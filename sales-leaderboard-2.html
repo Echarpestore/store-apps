@@ -185,7 +185,7 @@
       <h3 style="margin-bottom:4px;">سكان الباركود</h3>
       <p class="sub">وجّه الكاميرا على الباركود</p>
       <div class="field-err" id="scannerStatus" style="color:var(--sub); margin-bottom:8px;"></div>
-      <video id="scannerVideo" style="width:100%; border-radius:14px; background:#000; margin-bottom:14px;" playsinline muted></video>
+      <video id="scannerVideo" style="width:100%; height:200px; object-fit:cover; border-radius:14px; background:#000; margin-bottom:14px;" playsinline muted></video>
       <div class="field-err" id="scannerErr"></div>
       <button class="cancelBtn" id="scannerCancelBtn">إلغاء</button>
     </div>
@@ -466,6 +466,23 @@ $('#invoiceCancelBtn').addEventListener('click', ()=>{
 let scanStream = null;
 let scanLoopId = null;
 
+function playBeep(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 1800;
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+    osc.onended = ()=> ctx.close();
+  }catch(e){ /* audio not available, ignore */ }
+}
+
 $('#scanBtn').addEventListener('click', openScanner);
 $('#scannerCancelBtn').addEventListener('click', closeScanner);
 
@@ -496,7 +513,7 @@ async function openScanner(){
     $('#scannerStatus').textContent = '';
     let detector;
     try{
-      detector = new BarcodeDetector({ formats: ['code_128','code_39','ean_13','ean_8','upc_a','upc_e','qr_code'] });
+      detector = new BarcodeDetector({ formats: ['code_128','code_39','code_93','ean_13','ean_8','upc_a','upc_e','itf','codabar'] });
     }catch(e){
       detector = new BarcodeDetector(); // fallback if formats hint unsupported
     }
@@ -507,8 +524,10 @@ async function openScanner(){
         try{
           const codes = await detector.detect(video);
           if(codes.length > 0){
+            playBeep();
             $('#invoiceInput').value = codes[0].rawValue;
             closeScanner();
+            confirmInvoice();
             return;
           }
         }catch(e){ /* keep trying */ }
