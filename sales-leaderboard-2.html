@@ -74,6 +74,16 @@
   .pin-box{background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:30px 26px; width:min(92vw,340px); text-align:center;}
   .pin-box h3{margin:0 0 4px; font-size:19px; font-weight:900;}
   .pin-box .sub{color:var(--sub); font-size:13px; margin:0 0 20px;}
+  .toast{
+    position:absolute; bottom:36px; left:50%; transform:translateX(-50%) translateY(20px);
+    z-index:55; display:flex; align-items:center; gap:12px; background:var(--panel);
+    border:1px solid var(--gold-dim); border-radius:16px; padding:16px 26px;
+    opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease;
+    box-shadow:0 8px 30px rgba(0,0,0,.5); max-width:90vw;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast .check{width:32px; height:32px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .toast p{margin:0; font-size:16px; font-weight:800; white-space:nowrap;}
   /* ---------- LEADERBOARD ---------- */
   #leaderboard{position:absolute; inset:0; overflow-y:auto; padding:5vh 4vw; display:none; background:var(--bg); z-index:30;}
   #leaderboard.show{display:block;}
@@ -193,6 +203,12 @@
       <button class="cancelBtn" id="scannerManualBtn" style="margin-bottom:8px;">✍️ اكتب رقم الفاتورة بإيدك بدل كده</button>
       <button class="cancelBtn" id="scannerCancelBtn">إلغاء</button>
     </div>
+  </div>
+
+  <!-- CONFIRMATION TOAST -->
+  <div class="toast" id="toast">
+    <div class="check"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0b0c0f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    <p id="toastMsg">تمام!</p>
   </div>
 
   <!-- LEADERBOARD -->
@@ -443,7 +459,14 @@ function glowEmployee(empId){
   }, 5000);
 }
 
+function showToast(empName){
+  $('#toastMsg').textContent = '🎉 +1 نقطة يا ' + empName + '!';
+  $('#toast').classList.add('show');
+  setTimeout(()=> $('#toast').classList.remove('show'), 2500);
+}
+
 function startForEmployee(empId){
+  requestFullscreenOnce();
   selectedEmp = employees.find(e=> e.id === empId);
   if(!selectedEmp) return;
   // Go straight to the camera. Only fall back to manual typing if the
@@ -468,12 +491,26 @@ async function confirmInvoice(){
   const invoiceNumber = $('#invoiceInput').value.trim();
   if(!invoiceNumber){ $('#invoiceErr').textContent = 'اكتب رقم الفاتورة أو اعمل سكان للباركود'; return; }
   const emp = selectedEmp;
+  if(!emp) return;
+
+  // Prevent the same invoice number being registered twice within the same branch.
+  const branchEmpIds = new Set(allEmployees.filter(x=> x.branch === emp.branch).map(x=> x.id));
+  const isDuplicate = points.some(p=> branchEmpIds.has(p.employeeId) && String(p.invoiceNumber||'').trim() === invoiceNumber);
+  if(isDuplicate){
+    $('#invoiceEmpName').textContent = emp.name;
+    $('#invoiceInput').value = invoiceNumber;
+    $('#invoiceErr').textContent = 'رقم الفاتورة ده اتسجل قبل كده. تأكد من الرقم أو اكتب رقم صح.';
+    $('#invoiceOverlay').classList.add('show');
+    return;
+  }
+
   try{
     await addDoc(pointsCol, { employeeId: emp.id, employeeName: emp.name, invoiceNumber, ts: Date.now() });
   }catch(err){ console.error('تعذر تسجيل النقطة', err); }
   $('#invoiceOverlay').classList.remove('show');
   selectedEmp = null;
   glowEmployee(emp.id);
+  showToast(emp.name);
 }
 
 $('#invoiceConfirmBtn').addEventListener('click', confirmInvoice);
@@ -632,11 +669,12 @@ function toggleFullscreen(){
   }
 }
 $('#fsBtn').addEventListener('click', toggleFullscreen);
-// Auto-enter fullscreen the first time someone taps an employee tile
 let firstTapDone = false;
-$('#empGrid').addEventListener('click', ()=>{
-  if(!firstTapDone){ firstTapDone = true; if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.().catch(()=>{}); } }
-});
+function requestFullscreenOnce(){
+  if(firstTapDone) return;
+  firstTapDone = true;
+  if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.().catch(()=>{}); }
+}
 
 function openAdmin(){
   $('#admin').classList.add('show');
