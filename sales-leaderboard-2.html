@@ -65,11 +65,14 @@
   .pin-box{background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:30px 26px; width:min(92vw,340px); text-align:center;}
   .pin-box h3{margin:0 0 4px; font-size:19px; font-weight:900;}
   .pin-box .sub{color:var(--sub); font-size:13px; margin:0 0 20px;}
-  .toast{position:absolute; inset:0; z-index:45; display:none; align-items:center; justify-content:center; background:var(--bg); flex-direction:column; gap:14px;}
-  .toast.show{display:flex;}
-  .toast .circle{width:90px; height:90px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; animation:pop .35s cubic-bezier(.2,1.4,.4,1);}
+  .toast{position:absolute; inset:0; z-index:45; display:none; align-items:center; justify-content:center; background:radial-gradient(circle at center, #2a2410 0%, var(--bg) 70%); flex-direction:column; gap:18px;}
+  .toast.show{display:flex; animation:glowBg 1.4s ease-in-out infinite alternate;}
+  @keyframes glowBg{from{background:radial-gradient(circle at center, #2a2410 0%, var(--bg) 70%);} to{background:radial-gradient(circle at center, #3d3418 0%, var(--bg) 75%);}}
+  .toast .circle{width:100px; height:100px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; animation:pop .35s cubic-bezier(.2,1.4,.4,1), glowPulse 1s ease-in-out infinite alternate; box-shadow:0 0 40px 10px rgba(242,193,78,0.5);}
   @keyframes pop{from{transform:scale(.4); opacity:0} to{transform:scale(1); opacity:1}}
-  .toast p{font-size:clamp(18px,3vw,26px); font-weight:900; margin:0; text-align:center; padding:0 20px;}
+  @keyframes glowPulse{from{box-shadow:0 0 30px 6px rgba(242,193,78,0.4);} to{box-shadow:0 0 55px 16px rgba(242,193,78,0.65);}}
+  .toast .lbl{color:var(--sub); font-size:14px; font-weight:700; letter-spacing:.05em;}
+  .toast p{font-size:clamp(28px,6vw,44px); font-weight:900; margin:0; text-align:center; padding:0 20px; color:var(--gold); text-shadow:0 0 20px rgba(242,193,78,0.5);}
 
   /* ---------- LEADERBOARD ---------- */
   #leaderboard{position:absolute; inset:0; overflow-y:auto; padding:5vh 4vw; display:none; background:var(--bg); z-index:30;}
@@ -182,18 +185,20 @@
   <!-- BARCODE SCANNER -->
   <div class="overlay" id="scannerOverlay">
     <div class="pin-box" style="padding:20px;">
-      <h3 style="margin-bottom:4px;">سكان الباركود</h3>
+      <h3 id="scannerEmpName" style="margin-bottom:4px;">—</h3>
       <p class="sub">وجّه الكاميرا على الباركود</p>
       <div class="field-err" id="scannerStatus" style="color:var(--sub); margin-bottom:8px;"></div>
       <video id="scannerVideo" style="width:100%; height:200px; object-fit:cover; border-radius:14px; background:#000; margin-bottom:14px;" playsinline muted></video>
       <div class="field-err" id="scannerErr"></div>
+      <button class="cancelBtn" id="scannerManualBtn" style="margin-bottom:8px;">✍️ اكتب رقم الفاتورة بإيدك بدل كده</button>
       <button class="cancelBtn" id="scannerCancelBtn">إلغاء</button>
     </div>
   </div>
 
   <!-- SUCCESS TOAST -->
   <div class="toast" id="toast">
-    <div class="circle"><svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#0b0c0f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    <div class="circle"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#0b0c0f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    <div class="lbl">🎉 +1 نقطة</div>
     <p id="toastMsg">تمام!</p>
   </div>
 
@@ -428,12 +433,23 @@ function renderEmpGrid(){
     </div>
   `).join('');
   grid.querySelectorAll('.emp-tile').forEach(tile=>{
-    tile.addEventListener('click', ()=> openInvoiceModal(tile.dataset.id));
+    tile.addEventListener('click', ()=> startForEmployee(tile.dataset.id));
   });
 }
 
-function openInvoiceModal(empId){
+function startForEmployee(empId){
   selectedEmp = employees.find(e=> e.id === empId);
+  if(!selectedEmp) return;
+  // Go straight to the camera. Only fall back to manual typing if the
+  // device/browser genuinely can't scan (unsupported browser or no camera API).
+  if(('BarcodeDetector' in window) && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+    openScanner();
+  } else {
+    openInvoiceModal();
+  }
+}
+
+function openInvoiceModal(){
   if(!selectedEmp) return;
   $('#invoiceEmpName').textContent = selectedEmp.name;
   $('#invoiceInput').value = '';
@@ -445,15 +461,19 @@ function openInvoiceModal(empId){
 async function confirmInvoice(){
   const invoiceNumber = $('#invoiceInput').value.trim();
   if(!invoiceNumber){ $('#invoiceErr').textContent = 'اكتب رقم الفاتورة أو اعمل سكان للباركود'; return; }
+  const emp = selectedEmp;
   try{
-    await addDoc(pointsCol, { employeeId: selectedEmp.id, employeeName: selectedEmp.name, invoiceNumber, ts: Date.now() });
+    await addDoc(pointsCol, { employeeId: emp.id, employeeName: emp.name, invoiceNumber, ts: Date.now() });
   }catch(err){ console.error('تعذر تسجيل النقطة', err); }
-  const empName = selectedEmp.name;
   $('#invoiceOverlay').classList.remove('show');
   selectedEmp = null;
-  $('#toastMsg').textContent = '🎉 +1 نقطة يا ' + empName + '!';
+  showSuccessGlow(emp.name);
+}
+
+function showSuccessGlow(empName){
+  $('#toastMsg').textContent = empName;
   $('#toast').classList.add('show');
-  setTimeout(()=> $('#toast').classList.remove('show'), 1600);
+  setTimeout(()=> $('#toast').classList.remove('show'), 5000);
 }
 $('#invoiceConfirmBtn').addEventListener('click', confirmInvoice);
 $('#invoiceInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') confirmInvoice(); });
@@ -485,10 +505,15 @@ function playBeep(){
 
 $('#scanBtn').addEventListener('click', openScanner);
 $('#scannerCancelBtn').addEventListener('click', closeScanner);
+$('#scannerManualBtn').addEventListener('click', ()=>{
+  closeScanner();
+  openInvoiceModal();
+});
 
 async function openScanner(){
   // Show the overlay immediately so any error message is actually visible —
   // previously errors were written before the overlay existed on screen.
+  $('#scannerEmpName').textContent = selectedEmp ? selectedEmp.name : '—';
   $('#scannerErr').textContent = '';
   $('#scannerStatus').textContent = 'بيفتح الكاميرا...';
   $('#scannerOverlay').classList.add('show');
