@@ -75,13 +75,13 @@
   .pin-box h3{margin:0 0 4px; font-size:19px; font-weight:900;}
   .pin-box .sub{color:var(--sub); font-size:13px; margin:0 0 20px;}
   .toast{
-    position:absolute; bottom:36px; left:50%; transform:translateX(-50%) translateY(20px);
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(.9);
     z-index:55; display:flex; align-items:center; gap:12px; background:var(--panel);
     border:1px solid var(--gold-dim); border-radius:16px; padding:16px 26px;
-    opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease;
+    opacity:0; pointer-events:none; transition:opacity .2s ease, transform .2s ease;
     box-shadow:0 8px 30px rgba(0,0,0,.5); max-width:90vw;
   }
-  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast.show{opacity:1; transform:translate(-50%,-50%) scale(1);}
   .toast .check{width:32px; height:32px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
   .toast p{margin:0; font-size:16px; font-weight:800; white-space:nowrap;}
   /* ---------- LEADERBOARD ---------- */
@@ -462,7 +462,7 @@ function glowEmployee(empId){
 function showToast(empName){
   $('#toastMsg').textContent = '🎉 +1 نقطة يا ' + empName + '!';
   $('#toast').classList.add('show');
-  setTimeout(()=> $('#toast').classList.remove('show'), 2500);
+  setTimeout(()=> $('#toast').classList.remove('show'), 1000);
 }
 
 function startForEmployee(empId){
