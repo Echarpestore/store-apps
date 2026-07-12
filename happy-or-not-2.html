@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>إحنا عايزين رأيك</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12141a;
+    --panel:#1b1e27;
+    --panel2:#232733;
+    --ink:#eef0f4;
+    --sub:#8b90a0;
+    --line:#2b2f3b;
+    --r1:#e5484d; /* مضايقني جدا */
+    --r2:#f2a93c; /* مضايقني */
+    --r3:#a8c63c; /* كويس */
+    --r4:#2fa36b; /* عجبني جدا */
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Cairo',sans-serif;
+    overflow:hidden; user-select:none;
+  }
+  #app{height:100vh; width:100vw; position:relative;}
+
+  /* ---------- KIOSK ---------- */
+  #kiosk{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    padding:5vh 4vw; text-align:center;
+    transition:opacity .3s ease;
+  }
+  #kiosk .eyebrow{
+    font-family:'Space Grotesk',sans-serif;
+    letter-spacing:.3em; font-size:clamp(11px,1.4vw,14px);
+    color:var(--sub); text-transform:uppercase; margin-bottom:14px;
+  }
+  #kiosk h1{
+    font-size:clamp(28px,4.5vw,52px); font-weight:900; margin:0 0 6vh;
+    line-height:1.25; max-width:900px;
+  }
+  #branchTag{
+    position:absolute; top:22px; right:26px;
+    font-family:'Space Grotesk',sans-serif; font-size:13px; color:var(--sub);
+    letter-spacing:.05em;
+  }
+  .grid{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(14px,2vw,28px);
+    width:100%; max-width:1200px;
+  }
+  @media (max-width:760px){ .grid{grid-template-columns:repeat(2,1fr);} }
+
+  .face-btn{
+    position:relative; border:none; cursor:pointer;
+    aspect-ratio:1/1; border-radius:28px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+    font-family:'Cairo',sans-serif; font-weight:700; font-size:clamp(14px,1.6vw,19px);
+    color:#0b0c0f;
+    box-shadow:
+      0 10px 0 rgba(0,0,0,.28),
+      0 18px 30px rgba(0,0,0,.35),
+      inset 0 3px 0 rgba(255,255,255,.35),
+      inset 0 -8px 14px rgba(0,0,0,.18);
+    transform:translateY(0);
+    transition:transform .08s ease, box-shadow .08s ease;
+  }
+  .face-btn:active{
+    transform:translateY(9px);
+    box-shadow:
+      0 1px 0 rgba(0,0,0,.28),
+      0 4px 10px rgba(0,0,0,.35),
+      inset 0 3px 0 rgba(255,255,255,.25),
+      inset 0 -4px 8px rgba(0,0,0,.18);
+  }
+  .face-btn svg{width:clamp(46px,6vw,84px); height:clamp(46px,6vw,84px);}
+  .b1{background:var(--r1);} .b2{background:var(--r2);}
+  .b3{background:var(--r3);} .b4{background:var(--r4);}
+
+  /* thank you overlay */
+  #thanks{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:18px; background:var(--bg);
+    opacity:0; pointer-events:none; transition:opacity .25s ease;
+  }
+  #thanks.show{opacity:1; pointer-events:all;}
+  #thanks .check{
+    width:96px; height:96px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    animation:pop .35s cubic-bezier(.2,1.4,.4,1);
+  }
+  @keyframes pop{from{transform:scale(.4); opacity:0} to{transform:scale(1); opacity:1}}
+  #thanks p{font-size:clamp(20px,3vw,30px); font-weight:900; margin:0;}
+
+  /* gear */
+  #gear{
+    position:absolute; top:18px; left:18px; width:46px; height:46px; opacity:.6;
+    display:flex; align-items:center; justify-content:center; border-radius:50%;
+    cursor:pointer; background:var(--panel); border:1px solid var(--line);
+    transition:opacity .15s ease;
+  }
+  #gear:active{opacity:1;}
+  #gear svg{width:22px; height:22px; stroke:var(--sub);}
+  #fsBtn{
+    position:absolute; top:18px; left:74px; width:46px; height:46px; opacity:.6;
+    display:flex; align-items:center; justify-content:center; border-radius:50%;
+    cursor:pointer; background:var(--panel); border:1px solid var(--line);
+  }
+  #fsBtn:active{opacity:1;}
+  #fsBtn svg{width:20px; height:20px; stroke:var(--sub);}
+
+  /* ---------- DASHBOARD ---------- */
+  #dash{
+    position:absolute; inset:0; overflow-y:auto; padding:28px 32px 60px;
+    display:none;
+  }
+  #dash.show{display:block;}
+  .dash-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; flex-wrap:wrap; gap:12px;}
+  .dash-top h2{font-size:22px; font-weight:900; margin:0;}
+  .dash-top .sub{color:var(--sub); font-size:13px; margin-top:4px;}
+  .tabs{display:flex; gap:8px; background:var(--panel); padding:4px; border-radius:10px;}
+  .tabs button{
+    border:none; background:transparent; color:var(--sub); padding:8px 14px; border-radius:8px;
+    font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;
+  }
+  .tabs button.active{background:var(--panel2); color:var(--ink);}
+  .backBtn{
+    border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    padding:9px 16px; border-radius:10px; font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;
+  }
+
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:22px;}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px;}
+  .card .label{color:var(--sub); font-size:12px; letter-spacing:.04em; margin-bottom:8px;}
+  .card .value{font-family:'Space Grotesk'; font-size:30px; font-weight:700;}
+  .card .value.good{color:var(--r4);} .card .value.bad{color:var(--r1);}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:20px;}
+  .panel h3{margin:0 0 16px; font-size:14px; color:var(--sub); font-weight:700;}
+
+  .bars{display:flex; flex-direction:column; gap:12px;}
+  .bar-row{display:flex; align-items:center; gap:12px;}
+  .bar-row .lbl{width:110px; font-size:13px; flex-shrink:0;}
+  .bar-track{flex:1; height:14px; background:var(--panel2); border-radius:7px; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:7px; transition:width .5s ease;}
+  .bar-row .pct{width:50px; text-align:left; font-family:'Space Grotesk'; font-size:13px; color:var(--sub);}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{padding:9px 10px; text-align:right; border-bottom:1px solid var(--line);}
+  th{color:var(--sub); font-weight:700; font-size:12px;}
+  .dot{width:10px; height:10px; border-radius:50%; display:inline-block; margin-left:6px;}
+  .empty{color:var(--sub); text-align:center; padding:30px; font-size:13px;}
+
+  #svgChart{width:100%; height:180px;}
+
+  /* ---------- LOGIN GATE ---------- */
+  .login-gate{
+    position:absolute; inset:0; z-index:50; display:none;
+    align-items:center; justify-content:center; background:var(--bg);
+  }
+  .login-gate.show{display:flex;}
+  .login-box{
+    background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:32px 28px; width:min(90vw,340px); text-align:center;
+  }
+  .login-box h3{margin:0 0 6px; font-size:18px; font-weight:900;}
+  .login-box .sub{color:var(--sub); font-size:13px; margin:0 0 20px;}
+  .login-box input{
+    width:100%; padding:12px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:15px;
+    text-align:center; margin-bottom:12px;
+  }
+  .login-box button#loginBtn{
+    width:100%; padding:12px; border:none; border-radius:10px; background:var(--r4);
+    color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer; margin-bottom:12px;
+  }
+  .login-err{color:var(--r1); font-size:12px; min-height:16px; margin-bottom:8px;}
+
+  /* ---------- BRANCH SETUP ---------- */
+  #branchSetup{position:absolute; inset:0; z-index:60; display:none; align-items:center; justify-content:center; background:var(--bg);}
+  #branchSetup.show{display:flex;}
+  .branch-box{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:32px 28px; width:min(90vw,340px); text-align:center;}
+  .branch-box h3{margin:0 0 6px; font-size:18px; font-weight:900;}
+  .branch-box .sub{color:var(--sub); font-size:13px; margin:0 0 20px;}
+  .branch-box input{width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:15px; text-align:center; margin-bottom:12px;}
+  .branch-box button{width:100%; padding:12px; border:none; border-radius:10px; background:var(--r4); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer;}
+
+  /* ---------- TIME ANALYSIS ---------- */
+  .dateRow{display:flex; align-items:center; gap:10px; margin-bottom:18px; flex-wrap:wrap;}
+  .dateRow input[type="date"]{
+    padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2);
+    color:var(--ink); font-family:'Cairo'; font-size:13px;
+  }
+  .shiftCards{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:20px;}
+  .shiftCard{background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:16px;}
+  .shiftCard .t{font-size:13px; font-weight:700; margin-bottom:6px;}
+  .shiftCard .n{font-family:'Space Grotesk'; font-size:26px; font-weight:700;}
+  .shiftCard .c{color:var(--sub); font-size:12px; margin-top:4px;}
+  .blockLabel{width:90px !important;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- KIOSK -->
+  <div id="kiosk">
+    <div id="branchTag">📍 <span id="branchName">الفرع</span></div>
+    <div class="eyebrow">رأيك يهمنا</div>
+    <h1>إزاي كانت تجربتك معانا النهاردة؟</h1>
+    <div class="grid">
+      <button class="face-btn b1" data-r="1">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="10" r="1.4" fill="#0b0c0f"/><circle cx="15" cy="10" r="1.4" fill="#0b0c0f"/><path d="M8 16.5c1-1.6 2.6-2.4 4-2.4s3 .8 4 2.4" stroke="#0b0c0f" stroke-width="1.8" stroke-linecap="round"/></svg>
+        مضايقني جدًا
+      </button>
+      <button class="face-btn b2" data-r="2">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="10" r="1.4" fill="#0b0c0f"/><circle cx="15" cy="10" r="1.4" fill="#0b0c0f"/><path d="M8 15.5h8" stroke="#0b0c0f" stroke-width="1.8" stroke-linecap="round"/></svg>
+        مش عاجبني
+      </button>
+      <button class="face-btn b3" data-r="3">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="10" r="1.4" fill="#0b0c0f"/><circle cx="15" cy="10" r="1.4" fill="#0b0c0f"/><path d="M8 14.5c1 1.2 2.6 1.8 4 1.8s3-.6 4-1.8" stroke="#0b0c0f" stroke-width="1.8" stroke-linecap="round"/></svg>
+        كويس
+      </button>
+      <button class="face-btn b4" data-r="4">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="10" r="1.4" fill="#0b0c0f"/><circle cx="15" cy="10" r="1.4" fill="#0b0c0f"/><path d="M7.5 14c1.2 2 2.8 3 4.5 3s3.3-1 4.5-3" stroke="#0b0c0f" stroke-width="2" stroke-linecap="round"/></svg>
+        عجبني جدًا
+      </button>
+    </div>
+    <div id="gear"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+    <div id="fsBtn" title="ملء الشاشة"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg></div>
+  </div>
+
+  <!-- THANK YOU -->
+  <div id="thanks">
+    <div class="check" id="checkCircle">
+      <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#0b0c0f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <p>شكرًا لرأيك 🙏</p>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dash">
+    <div class="dash-top">
+      <div>
+        <h2>لوحة نتائج رضا العملاء</h2>
+        <div class="sub" id="branchSub">الفرع: —</div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <select id="branchFilter" style="padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:13px;">
+          <option value="__ALL__">كل الفروع</option>
+        </select>
+        <div class="tabs" id="rangeTabs">
+          <button data-range="today" class="active">النهاردة</button>
+          <button data-range="week">آخر 7 أيام</button>
+          <button data-range="month">آخر 30 يوم</button>
+          <button data-range="all">الكل</button>
+        </div>
+        <button class="backBtn" id="logoutBtn">خروج 🔒</button>
+        <button class="backBtn" id="backToKiosk">◀ رجوع للشاشة</button>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="label">عدد الآراء</div><div class="value" id="cTotal">0</div></div>
+      <div class="card"><div class="label">متوسط الرضا (من 4)</div><div class="value" id="cAvg">—</div></div>
+      <div class="card"><div class="label">نسبة الرضا (كويس + عجبني جدًا)</div><div class="value good" id="cHappy">—</div></div>
+      <div class="card"><div class="label">نسبة الاستياء</div><div class="value bad" id="cSad">—</div></div>
+    </div>
+
+    <div class="panel">
+      <h3>توزيع الآراء</h3>
+      <div class="bars" id="barsWrap"></div>
+    </div>
+
+    <div class="panel">
+      <h3>الاتجاه على مدار الوقت</h3>
+      <svg id="svgChart" viewBox="0 0 600 180" preserveAspectRatio="none"></svg>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0;">آخر الآراء</h3>
+        <button class="backBtn" id="clearData" style="font-size:12px; padding:6px 12px;">مسح كل البيانات</button>
+      </div>
+      <div id="tableWrap"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+        <h3 style="margin:0;">تحليل الأداء حسب الوقت</h3>
+        <div class="dateRow" style="margin:0;">
+          <input type="date" id="analysisDate">
+        </div>
+      </div>
+      <div class="shiftCards" id="shiftCards"></div>
+      <div style="margin-bottom:18px;">
+        <div class="sub" style="color:var(--sub); font-size:12px; margin-bottom:10px;">نسبة الرضا كل 4 ساعات</div>
+        <div class="bars" id="block4Bars"></div>
+      </div>
+      <div>
+        <div class="sub" style="color:var(--sub); font-size:12px; margin-bottom:10px;">نسبة الرضا لكل ساعة</div>
+        <div class="bars" id="hourlyBars"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>الفرع</h3>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div class="sub" id="branchSub2">الفرع الحالي: —</div>
+        <button class="backBtn" id="changeBranchBtn">📍 تغيير الفرع</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BRANCH SETUP (first run on this device) -->
+  <div id="branchSetup">
+    <div class="branch-box">
+      <h3>اسم الفرع</h3>
+      <p class="sub">اكتب اسم الفرع مرة واحدة بس — الجهاز ده هيفتكره وهيشوف بيانات الفرع ده بس</p>
+      <input id="branchInput" placeholder="مثلاً: فرع المعادي">
+      <button id="branchSaveBtn">حفظ</button>
+    </div>
+  </div>
+
+  <!-- LOGIN GATE -->
+  <div id="loginGate" class="login-gate">
+    <div class="login-box">
+      <h3>دخول لوحة التحكم</h3>
+      <p class="sub">اكتب كود الدخول عشان تشوف النتائج</p>
+      <input type="password" id="loginPass" placeholder="كود الدخول" autocomplete="off">
+      <button id="loginBtn">دخول</button>
+      <div class="login-err" id="loginErr"></div>
+      <button class="backBtn" id="loginCancel" style="width:100%;">رجوع للشاشة</button>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, onSnapshot,
+  doc, deleteDoc, enableIndexedDbPersistence
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
+  authDomain: "customer-feedback-8ac1d.firebaseapp.com",
+  projectId: "customer-feedback-8ac1d",
+  storageBucket: "customer-feedback-8ac1d.firebasestorage.app",
+  messagingSenderId: "408860081491",
+  appId: "1:408860081491:web:c5fa8b8e757c13196375a6",
+  measurementId: "G-6K33TSHDZ6"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const entriesCol = collection(db, 'entries');
+
+// Keeps unsynced data on-device (IndexedDB) if the tab is closed/reloaded
+// while offline — it's sent to Firebase automatically once back online.
+enableIndexedDbPersistence(db).catch((err)=>{
+  console.warn('Offline persistence not enabled:', err.code);
+});
+
+// Simple dashboard access code — checked entirely on-device, no network
+// call, no rate limits. Change this string to whatever code you want.
+const DASHBOARD_CODE = '2005';
+let unlocked = false;
+
+const RATINGS = {
+  1:{label:'مضايقني جدًا', color:'var(--r1)', hex:'#e5484d'},
+  2:{label:'مش عاجبني', color:'var(--r2)', hex:'#f2a93c'},
+  3:{label:'كويس', color:'var(--r3)', hex:'#a8c63c'},
+  4:{label:'عجبني جدًا', color:'var(--r4)', hex:'#2fa36b'},
+};
+let allEntries = [];
+let entries = []; // entries filtered by the dashboard's selected branch
+let currentRange = 'today';
+let gearTimer = null;
+let dashOpen = false;
+
+const $ = s => document.querySelector(s);
+
+// ---------- BRANCH (per-device, stored locally) ----------
+let currentBranch = localStorage.getItem('feedback_branch') || '';
+function refreshBranchUI(){
+  $('#branchName').textContent = currentBranch || 'الفرع';
+  $('#branchSub').textContent = 'الفرع: ' + (currentBranch || '—');
+  $('#branchSub2').textContent = 'الفرع الحالي: ' + (currentBranch || 'مش متحدد على الجهاز ده');
+}
+$('#branchSaveBtn').addEventListener('click', ()=>{
+  const val = $('#branchInput').value.trim();
+  if(!val) return;
+  currentBranch = val;
+  localStorage.setItem('feedback_branch', val);
+  refreshBranchUI();
+  applyBranchFilter();
+});
+$('#changeBranchBtn').addEventListener('click', ()=>{
+  $('#branchInput').value = currentBranch;
+  $('#branchSetup').classList.add('show');
+});
+refreshBranchUI();
+
+function applyBranchFilter(){
+  // Dashboard branch selector now controls what's reviewed — this keeps
+  // the dropdown options up to date whenever new branches appear.
+  populateBranchDropdown();
+  if(dashOpen && unlocked) renderDashboard();
+}
+
+function populateBranchDropdown(){
+  const sel = $('#branchFilter');
+  const branches = [...new Set(allEntries.map(e=>e.branch).filter(Boolean))].sort();
+  const prevValue = sel.value || '__ALL__';
+  sel.innerHTML = '<option value="__ALL__">كل الفروع</option>' +
+    branches.map(b=>`<option value="${b}">${b}</option>`).join('');
+  sel.value = branches.includes(prevValue) || prevValue === '__ALL__' ? prevValue : '__ALL__';
+}
+
+// Live sync: any device connected to this Firebase project sees the
+// same data instantly, but each device only shows its own branch's data.
+onSnapshot(entriesCol, (snapshot)=>{
+  allEntries = snapshot.docs.map(d=>({id:d.id, ...d.data()}));
+  applyBranchFilter();
+}, (err)=> console.error('entries sync error', err));
+
+async function submitRating(r){
+  if(!currentBranch){
+    $('#branchSetup').classList.add('show');
+    return;
+  }
+  const info = RATINGS[r];
+  $('#checkCircle').style.background = info.hex;
+  $('#thanks').classList.add('show');
+  setTimeout(()=>{ $('#thanks').classList.remove('show'); }, 1600);
+  try{ await addDoc(entriesCol, { r, ts: Date.now(), branch: currentBranch }); }
+  catch(e){ console.error('تعذر حفظ الرأي', e); }
+}
+
+document.querySelectorAll('.face-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> submitRating(parseInt(btn.dataset.r)));
+});
+
+// Fullscreen kiosk mode
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+  } else {
+    document.exitFullscreen?.().catch(()=>{});
+  }
+}
+$('#fsBtn').addEventListener('click', toggleFullscreen);
+// Auto-enter fullscreen the first time someone taps a rating button
+let firstTapDone = false;
+document.querySelectorAll('.face-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if(!firstTapDone){ firstTapDone = true; if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.().catch(()=>{}); } }
+  });
+});
+
+// gear -> long press opens dashboard
+const gear = $('#gear');
+gear.addEventListener('pointerdown', ()=>{
+  gearTimer = setTimeout(openDashboard, 1200);
+});
+['pointerup','pointerleave'].forEach(ev=> gear.addEventListener(ev, ()=> clearTimeout(gearTimer)));
+
+$('#backToKiosk').addEventListener('click', ()=>{
+  dashOpen = false;
+  $('#dash').classList.remove('show');
+  $('#kiosk').style.display = 'flex';
+});
+
+function openDashboard(){
+  dashOpen = true;
+  $('#kiosk').style.display = 'none';
+  $('#dash').classList.add('show');
+  if(unlocked){
+    renderDashboard();
+  } else {
+    $('#loginGate').classList.add('show');
+  }
+}
+
+function doLogin(){
+  const pass = $('#loginPass').value;
+  $('#loginErr').textContent = '';
+  if(pass === DASHBOARD_CODE){
+    unlocked = true;
+    $('#loginPass').value = '';
+    $('#loginGate').classList.remove('show');
+    renderDashboard();
+  } else {
+    $('#loginErr').textContent = 'كود الدخول غلط، حاول تاني';
+  }
+}
+$('#loginBtn').addEventListener('click', doLogin);
+$('#loginPass').addEventListener('keydown', (e)=>{ if(e.key==='Enter') doLogin(); });
+$('#loginCancel').addEventListener('click', ()=>{
+  dashOpen = false;
+  $('#loginGate').classList.remove('show');
+  $('#dash').classList.remove('show');
+  $('#kiosk').style.display = 'flex';
+});
+$('#logoutBtn').addEventListener('click', ()=>{
+  unlocked = false;
+  dashOpen = false;
+  $('#dash').classList.remove('show');
+  $('#kiosk').style.display = 'flex';
+});
+
+$('#branchFilter').addEventListener('change', renderDashboard);
+
+document.querySelectorAll('#rangeTabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#rangeTabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentRange = btn.dataset.range;
+    renderDashboard();
+  });
+});
+
+$('#clearData').addEventListener('click', async ()=>{
+  if(!confirm('متأكد إنك عايز تمسح كل البيانات؟ الإجراء ده مينفعش يترجع.')) return;
+  try{
+    await Promise.all(entries.map(e=> deleteDoc(doc(db,'entries', e.id))));
+  }catch(err){ console.error('تعذر مسح البيانات', err); }
+});
+
+function filteredEntries(){
+  const branchVal = $('#branchFilter').value || '__ALL__';
+  entries = branchVal === '__ALL__' ? allEntries : allEntries.filter(e => e.branch === branchVal);
+  const now = Date.now();
+  let cutoff = 0;
+  if(currentRange === 'today'){
+    const d = new Date(); d.setHours(0,0,0,0);
+    cutoff = d.getTime();
+  } else if(currentRange === 'week'){
+    cutoff = now - 7*24*60*60*1000;
+  } else if(currentRange === 'month'){
+    cutoff = now - 30*24*60*60*1000;
+  }
+  return entries.filter(e => e.ts >= cutoff);
+}
+
+function renderDashboard(){
+  const list = filteredEntries();
+  const total = list.length;
+  $('#cTotal').textContent = total;
+
+  const counts = {1:0,2:0,3:0,4:0};
+  list.forEach(e=> counts[e.r]++);
+
+  const avg = total ? (list.reduce((s,e)=>s+e.r,0)/total) : 0;
+  $('#cAvg').textContent = total ? avg.toFixed(2) : '—';
+
+  const happy = counts[3]+counts[4];
+  const sad = counts[1]+counts[2];
+  $('#cHappy').textContent = total ? Math.round(happy/total*100)+'%' : '—';
+  $('#cSad').textContent = total ? Math.round(sad/total*100)+'%' : '—';
+
+  const barsWrap = $('#barsWrap');
+  barsWrap.innerHTML = '';
+  [4,3,2,1].forEach(r=>{
+    const pct = total ? Math.round(counts[r]/total*100) : 0;
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML = `
+      <div class="lbl">${RATINGS[r].label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:${RATINGS[r].hex}"></div></div>
+      <div class="pct">${pct}%</div>
+    `;
+    barsWrap.appendChild(row);
+  });
+
+  renderChart(list);
+  renderTable(list);
+  renderTimeAnalysis();
+}
+
+// ---------- TIME ANALYSIS (per selected day) ----------
+function getAnalysisDayEntries(){
+  const dateStr = $('#analysisDate').value;
+  const d = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+  d.setHours(0,0,0,0);
+  const start = d.getTime();
+  const end = start + 24*60*60*1000;
+  return entries.filter(e => e.ts >= start && e.ts < end);
+}
+
+function satisfaction(list){
+  const total = list.length;
+  if(total === 0) return {total:0, pct:null};
+  const happy = list.filter(e => e.r === 3 || e.r === 4).length;
+  return {total, pct: Math.round(happy/total*100)};
+}
+
+function renderTimeAnalysis(){
+  if(!$('#analysisDate').value){
+    const today = new Date();
+    const iso = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    $('#analysisDate').value = iso;
+  }
+  const dayEntries = getAnalysisDayEntries();
+
+  // Shifts: 10am–4pm and 4pm–12am
+  const shift1 = dayEntries.filter(e=>{ const h = new Date(e.ts).getHours(); return h>=10 && h<16; });
+  const shift2 = dayEntries.filter(e=>{ const h = new Date(e.ts).getHours(); return h>=16 && h<24; });
+  const dayStats = satisfaction(dayEntries);
+  const s1 = satisfaction(shift1);
+  const s2 = satisfaction(shift2);
+
+  $('#shiftCards').innerHTML = `
+    <div class="shiftCard">
+      <div class="t">اليوم كامل</div>
+      <div class="n" style="color:${dayStats.pct===null?'var(--sub)':'var(--r4)'}">${dayStats.pct===null?'—':dayStats.pct+'%'}</div>
+      <div class="c">${dayStats.total} رأي</div>
+    </div>
+    <div class="shiftCard">
+      <div class="t">شيفت الصبح (10ص – 4م)</div>
+      <div class="n" style="color:${s1.pct===null?'var(--sub)':'var(--r4)'}">${s1.pct===null?'—':s1.pct+'%'}</div>
+      <div class="c">${s1.total} رأي</div>
+    </div>
+    <div class="shiftCard">
+      <div class="t">شيفت المساء (4م – 12ص)</div>
+      <div class="n" style="color:${s2.pct===null?'var(--sub)':'var(--r4)'}">${s2.pct===null?'—':s2.pct+'%'}</div>
+      <div class="c">${s2.total} رأي</div>
+    </div>
+  `;
+
+  // Every 4 hours: 00-04, 04-08, 08-12, 12-16, 16-20, 20-24
+  const blockLabels = ['12ص – 4ص','4ص – 8ص','8ص – 12م','12م – 4م','4م – 8م','8م – 12ص'];
+  const block4Wrap = $('#block4Bars');
+  block4Wrap.innerHTML = '';
+  for(let b=0; b<6; b++){
+    const startH = b*4, endH = startH+4;
+    const list = dayEntries.filter(e=>{ const h = new Date(e.ts).getHours(); return h>=startH && h<endH; });
+    const st = satisfaction(list);
+    const pct = st.pct===null ? 0 : st.pct;
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML = `
+      <div class="lbl blockLabel">${blockLabels[b]}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:var(--r4)"></div></div>
+      <div class="pct">${st.pct===null?'—':pct+'%'} <span style="color:var(--sub); font-size:11px;">(${st.total})</span></div>
+    `;
+    block4Wrap.appendChild(row);
+  }
+
+  // Hourly (only hours that have data)
+  const hourlyWrap = $('#hourlyBars');
+  hourlyWrap.innerHTML = '';
+  let anyHour = false;
+  for(let h=0; h<24; h++){
+    const list = dayEntries.filter(e=> new Date(e.ts).getHours() === h);
+    if(list.length === 0) continue;
+    anyHour = true;
+    const st = satisfaction(list);
+    const pct = st.pct===null ? 0 : st.pct;
+    const label = String(h).padStart(2,'0') + ':00';
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+    row.innerHTML = `
+      <div class="lbl blockLabel">${label}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%; background:var(--r4)"></div></div>
+      <div class="pct">${pct}% <span style="color:var(--sub); font-size:11px;">(${st.total})</span></div>
+    `;
+    hourlyWrap.appendChild(row);
+  }
+  if(!anyHour){
+    hourlyWrap.innerHTML = '<div class="empty" style="padding:12px;">لا توجد بيانات في اليوم ده</div>';
+  }
+}
+
+$('#analysisDate').addEventListener('change', renderTimeAnalysis);
+
+function renderChart(list){
+  const svg = $('#svgChart');
+  svg.innerHTML = '';
+  if(list.length === 0){
+    svg.innerHTML = `<text x="300" y="90" fill="#8b90a0" font-size="13" text-anchor="middle" font-family="Cairo">لا توجد بيانات لعرضها</text>`;
+    return;
+  }
+  // bucket by day
+  const byDay = {};
+  list.forEach(e=>{
+    const d = new Date(e.ts);
+    const key = d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+    if(!byDay[key]) byDay[key] = {sum:0,count:0,ts:d.setHours(0,0,0,0)};
+    byDay[key].sum += e.r; byDay[key].count++;
+  });
+  const days = Object.values(byDay).sort((a,b)=>a.ts-b.ts);
+  const w = 600, h = 180, pad = 20;
+  const maxN = days.length > 1 ? days.length-1 : 1;
+  const points = days.map((d,i)=>{
+    const x = pad + (i/maxN)*(w-2*pad);
+    const avgR = d.sum/d.count; // 1-4
+    const y = h - pad - ((avgR-1)/3)*(h-2*pad);
+    return [x,y];
+  });
+  const path = points.map((p,i)=> (i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const areaPath = path + ` L${points[points.length-1][0]},${h-pad} L${points[0][0]},${h-pad} Z`;
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#2fa36b" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="#2fa36b" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path d="${areaPath}" fill="url(#grad)" stroke="none"/>
+    <path d="${path}" fill="none" stroke="#2fa36b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    ${points.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="#0f1319" stroke="#2fa36b" stroke-width="2"/>`).join('')}
+  `;
+}
+
+function renderTable(list){
+  const wrap = $('#tableWrap');
+  if(list.length === 0){
+    wrap.innerHTML = `<div class="empty">لسه مفيش أي آراء مسجلة في الفترة دي</div>`;
+    return;
+  }
+  const recent = [...list].sort((a,b)=>b.ts-a.ts).slice(0,25);
+  let rows = recent.map(e=>{
+    const d = new Date(e.ts);
+    const time = d.toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+    return `<tr>
+      <td>${time}</td>
+      <td><span class="dot" style="background:${RATINGS[e.r].hex}"></span>${RATINGS[e.r].label}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table><thead><tr><th>التوقيت</th><th>الرأي</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+</script>
+</body>
+</html>
