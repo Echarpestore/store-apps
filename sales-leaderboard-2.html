@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ترتيب المبيعات</title>
+<link rel="manifest" href="manifest-sales.json">
+<meta name="theme-color" content="#f2c14e">
+<link rel="apple-touch-icon" href="icons/icon-sales-192.png">
+<link rel="icon" href="icons/icon-sales-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -738,6 +742,13 @@ $('#addEmpBtn').addEventListener('click', async ()=>{
     $('#newEmpName').value = '';
   }catch(err){ errEl.textContent = 'حصل خطأ، حاول تاني'; console.error(err); }
 });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
