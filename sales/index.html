@@ -286,7 +286,7 @@
     <div class="panel">
       <h3>⭐ أداء الموظف + رضا العميل</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
-        ربط تقريبي: كل عملية بيع متربطة بأقرب تقييم عميل ليها زمنيًا (قبلها أو بعدها) في نفس الفرع. مش رابط مؤكد 100%
+        ربط تقريبي: كل عملية بيع متربطة بأقرب تقييم عميل جه في حدود دقيقتين قبلها أو بعدها في نفس الفرع. مش رابط مؤكد 100%
         (لأن برنامج التقييم مجهول ومش بياخد رقم فاتورة)، بس بيدّي مؤشر عام.
       </p>
       <div id="perfList"></div>
@@ -453,7 +453,7 @@ const RATING_LABELS = {
   3:{label:'كويس', emoji:'🙂'},
   4:{label:'عجبني جدًا', emoji:'😄'},
 };
-const MATCH_WINDOW_MS = 60 * 60 * 1000; // only match feedback within 1 hour after the sale
+const MATCH_WINDOW_MS = 2 * 60 * 1000; // only match feedback within 2 minutes before/after the sale
 
 function renderPerformanceLink(){
   const wrap = $('#perfList');
