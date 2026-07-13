@@ -200,6 +200,7 @@
   .attCard .t{font-size:9px; color:var(--sub); font-family:'Space Grotesk';}
   .attCard.late{border-color:var(--r1);}
   .attCard .lateTag{position:absolute; top:4px; right:4px; font-size:8px; background:var(--r1); color:#fff; padding:1px 5px; border-radius:6px;}
+  .dayOffReminder{position:absolute; top:-8px; left:50%; transform:translateX(-50%); font-size:8px; background:var(--purple); color:#fff; padding:2px 7px; border-radius:8px; white-space:nowrap;}
 
   .dayHubBox{text-align:right;}
   .dayHubBox h3{margin:0 0 2px; font-size:17px;}
@@ -537,6 +538,35 @@
       <h3>🎁 سجل المكافآت</h3>
       <div id="rewardsList"></div>
     </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <h3 style="margin:0;">📅 سجل الحضور الكامل (كل السنة)</h3>
+        <button class="backBtn" id="exportAttendanceCsvBtn">⬇️ CSV</button>
+      </div>
+      <select id="attendanceEmpFilter" style="width:100%; padding:9px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:13px; margin-bottom:12px;">
+        <option value="__ALL__">كل الموظفين</option>
+      </select>
+      <div id="attendanceHistoryList"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <h3 style="margin:0;">📅 التقييم الأسبوعي المجمّع (الأسبوع الحالي)</h3>
+      </div>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
+        بيجمع: الحضور بالنسبة لأيام العمل المطلوبة (بعد استبعاد يوم إجازته)، الالتزام بالميعاد، تنفيذ المهام، ومتوسط تقييم العميل.
+      </p>
+      <div id="weeklyAggregateList"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <h3 style="margin:0;">📊 التقرير الشامل لكل الموظفين</h3>
+        <button class="backBtn" id="exportFullReportCsvBtn">⬇️ CSV</button>
+      </div>
+      <div id="fullReportList"></div>
+    </div>
   </div>
 
 </div>
@@ -657,7 +687,7 @@ function applyBranchFilter(){
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
   if($('#attendance').classList.contains('show')) renderAttendanceLists();
@@ -837,18 +867,34 @@ $('#openAttendance').addEventListener('click', ()=>{
 });
 $('#closeAttendance').addEventListener('click', ()=> $('#attendance').classList.remove('show'));
 
+function isDayOffToday(emp){
+  if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return false;
+  return new Date().getDay() === Number(emp.dayOff);
+}
+function isDayOffTomorrow(emp){
+  if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return false;
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+  return tomorrow.getDay() === Number(emp.dayOff);
+}
+
 function renderAttendanceLists(){
   const notIn = employees.filter(e=> !isClockedIn(e.id));
   const clockedIn = employees.filter(e=> isClockedIn(e.id));
 
   const notInWrap = $('#notInGrid');
-  notInWrap.innerHTML = notIn.length ? notIn.map(e=> `
+  notInWrap.innerHTML = notIn.length ? notIn.map(e=>{
+    let subText = e.scheduledStartTime ? 'ميعادك '+e.scheduledStartTime : 'دوس للحضور';
+    let reminderBadge = '';
+    if(isDayOffToday(e)){ subText = '🏖️ النهاردة إجازتك'; }
+    else if(isDayOffTomorrow(e)){ reminderBadge = '<div class="dayOffReminder">🔔 بكرة إجازتك</div>'; }
+    return `
     <div class="attCard" data-act="in" data-id="${e.id}">
+      ${reminderBadge}
       <div class="av">${initials(e.name)}</div>
       <div class="n">${e.name}</div>
-      <div class="t">${e.scheduledStartTime ? 'ميعادك '+e.scheduledStartTime : 'دوس للحضور'}</div>
-    </div>
-  `).join('') : '<div class="empty">كل الموظفين حاضرين</div>';
+      <div class="t">${subText}</div>
+    </div>`;
+  }).join('') : '<div class="empty">كل الموظفين حاضرين</div>';
 
   const inWrap = $('#clockedInGrid');
   inWrap.innerHTML = clockedIn.length ? clockedIn.map(e=>{
@@ -1089,22 +1135,25 @@ function computeAvgRatingFor(empId){
   return `${avg} / 4 (${count} تقييم مرتبط)`;
 }
 
-function computeAvgRatingToday(empId){
-  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-  const empPointsToday = points.filter(p=> p.employeeId === empId && p.ts >= dayStart.getTime());
-  const branchFeedbackToday = allFeedback.filter(f=> f.branch === currentBranch && f.ts >= dayStart.getTime());
+function computeAvgRatingInRange(empId, startTs, endTs){
+  const empPointsInRange = points.filter(p=> p.employeeId === empId && p.ts >= startTs && p.ts <= endTs);
+  const branchFeedbackInRange = allFeedback.filter(f=> f.branch === currentBranch && f.ts >= startTs && f.ts <= endTs);
   const usedFeedback = new Set();
   let sum = 0, count = 0;
-  empPointsToday.forEach(p=>{
+  empPointsInRange.forEach(p=>{
     let bestIdx=-1, bestAbsDelta=Infinity;
-    for(let i=0;i<branchFeedbackToday.length;i++){
+    for(let i=0;i<branchFeedbackInRange.length;i++){
       if(usedFeedback.has(i)) continue;
-      const absDelta = Math.abs(branchFeedbackToday[i].ts - p.ts);
+      const absDelta = Math.abs(branchFeedbackInRange[i].ts - p.ts);
       if(absDelta <= MATCH_WINDOW_MS && absDelta < bestAbsDelta){ bestAbsDelta=absDelta; bestIdx=i; }
     }
-    if(bestIdx>=0){ usedFeedback.add(bestIdx); sum += branchFeedbackToday[bestIdx].r; count++; }
+    if(bestIdx>=0){ usedFeedback.add(bestIdx); sum += branchFeedbackInRange[bestIdx].r; count++; }
   });
   return count === 0 ? null : sum/count;
+}
+function computeAvgRatingToday(empId){
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  return computeAvgRatingInRange(empId, dayStart.getTime(), Date.now());
 }
 
 // ---------- UNIFIED STAFF OVERVIEW (admin) ----------
@@ -1249,17 +1298,31 @@ function countConfirmedDaysInRange(empId, start, end){
   });
   return days.size;
 }
-function countElapsedDaysInRange(start, end){
+// Counts calendar days in the range EXCLUDING the employee's weekly day off,
+// since they're not expected to work (or submit a task) on that day.
+function countRequiredWorkDaysInRange(emp, start, end){
+  let count = 0;
+  const cur = new Date(start);
+  while(cur <= end){
+    const isDayOff = (emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== '') && cur.getDay() === Number(emp.dayOff);
+    if(!isDayOff) count++;
+    cur.setDate(cur.getDate()+1);
+  }
+  return count;
+}
+function countElapsedWorkDaysInRange(emp, start, end){
   const now = new Date();
   const effectiveEnd = now < end ? now : end;
-  const diffDays = Math.floor((effectiveEnd - start)/(24*60*60*1000)) + 1;
-  return Math.max(0, diffDays);
+  if(effectiveEnd < start) return 0;
+  return countRequiredWorkDaysInRange(emp, start, effectiveEnd);
 }
 
 function getPeriodProgressLabel(empId, periodType){
+  const emp = employees.find(e=> e.id === empId);
+  if(!emp) return '—';
   const range = periodType === 'week' ? getWeekRange(new Date()) : getMonthRange(new Date());
   const confirmedDays = countConfirmedDaysInRange(empId, range.start, range.end);
-  const elapsedDays = countElapsedDaysInRange(range.start, range.end);
+  const elapsedDays = countElapsedWorkDaysInRange(emp, range.start, range.end);
   if(confirmedDays >= elapsedDays && elapsedDays > 0){
     return `<span style="color:var(--good);">${confirmedDays}/${elapsedDays} ✅ ماشي تمام</span>`;
   }
@@ -1292,7 +1355,7 @@ async function checkAndAwardRewards(){
 }
 
 async function maybeAwardPeriod(emp, range, type, label){
-  const requiredDays = Math.floor((range.end - range.start)/(24*60*60*1000)) + 1;
+  const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
   const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
   if(confirmedDays < requiredDays || requiredDays === 0) return;
   const already = rewards.some(r=> r.employeeId===emp.id && r.type===type && r.periodLabel===label);
@@ -1590,7 +1653,7 @@ function openAdmin(){
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
   }
   else { $('#adminLoginGate').classList.add('show'); }
 }
@@ -1607,7 +1670,7 @@ function doAdminLogin(){
     renderLog();
     renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -1671,6 +1734,8 @@ $('#addEmpBtn').addEventListener('click', async ()=>{
 });
 
 // ---------- SCHEDULE (admin) ----------
+const DAY_NAMES = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+
 function renderScheduleList(){
   const wrap = $('#scheduleList');
   if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
@@ -1687,6 +1752,18 @@ function renderScheduleList(){
         <input type="time" data-act="end" data-id="${e.id}" value="${e.scheduledEndTime || ''}"
           style="padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
       </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:11px; color:var(--sub);">يوم الإجازة</span>
+        <select data-act="dayoff" data-id="${e.id}" style="padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
+          <option value="">بدون</option>
+          ${DAY_NAMES.map((d,i)=> `<option value="${i}" ${String(e.dayOff)===String(i)?'selected':''}>${d}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:11px; color:var(--sub);">حد أدنى نقط/أسبوع لاستحقاق المكافأة</span>
+        <input type="number" min="0" data-act="minpoints" data-id="${e.id}" value="${e.minWeeklyPoints || ''}" placeholder="بدون حد"
+          style="width:80px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk';">
+      </div>
     </div>
   `).join('');
   wrap.querySelectorAll('input[data-act="start"]').forEach(inp=>{
@@ -1699,6 +1776,20 @@ function renderScheduleList(){
     inp.addEventListener('change', async ()=>{
       try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { scheduledEndTime: inp.value }); }
       catch(err){ console.error('تعذر حفظ ميعاد الانصراف', err); }
+    });
+  });
+  wrap.querySelectorAll('input[data-act="minpoints"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      const val = inp.value.trim() === '' ? null : parseInt(inp.value.trim());
+      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { minWeeklyPoints: val }); }
+      catch(err){ console.error('تعذر حفظ الحد الأدنى للنقط', err); }
+    });
+  });
+  wrap.querySelectorAll('select[data-act="dayoff"]').forEach(sel=>{
+    sel.addEventListener('change', async ()=>{
+      const val = sel.value === '' ? null : parseInt(sel.value);
+      try{ await updateDoc(doc(db,'sales_employees', sel.dataset.id), { dayOff: val }); }
+      catch(err){ console.error('تعذر حفظ يوم الإجازة', err); }
     });
   });
 }
@@ -1825,6 +1916,179 @@ function renderRewardsList(){
   }).join('');
   wrap.innerHTML = `<table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>النوع</th><th>الفترة</th><th>المبلغ</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+
+// ---------- FULL ATTENDANCE HISTORY (admin) ----------
+function populateAttendanceEmpFilter(){
+  const sel = $('#attendanceEmpFilter');
+  if(!sel) return;
+  const prev = sel.value || '__ALL__';
+  sel.innerHTML = '<option value="__ALL__">كل الموظفين</option>' +
+    employees.map(e=> `<option value="${e.id}">${e.name}</option>`).join('');
+  sel.value = employees.some(e=>e.id===prev) || prev==='__ALL__' ? prev : '__ALL__';
+}
+$('#attendanceEmpFilter')?.addEventListener('change', renderAttendanceHistory);
+
+function getAttendanceHistoryList(){
+  const branchEmpIds = new Set(employees.map(e=>e.id));
+  const filterEmp = $('#attendanceEmpFilter') ? $('#attendanceEmpFilter').value : '__ALL__';
+  return shifts.filter(s=> branchEmpIds.has(s.employeeId) && (filterEmp==='__ALL__' || s.employeeId===filterEmp))
+    .sort((a,b)=> b.clockInTs - a.clockInTs);
+}
+
+function renderAttendanceHistory(){
+  const wrap = $('#attendanceHistoryList');
+  if(!wrap) return;
+  populateAttendanceEmpFilter();
+  const list = getAttendanceHistoryList().slice(0, 300);
+  if(list.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش سجل حضور</div>'; return; }
+  const rows = list.map(s=>{
+    const inD = new Date(s.clockInTs);
+    const dateStr = inD.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const inTime = inD.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+    const outTime = s.clockOutTs ? new Date(s.clockOutTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : '—';
+    const duration = s.clockOutTs ? formatDuration(s.clockOutTs - s.clockInTs) : 'لسه شغال';
+    const lateTxt = s.lateMinutes > 0 ? `${s.lateMinutes}د` : '—';
+    const otTxt = s.overtimeMinutes > 0 ? `${s.overtimeMinutes}د` : '—';
+    return `<tr>
+      <td>${dateStr}</td><td>${s.employeeName}</td><td>${inTime}</td><td>${outTime}</td>
+      <td>${duration}</td>
+      <td style="color:${s.lateMinutes>0?'var(--bad)':'var(--sub)'}">${lateTxt}</td>
+      <td style="color:${s.overtimeMinutes>0?'var(--gold)':'var(--sub)'}">${otTxt}</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>حضور</th><th>انصراف</th><th>المدة</th><th>تأخير</th><th>إضافي</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+$('#exportAttendanceCsvBtn')?.addEventListener('click', ()=>{
+  const list = getAttendanceHistoryList();
+  if(list.length === 0){ alert('لا توجد بيانات للتصدير'); return; }
+  let csv = 'التاريخ,الموظف,وقت الحضور,وقت الانصراف,المدة بالدقايق,التأخير بالدقايق,الوقت الإضافي بالدقايق\n';
+  list.forEach(s=>{
+    const inD = new Date(s.clockInTs);
+    const dateStr = inD.toLocaleDateString('ar-EG');
+    const inTime = inD.toLocaleTimeString('ar-EG');
+    const outTime = s.clockOutTs ? new Date(s.clockOutTs).toLocaleTimeString('ar-EG') : 'لسه شغال';
+    const durationMin = s.clockOutTs ? Math.round((s.clockOutTs - s.clockInTs)/60000) : '';
+    csv += `"${dateStr}","${s.employeeName}","${inTime}","${outTime}","${durationMin}","${s.lateMinutes||0}","${s.overtimeMinutes||0}"\n`;
+  });
+  const blob = new Blob(["\ufeff"+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'attendance-' + currentBranch + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ---------- COMPREHENSIVE REPORT (admin) ----------
+// ---------- WEEKLY AGGREGATE PERFORMANCE (admin) ----------
+function buildWeeklyAggregateData(){
+  const week = getWeekRange(new Date());
+  return employees.map(e=>{
+    const requiredDays = countRequiredWorkDaysInRange(e, week.start, week.end);
+    const elapsedRequiredDays = countElapsedWorkDaysInRange(e, week.start, week.end);
+    const daysPresent = shifts.filter(s=> s.employeeId===e.id && s.clockInTs >= week.start.getTime() && s.clockInTs <= week.end.getTime()).length;
+    const weekShifts = shifts.filter(s=> s.employeeId===e.id && s.clockInTs >= week.start.getTime() && s.clockInTs <= week.end.getTime());
+    const lateCount = weekShifts.filter(s=> (s.lateMinutes||0) > 0).length;
+    const confirmedTasks = countConfirmedDaysInRange(e.id, week.start, week.end);
+    const avgRating = computeAvgRatingInRange(e.id, week.start.getTime(), week.end.getTime());
+
+    const attendancePct = elapsedRequiredDays > 0 ? Math.min(100, Math.round(daysPresent/elapsedRequiredDays*100)) : 100;
+    const punctualityPct = daysPresent > 0 ? Math.round((daysPresent-lateCount)/daysPresent*100) : 100;
+    const taskPct = elapsedRequiredDays > 0 ? Math.min(100, Math.round(confirmedTasks/elapsedRequiredDays*100)) : 100;
+    const ratingPct = avgRating === null ? null : Math.round((avgRating-1)/3*100); // maps 1..4 scale to 0..100%
+    const parts = [attendancePct, punctualityPct, taskPct];
+    if(ratingPct !== null) parts.push(ratingPct);
+    const composite = Math.round(parts.reduce((a,b)=>a+b,0)/parts.length);
+
+    return {
+      name: e.name, requiredDays, elapsedRequiredDays, daysPresent, lateCount,
+      confirmedTasks, avgRating, composite
+    };
+  });
+}
+
+function renderWeeklyAggregate(){
+  const wrap = $('#weeklyAggregateList');
+  if(!wrap) return;
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  const data = buildWeeklyAggregateData();
+  const rows = data.map(d=>{
+    const color = d.composite >= 85 ? 'var(--good)' : d.composite >= 60 ? '#f2a93c' : 'var(--bad)';
+    const ratingTxt = d.avgRating === null ? '—' : d.avgRating.toFixed(1)+'/4';
+    return `
+    <div class="overviewRow" style="grid-template-columns:1.3fr 0.7fr 0.7fr 0.7fr 0.8fr;">
+      <div class="n">${d.name}</div>
+      <div>حضور ${d.daysPresent}/${d.elapsedRequiredDays}</div>
+      <div style="color:${d.lateCount>0?'var(--bad)':'var(--sub)'}">تأخير ${d.lateCount}</div>
+      <div>تاسك ${d.confirmedTasks}/${d.elapsedRequiredDays}</div>
+      <div style="font-weight:800; color:${color};">${d.composite}% (⭐${ratingTxt})</div>
+    </div>`;
+  }).join('');
+  wrap.innerHTML = rows;
+}
+
+function buildFullReportData(){
+  return employees.map(e=>{
+    const empPoints = points.filter(p=> p.employeeId === e.id);
+    const empSubs = submissions.filter(s=> s.employeeId === e.id);
+    const confirmedTasks = empSubs.filter(s=> s.confirmed).length;
+    const rejectedTasks = empSubs.filter(s=> s.rejected).length;
+    const empShifts = shifts.filter(s=> s.employeeId === e.id);
+    const daysPresent = empShifts.length;
+    const lateCount = empShifts.filter(s=> (s.lateMinutes||0) > 0).length;
+    const totalLateMin = empShifts.reduce((sum,s)=> sum + (s.lateMinutes||0), 0);
+    const totalOvertimeMin = empShifts.reduce((sum,s)=> sum + (s.overtimeMinutes||0), 0);
+    const empRewards = rewards.filter(r=> r.employeeId === e.id);
+    const totalRewardAmount = empRewards.reduce((sum,r)=> sum + r.amount, 0);
+    const avgRatingHtml = computeAvgRatingFor(e.id);
+    const avgRatingPlain = avgRatingHtml.replace(/<[^>]*>/g,'');
+    return {
+      name: e.name, totalPoints: empPoints.length, confirmedTasks, rejectedTasks,
+      daysPresent, lateCount, totalLateMin, totalOvertimeMin,
+      rewardsCount: empRewards.length, totalRewardAmount, avgRatingPlain
+    };
+  });
+}
+
+function renderFullReport(){
+  const wrap = $('#fullReportList');
+  if(!wrap) return;
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  const data = buildFullReportData();
+  const rows = data.map(d=> `<tr>
+    <td>${d.name}</td>
+    <td>${d.totalPoints}</td>
+    <td>${d.confirmedTasks}</td>
+    <td style="color:${d.rejectedTasks>0?'var(--bad)':'var(--sub)'}">${d.rejectedTasks}</td>
+    <td>${d.daysPresent}</td>
+    <td style="color:${d.lateCount>0?'var(--bad)':'var(--sub)'}">${d.lateCount} (${d.totalLateMin}د)</td>
+    <td style="color:${d.totalOvertimeMin>0?'var(--gold)':'var(--sub)'}">${d.totalOvertimeMin}د</td>
+    <td>${d.avgRatingPlain}</td>
+    <td style="color:var(--gold); font-weight:700;">${d.rewardsCount} (${d.totalRewardAmount} ج.م)</td>
+  </tr>`).join('');
+  wrap.innerHTML = `<div style="overflow-x:auto;"><table class="logTable">
+    <thead><tr>
+      <th>الموظف</th><th>النقط</th><th>مهام مؤكدة</th><th>مهام مرفوضة</th>
+      <th>أيام حضور</th><th>مرات تأخير</th><th>وقت إضافي</th><th>متوسط تقييم</th><th>المكافآت</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+$('#exportFullReportCsvBtn')?.addEventListener('click', ()=>{
+  const data = buildFullReportData();
+  if(data.length === 0){ alert('لا توجد بيانات للتصدير'); return; }
+  let csv = 'الموظف,إجمالي النقط,مهام مؤكدة,مهام مرفوضة,أيام حضور,مرات تأخير,إجمالي دقايق التأخير,إجمالي دقايق الوقت الإضافي,متوسط التقييم,عدد المكافآت,إجمالي مبلغ المكافآت\n';
+  data.forEach(d=>{
+    csv += `"${d.name}","${d.totalPoints}","${d.confirmedTasks}","${d.rejectedTasks}","${d.daysPresent}","${d.lateCount}","${d.totalLateMin}","${d.totalOvertimeMin}","${d.avgRatingPlain}","${d.rewardsCount}","${d.totalRewardAmount}"\n`;
+  });
+  const blob = new Blob(["\ufeff"+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'full-report-' + currentBranch + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
 
 </script>
 <script>
