@@ -90,6 +90,8 @@
   .toast p{margin:0; font-size:16px; font-weight:800; white-space:nowrap;}
   /* ---------- LEADERBOARD ---------- */
   #leaderboard{position:absolute; inset:0; overflow-y:auto; padding:5vh 4vw; display:none; background:var(--bg); z-index:30;}
+  #attendance{position:absolute; inset:0; overflow-y:auto; padding:5vh 4vw; display:none; background:var(--bg); z-index:30;}
+  #attendance.show{display:block;}
   #leaderboard.show{display:block;}
   .lb-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px;}
   .lb-header h2{font-size:24px; font-weight:900; margin:0;}
@@ -157,6 +159,57 @@
   .ratingBadge.r3{background:rgba(168,198,60,.2); color:#a8c63c;}
   .ratingBadge.r4{background:rgba(47,163,107,.2); color:#2fa36b;}
   .ratingBadge.none{background:var(--panel2); color:var(--sub);}
+
+  /* ---------- ATTENDANCE / TASKS / REWARDS ---------- */
+  .attTile{position:relative;}
+  .taskBadge{position:absolute; top:6px; left:6px; font-size:13px;}
+  .giftBadge{position:absolute; top:6px; right:6px; font-size:16px; animation:giftPulse 1s ease-in-out infinite alternate;}
+  @keyframes giftPulse{from{transform:scale(1);} to{transform:scale(1.15);}}
+
+  .attSections{display:flex; flex-direction:column; gap:18px;}
+  .attSectionTitle{font-size:13px; color:var(--sub); font-weight:700; margin-bottom:10px;}
+  .attGrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px;}
+  .attCard{
+    background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:12px 8px;
+    display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer; text-align:center; position:relative;
+  }
+  .attCard .av{width:34px; height:34px; border-radius:50%; background:var(--panel); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk'; font-weight:700; font-size:12px; color:var(--gold);}
+  .attCard .n{font-size:11px; font-weight:700;}
+  .attCard .t{font-size:9px; color:var(--sub); font-family:'Space Grotesk';}
+  .attCard.late{border-color:var(--r1);}
+  .attCard .lateTag{position:absolute; top:4px; right:4px; font-size:8px; background:var(--r1); color:#fff; padding:1px 5px; border-radius:6px;}
+
+  .dayHubBox{text-align:right;}
+  .dayHubBox h3{margin:0 0 2px; font-size:17px;}
+  .dayHubRow{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px;}
+  .dayHubRow:last-child{border-bottom:none;}
+  .dayHubRow .lbl{color:var(--sub);}
+  .taskBox{background:var(--panel2); border-radius:12px; padding:14px; margin:12px 0;}
+  .taskBox .desc{font-weight:700; font-size:14px; margin-bottom:8px;}
+  .taskStatusPill{display:inline-block; padding:4px 10px; border-radius:10px; font-size:11px; font-weight:700;}
+  .taskStatusPill.pending{background:rgba(242,169,60,.2); color:var(--r2);}
+  .taskStatusPill.confirmed{background:rgba(47,163,107,.2); color:var(--good);}
+  .taskStatusPill.none{background:var(--panel); color:var(--sub);}
+  .photoPreview{width:100%; max-height:160px; object-fit:cover; border-radius:10px; margin:10px 0; display:none;}
+  .fileBtn{display:block; width:100%; padding:12px; border-radius:12px; border:1px dashed var(--gold-dim); background:transparent; color:var(--gold); font-family:'Cairo'; font-weight:700; font-size:13px; text-align:center; cursor:pointer;}
+
+  .giftBoxToast{
+    position:absolute; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
+    background:rgba(8,9,12,.92); flex-direction:column; gap:16px; text-align:center;
+  }
+  .giftBoxToast.show{display:flex;}
+  .giftBoxToast .box-emoji{font-size:70px; animation:giftBounce .6s ease-in-out infinite alternate;}
+  @keyframes giftBounce{from{transform:translateY(0) rotate(-4deg);} to{transform:translateY(-12px) rotate(4deg);}}
+  .giftBoxToast h2{font-size:24px; margin:0; color:var(--gold);}
+  .giftBoxToast .amount{font-family:'Space Grotesk'; font-size:38px; font-weight:900; color:var(--good);}
+
+  .subRow{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .subRow:last-child{border-bottom:none;}
+  .subRow img{width:50px; height:50px; object-fit:cover; border-radius:8px; flex-shrink:0;}
+  .subRow .info{flex:1; min-width:120px;}
+  .subRow .n{font-weight:700; font-size:13px;}
+  .subRow .m{color:var(--sub); font-size:11px;}
+  .confirmBtnSmall{border:none; background:var(--good); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;}
 </style>
 </head>
 <body>
@@ -170,6 +223,7 @@
         <h1>مين اللي باع دلوقتي؟ 🔥</h1>
         <div class="branch-tag" id="branchTag">📍 —</div>
       </div>
+      <button class="lbBtn" id="openAttendance" style="margin-left:8px;">⏰ الحضور</button>
       <button class="lbBtn" id="openLeaderboard">🏆 الترتيب</button>
     </div>
     <div class="grid" id="empGrid"></div>
@@ -242,6 +296,58 @@
     </div>
   </div>
 
+  <!-- ATTENDANCE -->
+  <div id="attendance">
+    <div class="lb-header">
+      <h2>⏰ الحضور والانصراف</h2>
+      <button class="backBtn" id="closeAttendance">◀ رجوع</button>
+    </div>
+    <div class="attSections">
+      <div>
+        <div class="attSectionTitle">لسه محضرش (دوس عشان تسجل حضور)</div>
+        <div class="attGrid" id="notInGrid"></div>
+      </div>
+      <div>
+        <div class="attSectionTitle">حاضر دلوقتي (دوس على اسمك عشان تشوف يومك)</div>
+        <div class="attGrid" id="clockedInGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PERSONAL DAY HUB -->
+  <div id="dayHubOverlay" class="overlay">
+    <div class="box dayHubBox" style="width:min(94vw,420px);">
+      <h3 id="dh_name">—</h3>
+      <p class="sub" id="dh_shiftInfo">—</p>
+
+      <div class="taskBox">
+        <div class="desc" id="dh_taskDesc">مفيش تاسك متحدد للأسبوع ده</div>
+        <div id="dh_taskStatus"></div>
+        <input type="file" accept="image/*" capture="environment" id="dh_photoInput" style="display:none;">
+        <label class="fileBtn" id="dh_fileBtnLabel" for="dh_photoInput" style="display:none;">📸 اختار صورة تنفيذ التاسك</label>
+        <img id="dh_photoPreview" class="photoPreview">
+        <button class="btnPrimary" id="dh_submitTaskBtn" style="width:100%; margin-top:10px; display:none;">تأكيد تنفيذ التاسك ✅</button>
+      </div>
+
+      <div class="dayHubRow"><div class="lbl">نقاط البيع النهاردة</div><div id="dh_pointsToday">0</div></div>
+      <div class="dayHubRow"><div class="lbl">متوسط تقييم العميل ليك</div><div id="dh_avgRating">—</div></div>
+      <div class="dayHubRow"><div class="lbl">مدة الشيفت لحد دلوقتي</div><div id="dh_shiftDuration">—</div></div>
+      <div class="dayHubRow"><div class="lbl">مكافأة الأسبوع</div><div id="dh_weeklyProgress">—</div></div>
+      <div class="dayHubRow"><div class="lbl">مكافأة الشهر</div><div id="dh_monthlyProgress">—</div></div>
+
+      <button class="btnGhost" style="width:100%; margin-top:14px; background:var(--bad); color:#fff; border:none;" id="dh_clockOutBtn">🚪 تسجيل انصراف</button>
+      <button class="btnGhost" style="width:100%; margin-top:8px;" id="dh_closeBtn">رجوع</button>
+    </div>
+  </div>
+
+  <!-- GIFT BOX CELEBRATION -->
+  <div id="giftBoxToast" class="giftBoxToast">
+    <div class="box-emoji">🎁</div>
+    <h2 id="giftBoxName">مبروك!</h2>
+    <div class="amount" id="giftBoxAmount">0 ج.م</div>
+    <p style="color:var(--sub); font-size:13px;" id="giftBoxSub">مكافأة الالتزام</p>
+  </div>
+
   <!-- ADMIN LOGIN -->
   <div id="adminLoginGate" class="login-gate">
     <div class="login-box">
@@ -291,6 +397,33 @@
       </p>
       <div id="perfList"></div>
     </div>
+
+    <div class="panel">
+      <h3>⏰ مواعيد الحضور المحددة</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">حدّد ميعاد الحضور الرسمي لكل موظف عشان التأخير يتحسب منه.</p>
+      <div id="scheduleList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📋 المهام الأسبوعية</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">حدّد تاسك كل موظف للأسبوع ده (مثلاً "سكشن A"). الموظف لازم ينفذه ويصور كل يوم.</p>
+      <div id="taskAssignList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📸 مراجعة تنفيذ المهام (محتاجة تأكيد)</h3>
+      <div id="pendingSubmissionsList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>✅ المهام المؤكدة (آخر 30)</h3>
+      <div id="confirmedSubmissionsList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🎁 سجل المكافآت</h3>
+      <div id="rewardsList"></div>
+    </div>
   </div>
 
 </div>
@@ -298,7 +431,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, enableIndexedDbPersistence
+  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -318,6 +451,10 @@ enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence n
 const empCol = collection(db, 'sales_employees');
 const pointsCol = collection(db, 'sales_points');
 const entriesCol = collection(db, 'entries'); // shared with the feedback (happy-or-not) app
+const shiftsCol = collection(db, 'sales_shifts');
+const tasksCol = collection(db, 'sales_tasks');
+const submissionsCol = collection(db, 'sales_task_submissions');
+const rewardsCol = collection(db, 'sales_rewards');
 
 // Simple admin access code — checked on-device, no network call.
 // Change this string to whatever code you want, then re-download the file.
@@ -330,6 +467,12 @@ let points = [];      // {id, employeeId, employeeName, invoiceNumber, ts}
 let allFeedback = []; // raw customer satisfaction entries from the feedback app
 let selectedEmp = null;
 let adminUnlocked = false;
+let allShifts = [], shifts = [];           // clock in/out records
+let allTasks = [], tasks = [];             // current weekly task assignment per employee
+let allSubmissions = [], submissions = []; // daily task photo submissions
+let allRewards = [], rewards = [];         // earned weekly/monthly rewards
+let pendingTaskPhoto = null;                // File selected before upload
+let taskSubmitEmpId = null;
 
 // ---------- BRANCH SETUP (this device's own branch, for the kiosk grid) ----------
 let currentBranch = localStorage.getItem('sales_branch') || '';
@@ -387,11 +530,26 @@ $('#lbBranchSelect').addEventListener('change', (e)=>{
 
 function applyBranchFilter(){
   employees = allEmployees.filter(e => e.branch === currentBranch);
+  shifts = allShifts.filter(s => s.branch === currentBranch);
+  tasks = allTasks.filter(t => t.branch === currentBranch);
+  submissions = allSubmissions.filter(s => s.branch === currentBranch);
+  rewards = allRewards.filter(r => r.branch === currentBranch);
   renderEmpGrid();
   populateBranchDropdowns();
-  if(adminUnlocked){ renderAdminList(); renderLog(); renderPerformanceLink(); }
+  checkAndAwardRewards();
+  if(!rewardToastLock){
+    rewardToastLock = true;
+    setTimeout(()=>{ showUnseenRewardsIfAny(); rewardToastLock = false; }, 800);
+  }
+  if(adminUnlocked){
+    renderAdminList(); renderLog(); renderPerformanceLink();
+    renderScheduleList(); renderTaskAssignList();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
+  }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
+  if($('#attendance').classList.contains('show')) renderAttendanceLists();
 }
+let rewardToastLock = false;
 
 function initials(name){
   const parts = name.trim().split(/\s+/);
@@ -414,6 +572,26 @@ onSnapshot(entriesCol, (snap)=>{
   allFeedback = snap.docs.map(d=>({id:d.id, ...d.data()}));
   if(adminUnlocked) renderPerformanceLink();
 }, (err)=> console.error('feedback sync error', err));
+
+onSnapshot(shiftsCol, (snap)=>{
+  allShifts = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  applyBranchFilter();
+}, (err)=> console.error('shifts sync error', err));
+
+onSnapshot(tasksCol, (snap)=>{
+  allTasks = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  applyBranchFilter();
+}, (err)=> console.error('tasks sync error', err));
+
+onSnapshot(submissionsCol, (snap)=>{
+  allSubmissions = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  applyBranchFilter();
+}, (err)=> console.error('submissions sync error', err));
+
+onSnapshot(rewardsCol, (snap)=>{
+  allRewards = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  applyBranchFilter();
+}, (err)=> console.error('rewards sync error', err));
 
 function renderLog(){
   const wrap = $('#logList');
@@ -514,6 +692,337 @@ function renderPerformanceLink(){
   wrap.innerHTML = `<table class="logTable"><thead><tr><th>وقت البيع</th><th>الموظف</th><th>الفاتورة</th><th>تقييم العميل (تقريبي)</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+// ==================== ATTENDANCE / TASKS / REWARDS ====================
+function todayStr(d){
+  const dt = d ? new Date(d) : new Date();
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+function getOpenShift(empId){
+  return shifts.find(s=> s.employeeId === empId && !s.clockOutTs);
+}
+function isClockedIn(empId){
+  return !!getOpenShift(empId);
+}
+function getTodaysSubmission(empId){
+  const today = todayStr();
+  return submissions.find(s=> s.employeeId === empId && s.date === today);
+}
+function getCurrentTask(empId){
+  return tasks.find(t=> t.employeeId === empId);
+}
+function formatDuration(ms){
+  const totalMin = Math.floor(ms/60000);
+  const h = Math.floor(totalMin/60), m = totalMin%60;
+  return h > 0 ? `${h} س ${m} د` : `${m} دقيقة`;
+}
+
+// ---------- ATTENDANCE SCREEN ----------
+$('#openAttendance').addEventListener('click', ()=>{
+  requestFullscreenOnce();
+  $('#attendance').classList.add('show');
+  renderAttendanceLists();
+});
+$('#closeAttendance').addEventListener('click', ()=> $('#attendance').classList.remove('show'));
+
+function renderAttendanceLists(){
+  const notIn = employees.filter(e=> !isClockedIn(e.id));
+  const clockedIn = employees.filter(e=> isClockedIn(e.id));
+
+  const notInWrap = $('#notInGrid');
+  notInWrap.innerHTML = notIn.length ? notIn.map(e=> `
+    <div class="attCard" data-act="in" data-id="${e.id}">
+      <div class="av">${initials(e.name)}</div>
+      <div class="n">${e.name}</div>
+      <div class="t">${e.scheduledStartTime ? 'ميعادك '+e.scheduledStartTime : 'دوس للحضور'}</div>
+    </div>
+  `).join('') : '<div class="empty">كل الموظفين حاضرين</div>';
+
+  const inWrap = $('#clockedInGrid');
+  inWrap.innerHTML = clockedIn.length ? clockedIn.map(e=>{
+    const shift = getOpenShift(e.id);
+    const late = shift && shift.lateMinutes > 0;
+    return `
+    <div class="attCard${late?' late':''}" data-act="hub" data-id="${e.id}">
+      ${late ? `<div class="lateTag">متأخر ${shift.lateMinutes}د</div>` : ''}
+      <div class="av">${initials(e.name)}</div>
+      <div class="n">${e.name}</div>
+      <div class="t">${formatDuration(Date.now() - shift.clockInTs)}</div>
+    </div>`;
+  }).join('') : '<div class="empty">محدش حاضر دلوقتي</div>';
+
+  notInWrap.querySelectorAll('.attCard').forEach(card=>{
+    card.addEventListener('click', ()=> clockIn(card.dataset.id));
+  });
+  inWrap.querySelectorAll('.attCard').forEach(card=>{
+    card.addEventListener('click', ()=> openDayHub(card.dataset.id));
+  });
+}
+
+async function clockIn(empId){
+  const emp = employees.find(e=> e.id === empId);
+  if(!emp) return;
+  let lateMinutes = 0;
+  if(emp.scheduledStartTime){
+    const [h,m] = emp.scheduledStartTime.split(':').map(Number);
+    const scheduled = new Date();
+    scheduled.setHours(h, m, 0, 0);
+    const diffMin = Math.round((Date.now() - scheduled.getTime())/60000);
+    if(diffMin > 0) lateMinutes = diffMin;
+  }
+  try{
+    await addDoc(shiftsCol, {
+      employeeId: empId, employeeName: emp.name, branch: currentBranch,
+      clockInTs: Date.now(), clockOutTs: null,
+      scheduledStartTime: emp.scheduledStartTime || null, lateMinutes
+    });
+  }catch(err){ console.error('تعذر تسجيل الحضور', err); }
+  renderAttendanceLists();
+}
+
+async function clockOut(empId){
+  const shift = getOpenShift(empId);
+  if(!shift) return;
+  try{ await updateDoc(doc(db,'sales_shifts', shift.id), { clockOutTs: Date.now() }); }
+  catch(err){ console.error('تعذر تسجيل الانصراف', err); }
+}
+
+// ---------- PERSONAL DAY HUB ----------
+function openDayHub(empId){
+  taskSubmitEmpId = empId;
+  renderDayHub(empId);
+  $('#dayHubOverlay').classList.add('show');
+}
+$('#dh_closeBtn').addEventListener('click', ()=>{
+  $('#dayHubOverlay').classList.remove('show');
+  pendingTaskPhoto = null;
+  taskSubmitEmpId = null;
+});
+$('#dh_clockOutBtn').addEventListener('click', async ()=>{
+  if(!confirm('متأكد إنك عايز تسجل انصراف؟')) return;
+  await clockOut(taskSubmitEmpId);
+  $('#dayHubOverlay').classList.remove('show');
+  renderAttendanceLists();
+});
+
+function renderDayHub(empId){
+  const emp = employees.find(e=> e.id === empId);
+  const shift = getOpenShift(empId);
+  if(!emp || !shift) return;
+
+  $('#dh_name').textContent = emp.name;
+  const lateTxt = shift.lateMinutes > 0 ? ` — متأخر ${shift.lateMinutes} دقيقة` : ' — في الميعاد ✅';
+  $('#dh_shiftInfo').textContent = 'دخل الشيفت الساعة ' + new Date(shift.clockInTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) + lateTxt;
+  $('#dh_shiftDuration').textContent = formatDuration(Date.now() - shift.clockInTs);
+
+  // Task
+  const task = getCurrentTask(empId);
+  const sub = getTodaysSubmission(empId);
+  $('#dh_taskDesc').textContent = task ? task.taskDescription : 'مفيش تاسك متحدد للأسبوع ده';
+  $('#dh_photoInput').value = '';
+  $('#dh_photoPreview').style.display = 'none';
+  $('#dh_submitTaskBtn').style.display = 'none';
+  pendingTaskPhoto = null;
+
+  if(sub){
+    const pill = sub.confirmed
+      ? '<span class="taskStatusPill confirmed">✅ اتأكد التنفيذ</span>'
+      : '<span class="taskStatusPill pending">⏳ في انتظار تأكيد الأدمن</span>';
+    $('#dh_taskStatus').innerHTML = pill;
+    $('#dh_fileBtnLabel').style.display = 'none';
+    if(sub.photoURL){
+      $('#dh_photoPreview').src = sub.photoURL;
+      $('#dh_photoPreview').style.display = 'block';
+    }
+  } else if(task){
+    $('#dh_taskStatus').innerHTML = '<span class="taskStatusPill none">لسه متنفذش النهاردة</span>';
+    $('#dh_fileBtnLabel').style.display = 'block';
+  } else {
+    $('#dh_taskStatus').innerHTML = '';
+    $('#dh_fileBtnLabel').style.display = 'none';
+  }
+
+  // Points today
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  $('#dh_pointsToday').textContent = countsFor(empId, dayStart.getTime());
+
+  // Average customer rating linked to this employee (reusing the same
+  // approximate time-based matching used in the performance-link report).
+  $('#dh_avgRating').innerHTML = computeAvgRatingFor(empId);
+
+  // Weekly / monthly progress
+  $('#dh_weeklyProgress').innerHTML = getPeriodProgressLabel(empId, 'week');
+  $('#dh_monthlyProgress').innerHTML = getPeriodProgressLabel(empId, 'month');
+}
+
+function computeAvgRatingFor(empId){
+  const empPoints = points.filter(p=> p.employeeId === empId);
+  const branchFeedback = allFeedback.filter(f=> f.branch === currentBranch);
+  const usedFeedback = new Set();
+  let sum = 0, count = 0;
+  empPoints.forEach(p=>{
+    let bestIdx=-1, bestAbsDelta=Infinity;
+    for(let i=0;i<branchFeedback.length;i++){
+      if(usedFeedback.has(i)) continue;
+      const absDelta = Math.abs(branchFeedback[i].ts - p.ts);
+      if(absDelta <= MATCH_WINDOW_MS && absDelta < bestAbsDelta){ bestAbsDelta=absDelta; bestIdx=i; }
+    }
+    if(bestIdx>=0){ usedFeedback.add(bestIdx); sum += branchFeedback[bestIdx].r; count++; }
+  });
+  if(count===0) return '<span style="color:var(--sub);">مفيش بيانات كفاية</span>';
+  const avg = (sum/count).toFixed(1);
+  return `${avg} / 4 (${count} تقييم مرتبط)`;
+}
+
+$('#dh_photoInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  pendingTaskPhoto = file;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    $('#dh_photoPreview').src = ev.target.result;
+    $('#dh_photoPreview').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+  $('#dh_submitTaskBtn').style.display = 'block';
+});
+
+function compressImage(file, maxWidth, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w > maxWidth){ h = Math.round(h*(maxWidth/w)); w = maxWidth; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = ()=> reject(new Error('تعذرت قراءة الصورة'));
+      img.src = e.target.result;
+    };
+    reader.onerror = ()=> reject(new Error('تعذرت قراءة الملف'));
+    reader.readAsDataURL(file);
+  });
+}
+
+$('#dh_submitTaskBtn').addEventListener('click', async ()=>{
+  if(!pendingTaskPhoto || !taskSubmitEmpId) return;
+  const emp = employees.find(e=> e.id === taskSubmitEmpId);
+  const task = getCurrentTask(taskSubmitEmpId);
+  const btn = $('#dh_submitTaskBtn');
+  btn.disabled = true; btn.textContent = 'بيضغط الصورة...';
+  try{
+    // Photos are compressed and stored directly in Firestore (small, low-res JPEG)
+    // instead of Firebase Storage, so this works on the free Spark plan with no billing account needed.
+    const dataUri = await compressImage(pendingTaskPhoto, 480, 0.5);
+    await addDoc(submissionsCol, {
+      employeeId: taskSubmitEmpId, employeeName: emp.name, branch: currentBranch,
+      date: todayStr(), taskDescription: task ? task.taskDescription : '',
+      photoURL: dataUri, submittedAt: Date.now(), confirmed: false, confirmedAt: null
+    });
+    renderDayHub(taskSubmitEmpId);
+  }catch(err){
+    console.error('تعذر حفظ صورة التاسك', err);
+    alert('حصل خطأ في حفظ الصورة: ' + (err && err.message ? err.message : 'غير معروف'));
+  }
+  btn.disabled = false; btn.textContent = 'تأكيد تنفيذ التاسك ✅';
+});
+
+// ---------- WEEK/MONTH HELPERS ----------
+function getWeekRange(d){
+  const dt = new Date(d);
+  const day = dt.getDay(); // 0=Sun
+  const diffToMonday = (day === 0 ? -6 : 1 - day);
+  const monday = new Date(dt); monday.setDate(dt.getDate()+diffToMonday); monday.setHours(0,0,0,0);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6); sunday.setHours(23,59,59,999);
+  return { start: monday, end: sunday };
+}
+function getMonthRange(d){
+  const dt = new Date(d);
+  const start = new Date(dt.getFullYear(), dt.getMonth(), 1, 0,0,0,0);
+  const end = new Date(dt.getFullYear(), dt.getMonth()+1, 0, 23,59,59,999);
+  return { start, end };
+}
+function countConfirmedDaysInRange(empId, start, end){
+  const days = new Set();
+  submissions.forEach(s=>{
+    if(s.employeeId !== empId || !s.confirmed) return;
+    const d = new Date(s.date+'T00:00:00');
+    if(d >= start && d <= end) days.add(s.date);
+  });
+  return days.size;
+}
+function countElapsedDaysInRange(start, end){
+  const now = new Date();
+  const effectiveEnd = now < end ? now : end;
+  const diffDays = Math.floor((effectiveEnd - start)/(24*60*60*1000)) + 1;
+  return Math.max(0, diffDays);
+}
+
+function getPeriodProgressLabel(empId, periodType){
+  const range = periodType === 'week' ? getWeekRange(new Date()) : getMonthRange(new Date());
+  const confirmedDays = countConfirmedDaysInRange(empId, range.start, range.end);
+  const elapsedDays = countElapsedDaysInRange(range.start, range.end);
+  if(confirmedDays >= elapsedDays && elapsedDays > 0){
+    return `<span style="color:var(--good);">${confirmedDays}/${elapsedDays} ✅ ماشي تمام</span>`;
+  }
+  const missed = elapsedDays - confirmedDays;
+  return `<span style="color:var(--r1);">${confirmedDays}/${elapsedDays} — فايتك ${missed} يوم</span>`;
+}
+
+// ---------- REWARD AUTO-GENERATION ----------
+function randomReward(){ return Math.floor(Math.random()*(1000-200+1))+200; }
+
+async function checkAndAwardRewards(){
+  if(!currentBranch || employees.length === 0) return;
+  const now = new Date();
+  const thisWeek = getWeekRange(now);
+  const thisMonth = getMonthRange(now);
+
+  for(const emp of employees){
+    // Previous (fully completed) week
+    const prevWeekEnd = new Date(thisWeek.start.getTime() - 1);
+    const prevWeek = getWeekRange(prevWeekEnd);
+    await maybeAwardPeriod(emp, prevWeek, 'weekly', 'أسبوع ' + todayStr(prevWeek.start));
+
+    // Previous (fully completed) month
+    if(now.getDate() <= 3){ // only need to check right after month changes; cheap enough to always check anyway
+      const prevMonthEnd = new Date(thisMonth.start.getTime() - 1);
+      const prevMonth = getMonthRange(prevMonthEnd);
+      await maybeAwardPeriod(emp, prevMonth, 'monthly', prevMonth.start.toLocaleDateString('ar-EG',{month:'long', year:'numeric'}));
+    }
+  }
+}
+
+async function maybeAwardPeriod(emp, range, type, label){
+  const requiredDays = Math.floor((range.end - range.start)/(24*60*60*1000)) + 1;
+  const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
+  if(confirmedDays < requiredDays || requiredDays === 0) return;
+  const already = rewards.some(r=> r.employeeId===emp.id && r.type===type && r.periodLabel===label);
+  if(already) return;
+  try{
+    await addDoc(rewardsCol, {
+      employeeId: emp.id, employeeName: emp.name, branch: currentBranch,
+      type, periodLabel: label, amount: randomReward(), earnedAt: Date.now(), seen: false
+    });
+  }catch(err){ console.error('تعذر إنشاء المكافأة', err); }
+}
+
+// Show a celebratory gift-box toast for any unseen reward, once per app load per reward.
+function showUnseenRewardsIfAny(){
+  const unseen = rewards.filter(r=> !r.seen);
+  if(unseen.length === 0) return;
+  const r = unseen[0];
+  $('#giftBoxName').textContent = '🎉 مبروك يا ' + r.employeeName + '!';
+  $('#giftBoxAmount').textContent = r.amount + ' ج.م';
+  $('#giftBoxSub').textContent = (r.type==='weekly' ? 'مكافأة الالتزام الأسبوعية' : 'مكافأة الالتزام الشهرية') + ' — ' + r.periodLabel;
+  $('#giftBoxToast').classList.add('show');
+  updateDoc(doc(db,'sales_rewards', r.id), { seen: true }).catch(()=>{});
+  setTimeout(()=> $('#giftBoxToast').classList.remove('show'), 4000);
+}
+
 function countsFor(empId, sinceTs){
   return points.filter(p=> p.employeeId === empId && (!sinceTs || p.ts >= sinceTs)).length;
 }
@@ -524,19 +1033,28 @@ let highlightTimer = null;
 function renderEmpGrid(){
   const grid = $('#empGrid');
   const hint = $('#emptyHint');
-  if(employees.length === 0){
+  const clockedIn = employees.filter(e=> isClockedIn(e.id));
+  if(clockedIn.length === 0){
     grid.innerHTML = '';
     hint.style.display = 'block';
+    hint.textContent = 'محدش سجل حضوره لسه. دوس على "⏰ الحضور" فوق عشان تسجل حضورك الأول.';
     return;
   }
   hint.style.display = 'none';
-  grid.innerHTML = employees.map(e=>`
-    <div class="emp-tile${e.id===highlightEmpId?' just-scored':''}" data-id="${e.id}">
+  grid.innerHTML = clockedIn.map(e=>{
+    const sub = getTodaysSubmission(e.id);
+    let taskIcon = '';
+    if(sub){ taskIcon = sub.confirmed ? '✅' : '⏳'; }
+    const hasUnseenReward = rewards.some(r=> r.employeeId===e.id && !r.seen);
+    return `
+    <div class="emp-tile attTile${e.id===highlightEmpId?' just-scored':''}" data-id="${e.id}">
+      ${taskIcon ? `<div class="taskBadge">${taskIcon}</div>` : ''}
+      ${hasUnseenReward ? `<div class="giftBadge">🎁</div>` : ''}
       <div class="emp-avatar">${initials(e.name)}</div>
       <div class="emp-name">${e.name}</div>
       <div class="emp-count">${countsFor(e.id)} نقطة</div>
     </div>
-  `).join('');
+  `;}).join('');
   grid.querySelectorAll('.emp-tile').forEach(tile=>{
     tile.addEventListener('click', ()=> startForEmployee(tile.dataset.id));
   });
@@ -832,6 +1350,124 @@ $('#addEmpBtn').addEventListener('click', async ()=>{
     $('#newEmpName').value = '';
   }catch(err){ errEl.textContent = 'حصل خطأ، حاول تاني'; console.error(err); }
 });
+
+// ---------- SCHEDULE (admin) ----------
+function renderScheduleList(){
+  const wrap = $('#scheduleList');
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = employees.map(e=> `
+    <div class="emp-row">
+      <div class="n">${e.name}</div>
+      <input type="time" data-id="${e.id}" value="${e.scheduledStartTime || ''}"
+        style="padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
+    </div>
+  `).join('');
+  wrap.querySelectorAll('input[type="time"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { scheduledStartTime: inp.value }); }
+      catch(err){ console.error('تعذر حفظ الميعاد', err); }
+    });
+  });
+}
+
+// ---------- TASK ASSIGNMENT (admin) ----------
+function renderTaskAssignList(){
+  const wrap = $('#taskAssignList');
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = employees.map(e=>{
+    const task = getCurrentTask(e.id);
+    return `
+    <div class="emp-row" style="flex-wrap:wrap;">
+      <div class="n">${e.name}</div>
+      <input type="text" data-id="${e.id}" placeholder="مثلاً: سكشن A" value="${task ? task.taskDescription.replace(/"/g,'&quot;') : ''}"
+        style="flex:1; min-width:140px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
+      <button data-id="${e.id}" class="saveTaskBtn" style="border:none; background:var(--good); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">حفظ</button>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('.saveTaskBtn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const input = wrap.querySelector(`input[data-id="${btn.dataset.id}"]`);
+      const desc = input.value.trim();
+      const emp = employees.find(e=> e.id === btn.dataset.id);
+      if(!desc || !emp) return;
+      try{
+        await setDoc(doc(db,'sales_tasks', btn.dataset.id), {
+          employeeId: btn.dataset.id, employeeName: emp.name, branch: currentBranch,
+          taskDescription: desc, assignedAt: Date.now()
+        });
+        btn.textContent = 'اتحفظت ✅';
+        setTimeout(()=> btn.textContent = 'حفظ', 1500);
+      }catch(err){ console.error('تعذر حفظ التاسك', err); }
+    });
+  });
+}
+
+// ---------- SUBMISSION REVIEW (admin) ----------
+function renderPendingSubmissions(){
+  const wrap = $('#pendingSubmissionsList');
+  const branchEmpIds = new Set(employees.map(e=>e.id));
+  const pending = submissions.filter(s=> branchEmpIds.has(s.employeeId) && !s.confirmed).sort((a,b)=> b.submittedAt-a.submittedAt);
+  if(pending.length === 0){ wrap.innerHTML = '<div class="empty">مفيش تنفيذات محتاجة تأكيد دلوقتي</div>'; return; }
+  wrap.innerHTML = pending.map(s=>{
+    const d = new Date(s.submittedAt);
+    const time = d.toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    return `
+    <div class="subRow" data-id="${s.id}">
+      <img src="${s.photoURL}" alt="task photo">
+      <div class="info">
+        <div class="n">${s.employeeName} — ${s.taskDescription||'—'}</div>
+        <div class="m">${time}</div>
+      </div>
+      <button class="confirmBtnSmall" data-id="${s.id}">✅ تأكيد</button>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('.confirmBtnSmall').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      try{ await updateDoc(doc(db,'sales_task_submissions', btn.dataset.id), { confirmed:true, confirmedAt: Date.now() }); }
+      catch(err){ console.error('تعذر التأكيد', err); }
+    });
+  });
+}
+
+function renderConfirmedSubmissions(){
+  const wrap = $('#confirmedSubmissionsList');
+  const branchEmpIds = new Set(employees.map(e=>e.id));
+  const confirmed = submissions.filter(s=> branchEmpIds.has(s.employeeId) && s.confirmed)
+    .sort((a,b)=> b.submittedAt-a.submittedAt).slice(0,30);
+  if(confirmed.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش تنفيذات مؤكدة</div>'; return; }
+  wrap.innerHTML = confirmed.map(s=>{
+    const d = new Date(s.submittedAt);
+    const time = d.toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    return `
+    <div class="subRow">
+      <img src="${s.photoURL}" alt="task photo">
+      <div class="info">
+        <div class="n">${s.employeeName} — ${s.taskDescription||'—'}</div>
+        <div class="m">${time}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ---------- REWARDS LOG (admin) ----------
+function renderRewardsList(){
+  const wrap = $('#rewardsList');
+  const branchEmpIds = new Set(employees.map(e=>e.id));
+  const list = rewards.filter(r=> branchEmpIds.has(r.employeeId)).sort((a,b)=> b.earnedAt-a.earnedAt);
+  if(list.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش كسب مكافأة</div>'; return; }
+  const rows = list.map(r=>{
+    const d = new Date(r.earnedAt);
+    const time = d.toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'});
+    return `<tr>
+      <td>${time}</td><td>${r.employeeName}</td>
+      <td>${r.type==='weekly'?'أسبوعية':'شهرية'}</td>
+      <td>${r.periodLabel}</td>
+      <td style="color:var(--gold); font-weight:700;">${r.amount} ج.م</td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>النوع</th><th>الفترة</th><th>المبلغ</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 </script>
 <script>
 if ('serviceWorker' in navigator) {
