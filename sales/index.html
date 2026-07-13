@@ -597,6 +597,11 @@
     </div>
 
     <div class="panel">
+      <h3>📜 سجل صرف الرواتب (كل الشهور)</h3>
+      <div id="salaryPaymentLogList"></div>
+    </div>
+
+    <div class="panel">
       <h3>🚪 إنهاء خدمة موظف</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
         بيتحسب مستحقاته بالتناسب لغاية يوم خروجه في الشهر الحالي، وبيتنقل لسجل المغادرين تحت.
@@ -733,7 +738,7 @@ function applyBranchFilter(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
-    renderCommissionPanel(); renderSalaryPanel(); renderTerminationPanel(); renderTerminationLog();
+    renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
   if($('#attendance').classList.contains('show')) renderAttendanceLists();
@@ -797,7 +802,7 @@ onSnapshot(commissionPaymentsCol, (snap)=>{
 onSnapshot(salaryPaymentsCol, (snap)=>{
   allSalaryPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
   salaryPayments = allSalaryPayments.filter(p=> p.branch === currentBranch);
-  if(adminUnlocked) renderSalaryPanel();
+  if(adminUnlocked){ renderSalaryPanel(); renderSalaryPaymentLog(); }
 }, (err)=> console.error('salary payments sync error', err));
 
 onSnapshot(terminationsCol, (snap)=>{
@@ -1756,7 +1761,7 @@ function openAdmin(){
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderTerminationPanel(); renderTerminationLog();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
   }
   else { $('#adminLoginGate').classList.add('show'); }
 }
@@ -1773,7 +1778,7 @@ function doAdminLogin(){
     renderLog();
     renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderTerminationPanel(); renderTerminationLog();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -1872,6 +1877,11 @@ function renderScheduleList(){
         <input type="number" min="0" data-act="salary" data-id="${e.id}" value="${e.baseSalary || ''}" placeholder="بالجنيه"
           style="width:90px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk';">
       </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:11px; color:var(--sub);">تاريخ التعيين</span>
+        <input type="date" data-act="hiredate" data-id="${e.id}" value="${e.hireDate || ''}"
+          style="padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
+      </div>
     </div>
   `).join('');
   wrap.querySelectorAll('input[data-act="start"]').forEach(inp=>{
@@ -1898,6 +1908,12 @@ function renderScheduleList(){
       const val = inp.value.trim() === '' ? null : parseFloat(inp.value.trim());
       try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { baseSalary: val }); }
       catch(err){ console.error('تعذر حفظ المرتب', err); }
+    });
+  });
+  wrap.querySelectorAll('input[data-act="hiredate"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { hireDate: inp.value || null }); }
+      catch(err){ console.error('تعذر حفظ تاريخ التعيين', err); }
     });
   });
   wrap.querySelectorAll('select[data-act="dayoff"]').forEach(sel=>{
@@ -2289,10 +2305,25 @@ function countDayOffOccurrencesInRange(emp, start, end){
 
 // Computes pay for any date range within a salary cycle — used both for the
 // regular full-month calculation and for a prorated final settlement.
-function computeSalary(emp, start, end){
+function computeSalary(emp, periodStart, end){
   const baseSalary = emp.baseSalary || 0;
   const dailyRate = baseSalary / 30;
   const hourlyRate = baseSalary / 240; // 30 days × 8 hours
+
+  // If the employee was hired partway through this period, only pay them
+  // from their hire date onward — not the full period.
+  let start = periodStart;
+  let notYetHired = false;
+  if(emp.hireDate){
+    const hireDate = new Date(emp.hireDate + 'T00:00:00');
+    if(hireDate > end){ notYetHired = true; }
+    else if(hireDate > start){ start = hireDate; }
+  }
+
+  if(notYetHired){
+    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, netSalary:0, daysInCalc:0, notYetHired:true };
+  }
+
   const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
   const proratedBase = Math.round(dailyRate * daysInCalc * 100)/100;
 
@@ -2305,7 +2336,7 @@ function computeSalary(emp, start, end){
   const deductionAmount = Math.round(extraOffDays * dailyRate * 100)/100;
 
   const netSalary = Math.round((proratedBase - deductionAmount + overtimePay) * 100)/100;
-  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, netSalary, daysInCalc };
+  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, netSalary, daysInCalc, notYetHired:false };
 }
 
 function renderSalaryPanel(){
@@ -2320,6 +2351,10 @@ function renderSalaryPanel(){
       return `<div class="emp-row"><div class="n">${e.name}</div><div class="meta" style="color:var(--sub);">لسه مفيش مرتب أساسي متحدد (حطه في بانل المواعيد)</div></div>`;
     }
     const calc = computeSalary(e, range.start, range.end);
+    if(calc.notYetHired){
+      return `<div class="emp-row"><div class="n">${e.name}</div><div class="meta" style="color:var(--sub);">لسه معينش في الفترة دي (تاريخ التعيين ${e.hireDate})</div></div>`;
+    }
+    const proratedNote = calc.daysInCalc < 30 ? `<div class="meta" style="color:var(--sub); font-size:10px;">(${calc.daysInCalc} يوم بس — من تاريخ التعيين ${e.hireDate})</div>` : '';
     const paidRecord = salaryPayments.find(p=> p.employeeId===e.id && p.periodLabel===periodLabel);
     const actionHtml = paidRecord
       ? `<span style="color:var(--good); font-size:11px;">✅ مدفوع (${new Date(paidRecord.paidAt).toLocaleDateString('ar-EG')})</span>`
@@ -2328,6 +2363,7 @@ function renderSalaryPanel(){
     <div class="emp-row" style="flex-wrap:wrap;">
       <div class="n">${e.name}</div>
       <div class="meta">أساسي ${calc.proratedBase}</div>
+      ${proratedNote}
       <div class="meta" style="color:var(--gold);">إضافي +${calc.overtimePay}</div>
       <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم -${calc.deductionAmount} (${calc.extraOffDays} يوم زيادة)</div>
       <div class="meta" style="color:var(--good); font-weight:800;">صافي ${calc.netSalary} ج.م</div>
@@ -2348,6 +2384,18 @@ function renderSalaryPanel(){
       }catch(err){ console.error('تعذر تسجيل صرف الراتب', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
     });
   });
+}
+
+function renderSalaryPaymentLog(){
+  const wrap = $('#salaryPaymentLogList');
+  if(!wrap) return;
+  if(salaryPayments.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش رواتب اتصرفت</div>'; return; }
+  const sorted = [...salaryPayments].sort((a,b)=> b.paidAt - a.paidAt);
+  const rows = sorted.map(p=>{
+    const dateStr = new Date(p.paidAt).toLocaleDateString('ar-EG');
+    return `<tr><td>${p.periodLabel}</td><td>${p.employeeName}</td><td style="color:var(--good); font-weight:700;">${p.amount} ج.م</td><td>${dateStr}</td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="logTable"><thead><tr><th>الشهر</th><th>الموظف</th><th>المبلغ</th><th>تاريخ الصرف</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // ---------- EMPLOYEE TERMINATION (admin) ----------
