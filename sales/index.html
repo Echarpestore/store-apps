@@ -151,6 +151,12 @@
   table.logTable th, table.logTable td{padding:9px 8px; text-align:right; border-bottom:1px solid var(--line);}
   table.logTable th{color:var(--sub); font-weight:700; font-size:12px;}
   table.logTable button{border:none; background:var(--bad); color:#fff; padding:6px 10px; border-radius:7px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;}
+  .ratingBadge{padding:3px 10px; border-radius:10px; font-size:11px; font-weight:700;}
+  .ratingBadge.r1{background:rgba(229,72,77,.2); color:#e5484d;}
+  .ratingBadge.r2{background:rgba(242,169,60,.2); color:#f2a93c;}
+  .ratingBadge.r3{background:rgba(168,198,60,.2); color:#a8c63c;}
+  .ratingBadge.r4{background:rgba(47,163,107,.2); color:#2fa36b;}
+  .ratingBadge.none{background:var(--panel2); color:var(--sub);}
 </style>
 </head>
 <body>
@@ -277,6 +283,14 @@
       <h3>سجل العمليات (كل التاريخ)</h3>
       <div id="logList"></div>
     </div>
+    <div class="panel">
+      <h3>⭐ أداء الموظف + رضا العميل</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
+        ربط تقريبي: كل عملية بيع متربطة بأقرب تقييم عميل جه بعدها في نفس الفرع. مش رابط مؤكد 100%
+        (لأن برنامج التقييم مجهول ومش بياخد رقم فاتورة)، بس بيدّي مؤشر عام.
+      </p>
+      <div id="perfList"></div>
+    </div>
   </div>
 
 </div>
@@ -303,6 +317,7 @@ enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence n
 
 const empCol = collection(db, 'sales_employees');
 const pointsCol = collection(db, 'sales_points');
+const entriesCol = collection(db, 'entries'); // shared with the feedback (happy-or-not) app
 
 // Simple admin access code — checked on-device, no network call.
 // Change this string to whatever code you want, then re-download the file.
@@ -312,6 +327,7 @@ const $ = s => document.querySelector(s);
 let employees = [];   // filtered to this device's own branch (kiosk grid)
 let allEmployees = []; // raw from Firestore
 let points = [];      // {id, employeeId, employeeName, invoiceNumber, ts}
+let allFeedback = []; // raw customer satisfaction entries from the feedback app
 let selectedEmp = null;
 let adminUnlocked = false;
 
@@ -361,6 +377,7 @@ $('#adminBranchSelect').addEventListener('change', (e)=>{
   $('#lbBranchSelect').value = viewBranch;
   renderAdminList();
   renderLog();
+  renderPerformanceLink();
 });
 $('#lbBranchSelect').addEventListener('change', (e)=>{
   viewBranch = e.target.value;
@@ -372,7 +389,7 @@ function applyBranchFilter(){
   employees = allEmployees.filter(e => e.branch === currentBranch);
   renderEmpGrid();
   populateBranchDropdowns();
-  if(adminUnlocked){ renderAdminList(); renderLog(); }
+  if(adminUnlocked){ renderAdminList(); renderLog(); renderPerformanceLink(); }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
 }
 
@@ -390,8 +407,13 @@ onSnapshot(pointsCol, (snap)=>{
   points = snap.docs.map(d=>({id:d.id, ...d.data()}));
   renderEmpGrid();
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
-  if(adminUnlocked) renderLog();
+  if(adminUnlocked){ renderLog(); renderPerformanceLink(); }
 }, (err)=> console.error('points sync error', err));
+
+onSnapshot(entriesCol, (snap)=>{
+  allFeedback = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  if(adminUnlocked) renderPerformanceLink();
+}, (err)=> console.error('feedback sync error', err));
 
 function renderLog(){
   const wrap = $('#logList');
@@ -423,6 +445,66 @@ function renderLog(){
       catch(err){ console.error('تعذر الحذف', err); }
     });
   });
+}
+
+const RATING_LABELS = {
+  1:{label:'مضايقني جدًا', emoji:'😠'},
+  2:{label:'مش عاجبني', emoji:'🙁'},
+  3:{label:'كويس', emoji:'🙂'},
+  4:{label:'عجبني جدًا', emoji:'😄'},
+};
+const MATCH_WINDOW_MS = 60 * 60 * 1000; // only match feedback within 1 hour after the sale
+
+function renderPerformanceLink(){
+  const wrap = $('#perfList');
+  const branchEmps = reviewEmployeesFor(viewBranch);
+  const branchEmpIds = new Set(branchEmps.map(e=>e.id));
+  const branchPoints = points.filter(p=> branchEmpIds.has(p.employeeId)).sort((a,b)=> a.ts - b.ts);
+
+  const branchNames = viewBranch === '__ALL__'
+    ? new Set(branchEmps.map(e=> e.branch))
+    : new Set([viewBranch]);
+  const branchFeedback = allFeedback.filter(f=> branchNames.has(f.branch)).sort((a,b)=> a.ts - b.ts);
+
+  if(branchPoints.length === 0){
+    wrap.innerHTML = '<div class="empty">لسه مفيش عمليات بيع مسجلة</div>';
+    return;
+  }
+
+  // Greedy nearest-forward match: each feedback entry can only be matched once,
+  // to the closest-in-time sale that precedes it (within the allowed window).
+  const usedFeedback = new Set();
+  const matched = branchPoints.slice().sort((a,b)=> b.ts - a.ts).map(p=>{
+    let bestIdx = -1, bestDelta = Infinity;
+    for(let i=0;i<branchFeedback.length;i++){
+      if(usedFeedback.has(i)) continue;
+      const delta = branchFeedback[i].ts - p.ts;
+      if(delta >= 0 && delta <= MATCH_WINDOW_MS && delta < bestDelta){
+        bestDelta = delta; bestIdx = i;
+      }
+    }
+    let fb = null, minutesAfter = null;
+    if(bestIdx >= 0){ fb = branchFeedback[bestIdx]; usedFeedback.add(bestIdx); minutesAfter = Math.round(bestDelta/60000); }
+    return { point: p, feedback: fb, minutesAfter };
+  }).slice(0, 100);
+
+  const rows = matched.map(({point, feedback, minutesAfter})=>{
+    const d = new Date(point.ts);
+    const time = d.toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+    let ratingCell = '<span class="ratingBadge none">مفيش تقييم قريب</span>';
+    if(feedback){
+      const r = RATING_LABELS[feedback.r];
+      ratingCell = `<span class="ratingBadge r${feedback.r}">${r.emoji} ${r.label}</span> <span style="color:var(--sub); font-size:10px;">(بعد ${minutesAfter} د)</span>`;
+    }
+    return `<tr>
+      <td>${time}</td>
+      <td>${point.employeeName || ''}</td>
+      <td>${point.invoiceNumber || '—'}</td>
+      <td>${ratingCell}</td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<table class="logTable"><thead><tr><th>وقت البيع</th><th>الموظف</th><th>الفاتورة</th><th>تقييم العميل (تقريبي)</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function countsFor(empId, sinceTs){
@@ -682,7 +764,7 @@ function requestFullscreenOnce(){
 
 function openAdmin(){
   $('#admin').classList.add('show');
-  if(adminUnlocked){ renderAdminList(); renderLog(); }
+  if(adminUnlocked){ renderAdminList(); renderLog(); renderPerformanceLink(); }
   else { $('#adminLoginGate').classList.add('show'); }
 }
 $('#adminLoginBtn').addEventListener('click', doAdminLogin);
@@ -696,6 +778,7 @@ function doAdminLogin(){
     $('#adminLoginGate').classList.remove('show');
     renderAdminList();
     renderLog();
+    renderPerformanceLink();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
