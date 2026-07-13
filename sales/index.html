@@ -10,7 +10,6 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <style>
   :root{
     --bg:#12141a; --panel:#1b1e27; --panel2:#232733;
@@ -2561,6 +2560,15 @@ let faceApiReady = false;
     await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
     await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
     await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    // Warm up the models with one dummy inference so the WebGL shaders are
+    // already compiled by the time the user actually needs to scan a face —
+    // this removes most of the "first scan is slow" lag.
+    try{
+      const warmupCanvas = document.createElement('canvas');
+      warmupCanvas.width = 160; warmupCanvas.height = 120;
+      await faceapi.detectSingleFace(warmupCanvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }))
+        .withFaceLandmarks().withFaceDescriptor();
+    }catch(e){ /* warm-up failures are harmless, ignore */ }
     faceApiReady = true;
   }catch(err){
     console.error('تعذر تحميل نماذج التعرف على الوجه', err);
@@ -2570,10 +2578,14 @@ let faceApiReady = false;
 
 const FACE_MATCH_THRESHOLD = 0.6; // lower = stricter match; 0.6 is the commonly used default
 const FACE_OVERRIDE_SHOW_AFTER_MS = 4000;
+const FACE_SCAN_INTERVAL_MS = 400; // throttle scans instead of running flat-out every frame
 
 async function getFaceDescriptorFromVideo(videoEl){
   try{
-    const detection = await faceapi.detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
+    // A smaller inputSize (224 instead of the 416 default) trades a little
+    // detection range for noticeably faster inference — plenty for a face
+    // filling most of the frame at arm's length, which is the normal case here.
+    const detection = await faceapi.detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
       .withFaceLandmarks().withFaceDescriptor();
     return detection ? detection.descriptor : null;
   }catch(e){ return null; }
@@ -2697,7 +2709,8 @@ async function scanFaceLoop(emp){
     $('#faceVerifyStatus').textContent = 'لسه مش متطابق...';
     $('#faceVerifyOverrideBtn').style.display = 'block';
   }
-  faceVerifyLoopId = requestAnimationFrame(()=> scanFaceLoop(emp));
+  if(!pendingFaceAction) return; // may have been cancelled while awaiting above
+  faceVerifyLoopId = setTimeout(()=> scanFaceLoop(emp), FACE_SCAN_INTERVAL_MS);
 }
 
 async function finishFaceVerify(){
@@ -2709,7 +2722,7 @@ async function finishFaceVerify(){
 }
 
 function closeFaceVerify(){
-  if(faceVerifyLoopId) cancelAnimationFrame(faceVerifyLoopId);
+  if(faceVerifyLoopId) clearTimeout(faceVerifyLoopId);
   faceVerifyLoopId = null;
   if(faceVerifyStream){ faceVerifyStream.getTracks().forEach(t=>t.stop()); faceVerifyStream=null; }
   $('#faceVerifyOverlay').classList.remove('show');
