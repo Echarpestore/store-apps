@@ -1354,10 +1354,30 @@ async function checkAndAwardRewards(){
   }
 }
 
+const MIN_RATING_FOR_REWARD = 2.5; // out of 4 — skipped if no rating data exists for the period
+function totalCalendarDaysInRange(start, end){
+  return Math.floor((end - start)/(24*60*60*1000)) + 1;
+}
+
 async function maybeAwardPeriod(emp, range, type, label){
   const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
   const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
   if(confirmedDays < requiredDays || requiredDays === 0) return;
+
+  // Customer rating requirement — only enforced if there's actual rating data
+  // for the period (an employee shouldn't be penalized for a lack of feedback).
+  const avgRating = computeAvgRatingInRange(emp.id, range.start.getTime(), range.end.getTime());
+  if(avgRating !== null && avgRating < MIN_RATING_FOR_REWARD) return;
+
+  // Minimum sales points requirement — only enforced if the admin set a
+  // per-employee weekly threshold; scaled proportionally for monthly periods.
+  if(emp.minWeeklyPoints){
+    const periodDays = totalCalendarDaysInRange(range.start, range.end);
+    const minPointsForPeriod = Math.round(emp.minWeeklyPoints * periodDays / 7);
+    const pointsInRange = points.filter(p=> p.employeeId===emp.id && p.ts >= range.start.getTime() && p.ts <= range.end.getTime()).length;
+    if(pointsInRange < minPointsForPeriod) return;
+  }
+
   const already = rewards.some(r=> r.employeeId===emp.id && r.type===type && r.periodLabel===label);
   if(already) return;
   try{
