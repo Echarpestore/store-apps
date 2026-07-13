@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ترتيب المبيعات</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#f2c14e">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12141a; --panel:#1b1e27; --panel2:#232733;
+    --ink:#eef0f4; --sub:#8b90a0; --line:#2b2f3b;
+    --gold:#f2c14e; --gold-dim:#8a6f2c;
+    --good:#2fa36b; --bad:#e5484d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:'Cairo',sans-serif; overflow:hidden; user-select:none;}
+  #app{height:100vh; width:100vw; position:relative;}
+
+  /* ---------- KIOSK ---------- */
+  #kiosk{position:absolute; inset:0; display:flex; flex-direction:column; padding:5vh 4vw; overflow-y:auto;}
+  .top-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:4vh; flex-wrap:wrap; gap:12px;}
+  .eyebrow{font-family:'Space Grotesk'; letter-spacing:.3em; font-size:12px; color:var(--sub); text-transform:uppercase;}
+  #kiosk h1{font-size:clamp(24px,3.6vw,38px); font-weight:900; margin:6px 0 0;}
+  .lbBtn{
+    border:1px solid var(--gold-dim); background:linear-gradient(180deg,#2a2410,#1b1e27);
+    color:var(--gold); padding:12px 22px; border-radius:14px; font-family:'Cairo'; font-weight:800;
+    font-size:15px; cursor:pointer; display:flex; align-items:center; gap:8px;
+  }
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:16px; flex:1; align-content:start;}
+  .emp-tile{
+    background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:22px 14px;
+    display:flex; flex-direction:column; align-items:center; gap:10px; cursor:pointer;
+    box-shadow:0 6px 0 rgba(0,0,0,.25); transition:transform .08s ease;
+  }
+  .emp-tile:active{transform:translateY(5px); box-shadow:0 1px 0 rgba(0,0,0,.25);}
+  .emp-tile.just-scored{
+    border-color:var(--gold); background:linear-gradient(180deg,#2a2410,var(--panel));
+    animation:tileGlow 1s ease-in-out infinite alternate;
+  }
+  .emp-tile.just-scored .emp-name{color:var(--gold);}
+  @keyframes tileGlow{
+    from{box-shadow:0 6px 0 rgba(0,0,0,.25), 0 0 18px 2px rgba(242,193,78,0.35);}
+    to{box-shadow:0 6px 0 rgba(0,0,0,.25), 0 0 32px 8px rgba(242,193,78,0.6);}
+  }
+  .emp-avatar{
+    width:58px; height:58px; border-radius:50%; background:var(--panel2); display:flex; align-items:center;
+    justify-content:center; font-family:'Space Grotesk'; font-weight:700; font-size:22px; color:var(--gold);
+    border:2px solid var(--gold-dim);
+  }
+  .emp-name{font-weight:700; font-size:15px; text-align:center;}
+  .emp-count{font-family:'Space Grotesk'; font-size:12px; color:var(--sub);}
+  .empty-hint{color:var(--sub); text-align:center; padding:40px; font-size:14px;}
+
+  #gear{
+    position:absolute; top:18px; left:18px; width:46px; height:46px; opacity:.6;
+    display:flex; align-items:center; justify-content:center; border-radius:50%;
+    cursor:pointer; background:var(--panel); border:1px solid var(--line);
+  }
+  #gear:active{opacity:1;}
+  #gear svg{width:22px; height:22px; stroke:var(--sub);}
+  #fsBtn{
+    position:absolute; top:18px; left:74px; width:46px; height:46px; opacity:.6;
+    display:flex; align-items:center; justify-content:center; border-radius:50%;
+    cursor:pointer; background:var(--panel); border:1px solid var(--line);
+  }
+  #fsBtn:active{opacity:1;}
+  #fsBtn svg{width:20px; height:20px; stroke:var(--sub);}
+
+  /* ---------- PIN MODAL ---------- */
+  .overlay{position:absolute; inset:0; z-index:40; display:none; align-items:center; justify-content:center; background:rgba(8,9,12,.88);}
+  .overlay.show{display:flex;}
+  .pin-box{background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:30px 26px; width:min(92vw,340px); text-align:center;}
+  .pin-box h3{margin:0 0 4px; font-size:19px; font-weight:900;}
+  .pin-box .sub{color:var(--sub); font-size:13px; margin:0 0 20px;}
+  .toast{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(.9);
+    z-index:55; display:flex; align-items:center; gap:12px; background:var(--panel);
+    border:1px solid var(--gold-dim); border-radius:16px; padding:16px 26px;
+    opacity:0; pointer-events:none; transition:opacity .2s ease, transform .2s ease;
+    box-shadow:0 8px 30px rgba(0,0,0,.5); max-width:90vw;
+  }
+  .toast.show{opacity:1; transform:translate(-50%,-50%) scale(1);}
+  .toast .check{width:32px; height:32px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .toast p{margin:0; font-size:16px; font-weight:800; white-space:nowrap;}
+  /* ---------- LEADERBOARD ---------- */
+  #leaderboard{position:absolute; inset:0; overflow-y:auto; padding:5vh 4vw; display:none; background:var(--bg); z-index:30;}
+  #leaderboard.show{display:block;}
+  .lb-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px;}
+  .lb-header h2{font-size:24px; font-weight:900; margin:0;}
+  .backBtn{border:1px solid var(--line); background:var(--panel); color:var(--ink); padding:10px 18px; border-radius:12px; font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;}
+  .lb-section{margin-bottom:32px;}
+  .lb-section h3{color:var(--sub); font-size:13px; font-weight:700; letter-spacing:.05em; margin-bottom:14px;}
+  .lb-row{
+    display:flex; align-items:center; gap:14px; background:var(--panel); border:1px solid var(--line);
+    border-radius:16px; padding:14px 18px; margin-bottom:10px;
+  }
+  .lb-row.rank1{border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset;}
+  .lb-rank{font-family:'Space Grotesk'; font-weight:700; font-size:18px; color:var(--sub); width:28px; text-align:center;}
+  .lb-row.rank1 .lb-rank{color:var(--gold);}
+  .lb-avatar{width:42px; height:42px; border-radius:50%; background:var(--panel2); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk'; font-weight:700; font-size:16px; color:var(--gold); flex-shrink:0;}
+  .lb-name{flex:1; font-weight:700; font-size:15px;}
+  .lb-points{font-family:'Space Grotesk'; font-weight:700; font-size:16px; color:var(--good);}
+  .crown{font-size:20px;}
+  .lb-empty{color:var(--sub); text-align:center; padding:24px; font-size:13px; background:var(--panel); border-radius:16px; border:1px solid var(--line);}
+
+  /* ---------- ADMIN LOGIN ---------- */
+  .login-gate{position:absolute; inset:0; z-index:50; display:none; align-items:center; justify-content:center; background:var(--bg);}
+  .login-gate.show{display:flex;}
+  .login-box{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:32px 28px; width:min(90vw,340px); text-align:center;}
+  .login-box h3{margin:0 0 6px; font-size:18px; font-weight:900;}
+  .login-box .sub{color:var(--sub); font-size:13px; margin:0 0 20px;}
+  .login-box input{width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:15px; text-align:center; margin-bottom:12px;}
+  .login-box button#adminLoginBtn{width:100%; padding:12px; border:none; border-radius:10px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer; margin-bottom:12px;}
+  .login-err{color:var(--bad); font-size:12px; min-height:16px; margin-bottom:8px;}
+
+  /* ---------- ADMIN PANEL ---------- */
+  #admin{position:absolute; inset:0; overflow-y:auto; padding:28px 32px 60px; display:none; background:var(--bg); z-index:30;}
+  .branch-tag{color:var(--sub); font-size:12px; margin-top:2px;}
+  #branchSetup{position:absolute; inset:0; z-index:60; display:none; align-items:center; justify-content:center; background:var(--bg);}
+  #branchSetup.show{display:flex;}
+  .branch-box{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:32px 28px; width:min(90vw,340px); text-align:center;}
+  .branch-box h3{margin:0 0 6px; font-size:18px; font-weight:900;}
+  .branch-box .sub{color:var(--sub); font-size:13px; margin:0 0 20px;}
+  .branch-box input{width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:15px; text-align:center; margin-bottom:12px;}
+  .branch-box button{width:100%; padding:12px; border:none; border-radius:10px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer;}
+  #admin.show{display:block;}
+  .admin-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; flex-wrap:wrap; gap:12px;}
+  .admin-top h2{font-size:22px; font-weight:900; margin:0;}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:20px;}
+  .panel h3{margin:0 0 16px; font-size:14px; color:var(--sub); font-weight:700;}
+  .emp-row{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line);}
+  .emp-row:last-child{border-bottom:none;}
+  .emp-row .n{flex:1; font-weight:700; font-size:14px;}
+  .emp-row .p{font-family:'Space Grotesk'; color:var(--sub); font-size:13px;}
+  .emp-row button{border:none; background:var(--bad); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;}
+  .add-form{display:flex; gap:10px; flex-wrap:wrap;}
+  .add-form input{flex:1; min-width:120px; padding:11px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:14px;}
+  .add-form button{border:none; background:var(--gold); color:#0b0c0f; padding:11px 20px; border-radius:10px; font-family:'Cairo'; font-weight:800; font-size:13px; cursor:pointer;}
+  .field-err{color:var(--bad); font-size:12px; margin-top:8px;}
+  .empty{color:var(--sub); text-align:center; padding:20px; font-size:13px;}
+  #invoiceOverlay .pin-box input{width:100%; padding:14px; border-radius:12px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; font-size:20px; text-align:center; margin-bottom:16px;}
+  #invoiceOverlay .pin-box button.confirmBtn{width:100%; padding:13px; border:none; border-radius:12px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:15px; cursor:pointer; margin-bottom:10px;}
+  #invoiceOverlay .pin-box button.cancelBtn{width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;}
+  table.logTable{width:100%; border-collapse:collapse; font-size:13px;}
+  table.logTable th, table.logTable td{padding:9px 8px; text-align:right; border-bottom:1px solid var(--line);}
+  table.logTable th{color:var(--sub); font-weight:700; font-size:12px;}
+  table.logTable button{border:none; background:var(--bad); color:#fff; padding:6px 10px; border-radius:7px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- KIOSK -->
+  <div id="kiosk">
+    <div class="top-row">
+      <div>
+        <div class="eyebrow">سجّل بيعتك</div>
+        <h1>مين اللي باع دلوقتي؟ 🔥</h1>
+        <div class="branch-tag" id="branchTag">📍 —</div>
+      </div>
+      <button class="lbBtn" id="openLeaderboard">🏆 الترتيب</button>
+    </div>
+    <div class="grid" id="empGrid"></div>
+    <div class="empty-hint" id="emptyHint" style="display:none;">لسه مفيش موظفين مضافين. من الترس ⚙️ (ضغطة مطولة) تقدر تضيف موظفين.</div>
+  </div>
+
+  <!-- BRANCH SETUP (first run on this device) -->
+  <div id="branchSetup">
+    <div class="branch-box">
+      <h3>اسم الفرع</h3>
+      <p class="sub">اكتب اسم الفرع مرة واحدة بس — الجهاز ده هيفتكره وهيشوف موظفين وترتيب الفرع ده بس</p>
+      <input id="branchInput" placeholder="مثلاً: فرع المعادي">
+      <button id="branchSaveBtn">حفظ</button>
+    </div>
+  </div>
+
+  <div id="gear"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+  <div id="fsBtn" title="ملء الشاشة"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg></div>
+
+  <!-- INVOICE NUMBER MODAL -->
+  <div class="overlay" id="invoiceOverlay">
+    <div class="pin-box">
+      <h3 id="invoiceEmpName">—</h3>
+      <p class="sub">اكتب رقم الفاتورة أو اعمل سكان للباركود</p>
+      <input type="text" id="invoiceInput" inputmode="numeric" placeholder="رقم الفاتورة" autocomplete="off">
+      <div class="field-err" id="invoiceErr"></div>
+      <button class="confirmBtn" id="scanBtn" style="background:var(--panel2); color:var(--gold); border:1px solid var(--gold-dim); margin-bottom:10px;">📷 سكان الباركود</button>
+      <button class="confirmBtn" id="invoiceConfirmBtn">تسجيل النقطة ✅</button>
+      <button class="cancelBtn" id="invoiceCancelBtn">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- BARCODE SCANNER -->
+  <div class="overlay" id="scannerOverlay">
+    <div class="pin-box" style="padding:20px;">
+      <h3 id="scannerEmpName" style="margin-bottom:4px;">—</h3>
+      <p class="sub">وجّه الكاميرا على الباركود</p>
+      <div class="field-err" id="scannerStatus" style="color:var(--sub); margin-bottom:8px;"></div>
+      <video id="scannerVideo" style="width:100%; height:200px; object-fit:cover; border-radius:14px; background:#000; margin-bottom:14px;" playsinline muted></video>
+      <div class="field-err" id="scannerErr"></div>
+      <button class="cancelBtn" id="scannerManualBtn" style="margin-bottom:8px;">✍️ اكتب رقم الفاتورة بإيدك بدل كده</button>
+      <button class="cancelBtn" id="scannerCancelBtn">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- CONFIRMATION TOAST -->
+  <div class="toast" id="toast">
+    <div class="check"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0b0c0f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+    <p id="toastMsg">تمام!</p>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div id="leaderboard">
+    <div class="lb-header">
+      <h2>🏆 لوحة الترتيب</h2>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <select id="lbBranchSelect" style="padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:13px;">
+          <option value="__ALL__">كل الفروع</option>
+        </select>
+        <button class="backBtn" id="closeLeaderboard">◀ رجوع</button>
+      </div>
+    </div>
+    <div class="lb-section">
+      <h3>الأسبوع ده (آخر 7 أيام)</h3>
+      <div id="weeklyList"></div>
+    </div>
+    <div class="lb-section">
+      <h3>الترتيب العام (كل الوقت)</h3>
+      <div id="allTimeList"></div>
+    </div>
+  </div>
+
+  <!-- ADMIN LOGIN -->
+  <div id="adminLoginGate" class="login-gate">
+    <div class="login-box">
+      <h3>دخول لوحة تحكم الموظفين</h3>
+      <p class="sub">اكتب كود المدير</p>
+      <input type="password" id="adminPass" placeholder="كود المدير" autocomplete="off">
+      <button id="adminLoginBtn">دخول</button>
+      <div class="login-err" id="adminLoginErr"></div>
+      <button class="backBtn" id="adminLoginCancel" style="width:100%;">رجوع للشاشة</button>
+    </div>
+  </div>
+
+  <!-- ADMIN PANEL -->
+  <div id="admin">
+    <div class="admin-top">
+      <h2>إدارة الموظفين</h2>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <select id="adminBranchSelect" style="padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:13px;">
+          <option value="__ALL__">كل الفروع</option>
+        </select>
+        <button class="backBtn" id="changeBranchBtn">📍 تغيير فرع الجهاز ده</button>
+        <button class="backBtn" id="adminLogout">خروج 🔒</button>
+        <button class="backBtn" id="backFromAdmin">◀ رجوع للشاشة</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>إضافة موظف جديد</h3>
+      <div class="add-form">
+        <input id="newEmpName" placeholder="اسم الموظف">
+        <button id="addEmpBtn">إضافة</button>
+      </div>
+      <div class="field-err" id="addEmpErr"></div>
+    </div>
+    <div class="panel">
+      <h3>الموظفين الحاليين</h3>
+      <div id="empList"></div>
+    </div>
+    <div class="panel">
+      <h3>سجل العمليات (كل التاريخ)</h3>
+      <div id="logList"></div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, enableIndexedDbPersistence
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
+  authDomain: "customer-feedback-8ac1d.firebaseapp.com",
+  projectId: "customer-feedback-8ac1d",
+  storageBucket: "customer-feedback-8ac1d.firebasestorage.app",
+  messagingSenderId: "408860081491",
+  appId: "1:408860081491:web:c5fa8b8e757c13196375a6",
+  measurementId: "G-6K33TSHDZ6"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence not enabled:', err.code));
+
+const empCol = collection(db, 'sales_employees');
+const pointsCol = collection(db, 'sales_points');
+
+// Simple admin access code — checked on-device, no network call.
+// Change this string to whatever code you want, then re-download the file.
+const ADMIN_CODE = '2005';
+
+const $ = s => document.querySelector(s);
+let employees = [];   // filtered to this device's own branch (kiosk grid)
+let allEmployees = []; // raw from Firestore
+let points = [];      // {id, employeeId, employeeName, invoiceNumber, ts}
+let selectedEmp = null;
+let adminUnlocked = false;
+
+// ---------- BRANCH SETUP (this device's own branch, for the kiosk grid) ----------
+let currentBranch = localStorage.getItem('sales_branch') || '';
+function refreshBranchUI(){
+  $('#branchTag').textContent = '📍 ' + (currentBranch || '—');
+  if(!currentBranch){
+    $('#branchSetup').classList.add('show');
+  } else {
+    $('#branchSetup').classList.remove('show');
+  }
+}
+$('#branchSaveBtn').addEventListener('click', ()=>{
+  const val = $('#branchInput').value.trim();
+  if(!val) return;
+  currentBranch = val;
+  localStorage.setItem('sales_branch', val);
+  refreshBranchUI();
+  applyBranchFilter();
+});
+$('#changeBranchBtn').addEventListener('click', ()=>{
+  $('#admin').classList.remove('show');
+  $('#branchInput').value = currentBranch;
+  $('#branchSetup').classList.add('show');
+});
+refreshBranchUI();
+
+// ---------- VIEW BRANCH (for remote review — any device can pick any branch) ----------
+let viewBranch = '__ALL__';
+function reviewEmployeesFor(branch){
+  return branch === '__ALL__' ? allEmployees : allEmployees.filter(e => e.branch === branch);
+}
+function populateBranchSelect(sel){
+  const branches = [...new Set(allEmployees.map(e=>e.branch).filter(Boolean))].sort();
+  const prevValue = sel.value || viewBranch;
+  sel.innerHTML = '<option value="__ALL__">كل الفروع</option>' +
+    branches.map(b=>`<option value="${b}">${b}</option>`).join('');
+  sel.value = branches.includes(prevValue) || prevValue === '__ALL__' ? prevValue : '__ALL__';
+}
+function populateBranchDropdowns(){
+  populateBranchSelect($('#adminBranchSelect'));
+  populateBranchSelect($('#lbBranchSelect'));
+}
+$('#adminBranchSelect').addEventListener('change', (e)=>{
+  viewBranch = e.target.value;
+  $('#lbBranchSelect').value = viewBranch;
+  renderAdminList();
+  renderLog();
+});
+$('#lbBranchSelect').addEventListener('change', (e)=>{
+  viewBranch = e.target.value;
+  $('#adminBranchSelect').value = viewBranch;
+  renderLeaderboard();
+});
+
+function applyBranchFilter(){
+  employees = allEmployees.filter(e => e.branch === currentBranch);
+  renderEmpGrid();
+  populateBranchDropdowns();
+  if(adminUnlocked){ renderAdminList(); renderLog(); }
+  if($('#leaderboard').classList.contains('show')) renderLeaderboard();
+}
+
+function initials(name){
+  const parts = name.trim().split(/\s+/);
+  return (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
+}
+
+onSnapshot(empCol, (snap)=>{
+  allEmployees = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  applyBranchFilter();
+}, (err)=> console.error('employees sync error', err));
+
+onSnapshot(pointsCol, (snap)=>{
+  points = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  renderEmpGrid();
+  if($('#leaderboard').classList.contains('show')) renderLeaderboard();
+  if(adminUnlocked) renderLog();
+}, (err)=> console.error('points sync error', err));
+
+function renderLog(){
+  const wrap = $('#logList');
+  const branchEmps = reviewEmployeesFor(viewBranch);
+  const branchEmpIds = new Set(branchEmps.map(e=>e.id));
+  const branchPoints = points.filter(p=> branchEmpIds.has(p.employeeId))
+    .sort((a,b)=> b.ts - a.ts);
+  if(branchPoints.length === 0){
+    wrap.innerHTML = '<div class="empty">لسه مفيش عمليات مسجلة</div>';
+    return;
+  }
+  const rows = branchPoints.map(p=>{
+    const d = new Date(p.ts);
+    const time = d.toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+    const emp = allEmployees.find(e=>e.id===p.employeeId);
+    return `<tr>
+      <td>${time}</td>
+      <td>${p.employeeName || ''}</td>
+      <td>${emp?.branch || '—'}</td>
+      <td>${p.invoiceNumber || '—'}</td>
+      <td><button data-id="${p.id}">حذف</button></td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="logTable"><thead><tr><th>الوقت</th><th>الموظف</th><th>الفرع</th><th>رقم الفاتورة</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  wrap.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('متأكد إنك عايز تحذف العملية دي؟')) return;
+      try{ await deleteDoc(doc(db,'sales_points', btn.dataset.id)); }
+      catch(err){ console.error('تعذر الحذف', err); }
+    });
+  });
+}
+
+function countsFor(empId, sinceTs){
+  return points.filter(p=> p.employeeId === empId && (!sinceTs || p.ts >= sinceTs)).length;
+}
+
+let highlightEmpId = null;
+let highlightTimer = null;
+
+function renderEmpGrid(){
+  const grid = $('#empGrid');
+  const hint = $('#emptyHint');
+  if(employees.length === 0){
+    grid.innerHTML = '';
+    hint.style.display = 'block';
+    return;
+  }
+  hint.style.display = 'none';
+  grid.innerHTML = employees.map(e=>`
+    <div class="emp-tile${e.id===highlightEmpId?' just-scored':''}" data-id="${e.id}">
+      <div class="emp-avatar">${initials(e.name)}</div>
+      <div class="emp-name">${e.name}</div>
+      <div class="emp-count">${countsFor(e.id)} نقطة</div>
+    </div>
+  `).join('');
+  grid.querySelectorAll('.emp-tile').forEach(tile=>{
+    tile.addEventListener('click', ()=> startForEmployee(tile.dataset.id));
+  });
+}
+
+function glowEmployee(empId){
+  highlightEmpId = empId;
+  renderEmpGrid();
+  clearTimeout(highlightTimer);
+  highlightTimer = setTimeout(()=>{
+    highlightEmpId = null;
+    renderEmpGrid();
+  }, 5000);
+}
+
+function showToast(empName){
+  $('#toastMsg').textContent = '🎉 +1 نقطة يا ' + empName + '!';
+  $('#toast').classList.add('show');
+  setTimeout(()=> $('#toast').classList.remove('show'), 1000);
+}
+
+function startForEmployee(empId){
+  requestFullscreenOnce();
+  selectedEmp = employees.find(e=> e.id === empId);
+  if(!selectedEmp) return;
+  // Go straight to the camera. Only fall back to manual typing if the
+  // device/browser genuinely can't scan (unsupported browser or no camera API).
+  if(('BarcodeDetector' in window) && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+    openScanner();
+  } else {
+    openInvoiceModal();
+  }
+}
+
+function openInvoiceModal(){
+  if(!selectedEmp) return;
+  $('#invoiceEmpName').textContent = selectedEmp.name;
+  $('#invoiceInput').value = '';
+  $('#invoiceErr').textContent = '';
+  $('#invoiceOverlay').classList.add('show');
+  setTimeout(()=> $('#invoiceInput').focus(), 100);
+}
+
+async function confirmInvoice(){
+  const invoiceNumber = $('#invoiceInput').value.trim();
+  if(!invoiceNumber){ $('#invoiceErr').textContent = 'اكتب رقم الفاتورة أو اعمل سكان للباركود'; return; }
+  const emp = selectedEmp;
+  if(!emp) return;
+
+  // Prevent the same invoice number being registered twice within the same branch.
+  const branchEmpIds = new Set(allEmployees.filter(x=> x.branch === emp.branch).map(x=> x.id));
+  const isDuplicate = points.some(p=> branchEmpIds.has(p.employeeId) && String(p.invoiceNumber||'').trim() === invoiceNumber);
+  if(isDuplicate){
+    $('#invoiceEmpName').textContent = emp.name;
+    $('#invoiceInput').value = invoiceNumber;
+    $('#invoiceErr').textContent = 'رقم الفاتورة ده اتسجل قبل كده. تأكد من الرقم أو اكتب رقم صح.';
+    $('#invoiceOverlay').classList.add('show');
+    return;
+  }
+
+  try{
+    await addDoc(pointsCol, { employeeId: emp.id, employeeName: emp.name, invoiceNumber, ts: Date.now() });
+  }catch(err){ console.error('تعذر تسجيل النقطة', err); }
+  $('#invoiceOverlay').classList.remove('show');
+  selectedEmp = null;
+  glowEmployee(emp.id);
+  showToast(emp.name);
+}
+
+$('#invoiceConfirmBtn').addEventListener('click', confirmInvoice);
+$('#invoiceInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') confirmInvoice(); });
+$('#invoiceCancelBtn').addEventListener('click', ()=>{
+  $('#invoiceOverlay').classList.remove('show');
+  selectedEmp = null;
+});
+
+// ---------- BARCODE SCANNER ----------
+let scanStream = null;
+let scanLoopId = null;
+
+function playBeep(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 1800;
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+    osc.onended = ()=> ctx.close();
+  }catch(e){ /* audio not available, ignore */ }
+}
+
+$('#scanBtn').addEventListener('click', openScanner);
+$('#scannerCancelBtn').addEventListener('click', closeScanner);
+$('#scannerManualBtn').addEventListener('click', ()=>{
+  closeScanner();
+  openInvoiceModal();
+});
+
+async function openScanner(){
+  // Show the overlay immediately so any error message is actually visible —
+  // previously errors were written before the overlay existed on screen.
+  $('#scannerEmpName').textContent = selectedEmp ? selectedEmp.name : '—';
+  $('#scannerErr').textContent = '';
+  $('#scannerStatus').textContent = 'بيفتح الكاميرا...';
+  $('#scannerOverlay').classList.add('show');
+
+  if(!('BarcodeDetector' in window)){
+    $('#scannerStatus').textContent = '';
+    $('#scannerErr').textContent = 'المتصفح ده مش بيدعم سكان الباركود. اكتب رقم الفاتورة بإيدك بدل كده.';
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    $('#scannerStatus').textContent = '';
+    $('#scannerErr').textContent = 'الكاميرا متاحة بس لو الملف اتفتح من رابط ويب آمن (https). لو بتفتح الملف من جهازك مباشرة، الكاميرا مش هتشتغل — لازم ترفع الملف Online (اسأل Claude يساعدك تعمل ده) عشان السكان يشتغل.';
+    return;
+  }
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const video = $('#scannerVideo');
+    video.srcObject = scanStream;
+    await video.play();
+    $('#scannerStatus').textContent = '';
+    let detector;
+    try{
+      detector = new BarcodeDetector({ formats: ['code_128','code_39','code_93','ean_13','ean_8','upc_a','upc_e','itf','codabar'] });
+    }catch(e){
+      detector = new BarcodeDetector(); // fallback if formats hint unsupported
+    }
+    let busy = false;
+    const scanFrame = async ()=>{
+      if(!busy){
+        busy = true;
+        try{
+          const codes = await detector.detect(video);
+          if(codes.length > 0){
+            playBeep();
+            $('#invoiceInput').value = codes[0].rawValue;
+            closeScanner();
+            confirmInvoice();
+            return;
+          }
+        }catch(e){ /* keep trying */ }
+        busy = false;
+      }
+      scanLoopId = requestAnimationFrame(scanFrame);
+    };
+    scanLoopId = requestAnimationFrame(scanFrame);
+  }catch(err){
+    $('#scannerStatus').textContent = '';
+    if(err && err.name === 'NotAllowedError'){
+      $('#scannerErr').textContent = 'تم رفض إذن الكاميرا. فعّل إذن الكاميرا للمتصفح من إعدادات الجهاز وحاول تاني.';
+    } else if(err && err.name === 'NotFoundError'){
+      $('#scannerErr').textContent = 'مفيش كاميرا متاحة على الجهاز ده.';
+    } else {
+      $('#scannerErr').textContent = 'مقدرش أوصل للكاميرا. اكتب رقم الفاتورة بإيدك بدل كده.';
+    }
+    console.error(err);
+  }
+}
+
+function closeScanner(){
+  if(scanLoopId) cancelAnimationFrame(scanLoopId);
+  scanLoopId = null;
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  $('#scannerOverlay').classList.remove('show');
+}
+
+// ---------- LEADERBOARD ----------
+$('#openLeaderboard').addEventListener('click', ()=>{
+  $('#leaderboard').classList.add('show');
+  $('#lbBranchSelect').value = viewBranch;
+  renderLeaderboard();
+});
+$('#closeLeaderboard').addEventListener('click', ()=> $('#leaderboard').classList.remove('show'));
+
+function medalOrRank(i){
+  return i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : String(i+1);
+}
+
+function buildRows(list, key){
+  if(list.length === 0) return '<div class="lb-empty">لسه مفيش نقط مسجلة</div>';
+  return list.map((e,i)=>`
+    <div class="lb-row ${i===0?'rank1':''}">
+      <div class="lb-rank">${medalOrRank(i)}</div>
+      <div class="lb-avatar">${initials(e.name)}</div>
+      <div class="lb-name">${e.name} ${i===0 && key==='w' ? '<span class="crown">👑</span>' : ''}</div>
+      <div class="lb-points">${e.count} نقطة</div>
+    </div>
+  `).join('');
+}
+
+function renderLeaderboard(){
+  const lbEmployees = reviewEmployeesFor(viewBranch);
+  const weekAgo = Date.now() - 7*24*60*60*1000;
+  const weekly = lbEmployees.map(e=>({name:e.name, count: countsFor(e.id, weekAgo)}))
+    .filter(e=>e.count>0).sort((a,b)=>b.count-a.count);
+  const allTime = lbEmployees.map(e=>({name:e.name, count: countsFor(e.id)}))
+    .filter(e=>e.count>0).sort((a,b)=>b.count-a.count);
+  $('#weeklyList').innerHTML = buildRows(weekly, 'w');
+  $('#allTimeList').innerHTML = buildRows(allTime, 'a');
+}
+
+// ---------- ADMIN GATE ----------
+const gear = $('#gear');
+let gearTimer = null;
+gear.addEventListener('pointerdown', ()=>{ gearTimer = setTimeout(openAdmin, 1200); });
+['pointerup','pointerleave'].forEach(ev=> gear.addEventListener(ev, ()=> clearTimeout(gearTimer)));
+
+// Fullscreen kiosk mode
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+  } else {
+    document.exitFullscreen?.().catch(()=>{});
+  }
+}
+$('#fsBtn').addEventListener('click', toggleFullscreen);
+let firstTapDone = false;
+function requestFullscreenOnce(){
+  if(firstTapDone) return;
+  firstTapDone = true;
+  if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.().catch(()=>{}); }
+}
+
+function openAdmin(){
+  $('#admin').classList.add('show');
+  if(adminUnlocked){ renderAdminList(); renderLog(); }
+  else { $('#adminLoginGate').classList.add('show'); }
+}
+$('#adminLoginBtn').addEventListener('click', doAdminLogin);
+$('#adminPass').addEventListener('keydown', (e)=>{ if(e.key==='Enter') doAdminLogin(); });
+function doAdminLogin(){
+  const pass = $('#adminPass').value;
+  $('#adminLoginErr').textContent = '';
+  if(pass === ADMIN_CODE){
+    adminUnlocked = true;
+    $('#adminPass').value = '';
+    $('#adminLoginGate').classList.remove('show');
+    renderAdminList();
+    renderLog();
+  } else {
+    $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
+  }
+}
+$('#adminLoginCancel').addEventListener('click', ()=>{
+  $('#adminLoginGate').classList.remove('show');
+  $('#admin').classList.remove('show');
+});
+$('#backFromAdmin').addEventListener('click', ()=> $('#admin').classList.remove('show'));
+$('#adminLogout').addEventListener('click', ()=>{
+  adminUnlocked = false;
+  $('#admin').classList.remove('show');
+});
+
+function renderAdminList(){
+  const wrap = $('#empList');
+  const listed = reviewEmployeesFor(viewBranch);
+  if(listed.length === 0){
+    wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>';
+    return;
+  }
+  wrap.innerHTML = listed.map(e=>`
+    <div class="emp-row">
+      <div class="n">${e.name}${viewBranch==='__ALL__' ? ' <span style="color:var(--sub); font-weight:400; font-size:12px;">— '+(e.branch||'—')+'</span>' : ''}</div>
+      <button data-id="${e.id}">حذف</button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('متأكد إنك عايز تحذف الموظف ده؟')) return;
+      try{ await deleteDoc(doc(db,'sales_employees', btn.dataset.id)); }
+      catch(err){ console.error('تعذر الحذف', err); }
+    });
+  });
+}
+
+$('#addEmpBtn').addEventListener('click', async ()=>{
+  const name = $('#newEmpName').value.trim();
+  const errEl = $('#addEmpErr');
+  errEl.textContent = '';
+  if(!name){ errEl.textContent = 'اكتب اسم الموظف'; return; }
+  try{
+    await addDoc(empCol, { name, branch: currentBranch, createdAt: Date.now() });
+    $('#newEmpName').value = '';
+  }catch(err){ errEl.textContent = 'حصل خطأ، حاول تاني'; console.error(err); }
+});
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
