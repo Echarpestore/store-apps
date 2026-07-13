@@ -213,13 +213,9 @@
     box-shadow:0 6px 18px rgba(229,72,77,.35); display:flex; align-items:center; justify-content:center; gap:8px;
   }
   .clockOutBigBtn:active{transform:translateY(2px); box-shadow:0 3px 10px rgba(229,72,77,.3);}
-  .faceVideoBox{position:relative; width:100%; border-radius:14px; overflow:hidden; background:#000; margin-bottom:14px;}
-  .faceVideoBox video{width:100%; height:240px; object-fit:cover; display:block;}
-  .faceOval{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:130px; height:170px; border:3px solid var(--gold); border-radius:50%/60%; opacity:.7; pointer-events:none;}
-  .faceStatusPill{padding:6px 14px; border-radius:20px; font-size:12px; font-weight:700; display:inline-block; margin-bottom:10px;}
-  .faceStatusPill.checking{background:var(--panel2); color:var(--sub);}
-  .faceStatusPill.match{background:rgba(47,163,107,.2); color:var(--good);}
-  .faceStatusPill.nomatch{background:rgba(229,72,77,.2); color:var(--bad);}
+  .attPhotoBox{position:relative; width:100%; border-radius:14px; overflow:hidden; background:#000; margin-bottom:14px;}
+  .attPhotoBox video{width:100%; height:220px; object-fit:cover; display:block;}
+  .attPhotoStatus{padding:6px 14px; border-radius:20px; font-size:12px; font-weight:700; display:inline-block; margin-bottom:10px; background:var(--panel2); color:var(--sub);}
   .dhXBtn{
     position:absolute; top:14px; left:14px; width:30px; height:30px; border-radius:50%; border:1px solid var(--line);
     background:var(--panel2); color:var(--sub); font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:5;
@@ -291,7 +287,9 @@
         <div class="eyebrow">سجّل بيعتك</div>
         <h1>مين اللي باع دلوقتي؟ 🔥</h1>
         <div class="branch-tag" id="branchTag">📍 —</div>
+        <div class="branch-tag" id="todayAdvancesTag" style="color:var(--gold); margin-top:4px;">💰 سلف النهاردة: 0 ج.م</div>
       </div>
+      <button class="lbBtn" id="openAdvance" style="margin-left:8px; background:linear-gradient(180deg,#2a2410,#1b1e27); border-color:var(--gold-dim);">💰 سلفة</button>
       <button class="lbBtn" id="openAttendance" style="margin-left:8px;">⏰ الحضور</button>
       <button class="lbBtn" id="openLeaderboard">🏆 الترتيب</button>
     </div>
@@ -470,48 +468,52 @@
     </div>
   </div>
 
-  <!-- FACE VERIFICATION (2nd factor after PIN) -->
-  <div id="faceVerifyOverlay" class="overlay">
+  <!-- ATTENDANCE PHOTO (quick snapshot for audit, no AI matching) -->
+  <div id="attPhotoOverlay" class="overlay">
     <div class="box pin-box">
-      <h3 id="faceVerifyName">—</h3>
-      <p class="sub">وجّه وشك للكاميرا عشان نتأكد إنه إنت</p>
-      <div class="faceStatusPill checking" id="faceVerifyStatus">بيفحص...</div>
-      <div class="faceVideoBox">
-        <video id="faceVerifyVideo" autoplay muted playsinline></video>
-        <div class="faceOval"></div>
+      <h3 id="attPhotoName">—</h3>
+      <p class="sub">هتتاخد صورة سريعة عشان تتوثق مع تسجيلك</p>
+      <div class="attPhotoStatus" id="attPhotoStatus">بيفتح الكاميرا...</div>
+      <div class="attPhotoBox">
+        <video id="attPhotoVideo" autoplay muted playsinline></video>
       </div>
-      <div class="field-err" id="faceVerifyErr"></div>
-      <button style="width:100%; display:none; padding:11px; border:1px solid var(--gold-dim); border-radius:12px; background:transparent; color:var(--gold); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="faceVerifyOverrideBtn">🔑 تجاوز بكود الأدمن</button>
-      <button style="width:100%; margin-top:8px; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="faceVerifyCancel">إلغاء</button>
+      <div class="field-err" id="attPhotoErr"></div>
+      <button style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="attPhotoCancel">إلغاء</button>
     </div>
   </div>
 
-  <!-- FACE OVERRIDE (admin password) -->
-  <div id="faceOverrideOverlay" class="overlay">
-    <div class="box pin-box">
-      <h3>تجاوز التحقق من الوجه</h3>
-      <p class="sub">اكتب كود الأدمن عشان تسمح بالدخول من غيره</p>
-      <input type="password" id="faceOverridePass" placeholder="كود الأدمن"
-        style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:15px; text-align:center; margin-bottom:12px;">
-      <div class="field-err" id="faceOverrideErr"></div>
-      <button id="faceOverrideConfirmBtn" style="width:100%; padding:13px; border:none; border-radius:12px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer; margin-bottom:10px;">تأكيد التجاوز</button>
-      <button style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="faceOverrideCancel">إلغاء</button>
-    </div>
-  </div>
-
-  <!-- FACE ENROLLMENT (admin registers employee face) -->
-  <div id="faceEnrollOverlay" class="overlay">
-    <div class="box pin-box">
-      <h3 id="faceEnrollName">—</h3>
-      <p class="sub">خلي الموظف يبص للكاميرا ودوس "التقاط" لما يبقى واضح</p>
-      <div class="faceStatusPill checking" id="faceEnrollStatus">جاهز</div>
-      <div class="faceVideoBox">
-        <video id="faceEnrollVideo" autoplay muted playsinline></video>
-        <div class="faceOval"></div>
+  <!-- ADVANCE / SALARY LOAN REQUEST -->
+  <div id="advanceOverlay" class="overlay">
+    <div class="box pin-box" style="width:min(92vw,360px);">
+      <div id="advStep1">
+        <h3>💰 تسجيل سلفة</h3>
+        <p class="sub">اختار اسمك</p>
+        <div class="attGrid" id="advanceEmpGrid"></div>
+        <button style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="advStep1Cancel">إلغاء</button>
       </div>
-      <div class="field-err" id="faceEnrollErr"></div>
-      <button style="width:100%; margin-bottom:8px; padding:13px; border:none; border-radius:12px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer;" id="faceEnrollCaptureBtn">📸 التقاط وتسجيل</button>
-      <button style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="faceEnrollCancel">إلغاء</button>
+      <div id="advStep2" style="display:none;">
+        <h3 id="advStep2Name">—</h3>
+        <p class="sub">اكتب كودك السري</p>
+        <div class="pin-dots" id="advPinDots">
+          <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+        </div>
+        <div class="keypad" id="advKeypad">
+          <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+          <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+          <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+          <button class="wide" id="advPinBack">رجوع</button><button data-k="0">0</button><button class="wide" id="advPinDel">⌫</button>
+        </div>
+        <div class="pin-err-text" id="advPinErrText"></div>
+      </div>
+      <div id="advStep3" style="display:none;">
+        <h3 id="advStep3Name">—</h3>
+        <p class="sub">اكتب مبلغ السلفة</p>
+        <input type="number" min="1" id="advAmountInput" placeholder="بالجنيه"
+          style="width:100%; padding:14px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; font-size:20px; text-align:center; margin-bottom:12px;">
+        <div class="field-err" id="advAmountErr"></div>
+        <button style="width:100%; padding:13px; border:none; border-radius:12px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer; margin-bottom:10px;" id="advConfirmBtn">تأكيد السلفة ✅</button>
+        <button style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="advStep3Cancel">إلغاء</button>
+      </div>
     </div>
   </div>
 
@@ -577,15 +579,6 @@
       <h3>⏰ مواعيد الحضور المحددة</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">حدّد ميعاد الحضور الرسمي لكل موظف عشان التأخير يتحسب منه.</p>
       <div id="scheduleList"></div>
-    </div>
-
-    <div class="panel">
-      <h3>📷 التحقق من الوجه (منع تسجيل حضور حد بدال حد)</h3>
-      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
-        سجّل وجه كل موظف مرة واحدة. بعد كده، هيتطلب التحقق من وشه قبل ما يقدر يسجل حضور أو انصراف.
-        الدقة مش 100% — لو الوجه مش واضح، فيه خيار تجاوز بكود الأدمن.
-      </p>
-      <div id="faceEnrollList"></div>
     </div>
 
     <div class="panel">
@@ -674,6 +667,11 @@
       <h3>📋 سجل المغادرين</h3>
       <div id="terminationLogList"></div>
     </div>
+
+    <div class="panel">
+      <h3>💰 سجل السلف</h3>
+      <div id="advancesLogList"></div>
+    </div>
   </div>
 
 </div>
@@ -709,6 +707,7 @@ const settingsCol = collection(db, 'sales_settings');
 const commissionPaymentsCol = collection(db, 'sales_commission_payments');
 const salaryPaymentsCol = collection(db, 'sales_salary_payments');
 const terminationsCol = collection(db, 'sales_terminations');
+const advancesCol = collection(db, 'sales_advances');
 
 // Simple admin access code — checked on-device, no network call.
 // Change this string to whatever code you want, then re-download the file.
@@ -729,6 +728,7 @@ let commissionPerPoint = 0;                // set by admin, per branch
 let allCommissionPayments = [], commissionPayments = []; // monthly payment records
 let allSalaryPayments = [], salaryPayments = [];
 let allTerminations = [], terminations = [];
+let allAdvances = [], advances = [];
 let pendingTaskPhoto = null;                // File selected before upload
 let taskSubmitEmpId = null;
 
@@ -788,7 +788,9 @@ function applyBranchFilter(){
   commissionPayments = allCommissionPayments.filter(p => p.branch === currentBranch);
   salaryPayments = allSalaryPayments.filter(p => p.branch === currentBranch);
   terminations = allTerminations.filter(t => t.branch === currentBranch);
+  advances = allAdvances.filter(a => a.branch === currentBranch);
   renderEmpGrid();
+  renderTodayAdvancesSummary();
   populateBranchDropdowns();
   checkAndAwardRewards();
   if(!rewardToastLock){
@@ -797,9 +799,9 @@ function applyBranchFilter(){
   }
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
-    renderStaffOverview(); renderScheduleList(); renderFaceEnrollList(); renderTaskAssignList();
+    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
-    renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
+    renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
   if($('#attendance').classList.contains('show')) renderAttendanceLists();
@@ -871,6 +873,13 @@ onSnapshot(terminationsCol, (snap)=>{
   terminations = allTerminations.filter(t=> t.branch === currentBranch);
   if(adminUnlocked){ renderTerminationPanel(); renderTerminationLog(); }
 }, (err)=> console.error('terminations sync error', err));
+
+onSnapshot(advancesCol, (snap)=>{
+  allAdvances = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  advances = allAdvances.filter(a=> a.branch === currentBranch);
+  renderTodayAdvancesSummary();
+  if(adminUnlocked){ renderSalaryPanel(); renderAdvancesLog(); }
+}, (err)=> console.error('advances sync error', err));
 
 function renderLog(){
   const wrap = $('#logList');
@@ -1055,7 +1064,7 @@ function renderAttendanceLists(){
 
 const LATE_GRACE_MINUTES = 10; // no penalty within this window around the scheduled time
 const SEVERE_LATE_MINUTES = 20; // being later than this even once disqualifies the reward for that period
-async function clockIn(empId){
+async function clockIn(empId, photoDataUri){
   const emp = employees.find(e=> e.id === empId);
   if(!emp) return;
   let lateMinutes = 0;
@@ -1070,7 +1079,8 @@ async function clockIn(empId){
     await addDoc(shiftsCol, {
       employeeId: empId, employeeName: emp.name, branch: currentBranch,
       clockInTs: Date.now(), clockOutTs: null,
-      scheduledStartTime: emp.scheduledStartTime || null, lateMinutes
+      scheduledStartTime: emp.scheduledStartTime || null, lateMinutes,
+      clockInPhoto: photoDataUri || null
     });
   }catch(err){
     console.error('تعذر تسجيل الحضور', err);
@@ -1079,7 +1089,7 @@ async function clockIn(empId){
   renderAttendanceLists();
 }
 
-async function clockOut(empId){
+async function clockOut(empId, photoDataUri){
   const shift = getOpenShift(empId);
   if(!shift) return;
   const emp = employees.find(e=> e.id === empId);
@@ -1099,7 +1109,7 @@ async function clockOut(empId){
   }
 
   try{
-    await updateDoc(doc(db,'sales_shifts', shift.id), { clockOutTs: now, overtimeMinutes });
+    await updateDoc(doc(db,'sales_shifts', shift.id), { clockOutTs: now, overtimeMinutes, clockOutPhoto: photoDataUri || null });
     const totalMin = Math.round((now - shift.clockInTs)/60000);
     const h = Math.floor(totalMin/60), m = totalMin%60;
     let msg = `تم تسجيل الانصراف ✅\nمدة الشيفت: ${h} س ${m} د`;
@@ -1168,12 +1178,7 @@ async function checkAttPin(){
   if(attPinBuffer === String(emp.pin)){
     const action = pendingAttAction;
     closeAttPin();
-    if(emp.faceDescriptor){
-      openFaceVerify(action);
-    } else {
-      if(action.type === 'in'){ await clockIn(action.empId); }
-      else{ await clockOut(action.empId); renderAttendanceLists(); }
-    }
+    openAttPhoto(action);
   } else {
     updateAttPinDots(true);
     $('#attPinErrText').textContent = 'الكود غلط';
@@ -1825,7 +1830,7 @@ function openAdmin(){
   $('#admin').classList.add('show');
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
-    renderStaffOverview(); renderScheduleList(); renderFaceEnrollList(); renderTaskAssignList();
+    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
   }
   else { $('#adminLoginGate').classList.add('show'); }
@@ -1842,7 +1847,7 @@ function doAdminLogin(){
     renderAdminList();
     renderLog();
     renderPerformanceLink();
-    renderStaffOverview(); renderScheduleList(); renderFaceEnrollList(); renderTaskAssignList();
+    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
@@ -2145,14 +2150,21 @@ function renderAttendanceHistory(){
     const duration = s.clockOutTs ? formatDuration(s.clockOutTs - s.clockInTs) : 'لسه شغال';
     const lateTxt = s.lateMinutes > 0 ? `${s.lateMinutes}د` : '—';
     const otTxt = s.overtimeMinutes > 0 ? `${s.overtimeMinutes}د` : '—';
+    const inPhoto = s.clockInPhoto ? `<img src="${s.clockInPhoto}" class="lightboxable" style="width:32px; height:32px; border-radius:6px; object-fit:cover; cursor:pointer;">` : '—';
+    const outPhoto = s.clockOutPhoto ? `<img src="${s.clockOutPhoto}" class="lightboxable" style="width:32px; height:32px; border-radius:6px; object-fit:cover; cursor:pointer;">` : '—';
     return `<tr>
       <td>${dateStr}</td><td>${s.employeeName}</td><td>${inTime}</td><td>${outTime}</td>
       <td>${duration}</td>
       <td style="color:${s.lateMinutes>0?'var(--bad)':'var(--sub)'}">${lateTxt}</td>
       <td style="color:${s.overtimeMinutes>0?'var(--gold)':'var(--sub)'}">${otTxt}</td>
+      <td>${inPhoto}</td>
+      <td>${outPhoto}</td>
     </tr>`;
   }).join('');
-  wrap.innerHTML = `<table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>حضور</th><th>انصراف</th><th>المدة</th><th>تأخير</th><th>إضافي</th></tr></thead><tbody>${rows}</tbody></table>`;
+  wrap.innerHTML = `<div style="overflow-x:auto;"><table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>حضور</th><th>انصراف</th><th>المدة</th><th>تأخير</th><th>إضافي</th><th>صورة حضور</th><th>صورة انصراف</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  wrap.querySelectorAll('.lightboxable').forEach(img=>{
+    img.addEventListener('click', ()=> openLightbox(img.src));
+  });
 }
 
 $('#exportAttendanceCsvBtn')?.addEventListener('click', ()=>{
@@ -2386,7 +2398,7 @@ function computeSalary(emp, periodStart, end){
   }
 
   if(notYetHired){
-    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, netSalary:0, daysInCalc:0, notYetHired:true };
+    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, advancesTotal:0, netSalary:0, daysInCalc:0, notYetHired:true };
   }
 
   const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
@@ -2400,8 +2412,11 @@ function computeSalary(emp, periodStart, end){
   const extraOffDays = Math.max(0, dayOffOccurrences - FREE_DAYOFF_PER_MONTH);
   const deductionAmount = Math.round(extraOffDays * dailyRate * 100)/100;
 
-  const netSalary = Math.round((proratedBase - deductionAmount + overtimePay) * 100)/100;
-  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, netSalary, daysInCalc, notYetHired:false };
+  const advancesTotal = advances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= end.getTime())
+    .reduce((sum,a)=> sum + a.amount, 0);
+
+  const netSalary = Math.round((proratedBase - deductionAmount + overtimePay - advancesTotal) * 100)/100;
+  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, advancesTotal, netSalary, daysInCalc, notYetHired:false };
 }
 
 function renderSalaryPanel(){
@@ -2436,7 +2451,8 @@ function renderSalaryPanel(){
       <div class="meta">أساسي ${calc.proratedBase}</div>
       ${proratedNote}
       <div class="meta" style="color:var(--gold);">إضافي +${calc.overtimePay}</div>
-      <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم -${calc.deductionAmount} (${calc.extraOffDays} يوم زيادة)</div>
+      <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم إجازة -${calc.deductionAmount} (${calc.extraOffDays} يوم زيادة)</div>
+      <div class="meta" style="color:${calc.advancesTotal>0?'var(--bad)':'var(--sub)'}">سلف -${calc.advancesTotal}</div>
       <div class="meta" style="color:var(--good); font-weight:800;">صافي ${calc.netSalary} ج.م</div>
       ${actionHtml}
     </div>`;
@@ -2552,202 +2568,181 @@ function renderTerminationLog(){
   });
 }
 
-// ==================== FACE RECOGNITION (attendance anti-fraud) ====================
-let faceApiReady = false;
-(async function loadFaceApiModels(){
+// ==================== ATTENDANCE PHOTO (simple audit snapshot, no AI matching) ====================
+let attPhotoStream = null;
+let pendingPhotoAction = null;
+
+async function openAttPhoto(action){
+  pendingPhotoAction = action;
+  const emp = employees.find(e=> e.id === action.empId);
+  $('#attPhotoName').textContent = emp ? emp.name : '—';
+  $('#attPhotoErr').textContent = '';
+  $('#attPhotoStatus').textContent = 'بيفتح الكاميرا...';
+  $('#attPhotoOverlay').classList.add('show');
   try{
-    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
-    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-    // Warm up the models with one dummy inference so the WebGL shaders are
-    // already compiled by the time the user actually needs to scan a face —
-    // this removes most of the "first scan is slow" lag.
-    try{
-      const warmupCanvas = document.createElement('canvas');
-      warmupCanvas.width = 160; warmupCanvas.height = 120;
-      await faceapi.detectSingleFace(warmupCanvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }))
-        .withFaceLandmarks().withFaceDescriptor();
-    }catch(e){ /* warm-up failures are harmless, ignore */ }
-    faceApiReady = true;
+    attPhotoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+    const video = $('#attPhotoVideo');
+    video.srcObject = attPhotoStream;
+    await video.play();
+    $('#attPhotoStatus').textContent = 'بيصور...';
+    // Give the camera a brief moment to focus/expose before snapping.
+    setTimeout(()=> captureAttPhoto(video), 900);
   }catch(err){
-    console.error('تعذر تحميل نماذج التعرف على الوجه', err);
-    faceApiReady = false;
+    $('#attPhotoStatus').textContent = '';
+    $('#attPhotoErr').textContent = 'مقدرش أوصل للكاميرا: ' + (err && err.name ? err.name : 'غير معروف') + '. هيتسجل من غير صورة.';
+    setTimeout(()=> finishAttPhoto(null), 1200);
   }
-})();
-
-const FACE_MATCH_THRESHOLD = 0.6; // lower = stricter match; 0.6 is the commonly used default
-const FACE_OVERRIDE_SHOW_AFTER_MS = 4000;
-const FACE_SCAN_INTERVAL_MS = 400; // throttle scans instead of running flat-out every frame
-
-async function getFaceDescriptorFromVideo(videoEl){
-  try{
-    // A smaller inputSize (224 instead of the 416 default) trades a little
-    // detection range for noticeably faster inference — plenty for a face
-    // filling most of the frame at arm's length, which is the normal case here.
-    const detection = await faceapi.detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
-      .withFaceLandmarks().withFaceDescriptor();
-    return detection ? detection.descriptor : null;
-  }catch(e){ return null; }
 }
 
-// ---------- ENROLLMENT (admin registers an employee's face) ----------
-function renderFaceEnrollList(){
-  const wrap = $('#faceEnrollList');
-  if(!wrap) return;
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  wrap.innerHTML = employees.map(e=> `
-    <div class="emp-row">
-      <div class="n">${e.name}</div>
-      ${e.faceDescriptor ? '<span style="color:var(--good); font-size:11px;">✅ متسجل</span>' : '<span style="color:var(--sub); font-size:11px;">مش متسجل</span>'}
-      <button data-id="${e.id}" style="border:none; background:var(--gold); color:#0b0c0f; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">📷 ${e.faceDescriptor?'إعادة تسجيل':'تسجيل الوجه'}</button>
-    </div>
-  `).join('');
-  wrap.querySelectorAll('button').forEach(btn=>{
-    btn.addEventListener('click', ()=> openFaceEnroll(btn.dataset.id));
+function captureAttPhoto(video){
+  try{
+    const canvas = document.createElement('canvas');
+    const w = 320, h = Math.round(w * video.videoHeight/video.videoWidth);
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+    const dataUri = canvas.toDataURL('image/jpeg', 0.5);
+    $('#attPhotoStatus').textContent = 'تم ✅';
+    finishAttPhoto(dataUri);
+  }catch(err){
+    console.error('تعذر التقاط الصورة', err);
+    finishAttPhoto(null);
+  }
+}
+
+async function finishAttPhoto(photoDataUri){
+  const action = pendingPhotoAction;
+  closeAttPhoto();
+  if(!action) return;
+  if(action.type === 'in'){ await clockIn(action.empId, photoDataUri); }
+  else{ await clockOut(action.empId, photoDataUri); renderAttendanceLists(); }
+}
+
+function closeAttPhoto(){
+  if(attPhotoStream){ attPhotoStream.getTracks().forEach(t=>t.stop()); attPhotoStream=null; }
+  $('#attPhotoOverlay').classList.remove('show');
+  pendingPhotoAction = null;
+}
+$('#attPhotoCancel')?.addEventListener('click', closeAttPhoto);
+
+// ==================== SALARY ADVANCES ====================
+function todayAdvancesTotal(){
+  const today = todayStr();
+  return advances.filter(a=> a.date === today).reduce((sum,a)=> sum + a.amount, 0);
+}
+function renderTodayAdvancesSummary(){
+  const tag = $('#todayAdvancesTag');
+  if(!tag) return;
+  tag.textContent = '💰 سلف النهاردة: ' + todayAdvancesTotal() + ' ج.م';
+}
+
+let advSelectedEmp = null;
+let advPinBuffer = '';
+
+$('#openAdvance')?.addEventListener('click', ()=>{
+  requestFullscreenOnce();
+  showAdvStep(1);
+  const wrap = $('#advanceEmpGrid');
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; }
+  else{
+    wrap.innerHTML = employees.map(e=> `
+      <div class="attCard" data-id="${e.id}">
+        <div class="av">${initials(e.name)}</div>
+        <div class="n">${e.name}</div>
+      </div>
+    `).join('');
+    wrap.querySelectorAll('.attCard').forEach(tile=>{
+      tile.addEventListener('click', ()=> selectAdvEmp(tile.dataset.id));
+    });
+  }
+  $('#advanceOverlay').classList.add('show');
+});
+
+function showAdvStep(n){
+  $('#advStep1').style.display = n===1 ? 'block' : 'none';
+  $('#advStep2').style.display = n===2 ? 'block' : 'none';
+  $('#advStep3').style.display = n===3 ? 'block' : 'none';
+}
+$('#advStep1Cancel')?.addEventListener('click', ()=> $('#advanceOverlay').classList.remove('show'));
+$('#advStep3Cancel')?.addEventListener('click', ()=> $('#advanceOverlay').classList.remove('show'));
+
+function selectAdvEmp(empId){
+  advSelectedEmp = employees.find(e=> e.id === empId);
+  if(!advSelectedEmp) return;
+  advPinBuffer = '';
+  $('#advStep2Name').textContent = advSelectedEmp.name;
+  $('#advPinErrText').textContent = '';
+  updateAdvPinDots(false);
+  showAdvStep(2);
+}
+
+function updateAdvPinDots(isErr){
+  document.querySelectorAll('#advPinDots .pin-dot').forEach((d,i)=>{
+    d.className = 'pin-dot' + (i < advPinBuffer.length ? (isErr?' err':' filled') : '');
   });
 }
+$('#advKeypad')?.addEventListener('click', (e)=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  if(btn.id === 'advPinBack'){ showAdvStep(1); return; }
+  if(btn.id === 'advPinDel'){ advPinBuffer = advPinBuffer.slice(0,-1); updateAdvPinDots(false); return; }
+  const k = btn.dataset.k;
+  if(k === undefined || advPinBuffer.length >= 4) return;
+  advPinBuffer += k;
+  updateAdvPinDots(false);
+  if(advPinBuffer.length === 4) checkAdvPin();
+});
 
-let faceEnrollStream = null;
-let faceEnrollEmpId = null;
-
-async function openFaceEnroll(empId){
-  const emp = employees.find(e=> e.id === empId);
-  if(!emp) return;
-  faceEnrollEmpId = empId;
-  $('#faceEnrollName').textContent = emp.name;
-  $('#faceEnrollErr').textContent = '';
-  $('#faceEnrollStatus').className = 'faceStatusPill checking';
-  $('#faceEnrollStatus').textContent = 'بيفتح الكاميرا...';
-  $('#faceEnrollOverlay').classList.add('show');
-  try{
-    faceEnrollStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' } });
-    $('#faceEnrollVideo').srcObject = faceEnrollStream;
-    $('#faceEnrollStatus').textContent = 'جاهز، دوس التقاط';
-  }catch(err){
-    $('#faceEnrollErr').textContent = 'مقدرش أوصل للكاميرا: ' + (err && err.name ? err.name : 'غير معروف');
-  }
-}
-
-function closeFaceEnroll(){
-  if(faceEnrollStream){ faceEnrollStream.getTracks().forEach(t=>t.stop()); faceEnrollStream=null; }
-  $('#faceEnrollOverlay').classList.remove('show');
-  faceEnrollEmpId = null;
-}
-$('#faceEnrollCancel')?.addEventListener('click', closeFaceEnroll);
-
-$('#faceEnrollCaptureBtn')?.addEventListener('click', async ()=>{
-  if(!faceApiReady){ $('#faceEnrollErr').textContent = 'نماذج التعرف على الوجه لسه بتحمّل أو فشلت، تأكد من الاتصال بالإنترنت وحاول تاني.'; return; }
-  $('#faceEnrollStatus').textContent = 'بيحلل...';
-  const descriptor = await getFaceDescriptorFromVideo($('#faceEnrollVideo'));
-  if(!descriptor){
-    $('#faceEnrollErr').textContent = 'مقدرش ألاقي وجه واضح، جرب تاني بإضاءة أحسن وقرّب من الكاميرا.';
-    $('#faceEnrollStatus').textContent = 'جاهز، دوس التقاط';
+function checkAdvPin(){
+  if(!advSelectedEmp.pin){
+    // No PIN configured for this employee yet — don't block them, just proceed.
+    goToAdvAmountStep();
     return;
   }
+  if(advPinBuffer === String(advSelectedEmp.pin)){
+    goToAdvAmountStep();
+  } else {
+    updateAdvPinDots(true);
+    $('#advPinErrText').textContent = 'الكود غلط';
+    setTimeout(()=>{ advPinBuffer=''; updateAdvPinDots(false); }, 500);
+  }
+}
+
+function goToAdvAmountStep(){
+  $('#advStep3Name').textContent = advSelectedEmp.name;
+  $('#advAmountInput').value = '';
+  $('#advAmountErr').textContent = '';
+  showAdvStep(3);
+}
+
+$('#advConfirmBtn')?.addEventListener('click', async ()=>{
+  const amount = parseFloat($('#advAmountInput').value);
+  if(isNaN(amount) || amount <= 0){ $('#advAmountErr').textContent = 'اكتب مبلغ صحيح'; return; }
   try{
-    await updateDoc(doc(db,'sales_employees', faceEnrollEmpId), { faceDescriptor: Array.from(descriptor) });
-    $('#faceEnrollStatus').className = 'faceStatusPill match';
-    $('#faceEnrollStatus').textContent = 'اتسجل ✅';
-    setTimeout(closeFaceEnroll, 1200);
+    await addDoc(advancesCol, {
+      employeeId: advSelectedEmp.id, employeeName: advSelectedEmp.name, branch: currentBranch,
+      amount, date: todayStr(), ts: Date.now()
+    });
+    $('#advanceOverlay').classList.remove('show');
+    alert(`تم تسجيل سلفة ${amount} ج.م لـ ${advSelectedEmp.name} ✅`);
   }catch(err){
-    console.error('تعذر حفظ بيانات الوجه', err);
-    $('#faceEnrollErr').textContent = 'حصل خطأ في الحفظ: ' + (err && err.code ? err.code : 'غير معروف');
+    console.error('تعذر تسجيل السلفة', err);
+    $('#advAmountErr').textContent = 'حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف');
   }
 });
 
-// ---------- VERIFICATION (2nd factor after PIN, at clock in/out) ----------
-let pendingFaceAction = null;
-let faceVerifyStream = null;
-let faceVerifyLoopId = null;
-let faceVerifyStartTime = 0;
-
-async function openFaceVerify(action){
-  pendingFaceAction = action;
-  const emp = employees.find(e=> e.id === action.empId);
-  $('#faceVerifyName').textContent = emp ? emp.name : '—';
-  $('#faceVerifyErr').textContent = '';
-  $('#faceVerifyOverrideBtn').style.display = 'none';
-  $('#faceVerifyStatus').className = 'faceStatusPill checking';
-  $('#faceVerifyStatus').textContent = 'بيفتح الكاميرا...';
-  $('#faceVerifyOverlay').classList.add('show');
-
-  if(!faceApiReady){
-    $('#faceVerifyStatus').textContent = '';
-    $('#faceVerifyErr').textContent = 'نماذج التعرف على الوجه لسه بتحمّل أو فشلت. تقدر تجاوز بكود الأدمن.';
-    $('#faceVerifyOverrideBtn').style.display = 'block';
-    return;
-  }
-  try{
-    faceVerifyStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' } });
-    $('#faceVerifyVideo').srcObject = faceVerifyStream;
-    $('#faceVerifyStatus').textContent = 'بيدوّر على وشك...';
-    faceVerifyStartTime = Date.now();
-    scanFaceLoop(emp);
-  }catch(err){
-    $('#faceVerifyStatus').textContent = '';
-    $('#faceVerifyErr').textContent = 'مقدرش أوصل للكاميرا: ' + (err && err.name ? err.name : 'غير معروف');
-    $('#faceVerifyOverrideBtn').style.display = 'block';
-  }
+// ---------- ADMIN: advances log ----------
+function renderAdvancesLog(){
+  const wrap = $('#advancesLogList');
+  if(!wrap) return;
+  if(advances.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش أخد سلفة</div>'; return; }
+  const sorted = [...advances].sort((a,b)=> b.ts - a.ts);
+  const rows = sorted.map(a=>{
+    const d = new Date(a.ts);
+    const dateStr = d.toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    return `<tr><td>${dateStr}</td><td>${a.employeeName}</td><td style="color:var(--gold); font-weight:700;">${a.amount} ج.م</td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>المبلغ</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
-
-async function scanFaceLoop(emp){
-  if(!pendingFaceAction) return; // cancelled by the user
-  const descriptor = await getFaceDescriptorFromVideo($('#faceVerifyVideo'));
-  if(descriptor && emp.faceDescriptor){
-    const dist = faceapi.euclideanDistance(descriptor, Float32Array.from(emp.faceDescriptor));
-    if(dist < FACE_MATCH_THRESHOLD){
-      $('#faceVerifyStatus').className = 'faceStatusPill match';
-      $('#faceVerifyStatus').textContent = '✅ اتطابق';
-      playBeep();
-      await finishFaceVerify();
-      return;
-    }
-  }
-  if(Date.now() - faceVerifyStartTime > FACE_OVERRIDE_SHOW_AFTER_MS){
-    $('#faceVerifyStatus').className = 'faceStatusPill nomatch';
-    $('#faceVerifyStatus').textContent = 'لسه مش متطابق...';
-    $('#faceVerifyOverrideBtn').style.display = 'block';
-  }
-  if(!pendingFaceAction) return; // may have been cancelled while awaiting above
-  faceVerifyLoopId = setTimeout(()=> scanFaceLoop(emp), FACE_SCAN_INTERVAL_MS);
-}
-
-async function finishFaceVerify(){
-  const action = pendingFaceAction;
-  closeFaceVerify();
-  if(!action) return;
-  if(action.type === 'in'){ await clockIn(action.empId); }
-  else{ await clockOut(action.empId); renderAttendanceLists(); }
-}
-
-function closeFaceVerify(){
-  if(faceVerifyLoopId) clearTimeout(faceVerifyLoopId);
-  faceVerifyLoopId = null;
-  if(faceVerifyStream){ faceVerifyStream.getTracks().forEach(t=>t.stop()); faceVerifyStream=null; }
-  $('#faceVerifyOverlay').classList.remove('show');
-  pendingFaceAction = null;
-}
-$('#faceVerifyCancel')?.addEventListener('click', closeFaceVerify);
-
-$('#faceVerifyOverrideBtn')?.addEventListener('click', ()=>{
-  $('#faceOverridePass').value = '';
-  $('#faceOverrideErr').textContent = '';
-  $('#faceOverrideOverlay').classList.add('show');
-});
-$('#faceOverrideCancel')?.addEventListener('click', ()=> $('#faceOverrideOverlay').classList.remove('show'));
-$('#faceOverrideConfirmBtn')?.addEventListener('click', async ()=>{
-  const pass = $('#faceOverridePass').value;
-  if(pass !== ADMIN_CODE){ $('#faceOverrideErr').textContent = 'كود غلط'; return; }
-  $('#faceOverrideOverlay').classList.remove('show');
-  // Admin-approved bypass: proceed with the pending clock in/out despite no face match.
-  const action = pendingFaceAction;
-  closeFaceVerify();
-  if(action){
-    if(action.type === 'in'){ await clockIn(action.empId); }
-    else{ await clockOut(action.empId); renderAttendanceLists(); }
-  }
-});
 </script>
 <script>
 if ('serviceWorker' in navigator) {
