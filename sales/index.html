@@ -201,6 +201,15 @@
 
   .dayHubBox{text-align:right;}
   .dayHubBox h3{margin:0 0 2px; font-size:17px;}
+  .dhHeader{display:flex; align-items:center; gap:12px; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--line);}
+  .dhAvatar{width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--gold-dim); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk'; font-weight:700; font-size:16px; color:var(--gold); flex-shrink:0;}
+  .dhSectionLabel{font-size:11px; color:var(--gold); font-weight:700; letter-spacing:.03em; margin:16px 0 8px; text-transform:uppercase;}
+  .clockOutBigBtn{
+    width:100%; margin-top:16px; padding:15px; border:none; border-radius:14px; cursor:pointer;
+    background:linear-gradient(135deg,#e5484d,#b93a3e); color:#fff; font-family:'Cairo'; font-weight:800; font-size:15px;
+    box-shadow:0 6px 18px rgba(229,72,77,.35); display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .clockOutBigBtn:active{transform:translateY(2px); box-shadow:0 3px 10px rgba(229,72,77,.3);}
   .dayHubRow{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px;}
   .dayHubRow:last-child{border-bottom:none;}
   .dayHubRow .lbl{color:var(--sub);}
@@ -349,9 +358,15 @@
   <!-- PERSONAL DAY HUB -->
   <div id="dayHubOverlay" class="overlay">
     <div class="box dayHubBox" style="width:min(94vw,420px);">
-      <h3 id="dh_name">—</h3>
-      <p class="sub" id="dh_shiftInfo">—</p>
+      <div class="dhHeader">
+        <div class="dhAvatar" id="dh_avatar">—</div>
+        <div>
+          <h3 id="dh_name" style="margin:0;">—</h3>
+          <p class="sub" id="dh_shiftInfo" style="margin:2px 0 0;">—</p>
+        </div>
+      </div>
 
+      <div class="dhSectionLabel">📋 تاسك النهاردة</div>
       <div class="taskBox">
         <div class="desc" id="dh_taskDesc">مفيش تاسك متحدد للأسبوع ده</div>
         <div id="dh_taskStatus"></div>
@@ -361,13 +376,16 @@
         <button class="btnPrimary" id="dh_submitTaskBtn" style="width:100%; margin-top:10px; display:none;">تأكيد تنفيذ التاسك ✅</button>
       </div>
 
-      <div class="dayHubRow"><div class="lbl">نقاط البيع النهاردة</div><div id="dh_pointsToday">0</div></div>
-      <div class="dayHubRow"><div class="lbl">متوسط تقييم العميل ليك</div><div id="dh_avgRating">—</div></div>
+      <div class="dhSectionLabel">📈 أداء النهاردة</div>
+      <div class="dayHubRow"><div class="lbl">نقاط البيع</div><div id="dh_pointsToday">0</div></div>
+      <div class="dayHubRow"><div class="lbl">متوسط تقييم العميل</div><div id="dh_avgRating">—</div></div>
       <div class="dayHubRow"><div class="lbl">مدة الشيفت لحد دلوقتي</div><div id="dh_shiftDuration">—</div></div>
+
+      <div class="dhSectionLabel">🎁 المكافآت</div>
       <div class="dayHubRow"><div class="lbl">مكافأة الأسبوع</div><div id="dh_weeklyProgress">—</div></div>
       <div class="dayHubRow"><div class="lbl">مكافأة الشهر</div><div id="dh_monthlyProgress">—</div></div>
 
-      <button class="btnGhost" style="width:100%; margin-top:14px; background:var(--bad); color:#fff; border:none;" id="dh_clockOutBtn">🚪 تسجيل انصراف</button>
+      <button class="clockOutBigBtn" id="dh_clockOutBtn">🚪 تسجيل انصراف</button>
       <button class="btnGhost" style="width:100%; margin-top:8px;" id="dh_closeBtn">رجوع</button>
     </div>
   </div>
@@ -865,8 +883,26 @@ async function clockIn(empId){
 async function clockOut(empId){
   const shift = getOpenShift(empId);
   if(!shift) return;
-  try{ await updateDoc(doc(db,'sales_shifts', shift.id), { clockOutTs: Date.now() }); }
-  catch(err){
+  const emp = employees.find(e=> e.id === empId);
+  const now = Date.now();
+
+  let overtimeMinutes = 0;
+  if(emp && emp.scheduledEndTime){
+    const [h,m] = emp.scheduledEndTime.split(':').map(Number);
+    const scheduledEnd = new Date();
+    scheduledEnd.setHours(h, m, 0, 0);
+    const diffMin = Math.round((now - scheduledEnd.getTime())/60000);
+    if(diffMin > 0) overtimeMinutes = diffMin;
+  }
+
+  try{
+    await updateDoc(doc(db,'sales_shifts', shift.id), { clockOutTs: now, overtimeMinutes });
+    const totalMin = Math.round((now - shift.clockInTs)/60000);
+    const h = Math.floor(totalMin/60), m = totalMin%60;
+    let msg = `تم تسجيل الانصراف ✅\nمدة الشيفت: ${h} س ${m} د`;
+    if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي بعد ميعادك: ${overtimeMinutes} دقيقة`;
+    alert(msg);
+  }catch(err){
     console.error('تعذر تسجيل الانصراف', err);
     alert('تعذر تسجيل الانصراف: ' + (err && err.code ? err.code : 'غير معروف'));
   }
@@ -879,20 +915,23 @@ let attPinBuffer = '';
 function promptAttPin(type, empId){
   const emp = employees.find(e=> e.id === empId);
   if(!emp) return;
+
+  // If this employee doesn't have a PIN configured yet, don't block them —
+  // just perform the action directly (admin can set a PIN later from the panel).
+  if(!emp.pin){
+    if(type === 'in'){ clockIn(empId); }
+    else{ clockOut(empId).then(()=> renderAttendanceLists()); }
+    return;
+  }
+
   pendingAttAction = { type, empId };
   attPinBuffer = '';
   $('#attPinName').textContent = emp.name;
   $('#attPinAction').textContent = type === 'in' ? 'اكتب كودك عشان تسجل حضور' : 'اكتب كودك عشان تسجل انصراف';
   $('#attPinErrText').textContent = '';
   updateAttPinDots(false);
-
-  if(!emp.pin){
-    $('#attPinKeypadArea').style.display = 'none';
-    $('#attNoPinArea').style.display = 'block';
-  } else {
-    $('#attPinKeypadArea').style.display = 'block';
-    $('#attNoPinArea').style.display = 'none';
-  }
+  $('#attPinKeypadArea').style.display = 'block';
+  $('#attNoPinArea').style.display = 'none';
   $('#attPinOverlay').classList.add('show');
 }
 
@@ -956,6 +995,7 @@ function renderDayHub(empId){
   const shift = getOpenShift(empId);
   if(!emp || !shift) return;
 
+  $('#dh_avatar').textContent = initials(emp.name);
   $('#dh_name').textContent = emp.name;
   const lateTxt = shift.lateMinutes > 0 ? ` — متأخر ${shift.lateMinutes} دقيقة` : ' — في الميعاد ✅';
   $('#dh_shiftInfo').textContent = 'دخل الشيفت الساعة ' + new Date(shift.clockInTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) + lateTxt;
@@ -1707,13 +1747,23 @@ function renderPendingSubmissions(){
         <div class="n">${s.employeeName} — ${s.taskDescription||'—'}</div>
         <div class="m">${time}</div>
       </div>
-      <button class="confirmBtnSmall" data-id="${s.id}">✅ تأكيد</button>
+      <div style="display:flex; gap:6px;">
+        <button class="confirmBtnSmall" data-act="confirm" data-id="${s.id}">✅ تأكيد</button>
+        <button class="confirmBtnSmall" data-act="reject" data-id="${s.id}" style="background:var(--bad);">❌ رفض</button>
+      </div>
     </div>`;
   }).join('');
-  wrap.querySelectorAll('.confirmBtnSmall').forEach(btn=>{
+  wrap.querySelectorAll('[data-act="confirm"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       try{ await updateDoc(doc(db,'sales_task_submissions', btn.dataset.id), { confirmed:true, confirmedAt: Date.now() }); }
       catch(err){ console.error('تعذر التأكيد', err); }
+    });
+  });
+  wrap.querySelectorAll('[data-act="reject"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('متأكد إنك عايز ترفض التنفيذ ده؟ الموظف هيقدر يصور ويرفع تاني.')) return;
+      try{ await deleteDoc(doc(db,'sales_task_submissions', btn.dataset.id)); }
+      catch(err){ console.error('تعذر الرفض', err); }
     });
   });
   wrap.querySelectorAll('.lightboxable').forEach(img=>{
