@@ -198,8 +198,8 @@
   .attCard .av{width:34px; height:34px; border-radius:50%; background:var(--panel); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk'; font-weight:700; font-size:12px; color:var(--gold);}
   .attCard .n{font-size:11px; font-weight:700;}
   .attCard .t{font-size:9px; color:var(--sub); font-family:'Space Grotesk';}
-  .attCard.late{border-color:var(--r1);}
-  .attCard .lateTag{position:absolute; top:4px; right:4px; font-size:8px; background:var(--r1); color:#fff; padding:1px 5px; border-radius:6px;}
+  .attCard.late{border-color:var(--bad);}
+  .attCard .lateTag{position:absolute; top:4px; right:4px; font-size:8px; background:var(--bad); color:#fff; padding:1px 5px; border-radius:6px;}
   .dayOffReminder{position:absolute; top:-8px; left:50%; transform:translateX(-50%); font-size:8px; background:var(--purple); color:#fff; padding:2px 7px; border-radius:8px; white-space:nowrap;}
 
   .dayHubBox{text-align:right;}
@@ -236,7 +236,7 @@
   .taskBox{background:var(--panel2); border-radius:12px; padding:14px; margin:12px 0;}
   .taskBox .desc{font-weight:700; font-size:14px; margin-bottom:8px;}
   .taskStatusPill{display:inline-block; padding:4px 10px; border-radius:10px; font-size:11px; font-weight:700;}
-  .taskStatusPill.pending{background:rgba(242,169,60,.2); color:var(--r2);}
+  .taskStatusPill.pending{background:rgba(242,169,60,.2); color:#f2a93c;}
   .taskStatusPill.confirmed{background:rgba(47,163,107,.2); color:var(--good);}
   .taskStatusPill.rejected{background:rgba(229,72,77,.2); color:var(--bad);}
   .taskStatusPill.none{background:var(--panel); color:var(--sub);}
@@ -417,6 +417,20 @@
     <p style="color:var(--sub); font-size:13px;" id="giftBoxSub">مكافأة الالتزام</p>
   </div>
 
+  <!-- TERMINATION CONFIRM (admin password) -->
+  <div id="terminateConfirmOverlay" class="overlay">
+    <div class="pin-box">
+      <h3>تأكيد إنهاء الخدمة</h3>
+      <p class="sub" id="terminateConfirmName">—</p>
+      <p style="color:var(--bad); font-size:12px; margin:0 0 16px;">الإجراء ده نهائي. اكتب كود الأدمن للتأكيد.</p>
+      <input type="password" id="terminateConfirmPass" placeholder="كود الأدمن"
+        style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:15px; text-align:center; margin-bottom:12px;">
+      <div class="field-err" id="terminateConfirmErr"></div>
+      <button id="terminateConfirmBtn" style="width:100%; padding:13px; border:none; border-radius:12px; background:var(--bad); color:#fff; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer; margin-bottom:10px;">تأكيد إنهاء الخدمة 🚪</button>
+      <button id="terminateConfirmCancel" style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;">إلغاء</button>
+    </div>
+  </div>
+
   <!-- PHOTO LIGHTBOX -->
   <div id="photoLightbox" class="overlay" style="background:rgba(0,0,0,.95); overflow-y:auto; padding:20px 0; align-items:flex-start;">
     <div style="width:min(94vw,500px); text-align:center; margin:auto;">
@@ -572,6 +586,28 @@
       <div id="commissionCurrentRate" style="color:var(--sub); font-size:12px; margin-bottom:14px;"></div>
       <div id="commissionList"></div>
     </div>
+
+    <div class="panel">
+      <h3>💵 الرواتب الشهرية</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
+        الشهر بيتحسب من يوم 1 لحد يوم 30. الراتب بيتصرف يوم 6 من الشهر اللي بعده.
+        الساعات الإضافية بتتحسب بسعر الساعة العادي (المرتب ÷ 240 ساعة). أي يوم إجازة زيادة عن 4 مرات في الشهر بيتخصم كيوم كامل (المرتب ÷ 30).
+      </p>
+      <div id="salaryList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🚪 إنهاء خدمة موظف</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
+        بيتحسب مستحقاته بالتناسب لغاية يوم خروجه في الشهر الحالي، وبيتنقل لسجل المغادرين تحت.
+      </p>
+      <div id="terminateEmpList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📋 سجل المغادرين</h3>
+      <div id="terminationLogList"></div>
+    </div>
   </div>
 
 </div>
@@ -605,6 +641,8 @@ const submissionsCol = collection(db, 'sales_task_submissions');
 const rewardsCol = collection(db, 'sales_rewards');
 const settingsCol = collection(db, 'sales_settings');
 const commissionPaymentsCol = collection(db, 'sales_commission_payments');
+const salaryPaymentsCol = collection(db, 'sales_salary_payments');
+const terminationsCol = collection(db, 'sales_terminations');
 
 // Simple admin access code — checked on-device, no network call.
 // Change this string to whatever code you want, then re-download the file.
@@ -623,6 +661,8 @@ let allSubmissions = [], submissions = []; // daily task photo submissions
 let allRewards = [], rewards = [];         // earned weekly/monthly rewards
 let commissionPerPoint = 0;                // set by admin, per branch
 let allCommissionPayments = [], commissionPayments = []; // monthly payment records
+let allSalaryPayments = [], salaryPayments = [];
+let allTerminations = [], terminations = [];
 let pendingTaskPhoto = null;                // File selected before upload
 let taskSubmitEmpId = null;
 
@@ -674,12 +714,14 @@ $('#adminBranchSelect').addEventListener('change', (e)=>{
 });
 
 function applyBranchFilter(){
-  employees = allEmployees.filter(e => e.branch === currentBranch);
+  employees = allEmployees.filter(e => e.branch === currentBranch && e.active !== false);
   shifts = allShifts.filter(s => s.branch === currentBranch);
   tasks = allTasks.filter(t => t.branch === currentBranch);
   submissions = allSubmissions.filter(s => s.branch === currentBranch);
   rewards = allRewards.filter(r => r.branch === currentBranch);
   commissionPayments = allCommissionPayments.filter(p => p.branch === currentBranch);
+  salaryPayments = allSalaryPayments.filter(p => p.branch === currentBranch);
+  terminations = allTerminations.filter(t => t.branch === currentBranch);
   renderEmpGrid();
   populateBranchDropdowns();
   checkAndAwardRewards();
@@ -691,7 +733,7 @@ function applyBranchFilter(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
-    renderCommissionPanel();
+    renderCommissionPanel(); renderSalaryPanel(); renderTerminationPanel(); renderTerminationLog();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
   if($('#attendance').classList.contains('show')) renderAttendanceLists();
@@ -751,6 +793,18 @@ onSnapshot(commissionPaymentsCol, (snap)=>{
   commissionPayments = allCommissionPayments.filter(p=> p.branch === currentBranch);
   if(adminUnlocked) renderCommissionPanel();
 }, (err)=> console.error('commission payments sync error', err));
+
+onSnapshot(salaryPaymentsCol, (snap)=>{
+  allSalaryPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  salaryPayments = allSalaryPayments.filter(p=> p.branch === currentBranch);
+  if(adminUnlocked) renderSalaryPanel();
+}, (err)=> console.error('salary payments sync error', err));
+
+onSnapshot(terminationsCol, (snap)=>{
+  allTerminations = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  terminations = allTerminations.filter(t=> t.branch === currentBranch);
+  if(adminUnlocked){ renderTerminationPanel(); renderTerminationLog(); }
+}, (err)=> console.error('terminations sync error', err));
 
 function renderLog(){
   const wrap = $('#logList');
@@ -1345,7 +1399,7 @@ function getPeriodProgressLabel(empId, periodType){
     return `<span style="color:var(--good);">${confirmedDays}/${elapsedDays} ✅ ماشي تمام</span>`;
   }
   const missed = elapsedDays - confirmedDays;
-  return `<span style="color:var(--r1);">${confirmedDays}/${elapsedDays} — فايتك ${missed} يوم</span>`;
+  return `<span style="color:var(--bad);">${confirmedDays}/${elapsedDays} — فايتك ${missed} يوم</span>`;
 }
 
 // ---------- REWARD AUTO-GENERATION ----------
@@ -1702,7 +1756,7 @@ function openAdmin(){
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderTerminationPanel(); renderTerminationLog();
   }
   else { $('#adminLoginGate').classList.add('show'); }
 }
@@ -1719,7 +1773,7 @@ function doAdminLogin(){
     renderLog();
     renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderTerminationPanel(); renderTerminationLog();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -1813,6 +1867,11 @@ function renderScheduleList(){
         <input type="number" min="0" data-act="minpoints" data-id="${e.id}" value="${e.minWeeklyPoints || ''}" placeholder="بدون حد"
           style="width:80px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk';">
       </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:11px; color:var(--sub);">المرتب الأساسي/شهر</span>
+        <input type="number" min="0" data-act="salary" data-id="${e.id}" value="${e.baseSalary || ''}" placeholder="بالجنيه"
+          style="width:90px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk';">
+      </div>
     </div>
   `).join('');
   wrap.querySelectorAll('input[data-act="start"]').forEach(inp=>{
@@ -1832,6 +1891,13 @@ function renderScheduleList(){
       const val = inp.value.trim() === '' ? null : parseInt(inp.value.trim());
       try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { minWeeklyPoints: val }); }
       catch(err){ console.error('تعذر حفظ الحد الأدنى للنقط', err); }
+    });
+  });
+  wrap.querySelectorAll('input[data-act="salary"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      const val = inp.value.trim() === '' ? null : parseFloat(inp.value.trim());
+      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { baseSalary: val }); }
+      catch(err){ console.error('تعذر حفظ المرتب', err); }
     });
   });
   wrap.querySelectorAll('select[data-act="dayoff"]').forEach(sel=>{
@@ -2197,6 +2263,175 @@ $('#saveCommissionBtn')?.addEventListener('click', async ()=>{
     await setDoc(doc(db,'sales_settings', currentBranch), { commissionPerPoint: val }, { merge:true });
   }catch(err){ console.error('تعذر حفظ العمولة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
 });
+
+// ---------- SALARY (admin) ----------
+const FREE_DAYOFF_PER_MONTH = 4;
+
+function getMonthDateRange(d){
+  // Salary period is always day 1 to day 30 of the calendar month, per the
+  // simplified pay-cycle rule (day 31, if any, isn't counted separately).
+  const dt = d || new Date();
+  const start = new Date(dt.getFullYear(), dt.getMonth(), 1, 0,0,0,0);
+  const end = new Date(dt.getFullYear(), dt.getMonth(), 30, 23,59,59,999);
+  return { start, end };
+}
+
+function countDayOffOccurrencesInRange(emp, start, end){
+  if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return 0;
+  let count = 0;
+  const cur = new Date(start);
+  while(cur <= end){
+    if(cur.getDay() === Number(emp.dayOff)) count++;
+    cur.setDate(cur.getDate()+1);
+  }
+  return count;
+}
+
+// Computes pay for any date range within a salary cycle — used both for the
+// regular full-month calculation and for a prorated final settlement.
+function computeSalary(emp, start, end){
+  const baseSalary = emp.baseSalary || 0;
+  const dailyRate = baseSalary / 30;
+  const hourlyRate = baseSalary / 240; // 30 days × 8 hours
+  const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
+  const proratedBase = Math.round(dailyRate * daysInCalc * 100)/100;
+
+  const rangeShifts = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime());
+  const overtimeMinutes = rangeShifts.reduce((sum,s)=> sum + (s.overtimeMinutes||0), 0);
+  const overtimePay = Math.round((overtimeMinutes/60) * hourlyRate * 100)/100;
+
+  const dayOffOccurrences = countDayOffOccurrencesInRange(emp, start, end);
+  const extraOffDays = Math.max(0, dayOffOccurrences - FREE_DAYOFF_PER_MONTH);
+  const deductionAmount = Math.round(extraOffDays * dailyRate * 100)/100;
+
+  const netSalary = Math.round((proratedBase - deductionAmount + overtimePay) * 100)/100;
+  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, netSalary, daysInCalc };
+}
+
+function renderSalaryPanel(){
+  const wrap = $('#salaryList');
+  if(!wrap) return;
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  const range = getMonthDateRange(new Date());
+  const periodLabel = getMonthLabel(range.start);
+
+  wrap.innerHTML = employees.map(e=>{
+    if(!e.baseSalary){
+      return `<div class="emp-row"><div class="n">${e.name}</div><div class="meta" style="color:var(--sub);">لسه مفيش مرتب أساسي متحدد (حطه في بانل المواعيد)</div></div>`;
+    }
+    const calc = computeSalary(e, range.start, range.end);
+    const paidRecord = salaryPayments.find(p=> p.employeeId===e.id && p.periodLabel===periodLabel);
+    const actionHtml = paidRecord
+      ? `<span style="color:var(--good); font-size:11px;">✅ مدفوع (${new Date(paidRecord.paidAt).toLocaleDateString('ar-EG')})</span>`
+      : `<button class="confirmBtnSmall" data-act="paysalary" data-id="${e.id}" data-amount="${calc.netSalary}">✅ تم الدفع</button>`;
+    return `
+    <div class="emp-row" style="flex-wrap:wrap;">
+      <div class="n">${e.name}</div>
+      <div class="meta">أساسي ${calc.proratedBase}</div>
+      <div class="meta" style="color:var(--gold);">إضافي +${calc.overtimePay}</div>
+      <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم -${calc.deductionAmount} (${calc.extraOffDays} يوم زيادة)</div>
+      <div class="meta" style="color:var(--good); font-weight:800;">صافي ${calc.netSalary} ج.م</div>
+      ${actionHtml}
+    </div>`;
+  }).join('');
+
+  wrap.querySelectorAll('[data-act="paysalary"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const emp = employees.find(e=> e.id === btn.dataset.id);
+      if(!emp) return;
+      if(!confirm(`تأكيد صرف ${btn.dataset.amount} ج.م لـ ${emp.name} عن شهر ${periodLabel}؟`)) return;
+      try{
+        await addDoc(salaryPaymentsCol, {
+          employeeId: emp.id, employeeName: emp.name, branch: currentBranch,
+          periodLabel, amount: parseFloat(btn.dataset.amount), paidAt: Date.now()
+        });
+      }catch(err){ console.error('تعذر تسجيل صرف الراتب', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
+    });
+  });
+}
+
+// ---------- EMPLOYEE TERMINATION (admin) ----------
+let pendingTerminateEmpId = null;
+
+function renderTerminationPanel(){
+  const wrap = $('#terminateEmpList');
+  if(!wrap) return;
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = employees.map(e=> `
+    <div class="emp-row">
+      <div class="n">${e.name}</div>
+      <button data-id="${e.id}" style="border:none; background:var(--bad); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">🚪 إنهاء الخدمة</button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      pendingTerminateEmpId = btn.dataset.id;
+      const emp = employees.find(e=> e.id === pendingTerminateEmpId);
+      $('#terminateConfirmName').textContent = emp ? 'إنهاء خدمة: ' + emp.name : '—';
+      $('#terminateConfirmPass').value = '';
+      $('#terminateConfirmErr').textContent = '';
+      $('#terminateConfirmOverlay').classList.add('show');
+    });
+  });
+}
+
+$('#terminateConfirmCancel')?.addEventListener('click', ()=>{
+  $('#terminateConfirmOverlay').classList.remove('show');
+  pendingTerminateEmpId = null;
+});
+
+$('#terminateConfirmBtn')?.addEventListener('click', async ()=>{
+  const pass = $('#terminateConfirmPass').value;
+  if(pass !== ADMIN_CODE){ $('#terminateConfirmErr').textContent = 'كود غلط'; return; }
+  const emp = employees.find(e=> e.id === pendingTerminateEmpId);
+  if(!emp){ $('#terminateConfirmOverlay').classList.remove('show'); return; }
+
+  const now = new Date();
+  const range = getMonthDateRange(now);
+  const periodLabel = getMonthLabel(range.start);
+  // Prorate the settlement from the start of the current salary period up to today only.
+  const calc = computeSalary(emp, range.start, now);
+
+  try{
+    await addDoc(terminationsCol, {
+      employeeId: emp.id, employeeName: emp.name, branch: currentBranch,
+      terminatedAt: Date.now(), periodLabel, settlementAmount: calc.netSalary, paidAt: null
+    });
+    await updateDoc(doc(db,'sales_employees', emp.id), { active: false });
+  }catch(err){
+    console.error('تعذر إنهاء الخدمة', err);
+    alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف'));
+  }
+  $('#terminateConfirmOverlay').classList.remove('show');
+  pendingTerminateEmpId = null;
+});
+
+function renderTerminationLog(){
+  const wrap = $('#terminationLogList');
+  if(!wrap) return;
+  if(terminations.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش خرج من الشغل</div>'; return; }
+  const sorted = [...terminations].sort((a,b)=> b.terminatedAt - a.terminatedAt);
+  wrap.innerHTML = sorted.map(t=>{
+    const dateStr = new Date(t.terminatedAt).toLocaleDateString('ar-EG');
+    const actionHtml = t.paidAt
+      ? `<span style="color:var(--good); font-size:11px;">✅ مدفوع (${new Date(t.paidAt).toLocaleDateString('ar-EG')})</span>`
+      : `<button data-id="${t.id}" class="confirmBtnSmall">✅ تم الدفع</button>`;
+    return `
+    <div class="emp-row" style="flex-wrap:wrap;">
+      <div class="n">${t.employeeName}</div>
+      <div class="meta">خرج بتاريخ ${dateStr}</div>
+      <div class="meta" style="color:var(--gold); font-weight:700;">مستحقاته: ${t.settlementAmount} ج.م</div>
+      ${actionHtml}
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('button[data-id]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('تأكيد صرف مستحقات الموظف؟')) return;
+      try{ await updateDoc(doc(db,'sales_terminations', btn.dataset.id), { paidAt: Date.now() }); }
+      catch(err){ console.error('تعذر تسجيل الدفع', err); }
+    });
+  });
+}
 </script>
 <script>
 if ('serviceWorker' in navigator) {
