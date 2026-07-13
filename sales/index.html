@@ -87,6 +87,17 @@
   .keypad button:active{background:var(--gold-dim); color:#0b0c0f;}
   .keypad .wide{font-size:13px; font-family:'Cairo'; color:var(--sub); background:transparent;}
   .pin-err-text{color:var(--bad); font-size:12px; min-height:16px; margin-top:14px;}
+
+  .overviewRow{display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .overviewRow:last-child{border-bottom:none;}
+  .statusDot{width:12px; height:12px; border-radius:50%; flex-shrink:0;}
+  .statusDot.green{background:var(--good); box-shadow:0 0 8px var(--good);}
+  .statusDot.yellow{background:#f2c14e; box-shadow:0 0 8px #f2c14e;}
+  .statusDot.red{background:var(--bad); box-shadow:0 0 8px var(--bad);}
+  .statusDot.gray{background:var(--line);}
+  .overviewRow .n{font-weight:800; font-size:14px; min-width:100px;}
+  .overviewRow .stat{font-size:11px; color:var(--sub); background:var(--panel2); padding:4px 10px; border-radius:10px;}
+  .overviewRow .stat.hl{color:var(--gold);}
   .toast{
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(.9);
     z-index:55; display:flex; align-items:center; gap:12px; background:var(--panel);
@@ -219,6 +230,18 @@
   .subRow .n{font-weight:700; font-size:13px;}
   .subRow .m{color:var(--sub); font-size:11px;}
   .confirmBtnSmall{border:none; background:var(--good); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;}
+
+  /* ---------- STAFF OVERVIEW ---------- */
+  .overviewHead{display:grid; grid-template-columns:16px 1.4fr 1fr 0.7fr 0.8fr; gap:10px; padding:6px 0; font-size:11px; color:var(--sub); font-weight:700; border-bottom:1px solid var(--line); margin-bottom:6px;}
+  .overviewRow{display:grid; grid-template-columns:16px 1.4fr 1fr 0.7fr 0.8fr; gap:10px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); font-size:12px;}
+  .overviewRow:last-child{border-bottom:none;}
+  .overviewRow .n{font-weight:700; font-size:13px;}
+  .overviewRow .m{color:var(--sub); font-size:10px;}
+  .statusDot{width:12px; height:12px; border-radius:50%; flex-shrink:0;}
+  .statusDot.green{background:var(--good); box-shadow:0 0 8px rgba(47,163,107,.6);}
+  .statusDot.yellow{background:#f2a93c; box-shadow:0 0 8px rgba(242,169,60,.6);}
+  .statusDot.red{background:var(--bad); box-shadow:0 0 8px rgba(229,72,77,.6);}
+  .statusDot.gray{background:var(--sub);}
 </style>
 </head>
 <body>
@@ -357,6 +380,14 @@
     <p style="color:var(--sub); font-size:13px;" id="giftBoxSub">مكافأة الالتزام</p>
   </div>
 
+  <!-- PHOTO LIGHTBOX -->
+  <div id="photoLightbox" class="overlay" style="background:rgba(0,0,0,.95);">
+    <div style="width:min(94vw,500px); text-align:center;">
+      <img id="lightboxImg" style="width:100%; border-radius:14px; margin-bottom:16px;">
+      <button class="btnGhost" style="width:100%; background:var(--panel); color:var(--ink);" id="lightboxCloseBtn">إغلاق</button>
+    </div>
+  </div>
+
   <!-- ATTENDANCE PIN -->
   <div id="attPinOverlay" class="overlay">
     <div class="box pin-box">
@@ -407,6 +438,13 @@
       </div>
     </div>
     <div class="panel">
+      <h3>📊 نظرة عامة النهاردة</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
+        الألوان: 🟢 حضر في ميعاده — 🟡 متأخر لحد 30 دقيقة — 🔴 متأخر أكتر من 30 دقيقة — ⚪ لسه محضرش
+      </p>
+      <div id="overviewList"></div>
+    </div>
+    <div class="panel">
       <h3>إضافة موظف جديد</h3>
       <div class="add-form">
         <input id="newEmpName" placeholder="اسم الموظف">
@@ -429,6 +467,14 @@
         (لأن برنامج التقييم مجهول ومش بياخد رقم فاتورة)، بس بيدّي مؤشر عام.
       </p>
       <div id="perfList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📊 نظرة عامة على الموظفين النهاردة</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
+        🟢 في الميعاد &nbsp; 🟡 متأخر 10-29 دقيقة &nbsp; 🔴 متأخر 30 دقيقة فأكتر أو لسه محضرش
+      </p>
+      <div id="staffOverviewList"></div>
     </div>
 
     <div class="panel">
@@ -576,8 +622,9 @@ function applyBranchFilter(){
   }
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
-    renderScheduleList(); renderTaskAssignList();
+    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
+    renderOverviewList();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
   if($('#attendance').classList.contains('show')) renderAttendanceLists();
@@ -971,6 +1018,74 @@ function computeAvgRatingFor(empId){
   if(count===0) return '<span style="color:var(--sub);">مفيش بيانات كفاية</span>';
   const avg = (sum/count).toFixed(1);
   return `${avg} / 4 (${count} تقييم مرتبط)`;
+}
+
+function computeAvgRatingToday(empId){
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  const empPointsToday = points.filter(p=> p.employeeId === empId && p.ts >= dayStart.getTime());
+  const branchFeedbackToday = allFeedback.filter(f=> f.branch === currentBranch && f.ts >= dayStart.getTime());
+  const usedFeedback = new Set();
+  let sum = 0, count = 0;
+  empPointsToday.forEach(p=>{
+    let bestIdx=-1, bestAbsDelta=Infinity;
+    for(let i=0;i<branchFeedbackToday.length;i++){
+      if(usedFeedback.has(i)) continue;
+      const absDelta = Math.abs(branchFeedbackToday[i].ts - p.ts);
+      if(absDelta <= MATCH_WINDOW_MS && absDelta < bestAbsDelta){ bestAbsDelta=absDelta; bestIdx=i; }
+    }
+    if(bestIdx>=0){ usedFeedback.add(bestIdx); sum += branchFeedbackToday[bestIdx].r; count++; }
+  });
+  return count === 0 ? null : sum/count;
+}
+
+// ---------- UNIFIED STAFF OVERVIEW (admin) ----------
+function renderStaffOverview(){
+  const wrap = $('#staffOverviewList');
+  if(!wrap) return;
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+
+  const rows = employees.map(e=>{
+    const shift = getOpenShift(e.id);
+    let statusColor = 'gray', statusText = 'لسه محضرش';
+    if(shift){
+      const lm = shift.lateMinutes || 0;
+      if(lm < 10){ statusColor='green'; statusText = lm===0 ? 'في الميعاد' : ('متأخر '+lm+' د'); }
+      else if(lm < 30){ statusColor='yellow'; statusText='متأخر '+lm+' د'; }
+      else { statusColor='red'; statusText='متأخر '+lm+' د'; }
+    } else if(e.scheduledStartTime){
+      const [h,m] = e.scheduledStartTime.split(':').map(Number);
+      const scheduled = new Date(); scheduled.setHours(h,m,0,0);
+      if(Date.now() > scheduled.getTime()){ statusColor = 'red'; statusText = 'لسه محضرش (فات ميعاده)'; }
+    }
+
+    const sub = getTodaysSubmission(e.id);
+    const hasTask = !!getCurrentTask(e.id);
+    let taskText = '➖ مفيش تاسك';
+    if(sub){ taskText = sub.confirmed ? '✅ اتأكد' : '⏳ محتاج تأكيد'; }
+    else if(hasTask){ taskText = '❌ لسه متنفذش'; }
+
+    const pointsToday = countsFor(e.id, dayStart.getTime());
+    const avgToday = computeAvgRatingToday(e.id);
+    const ratingText = avgToday === null ? '—' : avgToday.toFixed(1)+'/4';
+
+    return `
+    <div class="overviewRow">
+      <div class="statusDot ${statusColor}"></div>
+      <div>
+        <div class="n">${e.name}</div>
+        <div class="m">${statusText}</div>
+      </div>
+      <div>${taskText}</div>
+      <div>${pointsToday} نقطة</div>
+      <div>${ratingText}</div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="overviewHead"><div></div><div>الموظف</div><div>التاسك</div><div>النقط</div><div>التقييم</div></div>
+    ${rows}
+  `;
 }
 
 $('#dh_photoInput').addEventListener('change', (e)=>{
@@ -1389,7 +1504,12 @@ function requestFullscreenOnce(){
 
 function openAdmin(){
   $('#admin').classList.add('show');
-  if(adminUnlocked){ renderAdminList(); renderLog(); renderPerformanceLink(); }
+  if(adminUnlocked){
+    renderAdminList(); renderLog(); renderPerformanceLink();
+    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
+    renderOverviewList();
+  }
   else { $('#adminLoginGate').classList.add('show'); }
 }
 $('#adminLoginBtn').addEventListener('click', doAdminLogin);
@@ -1404,6 +1524,9 @@ function doAdminLogin(){
     renderAdminList();
     renderLog();
     renderPerformanceLink();
+    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
+    renderOverviewList();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -1467,20 +1590,71 @@ $('#addEmpBtn').addEventListener('click', async ()=>{
 });
 
 // ---------- SCHEDULE (admin) ----------
+function latenessColor(lateMinutes){
+  if(lateMinutes === 0) return 'green';
+  if(lateMinutes > 0 && lateMinutes <= 30) return 'yellow';
+  return 'red';
+}
+
+function renderOverviewList(){
+  const wrap = $('#overviewList');
+  if(!wrap) return;
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+
+  wrap.innerHTML = employees.map(e=>{
+    const shift = getOpenShift(e.id);
+    const color = shift ? latenessColor(shift.lateMinutes||0) : 'gray';
+    const attendanceTxt = shift
+      ? (shift.lateMinutes>0 ? `متأخر ${shift.lateMinutes}د` : 'في الميعاد')
+      : 'لسه محضرش';
+
+    const sub = getTodaysSubmission(e.id);
+    const taskTxt = sub ? (sub.confirmed ? '✅ تاسك مؤكد' : '⏳ تاسك محتاج تأكيد') : '❌ لسه متعملش تاسك';
+
+    const pointsToday = countsFor(e.id, dayStart.getTime());
+    const ratingTxt = computeAvgRatingFor(e.id).replace(/<[^>]*>/g,'');
+
+    return `
+    <div class="overviewRow">
+      <div class="statusDot ${color}"></div>
+      <div class="n">${e.name}</div>
+      <div class="stat">${attendanceTxt}</div>
+      <div class="stat">${taskTxt}</div>
+      <div class="stat hl">${pointsToday} نقطة</div>
+      <div class="stat">⭐ ${ratingTxt}</div>
+    </div>`;
+  }).join('');
+}
+
 function renderScheduleList(){
   const wrap = $('#scheduleList');
   if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   wrap.innerHTML = employees.map(e=> `
-    <div class="emp-row">
+    <div class="emp-row" style="flex-wrap:wrap; gap:8px;">
       <div class="n">${e.name}</div>
-      <input type="time" data-id="${e.id}" value="${e.scheduledStartTime || ''}"
-        style="padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:11px; color:var(--sub);">حضور</span>
+        <input type="time" data-act="start" data-id="${e.id}" value="${e.scheduledStartTime || ''}"
+          style="padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:11px; color:var(--sub);">انصراف</span>
+        <input type="time" data-act="end" data-id="${e.id}" value="${e.scheduledEndTime || ''}"
+          style="padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
+      </div>
     </div>
   `).join('');
-  wrap.querySelectorAll('input[type="time"]').forEach(inp=>{
+  wrap.querySelectorAll('input[data-act="start"]').forEach(inp=>{
     inp.addEventListener('change', async ()=>{
       try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { scheduledStartTime: inp.value }); }
-      catch(err){ console.error('تعذر حفظ الميعاد', err); }
+      catch(err){ console.error('تعذر حفظ ميعاد الحضور', err); }
+    });
+  });
+  wrap.querySelectorAll('input[data-act="end"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { scheduledEndTime: inp.value }); }
+      catch(err){ console.error('تعذر حفظ ميعاد الانصراف', err); }
     });
   });
 }
@@ -1528,7 +1702,7 @@ function renderPendingSubmissions(){
     const time = d.toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     return `
     <div class="subRow" data-id="${s.id}">
-      <img src="${s.photoURL}" alt="task photo">
+      <img src="${s.photoURL}" alt="task photo" class="lightboxable" style="cursor:pointer;">
       <div class="info">
         <div class="n">${s.employeeName} — ${s.taskDescription||'—'}</div>
         <div class="m">${time}</div>
@@ -1541,6 +1715,9 @@ function renderPendingSubmissions(){
       try{ await updateDoc(doc(db,'sales_task_submissions', btn.dataset.id), { confirmed:true, confirmedAt: Date.now() }); }
       catch(err){ console.error('تعذر التأكيد', err); }
     });
+  });
+  wrap.querySelectorAll('.lightboxable').forEach(img=>{
+    img.addEventListener('click', ()=> openLightbox(img.src));
   });
 }
 
@@ -1555,14 +1732,26 @@ function renderConfirmedSubmissions(){
     const time = d.toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     return `
     <div class="subRow">
-      <img src="${s.photoURL}" alt="task photo">
+      <img src="${s.photoURL}" alt="task photo" class="lightboxable" style="cursor:pointer;">
       <div class="info">
         <div class="n">${s.employeeName} — ${s.taskDescription||'—'}</div>
         <div class="m">${time}</div>
       </div>
     </div>`;
   }).join('');
+  wrap.querySelectorAll('.lightboxable').forEach(img=>{
+    img.addEventListener('click', ()=> openLightbox(img.src));
+  });
 }
+
+function openLightbox(src){
+  $('#lightboxImg').src = src;
+  $('#photoLightbox').classList.add('show');
+}
+$('#lightboxCloseBtn').addEventListener('click', ()=> $('#photoLightbox').classList.remove('show'));
+$('#photoLightbox').addEventListener('click', (e)=>{
+  if(e.target.id === 'photoLightbox') $('#photoLightbox').classList.remove('show');
+});
 
 // ---------- REWARDS LOG (admin) ----------
 function renderRewardsList(){
