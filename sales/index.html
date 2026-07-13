@@ -78,6 +78,15 @@
   .pin-box{background:var(--panel); border:1px solid var(--line); border-radius:22px; padding:30px 26px; width:min(92vw,340px); text-align:center;}
   .pin-box h3{margin:0 0 4px; font-size:19px; font-weight:900;}
   .pin-box .sub{color:var(--sub); font-size:13px; margin:0 0 20px;}
+  .pin-dots{display:flex; justify-content:center; gap:14px; margin-bottom:22px;}
+  .pin-dot{width:16px; height:16px; border-radius:50%; border:2px solid var(--line); background:transparent; transition:.15s;}
+  .pin-dot.filled{background:var(--gold); border-color:var(--gold);}
+  .pin-dot.err{background:var(--bad); border-color:var(--bad);}
+  .keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .keypad button{aspect-ratio:1/1; border:none; border-radius:14px; background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; font-size:20px; font-weight:700; cursor:pointer;}
+  .keypad button:active{background:var(--gold-dim); color:#0b0c0f;}
+  .keypad .wide{font-size:13px; font-family:'Cairo'; color:var(--sub); background:transparent;}
+  .pin-err-text{color:var(--bad); font-size:12px; min-height:16px; margin-top:14px;}
   .toast{
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(.9);
     z-index:55; display:flex; align-items:center; gap:12px; background:var(--panel);
@@ -346,6 +355,30 @@
     <h2 id="giftBoxName">مبروك!</h2>
     <div class="amount" id="giftBoxAmount">0 ج.م</div>
     <p style="color:var(--sub); font-size:13px;" id="giftBoxSub">مكافأة الالتزام</p>
+  </div>
+
+  <!-- ATTENDANCE PIN -->
+  <div id="attPinOverlay" class="overlay">
+    <div class="box pin-box">
+      <h3 id="attPinName">—</h3>
+      <p class="sub" id="attPinAction">اكتب الكود السري بتاعك</p>
+      <div id="attPinKeypadArea">
+        <div class="pin-dots" id="attPinDots">
+          <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+        </div>
+        <div class="keypad" id="attKeypad">
+          <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+          <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+          <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+          <button class="wide" id="attPinCancel">إلغاء</button><button data-k="0">0</button><button class="wide" id="attPinDel">⌫</button>
+        </div>
+        <div class="pin-err-text" id="attPinErrText"></div>
+      </div>
+      <div id="attNoPinArea" style="display:none;">
+        <p style="color:var(--bad); font-size:13px; margin-bottom:16px;">الموظف ده معندوش كود سري متسجل. اطلب من الأدمن يحدده من لوحة التحكم.</p>
+        <button class="btnGhost" style="width:100%;" id="attNoPinCancel">رجوع</button>
+      </div>
+    </div>
   </div>
 
   <!-- ADMIN LOGIN -->
@@ -751,7 +784,7 @@ function renderAttendanceLists(){
   }).join('') : '<div class="empty">محدش حاضر دلوقتي</div>';
 
   notInWrap.querySelectorAll('.attCard').forEach(card=>{
-    card.addEventListener('click', ()=> clockIn(card.dataset.id));
+    card.addEventListener('click', ()=> promptAttPin('in', card.dataset.id));
   });
   inWrap.querySelectorAll('.attCard').forEach(card=>{
     card.addEventListener('click', ()=> openDayHub(card.dataset.id));
@@ -775,7 +808,10 @@ async function clockIn(empId){
       clockInTs: Date.now(), clockOutTs: null,
       scheduledStartTime: emp.scheduledStartTime || null, lateMinutes
     });
-  }catch(err){ console.error('تعذر تسجيل الحضور', err); }
+  }catch(err){
+    console.error('تعذر تسجيل الحضور', err);
+    alert('تعذر تسجيل الحضور: ' + (err && err.code ? err.code : 'غير معروف') + '\n\nتأكد إنك ضايف Firestore Rules الخاصة بـ sales_shifts.');
+  }
   renderAttendanceLists();
 }
 
@@ -783,7 +819,73 @@ async function clockOut(empId){
   const shift = getOpenShift(empId);
   if(!shift) return;
   try{ await updateDoc(doc(db,'sales_shifts', shift.id), { clockOutTs: Date.now() }); }
-  catch(err){ console.error('تعذر تسجيل الانصراف', err); }
+  catch(err){
+    console.error('تعذر تسجيل الانصراف', err);
+    alert('تعذر تسجيل الانصراف: ' + (err && err.code ? err.code : 'غير معروف'));
+  }
+}
+
+// ---------- ATTENDANCE PIN GATE ----------
+let pendingAttAction = null; // {type:'in'|'out', empId}
+let attPinBuffer = '';
+
+function promptAttPin(type, empId){
+  const emp = employees.find(e=> e.id === empId);
+  if(!emp) return;
+  pendingAttAction = { type, empId };
+  attPinBuffer = '';
+  $('#attPinName').textContent = emp.name;
+  $('#attPinAction').textContent = type === 'in' ? 'اكتب كودك عشان تسجل حضور' : 'اكتب كودك عشان تسجل انصراف';
+  $('#attPinErrText').textContent = '';
+  updateAttPinDots(false);
+
+  if(!emp.pin){
+    $('#attPinKeypadArea').style.display = 'none';
+    $('#attNoPinArea').style.display = 'block';
+  } else {
+    $('#attPinKeypadArea').style.display = 'block';
+    $('#attNoPinArea').style.display = 'none';
+  }
+  $('#attPinOverlay').classList.add('show');
+}
+
+function updateAttPinDots(isErr){
+  document.querySelectorAll('#attPinDots .pin-dot').forEach((d,i)=>{
+    d.className = 'pin-dot' + (i < attPinBuffer.length ? (isErr?' err':' filled') : '');
+  });
+}
+$('#attKeypad').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  if(btn.id === 'attPinCancel'){ closeAttPin(); return; }
+  if(btn.id === 'attPinDel'){ attPinBuffer = attPinBuffer.slice(0,-1); updateAttPinDots(false); return; }
+  const k = btn.dataset.k;
+  if(k === undefined || attPinBuffer.length >= 4) return;
+  attPinBuffer += k;
+  updateAttPinDots(false);
+  if(attPinBuffer.length === 4) checkAttPin();
+});
+$('#attNoPinCancel').addEventListener('click', closeAttPin);
+
+function closeAttPin(){
+  $('#attPinOverlay').classList.remove('show');
+  pendingAttAction = null;
+  attPinBuffer = '';
+}
+
+async function checkAttPin(){
+  const emp = employees.find(e=> e.id === pendingAttAction.empId);
+  if(!emp) return;
+  if(attPinBuffer === String(emp.pin)){
+    const action = pendingAttAction;
+    closeAttPin();
+    if(action.type === 'in'){ await clockIn(action.empId); }
+    else{ await clockOut(action.empId); renderAttendanceLists(); }
+  } else {
+    updateAttPinDots(true);
+    $('#attPinErrText').textContent = 'الكود غلط';
+    setTimeout(()=>{ attPinBuffer=''; updateAttPinDots(false); }, 500);
+  }
 }
 
 // ---------- PERSONAL DAY HUB ----------
@@ -797,11 +899,9 @@ $('#dh_closeBtn').addEventListener('click', ()=>{
   pendingTaskPhoto = null;
   taskSubmitEmpId = null;
 });
-$('#dh_clockOutBtn').addEventListener('click', async ()=>{
-  if(!confirm('متأكد إنك عايز تسجل انصراف؟')) return;
-  await clockOut(taskSubmitEmpId);
+$('#dh_clockOutBtn').addEventListener('click', ()=>{
   $('#dayHubOverlay').classList.remove('show');
-  renderAttendanceLists();
+  promptAttPin('out', taskSubmitEmpId);
 });
 
 function renderDayHub(empId){
@@ -1326,16 +1426,31 @@ function renderAdminList(){
     return;
   }
   wrap.innerHTML = listed.map(e=>`
-    <div class="emp-row">
+    <div class="emp-row" style="flex-wrap:wrap;">
       <div class="n">${e.name}${viewBranch==='__ALL__' ? ' <span style="color:var(--sub); font-weight:400; font-size:12px;">— '+(e.branch||'—')+'</span>' : ''}</div>
-      <button data-id="${e.id}">حذف</button>
+      <input type="text" inputmode="numeric" maxlength="4" placeholder="كود PIN" data-pin-id="${e.id}" value="${e.pin || ''}"
+        style="width:80px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; text-align:center;">
+      <button data-act="savePin" data-id="${e.id}" style="border:none; background:var(--good); color:#fff; padding:8px 12px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">حفظ الكود</button>
+      <button data-act="del" data-id="${e.id}">حذف</button>
     </div>
   `).join('');
-  wrap.querySelectorAll('button').forEach(btn=>{
+  wrap.querySelectorAll('[data-act="del"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       if(!confirm('متأكد إنك عايز تحذف الموظف ده؟')) return;
       try{ await deleteDoc(doc(db,'sales_employees', btn.dataset.id)); }
       catch(err){ console.error('تعذر الحذف', err); }
+    });
+  });
+  wrap.querySelectorAll('[data-act="savePin"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const input = wrap.querySelector(`input[data-pin-id="${btn.dataset.id}"]`);
+      const pin = input.value.trim();
+      if(!/^\d{4}$/.test(pin)){ alert('الكود لازم يكون 4 أرقام'); return; }
+      try{
+        await updateDoc(doc(db,'sales_employees', btn.dataset.id), { pin });
+        btn.textContent = 'اتحفظ ✅';
+        setTimeout(()=> btn.textContent = 'حفظ الكود', 1500);
+      }catch(err){ console.error('تعذر حفظ الكود', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
     });
   });
 }
