@@ -341,12 +341,7 @@
   <div id="leaderboard">
     <div class="lb-header">
       <h2>🏆 لوحة الترتيب</h2>
-      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <select id="lbBranchSelect" style="padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:13px;">
-          <option value="__ALL__">كل الفروع</option>
-        </select>
-        <button class="backBtn" id="closeLeaderboard">◀ رجوع</button>
-      </div>
+      <button class="backBtn" id="closeLeaderboard">◀ رجوع</button>
     </div>
     <div class="lb-section">
       <h3>الأسبوع ده (آخر 7 أيام)</h3>
@@ -567,6 +562,16 @@
       </div>
       <div id="fullReportList"></div>
     </div>
+
+    <div class="panel">
+      <h3>💰 عمولة النقط الشهرية</h3>
+      <div class="add-form" style="margin-bottom:16px;">
+        <input type="number" min="0" step="0.5" id="commissionPerPointInput" placeholder="عمولة كل نقطة بالجنيه">
+        <button id="saveCommissionBtn">حفظ العمولة</button>
+      </div>
+      <div id="commissionCurrentRate" style="color:var(--sub); font-size:12px; margin-bottom:14px;"></div>
+      <div id="commissionList"></div>
+    </div>
   </div>
 
 </div>
@@ -598,6 +603,8 @@ const shiftsCol = collection(db, 'sales_shifts');
 const tasksCol = collection(db, 'sales_tasks');
 const submissionsCol = collection(db, 'sales_task_submissions');
 const rewardsCol = collection(db, 'sales_rewards');
+const settingsCol = collection(db, 'sales_settings');
+const commissionPaymentsCol = collection(db, 'sales_commission_payments');
 
 // Simple admin access code — checked on-device, no network call.
 // Change this string to whatever code you want, then re-download the file.
@@ -614,6 +621,8 @@ let allShifts = [], shifts = [];           // clock in/out records
 let allTasks = [], tasks = [];             // current weekly task assignment per employee
 let allSubmissions = [], submissions = []; // daily task photo submissions
 let allRewards = [], rewards = [];         // earned weekly/monthly rewards
+let commissionPerPoint = 0;                // set by admin, per branch
+let allCommissionPayments = [], commissionPayments = []; // monthly payment records
 let pendingTaskPhoto = null;                // File selected before upload
 let taskSubmitEmpId = null;
 
@@ -656,19 +665,12 @@ function populateBranchSelect(sel){
 }
 function populateBranchDropdowns(){
   populateBranchSelect($('#adminBranchSelect'));
-  populateBranchSelect($('#lbBranchSelect'));
 }
 $('#adminBranchSelect').addEventListener('change', (e)=>{
   viewBranch = e.target.value;
-  $('#lbBranchSelect').value = viewBranch;
   renderAdminList();
   renderLog();
   renderPerformanceLink();
-});
-$('#lbBranchSelect').addEventListener('change', (e)=>{
-  viewBranch = e.target.value;
-  $('#adminBranchSelect').value = viewBranch;
-  renderLeaderboard();
 });
 
 function applyBranchFilter(){
@@ -677,6 +679,7 @@ function applyBranchFilter(){
   tasks = allTasks.filter(t => t.branch === currentBranch);
   submissions = allSubmissions.filter(s => s.branch === currentBranch);
   rewards = allRewards.filter(r => r.branch === currentBranch);
+  commissionPayments = allCommissionPayments.filter(p => p.branch === currentBranch);
   renderEmpGrid();
   populateBranchDropdowns();
   checkAndAwardRewards();
@@ -688,6 +691,7 @@ function applyBranchFilter(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
+    renderCommissionPanel();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
   if($('#attendance').classList.contains('show')) renderAttendanceLists();
@@ -735,6 +739,18 @@ onSnapshot(rewardsCol, (snap)=>{
   allRewards = snap.docs.map(d=>({id:d.id, ...d.data()}));
   applyBranchFilter();
 }, (err)=> console.error('rewards sync error', err));
+
+onSnapshot(settingsCol, (snap)=>{
+  const branchDoc = snap.docs.find(d=> d.id === currentBranch);
+  commissionPerPoint = branchDoc ? (branchDoc.data().commissionPerPoint || 0) : 0;
+  if(adminUnlocked) renderCommissionPanel();
+}, (err)=> console.error('settings sync error', err));
+
+onSnapshot(commissionPaymentsCol, (snap)=>{
+  allCommissionPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  commissionPayments = allCommissionPayments.filter(p=> p.branch === currentBranch);
+  if(adminUnlocked) renderCommissionPanel();
+}, (err)=> console.error('commission payments sync error', err));
 
 function renderLog(){
   const wrap = $('#logList');
@@ -917,6 +933,8 @@ function renderAttendanceLists(){
   });
 }
 
+const LATE_GRACE_MINUTES = 10; // no penalty within this window around the scheduled time
+const SEVERE_LATE_MINUTES = 20; // being later than this even once disqualifies the reward for that period
 async function clockIn(empId){
   const emp = employees.find(e=> e.id === empId);
   if(!emp) return;
@@ -926,7 +944,7 @@ async function clockIn(empId){
     const scheduled = new Date();
     scheduled.setHours(h, m, 0, 0);
     const diffMin = Math.round((Date.now() - scheduled.getTime())/60000);
-    if(diffMin > 0) lateMinutes = diffMin;
+    if(diffMin > LATE_GRACE_MINUTES) lateMinutes = diffMin;
   }
   try{
     await addDoc(shiftsCol, {
@@ -1168,8 +1186,8 @@ function renderStaffOverview(){
     let statusColor = 'gray', statusText = 'لسه محضرش';
     if(shift){
       const lm = shift.lateMinutes || 0;
-      if(lm < 10){ statusColor='green'; statusText = lm===0 ? 'في الميعاد' : ('متأخر '+lm+' د'); }
-      else if(lm < 30){ statusColor='yellow'; statusText='متأخر '+lm+' د'; }
+      if(lm === 0){ statusColor='green'; statusText='في الميعاد'; }
+      else if(lm <= SEVERE_LATE_MINUTES){ statusColor='yellow'; statusText='متأخر '+lm+' د'; }
       else { statusColor='red'; statusText='متأخر '+lm+' د'; }
     } else if(e.scheduledStartTime){
       const [h,m] = e.scheduledStartTime.split(':').map(Number);
@@ -1363,6 +1381,17 @@ async function maybeAwardPeriod(emp, range, type, label){
   const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
   const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
   if(confirmedDays < requiredDays || requiredDays === 0) return;
+
+  // Severe lateness (beyond the grace period + severe threshold) even once
+  // in the period disqualifies the reward entirely.
+  const rangeShifts = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
+  const hasSevereLateness = rangeShifts.some(s=> (s.lateMinutes||0) > SEVERE_LATE_MINUTES);
+  if(hasSevereLateness) return;
+
+  // Mild lateness (over the grace period but not severe) is tolerated ONCE per
+  // period — a second mild-late instance in the same week/month costs the reward.
+  const mildLateCount = rangeShifts.filter(s=> (s.lateMinutes||0) > 0 && (s.lateMinutes||0) <= SEVERE_LATE_MINUTES).length;
+  if(mildLateCount > 1) return;
 
   // Customer rating requirement — only enforced if there's actual rating data
   // for the period (an employee shouldn't be penalized for a lack of feedback).
@@ -1614,7 +1643,6 @@ function closeScanner(){
 // ---------- LEADERBOARD ----------
 $('#openLeaderboard').addEventListener('click', ()=>{
   $('#leaderboard').classList.add('show');
-  $('#lbBranchSelect').value = viewBranch;
   renderLeaderboard();
 });
 $('#closeLeaderboard').addEventListener('click', ()=> $('#leaderboard').classList.remove('show'));
@@ -1636,7 +1664,8 @@ function buildRows(list, key){
 }
 
 function renderLeaderboard(){
-  const lbEmployees = reviewEmployeesFor(viewBranch);
+  // The kiosk-facing leaderboard always shows this device's own branch only.
+  const lbEmployees = employees;
   const weekAgo = Date.now() - 7*24*60*60*1000;
   const weekly = lbEmployees.map(e=>({name:e.name, count: countsFor(e.id, weekAgo)}))
     .filter(e=>e.count>0).sort((a,b)=>b.count-a.count);
@@ -1673,7 +1702,7 @@ function openAdmin(){
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel();
   }
   else { $('#adminLoginGate').classList.add('show'); }
 }
@@ -1690,7 +1719,7 @@ function doAdminLogin(){
     renderLog();
     renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -2110,6 +2139,64 @@ $('#exportFullReportCsvBtn')?.addEventListener('click', ()=>{
   URL.revokeObjectURL(url);
 });
 
+// ---------- COMMISSION PER POINT (admin) ----------
+function getMonthLabel(d){
+  const dt = d || new Date();
+  return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0');
+}
+
+function renderCommissionPanel(){
+  const input = $('#commissionPerPointInput');
+  if(!input) return;
+  if(document.activeElement !== input) input.value = commissionPerPoint || '';
+  $('#commissionCurrentRate').textContent = commissionPerPoint > 0
+    ? `العمولة الحالية: ${commissionPerPoint} ج.م لكل نقطة`
+    : 'لسه معملتش عمولة لهذا الفرع';
+
+  const wrap = $('#commissionList');
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  const monthLabel = getMonthLabel();
+  const monthRange = getMonthRange(new Date());
+
+  wrap.innerHTML = employees.map(e=>{
+    const pointsThisMonth = points.filter(p=> p.employeeId===e.id && p.ts >= monthRange.start.getTime() && p.ts <= monthRange.end.getTime()).length;
+    const commissionOwed = Math.round(pointsThisMonth * commissionPerPoint * 100)/100;
+    const paidRecord = commissionPayments.find(p=> p.employeeId===e.id && p.monthLabel===monthLabel);
+    const actionHtml = paidRecord
+      ? `<span style="color:var(--good); font-size:11px;">✅ مدفوعة (${new Date(paidRecord.paidAt).toLocaleDateString('ar-EG')})</span>`
+      : `<button class="confirmBtnSmall" data-act="pay" data-id="${e.id}" data-points="${pointsThisMonth}" data-amount="${commissionOwed}">✅ تم الدفع</button>`;
+    return `
+    <div class="emp-row" style="flex-wrap:wrap;">
+      <div class="n">${e.name}</div>
+      <div class="meta">${pointsThisMonth} نقطة</div>
+      <div class="meta" style="color:var(--gold); font-weight:700;">${commissionOwed} ج.م</div>
+      ${actionHtml}
+    </div>`;
+  }).join('');
+
+  wrap.querySelectorAll('[data-act="pay"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const emp = employees.find(e=> e.id === btn.dataset.id);
+      if(!emp) return;
+      if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عن شهر ${monthLabel}؟`)) return;
+      try{
+        await addDoc(commissionPaymentsCol, {
+          employeeId: emp.id, employeeName: emp.name, branch: currentBranch,
+          monthLabel, pointsCount: parseInt(btn.dataset.points), commissionAmount: parseFloat(btn.dataset.amount),
+          paidAt: Date.now()
+        });
+      }catch(err){ console.error('تعذر تسجيل الدفع', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
+    });
+  });
+}
+
+$('#saveCommissionBtn')?.addEventListener('click', async ()=>{
+  const val = parseFloat($('#commissionPerPointInput').value);
+  if(isNaN(val) || val < 0){ alert('اكتب رقم صحيح'); return; }
+  try{
+    await setDoc(doc(db,'sales_settings', currentBranch), { commissionPerPoint: val }, { merge:true });
+  }catch(err){ console.error('تعذر حفظ العمولة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
+});
 </script>
 <script>
 if ('serviceWorker' in navigator) {
