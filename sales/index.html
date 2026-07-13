@@ -10,6 +10,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <style>
   :root{
     --bg:#12141a; --panel:#1b1e27; --panel2:#232733;
@@ -213,6 +214,13 @@
     box-shadow:0 6px 18px rgba(229,72,77,.35); display:flex; align-items:center; justify-content:center; gap:8px;
   }
   .clockOutBigBtn:active{transform:translateY(2px); box-shadow:0 3px 10px rgba(229,72,77,.3);}
+  .faceVideoBox{position:relative; width:100%; border-radius:14px; overflow:hidden; background:#000; margin-bottom:14px;}
+  .faceVideoBox video{width:100%; height:240px; object-fit:cover; display:block;}
+  .faceOval{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:130px; height:170px; border:3px solid var(--gold); border-radius:50%/60%; opacity:.7; pointer-events:none;}
+  .faceStatusPill{padding:6px 14px; border-radius:20px; font-size:12px; font-weight:700; display:inline-block; margin-bottom:10px;}
+  .faceStatusPill.checking{background:var(--panel2); color:var(--sub);}
+  .faceStatusPill.match{background:rgba(47,163,107,.2); color:var(--good);}
+  .faceStatusPill.nomatch{background:rgba(229,72,77,.2); color:var(--bad);}
   .dhXBtn{
     position:absolute; top:14px; left:14px; width:30px; height:30px; border-radius:50%; border:1px solid var(--line);
     background:var(--panel2); color:var(--sub); font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:5;
@@ -463,6 +471,51 @@
     </div>
   </div>
 
+  <!-- FACE VERIFICATION (2nd factor after PIN) -->
+  <div id="faceVerifyOverlay" class="overlay">
+    <div class="box pin-box">
+      <h3 id="faceVerifyName">—</h3>
+      <p class="sub">وجّه وشك للكاميرا عشان نتأكد إنه إنت</p>
+      <div class="faceStatusPill checking" id="faceVerifyStatus">بيفحص...</div>
+      <div class="faceVideoBox">
+        <video id="faceVerifyVideo" autoplay muted playsinline></video>
+        <div class="faceOval"></div>
+      </div>
+      <div class="field-err" id="faceVerifyErr"></div>
+      <button style="width:100%; display:none; padding:11px; border:1px solid var(--gold-dim); border-radius:12px; background:transparent; color:var(--gold); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="faceVerifyOverrideBtn">🔑 تجاوز بكود الأدمن</button>
+      <button style="width:100%; margin-top:8px; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="faceVerifyCancel">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- FACE OVERRIDE (admin password) -->
+  <div id="faceOverrideOverlay" class="overlay">
+    <div class="box pin-box">
+      <h3>تجاوز التحقق من الوجه</h3>
+      <p class="sub">اكتب كود الأدمن عشان تسمح بالدخول من غيره</p>
+      <input type="password" id="faceOverridePass" placeholder="كود الأدمن"
+        style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:15px; text-align:center; margin-bottom:12px;">
+      <div class="field-err" id="faceOverrideErr"></div>
+      <button id="faceOverrideConfirmBtn" style="width:100%; padding:13px; border:none; border-radius:12px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer; margin-bottom:10px;">تأكيد التجاوز</button>
+      <button style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="faceOverrideCancel">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- FACE ENROLLMENT (admin registers employee face) -->
+  <div id="faceEnrollOverlay" class="overlay">
+    <div class="box pin-box">
+      <h3 id="faceEnrollName">—</h3>
+      <p class="sub">خلي الموظف يبص للكاميرا ودوس "التقاط" لما يبقى واضح</p>
+      <div class="faceStatusPill checking" id="faceEnrollStatus">جاهز</div>
+      <div class="faceVideoBox">
+        <video id="faceEnrollVideo" autoplay muted playsinline></video>
+        <div class="faceOval"></div>
+      </div>
+      <div class="field-err" id="faceEnrollErr"></div>
+      <button style="width:100%; margin-bottom:8px; padding:13px; border:none; border-radius:12px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer;" id="faceEnrollCaptureBtn">📸 التقاط وتسجيل</button>
+      <button style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="faceEnrollCancel">إلغاء</button>
+    </div>
+  </div>
+
   <!-- ADMIN LOGIN -->
   <div id="adminLoginGate" class="login-gate">
     <div class="login-box">
@@ -525,6 +578,15 @@
       <h3>⏰ مواعيد الحضور المحددة</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">حدّد ميعاد الحضور الرسمي لكل موظف عشان التأخير يتحسب منه.</p>
       <div id="scheduleList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📷 التحقق من الوجه (منع تسجيل حضور حد بدال حد)</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
+        سجّل وجه كل موظف مرة واحدة. بعد كده، هيتطلب التحقق من وشه قبل ما يقدر يسجل حضور أو انصراف.
+        الدقة مش 100% — لو الوجه مش واضح، فيه خيار تجاوز بكود الأدمن.
+      </p>
+      <div id="faceEnrollList"></div>
     </div>
 
     <div class="panel">
@@ -736,7 +798,7 @@ function applyBranchFilter(){
   }
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
-    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
+    renderStaffOverview(); renderScheduleList(); renderFaceEnrollList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
     renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
   }
@@ -1107,8 +1169,12 @@ async function checkAttPin(){
   if(attPinBuffer === String(emp.pin)){
     const action = pendingAttAction;
     closeAttPin();
-    if(action.type === 'in'){ await clockIn(action.empId); }
-    else{ await clockOut(action.empId); renderAttendanceLists(); }
+    if(emp.faceDescriptor){
+      openFaceVerify(action);
+    } else {
+      if(action.type === 'in'){ await clockIn(action.empId); }
+      else{ await clockOut(action.empId); renderAttendanceLists(); }
+    }
   } else {
     updateAttPinDots(true);
     $('#attPinErrText').textContent = 'الكود غلط';
@@ -1760,7 +1826,7 @@ function openAdmin(){
   $('#admin').classList.add('show');
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
-    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
+    renderStaffOverview(); renderScheduleList(); renderFaceEnrollList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
   }
   else { $('#adminLoginGate').classList.add('show'); }
@@ -1777,7 +1843,7 @@ function doAdminLogin(){
     renderAdminList();
     renderLog();
     renderPerformanceLink();
-    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
+    renderStaffOverview(); renderScheduleList(); renderFaceEnrollList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
@@ -2345,6 +2411,7 @@ function renderSalaryPanel(){
   if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const range = getMonthDateRange(new Date());
   const periodLabel = getMonthLabel(range.start);
+  const monthEnded = new Date() > range.end;
 
   wrap.innerHTML = employees.map(e=>{
     if(!e.baseSalary){
@@ -2356,9 +2423,14 @@ function renderSalaryPanel(){
     }
     const proratedNote = calc.daysInCalc < 30 ? `<div class="meta" style="color:var(--sub); font-size:10px;">(${calc.daysInCalc} يوم بس — من تاريخ التعيين ${e.hireDate})</div>` : '';
     const paidRecord = salaryPayments.find(p=> p.employeeId===e.id && p.periodLabel===periodLabel);
-    const actionHtml = paidRecord
-      ? `<span style="color:var(--good); font-size:11px;">✅ مدفوع (${new Date(paidRecord.paidAt).toLocaleDateString('ar-EG')})</span>`
-      : `<button class="confirmBtnSmall" data-act="paysalary" data-id="${e.id}" data-amount="${calc.netSalary}">✅ تم الدفع</button>`;
+    let actionHtml;
+    if(paidRecord){
+      actionHtml = `<span style="color:var(--good); font-size:11px;">✅ مدفوع (${new Date(paidRecord.paidAt).toLocaleDateString('ar-EG')})</span>`;
+    } else if(!monthEnded){
+      actionHtml = `<span style="color:var(--sub); font-size:10px;">🔒 هيتفعل بعد ما الشهر يخلص (يوم 30)</span>`;
+    } else {
+      actionHtml = `<button class="confirmBtnSmall" data-act="paysalary" data-id="${e.id}" data-amount="${calc.netSalary}">✅ تم الدفع</button>`;
+    }
     return `
     <div class="emp-row" style="flex-wrap:wrap;">
       <div class="n">${e.name}</div>
@@ -2480,6 +2552,189 @@ function renderTerminationLog(){
     });
   });
 }
+
+// ==================== FACE RECOGNITION (attendance anti-fraud) ====================
+let faceApiReady = false;
+(async function loadFaceApiModels(){
+  try{
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    faceApiReady = true;
+  }catch(err){
+    console.error('تعذر تحميل نماذج التعرف على الوجه', err);
+    faceApiReady = false;
+  }
+})();
+
+const FACE_MATCH_THRESHOLD = 0.6; // lower = stricter match; 0.6 is the commonly used default
+const FACE_OVERRIDE_SHOW_AFTER_MS = 4000;
+
+async function getFaceDescriptorFromVideo(videoEl){
+  try{
+    const detection = await faceapi.detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks().withFaceDescriptor();
+    return detection ? detection.descriptor : null;
+  }catch(e){ return null; }
+}
+
+// ---------- ENROLLMENT (admin registers an employee's face) ----------
+function renderFaceEnrollList(){
+  const wrap = $('#faceEnrollList');
+  if(!wrap) return;
+  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = employees.map(e=> `
+    <div class="emp-row">
+      <div class="n">${e.name}</div>
+      ${e.faceDescriptor ? '<span style="color:var(--good); font-size:11px;">✅ متسجل</span>' : '<span style="color:var(--sub); font-size:11px;">مش متسجل</span>'}
+      <button data-id="${e.id}" style="border:none; background:var(--gold); color:#0b0c0f; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">📷 ${e.faceDescriptor?'إعادة تسجيل':'تسجيل الوجه'}</button>
+    </div>
+  `).join('');
+  wrap.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=> openFaceEnroll(btn.dataset.id));
+  });
+}
+
+let faceEnrollStream = null;
+let faceEnrollEmpId = null;
+
+async function openFaceEnroll(empId){
+  const emp = employees.find(e=> e.id === empId);
+  if(!emp) return;
+  faceEnrollEmpId = empId;
+  $('#faceEnrollName').textContent = emp.name;
+  $('#faceEnrollErr').textContent = '';
+  $('#faceEnrollStatus').className = 'faceStatusPill checking';
+  $('#faceEnrollStatus').textContent = 'بيفتح الكاميرا...';
+  $('#faceEnrollOverlay').classList.add('show');
+  try{
+    faceEnrollStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' } });
+    $('#faceEnrollVideo').srcObject = faceEnrollStream;
+    $('#faceEnrollStatus').textContent = 'جاهز، دوس التقاط';
+  }catch(err){
+    $('#faceEnrollErr').textContent = 'مقدرش أوصل للكاميرا: ' + (err && err.name ? err.name : 'غير معروف');
+  }
+}
+
+function closeFaceEnroll(){
+  if(faceEnrollStream){ faceEnrollStream.getTracks().forEach(t=>t.stop()); faceEnrollStream=null; }
+  $('#faceEnrollOverlay').classList.remove('show');
+  faceEnrollEmpId = null;
+}
+$('#faceEnrollCancel')?.addEventListener('click', closeFaceEnroll);
+
+$('#faceEnrollCaptureBtn')?.addEventListener('click', async ()=>{
+  if(!faceApiReady){ $('#faceEnrollErr').textContent = 'نماذج التعرف على الوجه لسه بتحمّل أو فشلت، تأكد من الاتصال بالإنترنت وحاول تاني.'; return; }
+  $('#faceEnrollStatus').textContent = 'بيحلل...';
+  const descriptor = await getFaceDescriptorFromVideo($('#faceEnrollVideo'));
+  if(!descriptor){
+    $('#faceEnrollErr').textContent = 'مقدرش ألاقي وجه واضح، جرب تاني بإضاءة أحسن وقرّب من الكاميرا.';
+    $('#faceEnrollStatus').textContent = 'جاهز، دوس التقاط';
+    return;
+  }
+  try{
+    await updateDoc(doc(db,'sales_employees', faceEnrollEmpId), { faceDescriptor: Array.from(descriptor) });
+    $('#faceEnrollStatus').className = 'faceStatusPill match';
+    $('#faceEnrollStatus').textContent = 'اتسجل ✅';
+    setTimeout(closeFaceEnroll, 1200);
+  }catch(err){
+    console.error('تعذر حفظ بيانات الوجه', err);
+    $('#faceEnrollErr').textContent = 'حصل خطأ في الحفظ: ' + (err && err.code ? err.code : 'غير معروف');
+  }
+});
+
+// ---------- VERIFICATION (2nd factor after PIN, at clock in/out) ----------
+let pendingFaceAction = null;
+let faceVerifyStream = null;
+let faceVerifyLoopId = null;
+let faceVerifyStartTime = 0;
+
+async function openFaceVerify(action){
+  pendingFaceAction = action;
+  const emp = employees.find(e=> e.id === action.empId);
+  $('#faceVerifyName').textContent = emp ? emp.name : '—';
+  $('#faceVerifyErr').textContent = '';
+  $('#faceVerifyOverrideBtn').style.display = 'none';
+  $('#faceVerifyStatus').className = 'faceStatusPill checking';
+  $('#faceVerifyStatus').textContent = 'بيفتح الكاميرا...';
+  $('#faceVerifyOverlay').classList.add('show');
+
+  if(!faceApiReady){
+    $('#faceVerifyStatus').textContent = '';
+    $('#faceVerifyErr').textContent = 'نماذج التعرف على الوجه لسه بتحمّل أو فشلت. تقدر تجاوز بكود الأدمن.';
+    $('#faceVerifyOverrideBtn').style.display = 'block';
+    return;
+  }
+  try{
+    faceVerifyStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' } });
+    $('#faceVerifyVideo').srcObject = faceVerifyStream;
+    $('#faceVerifyStatus').textContent = 'بيدوّر على وشك...';
+    faceVerifyStartTime = Date.now();
+    scanFaceLoop(emp);
+  }catch(err){
+    $('#faceVerifyStatus').textContent = '';
+    $('#faceVerifyErr').textContent = 'مقدرش أوصل للكاميرا: ' + (err && err.name ? err.name : 'غير معروف');
+    $('#faceVerifyOverrideBtn').style.display = 'block';
+  }
+}
+
+async function scanFaceLoop(emp){
+  if(!pendingFaceAction) return; // cancelled by the user
+  const descriptor = await getFaceDescriptorFromVideo($('#faceVerifyVideo'));
+  if(descriptor && emp.faceDescriptor){
+    const dist = faceapi.euclideanDistance(descriptor, Float32Array.from(emp.faceDescriptor));
+    if(dist < FACE_MATCH_THRESHOLD){
+      $('#faceVerifyStatus').className = 'faceStatusPill match';
+      $('#faceVerifyStatus').textContent = '✅ اتطابق';
+      playBeep();
+      await finishFaceVerify();
+      return;
+    }
+  }
+  if(Date.now() - faceVerifyStartTime > FACE_OVERRIDE_SHOW_AFTER_MS){
+    $('#faceVerifyStatus').className = 'faceStatusPill nomatch';
+    $('#faceVerifyStatus').textContent = 'لسه مش متطابق...';
+    $('#faceVerifyOverrideBtn').style.display = 'block';
+  }
+  faceVerifyLoopId = requestAnimationFrame(()=> scanFaceLoop(emp));
+}
+
+async function finishFaceVerify(){
+  const action = pendingFaceAction;
+  closeFaceVerify();
+  if(!action) return;
+  if(action.type === 'in'){ await clockIn(action.empId); }
+  else{ await clockOut(action.empId); renderAttendanceLists(); }
+}
+
+function closeFaceVerify(){
+  if(faceVerifyLoopId) cancelAnimationFrame(faceVerifyLoopId);
+  faceVerifyLoopId = null;
+  if(faceVerifyStream){ faceVerifyStream.getTracks().forEach(t=>t.stop()); faceVerifyStream=null; }
+  $('#faceVerifyOverlay').classList.remove('show');
+  pendingFaceAction = null;
+}
+$('#faceVerifyCancel')?.addEventListener('click', closeFaceVerify);
+
+$('#faceVerifyOverrideBtn')?.addEventListener('click', ()=>{
+  $('#faceOverridePass').value = '';
+  $('#faceOverrideErr').textContent = '';
+  $('#faceOverrideOverlay').classList.add('show');
+});
+$('#faceOverrideCancel')?.addEventListener('click', ()=> $('#faceOverrideOverlay').classList.remove('show'));
+$('#faceOverrideConfirmBtn')?.addEventListener('click', async ()=>{
+  const pass = $('#faceOverridePass').value;
+  if(pass !== ADMIN_CODE){ $('#faceOverrideErr').textContent = 'كود غلط'; return; }
+  $('#faceOverrideOverlay').classList.remove('show');
+  // Admin-approved bypass: proceed with the pending clock in/out despite no face match.
+  const action = pendingFaceAction;
+  closeFaceVerify();
+  if(action){
+    if(action.type === 'in'){ await clockIn(action.empId); }
+    else{ await clockOut(action.empId); renderAttendanceLists(); }
+  }
+});
 </script>
 <script>
 if ('serviceWorker' in navigator) {
