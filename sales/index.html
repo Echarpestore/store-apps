@@ -183,6 +183,8 @@
   /* ---------- ATTENDANCE / TASKS / REWARDS ---------- */
   .attTile{position:relative;}
   .taskBadge{position:absolute; top:6px; left:6px; font-size:13px;}
+  .taskBadge.rejected{animation:rejectPulse 1s ease-in-out infinite alternate; filter:drop-shadow(0 0 4px rgba(229,72,77,.8));}
+  @keyframes rejectPulse{from{transform:scale(1);} to{transform:scale(1.3);}}
   .giftBadge{position:absolute; top:6px; right:6px; font-size:16px; animation:giftPulse 1s ease-in-out infinite alternate;}
   @keyframes giftPulse{from{transform:scale(1);} to{transform:scale(1.15);}}
 
@@ -210,6 +212,23 @@
     box-shadow:0 6px 18px rgba(229,72,77,.35); display:flex; align-items:center; justify-content:center; gap:8px;
   }
   .clockOutBigBtn:active{transform:translateY(2px); box-shadow:0 3px 10px rgba(229,72,77,.3);}
+  .dhXBtn{
+    position:absolute; top:14px; left:14px; width:30px; height:30px; border-radius:50%; border:1px solid var(--line);
+    background:var(--panel2); color:var(--sub); font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:5;
+  }
+  .dhXBtn:active{background:var(--bad); color:#fff;}
+  .dhBtnRow{display:flex; gap:10px; margin-top:16px;}
+  .dhBackBtn{
+    flex:1.3; padding:13px; border-radius:12px; border:1px solid var(--gold-dim); background:var(--panel2); color:var(--gold);
+    font-family:'Cairo'; font-weight:800; font-size:13px; cursor:pointer;
+  }
+  .dhBackBtn:active{background:var(--gold-dim); color:#0b0c0f;}
+  .clockOutSmallBtn{
+    flex:1; padding:13px 10px; border:none; border-radius:12px; cursor:pointer;
+    background:linear-gradient(135deg,#e5484d,#b93a3e); color:#fff; font-family:'Cairo'; font-weight:800; font-size:13px;
+    box-shadow:0 4px 12px rgba(229,72,77,.3);
+  }
+  .clockOutSmallBtn:active{transform:translateY(2px); box-shadow:0 2px 6px rgba(229,72,77,.3);}
   .dayHubRow{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px;}
   .dayHubRow:last-child{border-bottom:none;}
   .dayHubRow .lbl{color:var(--sub);}
@@ -218,6 +237,7 @@
   .taskStatusPill{display:inline-block; padding:4px 10px; border-radius:10px; font-size:11px; font-weight:700;}
   .taskStatusPill.pending{background:rgba(242,169,60,.2); color:var(--r2);}
   .taskStatusPill.confirmed{background:rgba(47,163,107,.2); color:var(--good);}
+  .taskStatusPill.rejected{background:rgba(229,72,77,.2); color:var(--bad);}
   .taskStatusPill.none{background:var(--panel); color:var(--sub);}
   .photoPreview{width:100%; max-height:160px; object-fit:cover; border-radius:10px; margin:10px 0; display:none;}
   .fileBtn{display:block; width:100%; padding:12px; border-radius:12px; border:1px dashed var(--gold-dim); background:transparent; color:var(--gold); font-family:'Cairo'; font-weight:700; font-size:13px; text-align:center; cursor:pointer;}
@@ -357,7 +377,8 @@
 
   <!-- PERSONAL DAY HUB -->
   <div id="dayHubOverlay" class="overlay">
-    <div class="box dayHubBox" style="width:min(94vw,420px);">
+    <div class="box dayHubBox" style="width:min(94vw,420px); position:relative;">
+      <button class="dhXBtn" id="dh_xBtn">✕</button>
       <div class="dhHeader">
         <div class="dhAvatar" id="dh_avatar">—</div>
         <div>
@@ -385,8 +406,10 @@
       <div class="dayHubRow"><div class="lbl">مكافأة الأسبوع</div><div id="dh_weeklyProgress">—</div></div>
       <div class="dayHubRow"><div class="lbl">مكافأة الشهر</div><div id="dh_monthlyProgress">—</div></div>
 
-      <button class="clockOutBigBtn" id="dh_clockOutBtn">🚪 تسجيل انصراف</button>
-      <button class="btnGhost" style="width:100%; margin-top:8px;" id="dh_closeBtn">رجوع</button>
+      <div class="dhBtnRow">
+        <button class="dhBackBtn" id="dh_closeBtn">◀ رجوع</button>
+        <button class="clockOutSmallBtn" id="dh_clockOutBtn">🚪 انصراف</button>
+      </div>
     </div>
   </div>
 
@@ -454,13 +477,6 @@
         <button class="backBtn" id="adminLogout">خروج 🔒</button>
         <button class="backBtn" id="backFromAdmin">◀ رجوع للشاشة</button>
       </div>
-    </div>
-    <div class="panel">
-      <h3>📊 نظرة عامة النهاردة</h3>
-      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
-        الألوان: 🟢 حضر في ميعاده — 🟡 متأخر لحد 30 دقيقة — 🔴 متأخر أكتر من 30 دقيقة — ⚪ لسه محضرش
-      </p>
-      <div id="overviewList"></div>
     </div>
     <div class="panel">
       <h3>إضافة موظف جديد</h3>
@@ -642,7 +658,6 @@ function applyBranchFilter(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
-    renderOverviewList();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
   if($('#attendance').classList.contains('show')) renderAttendanceLists();
@@ -980,11 +995,13 @@ function openDayHub(empId){
   renderDayHub(empId);
   $('#dayHubOverlay').classList.add('show');
 }
-$('#dh_closeBtn').addEventListener('click', ()=>{
+function closeDayHub(){
   $('#dayHubOverlay').classList.remove('show');
   pendingTaskPhoto = null;
   taskSubmitEmpId = null;
-});
+}
+$('#dh_closeBtn').addEventListener('click', closeDayHub);
+$('#dh_xBtn').addEventListener('click', closeDayHub);
 $('#dh_clockOutBtn').addEventListener('click', ()=>{
   $('#dayHubOverlay').classList.remove('show');
   promptAttPin('out', taskSubmitEmpId);
@@ -999,7 +1016,8 @@ function renderDayHub(empId){
   $('#dh_name').textContent = emp.name;
   const lateTxt = shift.lateMinutes > 0 ? ` — متأخر ${shift.lateMinutes} دقيقة` : ' — في الميعاد ✅';
   $('#dh_shiftInfo').textContent = 'دخل الشيفت الساعة ' + new Date(shift.clockInTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) + lateTxt;
-  $('#dh_shiftDuration').textContent = formatDuration(Date.now() - shift.clockInTs);
+  const elapsedMs = Date.now() - shift.clockInTs;
+  $('#dh_shiftDuration').textContent = formatDuration(elapsedMs) + ' من 8 ساعات';
 
   // Task
   const task = getCurrentTask(empId);
@@ -1010,7 +1028,14 @@ function renderDayHub(empId){
   $('#dh_submitTaskBtn').style.display = 'none';
   pendingTaskPhoto = null;
 
-  if(sub){
+  if(sub && sub.rejected){
+    $('#dh_taskStatus').innerHTML = '<span class="taskStatusPill rejected">❌ اتعمل رفض — صور تاني</span>';
+    $('#dh_fileBtnLabel').style.display = 'block';
+    if(sub.photoURL){
+      $('#dh_photoPreview').src = sub.photoURL;
+      $('#dh_photoPreview').style.display = 'block';
+    }
+  } else if(sub){
     const pill = sub.confirmed
       ? '<span class="taskStatusPill confirmed">✅ اتأكد التنفيذ</span>'
       : '<span class="taskStatusPill pending">⏳ في انتظار تأكيد الأدمن</span>';
@@ -1102,7 +1127,8 @@ function renderStaffOverview(){
     const sub = getTodaysSubmission(e.id);
     const hasTask = !!getCurrentTask(e.id);
     let taskText = '➖ مفيش تاسك';
-    if(sub){ taskText = sub.confirmed ? '✅ اتأكد' : '⏳ محتاج تأكيد'; }
+    if(sub && sub.rejected){ taskText = '🔴 اترفض - محتاج يصور تاني'; }
+    else if(sub){ taskText = sub.confirmed ? '✅ اتأكد' : '⏳ محتاج تأكيد'; }
     else if(hasTask){ taskText = '❌ لسه متنفذش'; }
 
     const pointsToday = countsFor(e.id, dayStart.getTime());
@@ -1166,17 +1192,27 @@ $('#dh_submitTaskBtn').addEventListener('click', async ()=>{
   if(!pendingTaskPhoto || !taskSubmitEmpId) return;
   const emp = employees.find(e=> e.id === taskSubmitEmpId);
   const task = getCurrentTask(taskSubmitEmpId);
+  const existingSub = getTodaysSubmission(taskSubmitEmpId); // present only if previously rejected
   const btn = $('#dh_submitTaskBtn');
   btn.disabled = true; btn.textContent = 'بيضغط الصورة...';
   try{
     // Photos are compressed and stored directly in Firestore (small, low-res JPEG)
     // instead of Firebase Storage, so this works on the free Spark plan with no billing account needed.
     const dataUri = await compressImage(pendingTaskPhoto, 480, 0.5);
-    await addDoc(submissionsCol, {
-      employeeId: taskSubmitEmpId, employeeName: emp.name, branch: currentBranch,
-      date: todayStr(), taskDescription: task ? task.taskDescription : '',
-      photoURL: dataUri, submittedAt: Date.now(), confirmed: false, confirmedAt: null
-    });
+    if(existingSub){
+      // Resubmitting after a rejection — update the same doc instead of duplicating it.
+      await updateDoc(doc(db,'sales_task_submissions', existingSub.id), {
+        photoURL: dataUri, submittedAt: Date.now(), confirmed: false, confirmedAt: null,
+        rejected: false, rejectedAt: null
+      });
+    } else {
+      await addDoc(submissionsCol, {
+        employeeId: taskSubmitEmpId, employeeName: emp.name, branch: currentBranch,
+        date: todayStr(), taskDescription: task ? task.taskDescription : '',
+        photoURL: dataUri, submittedAt: Date.now(), confirmed: false, confirmedAt: null,
+        rejected: false, rejectedAt: null
+      });
+    }
     renderDayHub(taskSubmitEmpId);
   }catch(err){
     console.error('تعذر حفظ صورة التاسك', err);
@@ -1299,11 +1335,14 @@ function renderEmpGrid(){
   grid.innerHTML = clockedIn.map(e=>{
     const sub = getTodaysSubmission(e.id);
     let taskIcon = '';
-    if(sub){ taskIcon = sub.confirmed ? '✅' : '⏳'; }
+    if(sub){
+      if(sub.rejected) taskIcon = '❌';
+      else taskIcon = sub.confirmed ? '✅' : '⏳';
+    }
     const hasUnseenReward = rewards.some(r=> r.employeeId===e.id && !r.seen);
     return `
     <div class="emp-tile attTile${e.id===highlightEmpId?' just-scored':''}" data-id="${e.id}">
-      ${taskIcon ? `<div class="taskBadge">${taskIcon}</div>` : ''}
+      ${taskIcon ? `<div class="taskBadge${sub && sub.rejected ? ' rejected' : ''}">${taskIcon}</div>` : ''}
       ${hasUnseenReward ? `<div class="giftBadge">🎁</div>` : ''}
       <div class="emp-avatar">${initials(e.name)}</div>
       <div class="emp-name">${e.name}</div>
@@ -1548,7 +1587,6 @@ function openAdmin(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
-    renderOverviewList();
   }
   else { $('#adminLoginGate').classList.add('show'); }
 }
@@ -1566,7 +1604,6 @@ function doAdminLogin(){
     renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList();
-    renderOverviewList();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -1630,43 +1667,6 @@ $('#addEmpBtn').addEventListener('click', async ()=>{
 });
 
 // ---------- SCHEDULE (admin) ----------
-function latenessColor(lateMinutes){
-  if(lateMinutes === 0) return 'green';
-  if(lateMinutes > 0 && lateMinutes <= 30) return 'yellow';
-  return 'red';
-}
-
-function renderOverviewList(){
-  const wrap = $('#overviewList');
-  if(!wrap) return;
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-
-  wrap.innerHTML = employees.map(e=>{
-    const shift = getOpenShift(e.id);
-    const color = shift ? latenessColor(shift.lateMinutes||0) : 'gray';
-    const attendanceTxt = shift
-      ? (shift.lateMinutes>0 ? `متأخر ${shift.lateMinutes}د` : 'في الميعاد')
-      : 'لسه محضرش';
-
-    const sub = getTodaysSubmission(e.id);
-    const taskTxt = sub ? (sub.confirmed ? '✅ تاسك مؤكد' : '⏳ تاسك محتاج تأكيد') : '❌ لسه متعملش تاسك';
-
-    const pointsToday = countsFor(e.id, dayStart.getTime());
-    const ratingTxt = computeAvgRatingFor(e.id).replace(/<[^>]*>/g,'');
-
-    return `
-    <div class="overviewRow">
-      <div class="statusDot ${color}"></div>
-      <div class="n">${e.name}</div>
-      <div class="stat">${attendanceTxt}</div>
-      <div class="stat">${taskTxt}</div>
-      <div class="stat hl">${pointsToday} نقطة</div>
-      <div class="stat">⭐ ${ratingTxt}</div>
-    </div>`;
-  }).join('');
-}
-
 function renderScheduleList(){
   const wrap = $('#scheduleList');
   if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
@@ -1735,7 +1735,7 @@ function renderTaskAssignList(){
 function renderPendingSubmissions(){
   const wrap = $('#pendingSubmissionsList');
   const branchEmpIds = new Set(employees.map(e=>e.id));
-  const pending = submissions.filter(s=> branchEmpIds.has(s.employeeId) && !s.confirmed).sort((a,b)=> b.submittedAt-a.submittedAt);
+  const pending = submissions.filter(s=> branchEmpIds.has(s.employeeId) && !s.confirmed && !s.rejected).sort((a,b)=> b.submittedAt-a.submittedAt);
   if(pending.length === 0){ wrap.innerHTML = '<div class="empty">مفيش تنفيذات محتاجة تأكيد دلوقتي</div>'; return; }
   wrap.innerHTML = pending.map(s=>{
     const d = new Date(s.submittedAt);
@@ -1761,8 +1761,8 @@ function renderPendingSubmissions(){
   });
   wrap.querySelectorAll('[data-act="reject"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      if(!confirm('متأكد إنك عايز ترفض التنفيذ ده؟ الموظف هيقدر يصور ويرفع تاني.')) return;
-      try{ await deleteDoc(doc(db,'sales_task_submissions', btn.dataset.id)); }
+      if(!confirm('متأكد إنك عايز ترفض التنفيذ ده؟ الموظف هيشوف علامة رفض وهيقدر يصور تاني.')) return;
+      try{ await updateDoc(doc(db,'sales_task_submissions', btn.dataset.id), { rejected:true, rejectedAt: Date.now(), confirmed:false }); }
       catch(err){ console.error('تعذر الرفض', err); }
     });
   });
