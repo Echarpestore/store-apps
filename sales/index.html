@@ -286,7 +286,7 @@
     <div class="panel">
       <h3>⭐ أداء الموظف + رضا العميل</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
-        ربط تقريبي: كل عملية بيع متربطة بأقرب تقييم عميل جه بعدها في نفس الفرع. مش رابط مؤكد 100%
+        ربط تقريبي: كل عملية بيع متربطة بأقرب تقييم عميل ليها زمنيًا (قبلها أو بعدها) في نفس الفرع. مش رابط مؤكد 100%
         (لأن برنامج التقييم مجهول ومش بياخد رقم فاتورة)، بس بيدّي مؤشر عام.
       </p>
       <div id="perfList"></div>
@@ -471,30 +471,37 @@ function renderPerformanceLink(){
     return;
   }
 
-  // Greedy nearest-forward match: each feedback entry can only be matched once,
-  // to the closest-in-time sale that precedes it (within the allowed window).
+  // Greedy nearest-match: each feedback entry can only be matched once,
+  // to the closest-in-time sale — whether the feedback came shortly before
+  // or shortly after the sale — within the allowed window.
   const usedFeedback = new Set();
   const matched = branchPoints.slice().sort((a,b)=> b.ts - a.ts).map(p=>{
-    let bestIdx = -1, bestDelta = Infinity;
+    let bestIdx = -1, bestAbsDelta = Infinity, bestDelta = 0;
     for(let i=0;i<branchFeedback.length;i++){
       if(usedFeedback.has(i)) continue;
-      const delta = branchFeedback[i].ts - p.ts;
-      if(delta >= 0 && delta <= MATCH_WINDOW_MS && delta < bestDelta){
-        bestDelta = delta; bestIdx = i;
+      const delta = branchFeedback[i].ts - p.ts; // positive = feedback after sale, negative = before
+      const absDelta = Math.abs(delta);
+      if(absDelta <= MATCH_WINDOW_MS && absDelta < bestAbsDelta){
+        bestAbsDelta = absDelta; bestDelta = delta; bestIdx = i;
       }
     }
-    let fb = null, minutesAfter = null;
-    if(bestIdx >= 0){ fb = branchFeedback[bestIdx]; usedFeedback.add(bestIdx); minutesAfter = Math.round(bestDelta/60000); }
-    return { point: p, feedback: fb, minutesAfter };
+    let fb = null, minutesDiff = null, direction = null;
+    if(bestIdx >= 0){
+      fb = branchFeedback[bestIdx];
+      usedFeedback.add(bestIdx);
+      minutesDiff = Math.round(bestAbsDelta/60000);
+      direction = bestDelta >= 0 ? 'بعد' : 'قبل';
+    }
+    return { point: p, feedback: fb, minutesDiff, direction };
   }).slice(0, 100);
 
-  const rows = matched.map(({point, feedback, minutesAfter})=>{
+  const rows = matched.map(({point, feedback, minutesDiff, direction})=>{
     const d = new Date(point.ts);
     const time = d.toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
     let ratingCell = '<span class="ratingBadge none">مفيش تقييم قريب</span>';
     if(feedback){
       const r = RATING_LABELS[feedback.r];
-      ratingCell = `<span class="ratingBadge r${feedback.r}">${r.emoji} ${r.label}</span> <span style="color:var(--sub); font-size:10px;">(بعد ${minutesAfter} د)</span>`;
+      ratingCell = `<span class="ratingBadge r${feedback.r}">${r.emoji} ${r.label}</span> <span style="color:var(--sub); font-size:10px;">(${direction} ${minutesDiff} د)</span>`;
     }
     return `<tr>
       <td>${time}</td>
@@ -649,7 +656,7 @@ async function openScanner(){
   }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     $('#scannerStatus').textContent = '';
-    $('#scannerErr').textContent = 'الكاميرا متاحة بس لو الملف اتفتح من رابط ويب آمن (https). لو بتفتح الملف من جهازك مباشرة، الكاميرا مش هتشتغل — لازم ترفع الملف Online (اسأل Claude يساعدك تعمل ده) عشان السكان يشتغل.';
+    $('#scannerErr').textContent = 'الكاميرا متاحة بس لو الملف اتفتح من رابط ويب آمن (https). لو بتفتح الملف من جهازك مباشرة، الكاميرا مش هتشتغل — لازم ترفع الملف Online عشان السكان يشتغل.';
     return;
   }
   try{
