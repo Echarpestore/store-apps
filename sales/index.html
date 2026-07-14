@@ -155,6 +155,11 @@
   .admin-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; flex-wrap:wrap; gap:12px;}
   .admin-top h2{font-size:22px; font-weight:900; margin:0;}
   .panel{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:20px;}
+  .panel h3{display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none;}
+  .panel h3 .chev{font-size:13px; color:var(--sub); transition:transform .2s; margin-right:8px;}
+  .panel h3.open .chev{transform:rotate(180deg);}
+  .panel-body{display:none;}
+  .panel-body.open{display:block;}
   .panel h3{margin:0 0 16px; font-size:14px; color:var(--sub); font-weight:700;}
   .emp-row{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line);}
   .emp-row:last-child{border-bottom:none;}
@@ -289,9 +294,9 @@
         <div class="branch-tag" id="branchTag">📍 —</div>
         <div class="branch-tag" id="todayAdvancesTag" style="color:var(--gold); margin-top:4px;">💰 سلف النهاردة: 0 ج.م</div>
       </div>
-      <button class="lbBtn" id="openAdvance" style="margin-left:8px; background:linear-gradient(180deg,#2a2410,#1b1e27); border-color:var(--gold-dim);">💰 سلفة</button>
+      <button class="lbBtn" id="openAdvance" style="margin-left:8px; padding:8px 12px; font-size:11px;">💰 سلفة</button>
       <button class="lbBtn" id="openAttendance" style="margin-left:8px;">⏰ الحضور</button>
-      <button class="lbBtn" id="openLeaderboard">🏆 الترتيب</button>
+      <button class="lbBtn" id="openLeaderboard" style="padding:8px 12px; font-size:11px;">🏆 الترتيب</button>
     </div>
     <div class="grid" id="empGrid"></div>
     <div class="empty-hint" id="emptyHint" style="display:none;">لسه مفيش موظفين مضافين. من الترس ⚙️ (ضغطة مطولة) تقدر تضيف موظفين.</div>
@@ -642,6 +647,11 @@
     </div>
 
     <div class="panel">
+      <h3>📜 سجل دفع العمولات</h3>
+      <div id="commissionPaymentLogList"></div>
+    </div>
+
+    <div class="panel">
       <h3>💵 الرواتب الشهرية</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
         الشهر بيتحسب من يوم 1 لحد يوم 30. الراتب بيتصرف يوم 6 من الشهر اللي بعده.
@@ -801,7 +811,7 @@ function applyBranchFilter(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport();
-    renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog();
+    renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
   if($('#attendance').classList.contains('show')) renderAttendanceLists();
@@ -1826,12 +1836,37 @@ function requestFullscreenOnce(){
   if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.().catch(()=>{}); }
 }
 
+let panelsCollapsibleInit = false;
+function initCollapsiblePanels(){
+  if(panelsCollapsibleInit) return;
+  panelsCollapsibleInit = true;
+  document.querySelectorAll('#admin .panel').forEach(panel=>{
+    const heading = panel.querySelector('h3');
+    if(!heading) return;
+    const bodyChildren = Array.from(panel.children).filter(c=> c !== heading);
+    const body = document.createElement('div');
+    body.className = 'panel-body';
+    bodyChildren.forEach(c=> body.appendChild(c));
+    panel.appendChild(body);
+    const chev = document.createElement('span');
+    chev.className = 'chev';
+    chev.textContent = '▾';
+    heading.appendChild(chev);
+    heading.addEventListener('click', ()=>{
+      const isOpen = body.classList.contains('open');
+      body.classList.toggle('open', !isOpen);
+      heading.classList.toggle('open', !isOpen);
+    });
+  });
+}
+
 function openAdmin(){
   $('#admin').classList.add('show');
+  initCollapsiblePanels();
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog();
   }
   else { $('#adminLoginGate').classList.add('show'); }
 }
@@ -1848,7 +1883,7 @@ function doAdminLogin(){
     renderLog();
     renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -2319,16 +2354,22 @@ function renderCommissionPanel(){
 
   wrap.innerHTML = employees.map(e=>{
     const pointsThisMonth = points.filter(p=> p.employeeId===e.id && p.ts >= monthRange.start.getTime() && p.ts <= monthRange.end.getTime()).length;
-    const commissionOwed = Math.round(pointsThisMonth * commissionPerPoint * 100)/100;
-    const paidRecord = commissionPayments.find(p=> p.employeeId===e.id && p.monthLabel===monthLabel);
-    const actionHtml = paidRecord
-      ? `<span style="color:var(--good); font-size:11px;">✅ مدفوعة (${new Date(paidRecord.paidAt).toLocaleDateString('ar-EG')})</span>`
-      : `<button class="confirmBtnSmall" data-act="pay" data-id="${e.id}" data-points="${pointsThisMonth}" data-amount="${commissionOwed}">✅ تم الدفع</button>`;
+    const paidThisMonth = commissionPayments.filter(p=> p.employeeId===e.id && p.monthLabel===monthLabel);
+    const pointsAlreadyPaid = paidThisMonth.reduce((sum,p)=> sum + (p.pointsCount||0), 0);
+    const amountAlreadyPaid = paidThisMonth.reduce((sum,p)=> sum + (p.commissionAmount||0), 0);
+    const newPoints = Math.max(0, pointsThisMonth - pointsAlreadyPaid);
+    const newAmount = Math.round(newPoints * commissionPerPoint * 100)/100;
+
+    const paidNote = amountAlreadyPaid > 0
+      ? `<div class="meta" style="color:var(--sub); font-size:10px;">اتدفع قبل كده: ${amountAlreadyPaid} ج.م (${pointsAlreadyPaid} نقطة)</div>` : '';
+    const actionHtml = newPoints <= 0
+      ? `<span style="color:var(--good); font-size:11px;">✅ كل النقط لحد دلوقتي مدفوعة</span>`
+      : `<button class="confirmBtnSmall" data-act="pay" data-id="${e.id}" data-points="${newPoints}" data-amount="${newAmount}">✅ ادفع ${newAmount} ج.م (${newPoints} نقطة جديدة)</button>`;
     return `
     <div class="emp-row" style="flex-wrap:wrap;">
       <div class="n">${e.name}</div>
-      <div class="meta">${pointsThisMonth} نقطة</div>
-      <div class="meta" style="color:var(--gold); font-weight:700;">${commissionOwed} ج.م</div>
+      <div class="meta">${pointsThisMonth} نقطة إجمالي الشهر</div>
+      ${paidNote}
       ${actionHtml}
     </div>`;
   }).join('');
@@ -2337,7 +2378,7 @@ function renderCommissionPanel(){
     btn.addEventListener('click', async ()=>{
       const emp = employees.find(e=> e.id === btn.dataset.id);
       if(!emp) return;
-      if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عن شهر ${monthLabel}؟`)) return;
+      if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عن ${btn.dataset.points} نقطة جديدة (شهر ${monthLabel})؟`)) return;
       try{
         await addDoc(commissionPaymentsCol, {
           employeeId: emp.id, employeeName: emp.name, branch: currentBranch,
@@ -2347,6 +2388,18 @@ function renderCommissionPanel(){
       }catch(err){ console.error('تعذر تسجيل الدفع', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
     });
   });
+}
+
+function renderCommissionPaymentLog(){
+  const wrap = $('#commissionPaymentLogList');
+  if(!wrap) return;
+  if(commissionPayments.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش عمولات اتدفعت</div>'; return; }
+  const sorted = [...commissionPayments].sort((a,b)=> b.paidAt - a.paidAt);
+  const rows = sorted.map(p=>{
+    const dateStr = new Date(p.paidAt).toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    return `<tr><td>${p.monthLabel}</td><td>${p.employeeName}</td><td>${p.pointsCount} نقطة</td><td style="color:var(--gold); font-weight:700;">${p.commissionAmount} ج.م</td><td>${dateStr}</td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="logTable"><thead><tr><th>الشهر</th><th>الموظف</th><th>النقط</th><th>المبلغ</th><th>تاريخ الدفع</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 $('#saveCommissionBtn')?.addEventListener('click', async ()=>{
@@ -2594,7 +2647,15 @@ async function openAttPhoto(action){
   }
 }
 
-function captureAttPhoto(video){
+function captureAttPhoto(video, retriesLeft){
+  retriesLeft = retriesLeft === undefined ? 5 : retriesLeft;
+  if(!video.videoWidth || !video.videoHeight){
+    // Video metadata not ready yet — wait a bit and try again rather than
+    // capturing a blank/broken frame.
+    if(retriesLeft > 0){ setTimeout(()=> captureAttPhoto(video, retriesLeft-1), 300); return; }
+    finishAttPhoto(null);
+    return;
+  }
   try{
     const canvas = document.createElement('canvas');
     const w = 320, h = Math.round(w * video.videoHeight/video.videoWidth);
@@ -2714,9 +2775,14 @@ function goToAdvAmountStep(){
   showAdvStep(3);
 }
 
+let advSubmitting = false;
 $('#advConfirmBtn')?.addEventListener('click', async ()=>{
+  if(advSubmitting) return;
   const amount = parseFloat($('#advAmountInput').value);
   if(isNaN(amount) || amount <= 0){ $('#advAmountErr').textContent = 'اكتب مبلغ صحيح'; return; }
+  advSubmitting = true;
+  const btn = $('#advConfirmBtn');
+  btn.disabled = true;
   try{
     await addDoc(advancesCol, {
       employeeId: advSelectedEmp.id, employeeName: advSelectedEmp.name, branch: currentBranch,
@@ -2728,6 +2794,8 @@ $('#advConfirmBtn')?.addEventListener('click', async ()=>{
     console.error('تعذر تسجيل السلفة', err);
     $('#advAmountErr').textContent = 'حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف');
   }
+  advSubmitting = false;
+  btn.disabled = false;
 });
 
 // ---------- ADMIN: advances log ----------
@@ -2739,9 +2807,16 @@ function renderAdvancesLog(){
   const rows = sorted.map(a=>{
     const d = new Date(a.ts);
     const dateStr = d.toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    return `<tr><td>${dateStr}</td><td>${a.employeeName}</td><td style="color:var(--gold); font-weight:700;">${a.amount} ج.م</td></tr>`;
+    return `<tr><td>${dateStr}</td><td>${a.employeeName}</td><td style="color:var(--gold); font-weight:700;">${a.amount} ج.م</td><td><button data-id="${a.id}" style="border:none; background:var(--bad); color:#fff; padding:6px 10px; border-radius:7px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">حذف</button></td></tr>`;
   }).join('');
-  wrap.innerHTML = `<table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>المبلغ</th></tr></thead><tbody>${rows}</tbody></table>`;
+  wrap.innerHTML = `<table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>المبلغ</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  wrap.querySelectorAll('button[data-id]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('متأكد إنك عايز تحذف السلفة دي؟')) return;
+      try{ await deleteDoc(doc(db,'sales_advances', btn.dataset.id)); }
+      catch(err){ console.error('تعذر حذف السلفة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
+    });
+  });
 }
 </script>
 <script>
