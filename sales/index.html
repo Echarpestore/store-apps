@@ -1903,7 +1903,15 @@ function initCollapsiblePanels(){
   document.querySelectorAll('#admin .panel').forEach(panel=>{
     const heading = panel.querySelector('h3');
     if(!heading) return;
-    const bodyChildren = Array.from(panel.children).filter(c=> c !== heading);
+    // Some panels wrap the h3 together with a button (e.g. CSV export) in a
+    // flex div — find that direct-child wrapper (or the h3 itself if it's
+    // already a direct child) so the whole header row stays visible and
+    // clickable, instead of being accidentally hidden inside the collapsed body.
+    let headerRow = heading;
+    while(headerRow.parentElement && headerRow.parentElement !== panel){
+      headerRow = headerRow.parentElement;
+    }
+    const bodyChildren = Array.from(panel.children).filter(c=> c !== headerRow);
     const body = document.createElement('div');
     body.className = 'panel-body';
     bodyChildren.forEach(c=> body.appendChild(c));
@@ -1912,7 +1920,9 @@ function initCollapsiblePanels(){
     chev.className = 'chev';
     chev.textContent = '▾';
     heading.appendChild(chev);
-    heading.addEventListener('click', ()=>{
+    headerRow.style.cursor = 'pointer';
+    headerRow.addEventListener('click', (e)=>{
+      if(e.target.closest('button')) return; // don't toggle when tapping an export/action button in the header
       const isOpen = body.classList.contains('open');
       body.classList.toggle('open', !isOpen);
       heading.classList.toggle('open', !isOpen);
