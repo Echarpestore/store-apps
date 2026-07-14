@@ -307,6 +307,18 @@
 </style>
 </head>
 <body>
+<div id="loadFailBanner" style="display:none; position:fixed; inset:0; z-index:99999; background:#12141a; color:#eef0f4; direction:rtl; font-family:'Cairo',sans-serif; align-items:center; justify-content:center; flex-direction:column; gap:16px; padding:24px; text-align:center;">
+  <div style="font-size:48px;">⚠️</div>
+  <h2 style="margin:0; font-size:19px;">الصفحة معملتش لود صح</h2>
+  <p style="color:#8b90a0; font-size:14px; max-width:320px; margin:0;">حصلت مشكلة مؤقتة في تحميل البرنامج (غالبًا مشكلة اتصال بالإنترنت). دوس تحديث وجرب تاني.</p>
+  <button onclick="location.reload()" style="padding:14px 28px; border:none; border-radius:12px; background:#f2c14e; color:#0b0c0f; font-family:'Cairo',sans-serif; font-weight:800; font-size:15px; cursor:pointer;">🔄 تحديث الصفحة</button>
+</div>
+<script>
+  window.__appReady = false;
+  setTimeout(function(){
+    if(!window.__appReady){ document.getElementById('loadFailBanner').style.display = 'flex'; }
+  }, 6000);
+</script>
 <div id="app">
 
   <!-- KIOSK -->
@@ -766,6 +778,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence not enabled:', err.code));
+window.__appReady = true; // signal to the safety-net script that the module loaded and is executing
 
 const empCol = collection(db, 'sales_employees');
 const pointsCol = collection(db, 'sales_points');
