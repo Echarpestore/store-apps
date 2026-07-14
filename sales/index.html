@@ -3241,7 +3241,15 @@ if ('serviceWorker' in navigator) {
 // ==================== ANNOUNCEMENT + DAILY TARGET ====================
 function renderAnnouncementBanner(){
   const el = $('#announcementBanner');
-  if(!el) return;
+  if(!el){
+    console.error('DIAGNOSTIC: #announcementBanner element not found in DOM at all!');
+    return;
+  }
+  // TEMPORARY DIAGNOSTIC: force-show a bright test banner regardless of any
+  // condition, to isolate whether this is a data/logic issue or a display issue.
+  el.style.cssText = 'display:flex !important; position:relative; z-index:999; background:red !important; color:white !important; padding:16px !important; font-size:16px !important; border:4px solid yellow !important;';
+  el.innerHTML = `<span>🔴 DIAGNOSTIC TEST — لو شايف الشريط الأحمر ده يبقى العرض شغال. currentAnnouncement = "${currentAnnouncement}"</span>`;
+  return;
   if(!currentAnnouncement || !currentAnnouncement.trim()){
     el.style.display = 'none';
     el.innerHTML = '';
