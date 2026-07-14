@@ -3291,27 +3291,35 @@ function renderAdminSettingsForm(){
 }
 
 $('#saveAnnouncementBtn')?.addEventListener('click', async ()=>{
+  const btn = $('#saveAnnouncementBtn');
   const text = $('#announcementInput').value.trim();
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
   try{
     await setDoc(doc(db,'sales_settings', currentBranch), { announcement: text }, { merge:true });
     $('#announcementErr').textContent = '';
-    alert(text ? 'اتنشرت الرسالة ✅' : 'اتشالت الرسالة');
+    btn.textContent = text ? 'اتنشرت ✅' : 'اتشالت الرسالة ✅';
   }catch(err){
     console.error('تعذر حفظ الرسالة', err);
     $('#announcementErr').textContent = 'حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف');
   }
+  setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
 });
 
 $('#saveDailyTargetBtn')?.addEventListener('click', async ()=>{
+  const btn = $('#saveDailyTargetBtn');
   const val = parseInt($('#dailyTargetInput').value);
   const target = isNaN(val) || val < 0 ? 0 : val;
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
   try{
     await setDoc(doc(db,'sales_settings', currentBranch), { dailyTarget: target }, { merge:true });
-    alert(target > 0 ? `اتحفظ التارجت: ${target} نقطة` : 'اتلغى التارجت اليومي');
+    btn.textContent = target > 0 ? `اتحفظ (${target}) ✅` : 'اتلغى التارجت ✅';
   }catch(err){
     console.error('تعذر حفظ التارجت', err);
-    alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف'));
+    btn.textContent = 'حصل خطأ ❌';
   }
+  setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
 });
 </script>
 </body>
