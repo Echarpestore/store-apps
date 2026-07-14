@@ -174,6 +174,11 @@
   .admin-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; flex-wrap:wrap; gap:12px;}
   .admin-top h2{font-size:22px; font-weight:900; margin:0;}
   .panel{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px; margin-bottom:20px;}
+  .panel > h3, .panel > div:first-child{cursor:pointer; user-select:none;}
+  .panel h3{display:flex; align-items:center; justify-content:space-between;}
+  .panel h3 .chev{font-size:13px; color:var(--sub); transition:transform .2s; margin-right:8px; display:inline-block;}
+  .panel h3.open .chev{transform:rotate(180deg);}
+  .panel.collapsed > *:not(:first-child){ display:none !important; }
   .panel h3{display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none;}
   .panel h3 .chev{font-size:13px; color:var(--sub); transition:transform .2s; margin-right:8px;}
   .panel h3.open .chev{transform:rotate(180deg);}
@@ -2046,9 +2051,38 @@ function requestFullscreenOnce(){
   if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.().catch(()=>{}); }
 }
 
+let panelsCollapsibleInit = false;
+function initCollapsiblePanels(){
+  if(panelsCollapsibleInit) return;
+  panelsCollapsibleInit = true;
+  document.querySelectorAll('#admin .panel').forEach(panel=>{
+    // Whatever the FIRST child of the panel is (a plain <h3>, or a wrapper div
+    // containing the h3 + an export button) becomes the clickable header row.
+    // No DOM nodes are ever moved — only a CSS class is toggled — so this can
+    // never interfere with any button's own click listener inside the panel.
+    const headerRow = panel.firstElementChild;
+    if(!headerRow) return;
+    const heading = headerRow.tagName === 'H3' ? headerRow : headerRow.querySelector('h3');
+    if(heading){
+      const chev = document.createElement('span');
+      chev.className = 'chev';
+      chev.textContent = '▾';
+      heading.appendChild(chev);
+    }
+    panel.classList.add('collapsed');
+    headerRow.addEventListener('click', (e)=>{
+      if(e.target.closest('button')) return; // don't toggle when tapping an export/action button in the header
+      const willCollapse = !panel.classList.contains('collapsed');
+      panel.classList.toggle('collapsed', willCollapse);
+      if(heading) heading.classList.toggle('open', !willCollapse);
+    });
+  });
+}
+
 function openAdmin(){
   $('#admin').classList.add('show');
   $('#targetCelebration').classList.remove('show'); // safety: never let this linger over the admin panel
+  initCollapsiblePanels();
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
