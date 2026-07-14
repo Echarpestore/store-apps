@@ -2661,11 +2661,14 @@ $('#saveAnnouncementBtn')?.addEventListener('click', async ()=>{
   btn.disabled = true;
   try{
     await setDoc(doc(db,'sales_settings', currentBranch), { announcement: text }, { merge:true });
+    // Update locally right away instead of waiting on the snapshot round-trip.
+    currentAnnouncement = text;
+    renderAnnouncementBanner();
     $('#announcementErr').textContent = '';
     btn.textContent = text ? 'اتنشرت ✅' : 'اتشالت الرسالة ✅';
   }catch(err){
     console.error('تعذر حفظ الرسالة', err);
-    $('#announcementErr').textContent = 'حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف');
+    $('#announcementErr').textContent = 'حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف') + ' (فرع: ' + currentBranch + ')';
   }
   setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
 });
@@ -2678,6 +2681,9 @@ $('#saveDailyTargetBtn')?.addEventListener('click', async ()=>{
   btn.disabled = true;
   try{
     await setDoc(doc(db,'sales_settings', currentBranch), { dailyTarget: target }, { merge:true });
+    // Update locally right away instead of waiting on the snapshot round-trip.
+    dailyTarget = target;
+    renderDailyTargetCard();
     btn.textContent = target > 0 ? `اتحفظ (${target}) ✅` : 'اتلغى التارجت ✅';
   }catch(err){
     console.error('تعذر حفظ التارجت', err);
