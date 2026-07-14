@@ -1957,41 +1957,9 @@ function requestFullscreenOnce(){
   if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.().catch(()=>{}); }
 }
 
-let panelsCollapsibleInit = false;
-function initCollapsiblePanels(){
-  if(panelsCollapsibleInit) return;
-  panelsCollapsibleInit = true;
-  document.querySelectorAll('#admin .panel').forEach(panel=>{
-    const heading = panel.querySelector('h3');
-    if(!heading) return;
-    // Some panels wrap the h3 together with a button (e.g. CSV export) in a
-    // flex div — find that direct-child wrapper (or the h3 itself if it's
-    // already a direct child) so the whole header row stays visible and clickable.
-    let headerRow = heading;
-    while(headerRow.parentElement && headerRow.parentElement !== panel){
-      headerRow = headerRow.parentElement;
-    }
-    const chev = document.createElement('span');
-    chev.className = 'chev';
-    chev.textContent = '▾';
-    heading.appendChild(chev);
-    headerRow.style.cursor = 'pointer';
-    // Purely a CSS class toggle — no DOM nodes are ever moved, so this can
-    // never interfere with any button or its click listeners inside the panel.
-    panel.classList.add('collapsed');
-    headerRow.addEventListener('click', (e)=>{
-      if(e.target.closest('button')) return; // don't toggle when tapping an export/action button in the header
-      const willCollapse = !panel.classList.contains('collapsed');
-      panel.classList.toggle('collapsed', willCollapse);
-      heading.classList.toggle('open', !willCollapse);
-    });
-  });
-}
-
 function openAdmin(){
   $('#admin').classList.add('show');
   $('#targetCelebration').classList.remove('show'); // safety: never let this linger over the admin panel
-  initCollapsiblePanels();
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
@@ -2686,6 +2654,38 @@ $('#saveCommissionBtn')?.addEventListener('click', async ()=>{
   }catch(err){ console.error('تعذر حفظ العمولة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
 });
 
+$('#saveAnnouncementBtn')?.addEventListener('click', async ()=>{
+  const btn = $('#saveAnnouncementBtn');
+  const text = $('#announcementInput').value.trim();
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  try{
+    await setDoc(doc(db,'sales_settings', currentBranch), { announcement: text }, { merge:true });
+    $('#announcementErr').textContent = '';
+    btn.textContent = text ? 'اتنشرت ✅' : 'اتشالت الرسالة ✅';
+  }catch(err){
+    console.error('تعذر حفظ الرسالة', err);
+    $('#announcementErr').textContent = 'حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف');
+  }
+  setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
+});
+
+$('#saveDailyTargetBtn')?.addEventListener('click', async ()=>{
+  const btn = $('#saveDailyTargetBtn');
+  const val = parseInt($('#dailyTargetInput').value);
+  const target = isNaN(val) || val < 0 ? 0 : val;
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  try{
+    await setDoc(doc(db,'sales_settings', currentBranch), { dailyTarget: target }, { merge:true });
+    btn.textContent = target > 0 ? `اتحفظ (${target}) ✅` : 'اتلغى التارجت ✅';
+  }catch(err){
+    console.error('تعذر حفظ التارجت', err);
+    btn.textContent = 'حصل خطأ ❌';
+  }
+  setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
+});
+
 // ---------- SALARY (admin) ----------
 const FREE_DAYOFF_PER_MONTH = 4;
 
@@ -3287,38 +3287,6 @@ function renderAdminSettingsForm(){
   if(annInput && document.activeElement !== annInput) annInput.value = currentAnnouncement || '';
   if(targetInput && document.activeElement !== targetInput) targetInput.value = dailyTarget || '';
 }
-
-$('#saveAnnouncementBtn')?.addEventListener('click', async ()=>{
-  const btn = $('#saveAnnouncementBtn');
-  const text = $('#announcementInput').value.trim();
-  const originalLabel = btn.textContent;
-  btn.disabled = true;
-  try{
-    await setDoc(doc(db,'sales_settings', currentBranch), { announcement: text }, { merge:true });
-    $('#announcementErr').textContent = '';
-    btn.textContent = text ? 'اتنشرت ✅' : 'اتشالت الرسالة ✅';
-  }catch(err){
-    console.error('تعذر حفظ الرسالة', err);
-    $('#announcementErr').textContent = 'حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف');
-  }
-  setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
-});
-
-$('#saveDailyTargetBtn')?.addEventListener('click', async ()=>{
-  const btn = $('#saveDailyTargetBtn');
-  const val = parseInt($('#dailyTargetInput').value);
-  const target = isNaN(val) || val < 0 ? 0 : val;
-  const originalLabel = btn.textContent;
-  btn.disabled = true;
-  try{
-    await setDoc(doc(db,'sales_settings', currentBranch), { dailyTarget: target }, { merge:true });
-    btn.textContent = target > 0 ? `اتحفظ (${target}) ✅` : 'اتلغى التارجت ✅';
-  }catch(err){
-    console.error('تعذر حفظ التارجت', err);
-    btn.textContent = 'حصل خطأ ❌';
-  }
-  setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
-});
 </script>
 </body>
 </html>
