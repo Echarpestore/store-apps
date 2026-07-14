@@ -489,6 +489,7 @@
         <video id="attPhotoVideo" autoplay muted playsinline></video>
       </div>
       <div class="field-err" id="attPhotoErr"></div>
+      <button style="width:100%; display:none; margin-bottom:8px; padding:12px; border:none; border-radius:12px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:13px; cursor:pointer;" id="attPhotoRetryBtn">🔄 حاول تاني</button>
       <button style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="attPhotoCancel">إلغاء</button>
     </div>
   </div>
@@ -2783,6 +2784,7 @@ async function openAttPhoto(action){
   const emp = employees.find(e=> e.id === action.empId);
   $('#attPhotoName').textContent = emp ? emp.name : '—';
   $('#attPhotoErr').textContent = '';
+  $('#attPhotoRetryBtn').style.display = 'none';
   $('#attPhotoStatus').textContent = 'بيفتح الكاميرا...';
   $('#attPhotoOverlay').classList.add('show');
   try{
@@ -2793,57 +2795,59 @@ async function openAttPhoto(action){
     $('#attPhotoStatus').textContent = 'بص للكاميرا...';
     waitForFaceThenCapture(video, Date.now());
   }catch(err){
+    // The photo is mandatory — no camera means no clock in/out. Don't
+    // proceed; let the person retry or cancel entirely.
     $('#attPhotoStatus').textContent = '';
-    $('#attPhotoErr').textContent = 'مقدرش أوصل للكاميرا: ' + (err && err.name ? err.name : 'غير معروف') + '. هيتسجل من غير صورة.';
-    setTimeout(()=> finishAttPhoto(null), 1200);
+    $('#attPhotoErr').textContent = 'مقدرش أوصل للكاميرا (' + (err && err.name ? err.name : 'غير معروف') + '). الصورة إجبارية — مينفعش تسجل حضور/انصراف من غيرها. اتأكد من إذن الكاميرا وحاول تاني.';
+    $('#attPhotoRetryBtn').style.display = 'block';
   }
 }
-
-const ATT_PHOTO_FACE_TIMEOUT_MS = 6000; // give up waiting for a face after this and just snap anyway
+$('#attPhotoRetryBtn')?.addEventListener('click', ()=>{
+  if(pendingPhotoAction) openAttPhoto(pendingPhotoAction);
+});
 
 async function waitForFaceThenCapture(video, startTime){
   if(!pendingPhotoAction) return; // cancelled
-  const timedOut = Date.now() - startTime > ATT_PHOTO_FACE_TIMEOUT_MS;
 
   // Uses the browser's built-in face detector (no external library, fast and
-  // free) when available, so we only snap once an actual face is in frame
-  // instead of blindly capturing after a fixed delay (which could catch the
-  // ceiling or an empty background). Falls back to a short fixed wait if the
-  // API isn't supported on this browser.
+  // free) when available, so we only snap once an actual face is genuinely
+  // in frame instead of blindly capturing after a fixed delay. The photo is
+  // mandatory, so this keeps scanning indefinitely — the person can only
+  // exit without a photo by cancelling the whole action.
   if('FaceDetector' in window){
     try{
       if(!attFaceDetector) attFaceDetector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
       const faces = await attFaceDetector.detect(video);
       if(faces && faces.length > 0){
+        $('#attPhotoErr').textContent = '';
         $('#attPhotoStatus').textContent = 'لقيت وشك، بيصور...';
         setTimeout(()=> captureAttPhoto(video), 200);
         return;
       }
-      if(timedOut){
-        $('#attPhotoStatus').textContent = 'بيصور...';
-        captureAttPhoto(video);
-        return;
-      }
-      $('#attPhotoStatus').textContent = 'بدور على وشك...';
+      const waitedSec = Math.round((Date.now()-startTime)/1000);
+      $('#attPhotoStatus').textContent = waitedSec > 4 ? 'لسه بدور على وشك... قرّب من الكاميرا' : 'بدور على وشك...';
       setTimeout(()=> waitForFaceThenCapture(video, startTime), 350);
     }catch(err){
-      // Detector failed unexpectedly — don't get stuck, just capture.
-      captureAttPhoto(video);
+      // Detector hiccupped — retry rather than silently skipping the photo.
+      setTimeout(()=> waitForFaceThenCapture(video, startTime), 500);
     }
   } else {
-    // No native face detector on this browser — keep the short fixed delay as before.
+    // No native face detector on this browser — still take a photo (just
+    // without the "wait for a face" smarts), since a photo is mandatory either way.
     setTimeout(()=> captureAttPhoto(video), 900);
   }
 }
 let attFaceDetector = null;
 
 function captureAttPhoto(video, retriesLeft){
-  retriesLeft = retriesLeft === undefined ? 5 : retriesLeft;
+  retriesLeft = retriesLeft === undefined ? 10 : retriesLeft;
   if(!video.videoWidth || !video.videoHeight){
     // Video metadata not ready yet — wait a bit and try again rather than
     // capturing a blank/broken frame.
     if(retriesLeft > 0){ setTimeout(()=> captureAttPhoto(video, retriesLeft-1), 300); return; }
-    finishAttPhoto(null);
+    $('#attPhotoStatus').textContent = '';
+    $('#attPhotoErr').textContent = 'الكاميرا مش راجعة صورة واضحة. الصورة إجبارية — حاول تاني.';
+    $('#attPhotoRetryBtn').style.display = 'block';
     return;
   }
   try{
@@ -2856,7 +2860,9 @@ function captureAttPhoto(video, retriesLeft){
     finishAttPhoto(dataUri);
   }catch(err){
     console.error('تعذر التقاط الصورة', err);
-    finishAttPhoto(null);
+    $('#attPhotoStatus').textContent = '';
+    $('#attPhotoErr').textContent = 'حصل خطأ في التقاط الصورة. الصورة إجبارية — حاول تاني.';
+    $('#attPhotoRetryBtn').style.display = 'block';
   }
 }
 
