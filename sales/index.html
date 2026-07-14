@@ -1248,25 +1248,20 @@ async function clockOut(empId, photoDataUri){
   const emp = employees.find(e=> e.id === empId);
   const now = Date.now();
 
-  let overtimeMinutes = 0;
-  if(emp && emp.scheduledEndTime){
-    const [h,m] = emp.scheduledEndTime.split(':').map(Number);
-    const scheduledEnd = new Date();
-    scheduledEnd.setHours(h, m, 0, 0);
-    // Only count overtime if the shift actually started before the scheduled end
-    // time and ran past it — avoids nonsense numbers if the end time configured
-    // is earlier than when the employee clocked in (e.g. misconfigured schedule).
-    if(shift.clockInTs < scheduledEnd.getTime() && now > scheduledEnd.getTime()){
-      overtimeMinutes = Math.round((now - scheduledEnd.getTime())/60000);
-    }
-  }
+  // Overtime is based on actual shift duration exceeding the standard 8h15m
+  // (495 minutes) — not on a fixed clock-out time. This naturally accounts
+  // for lateness: if the employee arrived late, they simply need to work
+  // past 8h15m of ACTUAL time before it counts as overtime, regardless of
+  // what time of day their shift started or ends.
+  const STANDARD_SHIFT_MINUTES = 8*60 + 15; // 495
+  const totalMin = Math.round((now - shift.clockInTs)/60000);
+  const overtimeMinutes = Math.max(0, totalMin - STANDARD_SHIFT_MINUTES);
 
   try{
     await updateDoc(doc(db,'sales_shifts', shift.id), { clockOutTs: now, overtimeMinutes, clockOutPhoto: photoDataUri || null });
-    const totalMin = Math.round((now - shift.clockInTs)/60000);
     const h = Math.floor(totalMin/60), m = totalMin%60;
     let msg = `تم تسجيل الانصراف ✅\nمدة الشيفت: ${h} س ${m} د`;
-    if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي بعد ميعادك: ${overtimeMinutes} دقيقة`;
+    if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي (بعد 8 ساعات وربع): ${overtimeMinutes} دقيقة`;
     alert(msg);
   }catch(err){
     console.error('تعذر تسجيل الانصراف', err);
@@ -2781,7 +2776,7 @@ document.querySelector('#saveDailyTargetBtn')?.addEventListener('click', async (
     btn.textContent = target > 0 ? `اتحفظ (${target}) ✅` : 'اتلغى التارجت ✅';
   }catch(err){
     console.error('تعذر حفظ التارجت', err);
-    btn.textContent = 'حصل خطأ ❌';
+    btn.textContent = 'خطأ: ' + (err && err.message ? err.message.slice(0,40) : String(err).slice(0,40));
   }
   setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
 });
