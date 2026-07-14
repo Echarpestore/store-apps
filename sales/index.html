@@ -10,6 +10,7 @@
 <link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <style>
   :root{
     --bg:#12141a; --panel:#1b1e27; --panel2:#232733;
@@ -2816,6 +2817,22 @@ $('#attPhotoRetryBtn')?.addEventListener('click', ()=>{
   if(pendingPhotoAction) openAttPhoto(pendingPhotoAction);
 });
 
+let faceDetectModelReady = false;
+(async function loadTinyFaceDetectorModel(){
+  // Only used as a fallback when the native FaceDetector API isn't available.
+  // We load ONLY the tiny detector model (no landmarks, no recognition net) —
+  // skipping those heavier steps is what keeps this fast.
+  if('FaceDetector' in window) return; // native API available, no need for this at all
+  try{
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    faceDetectModelReady = true;
+  }catch(err){
+    console.error('تعذر تحميل نموذج كشف الوجه الاحتياطي', err);
+    faceDetectModelReady = false;
+  }
+})();
+
 async function waitForFaceThenCapture(video, startTime){
   if(!pendingPhotoAction) return; // cancelled
 
@@ -2841,11 +2858,39 @@ async function waitForFaceThenCapture(video, startTime){
       // Detector hiccupped — retry rather than silently skipping the photo.
       setTimeout(()=> waitForFaceThenCapture(video, startTime), 500);
     }
-  } else {
-    // No native face detector on this browser — still take a photo (just
-    // without the "wait for a face" smarts), since a photo is mandatory either way.
-    setTimeout(()=> captureAttPhoto(video), 900);
+    return;
   }
+
+  // Fallback for browsers without the native API: lightweight face-api.js
+  // detection-only check (no landmarks/descriptor — that's what keeps it fast).
+  if(faceDetectModelReady){
+    try{
+      const result = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }));
+      if(result){
+        $('#attPhotoErr').textContent = '';
+        $('#attPhotoStatus').textContent = 'لقيت وشك، بيصور...';
+        setTimeout(()=> captureAttPhoto(video), 200);
+        return;
+      }
+      const waitedSec = Math.round((Date.now()-startTime)/1000);
+      $('#attPhotoStatus').textContent = waitedSec > 4 ? 'لسه بدور على وشك... قرّب من الكاميرا' : 'بدور على وشك...';
+      setTimeout(()=> waitForFaceThenCapture(video, startTime), 400);
+    }catch(err){
+      setTimeout(()=> waitForFaceThenCapture(video, startTime), 500);
+    }
+    return;
+  }
+
+  // Model still loading (first moments after opening) — wait briefly rather than skipping the check.
+  if(Date.now() - startTime < 4000){
+    $('#attPhotoStatus').textContent = 'بيجهّز كشف الوجه...';
+    setTimeout(()=> waitForFaceThenCapture(video, startTime), 300);
+    return;
+  }
+
+  // Last resort: neither detection method available after waiting — still
+  // take a photo (mandatory either way), just without the "wait for a face" smarts.
+  setTimeout(()=> captureAttPhoto(video), 500);
 }
 let attFaceDetector = null;
 
