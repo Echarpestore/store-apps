@@ -2790,15 +2790,52 @@ async function openAttPhoto(action){
     const video = $('#attPhotoVideo');
     video.srcObject = attPhotoStream;
     await video.play();
-    $('#attPhotoStatus').textContent = 'بيصور...';
-    // Give the camera a brief moment to focus/expose before snapping.
-    setTimeout(()=> captureAttPhoto(video), 900);
+    $('#attPhotoStatus').textContent = 'بص للكاميرا...';
+    waitForFaceThenCapture(video, Date.now());
   }catch(err){
     $('#attPhotoStatus').textContent = '';
     $('#attPhotoErr').textContent = 'مقدرش أوصل للكاميرا: ' + (err && err.name ? err.name : 'غير معروف') + '. هيتسجل من غير صورة.';
     setTimeout(()=> finishAttPhoto(null), 1200);
   }
 }
+
+const ATT_PHOTO_FACE_TIMEOUT_MS = 6000; // give up waiting for a face after this and just snap anyway
+
+async function waitForFaceThenCapture(video, startTime){
+  if(!pendingPhotoAction) return; // cancelled
+  const timedOut = Date.now() - startTime > ATT_PHOTO_FACE_TIMEOUT_MS;
+
+  // Uses the browser's built-in face detector (no external library, fast and
+  // free) when available, so we only snap once an actual face is in frame
+  // instead of blindly capturing after a fixed delay (which could catch the
+  // ceiling or an empty background). Falls back to a short fixed wait if the
+  // API isn't supported on this browser.
+  if('FaceDetector' in window){
+    try{
+      if(!attFaceDetector) attFaceDetector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+      const faces = await attFaceDetector.detect(video);
+      if(faces && faces.length > 0){
+        $('#attPhotoStatus').textContent = 'لقيت وشك، بيصور...';
+        setTimeout(()=> captureAttPhoto(video), 200);
+        return;
+      }
+      if(timedOut){
+        $('#attPhotoStatus').textContent = 'بيصور...';
+        captureAttPhoto(video);
+        return;
+      }
+      $('#attPhotoStatus').textContent = 'بدور على وشك...';
+      setTimeout(()=> waitForFaceThenCapture(video, startTime), 350);
+    }catch(err){
+      // Detector failed unexpectedly — don't get stuck, just capture.
+      captureAttPhoto(video);
+    }
+  } else {
+    // No native face detector on this browser — keep the short fixed delay as before.
+    setTimeout(()=> captureAttPhoto(video), 900);
+  }
+}
+let attFaceDetector = null;
 
 function captureAttPhoto(video, retriesLeft){
   retriesLeft = retriesLeft === undefined ? 5 : retriesLeft;
