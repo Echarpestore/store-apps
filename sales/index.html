@@ -160,6 +160,12 @@
   .panel h3.open .chev{transform:rotate(180deg);}
   .panel-body{display:none;}
   .panel-body.open{display:block;}
+  .dayLogGroup{border:1px solid var(--line); border-radius:12px; margin-bottom:10px; overflow:hidden;}
+  .dayLogHead{display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:var(--panel2); cursor:pointer; font-size:13px; font-weight:700; user-select:none;}
+  .dayLogHead .chev{font-size:11px; margin-right:4px; transition:transform .2s; display:inline-block;}
+  .dayLogHead.open .chev{transform:rotate(180deg);}
+  .dayLogBody{display:none; padding:10px 14px;}
+  .dayLogBody.open{display:block;}
   .panel h3{margin:0 0 16px; font-size:14px; color:var(--sub); font-weight:700;}
   .emp-row{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line);}
   .emp-row:last-child{border-bottom:none;}
@@ -560,7 +566,11 @@
       <div id="empList"></div>
     </div>
     <div class="panel">
-      <h3>سجل العمليات (كل التاريخ)</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <h3 style="margin:0;">سجل العمليات (مقسّم باليوم)</h3>
+        <button class="backBtn" id="exportPointsCsvBtn">⬇️ CSV كامل</button>
+      </div>
+      <p style="color:var(--sub); font-size:12px; margin:-4px 0 14px;">كل يوم يفتح لوحده بالضغط عليه. آخر 60 يوم بيظهروا هنا؛ التاريخ الأقدم من كده متاح بالكامل عن طريق تصدير CSV.</p>
       <div id="logList"></div>
     </div>
     <div class="panel">
@@ -895,26 +905,56 @@ function renderLog(){
   const wrap = $('#logList');
   const branchEmps = reviewEmployeesFor(viewBranch);
   const branchEmpIds = new Set(branchEmps.map(e=>e.id));
-  const branchPoints = points.filter(p=> branchEmpIds.has(p.employeeId))
-    .sort((a,b)=> b.ts - a.ts);
+  const branchPoints = points.filter(p=> branchEmpIds.has(p.employeeId)).sort((a,b)=> b.ts - a.ts);
   if(branchPoints.length === 0){
     wrap.innerHTML = '<div class="empty">لسه مفيش عمليات مسجلة</div>';
     return;
   }
-  const rows = branchPoints.map(p=>{
+
+  // Group by calendar day (local time), newest first.
+  const byDay = new Map();
+  branchPoints.forEach(p=>{
     const d = new Date(p.ts);
-    const time = d.toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
-    const emp = allEmployees.find(e=>e.id===p.employeeId);
-    return `<tr>
-      <td>${time}</td>
-      <td>${p.employeeName || ''}</td>
-      <td>${emp?.branch || '—'}</td>
-      <td>${p.invoiceNumber || '—'}</td>
-      <td><button data-id="${p.id}">حذف</button></td>
-    </tr>`;
+    const key = d.toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric'});
+    if(!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(p);
+  });
+  const dayKeys = Array.from(byDay.keys()).slice(0, 60); // cap rendered history to the last 60 days
+
+  wrap.innerHTML = dayKeys.map(dayKey=>{
+    const dayPoints = byDay.get(dayKey);
+    const rows = dayPoints.map(p=>{
+      const time = new Date(p.ts).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'});
+      const emp = allEmployees.find(e=>e.id===p.employeeId);
+      return `<tr>
+        <td>${time}</td>
+        <td>${p.employeeName || ''}</td>
+        <td>${emp?.branch || '—'}</td>
+        <td>${p.invoiceNumber || '—'}</td>
+        <td><button data-id="${p.id}">حذف</button></td>
+      </tr>`;
+    }).join('');
+    return `
+    <div class="dayLogGroup">
+      <div class="dayLogHead" data-day="${dayKey}">
+        <span>${dayKey}</span>
+        <span style="color:var(--gold);">${dayPoints.length} عملية <span class="chev">▾</span></span>
+      </div>
+      <div class="dayLogBody">
+        <table class="logTable"><thead><tr><th>الوقت</th><th>الموظف</th><th>الفرع</th><th>رقم الفاتورة</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
   }).join('');
-  wrap.innerHTML = `<table class="logTable"><thead><tr><th>الوقت</th><th>الموظف</th><th>الفرع</th><th>رقم الفاتورة</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
-  wrap.querySelectorAll('button').forEach(btn=>{
+
+  wrap.querySelectorAll('.dayLogHead').forEach(head=>{
+    head.addEventListener('click', ()=>{
+      const body = head.nextElementSibling;
+      const isOpen = body.classList.contains('open');
+      body.classList.toggle('open', !isOpen);
+      head.classList.toggle('open', !isOpen);
+    });
+  });
+  wrap.querySelectorAll('button[data-id]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       if(!confirm('متأكد إنك عايز تحذف العملية دي؟')) return;
       try{ await deleteDoc(doc(db,'sales_points', btn.dataset.id)); }
@@ -922,6 +962,25 @@ function renderLog(){
     });
   });
 }
+
+$('#exportPointsCsvBtn')?.addEventListener('click', ()=>{
+  const branchEmps = reviewEmployeesFor(viewBranch);
+  const branchEmpIds = new Set(branchEmps.map(e=>e.id));
+  const branchPoints = points.filter(p=> branchEmpIds.has(p.employeeId)).sort((a,b)=> b.ts - a.ts);
+  if(branchPoints.length === 0){ alert('لا توجد بيانات للتصدير'); return; }
+  let csv = 'التاريخ,الوقت,الموظف,الفرع,رقم الفاتورة\n';
+  branchPoints.forEach(p=>{
+    const d = new Date(p.ts);
+    const emp = allEmployees.find(e=>e.id===p.employeeId);
+    csv += `"${d.toLocaleDateString('ar-EG')}","${d.toLocaleTimeString('ar-EG')}","${p.employeeName||''}","${emp?.branch||'—'}","${p.invoiceNumber||'—'}"\n`;
+  });
+  const blob = new Blob(["\ufeff"+csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'points-log-' + (viewBranch==='__ALL__'?'all-branches':viewBranch) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
 
 const RATING_LABELS = {
   1:{label:'مضايقني جدًا', emoji:'😠'},
@@ -2140,17 +2199,48 @@ function renderRewardsList(){
   const branchEmpIds = new Set(employees.map(e=>e.id));
   const list = rewards.filter(r=> branchEmpIds.has(r.employeeId)).sort((a,b)=> b.earnedAt-a.earnedAt);
   if(list.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش كسب مكافأة</div>'; return; }
-  const rows = list.map(r=>{
-    const d = new Date(r.earnedAt);
-    const time = d.toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'});
-    return `<tr>
-      <td>${time}</td><td>${r.employeeName}</td>
-      <td>${r.type==='weekly'?'أسبوعية':'شهرية'}</td>
-      <td>${r.periodLabel}</td>
-      <td style="color:var(--gold); font-weight:700;">${r.amount} ج.م</td>
-    </tr>`;
+
+  const byMonth = new Map();
+  list.forEach(r=>{
+    const key = new Date(r.earnedAt).toLocaleDateString('ar-EG', {month:'long', year:'numeric'});
+    if(!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key).push(r);
+  });
+
+  wrap.innerHTML = Array.from(byMonth.entries()).map(([monthKey, items])=>{
+    const rows = items.map(r=>{
+      const time = new Date(r.earnedAt).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'});
+      return `<tr>
+        <td>${time}</td><td>${r.employeeName}</td>
+        <td>${r.type==='weekly'?'أسبوعية':'شهرية'}</td>
+        <td>${r.periodLabel}</td>
+        <td style="color:var(--gold); font-weight:700;">${r.amount} ج.م</td>
+      </tr>`;
+    }).join('');
+    return `
+    <div class="dayLogGroup">
+      <div class="dayLogHead" data-group="${monthKey}">
+        <span>${monthKey}</span>
+        <span style="color:var(--gold);">${items.length} مكافأة <span class="chev">▾</span></span>
+      </div>
+      <div class="dayLogBody">
+        <table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>النوع</th><th>الفترة</th><th>المبلغ</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
   }).join('');
-  wrap.innerHTML = `<table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>النوع</th><th>الفترة</th><th>المبلغ</th></tr></thead><tbody>${rows}</tbody></table>`;
+  wireDayLogToggles(wrap);
+}
+
+// Shared toggle wiring for any collapsible day/month log group.
+function wireDayLogToggles(wrap){
+  wrap.querySelectorAll('.dayLogHead').forEach(head=>{
+    head.addEventListener('click', ()=>{
+      const body = head.nextElementSibling;
+      const isOpen = body.classList.contains('open');
+      body.classList.toggle('open', !isOpen);
+      head.classList.toggle('open', !isOpen);
+    });
+  });
 }
 
 // ---------- FULL ATTENDANCE HISTORY (admin) ----------
@@ -2175,28 +2265,49 @@ function renderAttendanceHistory(){
   const wrap = $('#attendanceHistoryList');
   if(!wrap) return;
   populateAttendanceEmpFilter();
-  const list = getAttendanceHistoryList().slice(0, 300);
+  const list = getAttendanceHistoryList().slice(0, 500);
   if(list.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش سجل حضور</div>'; return; }
-  const rows = list.map(s=>{
-    const inD = new Date(s.clockInTs);
-    const dateStr = inD.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'});
-    const inTime = inD.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
-    const outTime = s.clockOutTs ? new Date(s.clockOutTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : '—';
-    const duration = s.clockOutTs ? formatDuration(s.clockOutTs - s.clockInTs) : 'لسه شغال';
-    const lateTxt = s.lateMinutes > 0 ? `${s.lateMinutes}د` : '—';
-    const otTxt = s.overtimeMinutes > 0 ? `${s.overtimeMinutes}د` : '—';
-    const inPhoto = s.clockInPhoto ? `<img src="${s.clockInPhoto}" class="lightboxable" style="width:32px; height:32px; border-radius:6px; object-fit:cover; cursor:pointer;">` : '—';
-    const outPhoto = s.clockOutPhoto ? `<img src="${s.clockOutPhoto}" class="lightboxable" style="width:32px; height:32px; border-radius:6px; object-fit:cover; cursor:pointer;">` : '—';
-    return `<tr>
-      <td>${dateStr}</td><td>${s.employeeName}</td><td>${inTime}</td><td>${outTime}</td>
-      <td>${duration}</td>
-      <td style="color:${s.lateMinutes>0?'var(--bad)':'var(--sub)'}">${lateTxt}</td>
-      <td style="color:${s.overtimeMinutes>0?'var(--gold)':'var(--sub)'}">${otTxt}</td>
-      <td>${inPhoto}</td>
-      <td>${outPhoto}</td>
-    </tr>`;
+
+  const byDay = new Map();
+  list.forEach(s=>{
+    const key = new Date(s.clockInTs).toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric'});
+    if(!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(s);
+  });
+  const dayKeys = Array.from(byDay.keys()).slice(0, 90);
+
+  wrap.innerHTML = dayKeys.map(dayKey=>{
+    const items = byDay.get(dayKey);
+    const rows = items.map(s=>{
+      const inTime = new Date(s.clockInTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+      const outTime = s.clockOutTs ? new Date(s.clockOutTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : '—';
+      const duration = s.clockOutTs ? formatDuration(s.clockOutTs - s.clockInTs) : 'لسه شغال';
+      const lateTxt = s.lateMinutes > 0 ? `${s.lateMinutes}د` : '—';
+      const otTxt = s.overtimeMinutes > 0 ? `${s.overtimeMinutes}د` : '—';
+      const inPhoto = s.clockInPhoto ? `<img src="${s.clockInPhoto}" class="lightboxable" style="width:32px; height:32px; border-radius:6px; object-fit:cover; cursor:pointer;">` : '—';
+      const outPhoto = s.clockOutPhoto ? `<img src="${s.clockOutPhoto}" class="lightboxable" style="width:32px; height:32px; border-radius:6px; object-fit:cover; cursor:pointer;">` : '—';
+      return `<tr>
+        <td>${s.employeeName}</td><td>${inTime}</td><td>${outTime}</td>
+        <td>${duration}</td>
+        <td style="color:${s.lateMinutes>0?'var(--bad)':'var(--sub)'}">${lateTxt}</td>
+        <td style="color:${s.overtimeMinutes>0?'var(--gold)':'var(--sub)'}">${otTxt}</td>
+        <td>${inPhoto}</td>
+        <td>${outPhoto}</td>
+      </tr>`;
+    }).join('');
+    return `
+    <div class="dayLogGroup">
+      <div class="dayLogHead" data-group="${dayKey}">
+        <span>${dayKey}</span>
+        <span style="color:var(--gold);">${items.length} سجل <span class="chev">▾</span></span>
+      </div>
+      <div class="dayLogBody">
+        <div style="overflow-x:auto;"><table class="logTable"><thead><tr><th>الموظف</th><th>حضور</th><th>انصراف</th><th>المدة</th><th>تأخير</th><th>إضافي</th><th>صورة حضور</th><th>صورة انصراف</th></tr></thead><tbody>${rows}</tbody></table></div>
+      </div>
+    </div>`;
   }).join('');
-  wrap.innerHTML = `<div style="overflow-x:auto;"><table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>حضور</th><th>انصراف</th><th>المدة</th><th>تأخير</th><th>إضافي</th><th>صورة حضور</th><th>صورة انصراف</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+
+  wireDayLogToggles(wrap);
   wrap.querySelectorAll('.lightboxable').forEach(img=>{
     img.addEventListener('click', ()=> openLightbox(img.src));
   });
@@ -2395,11 +2506,32 @@ function renderCommissionPaymentLog(){
   if(!wrap) return;
   if(commissionPayments.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش عمولات اتدفعت</div>'; return; }
   const sorted = [...commissionPayments].sort((a,b)=> b.paidAt - a.paidAt);
-  const rows = sorted.map(p=>{
-    const dateStr = new Date(p.paidAt).toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    return `<tr><td>${p.monthLabel}</td><td>${p.employeeName}</td><td>${p.pointsCount} نقطة</td><td style="color:var(--gold); font-weight:700;">${p.commissionAmount} ج.م</td><td>${dateStr}</td></tr>`;
+
+  const byMonth = new Map();
+  sorted.forEach(p=>{
+    const key = p.monthLabel || 'غير معروف';
+    if(!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key).push(p);
+  });
+
+  wrap.innerHTML = Array.from(byMonth.entries()).map(([monthKey, items])=>{
+    const monthTotal = items.reduce((sum,p)=> sum + p.commissionAmount, 0);
+    const rows = items.map(p=>{
+      const dateStr = new Date(p.paidAt).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'});
+      return `<tr><td>${p.employeeName}</td><td>${p.pointsCount} نقطة</td><td style="color:var(--gold); font-weight:700;">${p.commissionAmount} ج.م</td><td>${dateStr}</td></tr>`;
+    }).join('');
+    return `
+    <div class="dayLogGroup">
+      <div class="dayLogHead" data-group="${monthKey}">
+        <span>${monthKey}</span>
+        <span style="color:var(--gold);">${monthTotal} ج.م (${items.length}) <span class="chev">▾</span></span>
+      </div>
+      <div class="dayLogBody">
+        <table class="logTable"><thead><tr><th>الموظف</th><th>النقط</th><th>المبلغ</th><th>تاريخ الدفع</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
   }).join('');
-  wrap.innerHTML = `<table class="logTable"><thead><tr><th>الشهر</th><th>الموظف</th><th>النقط</th><th>المبلغ</th><th>تاريخ الدفع</th></tr></thead><tbody>${rows}</tbody></table>`;
+  wireDayLogToggles(wrap);
 }
 
 $('#saveCommissionBtn')?.addEventListener('click', async ()=>{
@@ -2531,11 +2663,32 @@ function renderSalaryPaymentLog(){
   if(!wrap) return;
   if(salaryPayments.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش رواتب اتصرفت</div>'; return; }
   const sorted = [...salaryPayments].sort((a,b)=> b.paidAt - a.paidAt);
-  const rows = sorted.map(p=>{
-    const dateStr = new Date(p.paidAt).toLocaleDateString('ar-EG');
-    return `<tr><td>${p.periodLabel}</td><td>${p.employeeName}</td><td style="color:var(--good); font-weight:700;">${p.amount} ج.م</td><td>${dateStr}</td></tr>`;
+
+  const byMonth = new Map();
+  sorted.forEach(p=>{
+    const key = p.periodLabel || 'غير معروف';
+    if(!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key).push(p);
+  });
+
+  wrap.innerHTML = Array.from(byMonth.entries()).map(([monthKey, items])=>{
+    const monthTotal = items.reduce((sum,p)=> sum + p.amount, 0);
+    const rows = items.map(p=>{
+      const dateStr = new Date(p.paidAt).toLocaleDateString('ar-EG');
+      return `<tr><td>${p.employeeName}</td><td style="color:var(--good); font-weight:700;">${p.amount} ج.م</td><td>${dateStr}</td></tr>`;
+    }).join('');
+    return `
+    <div class="dayLogGroup">
+      <div class="dayLogHead" data-group="${monthKey}">
+        <span>${monthKey}</span>
+        <span style="color:var(--good);">${monthTotal} ج.م (${items.length}) <span class="chev">▾</span></span>
+      </div>
+      <div class="dayLogBody">
+        <table class="logTable"><thead><tr><th>الموظف</th><th>المبلغ</th><th>تاريخ الصرف</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
   }).join('');
-  wrap.innerHTML = `<table class="logTable"><thead><tr><th>الشهر</th><th>الموظف</th><th>المبلغ</th><th>تاريخ الصرف</th></tr></thead><tbody>${rows}</tbody></table>`;
+  wireDayLogToggles(wrap);
 }
 
 // ---------- EMPLOYEE TERMINATION (admin) ----------
@@ -2804,12 +2957,35 @@ function renderAdvancesLog(){
   if(!wrap) return;
   if(advances.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش أخد سلفة</div>'; return; }
   const sorted = [...advances].sort((a,b)=> b.ts - a.ts);
-  const rows = sorted.map(a=>{
-    const d = new Date(a.ts);
-    const dateStr = d.toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    return `<tr><td>${dateStr}</td><td>${a.employeeName}</td><td style="color:var(--gold); font-weight:700;">${a.amount} ج.م</td><td><button data-id="${a.id}" style="border:none; background:var(--bad); color:#fff; padding:6px 10px; border-radius:7px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">حذف</button></td></tr>`;
+
+  const byDay = new Map();
+  sorted.forEach(a=>{
+    const key = new Date(a.ts).toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric'});
+    if(!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(a);
+  });
+  const dayKeys = Array.from(byDay.keys()).slice(0, 90);
+
+  wrap.innerHTML = dayKeys.map(dayKey=>{
+    const items = byDay.get(dayKey);
+    const dayTotal = items.reduce((sum,a)=> sum + a.amount, 0);
+    const rows = items.map(a=>{
+      const time = new Date(a.ts).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+      return `<tr><td>${time}</td><td>${a.employeeName}</td><td style="color:var(--gold); font-weight:700;">${a.amount} ج.م</td><td><button data-id="${a.id}" style="border:none; background:var(--bad); color:#fff; padding:6px 10px; border-radius:7px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">حذف</button></td></tr>`;
+    }).join('');
+    return `
+    <div class="dayLogGroup">
+      <div class="dayLogHead" data-group="${dayKey}">
+        <span>${dayKey}</span>
+        <span style="color:var(--gold);">${dayTotal} ج.م (${items.length}) <span class="chev">▾</span></span>
+      </div>
+      <div class="dayLogBody">
+        <table class="logTable"><thead><tr><th>الوقت</th><th>الموظف</th><th>المبلغ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
   }).join('');
-  wrap.innerHTML = `<table class="logTable"><thead><tr><th>التاريخ</th><th>الموظف</th><th>المبلغ</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+
+  wireDayLogToggles(wrap);
   wrap.querySelectorAll('button[data-id]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       if(!confirm('متأكد إنك عايز تحذف السلفة دي؟')) return;
