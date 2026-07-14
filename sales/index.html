@@ -177,8 +177,7 @@
   .panel h3{display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none;}
   .panel h3 .chev{font-size:13px; color:var(--sub); transition:transform .2s; margin-right:8px;}
   .panel h3.open .chev{transform:rotate(180deg);}
-  .panel-body{display:none;}
-  .panel-body.open{display:block;}
+  .panel.collapsed > *:not(:first-child){ display:none !important; }
   .dayLogGroup{border:1px solid var(--line); border-radius:12px; margin-bottom:10px; overflow:hidden;}
   .dayLogHead{display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:var(--panel2); cursor:pointer; font-size:13px; font-weight:700; user-select:none;}
   .dayLogHead .chev{font-size:11px; margin-right:4px; transition:transform .2s; display:inline-block;}
@@ -1967,27 +1966,24 @@ function initCollapsiblePanels(){
     if(!heading) return;
     // Some panels wrap the h3 together with a button (e.g. CSV export) in a
     // flex div — find that direct-child wrapper (or the h3 itself if it's
-    // already a direct child) so the whole header row stays visible and
-    // clickable, instead of being accidentally hidden inside the collapsed body.
+    // already a direct child) so the whole header row stays visible and clickable.
     let headerRow = heading;
     while(headerRow.parentElement && headerRow.parentElement !== panel){
       headerRow = headerRow.parentElement;
     }
-    const bodyChildren = Array.from(panel.children).filter(c=> c !== headerRow);
-    const body = document.createElement('div');
-    body.className = 'panel-body';
-    bodyChildren.forEach(c=> body.appendChild(c));
-    panel.appendChild(body);
     const chev = document.createElement('span');
     chev.className = 'chev';
     chev.textContent = '▾';
     heading.appendChild(chev);
     headerRow.style.cursor = 'pointer';
+    // Purely a CSS class toggle — no DOM nodes are ever moved, so this can
+    // never interfere with any button or its click listeners inside the panel.
+    panel.classList.add('collapsed');
     headerRow.addEventListener('click', (e)=>{
       if(e.target.closest('button')) return; // don't toggle when tapping an export/action button in the header
-      const isOpen = body.classList.contains('open');
-      body.classList.toggle('open', !isOpen);
-      heading.classList.toggle('open', !isOpen);
+      const willCollapse = !panel.classList.contains('collapsed');
+      panel.classList.toggle('collapsed', willCollapse);
+      heading.classList.toggle('open', !willCollapse);
     });
   });
 }
