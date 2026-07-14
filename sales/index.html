@@ -236,6 +236,13 @@
   .dhHeader{display:flex; align-items:center; gap:12px; margin-bottom:16px; padding-bottom:14px; border-bottom:1px solid var(--line);}
   .dhAvatar{width:48px; height:48px; border-radius:50%; background:var(--panel2); border:2px solid var(--gold-dim); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk'; font-weight:700; font-size:16px; color:var(--gold); flex-shrink:0;}
   .dhSectionLabel{font-size:11px; color:var(--gold); font-weight:700; letter-spacing:.03em; margin:16px 0 8px; text-transform:uppercase;}
+  .raceBlock{background:var(--panel2); border-radius:12px; padding:12px; margin-bottom:10px;}
+  .raceBlockTitle{font-size:12px; font-weight:800; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;}
+  .raceItem{display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:5px 0; border-bottom:1px solid var(--line);}
+  .raceItem:last-child{border-bottom:none;}
+  .raceVerdict{padding:8px 12px; border-radius:10px; font-size:12px; font-weight:800; text-align:center; margin-top:8px;}
+  .raceVerdict.ok{background:rgba(47,163,107,.2); color:var(--good);}
+  .raceVerdict.out{background:rgba(229,72,77,.2); color:var(--bad);}
   .clockOutBigBtn{
     width:100%; margin-top:16px; padding:15px; border:none; border-radius:14px; cursor:pointer;
     background:linear-gradient(135deg,#e5484d,#b93a3e); color:#fff; font-family:'Cairo'; font-weight:800; font-size:15px;
@@ -455,6 +462,9 @@
       <div class="dhSectionLabel">🎁 المكافآت</div>
       <div class="dayHubRow"><div class="lbl">مكافأة الأسبوع</div><div id="dh_weeklyProgress">—</div></div>
       <div class="dayHubRow"><div class="lbl">مكافأة الشهر</div><div id="dh_monthlyProgress">—</div></div>
+
+      <div class="dhSectionLabel">🏁 حالتك في السباق</div>
+      <div id="dh_raceStatus"></div>
 
       <div class="dhBtnRow">
         <button class="dhBackBtn" id="dh_closeBtn">◀ رجوع</button>
@@ -1405,6 +1415,7 @@ function renderDayHub(empId){
   // Weekly / monthly progress
   $('#dh_weeklyProgress').innerHTML = getPeriodProgressLabel(empId, 'week');
   $('#dh_monthlyProgress').innerHTML = getPeriodProgressLabel(empId, 'month');
+  renderRaceStatus(empId);
 }
 
 function computeAvgRatingFor(empId){
@@ -1648,6 +1659,77 @@ async function checkAndAwardRewards(){
 const MIN_RATING_FOR_REWARD = 2.5; // out of 4 — skipped if no rating data exists for the period
 function totalCalendarDaysInRange(start, end){
   return Math.floor((end - start)/(24*60*60*1000)) + 1;
+}
+
+// Live, employee-facing view of "am I still on track for the weekly/monthly
+// reward?" — uses the exact same rules as the real award check below, but
+// evaluated against the period SO FAR (not waiting for the period to fully end).
+function computeRaceStatus(emp, periodType){
+  const range = periodType === 'week' ? getWeekRange(new Date()) : getMonthRange(new Date());
+  const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
+  const elapsedRequiredDays = countElapsedWorkDaysInRange(emp, range.start, range.end);
+  const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
+
+  const rangeShifts = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
+  const hasSevereLateness = rangeShifts.some(s=> (s.lateMinutes||0) > SEVERE_LATE_MINUTES);
+  const mildLateCount = rangeShifts.filter(s=> (s.lateMinutes||0) > 0 && (s.lateMinutes||0) <= SEVERE_LATE_MINUTES).length;
+
+  const avgRating = computeAvgRatingInRange(emp.id, range.start.getTime(), range.end.getTime());
+  const ratingOk = avgRating === null || avgRating >= MIN_RATING_FOR_REWARD;
+
+  let pointsOk = true, minPointsForPeriod = null, pointsInRange = null;
+  if(emp.minWeeklyPoints){
+    const periodDaysSoFar = Math.max(1, Math.round((Math.min(Date.now(), range.end.getTime()) - range.start.getTime())/(24*60*60*1000)) + 1);
+    minPointsForPeriod = Math.round(emp.minWeeklyPoints * periodDaysSoFar / 7);
+    pointsInRange = points.filter(p=> p.employeeId===emp.id && p.ts >= range.start.getTime() && p.ts <= Math.min(Date.now(), range.end.getTime())).length;
+    pointsOk = pointsInRange >= minPointsForPeriod;
+  }
+
+  const attendanceOk = confirmedDays >= elapsedRequiredDays;
+
+  const reasons = [];
+  if(hasSevereLateness) reasons.push('اتأخرت أكتر من 20 دقيقة مرة واحدة');
+  if(mildLateCount > 1) reasons.push('اتأخرت أكتر من مرة');
+  if(!attendanceOk) reasons.push('فاتك تنفيذ التاسك يوم أو أكتر');
+  if(!ratingOk) reasons.push('متوسط تقييم العميل أقل من 3');
+  if(!pointsOk) reasons.push('نقاطك أقل من المطلوب');
+
+  const stillInRace = reasons.length === 0;
+
+  return {
+    requiredDays, elapsedRequiredDays, confirmedDays,
+    hasSevereLateness, mildLateCount,
+    avgRating, ratingOk,
+    pointsOk, minPointsForPeriod, pointsInRange,
+    attendanceOk, stillInRace, reasons
+  };
+}
+
+function renderRaceStatus(empId){
+  const wrap = document.querySelector('#dh_raceStatus');
+  if(!wrap) return;
+  const emp = employees.find(e=> e.id === empId);
+  if(!emp){ wrap.innerHTML = ''; return; }
+
+  const blocks = ['week','month'].map(periodType=>{
+    const st = computeRaceStatus(emp, periodType);
+    const title = periodType === 'week' ? '📅 الأسبوع ده' : '🗓️ الشهر ده';
+    const ratingTxt = st.avgRating === null ? '— (مفيش بيانات)' : st.avgRating.toFixed(1) + '/4';
+    const pointsRow = emp.minWeeklyPoints
+      ? `<div class="raceItem"><span>النقاط</span><span style="color:${st.pointsOk?'var(--good)':'var(--bad)'}">${st.pointsOk?'✅':'❌'} ${st.pointsInRange}/${st.minPointsForPeriod}</span></div>`
+      : '';
+    return `
+    <div class="raceBlock">
+      <div class="raceBlockTitle"><span>${title}</span></div>
+      <div class="raceItem"><span>الحضور والتاسك</span><span style="color:${st.attendanceOk?'var(--good)':'var(--bad)'}">${st.attendanceOk?'✅':'❌'} ${st.confirmedDays}/${st.elapsedRequiredDays}</span></div>
+      <div class="raceItem"><span>الالتزام بالمواعيد</span><span style="color:${(!st.hasSevereLateness && st.mildLateCount<=1)?'var(--good)':'var(--bad)'}">${st.hasSevereLateness ? '❌ تأخير شديد' : (st.mildLateCount>1 ? '❌ '+st.mildLateCount+' مرات تأخير' : (st.mildLateCount===1 ? '⚠️ مرة تأخير' : '✅ ملتزم'))}</span></div>
+      <div class="raceItem"><span>تقييم العميل</span><span style="color:${st.ratingOk?'var(--good)':'var(--bad)'}">${st.ratingOk?'✅':'❌'} ${ratingTxt}</span></div>
+      ${pointsRow}
+      <div class="raceVerdict ${st.stillInRace?'ok':'out'}">${st.stillInRace ? '🏁 لسه في السباق!' : '⛔ خرجت من سباق '+(periodType==='week'?'الأسبوع':'الشهر')+' ده: '+st.reasons.join('، ')}</div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML = blocks;
 }
 
 async function maybeAwardPeriod(emp, range, type, label){
@@ -2667,9 +2749,9 @@ $('#saveCommissionBtn')?.addEventListener('click', async ()=>{
   }catch(err){ console.error('تعذر حفظ العمولة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
 });
 
-$('#saveAnnouncementBtn')?.addEventListener('click', async ()=>{
-  const btn = $('#saveAnnouncementBtn');
-  const text = $('#announcementInput').value.trim();
+document.querySelector('#saveAnnouncementBtn')?.addEventListener('click', async ()=>{
+  const btn = document.querySelector('#saveAnnouncementBtn');
+  const text = document.querySelector('#announcementInput').value.trim();
   const originalLabel = btn.textContent;
   btn.disabled = true;
   try{
@@ -2677,18 +2759,18 @@ $('#saveAnnouncementBtn')?.addEventListener('click', async ()=>{
     // Update locally right away instead of waiting on the snapshot round-trip.
     currentAnnouncement = text;
     renderAnnouncementBanner();
-    $('#announcementErr').textContent = '';
+    document.querySelector('#announcementErr').textContent = '';
     btn.textContent = text ? 'اتنشرت ✅' : 'اتشالت الرسالة ✅';
   }catch(err){
     console.error('تعذر حفظ الرسالة', err);
-    $('#announcementErr').textContent = 'خطأ: ' + (err && err.message ? err.message : String(err)) + (err && err.stack ? (' | ' + err.stack.split('\n')[1]) : '');
+    document.querySelector('#announcementErr').textContent = 'حصل خطأ، حاول تاني';
   }
   setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
 });
 
-$('#saveDailyTargetBtn')?.addEventListener('click', async ()=>{
-  const btn = $('#saveDailyTargetBtn');
-  const val = parseInt($('#dailyTargetInput').value);
+document.querySelector('#saveDailyTargetBtn')?.addEventListener('click', async ()=>{
+  const btn = document.querySelector('#saveDailyTargetBtn');
+  const val = parseInt(document.querySelector('#dailyTargetInput').value);
   const target = isNaN(val) || val < 0 ? 0 : val;
   const originalLabel = btn.textContent;
   btn.disabled = true;
@@ -3253,7 +3335,7 @@ if ('serviceWorker' in navigator) {
 
 // ==================== ANNOUNCEMENT + DAILY TARGET ====================
 function renderAnnouncementBanner(){
-  const el = $('#announcementBanner');
+  const el = document.querySelector('#announcementBanner');
   if(!el) return;
   if(!currentAnnouncement || !currentAnnouncement.trim()){
     el.style.display = 'none';
@@ -3265,7 +3347,7 @@ function renderAnnouncementBanner(){
 }
 
 function renderDailyTargetCard(){
-  const el = $('#dailyTargetCard');
+  const el = document.querySelector('#dailyTargetCard');
   if(!el) return;
   if(!dailyTarget || dailyTarget <= 0){
     el.style.display = 'none';
@@ -3291,18 +3373,18 @@ function renderDailyTargetCard(){
 
   if(isDone){
     const today = todayStr();
-    const otherScreenOpen = $('#admin').classList.contains('show') || $('#attendance').classList.contains('show') || $('#leaderboard').classList.contains('show');
+    const otherScreenOpen = document.querySelector('#admin').classList.contains('show') || document.querySelector('#attendance').classList.contains('show') || document.querySelector('#leaderboard').classList.contains('show');
     if(targetCelebrationShownFor !== today && !otherScreenOpen){
       targetCelebrationShownFor = today;
-      $('#targetCelebration').classList.add('show');
+      document.querySelector('#targetCelebration').classList.add('show');
     }
   }
 }
-$('#targetCelebrationClose')?.addEventListener('click', ()=> $('#targetCelebration').classList.remove('show'));
+document.querySelector('#targetCelebrationClose')?.addEventListener('click', ()=> document.querySelector('#targetCelebration').classList.remove('show'));
 
 function renderAdminSettingsForm(){
-  const annInput = $('#announcementInput');
-  const targetInput = $('#dailyTargetInput');
+  const annInput = document.querySelector('#announcementInput');
+  const targetInput = document.querySelector('#dailyTargetInput');
   if(annInput && document.activeElement !== annInput) annInput.value = currentAnnouncement || '';
   if(targetInput && document.activeElement !== targetInput) targetInput.value = dailyTarget || '';
 }
