@@ -818,8 +818,8 @@ let allTasks = [], tasks = [];             // current weekly task assignment per
 let allSubmissions = [], submissions = []; // daily task photo submissions
 let allRewards = [], rewards = [];         // earned weekly/monthly rewards
 let commissionPerPoint = 0;                // set by admin, per branch
-let currentAnnouncement = '';
-let dailyTarget = 0;
+window.currentAnnouncement = '';
+window.dailyTarget = 0;
 let targetCelebrationShownFor = null; // date string, so we only celebrate once per day
 let allCommissionPayments = [], commissionPayments = []; // monthly payment records
 let allSalaryPayments = [], salaryPayments = [];
@@ -953,8 +953,8 @@ onSnapshot(settingsCol, (snap)=>{
   const branchDoc = snap.docs.find(d=> d.id === currentBranch);
   const data = branchDoc ? branchDoc.data() : {};
   commissionPerPoint = data.commissionPerPoint || 0;
-  currentAnnouncement = data.announcement || '';
-  dailyTarget = data.dailyTarget || 0;
+  window.currentAnnouncement = data.announcement || '';
+  window.dailyTarget = data.dailyTarget || 0;
   renderAnnouncementBanner();
   renderDailyTargetCard();
   if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); }
@@ -2756,7 +2756,7 @@ document.querySelector('#saveAnnouncementBtn')?.addEventListener('click', async 
   try{
     await setDoc(doc(db,'sales_settings', currentBranch), { announcement: text }, { merge:true });
     // Update locally right away instead of waiting on the snapshot round-trip.
-    currentAnnouncement = text;
+    window.currentAnnouncement = text;
     renderAnnouncementBanner();
     document.querySelector('#announcementErr').textContent = '';
     btn.textContent = text ? 'اتنشرت ✅' : 'اتشالت الرسالة ✅';
@@ -2776,7 +2776,7 @@ document.querySelector('#saveDailyTargetBtn')?.addEventListener('click', async (
   try{
     await setDoc(doc(db,'sales_settings', currentBranch), { dailyTarget: target }, { merge:true });
     // Update locally right away instead of waiting on the snapshot round-trip.
-    dailyTarget = target;
+    window.dailyTarget = target;
     renderDailyTargetCard();
     btn.textContent = target > 0 ? `اتحفظ (${target}) ✅` : 'اتلغى التارجت ✅';
   }catch(err){
@@ -3336,19 +3336,19 @@ if ('serviceWorker' in navigator) {
 function renderAnnouncementBanner(){
   const el = document.querySelector('#announcementBanner');
   if(!el) return;
-  if(!currentAnnouncement || !currentAnnouncement.trim()){
+  if(!window.currentAnnouncement || !window.currentAnnouncement.trim()){
     el.style.display = 'none';
     el.innerHTML = '';
     return;
   }
   el.style.display = 'flex';
-  el.innerHTML = `<span>📢</span><span>${currentAnnouncement}</span>`;
+  el.innerHTML = `<span>📢</span><span>${window.currentAnnouncement}</span>`;
 }
 
 function renderDailyTargetCard(){
   const el = document.querySelector('#dailyTargetCard');
   if(!el) return;
-  if(!dailyTarget || dailyTarget <= 0){
+  if(!window.dailyTarget || window.dailyTarget <= 0){
     el.style.display = 'none';
     el.innerHTML = '';
     return;
@@ -3356,15 +3356,15 @@ function renderDailyTargetCard(){
   const dayStart = new Date(); dayStart.setHours(0,0,0,0);
   const empIds = new Set(employees.map(e=> e.id));
   const achieved = points.filter(p=> empIds.has(p.employeeId) && p.ts >= dayStart.getTime()).length;
-  const pct = Math.min(100, Math.round(achieved/dailyTarget*100));
-  const remaining = Math.max(0, dailyTarget - achieved);
-  const isDone = achieved >= dailyTarget;
+  const pct = Math.min(100, Math.round(achieved/window.dailyTarget*100));
+  const remaining = Math.max(0, window.dailyTarget - achieved);
+  const isDone = achieved >= window.dailyTarget;
 
   el.style.display = 'block';
   el.innerHTML = `
     <div class="targetHead">
       <span>🎯 التارجت اليومي</span>
-      <span style="color:${isDone?'var(--good)':'var(--gold)'};">${achieved}/${dailyTarget}</span>
+      <span style="color:${isDone?'var(--good)':'var(--gold)'};">${achieved}/${window.dailyTarget}</span>
     </div>
     <div class="targetBarTrack"><div class="targetBarFill${isDone?' done':''}" style="width:${pct}%;"></div></div>
     <div class="targetSub">${isDone ? '✅ تم تحقيق التارجت — شكرًا لمجهودكم!' : 'باقي ' + remaining + ' نقطة'}</div>
@@ -3384,8 +3384,8 @@ document.querySelector('#targetCelebrationClose')?.addEventListener('click', ()=
 function renderAdminSettingsForm(){
   const annInput = document.querySelector('#announcementInput');
   const targetInput = document.querySelector('#dailyTargetInput');
-  if(annInput && document.activeElement !== annInput) annInput.value = currentAnnouncement || '';
-  if(targetInput && document.activeElement !== targetInput) targetInput.value = dailyTarget || '';
+  if(annInput && document.activeElement !== annInput) annInput.value = window.currentAnnouncement || '';
+  if(targetInput && document.activeElement !== targetInput) targetInput.value = window.dailyTarget || '';
 }
 
 // If we reach this final line, the ENTIRE script downloaded and executed
