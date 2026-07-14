@@ -157,7 +157,7 @@
   .targetBarFill.done{background:linear-gradient(90deg,var(--good),#2fd484);}
   .targetSub{font-size:11px; color:var(--sub); margin-top:6px;}
   .targetCelebration{
-    position:absolute; inset:0; z-index:60; display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px;
+    position:absolute; inset:0; z-index:20; display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px;
     background:rgba(8,9,12,.94); text-align:center; padding:20px;
   }
   .targetCelebration.show{display:flex;}
@@ -1990,6 +1990,7 @@ function initCollapsiblePanels(){
 
 function openAdmin(){
   $('#admin').classList.add('show');
+  $('#targetCelebration').classList.remove('show'); // safety: never let this linger over the admin panel
   initCollapsiblePanels();
   if(adminUnlocked){
     renderAdminList(); renderLog(); renderPerformanceLink();
@@ -3271,7 +3272,8 @@ function renderDailyTargetCard(){
 
   if(isDone){
     const today = todayStr();
-    if(targetCelebrationShownFor !== today){
+    const otherScreenOpen = $('#admin').classList.contains('show') || $('#attendance').classList.contains('show') || $('#leaderboard').classList.contains('show');
+    if(targetCelebrationShownFor !== today && !otherScreenOpen){
       targetCelebrationShownFor = today;
       $('#targetCelebration').classList.add('show');
     }
