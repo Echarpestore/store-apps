@@ -179,10 +179,12 @@
   .panel h3 .chev{font-size:13px; color:var(--sub); transition:transform .2s; margin-right:8px; display:inline-block;}
   .panel h3.open .chev{transform:rotate(180deg);}
   .panel.collapsed > *:not(:first-child){ display:none !important; }
-  .panel h3{display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none;}
-  .panel h3 .chev{font-size:13px; color:var(--sub); transition:transform .2s; margin-right:8px;}
-  .panel h3.open .chev{transform:rotate(180deg);}
-  .panel.collapsed > *:not(:first-child){ display:none !important; }
+  .panelBadge{
+    display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px;
+    background:var(--bad); color:#fff; border-radius:10px; font-size:11px; font-weight:800;
+    margin-right:6px; animation:badgePulse 1.2s ease-in-out infinite alternate; vertical-align:middle;
+  }
+  @keyframes badgePulse{from{opacity:1;} to{opacity:.55;}}
   .dayLogGroup{border:1px solid var(--line); border-radius:12px; margin-bottom:10px; overflow:hidden;}
   .dayLogHead{display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:var(--panel2); cursor:pointer; font-size:13px; font-weight:700; user-select:none;}
   .dayLogHead .chev{font-size:11px; margin-right:4px; transition:transform .2s; display:inline-block;}
@@ -368,7 +370,7 @@
     </div>
   </div>
 
-  <div id="gear"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+  <div id="gear" style="position:relative;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span id="gearBadge" style="display:none; position:absolute; top:-4px; left:-4px; width:12px; height:12px; border-radius:50%; background:var(--bad); animation:badgePulse 1.2s ease-in-out infinite alternate;"></span></div>
   <div id="fsBtn" title="ملء الشاشة"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3"/></svg></div>
 
   <!-- INVOICE NUMBER MODAL -->
@@ -526,8 +528,17 @@
         <div class="pin-err-text" id="attPinErrText"></div>
       </div>
       <div id="attNoPinArea" style="display:none;">
-        <p style="color:var(--bad); font-size:13px; margin-bottom:16px;">الموظف ده معندوش كود سري متسجل. اطلب من الأدمن يحدده من لوحة التحكم.</p>
-        <button class="btnGhost" style="width:100%;" id="attNoPinCancel">رجوع</button>
+        <p style="color:var(--sub); font-size:13px; margin-bottom:14px;">أول مرة تسجل؟ اختار كود سري من 4 أرقام لنفسك، هتستخدمه في كل مرة بعد كده.</p>
+        <div class="pin-dots" id="attNewPinDots">
+          <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+        </div>
+        <div class="keypad" id="attNewPinKeypad">
+          <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+          <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+          <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+          <button class="wide" id="attNewPinCancel">إلغاء</button><button data-k="0">0</button><button class="wide" id="attNewPinDel">⌫</button>
+        </div>
+        <div class="pin-err-text" id="attNewPinErrText"></div>
       </div>
     </div>
   </div>
@@ -670,7 +681,7 @@
     </div>
 
     <div class="panel">
-      <h3>📸 مراجعة تنفيذ المهام (محتاجة تأكيد)</h3>
+      <h3><span>📸 مراجعة تنفيذ المهام (محتاجة تأكيد) <span id="pendingBadge" class="panelBadge" style="display:none;">0</span></span></h3>
       <div id="pendingSubmissionsList"></div>
     </div>
 
@@ -812,9 +823,9 @@ const advancesCol = collection(db, 'sales_advances');
 const ADMIN_CODE = '2005';
 
 const $ = s => document.querySelector(s);
-let employees = [];   // filtered to this device's own branch (kiosk grid)
+window.employees = [];   // filtered to this device's own branch (kiosk grid)
 let allEmployees = []; // raw from Firestore
-let points = [];      // {id, employeeId, employeeName, invoiceNumber, ts}
+window.points = [];      // {id, employeeId, employeeName, invoiceNumber, ts}
 let allFeedback = []; // raw customer satisfaction entries from the feedback app
 let selectedEmp = null;
 let adminUnlocked = false;
@@ -834,10 +845,10 @@ let pendingTaskPhoto = null;                // File selected before upload
 let taskSubmitEmpId = null;
 
 // ---------- BRANCH SETUP (this device's own branch, for the kiosk grid) ----------
-let currentBranch = localStorage.getItem('sales_branch') || '';
+window.currentBranch = localStorage.getItem('sales_branch') || '';
 function refreshBranchUI(){
-  $('#branchTag').textContent = '📍 ' + (currentBranch || '—');
-  if(!currentBranch){
+  $('#branchTag').textContent = '📍 ' + (window.currentBranch || '—');
+  if(!window.currentBranch){
     $('#branchSetup').classList.add('show');
   } else {
     $('#branchSetup').classList.remove('show');
@@ -846,14 +857,14 @@ function refreshBranchUI(){
 $('#branchSaveBtn').addEventListener('click', ()=>{
   const val = $('#branchInput').value.trim();
   if(!val) return;
-  currentBranch = val;
+  window.currentBranch = val;
   localStorage.setItem('sales_branch', val);
   refreshBranchUI();
   applyBranchFilter();
 });
 $('#changeBranchBtn').addEventListener('click', ()=>{
   $('#admin').classList.remove('show');
-  $('#branchInput').value = currentBranch;
+  $('#branchInput').value = window.currentBranch;
   $('#branchSetup').classList.add('show');
 });
 refreshBranchUI();
@@ -881,19 +892,20 @@ $('#adminBranchSelect').addEventListener('change', (e)=>{
 });
 
 function applyBranchFilter(){
-  employees = allEmployees.filter(e => e.branch === currentBranch && e.active !== false);
-  shifts = allShifts.filter(s => s.branch === currentBranch);
-  tasks = allTasks.filter(t => t.branch === currentBranch);
-  submissions = allSubmissions.filter(s => s.branch === currentBranch);
-  rewards = allRewards.filter(r => r.branch === currentBranch);
-  commissionPayments = allCommissionPayments.filter(p => p.branch === currentBranch);
-  salaryPayments = allSalaryPayments.filter(p => p.branch === currentBranch);
-  terminations = allTerminations.filter(t => t.branch === currentBranch);
-  advances = allAdvances.filter(a => a.branch === currentBranch);
+  window.employees = allEmployees.filter(e => e.branch === window.currentBranch && e.active !== false);
+  shifts = allShifts.filter(s => s.branch === window.currentBranch);
+  tasks = allTasks.filter(t => t.branch === window.currentBranch);
+  submissions = allSubmissions.filter(s => s.branch === window.currentBranch);
+  rewards = allRewards.filter(r => r.branch === window.currentBranch);
+  commissionPayments = allCommissionPayments.filter(p => p.branch === window.currentBranch);
+  salaryPayments = allSalaryPayments.filter(p => p.branch === window.currentBranch);
+  terminations = allTerminations.filter(t => t.branch === window.currentBranch);
+  advances = allAdvances.filter(a => a.branch === window.currentBranch);
   renderEmpGrid();
   renderTodayAdvancesSummary();
   renderAnnouncementBanner();
   renderDailyTargetCard();
+  updateGearBadge();
   populateBranchDropdowns();
   checkAndAwardRewards();
   if(!rewardToastLock){
@@ -919,10 +931,10 @@ function initials(name){
 onSnapshot(empCol, (snap)=>{
   allEmployees = snap.docs.map(d=>({id:d.id, ...d.data()}));
   applyBranchFilter();
-}, (err)=> console.error('employees sync error', err));
+}, (err)=> console.error('window.employees sync error', err));
 
 onSnapshot(pointsCol, (snap)=>{
-  points = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  window.points = snap.docs.map(d=>({id:d.id, ...d.data()}));
   renderEmpGrid();
   renderDailyTargetCard();
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
@@ -955,7 +967,7 @@ onSnapshot(rewardsCol, (snap)=>{
 }, (err)=> console.error('rewards sync error', err));
 
 onSnapshot(settingsCol, (snap)=>{
-  const branchDoc = snap.docs.find(d=> d.id === currentBranch);
+  const branchDoc = snap.docs.find(d=> d.id === window.currentBranch);
   const data = branchDoc ? branchDoc.data() : {};
   commissionPerPoint = data.commissionPerPoint || 0;
   window.currentAnnouncement = data.announcement || '';
@@ -967,25 +979,25 @@ onSnapshot(settingsCol, (snap)=>{
 
 onSnapshot(commissionPaymentsCol, (snap)=>{
   allCommissionPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  commissionPayments = allCommissionPayments.filter(p=> p.branch === currentBranch);
+  commissionPayments = allCommissionPayments.filter(p=> p.branch === window.currentBranch);
   if(adminUnlocked) renderCommissionPanel();
 }, (err)=> console.error('commission payments sync error', err));
 
 onSnapshot(salaryPaymentsCol, (snap)=>{
   allSalaryPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  salaryPayments = allSalaryPayments.filter(p=> p.branch === currentBranch);
+  salaryPayments = allSalaryPayments.filter(p=> p.branch === window.currentBranch);
   if(adminUnlocked){ renderSalaryPanel(); renderSalaryPaymentLog(); }
 }, (err)=> console.error('salary payments sync error', err));
 
 onSnapshot(terminationsCol, (snap)=>{
   allTerminations = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  terminations = allTerminations.filter(t=> t.branch === currentBranch);
+  terminations = allTerminations.filter(t=> t.branch === window.currentBranch);
   if(adminUnlocked){ renderTerminationPanel(); renderTerminationLog(); }
 }, (err)=> console.error('terminations sync error', err));
 
 onSnapshot(advancesCol, (snap)=>{
   allAdvances = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  advances = allAdvances.filter(a=> a.branch === currentBranch);
+  advances = allAdvances.filter(a=> a.branch === window.currentBranch);
   renderTodayAdvancesSummary();
   if(adminUnlocked){ renderSalaryPanel(); renderAdvancesLog(); }
 }, (err)=> console.error('advances sync error', err));
@@ -994,7 +1006,7 @@ function renderLog(){
   const wrap = $('#logList');
   const branchEmps = reviewEmployeesFor(viewBranch);
   const branchEmpIds = new Set(branchEmps.map(e=>e.id));
-  const branchPoints = points.filter(p=> branchEmpIds.has(p.employeeId)).sort((a,b)=> b.ts - a.ts);
+  const branchPoints = window.points.filter(p=> branchEmpIds.has(p.employeeId)).sort((a,b)=> b.ts - a.ts);
   if(branchPoints.length === 0){
     wrap.innerHTML = '<div class="empty">لسه مفيش عمليات مسجلة</div>';
     return;
@@ -1055,7 +1067,7 @@ function renderLog(){
 $('#exportPointsCsvBtn')?.addEventListener('click', ()=>{
   const branchEmps = reviewEmployeesFor(viewBranch);
   const branchEmpIds = new Set(branchEmps.map(e=>e.id));
-  const branchPoints = points.filter(p=> branchEmpIds.has(p.employeeId)).sort((a,b)=> b.ts - a.ts);
+  const branchPoints = window.points.filter(p=> branchEmpIds.has(p.employeeId)).sort((a,b)=> b.ts - a.ts);
   if(branchPoints.length === 0){ alert('لا توجد بيانات للتصدير'); return; }
   let csv = 'التاريخ,الوقت,الموظف,الفرع,رقم الفاتورة\n';
   branchPoints.forEach(p=>{
@@ -1083,7 +1095,7 @@ function renderPerformanceLink(){
   const wrap = $('#perfList');
   const branchEmps = reviewEmployeesFor(viewBranch);
   const branchEmpIds = new Set(branchEmps.map(e=>e.id));
-  const branchPoints = points.filter(p=> branchEmpIds.has(p.employeeId)).sort((a,b)=> a.ts - b.ts);
+  const branchPoints = window.points.filter(p=> branchEmpIds.has(p.employeeId)).sort((a,b)=> a.ts - b.ts);
 
   const branchNames = viewBranch === '__ALL__'
     ? new Set(branchEmps.map(e=> e.branch))
@@ -1181,8 +1193,8 @@ function isDayOffTomorrow(emp){
 }
 
 function renderAttendanceLists(){
-  const notIn = employees.filter(e=> !isClockedIn(e.id));
-  const clockedIn = employees.filter(e=> isClockedIn(e.id));
+  const notIn = window.employees.filter(e=> !isClockedIn(e.id));
+  const clockedIn = window.employees.filter(e=> isClockedIn(e.id));
 
   const notInWrap = $('#notInGrid');
   notInWrap.innerHTML = notIn.length ? notIn.map(e=>{
@@ -1223,7 +1235,7 @@ function renderAttendanceLists(){
 const LATE_GRACE_MINUTES = 10; // no penalty within this window around the scheduled time
 const SEVERE_LATE_MINUTES = 20; // being later than this even once disqualifies the reward for that period
 async function clockIn(empId, photoDataUri){
-  const emp = employees.find(e=> e.id === empId);
+  const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return;
   let lateMinutes = 0;
   if(emp.scheduledStartTime){
@@ -1235,7 +1247,7 @@ async function clockIn(empId, photoDataUri){
   }
   try{
     await addDoc(shiftsCol, {
-      employeeId: empId, employeeName: emp.name, branch: currentBranch,
+      employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
       clockInTs: Date.now(), clockOutTs: null,
       scheduledStartTime: emp.scheduledStartTime || null, lateMinutes,
       clockInPhoto: photoDataUri || null
@@ -1250,7 +1262,7 @@ async function clockIn(empId, photoDataUri){
 async function clockOut(empId, photoDataUri){
   const shift = getOpenShift(empId);
   if(!shift) return;
-  const emp = employees.find(e=> e.id === empId);
+  const emp = window.employees.find(e=> e.id === empId);
   const now = Date.now();
 
   // Overtime is based on actual shift duration exceeding the standard 8h15m
@@ -1279,18 +1291,23 @@ let pendingAttAction = null; // {type:'in'|'out', empId}
 let attPinBuffer = '';
 
 function promptAttPin(type, empId){
-  const emp = employees.find(e=> e.id === empId);
+  const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return;
+  pendingAttAction = { type, empId };
 
-  // If this employee doesn't have a PIN configured yet, don't block them —
-  // just perform the action directly (admin can set a PIN later from the panel).
   if(!emp.pin){
-    if(type === 'in'){ clockIn(empId); }
-    else{ clockOut(empId).then(()=> renderAttendanceLists()); }
+    // First time this employee is clocking in/out — let them set their own PIN.
+    newPinBuffer = '';
+    $('#attPinName').textContent = emp.name;
+    $('#attPinAction').textContent = type === 'in' ? 'اكتب كودك عشان تسجل حضور' : 'اكتب كودك عشان تسجل انصراف';
+    $('#attNewPinErrText').textContent = '';
+    updateNewPinDots(false);
+    $('#attPinKeypadArea').style.display = 'none';
+    $('#attNoPinArea').style.display = 'block';
+    $('#attPinOverlay').classList.add('show');
     return;
   }
 
-  pendingAttAction = { type, empId };
   attPinBuffer = '';
   $('#attPinName').textContent = emp.name;
   $('#attPinAction').textContent = type === 'in' ? 'اكتب كودك عشان تسجل حضور' : 'اكتب كودك عشان تسجل انصراف';
@@ -1300,6 +1317,37 @@ function promptAttPin(type, empId){
   $('#attNoPinArea').style.display = 'none';
   $('#attPinOverlay').classList.add('show');
 }
+
+let newPinBuffer = '';
+function updateNewPinDots(isErr){
+  document.querySelectorAll('#attNewPinDots .pin-dot').forEach((d,i)=>{
+    d.className = 'pin-dot' + (i < newPinBuffer.length ? (isErr?' err':' filled') : '');
+  });
+}
+$('#attNewPinKeypad').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  if(btn.id === 'attNewPinCancel'){ closeAttPin(); return; }
+  if(btn.id === 'attNewPinDel'){ newPinBuffer = newPinBuffer.slice(0,-1); updateNewPinDots(false); return; }
+  const k = btn.dataset.k;
+  if(k === undefined || newPinBuffer.length >= 4) return;
+  newPinBuffer += k;
+  updateNewPinDots(false);
+  if(newPinBuffer.length === 4){
+    const action = pendingAttAction;
+    const empId = action.empId;
+    try{
+      await updateDoc(doc(db,'sales_employees', empId), { pin: newPinBuffer });
+      closeAttPin();
+      openAttPhoto(action);
+    }catch(err){
+      console.error('تعذر حفظ الكود', err);
+      updateNewPinDots(true);
+      $('#attNewPinErrText').textContent = 'حصل خطأ، حاول تاني';
+      setTimeout(()=>{ newPinBuffer=''; updateNewPinDots(false); }, 800);
+    }
+  }
+});
 
 function updateAttPinDots(isErr){
   document.querySelectorAll('#attPinDots .pin-dot').forEach((d,i)=>{
@@ -1317,16 +1365,16 @@ $('#attKeypad').addEventListener('click', (e)=>{
   updateAttPinDots(false);
   if(attPinBuffer.length === 4) checkAttPin();
 });
-$('#attNoPinCancel').addEventListener('click', closeAttPin);
 
 function closeAttPin(){
   $('#attPinOverlay').classList.remove('show');
   pendingAttAction = null;
   attPinBuffer = '';
+  newPinBuffer = '';
 }
 
 async function checkAttPin(){
-  const emp = employees.find(e=> e.id === pendingAttAction.empId);
+  const emp = window.employees.find(e=> e.id === pendingAttAction.empId);
   if(!emp) return;
   if(attPinBuffer === String(emp.pin)){
     const action = pendingAttAction;
@@ -1358,7 +1406,7 @@ $('#dh_clockOutBtn').addEventListener('click', ()=>{
 });
 
 function renderDayHub(empId){
-  const emp = employees.find(e=> e.id === empId);
+  const emp = window.employees.find(e=> e.id === empId);
   const shift = getOpenShift(empId);
   if(!emp || !shift) return;
 
@@ -1418,8 +1466,8 @@ function renderDayHub(empId){
 }
 
 function computeAvgRatingFor(empId){
-  const empPoints = points.filter(p=> p.employeeId === empId);
-  const branchFeedback = allFeedback.filter(f=> f.branch === currentBranch);
+  const empPoints = window.points.filter(p=> p.employeeId === empId);
+  const branchFeedback = allFeedback.filter(f=> f.branch === window.currentBranch);
   const usedFeedback = new Set();
   let sum = 0, count = 0;
   empPoints.forEach(p=>{
@@ -1437,8 +1485,8 @@ function computeAvgRatingFor(empId){
 }
 
 function computeAvgRatingInRange(empId, startTs, endTs){
-  const empPointsInRange = points.filter(p=> p.employeeId === empId && p.ts >= startTs && p.ts <= endTs);
-  const branchFeedbackInRange = allFeedback.filter(f=> f.branch === currentBranch && f.ts >= startTs && f.ts <= endTs);
+  const empPointsInRange = window.points.filter(p=> p.employeeId === empId && p.ts >= startTs && p.ts <= endTs);
+  const branchFeedbackInRange = allFeedback.filter(f=> f.branch === window.currentBranch && f.ts >= startTs && f.ts <= endTs);
   const usedFeedback = new Set();
   let sum = 0, count = 0;
   empPointsInRange.forEach(p=>{
@@ -1461,10 +1509,10 @@ function computeAvgRatingToday(empId){
 function renderStaffOverview(){
   const wrap = $('#staffOverviewList');
   if(!wrap) return;
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const dayStart = new Date(); dayStart.setHours(0,0,0,0);
 
-  const rows = employees.map(e=>{
+  const rows = window.employees.map(e=>{
     const shift = getOpenShift(e.id);
     let statusColor = 'gray', statusText = 'لسه محضرش';
     if(shift){
@@ -1481,8 +1529,12 @@ function renderStaffOverview(){
     const sub = getTodaysSubmission(e.id);
     const hasTask = !!getCurrentTask(e.id);
     let taskText = '➖ مفيش تاسك';
+    let needsAttention = false;
     if(sub && sub.rejected){ taskText = '🔴 اترفض - محتاج يصور تاني'; }
-    else if(sub){ taskText = sub.confirmed ? '✅ اتأكد' : '⏳ محتاج تأكيد'; }
+    else if(sub){
+      if(sub.confirmed){ taskText = '✅ اتأكد'; }
+      else { taskText = '⏳ محتاج تأكيد'; needsAttention = true; }
+    }
     else if(hasTask){ taskText = '❌ لسه متنفذش'; }
 
     const pointsToday = countsFor(e.id, dayStart.getTime());
@@ -1490,10 +1542,10 @@ function renderStaffOverview(){
     const ratingText = avgToday === null ? '—' : avgToday.toFixed(1)+'/4';
 
     return `
-    <div class="overviewRow">
+    <div class="overviewRow" style="${needsAttention ? 'background:rgba(229,72,77,.1); border-radius:10px;' : ''}">
       <div class="statusDot ${statusColor}"></div>
       <div>
-        <div class="n">${e.name}</div>
+        <div class="n">${e.name}${needsAttention ? ' <span class="panelBadge" style="animation:none;">!</span>' : ''}</div>
         <div class="m">${statusText}</div>
       </div>
       <div>${taskText}</div>
@@ -1544,7 +1596,7 @@ function compressImage(file, maxWidth, quality){
 
 $('#dh_submitTaskBtn').addEventListener('click', async ()=>{
   if(!pendingTaskPhoto || !taskSubmitEmpId) return;
-  const emp = employees.find(e=> e.id === taskSubmitEmpId);
+  const emp = window.employees.find(e=> e.id === taskSubmitEmpId);
   const task = getCurrentTask(taskSubmitEmpId);
   const existingSub = getTodaysSubmission(taskSubmitEmpId); // present only if previously rejected
   const btn = $('#dh_submitTaskBtn');
@@ -1561,7 +1613,7 @@ $('#dh_submitTaskBtn').addEventListener('click', async ()=>{
       });
     } else {
       await addDoc(submissionsCol, {
-        employeeId: taskSubmitEmpId, employeeName: emp.name, branch: currentBranch,
+        employeeId: taskSubmitEmpId, employeeName: emp.name, branch: window.currentBranch,
         date: todayStr(), taskDescription: task ? task.taskDescription : '',
         photoURL: dataUri, submittedAt: Date.now(), confirmed: false, confirmedAt: null,
         rejected: false, rejectedAt: null
@@ -1619,7 +1671,7 @@ function countElapsedWorkDaysInRange(emp, start, end){
 }
 
 function getPeriodProgressLabel(empId, periodType){
-  const emp = employees.find(e=> e.id === empId);
+  const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return '—';
   const range = periodType === 'week' ? getWeekRange(new Date()) : getMonthRange(new Date());
   const confirmedDays = countConfirmedDaysInRange(empId, range.start, range.end);
@@ -1635,12 +1687,12 @@ function getPeriodProgressLabel(empId, periodType){
 function randomReward(){ return Math.floor(Math.random()*(1000-200+1))+200; }
 
 async function checkAndAwardRewards(){
-  if(!currentBranch || employees.length === 0) return;
+  if(!window.currentBranch || window.employees.length === 0) return;
   const now = new Date();
   const thisWeek = getWeekRange(now);
   const thisMonth = getMonthRange(now);
 
-  for(const emp of employees){
+  for(const emp of window.employees){
     // Previous (fully completed) week
     const prevWeekEnd = new Date(thisWeek.start.getTime() - 1);
     const prevWeek = getWeekRange(prevWeekEnd);
@@ -1680,7 +1732,7 @@ function computeRaceStatus(emp, periodType){
   if(emp.minWeeklyPoints){
     const periodDaysSoFar = Math.max(1, Math.round((Math.min(Date.now(), range.end.getTime()) - range.start.getTime())/(24*60*60*1000)) + 1);
     minPointsForPeriod = Math.round(emp.minWeeklyPoints * periodDaysSoFar / 7);
-    pointsInRange = points.filter(p=> p.employeeId===emp.id && p.ts >= range.start.getTime() && p.ts <= Math.min(Date.now(), range.end.getTime())).length;
+    pointsInRange = window.points.filter(p=> p.employeeId===emp.id && p.ts >= range.start.getTime() && p.ts <= Math.min(Date.now(), range.end.getTime())).length;
     pointsOk = pointsInRange >= minPointsForPeriod;
   }
 
@@ -1707,7 +1759,7 @@ function computeRaceStatus(emp, periodType){
 function renderRaceStatus(empId){
   const wrap = document.querySelector('#dh_raceStatus');
   if(!wrap) return;
-  const emp = employees.find(e=> e.id === empId);
+  const emp = window.employees.find(e=> e.id === empId);
   if(!emp){ wrap.innerHTML = ''; return; }
 
   const blocks = ['week','month'].map(periodType=>{
@@ -1732,6 +1784,37 @@ function renderRaceStatus(empId){
 }
 
 async function maybeAwardPeriod(emp, range, type, label){
+  const already = rewards.some(r=> r.employeeId===emp.id && r.type===type && r.periodLabel===label);
+  if(already) return;
+
+  if(type === 'monthly'){
+    // Monthly reward: split the month into ~4 weekly chunks and average their
+    // composite scores (attendance% + punctuality% + task% + rating%). Reaching
+    // 80% overall qualifies — no need for a flawless month, just solid consistency.
+    const MONTHLY_THRESHOLD_PCT = 80;
+    const chunks = [];
+    let chunkStart = new Date(range.start);
+    while(chunkStart < range.end){
+      let chunkEnd = new Date(chunkStart.getTime() + 6*24*60*60*1000);
+      if(chunkEnd > range.end) chunkEnd = new Date(range.end);
+      chunks.push({ start: chunkStart, end: chunkEnd });
+      chunkStart = new Date(chunkEnd.getTime() + 24*60*60*1000);
+    }
+    if(chunks.length === 0) return;
+    const composites = chunks.map(c=> computeWeekComposite(emp, c.start, c.end));
+    const avgComposite = Math.round(composites.reduce((a,b)=>a+b,0)/composites.length);
+    if(avgComposite < MONTHLY_THRESHOLD_PCT) return;
+
+    try{
+      await addDoc(rewardsCol, {
+        employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
+        type, periodLabel: label, amount: randomReward(), earnedAt: Date.now(), seen: false
+      });
+    }catch(err){ console.error('تعذر إنشاء المكافأة', err); }
+    return;
+  }
+
+  // Weekly reward: strict criteria — every single requirement must hold for the week.
   const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
   const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
   if(confirmedDays < requiredDays || requiredDays === 0) return;
@@ -1743,7 +1826,7 @@ async function maybeAwardPeriod(emp, range, type, label){
   if(hasSevereLateness) return;
 
   // Mild lateness (over the grace period but not severe) is tolerated ONCE per
-  // period — a second mild-late instance in the same week/month costs the reward.
+  // period — a second mild-late instance in the same week costs the reward.
   const mildLateCount = rangeShifts.filter(s=> (s.lateMinutes||0) > 0 && (s.lateMinutes||0) <= SEVERE_LATE_MINUTES).length;
   if(mildLateCount > 1) return;
 
@@ -1753,19 +1836,17 @@ async function maybeAwardPeriod(emp, range, type, label){
   if(avgRating !== null && avgRating < MIN_RATING_FOR_REWARD) return;
 
   // Minimum sales points requirement — only enforced if the admin set a
-  // per-employee weekly threshold; scaled proportionally for monthly periods.
+  // per-employee weekly threshold.
   if(emp.minWeeklyPoints){
     const periodDays = totalCalendarDaysInRange(range.start, range.end);
     const minPointsForPeriod = Math.round(emp.minWeeklyPoints * periodDays / 7);
-    const pointsInRange = points.filter(p=> p.employeeId===emp.id && p.ts >= range.start.getTime() && p.ts <= range.end.getTime()).length;
+    const pointsInRange = window.points.filter(p=> p.employeeId===emp.id && p.ts >= range.start.getTime() && p.ts <= range.end.getTime()).length;
     if(pointsInRange < minPointsForPeriod) return;
   }
 
-  const already = rewards.some(r=> r.employeeId===emp.id && r.type===type && r.periodLabel===label);
-  if(already) return;
   try{
     await addDoc(rewardsCol, {
-      employeeId: emp.id, employeeName: emp.name, branch: currentBranch,
+      employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
       type, periodLabel: label, amount: randomReward(), earnedAt: Date.now(), seen: false
     });
   }catch(err){ console.error('تعذر إنشاء المكافأة', err); }
@@ -1785,7 +1866,7 @@ function showUnseenRewardsIfAny(){
 }
 
 function countsFor(empId, sinceTs){
-  return points.filter(p=> p.employeeId === empId && (!sinceTs || p.ts >= sinceTs)).length;
+  return window.points.filter(p=> p.employeeId === empId && (!sinceTs || p.ts >= sinceTs)).length;
 }
 
 let highlightEmpId = null;
@@ -1794,7 +1875,7 @@ let highlightTimer = null;
 function renderEmpGrid(){
   const grid = $('#empGrid');
   const hint = $('#emptyHint');
-  const clockedIn = employees.filter(e=> isClockedIn(e.id));
+  const clockedIn = window.employees.filter(e=> isClockedIn(e.id));
   if(clockedIn.length === 0){
     grid.innerHTML = '';
     hint.style.display = 'block';
@@ -1842,7 +1923,7 @@ function showToast(empName){
 
 function startForEmployee(empId){
   requestFullscreenOnce();
-  selectedEmp = employees.find(e=> e.id === empId);
+  selectedEmp = window.employees.find(e=> e.id === empId);
   if(!selectedEmp) return;
   // Go straight to the camera. Only fall back to manual typing if the
   // device/browser genuinely can't scan (unsupported browser or no camera API).
@@ -1870,7 +1951,7 @@ async function confirmInvoice(){
 
   // Prevent the same invoice number being registered twice within the same branch.
   const branchEmpIds = new Set(allEmployees.filter(x=> x.branch === emp.branch).map(x=> x.id));
-  const isDuplicate = points.some(p=> branchEmpIds.has(p.employeeId) && String(p.invoiceNumber||'').trim() === invoiceNumber);
+  const isDuplicate = window.points.some(p=> branchEmpIds.has(p.employeeId) && String(p.invoiceNumber||'').trim() === invoiceNumber);
   if(isDuplicate){
     $('#invoiceEmpName').textContent = emp.name;
     $('#invoiceInput').value = invoiceNumber;
@@ -2019,7 +2100,7 @@ function buildRows(list, key){
 
 function renderLeaderboard(){
   // The kiosk-facing leaderboard always shows this device's own branch only.
-  const lbEmployees = employees;
+  const lbEmployees = window.employees;
   const weekAgo = Date.now() - 7*24*60*60*1000;
   const weekly = lbEmployees.map(e=>({name:e.name, count: countsFor(e.id, weekAgo)}))
     .filter(e=>e.count>0).sort((a,b)=>b.count-a.count);
@@ -2131,6 +2212,7 @@ function renderAdminList(){
       <input type="text" inputmode="numeric" maxlength="4" placeholder="كود PIN" data-pin-id="${e.id}" value="${e.pin || ''}"
         style="width:80px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; text-align:center;">
       <button data-act="savePin" data-id="${e.id}" style="border:none; background:var(--good); color:#fff; padding:8px 12px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">حفظ الكود</button>
+      <button data-act="resetPin" data-id="${e.id}" style="border:none; background:var(--gold-dim); color:#0b0c0f; padding:8px 12px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">🔄 إعادة تعيين</button>
       <button data-act="del" data-id="${e.id}">حذف</button>
     </div>
   `).join('');
@@ -2139,6 +2221,17 @@ function renderAdminList(){
       if(!confirm('متأكد إنك عايز تحذف الموظف ده؟')) return;
       try{ await deleteDoc(doc(db,'sales_employees', btn.dataset.id)); }
       catch(err){ console.error('تعذر الحذف', err); }
+    });
+  });
+  wrap.querySelectorAll('[data-act="resetPin"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const emp = window.employees.find(e=> e.id === btn.dataset.id);
+      if(!confirm(`متأكد إنك عايز تصفّر كود ${emp?emp.name:''}؟ هيحتاج يختار كود جديد لنفسه أول ما يسجل حضور تاني.`)) return;
+      try{
+        await updateDoc(doc(db,'sales_employees', btn.dataset.id), { pin: '' });
+        btn.textContent = 'اتصفّر ✅';
+        setTimeout(()=> btn.textContent = '🔄 إعادة تعيين', 1500);
+      }catch(err){ console.error('تعذر تصفير الكود', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
     });
   });
   wrap.querySelectorAll('[data-act="savePin"]').forEach(btn=>{
@@ -2161,7 +2254,7 @@ $('#addEmpBtn').addEventListener('click', async ()=>{
   errEl.textContent = '';
   if(!name){ errEl.textContent = 'اكتب اسم الموظف'; return; }
   try{
-    await addDoc(empCol, { name, branch: currentBranch, createdAt: Date.now() });
+    await addDoc(empCol, { name, branch: window.currentBranch, createdAt: Date.now() });
     $('#newEmpName').value = '';
   }catch(err){ errEl.textContent = 'حصل خطأ، حاول تاني'; console.error(err); }
 });
@@ -2171,8 +2264,8 @@ const DAY_NAMES = ['الأحد','الإثنين','الثلاثاء','الأرب�
 
 function renderScheduleList(){
   const wrap = $('#scheduleList');
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  wrap.innerHTML = employees.map(e=> `
+  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = window.employees.map(e=> `
     <div class="emp-row" style="flex-wrap:wrap; gap:8px;">
       <div class="n">${e.name}</div>
       <div style="display:flex; align-items:center; gap:6px;">
@@ -2253,8 +2346,8 @@ function renderScheduleList(){
 // ---------- TASK ASSIGNMENT (admin) ----------
 function renderTaskAssignList(){
   const wrap = $('#taskAssignList');
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  wrap.innerHTML = employees.map(e=>{
+  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = window.employees.map(e=>{
     const task = getCurrentTask(e.id);
     return `
     <div class="emp-row" style="flex-wrap:wrap;">
@@ -2268,11 +2361,11 @@ function renderTaskAssignList(){
     btn.addEventListener('click', async ()=>{
       const input = wrap.querySelector(`input[data-id="${btn.dataset.id}"]`);
       const desc = input.value.trim();
-      const emp = employees.find(e=> e.id === btn.dataset.id);
+      const emp = window.employees.find(e=> e.id === btn.dataset.id);
       if(!desc || !emp) return;
       try{
         await setDoc(doc(db,'sales_tasks', btn.dataset.id), {
-          employeeId: btn.dataset.id, employeeName: emp.name, branch: currentBranch,
+          employeeId: btn.dataset.id, employeeName: emp.name, branch: window.currentBranch,
           taskDescription: desc, assignedAt: Date.now()
         });
         btn.textContent = 'اتحفظت ✅';
@@ -2283,10 +2376,28 @@ function renderTaskAssignList(){
 }
 
 // ---------- SUBMISSION REVIEW (admin) ----------
+// Shows a small red dot on the settings gear whenever there's something
+// awaiting admin action (currently: unconfirmed task submissions), so it's
+// never missed even before opening the admin panel.
+function updateGearBadge(){
+  const badge = document.querySelector('#gearBadge');
+  if(!badge) return;
+  const branchEmpIds = new Set(window.employees.map(e=>e.id));
+  const hasPending = submissions.some(s=> branchEmpIds.has(s.employeeId) && !s.confirmed && !s.rejected);
+  badge.style.display = hasPending ? 'block' : 'none';
+}
+
 function renderPendingSubmissions(){
   const wrap = $('#pendingSubmissionsList');
-  const branchEmpIds = new Set(employees.map(e=>e.id));
+  const branchEmpIds = new Set(window.employees.map(e=>e.id));
   const pending = submissions.filter(s=> branchEmpIds.has(s.employeeId) && !s.confirmed && !s.rejected).sort((a,b)=> b.submittedAt-a.submittedAt);
+
+  const badge = document.querySelector('#pendingBadge');
+  if(badge){
+    if(pending.length > 0){ badge.textContent = pending.length; badge.style.display = 'inline-flex'; }
+    else{ badge.style.display = 'none'; }
+  }
+
   if(pending.length === 0){ wrap.innerHTML = '<div class="empty">مفيش تنفيذات محتاجة تأكيد دلوقتي</div>'; return; }
   wrap.innerHTML = pending.map(s=>{
     const d = new Date(s.submittedAt);
@@ -2324,7 +2435,7 @@ function renderPendingSubmissions(){
 
 function renderConfirmedSubmissions(){
   const wrap = $('#confirmedSubmissionsList');
-  const branchEmpIds = new Set(employees.map(e=>e.id));
+  const branchEmpIds = new Set(window.employees.map(e=>e.id));
   const confirmed = submissions.filter(s=> branchEmpIds.has(s.employeeId) && s.confirmed)
     .sort((a,b)=> b.submittedAt-a.submittedAt).slice(0,30);
   if(confirmed.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش تنفيذات مؤكدة</div>'; return; }
@@ -2357,7 +2468,7 @@ $('#photoLightbox').addEventListener('click', (e)=>{
 // ---------- REWARDS LOG (admin) ----------
 function renderRewardsList(){
   const wrap = $('#rewardsList');
-  const branchEmpIds = new Set(employees.map(e=>e.id));
+  const branchEmpIds = new Set(window.employees.map(e=>e.id));
   const list = rewards.filter(r=> branchEmpIds.has(r.employeeId)).sort((a,b)=> b.earnedAt-a.earnedAt);
   if(list.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش كسب مكافأة</div>'; return; }
 
@@ -2410,13 +2521,13 @@ function populateAttendanceEmpFilter(){
   if(!sel) return;
   const prev = sel.value || '__ALL__';
   sel.innerHTML = '<option value="__ALL__">كل الموظفين</option>' +
-    employees.map(e=> `<option value="${e.id}">${e.name}</option>`).join('');
-  sel.value = employees.some(e=>e.id===prev) || prev==='__ALL__' ? prev : '__ALL__';
+    window.employees.map(e=> `<option value="${e.id}">${e.name}</option>`).join('');
+  sel.value = window.employees.some(e=>e.id===prev) || prev==='__ALL__' ? prev : '__ALL__';
 }
 $('#attendanceEmpFilter')?.addEventListener('change', renderAttendanceHistory);
 
 function getAttendanceHistoryList(){
-  const branchEmpIds = new Set(employees.map(e=>e.id));
+  const branchEmpIds = new Set(window.employees.map(e=>e.id));
   const filterEmp = $('#attendanceEmpFilter') ? $('#attendanceEmpFilter').value : '__ALL__';
   return shifts.filter(s=> branchEmpIds.has(s.employeeId) && (filterEmp==='__ALL__' || s.employeeId===filterEmp))
     .sort((a,b)=> b.clockInTs - a.clockInTs);
@@ -2489,16 +2600,33 @@ $('#exportAttendanceCsvBtn')?.addEventListener('click', ()=>{
   const blob = new Blob(["\ufeff"+csv], { type:'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'attendance-' + currentBranch + '.csv';
+  a.href = url; a.download = 'attendance-' + window.currentBranch + '.csv';
   a.click();
   URL.revokeObjectURL(url);
 });
 
 // ---------- COMPREHENSIVE REPORT (admin) ----------
 // ---------- WEEKLY AGGREGATE PERFORMANCE (admin) ----------
+function computeWeekComposite(emp, weekStart, weekEnd){
+  const elapsedRequiredDays = countElapsedWorkDaysInRange(emp, weekStart, weekEnd);
+  const daysPresent = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= weekStart.getTime() && s.clockInTs <= weekEnd.getTime()).length;
+  const weekShifts = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= weekStart.getTime() && s.clockInTs <= weekEnd.getTime());
+  const lateCount = weekShifts.filter(s=> (s.lateMinutes||0) > 0).length;
+  const confirmedTasks = countConfirmedDaysInRange(emp.id, weekStart, weekEnd);
+  const avgRating = computeAvgRatingInRange(emp.id, weekStart.getTime(), weekEnd.getTime());
+
+  const attendancePct = elapsedRequiredDays > 0 ? Math.min(100, Math.round(daysPresent/elapsedRequiredDays*100)) : 100;
+  const punctualityPct = daysPresent > 0 ? Math.round((daysPresent-lateCount)/daysPresent*100) : 100;
+  const taskPct = elapsedRequiredDays > 0 ? Math.min(100, Math.round(confirmedTasks/elapsedRequiredDays*100)) : 100;
+  const ratingPct = avgRating === null ? null : Math.round((avgRating-1)/3*100); // maps 1..4 scale to 0..100%
+  const parts = [attendancePct, punctualityPct, taskPct];
+  if(ratingPct !== null) parts.push(ratingPct);
+  return Math.round(parts.reduce((a,b)=>a+b,0)/parts.length);
+}
+
 function buildWeeklyAggregateData(){
   const week = getWeekRange(new Date());
-  return employees.map(e=>{
+  return window.employees.map(e=>{
     const requiredDays = countRequiredWorkDaysInRange(e, week.start, week.end);
     const elapsedRequiredDays = countElapsedWorkDaysInRange(e, week.start, week.end);
     const daysPresent = shifts.filter(s=> s.employeeId===e.id && s.clockInTs >= week.start.getTime() && s.clockInTs <= week.end.getTime()).length;
@@ -2506,14 +2634,7 @@ function buildWeeklyAggregateData(){
     const lateCount = weekShifts.filter(s=> (s.lateMinutes||0) > 0).length;
     const confirmedTasks = countConfirmedDaysInRange(e.id, week.start, week.end);
     const avgRating = computeAvgRatingInRange(e.id, week.start.getTime(), week.end.getTime());
-
-    const attendancePct = elapsedRequiredDays > 0 ? Math.min(100, Math.round(daysPresent/elapsedRequiredDays*100)) : 100;
-    const punctualityPct = daysPresent > 0 ? Math.round((daysPresent-lateCount)/daysPresent*100) : 100;
-    const taskPct = elapsedRequiredDays > 0 ? Math.min(100, Math.round(confirmedTasks/elapsedRequiredDays*100)) : 100;
-    const ratingPct = avgRating === null ? null : Math.round((avgRating-1)/3*100); // maps 1..4 scale to 0..100%
-    const parts = [attendancePct, punctualityPct, taskPct];
-    if(ratingPct !== null) parts.push(ratingPct);
-    const composite = Math.round(parts.reduce((a,b)=>a+b,0)/parts.length);
+    const composite = computeWeekComposite(e, week.start, week.end);
 
     return {
       name: e.name, requiredDays, elapsedRequiredDays, daysPresent, lateCount,
@@ -2525,7 +2646,7 @@ function buildWeeklyAggregateData(){
 function renderWeeklyAggregate(){
   const wrap = $('#weeklyAggregateList');
   if(!wrap) return;
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const data = buildWeeklyAggregateData();
   const rows = data.map(d=>{
     const color = d.composite >= 85 ? 'var(--good)' : d.composite >= 60 ? '#f2a93c' : 'var(--bad)';
@@ -2548,13 +2669,13 @@ function populatePerfHistoryEmpSelect(){
   if(!sel) return;
   const prev = sel.value;
   sel.innerHTML = '<option value="">— اختار موظف —</option>' +
-    employees.map(e=> `<option value="${e.id}">${e.name}</option>`).join('');
-  if(employees.some(e=> e.id === prev)) sel.value = prev;
+    window.employees.map(e=> `<option value="${e.id}">${e.name}</option>`).join('');
+  if(window.employees.some(e=> e.id === prev)) sel.value = prev;
 }
 $('#perfHistoryEmpSelect')?.addEventListener('change', renderPerfHistory);
 
 function buildMonthlyPerformanceData(empId, monthsBack){
-  const emp = employees.find(e=> e.id === empId);
+  const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return [];
   const now = new Date();
   const results = [];
@@ -2563,7 +2684,7 @@ function buildMonthlyPerformanceData(empId, monthsBack){
     const range = getMonthRange(refDate);
     const monthLabel = refDate.toLocaleDateString('ar-EG', {month:'long', year:'numeric'});
 
-    const monthPoints = points.filter(p=> p.employeeId===empId && p.ts >= range.start.getTime() && p.ts <= range.end.getTime()).length;
+    const monthPoints = window.points.filter(p=> p.employeeId===empId && p.ts >= range.start.getTime() && p.ts <= range.end.getTime()).length;
     const avgRating = computeAvgRatingInRange(empId, range.start.getTime(), range.end.getTime());
     const confirmedTasks = countConfirmedDaysInRange(empId, range.start, range.end);
     const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
@@ -2617,8 +2738,8 @@ function renderPerfHistory(){
 }
 
 function buildFullReportData(){
-  return employees.map(e=>{
-    const empPoints = points.filter(p=> p.employeeId === e.id);
+  return window.employees.map(e=>{
+    const empPoints = window.points.filter(p=> p.employeeId === e.id);
     const empSubs = submissions.filter(s=> s.employeeId === e.id);
     const confirmedTasks = empSubs.filter(s=> s.confirmed).length;
     const rejectedTasks = empSubs.filter(s=> s.rejected).length;
@@ -2642,7 +2763,7 @@ function buildFullReportData(){
 function renderFullReport(){
   const wrap = $('#fullReportList');
   if(!wrap) return;
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const data = buildFullReportData();
   const rows = data.map(d=> `<tr>
     <td>${d.name}</td>
@@ -2674,7 +2795,7 @@ $('#exportFullReportCsvBtn')?.addEventListener('click', ()=>{
   const blob = new Blob(["\ufeff"+csv], { type:'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'full-report-' + currentBranch + '.csv';
+  a.href = url; a.download = 'full-report-' + window.currentBranch + '.csv';
   a.click();
   URL.revokeObjectURL(url);
 });
@@ -2694,12 +2815,12 @@ function renderCommissionPanel(){
     : 'لسه معملتش عمولة لهذا الفرع';
 
   const wrap = $('#commissionList');
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const monthLabel = getMonthLabel();
   const monthRange = getMonthRange(new Date());
 
-  wrap.innerHTML = employees.map(e=>{
-    const pointsThisMonth = points.filter(p=> p.employeeId===e.id && p.ts >= monthRange.start.getTime() && p.ts <= monthRange.end.getTime()).length;
+  wrap.innerHTML = window.employees.map(e=>{
+    const pointsThisMonth = window.points.filter(p=> p.employeeId===e.id && p.ts >= monthRange.start.getTime() && p.ts <= monthRange.end.getTime()).length;
     const paidThisMonth = commissionPayments.filter(p=> p.employeeId===e.id && p.monthLabel===monthLabel);
     const pointsAlreadyPaid = paidThisMonth.reduce((sum,p)=> sum + (p.pointsCount||0), 0);
     const amountAlreadyPaid = paidThisMonth.reduce((sum,p)=> sum + (p.commissionAmount||0), 0);
@@ -2722,12 +2843,12 @@ function renderCommissionPanel(){
 
   wrap.querySelectorAll('[data-act="pay"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      const emp = employees.find(e=> e.id === btn.dataset.id);
+      const emp = window.employees.find(e=> e.id === btn.dataset.id);
       if(!emp) return;
       if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عن ${btn.dataset.points} نقطة جديدة (شهر ${monthLabel})؟`)) return;
       try{
         await addDoc(commissionPaymentsCol, {
-          employeeId: emp.id, employeeName: emp.name, branch: currentBranch,
+          employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
           monthLabel, pointsCount: parseInt(btn.dataset.points), commissionAmount: parseFloat(btn.dataset.amount),
           paidAt: Date.now()
         });
@@ -2773,7 +2894,7 @@ $('#saveCommissionBtn')?.addEventListener('click', async ()=>{
   const val = parseFloat($('#commissionPerPointInput').value);
   if(isNaN(val) || val < 0){ alert('اكتب رقم صحيح'); return; }
   try{
-    await setDoc(doc(db,'sales_settings', currentBranch), { commissionPerPoint: val }, { merge:true });
+    await setDoc(doc(db,'sales_settings', window.currentBranch), { commissionPerPoint: val }, { merge:true });
   }catch(err){ console.error('تعذر حفظ العمولة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
 });
 
@@ -2783,7 +2904,7 @@ document.querySelector('#saveAnnouncementBtn')?.addEventListener('click', async 
   const originalLabel = btn.textContent;
   btn.disabled = true;
   try{
-    await setDoc(doc(db,'sales_settings', currentBranch), { announcement: text }, { merge:true });
+    await setDoc(doc(db,'sales_settings', window.currentBranch), { announcement: text }, { merge:true });
     // Update locally right away instead of waiting on the snapshot round-trip.
     window.currentAnnouncement = text;
     renderAnnouncementBanner();
@@ -2803,7 +2924,7 @@ document.querySelector('#saveDailyTargetBtn')?.addEventListener('click', async (
   const originalLabel = btn.textContent;
   btn.disabled = true;
   try{
-    await setDoc(doc(db,'sales_settings', currentBranch), { dailyTarget: target }, { merge:true });
+    await setDoc(doc(db,'sales_settings', window.currentBranch), { dailyTarget: target }, { merge:true });
     // Update locally right away instead of waiting on the snapshot round-trip.
     window.dailyTarget = target;
     renderDailyTargetCard();
@@ -2880,12 +3001,12 @@ function computeSalary(emp, periodStart, end){
 function renderSalaryPanel(){
   const wrap = $('#salaryList');
   if(!wrap) return;
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const range = getMonthDateRange(new Date());
   const periodLabel = getMonthLabel(range.start);
   const monthEnded = new Date() > range.end;
 
-  wrap.innerHTML = employees.map(e=>{
+  wrap.innerHTML = window.employees.map(e=>{
     if(!e.baseSalary){
       return `<div class="emp-row"><div class="n">${e.name}</div><div class="meta" style="color:var(--sub);">لسه مفيش مرتب أساسي متحدد (حطه في بانل المواعيد)</div></div>`;
     }
@@ -2918,12 +3039,12 @@ function renderSalaryPanel(){
 
   wrap.querySelectorAll('[data-act="paysalary"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      const emp = employees.find(e=> e.id === btn.dataset.id);
+      const emp = window.employees.find(e=> e.id === btn.dataset.id);
       if(!emp) return;
       if(!confirm(`تأكيد صرف ${btn.dataset.amount} ج.م لـ ${emp.name} عن شهر ${periodLabel}؟`)) return;
       try{
         await addDoc(salaryPaymentsCol, {
-          employeeId: emp.id, employeeName: emp.name, branch: currentBranch,
+          employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
           periodLabel, amount: parseFloat(btn.dataset.amount), paidAt: Date.now()
         });
       }catch(err){ console.error('تعذر تسجيل صرف الراتب', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
@@ -2970,8 +3091,8 @@ let pendingTerminateEmpId = null;
 function renderTerminationPanel(){
   const wrap = $('#terminateEmpList');
   if(!wrap) return;
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  wrap.innerHTML = employees.map(e=> `
+  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = window.employees.map(e=> `
     <div class="emp-row">
       <div class="n">${e.name}</div>
       <button data-id="${e.id}" style="border:none; background:var(--bad); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">🚪 إنهاء الخدمة</button>
@@ -2980,7 +3101,7 @@ function renderTerminationPanel(){
   wrap.querySelectorAll('button').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       pendingTerminateEmpId = btn.dataset.id;
-      const emp = employees.find(e=> e.id === pendingTerminateEmpId);
+      const emp = window.employees.find(e=> e.id === pendingTerminateEmpId);
       $('#terminateConfirmName').textContent = emp ? 'إنهاء خدمة: ' + emp.name : '—';
       $('#terminateConfirmPass').value = '';
       $('#terminateConfirmErr').textContent = '';
@@ -2997,7 +3118,7 @@ $('#terminateConfirmCancel')?.addEventListener('click', ()=>{
 $('#terminateConfirmBtn')?.addEventListener('click', async ()=>{
   const pass = $('#terminateConfirmPass').value;
   if(pass !== ADMIN_CODE){ $('#terminateConfirmErr').textContent = 'كود غلط'; return; }
-  const emp = employees.find(e=> e.id === pendingTerminateEmpId);
+  const emp = window.employees.find(e=> e.id === pendingTerminateEmpId);
   if(!emp){ $('#terminateConfirmOverlay').classList.remove('show'); return; }
 
   const now = new Date();
@@ -3008,7 +3129,7 @@ $('#terminateConfirmBtn')?.addEventListener('click', async ()=>{
 
   try{
     await addDoc(terminationsCol, {
-      employeeId: emp.id, employeeName: emp.name, branch: currentBranch,
+      employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
       terminatedAt: Date.now(), periodLabel, settlementAmount: calc.netSalary, paidAt: null
     });
     await updateDoc(doc(db,'sales_employees', emp.id), { active: false });
@@ -3053,7 +3174,7 @@ let pendingPhotoAction = null;
 
 async function openAttPhoto(action){
   pendingPhotoAction = action;
-  const emp = employees.find(e=> e.id === action.empId);
+  const emp = window.employees.find(e=> e.id === action.empId);
   $('#attPhotoName').textContent = emp ? emp.name : '—';
   $('#attPhotoErr').textContent = '';
   $('#attPhotoRetryBtn').style.display = 'none';
@@ -3215,9 +3336,9 @@ $('#openAdvance')?.addEventListener('click', ()=>{
   requestFullscreenOnce();
   showAdvStep(1);
   const wrap = $('#advanceEmpGrid');
-  if(employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; }
+  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; }
   else{
-    wrap.innerHTML = employees.map(e=> `
+    wrap.innerHTML = window.employees.map(e=> `
       <div class="attCard" data-id="${e.id}">
         <div class="av">${initials(e.name)}</div>
         <div class="n">${e.name}</div>
@@ -3239,7 +3360,7 @@ $('#advStep1Cancel')?.addEventListener('click', ()=> $('#advanceOverlay').classL
 $('#advStep3Cancel')?.addEventListener('click', ()=> $('#advanceOverlay').classList.remove('show'));
 
 function selectAdvEmp(empId){
-  advSelectedEmp = employees.find(e=> e.id === empId);
+  advSelectedEmp = window.employees.find(e=> e.id === empId);
   if(!advSelectedEmp) return;
   advPinBuffer = '';
   $('#advStep2Name').textContent = advSelectedEmp.name;
@@ -3297,7 +3418,7 @@ $('#advConfirmBtn')?.addEventListener('click', async ()=>{
   btn.disabled = true;
   try{
     await addDoc(advancesCol, {
-      employeeId: advSelectedEmp.id, employeeName: advSelectedEmp.name, branch: currentBranch,
+      employeeId: advSelectedEmp.id, employeeName: advSelectedEmp.name, branch: window.currentBranch,
       amount, date: todayStr(), ts: Date.now()
     });
     $('#advanceOverlay').classList.remove('show');
@@ -3383,8 +3504,8 @@ function renderDailyTargetCard(){
     return;
   }
   const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-  const empIds = new Set(employees.map(e=> e.id));
-  const achieved = points.filter(p=> empIds.has(p.employeeId) && p.ts >= dayStart.getTime()).length;
+  const empIds = new Set(window.employees.map(e=> e.id));
+  const achieved = window.points.filter(p=> empIds.has(p.employeeId) && p.ts >= dayStart.getTime()).length;
   const pct = Math.min(100, Math.round(achieved/window.dailyTarget*100));
   const remaining = Math.max(0, window.dailyTarget - achieved);
   const isDone = achieved >= window.dailyTarget;
