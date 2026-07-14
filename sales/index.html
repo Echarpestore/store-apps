@@ -2668,7 +2668,7 @@ $('#saveAnnouncementBtn')?.addEventListener('click', async ()=>{
     btn.textContent = text ? 'اتنشرت ✅' : 'اتشالت الرسالة ✅';
   }catch(err){
     console.error('تعذر حفظ الرسالة', err);
-    $('#announcementErr').textContent = 'خطأ: ' + (err && err.message ? err.message : String(err));
+    $('#announcementErr').textContent = 'STACK: ' + (err && err.stack ? err.stack.split('\n').slice(0,3).join(' | ') : String(err));
   }
   setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
 });
