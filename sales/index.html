@@ -321,10 +321,10 @@
   <button onclick="location.reload()" style="padding:14px 28px; border:none; border-radius:12px; background:#f2c14e; color:#0b0c0f; font-family:'Cairo',sans-serif; font-weight:800; font-size:15px; cursor:pointer;">🔄 تحديث الصفحة</button>
 </div>
 <script>
-  window.__appReady = false;
+  window.__scriptFullyLoaded = false;
   setTimeout(function(){
-    if(!window.__appReady){ document.getElementById('loadFailBanner').style.display = 'flex'; }
-  }, 6000);
+    if(!window.__scriptFullyLoaded){ document.getElementById('loadFailBanner').style.display = 'flex'; }
+  }, 8000);
 </script>
 <div id="app">
 
@@ -788,7 +788,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence not enabled:', err.code));
-window.__appReady = true; // signal to the safety-net script that the module loaded and is executing
 
 const empCol = collection(db, 'sales_employees');
 const pointsCol = collection(db, 'sales_points');
@@ -3388,6 +3387,13 @@ function renderAdminSettingsForm(){
   if(annInput && document.activeElement !== annInput) annInput.value = currentAnnouncement || '';
   if(targetInput && document.activeElement !== targetInput) targetInput.value = dailyTarget || '';
 }
+
+// If we reach this final line, the ENTIRE script downloaded and executed
+// successfully — not just the beginning. If this never runs (script got cut
+// off partway through a slow/unstable connection), the safety-net banner
+// below will catch it and prompt a reload instead of leaving buttons silently broken.
+window.__scriptFullyLoaded = true;
+console.log('%c✅ Script fully loaded (all ' + document.querySelectorAll('script').length + ' script tags parsed)', 'color:lime');
 </script>
 </body>
 </html>
