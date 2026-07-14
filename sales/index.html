@@ -2763,7 +2763,7 @@ document.querySelector('#saveAnnouncementBtn')?.addEventListener('click', async 
     btn.textContent = text ? 'اتنشرت ✅' : 'اتشالت الرسالة ✅';
   }catch(err){
     console.error('تعذر حفظ الرسالة', err);
-    document.querySelector('#announcementErr').textContent = 'حصل خطأ، حاول تاني';
+    document.querySelector('#announcementErr').textContent = 'خطأ: ' + (err && err.message ? err.message : String(err)) + (err && err.code ? (' [كود: '+err.code+']') : '');
   }
   setTimeout(()=>{ btn.textContent = originalLabel; btn.disabled = false; }, 1800);
 });
