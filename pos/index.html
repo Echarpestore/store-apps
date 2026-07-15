@@ -1,1 +1,1047 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>POS تجريبي</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --panel3:#242833;
+  --border:#2a2f3a; --text:#e8e9ec; --muted:#8a8f9a;
+  --accent:#3b82f6; --plus:#22c55e; --minus:#ef4444; --warn:#f59e0b;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
+.screen{display:none;height:100vh;flex-direction:column;}
+.screen.active{display:flex;}
+.badge-test{
+  position:fixed;top:8px;left:8px;background:var(--warn);color:#1a1200;
+  font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;z-index:999;
+}
 
+/* ---------- Login ---------- */
+#loginScreen{align-items:center;justify-content:center;}
+.pin-box{width:280px;text-align:center;}
+.pin-box h2{margin-bottom:18px;font-size:18px;}
+.pin-display{
+  font-size:28px;letter-spacing:10px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:12px;padding:14px;margin-bottom:16px;min-height:24px;
+}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.pin-pad button{
+  padding:18px 0;font-size:20px;border-radius:12px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--text);cursor:pointer;
+}
+.pin-pad button:active{background:var(--panel3);}
+.pin-pad .clear{color:var(--minus);}
+.pin-pad .ok{color:var(--plus);}
+.login-err{color:var(--minus);font-size:13px;margin-top:10px;min-height:16px;}
+
+/* ---------- Dashboard ---------- */
+#dashboardScreen{padding:20px;}
+.dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
+.dash-header h1{font-size:18px;margin:0;}
+.dash-header .who{font-size:13px;color:var(--muted);}
+.logout-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 12px;font-size:12px;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;}
+.tile{
+  background:var(--panel);border:1px solid var(--border);border-radius:16px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  cursor:pointer;padding:20px;min-height:120px;
+}
+.tile:active{background:var(--panel2);}
+.tile .icon{font-size:32px;}
+.tile .label{font-size:14px;font-weight:700;}
+.tile.disabled{opacity:.35;}
+.tile .sub{font-size:11px;color:var(--muted);}
+
+/* ---------- Make Sale ---------- */
+#saleScreen{padding:14px;}
+.sale-top{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
+.back-btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:14px;flex-shrink:0;}
+.search-wrap{position:relative;flex:1;}
+#searchBar{width:100%;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:16px;}
+#suggestBox{
+  position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel3);
+  border:1px solid var(--border);border-radius:12px;max-height:240px;overflow-y:auto;z-index:20;
+}
+.sugg-row{padding:12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;cursor:pointer;}
+.sugg-row:last-child{border-bottom:none;}
+.sugg-row:active{background:var(--panel2);}
+
+.customer-row{display:flex;gap:8px;margin-bottom:10px;}
+.customer-row input{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;}
+.customer-info{font-size:12px;color:var(--plus);padding:8px 0;min-height:16px;}
+
+.cart-area{flex:1;overflow-y:auto;margin-bottom:10px;}
+.cart-item{
+  background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:8px;
+}
+.cart-item .info{flex:1;}
+.cart-item .name{font-size:14px;font-weight:600;}
+.cart-item .price{font-size:12px;color:var(--muted);}
+.qtybox{display:flex;align-items:center;gap:6px;}
+.qtybox button{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:16px;}
+.qtybox .n{width:24px;text-align:center;font-size:14px;}
+.line-total{width:64px;text-align:left;font-size:13px;font-weight:700;}
+.remove-btn{color:var(--minus);background:none;border:none;font-size:18px;padding:4px 6px;}
+.empty-cart{color:var(--muted);text-align:center;padding:40px 0;font-size:13px;}
+
+.sale-footer{border-top:1px solid var(--border);padding-top:10px;}
+.total-row{display:flex;justify-content:space-between;font-size:20px;font-weight:800;margin-bottom:10px;}
+.action-row{display:flex;gap:8px;}
+.action-row button{
+  flex:1;padding:13px 0;border-radius:12px;border:none;font-size:14px;font-weight:700;cursor:pointer;
+}
+.btn-hold{background:var(--panel2);color:var(--warn);border:1px solid var(--border) !important;}
+.btn-pay{background:var(--accent);color:#fff;}
+.btn-held-list{background:var(--panel2);color:var(--text);border:1px solid var(--border) !important;}
+
+/* ---------- Payment Modal ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:200;
+}
+.modal-overlay.active{display:flex;}
+.modal-sheet{
+  background:var(--panel);border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:88vh;overflow-y:auto;
+}
+.modal-sheet h3{margin:0 0 14px;font-size:16px;text-align:center;}
+.pay-methods{display:flex;gap:8px;margin-bottom:14px;}
+.pay-method{
+  flex:1;padding:14px 0;border-radius:12px;border:2px solid var(--border);background:var(--panel2);
+  color:var(--text);text-align:center;cursor:pointer;
+}
+.pay-method.selected{border-color:var(--accent);background:rgba(59,130,246,.12);}
+.pay-method .m-label{font-size:13px;font-weight:700;}
+.pay-inputs{margin-bottom:12px;}
+.pay-input-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
+.pay-input-row label{font-size:13px;color:var(--muted);flex-shrink:0;}
+.pay-input-row input{width:120px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:15px;text-align:left;}
+.summary-box{background:var(--panel2);border-radius:12px;padding:12px;margin-bottom:14px;font-size:14px;}
+.summary-box .row{display:flex;justify-content:space-between;padding:4px 0;}
+.summary-box .row.err{color:var(--minus);font-weight:700;}
+.summary-box .row.ok{color:var(--plus);font-weight:700;}
+.modal-btns{display:flex;gap:8px;}
+.modal-btns button{flex:1;padding:14px 0;border-radius:12px;border:none;font-size:15px;font-weight:700;}
+.btn-cancel{background:var(--panel2);color:var(--muted);}
+.btn-confirm{background:var(--plus);color:#04170a;}
+.btn-confirm:disabled{opacity:.35;}
+
+/* Held invoices modal */
+.held-row{
+  background:var(--panel2);border-radius:12px;padding:12px;margin-bottom:8px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.held-row .h-info{font-size:13px;}
+.held-row .h-time{color:var(--muted);font-size:11px;}
+.held-row button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;}
+
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--panel3);border:1px solid var(--border);padding:12px 20px;border-radius:10px;
+  font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:999;
+}
+.toast.show{opacity:1;}
+.toast.err{border-color:var(--minus);color:var(--minus);}
+.toast.ok{border-color:var(--plus);color:var(--plus);}
+
+/* Printable receipt (hidden until print) */
+#receiptPrint{display:none;}
+@media print{
+  body *{visibility:hidden;}
+  #receiptPrint, #receiptPrint *{visibility:visible;}
+  #receiptPrint{display:block !important;position:absolute;top:0;left:0;width:100%;padding:10px;color:#000;background:#fff;}
+  #receiptPrint h2{text-align:center;margin:0 0 6px;}
+  #receiptPrint table{width:100%;border-collapse:collapse;font-size:12px;}
+  #receiptPrint td{padding:3px 0;}
+  #receiptPrint .r-total{font-weight:800;font-size:15px;border-top:1px dashed #000;padding-top:6px;}
+}
+</style>
+</head>
+<body>
+<div class="badge-test">⚠️ نسخة تجريبية</div>
+
+<!-- ============ BRANCH SETUP (first run only) ============ -->
+<div class="screen active" id="branchSetupScreen">
+  <div class="pin-box">
+    <h2>اسم الفرع</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">اكتب اسم الفرع بالظبط زي ما مسجل في نظام المبيعات — الجهاز ده هيفتكره.</p>
+    <input id="branchSetupInput" placeholder="مثلاً: Glow" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:15px; text-align:center; margin-bottom:12px;">
+    <button class="ok" style="width:100%; padding:14px; border-radius:12px; border:1px solid var(--border); background:var(--panel2); color:var(--plus); font-size:15px; cursor:pointer;" onclick="saveBranchSetup()">حفظ</button>
+  </div>
+</div>
+
+<!-- ============ LOGIN ============ -->
+<div class="screen" id="loginScreen">
+  <div class="pin-box">
+    <h2>ادخل الـ PIN بتاعك</h2>
+    <div class="pin-display" id="pinDisplay"></div>
+    <div class="pin-pad">
+      <button onclick="pinPress('1')">1</button><button onclick="pinPress('2')">2</button><button onclick="pinPress('3')">3</button>
+      <button onclick="pinPress('4')">4</button><button onclick="pinPress('5')">5</button><button onclick="pinPress('6')">6</button>
+      <button onclick="pinPress('7')">7</button><button onclick="pinPress('8')">8</button><button onclick="pinPress('9')">9</button>
+      <button class="clear" onclick="pinClear()">مسح</button><button onclick="pinPress('0')">0</button><button class="ok" onclick="pinSubmit()">دخول</button>
+    </div>
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ============ DASHBOARD ============ -->
+<div class="screen" id="dashboardScreen">
+  <div class="dash-header">
+    <div>
+      <h1 id="dashTitle">لوحة التحكم</h1>
+      <div class="who" id="dashWho"></div>
+    </div>
+    <button class="logout-btn" onclick="logout()">خروج 🔒</button>
+  </div>
+  <div class="grid" id="dashGrid">
+    <div class="tile" onclick="goToSale()">
+      <div class="icon">🧾</div>
+      <div class="label">بيع جديد</div>
+    </div>
+    <div class="tile" onclick="openHeldModal()">
+      <div class="icon">⏸️</div>
+      <div class="label">فواتير معلّقة</div>
+      <div class="sub" id="heldCountLabel">0 فاتورة</div>
+    </div>
+    <div class="tile" id="inventoryTile" onclick="goToInventory()">
+      <div class="icon">📦</div>
+      <div class="label">المخزون</div>
+      <div class="sub" id="inventoryTileSub">اطبع Price Label</div>
+    </div>
+    <div class="tile" id="reportsTile" onclick="goToReports()">
+      <div class="icon">📊</div>
+      <div class="label">تقارير المبيعات</div>
+      <div class="sub">للمدير بس</div>
+    </div>
+    <div class="tile" id="rolesTile" onclick="goToRoles()">
+      <div class="icon">🛡️</div>
+      <div class="label">الصلاحيات</div>
+      <div class="sub">للمدير بس</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ INVENTORY ============ -->
+<div class="screen" id="inventoryScreen">
+  <div class="dash-header">
+    <div><h1>📦 المخزون</h1></div>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="padding:0 4px 12px;" id="inventoryAddRow"></div>
+  <div style="flex:1; overflow-y:auto;" id="inventoryListWrap"></div>
+</div>
+
+<!-- ============ ROLES / PERMISSIONS (manager only) ============ -->
+<div class="screen" id="rolesScreen">
+  <div class="dash-header">
+    <div><h1>🛡️ الصلاحيات</h1></div>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 4px;">
+    <h3 style="margin:8px 0;">تخصيص صلاحيات كل دور</h3>
+    <div id="rolePermsWrap"></div>
+    <h3 style="margin:20px 0 8px;">دور كل موظف</h3>
+    <div id="employeeRolesWrap"></div>
+  </div>
+</div>
+
+<!-- ============ REPORTS (manager only, basic) ============ -->
+<div class="screen" id="reportsScreen">
+  <div class="dash-header">
+    <div><h1>📊 تقارير المبيعات</h1></div>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 4px;" id="reportsWrap"></div>
+</div>
+
+<!-- ============ MAKE SALE ============ -->
+<div class="screen" id="saleScreen">
+  <div class="sale-top">
+    <button class="back-btn" onclick="goToDashboard()">◀ رجوع</button>
+    <div class="search-wrap">
+      <input type="text" id="searchBar" placeholder="اكتب اسم المنتج أو امسح الباركود..." autocomplete="off">
+      <div id="suggestBox"></div>
+    </div>
+  </div>
+
+  <div class="customer-row">
+    <input type="tel" id="customerPhone" placeholder="رقم تليفون العميل (اختياري)" inputmode="numeric">
+  </div>
+  <div class="customer-info" id="customerInfo"></div>
+
+  <div class="cart-area" id="cartArea">
+    <div class="empty-cart">لسه مفيش أصناف في الفاتورة</div>
+  </div>
+
+  <div class="sale-footer">
+    <div class="total-row"><span>الإجمالي</span><span id="cartTotal">0.00</span></div>
+    <div class="action-row">
+      <button class="btn-hold" onclick="holdInvoice()">⏸️ Hold</button>
+      <button class="btn-pay" onclick="openPaymentModal()">💳 الدفع</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PAYMENT MODAL ============ -->
+<div class="modal-overlay" id="paymentModal">
+  <div class="modal-sheet">
+    <h3>طريقة الدفع</h3>
+    <div class="pay-methods">
+      <div class="pay-method" id="pmCash" onclick="togglePayMethod('cash')">
+        <div class="m-label">💵 كاش</div>
+      </div>
+      <div class="pay-method" id="pmVisa" onclick="togglePayMethod('visa')">
+        <div class="m-label">💳 فيزا</div>
+      </div>
+      <div class="pay-method" id="pmInsta" onclick="togglePayMethod('instapay')">
+        <div class="m-label">📱 انستا باي</div>
+      </div>
+    </div>
+    <div class="pay-inputs" id="payInputs"></div>
+    <div class="summary-box" id="paySummary"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closePaymentModal()">إلغاء</button>
+      <button class="btn-confirm" id="confirmPayBtn" onclick="confirmPayment()" disabled>Save &amp; Print ✔</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HELD INVOICES MODAL ============ -->
+<div class="modal-overlay" id="heldModal">
+  <div class="modal-sheet">
+    <h3>الفواتير المعلّقة</h3>
+    <div id="heldList"><div class="empty-cart">مفيش فواتير معلّقة</div></div>
+    <div class="modal-btns" style="margin-top:10px;">
+      <button class="btn-cancel" onclick="closeHeldModal()" style="flex:1;">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Printable receipt template -->
+<div id="receiptPrint">
+  <h2 id="rShopName">إيشارب ستور</h2>
+  <div style="text-align:center;font-size:11px;margin-bottom:8px;" id="rMeta"></div>
+  <table id="rItemsTable"></table>
+  <div class="r-total" id="rTotalLine"></div>
+  <div style="text-align:center;font-size:11px;margin-top:10px;">شكرًا لتعاملكم معنا 🙏</div>
+</div>
+
+<script>
+// ============================================================
+// إعدادات Firebase — نفس مشروع باقي البرامج (المبيعات، التقييم)
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
+  authDomain: "customer-feedback-8ac1d.firebaseapp.com",
+  projectId: "customer-feedback-8ac1d",
+  storageBucket: "customer-feedback-8ac1d.firebasestorage.app",
+  messagingSenderId: "408860081491",
+  appId: "1:408860081491:web:c5fa8b8e757c13196375a6",
+  measurementId: "G-6K33TSHDZ6"
+};
+
+// نفس الـ collection الحقيقي للموظفين في نظام الـ HR (نظام المبيعات) — قراءة فقط،
+// أي موظف مسجل هناك (بالاسم + الفرع + الـ PIN) بيظهر هنا تلقائيًا من غير أي إضافة يدوية.
+const EMPLOYEES_COLLECTION = "sales_employees";
+
+// كل بيانات النسخة التجريبية معزولة في الـ collections دي، مفيش أي تعديل على بياناتك الحقيقية
+const TEST_INVENTORY = "pos_test_inventory";
+const TEST_SALES = "pos_test_sales";
+const TEST_HELD = "pos_test_held_invoices";
+const TEST_CUSTOMERS = "pos_test_customers";
+const TEST_EMPLOYEE_POINTS = "pos_test_employee_points";
+const TEST_ROLES = "pos_test_roles"; // صلاحيات الأدوار (كاشير/مشرف/مدير) — خاصة بالـ POS بس، منفصلة عن نظام الـ HR
+
+const FEEDBACK_URL = "https://echarpestore.github.io/store-apps/feedback/";
+const POINTS_PER_EGP = 100;   // كل 100 جنيه = نقطة ولاء واحدة للعميل
+const MIN_ITEMS_FOR_STAFF_POINT = 5; // كل فاتورة فيها 5 قطع أو أكتر = نقطة للموظف
+
+// كل جهاز POS بيتبع فرع محدد (نفس فكرة باقي البرامج) — بيتحفظ على الجهاز نفسه
+let currentBranch = localStorage.getItem('pos_branch') || '';
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+function saveBranchSetup(){
+  const val = document.getElementById('branchSetupInput').value.trim();
+  if(!val) return;
+  currentBranch = val;
+  localStorage.setItem('pos_branch', val);
+  showScreen('loginScreen');
+}
+
+// أول ما الصفحة تفتح: لو مفيش فرع متسجل على الجهاز ده، اطلب تسجيله الأول قبل أي حاجة تانية.
+if(currentBranch){
+  document.getElementById('branchSetupScreen').classList.remove('active');
+  document.getElementById('loginScreen').classList.add('active');
+}
+
+// ---------------- State ----------------
+let currentEmployee = null;
+let cart = []; // {id, name, barcode, price, qty}
+let allInventory = [];
+let editingHeldId = null; // لو بنكمل على فاتورة كانت معلّقة
+let selectedPayMethods = new Set();
+
+// ---------------- Roles & Permissions (خاصة بالـ POS بس، منفصلة عن نظام الـ HR) ----------------
+// كل دور له مجموعة صلاحيات bool. القيم دي الافتراضية (Fallback) لو الأدمن لسه معملش تخصيص
+// من بانل الصلاحيات — بعد أول حفظ من البانل، القيم بتتقرا من قاعدة البيانات بدل كده.
+const DEFAULT_ROLE_PERMISSIONS = {
+  cashier: {
+    label: 'كاشير', canSell: true, canHold: true, canPrintLabel: true,
+    canViewCostPrice: false, canViewLogs: false, canRefund: false,
+    canEditInventory: false, canChangePrices: false, canViewReports: false, canManageRoles: false
+  },
+  supervisor: {
+    label: 'مشرف', canSell: true, canHold: true, canPrintLabel: true,
+    canViewCostPrice: false, canViewLogs: true, canRefund: true,
+    canEditInventory: false, canChangePrices: false, canViewReports: false, canManageRoles: false
+  },
+  manager: {
+    label: 'مدير', canSell: true, canHold: true, canPrintLabel: true,
+    canViewCostPrice: true, canViewLogs: true, canRefund: true,
+    canEditInventory: true, canChangePrices: true, canViewReports: true, canManageRoles: true
+  }
+};
+let rolePermissions = JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS));
+let currentEmployeeRole = 'cashier'; // fallback until loaded
+
+// بيرجع صلاحيات الموظف الحالي (كائن bool)، مبني على دوره المخصص.
+function myPerms(){
+  return rolePermissions[currentEmployeeRole] || DEFAULT_ROLE_PERMISSIONS.cashier;
+}
+function hasPerm(key){
+  return !!myPerms()[key];
+}
+
+// تحميل صلاحيات الأدوار (لو الأدمن خصّصها) ودور الموظف الحالي — بيتنفذ بعد كل تسجيل دخول.
+async function loadCurrentEmployeeRole(){
+  try{
+    const rolesSnap = await db.collection(TEST_ROLES).get();
+    rolesSnap.forEach(d=>{
+      if(rolePermissions[d.id]) rolePermissions[d.id] = { ...rolePermissions[d.id], ...d.data() };
+    });
+  }catch(e){ console.warn('تعذر تحميل صلاحيات الأدوار، هتُستخدم الافتراضية', e); }
+
+  try{
+    const assignSnap = await db.collection(TEST_ROLES).doc('_assignments').get();
+    const assignments = assignSnap.exists ? assignSnap.data() : {};
+    currentEmployeeRole = assignments[currentEmployee.id] || 'cashier';
+  }catch(e){
+    console.warn('تعذر تحميل دور الموظف، هيُعامل كـ"كاشير" افتراضيًا', e);
+    currentEmployeeRole = 'cashier';
+  }
+}
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function showToast(msg, type=""){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show ' + type;
+  setTimeout(()=> t.classList.remove('show'), 2400);
+}
+
+// ---------------- Login (PIN) ----------------
+let pinBuffer = "";
+function pinPress(d){
+  if(pinBuffer.length >= 6) return;
+  pinBuffer += d;
+  document.getElementById('pinDisplay').textContent = '•'.repeat(pinBuffer.length);
+}
+function pinClear(){ pinBuffer=""; document.getElementById('pinDisplay').textContent=""; document.getElementById('loginErr').textContent=""; }
+
+async function pinSubmit(){
+  const errBox = document.getElementById('loginErr');
+  if(!pinBuffer){ errBox.textContent = "اكتب الـ PIN الأول"; return; }
+  errBox.textContent = "جارٍ التحقق...";
+  try{
+    const snap = await db.collection(EMPLOYEES_COLLECTION)
+      .where('pin','==', pinBuffer)
+      .where('branch','==', currentBranch)
+      .limit(1).get();
+    if(snap.empty){
+      errBox.textContent = "الـ PIN غلط، حاول تاني";
+      pinClear();
+      return;
+    }
+    const doc = snap.docs[0];
+    currentEmployee = { id: doc.id, ...doc.data() };
+    errBox.textContent = "";
+    pinClear();
+    await loadCurrentEmployeeRole();
+    enterDashboard();
+  }catch(e){
+    errBox.textContent = "خطأ في الاتصال: " + e.message;
+  }
+}
+
+function logout(){
+  currentEmployee = null;
+  cart = [];
+  showScreen('loginScreen');
+}
+
+function enterDashboard(){
+  const roleLabel = myPerms().label || 'كاشير';
+  document.getElementById('dashWho').textContent = 'مسجّل دخول: ' + (currentEmployee.name || currentEmployee.id) + ' — ' + roleLabel;
+  refreshHeldCount();
+
+  // Gate tiles by the current employee's actual permissions.
+  const invTile = document.getElementById('inventoryTile');
+  document.getElementById('inventoryTileSub').textContent = hasPerm('canEditInventory') ? 'عرض + تعديل' : 'اطبع Price Label بس';
+
+  const reportsTile = document.getElementById('reportsTile');
+  if(hasPerm('canViewReports')){ reportsTile.classList.remove('disabled'); reportsTile.onclick = goToReports; }
+  else { reportsTile.classList.add('disabled'); reportsTile.onclick = null; }
+
+  const rolesTile = document.getElementById('rolesTile');
+  if(hasPerm('canManageRoles')){ rolesTile.classList.remove('disabled'); rolesTile.onclick = goToRoles; rolesTile.style.display=''; }
+  else { rolesTile.style.display = 'none'; }
+
+  showScreen('dashboardScreen');
+}
+
+function goToInventory(){
+  showScreen('inventoryScreen');
+  renderInventoryScreen();
+}
+function goToReports(){
+  if(!hasPerm('canViewReports')){ showToast('الصلاحية دي للمدير بس', 'err'); return; }
+  showScreen('reportsScreen');
+  renderReportsScreen();
+}
+function goToRoles(){
+  if(!hasPerm('canManageRoles')){ showToast('الصلاحية دي للمدير بس', 'err'); return; }
+  showScreen('rolesScreen');
+  renderRolesScreen();
+}
+
+// ---------------- Inventory (test) ----------------
+async function ensureDemoInventory(){
+  const snap = await db.collection(TEST_INVENTORY).limit(1).get();
+  if(!snap.empty) return;
+  const demo = [
+    {name:"حجاب حرير موف", barcode:"1001", price:150, quantity:40},
+    {name:"بيجامة قطن كاروهات", barcode:"1002", price:220, quantity:25},
+    {name:"طقم هوم وير 3 قطع", barcode:"1003", price:380, quantity:15},
+    {name:"حجاب شيفون أسود", barcode:"1004", price:120, quantity:60},
+    {name:"بيجامة صيفي قصير", barcode:"1005", price:180, quantity:30},
+    {name:"شرشف سرير مطرز", barcode:"1006", price:450, quantity:10}
+  ];
+  const batch = db.batch();
+  demo.forEach(it=>{
+    const ref = db.collection(TEST_INVENTORY).doc();
+    batch.set(ref, it);
+  });
+  await batch.commit();
+}
+async function loadInventory(){
+  const snap = await db.collection(TEST_INVENTORY).get();
+  allInventory = snap.docs.map(d=>({id:d.id, ...d.data()}));
+}
+
+// ---------------- Inventory screen (permission-gated) ----------------
+async function renderInventoryScreen(){
+  await loadInventory();
+  const addWrap = document.getElementById('inventoryAddRow');
+  const listWrap = document.getElementById('inventoryListWrap');
+
+  addWrap.innerHTML = hasPerm('canEditInventory') ? `
+    <div style="display:flex; gap:6px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px;">
+      <input id="newItemName" placeholder="اسم الصنف" style="flex:2; min-width:100px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <input id="newItemBarcode" placeholder="الباركود" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <input id="newItemPrice" type="number" placeholder="السعر" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <input id="newItemCost" type="number" placeholder="سعر التكلفة" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <input id="newItemQty" type="number" placeholder="الكمية" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <button onclick="addInventoryItem()" style="padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:700; cursor:pointer;">إضافة</button>
+    </div>` : '';
+
+  const canEdit = hasPerm('canEditInventory');
+  const canPrice = hasPerm('canChangePrices');
+  const canCost = hasPerm('canViewCostPrice');
+  const canLabel = hasPerm('canPrintLabel');
+
+  listWrap.innerHTML = allInventory.map(it=>`
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px; margin-bottom:8px;">
+      <div style="flex:2; min-width:110px;">
+        <div style="font-weight:700; font-size:13px;">${it.name}</div>
+        <div style="font-size:11px; color:var(--muted);">باركود: ${it.barcode||'—'} · الكمية: ${it.quantity??0}</div>
+      </div>
+      <div style="font-size:13px; font-weight:700;">${it.price} ج.م${canCost && it.cost!=null ? ` <span style="color:var(--muted); font-weight:400; font-size:11px;">(تكلفة ${it.cost})</span>` : ''}</div>
+      ${canLabel ? `<button onclick="printPriceLabel('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px; cursor:pointer;">🏷️ Label</button>` : ''}
+      ${(canEdit||canPrice) ? `<button onclick="editInventoryItem('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--accent); font-size:11px; cursor:pointer;">تعديل</button>` : ''}
+      ${canEdit ? `<button onclick="deleteInventoryItem('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>` : ''}
+    </div>
+  `).join('') || '<div class="empty-cart">لسه مفيش أصناف</div>';
+}
+
+async function addInventoryItem(){
+  if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
+  const name = document.getElementById('newItemName').value.trim();
+  const barcode = document.getElementById('newItemBarcode').value.trim();
+  const price = parseFloat(document.getElementById('newItemPrice').value) || 0;
+  const cost = parseFloat(document.getElementById('newItemCost').value) || 0;
+  const quantity = parseInt(document.getElementById('newItemQty').value) || 0;
+  if(!name || !price){ showToast('اكتب الاسم والسعر على الأقل', 'err'); return; }
+  await db.collection(TEST_INVENTORY).add({ name, barcode, price, cost, quantity });
+  showToast('اتضاف الصنف ✅');
+  renderInventoryScreen();
+}
+async function editInventoryItem(id){
+  const it = allInventory.find(x=>x.id===id);
+  if(!it) return;
+  const canEdit = hasPerm('canEditInventory');
+  const newPrice = prompt('السعر الجديد:', it.price);
+  if(newPrice === null) return;
+  const update = { price: parseFloat(newPrice) || it.price };
+  if(canEdit){
+    const newQty = prompt('الكمية الجديدة:', it.quantity ?? 0);
+    if(newQty !== null) update.quantity = parseInt(newQty) || 0;
+  }
+  await db.collection(TEST_INVENTORY).doc(id).update(update);
+  showToast('اتحفظ ✅');
+  renderInventoryScreen();
+}
+async function deleteInventoryItem(id){
+  if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
+  if(!confirm('متأكد إنك عايز تمسح الصنف ده؟')) return;
+  await db.collection(TEST_INVENTORY).doc(id).delete();
+  showToast('اتمسح ✅');
+  renderInventoryScreen();
+}
+function printPriceLabel(id){
+  if(!hasPerm('canPrintLabel')){ showToast('مفيش صلاحية', 'err'); return; }
+  const it = allInventory.find(x=>x.id===id);
+  if(!it) return;
+  const w = window.open('', '_blank', 'width=300,height=200');
+  w.document.write(`
+    <html dir="rtl"><head><meta charset="UTF-8"><style>
+      body{font-family:Tahoma,Arial,sans-serif; text-align:center; padding:14px;}
+      h2{margin:4px 0; font-size:16px;} .price{font-size:26px; font-weight:900; margin:6px 0;}
+      .code{font-size:11px; color:#555;}
+    </style></head><body>
+      <h2>${it.name}</h2>
+      <div class="price">${it.price} ج.م</div>
+      <div class="code">${it.barcode || ''}</div>
+      <script>window.print(); setTimeout(()=>window.close(), 300);<\/script>
+    </body></html>`);
+  w.document.close();
+}
+
+// ---------------- Roles / permissions screen (manager only) ----------------
+const PERM_LABELS = {
+  canSell:'يبيع', canHold:'يعمل Hold/Unhold', canPrintLabel:'يطبع Price Label',
+  canViewCostPrice:'يشوف سعر التكلفة', canViewLogs:'يشوف السجلات', canRefund:'يعمل استرجاع',
+  canEditInventory:'يعدّل/يضيف مخزون', canChangePrices:'يغيّر الأسعار', canViewReports:'يشوف التقارير المالية',
+  canManageRoles:'يدير الصلاحيات'
+};
+async function renderRolesScreen(){
+  const wrap = document.getElementById('rolePermsWrap');
+  wrap.innerHTML = Object.keys(DEFAULT_ROLE_PERMISSIONS).map(roleKey=>{
+    const perms = rolePermissions[roleKey];
+    const toggles = Object.keys(PERM_LABELS).map(permKey=>`
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; padding:4px 0;">
+        <input type="checkbox" data-role="${roleKey}" data-perm="${permKey}" ${perms[permKey]?'checked':''} onchange="toggleRolePerm(this)">
+        ${PERM_LABELS[permKey]}
+      </label>`).join('');
+    return `
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:10px;">
+      <div style="font-weight:800; margin-bottom:6px;">${perms.label}</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px;">${toggles}</div>
+    </div>`;
+  }).join('');
+
+  const empWrap = document.getElementById('employeeRolesWrap');
+  const empSnap = await db.collection(EMPLOYEES_COLLECTION).where('branch','==', currentBranch).get();
+  const assignSnap = await db.collection(TEST_ROLES).doc('_assignments').get();
+  const assignments = assignSnap.exists ? assignSnap.data() : {};
+  empWrap.innerHTML = empSnap.docs.map(d=>{
+    const emp = { id:d.id, ...d.data() };
+    const role = assignments[emp.id] || 'cashier';
+    const options = Object.keys(DEFAULT_ROLE_PERMISSIONS).map(rk=>
+      `<option value="${rk}" ${rk===role?'selected':''}>${DEFAULT_ROLE_PERMISSIONS[rk].label}</option>`).join('');
+    return `
+    <div style="display:flex; justify-content:space-between; align-items:center; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:6px;">
+      <div style="font-weight:700; font-size:13px;">${emp.name}</div>
+      <select data-emp="${emp.id}" onchange="setEmployeeRole(this)" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">${options}</select>
+    </div>`;
+  }).join('') || '<div class="empty-cart">لسه مفيش موظفين في الفرع ده</div>';
+}
+async function toggleRolePerm(checkbox){
+  const role = checkbox.dataset.role;
+  const perm = checkbox.dataset.perm;
+  rolePermissions[role][perm] = checkbox.checked;
+  await db.collection(TEST_ROLES).doc(role).set(rolePermissions[role], { merge:true });
+  showToast('اتحفظ ✅');
+}
+async function setEmployeeRole(sel){
+  const empId = sel.dataset.emp;
+  const role = sel.value;
+  await db.collection(TEST_ROLES).doc('_assignments').set({ [empId]: role }, { merge:true });
+  showToast('اتحفظ ✅');
+}
+
+// ---------------- Basic reports (manager only) ----------------
+async function renderReportsScreen(){
+  const wrap = document.getElementById('reportsWrap');
+  wrap.innerHTML = 'بيتحمّل...';
+  const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+  const sales = snap.docs.map(d=>d.data());
+  const total = sales.reduce((s,x)=> s + (x.total||0), 0);
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  const todaySales = sales.filter(x=> x.createdAt && x.createdAt.toMillis && x.createdAt.toMillis() >= dayStart.getTime());
+  const todayTotal = todaySales.reduce((s,x)=> s + (x.total||0), 0);
+  wrap.innerHTML = `
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px;">
+      <div style="color:var(--muted); font-size:12px;">إجمالي مبيعات النهاردة</div>
+      <div style="font-size:26px; font-weight:900; color:var(--plus);">${todayTotal.toFixed(2)} ج.م</div>
+      <div style="color:var(--muted); font-size:11px;">${todaySales.length} فاتورة</div>
+    </div>
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;">
+      <div style="color:var(--muted); font-size:12px;">إجمالي كل المبيعات المسجلة (الفرع ده)</div>
+      <div style="font-size:22px; font-weight:800;">${total.toFixed(2)} ج.م</div>
+      <div style="color:var(--muted); font-size:11px;">${sales.length} فاتورة إجمالي</div>
+    </div>`;
+}
+
+// ---------------- Navigation ----------------
+function goToSale(){
+  editingHeldId = null;
+  cart = [];
+  document.getElementById('customerPhone').value = '';
+  document.getElementById('customerInfo').textContent = '';
+  renderCart();
+  showScreen('saleScreen');
+}
+function goToDashboard(){
+  refreshHeldCount();
+  showScreen('dashboardScreen');
+}
+
+// ---------------- Search / suggestions ----------------
+const searchBar = document.getElementById('searchBar');
+searchBar.addEventListener('input', ()=>{
+  const q = searchBar.value.trim().toLowerCase();
+  const box = document.getElementById('suggestBox');
+  box.innerHTML = '';
+  if(!q){ return; }
+  const matches = allInventory.filter(it =>
+    (it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q)
+  ).slice(0,10);
+  matches.forEach(it=>{
+    const row = document.createElement('div');
+    row.className = 'sugg-row';
+    row.innerHTML = `<span>${it.name}</span><span style="color:var(--muted)">${it.price} جنيه</span>`;
+    row.onclick = ()=>{ addToCart(it); searchBar.value=''; box.innerHTML=''; };
+    box.appendChild(row);
+  });
+});
+searchBar.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){
+    const code = searchBar.value.trim();
+    if(!code) return;
+    const match = allInventory.find(it => it.barcode === code);
+    if(match){
+      addToCart(match);
+      searchBar.value = '';
+      document.getElementById('suggestBox').innerHTML = '';
+    }else{
+      showToast('لا يوجد صنف بهذا الكود', 'err');
+    }
+  }
+});
+
+function addToCart(item){
+  const existing = cart.find(c => c.id === item.id);
+  if(existing){ existing.qty += 1; }
+  else{ cart.push({id:item.id, name:item.name, barcode:item.barcode, price:item.price, qty:1}); }
+  renderCart();
+}
+
+function renderCart(){
+  const area = document.getElementById('cartArea');
+  if(cart.length === 0){
+    area.innerHTML = '<div class="empty-cart">لسه مفيش أصناف في الفاتورة</div>';
+  }else{
+    area.innerHTML = '';
+    cart.forEach((c, idx)=>{
+      const row = document.createElement('div');
+      row.className = 'cart-item';
+      row.innerHTML = `
+        <div class="info">
+          <div class="name">${c.name}</div>
+          <div class="price">${c.price} جنيه × ${c.qty}</div>
+        </div>
+        <div class="qtybox">
+          <button onclick="changeQty(${idx}, -1)">−</button>
+          <div class="n">${c.qty}</div>
+          <button onclick="changeQty(${idx}, 1)">+</button>
+        </div>
+        <div class="line-total">${(c.price*c.qty).toFixed(2)}</div>
+        <button class="remove-btn" onclick="removeFromCart(${idx})">✕</button>
+      `;
+      area.appendChild(row);
+    });
+  }
+  const total = cart.reduce((s,c)=> s + c.price*c.qty, 0);
+  document.getElementById('cartTotal').textContent = total.toFixed(2);
+}
+function changeQty(idx, delta){
+  cart[idx].qty += delta;
+  if(cart[idx].qty <= 0) cart.splice(idx,1);
+  renderCart();
+}
+function removeFromCart(idx){ cart.splice(idx,1); renderCart(); }
+
+function cartTotal(){ return cart.reduce((s,c)=> s + c.price*c.qty, 0); }
+
+// ---------------- Customer lookup (loyalty - test) ----------------
+document.getElementById('customerPhone').addEventListener('blur', async ()=>{
+  const phone = document.getElementById('customerPhone').value.trim();
+  const infoBox = document.getElementById('customerInfo');
+  if(!phone){ infoBox.textContent=''; return; }
+  try{
+    const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
+    if(doc.exists){
+      const d = doc.data();
+      infoBox.textContent = `عميل حالي - رصيد النقاط: ${d.points || 0} نقطة`;
+    }else{
+      infoBox.textContent = 'عميل جديد - هيتسجل بعد الدفع';
+    }
+  }catch(e){ infoBox.textContent=''; }
+});
+
+// ---------------- Hold / Unhold ----------------
+async function holdInvoice(){
+  if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
+  try{
+    await db.collection(TEST_HELD).add({
+      employeeId: currentEmployee.id,
+      employeeName: currentEmployee.name || '',
+      customerPhone: document.getElementById('customerPhone').value.trim(),
+      items: cart,
+      total: cartTotal(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast('اتحفظت كـ فاتورة معلّقة ✔', 'ok');
+    goToDashboard();
+  }catch(e){ showToast('فشل الحفظ: ' + e.message, 'err'); }
+}
+
+async function refreshHeldCount(){
+  try{
+    const snap = await db.collection(TEST_HELD).get();
+    document.getElementById('heldCountLabel').textContent = snap.size + ' فاتورة';
+  }catch(e){}
+}
+
+async function openHeldModal(){
+  const listBox = document.getElementById('heldList');
+  listBox.innerHTML = '<div class="empty-cart">جارٍ التحميل...</div>';
+  document.getElementById('heldModal').classList.add('active');
+  try{
+    const snap = await db.collection(TEST_HELD).orderBy('createdAt','desc').get();
+    if(snap.empty){
+      listBox.innerHTML = '<div class="empty-cart">مفيش فواتير معلّقة</div>';
+      return;
+    }
+    listBox.innerHTML = '';
+    snap.docs.forEach(d=>{
+      const h = d.data();
+      const row = document.createElement('div');
+      row.className = 'held-row';
+      row.innerHTML = `
+        <div class="h-info">
+          ${h.employeeName || '—'} | ${h.total.toFixed(2)} جنيه
+          <div class="h-time">${h.items.length} صنف${h.customerPhone ? ' | 📞 '+h.customerPhone : ''}</div>
+        </div>
+        <button onclick="unholdInvoice('${d.id}')">استرجاع</button>
+      `;
+      listBox.appendChild(row);
+    });
+  }catch(e){ listBox.innerHTML = '<div class="empty-cart">تعذر التحميل</div>'; }
+}
+function closeHeldModal(){ document.getElementById('heldModal').classList.remove('active'); }
+
+async function unholdInvoice(heldId){
+  try{
+    const doc = await db.collection(TEST_HELD).doc(heldId).get();
+    if(!doc.exists){ showToast('الفاتورة مش موجودة', 'err'); return; }
+    const h = doc.data();
+    cart = h.items || [];
+    document.getElementById('customerPhone').value = h.customerPhone || '';
+    document.getElementById('customerInfo').textContent = '';
+    editingHeldId = heldId;
+    // تتشال خالص من قائمة المعلّقة فور الاسترجاع
+    await db.collection(TEST_HELD).doc(heldId).delete();
+    closeHeldModal();
+    renderCart();
+    showScreen('saleScreen');
+  }catch(e){ showToast('فشل الاسترجاع: ' + e.message, 'err'); }
+}
+
+// ---------------- Payment ----------------
+function openPaymentModal(){
+  if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
+  selectedPayMethods = new Set();
+  document.querySelectorAll('.pay-method').forEach(el=>el.classList.remove('selected'));
+  document.getElementById('payInputs').innerHTML = '';
+  updatePaySummary();
+  document.getElementById('paymentModal').classList.add('active');
+}
+function closePaymentModal(){ document.getElementById('paymentModal').classList.remove('active'); }
+
+function togglePayMethod(method){
+  const total = cartTotal();
+  if(selectedPayMethods.has(method)){
+    selectedPayMethods.delete(method);
+  }else{
+    selectedPayMethods.add(method);
+  }
+  document.getElementById('pmCash').classList.toggle('selected', selectedPayMethods.has('cash'));
+  document.getElementById('pmVisa').classList.toggle('selected', selectedPayMethods.has('visa'));
+  document.getElementById('pmInsta').classList.toggle('selected', selectedPayMethods.has('instapay'));
+
+  const inputsBox = document.getElementById('payInputs');
+  inputsBox.innerHTML = '';
+  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
+  selectedPayMethods.forEach(m=>{
+    const row = document.createElement('div');
+    row.className = 'pay-input-row';
+    const defaultVal = (m === 'cash') ? '' : total.toFixed(2);
+    row.innerHTML = `<label>${labels[m]}</label><input type="number" step="0.01" id="pay_${m}" value="${defaultVal}" oninput="updatePaySummary()">`;
+    inputsBox.appendChild(row);
+  });
+  updatePaySummary();
+}
+
+function updatePaySummary(){
+  const total = cartTotal();
+  let entered = 0;
+  selectedPayMethods.forEach(m=>{
+    const el = document.getElementById('pay_'+m);
+    entered += el ? (parseFloat(el.value) || 0) : 0;
+  });
+  const diff = +(entered - total).toFixed(2);
+  const box = document.getElementById('paySummary');
+  const confirmBtn = document.getElementById('confirmPayBtn');
+
+  let extraLine = '';
+  if(selectedPayMethods.size === 0){
+    extraLine = '<div class="row">اختر طريقة دفع واحدة أو أكتر</div>';
+    confirmBtn.disabled = true;
+  }else if(diff < 0){
+    extraLine = `<div class="row err">ناقص ${Math.abs(diff).toFixed(2)} جنيه</div>`;
+    confirmBtn.disabled = true;
+  }else if(diff > 0){
+    extraLine = `<div class="row err">⚠️ المبلغ زيادة عن الإجمالي بـ ${diff.toFixed(2)} جنيه - راجع المبلغ</div>`;
+    confirmBtn.disabled = true;
+  }else{
+    extraLine = '<div class="row ok">المبلغ مظبوط ✔</div>';
+    confirmBtn.disabled = false;
+  }
+
+  box.innerHTML = `
+    <div class="row"><span>الإجمالي المطلوب</span><span>${total.toFixed(2)}</span></div>
+    <div class="row"><span>المبلغ المُدخل</span><span>${entered.toFixed(2)}</span></div>
+    ${extraLine}
+  `;
+}
+
+async function confirmPayment(){
+  const total = cartTotal();
+  const payments = {};
+  selectedPayMethods.forEach(m=>{
+    const el = document.getElementById('pay_'+m);
+    payments[m] = parseFloat(el.value) || 0;
+  });
+  const phone = document.getElementById('customerPhone').value.trim();
+  const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
+  const earnsStaffPoint = itemCount >= MIN_ITEMS_FOR_STAFF_POINT;
+  const loyaltyPointsEarned = phone ? Math.floor(total / POINTS_PER_EGP) : 0;
+
+  try{
+    // 1) سجل البيع
+    await db.collection(TEST_SALES).add({
+      employeeId: currentEmployee.id,
+      employeeName: currentEmployee.name || '',
+      items: cart,
+      itemCount, total, payments,
+      customerPhone: phone || null,
+      loyaltyPointsEarned,
+      staffPointEarned: earnsStaffPoint,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // 2) خصم من المخزون التجريبي
+    const batch = db.batch();
+    cart.forEach(c=>{
+      const ref = db.collection(TEST_INVENTORY).doc(c.id);
+      batch.update(ref, { quantity: firebase.firestore.FieldValue.increment(-c.qty) });
+    });
+    await batch.commit();
+
+    // 3) نقطة الموظف (تجريبي - منفصل عن رصيد الـ HR الحقيقي)
+    if(earnsStaffPoint){
+      const ptRef = db.collection(TEST_EMPLOYEE_POINTS).doc(currentEmployee.id);
+      await ptRef.set({
+        employeeName: currentEmployee.name || '',
+        points: firebase.firestore.FieldValue.increment(1),
+        salesCount: firebase.firestore.FieldValue.increment(1)
+      }, { merge: true });
+    }
+
+    // 4) نقاط ولاء العميل (تجريبي)
+    if(phone){
+      const custRef = db.collection(TEST_CUSTOMERS).doc(phone);
+      await custRef.set({
+        points: firebase.firestore.FieldValue.increment(loyaltyPointsEarned),
+        totalSpent: firebase.firestore.FieldValue.increment(total),
+        lastVisit: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    }
+
+    printReceipt(payments, total);
+    closePaymentModal();
+    showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
+    goToSale();
+  }catch(e){
+    showToast('فشل حفظ الفاتورة: ' + e.message, 'err');
+  }
+}
+
+function printReceipt(payments, total){
+  document.getElementById('rMeta').textContent =
+    new Date().toLocaleString('ar-EG') + ' | الموظف: ' + (currentEmployee.name || '');
+  const table = document.getElementById('rItemsTable');
+  table.innerHTML = '';
+  cart.forEach(c=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${c.name}</td><td>${c.qty}×</td><td>${(c.price*c.qty).toFixed(2)}</td>`;
+    table.appendChild(tr);
+  });
+  const payLines = Object.entries(payments).map(([k,v])=>{
+    const labels = {cash:'كاش', visa:'فيزا', instapay:'انستا باي'};
+    return `${labels[k]}: ${v.toFixed(2)}`;
+  }).join(' | ');
+  document.getElementById('rTotalLine').textContent = `الإجمالي: ${total.toFixed(2)} جنيه (${payLines})`;
+  window.print();
+}
+
+// ---------------- Init ----------------
+(async function init(){
+  await ensureDemoInventory();
+  await loadInventory();
+})();
+</script>
+</body>
+</html>
