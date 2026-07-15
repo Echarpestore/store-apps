@@ -40,10 +40,38 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .login-err{color:var(--minus);font-size:13px;margin-top:10px;min-height:16px;}
 
 /* ---------- Dashboard ---------- */
-#dashboardScreen{padding:20px;}
+#dashboardScreen{padding:0;}
 .dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
 .dash-header h1{font-size:18px;margin:0;}
 .dash-header .who{font-size:13px;color:var(--muted);}
+
+/* ---------- QuickBooks-style layout (sidebar + Navigator) ---------- */
+.qb-layout{display:flex; height:100vh;}
+.qb-sidebar{
+  width:190px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border);
+  display:flex; flex-direction:column; gap:10px; padding:16px 12px; overflow-y:auto;
+}
+.qb-sidebar button{
+  padding:14px 10px; border-radius:10px; border:1px solid var(--accent); background:var(--accent);
+  color:#fff; font-size:13px; font-weight:700; cursor:pointer; text-align:center;
+}
+.qb-sidebar button.secondary{background:var(--panel2); border-color:var(--border); color:var(--text);}
+.qb-sidebar button:active{opacity:.8;}
+.qb-main{flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column;}
+.qb-nav-box{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:18px; flex:1;}
+.qb-nav-box h2{margin:0 0 16px; font-size:16px;}
+.qb-nav-row{display:flex; align-items:flex-start; gap:6px; margin-bottom:22px; flex-wrap:wrap;}
+.qb-nav-row-label{writing-mode:vertical-rl; text-orientation:mixed; color:var(--muted); font-size:11px; font-weight:700; align-self:stretch; display:flex; align-items:center; justify-content:center; padding:4px 0;}
+.qb-nav-items{display:flex; align-items:center; gap:4px; flex-wrap:wrap;}
+.qb-nav-item{
+  display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer;
+  padding:10px 12px; border-radius:12px; min-width:76px; text-align:center;
+}
+.qb-nav-item:active{background:var(--panel2);}
+.qb-nav-item .qb-icon{font-size:26px;}
+.qb-nav-item .qb-label{font-size:11px; font-weight:700;}
+.qb-nav-item.disabled{opacity:.3; pointer-events:none;}
+.qb-arrow{color:var(--muted); font-size:16px; padding:0 2px;}
 .logout-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 12px;font-size:12px;}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;}
 .tile{
@@ -58,7 +86,18 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .tile .sub{font-size:11px;color:var(--muted);}
 
 /* ---------- Make Sale ---------- */
-#saleScreen{padding:14px;}
+#saleScreen{padding:0;}
+.qb-sale-layout{display:flex; height:100vh;}
+.qb-sale-sidebar{
+  width:170px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border);
+  display:flex; flex-direction:column; gap:10px; padding:14px 10px; overflow-y:auto;
+}
+.qb-sale-sidebar button{
+  padding:12px 8px; border-radius:10px; border:1px solid var(--border); background:var(--panel2);
+  color:var(--text); font-size:12px; font-weight:700; cursor:pointer; text-align:center;
+}
+.qb-sale-sidebar button:disabled{opacity:.3; cursor:not-allowed;}
+.qb-sale-main{flex:1; overflow:hidden; display:flex; flex-direction:column; padding:14px;}
 .sale-top{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
 .back-btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:14px;flex-shrink:0;}
 .search-wrap{position:relative;flex:1;}
@@ -71,23 +110,27 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .sugg-row:last-child{border-bottom:none;}
 .sugg-row:active{background:var(--panel2);}
 
-.customer-row{display:flex;gap:8px;margin-bottom:10px;}
+.customer-row{display:flex;gap:8px;margin-bottom:6px;}
 .customer-row input{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;}
-.customer-info{font-size:12px;color:var(--plus);padding:8px 0;min-height:16px;}
+.customer-info{font-size:12px;color:var(--plus);padding:4px 0;min-height:16px;}
+#newCustomerRow{display:none; gap:8px; margin-bottom:10px; background:var(--panel2); border:1px solid var(--warn); border-radius:10px; padding:8px;}
+#newCustomerRow input{flex:1; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel3); color:var(--text);}
+#newCustomerRow button{padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:700; cursor:pointer;}
 
-.cart-area{flex:1;overflow-y:auto;margin-bottom:10px;}
-.cart-item{
-  background:var(--panel);border:1px solid var(--border);border-radius:12px;
-  padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:8px;
+/* ---------- Item table (QuickBooks style, no Tax column) ---------- */
+.cart-area{flex:1;overflow-y:auto;margin-bottom:10px; border:1px solid var(--border); border-radius:12px;}
+.cart-table{width:100%; border-collapse:collapse; font-size:12px;}
+.cart-table thead th{
+  position:sticky; top:0; background:var(--panel2); padding:10px 6px; text-align:center; font-weight:700;
+  color:var(--muted); border-bottom:1px solid var(--border);
 }
-.cart-item .info{flex:1;}
-.cart-item .name{font-size:14px;font-weight:600;}
-.cart-item .price{font-size:12px;color:var(--muted);}
-.qtybox{display:flex;align-items:center;gap:6px;}
-.qtybox button{width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:16px;}
-.qtybox .n{width:24px;text-align:center;font-size:14px;}
-.line-total{width:64px;text-align:left;font-size:13px;font-weight:700;}
-.remove-btn{color:var(--minus);background:none;border:none;font-size:18px;padding:4px 6px;}
+.cart-table tbody td{padding:8px 6px; text-align:center; border-bottom:1px solid var(--border);}
+.cart-table tbody tr:last-child td{border-bottom:none;}
+.cart-table .item-name{text-align:right; font-weight:600;}
+.qtybox{display:flex;align-items:center;gap:4px; justify-content:center;}
+.qtybox button{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;}
+.qtybox .n{width:20px;text-align:center;font-size:13px;}
+.remove-btn{color:var(--minus);background:none;border:none;font-size:16px;padding:4px 6px;}
 .empty-cart{color:var(--muted);text-align:center;padding:40px 0;font-size:13px;}
 
 .sale-footer{border-top:1px solid var(--border);padding-top:10px;}
@@ -191,39 +234,82 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 
 <!-- ============ DASHBOARD ============ -->
 <div class="screen" id="dashboardScreen">
-  <div class="dash-header">
-    <div>
-      <h1 id="dashTitle">لوحة التحكم</h1>
-      <div class="who" id="dashWho"></div>
+  <div class="qb-layout">
+    <div class="qb-sidebar">
+      <div style="color:var(--muted); font-size:11px; margin-bottom:2px;" id="dashWho"></div>
+      <button onclick="goToSale()">🧾 بيع جديد</button>
+      <button onclick="openHeldModal()">⏸️ فواتير معلّقة <span id="heldCountLabel" style="display:block; font-size:10px; font-weight:400; opacity:.8;">0 فاتورة</span></button>
+      <button class="secondary" onclick="goToInventory()">📦 قائمة الأصناف</button>
+      <button class="secondary" onclick="goToCustomerList()">👤 قائمة العملاء</button>
+      <button class="secondary" id="reportsSidebarBtn" onclick="goToReports()">📊 التقارير</button>
+      <button class="secondary" id="rolesSidebarBtn" onclick="goToRoles()" style="display:none;">🛡️ الصلاحيات</button>
+      <div style="flex:1;"></div>
+      <button class="secondary" onclick="goToEndOfDay()">🌙 إغلاق اليوم</button>
+      <button class="secondary" style="border-color:var(--minus); color:var(--minus);" onclick="logout()">خروج 🔒</button>
     </div>
-    <button class="logout-btn" onclick="logout()">خروج 🔒</button>
+    <div class="qb-main">
+      <div class="qb-nav-box">
+        <h2>🧭 الرئيسية</h2>
+        <div class="qb-nav-row">
+          <div class="qb-nav-row-label">نقطة البيع</div>
+          <div class="qb-nav-items">
+            <div class="qb-nav-item" onclick="goToSale()"><div class="qb-icon">🧾</div><div class="qb-label">بيع جديد</div></div>
+            <div class="qb-arrow">→</div>
+            <div class="qb-nav-item" onclick="openHeldModal()"><div class="qb-icon">⏸️</div><div class="qb-label">فواتير معلّقة</div></div>
+            <div class="qb-arrow">→</div>
+            <div class="qb-nav-item" onclick="goToSalesHistory()"><div class="qb-icon">🗂️</div><div class="qb-label">سجل المبيعات</div></div>
+            <div class="qb-arrow">→</div>
+            <div class="qb-nav-item" onclick="goToCustomerList()"><div class="qb-icon">👤</div><div class="qb-label">قائمة العملاء</div></div>
+          </div>
+        </div>
+        <div class="qb-nav-row">
+          <div class="qb-nav-row-label">المخزون</div>
+          <div class="qb-nav-items">
+            <div class="qb-nav-item" id="navInventory" onclick="goToInventory()"><div class="qb-icon">📦</div><div class="qb-label">قائمة الأصناف</div></div>
+            <div class="qb-arrow">→</div>
+            <div class="qb-nav-item" id="navPriceLabel" onclick="goToInventory()"><div class="qb-icon">🏷️</div><div class="qb-label">طباعة أسعار</div></div>
+          </div>
+        </div>
+        <div class="qb-nav-row">
+          <div class="qb-nav-row-label">العمليات</div>
+          <div class="qb-nav-items">
+            <div class="qb-nav-item" id="navReports" onclick="goToReports()"><div class="qb-icon">📊</div><div class="qb-label">التقارير</div></div>
+            <div class="qb-arrow">→</div>
+            <div class="qb-nav-item" id="navRoles" onclick="goToRoles()" style="display:none;"><div class="qb-icon">🛡️</div><div class="qb-label">الصلاحيات</div></div>
+            <div class="qb-arrow" id="navRolesArrow" style="display:none;">→</div>
+            <div class="qb-nav-item" onclick="goToEndOfDay()"><div class="qb-icon">🌙</div><div class="qb-label">إغلاق اليوم</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="grid" id="dashGrid">
-    <div class="tile" onclick="goToSale()">
-      <div class="icon">🧾</div>
-      <div class="label">بيع جديد</div>
-    </div>
-    <div class="tile" onclick="openHeldModal()">
-      <div class="icon">⏸️</div>
-      <div class="label">فواتير معلّقة</div>
-      <div class="sub" id="heldCountLabel">0 فاتورة</div>
-    </div>
-    <div class="tile" id="inventoryTile" onclick="goToInventory()">
-      <div class="icon">📦</div>
-      <div class="label">المخزون</div>
-      <div class="sub" id="inventoryTileSub">اطبع Price Label</div>
-    </div>
-    <div class="tile" id="reportsTile" onclick="goToReports()">
-      <div class="icon">📊</div>
-      <div class="label">تقارير المبيعات</div>
-      <div class="sub">للمدير بس</div>
-    </div>
-    <div class="tile" id="rolesTile" onclick="goToRoles()">
-      <div class="icon">🛡️</div>
-      <div class="label">الصلاحيات</div>
-      <div class="sub">للمدير بس</div>
-    </div>
+</div>
+
+<!-- ============ SALES HISTORY ============ -->
+<div class="screen" id="salesHistoryScreen">
+  <div class="dash-header" style="padding:16px 20px 0;">
+    <div><h1>🗂️ سجل المبيعات</h1></div>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
+  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="salesHistoryWrap"></div>
+</div>
+
+<!-- ============ CUSTOMER LIST ============ -->
+<div class="screen" id="customerListScreen">
+  <div class="dash-header" style="padding:16px 20px 0;">
+    <div><h1>👤 قائمة العملاء</h1></div>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="customerListWrap"></div>
+</div>
+
+<!-- ============ END OF DAY ============ -->
+<div class="screen" id="endOfDayScreen">
+  <div class="dash-header" style="padding:16px 20px 0;">
+    <div><h1>🌙 إغلاق اليوم</h1></div>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="endOfDayWrap"></div>
 </div>
 
 <!-- ============ INVENTORY ============ -->
@@ -261,28 +347,53 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 
 <!-- ============ MAKE SALE ============ -->
 <div class="screen" id="saleScreen">
-  <div class="sale-top">
-    <button class="back-btn" onclick="goToDashboard()">◀ رجوع</button>
-    <div class="search-wrap">
-      <input type="text" id="searchBar" placeholder="اكتب اسم المنتج أو امسح الباركود..." autocomplete="off">
-      <div id="suggestBox"></div>
+  <div class="qb-sale-layout">
+    <div class="qb-sale-sidebar">
+      <button class="back-btn" onclick="goToDashboard()" style="width:100%;">◀ رجوع</button>
+      <div style="flex:1;"></div>
+      <button onclick="openGiveDiscount()">🏷️ خصم</button>
+      <button id="btnAcceptReturn" onclick="openAcceptReturn()">↩️ استرجاع</button>
+      <button onclick="showCashierInfo()">👤 الكاشير/الموظف</button>
+      <button onclick="openShipItems()">🚚 توصيل</button>
     </div>
-  </div>
+    <div class="qb-sale-main">
+      <div class="sale-top">
+        <div class="search-wrap">
+          <input type="text" id="searchBar" placeholder="اكتب اسم المنتج أو امسح الباركود..." autocomplete="off">
+          <div id="suggestBox"></div>
+        </div>
+      </div>
 
-  <div class="customer-row">
-    <input type="tel" id="customerPhone" placeholder="رقم تليفون العميل (اختياري)" inputmode="numeric">
-  </div>
-  <div class="customer-info" id="customerInfo"></div>
+      <div class="customer-row">
+        <input type="text" id="customerName" placeholder="اسم العميل" style="flex:1;">
+        <input type="tel" id="customerPhone" placeholder="رقم تليفون العميل (اختياري)" inputmode="numeric" style="flex:1;">
+      </div>
+      <div id="newCustomerRow">
+        <span style="font-size:12px; color:var(--warn); align-self:center;">⚠️ الرقم ده مش مسجل</span>
+        <button onclick="registerNewCustomer()">إضافة كعميل جديد بالاسم المكتوب</button>
+      </div>
+      <div class="customer-info" id="customerInfo"></div>
 
-  <div class="cart-area" id="cartArea">
-    <div class="empty-cart">لسه مفيش أصناف في الفاتورة</div>
-  </div>
+      <div class="cart-area" id="cartArea">
+        <table class="cart-table">
+          <thead>
+            <tr>
+              <th>#</th><th>الصنف</th><th>اللون/النوع</th><th>المقاس</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="cartTbody">
+            <tr><td colspan="8" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>
+          </tbody>
+        </table>
+      </div>
 
-  <div class="sale-footer">
-    <div class="total-row"><span>الإجمالي</span><span id="cartTotal">0.00</span></div>
-    <div class="action-row">
-      <button class="btn-hold" onclick="holdInvoice()">⏸️ Hold</button>
-      <button class="btn-pay" onclick="openPaymentModal()">💳 الدفع</button>
+      <div class="sale-footer">
+        <div class="total-row"><span>الإجمالي</span><span id="cartTotal">0.00</span></div>
+        <div class="action-row">
+          <button class="btn-hold" onclick="holdInvoice()">⏸️ Hold</button>
+          <button class="btn-pay" onclick="openPaymentModal()">💳 الدفع</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -433,9 +544,13 @@ async function loadCurrentEmployeeRole(){
   try{
     const assignSnap = await db.collection(TEST_ROLES).doc('_assignments').get();
     const assignments = assignSnap.exists ? assignSnap.data() : {};
+    // Bootstrap: if literally nobody has ever been assigned a role, open up
+    // the roles panel to everyone so the first manager can be set.
+    noRoleAssignmentsYet = Object.keys(assignments).length === 0;
     currentEmployeeRole = assignments[currentEmployee.id] || 'cashier';
   }catch(e){
     console.warn('تعذر تحميل دور الموظف، هيُعامل كـ"كاشير" افتراضيًا', e);
+    noRoleAssignmentsYet = true;
     currentEmployeeRole = 'cashier';
   }
 }
@@ -490,22 +605,23 @@ function logout(){
   showScreen('loginScreen');
 }
 
+let noRoleAssignmentsYet = false; // bootstrap flag: true if the system has never had any role assigned
+
 function enterDashboard(){
   const roleLabel = myPerms().label || 'كاشير';
-  document.getElementById('dashWho').textContent = 'مسجّل دخول: ' + (currentEmployee.name || currentEmployee.id) + ' — ' + roleLabel;
+  document.getElementById('dashWho').textContent = (currentEmployee.name || currentEmployee.id) + ' — ' + roleLabel;
   refreshHeldCount();
 
-  // Gate tiles by the current employee's actual permissions.
-  const invTile = document.getElementById('inventoryTile');
-  document.getElementById('inventoryTileSub').textContent = hasPerm('canEditInventory') ? 'عرض + تعديل' : 'اطبع Price Label بس';
+  // Gate roles access by permission — EXCEPT during first-time bootstrap
+  // (nobody has been assigned a role yet anywhere in the system), where
+  // access is open to everyone so someone can set themselves as manager.
+  const canSeeRoles = hasPerm('canManageRoles') || noRoleAssignmentsYet;
+  document.getElementById('rolesSidebarBtn').style.display = canSeeRoles ? '' : 'none';
+  document.getElementById('navRoles').style.display = canSeeRoles ? '' : 'none';
+  document.getElementById('navRolesArrow').style.display = canSeeRoles ? '' : 'none';
 
-  const reportsTile = document.getElementById('reportsTile');
-  if(hasPerm('canViewReports')){ reportsTile.classList.remove('disabled'); reportsTile.onclick = goToReports; }
-  else { reportsTile.classList.add('disabled'); reportsTile.onclick = null; }
-
-  const rolesTile = document.getElementById('rolesTile');
-  if(hasPerm('canManageRoles')){ rolesTile.classList.remove('disabled'); rolesTile.onclick = goToRoles; rolesTile.style.display=''; }
-  else { rolesTile.style.display = 'none'; }
+  const reportsBtn = document.getElementById('reportsSidebarBtn');
+  reportsBtn.style.opacity = hasPerm('canViewReports') ? '1' : '.4';
 
   showScreen('dashboardScreen');
 }
@@ -520,7 +636,7 @@ function goToReports(){
   renderReportsScreen();
 }
 function goToRoles(){
-  if(!hasPerm('canManageRoles')){ showToast('الصلاحية دي للمدير بس', 'err'); return; }
+  if(!hasPerm('canManageRoles') && !noRoleAssignmentsYet){ showToast('الصلاحية دي للمدير بس', 'err'); return; }
   showScreen('rolesScreen');
   renderRolesScreen();
 }
@@ -718,13 +834,83 @@ function goToSale(){
   editingHeldId = null;
   cart = [];
   document.getElementById('customerPhone').value = '';
+  document.getElementById('customerName').value = '';
   document.getElementById('customerInfo').textContent = '';
+  document.getElementById('newCustomerRow').style.display = 'none';
+  document.getElementById('btnAcceptReturn').disabled = !hasPerm('canRefund');
   renderCart();
   showScreen('saleScreen');
 }
 function goToDashboard(){
   refreshHeldCount();
   showScreen('dashboardScreen');
+}
+
+// ---------------- Sales History ----------------
+async function goToSalesHistory(){
+  showScreen('salesHistoryScreen');
+  const wrap = document.getElementById('salesHistoryWrap');
+  wrap.innerHTML = 'بيتحمّل...';
+  const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+  const sales = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>{
+    const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+    const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+    return bt - at;
+  });
+  if(sales.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش مبيعات مسجلة</div>'; return; }
+  wrap.innerHTML = sales.slice(0,100).map(s=>{
+    const d = s.createdAt && s.createdAt.toDate ? s.createdAt.toDate() : null;
+    const dateStr = d ? d.toLocaleString('ar-EG') : '—';
+    return `
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-weight:700; font-size:13px;">${(s.items||[]).length} صنف — ${s.customerPhone ? 'عميل: '+s.customerPhone : 'من غير عميل'}</div>
+        <div style="color:var(--muted); font-size:11px;">${dateStr} — بواسطة ${s.employeeName||'—'}</div>
+      </div>
+      <div style="font-weight:800; font-size:15px; color:var(--plus);">${(s.total||0).toFixed(2)} ج.م</div>
+    </div>`;
+  }).join('');
+}
+
+// ---------------- Customer List ----------------
+async function goToCustomerList(){
+  showScreen('customerListScreen');
+  const wrap = document.getElementById('customerListWrap');
+  wrap.innerHTML = 'بيتحمّل...';
+  const snap = await db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get();
+  const customers = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  if(customers.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش عملاء مسجلين</div>'; return; }
+  wrap.innerHTML = customers.map(c=>`
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-weight:700; font-size:13px;">${c.name || 'بدون اسم'}</div>
+        <div style="color:var(--muted); font-size:11px;">${c.phone}</div>
+      </div>
+      <div style="font-size:12px; color:var(--muted);">${c.points||0} نقطة ولاء</div>
+    </div>`).join('');
+}
+
+// ---------------- End of Day ----------------
+async function goToEndOfDay(){
+  showScreen('endOfDayScreen');
+  const wrap = document.getElementById('endOfDayWrap');
+  wrap.innerHTML = 'بيتحمّل...';
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+  const sales = snap.docs.map(d=>d.data()).filter(s=> s.createdAt && s.createdAt.toMillis && s.createdAt.toMillis() >= dayStart.getTime());
+  const total = sales.reduce((s,x)=> s + (x.total||0), 0);
+  const byMethod = {};
+  sales.forEach(s=> (s.payments||[]).forEach(p=>{ byMethod[p.method] = (byMethod[p.method]||0) + p.amount; }));
+  wrap.innerHTML = `
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px;">
+      <div style="color:var(--muted); font-size:12px;">إجمالي مبيعات النهاردة</div>
+      <div style="font-size:26px; font-weight:900; color:var(--plus);">${total.toFixed(2)} ج.م</div>
+      <div style="color:var(--muted); font-size:11px;">${sales.length} فاتورة</div>
+    </div>
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;">
+      <div style="font-weight:700; margin-bottom:8px;">حسب طريقة الدفع</div>
+      ${Object.keys(byMethod).map(m=>`<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--border); font-size:13px;"><span>${m}</span><span>${byMethod[m].toFixed(2)} ج.م</span></div>`).join('') || '<div class="empty-cart">لا يوجد</div>'}
+    </div>`;
 }
 
 // ---------------- Search / suggestions ----------------
@@ -763,34 +949,32 @@ searchBar.addEventListener('keydown', (e)=>{
 function addToCart(item){
   const existing = cart.find(c => c.id === item.id);
   if(existing){ existing.qty += 1; }
-  else{ cart.push({id:item.id, name:item.name, barcode:item.barcode, price:item.price, qty:1}); }
+  else{ cart.push({id:item.id, name:item.name, barcode:item.barcode, price:item.price, qty:1, attribute:item.attribute||'', size:item.size||''}); }
   renderCart();
 }
 
 function renderCart(){
-  const area = document.getElementById('cartArea');
+  const tbody = document.getElementById('cartTbody');
   if(cart.length === 0){
-    area.innerHTML = '<div class="empty-cart">لسه مفيش أصناف في الفاتورة</div>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>';
   }else{
-    area.innerHTML = '';
-    cart.forEach((c, idx)=>{
-      const row = document.createElement('div');
-      row.className = 'cart-item';
-      row.innerHTML = `
-        <div class="info">
-          <div class="name">${c.name}</div>
-          <div class="price">${c.price} جنيه × ${c.qty}</div>
-        </div>
-        <div class="qtybox">
-          <button onclick="changeQty(${idx}, -1)">−</button>
-          <div class="n">${c.qty}</div>
-          <button onclick="changeQty(${idx}, 1)">+</button>
-        </div>
-        <div class="line-total">${(c.price*c.qty).toFixed(2)}</div>
-        <button class="remove-btn" onclick="removeFromCart(${idx})">✕</button>
-      `;
-      area.appendChild(row);
-    });
+    tbody.innerHTML = cart.map((c, idx)=>`
+      <tr>
+        <td>${idx+1}</td>
+        <td class="item-name">${c.name}</td>
+        <td>${c.attribute || '—'}</td>
+        <td>${c.size || '—'}</td>
+        <td>
+          <div class="qtybox">
+            <button onclick="changeQty(${idx}, -1)">−</button>
+            <div class="n">${c.qty}</div>
+            <button onclick="changeQty(${idx}, 1)">+</button>
+          </div>
+        </td>
+        <td>${c.price.toFixed(2)}</td>
+        <td>${(c.price*c.qty).toFixed(2)}</td>
+        <td><button class="remove-btn" onclick="removeFromCart(${idx})">✕</button></td>
+      </tr>`).join('');
   }
   const total = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   document.getElementById('cartTotal').textContent = total.toFixed(2);
@@ -805,20 +989,59 @@ function removeFromCart(idx){ cart.splice(idx,1); renderCart(); }
 function cartTotal(){ return cart.reduce((s,c)=> s + c.price*c.qty, 0); }
 
 // ---------------- Customer lookup (loyalty - test) ----------------
+// لو الرقم متسجلش، بيوري صف "إضافة عميل جديد" عشان الكاشير يكتب الاسم ويسجله على طول.
 document.getElementById('customerPhone').addEventListener('blur', async ()=>{
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
-  if(!phone){ infoBox.textContent=''; return; }
+  const newRow = document.getElementById('newCustomerRow');
+  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     if(doc.exists){
       const d = doc.data();
-      infoBox.textContent = `عميل حالي - رصيد النقاط: ${d.points || 0} نقطة`;
+      document.getElementById('customerName').value = d.name || '';
+      infoBox.textContent = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d.points || 0} نقطة`;
+      newRow.style.display = 'none';
     }else{
-      infoBox.textContent = 'عميل جديد - هيتسجل بعد الدفع';
+      infoBox.textContent = '';
+      newRow.style.display = 'flex';
     }
   }catch(e){ infoBox.textContent=''; }
 });
+async function registerNewCustomer(){
+  const phone = document.getElementById('customerPhone').value.trim();
+  const name = document.getElementById('customerName').value.trim();
+  if(!phone){ showToast('اكتب رقم التليفون الأول', 'err'); return; }
+  if(!name){ showToast('اكتب اسم العميل', 'err'); return; }
+  try{
+    await db.collection(TEST_CUSTOMERS).doc(phone).set({ name, phone, points:0, branch: currentBranch, createdAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
+    document.getElementById('customerInfo').textContent = `اتسجل عميل جديد: ${name}`;
+    document.getElementById('newCustomerRow').style.display = 'none';
+    showToast('اتسجل العميل ✅');
+  }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
+
+// ---------------- Sidebar actions (Give Discount / Accept Return / Cashier / Ship) ----------------
+function openGiveDiscount(){
+  if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
+  const pct = prompt('نسبة الخصم % على إجمالي الفاتورة:', '0');
+  if(pct === null) return;
+  const p = parseFloat(pct);
+  if(isNaN(p) || p < 0 || p > 100){ showToast('نسبة غير صحيحة', 'err'); return; }
+  cart.forEach(c=> c.price = c.price * (1 - p/100));
+  renderCart();
+  showToast(`اتحط خصم ${p}% ✅`);
+}
+function openAcceptReturn(){
+  if(!hasPerm('canRefund')){ showToast('الصلاحية دي للمشرف/المدير بس', 'err'); return; }
+  showToast('شاشة الاسترجاع الكاملة لسه قيد التطوير — قريبًا', 'warn');
+}
+function showCashierInfo(){
+  showToast('مسجّل دخول: ' + (currentEmployee.name||'') + ' — ' + (myPerms().label||''));
+}
+function openShipItems(){
+  showToast('خاصية التوصيل لسه قيد التطوير — قريبًا', 'warn');
+}
 
 // ---------------- Hold / Unhold ----------------
 async function holdInvoice(){
