@@ -235,6 +235,7 @@
   .attCard .n{font-size:11px; font-weight:700;}
   .attCard .t{font-size:9px; color:var(--sub); font-family:'Space Grotesk';}
   .attCard.late{border-color:var(--bad);}
+  .attCard.onTime{border-color:var(--good); background:rgba(47,163,107,.08);}
   .attCard .lateTag{position:absolute; top:4px; right:4px; font-size:8px; background:var(--bad); color:#fff; padding:1px 5px; border-radius:6px;}
   .dayOffReminder{position:absolute; top:-8px; left:50%; transform:translateX(-50%); font-size:8px; background:var(--purple); color:#fff; padding:2px 7px; border-radius:8px; white-space:nowrap;}
 
@@ -1234,7 +1235,7 @@ function renderAttendanceLists(){
     const shift = getOpenShift(e.id);
     const late = shift && shift.lateMinutes > 0;
     return `
-    <div class="attCard${late?' late':''}" data-act="hub" data-id="${e.id}">
+    <div class="attCard${late?' late':' onTime'}" data-act="hub" data-id="${e.id}">
       ${late ? `<div class="lateTag">متأخر ${shift.lateMinutes}د</div>` : ''}
       <div class="av">${initials(e.name)}</div>
       <div class="n">${e.name}</div>
