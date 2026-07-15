@@ -2963,17 +2963,19 @@ function countDayOffOccurrencesInRange(emp, start, end){
 // regular full-month calculation and for a prorated final settlement.
 function computeSalary(emp, periodStart, end){
   const baseSalary = emp.baseSalary || 0;
-  const dailyRate = baseSalary / 30;
-  const hourlyRate = baseSalary / 240; // 30 days × 8 hours
+  const daysInFullPeriod = Math.max(1, Math.round((end - periodStart)/(24*60*60*1000)) + 1);
+  const dailyRate = baseSalary / daysInFullPeriod; // based on THIS period's actual day count (28/30/31)
+  const hourlyRate = dailyRate / 8;
 
   // If the employee was hired partway through this period, only pay them
   // from their hire date onward — not the full period.
   let start = periodStart;
   let notYetHired = false;
+  let isPartialPeriod = false;
   if(emp.hireDate){
     const hireDate = new Date(emp.hireDate + 'T00:00:00');
     if(hireDate > end){ notYetHired = true; }
-    else if(hireDate > start){ start = hireDate; }
+    else if(hireDate > start){ start = hireDate; isPartialPeriod = true; }
   }
 
   if(notYetHired){
@@ -2981,7 +2983,12 @@ function computeSalary(emp, periodStart, end){
   }
 
   const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
-  const proratedBase = Math.round(dailyRate * daysInCalc * 100)/100;
+  // A full month worked (no mid-month hire) always pays the exact base salary,
+  // regardless of whether the calendar month has 28, 30, or 31 days. Only a
+  // partial period (employee hired mid-month) gets prorated by daily rate.
+  const proratedBase = isPartialPeriod
+    ? Math.round(dailyRate * daysInCalc * 100)/100
+    : baseSalary;
 
   const rangeShifts = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime());
   const overtimeMinutes = rangeShifts.reduce((sum,s)=> sum + (s.overtimeMinutes||0), 0);
