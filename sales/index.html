@@ -1919,10 +1919,13 @@ function renderEmpGrid(){
   hint.style.display = 'none';
   grid.innerHTML = clockedIn.map(e=>{
     const sub = getTodaysSubmission(e.id);
+    const hasTask = !!getCurrentTask(e.id);
     let taskIcon = '';
     if(sub){
       if(sub.rejected) taskIcon = '❌';
       else taskIcon = sub.confirmed ? '✅' : '⏳';
+    } else if(hasTask){
+      taskIcon = '📸'; // task assigned, nothing submitted yet today
     }
     const hasUnseenReward = rewards.some(r=> r.employeeId===e.id && !r.seen);
     return `
