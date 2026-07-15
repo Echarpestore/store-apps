@@ -2996,13 +2996,14 @@ function countAttendedDaysInRange(empId, start, end){
 // regular full-month calculation and for a prorated final settlement.
 function computeSalary(emp, periodStart, end){
   const baseSalary = emp.baseSalary || 0;
-  // Daily rate is always based on the NATURAL full calendar month length (28/30/31),
-  // even if `end` passed in is truncated early (e.g. a termination settlement) —
-  // otherwise a truncated period would inflate the daily rate incorrectly.
-  const naturalMonthEnd = getMonthDateRange(periodStart).end;
-  const daysInFullPeriod = Math.max(1, Math.round((naturalMonthEnd - periodStart)/(24*60*60*1000)) + 1);
-  const dailyRate = baseSalary / daysInFullPeriod;
+  // Daily/hourly rate always uses a FIXED 30-day divisor, regardless of
+  // whether the actual calendar month has 28, 30, or 31 days. This only
+  // matters for partial periods (mid-month hire/termination) and for
+  // deductions/overtime — a FULL month worked always pays the exact base
+  // salary as-is (handled further below), untouched by this divisor.
+  const dailyRate = baseSalary / 30;
   const hourlyRate = dailyRate / 8;
+  const naturalMonthEnd = getMonthDateRange(periodStart).end;
 
   // If the employee was hired partway through this period, only pay them
   // from their hire date onward — not the full period. Likewise, if `end` is
