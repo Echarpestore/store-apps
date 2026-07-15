@@ -307,9 +307,15 @@
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <h3 style="margin:0;">آخر الآراء</h3>
-        <button class="backBtn" id="clearData" style="font-size:12px; padding:6px 12px;">مسح كل البيانات</button>
+        <button class="backBtn" id="clearData" style="font-size:12px; padding:6px 12px;">مسح كل بيانات الفرع الحالي</button>
       </div>
       <div id="tableWrap"></div>
+    </div>
+
+    <div class="panel">
+      <h3 style="margin:0 0 12px;">🗑️ إدارة الفروع</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">كل الفروع المسجلة وعندها تقييمات. دوس "حذف" جنب أي فرع عشان تمسح كل بياناته نهائيًا ويختفي من القايمة.</p>
+      <div id="branchManageList"></div>
     </div>
 
     <div class="panel">
@@ -493,6 +499,29 @@ function populateBranchDropdown(){
   sel.innerHTML = '<option value="__ALL__">كل الفروع</option>' +
     branches.map(b=>`<option value="${b}">${b}</option>`).join('');
   sel.value = branches.includes(prevValue) || prevValue === '__ALL__' ? prevValue : '__ALL__';
+  renderBranchManageList(branches);
+}
+
+function renderBranchManageList(branches){
+  const wrap = $('#branchManageList');
+  if(!wrap) return;
+  if(branches.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش فروع مسجلة</div>'; return; }
+  wrap.innerHTML = branches.map(b=>{
+    const count = allEntries.filter(e=> e.branch === b).length;
+    return `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line);">
+      <div>
+        <div style="font-weight:700; font-size:14px;">${b}</div>
+        <div style="color:var(--sub); font-size:11px;">${count} تقييم</div>
+      </div>
+      <button data-branch="${b}" data-label="${b}" class="branch-delete-btn" style="border:none; background:var(--r1); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">حذف</button>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('.branch-delete-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      openClearDataConfirm(btn.dataset.branch, btn.dataset.label);
+    });
+  });
 }
 
 // Live sync: any device connected to this Firebase project sees the
@@ -598,12 +627,22 @@ document.querySelectorAll('#rangeTabs button').forEach(btn=>{
   });
 });
 
-$('#clearData').addEventListener('click', ()=>{
+let pendingDeleteBranch = null; // '__ALL__' or a specific branch name
+
+function openClearDataConfirm(branchVal, label){
+  pendingDeleteBranch = branchVal;
   $('#clearDataPass1').value = '';
   $('#clearDataPass2').value = '';
   $('#clearDataWord').value = '';
   $('#clearDataErr').textContent = '';
+  $('#clearDataConfirmOverlay').querySelector('h3').textContent = '⚠️ مسح بيانات: ' + label;
   $('#clearDataConfirmOverlay').style.display = 'flex';
+}
+
+$('#clearData').addEventListener('click', ()=>{
+  const branchVal = $('#branchFilter').value || '__ALL__';
+  const label = branchVal === '__ALL__' ? 'كل الفروع' : branchVal;
+  openClearDataConfirm(branchVal, label);
 });
 $('#clearDataCancelBtn').addEventListener('click', ()=>{
   $('#clearDataConfirmOverlay').style.display = 'none';
@@ -627,7 +666,10 @@ $('#clearDataConfirmBtn').addEventListener('click', async ()=>{
   btn.disabled = true;
   btn.textContent = 'بيمسح...';
   try{
-    await Promise.all(entries.map(e=> deleteDoc(doc(db,'entries', e.id))));
+    const toDelete = pendingDeleteBranch === '__ALL__'
+      ? allEntries
+      : allEntries.filter(e=> e.branch === pendingDeleteBranch);
+    await Promise.all(toDelete.map(e=> deleteDoc(doc(db,'entries', e.id))));
     $('#clearDataConfirmOverlay').style.display = 'none';
   }catch(err){
     console.error('تعذر مسح البيانات', err);
