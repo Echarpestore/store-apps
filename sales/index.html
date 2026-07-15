@@ -753,8 +753,9 @@
     <div class="panel">
       <h3>💵 الرواتب الشهرية</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
-        الشهر بيتحسب من يوم 1 لحد يوم 30. الراتب بيتصرف يوم 6 من الشهر اللي بعده.
-        الساعات الإضافية بتتحسب بسعر الساعة العادي (المرتب ÷ 240 ساعة). أي يوم إجازة زيادة عن 4 مرات في الشهر بيتخصم كيوم كامل (المرتب ÷ 30).
+        الراتب الأساسي شهري ثابت (مش بيتقسم على أيام الشهر) طالما الموظف اشتغل الفترة كاملة. الوقت الإضافي بيتحسب من مدة الشيفت الفعلية (أكتر من 8 ساعات وربع) بسعر الساعة (الراتب÷30÷8).
+        الغياب غير المبرر بيتقارن بعدد مرات يوم إجازته الأسبوعي الفعلي في الفترة (مش رقم ثابت)، وأي غياب زيادة عليه بيتخصم يوم كامل (الراتب÷30). لو اشتغل في يوم إجازته، بياخد يوم كامل زيادة على راتبه.
+        "تتبع الحضور من" بيحدد أول يوم يبدأ منه حساب الغياب (منفصل عن تاريخ التعيين اللي بيأثر بس على حساب الراتب المتناسب).
       </p>
       <div id="salaryList"></div>
     </div>
@@ -2271,7 +2272,11 @@ $('#addEmpBtn').addEventListener('click', async ()=>{
   errEl.textContent = '';
   if(!name){ errEl.textContent = 'اكتب اسم الموظف'; return; }
   try{
-    await addDoc(empCol, { name, branch: (viewBranch==='__ALL__' ? window.currentBranch : viewBranch), createdAt: Date.now() });
+    // Attendance tracking starts from the moment they're added (used only to
+    // put a floor on absence detection), completely separate from hireDate
+    // (which the admin sets manually and only affects salary proration).
+    const trackingStart = todayStr();
+    await addDoc(empCol, { name, branch: (viewBranch==='__ALL__' ? window.currentBranch : viewBranch), attendanceTrackingStart: trackingStart, createdAt: Date.now() });
     $('#newEmpName').value = '';
   }catch(err){ errEl.textContent = 'حصل خطأ، حاول تاني'; console.error(err); }
 });
@@ -2317,6 +2322,11 @@ function renderScheduleList(){
         <input type="date" data-act="hiredate" data-id="${e.id}" value="${e.hireDate || ''}"
           style="padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
       </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:11px; color:var(--gold);">📅 تتبع الحضور من</span>
+        <input type="date" data-act="trackingstart" data-id="${e.id}" value="${e.attendanceTrackingStart || ''}"
+          style="padding:8px; border-radius:8px; border:1px solid var(--gold-dim); background:var(--panel2); color:var(--ink); font-family:'Cairo';">
+      </div>
     </div>
   `).join('');
   wrap.querySelectorAll('input[data-act="start"]').forEach(inp=>{
@@ -2349,6 +2359,12 @@ function renderScheduleList(){
     inp.addEventListener('change', async ()=>{
       try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { hireDate: inp.value || null }); }
       catch(err){ console.error('تعذر حفظ تاريخ التعيين', err); }
+    });
+  });
+  wrap.querySelectorAll('input[data-act="trackingstart"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { attendanceTrackingStart: inp.value || null }); }
+      catch(err){ console.error('تعذر حفظ تاريخ تتبع الحضور', err); }
     });
   });
   wrap.querySelectorAll('select[data-act="dayoff"]').forEach(sel=>{
@@ -2999,8 +3015,8 @@ function computeSalary(emp, periodStart, end){
   // Daily/hourly rate always uses a FIXED 30-day divisor, regardless of
   // whether the actual calendar month has 28, 30, or 31 days. This only
   // matters for partial periods (mid-month hire/termination) and for
-  // deductions/overtime — a FULL month worked always pays the exact base
-  // salary as-is (handled further below), untouched by this divisor.
+  // deductions/bonuses/overtime — a FULL month worked always pays the exact
+  // base salary as-is (handled further below), untouched by this divisor.
   const dailyRate = baseSalary / 30;
   const hourlyRate = dailyRate / 8;
   const naturalMonthEnd = getMonthDateRange(periodStart).end;
@@ -3009,7 +3025,8 @@ function computeSalary(emp, periodStart, end){
   // from their hire date onward — not the full period. Likewise, if `end` is
   // truncated before the natural month end (e.g. termination settlement),
   // this is also a partial period that must be prorated by days, not paid
-  // the full base salary.
+  // the full base salary. hireDate ONLY affects pay proration — it does NOT
+  // affect absence detection (see attendanceTrackingStart below for that).
   let start = periodStart;
   let notYetHired = false;
   let isPartialPeriod = end < naturalMonthEnd;
@@ -3020,7 +3037,7 @@ function computeSalary(emp, periodStart, end){
   }
 
   if(notYetHired){
-    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, advancesTotal:0, netSalary:0, daysInCalc:0, notYetHired:true };
+    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, dayOffBonusDays:0, dayOffBonusAmount:0, advancesTotal:0, netSalary:0, daysInCalc:0, notYetHired:true };
   }
 
   const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
@@ -3038,22 +3055,58 @@ function computeSalary(emp, periodStart, end){
   // Real unauthorized-absence detection: compare how many work days (excluding
   // the employee's scheduled day off) have actually ELAPSED so far in the
   // period against how many distinct days they genuinely clocked in. Any gap
-  // is an unexcused absence. A small number of free/excused absence days per
-  // month are still tolerated before a deduction kicks in.
+  // is an unexcused absence.
+  //
+  // absenceRangeStart is a SEPARATE, admin-controlled floor (attendanceTrackingStart)
+  // — distinct from hireDate. This lets the admin set an old hireDate (for full
+  // salary continuity) while telling the system "don't judge absence before
+  // this date", e.g. when first rolling the system out for existing staff.
+  let absenceRangeStart = start;
+  if(emp.attendanceTrackingStart){
+    const trackStart = new Date(emp.attendanceTrackingStart + 'T00:00:00');
+    if(trackStart > absenceRangeStart) absenceRangeStart = trackStart;
+  }
+
   const now = new Date();
   const elapsedEnd = now < end ? now : end;
-  const elapsedWorkDays = elapsedEnd < start ? 0 : countRequiredWorkDaysInRange(emp, start, elapsedEnd);
-  const attendedDays = countAttendedDaysInRange(emp.id, start, elapsedEnd < start ? start : elapsedEnd);
+  const elapsedWorkDays = elapsedEnd < absenceRangeStart ? 0 : countRequiredWorkDaysInRange(emp, absenceRangeStart, elapsedEnd);
+  const attendedDays = elapsedEnd < absenceRangeStart ? 0 : countAttendedDaysInRange(emp.id, absenceRangeStart, elapsedEnd);
   const absenceDays = Math.max(0, elapsedWorkDays - attendedDays);
-  const dayOffOccurrences = countDayOffOccurrencesInRange(emp, start, end); // kept for display/reference
-  const extraOffDays = Math.max(0, absenceDays - FREE_DAYOFF_PER_MONTH);
+
+  // Free/excused absence days are now PROPORTIONAL to the actual number of
+  // times the employee's weekly day off falls within the tracked period —
+  // not a fixed number — so a partial month or a 5-week month are both
+  // handled correctly and consistently (someone tracked for half a month
+  // gets roughly half the allowance; a month with 5 Fridays gives 5, not 4).
+  const dayOffOccurrences = elapsedEnd < absenceRangeStart ? 0 : countDayOffOccurrencesInRange(emp, absenceRangeStart, elapsedEnd);
+  const extraOffDays = Math.max(0, absenceDays - dayOffOccurrences);
   const deductionAmount = Math.round(extraOffDays * dailyRate * 100)/100;
+
+  // Bonus for working ON the scheduled day off instead of resting: for every
+  // occurrence of the employee's weekly day off within the period where they
+  // actually clocked in anyway, they earn an extra day's pay.
+  let dayOffBonusDays = 0;
+  if(emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== ''){
+    const cur = new Date(start);
+    while(cur <= end){
+      if(cur.getDay() === Number(emp.dayOff)){
+        const dayKey = cur.getFullYear()+'-'+cur.getMonth()+'-'+cur.getDate();
+        const workedThatDay = rangeShifts.some(s=>{
+          const d = new Date(s.clockInTs);
+          return (d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()) === dayKey;
+        });
+        if(workedThatDay) dayOffBonusDays++;
+      }
+      cur.setDate(cur.getDate()+1);
+    }
+  }
+  const dayOffBonusAmount = Math.round(dayOffBonusDays * dailyRate * 100)/100;
 
   const advancesTotal = allAdvances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= end.getTime())
     .reduce((sum,a)=> sum + a.amount, 0);
 
-  const netSalary = Math.round((proratedBase - deductionAmount + overtimePay - advancesTotal) * 100)/100;
-  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, advancesTotal, netSalary, daysInCalc, notYetHired:false };
+  const netSalary = Math.round((proratedBase - deductionAmount + overtimePay + dayOffBonusAmount - advancesTotal) * 100)/100;
+  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, dayOffBonusDays, dayOffBonusAmount, advancesTotal, netSalary, daysInCalc, notYetHired:false };
 }
 
 function renderSalaryPanel(){
@@ -3088,7 +3141,8 @@ function renderSalaryPanel(){
       <div class="meta">أساسي ${calc.proratedBase}</div>
       ${proratedNote}
       <div class="meta" style="color:var(--gold);">إضافي +${calc.overtimePay}</div>
-      <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم غياب -${calc.deductionAmount} (${calc.extraOffDays} يوم غياب غير مبرر)</div>
+      <div class="meta" style="color:${calc.dayOffBonusAmount>0?'var(--good)':'var(--sub)'}">مكافأة اشتغال إجازة +${calc.dayOffBonusAmount} (${calc.dayOffBonusDays} يوم)</div>
+      <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم غياب -${calc.deductionAmount} (${calc.extraOffDays} يوم غياب غير مبرر، من أصل ${calc.dayOffOccurrences} إجازة مسموحة)</div>
       <div class="meta" style="color:${calc.advancesTotal>0?'var(--bad)':'var(--sub)'}">سلف -${calc.advancesTotal}</div>
       <div class="meta" style="color:var(--good); font-weight:800;">صافي ${calc.netSalary} ج.م</div>
       ${actionHtml}
