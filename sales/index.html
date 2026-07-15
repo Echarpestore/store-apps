@@ -2959,19 +2959,39 @@ function countDayOffOccurrencesInRange(emp, start, end){
   return count;
 }
 
+// Distinct CALENDAR DAYS the employee actually clocked in during the range —
+// used to detect real unauthorized absences (a required work day with no
+// attendance record at all), not just to count their scheduled day off.
+function countAttendedDaysInRange(empId, start, end){
+  const daySet = new Set();
+  shifts.filter(s=> s.employeeId===empId && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime())
+    .forEach(s=>{
+      const d = new Date(s.clockInTs);
+      daySet.add(d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate());
+    });
+  return daySet.size;
+}
+
 // Computes pay for any date range within a salary cycle — used both for the
 // regular full-month calculation and for a prorated final settlement.
 function computeSalary(emp, periodStart, end){
   const baseSalary = emp.baseSalary || 0;
-  const daysInFullPeriod = Math.max(1, Math.round((end - periodStart)/(24*60*60*1000)) + 1);
-  const dailyRate = baseSalary / daysInFullPeriod; // based on THIS period's actual day count (28/30/31)
+  // Daily rate is always based on the NATURAL full calendar month length (28/30/31),
+  // even if `end` passed in is truncated early (e.g. a termination settlement) —
+  // otherwise a truncated period would inflate the daily rate incorrectly.
+  const naturalMonthEnd = getMonthDateRange(periodStart).end;
+  const daysInFullPeriod = Math.max(1, Math.round((naturalMonthEnd - periodStart)/(24*60*60*1000)) + 1);
+  const dailyRate = baseSalary / daysInFullPeriod;
   const hourlyRate = dailyRate / 8;
 
   // If the employee was hired partway through this period, only pay them
-  // from their hire date onward — not the full period.
+  // from their hire date onward — not the full period. Likewise, if `end` is
+  // truncated before the natural month end (e.g. termination settlement),
+  // this is also a partial period that must be prorated by days, not paid
+  // the full base salary.
   let start = periodStart;
   let notYetHired = false;
-  let isPartialPeriod = false;
+  let isPartialPeriod = end < naturalMonthEnd;
   if(emp.hireDate){
     const hireDate = new Date(emp.hireDate + 'T00:00:00');
     if(hireDate > end){ notYetHired = true; }
@@ -2983,9 +3003,9 @@ function computeSalary(emp, periodStart, end){
   }
 
   const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
-  // A full month worked (no mid-month hire) always pays the exact base salary,
-  // regardless of whether the calendar month has 28, 30, or 31 days. Only a
-  // partial period (employee hired mid-month) gets prorated by daily rate.
+  // A full month worked (no mid-month hire, not a truncated/early settlement)
+  // always pays the exact base salary, regardless of whether the calendar
+  // month has 28, 30, or 31 days. Any partial period gets prorated by daily rate.
   const proratedBase = isPartialPeriod
     ? Math.round(dailyRate * daysInCalc * 100)/100
     : baseSalary;
@@ -2994,8 +3014,18 @@ function computeSalary(emp, periodStart, end){
   const overtimeMinutes = rangeShifts.reduce((sum,s)=> sum + (s.overtimeMinutes||0), 0);
   const overtimePay = Math.round((overtimeMinutes/60) * hourlyRate * 100)/100;
 
-  const dayOffOccurrences = countDayOffOccurrencesInRange(emp, start, end);
-  const extraOffDays = Math.max(0, dayOffOccurrences - FREE_DAYOFF_PER_MONTH);
+  // Real unauthorized-absence detection: compare how many work days (excluding
+  // the employee's scheduled day off) have actually ELAPSED so far in the
+  // period against how many distinct days they genuinely clocked in. Any gap
+  // is an unexcused absence. A small number of free/excused absence days per
+  // month are still tolerated before a deduction kicks in.
+  const now = new Date();
+  const elapsedEnd = now < end ? now : end;
+  const elapsedWorkDays = elapsedEnd < start ? 0 : countRequiredWorkDaysInRange(emp, start, elapsedEnd);
+  const attendedDays = countAttendedDaysInRange(emp.id, start, elapsedEnd < start ? start : elapsedEnd);
+  const absenceDays = Math.max(0, elapsedWorkDays - attendedDays);
+  const dayOffOccurrences = countDayOffOccurrencesInRange(emp, start, end); // kept for display/reference
+  const extraOffDays = Math.max(0, absenceDays - FREE_DAYOFF_PER_MONTH);
   const deductionAmount = Math.round(extraOffDays * dailyRate * 100)/100;
 
   const advancesTotal = advances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= end.getTime())
@@ -3037,7 +3067,7 @@ function renderSalaryPanel(){
       <div class="meta">أساسي ${calc.proratedBase}</div>
       ${proratedNote}
       <div class="meta" style="color:var(--gold);">إضافي +${calc.overtimePay}</div>
-      <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم إجازة -${calc.deductionAmount} (${calc.extraOffDays} يوم زيادة)</div>
+      <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم غياب -${calc.deductionAmount} (${calc.extraOffDays} يوم غياب غير مبرر)</div>
       <div class="meta" style="color:${calc.advancesTotal>0?'var(--bad)':'var(--sub)'}">سلف -${calc.advancesTotal}</div>
       <div class="meta" style="color:var(--good); font-weight:800;">صافي ${calc.netSalary} ج.م</div>
       ${actionHtml}
