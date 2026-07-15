@@ -306,6 +306,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
       <button class="secondary" onclick="goToCustomerList()">👤 قائمة العملاء</button>
       <button class="secondary" id="reportsSidebarBtn" onclick="goToReports()">📊 التقارير</button>
       <button class="secondary" id="rolesSidebarBtn" onclick="goToRoles()" style="display:none;">🛡️ الصلاحيات</button>
+      <button class="secondary" id="discountsSidebarBtn" onclick="goToDiscounts()" style="display:none;">🏷️ الخصومات</button>
       <div style="flex:1;"></div>
       <button class="secondary" onclick="goToEndOfDay()">🌙 إغلاق اليوم</button>
       <button class="secondary" style="border-color:var(--minus); color:var(--minus);" onclick="logout()">خروج 🔒</button>
@@ -339,6 +340,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
             <div class="qb-nav-item" id="navReports" onclick="goToReports()"><div class="qb-icon">📊</div><div class="qb-label">التقارير</div></div>
             <div class="qb-arrow">→</div>
             <div class="qb-nav-item" id="navRoles" onclick="goToRoles()" style="display:none;"><div class="qb-icon">🛡️</div><div class="qb-label">الصلاحيات</div></div>
+            <div class="qb-nav-item" id="navDiscounts" onclick="goToDiscounts()" style="display:none;"><div class="qb-icon">🏷️</div><div class="qb-label">الخصومات</div></div>
             <div class="qb-arrow" id="navRolesArrow" style="display:none;">→</div>
             <div class="qb-nav-item" onclick="goToEndOfDay()"><div class="qb-icon">🌙</div><div class="qb-label">إغلاق اليوم</div></div>
           </div>
@@ -425,6 +427,18 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
     <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="employeeProfileWrap"></div>
+</div>
+
+<!-- ============ DISCOUNTS (manager only) ============ -->
+<div class="screen" id="discountsScreen">
+  <div class="dash-header">
+    <div><h1>🏷️ الخصومات</h1></div>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
+    <div id="discountAddCard"></div>
+    <div id="discountListCard"></div>
+  </div>
 </div>
 
 <!-- ============ ROLES / PERMISSIONS (manager only) ============ -->
@@ -596,5 +610,6 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <script src="app.js"></script>
 <script src="products.js"></script>
 <script src="profiles.js"></script>
+<script src="discounts.js"></script>
 </body>
 </html>

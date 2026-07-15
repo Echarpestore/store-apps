@@ -216,6 +216,10 @@ function enterDashboard(){
   document.getElementById('navRoles').style.display = canSeeRoles ? '' : 'none';
   document.getElementById('navRolesArrow').style.display = canSeeRoles ? '' : 'none';
 
+  const canDiscounts = hasPerm('canChangePrices');
+  document.getElementById('discountsSidebarBtn').style.display = canDiscounts ? '' : 'none';
+  document.getElementById('navDiscounts').style.display = canDiscounts ? '' : 'none';
+
   const reportsBtn = document.getElementById('reportsSidebarBtn');
   reportsBtn.style.opacity = hasPerm('canViewReports') ? '1' : '.4';
 
@@ -539,6 +543,8 @@ function goToSale(){
   editingHeldId = null;
   cart = [];
   selectedCartIdx = null;
+  // تحميل الخصومات السارية عشان تتطبق تلقائي وقت إضافة الأصناف
+  if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
   document.getElementById('customerPhone').value = '';
   document.getElementById('customerName').value = '';
   document.getElementById('customerInfo').textContent = '';
@@ -673,7 +679,22 @@ function addToCart(item){
     return;
   }
   if(existing){ existing.qty += 1; }
-  else{ cart.push({id:item.id, name:item.name, barcode:item.barcode, price:item.price, qty:1, attribute:item.attribute||'', size:item.size||''}); }
+  else{
+    // تطبيق أفضل خصم ساري تلقائيًا (لو فيه) — بقاعدة "الأفضل للعميل بس، مش تجميع"
+    let finalPrice = item.price;
+    let discountName = null;
+    let originalPrice = null;
+    if(typeof bestDiscountFor === 'function'){
+      const best = bestDiscountFor(item);
+      if(best){
+        originalPrice = item.price;
+        finalPrice = +(item.price - best.saving).toFixed(2);
+        discountName = best.discount.name;
+        showToast(`🏷️ اتطبق خصم "${discountName}" — وفّر ${best.saving.toFixed(2)} ج.م`, 'ok');
+      }
+    }
+    cart.push({id:item.id, name:item.name, barcode:item.barcode, price:finalPrice, originalPrice, discountName, qty:1, attribute:item.attribute||'', size:item.size||''});
+  }
   renderCart();
 }
 
@@ -689,10 +710,10 @@ function renderCart(){
     tbody.innerHTML = cart.map((c, idx)=>`
       <tr class="${idx===selectedCartIdx?'sel ':''}${c.isReturn?'ret':''}" onclick="selectCartRow(${idx})">
         <td>${idx+1}</td>
-        <td class="item-name">${c.name}${c.isReturn?' ↩️ (مرتجع)':''}</td>
+        <td class="item-name">${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}</td>
         <td>${c.attribute || '—'}</td>
         <td>${c.size || '—'}</td>
-        <td>${c.price.toFixed(2)}</td>
+        <td>${c.originalPrice ? `<s style="color:#999; font-size:10px;">${c.originalPrice.toFixed(2)}</s> ` : ''}${c.price.toFixed(2)}</td>
         <td>${c.qty}</td>
         <td>${(c.price*c.qty).toFixed(2)}</td>
       </tr>`).join('');
