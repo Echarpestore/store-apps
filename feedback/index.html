@@ -212,12 +212,20 @@
   <div style="font-size:48px;">⚠️</div>
   <h2 style="margin:0; font-size:19px;">الصفحة معملتش لود صح</h2>
   <p style="color:#8b90a0; font-size:14px; max-width:320px; margin:0;">حصلت مشكلة مؤقتة في تحميل البرنامج (غالبًا مشكلة اتصال بالإنترنت). دوس تحديث وجرب تاني.</p>
+  <p id="loadFailDetail" style="color:#e5484d; font-size:12px; max-width:320px; margin:0; word-break:break-word;"></p>
   <button onclick="location.reload()" style="padding:14px 28px; border:none; border-radius:12px; background:#2fa36b; color:#fff; font-family:'Cairo',sans-serif; font-weight:800; font-size:15px; cursor:pointer;">🔄 تحديث الصفحة</button>
 </div>
 <script>
   window.__scriptFullyLoaded = false;
+  window.__lastError = null;
+  window.addEventListener('error', function(e){
+    window.__lastError = (e.message || 'خطأ غير معروف') + (e.filename ? (' | ' + e.filename.split('/').pop() + ':' + e.lineno) : '');
+  });
   setTimeout(function(){
-    if(!window.__scriptFullyLoaded){ document.getElementById('loadFailBanner').style.display = 'flex'; }
+    if(!window.__scriptFullyLoaded){
+      document.getElementById('loadFailBanner').style.display = 'flex';
+      if(window.__lastError){ document.getElementById('loadFailDetail').textContent = window.__lastError; }
+    }
   }, 8000);
 </script>
 <div id="app">
