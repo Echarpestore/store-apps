@@ -11,6 +11,8 @@
   --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --panel3:#242833;
   --border:#2a2f3a; --text:#e8e9ec; --muted:#8a8f9a;
   --accent:#3b82f6; --plus:#22c55e; --minus:#ef4444; --warn:#f59e0b;
+  /* شاشة البيع نفسها بتستخدم تصميم فاتح (زي الجهاز الحقيقي في الصورة) — القائمة الجانبية بس تفضل غامقة */
+  --lt-bg:#f2f2f4; --lt-panel:#ffffff; --lt-panel2:#eef0f3; --lt-border:#d6d9de; --lt-text:#1a1c20;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
@@ -79,6 +81,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .qb-nav-item .qb-label{font-size:11px; font-weight:700;}
 .qb-nav-item.disabled{opacity:.3; pointer-events:none;}
 .qb-arrow{color:var(--muted); font-size:16px; padding:0 2px;}
+.rep-range-btn{
+  padding:8px 14px; border-radius:20px; border:1px solid var(--border); background:var(--panel2);
+  color:var(--text); font-size:12px; font-weight:700; cursor:pointer;
+}
+.rep-range-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
 .logout-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 12px;font-size:12px;}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;}
 .tile{
@@ -104,7 +111,21 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   color:var(--text); font-size:12px; font-weight:700; cursor:pointer; text-align:center;
 }
 .qb-sale-sidebar button:disabled{opacity:.3; cursor:not-allowed;}
-.qb-sale-main{flex:1; overflow:hidden; display:flex; flex-direction:column; padding:14px;}
+.qb-sale-main{
+  flex:1; overflow:hidden; display:flex; flex-direction:column; padding:14px;
+  background:var(--lt-bg); color:var(--lt-text);
+}
+.qb-sale-main #searchBar, .qb-sale-main .customer-row input,
+.qb-sale-main .cart-area, .qb-sale-main .cart-table thead th,
+.qb-sale-main #suggestBox, .qb-sale-main .pay-method, .qb-sale-main .pay-input-row input,
+.qb-sale-main .summary-box, .qb-sale-main #newCustomerRow{
+  background:var(--lt-panel); color:var(--lt-text); border-color:var(--lt-border);
+}
+.qb-sale-main .cart-table tbody td{border-color:var(--lt-border);}
+.qb-sale-main .qtybox button{background:var(--lt-panel2); color:var(--lt-text); border-color:var(--lt-border);}
+.qb-sale-main .sale-footer{border-top-color:var(--lt-border);}
+.qb-sale-main .sugg-row{border-color:var(--lt-border);}
+.qb-sale-main .sugg-row:active{background:var(--lt-panel2);}
 .sale-top{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
 .back-btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:14px;flex-shrink:0;}
 .search-wrap{position:relative;flex:1;}
@@ -354,7 +375,27 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
     <div><h1>📊 تقارير المبيعات</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
-  <div style="flex:1; overflow-y:auto; padding:0 4px;" id="reportsWrap"></div>
+  <div style="padding:0 20px;">
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+      <button class="rep-range-btn" data-range="today" onclick="setReportRange('today')">النهاردة</button>
+      <button class="rep-range-btn" data-range="yesterday" onclick="setReportRange('yesterday')">امبارح</button>
+      <button class="rep-range-btn" data-range="week" onclick="setReportRange('week')">آخر 7 أيام</button>
+      <button class="rep-range-btn" data-range="month" onclick="setReportRange('month')">آخر 30 يوم</button>
+      <button class="rep-range-btn" data-range="all" onclick="setReportRange('all')">الكل</button>
+    </div>
+    <div style="display:flex; gap:6px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+      <input type="date" id="repFrom" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <span style="color:var(--muted); font-size:12px;">لـ</span>
+      <input type="date" id="repTo" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <button class="rep-range-btn" onclick="setReportRange('custom')">تطبيق</button>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; font-size:12px; color:var(--muted);">
+      <label style="display:flex; align-items:center; gap:4px;"><input type="checkbox" id="repShowItems" checked onchange="renderReportsScreen()"> الأصناف الأكتر مبيعًا</label>
+      <label style="display:flex; align-items:center; gap:4px;"><input type="checkbox" id="repShowPayments" checked onchange="renderReportsScreen()"> طرق الدفع</label>
+      <label style="display:flex; align-items:center; gap:4px;"><input type="checkbox" id="repShowStaff" checked onchange="renderReportsScreen()"> أداء الموظفين</label>
+    </div>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="reportsWrap"></div>
 </div>
 
 <!-- ============ MAKE SALE ============ -->
@@ -430,6 +471,19 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ REVERSE RECEIPT MODAL ============ -->
+<!-- ============ PAYMENT AMOUNT POPUP ============ -->
+<div class="modal-overlay" id="payAmountModal" style="align-items:center;">
+  <div class="modal-sheet" style="width:min(90vw,340px); border-radius:16px;">
+    <h3 id="payAmountTitle">💵 كاش</h3>
+    <input type="number" step="0.01" id="payAmountInput" style="width:100%; padding:16px; font-size:22px; text-align:center; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:12px;">
+    <div id="payAmountChange" style="text-align:center; font-size:16px; font-weight:800; margin-bottom:14px; min-height:22px;"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closePayAmountPopup()">إلغاء</button>
+      <button class="btn-confirm" onclick="confirmPayAmount()">OK ✔</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="reverseModal">
   <div class="modal-sheet">
     <h3>عكس فاتورة (استرجاع كامل)</h3>
@@ -857,26 +911,119 @@ async function setEmployeeRole(sel){
 }
 
 // ---------------- Basic reports (manager only) ----------------
+let currentReportRange = 'today';
+
+function setReportRange(range){
+  currentReportRange = range;
+  document.querySelectorAll('.rep-range-btn').forEach(b=> b.classList.toggle('active', b.dataset.range === range));
+  renderReportsScreen();
+}
+
+function getReportDateBounds(){
+  const now = new Date();
+  let from = null, to = null;
+  if(currentReportRange === 'today'){
+    from = new Date(); from.setHours(0,0,0,0);
+    to = new Date(); to.setHours(23,59,59,999);
+  }else if(currentReportRange === 'yesterday'){
+    from = new Date(); from.setDate(from.getDate()-1); from.setHours(0,0,0,0);
+    to = new Date(); to.setDate(to.getDate()-1); to.setHours(23,59,59,999);
+  }else if(currentReportRange === 'week'){
+    from = new Date(); from.setDate(from.getDate()-6); from.setHours(0,0,0,0);
+    to = new Date(); to.setHours(23,59,59,999);
+  }else if(currentReportRange === 'month'){
+    from = new Date(); from.setDate(from.getDate()-29); from.setHours(0,0,0,0);
+    to = new Date(); to.setHours(23,59,59,999);
+  }else if(currentReportRange === 'custom'){
+    const fromVal = document.getElementById('repFrom').value;
+    const toVal = document.getElementById('repTo').value;
+    if(fromVal) { from = new Date(fromVal + 'T00:00:00'); }
+    if(toVal) { to = new Date(toVal + 'T23:59:59'); }
+  }
+  // 'all' → from/to تفضل null (بدون حد)
+  return { from, to };
+}
+
 async function renderReportsScreen(){
   const wrap = document.getElementById('reportsWrap');
   wrap.innerHTML = 'بيتحمّل...';
+  document.querySelectorAll('.rep-range-btn').forEach(b=> b.classList.toggle('active', b.dataset.range === currentReportRange));
+
   const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
-  const sales = snap.docs.map(d=>d.data());
+  let sales = snap.docs.map(d=>d.data()).filter(s=> !s.reversed); // استبعاد الفواتير الملغاة، عمليات العكس بتدخل بسالبها عادي
+
+  const { from, to } = getReportDateBounds();
+  if(from || to){
+    sales = sales.filter(s=>{
+      const t = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : null;
+      if(!t) return false;
+      if(from && t < from.getTime()) return false;
+      if(to && t > to.getTime()) return false;
+      return true;
+    });
+  }
+
   const total = sales.reduce((s,x)=> s + (x.total||0), 0);
-  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-  const todaySales = sales.filter(x=> x.createdAt && x.createdAt.toMillis && x.createdAt.toMillis() >= dayStart.getTime());
-  const todayTotal = todaySales.reduce((s,x)=> s + (x.total||0), 0);
-  wrap.innerHTML = `
+  const invoiceCount = sales.filter(s=> !s.isReversal).length;
+
+  // طرق الدفع
+  const byMethod = {};
+  sales.forEach(s=> Object.entries(s.payments||{}).forEach(([m,amt])=>{ byMethod[m] = (byMethod[m]||0) + amt; }));
+  const methodLabels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
+
+  // الأصناف الأكتر مبيعًا
+  const itemAgg = {};
+  sales.forEach(s=> (s.items||[]).forEach(it=>{
+    if(it.price < 0) return; // استبعاد سطور المرتجع من إحصائية "الأكتر مبيعًا"
+    if(!itemAgg[it.name]) itemAgg[it.name] = { qty:0, revenue:0 };
+    itemAgg[it.name].qty += it.qty;
+    itemAgg[it.name].revenue += it.price * it.qty;
+  }));
+  const topItems = Object.entries(itemAgg).sort((a,b)=> b[1].qty - a[1].qty).slice(0, 10);
+
+  // أداء الموظفين
+  const byStaff = {};
+  sales.forEach(s=>{
+    if(!s.employeeName) return;
+    if(!byStaff[s.employeeName]) byStaff[s.employeeName] = { total:0, count:0 };
+    byStaff[s.employeeName].total += s.total||0;
+    if(!s.isReversal) byStaff[s.employeeName].count += 1;
+  });
+  const staffRows = Object.entries(byStaff).sort((a,b)=> b[1].total - a[1].total);
+
+  const showItems = document.getElementById('repShowItems').checked;
+  const showPayments = document.getElementById('repShowPayments').checked;
+  const showStaff = document.getElementById('repShowStaff').checked;
+
+  let html = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px;">
-      <div style="color:var(--muted); font-size:12px;">إجمالي مبيعات النهاردة</div>
-      <div style="font-size:26px; font-weight:900; color:var(--plus);">${todayTotal.toFixed(2)} ج.م</div>
-      <div style="color:var(--muted); font-size:11px;">${todaySales.length} فاتورة</div>
-    </div>
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;">
-      <div style="color:var(--muted); font-size:12px;">إجمالي كل المبيعات المسجلة (الفرع ده)</div>
-      <div style="font-size:22px; font-weight:800;">${total.toFixed(2)} ج.م</div>
-      <div style="color:var(--muted); font-size:11px;">${sales.length} فاتورة إجمالي</div>
+      <div style="color:var(--muted); font-size:12px;">إجمالي المبيعات للفترة المختارة</div>
+      <div style="font-size:26px; font-weight:900; color:var(--plus);">${total.toFixed(2)} ج.م</div>
+      <div style="color:var(--muted); font-size:11px;">${invoiceCount} فاتورة</div>
     </div>`;
+
+  if(showPayments){
+    html += `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px;">
+      <div style="font-weight:700; margin-bottom:8px;">حسب طريقة الدفع</div>
+      ${Object.keys(byMethod).map(m=>`<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px;"><span>${methodLabels[m]||m}</span><span>${byMethod[m].toFixed(2)} ج.م</span></div>`).join('') || '<div class="empty-cart">لا يوجد</div>'}
+    </div>`;
+  }
+
+  if(showItems){
+    html += `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px;">
+      <div style="font-weight:700; margin-bottom:8px;">🏆 الأصناف الأكتر مبيعًا</div>
+      ${topItems.map(([name,d],i)=>`<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px;"><span>${i+1}. ${name}</span><span>${d.qty} قطعة — ${d.revenue.toFixed(2)} ج.م</span></div>`).join('') || '<div class="empty-cart">لا يوجد مبيعات</div>'}
+    </div>`;
+  }
+
+  if(showStaff){
+    html += `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;">
+      <div style="font-weight:700; margin-bottom:8px;">👤 أداء الموظفين</div>
+      ${staffRows.map(([name,d])=>`<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px;"><span>${name}</span><span>${d.count} فاتورة — ${d.total.toFixed(2)} ج.م</span></div>`).join('') || '<div class="empty-cart">لا يوجد</div>'}
+    </div>`;
+  }
+
+  wrap.innerHTML = html;
 }
 
 // ---------------- Navigation ----------------
@@ -1010,9 +1157,9 @@ function renderCart(){
     tbody.innerHTML = '<tr><td colspan="8" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>';
   }else{
     tbody.innerHTML = cart.map((c, idx)=>`
-      <tr>
+      <tr${c.isReturn ? ' style="color:var(--minus);"' : ''}>
         <td>${idx+1}</td>
-        <td class="item-name">${c.name}</td>
+        <td class="item-name">${c.name}${c.isReturn?' ↩️':''}</td>
         <td>${c.attribute || '—'}</td>
         <td>${c.size || '—'}</td>
         <td>
@@ -1024,11 +1171,31 @@ function renderCart(){
         </td>
         <td>${c.price.toFixed(2)}</td>
         <td>${(c.price*c.qty).toFixed(2)}</td>
-        <td><button class="remove-btn" onclick="removeFromCart(${idx})">✕</button></td>
+        <td>
+          ${!c.isReturn ? `<button class="remove-btn" style="color:var(--warn); font-size:13px;" onclick="returnCartItem(${idx})" title="مرتجع">↩️</button>` : ''}
+          <button class="remove-btn" onclick="removeFromCart(${idx})">✕</button>
+        </td>
       </tr>`).join('');
   }
   const total = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   document.getElementById('cartTotal').textContent = total.toFixed(2);
+}
+
+// إرجاع صنف داخل نفس الفاتورة الحالية (مثلاً عملية تبديل) — بيضيف سطر بالسالب
+// بلون أحمر يقلل من إجمالي الفاتورة، أو يرجع الفرق للعميل لو الإجمالي بقى بالسالب.
+function returnCartItem(idx){
+  const item = cart[idx];
+  if(item.isReturn) return;
+  const qtyStr = prompt(`كام قطعة من "${item.name}" عايز ترجعها؟ (المتاح: ${item.qty})`, '1');
+  if(qtyStr === null) return;
+  const qty = parseInt(qtyStr);
+  if(isNaN(qty) || qty <= 0 || qty > item.qty){ showToast('كمية غير صحيحة', 'err'); return; }
+  cart.push({
+    id: item.id, name: item.name, barcode: item.barcode,
+    price: -item.price, qty, attribute: item.attribute, size: item.size, isReturn: true
+  });
+  renderCart();
+  showToast('اتضاف سطر مرتجع بالأحمر ✅ — قلل من إجمالي الفاتورة');
 }
 function changeQty(idx, delta){
   cart[idx].qty += delta;
@@ -1257,45 +1424,79 @@ async function unholdInvoice(heldId){
 // ---------------- Payment ----------------
 function resetPaymentUI(){
   selectedPayMethods = new Set();
-  document.querySelectorAll('.pay-method').forEach(el=>el.classList.remove('selected'));
-  document.getElementById('payInputs').innerHTML = '';
+  paymentAmounts = {};
+  document.querySelectorAll('.pay-method').forEach(el=>el.classList.remove('selected', 'filled'));
   updatePaySummary();
 }
+
+let paymentAmounts = {}; // {cash: 50, visa: 120, ...} — filled in via the popup
+let pendingPayMethod = null;
 
 function togglePayMethod(method){
+  pendingPayMethod = method;
   const total = cartTotal();
-  if(selectedPayMethods.has(method)){
-    selectedPayMethods.delete(method);
-  }else{
-    selectedPayMethods.add(method);
-  }
-  document.getElementById('pmCash').classList.toggle('selected', selectedPayMethods.has('cash'));
-  document.getElementById('pmVisa').classList.toggle('selected', selectedPayMethods.has('visa'));
-  document.getElementById('pmInsta').classList.toggle('selected', selectedPayMethods.has('instapay'));
-
-  const inputsBox = document.getElementById('payInputs');
-  inputsBox.innerHTML = '';
+  const alreadyEntered = Object.keys(paymentAmounts).reduce((s,m)=> m===method ? s : s + paymentAmounts[m], 0);
+  const remaining = Math.max(0, +(total - alreadyEntered).toFixed(2));
   const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
-  selectedPayMethods.forEach(m=>{
-    const row = document.createElement('div');
-    row.className = 'pay-input-row';
-    const defaultVal = (m === 'cash') ? '' : total.toFixed(2);
-    row.innerHTML = `<label>${labels[m]}</label><input type="number" step="0.01" id="pay_${m}" value="${defaultVal}" oninput="updatePaySummary()">`;
-    inputsBox.appendChild(row);
-  });
+
+  document.getElementById('payAmountTitle').textContent = labels[method];
+  const input = document.getElementById('payAmountInput');
+  // كاش: فاضية عشان الكاشير يكتب المبلغ اللي استلمه فعليًا (يقدر يكون أكتر من المطلوب، والباقي بيتحسب تلقائي).
+  // فيزا/انستا باي: مقترحة تلقائي بباقي الفاتورة، وتقدر تعدّلها لو هتقسّم الدفع بين أكتر من وسيلة.
+  input.value = method === 'cash' ? '' : remaining.toFixed(2);
+  document.getElementById('payAmountChange').textContent = '';
+  document.getElementById('payAmountModal').classList.add('active');
+  input.oninput = ()=> updatePayAmountChangeLive(method, total, alreadyEntered);
+  setTimeout(()=>{ input.focus(); input.select(); }, 50);
+}
+
+function updatePayAmountChangeLive(method, total, alreadyEntered){
+  const val = parseFloat(document.getElementById('payAmountInput').value) || 0;
+  const changeBox = document.getElementById('payAmountChange');
+  if(method === 'cash'){
+    const totalPaidSoFar = alreadyEntered + val;
+    const change = +(totalPaidSoFar - total).toFixed(2);
+    if(val === 0){ changeBox.textContent = ''; }
+    else if(change >= 0){ changeBox.innerHTML = `<span style="color:var(--plus);">الباقي للعميل: ${change.toFixed(2)} ج.م</span>`; }
+    else{ changeBox.innerHTML = `<span style="color:var(--minus);">ناقص ${Math.abs(change).toFixed(2)} ج.م</span>`; }
+  }else{
+    changeBox.textContent = '';
+  }
+}
+
+function closePayAmountPopup(){
+  document.getElementById('payAmountModal').classList.remove('active');
+  pendingPayMethod = null;
+}
+
+function confirmPayAmount(){
+  const method = pendingPayMethod;
+  if(!method) return;
+  const val = parseFloat(document.getElementById('payAmountInput').value) || 0;
+  if(val <= 0){ showToast('اكتب مبلغ صحيح', 'err'); return; }
+  paymentAmounts[method] = val;
+  selectedPayMethods.add(method);
+  document.getElementById('pm' + (method==='cash'?'Cash':method==='visa'?'Visa':'Insta')).classList.add('selected','filled');
+  document.getElementById('payAmountModal').classList.remove('active');
+  pendingPayMethod = null;
   updatePaySummary();
 }
+// دعم Enter بدل ما تدوس OK يدويًا
+document.getElementById('payAmountInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){ e.preventDefault(); confirmPayAmount(); }
+});
 
 function updatePaySummary(){
   const total = cartTotal();
   let entered = 0;
-  selectedPayMethods.forEach(m=>{
-    const el = document.getElementById('pay_'+m);
-    entered += el ? (parseFloat(el.value) || 0) : 0;
-  });
+  selectedPayMethods.forEach(m=> entered += paymentAmounts[m] || 0);
   const diff = +(entered - total).toFixed(2);
   const box = document.getElementById('paySummary');
   const confirmBtn = document.getElementById('confirmPayBtn');
+
+  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
+  const methodLines = Array.from(selectedPayMethods).map(m=>
+    `<div class="row"><span>${labels[m]}</span><span>${(paymentAmounts[m]||0).toFixed(2)}</span></div>`).join('');
 
   let extraLine = '';
   if(selectedPayMethods.size === 0){
@@ -1304,15 +1505,15 @@ function updatePaySummary(){
   }else if(diff < 0){
     extraLine = `<div class="row err">ناقص ${Math.abs(diff).toFixed(2)} جنيه</div>`;
     confirmBtn.disabled = true;
-  }else if(diff > 0){
-    extraLine = `<div class="row err">⚠️ المبلغ زيادة عن الإجمالي بـ ${diff.toFixed(2)} جنيه - راجع المبلغ</div>`;
-    confirmBtn.disabled = true;
   }else{
-    extraLine = '<div class="row ok">المبلغ مظبوط ✔</div>';
+    // لو المبلغ زيادة (زي دفع كاش أكتر من المطلوب)، ده باقي بيترجع للعميل — مش خطأ.
+    const changeDue = diff > 0 ? `<div class="row ok">الباقي للعميل: ${diff.toFixed(2)} ج.م</div>` : '';
+    extraLine = `<div class="row ok">المبلغ مظبوط ✔</div>${changeDue}`;
     confirmBtn.disabled = false;
   }
 
   box.innerHTML = `
+    ${methodLines}
     <div class="row"><span>الإجمالي المطلوب</span><span>${total.toFixed(2)}</span></div>
     <div class="row"><span>المبلغ المُدخل</span><span>${entered.toFixed(2)}</span></div>
     ${extraLine}
@@ -1322,10 +1523,7 @@ function updatePaySummary(){
 async function confirmPayment(){
   const total = cartTotal();
   const payments = {};
-  selectedPayMethods.forEach(m=>{
-    const el = document.getElementById('pay_'+m);
-    payments[m] = parseFloat(el.value) || 0;
-  });
+  selectedPayMethods.forEach(m=> payments[m] = paymentAmounts[m] || 0);
   const phone = document.getElementById('customerPhone').value.trim();
   const custName = document.getElementById('customerName').value.trim();
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
