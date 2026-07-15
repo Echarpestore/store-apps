@@ -214,11 +214,17 @@ function enterDashboard(){
   const canSeeRoles = hasPerm('canManageRoles') || noRoleAssignmentsYet;
   document.getElementById('rolesSidebarBtn').style.display = canSeeRoles ? '' : 'none';
   document.getElementById('navRoles').style.display = canSeeRoles ? '' : 'none';
-  document.getElementById('navRolesArrow').style.display = canSeeRoles ? '' : 'none';
 
   const canDiscounts = hasPerm('canChangePrices');
   document.getElementById('discountsSidebarBtn').style.display = canDiscounts ? '' : 'none';
   document.getElementById('navDiscounts').style.display = canDiscounts ? '' : 'none';
+
+  const canImport = hasPerm('canEditInventory') || hasPerm('canChangePrices');
+  document.getElementById('importSidebarBtn').style.display = canImport ? '' : 'none';
+  document.getElementById('navImport').style.display = canImport ? '' : 'none';
+
+  // بانل "الإدارة" الذهبي بيظهر بس لو فيه على الأقل حاجة واحدة جواه متاحة
+  document.getElementById('navMgmtSection').style.display = (canSeeRoles || canDiscounts || canImport) ? '' : 'none';
 
   const reportsBtn = document.getElementById('reportsSidebarBtn');
   reportsBtn.style.opacity = hasPerm('canViewReports') ? '1' : '.4';
@@ -566,8 +572,21 @@ function goToDashboard(){
 }
 
 // ---------------- Sales History ----------------
+let salesHistoryTab = 'live';
+function switchSalesHistoryTab(tab){
+  salesHistoryTab = tab;
+  document.getElementById('shTabLive').classList.toggle('active', tab==='live');
+  document.getElementById('shTabLegacy').classList.toggle('active', tab==='legacy');
+  if(tab === 'live') renderLiveSalesHistory();
+  else renderLegacySalesHistory();
+}
+
 async function goToSalesHistory(){
   showScreen('salesHistoryScreen');
+  switchSalesHistoryTab('live');
+}
+
+async function renderLiveSalesHistory(){
   const wrap = document.getElementById('salesHistoryWrap');
   wrap.innerHTML = 'بيتحمّل...';
   const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
@@ -590,6 +609,25 @@ async function goToSalesHistory(){
       <div style="font-weight:800; font-size:15px; color:${(s.total||0) < 0 ? 'var(--minus)' : 'var(--plus)'};">${(s.total||0).toFixed(2)} ج.م</div>
     </div>`;
   }).join('');
+}
+
+// المبيعات المستوردة من QuickBooks — للرجوع والاطلاع بس، مش بتدخل في التقارير الحية
+async function renderLegacySalesHistory(){
+  const wrap = document.getElementById('salesHistoryWrap');
+  wrap.innerHTML = 'بيتحمّل...';
+  try{
+    const legacy = typeof viewLegacySales === 'function' ? await viewLegacySales() : [];
+    if(legacy.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش مبيعات مستوردة — استخدم "📥 استيراد بيانات" من الرئيسية</div>'; return; }
+    wrap.innerHTML = `<div style="color:var(--muted); font-size:11px; margin-bottom:8px;">📌 دي بيانات تاريخية للرجوع بس، مش هتظهر في التقارير أو إحصائيات المنتجات.</div>` +
+      legacy.slice(0,200).map(s=>`
+      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-weight:700; font-size:13px;">${s.invoiceNo ? '🧾 '+s.invoiceNo+' — ' : ''}${s.itemName || 'بيعة قديمة'}${s.qty ? ' × '+s.qty : ''}</div>
+          <div style="color:var(--muted); font-size:11px;">${s.date || '—'}${s.customerName ? ' — '+s.customerName : ''}</div>
+        </div>
+        <div style="font-weight:800; font-size:14px; color:var(--muted);">${(s.total||0).toFixed(2)} ج.م</div>
+      </div>`).join('');
+  }catch(e){ wrap.innerHTML = '<div class="empty-cart">تعذر التحميل: ' + e.message + '</div>'; }
 }
 
 // ---------------- Customer List ----------------

@@ -66,21 +66,24 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 }
 .qb-sidebar button.secondary{background:var(--panel2); border-color:var(--border); color:var(--text);}
 .qb-sidebar button:active{opacity:.8;}
-.qb-main{flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column;}
-.qb-nav-box{background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:18px; flex:1;}
-.qb-nav-box h2{margin:0 0 16px; font-size:16px;}
-.qb-nav-row{display:flex; align-items:flex-start; gap:6px; margin-bottom:22px; flex-wrap:wrap;}
-.qb-nav-row-label{writing-mode:vertical-rl; text-orientation:mixed; color:var(--muted); font-size:11px; font-weight:700; align-self:stretch; display:flex; align-items:center; justify-content:center; padding:4px 0;}
-.qb-nav-items{display:flex; align-items:center; gap:4px; flex-wrap:wrap;}
-.qb-nav-item{
-  display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer;
-  padding:10px 12px; border-radius:12px; min-width:76px; text-align:center;
+.qb-main{flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; background:#f3f1e7;}
+.qb-section-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:14px; align-content:start;}
+.qb-section{border-radius:10px; overflow:hidden; border:1px solid #b9c9a0; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.qb-section.gold{border-color:#d8c477;}
+.qb-section-head{
+  background:linear-gradient(#eef3de,#dde8c4); color:#3c4a26; font-weight:800; font-size:13px;
+  padding:8px 12px; border-bottom:1px solid #b9c9a0;
 }
-.qb-nav-item:active{background:var(--panel2);}
-.qb-nav-item .qb-icon{font-size:26px;}
-.qb-nav-item .qb-label{font-size:11px; font-weight:700;}
+.qb-section.gold .qb-section-head{background:linear-gradient(#fbf3d6,#f3e3a6); color:#5c4a10; border-bottom-color:#d8c477;}
+.qb-section-body{display:flex; flex-wrap:wrap; gap:4px; padding:10px; justify-content:space-around;}
+.qb-nav-item{
+  display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer;
+  padding:8px 6px; border-radius:10px; min-width:64px; text-align:center; color:#2a2a2a;
+}
+.qb-nav-item:active{background:#f0efe6;}
+.qb-nav-item .qb-icon{font-size:32px; line-height:1;}
+.qb-nav-item .qb-label{font-size:10.5px; font-weight:700;}
 .qb-nav-item.disabled{opacity:.3; pointer-events:none;}
-.qb-arrow{color:var(--muted); font-size:16px; padding:0 2px;}
 .rep-range-btn{
   padding:8px 14px; border-radius:20px; border:1px solid var(--border); background:var(--panel2);
   color:var(--text); font-size:12px; font-weight:700; cursor:pointer;
@@ -138,13 +141,19 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .qbx-pay-title{font-size:12px; font-weight:800; margin-bottom:4px; border-bottom:1px solid #ccc; padding-bottom:3px;}
 #qbxPayList{min-height:40px; font-size:12px;}
 #qbxPayList .pl-row{display:flex; justify-content:space-between; padding:2px 0; border-bottom:1px dotted #ddd;}
-.qbx-pay-btns{display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;}
+.qbx-pay-btns{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;}
 .qbx-pay-btns button{
-  padding:9px 14px; border-radius:5px; border:1px solid #777;
-  background:linear-gradient(#9c9c9e,#7a7a7c); color:#fff; font-size:12px; font-weight:700; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:12px 16px; border-radius:12px; border:none; min-width:82px;
+  color:#fff; font-size:12px; font-weight:800; cursor:pointer;
+  box-shadow:0 2px 5px rgba(0,0,0,.25);
 }
-.qbx-pay-btns button.selected{outline:2px solid var(--accent); outline-offset:1px;}
-.qbx-pay-btns button.qbx-clear-pay{background:linear-gradient(#d9534f,#b52b27); border-color:#8f1f1c;}
+.qbx-pay-btns button .pm-icon{font-size:26px; line-height:1;}
+.qbx-pay-btns button#pmCash{background:linear-gradient(#3fbf60,#1f9440);}
+.qbx-pay-btns button#pmVisa{background:linear-gradient(#3b82f6,#1d4fd6);}
+.qbx-pay-btns button#pmInsta{background:linear-gradient(#a855f7,#7c22d6);}
+.qbx-pay-btns button.selected{outline:3px solid #ffd23f; outline-offset:1px;}
+.qbx-pay-btns button.qbx-clear-pay{background:linear-gradient(#d9534f,#b52b27); min-width:auto; flex-direction:row; padding:10px 16px;}
 .qbx-totals{
   width:280px; flex-shrink:0; display:flex; flex-direction:column; gap:4px; justify-content:flex-end;
 }
@@ -307,42 +316,51 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
       <button class="secondary" id="reportsSidebarBtn" onclick="goToReports()">📊 التقارير</button>
       <button class="secondary" id="rolesSidebarBtn" onclick="goToRoles()" style="display:none;">🛡️ الصلاحيات</button>
       <button class="secondary" id="discountsSidebarBtn" onclick="goToDiscounts()" style="display:none;">🏷️ الخصومات</button>
+      <button class="secondary" id="importSidebarBtn" onclick="goToImport()" style="display:none;">📥 استيراد بيانات</button>
       <div style="flex:1;"></div>
       <button class="secondary" onclick="goToEndOfDay()">🌙 إغلاق اليوم</button>
       <button class="secondary" style="border-color:var(--minus); color:var(--minus);" onclick="logout()">خروج 🔒</button>
     </div>
     <div class="qb-main">
-      <div class="qb-nav-box">
-        <h2>🧭 الرئيسية</h2>
-        <div class="qb-nav-row">
-          <div class="qb-nav-row-label">نقطة البيع</div>
-          <div class="qb-nav-items">
+      <div class="qb-section-grid">
+        <div class="qb-section">
+          <div class="qb-section-head">🛒 نقطة البيع</div>
+          <div class="qb-section-body">
             <div class="qb-nav-item" onclick="goToSale()"><div class="qb-icon">🧾</div><div class="qb-label">بيع جديد</div></div>
-            <div class="qb-arrow">→</div>
             <div class="qb-nav-item" onclick="openHeldModal()"><div class="qb-icon">⏸️</div><div class="qb-label">فواتير معلّقة</div></div>
-            <div class="qb-arrow">→</div>
             <div class="qb-nav-item" onclick="goToSalesHistory()"><div class="qb-icon">🗂️</div><div class="qb-label">سجل المبيعات</div></div>
-            <div class="qb-arrow">→</div>
-            <div class="qb-nav-item" onclick="goToCustomerList()"><div class="qb-icon">👤</div><div class="qb-label">قائمة العملاء</div></div>
+            <div class="qb-nav-item" onclick="goToEndOfDay()"><div class="qb-icon">🌙</div><div class="qb-label">إغلاق اليوم</div></div>
           </div>
         </div>
-        <div class="qb-nav-row">
-          <div class="qb-nav-row-label">المخزون</div>
-          <div class="qb-nav-items">
+
+        <div class="qb-section">
+          <div class="qb-section-head">👥 العملاء</div>
+          <div class="qb-section-body">
+            <div class="qb-nav-item" onclick="goToCustomerList()"><div class="qb-icon">📇</div><div class="qb-label">قائمة العملاء</div></div>
+          </div>
+        </div>
+
+        <div class="qb-section">
+          <div class="qb-section-head">📦 المخزون</div>
+          <div class="qb-section-body">
             <div class="qb-nav-item" id="navInventory" onclick="goToInventory()"><div class="qb-icon">📦</div><div class="qb-label">قائمة الأصناف</div></div>
-            <div class="qb-arrow">→</div>
             <div class="qb-nav-item" id="navPriceLabel" onclick="goToInventory()"><div class="qb-icon">🏷️</div><div class="qb-label">طباعة أسعار</div></div>
           </div>
         </div>
-        <div class="qb-nav-row">
-          <div class="qb-nav-row-label">العمليات</div>
-          <div class="qb-nav-items">
-            <div class="qb-nav-item" id="navReports" onclick="goToReports()"><div class="qb-icon">📊</div><div class="qb-label">التقارير</div></div>
-            <div class="qb-arrow">→</div>
+
+        <div class="qb-section">
+          <div class="qb-section-head">📊 التقارير</div>
+          <div class="qb-section-body">
+            <div class="qb-nav-item" id="navReports" onclick="goToReports()"><div class="qb-icon">📈</div><div class="qb-label">تقارير المبيعات</div></div>
+          </div>
+        </div>
+
+        <div class="qb-section gold" id="navMgmtSection" style="display:none;">
+          <div class="qb-section-head">⚙️ الإدارة</div>
+          <div class="qb-section-body">
             <div class="qb-nav-item" id="navRoles" onclick="goToRoles()" style="display:none;"><div class="qb-icon">🛡️</div><div class="qb-label">الصلاحيات</div></div>
             <div class="qb-nav-item" id="navDiscounts" onclick="goToDiscounts()" style="display:none;"><div class="qb-icon">🏷️</div><div class="qb-label">الخصومات</div></div>
-            <div class="qb-arrow" id="navRolesArrow" style="display:none;">→</div>
-            <div class="qb-nav-item" onclick="goToEndOfDay()"><div class="qb-icon">🌙</div><div class="qb-label">إغلاق اليوم</div></div>
+            <div class="qb-nav-item" id="navImport" onclick="goToImport()" style="display:none;"><div class="qb-icon">📥</div><div class="qb-label">استيراد بيانات</div></div>
           </div>
         </div>
       </div>
@@ -355,6 +373,12 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   <div class="dash-header" style="padding:16px 20px 0;">
     <div><h1>🗂️ سجل المبيعات</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="padding:0 20px;">
+    <div style="display:flex; gap:6px; margin-bottom:10px;">
+      <button class="rep-range-btn active" id="shTabLive" onclick="switchSalesHistoryTab('live')">مبيعات النظام الجديد</button>
+      <button class="rep-range-btn" id="shTabLegacy" onclick="switchSalesHistoryTab('legacy')">مبيعات مستوردة من QuickBooks (للرجوع بس)</button>
+    </div>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="salesHistoryWrap"></div>
 </div>
@@ -438,6 +462,22 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
     <div id="discountAddCard"></div>
     <div id="discountListCard"></div>
+  </div>
+</div>
+
+<!-- ============ DATA IMPORT (manager only) ============ -->
+<div class="screen" id="importScreen">
+  <div class="dash-header">
+    <div><h1>📥 استيراد بيانات من QuickBooks</h1></div>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
+    <div style="display:flex; gap:6px; margin-bottom:14px;">
+      <button class="rep-range-btn active" data-tab="inventory" onclick="switchImportTab('inventory')">📦 المخزون</button>
+      <button class="rep-range-btn" data-tab="customers" onclick="switchImportTab('customers')">👤 العملاء</button>
+      <button class="rep-range-btn" data-tab="sales" onclick="switchImportTab('sales')">🗂️ مبيعات قديمة (للرجوع بس)</button>
+    </div>
+    <div id="importPanelWrap"></div>
   </div>
 </div>
 
@@ -543,10 +583,10 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
         <div class="qbx-pay-title">المدفوعات</div>
         <div id="qbxPayList"></div>
         <div class="qbx-pay-btns">
-          <button id="pmCash" onclick="togglePayMethod('cash')">كاش</button>
-          <button id="pmVisa" onclick="togglePayMethod('visa')">فيزا</button>
-          <button id="pmInsta" onclick="togglePayMethod('instapay')">انستا باي</button>
-          <button class="qbx-clear-pay" onclick="resetPaymentUI()">مسح المدفوعات</button>
+          <button id="pmCash" onclick="togglePayMethod('cash')"><span class="pm-icon">💵</span>كاش</button>
+          <button id="pmVisa" onclick="togglePayMethod('visa')"><span class="pm-icon">💳</span>فيزا</button>
+          <button id="pmInsta" onclick="togglePayMethod('instapay')"><span class="pm-icon">📱</span>انستا باي</button>
+          <button class="qbx-clear-pay" onclick="resetPaymentUI()">🗑️ مسح المدفوعات</button>
         </div>
       </div>
       <div class="qbx-totals">
@@ -573,8 +613,8 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 
 <!-- ============ REVERSE RECEIPT MODAL ============ -->
 <!-- ============ PAYMENT AMOUNT POPUP ============ -->
-<div class="modal-overlay" id="payAmountModal" style="align-items:center;">
-  <div class="modal-sheet" style="width:min(90vw,340px); border-radius:16px;">
+<div class="modal-overlay" id="payAmountModal" style="align-items:center; justify-content:center;">
+  <div class="modal-sheet" style="width:min(90vw,340px); border-radius:16px; margin:0;">
     <h3 id="payAmountTitle">💵 كاش</h3>
     <input type="number" step="0.01" id="payAmountInput" style="width:100%; padding:16px; font-size:22px; text-align:center; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:12px;">
     <div id="payAmountChange" style="text-align:center; font-size:16px; font-weight:800; margin-bottom:14px; min-height:22px;"></div>
@@ -611,5 +651,6 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <script src="products.js"></script>
 <script src="profiles.js"></script>
 <script src="discounts.js"></script>
+<script src="import.js"></script>
 </body>
 </html>
