@@ -397,6 +397,16 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+
+// Keeps unsynced data on-device (IndexedDB) if the tab is closed/reloaded
+// while offline — it's sent to Firebase automatically once back online.
+// IMPORTANT: this must run before ANY other Firestore operation (queries,
+// collection() calls that get used, etc.) — enabling it later throws
+// "Firestore has already been started" and halts the whole script.
+enableIndexedDbPersistence(db).catch((err)=>{
+  console.warn('Offline persistence not enabled:', err.code);
+});
+
 const entriesCol = collection(db, 'entries');
 
 // Suggest branch names already used in the sales app (same Firebase project,
@@ -412,12 +422,6 @@ const entriesCol = collection(db, 'entries');
     console.warn('تعذر تحميل اقتراحات الفروع من برنامج المبيعات', err);
   }
 })();
-
-// Keeps unsynced data on-device (IndexedDB) if the tab is closed/reloaded
-// while offline — it's sent to Firebase automatically once back online.
-enableIndexedDbPersistence(db).catch((err)=>{
-  console.warn('Offline persistence not enabled:', err.code);
-});
 
 // Simple dashboard access code — checked entirely on-device, no network
 // call, no rate limits. Change this string to whatever code you want.
