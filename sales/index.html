@@ -1661,7 +1661,7 @@ function getMonthRange(d){
 }
 function countConfirmedDaysInRange(empId, start, end){
   const days = new Set();
-  submissions.forEach(s=>{
+  allSubmissions.forEach(s=>{
     if(s.employeeId !== empId || !s.confirmed) return;
     const d = new Date(s.date+'T00:00:00');
     if(d >= start && d <= end) days.add(s.date);
@@ -2878,8 +2878,10 @@ function renderCommissionPanel(){
 function renderCommissionPaymentLog(){
   const wrap = $('#commissionPaymentLogList');
   if(!wrap) return;
-  if(commissionPayments.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش عمولات اتدفعت</div>'; return; }
-  const sorted = [...commissionPayments].sort((a,b)=> b.paidAt - a.paidAt);
+  const branchEmpIds = new Set(reviewEmployeesFor(viewBranch).map(e=>e.id));
+  const branchPayments = allCommissionPayments.filter(p=> branchEmpIds.has(p.employeeId));
+  if(branchPayments.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش عمولات اتدفعت</div>'; return; }
+  const sorted = [...branchPayments].sort((a,b)=> b.paidAt - a.paidAt);
 
   const byMonth = new Map();
   sorted.forEach(p=>{
@@ -3070,7 +3072,7 @@ function renderSalaryPanel(){
       return `<div class="emp-row"><div class="n">${e.name}</div><div class="meta" style="color:var(--sub);">لسه معينش في الفترة دي (تاريخ التعيين ${e.hireDate})</div></div>`;
     }
     const proratedNote = calc.daysInCalc < 30 ? `<div class="meta" style="color:var(--sub); font-size:10px;">(${calc.daysInCalc} يوم بس — من تاريخ التعيين ${e.hireDate})</div>` : '';
-    const paidRecord = salaryPayments.find(p=> p.employeeId===e.id && p.periodLabel===periodLabel);
+    const paidRecord = allSalaryPayments.find(p=> p.employeeId===e.id && p.periodLabel===periodLabel);
     let actionHtml;
     if(paidRecord){
       actionHtml = `<span style="color:var(--good); font-size:11px;">✅ مدفوع (${new Date(paidRecord.paidAt).toLocaleDateString('ar-EG')})</span>`;
@@ -3110,8 +3112,10 @@ function renderSalaryPanel(){
 function renderSalaryPaymentLog(){
   const wrap = $('#salaryPaymentLogList');
   if(!wrap) return;
-  if(salaryPayments.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش رواتب اتصرفت</div>'; return; }
-  const sorted = [...salaryPayments].sort((a,b)=> b.paidAt - a.paidAt);
+  const branchEmpIds = new Set(reviewEmployeesFor(viewBranch).map(e=>e.id));
+  const branchPayments = allSalaryPayments.filter(p=> branchEmpIds.has(p.employeeId));
+  if(branchPayments.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش رواتب اتصرفت</div>'; return; }
+  const sorted = [...branchPayments].sort((a,b)=> b.paidAt - a.paidAt);
 
   const byMonth = new Map();
   sorted.forEach(p=>{
@@ -3199,8 +3203,9 @@ $('#terminateConfirmBtn')?.addEventListener('click', async ()=>{
 function renderTerminationLog(){
   const wrap = $('#terminationLogList');
   if(!wrap) return;
-  if(terminations.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش خرج من الشغل</div>'; return; }
-  const sorted = [...terminations].sort((a,b)=> b.terminatedAt - a.terminatedAt);
+  const branchTerminations = viewBranch === '__ALL__' ? allTerminations : allTerminations.filter(t=> t.branch === viewBranch);
+  if(branchTerminations.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش خرج من الشغل</div>'; return; }
+  const sorted = [...branchTerminations].sort((a,b)=> b.terminatedAt - a.terminatedAt);
   wrap.innerHTML = sorted.map(t=>{
     const dateStr = new Date(t.terminatedAt).toLocaleDateString('ar-EG');
     const actionHtml = t.paidAt
@@ -3490,8 +3495,10 @@ $('#advConfirmBtn')?.addEventListener('click', async ()=>{
 function renderAdvancesLog(){
   const wrap = $('#advancesLogList');
   if(!wrap) return;
-  if(advances.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش أخد سلفة</div>'; return; }
-  const sorted = [...advances].sort((a,b)=> b.ts - a.ts);
+  const branchEmpIds = new Set(reviewEmployeesFor(viewBranch).map(e=>e.id));
+  const branchAdvances = allAdvances.filter(a=> branchEmpIds.has(a.employeeId));
+  if(branchAdvances.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش أخد سلفة</div>'; return; }
+  const sorted = [...branchAdvances].sort((a,b)=> b.ts - a.ts);
 
   const byDay = new Map();
   sorted.forEach(a=>{
