@@ -574,13 +574,14 @@ async function goToSalesHistory(){
   wrap.innerHTML = sales.slice(0,100).map(s=>{
     const d = s.createdAt && s.createdAt.toDate ? s.createdAt.toDate() : null;
     const dateStr = d ? d.toLocaleString('ar-EG') : '—';
+    const badge = s.reversed ? ' <span style="color:var(--minus); font-size:11px;">(ملغاة)</span>' : (s.isReversal ? ' <span style="color:var(--warn); font-size:11px;">(عكس)</span>' : '');
     return `
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+    <div onclick="openInvoice('${s.id}')" style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
       <div>
-        <div style="font-weight:700; font-size:13px;">${(s.items||[]).length} صنف — ${s.customerPhone ? 'عميل: '+s.customerPhone : 'من غير عميل'}</div>
+        <div style="font-weight:700; font-size:13px;">🧾 ${s.id.slice(-6).toUpperCase()}${badge} — ${(s.items||[]).length} صنف — ${s.customerPhone ? 'عميل: '+s.customerPhone : 'من غير عميل'}</div>
         <div style="color:var(--muted); font-size:11px;">${dateStr} — بواسطة ${s.employeeName||'—'}</div>
       </div>
-      <div style="font-weight:800; font-size:15px; color:var(--plus);">${(s.total||0).toFixed(2)} ج.م</div>
+      <div style="font-weight:800; font-size:15px; color:${(s.total||0) < 0 ? 'var(--minus)' : 'var(--plus)'};">${(s.total||0).toFixed(2)} ج.م</div>
     </div>`;
   }).join('');
 }
@@ -594,7 +595,7 @@ async function goToCustomerList(){
   const customers = snap.docs.map(d=>({id:d.id, ...d.data()}));
   if(customers.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش عملاء مسجلين</div>'; return; }
   wrap.innerHTML = customers.map(c=>`
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+    <div onclick="openCustomerProfile('${c.phone}')" style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
       <div>
         <div style="font-weight:700; font-size:13px;">${c.name || 'بدون اسم'}</div>
         <div style="color:var(--muted); font-size:11px;">${c.phone}</div>

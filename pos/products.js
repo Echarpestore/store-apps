@@ -79,6 +79,7 @@ async function renderProductDetails(){
     </div>`;
 
   renderPdStockLog();
+  if(typeof renderPdTimeline === 'function') renderPdTimeline(currentProductId);
 }
 
 // حفظ أي حقل قابل للتعديل من صفحة التفاصيل (بيتحقق من الصلاحية المناسبة لكل حقل)
