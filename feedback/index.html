@@ -343,9 +343,12 @@
   <div id="branchSetup">
     <div class="branch-box">
       <h3>اسم الفرع</h3>
-      <p class="sub">اكتب اسم الفرع مرة واحدة بس — الجهاز ده هيفتكره وهيشوف بيانات الفرع ده بس. لو الفرع ده مسجل بالفعل في برنامج المبيعات، هيظهرلك كاقتراح تحت وانت بتكتب.</p>
-      <input id="branchInput" placeholder="مثلاً: فرع المعادي" list="branchSuggestions" autocomplete="off">
-      <datalist id="branchSuggestions"></datalist>
+      <p class="sub">اكتب اسم الفرع مرة واحدة بس — الجهاز ده هيفتكره وهيشوف بيانات الفرع ده بس.</p>
+      <input id="branchInput" placeholder="مثلاً: فرع المعادي" autocomplete="off">
+      <div id="branchSuggestionsList" style="display:none; text-align:right; margin:-4px 0 12px;">
+        <div style="color:var(--sub); font-size:11px; margin-bottom:6px;">فروع مسجلة بالفعل في برنامج المبيعات — دوس على أي واحد يظبطه في الخانة فوق:</div>
+        <div id="branchSuggestionsChips" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+      </div>
       <button id="branchSaveBtn">حفظ</button>
     </div>
   </div>
@@ -412,12 +415,24 @@ const entriesCol = collection(db, 'entries');
 // Suggest branch names already used in the sales app (same Firebase project,
 // different collection) so a new kiosk device can match an existing branch
 // exactly instead of risking a typo that would silently create a "new" branch.
+// Uses a custom clickable chip list instead of a native <datalist> — datalist
+// autocomplete is unreliable on many mobile browsers (invisible/non-firing).
 (async function loadBranchSuggestionsFromSalesApp(){
   try{
     const snap = await getDocs(collection(db, 'sales_employees'));
     const branches = [...new Set(snap.docs.map(d=> d.data().branch).filter(Boolean))].sort();
-    const dl = document.getElementById('branchSuggestions');
-    if(dl) dl.innerHTML = branches.map(b=> `<option value="${b}"></option>`).join('');
+    const wrap = document.getElementById('branchSuggestionsList');
+    const chipsWrap = document.getElementById('branchSuggestionsChips');
+    if(!wrap || !chipsWrap || branches.length === 0) return;
+    chipsWrap.innerHTML = branches.map(b=>
+      `<button type="button" class="branch-chip" data-branch="${b}" style="padding:6px 12px; border-radius:20px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:12px; cursor:pointer;">${b}</button>`
+    ).join('');
+    wrap.style.display = 'block';
+    chipsWrap.querySelectorAll('.branch-chip').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        document.getElementById('branchInput').value = chip.dataset.branch;
+      });
+    });
   }catch(err){
     console.warn('تعذر تحميل اقتراحات الفروع من برنامج المبيعات', err);
   }
@@ -456,6 +471,7 @@ $('#branchSaveBtn').addEventListener('click', ()=>{
   localStorage.setItem('feedback_branch', val);
   refreshBranchUI();
   applyBranchFilter();
+  $('#branchSetup').classList.remove('show');
 });
 $('#changeBranchBtn').addEventListener('click', ()=>{
   $('#branchInput').value = currentBranch;
