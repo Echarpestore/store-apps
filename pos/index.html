@@ -274,6 +274,24 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <body>
 <div class="badge-test">⚠️ نسخة تجريبية</div>
 
+<div id="loadFailBanner" style="display:none; position:fixed; inset:0; z-index:99999; background:#12141a; color:#eef0f4; direction:rtl; font-family:'Cairo',sans-serif; align-items:center; justify-content:center; flex-direction:column; gap:16px; padding:24px; text-align:center;">
+  <div style="font-size:48px;">⚠️</div>
+  <h2 style="margin:0; font-size:19px;">فيه نسخة قديمة متخزّنة في الجهاز ده</h2>
+  <p style="color:#8b90a0; font-size:14px; max-width:320px; margin:0;">النظام بقى فيه كذا ملف منفصل، والجهاز ده لسه شايل نسخة قديمة من واحد منهم. امسح بيانات الموقع من إعدادات المتصفح وحدّث الصفحة.</p>
+  <p id="loadFailDetail" style="color:#e5484d; font-size:12px; max-width:320px; margin:0; word-break:break-word;"></p>
+  <button onclick="location.reload(true)" style="padding:14px 28px; border:none; border-radius:12px; background:#2fa36b; color:#fff; font-family:'Cairo',sans-serif; font-weight:800; font-size:15px; cursor:pointer;">🔄 تحديث الصفحة</button>
+</div>
+<script>
+  window.addEventListener('error', function(e){
+    const banner = document.getElementById('loadFailBanner');
+    const detail = document.getElementById('loadFailDetail');
+    if(banner && banner.style.display !== 'flex'){
+      banner.style.display = 'flex';
+      if(detail) detail.textContent = (e.message||'خطأ غير معروف') + (e.filename ? (' | ' + e.filename.split('/').pop() + ':' + e.lineno) : '');
+    }
+  });
+</script>
+
 <!-- ============ BRANCH SETUP (first run only) ============ -->
 <div class="screen active" id="branchSetupScreen">
   <div class="pin-box">

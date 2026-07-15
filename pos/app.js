@@ -211,23 +211,25 @@ function enterDashboard(){
   // Gate roles access by permission — EXCEPT during first-time bootstrap
   // (nobody has been assigned a role yet anywhere in the system), where
   // access is open to everyone so someone can set themselves as manager.
+  // كل عنصر بيتفحص إنه موجود فعليًا الأول (null-safe) عشان لو جهاز شايل نسخة
+  // ملف قديمة بالغلط، الكود ميكرشش خالص، بس يتجاهل العنصر الناقص ده بس.
   const canSeeRoles = hasPerm('canManageRoles') || noRoleAssignmentsYet;
-  document.getElementById('rolesSidebarBtn').style.display = canSeeRoles ? '' : 'none';
-  document.getElementById('navRoles').style.display = canSeeRoles ? '' : 'none';
+  if(document.getElementById('rolesSidebarBtn')) document.getElementById('rolesSidebarBtn').style.display = canSeeRoles ? '' : 'none';
+  if(document.getElementById('navRoles')) document.getElementById('navRoles').style.display = canSeeRoles ? '' : 'none';
 
   const canDiscounts = hasPerm('canChangePrices');
-  document.getElementById('discountsSidebarBtn').style.display = canDiscounts ? '' : 'none';
-  document.getElementById('navDiscounts').style.display = canDiscounts ? '' : 'none';
+  if(document.getElementById('discountsSidebarBtn')) document.getElementById('discountsSidebarBtn').style.display = canDiscounts ? '' : 'none';
+  if(document.getElementById('navDiscounts')) document.getElementById('navDiscounts').style.display = canDiscounts ? '' : 'none';
 
   const canImport = hasPerm('canEditInventory') || hasPerm('canChangePrices');
-  document.getElementById('importSidebarBtn').style.display = canImport ? '' : 'none';
-  document.getElementById('navImport').style.display = canImport ? '' : 'none';
+  if(document.getElementById('importSidebarBtn')) document.getElementById('importSidebarBtn').style.display = canImport ? '' : 'none';
+  if(document.getElementById('navImport')) document.getElementById('navImport').style.display = canImport ? '' : 'none';
 
   // بانل "الإدارة" الذهبي بيظهر بس لو فيه على الأقل حاجة واحدة جواه متاحة
-  document.getElementById('navMgmtSection').style.display = (canSeeRoles || canDiscounts || canImport) ? '' : 'none';
+  if(document.getElementById('navMgmtSection')) document.getElementById('navMgmtSection').style.display = (canSeeRoles || canDiscounts || canImport) ? '' : 'none';
 
   const reportsBtn = document.getElementById('reportsSidebarBtn');
-  reportsBtn.style.opacity = hasPerm('canViewReports') ? '1' : '.4';
+  if(reportsBtn) reportsBtn.style.opacity = hasPerm('canViewReports') ? '1' : '.4';
 
   showScreen('dashboardScreen');
 }
