@@ -1156,17 +1156,17 @@ function todayStr(d){
   return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
 }
 function getOpenShift(empId){
-  return shifts.find(s=> s.employeeId === empId && !s.clockOutTs);
+  return allShifts.find(s=> s.employeeId === empId && !s.clockOutTs);
 }
 function isClockedIn(empId){
   return !!getOpenShift(empId);
 }
 function getTodaysSubmission(empId){
   const today = todayStr();
-  return submissions.find(s=> s.employeeId === empId && s.date === today);
+  return allSubmissions.find(s=> s.employeeId === empId && s.date === today);
 }
 function getCurrentTask(empId){
-  return tasks.find(t=> t.employeeId === empId);
+  return allTasks.find(t=> t.employeeId === empId);
 }
 function formatDuration(ms){
   const totalMin = Math.floor(ms/60000);
@@ -1509,10 +1509,10 @@ function computeAvgRatingToday(empId){
 function renderStaffOverview(){
   const wrap = $('#staffOverviewList');
   if(!wrap) return;
-  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const dayStart = new Date(); dayStart.setHours(0,0,0,0);
 
-  const rows = window.employees.map(e=>{
+  const rows = reviewEmployeesFor(viewBranch).map(e=>{
     const shift = getOpenShift(e.id);
     let statusColor = 'gray', statusText = 'لسه محضرش';
     if(shift){
@@ -1721,7 +1721,7 @@ function computeRaceStatus(emp, periodType){
   const elapsedRequiredDays = countElapsedWorkDaysInRange(emp, range.start, range.end);
   const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
 
-  const rangeShifts = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
+  const rangeShifts = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
   const hasSevereLateness = rangeShifts.some(s=> (s.lateMinutes||0) > SEVERE_LATE_MINUTES);
   const mildLateCount = rangeShifts.filter(s=> (s.lateMinutes||0) > 0 && (s.lateMinutes||0) <= SEVERE_LATE_MINUTES).length;
 
@@ -1784,7 +1784,7 @@ function renderRaceStatus(empId){
 }
 
 async function maybeAwardPeriod(emp, range, type, label){
-  const already = rewards.some(r=> r.employeeId===emp.id && r.type===type && r.periodLabel===label);
+  const already = allRewards.some(r=> r.employeeId===emp.id && r.type===type && r.periodLabel===label);
   if(already) return;
 
   if(type === 'monthly'){
@@ -1821,7 +1821,7 @@ async function maybeAwardPeriod(emp, range, type, label){
 
   // Severe lateness (beyond the grace period + severe threshold) even once
   // in the period disqualifies the reward entirely.
-  const rangeShifts = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
+  const rangeShifts = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
   const hasSevereLateness = rangeShifts.some(s=> (s.lateMinutes||0) > SEVERE_LATE_MINUTES);
   if(hasSevereLateness) return;
 
@@ -2225,7 +2225,7 @@ function renderAdminList(){
   });
   wrap.querySelectorAll('[data-act="resetPin"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      const emp = window.employees.find(e=> e.id === btn.dataset.id);
+      const emp = allEmployees.find(e=> e.id === btn.dataset.id);
       if(!confirm(`متأكد إنك عايز تصفّر كود ${emp?emp.name:''}؟ هيحتاج يختار كود جديد لنفسه أول ما يسجل حضور تاني.`)) return;
       try{
         await updateDoc(doc(db,'sales_employees', btn.dataset.id), { pin: '' });
@@ -2254,7 +2254,7 @@ $('#addEmpBtn').addEventListener('click', async ()=>{
   errEl.textContent = '';
   if(!name){ errEl.textContent = 'اكتب اسم الموظف'; return; }
   try{
-    await addDoc(empCol, { name, branch: window.currentBranch, createdAt: Date.now() });
+    await addDoc(empCol, { name, branch: (viewBranch==='__ALL__' ? window.currentBranch : viewBranch), createdAt: Date.now() });
     $('#newEmpName').value = '';
   }catch(err){ errEl.textContent = 'حصل خطأ، حاول تاني'; console.error(err); }
 });
@@ -2264,8 +2264,8 @@ const DAY_NAMES = ['الأحد','الإثنين','الثلاثاء','الأرب�
 
 function renderScheduleList(){
   const wrap = $('#scheduleList');
-  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  wrap.innerHTML = window.employees.map(e=> `
+  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=> `
     <div class="emp-row" style="flex-wrap:wrap; gap:8px;">
       <div class="n">${e.name}</div>
       <div style="display:flex; align-items:center; gap:6px;">
@@ -2346,8 +2346,8 @@ function renderScheduleList(){
 // ---------- TASK ASSIGNMENT (admin) ----------
 function renderTaskAssignList(){
   const wrap = $('#taskAssignList');
-  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  wrap.innerHTML = window.employees.map(e=>{
+  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=>{
     const task = getCurrentTask(e.id);
     return `
     <div class="emp-row" style="flex-wrap:wrap;">
@@ -2361,11 +2361,11 @@ function renderTaskAssignList(){
     btn.addEventListener('click', async ()=>{
       const input = wrap.querySelector(`input[data-id="${btn.dataset.id}"]`);
       const desc = input.value.trim();
-      const emp = window.employees.find(e=> e.id === btn.dataset.id);
+      const emp = allEmployees.find(e=> e.id === btn.dataset.id);
       if(!desc || !emp) return;
       try{
         await setDoc(doc(db,'sales_tasks', btn.dataset.id), {
-          employeeId: btn.dataset.id, employeeName: emp.name, branch: window.currentBranch,
+          employeeId: btn.dataset.id, employeeName: emp.name, branch: emp.branch,
           taskDescription: desc, assignedAt: Date.now()
         });
         btn.textContent = 'اتحفظت ✅';
@@ -2389,8 +2389,8 @@ function updateGearBadge(){
 
 function renderPendingSubmissions(){
   const wrap = $('#pendingSubmissionsList');
-  const branchEmpIds = new Set(window.employees.map(e=>e.id));
-  const pending = submissions.filter(s=> branchEmpIds.has(s.employeeId) && !s.confirmed && !s.rejected).sort((a,b)=> b.submittedAt-a.submittedAt);
+  const branchEmpIds = new Set(reviewEmployeesFor(viewBranch).map(e=>e.id));
+  const pending = allSubmissions.filter(s=> branchEmpIds.has(s.employeeId) && !s.confirmed && !s.rejected).sort((a,b)=> b.submittedAt-a.submittedAt);
 
   const badge = document.querySelector('#pendingBadge');
   if(badge){
@@ -2435,8 +2435,8 @@ function renderPendingSubmissions(){
 
 function renderConfirmedSubmissions(){
   const wrap = $('#confirmedSubmissionsList');
-  const branchEmpIds = new Set(window.employees.map(e=>e.id));
-  const confirmed = submissions.filter(s=> branchEmpIds.has(s.employeeId) && s.confirmed)
+  const branchEmpIds = new Set(reviewEmployeesFor(viewBranch).map(e=>e.id));
+  const confirmed = allSubmissions.filter(s=> branchEmpIds.has(s.employeeId) && s.confirmed)
     .sort((a,b)=> b.submittedAt-a.submittedAt).slice(0,30);
   if(confirmed.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش تنفيذات مؤكدة</div>'; return; }
   wrap.innerHTML = confirmed.map(s=>{
@@ -2468,8 +2468,8 @@ $('#photoLightbox').addEventListener('click', (e)=>{
 // ---------- REWARDS LOG (admin) ----------
 function renderRewardsList(){
   const wrap = $('#rewardsList');
-  const branchEmpIds = new Set(window.employees.map(e=>e.id));
-  const list = rewards.filter(r=> branchEmpIds.has(r.employeeId)).sort((a,b)=> b.earnedAt-a.earnedAt);
+  const branchEmpIds = new Set(reviewEmployeesFor(viewBranch).map(e=>e.id));
+  const list = allRewards.filter(r=> branchEmpIds.has(r.employeeId)).sort((a,b)=> b.earnedAt-a.earnedAt);
   if(list.length === 0){ wrap.innerHTML = '<div class="empty">لسه محدش كسب مكافأة</div>'; return; }
 
   const byMonth = new Map();
@@ -2520,16 +2520,17 @@ function populateAttendanceEmpFilter(){
   const sel = $('#attendanceEmpFilter');
   if(!sel) return;
   const prev = sel.value || '__ALL__';
+  const branchEmps = reviewEmployeesFor(viewBranch);
   sel.innerHTML = '<option value="__ALL__">كل الموظفين</option>' +
-    window.employees.map(e=> `<option value="${e.id}">${e.name}</option>`).join('');
-  sel.value = window.employees.some(e=>e.id===prev) || prev==='__ALL__' ? prev : '__ALL__';
+    branchEmps.map(e=> `<option value="${e.id}">${e.name}${viewBranch==='__ALL__' ? ' — '+(e.branch||'—') : ''}</option>`).join('');
+  sel.value = branchEmps.some(e=>e.id===prev) || prev==='__ALL__' ? prev : '__ALL__';
 }
 $('#attendanceEmpFilter')?.addEventListener('change', renderAttendanceHistory);
 
 function getAttendanceHistoryList(){
-  const branchEmpIds = new Set(window.employees.map(e=>e.id));
+  const branchEmpIds = new Set(reviewEmployeesFor(viewBranch).map(e=>e.id));
   const filterEmp = $('#attendanceEmpFilter') ? $('#attendanceEmpFilter').value : '__ALL__';
-  return shifts.filter(s=> branchEmpIds.has(s.employeeId) && (filterEmp==='__ALL__' || s.employeeId===filterEmp))
+  return allShifts.filter(s=> branchEmpIds.has(s.employeeId) && (filterEmp==='__ALL__' || s.employeeId===filterEmp))
     .sort((a,b)=> b.clockInTs - a.clockInTs);
 }
 
@@ -2609,8 +2610,8 @@ $('#exportAttendanceCsvBtn')?.addEventListener('click', ()=>{
 // ---------- WEEKLY AGGREGATE PERFORMANCE (admin) ----------
 function computeWeekComposite(emp, weekStart, weekEnd){
   const elapsedRequiredDays = countElapsedWorkDaysInRange(emp, weekStart, weekEnd);
-  const daysPresent = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= weekStart.getTime() && s.clockInTs <= weekEnd.getTime()).length;
-  const weekShifts = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= weekStart.getTime() && s.clockInTs <= weekEnd.getTime());
+  const daysPresent = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= weekStart.getTime() && s.clockInTs <= weekEnd.getTime()).length;
+  const weekShifts = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= weekStart.getTime() && s.clockInTs <= weekEnd.getTime());
   const lateCount = weekShifts.filter(s=> (s.lateMinutes||0) > 0).length;
   const confirmedTasks = countConfirmedDaysInRange(emp.id, weekStart, weekEnd);
   const avgRating = computeAvgRatingInRange(emp.id, weekStart.getTime(), weekEnd.getTime());
@@ -2626,11 +2627,11 @@ function computeWeekComposite(emp, weekStart, weekEnd){
 
 function buildWeeklyAggregateData(){
   const week = getWeekRange(new Date());
-  return window.employees.map(e=>{
+  return reviewEmployeesFor(viewBranch).map(e=>{
     const requiredDays = countRequiredWorkDaysInRange(e, week.start, week.end);
     const elapsedRequiredDays = countElapsedWorkDaysInRange(e, week.start, week.end);
-    const daysPresent = shifts.filter(s=> s.employeeId===e.id && s.clockInTs >= week.start.getTime() && s.clockInTs <= week.end.getTime()).length;
-    const weekShifts = shifts.filter(s=> s.employeeId===e.id && s.clockInTs >= week.start.getTime() && s.clockInTs <= week.end.getTime());
+    const daysPresent = allShifts.filter(s=> s.employeeId===e.id && s.clockInTs >= week.start.getTime() && s.clockInTs <= week.end.getTime()).length;
+    const weekShifts = allShifts.filter(s=> s.employeeId===e.id && s.clockInTs >= week.start.getTime() && s.clockInTs <= week.end.getTime());
     const lateCount = weekShifts.filter(s=> (s.lateMinutes||0) > 0).length;
     const confirmedTasks = countConfirmedDaysInRange(e.id, week.start, week.end);
     const avgRating = computeAvgRatingInRange(e.id, week.start.getTime(), week.end.getTime());
@@ -2646,7 +2647,7 @@ function buildWeeklyAggregateData(){
 function renderWeeklyAggregate(){
   const wrap = $('#weeklyAggregateList');
   if(!wrap) return;
-  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const data = buildWeeklyAggregateData();
   const rows = data.map(d=>{
     const color = d.composite >= 85 ? 'var(--good)' : d.composite >= 60 ? '#f2a93c' : 'var(--bad)';
@@ -2669,13 +2670,13 @@ function populatePerfHistoryEmpSelect(){
   if(!sel) return;
   const prev = sel.value;
   sel.innerHTML = '<option value="">— اختار موظف —</option>' +
-    window.employees.map(e=> `<option value="${e.id}">${e.name}</option>`).join('');
-  if(window.employees.some(e=> e.id === prev)) sel.value = prev;
+    reviewEmployeesFor(viewBranch).map(e=> `<option value="${e.id}">${e.name}</option>`).join('');
+  if(reviewEmployeesFor(viewBranch).some(e=> e.id === prev)) sel.value = prev;
 }
 $('#perfHistoryEmpSelect')?.addEventListener('change', renderPerfHistory);
 
 function buildMonthlyPerformanceData(empId, monthsBack){
-  const emp = window.employees.find(e=> e.id === empId);
+  const emp = allEmployees.find(e=> e.id === empId);
   if(!emp) return [];
   const now = new Date();
   const results = [];
@@ -2688,10 +2689,10 @@ function buildMonthlyPerformanceData(empId, monthsBack){
     const avgRating = computeAvgRatingInRange(empId, range.start.getTime(), range.end.getTime());
     const confirmedTasks = countConfirmedDaysInRange(empId, range.start, range.end);
     const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
-    const monthShifts = shifts.filter(s=> s.employeeId===empId && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
+    const monthShifts = allShifts.filter(s=> s.employeeId===empId && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
     const daysPresent = monthShifts.length;
     const lateCount = monthShifts.filter(s=> (s.lateMinutes||0) > 0).length;
-    const monthRewards = rewards.filter(r=> r.employeeId===empId && r.earnedAt >= range.start.getTime() && r.earnedAt <= range.end.getTime());
+    const monthRewards = allRewards.filter(r=> r.employeeId===empId && r.earnedAt >= range.start.getTime() && r.earnedAt <= range.end.getTime());
     const rewardTotal = monthRewards.reduce((s,r)=> s+r.amount, 0);
     const hasAnyActivity = monthPoints > 0 || daysPresent > 0;
 
@@ -2738,17 +2739,17 @@ function renderPerfHistory(){
 }
 
 function buildFullReportData(){
-  return window.employees.map(e=>{
+  return reviewEmployeesFor(viewBranch).map(e=>{
     const empPoints = window.points.filter(p=> p.employeeId === e.id);
-    const empSubs = submissions.filter(s=> s.employeeId === e.id);
+    const empSubs = allSubmissions.filter(s=> s.employeeId === e.id);
     const confirmedTasks = empSubs.filter(s=> s.confirmed).length;
     const rejectedTasks = empSubs.filter(s=> s.rejected).length;
-    const empShifts = shifts.filter(s=> s.employeeId === e.id);
+    const empShifts = allShifts.filter(s=> s.employeeId === e.id);
     const daysPresent = empShifts.length;
     const lateCount = empShifts.filter(s=> (s.lateMinutes||0) > 0).length;
     const totalLateMin = empShifts.reduce((sum,s)=> sum + (s.lateMinutes||0), 0);
     const totalOvertimeMin = empShifts.reduce((sum,s)=> sum + (s.overtimeMinutes||0), 0);
-    const empRewards = rewards.filter(r=> r.employeeId === e.id);
+    const empRewards = allRewards.filter(r=> r.employeeId === e.id);
     const totalRewardAmount = empRewards.reduce((sum,r)=> sum + r.amount, 0);
     const avgRatingHtml = computeAvgRatingFor(e.id);
     const avgRatingPlain = avgRatingHtml.replace(/<[^>]*>/g,'');
@@ -2763,7 +2764,7 @@ function buildFullReportData(){
 function renderFullReport(){
   const wrap = $('#fullReportList');
   if(!wrap) return;
-  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const data = buildFullReportData();
   const rows = data.map(d=> `<tr>
     <td>${d.name}</td>
@@ -2815,13 +2816,13 @@ function renderCommissionPanel(){
     : 'لسه معملتش عمولة لهذا الفرع';
 
   const wrap = $('#commissionList');
-  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const monthLabel = getMonthLabel();
   const monthRange = getMonthRange(new Date());
 
-  wrap.innerHTML = window.employees.map(e=>{
+  wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=>{
     const pointsThisMonth = window.points.filter(p=> p.employeeId===e.id && p.ts >= monthRange.start.getTime() && p.ts <= monthRange.end.getTime()).length;
-    const paidThisMonth = commissionPayments.filter(p=> p.employeeId===e.id && p.monthLabel===monthLabel);
+    const paidThisMonth = allCommissionPayments.filter(p=> p.employeeId===e.id && p.monthLabel===monthLabel);
     const pointsAlreadyPaid = paidThisMonth.reduce((sum,p)=> sum + (p.pointsCount||0), 0);
     const amountAlreadyPaid = paidThisMonth.reduce((sum,p)=> sum + (p.commissionAmount||0), 0);
     const newPoints = Math.max(0, pointsThisMonth - pointsAlreadyPaid);
@@ -2843,12 +2844,12 @@ function renderCommissionPanel(){
 
   wrap.querySelectorAll('[data-act="pay"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      const emp = window.employees.find(e=> e.id === btn.dataset.id);
+      const emp = allEmployees.find(e=> e.id === btn.dataset.id);
       if(!emp) return;
       if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عن ${btn.dataset.points} نقطة جديدة (شهر ${monthLabel})؟`)) return;
       try{
         await addDoc(commissionPaymentsCol, {
-          employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
+          employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
           monthLabel, pointsCount: parseInt(btn.dataset.points), commissionAmount: parseFloat(btn.dataset.amount),
           paidAt: Date.now()
         });
@@ -2964,7 +2965,7 @@ function countDayOffOccurrencesInRange(emp, start, end){
 // attendance record at all), not just to count their scheduled day off.
 function countAttendedDaysInRange(empId, start, end){
   const daySet = new Set();
-  shifts.filter(s=> s.employeeId===empId && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime())
+  allShifts.filter(s=> s.employeeId===empId && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime())
     .forEach(s=>{
       const d = new Date(s.clockInTs);
       daySet.add(d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate());
@@ -3010,7 +3011,7 @@ function computeSalary(emp, periodStart, end){
     ? Math.round(dailyRate * daysInCalc * 100)/100
     : baseSalary;
 
-  const rangeShifts = shifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime());
+  const rangeShifts = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime());
   const overtimeMinutes = rangeShifts.reduce((sum,s)=> sum + (s.overtimeMinutes||0), 0);
   const overtimePay = Math.round((overtimeMinutes/60) * hourlyRate * 100)/100;
 
@@ -3028,7 +3029,7 @@ function computeSalary(emp, periodStart, end){
   const extraOffDays = Math.max(0, absenceDays - FREE_DAYOFF_PER_MONTH);
   const deductionAmount = Math.round(extraOffDays * dailyRate * 100)/100;
 
-  const advancesTotal = advances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= end.getTime())
+  const advancesTotal = allAdvances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= end.getTime())
     .reduce((sum,a)=> sum + a.amount, 0);
 
   const netSalary = Math.round((proratedBase - deductionAmount + overtimePay - advancesTotal) * 100)/100;
@@ -3038,12 +3039,12 @@ function computeSalary(emp, periodStart, end){
 function renderSalaryPanel(){
   const wrap = $('#salaryList');
   if(!wrap) return;
-  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const range = getMonthDateRange(new Date());
   const periodLabel = getMonthLabel(range.start);
   const monthEnded = new Date() > range.end;
 
-  wrap.innerHTML = window.employees.map(e=>{
+  wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=>{
     if(!e.baseSalary){
       return `<div class="emp-row"><div class="n">${e.name}</div><div class="meta" style="color:var(--sub);">لسه مفيش مرتب أساسي متحدد (حطه في بانل المواعيد)</div></div>`;
     }
@@ -3076,12 +3077,12 @@ function renderSalaryPanel(){
 
   wrap.querySelectorAll('[data-act="paysalary"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      const emp = window.employees.find(e=> e.id === btn.dataset.id);
+      const emp = allEmployees.find(e=> e.id === btn.dataset.id);
       if(!emp) return;
       if(!confirm(`تأكيد صرف ${btn.dataset.amount} ج.م لـ ${emp.name} عن شهر ${periodLabel}؟`)) return;
       try{
         await addDoc(salaryPaymentsCol, {
-          employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
+          employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
           periodLabel, amount: parseFloat(btn.dataset.amount), paidAt: Date.now()
         });
       }catch(err){ console.error('تعذر تسجيل صرف الراتب', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
@@ -3128,8 +3129,8 @@ let pendingTerminateEmpId = null;
 function renderTerminationPanel(){
   const wrap = $('#terminateEmpList');
   if(!wrap) return;
-  if(window.employees.length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  wrap.innerHTML = window.employees.map(e=> `
+  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=> `
     <div class="emp-row">
       <div class="n">${e.name}</div>
       <button data-id="${e.id}" style="border:none; background:var(--bad); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">🚪 إنهاء الخدمة</button>
@@ -3138,7 +3139,7 @@ function renderTerminationPanel(){
   wrap.querySelectorAll('button').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       pendingTerminateEmpId = btn.dataset.id;
-      const emp = window.employees.find(e=> e.id === pendingTerminateEmpId);
+      const emp = allEmployees.find(e=> e.id === pendingTerminateEmpId);
       $('#terminateConfirmName').textContent = emp ? 'إنهاء خدمة: ' + emp.name : '—';
       $('#terminateConfirmPass').value = '';
       $('#terminateConfirmErr').textContent = '';
@@ -3155,7 +3156,7 @@ $('#terminateConfirmCancel')?.addEventListener('click', ()=>{
 $('#terminateConfirmBtn')?.addEventListener('click', async ()=>{
   const pass = $('#terminateConfirmPass').value;
   if(pass !== ADMIN_CODE){ $('#terminateConfirmErr').textContent = 'كود غلط'; return; }
-  const emp = window.employees.find(e=> e.id === pendingTerminateEmpId);
+  const emp = allEmployees.find(e=> e.id === pendingTerminateEmpId);
   if(!emp){ $('#terminateConfirmOverlay').classList.remove('show'); return; }
 
   const now = new Date();
@@ -3166,7 +3167,7 @@ $('#terminateConfirmBtn')?.addEventListener('click', async ()=>{
 
   try{
     await addDoc(terminationsCol, {
-      employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
+      employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
       terminatedAt: Date.now(), periodLabel, settlementAmount: calc.netSalary, paidAt: null
     });
     await updateDoc(doc(db,'sales_employees', emp.id), { active: false });
