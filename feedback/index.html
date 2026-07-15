@@ -208,6 +208,18 @@
 </style>
 </head>
 <body>
+<div id="loadFailBanner" style="display:none; position:fixed; inset:0; z-index:99999; background:#12141a; color:#eef0f4; direction:rtl; font-family:'Cairo',sans-serif; align-items:center; justify-content:center; flex-direction:column; gap:16px; padding:24px; text-align:center;">
+  <div style="font-size:48px;">⚠️</div>
+  <h2 style="margin:0; font-size:19px;">الصفحة معملتش لود صح</h2>
+  <p style="color:#8b90a0; font-size:14px; max-width:320px; margin:0;">حصلت مشكلة مؤقتة في تحميل البرنامج (غالبًا مشكلة اتصال بالإنترنت). دوس تحديث وجرب تاني.</p>
+  <button onclick="location.reload()" style="padding:14px 28px; border:none; border-radius:12px; background:#2fa36b; color:#fff; font-family:'Cairo',sans-serif; font-weight:800; font-size:15px; cursor:pointer;">🔄 تحديث الصفحة</button>
+</div>
+<script>
+  window.__scriptFullyLoaded = false;
+  setTimeout(function(){
+    if(!window.__scriptFullyLoaded){ document.getElementById('loadFailBanner').style.display = 'flex'; }
+  }, 8000);
+</script>
 <div id="app">
 
   <!-- KIOSK -->
@@ -802,6 +814,11 @@ function renderTable(list){
   wrap.innerHTML = `<table><thead><tr><th>التوقيت</th><th>الرأي</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+// If we reach this final line, the ENTIRE script downloaded and executed
+// successfully — not just the beginning. If this never runs (script got cut
+// off partway through a slow/unstable connection), the safety-net banner
+// above will catch it and prompt a reload instead of leaving buttons silently broken.
+window.__scriptFullyLoaded = true;
 </script>
 <script>
 if ('serviceWorker' in navigator) {
