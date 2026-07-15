@@ -38,6 +38,13 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .pin-pad .clear{color:var(--minus);}
 .pin-pad .ok{color:var(--plus);}
 .login-err{color:var(--minus);font-size:13px;margin-top:10px;min-height:16px;}
+.emp-pick-tile{
+  background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:16px 8px;
+  display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer;
+}
+.emp-pick-tile:active{background:var(--panel3);}
+.emp-pick-tile .av{width:44px; height:44px; border-radius:50%; background:var(--panel3); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--accent);}
+.emp-pick-tile .n{font-size:12px; font-weight:700; text-align:center;}
 
 /* ---------- Dashboard ---------- */
 #dashboardScreen{padding:0;}
@@ -219,14 +226,19 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 
 <!-- ============ LOGIN ============ -->
 <div class="screen" id="loginScreen">
-  <div class="pin-box">
-    <h2>ادخل الـ PIN بتاعك</h2>
+  <div class="pin-box" id="employeePickerBox" style="width:min(90vw,480px);">
+    <h2>مين هيدخل؟</h2>
+    <div id="employeePickerGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px;"></div>
+    <div class="login-err" id="employeePickerErr"></div>
+  </div>
+  <div class="pin-box" id="pinPadBox" style="display:none;">
+    <h2 id="pinPadEmpName">ادخل الـ PIN بتاعك</h2>
     <div class="pin-display" id="pinDisplay"></div>
     <div class="pin-pad">
       <button onclick="pinPress('1')">1</button><button onclick="pinPress('2')">2</button><button onclick="pinPress('3')">3</button>
       <button onclick="pinPress('4')">4</button><button onclick="pinPress('5')">5</button><button onclick="pinPress('6')">6</button>
       <button onclick="pinPress('7')">7</button><button onclick="pinPress('8')">8</button><button onclick="pinPress('9')">9</button>
-      <button class="clear" onclick="pinClear()">مسح</button><button onclick="pinPress('0')">0</button><button class="ok" onclick="pinSubmit()">دخول</button>
+      <button class="clear" onclick="backToEmployeePicker()">رجوع</button><button onclick="pinPress('0')">0</button><button class="ok" onclick="pinSubmit()">دخول</button>
     </div>
     <div class="login-err" id="loginErr"></div>
   </div>
@@ -350,11 +362,13 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   <div class="qb-sale-layout">
     <div class="qb-sale-sidebar">
       <button class="back-btn" onclick="goToDashboard()" style="width:100%;">◀ رجوع</button>
-      <div style="flex:1;"></div>
+      <button onclick="holdInvoice()">⏸️ Hold</button>
+      <button onclick="openCashDrawer()">🗄️ فتح الدرج</button>
       <button onclick="openGiveDiscount()">🏷️ خصم</button>
-      <button id="btnAcceptReturn" onclick="openAcceptReturn()">↩️ استرجاع</button>
+      <button onclick="focusAddCustomer()">👤 إضافة عميل</button>
+      <div style="flex:1;"></div>
+      <button id="btnAcceptReturn" onclick="openReverseReceipt()">↩️ عكس فاتورة</button>
       <button onclick="showCashierInfo()">👤 الكاشير/الموظف</button>
-      <button onclick="openShipItems()">🚚 توصيل</button>
     </div>
     <div class="qb-sale-main">
       <div class="sale-top">
@@ -389,35 +403,17 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 
       <div class="sale-footer">
         <div class="total-row"><span>الإجمالي</span><span id="cartTotal">0.00</span></div>
+        <div class="pay-methods">
+          <div class="pay-method" id="pmCash" onclick="togglePayMethod('cash')"><div class="m-label">💵 كاش</div></div>
+          <div class="pay-method" id="pmVisa" onclick="togglePayMethod('visa')"><div class="m-label">💳 فيزا</div></div>
+          <div class="pay-method" id="pmInsta" onclick="togglePayMethod('instapay')"><div class="m-label">📱 انستا باي</div></div>
+        </div>
+        <div class="pay-inputs" id="payInputs"></div>
+        <div class="summary-box" id="paySummary"></div>
         <div class="action-row">
-          <button class="btn-hold" onclick="holdInvoice()">⏸️ Hold</button>
-          <button class="btn-pay" onclick="openPaymentModal()">💳 الدفع</button>
+          <button class="btn-pay" id="confirmPayBtn" onclick="confirmPayment()" disabled style="flex:1;">Save &amp; Print ✔</button>
         </div>
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- ============ PAYMENT MODAL ============ -->
-<div class="modal-overlay" id="paymentModal">
-  <div class="modal-sheet">
-    <h3>طريقة الدفع</h3>
-    <div class="pay-methods">
-      <div class="pay-method" id="pmCash" onclick="togglePayMethod('cash')">
-        <div class="m-label">💵 كاش</div>
-      </div>
-      <div class="pay-method" id="pmVisa" onclick="togglePayMethod('visa')">
-        <div class="m-label">💳 فيزا</div>
-      </div>
-      <div class="pay-method" id="pmInsta" onclick="togglePayMethod('instapay')">
-        <div class="m-label">📱 انستا باي</div>
-      </div>
-    </div>
-    <div class="pay-inputs" id="payInputs"></div>
-    <div class="summary-box" id="paySummary"></div>
-    <div class="modal-btns">
-      <button class="btn-cancel" onclick="closePaymentModal()">إلغاء</button>
-      <button class="btn-confirm" id="confirmPayBtn" onclick="confirmPayment()" disabled>Save &amp; Print ✔</button>
     </div>
   </div>
 </div>
@@ -429,6 +425,18 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
     <div id="heldList"><div class="empty-cart">مفيش فواتير معلّقة</div></div>
     <div class="modal-btns" style="margin-top:10px;">
       <button class="btn-cancel" onclick="closeHeldModal()" style="flex:1;">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ REVERSE RECEIPT MODAL ============ -->
+<div class="modal-overlay" id="reverseModal">
+  <div class="modal-sheet">
+    <h3>عكس فاتورة (استرجاع كامل)</h3>
+    <p style="font-size:12px; color:var(--muted); margin:-6px 0 10px;">بيرجّع الكمية للمخزون ويسجل الفاتورة كملغاة. مينفعش يترجع.</p>
+    <div id="reverseList"><div class="empty-cart">بيتحمّل...</div></div>
+    <div class="modal-btns" style="margin-top:10px;">
+      <button class="btn-cancel" onclick="closeReverseModal()" style="flex:1;">إغلاق</button>
     </div>
   </div>
 </div>
@@ -486,12 +494,14 @@ function saveBranchSetup(){
   currentBranch = val;
   localStorage.setItem('pos_branch', val);
   showScreen('loginScreen');
+  loadEmployeePicker();
 }
 
 // أول ما الصفحة تفتح: لو مفيش فرع متسجل على الجهاز ده، اطلب تسجيله الأول قبل أي حاجة تانية.
 if(currentBranch){
   document.getElementById('branchSetupScreen').classList.remove('active');
   document.getElementById('loginScreen').classList.add('active');
+  loadEmployeePicker();
 }
 
 // ---------------- State ----------------
@@ -567,6 +577,47 @@ function showToast(msg, type=""){
 
 // ---------------- Login (PIN) ----------------
 let pinBuffer = "";
+let selectedLoginEmp = null; // {id, name, ...} chosen from the picker before PIN entry
+
+async function loadEmployeePicker(){
+  const grid = document.getElementById('employeePickerGrid');
+  const errBox = document.getElementById('employeePickerErr');
+  grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:var(--muted); font-size:12px;">جارٍ التحميل...</div>';
+  try{
+    const snap = await db.collection(EMPLOYEES_COLLECTION).where('branch','==', currentBranch).get();
+    const emps = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=> e.active !== false);
+    if(emps.length === 0){
+      grid.innerHTML = '';
+      errBox.textContent = 'لسه مفيش موظفين مسجلين للفرع ده في نظام المبيعات';
+      return;
+    }
+    errBox.textContent = '';
+    grid.innerHTML = emps.map(e=>{
+      const initials = (e.name||'؟').trim().split(' ').slice(0,2).map(w=>w[0]).join('');
+      return `<div class="emp-pick-tile" onclick="selectEmployeeForLogin('${e.id}', '${(e.name||'').replace(/'/g,"\\'")}')"><div class="av">${initials}</div><div class="n">${e.name}</div></div>`;
+    }).join('');
+  }catch(e){
+    grid.innerHTML = '';
+    errBox.textContent = 'تعذر تحميل الموظفين: ' + e.message;
+  }
+}
+
+function selectEmployeeForLogin(empId, name){
+  selectedLoginEmp = { id: empId, name };
+  document.getElementById('pinPadEmpName').textContent = 'ادخل الـ PIN بتاع ' + name;
+  pinBuffer = '';
+  document.getElementById('pinDisplay').textContent = '';
+  document.getElementById('loginErr').textContent = '';
+  document.getElementById('employeePickerBox').style.display = 'none';
+  document.getElementById('pinPadBox').style.display = 'block';
+}
+function backToEmployeePicker(){
+  selectedLoginEmp = null;
+  pinBuffer = '';
+  document.getElementById('pinPadBox').style.display = 'none';
+  document.getElementById('employeePickerBox').style.display = 'block';
+}
+
 function pinPress(d){
   if(pinBuffer.length >= 6) return;
   pinBuffer += d;
@@ -576,19 +627,17 @@ function pinClear(){ pinBuffer=""; document.getElementById('pinDisplay').textCon
 
 async function pinSubmit(){
   const errBox = document.getElementById('loginErr');
+  if(!selectedLoginEmp){ errBox.textContent = "اختار اسمك الأول"; return; }
   if(!pinBuffer){ errBox.textContent = "اكتب الـ PIN الأول"; return; }
   errBox.textContent = "جارٍ التحقق...";
   try{
-    const snap = await db.collection(EMPLOYEES_COLLECTION)
-      .where('pin','==', pinBuffer)
-      .where('branch','==', currentBranch)
-      .limit(1).get();
-    if(snap.empty){
+    const doc = await db.collection(EMPLOYEES_COLLECTION).doc(selectedLoginEmp.id).get();
+    if(!doc.exists || doc.data().pin !== pinBuffer){
       errBox.textContent = "الـ PIN غلط، حاول تاني";
-      pinClear();
+      pinBuffer = '';
+      document.getElementById('pinDisplay').textContent = '';
       return;
     }
-    const doc = snap.docs[0];
     currentEmployee = { id: doc.id, ...doc.data() };
     errBox.textContent = "";
     pinClear();
@@ -602,6 +651,7 @@ async function pinSubmit(){
 function logout(){
   currentEmployee = null;
   cart = [];
+  backToEmployeePicker();
   showScreen('loginScreen');
 }
 
@@ -839,6 +889,7 @@ function goToSale(){
   document.getElementById('newCustomerRow').style.display = 'none';
   document.getElementById('btnAcceptReturn').disabled = !hasPerm('canRefund');
   renderCart();
+  resetPaymentUI();
   showScreen('saleScreen');
 }
 function goToDashboard(){
@@ -1032,15 +1083,99 @@ function openGiveDiscount(){
   renderCart();
   showToast(`اتحط خصم ${p}% ✅`);
 }
-function openAcceptReturn(){
-  if(!hasPerm('canRefund')){ showToast('الصلاحية دي للمشرف/المدير بس', 'err'); return; }
-  showToast('شاشة الاسترجاع الكاملة لسه قيد التطوير — قريبًا', 'warn');
+function focusAddCustomer(){
+  document.getElementById('customerPhone').focus();
 }
 function showCashierInfo(){
   showToast('مسجّل دخول: ' + (currentEmployee.name||'') + ' — ' + (myPerms().label||''));
 }
-function openShipItems(){
-  showToast('خاصية التوصيل لسه قيد التطوير — قريبًا', 'warn');
+
+// ---------------- Open Cash Drawer (best-effort, hardware-dependent) ----------------
+// المتصفح مقدرش يوصل مباشرة لدرج الفلوس. الطريقة الشائعة: الطابعة نفسها فيها منفذ
+// (RJ11) موصّل بالدرج، ومُعدّة تفتحه تلقائي كل ما تستقبل أمر طباعة. الزرار ده بيطبع
+// إيصال فاضي صغير كمحاولة — لازم تتأكد إن الطابعة معمول لها الإعداد ده من قبل.
+function openCashDrawer(){
+  try{
+    const w = window.open('', '_blank', 'width=200,height=100');
+    w.document.write('<html><body onload="window.print(); setTimeout(()=>window.close(), 300);"></body></html>');
+    w.document.close();
+    showToast('اتبعت أمر فتح الدرج للطابعة — لو مفتحش، اتأكد إن الطابعة معمول لها إعداد فتح الدرج تلقائي', 'warn');
+  }catch(e){
+    showToast('تعذر إرسال أمر فتح الدرج: ' + e.message, 'err');
+  }
+}
+
+// ---------------- Reverse Receipt (full refund of an already-paid sale) ----------------
+function openReverseReceipt(){
+  if(!hasPerm('canRefund')){ showToast('الصلاحية دي للمشرف/المدير بس', 'err'); return; }
+  document.getElementById('reverseModal').classList.add('active');
+  renderReverseList();
+}
+function closeReverseModal(){ document.getElementById('reverseModal').classList.remove('active'); }
+
+async function renderReverseList(){
+  const wrap = document.getElementById('reverseList');
+  wrap.innerHTML = '<div class="empty-cart">بيتحمّل...</div>';
+  try{
+    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+    const sales = snap.docs.map(d=>({id:d.id, ...d.data()}))
+      .filter(s=> !s.reversed && !s.isReversal)
+      .sort((a,b)=>{
+        const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
+        const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
+        return bt - at;
+      }).slice(0, 30);
+    if(sales.length === 0){ wrap.innerHTML = '<div class="empty-cart">لا يوجد فواتير قابلة للعكس</div>'; return; }
+    wrap.innerHTML = '';
+    sales.forEach(s=>{
+      const d = s.createdAt && s.createdAt.toDate ? s.createdAt.toDate() : null;
+      const dateStr = d ? d.toLocaleString('ar-EG') : '—';
+      const row = document.createElement('div');
+      row.className = 'held-row';
+      row.innerHTML = `
+        <div class="h-info">
+          ${(s.items||[]).length} صنف — ${s.total.toFixed(2)} ج.م
+          <div class="h-time">${dateStr} — ${s.employeeName||'—'}</div>
+        </div>
+        <button onclick="reverseReceipt('${s.id}')">عكس الفاتورة</button>
+      `;
+      wrap.appendChild(row);
+    });
+  }catch(e){ wrap.innerHTML = '<div class="empty-cart">تعذر التحميل: ' + e.message + '</div>'; }
+}
+
+async function reverseReceipt(saleId){
+  if(!confirm('متأكد إنك عايز تعكس الفاتورة دي؟ الكمية هترجع للمخزون، والإجراء ده نهائي.')) return;
+  try{
+    const saleDoc = await db.collection(TEST_SALES).doc(saleId).get();
+    if(!saleDoc.exists){ showToast('الفاتورة مش موجودة', 'err'); return; }
+    const sale = saleDoc.data();
+
+    // 1) رجّع الكمية للمخزون
+    const batch = db.batch();
+    (sale.items||[]).forEach(it=>{
+      const ref = db.collection(TEST_INVENTORY).doc(it.id);
+      batch.update(ref, { quantity: firebase.firestore.FieldValue.increment(it.qty) });
+    });
+    batch.update(db.collection(TEST_SALES).doc(saleId), { reversed: true, reversedAt: firebase.firestore.FieldValue.serverTimestamp(), reversedBy: currentEmployee.name||'' });
+    await batch.commit();
+
+    // 2) سجل عملية عكس منفصلة (رقم سالب) عشان التقارير تفضل دقيقة
+    await db.collection(TEST_SALES).add({
+      isReversal: true,
+      originalSaleId: saleId,
+      employeeId: currentEmployee.id,
+      employeeName: currentEmployee.name || '',
+      branch: currentBranch,
+      items: sale.items,
+      itemCount: -(sale.itemCount||0),
+      total: -(sale.total||0),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    showToast('اتعكست الفاتورة ✅ والكمية رجعت للمخزون', 'ok');
+    renderReverseList();
+  }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
 }
 
 // ---------------- Hold / Unhold ----------------
@@ -1050,7 +1185,9 @@ async function holdInvoice(){
     await db.collection(TEST_HELD).add({
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.name || '',
+      branch: currentBranch,
       customerPhone: document.getElementById('customerPhone').value.trim(),
+      customerName: document.getElementById('customerName').value.trim(),
       items: cart,
       total: cartTotal(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1062,7 +1199,7 @@ async function holdInvoice(){
 
 async function refreshHeldCount(){
   try{
-    const snap = await db.collection(TEST_HELD).get();
+    const snap = await db.collection(TEST_HELD).where('branch','==', currentBranch).get();
     document.getElementById('heldCountLabel').textContent = snap.size + ' فاتورة';
   }catch(e){}
 }
@@ -1072,13 +1209,18 @@ async function openHeldModal(){
   listBox.innerHTML = '<div class="empty-cart">جارٍ التحميل...</div>';
   document.getElementById('heldModal').classList.add('active');
   try{
-    const snap = await db.collection(TEST_HELD).orderBy('createdAt','desc').get();
+    const snap = await db.collection(TEST_HELD).where('branch','==', currentBranch).get();
     if(snap.empty){
       listBox.innerHTML = '<div class="empty-cart">مفيش فواتير معلّقة</div>';
       return;
     }
+    const docs = snap.docs.sort((a,b)=>{
+      const at = a.data().createdAt && a.data().createdAt.toMillis ? a.data().createdAt.toMillis() : 0;
+      const bt = b.data().createdAt && b.data().createdAt.toMillis ? b.data().createdAt.toMillis() : 0;
+      return bt - at;
+    });
     listBox.innerHTML = '';
-    snap.docs.forEach(d=>{
+    docs.forEach(d=>{
       const h = d.data();
       const row = document.createElement('div');
       row.className = 'held-row';
@@ -1113,15 +1255,12 @@ async function unholdInvoice(heldId){
 }
 
 // ---------------- Payment ----------------
-function openPaymentModal(){
-  if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
+function resetPaymentUI(){
   selectedPayMethods = new Set();
   document.querySelectorAll('.pay-method').forEach(el=>el.classList.remove('selected'));
   document.getElementById('payInputs').innerHTML = '';
   updatePaySummary();
-  document.getElementById('paymentModal').classList.add('active');
 }
-function closePaymentModal(){ document.getElementById('paymentModal').classList.remove('active'); }
 
 function togglePayMethod(method){
   const total = cartTotal();
@@ -1188,6 +1327,7 @@ async function confirmPayment(){
     payments[m] = parseFloat(el.value) || 0;
   });
   const phone = document.getElementById('customerPhone').value.trim();
+  const custName = document.getElementById('customerName').value.trim();
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
   const earnsStaffPoint = itemCount >= MIN_ITEMS_FOR_STAFF_POINT;
   const loyaltyPointsEarned = phone ? Math.floor(total / POINTS_PER_EGP) : 0;
@@ -1197,9 +1337,11 @@ async function confirmPayment(){
     await db.collection(TEST_SALES).add({
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.name || '',
+      branch: currentBranch,
       items: cart,
       itemCount, total, payments,
       customerPhone: phone || null,
+      customerName: custName || null,
       loyaltyPointsEarned,
       staffPointEarned: earnsStaffPoint,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1226,15 +1368,17 @@ async function confirmPayment(){
     // 4) نقاط ولاء العميل (تجريبي)
     if(phone){
       const custRef = db.collection(TEST_CUSTOMERS).doc(phone);
-      await custRef.set({
+      const custUpdate = {
+        phone, branch: currentBranch,
         points: firebase.firestore.FieldValue.increment(loyaltyPointsEarned),
         totalSpent: firebase.firestore.FieldValue.increment(total),
         lastVisit: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+      };
+      if(custName) custUpdate.name = custName;
+      await custRef.set(custUpdate, { merge: true });
     }
 
     printReceipt(payments, total);
-    closePaymentModal();
     showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
     goToSale();
   }catch(e){
