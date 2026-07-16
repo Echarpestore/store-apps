@@ -751,6 +751,10 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
           <button onclick="registerNewCustomer()">إضافة كعميل جديد بالاسم المكتوب</button>
         </div>
         <div class="customer-info" id="customerInfo"></div>
+        <div id="resetPinRow" style="display:none; margin-top:4px;">
+          <button onclick="resetLoyaltyPin()" style="padding:6px 12px; border-radius:6px; border:1px solid #c98; background:#fff3ef; color:#a23; font-size:12px; font-weight:700; cursor:pointer;">🔑 مسح الرقم السري للعميل</button>
+          <span style="font-size:11px; color:#8a6d00; margin-inline-start:6px;">لو العميل نسي رقمه السري في التطبيق</span>
+        </div>
       </div>
       <div class="qbx-itemops">
         <button onclick="qbxQty(1)">➕<br>كمية</button>

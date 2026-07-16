@@ -845,6 +845,12 @@ searchBar.addEventListener('keydown', (e)=>{
       addToCart(match);
       searchBar.value = '';
       document.getElementById('suggestBox').innerHTML = '';
+    }else if(/^ECH/i.test(code)){
+      // مش منتج، وشكله كود عضوية عميل من تطبيق الولاء → نربط العميل بالفاتورة
+      resolveLoyaltyScan(code.toUpperCase()).then(found=>{
+        if(found){ searchBar.value=''; document.getElementById('suggestBox').innerHTML=''; }
+        else showToast('كود العضوية مش موجود', 'err');
+      });
     }else{
       showToast('لا يوجد صنف بهذا الكود', 'err');
     }
@@ -985,7 +991,7 @@ function cartTotal(){ return cart.reduce((s,c)=> s + c.price*c.qty, 0); }
 // ---------------- Customer lookup (loyalty - test) ----------------
 // لو الرقم متسجلش، بيوري صف "إضافة عميل جديد" عشان الكاشير يكتب الاسم ويسجله على طول.
 const RATING_PREVIEW_MAP = {1:'😠 مضايقني جدًا', 2:'🙁 مش عاجبني', 3:'🙂 كويس', 4:'😍 عجبني جدًا'};
-document.getElementById('customerPhone').addEventListener('blur', async ()=>{
+async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
   const newRow = document.getElementById('newCustomerRow');
@@ -1013,12 +1019,43 @@ document.getElementById('customerPhone').addEventListener('blur', async ()=>{
       document.getElementById('customerName').value = d.name || '';
       infoBox.textContent = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d.points || 0} نقطة${ratingLine}`;
       newRow.style.display = 'none';
+      const rp = document.getElementById('resetPinRow');
+      if(rp) rp.style.display = d.loyaltyPin ? 'block' : 'none';   // زر مسح الرقم السري يبان بس لو العميل حاطط واحد
     }else{
       infoBox.textContent = ratingLine ? ratingLine.replace(' | ','') : '';
       newRow.style.display = 'flex';
+      const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
     }
   }catch(e){ infoBox.textContent=''; }
-});
+}
+document.getElementById('customerPhone').addEventListener('blur', refreshCustomerInfo);
+
+// الكاشير بيمسح الرقم السري للعميل (لو نسيه) — العميل هيحدد واحد جديد أول ما يفتح التطبيق
+async function resetLoyaltyPin(){
+  const phone = document.getElementById('customerPhone').value.trim();
+  if(!phone){ showToast('اكتب رقم العميل الأول', 'err'); return; }
+  if(!confirm('متأكد إنك عايز تمسح الرقم السري للعميل ده؟ هيحدد واحد جديد أول ما يفتح التطبيق.')) return;
+  try{
+    await db.collection(TEST_CUSTOMERS).doc(phone).set({ loyaltyPin: null }, { merge:true });
+    const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
+    showToast('اتمسح الرقم السري ✅ العميل هيحدد واحد جديد');
+  }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
+
+// يدوّر على عميل بكود العضوية (اللي بيتمسح من بطاقة تطبيق الولاء ECH...)
+async function resolveLoyaltyScan(code){
+  try{
+    const snap = await db.collection(TEST_CUSTOMERS).where('loyaltyCode','==', code).limit(1).get();
+    if(snap.empty) return false;
+    const docSnap = snap.docs[0];
+    const c = docSnap.data();
+    const phone = c.phone || docSnap.id;
+    document.getElementById('customerPhone').value = phone;
+    await refreshCustomerInfo();
+    showToast('اترّبط العميل: ' + (c.name || phone) + ' 💳');
+    return true;
+  }catch(e){ console.warn('resolveLoyaltyScan', e); return false; }
+}
 async function registerNewCustomer(){
   const phone = document.getElementById('customerPhone').value.trim();
   const name = document.getElementById('customerName').value.trim();
