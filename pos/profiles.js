@@ -129,6 +129,16 @@ async function openCustomerProfile(phone){
 
     // تقييمات الرضا (Happy or Not) المرتبطة بالعميل ده فعليًا (من مبيعات سابقة اتربطت وقتها)
     const RATING_MAP = {1:{l:'😠 مضايقني جدًا', c:'var(--minus)'}, 2:{l:'🙁 مش عاجبني', c:'var(--warn)'}, 3:{l:'🙂 كويس', c:'var(--text)'}, 4:{l:'😍 عجبني جدًا', c:'var(--plus)'}};
+
+    // سجل النقاط (كسب/استبدال) — مستخرج من الفواتير مباشرة
+    const ptsEvents = [];
+    sales.forEach(s=>{
+      const t = saleTime(s);
+      const ref = s.invoiceNo || (s.id ? s.id.slice(-6).toUpperCase() : '');
+      if((s.loyaltyPointsEarned||0) > 0) ptsEvents.push({ type:'earn', pts:s.loyaltyPointsEarned, t, ref });
+      if((s.pointsRedeemed||0) > 0)     ptsEvents.push({ type:'redeem', pts:s.pointsRedeemed, t, ref });
+    });
+    ptsEvents.sort((a,b)=> b.t - a.t);
     let ratings = [];
     try{
       const ratingsSnap = await db.collection('entries').where('customerPhone','==', phone).get();
@@ -140,6 +150,29 @@ async function openCustomerProfile(phone){
         <div style="color:var(--muted); font-size:10px;">${label}</div>
         <div style="font-weight:900; font-size:16px; color:${color||'var(--text)'};">${value}</div>
       </div>`;
+
+    // 📊 سجل النقاط: كسب (من كل فاتورة) + استبدال (من حقل pointsRedeemed أو سطر الاستبدال في الفواتير القديمة)
+    const ptLog = [];
+    sales.forEach(s=>{
+      const t = saleTime(s);
+      const ref = s.invoiceNo || (s.id ? s.id.slice(-6).toUpperCase() : '');
+      if((s.loyaltyPointsEarned||0) > 0) ptLog.push({ type:'earn', points:s.loyaltyPointsEarned, ts:t, ref });
+      let redeemed = s.pointsRedeemed || 0;
+      if(!redeemed){
+        const rl = (s.items||[]).find(it=> it.isRedemption);
+        if(rl){ const m = String(rl.name||'').match(/(\d+)/); if(m) redeemed = parseInt(m[1]); }
+      }
+      if(redeemed > 0) ptLog.push({ type:'redeem', points:redeemed, ts:t, ref });
+    });
+    ptLog.sort((a,b)=> b.ts - a.ts);
+    const ptLogRows = ptLog.slice(0,60).map(e=>{
+      const isEarn = e.type==='earn';
+      const d = e.ts ? new Date(e.ts).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
+      return `<div style="display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid var(--border); font-size:12px;">
+        <span style="font-weight:700; color:${isEarn?'var(--plus)':'var(--warn)'};">${isEarn?'➕ كسب':'🎁 استبدال'} ${e.points} نقطة</span>
+        <span style="color:var(--muted); font-size:11px;">${d}${e.ref?(' · '+e.ref):''}</span>
+      </div>`;
+    }).join('');
 
     const invoicesRows = sales.sort((a,b)=> saleTime(b)-saleTime(a)).slice(0,50).map(s=>`
       <div onclick="openInvoice('${s.id}')" style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border); cursor:pointer;">
@@ -168,6 +201,29 @@ async function openCustomerProfile(phone){
         <div style="font-weight:800; margin-bottom:6px;">❤️ منتجاته المفضلة</div>
         ${topFav.map(([name,qty],i)=>`<div style="display:flex; justify-content:space-between; padding:4px 0; font-size:12px; border-bottom:1px solid var(--border);"><span>${i+1}. ${name}</span><span style="color:var(--muted);">${qty} قطعة</span></div>`).join('')}
       </div>` : ''}
+
+      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
+        <div style="font-weight:800; margin-bottom:8px;">📊 سجل النقاط <span style="color:var(--warn); font-size:12px;">(الرصيد الحالي: ${c.points||0})</span></div>
+        ${ptsEvents.length ? ptsEvents.slice(0,40).map(e=>{
+          const isEarn = e.type === 'earn';
+          const dstr = e.t ? new Date(e.t).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
+          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid var(--border); font-size:12.5px;">
+            <div>
+              <span style="font-weight:800; color:${isEarn?'var(--plus)':'var(--warn)'};">${isEarn?'➕ كسب':'🎁 استبدال'} ${e.pts} نقطة</span>
+              <div style="color:var(--muted); font-size:10.5px; margin-top:2px;">${e.ref?('فاتورة #'+e.ref+' · '):''}${dstr}</div>
+            </div>
+            <span style="font-weight:900; font-size:15px; color:${isEarn?'var(--plus)':'var(--warn)'};">${isEarn?'+':'−'}${e.pts}</span>
+          </div>`;
+        }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:8px 0;">لسه مفيش حركات نقاط. (بتتسجّل تلقائي من الفواتير)</div>'}
+      </div>
+
+      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div style="font-weight:800;">📊 سجل النقاط</div>
+          <div style="font-size:12px; color:var(--warn); font-weight:800;">الرصيد: ${c.points||0} نقطة</div>
+        </div>
+        ${ptLogRows || '<div style="color:var(--muted); text-align:center; padding:10px 0; font-size:12px;">لسه مفيش حركات نقاط</div>'}
+      </div>
 
       <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
         <div style="font-weight:800; margin-bottom:6px;">⭐ تقييمات الرضا (Happy or Not)</div>
