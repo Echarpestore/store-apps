@@ -178,8 +178,7 @@ let receiveGoodsTodayLog = [];
 function goToReceiveGoods(){
   if(!hasPerm('canEditInventory')){ showToast('الصلاحية دي محتاجة إذن تعديل المخزون', 'err'); return; }
   showScreen('receiveGoodsScreen');
-  receiveCart = [];
-  renderReceiveCart();
+  renderReceiveCart();   // القايمة بتفضل زي ما هي (مبتتمسحش إلا بعد التأكيد)
   // نتأكد إن المخزون متحمّل عشان البحث يلاقي المنتجات
   if(typeof loadInventory === 'function') loadInventory().catch(()=>{});
   const input = document.getElementById('receiveGoodsBarcode');

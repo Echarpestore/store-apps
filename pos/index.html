@@ -519,6 +519,10 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="padding:0 20px 10px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+      <button onclick="goToImport(); switchImportTab('customers');" style="padding:9px 14px; border-radius:9px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:800; font-size:13px; cursor:pointer;">📥 استيراد من كويك بوكس</button>
+      <button onclick="exportCustomersCSV()" style="padding:9px 14px; border-radius:9px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-weight:800; font-size:13px; cursor:pointer;">📤 تصدير Excel/CSV</button>
+    </div>
     <div id="custSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
       <input type="text" id="custSearch" placeholder="🔍 دوّر بالاسم أو الرقم..." oninput="renderCustList()"
@@ -802,6 +806,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
         <button onclick="openRedeemPoints()">🎁 استبدال نقاط</button>
         <button onclick="showCashierInfo()">الكاشير</button>
         <button onclick="logout()">خروج</button>
+        <button onclick="goToReceiveGoods()">📥 استلام المنتجات</button>
       </div>
       <div class="qbx-center">
         <div class="sale-top">
