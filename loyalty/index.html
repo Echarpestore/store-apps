@@ -993,8 +993,14 @@ function openInvoiceDetail(i){
     '<div class="ish-row big"><span>الإجمالي</span><span>'+fmt(s.total)+' ج.م</span></div>'+
     pmtRows+
     (s.loyaltyPointsEarned ? '<div class="ish-row"><span>نقاط كسبتيها</span><span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span></div>' : '')+
-    (s.sellerEmployeeName||s.employeeName ? '<div class="ish-row"><span>خدمك</span><span>'+esc(s.sellerEmployeeName||s.employeeName)+'</span></div>' : '');
+    (s.sellerEmployeeName||s.employeeName ? '<div class="ish-row"><span>خدمك</span><span>'+esc(s.sellerEmployeeName||s.employeeName)+'</span></div>' : '')+
+    (s.invoiceCode ? '<div style="margin-top:16px; padding-top:14px; border-top:2px dashed var(--line); text-align:center;">'+
+      '<div style="font-size:12px; color:var(--muted); font-weight:700; margin-bottom:8px;">📷 لو عايزة ترجّعي حاجة، ورّي الكود ده للكاشير</div>'+
+      '<div id="invBarcode" style="max-width:230px; margin:0 auto;"></div>'+
+      '<div style="font-family:monospace; font-size:12px; color:var(--pink-deep); margin-top:4px; letter-spacing:1px;">'+esc(s.invoiceCode)+'</div>'+
+    '</div>' : '');
   $('invOverlay').classList.add('on');
+  if(s.invoiceCode){ try{ drawBarcode('invBarcode', s.invoiceCode); }catch(e){ console.warn('inv barcode', e); } }
 }
 function closeInvoiceDetail(){ $('invOverlay').classList.remove('on'); }
 
