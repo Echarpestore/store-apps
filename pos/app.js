@@ -623,14 +623,15 @@ async function loadClockedInStaff(){
     const empSnap = await db.collection(EMPLOYEES_COLLECTION).where('branch','==', currentBranch).get();
     const activeEmpIds = new Set(empSnap.docs.filter(d=> d.data().active !== false).map(d=> d.id));
 
-    const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+    // مفيش فلترة بـ"النهاردة بس" هنا عمدًا — لو شيفت لسه فعليًا "مفتوح" (محضّرش انصراف)،
+    // يفضل يبان حتى لو ابتدأ من يوم فات، عشان مانخسرش موظف شغال فعليًا.
     const snap = await db.collection('sales_shifts').where('branch','==', currentBranch).get();
-    const openShiftsToday = snap.docs.map(d=>d.data())
-      .filter(s=> !s.clockOutTs && s.clockInTs >= dayStart.getTime() && activeEmpIds.has(s.employeeId));
+    const openShifts = snap.docs.map(d=>d.data())
+      .filter(s=> !s.clockOutTs && activeEmpIds.has(s.employeeId));
 
     // استبعاد أي تكرار لنفس الموظف (لو حصل له أكتر من شيفت مفتوح بالغلط)
     const seen = new Set();
-    openShiftsToday.forEach(s=>{
+    openShifts.forEach(s=>{
       if(seen.has(s.employeeId)) return;
       seen.add(s.employeeId);
       const opt = document.createElement('option');
