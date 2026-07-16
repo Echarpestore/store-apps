@@ -1379,6 +1379,10 @@ async function refreshCustomerInfo(){
 // تلوين مربع العميل: أخضر لو فيه عميل مختار، مطفي لو لأ
 function setCustBox(on){ const b = document.getElementById('custBox'); if(b) b.classList.toggle('on', !!on); }
 document.getElementById('customerPhone').addEventListener('blur', refreshCustomerInfo);
+// دوس Enter في خانة رقم العميل يظهر العميل على طول (من غير ما تحتاج تدوس في مكان تاني)
+document.getElementById('customerPhone').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); refreshCustomerInfo(); }
+});
 
 // الكاشير بيمسح الرقم السري للعميل (لو نسيه) — العميل هيحدد واحد جديد أول ما يفتح التطبيق
 async function resetLoyaltyPin(){
