@@ -40,6 +40,13 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   position:fixed;top:8px;left:8px;background:var(--warn);color:#1a1200;
   font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;z-index:999;
 }
+.online-badge{
+  position:fixed; top:8px; right:8px; font-size:11px; font-weight:800;
+  padding:5px 12px; border-radius:20px; z-index:999;
+}
+.online-badge.online{background:#1f9440; color:#fff;}
+.online-badge.offline{background:#d9534f; color:#fff; animation:offlinePulse 1.5s ease-in-out infinite;}
+@keyframes offlinePulse{0%,100%{opacity:1;} 50%{opacity:.6;}}
 
 /* ---------- Login ---------- */
 #loginScreen{align-items:center;justify-content:center;}
@@ -297,6 +304,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </head>
 <body>
 <div class="badge-test">⚠️ نسخة تجريبية</div>
+<div id="onlineStatusBadge" class="online-badge online">🟢 متصل</div>
 
 <div id="loadFailBanner" style="display:none; position:fixed; inset:0; z-index:99999; background:#12141a; color:#eef0f4; direction:rtl; font-family:'Cairo',sans-serif; align-items:center; justify-content:center; flex-direction:column; gap:16px; padding:24px; text-align:center;">
   <div style="font-size:48px;">⚠️</div>
@@ -584,6 +592,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
         <button onclick="openCashDrawer()">فتح الدرج</button>
         <button onclick="openGiveDiscount()">خصم</button>
         <button onclick="focusAddCustomer()">إضافة عميل</button>
+        <button onclick="openRedeemPoints()">🎁 استبدال نقاط</button>
         <button id="btnAcceptReturn" onclick="openReverseReceipt()">عكس فاتورة</button>
         <button onclick="showCashierInfo()">الكاشير</button>
         <button onclick="logout()">خروج</button>

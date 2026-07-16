@@ -127,6 +127,14 @@ async function openCustomerProfile(phone){
     }));
     const topFav = Object.entries(fav).sort((a,b)=> b[1]-a[1]).slice(0,5);
 
+    // تقييمات الرضا (Happy or Not) المرتبطة بالعميل ده فعليًا (من مبيعات سابقة اتربطت وقتها)
+    const RATING_MAP = {1:{l:'😠 مضايقني جدًا', c:'var(--minus)'}, 2:{l:'🙁 مش عاجبني', c:'var(--warn)'}, 3:{l:'🙂 كويس', c:'var(--text)'}, 4:{l:'😍 عجبني جدًا', c:'var(--plus)'}};
+    let ratings = [];
+    try{
+      const ratingsSnap = await db.collection('entries').where('customerPhone','==', phone).get();
+      ratings = ratingsSnap.docs.map(d=>d.data()).sort((a,b)=> b.ts - a.ts);
+    }catch(e){ console.warn('تعذر تحميل تقييمات العميل', e); }
+
     const statCard = (label, value, color)=> `
       <div style="flex:1; min-width:110px; background:var(--panel2); border-radius:10px; padding:10px; text-align:center;">
         <div style="color:var(--muted); font-size:10px;">${label}</div>
@@ -160,6 +168,17 @@ async function openCustomerProfile(phone){
         <div style="font-weight:800; margin-bottom:6px;">❤️ منتجاته المفضلة</div>
         ${topFav.map(([name,qty],i)=>`<div style="display:flex; justify-content:space-between; padding:4px 0; font-size:12px; border-bottom:1px solid var(--border);"><span>${i+1}. ${name}</span><span style="color:var(--muted);">${qty} قطعة</span></div>`).join('')}
       </div>` : ''}
+
+      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
+        <div style="font-weight:800; margin-bottom:6px;">⭐ تقييمات الرضا (Happy or Not)</div>
+        ${ratings.length ? ratings.slice(0,10).map(r=>{
+          const info = RATING_MAP[r.r] || {l:'—', c:'var(--muted)'};
+          return `<div style="display:flex; justify-content:space-between; padding:4px 0; font-size:12px; border-bottom:1px solid var(--border);">
+            <span style="color:${info.c}; font-weight:700;">${info.l}</span>
+            <span style="color:var(--muted);">${new Date(r.ts).toLocaleDateString('ar-EG')}</span>
+          </div>`;
+        }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:8px 0;">لسه مفيش تقييمات مرتبطة بيه (بيترتبط تلقائي من الفواتير الجديدة)</div>'}
+      </div>
 
       <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
         <div style="font-weight:800; margin-bottom:6px;">📝 ملاحظات</div>
