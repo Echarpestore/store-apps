@@ -336,7 +336,7 @@ async function renderInventoryScreen(){
   addWrap.innerHTML = hasPerm('canEditInventory') ? `
     <div style="display:flex; gap:6px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px;">
       <input id="newItemName" placeholder="اسم الصنف" style="flex:2; min-width:100px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-      <input id="newItemBarcode" placeholder="الباركود" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <input id="newItemBarcode" placeholder="الباركود" value="${nextBarcode()}" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
       <input id="newItemPrice" type="number" placeholder="السعر" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
       <input id="newItemCost" type="number" placeholder="سعر التكلفة" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
       <input id="newItemQty" type="number" placeholder="الكمية" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
@@ -429,10 +429,21 @@ function renderInventoryList(){
   }).join('') || '<div class="empty-cart">'+(q||filter!=='all'?'مفيش أصناف بالفلتر ده':'لسه مفيش أصناف')+'</div>';
 }
 
+// بيختار أول باركود رقمي متسلسل بعد أكبر باركود موجود (لو آخر واحد 543 يبقى الجديد 544)
+function nextBarcode(){
+  let max = 0;
+  (allInventory||[]).forEach(it=>{
+    const b = String(it.barcode||'');
+    if(/^\d+$/.test(b)){ const n = parseInt(b,10); if(n > max) max = n; }
+  });
+  return String(max + 1);
+}
+
 async function addInventoryItem(){
   if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
   const name = document.getElementById('newItemName').value.trim();
-  const barcode = document.getElementById('newItemBarcode').value.trim();
+  let barcode = document.getElementById('newItemBarcode').value.trim();
+  if(!barcode) barcode = nextBarcode();   // فاضي؟ السيستم يختار المتسلسل
   const price = parseFloat(document.getElementById('newItemPrice').value) || 0;
   const cost = parseFloat(document.getElementById('newItemCost').value) || 0;
   const quantity = parseInt(document.getElementById('newItemQty').value) || 0;
@@ -755,7 +766,6 @@ function focusSearchBar(){
 }
 function resumeOrStartSale(){
   if(cart.length > 0){
-    document.getElementById('btnAcceptReturn').disabled = !hasPerm('canRefund');
     if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
     loadLoyaltyRedemptionConfig();
     loadClockedInStaff();
@@ -781,7 +791,7 @@ function goToSale(){
   document.getElementById('customerName').value = '';
   document.getElementById('customerInfo').textContent = '';
   document.getElementById('newCustomerRow').style.display = 'none';
-  document.getElementById('btnAcceptReturn').disabled = !hasPerm('canRefund');
+  setCustBox(false);
   // التاريخ والوقت واسم الموظف في ركن الشاشة (زي الجهاز الحقيقي بالظبط)
   const now = new Date();
   document.getElementById('qbxMeta').innerHTML =
@@ -1186,22 +1196,48 @@ function renderCart(){
   if(selectedCartIdx !== null && selectedCartIdx >= cart.length) selectedCartIdx = null;
   if(cart.length === 0){
     selectedCartIdx = null;
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>';
   }else{
     tbody.innerHTML = cart.map((c, idx)=>`
       <tr class="${idx===selectedCartIdx?'sel ':''}${c.isReturn?'ret':''}" onclick="selectCartRow(${idx})">
         <td>${idx+1}</td>
-        <td class="item-name">${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}</td>
-        <td>${c.attribute || '—'}</td>
-        <td>${c.size || '—'}</td>
+        <td class="item-name">${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}${c.barcode?`<div class="cart-code">${c.barcode}</div>`:''}</td>
         <td>${c.originalPrice ? `<s style="color:#999; font-size:10px;">${c.originalPrice.toFixed(2)}</s> ` : ''}${c.price.toFixed(2)}</td>
-        <td>${c.qty}</td>
+        <td>
+          <div class="qty-cell">
+            <button onclick="event.stopPropagation(); cartQty(${idx},-1)">−</button>
+            <span class="qn">${c.qty}</span>
+            <button onclick="event.stopPropagation(); cartQty(${idx},1)">+</button>
+          </div>
+        </td>
         <td>${(c.price*c.qty).toFixed(2)}</td>
+        <td><button class="cart-del" onclick="event.stopPropagation(); cartRemove(${idx})" title="مسح">🗑️</button></td>
       </tr>`).join('');
   }
   const total = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   document.getElementById('cartTotal').textContent = total.toFixed(2);
   updatePaySummary();
+}
+
+// + / − للكمية في سطر السلة
+function cartQty(idx, delta){
+  const c = cart[idx]; if(!c) return;
+  let nq = (c.qty||1) + delta;
+  if(nq < 1){ cartRemove(idx); return; }
+  if(delta > 0 && !c.isReturn){
+    const inv = allInventory.find(x=> x.id === c.id);
+    if(inv && (inv.quantity ?? Infinity) < nq){ showToast('الكمية المتاحة في المخزون: ' + (inv.quantity ?? 0), 'err'); return; }
+  }
+  c.qty = nq;
+  renderCart();
+}
+// مسح صنف من السلة
+function cartRemove(idx){
+  if(idx < 0 || idx >= cart.length) return;
+  cart.splice(idx, 1);
+  if(selectedCartIdx === idx) selectedCartIdx = null;
+  else if(selectedCartIdx !== null && selectedCartIdx > idx) selectedCartIdx--;
+  renderCart();
 }
 
 function selectCartRow(idx){
@@ -1288,7 +1324,7 @@ async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
   const newRow = document.getElementById('newCustomerRow');
-  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; return; }
+  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     let ratingLine = '';
@@ -1312,15 +1348,19 @@ async function refreshCustomerInfo(){
       document.getElementById('customerName').value = d.name || '';
       infoBox.textContent = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d.points || 0} نقطة${ratingLine}`;
       newRow.style.display = 'none';
+      setCustBox(true);   // 🟢 عميل متسجّل ومختار → المربع ينوّر أخضر
       const rp = document.getElementById('resetPinRow');
       if(rp) rp.style.display = d.loyaltyPin ? 'block' : 'none';   // زر مسح الرقم السري يبان بس لو العميل حاطط واحد
     }else{
       infoBox.textContent = ratingLine ? ratingLine.replace(' | ','') : '';
       newRow.style.display = 'flex';
+      setCustBox(false);
       const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
     }
-  }catch(e){ infoBox.textContent=''; }
+  }catch(e){ infoBox.textContent=''; setCustBox(false); }
 }
+// تلوين مربع العميل: أخضر لو فيه عميل مختار، مطفي لو لأ
+function setCustBox(on){ const b = document.getElementById('custBox'); if(b) b.classList.toggle('on', !!on); }
 document.getElementById('customerPhone').addEventListener('blur', refreshCustomerInfo);
 
 // الكاشير بيمسح الرقم السري للعميل (لو نسيه) — العميل هيحدد واحد جديد أول ما يفتح التطبيق

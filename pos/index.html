@@ -199,13 +199,20 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .qbx-pay-btns button.selected{outline:3px solid #ffd23f; outline-offset:1px;}
 .qbx-pay-btns button.qbx-clear-pay{background:linear-gradient(#d9534f,#b52b27); min-width:auto; flex-direction:row; padding:10px 16px;}
 .qbx-totals{
-  width:280px; flex-shrink:0; display:flex; flex-direction:column; gap:4px; justify-content:flex-end;
+  width:330px; flex-shrink:0; display:flex; flex-direction:column; gap:6px; justify-content:flex-end;
 }
-.t-row{display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:700;}
-.t-val{min-width:110px; text-align:center; padding:5px 8px; border-radius:4px; background:#f4f3ef; border:1px solid #b8b5ad; font-family:monospace; font-size:14px;}
+.t-row{display:flex; justify-content:space-between; align-items:center; font-size:17px; font-weight:800;}
+.t-val{min-width:150px; text-align:center; padding:9px 12px; border-radius:6px; background:#f4f3ef; border:1px solid #b8b5ad; font-family:monospace; font-size:26px; font-weight:900;}
 .t-val.t-green{background:#0d5c19; color:#7dff8f; border-color:#0a4413;}
 .t-val.t-dark{background:#1c1c1e; color:#fff; border-color:#000;}
 .t-val.t-red{background:#1c1c1e; color:#ff5a5a; border-color:#000;}
+/* أزرار الكمية والمسح جوه سطر السلة */
+.qty-cell{display:flex; align-items:center; justify-content:center; gap:7px;}
+.qty-cell button{width:28px; height:28px; border-radius:6px; border:1px solid #b8b5ad; background:#fff; font-weight:900; font-size:17px; line-height:1; cursor:pointer; color:#333;}
+.qty-cell button:active{background:#eee;}
+.qty-cell .qn{min-width:22px; text-align:center; font-weight:800;}
+.cart-del{border:none; background:none; cursor:pointer; font-size:17px; padding:2px 6px;}
+.cart-code{font-size:10px; color:#999; direction:ltr; text-align:right; font-family:monospace;}
 .qbx-save{
   margin-top:5px; padding:14px 0; border-radius:6px; border:1px solid #2c7a35;
   background:linear-gradient(#4db658,#348c3e); color:#fff; font-size:15px; font-weight:800; cursor:pointer;
@@ -234,6 +241,9 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .sugg-row:active{background:#eef0f3;}
 
 .customer-row{display:flex;gap:8px;margin:8px 0 4px;}
+#custBox{border:2px solid #cfcabf; border-radius:8px; padding:7px; background:#efeee9; opacity:.72; transition:border-color .2s, background .2s, opacity .2s; margin:8px 0 4px;}
+#custBox.on{border-color:#2c9a3e; background:#eafaf0; opacity:1; box-shadow:0 0 0 2px rgba(44,154,62,.15);}
+#custBox .customer-row{margin:0;}
 .customer-row input{
   flex:1;padding:9px 11px;border-radius:4px;border:1px solid #a8a49b;
   background:#fff;color:#1a1a1a;font-size:13px;
@@ -783,7 +793,6 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
         <button onclick="openGiveDiscount()">خصم</button>
         <button onclick="focusAddCustomer()">إضافة عميل</button>
         <button onclick="openRedeemPoints()">🎁 استبدال نقاط</button>
-        <button id="btnAcceptReturn" onclick="openReverseReceipt()">عكس فاتورة</button>
         <button onclick="showCashierInfo()">الكاشير</button>
         <button onclick="logout()">خروج</button>
       </div>
@@ -798,11 +807,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
           <table class="cart-table">
             <thead>
               <tr>
-                <th>#</th><th>الصنف</th><th>اللون/النوع</th><th>المقاس</th><th>السعر</th><th>الكمية</th><th>الإجمالي</th>
+                <th>#</th><th>الصنف</th><th>السعر</th><th>الكمية</th><th>الإجمالي</th><th></th>
               </tr>
             </thead>
             <tbody id="cartTbody">
-              <tr><td colspan="7" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>
+              <tr><td colspan="6" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>
             </tbody>
           </table>
         </div>
@@ -811,9 +820,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
             <option value="">👤 مين اللي باع؟ (اختياري)</option>
           </select>
         </div>
+        <div id="custBox">
         <div class="customer-row">
           <input type="text" id="customerName" placeholder="&lt; اسم العميل &gt;">
           <input type="tel" id="customerPhone" placeholder="&lt; رقم تليفون العميل &gt;" inputmode="numeric">
+        </div>
         </div>
         <div id="newCustomerRow">
           <span style="font-size:12px; color:#8a6d00; align-self:center;">⚠️ الرقم ده مش مسجل</span>
