@@ -173,8 +173,11 @@ async function openCustomerProfile(phone){
         <div style="font-weight:800; margin-bottom:6px;">⭐ تقييمات الرضا (Happy or Not)</div>
         ${ratings.length ? ratings.slice(0,10).map(r=>{
           const info = RATING_MAP[r.r] || {l:'—', c:'var(--muted)'};
-          return `<div style="display:flex; justify-content:space-between; padding:4px 0; font-size:12px; border-bottom:1px solid var(--border);">
-            <span style="color:${info.c}; font-weight:700;">${info.l}</span>
+          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; font-size:12px; border-bottom:1px solid var(--border);">
+            <div>
+              <span style="color:${info.c}; font-weight:700;">${info.l}</span>
+              ${r.servedByEmployeeName ? `<div style="color:var(--muted); font-size:10px;">👤 الموظف: ${r.servedByEmployeeName}</div>` : ''}
+            </div>
             <span style="color:var(--muted);">${new Date(r.ts).toLocaleDateString('ar-EG')}</span>
           </div>`;
         }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:8px 0;">لسه مفيش تقييمات مرتبطة بيه (بيترتبط تلقائي من الفواتير الجديدة)</div>'}

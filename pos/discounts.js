@@ -66,26 +66,12 @@ function goToDiscounts(){
 }
 
 async function renderDiscountsScreen(){
-  await loadLoyaltyRedemptionConfig();
-  document.getElementById('discountAddCard').innerHTML = `
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
-      <div style="font-weight:800; margin-bottom:10px;">🎁 معدل استبدال نقاط الولاء بخصم</div>
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:13px;">
-        <span>كل</span>
-        <input id="loyaltyPointsInput" type="number" value="${loyaltyRedemptionConfig.pointsPerRedemption}" style="width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center;">
-        <span>نقطة = </span>
-        <input id="loyaltyValueInput" type="number" value="${loyaltyRedemptionConfig.redemptionValueEGP}" style="width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center;">
-        <span>جنيه خصم</span>
-        <button onclick="saveLoyaltyRedemptionConfig()" style="padding:8px 16px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:700; cursor:pointer;">حفظ</button>
-      </div>
-    </div>`;
-
   // نموذج الإضافة
   const productOptions = allInventory
     .filter(p=> p.status !== 'hidden')
     .map(p=> `<option value="${p.id}" data-name="${p.name}">${p.name}</option>`).join('');
 
-  document.getElementById('discountAddCard').innerHTML += `
+  document.getElementById('discountAddCard').innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
       <div style="font-weight:800; margin-bottom:10px;">➕ خصم جديد</div>
       <div style="display:flex; flex-direction:column; gap:8px;">
@@ -155,17 +141,6 @@ async function renderDiscountsList(){
       </div>`;
     }).join('');
   }catch(e){ wrap.innerHTML = '<div class="empty-cart">تعذر التحميل: ' + e.message + '</div>'; }
-}
-
-async function saveLoyaltyRedemptionConfig(){
-  if(!hasPerm('canChangePrices')){ showToast('مفيش صلاحية', 'err'); return; }
-  const pointsPerRedemption = parseInt(document.getElementById('loyaltyPointsInput').value) || 10;
-  const redemptionValueEGP = parseFloat(document.getElementById('loyaltyValueInput').value) || 5;
-  try{
-    await db.collection(TEST_SETTINGS).doc('loyalty').set({ pointsPerRedemption, redemptionValueEGP }, { merge:true });
-    loyaltyRedemptionConfig = { pointsPerRedemption, redemptionValueEGP };
-    showToast('اتحفظ ✅');
-  }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
 }
 
 async function addDiscount(){

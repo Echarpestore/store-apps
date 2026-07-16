@@ -24,17 +24,20 @@ const TEST_EMPLOYEE_POINTS = "pos_test_employee_points";
 const TEST_ROLES = "pos_test_roles"; // صلاحيات الأدوار (كاشير/مشرف/مدير) — خاصة بالـ POS بس، منفصلة عن نظام الـ HR
 const TEST_STOCK_LOG = "pos_test_stock_log"; // سجل حركة المخزون الكامل (توريد، بيع، تسويات يدوية، عكس فواتير)
 
-const FEEDBACK_URL = "https://echarpestore.github.io/store-apps/feedback/";
-const POINTS_PER_EGP = 100;   // كل 100 جنيه = نقطة ولاء واحدة للعميل
-const TEST_SETTINGS = "pos_test_settings"; // إعدادات عامة قابلة للتعديل من الأدمن (زي معدل استبدال النقط)
+const TEST_SETTINGS = "pos_test_settings"; // إعدادات عامة قابلة للتعديل من الأدمن
 
-// معدل استبدال نقاط الولاء بخصم — قابل للتعديل من بانل الخصومات، القيم دي افتراضية لحد ما الأدمن يغيّرها
-let loyaltyRedemptionConfig = { pointsPerRedemption: 10, redemptionValueEGP: 5 }; // افتراضي: كل 10 نقط = 5 جنيه خصم
+// برنامج الولاء بالكامل — معدل الكسب ومعدل الاستبدال مع بعض، قابلين للتعديل
+// من بانل "🎁 برنامج الولاء". القيم دي افتراضية لحد ما الأدمن يغيّرها.
+let loyaltyRedemptionConfig = {
+  pointsPerEGP: 100,        // كل 100 جنيه مشتريات = نقطة واحدة (معدل الكسب)
+  pointsPerRedemption: 10,  // كل 10 نقط
+  redemptionValueEGP: 5     // = 5 جنيه خصم (معدل الاستبدال)
+};
 async function loadLoyaltyRedemptionConfig(){
   try{
     const doc = await db.collection(TEST_SETTINGS).doc('loyalty').get();
     if(doc.exists) loyaltyRedemptionConfig = { ...loyaltyRedemptionConfig, ...doc.data() };
-  }catch(e){ console.warn('تعذر تحميل إعدادات استبدال النقط، هتُستخدم القيم الافتراضية', e); }
+  }catch(e){ console.warn('تعذر تحميل إعدادات برنامج الولاء، هتُستخدم القيم الافتراضية', e); }
 }
 const MIN_ITEMS_FOR_STAFF_POINT = 5; // كل فاتورة فيها 5 قطع أو أكتر = نقطة للموظف
 
@@ -272,8 +275,12 @@ function enterDashboard(){
   const canReceiptDesign = hasPerm('canChangePrices');
   if(document.getElementById('navReceiptDesign')) document.getElementById('navReceiptDesign').style.display = canReceiptDesign ? '' : 'none';
 
+  const canLoyalty = hasPerm('canChangePrices');
+  if(document.getElementById('navLoyalty')) document.getElementById('navLoyalty').style.display = canLoyalty ? '' : 'none';
+  if(document.getElementById('loyaltySidebarBtn')) document.getElementById('loyaltySidebarBtn').style.display = canLoyalty ? '' : 'none';
+
   // بانل "الإدارة" الذهبي بيظهر بس لو فيه على الأقل حاجة واحدة جواه متاحة
-  if(document.getElementById('navMgmtSection')) document.getElementById('navMgmtSection').style.display = (canSeeRoles || canDiscounts || canImport || canReceiptDesign) ? '' : 'none';
+  if(document.getElementById('navMgmtSection')) document.getElementById('navMgmtSection').style.display = (canSeeRoles || canDiscounts || canImport || canReceiptDesign || canLoyalty) ? '' : 'none';
 
   const reportsBtn = document.getElementById('reportsSidebarBtn');
   if(reportsBtn) reportsBtn.style.opacity = hasPerm('canViewReports') ? '1' : '.4';
@@ -603,11 +610,36 @@ async function renderReportsScreen(){
 // بيرجع لفاتورة شغالة بالفعل من غير ما يمسحها (لو فيه أصناف في السلة)، أو
 // يبدأ فاتورة جديدة عادي لو السلة فاضية. ده اللي بيخلي الفاتورة "تفضل موجودة"
 // حتى لو راح المخزون أو العملاء وبعدين رجع لشاشة البيع.
+// بيجيب كل الموظفين اللي حاضرين وشغالين دلوقتي فعليًا (شيفت مفتوح، لسه ماعملوش
+// انصراف) من نظام الحضور في برنامج المبيعات (نفس قاعدة البيانات)، عشان الكاشير
+// يقدر يحدد مين اللي فعليًا باع للعميل، مش بس مين مسجّل دخول في جهاز الـPOS.
+async function loadClockedInStaff(){
+  const sel = document.getElementById('sellerEmployeeSelect');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">👤 مين اللي باع؟ (اختياري)</option>';
+  try{
+    const snap = await db.collection('sales_shifts').where('branch','==', currentBranch).get();
+    const openShifts = snap.docs.map(d=>d.data()).filter(s=> !s.clockOutTs);
+    openShifts.forEach(s=>{
+      const opt = document.createElement('option');
+      opt.value = s.employeeId;
+      opt.textContent = s.employeeName || s.employeeId;
+      opt.dataset.name = s.employeeName || '';
+      sel.appendChild(opt);
+    });
+    // افتراضيًا، لو الموظف المسجل دخول في الـPOS نفسه حاضر في القايمة، يتفضّل تلقائي
+    if(openShifts.some(s=> s.employeeId === currentEmployee.id)){
+      sel.value = currentEmployee.id;
+    }
+  }catch(e){ console.warn('تعذر تحميل قايمة الموظفين الحاضرين', e); }
+}
+
 function resumeOrStartSale(){
   if(cart.length > 0){
     document.getElementById('btnAcceptReturn').disabled = !hasPerm('canRefund');
     if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
     loadLoyaltyRedemptionConfig();
+    loadClockedInStaff();
     renderCart();
     resetPaymentUI(); // بس حالة الدفع بتتصفّر (ممكن يكون الإجمالي اتغيّر)، الأصناف نفسها فاضلة زي ما هي
     showScreen('saleScreen');
@@ -624,6 +656,7 @@ function goToSale(){
   // تحميل الخصومات السارية عشان تتطبق تلقائي وقت إضافة الأصناف
   if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
   loadLoyaltyRedemptionConfig();
+  loadClockedInStaff();
   document.getElementById('customerPhone').value = '';
   document.getElementById('customerName').value = '';
   document.getElementById('customerInfo').textContent = '';
@@ -1315,8 +1348,13 @@ async function confirmPayment(){
   const custName = document.getElementById('customerName').value.trim();
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
   const earnsStaffPoint = !isRefundInvoice && itemCount >= MIN_ITEMS_FOR_STAFF_POINT;
-  const loyaltyPointsEarned = (phone && !isRefundInvoice) ? Math.floor(total / POINTS_PER_EGP) : 0;
+  const loyaltyPointsEarned = (phone && !isRefundInvoice) ? Math.floor(total / loyaltyRedemptionConfig.pointsPerEGP) : 0;
   const invoiceNo = await generateInvoiceNumber();
+
+  // الموظف اللي فعليًا باع للعميل (ممكن يكون مختلف عن اللي مسجّل دخول في جهاز الـPOS نفسه)
+  const sellerSel = document.getElementById('sellerEmployeeSelect');
+  const sellerEmployeeId = sellerSel && sellerSel.value ? sellerSel.value : currentEmployee.id;
+  const sellerEmployeeName = sellerSel && sellerSel.value ? sellerSel.options[sellerSel.selectedIndex].dataset.name : (currentEmployee.name || '');
 
   try{
     // 1) سجل البيع
@@ -1324,6 +1362,7 @@ async function confirmPayment(){
       invoiceNo,
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.name || '',
+      sellerEmployeeId, sellerEmployeeName,
       branch: currentBranch,
       items: cart,
       itemCount, total, payments,
@@ -1346,11 +1385,11 @@ async function confirmPayment(){
       await logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع');
     }
 
-    // 3) نقطة الموظف (تجريبي - منفصل عن رصيد الـ HR الحقيقي)
+    // 3) نقطة الموظف (تجريبي - منفصل عن رصيد الـ HR الحقيقي) — بتتحسب للبائع الفعلي
     if(earnsStaffPoint){
-      const ptRef = db.collection(TEST_EMPLOYEE_POINTS).doc(currentEmployee.id);
+      const ptRef = db.collection(TEST_EMPLOYEE_POINTS).doc(sellerEmployeeId);
       await ptRef.set({
-        employeeName: currentEmployee.name || '',
+        employeeName: sellerEmployeeName,
         points: firebase.firestore.FieldValue.increment(1),
         salesCount: firebase.firestore.FieldValue.increment(1)
       }, { merge: true });
@@ -1373,7 +1412,7 @@ async function confirmPayment(){
 
     // 5) محاولة ربط العميل بأقرب تقييم لسه من غير عميل معروف في نفس الفرع (زمنيًا)
     if(phone){
-      await tryLinkFeedbackToCustomer(phone, custName);
+      await tryLinkFeedbackToCustomer(phone, custName, sellerEmployeeName);
     }
 
     printReceipt(payments, total, invoiceNo);
@@ -1390,7 +1429,7 @@ async function confirmPayment(){
 // ونص تقريبًا (يمسك أي تقييم حصل بعد ما العميل استلم الفاتورة). ده بيشتغل
 // بس على التقييمات الجديدة من دلوقتي وطالع — مفيش طريقة نربط تقييمات قديمة
 // اتسجلت قبل الميزة دي لأنها كانت بتتسجل من غير أي هوية خالص.
-async function tryLinkFeedbackToCustomer(phone, name){
+async function tryLinkFeedbackToCustomer(phone, name, sellerName){
   const saleTime = Date.now();
   const attemptLink = async ()=>{
     try{
@@ -1403,7 +1442,7 @@ async function tryLinkFeedbackToCustomer(phone, name){
         .sort((a,b)=> Math.abs(a.ts - saleTime) - Math.abs(b.ts - saleTime)); // الأقرب زمنيًا للفاتورة الأول
       if(candidates.length === 0) return;
       await db.collection('entries').doc(candidates[0].id).update({
-        customerPhone: phone, customerName: name || null
+        customerPhone: phone, customerName: name || null, servedByEmployeeName: sellerName || null
       });
     }catch(e){ console.warn('تعذر ربط التقييم بالعميل', e); }
   };

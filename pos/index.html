@@ -18,7 +18,14 @@
 body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
 
 /* ---------- Light management theme (inventory, customers, roles, discounts, reports, import, profiles) ---------- */
-.mgmt-light{background:#f3f1e7 !important; color:#1a1a1a !important;}
+/* بيعيد تعريف المتغيرات نفسها (مش بس لون العنصر) عشان أي var(--text) أو var(--muted)
+   مكتوبة inline في أي مكان جوه الشاشات دي تتحول تلقائي للون غامق واضح، بدل ما تفضل
+   بيضا باهتة زي الثيم الغامق الأصلي. ده بيحل مشكلة "الأرقام مش واضحة" من الجذر. */
+.mgmt-light{
+  --text:#1a1a1a; --muted:#6b6b60; --panel:#ffffff; --panel2:#f7f6ef; --panel3:#eef0e0;
+  --border:#d8d5c5; --bg:#f3f1e7;
+  background:#f3f1e7 !important; color:#1a1a1a !important;
+}
 .mgmt-light .dash-header{background:#fff; border-bottom:2px solid #b9c9a0; padding:14px 18px; margin:0 0 16px; border-radius:0 0 10px 10px;}
 .mgmt-light .dash-header h1{font-size:16px; margin:0; color:#2a2a2a;}
 .mgmt-light .logout-btn{background:#3d3d3f; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-weight:700; font-size:13px; cursor:pointer;}
@@ -26,11 +33,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   background:#fff !important; color:#1a1a1a !important; border:1px solid #b9c9a0 !important;
 }
 .mgmt-light input::placeholder{color:#8a8a80;}
-/* أي كارت بخلفية غامقة قديمة (var(--panel)) بيتحول تلقائي لكارت أبيض واضح */
-.mgmt-light [style*="var(--panel)"]{background:#fff !important; border-color:#d8d5c5 !important; color:#1a1a1a !important;}
-.mgmt-light [style*="var(--panel2)"]{background:#f7f6ef !important; color:#1a1a1a !important;}
 .mgmt-light .empty-cart{color:#999 !important;}
-.mgmt-light [style*="color:var(--muted)"]{color:#7a7a70 !important;}
 .mgmt-light button:not(.logout-btn):not(.rep-range-btn){
   background:#eef0e0; color:#1a1a1a; border:1px solid #b9c9a0;
 }
@@ -75,7 +78,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 
 /* ---------- Dashboard ---------- */
 #dashboardScreen{padding:0;}
-.dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
+.dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:8px;}
 .dash-header h1{font-size:18px;margin:0;}
 .dash-header .who{font-size:13px;color:var(--muted);}
 
@@ -364,7 +367,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   <div class="qb-layout">
     <div class="qb-sidebar">
       <div style="color:var(--muted); font-size:11px; margin-bottom:2px;" id="dashWho"></div>
-      <button onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+      <button onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
       <button onclick="openHeldModal()">⏸️ فواتير معلّقة <span id="heldCountLabel" style="display:block; font-size:10px; font-weight:400; opacity:.8;">0 فاتورة</span></button>
       <button class="secondary" onclick="goToInventory()">📦 قائمة الأصناف</button>
       <button class="secondary" onclick="goToReceiveGoods()">📥 استلام بضاعة</button>
@@ -372,6 +375,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
       <button class="secondary" id="reportsSidebarBtn" onclick="goToReports()">📊 التقارير</button>
       <button class="secondary" id="rolesSidebarBtn" onclick="goToRoles()" style="display:none;">🛡️ الصلاحيات</button>
       <button class="secondary" id="discountsSidebarBtn" onclick="goToDiscounts()" style="display:none;">🏷️ الخصومات</button>
+      <button class="secondary" id="loyaltySidebarBtn" onclick="goToLoyaltyScreen()" style="display:none;">🎁 برنامج الولاء</button>
       <button class="secondary" id="importSidebarBtn" onclick="goToImport()" style="display:none;">📥 استيراد بيانات</button>
       <div style="flex:1;"></div>
       <button class="secondary" onclick="goToEndOfDay()">🌙 إغلاق اليوم</button>
@@ -423,6 +427,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
             <div class="qb-nav-item" id="navDiscounts" onclick="goToDiscounts()" style="display:none;"><div class="qb-icon">🏷️</div><div class="qb-label">الخصومات</div></div>
             <div class="qb-nav-item" id="navImport" onclick="goToImport()" style="display:none;"><div class="qb-icon">📥</div><div class="qb-label">استيراد بيانات</div></div>
             <div class="qb-nav-item" id="navReceiptDesign" onclick="goToReceiptDesign()" style="display:none;"><div class="qb-icon">🖨️</div><div class="qb-label">تصميم الفاتورة</div></div>
+            <div class="qb-nav-item" id="navLoyalty" onclick="goToLoyaltyScreen()" style="display:none;"><div class="qb-icon">🎁</div><div class="qb-label">برنامج الولاء</div></div>
           </div>
         </div>
       </div>
@@ -434,7 +439,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="salesHistoryScreen">
   <div class="dash-header" style="padding:16px 20px 0;">
     <div><h1>🗂️ سجل المبيعات</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="padding:0 20px;">
@@ -450,7 +459,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="customerListScreen">
   <div class="dash-header" style="padding:16px 20px 0;">
     <div><h1>👤 قائمة العملاء</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="customerListWrap"></div>
@@ -460,7 +473,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="endOfDayScreen">
   <div class="dash-header" style="padding:16px 20px 0;">
     <div><h1>🌙 إغلاق اليوم</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="endOfDayWrap"></div>
@@ -470,7 +487,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="inventoryScreen">
   <div class="dash-header">
     <div><h1>📦 المخزون</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="padding:0 4px;" id="lowStockAlertBar"></div>
@@ -482,7 +503,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="receiveGoodsScreen">
   <div class="dash-header">
     <div><h1>📥 استلام بضاعة</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="padding:0 16px;">
@@ -517,7 +542,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="invoiceScreen">
   <div class="dash-header">
     <div><h1 id="invTitle">🧾 فاتورة</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="invoiceWrap"></div>
@@ -527,7 +556,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="customerProfileScreen">
   <div class="dash-header">
     <div><h1 id="custProfTitle">👤 بروفايل عميل</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="customerProfileWrap"></div>
@@ -537,7 +570,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="employeeProfileScreen">
   <div class="dash-header">
     <div><h1 id="empProfTitle">👤 بروفايل موظف</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="employeeProfileWrap"></div>
@@ -547,7 +584,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="discountsScreen">
   <div class="dash-header">
     <div><h1>🏷️ الخصومات</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
@@ -556,11 +597,29 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   </div>
 </div>
 
+<!-- ============ LOYALTY PROGRAM (manager only) ============ -->
+<div class="screen mgmt-light" id="loyaltyScreen">
+  <div class="dash-header">
+    <div><h1>🎁 برنامج الولاء</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="loyaltyScreenWrap"></div>
+</div>
+
 <!-- ============ RECEIPT & LABEL DESIGN (manager only) ============ -->
 <div class="screen mgmt-light" id="receiptDesignScreen">
   <div class="dash-header">
     <div><h1>🖨️ تصميم الفاتورة والليبل</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="receiptDesignWrap"></div>
@@ -570,7 +629,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="importScreen">
   <div class="dash-header">
     <div><h1>📥 استيراد بيانات من QuickBooks</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
@@ -587,7 +650,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="rolesScreen">
   <div class="dash-header">
     <div><h1>🛡️ الصلاحيات</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 4px;">
@@ -602,7 +669,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="reportsScreen">
   <div class="dash-header">
     <div><h1>📊 تقارير المبيعات</h1></div>
-    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🧾 بيع جديد</button>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="padding:0 20px;">
@@ -653,9 +724,6 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
             <input type="text" id="searchBar" placeholder="&lt; اكتب اسم المنتج أو امسح الباركود هنا &gt;" autocomplete="off">
             <div id="suggestBox"></div>
           </div>
-          <button onclick="qbxQty(1)" class="qbx-quickbtn" title="زيادة الكمية">➕</button>
-          <button onclick="qbxQty(-1)" class="qbx-quickbtn" title="إنقاص الكمية">➖</button>
-          <button onclick="qbxDeleteSel()" class="qbx-quickbtn qbx-quickbtn-del" title="حذف الصنف المختار">🗑️</button>
         </div>
         <div class="cart-area" id="cartArea">
           <table class="cart-table">
@@ -668,6 +736,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
               <tr><td colspan="7" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>
             </tbody>
           </table>
+        </div>
+        <div class="customer-row" style="margin-bottom:4px;">
+          <select id="sellerEmployeeSelect" style="flex:1; padding:9px 11px; border-radius:4px; border:1px solid #a8a49b; background:#fff; color:#1a1a1a; font-size:13px;">
+            <option value="">👤 مين اللي باع؟ (اختياري)</option>
+          </select>
         </div>
         <div class="customer-row">
           <input type="text" id="customerName" placeholder="&lt; اسم العميل &gt;">
@@ -764,5 +837,6 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <script src="discounts.js"></script>
 <script src="import.js"></script>
 <script src="search.js"></script>
+<script src="loyalty.js"></script>
 </body>
 </html>
