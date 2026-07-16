@@ -391,7 +391,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getFirestore, collection, addDoc, onSnapshot,
-  doc, deleteDoc, enableIndexedDbPersistence, getDocs
+  doc, deleteDoc, enableIndexedDbPersistence, getDocs, setDoc
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -417,6 +417,7 @@ enableIndexedDbPersistence(db).catch((err)=>{
 });
 
 const entriesCol = collection(db, 'entries');
+const branchesCol = collection(db, 'feedback_branches'); // persists branch names independently of ratings data
 
 // Suggest branch names already used in the sales app (same Firebase project,
 // different collection) so a new kiosk device can match an existing branch
@@ -465,12 +466,13 @@ const $ = s => document.querySelector(s);
 
 // ---------- BRANCH (per-device, stored locally) ----------
 let currentBranch = localStorage.getItem('feedback_branch') || '';
+let allBranches = []; // persistent branch registry — survives even if a branch's entries get cleared
 function refreshBranchUI(){
   $('#branchName').textContent = currentBranch || 'الفرع';
   $('#branchSub').textContent = 'الفرع: ' + (currentBranch || '—');
   $('#branchSub2').textContent = 'الفرع الحالي: ' + (currentBranch || 'مش متحدد على الجهاز ده');
 }
-$('#branchSaveBtn').addEventListener('click', ()=>{
+$('#branchSaveBtn').addEventListener('click', async ()=>{
   const val = $('#branchInput').value.trim();
   if(!val) return;
   currentBranch = val;
@@ -478,6 +480,15 @@ $('#branchSaveBtn').addEventListener('click', ()=>{
   refreshBranchUI();
   applyBranchFilter();
   $('#branchSetup').classList.remove('show');
+  // Register this branch name as a persistent entity (separate from its
+  // feedback entries) so it keeps showing in the branch list even after
+  // "clear this branch's data" is used — only the dedicated branch-delete
+  // button removes the branch itself.
+  const alreadyRegistered = allBranches.some(b=> b.name === val);
+  if(!alreadyRegistered){
+    try{ await addDoc(branchesCol, { name: val, createdAt: Date.now() }); }
+    catch(err){ console.warn('تعذر تسجيل الفرع', err); }
+  }
 });
 $('#changeBranchBtn').addEventListener('click', ()=>{
   $('#branchInput').value = currentBranch;
@@ -494,7 +505,9 @@ function applyBranchFilter(){
 
 function populateBranchDropdown(){
   const sel = $('#branchFilter');
-  const branches = [...new Set(allEntries.map(e=>e.branch).filter(Boolean))].sort();
+  const fromRegistry = allBranches.map(b=> b.name);
+  const fromEntries = allEntries.map(e=> e.branch);
+  const branches = [...new Set([...fromRegistry, ...fromEntries].filter(Boolean))].sort();
   const prevValue = sel.value || '__ALL__';
   sel.innerHTML = '<option value="__ALL__">كل الفروع</option>' +
     branches.map(b=>`<option value="${b}">${b}</option>`).join('');
@@ -514,12 +527,12 @@ function renderBranchManageList(branches){
         <div style="font-weight:700; font-size:14px;">${b}</div>
         <div style="color:var(--sub); font-size:11px;">${count} تقييم</div>
       </div>
-      <button data-branch="${b}" data-label="${b}" class="branch-delete-btn" style="border:none; background:var(--r1); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">حذف</button>
+      <button data-branch="${b}" data-label="${b}" class="branch-delete-btn" style="border:none; background:var(--r1); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">حذف الفرع نهائيًا</button>
     </div>`;
   }).join('');
   wrap.querySelectorAll('.branch-delete-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      openClearDataConfirm(btn.dataset.branch, btn.dataset.label);
+      openClearDataConfirm(btn.dataset.branch, btn.dataset.label, true);
     });
   });
 }
@@ -530,6 +543,11 @@ onSnapshot(entriesCol, (snapshot)=>{
   allEntries = snapshot.docs.map(d=>({id:d.id, ...d.data()}));
   applyBranchFilter();
 }, (err)=> console.error('entries sync error', err));
+
+onSnapshot(branchesCol, (snapshot)=>{
+  allBranches = snapshot.docs.map(d=>({id:d.id, ...d.data()}));
+  populateBranchDropdown();
+}, (err)=> console.error('branches sync error', err));
 
 async function submitRating(r){
   if(!currentBranch){
@@ -628,21 +646,24 @@ document.querySelectorAll('#rangeTabs button').forEach(btn=>{
 });
 
 let pendingDeleteBranch = null; // '__ALL__' or a specific branch name
+let pendingDeleteFullBranch = false; // true = also remove the branch's registry entry entirely
 
-function openClearDataConfirm(branchVal, label){
+function openClearDataConfirm(branchVal, label, fullBranch){
   pendingDeleteBranch = branchVal;
+  pendingDeleteFullBranch = !!fullBranch;
   $('#clearDataPass1').value = '';
   $('#clearDataPass2').value = '';
   $('#clearDataWord').value = '';
   $('#clearDataErr').textContent = '';
-  $('#clearDataConfirmOverlay').querySelector('h3').textContent = '⚠️ مسح بيانات: ' + label;
+  const title = pendingDeleteFullBranch ? '⚠️ حذف الفرع نهائيًا: ' + label : '⚠️ مسح بيانات: ' + label;
+  $('#clearDataConfirmOverlay').querySelector('h3').textContent = title;
   $('#clearDataConfirmOverlay').style.display = 'flex';
 }
 
 $('#clearData').addEventListener('click', ()=>{
   const branchVal = $('#branchFilter').value || '__ALL__';
   const label = branchVal === '__ALL__' ? 'كل الفروع' : branchVal;
-  openClearDataConfirm(branchVal, label);
+  openClearDataConfirm(branchVal, label, false); // clears entries only — the branch stays registered
 });
 $('#clearDataCancelBtn').addEventListener('click', ()=>{
   $('#clearDataConfirmOverlay').style.display = 'none';
@@ -670,6 +691,12 @@ $('#clearDataConfirmBtn').addEventListener('click', async ()=>{
       ? allEntries
       : allEntries.filter(e=> e.branch === pendingDeleteBranch);
     await Promise.all(toDelete.map(e=> deleteDoc(doc(db,'entries', e.id))));
+    // Only remove the branch's own registry record when explicitly deleting
+    // the branch itself (not when just clearing its data).
+    if(pendingDeleteFullBranch && pendingDeleteBranch !== '__ALL__'){
+      const regRecord = allBranches.find(b=> b.name === pendingDeleteBranch);
+      if(regRecord) await deleteDoc(doc(db,'feedback_branches', regRecord.id));
+    }
     $('#clearDataConfirmOverlay').style.display = 'none';
   }catch(err){
     console.error('تعذر مسح البيانات', err);
@@ -872,16 +899,26 @@ function renderTable(list){
     wrap.innerHTML = `<div class="empty">لسه مفيش أي آراء مسجلة في الفترة دي</div>`;
     return;
   }
+  // هروب بسيط عشان اسم العميل يتعرض بأمان جوه innerHTML
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const recent = [...list].sort((a,b)=>b.ts-a.ts).slice(0,25);
   let rows = recent.map(e=>{
     const d = new Date(e.ts);
     const time = d.toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+    // خانة العميل: تتعرض بس لو التقييم اترّبط بفاتورة فيها عميل (من نظام الكاشير)
+    let cust = '<span style="color:var(--sub)">—</span>';
+    if(e.customerName || e.customerPhone){
+      const nm = e.customerName ? `<div>${esc(e.customerName)}</div>` : '';
+      const ph = e.customerPhone ? `<div style="color:var(--sub); font-size:12px; direction:ltr; text-align:right;">${esc(e.customerPhone)}</div>` : '';
+      cust = nm + ph;
+    }
     return `<tr>
       <td>${time}</td>
       <td><span class="dot" style="background:${RATINGS[e.r].hex}"></span>${RATINGS[e.r].label}</td>
+      <td>${cust}</td>
     </tr>`;
   }).join('');
-  wrap.innerHTML = `<table><thead><tr><th>التوقيت</th><th>الرأي</th></tr></thead><tbody>${rows}</tbody></table>`;
+  wrap.innerHTML = `<table><thead><tr><th>التوقيت</th><th>الرأي</th><th>العميل</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // If we reach this final line, the ENTIRE script downloaded and executed
