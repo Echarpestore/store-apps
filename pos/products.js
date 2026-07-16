@@ -206,7 +206,7 @@ document.getElementById('receiveGoodsBarcode').addEventListener('input', (e)=>{
   matches.forEach(it=>{
     const row = document.createElement('div');
     row.className = 'sugg-row';
-    row.innerHTML = `<span>${it.name} <span style="color:#999; font-size:11px;">${it.barcode||''}</span></span><span style="color:var(--muted)">مخزون: ${it.quantity??0}</span>`;
+    row.innerHTML = `<span>${it.name} <span style="color:#999; font-size:11px;">${it.barcode||''}</span></span><span style="color:var(--muted)">${it.price} ج.م · مخزون: ${it.quantity??0}</span>`;
     row.onclick = ()=>{ addToReceiveCart(it); e.target.value=''; box.innerHTML=''; e.target.focus(); };
     box.appendChild(row);
   });
@@ -270,12 +270,17 @@ function renderReceiveCart(){
     const p = allInventory.find(x=> x.id === r.id);
     const cur = p ? (p.quantity ?? 0) : r.currentQty;
     const newQty = cur + (r.qty || 0);
+    const isNeg = (r.qty || 0) < 0;                       // كمية بالسالب = تالف/مرتجع
+    const price = p ? p.price : '';
+    const border = isNeg ? 'var(--minus)' : '#b9c9a0';
+    const bg = isNeg ? '#fdecec' : '#fff';
     return `
-    <div style="background:#fff; border:1px solid #b9c9a0; border-radius:12px; padding:12px 14px; margin-bottom:9px;">
+    <div style="background:${bg}; border:1.5px solid ${border}; border-radius:12px; padding:12px 14px; margin-bottom:9px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
         <div style="min-width:0;">
-          <div style="font-weight:800; font-size:14px;">${r.name}</div>
-          <div style="color:#888; font-size:11px; margin-top:2px;">كود: ${r.barcode || '—'} · المخزون: ${cur} ← <b style="color:${newQty<0?'var(--minus)':'var(--plus)'};">${newQty}</b></div>
+          <div style="font-weight:800; font-size:14px; color:${isNeg?'var(--minus)':'inherit'};">${r.name}${isNeg?' ↩️':''}</div>
+          <div style="color:#555; font-size:11.5px; margin-top:3px;">🔖 كود: <b style="direction:ltr; display:inline-block;">${r.barcode || '—'}</b>${price!==''?` · 💵 السعر: <b>${price} ج.م</b>`:''}</div>
+          <div style="color:#888; font-size:11px; margin-top:2px;">المخزون: ${cur} ← <b style="color:${newQty<0?'var(--minus)':'var(--plus)'};">${newQty}</b></div>
         </div>
         <button class="cart-del" onclick="receiveRemove(${idx})" title="مسح">🗑️</button>
       </div>

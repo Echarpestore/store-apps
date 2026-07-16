@@ -107,17 +107,17 @@ let selectedPayMethods = new Set();
 const DEFAULT_ROLE_PERMISSIONS = {
   cashier: {
     label: 'كاشير', canSell: true, canHold: true, canPrintLabel: true,
-    canViewCostPrice: false, canViewLogs: false, canRefund: false,
+    canViewCostPrice: false, canViewStock: true, canViewLogs: false, canRefund: false, canResetCustomerPin: false,
     canEditInventory: false, canChangePrices: false, canViewReports: false, canManageRoles: false
   },
   supervisor: {
     label: 'مشرف', canSell: true, canHold: true, canPrintLabel: true,
-    canViewCostPrice: false, canViewLogs: true, canRefund: true,
+    canViewCostPrice: false, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
     canEditInventory: false, canChangePrices: false, canViewReports: false, canManageRoles: false
   },
   manager: {
     label: 'مدير', canSell: true, canHold: true, canPrintLabel: true,
-    canViewCostPrice: true, canViewLogs: true, canRefund: true,
+    canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
     canEditInventory: true, canChangePrices: true, canViewReports: true, canManageRoles: true
   }
 };
@@ -195,42 +195,41 @@ async function loadEmployeePicker(){
 function selectEmployeeForLogin(empId, name){
   selectedLoginEmp = { id: empId, name };
   document.getElementById('pinPadEmpName').textContent = 'ادخل الـ PIN بتاع ' + name;
-  pinBuffer = '';
-  document.getElementById('pinDisplay').textContent = '';
+  const inp = document.getElementById('pinInput');
+  inp.value = '';
   document.getElementById('loginErr').textContent = '';
   document.getElementById('employeePickerBox').style.display = 'none';
   document.getElementById('pinPadBox').style.display = 'block';
+  setTimeout(()=> inp.focus(), 100);   // يركّز الخانة عشان يكتب من الكيبورد على طول
 }
 function backToEmployeePicker(){
   selectedLoginEmp = null;
-  pinBuffer = '';
+  const inp = document.getElementById('pinInput'); if(inp) inp.value = '';
   document.getElementById('pinPadBox').style.display = 'none';
   document.getElementById('employeePickerBox').style.display = 'block';
 }
 
-function pinPress(d){
-  if(pinBuffer.length >= 6) return;
-  pinBuffer += d;
-  document.getElementById('pinDisplay').textContent = '•'.repeat(pinBuffer.length);
-}
-function pinClear(){ pinBuffer=""; document.getElementById('pinDisplay').textContent=""; document.getElementById('loginErr').textContent=""; }
+// Enter في خانة الـ PIN = دخول
+document.getElementById('pinInput').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); pinSubmit(); }
+});
 
 async function pinSubmit(){
   const errBox = document.getElementById('loginErr');
+  const pin = (document.getElementById('pinInput').value || '').trim();
   if(!selectedLoginEmp){ errBox.textContent = "اختار اسمك الأول"; return; }
-  if(!pinBuffer){ errBox.textContent = "اكتب الـ PIN الأول"; return; }
+  if(!pin){ errBox.textContent = "اكتب الـ PIN الأول"; return; }
   errBox.textContent = "جارٍ التحقق...";
   try{
     const doc = await db.collection(EMPLOYEES_COLLECTION).doc(selectedLoginEmp.id).get();
-    if(!doc.exists || doc.data().pin !== pinBuffer){
+    if(!doc.exists || doc.data().pin !== pin){
       errBox.textContent = "الـ PIN غلط، حاول تاني";
-      pinBuffer = '';
-      document.getElementById('pinDisplay').textContent = '';
+      document.getElementById('pinInput').value = '';
       return;
     }
     currentEmployee = { id: doc.id, ...doc.data() };
     errBox.textContent = "";
-    pinClear();
+    document.getElementById('pinInput').value = '';
     await loadCurrentEmployeeRole();
     enterDashboard();
   }catch(e){
@@ -366,11 +365,15 @@ async function renderInventoryScreen(){
   const stockValue = allInventory.reduce((s,it)=> s + ((canCost2 ? (it.cost||0) : (it.price||0)) * (it.quantity??0)), 0);
   const sumEl = document.getElementById('invSummary');
   if(sumEl){
+    const canStock2 = hasPerm('canViewStock');
     const chip = (lbl,val,col)=>`<div style="flex:1; min-width:92px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:9px 11px; text-align:center;"><div style="color:var(--muted); font-size:10px;">${lbl}</div><div style="font-weight:900; font-size:15px; color:${col||'var(--text)'};">${val}</div></div>`;
-    sumEl.innerHTML = chip('عدد الأصناف', totalItems)
-      + chip('قيمة المخزون', stockValue.toFixed(0)+' ج.م', 'var(--plus)')
-      + chip('نواقص', lowStock.length, lowStock.length?'var(--warn)':'var(--text)')
-      + chip('نافد', outCount, outCount?'var(--minus)':'var(--text)');
+    let chips = chip('عدد الأصناف', totalItems);
+    if(canStock2){
+      chips += chip('قيمة المخزون', stockValue.toFixed(0)+' ج.م', 'var(--plus)')
+        + chip('نواقص', lowStock.length, lowStock.length?'var(--warn)':'var(--text)')
+        + chip('نافد', outCount, outCount?'var(--minus)':'var(--text)');
+    }
+    sumEl.innerHTML = chips;
   }
 
   renderInventoryList();
@@ -383,6 +386,7 @@ function renderInventoryList(){
   const canCost = hasPerm('canViewCostPrice');
   const canLabel = hasPerm('canPrintLabel');
   const canEdit = hasPerm('canEditInventory');
+  const canStock = hasPerm('canViewStock');
   const q = (document.getElementById('invSearch')?.value || '').trim().toLowerCase();
   const filter = document.getElementById('invFilter')?.value || 'all';
 
@@ -401,11 +405,13 @@ function renderInventoryList(){
     const isLow = (it.minStock??0) > 0 && qty <= it.minStock;
     const isOut = it.status==='outofstock' || qty <= 0;
     let badge, bcol, bbg;
-    if(isOut){ badge='نافد'; bcol='#b91c1c'; bbg='#fdecec'; }
-    else if(isLow){ badge='ناقص · '+qty; bcol='#b45309'; bbg='#fff6e6'; }
-    else { badge='متاح · '+qty; bcol='#15803d'; bbg='#eafaf0'; }
+    // من غير صلاحية عرض المخزون: نبيّن الحالة بس من غير الرقم
+    if(isOut){ badge = canStock ? 'نافد' : 'نافد'; bcol='#b91c1c'; bbg='#fdecec'; }
+    else if(isLow){ badge = canStock ? ('ناقص · '+qty) : 'ناقص'; bcol='#b45309'; bbg='#fff6e6'; }
+    else { badge = canStock ? ('متاح · '+qty) : 'متاح'; bcol='#15803d'; bbg='#eafaf0'; }
     const border = isOut ? 'var(--minus)' : isLow ? 'var(--warn)' : 'var(--border)';
     const meta = [it.attribute, it.size].filter(Boolean).join(' · ');
+    const minNote = (canStock && (it.minStock??0) > 0) ? ` <span style="opacity:.7; font-weight:600;">(حد أدنى ${it.minStock})</span>` : '';
     return `
     <div onclick="openProductDetails('${it.id}')" style="background:var(--panel); border:1px solid ${border}; border-radius:12px; padding:12px 14px; margin-bottom:9px; cursor:pointer;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
@@ -419,7 +425,7 @@ function renderInventoryList(){
         </div>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:9px;">
-        <span style="background:${bbg}; color:${bcol}; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">${badge}${(it.minStock??0)>0?` <span style="opacity:.7; font-weight:600;">(حد أدنى ${it.minStock})</span>`:''}</span>
+        <span style="background:${bbg}; color:${bcol}; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">${badge}${minNote}</span>
         <div style="display:flex; gap:6px;">
           ${canLabel ? `<button onclick="event.stopPropagation(); printPriceLabel('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px; cursor:pointer;">🏷️</button>` : ''}
           ${canEdit ? `<button onclick="event.stopPropagation(); deleteInventoryItem('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>` : ''}
@@ -524,9 +530,9 @@ function printPriceLabel(id){
 // ---------------- Roles / permissions screen (manager only) ----------------
 const PERM_LABELS = {
   canSell:'يبيع', canHold:'يعمل Hold/Unhold', canPrintLabel:'يطبع Price Label',
-  canViewCostPrice:'يشوف سعر التكلفة', canViewLogs:'يشوف السجلات', canRefund:'يعمل استرجاع',
-  canEditInventory:'يعدّل/يضيف مخزون', canChangePrices:'يغيّر الأسعار', canViewReports:'يشوف التقارير المالية',
-  canManageRoles:'يدير الصلاحيات'
+  canViewCostPrice:'يشوف سعر التكلفة', canViewStock:'يشوف المخزون (الكميات)', canViewLogs:'يشوف السجلات', canRefund:'يعمل استرجاع',
+  canResetCustomerPin:'يمسح الرقم السري للعميل', canEditInventory:'يعدّل/يضيف مخزون', canChangePrices:'يغيّر الأسعار',
+  canViewReports:'يشوف التقارير المالية', canManageRoles:'يدير الصلاحيات'
 };
 async function renderRolesScreen(){
   const wrap = document.getElementById('rolePermsWrap');
@@ -1032,11 +1038,12 @@ async function goToEndOfDay(){
       <div id="dc_line_${d}" class="dc-line">0</div>
     </div>`).join('');
 
+  const isMgr = hasPerm('canViewReports');   // المدير بس يشوف إجماليات السيستم والنتيجة
   wrap.innerHTML = `
-    <div class="dc-summary">
+    ${isMgr ? `<div class="dc-summary">
       <div><div class="dc-sm-lbl">مبيعات النهاردة (السيستم)</div><div class="dc-sm-val">${systemTotal.toFixed(2)} <span>ج.م</span></div></div>
       <div class="dc-sm-sub">${dcData.invoiceCount} فاتورة · كاش ${cashSales.toFixed(0)} · فيزا ${visaSales.toFixed(0)} · انستا ${instaSales.toFixed(0)}</div>
-    </div>
+    </div>` : `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:14px; color:var(--muted); font-size:12.5px; text-align:center;">اعدّ الدرج واملأ البيانات، وفي الآخر دوس تأكيد — النتيجة بتتسجّل للمدير.</div>`}
 
     <div class="dc-card">
       <div class="dc-card-h">💵 عدّ الكاش في الدرج</div>
@@ -1048,16 +1055,16 @@ async function goToEndOfDay(){
       <div class="dc-card-h">🧾 خصومات من الدرج</div>
       ${dcField('العهدة (فكّة أول اليوم)', 'dc_float', lastFloat, 'بتتخصم — مش إيراد')}
       ${dcField('مصروفات اليوم (طلعت كاش)', 'dc_expenses', '', 'اللي اتصرف من الدرج')}
-      ${dcField('سلف اليوم', 'dc_advances', advancesTotal || '', 'جِت من المبيعات — عدّلها لو محتاج')}
+      ${dcField('سلف اليوم', 'dc_advances', advancesTotal || '', 'اللي اتاخد سلف من الدرج')}
     </div>
 
     <div class="dc-card">
       <div class="dc-card-h">💳 الفيزا والانستاباي</div>
-      ${dcField('فيزا (من السيستم)', 'dc_visa', visaSales || '', 'عدّلها لو الماكينة مختلفة')}
-      ${dcField('انستاباي (من السيستم)', 'dc_insta', instaSales || '', 'عدّلها لو محتاج')}
+      ${dcField('فيزا (من الماكينة)', 'dc_visa', '', 'اكتب اللي على ماكينة الفيزا')}
+      ${dcField('انستاباي', 'dc_insta', '', 'اكتب إجمالي الانستاباي')}
     </div>
 
-    <button class="dc-ok" onclick="dcFinish()">✔️ احسب النتيجة (أوفر / عجز)</button>
+    <button class="dc-ok" onclick="dcFinish()">✔️ ${isMgr ? 'احسب النتيجة (أوفر / عجز)' : 'تأكيد وتسليم الدرج'}</button>
     <div id="dc_result"></div>
   `;
   dcRecalc();
@@ -1102,21 +1109,31 @@ function dcFinish(){
   const isShort = overShort < -0.01, isOver = overShort > 0.01;
   const state = isShort ? {c:'var(--minus)', t:'⚠️ عجز', bg:'#fdecec'} : isOver ? {c:'var(--warn)', t:'🔺 أوفر (زيادة)', bg:'#fff6e6'} : {c:'var(--plus)', t:'✅ مظبوط بالظبط', bg:'#eafaf0'};
 
-  document.getElementById('dc_result').innerHTML = `
-    <div class="dc-result" style="background:${state.bg}; border-color:${state.c};">
-      <div class="dc-res-head" style="color:${state.c};">${state.t}</div>
-      <div class="dc-res-big" style="color:${state.c};">${Math.abs(overShort).toFixed(2)} ج.م</div>
-      <div class="dc-res-break">
-        <div><span>كاش معدود</span><b>${counted.toFixed(2)}</b></div>
-        <div><span>− عهدة</span><b>${flt.toFixed(2)}</b></div>
-        <div><span>+ مصروفات</span><b>${exp.toFixed(2)}</b></div>
-        <div><span>+ سلف</span><b>${adv.toFixed(2)}</b></div>
-        <div><span>+ فيزا</span><b>${visa.toFixed(2)}</b></div>
-        <div><span>+ انستاباي</span><b>${insta.toFixed(2)}</b></div>
-        <div class="dc-res-sep"><span>= إجمالي محسوب</span><b>${accounted.toFixed(2)}</b></div>
-        <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>
-      </div>
-    </div>`;
+  if(hasPerm('canViewReports')){
+    // المدير يشوف النتيجة كاملة
+    document.getElementById('dc_result').innerHTML = `
+      <div class="dc-result" style="background:${state.bg}; border-color:${state.c};">
+        <div class="dc-res-head" style="color:${state.c};">${state.t}</div>
+        <div class="dc-res-big" style="color:${state.c};">${Math.abs(overShort).toFixed(2)} ج.م</div>
+        <div class="dc-res-break">
+          <div><span>كاش معدود</span><b>${counted.toFixed(2)}</b></div>
+          <div><span>− عهدة</span><b>${flt.toFixed(2)}</b></div>
+          <div><span>+ مصروفات</span><b>${exp.toFixed(2)}</b></div>
+          <div><span>+ سلف</span><b>${adv.toFixed(2)}</b></div>
+          <div><span>+ فيزا</span><b>${visa.toFixed(2)}</b></div>
+          <div><span>+ انستاباي</span><b>${insta.toFixed(2)}</b></div>
+          <div class="dc-res-sep"><span>= إجمالي محسوب</span><b>${accounted.toFixed(2)}</b></div>
+          <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>
+        </div>
+      </div>`;
+  }else{
+    // الكاشير: تأكيد بس من غير أي إجماليات (عدّ أعمى)
+    document.getElementById('dc_result').innerHTML = `
+      <div class="dc-result" style="background:#eafaf0; border-color:var(--plus);">
+        <div class="dc-res-head" style="color:var(--plus);">✅ اتسجّل التقفيل</div>
+        <div style="color:#555; font-size:13px; margin-top:6px;">سلّم الدرج والمبلغ للمدير. المدير هو اللي يشوف الفرق.</div>
+      </div>`;
+  }
 
   // نفتكر آخر عهدة على الجهاز ده
   try{ localStorage.setItem('dc_float_'+currentBranch, String(flt)); }catch(e){}
@@ -1151,7 +1168,7 @@ searchBar.addEventListener('input', ()=>{
     const row = document.createElement('div');
     row.className = 'sugg-row';
     const stockNote = (it.quantity??0) <= 0 ? ' <span style="color:var(--minus); font-size:11px;">(نافد)</span>' : '';
-    row.innerHTML = `<span>${it.name}${stockNote}</span><span style="color:var(--muted)">${it.price} جنيه</span>`;
+    row.innerHTML = `<span>${it.name}${stockNote} <span style="color:#aaa; font-size:11px; direction:ltr;">${it.barcode||''}</span></span><span style="color:var(--muted)">${it.price} جنيه</span>`;
     row.onclick = ()=>{ addToCart(it); searchBar.value=''; box.innerHTML=''; };
     box.appendChild(row);
   });
@@ -1367,7 +1384,7 @@ async function refreshCustomerInfo(){
       newRow.style.display = 'none';
       setCustBox(true);   // 🟢 عميل متسجّل ومختار → المربع ينوّر أخضر
       const rp = document.getElementById('resetPinRow');
-      if(rp) rp.style.display = d.loyaltyPin ? 'block' : 'none';   // زر مسح الرقم السري يبان بس لو العميل حاطط واحد
+      if(rp) rp.style.display = (d.loyaltyPin && hasPerm('canResetCustomerPin')) ? 'block' : 'none';   // بيان لو العميل حاطط رقم + الموظف عنده صلاحية
     }else{
       infoBox.textContent = ratingLine ? ratingLine.replace(' | ','') : '';
       newRow.style.display = 'flex';

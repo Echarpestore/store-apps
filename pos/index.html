@@ -404,12 +404,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   </div>
   <div class="pin-box" id="pinPadBox" style="display:none;">
     <h2 id="pinPadEmpName">ادخل الـ PIN بتاعك</h2>
-    <div class="pin-display" id="pinDisplay"></div>
-    <div class="pin-pad">
-      <button onclick="pinPress('1')">1</button><button onclick="pinPress('2')">2</button><button onclick="pinPress('3')">3</button>
-      <button onclick="pinPress('4')">4</button><button onclick="pinPress('5')">5</button><button onclick="pinPress('6')">6</button>
-      <button onclick="pinPress('7')">7</button><button onclick="pinPress('8')">8</button><button onclick="pinPress('9')">9</button>
-      <button class="clear" onclick="backToEmployeePicker()">رجوع</button><button onclick="pinPress('0')">0</button><button class="ok" onclick="pinSubmit()">دخول</button>
+    <input type="password" id="pinInput" inputmode="numeric" autocomplete="off" placeholder="••••••"
+      style="width:100%; padding:15px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:22px; text-align:center; letter-spacing:10px; margin-bottom:12px; box-sizing:border-box;">
+    <div style="display:flex; gap:10px;">
+      <button onclick="backToEmployeePicker()" style="flex:1; padding:14px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-weight:800; font-size:15px; cursor:pointer;">رجوع</button>
+      <button onclick="pinSubmit()" style="flex:2; padding:14px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:900; font-size:16px; cursor:pointer;">دخول ✔️</button>
     </div>
     <div class="login-err" id="loginErr"></div>
   </div>
