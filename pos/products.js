@@ -164,3 +164,101 @@ async function renderPdStockLog(){
     document.getElementById('pdLogList').innerHTML = '<div style="color:var(--minus);">تعذر تحميل السجل: ' + e.message + '</div>';
   }
 }
+
+// ============================================================
+// استلام بضاعة (Receive Goods) — اكتب/امسح باركود، دوس Enter،
+// عدّل الكمية (موجب = توريد جديد، سالب = خصم تالف/مرتجع للمورد).
+// لو الكمية النهائية بقت صفر أو أقل، المنتج بيتحط "نافد" تلقائي
+// ويختفي من شاشة البيع. لو اتضاف رصيد لمنتج كان "نافد"، بيرجع "نشط" تلقائي.
+// ============================================================
+
+let receiveGoodsProduct = null;
+let receiveGoodsTodayLog = [];
+
+function goToReceiveGoods(){
+  if(!hasPerm('canEditInventory')){ showToast('الصلاحية دي محتاجة إذن تعديل المخزون', 'err'); return; }
+  showScreen('receiveGoodsScreen');
+  document.getElementById('receiveGoodsResult').innerHTML = '';
+  const input = document.getElementById('receiveGoodsBarcode');
+  input.value = '';
+  setTimeout(()=> input.focus(), 100);
+  renderReceiveGoodsLog();
+}
+
+document.getElementById('receiveGoodsBarcode').addEventListener('keydown', async (e)=>{
+  if(e.key !== 'Enter') return;
+  const code = e.target.value.trim();
+  if(!code) return;
+  const product = allInventory.find(p=> p.barcode === code || p.name === code);
+  const resultBox = document.getElementById('receiveGoodsResult');
+  if(!product){
+    resultBox.innerHTML = `<div style="background:#fff3f2; border:1px solid var(--minus); border-radius:10px; padding:14px; color:var(--minus); font-weight:700;">⚠️ مفيش منتج بالباركود ده — ${code}. تقدر تضيفه من "قائمة الأصناف".</div>`;
+    return;
+  }
+  receiveGoodsProduct = product;
+  renderReceiveGoodsResult();
+});
+
+function renderReceiveGoodsResult(){
+  const p = receiveGoodsProduct;
+  const resultBox = document.getElementById('receiveGoodsResult');
+  resultBox.innerHTML = `
+    <div style="background:#fff; border:1px solid #b9c9a0; border-radius:12px; padding:16px;">
+      <div style="font-weight:800; font-size:15px; margin-bottom:2px;">${p.name}</div>
+      <div style="color:#888; font-size:12px; margin-bottom:12px;">الكمية الحالية: ${p.quantity ?? 0}</div>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+        <button onclick="rgAdjustQty(-1)" style="width:44px; height:44px; border-radius:8px; border:1px solid #888; background:#eee; font-size:20px; cursor:pointer;">−</button>
+        <input type="number" id="rgQtyInput" value="1" style="flex:1; padding:12px; text-align:center; font-size:18px; border-radius:8px; border:1px solid #b9c9a0;">
+        <button onclick="rgAdjustQty(1)" style="width:44px; height:44px; border-radius:8px; border:1px solid #888; background:#eee; font-size:20px; cursor:pointer;">+</button>
+      </div>
+      <div style="font-size:11px; color:#888; margin-bottom:10px;">اكتب رقم بالسالب (زي -3) لو هتخصم بضاعة تالفة أو مرتجعة للمورد</div>
+      <button onclick="confirmReceiveGoods()" style="width:100%; padding:13px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">تأكيد الحركة</button>
+    </div>`;
+  document.getElementById('rgQtyInput').focus();
+  document.getElementById('rgQtyInput').select();
+}
+function rgAdjustQty(delta){
+  const input = document.getElementById('rgQtyInput');
+  input.value = (parseInt(input.value)||0) + delta;
+}
+
+async function confirmReceiveGoods(){
+  const p = receiveGoodsProduct;
+  if(!p) return;
+  const qtyChange = parseInt(document.getElementById('rgQtyInput').value);
+  if(isNaN(qtyChange) || qtyChange === 0){ showToast('اكتب رقم غير صفر', 'err'); return; }
+
+  const newQty = (p.quantity ?? 0) + qtyChange;
+  if(newQty < 0){ showToast(`مينفعش تخصم أكتر من الموجود (${p.quantity??0})`, 'err'); return; }
+
+  const update = { quantity: firebase.firestore.FieldValue.increment(qtyChange) };
+  // لو الرصيد بقى صفر أو أقل، اعتبره نافد تلقائي؛ لو كان نافد وبقى فيه رصيد تاني، رجّعه نشط تلقائي
+  if(newQty <= 0) update.status = 'outofstock';
+  else if(p.status === 'outofstock') update.status = 'active';
+
+  try{
+    await db.collection(TEST_INVENTORY).doc(p.id).update(update);
+    const reason = qtyChange > 0 ? 'استلام بضاعة (توريد)' : 'خصم بضاعة (تالف/مرتجع للمورد)';
+    await logStockMovement(p.id, p.name, qtyChange, qtyChange > 0 ? 'receipt' : 'adjustment', reason);
+    receiveGoodsTodayLog.unshift({ name:p.name, qtyChange, ts:Date.now() });
+    showToast(qtyChange > 0 ? `اتضاف ${qtyChange} قطعة ✅` : `اتخصم ${Math.abs(qtyChange)} قطعة ✅${newQty<=0 ? ' — المنتج بقى نافد' : ''}`);
+    await loadInventory();
+    receiveGoodsProduct = null;
+    document.getElementById('receiveGoodsResult').innerHTML = '';
+    document.getElementById('receiveGoodsBarcode').value = '';
+    document.getElementById('receiveGoodsBarcode').focus();
+    renderReceiveGoodsLog();
+  }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
+
+function renderReceiveGoodsLog(){
+  const wrap = document.getElementById('receiveGoodsLog');
+  if(!wrap) return;
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  const todays = receiveGoodsTodayLog.filter(l=> l.ts >= dayStart.getTime());
+  wrap.innerHTML = todays.length ? todays.map(l=> `
+    <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee; font-size:12px;">
+      <span>${l.name}</span>
+      <span style="font-weight:800; color:${l.qtyChange>0?'var(--plus)':'var(--minus)'};">${l.qtyChange>0?'+':''}${l.qtyChange}</span>
+    </div>`).join('') : '<div style="color:#999; font-size:12px; text-align:center; padding:10px 0;">لسه مفيش عمليات استلام النهاردة</div>';
+}

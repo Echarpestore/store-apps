@@ -43,7 +43,7 @@ async function runGlobalSearch(q){
     const salesSnap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
     results.invoices = salesSnap.docs
       .map(d=>({id:d.id, ...d.data()}))
-      .filter(s=> s.id.slice(-6).toUpperCase().includes(q.toUpperCase()) || (s.customerPhone||'').includes(q))
+      .filter(s=> (s.invoiceNo||s.id.slice(-6).toUpperCase()).toUpperCase().includes(q.toUpperCase()) || (s.customerPhone||'').includes(q))
       .slice(0, 5);
   }catch(e){}
 
@@ -79,7 +79,7 @@ function renderGlobalSearchResults(q, results){
     html += `<div style="padding:8px 12px; font-weight:800; font-size:11px; color:#5c7a3a; background:#f3f6ea;">🧾 فواتير</div>`;
     html += results.invoices.map(s=> `
       <div onclick="closeGlobalSearchAnd(()=>openInvoice('${s.id}'))" style="padding:10px 12px; border-bottom:1px solid #eee; cursor:pointer; display:flex; justify-content:space-between;">
-        <span style="font-weight:700; font-size:13px;">🧾 ${s.id.slice(-6).toUpperCase()}</span>
+        <span style="font-weight:700; font-size:13px;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}</span>
         <span style="color:#888; font-size:12px;">${(s.total||0).toFixed(2)} ج.م${s.customerPhone ? ' · 📞 '+s.customerPhone : ''}</span>
       </div>`).join('');
   }

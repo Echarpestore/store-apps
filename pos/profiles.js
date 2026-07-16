@@ -45,7 +45,7 @@ async function openInvoice(saleId){
     const doc = await db.collection(TEST_SALES).doc(saleId).get();
     if(!doc.exists){ wrap.innerHTML = '<div class="empty-cart">الفاتورة مش موجودة</div>'; return; }
     const s = { id: doc.id, ...doc.data() };
-    document.getElementById('invTitle').textContent = '🧾 فاتورة ' + s.id.slice(-6).toUpperCase();
+    document.getElementById('invTitle').textContent = '🧾 فاتورة ' + (s.invoiceNo || s.id.slice(-6).toUpperCase());
 
     const statusBadge = s.reversed
       ? '<span style="color:var(--minus); font-weight:800;">⛔ ملغاة (اتعكست)</span>'
@@ -144,7 +144,7 @@ async function openCustomerProfile(phone){
     const invoicesRows = sales.sort((a,b)=> saleTime(b)-saleTime(a)).slice(0,50).map(s=>`
       <div onclick="openInvoice('${s.id}')" style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border); cursor:pointer;">
         <div>
-          <div style="font-size:12px; font-weight:700;">🧾 ${s.id.slice(-6).toUpperCase()}${s.isReversal?' <span style="color:var(--warn); font-size:10px;">(عكس)</span>':''} — ${(s.items||[]).length} صنف</div>
+          <div style="font-size:12px; font-weight:700;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}${s.isReversal?' <span style="color:var(--warn); font-size:10px;">(عكس)</span>':''} — ${(s.items||[]).length} صنف</div>
           <div style="color:var(--muted); font-size:10px;">${saleDateStr(s)} · ${s.employeeName||'—'}</div>
         </div>
         <span style="font-weight:800; color:${(s.total||0)<0?'var(--minus)':'var(--plus)'};">${(s.total||0).toFixed(2)}</span>
@@ -232,7 +232,7 @@ async function openEmployeeProfile(empId, empName){
     const invoicesRows = sales.sort((a,b)=> saleTime(b)-saleTime(a)).slice(0,50).map(s=>`
       <div onclick="openInvoice('${s.id}')" style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border); cursor:pointer;">
         <div>
-          <div style="font-size:12px; font-weight:700;">🧾 ${s.id.slice(-6).toUpperCase()}${s.isReversal?' <span style="color:var(--warn); font-size:10px;">(عكس)</span>':''} — ${(s.items||[]).length} صنف${s.customerPhone ? ' · 📞 '+s.customerPhone : ''}</div>
+          <div style="font-size:12px; font-weight:700;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}${s.isReversal?' <span style="color:var(--warn); font-size:10px;">(عكس)</span>':''} — ${(s.items||[]).length} صنف${s.customerPhone ? ' · 📞 '+s.customerPhone : ''}</div>
           <div style="color:var(--muted); font-size:10px;">${saleDateStr(s)}</div>
         </div>
         <span style="font-weight:800; color:${(s.total||0)<0?'var(--minus)':'var(--plus)'};">${(s.total||0).toFixed(2)}</span>
@@ -284,7 +284,7 @@ async function renderPdTimeline(productId){
       return `
       <div onclick="openInvoice('${s.id}')" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; gap:8px;">
         <div>
-          <div style="font-weight:700;">🧾 ${s.id.slice(-6).toUpperCase()}${it.isReturn?' <span style="color:var(--minus); font-size:10px;">↩️ مرتجع</span>':''}${s.isReversal?' <span style="color:var(--warn); font-size:10px;">(عكس)</span>':''}</div>
+          <div style="font-weight:700;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}${it.isReturn?' <span style="color:var(--minus); font-size:10px;">↩️ مرتجع</span>':''}${s.isReversal?' <span style="color:var(--warn); font-size:10px;">(عكس)</span>':''}</div>
           <div style="color:var(--muted); font-size:10px;">
             ${saleDateStr(s)} · ${s.employeeName||'—'}${s.customerPhone ? ' · 📞 '+s.customerPhone : ''} · ${pays}
           </div>

@@ -266,8 +266,14 @@ function enterDashboard(){
   if(document.getElementById('importSidebarBtn')) document.getElementById('importSidebarBtn').style.display = canImport ? '' : 'none';
   if(document.getElementById('navImport')) document.getElementById('navImport').style.display = canImport ? '' : 'none';
 
+  const canReceiveGoods = hasPerm('canEditInventory');
+  if(document.getElementById('navReceiveGoods')) document.getElementById('navReceiveGoods').style.display = canReceiveGoods ? '' : 'none';
+
+  const canReceiptDesign = hasPerm('canChangePrices');
+  if(document.getElementById('navReceiptDesign')) document.getElementById('navReceiptDesign').style.display = canReceiptDesign ? '' : 'none';
+
   // بانل "الإدارة" الذهبي بيظهر بس لو فيه على الأقل حاجة واحدة جواه متاحة
-  if(document.getElementById('navMgmtSection')) document.getElementById('navMgmtSection').style.display = (canSeeRoles || canDiscounts || canImport) ? '' : 'none';
+  if(document.getElementById('navMgmtSection')) document.getElementById('navMgmtSection').style.display = (canSeeRoles || canDiscounts || canImport || canReceiptDesign) ? '' : 'none';
 
   const reportsBtn = document.getElementById('reportsSidebarBtn');
   if(reportsBtn) reportsBtn.style.opacity = hasPerm('canViewReports') ? '1' : '.4';
@@ -403,17 +409,23 @@ function printPriceLabel(id){
   if(!hasPerm('canPrintLabel')){ showToast('مفيش صلاحية', 'err'); return; }
   const it = allInventory.find(x=>x.id===id);
   if(!it) return;
-  const w = window.open('', '_blank', 'width=300,height=200');
+  const c = receiptDesignConfig;
+  const w = window.open('', '_blank', 'width=300,height=220');
   w.document.write(`
     <html dir="rtl"><head><meta charset="UTF-8"><style>
       body{font-family:Tahoma,Arial,sans-serif; text-align:center; padding:14px;}
+      .shop{font-size:11px; color:#666; margin-bottom:4px;}
       h2{margin:4px 0; font-size:16px;} .price{font-size:26px; font-weight:900; margin:6px 0;}
-      .code{font-size:11px; color:#555;}
     </style></head><body>
+      ${c.labelShopName ? `<div class="shop">${c.shopName}</div>` : ''}
       <h2>${it.name}</h2>
       <div class="price">${it.price} ج.م</div>
-      <div class="code">${it.barcode || ''}</div>
-      <script>window.print(); setTimeout(()=>window.close(), 300);<\/script>
+      ${c.showBarcodeOnLabel && it.barcode ? '<svg id="lblBarcode"></svg>' : ''}
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"><\/script>
+      <script>
+        try{ if(document.getElementById('lblBarcode')) JsBarcode('#lblBarcode', '${it.barcode}', {format:'CODE128', width:1.6, height:38, fontSize:11}); }catch(e){}
+        window.print(); setTimeout(()=>window.close(), 400);
+      <\/script>
     </body></html>`);
   w.document.close();
 }
@@ -588,6 +600,22 @@ async function renderReportsScreen(){
 }
 
 // ---------------- Navigation ----------------
+// بيرجع لفاتورة شغالة بالفعل من غير ما يمسحها (لو فيه أصناف في السلة)، أو
+// يبدأ فاتورة جديدة عادي لو السلة فاضية. ده اللي بيخلي الفاتورة "تفضل موجودة"
+// حتى لو راح المخزون أو العملاء وبعدين رجع لشاشة البيع.
+function resumeOrStartSale(){
+  if(cart.length > 0){
+    document.getElementById('btnAcceptReturn').disabled = !hasPerm('canRefund');
+    if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
+    loadLoyaltyRedemptionConfig();
+    renderCart();
+    resetPaymentUI(); // بس حالة الدفع بتتصفّر (ممكن يكون الإجمالي اتغيّر)، الأصناف نفسها فاضلة زي ما هي
+    showScreen('saleScreen');
+  }else{
+    goToSale();
+  }
+}
+
 function goToSale(){
   editingHeldId = null;
   cart = [];
@@ -648,7 +676,7 @@ async function renderLiveSalesHistory(){
     return `
     <div onclick="openInvoice('${s.id}')" style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
       <div>
-        <div style="font-weight:700; font-size:13px;">🧾 ${s.id.slice(-6).toUpperCase()}${badge} — ${(s.items||[]).length} صنف — ${s.customerPhone ? 'عميل: '+s.customerPhone : 'من غير عميل'}</div>
+        <div style="font-weight:700; font-size:13px;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}${badge} — ${(s.items||[]).length} صنف — ${s.customerPhone ? 'عميل: '+s.customerPhone : 'من غير عميل'}</div>
         <div style="color:var(--muted); font-size:11px;">${dateStr} — بواسطة ${s.employeeName||'—'}</div>
       </div>
       <div style="font-weight:800; font-size:15px; color:${(s.total||0) < 0 ? 'var(--minus)' : 'var(--plus)'};">${(s.total||0).toFixed(2)} ج.م</div>
@@ -1258,6 +1286,26 @@ function updatePaySummary(){
   confirmBtn.disabled = !(cart.length > 0 && selectedPayMethods.size > 0 && enteredAbs >= requiredAbs);
 }
 
+// رقم فاتورة متسلسل ومميز (زي INV-000123) — بيتولّد بمعاملة Firestore آمنة
+// عشان لو جهازين بيبيعوا في نفس اللحظة، كل واحد ياخد رقم مختلف من غير تعارض.
+async function generateInvoiceNumber(){
+  const counterRef = db.collection(TEST_SETTINGS).doc('invoice_counter_' + currentBranch);
+  try{
+    const newNumber = await db.runTransaction(async (tx)=>{
+      const doc = await tx.get(counterRef);
+      const current = doc.exists ? (doc.data().value || 0) : 0;
+      const next = current + 1;
+      tx.set(counterRef, { value: next }, { merge:true });
+      return next;
+    });
+    return String(newNumber);
+  }catch(e){
+    // لو حصلت مشكلة (نادر) نستخدم بديل مبني على الوقت عشان الفاتورة تتحفظ برضو
+    console.warn('تعذر توليد رقم فاتورة متسلسل، هيتستخدم رقم بديل', e);
+    return Date.now().toString().slice(-8);
+  }
+}
+
 async function confirmPayment(){
   const total = cartTotal();
   const isRefundInvoice = total < 0;
@@ -1268,10 +1316,12 @@ async function confirmPayment(){
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
   const earnsStaffPoint = !isRefundInvoice && itemCount >= MIN_ITEMS_FOR_STAFF_POINT;
   const loyaltyPointsEarned = (phone && !isRefundInvoice) ? Math.floor(total / POINTS_PER_EGP) : 0;
+  const invoiceNo = await generateInvoiceNumber();
 
   try{
     // 1) سجل البيع
     await db.collection(TEST_SALES).add({
+      invoiceNo,
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.name || '',
       branch: currentBranch,
@@ -1326,7 +1376,7 @@ async function confirmPayment(){
       await tryLinkFeedbackToCustomer(phone, custName);
     }
 
-    printReceipt(payments, total);
+    printReceipt(payments, total, invoiceNo);
     showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
     goToSale();
   }catch(e){
@@ -1361,9 +1411,65 @@ async function tryLinkFeedbackToCustomer(phone, name){
   setTimeout(attemptLink, 90000); // محاولة تانية بعد دقيقة ونص (تقييمات بعد الفاتورة بدقيقة)
 }
 
-function printReceipt(payments, total){
-  document.getElementById('rMeta').textContent =
+// ---------------- تصميم الفاتورة والليبل (قابل للتعديل من المدير) ----------------
+let receiptDesignConfig = {
+  shopName: 'إيشارب ستور', headerNote: '', footerNote: 'شكرًا لتعاملكم معنا 🙏',
+  showBarcodeOnReceipt: true, showBarcodeOnLabel: true, labelShopName: true
+};
+async function loadReceiptDesignConfig(){
+  try{
+    const doc = await db.collection(TEST_SETTINGS).doc('receipt_design').get();
+    if(doc.exists) receiptDesignConfig = { ...receiptDesignConfig, ...doc.data() };
+  }catch(e){ console.warn('تعذر تحميل إعدادات تصميم الفاتورة، هتُستخدم الافتراضية', e); }
+}
+
+function goToReceiptDesign(){
+  if(!hasPerm('canChangePrices')){ showToast('الصلاحية دي للمدير بس', 'err'); return; }
+  showScreen('receiptDesignScreen');
+  renderReceiptDesignScreen();
+}
+function renderReceiptDesignScreen(){
+  const c = receiptDesignConfig;
+  document.getElementById('receiptDesignWrap').innerHTML = `
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px;">
+      <div style="font-weight:800; margin-bottom:10px;">🧾 فاتورة البيع (58mm)</div>
+      <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">اسم المحل (عنوان الفاتورة)</label>
+      <input id="rdShopName" value="${c.shopName}" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:10px;">
+      <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">سطر إضافي تحت الاسم (عنوان/تليفون المحل — اختياري)</label>
+      <input id="rdHeaderNote" value="${c.headerNote}" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:10px;">
+      <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">رسالة آخر الفاتورة</label>
+      <input id="rdFooterNote" value="${c.footerNote}" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:10px;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="rdShowBarcodeReceipt" ${c.showBarcodeOnReceipt?'checked':''}> اطبع باركود رقم الفاتورة آخر الريسيت</label>
+    </div>
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px;">
+      <div style="font-weight:800; margin-bottom:10px;">🏷️ ليبل السعر</div>
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:8px;"><input type="checkbox" id="rdLabelShopName" ${c.labelShopName?'checked':''}> اكتب اسم المحل فوق الليبل</label>
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="rdShowBarcodeLabel" ${c.showBarcodeOnLabel?'checked':''}> اطبع باركود المنتج على الليبل</label>
+    </div>
+    <button onclick="saveReceiptDesignConfig()" style="width:100%; padding:13px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">حفظ التصميم</button>`;
+}
+async function saveReceiptDesignConfig(){
+  const config = {
+    shopName: document.getElementById('rdShopName').value.trim() || 'المحل',
+    headerNote: document.getElementById('rdHeaderNote').value.trim(),
+    footerNote: document.getElementById('rdFooterNote').value.trim(),
+    showBarcodeOnReceipt: document.getElementById('rdShowBarcodeReceipt').checked,
+    labelShopName: document.getElementById('rdLabelShopName').checked,
+    showBarcodeOnLabel: document.getElementById('rdShowBarcodeLabel').checked
+  };
+  try{
+    await db.collection(TEST_SETTINGS).doc('receipt_design').set(config, { merge:true });
+    receiptDesignConfig = config;
+    showToast('اتحفظ التصميم ✅');
+  }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
+
+function printReceipt(payments, total, invoiceNo){
+  const c = receiptDesignConfig;
+  document.getElementById('rShopName').textContent = c.shopName;
+  const metaLine = (c.headerNote ? c.headerNote + ' | ' : '') +
     new Date().toLocaleString('ar-EG') + ' | الموظف: ' + (currentEmployee.name || '');
+  document.getElementById('rMeta').textContent = metaLine;
   const table = document.getElementById('rItemsTable');
   table.innerHTML = '';
   cart.forEach(c=>{
@@ -1376,6 +1482,20 @@ function printReceipt(payments, total){
     return `${labels[k]}: ${v.toFixed(2)}`;
   }).join(' | ');
   document.getElementById('rTotalLine').textContent = `الإجمالي: ${total.toFixed(2)} جنيه (${payLines})`;
+  document.getElementById('rInvoiceNo').textContent = invoiceNo || '';
+  document.querySelector('#receiptPrint > div:last-child').textContent = c.footerNote;
+  // باركود رقم الفاتورة في آخر الريسيت — يسهّل الرجوع للفاتورة لاحقًا بمسح الكود (قابل للإيقاف من إعدادات التصميم)
+  const barcodeBox = document.querySelector('.r-barcode');
+  if(c.showBarcodeOnReceipt && invoiceNo){
+    barcodeBox.style.display = '';
+    try{
+      if(typeof JsBarcode !== 'undefined'){
+        JsBarcode('#rBarcode', invoiceNo, { format:'CODE128', width:1.4, height:34, fontSize:10, margin:0 });
+      }
+    }catch(e){ console.warn('تعذر إنشاء الباركود', e); }
+  }else{
+    barcodeBox.style.display = 'none';
+  }
   window.print();
 }
 
@@ -1383,4 +1503,5 @@ function printReceipt(payments, total){
 (async function init(){
   await ensureDemoInventory();
   await loadInventory();
+  await loadReceiptDesignConfig();
 })();
