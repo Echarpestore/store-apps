@@ -78,6 +78,7 @@
   .btn-primary:active{transform:translateY(1px) scale(.995); filter:brightness(1.03);}
   .btn-primary:disabled{opacity:.6; filter:grayscale(.2);}
   .login-note{margin-top:auto; padding-top:24px; text-align:center; color:var(--muted); font-size:12px; line-height:1.7;}
+  .btn-back{width:100%; margin-top:10px; padding:11px; border:none; background:none; color:var(--muted); font-weight:700; font-size:14px;}
   .err{color:#D92662; font-size:13.5px; font-weight:700; margin:12px 2px 0; min-height:18px;}
   .newfield{max-height:0; overflow:hidden; transition:max-height .3s ease;}
   .newfield.show{max-height:140px; margin-top:18px;}
@@ -96,6 +97,10 @@
   .topbar .badge img{width:30px; filter:brightness(0) invert(1);}
   .topbar .hi{font-size:13px; color:var(--muted); font-weight:600; line-height:1.3;}
   .topbar .who{font-size:17px; font-weight:800; line-height:1.3;}
+  .topbar-mid{flex:1; min-width:0;}
+  .wa-btn{flex-shrink:0; width:44px; height:44px; border-radius:13px; border:none; background:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px -6px rgba(37,211,102,.7);}
+  .wa-btn:active{transform:translateY(1px);}
+  .btn-outline.wa{border-color:#25D366; color:#128C4B; background:#eafaf0;}
 
   .tabview{padding:8px 18px 24px;}
 
@@ -291,21 +296,34 @@
       <div class="kicker">نادي عملاء إيشارب</div>
     </div>
     <div class="login-body">
-      <h1>أهلاً بيكِ 🌸</h1>
-      <p class="sub">اجمعي نقاط مع كل شراء، واستبدليها بخصومات. سجّلي برقم موبايلك عشان نعرفك عند الكاشير.</p>
+      <h1 id="loginTitle">أهلاً بيكِ 🌸</h1>
+      <p class="sub" id="loginSub">اجمعي نقاط مع كل شراء، واستبدليها بخصومات. سجّلي برقم موبايلك عشان نعرفك عند الكاشير.</p>
 
-      <label class="field-label" for="phoneInput">رقم الموبايل</label>
-      <input id="phoneInput" class="txt ltr" type="tel" inputmode="numeric" placeholder="01xxxxxxxxx" autocomplete="tel">
+      <div id="phoneField">
+        <label class="field-label" for="phoneInput">رقم الموبايل</label>
+        <input id="phoneInput" class="txt ltr" type="tel" inputmode="numeric" placeholder="01xxxxxxxxx" autocomplete="tel">
+      </div>
 
-      <div id="nameWrap" class="newfield">
-        <label class="field-label" for="nameInput" style="margin-top:2px;">اسمك (عشان نرحّب بيكِ صح)</label>
+      <div id="nameField" style="display:none;">
+        <label class="field-label" for="nameInput">اسمك (عشان نرحّب بيكِ صح)</label>
         <input id="nameInput" class="txt" type="text" placeholder="الاسم" autocomplete="name">
+      </div>
+
+      <div id="pinField" style="display:none;">
+        <label class="field-label" for="pinInput" id="pinLabel">اختاري رقم سري (٤ أرقام)</label>
+        <input id="pinInput" class="txt ltr" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
+      </div>
+
+      <div id="pinConfirmField" style="display:none;">
+        <label class="field-label" for="pinConfirmInput">أكّدي الرقم السري</label>
+        <input id="pinConfirmInput" class="txt ltr" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
       </div>
 
       <div id="loginErr" class="err"></div>
       <button id="loginBtn" class="btn-primary">دخول</button>
+      <button id="loginBack" class="btn-back" style="display:none;">‹ رجوع لرقم تاني</button>
 
-      <div class="login-note">من غير كلمات سر — رقم موبايلك بس هو حسابك.<br>نفس الرقم اللي بتديه للكاشير في المحل.</div>
+      <div class="login-note" id="loginNote">رقمك السري بيحمي نقاطك — محدش يقدر يفتح حسابك من غيره.<br>لو نسيتيه، الكاشير في المحل يقدر يمسحه لك.</div>
     </div>
   </section>
 
@@ -313,10 +331,13 @@
   <section id="screen-app" class="screen">
     <div class="topbar">
       <div class="badge"><img id="topLogo" alt=""></div>
-      <div>
+      <div class="topbar-mid">
         <div class="hi" id="greet">أهلاً</div>
         <div class="who" id="topName">—</div>
       </div>
+      <button class="wa-btn" id="waTop" onclick="openSupport()" aria-label="تواصل واتساب" style="display:none;">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.945C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+      </button>
     </div>
 
     <div class="tabview">
@@ -391,6 +412,24 @@ var COL_SETTINGS  = 'pos_test_settings';
 
 var LS_PHONE = 'echarpe_loyalty_phone';
 
+/* ⬇️⬇️ رقم واتساب خدمة العملاء — غيّريه هنا ⬇️⬇️
+   الصيغة دولية من غير + ولا صفر البداية. مصر = 20 + الرقم من غير الصفر.
+   مثال: الموبايل 01001234567  →  201001234567
+   سيبيه فاضي '' لو مش عايزة زر الواتساب يظهر. */
+var SUPPORT_WHATSAPP = '';
+
+function hasSupport(){ return digits(SUPPORT_WHATSAPP).length >= 8; }
+function openSupport(){
+  if(!hasSupport()) return;
+  var msg = 'السلام عليكم 🌸';
+  if(currentCustomer){
+    msg = 'السلام عليكم، أنا ' + (currentCustomer.name||'') +
+          (currentCustomer.loyaltyCode ? ' (كود: '+currentCustomer.loyaltyCode+')' : '') +
+          ' ومحتاجة مساعدة.';
+  }
+  window.open('https://wa.me/' + digits(SUPPORT_WHATSAPP) + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
 // اللوجو inline (base64) — عشان التطبيق يشتغل أوفلاين فورًا من غير ما يستنى صورة
 var LOGO_B64 = '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';
 var logoSrc = 'data:image/png;base64,' + LOGO_B64;
@@ -425,68 +464,123 @@ function loadSettings(){
 /* ============================================================
    الدخول / التسجيل
    ============================================================ */
-var pendingNewPhone = null;
+var loginStep = 'phone';      // phone | name | setpin | enterpin
+var pendingPhone = '';
+var pendingName = '';
+var pendingIsNew = false;
+var pinToMatch = '';
 
-$('phoneInput').addEventListener('input', function(){
-  // لو غيّر الرقم بعد ما ظهرت خانة الاسم، نخفيها تاني
-  if(pendingNewPhone !== null){ pendingNewPhone = null; $('nameWrap').classList.remove('show'); $('loginBtn').textContent = 'دخول'; }
-  $('loginErr').textContent = '';
-});
-
-$('loginBtn').addEventListener('click', doLogin);
-$('phoneInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
-$('nameInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
-
-function doLogin(){
-  var phone = digits($('phoneInput').value);
-  if(phone.length < 8){ $('loginErr').textContent = 'اكتبي رقم موبايل صح'; return; }
-
-  // لو إحنا في مرحلة إدخال الاسم لعميل جديد
-  if(pendingNewPhone === phone){
-    var name = $('nameInput').value.trim();
-    if(!name){ $('loginErr').textContent = 'اكتبي اسمك عشان نكمّل'; return; }
-    createCustomer(phone, name);
-    return;
+function setLoginStep(step){
+  loginStep = step;
+  var titleEl=$('loginTitle'), subEl=$('loginSub'), btn=$('loginBtn');
+  $('phoneField').style.display      = (step==='phone') ? 'block':'none';
+  $('nameField').style.display       = (step==='name') ? 'block':'none';
+  $('pinField').style.display        = (step==='setpin'||step==='enterpin') ? 'block':'none';
+  $('pinConfirmField').style.display = (step==='setpin') ? 'block':'none';
+  $('loginBack').style.display       = (step==='phone') ? 'none':'block';
+  $('loginErr').textContent='';
+  $('pinInput').value=''; $('pinConfirmInput').value='';
+  if(step==='phone'){
+    titleEl.textContent='أهلاً بيكِ 🌸';
+    subEl.textContent='اجمعي نقاط مع كل شراء، واستبدليها بخصومات. سجّلي برقم موبايلك عشان نعرفك عند الكاشير.';
+    btn.textContent='دخول'; setTimeout(function(){ $('phoneInput').focus(); },50);
+  }else if(step==='name'){
+    titleEl.textContent='أول مرة معانا 🌷';
+    subEl.textContent='اكتبي اسمك عشان نرحّب بيكِ.';
+    btn.textContent='التالي'; setTimeout(function(){ $('nameInput').focus(); },50);
+  }else if(step==='setpin'){
+    titleEl.textContent='اختاري رقم سري 🔐';
+    subEl.textContent='اختاري ٤ أرقام سهل تفتكريها — دي هتحمي حسابك، ومحدش هيقدر يفتحه من غيرها.';
+    $('pinLabel').textContent='اختاري رقم سري (٤ أرقام)';
+    btn.textContent='حفظ ودخول'; setTimeout(function(){ $('pinInput').focus(); },50);
+  }else if(step==='enterpin'){
+    titleEl.textContent='أهلاً تاني 👋';
+    subEl.textContent='اكتبي رقمك السري عشان تدخلي حسابك.';
+    $('pinLabel').textContent='الرقم السري';
+    btn.textContent='دخول'; setTimeout(function(){ $('pinInput').focus(); },50);
   }
+}
 
-  $('loginBtn').disabled = true; $('loginBtn').textContent = 'لحظة...';
+$('phoneInput').addEventListener('input', function(){ $('loginErr').textContent=''; });
+$('loginBtn').addEventListener('click', doLoginPrimary);
+$('loginBack').addEventListener('click', function(){ pendingIsNew=false; pendingName=''; pinToMatch=''; setLoginStep('phone'); });
+$('phoneInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLoginPrimary(); });
+$('nameInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLoginPrimary(); });
+$('pinConfirmInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLoginPrimary(); });
+$('pinInput').addEventListener('keydown', function(e){ if(e.key==='Enter' && loginStep==='enterpin') doLoginPrimary(); });
+
+function doLoginPrimary(){
+  if(loginStep==='phone')    return stepPhone();
+  if(loginStep==='name')     return stepName();
+  if(loginStep==='setpin')   return stepSetPin();
+  if(loginStep==='enterpin') return stepEnterPin();
+}
+
+function stepPhone(){
+  var phone = digits($('phoneInput').value);
+  if(phone.length < 8){ $('loginErr').textContent='اكتبي رقم موبايل صح'; return; }
+  $('loginBtn').disabled=true; $('loginBtn').textContent='لحظة...';
   db.collection(COL_CUSTOMERS).doc(phone).get().then(function(doc){
-    $('loginBtn').disabled = false;
-    if(doc.exists){
-      localStorage.setItem(LS_PHONE, phone);
-      enterApp(phone);
-    }else{
-      // عميل جديد — نطلب الاسم
-      pendingNewPhone = phone;
-      $('nameWrap').classList.add('show');
-      $('nameInput').focus();
-      $('loginBtn').textContent = 'إنشاء حساب';
-      $('loginErr').textContent = '';
+    $('loginBtn').disabled=false; pendingPhone = phone;
+    if(!doc.exists){ pendingIsNew=true; setLoginStep('name'); }
+    else{
+      pendingIsNew=false;
+      var d = doc.data();
+      if(d.loyaltyPin){ pinToMatch = String(d.loyaltyPin); setLoginStep('enterpin'); }
+      else{ setLoginStep('setpin'); }   // حساب موجود من غير رقم سري (اتعمل من الكاشير أو اتعمله reset)
     }
   }).catch(function(e){
-    $('loginBtn').disabled = false; $('loginBtn').textContent = 'دخول';
-    $('loginErr').textContent = 'النت ضعيف — حاولي تاني';
-    console.warn(e);
+    $('loginBtn').disabled=false; $('loginBtn').textContent='دخول';
+    $('loginErr').textContent='النت ضعيف — حاولي تاني'; console.warn(e);
   });
 }
 
-function createCustomer(phone, name){
-  $('loginBtn').disabled = true; $('loginBtn').textContent = 'بنجهّز حسابك...';
+function stepName(){
+  var name = $('nameInput').value.trim();
+  if(!name){ $('loginErr').textContent='اكتبي اسمك عشان نكمّل'; return; }
+  pendingName = name; setLoginStep('setpin');
+}
+
+function stepSetPin(){
+  var pin = digits($('pinInput').value), c = digits($('pinConfirmInput').value);
+  if(pin.length !== 4){ $('loginErr').textContent='الرقم السري لازم يكون ٤ أرقام'; return; }
+  if(pin !== c){ $('loginErr').textContent='الرقمين مش متطابقين'; $('pinConfirmInput').value=''; return; }
+  $('loginBtn').disabled=true; $('loginBtn').textContent='بنجهّز...';
+  if(pendingIsNew){
+    createCustomer(pendingPhone, pendingName, pin);
+  }else{
+    db.collection(COL_CUSTOMERS).doc(pendingPhone).set({ loyaltyPin: pin }, { merge:true }).then(function(){
+      localStorage.setItem(LS_PHONE, pendingPhone);
+      $('loginBtn').disabled=false; enterApp(pendingPhone);
+    }).catch(function(e){
+      $('loginBtn').disabled=false; $('loginBtn').textContent='حفظ ودخول';
+      $('loginErr').textContent='معرفناش نحفظ — حاولي تاني'; console.warn(e);
+    });
+  }
+}
+
+function stepEnterPin(){
+  var pin = digits($('pinInput').value);
+  if(pin.length !== 4){ $('loginErr').textContent='اكتبي الرقم السري (٤ أرقام)'; return; }
+  if(pin !== pinToMatch){ $('loginErr').textContent='الرقم السري غلط'; $('pinInput').value=''; return; }
+  localStorage.setItem(LS_PHONE, pendingPhone);
+  enterApp(pendingPhone);
+}
+
+function createCustomer(phone, name, pin){
   makeUniqueCode(0).then(function(code){
     var data = {
       name: name, phone: phone, points: 0, totalSpent: 0,
       lastVisit: null, notes: '', branch: '',
-      loyaltyCode: code, createdAt: Date.now(), source: 'loyalty_app'
+      loyaltyCode: code, loyaltyPin: pin, createdAt: Date.now(), source: 'loyalty_app'
     };
     return db.collection(COL_CUSTOMERS).doc(phone).set(data, { merge:true });
   }).then(function(){
     localStorage.setItem(LS_PHONE, phone);
-    $('loginBtn').disabled = false;
-    enterApp(phone);
+    $('loginBtn').disabled=false; enterApp(phone);
   }).catch(function(e){
-    $('loginBtn').disabled = false; $('loginBtn').textContent = 'إنشاء حساب';
-    $('loginErr').textContent = 'معرفناش نحفظ الحساب — حاولي تاني';
-    console.warn(e);
+    $('loginBtn').disabled=false; $('loginBtn').textContent='حفظ ودخول';
+    $('loginErr').textContent='معرفناش نحفظ الحساب — حاولي تاني'; console.warn(e);
   });
 }
 
@@ -497,6 +591,7 @@ function enterApp(phone){
   showScreen('screen-app');
   $('topLogo').src = logoSrc;
   $('greet').textContent = greetWord();
+  $('waTop').style.display = hasSupport() ? 'flex' : 'none';
   switchTab('card');
 
   if(custUnsub){ custUnsub(); }
@@ -806,6 +901,7 @@ function renderAccount(){
       (spent>0 ? '<div class="acct-row"><span class="k">إجمالي مشترياتك</span><span class="v">'+fmt(spent)+' ج.م</span></div>' : '')+
       '<div class="acct-row"><span class="k">عضو من</span><span class="v">'+esc(sinceFull)+'</span></div>'+
     '</div>'+
+    (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
     '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
     '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
     '<button class="btn-outline logout" onclick="logout()">تسجيل الخروج</button>';
@@ -822,8 +918,9 @@ function logout(silent){
   currentCustomer = null;
   localStorage.removeItem(LS_PHONE);
   $('phoneInput').value=''; $('nameInput').value='';
-  pendingNewPhone=null; $('nameWrap').classList.remove('show'); $('loginBtn').textContent='دخول';
+  pendingIsNew=false; pendingName=''; pinToMatch='';
   showScreen('screen-login');
+  setLoginStep('phone');
 }
 
 /* ============================================================
@@ -887,7 +984,7 @@ $('heroLogo').src = logoSrc;
 loadSettings().finally(function(){
   var saved = localStorage.getItem(LS_PHONE);
   if(saved){ showScreen('screen-app'); enterApp(saved); }
-  else { showScreen('screen-login'); $('phoneInput').focus(); }
+  else { showScreen('screen-login'); setLoginStep('phone'); }
 });
 
 // لو الاسكربت كله اشتغل، نلغي بانر الفشل الاحتياطي
