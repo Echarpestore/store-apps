@@ -786,21 +786,36 @@ function qbxDeleteSel(){
   renderCart();
 }
 
+// تحويل الفاتورة كلها لمرتجع بتأكيد واحد بس — بدل ما تدوس مرتجع على كل صنف لوحده
+function qbxReturnWholeInvoice(){
+  if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
+  if(!confirm(`متأكد إنك عايز تحوّل كل الفاتورة (${cart.length} صنف) لمرتجع كامل؟`)) return;
+  cart.forEach(line=>{
+    line.price = -Math.abs(line.price);
+    line.isReturn = true;
+  });
+  selectedCartIdx = null;
+  renderCart();
+  showToast('اتحولت الفاتورة كلها لمرتجع 🔄 — اختار طريقة الدفع لإعطاء الباقي للعميل');
+}
+
 // إرجاع صنف داخل نفس الفاتورة الحالية (مثلاً عملية تبديل) — بيضيف سطر بالسالب
 // بلون أحمر يقلل من إجمالي الفاتورة، أو يرجع الفرق للعميل لو الإجمالي بقى بالسالب.
 function returnCartItem(idx){
   const item = cart[idx];
-  if(item.isReturn) return;
-  const qtyStr = prompt(`كام قطعة من "${item.name}" عايز ترجعها؟ (المتاح: ${item.qty})`, '1');
-  if(qtyStr === null) return;
-  const qty = parseInt(qtyStr);
-  if(isNaN(qty) || qty <= 0 || qty > item.qty){ showToast('كمية غير صحيحة', 'err'); return; }
-  cart.push({
-    id: item.id, name: item.name, barcode: item.barcode,
-    price: -item.price, qty, attribute: item.attribute, size: item.size, isReturn: true
-  });
+  if(item.isReturn){
+    // دوس تاني على نفس الصنف يرجّعه لبيع عادي (تراجع)
+    item.price = Math.abs(item.price);
+    item.isReturn = false;
+    renderCart();
+    showToast('رجع بيع عادي ✅');
+    return;
+  }
+  if(!confirm(`تحويل "${item.name}" (${item.qty} قطعة) لمرتجع بالكامل؟`)) return;
+  item.price = -Math.abs(item.price);
+  item.isReturn = true;
   renderCart();
-  showToast('اتضاف سطر مرتجع بالأحمر ✅ — قلل من إجمالي الفاتورة');
+  showToast('اتحول لمرتجع بالأحمر ✅ — قلل من إجمالي الفاتورة');
 }
 function changeQty(idx, delta){
   const line = cart[idx];
@@ -1053,26 +1068,30 @@ let pendingPayMethod = null;
 function togglePayMethod(method){
   pendingPayMethod = method;
   const total = cartTotal();
-  const alreadyEntered = Object.keys(paymentAmounts).reduce((s,m)=> m===method ? s : s + paymentAmounts[m], 0);
-  const remaining = Math.max(0, +(total - alreadyEntered).toFixed(2));
+  const isRefund = total < 0;
+  const requiredAbs = Math.abs(total);
+  const alreadyEnteredAbs = Object.keys(paymentAmounts).reduce((s,m)=> m===method ? s : s + Math.abs(paymentAmounts[m]), 0);
+  const remaining = Math.max(0, +(requiredAbs - alreadyEnteredAbs).toFixed(2));
   const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
 
-  document.getElementById('payAmountTitle').textContent = labels[method];
+  document.getElementById('payAmountTitle').textContent = labels[method] + (isRefund ? ' (إرجاع للعميل)' : '');
   const input = document.getElementById('payAmountInput');
-  // كاش: فاضية عشان الكاشير يكتب المبلغ اللي استلمه فعليًا (يقدر يكون أكتر من المطلوب، والباقي بيتحسب تلقائي).
-  // فيزا/انستا باي: مقترحة تلقائي بباقي الفاتورة، وتقدر تعدّلها لو هتقسّم الدفع بين أكتر من وسيلة.
-  input.value = method === 'cash' ? '' : remaining.toFixed(2);
+  // بيع عادي + كاش: فاضية عشان الكاشير يكتب المبلغ اللي استلمه فعليًا (والباقي بيتحسب تلقائي).
+  // بيع عادي + فيزا/انستا باي: مقترحة تلقائي بباقي الفاتورة.
+  // فاتورة مرتجع (الإجمالي بالسالب): مقترحة تلقائي بقيمة المبلغ المطلوب إرجاعه للعميل، بأي وسيلة.
+  input.value = (method === 'cash' && !isRefund) ? '' : remaining.toFixed(2);
   document.getElementById('payAmountChange').textContent = '';
   document.getElementById('payAmountModal').classList.add('active');
-  input.oninput = ()=> updatePayAmountChangeLive(method, total, alreadyEntered);
+  input.oninput = ()=> updatePayAmountChangeLive(method, total, alreadyEnteredAbs);
   setTimeout(()=>{ input.focus(); input.select(); }, 50);
 }
 
-function updatePayAmountChangeLive(method, total, alreadyEntered){
+function updatePayAmountChangeLive(method, total, alreadyEnteredAbs){
   const val = parseFloat(document.getElementById('payAmountInput').value) || 0;
   const changeBox = document.getElementById('payAmountChange');
-  if(method === 'cash'){
-    const totalPaidSoFar = alreadyEntered + val;
+  const isRefund = total < 0;
+  if(method === 'cash' && !isRefund){
+    const totalPaidSoFar = alreadyEnteredAbs + val;
     const change = +(totalPaidSoFar - total).toFixed(2);
     if(val === 0){ changeBox.textContent = ''; }
     else if(change >= 0){ changeBox.innerHTML = `<span style="color:var(--plus);">الباقي للعميل: ${change.toFixed(2)} ج.م</span>`; }
@@ -1092,7 +1111,9 @@ function confirmPayAmount(){
   if(!method) return;
   const val = parseFloat(document.getElementById('payAmountInput').value) || 0;
   if(val <= 0){ showToast('اكتب مبلغ صحيح', 'err'); return; }
-  paymentAmounts[method] = val;
+  // في فاتورة المرتجع (إجمالي بالسالب) المبلغ بيتسجل بالسالب (فلوس خارجة)، وفي البيع العادي بالموجب.
+  const total = cartTotal();
+  paymentAmounts[method] = total < 0 ? -val : val;
   selectedPayMethods.add(method);
   document.getElementById('pm' + (method==='cash'?'Cash':method==='visa'?'Visa':'Insta')).classList.add('selected','filled');
   document.getElementById('payAmountModal').classList.remove('active');
@@ -1106,40 +1127,47 @@ document.getElementById('payAmountInput').addEventListener('keydown', (e)=>{
 
 function updatePaySummary(){
   const total = cartTotal();
+  const isRefund = total < 0;
   let entered = 0;
   selectedPayMethods.forEach(m=> entered += paymentAmounts[m] || 0);
-  const due = Math.max(0, +(total - entered).toFixed(2));
-  const change = Math.max(0, +(entered - total).toFixed(2));
+  const enteredAbs = Math.abs(entered);
+  const requiredAbs = Math.abs(total);
+  const due = Math.max(0, +(requiredAbs - enteredAbs).toFixed(2));
+  const change = (!isRefund) ? Math.max(0, +(enteredAbs - requiredAbs).toFixed(2)) : 0;
   const confirmBtn = document.getElementById('confirmPayBtn');
 
   const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
   const payList = document.getElementById('qbxPayList');
   if(payList){
     payList.innerHTML = Array.from(selectedPayMethods).map(m=>
-      `<div class="pl-row"><span>${labels[m]}</span><span>${(paymentAmounts[m]||0).toFixed(2)} ج.م</span></div>`).join('')
-      || '<div style="color:#999; font-size:11px; padding:6px 0;">لسه مفيش مدفوعات — دوس كاش/فيزا/انستا باي</div>';
+      `<div class="pl-row"><span>${labels[m]}</span><span>${Math.abs(paymentAmounts[m]||0).toFixed(2)} ج.م</span></div>`).join('')
+      || `<div style="color:#999; font-size:11px; padding:6px 0;">${isRefund ? 'اختار طريقة إرجاع المبلغ للعميل' : 'لسه مفيش مدفوعات — دوس كاش/فيزا/انستا باي'}</div>`;
   }
+
+  const dueLabel = document.querySelector('.qbx-totals .t-row:nth-child(3) span:first-child');
+  if(dueLabel) dueLabel.textContent = isRefund ? 'متبقي إرجاعه' : 'المتبقي';
 
   const paidEl = document.getElementById('qbxPaid');
   const dueEl = document.getElementById('qbxDue');
   const changeEl = document.getElementById('qbxChange');
-  if(paidEl) paidEl.textContent = entered.toFixed(2);
+  if(paidEl) paidEl.textContent = enteredAbs.toFixed(2);
   if(dueEl) dueEl.textContent = due.toFixed(2);
   if(changeEl) changeEl.textContent = change.toFixed(2);
 
-  // زرار الحفظ بيتفعّل بس لما المدفوع يغطي الإجمالي بالكامل وفيه أصناف فعلًا
-  confirmBtn.disabled = !(cart.length > 0 && selectedPayMethods.size > 0 && entered >= total);
+  // زرار الحفظ بيتفعّل لما المبلغ المُدخل (بصرف النظر عن الاتجاه) يغطي المطلوب بالكامل
+  confirmBtn.disabled = !(cart.length > 0 && selectedPayMethods.size > 0 && enteredAbs >= requiredAbs);
 }
 
 async function confirmPayment(){
   const total = cartTotal();
+  const isRefundInvoice = total < 0;
   const payments = {};
   selectedPayMethods.forEach(m=> payments[m] = paymentAmounts[m] || 0);
   const phone = document.getElementById('customerPhone').value.trim();
   const custName = document.getElementById('customerName').value.trim();
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
-  const earnsStaffPoint = itemCount >= MIN_ITEMS_FOR_STAFF_POINT;
-  const loyaltyPointsEarned = phone ? Math.floor(total / POINTS_PER_EGP) : 0;
+  const earnsStaffPoint = !isRefundInvoice && itemCount >= MIN_ITEMS_FOR_STAFF_POINT;
+  const loyaltyPointsEarned = (phone && !isRefundInvoice) ? Math.floor(total / POINTS_PER_EGP) : 0;
 
   try{
     // 1) سجل البيع

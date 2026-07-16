@@ -16,6 +16,24 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
+
+/* ---------- Light management theme (inventory, customers, roles, discounts, reports, import, profiles) ---------- */
+.mgmt-light{background:#f3f1e7 !important; color:#1a1a1a !important;}
+.mgmt-light .dash-header{background:#fff; border-bottom:2px solid #b9c9a0; padding:14px 18px; margin:0 0 16px; border-radius:0 0 10px 10px;}
+.mgmt-light .dash-header h1{font-size:16px; margin:0; color:#2a2a2a;}
+.mgmt-light .logout-btn{background:#3d3d3f; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-weight:700; font-size:13px; cursor:pointer;}
+.mgmt-light input, .mgmt-light select, .mgmt-light textarea{
+  background:#fff !important; color:#1a1a1a !important; border:1px solid #b9c9a0 !important;
+}
+.mgmt-light input::placeholder{color:#8a8a80;}
+/* أي كارت بخلفية غامقة قديمة (var(--panel)) بيتحول تلقائي لكارت أبيض واضح */
+.mgmt-light [style*="var(--panel)"]{background:#fff !important; border-color:#d8d5c5 !important; color:#1a1a1a !important;}
+.mgmt-light [style*="var(--panel2)"]{background:#f7f6ef !important; color:#1a1a1a !important;}
+.mgmt-light .empty-cart{color:#999 !important;}
+.mgmt-light [style*="color:var(--muted)"]{color:#7a7a70 !important;}
+.mgmt-light button:not(.logout-btn):not(.rep-range-btn){
+  background:#eef0e0; color:#1a1a1a; border:1px solid #b9c9a0;
+}
 .screen{display:none;height:100vh;flex-direction:column;}
 .screen.active{display:flex;}
 .badge-test{
@@ -117,22 +135,23 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .qbx-meta{font-size:12px; color:#333; text-align:left; line-height:1.5;}
 .qbx-body{flex:1; display:flex; gap:8px; padding:0 10px; overflow:hidden;}
 .qbx-actions{
-  width:150px; flex-shrink:0; display:grid; grid-template-columns:1fr 1fr;
-  gap:6px; align-content:start; padding-top:4px;
+  width:170px; flex-shrink:0; display:grid; grid-template-columns:1fr 1fr;
+  gap:8px; align-content:start; padding-top:4px;
 }
 .qbx-actions button{
-  padding:12px 4px; border-radius:6px; border:1px solid #222; background:#3d3d3f;
-  color:#fff; font-size:11px; font-weight:700; cursor:pointer; text-align:center;
+  padding:16px 6px; border-radius:8px; border:1px solid #222; background:#3d3d3f;
+  color:#fff; font-size:13px; font-weight:700; cursor:pointer; text-align:center;
 }
 .qbx-actions button:active{background:#555;}
 .qbx-center{flex:1; display:flex; flex-direction:column; overflow:hidden;}
 .qbx-itemops{
-  width:86px; flex-shrink:0; display:flex; flex-direction:column; gap:6px; padding-top:52px;
+  width:110px; flex-shrink:0; display:flex; flex-direction:column; gap:8px; padding-top:52px;
 }
 .qbx-itemops button{
-  padding:12px 4px; border-radius:6px; border:1px solid #222; background:#3d3d3f;
-  color:#fff; font-size:11px; font-weight:700; cursor:pointer;
+  padding:16px 6px; border-radius:8px; border:1px solid #222; background:#3d3d3f;
+  color:#fff; font-size:13px; font-weight:800; cursor:pointer;
 }
+.qbx-itemops button.qbx-return-all{background:linear-gradient(#d9534f,#a5271f); margin-top:10px;}
 .qbx-bottom{
   display:flex; gap:10px; padding:8px 10px 10px; align-items:stretch;
   border-top:1px solid #b8b5ad; background:#e0ddd5;
@@ -169,6 +188,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .qbx-save:disabled{opacity:.45; cursor:not-allowed;}
 
 .sale-top{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+.qbx-quickbtn{
+  flex-shrink:0; width:46px; height:46px; border-radius:8px; border:1px solid #222;
+  background:#3d3d3f; color:#fff; font-size:20px; cursor:pointer;
+}
+.qbx-quickbtn-del{background:linear-gradient(#d9534f,#a5271f);}
 .back-btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:14px;flex-shrink:0;}
 .search-wrap{position:relative;flex:1;}
 #searchBar{
@@ -340,6 +364,10 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
       <button class="secondary" style="border-color:var(--minus); color:var(--minus);" onclick="logout()">خروج 🔒</button>
     </div>
     <div class="qb-main">
+      <div style="position:relative; margin-bottom:14px;">
+        <input type="text" id="globalSearchInput" placeholder="🔍 دوّر على أي حاجة: رقم فاتورة، رقم تليفون عميل، اسم منتج..." style="width:100%; padding:14px 16px; border-radius:10px; border:1px solid #b9c9a0; background:#fff; color:#1a1a1a; font-size:14px;">
+        <div id="globalSearchResults" style="position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid #b9c9a0; border-radius:10px; max-height:340px; overflow-y:auto; z-index:50; display:none;"></div>
+      </div>
       <div class="qb-section-grid">
         <div class="qb-section">
           <div class="qb-section-head">🛒 نقطة البيع</div>
@@ -387,7 +415,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ SALES HISTORY ============ -->
-<div class="screen" id="salesHistoryScreen">
+<div class="screen mgmt-light" id="salesHistoryScreen">
   <div class="dash-header" style="padding:16px 20px 0;">
     <div><h1>🗂️ سجل المبيعات</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
@@ -402,7 +430,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ CUSTOMER LIST ============ -->
-<div class="screen" id="customerListScreen">
+<div class="screen mgmt-light" id="customerListScreen">
   <div class="dash-header" style="padding:16px 20px 0;">
     <div><h1>👤 قائمة العملاء</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
@@ -411,7 +439,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ END OF DAY ============ -->
-<div class="screen" id="endOfDayScreen">
+<div class="screen mgmt-light" id="endOfDayScreen">
   <div class="dash-header" style="padding:16px 20px 0;">
     <div><h1>🌙 إغلاق اليوم</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
@@ -420,7 +448,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ INVENTORY ============ -->
-<div class="screen" id="inventoryScreen">
+<div class="screen mgmt-light" id="inventoryScreen">
   <div class="dash-header">
     <div><h1>📦 المخزون</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
@@ -431,7 +459,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ PRODUCT DETAILS ============ -->
-<div class="screen" id="productDetailsScreen">
+<div class="screen mgmt-light" id="productDetailsScreen">
   <div class="dash-header">
     <div><h1 id="pdTitle">📦 تفاصيل المنتج</h1></div>
     <button class="logout-btn" onclick="goToInventory()">◀ رجوع للمخزون</button>
@@ -445,7 +473,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ INVOICE DETAILS ============ -->
-<div class="screen" id="invoiceScreen">
+<div class="screen mgmt-light" id="invoiceScreen">
   <div class="dash-header">
     <div><h1 id="invTitle">🧾 فاتورة</h1></div>
     <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
@@ -454,7 +482,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ CUSTOMER PROFILE ============ -->
-<div class="screen" id="customerProfileScreen">
+<div class="screen mgmt-light" id="customerProfileScreen">
   <div class="dash-header">
     <div><h1 id="custProfTitle">👤 بروفايل عميل</h1></div>
     <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
@@ -463,7 +491,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ EMPLOYEE PROFILE ============ -->
-<div class="screen" id="employeeProfileScreen">
+<div class="screen mgmt-light" id="employeeProfileScreen">
   <div class="dash-header">
     <div><h1 id="empProfTitle">👤 بروفايل موظف</h1></div>
     <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
@@ -472,7 +500,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ DISCOUNTS (manager only) ============ -->
-<div class="screen" id="discountsScreen">
+<div class="screen mgmt-light" id="discountsScreen">
   <div class="dash-header">
     <div><h1>🏷️ الخصومات</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
@@ -484,7 +512,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ DATA IMPORT (manager only) ============ -->
-<div class="screen" id="importScreen">
+<div class="screen mgmt-light" id="importScreen">
   <div class="dash-header">
     <div><h1>📥 استيراد بيانات من QuickBooks</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
@@ -500,7 +528,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ ROLES / PERMISSIONS (manager only) ============ -->
-<div class="screen" id="rolesScreen">
+<div class="screen mgmt-light" id="rolesScreen">
   <div class="dash-header">
     <div><h1>🛡️ الصلاحيات</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
@@ -514,7 +542,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ REPORTS (manager only, basic) ============ -->
-<div class="screen" id="reportsScreen">
+<div class="screen mgmt-light" id="reportsScreen">
   <div class="dash-header">
     <div><h1>📊 تقارير المبيعات</h1></div>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
@@ -566,6 +594,9 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
             <input type="text" id="searchBar" placeholder="&lt; اكتب اسم المنتج أو امسح الباركود هنا &gt;" autocomplete="off">
             <div id="suggestBox"></div>
           </div>
+          <button onclick="qbxQty(1)" class="qbx-quickbtn" title="زيادة الكمية">➕</button>
+          <button onclick="qbxQty(-1)" class="qbx-quickbtn" title="إنقاص الكمية">➖</button>
+          <button onclick="qbxDeleteSel()" class="qbx-quickbtn qbx-quickbtn-del" title="حذف الصنف المختار">🗑️</button>
         </div>
         <div class="cart-area" id="cartArea">
           <table class="cart-table">
@@ -590,10 +621,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
         <div class="customer-info" id="customerInfo"></div>
       </div>
       <div class="qbx-itemops">
-        <button onclick="qbxQty(1)">كمية +</button>
-        <button onclick="qbxQty(-1)">كمية −</button>
-        <button onclick="qbxReturnSel()">مرتجع الصنف</button>
-        <button onclick="qbxDeleteSel()">حذف الصنف</button>
+        <button onclick="qbxQty(1)">➕<br>كمية</button>
+        <button onclick="qbxQty(-1)">➖<br>كمية</button>
+        <button onclick="qbxReturnSel()">↩️<br>مرتجع الصنف</button>
+        <button onclick="qbxDeleteSel()">🗑️<br>حذف الصنف</button>
+        <button class="qbx-return-all" onclick="qbxReturnWholeInvoice()">🔄<br>مرتجع الفاتورة كاملة</button>
       </div>
     </div>
     <div class="qbx-bottom">
@@ -670,5 +702,6 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <script src="profiles.js"></script>
 <script src="discounts.js"></script>
 <script src="import.js"></script>
+<script src="search.js"></script>
 </body>
 </html>
