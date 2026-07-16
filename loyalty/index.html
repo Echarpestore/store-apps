@@ -21,8 +21,6 @@
 <!-- Firebase (compat — نفس إصدار الكاشير عشان يقرا نفس البيانات) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<!-- باركود رقم العميل للكاشير -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"></script>
 
 <style>
   :root{
@@ -140,8 +138,8 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px 22px;
   }
   .card-back .cb-title{font-weight:800; font-size:15px; color:var(--pink-deep);}
-  .card-back .cb-barcode{background:#fff; padding:6px 8px; border-radius:10px; margin-top:14px; max-width:100%;}
-  .card-back .cb-barcode svg{max-width:100%; height:70px; display:block;}
+  .card-back .cb-barcode{background:#fff; padding:8px 10px; border-radius:10px; margin-top:14px; width:82%; max-width:280px;}
+  .card-back .cb-barcode svg{width:100%; height:auto; display:block;}
   .card-back .cb-code{font-size:16px; font-weight:800; letter-spacing:4px; color:var(--ink); direction:ltr; margin-top:10px;}
   .card-back .cb-pts{font-size:12.5px; font-weight:700; color:var(--muted); margin-top:6px;}
   .card-back .cb-wait{color:var(--muted); font-weight:700; padding:30px 0;}
@@ -584,6 +582,36 @@ function ensureLoyaltyCode(phone){
   }).catch(function(e){ console.warn('تعذر توليد كود العضوية', e); });
 }
 
+/* ---------- مولّد باركود CODE128-B جوه الملف (من غير أي مكتبة خارجية عشان يشتغل أوفلاين) ---------- */
+var C128 = ["11011001100","11001101100","11001100110","10010011000","10010001100","10001001100","10011001000","10011000100","10001100100","11001001000","11001000100","11000100100","10110011100","10011011100","10011001110","10111001100","10011101100","10011100110","11001110010","11001011100","11001001110","11011100100","11001110100","11101101110","11101001100","11100101100","11100100110","11101100100","11100110100","11100110010","11011011000","11011000110","11000110110","10100011000","10001011000","10001000110","10110001000","10001101000","10001100010","11010001000","11000101000","11000100010","10110111000","10110001110","10001101110","10111011000","10111000110","10001110110","11101110110","11010001110","11000101110","11011101000","11011100010","11011101110","11101011000","11101000110","11100010110","11101101000","11101100010","11100011010","11101111010","11001000010","11110001010","10100110000","10100001100","10010110000","10010000110","10000101100","10000100110","10110010000","10110000100","10011010000","10011000010","10000110100","10000110010","11000010010","11001010000","11110111010","11000010100","10001111010","10100111100","10010111100","10010011110","10111100100","10011110100","10011110010","11110100100","11110010100","11110010010","11011011110","11011110110","11110110110","10101111000","10100011110","10001011110","10111101000","10111100010","11110101000","11110100010","10111011110","10111101110","11101011110","11110101110","11010000100","11010010000","11010011100","1100011101011"];
+function code128b(text){
+  var codes=[104], i;              // Start B
+  for(i=0;i<text.length;i++){ codes.push(text.charCodeAt(i)-32); }
+  var sum=104;
+  for(i=0;i<text.length;i++){ sum += (text.charCodeAt(i)-32)*(i+1); }
+  codes.push(sum%103);             // checksum
+  codes.push(106);                 // Stop
+  var bits=''; for(i=0;i<codes.length;i++){ bits += C128[codes[i]]; }
+  return bits;
+}
+function drawBarcode(containerId, text){
+  var el = document.getElementById(containerId);
+  if(!el) return;
+  var bits = code128b(String(text));
+  var mw = 2, h = 70, quiet = 10;          // عرض الموديول، الارتفاع، المنطقة البيضا على الجناب
+  var total = (bits.length + quiet*2) * mw;
+  var x = quiet*mw, rects = '';
+  for(var i=0;i<bits.length;i++){
+    if(bits.charAt(i)==='1'){ rects += '<rect x="'+x+'" y="0" width="'+mw+'" height="'+h+'"/>'; }
+    x += mw;
+  }
+  // بنبني الـ SVG كامل كنص وبنحطه جوه div — ده بيتفهم صح على كل المتصفحات (مش svg.innerHTML)
+  el.innerHTML = '<svg viewBox="0 0 '+total+' '+h+'" width="100%" height="'+h+'" '+
+                 'preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;">'+
+                 '<rect x="0" y="0" width="'+total+'" height="'+h+'" fill="#ffffff"/>'+
+                 '<g fill="#3A2233">'+rects+'</g></svg>';
+}
+
 /* ---------- قلب البطاقة ---------- */
 function flipCard(){ var f=$('cardFlip'); if(f) f.classList.toggle('flipped'); }
 
@@ -629,7 +657,7 @@ function renderCard(){
         '<div class="card-face card-back">'+
           '<div class="cb-title">🎟️ كود عضويتك</div>'+
           (code
-            ? '<div class="cb-barcode"><svg id="cardBarcode"></svg></div><div class="cb-code">'+esc(prettyCode(code))+'</div>'
+            ? '<div class="cb-barcode" id="cardBarcode"></div><div class="cb-code">'+esc(prettyCode(code))+'</div>'
             : '<div class="cb-wait">بنجهّز كودك...</div>')+
           '<div class="cb-pts">رصيدك: '+fmt(pts)+' نقطة</div>'+
           '<div class="flip-hint">اضغطي للرجوع ↩</div>'+
@@ -652,9 +680,9 @@ function renderCard(){
 
     '<div class="redeem-hint">💡 الاستبدال بيحصل في المحل — قوليلهم عايزة تستبدلي نقاطك عند الدفع.</div>';
 
-  // نرسم الباركود على ضهر البطاقة (بيتحط جوه SVG حتى لو الضهر لسه مخفي)
+  // نرسم الباركود على ضهر البطاقة (مولّد داخلي — بيشتغل حتى أوفلاين)
   if(code){
-    try{ JsBarcode('#cardBarcode', code, {format:'CODE128', width:2, height:70, displayValue:false, margin:0, lineColor:'#3A2233'}); }catch(e){}
+    try{ drawBarcode('cardBarcode', code); }catch(e){ console.warn('barcode', e); }
   }
 }
 
