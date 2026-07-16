@@ -112,11 +112,12 @@
     min-height:198px; display:flex; flex-direction:column; justify-content:space-between;
   }
   .card::after{
-    content:""; position:absolute; top:-60%; right:-30%; width:80%; height:220%;
+    content:""; position:absolute; top:-60%; right:0; width:55%; height:220%;
     background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);
-    transform:rotate(18deg); animation:sheen 5.5s ease-in-out infinite;
+    transform:rotate(18deg) translateX(240%); will-change:transform;
+    animation:sheen 6s ease-in-out infinite;
   }
-  @keyframes sheen{0%,60%{right:-40%;} 88%,100%{right:120%;}}
+  @keyframes sheen{0%,55%{transform:rotate(18deg) translateX(240%);} 85%,100%{transform:rotate(18deg) translateX(-260%);}}
   .card .card-top{display:flex; justify-content:space-between; align-items:flex-start; position:relative; z-index:1;}
   .card .card-top .lbl{font-size:12px; font-weight:700; opacity:.9; letter-spacing:.4px;}
   .card .card-top .clubname{font-size:15px; font-weight:800; margin-top:2px;}
@@ -222,7 +223,7 @@
   /* ===== التبويبات السفلية ===== */
   .tabbar{
     position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px;
-    background:rgba(255,255,255,.94); backdrop-filter:blur(10px);
+    background:#ffffff;
     border-top:1px solid var(--line); display:flex; padding:9px 8px calc(9px + env(safe-area-inset-bottom));
     z-index:40;
   }
@@ -231,23 +232,6 @@
   .tab .tl{font-size:11px; font-weight:700;}
   .tab.active{color:var(--pink);}
   .tab.active .ti{transform:translateY(-1px);}
-
-  /* ===== overlay الكاشير ===== */
-  .overlay{
-    position:fixed; inset:0; background:rgba(58,34,51,.55); backdrop-filter:blur(4px);
-    display:none; align-items:center; justify-content:center; z-index:60; padding:26px;
-  }
-  .overlay.on{display:flex;}
-  .cashier-sheet{
-    background:#fff; border-radius:28px; width:100%; max-width:380px; padding:30px 26px 26px; text-align:center;
-    box-shadow:0 30px 70px -20px rgba(0,0,0,.5);
-  }
-  .cashier-sheet .cs-h{font-weight:800; font-size:18px;}
-  .cashier-sheet .cs-sub{color:var(--muted); font-size:13.5px; font-weight:600; margin-top:6px; line-height:1.7;}
-  .cashier-sheet .phone-big{font-size:33px; font-weight:800; letter-spacing:2px; direction:ltr; margin:20px 0 8px; color:var(--ink);}
-  .cashier-sheet svg{max-width:100%;}
-  .cashier-sheet .pts-mini{margin-top:14px; font-weight:700; color:var(--pink-deep); font-size:14px;}
-  .cashier-sheet .close{margin-top:20px; width:100%; padding:14px; border:none; border-radius:14px; background:var(--pink-soft); color:var(--pink-deep); font-weight:800; font-size:15px;}
 
   .empty{text-align:center; padding:44px 20px; color:var(--muted); font-weight:600; font-size:14.5px; line-height:1.9;}
   .empty .big{font-size:40px; display:block; margin-bottom:12px;}
@@ -439,7 +423,7 @@ var loyaltyCfg = { pointsPerEGP:100, pointsPerRedemption:10, redemptionValueEGP:
 
 var currentCustomer = null;   // { name, phone, points, ... }
 var custUnsub = null;         // مستمع realtime على وثيقة العميل
-var offersLoaded = false, productsLoaded = false;
+var offersCache = null, productsCache = null;   // كاش في الذاكرة عشان التبويبات تفتح فورًا
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -786,6 +770,7 @@ function renderCard(){
    ============================================================ */
 function renderOffers(){
   var box = $('tab-offers');
+  if(offersCache){ box.innerHTML = offersCache; return; }   // من الكاش فورًا
   box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
                   '<div class="empty"><span class="big">⏳</span>بنجيب أحدث العروض...</div>';
   var today = todayISO();
@@ -805,30 +790,31 @@ function renderOffers(){
       if(!seen[key]){ seen[key]=1; uniq.push(dc); }
     });
 
+    var html;
     if(uniq.length === 0){
-      box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
+      html = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
         '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>';
-      return;
+    }else{
+      var rows = uniq.map(function(dc){
+        var isPct = dc.type === 'percent';
+        var big = isPct ? (fmt(dc.value)+'%') : fmt(dc.value);
+        var sm  = isPct ? 'خصم' : 'ج.م';
+        var scopeStr = dc.scope === 'all' ? '🏪 على المحل كله' : ('🏷️ ' + esc(dc.productName || 'منتج مختار'));
+        var cap = (isPct && dc.maxDiscount) ? (' · بحد أقصى '+fmt(dc.maxDiscount)+' ج.م') : '';
+        var endStr = dc.endDate ? ('ساري لحد '+esc(dc.endDate)) : 'عرض مفتوح';
+        return '<div class="offer">'+
+          '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
+          '<div class="obody">'+
+            '<div class="on">'+esc(dc.name||'عرض')+'</div>'+
+            '<div class="osc">'+scopeStr+cap+'</div>'+
+            '<div class="oend">'+endStr+'</div>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+      html = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' + rows;
     }
-
-    var rows = uniq.map(function(dc){
-      var isPct = dc.type === 'percent';
-      var big = isPct ? (fmt(dc.value)+'%') : fmt(dc.value);
-      var sm  = isPct ? 'خصم' : 'ج.م';
-      var scopeStr = dc.scope === 'all' ? '🏪 على المحل كله' : ('🏷️ ' + esc(dc.productName || 'منتج مختار'));
-      var cap = (isPct && dc.maxDiscount) ? (' · بحد أقصى '+fmt(dc.maxDiscount)+' ج.م') : '';
-      var endStr = dc.endDate ? ('ساري لحد '+esc(dc.endDate)) : 'عرض مفتوح';
-      return '<div class="offer">'+
-        '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
-        '<div class="obody">'+
-          '<div class="on">'+esc(dc.name||'عرض')+'</div>'+
-          '<div class="osc">'+scopeStr+cap+'</div>'+
-          '<div class="oend">'+endStr+'</div>'+
-        '</div>'+
-      '</div>';
-    }).join('');
-    box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' + rows;
-    offersLoaded = true;
+    offersCache = html;          // نحفظه عشان المرات الجاية تفتح فورًا
+    box.innerHTML = html;
   }).catch(function(e){
     console.warn(e);
     box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
@@ -841,6 +827,7 @@ function renderOffers(){
    ============================================================ */
 function renderProducts(){
   var box = $('tab-products');
+  if(productsCache){ box.innerHTML = productsCache; return; }   // من الكاش فورًا
   box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
                   '<div class="empty"><span class="big">⏳</span>بنجيب المنتجات...</div>';
   db.collection(COL_INVENTORY).get().then(function(snap){
@@ -858,24 +845,25 @@ function renderProducts(){
       return String(a.name||'').localeCompare(String(b.name||''),'ar');
     });
 
+    var html;
     if(items.length === 0){
-      box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
+      html = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
         '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
-      return;
+    }else{
+      var cards = items.map(function(p){
+        var oos = (p.status==='outofstock') || ((p.quantity??0) <= 0);
+        var meta = [p.attribute, p.size].filter(Boolean).join(' · ');
+        return '<div class="prod">'+
+          (oos ? '<div class="oos">خلص مؤقتًا</div>' : '')+
+          '<div class="pname">'+esc(p.name||'منتج')+'</div>'+
+          '<div class="pmeta">'+esc(meta||' ')+'</div>'+
+          '<div class="pprice">'+fmt(p.price)+' <span>ج.م</span></div>'+
+        '</div>';
+      }).join('');
+      html = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div><div class="prod-grid">'+cards+'</div>';
     }
-
-    var cards = items.map(function(p){
-      var oos = (p.status==='outofstock') || ((p.quantity??0) <= 0);
-      var meta = [p.attribute, p.size].filter(Boolean).join(' · ');
-      return '<div class="prod">'+
-        (oos ? '<div class="oos">خلص مؤقتًا</div>' : '')+
-        '<div class="pname">'+esc(p.name||'منتج')+'</div>'+
-        '<div class="pmeta">'+esc(meta||' ')+'</div>'+
-        '<div class="pprice">'+fmt(p.price)+' <span>ج.م</span></div>'+
-      '</div>';
-    }).join('');
-    box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div><div class="prod-grid">'+cards+'</div>';
-    productsLoaded = true;
+    productsCache = html;        // نحفظه عشان المرات الجاية تفتح فورًا
+    box.innerHTML = html;
   }).catch(function(e){
     console.warn(e);
     box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
