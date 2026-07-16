@@ -125,6 +125,27 @@
   .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px;}
   .card .holder .name{font-size:16px; font-weight:800;}
   .card .holder .since{font-size:11px; opacity:.85; font-weight:600;}
+  .card .flip-hint{position:absolute; z-index:1; bottom:12px; left:20px; font-size:11px; font-weight:700; opacity:.9;}
+
+  /* ===== بطاقة تنقلب (flip) ===== */
+  .card-flip{perspective:1600px;}
+  .card-inner{position:relative; width:100%; min-height:236px; cursor:pointer;
+    transition:transform .65s cubic-bezier(.4,.15,.2,1); transform-style:preserve-3d;}
+  .card-flip.flipped .card-inner{transform:rotateY(180deg);}
+  .card-face{position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden; border-radius:26px; overflow:hidden;}
+  /* الوش بياخد شكل .card نفسه؛ الـ position:absolute هنا بيغلب لأنه متعرّف بعده */
+  .card-back{
+    transform:rotateY(180deg); background:#fff; border:1.5px solid var(--line);
+    box-shadow:0 20px 44px -18px rgba(201,50,126,.55);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px 22px;
+  }
+  .card-back .cb-title{font-weight:800; font-size:15px; color:var(--pink-deep);}
+  .card-back .cb-barcode{background:#fff; padding:6px 8px; border-radius:10px; margin-top:14px; max-width:100%;}
+  .card-back .cb-barcode svg{max-width:100%; height:70px; display:block;}
+  .card-back .cb-code{font-size:16px; font-weight:800; letter-spacing:4px; color:var(--ink); direction:ltr; margin-top:10px;}
+  .card-back .cb-pts{font-size:12.5px; font-weight:700; color:var(--muted); margin-top:6px;}
+  .card-back .cb-wait{color:var(--muted); font-weight:700; padding:30px 0;}
+  .card-back .flip-hint{color:var(--muted); opacity:.85; left:auto; right:20px;}
 
   .show-cashier{
     width:100%; margin-top:14px; padding:15px; border:none; border-radius:16px;
@@ -232,7 +253,27 @@
   #errBanner{display:none; position:fixed; top:0; left:0; right:0; z-index:99; background:#B8123F; color:#fff; padding:11px 16px; font-size:13px; font-weight:700; text-align:center;}
   #loadFail{display:none; position:fixed; inset:0; z-index:120; background:var(--bg); color:var(--ink); align-items:center; justify-content:center; padding:30px; text-align:center; font-weight:700; line-height:1.9;}
 
-  @media (prefers-reduced-motion: reduce){ .card::after{animation:none; display:none;} }
+  /* ===== بانر تثبيت التطبيق ===== */
+  #installBanner{
+    position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom));
+    transform:translateX(-50%) translateY(150%); opacity:0;
+    width:calc(100% - 28px); max-width:452px; z-index:55;
+    background:#fff; border:1.5px solid var(--line); border-radius:20px;
+    box-shadow:0 18px 44px -14px rgba(201,50,126,.5);
+    display:flex; align-items:center; gap:12px; padding:12px 13px;
+    transition:transform .45s cubic-bezier(.2,.75,.25,1), opacity .35s;
+  }
+  #installBanner.show{ transform:translateX(-50%) translateY(0); opacity:1; }
+  #installBanner .ib-ico{width:44px; height:44px; border-radius:12px; background:var(--card-grad); flex-shrink:0; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 14px -6px rgba(236,72,152,.6);}
+  #installBanner .ib-ico img{width:31px; filter:brightness(0) invert(1);}
+  #installBanner .ib-txt{flex:1; min-width:0;}
+  #installBanner .ib-t{font-weight:800; font-size:14.5px;}
+  #installBanner .ib-d{font-size:12px; color:var(--muted); font-weight:600; margin-top:2px; line-height:1.55;}
+  #installBanner .ib-btn{flex-shrink:0; border:none; border-radius:12px; background:var(--card-grad); color:#fff; font-weight:800; font-size:14px; padding:11px 15px; box-shadow:0 8px 18px -8px rgba(236,72,152,.6);}
+  #installBanner .ib-x{flex-shrink:0; border:none; background:none; color:var(--muted); font-size:14px; width:24px; height:24px; border-radius:50%; padding:0;}
+  #installBanner.ios .ib-btn{display:none;}
+
+  @media (prefers-reduced-motion: reduce){ .card::after{animation:none; display:none;} .card-inner{transition:none;} #installBanner{transition:opacity .3s;} }
 </style>
 </head>
 <body>
@@ -296,16 +337,15 @@
     <button class="tab" data-tab="account"><span class="ti">👤</span><span class="tl">حسابي</span></button>
   </nav>
 
-  <!-- overlay الكاشير -->
-  <div class="overlay" id="cashierOverlay">
-    <div class="cashier-sheet">
-      <div class="cs-h">اعرضي الشاشة دي للكاشير 💗</div>
-      <div class="cs-sub">الكاشير هيدخّل رقمك عشان يضيفلك النقط أو يخصم لك</div>
-      <div class="phone-big" id="cashierPhone">—</div>
-      <svg id="cashierBarcode"></svg>
-      <div class="pts-mini" id="cashierPts"></div>
-      <button class="close" onclick="closeCashier()">تمام</button>
+  <!-- بانر تثبيت التطبيق (بيظهر تلقائي في المتصفح) -->
+  <div id="installBanner">
+    <div class="ib-ico"><img id="ibLogo" alt=""></div>
+    <div class="ib-txt">
+      <div class="ib-t">نزّلي تطبيق إيشارب 📲</div>
+      <div class="ib-d" id="ibDesc">ثبّتيه على موبايلك عشان توصليله بضغطة</div>
     </div>
+    <button class="ib-btn" id="ibBtn" onclick="triggerInstall()">تثبيت</button>
+    <button class="ib-x" onclick="dismissInstall()" aria-label="إغلاق">✕</button>
   </div>
 
 </div>
@@ -434,12 +474,14 @@ function doLogin(){
 
 function createCustomer(phone, name){
   $('loginBtn').disabled = true; $('loginBtn').textContent = 'بنجهّز حسابك...';
-  var data = {
-    name: name, phone: phone, points: 0, totalSpent: 0,
-    lastVisit: null, notes: '', branch: '',
-    createdAt: Date.now(), source: 'loyalty_app'
-  };
-  db.collection(COL_CUSTOMERS).doc(phone).set(data, { merge:true }).then(function(){
+  makeUniqueCode(0).then(function(code){
+    var data = {
+      name: name, phone: phone, points: 0, totalSpent: 0,
+      lastVisit: null, notes: '', branch: '',
+      loyaltyCode: code, createdAt: Date.now(), source: 'loyalty_app'
+    };
+    return db.collection(COL_CUSTOMERS).doc(phone).set(data, { merge:true });
+  }).then(function(){
     localStorage.setItem(LS_PHONE, phone);
     $('loginBtn').disabled = false;
     enterApp(phone);
@@ -466,6 +508,7 @@ function enterApp(phone){
     }
     currentCustomer = Object.assign({ phone: phone }, doc.data());
     $('topName').textContent = firstName(currentCustomer.name);
+    if(!currentCustomer.loyaltyCode){ ensureLoyaltyCode(phone); } // عميل قديم من غير كود؟ نولّدله
     renderCard();
     // لو التبويب المفتوح هو الحساب، نحدّثه كمان
     if($('tab-account').style.display !== 'none') renderAccount();
@@ -501,6 +544,49 @@ document.querySelectorAll('.tab').forEach(function(b){
 /* ============================================================
    تبويب البطاقة
    ============================================================ */
+/* ---------- تاريخ التسجيل: بيتعامل مع صيغة التطبيق (رقم) وصيغة الكاشير (Firestore Timestamp) ---------- */
+function toJsDate(v){
+  if(v==null) return null;
+  if(typeof v==='number') return new Date(v);
+  if(typeof v==='string'){ var d=new Date(v); return isNaN(d.getTime())?null:d; }
+  if(typeof v==='object'){
+    if(typeof v.toDate==='function'){ try{ return v.toDate(); }catch(_){ } }
+    if(typeof v.seconds==='number') return new Date(v.seconds*1000);
+  }
+  return null;
+}
+function regDateText(opts){
+  var d = toJsDate(currentCustomer && currentCustomer.createdAt);
+  if(!d) return '';
+  try{ return d.toLocaleDateString('ar-EG', opts); }catch(_){ return ''; }
+}
+
+/* ---------- كود العضوية المميز ---------- */
+function generateLoyaltyCode(){ return 'ECH' + String(Math.floor(Math.random()*1e8)).padStart(8,'0'); }
+function prettyCode(c){
+  c = String(c||'');
+  if(c.indexOf('ECH')===0){ return 'ECH ' + c.slice(3).replace(/(\d{4})(\d{4})/, '$1 $2'); }
+  return c;
+}
+// يولّد كود ويتأكد إنه مش متكرر (بيحاول لحد 5 مرات)
+function makeUniqueCode(tries){
+  var code = generateLoyaltyCode();
+  return db.collection(COL_CUSTOMERS).where('loyaltyCode','==',code).limit(1).get().then(function(snap){
+    if(snap.empty || tries>=5) return code;
+    return makeUniqueCode(tries+1);
+  }).catch(function(){ return code; }); // أوفلاين؟ نقبل الكود زي ما هو
+}
+// يتأكد إن العميل عنده كود؛ لو لأ يولّد واحد ويحفظه (الحفظ بيرجّع snapshot تاني فيعاد الرسم بالباركود)
+function ensureLoyaltyCode(phone){
+  if(currentCustomer && currentCustomer.loyaltyCode) return;
+  makeUniqueCode(0).then(function(code){
+    return db.collection(COL_CUSTOMERS).doc(phone).set({ loyaltyCode: code }, { merge:true });
+  }).catch(function(e){ console.warn('تعذر توليد كود العضوية', e); });
+}
+
+/* ---------- قلب البطاقة ---------- */
+function flipCard(){ var f=$('cardFlip'); if(f) f.classList.toggle('flipped'); }
+
 function renderCard(){
   if(!currentCustomer) return;
   var pts = Number(currentCustomer.points)||0;
@@ -513,29 +599,46 @@ function renderCard(){
   var toNext = per - (pts % per);                    // كام نقطة للوحدة الجاية
   var pct = Math.round(((pts % per) / per) * 100);
 
-  var sinceTxt = '';
-  var since = currentCustomer.createdAt;
-  if(since){
-    try{ sinceTxt = 'عضو من ' + new Date(since).toLocaleDateString('ar-EG', {month:'long', year:'numeric'}); }catch(_){}
-  }
+  var sinceTxt = regDateText({day:'numeric', month:'long', year:'numeric'});
+  if(sinceTxt) sinceTxt = 'عضو من ' + sinceTxt;
+
+  var code = currentCustomer.loyaltyCode || '';
 
   $('tab-card').innerHTML =
-    '<div class="card">'+
-      '<div class="card-top">'+
-        '<div><div class="lbl">نقاطك</div><div class="clubname">نادي إيشارب</div></div>'+
-        '<img src="'+logoSrc+'" alt="">'+
-      '</div>'+
-      '<div class="pts-block">'+
-        '<span class="pts-num">'+fmt(pts)+'</span><span class="pts-unit">نقطة</span>'+
-        '<div class="pts-worth">'+(worth>0 ? ('تقدري تستبدليها بخصم ~'+fmt(worth)+' ج.م') : 'اجمعي نقاط أكتر عشان تبدأي تستبدلي')+'</div>'+
-      '</div>'+
-      '<div class="holder">'+
-        '<div class="name">'+esc(currentCustomer.name||'—')+'</div>'+
-        '<div class="since">'+esc(sinceTxt)+'</div>'+
+    '<div class="card-flip" id="cardFlip">'+
+      '<div class="card-inner" onclick="flipCard()">'+
+
+        // ===== وش البطاقة =====
+        '<div class="card card-face card-front">'+
+          '<div class="card-top">'+
+            '<div><div class="lbl">نقاطك</div><div class="clubname">نادي إيشارب</div></div>'+
+            '<img src="'+logoSrc+'" alt="">'+
+          '</div>'+
+          '<div class="pts-block">'+
+            '<span class="pts-num">'+fmt(pts)+'</span><span class="pts-unit">نقطة</span>'+
+            '<div class="pts-worth">'+(worth>0 ? ('تقدري تستبدليها بخصم ~'+fmt(worth)+' ج.م') : 'اجمعي نقاط أكتر عشان تبدأي تستبدلي')+'</div>'+
+          '</div>'+
+          '<div class="holder">'+
+            '<div class="name">'+esc(currentCustomer.name||'—')+'</div>'+
+            '<div class="since">'+esc(sinceTxt)+'</div>'+
+          '</div>'+
+          '<div class="flip-hint">اضغطي لعرض الباركود ↻</div>'+
+        '</div>'+
+
+        // ===== ضهر البطاقة (الباركود) =====
+        '<div class="card-face card-back">'+
+          '<div class="cb-title">🎟️ كود عضويتك</div>'+
+          (code
+            ? '<div class="cb-barcode"><svg id="cardBarcode"></svg></div><div class="cb-code">'+esc(prettyCode(code))+'</div>'
+            : '<div class="cb-wait">بنجهّز كودك...</div>')+
+          '<div class="cb-pts">رصيدك: '+fmt(pts)+' نقطة</div>'+
+          '<div class="flip-hint">اضغطي للرجوع ↩</div>'+
+        '</div>'+
+
       '</div>'+
     '</div>'+
 
-    '<button class="show-cashier" onclick="openCashier()">🎟️ اعرضي رقمك للكاشير</button>'+
+    '<button class="show-cashier" onclick="flipCard()">🎟️ اعرضي كودك للكاشير</button>'+
 
     '<div class="progress-wrap">'+
       '<div class="pw-top"><span>الوحدة الجاية</span><span class="g">'+(pts>0 && (pts%per===0) ? 'جاهزة للاستبدال! 🎉' : ('فاضل '+toNext+' نقطة'))+'</span></div>'+
@@ -548,23 +651,12 @@ function renderCard(){
     '</div>'+
 
     '<div class="redeem-hint">💡 الاستبدال بيحصل في المحل — قوليلهم عايزة تستبدلي نقاطك عند الدفع.</div>';
-}
 
-/* overlay الكاشير */
-function openCashier(){
-  if(!currentCustomer) return;
-  $('cashierPhone').textContent = currentCustomer.phone;
-  var pts = Number(currentCustomer.points)||0;
-  $('cashierPts').textContent = 'رصيدك: ' + fmt(pts) + ' نقطة';
-  $('cashierOverlay').classList.add('on');
-  try{
-    JsBarcode('#cashierBarcode', currentCustomer.phone, {
-      format:'CODE128', width:2, height:64, displayValue:false, margin:6, lineColor:'#3A2233'
-    });
-  }catch(e){ $('cashierBarcode').style.display='none'; }
+  // نرسم الباركود على ضهر البطاقة (بيتحط جوه SVG حتى لو الضهر لسه مخفي)
+  if(code){
+    try{ JsBarcode('#cardBarcode', code, {format:'CODE128', width:2, height:70, displayValue:false, margin:0, lineColor:'#3A2233'}); }catch(e){}
+  }
 }
-function closeCashier(){ $('cashierOverlay').classList.remove('on'); }
-$('cashierOverlay').addEventListener('click', function(e){ if(e.target===$('cashierOverlay')) closeCashier(); });
 
 /* ============================================================
    تبويب العروض (الخصومات السارية من الكاشير)
@@ -671,22 +763,20 @@ function renderProducts(){
 /* ============================================================
    تبويب الحساب
    ============================================================ */
-function renderProdSince(){
-  var s = currentCustomer && currentCustomer.createdAt;
-  if(!s) return '—';
-  try{ return new Date(s).toLocaleDateString('ar-EG', {day:'numeric', month:'long', year:'numeric'}); }catch(_){ return '—'; }
-}
 function renderAccount(){
   if(!currentCustomer) return;
   var spent = Number(currentCustomer.totalSpent)||0;
+  var sinceFull = regDateText({day:'numeric', month:'long', year:'numeric'}) || '—';
+  var code = currentCustomer.loyaltyCode ? prettyCode(currentCustomer.loyaltyCode) : '—';
   $('tab-account').innerHTML =
     '<div class="sec-h">حسابي</div>'+
     '<div class="acct-card">'+
       '<div class="acct-row"><span class="k">الاسم</span><span class="v">'+esc(currentCustomer.name||'—')+'</span></div>'+
       '<div class="acct-row"><span class="k">رقم الموبايل</span><span class="v ltr">'+esc(currentCustomer.phone)+'</span></div>'+
+      '<div class="acct-row"><span class="k">كود العضوية</span><span class="v ltr">'+esc(code)+'</span></div>'+
       '<div class="acct-row"><span class="k">رصيد النقاط</span><span class="v">'+fmt(currentCustomer.points||0)+' نقطة</span></div>'+
       (spent>0 ? '<div class="acct-row"><span class="k">إجمالي مشترياتك</span><span class="v">'+fmt(spent)+' ج.م</span></div>' : '')+
-      '<div class="acct-row"><span class="k">عضو منذ</span><span class="v">'+esc(renderProdSince())+'</span></div>'+
+      '<div class="acct-row"><span class="k">عضو من</span><span class="v">'+esc(sinceFull)+'</span></div>'+
     '</div>'+
     '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
     '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
@@ -712,17 +802,55 @@ function logout(silent){
    تثبيت التطبيق (PWA)
    ============================================================ */
 var deferredPrompt = null;
-window.addEventListener('beforeinstallprompt', function(e){
-  e.preventDefault(); deferredPrompt = e;
-  var ib = $('installBtn'); if(ib){ ib.style.display='flex'; ib.onclick = triggerInstall; }
-});
-function triggerInstall(){
-  if(!deferredPrompt) return;
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.finally(function(){ deferredPrompt=null; var ib=$('installBtn'); if(ib) ib.style.display='none'; });
-}
+var installDismissed = false;   // اتقفل في الجلسة دي؟ (يظهر تاني في فتحة جديدة)
+
 function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent); }
 function isStandalone(){ return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
+
+// بيمسك حدث التثبيت من كروم/أندرويد وبيوري البانر تلقائي
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault(); deferredPrompt = e;
+  // زر التثبيت اللي في تبويب الحساب (لو ظاهر)
+  var ib = $('installBtn'); if(ib){ ib.style.display='flex'; ib.onclick = triggerInstall; }
+  showInstallBanner('android');
+});
+
+// لو اتثبت خلاص، نخفي أي دعوة
+window.addEventListener('appinstalled', function(){ deferredPrompt=null; hideInstallBanner(); });
+
+function showInstallBanner(mode){
+  if(isStandalone() || installDismissed) return;      // متثبت أصلاً أو العميلة قفلته
+  var b = $('installBanner'); if(!b) return;
+  $('ibLogo').src = logoSrc;
+  if(mode === 'ios'){
+    b.classList.add('ios');
+    $('ibDesc').innerHTML = 'دوسي مشاركة <b>⬆️</b> تحت، بعدين <b>«إضافة إلى الشاشة الرئيسية»</b>';
+  }else{
+    b.classList.remove('ios');
+    $('ibDesc').textContent = 'ثبّتيه على موبايلك عشان توصليله بضغطة';
+  }
+  requestAnimationFrame(function(){ b.classList.add('show'); });
+}
+function hideInstallBanner(){ var b=$('installBanner'); if(b) b.classList.remove('show'); }
+function dismissInstall(){ installDismissed = true; hideInstallBanner(); }
+
+function triggerInstall(){
+  if(!deferredPrompt){
+    if(isIOS()){ showInstallBanner('ios'); }
+    return;
+  }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.finally(function(){
+    deferredPrompt = null;
+    hideInstallBanner();
+    var ib = $('installBtn'); if(ib) ib.style.display='none';
+  });
+}
+
+// على الآيفون مفيش beforeinstallprompt — نوري البانر بإرشادات الإضافة يدويًا
+if(isIOS() && !isStandalone()){
+  setTimeout(function(){ showInstallBanner('ios'); }, 1500);
+}
 
 /* ============================================================
    إقلاع التطبيق
