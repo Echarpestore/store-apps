@@ -1,4 +1,4 @@
-const CACHE_NAME = 'echarpe-loyalty-v5';
+const CACHE_NAME = 'echarpe-loyalty-v6';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

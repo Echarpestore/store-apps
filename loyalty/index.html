@@ -236,6 +236,26 @@
   .empty{text-align:center; padding:44px 20px; color:var(--muted); font-weight:600; font-size:14.5px; line-height:1.9;}
   .empty .big{font-size:40px; display:block; margin-bottom:12px;}
 
+  /* ===== فواتيري ===== */
+  .inv{background:#fff; border:1.5px solid var(--line); border-radius:16px; padding:14px 15px; margin-bottom:11px; cursor:pointer;}
+  .inv-top{display:flex; justify-content:space-between; align-items:flex-start;}
+  .inv-date{font-weight:800; font-size:14px;}
+  .inv-no{font-size:11px; color:var(--muted); margin-top:2px; direction:ltr; text-align:right;}
+  .inv-total{font-weight:900; font-size:17px; color:var(--pink-deep);}
+  .inv-meta{display:flex; justify-content:space-between; margin-top:9px; padding-top:9px; border-top:1px solid var(--line); font-size:11.5px; color:var(--muted); font-weight:600;}
+  .inv-pts{color:var(--gold-deep); font-weight:800;}
+  .overlay{position:fixed; inset:0; background:rgba(58,34,51,.55); display:none; align-items:flex-end; justify-content:center; z-index:60;}
+  .overlay.on{display:flex;}
+  .inv-sheet{background:#fff; width:100%; max-width:480px; border-radius:24px 24px 0 0; padding:20px 20px calc(24px + env(safe-area-inset-bottom)); max-height:82vh; overflow-y:auto;}
+  .inv-sheet .ish-h{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
+  .inv-sheet .ish-title{font-weight:800; font-size:17px;}
+  .inv-sheet .ish-x{border:none; background:var(--pink-soft); color:var(--pink-deep); width:32px; height:32px; border-radius:50%; font-weight:800; font-size:15px;}
+  .inv-sheet .ish-sub{color:var(--muted); font-size:12.5px; font-weight:600; margin-bottom:14px;}
+  .inv-sheet .ish-item{display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13.5px;}
+  .inv-sheet .ish-item .q{color:var(--muted); font-size:12px;}
+  .inv-sheet .ish-row{display:flex; justify-content:space-between; padding:6px 0; font-size:14px;}
+  .inv-sheet .ish-row.big{font-weight:900; font-size:17px; border-top:2px solid var(--line); margin-top:6px; padding-top:12px;}
+
   /* بانر أخطاء */
   #errBanner{display:none; position:fixed; top:0; left:0; right:0; z-index:99; background:#B8123F; color:#fff; padding:11px 16px; font-size:13px; font-weight:700; text-align:center;}
   #loadFail{display:none; position:fixed; inset:0; z-index:120; background:var(--bg); color:var(--ink); align-items:center; justify-content:center; padding:30px; text-align:center; font-weight:700; line-height:1.9;}
@@ -328,6 +348,7 @@
       <div id="tab-card"></div>
       <div id="tab-offers" style="display:none;"></div>
       <div id="tab-products" style="display:none;"></div>
+      <div id="tab-invoices" style="display:none;"></div>
       <div id="tab-account" style="display:none;"></div>
     </div>
   </section>
@@ -337,8 +358,14 @@
     <button class="tab active" data-tab="card"><span class="ti">💳</span><span class="tl">بطاقتي</span></button>
     <button class="tab" data-tab="offers"><span class="ti">🎀</span><span class="tl">العروض</span></button>
     <button class="tab" data-tab="products"><span class="ti">🛍️</span><span class="tl">منتجاتنا</span></button>
+    <button class="tab" data-tab="invoices"><span class="ti">🧾</span><span class="tl">فواتيري</span></button>
     <button class="tab" data-tab="account"><span class="ti">👤</span><span class="tl">حسابي</span></button>
   </nav>
+
+  <!-- تفاصيل فاتورة -->
+  <div class="overlay" id="invOverlay" onclick="if(event.target===this) closeInvoiceDetail()">
+    <div class="inv-sheet" id="invSheet"></div>
+  </div>
 
   <!-- بانر تثبيت التطبيق (بيظهر تلقائي في المتصفح) -->
   <div id="installBanner">
@@ -392,6 +419,7 @@ db.enablePersistence({ synchronizeTabs: true }).catch(function(err){
 var COL_CUSTOMERS = 'pos_test_customers';
 var COL_DISCOUNTS = 'pos_test_discounts';
 var COL_INVENTORY = 'pos_test_inventory';
+var COL_SALES     = 'pos_test_sales';
 var COL_SETTINGS  = 'pos_test_settings';
 
 var LS_PHONE = 'echarpe_loyalty_phone';
@@ -423,7 +451,7 @@ var loyaltyCfg = { pointsPerEGP:100, pointsPerRedemption:10, redemptionValueEGP:
 
 var currentCustomer = null;   // { name, phone, points, ... }
 var custUnsub = null;         // مستمع realtime على وثيقة العميل
-var offersCache = null, productsCache = null;   // كاش في الذاكرة عشان التبويبات تفتح فورًا
+// (التبويبات التقيلة بتترسم مرة واحدة عن طريق renderedTabs في switchTab)
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -573,6 +601,7 @@ function createCustomer(phone, name, pin){
    ============================================================ */
 function enterApp(phone){
   showScreen('screen-app');
+  renderedTabs = {}; invoicesData = [];   // تبويبات جديدة لكل جلسة/عميل
   $('topLogo').src = logoSrc;
   $('greet').textContent = greetWord();
   $('waTop').style.display = hasSupport() ? 'flex' : 'none';
@@ -603,15 +632,17 @@ function firstName(n){ n=(n||'').trim(); return n ? n.split(/\s+/)[0] : 'يا ف
 /* ============================================================
    التبويبات
    ============================================================ */
+var renderedTabs = {};   // التبويب اتُرسم قبل كده؟ (عشان مانعيدش بناء الـ DOM كل مرة)
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
-  ['card','offers','products','account'].forEach(function(t){
+  ['card','offers','products','invoices','account'].forEach(function(t){
     $('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
   });
-  if(tab==='card') renderCard();
-  if(tab==='offers') renderOffers();
-  if(tab==='products') renderProducts();
-  if(tab==='account') renderAccount();
+  // التبويبات التقيلة تترسم مرة واحدة بس (البطاقة بتتحدّث لايف من onSnapshot)
+  if(tab==='offers'   && !renderedTabs.offers)   renderOffers();
+  if(tab==='products' && !renderedTabs.products) renderProducts();
+  if(tab==='invoices' && !renderedTabs.invoices) renderInvoices();
+  if(tab==='account') renderAccount();   // خفيف وبيعكس أحدث نقاط
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.tab').forEach(function(b){
@@ -770,7 +801,6 @@ function renderCard(){
    ============================================================ */
 function renderOffers(){
   var box = $('tab-offers');
-  if(offersCache){ box.innerHTML = offersCache; return; }   // من الكاش فورًا
   box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
                   '<div class="empty"><span class="big">⏳</span>بنجيب أحدث العروض...</div>';
   var today = todayISO();
@@ -813,7 +843,7 @@ function renderOffers(){
       }).join('');
       html = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' + rows;
     }
-    offersCache = html;          // نحفظه عشان المرات الجاية تفتح فورًا
+    renderedTabs.offers = true;
     box.innerHTML = html;
   }).catch(function(e){
     console.warn(e);
@@ -827,7 +857,6 @@ function renderOffers(){
    ============================================================ */
 function renderProducts(){
   var box = $('tab-products');
-  if(productsCache){ box.innerHTML = productsCache; return; }   // من الكاش فورًا
   box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
                   '<div class="empty"><span class="big">⏳</span>بنجيب المنتجات...</div>';
   db.collection(COL_INVENTORY).get().then(function(snap){
@@ -862,7 +891,7 @@ function renderProducts(){
       }).join('');
       html = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div><div class="prod-grid">'+cards+'</div>';
     }
-    productsCache = html;        // نحفظه عشان المرات الجاية تفتح فورًا
+    renderedTabs.products = true;
     box.innerHTML = html;
   }).catch(function(e){
     console.warn(e);
@@ -870,6 +899,79 @@ function renderProducts(){
       '<div class="empty"><span class="big">📡</span>النت ضعيف — حاولي تاني.</div>';
   });
 }
+
+/* ============================================================
+   تبويب فواتيري (نسخ من فواتير العميلة — بديل الفاتورة الورق)
+   ============================================================ */
+var invoicesData = [];
+var PAY_LABEL = { cash:'كاش', visa:'فيزا', instapay:'انستاباي' };
+
+function payMethodsText(pmts){
+  var out = [];
+  Object.keys(pmts||{}).forEach(function(m){ if((pmts[m]||0) > 0) out.push(PAY_LABEL[m]||m); });
+  return out.length ? out.join(' + ') : '—';
+}
+
+function renderInvoices(){
+  var box = $('tab-invoices');
+  box.innerHTML = '<div class="sec-h">🧾 فواتيري</div><div class="empty"><span class="big">⏳</span>بنجيب فواتيرك...</div>';
+  if(!currentCustomer){ return; }
+  db.collection(COL_SALES).where('customerPhone','==', currentCustomer.phone).get().then(function(snap){
+    invoicesData = snap.docs.map(function(d){ return Object.assign({ _id:d.id }, d.data()); })
+      .filter(function(s){ return !s.reversed; })
+      .sort(function(a,b){ return (toJsDate(b.createdAt)?.getTime()||0) - (toJsDate(a.createdAt)?.getTime()||0); });
+
+    if(invoicesData.length === 0){
+      box.innerHTML = '<div class="sec-h">🧾 فواتيري</div><div class="empty"><span class="big">🧾</span>لسه مفيش فواتير مسجّلة باسمك.<br>قوّلي الكاشير يحط رقمك وقت الشراء عشان تتحفظ هنا.</div>';
+      renderedTabs.invoices = true; return;
+    }
+
+    var rows = invoicesData.map(function(s, i){
+      var d = toJsDate(s.createdAt);
+      var dateStr = d ? d.toLocaleDateString('ar-EG', {day:'2-digit', month:'long', year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '—';
+      var pieces = s.itemCount != null ? s.itemCount : (s.items||[]).reduce(function(x,it){ return x + (it.qty||0); }, 0);
+      var isRet = (s.total||0) < 0;
+      return '<div class="inv" onclick="openInvoiceDetail('+i+')">'+
+        '<div class="inv-top">'+
+          '<div><div class="inv-date">'+esc(dateStr)+'</div>'+(s.invoiceNo?'<div class="inv-no">#'+esc(s.invoiceNo)+'</div>':'')+'</div>'+
+          '<div class="inv-total" style="'+(isRet?'color:#c0396b':'')+'">'+fmt(s.total)+' <span style="font-size:11px;">ج.م</span></div>'+
+        '</div>'+
+        '<div class="inv-meta">'+
+          '<span>🛍️ '+pieces+' قطعة · '+payMethodsText(s.payments)+'</span>'+
+          (s.loyaltyPointsEarned ? '<span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span>' : '<span></span>')+
+        '</div>'+
+      '</div>';
+    }).join('');
+    box.innerHTML = '<div class="sec-h">🧾 فواتيري</div>' + rows;
+    renderedTabs.invoices = true;
+  }).catch(function(e){
+    console.warn('invoices', e);
+    box.innerHTML = '<div class="sec-h">🧾 فواتيري</div><div class="empty"><span class="big">📡</span>النت ضعيف — حاولي تاني.</div>';
+  });
+}
+
+function openInvoiceDetail(i){
+  var s = invoicesData[i]; if(!s) return;
+  var d = toJsDate(s.createdAt);
+  var dateStr = d ? d.toLocaleDateString('ar-EG', {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+  var itemsHtml = (s.items||[]).map(function(it){
+    var line = (it.price||0) * (it.qty||0);
+    return '<div class="ish-item"><div>'+esc(it.name||'صنف')+' <span class="q">× '+(it.qty||0)+'</span>'+(it.discountName?' <span style="color:var(--pink);font-size:11px;">🏷️</span>':'')+'</div><div>'+fmt(line)+'</div></div>';
+  }).join('');
+  var pmtRows = Object.keys(s.payments||{}).filter(function(m){ return (s.payments[m]||0)>0; })
+    .map(function(m){ return '<div class="ish-row"><span>'+(PAY_LABEL[m]||m)+'</span><span>'+fmt(s.payments[m])+' ج.م</span></div>'; }).join('');
+
+  $('invSheet').innerHTML =
+    '<div class="ish-h"><div class="ish-title">🧾 فاتورة'+(s.invoiceNo?(' #'+esc(s.invoiceNo)):'')+'</div><button class="ish-x" onclick="closeInvoiceDetail()">✕</button></div>'+
+    '<div class="ish-sub">'+esc(dateStr)+(s.branch?(' · '+esc(s.branch)):'')+'</div>'+
+    itemsHtml+
+    '<div class="ish-row big"><span>الإجمالي</span><span>'+fmt(s.total)+' ج.م</span></div>'+
+    pmtRows+
+    (s.loyaltyPointsEarned ? '<div class="ish-row"><span>نقاط كسبتيها</span><span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span></div>' : '')+
+    (s.sellerEmployeeName||s.employeeName ? '<div class="ish-row"><span>خدمك</span><span>'+esc(s.sellerEmployeeName||s.employeeName)+'</span></div>' : '');
+  $('invOverlay').classList.add('on');
+}
+function closeInvoiceDetail(){ $('invOverlay').classList.remove('on'); }
 
 /* ============================================================
    تبويب الحساب
