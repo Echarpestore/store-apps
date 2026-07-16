@@ -435,6 +435,23 @@ function renderInventoryList(){
   }).join('') || '<div class="empty-cart">'+(q||filter!=='all'?'مفيش أصناف بالفلتر ده':'لسه مفيش أصناف')+'</div>';
 }
 
+// تصدير العملاء CSV (بأعمدة متوافقة مع كويك بوكس عشان يتقرا تاني بالاستيراد)
+function exportCustomersCSV(){
+  if(!custListData || !custListData.length){ showToast('مفيش عملاء للتصدير', 'err'); return; }
+  const headers = ['Last Name','Phone 1','Points','Loyalty Code','Total Spent','Invoices','EMail','Notes'];
+  const esc = v=>{ v = String(v==null?'':v); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+  const lines = [headers.join(',')];
+  custListData.forEach(c=>{
+    lines.push([c.name||'', c.phone||'', c.points||0, c.loyaltyCode||'', (c._spend||0).toFixed(2), c._count||0, c.email||'', c.notes||''].map(esc).join(','));
+  });
+  const blob = new Blob(['\ufeff'+lines.join('\r\n')], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'customers_'+(currentBranch||'export')+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('اتصدّر '+custListData.length+' عميل ✅');
+}
+
 // تصدير المخزون CSV (بأعمدة متوافقة مع كويك بوكس عشان يتقرا تاني بالاستيراد)
 function exportInventoryCSV(){
   if(!allInventory || !allInventory.length){ showToast('مفيش أصناف للتصدير', 'err'); return; }
@@ -1183,11 +1200,15 @@ searchBar.addEventListener('keydown', (e)=>{
       searchBar.value = '';
       document.getElementById('suggestBox').innerHTML = '';
     }else if(/^ECH/i.test(code)){
-      // مش منتج، وشكله كود عضوية عميل من تطبيق الولاء → نربط العميل بالفاتورة
+      // مش منتج, وشكله كود عضوية عميل من تطبيق الولاء → نربط العميل بالفاتورة
       resolveLoyaltyScan(code.toUpperCase()).then(found=>{
         if(found){ searchBar.value=''; document.getElementById('suggestBox').innerHTML=''; }
         else showToast('كود العضوية مش موجود', 'err');
       });
+    }else if(/^FT/i.test(code)){
+      // كود فاتورة → نفتحها للمرتجع
+      openInvoiceForReturn(code.toUpperCase());
+      searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
     }else{
       showToast('لا يوجد صنف بهذا الكود', 'err');
     }
@@ -1289,6 +1310,85 @@ function qbxQty(delta){
 function qbxReturnSel(){
   if(!requireSelection()) return;
   returnCartItem(selectedCartIdx);
+}
+
+// ============ مرتجع بمسح باركود الفاتورة ============
+let returnInvoiceData = null;
+const RETURN_WINDOW_DAYS = 14;
+
+async function openInvoiceForReturn(code){
+  showScreen('saleScreen');   // نتأكد إننا في شاشة البيع عشان المرتجع يتحط في السلة
+  document.getElementById('returnInvoiceModal').classList.add('active');
+  document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">بندوّر على الفاتورة...</div>';
+  try{
+    const snap = await db.collection(TEST_SALES).where('invoiceCode','==', code).limit(1).get();
+    if(snap.empty){
+      document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">مفيش فاتورة بالكود ده 🤔<br><span style="font-size:11px;">'+code+'</span></div>';
+      return;
+    }
+    const doc = snap.docs[0];
+    const s = doc.data();
+    returnInvoiceData = { id: doc.id, ...s };
+
+    const saleMs = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : (s.createdAt && s.createdAt.seconds ? s.createdAt.seconds*1000 : 0);
+    const dateStr = saleMs ? new Date(saleMs).toLocaleString('ar-EG', {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+    const daysAgo = saleMs ? Math.floor((Date.now() - saleMs) / 86400000) : 0;
+    const withinWindow = daysAgo <= RETURN_WINDOW_DAYS;
+    const windowBadge = withinWindow
+      ? `<span style="background:#eafaf0; color:#15803d; font-weight:800; font-size:12px; padding:3px 10px; border-radius:99px;">✅ خلال الـ${RETURN_WINDOW_DAYS} يوم (فاضل ${RETURN_WINDOW_DAYS - daysAgo} يوم)</span>`
+      : `<span style="background:#fdecec; color:#b91c1c; font-weight:800; font-size:12px; padding:3px 10px; border-radius:99px;">⚠️ عدّى ${daysAgo} يوم — أكتر من ${RETURN_WINDOW_DAYS} يوم</span>`;
+
+    const alreadyReversed = s.reversed ? '<div style="background:#fdecec; color:#b91c1c; padding:8px 10px; border-radius:8px; font-size:12px; margin-bottom:8px;">⚠️ الفاتورة دي اترجعت بالكامل قبل كده.</div>' : '';
+
+    const itemsHtml = (s.items||[]).filter(it=> !it.isRedemption).map((it, i)=>{
+      const isRet = it.isReturn || (it.price||0) < 0;
+      return `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border);">
+        <div style="min-width:0;">
+          <div style="font-weight:700; font-size:13px;">${it.name}${isRet?' <span style="color:var(--warn); font-size:10px;">(مرتجع أصلاً)</span>':''}</div>
+          <div style="color:var(--muted); font-size:11px;">${it.qty} × ${Math.abs(it.price||0).toFixed(2)} ج.م${it.barcode?' · كود '+it.barcode:''}</div>
+        </div>
+        ${(!isRet) ? `<button onclick="returnItemFromInvoice(${i})" style="flex-shrink:0; padding:8px 12px; border-radius:8px; border:none; background:var(--minus); color:#fff; font-weight:800; font-size:12px; cursor:pointer;">↩️ ارجع ده</button>` : '<span style="color:var(--muted); font-size:11px;">—</span>'}
+      </div>`;
+    }).join('');
+
+    document.getElementById('returnInvoiceBody').innerHTML = `
+      <div style="background:var(--panel2); border-radius:10px; padding:12px; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <div style="font-weight:800; font-size:14px;">🧾 فاتورة #${s.invoiceNo||''}</div>
+          <div style="font-weight:900; color:var(--plus);">${(s.total||0).toFixed(2)} ج.م</div>
+        </div>
+        <div style="color:var(--muted); font-size:12px; margin-bottom:8px;">📅 ${dateStr} · من ${daysAgo} يوم</div>
+        ${windowBadge}
+      </div>
+      ${alreadyReversed}
+      <div style="font-weight:800; font-size:13px; margin-bottom:4px;">اختار الصنف اللي عايز ترجعه:</div>
+      ${itemsHtml || '<div class="empty-cart">مفيش أصناف</div>'}
+      <div style="color:var(--muted); font-size:11px; margin-top:8px;">هيتحط في الفاتورة الحالية كمرتجع (بالأحمر) — كمّل واختار طريقة رجوع الفلوس.</div>`;
+  }catch(e){
+    document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">تعذّر التحميل: '+e.message+'</div>';
+  }
+}
+
+// يضيف صنف من الفاتورة الممسوحة كمرتجع (بالسالب) في السلة الحالية
+function returnItemFromInvoice(itemIdx){
+  if(!returnInvoiceData) return;
+  const it = (returnInvoiceData.items||[])[itemIdx];
+  if(!it){ return; }
+  cart.push({
+    id: it.id || '__ret__'+itemIdx,
+    name: it.name,
+    barcode: it.barcode || '',
+    price: -Math.abs(it.price||0),
+    qty: it.qty || 1,
+    isReturn: true,
+    fromInvoice: returnInvoiceData.invoiceNo || ''
+  });
+  renderCart();
+  showToast('اتحط "'+it.name+'" كمرتجع بالأحمر ↩️');
+}
+
+function closeReturnInvoiceModal(){
+  document.getElementById('returnInvoiceModal').classList.remove('active');
 }
 function qbxDeleteSel(){
   if(!requireSelection()) return;
@@ -1796,6 +1896,8 @@ async function confirmPayment(){
   const earnsStaffPoint = !isRefundInvoice && itemCount >= MIN_ITEMS_FOR_STAFF_POINT;
   const loyaltyPointsEarned = (phone && !isRefundInvoice) ? Math.floor(total / loyaltyRedemptionConfig.pointsPerEGP) : 0;
   const invoiceNo = await generateInvoiceNumber();
+  // كود فاتورة مميز عالميًا للباركود (بادئة FT عشان يتفرّق عن باركود المنتجات والعملاء)
+  const invoiceCode = 'FT' + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
 
   // الموظف اللي فعليًا باع للعميل (ممكن يكون مختلف عن اللي مسجّل دخول في جهاز الـPOS نفسه)
   const sellerSel = document.getElementById('sellerEmployeeSelect');
@@ -1806,6 +1908,7 @@ async function confirmPayment(){
     // 1) سجل البيع
     await db.collection(TEST_SALES).add({
       invoiceNo,
+      invoiceCode,
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.name || '',
       sellerEmployeeId, sellerEmployeeName,
@@ -1815,6 +1918,7 @@ async function confirmPayment(){
       customerPhone: phone || null,
       customerName: custName || null,
       loyaltyPointsEarned,
+      pointsRedeemed: (pendingRedemption ? pendingRedemption.points : 0),
       staffPointEarned: earnsStaffPoint,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -1861,7 +1965,7 @@ async function confirmPayment(){
       await tryLinkFeedbackToCustomer(phone, custName, sellerEmployeeName);
     }
 
-    printReceipt(payments, total, invoiceNo);
+    printReceipt(payments, total, invoiceNo, invoiceCode);
     showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
     goToSale();
   }catch(e){
@@ -1950,7 +2054,7 @@ async function saveReceiptDesignConfig(){
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
 }
 
-function printReceipt(payments, total, invoiceNo){
+function printReceipt(payments, total, invoiceNo, invoiceCode){
   const c = receiptDesignConfig;
   document.getElementById('rShopName').textContent = c.shopName;
   const metaLine = (c.headerNote ? c.headerNote + ' | ' : '') +
@@ -1972,11 +2076,12 @@ function printReceipt(payments, total, invoiceNo){
   document.querySelector('#receiptPrint > div:last-child').textContent = c.footerNote;
   // باركود رقم الفاتورة في آخر الريسيت — يسهّل الرجوع للفاتورة لاحقًا بمسح الكود (قابل للإيقاف من إعدادات التصميم)
   const barcodeBox = document.querySelector('.r-barcode');
-  if(c.showBarcodeOnReceipt && invoiceNo){
+  const scanCode = invoiceCode || invoiceNo;
+  if(c.showBarcodeOnReceipt && scanCode){
     barcodeBox.style.display = '';
     try{
       if(typeof JsBarcode !== 'undefined'){
-        JsBarcode('#rBarcode', invoiceNo, { format:'CODE128', width:1.4, height:34, fontSize:10, margin:0 });
+        JsBarcode('#rBarcode', scanCode, { format:'CODE128', width:1.4, height:34, fontSize:11, margin:0, displayValue:true });
       }
     }catch(e){ console.warn('تعذر إنشاء الباركود', e); }
   }else{
