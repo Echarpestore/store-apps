@@ -429,6 +429,23 @@ function renderInventoryList(){
   }).join('') || '<div class="empty-cart">'+(q||filter!=='all'?'مفيش أصناف بالفلتر ده':'لسه مفيش أصناف')+'</div>';
 }
 
+// تصدير المخزون CSV (بأعمدة متوافقة مع كويك بوكس عشان يتقرا تاني بالاستيراد)
+function exportInventoryCSV(){
+  if(!allInventory || !allInventory.length){ showToast('مفيش أصناف للتصدير', 'err'); return; }
+  const headers = ['Item Number','Item Name','Regular Price','Average Unit Cost','Qty 1','Vendor Name','Reorder Point 1','Department Name','Status'];
+  const esc = v=>{ v = String(v==null?'':v); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
+  const lines = [headers.join(',')];
+  allInventory.forEach(it=>{
+    lines.push([it.barcode||'', it.name||'', it.price??'', it.cost??'', it.quantity??'', it.supplier||'', it.minStock??'', it.department||'', it.status||''].map(esc).join(','));
+  });
+  const blob = new Blob(['\ufeff'+lines.join('\r\n')], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'inventory_'+(currentBranch||'export')+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('اتصدّر '+allInventory.length+' صنف ✅');
+}
+
 // بيختار أول باركود رقمي متسلسل بعد أكبر باركود موجود (لو آخر واحد 543 يبقى الجديد 544)
 function nextBarcode(){
   let max = 0;
