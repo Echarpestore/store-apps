@@ -451,7 +451,7 @@ var loyaltyCfg = { pointsPerEGP:100, pointsPerRedemption:10, redemptionValueEGP:
 
 var currentCustomer = null;   // { name, phone, points, ... }
 var custUnsub = null;         // مستمع realtime على وثيقة العميل
-// (بيانات التبويبات بتتحمّل مرة واحدة في الخلفية عن طريق preloadData، والتبويبات بتعرض من الذاكرة)
+// (كل تبويب بيتحمّل كسول أول ما تفتحه فقط، بحد أقصى للعدد، وبعدها بيعرض من الذاكرة فورًا)
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -605,7 +605,7 @@ function enterApp(phone){
   $('topLogo').src = logoSrc;
   $('greet').textContent = greetWord();
   $('waTop').style.display = hasSupport() ? 'flex' : 'none';
-  preloadData(phone);   // نحمّل العروض والمنتجات والفواتير في الخلفية من أول لحظة
+  dataOffers = null; dataProducts = null; dataInvoices = null; tabStarted = {};   // تبويبات جديدة لكل جلسة، تتحمّل كسول عند فتحها
   switchTab('card');
 
   if(custUnsub){ custUnsub(); }
@@ -634,30 +634,31 @@ function firstName(n){ n=(n||'').trim(); return n ? n.split(/\s+/)[0] : 'يا ف
    التبويبات
    ============================================================ */
 var currentTab = 'card';
-var dataOffers = null, dataProducts = null, dataInvoices = null;   // null = لسه بيحمّل
+var dataOffers = null, dataProducts = null, dataInvoices = null;   // null = لسه ما اتحمّلش
+var tabStarted = {};   // التبويب بدأ تحميله قبل كده؟
 
-// بيحمّل من الكاش المحلي فورًا، وبعدين يحدّث من السيرفر في الخلفية (من غير ما يوقف التبويبات)
-function getCacheFirst(ref, onData){
-  ref.get({ source:'cache' }).then(function(s){
-    if(s && s.docs && s.docs.length){ onData(s); }
-  }).catch(function(){});
-  ref.get().then(function(s){ onData(s); }).catch(function(){ onData(null); });
+// بيبني الاستعلام لكل تبويب — بحد أقصى للعدد عشان ما نحمّلش آلاف الصفوف على الموبايل
+function tabRef(tab){
+  if(tab==='offers')   return db.collection(COL_DISCOUNTS).limit(60);
+  if(tab==='products') return db.collection(COL_INVENTORY).limit(60);
+  if(tab==='invoices' && currentCustomer) return db.collection(COL_SALES).where('customerPhone','==', currentCustomer.phone).limit(100);
+  return null;
 }
-
-function preloadData(phone){
-  dataOffers = null; dataProducts = null; dataInvoices = null;
-  getCacheFirst(db.collection(COL_DISCOUNTS), function(s){
-    dataOffers = s ? s.docs.map(function(d){ return d.data(); }) : [];
-    if(currentTab==='offers') renderOffers();
-  });
-  getCacheFirst(db.collection(COL_INVENTORY), function(s){
-    dataProducts = s ? s.docs.map(function(d){ return d.data(); }) : [];
-    if(currentTab==='products') renderProducts();
-  });
-  getCacheFirst(db.collection(COL_SALES).where('customerPhone','==', phone), function(s){
-    dataInvoices = s ? s.docs.map(function(d){ return Object.assign({ _id:d.id }, d.data()); }) : [];
-    if(currentTab==='invoices') renderInvoices();
-  });
+function tabAssign(tab, s){
+  var arr = s ? s.docs.map(function(d){ return tab==='invoices' ? Object.assign({ _id:d.id }, d.data()) : d.data(); }) : [];
+  if(tab==='offers') dataOffers = arr; else if(tab==='products') dataProducts = arr; else if(tab==='invoices') dataInvoices = arr;
+}
+function tabRender(tab){
+  if(currentTab !== tab) return;
+  if(tab==='offers') renderOffers(); else if(tab==='products') renderProducts(); else if(tab==='invoices') renderInvoices();
+}
+// تحميل كسول: أول ما تفتح التبويب بس — كاش فوري + تحديث محدود من السيرفر في الخلفية
+function lazyLoadTab(tab){
+  if(tabStarted[tab]) return;
+  var ref = tabRef(tab); if(!ref) return;
+  tabStarted[tab] = true;
+  ref.get({ source:'cache' }).then(function(s){ if(s && s.docs && s.docs.length){ tabAssign(tab, s); tabRender(tab); } }).catch(function(){});
+  ref.get().then(function(s){ tabAssign(tab, s); tabRender(tab); }).catch(function(){ tabAssign(tab, null); tabRender(tab); });
 }
 
 function switchTab(tab){
@@ -666,7 +667,8 @@ function switchTab(tab){
   ['card','offers','products','invoices','account'].forEach(function(t){
     $('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
   });
-  // كله بيترسم من الذاكرة فورًا — مفيش أي انتظار للنت عند التنقل
+  // نبدأ تحميل بيانات التبويب أول مرة بس (كسول)، والعرض من الذاكرة فورًا في المرات الجاية
+  if(tab==='offers' || tab==='products' || tab==='invoices') lazyLoadTab(tab);
   if(tab==='offers') renderOffers();
   else if(tab==='products') renderProducts();
   else if(tab==='invoices') renderInvoices();
