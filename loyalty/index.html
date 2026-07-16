@@ -114,8 +114,8 @@
   .card::after{
     content:""; position:absolute; top:-60%; right:0; width:55%; height:220%;
     background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);
-    transform:rotate(18deg) translateX(240%); will-change:transform;
-    animation:sheen 6s ease-in-out infinite;
+    transform:rotate(18deg) translateX(240%);
+    animation:sheen 6s ease-in-out 2;
   }
   @keyframes sheen{0%,55%{transform:rotate(18deg) translateX(240%);} 85%,100%{transform:rotate(18deg) translateX(-260%);}}
   .card .card-top{display:flex; justify-content:space-between; align-items:flex-start; position:relative; z-index:1;}
@@ -451,7 +451,7 @@ var loyaltyCfg = { pointsPerEGP:100, pointsPerRedemption:10, redemptionValueEGP:
 
 var currentCustomer = null;   // { name, phone, points, ... }
 var custUnsub = null;         // مستمع realtime على وثيقة العميل
-// (التبويبات التقيلة بتترسم مرة واحدة عن طريق renderedTabs في switchTab)
+// (بيانات التبويبات بتتحمّل مرة واحدة في الخلفية عن طريق preloadData، والتبويبات بتعرض من الذاكرة)
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -601,10 +601,11 @@ function createCustomer(phone, name, pin){
    ============================================================ */
 function enterApp(phone){
   showScreen('screen-app');
-  renderedTabs = {}; invoicesData = [];   // تبويبات جديدة لكل جلسة/عميل
+  invoicesData = [];
   $('topLogo').src = logoSrc;
   $('greet').textContent = greetWord();
   $('waTop').style.display = hasSupport() ? 'flex' : 'none';
+  preloadData(phone);   // نحمّل العروض والمنتجات والفواتير في الخلفية من أول لحظة
   switchTab('card');
 
   if(custUnsub){ custUnsub(); }
@@ -632,17 +633,45 @@ function firstName(n){ n=(n||'').trim(); return n ? n.split(/\s+/)[0] : 'يا ف
 /* ============================================================
    التبويبات
    ============================================================ */
-var renderedTabs = {};   // التبويب اتُرسم قبل كده؟ (عشان مانعيدش بناء الـ DOM كل مرة)
+var currentTab = 'card';
+var dataOffers = null, dataProducts = null, dataInvoices = null;   // null = لسه بيحمّل
+
+// بيحمّل من الكاش المحلي فورًا، وبعدين يحدّث من السيرفر في الخلفية (من غير ما يوقف التبويبات)
+function getCacheFirst(ref, onData){
+  ref.get({ source:'cache' }).then(function(s){
+    if(s && s.docs && s.docs.length){ onData(s); }
+  }).catch(function(){});
+  ref.get().then(function(s){ onData(s); }).catch(function(){ onData(null); });
+}
+
+function preloadData(phone){
+  dataOffers = null; dataProducts = null; dataInvoices = null;
+  getCacheFirst(db.collection(COL_DISCOUNTS), function(s){
+    dataOffers = s ? s.docs.map(function(d){ return d.data(); }) : [];
+    if(currentTab==='offers') renderOffers();
+  });
+  getCacheFirst(db.collection(COL_INVENTORY), function(s){
+    dataProducts = s ? s.docs.map(function(d){ return d.data(); }) : [];
+    if(currentTab==='products') renderProducts();
+  });
+  getCacheFirst(db.collection(COL_SALES).where('customerPhone','==', phone), function(s){
+    dataInvoices = s ? s.docs.map(function(d){ return Object.assign({ _id:d.id }, d.data()); }) : [];
+    if(currentTab==='invoices') renderInvoices();
+  });
+}
+
 function switchTab(tab){
+  currentTab = tab;
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
   ['card','offers','products','invoices','account'].forEach(function(t){
     $('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
   });
-  // التبويبات التقيلة تترسم مرة واحدة بس (البطاقة بتتحدّث لايف من onSnapshot)
-  if(tab==='offers'   && !renderedTabs.offers)   renderOffers();
-  if(tab==='products' && !renderedTabs.products) renderProducts();
-  if(tab==='invoices' && !renderedTabs.invoices) renderInvoices();
-  if(tab==='account') renderAccount();   // خفيف وبيعكس أحدث نقاط
+  // كله بيترسم من الذاكرة فورًا — مفيش أي انتظار للنت عند التنقل
+  if(tab==='offers') renderOffers();
+  else if(tab==='products') renderProducts();
+  else if(tab==='invoices') renderInvoices();
+  else if(tab==='account') renderAccount();
+  // البطاقة بتتحدّث لايف من onSnapshot
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.tab').forEach(function(b){
@@ -801,55 +830,40 @@ function renderCard(){
    ============================================================ */
 function renderOffers(){
   var box = $('tab-offers');
-  box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
-                  '<div class="empty"><span class="big">⏳</span>بنجيب أحدث العروض...</div>';
+  var head = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>';
+  if(dataOffers === null){ box.innerHTML = head + '<div class="empty"><span class="big">⏳</span>بنجيب أحدث العروض...</div>'; return; }
   var today = todayISO();
-  db.collection(COL_DISCOUNTS).get().then(function(snap){
-    var all = [];
-    snap.forEach(function(d){ all.push(d.data()); });
-    // سارية: نشطة + جوه فترة التاريخ (نفس منطق الكاشير)
-    var live = all.filter(function(dc){
-      return dc.active !== false
-        && (!dc.startDate || dc.startDate <= today)
-        && (!dc.endDate   || dc.endDate   >= today);
-    });
-    // إزالة التكرار (نفس العرض متكرر عبر الفروع) بمفتاح الاسم+النوع+القيمة+النطاق
-    var seen = {}, uniq = [];
-    live.forEach(function(dc){
-      var key = (dc.name||'')+'|'+dc.type+'|'+dc.value+'|'+dc.scope+'|'+(dc.productId||'');
-      if(!seen[key]){ seen[key]=1; uniq.push(dc); }
-    });
-
-    var html;
-    if(uniq.length === 0){
-      html = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
-        '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>';
-    }else{
-      var rows = uniq.map(function(dc){
-        var isPct = dc.type === 'percent';
-        var big = isPct ? (fmt(dc.value)+'%') : fmt(dc.value);
-        var sm  = isPct ? 'خصم' : 'ج.م';
-        var scopeStr = dc.scope === 'all' ? '🏪 على المحل كله' : ('🏷️ ' + esc(dc.productName || 'منتج مختار'));
-        var cap = (isPct && dc.maxDiscount) ? (' · بحد أقصى '+fmt(dc.maxDiscount)+' ج.م') : '';
-        var endStr = dc.endDate ? ('ساري لحد '+esc(dc.endDate)) : 'عرض مفتوح';
-        return '<div class="offer">'+
-          '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
-          '<div class="obody">'+
-            '<div class="on">'+esc(dc.name||'عرض')+'</div>'+
-            '<div class="osc">'+scopeStr+cap+'</div>'+
-            '<div class="oend">'+endStr+'</div>'+
-          '</div>'+
-        '</div>';
-      }).join('');
-      html = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' + rows;
-    }
-    renderedTabs.offers = true;
-    box.innerHTML = html;
-  }).catch(function(e){
-    console.warn(e);
-    box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
-      '<div class="empty"><span class="big">📡</span>النت ضعيف — حاولي تاني بعد شوية.</div>';
+  var live = dataOffers.filter(function(dc){
+    return dc.active !== false
+      && (!dc.startDate || dc.startDate <= today)
+      && (!dc.endDate   || dc.endDate   >= today);
   });
+  var seen = {}, uniq = [];
+  live.forEach(function(dc){
+    var key = (dc.name||'')+'|'+dc.type+'|'+dc.value+'|'+dc.scope+'|'+(dc.productId||'');
+    if(!seen[key]){ seen[key]=1; uniq.push(dc); }
+  });
+  if(uniq.length === 0){
+    box.innerHTML = head + '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>';
+    return;
+  }
+  var rows = uniq.map(function(dc){
+    var isPct = dc.type === 'percent';
+    var big = isPct ? (fmt(dc.value)+'%') : fmt(dc.value);
+    var sm  = isPct ? 'خصم' : 'ج.م';
+    var scopeStr = dc.scope === 'all' ? '🏪 على المحل كله' : ('🏷️ ' + esc(dc.productName || 'منتج مختار'));
+    var cap = (isPct && dc.maxDiscount) ? (' · بحد أقصى '+fmt(dc.maxDiscount)+' ج.م') : '';
+    var endStr = dc.endDate ? ('ساري لحد '+esc(dc.endDate)) : 'عرض مفتوح';
+    return '<div class="offer">'+
+      '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
+      '<div class="obody">'+
+        '<div class="on">'+esc(dc.name||'عرض')+'</div>'+
+        '<div class="osc">'+scopeStr+cap+'</div>'+
+        '<div class="oend">'+endStr+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  box.innerHTML = head + rows;
 }
 
 /* ============================================================
@@ -857,47 +871,32 @@ function renderOffers(){
    ============================================================ */
 function renderProducts(){
   var box = $('tab-products');
-  box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
-                  '<div class="empty"><span class="big">⏳</span>بنجيب المنتجات...</div>';
-  db.collection(COL_INVENTORY).get().then(function(snap){
-    var items = [];
-    snap.forEach(function(d){
-      var p = d.data();
-      if(p.status === 'hidden') return;           // المخفي مايظهرش للعميل
-      items.push(p);
-    });
-    // المتاح الأول، والخالص في الآخر، وبالاسم
-    items.sort(function(a,b){
-      var ao = (a.status==='outofstock' || (a.quantity??0)<=0) ? 1 : 0;
-      var bo = (b.status==='outofstock' || (b.quantity??0)<=0) ? 1 : 0;
-      if(ao!==bo) return ao-bo;
-      return String(a.name||'').localeCompare(String(b.name||''),'ar');
-    });
-
-    var html;
-    if(items.length === 0){
-      html = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
-        '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
-    }else{
-      var cards = items.map(function(p){
-        var oos = (p.status==='outofstock') || ((p.quantity??0) <= 0);
-        var meta = [p.attribute, p.size].filter(Boolean).join(' · ');
-        return '<div class="prod">'+
-          (oos ? '<div class="oos">خلص مؤقتًا</div>' : '')+
-          '<div class="pname">'+esc(p.name||'منتج')+'</div>'+
-          '<div class="pmeta">'+esc(meta||' ')+'</div>'+
-          '<div class="pprice">'+fmt(p.price)+' <span>ج.م</span></div>'+
-        '</div>';
-      }).join('');
-      html = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div><div class="prod-grid">'+cards+'</div>';
-    }
-    renderedTabs.products = true;
-    box.innerHTML = html;
-  }).catch(function(e){
-    console.warn(e);
-    box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
-      '<div class="empty"><span class="big">📡</span>النت ضعيف — حاولي تاني.</div>';
+  var head = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>';
+  if(dataProducts === null){ box.innerHTML = head + '<div class="empty"><span class="big">⏳</span>بنجيب المنتجات...</div>'; return; }
+  var items = dataProducts.filter(function(p){ return p.status !== 'hidden'; });
+  items.sort(function(a,b){
+    var ao = (a.status==='outofstock' || (a.quantity??0)<=0) ? 1 : 0;
+    var bo = (b.status==='outofstock' || (b.quantity??0)<=0) ? 1 : 0;
+    if(ao!==bo) return ao-bo;
+    return String(a.name||'').localeCompare(String(b.name||''),'ar');
   });
+  if(items.length === 0){
+    box.innerHTML = head + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
+    return;
+  }
+  var shown = items.slice(0, 120);   // حد أقصى للعرض عشان الأداء على الموبايلات الضعيفة
+  var cards = shown.map(function(p){
+    var oos = (p.status==='outofstock') || ((p.quantity??0) <= 0);
+    var meta = [p.attribute, p.size].filter(Boolean).join(' · ');
+    return '<div class="prod">'+
+      (oos ? '<div class="oos">خلص مؤقتًا</div>' : '')+
+      '<div class="pname">'+esc(p.name||'منتج')+'</div>'+
+      '<div class="pmeta">'+esc(meta||' ')+'</div>'+
+      '<div class="pprice">'+fmt(p.price)+' <span>ج.م</span></div>'+
+    '</div>';
+  }).join('');
+  var more = items.length > shown.length ? '<div class="empty" style="padding:16px;">و '+(items.length-shown.length)+' منتج تاني — دوّري في المحل 🌸</div>' : '';
+  box.innerHTML = head + '<div class="prod-grid">'+cards+'</div>' + more;
 }
 
 /* ============================================================
@@ -914,40 +913,32 @@ function payMethodsText(pmts){
 
 function renderInvoices(){
   var box = $('tab-invoices');
-  box.innerHTML = '<div class="sec-h">🧾 فواتيري</div><div class="empty"><span class="big">⏳</span>بنجيب فواتيرك...</div>';
-  if(!currentCustomer){ return; }
-  db.collection(COL_SALES).where('customerPhone','==', currentCustomer.phone).get().then(function(snap){
-    invoicesData = snap.docs.map(function(d){ return Object.assign({ _id:d.id }, d.data()); })
-      .filter(function(s){ return !s.reversed; })
-      .sort(function(a,b){ return (toJsDate(b.createdAt)?.getTime()||0) - (toJsDate(a.createdAt)?.getTime()||0); });
+  var head = '<div class="sec-h">🧾 فواتيري</div>';
+  if(dataInvoices === null){ box.innerHTML = head + '<div class="empty"><span class="big">⏳</span>بنجيب فواتيرك...</div>'; return; }
+  invoicesData = dataInvoices.filter(function(s){ return !s.reversed; })
+    .sort(function(a,b){ return (toJsDate(b.createdAt)?.getTime()||0) - (toJsDate(a.createdAt)?.getTime()||0); });
 
-    if(invoicesData.length === 0){
-      box.innerHTML = '<div class="sec-h">🧾 فواتيري</div><div class="empty"><span class="big">🧾</span>لسه مفيش فواتير مسجّلة باسمك.<br>قوّلي الكاشير يحط رقمك وقت الشراء عشان تتحفظ هنا.</div>';
-      renderedTabs.invoices = true; return;
-    }
-
-    var rows = invoicesData.map(function(s, i){
-      var d = toJsDate(s.createdAt);
-      var dateStr = d ? d.toLocaleDateString('ar-EG', {day:'2-digit', month:'long', year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '—';
-      var pieces = s.itemCount != null ? s.itemCount : (s.items||[]).reduce(function(x,it){ return x + (it.qty||0); }, 0);
-      var isRet = (s.total||0) < 0;
-      return '<div class="inv" onclick="openInvoiceDetail('+i+')">'+
-        '<div class="inv-top">'+
-          '<div><div class="inv-date">'+esc(dateStr)+'</div>'+(s.invoiceNo?'<div class="inv-no">#'+esc(s.invoiceNo)+'</div>':'')+'</div>'+
-          '<div class="inv-total" style="'+(isRet?'color:#c0396b':'')+'">'+fmt(s.total)+' <span style="font-size:11px;">ج.م</span></div>'+
-        '</div>'+
-        '<div class="inv-meta">'+
-          '<span>🛍️ '+pieces+' قطعة · '+payMethodsText(s.payments)+'</span>'+
-          (s.loyaltyPointsEarned ? '<span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span>' : '<span></span>')+
-        '</div>'+
-      '</div>';
-    }).join('');
-    box.innerHTML = '<div class="sec-h">🧾 فواتيري</div>' + rows;
-    renderedTabs.invoices = true;
-  }).catch(function(e){
-    console.warn('invoices', e);
-    box.innerHTML = '<div class="sec-h">🧾 فواتيري</div><div class="empty"><span class="big">📡</span>النت ضعيف — حاولي تاني.</div>';
-  });
+  if(invoicesData.length === 0){
+    box.innerHTML = head + '<div class="empty"><span class="big">🧾</span>لسه مفيش فواتير مسجّلة باسمك.<br>قوّلي الكاشير يحط رقمك وقت الشراء عشان تتحفظ هنا.</div>';
+    return;
+  }
+  var rows = invoicesData.map(function(s, i){
+    var d = toJsDate(s.createdAt);
+    var dateStr = d ? d.toLocaleDateString('ar-EG', {day:'2-digit', month:'long', year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '—';
+    var pieces = s.itemCount != null ? s.itemCount : (s.items||[]).reduce(function(x,it){ return x + (it.qty||0); }, 0);
+    var isRet = (s.total||0) < 0;
+    return '<div class="inv" onclick="openInvoiceDetail('+i+')">'+
+      '<div class="inv-top">'+
+        '<div><div class="inv-date">'+esc(dateStr)+'</div>'+(s.invoiceNo?'<div class="inv-no">#'+esc(s.invoiceNo)+'</div>':'')+'</div>'+
+        '<div class="inv-total" style="'+(isRet?'color:#c0396b':'')+'">'+fmt(s.total)+' <span style="font-size:11px;">ج.م</span></div>'+
+      '</div>'+
+      '<div class="inv-meta">'+
+        '<span>🛍️ '+pieces+' قطعة · '+payMethodsText(s.payments)+'</span>'+
+        (s.loyaltyPointsEarned ? '<span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span>' : '<span></span>')+
+      '</div>'+
+    '</div>';
+  }).join('');
+  box.innerHTML = head + rows;
 }
 
 function openInvoiceDetail(i){
