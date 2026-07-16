@@ -618,9 +618,21 @@ async function loadClockedInStaff(){
   if(!sel) return;
   sel.innerHTML = '<option value="">👤 مين اللي باع؟ (اختياري)</option>';
   try{
+    // نجيب قايمة الموظفين الحاليين الحقيقية للفرع ده الأول (عشان نستبعد أي حد
+    // اتمسح أو بقى غير نشط، حتى لو لسه ليه سجل شيفت قديم "مفتوح" بالغلط)
+    const empSnap = await db.collection(EMPLOYEES_COLLECTION).where('branch','==', currentBranch).get();
+    const activeEmpIds = new Set(empSnap.docs.filter(d=> d.data().active !== false).map(d=> d.id));
+
+    const dayStart = new Date(); dayStart.setHours(0,0,0,0);
     const snap = await db.collection('sales_shifts').where('branch','==', currentBranch).get();
-    const openShifts = snap.docs.map(d=>d.data()).filter(s=> !s.clockOutTs);
-    openShifts.forEach(s=>{
+    const openShiftsToday = snap.docs.map(d=>d.data())
+      .filter(s=> !s.clockOutTs && s.clockInTs >= dayStart.getTime() && activeEmpIds.has(s.employeeId));
+
+    // استبعاد أي تكرار لنفس الموظف (لو حصل له أكتر من شيفت مفتوح بالغلط)
+    const seen = new Set();
+    openShiftsToday.forEach(s=>{
+      if(seen.has(s.employeeId)) return;
+      seen.add(s.employeeId);
       const opt = document.createElement('option');
       opt.value = s.employeeId;
       opt.textContent = s.employeeName || s.employeeId;
@@ -628,7 +640,7 @@ async function loadClockedInStaff(){
       sel.appendChild(opt);
     });
     // افتراضيًا، لو الموظف المسجل دخول في الـPOS نفسه حاضر في القايمة، يتفضّل تلقائي
-    if(openShifts.some(s=> s.employeeId === currentEmployee.id)){
+    if(seen.has(currentEmployee.id)){
       sel.value = currentEmployee.id;
     }
   }catch(e){ console.warn('تعذر تحميل قايمة الموظفين الحاضرين', e); }
@@ -692,6 +704,7 @@ async function goToSalesHistory(){
   switchSalesHistoryTab('live');
 }
 
+const RATING_ICON_MAP = {1:'😠', 2:'🙁', 3:'🙂', 4:'😍'};
 async function renderLiveSalesHistory(){
   const wrap = document.getElementById('salesHistoryWrap');
   wrap.innerHTML = 'بيتحمّل...';
@@ -702,14 +715,38 @@ async function renderLiveSalesHistory(){
     return bt - at;
   });
   if(sales.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش مبيعات مسجلة</div>'; return; }
+
+  // نجيب كل التقييمات المرتبطة بعملاء مرة واحدة، وبعدين نربط كل فاتورة بأقرب تقييم لنفس رقم العميل
+  let entriesByPhone = {};
+  try{
+    const entriesSnap = await db.collection('entries').where('branch','==', currentBranch).get();
+    entriesSnap.docs.forEach(d=>{
+      const e = d.data();
+      if(!e.customerPhone) return;
+      if(!entriesByPhone[e.customerPhone]) entriesByPhone[e.customerPhone] = [];
+      entriesByPhone[e.customerPhone].push(e);
+    });
+  }catch(e){ console.warn('تعذر تحميل التقييمات', e); }
+
   wrap.innerHTML = sales.slice(0,100).map(s=>{
     const d = s.createdAt && s.createdAt.toDate ? s.createdAt.toDate() : null;
     const dateStr = d ? d.toLocaleString('ar-EG') : '—';
     const badge = s.reversed ? ' <span style="color:var(--minus); font-size:11px;">(ملغاة)</span>' : (s.isReversal ? ' <span style="color:var(--warn); font-size:11px;">(عكس)</span>' : '');
+
+    let ratingBadge = '';
+    if(s.customerPhone && entriesByPhone[s.customerPhone] && d){
+      const saleMs = d.getTime();
+      const closest = entriesByPhone[s.customerPhone].sort((a,b)=> Math.abs(a.ts-saleMs) - Math.abs(b.ts-saleMs))[0];
+      // نربط التقييم بالفاتورة دي بس لو قريب زمنيًا منها فعلًا (مش تقييم من زيارة تانية قديمة)
+      if(closest && Math.abs(closest.ts - saleMs) <= (3*60*1000)){
+        ratingBadge = ` <span title="تقييم العميل">${RATING_ICON_MAP[closest.r]||''}</span>`;
+      }
+    }
+
     return `
     <div onclick="openInvoice('${s.id}')" style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
       <div>
-        <div style="font-weight:700; font-size:13px;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}${badge} — ${(s.items||[]).length} صنف — ${s.customerPhone ? 'عميل: '+s.customerPhone : 'من غير عميل'}</div>
+        <div style="font-weight:700; font-size:13px;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}${badge} — ${(s.items||[]).length} صنف — ${s.customerPhone ? 'عميل: '+s.customerPhone : 'من غير عميل'}${ratingBadge}</div>
         <div style="color:var(--muted); font-size:11px;">${dateStr} — بواسطة ${s.employeeName||'—'}</div>
       </div>
       <div style="font-weight:800; font-size:15px; color:${(s.total||0) < 0 ? 'var(--minus)' : 'var(--plus)'};">${(s.total||0).toFixed(2)} ج.م</div>
@@ -1434,7 +1471,7 @@ async function tryLinkFeedbackToCustomer(phone, name, sellerName){
   const attemptLink = async ()=>{
     try{
       const windowStart = saleTime - (2 * 60 * 1000);  // دقيقتين قبل الفاتورة
-      const windowEnd = saleTime + (1 * 60 * 1000);    // دقيقة بعد الفاتورة
+      const windowEnd = saleTime + (3 * 60 * 1000);    // 3 دقايق بعد الفاتورة (وقت واقعي إن العميل يمشي للكشك ويقيّم)
       const snap = await db.collection('entries').where('branch','==', currentBranch).get();
       const candidates = snap.docs
         .map(d=>({id:d.id, ...d.data()}))
@@ -1446,8 +1483,9 @@ async function tryLinkFeedbackToCustomer(phone, name, sellerName){
       });
     }catch(e){ console.warn('تعذر ربط التقييم بالعميل', e); }
   };
-  await attemptLink();          // محاولة فورية (تقييمات قبل الفاتورة)
-  setTimeout(attemptLink, 90000); // محاولة تانية بعد دقيقة ونص (تقييمات بعد الفاتورة بدقيقة)
+  await attemptLink();           // محاولة فورية (تقييمات قبل الفاتورة)
+  setTimeout(attemptLink, 90000);  // محاولة تانية بعد دقيقة ونص
+  setTimeout(attemptLink, 200000); // محاولة تالتة بعد حوالي 3 دقايق ونص (تغطي آخر حدود النافذة براحة)
 }
 
 // ---------------- تصميم الفاتورة والليبل (قابل للتعديل من المدير) ----------------
