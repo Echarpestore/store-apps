@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>إيشارب · نادي العملاء</title>
+<meta name="theme-color" content="#EC4899">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="إيشارب">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+
+<!-- الخطوط -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+<!-- Firebase (compat — نفس إصدار الكاشير عشان يقرا نفس البيانات) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<!-- باركود رقم العميل للكاشير -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"></script>
+
+<style>
+  :root{
+    --pink:#EC4899; --pink-deep:#C9327E; --pink-soft:#FCE7F1;
+    --gold:#E6B450; --gold-deep:#C79A38; --gold-soft:#FBF3DF;
+    --bg:#FFF6FA; --ink:#3A2233; --muted:#9E8792; --line:#F3DEE9; --white:#fff;
+    --card-grad:linear-gradient(135deg,#EC4899 0%,#F06AA6 45%,#E6B450 100%);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0;}
+  body{
+    font-family:'Tajawal',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg); color:var(--ink);
+    min-height:100vh; min-height:100dvh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{max-width:480px; margin:0 auto; min-height:100vh; min-height:100dvh; position:relative; background:var(--bg);}
+  button{font-family:inherit; cursor:pointer;}
+  input{font-family:inherit;}
+
+  /* ===== شاشات ===== */
+  .screen{display:none;}
+  .screen.on{display:block;}
+
+  /* ===== شاشة الدخول ===== */
+  #screen-login{min-height:100vh; min-height:100dvh; display:none; flex-direction:column;}
+  #screen-login.on{display:flex;}
+  .login-hero{
+    background:var(--card-grad); color:#fff; padding:56px 26px 44px;
+    border-radius:0 0 34px 34px; text-align:center;
+    box-shadow:0 14px 40px -14px rgba(236,72,152,.55);
+  }
+  .login-hero img{width:172px; max-width:64%; height:auto; filter:drop-shadow(0 3px 8px rgba(0,0,0,.14));}
+  .login-hero .kicker{
+    margin-top:16px; font-weight:700; font-size:14px; letter-spacing:.5px;
+    color:#fff; opacity:.92;
+  }
+  .login-body{flex:1; padding:34px 26px; display:flex; flex-direction:column;}
+  .login-body h1{font-size:23px; font-weight:800; margin:0 0 6px;}
+  .login-body .sub{color:var(--muted); font-size:14.5px; line-height:1.7; margin:0 0 26px;}
+  .field-label{font-weight:700; font-size:13.5px; margin:0 0 8px; color:var(--ink);}
+  .txt{
+    width:100%; padding:15px 16px; border-radius:15px; border:1.5px solid var(--line);
+    background:#fff; font-size:17px; color:var(--ink); font-weight:700; outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  .txt::placeholder{color:#cdbcc5; font-weight:500;}
+  .txt:focus{border-color:var(--pink); box-shadow:0 0 0 4px rgba(236,72,152,.12);}
+  .txt.ltr{direction:ltr; text-align:right;}
+  .btn-primary{
+    width:100%; margin-top:18px; padding:16px; border:none; border-radius:15px;
+    background:var(--card-grad); color:#fff; font-weight:800; font-size:17px;
+    box-shadow:0 10px 26px -8px rgba(236,72,152,.6); transition:transform .08s, filter .15s;
+  }
+  .btn-primary:active{transform:translateY(1px) scale(.995); filter:brightness(1.03);}
+  .btn-primary:disabled{opacity:.6; filter:grayscale(.2);}
+  .login-note{margin-top:auto; padding-top:24px; text-align:center; color:var(--muted); font-size:12px; line-height:1.7;}
+  .err{color:#D92662; font-size:13.5px; font-weight:700; margin:12px 2px 0; min-height:18px;}
+  .newfield{max-height:0; overflow:hidden; transition:max-height .3s ease;}
+  .newfield.show{max-height:140px; margin-top:18px;}
+
+  /* ===== شاشة التطبيق ===== */
+  #screen-app{display:none; flex-direction:column; min-height:100vh; min-height:100dvh; padding-bottom:82px;}
+  #screen-app.on{display:flex;}
+  .topbar{
+    display:flex; align-items:center; gap:12px; padding:16px 20px 12px;
+  }
+  .topbar .badge{
+    width:42px; height:42px; border-radius:13px; background:var(--card-grad);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    box-shadow:0 6px 16px -6px rgba(236,72,152,.6);
+  }
+  .topbar .badge img{width:30px; filter:brightness(0) invert(1);}
+  .topbar .hi{font-size:13px; color:var(--muted); font-weight:600; line-height:1.3;}
+  .topbar .who{font-size:17px; font-weight:800; line-height:1.3;}
+
+  .tabview{padding:8px 18px 24px;}
+
+  /* ===== البطاقة (العنصر المميز) ===== */
+  .card{
+    position:relative; border-radius:26px; padding:24px 22px 22px; color:#fff;
+    background:var(--card-grad); overflow:hidden;
+    box-shadow:0 20px 44px -18px rgba(201,50,126,.7);
+    min-height:198px; display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .card::after{
+    content:""; position:absolute; top:-60%; right:-30%; width:80%; height:220%;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);
+    transform:rotate(18deg); animation:sheen 5.5s ease-in-out infinite;
+  }
+  @keyframes sheen{0%,60%{right:-40%;} 88%,100%{right:120%;}}
+  .card .card-top{display:flex; justify-content:space-between; align-items:flex-start; position:relative; z-index:1;}
+  .card .card-top .lbl{font-size:12px; font-weight:700; opacity:.9; letter-spacing:.4px;}
+  .card .card-top .clubname{font-size:15px; font-weight:800; margin-top:2px;}
+  .card .card-top img{width:96px; opacity:.96;}
+  .card .pts-block{position:relative; z-index:1;}
+  .card .pts-num{font-size:52px; font-weight:800; line-height:1; letter-spacing:-1px;}
+  .card .pts-unit{font-size:17px; font-weight:700; opacity:.92; margin-right:6px;}
+  .card .pts-worth{font-size:13.5px; font-weight:600; opacity:.95; margin-top:8px;}
+  .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px;}
+  .card .holder .name{font-size:16px; font-weight:800;}
+  .card .holder .since{font-size:11px; opacity:.85; font-weight:600;}
+
+  .show-cashier{
+    width:100%; margin-top:14px; padding:15px; border:none; border-radius:16px;
+    background:#fff; color:var(--pink-deep); font-weight:800; font-size:16px;
+    box-shadow:0 8px 20px -10px rgba(201,50,126,.5); display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:transform .08s;
+  }
+  .show-cashier:active{transform:translateY(1px);}
+
+  /* بلوكات الشرح */
+  .info-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;}
+  .info-box{
+    background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:16px 15px;
+  }
+  .info-box .ico{font-size:22px;}
+  .info-box .t{font-weight:800; font-size:14px; margin-top:7px;}
+  .info-box .d{font-size:12.5px; color:var(--muted); font-weight:600; margin-top:3px; line-height:1.6;}
+  .progress-wrap{background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:16px 16px 18px; margin-top:12px;}
+  .progress-wrap .pw-top{display:flex; justify-content:space-between; font-size:13px; font-weight:700; margin-bottom:10px;}
+  .progress-wrap .pw-top .g{color:var(--gold-deep);}
+  .bar{height:11px; border-radius:99px; background:var(--pink-soft); overflow:hidden;}
+  .bar>span{display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--pink),var(--gold)); transition:width .5s;}
+  .redeem-hint{font-size:12px; color:var(--muted); font-weight:600; text-align:center; margin-top:14px; line-height:1.7;}
+
+  /* ===== عناوين أقسام ===== */
+  .sec-h{font-size:20px; font-weight:800; margin:6px 2px 16px;}
+  .sec-h .em{color:var(--pink);}
+
+  /* ===== العروض ===== */
+  .offer{
+    background:#fff; border:1.5px solid var(--line); border-radius:20px; padding:16px 16px;
+    margin-bottom:13px; display:flex; gap:14px; align-items:center;
+    position:relative; overflow:hidden;
+  }
+  .offer::before{content:""; position:absolute; top:0; right:0; width:6px; height:100%; background:var(--card-grad);}
+  .offer .oval{
+    flex-shrink:0; width:66px; height:66px; border-radius:16px; background:var(--pink-soft);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--pink-deep);
+  }
+  .offer .oval .big{font-size:21px; font-weight:800; line-height:1;}
+  .offer .oval .sm{font-size:11px; font-weight:700; margin-top:2px;}
+  .offer .obody{flex:1; min-width:0;}
+  .offer .obody .on{font-weight:800; font-size:15.5px;}
+  .offer .obody .osc{font-size:12.5px; color:var(--muted); font-weight:600; margin-top:4px;}
+  .offer .obody .oend{font-size:11.5px; color:var(--gold-deep); font-weight:700; margin-top:6px;}
+
+  /* ===== المنتجات ===== */
+  .prod-grid{display:grid; grid-template-columns:1fr 1fr; gap:13px;}
+  .prod{background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:14px 14px 15px; position:relative;}
+  .prod .pname{font-weight:800; font-size:14.5px; line-height:1.4; min-height:40px;}
+  .prod .pmeta{font-size:12px; color:var(--muted); font-weight:600; margin-top:4px; min-height:17px;}
+  .prod .pprice{margin-top:10px; font-weight:800; font-size:17px; color:var(--pink-deep);}
+  .prod .pprice span{font-size:12px; font-weight:700; color:var(--muted);}
+  .prod .oos{position:absolute; top:12px; left:12px; background:#f2e3ea; color:#b06; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:99px;}
+
+  /* ===== الحساب ===== */
+  .acct-card{background:#fff; border:1.5px solid var(--line); border-radius:20px; padding:6px 18px; margin-bottom:16px;}
+  .acct-row{display:flex; justify-content:space-between; align-items:center; padding:15px 0; border-bottom:1px solid var(--line);}
+  .acct-row:last-child{border-bottom:none;}
+  .acct-row .k{color:var(--muted); font-weight:600; font-size:14px;}
+  .acct-row .v{font-weight:800; font-size:15px;}
+  .acct-row .v.ltr{direction:ltr;}
+  .btn-outline{
+    width:100%; padding:15px; border-radius:15px; border:1.5px solid var(--line); background:#fff;
+    font-weight:800; font-size:15.5px; color:var(--ink); margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn-outline.install{border-color:var(--gold); color:var(--gold-deep); background:var(--gold-soft);}
+  .btn-outline.logout{color:#c0396b;}
+  .ios-tip{background:var(--gold-soft); border:1.5px solid #efdcae; border-radius:15px; padding:14px 15px; font-size:13px; font-weight:600; color:#8a6d1f; line-height:1.8; margin-bottom:12px; display:none;}
+
+  /* ===== التبويبات السفلية ===== */
+  .tabbar{
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px;
+    background:rgba(255,255,255,.94); backdrop-filter:blur(10px);
+    border-top:1px solid var(--line); display:flex; padding:9px 8px calc(9px + env(safe-area-inset-bottom));
+    z-index:40;
+  }
+  .tab{flex:1; background:none; border:none; padding:6px 0; display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted);}
+  .tab .ti{font-size:22px; line-height:1;}
+  .tab .tl{font-size:11px; font-weight:700;}
+  .tab.active{color:var(--pink);}
+  .tab.active .ti{transform:translateY(-1px);}
+
+  /* ===== overlay الكاشير ===== */
+  .overlay{
+    position:fixed; inset:0; background:rgba(58,34,51,.55); backdrop-filter:blur(4px);
+    display:none; align-items:center; justify-content:center; z-index:60; padding:26px;
+  }
+  .overlay.on{display:flex;}
+  .cashier-sheet{
+    background:#fff; border-radius:28px; width:100%; max-width:380px; padding:30px 26px 26px; text-align:center;
+    box-shadow:0 30px 70px -20px rgba(0,0,0,.5);
+  }
+  .cashier-sheet .cs-h{font-weight:800; font-size:18px;}
+  .cashier-sheet .cs-sub{color:var(--muted); font-size:13.5px; font-weight:600; margin-top:6px; line-height:1.7;}
+  .cashier-sheet .phone-big{font-size:33px; font-weight:800; letter-spacing:2px; direction:ltr; margin:20px 0 8px; color:var(--ink);}
+  .cashier-sheet svg{max-width:100%;}
+  .cashier-sheet .pts-mini{margin-top:14px; font-weight:700; color:var(--pink-deep); font-size:14px;}
+  .cashier-sheet .close{margin-top:20px; width:100%; padding:14px; border:none; border-radius:14px; background:var(--pink-soft); color:var(--pink-deep); font-weight:800; font-size:15px;}
+
+  .empty{text-align:center; padding:44px 20px; color:var(--muted); font-weight:600; font-size:14.5px; line-height:1.9;}
+  .empty .big{font-size:40px; display:block; margin-bottom:12px;}
+
+  /* بانر أخطاء */
+  #errBanner{display:none; position:fixed; top:0; left:0; right:0; z-index:99; background:#B8123F; color:#fff; padding:11px 16px; font-size:13px; font-weight:700; text-align:center;}
+  #loadFail{display:none; position:fixed; inset:0; z-index:120; background:var(--bg); color:var(--ink); align-items:center; justify-content:center; padding:30px; text-align:center; font-weight:700; line-height:1.9;}
+
+  @media (prefers-reduced-motion: reduce){ .card::after{animation:none; display:none;} }
+</style>
+</head>
+<body>
+<div id="errBanner"></div>
+<div id="loadFail">
+  <div>
+    ⚠️ التطبيق مقفلش صح<br><span style="font-weight:600; color:var(--muted); font-size:13px;">اقفل الصفحة وافتحها تاني، ولو فضلت المشكلة امسح بيانات الموقع.</span>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- ===================== شاشة الدخول ===================== -->
+  <section id="screen-login" class="screen">
+    <div class="login-hero">
+      <img id="heroLogo" alt="echarpe">
+      <div class="kicker">نادي عملاء إيشارب</div>
+    </div>
+    <div class="login-body">
+      <h1>أهلاً بيكِ 🌸</h1>
+      <p class="sub">اجمعي نقاط مع كل شراء، واستبدليها بخصومات. سجّلي برقم موبايلك عشان نعرفك عند الكاشير.</p>
+
+      <label class="field-label" for="phoneInput">رقم الموبايل</label>
+      <input id="phoneInput" class="txt ltr" type="tel" inputmode="numeric" placeholder="01xxxxxxxxx" autocomplete="tel">
+
+      <div id="nameWrap" class="newfield">
+        <label class="field-label" for="nameInput" style="margin-top:2px;">اسمك (عشان نرحّب بيكِ صح)</label>
+        <input id="nameInput" class="txt" type="text" placeholder="الاسم" autocomplete="name">
+      </div>
+
+      <div id="loginErr" class="err"></div>
+      <button id="loginBtn" class="btn-primary">دخول</button>
+
+      <div class="login-note">من غير كلمات سر — رقم موبايلك بس هو حسابك.<br>نفس الرقم اللي بتديه للكاشير في المحل.</div>
+    </div>
+  </section>
+
+  <!-- ===================== شاشة التطبيق ===================== -->
+  <section id="screen-app" class="screen">
+    <div class="topbar">
+      <div class="badge"><img id="topLogo" alt=""></div>
+      <div>
+        <div class="hi" id="greet">أهلاً</div>
+        <div class="who" id="topName">—</div>
+      </div>
+    </div>
+
+    <div class="tabview">
+      <div id="tab-card"></div>
+      <div id="tab-offers" style="display:none;"></div>
+      <div id="tab-products" style="display:none;"></div>
+      <div id="tab-account" style="display:none;"></div>
+    </div>
+  </section>
+
+  <!-- تبويبات -->
+  <nav class="tabbar" id="tabbar" style="display:none;">
+    <button class="tab active" data-tab="card"><span class="ti">💳</span><span class="tl">بطاقتي</span></button>
+    <button class="tab" data-tab="offers"><span class="ti">🎀</span><span class="tl">العروض</span></button>
+    <button class="tab" data-tab="products"><span class="ti">🛍️</span><span class="tl">منتجاتنا</span></button>
+    <button class="tab" data-tab="account"><span class="ti">👤</span><span class="tl">حسابي</span></button>
+  </nav>
+
+  <!-- overlay الكاشير -->
+  <div class="overlay" id="cashierOverlay">
+    <div class="cashier-sheet">
+      <div class="cs-h">اعرضي الشاشة دي للكاشير 💗</div>
+      <div class="cs-sub">الكاشير هيدخّل رقمك عشان يضيفلك النقط أو يخصم لك</div>
+      <div class="phone-big" id="cashierPhone">—</div>
+      <svg id="cashierBarcode"></svg>
+      <div class="pts-mini" id="cashierPts"></div>
+      <button class="close" onclick="closeCashier()">تمام</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   نادي عملاء إيشارب — تطبيق العميل (Loyalty)
+   يقرا نفس بيانات الكاشير: pos_test_customers / pos_test_discounts
+   / pos_test_inventory / pos_test_settings/loyalty
+   ============================================================ */
+
+// بانر أخطاء عام (زي باقي التطبيقات) — بيبان لو حصل أي error وقت التشغيل
+window.addEventListener('error', function(e){
+  try{
+    var b = document.getElementById('errBanner');
+    b.textContent = '⚠️ حصل خطأ: ' + (e.message || 'غير معروف');
+    b.style.display = 'block';
+  }catch(_){}
+});
+
+var firebaseConfig = {
+  apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
+  authDomain: "customer-feedback-8ac1d.firebaseapp.com",
+  projectId: "customer-feedback-8ac1d",
+  storageBucket: "customer-feedback-8ac1d.firebasestorage.app",
+  messagingSenderId: "408860081491",
+  appId: "1:408860081491:web:c5fa8b8e757c13196375a6",
+  measurementId: "G-6K33TSHDZ6"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.firestore();
+
+// أوفلاين قوي: البيانات محفوظة على الجهاز والتطبيق بيفتح حتى من غير نت
+db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED });
+db.enablePersistence({ synchronizeTabs: true }).catch(function(err){
+  if(err.code === 'failed-precondition'){ console.warn('أكتر من تاب مفتوح — الأوفلاين هيشتغل بس مش بكامل قوته'); }
+  else if(err.code === 'unimplemented'){ console.warn('المتصفح ده مش بيدعم تخزين الأوفلاين'); }
+});
+
+// أسماء الكوليكشنز (لو الكاشير اتنقل من pos_test_ لـ production، غيّرهم من هنا بس)
+var COL_CUSTOMERS = 'pos_test_customers';
+var COL_DISCOUNTS = 'pos_test_discounts';
+var COL_INVENTORY = 'pos_test_inventory';
+var COL_SETTINGS  = 'pos_test_settings';
+
+var LS_PHONE = 'echarpe_loyalty_phone';
+
+// اللوجو inline (base64) — عشان التطبيق يشتغل أوفلاين فورًا من غير ما يستنى صورة
+var LOGO_B64 = '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';
+var logoSrc = 'data:image/png;base64,' + LOGO_B64;
+
+// إعدادات النقاط (نفس اللي الأدمن بيظبطها في الكاشير) — بقيم افتراضية لحد ما تتحمّل
+var loyaltyCfg = { pointsPerEGP:100, pointsPerRedemption:10, redemptionValueEGP:5 };
+
+var currentCustomer = null;   // { name, phone, points, ... }
+var custUnsub = null;         // مستمع realtime على وثيقة العميل
+var offersLoaded = false, productsLoaded = false;
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function digits(s){ return String(s||'').replace(/[^0-9]/g,''); }
+function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmt(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('en-US'); }
+
+/* ---------- تنقل بين الشاشات ---------- */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('on'); });
+  $(id).classList.add('on');
+  $('tabbar').style.display = (id==='screen-app') ? 'flex' : 'none';
+}
+
+/* ---------- تحميل إعدادات النقاط ---------- */
+function loadSettings(){
+  return db.collection(COL_SETTINGS).doc('loyalty').get().then(function(doc){
+    if(doc.exists){ loyaltyCfg = Object.assign({}, loyaltyCfg, doc.data()); }
+  }).catch(function(e){ console.warn('تعذر تحميل إعدادات النقاط', e); });
+}
+
+/* ============================================================
+   الدخول / التسجيل
+   ============================================================ */
+var pendingNewPhone = null;
+
+$('phoneInput').addEventListener('input', function(){
+  // لو غيّر الرقم بعد ما ظهرت خانة الاسم، نخفيها تاني
+  if(pendingNewPhone !== null){ pendingNewPhone = null; $('nameWrap').classList.remove('show'); $('loginBtn').textContent = 'دخول'; }
+  $('loginErr').textContent = '';
+});
+
+$('loginBtn').addEventListener('click', doLogin);
+$('phoneInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+$('nameInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+
+function doLogin(){
+  var phone = digits($('phoneInput').value);
+  if(phone.length < 8){ $('loginErr').textContent = 'اكتبي رقم موبايل صح'; return; }
+
+  // لو إحنا في مرحلة إدخال الاسم لعميل جديد
+  if(pendingNewPhone === phone){
+    var name = $('nameInput').value.trim();
+    if(!name){ $('loginErr').textContent = 'اكتبي اسمك عشان نكمّل'; return; }
+    createCustomer(phone, name);
+    return;
+  }
+
+  $('loginBtn').disabled = true; $('loginBtn').textContent = 'لحظة...';
+  db.collection(COL_CUSTOMERS).doc(phone).get().then(function(doc){
+    $('loginBtn').disabled = false;
+    if(doc.exists){
+      localStorage.setItem(LS_PHONE, phone);
+      enterApp(phone);
+    }else{
+      // عميل جديد — نطلب الاسم
+      pendingNewPhone = phone;
+      $('nameWrap').classList.add('show');
+      $('nameInput').focus();
+      $('loginBtn').textContent = 'إنشاء حساب';
+      $('loginErr').textContent = '';
+    }
+  }).catch(function(e){
+    $('loginBtn').disabled = false; $('loginBtn').textContent = 'دخول';
+    $('loginErr').textContent = 'النت ضعيف — حاولي تاني';
+    console.warn(e);
+  });
+}
+
+function createCustomer(phone, name){
+  $('loginBtn').disabled = true; $('loginBtn').textContent = 'بنجهّز حسابك...';
+  var data = {
+    name: name, phone: phone, points: 0, totalSpent: 0,
+    lastVisit: null, notes: '', branch: '',
+    createdAt: Date.now(), source: 'loyalty_app'
+  };
+  db.collection(COL_CUSTOMERS).doc(phone).set(data, { merge:true }).then(function(){
+    localStorage.setItem(LS_PHONE, phone);
+    $('loginBtn').disabled = false;
+    enterApp(phone);
+  }).catch(function(e){
+    $('loginBtn').disabled = false; $('loginBtn').textContent = 'إنشاء حساب';
+    $('loginErr').textContent = 'معرفناش نحفظ الحساب — حاولي تاني';
+    console.warn(e);
+  });
+}
+
+/* ============================================================
+   دخول التطبيق + مستمع realtime على العميل
+   ============================================================ */
+function enterApp(phone){
+  showScreen('screen-app');
+  $('topLogo').src = logoSrc;
+  $('greet').textContent = greetWord();
+  switchTab('card');
+
+  if(custUnsub){ custUnsub(); }
+  custUnsub = db.collection(COL_CUSTOMERS).doc(phone).onSnapshot(function(doc){
+    if(!doc.exists){ // اتمسح من الكاشير؟ نرجّع لتسجيل الدخول
+      logout(true); return;
+    }
+    currentCustomer = Object.assign({ phone: phone }, doc.data());
+    $('topName').textContent = firstName(currentCustomer.name);
+    renderCard();
+    // لو التبويب المفتوح هو الحساب، نحدّثه كمان
+    if($('tab-account').style.display !== 'none') renderAccount();
+  }, function(err){ console.warn('customer sync', err); });
+}
+
+function greetWord(){
+  var h = new Date().getHours();
+  if(h < 12) return 'صباح الخير 🌷';
+  if(h < 18) return 'نهارك سعيد ✨';
+  return 'مساء الخير 🌙';
+}
+function firstName(n){ n=(n||'').trim(); return n ? n.split(/\s+/)[0] : 'يا فندم'; }
+
+/* ============================================================
+   التبويبات
+   ============================================================ */
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
+  ['card','offers','products','account'].forEach(function(t){
+    $('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
+  });
+  if(tab==='card') renderCard();
+  if(tab==='offers') renderOffers();
+  if(tab==='products') renderProducts();
+  if(tab==='account') renderAccount();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll('.tab').forEach(function(b){
+  b.addEventListener('click', function(){ switchTab(b.dataset.tab); });
+});
+
+/* ============================================================
+   تبويب البطاقة
+   ============================================================ */
+function renderCard(){
+  if(!currentCustomer) return;
+  var pts = Number(currentCustomer.points)||0;
+  var per = Number(loyaltyCfg.pointsPerRedemption)||10;
+  var val = Number(loyaltyCfg.redemptionValueEGP)||5;
+  var earn = Number(loyaltyCfg.pointsPerEGP)||100;
+
+  var units = Math.floor(pts / per);
+  var worth = units * val;                          // القيمة القابلة للاستبدال دلوقتي
+  var toNext = per - (pts % per);                    // كام نقطة للوحدة الجاية
+  var pct = Math.round(((pts % per) / per) * 100);
+
+  var sinceTxt = '';
+  var since = currentCustomer.createdAt;
+  if(since){
+    try{ sinceTxt = 'عضو من ' + new Date(since).toLocaleDateString('ar-EG', {month:'long', year:'numeric'}); }catch(_){}
+  }
+
+  $('tab-card').innerHTML =
+    '<div class="card">'+
+      '<div class="card-top">'+
+        '<div><div class="lbl">نقاطك</div><div class="clubname">نادي إيشارب</div></div>'+
+        '<img src="'+logoSrc+'" alt="">'+
+      '</div>'+
+      '<div class="pts-block">'+
+        '<span class="pts-num">'+fmt(pts)+'</span><span class="pts-unit">نقطة</span>'+
+        '<div class="pts-worth">'+(worth>0 ? ('تقدري تستبدليها بخصم ~'+fmt(worth)+' ج.م') : 'اجمعي نقاط أكتر عشان تبدأي تستبدلي')+'</div>'+
+      '</div>'+
+      '<div class="holder">'+
+        '<div class="name">'+esc(currentCustomer.name||'—')+'</div>'+
+        '<div class="since">'+esc(sinceTxt)+'</div>'+
+      '</div>'+
+    '</div>'+
+
+    '<button class="show-cashier" onclick="openCashier()">🎟️ اعرضي رقمك للكاشير</button>'+
+
+    '<div class="progress-wrap">'+
+      '<div class="pw-top"><span>الوحدة الجاية</span><span class="g">'+(pts>0 && (pts%per===0) ? 'جاهزة للاستبدال! 🎉' : ('فاضل '+toNext+' نقطة'))+'</span></div>'+
+      '<div class="bar"><span style="width:'+pct+'%"></span></div>'+
+    '</div>'+
+
+    '<div class="info-grid">'+
+      '<div class="info-box"><div class="ico">🛒</div><div class="t">إزاي تكسبي نقاط</div><div class="d">كل '+fmt(earn)+' ج.م تشتريها = نقطة</div></div>'+
+      '<div class="info-box"><div class="ico">🎁</div><div class="t">إزاي تستبدلي</div><div class="d">كل '+per+' نقطة = '+fmt(val)+' ج.م خصم</div></div>'+
+    '</div>'+
+
+    '<div class="redeem-hint">💡 الاستبدال بيحصل في المحل — قوليلهم عايزة تستبدلي نقاطك عند الدفع.</div>';
+}
+
+/* overlay الكاشير */
+function openCashier(){
+  if(!currentCustomer) return;
+  $('cashierPhone').textContent = currentCustomer.phone;
+  var pts = Number(currentCustomer.points)||0;
+  $('cashierPts').textContent = 'رصيدك: ' + fmt(pts) + ' نقطة';
+  $('cashierOverlay').classList.add('on');
+  try{
+    JsBarcode('#cashierBarcode', currentCustomer.phone, {
+      format:'CODE128', width:2, height:64, displayValue:false, margin:6, lineColor:'#3A2233'
+    });
+  }catch(e){ $('cashierBarcode').style.display='none'; }
+}
+function closeCashier(){ $('cashierOverlay').classList.remove('on'); }
+$('cashierOverlay').addEventListener('click', function(e){ if(e.target===$('cashierOverlay')) closeCashier(); });
+
+/* ============================================================
+   تبويب العروض (الخصومات السارية من الكاشير)
+   ============================================================ */
+function renderOffers(){
+  var box = $('tab-offers');
+  box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
+                  '<div class="empty"><span class="big">⏳</span>بنجيب أحدث العروض...</div>';
+  var today = todayISO();
+  db.collection(COL_DISCOUNTS).get().then(function(snap){
+    var all = [];
+    snap.forEach(function(d){ all.push(d.data()); });
+    // سارية: نشطة + جوه فترة التاريخ (نفس منطق الكاشير)
+    var live = all.filter(function(dc){
+      return dc.active !== false
+        && (!dc.startDate || dc.startDate <= today)
+        && (!dc.endDate   || dc.endDate   >= today);
+    });
+    // إزالة التكرار (نفس العرض متكرر عبر الفروع) بمفتاح الاسم+النوع+القيمة+النطاق
+    var seen = {}, uniq = [];
+    live.forEach(function(dc){
+      var key = (dc.name||'')+'|'+dc.type+'|'+dc.value+'|'+dc.scope+'|'+(dc.productId||'');
+      if(!seen[key]){ seen[key]=1; uniq.push(dc); }
+    });
+
+    if(uniq.length === 0){
+      box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
+        '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>';
+      return;
+    }
+
+    var rows = uniq.map(function(dc){
+      var isPct = dc.type === 'percent';
+      var big = isPct ? (fmt(dc.value)+'%') : fmt(dc.value);
+      var sm  = isPct ? 'خصم' : 'ج.م';
+      var scopeStr = dc.scope === 'all' ? '🏪 على المحل كله' : ('🏷️ ' + esc(dc.productName || 'منتج مختار'));
+      var cap = (isPct && dc.maxDiscount) ? (' · بحد أقصى '+fmt(dc.maxDiscount)+' ج.م') : '';
+      var endStr = dc.endDate ? ('ساري لحد '+esc(dc.endDate)) : 'عرض مفتوح';
+      return '<div class="offer">'+
+        '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
+        '<div class="obody">'+
+          '<div class="on">'+esc(dc.name||'عرض')+'</div>'+
+          '<div class="osc">'+scopeStr+cap+'</div>'+
+          '<div class="oend">'+endStr+'</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+    box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' + rows;
+    offersLoaded = true;
+  }).catch(function(e){
+    console.warn(e);
+    box.innerHTML = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>' +
+      '<div class="empty"><span class="big">📡</span>النت ضعيف — حاولي تاني بعد شوية.</div>';
+  });
+}
+
+/* ============================================================
+   تبويب المنتجات (المخزون المتاح)
+   ============================================================ */
+function renderProducts(){
+  var box = $('tab-products');
+  box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
+                  '<div class="empty"><span class="big">⏳</span>بنجيب المنتجات...</div>';
+  db.collection(COL_INVENTORY).get().then(function(snap){
+    var items = [];
+    snap.forEach(function(d){
+      var p = d.data();
+      if(p.status === 'hidden') return;           // المخفي مايظهرش للعميل
+      items.push(p);
+    });
+    // المتاح الأول، والخالص في الآخر، وبالاسم
+    items.sort(function(a,b){
+      var ao = (a.status==='outofstock' || (a.quantity??0)<=0) ? 1 : 0;
+      var bo = (b.status==='outofstock' || (b.quantity??0)<=0) ? 1 : 0;
+      if(ao!==bo) return ao-bo;
+      return String(a.name||'').localeCompare(String(b.name||''),'ar');
+    });
+
+    if(items.length === 0){
+      box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
+        '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
+      return;
+    }
+
+    var cards = items.map(function(p){
+      var oos = (p.status==='outofstock') || ((p.quantity??0) <= 0);
+      var meta = [p.attribute, p.size].filter(Boolean).join(' · ');
+      return '<div class="prod">'+
+        (oos ? '<div class="oos">خلص مؤقتًا</div>' : '')+
+        '<div class="pname">'+esc(p.name||'منتج')+'</div>'+
+        '<div class="pmeta">'+esc(meta||' ')+'</div>'+
+        '<div class="pprice">'+fmt(p.price)+' <span>ج.م</span></div>'+
+      '</div>';
+    }).join('');
+    box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div><div class="prod-grid">'+cards+'</div>';
+    productsLoaded = true;
+  }).catch(function(e){
+    console.warn(e);
+    box.innerHTML = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>' +
+      '<div class="empty"><span class="big">📡</span>النت ضعيف — حاولي تاني.</div>';
+  });
+}
+
+/* ============================================================
+   تبويب الحساب
+   ============================================================ */
+function renderProdSince(){
+  var s = currentCustomer && currentCustomer.createdAt;
+  if(!s) return '—';
+  try{ return new Date(s).toLocaleDateString('ar-EG', {day:'numeric', month:'long', year:'numeric'}); }catch(_){ return '—'; }
+}
+function renderAccount(){
+  if(!currentCustomer) return;
+  var spent = Number(currentCustomer.totalSpent)||0;
+  $('tab-account').innerHTML =
+    '<div class="sec-h">حسابي</div>'+
+    '<div class="acct-card">'+
+      '<div class="acct-row"><span class="k">الاسم</span><span class="v">'+esc(currentCustomer.name||'—')+'</span></div>'+
+      '<div class="acct-row"><span class="k">رقم الموبايل</span><span class="v ltr">'+esc(currentCustomer.phone)+'</span></div>'+
+      '<div class="acct-row"><span class="k">رصيد النقاط</span><span class="v">'+fmt(currentCustomer.points||0)+' نقطة</span></div>'+
+      (spent>0 ? '<div class="acct-row"><span class="k">إجمالي مشترياتك</span><span class="v">'+fmt(spent)+' ج.م</span></div>' : '')+
+      '<div class="acct-row"><span class="k">عضو منذ</span><span class="v">'+esc(renderProdSince())+'</span></div>'+
+    '</div>'+
+    '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
+    '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
+    '<button class="btn-outline logout" onclick="logout()">تسجيل الخروج</button>';
+
+  // زر التثبيت
+  var ib = $('installBtn');
+  if(deferredPrompt){ ib.style.display='flex'; ib.onclick = triggerInstall; }
+  if(isIOS() && !isStandalone()){ $('iosTip').style.display='block'; }
+}
+
+function logout(silent){
+  if(!silent && !confirm('تسجيل الخروج من حسابك؟')) return;
+  if(custUnsub){ custUnsub(); custUnsub=null; }
+  currentCustomer = null;
+  localStorage.removeItem(LS_PHONE);
+  $('phoneInput').value=''; $('nameInput').value='';
+  pendingNewPhone=null; $('nameWrap').classList.remove('show'); $('loginBtn').textContent='دخول';
+  showScreen('screen-login');
+}
+
+/* ============================================================
+   تثبيت التطبيق (PWA)
+   ============================================================ */
+var deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault(); deferredPrompt = e;
+  var ib = $('installBtn'); if(ib){ ib.style.display='flex'; ib.onclick = triggerInstall; }
+});
+function triggerInstall(){
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.finally(function(){ deferredPrompt=null; var ib=$('installBtn'); if(ib) ib.style.display='none'; });
+}
+function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+function isStandalone(){ return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
+
+/* ============================================================
+   إقلاع التطبيق
+   ============================================================ */
+$('heroLogo').src = logoSrc;
+loadSettings().finally(function(){
+  var saved = localStorage.getItem(LS_PHONE);
+  if(saved){ showScreen('screen-app'); enterApp(saved); }
+  else { showScreen('screen-login'); $('phoneInput').focus(); }
+});
+
+// لو الاسكربت كله اشتغل، نلغي بانر الفشل الاحتياطي
+window.__scriptFullyLoaded = true;
+setTimeout(function(){
+  if(!window.__scriptFullyLoaded){ $('loadFail').style.display='flex'; }
+}, 8000);
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+</script>
+</body>
+</html>
