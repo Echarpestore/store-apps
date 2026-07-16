@@ -357,20 +357,76 @@ async function renderInventoryScreen(){
       </div>` : '';
   }
 
-  const statusLabel = { active:'', hidden:' · 🚫 مخفي', outofstock:' · ⛔ نافد' };
-  listWrap.innerHTML = allInventory.map(it=>{
+  const statusLabelOld = { active:'', hidden:' · 🚫 مخفي', outofstock:' · ⛔ نافد' };
+
+  // إحصائيات عامة
+  const canCost2 = hasPerm('canViewCostPrice');
+  const totalItems = allInventory.length;
+  const outCount = allInventory.filter(it=> it.status==='outofstock' || (it.quantity??0)<=0).length;
+  const stockValue = allInventory.reduce((s,it)=> s + ((canCost2 ? (it.cost||0) : (it.price||0)) * (it.quantity??0)), 0);
+  const sumEl = document.getElementById('invSummary');
+  if(sumEl){
+    const chip = (lbl,val,col)=>`<div style="flex:1; min-width:92px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:9px 11px; text-align:center;"><div style="color:var(--muted); font-size:10px;">${lbl}</div><div style="font-weight:900; font-size:15px; color:${col||'var(--text)'};">${val}</div></div>`;
+    sumEl.innerHTML = chip('عدد الأصناف', totalItems)
+      + chip('قيمة المخزون', stockValue.toFixed(0)+' ج.م', 'var(--plus)')
+      + chip('نواقص', lowStock.length, lowStock.length?'var(--warn)':'var(--text)')
+      + chip('نافد', outCount, outCount?'var(--minus)':'var(--text)');
+  }
+
+  renderInventoryList();
+}
+
+// عرض قائمة الأصناف مع البحث والفلترة (بيتنده من غير ما يعيد التحميل)
+function renderInventoryList(){
+  const listWrap = document.getElementById('inventoryListWrap');
+  if(!listWrap) return;
+  const canCost = hasPerm('canViewCostPrice');
+  const canLabel = hasPerm('canPrintLabel');
+  const canEdit = hasPerm('canEditInventory');
+  const q = (document.getElementById('invSearch')?.value || '').trim().toLowerCase();
+  const filter = document.getElementById('invFilter')?.value || 'all';
+
+  let items = allInventory.filter(it=>{
+    if(q && !((it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q))) return false;
     const isLow = (it.minStock??0) > 0 && (it.quantity??0) <= it.minStock;
+    const isOut = it.status==='outofstock' || (it.quantity??0) <= 0;
+    if(filter==='low') return isLow && it.status!=='hidden';
+    if(filter==='out') return isOut;
+    if(filter==='hidden') return it.status==='hidden';
+    return true;
+  });
+
+  listWrap.innerHTML = items.map(it=>{
+    const qty = it.quantity??0;
+    const isLow = (it.minStock??0) > 0 && qty <= it.minStock;
+    const isOut = it.status==='outofstock' || qty <= 0;
+    let badge, bcol, bbg;
+    if(isOut){ badge='نافد'; bcol='#b91c1c'; bbg='#fdecec'; }
+    else if(isLow){ badge='ناقص · '+qty; bcol='#b45309'; bbg='#fff6e6'; }
+    else { badge='متاح · '+qty; bcol='#15803d'; bbg='#eafaf0'; }
+    const border = isOut ? 'var(--minus)' : isLow ? 'var(--warn)' : 'var(--border)';
+    const meta = [it.attribute, it.size].filter(Boolean).join(' · ');
     return `
-    <div onclick="openProductDetails('${it.id}')" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--panel); border:1px solid ${isLow?'var(--minus)':'var(--border)'}; border-radius:12px; padding:10px; margin-bottom:8px; cursor:pointer;">
-      <div style="flex:2; min-width:110px;">
-        <div style="font-weight:700; font-size:13px;">${it.name}${isLow?' ⚠️':''}${statusLabel[it.status]||''}</div>
-        <div style="font-size:11px; color:var(--muted);">باركود: ${it.barcode||'—'} · الكمية: ${it.quantity??0}${(it.minStock??0)>0?` · الحد الأدنى: ${it.minStock}`:''}</div>
+    <div onclick="openProductDetails('${it.id}')" style="background:var(--panel); border:1px solid ${border}; border-radius:12px; padding:12px 14px; margin-bottom:9px; cursor:pointer;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+        <div style="min-width:0; flex:1;">
+          <div style="font-weight:800; font-size:14px;">${it.name}${it.status==='hidden'?' <span style="font-size:10px; color:var(--muted);">🚫 مخفي</span>':''}</div>
+          <div style="color:var(--muted); font-size:11px; margin-top:2px;">${meta?meta+' · ':''}باركود: ${it.barcode||'—'}</div>
+        </div>
+        <div style="text-align:left; flex-shrink:0;">
+          <div style="font-weight:900; font-size:15px;">${it.price} <span style="font-size:11px; font-weight:700;">ج.م</span></div>
+          ${canCost && it.cost!=null ? `<div style="color:var(--muted); font-size:10px;">تكلفة ${it.cost}</div>` : ''}
+        </div>
       </div>
-      <div style="font-size:13px; font-weight:700;">${it.price} ج.م${canCost && it.cost!=null ? ` <span style="color:var(--muted); font-weight:400; font-size:11px;">(تكلفة ${it.cost})</span>` : ''}</div>
-      ${canLabel ? `<button onclick="event.stopPropagation(); printPriceLabel('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px; cursor:pointer;">🏷️ Label</button>` : ''}
-      ${canEdit ? `<button onclick="event.stopPropagation(); deleteInventoryItem('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>` : ''}
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:9px;">
+        <span style="background:${bbg}; color:${bcol}; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">${badge}${(it.minStock??0)>0?` <span style="opacity:.7; font-weight:600;">(حد أدنى ${it.minStock})</span>`:''}</span>
+        <div style="display:flex; gap:6px;">
+          ${canLabel ? `<button onclick="event.stopPropagation(); printPriceLabel('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px; cursor:pointer;">🏷️</button>` : ''}
+          ${canEdit ? `<button onclick="event.stopPropagation(); deleteInventoryItem('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>` : ''}
+        </div>
+      </div>
     </div>`;
-  }).join('') || '<div class="empty-cart">لسه مفيش أصناف</div>';
+  }).join('') || '<div class="empty-cart">'+(q||filter!=='all'?'مفيش أصناف بالفلتر ده':'لسه مفيش أصناف')+'</div>';
 }
 
 async function addInventoryItem(){
@@ -490,12 +546,18 @@ async function setEmployeeRole(sel){
   showToast('اتحفظ ✅');
 }
 
-// ---------------- Basic reports (manager only) ----------------
+// ---------------- Reports (manager only) ----------------
 let currentReportRange = 'today';
+let currentReportType = 'receipt';   // receipt | items | payments
 
 function setReportRange(range){
   currentReportRange = range;
   document.querySelectorAll('.rep-range-btn').forEach(b=> b.classList.toggle('active', b.dataset.range === range));
+  renderReportsScreen();
+}
+function setReportType(t){
+  currentReportType = t;
+  document.querySelectorAll('.rep-type-btn').forEach(b=> b.classList.toggle('active', b.dataset.rtype === t));
   renderReportsScreen();
 }
 
@@ -520,17 +582,24 @@ function getReportDateBounds(){
     if(fromVal) { from = new Date(fromVal + 'T00:00:00'); }
     if(toVal) { to = new Date(toVal + 'T23:59:59'); }
   }
-  // 'all' → from/to تفضل null (بدون حد)
   return { from, to };
+}
+function reportRangeLabel(){
+  const map = {today:'النهاردة', yesterday:'امبارح', week:'آخر 7 أيام', month:'آخر 30 يوم', all:'كل الفترة', custom:'فترة مخصصة'};
+  return map[currentReportRange] || '';
 }
 
 async function renderReportsScreen(){
   const wrap = document.getElementById('reportsWrap');
-  wrap.innerHTML = 'بيتحمّل...';
+  wrap.innerHTML = '<div style="padding:30px; text-align:center; color:var(--muted);">بيتحمّل...</div>';
   document.querySelectorAll('.rep-range-btn').forEach(b=> b.classList.toggle('active', b.dataset.range === currentReportRange));
+  document.querySelectorAll('.rep-type-btn').forEach(b=> b.classList.toggle('active', b.dataset.rtype === currentReportType));
 
-  const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
-  let sales = snap.docs.map(d=>d.data()).filter(s=> !s.reversed); // استبعاد الفواتير الملغاة، عمليات العكس بتدخل بسالبها عادي
+  let sales = [];
+  try{
+    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+    sales = snap.docs.map(d=>d.data()).filter(s=> !s.reversed);
+  }catch(e){ console.warn(e); }
 
   const { from, to } = getReportDateBounds();
   if(from || to){
@@ -543,67 +612,100 @@ async function renderReportsScreen(){
     });
   }
 
-  const total = sales.reduce((s,x)=> s + (x.total||0), 0);
-  const invoiceCount = sales.filter(s=> !s.isReversal).length;
-
-  // طرق الدفع
-  const byMethod = {};
-  sales.forEach(s=> Object.entries(s.payments||{}).forEach(([m,amt])=>{ byMethod[m] = (byMethod[m]||0) + amt; }));
-  const methodLabels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
-
-  // الأصناف الأكتر مبيعًا
+  // إجماليات عامة
+  let salesTotal=0, returnsTotal=0, itemsSold=0;
+  const byMethod = {}, methodCount = {};
   const itemAgg = {};
-  sales.forEach(s=> (s.items||[]).forEach(it=>{
-    if(it.price < 0) return; // استبعاد سطور المرتجع من إحصائية "الأكتر مبيعًا"
-    if(!itemAgg[it.name]) itemAgg[it.name] = { qty:0, revenue:0 };
-    itemAgg[it.name].qty += it.qty;
-    itemAgg[it.name].revenue += it.price * it.qty;
-  }));
-  const topItems = Object.entries(itemAgg).sort((a,b)=> b[1].qty - a[1].qty).slice(0, 10);
-
-  // أداء الموظفين
-  const byStaff = {};
   sales.forEach(s=>{
-    if(!s.employeeName) return;
-    if(!byStaff[s.employeeName]) byStaff[s.employeeName] = { total:0, count:0 };
-    byStaff[s.employeeName].total += s.total||0;
-    if(!s.isReversal) byStaff[s.employeeName].count += 1;
+    const tot = s.total||0;
+    if(tot >= 0) salesTotal += tot; else returnsTotal += tot;
+    Object.entries(s.payments||{}).forEach(([m,amt])=>{ byMethod[m]=(byMethod[m]||0)+amt; methodCount[m]=(methodCount[m]||0)+1; });
+    (s.items||[]).forEach(it=>{
+      const qty = it.qty||0, line = (it.price||0)*qty;
+      if(!it.isReturn && (it.price||0) >= 0) itemsSold += qty;
+      if(!itemAgg[it.name]) itemAgg[it.name] = { qty:0, revenue:0 };
+      itemAgg[it.name].qty += qty;
+      itemAgg[it.name].revenue += line;
+    });
   });
-  const staffRows = Object.entries(byStaff).sort((a,b)=> b[1].total - a[1].total);
+  const netTotal = salesTotal + returnsTotal;
+  const invoiceCount = sales.filter(s=> !s.isReversal && (s.total||0) >= 0).length;
+  const methodLabels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستاباي'};
 
-  const showItems = document.getElementById('repShowItems').checked;
-  const showPayments = document.getElementById('repShowPayments').checked;
-  const showStaff = document.getElementById('repShowStaff').checked;
+  let html = '';
 
-  let html = `
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px;">
-      <div style="color:var(--muted); font-size:12px;">إجمالي المبيعات للفترة المختارة</div>
-      <div style="font-size:26px; font-weight:900; color:var(--plus);">${total.toFixed(2)} ج.م</div>
-      <div style="color:var(--muted); font-size:11px;">${invoiceCount} فاتورة</div>
-    </div>`;
-
-  if(showPayments){
-    html += `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px;">
-      <div style="font-weight:700; margin-bottom:8px;">حسب طريقة الدفع</div>
-      ${Object.keys(byMethod).map(m=>`<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px;"><span>${methodLabels[m]||m}</span><span>${byMethod[m].toFixed(2)} ج.م</span></div>`).join('') || '<div class="empty-cart">لا يوجد</div>'}
-    </div>`;
+  if(currentReportType === 'receipt'){
+    // 🧾 إيصال اليوم — ملخص على شكل إيصال
+    const methodLines = Object.keys(byMethod).length
+      ? Object.keys(byMethod).map(m=>`<div class="rc-line"><span>${methodLabels[m]||m}</span><span>${byMethod[m].toFixed(2)}</span></div>`).join('')
+      : '<div class="rc-line"><span>لا يوجد</span><span>0.00</span></div>';
+    html = `<div id="repPrintArea"><div class="rep-receipt">
+      <div class="rc-h">إيصال المبيعات</div>
+      <div class="rc-sub">${currentBranch||''} · ${reportRangeLabel()}</div>
+      <div class="rc-line"><span>إجمالي المبيعات</span><span>${salesTotal.toFixed(2)}</span></div>
+      <div class="rc-line"><span>المرتجعات</span><span>${returnsTotal.toFixed(2)}</span></div>
+      <div class="rc-sep"></div>
+      <div class="rc-line rc-big"><span>صافي المبيعات</span><span>${netTotal.toFixed(2)} ج.م</span></div>
+      <div class="rc-sep"></div>
+      ${methodLines}
+      <div class="rc-sep"></div>
+      <div class="rc-line"><span>عدد الفواتير</span><span>${invoiceCount}</span></div>
+      <div class="rc-line"><span>عدد القطع المباعة</span><span>${itemsSold}</span></div>
+      <div class="rc-line"><span>متوسط الفاتورة</span><span>${(invoiceCount? netTotal/invoiceCount : 0).toFixed(2)}</span></div>
+    </div></div>
+    <div style="text-align:center; margin-top:14px;"><button class="rep-print-btn" onclick="printReportArea()">🖨️ طباعة الإيصال</button></div>`;
   }
 
-  if(showItems){
-    html += `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px;">
-      <div style="font-weight:700; margin-bottom:8px;">🏆 الأصناف الأكتر مبيعًا</div>
-      ${topItems.map(([name,d],i)=>`<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px;"><span>${i+1}. ${name}</span><span>${d.qty} قطعة — ${d.revenue.toFixed(2)} ج.م</span></div>`).join('') || '<div class="empty-cart">لا يوجد مبيعات</div>'}
-    </div>`;
+  else if(currentReportType === 'items'){
+    // 📦 ملخص الأصناف — كل الأصناف المباعة بالكمية والإجمالي
+    const rows = Object.entries(itemAgg).sort((a,b)=> b[1].revenue - a[1].revenue);
+    const totQty = rows.reduce((s,[,d])=> s + d.qty, 0);
+    const totRev = rows.reduce((s,[,d])=> s + d.revenue, 0);
+    html = `<div id="repPrintArea"><div class="rep-card">
+      <h2 style="margin:0 0 4px; font-size:16px;">📦 ملخص الأصناف — ${reportRangeLabel()}</h2>
+      <div style="color:var(--muted); font-size:12px; margin-bottom:10px;">${currentBranch||''}</div>
+      <table class="rep-tbl"><thead><tr><th>الصنف</th><th class="num">الكمية</th><th class="num">الإجمالي</th></tr></thead><tbody>
+      ${rows.length ? rows.map(([name,d])=>`<tr><td>${name}</td><td class="num">${d.qty}</td><td class="num">${d.revenue.toFixed(2)}</td></tr>`).join('')
+                    : '<tr><td colspan="3" style="text-align:center; color:var(--muted); padding:16px;">لا يوجد مبيعات في الفترة دي</td></tr>'}
+      </tbody><tfoot><tr class="grand"><td>الإجمالي</td><td class="num">${totQty}</td><td class="num">${totRev.toFixed(2)} ج.م</td></tr></tfoot></table>
+    </div></div>
+    <div style="text-align:center; margin-top:6px;"><button class="rep-print-btn" onclick="printReportArea()">🖨️ طباعة</button></div>`;
   }
 
-  if(showStaff){
-    html += `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;">
-      <div style="font-weight:700; margin-bottom:8px;">👤 أداء الموظفين</div>
-      ${staffRows.map(([name,d])=>`<div style="display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px;"><span>${name}</span><span>${d.count} فاتورة — ${d.total.toFixed(2)} ج.م</span></div>`).join('') || '<div class="empty-cart">لا يوجد</div>'}
-    </div>`;
+  else if(currentReportType === 'payments'){
+    // 💳 ملخص المدفوعات
+    const entries = Object.keys(byMethod);
+    const grand = entries.reduce((s,m)=> s + byMethod[m], 0);
+    html = `<div id="repPrintArea"><div class="rep-card">
+      <h2 style="margin:0 0 4px; font-size:16px;">💳 ملخص المدفوعات — ${reportRangeLabel()}</h2>
+      <div style="color:var(--muted); font-size:12px; margin-bottom:10px;">${currentBranch||''}</div>
+      <table class="rep-tbl"><thead><tr><th>طريقة الدفع</th><th class="num">عدد الفواتير</th><th class="num">الإجمالي</th><th class="num">النسبة</th></tr></thead><tbody>
+      ${entries.length ? entries.map(m=>`<tr><td>${methodLabels[m]||m}</td><td class="num">${methodCount[m]||0}</td><td class="num">${byMethod[m].toFixed(2)}</td><td class="num">${grand? Math.round(byMethod[m]/grand*100):0}%</td></tr>`).join('')
+                       : '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:16px;">لا يوجد</td></tr>'}
+      </tbody><tfoot><tr class="grand"><td>الإجمالي</td><td class="num">${invoiceCount}</td><td class="num">${grand.toFixed(2)} ج.م</td><td class="num">100%</td></tr></tfoot></table>
+    </div></div>
+    <div style="text-align:center; margin-top:6px;"><button class="rep-print-btn" onclick="printReportArea()">🖨️ طباعة</button></div>`;
   }
 
   wrap.innerHTML = html;
+}
+
+// طباعة التقرير المعروض (نافذة طباعة مستقلة)
+function printReportArea(){
+  const area = document.getElementById('repPrintArea');
+  if(!area) return;
+  const w = window.open('', '', 'width=420,height=640');
+  if(!w) { showToast('اسمح بالنوافذ المنبثقة عشان الطباعة تشتغل', 'err'); return; }
+  w.document.write('<html dir="rtl"><head><meta charset="utf-8"><title>تقرير</title>'+
+    '<style>body{font-family:sans-serif;padding:14px;color:#111;}table{width:100%;border-collapse:collapse;}'+
+    'th,td{padding:6px 8px;border-bottom:1px solid #ccc;font-size:13px;text-align:right;}'+
+    'th{border-bottom:2px solid #000;}.num{text-align:left;}tr.grand td{font-weight:900;border-top:2px solid #000;}'+
+    'h2{text-align:center;font-size:16px;margin:6px 0;}.rep-receipt{max-width:340px;margin:auto;font-family:monospace;}'+
+    '.rc-h{text-align:center;font-weight:900;font-size:16px;}.rc-sub{text-align:center;font-size:12px;color:#555;margin-bottom:10px;}'+
+    '.rc-line{display:flex;justify-content:space-between;padding:3px 0;}.rc-sep{border-top:1px dashed #888;margin:7px 0;}.rc-big{font-weight:900;}'+
+    '</style></head><body>'+area.innerHTML+'</body></html>');
+  w.document.close(); w.focus();
+  setTimeout(function(){ w.print(); }, 250);
 }
 
 // ---------------- Navigation ----------------
@@ -647,6 +749,10 @@ async function loadClockedInStaff(){
   }catch(e){ console.warn('تعذر تحميل قايمة الموظفين الحاضرين', e); }
 }
 
+function focusSearchBar(){
+  // نفوكس خانة البحث عشان السكانر يمسح على طول (منتج أو كود عميل) من غير ما الكاشير يدوس عليها
+  setTimeout(function(){ var sb=document.getElementById('searchBar'); if(sb) sb.focus(); }, 120);
+}
 function resumeOrStartSale(){
   if(cart.length > 0){
     document.getElementById('btnAcceptReturn').disabled = !hasPerm('canRefund');
@@ -656,6 +762,7 @@ function resumeOrStartSale(){
     renderCart();
     resetPaymentUI(); // بس حالة الدفع بتتصفّر (ممكن يكون الإجمالي اتغيّر)، الأصناف نفسها فاضلة زي ما هي
     showScreen('saleScreen');
+    focusSearchBar();
   }else{
     goToSale();
   }
@@ -684,6 +791,7 @@ function goToSale(){
   renderCart();
   resetPaymentUI();
   showScreen('saleScreen');
+  focusSearchBar();
 }
 function goToDashboard(){
   refreshHeldCount();
@@ -775,21 +883,84 @@ async function renderLegacySalesHistory(){
 }
 
 // ---------------- Customer List ----------------
+let custListData = [];
 async function goToCustomerList(){
   showScreen('customerListScreen');
   const wrap = document.getElementById('customerListWrap');
-  wrap.innerHTML = 'بيتحمّل...';
-  const snap = await db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get();
-  const customers = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  if(customers.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش عملاء مسجلين</div>'; return; }
-  wrap.innerHTML = customers.map(c=>`
-    <div onclick="openCustomerProfile('${c.phone}')" style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-      <div>
-        <div style="font-weight:700; font-size:13px;">${c.name || 'بدون اسم'}</div>
-        <div style="color:var(--muted); font-size:11px;">${c.phone}</div>
+  wrap.innerHTML = '<div style="padding:30px; text-align:center; color:var(--muted);">بيتحمّل...</div>';
+  const searchEl = document.getElementById('custSearch'); if(searchEl) searchEl.value='';
+  try{
+    const [custSnap, sales] = await Promise.all([
+      db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get(),
+      getBranchSales()
+    ]);
+    // تجميع إنفاق/زيارات/آخر زيارة لكل عميل من الفواتير
+    const agg = {};
+    sales.forEach(s=>{
+      if(!s.customerPhone || s.reversed) return;
+      const p = s.customerPhone;
+      if(!agg[p]) agg[p] = { spend:0, count:0, lastTs:0 };
+      agg[p].spend += (s.total||0);
+      if(!s.isReversal) agg[p].count += 1;
+      const t = saleTime(s); if(t > agg[p].lastTs) agg[p].lastTs = t;
+    });
+    custListData = custSnap.docs.map(d=>{
+      const c = { id:d.id, ...d.data() };
+      const a = agg[c.phone] || { spend:0, count:0, lastTs:0 };
+      c._spend = a.spend; c._count = a.count; c._lastTs = a.lastTs;
+      return c;
+    });
+    renderCustList();
+  }catch(e){ wrap.innerHTML = '<div class="empty-cart">تعذر التحميل: '+e.message+'</div>'; }
+}
+
+function renderCustList(){
+  const wrap = document.getElementById('customerListWrap');
+  if(!wrap) return;
+  const q = (document.getElementById('custSearch')?.value || '').trim().toLowerCase();
+  const sort = document.getElementById('custSort')?.value || 'spend';
+
+  // إحصائيات عامة (على كل العملاء مش المفلترين)
+  const totalCustomers = custListData.length;
+  const totalPoints = custListData.reduce((s,c)=> s + (c.points||0), 0);
+  const totalSpend = custListData.reduce((s,c)=> s + (c._spend||0), 0);
+  const sumEl = document.getElementById('custSummary');
+  if(sumEl){
+    const chip = (lbl,val,col)=>`<div style="flex:1; min-width:100px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 12px; text-align:center;"><div style="color:var(--muted); font-size:10px;">${lbl}</div><div style="font-weight:900; font-size:16px; color:${col||'var(--text)'};">${val}</div></div>`;
+    sumEl.innerHTML = chip('عملاء مسجّلين', totalCustomers) + chip('إجمالي إنفاقهم', totalSpend.toFixed(0)+' ج.م','var(--plus)') + chip('إجمالي النقاط', totalPoints,'var(--warn)');
+  }
+
+  let list = custListData.filter(c=> !q || (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q));
+  if(sort==='spend') list.sort((a,b)=> (b._spend||0)-(a._spend||0));
+  else if(sort==='recent') list.sort((a,b)=> (b._lastTs||0)-(a._lastTs||0));
+  else if(sort==='points') list.sort((a,b)=> (b.points||0)-(a.points||0));
+  else if(sort==='name') list.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''),'ar'));
+
+  if(list.length === 0){ wrap.innerHTML = '<div class="empty-cart">'+(q?'مفيش عميل بالبحث ده':'لسه مفيش عملاء مسجلين')+'</div>'; return; }
+
+  wrap.innerHTML = list.map(c=>{
+    const last = c._lastTs ? new Date(c._lastTs).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
+    const hasCode = c.loyaltyCode ? `<span style="background:#eef; color:#5340c8; font-size:10px; font-weight:800; padding:2px 7px; border-radius:99px;">💳 ${c.loyaltyCode}</span>` : '';
+    const hasPin = c.loyaltyPin ? '<span style="font-size:10px; color:var(--muted);">🔒 مؤمّن</span>' : '';
+    return `
+    <div onclick="openCustomerProfile('${c.phone}')" style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:9px; cursor:pointer;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+        <div style="min-width:0;">
+          <div style="font-weight:800; font-size:14px;">${c.name || 'بدون اسم'}</div>
+          <div style="color:var(--muted); font-size:11px; direction:ltr; text-align:right;">${c.phone}</div>
+          <div style="margin-top:5px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">${hasCode} ${hasPin}</div>
+        </div>
+        <div style="text-align:left; flex-shrink:0;">
+          <div style="font-weight:900; font-size:15px; color:var(--plus);">${(c._spend||0).toFixed(0)} <span style="font-size:11px; font-weight:700;">ج.م</span></div>
+          <div style="color:var(--warn); font-size:11px; font-weight:700;">${c.points||0} نقطة</div>
+        </div>
       </div>
-      <div style="font-size:12px; color:var(--muted);">${c.points||0} نقطة ولاء</div>
-    </div>`).join('');
+      <div style="display:flex; justify-content:space-between; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:11px; color:var(--muted);">
+        <span>🧾 ${c._count||0} فاتورة</span>
+        <span>🕐 آخر زيارة: ${last}</span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ---------------- End of Day (إغلاق اليوم / تقفيل الدرج) ----------------

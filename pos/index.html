@@ -117,6 +117,21 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   color:var(--text); font-size:12px; font-weight:700; cursor:pointer;
 }
 .rep-range-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+.rep-type-btn{padding:11px 16px; border-radius:11px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-weight:800; font-size:14px; cursor:pointer;}
+.rep-type-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+.rep-print-btn{padding:10px 16px; border-radius:10px; border:none; background:#334155; color:#fff; font-weight:800; font-size:13px; cursor:pointer;}
+.rep-tbl{width:100%; border-collapse:collapse;}
+.rep-tbl th{text-align:right; font-size:12px; color:var(--muted); padding:8px 6px; border-bottom:2px solid var(--border); font-weight:800;}
+.rep-tbl td{text-align:right; font-size:13px; padding:9px 6px; border-bottom:1px solid var(--border); color:var(--text);}
+.rep-tbl td.num, .rep-tbl th.num{text-align:left; font-variant-numeric:tabular-nums;}
+.rep-tbl tr.grand td{font-weight:900; border-top:2px solid var(--border); border-bottom:none; font-size:14px;}
+.rep-card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:12px;}
+.rep-receipt{background:#fff; border:1px dashed #999; border-radius:10px; padding:20px 22px; max-width:360px; margin:0 auto; color:#111; font-family:'Courier New',monospace;}
+.rep-receipt .rc-h{text-align:center; font-weight:900; font-size:16px;}
+.rep-receipt .rc-sub{text-align:center; font-size:12px; color:#555; margin-bottom:12px;}
+.rep-receipt .rc-line{display:flex; justify-content:space-between; padding:4px 0; font-size:13.5px;}
+.rep-receipt .rc-sep{border-top:1px dashed #999; margin:8px 0;}
+.rep-receipt .rc-big{font-weight:900; font-size:15px;}
 .logout-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 12px;font-size:12px;}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;}
 .tile{
@@ -494,6 +509,19 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
     <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
+  <div style="padding:0 20px 10px;">
+    <div id="custSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <input type="text" id="custSearch" placeholder="🔍 دوّر بالاسم أو الرقم..." oninput="renderCustList()"
+        style="flex:1; min-width:180px; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; outline:none;">
+      <select id="custSort" onchange="renderCustList()" style="padding:11px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;">
+        <option value="spend">الأكثر إنفاقًا</option>
+        <option value="recent">آخر زيارة</option>
+        <option value="points">النقاط</option>
+        <option value="name">الاسم</option>
+      </select>
+    </div>
+  </div>
   <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="customerListWrap"></div>
 </div>
 
@@ -524,7 +552,20 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   </div>
   <div style="padding:0 4px;" id="lowStockAlertBar"></div>
   <div style="padding:0 4px 12px;" id="inventoryAddRow"></div>
-  <div style="flex:1; overflow-y:auto;" id="inventoryListWrap"></div>
+  <div style="padding:0 4px;">
+    <div id="invSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+      <input type="text" id="invSearch" placeholder="🔍 دوّر باسم الصنف أو الباركود..." oninput="renderInventoryList()"
+        style="flex:1; min-width:180px; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; outline:none;">
+      <select id="invFilter" onchange="renderInventoryList()" style="padding:11px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;">
+        <option value="all">كل الأصناف</option>
+        <option value="low">نواقص ⚠️</option>
+        <option value="out">نافد ⛔</option>
+        <option value="hidden">مخفي 🚫</option>
+      </select>
+    </div>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 4px 16px;" id="inventoryListWrap"></div>
 </div>
 
 <!-- ============ RECEIVE GOODS ============ -->
@@ -718,10 +759,10 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
       <input type="date" id="repTo" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
       <button class="rep-range-btn" onclick="setReportRange('custom')">تطبيق</button>
     </div>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; font-size:12px; color:var(--muted);">
-      <label style="display:flex; align-items:center; gap:4px;"><input type="checkbox" id="repShowItems" checked onchange="renderReportsScreen()"> الأصناف الأكتر مبيعًا</label>
-      <label style="display:flex; align-items:center; gap:4px;"><input type="checkbox" id="repShowPayments" checked onchange="renderReportsScreen()"> طرق الدفع</label>
-      <label style="display:flex; align-items:center; gap:4px;"><input type="checkbox" id="repShowStaff" checked onchange="renderReportsScreen()"> أداء الموظفين</label>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+      <button class="rep-type-btn active" data-rtype="receipt" onclick="setReportType('receipt')">🧾 إيصال اليوم</button>
+      <button class="rep-type-btn" data-rtype="items" onclick="setReportType('items')">📦 ملخص الأصناف</button>
+      <button class="rep-type-btn" data-rtype="payments" onclick="setReportType('payments')">💳 ملخص المدفوعات</button>
     </div>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="reportsWrap"></div>
