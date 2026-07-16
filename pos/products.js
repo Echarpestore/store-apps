@@ -180,25 +180,58 @@ function goToReceiveGoods(){
   showScreen('receiveGoodsScreen');
   receiveCart = [];
   renderReceiveCart();
+  // نتأكد إن المخزون متحمّل عشان البحث يلاقي المنتجات
+  if(typeof loadInventory === 'function') loadInventory().catch(()=>{});
   const input = document.getElementById('receiveGoodsBarcode');
   input.value = '';
+  const sb = document.getElementById('receiveSuggestBox'); if(sb) sb.innerHTML = '';
   setTimeout(()=> input.focus(), 100);
   renderReceiveGoodsLog();
 }
 
-// امسح/اكتب كود ودوس Enter → يتضاف للقايمة (زي شاشة البيع)
+// بحث حي وأنت بتكتب (زي صفحة البيع): يوري اقتراحات تدوس عليها
+document.getElementById('receiveGoodsBarcode').addEventListener('input', (e)=>{
+  const q = e.target.value.trim().toLowerCase();
+  const box = document.getElementById('receiveSuggestBox');
+  if(!box) return;
+  box.innerHTML = '';
+  if(!q) return;
+  const matches = allInventory.filter(it=>
+    (it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q)
+  ).slice(0, 12);
+  if(!matches.length){
+    box.innerHTML = '<div style="padding:11px; color:#999; font-size:13px;">مفيش منتج بالاسم/الكود ده</div>';
+    return;
+  }
+  matches.forEach(it=>{
+    const row = document.createElement('div');
+    row.className = 'sugg-row';
+    row.innerHTML = `<span>${it.name} <span style="color:#999; font-size:11px;">${it.barcode||''}</span></span><span style="color:var(--muted)">مخزون: ${it.quantity??0}</span>`;
+    row.onclick = ()=>{ addToReceiveCart(it); e.target.value=''; box.innerHTML=''; e.target.focus(); };
+    box.appendChild(row);
+  });
+});
+
+// امسح/اكتب كود أو اسم ودوس Enter → يتضاف للقايمة (زي شاشة البيع)
 document.getElementById('receiveGoodsBarcode').addEventListener('keydown', (e)=>{
   if(e.key !== 'Enter') return;
   const code = e.target.value.trim();
   if(!code) return;
-  const product = allInventory.find(p=> p.barcode === code || p.name === code);
+  const box = document.getElementById('receiveSuggestBox');
+  let product = allInventory.find(p=> p.barcode === code || p.name === code);
   if(!product){
-    showToast('مفيش منتج بالكود ده: ' + code, 'err');
-    e.target.value = '';
+    // مفيش تطابق تام؟ لو فيه نتيجة واحدة بس في البحث خدها
+    const q = code.toLowerCase();
+    const ms = allInventory.filter(it=> (it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q));
+    if(ms.length === 1) product = ms[0];
+  }
+  if(!product){
+    showToast('مفيش منتج بالكود/الاسم ده: ' + code, 'err');
     return;
   }
   addToReceiveCart(product);
   e.target.value = '';
+  if(box) box.innerHTML = '';
   e.target.focus();
 });
 

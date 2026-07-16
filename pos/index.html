@@ -595,12 +595,16 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   </div>
   <div style="padding:0 16px;">
     <p style="color:var(--muted); font-size:12px; margin:-6px 0 12px;">
-      اكتب أو امسح باركود المنتج ودوس Enter. رقم موجب = إضافة للمخزون (توريد). رقم بالسالب = خصم (تالف/مرتجع للمورد) — لو الكمية وصلت صفر أو أقل، المنتج هيتحط "نافد" ويختفي من شاشة البيع تلقائي.
+      امسح أو اكتب كود المنتج ودوس Enter — هيتضاف لقايمة تحت. اكتب العدد وكمّل باقي المنتجات، وفي الآخر دوس «تأكيد الاستلام». (رقم بالسالب = خصم تالف/مرتجع للمورد.)
     </p>
-    <input type="text" id="receiveGoodsBarcode" placeholder="امسح أو اكتب الباركود هنا..." autocomplete="off"
-      style="width:100%; padding:14px; border-radius:10px; border:1px solid #b9c9a0; background:#fff; color:#1a1a1a; font-size:15px; margin-bottom:14px;">
-    <div id="receiveGoodsResult"></div>
-    <div style="margin-top:16px;">
+    <div style="position:relative; margin-bottom:14px;">
+      <input type="text" id="receiveGoodsBarcode" placeholder="امسح أو اكتب الباركود أو اسم المنتج..." autocomplete="off"
+        style="width:100%; padding:14px; border-radius:10px; border:1px solid #b9c9a0; background:#fff; color:#1a1a1a; font-size:15px;">
+      <div id="receiveSuggestBox" style="position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid #a8a49b; border-radius:6px; max-height:260px; overflow-y:auto; z-index:30; color:#1a1a1a;"></div>
+    </div>
+    <div id="receiveCartWrap"></div>
+    <button id="receiveConfirmBtn" onclick="confirmReceiveCart()" style="display:none; width:100%; padding:15px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:900; font-size:15px; cursor:pointer; margin-bottom:16px;">✔️ تأكيد الاستلام</button>
+    <div style="margin-top:8px;">
       <div style="font-weight:800; margin-bottom:6px;">📋 آخر عمليات الاستلام اليوم</div>
       <div id="receiveGoodsLog"></div>
     </div>
