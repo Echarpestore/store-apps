@@ -792,27 +792,149 @@ async function goToCustomerList(){
     </div>`).join('');
 }
 
-// ---------------- End of Day ----------------
+// ---------------- End of Day (إغلاق اليوم / تقفيل الدرج) ----------------
+let dcData = {};   // بيانات النهاردة من السيستم (للحساب والحفظ)
+
 async function goToEndOfDay(){
   showScreen('endOfDayScreen');
   const wrap = document.getElementById('endOfDayWrap');
-  wrap.innerHTML = 'بيتحمّل...';
+  wrap.innerHTML = '<div style="padding:34px; text-align:center; color:var(--muted);">بيتحمّل بيانات النهاردة...</div>';
+
   const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-  const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
-  const sales = snap.docs.map(d=>d.data()).filter(s=> s.createdAt && s.createdAt.toMillis && s.createdAt.toMillis() >= dayStart.getTime());
-  const total = sales.reduce((s,x)=> s + (x.total||0), 0);
-  const byMethod = {};
-  sales.forEach(s=> (s.payments||[]).forEach(p=>{ byMethod[p.method] = (byMethod[p.method]||0) + p.amount; }));
+  const dayMs = dayStart.getTime();
+
+  // مبيعات النهاردة (نفس الفرع)
+  let sales = [];
+  try{
+    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+    sales = snap.docs.map(d=>d.data()).filter(s=> s.createdAt && s.createdAt.toMillis && s.createdAt.toMillis() >= dayMs);
+  }catch(e){ console.warn('sales', e); }
+
+  const systemTotal = sales.reduce((s,x)=> s + (x.total||0), 0);
+  let cashSales=0, visaSales=0, instaSales=0;
+  sales.forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); });
+
+  // سلف النهاردة من برنامج المبيعات (sales_advances)
+  let advancesTotal = 0;
+  try{
+    const advSnap = await db.collection('sales_advances').where('branch','==', currentBranch).get();
+    advSnap.forEach(d=>{ const a=d.data(); const t = a.ts || (a.date ? Date.parse(a.date) : 0); if(t >= dayMs) advancesTotal += (+a.amount||0); });
+  }catch(e){ console.warn('advances', e); }
+
+  dcData = { systemTotal, cashSales, visaSales, instaSales, advancesTotal, invoiceCount: sales.length };
+  const lastFloat = parseFloat(localStorage.getItem('dc_float_'+currentBranch)) || '';
+
+  const denoms = [200,100,50,20,10,5];
+  const denomRows = denoms.map(d=>`
+    <div class="dc-den-row">
+      <div class="dc-den-face">${d} ج.م</div>
+      <span class="dc-x">×</span>
+      <input type="number" min="0" id="dc_den_${d}" placeholder="0" inputmode="numeric" oninput="dcRecalc()" class="dc-inp dc-inp-count">
+      <span class="dc-x">=</span>
+      <div id="dc_line_${d}" class="dc-line">0</div>
+    </div>`).join('');
+
   wrap.innerHTML = `
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:10px;">
-      <div style="color:var(--muted); font-size:12px;">إجمالي مبيعات النهاردة</div>
-      <div style="font-size:26px; font-weight:900; color:var(--plus);">${total.toFixed(2)} ج.م</div>
-      <div style="color:var(--muted); font-size:11px;">${sales.length} فاتورة</div>
+    <div class="dc-summary">
+      <div><div class="dc-sm-lbl">مبيعات النهاردة (السيستم)</div><div class="dc-sm-val">${systemTotal.toFixed(2)} <span>ج.م</span></div></div>
+      <div class="dc-sm-sub">${dcData.invoiceCount} فاتورة · كاش ${cashSales.toFixed(0)} · فيزا ${visaSales.toFixed(0)} · انستا ${instaSales.toFixed(0)}</div>
     </div>
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;">
-      <div style="font-weight:700; margin-bottom:8px;">حسب طريقة الدفع</div>
-      ${Object.keys(byMethod).map(m=>`<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--border); font-size:13px;"><span>${m}</span><span>${byMethod[m].toFixed(2)} ج.م</span></div>`).join('') || '<div class="empty-cart">لا يوجد</div>'}
+
+    <div class="dc-card">
+      <div class="dc-card-h">💵 عدّ الكاش في الدرج</div>
+      ${denomRows}
+      <div class="dc-total-row"><span>إجمالي الكاش المعدود</span><span id="dc_counted">0.00 ج.م</span></div>
+    </div>
+
+    <div class="dc-card">
+      <div class="dc-card-h">🧾 خصومات من الدرج</div>
+      ${dcField('العهدة (فكّة أول اليوم)', 'dc_float', lastFloat, 'بتتخصم — مش إيراد')}
+      ${dcField('مصروفات اليوم (طلعت كاش)', 'dc_expenses', '', 'اللي اتصرف من الدرج')}
+      ${dcField('سلف اليوم', 'dc_advances', advancesTotal || '', 'جِت من المبيعات — عدّلها لو محتاج')}
+    </div>
+
+    <div class="dc-card">
+      <div class="dc-card-h">💳 الفيزا والانستاباي</div>
+      ${dcField('فيزا (من السيستم)', 'dc_visa', visaSales || '', 'عدّلها لو الماكينة مختلفة')}
+      ${dcField('انستاباي (من السيستم)', 'dc_insta', instaSales || '', 'عدّلها لو محتاج')}
+    </div>
+
+    <button class="dc-ok" onclick="dcFinish()">✔️ احسب النتيجة (أوفر / عجز)</button>
+    <div id="dc_result"></div>
+  `;
+  dcRecalc();
+}
+
+// خانة إدخال قابلة للتعديل
+function dcField(label, id, val, hint){
+  return `<div class="dc-field">
+    <div><div class="dc-field-lbl">${label}</div>${hint?`<div class="dc-field-hint">${hint}</div>`:''}</div>
+    <input type="number" min="0" id="${id}" value="${val===''||val==null?'':(+val).toFixed(0)}" placeholder="0" inputmode="numeric" oninput="dcClearResult()" class="dc-inp">
+  </div>`;
+}
+function dcNum(id){ const el=document.getElementById(id); return el ? (parseFloat(el.value)||0) : 0; }
+function dcClearResult(){ const r=document.getElementById('dc_result'); if(r) r.innerHTML=''; }
+
+// حساب حي لإجمالي الكاش المعدود
+function dcRecalc(){
+  const denoms = [200,100,50,20,10,5];
+  let counted = 0;
+  denoms.forEach(d=>{
+    const c = dcNum('dc_den_'+d);
+    const line = c * d;
+    counted += line;
+    const el = document.getElementById('dc_line_'+d); if(el) el.textContent = line.toLocaleString('en-US');
+  });
+  const ct = document.getElementById('dc_counted'); if(ct) ct.textContent = counted.toFixed(2) + ' ج.م';
+  dcClearResult();
+  return counted;
+}
+
+// لما يدوس OK: يحسب الأوفر/العجز ويحفظ سجل التقفيل
+function dcFinish(){
+  const denoms = [200,100,50,20,10,5];
+  let counted = 0; denoms.forEach(d=> counted += dcNum('dc_den_'+d) * d);
+  const flt = dcNum('dc_float'), exp = dcNum('dc_expenses'), adv = dcNum('dc_advances');
+  const visa = dcNum('dc_visa'), insta = dcNum('dc_insta');
+
+  // المفروض يتجمّع فعليًا = (كاش معدود − عهدة) + مصروفات + سلف + فيزا + انستا
+  const accounted = (counted - flt) + exp + adv + visa + insta;
+  const overShort = +(accounted - dcData.systemTotal).toFixed(2);
+
+  const isShort = overShort < -0.01, isOver = overShort > 0.01;
+  const state = isShort ? {c:'var(--minus)', t:'⚠️ عجز', bg:'#fdecec'} : isOver ? {c:'var(--warn)', t:'🔺 أوفر (زيادة)', bg:'#fff6e6'} : {c:'var(--plus)', t:'✅ مظبوط بالظبط', bg:'#eafaf0'};
+
+  document.getElementById('dc_result').innerHTML = `
+    <div class="dc-result" style="background:${state.bg}; border-color:${state.c};">
+      <div class="dc-res-head" style="color:${state.c};">${state.t}</div>
+      <div class="dc-res-big" style="color:${state.c};">${Math.abs(overShort).toFixed(2)} ج.م</div>
+      <div class="dc-res-break">
+        <div><span>كاش معدود</span><b>${counted.toFixed(2)}</b></div>
+        <div><span>− عهدة</span><b>${flt.toFixed(2)}</b></div>
+        <div><span>+ مصروفات</span><b>${exp.toFixed(2)}</b></div>
+        <div><span>+ سلف</span><b>${adv.toFixed(2)}</b></div>
+        <div><span>+ فيزا</span><b>${visa.toFixed(2)}</b></div>
+        <div><span>+ انستاباي</span><b>${insta.toFixed(2)}</b></div>
+        <div class="dc-res-sep"><span>= إجمالي محسوب</span><b>${accounted.toFixed(2)}</b></div>
+        <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>
+      </div>
     </div>`;
+
+  // نفتكر آخر عهدة على الجهاز ده
+  try{ localStorage.setItem('dc_float_'+currentBranch, String(flt)); }catch(e){}
+
+  // نحفظ سجل التقفيل (جوه pos_test_settings عشان القواعد الحالية تسمح بيه)
+  const rec = {
+    type:'dayclose', branch: currentBranch, date: todayISO(),
+    countedCash: counted, float: flt, expenses: exp, advances: adv, visa, instapay: insta,
+    systemTotal: dcData.systemTotal, cashSales: dcData.cashSales, visaSales: dcData.visaSales, instaSales: dcData.instaSales,
+    accounted, overShort, invoiceCount: dcData.invoiceCount,
+    closedBy: (typeof currentEmployee!=='undefined' && currentEmployee) ? (currentEmployee.name||'') : '',
+    ts: Date.now()
+  };
+  db.collection(TEST_SETTINGS).doc('dayclose_'+currentBranch+'_'+todayISO()).set(rec, {merge:true})
+    .then(()=> showToast('اتقفل اليوم واتسجل ✅'))
+    .catch(e=> console.warn('dayclose save', e));
 }
 
 // ---------------- Search / suggestions ----------------
