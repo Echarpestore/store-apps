@@ -507,10 +507,13 @@ function openRewardModal(target){
 }
 function closeRewardModal(){ document.getElementById('rewardModal').classList.remove('active'); }
 
+const _busyOps = new Set();   // منع تكرار العمليات أثناء التحميل
 async function sendRewardConfirm(){
+  if(_busyOps.has('reward')) return;   // لسه بيتبعت — تجاهل الضغط المكرر
   const type = document.getElementById('rwType').value;
   const value = parseFloat(document.getElementById('rwValue').value) || 0;
   if(value <= 0){ showToast('اكتب قيمة الخصم', 'err'); return; }
+  _busyOps.add('reward');
   const minInvoice = parseFloat(document.getElementById('rwMin').value) || 0;
   const days = parseInt(document.getElementById('rwDays').value) || 7;
   const reward = {
@@ -522,7 +525,7 @@ async function sendRewardConfirm(){
     ts: Date.now()
   };
   const phones = (rewardTarget && rewardTarget.bulk) ? rewardTarget.phones : [rewardTarget];
-  if(!phones.length){ showToast('مفيش عملاء', 'err'); return; }
+  if(!phones.length){ showToast('مفيش عملاء', 'err'); _busyOps.delete('reward'); return; }
   try{
     let batch = db.batch(), n = 0;
     for(const ph of phones){
@@ -539,7 +542,7 @@ async function sendRewardConfirm(){
     closeRewardModal();
     if(typeof selectedCustomers !== 'undefined'){ selectedCustomers.clear(); if(document.getElementById('customerListWrap')) renderCustList(); }
     showToast(`اتبعتت المكافأة لـ ${phones.length} عميل 🎁`);
-  }catch(e){ showToast('خطأ: ' + e.message, 'err'); }
+  }catch(e){ showToast('خطأ: ' + e.message, 'err'); }finally{ _busyOps.delete('reward'); }
 }
 function sendRewardToAllListed(){
   const phones = (custListFiltered && custListFiltered.length ? custListFiltered : custListData).map(c=> c.phone).filter(Boolean);
@@ -595,6 +598,10 @@ function renderCatalogEditor(){
         </select>
         <input id="catDiscVal" type="number" placeholder="قيمة الخصم" style="${inp} flex:1;">
       </div>
+      <div style="display:flex; gap:8px;">
+        <input id="catUses" type="number" placeholder="يستخدمه كام مرة (لكل عميل)" value="1" style="${inp} flex:1;">
+        <input id="catValidDays" type="number" placeholder="صالح كام يوم (فاضي=مفتوح)" style="${inp} flex:1;">
+      </div>
       <label style="display:block; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:4px;">📷 صورة المنتج (من موبايلك)</label>
       <input type="file" id="catImgFile" accept="image/*" onchange="catalogPickImage(this)" style="${inp}">
       <div id="catImgPreview"></div>
@@ -606,6 +613,7 @@ function renderCatalogEditor(){
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
       ${catalogData.items.map(it=>{
         const disc = it.discountType==='percent' ? `خصم ${it.discountValue}%` : it.discountType==='amount' ? `خصم ${it.discountValue} ج.م` : '';
+        const limits = disc ? `${it.usesPerCustomer||1}× لكل عميل${it.validDays?` · ${it.validDays} يوم`:''}` : '';
         const st = (it.barcode && catalogStats[it.barcode]) ? catalogStats[it.barcode] : null;
         const statLine = (disc && it.barcode) ? `<div style="color:var(--accent); font-size:10px; font-weight:700;">🎯 فعّلوه: ${st&&st.activated?st.activated:0} · استعملوه: ${st&&st.used?st.used:0}</div>` : '';
         return `
@@ -615,6 +623,7 @@ function renderCatalogEditor(){
             <div style="font-weight:700; font-size:13px;">${it.name||''}</div>
             ${it.price?`<div style="color:var(--plus); font-weight:800; font-size:13px;">${it.price} ج.م</div>`:''}
             ${disc?`<div style="color:var(--warn); font-weight:800; font-size:11px;">🎁 ${disc}</div>`:''}
+            ${limits?`<div style="color:var(--muted); font-size:10px;">⏱️ ${limits}</div>`:''}
             ${statLine}
             ${it.barcode?`<div style="color:var(--muted); font-size:10px;">كود: ${it.barcode}</div>`:''}
             <button onclick="catalogDelItem('${it.id}')" style="margin-top:6px; width:100%; padding:6px; border-radius:7px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>
@@ -688,8 +697,10 @@ function catalogPickInv(id){
 }
 
 async function catalogAddItem(){
+  if(_busyOps.has('catItem')) return;
   const name = document.getElementById('catName').value.trim();
   if(!name){ showToast('اكتب اسم المنتج (أو اختاره من المخزون)', 'err'); return; }
+  _busyOps.add('catItem');
   const dtype = document.getElementById('catDiscType').value;
   catalogData.items.push({
     id: 'c' + Date.now().toString(36),
@@ -699,20 +710,26 @@ async function catalogAddItem(){
     img: catalogPendingImg || '',
     desc: document.getElementById('catDesc').value.trim(),
     discountType: dtype,
-    discountValue: dtype === 'none' ? 0 : (parseFloat(document.getElementById('catDiscVal').value) || 0)
+    discountValue: dtype === 'none' ? 0 : (parseFloat(document.getElementById('catDiscVal').value) || 0),
+    usesPerCustomer: Math.max(1, parseInt(document.getElementById('catUses').value) || 1),
+    validDays: parseInt(document.getElementById('catValidDays').value) || 0   // 0 = مفتوح
   });
   try{ await saveCatalogDoc(); catalogPendingImg=''; showToast('اتضاف ✅'); renderCatalogEditor(); }
   catch(e){ showToast('خطأ (يمكن الصورة كبيرة): '+e.message, 'err'); catalogData.items.pop(); }
+  finally{ _busyOps.delete('catItem'); }
 }
 async function catalogDelItem(id){
   catalogData.items = catalogData.items.filter(x=> x.id !== id);
   try{ await saveCatalogDoc(); renderCatalogEditor(); }catch(e){ showToast('خطأ: '+e.message,'err'); }
 }
 async function catalogAddBanner(){
+  if(_busyOps.has('catBanner')) return;
   if(!catalogPendingBanner){ showToast('اختار صورة البانر الأول', 'err'); return; }
+  _busyOps.add('catBanner');
   catalogData.banners.push({ id:'b'+Date.now().toString(36), img: catalogPendingBanner });
   try{ await saveCatalogDoc(); catalogPendingBanner=''; showToast('اتضاف البانر ✅'); renderCatalogEditor(); }
   catch(e){ showToast('خطأ: '+e.message,'err'); catalogData.banners.pop(); }
+  finally{ _busyOps.delete('catBanner'); }
 }
 async function catalogDelBanner(id){
   catalogData.banners = catalogData.banners.filter(x=> x.id !== id);
@@ -1539,6 +1556,8 @@ function applyCustomerOffers(){
     if(line.isReturn || line.isRedemption || line.offerApplied || !line.barcode) return;
     const off = custActivatedOffers[line.barcode];
     if(!off) return;
+    if(off.expiry && off.expiry < Date.now()) return;          // العرض انتهت صلاحيته
+    if((off.uses||0) >= (off.maxUses||1)) return;               // العميل استهلك مرّاته
     const orig = line.price;
     let np = off.type==='percent' ? orig*(1-Number(off.value)/100) : orig-Number(off.value);
     np = Math.max(0, Math.round(np*100)/100);
@@ -2113,7 +2132,9 @@ async function renderReverseList(){
 }
 
 async function reverseReceipt(saleId){
+  if(_busyOps.has('reverse_'+saleId)) return;
   if(!confirm('متأكد إنك عايز تعكس الفاتورة دي؟ الكمية هترجع للمخزون، والإجراء ده نهائي.')) return;
+  _busyOps.add('reverse_'+saleId);
   try{
     const saleDoc = await db.collection(TEST_SALES).doc(saleId).get();
     if(!saleDoc.exists){ showToast('الفاتورة مش موجودة', 'err'); return; }
@@ -2153,6 +2174,7 @@ async function reverseReceipt(saleId){
     showToast('اتعكست الفاتورة ✅ والكمية رجعت للمخزون', 'ok');
     renderReverseList();
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+  finally{ _busyOps.delete('reverse_'+saleId); }
 }
 
 // ---------------- Hold / Unhold ----------------
@@ -2448,7 +2470,16 @@ async function _doConfirmPayment(){
       custUpdate[pf] = firebase.firestore.FieldValue.increment(netPointsChange);   // نقاط الفرع الصح
       if(pendingRedemption) custUpdate.pendingRedeem = firebase.firestore.FieldValue.delete();   // نمسح الطلب بعد ما اتنفّذ
       if(appliedReward) custUpdate.rewards = firebase.firestore.FieldValue.arrayRemove(appliedReward);   // نمسح المكافأة اللي اتستخدمت
-      cart.forEach(l=>{ if(l.offerApplied && l.barcode) custUpdate['activatedOffers.'+l.barcode] = firebase.firestore.FieldValue.delete(); });   // نمسح العروض اللي اتستخدمت
+      cart.forEach(l=>{
+        if(l.offerApplied && l.barcode){
+          const _off = custActivatedOffers[l.barcode] || {};
+          if(((_off.uses||0) + 1) >= (_off.maxUses||1)){
+            db.collection(TEST_CUSTOMERS).doc(phone).update({ ['activatedOffers.'+l.barcode]: firebase.firestore.FieldValue.delete() }).catch(()=>{});   // خلصت مرّاته → يتشال
+          }else{
+            db.collection(TEST_CUSTOMERS).doc(phone).update({ ['activatedOffers.'+l.barcode+'.uses']: firebase.firestore.FieldValue.increment(1) }).catch(()=>{});   // لسه ليه مرّات → نزوّد العدّاد
+          }
+        }
+      });
       if(custName) custUpdate.name = custName;
       await custRef.set(custUpdate, { merge: true });
     }
