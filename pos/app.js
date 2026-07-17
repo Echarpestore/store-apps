@@ -1328,8 +1328,8 @@ searchBar.addEventListener('keydown', (e)=>{
       addToCart(match);
       searchBar.value = '';
       document.getElementById('suggestBox').innerHTML = '';
-    }else if(/^ECH/i.test(code)){
-      // مش منتج, وشكله كود عضوية عميل من تطبيق الولاء → نربط العميل بالفاتورة
+    }else if(/^ECH/i.test(code) || /^GLW/i.test(code)){
+      // كود عضوية عميل (echarpe ECH أو Glow GLW) → نربط العميل بالفاتورة
       resolveLoyaltyScan(code.toUpperCase()).then(found=>{
         if(found){ searchBar.value=''; document.getElementById('suggestBox').innerHTML=''; }
         else showToast('كود العضوية مش موجود', 'err');
@@ -1731,7 +1731,13 @@ async function resetLoyaltyPin(){
 // يدوّر على عميل بكود العضوية (اللي بيتمسح من بطاقة تطبيق الولاء ECH...)
 async function resolveLoyaltyScan(code){
   try{
-    const snap = await db.collection(TEST_CUSTOMERS).where('loyaltyCode','==', code).limit(1).get();
+    const field = /^GLW/i.test(code) ? 'loyaltyCode_glow' : 'loyaltyCode';
+    let snap = await db.collection(TEST_CUSTOMERS).where(field, '==', code).limit(1).get();
+    if(snap.empty){
+      // احتياطي: نجرّب الخانة التانية لو مالقيناش
+      const other = field === 'loyaltyCode' ? 'loyaltyCode_glow' : 'loyaltyCode';
+      snap = await db.collection(TEST_CUSTOMERS).where(other, '==', code).limit(1).get();
+    }
     if(snap.empty) return false;
     const docSnap = snap.docs[0];
     const c = docSnap.data();
