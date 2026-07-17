@@ -46,6 +46,14 @@ let currentBranch = localStorage.getItem('pos_branch') || '';
 // فروع Glow ليها رصيد نقاط منفصل (points_glow) عن echarpe (points) — عشان ما تتلخبطش
 const GLOW_BRANCHES = ['Glow'];
 function pointsFieldFor(branch){ return GLOW_BRANCHES.includes(branch) ? 'points_glow' : 'points'; }
+// رمز مختصر للفرع لكود الفاتورة (بيشيل كلمة echarpe وياخد الكلمة المميزة)
+function branchCode(branch){
+  let s = String(branch||'').replace(/echarpe/ig,'').trim();
+  s = s.replace(/[^A-Za-z\u0600-\u06FF ]/g,' ').trim();
+  const words = s.split(/\s+/).filter(w=> w && !/^(el|al|the)$/i.test(w));
+  const base = words[0] || s || String(branch||'X');
+  return (base.slice(0,3).toUpperCase() || 'X');
+}
 // كمية المنتج في الفرع الحالي (كل فرع مخزونه منفصل). لو المنتج لسه ماتفصلش، بيرجّع الكمية القديمة.
 function branchQty(p, br){
   br = br || currentBranch;
@@ -1856,6 +1864,13 @@ async function openInvoiceForReturn(code){
     }
     const doc = snap.docs[0];
     const s = doc.data();
+    // Glow يرجّع Glow بس، وecharpe يرجّع echarpe بس (أي فرع echarpe)
+    const saleIsGlow = GLOW_BRANCHES.includes(s.branch);
+    const hereIsGlow = GLOW_BRANCHES.includes(currentBranch);
+    if(saleIsGlow !== hereIsGlow){
+      document.getElementById('returnInvoiceBody').innerHTML = `<div class="empty-cart">⛔ الفاتورة دي من سلسلة تانية (${s.branch||'—'})<br><span style="font-size:12px;">${hereIsGlow?'جهاز Glow يرجّع فواتير Glow بس':'الكاشير ده يرجّع فواتير echarpe بس'}</span></div>`;
+      return;
+    }
     returnInvoiceData = { id: doc.id, ...s };
 
     const saleMs = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : (s.createdAt && s.createdAt.seconds ? s.createdAt.seconds*1000 : 0);
@@ -1882,7 +1897,7 @@ async function openInvoiceForReturn(code){
     document.getElementById('returnInvoiceBody').innerHTML = `
       <div style="background:var(--panel2); border-radius:10px; padding:12px; margin-bottom:10px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <div style="font-weight:800; font-size:14px;">🧾 فاتورة #${s.invoiceNo||''}</div>
+          <div style="font-weight:800; font-size:14px;">🧾 فاتورة #${s.invoiceNo||''}${s.branch?` <span style="color:var(--accent); font-size:12px;">🏬 ${s.branch}</span>`:''}</div>
           <div style="font-weight:900; color:var(--plus);">${(s.total||0).toFixed(2)} ج.م</div>
         </div>
         <div style="color:var(--muted); font-size:12px; margin-bottom:8px;">📅 ${dateStr} · من ${daysAgo} يوم</div>
@@ -2523,8 +2538,8 @@ async function _doConfirmPayment(){
   const _rawPts = Math.floor(Math.abs(total) / _rate);
   const loyaltyPointsEarned = phone ? (total < 0 ? -_rawPts : _rawPts) : 0;   // المرتجع بيخصم نقط بالسالب
   const invoiceNo = await generateInvoiceNumber();
-  // كود فاتورة مميز عالميًا للباركود (بادئة FT عشان يتفرّق عن باركود المنتجات والعملاء)
-  const invoiceCode = 'FT' + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
+  // بادئة الفرع في كود الفاتورة (FT + رمز الفرع) — عشان الكود يقول الفرع فورًا ويمنع تعارض الأوفلاين
+  const invoiceCode = 'FT' + branchCode(currentBranch) + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
 
   // الموظف اللي فعليًا باع للعميل (ممكن يكون مختلف عن اللي مسجّل دخول في جهاز الـPOS نفسه)
   const sellerSel = document.getElementById('sellerEmployeeSelect');
