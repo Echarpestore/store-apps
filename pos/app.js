@@ -2103,6 +2103,12 @@ async function reverseReceipt(saleId){
       batch.update(ref, { ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(it.isReturn ? -it.qty : it.qty) });
     });
     batch.update(db.collection(TEST_SALES).doc(saleId), { reversed: true, reversedAt: firebase.firestore.FieldValue.serverTimestamp(), reversedBy: currentEmployee.name||'' });
+    // رجّع نقاط العميل: نشيل اللي كسبه ونرجّع اللي استبدله
+    if(sale.customerPhone){
+      const _pf = pointsFieldFor(sale.branch || currentBranch);
+      const _net = -(sale.loyaltyPointsEarned||0) + (sale.pointsRedeemed||0);
+      if(_net !== 0) batch.update(db.collection(TEST_CUSTOMERS).doc(sale.customerPhone), { [_pf]: firebase.firestore.FieldValue.increment(_net) });
+    }
     await batch.commit();
     for(const it of (sale.items||[])){
       await logStockMovement(it.id, it.name, it.isReturn ? -it.qty : it.qty, 'reversal', 'عكس فاتورة كاملة');
@@ -2353,7 +2359,9 @@ async function _doConfirmPayment(){
   const custName = document.getElementById('customerName').value.trim();
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
   const earnsStaffPoint = !isRefundInvoice && itemCount >= MIN_ITEMS_FOR_STAFF_POINT;
-  const loyaltyPointsEarned = (phone && !isRefundInvoice) ? Math.floor(total / loyaltyRedemptionConfig.pointsPerEGP) : 0;
+  const _rate = loyaltyRedemptionConfig.pointsPerEGP || 100;
+  const _rawPts = Math.floor(Math.abs(total) / _rate);
+  const loyaltyPointsEarned = phone ? (total < 0 ? -_rawPts : _rawPts) : 0;   // المرتجع بيخصم نقط بالسالب
   const invoiceNo = await generateInvoiceNumber();
   // كود فاتورة مميز عالميًا للباركود (بادئة FT عشان يتفرّق عن باركود المنتجات والعملاء)
   const invoiceCode = 'FT' + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
