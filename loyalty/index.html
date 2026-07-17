@@ -664,8 +664,17 @@ function tabRef(tab){
   if(tab==='invoices' && currentCustomer) return db.collection(COL_SALES).where('customerPhone','==', currentCustomer.phone).limit(100);
   return null;
 }
+var GLOW_BRANCH = 'Glow';   // فرع Glow ليه تطبيقه المنفصل — نستثنيه من تطبيق echarpe
+var COL_SETTINGS = 'pos_test_settings';
+var CATALOG_BRAND = 'echarpe';
+var catalogBanners = [];
+function pqty(p){ if(p.qtyByBranch){ var t=0; for(var k in p.qtyByBranch){ if(k!==GLOW_BRANCH) t+=Number(p.qtyByBranch[k])||0; } return t; } return Number(p.quantity)||0; }
 function tabAssign(tab, s){
   var arr = s ? s.docs.map(function(d){ return tab==='invoices' ? Object.assign({ _id:d.id }, d.data()) : d.data(); }) : [];
+  // تطبيق echarpe يعرض فروع echarpe بس (يستثني بيانات Glow عشان ما تتلخبطش)
+  if(tab==='products')      arr = arr.filter(function(p){ if(!p.showToCustomer) return false; if(p.branches && !p.branches.some(function(b){return b!==GLOW_BRANCH;})) return false; return true; });
+  else if(tab==='offers')   arr = arr.filter(function(o){ return (o.branch||'') !== GLOW_BRANCH; });
+  else if(tab==='invoices') arr = arr.filter(function(v){ return (v.branch||'') !== GLOW_BRANCH; });
   if(tab==='offers') dataOffers = arr; else if(tab==='products') dataProducts = arr; else if(tab==='invoices') dataInvoices = arr;
 }
 function tabRender(tab){
@@ -685,9 +694,20 @@ function showTopLoad(on){
 // تحميل كسول: أول ما تفتح التبويب بس — كاش فوري + تحديث محدود من السيرفر في الخلفية
 function lazyLoadTab(tab){
   if(tabStarted[tab]) return;
+  if(tab==='products'){
+    tabStarted[tab] = true; showTopLoad(true);
+    db.collection(COL_SETTINGS).doc('catalog_'+CATALOG_BRAND).get().then(function(d){
+      var data = d.exists ? d.data() : {};
+      dataProducts = Array.isArray(data.items) ? data.items : [];
+      catalogBanners = Array.isArray(data.banners) ? data.banners : [];
+      if(currentTab==='products') renderProducts();
+    }).catch(function(){ dataProducts=[]; if(currentTab==='products') renderProducts(); })
+      .then(function(){ showTopLoad(false); });
+    return;
+  }
   var ref = tabRef(tab); if(!ref) return;
   tabStarted[tab] = true;
-  showTopLoad(true);   // شريط علوي يبيّن إن في تحميل شغّال
+  showTopLoad(true);
   ref.get({ source:'cache' }).then(function(s){ if(s && s.docs && s.docs.length){ tabAssign(tab, s); tabRender(tab); } }).catch(function(){});
   ref.get().then(function(s){ tabAssign(tab, s); tabRender(tab); }).catch(function(){ tabAssign(tab, null); tabRender(tab); })
     .then(function(){ showTopLoad(false); });
@@ -905,32 +925,26 @@ function renderOffers(){
    ============================================================ */
 function renderProducts(){
   var box = $('tab-products');
-  var head = '<div class="sec-h">منتجات <span class="em">إيشارب</span></div>';
-  if(dataProducts === null){ box.innerHTML = head + loaderHTML('بنجيب المنتجات...'); return; }
-  var items = dataProducts.filter(function(p){ return p.status !== 'hidden'; });
-  items.sort(function(a,b){
-    var ao = (a.status==='outofstock' || (a.quantity??0)<=0) ? 1 : 0;
-    var bo = (b.status==='outofstock' || (b.quantity??0)<=0) ? 1 : 0;
-    if(ao!==bo) return ao-bo;
-    return String(a.name||'').localeCompare(String(b.name||''),'ar');
-  });
-  if(items.length === 0){
-    box.innerHTML = head + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
+  var head = '<div class="sec-h">تشكيلة <span class="em">إيشارب</span></div>';
+  if(dataProducts === null){ box.innerHTML = head + loaderHTML('بنجيب التشكيلة...'); return; }
+  var banners = (catalogBanners||[]).map(function(b){
+    return '<img src="'+esc(b.img||'')+'" style="width:100%; border-radius:16px; margin-bottom:12px; display:block;">';
+  }).join('');
+  if(dataProducts.length === 0){
+    box.innerHTML = head + banners + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
     return;
   }
-  var shown = items.slice(0, 120);   // حد أقصى للعرض عشان الأداء على الموبايلات الضعيفة
-  var cards = shown.map(function(p){
-    var oos = (p.status==='outofstock') || ((p.quantity??0) <= 0);
-    var meta = [p.attribute, p.size].filter(Boolean).join(' · ');
-    return '<div class="prod">'+
-      (oos ? '<div class="oos">خلص مؤقتًا</div>' : '')+
-      '<div class="pname">'+esc(p.name||'منتج')+'</div>'+
-      '<div class="pmeta">'+esc(meta||' ')+'</div>'+
-      '<div class="pprice">'+fmt(p.price)+' <span>ج.م</span></div>'+
+  var cards = dataProducts.map(function(p){
+    return '<div class="prod" style="padding:0; overflow:hidden;">'+
+      (p.img ? '<div style="width:100%; height:150px; background:#eee center/cover no-repeat; background-image:url(\''+String(p.img).replace(/\'/g,'')+'\');"></div>' : '')+
+      '<div style="padding:12px 14px 14px;">'+
+        '<div class="pname">'+esc(p.name||'منتج')+'</div>'+
+        (p.desc ? '<div class="pmeta">'+esc(p.desc)+'</div>' : '')+
+        (p.price ? '<div class="pprice">'+esc(p.price)+' <span>ج.م</span></div>' : '')+
+      '</div>'+
     '</div>';
   }).join('');
-  var more = items.length > shown.length ? '<div class="empty" style="padding:16px;">و '+(items.length-shown.length)+' منتج تاني — دوّري في المحل 🌸</div>' : '';
-  box.innerHTML = head + '<div class="prod-grid">'+cards+'</div>' + more;
+  box.innerHTML = head + banners + '<div class="prod-grid">'+cards+'</div>';
 }
 
 /* ============================================================
