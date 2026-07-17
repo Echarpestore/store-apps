@@ -468,13 +468,10 @@ function renderInventoryList(){
     const sold = invSales[it.id]||0;
     return `<tr onclick="openProductDetails('${it.id}')" style="cursor:pointer; border-bottom:1px solid var(--border); background:${i%2?'transparent':'rgba(0,0,0,.02)'};">
       <td style="padding:9px 8px; color:var(--muted); font-size:11px; direction:ltr;">${it.barcode||'—'}</td>
-      <td style="padding:9px 8px; font-weight:700; font-size:13px;">${it.name}${it.status==='hidden'?' <span style="font-size:9px; color:var(--muted);">🚫</span>':''}${it.showToCustomer?' <span title="ظاهر للعميل" style="font-size:9px;">👁️</span>':''}</td>
+      <td style="padding:9px 8px; font-weight:700; font-size:13px;">${it.name}${it.status==='hidden'?' <span style="font-size:9px; color:var(--muted);">🚫</span>':''}</td>
       <td style="padding:9px 8px; text-align:center; font-weight:900; color:${qtyCol};">${qtyTxt}</td>
       <td style="padding:9px 8px; text-align:center; font-weight:800; white-space:nowrap;">${it.price}${canCost && it.cost!=null?`<div style="font-size:9px; color:var(--muted); font-weight:600;">ت:${it.cost}</div>`:''}</td>
       <td style="padding:9px 8px; text-align:center; font-weight:700; color:var(--accent);">${sold}</td>
-      ${canEdit?`<td style="padding:9px 4px; text-align:center; white-space:nowrap;">
-        <button onclick="event.stopPropagation(); toggleCustomerVisible('${it.id}')" title="يظهر للعميل؟" style="padding:5px 7px; border-radius:7px; border:1px solid ${it.showToCustomer?'var(--plus)':'var(--border)'}; background:${it.showToCustomer?'#eafaf0':'var(--panel2)'}; font-size:12px; cursor:pointer;">${it.showToCustomer?'👁️':'🙈'}</button>
-      </td>`:''}
     </tr>`;
   }).join('');
 
@@ -487,7 +484,6 @@ function renderInventoryList(){
           ${th('qty','المخزون','center')}
           ${th('price','السعر','center')}
           ${th('sold','اتباع','center')}
-          ${canEdit?'<th style="padding:10px 4px;"></th>':''}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -531,12 +527,14 @@ function exportInventoryCSV(){
 
 // بيختار أول باركود رقمي متسلسل بعد أكبر باركود موجود (لو آخر واحد 543 يبقى الجديد 544)
 function nextBarcode(){
-  let max = 0;
+  const used = new Set();
   (allInventory||[]).forEach(it=>{
     const b = String(it.barcode||'');
-    if(/^\d+$/.test(b)){ const n = parseInt(b,10); if(n > max) max = n; }
+    if(/^\d+$/.test(b)) used.add(parseInt(b,10));
   });
-  return String(max + 1);
+  let n = 1;
+  while(used.has(n)) n++;   // أقرب رقم فاضي (بيملأ الفجوات)
+  return String(n);
 }
 
 // ============ مكافآت خاصة للعملاء (فردية أو جماعية) ============
