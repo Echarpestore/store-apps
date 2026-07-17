@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Glow · نادي العملاء</title>
+<meta name="theme-color" content="#F4B9C6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Glow">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+
+<!-- الخطوط -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+<!-- Firebase (compat — نفس إصدار الكاشير عشان يقرا نفس البيانات) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --pink:#E27A97; --pink-deep:#C0577A; --pink-soft:#FCE7EC;
+    --gold:#1A1315; --gold-deep:#000; --gold-soft:#FCE7EC;
+    --bg:#FCEAEF; --ink:#1A1315; --muted:#A17E8A; --line:#F3D5DE; --white:#ffffff;
+    --card-grad:linear-gradient(140deg,#F4B9C6 0%,#EFA6BA 55%,#F7C8D3 100%);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0;}
+  body{
+    font-family:'Cairo',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg); color:var(--ink);
+    min-height:100vh; min-height:100dvh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{max-width:480px; margin:0 auto; min-height:100vh; min-height:100dvh; position:relative; background:var(--bg);}
+  button{font-family:inherit; cursor:pointer;}
+  input{font-family:inherit;}
+
+  /* ===== شاشات ===== */
+  .screen{display:none;}
+  .screen.on{display:block;}
+
+  /* ===== شاشة الدخول ===== */
+  #screen-login{min-height:100vh; min-height:100dvh; display:none; flex-direction:column;}
+  #screen-login.on{display:flex;}
+  .login-hero{
+    background:var(--card-grad); color:#1A1315; padding:56px 26px 44px;
+    border-radius:0 0 34px 34px; text-align:center;
+    box-shadow:0 14px 36px -16px rgba(192,87,122,.5);
+  }
+  .login-hero img{width:190px; max-width:70%; height:auto;}
+  .login-hero .kicker{
+    margin-top:16px; font-weight:700; font-size:14px; letter-spacing:.5px;
+    color:#4a2531; opacity:.9;
+  }
+  .login-body{flex:1; padding:34px 26px; display:flex; flex-direction:column;}
+  .login-body h1{font-size:23px; font-weight:800; margin:0 0 6px;}
+  .login-body .sub{color:var(--muted); font-size:14.5px; line-height:1.7; margin:0 0 26px;}
+  .field-label{font-weight:700; font-size:13.5px; margin:0 0 8px; color:var(--ink);}
+  .txt{
+    width:100%; padding:15px 16px; border-radius:15px; border:1.5px solid var(--line);
+    background:var(--white); font-size:17px; color:var(--ink); font-weight:700; outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  .txt::placeholder{color:#6f6753; font-weight:500;}
+  .txt:focus{border-color:var(--pink); box-shadow:0 0 0 4px rgba(226,122,151,.16);}
+  .txt.ltr{direction:ltr; text-align:right;}
+  .btn-primary{
+    width:100%; margin-top:18px; padding:16px; border:none; border-radius:15px;
+    background:var(--card-grad); color:#1A1315; font-weight:800; font-size:17px;
+    box-shadow:0 10px 26px -8px rgba(192,87,122,.32); transition:transform .08s, filter .15s;
+  }
+  .btn-primary:active{transform:translateY(1px) scale(.995); filter:brightness(1.03);}
+  .btn-primary:disabled{opacity:.6; filter:grayscale(.2);}
+  .login-note{margin-top:auto; padding-top:24px; text-align:center; color:var(--muted); font-size:12px; line-height:1.7;}
+  .btn-back{width:100%; margin-top:10px; padding:11px; border:none; background:none; color:var(--muted); font-weight:700; font-size:14px;}
+  .err{color:#e0656b; font-size:13.5px; font-weight:700; margin:12px 2px 0; min-height:18px;}
+  .newfield{max-height:0; overflow:hidden; transition:max-height .3s ease;}
+  .newfield.show{max-height:140px; margin-top:18px;}
+
+  /* ===== شاشة التطبيق ===== */
+  #screen-app{display:none; flex-direction:column; min-height:100vh; min-height:100dvh; padding-bottom:82px;}
+  #screen-app.on{display:flex;}
+  .topbar{
+    display:flex; align-items:center; gap:12px; padding:16px 20px 12px;
+  }
+  .topbar .badge{
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .topbar .badge img{width:96px; height:auto;}
+  .topbar .hi{font-size:13px; color:var(--muted); font-weight:600; line-height:1.3;}
+  .topbar .who{font-size:17px; font-weight:800; line-height:1.3;}
+  .topbar-mid{flex:1; min-width:0;}
+  .wa-btn{flex-shrink:0; width:44px; height:44px; border-radius:13px; border:none; background:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px -6px rgba(37,211,102,.7);}
+  .wa-btn:active{transform:translateY(1px);}
+  .btn-outline.wa{border-color:#25D366; color:#128C4B; background:#eafaf0;}
+
+  .tabview{padding:8px 18px 24px;}
+
+  /* ===== بطاقة Glow (تذكرة — الباركود ظاهر على طول) ===== */
+  .gcard{
+    background:var(--card-grad); border:1px solid rgba(0,0,0,.12); border-radius:22px;
+    padding:22px 22px 0; color:#1A1315; box-shadow:0 18px 40px -20px rgba(192,87,122,.55); overflow:hidden; position:relative;
+  }
+  .gcard-head{display:flex; align-items:center; justify-content:space-between;}
+  .gcard-logo{width:104px; height:auto;}
+  .gcard-tag{font-size:11px; font-weight:800; letter-spacing:2px; color:#7a2e45;}
+  .gcard-pts{text-align:center; margin:18px 0 6px;}
+  .gcard-pts .gpn{font-size:60px; font-weight:900; line-height:1; color:#1A1315; letter-spacing:-1px;}
+  .gcard-pts .gpu{font-size:18px; font-weight:800; color:#7a2e45; margin-right:6px;}
+  .gcard-pts .gpw{font-size:13px; font-weight:700; color:#7a2e45; margin-top:8px;}
+  .gcard-holder{display:flex; justify-content:space-between; align-items:baseline; padding:12px 2px 20px;}
+  .gcard-holder .gh-name{font-size:17px; font-weight:800; color:#1A1315;}
+  .gcard-holder .gh-since{font-size:11px; font-weight:700; color:#8a4a5c;}
+  .gcard-perf{position:relative; height:0; border-top:2px dashed rgba(0,0,0,.22); margin:0 -22px;}
+  .gcard-perf::before,.gcard-perf::after{content:""; position:absolute; top:-13px; width:26px; height:26px; border-radius:50%; background:var(--bg);}
+  .gcard-perf::before{right:-13px;} .gcard-perf::after{left:-13px;}
+  .gcard-bc{background:#fff; margin:0 -22px; padding:20px 22px 22px; display:flex; flex-direction:column; align-items:center;}
+  .gcard-bc .cb-barcode{width:88%; max-width:300px;}
+  .gcard-bc .cb-barcode svg{width:100%; height:auto; display:block;}
+  .gcard-code{font-size:17px; font-weight:800; letter-spacing:4px; color:#1a1a1a; direction:ltr; margin-top:10px;}
+  .gcard-scanhint{font-size:12px; font-weight:700; color:#7a7a7a; margin-top:8px;}
+  .gcard-bc .cb-wait{color:#888; font-weight:700; padding:24px 0;}
+
+  /* ===== البطاقة (العنصر المميز) ===== */
+  .card{
+    position:relative; border-radius:26px; padding:24px 22px 22px; color:#fff;
+    background:var(--card-grad); overflow:hidden;
+    box-shadow:0 20px 44px -18px rgba(192,87,122,.28);
+    min-height:198px; display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .card::after{
+    content:""; position:absolute; top:-60%; right:0; width:55%; height:220%;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);
+    transform:rotate(18deg) translateX(240%);
+    animation:sheen 6s ease-in-out infinite;
+  }
+  @keyframes sheen{0%,55%{transform:rotate(18deg) translateX(240%);} 85%,100%{transform:rotate(18deg) translateX(-260%);}}
+  .card .card-top{display:flex; justify-content:space-between; align-items:flex-start; position:relative; z-index:1;}
+  .card .card-top .lbl{font-size:12px; font-weight:700; opacity:.9; letter-spacing:.4px;}
+  .card .card-top .clubname{font-size:15px; font-weight:800; margin-top:2px;}
+  .card .card-top img{width:112px; opacity:.98;}
+  .card .pts-block{position:relative; z-index:1;}
+  .card .pts-num{font-size:52px; font-weight:800; line-height:1; letter-spacing:-1px;}
+  .card .pts-unit{font-size:17px; font-weight:700; opacity:.92; margin-right:6px;}
+  .card .pts-worth{font-size:13.5px; font-weight:600; opacity:.95; margin-top:8px;}
+  .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px;}
+  .card .holder .name{font-size:16px; font-weight:800;}
+  .card .holder .since{font-size:11px; opacity:.85; font-weight:600;}
+  .card .flip-hint{position:absolute; z-index:1; bottom:12px; left:20px; font-size:11px; font-weight:700; opacity:.9;}
+
+  /* ===== بطاقة تنقلب (flip) ===== */
+  .card-flip{perspective:1600px;}
+  .card-inner{position:relative; width:100%; min-height:236px; cursor:pointer;
+    transition:transform .65s cubic-bezier(.4,.15,.2,1); transform-style:preserve-3d;}
+  .card-flip.flipped .card-inner{transform:rotateY(180deg);}
+  .card-face{position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden; border-radius:26px; overflow:hidden;}
+  /* الوش بياخد شكل .card نفسه؛ الـ position:absolute هنا بيغلب لأنه متعرّف بعده */
+  .card-back{
+    transform:rotateY(180deg); background:var(--white); border:1.5px solid var(--line);
+    box-shadow:0 20px 44px -18px rgba(0,0,0,.6);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px 22px;
+  }
+  .card-back .cb-title{font-weight:800; font-size:15px; color:var(--pink-deep);}
+  .card-back .cb-barcode{background:#fff; padding:10px 12px; border-radius:10px; margin-top:14px; width:82%; max-width:280px;}
+  .card-back .cb-barcode svg{width:100%; height:auto; display:block;}
+  .card-back .cb-code{font-size:16px; font-weight:800; letter-spacing:4px; color:var(--ink); direction:ltr; margin-top:10px;}
+  .card-back .cb-pts{font-size:12.5px; font-weight:700; color:var(--muted); margin-top:6px;}
+  .card-back .cb-wait{color:var(--muted); font-weight:700; padding:30px 0;}
+  .card-back .flip-hint{color:var(--muted); opacity:.85; left:auto; right:20px;}
+
+  .show-cashier{
+    width:100%; margin-top:14px; padding:15px; border:none; border-radius:16px;
+    background:var(--white); color:var(--pink-deep); font-weight:800; font-size:16px;
+    box-shadow:0 8px 20px -10px rgba(192,87,122,.22); display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:transform .08s;
+  }
+  .show-cashier:active{transform:translateY(1px);}
+
+  /* بلوكات الشرح */
+  .info-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;}
+  .info-box{
+    background:var(--white); border:1.5px solid var(--line); border-radius:18px; padding:16px 15px;
+  }
+  .info-box .ico{font-size:22px;}
+  .info-box .t{font-weight:800; font-size:14px; margin-top:7px;}
+  .info-box .d{font-size:12.5px; color:var(--muted); font-weight:600; margin-top:3px; line-height:1.6;}
+  .progress-wrap{background:var(--white); border:1.5px solid var(--line); border-radius:18px; padding:16px 16px 18px; margin-top:12px;}
+  .progress-wrap .pw-top{display:flex; justify-content:space-between; font-size:13px; font-weight:700; margin-bottom:10px;}
+  .progress-wrap .pw-top .g{color:var(--gold-deep);}
+  .bar{height:11px; border-radius:99px; background:var(--pink-soft); overflow:hidden;}
+  .bar>span{display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--pink),var(--gold)); transition:width .5s;}
+  .redeem-hint{font-size:12px; color:var(--muted); font-weight:600; text-align:center; margin-top:14px; line-height:1.7;}
+
+  /* ===== عناوين أقسام ===== */
+  .sec-h{font-size:20px; font-weight:800; margin:6px 2px 16px;}
+  .sec-h .em{color:var(--pink);}
+
+  /* ===== العروض ===== */
+  .offer{
+    background:var(--white); border:1.5px solid var(--line); border-radius:20px; padding:16px 16px;
+    margin-bottom:13px; display:flex; gap:14px; align-items:center;
+    position:relative; overflow:hidden;
+  }
+  .offer::before{content:""; position:absolute; top:0; right:0; width:6px; height:100%; background:var(--card-grad);}
+  .offer .oval{
+    flex-shrink:0; width:66px; height:66px; border-radius:16px; background:var(--pink-soft);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--pink-deep);
+  }
+  .offer .oval .big{font-size:21px; font-weight:800; line-height:1;}
+  .offer .oval .sm{font-size:11px; font-weight:700; margin-top:2px;}
+  .offer .obody{flex:1; min-width:0;}
+  .offer .obody .on{font-weight:800; font-size:15.5px;}
+  .offer .obody .osc{font-size:12.5px; color:var(--muted); font-weight:600; margin-top:4px;}
+  .offer .obody .oend{font-size:11.5px; color:var(--gold-deep); font-weight:700; margin-top:6px;}
+
+  /* ===== المنتجات ===== */
+  .prod-grid{display:grid; grid-template-columns:1fr 1fr; gap:13px;}
+  .prod{background:var(--white); border:1.5px solid var(--line); border-radius:18px; padding:14px 14px 15px; position:relative;}
+  .prod .pname{font-weight:800; font-size:14.5px; line-height:1.4; min-height:40px;}
+  .prod .pmeta{font-size:12px; color:var(--muted); font-weight:600; margin-top:4px; min-height:17px;}
+  .prod .pprice{margin-top:10px; font-weight:800; font-size:17px; color:var(--pink-deep);}
+  .prod .pprice span{font-size:12px; font-weight:700; color:var(--muted);}
+  .prod .oos{position:absolute; top:12px; left:12px; background:#2a1414; color:#e08a8a; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:99px;}
+
+  /* ===== الحساب ===== */
+  .acct-card{background:var(--white); border:1.5px solid var(--line); border-radius:20px; padding:6px 18px; margin-bottom:16px;}
+  .acct-row{display:flex; justify-content:space-between; align-items:center; padding:15px 0; border-bottom:1px solid var(--line);}
+  .acct-row:last-child{border-bottom:none;}
+  .acct-row .k{color:var(--muted); font-weight:600; font-size:14px;}
+  .acct-row .v{font-weight:800; font-size:15px;}
+  .acct-row .v.ltr{direction:ltr;}
+  .btn-outline{
+    width:100%; padding:15px; border-radius:15px; border:1.5px solid var(--line); background:var(--white);
+    font-weight:800; font-size:15.5px; color:var(--ink); margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn-outline.install{border-color:var(--gold); color:var(--gold-deep); background:var(--gold-soft);}
+  .btn-outline.logout{color:#e07a7a;}
+  .ios-tip{background:var(--gold-soft); border:1.5px solid #efdcae; border-radius:15px; padding:14px 15px; font-size:13px; font-weight:600; color:#8a6d1f; line-height:1.8; margin-bottom:12px; display:none;}
+
+  /* ===== التبويبات السفلية ===== */
+  .tabbar{
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px;
+    background:var(--white);
+    border-top:1px solid var(--line); display:flex; padding:9px 8px calc(9px + env(safe-area-inset-bottom));
+    z-index:40;
+  }
+  .tab{flex:1; background:none; border:none; padding:6px 0; display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted);}
+  .tab .ti{font-size:22px; line-height:1;}
+  .tab .tl{font-size:11px; font-weight:700;}
+  .tab.active{color:var(--pink);}
+  .tab.active .ti{transform:translateY(-1px);}
+
+  .empty{text-align:center; padding:44px 20px; color:var(--muted); font-weight:600; font-size:14.5px; line-height:1.9;}
+  .empty .big{font-size:40px; display:block; margin-bottom:12px;}
+
+  /* ===== مؤشّر التحميل (وردي/دهبي) ===== */
+  .loader{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:56px 20px; gap:16px;}
+  .loader .ring{
+    width:46px; height:46px; border-radius:50%;
+    border:4px solid var(--pink-soft); border-top-color:var(--pink); border-right-color:var(--gold);
+    animation:spin .75s linear infinite;
+  }
+  .loader .lt{color:var(--pink-deep); font-weight:700; font-size:14px; animation:pulse 1.4s ease-in-out infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  @keyframes pulse{0%,100%{opacity:.55;} 50%{opacity:1;}}
+  /* شريط تحميل رفيع أعلى الشاشة (بيظهر وقت جلب بيانات) */
+  #topLoad{position:fixed; top:0; left:0; right:0; height:3px; z-index:80; overflow:hidden; display:none;}
+  #topLoad.on{display:block;}
+  #topLoad::before{content:""; position:absolute; left:0; top:0; height:100%; width:40%;
+    background:linear-gradient(90deg,transparent,var(--pink),var(--gold),transparent); animation:slide 1.1s ease-in-out infinite;}
+  @keyframes slide{0%{left:-40%;} 100%{left:100%;}}
+
+  /* ===== فواتيري ===== */
+  .inv{background:var(--white); border:1.5px solid var(--line); border-radius:16px; padding:14px 15px; margin-bottom:11px; cursor:pointer;}
+  .inv-top{display:flex; justify-content:space-between; align-items:flex-start;}
+  .inv-date{font-weight:800; font-size:14px;}
+  .inv-no{font-size:11px; color:var(--muted); margin-top:2px; direction:ltr; text-align:right;}
+  .inv-total{font-weight:900; font-size:17px; color:var(--pink-deep);}
+  .inv-meta{display:flex; justify-content:space-between; margin-top:9px; padding-top:9px; border-top:1px solid var(--line); font-size:11.5px; color:var(--muted); font-weight:600;}
+  .inv-pts{color:var(--gold-deep); font-weight:800;}
+  .overlay{position:fixed; inset:0; background:rgba(58,34,51,.55); display:none; align-items:flex-end; justify-content:center; z-index:60;}
+  .overlay.on{display:flex;}
+  .inv-sheet{background:var(--white); width:100%; max-width:480px; border-radius:24px 24px 0 0; padding:20px 20px calc(24px + env(safe-area-inset-bottom)); max-height:82vh; overflow-y:auto;}
+  .inv-sheet .ish-h{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
+  .inv-sheet .ish-title{font-weight:800; font-size:17px;}
+  .inv-sheet .ish-x{border:none; background:var(--pink-soft); color:var(--pink-deep); width:32px; height:32px; border-radius:50%; font-weight:800; font-size:15px;}
+  .inv-sheet .ish-sub{color:var(--muted); font-size:12.5px; font-weight:600; margin-bottom:14px;}
+  .inv-sheet .ish-item{display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13.5px;}
+  .inv-sheet .ish-item .q{color:var(--muted); font-size:12px;}
+  .inv-sheet .ish-row{display:flex; justify-content:space-between; padding:6px 0; font-size:14px;}
+  .inv-sheet .ish-row.big{font-weight:900; font-size:17px; border-top:2px solid var(--line); margin-top:6px; padding-top:12px;}
+
+  /* بانر أخطاء */
+  #errBanner{display:none; position:fixed; top:0; left:0; right:0; z-index:99; background:#B8123F; color:#fff; padding:11px 16px; font-size:13px; font-weight:700; text-align:center;}
+  #loadFail{display:none; position:fixed; inset:0; z-index:120; background:var(--bg); color:var(--ink); align-items:center; justify-content:center; padding:30px; text-align:center; font-weight:700; line-height:1.9;}
+
+  /* ===== بانر تثبيت التطبيق ===== */
+  #installBanner{
+    position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom));
+    transform:translateX(-50%) translateY(150%); opacity:0;
+    width:calc(100% - 28px); max-width:452px; z-index:55;
+    background:var(--white); border:1.5px solid var(--line); border-radius:20px;
+    box-shadow:0 18px 44px -14px rgba(192,87,122,.22);
+    display:flex; align-items:center; gap:12px; padding:12px 13px;
+    transition:transform .45s cubic-bezier(.2,.75,.25,1), opacity .35s;
+  }
+  #installBanner.show{ transform:translateX(-50%) translateY(0); opacity:1; }
+  #installBanner .ib-ico{width:58px; height:44px; border-radius:12px; background:#141210; border:1px solid var(--line); flex-shrink:0; display:flex; align-items:center; justify-content:center;}
+  #installBanner .ib-ico img{width:48px; height:auto;}
+  #installBanner .ib-txt{flex:1; min-width:0;}
+  #installBanner .ib-t{font-weight:800; font-size:14.5px;}
+  #installBanner .ib-d{font-size:12px; color:var(--muted); font-weight:600; margin-top:2px; line-height:1.55;}
+  #installBanner .ib-btn{flex-shrink:0; border:none; border-radius:12px; background:var(--card-grad); color:#1A1315; font-weight:800; font-size:14px; padding:11px 15px; box-shadow:0 8px 18px -8px rgba(192,87,122,.32);}
+  #installBanner .ib-x{flex-shrink:0; border:none; background:none; color:var(--muted); font-size:14px; width:24px; height:24px; border-radius:50%; padding:0;}
+  #installBanner.ios .ib-btn{display:none;}
+
+  @media (prefers-reduced-motion: reduce){ .card::after{animation:none; display:none;} .card-inner{transition:none;} #installBanner{transition:opacity .3s;} }
+</style>
+</head>
+<body>
+<div id="errBanner"></div>
+<div id="loadFail">
+  <div>
+    ⚠️ التطبيق مقفلش صح<br><span style="font-weight:600; color:var(--muted); font-size:13px;">اقفل الصفحة وافتحها تاني، ولو فضلت المشكلة امسح بيانات الموقع.</span>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- ===================== شاشة الدخول ===================== -->
+  <section id="screen-login" class="screen">
+    <div class="login-hero">
+      <img id="heroLogo" alt="Glow">
+      <div class="kicker">نادي عملاء Glow</div>
+    </div>
+    <div class="login-body">
+      <h1 id="loginTitle">أهلاً بيكِ 🌸</h1>
+      <p class="sub" id="loginSub">اجمعي نقاط مع كل شراء، واستبدليها بخصومات. سجّلي برقم موبايلك عشان نعرفك عند الكاشير.</p>
+
+      <div id="phoneField">
+        <label class="field-label" for="phoneInput">رقم الموبايل</label>
+        <input id="phoneInput" class="txt ltr" type="tel" inputmode="numeric" placeholder="01xxxxxxxxx" autocomplete="tel">
+      </div>
+
+      <div id="nameField" style="display:none;">
+        <label class="field-label" for="nameInput">اسمك (عشان نرحّب بيكِ صح)</label>
+        <input id="nameInput" class="txt" type="text" placeholder="الاسم" autocomplete="name">
+      </div>
+
+      <div id="pinField" style="display:none;">
+        <label class="field-label" for="pinInput" id="pinLabel">اختاري رقم سري (٤ أرقام)</label>
+        <input id="pinInput" class="txt ltr" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
+      </div>
+
+      <div id="pinConfirmField" style="display:none;">
+        <label class="field-label" for="pinConfirmInput">أكّدي الرقم السري</label>
+        <input id="pinConfirmInput" class="txt ltr" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
+      </div>
+
+      <div id="loginErr" class="err"></div>
+      <button id="loginBtn" class="btn-primary">دخول</button>
+      <button id="loginBack" class="btn-back" style="display:none;">‹ رجوع لرقم تاني</button>
+
+      <div class="login-note" id="loginNote">رقمك السري بيحمي نقاطك — محدش يقدر يفتح حسابك من غيره.<br>لو نسيتيه، الكاشير في المحل يقدر يمسحه لك.</div>
+    </div>
+  </section>
+
+  <!-- ===================== شاشة التطبيق ===================== -->
+  <section id="screen-app" class="screen">
+    <div class="topbar">
+      <div class="badge"><img id="topLogo" alt=""></div>
+      <div class="topbar-mid">
+        <div class="hi" id="greet">أهلاً</div>
+        <div class="who" id="topName">—</div>
+      </div>
+      <button class="wa-btn" id="waTop" onclick="openSupport()" aria-label="تواصل واتساب" style="display:none;">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.945C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+      </button>
+    </div>
+
+    <div class="tabview">
+      <div id="tab-card"></div>
+      <div id="tab-offers" style="display:none;"></div>
+      <div id="tab-products" style="display:none;"></div>
+      <div id="tab-invoices" style="display:none;"></div>
+      <div id="tab-account" style="display:none;"></div>
+    </div>
+  </section>
+
+  <!-- تبويبات -->
+  <nav class="tabbar" id="tabbar" style="display:none;">
+    <button class="tab active" data-tab="card"><span class="ti">⭐</span><span class="tl">نقاطي</span></button>
+    <button class="tab" data-tab="offers"><span class="ti">🏆</span><span class="tl">مكافآت</span></button>
+    <button class="tab" data-tab="products"><span class="ti">👜</span><span class="tl">تشكيلتنا</span></button>
+    <button class="tab" data-tab="invoices"><span class="ti">🛒</span><span class="tl">مشترياتي</span></button>
+    <button class="tab" data-tab="account"><span class="ti">✦</span><span class="tl">حسابي</span></button>
+  </nav>
+
+  <!-- شريط تحميل رفيع أعلى الشاشة -->
+  <div id="topLoad"></div>
+
+  <!-- تفاصيل فاتورة -->
+  <div class="overlay" id="invOverlay" onclick="if(event.target===this) closeInvoiceDetail()">
+    <div class="inv-sheet" id="invSheet"></div>
+  </div>
+
+  <!-- بانر تثبيت التطبيق (بيظهر تلقائي في المتصفح) -->
+  <div id="installBanner">
+    <div class="ib-ico"><img id="ibLogo" alt=""></div>
+    <div class="ib-txt">
+      <div class="ib-t">نزّلي تطبيق Glow 📲</div>
+      <div class="ib-d" id="ibDesc">ثبّتيه على موبايلك عشان توصليله بضغطة</div>
+    </div>
+    <button class="ib-btn" id="ibBtn" onclick="triggerInstall()">تثبيت</button>
+    <button class="ib-x" onclick="dismissInstall()" aria-label="إغلاق">✕</button>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   نادي عملاء Glow — تطبيق العميل (Loyalty)
+   يقرا نفس بيانات الكاشير: pos_test_customers / pos_test_discounts
+   / pos_test_inventory / pos_test_settings/loyalty
+   ============================================================ */
+
+// بانر أخطاء عام (زي باقي التطبيقات) — بيبان لو حصل أي error وقت التشغيل
+window.addEventListener('error', function(e){
+  try{
+    var b = document.getElementById('errBanner');
+    b.textContent = '⚠️ حصل خطأ: ' + (e.message || 'غير معروف');
+    b.style.display = 'block';
+  }catch(_){}
+});
+
+var firebaseConfig = {
+  apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
+  authDomain: "customer-feedback-8ac1d.firebaseapp.com",
+  projectId: "customer-feedback-8ac1d",
+  storageBucket: "customer-feedback-8ac1d.firebasestorage.app",
+  messagingSenderId: "408860081491",
+  appId: "1:408860081491:web:c5fa8b8e757c13196375a6",
+  measurementId: "G-6K33TSHDZ6"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.firestore();
+
+// أوفلاين قوي: البيانات محفوظة على الجهاز والتطبيق بيفتح حتى من غير نت
+db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED });
+db.enablePersistence({ synchronizeTabs: true }).catch(function(err){
+  if(err.code === 'failed-precondition'){ console.warn('أكتر من تاب مفتوح — الأوفلاين هيشتغل بس مش بكامل قوته'); }
+  else if(err.code === 'unimplemented'){ console.warn('المتصفح ده مش بيدعم تخزين الأوفلاين'); }
+});
+
+// أسماء الكوليكشنز (لو الكاشير اتنقل من pos_test_ لـ production، غيّرهم من هنا بس)
+var COL_CUSTOMERS = 'pos_test_customers';
+var COL_DISCOUNTS = 'pos_test_discounts';
+var COL_INVENTORY = 'pos_test_inventory';
+var COL_SALES     = 'pos_test_sales';
+var COL_SETTINGS  = 'pos_test_settings';
+
+var LS_PHONE = 'Glow_loyalty_phone';
+
+/* ⬇️⬇️ رقم واتساب خدمة العملاء — غيّريه هنا ⬇️⬇️
+   الصيغة دولية من غير + ولا صفر البداية. مصر = 20 + الرقم من غير الصفر.
+   مثال: الموبايل 01001234567  →  201001234567
+   سيبيه فاضي '' لو مش عايزة زر الواتساب يظهر. */
+var SUPPORT_WHATSAPP = '';
+
+function hasSupport(){ return digits(SUPPORT_WHATSAPP).length >= 8; }
+function openSupport(){
+  if(!hasSupport()) return;
+  var msg = 'السلام عليكم 🌸';
+  if(currentCustomer){
+    msg = 'السلام عليكم، أنا ' + (currentCustomer.name||'') +
+          (currentCustomer.loyaltyCode_glow ? ' (كود: '+currentCustomer.loyaltyCode_glow+')' : '') +
+          ' ومحتاجة مساعدة.';
+  }
+  window.open('https://wa.me/' + digits(SUPPORT_WHATSAPP) + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// اللوجو inline (base64) — عشان التطبيق يشتغل أوفلاين فورًا من غير ما يستنى صورة
+var LOGO_B64 = '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';
+var logoSrc = 'data:image/png;base64,' + LOGO_B64;
+
+// إعدادات النقاط (نفس اللي الأدمن بيظبطها في الكاشير) — بقيم افتراضية لحد ما تتحمّل
+var loyaltyCfg = { pointsPerEGP:100, pointsPerRedemption:10, redemptionValueEGP:5 };
+var POINTS_FIELD = 'points_glow';   // نقاط Glow منفصلة عن نقاط echarpe (points)
+
+var currentCustomer = null;   // { name, phone, points, ... }
+var custUnsub = null;         // مستمع realtime على وثيقة العميل
+// (كل تبويب بيتحمّل كسول أول ما تفتحه فقط، بحد أقصى للعدد، وبعدها بيعرض من الذاكرة فورًا)
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function digits(s){ return String(s||'').replace(/[^0-9]/g,''); }
+function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmt(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('en-US'); }
+
+/* ---------- تنقل بين الشاشات ---------- */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('on'); });
+  $(id).classList.add('on');
+  $('tabbar').style.display = (id==='screen-app') ? 'flex' : 'none';
+}
+
+/* ---------- تحميل إعدادات النقاط ---------- */
+function loadSettings(){
+  return db.collection(COL_SETTINGS).doc('loyalty').get().then(function(doc){
+    if(doc.exists){ loyaltyCfg = Object.assign({}, loyaltyCfg, doc.data()); }
+  }).catch(function(e){ console.warn('تعذر تحميل إعدادات النقاط', e); });
+}
+
+/* ============================================================
+   الدخول / التسجيل
+   ============================================================ */
+var loginStep = 'phone';      // phone | name | setpin | enterpin
+var pendingPhone = '';
+var pendingName = '';
+var pendingIsNew = false;
+var pinToMatch = '';
+
+function setLoginStep(step){
+  loginStep = step;
+  var titleEl=$('loginTitle'), subEl=$('loginSub'), btn=$('loginBtn');
+  $('phoneField').style.display      = (step==='phone') ? 'block':'none';
+  $('nameField').style.display       = (step==='name') ? 'block':'none';
+  $('pinField').style.display        = (step==='setpin'||step==='enterpin') ? 'block':'none';
+  $('pinConfirmField').style.display = (step==='setpin') ? 'block':'none';
+  $('loginBack').style.display       = (step==='phone') ? 'none':'block';
+  $('loginErr').textContent='';
+  $('pinInput').value=''; $('pinConfirmInput').value='';
+  if(step==='phone'){
+    titleEl.textContent='أهلاً بيكِ 🌸';
+    subEl.textContent='اجمعي نقاط مع كل شراء، واستبدليها بخصومات. سجّلي برقم موبايلك عشان نعرفك عند الكاشير.';
+    btn.textContent='دخول'; setTimeout(function(){ $('phoneInput').focus(); },50);
+  }else if(step==='name'){
+    titleEl.textContent='أول مرة معانا 🌷';
+    subEl.textContent='اكتبي اسمك عشان نرحّب بيكِ.';
+    btn.textContent='التالي'; setTimeout(function(){ $('nameInput').focus(); },50);
+  }else if(step==='setpin'){
+    titleEl.textContent='اختاري رقم سري 🔐';
+    subEl.textContent='اختاري ٤ أرقام سهل تفتكريها — دي هتحمي حسابك، ومحدش هيقدر يفتحه من غيرها.';
+    $('pinLabel').textContent='اختاري رقم سري (٤ أرقام)';
+    btn.textContent='حفظ ودخول'; setTimeout(function(){ $('pinInput').focus(); },50);
+  }else if(step==='enterpin'){
+    titleEl.textContent='أهلاً تاني 👋';
+    subEl.textContent='اكتبي رقمك السري عشان تدخلي حسابك.';
+    $('pinLabel').textContent='الرقم السري';
+    btn.textContent='دخول'; setTimeout(function(){ $('pinInput').focus(); },50);
+  }
+}
+
+$('phoneInput').addEventListener('input', function(){ $('loginErr').textContent=''; });
+$('loginBtn').addEventListener('click', doLoginPrimary);
+$('loginBack').addEventListener('click', function(){ pendingIsNew=false; pendingName=''; pinToMatch=''; setLoginStep('phone'); });
+$('phoneInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLoginPrimary(); });
+$('nameInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLoginPrimary(); });
+$('pinConfirmInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLoginPrimary(); });
+$('pinInput').addEventListener('keydown', function(e){ if(e.key==='Enter' && loginStep==='enterpin') doLoginPrimary(); });
+
+function doLoginPrimary(){
+  if(loginStep==='phone')    return stepPhone();
+  if(loginStep==='name')     return stepName();
+  if(loginStep==='setpin')   return stepSetPin();
+  if(loginStep==='enterpin') return stepEnterPin();
+}
+
+function stepPhone(){
+  var phone = digits($('phoneInput').value);
+  if(phone.length < 8){ $('loginErr').textContent='اكتبي رقم موبايل صح'; return; }
+  $('loginBtn').disabled=true; $('loginBtn').textContent='لحظة...';
+  db.collection(COL_CUSTOMERS).doc(phone).get().then(function(doc){
+    $('loginBtn').disabled=false; pendingPhone = phone;
+    if(!doc.exists){ pendingIsNew=true; setLoginStep('name'); }
+    else{
+      pendingIsNew=false;
+      var d = doc.data();
+      if(d.loyaltyPin){ pinToMatch = String(d.loyaltyPin); setLoginStep('enterpin'); }
+      else{ setLoginStep('setpin'); }   // حساب موجود من غير رقم سري (اتعمل من الكاشير أو اتعمله reset)
+    }
+  }).catch(function(e){
+    $('loginBtn').disabled=false; $('loginBtn').textContent='دخول';
+    $('loginErr').textContent='النت ضعيف — حاولي تاني'; console.warn(e);
+  });
+}
+
+function stepName(){
+  var name = $('nameInput').value.trim();
+  if(!name){ $('loginErr').textContent='اكتبي اسمك عشان نكمّل'; return; }
+  pendingName = name; setLoginStep('setpin');
+}
+
+function stepSetPin(){
+  var pin = digits($('pinInput').value), c = digits($('pinConfirmInput').value);
+  if(pin.length !== 4){ $('loginErr').textContent='الرقم السري لازم يكون ٤ أرقام'; return; }
+  if(pin !== c){ $('loginErr').textContent='الرقمين مش متطابقين'; $('pinConfirmInput').value=''; return; }
+  $('loginBtn').disabled=true; $('loginBtn').textContent='بنجهّز...';
+  if(pendingIsNew){
+    createCustomer(pendingPhone, pendingName, pin);
+  }else{
+    db.collection(COL_CUSTOMERS).doc(pendingPhone).set({ loyaltyPin: pin }, { merge:true }).then(function(){
+      localStorage.setItem(LS_PHONE, pendingPhone);
+      $('loginBtn').disabled=false; enterApp(pendingPhone);
+    }).catch(function(e){
+      $('loginBtn').disabled=false; $('loginBtn').textContent='حفظ ودخول';
+      $('loginErr').textContent='معرفناش نحفظ — حاولي تاني'; console.warn(e);
+    });
+  }
+}
+
+function stepEnterPin(){
+  var pin = digits($('pinInput').value);
+  if(pin.length !== 4){ $('loginErr').textContent='اكتبي الرقم السري (٤ أرقام)'; return; }
+  if(pin !== pinToMatch){ $('loginErr').textContent='الرقم السري غلط'; $('pinInput').value=''; return; }
+  localStorage.setItem(LS_PHONE, pendingPhone);
+  enterApp(pendingPhone);
+}
+
+function createCustomer(phone, name, pin){
+  makeUniqueCode(0).then(function(code){
+    var data = {
+      name: name, phone: phone, points: 0, totalSpent: 0,
+      lastVisit: null, notes: '', branch: '',
+      loyaltyCode_glow: code, loyaltyPin: pin, createdAt: Date.now(), source: 'glow_app'
+    };
+    return db.collection(COL_CUSTOMERS).doc(phone).set(data, { merge:true });
+  }).then(function(){
+    localStorage.setItem(LS_PHONE, phone);
+    $('loginBtn').disabled=false; enterApp(phone);
+  }).catch(function(e){
+    $('loginBtn').disabled=false; $('loginBtn').textContent='حفظ ودخول';
+    $('loginErr').textContent='معرفناش نحفظ الحساب — حاولي تاني'; console.warn(e);
+  });
+}
+
+/* ============================================================
+   دخول التطبيق + مستمع realtime على العميل
+   ============================================================ */
+function enterApp(phone){
+  showScreen('screen-app');
+  invoicesData = [];
+  $('topLogo').src = logoSrc;
+  $('greet').textContent = greetWord();
+  $('waTop').style.display = hasSupport() ? 'flex' : 'none';
+  dataOffers = null; dataProducts = null; dataInvoices = null; tabStarted = {};   // تبويبات جديدة لكل جلسة، تتحمّل كسول عند فتحها
+  switchTab('card');
+
+  if(custUnsub){ custUnsub(); }
+  custUnsub = db.collection(COL_CUSTOMERS).doc(phone).onSnapshot(function(doc){
+    if(!doc.exists){ // اتمسح من الكاشير؟ نرجّع لتسجيل الدخول
+      logout(true); return;
+    }
+    currentCustomer = Object.assign({ phone: phone }, doc.data());
+    $('topName').textContent = firstName(currentCustomer.name);
+    if(!currentCustomer.loyaltyCode_glow){ ensureLoyaltyCode(phone); } // عميل قديم من غير كود؟ نولّدله
+    renderCard();
+    // لو التبويب المفتوح هو الحساب، نحدّثه كمان
+    if($('tab-account').style.display !== 'none') renderAccount();
+  }, function(err){ console.warn('customer sync', err); });
+}
+
+function greetWord(){
+  var h = new Date().getHours();
+  if(h < 12) return 'صباح الخير 🌷';
+  if(h < 18) return 'نهارك سعيد ✨';
+  return 'مساء الخير 🌙';
+}
+function firstName(n){ n=(n||'').trim(); return n ? n.split(/\s+/)[0] : 'يا فندم'; }
+
+/* ============================================================
+   التبويبات
+   ============================================================ */
+var currentTab = 'card';
+var dataOffers = null, dataProducts = null, dataInvoices = null;   // null = لسه ما اتحمّلش
+var tabStarted = {};   // التبويب بدأ تحميله قبل كده؟
+
+// بيبني الاستعلام لكل تبويب — بحد أقصى للعدد عشان ما نحمّلش آلاف الصفوف على الموبايل
+function tabRef(tab){
+  if(tab==='offers')   return db.collection(COL_DISCOUNTS).limit(60);
+  if(tab==='products') return db.collection(COL_INVENTORY).limit(60);
+  if(tab==='invoices' && currentCustomer) return db.collection(COL_SALES).where('customerPhone','==', currentCustomer.phone).limit(100);
+  return null;
+}
+var BRANCH = 'Glow';   // فرع Glow — التطبيق ده بيعرض بيانات الفرع ده بس
+var COL_SETTINGS = 'pos_test_settings';
+var CATALOG_BRAND = 'glow';   // كتالوج العرض بتاع Glow
+var catalogBanners = [];
+function pqty(p){ if(p.qtyByBranch) return Number(p.qtyByBranch[BRANCH])||0; return Number(p.quantity)||0; }
+function tabAssign(tab, s){
+  var arr = s ? s.docs.map(function(d){ return tab==='invoices' ? Object.assign({ _id:d.id }, d.data()) : d.data(); }) : [];
+  // نعرض بيانات فرع Glow بس (منتجات/عروض/فواتير) عشان يبان فرع مستقل
+  if(tab==='products') arr = arr.filter(function(p){ if(!p.showToCustomer) return false; if(p.branches && p.branches.indexOf(BRANCH)===-1) return false; return true; });
+  else if(tab==='offers') arr = arr.filter(function(o){ return !o.branch || o.branch === BRANCH; });
+  else if(tab==='invoices') arr = arr.filter(function(v){ return (v.branch||'') === BRANCH; });
+  if(tab==='offers') dataOffers = arr; else if(tab==='products') dataProducts = arr; else if(tab==='invoices') dataInvoices = arr;
+}
+function tabRender(tab){
+  if(currentTab !== tab) return;
+  if(tab==='offers') renderOffers(); else if(tab==='products') renderProducts(); else if(tab==='invoices') renderInvoices();
+}
+// مؤشّر تحميل لايق مع الثيم (بيظهر جوه التبويب لحد ما البيانات توصل)
+function loaderHTML(text){
+  return '<div class="loader"><div class="ring"></div><div class="lt">'+(text||'ثانية واحدة...')+'</div></div>';
+}
+var _loadCount = 0;
+function showTopLoad(on){
+  _loadCount = Math.max(0, _loadCount + (on ? 1 : -1));
+  var el = $('topLoad'); if(el) el.classList.toggle('on', _loadCount > 0);
+}
+
+// تحميل كسول: أول ما تفتح التبويب بس — كاش فوري + تحديث محدود من السيرفر في الخلفية
+function lazyLoadTab(tab){
+  if(tabStarted[tab]) return;
+  if(tab==='products'){   // الكتالوج (منتجات العرض + بانرات) من مستند واحد
+    tabStarted[tab] = true; showTopLoad(true);
+    db.collection(COL_SETTINGS).doc('catalog_'+CATALOG_BRAND).get().then(function(d){
+      var data = d.exists ? d.data() : {};
+      dataProducts = Array.isArray(data.items) ? data.items : [];
+      catalogBanners = Array.isArray(data.banners) ? data.banners : [];
+      if(currentTab==='products') renderProducts();
+    }).catch(function(){ dataProducts=[]; if(currentTab==='products') renderProducts(); })
+      .then(function(){ showTopLoad(false); });
+    return;
+  }
+  var ref = tabRef(tab); if(!ref) return;
+  tabStarted[tab] = true;
+  showTopLoad(true);
+  ref.get({ source:'cache' }).then(function(s){ if(s && s.docs && s.docs.length){ tabAssign(tab, s); tabRender(tab); } }).catch(function(){});
+  ref.get().then(function(s){ tabAssign(tab, s); tabRender(tab); }).catch(function(){ tabAssign(tab, null); tabRender(tab); })
+    .then(function(){ showTopLoad(false); });
+}
+
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
+  ['card','offers','products','invoices','account'].forEach(function(t){
+    $('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
+  });
+  // نبدأ تحميل بيانات التبويب أول مرة بس (كسول)، والعرض من الذاكرة فورًا في المرات الجاية
+  if(tab==='offers' || tab==='products' || tab==='invoices') lazyLoadTab(tab);
+  if(tab==='offers') renderOffers();
+  else if(tab==='products') renderProducts();
+  else if(tab==='invoices') renderInvoices();
+  else if(tab==='account') renderAccount();
+  // البطاقة بتتحدّث لايف من onSnapshot
+  window.scrollTo(0,0);
+}
+document.querySelectorAll('.tab').forEach(function(b){
+  b.addEventListener('click', function(){ switchTab(b.dataset.tab); });
+});
+
+/* ============================================================
+   تبويب البطاقة
+   ============================================================ */
+/* ---------- تاريخ التسجيل: بيتعامل مع صيغة التطبيق (رقم) وصيغة الكاشير (Firestore Timestamp) ---------- */
+function toJsDate(v){
+  if(v==null) return null;
+  if(typeof v==='number') return new Date(v);
+  if(typeof v==='string'){ var d=new Date(v); return isNaN(d.getTime())?null:d; }
+  if(typeof v==='object'){
+    if(typeof v.toDate==='function'){ try{ return v.toDate(); }catch(_){ } }
+    if(typeof v.seconds==='number') return new Date(v.seconds*1000);
+  }
+  return null;
+}
+function regDateText(opts){
+  var d = toJsDate(currentCustomer && currentCustomer.createdAt);
+  if(!d) return '';
+  try{ return d.toLocaleDateString('ar-EG', opts); }catch(_){ return ''; }
+}
+
+/* ---------- كود العضوية المميز ---------- */
+function generateLoyaltyCode(){ return 'GLW' + String(Math.floor(Math.random()*1e8)).padStart(8,'0'); }
+function prettyCode(c){
+  c = String(c||'');
+  if(c.indexOf('GLW')===0){ return 'GLW ' + c.slice(3).replace(/(\d{4})(\d{4})/, '$1 $2'); }
+  if(c.indexOf('ECH')===0){ return 'ECH ' + c.slice(3).replace(/(\d{4})(\d{4})/, '$1 $2'); }
+  return c;
+}
+// يولّد كود ويتأكد إنه مش متكرر (بيحاول لحد 5 مرات)
+function makeUniqueCode(tries){
+  var code = generateLoyaltyCode();
+  return db.collection(COL_CUSTOMERS).where('loyaltyCode_glow','==',code).limit(1).get().then(function(snap){
+    if(snap.empty || tries>=5) return code;
+    return makeUniqueCode(tries+1);
+  }).catch(function(){ return code; }); // أوفلاين؟ نقبل الكود زي ما هو
+}
+// يتأكد إن العميل عنده كود؛ لو لأ يولّد واحد ويحفظه (الحفظ بيرجّع snapshot تاني فيعاد الرسم بالباركود)
+function ensureLoyaltyCode(phone){
+  if(currentCustomer && currentCustomer.loyaltyCode_glow) return;
+  makeUniqueCode(0).then(function(code){
+    return db.collection(COL_CUSTOMERS).doc(phone).set({ loyaltyCode_glow: code }, { merge:true });
+  }).catch(function(e){ console.warn('تعذر توليد كود العضوية', e); });
+}
+
+/* ---------- مولّد باركود CODE128-B جوه الملف (من غير أي مكتبة خارجية عشان يشتغل أوفلاين) ---------- */
+var C128 = ["11011001100","11001101100","11001100110","10010011000","10010001100","10001001100","10011001000","10011000100","10001100100","11001001000","11001000100","11000100100","10110011100","10011011100","10011001110","10111001100","10011101100","10011100110","11001110010","11001011100","11001001110","11011100100","11001110100","11101101110","11101001100","11100101100","11100100110","11101100100","11100110100","11100110010","11011011000","11011000110","11000110110","10100011000","10001011000","10001000110","10110001000","10001101000","10001100010","11010001000","11000101000","11000100010","10110111000","10110001110","10001101110","10111011000","10111000110","10001110110","11101110110","11010001110","11000101110","11011101000","11011100010","11011101110","11101011000","11101000110","11100010110","11101101000","11101100010","11100011010","11101111010","11001000010","11110001010","10100110000","10100001100","10010110000","10010000110","10000101100","10000100110","10110010000","10110000100","10011010000","10011000010","10000110100","10000110010","11000010010","11001010000","11110111010","11000010100","10001111010","10100111100","10010111100","10010011110","10111100100","10011110100","10011110010","11110100100","11110010100","11110010010","11011011110","11011110110","11110110110","10101111000","10100011110","10001011110","10111101000","10111100010","11110101000","11110100010","10111011110","10111101110","11101011110","11110101110","11010000100","11010010000","11010011100","1100011101011"];
+function code128b(text){
+  var codes=[104], i;              // Start B
+  for(i=0;i<text.length;i++){ codes.push(text.charCodeAt(i)-32); }
+  var sum=104;
+  for(i=0;i<text.length;i++){ sum += (text.charCodeAt(i)-32)*(i+1); }
+  codes.push(sum%103);             // checksum
+  codes.push(106);                 // Stop
+  var bits=''; for(i=0;i<codes.length;i++){ bits += C128[codes[i]]; }
+  return bits;
+}
+function drawBarcode(containerId, text){
+  var el = document.getElementById(containerId);
+  if(!el) return;
+  var bits = code128b(String(text));
+  var mw = 2, h = 70, quiet = 10;          // عرض الموديول، الارتفاع، المنطقة البيضا على الجناب
+  var total = (bits.length + quiet*2) * mw;
+  var x = quiet*mw, rects = '';
+  for(var i=0;i<bits.length;i++){
+    if(bits.charAt(i)==='1'){ rects += '<rect x="'+x+'" y="0" width="'+mw+'" height="'+h+'"/>'; }
+    x += mw;
+  }
+  // بنبني الـ SVG كامل كنص وبنحطه جوه div — ده بيتفهم صح على كل المتصفحات (مش svg.innerHTML)
+  el.innerHTML = '<svg viewBox="0 0 '+total+' '+h+'" width="100%" height="'+h+'" '+
+                 'preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;">'+
+                 '<rect x="0" y="0" width="'+total+'" height="'+h+'" fill="#ffffff"/>'+
+                 '<g fill="#3A2233">'+rects+'</g></svg>';
+}
+
+/* ---------- قلب البطاقة ---------- */
+function flipCard(){ var f=$('cardFlip'); if(f) f.classList.toggle('flipped'); }
+
+
+// ===== العميل يطلب استبدال نقاط من التطبيق (يظهر للكاشير عند الشراء) =====
+var redeemSel = 0;
+function redeemMax(){ var per=Number(loyaltyCfg.pointsPerRedemption)||10; return Math.floor((Number(currentCustomer[POINTS_FIELD])||0)/per); }
+function changeRedeem(d){ redeemSel=Math.max(0,Math.min(redeemMax(),redeemSel+d)); renderCard(); }
+function requestRedeem(){
+  var per=Number(loyaltyCfg.pointsPerRedemption)||10, val=Number(loyaltyCfg.redemptionValueEGP)||5;
+  if(redeemSel<=0) return;
+  var req={ points:redeemSel*per, valueEGP:redeemSel*val, brand:CATALOG_BRAND, ts:Date.now() };
+  db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ pendingRedeem:req },{merge:true}).then(function(){
+    currentCustomer.pendingRedeem=req; redeemSel=0; renderCard();
+    alert('تمام! ✅ لما تيجي تدفعي، الكاشير هيلاقي طلب الاستبدال جاهز.');
+  }).catch(function(){ alert('حصل خطأ، حاولي تاني'); });
+}
+function cancelRedeem(){
+  db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ pendingRedeem: firebase.firestore.FieldValue.delete() },{merge:true}).then(function(){
+    currentCustomer.pendingRedeem=null; renderCard();
+  });
+}
+function redeemBlockHtml(){
+  var per=Number(loyaltyCfg.pointsPerRedemption)||10, val=Number(loyaltyCfg.redemptionValueEGP)||5;
+  var bal=Number(currentCustomer[POINTS_FIELD])||0;
+  var pr=currentCustomer.pendingRedeem;
+  if(pr && pr.brand===CATALOG_BRAND && pr.points>0){
+    return '<div style="background:var(--pink-soft); border:1px solid var(--pink); border-radius:16px; padding:16px; margin-top:14px; text-align:center;">'+
+      '<div style="font-weight:800; color:var(--pink-deep); margin-bottom:4px;">🎁 طلبتي استبدال '+pr.points+' نقطة</div>'+
+      '<div style="font-size:13px; color:var(--ink);">خصم '+pr.valueEGP+' ج.م — هيتطبق عند الدفع</div>'+
+      '<button onclick="cancelRedeem()" style="margin-top:10px; padding:8px 16px; border-radius:8px; border:1px solid var(--pink); background:transparent; color:var(--pink-deep); font-weight:700; cursor:pointer;">إلغاء الطلب</button>'+
+    '</div>';
+  }
+  if(bal<per) return '';
+  var pts=redeemSel*per, egp=redeemSel*val;
+  return '<div style="background:var(--white); border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:14px;">'+
+    '<div style="font-weight:800; text-align:center; margin-bottom:12px;">🎁 استبدلي نقاطك</div>'+
+    '<div style="display:flex; align-items:center; justify-content:center; gap:18px; margin-bottom:8px;">'+
+      '<button onclick="changeRedeem(-1)" style="width:42px; height:42px; border-radius:50%; border:1px solid var(--line); background:var(--pink-soft); font-size:22px; font-weight:800; cursor:pointer;">−</button>'+
+      '<div style="text-align:center; min-width:90px;"><div style="font-size:26px; font-weight:900; color:var(--pink-deep);">'+pts+'</div><div style="font-size:11px; color:var(--muted);">نقطة</div></div>'+
+      '<button onclick="changeRedeem(1)" style="width:42px; height:42px; border-radius:50%; border:1px solid var(--line); background:var(--pink-soft); font-size:22px; font-weight:800; cursor:pointer;">+</button>'+
+    '</div>'+
+    '<div style="text-align:center; font-size:14px; color:var(--ink); margin-bottom:12px;">= خصم <b>'+egp+' ج.م</b></div>'+
+    '<button onclick="requestRedeem()" '+(redeemSel<=0?'disabled':'')+' style="width:100%; padding:12px; border-radius:10px; border:none; background:'+(redeemSel<=0?'#bbb':'var(--pink)')+'; color:#fff; font-weight:800; cursor:'+(redeemSel<=0?'default':'pointer')+';">اطلبي الاستبدال</button>'+
+  '</div>';
+}
+
+function renderCard(){
+  if(!currentCustomer) return;
+  var pts = Number(currentCustomer[POINTS_FIELD])||0;
+  var per = Number(loyaltyCfg.pointsPerRedemption)||10;
+  var val = Number(loyaltyCfg.redemptionValueEGP)||5;
+  var earn = Number(loyaltyCfg.pointsPerEGP)||100;
+
+  var units = Math.floor(pts / per);
+  var worth = units * val;                          // القيمة القابلة للاستبدال دلوقتي
+  var toNext = per - (pts % per);                    // كام نقطة للوحدة الجاية
+  var pct = Math.round(((pts % per) / per) * 100);
+
+  var sinceTxt = regDateText({day:'numeric', month:'long', year:'numeric'});
+  if(sinceTxt) sinceTxt = 'عضو من ' + sinceTxt;
+
+  var code = currentCustomer.loyaltyCode_glow || '';
+
+  $('tab-card').innerHTML =
+    '<div class="gcard">'+
+      '<div class="gcard-head">'+
+        '<img src="'+logoSrc+'" class="gcard-logo" alt="Glow">'+
+        '<div class="gcard-tag">بطاقة عضوية</div>'+
+      '</div>'+
+      '<div class="gcard-pts">'+
+        '<span class="gpn">'+fmt(pts)+'</span><span class="gpu">نقطة</span>'+
+        '<div class="gpw">'+(worth>0 ? ('≈ '+fmt(worth)+' ج.م رصيد مكافآت') : 'اجمعي نقاط أكتر عشان تبدأي تستبدلي')+'</div>'+
+      '</div>'+
+      '<div class="gcard-holder"><span class="gh-name">'+esc(currentCustomer.name||'—')+'</span><span class="gh-since">'+esc(sinceTxt)+'</span></div>'+
+      '<div class="gcard-perf"></div>'+
+      '<div class="gcard-bc">'+
+        (code
+          ? '<div class="cb-barcode" id="cardBarcode"></div><div class="gcard-code">'+esc(prettyCode(code))+'</div>'
+          : '<div class="cb-wait">بنجهّز كودك...</div>')+
+        '<div class="gcard-scanhint">📷 اعرضي الكود ده للكاشير عند الدفع</div>'+
+      '</div>'+
+    '</div>'+
+
+    '<div class="progress-wrap">'+
+      '<div class="pw-top"><span>الوحدة الجاية</span><span class="g">'+(pts>0 && (pts%per===0) ? 'جاهزة للاستبدال! 🎉' : ('فاضل '+toNext+' نقطة'))+'</span></div>'+
+      '<div class="bar"><span style="width:'+pct+'%"></span></div>'+
+    '</div>'+
+
+    '<div class="info-grid">'+
+      '<div class="info-box"><div class="ico">👜</div><div class="t">إزاي تكسبي نقاط</div><div class="d">كل '+fmt(earn)+' ج.م تشتريها = نقطة</div></div>'+
+      '<div class="info-box"><div class="ico">🏆</div><div class="t">إزاي تستبدلي</div><div class="d">كل '+per+' نقطة = '+fmt(val)+' ج.م خصم</div></div>'+
+    '</div>'+
+
+    redeemBlockHtml()+
+    '<div class="redeem-hint">💡 الاستبدال بيحصل في المحل — قوليلهم عايزة تستبدلي نقاطك عند الدفع.</div>';
+
+  // نرسم الباركود (ظاهر على طول)
+  if(code){
+    try{ drawBarcode('cardBarcode', code); }catch(e){ console.warn('barcode', e); }
+  }
+}
+
+/* ============================================================
+   تبويب العروض (الخصومات السارية من الكاشير)
+   ============================================================ */
+function renderOffers(){
+  var box = $('tab-offers');
+  var head = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>';
+  var _now = Date.now();
+  var _myR = (currentCustomer && currentCustomer.rewards ? currentCustomer.rewards : []).filter(function(r){ return r && !r.used && r.brand===CATALOG_BRAND && (!r.expiry || r.expiry>_now); });
+  var rewardsHtml = _myR.length ? ('<div class="sec-h">مكافآتك <span class="em">الخاصة</span></div>' + _myR.map(function(r){
+    var big = r.type==='percent' ? (fmt(r.value)+'%') : fmt(r.value);
+    var sm  = r.type==='percent' ? 'خصم' : 'ج.م';
+    var cond = r.minInvoice ? ('لو اشتريتي بـ '+fmt(r.minInvoice)+' ج.م أو أكتر') : 'على أي فاتورة';
+    var days = r.expiry ? Math.max(0, Math.ceil((r.expiry-_now)/86400000)) : null;
+    return '<div class="offer" style="border:2px solid var(--pink); background:var(--pink-soft);">'+
+      '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
+      '<div class="obody"><div class="on">🎁 مكافأة خاصة ليكي</div><div class="osc">'+cond+'</div><div class="oend">'+(days!=null?('صالحة '+days+' يوم كمان — بتتطبق عند الدفع'):'بتتطبق عند الدفع')+'</div></div>'+
+    '</div>';
+  }).join('')) : '';
+
+  if(dataOffers === null){ box.innerHTML = head + loaderHTML('بنجيب أحدث العروض...'); return; }
+  var today = todayISO();
+  var live = dataOffers.filter(function(dc){
+    return dc.active !== false
+      && (!dc.startDate || dc.startDate <= today)
+      && (!dc.endDate   || dc.endDate   >= today);
+  });
+  var seen = {}, uniq = [];
+  live.forEach(function(dc){
+    var key = (dc.name||'')+'|'+dc.type+'|'+dc.value+'|'+dc.scope+'|'+(dc.productId||'');
+    if(!seen[key]){ seen[key]=1; uniq.push(dc); }
+  });
+  if(uniq.length === 0){
+    box.innerHTML = rewardsHtml + head + '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>';
+    return;
+  }
+  var rows = uniq.map(function(dc){
+    var isPct = dc.type === 'percent';
+    var big = isPct ? (fmt(dc.value)+'%') : fmt(dc.value);
+    var sm  = isPct ? 'خصم' : 'ج.م';
+    var scopeStr = dc.scope === 'all' ? '🏪 على المحل كله' : ('🏷️ ' + esc(dc.productName || 'منتج مختار'));
+    var cap = (isPct && dc.maxDiscount) ? (' · بحد أقصى '+fmt(dc.maxDiscount)+' ج.م') : '';
+    var endStr = dc.endDate ? ('ساري لحد '+esc(dc.endDate)) : 'عرض مفتوح';
+    return '<div class="offer">'+
+      '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
+      '<div class="obody">'+
+        '<div class="on">'+esc(dc.name||'عرض')+'</div>'+
+        '<div class="osc">'+scopeStr+cap+'</div>'+
+        '<div class="oend">'+endStr+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  box.innerHTML = rewardsHtml + head + rows;
+}
+
+/* ============================================================
+   تبويب المنتجات (المخزون المتاح)
+   ============================================================ */
+
+function activateOffer(barcode, type, value){
+  if(!barcode || !currentCustomer){ return; }
+  var offers = currentCustomer.activatedOffers || {};
+  offers[barcode] = { type:type, value:value, brand:CATALOG_BRAND };
+  db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ activatedOffers: offers }, { merge:true }).then(function(){
+    currentCustomer.activatedOffers = offers; renderProducts();
+    alert('تم تفعيل العرض! 🎉 هيتطبق تلقائي عند الدفع في المحل.');
+  }).catch(function(){ alert('حصل خطأ، حاولي تاني'); });
+}
+function renderProducts(){
+  var box = $('tab-products');
+  var head = '<div class="sec-h">تشكيلة <span class="em">Glow</span></div>';
+  if(dataProducts === null){ box.innerHTML = head + loaderHTML('بنجيب التشكيلة...'); return; }
+  var banners = (catalogBanners||[]).map(function(b){
+    return '<img src="'+esc(b.img||'')+'" style="width:100%; border-radius:16px; margin-bottom:12px; display:block;">';
+  }).join('');
+  if(dataProducts.length === 0){
+    box.innerHTML = head + banners + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
+    return;
+  }
+  var cards = dataProducts.map(function(p){
+    var hasOffer = p.discountType && p.discountType!=='none' && Number(p.discountValue)>0 && p.barcode;
+    var priceNum = parseFloat(p.price)||0, newPrice = priceNum;
+    if(hasOffer){ newPrice = p.discountType==='percent' ? Math.max(0, priceNum*(1-Number(p.discountValue)/100)) : Math.max(0, priceNum-Number(p.discountValue)); }
+    var activated = currentCustomer && currentCustomer.activatedOffers && currentCustomer.activatedOffers[p.barcode];
+    var priceHtml = p.price ? (hasOffer
+      ? '<div class="pprice"><span style="text-decoration:line-through; color:var(--muted); font-size:12px;">'+esc(p.price)+'</span> '+Math.round(newPrice)+' <span>ج.م</span></div>'
+      : '<div class="pprice">'+esc(p.price)+' <span>ج.م</span></div>') : '';
+    var offerBtn = hasOffer ? (activated
+      ? '<div style="margin-top:8px; padding:8px; border-radius:8px; background:var(--pink-soft); color:var(--pink-deep); font-weight:800; font-size:12px; text-align:center;">✅ العرض مفعّل</div>'
+      : '<button onclick="activateOffer(\''+p.barcode+'\',\''+p.discountType+'\','+Number(p.discountValue)+')" style="margin-top:8px; width:100%; padding:9px; border-radius:8px; border:none; background:var(--pink); color:#fff; font-weight:800; font-size:12px; cursor:pointer;">🎁 فعّل العرض</button>') : '';
+    return '<div class="prod" style="padding:0; overflow:hidden;">'+
+      (p.img ? '<div style="width:100%; height:150px; background:#eee center/cover no-repeat; background-image:url(\''+String(p.img).replace(/\'/g,'')+'\');"></div>' : '')+
+      '<div style="padding:12px 14px 14px;">'+
+        '<div class="pname">'+esc(p.name||'منتج')+'</div>'+
+        (p.desc ? '<div class="pmeta">'+esc(p.desc)+'</div>' : '')+
+        priceHtml + offerBtn +
+      '</div>'+
+    '</div>';
+  }).join('');
+  box.innerHTML = head + banners + '<div class="prod-grid">'+cards+'</div>';
+}
+
+/* ============================================================
+   تبويب فواتيري (نسخ من فواتير العميلة — بديل الفاتورة الورق)
+   ============================================================ */
+var invoicesData = [];
+var PAY_LABEL = { cash:'كاش', visa:'فيزا', instapay:'انستاباي' };
+
+function payMethodsText(pmts){
+  var out = [];
+  Object.keys(pmts||{}).forEach(function(m){ if((pmts[m]||0) > 0) out.push(PAY_LABEL[m]||m); });
+  return out.length ? out.join(' + ') : '—';
+}
+
+function renderInvoices(){
+  var box = $('tab-invoices');
+  var head = '<div class="sec-h">🧾 فواتيري</div>';
+  if(dataInvoices === null){ box.innerHTML = head + loaderHTML('بنجيب فواتيرك...'); return; }
+  invoicesData = dataInvoices.filter(function(s){ return !s.reversed; })
+    .sort(function(a,b){ return (toJsDate(b.createdAt)?.getTime()||0) - (toJsDate(a.createdAt)?.getTime()||0); });
+
+  if(invoicesData.length === 0){
+    box.innerHTML = head + '<div class="empty"><span class="big">🧾</span>لسه مفيش فواتير مسجّلة باسمك.<br>قوّلي الكاشير يحط رقمك وقت الشراء عشان تتحفظ هنا.</div>';
+    return;
+  }
+  var rows = invoicesData.map(function(s, i){
+    var d = toJsDate(s.createdAt);
+    var dateStr = d ? d.toLocaleDateString('ar-EG', {day:'2-digit', month:'long', year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '—';
+    var pieces = s.itemCount != null ? s.itemCount : (s.items||[]).reduce(function(x,it){ return x + (it.qty||0); }, 0);
+    var isRet = (s.total||0) < 0;
+    return '<div class="inv" onclick="openInvoiceDetail('+i+')">'+
+      '<div class="inv-top">'+
+        '<div><div class="inv-date">'+esc(dateStr)+'</div>'+(s.invoiceNo?'<div class="inv-no">#'+esc(s.invoiceNo)+'</div>':'')+'</div>'+
+        '<div class="inv-total" style="'+(isRet?'color:#e07a7a':'')+'">'+fmt(s.total)+' <span style="font-size:11px;">ج.م</span></div>'+
+      '</div>'+
+      '<div class="inv-meta">'+
+        '<span>🛍️ '+pieces+' قطعة · '+payMethodsText(s.payments)+'</span>'+
+        (s.loyaltyPointsEarned ? '<span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span>' : '<span></span>')+
+      '</div>'+
+    '</div>';
+  }).join('');
+  box.innerHTML = rewardsHtml + head + rows;
+}
+
+function openInvoiceDetail(i){
+  var s = invoicesData[i]; if(!s) return;
+  var d = toJsDate(s.createdAt);
+  var dateStr = d ? d.toLocaleDateString('ar-EG', {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+  var itemsHtml = (s.items||[]).map(function(it){
+    var line = (it.price||0) * (it.qty||0);
+    return '<div class="ish-item"><div>'+esc(it.name||'صنف')+' <span class="q">× '+(it.qty||0)+'</span>'+(it.discountName?' <span style="color:var(--pink);font-size:11px;">🏷️</span>':'')+'</div><div>'+fmt(line)+'</div></div>';
+  }).join('');
+  var pmtRows = Object.keys(s.payments||{}).filter(function(m){ return (s.payments[m]||0)>0; })
+    .map(function(m){ return '<div class="ish-row"><span>'+(PAY_LABEL[m]||m)+'</span><span>'+fmt(s.payments[m])+' ج.م</span></div>'; }).join('');
+
+  $('invSheet').innerHTML =
+    '<div class="ish-h"><div class="ish-title">🧾 فاتورة'+(s.invoiceNo?(' #'+esc(s.invoiceNo)):'')+'</div><button class="ish-x" onclick="closeInvoiceDetail()">✕</button></div>'+
+    '<div class="ish-sub">'+esc(dateStr)+(s.branch?(' · '+esc(s.branch)):'')+'</div>'+
+    itemsHtml+
+    '<div class="ish-row big"><span>الإجمالي</span><span>'+fmt(s.total)+' ج.م</span></div>'+
+    pmtRows+
+    (s.loyaltyPointsEarned ? '<div class="ish-row"><span>نقاط كسبتيها</span><span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span></div>' : '')+
+    (s.sellerEmployeeName||s.employeeName ? '<div class="ish-row"><span>خدمك</span><span>'+esc(s.sellerEmployeeName||s.employeeName)+'</span></div>' : '')+
+    (s.invoiceCode ? '<div style="margin-top:16px; padding-top:14px; border-top:2px dashed var(--line); text-align:center;">'+
+      '<div style="font-size:12px; color:var(--muted); font-weight:700; margin-bottom:8px;">📷 لو عايزة ترجّعي حاجة، ورّي الكود ده للكاشير</div>'+
+      '<div id="invBarcode" style="max-width:230px; margin:0 auto; background:#fff; padding:10px 12px; border-radius:10px;"></div>'+
+      '<div style="font-family:monospace; font-size:12px; color:var(--pink-deep); margin-top:4px; letter-spacing:1px;">'+esc(s.invoiceCode)+'</div>'+
+    '</div>' : '');
+  $('invOverlay').classList.add('on');
+  if(s.invoiceCode){ try{ drawBarcode('invBarcode', s.invoiceCode); }catch(e){ console.warn('inv barcode', e); } }
+}
+function closeInvoiceDetail(){ $('invOverlay').classList.remove('on'); }
+
+/* ============================================================
+   تبويب الحساب
+   ============================================================ */
+function renderAccount(){
+  if(!currentCustomer) return;
+  var spent = Number(currentCustomer.totalSpent)||0;
+  var sinceFull = regDateText({day:'numeric', month:'long', year:'numeric'}) || '—';
+  var code = currentCustomer.loyaltyCode_glow ? prettyCode(currentCustomer.loyaltyCode_glow) : '—';
+  $('tab-account').innerHTML =
+    '<div class="sec-h">حسابي</div>'+
+    '<div class="acct-card">'+
+      '<div class="acct-row"><span class="k">الاسم</span><span class="v">'+esc(currentCustomer.name||'—')+'</span></div>'+
+      '<div class="acct-row"><span class="k">رقم الموبايل</span><span class="v ltr">'+esc(currentCustomer.phone)+'</span></div>'+
+      '<div class="acct-row"><span class="k">كود العضوية</span><span class="v ltr">'+esc(code)+'</span></div>'+
+      '<div class="acct-row"><span class="k">رصيد النقاط</span><span class="v">'+fmt(currentCustomer[POINTS_FIELD]||0)+' نقطة</span></div>'+
+      (spent>0 ? '<div class="acct-row"><span class="k">إجمالي مشترياتك</span><span class="v">'+fmt(spent)+' ج.م</span></div>' : '')+
+      '<div class="acct-row"><span class="k">عضو من</span><span class="v">'+esc(sinceFull)+'</span></div>'+
+    '</div>'+
+    (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
+    '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
+    '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
+    '<button class="btn-outline logout" onclick="logout()">تسجيل الخروج</button>';
+
+  // زر التثبيت
+  var ib = $('installBtn');
+  if(deferredPrompt){ ib.style.display='flex'; ib.onclick = triggerInstall; }
+  if(isIOS() && !isStandalone()){ $('iosTip').style.display='block'; }
+}
+
+function logout(silent){
+  if(!silent && !confirm('تسجيل الخروج من حسابك؟')) return;
+  if(custUnsub){ custUnsub(); custUnsub=null; }
+  currentCustomer = null;
+  localStorage.removeItem(LS_PHONE);
+  $('phoneInput').value=''; $('nameInput').value='';
+  pendingIsNew=false; pendingName=''; pinToMatch='';
+  showScreen('screen-login');
+  setLoginStep('phone');
+}
+
+/* ============================================================
+   تثبيت التطبيق (PWA)
+   ============================================================ */
+var deferredPrompt = null;
+var installDismissed = false;   // اتقفل في الجلسة دي؟ (يظهر تاني في فتحة جديدة)
+
+function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+function isStandalone(){ return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
+
+// بيمسك حدث التثبيت من كروم/أندرويد وبيوري البانر تلقائي
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault(); deferredPrompt = e;
+  // زر التثبيت اللي في تبويب الحساب (لو ظاهر)
+  var ib = $('installBtn'); if(ib){ ib.style.display='flex'; ib.onclick = triggerInstall; }
+  showInstallBanner('android');
+});
+
+// لو اتثبت خلاص، نخفي أي دعوة
+window.addEventListener('appinstalled', function(){ deferredPrompt=null; hideInstallBanner(); });
+
+function showInstallBanner(mode){
+  if(isStandalone() || installDismissed) return;      // متثبت أصلاً أو العميلة قفلته
+  var b = $('installBanner'); if(!b) return;
+  $('ibLogo').src = logoSrc;
+  if(mode === 'ios'){
+    b.classList.add('ios');
+    $('ibDesc').innerHTML = 'دوسي مشاركة <b>⬆️</b> تحت، بعدين <b>«إضافة إلى الشاشة الرئيسية»</b>';
+  }else{
+    b.classList.remove('ios');
+    $('ibDesc').textContent = 'ثبّتيه على موبايلك عشان توصليله بضغطة';
+  }
+  requestAnimationFrame(function(){ b.classList.add('show'); });
+}
+function hideInstallBanner(){ var b=$('installBanner'); if(b) b.classList.remove('show'); }
+function dismissInstall(){ installDismissed = true; hideInstallBanner(); }
+
+function triggerInstall(){
+  if(!deferredPrompt){
+    if(isIOS()){ showInstallBanner('ios'); }
+    return;
+  }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.finally(function(){
+    deferredPrompt = null;
+    hideInstallBanner();
+    var ib = $('installBtn'); if(ib) ib.style.display='none';
+  });
+}
+
+// على الآيفون مفيش beforeinstallprompt — نوري البانر بإرشادات الإضافة يدويًا
+if(isIOS() && !isStandalone()){
+  setTimeout(function(){ showInstallBanner('ios'); }, 1500);
+}
+
+/* ============================================================
+   إقلاع التطبيق
+   ============================================================ */
+$('heroLogo').src = logoSrc;
+loadSettings().finally(function(){
+  var saved = localStorage.getItem(LS_PHONE);
+  if(saved){ showScreen('screen-app'); enterApp(saved); }
+  else { showScreen('screen-login'); setLoginStep('phone'); }
+});
+
+// لو الاسكربت كله اشتغل، نلغي بانر الفشل الاحتياطي
+window.__scriptFullyLoaded = true;
+setTimeout(function(){
+  if(!window.__scriptFullyLoaded){ $('loadFail').style.display='flex'; }
+}, 8000);
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+</script>
+</body>
+</html>
