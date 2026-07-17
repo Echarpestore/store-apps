@@ -179,15 +179,16 @@ async function runImport(){
           const name = (row[mapping.name]||'').trim();
           if(!name){ failed++; return; }
           const barcode = mapping.barcode ? String(row[mapping.barcode]||'').trim() : '';
+          const qtyNum = mapping.quantity ? Math.max(0, parseInt(row[mapping.quantity]) || 0) : 0;   // السالب يبقى صفر
           const data = {
             name, barcode,
             price: mapping.price ? (parseFloat(row[mapping.price]) || 0) : 0,
             cost: mapping.cost ? (parseFloat(row[mapping.cost]) || 0) : 0,
-            quantity: mapping.quantity ? Math.max(0, parseInt(row[mapping.quantity]) || 0) : 0,  // السالب يبقى صفر
+            qtyByBranch: { [currentBranch]: qtyNum },   // كمية الفرع الحالي (مخزون منفصل لكل فرع)
             supplier: mapping.supplier ? (row[mapping.supplier]||'') : '',
             minStock: mapping.minStock ? (Math.max(0, parseInt(row[mapping.minStock])||0)) : 0,
             department: mapping.department ? (row[mapping.department]||'') : '',
-            status:'active', branch: currentBranch, importedFrom:'quickbooks',
+            status:'active', importedFrom:'quickbooks',
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           };
           // الباركود = ID الوثيقة عشان لو استوردت تاني يتحدّث بدل ما يتكرر

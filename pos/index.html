@@ -472,6 +472,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
             <div class="qb-nav-item" id="navInventory" onclick="goToInventory()"><div class="qb-icon">📦</div><div class="qb-label">قائمة الأصناف</div></div>
             <div class="qb-nav-item" id="navReceiveGoods" onclick="goToReceiveGoods()"><div class="qb-icon">📥</div><div class="qb-label">استلام بضاعة</div></div>
             <div class="qb-nav-item" id="navPriceLabel" onclick="goToInventory()"><div class="qb-icon">🏷️</div><div class="qb-label">طباعة أسعار</div></div>
+            <div class="qb-nav-item" id="navCatalog" onclick="goToCatalogEditor()"><div class="qb-icon">🖼️</div><div class="qb-label">كتالوج العرض</div></div>
           </div>
         </div>
 
@@ -563,6 +564,14 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ INVENTORY ============ -->
+<div class="screen mgmt-light" id="catalogScreen">
+  <div class="dash-header">
+    <button class="back-btn" onclick="goToDashboard()">◀</button>
+    <h2>🖼️ كتالوج العرض</h2>
+  </div>
+  <div id="catalogWrap" style="padding:14px 16px 40px;"></div>
+</div>
+
 <div class="screen mgmt-light" id="inventoryScreen">
   <div class="dash-header">
     <div><h1>📦 المخزون</h1></div>

@@ -64,11 +64,11 @@ async function renderProductDetails(){
         : (statusOptions.find(o=>o.v===p.status)||statusOptions[0]).l)}
     </div>`;
 
-  const isLow = (p.minStock??0) > 0 && (p.quantity??0) <= p.minStock;
+  const isLow = (p.minStock??0) > 0 && branchQty(p) <= p.minStock;
   document.getElementById('pdStockCard').innerHTML = `
     <div style="background:var(--panel); border:1px solid ${isLow?'var(--minus)':'var(--border)'}; border-radius:12px; padding:14px; margin-bottom:10px;">
       <div style="font-weight:800; margin-bottom:6px;">المخزون ${isLow ? '<span style="color:var(--minus); font-size:12px;">⚠️ وصل للحد الأدنى</span>' : ''}</div>
-      ${fieldRow('الكمية الحالية', `<span style="font-size:17px; color:${isLow?'var(--minus)':'var(--plus)'};">${p.quantity ?? 0}</span>`)}
+      ${fieldRow('الكمية الحالية', `<span style="font-size:17px; color:${isLow?'var(--minus)':'var(--plus)'};">${branchQty(p)}</span>`)}
       ${fieldRow('الحد الأدنى للتنبيه', editableInput('minStock', p.minStock ?? 0, 'number', canEdit))}
       ${canEdit ? `
       <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
@@ -111,8 +111,8 @@ async function pdAdjustStock(direction){
   if(isNaN(qty) || qty <= 0){ showToast('كمية غير صحيحة', 'err'); return; }
 
   // منع المخزون السالب: مينفعش تخصم أكتر من الموجود
-  if(direction < 0 && qty > (p.quantity ?? 0)){
-    showToast(`مينفعش تخصم ${qty} — الموجود فعليًا ${p.quantity ?? 0} بس`, 'err');
+  if(direction < 0 && qty > branchQty(p)){
+    showToast(`مينفعش تخصم ${qty} — الموجود فعليًا ${branchQty(p)} بس`, 'err');
     return;
   }
 
@@ -123,7 +123,7 @@ async function pdAdjustStock(direction){
   const delta = direction > 0 ? qty : -qty;
   try{
     await db.collection(TEST_INVENTORY).doc(currentProductId).update({
-      quantity: firebase.firestore.FieldValue.increment(delta)
+      ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(delta)
     });
     await logStockMovement(currentProductId, p.name, delta, direction > 0 ? 'receipt' : 'adjustment', reason.trim());
     showToast('اتسجلت التسوية ✅');
@@ -205,7 +205,7 @@ document.getElementById('receiveGoodsBarcode').addEventListener('input', (e)=>{
   matches.forEach(it=>{
     const row = document.createElement('div');
     row.className = 'sugg-row';
-    row.innerHTML = `<span>${it.name} <span style="color:#999; font-size:11px;">${it.barcode||''}</span></span><span style="color:var(--muted)">${it.price} ج.م · مخزون: ${it.quantity??0}</span>`;
+    row.innerHTML = `<span>${it.name} <span style="color:#999; font-size:11px;">${it.barcode||''}</span></span><span style="color:var(--muted)">${it.price} ج.م · مخزون: ${branchQty(it)}</span>`;
     row.onclick = ()=>{ addToReceiveCart(it); e.target.value=''; box.innerHTML=''; e.target.focus(); };
     box.appendChild(row);
   });
@@ -237,7 +237,7 @@ document.getElementById('receiveGoodsBarcode').addEventListener('keydown', (e)=>
 function addToReceiveCart(product){
   const ex = receiveCart.find(r=> r.id === product.id);
   if(ex){ ex.qty += 1; }
-  else receiveCart.push({ id:product.id, name:product.name, barcode:product.barcode, currentQty:(product.quantity ?? 0), qty:1 });
+  else receiveCart.push({ id:product.id, name:product.name, barcode:product.barcode, currentQty:branchQty(product), qty:1 });
   renderReceiveCart();
 }
 function receiveQty(idx, delta){
@@ -267,7 +267,7 @@ function renderReceiveCart(){
   wrap.innerHTML = receiveCart.map((r, idx)=>{
     // نحسب المخزون الجديد من الرصيد الحالي الفعلي
     const p = allInventory.find(x=> x.id === r.id);
-    const cur = p ? (p.quantity ?? 0) : r.currentQty;
+    const cur = p ? branchQty(p) : r.currentQty;
     const newQty = cur + (r.qty || 0);
     const isNeg = (r.qty || 0) < 0;                       // كمية بالسالب = تالف/مرتجع
     const price = p ? p.price : '';
@@ -302,7 +302,7 @@ async function confirmReceiveCart(){
   // تأكد إن مفيش خصم أكتر من الموجود
   for(const r of rows){
     const p = allInventory.find(x=> x.id === r.id);
-    const cur = p ? (p.quantity ?? 0) : r.currentQty;
+    const cur = p ? branchQty(p) : r.currentQty;
     if(cur + r.qty < 0){ showToast(`«${r.name}» مينفعش تخصم أكتر من الموجود (${cur})`, 'err'); return; }
   }
   const btn = document.getElementById('receiveConfirmBtn');
@@ -310,9 +310,9 @@ async function confirmReceiveCart(){
   try{
     for(const r of rows){
       const p = allInventory.find(x=> x.id === r.id);
-      const cur = p ? (p.quantity ?? 0) : r.currentQty;
+      const cur = p ? branchQty(p) : r.currentQty;
       const newQty = cur + r.qty;
-      const update = { quantity: firebase.firestore.FieldValue.increment(r.qty) };
+      const update = { ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(r.qty) };
       if(newQty <= 0) update.status = 'outofstock';
       else if(p && p.status === 'outofstock') update.status = 'active';
       await db.collection(TEST_INVENTORY).doc(r.id).update(update);

@@ -46,6 +46,12 @@ let currentBranch = localStorage.getItem('pos_branch') || '';
 // فروع Glow ليها رصيد نقاط منفصل (points_glow) عن echarpe (points) — عشان ما تتلخبطش
 const GLOW_BRANCHES = ['Glow'];
 function pointsFieldFor(branch){ return GLOW_BRANCHES.includes(branch) ? 'points_glow' : 'points'; }
+// كمية المنتج في الفرع الحالي (كل فرع مخزونه منفصل). لو المنتج لسه ماتفصلش، بيرجّع الكمية القديمة.
+function branchQty(p, br){
+  br = br || currentBranch;
+  if(p && p.qtyByBranch) return Number(p.qtyByBranch[br]) || 0;
+  return Number(p && p.quantity) || 0;   // legacy قبل فصل المخزون
+}
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -341,7 +347,10 @@ async function renderInventoryScreen(){
       <input id="newItemBarcode" placeholder="الباركود" value="${nextBarcode()}" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
       <input id="newItemPrice" type="number" placeholder="السعر" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
       <input id="newItemCost" type="number" placeholder="سعر التكلفة" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-      <input id="newItemQty" type="number" placeholder="الكمية" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <input id="newItemQty" type="number" placeholder="الكمية (لفرعك)" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--text); padding:0 4px; cursor:pointer;">
+        <input type="checkbox" id="newItemAllBranches" checked style="width:16px; height:16px;"> في كل الفروع
+      </label>
       <button onclick="addInventoryItem()" style="padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:700; cursor:pointer;">إضافة</button>
     </div>` : '';
 
@@ -350,7 +359,7 @@ async function renderInventoryScreen(){
   const canEdit = hasPerm('canEditInventory');
 
   // شريط تنبيه نقص المخزون
-  const lowStock = allInventory.filter(it=> it.status !== 'hidden' && (it.quantity??0) <= (it.minStock??0) && (it.minStock??0) > 0);
+  const lowStock = allInventory.filter(it=> it.status !== 'hidden' && branchQty(it) <= (it.minStock??0) && (it.minStock??0) > 0);
   const alertBar = document.getElementById('lowStockAlertBar');
   if(alertBar){
     alertBar.innerHTML = lowStock.length ? `
@@ -364,8 +373,8 @@ async function renderInventoryScreen(){
   // إحصائيات عامة
   const canCost2 = hasPerm('canViewCostPrice');
   const totalItems = allInventory.length;
-  const outCount = allInventory.filter(it=> it.status==='outofstock' || (it.quantity??0)<=0).length;
-  const stockValue = allInventory.reduce((s,it)=> s + ((canCost2 ? (it.cost||0) : (it.price||0)) * (it.quantity??0)), 0);
+  const outCount = allInventory.filter(it=> it.status==='outofstock' || branchQty(it)<=0).length;
+  const stockValue = allInventory.reduce((s,it)=> s + ((canCost2 ? (it.cost||0) : (it.price||0)) * branchQty(it)), 0);
   const sumEl = document.getElementById('invSummary');
   if(sumEl){
     const canStock2 = hasPerm('canViewStock');
@@ -394,9 +403,10 @@ function renderInventoryList(){
   const filter = document.getElementById('invFilter')?.value || 'all';
 
   let items = allInventory.filter(it=>{
+    if(it.branches && !it.branches.includes(currentBranch)) return false;   // مقصور على فرع تاني
     if(q && !((it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q))) return false;
-    const isLow = (it.minStock??0) > 0 && (it.quantity??0) <= it.minStock;
-    const isOut = it.status==='outofstock' || (it.quantity??0) <= 0;
+    const isLow = (it.minStock??0) > 0 && branchQty(it) <= it.minStock;
+    const isOut = it.status==='outofstock' || branchQty(it) <= 0;
     if(filter==='low') return isLow && it.status!=='hidden';
     if(filter==='out') return isOut;
     if(filter==='hidden') return it.status==='hidden';
@@ -404,7 +414,7 @@ function renderInventoryList(){
   });
 
   listWrap.innerHTML = items.map(it=>{
-    const qty = it.quantity??0;
+    const qty = branchQty(it);
     const isLow = (it.minStock??0) > 0 && qty <= it.minStock;
     const isOut = it.status==='outofstock' || qty <= 0;
     let badge, bcol, bbg;
@@ -430,6 +440,7 @@ function renderInventoryList(){
       <div style="display:flex; justify-content:space-between; align-items:center; margin-top:9px;">
         <span style="background:${bbg}; color:${bcol}; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">${badge}${minNote}</span>
         <div style="display:flex; gap:6px;">
+          ${canEdit ? `<button onclick="event.stopPropagation(); toggleCustomerVisible('${it.id}')" title="يظهر للعميل؟" style="padding:6px 10px; border-radius:8px; border:1px solid ${it.showToCustomer?'var(--plus)':'var(--border)'}; background:${it.showToCustomer?'#eafaf0':'var(--panel2)'}; color:${it.showToCustomer?'#15803d':'var(--muted)'}; font-size:11px; font-weight:700; cursor:pointer;">${it.showToCustomer?'👁️ ظاهر':'🙈 مخفي'}</button>` : ''}
           ${canLabel ? `<button onclick="event.stopPropagation(); printPriceLabel('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px; cursor:pointer;">🏷️</button>` : ''}
           ${canEdit ? `<button onclick="event.stopPropagation(); deleteInventoryItem('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>` : ''}
         </div>
@@ -462,7 +473,7 @@ function exportInventoryCSV(){
   const esc = v=>{ v = String(v==null?'':v); return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
   const lines = [headers.join(',')];
   allInventory.forEach(it=>{
-    lines.push([it.barcode||'', it.name||'', it.price??'', it.cost??'', it.quantity??'', it.supplier||'', it.minStock??'', it.department||'', it.status||''].map(esc).join(','));
+    lines.push([it.barcode||'', it.name||'', it.price??'', it.cost??'', branchQty(it), it.supplier||'', it.minStock??'', it.department||'', it.status||''].map(esc).join(','));
   });
   const blob = new Blob(['\ufeff'+lines.join('\r\n')], { type:'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -482,6 +493,117 @@ function nextBarcode(){
   return String(max + 1);
 }
 
+// ============ كتالوج العرض (منفصل عن المخزون — منتجات بصور + بانرات يدوي) ============
+// بيتخزّن في pos_test_settings/catalog_<brand> — كل فرع/براند له كتالوجه
+function catalogBrand(){ return GLOW_BRANCHES.includes(currentBranch) ? 'glow' : 'echarpe'; }
+let catalogData = { items: [], banners: [] };
+
+async function goToCatalogEditor(){
+  if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
+  showScreen('catalogScreen');
+  document.getElementById('catalogWrap').innerHTML = '<div class="empty-cart">بيتحمّل...</div>';
+  try{
+    const doc = await db.collection(TEST_SETTINGS).doc('catalog_' + catalogBrand()).get();
+    catalogData = doc.exists ? Object.assign({ items:[], banners:[] }, doc.data()) : { items:[], banners:[] };
+    if(!Array.isArray(catalogData.items)) catalogData.items = [];
+    if(!Array.isArray(catalogData.banners)) catalogData.banners = [];
+  }catch(e){ catalogData = { items:[], banners:[] }; }
+  renderCatalogEditor();
+}
+
+async function saveCatalogDoc(){
+  await db.collection(TEST_SETTINGS).doc('catalog_' + catalogBrand()).set(catalogData, { merge:true });
+}
+
+function renderCatalogEditor(){
+  const w = document.getElementById('catalogWrap');
+  const inp = 'width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:8px;';
+  w.innerHTML = `
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:8px 12px; margin-bottom:14px; font-size:12px; color:var(--muted);">
+      بتعدّل كتالوج فرع <b style="color:var(--text);">${catalogBrand()==='glow'?'Glow':'echarpe'}</b> — ده اللي بيظهر للعميل في التطبيق (مالوش علاقة بمخزون البيع).
+    </div>
+
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:16px;">
+      <div style="font-weight:800; margin-bottom:10px;">➕ ضيف منتج للعرض</div>
+      <input id="catName" placeholder="اسم المنتج" style="${inp}">
+      <input id="catPrice" placeholder="السعر (اختياري)" style="${inp}">
+      <input id="catImg" placeholder="لينك الصورة (https://...)" style="${inp}">
+      <textarea id="catDesc" placeholder="وصف قصير (اختياري)" style="${inp} min-height:54px;"></textarea>
+      <button onclick="catalogAddItem()" style="width:100%; padding:11px; border-radius:9px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">إضافة المنتج</button>
+    </div>
+
+    <div style="font-weight:800; margin-bottom:10px;">🛍️ منتجات الكتالوج (${catalogData.items.length})</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
+      ${catalogData.items.map(it=>`
+        <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden;">
+          <div style="width:100%; height:120px; background:#eee url('${(it.img||'').replace(/'/g,"")}') center/cover no-repeat;"></div>
+          <div style="padding:8px 10px;">
+            <div style="font-weight:700; font-size:13px;">${it.name||''}</div>
+            ${it.price?`<div style="color:var(--plus); font-weight:800; font-size:13px;">${it.price} ج.م</div>`:''}
+            <button onclick="catalogDelItem('${it.id}')" style="margin-top:6px; width:100%; padding:6px; border-radius:7px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>
+          </div>
+        </div>`).join('') || '<div style="color:var(--muted); font-size:13px;">لسه مفيش منتجات في الكتالوج.</div>'}
+    </div>
+
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:16px;">
+      <div style="font-weight:800; margin-bottom:10px;">🖼️ ضيف بانر إعلاني</div>
+      <input id="banImg" placeholder="لينك صورة البانر (https://...)" style="${inp}">
+      <button onclick="catalogAddBanner()" style="width:100%; padding:11px; border-radius:9px; border:none; background:var(--accent); color:#fff; font-weight:800; cursor:pointer;">إضافة البانر</button>
+    </div>
+
+    <div style="font-weight:800; margin-bottom:10px;">📢 البانرات (${catalogData.banners.length})</div>
+    <div style="margin-bottom:20px;">
+      ${catalogData.banners.map(b=>`
+        <div style="position:relative; margin-bottom:10px;">
+          <img src="${(b.img||'').replace(/"/g,'')}" style="width:100%; border-radius:12px; display:block;">
+          <button onclick="catalogDelBanner('${b.id}')" style="position:absolute; top:8px; left:8px; padding:6px 10px; border-radius:8px; border:none; background:rgba(0,0,0,.6); color:#fff; font-size:11px; cursor:pointer;">حذف</button>
+        </div>`).join('') || '<div style="color:var(--muted); font-size:13px;">لسه مفيش بانرات.</div>'}
+    </div>
+  `;
+}
+
+async function catalogAddItem(){
+  const name = document.getElementById('catName').value.trim();
+  const img = document.getElementById('catImg').value.trim();
+  if(!name){ showToast('اكتب اسم المنتج', 'err'); return; }
+  catalogData.items.push({
+    id: 'c' + Date.now().toString(36),
+    name, img,
+    price: document.getElementById('catPrice').value.trim(),
+    desc: document.getElementById('catDesc').value.trim()
+  });
+  try{ await saveCatalogDoc(); showToast('اتضاف ✅'); renderCatalogEditor(); }
+  catch(e){ showToast('خطأ: '+e.message, 'err'); catalogData.items.pop(); }
+}
+async function catalogDelItem(id){
+  catalogData.items = catalogData.items.filter(x=> x.id !== id);
+  try{ await saveCatalogDoc(); renderCatalogEditor(); }catch(e){ showToast('خطأ: '+e.message,'err'); }
+}
+async function catalogAddBanner(){
+  const img = document.getElementById('banImg').value.trim();
+  if(!img){ showToast('حط لينك الصورة', 'err'); return; }
+  catalogData.banners.push({ id:'b'+Date.now().toString(36), img });
+  try{ await saveCatalogDoc(); showToast('اتضاف البانر ✅'); renderCatalogEditor(); }
+  catch(e){ showToast('خطأ: '+e.message,'err'); catalogData.banners.pop(); }
+}
+async function catalogDelBanner(id){
+  catalogData.banners = catalogData.banners.filter(x=> x.id !== id);
+  try{ await saveCatalogDoc(); renderCatalogEditor(); }catch(e){ showToast('خطأ: '+e.message,'err'); }
+}
+
+// تشغيل/إيقاف ظهور المنتج للعميل في تطبيق الولاء (الافتراضي: مخفي)
+async function toggleCustomerVisible(id){
+  if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
+  const it = allInventory.find(x=> x.id === id); if(!it) return;
+  const newVal = !it.showToCustomer;
+  it.showToCustomer = newVal;   // تحديث فوري للواجهة
+  renderInventoryList();
+  try{
+    await db.collection(TEST_INVENTORY).doc(id).update({ showToCustomer: newVal });
+    showToast(newVal ? 'المنتج هيظهر للعميل 👁️' : 'المنتج مخفي عن العميل 🙈');
+  }catch(e){ showToast('حصل خطأ: '+e.message, 'err'); it.showToCustomer = !newVal; renderInventoryList(); }
+}
+
 async function addInventoryItem(){
   if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
   const name = document.getElementById('newItemName').value.trim();
@@ -490,12 +612,16 @@ async function addInventoryItem(){
   const price = parseFloat(document.getElementById('newItemPrice').value) || 0;
   const cost = parseFloat(document.getElementById('newItemCost').value) || 0;
   const quantity = parseInt(document.getElementById('newItemQty').value) || 0;
+  const allBranches = document.getElementById('newItemAllBranches').checked;
   if(!name || !price){ showToast('اكتب الاسم والسعر على الأقل', 'err'); return; }
-  const docRef = await db.collection(TEST_INVENTORY).add({
-    name, barcode, price, cost, quantity,
+  const data = {
+    name, barcode, price, cost,
+    qtyByBranch: { [currentBranch]: quantity },   // الكمية لفرعك، باقي الفروع صفر لحد ما يستلموا
     supplier:'', minStock:0, status:'active',
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  };
+  if(!allBranches) data.branches = [currentBranch];   // مقصور على فرعك بس (مش في باقي الفروع)
+  const docRef = await db.collection(TEST_INVENTORY).add(data);
   // تسجيل الرصيد الافتتاحي في سجل حركة المخزون
   if(quantity > 0){
     await logStockMovement(docRef.id, name, quantity, 'receipt', 'رصيد افتتاحي عند إضافة الصنف');
@@ -1187,7 +1313,7 @@ searchBar.addEventListener('input', ()=>{
   matches.forEach(it=>{
     const row = document.createElement('div');
     row.className = 'sugg-row';
-    const stockNote = (it.quantity??0) <= 0 ? ' <span style="color:var(--minus); font-size:11px;">(نافد)</span>' : '';
+    const stockNote = branchQty(it) <= 0 ? ' <span style="color:var(--minus); font-size:11px;">(نافد)</span>' : '';
     row.innerHTML = `<span>${it.name}${stockNote} <span style="color:#aaa; font-size:11px; direction:ltr;">${it.barcode||''}</span></span><span style="color:var(--muted)">${it.price} جنيه</span>`;
     row.onclick = ()=>{ addToCart(it); searchBar.value=''; box.innerHTML=''; };
     box.appendChild(row);
@@ -1222,7 +1348,7 @@ function addToCart(item){
   // منع البيع بالسالب: مينفعش الكمية في الفاتورة تزيد عن الكمية المتاحة فعليًا في المخزون
   const existing = cart.find(c => c.id === item.id && !c.isReturn);
   const inCartQty = existing ? existing.qty : 0;
-  const available = item.quantity ?? 0;
+  const available = branchQty(item);
   if(inCartQty + 1 > available){
     showToast(`الكمية المتاحة من "${item.name}" هي ${available} بس — مفيش مخزون كفاية`, 'err');
     return;
@@ -1357,7 +1483,7 @@ function cartSetQty(idx, val){
   if(isNaN(nq) || nq < 1){ if(nq === 0){ cartRemove(idx); return; } nq = 1; }
   if(!c.isReturn){
     const inv = allInventory.find(x=> x.id === c.id);
-    if(inv && (inv.quantity ?? Infinity) < nq){ showToast('الكمية المتاحة في المخزون: ' + (inv.quantity ?? 0), 'err'); nq = inv.quantity ?? 1; }
+    if(inv && branchQty(inv) < nq){ showToast('الكمية المتاحة في المخزون: ' + branchQty(inv), 'err'); nq = (branchQty(inv)||1); }
   }
   c.qty = nq;
   renderCart();
@@ -1370,7 +1496,7 @@ function cartQty(idx, delta){
   if(nq < 1){ cartRemove(idx); return; }
   if(delta > 0 && !c.isReturn){
     const inv = allInventory.find(x=> x.id === c.id);
-    if(inv && (inv.quantity ?? Infinity) < nq){ showToast('الكمية المتاحة في المخزون: ' + (inv.quantity ?? 0), 'err'); return; }
+    if(inv && branchQty(inv) < nq){ showToast('الكمية المتاحة في المخزون: ' + branchQty(inv), 'err'); return; }
   }
   c.qty = nq;
   renderCart();
@@ -1522,7 +1648,7 @@ function changeQty(idx, delta){
   // منع الزيادة فوق المخزون المتاح (سطور المرتجع مستثناة لأنها بترجع بضاعة مش بتبيعها)
   if(delta > 0 && !line.isReturn){
     const invItem = allInventory.find(x=> x.id === line.id);
-    const available = invItem ? (invItem.quantity ?? 0) : Infinity;
+    const available = invItem ? branchQty(invItem) : Infinity;
     if(line.qty + delta > available){
       showToast(`الكمية المتاحة من "${line.name}" هي ${available} بس`, 'err');
       return;
@@ -1748,7 +1874,7 @@ async function reverseReceipt(saleId){
     const batch = db.batch();
     (sale.items||[]).forEach(it=>{
       const ref = db.collection(TEST_INVENTORY).doc(it.id);
-      batch.update(ref, { quantity: firebase.firestore.FieldValue.increment(it.isReturn ? -it.qty : it.qty) });
+      batch.update(ref, { ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(it.isReturn ? -it.qty : it.qty) });
     });
     batch.update(db.collection(TEST_SALES).doc(saleId), { reversed: true, reversedAt: firebase.firestore.FieldValue.serverTimestamp(), reversedBy: currentEmployee.name||'' });
     await batch.commit();
@@ -2017,7 +2143,7 @@ async function confirmPayment(){
     const batch = db.batch();
     stockLines.forEach(c=>{
       const ref = db.collection(TEST_INVENTORY).doc(c.id);
-      batch.update(ref, { quantity: firebase.firestore.FieldValue.increment(c.isReturn ? c.qty : -c.qty) });
+      batch.update(ref, { ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(c.isReturn ? c.qty : -c.qty) });
     });
     await batch.commit();
     for(const c of stockLines){
