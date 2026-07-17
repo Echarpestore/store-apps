@@ -525,29 +525,47 @@ function renderCatalogEditor(){
 
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:16px;">
       <div style="font-weight:800; margin-bottom:10px;">➕ ضيف منتج للعرض</div>
-      <input id="catName" placeholder="اسم المنتج" style="${inp}">
-      <input id="catPrice" placeholder="السعر (اختياري)" style="${inp}">
-      <input id="catImg" placeholder="لينك الصورة (https://...)" style="${inp}">
+      <input id="catSearch" placeholder="🔍 اختار من المخزون (اسم أو باركود)" oninput="catalogInvSuggest(this.value)" style="${inp}">
+      <div id="catInvSuggest" style="background:var(--panel2); border-radius:8px; margin-top:-4px; margin-bottom:8px; overflow:hidden;"></div>
+      <input id="catBarcode" placeholder="الباركود (بيتملأ لوحده لما تختار)" style="${inp}">
+      <input id="catName" placeholder="الاسم المعروض للعميل" style="${inp}">
+      <input id="catPrice" placeholder="السعر" style="${inp}">
+      <div style="display:flex; gap:8px;">
+        <select id="catDiscType" style="${inp} flex:1;">
+          <option value="none">بدون خصم</option>
+          <option value="percent">خصم نسبة %</option>
+          <option value="amount">خصم مبلغ ج.م</option>
+        </select>
+        <input id="catDiscVal" type="number" placeholder="قيمة الخصم" style="${inp} flex:1;">
+      </div>
+      <label style="display:block; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:4px;">📷 صورة المنتج (من موبايلك)</label>
+      <input type="file" id="catImgFile" accept="image/*" onchange="catalogPickImage(this)" style="${inp}">
+      <div id="catImgPreview"></div>
       <textarea id="catDesc" placeholder="وصف قصير (اختياري)" style="${inp} min-height:54px;"></textarea>
-      <button onclick="catalogAddItem()" style="width:100%; padding:11px; border-radius:9px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">إضافة المنتج</button>
+      <button onclick="catalogAddItem()" style="width:100%; padding:11px; border-radius:9px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">إضافة المنتج للعرض</button>
     </div>
 
     <div style="font-weight:800; margin-bottom:10px;">🛍️ منتجات الكتالوج (${catalogData.items.length})</div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
-      ${catalogData.items.map(it=>`
+      ${catalogData.items.map(it=>{
+        const disc = it.discountType==='percent' ? `خصم ${it.discountValue}%` : it.discountType==='amount' ? `خصم ${it.discountValue} ج.م` : '';
+        return `
         <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden;">
-          <div style="width:100%; height:120px; background:#eee url('${(it.img||'').replace(/'/g,"")}') center/cover no-repeat;"></div>
+          <div style="width:100%; height:120px; background:#eee center/cover no-repeat; background-image:url('${(it.img||'').replace(/'/g,"")}');"></div>
           <div style="padding:8px 10px;">
             <div style="font-weight:700; font-size:13px;">${it.name||''}</div>
             ${it.price?`<div style="color:var(--plus); font-weight:800; font-size:13px;">${it.price} ج.م</div>`:''}
+            ${disc?`<div style="color:var(--warn); font-weight:800; font-size:11px;">🎁 ${disc}</div>`:''}
+            ${it.barcode?`<div style="color:var(--muted); font-size:10px;">كود: ${it.barcode}</div>`:''}
             <button onclick="catalogDelItem('${it.id}')" style="margin-top:6px; width:100%; padding:6px; border-radius:7px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>
           </div>
-        </div>`).join('') || '<div style="color:var(--muted); font-size:13px;">لسه مفيش منتجات في الكتالوج.</div>'}
+        </div>`; }).join('') || '<div style="color:var(--muted); font-size:13px;">لسه مفيش منتجات في الكتالوج.</div>'}
     </div>
 
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:16px;">
       <div style="font-weight:800; margin-bottom:10px;">🖼️ ضيف بانر إعلاني</div>
-      <input id="banImg" placeholder="لينك صورة البانر (https://...)" style="${inp}">
+      <input type="file" id="banImgFile" accept="image/*" onchange="catalogPickBanner(this)" style="${inp}">
+      <div id="banImgPreview"></div>
       <button onclick="catalogAddBanner()" style="width:100%; padding:11px; border-radius:9px; border:none; background:var(--accent); color:#fff; font-weight:800; cursor:pointer;">إضافة البانر</button>
     </div>
 
@@ -562,28 +580,78 @@ function renderCatalogEditor(){
   `;
 }
 
+// ضغط الصورة وتحويلها base64 (عشان نرفعها من الموبايل من غير لينكات)
+function resizeImageFile(file, maxDim, cb){
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const img = new Image();
+    img.onload = function(){
+      let w = img.width, h = img.height;
+      if(w > h && w > maxDim){ h = Math.round(h*maxDim/w); w = maxDim; }
+      else if(h > maxDim){ w = Math.round(w*maxDim/h); h = maxDim; }
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      cb(cv.toDataURL('image/jpeg', 0.68));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+let catalogPendingImg = '', catalogPendingBanner = '';
+function catalogPickImage(input){
+  const f = input.files && input.files[0]; if(!f) return;
+  resizeImageFile(f, 620, function(data){
+    catalogPendingImg = data;
+    document.getElementById('catImgPreview').innerHTML = '<img src="'+data+'" style="width:100%; max-height:160px; object-fit:cover; border-radius:8px; margin-bottom:8px;">';
+  });
+}
+function catalogPickBanner(input){
+  const f = input.files && input.files[0]; if(!f) return;
+  resizeImageFile(f, 900, function(data){
+    catalogPendingBanner = data;
+    document.getElementById('banImgPreview').innerHTML = '<img src="'+data+'" style="width:100%; border-radius:8px; margin-bottom:8px;">';
+  });
+}
+function catalogInvSuggest(q){
+  const box = document.getElementById('catInvSuggest'); q = (q||'').trim().toLowerCase();
+  if(!q){ box.innerHTML = ''; return; }
+  const ms = allInventory.filter(p=> (p.name||'').toLowerCase().includes(q) || (p.barcode||'').toLowerCase().includes(q)).slice(0, 8);
+  box.innerHTML = ms.map(p=> `<div onclick="catalogPickInv('${p.id}')" style="padding:9px 10px; border-bottom:1px solid var(--border); cursor:pointer; font-size:13px;">${p.name} <span style="color:var(--muted); font-size:11px;">${p.barcode||''} · ${p.price}ج</span></div>`).join('');
+}
+function catalogPickInv(id){
+  const p = allInventory.find(x=> x.id === id); if(!p) return;
+  document.getElementById('catBarcode').value = p.barcode || '';
+  document.getElementById('catName').value = p.name || '';
+  document.getElementById('catPrice').value = p.price || '';
+  document.getElementById('catInvSuggest').innerHTML = '';
+  document.getElementById('catSearch').value = '';
+}
+
 async function catalogAddItem(){
   const name = document.getElementById('catName').value.trim();
-  const img = document.getElementById('catImg').value.trim();
-  if(!name){ showToast('اكتب اسم المنتج', 'err'); return; }
+  if(!name){ showToast('اكتب اسم المنتج (أو اختاره من المخزون)', 'err'); return; }
+  const dtype = document.getElementById('catDiscType').value;
   catalogData.items.push({
     id: 'c' + Date.now().toString(36),
-    name, img,
+    barcode: document.getElementById('catBarcode').value.trim(),
+    name,
     price: document.getElementById('catPrice').value.trim(),
-    desc: document.getElementById('catDesc').value.trim()
+    img: catalogPendingImg || '',
+    desc: document.getElementById('catDesc').value.trim(),
+    discountType: dtype,
+    discountValue: dtype === 'none' ? 0 : (parseFloat(document.getElementById('catDiscVal').value) || 0)
   });
-  try{ await saveCatalogDoc(); showToast('اتضاف ✅'); renderCatalogEditor(); }
-  catch(e){ showToast('خطأ: '+e.message, 'err'); catalogData.items.pop(); }
+  try{ await saveCatalogDoc(); catalogPendingImg=''; showToast('اتضاف ✅'); renderCatalogEditor(); }
+  catch(e){ showToast('خطأ (يمكن الصورة كبيرة): '+e.message, 'err'); catalogData.items.pop(); }
 }
 async function catalogDelItem(id){
   catalogData.items = catalogData.items.filter(x=> x.id !== id);
   try{ await saveCatalogDoc(); renderCatalogEditor(); }catch(e){ showToast('خطأ: '+e.message,'err'); }
 }
 async function catalogAddBanner(){
-  const img = document.getElementById('banImg').value.trim();
-  if(!img){ showToast('حط لينك الصورة', 'err'); return; }
-  catalogData.banners.push({ id:'b'+Date.now().toString(36), img });
-  try{ await saveCatalogDoc(); showToast('اتضاف البانر ✅'); renderCatalogEditor(); }
+  if(!catalogPendingBanner){ showToast('اختار صورة البانر الأول', 'err'); return; }
+  catalogData.banners.push({ id:'b'+Date.now().toString(36), img: catalogPendingBanner });
+  try{ await saveCatalogDoc(); catalogPendingBanner=''; showToast('اتضاف البانر ✅'); renderCatalogEditor(); }
   catch(e){ showToast('خطأ: '+e.message,'err'); catalogData.banners.pop(); }
 }
 async function catalogDelBanner(id){
@@ -1375,7 +1443,24 @@ function addToCart(item){
 
 let selectedCartIdx = null;
 
+// عروض الكتالوج اللي العميل فعّلها من التطبيق (بتتطبّق تلقائي على المنتج المطابق في السلة)
+let custActivatedOffers = {};
+function applyCustomerOffers(){
+  if(!custActivatedOffers || !cart.length) return;
+  cart.forEach(line=>{
+    if(line.isReturn || line.isRedemption || line.offerApplied || !line.barcode) return;
+    const off = custActivatedOffers[line.barcode];
+    if(!off) return;
+    const orig = line.price;
+    let np = off.type==='percent' ? orig*(1-Number(off.value)/100) : orig-Number(off.value);
+    np = Math.max(0, Math.round(np*100)/100);
+    line.origPrice = orig; line.price = np; line.offerApplied = true;
+    showToast('🎁 اتطبّق عرض العميل على ' + (line.name||'المنتج'));
+  });
+}
+
 function renderCart(){
+  applyCustomerOffers();
   const tbody = document.getElementById('cartTbody');
   if(selectedCartIdx !== null && selectedCartIdx >= cart.length) selectedCartIdx = null;
   if(cart.length === 0){
@@ -1673,7 +1758,7 @@ async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
   const newRow = document.getElementById('newCustomerRow');
-  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); return; }
+  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     let ratingLine = '';
@@ -1695,6 +1780,8 @@ async function refreshCustomerInfo(){
     if(doc.exists){
       const d = doc.data();
       document.getElementById('customerName').value = d.name || '';
+      custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
+      applyCustomerOffers(); renderCart();
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
       const _pr = d.pendingRedeem;
       const _base = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
@@ -2203,6 +2290,7 @@ async function confirmPayment(){
       };
       custUpdate[pf] = firebase.firestore.FieldValue.increment(netPointsChange);   // نقاط الفرع الصح
       if(pendingRedemption) custUpdate.pendingRedeem = firebase.firestore.FieldValue.delete();   // نمسح الطلب بعد ما اتنفّذ
+      cart.forEach(l=>{ if(l.offerApplied && l.barcode) custUpdate['activatedOffers.'+l.barcode] = firebase.firestore.FieldValue.delete(); });   // نمسح العروض اللي اتستخدمت
       if(custName) custUpdate.name = custName;
       await custRef.set(custUpdate, { merge: true });
     }
