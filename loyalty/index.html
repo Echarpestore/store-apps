@@ -989,6 +989,7 @@ function activateOffer(barcode, type, value){
   offers[barcode] = { type:type, value:value, brand:CATALOG_BRAND };
   db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ activatedOffers: offers }, { merge:true }).then(function(){
     currentCustomer.activatedOffers = offers; renderProducts();
+    try{ var u={}; u[barcode]={ activated: firebase.firestore.FieldValue.increment(1) }; db.collection(COL_SETTINGS).doc('offer_stats_'+CATALOG_BRAND).set(u,{merge:true}); }catch(e){}
     alert('تم تفعيل العرض! 🎉 هيتطبق تلقائي عند الدفع في المحل.');
   }).catch(function(){ alert('حصل خطأ، حاولي تاني'); });
 }
@@ -1065,7 +1066,7 @@ function renderInvoices(){
       '</div>'+
     '</div>';
   }).join('');
-  box.innerHTML = rewardsHtml + head + rows;
+  box.innerHTML = head + rows;
 }
 
 function openInvoiceDetail(i){
