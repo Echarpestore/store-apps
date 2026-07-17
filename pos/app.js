@@ -1695,7 +1695,18 @@ async function refreshCustomerInfo(){
     if(doc.exists){
       const d = doc.data();
       document.getElementById('customerName').value = d.name || '';
-      infoBox.textContent = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
+      const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
+      const _pr = d.pendingRedeem;
+      const _base = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
+      if(_pr && _pr.brand === _brand && _pr.points > 0 && !pendingRedemption){
+        infoBox.innerHTML = _base +
+          `<div style="margin-top:8px; background:#fff6e6; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
+             <div style="font-weight:800; color:#b45309;">🎁 العميل طلب استبدال ${_pr.points} نقطة (خصم ${_pr.valueEGP} ج.م)</div>
+             <button onclick="applyPendingRedeem(${_pr.points}, ${_pr.valueEGP})" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق الاستبدال</button>
+           </div>`;
+      }else{
+        infoBox.textContent = _base;
+      }
       newRow.style.display = 'none';
       setCustBox(true);   // 🟢 عميل متسجّل ومختار → المربع ينوّر أخضر
       const rp = document.getElementById('resetPinRow');
@@ -1813,6 +1824,20 @@ async function openRedeemPoints(){
     renderCart();
     showToast(`اتخصم ${discountValue.toFixed(2)} ج.م مقابل ${pointsUsed} نقطة ✅`);
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
+
+// بيطبّق طلب الاستبدال اللي العميل عمله من التطبيق (بيظهر أول ما نكتب رقمه)
+function applyPendingRedeem(points, value){
+  if(pendingRedemption){ showToast('في استبدال مطبّق بالفعل على الفاتورة', 'err'); return; }
+  const phone = document.getElementById('customerPhone').value.trim();
+  cart.push({
+    id: '__loyalty_redemption__', name: `🎁 استبدال ${points} نقطة ولاء`,
+    price: -Math.abs(value), qty: 1, isReturn: false, isRedemption: true
+  });
+  pendingRedemption = { phone, points, value: Math.abs(value) };
+  renderCart();
+  refreshCustomerInfo();   // نحدّث العرض (يخفي الطلب بعد ما اتطبّق)
+  showToast(`اتطبّق خصم ${value} ج.م مقابل ${points} نقطة 🎁`);
 }
 
 // ---------------- Open Cash Drawer (best-effort, hardware-dependent) ----------------
@@ -2177,6 +2202,7 @@ async function confirmPayment(){
         lastVisit: firebase.firestore.FieldValue.serverTimestamp()
       };
       custUpdate[pf] = firebase.firestore.FieldValue.increment(netPointsChange);   // نقاط الفرع الصح
+      if(pendingRedemption) custUpdate.pendingRedeem = firebase.firestore.FieldValue.delete();   // نمسح الطلب بعد ما اتنفّذ
       if(custName) custUpdate.name = custName;
       await custRef.set(custUpdate, { merge: true });
     }
