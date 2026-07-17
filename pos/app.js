@@ -532,6 +532,10 @@ async function sendRewardConfirm(){
       if(n % 400 === 0){ await batch.commit(); batch = db.batch(); }
     }
     await batch.commit();
+    try{
+      const _bs = (reward.brand||'echarpe');
+      db.collection(TEST_SETTINGS).doc('reward_stats_'+_bs).set({ sent: firebase.firestore.FieldValue.increment(phones.length) }, { merge:true });
+    }catch(e){}
     closeRewardModal();
     if(typeof selectedCustomers !== 'undefined'){ selectedCustomers.clear(); if(document.getElementById('customerListWrap')) renderCustList(); }
     showToast(`اتبعتت المكافأة لـ ${phones.length} عميل 🎁`);
@@ -547,6 +551,7 @@ function sendRewardToAllListed(){
 // بيتخزّن في pos_test_settings/catalog_<brand> — كل فرع/براند له كتالوجه
 function catalogBrand(){ return GLOW_BRANCHES.includes(currentBranch) ? 'glow' : 'echarpe'; }
 let catalogData = { items: [], banners: [] };
+let catalogStats = {};   // { <barcode>: {activated, used} }
 
 async function goToCatalogEditor(){
   if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
@@ -557,7 +562,9 @@ async function goToCatalogEditor(){
     catalogData = doc.exists ? Object.assign({ items:[], banners:[] }, doc.data()) : { items:[], banners:[] };
     if(!Array.isArray(catalogData.items)) catalogData.items = [];
     if(!Array.isArray(catalogData.banners)) catalogData.banners = [];
-  }catch(e){ catalogData = { items:[], banners:[] }; }
+    const st = await db.collection(TEST_SETTINGS).doc('offer_stats_' + catalogBrand()).get();
+    catalogStats = st.exists ? st.data() : {};
+  }catch(e){ catalogData = { items:[], banners:[] }; catalogStats = {}; }
   renderCatalogEditor();
 }
 
@@ -599,6 +606,8 @@ function renderCatalogEditor(){
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
       ${catalogData.items.map(it=>{
         const disc = it.discountType==='percent' ? `خصم ${it.discountValue}%` : it.discountType==='amount' ? `خصم ${it.discountValue} ج.م` : '';
+        const st = (it.barcode && catalogStats[it.barcode]) ? catalogStats[it.barcode] : null;
+        const statLine = (disc && it.barcode) ? `<div style="color:var(--accent); font-size:10px; font-weight:700;">🎯 فعّلوه: ${st&&st.activated?st.activated:0} · استعملوه: ${st&&st.used?st.used:0}</div>` : '';
         return `
         <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden;">
           <div style="width:100%; height:120px; background:#eee center/cover no-repeat; background-image:url('${(it.img||'').replace(/'/g,"")}');"></div>
@@ -606,6 +615,7 @@ function renderCatalogEditor(){
             <div style="font-weight:700; font-size:13px;">${it.name||''}</div>
             ${it.price?`<div style="color:var(--plus); font-weight:800; font-size:13px;">${it.price} ج.م</div>`:''}
             ${disc?`<div style="color:var(--warn); font-weight:800; font-size:11px;">🎁 ${disc}</div>`:''}
+            ${statLine}
             ${it.barcode?`<div style="color:var(--muted); font-size:10px;">كود: ${it.barcode}</div>`:''}
             <button onclick="catalogDelItem('${it.id}')" style="margin-top:6px; width:100%; padding:6px; border-radius:7px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>
           </div>
@@ -1183,6 +1193,7 @@ async function renderLegacySalesHistory(){
 let custListData = [];
 let custListFiltered = [];
 let selectedCustomers = new Set();
+let rewardStats = {};
 function toggleCustSelect(phone, checked){
   if(checked) selectedCustomers.add(phone); else selectedCustomers.delete(phone);
   renderCustList();
@@ -1207,6 +1218,10 @@ async function goToCustomerList(){
       db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get(),
       getBranchSales()
     ]);
+    try{
+      const _rs = await db.collection(TEST_SETTINGS).doc('reward_stats_' + (pointsFieldFor(currentBranch)==='points_glow'?'glow':'echarpe')).get();
+      rewardStats = _rs.exists ? _rs.data() : {};
+    }catch(e){ rewardStats = {}; }
     // تجميع إنفاق/زيارات/آخر زيارة لكل عميل من الفواتير
     const agg = {};
     sales.forEach(s=>{
@@ -1240,7 +1255,7 @@ function renderCustList(){
   const sumEl = document.getElementById('custSummary');
   if(sumEl){
     const chip = (lbl,val,col)=>`<div style="flex:1; min-width:100px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 12px; text-align:center;"><div style="color:var(--muted); font-size:10px;">${lbl}</div><div style="font-weight:900; font-size:16px; color:${col||'var(--text)'};">${val}</div></div>`;
-    sumEl.innerHTML = chip('عملاء مسجّلين', totalCustomers) + chip('إجمالي إنفاقهم', totalSpend.toFixed(0)+' ج.م','var(--plus)') + chip('إجمالي النقاط', totalPoints,'var(--warn)');
+    sumEl.innerHTML = chip('عملاء مسجّلين', totalCustomers) + chip('إجمالي إنفاقهم', totalSpend.toFixed(0)+' ج.م','var(--plus)') + chip('إجمالي النقاط', totalPoints,'var(--warn)') + chip('مكافآت: اتبعت/اتستعمل', (rewardStats.sent||0)+' / '+(rewardStats.used||0),'var(--accent)');
   }
 
   let list = custListData.filter(c=> !q || (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q));
@@ -2437,6 +2452,19 @@ async function _doConfirmPayment(){
       if(custName) custUpdate.name = custName;
       await custRef.set(custUpdate, { merge: true });
     }
+    // إحصائيات الاستعمال: عروض اتطبّقت + مكافأة اتستعملت
+    try{
+      const _brandS = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
+      const _usedOffers = cart.filter(l=> l.offerApplied && l.barcode);
+      if(_usedOffers.length){
+        const _upd = {};
+        _usedOffers.forEach(l=> _upd[l.barcode] = { used: firebase.firestore.FieldValue.increment(1) });
+        db.collection(TEST_SETTINGS).doc('offer_stats_'+_brandS).set(_upd, { merge:true });
+      }
+      if(appliedReward){
+        db.collection(TEST_SETTINGS).doc('reward_stats_'+_brandS).set({ used: firebase.firestore.FieldValue.increment(1) }, { merge:true });
+      }
+    }catch(e){}
     pendingRedemption = null;
     appliedReward = null; custReward = null;
 
