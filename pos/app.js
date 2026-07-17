@@ -1413,14 +1413,8 @@ searchBar.addEventListener('keydown', (e)=>{
 });
 
 function addToCart(item){
-  // منع البيع بالسالب: مينفعش الكمية في الفاتورة تزيد عن الكمية المتاحة فعليًا في المخزون
+  // البيع مسموح دايمًا حتى لو المخزون مايكفيش (الكمية تنزل بالسالب)
   const existing = cart.find(c => c.id === item.id && !c.isReturn);
-  const inCartQty = existing ? existing.qty : 0;
-  const available = branchQty(item);
-  if(inCartQty + 1 > available){
-    showToast(`الكمية المتاحة من "${item.name}" هي ${available} بس — مفيش مخزون كفاية`, 'err');
-    return;
-  }
   if(existing){ existing.qty += 1; }
   else{
     // تطبيق أفضل خصم ساري تلقائيًا (لو فيه) — بقاعدة "الأفضل للعميل بس، مش تجميع"
@@ -1566,11 +1560,7 @@ function cartSetQty(idx, val){
   const c = cart[idx]; if(!c) return;
   let nq = parseInt(val);
   if(isNaN(nq) || nq < 1){ if(nq === 0){ cartRemove(idx); return; } nq = 1; }
-  if(!c.isReturn){
-    const inv = allInventory.find(x=> x.id === c.id);
-    if(inv && branchQty(inv) < nq){ showToast('الكمية المتاحة في المخزون: ' + branchQty(inv), 'err'); nq = (branchQty(inv)||1); }
-  }
-  c.qty = nq;
+  c.qty = nq;   // مسموح بأي كمية حتى لو أكبر من المخزون
   renderCart();
 }
 
@@ -1579,11 +1569,7 @@ function cartQty(idx, delta){
   const c = cart[idx]; if(!c) return;
   let nq = (c.qty||1) + delta;
   if(nq < 1){ cartRemove(idx); return; }
-  if(delta > 0 && !c.isReturn){
-    const inv = allInventory.find(x=> x.id === c.id);
-    if(inv && branchQty(inv) < nq){ showToast('الكمية المتاحة في المخزون: ' + branchQty(inv), 'err'); return; }
-  }
-  c.qty = nq;
+  c.qty = nq;   // مسموح بأي كمية حتى لو أكبر من المخزون
   renderCart();
 }
 // مسح صنف من السلة
@@ -1730,16 +1716,7 @@ function returnCartItem(idx){
 }
 function changeQty(idx, delta){
   const line = cart[idx];
-  // منع الزيادة فوق المخزون المتاح (سطور المرتجع مستثناة لأنها بترجع بضاعة مش بتبيعها)
-  if(delta > 0 && !line.isReturn){
-    const invItem = allInventory.find(x=> x.id === line.id);
-    const available = invItem ? branchQty(invItem) : Infinity;
-    if(line.qty + delta > available){
-      showToast(`الكمية المتاحة من "${line.name}" هي ${available} بس`, 'err');
-      return;
-    }
-  }
-  line.qty += delta;
+  line.qty += delta;   // مسموح بأي كمية حتى لو أكبر من المخزون
   if(line.qty <= 0){ cart.splice(idx,1); selectedCartIdx = null; }
   renderCart();
 }
