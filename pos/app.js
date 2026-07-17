@@ -2338,8 +2338,8 @@ async function confirmPayment(){
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
-    // 2) خصم من المخزون التجريبي + تسجيل الحركة في سجل المخزون (باستثناء سطر استبدال النقط، مش منتج فعلي)
-    const stockLines = cart.filter(c=> !c.isRedemption);
+    // 2) خصم من المخزون التجريبي (باستثناء سطور مش منتجات فعلية: استبدال نقط، مكافأة، أي id محجوز)
+    const stockLines = cart.filter(c=> !c.isRedemption && !c.isRewardDiscount && c.id && !String(c.id).startsWith('__'));
     const batch = db.batch();
     stockLines.forEach(c=>{
       const ref = db.collection(TEST_INVENTORY).doc(c.id);
