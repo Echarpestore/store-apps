@@ -2326,7 +2326,25 @@ async function generateInvoiceNumber(){
   }
 }
 
+let _confirmSaving = false;
 async function confirmPayment(){
+  if(_confirmSaving){ showToast('الفاتورة بتتحفظ... استنى ثانية', 'err'); return; }   // منع التكرار
+  const _btn = document.getElementById('confirmPayBtn');
+  _confirmSaving = true;
+  if(_btn){ _btn.dataset.lbl = _btn.textContent; _btn.disabled = true; _btn.textContent = '⏳ بيحفظ...'; }
+  try{
+    await _doConfirmPayment();
+  }catch(e){
+    console.error('confirmPayment', e);
+    showToast('فشل حفظ الفاتورة: ' + (e && e.message ? e.message : e), 'err');
+  }finally{
+    _confirmSaving = false;
+    if(_btn){ _btn.textContent = _btn.dataset.lbl || 'حفظ وطباعة'; }
+    if(typeof updatePaySummary === 'function') updatePaySummary();   // بيظبط تفعيل/تعطيل الزر حسب السلة
+  }
+}
+
+async function _doConfirmPayment(){
   const total = cartTotal();
   const isRefundInvoice = total < 0;
   const payments = {};
