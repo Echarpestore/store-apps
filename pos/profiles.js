@@ -191,7 +191,7 @@ async function openCustomerProfile(phone){
           ${statCard('إجمالي الإنفاق', lifetimeSpend.toFixed(0) + ' ج.م', 'var(--plus)')}
           ${statCard('عدد الفواتير', realInvoices.length)}
           ${statCard('متوسط الفاتورة', avgOrder.toFixed(0) + ' ج.م')}
-          ${statCard('نقاط الولاء', c.points||0, 'var(--warn)')}
+          ${statCard('نقاط الولاء', c[pointsFieldFor(currentBranch)]||0, 'var(--warn)')}
         </div>
         <div style="color:var(--muted); font-size:11px; margin-top:8px;">آخر زيارة: ${lastVisitStr}</div>
       </div>
@@ -203,7 +203,7 @@ async function openCustomerProfile(phone){
       </div>` : ''}
 
       <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
-        <div style="font-weight:800; margin-bottom:8px;">📊 سجل النقاط <span style="color:var(--warn); font-size:12px;">(الرصيد الحالي: ${c.points||0})</span></div>
+        <div style="font-weight:800; margin-bottom:8px;">📊 سجل النقاط <span style="color:var(--warn); font-size:12px;">(الرصيد الحالي: ${c[pointsFieldFor(currentBranch)]||0})</span></div>
         ${ptsEvents.length ? ptsEvents.slice(0,40).map(e=>{
           const isEarn = e.type === 'earn';
           const dstr = e.t ? new Date(e.t).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
@@ -220,7 +220,7 @@ async function openCustomerProfile(phone){
       <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
           <div style="font-weight:800;">📊 سجل النقاط</div>
-          <div style="font-size:12px; color:var(--warn); font-weight:800;">الرصيد: ${c.points||0} نقطة</div>
+          <div style="font-size:12px; color:var(--warn); font-weight:800;">الرصيد: ${c[pointsFieldFor(currentBranch)]||0} نقطة</div>
         </div>
         ${ptLogRows || '<div style="color:var(--muted); text-align:center; padding:10px 0; font-size:12px;">لسه مفيش حركات نقاط</div>'}
       </div>

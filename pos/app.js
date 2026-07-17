@@ -43,6 +43,9 @@ const MIN_ITEMS_FOR_STAFF_POINT = 5; // كل فاتورة فيها 5 قطع أو
 
 // كل جهاز POS بيتبع فرع محدد (نفس فكرة باقي البرامج) — بيتحفظ على الجهاز نفسه
 let currentBranch = localStorage.getItem('pos_branch') || '';
+// فروع Glow ليها رصيد نقاط منفصل (points_glow) عن echarpe (points) — عشان ما تتلخبطش
+const GLOW_BRANCHES = ['Glow'];
+function pointsFieldFor(branch){ return GLOW_BRANCHES.includes(branch) ? 'points_glow' : 'points'; }
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -972,7 +975,7 @@ function renderCustList(){
 
   // إحصائيات عامة (على كل العملاء مش المفلترين)
   const totalCustomers = custListData.length;
-  const totalPoints = custListData.reduce((s,c)=> s + (c.points||0), 0);
+  const totalPoints = custListData.reduce((s,c)=> s + (c[pointsFieldFor(currentBranch)]||0), 0);
   const totalSpend = custListData.reduce((s,c)=> s + (c._spend||0), 0);
   const sumEl = document.getElementById('custSummary');
   if(sumEl){
@@ -983,7 +986,7 @@ function renderCustList(){
   let list = custListData.filter(c=> !q || (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q));
   if(sort==='spend') list.sort((a,b)=> (b._spend||0)-(a._spend||0));
   else if(sort==='recent') list.sort((a,b)=> (b._lastTs||0)-(a._lastTs||0));
-  else if(sort==='points') list.sort((a,b)=> (b.points||0)-(a.points||0));
+  else if(sort==='points') list.sort((a,b)=> (b[pointsFieldFor(currentBranch)]||0)-(a[pointsFieldFor(currentBranch)]||0));
   else if(sort==='name') list.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
   if(list.length === 0){ wrap.innerHTML = '<div class="empty-cart">'+(q?'مفيش عميل بالبحث ده':'لسه مفيش عملاء مسجلين')+'</div>'; return; }
@@ -1002,7 +1005,7 @@ function renderCustList(){
         </div>
         <div style="text-align:left; flex-shrink:0;">
           <div style="font-weight:900; font-size:15px; color:var(--plus);">${(c._spend||0).toFixed(0)} <span style="font-size:11px; font-weight:700;">ج.م</span></div>
-          <div style="color:var(--warn); font-size:11px; font-weight:700;">${c.points||0} نقطة</div>
+          <div style="color:var(--warn); font-size:11px; font-weight:700;">${c[pointsFieldFor(currentBranch)]||0} نقطة</div>
         </div>
       </div>
       <div style="display:flex; justify-content:space-between; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:11px; color:var(--muted);">
@@ -1566,7 +1569,7 @@ async function refreshCustomerInfo(){
     if(doc.exists){
       const d = doc.data();
       document.getElementById('customerName').value = d.name || '';
-      infoBox.textContent = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d.points || 0} نقطة${ratingLine}`;
+      infoBox.textContent = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
       newRow.style.display = 'none';
       setCustBox(true);   // 🟢 عميل متسجّل ومختار → المربع ينوّر أخضر
       const rp = document.getElementById('resetPinRow');
@@ -1655,7 +1658,7 @@ async function openRedeemPoints(){
 
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
-    const balance = doc.exists ? (doc.data().points || 0) : 0;
+    const balance = doc.exists ? (doc.data()[pointsFieldFor(currentBranch)] || 0) : 0;
     const rate = loyaltyRedemptionConfig;
     if(balance < rate.pointsPerRedemption){
       showToast(`رصيد العميل ${balance} نقطة بس — محتاج ${rate.pointsPerRedemption} نقطة على الأقل للاستبدال`, 'err');
@@ -2035,12 +2038,13 @@ async function confirmPayment(){
     if(phone){
       const custRef = db.collection(TEST_CUSTOMERS).doc(phone);
       const netPointsChange = loyaltyPointsEarned - (pendingRedemption ? pendingRedemption.points : 0);
+      const pf = pointsFieldFor(currentBranch);
       const custUpdate = {
         phone, branch: currentBranch,
-        points: firebase.firestore.FieldValue.increment(netPointsChange),
         totalSpent: firebase.firestore.FieldValue.increment(total),
         lastVisit: firebase.firestore.FieldValue.serverTimestamp()
       };
+      custUpdate[pf] = firebase.firestore.FieldValue.increment(netPointsChange);   // نقاط الفرع الصح
       if(custName) custUpdate.name = custName;
       await custRef.set(custUpdate, { merge: true });
     }
