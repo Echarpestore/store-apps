@@ -533,6 +533,7 @@ async function sendRewardConfirm(){
     }
     await batch.commit();
     closeRewardModal();
+    if(typeof selectedCustomers !== 'undefined'){ selectedCustomers.clear(); if(document.getElementById('customerListWrap')) renderCustList(); }
     showToast(`اتبعتت المكافأة لـ ${phones.length} عميل 🎁`);
   }catch(e){ showToast('خطأ: ' + e.message, 'err'); }
 }
@@ -1181,6 +1182,21 @@ async function renderLegacySalesHistory(){
 // ---------------- Customer List ----------------
 let custListData = [];
 let custListFiltered = [];
+let selectedCustomers = new Set();
+function toggleCustSelect(phone, checked){
+  if(checked) selectedCustomers.add(phone); else selectedCustomers.delete(phone);
+  renderCustList();
+}
+function selectAllListed(){
+  (custListFiltered.length ? custListFiltered : custListData).forEach(c=> c.phone && selectedCustomers.add(c.phone));
+  renderCustList();
+}
+function clearCustSelection(){ selectedCustomers.clear(); renderCustList(); }
+function sendRewardToSelected(){
+  const phones = [...selectedCustomers];
+  if(!phones.length){ showToast('اختار عملاء الأول', 'err'); return; }
+  openRewardModal({ bulk:true, phones });
+}
 async function goToCustomerList(){
   showScreen('customerListScreen');
   const wrap = document.getElementById('customerListWrap');
@@ -1236,14 +1252,23 @@ function renderCustList(){
   if(list.length === 0){ wrap.innerHTML = '<div class="empty-cart">'+(q?'مفيش عميل بالبحث ده':'لسه مفيش عملاء مسجلين')+'</div>'; return; }
   custListFiltered = list;   // للمكافأة الجماعية
 
-  const bulkBtn = hasPerm('canEditInventory') ? `<button onclick="sendRewardToAllListed()" style="width:100%; margin-bottom:10px; padding:11px; border-radius:10px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer;">🎁 ابعت مكافأة لكل دول (${list.length} عميل)</button>` : '';
+  const selCount = selectedCustomers.size;
+  const bulkBtn = hasPerm('canEditInventory') ? `
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button onclick="sendRewardToAllListed()" style="flex:1; padding:11px; border-radius:10px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer;">🎁 للكل (${list.length})</button>
+      <button onclick="${selCount?'sendRewardToSelected()':'selectAllListed()'}" style="flex:1; padding:11px; border-radius:10px; border:none; background:${selCount?'var(--plus)':'var(--panel2)'}; color:${selCount?'#062':'var(--text)'}; font-weight:800; cursor:pointer;">${selCount? '🎁 للمختارين ('+selCount+')' : '☑️ اختار'}</button>
+      ${selCount?`<button onclick="clearCustSelection()" style="padding:11px 14px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-weight:800; cursor:pointer;">✕</button>`:''}
+    </div>` : '';
 
   wrap.innerHTML = bulkBtn + list.map(c=>{
     const last = c._lastTs ? new Date(c._lastTs).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
     const hasCode = c.loyaltyCode ? `<span style="background:#eef; color:#5340c8; font-size:10px; font-weight:800; padding:2px 7px; border-radius:99px;">💳 ${c.loyaltyCode}</span>` : '';
     const hasPin = c.loyaltyPin ? '<span style="font-size:10px; color:var(--muted);">🔒 مؤمّن</span>' : '';
+    const checked = selectedCustomers.has(c.phone) ? 'checked' : '';
     return `
-    <div onclick="openCustomerProfile('${c.phone}')" style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:9px; cursor:pointer;">
+    <div style="background:var(--panel); border:1px solid ${selectedCustomers.has(c.phone)?'var(--plus)':'var(--border)'}; border-radius:12px; padding:12px 14px; margin-bottom:9px; display:flex; gap:10px; align-items:flex-start;">
+      <input type="checkbox" ${checked} onclick="event.stopPropagation(); toggleCustSelect('${c.phone}', this.checked)" style="width:20px; height:20px; margin-top:2px; flex-shrink:0; cursor:pointer;">
+      <div onclick="openCustomerProfile('${c.phone}')" style="flex:1; min-width:0; cursor:pointer;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
         <div style="min-width:0;">
           <div style="font-weight:800; font-size:14px;">${c.name || 'بدون اسم'}</div>
@@ -1258,6 +1283,7 @@ function renderCustList(){
       <div style="display:flex; justify-content:space-between; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:11px; color:var(--muted);">
         <span>🧾 ${c._count||0} فاتورة</span>
         <span>🕐 آخر زيارة: ${last}</span>
+      </div>
       </div>
     </div>`;
   }).join('');
