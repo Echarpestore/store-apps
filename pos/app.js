@@ -1534,6 +1534,7 @@ function renderCart(){
   document.getElementById('cartTotal').textContent = total.toFixed(2);
   const _pieces = cart.filter(c=>!c.isRedemption).reduce((s,c)=> s + (c.isReturn?-c.qty:c.qty), 0);
   const _icEl = document.getElementById('cartItemCount'); if(_icEl) _icEl.textContent = _pieces;
+  refreshCustomerActionUI();
   updatePaySummary();
   renderHoldButtons();
 }
@@ -1801,7 +1802,7 @@ async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
   const newRow = document.getElementById('newCustomerRow');
-  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); custReward=null; renderCart(); return; }
+  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); custReward=null; custPendingRedeem=null; custBaseText=''; renderCart(); return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     let ratingLine = '';
@@ -1826,34 +1827,11 @@ async function refreshCustomerInfo(){
       custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
       revertCustomerOffers(); applyCustomerOffers(); renderCart();
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
-      const _pr = d.pendingRedeem;
-      const _base = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
-      // مكافأة خاصة صالحة؟
       const _now = Date.now();
+      custPendingRedeem = (d.pendingRedeem && d.pendingRedeem.brand === _brand && d.pendingRedeem.points > 0) ? d.pendingRedeem : null;
       custReward = (d.rewards||[]).find(r=> r && !r.used && r.brand===_brand && (!r.expiry || r.expiry>_now)) || null;
-      let _rewardHtml = '';
-      if(custReward && !cart.some(l=>l.isRewardDiscount)){
-        const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
-        const okMin = cartTot >= (custReward.minInvoice||0);
-        const rTxt = custReward.type==='percent' ? `${custReward.value}% خصم` : `${custReward.value} ج.م خصم`;
-        const cond = custReward.minInvoice ? ` (لفاتورة ${custReward.minInvoice} ج.م أو أكتر)` : '';
-        _rewardHtml = `<div style="margin-top:8px; background:#fdeef5; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
-             <div style="font-weight:800; color:#b45309;">🎁 مكافأة خاصة: ${rTxt}${cond}</div>
-             ${okMin
-               ? `<button onclick="applyCustomerReward()" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق المكافأة</button>`
-               : `<div style="font-size:11px; color:var(--muted); margin-top:4px;">لسه محتاج فاتورة أكبر عشان تتفعّل</div>`}
-           </div>`;
-      }
-      if(_pr && _pr.brand === _brand && _pr.points > 0 && !pendingRedemption){
-        infoBox.innerHTML = _base +
-          `<div style="margin-top:8px; background:#fff6e6; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
-             <div style="font-weight:800; color:#b45309;">🎁 العميل طلب استبدال ${_pr.points} نقطة (خصم ${_pr.valueEGP} ج.م)</div>
-             <button onclick="applyPendingRedeem(${_pr.points}, ${_pr.valueEGP})" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق الاستبدال</button>
-           </div>` + _rewardHtml;
-      }else{
-        if(_rewardHtml){ infoBox.innerHTML = _base + _rewardHtml; }
-        else infoBox.textContent = _base;
-      }
+      custBaseText = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
+      refreshCustomerActionUI();
       newRow.style.display = 'none';
       setCustBox(true);   // 🟢 عميل متسجّل ومختار → المربع ينوّر أخضر
       const rp = document.getElementById('resetPinRow');
@@ -1975,6 +1953,35 @@ async function openRedeemPoints(){
 
 // مكافأة خاصة العميل — تطبيق عند الدفع
 let custReward = null, appliedReward = null;
+let custPendingRedeem = null, custBaseText = '';
+
+// بيحدّث صندوق العميل (المكافأة/الاستبدال) حسب إجمالي الفاتورة الحالي — بيتنادى مع كل تغيّر في السلة
+function refreshCustomerActionUI(){
+  const infoBox = document.getElementById('customerInfo');
+  if(!infoBox) return;
+  if(!custBaseText){ return; }   // مفيش عميل متحمّل
+  const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
+  let html = custBaseText;
+  if(custPendingRedeem && !pendingRedemption){
+    html += `<div style="margin-top:8px; background:#fff6e6; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
+       <div style="font-weight:800; color:#b45309;">🎁 العميل طلب استبدال ${custPendingRedeem.points} نقطة (خصم ${custPendingRedeem.valueEGP} ج.م)</div>
+       <button onclick="applyPendingRedeem(${custPendingRedeem.points}, ${custPendingRedeem.valueEGP})" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق الاستبدال</button>
+     </div>`;
+  }
+  if(custReward && !cart.some(l=> l.isRewardDiscount)){
+    const okMin = cartTot >= (custReward.minInvoice||0);
+    const rTxt = custReward.type==='percent' ? `${custReward.value}% خصم` : `${custReward.value} ج.م خصم`;
+    const cond = custReward.minInvoice ? ` (لفاتورة ${custReward.minInvoice} ج.م أو أكتر)` : '';
+    html += `<div style="margin-top:8px; background:#fdeef5; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
+       <div style="font-weight:800; color:#b45309;">🎁 مكافأة خاصة: ${rTxt}${cond}</div>
+       ${okMin
+         ? `<button onclick="applyCustomerReward()" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق المكافأة</button>`
+         : `<div style="font-size:11px; color:var(--muted); margin-top:4px;">لسه محتاج فاتورة ${custReward.minInvoice} ج.م — الحالي ${cartTot.toFixed(0)}</div>`}
+     </div>`;
+  }
+  infoBox.innerHTML = html;
+}
+
 function applyCustomerReward(){
   if(!custReward) return;
   const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
