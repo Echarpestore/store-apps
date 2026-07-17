@@ -1462,10 +1462,10 @@ function renderCart(){
     tbody.innerHTML = '<tr><td colspan="6" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>';
   }else{
     tbody.innerHTML = cart.map((c, idx)=>`
-      <tr class="${idx===selectedCartIdx?'sel ':''}${c.isReturn?'ret':''}" onclick="selectCartRow(${idx})">
+      <tr class="${idx===selectedCartIdx?'sel ':''}${c.isReturn?'ret':''}" onclick="selectCartRow(${idx})" style="${c.offerApplied?'background:linear-gradient(90deg,#ffeef5,#fff); box-shadow:inset 4px 0 0 #e27a97;':''}">
         <td>${idx+1}</td>
-        <td class="item-name">${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}${c.barcode?`<div class="cart-code">${c.barcode}</div>`:''}</td>
-        <td>${c.originalPrice ? `<s style="color:#999; font-size:10px;">${c.originalPrice.toFixed(2)}</s> ` : ''}${c.price.toFixed(2)}</td>
+        <td class="item-name">${c.offerApplied?'🎁 ':''}${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.offerApplied?' <span style="color:#c0397a; font-size:10px; font-weight:800;">🎁 عرض مفعّل</span>':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}${c.barcode?`<div class="cart-code">${c.barcode}</div>`:''}</td>
+        <td>${c.offerApplied && c.origPrice!=null ? `<s style="color:#c0397a; font-size:10px;">${c.origPrice.toFixed(2)}</s> ` : (c.originalPrice ? `<s style="color:#999; font-size:10px;">${c.originalPrice.toFixed(2)}</s> ` : '')}${c.price.toFixed(2)}</td>
         <td>
           <div class="qty-cell">
             <button onclick="event.stopPropagation(); cartQty(${idx},-1)">−</button>
@@ -1479,8 +1479,21 @@ function renderCart(){
   }
   const total = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   document.getElementById('cartTotal').textContent = total.toFixed(2);
+  const _pieces = cart.filter(c=>!c.isRedemption).reduce((s,c)=> s + (c.isReturn?-c.qty:c.qty), 0);
+  const _icEl = document.getElementById('cartItemCount'); if(_icEl) _icEl.textContent = _pieces;
   updatePaySummary();
   renderHoldButtons();
+}
+
+// يرجّع أي منتج اتطبّق عليه عرض العميل لسعره وشكله الأصلي (لما نشيل/نغيّر العميل)
+function revertCustomerOffers(){
+  cart.forEach(line=>{
+    if(line.offerApplied){
+      if(line.origPrice != null) line.price = line.origPrice;
+      line.offerApplied = false;
+      delete line.origPrice;
+    }
+  });
 }
 
 // ============ هولد سريع بمكانين (محلي، من غير خروج من الشاشة) ============
@@ -1735,7 +1748,7 @@ async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
   const newRow = document.getElementById('newCustomerRow');
-  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; return; }
+  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); renderCart(); return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     let ratingLine = '';
@@ -1758,7 +1771,7 @@ async function refreshCustomerInfo(){
       const d = doc.data();
       document.getElementById('customerName').value = d.name || '';
       custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
-      applyCustomerOffers(); renderCart();
+      revertCustomerOffers(); applyCustomerOffers(); renderCart();
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
       const _pr = d.pendingRedeem;
       const _base = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
