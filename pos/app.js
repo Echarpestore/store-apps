@@ -1261,7 +1261,7 @@ function renderCart(){
         <td>
           <div class="qty-cell">
             <button onclick="event.stopPropagation(); cartQty(${idx},-1)">−</button>
-            <span class="qn">${c.qty}</span>
+            <input type="number" class="qn-input" value="${c.qty}" min="1" onclick="event.stopPropagation()" onchange="cartSetQty(${idx}, this.value)">
             <button onclick="event.stopPropagation(); cartQty(${idx},1)">+</button>
           </div>
         </td>
@@ -1272,6 +1272,92 @@ function renderCart(){
   const total = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   document.getElementById('cartTotal').textContent = total.toFixed(2);
   updatePaySummary();
+  renderHoldButtons();
+}
+
+// ============ هولد سريع بمكانين (محلي، من غير خروج من الشاشة) ============
+let holdSlots = [null, null];
+
+function captureSaleState(){
+  return {
+    items: cart,
+    customerPhone: (document.getElementById('customerPhone')?.value || '').trim(),
+    customerName: (document.getElementById('customerName')?.value || '').trim(),
+    total: cart.reduce((s,c)=> s + c.price*c.qty, 0)
+  };
+}
+function clearSaleState(){
+  cart = [];
+  selectedCartIdx = null;
+  if(typeof pendingRedemption !== 'undefined') pendingRedemption = null;
+  const ph = document.getElementById('customerPhone'); if(ph) ph.value = '';
+  const cn = document.getElementById('customerName'); if(cn) cn.value = '';
+  const ci = document.getElementById('customerInfo'); if(ci) ci.textContent = '';
+  if(typeof setCustBox === 'function') setCustBox(false);
+  if(typeof resetPaymentUI === 'function') resetPaymentUI();
+}
+function restoreSaleState(s){
+  cart = s.items || [];
+  selectedCartIdx = null;
+  const ph = document.getElementById('customerPhone'); if(ph) ph.value = s.customerPhone || '';
+  const cn = document.getElementById('customerName'); if(cn) cn.value = s.customerName || '';
+  if(s.customerPhone && typeof refreshCustomerInfo === 'function'){ refreshCustomerInfo(); }
+  else { const ci = document.getElementById('customerInfo'); if(ci) ci.textContent=''; if(typeof setCustBox==='function') setCustBox(false); }
+  if(typeof resetPaymentUI === 'function') resetPaymentUI();
+}
+
+function toggleHold(i){
+  const slot = holdSlots[i];
+  const slotHas = slot && slot.items && slot.items.length;
+  const cartHas = cart.length > 0;
+
+  if(cartHas && slotHas){
+    const cur = captureSaleState();          // تبديل
+    restoreSaleState(slot);
+    holdSlots[i] = cur;
+    showToast('بدّلت الفاتورة الحالية بهولد ' + (i+1));
+  } else if(cartHas && !slotHas){
+    holdSlots[i] = captureSaleState();        // حفظ + تفضية
+    clearSaleState();
+    showToast('اتحفظت في هولد ' + (i+1) + ' — ابدأ فاتورة جديدة ✔');
+  } else if(!cartHas && slotHas){
+    restoreSaleState(slot);                   // استرجاع
+    holdSlots[i] = null;
+    showToast('رجّعت فاتورة هولد ' + (i+1));
+  } else {
+    showToast('السلة فاضية وهولد ' + (i+1) + ' فاضي', 'err');
+    return;
+  }
+  renderCart();
+  focusSearchBar && focusSearchBar();
+}
+
+function renderHoldButtons(){
+  [0,1].forEach(i=>{
+    const btn = document.getElementById('holdBtn'+i);
+    if(!btn) return;
+    const slot = holdSlots[i];
+    if(slot && slot.items && slot.items.length){
+      btn.innerHTML = '📌 هولد ' + (i+1) + '<br><b>' + slot.total.toFixed(0) + ' ج.م</b>';
+      btn.classList.add('filled');
+    }else{
+      btn.innerHTML = 'هولد ' + (i+1) + '<br><span style="opacity:.7;">فاضي</span>';
+      btn.classList.remove('filled');
+    }
+  });
+}
+
+// كتابة الكمية بأي رقم مباشرة
+function cartSetQty(idx, val){
+  const c = cart[idx]; if(!c) return;
+  let nq = parseInt(val);
+  if(isNaN(nq) || nq < 1){ if(nq === 0){ cartRemove(idx); return; } nq = 1; }
+  if(!c.isReturn){
+    const inv = allInventory.find(x=> x.id === c.id);
+    if(inv && (inv.quantity ?? Infinity) < nq){ showToast('الكمية المتاحة في المخزون: ' + (inv.quantity ?? 0), 'err'); nq = inv.quantity ?? 1; }
+  }
+  c.qty = nq;
+  renderCart();
 }
 
 // + / − للكمية في سطر السلة

@@ -168,6 +168,14 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   color:#fff; font-size:13px; font-weight:700; cursor:pointer; text-align:center;
 }
 .qbx-actions button:active{background:#555;}
+/* زرّي الهولد الملوّنين */
+.hold-slot{line-height:1.35 !important;}
+.hold-slot.hs0{background:linear-gradient(#e8912e,#c96f14) !important; border-color:#a85c0d !important;}
+.hold-slot.hs1{background:linear-gradient(#2fa4a0,#1c7f7b) !important; border-color:#155f5c !important;}
+.hold-slot.filled{outline:3px solid #ffd23f; outline-offset:1px;}
+.hold-slot.hs0.filled{background:linear-gradient(#f5a742,#d97b16) !important;}
+.hold-slot.hs1.filled{background:linear-gradient(#3ec9c4,#20938f) !important;}
+.hold-slot b{font-size:14px;}
 .qbx-center{flex:1; display:flex; flex-direction:column; overflow:hidden;}
 .qbx-itemops{
   width:110px; flex-shrink:0; display:flex; flex-direction:column; gap:7px; padding-top:44px;
@@ -211,6 +219,8 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .qty-cell button{width:28px; height:28px; border-radius:6px; border:1px solid #b8b5ad; background:#fff; font-weight:900; font-size:17px; line-height:1; cursor:pointer; color:#333;}
 .qty-cell button:active{background:#eee;}
 .qty-cell .qn{min-width:22px; text-align:center; font-weight:800;}
+.qty-cell .qn-input{width:46px; text-align:center; font-weight:800; font-size:15px; border:1px solid #b8b5ad; border-radius:6px; padding:5px 2px; background:#fff; color:#111;}
+.qty-cell .qn-input::-webkit-outer-spin-button,.qty-cell .qn-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
 .cart-del{border:none; background:none; cursor:pointer; font-size:17px; padding:2px 6px;}
 .cart-code{font-size:10px; color:#999; direction:ltr; text-align:right; font-family:monospace;}
 .qbx-save{
@@ -799,7 +809,8 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
     <div class="qbx-body">
       <div class="qbx-actions">
         <button onclick="goToDashboard()">◀ رجوع</button>
-        <button onclick="holdInvoice()">Hold</button>
+        <button id="holdBtn0" class="hold-slot hs0" onclick="toggleHold(0)">هولد ١<br><span style="opacity:.7;">فاضي</span></button>
+        <button id="holdBtn1" class="hold-slot hs1" onclick="toggleHold(1)">هولد ٢<br><span style="opacity:.7;">فاضي</span></button>
         <button onclick="openCashDrawer()">فتح الدرج</button>
         <button onclick="openGiveDiscount()">خصم</button>
         <button onclick="focusAddCustomer()">إضافة عميل</button>
