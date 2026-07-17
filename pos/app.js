@@ -107,6 +107,9 @@ if(currentBranch){
 let currentEmployee = null;
 let cart = []; // {id, name, barcode, price, qty}
 let allInventory = [];
+let invSales = {};              // { productId: عدد المباع }
+let invSortCol = 'name';        // العمود اللي بنرتّب بيه
+let invSortDir = 1;             // 1 تصاعدي، -1 تنازلي
 let editingHeldId = null; // لو بنكمل على فاتورة كانت معلّقة
 let selectedPayMethods = new Set();
 
@@ -338,6 +341,18 @@ async function loadInventory(){
 // ---------------- Inventory screen (permission-gated) ----------------
 async function renderInventoryScreen(){
   await loadInventory();
+  // نحسب المباع لكل منتج (للترتيب بالأكثر/الأقل مبيعًا)
+  try{
+    invSales = {};
+    const sales = await getBranchSales();
+    sales.forEach(s=>{
+      if(s.reversed) return;
+      (s.items||[]).forEach(it=>{
+        if(it.isRedemption || it.isRewardDiscount || !it.id) return;
+        invSales[it.id] = (invSales[it.id]||0) + (it.qty||0) * (it.isReturn ? -1 : 1);
+      });
+    });
+  }catch(e){ invSales = {}; }
   const addWrap = document.getElementById('inventoryAddRow');
   const listWrap = document.getElementById('inventoryListWrap');
 
@@ -392,6 +407,12 @@ async function renderInventoryScreen(){
 }
 
 // عرض قائمة الأصناف مع البحث والفلترة (بيتنده من غير ما يعيد التحميل)
+function invSort(col){
+  if(invSortCol === col){ invSortDir = -invSortDir; }   // نفس العمود → نعكس الاتجاه
+  else { invSortCol = col; invSortDir = -1; }            // عمود جديد → نبدأ تنازلي
+  renderInventoryList();
+}
+
 function renderInventoryList(){
   const listWrap = document.getElementById('inventoryListWrap');
   if(!listWrap) return;
@@ -403,7 +424,7 @@ function renderInventoryList(){
   const filter = document.getElementById('invFilter')?.value || 'all';
 
   let items = allInventory.filter(it=>{
-    if(it.branches && !it.branches.includes(currentBranch)) return false;   // مقصور على فرع تاني
+    if(it.branches && !it.branches.includes(currentBranch)) return false;
     if(q && !((it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q))) return false;
     const isLow = (it.minStock??0) > 0 && branchQty(it) <= it.minStock;
     const isOut = it.status==='outofstock' || branchQty(it) <= 0;
@@ -413,40 +434,65 @@ function renderInventoryList(){
     return true;
   });
 
-  listWrap.innerHTML = items.map(it=>{
+  // الترتيب
+  const val = (it)=>{
+    switch(invSortCol){
+      case 'barcode': return (it.barcode||'');
+      case 'name':    return (it.name||'');
+      case 'qty':     return branchQty(it);
+      case 'price':   return Number(it.price)||0;
+      case 'sold':    return invSales[it.id]||0;
+      default:        return (it.name||'');
+    }
+  };
+  items.sort((a,b)=>{
+    const va = val(a), vb = val(b);
+    if(typeof va === 'string') return va.localeCompare(vb, 'ar') * invSortDir;
+    return (va - vb) * invSortDir;
+  });
+
+  const arrow = (col)=> invSortCol===col ? (invSortDir<0 ? ' ▼' : ' ▲') : '';
+  const th = (col, label, extra)=> `<th onclick="invSort('${col}')" style="cursor:pointer; user-select:none; padding:10px 8px; text-align:${extra||'right'}; white-space:nowrap; ${invSortCol===col?'color:var(--accent);':'color:var(--muted);'}">${label}${arrow(col)}</th>`;
+
+  if(items.length === 0){
+    listWrap.innerHTML = '<div class="empty-cart">'+(q||filter!=='all'?'مفيش أصناف بالفلتر ده':'لسه مفيش أصناف')+'</div>';
+    return;
+  }
+
+  const rows = items.map((it, i)=>{
     const qty = branchQty(it);
     const isLow = (it.minStock??0) > 0 && qty <= it.minStock;
     const isOut = it.status==='outofstock' || qty <= 0;
-    let badge, bcol, bbg;
-    // من غير صلاحية عرض المخزون: نبيّن الحالة بس من غير الرقم
-    if(isOut){ badge = canStock ? 'نافد' : 'نافد'; bcol='#b91c1c'; bbg='#fdecec'; }
-    else if(isLow){ badge = canStock ? ('ناقص · '+qty) : 'ناقص'; bcol='#b45309'; bbg='#fff6e6'; }
-    else { badge = canStock ? ('متاح · '+qty) : 'متاح'; bcol='#15803d'; bbg='#eafaf0'; }
-    const border = isOut ? 'var(--minus)' : isLow ? 'var(--warn)' : 'var(--border)';
-    const meta = [it.attribute, it.size].filter(Boolean).join(' · ');
-    const minNote = (canStock && (it.minStock??0) > 0) ? ` <span style="opacity:.7; font-weight:600;">(حد أدنى ${it.minStock})</span>` : '';
-    return `
-    <div onclick="openProductDetails('${it.id}')" style="background:var(--panel); border:1px solid ${border}; border-radius:12px; padding:12px 14px; margin-bottom:9px; cursor:pointer;">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-        <div style="min-width:0; flex:1;">
-          <div style="font-weight:800; font-size:14px;">${it.name}${it.status==='hidden'?' <span style="font-size:10px; color:var(--muted);">🚫 مخفي</span>':''}</div>
-          <div style="color:var(--muted); font-size:11px; margin-top:2px;">${meta?meta+' · ':''}باركود: ${it.barcode||'—'}</div>
-        </div>
-        <div style="text-align:left; flex-shrink:0;">
-          <div style="font-weight:900; font-size:15px;">${it.price} <span style="font-size:11px; font-weight:700;">ج.م</span></div>
-          ${canCost && it.cost!=null ? `<div style="color:var(--muted); font-size:10px;">تكلفة ${it.cost}</div>` : ''}
-        </div>
-      </div>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:9px;">
-        <span style="background:${bbg}; color:${bcol}; font-size:11px; font-weight:800; padding:3px 10px; border-radius:99px;">${badge}${minNote}</span>
-        <div style="display:flex; gap:6px;">
-          ${canEdit ? `<button onclick="event.stopPropagation(); toggleCustomerVisible('${it.id}')" title="يظهر للعميل؟" style="padding:6px 10px; border-radius:8px; border:1px solid ${it.showToCustomer?'var(--plus)':'var(--border)'}; background:${it.showToCustomer?'#eafaf0':'var(--panel2)'}; color:${it.showToCustomer?'#15803d':'var(--muted)'}; font-size:11px; font-weight:700; cursor:pointer;">${it.showToCustomer?'👁️ ظاهر':'🙈 مخفي'}</button>` : ''}
-          ${canLabel ? `<button onclick="event.stopPropagation(); printPriceLabel('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px; cursor:pointer;">🏷️</button>` : ''}
-          ${canEdit ? `<button onclick="event.stopPropagation(); deleteInventoryItem('${it.id}')" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11px; cursor:pointer;">حذف</button>` : ''}
-        </div>
-      </div>
-    </div>`;
-  }).join('') || '<div class="empty-cart">'+(q||filter!=='all'?'مفيش أصناف بالفلتر ده':'لسه مفيش أصناف')+'</div>';
+    const qtyCol = isOut ? '#b91c1c' : isLow ? '#b45309' : '#15803d';
+    const qtyTxt = canStock ? qty : (isOut?'نافد':isLow?'ناقص':'متاح');
+    const sold = invSales[it.id]||0;
+    return `<tr onclick="openProductDetails('${it.id}')" style="cursor:pointer; border-bottom:1px solid var(--border); background:${i%2?'transparent':'rgba(0,0,0,.02)'};">
+      <td style="padding:9px 8px; color:var(--muted); font-size:11px; direction:ltr;">${it.barcode||'—'}</td>
+      <td style="padding:9px 8px; font-weight:700; font-size:13px;">${it.name}${it.status==='hidden'?' <span style="font-size:9px; color:var(--muted);">🚫</span>':''}${it.showToCustomer?' <span title="ظاهر للعميل" style="font-size:9px;">👁️</span>':''}</td>
+      <td style="padding:9px 8px; text-align:center; font-weight:900; color:${qtyCol};">${qtyTxt}</td>
+      <td style="padding:9px 8px; text-align:center; font-weight:800; white-space:nowrap;">${it.price}${canCost && it.cost!=null?`<div style="font-size:9px; color:var(--muted); font-weight:600;">ت:${it.cost}</div>`:''}</td>
+      <td style="padding:9px 8px; text-align:center; font-weight:700; color:var(--accent);">${sold}</td>
+      ${canEdit?`<td style="padding:9px 4px; text-align:center; white-space:nowrap;">
+        <button onclick="event.stopPropagation(); toggleCustomerVisible('${it.id}')" title="يظهر للعميل؟" style="padding:5px 7px; border-radius:7px; border:1px solid ${it.showToCustomer?'var(--plus)':'var(--border)'}; background:${it.showToCustomer?'#eafaf0':'var(--panel2)'}; font-size:12px; cursor:pointer;">${it.showToCustomer?'👁️':'🙈'}</button>
+      </td>`:''}
+    </tr>`;
+  }).join('');
+
+  listWrap.innerHTML = `
+    <div style="overflow-x:auto; border:1px solid var(--border); border-radius:12px; background:var(--panel);">
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead><tr style="border-bottom:2px solid var(--border); background:var(--panel2); position:sticky; top:0;">
+          ${th('barcode','الكود')}
+          ${th('name','الاسم')}
+          ${th('qty','المخزون','center')}
+          ${th('price','السعر','center')}
+          ${th('sold','اتباع','center')}
+          ${canEdit?'<th style="padding:10px 4px;"></th>':''}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="text-align:center; color:var(--muted); font-size:11px; margin-top:8px;">${items.length} صنف · اضغط على عنوان العمود للترتيب</div>`;
 }
 
 // تصدير العملاء CSV (بأعمدة متوافقة مع كويك بوكس عشان يتقرا تاني بالاستيراد)
