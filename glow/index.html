@@ -833,6 +833,50 @@ function drawBarcode(containerId, text){
 /* ---------- قلب البطاقة ---------- */
 function flipCard(){ var f=$('cardFlip'); if(f) f.classList.toggle('flipped'); }
 
+
+// ===== العميل يطلب استبدال نقاط من التطبيق (يظهر للكاشير عند الشراء) =====
+var redeemSel = 0;
+function redeemMax(){ var per=Number(loyaltyCfg.pointsPerRedemption)||10; return Math.floor((Number(currentCustomer[POINTS_FIELD])||0)/per); }
+function changeRedeem(d){ redeemSel=Math.max(0,Math.min(redeemMax(),redeemSel+d)); renderCard(); }
+function requestRedeem(){
+  var per=Number(loyaltyCfg.pointsPerRedemption)||10, val=Number(loyaltyCfg.redemptionValueEGP)||5;
+  if(redeemSel<=0) return;
+  var req={ points:redeemSel*per, valueEGP:redeemSel*val, brand:CATALOG_BRAND, ts:Date.now() };
+  db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ pendingRedeem:req },{merge:true}).then(function(){
+    currentCustomer.pendingRedeem=req; redeemSel=0; renderCard();
+    alert('تمام! ✅ لما تيجي تدفعي، الكاشير هيلاقي طلب الاستبدال جاهز.');
+  }).catch(function(){ alert('حصل خطأ، حاولي تاني'); });
+}
+function cancelRedeem(){
+  db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ pendingRedeem: firebase.firestore.FieldValue.delete() },{merge:true}).then(function(){
+    currentCustomer.pendingRedeem=null; renderCard();
+  });
+}
+function redeemBlockHtml(){
+  var per=Number(loyaltyCfg.pointsPerRedemption)||10, val=Number(loyaltyCfg.redemptionValueEGP)||5;
+  var bal=Number(currentCustomer[POINTS_FIELD])||0;
+  var pr=currentCustomer.pendingRedeem;
+  if(pr && pr.brand===CATALOG_BRAND && pr.points>0){
+    return '<div style="background:var(--pink-soft); border:1px solid var(--pink); border-radius:16px; padding:16px; margin-top:14px; text-align:center;">'+
+      '<div style="font-weight:800; color:var(--pink-deep); margin-bottom:4px;">🎁 طلبتي استبدال '+pr.points+' نقطة</div>'+
+      '<div style="font-size:13px; color:var(--ink);">خصم '+pr.valueEGP+' ج.م — هيتطبق عند الدفع</div>'+
+      '<button onclick="cancelRedeem()" style="margin-top:10px; padding:8px 16px; border-radius:8px; border:1px solid var(--pink); background:transparent; color:var(--pink-deep); font-weight:700; cursor:pointer;">إلغاء الطلب</button>'+
+    '</div>';
+  }
+  if(bal<per) return '';
+  var pts=redeemSel*per, egp=redeemSel*val;
+  return '<div style="background:var(--white); border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:14px;">'+
+    '<div style="font-weight:800; text-align:center; margin-bottom:12px;">🎁 استبدلي نقاطك</div>'+
+    '<div style="display:flex; align-items:center; justify-content:center; gap:18px; margin-bottom:8px;">'+
+      '<button onclick="changeRedeem(-1)" style="width:42px; height:42px; border-radius:50%; border:1px solid var(--line); background:var(--pink-soft); font-size:22px; font-weight:800; cursor:pointer;">−</button>'+
+      '<div style="text-align:center; min-width:90px;"><div style="font-size:26px; font-weight:900; color:var(--pink-deep);">'+pts+'</div><div style="font-size:11px; color:var(--muted);">نقطة</div></div>'+
+      '<button onclick="changeRedeem(1)" style="width:42px; height:42px; border-radius:50%; border:1px solid var(--line); background:var(--pink-soft); font-size:22px; font-weight:800; cursor:pointer;">+</button>'+
+    '</div>'+
+    '<div style="text-align:center; font-size:14px; color:var(--ink); margin-bottom:12px;">= خصم <b>'+egp+' ج.م</b></div>'+
+    '<button onclick="requestRedeem()" '+(redeemSel<=0?'disabled':'')+' style="width:100%; padding:12px; border-radius:10px; border:none; background:'+(redeemSel<=0?'#bbb':'var(--pink)')+'; color:#fff; font-weight:800; cursor:'+(redeemSel<=0?'default':'pointer')+';">اطلبي الاستبدال</button>'+
+  '</div>';
+}
+
 function renderCard(){
   if(!currentCustomer) return;
   var pts = Number(currentCustomer[POINTS_FIELD])||0;
@@ -880,6 +924,7 @@ function renderCard(){
       '<div class="info-box"><div class="ico">🏆</div><div class="t">إزاي تستبدلي</div><div class="d">كل '+per+' نقطة = '+fmt(val)+' ج.م خصم</div></div>'+
     '</div>'+
 
+    redeemBlockHtml()+
     '<div class="redeem-hint">💡 الاستبدال بيحصل في المحل — قوليلهم عايزة تستبدلي نقاطك عند الدفع.</div>';
 
   // نرسم الباركود (ظاهر على طول)
