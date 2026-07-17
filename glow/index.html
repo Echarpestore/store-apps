@@ -479,7 +479,7 @@ function openSupport(){
   var msg = 'السلام عليكم 🌸';
   if(currentCustomer){
     msg = 'السلام عليكم، أنا ' + (currentCustomer.name||'') +
-          (currentCustomer.loyaltyCode ? ' (كود: '+currentCustomer.loyaltyCode+')' : '') +
+          (currentCustomer.loyaltyCode_glow ? ' (كود: '+currentCustomer.loyaltyCode_glow+')' : '') +
           ' ومحتاجة مساعدة.';
   }
   window.open('https://wa.me/' + digits(SUPPORT_WHATSAPP) + '?text=' + encodeURIComponent(msg), '_blank');
@@ -628,7 +628,7 @@ function createCustomer(phone, name, pin){
     var data = {
       name: name, phone: phone, points: 0, totalSpent: 0,
       lastVisit: null, notes: '', branch: '',
-      loyaltyCode: code, loyaltyPin: pin, createdAt: Date.now(), source: 'loyalty_app'
+      loyaltyCode_glow: code, loyaltyPin: pin, createdAt: Date.now(), source: 'glow_app'
     };
     return db.collection(COL_CUSTOMERS).doc(phone).set(data, { merge:true });
   }).then(function(){
@@ -659,7 +659,7 @@ function enterApp(phone){
     }
     currentCustomer = Object.assign({ phone: phone }, doc.data());
     $('topName').textContent = firstName(currentCustomer.name);
-    if(!currentCustomer.loyaltyCode){ ensureLoyaltyCode(phone); } // عميل قديم من غير كود؟ نولّدله
+    if(!currentCustomer.loyaltyCode_glow){ ensureLoyaltyCode(phone); } // عميل قديم من غير كود؟ نولّدله
     renderCard();
     // لو التبويب المفتوح هو الحساب، نحدّثه كمان
     if($('tab-account').style.display !== 'none') renderAccount();
@@ -777,25 +777,26 @@ function regDateText(opts){
 }
 
 /* ---------- كود العضوية المميز ---------- */
-function generateLoyaltyCode(){ return 'ECH' + String(Math.floor(Math.random()*1e8)).padStart(8,'0'); }
+function generateLoyaltyCode(){ return 'GLW' + String(Math.floor(Math.random()*1e8)).padStart(8,'0'); }
 function prettyCode(c){
   c = String(c||'');
+  if(c.indexOf('GLW')===0){ return 'GLW ' + c.slice(3).replace(/(\d{4})(\d{4})/, '$1 $2'); }
   if(c.indexOf('ECH')===0){ return 'ECH ' + c.slice(3).replace(/(\d{4})(\d{4})/, '$1 $2'); }
   return c;
 }
 // يولّد كود ويتأكد إنه مش متكرر (بيحاول لحد 5 مرات)
 function makeUniqueCode(tries){
   var code = generateLoyaltyCode();
-  return db.collection(COL_CUSTOMERS).where('loyaltyCode','==',code).limit(1).get().then(function(snap){
+  return db.collection(COL_CUSTOMERS).where('loyaltyCode_glow','==',code).limit(1).get().then(function(snap){
     if(snap.empty || tries>=5) return code;
     return makeUniqueCode(tries+1);
   }).catch(function(){ return code; }); // أوفلاين؟ نقبل الكود زي ما هو
 }
 // يتأكد إن العميل عنده كود؛ لو لأ يولّد واحد ويحفظه (الحفظ بيرجّع snapshot تاني فيعاد الرسم بالباركود)
 function ensureLoyaltyCode(phone){
-  if(currentCustomer && currentCustomer.loyaltyCode) return;
+  if(currentCustomer && currentCustomer.loyaltyCode_glow) return;
   makeUniqueCode(0).then(function(code){
-    return db.collection(COL_CUSTOMERS).doc(phone).set({ loyaltyCode: code }, { merge:true });
+    return db.collection(COL_CUSTOMERS).doc(phone).set({ loyaltyCode_glow: code }, { merge:true });
   }).catch(function(e){ console.warn('تعذر توليد كود العضوية', e); });
 }
 
@@ -847,7 +848,7 @@ function renderCard(){
   var sinceTxt = regDateText({day:'numeric', month:'long', year:'numeric'});
   if(sinceTxt) sinceTxt = 'عضو من ' + sinceTxt;
 
-  var code = currentCustomer.loyaltyCode || '';
+  var code = currentCustomer.loyaltyCode_glow || '';
 
   $('tab-card').innerHTML =
     '<div class="gcard">'+
@@ -1033,7 +1034,7 @@ function renderAccount(){
   if(!currentCustomer) return;
   var spent = Number(currentCustomer.totalSpent)||0;
   var sinceFull = regDateText({day:'numeric', month:'long', year:'numeric'}) || '—';
-  var code = currentCustomer.loyaltyCode ? prettyCode(currentCustomer.loyaltyCode) : '—';
+  var code = currentCustomer.loyaltyCode_glow ? prettyCode(currentCustomer.loyaltyCode_glow) : '—';
   $('tab-account').innerHTML =
     '<div class="sec-h">حسابي</div>'+
     '<div class="acct-card">'+
