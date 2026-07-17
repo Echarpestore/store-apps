@@ -939,6 +939,19 @@ function renderCard(){
 function renderOffers(){
   var box = $('tab-offers');
   var head = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>';
+  var _now = Date.now();
+  var _myR = (currentCustomer && currentCustomer.rewards ? currentCustomer.rewards : []).filter(function(r){ return r && !r.used && r.brand===CATALOG_BRAND && (!r.expiry || r.expiry>_now); });
+  var rewardsHtml = _myR.length ? ('<div class="sec-h">مكافآتك <span class="em">الخاصة</span></div>' + _myR.map(function(r){
+    var big = r.type==='percent' ? (fmt(r.value)+'%') : fmt(r.value);
+    var sm  = r.type==='percent' ? 'خصم' : 'ج.م';
+    var cond = r.minInvoice ? ('لو اشتريتي بـ '+fmt(r.minInvoice)+' ج.م أو أكتر') : 'على أي فاتورة';
+    var days = r.expiry ? Math.max(0, Math.ceil((r.expiry-_now)/86400000)) : null;
+    return '<div class="offer" style="border:2px solid var(--pink); background:var(--pink-soft);">'+
+      '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
+      '<div class="obody"><div class="on">🎁 مكافأة خاصة ليكي</div><div class="osc">'+cond+'</div><div class="oend">'+(days!=null?('صالحة '+days+' يوم كمان — بتتطبق عند الدفع'):'بتتطبق عند الدفع')+'</div></div>'+
+    '</div>';
+  }).join('')) : '';
+
   if(dataOffers === null){ box.innerHTML = head + loaderHTML('بنجيب أحدث العروض...'); return; }
   var today = todayISO();
   var live = dataOffers.filter(function(dc){
@@ -952,7 +965,7 @@ function renderOffers(){
     if(!seen[key]){ seen[key]=1; uniq.push(dc); }
   });
   if(uniq.length === 0){
-    box.innerHTML = head + '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>';
+    box.innerHTML = rewardsHtml + head + '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>';
     return;
   }
   var rows = uniq.map(function(dc){
@@ -971,7 +984,7 @@ function renderOffers(){
       '</div>'+
     '</div>';
   }).join('');
-  box.innerHTML = head + rows;
+  box.innerHTML = rewardsHtml + head + rows;
 }
 
 /* ============================================================
@@ -1060,7 +1073,7 @@ function renderInvoices(){
       '</div>'+
     '</div>';
   }).join('');
-  box.innerHTML = head + rows;
+  box.innerHTML = rewardsHtml + head + rows;
 }
 
 function openInvoiceDetail(i){
