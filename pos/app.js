@@ -1751,19 +1751,27 @@ async function openInvoiceForReturn(code){
 // يضيف صنف من الفاتورة الممسوحة كمرتجع (بالسالب) في السلة الحالية
 function returnItemFromInvoice(itemIdx){
   if(!returnInvoiceData) return;
-  const it = (returnInvoiceData.items||[])[itemIdx];
+  const items = returnInvoiceData.items || [];
+  const it = items[itemIdx];
   if(!it){ return; }
+  // نوزّع أي خصم/مكافأة على مستوى الفاتورة بالنسبة → الصنف يرجع بحصته من اللي اتدفع فعلاً
+  const gross = items.filter(x=> !x.isRedemption && !x.isRewardDiscount && (x.price||0) > 0)
+                     .reduce((s,x)=> s + (x.price||0)*(x.qty||1), 0);
+  const net = (returnInvoiceData.total != null) ? returnInvoiceData.total : gross;
+  const ratio = gross > 0 ? Math.min(1, net / gross) : 1;
+  const refundEach = Math.round((Math.abs(it.price||0) * ratio) * 100) / 100;
   cart.push({
     id: it.id || '__ret__'+itemIdx,
     name: it.name,
     barcode: it.barcode || '',
-    price: -Math.abs(it.price||0),
+    price: -refundEach,
     qty: it.qty || 1,
     isReturn: true,
     fromInvoice: returnInvoiceData.invoiceNo || ''
   });
   renderCart();
-  showToast('اتحط "'+it.name+'" كمرتجع بالأحمر ↩️');
+  const note = ratio < 1 ? ` (بعد توزيع الخصم: ${refundEach} ج.م للقطعة)` : '';
+  showToast('اتحط "'+it.name+'" كمرتجع بالأحمر ↩️'+note);
 }
 
 function closeReturnInvoiceModal(){
