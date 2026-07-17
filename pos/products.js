@@ -176,7 +176,7 @@ let receiveCart = [];          // {id, name, barcode, currentQty, qty}
 let receiveGoodsTodayLog = [];
 
 function goToReceiveGoods(){
-  if(!hasPerm('canEditInventory')){ showToast('الصلاحية دي محتاجة إذن تعديل المخزون', 'err'); return; }
+  if(!hasPerm('canReceiveGoods') && !hasPerm('canEditInventory')){ showToast('محتاج صلاحية استلام البضاعة', 'err'); return; }
   showScreen('receiveGoodsScreen');
   renderReceiveCart();   // القايمة بتفضل زي ما هي (مبتتمسحش إلا بعد التأكيد)
   // نتأكد إن المخزون متحمّل عشان البحث يلاقي المنتجات
@@ -297,6 +297,7 @@ function renderReceiveCart(){
 }
 
 async function confirmReceiveCart(){
+  if(!hasPerm('canReceiveGoods') && !hasPerm('canEditInventory')){ showToast('محتاج صلاحية استلام البضاعة', 'err'); return; }
   const rows = receiveCart.filter(r=> (r.qty || 0) !== 0);
   if(!rows.length){ showToast('القايمة فاضية أو كل الكميات صفر', 'err'); return; }
   // تأكد إن مفيش خصم أكتر من الموجود

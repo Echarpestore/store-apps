@@ -117,17 +117,17 @@ const DEFAULT_ROLE_PERMISSIONS = {
   cashier: {
     label: 'كاشير', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: false, canViewStock: true, canViewLogs: false, canRefund: false, canResetCustomerPin: false,
-    canEditInventory: false, canChangePrices: false, canViewReports: false, canManageRoles: false
+    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false
   },
   supervisor: {
     label: 'مشرف', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: false, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
-    canEditInventory: false, canChangePrices: false, canViewReports: false, canManageRoles: false
+    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false
   },
   manager: {
     label: 'مدير', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
-    canEditInventory: true, canChangePrices: true, canViewReports: true, canManageRoles: true
+    canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true
   }
 };
 let rolePermissions = JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS));
@@ -277,7 +277,7 @@ function enterDashboard(){
   if(document.getElementById('importSidebarBtn')) document.getElementById('importSidebarBtn').style.display = canImport ? '' : 'none';
   if(document.getElementById('navImport')) document.getElementById('navImport').style.display = canImport ? '' : 'none';
 
-  const canReceiveGoods = hasPerm('canEditInventory');
+  const canReceiveGoods = hasPerm('canReceiveGoods') || hasPerm('canEditInventory');
   if(document.getElementById('navReceiveGoods')) document.getElementById('navReceiveGoods').style.display = canReceiveGoods ? '' : 'none';
 
   const canReceiptDesign = hasPerm('canChangePrices');
@@ -822,7 +822,7 @@ function printPriceLabel(id){
 const PERM_LABELS = {
   canSell:'يبيع', canHold:'يعمل Hold/Unhold', canPrintLabel:'يطبع Price Label',
   canViewCostPrice:'يشوف سعر التكلفة', canViewStock:'يشوف المخزون (الكميات)', canViewLogs:'يشوف السجلات', canRefund:'يعمل استرجاع',
-  canResetCustomerPin:'يمسح الرقم السري للعميل', canEditInventory:'يعدّل/يضيف مخزون', canChangePrices:'يغيّر الأسعار',
+  canResetCustomerPin:'يمسح الرقم السري للعميل', canEditInventory:'يعدّل/يضيف مخزون', canReceiveGoods:'يستلم/يخرج بضاعة', canChangePrices:'يغيّر الأسعار',
   canViewReports:'يشوف التقارير المالية', canManageRoles:'يدير الصلاحيات'
 };
 async function renderRolesScreen(){
