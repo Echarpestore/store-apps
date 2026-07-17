@@ -480,6 +480,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
           <div class="qb-section-head">📊 التقارير</div>
           <div class="qb-section-body">
             <div class="qb-nav-item" id="navReports" onclick="goToReports()"><div class="qb-icon">📈</div><div class="qb-label">تقارير المبيعات</div></div>
+            <div class="qb-nav-item" id="navBranchSummary" onclick="goToBranchSummary()"><div class="qb-icon">🏬</div><div class="qb-label">ملخّص الفروع</div></div>
           </div>
         </div>
 
@@ -564,6 +565,14 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ INVENTORY ============ -->
+<div class="screen mgmt-light" id="branchSummaryScreen">
+  <div class="dash-header">
+    <button class="back-btn" onclick="goToDashboard()">◀</button>
+    <h2>🏬 ملخّص الأصناف لكل الفروع</h2>
+  </div>
+  <div id="branchSummaryWrap" style="flex:1; overflow:auto; -webkit-overflow-scrolling:touch; padding:14px 16px 60px;"></div>
+</div>
+
 <div class="screen mgmt-light" id="catalogScreen">
   <div class="dash-header">
     <button class="back-btn" onclick="goToDashboard()">◀</button>

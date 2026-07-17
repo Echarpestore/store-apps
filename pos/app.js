@@ -537,6 +537,77 @@ function nextBarcode(){
   return String(n);
 }
 
+// ============ ملخّص الأصناف لكل الفروع (للمدير) ============
+let _bsSold = {}, _bsBranches = [];
+async function goToBranchSummary(){
+  if(!hasPerm('canViewReports')){ showToast('الصلاحية دي للمدير بس', 'err'); return; }
+  showScreen('branchSummaryScreen');
+  const wrap = document.getElementById('branchSummaryWrap');
+  wrap.innerHTML = '<div class="empty-cart">بيتحمّل من كل الفروع... 🏬</div>';
+  try{
+    await loadInventory();
+    const snap = await db.collection(TEST_SALES).get();   // مبيعات كل الفروع
+    const sold = {};
+    snap.docs.forEach(d=>{
+      const s = d.data(); if(s.reversed) return;
+      const br = s.branch || '—';
+      (s.items||[]).forEach(it=>{
+        if(it.isRedemption || it.isRewardDiscount || !it.id) return;
+        if(!sold[it.id]) sold[it.id] = {};
+        sold[it.id][br] = (sold[it.id][br]||0) + (it.qty||0) * (it.isReturn ? -1 : 1);
+      });
+    });
+    const brset = new Set();
+    allInventory.forEach(p=>{ if(p.qtyByBranch) Object.keys(p.qtyByBranch).forEach(b=> brset.add(b)); });
+    Object.values(sold).forEach(m=> Object.keys(m).forEach(b=> { if(b!=='—') brset.add(b); }));
+    _bsSold = sold; _bsBranches = [...brset].sort((a,b)=> a.localeCompare(b,'ar'));
+    renderBranchSummary();
+  }catch(e){ wrap.innerHTML = '<div class="empty-cart">خطأ: '+e.message+'</div>'; }
+}
+
+function renderBranchSummary(){
+  const wrap = document.getElementById('branchSummaryWrap');
+  const q = (document.getElementById('bsSearch')?.value || '').trim().toLowerCase();
+  const branches = _bsBranches;
+
+  let items = allInventory.filter(p=> !q || (p.name||'').toLowerCase().includes(q) || (p.barcode||'').toLowerCase().includes(q));
+  // ترتيب بالأكثر مبيعًا إجمالًا
+  const totalSold = (p)=> branches.reduce((s,b)=> s + ((_bsSold[p.id]&&_bsSold[p.id][b])||0), 0);
+  items.sort((a,b)=> totalSold(b) - totalSold(a));
+
+  const headBranches = branches.map(b=> `<th style="padding:8px 6px; text-align:center; white-space:nowrap; color:var(--accent);">${b}<div style="font-size:9px; color:var(--muted); font-weight:600;">مخزون · باع</div></th>`).join('');
+
+  const rows = items.slice(0, 400).map(p=>{
+    const cells = branches.map(b=>{
+      const stock = (p.qtyByBranch && typeof p.qtyByBranch[b]==='number') ? p.qtyByBranch[b] : 0;
+      const s = (_bsSold[p.id] && _bsSold[p.id][b]) || 0;
+      const low = stock <= (p.minStock||0);
+      const stockCol = stock<=0 ? '#b91c1c' : low ? '#b45309' : '#15803d';
+      return `<td style="padding:7px 6px; text-align:center; white-space:nowrap;"><span style="font-weight:900; color:${stockCol};">${stock}</span> <span style="color:var(--muted);">·</span> <span style="font-weight:700; color:var(--accent);">${s}</span></td>`;
+    }).join('');
+    const totStock = branches.reduce((x,b)=> x + ((p.qtyByBranch&&p.qtyByBranch[b])||0), 0);
+    return `<tr onclick="openProductDetails('${p.id}')" style="cursor:pointer; border-bottom:1px solid var(--border);">
+      <td style="padding:7px 8px; position:sticky; right:0; background:var(--panel); min-width:120px;"><div style="font-weight:700; font-size:12px;">${p.name}</div><div style="font-size:10px; color:var(--muted); direction:ltr; text-align:right;">${p.barcode||'—'}</div></td>
+      ${cells}
+      <td style="padding:7px 8px; text-align:center; font-weight:900;">${totStock}<div style="font-size:9px; color:var(--accent); font-weight:700;">باع ${totalSold(p)}</div></td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <input id="bsSearch" oninput="renderBranchSummary()" value="${q}" placeholder="🔍 دوّر على صنف (اسم/كود)" style="width:100%; padding:11px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:12px;">
+    <div style="overflow-x:auto; border:1px solid var(--border); border-radius:12px; background:var(--panel);">
+      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead><tr style="border-bottom:2px solid var(--border); background:var(--panel2);">
+          <th style="padding:8px; text-align:right; position:sticky; right:0; background:var(--panel2); min-width:120px;">الصنف</th>
+          ${headBranches}
+          <th style="padding:8px; text-align:center;">الإجمالي</th>
+        </tr></thead>
+        <tbody>${rows || '<tr><td style="padding:20px; text-align:center; color:var(--muted);">مفيش أصناف</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div style="text-align:center; color:var(--muted); font-size:11px; margin-top:8px;">${items.length} صنف · مرتّبين بالأكثر مبيعًا · الأحمر = مخزون ناقص/نافد · دوس على الصنف يفتح تفاصيله</div>`;
+}
+
 // ============ مكافآت خاصة للعملاء (فردية أو جماعية) ============
 let rewardTarget = null;   // رقم عميل، أو {bulk:true, phones:[...]}
 function openRewardModal(target){
