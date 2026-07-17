@@ -194,6 +194,7 @@ async function openCustomerProfile(phone){
           ${statCard('نقاط الولاء', c[pointsFieldFor(currentBranch)]||0, 'var(--warn)')}
         </div>
         <div style="color:var(--muted); font-size:11px; margin-top:8px;">آخر زيارة: ${lastVisitStr}</div>
+        <button onclick="openRewardModal('${phone}')" style="margin-top:10px; width:100%; padding:11px; border-radius:9px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer;">🎁 ابعت مكافأة خاصة للعميل ده</button>
       </div>
 
       ${topFav.length ? `

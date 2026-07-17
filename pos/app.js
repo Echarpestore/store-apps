@@ -493,6 +493,55 @@ function nextBarcode(){
   return String(max + 1);
 }
 
+// ============ مكافآت خاصة للعملاء (فردية أو جماعية) ============
+let rewardTarget = null;   // رقم عميل، أو {bulk:true, phones:[...]}
+function openRewardModal(target){
+  rewardTarget = target;
+  document.getElementById('rwValue').value = '';
+  document.getElementById('rwMin').value = '';
+  document.getElementById('rwDays').value = '7';
+  document.getElementById('rwType').value = 'amount';
+  const lbl = document.getElementById('rewardTargetLbl');
+  lbl.textContent = (target && target.bulk) ? `هتتبعت لـ ${target.phones.length} عميل` : ('للعميل: ' + target);
+  document.getElementById('rewardModal').classList.add('active');
+}
+function closeRewardModal(){ document.getElementById('rewardModal').classList.remove('active'); }
+
+async function sendRewardConfirm(){
+  const type = document.getElementById('rwType').value;
+  const value = parseFloat(document.getElementById('rwValue').value) || 0;
+  if(value <= 0){ showToast('اكتب قيمة الخصم', 'err'); return; }
+  const minInvoice = parseFloat(document.getElementById('rwMin').value) || 0;
+  const days = parseInt(document.getElementById('rwDays').value) || 7;
+  const reward = {
+    id: 'r' + Date.now().toString(36) + Math.floor(Math.random()*100),
+    type, value, minInvoice,
+    expiry: Date.now() + days*86400000,
+    used: false,
+    brand: (pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe'),
+    ts: Date.now()
+  };
+  const phones = (rewardTarget && rewardTarget.bulk) ? rewardTarget.phones : [rewardTarget];
+  if(!phones.length){ showToast('مفيش عملاء', 'err'); return; }
+  try{
+    let batch = db.batch(), n = 0;
+    for(const ph of phones){
+      if(!ph) continue;
+      batch.set(db.collection(TEST_CUSTOMERS).doc(ph), { rewards: firebase.firestore.FieldValue.arrayUnion(reward) }, { merge:true });
+      n++;
+      if(n % 400 === 0){ await batch.commit(); batch = db.batch(); }
+    }
+    await batch.commit();
+    closeRewardModal();
+    showToast(`اتبعتت المكافأة لـ ${phones.length} عميل 🎁`);
+  }catch(e){ showToast('خطأ: ' + e.message, 'err'); }
+}
+function sendRewardToAllListed(){
+  const phones = (custListFiltered && custListFiltered.length ? custListFiltered : custListData).map(c=> c.phone).filter(Boolean);
+  if(!phones.length){ showToast('القائمة فاضية', 'err'); return; }
+  openRewardModal({ bulk:true, phones });
+}
+
 // ============ كتالوج العرض (منفصل عن المخزون — منتجات بصور + بانرات يدوي) ============
 // بيتخزّن في pos_test_settings/catalog_<brand> — كل فرع/براند له كتالوجه
 function catalogBrand(){ return GLOW_BRANCHES.includes(currentBranch) ? 'glow' : 'echarpe'; }
@@ -1131,6 +1180,7 @@ async function renderLegacySalesHistory(){
 
 // ---------------- Customer List ----------------
 let custListData = [];
+let custListFiltered = [];
 async function goToCustomerList(){
   showScreen('customerListScreen');
   const wrap = document.getElementById('customerListWrap');
@@ -1184,8 +1234,11 @@ function renderCustList(){
   else if(sort==='name') list.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
   if(list.length === 0){ wrap.innerHTML = '<div class="empty-cart">'+(q?'مفيش عميل بالبحث ده':'لسه مفيش عملاء مسجلين')+'</div>'; return; }
+  custListFiltered = list;   // للمكافأة الجماعية
 
-  wrap.innerHTML = list.map(c=>{
+  const bulkBtn = hasPerm('canEditInventory') ? `<button onclick="sendRewardToAllListed()" style="width:100%; margin-bottom:10px; padding:11px; border-radius:10px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer;">🎁 ابعت مكافأة لكل دول (${list.length} عميل)</button>` : '';
+
+  wrap.innerHTML = bulkBtn + list.map(c=>{
     const last = c._lastTs ? new Date(c._lastTs).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
     const hasCode = c.loyaltyCode ? `<span style="background:#eef; color:#5340c8; font-size:10px; font-weight:800; padding:2px 7px; border-radius:99px;">💳 ${c.loyaltyCode}</span>` : '';
     const hasPin = c.loyaltyPin ? '<span style="font-size:10px; color:var(--muted);">🔒 مؤمّن</span>' : '';
@@ -1748,7 +1801,7 @@ async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
   const newRow = document.getElementById('newCustomerRow');
-  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); renderCart(); return; }
+  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); custReward=null; renderCart(); return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     let ratingLine = '';
@@ -1775,14 +1828,31 @@ async function refreshCustomerInfo(){
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
       const _pr = d.pendingRedeem;
       const _base = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
+      // مكافأة خاصة صالحة؟
+      const _now = Date.now();
+      custReward = (d.rewards||[]).find(r=> r && !r.used && r.brand===_brand && (!r.expiry || r.expiry>_now)) || null;
+      let _rewardHtml = '';
+      if(custReward && !cart.some(l=>l.isRewardDiscount)){
+        const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
+        const okMin = cartTot >= (custReward.minInvoice||0);
+        const rTxt = custReward.type==='percent' ? `${custReward.value}% خصم` : `${custReward.value} ج.م خصم`;
+        const cond = custReward.minInvoice ? ` (لفاتورة ${custReward.minInvoice} ج.م أو أكتر)` : '';
+        _rewardHtml = `<div style="margin-top:8px; background:#fdeef5; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
+             <div style="font-weight:800; color:#b45309;">🎁 مكافأة خاصة: ${rTxt}${cond}</div>
+             ${okMin
+               ? `<button onclick="applyCustomerReward()" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق المكافأة</button>`
+               : `<div style="font-size:11px; color:var(--muted); margin-top:4px;">لسه محتاج فاتورة أكبر عشان تتفعّل</div>`}
+           </div>`;
+      }
       if(_pr && _pr.brand === _brand && _pr.points > 0 && !pendingRedemption){
         infoBox.innerHTML = _base +
           `<div style="margin-top:8px; background:#fff6e6; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
              <div style="font-weight:800; color:#b45309;">🎁 العميل طلب استبدال ${_pr.points} نقطة (خصم ${_pr.valueEGP} ج.م)</div>
              <button onclick="applyPendingRedeem(${_pr.points}, ${_pr.valueEGP})" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق الاستبدال</button>
-           </div>`;
+           </div>` + _rewardHtml;
       }else{
-        infoBox.textContent = _base;
+        if(_rewardHtml){ infoBox.innerHTML = _base + _rewardHtml; }
+        else infoBox.textContent = _base;
       }
       newRow.style.display = 'none';
       setCustBox(true);   // 🟢 عميل متسجّل ومختار → المربع ينوّر أخضر
@@ -1901,6 +1971,21 @@ async function openRedeemPoints(){
     renderCart();
     showToast(`اتخصم ${discountValue.toFixed(2)} ج.م مقابل ${pointsUsed} نقطة ✅`);
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
+
+// مكافأة خاصة العميل — تطبيق عند الدفع
+let custReward = null, appliedReward = null;
+function applyCustomerReward(){
+  if(!custReward) return;
+  const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
+  if(cartTot < (custReward.minInvoice||0)){ showToast('الفاتورة لسه أقل من الحد المطلوب', 'err'); return; }
+  if(cart.some(l=> l.isRewardDiscount)){ showToast('المكافأة مطبّقة بالفعل', 'err'); return; }
+  let disc = custReward.type==='percent' ? cartTot*(Number(custReward.value)/100) : Number(custReward.value);
+  disc = Math.min(disc, cartTot); disc = Math.round(disc*100)/100;
+  cart.push({ id:'__reward__', name:`🎁 مكافأة خاصة (${custReward.type==='percent'?custReward.value+'%':custReward.value+' ج.م'})`, price:-disc, qty:1, isRewardDiscount:true });
+  appliedReward = custReward;
+  renderCart(); refreshCustomerInfo();
+  showToast(`اتطبّقت المكافأة — خصم ${disc} ج.م 🎁`);
 }
 
 // بيطبّق طلب الاستبدال اللي العميل عمله من التطبيق (بيظهر أول ما نكتب رقمه)
@@ -2280,11 +2365,13 @@ async function confirmPayment(){
       };
       custUpdate[pf] = firebase.firestore.FieldValue.increment(netPointsChange);   // نقاط الفرع الصح
       if(pendingRedemption) custUpdate.pendingRedeem = firebase.firestore.FieldValue.delete();   // نمسح الطلب بعد ما اتنفّذ
+      if(appliedReward) custUpdate.rewards = firebase.firestore.FieldValue.arrayRemove(appliedReward);   // نمسح المكافأة اللي اتستخدمت
       cart.forEach(l=>{ if(l.offerApplied && l.barcode) custUpdate['activatedOffers.'+l.barcode] = firebase.firestore.FieldValue.delete(); });   // نمسح العروض اللي اتستخدمت
       if(custName) custUpdate.name = custName;
       await custRef.set(custUpdate, { merge: true });
     }
     pendingRedemption = null;
+    appliedReward = null; custReward = null;
 
     // 5) محاولة ربط العميل بأقرب تقييم لسه من غير عميل معروف في نفس الفرع (زمنيًا)
     if(phone){

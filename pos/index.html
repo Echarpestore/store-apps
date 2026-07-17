@@ -945,6 +945,28 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   </div>
 </div>
 
+<div class="modal-overlay" id="rewardModal">
+  <div class="modal-sheet">
+    <h3>🎁 ابعت مكافأة</h3>
+    <div id="rewardTargetLbl" style="font-size:13px; color:var(--muted); margin:-6px 0 12px;"></div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div style="display:flex; gap:8px;">
+        <select id="rwType" style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+          <option value="amount">مبلغ خصم (ج.م)</option>
+          <option value="percent">نسبة خصم (%)</option>
+        </select>
+        <input id="rwValue" type="number" placeholder="القيمة" style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      </div>
+      <input id="rwMin" type="number" placeholder="الحد الأدنى للفاتورة (ج.م) — اختياري" style="padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <input id="rwDays" type="number" placeholder="صالحة كام يوم (مثلاً 7)" value="7" style="padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+    </div>
+    <div class="modal-btns" style="margin-top:14px;">
+      <button class="btn-cancel" onclick="closeRewardModal()" style="flex:1;">إلغاء</button>
+      <button class="btn-ok" onclick="sendRewardConfirm()" style="flex:1;">ابعت المكافأة</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- Printable receipt template -->
