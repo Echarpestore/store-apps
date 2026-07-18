@@ -970,6 +970,12 @@ let _confirmSaving = false;
 async function confirmPayment(){
   if(_confirmSaving){ showToast('الفاتورة بتتحفظ... استنى ثانية', 'err'); return; }   // منع التكرار
   const _btn = document.getElementById('confirmPayBtn');
+  // حماية: نفس شروط الزرار بالظبط — لو معطّل يبقى السلة فاضية أو المدفوعات ناقصة
+  // (مهم للاختصار Shift+Enter اللي كان بيتخطى الزرار ويطبع فاتورة فاضية)
+  if(_btn && _btn.disabled){
+    showToast(cart.length ? '💳 كمّل المدفوعات الأول (F2 كاش · F3 فيزا · F4 انستا)' : '🛒 السلة فاضية — ضيف منتجات الأول', 'err');
+    return;
+  }
   _confirmSaving = true;
   if(_btn){ _btn.dataset.lbl = _btn.textContent; _btn.disabled = true; _btn.textContent = '⏳ بيحفظ...'; }
   try{
