@@ -20,6 +20,7 @@
 
 <!-- Firebase (compat — نفس إصدار الكاشير عشان يقرا نفس البيانات) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <style>
@@ -450,6 +451,16 @@ var firebaseConfig = {
   measurementId: "G-6K33TSHDZ6"
 };
 firebase.initializeApp(firebaseConfig);
+// تسجيل دخول مجهول — مطلوب لقواعد الأمان (بيتحفظ على الجهاز، ويعيد المحاولة أول ما النت يرجع)
+function ensureAnonAuth(){
+  try{
+    if(firebase.auth && !firebase.auth().currentUser){
+      firebase.auth().signInAnonymously().catch(function(e){ console.warn('anon auth', e && e.code); });
+    }
+  }catch(e){ console.warn('anon auth unavailable', e); }
+}
+ensureAnonAuth();
+window.addEventListener('online', ensureAnonAuth);
 var db = firebase.firestore();
 
 // أوفلاين قوي: البيانات محفوظة على الجهاز والتطبيق بيفتح حتى من غير نت
