@@ -114,8 +114,6 @@ const RECEIPT_ELEMENTS = [
   { id:'invoiceNo', label:'🔢 رقم الفاتورة',          kind:'auto', size:11 },
   { id:'barcode',   label:'⬛ باركود المرتجع',        kind:'auto' },
   { id:'appQR',     label:'📱 QR تحميل التطبيق (للعملاء الغير مسجّلين/من غير تطبيق)', kind:'auto', size:10 },
-  { id:'spacer',    label:'⬜ مسافة فارغة',           kind:'multi', size:8 },
-  { id:'divider',   label:'➖ خط فاصل',               kind:'multi', size:4 },
   { id:'footer',    label:'💬 رسالة الختام',          kind:'text', def:'شكرًا لتعاملكم معنا 🙏', size:11 }
 ];
 // 🏷️ مقاسات الليبل العالمية (Zebra وغيرها) بالمليمتر
@@ -227,7 +225,7 @@ async function renderReceiptDesignScreen(){
         <span style="position:absolute; top:2.5px; ${el.on?'left:18px;':'left:3px;'} width:15px; height:15px; border-radius:50%; background:#fff; transition:.15s;"></span>
       </label>
       <div style="flex:1; min-width:0;">
-        <div style="font-size:12.5px; font-weight:800;">${def.label} ${isMulti?`<button onclick="deleteReceiptEl(${i})" style="border:none; background:none; color:var(--bad); cursor:pointer; font-size:12px;">🗑️</button>`:''}</div>
+        <div style="font-size:12.5px; font-weight:800;">${def.label}</div>
         ${isText?`<input value="${(el.text||'').replace(/"/g,'&quot;')}" oninput="${togglePath}[${i}].text=this.value; ${refreshFn}();" placeholder="اكتب النص..." style="width:100%; margin-top:5px; ${S.ctl}">`:''}
       </div>
       ${isDyn?`<button onclick="removeReceiptDynEl(${i})" style="border:none; background:none; color:var(--bad); cursor:pointer; font-size:14px;">🗑️</button>`:''}
