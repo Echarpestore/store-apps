@@ -365,10 +365,16 @@
   <!-- BRANCH SETUP (first run on this device) -->
   <div id="branchSetup">
     <div class="branch-box">
-      <h3>اسم الفرع</h3>
-      <p class="sub">اكتب اسم الفرع مرة واحدة بس — الجهاز ده هيفتكره وهيشوف موظفين وترتيب الفرع ده بس</p>
-      <input id="branchInput" placeholder="مثلاً: فرع المعادي">
-      <button id="branchSaveBtn">حفظ</button>
+      <h3>إعداد الجهاز</h3>
+      <p class="sub">اكتب اسم الفرع + حساب الفرع (مرة واحدة بس) — الجهاز ده هيفتكرهم</p>
+      <select id="branchSelect" style="width:100%; padding:12px; border-radius:10px; margin-bottom:10px; text-align:center; font-family:inherit; font-size:14px;">
+        <option value="">جارٍ تحميل الفروع...</option>
+      </select>
+      <input id="branchInput" placeholder="اسم الفرع الجديد" style="display:none;">
+      <input id="branchEmail" type="email" placeholder="إيميل حساب الفرع" autocomplete="username" style="direction:ltr; text-align:center;">
+      <input id="branchPass" type="password" placeholder="الباسورد" autocomplete="current-password" style="direction:ltr; text-align:center;">
+      <div id="branchErr" style="color:var(--bad); font-size:12px; min-height:16px; margin-bottom:6px;"></div>
+      <button id="branchSaveBtn">دخول وحفظ</button>
     </div>
   </div>
 
@@ -790,6 +796,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -805,6 +812,10 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+// حساب الفرع (Email/Password) — نفس نظام الكاشير: الجهاز بيدخل مرة واحدة
+// وده اللي بيسمحله يكتب الحضور/النقط/المرتبات تحت قواعد الأمان الجديدة.
+const _auth = getAuth(app);
+setPersistence(_auth, browserLocalPersistence).catch(()=>{});
 const db = getFirestore(app);
 enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence not enabled:', err.code));
 
@@ -851,20 +862,50 @@ let taskSubmitEmpId = null;
 window.currentBranch = localStorage.getItem('sales_branch') || '';
 function refreshBranchUI(){
   $('#branchTag').textContent = '📍 ' + (window.currentBranch || '—');
-  if(!window.currentBranch){
+  const u = _auth.currentUser;
+  if(!window.currentBranch || !u || u.isAnonymous){
+    populateBranchSetupSelect();
     $('#branchSetup').classList.add('show');
   } else {
     $('#branchSetup').classList.remove('show');
   }
 }
-$('#branchSaveBtn').addEventListener('click', ()=>{
-  const val = $('#branchInput').value.trim();
-  if(!val) return;
-  window.currentBranch = val;
-  localStorage.setItem('sales_branch', val);
-  refreshBranchUI();
-  applyBranchFilter();
+// قايمة الفروع في شاشة الإعداد — من الموظفين المسجّلين + كاش محلي (لو القراءة مقفولة قبل الدخول)
+function populateBranchSetupSelect(){
+  const sel = $('#branchSelect'); if(!sel) return;
+  let branches = [...new Set(allEmployees.map(e=>e.branch).filter(Boolean))].sort();
+  if(branches.length){ try{ localStorage.setItem('sales_branch_list', JSON.stringify(branches)); }catch(e){} }
+  else { try{ branches = JSON.parse(localStorage.getItem('sales_branch_list')||'[]'); }catch(e){ branches=[]; } }
+  const saved = window.currentBranch || '';
+  sel.innerHTML = '<option value="">— اختار الفرع —</option>'
+    + branches.map(b=> `<option value="${b.replace(/"/g,'&quot;')}" ${b===saved?'selected':''}>${b}</option>`).join('')
+    + '<option value="__new__">➕ فرع جديد (اكتب الاسم)...</option>';
+  sel.onchange = ()=>{ $('#branchInput').style.display = (sel.value==='__new__') ? 'block' : 'none'; if(sel.value==='__new__') $('#branchInput').focus(); };
+  $('#branchInput').style.display = 'none';
+}
+$('#branchSaveBtn').addEventListener('click', async ()=>{
+  const selVal = $('#branchSelect') ? $('#branchSelect').value : '';
+  const val = (selVal && selVal !== '__new__') ? selVal : $('#branchInput').value.trim();
+  const email = ($('#branchEmail').value||'').trim();
+  const pass = $('#branchPass').value||'';
+  const err = $('#branchErr');
+  if(!val){ err.textContent='اكتب اسم الفرع'; return; }
+  if(!email || !pass){ err.textContent='اكتب إيميل وباسورد حساب الفرع'; return; }
+  err.textContent = 'جارٍ الدخول...';
+  try{
+    await signInWithEmailAndPassword(_auth, email, pass);
+    window.currentBranch = val;
+    localStorage.setItem('sales_branch', val);
+    err.textContent = '';
+    refreshBranchUI();
+    applyBranchFilter();
+  }catch(e){
+    err.textContent = (e && (e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found'))
+      ? 'الإيميل أو الباسورد غلط' : 'تعذر الدخول: ' + (e.message||e);
+  }
 });
+// لو الجلسة انتهت (اتمسحت من المتصفح)، نرجّع لشاشة الإعداد تلقائيًا
+onAuthStateChanged(_auth, ()=> refreshBranchUI());
 $('#changeBranchBtn').addEventListener('click', ()=>{
   $('#admin').classList.remove('show');
   $('#branchInput').value = window.currentBranch;
@@ -951,6 +992,7 @@ function initials(name){
 onSnapshot(empCol, (snap)=>{
   allEmployees = snap.docs.map(d=>({id:d.id, ...d.data()}));
   applyBranchFilter();
+  if($('#branchSetup').classList.contains('show')) populateBranchSetupSelect();   // الشاشة مفتوحة؟ حدّث القايمة
 }, (err)=> console.error('window.employees sync error', err));
 
 onSnapshot(pointsCol, (snap)=>{
