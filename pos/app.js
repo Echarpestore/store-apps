@@ -625,6 +625,52 @@ function _printBuiltReceipt(data, payments){
   }
 }
 
+// ---------------- ⌨️ اختصارات الكيبورد (شاشة البيع) ----------------
+// F1 أو Tab (بره الخانات): شاشة البيع من أي مكان
+// F2/F3/F4: كاش/فيزا/انستا (نفس ضغطة الأيقونة بالظبط) · F8: مسح المدفوعات · Shift+Enter: حفظ وطباعة
+function _onSaleScreen(){
+  const el = document.getElementById('saleScreen');
+  return !!(el && el.offsetParent !== null);
+}
+function _inTypingField(){
+  const a = document.activeElement;
+  return !!(a && (a.tagName==='INPUT' || a.tagName==='TEXTAREA' || a.tagName==='SELECT' || a.isContentEditable));
+}
+document.addEventListener('keydown', function(e){
+  // لازم يكون فيه موظف مسجّل دخول
+  if(typeof currentEmployee === 'undefined' || !currentEmployee) return;
+
+  // F1 — شاشة البيع من أي مكان
+  if(e.key === 'F1'){
+    e.preventDefault();
+    if(typeof resumeOrStartSale === 'function') resumeOrStartSale(); else showScreen('saleScreen');
+    return;
+  }
+  // Tab — نفس الشيء، بس لو مش واقف في خانة كتابة (وإلا يكمل تنقّل عادي)
+  if(e.key === 'Tab' && !_inTypingField()){
+    e.preventDefault();
+    if(typeof resumeOrStartSale === 'function') resumeOrStartSale(); else showScreen('saleScreen');
+    return;
+  }
+
+  // الباقي مخصوص لشاشة البيع بس
+  if(!_onSaleScreen()) return;
+
+  if(e.key === 'F2'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('cash'); return; }
+  if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('visa'); return; }
+  if(e.key === 'F4'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('instapay'); return; }
+  if(e.key === 'F8'){
+    e.preventDefault();
+    if(typeof resetPaymentUI==='function'){ resetPaymentUI(); showToast('اتمسحت المدفوعات 🧹'); }
+    return;
+  }
+  if(e.key === 'Enter' && e.shiftKey){
+    e.preventDefault();
+    if(typeof confirmPayment==='function') confirmPayment();
+    return;
+  }
+});
+
 // ---------------- Init ----------------
 (async function init(){
   ensureReceiptQrCached();   // نخزّن QR الفاتورة محليًا (مرة واحدة لكل جهاز/فرع)
