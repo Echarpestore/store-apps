@@ -1128,6 +1128,10 @@ async function renderReportsScreen(){
 
   if(currentReportType === 'receipt'){
     // 🧾 إيصال اليوم — ملخص على شكل إيصال
+    const _byDay = {};
+    sales.forEach(s=>{ const _t=s.createdAt&&s.createdAt.toMillis?s.createdAt.toMillis():null; if(_t==null) return; const _d=new Date(_t); const _k=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0'); _byDay[_k]=(_byDay[_k]||0)+(s.total||0); });
+    const _dayPts = Object.keys(_byDay).sort().map(k=>({label:k, short:k.slice(5), value:Math.max(0,_byDay[k])}));
+    const _trend = _dayPts.length>1 ? `<div class="rep-card" style="margin-top:12px;"><h3 style="font-size:13px; margin:0 0 6px; color:var(--muted);">📈 المبيعات على مدار الفترة</h3>${chartColumns(_dayPts,{fmt:v=>v.toFixed(0)})}</div>` : '';
     const methodLines = Object.keys(byMethod).length
       ? Object.keys(byMethod).map(m=>`<div class="rc-line"><span>${methodLabels[m]||m}</span><span>${byMethod[m].toFixed(2)}</span></div>`).join('')
       : '<div class="rc-line"><span>لا يوجد</span><span>0.00</span></div>';
@@ -1145,7 +1149,8 @@ async function renderReportsScreen(){
       <div class="rc-line"><span>عدد القطع المباعة</span><span>${itemsSold}</span></div>
       <div class="rc-line"><span>متوسط الفاتورة</span><span>${(invoiceCount? netTotal/invoiceCount : 0).toFixed(2)}</span></div>
     </div></div>
-    <div style="text-align:center; margin-top:14px;"><button class="rep-print-btn" onclick="printReportArea()">🖨️ طباعة الإيصال</button></div>`;
+    <div style="text-align:center; margin-top:14px;"><button class="rep-print-btn" onclick="printReportArea()">🖨️ طباعة الإيصال</button></div>
+    ${_trend}`;
   }
 
   else if(currentReportType === 'items'){
@@ -1156,6 +1161,7 @@ async function renderReportsScreen(){
     html = `<div id="repPrintArea"><div class="rep-card">
       <h2 style="margin:0 0 4px; font-size:16px;">📦 ملخص الأصناف — ${reportRangeLabel()}</h2>
       <div style="color:var(--muted); font-size:12px; margin-bottom:10px;">${currentBranch||''}</div>
+      ${rows.length? `<h3 style="font-size:13px; margin:4px 0 8px; color:var(--muted);">📊 أعلى الأصناف مبيعًا (بالقيمة)</h3>${chartBars(rows.slice(0,8).map(([n,d])=>({label:n, value:d.revenue})), {fmt:v=>v.toFixed(0)})}<div style="height:6px;"></div>`:''}
       <table class="rep-tbl"><thead><tr><th>الصنف</th><th class="num">الكمية</th><th class="num">الإجمالي</th></tr></thead><tbody>
       ${rows.length ? rows.map(([name,d])=>`<tr><td>${name}</td><td class="num">${d.qty}</td><td class="num">${d.revenue.toFixed(2)}</td></tr>`).join('')
                     : '<tr><td colspan="3" style="text-align:center; color:var(--muted); padding:16px;">لا يوجد مبيعات في الفترة دي</td></tr>'}
@@ -1171,6 +1177,7 @@ async function renderReportsScreen(){
     html = `<div id="repPrintArea"><div class="rep-card">
       <h2 style="margin:0 0 4px; font-size:16px;">💳 ملخص المدفوعات — ${reportRangeLabel()}</h2>
       <div style="color:var(--muted); font-size:12px; margin-bottom:10px;">${currentBranch||''}</div>
+      ${entries.length? `<div style="margin-bottom:14px;">${chartDonut(entries.map(m=>({label:methodLabels[m]||m, value:byMethod[m]})), {center:grand.toFixed(0), centerSub:'ج.م'})}</div>`:''}
       <table class="rep-tbl"><thead><tr><th>طريقة الدفع</th><th class="num">عدد الفواتير</th><th class="num">الإجمالي</th><th class="num">النسبة</th></tr></thead><tbody>
       ${entries.length ? entries.map(m=>`<tr><td>${methodLabels[m]||m}</td><td class="num">${methodCount[m]||0}</td><td class="num">${byMethod[m].toFixed(2)}</td><td class="num">${grand? Math.round(byMethod[m]/grand*100):0}%</td></tr>`).join('')
                        : '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:16px;">لا يوجد</td></tr>'}
@@ -1201,6 +1208,67 @@ function _sameBrandAsCurrent(branch){ return GLOW_BRANCHES.includes(branch||'') 
 function _isAppInfluencedSale(s){
   if((s.pointsRedeemed||0) > 0) return true;
   return (s.items||[]).some(it=> it.offerApplied || it.isRewardDiscount);
+}
+
+// ---- رسوم بيانية بسيطة (SVG/CSS خالص — من غير أي مكتبة خارجية عشان يشتغل أوفلاين) ----
+const CHART_COLORS = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
+
+// أعمدة أفقية (أصناف/عملاء/موظفين)
+function chartBars(items, opts){
+  opts = opts||{};
+  items = (items||[]).filter(x=> x && isFinite(x.value));
+  if(!items.length) return '<div style="color:var(--muted); font-size:12px; padding:8px 0;">لا يوجد بيانات</div>';
+  const max = Math.max(1, ...items.map(x=> Math.abs(x.value)));
+  return '<div style="margin:4px 0;">' + items.map((x,i)=>{
+    const bw = Math.round(Math.abs(x.value)/max*100);
+    const col = x.color || CHART_COLORS[i % CHART_COLORS.length];
+    return `<div style="display:flex; align-items:center; gap:8px; margin-bottom:7px;">
+      <div style="width:100px; font-size:11px; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${x.label}</div>
+      <div style="flex:1; background:var(--panel2); border-radius:99px; height:16px; overflow:hidden;"><div style="width:${bw}%; height:100%; background:${col}; border-radius:99px;"></div></div>
+      <div style="width:66px; font-size:11px; color:var(--muted); text-align:left;">${opts.fmt? opts.fmt(x.value): x.value}</div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+// أعمدة رأسية (المبيعات على مدار الأيام)
+function chartColumns(points, opts){
+  opts = opts||{};
+  points = points||[];
+  if(points.length < 2) return '';
+  const max = Math.max(1, ...points.map(p=> p.value));
+  const col = opts.color || '#3b82f6';
+  const bars = points.map(p=>{
+    const h = Math.max(3, Math.round(p.value/max*104));
+    return `<div style="flex:1; min-width:7px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:3px;" title="${p.label}: ${opts.fmt?opts.fmt(p.value):p.value}">
+      <div style="width:72%; max-width:24px; height:${h}px; background:${col}; border-radius:4px 4px 0 0;"></div>
+      <div style="font-size:8px; color:var(--muted); white-space:nowrap;">${p.short||''}</div>
+    </div>`;
+  }).join('');
+  return `<div style="display:flex; align-items:flex-end; gap:3px; height:130px; padding:6px 0; overflow-x:auto;">${bars}</div>`;
+}
+
+// دونات (نِسَب)
+function chartDonut(segments, opts){
+  opts = opts||{};
+  segments = (segments||[]).filter(s=> s && s.value>0);
+  const total = segments.reduce((a,s)=> a+s.value, 0);
+  if(!total) return '';
+  const r=54, cx=60, cy=60, sw=18, C=2*Math.PI*r;
+  let off=0;
+  const arcs = segments.map((s,i)=>{
+    const frac=s.value/total, col=s.color||CHART_COLORS[i%CHART_COLORS.length];
+    const arc = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-dasharray="${(frac*C).toFixed(2)} ${(C-frac*C).toFixed(2)}" stroke-dashoffset="${(-off*C).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    off+=frac; return arc;
+  }).join('');
+  const legend = segments.map((s,i)=>{
+    const col=s.color||CHART_COLORS[i%CHART_COLORS.length];
+    return `<div style="display:flex; align-items:center; gap:6px; font-size:11px; margin-bottom:5px;"><span style="width:11px; height:11px; border-radius:3px; background:${col};"></span><span style="flex:1;">${s.label}</span><span style="color:var(--muted); font-weight:700;">${Math.round(s.value/total*100)}%</span></div>`;
+  }).join('');
+  const center = (opts.center!=null) ? `<text x="${cx}" y="${cy-1}" text-anchor="middle" font-size="19" font-weight="800" fill="#1a1a1a">${opts.center}</text>${opts.centerSub?`<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="#8a8a80">${opts.centerSub}</text>`:''}` : '';
+  return `<div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+    <svg viewBox="0 0 120 120" width="120" height="120" style="flex-shrink:0;">${arcs}${center}</svg>
+    <div style="flex:1; min-width:130px;">${legend}</div>
+  </div>`;
 }
 
 // 👥 تحليلات العملاء + التطبيق (على كل تاريخ التعامل للبراند — مش متأثر بالفترة)
@@ -1280,7 +1348,13 @@ async function buildCustomersReport(){
       ${_repCard('مساهمة التطبيق (قيمة)', appShareValue+'%', appSalesValue.toFixed(0)+' ج.م')}
       ${_repCard('متوسط فاتورة (تطبيق)', appAOV.toFixed(0)+' ج.م', `مقابل ${noAOV.toFixed(0)} من غير تطبيق`)}
     </div>
+    <h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">📊 رسوم بيانية</h3>
+    <div style="display:flex; gap:18px; flex-wrap:wrap; margin-bottom:8px;">
+      <div style="flex:1; min-width:230px;"><div style="font-size:11px; color:var(--muted); margin-bottom:6px;">تكرار العملاء</div>${chartDonut([{label:'متكرر',value:repeatBuyers,color:'#22c55e'},{label:'مرة واحدة',value:oneTime,color:'#f59e0b'}], {center:repeatRate+'%', centerSub:'تكرار'})}</div>
+      <div style="flex:1; min-width:230px;"><div style="font-size:11px; color:var(--muted); margin-bottom:6px;">استخدام التطبيق</div>${chartDonut([{label:'بيستخدم التطبيق',value:appBuyers,color:'#3b82f6'},{label:'مش بيستخدم',value:Math.max(0,totalBuyers-appBuyers),color:'#94a3b8'}], {center:adoption+'%'})}</div>
+    </div>
     ${top.length?`<h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">🏆 أكتر 5 عملاء إنفاقًا</h3>
+    ${chartBars(top.map(t=>({label:t.name, value:t.spend})), {fmt:v=>v.toFixed(0)})}
     <table class="rep-tbl"><thead><tr><th>العميل</th><th class="num">فواتير</th><th class="num">إجمالي الإنفاق</th></tr></thead><tbody>
     ${top.map(t=>`<tr><td>${t.name} <span style="color:var(--muted); font-size:10px; direction:ltr;">${t.p}</span></td><td class="num">${t.n}</td><td class="num">${t.spend.toFixed(2)}</td></tr>`).join('')}
     </tbody></table>`:''}
@@ -1321,7 +1395,10 @@ async function buildRatingsReport(from, to){
       ${_repCard('متوسط التقييم', avg.toFixed(2)+' / 4')}
       ${_repCard('نسبة الرضا', satPct+'%', 'كويس أو عجبهم جدًا')}
     </div>
-    <div style="margin-bottom:8px;">${bar(4)}${bar(3)}${bar(2)}${bar(1)}</div>
+    <div style="display:flex; gap:18px; flex-wrap:wrap; margin-bottom:12px;">
+      <div style="flex:1; min-width:230px;">${chartDonut([{label:'😍 عجبهم جدًا',value:dist[4],color:'#22c55e'},{label:'🙂 كويس',value:dist[3],color:'#84cc16'},{label:'🙁 مش عاجبهم',value:dist[2],color:'#f59e0b'},{label:'😠 مضايقهم',value:dist[1],color:'#ef4444'}], {center:avg.toFixed(1), centerSub:'من 4'})}</div>
+      <div style="flex:1; min-width:230px;">${bar(4)}${bar(3)}${bar(2)}${bar(1)}</div>
+    </div>
     ${empRows.length? `<h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">التقييم حسب الموظف</h3>
       <table class="rep-tbl"><thead><tr><th>الموظف</th><th class="num">عدد</th><th class="num">متوسط</th></tr></thead><tbody>
       ${empRows.map(([n,d])=>`<tr><td>${n}</td><td class="num">${d.n}</td><td class="num">${(d.sum/d.n).toFixed(2)}</td></tr>`).join('')}
@@ -1371,6 +1448,9 @@ async function buildStaffReport(from, to, periodSales){
       ${_repCard('إجمالي ساعات العمل', totalHours.toFixed(1)+' س')}
       ${_repCard('حاضرين دلوقتي', openNow)}
     </div>
+    <h3 style="font-size:13px; margin:4px 0 8px; color:var(--muted);">⏱️ ساعات العمل لكل موظف</h3>
+    ${chartBars(rows.map(([id,d])=>({label:d.name, value:Math.round(d.hours*10)/10})), {fmt:v=>v.toFixed(1)+'س'})}
+    <div style="height:6px;"></div>
     <div style="overflow-x:auto;"><table class="rep-tbl"><thead><tr><th>الموظف</th><th class="num">أيام</th><th class="num">ساعات</th><th class="num">فواتيره</th><th class="num">مبيعاته</th></tr></thead><tbody>
       ${rows.map(([id,d])=>{ const sb = salesByEmp[id]||{count:0,total:0}; return `<tr><td>${d.name}${d.open?' <span style="color:#22c55e; font-size:10px;">● حاضر</span>':''}</td><td class="num">${d.days.size}</td><td class="num">${d.hours.toFixed(1)}</td><td class="num">${sb.count}</td><td class="num">${sb.total.toFixed(0)}</td></tr>`; }).join('')}
     </tbody></table></div>
