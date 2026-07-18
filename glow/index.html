@@ -435,8 +435,8 @@
   <div id="installBanner">
     <div class="ib-ico"><img id="ibLogo" alt=""></div>
     <div class="ib-txt">
-      <div class="ib-t">نزّلي تطبيق Glow 📲</div>
-      <div class="ib-d" id="ibDesc">ثبّتيه على موبايلك عشان توصليله بضغطة</div>
+      <div class="ib-t">ضيفي Glow على شاشتك 📲</div>
+      <div class="ib-d" id="ibDesc">أسرع في الفتح، وأول مين يعرف العروض والمكافآت الجديدة 🎁</div>
     </div>
     <button class="ib-btn" id="ibBtn" onclick="triggerInstall()">تثبيت</button>
     <button class="ib-x" onclick="dismissInstall()" aria-label="إغلاق">✕</button>
@@ -1265,10 +1265,10 @@ function showInstallBanner(mode){
   $('ibLogo').src = logoSrc;
   if(mode === 'ios'){
     b.classList.add('ios');
-    $('ibDesc').innerHTML = 'دوسي مشاركة <b>⬆️</b> تحت، بعدين <b>«إضافة إلى الشاشة الرئيسية»</b>';
+    $('ibDesc').innerHTML = 'عشان توصلك العروض أول ما تنزل: دوسي مشاركة <b>⬆️</b> تحت، بعدين <b>«إضافة إلى الشاشة الرئيسية»</b>';
   }else{
     b.classList.remove('ios');
-    $('ibDesc').textContent = 'ثبّتيه على موبايلك عشان توصليله بضغطة';
+    $('ibDesc').textContent = 'أسرع في الفتح، وأول مين يعرف العروض والمكافآت الجديدة 🎁';
   }
   requestAnimationFrame(function(){ b.classList.add('show'); });
 }
