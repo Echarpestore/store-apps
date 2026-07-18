@@ -301,12 +301,12 @@ async function buildCustomersReport(){
     ]);
     sales = ss.docs.map(d=>d.data()).filter(s=> !s.reversed && _sameBrandAsCurrent(s.branch));
     customers = cs.docs.map(d=> Object.assign({ _id:d.id }, d.data()));
-  }catch(e){ return `<div class="rep-card"><div style="color:var(--muted); text-align:center; padding:20px;">تعذر التحميل: ${e.message}</div></div>`; }
+  }catch(e){ return `<div class="rep-card"><div style="color:var(--muted); text-align:center; padding:20px;">تعذر التحميل: ${e.message}</div></div>${sourcesSection}`; }
 
   const isGlow = GLOW_BRANCHES.includes(currentBranch);
   const brandCode = isGlow ? 'loyaltyCode_glow' : 'loyaltyCode';
   const custByPhone = {}; customers.forEach(c=>{ custByPhone[c.phone || c._id] = c; });
-  const isAppUser = (c)=> !!c && (!!c.loyaltyPin || !!c[brandCode] || c.source==='loyalty_app');
+  const isAppUser = (c)=> !!c && (!!c.loyaltyPin || !!c[brandCode] || /^(loyalty|glow)_app/.test(String(c.source||'')));
 
   const byPhone = {}, spendByPhone = {};
   let appSalesCount=0, appSalesValue=0, allSalesValue=0, allSalesCount=0;
@@ -333,6 +333,37 @@ async function buildCustomersReport(){
   const repeatBuyers = buyers.filter(p=> byPhone[p].length >= 2).length;
   const oneTime = totalBuyers - repeatBuyers;
   const repeatRate = totalBuyers ? Math.round(repeatBuyers/totalBuyers*100) : 0;
+
+  // 📱 مصادر العملاء — مين جه منين (ملصق QR كل فرع / QR الفاتورة / التطبيق مباشرة / الكاشير)
+  const brandPrefix = isGlow ? 'glow_app' : 'loyalty_app';
+  const srcCounts = {};
+  customers.forEach(c=>{
+    const s = String(c.source||'');
+    let label;
+    if(!s){ label = '🧾 تسجيل من الكاشير'; }
+    else if(s.indexOf(brandPrefix) === 0){
+      const tag = s.indexOf(':')>=0 ? s.slice(s.indexOf(':')+1) : '';
+      if(/^qr-rcpt-/i.test(tag)) label = '🧾📱 QR الفاتورة — ' + tag.replace(/^qr-rcpt-/i,'').replace(/-/g,' ');
+      else if(/^qr-/i.test(tag)) label = '🪧 ملصق QR — ' + tag.replace(/^qr-/i,'').replace(/-/g,' ');
+      else label = '📱 التطبيق مباشرة';
+    }
+    else if(/^(loyalty|glow)_app/.test(s)) return;   // عميل البراند التاني — مش بتاعنا
+    else label = '🧾 تسجيل من الكاشير';
+    srcCounts[label] = (srcCounts[label]||0) + 1;
+  });
+  const srcRows = Object.entries(srcCounts).sort((a,b)=> b[1]-a[1]);
+  const srcTotal = srcRows.reduce((s,r)=> s+r[1], 0) || 1;
+  const sourcesSection = srcRows.length ? `
+    <div class="rep-card" style="margin-top:12px;">
+      <div style="font-weight:800; margin-bottom:4px;">📍 العملاء جم منين؟</div>
+      <div style="font-size:11px; color:var(--muted); margin-bottom:10px;">قياس فعالية ملصقات الـ QR وفواتير كل فرع (بيتحدث مع كل عميل جديد)</div>
+      ${srcRows.map(([label,n])=>{
+        const pct = Math.round(n/srcTotal*100);
+        return `<div style="margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px;"><span>${label}</span><b>${n} <span style="color:var(--muted); font-weight:400;">(${pct}%)</span></b></div>
+          <div style="background:var(--panel2); border-radius:6px; height:8px; overflow:hidden;"><div style="width:${pct}%; height:100%; background:linear-gradient(90deg,#818cf8,#22d3ee);"></div></div>
+        </div>`;}).join('')}
+    </div>` : '';
 
   let gapSum=0, gapCount=0;
   buyers.forEach(p=>{ const ts = byPhone[p].slice().sort((a,b)=>a-b); for(let i=1;i<ts.length;i++){ gapSum += (ts[i]-ts[i-1]); gapCount++; } });
