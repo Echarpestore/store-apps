@@ -1,4 +1,4 @@
-const CACHE_NAME = 'glow-loyalty-v16';
+const CACHE_NAME = 'glow-loyalty-v18';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

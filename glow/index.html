@@ -269,11 +269,13 @@
     border-top:1px solid var(--line); display:flex; padding:9px 8px calc(9px + env(safe-area-inset-bottom));
     z-index:40;
   }
-  .tab{flex:1; background:none; border:none; padding:6px 0; display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted);}
+  .tab{flex:1; position:relative; background:none; border:none; padding:6px 0; display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted);}
   .tab .ti{font-size:22px; line-height:1;}
   .tab .tl{font-size:11px; font-weight:700;}
   .tab.active{color:var(--pink);}
   .tab.active .ti{transform:translateY(-1px);}
+  .tab-badge{position:absolute; top:1px; left:calc(50% + 4px); min-width:16px; height:16px; padding:0 4px; border-radius:99px; background:#ef4444; color:#fff; font-size:9px; font-weight:800; line-height:16px; text-align:center; display:none; box-shadow:0 0 0 2px var(--white);}
+  .tab-badge.show{display:block;}
 
   .empty{text-align:center; padding:44px 20px; color:var(--muted); font-weight:600; font-size:14.5px; line-height:1.9;}
   .empty .big{font-size:40px; display:block; margin-bottom:12px;}
@@ -330,7 +332,7 @@
     transition:transform .45s cubic-bezier(.2,.75,.25,1), opacity .35s;
   }
   #installBanner.show{ transform:translateX(-50%) translateY(0); opacity:1; }
-  #installBanner .ib-ico{width:58px; height:44px; border-radius:12px; background:#141210; border:1px solid var(--line); flex-shrink:0; display:flex; align-items:center; justify-content:center;}
+  #installBanner .ib-ico{width:58px; height:44px; border-radius:12px; background:var(--white); border:1px solid var(--line); flex-shrink:0; display:flex; align-items:center; justify-content:center;}
   #installBanner .ib-ico img{width:48px; height:auto;}
   #installBanner .ib-txt{flex:1; min-width:0;}
   #installBanner .ib-t{font-weight:800; font-size:14.5px;}
@@ -416,8 +418,8 @@
   <!-- تبويبات -->
   <nav class="tabbar" id="tabbar" style="display:none;">
     <button class="tab active" data-tab="card"><span class="ti">⭐</span><span class="tl">نقاطي</span></button>
-    <button class="tab" data-tab="offers"><span class="ti">🏆</span><span class="tl">مكافآت</span></button>
-    <button class="tab" data-tab="products"><span class="ti">👜</span><span class="tl">تشكيلتنا</span></button>
+    <button class="tab" data-tab="offers"><span class="ti">🏆</span><span class="tl">مكافآت</span><span class="tab-badge" id="badge-offers"></span></button>
+    <button class="tab" data-tab="products"><span class="ti">👜</span><span class="tl">آخر العروض</span><span class="tab-badge" id="badge-products"></span></button>
     <button class="tab" data-tab="invoices"><span class="ti">🛒</span><span class="tl">مشترياتي</span></button>
     <button class="tab" data-tab="account"><span class="ti">✦</span><span class="tl">حسابي</span></button>
     <button class="tab" data-tab="contact"><span class="ti">💬</span><span class="tl">تواصل</span></button>
@@ -740,6 +742,7 @@ function enterApp(phone){
   $('waTop').style.display = hasSupport() ? 'flex' : 'none';
   dataOffers = null; dataProducts = null; dataInvoices = null; tabStarted = {};   // تبويبات جديدة لكل جلسة، تتحمّل كسول عند فتحها
   switchTab('card');
+  loadBadgeSources();   // تحميل مصادر الشارات (عروض/تشكيلة) مرة واحدة للجلسة
 
   if(custUnsub){ custUnsub(); }
   custUnsub = db.collection(COL_CUSTOMERS).doc(phone).onSnapshot(function(doc){
@@ -750,6 +753,7 @@ function enterApp(phone){
     $('topName').textContent = firstName(currentCustomer.name);
     if(!currentCustomer.loyaltyCode_glow){ ensureLoyaltyCode(phone); } // عميل قديم من غير كود؟ نولّدله
     renderCard();
+    refreshBadges();   // مكافأة جديدة اتبعتت؟ الشارة تظهر لايف
     // لو التبويب المفتوح هو الحساب، نحدّثه كمان
     if($('tab-account').style.display !== 'none') renderAccount();
   }, function(err){ console.warn('customer sync', err); });
@@ -840,11 +844,65 @@ function switchTab(tab){
   else if(tab==='account') renderAccount();
   else if(tab==='contact') renderContact();
   // البطاقة بتتحدّث لايف من onSnapshot
+  if(tab==='offers' || tab==='products') markTabSeen(tab);   // فتح التبويب = اتشاف → الشارة تختفي
+  refreshBadges();
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.tab').forEach(function(b){
   b.addEventListener('click', function(){ switchTab(b.dataset.tab); });
 });
+
+/* ============================================================
+   شارات "جديد" على التبويبات (مكافآت/عروض + آخر العروض)
+   محليًا بالكامل — localStorage لكل عميل، تختفي أول ما يفتح التبويب
+   ============================================================ */
+var _badgeOfferIds = null, _badgeProductIds = null;
+function _seenKey(tab){ return 'glow_seen_' + tab + '_' + (currentCustomer ? currentCustomer.phone : ''); }
+function _getSeen(tab){ try{ return JSON.parse(localStorage.getItem(_seenKey(tab)) || '[]'); }catch(e){ return []; } }
+function _saveSeen(tab, ids){ try{ localStorage.setItem(_seenKey(tab), JSON.stringify(ids)); }catch(e){} }
+function _rewardIds(){
+  var now = Date.now();
+  return (currentCustomer && currentCustomer.rewards ? currentCustomer.rewards : [])
+    .filter(function(r){ return r && !r.used && r.brand===CATALOG_BRAND && (!r.expiry || r.expiry>now); })
+    .map(function(r){ return 'r:'+(r.id||r.ts); });
+}
+function setTabBadge(tab, count){
+  var el = $('badge-'+tab); if(!el) return;
+  if(count>0){ el.textContent = count>9?'9+':String(count); el.classList.add('show'); }
+  else el.classList.remove('show');
+}
+function refreshBadges(){
+  if(!currentCustomer) return;
+  var offerDomain = _rewardIds().concat(_badgeOfferIds||[]);
+  var seenOff = _getSeen('offers');
+  var newOff = offerDomain.filter(function(id){ return seenOff.indexOf(id)<0; }).length;
+  setTabBadge('offers', currentTab==='offers' ? 0 : newOff);
+  var seenPr = _getSeen('products');
+  var newPr = (_badgeProductIds||[]).filter(function(id){ return seenPr.indexOf(id)<0; }).length;
+  setTabBadge('products', currentTab==='products' ? 0 : newPr);
+}
+function markTabSeen(tab){
+  if(!currentCustomer) return;
+  if(tab==='offers') _saveSeen('offers', _rewardIds().concat(_badgeOfferIds||[]));
+  else if(tab==='products') _saveSeen('products', (_badgeProductIds||[]));
+  setTabBadge(tab, 0);
+}
+// تحميل معرّفات العروض والتشكيلة مرة واحدة للشارات (خفيف)
+function loadBadgeSources(){
+  var _brand = (typeof BRAND!=='undefined') ? BRAND : 'Glow';
+  db.collection(COL_DISCOUNTS).limit(60).get().then(function(snap){
+    _badgeOfferIds = snap.docs
+      .filter(function(d){ var o=d.data()||{}; return !o.branch || o.branch === _brand; })
+      .map(function(d){ return 'o:'+d.id; });
+    refreshBadges();
+  }).catch(function(){ _badgeOfferIds = []; });
+  db.collection(COL_SETTINGS).doc('catalog_'+CATALOG_BRAND).get().then(function(d){
+    var data = d.exists ? (d.data()||{}) : {};
+    var items = Array.isArray(data.items) ? data.items : [];
+    _badgeProductIds = items.map(function(p,i){ return 'p:'+(p.id||p.barcode||p.name||i); });
+    refreshBadges();
+  }).catch(function(){ _badgeProductIds = []; });
+}
 
 /* ============================================================
    تبويب البطاقة
@@ -1093,8 +1151,8 @@ function activateOffer(barcode, type, value, maxUses, validDays){
 }
 function renderProducts(){
   var box = $('tab-products');
-  var head = '<div class="sec-h">تشكيلة <span class="em">Glow</span></div>';
-  if(dataProducts === null){ box.innerHTML = head + loaderHTML('بنجيب التشكيلة...'); return; }
+  var head = '<div class="sec-h">آخر عروض <span class="em">Glow</span></div>';
+  if(dataProducts === null){ box.innerHTML = head + loaderHTML('بنجيب أحدث العروض...'); return; }
   var banners = (catalogBanners||[]).map(function(b){
     return '<img src="'+esc(b.img||'')+'" style="width:100%; border-radius:16px; margin-bottom:12px; display:block;">';
   }).join('');
