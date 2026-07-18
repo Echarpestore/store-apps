@@ -653,7 +653,7 @@ function printPriceLabel(id){
       .shop{font-size:11px; color:#666; margin-bottom:4px;}
       h2{margin:4px 0; font-size:16px;} .price{font-size:26px; font-weight:900; margin:6px 0;}
     </style></head><body>
-      ${c.labelShopName ? `<div class="shop">${c.shopName}</div>` : ''}
+      ${c.labelShopName ? `<div class="shop">${c.shopName || ((c.elements||[]).find(e=>e.id==='shopName')||{}).text || ''}</div>` : ''}
       <h2>${it.name}</h2>
       <div class="price">${it.price} ج.م</div>
       ${c.showBarcodeOnLabel && it.barcode ? '<svg id="lblBarcode"></svg>' : ''}
