@@ -78,11 +78,13 @@ firebase.auth().onAuthStateChanged(function(u){
       // الجلسة انتهت/اتمسحت → نطلب دخول حساب الفرع تاني (اسم الفرع محفوظ أصلاً)
       document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
       bs.classList.add('active');
-      var bi = document.getElementById('branchSetupInput'); if(bi && currentBranch) bi.value = currentBranch;
+      if(typeof loadBranchSetupOptions === 'function') setTimeout(loadBranchSetupOptions, 50);
     }
   }
 });
 const db = firebase.firestore();
+// قايمة الفروع في شاشة الإعداد بتتحمّل عند فتح الصفحة (لو الشاشة ظاهرة)
+setTimeout(function(){ if(typeof loadBranchSetupOptions === 'function' && document.querySelector('#branchSetupScreen.active')) loadBranchSetupOptions(); }, 300);
 
 // ============================================================
 // وضع الأوفلاين القوي: البيع لازم يفضل شغال حتى لو النت اتقطع.
@@ -115,8 +117,46 @@ window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
 
+// بيحمّل أسماء الفروع المعتمدة (من الموظفين المسجّلين) لقايمة اختيار الفرع —
+// عشان نمنع أخطاء الكتابة اليدوية اللي بتعمل "فرع جديد" بالغلط
+async function loadBranchSetupOptions(){
+  const sel = document.getElementById('branchSetupSelect');
+  if(!sel) return;
+  let branches = [];
+  try{
+    const snap = await db.collection(EMPLOYEES_COLLECTION).get();
+    const set = new Set();
+    snap.docs.forEach(d=>{ const b=((d.data().branch)||'').trim(); if(b) set.add(b); });
+    GLOW_BRANCHES.forEach(b=> set.add(b));
+    branches = [...set].sort((a,b)=> a.localeCompare(b,'ar'));
+    try{ localStorage.setItem('pos_branch_list', JSON.stringify(branches)); }catch(e){}
+  }catch(e){
+    // القراءة اترفضت (قواعد الأمان قبل الدخول) أو مفيش نت → نستخدم القايمة المحفوظة من آخر مرة
+    try{ branches = JSON.parse(localStorage.getItem('pos_branch_list') || '[]'); }catch(e2){ branches = []; }
+    if(!branches.length) branches = [...GLOW_BRANCHES];
+  }
+  const saved = localStorage.getItem('pos_branch') || '';
+  sel.innerHTML = '<option value="">— اختار الفرع —</option>'
+    + branches.map(b=> `<option value="${b.replace(/"/g,'&quot;')}" ${b===saved?'selected':''}>${b}</option>`).join('')
+    + '<option value="__new__">➕ فرع جديد (اكتب الاسم)...</option>';
+  onBranchSetupSelect();
+}
+function onBranchSetupSelect(){
+  const sel = document.getElementById('branchSetupSelect');
+  const inp = document.getElementById('branchSetupInput');
+  if(!sel || !inp) return;
+  inp.style.display = (sel.value === '__new__') ? 'block' : 'none';
+  if(sel.value === '__new__') inp.focus();
+}
+function getBranchSetupValue(){
+  const sel = document.getElementById('branchSetupSelect');
+  const inp = document.getElementById('branchSetupInput');
+  if(sel && sel.value && sel.value !== '__new__') return sel.value;
+  return (inp?.value || '').trim();
+}
+
 async function saveBranchSetup(){
-  const val = document.getElementById('branchSetupInput').value.trim();
+  const val = getBranchSetupValue();
   const email = (document.getElementById('branchSetupEmail')?.value || '').trim();
   const pass = document.getElementById('branchSetupPass')?.value || '';
   const errBox = document.getElementById('branchSetupErr');

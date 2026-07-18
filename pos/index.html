@@ -414,7 +414,10 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   <div class="pin-box">
     <h2>إعداد الجهاز</h2>
     <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">اكتب اسم الفرع بالظبط زي ما مسجل في نظام المبيعات + حساب الفرع (بيتعمل مرة واحدة على الجهاز ده).</p>
-    <input id="branchSetupInput" placeholder="اسم الفرع — مثلاً: Glow" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:15px; text-align:center; margin-bottom:10px;">
+    <select id="branchSetupSelect" onchange="onBranchSetupSelect()" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:15px; text-align:center; margin-bottom:10px;">
+      <option value="">جارٍ تحميل الفروع...</option>
+    </select>
+    <input id="branchSetupInput" placeholder="اسم الفرع الجديد" style="display:none; width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:15px; text-align:center; margin-bottom:10px;">
     <input id="branchSetupEmail" type="email" placeholder="إيميل حساب الفرع" autocomplete="username" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; text-align:center; margin-bottom:10px; direction:ltr;">
     <input id="branchSetupPass" type="password" placeholder="الباسورد" autocomplete="current-password" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; text-align:center; margin-bottom:12px; direction:ltr;">
     <div class="login-err" id="branchSetupErr" style="margin-bottom:8px;"></div>
