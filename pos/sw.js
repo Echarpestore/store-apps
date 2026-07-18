@@ -1,4 +1,4 @@
-const CACHE_NAME = 'echarpe-loyalty-v24';
+const CACHE_NAME = 'store-apps-shell-v49';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -17,8 +17,9 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  // نتعامل بس مع ملفات موقعنا (HTML, manifest, icons).
-  // أي حاجة تانية (Firebase/Firestore, Google Fonts, JsBarcode) نسيبها تعدي عادي.
+  // Only handle our own site's files (HTML, manifest, icons).
+  // Everything else (Firebase/Firestore calls, Google Fonts, etc.)
+  // is left completely alone.
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(

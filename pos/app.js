@@ -1219,7 +1219,7 @@ function goToSale(){
   editingHeldId = null;
   cart = [];
   selectedCartIdx = null;
-  pendingRedemption = null;
+  clearCustomerContext();   // نصفّي سياق العميل بالكامل (استبدال/مكافأة/عروض) عشان الفاتورة الجديدة تبدأ نضيفة
   // تحميل الخصومات السارية عشان تتطبق تلقائي وقت إضافة الأصناف
   if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
   loadLoyaltyRedemptionConfig();
@@ -1736,18 +1736,32 @@ function revertCustomerOffers(){
 // ============ هولد سريع بمكانين (محلي، من غير خروج من الشاشة) ============
 let holdSlots = [null, null];
 
+// بيصفّر سياق العميل المرتبط بالفاتورة (استبدال نقط / مكافأة / عروض مفعّلة)
+// مهم: عشان ما يتسربش لفاتورة تانية بعد Hold أو بدء فاتورة جديدة
+function clearCustomerContext(){
+  if(typeof pendingRedemption   !== 'undefined') pendingRedemption   = null;
+  if(typeof appliedReward       !== 'undefined') appliedReward       = null;
+  if(typeof custBaseText        !== 'undefined') custBaseText        = '';
+  if(typeof custPendingRedeem   !== 'undefined') custPendingRedeem   = null;
+  if(typeof custReward          !== 'undefined') custReward          = null;
+  if(typeof custActivatedOffers !== 'undefined') custActivatedOffers = {};
+}
+
 function captureSaleState(){
   return {
     items: cart,
     customerPhone: (document.getElementById('customerPhone')?.value || '').trim(),
     customerName: (document.getElementById('customerName')?.value || '').trim(),
-    total: cart.reduce((s,c)=> s + c.price*c.qty, 0)
+    total: cart.reduce((s,c)=> s + c.price*c.qty, 0),
+    // سياق الفاتورة دي يتحفظ معاها عشان ما يختلطش مع فاتورة/هولد تاني
+    pendingRedemption: (typeof pendingRedemption !== 'undefined') ? pendingRedemption : null,
+    appliedReward:     (typeof appliedReward     !== 'undefined') ? appliedReward     : null
   };
 }
 function clearSaleState(){
   cart = [];
   selectedCartIdx = null;
-  if(typeof pendingRedemption !== 'undefined') pendingRedemption = null;
+  clearCustomerContext();
   const ph = document.getElementById('customerPhone'); if(ph) ph.value = '';
   const cn = document.getElementById('customerName'); if(cn) cn.value = '';
   const ci = document.getElementById('customerInfo'); if(ci) ci.textContent = '';
@@ -1757,8 +1771,13 @@ function clearSaleState(){
 function restoreSaleState(s){
   cart = s.items || [];
   selectedCartIdx = null;
+  // نصفّر أي بقايا من الفاتورة اللي كانت مفتوحة قبلها، وبعدين نرجّع سياق الفاتورة دي بالظبط
+  clearCustomerContext();
+  if(typeof pendingRedemption !== 'undefined') pendingRedemption = s.pendingRedemption || null;
+  if(typeof appliedReward     !== 'undefined') appliedReward     = s.appliedReward     || null;
   const ph = document.getElementById('customerPhone'); if(ph) ph.value = s.customerPhone || '';
   const cn = document.getElementById('customerName'); if(cn) cn.value = s.customerName || '';
+  // لو الفاتورة عليها عميل، نعيد تحميل بياناته من الداتابيز (بيرجّع custBaseText/العروض/المكافأة صح)
   if(s.customerPhone && typeof refreshCustomerInfo === 'function'){ refreshCustomerInfo(); }
   else { const ci = document.getElementById('customerInfo'); if(ci) ci.textContent=''; if(typeof setCustBox==='function') setCustBox(false); }
   if(typeof resetPaymentUI === 'function') resetPaymentUI();
@@ -1873,6 +1892,25 @@ async function openInvoiceForReturn(code){
     }
     returnInvoiceData = { id: doc.id, ...s };
 
+    // نربط العميل بتاع الفاتورة الأصلية تلقائيًا — عشان المرتجع يتسجّل على حسابه ويظهر في فواتيره (وتتخصم نقطه صح)
+    // ملاحظة: بنملأ الخانة بس ومش بننادي refreshCustomerInfo عشان ما نطبّقش عروض/مكافآت على فاتورة مرتجع
+    let customerBanner = '';
+    if(s.customerPhone){
+      const _ph = document.getElementById('customerPhone'); if(_ph) _ph.value = s.customerPhone;
+      const _cn = document.getElementById('customerName');  if(_cn) _cn.value  = s.customerName || '';
+      if(typeof setCustBox === 'function') setCustBox(true);
+      const _ci = document.getElementById('customerInfo');
+      if(_ci) _ci.textContent = '↩️ مرتجع — هيتسجّل على حساب ' + (s.customerName || s.customerPhone);
+      customerBanner = `<div style="background:#eafaf0; border:1.5px solid #86efac; border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12.5px;">
+        👤 <b>${s.customerName || 'عميل'}</b> — <span style="direction:ltr; unicode-bidi:embed;">${s.customerPhone}</span>
+        <div style="color:#15803d; font-weight:700; margin-top:3px;">✔️ المرتجع هيتسجّل على حساب العميل ده تلقائيًا</div>
+      </div>`;
+    } else {
+      customerBanner = `<div style="background:#fff6e6; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12.5px; color:#b45309;">
+        ℹ️ الفاتورة دي مالهاش عميل مسجّل — المرتجع مش هيتربط بحساب. تقدر تكتب رقم عميل في الخانة لو حابب.
+      </div>`;
+    }
+
     const saleMs = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : (s.createdAt && s.createdAt.seconds ? s.createdAt.seconds*1000 : 0);
     const dateStr = saleMs ? new Date(saleMs).toLocaleString('ar-EG', {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
     const daysAgo = saleMs ? Math.floor((Date.now() - saleMs) / 86400000) : 0;
@@ -1903,6 +1941,7 @@ async function openInvoiceForReturn(code){
         <div style="color:var(--muted); font-size:12px; margin-bottom:8px;">📅 ${dateStr} · من ${daysAgo} يوم</div>
         ${windowBadge}
       </div>
+      ${customerBanner}
       ${alreadyReversed}
       <div style="font-weight:800; font-size:13px; margin-bottom:4px;">اختار الصنف اللي عايز ترجعه:</div>
       ${itemsHtml || '<div class="empty-cart">مفيش أصناف</div>'}
