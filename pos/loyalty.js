@@ -78,6 +78,23 @@ async function renderLoyaltyScreen(){
     ${welcomeCard('echarpe', 'إيشارب', we)}
     ${welcomeCard('glow', 'Glow', wg)}
 
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
+      <div style="font-weight:800; margin-bottom:4px;">📱 كود QR لتحميل التطبيق</div>
+      <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">اطبعه وحطه عند الكاشير والفتارين — العميل يمسحه، التطبيق يفتح، والبانر يقترح التثبيت فورًا مع مكافأة الترحيب. الكود بيتعلّم بالفرع عشان تعرف من التقارير مين جه منين.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+        <select id="qrApp" style="flex:1; min-width:130px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+          <option value="loyalty">تطبيق إيشارب</option>
+          <option value="glow">تطبيق Glow</option>
+        </select>
+        <button class="secondary" onclick="generateAppQR()" style="padding:9px 16px;">🎯 توليد الكود</button>
+      </div>
+      <div id="qrResult" style="display:none; text-align:center; background:#fff; border-radius:12px; padding:16px;">
+        <div id="qrCanvasBox" style="display:flex; justify-content:center;"></div>
+        <div id="qrLinkTxt" style="font-size:10px; color:#555; margin-top:8px; direction:ltr; word-break:break-all;"></div>
+        <button onclick="printAppQR()" style="margin-top:10px; padding:10px 22px; border-radius:9px; border:none; background:#1a7f37; color:#fff; font-weight:800; cursor:pointer;">🖨️ طباعة الملصق</button>
+      </div>
+    </div>
+
     <button onclick="saveLoyaltyConfig()" style="width:100%; padding:14px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; font-size:14px; cursor:pointer;">حفظ إعدادات برنامج الولاء</button>`;
 }
 
@@ -112,4 +129,30 @@ async function saveLoyaltyConfig(){
     showToast('اتحفظت إعدادات برنامج الولاء ✅');
     renderLoyaltyScreen();
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
+
+
+// 📱 توليد QR لتحميل التطبيق — بعلامة الفرع للتتبع
+function generateAppQR(){
+  var app = document.getElementById('qrApp').value;
+  var base = 'https://echarpestore.github.io/store-apps/' + app + '/';
+  var src = 'qr-' + (currentBranch||'').replace(/\s+/g,'-');
+  var url = base + '?src=' + encodeURIComponent(src);
+  var img = 'https://api.qrserver.com/v1/create-qr-code/?size=340x340&margin=2&data=' + encodeURIComponent(url);
+  document.getElementById('qrCanvasBox').innerHTML = '<img id="qrImg" src="'+img+'" style="width:220px; height:220px;">';
+  document.getElementById('qrLinkTxt').textContent = url;
+  document.getElementById('qrResult').style.display = 'block';
+  window._qrPrintData = { img: img, app: (app==='glow'?'Glow':'echarpe'), branch: currentBranch||'' };
+}
+function printAppQR(){
+  var d = window._qrPrintData; if(!d) return;
+  var w = window.open('', '_blank', 'width=420,height=560');
+  w.document.write('<html dir="rtl"><head><meta charset="UTF-8"><style>body{font-family:Tahoma,Arial; text-align:center; padding:24px;} h2{margin:6px 0;} .sub{color:#555; font-size:13px; margin-bottom:14px;} img{width:280px; height:280px;} .gift{margin-top:12px; font-size:15px; font-weight:800;}</style></head><body>'
+    + '<h2>حمّلي تطبيق ' + d.app + ' 📱</h2>'
+    + '<div class="sub">امسحي الكود بكاميرا موبايلك</div>'
+    + '<img src="' + d.img + '">'
+    + '<div class="gift">🎁 سجّلي وفعّلي الإشعارات — ومستنياكي مكافأة ترحيب!</div>'
+    + '<script>var i=document.querySelector("img"); if(i.complete){window.print(); setTimeout(function(){window.close();},400);} else i.onload=function(){window.print(); setTimeout(function(){window.close();},400);};<\/script>'
+    + '</body></html>');
+  w.document.close();
 }
