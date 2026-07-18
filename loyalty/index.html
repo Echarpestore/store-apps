@@ -605,9 +605,11 @@ function pushSupported(){
 }
 // بنطلب الإذن بعد الدخول بـ 4 ثواني (مش أول لحظة) عشان ميبقاش مزعج
 function initPushForCustomer(){
-  if(!VAPID_KEY || !pushSupported() || !currentCustomer) return;
+  if(!VAPID_KEY || !pushSupported()) return;
   if(Notification.permission === 'denied') return;
   setTimeout(function(){
+    // فحص العميل هنا (بعد 4 ثواني) — وقت الاستدعاء بيانات العميل بتكون لسه في الطريق
+    if(!currentCustomer) return;
     Notification.requestPermission().then(function(perm){
       if(perm !== 'granted') return;
       navigator.serviceWorker.ready.then(function(reg){
