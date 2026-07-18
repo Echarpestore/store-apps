@@ -1,1318 +1,1000 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>إيشارب · نادي العملاء</title>
-<meta name="theme-color" content="#EC4899">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="إيشارب">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="icon" href="icon-192.png">
-
-<!-- الخطوط -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-
-<!-- Firebase (compat — نفس إصدار الكاشير عشان يقرا نفس البيانات) -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>POS تجريبي</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-
 <style>
-  :root{
-    --pink:#EC4899; --pink-deep:#C9327E; --pink-soft:#FCE7F1;
-    --gold:#E6B450; --gold-deep:#C79A38; --gold-soft:#FBF3DF;
-    --bg:#FFF6FA; --ink:#3A2233; --muted:#9E8792; --line:#F3DEE9; --white:#fff;
-    --card-grad:linear-gradient(135deg,#EC4899 0%,#F06AA6 45%,#E6B450 100%);
-  }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0; padding:0;}
-  body{
-    font-family:'Tajawal',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-    background:var(--bg); color:var(--ink);
-    min-height:100vh; min-height:100dvh;
-    -webkit-font-smoothing:antialiased;
-  }
-  .app{max-width:480px; margin:0 auto; min-height:100vh; min-height:100dvh; position:relative; background:var(--bg);}
-  button{font-family:inherit; cursor:pointer;}
-  input{font-family:inherit;}
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --panel3:#242833;
+  --border:#2a2f3a; --text:#e8e9ec; --muted:#8a8f9a;
+  --accent:#3b82f6; --plus:#22c55e; --minus:#ef4444; --warn:#f59e0b;
+  /* شاشة البيع نفسها بتستخدم تصميم فاتح (زي الجهاز الحقيقي في الصورة) — القائمة الجانبية بس تفضل غامقة */
+  --lt-bg:#f2f2f4; --lt-panel:#ffffff; --lt-panel2:#eef0f3; --lt-border:#d6d9de; --lt-text:#1a1c20;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
 
-  /* ===== شاشات ===== */
-  .screen{display:none;}
-  .screen.on{display:block;}
+/* ---------- Light management theme (inventory, customers, roles, discounts, reports, import, profiles) ---------- */
+/* بيعيد تعريف المتغيرات نفسها (مش بس لون العنصر) عشان أي var(--text) أو var(--muted)
+   مكتوبة inline في أي مكان جوه الشاشات دي تتحول تلقائي للون غامق واضح، بدل ما تفضل
+   بيضا باهتة زي الثيم الغامق الأصلي. ده بيحل مشكلة "الأرقام مش واضحة" من الجذر. */
+.mgmt-light{
+  --text:#1a1a1a; --muted:#6b6b60; --panel:#ffffff; --panel2:#f7f6ef; --panel3:#eef0e0;
+  --border:#d8d5c5; --bg:#f3f1e7;
+  background:#f3f1e7 !important; color:#1a1a1a !important;
+}
+.mgmt-light .dash-header{background:#fff; border-bottom:2px solid #b9c9a0; padding:14px 18px; margin:0 0 16px; border-radius:0 0 10px 10px;}
+.mgmt-light .dash-header h1{font-size:16px; margin:0; color:#2a2a2a;}
+.mgmt-light .logout-btn{background:#3d3d3f; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-weight:700; font-size:13px; cursor:pointer;}
+.mgmt-light input, .mgmt-light select, .mgmt-light textarea{
+  background:#fff !important; color:#1a1a1a !important; border:1px solid #b9c9a0 !important;
+}
+.mgmt-light input::placeholder{color:#8a8a80;}
+.mgmt-light .empty-cart{color:#999 !important;}
+.mgmt-light button:not(.logout-btn):not(.rep-range-btn){
+  background:#eef0e0; color:#1a1a1a; border:1px solid #b9c9a0;
+}
+.screen{display:none;height:100vh;flex-direction:column;}
+.screen.active{display:flex;}
+.badge-test{
+  position:fixed;top:8px;left:8px;background:var(--warn);color:#1a1200;
+  font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;z-index:999;
+}
+.online-badge{
+  position:fixed; top:8px; right:8px; font-size:11px; font-weight:800;
+  padding:5px 12px; border-radius:20px; z-index:999;
+}
+.online-badge.online{background:#1f9440; color:#fff;}
+.online-badge.offline{background:#d9534f; color:#fff; animation:offlinePulse 1.5s ease-in-out infinite;}
+@keyframes offlinePulse{0%,100%{opacity:1;} 50%{opacity:.6;}}
 
-  /* ===== شاشة الدخول ===== */
-  #screen-login{min-height:100vh; min-height:100dvh; display:none; flex-direction:column;}
-  #screen-login.on{display:flex;}
-  .login-hero{
-    background:var(--card-grad); color:#fff; padding:56px 26px 44px;
-    border-radius:0 0 34px 34px; text-align:center;
-    box-shadow:0 14px 40px -14px rgba(236,72,152,.55);
-  }
-  .login-hero img{width:172px; max-width:64%; height:auto; filter:drop-shadow(0 3px 8px rgba(0,0,0,.14));}
-  .login-hero .kicker{
-    margin-top:16px; font-weight:700; font-size:14px; letter-spacing:.5px;
-    color:#fff; opacity:.92;
-  }
-  .login-body{flex:1; padding:34px 26px; display:flex; flex-direction:column;}
-  .login-body h1{font-size:23px; font-weight:800; margin:0 0 6px;}
-  .login-body .sub{color:var(--muted); font-size:14.5px; line-height:1.7; margin:0 0 26px;}
-  .field-label{font-weight:700; font-size:13.5px; margin:0 0 8px; color:var(--ink);}
-  .txt{
-    width:100%; padding:15px 16px; border-radius:15px; border:1.5px solid var(--line);
-    background:#fff; font-size:17px; color:var(--ink); font-weight:700; outline:none;
-    transition:border-color .15s, box-shadow .15s;
-  }
-  .txt::placeholder{color:#cdbcc5; font-weight:500;}
-  .txt:focus{border-color:var(--pink); box-shadow:0 0 0 4px rgba(236,72,152,.12);}
-  .txt.ltr{direction:ltr; text-align:right;}
-  .btn-primary{
-    width:100%; margin-top:18px; padding:16px; border:none; border-radius:15px;
-    background:var(--card-grad); color:#fff; font-weight:800; font-size:17px;
-    box-shadow:0 10px 26px -8px rgba(236,72,152,.6); transition:transform .08s, filter .15s;
-  }
-  .btn-primary:active{transform:translateY(1px) scale(.995); filter:brightness(1.03);}
-  .btn-primary:disabled{opacity:.6; filter:grayscale(.2);}
-  .login-note{margin-top:auto; padding-top:24px; text-align:center; color:var(--muted); font-size:12px; line-height:1.7;}
-  .btn-back{width:100%; margin-top:10px; padding:11px; border:none; background:none; color:var(--muted); font-weight:700; font-size:14px;}
-  .err{color:#D92662; font-size:13.5px; font-weight:700; margin:12px 2px 0; min-height:18px;}
-  .newfield{max-height:0; overflow:hidden; transition:max-height .3s ease;}
-  .newfield.show{max-height:140px; margin-top:18px;}
+/* ---------- Login ---------- */
+#loginScreen{align-items:center;justify-content:center;}
+.pin-box{width:280px;text-align:center;}
+.pin-box h2{margin-bottom:18px;font-size:18px;}
+.pin-display{
+  font-size:28px;letter-spacing:10px;background:var(--panel2);border:1px solid var(--border);
+  border-radius:12px;padding:14px;margin-bottom:16px;min-height:24px;
+}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.pin-pad button{
+  padding:18px 0;font-size:20px;border-radius:12px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--text);cursor:pointer;
+}
+.pin-pad button:active{background:var(--panel3);}
+.pin-pad .clear{color:var(--minus);}
+.pin-pad .ok{color:var(--plus);}
+.login-err{color:var(--minus);font-size:13px;margin-top:10px;min-height:16px;}
+.emp-pick-tile{
+  background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:16px 8px;
+  display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer;
+}
+.emp-pick-tile:active{background:var(--panel3);}
+.emp-pick-tile .av{width:44px; height:44px; border-radius:50%; background:var(--panel3); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--accent);}
+.emp-pick-tile .n{font-size:12px; font-weight:700; text-align:center;}
 
-  /* ===== شاشة التطبيق ===== */
-  #screen-app{display:none; flex-direction:column; min-height:100vh; min-height:100dvh; padding-bottom:82px;}
-  #screen-app.on{display:flex;}
-  .topbar{
-    display:flex; align-items:center; gap:12px; padding:16px 20px 12px;
-  }
-  .topbar .badge{
-    width:42px; height:42px; border-radius:13px; background:var(--card-grad);
-    display:flex; align-items:center; justify-content:center; flex-shrink:0;
-    box-shadow:0 6px 16px -6px rgba(236,72,152,.6);
-  }
-  .topbar .badge img{width:30px; filter:brightness(0) invert(1);}
-  .topbar .hi{font-size:13px; color:var(--muted); font-weight:600; line-height:1.3;}
-  .topbar .who{font-size:17px; font-weight:800; line-height:1.3;}
-  .topbar-mid{flex:1; min-width:0;}
-  .wa-btn{flex-shrink:0; width:44px; height:44px; border-radius:13px; border:none; background:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px -6px rgba(37,211,102,.7);}
-  .wa-btn:active{transform:translateY(1px);}
-  .btn-outline.wa{border-color:#25D366; color:#128C4B; background:#eafaf0;}
+/* ---------- Dashboard ---------- */
+#dashboardScreen{padding:0;}
+.dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:8px;}
+.dash-header h1{font-size:18px;margin:0;}
+.dash-header .who{font-size:13px;color:var(--muted);}
 
-  .tabview{padding:8px 18px 24px;}
+/* ---------- QuickBooks-style layout (sidebar + Navigator) ---------- */
+.qb-layout{display:flex; height:100vh;}
+.qb-sidebar{
+  width:190px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border);
+  display:flex; flex-direction:column; gap:10px; padding:16px 12px; overflow-y:auto;
+}
+.qb-sidebar button{
+  padding:14px 10px; border-radius:10px; border:1px solid var(--accent); background:var(--accent);
+  color:#fff; font-size:13px; font-weight:700; cursor:pointer; text-align:center;
+}
+.qb-sidebar button.secondary{background:var(--panel2); border-color:var(--border); color:var(--text);}
+.qb-sidebar button:active{opacity:.8;}
+.qb-main{flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; background:#f3f1e7;}
+.qb-section-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:14px; align-content:start;}
+.qb-section{border-radius:10px; overflow:hidden; border:1px solid #b9c9a0; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.qb-section.gold{border-color:#d8c477;}
+.qb-section-head{
+  background:linear-gradient(#eef3de,#dde8c4); color:#3c4a26; font-weight:800; font-size:13px;
+  padding:8px 12px; border-bottom:1px solid #b9c9a0;
+}
+.qb-section.gold .qb-section-head{background:linear-gradient(#fbf3d6,#f3e3a6); color:#5c4a10; border-bottom-color:#d8c477;}
+.qb-section-body{display:flex; flex-wrap:wrap; gap:4px; padding:10px; justify-content:space-around;}
+.qb-nav-item{
+  display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer;
+  padding:8px 6px; border-radius:10px; min-width:64px; text-align:center; color:#2a2a2a;
+}
+.qb-nav-item:active{background:#f0efe6;}
+.qb-nav-item .qb-icon{font-size:32px; line-height:1;}
+.qb-nav-item .qb-label{font-size:10.5px; font-weight:700;}
+.qb-nav-item.disabled{opacity:.3; pointer-events:none;}
+.rep-range-btn{
+  padding:8px 14px; border-radius:20px; border:1px solid var(--border); background:var(--panel2);
+  color:var(--text); font-size:12px; font-weight:700; cursor:pointer;
+}
+.rep-range-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+.rep-type-btn{padding:11px 16px; border-radius:11px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-weight:800; font-size:14px; cursor:pointer;}
+.rep-type-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+.rep-print-btn{padding:10px 16px; border-radius:10px; border:none; background:#334155; color:#fff; font-weight:800; font-size:13px; cursor:pointer;}
+.rep-tbl{width:100%; border-collapse:collapse;}
+.rep-tbl th{text-align:right; font-size:12px; color:var(--muted); padding:8px 6px; border-bottom:2px solid var(--border); font-weight:800;}
+.rep-tbl td{text-align:right; font-size:13px; padding:9px 6px; border-bottom:1px solid var(--border); color:var(--text);}
+.rep-tbl td.num, .rep-tbl th.num{text-align:left; font-variant-numeric:tabular-nums;}
+.rep-tbl tr.grand td{font-weight:900; border-top:2px solid var(--border); border-bottom:none; font-size:14px;}
+.rep-card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:12px;}
+.rep-receipt{background:#fff; border:1px dashed #999; border-radius:10px; padding:20px 22px; max-width:360px; margin:0 auto; color:#111; font-family:'Courier New',monospace;}
+.rep-receipt .rc-h{text-align:center; font-weight:900; font-size:16px;}
+.rep-receipt .rc-sub{text-align:center; font-size:12px; color:#555; margin-bottom:12px;}
+.rep-receipt .rc-line{display:flex; justify-content:space-between; padding:4px 0; font-size:13.5px;}
+.rep-receipt .rc-sep{border-top:1px dashed #999; margin:8px 0;}
+.rep-receipt .rc-big{font-weight:900; font-size:15px;}
+.logout-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 12px;font-size:12px;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;}
+.tile{
+  background:var(--panel);border:1px solid var(--border);border-radius:16px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  cursor:pointer;padding:20px;min-height:120px;
+}
+.tile:active{background:var(--panel2);}
+.tile .icon{font-size:32px;}
+.tile .label{font-size:14px;font-weight:700;}
+.tile.disabled{opacity:.35;}
+.tile .sub{font-size:11px;color:var(--muted);}
 
-  /* ===== البطاقة (العنصر المميز) ===== */
-  .card{
-    position:relative; border-radius:26px; padding:24px 22px 22px; color:#fff;
-    background:var(--card-grad); overflow:hidden;
-    box-shadow:0 20px 44px -18px rgba(201,50,126,.7);
-    min-height:198px; display:flex; flex-direction:column; justify-content:space-between;
-  }
-  .card::after{
-    content:""; position:absolute; top:-60%; right:0; width:55%; height:220%;
-    background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);
-    transform:rotate(18deg) translateX(240%);
-    animation:sheen 6s ease-in-out infinite;
-  }
-  @keyframes sheen{0%,55%{transform:rotate(18deg) translateX(240%);} 85%,100%{transform:rotate(18deg) translateX(-260%);}}
-  .card .card-top{display:flex; justify-content:space-between; align-items:flex-start; position:relative; z-index:1;}
-  .card .card-top .lbl{font-size:12px; font-weight:700; opacity:.9; letter-spacing:.4px;}
-  .card .card-top .clubname{font-size:15px; font-weight:800; margin-top:2px;}
-  .card .card-top img{width:96px; opacity:.96;}
-  .card .pts-block{position:relative; z-index:1;}
-  .card .pts-num{font-size:52px; font-weight:800; line-height:1; letter-spacing:-1px;}
-  .card .pts-unit{font-size:17px; font-weight:700; opacity:.92; margin-right:6px;}
-  .card .pts-worth{font-size:13.5px; font-weight:600; opacity:.95; margin-top:8px;}
-  .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px;}
-  .card .holder .name{font-size:16px; font-weight:800;}
-  .card .holder .since{font-size:11px; opacity:.85; font-weight:600;}
-  .card .flip-hint{position:absolute; z-index:1; bottom:12px; left:20px; font-size:11px; font-weight:700; opacity:.9;}
+/* ---------- Make Sale ---------- */
+#saleScreen{padding:0;}
+/* ---------- QuickBooks-POS-exact light theme for the sale screen ---------- */
+.qbx-wrap{
+  display:flex; flex-direction:column; height:100vh;
+  background:#e7e4dd; color:#1a1a1a;
+}
+.qbx-top{
+  display:flex; justify-content:space-between; align-items:flex-start;
+  padding:10px 14px 4px;
+}
+.qbx-title{font-size:16px; font-weight:800;}
+.qbx-meta{font-size:12px; color:#333; text-align:left; line-height:1.5;}
+.qbx-body{flex:1; display:flex; gap:8px; padding:0 10px; overflow:hidden;}
+.qbx-actions{
+  width:170px; flex-shrink:0; display:grid; grid-template-columns:1fr 1fr;
+  gap:8px; align-content:start; padding-top:4px;
+}
+.qbx-actions button{
+  padding:16px 6px; border-radius:8px; border:1px solid #222; background:#3d3d3f;
+  color:#fff; font-size:13px; font-weight:700; cursor:pointer; text-align:center;
+}
+.qbx-actions button:active{background:#555;}
+/* زرّي الهولد الملوّنين */
+.hold-slot{line-height:1.35 !important;}
+.hold-slot.hs0{background:linear-gradient(#e8912e,#c96f14) !important; border-color:#a85c0d !important;}
+.hold-slot.hs1{background:linear-gradient(#2fa4a0,#1c7f7b) !important; border-color:#155f5c !important;}
+.hold-slot.filled{outline:3px solid #ffd23f; outline-offset:1px;}
+.hold-slot.hs0.filled{background:linear-gradient(#f5a742,#d97b16) !important;}
+.hold-slot.hs1.filled{background:linear-gradient(#3ec9c4,#20938f) !important;}
+.hold-slot b{font-size:14px;}
+.qbx-center{flex:1; display:flex; flex-direction:column; overflow:hidden;}
+.qbx-itemops{
+  width:110px; flex-shrink:0; display:flex; flex-direction:column; gap:7px; padding-top:44px;
+}
+.qbx-itemops button{
+  padding:12px 6px; border-radius:8px; border:1px solid #222; background:#3d3d3f;
+  color:#fff; font-size:13px; font-weight:800; cursor:pointer;
+}
+.qbx-itemops button.qbx-return-all{background:linear-gradient(#d9534f,#a5271f); margin-top:7px;}
+.qbx-bottom{
+  display:flex; gap:10px; padding:8px 10px 10px; align-items:stretch;
+  border-top:1px solid #b8b5ad; background:#e0ddd5;
+}
+.qbx-pay{flex:1; background:#f4f3ef; border:1px solid #b8b5ad; border-radius:6px; padding:8px 10px;}
+.qbx-pay-title{font-size:12px; font-weight:800; margin-bottom:4px; border-bottom:1px solid #ccc; padding-bottom:3px;}
+#qbxPayList{min-height:40px; font-size:12px;}
+#qbxPayList .pl-row{display:flex; justify-content:space-between; padding:2px 0; border-bottom:1px dotted #ddd;}
+.qbx-pay-btns{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;}
+.qbx-pay-btns button{
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  padding:12px 16px; border-radius:12px; border:none; min-width:82px;
+  color:#fff; font-size:12px; font-weight:800; cursor:pointer;
+  box-shadow:0 2px 5px rgba(0,0,0,.25);
+}
+.qbx-pay-btns button .pm-icon{font-size:26px; line-height:1;}
+.qbx-pay-btns button#pmCash{background:linear-gradient(#3fbf60,#1f9440);}
+.qbx-pay-btns button#pmVisa{background:linear-gradient(#3b82f6,#1d4fd6);}
+.qbx-pay-btns button#pmInsta{background:linear-gradient(#a855f7,#7c22d6);}
+.qbx-pay-btns button.selected{outline:3px solid #ffd23f; outline-offset:1px;}
+.qbx-pay-btns button.qbx-clear-pay{background:linear-gradient(#d9534f,#b52b27); min-width:auto; flex-direction:row; padding:10px 16px;}
+.qbx-totals{
+  width:240px; flex-shrink:0; display:flex; flex-direction:column; gap:3px; justify-content:flex-end;
+}
+.t-row{display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:800;}
+.t-val{min-width:115px; text-align:center; padding:4px 8px; border-radius:5px; background:#f4f3ef; border:1px solid #b8b5ad; font-family:monospace; font-size:17px; font-weight:900;}
+.t-val.t-green{background:#0d5c19; color:#7dff8f; border-color:#0a4413;}
+.t-val.t-dark{background:#1c1c1e; color:#fff; border-color:#000;}
+.t-val.t-red{background:#1c1c1e; color:#ff5a5a; border-color:#000;}
+/* أزرار الكمية والمسح جوه سطر السلة */
+.qty-cell{display:flex; align-items:center; justify-content:center; gap:7px;}
+.qty-cell button{width:28px; height:28px; border-radius:6px; border:1px solid #b8b5ad; background:#fff; font-weight:900; font-size:17px; line-height:1; cursor:pointer; color:#333;}
+.qty-cell button:active{background:#eee;}
+.qty-cell .qn{min-width:22px; text-align:center; font-weight:800;}
+.qty-cell .qn-input{width:46px; text-align:center; font-weight:800; font-size:15px; border:1px solid #b8b5ad; border-radius:6px; padding:5px 2px; background:#fff; color:#111;}
+.qty-cell .qn-input::-webkit-outer-spin-button,.qty-cell .qn-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+.cart-del{border:none; background:none; cursor:pointer; font-size:17px; padding:2px 6px;}
+.cart-code{font-size:10px; color:#999; direction:ltr; text-align:right; font-family:monospace;}
+.qbx-save{
+  margin-top:4px; padding:11px 0; border-radius:6px; border:1px solid #2c7a35;
+  background:linear-gradient(#4db658,#348c3e); color:#fff; font-size:15px; font-weight:800; cursor:pointer;
+}
+.qbx-save:disabled{opacity:.45; cursor:not-allowed;}
 
-  /* ===== بطاقة تنقلب (flip) ===== */
-  .card-flip{perspective:1600px;}
-  .card-inner{position:relative; width:100%; min-height:236px; cursor:pointer;
-    transition:transform .65s cubic-bezier(.4,.15,.2,1); transform-style:preserve-3d;}
-  .card-flip.flipped .card-inner{transform:rotateY(180deg);}
-  .card-face{position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden; border-radius:26px; overflow:hidden;}
-  /* الوش بياخد شكل .card نفسه؛ الـ position:absolute هنا بيغلب لأنه متعرّف بعده */
-  .card-back{
-    transform:rotateY(180deg); background:#fff; border:1.5px solid var(--line);
-    box-shadow:0 20px 44px -18px rgba(201,50,126,.55);
-    display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px 22px;
-  }
-  .card-back .cb-title{font-weight:800; font-size:15px; color:var(--pink-deep);}
-  .card-back .cb-barcode{background:#fff; padding:8px 10px; border-radius:10px; margin-top:14px; width:82%; max-width:280px;}
-  .card-back .cb-barcode svg{width:100%; height:auto; display:block;}
-  .card-back .cb-code{font-size:16px; font-weight:800; letter-spacing:4px; color:var(--ink); direction:ltr; margin-top:10px;}
-  .card-back .cb-pts{font-size:12.5px; font-weight:700; color:var(--muted); margin-top:6px;}
-  .card-back .cb-wait{color:var(--muted); font-weight:700; padding:30px 0;}
-  .card-back .flip-hint{color:var(--muted); opacity:.85; left:auto; right:20px;}
+.sale-top{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+.qbx-quickbtn{
+  flex-shrink:0; width:46px; height:46px; border-radius:8px; border:1px solid #222;
+  background:#3d3d3f; color:#fff; font-size:20px; cursor:pointer;
+}
+.qbx-quickbtn-del{background:linear-gradient(#d9534f,#a5271f);}
+.back-btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:14px;flex-shrink:0;}
+.search-wrap{position:relative;flex:1;}
+#searchBar{
+  width:100%;padding:10px 12px;border-radius:4px;border:1px solid #a8a49b;
+  background:#fdf6d8;color:#1a1a1a;font-size:14px;
+}
+#suggestBox{
+  position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;
+  border:1px solid #a8a49b;border-radius:6px;max-height:240px;overflow-y:auto;z-index:20;
+  color:#1a1a1a;
+}
+.sugg-row{padding:11px;border-bottom:1px solid #e4e1d9;display:flex;justify-content:space-between;cursor:pointer;}
+.sugg-row:last-child{border-bottom:none;}
+.sugg-row:active{background:#eef0f3;}
 
-  .show-cashier{
-    width:100%; margin-top:14px; padding:15px; border:none; border-radius:16px;
-    background:#fff; color:var(--pink-deep); font-weight:800; font-size:16px;
-    box-shadow:0 8px 20px -10px rgba(201,50,126,.5); display:flex; align-items:center; justify-content:center; gap:8px;
-    transition:transform .08s;
-  }
-  .show-cashier:active{transform:translateY(1px);}
+.customer-row{display:flex;gap:8px;margin:8px 0 4px;}
+#custBox{border:2px solid #cfcabf; border-radius:8px; padding:7px; background:#efeee9; opacity:.72; transition:border-color .2s, background .2s, opacity .2s; margin:8px 0 4px;}
+#custBox.on{border-color:#2c9a3e; background:#eafaf0; opacity:1; box-shadow:0 0 0 2px rgba(44,154,62,.15);}
+#custBox .customer-row{margin:0;}
+.customer-row input{
+  flex:1;padding:9px 11px;border-radius:4px;border:1px solid #a8a49b;
+  background:#fff;color:#1a1a1a;font-size:13px;
+}
+.customer-info{font-size:12px;color:#1c7a2e;padding:2px 0;min-height:15px;max-height:132px;overflow-y:auto;}
+#newCustomerRow{display:none; gap:8px; margin:4px 0; background:#fff8e0; border:1px solid #d8b73e; border-radius:6px; padding:8px;}
+#newCustomerRow button{padding:8px 14px; border-radius:5px; border:1px solid #2c7a35; background:linear-gradient(#4db658,#348c3e); color:#fff; font-weight:700; cursor:pointer;}
 
-  /* بلوكات الشرح */
-  .info-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;}
-  .info-box{
-    background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:16px 15px;
-  }
-  .info-box .ico{font-size:22px;}
-  .info-box .t{font-weight:800; font-size:14px; margin-top:7px;}
-  .info-box .d{font-size:12.5px; color:var(--muted); font-weight:600; margin-top:3px; line-height:1.6;}
-  .progress-wrap{background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:16px 16px 18px; margin-top:12px;}
-  .progress-wrap .pw-top{display:flex; justify-content:space-between; font-size:13px; font-weight:700; margin-bottom:10px;}
-  .progress-wrap .pw-top .g{color:var(--gold-deep);}
-  .bar{height:11px; border-radius:99px; background:var(--pink-soft); overflow:hidden;}
-  .bar>span{display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--pink),var(--gold)); transition:width .5s;}
-  .redeem-hint{font-size:12px; color:var(--muted); font-weight:600; text-align:center; margin-top:14px; line-height:1.7;}
+/* ---------- Item table (QuickBooks style, white, no Tax column) ---------- */
+.cart-area{flex:1;overflow-y:auto; border:1px solid #a8a49b; border-radius:4px; background:#fff;}
+.cart-table{width:100%; border-collapse:collapse; font-size:12px; color:#1a1a1a;}
+.cart-table thead th{
+  position:sticky; top:0; background:#eceae4; padding:8px 6px; text-align:center; font-weight:800;
+  color:#333; border-bottom:1px solid #b8b5ad;
+}
+.cart-table tbody td{padding:9px 6px; text-align:center; border-bottom:1px solid #eee;}
+.cart-table tbody tr{cursor:pointer;}
+.cart-table tbody tr.sel td{
+  background:linear-gradient(#5b9bd5,#3a7bbf); color:#fff; border-bottom-color:#2a6aae;
+}
+.cart-table tbody tr.ret td{color:var(--minus); font-weight:700;}
+.cart-table tbody tr.ret.sel td{background:linear-gradient(#c0392b,#992d22); color:#fff;}
+.cart-table .item-name{text-align:right; font-weight:600;}
+.empty-cart{color:#888;text-align:center;padding:40px 0;font-size:13px;}
 
-  /* ===== عناوين أقسام ===== */
-  .sec-h{font-size:20px; font-weight:800; margin:6px 2px 16px;}
-  .sec-h .em{color:var(--pink);}
+/* ---------- Payment Modal ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:200;
+}
+.modal-overlay.active{display:flex;}
+.modal-sheet{
+  background:var(--panel);border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:88vh;overflow-y:auto;
+}
+.modal-sheet h3{margin:0 0 14px;font-size:16px;text-align:center;}
+.pay-methods{display:flex;gap:8px;margin-bottom:14px;}
+.pay-method{
+  flex:1;padding:14px 0;border-radius:12px;border:2px solid var(--border);background:var(--panel2);
+  color:var(--text);text-align:center;cursor:pointer;
+}
+.pay-method.selected{border-color:var(--accent);background:rgba(59,130,246,.12);}
+.pay-method .m-label{font-size:13px;font-weight:700;}
+.pay-inputs{margin-bottom:12px;}
+.pay-input-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
+.pay-input-row label{font-size:13px;color:var(--muted);flex-shrink:0;}
+.pay-input-row input{width:120px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:15px;text-align:left;}
+.summary-box{background:var(--panel2);border-radius:12px;padding:12px;margin-bottom:14px;font-size:14px;}
+.summary-box .row{display:flex;justify-content:space-between;padding:4px 0;}
+.summary-box .row.err{color:var(--minus);font-weight:700;}
+.summary-box .row.ok{color:var(--plus);font-weight:700;}
+.modal-btns{display:flex;gap:8px;}
+.modal-btns button{flex:1;padding:14px 0;border-radius:12px;border:none;font-size:15px;font-weight:700;}
+.btn-cancel{background:var(--panel2);color:var(--muted);}
+.btn-confirm{background:var(--plus);color:#04170a;}
+.btn-confirm:disabled{opacity:.35;}
 
-  /* ===== العروض ===== */
-  .offer{
-    background:#fff; border:1.5px solid var(--line); border-radius:20px; padding:16px 16px;
-    margin-bottom:13px; display:flex; gap:14px; align-items:center;
-    position:relative; overflow:hidden;
-  }
-  .offer::before{content:""; position:absolute; top:0; right:0; width:6px; height:100%; background:var(--card-grad);}
-  .offer .oval{
-    flex-shrink:0; width:66px; height:66px; border-radius:16px; background:var(--pink-soft);
-    display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--pink-deep);
-  }
-  .offer .oval .big{font-size:21px; font-weight:800; line-height:1;}
-  .offer .oval .sm{font-size:11px; font-weight:700; margin-top:2px;}
-  .offer .obody{flex:1; min-width:0;}
-  .offer .obody .on{font-weight:800; font-size:15.5px;}
-  .offer .obody .osc{font-size:12.5px; color:var(--muted); font-weight:600; margin-top:4px;}
-  .offer .obody .oend{font-size:11.5px; color:var(--gold-deep); font-weight:700; margin-top:6px;}
+/* Held invoices modal */
+.held-row{
+  background:var(--panel2);border-radius:12px;padding:12px;margin-bottom:8px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.held-row .h-info{font-size:13px;}
+.held-row .h-time{color:var(--muted);font-size:11px;}
+.held-row button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;}
 
-  /* ===== المنتجات ===== */
-  .prod-grid{display:grid; grid-template-columns:1fr 1fr; gap:13px;}
-  .prod{background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:14px 14px 15px; position:relative;}
-  .prod .pname{font-weight:800; font-size:14.5px; line-height:1.4; min-height:40px;}
-  .prod .pmeta{font-size:12px; color:var(--muted); font-weight:600; margin-top:4px; min-height:17px;}
-  .prod .pprice{margin-top:10px; font-weight:800; font-size:17px; color:var(--pink-deep);}
-  .prod .pprice span{font-size:12px; font-weight:700; color:var(--muted);}
-  .prod .oos{position:absolute; top:12px; left:12px; background:#f2e3ea; color:#b06; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:99px;}
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--panel3);border:1px solid var(--border);padding:12px 20px;border-radius:10px;
+  font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:999;
+}
+.toast.show{opacity:1;}
+.toast.err{border-color:var(--minus);color:var(--minus);}
+.toast.ok{border-color:var(--plus);color:var(--plus);}
 
-  /* ===== الحساب ===== */
-  .acct-card{background:#fff; border:1.5px solid var(--line); border-radius:20px; padding:6px 18px; margin-bottom:16px;}
-  .acct-row{display:flex; justify-content:space-between; align-items:center; padding:15px 0; border-bottom:1px solid var(--line);}
-  .acct-row:last-child{border-bottom:none;}
-  .acct-row .k{color:var(--muted); font-weight:600; font-size:14px;}
-  .acct-row .v{font-weight:800; font-size:15px;}
-  .acct-row .v.ltr{direction:ltr;}
-  .btn-outline{
-    width:100%; padding:15px; border-radius:15px; border:1.5px solid var(--line); background:#fff;
-    font-weight:800; font-size:15.5px; color:var(--ink); margin-bottom:12px; display:flex; align-items:center; justify-content:center; gap:8px;
-  }
-  .btn-outline.install{border-color:var(--gold); color:var(--gold-deep); background:var(--gold-soft);}
-  .btn-outline.logout{color:#c0396b;}
-  .ios-tip{background:var(--gold-soft); border:1.5px solid #efdcae; border-radius:15px; padding:14px 15px; font-size:13px; font-weight:600; color:#8a6d1f; line-height:1.8; margin-bottom:12px; display:none;}
-
-  /* ===== تبويب «تواصلي معانا» ===== */
-  .contact-intro{color:var(--muted); font-size:14px; font-weight:600; line-height:1.7; margin:-6px 2px 18px;}
-  .branch-card{display:flex; align-items:center; gap:12px; background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:14px 16px; margin-bottom:12px; box-shadow:0 8px 22px -18px rgba(58,34,51,.5);}
-  .branch-card .bc-info{flex:1; min-width:0;}
-  .branch-card .bc-name{font-weight:800; font-size:15.5px; display:flex; align-items:center; gap:6px;}
-  .branch-card .bc-name .pin{color:var(--pink);}
-  .branch-card .bc-wa{direction:ltr; text-align:right; color:var(--muted); font-weight:700; font-size:13.5px; margin-top:3px;}
-  .wa-cta{flex-shrink:0; display:flex; align-items:center; gap:7px; background:#25D366; color:#fff; border:none; border-radius:13px; padding:11px 15px; font-weight:800; font-size:14px; box-shadow:0 6px 16px -7px rgba(37,211,102,.8);}
-  .wa-cta:active{transform:translateY(1px);}
-  .wa-cta svg{width:18px; height:18px; fill:#fff;}
-  .contact-sub{font-size:14.5px; font-weight:800; color:var(--ink); margin:24px 2px 12px;}
-  .social-row{display:flex; gap:12px;}
-  .soc{flex:1; display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border-radius:15px; font-weight:800; font-size:14.5px; color:#fff; text-decoration:none;}
-  .soc svg{width:20px; height:20px; fill:#fff;}
-  .soc.fb{background:#1877F2; box-shadow:0 6px 16px -7px rgba(24,119,242,.8);}
-  .soc.ig{background:linear-gradient(45deg,#F58529,#DD2A7B 52%,#8134AF 78%,#515BD4); box-shadow:0 6px 16px -7px rgba(221,42,123,.7);}
-  .soc:active{transform:translateY(1px);}
-  .contact-empty{color:var(--muted); font-size:13.5px; font-weight:600; text-align:center; padding:18px;}
-
-  /* ===== التبويبات السفلية ===== */
-  .tabbar{
-    position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px;
-    background:#ffffff;
-    border-top:1px solid var(--line); display:flex; padding:9px 8px calc(9px + env(safe-area-inset-bottom));
-    z-index:40;
-  }
-  .tab{flex:1; background:none; border:none; padding:6px 0; display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted);}
-  .tab .ti{font-size:22px; line-height:1;}
-  .tab .tl{font-size:11px; font-weight:700;}
-  .tab.active{color:var(--pink);}
-  .tab.active .ti{transform:translateY(-1px);}
-
-  .empty{text-align:center; padding:44px 20px; color:var(--muted); font-weight:600; font-size:14.5px; line-height:1.9;}
-  .empty .big{font-size:40px; display:block; margin-bottom:12px;}
-
-  /* ===== مؤشّر التحميل (وردي/دهبي) ===== */
-  .loader{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:56px 20px; gap:16px;}
-  .loader .ring{
-    width:46px; height:46px; border-radius:50%;
-    border:4px solid var(--pink-soft); border-top-color:var(--pink); border-right-color:var(--gold);
-    animation:spin .75s linear infinite;
-  }
-  .loader .lt{color:var(--pink-deep); font-weight:700; font-size:14px; animation:pulse 1.4s ease-in-out infinite;}
-  @keyframes spin{to{transform:rotate(360deg);}}
-  @keyframes pulse{0%,100%{opacity:.55;} 50%{opacity:1;}}
-  /* شريط تحميل رفيع أعلى الشاشة (بيظهر وقت جلب بيانات) */
-  #topLoad{position:fixed; top:0; left:0; right:0; height:3px; z-index:80; overflow:hidden; display:none;}
-  #topLoad.on{display:block;}
-  #topLoad::before{content:""; position:absolute; left:0; top:0; height:100%; width:40%;
-    background:linear-gradient(90deg,transparent,var(--pink),var(--gold),transparent); animation:slide 1.1s ease-in-out infinite;}
-  @keyframes slide{0%{left:-40%;} 100%{left:100%;}}
-
-  /* ===== فواتيري ===== */
-  .inv{background:#fff; border:1.5px solid var(--line); border-radius:16px; padding:14px 15px; margin-bottom:11px; cursor:pointer;}
-  .inv-top{display:flex; justify-content:space-between; align-items:flex-start;}
-  .inv-date{font-weight:800; font-size:14px;}
-  .inv-no{font-size:11px; color:var(--muted); margin-top:2px; direction:ltr; text-align:right;}
-  .inv-total{font-weight:900; font-size:17px; color:var(--pink-deep);}
-  .inv-meta{display:flex; justify-content:space-between; margin-top:9px; padding-top:9px; border-top:1px solid var(--line); font-size:11.5px; color:var(--muted); font-weight:600;}
-  .inv-pts{color:var(--gold-deep); font-weight:800;}
-  .overlay{position:fixed; inset:0; background:rgba(58,34,51,.55); display:none; align-items:flex-end; justify-content:center; z-index:60;}
-  .overlay.on{display:flex;}
-  .inv-sheet{background:#fff; width:100%; max-width:480px; border-radius:24px 24px 0 0; padding:20px 20px calc(24px + env(safe-area-inset-bottom)); max-height:82vh; overflow-y:auto;}
-  .inv-sheet .ish-h{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
-  .inv-sheet .ish-title{font-weight:800; font-size:17px;}
-  .inv-sheet .ish-x{border:none; background:var(--pink-soft); color:var(--pink-deep); width:32px; height:32px; border-radius:50%; font-weight:800; font-size:15px;}
-  .inv-sheet .ish-sub{color:var(--muted); font-size:12.5px; font-weight:600; margin-bottom:14px;}
-  .inv-sheet .ish-item{display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13.5px;}
-  .inv-sheet .ish-item .q{color:var(--muted); font-size:12px;}
-  .inv-sheet .ish-row{display:flex; justify-content:space-between; padding:6px 0; font-size:14px;}
-  .inv-sheet .ish-row.big{font-weight:900; font-size:17px; border-top:2px solid var(--line); margin-top:6px; padding-top:12px;}
-
-  /* بانر أخطاء */
-  #errBanner{display:none; position:fixed; top:0; left:0; right:0; z-index:99; background:#B8123F; color:#fff; padding:11px 16px; font-size:13px; font-weight:700; text-align:center;}
-  #loadFail{display:none; position:fixed; inset:0; z-index:120; background:var(--bg); color:var(--ink); align-items:center; justify-content:center; padding:30px; text-align:center; font-weight:700; line-height:1.9;}
-
-  /* ===== بانر تثبيت التطبيق ===== */
-  #installBanner{
-    position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom));
-    transform:translateX(-50%) translateY(150%); opacity:0;
-    width:calc(100% - 28px); max-width:452px; z-index:55;
-    background:#fff; border:1.5px solid var(--line); border-radius:20px;
-    box-shadow:0 18px 44px -14px rgba(201,50,126,.5);
-    display:flex; align-items:center; gap:12px; padding:12px 13px;
-    transition:transform .45s cubic-bezier(.2,.75,.25,1), opacity .35s;
-  }
-  #installBanner.show{ transform:translateX(-50%) translateY(0); opacity:1; }
-  #installBanner .ib-ico{width:44px; height:44px; border-radius:12px; background:var(--card-grad); flex-shrink:0; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 14px -6px rgba(236,72,152,.6);}
-  #installBanner .ib-ico img{width:31px; filter:brightness(0) invert(1);}
-  #installBanner .ib-txt{flex:1; min-width:0;}
-  #installBanner .ib-t{font-weight:800; font-size:14.5px;}
-  #installBanner .ib-d{font-size:12px; color:var(--muted); font-weight:600; margin-top:2px; line-height:1.55;}
-  #installBanner .ib-btn{flex-shrink:0; border:none; border-radius:12px; background:var(--card-grad); color:#fff; font-weight:800; font-size:14px; padding:11px 15px; box-shadow:0 8px 18px -8px rgba(236,72,152,.6);}
-  #installBanner .ib-x{flex-shrink:0; border:none; background:none; color:var(--muted); font-size:14px; width:24px; height:24px; border-radius:50%; padding:0;}
-  #installBanner.ios .ib-btn{display:none;}
-
-  @media (prefers-reduced-motion: reduce){ .card::after{animation:none; display:none;} .card-inner{transition:none;} #installBanner{transition:opacity .3s;} }
+/* Printable receipt (hidden until print) — مقاس 58mm (طابعة حرارية عادية) */
+#receiptPrint{display:none;}
+@media print{
+  @page{ size:58mm auto; margin:0; }
+  body *{visibility:hidden;}
+  #receiptPrint, #receiptPrint *{visibility:visible;}
+  #receiptPrint{display:block !important;position:absolute;top:0;left:0;width:58mm;padding:2mm;color:#000;background:#fff;font-family:'Cairo',Tahoma,sans-serif;}
+  #receiptPrint h2{text-align:center;margin:0 0 4px;font-size:14px;}
+  #receiptPrint table{width:100%;border-collapse:collapse;font-size:10px;}
+  #receiptPrint td{padding:2px 0;}
+  #receiptPrint .r-total{font-weight:800;font-size:13px;border-top:1px dashed #000;padding-top:4px;}
+  #receiptPrint .r-invoice-no{text-align:center;font-size:11px;font-weight:800;margin-top:6px;}
+  #receiptPrint .r-barcode{text-align:center;margin-top:4px;}
+  #receiptPrint .r-barcode svg{max-width:100%;}
+}
+/* ===== إغلاق اليوم ===== */
+.dc-summary{background:linear-gradient(135deg,#2c7a4b,#1f5e3a); color:#fff; border-radius:14px; padding:16px 18px; margin-bottom:14px;}
+.dc-summary .dc-sm-lbl{font-size:12px; opacity:.9;}
+.dc-summary .dc-sm-val{font-size:27px; font-weight:900; margin-top:2px;}
+.dc-summary .dc-sm-val span{font-size:15px; font-weight:700;}
+.dc-summary .dc-sm-sub{font-size:11.5px; opacity:.9; margin-top:6px;}
+.dc-card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px 16px; margin-bottom:14px;}
+.dc-card-h{font-weight:800; font-size:15px; margin-bottom:10px; color:var(--text);}
+.dc-den-row{display:flex; align-items:center; gap:9px; padding:5px 0;}
+.dc-den-face{width:66px; font-weight:800; color:var(--text); font-size:14px;}
+.dc-x{color:var(--muted); font-size:13px;}
+.dc-line{flex:1; text-align:left; font-weight:800; color:var(--text); font-size:14px;}
+.dc-inp{width:90px; padding:9px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800; font-size:15px; outline:none;}
+.dc-inp:focus{border-color:var(--accent);}
+.dc-inp-count{width:80px;}
+.dc-total-row{display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:11px; border-top:2px solid var(--border); font-weight:900; font-size:15px; color:var(--text);}
+.dc-field{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--border);}
+.dc-field:last-child{border-bottom:none;}
+.dc-field-lbl{font-weight:700; font-size:14px; color:var(--text);}
+.dc-field-hint{font-size:11px; color:var(--muted); margin-top:2px;}
+.dc-ok{width:100%; padding:16px; border:none; border-radius:14px; background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; font-weight:900; font-size:16px; cursor:pointer; box-shadow:0 8px 20px -8px rgba(59,130,246,.6); margin-top:4px;}
+.dc-ok:active{transform:translateY(1px);}
+.dc-result{border:2px solid; border-radius:16px; padding:18px; margin-top:16px; text-align:center;}
+.dc-res-head{font-weight:900; font-size:17px;}
+.dc-res-big{font-weight:900; font-size:36px; margin:4px 0 12px;}
+.dc-res-break{text-align:right; background:rgba(255,255,255,.55); border-radius:12px; padding:10px 14px; font-size:13px;}
+.dc-res-break>div{display:flex; justify-content:space-between; padding:3px 0; color:#333;}
+.dc-res-break .dc-res-sep{border-top:1.5px solid #bbb; margin-top:4px; padding-top:6px; font-weight:900;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"></script>
 </head>
 <body>
-<div id="errBanner"></div>
-<div id="loadFail">
-  <div>
-    ⚠️ التطبيق مقفلش صح<br><span style="font-weight:600; color:var(--muted); font-size:13px;">اقفل الصفحة وافتحها تاني، ولو فضلت المشكلة امسح بيانات الموقع.</span>
+<div class="badge-test">⚠️ نسخة تجريبية</div>
+<div id="onlineStatusBadge" class="online-badge online">🟢 متصل</div>
+
+<div id="loadFailBanner" style="display:none; position:fixed; inset:0; z-index:99999; background:#12141a; color:#eef0f4; direction:rtl; font-family:'Cairo',sans-serif; align-items:center; justify-content:center; flex-direction:column; gap:16px; padding:24px; text-align:center;">
+  <div style="font-size:48px;">⚠️</div>
+  <h2 style="margin:0; font-size:19px;">فيه نسخة قديمة متخزّنة في الجهاز ده</h2>
+  <p style="color:#8b90a0; font-size:14px; max-width:320px; margin:0;">النظام بقى فيه كذا ملف منفصل، والجهاز ده لسه شايل نسخة قديمة من واحد منهم. امسح بيانات الموقع من إعدادات المتصفح وحدّث الصفحة.</p>
+  <p id="loadFailDetail" style="color:#e5484d; font-size:12px; max-width:320px; margin:0; word-break:break-word;"></p>
+  <button onclick="location.reload(true)" style="padding:14px 28px; border:none; border-radius:12px; background:#2fa36b; color:#fff; font-family:'Cairo',sans-serif; font-weight:800; font-size:15px; cursor:pointer;">🔄 تحديث الصفحة</button>
+</div>
+<script>
+  window.addEventListener('error', function(e){
+    const banner = document.getElementById('loadFailBanner');
+    const detail = document.getElementById('loadFailDetail');
+    if(banner && banner.style.display !== 'flex'){
+      banner.style.display = 'flex';
+      if(detail) detail.textContent = (e.message||'خطأ غير معروف') + (e.filename ? (' | ' + e.filename.split('/').pop() + ':' + e.lineno) : '');
+    }
+  });
+</script>
+
+<!-- ============ BRANCH SETUP (first run only) ============ -->
+<div class="screen active" id="branchSetupScreen">
+  <div class="pin-box">
+    <h2>اسم الفرع</h2>
+    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">اكتب اسم الفرع بالظبط زي ما مسجل في نظام المبيعات — الجهاز ده هيفتكره.</p>
+    <input id="branchSetupInput" placeholder="مثلاً: Glow" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:15px; text-align:center; margin-bottom:12px;">
+    <button class="ok" style="width:100%; padding:14px; border-radius:12px; border:1px solid var(--border); background:var(--panel2); color:var(--plus); font-size:15px; cursor:pointer;" onclick="saveBranchSetup()">حفظ</button>
   </div>
 </div>
 
-<div class="app">
-
-  <!-- ===================== شاشة الدخول ===================== -->
-  <section id="screen-login" class="screen">
-    <div class="login-hero">
-      <img id="heroLogo" alt="echarpe">
-      <div class="kicker">نادي عملاء إيشارب</div>
-    </div>
-    <div class="login-body">
-      <h1 id="loginTitle">أهلاً بيكِ 🌸</h1>
-      <p class="sub" id="loginSub">اجمعي نقاط مع كل شراء، واستبدليها بخصومات. سجّلي برقم موبايلك عشان نعرفك عند الكاشير.</p>
-
-      <div id="phoneField">
-        <label class="field-label" for="phoneInput">رقم الموبايل</label>
-        <input id="phoneInput" class="txt ltr" type="tel" inputmode="numeric" placeholder="01xxxxxxxxx" autocomplete="tel">
-      </div>
-
-      <div id="nameField" style="display:none;">
-        <label class="field-label" for="nameInput">اسمك (عشان نرحّب بيكِ صح)</label>
-        <input id="nameInput" class="txt" type="text" placeholder="الاسم" autocomplete="name">
-      </div>
-
-      <div id="pinField" style="display:none;">
-        <label class="field-label" for="pinInput" id="pinLabel">اختاري رقم سري (٤ أرقام)</label>
-        <input id="pinInput" class="txt ltr" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
-      </div>
-
-      <div id="pinConfirmField" style="display:none;">
-        <label class="field-label" for="pinConfirmInput">أكّدي الرقم السري</label>
-        <input id="pinConfirmInput" class="txt ltr" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off">
-      </div>
-
-      <div id="loginErr" class="err"></div>
-      <button id="loginBtn" class="btn-primary">دخول</button>
-      <button id="loginBack" class="btn-back" style="display:none;">‹ رجوع لرقم تاني</button>
-
-      <div class="login-note" id="loginNote">رقمك السري بيحمي نقاطك — محدش يقدر يفتح حسابك من غيره.<br>لو نسيتيه، الكاشير في المحل يقدر يمسحه لك.</div>
-    </div>
-  </section>
-
-  <!-- ===================== شاشة التطبيق ===================== -->
-  <section id="screen-app" class="screen">
-    <div class="topbar">
-      <div class="badge"><img id="topLogo" alt=""></div>
-      <div class="topbar-mid">
-        <div class="hi" id="greet">أهلاً</div>
-        <div class="who" id="topName">—</div>
-      </div>
-      <button class="wa-btn" id="waTop" onclick="openSupport()" aria-label="تواصل واتساب" style="display:none;">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.945C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
-      </button>
-    </div>
-
-    <div class="tabview">
-      <div id="tab-card"></div>
-      <div id="tab-offers" style="display:none;"></div>
-      <div id="tab-products" style="display:none;"></div>
-      <div id="tab-invoices" style="display:none;"></div>
-      <div id="tab-account" style="display:none;"></div>
-      <div id="tab-contact" style="display:none;"></div>
-    </div>
-  </section>
-
-  <!-- تبويبات -->
-  <nav class="tabbar" id="tabbar" style="display:none;">
-    <button class="tab active" data-tab="card"><span class="ti">💳</span><span class="tl">بطاقتي</span></button>
-    <button class="tab" data-tab="offers"><span class="ti">🎀</span><span class="tl">العروض</span></button>
-    <button class="tab" data-tab="products"><span class="ti">🛍️</span><span class="tl">منتجاتنا</span></button>
-    <button class="tab" data-tab="invoices"><span class="ti">🧾</span><span class="tl">فواتيري</span></button>
-    <button class="tab" data-tab="account"><span class="ti">👤</span><span class="tl">حسابي</span></button>
-    <button class="tab" data-tab="contact"><span class="ti">💬</span><span class="tl">تواصل</span></button>
-  </nav>
-
-  <!-- شريط تحميل رفيع أعلى الشاشة -->
-  <div id="topLoad"></div>
-
-  <!-- تفاصيل فاتورة -->
-  <div class="overlay" id="invOverlay" onclick="if(event.target===this) closeInvoiceDetail()">
-    <div class="inv-sheet" id="invSheet"></div>
+<!-- ============ LOGIN ============ -->
+<div class="screen" id="loginScreen">
+  <div class="pin-box" id="employeePickerBox" style="width:min(90vw,480px);">
+    <h2>مين هيدخل؟</h2>
+    <div id="employeePickerGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px;"></div>
+    <div class="login-err" id="employeePickerErr"></div>
   </div>
-
-  <!-- بانر تثبيت التطبيق (بيظهر تلقائي في المتصفح) -->
-  <div id="installBanner">
-    <div class="ib-ico"><img id="ibLogo" alt=""></div>
-    <div class="ib-txt">
-      <div class="ib-t">نزّلي تطبيق إيشارب 📲</div>
-      <div class="ib-d" id="ibDesc">ثبّتيه على موبايلك عشان توصليله بضغطة</div>
+  <div class="pin-box" id="pinPadBox" style="display:none;">
+    <h2 id="pinPadEmpName">ادخل الـ PIN بتاعك</h2>
+    <input type="password" id="pinInput" inputmode="numeric" autocomplete="off" placeholder="••••••"
+      style="width:100%; padding:15px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:22px; text-align:center; letter-spacing:10px; margin-bottom:12px; box-sizing:border-box;">
+    <div style="display:flex; gap:10px;">
+      <button onclick="backToEmployeePicker()" style="flex:1; padding:14px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-weight:800; font-size:15px; cursor:pointer;">رجوع</button>
+      <button onclick="pinSubmit()" style="flex:2; padding:14px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:900; font-size:16px; cursor:pointer;">دخول ✔️</button>
     </div>
-    <button class="ib-btn" id="ibBtn" onclick="triggerInstall()">تثبيت</button>
-    <button class="ib-x" onclick="dismissInstall()" aria-label="إغلاق">✕</button>
+    <div class="login-err" id="loginErr"></div>
   </div>
-
 </div>
 
-<script>
-/* ============================================================
-   نادي عملاء إيشارب — تطبيق العميل (Loyalty)
-   يقرا نفس بيانات الكاشير: pos_test_customers / pos_test_discounts
-   / pos_test_inventory / pos_test_settings/loyalty
-   ============================================================ */
-
-// بانر أخطاء عام (زي باقي التطبيقات) — بيبان لو حصل أي error وقت التشغيل
-window.addEventListener('error', function(e){
-  try{
-    var b = document.getElementById('errBanner');
-    b.textContent = '⚠️ حصل خطأ: ' + (e.message || 'غير معروف');
-    b.style.display = 'block';
-  }catch(_){}
-});
-
-var firebaseConfig = {
-  apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
-  authDomain: "customer-feedback-8ac1d.firebaseapp.com",
-  projectId: "customer-feedback-8ac1d",
-  storageBucket: "customer-feedback-8ac1d.firebasestorage.app",
-  messagingSenderId: "408860081491",
-  appId: "1:408860081491:web:c5fa8b8e757c13196375a6",
-  measurementId: "G-6K33TSHDZ6"
-};
-firebase.initializeApp(firebaseConfig);
-var db = firebase.firestore();
-
-// أوفلاين قوي: البيانات محفوظة على الجهاز والتطبيق بيفتح حتى من غير نت
-db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED });
-db.enablePersistence({ synchronizeTabs: true }).catch(function(err){
-  if(err.code === 'failed-precondition'){ console.warn('أكتر من تاب مفتوح — الأوفلاين هيشتغل بس مش بكامل قوته'); }
-  else if(err.code === 'unimplemented'){ console.warn('المتصفح ده مش بيدعم تخزين الأوفلاين'); }
-});
-
-// أسماء الكوليكشنز (لو الكاشير اتنقل من pos_test_ لـ production، غيّرهم من هنا بس)
-var COL_CUSTOMERS = 'pos_test_customers';
-var COL_DISCOUNTS = 'pos_test_discounts';
-var COL_INVENTORY = 'pos_test_inventory';
-var COL_SALES     = 'pos_test_sales';
-var COL_SETTINGS  = 'pos_test_settings';
-
-var LS_PHONE = 'echarpe_loyalty_phone';
-
-/* ⬇️⬇️ رقم واتساب خدمة العملاء — غيّريه هنا ⬇️⬇️
-   الصيغة دولية من غير + ولا صفر البداية. مصر = 20 + الرقم من غير الصفر.
-   مثال: الموبايل 01001234567  →  201001234567
-   سيبيه فاضي '' لو مش عايزة زر الواتساب يظهر. */
-var SUPPORT_WHATSAPP = '';
-
-function hasSupport(){ return digits(SUPPORT_WHATSAPP).length >= 8; }
-function openSupport(){
-  if(!hasSupport()) return;
-  var msg = 'السلام عليكم 🌸';
-  if(currentCustomer){
-    msg = 'السلام عليكم، أنا ' + (currentCustomer.name||'') +
-          (currentCustomer.loyaltyCode ? ' (كود: '+currentCustomer.loyaltyCode+')' : '') +
-          ' ومحتاجة مساعدة.';
-  }
-  window.open('https://wa.me/' + digits(SUPPORT_WHATSAPP) + '?text=' + encodeURIComponent(msg), '_blank');
-}
-
-/* ============================================================
-   تبويب «تواصلي معانا» — أرقام واتساب الفروع + السوشيال ميديا
-   • عدّلي أرقام الفروع هنا. الصيغة دولية: 20 + الموبايل من غير صفر البداية.
-     مثال: 01148664485  →  201148664485
-   • أي فرع رقمه فاضي '' مش هيظهر للعميلة (سيبيه كده لحد ما ييجي رقمه).
-   • حطّي لينكات الفيسبوك والانستجرام في facebook / instagram تحت.
-     سيبيها '' لو لسه مش عايزة الزر يظهر.
-   ============================================================ */
-var CONTACT = {
-  branches: [
-    { name:'الرحاب',    wa:'201148664485', disp:'0114 8664485' },
-    { name:'مدينتي',    wa:'',             disp:'' },
-    { name:'سيتي سنتر', wa:'',             disp:'' }
-  ],
-  facebook:  'https://www.facebook.com/echarpestore',   // صفحة الفيسبوك
-  instagram: 'https://www.instagram.com/echarpestore2'  // صفحة الانستجرام
-};
-
-var _contactBranches = [];
-
-// شكل الرقم اللي بيظهر للعميلة (لو مفيش disp نحوّل الدولي لمحلي تلقائيًا)
-function waDisp(b){
-  if(b.disp) return b.disp;
-  var d = digits(b.wa);
-  if(d.indexOf('20')===0) d = '0' + d.slice(2);
-  return d.replace(/(\d{4})(\d{3})(\d+)/, '$1 $2 $3');
-}
-
-// يفتح واتساب الفرع برسالة جاهزة (بتحط اسم العميلة وكودها لو مسجّلة دخول)
-function openBranchWa(i){
-  var b = _contactBranches[i]; if(!b) return;
-  var msg;
-  if(currentCustomer){
-    msg = 'السلام عليكم، أنا ' + (currentCustomer.name||'') +
-          (currentCustomer.loyaltyCode ? ' (كود: '+currentCustomer.loyaltyCode+')' : '') +
-          ' — فرع ' + b.name + ' 🌸';
-  } else {
-    msg = 'السلام عليكم 🌸 — فرع ' + b.name;
-  }
-  window.open('https://wa.me/' + digits(b.wa) + '?text=' + encodeURIComponent(msg), '_blank');
-}
-
-var WA_ICON = '<svg viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.945C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>';
-var FB_ICON = '<svg viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>';
-var IG_ICON = '<svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>';
-
-function renderContact(){
-  _contactBranches = (CONTACT.branches||[]).filter(function(b){ return digits(b.wa).length >= 8; });
-  var html = '<div class="sec-h">تواصلي معانا <span class="em">💬</span></div>' +
-             '<p class="contact-intro">اختاري الفرع الأقرب ليكي وكلّمينا على واتساب مباشرة 🌸</p>';
-  if(_contactBranches.length){
-    _contactBranches.forEach(function(b, i){
-      html += '<div class="branch-card">' +
-                '<div class="bc-info">' +
-                  '<div class="bc-name"><span class="pin">📍</span>' + esc(b.name) + '</div>' +
-                  '<div class="bc-wa">' + esc(waDisp(b)) + '</div>' +
-                '</div>' +
-                '<button class="wa-cta" onclick="openBranchWa(' + i + ')">' + WA_ICON + 'واتساب</button>' +
-              '</div>';
-    });
-  } else {
-    html += '<div class="contact-empty">هنضيف أرقام الفروع قريبًا 🌸</div>';
-  }
-  var socials = '';
-  if(CONTACT.facebook)  socials += '<a class="soc fb" href="' + esc(CONTACT.facebook)  + '" target="_blank" rel="noopener">' + FB_ICON + 'فيسبوك</a>';
-  if(CONTACT.instagram) socials += '<a class="soc ig" href="' + esc(CONTACT.instagram) + '" target="_blank" rel="noopener">' + IG_ICON + 'انستجرام</a>';
-  if(socials){
-    html += '<div class="contact-sub">تابعينا على السوشيال ميديا</div>' +
-            '<div class="social-row">' + socials + '</div>';
-  }
-  $('tab-contact').innerHTML = html;
-}
-
-// اللوجو inline (base64) — عشان التطبيق يشتغل أوفلاين فورًا من غير ما يستنى صورة
-var LOGO_B64 = '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';
-var logoSrc = 'data:image/png;base64,' + LOGO_B64;
-
-// إعدادات النقاط (نفس اللي الأدمن بيظبطها في الكاشير) — بقيم افتراضية لحد ما تتحمّل
-var loyaltyCfg = { pointsPerEGP:100, pointsPerRedemption:10, redemptionValueEGP:5 };
-
-var currentCustomer = null;   // { name, phone, points, ... }
-var custUnsub = null;         // مستمع realtime على وثيقة العميل
-// (كل تبويب بيتحمّل كسول أول ما تفتحه فقط، بحد أقصى للعدد، وبعدها بيعرض من الذاكرة فورًا)
-
-function $(id){ return document.getElementById(id); }
-function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-function digits(s){ return String(s||'').replace(/[^0-9]/g,''); }
-function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function fmt(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('en-US'); }
-
-/* ---------- تنقل بين الشاشات ---------- */
-function showScreen(id){
-  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('on'); });
-  $(id).classList.add('on');
-  $('tabbar').style.display = (id==='screen-app') ? 'flex' : 'none';
-}
-
-/* ---------- تحميل إعدادات النقاط ---------- */
-function loadSettings(){
-  return db.collection(COL_SETTINGS).doc('loyalty').get().then(function(doc){
-    if(doc.exists){ loyaltyCfg = Object.assign({}, loyaltyCfg, doc.data()); }
-  }).catch(function(e){ console.warn('تعذر تحميل إعدادات النقاط', e); });
-}
-
-/* ============================================================
-   الدخول / التسجيل
-   ============================================================ */
-var loginStep = 'phone';      // phone | name | setpin | enterpin
-var pendingPhone = '';
-var pendingName = '';
-var pendingIsNew = false;
-var pinToMatch = '';
-
-function setLoginStep(step){
-  loginStep = step;
-  var titleEl=$('loginTitle'), subEl=$('loginSub'), btn=$('loginBtn');
-  $('phoneField').style.display      = (step==='phone') ? 'block':'none';
-  $('nameField').style.display       = (step==='name') ? 'block':'none';
-  $('pinField').style.display        = (step==='setpin'||step==='enterpin') ? 'block':'none';
-  $('pinConfirmField').style.display = (step==='setpin') ? 'block':'none';
-  $('loginBack').style.display       = (step==='phone') ? 'none':'block';
-  $('loginErr').textContent='';
-  $('pinInput').value=''; $('pinConfirmInput').value='';
-  if(step==='phone'){
-    titleEl.textContent='أهلاً بيكِ 🌸';
-    subEl.textContent='اجمعي نقاط مع كل شراء، واستبدليها بخصومات. سجّلي برقم موبايلك عشان نعرفك عند الكاشير.';
-    btn.textContent='دخول'; setTimeout(function(){ $('phoneInput').focus(); },50);
-  }else if(step==='name'){
-    titleEl.textContent='أول مرة معانا 🌷';
-    subEl.textContent='اكتبي اسمك عشان نرحّب بيكِ.';
-    btn.textContent='التالي'; setTimeout(function(){ $('nameInput').focus(); },50);
-  }else if(step==='setpin'){
-    titleEl.textContent='اختاري رقم سري 🔐';
-    subEl.textContent='اختاري ٤ أرقام سهل تفتكريها — دي هتحمي حسابك، ومحدش هيقدر يفتحه من غيرها.';
-    $('pinLabel').textContent='اختاري رقم سري (٤ أرقام)';
-    btn.textContent='حفظ ودخول'; setTimeout(function(){ $('pinInput').focus(); },50);
-  }else if(step==='enterpin'){
-    titleEl.textContent='أهلاً تاني 👋';
-    subEl.textContent='اكتبي رقمك السري عشان تدخلي حسابك.';
-    $('pinLabel').textContent='الرقم السري';
-    btn.textContent='دخول'; setTimeout(function(){ $('pinInput').focus(); },50);
-  }
-}
-
-$('phoneInput').addEventListener('input', function(){ $('loginErr').textContent=''; });
-$('loginBtn').addEventListener('click', doLoginPrimary);
-$('loginBack').addEventListener('click', function(){ pendingIsNew=false; pendingName=''; pinToMatch=''; setLoginStep('phone'); });
-$('phoneInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLoginPrimary(); });
-$('nameInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLoginPrimary(); });
-$('pinConfirmInput').addEventListener('keydown', function(e){ if(e.key==='Enter') doLoginPrimary(); });
-$('pinInput').addEventListener('keydown', function(e){ if(e.key==='Enter' && loginStep==='enterpin') doLoginPrimary(); });
-
-function doLoginPrimary(){
-  if(loginStep==='phone')    return stepPhone();
-  if(loginStep==='name')     return stepName();
-  if(loginStep==='setpin')   return stepSetPin();
-  if(loginStep==='enterpin') return stepEnterPin();
-}
-
-function stepPhone(){
-  var phone = digits($('phoneInput').value);
-  if(phone.length < 8){ $('loginErr').textContent='اكتبي رقم موبايل صح'; return; }
-  $('loginBtn').disabled=true; $('loginBtn').textContent='لحظة...';
-  db.collection(COL_CUSTOMERS).doc(phone).get().then(function(doc){
-    $('loginBtn').disabled=false; pendingPhone = phone;
-    if(!doc.exists){ pendingIsNew=true; setLoginStep('name'); }
-    else{
-      pendingIsNew=false;
-      var d = doc.data();
-      if(d.loyaltyPin){ pinToMatch = String(d.loyaltyPin); setLoginStep('enterpin'); }
-      else{ setLoginStep('setpin'); }   // حساب موجود من غير رقم سري (اتعمل من الكاشير أو اتعمله reset)
-    }
-  }).catch(function(e){
-    $('loginBtn').disabled=false; $('loginBtn').textContent='دخول';
-    $('loginErr').textContent='النت ضعيف — حاولي تاني'; console.warn(e);
-  });
-}
-
-function stepName(){
-  var name = $('nameInput').value.trim();
-  if(!name){ $('loginErr').textContent='اكتبي اسمك عشان نكمّل'; return; }
-  pendingName = name; setLoginStep('setpin');
-}
-
-function stepSetPin(){
-  var pin = digits($('pinInput').value), c = digits($('pinConfirmInput').value);
-  if(pin.length !== 4){ $('loginErr').textContent='الرقم السري لازم يكون ٤ أرقام'; return; }
-  if(pin !== c){ $('loginErr').textContent='الرقمين مش متطابقين'; $('pinConfirmInput').value=''; return; }
-  $('loginBtn').disabled=true; $('loginBtn').textContent='بنجهّز...';
-  if(pendingIsNew){
-    createCustomer(pendingPhone, pendingName, pin);
-  }else{
-    db.collection(COL_CUSTOMERS).doc(pendingPhone).set({ loyaltyPin: pin }, { merge:true }).then(function(){
-      localStorage.setItem(LS_PHONE, pendingPhone);
-      $('loginBtn').disabled=false; enterApp(pendingPhone);
-    }).catch(function(e){
-      $('loginBtn').disabled=false; $('loginBtn').textContent='حفظ ودخول';
-      $('loginErr').textContent='معرفناش نحفظ — حاولي تاني'; console.warn(e);
-    });
-  }
-}
-
-function stepEnterPin(){
-  var pin = digits($('pinInput').value);
-  if(pin.length !== 4){ $('loginErr').textContent='اكتبي الرقم السري (٤ أرقام)'; return; }
-  if(pin !== pinToMatch){ $('loginErr').textContent='الرقم السري غلط'; $('pinInput').value=''; return; }
-  localStorage.setItem(LS_PHONE, pendingPhone);
-  enterApp(pendingPhone);
-}
-
-function createCustomer(phone, name, pin){
-  makeUniqueCode(0).then(function(code){
-    var data = {
-      name: name, phone: phone, points: 0, totalSpent: 0,
-      lastVisit: null, notes: '', branch: '',
-      loyaltyCode: code, loyaltyPin: pin, createdAt: Date.now(), source: 'loyalty_app'
-    };
-    return db.collection(COL_CUSTOMERS).doc(phone).set(data, { merge:true });
-  }).then(function(){
-    localStorage.setItem(LS_PHONE, phone);
-    $('loginBtn').disabled=false; enterApp(phone);
-  }).catch(function(e){
-    $('loginBtn').disabled=false; $('loginBtn').textContent='حفظ ودخول';
-    $('loginErr').textContent='معرفناش نحفظ الحساب — حاولي تاني'; console.warn(e);
-  });
-}
-
-/* ============================================================
-   دخول التطبيق + مستمع realtime على العميل
-   ============================================================ */
-function enterApp(phone){
-  showScreen('screen-app');
-  invoicesData = [];
-  $('topLogo').src = logoSrc;
-  $('greet').textContent = greetWord();
-  $('waTop').style.display = hasSupport() ? 'flex' : 'none';
-  dataOffers = null; dataProducts = null; dataInvoices = null; tabStarted = {};   // تبويبات جديدة لكل جلسة، تتحمّل كسول عند فتحها
-  switchTab('card');
-
-  if(custUnsub){ custUnsub(); }
-  custUnsub = db.collection(COL_CUSTOMERS).doc(phone).onSnapshot(function(doc){
-    if(!doc.exists){ // اتمسح من الكاشير؟ نرجّع لتسجيل الدخول
-      logout(true); return;
-    }
-    currentCustomer = Object.assign({ phone: phone }, doc.data());
-    $('topName').textContent = firstName(currentCustomer.name);
-    if(!currentCustomer.loyaltyCode){ ensureLoyaltyCode(phone); } // عميل قديم من غير كود؟ نولّدله
-    renderCard();
-    // لو التبويب المفتوح هو الحساب، نحدّثه كمان
-    if($('tab-account').style.display !== 'none') renderAccount();
-  }, function(err){ console.warn('customer sync', err); });
-}
-
-function greetWord(){
-  var h = new Date().getHours();
-  if(h < 12) return 'صباح الخير 🌷';
-  if(h < 18) return 'نهارك سعيد ✨';
-  return 'مساء الخير 🌙';
-}
-function firstName(n){ n=(n||'').trim(); return n ? n.split(/\s+/)[0] : 'يا فندم'; }
-
-/* ============================================================
-   التبويبات
-   ============================================================ */
-var currentTab = 'card';
-var dataOffers = null, dataProducts = null, dataInvoices = null;   // null = لسه ما اتحمّلش
-var tabStarted = {};   // التبويب بدأ تحميله قبل كده؟
-
-// بيبني الاستعلام لكل تبويب — بحد أقصى للعدد عشان ما نحمّلش آلاف الصفوف على الموبايل
-function tabRef(tab){
-  if(tab==='offers')   return db.collection(COL_DISCOUNTS).limit(60);
-  if(tab==='products') return db.collection(COL_INVENTORY).limit(60);
-  if(tab==='invoices' && currentCustomer) return db.collection(COL_SALES).where('customerPhone','==', currentCustomer.phone).limit(100);
-  return null;
-}
-var GLOW_BRANCH = 'Glow';   // فرع Glow ليه تطبيقه المنفصل — نستثنيه من تطبيق echarpe
-var COL_SETTINGS = 'pos_test_settings';
-var CATALOG_BRAND = 'echarpe';
-var catalogBanners = [];
-var POINTS_FIELD = 'points';
-function pqty(p){ if(p.qtyByBranch){ var t=0; for(var k in p.qtyByBranch){ if(k!==GLOW_BRANCH) t+=Number(p.qtyByBranch[k])||0; } return t; } return Number(p.quantity)||0; }
-function tabAssign(tab, s){
-  var arr = s ? s.docs.map(function(d){ return tab==='invoices' ? Object.assign({ _id:d.id }, d.data()) : d.data(); }) : [];
-  // تطبيق echarpe يعرض فروع echarpe بس (يستثني بيانات Glow عشان ما تتلخبطش)
-  if(tab==='products')      arr = arr.filter(function(p){ if(!p.showToCustomer) return false; if(p.branches && !p.branches.some(function(b){return b!==GLOW_BRANCH;})) return false; return true; });
-  else if(tab==='offers')   arr = arr.filter(function(o){ return (o.branch||'') !== GLOW_BRANCH; });
-  else if(tab==='invoices') arr = arr.filter(function(v){ return (v.branch||'') !== GLOW_BRANCH; });
-  if(tab==='offers') dataOffers = arr; else if(tab==='products') dataProducts = arr; else if(tab==='invoices') dataInvoices = arr;
-}
-function tabRender(tab){
-  if(currentTab !== tab) return;
-  if(tab==='offers') renderOffers(); else if(tab==='products') renderProducts(); else if(tab==='invoices') renderInvoices();
-}
-// مؤشّر تحميل لايق مع الثيم (بيظهر جوه التبويب لحد ما البيانات توصل)
-function loaderHTML(text){
-  return '<div class="loader"><div class="ring"></div><div class="lt">'+(text||'ثانية واحدة...')+'</div></div>';
-}
-var _loadCount = 0;
-function showTopLoad(on){
-  _loadCount = Math.max(0, _loadCount + (on ? 1 : -1));
-  var el = $('topLoad'); if(el) el.classList.toggle('on', _loadCount > 0);
-}
-
-// تحميل كسول: أول ما تفتح التبويب بس — كاش فوري + تحديث محدود من السيرفر في الخلفية
-function lazyLoadTab(tab){
-  if(tabStarted[tab]) return;
-  if(tab==='products'){
-    tabStarted[tab] = true; showTopLoad(true);
-    db.collection(COL_SETTINGS).doc('catalog_'+CATALOG_BRAND).get().then(function(d){
-      var data = d.exists ? d.data() : {};
-      dataProducts = Array.isArray(data.items) ? data.items : [];
-      catalogBanners = Array.isArray(data.banners) ? data.banners : [];
-      if(currentTab==='products') renderProducts();
-    }).catch(function(){ dataProducts=[]; if(currentTab==='products') renderProducts(); })
-      .then(function(){ showTopLoad(false); });
-    return;
-  }
-  var ref = tabRef(tab); if(!ref) return;
-  tabStarted[tab] = true;
-  showTopLoad(true);
-  ref.get({ source:'cache' }).then(function(s){ if(s && s.docs && s.docs.length){ tabAssign(tab, s); tabRender(tab); } }).catch(function(){});
-  ref.get().then(function(s){ tabAssign(tab, s); tabRender(tab); }).catch(function(){ tabAssign(tab, null); tabRender(tab); })
-    .then(function(){ showTopLoad(false); });
-}
-
-function switchTab(tab){
-  currentTab = tab;
-  document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
-  ['card','offers','products','invoices','account','contact'].forEach(function(t){
-    $('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
-  });
-  // نبدأ تحميل بيانات التبويب أول مرة بس (كسول)، والعرض من الذاكرة فورًا في المرات الجاية
-  if(tab==='offers' || tab==='products' || tab==='invoices') lazyLoadTab(tab);
-  if(tab==='offers') renderOffers();
-  else if(tab==='products') renderProducts();
-  else if(tab==='invoices') renderInvoices();
-  else if(tab==='account') renderAccount();
-  else if(tab==='contact') renderContact();
-  // البطاقة بتتحدّث لايف من onSnapshot
-  window.scrollTo(0,0);
-}
-document.querySelectorAll('.tab').forEach(function(b){
-  b.addEventListener('click', function(){ switchTab(b.dataset.tab); });
-});
-
-/* ============================================================
-   تبويب البطاقة
-   ============================================================ */
-/* ---------- تاريخ التسجيل: بيتعامل مع صيغة التطبيق (رقم) وصيغة الكاشير (Firestore Timestamp) ---------- */
-function toJsDate(v){
-  if(v==null) return null;
-  if(typeof v==='number') return new Date(v);
-  if(typeof v==='string'){ var d=new Date(v); return isNaN(d.getTime())?null:d; }
-  if(typeof v==='object'){
-    if(typeof v.toDate==='function'){ try{ return v.toDate(); }catch(_){ } }
-    if(typeof v.seconds==='number') return new Date(v.seconds*1000);
-  }
-  return null;
-}
-function regDateText(opts){
-  var d = toJsDate(currentCustomer && currentCustomer.createdAt);
-  if(!d) return '';
-  try{ return d.toLocaleDateString('ar-EG', opts); }catch(_){ return ''; }
-}
-
-/* ---------- كود العضوية المميز ---------- */
-function generateLoyaltyCode(){ return 'ECH' + String(Math.floor(Math.random()*1e8)).padStart(8,'0'); }
-function prettyCode(c){
-  c = String(c||'');
-  if(c.indexOf('ECH')===0){ return 'ECH ' + c.slice(3).replace(/(\d{4})(\d{4})/, '$1 $2'); }
-  return c;
-}
-// يولّد كود ويتأكد إنه مش متكرر (بيحاول لحد 5 مرات)
-function makeUniqueCode(tries){
-  var code = generateLoyaltyCode();
-  return db.collection(COL_CUSTOMERS).where('loyaltyCode','==',code).limit(1).get().then(function(snap){
-    if(snap.empty || tries>=5) return code;
-    return makeUniqueCode(tries+1);
-  }).catch(function(){ return code; }); // أوفلاين؟ نقبل الكود زي ما هو
-}
-// يتأكد إن العميل عنده كود؛ لو لأ يولّد واحد ويحفظه (الحفظ بيرجّع snapshot تاني فيعاد الرسم بالباركود)
-function ensureLoyaltyCode(phone){
-  if(currentCustomer && currentCustomer.loyaltyCode) return;
-  makeUniqueCode(0).then(function(code){
-    return db.collection(COL_CUSTOMERS).doc(phone).set({ loyaltyCode: code }, { merge:true });
-  }).catch(function(e){ console.warn('تعذر توليد كود العضوية', e); });
-}
-
-/* ---------- مولّد باركود CODE128-B جوه الملف (من غير أي مكتبة خارجية عشان يشتغل أوفلاين) ---------- */
-var C128 = ["11011001100","11001101100","11001100110","10010011000","10010001100","10001001100","10011001000","10011000100","10001100100","11001001000","11001000100","11000100100","10110011100","10011011100","10011001110","10111001100","10011101100","10011100110","11001110010","11001011100","11001001110","11011100100","11001110100","11101101110","11101001100","11100101100","11100100110","11101100100","11100110100","11100110010","11011011000","11011000110","11000110110","10100011000","10001011000","10001000110","10110001000","10001101000","10001100010","11010001000","11000101000","11000100010","10110111000","10110001110","10001101110","10111011000","10111000110","10001110110","11101110110","11010001110","11000101110","11011101000","11011100010","11011101110","11101011000","11101000110","11100010110","11101101000","11101100010","11100011010","11101111010","11001000010","11110001010","10100110000","10100001100","10010110000","10010000110","10000101100","10000100110","10110010000","10110000100","10011010000","10011000010","10000110100","10000110010","11000010010","11001010000","11110111010","11000010100","10001111010","10100111100","10010111100","10010011110","10111100100","10011110100","10011110010","11110100100","11110010100","11110010010","11011011110","11011110110","11110110110","10101111000","10100011110","10001011110","10111101000","10111100010","11110101000","11110100010","10111011110","10111101110","11101011110","11110101110","11010000100","11010010000","11010011100","1100011101011"];
-function code128b(text){
-  var codes=[104], i;              // Start B
-  for(i=0;i<text.length;i++){ codes.push(text.charCodeAt(i)-32); }
-  var sum=104;
-  for(i=0;i<text.length;i++){ sum += (text.charCodeAt(i)-32)*(i+1); }
-  codes.push(sum%103);             // checksum
-  codes.push(106);                 // Stop
-  var bits=''; for(i=0;i<codes.length;i++){ bits += C128[codes[i]]; }
-  return bits;
-}
-function drawBarcode(containerId, text){
-  var el = document.getElementById(containerId);
-  if(!el) return;
-  var bits = code128b(String(text));
-  var mw = 2, h = 70, quiet = 10;          // عرض الموديول، الارتفاع، المنطقة البيضا على الجناب
-  var total = (bits.length + quiet*2) * mw;
-  var x = quiet*mw, rects = '';
-  for(var i=0;i<bits.length;i++){
-    if(bits.charAt(i)==='1'){ rects += '<rect x="'+x+'" y="0" width="'+mw+'" height="'+h+'"/>'; }
-    x += mw;
-  }
-  // بنبني الـ SVG كامل كنص وبنحطه جوه div — ده بيتفهم صح على كل المتصفحات (مش svg.innerHTML)
-  el.innerHTML = '<svg viewBox="0 0 '+total+' '+h+'" width="100%" height="'+h+'" '+
-                 'preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto;">'+
-                 '<rect x="0" y="0" width="'+total+'" height="'+h+'" fill="#ffffff"/>'+
-                 '<g fill="#3A2233">'+rects+'</g></svg>';
-}
-
-/* ---------- قلب البطاقة ---------- */
-function flipCard(){ var f=$('cardFlip'); if(f) f.classList.toggle('flipped'); }
-
-
-// ===== العميل يطلب استبدال نقاط من التطبيق (يظهر للكاشير عند الشراء) =====
-var redeemSel = 0;
-function redeemMax(){ var per=Number(loyaltyCfg.pointsPerRedemption)||10; return Math.floor((Number(currentCustomer[POINTS_FIELD])||0)/per); }
-function changeRedeem(d){ redeemSel=Math.max(0,Math.min(redeemMax(),redeemSel+d)); renderCard(); }
-function requestRedeem(){
-  var per=Number(loyaltyCfg.pointsPerRedemption)||10, val=Number(loyaltyCfg.redemptionValueEGP)||5;
-  if(redeemSel<=0) return;
-  var req={ points:redeemSel*per, valueEGP:redeemSel*val, brand:CATALOG_BRAND, ts:Date.now() };
-  db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ pendingRedeem:req },{merge:true}).then(function(){
-    currentCustomer.pendingRedeem=req; redeemSel=0; renderCard();
-    alert('تمام! ✅ لما تيجي تدفعي، الكاشير هيلاقي طلب الاستبدال جاهز.');
-  }).catch(function(){ alert('حصل خطأ، حاولي تاني'); });
-}
-function cancelRedeem(){
-  db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ pendingRedeem: firebase.firestore.FieldValue.delete() },{merge:true}).then(function(){
-    currentCustomer.pendingRedeem=null; renderCard();
-  });
-}
-function redeemBlockHtml(){
-  var per=Number(loyaltyCfg.pointsPerRedemption)||10, val=Number(loyaltyCfg.redemptionValueEGP)||5;
-  var bal=Number(currentCustomer[POINTS_FIELD])||0;
-  var pr=currentCustomer.pendingRedeem;
-  if(pr && pr.brand===CATALOG_BRAND && pr.points>0){
-    return '<div style="background:var(--pink-soft); border:1px solid var(--pink); border-radius:16px; padding:16px; margin-top:14px; text-align:center;">'+
-      '<div style="font-weight:800; color:var(--pink-deep); margin-bottom:4px;">🎁 طلبتي استبدال '+pr.points+' نقطة</div>'+
-      '<div style="font-size:13px; color:var(--ink);">خصم '+pr.valueEGP+' ج.م — هيتطبق عند الدفع</div>'+
-      '<button onclick="cancelRedeem()" style="margin-top:10px; padding:8px 16px; border-radius:8px; border:1px solid var(--pink); background:transparent; color:var(--pink-deep); font-weight:700; cursor:pointer;">إلغاء الطلب</button>'+
-    '</div>';
-  }
-  if(bal<per) return '';
-  var pts=redeemSel*per, egp=redeemSel*val;
-  return '<div style="background:var(--white); border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:14px;">'+
-    '<div style="font-weight:800; text-align:center; margin-bottom:12px;">🎁 استبدلي نقاطك</div>'+
-    '<div style="display:flex; align-items:center; justify-content:center; gap:18px; margin-bottom:8px;">'+
-      '<button onclick="changeRedeem(-1)" style="width:42px; height:42px; border-radius:50%; border:1px solid var(--line); background:var(--pink-soft); font-size:22px; font-weight:800; cursor:pointer;">−</button>'+
-      '<div style="text-align:center; min-width:90px;"><div style="font-size:26px; font-weight:900; color:var(--pink-deep);">'+pts+'</div><div style="font-size:11px; color:var(--muted);">نقطة</div></div>'+
-      '<button onclick="changeRedeem(1)" style="width:42px; height:42px; border-radius:50%; border:1px solid var(--line); background:var(--pink-soft); font-size:22px; font-weight:800; cursor:pointer;">+</button>'+
-    '</div>'+
-    '<div style="text-align:center; font-size:14px; color:var(--ink); margin-bottom:12px;">= خصم <b>'+egp+' ج.م</b></div>'+
-    '<button onclick="requestRedeem()" '+(redeemSel<=0?'disabled':'')+' style="width:100%; padding:12px; border-radius:10px; border:none; background:'+(redeemSel<=0?'#bbb':'var(--pink)')+'; color:#fff; font-weight:800; cursor:'+(redeemSel<=0?'default':'pointer')+';">اطلبي الاستبدال</button>'+
-  '</div>';
-}
-
-function renderCard(){
-  if(!currentCustomer) return;
-  var pts = Number(currentCustomer.points)||0;
-  var per = Number(loyaltyCfg.pointsPerRedemption)||10;
-  var val = Number(loyaltyCfg.redemptionValueEGP)||5;
-  var earn = Number(loyaltyCfg.pointsPerEGP)||100;
-
-  var units = Math.floor(pts / per);
-  var worth = units * val;                          // القيمة القابلة للاستبدال دلوقتي
-  var toNext = per - (pts % per);                    // كام نقطة للوحدة الجاية
-  var pct = Math.round(((pts % per) / per) * 100);
-
-  var sinceTxt = regDateText({day:'numeric', month:'long', year:'numeric'});
-  if(sinceTxt) sinceTxt = 'عضو من ' + sinceTxt;
-
-  var code = currentCustomer.loyaltyCode || '';
-
-  $('tab-card').innerHTML =
-    '<div class="card-flip" id="cardFlip">'+
-      '<div class="card-inner" onclick="flipCard()">'+
-
-        // ===== وش البطاقة =====
-        '<div class="card card-face card-front">'+
-          '<div class="card-top">'+
-            '<div><div class="lbl">نقاطك</div><div class="clubname">نادي إيشارب</div></div>'+
-            '<img src="'+logoSrc+'" alt="">'+
-          '</div>'+
-          '<div class="pts-block">'+
-            '<span class="pts-num">'+fmt(pts)+'</span><span class="pts-unit">نقطة</span>'+
-            '<div class="pts-worth">'+(worth>0 ? ('تقدري تستبدليها بخصم ~'+fmt(worth)+' ج.م') : 'اجمعي نقاط أكتر عشان تبدأي تستبدلي')+'</div>'+
-          '</div>'+
-          '<div class="holder">'+
-            '<div class="name">'+esc(currentCustomer.name||'—')+'</div>'+
-            '<div class="since">'+esc(sinceTxt)+'</div>'+
-          '</div>'+
-          '<div class="flip-hint">اضغطي لعرض الباركود ↻</div>'+
-        '</div>'+
-
-        // ===== ضهر البطاقة (الباركود) =====
-        '<div class="card-face card-back">'+
-          '<div class="cb-title">🎟️ كود عضويتك</div>'+
-          (code
-            ? '<div class="cb-barcode" id="cardBarcode"></div><div class="cb-code">'+esc(prettyCode(code))+'</div>'
-            : '<div class="cb-wait">بنجهّز كودك...</div>')+
-          '<div class="cb-pts">رصيدك: '+fmt(pts)+' نقطة</div>'+
-          '<div class="flip-hint">اضغطي للرجوع ↩</div>'+
-        '</div>'+
-
-      '</div>'+
-    '</div>'+
-
-    '<button class="show-cashier" onclick="flipCard()">🎟️ اعرضي كودك للكاشير</button>'+
-
-    '<div class="progress-wrap">'+
-      '<div class="pw-top"><span>الوحدة الجاية</span><span class="g">'+(pts>0 && (pts%per===0) ? 'جاهزة للاستبدال! 🎉' : ('فاضل '+toNext+' نقطة'))+'</span></div>'+
-      '<div class="bar"><span style="width:'+pct+'%"></span></div>'+
-    '</div>'+
-
-    '<div class="info-grid">'+
-      '<div class="info-box"><div class="ico">🛒</div><div class="t">إزاي تكسبي نقاط</div><div class="d">كل '+fmt(earn)+' ج.م تشتريها = نقطة</div></div>'+
-      '<div class="info-box"><div class="ico">🎁</div><div class="t">إزاي تستبدلي</div><div class="d">كل '+per+' نقطة = '+fmt(val)+' ج.م خصم</div></div>'+
-    '</div>'+
-
-    redeemBlockHtml()+
-    '<div class="redeem-hint">💡 الاستبدال بيحصل في المحل — قوليلهم عايزة تستبدلي نقاطك عند الدفع.</div>';
-
-  // نرسم الباركود على ضهر البطاقة (مولّد داخلي — بيشتغل حتى أوفلاين)
-  if(code){
-    try{ drawBarcode('cardBarcode', code); }catch(e){ console.warn('barcode', e); }
-  }
-}
-
-/* ============================================================
-   تبويب العروض (الخصومات السارية من الكاشير)
-   ============================================================ */
-function renderOffers(){
-  var box = $('tab-offers');
-  var head = '<div class="sec-h">عروض <span class="em">النهاردة</span></div>';
-  var _now = Date.now();
-  var _myR = (currentCustomer && currentCustomer.rewards ? currentCustomer.rewards : []).filter(function(r){ return r && !r.used && r.brand===CATALOG_BRAND && (!r.expiry || r.expiry>_now); });
-  var rewardsHtml = _myR.length ? ('<div class="sec-h">مكافآتك <span class="em">الخاصة</span></div>' + _myR.map(function(r){
-    var big = r.type==='percent' ? (fmt(r.value)+'%') : fmt(r.value);
-    var sm  = r.type==='percent' ? 'خصم' : 'ج.م';
-    var cond = r.minInvoice ? ('لو اشتريتي بـ '+fmt(r.minInvoice)+' ج.م أو أكتر') : 'على أي فاتورة';
-    var days = r.expiry ? Math.max(0, Math.ceil((r.expiry-_now)/86400000)) : null;
-    return '<div class="offer" style="border:2px solid var(--pink); background:var(--pink-soft);">'+
-      '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
-      '<div class="obody"><div class="on">🎁 مكافأة خاصة ليكي</div><div class="osc">'+cond+'</div><div class="oend">'+(days!=null?('صالحة '+days+' يوم كمان — بتتطبق عند الدفع'):'بتتطبق عند الدفع')+'</div></div>'+
-    '</div>';
-  }).join('')) : '';
-
-  if(dataOffers === null){ box.innerHTML = head + loaderHTML('بنجيب أحدث العروض...'); return; }
-  var today = todayISO();
-  var live = dataOffers.filter(function(dc){
-    return dc.active !== false
-      && (!dc.startDate || dc.startDate <= today)
-      && (!dc.endDate   || dc.endDate   >= today);
-  });
-  var seen = {}, uniq = [];
-  live.forEach(function(dc){
-    var key = (dc.name||'')+'|'+dc.type+'|'+dc.value+'|'+dc.scope+'|'+(dc.productId||'');
-    if(!seen[key]){ seen[key]=1; uniq.push(dc); }
-  });
-  if(uniq.length === 0){
-    box.innerHTML = rewardsHtml + head + '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>';
-    return;
-  }
-  var rows = uniq.map(function(dc){
-    var isPct = dc.type === 'percent';
-    var big = isPct ? (fmt(dc.value)+'%') : fmt(dc.value);
-    var sm  = isPct ? 'خصم' : 'ج.م';
-    var scopeStr = dc.scope === 'all' ? '🏪 على المحل كله' : ('🏷️ ' + esc(dc.productName || 'منتج مختار'));
-    var cap = (isPct && dc.maxDiscount) ? (' · بحد أقصى '+fmt(dc.maxDiscount)+' ج.م') : '';
-    var endStr = dc.endDate ? ('ساري لحد '+esc(dc.endDate)) : 'عرض مفتوح';
-    return '<div class="offer">'+
-      '<div class="oval"><span class="big">'+big+'</span><span class="sm">'+sm+'</span></div>'+
-      '<div class="obody">'+
-        '<div class="on">'+esc(dc.name||'عرض')+'</div>'+
-        '<div class="osc">'+scopeStr+cap+'</div>'+
-        '<div class="oend">'+endStr+'</div>'+
-      '</div>'+
-    '</div>';
-  }).join('');
-  box.innerHTML = rewardsHtml + head + rows;
-}
-
-/* ============================================================
-   تبويب المنتجات (المخزون المتاح)
-   ============================================================ */
-
-function activateOffer(barcode, type, value, maxUses, validDays){
-  if(!barcode || !currentCustomer){ return; }
-  var offers = currentCustomer.activatedOffers || {};
-  offers[barcode] = { type:type, value:value, brand:CATALOG_BRAND, maxUses:(maxUses||1), uses:0, expiry:(validDays? (Date.now()+validDays*86400000):0) };
-  db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ activatedOffers: offers }, { merge:true }).then(function(){
-    currentCustomer.activatedOffers = offers; renderProducts();
-    try{ var u={}; u[barcode]={ activated: firebase.firestore.FieldValue.increment(1) }; db.collection(COL_SETTINGS).doc('offer_stats_'+CATALOG_BRAND).set(u,{merge:true}); }catch(e){}
-    alert('تم تفعيل العرض! 🎉 هيتطبق تلقائي عند الدفع في المحل.');
-  }).catch(function(){ alert('حصل خطأ، حاولي تاني'); });
-}
-function renderProducts(){
-  var box = $('tab-products');
-  var head = '<div class="sec-h">تشكيلة <span class="em">إيشارب</span></div>';
-  if(dataProducts === null){ box.innerHTML = head + loaderHTML('بنجيب التشكيلة...'); return; }
-  var banners = (catalogBanners||[]).map(function(b){
-    return '<img src="'+esc(b.img||'')+'" style="width:100%; border-radius:16px; margin-bottom:12px; display:block;">';
-  }).join('');
-  if(dataProducts.length === 0){
-    box.innerHTML = head + banners + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
-    return;
-  }
-  var cards = dataProducts.map(function(p){
-    var hasOffer = p.discountType && p.discountType!=='none' && Number(p.discountValue)>0 && p.barcode;
-    var priceNum = parseFloat(p.price)||0, newPrice = priceNum;
-    if(hasOffer){ newPrice = p.discountType==='percent' ? Math.max(0, priceNum*(1-Number(p.discountValue)/100)) : Math.max(0, priceNum-Number(p.discountValue)); }
-    var _actObj = currentCustomer && currentCustomer.activatedOffers && currentCustomer.activatedOffers[p.barcode];
-    var _actLive = _actObj && (!_actObj.expiry || _actObj.expiry>Date.now()) && ((_actObj.uses||0) < (_actObj.maxUses||1));
-    var activated = _actLive;
-    var _remainUses = _actObj ? ((_actObj.maxUses||1) - (_actObj.uses||0)) : 0;
-    var priceHtml = p.price ? (hasOffer
-      ? '<div class="pprice"><span style="text-decoration:line-through; color:var(--muted); font-size:12px;">'+esc(p.price)+'</span> '+Math.round(newPrice)+' <span>ج.م</span></div>'
-      : '<div class="pprice">'+esc(p.price)+' <span>ج.م</span></div>') : '';
-    var offerBtn = hasOffer ? (activated
-      ? '<div style="margin-top:8px; padding:8px; border-radius:8px; background:var(--pink-soft); color:var(--pink-deep); font-weight:800; font-size:12px; text-align:center;">✅ مفعّل'+((_actObj.maxUses||1)>1?(' · باقي '+_remainUses+' مرة'):'')+'</div>'
-      : '<button onclick="activateOffer(\''+p.barcode+'\',\''+p.discountType+'\','+Number(p.discountValue)+','+(Number(p.usesPerCustomer)||1)+','+(Number(p.validDays)||0)+')" style="margin-top:8px; width:100%; padding:9px; border-radius:8px; border:none; background:var(--pink); color:#fff; font-weight:800; font-size:12px; cursor:pointer;">🎁 فعّل العرض'+(p.usesPerCustomer>1?(' ('+p.usesPerCustomer+' مرات)'):'')+(p.validDays?(' · '+p.validDays+' يوم'):'')+'</button>') : '';
-    return '<div class="prod" style="padding:0; overflow:hidden;">'+
-      (p.img ? '<div style="width:100%; height:150px; background:#eee center/cover no-repeat; background-image:url(\''+String(p.img).replace(/\'/g,'')+'\');"></div>' : '')+
-      '<div style="padding:12px 14px 14px;">'+
-        '<div class="pname">'+esc(p.name||'منتج')+'</div>'+
-        (p.desc ? '<div class="pmeta">'+esc(p.desc)+'</div>' : '')+
-        priceHtml + offerBtn +
-      '</div>'+
-    '</div>';
-  }).join('');
-  box.innerHTML = head + banners + '<div class="prod-grid">'+cards+'</div>';
-}
-
-/* ============================================================
-   تبويب فواتيري (نسخ من فواتير العميلة — بديل الفاتورة الورق)
-   ============================================================ */
-var invoicesData = [];
-var PAY_LABEL = { cash:'كاش', visa:'فيزا', instapay:'انستاباي' };
-
-function payMethodsText(pmts){
-  var out = [];
-  Object.keys(pmts||{}).forEach(function(m){ if((pmts[m]||0) > 0) out.push(PAY_LABEL[m]||m); });
-  return out.length ? out.join(' + ') : '—';
-}
-
-function renderInvoices(){
-  var box = $('tab-invoices');
-  var head = '<div class="sec-h">🧾 فواتيري</div>';
-  if(dataInvoices === null){ box.innerHTML = head + loaderHTML('بنجيب فواتيرك...'); return; }
-  invoicesData = dataInvoices.filter(function(s){ return !s.reversed; })
-    .sort(function(a,b){ return (toJsDate(b.createdAt)?.getTime()||0) - (toJsDate(a.createdAt)?.getTime()||0); });
-
-  if(invoicesData.length === 0){
-    box.innerHTML = head + '<div class="empty"><span class="big">🧾</span>لسه مفيش فواتير مسجّلة باسمك.<br>قوّلي الكاشير يحط رقمك وقت الشراء عشان تتحفظ هنا.</div>';
-    return;
-  }
-  var rows = invoicesData.map(function(s, i){
-    var d = toJsDate(s.createdAt);
-    var dateStr = d ? d.toLocaleDateString('ar-EG', {day:'2-digit', month:'long', year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '—';
-    var pieces = s.itemCount != null ? s.itemCount : (s.items||[]).reduce(function(x,it){ return x + (it.qty||0); }, 0);
-    var isRet = (s.total||0) < 0;
-    return '<div class="inv" onclick="openInvoiceDetail('+i+')">'+
-      '<div class="inv-top">'+
-        '<div><div class="inv-date">'+esc(dateStr)+'</div>'+(s.invoiceNo?'<div class="inv-no">#'+esc(s.invoiceNo)+'</div>':'')+'</div>'+
-        '<div class="inv-total" style="'+(isRet?'color:#c0396b':'')+'">'+fmt(s.total)+' <span style="font-size:11px;">ج.م</span></div>'+
-      '</div>'+
-      '<div class="inv-meta">'+
-        '<span>🛍️ '+pieces+' قطعة · '+payMethodsText(s.payments)+'</span>'+
-        (s.loyaltyPointsEarned ? '<span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span>' : '<span></span>')+
-      '</div>'+
-    '</div>';
-  }).join('');
-  box.innerHTML = head + rows;
-}
-
-function openInvoiceDetail(i){
-  var s = invoicesData[i]; if(!s) return;
-  var d = toJsDate(s.createdAt);
-  var dateStr = d ? d.toLocaleDateString('ar-EG', {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
-  var itemsHtml = (s.items||[]).map(function(it){
-    var line = (it.price||0) * (it.qty||0);
-    return '<div class="ish-item"><div>'+esc(it.name||'صنف')+' <span class="q">× '+(it.qty||0)+'</span>'+(it.discountName?' <span style="color:var(--pink);font-size:11px;">🏷️</span>':'')+'</div><div>'+fmt(line)+'</div></div>';
-  }).join('');
-  var pmtRows = Object.keys(s.payments||{}).filter(function(m){ return (s.payments[m]||0)>0; })
-    .map(function(m){ return '<div class="ish-row"><span>'+(PAY_LABEL[m]||m)+'</span><span>'+fmt(s.payments[m])+' ج.م</span></div>'; }).join('');
-
-  $('invSheet').innerHTML =
-    '<div class="ish-h"><div class="ish-title">🧾 فاتورة'+(s.invoiceNo?(' #'+esc(s.invoiceNo)):'')+'</div><button class="ish-x" onclick="closeInvoiceDetail()">✕</button></div>'+
-    '<div class="ish-sub">'+esc(dateStr)+(s.branch?(' · '+esc(s.branch)):'')+'</div>'+
-    itemsHtml+
-    '<div class="ish-row big"><span>الإجمالي</span><span>'+fmt(s.total)+' ج.م</span></div>'+
-    pmtRows+
-    (s.loyaltyPointsEarned ? '<div class="ish-row"><span>نقاط كسبتيها</span><span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span></div>' : '')+
-    (s.sellerEmployeeName||s.employeeName ? '<div class="ish-row"><span>خدمك</span><span>'+esc(s.sellerEmployeeName||s.employeeName)+'</span></div>' : '')+
-    (s.invoiceCode ? '<div style="margin-top:16px; padding-top:14px; border-top:2px dashed var(--line); text-align:center;">'+
-      '<div style="font-size:12px; color:var(--muted); font-weight:700; margin-bottom:8px;">📷 لو عايزة ترجّعي حاجة، ورّي الكود ده للكاشير</div>'+
-      '<div id="invBarcode" style="max-width:230px; margin:0 auto;"></div>'+
-      '<div style="font-family:monospace; font-size:12px; color:var(--pink-deep); margin-top:4px; letter-spacing:1px;">'+esc(s.invoiceCode)+'</div>'+
-    '</div>' : '');
-  $('invOverlay').classList.add('on');
-  if(s.invoiceCode){ try{ drawBarcode('invBarcode', s.invoiceCode); }catch(e){ console.warn('inv barcode', e); } }
-}
-function closeInvoiceDetail(){ $('invOverlay').classList.remove('on'); }
-
-/* ============================================================
-   تبويب الحساب
-   ============================================================ */
-function renderAccount(){
-  if(!currentCustomer) return;
-  var spent = Number(currentCustomer.totalSpent)||0;
-  var sinceFull = regDateText({day:'numeric', month:'long', year:'numeric'}) || '—';
-  var code = currentCustomer.loyaltyCode ? prettyCode(currentCustomer.loyaltyCode) : '—';
-  $('tab-account').innerHTML =
-    '<div class="sec-h">حسابي</div>'+
-    '<div class="acct-card">'+
-      '<div class="acct-row"><span class="k">الاسم</span><span class="v">'+esc(currentCustomer.name||'—')+'</span></div>'+
-      '<div class="acct-row"><span class="k">رقم الموبايل</span><span class="v ltr">'+esc(currentCustomer.phone)+'</span></div>'+
-      '<div class="acct-row"><span class="k">كود العضوية</span><span class="v ltr">'+esc(code)+'</span></div>'+
-      '<div class="acct-row"><span class="k">رصيد النقاط</span><span class="v">'+fmt(currentCustomer.points||0)+' نقطة</span></div>'+
-      (spent>0 ? '<div class="acct-row"><span class="k">إجمالي مشترياتك</span><span class="v">'+fmt(spent)+' ج.م</span></div>' : '')+
-      '<div class="acct-row"><span class="k">عضو من</span><span class="v">'+esc(sinceFull)+'</span></div>'+
-    '</div>'+
-    (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
-    '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
-    '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
-    '<button class="btn-outline logout" onclick="logout()">تسجيل الخروج</button>';
-
-  // زر التثبيت
-  var ib = $('installBtn');
-  if(deferredPrompt){ ib.style.display='flex'; ib.onclick = triggerInstall; }
-  if(isIOS() && !isStandalone()){ $('iosTip').style.display='block'; }
-}
-
-function logout(silent){
-  if(!silent && !confirm('تسجيل الخروج من حسابك؟')) return;
-  if(custUnsub){ custUnsub(); custUnsub=null; }
-  currentCustomer = null;
-  localStorage.removeItem(LS_PHONE);
-  $('phoneInput').value=''; $('nameInput').value='';
-  pendingIsNew=false; pendingName=''; pinToMatch='';
-  showScreen('screen-login');
-  setLoginStep('phone');
-}
-
-/* ============================================================
-   تثبيت التطبيق (PWA)
-   ============================================================ */
-var deferredPrompt = null;
-var installDismissed = false;   // اتقفل في الجلسة دي؟ (يظهر تاني في فتحة جديدة)
-
-function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent); }
-function isStandalone(){ return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
-
-// بيمسك حدث التثبيت من كروم/أندرويد وبيوري البانر تلقائي
-window.addEventListener('beforeinstallprompt', function(e){
-  e.preventDefault(); deferredPrompt = e;
-  // زر التثبيت اللي في تبويب الحساب (لو ظاهر)
-  var ib = $('installBtn'); if(ib){ ib.style.display='flex'; ib.onclick = triggerInstall; }
-  showInstallBanner('android');
-});
-
-// لو اتثبت خلاص، نخفي أي دعوة
-window.addEventListener('appinstalled', function(){ deferredPrompt=null; hideInstallBanner(); });
-
-function showInstallBanner(mode){
-  if(isStandalone() || installDismissed) return;      // متثبت أصلاً أو العميلة قفلته
-  var b = $('installBanner'); if(!b) return;
-  $('ibLogo').src = logoSrc;
-  if(mode === 'ios'){
-    b.classList.add('ios');
-    $('ibDesc').innerHTML = 'دوسي مشاركة <b>⬆️</b> تحت، بعدين <b>«إضافة إلى الشاشة الرئيسية»</b>';
-  }else{
-    b.classList.remove('ios');
-    $('ibDesc').textContent = 'ثبّتيه على موبايلك عشان توصليله بضغطة';
-  }
-  requestAnimationFrame(function(){ b.classList.add('show'); });
-}
-function hideInstallBanner(){ var b=$('installBanner'); if(b) b.classList.remove('show'); }
-function dismissInstall(){ installDismissed = true; hideInstallBanner(); }
-
-function triggerInstall(){
-  if(!deferredPrompt){
-    if(isIOS()){ showInstallBanner('ios'); }
-    return;
-  }
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.finally(function(){
-    deferredPrompt = null;
-    hideInstallBanner();
-    var ib = $('installBtn'); if(ib) ib.style.display='none';
-  });
-}
-
-// على الآيفون مفيش beforeinstallprompt — نوري البانر بإرشادات الإضافة يدويًا
-if(isIOS() && !isStandalone()){
-  setTimeout(function(){ showInstallBanner('ios'); }, 1500);
-}
-
-/* ============================================================
-   إقلاع التطبيق
-   ============================================================ */
-$('heroLogo').src = logoSrc;
-loadSettings().finally(function(){
-  var saved = localStorage.getItem(LS_PHONE);
-  if(saved){ showScreen('screen-app'); enterApp(saved); }
-  else { showScreen('screen-login'); setLoginStep('phone'); }
-});
-
-// لو الاسكربت كله اشتغل، نلغي بانر الفشل الاحتياطي
-window.__scriptFullyLoaded = true;
-setTimeout(function(){
-  if(!window.__scriptFullyLoaded){ $('loadFail').style.display='flex'; }
-}, 8000);
-</script>
-
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('sw.js').catch(function(){});
-  });
-}
-</script>
+<!-- ============ DASHBOARD ============ -->
+<div class="screen" id="dashboardScreen">
+  <div class="qb-layout">
+    <div class="qb-sidebar">
+      <div style="color:var(--muted); font-size:11px; margin-bottom:2px;" id="dashWho"></div>
+      <button onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+      <button onclick="openHeldModal()">⏸️ فواتير معلّقة <span id="heldCountLabel" style="display:block; font-size:10px; font-weight:400; opacity:.8;">0 فاتورة</span></button>
+      <button class="secondary" onclick="goToInventory()">📦 قائمة الأصناف</button>
+      <button class="secondary" onclick="goToReceiveGoods()">📥 استلام بضاعة</button>
+      <button class="secondary" onclick="goToCustomerList()">👤 قائمة العملاء</button>
+      <button class="secondary" id="reportsSidebarBtn" onclick="goToReports()">📊 التقارير</button>
+      <button class="secondary" id="rolesSidebarBtn" onclick="goToRoles()" style="display:none;">🛡️ الصلاحيات</button>
+      <button class="secondary" id="discountsSidebarBtn" onclick="goToDiscounts()" style="display:none;">🏷️ الخصومات</button>
+      <button class="secondary" id="loyaltySidebarBtn" onclick="goToLoyaltyScreen()" style="display:none;">🎁 برنامج الولاء</button>
+      <button class="secondary" id="importSidebarBtn" onclick="goToImport()" style="display:none;">📥 استيراد بيانات</button>
+      <div style="flex:1;"></div>
+      <button class="secondary" onclick="goToEndOfDay()">🌙 إغلاق اليوم</button>
+      <button class="secondary" style="border-color:var(--minus); color:var(--minus);" onclick="logout()">خروج 🔒</button>
+    </div>
+    <div class="qb-main">
+      <div style="position:relative; margin-bottom:14px;">
+        <input type="text" id="globalSearchInput" placeholder="🔍 دوّر على أي حاجة: رقم فاتورة، رقم تليفون عميل، اسم منتج..." style="width:100%; padding:14px 16px; border-radius:10px; border:1px solid #b9c9a0; background:#fff; color:#1a1a1a; font-size:14px;">
+        <div id="globalSearchResults" style="position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid #b9c9a0; border-radius:10px; max-height:340px; overflow-y:auto; z-index:50; display:none;"></div>
+      </div>
+      <div class="qb-section-grid">
+        <div class="qb-section">
+          <div class="qb-section-head">🛒 نقطة البيع</div>
+          <div class="qb-section-body">
+            <div class="qb-nav-item" onclick="resumeOrStartSale()"><div class="qb-icon">🧾</div><div class="qb-label">بيع جديد</div></div>
+            <div class="qb-nav-item" onclick="openHeldModal()"><div class="qb-icon">⏸️</div><div class="qb-label">فواتير معلّقة</div></div>
+            <div class="qb-nav-item" onclick="goToSalesHistory()"><div class="qb-icon">🗂️</div><div class="qb-label">سجل المبيعات</div></div>
+            <div class="qb-nav-item" onclick="goToEndOfDay()"><div class="qb-icon">🌙</div><div class="qb-label">إغلاق اليوم</div></div>
+          </div>
+        </div>
+
+        <div class="qb-section">
+          <div class="qb-section-head">👥 العملاء</div>
+          <div class="qb-section-body">
+            <div class="qb-nav-item" onclick="goToCustomerList()"><div class="qb-icon">📇</div><div class="qb-label">قائمة العملاء</div></div>
+          </div>
+        </div>
+
+        <div class="qb-section">
+          <div class="qb-section-head">📦 المخزون</div>
+          <div class="qb-section-body">
+            <div class="qb-nav-item" id="navInventory" onclick="goToInventory()"><div class="qb-icon">📦</div><div class="qb-label">قائمة الأصناف</div></div>
+            <div class="qb-nav-item" id="navReceiveGoods" onclick="goToReceiveGoods()"><div class="qb-icon">📥</div><div class="qb-label">استلام بضاعة</div></div>
+            <div class="qb-nav-item" id="navPriceLabel" onclick="goToInventory()"><div class="qb-icon">🏷️</div><div class="qb-label">طباعة أسعار</div></div>
+            <div class="qb-nav-item" id="navCatalog" onclick="goToCatalogEditor()"><div class="qb-icon">🖼️</div><div class="qb-label">كتالوج العرض</div></div>
+          </div>
+        </div>
+
+        <div class="qb-section">
+          <div class="qb-section-head">📊 التقارير</div>
+          <div class="qb-section-body">
+            <div class="qb-nav-item" id="navReports" onclick="goToReports()"><div class="qb-icon">📈</div><div class="qb-label">تقارير المبيعات</div></div>
+            <div class="qb-nav-item" id="navBranchSummary" onclick="goToBranchSummary()"><div class="qb-icon">🏬</div><div class="qb-label">ملخّص الفروع</div></div>
+          </div>
+        </div>
+
+        <div class="qb-section gold" id="navMgmtSection" style="display:none;">
+          <div class="qb-section-head">⚙️ الإدارة</div>
+          <div class="qb-section-body">
+            <div class="qb-nav-item" id="navRoles" onclick="goToRoles()" style="display:none;"><div class="qb-icon">🛡️</div><div class="qb-label">الصلاحيات</div></div>
+            <div class="qb-nav-item" id="navDiscounts" onclick="goToDiscounts()" style="display:none;"><div class="qb-icon">🏷️</div><div class="qb-label">الخصومات</div></div>
+            <div class="qb-nav-item" id="navImport" onclick="goToImport()" style="display:none;"><div class="qb-icon">📥</div><div class="qb-label">استيراد بيانات</div></div>
+            <div class="qb-nav-item" id="navReceiptDesign" onclick="goToReceiptDesign()" style="display:none;"><div class="qb-icon">🖨️</div><div class="qb-label">تصميم الفاتورة</div></div>
+            <div class="qb-nav-item" id="navLoyalty" onclick="goToLoyaltyScreen()" style="display:none;"><div class="qb-icon">🎁</div><div class="qb-label">برنامج الولاء</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SALES HISTORY ============ -->
+<div class="screen mgmt-light" id="salesHistoryScreen">
+  <div class="dash-header" style="padding:16px 20px 0;">
+    <div><h1>🗂️ سجل المبيعات</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="padding:0 20px;">
+    <div style="display:flex; gap:6px; margin-bottom:10px;">
+      <button class="rep-range-btn active" id="shTabLive" onclick="switchSalesHistoryTab('live')">مبيعات النظام الجديد</button>
+      <button class="rep-range-btn" id="shTabLegacy" onclick="switchSalesHistoryTab('legacy')">مبيعات مستوردة من QuickBooks (للرجوع بس)</button>
+    </div>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="salesHistoryWrap"></div>
+</div>
+
+<!-- ============ CUSTOMER LIST ============ -->
+<div class="screen mgmt-light" id="customerListScreen">
+  <div class="dash-header" style="padding:16px 20px 0;">
+    <div><h1>👤 قائمة العملاء</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="padding:0 20px 10px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+      <button onclick="goToImport(); switchImportTab('customers');" style="padding:9px 14px; border-radius:9px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:800; font-size:13px; cursor:pointer;">📥 استيراد من كويك بوكس</button>
+      <button onclick="exportCustomersCSV()" style="padding:9px 14px; border-radius:9px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-weight:800; font-size:13px; cursor:pointer;">📤 تصدير Excel/CSV</button>
+    </div>
+    <div id="custSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <input type="text" id="custSearch" placeholder="🔍 دوّر بالاسم أو الرقم..." oninput="renderCustList()"
+        style="flex:1; min-width:180px; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; outline:none;">
+      <select id="custSort" onchange="renderCustList()" style="padding:11px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;">
+        <option value="spend">الأكثر إنفاقًا</option>
+        <option value="recent">آخر زيارة</option>
+        <option value="points">النقاط</option>
+        <option value="name">الاسم</option>
+      </select>
+    </div>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="customerListWrap"></div>
+</div>
+
+<!-- ============ END OF DAY ============ -->
+<div class="screen mgmt-light" id="endOfDayScreen">
+  <div class="dash-header" style="padding:16px 20px 0;">
+    <div><h1>🌙 إغلاق اليوم</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="endOfDayWrap"></div>
+</div>
+
+<!-- ============ INVENTORY ============ -->
+<div class="screen mgmt-light" id="branchSummaryScreen">
+  <div class="dash-header">
+    <button class="back-btn" onclick="goToDashboard()">◀</button>
+    <h2>🏬 ملخّص الأصناف لكل الفروع</h2>
+  </div>
+  <div id="branchSummaryWrap" style="flex:1; overflow:auto; -webkit-overflow-scrolling:touch; padding:14px 16px 60px;"></div>
+</div>
+
+<div class="screen mgmt-light" id="catalogScreen">
+  <div class="dash-header">
+    <button class="back-btn" onclick="goToDashboard()">◀</button>
+    <h2>🖼️ كتالوج العرض</h2>
+  </div>
+  <div id="catalogWrap" style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:14px 16px 60px;"></div>
+</div>
+
+<div class="screen mgmt-light" id="inventoryScreen">
+  <div class="dash-header">
+    <div><h1>📦 المخزون</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="padding:0 4px;" id="lowStockAlertBar"></div>
+  <div style="padding:0 4px 12px;" id="inventoryAddRow"></div>
+  <div style="padding:0 4px;">
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+      <button onclick="goToImport(); switchImportTab('inventory');" style="padding:9px 14px; border-radius:9px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:800; font-size:13px; cursor:pointer;">📥 استيراد من كويك بوكس</button>
+      <button onclick="exportInventoryCSV()" style="padding:9px 14px; border-radius:9px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-weight:800; font-size:13px; cursor:pointer;">📤 تصدير Excel/CSV</button>
+    </div>
+    <div id="invSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+      <input type="text" id="invSearch" placeholder="🔍 دوّر باسم الصنف أو الباركود..." oninput="renderInventoryList()"
+        style="flex:1; min-width:180px; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; outline:none;">
+      <select id="invFilter" onchange="renderInventoryList()" style="padding:11px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;">
+        <option value="all">كل الأصناف</option>
+        <option value="low">نواقص ⚠️</option>
+        <option value="out">نافد ⛔</option>
+        <option value="hidden">مخفي 🚫</option>
+      </select>
+    </div>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 4px 16px;" id="inventoryListWrap"></div>
+</div>
+
+<!-- ============ RECEIVE GOODS ============ -->
+<div class="screen mgmt-light" id="receiveGoodsScreen">
+  <div class="dash-header">
+    <div><h1>📥 استلام بضاعة</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="padding:0 16px;">
+    <p style="color:var(--muted); font-size:12px; margin:-6px 0 12px;">
+      امسح أو اكتب كود المنتج ودوس Enter — هيتضاف لقايمة تحت. اكتب العدد وكمّل باقي المنتجات، وفي الآخر دوس «تأكيد الاستلام». (رقم بالسالب = خصم تالف/مرتجع للمورد.)
+    </p>
+    <div style="position:relative; margin-bottom:14px;">
+      <input type="text" id="receiveGoodsBarcode" placeholder="امسح أو اكتب الباركود أو اسم المنتج..." autocomplete="off"
+        style="width:100%; padding:14px; border-radius:10px; border:1px solid #b9c9a0; background:#fff; color:#1a1a1a; font-size:15px;">
+      <div id="receiveSuggestBox" style="position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid #a8a49b; border-radius:6px; max-height:260px; overflow-y:auto; z-index:30; color:#1a1a1a;"></div>
+    </div>
+    <div id="receiveCartWrap"></div>
+    <button id="receiveConfirmBtn" onclick="confirmReceiveCart()" style="display:none; width:100%; padding:15px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:900; font-size:15px; cursor:pointer; margin-bottom:16px;">✔️ تأكيد الاستلام</button>
+    <div style="margin-top:8px;">
+      <div style="font-weight:800; margin-bottom:6px;">📋 آخر عمليات الاستلام اليوم</div>
+      <div id="receiveGoodsLog"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PRODUCT DETAILS ============ -->
+<div class="screen mgmt-light" id="productDetailsScreen">
+  <div class="dash-header">
+    <div><h1 id="pdTitle">📦 تفاصيل المنتج</h1></div>
+    <button class="logout-btn" onclick="goToInventory()">◀ رجوع للمخزون</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
+    <div id="pdInfoCard"></div>
+    <div id="pdStockCard"></div>
+    <div id="pdTimelineCard"></div>
+    <div id="pdLogCard"></div>
+  </div>
+</div>
+
+<!-- ============ INVOICE DETAILS ============ -->
+<div class="screen mgmt-light" id="invoiceScreen">
+  <div class="dash-header">
+    <div><h1 id="invTitle">🧾 فاتورة</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="invoiceWrap"></div>
+</div>
+
+<!-- ============ CUSTOMER PROFILE ============ -->
+<div class="screen mgmt-light" id="customerProfileScreen">
+  <div class="dash-header">
+    <div><h1 id="custProfTitle">👤 بروفايل عميل</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="customerProfileWrap"></div>
+</div>
+
+<!-- ============ EMPLOYEE PROFILE ============ -->
+<div class="screen mgmt-light" id="employeeProfileScreen">
+  <div class="dash-header">
+    <div><h1 id="empProfTitle">👤 بروفايل موظف</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="employeeProfileWrap"></div>
+</div>
+
+<!-- ============ DISCOUNTS (manager only) ============ -->
+<div class="screen mgmt-light" id="discountsScreen">
+  <div class="dash-header">
+    <div><h1>🏷️ الخصومات</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
+    <div id="discountAddCard"></div>
+    <div id="discountListCard"></div>
+  </div>
+</div>
+
+<!-- ============ LOYALTY PROGRAM (manager only) ============ -->
+<div class="screen mgmt-light" id="loyaltyScreen">
+  <div class="dash-header">
+    <div><h1>🎁 برنامج الولاء</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="loyaltyScreenWrap"></div>
+</div>
+
+<!-- ============ RECEIPT & LABEL DESIGN (manager only) ============ -->
+<div class="screen mgmt-light" id="receiptDesignScreen">
+  <div class="dash-header">
+    <div><h1>🖨️ تصميم الفاتورة والليبل</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="receiptDesignWrap"></div>
+</div>
+
+<!-- ============ DATA IMPORT (manager only) ============ -->
+<div class="screen mgmt-light" id="importScreen">
+  <div class="dash-header">
+    <div><h1>📥 استيراد بيانات من QuickBooks</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
+    <div style="display:flex; gap:6px; margin-bottom:14px;">
+      <button class="rep-range-btn active" data-tab="inventory" onclick="switchImportTab('inventory')">📦 المخزون</button>
+      <button class="rep-range-btn" data-tab="customers" onclick="switchImportTab('customers')">👤 العملاء</button>
+      <button class="rep-range-btn" data-tab="sales" onclick="switchImportTab('sales')">🗂️ مبيعات قديمة (للرجوع بس)</button>
+    </div>
+    <div id="importPanelWrap"></div>
+  </div>
+</div>
+
+<!-- ============ ROLES / PERMISSIONS (manager only) ============ -->
+<div class="screen mgmt-light" id="rolesScreen">
+  <div class="dash-header">
+    <div><h1>🛡️ الصلاحيات</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 4px;">
+    <h3 style="margin:8px 0;">تخصيص صلاحيات كل دور</h3>
+    <div id="rolePermsWrap"></div>
+    <h3 style="margin:20px 0 8px;">دور كل موظف</h3>
+    <div id="employeeRolesWrap"></div>
+  </div>
+</div>
+
+<!-- ============ REPORTS (manager only, basic) ============ -->
+<div class="screen mgmt-light" id="reportsScreen">
+  <div class="dash-header">
+    <div><h1>📊 تقارير المبيعات</h1></div>
+    <button class="logout-btn" style="background:var(--plus); color:#062;" onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
+    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
+    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div style="padding:0 20px;">
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+      <button class="rep-range-btn" data-range="today" onclick="setReportRange('today')">النهاردة</button>
+      <button class="rep-range-btn" data-range="yesterday" onclick="setReportRange('yesterday')">امبارح</button>
+      <button class="rep-range-btn" data-range="week" onclick="setReportRange('week')">آخر 7 أيام</button>
+      <button class="rep-range-btn" data-range="month" onclick="setReportRange('month')">آخر 30 يوم</button>
+      <button class="rep-range-btn" data-range="all" onclick="setReportRange('all')">الكل</button>
+    </div>
+    <div style="display:flex; gap:6px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+      <input type="date" id="repFrom" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <span style="color:var(--muted); font-size:12px;">لـ</span>
+      <input type="date" id="repTo" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <button class="rep-range-btn" onclick="setReportRange('custom')">تطبيق</button>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+      <button class="rep-type-btn active" data-rtype="receipt" onclick="setReportType('receipt')">🧾 إيصال اليوم</button>
+      <button class="rep-type-btn" data-rtype="items" onclick="setReportType('items')">📦 ملخص الأصناف</button>
+      <button class="rep-type-btn" data-rtype="payments" onclick="setReportType('payments')">💳 ملخص المدفوعات</button>
+    </div>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="reportsWrap"></div>
+</div>
+
+<!-- ============ MAKE SALE ============ -->
+<div class="screen" id="saleScreen">
+  <div class="qbx-wrap">
+    <div class="qbx-top">
+      <div class="qbx-title">فاتورة بيع جديدة</div>
+      <div class="qbx-meta" id="qbxMeta"></div>
+    </div>
+    <div class="qbx-body">
+      <div class="qbx-actions">
+        <button onclick="goToDashboard()">◀ رجوع</button>
+        <button id="holdBtn0" class="hold-slot hs0" onclick="toggleHold(0)">هولد ١<br><span style="opacity:.7;">فاضي</span></button>
+        <button id="holdBtn1" class="hold-slot hs1" onclick="toggleHold(1)">هولد ٢<br><span style="opacity:.7;">فاضي</span></button>
+        <button onclick="openCashDrawer()">فتح الدرج</button>
+        <button onclick="openGiveDiscount()">خصم</button>
+        <button onclick="focusAddCustomer()">إضافة عميل</button>
+        <button onclick="openRedeemPoints()">🎁 استبدال نقاط</button>
+        <button onclick="showCashierInfo()">الكاشير</button>
+        <button onclick="logout()">خروج</button>
+        <button onclick="goToReceiveGoods()">📥 استلام المنتجات</button>
+      </div>
+      <div class="qbx-center">
+        <div class="sale-top">
+          <div class="search-wrap">
+            <input type="text" id="searchBar" placeholder="&lt; اكتب اسم المنتج أو امسح الباركود هنا &gt;" autocomplete="off">
+            <div id="suggestBox"></div>
+          </div>
+        </div>
+        <div class="cart-area" id="cartArea">
+          <table class="cart-table">
+            <thead>
+              <tr>
+                <th>#</th><th>الصنف</th><th>السعر</th><th>الكمية</th><th>الإجمالي</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="cartTbody">
+              <tr><td colspan="6" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="customer-row" style="margin-bottom:4px;">
+          <select id="sellerEmployeeSelect" style="flex:1; padding:9px 11px; border-radius:4px; border:1px solid #a8a49b; background:#fff; color:#1a1a1a; font-size:13px;">
+            <option value="">👤 مين اللي باع؟ (اختياري)</option>
+          </select>
+        </div>
+        <div id="custBox">
+        <div class="customer-row">
+          <input type="text" id="customerName" placeholder="&lt; اسم العميل &gt;">
+          <input type="tel" id="customerPhone" placeholder="&lt; رقم تليفون العميل &gt;" inputmode="numeric">
+        </div>
+        </div>
+        <div id="newCustomerRow">
+          <span style="font-size:12px; color:#8a6d00; align-self:center;">⚠️ الرقم ده مش مسجل</span>
+          <button onclick="registerNewCustomer()">إضافة كعميل جديد بالاسم المكتوب</button>
+        </div>
+        <div class="customer-info" id="customerInfo"></div>
+        <div id="resetPinRow" style="display:none; margin-top:4px;">
+          <button onclick="resetLoyaltyPin()" style="padding:6px 12px; border-radius:6px; border:1px solid #c98; background:#fff3ef; color:#a23; font-size:12px; font-weight:700; cursor:pointer;">🔑 مسح الرقم السري للعميل</button>
+          <span style="font-size:11px; color:#8a6d00; margin-inline-start:6px;">لو العميل نسي رقمه السري في التطبيق</span>
+        </div>
+      </div>
+      <div class="qbx-itemops">
+        <button onclick="qbxQty(1)">➕<br>كمية</button>
+        <button onclick="qbxQty(-1)">➖<br>كمية</button>
+        <button onclick="qbxReturnSel()">↩️<br>مرتجع الصنف</button>
+        <button onclick="qbxDeleteSel()">🗑️<br>حذف الصنف</button>
+        <button class="qbx-return-all" onclick="qbxReturnWholeInvoice()">🔄<br>مرتجع الفاتورة كاملة</button>
+      </div>
+    </div>
+    <div class="qbx-bottom">
+      <div class="qbx-pay">
+        <div class="qbx-pay-title">المدفوعات</div>
+        <div id="qbxPayList"></div>
+        <div class="qbx-pay-btns">
+          <button id="pmCash" onclick="togglePayMethod('cash')"><span class="pm-icon">💵</span>كاش</button>
+          <button id="pmVisa" onclick="togglePayMethod('visa')"><span class="pm-icon">💳</span>فيزا</button>
+          <button id="pmInsta" onclick="togglePayMethod('instapay')"><span class="pm-icon">📱</span>انستا باي</button>
+          <button class="qbx-clear-pay" onclick="resetPaymentUI()">🗑️ مسح المدفوعات</button>
+        </div>
+      </div>
+      <div class="qbx-totals">
+        <div class="t-row" style="font-size:13px; color:var(--muted);"><span>عدد القطع</span><span class="t-val" id="cartItemCount">0</span></div>
+        <div class="t-row"><span>الإجمالي</span><span class="t-val t-green" id="cartTotal">0.00</span></div>
+        <div class="t-row"><span>المدفوع</span><span class="t-val" id="qbxPaid">0.00</span></div>
+        <div class="t-row"><span>المتبقي</span><span class="t-val t-dark" id="qbxDue">0.00</span></div>
+        <div class="t-row"><span>الباقي للعميل</span><span class="t-val t-red" id="qbxChange">0.00</span></div>
+        <button class="qbx-save" id="confirmPayBtn" onclick="confirmPayment()" disabled>حفظ وطباعة</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HELD INVOICES MODAL ============ -->
+<div class="modal-overlay" id="heldModal">
+  <div class="modal-sheet">
+    <h3>الفواتير المعلّقة</h3>
+    <div id="heldList"><div class="empty-cart">مفيش فواتير معلّقة</div></div>
+    <div class="modal-btns" style="margin-top:10px;">
+      <button class="btn-cancel" onclick="closeHeldModal()" style="flex:1;">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ REVERSE RECEIPT MODAL ============ -->
+<!-- ============ PAYMENT AMOUNT POPUP ============ -->
+<div class="modal-overlay" id="payAmountModal" style="align-items:center; justify-content:center;">
+  <div class="modal-sheet" style="width:min(90vw,340px); border-radius:16px; margin:0;">
+    <h3 id="payAmountTitle">💵 كاش</h3>
+    <input type="number" step="0.01" id="payAmountInput" style="width:100%; padding:16px; font-size:22px; text-align:center; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:12px;">
+    <div id="payAmountChange" style="text-align:center; font-size:16px; font-weight:800; margin-bottom:14px; min-height:22px;"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closePayAmountPopup()">إلغاء</button>
+      <button class="btn-confirm" onclick="confirmPayAmount()">OK ✔</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="reverseModal">
+  <div class="modal-sheet">
+    <h3>عكس فاتورة (استرجاع كامل)</h3>
+    <p style="font-size:12px; color:var(--muted); margin:-6px 0 10px;">بيرجّع الكمية للمخزون ويسجل الفاتورة كملغاة. مينفعش يترجع.</p>
+    <div id="reverseList"><div class="empty-cart">بيتحمّل...</div></div>
+    <div class="modal-btns" style="margin-top:10px;">
+      <button class="btn-cancel" onclick="closeReverseModal()" style="flex:1;">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="returnInvoiceModal">
+  <div class="modal-sheet">
+    <h3>↩️ مرتجع من فاتورة</h3>
+    <div id="returnInvoiceBody"><div class="empty-cart">بيتحمّل...</div></div>
+    <div class="modal-btns" style="margin-top:10px;">
+      <button class="btn-cancel" onclick="closeReturnInvoiceModal()" style="flex:1;">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="rewardModal">
+  <div class="modal-sheet">
+    <h3>🎁 ابعت مكافأة</h3>
+    <div id="rewardTargetLbl" style="font-size:13px; color:var(--muted); margin:-6px 0 12px;"></div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div style="display:flex; gap:8px;">
+        <select id="rwType" style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+          <option value="amount">مبلغ خصم (ج.م)</option>
+          <option value="percent">نسبة خصم (%)</option>
+        </select>
+        <input id="rwValue" type="number" placeholder="القيمة" style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      </div>
+      <input id="rwMin" type="number" placeholder="الحد الأدنى للفاتورة (ج.م) — اختياري" style="padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <input id="rwDays" type="number" placeholder="صالحة كام يوم (مثلاً 7)" value="7" style="padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+    </div>
+    <div class="modal-btns" style="margin-top:14px;">
+      <button class="btn-cancel" onclick="closeRewardModal()" style="flex:1;">إلغاء</button>
+      <button class="btn-ok" onclick="sendRewardConfirm()" style="flex:1;">ابعت المكافأة</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Printable receipt template -->
+<div id="receiptPrint">
+  <h2 id="rShopName">إيشارب ستور</h2>
+  <div style="text-align:center;font-size:11px;margin-bottom:8px;" id="rMeta"></div>
+  <table id="rItemsTable"></table>
+  <div class="r-total" id="rTotalLine"></div>
+  <div class="r-invoice-no" id="rInvoiceNo"></div>
+  <div class="r-barcode"><svg id="rBarcode"></svg></div>
+  <div style="text-align:center;font-size:11px;margin-top:10px;">شكرًا لتعاملكم معنا 🙏</div>
+</div>
+
+<script src="app.js"></script>
+<script src="products.js"></script>
+<script src="profiles.js"></script>
+<script src="discounts.js"></script>
+<script src="import.js"></script>
+<script src="search.js"></script>
+<script src="loyalty.js"></script>
 </body>
 </html>
