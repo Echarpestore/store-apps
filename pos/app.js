@@ -62,16 +62,26 @@ function branchQty(p, br){
 }
 
 firebase.initializeApp(firebaseConfig);
-// تسجيل دخول مجهول — مطلوب لقواعد الأمان الجديدة (بيشتغل مرة ويتحفظ على الجهاز)
-function ensureAnonAuth(){
-  try{
-    if(firebase.auth && !firebase.auth().currentUser){
-      firebase.auth().signInAnonymously().catch(function(e){ console.warn('anon auth', e && e.code); });
-    }
-  }catch(e){ console.warn('anon auth unavailable', e); }
+// حساب الفرع (Email/Password) — الجهاز بيسجّل دخول مرة واحدة وبيتحفظ.
+// ده اللي بيدّي الكاشير صلاحية كتابة النقط/المبيعات في قواعد الأمان (المرحلة 2).
+firebase.auth().setPersistence && firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
+function isStaffSignedIn(){
+  var u = firebase.auth().currentUser;
+  return !!(u && !u.isAnonymous);
 }
-ensureAnonAuth();
-window.addEventListener('online', ensureAnonAuth);   // لو فتح أوفلاين، نسجّل أول ما النت يرجع
+// لو مفيش جلسة موظف محفوظة، نرجّع لشاشة إعداد الجهاز عشان يسجّل
+firebase.auth().onAuthStateChanged(function(u){
+  if(!u || u.isAnonymous){
+    var bs = document.getElementById('branchSetupScreen');
+    var ls = document.getElementById('loginScreen');
+    if(bs && ls && !document.querySelector('.screen.active#branchSetupScreen')){
+      // الجلسة انتهت/اتمسحت → نطلب دخول حساب الفرع تاني (اسم الفرع محفوظ أصلاً)
+      document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+      bs.classList.add('active');
+      var bi = document.getElementById('branchSetupInput'); if(bi && currentBranch) bi.value = currentBranch;
+    }
+  }
+});
 const db = firebase.firestore();
 
 // ============================================================
@@ -105,20 +115,43 @@ window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
 
-function saveBranchSetup(){
+async function saveBranchSetup(){
   const val = document.getElementById('branchSetupInput').value.trim();
-  if(!val) return;
-  currentBranch = val;
-  localStorage.setItem('pos_branch', val);
-  showScreen('loginScreen');
-  loadEmployeePicker();
+  const email = (document.getElementById('branchSetupEmail')?.value || '').trim();
+  const pass = document.getElementById('branchSetupPass')?.value || '';
+  const errBox = document.getElementById('branchSetupErr');
+  if(!val){ if(errBox) errBox.textContent = 'اكتب اسم الفرع'; return; }
+  if(!email || !pass){ if(errBox) errBox.textContent = 'اكتب إيميل وباسورد حساب الفرع'; return; }
+  if(errBox) errBox.textContent = 'جارٍ الدخول...';
+  try{
+    const cred = await firebase.auth().signInWithEmailAndPassword(email, pass);
+    // نسجّل UID الحساب ده في قايمة الموظفين المصرّح لهم — قواعد الأمان بتتحقق منها
+    try{
+      await db.collection(TEST_SETTINGS).doc('staff_uids').set({ [cred.user.uid]: { branch: val, email: email, ts: Date.now() } }, { merge:true });
+    }catch(e){ console.warn('staff uid register', e); }
+    currentBranch = val;
+    localStorage.setItem('pos_branch', val);
+    if(errBox) errBox.textContent = '';
+    showScreen('loginScreen');
+    loadEmployeePicker();
+  }catch(e){
+    const msg = (e && e.code === 'auth/invalid-credential') || (e && e.code === 'auth/wrong-password') || (e && e.code === 'auth/user-not-found')
+      ? 'الإيميل أو الباسورد غلط' : 'تعذر الدخول: ' + (e.message || e);
+    if(errBox) errBox.textContent = msg;
+  }
 }
 
 // أول ما الصفحة تفتح: لو مفيش فرع متسجل على الجهاز ده، اطلب تسجيله الأول قبل أي حاجة تانية.
+// أول ما الصفحة تفتح: الجهاز يعدّي بس لو عنده فرع محفوظ + جلسة حساب فرع سارية.
+// (onAuthStateChanged فوق بيرجّعه لشاشة الإعداد تلقائيًا لو الجلسة مش موجودة)
 if(currentBranch){
-  document.getElementById('branchSetupScreen').classList.remove('active');
-  document.getElementById('loginScreen').classList.add('active');
-  loadEmployeePicker();
+  firebase.auth().onAuthStateChanged(function once(u){
+    if(u && !u.isAnonymous){
+      document.getElementById('branchSetupScreen').classList.remove('active');
+      document.getElementById('loginScreen').classList.add('active');
+      loadEmployeePicker();
+    }
+  });
 }
 
 // ---------------- State ----------------
