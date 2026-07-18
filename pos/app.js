@@ -417,6 +417,28 @@ function setLabelSize(v){
   if(box) box.style.display = v==='custom' ? 'flex' : 'none';
   refreshLabelPreview();
 }
+function moveReceiptEl(i, dir){
+  const arr = receiptDesignConfig.elements;
+  const j = i + dir; if(j<0 || j>=arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  renderReceiptDesignScreen();
+}
+function handleReceiptLogoUpload(input){
+  const file = input.files && input.files[0]; if(!file) return;
+  const img = new Image();
+  img.onload = function(){
+    const maxW = 300, scale = Math.min(1, maxW / img.width);
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.width*scale); cv.height = Math.round(img.height*scale);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    receiptDesignConfig.logo = cv.toDataURL('image/png');
+    renderReceiptDesignScreen();
+    showToast('اللوجو اتحمّل — متنساش الحفظ');
+  };
+  img.onerror = ()=> showToast('الصورة دي مش صالحة', 'err');
+  img.src = URL.createObjectURL(file);
+}
+function removeReceiptLogo(){ receiptDesignConfig.logo=''; renderReceiptDesignScreen(); showToast('اتشال اللوجو'); }
 function moveLabelEl(i, dir){
   const arr = receiptDesignConfig.label.elements;
   const j = i+dir; if(j<0||j>=arr.length) return;
