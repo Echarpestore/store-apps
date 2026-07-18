@@ -470,6 +470,16 @@ ensureAnonAuth();
 window.addEventListener('online', ensureAnonAuth);
 var db = firebase.firestore();
 
+// 📱 تتبّع مصدر الزيارة (QR أو غيره): ?src=qr-rehab مثلاً
+// بنخزّنه عشان يتسجّل مع العميل عند الدخول + بنستخدمه لإظهار البانر بأولوية
+var visitSrc = '';
+try{
+  var _sp = new URLSearchParams(location.search);
+  if(_sp.get('src')){ visitSrc = _sp.get('src'); localStorage.setItem('visit_src', visitSrc); }
+  else visitSrc = localStorage.getItem('visit_src') || '';
+}catch(e){}
+var cameFromQR = /^qr/i.test(visitSrc);
+
 // أوفلاين قوي: البيانات محفوظة على الجهاز والتطبيق بيفتح حتى من غير نت
 db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED });
 db.enablePersistence({ synchronizeTabs: true }).catch(function(err){
@@ -772,7 +782,7 @@ function createCustomer(phone, name, pin){
     var data = {
       name: name, phone: phone, points: 0, totalSpent: 0,
       lastVisit: null, notes: '', branch: '',
-      loyaltyCode: code, loyaltyPin: pin, createdAt: Date.now(), source: 'loyalty_app'
+      loyaltyCode: code, loyaltyPin: pin, createdAt: Date.now(), source: visitSrc ? ('loyalty_app:'+visitSrc) : 'loyalty_app'
     };
     return db.collection(COL_CUSTOMERS).doc(phone).set(data, { merge:true });
   }).then(function(){
@@ -1392,7 +1402,7 @@ function showInstallBanner(mode){
     $('ibDesc').innerHTML = 'عشان توصلك العروض أول ما تنزل: دوسي مشاركة <b>⬆️</b> تحت، بعدين <b>«إضافة إلى الشاشة الرئيسية»</b>';
   }else{
     b.classList.remove('ios');
-    $('ibDesc').textContent = 'أسرع في الفتح، وأول مين يعرف العروض والمكافآت الجديدة 🎁';
+    $('ibDesc').textContent = cameFromQR ? 'ثبّتيه وفعّلي الإشعارات — ومستنياكي مكافأة ترحيب 🎁' : 'أسرع في الفتح، وأول مين يعرف العروض والمكافآت الجديدة 🎁';
   }
   requestAnimationFrame(function(){ b.classList.add('show'); });
 }
