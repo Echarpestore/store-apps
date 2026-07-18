@@ -93,8 +93,12 @@ function goToDashboard(){
 // ---------------- تصميم الفاتورة والليبل (قابل للتعديل من المدير) ----------------// ============================================================
 // 🧾 محرر الفاتورة — نظام عناصر: ترتيب حر، إظهار/إخفاء، خط، عربي/إنجليزي
 // ============================================================
+function currencyLabel(){
+  const c = receiptDesignConfig||{};
+  return (c.lang==='en') ? (c.currencyEn||'EGP') : (c.currencyAr||'ج.م');
+}
 const RECEIPT_LABELS = {
-  ar: { emp:'الموظف', total:'الإجمالي', cash:'كاش', visa:'فيزا', instapay:'انستا باي', currency:'جنيه', invoice:'فاتورة رقم', item:'الصنف', qty:'كمية', price:'السعر' },
+  ar: { emp:'الموظف', total:'الإجمالي', cash:'كاش', visa:'فيزا', instapay:'انستا باي', currency:'ج.م', invoice:'فاتورة رقم', item:'الصنف', qty:'كمية', price:'السعر' },
   en: { emp:'Cashier', total:'Total', cash:'Cash', visa:'Visa', instapay:'InstaPay', currency:'EGP', invoice:'Invoice #', item:'Item', qty:'Qty', price:'Price' }
 };
 // تعريف عناصر الفاتورة: fixed = نصه تلقائي من النظام، text = بتكتبه انت
@@ -128,14 +132,14 @@ const LABEL_ELEMENTS = [
   { id:'code',    label:'🔖 الكود (أرقام)',       kind:'auto', size:9 }
 ];
 function defaultLabelConfig(){
-  return { sizeId:'58x40', customW:58, customH:40,
+  return { sizeId:'58x40', customW:58, customH:40, priceStyle:'box', bcHeight:30, bcWidth:1.4, showBcDigits:false, logoWidth:50,
     elements: LABEL_ELEMENTS.map(e=> ({ id:e.id, on: e.id!=='logo', size:e.size||10 })) };
 }
 let receiptDesignConfig = null;
 
 function defaultReceiptConfig(){
   return {
-    lang:'ar', paperWidth:'80', logo:'',
+    lang:'ar', paperWidth:'80', logo:'', logoWidth:60, bcHeight:34, bcWidth:1.4, bcFont:11, currencyAr:'ج.م', currencyEn:'EGP',
     elements: RECEIPT_ELEMENTS.map(e=> ({ id:e.id, on: !(e.id==='branchName'||e.id==='address'||e.id==='phone'), text: e.def||'', size: e.size||12 }))
   };
 }
@@ -150,12 +154,12 @@ async function loadReceiptDesignConfig(){
         const saved = d.elements.filter(e=> RECEIPT_ELEMENTS.some(r=> r.id===e.id));
         const missing = RECEIPT_ELEMENTS.filter(r=> !saved.some(e=> e.id===r.id))
           .map(e=> ({ id:e.id, on:false, text:e.def||'', size:e.size||12 }));
-        receiptDesignConfig = { lang:d.lang||'ar', paperWidth:d.paperWidth||'80', logo:d.logo||'', elements:[...saved, ...missing] };
+        receiptDesignConfig = Object.assign(defaultReceiptConfig(), d, { elements:[...saved, ...missing] });
         receiptDesignConfig.labelShopName = d.labelShopName; receiptDesignConfig.showBarcodeOnLabel = d.showBarcodeOnLabel;
         if(d.label && Array.isArray(d.label.elements)){
           const ls = d.label.elements.filter(e=> LABEL_ELEMENTS.some(r=> r.id===e.id));
           const lm = LABEL_ELEMENTS.filter(r=> !ls.some(e=> e.id===r.id)).map(e=> ({id:e.id, on:false, size:e.size||10}));
-          receiptDesignConfig.label = { sizeId:d.label.sizeId||'58x40', customW:d.label.customW||58, customH:d.label.customH||40, elements:[...ls, ...lm] };
+          receiptDesignConfig.label = Object.assign(defaultLabelConfig(), d.label, { elements:[...ls, ...lm] });
         }
       }else{
         // ترقية من النسخة القديمة (خانات ثابتة) — ننقل قيمك القديمة للعناصر
@@ -179,127 +183,151 @@ function goToReceiptDesign(){
   renderReceiptDesignScreen();
 }
 
+let _designTab = 'receipt';   // receipt | label
 async function renderReceiptDesignScreen(){
   if(!receiptDesignConfig) await loadReceiptDesignConfig();
   const c = receiptDesignConfig;
   if(!c.label) c.label = defaultLabelConfig();
   const lb = c.label;
   const shell = (typeof window.posShell !== 'undefined');
-  const rows = c.elements.map((el, i)=>{
-    const def = RECEIPT_ELEMENTS.find(r=> r.id===el.id) || {label:el.id};
-    const isText = def.kind==='text';
-    const isLogo = def.kind==='logo';
-    return `
-    <div style="display:flex; align-items:center; gap:6px; padding:8px; border:1px solid var(--border); border-radius:10px; margin-bottom:6px; background:${el.on?'var(--panel)':'var(--panel2)'}; opacity:${el.on?1:.55};">
-      <div style="display:flex; flex-direction:column; gap:2px;">
-        <button onclick="moveReceiptEl(${i},-1)" ${i===0?'disabled':''} style="padding:2px 8px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">▲</button>
-        <button onclick="moveReceiptEl(${i},1)" ${i===c.elements.length-1?'disabled':''} style="padding:2px 8px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">▼</button>
-      </div>
-      <input type="checkbox" ${el.on?'checked':''} onchange="toggleReceiptEl(${i}, this.checked)" style="width:18px; height:18px;">
-      <div style="flex:1; min-width:0;">
-        <div style="font-size:12.5px; font-weight:700;">${def.label}</div>
-        ${isText?`<input value="${(el.text||'').replace(/"/g,'&quot;')}" oninput="setReceiptElText(${i}, this.value)" placeholder="اكتب النص هنا" style="width:100%; padding:6px 8px; border-radius:7px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:12px; margin-top:4px;">`:''}
-        ${isLogo?`<div style="display:flex; gap:8px; align-items:center; margin-top:4px;"><input type="file" accept="image/*" onchange="handleReceiptLogoUpload(this)" style="font-size:11px;">${c.logo?'<button onclick="removeReceiptLogo()" style="padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--bad); font-size:11px; cursor:pointer;">🗑️</button>':''}</div>`:''}
-      </div>
-      ${(!isLogo)?`<select onchange="setReceiptElSize(${i}, this.value)" style="padding:6px; border-radius:7px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px;">
-        ${[9,10,11,12,13,14,16,18,20,22].map(s=>`<option value="${s}" ${el.size==s?'selected':''}>${s}px</option>`).join('')}
-      </select>`:''}
+
+  const S = {
+    card: 'background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:12px;',
+    row: 'display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; margin-bottom:8px; background:var(--panel); transition:opacity .15s;',
+    ctl: 'padding:8px 10px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:12px;',
+    slider: 'flex:1; accent-color:#818cf8;',
+    chipOn: 'padding:7px 13px; border-radius:99px; border:1.5px solid #818cf8; background:rgba(129,140,248,.15); color:var(--text); font-weight:800; font-size:12px; cursor:pointer;',
+    chip: 'padding:7px 13px; border-radius:99px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); font-weight:700; font-size:12px; cursor:pointer;'
+  };
+  const slider = (label, val, min, max, step, oninput) =>
+    `<div style="display:flex; align-items:center; gap:8px; margin:8px 0;">
+      <span style="font-size:11.5px; color:var(--muted); min-width:88px;">${label}</span>
+      <input type="range" min="${min}" max="${max}" step="${step}" value="${val}" oninput="${oninput}" style="${S.slider}">
+      <b style="font-size:11px; min-width:34px; text-align:center;">${val}</b>
     </div>`;
-  }).join('');
+
+  const elRow = (el, i, defs, moveFn, togglePath, sizePath, refreshFn) => {
+    const def = defs.find(r=> r.id===el.id) || {label:el.id};
+    const isText = def.kind==='text', isLogo = def.kind==='logo';
+    return `
+    <div style="${S.row} ${el.on?'':'opacity:.45;'}">
+      <div style="display:flex; flex-direction:column;">
+        <button onclick="${moveFn}(${i},-1)" ${i===0?'disabled':''} style="border:none; background:none; color:var(--muted); cursor:pointer; padding:0 4px; font-size:13px;">▲</button>
+        <button onclick="${moveFn}(${i},1)" style="border:none; background:none; color:var(--muted); cursor:pointer; padding:0 4px; font-size:13px;">▼</button>
+      </div>
+      <label class="dsw" style="position:relative; width:38px; height:22px; flex-shrink:0; cursor:pointer;">
+        <input type="checkbox" ${el.on?'checked':''} onchange="${togglePath}[${i}].on=this.checked; renderReceiptDesignScreen();" style="opacity:0; width:0; height:0;">
+        <span style="position:absolute; inset:0; border-radius:99px; background:${el.on?'#818cf8':'var(--panel2)'}; border:1px solid var(--border); transition:.15s;"></span>
+        <span style="position:absolute; top:2.5px; ${el.on?'left:18px;':'left:3px;'} width:15px; height:15px; border-radius:50%; background:#fff; transition:.15s;"></span>
+      </label>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:12.5px; font-weight:800;">${def.label}</div>
+        ${isText?`<input value="${(el.text||'').replace(/"/g,'&quot;')}" oninput="${togglePath}[${i}].text=this.value; ${refreshFn}();" placeholder="اكتب النص..." style="width:100%; margin-top:5px; ${S.ctl}">`:''}
+      </div>
+      ${(!isLogo && el.id!=='barcode' && el.id!=='appQR')?`
+      <div style="display:flex; align-items:center; gap:4px;">
+        <button onclick="${sizePath}[${i}].size=Math.max(7,(${sizePath}[${i}].size||12)-1); renderReceiptDesignScreen();" style="width:26px; height:26px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">−</button>
+        <span style="font-size:11px; min-width:30px; text-align:center;">${el.size||12}px</span>
+        <button onclick="${sizePath}[${i}].size=Math.min(34,(${sizePath}[${i}].size||12)+1); renderReceiptDesignScreen();" style="width:26px; height:26px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">+</button>
+      </div>`:''}
+    </div>`;
+  };
+
+  // ====== تبويب الفاتورة ======
+  const receiptTab = `
+    <div style="${S.card}">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button onclick="receiptDesignConfig.lang='ar'; renderReceiptDesignScreen();" style="${c.lang!=='en'?S.chipOn:S.chip}">🇪🇬 عربي</button>
+        <button onclick="receiptDesignConfig.lang='en'; renderReceiptDesignScreen();" style="${c.lang==='en'?S.chipOn:S.chip}">🇬🇧 English</button>
+        <span style="flex:1;"></span>
+        <button onclick="receiptDesignConfig.paperWidth='80'; renderReceiptDesignScreen();" style="${c.paperWidth!=='58'?S.chipOn:S.chip}">ورق 80mm</button>
+        <button onclick="receiptDesignConfig.paperWidth='58'; renderReceiptDesignScreen();" style="${c.paperWidth==='58'?S.chipOn:S.chip}">58mm</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px; align-items:center;">
+        <span style="font-size:11.5px; color:var(--muted);">العملة:</span>
+        <input value="${c.currencyAr||'ج.م'}" oninput="receiptDesignConfig.currencyAr=this.value; refreshReceiptPreview(); refreshLabelPreview();" style="width:80px; text-align:center; ${S.ctl}" placeholder="ج.م">
+        <input value="${c.currencyEn||'EGP'}" oninput="receiptDesignConfig.currencyEn=this.value; refreshReceiptPreview(); refreshLabelPreview();" style="width:80px; text-align:center; direction:ltr; ${S.ctl}" placeholder="EGP">
+        <span style="font-size:10.5px; color:var(--muted);">(عربي / English)</span>
+      </div>
+    </div>
+
+    <div style="${S.card}">
+      <div style="font-weight:800; font-size:13px; margin-bottom:8px;">🖼️ اللوجو &nbsp;<input type="file" accept="image/*" onchange="handleReceiptLogoUpload(this)" style="font-size:11px;"> ${c.logo?'<button onclick="removeReceiptLogo()" style="border:none; background:none; color:var(--bad); cursor:pointer;">🗑️ شيل</button>':''}</div>
+      ${c.logo? slider('حجم اللوجو %', c.logoWidth||60, 20, 100, 5, "receiptDesignConfig.logoWidth=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();") : '<div style="font-size:11px; color:var(--muted);">ارفع لوجو وهيظهر هنا التحكم في حجمه</div>'}
+    </div>
+
+    <div style="${S.card}">
+      <div style="font-weight:800; font-size:13px; margin-bottom:6px;">⬛ باركود المرتجع</div>
+      ${slider('الارتفاع', c.bcHeight||34, 18, 70, 2, "receiptDesignConfig.bcHeight=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
+      ${slider('سُمك الخطوط', c.bcWidth||1.4, 1, 3, 0.1, "receiptDesignConfig.bcWidth=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
+      ${slider('حجم الأرقام', c.bcFont||11, 7, 16, 1, "receiptDesignConfig.bcFont=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
+    </div>
+
+    <div style="font-size:11px; color:var(--muted); margin:4px 2px 8px;">✥ رتّب العناصر بالأسهم · فعّل/عطّل بالمفتاح · − + لحجم الخط</div>
+    ${c.elements.map((el,i)=> elRow(el, i, RECEIPT_ELEMENTS, 'moveReceiptEl', 'receiptDesignConfig.elements', 'receiptDesignConfig.elements', 'refreshReceiptPreview')).join('')}`;
+
+  // ====== تبويب الليبل ======
+  const priceStyles = [
+    {id:'plain', name:'عادي'},
+    {id:'box',   name:'إطار'},
+    {id:'solid', name:'خلفية سودا'},
+    {id:'tag',   name:'وسم دائري'}
+  ];
+  const labelTab = `
+    <div style="${S.card}">
+      <div style="font-weight:800; font-size:13px; margin-bottom:8px;">📐 مقاس الليبل</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        ${LABEL_SIZES.map(s=>`<button onclick="setLabelSize('${s.id}')" style="${lb.sizeId===s.id?S.chipOn:S.chip}">${s.w}×${s.h}</button>`).join('')}
+        <button onclick="setLabelSize('custom')" style="${lb.sizeId==='custom'?S.chipOn:S.chip}">مخصص</button>
+      </div>
+      <div id="labelCustomSize" style="display:${lb.sizeId==='custom'?'flex':'none'}; gap:6px; align-items:center; margin-top:8px;">
+        <input type="number" value="${lb.customW}" onchange="receiptDesignConfig.label.customW=parseFloat(this.value)||58; refreshLabelPreview();" style="width:64px; text-align:center; ${S.ctl}"> ×
+        <input type="number" value="${lb.customH}" onchange="receiptDesignConfig.label.customH=parseFloat(this.value)||40; refreshLabelPreview();" style="width:64px; text-align:center; ${S.ctl}"> مم
+      </div>
+    </div>
+
+    <div style="${S.card}">
+      <div style="font-weight:800; font-size:13px; margin-bottom:8px;">💵 شكل السعر</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        ${priceStyles.map(p=>`<button onclick="receiptDesignConfig.label.priceStyle='${p.id}'; renderReceiptDesignScreen();" style="${lb.priceStyle===p.id?S.chipOn:S.chip}">${p.name}</button>`).join('')}
+      </div>
+    </div>
+
+    <div style="${S.card}">
+      <div style="font-weight:800; font-size:13px; margin-bottom:6px;">⬛ باركود الليبل</div>
+      ${slider('الارتفاع', lb.bcHeight||30, 14, 60, 2, "receiptDesignConfig.label.bcHeight=+this.value; this.nextElementSibling.textContent=this.value; refreshLabelPreview();")}
+      ${slider('سُمك الخطوط', lb.bcWidth||1.4, 1, 3, 0.1, "receiptDesignConfig.label.bcWidth=+this.value; this.nextElementSibling.textContent=this.value; refreshLabelPreview();")}
+      ${c.logo? slider('حجم اللوجو %', lb.logoWidth||50, 20, 90, 5, "receiptDesignConfig.label.logoWidth=+this.value; this.nextElementSibling.textContent=this.value; refreshLabelPreview();") : ''}
+    </div>
+
+    ${lb.elements.map((el,i)=> elRow(el, i, LABEL_ELEMENTS, 'moveLabelEl', 'receiptDesignConfig.label.elements', 'receiptDesignConfig.label.elements', 'refreshLabelPreview')).join('')}`;
 
   document.getElementById('receiptDesignWrap').innerHTML = `
-    <div style="display:flex; gap:8px; margin-bottom:12px;">
-      <select id="rdLang" onchange="receiptDesignConfig.lang=this.value; refreshReceiptPreview();" style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-        <option value="ar" ${c.lang!=='en'?'selected':''}>🇪🇬 فاتورة عربي</option>
-        <option value="en" ${c.lang==='en'?'selected':''}>🇬🇧 English Receipt</option>
-      </select>
-      <select id="rdPaperWidth" onchange="receiptDesignConfig.paperWidth=this.value; refreshReceiptPreview();" style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-        <option value="80" ${c.paperWidth!=='58'?'selected':''}>ورق 80mm</option>
-        <option value="58" ${c.paperWidth==='58'?'selected':''}>ورق 58mm</option>
-      </select>
+    <div style="display:flex; gap:6px; margin-bottom:12px; background:var(--panel2); border-radius:12px; padding:5px;">
+      <button onclick="_designTab='receipt'; renderReceiptDesignScreen();" style="flex:1; padding:11px; border-radius:9px; border:none; cursor:pointer; font-weight:800; font-size:13px; ${_designTab==='receipt'?'background:var(--panel); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,.25);':'background:none; color:var(--muted);'}">🧾 الفاتورة</button>
+      <button onclick="_designTab='label'; renderReceiptDesignScreen();" style="flex:1; padding:11px; border-radius:9px; border:none; cursor:pointer; font-weight:800; font-size:13px; ${_designTab==='label'?'background:var(--panel); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,.25);':'background:none; color:var(--muted);'}">🏷️ ليبل السعر</button>
     </div>
-    <div style="display:grid; grid-template-columns: 1fr 220px; gap:12px; align-items:start;">
-      <div>
-        <div style="font-size:11.5px; color:var(--muted); margin-bottom:8px;">▲▼ للترتيب · ✅ للإظهار · اكتب نصك · واختار حجم الخط — والمعاينة بتتحدث فورًا</div>
-        ${rows}
-      </div>
+    <div style="display:grid; grid-template-columns: 1fr 230px; gap:14px; align-items:start;">
+      <div>${_designTab==='receipt' ? receiptTab : labelTab}</div>
       <div style="position:sticky; top:8px;">
-        <div style="font-size:11px; color:var(--muted); margin-bottom:4px; text-align:center;">👁️ معاينة حيّة</div>
-        <div id="receiptLivePreview" style="background:#fff; color:#000; border-radius:8px; padding:10px 8px; box-shadow:0 4px 14px rgba(0,0,0,.35); max-height:60vh; overflow-y:auto;"></div>
-      </div>
-    </div>
-
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin:12px 0;">
-      <div style="font-weight:800; margin-bottom:8px;">🏷️ محرر ليبل السعر</div>
-      <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
-        <select onchange="setLabelSize(this.value)" style="flex:1; min-width:140px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-          ${LABEL_SIZES.map(s=>`<option value="${s.id}" ${lb.sizeId===s.id?'selected':''}>${s.w} × ${s.h} مم</option>`).join('')}
-          <option value="custom" ${lb.sizeId==='custom'?'selected':''}>مقاس مخصص...</option>
-        </select>
-        <div id="labelCustomSize" style="display:${lb.sizeId==='custom'?'flex':'none'}; gap:6px; align-items:center;">
-          <input type="number" value="${lb.customW}" onchange="receiptDesignConfig.label.customW=parseFloat(this.value)||58; refreshLabelPreview();" style="width:64px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center;"> ×
-          <input type="number" value="${lb.customH}" onchange="receiptDesignConfig.label.customH=parseFloat(this.value)||40; refreshLabelPreview();" style="width:64px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center;"> مم
-        </div>
-      </div>
-      <div style="display:grid; grid-template-columns: 1fr 200px; gap:12px; align-items:start;">
-        <div>${lb.elements.map((el,i)=>{
-          const def = LABEL_ELEMENTS.find(r=> r.id===el.id)||{label:el.id};
-          return `<div style="display:flex; align-items:center; gap:6px; padding:7px; border:1px solid var(--border); border-radius:9px; margin-bottom:5px; background:${el.on?'var(--panel)':'var(--panel2)'}; opacity:${el.on?1:.55};">
-            <div style="display:flex; flex-direction:column; gap:2px;">
-              <button onclick="moveLabelEl(${i},-1)" ${i===0?'disabled':''} style="padding:1px 7px; border-radius:5px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">▲</button>
-              <button onclick="moveLabelEl(${i},1)" ${i===lb.elements.length-1?'disabled':''} style="padding:1px 7px; border-radius:5px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">▼</button>
-            </div>
-            <input type="checkbox" ${el.on?'checked':''} onchange="receiptDesignConfig.label.elements[${i}].on=this.checked; renderReceiptDesignScreen();" style="width:17px; height:17px;">
-            <div style="flex:1; font-size:12px; font-weight:700;">${def.label}</div>
-            ${def.kind!=='logo'&&el.id!=='barcode'?`<select onchange="receiptDesignConfig.label.elements[${i}].size=parseInt(this.value); refreshLabelPreview();" style="padding:5px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px;">
-              ${[7,8,9,10,11,12,13,14,16,18,20,24,28].map(s=>`<option value="${s}" ${el.size==s?'selected':''}>${s}px</option>`).join('')}</select>`:''}
-          </div>`;}).join('')}
-        </div>
-        <div style="position:sticky; top:8px;">
-          <div style="font-size:11px; color:var(--muted); margin-bottom:4px; text-align:center;">👁️ معاينة الليبل</div>
-          <div style="display:flex; justify-content:center;"><div id="labelLivePreview" style="background:#fff; color:#000; border:1px dashed #999; overflow:hidden;"></div></div>
-          <div id="labelSizeNote" style="font-size:10px; color:var(--muted); text-align:center; margin-top:4px;"></div>
+        <div style="font-size:11px; color:var(--muted); margin-bottom:5px; text-align:center;">👁️ معاينة حيّة</div>
+        <div style="display:${_designTab==='receipt'?'block':'none'};"><div id="receiptLivePreview" style="background:#fff; color:#000; border-radius:10px; padding:10px 8px; box-shadow:0 6px 20px rgba(0,0,0,.4); max-height:62vh; overflow-y:auto; margin:0 auto;"></div></div>
+        <div style="display:${_designTab==='label'?'block':'none'};">
+          <div style="display:flex; justify-content:center;"><div id="labelLivePreview" style="background:#fff; color:#000; border:1px dashed #999; border-radius:4px; overflow:hidden; box-shadow:0 6px 20px rgba(0,0,0,.4);"></div></div>
+          <div id="labelSizeNote" style="font-size:10px; color:var(--muted); text-align:center; margin-top:5px;"></div>
         </div>
       </div>
     </div>
 
-    <div style="background:var(--panel); border:1px solid ${shell?'var(--plus)':'var(--border)'}; border-radius:12px; padding:16px; margin:12px 0;">
+    <div style="${S.card} margin-top:12px; ${shell?'border-color:var(--plus);':''}">
       <div style="font-weight:800; margin-bottom:6px;">🖨️ طابعات الجهاز ده ${shell?'':'<span style="font-size:11px; color:var(--muted); font-weight:400;">(بيشتغل جوّه برنامج الكاشير على ويندوز)</span>'}</div>
       <div id="printerPickers">${shell ? '<div style="color:var(--muted); font-size:12px;">جارٍ تحميل الطابعات...</div>' : '<div style="color:var(--muted); font-size:12.5px;">🔓 افتح من برنامج الكاشير على ويندوز لاختيار الطابعات.</div>'}</div>
     </div>
-    <button onclick="saveReceiptDesignConfig()" style="width:100%; padding:13px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">حفظ تصميم الفاتورة</button>`;
+    <button onclick="saveReceiptDesignConfig()" style="width:100%; padding:14px; border-radius:12px; border:none; background:var(--plus); color:#062; font-weight:800; font-size:14px; cursor:pointer;">💾 حفظ التصميم</button>`;
   refreshReceiptPreview();
   refreshLabelPreview();
   if(shell) loadPrinterPickers();
 }
-function moveReceiptEl(i, dir){
-  const arr = receiptDesignConfig.elements;
-  const j = i + dir; if(j<0 || j>=arr.length) return;
-  [arr[i], arr[j]] = [arr[j], arr[i]];
-  renderReceiptDesignScreen();
-}
-function toggleReceiptEl(i, on){ receiptDesignConfig.elements[i].on = on; renderReceiptDesignScreen(); }
-function setReceiptElText(i, v){ receiptDesignConfig.elements[i].text = v; refreshReceiptPreview(); }
-function setReceiptElSize(i, v){ receiptDesignConfig.elements[i].size = parseInt(v)||12; refreshReceiptPreview(); }
-
-function handleReceiptLogoUpload(input){
-  const file = input.files && input.files[0]; if(!file) return;
-  const img = new Image();
-  img.onload = function(){
-    const maxW = 300, scale = Math.min(1, maxW / img.width);
-    const cv = document.createElement('canvas');
-    cv.width = Math.round(img.width*scale); cv.height = Math.round(img.height*scale);
-    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-    receiptDesignConfig.logo = cv.toDataURL('image/png');
-    renderReceiptDesignScreen();
-    showToast('اللوجو اتحمّل — متنساش الحفظ');
-  };
-  img.onerror = ()=> showToast('الصورة دي مش صالحة', 'err');
-  img.src = URL.createObjectURL(file);
-}
-function removeReceiptLogo(){ receiptDesignConfig.logo=''; renderReceiptDesignScreen(); }
-
-// بيبني HTML الفاتورة من العناصر بالترتيب — بيستخدمه العرض الحي والطباعة الفعلية
 function buildReceiptHTML(data){
   const c = receiptDesignConfig || defaultReceiptConfig();
   const L = RECEIPT_LABELS[c.lang] || RECEIPT_LABELS.ar;
@@ -311,7 +339,7 @@ function buildReceiptHTML(data){
     const fs = (el.size||12) + 'px';
     switch(el.id){
       case 'logo':
-        if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto 6px; max-width:60%; max-height:70px;">`);
+        if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto 6px; max-width:${c.logoWidth||60}%;">`);
         break;
       case 'shopName': if(el.text) parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:2px 0;">${el.text}</div>`); break;
       case 'branchName': case 'address': case 'phone': case 'footer':
@@ -322,7 +350,7 @@ function buildReceiptHTML(data){
         parts.push(`<table style="width:100%; border-collapse:collapse; font-size:${fs}; margin:4px 0;">${(d.items||[]).map(it=>
           `<tr><td style="padding:2px 0; border-bottom:1px dashed #999;">${it.name}</td><td style="padding:2px 4px; border-bottom:1px dashed #999; white-space:nowrap;">${it.qty}×</td><td style="padding:2px 0; border-bottom:1px dashed #999; white-space:nowrap; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
       case 'totals':
-        parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${L.currency}${d.payStr?' ('+d.payStr+')':''}</div>`); break;
+        parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`); break;
       case 'invoiceNo':
         if(d.invoiceNo) parts.push(`<div style="text-align:center; font-size:${fs};">${L.invoice} ${d.invoiceNo}</div>`); break;
       case 'barcode':
@@ -380,7 +408,7 @@ function refreshReceiptPreview(){
   box.style.width = (c.paperWidth==='58'? '150px' : '200px');
   const d = receiptSampleData();
   box.innerHTML = buildReceiptHTML(d);
-  try{ if(typeof JsBarcode!=='undefined' && box.querySelector('#rBarcodeDyn')) JsBarcode(box.querySelector('#rBarcodeDyn'), d.scanCode, {format:'CODE128', width:1.1, height:26, fontSize:9, margin:0, displayValue:true}); }catch(e){}
+  try{ if(typeof JsBarcode!=='undefined' && box.querySelector('#rBarcodeDyn')) JsBarcode(box.querySelector('#rBarcodeDyn'), d.scanCode, {format:'CODE128', width:(c.bcWidth||1.4)*0.8, height:(c.bcHeight||34)*0.8, fontSize:(c.bcFont||11)*0.85, margin:0, displayValue:true}); }catch(e){}
 }
 
 function setLabelSize(v){
@@ -412,10 +440,18 @@ function buildLabelHTML(it, barcodeSvgId){
     if(!el.on) continue;
     const fs = (el.size||10)+'px';
     switch(el.id){
-      case 'logo': if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto; max-width:55%; max-height:${Math.round(h*0.25)}mm;">`); break;
+      case 'logo': if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto; max-width:${lb.logoWidth||50}%; max-height:${Math.round(h*0.3)}mm;">`); break;
       case 'shop': parts.push(`<div style="font-size:${fs}; color:#444;">${(shopEl&&shopEl.text)||''}</div>`); break;
       case 'name': parts.push(`<div style="font-size:${fs}; font-weight:800; line-height:1.15; overflow:hidden;">${it.name||''}</div>`); break;
-      case 'price': parts.push(`<div style="font-size:${fs}; font-weight:900;">${it.price!=null?it.price:''} ج.م</div>`); break;
+      case 'price': {
+        const cur = currencyLabel();
+        const pv = (it.price!=null?it.price:'') + ' ' + cur;
+        const st = lb.priceStyle||'plain';
+        if(st==='box')       parts.push(`<div style="font-size:${fs}; font-weight:900; border:2px solid #000; border-radius:4px; padding:1px 8px; display:inline-block;">${pv}</div>`);
+        else if(st==='solid')parts.push(`<div style="font-size:${fs}; font-weight:900; background:#000; color:#fff; border-radius:4px; padding:2px 9px; display:inline-block;">${pv}</div>`);
+        else if(st==='tag')  parts.push(`<div style="font-size:${fs}; font-weight:900; border:2.5px solid #000; border-radius:99px; padding:3px 12px; display:inline-block;">${pv}</div>`);
+        else                 parts.push(`<div style="font-size:${fs}; font-weight:900;">${pv}</div>`);
+        break; }
       case 'barcode': if(it.barcode) parts.push(`<div style="line-height:0;"><svg id="${barcodeSvgId}"></svg></div>`); break;
       case 'code': if(it.barcode) parts.push(`<div style="font-size:${fs}; letter-spacing:.5px; direction:ltr;">${it.barcode}</div>`); break;
     }
@@ -424,6 +460,7 @@ function buildLabelHTML(it, barcodeSvgId){
 }
 function refreshLabelPreview(){
   const box = document.getElementById('labelLivePreview'); if(!box) return;
+  const lbc = (receiptDesignConfig&&receiptDesignConfig.label)||defaultLabelConfig();
   const {w,h} = labelSizeMM();
   const scale = Math.min(190/(w*3.78), 1);
   const demo = {name:'إيشارب حرير مطرز', price:250, barcode:'2000123456789'};
@@ -434,7 +471,7 @@ function refreshLabelPreview(){
   box.style.width = (w*3.78*scale)+'px'; box.style.height = (h*3.78*scale)+'px';
   const note = document.getElementById('labelSizeNote');
   if(note) note.textContent = w+' × '+h+' مم (المعاينة مصغّرة — الطباعة بالمقاس الحقيقي)';
-  try{ const bc = box.querySelector('#lblPrevBc'); if(bc&&typeof JsBarcode!=='undefined') JsBarcode(bc, demo.barcode, {format:'CODE128', width:1.2, height:Math.max(16, h*1.1), fontSize:8, margin:0, displayValue:false}); }catch(e){}
+  try{ const bc = box.querySelector('#lblPrevBc'); if(bc&&typeof JsBarcode!=='undefined') JsBarcode(bc, demo.barcode, {format:'CODE128', width:(lbc.bcWidth||1.4), height:(lbc.bcHeight||30), fontSize:8, margin:0, displayValue:!!lbc.showBcDigits}); }catch(e){}
 }
 
 // ===== نافذة الكمية + الطباعة (مشتركة: صنف واحد أو دفعة من الاستلام) =====
@@ -484,7 +521,7 @@ function doPrintLabels(jobs){
   tmp.style.cssText = 'position:fixed; left:-9999px; top:0;';
   tmp.innerHTML = html;
   document.body.appendChild(tmp);
-  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el) JsBarcode(el, c.code, {format:'CODE128', width:1.4, height:Math.max(18, h*1.3), fontSize:9, margin:0, displayValue:false}); }); }catch(e){}
+  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el) JsBarcode(el, c.code, {format:'CODE128', width:(labelSizeMM(), (receiptDesignConfig.label&&receiptDesignConfig.label.bcWidth)||1.4), height:(receiptDesignConfig.label&&receiptDesignConfig.label.bcHeight)||30, fontSize:9, margin:0, displayValue:false}); }); }catch(e){}
   const finalHTML = tmp.innerHTML;
   tmp.remove();
 
@@ -572,7 +609,7 @@ function _printBuiltReceipt(data, payments){
   holder.innerHTML = buildReceiptHTML(data);
   const barcodeEl = holder.querySelector('#rBarcodeDyn');
   if(barcodeEl && data.scanCode){
-    try{ if(typeof JsBarcode!=='undefined') JsBarcode(barcodeEl, data.scanCode, {format:'CODE128', width:1.4, height:34, fontSize:11, margin:0, displayValue:true}); }catch(e){}
+    try{ if(typeof JsBarcode!=='undefined') JsBarcode(barcodeEl, data.scanCode, {format:'CODE128', width:c.bcWidth||1.4, height:c.bcHeight||34, fontSize:c.bcFont||11, margin:0, displayValue:true}); }catch(e){}
   }
   const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
   if(shellCfg && shellCfg.invoicePrinter){
