@@ -114,6 +114,8 @@ const RECEIPT_ELEMENTS = [
   { id:'invoiceNo', label:'🔢 رقم الفاتورة',          kind:'auto', size:11 },
   { id:'barcode',   label:'⬛ باركود المرتجع',        kind:'auto' },
   { id:'appQR',     label:'📱 QR تحميل التطبيق (للعملاء الغير مسجّلين/من غير تطبيق)', kind:'auto', size:10 },
+  { id:'spacer',    label:'⬜ مسافة فارغة',           kind:'multi', size:8 },
+  { id:'divider',   label:'➖ خط فاصل',               kind:'multi', size:4 },
   { id:'footer',    label:'💬 رسالة الختام',          kind:'text', def:'شكرًا لتعاملكم معنا 🙏', size:11 }
 ];
 // 🏷️ مقاسات الليبل العالمية (Zebra وغيرها) بالمليمتر
@@ -139,8 +141,8 @@ let receiptDesignConfig = null;
 
 function defaultReceiptConfig(){
   return {
-    lang:'ar', paperWidth:'80', logo:'', logoWidth:60, bcHeight:34, bcWidth:1.4, bcFont:11, currencyAr:'ج.م', currencyEn:'EGP',
-    elements: RECEIPT_ELEMENTS.map(e=> ({ id:e.id, on: !(e.id==='branchName'||e.id==='address'||e.id==='phone'), text: e.def||'', size: e.size||12 }))
+    lang:'ar', paperWidth:'80', logo:'', logoWidth:60, bcHeight:34, bcWidth:1.4, bcWidthPct:90, bcFont:11, currencyAr:'ج.م', currencyEn:'EGP',
+    elements: RECEIPT_ELEMENTS.filter(e=> e.kind!=='multi').map(e=> ({ id:e.id, on: !(e.id==='branchName'||e.id==='address'||e.id==='phone'), text: e.def||'', size: e.size||12 }))
   };
 }
 async function loadReceiptDesignConfig(){
@@ -151,8 +153,8 @@ async function loadReceiptDesignConfig(){
       const d = doc.data();
       if(Array.isArray(d.elements)){
         // دمج: نحافظ على ترتيبك وإعداداتك، ونضيف أي عنصر جديد في السيستم آخر القايمة
-        const saved = d.elements.filter(e=> RECEIPT_ELEMENTS.some(r=> r.id===e.id));
-        const missing = RECEIPT_ELEMENTS.filter(r=> !saved.some(e=> e.id===r.id))
+        const saved = d.elements.filter(e=> RECEIPT_ELEMENTS.some(r=> r.id===e.id) || /^(spacer|divider)/.test(e.id));
+        const missing = RECEIPT_ELEMENTS.filter(r=> r.kind!=='multi' && !saved.some(e=> e.id===r.id))
           .map(e=> ({ id:e.id, on:false, text:e.def||'', size:e.size||12 }));
         receiptDesignConfig = Object.assign(defaultReceiptConfig(), d, { elements:[...saved, ...missing] });
         receiptDesignConfig.labelShopName = d.labelShopName; receiptDesignConfig.showBarcodeOnLabel = d.showBarcodeOnLabel;
@@ -207,8 +209,12 @@ async function renderReceiptDesignScreen(){
     </div>`;
 
   const elRow = (el, i, defs, moveFn, togglePath, sizePath, refreshFn) => {
-    const def = defs.find(r=> r.id===el.id) || {label:el.id};
+    let def = defs.find(r=> r.id===el.id);
+    if(!def && el.id.indexOf('spacer')===0)  def = {label:'↕️ مسافة فارغة', kind:'dyn'};
+    if(!def && el.id.indexOf('divider')===0) def = {label:'➖ خط فاصل', kind:'dyn'};
+    if(!def) def = {label:el.id};
     const isText = def.kind==='text', isLogo = def.kind==='logo';
+    const isDyn = def.kind==='dyn', isSpacer = el.id.indexOf('spacer')===0;
     return `
     <div style="${S.row} ${el.on?'':'opacity:.45;'}">
       <div style="display:flex; flex-direction:column;">
@@ -221,10 +227,11 @@ async function renderReceiptDesignScreen(){
         <span style="position:absolute; top:2.5px; ${el.on?'left:18px;':'left:3px;'} width:15px; height:15px; border-radius:50%; background:#fff; transition:.15s;"></span>
       </label>
       <div style="flex:1; min-width:0;">
-        <div style="font-size:12.5px; font-weight:800;">${def.label}</div>
+        <div style="font-size:12.5px; font-weight:800;">${def.label} ${isMulti?`<button onclick="deleteReceiptEl(${i})" style="border:none; background:none; color:var(--bad); cursor:pointer; font-size:12px;">🗑️</button>`:''}</div>
         ${isText?`<input value="${(el.text||'').replace(/"/g,'&quot;')}" oninput="${togglePath}[${i}].text=this.value; ${refreshFn}();" placeholder="اكتب النص..." style="width:100%; margin-top:5px; ${S.ctl}">`:''}
       </div>
-      ${(!isLogo && el.id!=='barcode' && el.id!=='appQR')?`
+      ${isDyn?`<button onclick="removeReceiptDynEl(${i})" style="border:none; background:none; color:var(--bad); cursor:pointer; font-size:14px;">🗑️</button>`:''}
+      ${((!isLogo && el.id!=='barcode' && el.id!=='appQR' && el.id.indexOf('divider')!==0) || isSpacer)?`
       <div style="display:flex; align-items:center; gap:4px;">
         <button onclick="${sizePath}[${i}].size=Math.max(7,(${sizePath}[${i}].size||12)-1); renderReceiptDesignScreen();" style="width:26px; height:26px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">−</button>
         <span style="font-size:11px; min-width:30px; text-align:center;">${el.size||12}px</span>
@@ -258,12 +265,16 @@ async function renderReceiptDesignScreen(){
 
     <div style="${S.card}">
       <div style="font-weight:800; font-size:13px; margin-bottom:6px;">⬛ باركود المرتجع</div>
-      ${slider('الارتفاع', c.bcHeight||34, 18, 70, 2, "receiptDesignConfig.bcHeight=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
-      ${slider('سُمك الخطوط', c.bcWidth||1.4, 1, 3, 0.1, "receiptDesignConfig.bcWidth=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
+      ${slider('الارتفاع (px)', c.bcHeight||34, 18, 80, 2, "receiptDesignConfig.bcHeight=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
+      ${slider('العرض %', c.bcWidthPct||90, 40, 100, 5, "receiptDesignConfig.bcWidthPct=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
       ${slider('حجم الأرقام', c.bcFont||11, 7, 16, 1, "receiptDesignConfig.bcFont=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
     </div>
 
-    <div style="font-size:11px; color:var(--muted); margin:4px 2px 8px;">✥ رتّب العناصر بالأسهم · فعّل/عطّل بالمفتاح · − + لحجم الخط</div>
+    <div style="display:flex; gap:8px; align-items:center; margin:2px 2px 8px;">
+      <span style="font-size:11px; color:var(--muted); flex:1;">✥ رتّب بالأسهم · − + للحجم</span>
+      <button onclick="addReceiptSpacer()" style="${S.chip}">➕ مسافة</button>
+      <button onclick="addReceiptDivider()" style="${S.chip}">➕ خط فاصل</button>
+    </div>
     ${c.elements.map((el,i)=> elRow(el, i, RECEIPT_ELEMENTS, 'moveReceiptEl', 'receiptDesignConfig.elements', 'receiptDesignConfig.elements', 'refreshReceiptPreview')).join('')}`;
 
   // ====== تبويب الليبل ======
@@ -328,6 +339,16 @@ async function renderReceiptDesignScreen(){
   refreshLabelPreview();
   if(shell) loadPrinterPickers();
 }
+// بيرسم الباركود على canvas ويرجّعه صورة — مضمون في المعاينة والطباعة (الصامتة كمان) وبدقة عالية
+function receiptBarcodeImg(code){
+  try{
+    if(typeof JsBarcode==='undefined' || !code) return '';
+    const c = receiptDesignConfig||defaultReceiptConfig();
+    const cv = document.createElement('canvas');
+    JsBarcode(cv, code, {format:'CODE128', width:3, height:(c.bcHeight||34)*3, fontSize:(c.bcFont||11)*3, margin:6, displayValue:true});
+    return cv.toDataURL('image/png');
+  }catch(e){ return ''; }
+}
 function buildReceiptHTML(data){
   const c = receiptDesignConfig || defaultReceiptConfig();
   const L = RECEIPT_LABELS[c.lang] || RECEIPT_LABELS.ar;
@@ -337,7 +358,11 @@ function buildReceiptHTML(data){
   for(const el of c.elements){
     if(!el.on) continue;
     const fs = (el.size||12) + 'px';
-    switch(el.id){
+    if(el.id.indexOf('spacer')===0){ parts.push(`<div style="height:${el.size||10}px;"></div>`); continue; }
+    if(el.id.indexOf('divider')===0){ parts.push(`<div style="border-top:1.5px dashed #555; margin:4px 2px;"></div>`); continue; }
+    switch(el.base||el.id){
+      case 'spacer': parts.push(`<div style="height:${el.size||8}px;"></div>`); break;
+      case 'divider': parts.push(`<div style="border-top:1.5px dashed #000; margin:${el.size||4}px 0;"></div>`); break;
       case 'logo':
         if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto 6px; max-width:${c.logoWidth||60}%;">`);
         break;
@@ -353,8 +378,10 @@ function buildReceiptHTML(data){
         parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`); break;
       case 'invoiceNo':
         if(d.invoiceNo) parts.push(`<div style="text-align:center; font-size:${fs};">${L.invoice} ${d.invoiceNo}</div>`); break;
-      case 'barcode':
-        parts.push(`<div style="text-align:center; margin-top:5px;"><svg id="rBarcodeDyn"></svg></div>`); break;
+      case 'barcode': {
+        const bimg = receiptBarcodeImg(d.scanCode);
+        if(bimg) parts.push(`<img src="${bimg}" style="width:${c.bcWidthPct||90}%; display:block; margin:4px auto 0;">`);
+        break; }
       case 'appQR':
         if(d.showAppQR && d.appQrImg){
           parts.push(`<div style="text-align:center; margin-top:6px; border-top:1px dashed #999; padding-top:6px;">
@@ -408,7 +435,6 @@ function refreshReceiptPreview(){
   box.style.width = (c.paperWidth==='58'? '150px' : '200px');
   const d = receiptSampleData();
   box.innerHTML = buildReceiptHTML(d);
-  try{ if(typeof JsBarcode!=='undefined' && box.querySelector('#rBarcodeDyn')) JsBarcode(box.querySelector('#rBarcodeDyn'), d.scanCode, {format:'CODE128', width:(c.bcWidth||1.4)*0.8, height:(c.bcHeight||34)*0.8, fontSize:(c.bcFont||11)*0.85, margin:0, displayValue:true}); }catch(e){}
 }
 
 function setLabelSize(v){
@@ -416,6 +442,27 @@ function setLabelSize(v){
   const box = document.getElementById('labelCustomSize');
   if(box) box.style.display = v==='custom' ? 'flex' : 'none';
   refreshLabelPreview();
+}
+function addReceiptSpacer(){
+  receiptDesignConfig.elements.push({ id:'spacer_'+Date.now().toString(36), on:true, size:10 });
+  renderReceiptDesignScreen();
+}
+function addReceiptDivider(){
+  receiptDesignConfig.elements.push({ id:'divider_'+Date.now().toString(36), on:true });
+  renderReceiptDesignScreen();
+}
+function removeReceiptDynEl(i){
+  receiptDesignConfig.elements.splice(i,1);
+  renderReceiptDesignScreen();
+}
+function addReceiptMulti(base){
+  const def = RECEIPT_ELEMENTS.find(r=> r.id===base);
+  receiptDesignConfig.elements.push({ id: base+'_'+Date.now().toString(36), base, on:true, size:(def&&def.size)||8 });
+  renderReceiptDesignScreen();
+}
+function deleteReceiptEl(i){
+  receiptDesignConfig.elements.splice(i,1);
+  renderReceiptDesignScreen();
 }
 function moveReceiptEl(i, dir){
   const arr = receiptDesignConfig.elements;
@@ -461,7 +508,11 @@ function buildLabelHTML(it, barcodeSvgId){
   for(const el of lb.elements){
     if(!el.on) continue;
     const fs = (el.size||10)+'px';
-    switch(el.id){
+    if(el.id.indexOf('spacer')===0){ parts.push(`<div style="height:${el.size||10}px;"></div>`); continue; }
+    if(el.id.indexOf('divider')===0){ parts.push(`<div style="border-top:1.5px dashed #555; margin:4px 2px;"></div>`); continue; }
+    switch(el.base||el.id){
+      case 'spacer': parts.push(`<div style="height:${el.size||8}px;"></div>`); break;
+      case 'divider': parts.push(`<div style="border-top:1.5px dashed #000; margin:${el.size||4}px 0;"></div>`); break;
       case 'logo': if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto; max-width:${lb.logoWidth||50}%; max-height:${Math.round(h*0.3)}mm;">`); break;
       case 'shop': parts.push(`<div style="font-size:${fs}; color:#444;">${(shopEl&&shopEl.text)||''}</div>`); break;
       case 'name': parts.push(`<div style="font-size:${fs}; font-weight:800; line-height:1.15; overflow:hidden;">${it.name||''}</div>`); break;
@@ -636,10 +687,6 @@ function _printBuiltReceipt(data, payments){
   const c = receiptDesignConfig || defaultReceiptConfig();
   const holder = document.getElementById('receiptPrint');
   holder.innerHTML = buildReceiptHTML(data);
-  const barcodeEl = holder.querySelector('#rBarcodeDyn');
-  if(barcodeEl && data.scanCode){
-    try{ if(typeof JsBarcode!=='undefined') JsBarcode(barcodeEl, data.scanCode, {format:'CODE128', width:c.bcWidth||1.4, height:c.bcHeight||34, fontSize:c.bcFont||11, margin:0, displayValue:true}); }catch(e){}
-  }
   const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
   if(shellCfg && shellCfg.invoicePrinter){
     const hasCash = payments && Number(payments.cash) > 0;

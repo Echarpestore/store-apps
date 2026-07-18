@@ -100,6 +100,21 @@ function invSort(col){
   renderInventoryList();
 }
 
+let invSelected = new Set();   // تحديد متعدد بالـ Ctrl+Click لطباعة الليبلات
+function invRowClick(e, id){
+  if(e.ctrlKey || e.metaKey){
+    if(invSelected.has(id)) invSelected.delete(id); else invSelected.add(id);
+    renderInventoryList();
+    return;
+  }
+  openProductDetails(id);
+}
+function printSelectedLabels(){
+  if(!hasPerm('canPrintLabel')){ showToast('مفيش صلاحية طباعة الليبل', 'err'); return; }
+  const picked = allInventory.filter(it=> invSelected.has(it.id));
+  if(!picked.length){ showToast('حدد منتجات الأول: Ctrl + دوسة على كل منتج', 'err'); return; }
+  openLabelQtyModal(picked.map(it=> ({ name:it.name, price:it.price, barcode:it.barcode, suggestedQty: Math.max(1, branchQty(it)||1) })));
+}
 function renderInventoryList(){
   const listWrap = document.getElementById('inventoryListWrap');
   if(!listWrap) return;
@@ -146,6 +161,8 @@ function renderInventoryList(){
     return;
   }
 
+  const _lbtn = document.getElementById('invLabelBtn');
+  if(_lbtn) _lbtn.textContent = '🏷️ طباعة ليبل' + (invSelected.size? ' ('+invSelected.size+')' : '');
   const rows = items.map((it, i)=>{
     const qty = branchQty(it);
     const isLow = (it.minStock??0) > 0 && qty <= it.minStock;
@@ -153,7 +170,8 @@ function renderInventoryList(){
     const qtyCol = isOut ? '#b91c1c' : isLow ? '#b45309' : '#15803d';
     const qtyTxt = canStock ? qty : (isOut?'نافد':isLow?'ناقص':'متاح');
     const sold = invSales[it.id]||0;
-    return `<tr onclick="openProductDetails('${it.id}')" style="cursor:pointer; border-bottom:1px solid var(--border); background:${i%2?'transparent':'rgba(0,0,0,.02)'};">
+    const sel = invSelected.has(it.id);
+    return `<tr onclick="invRowClick(event, '${it.id}')" style="cursor:pointer; border-bottom:1px solid var(--border); background:${sel?'rgba(129,140,248,.20)':(i%2?'transparent':'rgba(0,0,0,.02)')}; ${sel?'outline:1.5px solid #818cf8; outline-offset:-1.5px;':''}">
       <td style="padding:9px 8px; color:var(--muted); font-size:11px; direction:ltr;">${it.barcode||'—'}</td>
       <td style="padding:9px 8px; font-weight:700; font-size:13px;">${it.name}${it.status==='hidden'?' <span style="font-size:9px; color:var(--muted);">🚫</span>':''}</td>
       <td style="padding:9px 8px; text-align:center; font-weight:900; color:${qtyCol};">${qtyTxt}</td>
