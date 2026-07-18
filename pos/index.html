@@ -34,7 +34,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 }
 .mgmt-light input::placeholder{color:#8a8a80;}
 .mgmt-light .empty-cart{color:#999 !important;}
-.mgmt-light button:not(.logout-btn):not(.rep-range-btn){
+.mgmt-light button:not(.logout-btn):not(.rep-range-btn):not(.bs-range-btn){
   background:#eef0e0; color:#1a1a1a; border:1px solid #b9c9a0;
 }
 .screen{display:none;height:100vh;flex-direction:column;}
@@ -117,6 +117,8 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   color:var(--text); font-size:12px; font-weight:700; cursor:pointer;
 }
 .rep-range-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+.bs-range-btn{padding:8px 14px; border-radius:20px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:12px; font-weight:700; cursor:pointer;}
+.bs-range-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
 .rep-type-btn{padding:11px 16px; border-radius:11px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-weight:800; font-size:14px; cursor:pointer;}
 .rep-type-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
 .rep-print-btn{padding:10px 16px; border-radius:10px; border:none; background:#334155; color:#fff; font-weight:800; font-size:13px; cursor:pointer;}
@@ -581,7 +583,23 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
     <button class="back-btn" onclick="goToDashboard()">◀</button>
     <h2>🏬 ملخّص الأصناف لكل الفروع</h2>
   </div>
-  <div id="branchSummaryWrap" style="flex:1; overflow:auto; -webkit-overflow-scrolling:touch; padding:14px 16px 60px;"></div>
+  <div style="padding:12px 16px 0;">
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+      <button class="bs-range-btn" data-bsrange="today" onclick="setBranchRange('today')">النهاردة</button>
+      <button class="bs-range-btn" data-bsrange="yesterday" onclick="setBranchRange('yesterday')">امبارح</button>
+      <button class="bs-range-btn" data-bsrange="week" onclick="setBranchRange('week')">آخر 7 أيام</button>
+      <button class="bs-range-btn" data-bsrange="month" onclick="setBranchRange('month')">آخر 30 يوم</button>
+      <button class="bs-range-btn active" data-bsrange="all" onclick="setBranchRange('all')">الكل</button>
+    </div>
+    <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+      <input type="date" id="bsFrom" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <span style="color:var(--muted); font-size:12px;">لـ</span>
+      <input type="date" id="bsTo" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <button class="bs-range-btn" onclick="setBranchRange('custom')">تطبيق</button>
+    </div>
+    <div style="font-size:11px; color:var(--muted); margin-bottom:4px;">📦 المخزون = الحالي · 🛒 المُباع = خلال الفترة المختارة</div>
+  </div>
+  <div id="branchSummaryWrap" style="flex:1; overflow:auto; -webkit-overflow-scrolling:touch; padding:8px 16px 60px;"></div>
 </div>
 
 <div class="screen mgmt-light" id="catalogScreen">

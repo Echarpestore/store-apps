@@ -547,6 +547,8 @@ function nextBarcode(){
 
 // ============ ملخّص الأصناف لكل الفروع (للمدير) ============
 let _bsSold = {}, _bsBranches = [];
+let _bsSalesRaw = [];              // مبيعات كل الفروع (خام) — عشان نعيد الفلترة بالتاريخ من غير تحميل تاني
+let currentBSRange = 'all';        // فترة عمود "باع" — زي التقارير
 async function goToBranchSummary(){
   if(!hasPerm('canViewReports')){ showToast('الصلاحية دي للمدير بس', 'err'); return; }
   showScreen('branchSummaryScreen');
@@ -555,22 +557,64 @@ async function goToBranchSummary(){
   try{
     await loadInventory();
     const snap = await db.collection(TEST_SALES).get();   // مبيعات كل الفروع
-    const sold = {};
-    snap.docs.forEach(d=>{
-      const s = d.data(); if(s.reversed) return;
-      const br = s.branch || '—';
-      (s.items||[]).forEach(it=>{
-        if(it.isRedemption || it.isRewardDiscount || !it.id) return;
-        if(!sold[it.id]) sold[it.id] = {};
-        sold[it.id][br] = (sold[it.id][br]||0) + (it.qty||0) * (it.isReturn ? -1 : 1);
-      });
-    });
+    _bsSalesRaw = snap.docs.map(d=> d.data()).filter(s=> !s.reversed);
+    // الفروع المتاحة (من المخزون + المبيعات) — ثابتة مش متأثرة بالتاريخ
     const brset = new Set();
     allInventory.forEach(p=>{ if(p.qtyByBranch) Object.keys(p.qtyByBranch).forEach(b=> brset.add(b)); });
-    Object.values(sold).forEach(m=> Object.keys(m).forEach(b=> { if(b!=='—') brset.add(b); }));
-    _bsSold = sold; _bsBranches = [...brset].sort((a,b)=> a.localeCompare(b,'ar'));
-    renderBranchSummary();
+    _bsSalesRaw.forEach(s=>{ if(s.branch) brset.add(s.branch); });
+    _bsBranches = [...brset].sort((a,b)=> a.localeCompare(b,'ar'));
+    document.querySelectorAll('.bs-range-btn').forEach(b=> b.classList.toggle('active', b.dataset.bsrange === currentBSRange));
+    computeBSSold();
   }catch(e){ wrap.innerHTML = '<div class="empty-cart">خطأ: '+e.message+'</div>'; }
+}
+
+// حدود الفترة المختارة (نفس منطق التقارير بالظبط)
+function getBSDateBounds(){
+  let from = null, to = null;
+  if(currentBSRange === 'today'){
+    from = new Date(); from.setHours(0,0,0,0); to = new Date(); to.setHours(23,59,59,999);
+  }else if(currentBSRange === 'yesterday'){
+    from = new Date(); from.setDate(from.getDate()-1); from.setHours(0,0,0,0);
+    to = new Date(); to.setDate(to.getDate()-1); to.setHours(23,59,59,999);
+  }else if(currentBSRange === 'week'){
+    from = new Date(); from.setDate(from.getDate()-6); from.setHours(0,0,0,0); to = new Date(); to.setHours(23,59,59,999);
+  }else if(currentBSRange === 'month'){
+    from = new Date(); from.setDate(from.getDate()-29); from.setHours(0,0,0,0); to = new Date(); to.setHours(23,59,59,999);
+  }else if(currentBSRange === 'custom'){
+    const f = document.getElementById('bsFrom')?.value; const t = document.getElementById('bsTo')?.value;
+    if(f) from = new Date(f + 'T00:00:00'); if(t) to = new Date(t + 'T23:59:59');
+  }
+  // 'all' → من غير حدود (كل الفترة)
+  return { from, to };
+}
+
+// بيحسب عمود "باع" لكل صنف/فرع حسب الفترة المختارة، من المبيعات الخام
+function computeBSSold(){
+  const { from, to } = getBSDateBounds();
+  const fromMs = from ? from.getTime() : null, toMs = to ? to.getTime() : null;
+  const sold = {};
+  _bsSalesRaw.forEach(s=>{
+    if(fromMs != null || toMs != null){
+      const t = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : null;
+      if(t == null) return;                    // فاتورة من غير تاريخ متتحسبش في فترة محددة
+      if(fromMs != null && t < fromMs) return;
+      if(toMs != null && t > toMs) return;
+    }
+    const br = s.branch || '—';
+    (s.items||[]).forEach(it=>{
+      if(it.isRedemption || it.isRewardDiscount || !it.id) return;
+      if(!sold[it.id]) sold[it.id] = {};
+      sold[it.id][br] = (sold[it.id][br]||0) + (it.qty||0) * (it.isReturn ? -1 : 1);
+    });
+  });
+  _bsSold = sold;
+  renderBranchSummary();
+}
+
+function setBranchRange(range){
+  currentBSRange = range;
+  document.querySelectorAll('.bs-range-btn').forEach(b=> b.classList.toggle('active', b.dataset.bsrange === range));
+  computeBSSold();
 }
 
 function renderBranchSummary(){
