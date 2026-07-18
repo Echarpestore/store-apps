@@ -627,7 +627,9 @@ async function goToBranchSummary(){
   wrap.innerHTML = '<div class="empty-cart">بيتحمّل من كل الفروع... 🏬</div>';
   try{
     await loadInventory();
-    const snap = await db.collection(TEST_SALES).get();   // مبيعات كل الفروع
+    // أحدث 3000 فاتورة على مستوى كل الفروع (بتغطي شهور) — بدل تحميل التاريخ كله كل مرة
+    const snap = await db.collection(TEST_SALES).orderBy('createdAt','desc').limit(3000).get()
+      .catch(async ()=> db.collection(TEST_SALES).limit(3000).get());
     _bsSalesRaw = snap.docs.map(d=> d.data()).filter(s=> !s.reversed);
     // الفروع المتاحة (من المخزون + المبيعات) — ثابتة مش متأثرة بالتاريخ
     const brset = new Set();
@@ -1160,7 +1162,10 @@ async function renderReportsScreen(){
 
   let sales = [];
   try{
-    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+    // بدل تحميل كل تاريخ الفرع: أحدث 1500 فاتورة بس (بتغطي شهور، والتقارير أصلاً بفترات قصيرة)
+    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
+      .orderBy('createdAt','desc').limit(1500).get()
+      .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(1500).get());
     sales = snap.docs.map(d=>d.data()).filter(s=> !s.reversed);
   }catch(e){ console.warn(e); }
 
@@ -1346,7 +1351,11 @@ function chartDonut(segments, opts){
 async function buildCustomersReport(){
   let sales = [], customers = [];
   try{
-    const [ss, cs] = await Promise.all([ db.collection(TEST_SALES).get(), db.collection(TEST_CUSTOMERS).get() ]);
+    const [ss, cs] = await Promise.all([
+      db.collection(TEST_SALES).orderBy('createdAt','desc').limit(3000).get()
+        .catch(async ()=> db.collection(TEST_SALES).limit(3000).get()),
+      db.collection(TEST_CUSTOMERS).get()
+    ]);
     sales = ss.docs.map(d=>d.data()).filter(s=> !s.reversed && _sameBrandAsCurrent(s.branch));
     customers = cs.docs.map(d=> Object.assign({ _id:d.id }, d.data()));
   }catch(e){ return `<div class="rep-card"><div style="color:var(--muted); text-align:center; padding:20px;">تعذر التحميل: ${e.message}</div></div>`; }
@@ -1654,7 +1663,9 @@ const RATING_ICON_MAP = {1:'😠', 2:'🙁', 3:'🙂', 4:'😍'};
 async function renderLiveSalesHistory(){
   const wrap = document.getElementById('salesHistoryWrap');
   wrap.innerHTML = 'بيتحمّل...';
-  const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+  const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
+    .orderBy('createdAt','desc').limit(500).get()
+    .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(500).get());
   const sales = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>{
     const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
     const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
@@ -1848,7 +1859,10 @@ async function goToEndOfDay(){
   // مبيعات النهاردة (نفس الفرع)
   let sales = [];
   try{
-    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+    // أحدث 300 فاتورة تكفي وزيادة ليوم واحد — بدل تحميل التاريخ كله
+    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
+      .orderBy('createdAt','desc').limit(300).get()
+      .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(300).get());
     sales = snap.docs.map(d=>d.data()).filter(s=> s.createdAt && s.createdAt.toMillis && s.createdAt.toMillis() >= dayMs);
   }catch(e){ console.warn('sales', e); }
 
@@ -2667,7 +2681,10 @@ async function renderReverseList(){
   const wrap = document.getElementById('reverseList');
   wrap.innerHTML = '<div class="empty-cart">بيتحمّل...</div>';
   try{
-    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+    // العكس بيتم لفواتير قريبة — أحدث 200 كفاية
+    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
+      .orderBy('createdAt','desc').limit(200).get()
+      .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(200).get());
     const sales = snap.docs.map(d=>({id:d.id, ...d.data()}))
       .filter(s=> !s.reversed && !s.isReversal)
       .sort((a,b)=>{
