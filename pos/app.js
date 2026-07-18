@@ -111,6 +111,25 @@ const RECEIPT_ELEMENTS = [
   { id:'barcode',   label:'⬛ باركود المرتجع',        kind:'auto' },
   { id:'footer',    label:'💬 رسالة الختام',          kind:'text', def:'شكرًا لتعاملكم معنا 🙏', size:11 }
 ];
+// 🏷️ مقاسات الليبل العالمية (Zebra وغيرها) بالمليمتر
+const LABEL_SIZES = [
+  {id:'40x25', w:40, h:25}, {id:'50x25', w:50, h:25}, {id:'50x30', w:50, h:30},
+  {id:'58x40', w:58, h:40}, {id:'60x40', w:60, h:40}, {id:'70x40', w:70, h:40},
+  {id:'75x50', w:75, h:50}, {id:'100x50', w:100, h:50}, {id:'100x75', w:100, h:75},
+  {id:'100x150', w:100, h:150}
+];
+const LABEL_ELEMENTS = [
+  { id:'logo',    label:'🖼️ لوجو المحل',        kind:'logo' },
+  { id:'shop',    label:'🏪 اسم المحل',          kind:'auto', size:9 },
+  { id:'name',    label:'📦 اسم المنتج',         kind:'auto', size:13 },
+  { id:'price',   label:'💵 السعر',              kind:'auto', size:20 },
+  { id:'barcode', label:'⬛ الباركود (الرسمة)',   kind:'auto' },
+  { id:'code',    label:'🔖 الكود (أرقام)',       kind:'auto', size:9 }
+];
+function defaultLabelConfig(){
+  return { sizeId:'58x40', customW:58, customH:40,
+    elements: LABEL_ELEMENTS.map(e=> ({ id:e.id, on: e.id!=='logo', size:e.size||10 })) };
+}
 let receiptDesignConfig = null;
 
 function defaultReceiptConfig(){
@@ -131,6 +150,12 @@ async function loadReceiptDesignConfig(){
         const missing = RECEIPT_ELEMENTS.filter(r=> !saved.some(e=> e.id===r.id))
           .map(e=> ({ id:e.id, on:false, text:e.def||'', size:e.size||12 }));
         receiptDesignConfig = { lang:d.lang||'ar', paperWidth:d.paperWidth||'80', logo:d.logo||'', elements:[...saved, ...missing] };
+        receiptDesignConfig.labelShopName = d.labelShopName; receiptDesignConfig.showBarcodeOnLabel = d.showBarcodeOnLabel;
+        if(d.label && Array.isArray(d.label.elements)){
+          const ls = d.label.elements.filter(e=> LABEL_ELEMENTS.some(r=> r.id===e.id));
+          const lm = LABEL_ELEMENTS.filter(r=> !ls.some(e=> e.id===r.id)).map(e=> ({id:e.id, on:false, size:e.size||10}));
+          receiptDesignConfig.label = { sizeId:d.label.sizeId||'58x40', customW:d.label.customW||58, customH:d.label.customH||40, elements:[...ls, ...lm] };
+        }
       }else{
         // ترقية من النسخة القديمة (خانات ثابتة) — ننقل قيمك القديمة للعناصر
         const c = receiptDesignConfig;
@@ -144,6 +169,7 @@ async function loadReceiptDesignConfig(){
       }
     }
   }catch(e){ console.warn('receipt design load', e); }
+  if(!receiptDesignConfig.label) receiptDesignConfig.label = defaultLabelConfig();
 }
 
 function goToReceiptDesign(){
@@ -155,6 +181,8 @@ function goToReceiptDesign(){
 async function renderReceiptDesignScreen(){
   if(!receiptDesignConfig) await loadReceiptDesignConfig();
   const c = receiptDesignConfig;
+  if(!c.label) c.label = defaultLabelConfig();
+  const lb = c.label;
   const shell = (typeof window.posShell !== 'undefined');
   const rows = c.elements.map((el, i)=>{
     const def = RECEIPT_ELEMENTS.find(r=> r.id===el.id) || {label:el.id};
@@ -200,12 +228,47 @@ async function renderReceiptDesignScreen(){
       </div>
     </div>
 
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin:12px 0;">
+      <div style="font-weight:800; margin-bottom:8px;">🏷️ محرر ليبل السعر</div>
+      <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <select onchange="setLabelSize(this.value)" style="flex:1; min-width:140px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+          ${LABEL_SIZES.map(s=>`<option value="${s.id}" ${lb.sizeId===s.id?'selected':''}>${s.w} × ${s.h} مم</option>`).join('')}
+          <option value="custom" ${lb.sizeId==='custom'?'selected':''}>مقاس مخصص...</option>
+        </select>
+        <div id="labelCustomSize" style="display:${lb.sizeId==='custom'?'flex':'none'}; gap:6px; align-items:center;">
+          <input type="number" value="${lb.customW}" onchange="receiptDesignConfig.label.customW=parseFloat(this.value)||58; refreshLabelPreview();" style="width:64px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center;"> ×
+          <input type="number" value="${lb.customH}" onchange="receiptDesignConfig.label.customH=parseFloat(this.value)||40; refreshLabelPreview();" style="width:64px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center;"> مم
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1fr 200px; gap:12px; align-items:start;">
+        <div>${lb.elements.map((el,i)=>{
+          const def = LABEL_ELEMENTS.find(r=> r.id===el.id)||{label:el.id};
+          return `<div style="display:flex; align-items:center; gap:6px; padding:7px; border:1px solid var(--border); border-radius:9px; margin-bottom:5px; background:${el.on?'var(--panel)':'var(--panel2)'}; opacity:${el.on?1:.55};">
+            <div style="display:flex; flex-direction:column; gap:2px;">
+              <button onclick="moveLabelEl(${i},-1)" ${i===0?'disabled':''} style="padding:1px 7px; border-radius:5px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">▲</button>
+              <button onclick="moveLabelEl(${i},1)" ${i===lb.elements.length-1?'disabled':''} style="padding:1px 7px; border-radius:5px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">▼</button>
+            </div>
+            <input type="checkbox" ${el.on?'checked':''} onchange="receiptDesignConfig.label.elements[${i}].on=this.checked; renderReceiptDesignScreen();" style="width:17px; height:17px;">
+            <div style="flex:1; font-size:12px; font-weight:700;">${def.label}</div>
+            ${def.kind!=='logo'&&el.id!=='barcode'?`<select onchange="receiptDesignConfig.label.elements[${i}].size=parseInt(this.value); refreshLabelPreview();" style="padding:5px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px;">
+              ${[7,8,9,10,11,12,13,14,16,18,20,24,28].map(s=>`<option value="${s}" ${el.size==s?'selected':''}>${s}px</option>`).join('')}</select>`:''}
+          </div>`;}).join('')}
+        </div>
+        <div style="position:sticky; top:8px;">
+          <div style="font-size:11px; color:var(--muted); margin-bottom:4px; text-align:center;">👁️ معاينة الليبل</div>
+          <div style="display:flex; justify-content:center;"><div id="labelLivePreview" style="background:#fff; color:#000; border:1px dashed #999; overflow:hidden;"></div></div>
+          <div id="labelSizeNote" style="font-size:10px; color:var(--muted); text-align:center; margin-top:4px;"></div>
+        </div>
+      </div>
+    </div>
+
     <div style="background:var(--panel); border:1px solid ${shell?'var(--plus)':'var(--border)'}; border-radius:12px; padding:16px; margin:12px 0;">
       <div style="font-weight:800; margin-bottom:6px;">🖨️ طابعات الجهاز ده ${shell?'':'<span style="font-size:11px; color:var(--muted); font-weight:400;">(بيشتغل جوّه برنامج الكاشير على ويندوز)</span>'}</div>
       <div id="printerPickers">${shell ? '<div style="color:var(--muted); font-size:12px;">جارٍ تحميل الطابعات...</div>' : '<div style="color:var(--muted); font-size:12.5px;">🔓 افتح من برنامج الكاشير على ويندوز لاختيار الطابعات.</div>'}</div>
     </div>
     <button onclick="saveReceiptDesignConfig()" style="width:100%; padding:13px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">حفظ تصميم الفاتورة</button>`;
   refreshReceiptPreview();
+  refreshLabelPreview();
   if(shell) loadPrinterPickers();
 }
 function moveReceiptEl(i, dir){
@@ -283,6 +346,122 @@ function refreshReceiptPreview(){
   const d = receiptSampleData();
   box.innerHTML = buildReceiptHTML(d);
   try{ if(typeof JsBarcode!=='undefined' && box.querySelector('#rBarcodeDyn')) JsBarcode(box.querySelector('#rBarcodeDyn'), d.scanCode, {format:'CODE128', width:1.1, height:26, fontSize:9, margin:0, displayValue:true}); }catch(e){}
+}
+
+function setLabelSize(v){
+  receiptDesignConfig.label.sizeId = v;
+  const box = document.getElementById('labelCustomSize');
+  if(box) box.style.display = v==='custom' ? 'flex' : 'none';
+  refreshLabelPreview();
+}
+function moveLabelEl(i, dir){
+  const arr = receiptDesignConfig.label.elements;
+  const j = i+dir; if(j<0||j>=arr.length) return;
+  [arr[i],arr[j]]=[arr[j],arr[i]];
+  renderReceiptDesignScreen();
+}
+function labelSizeMM(){
+  const lb = (receiptDesignConfig&&receiptDesignConfig.label)||defaultLabelConfig();
+  if(lb.sizeId==='custom') return {w: lb.customW||58, h: lb.customH||40};
+  const s = LABEL_SIZES.find(x=> x.id===lb.sizeId) || LABEL_SIZES[3];
+  return {w:s.w, h:s.h};
+}
+// بيبني HTML ليبل واحد من تصميمك — مقاسات حقيقية بالمليمتر (للطباعة الدقيقة)
+function buildLabelHTML(it, barcodeSvgId){
+  const c = receiptDesignConfig||defaultReceiptConfig();
+  const lb = c.label||defaultLabelConfig();
+  const {w,h} = labelSizeMM();
+  const shopEl = (c.elements||[]).find(e=> e.id==='shopName');
+  const parts = [];
+  for(const el of lb.elements){
+    if(!el.on) continue;
+    const fs = (el.size||10)+'px';
+    switch(el.id){
+      case 'logo': if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto; max-width:55%; max-height:${Math.round(h*0.25)}mm;">`); break;
+      case 'shop': parts.push(`<div style="font-size:${fs}; color:#444;">${(shopEl&&shopEl.text)||''}</div>`); break;
+      case 'name': parts.push(`<div style="font-size:${fs}; font-weight:800; line-height:1.15; overflow:hidden;">${it.name||''}</div>`); break;
+      case 'price': parts.push(`<div style="font-size:${fs}; font-weight:900;">${it.price!=null?it.price:''} ج.م</div>`); break;
+      case 'barcode': if(it.barcode) parts.push(`<div style="line-height:0;"><svg id="${barcodeSvgId}"></svg></div>`); break;
+      case 'code': if(it.barcode) parts.push(`<div style="font-size:${fs}; letter-spacing:.5px; direction:ltr;">${it.barcode}</div>`); break;
+    }
+  }
+  return `<div class="one-label" style="width:${w}mm; height:${h}mm; box-sizing:border-box; padding:1.5mm; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; text-align:center; font-family:Tahoma,Arial,sans-serif; overflow:hidden; page-break-after:always;">${parts.join('')}</div>`;
+}
+function refreshLabelPreview(){
+  const box = document.getElementById('labelLivePreview'); if(!box) return;
+  const {w,h} = labelSizeMM();
+  const scale = Math.min(190/(w*3.78), 1);
+  const demo = {name:'إيشارب حرير مطرز', price:250, barcode:'2000123456789'};
+  box.innerHTML = buildLabelHTML(demo, 'lblPrevBc');
+  const inner = box.firstChild;
+  inner.style.pageBreakAfter = 'auto';
+  inner.style.transform = `scale(${scale})`; inner.style.transformOrigin = 'top left';
+  box.style.width = (w*3.78*scale)+'px'; box.style.height = (h*3.78*scale)+'px';
+  const note = document.getElementById('labelSizeNote');
+  if(note) note.textContent = w+' × '+h+' مم (المعاينة مصغّرة — الطباعة بالمقاس الحقيقي)';
+  try{ const bc = box.querySelector('#lblPrevBc'); if(bc&&typeof JsBarcode!=='undefined') JsBarcode(bc, demo.barcode, {format:'CODE128', width:1.2, height:Math.max(16, h*1.1), fontSize:8, margin:0, displayValue:false}); }catch(e){}
+}
+
+// ===== نافذة الكمية + الطباعة (مشتركة: صنف واحد أو دفعة من الاستلام) =====
+// items: [{name, price, barcode, suggestedQty}]
+function openLabelQtyModal(items){
+  const old = document.getElementById('labelQtyOverlay'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'labelQtyOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px;';
+  ov.innerHTML = `<div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; width:100%; max-width:420px; max-height:80vh; overflow-y:auto;">
+    <h3 style="margin:0 0 4px;">🏷️ طباعة ليبلات</h3>
+    <div style="color:var(--muted); font-size:12px; margin-bottom:12px;">حدّد عدد الليبلات لكل صنف (متقترح تلقائيًا)</div>
+    ${items.map((it,i)=>`<div style="display:flex; align-items:center; gap:10px; padding:9px; border:1px solid var(--border); border-radius:10px; margin-bottom:7px;">
+      <div style="flex:1; min-width:0;"><div style="font-weight:700; font-size:13px;">${it.name}</div><div style="color:var(--muted); font-size:11px; direction:ltr; text-align:right;">${it.barcode||''}</div></div>
+      <input type="number" min="0" id="lq_${i}" value="${Math.max(0, it.suggestedQty||1)}" style="width:70px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800; font-size:15px;">
+    </div>`).join('')}
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button onclick="document.getElementById('labelQtyOverlay').remove()" style="flex:1; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">إلغاء</button>
+      <button id="lqGo" style="flex:2; padding:12px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">🖨️ طباعة</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('lqGo').onclick = ()=>{
+    const jobs = items.map((it,i)=> ({...it, qty: parseInt(document.getElementById('lq_'+i).value)||0})).filter(j=> j.qty>0);
+    ov.remove();
+    if(!jobs.length){ showToast('مفيش كميات للطباعة', 'err'); return; }
+    doPrintLabels(jobs);
+  };
+}
+function doPrintLabels(jobs){
+  // بنبني كل الليبلات (كل صنف × كميته) في مستند واحد — الطابعة بتقطع ليبل ليبل
+  let html = '', n = 0;
+  const codes = [];
+  for(const j of jobs){
+    for(let k=0; k<j.qty; k++){
+      const id = 'bc_'+(n++);
+      html += buildLabelHTML(j, id);
+      if(j.barcode) codes.push({id, code:j.barcode});
+    }
+  }
+  const {w,h} = labelSizeMM();
+  const total = n;
+  const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
+
+  // نرسم الباركودات في حاوية مخفية الأول (عشان الـ SVG يبقى جاهز جوّه الـ HTML)
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:fixed; left:-9999px; top:0;';
+  tmp.innerHTML = html;
+  document.body.appendChild(tmp);
+  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el) JsBarcode(el, c.code, {format:'CODE128', width:1.4, height:Math.max(18, h*1.3), fontSize:9, margin:0, displayValue:false}); }); }catch(e){}
+  const finalHTML = tmp.innerHTML;
+  tmp.remove();
+
+  if(shellCfg && shellCfg.labelPrinter){
+    window.posShell.printLabel({ printer: shellCfg.labelPrinter, html: `<style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;}</style>`+finalHTML })
+      .then(()=> showToast('اتبعت '+total+' ليبل للطابعة 🏷️'))
+      .catch(e=> showToast('فشل طباعة الليبل: '+e.message, 'err'));
+  }else{
+    const wdw = window.open('', '_blank', 'width=420,height=560');
+    wdw.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;}</style></head><body>${finalHTML}<script>window.print(); setTimeout(()=>window.close(), 500);<\/script></body></html>`);
+    wdw.document.close();
+  }
 }
 
 async function saveReceiptDesignConfig(){

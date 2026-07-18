@@ -262,6 +262,7 @@ function renderReceiveCart(){
   if(!receiveCart.length){
     wrap.innerHTML = '<div style="text-align:center; color:var(--muted); padding:26px 16px; font-size:13px;">امسح أو اكتب كود المنتج فوق 👆 عشان يتضاف للقايمة</div>';
     if(btn) btn.style.display = 'none';
+    const lb0 = document.getElementById('receiveLabelsBtn'); if(lb0) lb0.style.display = 'none';
     return;
   }
   wrap.innerHTML = receiveCart.map((r, idx)=>{
@@ -276,6 +277,9 @@ function renderReceiveCart(){
     return `
     <div style="background:${bg}; border:1.5px solid ${border}; border-radius:12px; padding:12px 14px; margin-bottom:9px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+        <label style="display:flex; align-items:flex-start; gap:6px; padding-top:2px;" title="تحديد لطباعة الليبل">
+          <input type="checkbox" class="lbl-pick" data-idx="${idx}" ${r._lblPick!==false && !isNeg ?'checked':''} onchange="receiveCart[${idx}]._lblPick=this.checked" style="width:17px; height:17px;">
+        </label>
         <div style="min-width:0;">
           <div style="font-weight:800; font-size:14px; color:${isNeg?'var(--minus)':'inherit'};">${r.name}${isNeg?' ↩️':''}</div>
           <div style="color:#555; font-size:11.5px; margin-top:3px;">🔖 كود: <b style="direction:ltr; display:inline-block;">${r.barcode || '—'}</b>${price!==''?` · 💵 السعر: <b>${price} ج.م</b>`:''}</div>
@@ -294,6 +298,16 @@ function renderReceiveCart(){
     </div>`;
   }).join('');
   if(btn){ btn.style.display = 'block'; btn.textContent = '✔️ تأكيد الاستلام (' + receiveCart.length + ' صنف)'; }
+  // زرار طباعة ليبلات المحدد (بيظهر مع القايمة)
+  let lb = document.getElementById('receiveLabelsBtn');
+  if(!lb && btn){
+    lb = document.createElement('button');
+    lb.id = 'receiveLabelsBtn';
+    lb.style.cssText = 'display:block; width:100%; margin:8px 0; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:800; cursor:pointer;';
+    lb.onclick = printReceiveLabels;
+    btn.parentNode.insertBefore(lb, btn);
+  }
+  if(lb){ lb.style.display = 'block'; lb.textContent = '🏷️ طباعة ليبلات المحدد (☑️)'; }
 }
 
 async function confirmReceiveCart(){
@@ -340,4 +354,16 @@ function renderReceiveGoodsLog(){
       <span>${l.name}</span>
       <span style="font-weight:800; color:${l.qtyChange>0?'var(--plus)':'var(--minus)'};">${l.qtyChange>0?'+':''}${l.qtyChange}</span>
     </div>`).join('') : '<div style="color:#999; font-size:12px; text-align:center; padding:10px 0;">لسه مفيش عمليات استلام النهاردة</div>';
+}
+
+
+// 🏷️ طباعة ليبلات الأصناف المحدّدة في الاستلام — الاقتراح = الكمية المستلمة دلوقتي
+function printReceiveLabels(){
+  if(!hasPerm('canPrintLabel')){ showToast('مفيش صلاحية طباعة الليبل', 'err'); return; }
+  const picked = receiveCart.filter(r=> r._lblPick!==false && (r.qty||0) > 0);
+  if(!picked.length){ showToast('علّم ☑️ على الأصناف اللي عايز تطبعلها ليبل', 'err'); return; }
+  openLabelQtyModal(picked.map(r=>{
+    const inv = allInventory.find(x=> x.id===r.id) || {};
+    return { name:r.name, price:(inv.price!=null?inv.price:r.price), barcode:(r.barcode||inv.barcode), suggestedQty:r.qty };
+  }));
 }

@@ -645,24 +645,8 @@ function printPriceLabel(id){
   if(!hasPerm('canPrintLabel')){ showToast('مفيش صلاحية', 'err'); return; }
   const it = allInventory.find(x=>x.id===id);
   if(!it) return;
-  const c = receiptDesignConfig;
-  const w = window.open('', '_blank', 'width=300,height=220');
-  w.document.write(`
-    <html dir="rtl"><head><meta charset="UTF-8"><style>
-      body{font-family:Tahoma,Arial,sans-serif; text-align:center; padding:14px;}
-      .shop{font-size:11px; color:#666; margin-bottom:4px;}
-      h2{margin:4px 0; font-size:16px;} .price{font-size:26px; font-weight:900; margin:6px 0;}
-    </style></head><body>
-      ${c.labelShopName ? `<div class="shop">${c.shopName || ((c.elements||[]).find(e=>e.id==='shopName')||{}).text || ''}</div>` : ''}
-      <h2>${it.name}</h2>
-      <div class="price">${it.price} ج.م</div>
-      ${c.showBarcodeOnLabel && it.barcode ? '<svg id="lblBarcode"></svg>' : ''}
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js"><\/script>
-      <script>
-        try{ if(document.getElementById('lblBarcode')) JsBarcode('#lblBarcode', '${it.barcode}', {format:'CODE128', width:1.6, height:38, fontSize:11}); }catch(e){}
-        window.print(); setTimeout(()=>window.close(), 400);
-      <\/script>
-    </body></html>`);
-  w.document.close();
+  // نافذة الكمية — الاقتراح = رصيد الفرع الحالي
+  const suggested = (typeof branchQty==='function') ? Math.max(1, branchQty(it)||1) : 1;
+  openLabelQtyModal([{ name: it.name, price: it.price, barcode: it.barcode, suggestedQty: suggested }]);
 }
 
