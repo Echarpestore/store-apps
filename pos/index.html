@@ -343,6 +343,27 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 
 /* Printable receipt (hidden until print) — مقاس 58mm (طابعة حرارية عادية) */
 #receiptPrint{display:none;}
+/* ===== معاينة الفاتورة الحية في شاشة التصميم ===== */
+#rdPreview{background:#fff; color:#000; font-family:'Cairo',Tahoma,sans-serif; padding:10px 8px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.35); margin:0 auto;}
+#rdPreview.w80{width:302px;}
+#rdPreview.w58{width:219px;}
+#rdPreview img.pv-logo{display:block; margin:0 auto 6px; max-width:60%; max-height:70px;}
+#rdPreview h2{text-align:center; margin:0 0 4px; font-size:14px; color:#000;}
+#rdPreview .pv-meta{text-align:center; font-size:10px; color:#333; margin-bottom:8px;}
+#rdPreview table{width:100%; border-collapse:collapse; font-size:10px; color:#000;}
+#rdPreview td{padding:2px 0; border-bottom:1px dashed #bbb;}
+#rdPreview td:nth-child(2), #rdPreview td:nth-child(3){text-align:left; white-space:nowrap; padding-right:6px;}
+#rdPreview .pv-total{font-weight:800; font-size:12px; border-top:1px dashed #000; padding-top:4px; text-align:center; margin-top:4px;}
+#rdPreview .pv-inv{text-align:center; font-size:10.5px; font-weight:800; margin-top:6px;}
+#rdPreview .pv-bar{text-align:center; margin-top:4px;}
+#rdPreview .pv-bar svg{max-width:100%;}
+#rdPreview .pv-foot{text-align:center; font-size:10px; margin-top:8px; color:#000;}
+/* معاينة ليبل السعر */
+#rdLabelPreview{background:#fff; color:#000; font-family:Tahoma,Arial,sans-serif; text-align:center; padding:12px; border-radius:8px; width:210px; margin:0 auto; box-shadow:0 6px 18px rgba(0,0,0,.35);}
+#rdLabelPreview .lv-shop{font-size:10px; color:#666; margin-bottom:3px;}
+#rdLabelPreview h3{margin:3px 0; font-size:14px; color:#000;}
+#rdLabelPreview .lv-price{font-size:22px; font-weight:900; margin:5px 0; color:#000;}
+#rdLabelPreview svg{max-width:100%;}
 @media print{
   @page{ size:58mm auto; margin:0; }
   body *{visibility:hidden;}

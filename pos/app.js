@@ -136,6 +136,10 @@ function renderReceiptDesignScreen(){
       <div style="font-weight:800; margin-bottom:10px;">🏷️ ليبل السعر</div>
       <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:8px;"><input type="checkbox" id="rdLabelShopName" ${c.labelShopName?'checked':''}> اكتب اسم المحل فوق الليبل</label>
       <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="rdShowBarcodeLabel" ${c.showBarcodeOnLabel?'checked':''}> اطبع باركود المنتج على الليبل</label>
+      <div style="margin-top:12px;">
+        <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">👁️ معاينة حية:</div>
+        <div id="rdLabelPreview"></div>
+      </div>
     </div>
 
     <div style="background:var(--panel); border:1px solid ${shell?'var(--plus)':'var(--border)'}; border-radius:12px; padding:16px; margin-bottom:12px;">
@@ -144,9 +148,64 @@ function renderReceiptDesignScreen(){
       <div id="printerPickers">${shell ? '<div style="color:var(--muted); font-size:12px;">جارٍ تحميل الطابعات...</div>' : '<div style="color:var(--muted); font-size:12.5px;">🔓 افتح الشاشة دي من برنامج الكاشير المثبّت على ويندوز عشان تختار: طابعة الفواتير · طابعة الليبل · طابعة درج الكاش — من طابعات ويندوز المعرّفة.</div>'}</div>
     </div>
 
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px;">
+      <div style="font-weight:800; margin-bottom:10px;">👁️ معاينة حية <span style="font-size:11px; color:var(--muted); font-weight:400;">— بتتحدّث مع كل تعديل، بشكل الطباعة الفعلي</span></div>
+      <div id="rdPreview" class="w80"></div>
+    </div>
+
     <button onclick="saveReceiptDesignConfig()" style="width:100%; padding:13px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">حفظ التصميم</button>`;
   if(shell) loadPrinterPickers();
+  // ربط كل الحقول بالمعاينة الحية (فاتورة + ليبل)
+  ['rdShopName','rdHeaderNote','rdFooterNote','rdPaperWidth','rdShowBarcodeReceipt','rdLabelShopName','rdShowBarcodeLabel'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.addEventListener('input', updateReceiptPreview), el.addEventListener('change', updateReceiptPreview);
+  });
+  updateReceiptPreview();
 }
+
+// المعاينة الحية — فاتورة تجريبية بشكل الطباعة الفعلي، بتقرا القيم من الحقول مباشرة
+function updateReceiptPreview(){
+  const pv = document.getElementById('rdPreview'); if(!pv) return;
+  const shopName = (document.getElementById('rdShopName')?.value || 'المحل').trim() || 'المحل';
+  const headerNote = (document.getElementById('rdHeaderNote')?.value || '').trim();
+  const footerNote = (document.getElementById('rdFooterNote')?.value || '').trim();
+  const paper = document.getElementById('rdPaperWidth')?.value || '80';
+  const showBar = document.getElementById('rdShowBarcodeReceipt')?.checked;
+  const logo = receiptDesignConfig.logo || '';
+  pv.className = paper === '58' ? 'w58' : 'w80';
+  const meta = (headerNote ? headerNote + ' | ' : '') + new Date().toLocaleString('ar-EG') + ' | الموظف: أحمد';
+  pv.innerHTML =
+    (logo ? '<img class="pv-logo" src="'+logo+'">' : '') +
+    '<h2>'+esc2(shopName)+'</h2>' +
+    '<div class="pv-meta">'+esc2(meta)+'</div>' +
+    '<table>' +
+      '<tr><td>إيشارب حرير مطبوع</td><td>2×</td><td>340.00</td></tr>' +
+      '<tr><td>طرحة قطن سادة</td><td>1×</td><td>120.00</td></tr>' +
+      '<tr><td>🎁 مكافأة خاصة (25 ج.م)</td><td>1×</td><td>-25.00</td></tr>' +
+    '</table>' +
+    '<div class="pv-total">الإجمالي: 435.00 جنيه (كاش: 435.00)</div>' +
+    '<div class="pv-inv">INV-000123</div>' +
+    (showBar ? '<div class="pv-bar"><svg id="pvBarcode"></svg></div>' : '') +
+    (footerNote ? '<div class="pv-foot">'+esc2(footerNote)+'</div>' : '');
+  if(showBar){
+    try{ if(typeof JsBarcode !== 'undefined') JsBarcode('#pvBarcode', 'FTRH000123-DEMO', { format:'CODE128', width:1.2, height:30, fontSize:10, margin:0, displayValue:true }); }catch(e){}
+  }
+  // معاينة ليبل السعر
+  const lv = document.getElementById('rdLabelPreview');
+  if(lv){
+    const lblShop = document.getElementById('rdLabelShopName')?.checked;
+    const lblBar = document.getElementById('rdShowBarcodeLabel')?.checked;
+    lv.innerHTML =
+      (lblShop ? '<div class="lv-shop">'+esc2(shopName)+'</div>' : '') +
+      '<h3>إيشارب حرير مطبوع</h3>' +
+      '<div class="lv-price">340 ج.م</div>' +
+      (lblBar ? '<svg id="lvBarcode"></svg>' : '');
+    if(lblBar){
+      try{ if(typeof JsBarcode !== 'undefined') JsBarcode('#lvBarcode', '6221033445566', { format:'CODE128', width:1.4, height:32, fontSize:10, margin:0 }); }catch(e){}
+    }
+  }
+}
+function esc2(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 
 // رفع اللوجو: بنصغّره تلقائيًا (أقصى عرض 300px) عشان يتخزّن خفيف ويطبع نضيف
 function handleReceiptLogoUpload(input){
@@ -161,6 +220,7 @@ function handleReceiptLogoUpload(input){
     receiptDesignConfig.logo = cv.toDataURL('image/png');
     const prev = document.getElementById('rdLogoPreview');
     prev.src = receiptDesignConfig.logo; prev.style.display = '';
+    updateReceiptPreview();
     showToast('اللوجو اتحمّل — متنساش الحفظ');
   };
   img.onerror = ()=> showToast('الصورة دي مش صالحة', 'err');
