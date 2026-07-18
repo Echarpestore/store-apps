@@ -340,7 +340,8 @@ async function renderReceiptDesignScreen(){
 // بيرسم الباركود على canvas ويرجّعه صورة — مضمون في المعاينة والطباعة (الصامتة كمان) وبدقة عالية
 function receiptBarcodeImg(code){
   try{
-    if(typeof JsBarcode==='undefined' || !code) return '';
+    if(!code) return '';
+    if(typeof JsBarcode==='undefined'){ console.warn('JsBarcode مش متحمّلة — الباركود مش هيترسم'); return ''; }
     const c = receiptDesignConfig||defaultReceiptConfig();
     const cv = document.createElement('canvas');
     JsBarcode(cv, code, {format:'CODE128', width:3, height:(c.bcHeight||34)*3, fontSize:(c.bcFont||11)*3, margin:6, displayValue:true});
@@ -379,6 +380,7 @@ function buildReceiptHTML(data){
       case 'barcode': {
         const bimg = receiptBarcodeImg(d.scanCode);
         if(bimg) parts.push(`<img src="${bimg}" style="width:${c.bcWidthPct||90}%; display:block; margin:4px auto 0;">`);
+        else if(d.scanCode && typeof JsBarcode==='undefined') parts.push(`<div style="text-align:center; font-size:10px; border:1px dashed #999; padding:6px; margin:4px 0;">⚠️ مكتبة الباركود مش متحمّلة — اعمل ريفريش وانت متوصل بالنت مرة واحدة</div>`);
         break; }
       case 'appQR':
         if(d.showAppQR && d.appQrImg){
