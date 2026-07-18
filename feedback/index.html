@@ -392,7 +392,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/fireba
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, addDoc, onSnapshot,
-  doc, deleteDoc, enableIndexedDbPersistence, getDocs, setDoc
+  doc, deleteDoc, enableIndexedDbPersistence, getDocs, setDoc, query, where
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -547,7 +547,10 @@ function renderBranchManageList(branches){
 
 // Live sync: any device connected to this Firebase project sees the
 // same data instantly, but each device only shows its own branch's data.
-onSnapshot(entriesCol, (snapshot)=>{
+// قيّدنا الاستماع اللايف بآخر 90 يوم بدل كل التاريخ — بيوفر آلاف القراءات يوميًا
+// (الكشك مفتوح طول اليوم، وكل تحميل كامل كان بيقرا كل تقييم من أول الزمن).
+const _entriesSince = Date.now() - 90*24*60*60*1000;
+onSnapshot(query(entriesCol, where('ts','>=', _entriesSince)), (snapshot)=>{
   allEntries = snapshot.docs.map(d=>({id:d.id, ...d.data()}));
   applyBranchFilter();
 }, (err)=> console.error('entries sync error', err));
