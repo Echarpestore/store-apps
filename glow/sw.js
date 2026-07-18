@@ -1,4 +1,4 @@
-const CACHE_NAME = 'glow-loyalty-v22';
+const CACHE_NAME = 'glow-loyalty-v23';
 
 // ============ استقبال إشعارات Push (حتى والتطبيق مقفول) ============
 self.addEventListener('push', (event) => {
@@ -22,11 +22,17 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  // مسار التطبيق المطلق (مبني على مكان الـ sw نفسه — مضمون سواء التطبيق مثبّت أو من المتصفح)
+  const appUrl = new URL('./index.html', self.registration.scope).href;
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
-      for (const w of wins) { if ('focus' in w) return w.focus(); }
-      return clients.openWindow(event.notification.data && event.notification.data.url || './');
-    })
+      // لو فيه نافذة للتطبيق مفتوحة فعلاً — نركّز عليها
+      for (const w of wins) {
+        if (w.url && w.url.indexOf(self.registration.scope) === 0 && 'focus' in w) return w.focus();
+      }
+      // مفيش — نفتح التطبيق
+      return clients.openWindow(appUrl);
+    }).catch(() => clients.openWindow(appUrl))
   );
 });
 
