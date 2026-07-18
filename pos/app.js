@@ -109,23 +109,100 @@ function goToReceiptDesign(){
 }
 function renderReceiptDesignScreen(){
   const c = receiptDesignConfig;
+  const shell = (typeof window.posShell !== 'undefined');
   document.getElementById('receiptDesignWrap').innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px;">
-      <div style="font-weight:800; margin-bottom:10px;">🧾 فاتورة البيع (58mm)</div>
+      <div style="font-weight:800; margin-bottom:10px;">🧾 فاتورة البيع</div>
+      <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">لوجو المحل (يظهر أعلى الفاتورة)</label>
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
+        <img id="rdLogoPreview" src="${c.logo||''}" style="height:44px; max-width:120px; object-fit:contain; background:#fff; border:1px solid var(--border); border-radius:8px; padding:4px; ${c.logo?'':'display:none;'}">
+        <input type="file" id="rdLogoFile" accept="image/*" onchange="handleReceiptLogoUpload(this)" style="font-size:12px;">
+        ${c.logo?'<button class="secondary" onclick="removeReceiptLogo()" style="padding:8px 12px;">🗑️ شيل اللوجو</button>':''}
+      </div>
+      <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">مقاس ورق الطابعة</label>
+      <select id="rdPaperWidth" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:10px;">
+        <option value="80" ${c.paperWidth!=='58'?'selected':''}>80mm / 75-80mm (العريضة)</option>
+        <option value="58" ${c.paperWidth==='58'?'selected':''}>58mm (الصغيرة)</option>
+      </select>
       <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">اسم المحل (عنوان الفاتورة)</label>
       <input id="rdShopName" value="${c.shopName}" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:10px;">
       <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">سطر إضافي تحت الاسم (عنوان/تليفون المحل — اختياري)</label>
       <input id="rdHeaderNote" value="${c.headerNote}" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:10px;">
       <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">رسالة آخر الفاتورة</label>
-      <input id="rdFooterNote" value="${c.footerNote}" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:10px;">
-      <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="rdShowBarcodeReceipt" ${c.showBarcodeOnReceipt?'checked':''}> اطبع باركود رقم الفاتورة آخر الريسيت</label>
+      <input id="rdFooterNote" value="${c.footerNote}" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--pan2); color:var(--text); margin-bottom:10px;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="rdShowBarcodeReceipt" ${c.showBarcodeOnReceipt?'checked':''}> اطبع باركود الفاتورة آخر الريسيت (بيتمسح لفتح المرتجع)</label>
     </div>
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:12px;">
       <div style="font-weight:800; margin-bottom:10px;">🏷️ ليبل السعر</div>
       <label style="display:flex; align-items:center; gap:6px; font-size:13px; margin-bottom:8px;"><input type="checkbox" id="rdLabelShopName" ${c.labelShopName?'checked':''}> اكتب اسم المحل فوق الليبل</label>
       <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" id="rdShowBarcodeLabel" ${c.showBarcodeOnLabel?'checked':''}> اطبع باركود المنتج على الليبل</label>
     </div>
+
+    <div style="background:var(--panel); border:1px solid ${shell?'var(--plus)':'var(--border)'}; border-radius:12px; padding:16px; margin-bottom:12px;">
+      <div style="font-weight:800; margin-bottom:6px;">🖨️ طابعات الجهاز ده ${shell?'':'<span style="font-size:11px; color:var(--muted); font-weight:400;">(بيشتغل جوّه برنامج الكاشير على ويندوز)</span>'}</div>
+      <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">اختيار الطابعات بيتحفظ على الجهاز ده بس — كل كاشير بإعداده. الطباعة بتبقى صامتة وفورية.</p>
+      <div id="printerPickers">${shell ? '<div style="color:var(--muted); font-size:12px;">جارٍ تحميل الطابعات...</div>' : '<div style="color:var(--muted); font-size:12.5px;">🔓 افتح الشاشة دي من برنامج الكاشير المثبّت على ويندوز عشان تختار: طابعة الفواتير · طابعة الليبل · طابعة درج الكاش — من طابعات ويندوز المعرّفة.</div>'}</div>
+    </div>
+
     <button onclick="saveReceiptDesignConfig()" style="width:100%; padding:13px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">حفظ التصميم</button>`;
+  if(shell) loadPrinterPickers();
+}
+
+// رفع اللوجو: بنصغّره تلقائيًا (أقصى عرض 300px) عشان يتخزّن خفيف ويطبع نضيف
+function handleReceiptLogoUpload(input){
+  const file = input.files && input.files[0]; if(!file) return;
+  const img = new Image();
+  img.onload = function(){
+    const maxW = 300;
+    const scale = Math.min(1, maxW / img.width);
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(img.width*scale); cv.height = Math.round(img.height*scale);
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    receiptDesignConfig.logo = cv.toDataURL('image/png');
+    const prev = document.getElementById('rdLogoPreview');
+    prev.src = receiptDesignConfig.logo; prev.style.display = '';
+    showToast('اللوجو اتحمّل — متنساش الحفظ');
+  };
+  img.onerror = ()=> showToast('الصورة دي مش صالحة', 'err');
+  img.src = URL.createObjectURL(file);
+}
+function removeReceiptLogo(){
+  receiptDesignConfig.logo = '';
+  renderReceiptDesignScreen();
+  showToast('اتشال اللوجو — متنساش الحفظ');
+}
+
+// اختيار طابعات الجهاز (بيشتغل جوّه غلاف الويندوز عبر window.posShell)
+async function loadPrinterPickers(){
+  const box = document.getElementById('printerPickers');
+  try{
+    const printers = await window.posShell.listPrinters();
+    const saved = JSON.parse(localStorage.getItem('pos_printers') || '{}');
+    const mk = (id, label, hint) => `
+      <label style="display:block; font-size:12px; color:var(--muted); margin:8px 0 4px;">${label} <span style="font-size:10px;">${hint||''}</span></label>
+      <select id="${id}" style="width:100%; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+        <option value="">— من غير طباعة —</option>
+        ${printers.map(p=> `<option value="${p.name.replace(/"/g,'&quot;')}" ${saved[id]===p.name?'selected':''}>${p.name}${p.isDefault?' (الافتراضية)':''}</option>`).join('')}
+      </select>`;
+    box.innerHTML =
+      mk('invoicePrinter', '🧾 طابعة الفواتير', '(بتطبع تلقائي مع كل دفع)') +
+      mk('labelPrinter', '🏷️ طابعة الليبل (Zebra)', '') +
+      mk('drawerPrinter', '💰 الطابعة الموصّل بيها درج الكاش', '(بيفتح تلقائي مع الكاش)') +
+      `<button class="secondary" onclick="savePrinterPickers()" style="width:100%; margin-top:12px; padding:10px;">حفظ طابعات الجهاز ده</button>
+       <button class="secondary" onclick="testInvoicePrinter()" style="width:100%; margin-top:8px; padding:10px;">🧪 اختبار طباعة فاتورة تجريبية</button>`;
+  }catch(e){ box.innerHTML = '<div style="color:var(--bad); font-size:12px;">تعذر تحميل الطابعات: '+e.message+'</div>'; }
+}
+function savePrinterPickers(){
+  const cfg = {
+    invoicePrinter: document.getElementById('invoicePrinter').value,
+    labelPrinter: document.getElementById('labelPrinter').value,
+    drawerPrinter: document.getElementById('drawerPrinter').value
+  };
+  localStorage.setItem('pos_printers', JSON.stringify(cfg));
+  showToast('اتحفظت طابعات الجهاز ✅');
+}
+function testInvoicePrinter(){
+  printReceipt({cash: 123.45}, 123.45, 'TEST-001', 'FTTEST001-DEMO');
 }
 async function saveReceiptDesignConfig(){
   const config = {
@@ -134,7 +211,9 @@ async function saveReceiptDesignConfig(){
     footerNote: document.getElementById('rdFooterNote').value.trim(),
     showBarcodeOnReceipt: document.getElementById('rdShowBarcodeReceipt').checked,
     labelShopName: document.getElementById('rdLabelShopName').checked,
-    showBarcodeOnLabel: document.getElementById('rdShowBarcodeLabel').checked
+    showBarcodeOnLabel: document.getElementById('rdShowBarcodeLabel').checked,
+    paperWidth: document.getElementById('rdPaperWidth').value,
+    logo: receiptDesignConfig.logo || ''
   };
   try{
     await db.collection(TEST_SETTINGS).doc('receipt_design').set(config, { merge:true });
@@ -145,6 +224,9 @@ async function saveReceiptDesignConfig(){
 
 function printReceipt(payments, total, invoiceNo, invoiceCode){
   const c = receiptDesignConfig;
+  // اللوجو (لو متظبط من محرر التصميم)
+  const logoEl = document.getElementById('rLogo');
+  if(logoEl){ if(c.logo){ logoEl.src = c.logo; logoEl.style.display = 'block'; } else { logoEl.style.display = 'none'; } }
   document.getElementById('rShopName').textContent = c.shopName;
   const metaLine = (c.headerNote ? c.headerNote + ' | ' : '') +
     new Date().toLocaleString('ar-EG') + ' | الموظف: ' + (currentEmployee.name || '');
@@ -176,7 +258,21 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
   }else{
     barcodeBox.style.display = 'none';
   }
-  window.print();
+  // ===== الطباعة =====
+  // جوّه برنامج الويندوز: طباعة صامتة للطابعة المختارة + فتح الدرج مع الكاش.
+  // في المتصفح: نافذة الطباعة العادية زي ما هي (الاحتياطي الدائم).
+  const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
+  if(shellCfg && shellCfg.invoicePrinter){
+    const hasCash = payments && Number(payments.cash) > 0;
+    window.posShell.printReceipt({
+      printer: shellCfg.invoicePrinter,
+      paperWidth: c.paperWidth || '80',
+      html: document.getElementById('receiptPrint').outerHTML,
+      openDrawer: hasCash ? (shellCfg.drawerPrinter || shellCfg.invoicePrinter) : null
+    }).catch(e=> { console.warn('silent print failed, fallback', e); window.print(); });
+  }else{
+    window.print();
+  }
 }
 
 // ---------------- Init ----------------
