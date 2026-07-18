@@ -276,6 +276,17 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 }
 .cart-table tbody tr.ret td{color:var(--minus); font-weight:700;}
 .cart-table tbody tr.ret.sel td{background:linear-gradient(#c0392b,#992d22); color:#fff;}
+/* آخر منتج اتضاف: إطار أخضر مميّز + خلفية خفيفة + ومضة بسيطة أول ما يتضاف */
+.cart-table tbody tr.just-added td{
+  background:linear-gradient(90deg, rgba(34,197,94,.30), rgba(34,197,94,.08));
+  border-top:2px solid var(--plus); border-bottom:2px solid var(--plus);
+}
+.cart-table tbody tr.just-added td:first-child{ border-right:4px solid var(--plus); }
+.cart-table tbody tr.just-added td:last-child{ border-left:4px solid var(--plus); }
+.cart-table tbody tr.just-added.sel td{ background:linear-gradient(#5b9bd5,#3a7bbf); color:#fff; }
+.cart-table tbody tr.just-added{ animation:justAddedFlash .6s ease-out; }
+@keyframes justAddedFlash{ 0%{ filter:brightness(1.6);} 55%{ filter:brightness(1.18);} 100%{ filter:brightness(1);} }
+.last-badge{ display:inline-block; background:var(--plus); color:#053018; font-size:9px; font-weight:900; padding:1px 7px; border-radius:99px; vertical-align:middle; }
 .cart-table .item-name{text-align:right; font-weight:600;}
 .empty-cart{color:#888;text-align:center;padding:40px 0;font-size:13px;}
 

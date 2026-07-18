@@ -1666,10 +1666,13 @@ function addToCart(item){
     }
     cart.push({id:item.id, name:item.name, barcode:item.barcode, price:finalPrice, originalPrice, discountName, qty:1, attribute:item.attribute||'', size:item.size||''});
   }
+  lastAddedId = item.id;   // ده آخر منتج ضربته — هيتميّز في السلة
   renderCart();
 }
 
 let selectedCartIdx = null;
+let lastAddedId = null;   // id آخر منتج اتضاف/اتزوّد في السلة — عشان نميّز صفه بلون مختلف
+function _isLastAdded(c){ return !!(lastAddedId && c.id===lastAddedId && !c.isReturn && !c.isRedemption && !c.isRewardDiscount); }
 
 // عروض الكتالوج اللي العميل فعّلها من التطبيق (بتتطبّق تلقائي على المنتج المطابق في السلة)
 let custActivatedOffers = {};
@@ -1698,9 +1701,9 @@ function renderCart(){
     tbody.innerHTML = '<tr><td colspan="6" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>';
   }else{
     tbody.innerHTML = cart.map((c, idx)=>`
-      <tr class="${idx===selectedCartIdx?'sel ':''}${c.isReturn?'ret':''}" onclick="selectCartRow(${idx})" style="${c.offerApplied?'background:linear-gradient(90deg,#ffeef5,#fff); box-shadow:inset 4px 0 0 #e27a97;':''}">
+      <tr class="${idx===selectedCartIdx?'sel ':''}${c.isReturn?'ret':''}${_isLastAdded(c)?' just-added':''}" onclick="selectCartRow(${idx})" style="${c.offerApplied?'background:linear-gradient(90deg,#ffeef5,#fff); box-shadow:inset 4px 0 0 #e27a97;':''}">
         <td>${idx+1}</td>
-        <td class="item-name">${c.offerApplied?'🎁 ':''}${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.offerApplied?' <span style="color:#c0397a; font-size:10px; font-weight:800;">🎁 عرض مفعّل</span>':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}${c.barcode?`<div class="cart-code">${c.barcode}</div>`:''}</td>
+        <td class="item-name">${_isLastAdded(c)?'<span class="last-badge">آخر ✅</span> ':''}${c.offerApplied?'🎁 ':''}${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.offerApplied?' <span style="color:#c0397a; font-size:10px; font-weight:800;">🎁 عرض مفعّل</span>':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}${c.barcode?`<div class="cart-code">${c.barcode}</div>`:''}</td>
         <td>${c.offerApplied && c.origPrice!=null ? `<s style="color:#c0397a; font-size:10px;">${c.origPrice.toFixed(2)}</s> ` : (c.originalPrice ? `<s style="color:#999; font-size:10px;">${c.originalPrice.toFixed(2)}</s> ` : '')}${c.price.toFixed(2)}</td>
         <td>
           <div class="qty-cell">
@@ -1739,6 +1742,7 @@ let holdSlots = [null, null];
 // بيصفّر سياق العميل المرتبط بالفاتورة (استبدال نقط / مكافأة / عروض مفعّلة)
 // مهم: عشان ما يتسربش لفاتورة تانية بعد Hold أو بدء فاتورة جديدة
 function clearCustomerContext(){
+  if(typeof lastAddedId !== 'undefined') lastAddedId = null;   // نلغي تمييز آخر منتج مع بداية/تعليق/استرجاع فاتورة
   if(typeof pendingRedemption   !== 'undefined') pendingRedemption   = null;
   if(typeof appliedReward       !== 'undefined') appliedReward       = null;
   if(typeof custBaseText        !== 'undefined') custBaseText        = '';
