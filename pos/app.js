@@ -125,20 +125,25 @@ let selectedPayMethods = new Set();
 // كل دور له مجموعة صلاحيات bool. القيم دي الافتراضية (Fallback) لو الأدمن لسه معملش تخصيص
 // من بانل الصلاحيات — بعد أول حفظ من البانل، القيم بتتقرا من قاعدة البيانات بدل كده.
 const DEFAULT_ROLE_PERMISSIONS = {
+  admin: {
+    label: 'أدمن', canSell: true, canHold: true, canPrintLabel: true,
+    canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
+    canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: true
+  },
   cashier: {
     label: 'كاشير', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: false, canViewStock: true, canViewLogs: false, canRefund: false, canResetCustomerPin: false,
-    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false
+    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false
   },
   supervisor: {
     label: 'مشرف', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: false, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
-    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false
+    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false
   },
   manager: {
     label: 'مدير', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
-    canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true
+    canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: false
   }
 };
 let rolePermissions = JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS));
@@ -196,15 +201,30 @@ async function loadEmployeePicker(){
   try{
     const snap = await db.collection(EMPLOYEES_COLLECTION).where('branch','==', currentBranch).get();
     const emps = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=> e.active !== false);
-    if(emps.length === 0){
+
+    // كمان نجيب الأدمن (بيظهر في الدخول على أي جهاز/فرع، مش متقيّد بفرع الجهاز)
+    let adminEmps = [];
+    try{
+      const asg = await db.collection(TEST_ROLES).doc('_assignments').get();
+      const assignments = asg.exists ? asg.data() : {};
+      const adminIds = Object.keys(assignments).filter(id=> assignments[id]==='admin' && !emps.some(e=> e.id===id));
+      if(adminIds.length){
+        const docs = await Promise.all(adminIds.map(id=> db.collection(EMPLOYEES_COLLECTION).doc(id).get()));
+        adminEmps = docs.filter(d=> d.exists).map(d=>Object.assign({id:d.id, _admin:true}, d.data())).filter(e=> e.active !== false);
+      }
+    }catch(e){ /* لو فشل، نكمّل بموظفين الفرع بس */ }
+
+    const allEmps = adminEmps.concat(emps);
+    if(allEmps.length === 0){
       grid.innerHTML = '';
       errBox.textContent = 'لسه مفيش موظفين مسجلين للفرع ده في نظام المبيعات';
       return;
     }
     errBox.textContent = '';
-    grid.innerHTML = emps.map(e=>{
+    grid.innerHTML = allEmps.map(e=>{
       const initials = (e.name||'؟').trim().split(' ').slice(0,2).map(w=>w[0]).join('');
-      return `<div class="emp-pick-tile" onclick="selectEmployeeForLogin('${e.id}', '${(e.name||'').replace(/'/g,"\\'")}')"><div class="av">${initials}</div><div class="n">${e.name}</div></div>`;
+      const adminBadge = e._admin ? '<div style="font-size:9px; color:var(--accent); font-weight:800; margin-top:2px;">🌐 أدمن</div>' : '';
+      return `<div class="emp-pick-tile" onclick="selectEmployeeForLogin('${e.id}', '${(e.name||'').replace(/'/g,"\\'")}')"><div class="av">${initials}</div><div class="n">${e.name}</div>${adminBadge}</div>`;
     }).join('');
   }catch(e){
     grid.innerHTML = '';
@@ -260,16 +280,57 @@ async function pinSubmit(){
 function logout(){
   currentEmployee = null;
   cart = [];
+  currentBranch = localStorage.getItem('pos_branch') || currentBranch;   // الجهاز يرجع لفرعه الأصلي بعد خروج الأدمن
   backToEmployeePicker();
   showScreen('loginScreen');
+}
+
+// ---------------- بدّل الفرع (أدمن) ----------------
+async function openBranchSwitch(){
+  if(!hasPerm('canSwitchBranch')){ showToast('الصلاحية دي للأدمن بس', 'err'); return; }
+  const modal = document.getElementById('branchSwitchModal');
+  const list = document.getElementById('branchSwitchList');
+  if(!modal || !list) return;
+  list.innerHTML = '<div class="empty-cart">جارٍ التحميل...</div>';
+  modal.classList.add('active');
+  try{
+    const snap = await db.collection(EMPLOYEES_COLLECTION).get();
+    const set = new Set();
+    snap.docs.forEach(d=>{ const b=((d.data().branch)||'').trim(); if(b) set.add(b); });
+    GLOW_BRANCHES.forEach(b=> set.add(b));
+    if(currentBranch) set.add(currentBranch);
+    const branches = [...set].sort((a,b)=> a.localeCompare(b,'ar'));
+    list.innerHTML = branches.map(b=>{
+      const sel = (b===currentBranch);
+      return `<button class="secondary" style="width:100%; margin-bottom:8px; ${sel?'border-color:var(--accent); color:var(--accent); font-weight:800;':''}" onclick="doBranchSwitch('${b.replace(/'/g,"\\'")}')">${sel?'✅ ':''}${b}</button>`;
+    }).join('') || '<div class="empty-cart">مفيش فروع</div>';
+  }catch(e){ list.innerHTML = '<div class="empty-cart">تعذر التحميل: '+e.message+'</div>'; }
+}
+function closeBranchSwitch(){ const m=document.getElementById('branchSwitchModal'); if(m) m.classList.remove('active'); }
+function doBranchSwitch(branch){
+  if(!hasPerm('canSwitchBranch')) return;
+  currentBranch = branch;   // مؤقت للجلسة — مش بيتخزّن، فالجهاز يفضل على فرعه الأصلي بعد الخروج
+  closeBranchSwitch();
+  const roleLabel = myPerms().label || '';
+  const el = document.getElementById('dashWho'); if(el) el.textContent = (currentEmployee.name||'') + ' — ' + roleLabel + ' · 🏬 ' + currentBranch;
+  const bb = document.getElementById('branchSwitchBtn'); if(bb) bb.innerHTML = '🏬 بدّل الفرع<span style="display:block; font-size:10px; font-weight:400; opacity:.8;">'+currentBranch+'</span>';
+  if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
+  if(typeof loadLoyaltyRedemptionConfig === 'function') loadLoyaltyRedemptionConfig();
+  showToast('اتبدّل الفرع لـ ' + currentBranch + ' ✔');
+  goToDashboard();
 }
 
 let noRoleAssignmentsYet = false; // bootstrap flag: true if the system has never had any role assigned
 
 function enterDashboard(){
   const roleLabel = myPerms().label || 'كاشير';
-  document.getElementById('dashWho').textContent = (currentEmployee.name || currentEmployee.id) + ' — ' + roleLabel;
+  document.getElementById('dashWho').textContent = (currentEmployee.name || currentEmployee.id) + ' — ' + roleLabel + ' · 🏬 ' + currentBranch;
   refreshHeldCount();
+
+  // زر "بدّل الفرع" — للأدمن بس
+  const canSwitch = hasPerm('canSwitchBranch');
+  const bb = document.getElementById('branchSwitchBtn');
+  if(bb){ bb.style.display = canSwitch ? '' : 'none'; bb.innerHTML = '🏬 بدّل الفرع<span style="display:block; font-size:10px; font-weight:400; opacity:.8;">'+currentBranch+'</span>'; }
 
   // Gate roles access by permission — EXCEPT during first-time bootstrap
   // (nobody has been assigned a role yet anywhere in the system), where
@@ -990,7 +1051,7 @@ const PERM_LABELS = {
   canSell:'يبيع', canHold:'يعمل Hold/Unhold', canPrintLabel:'يطبع Price Label',
   canViewCostPrice:'يشوف سعر التكلفة', canViewStock:'يشوف المخزون (الكميات)', canViewLogs:'يشوف السجلات', canRefund:'يعمل استرجاع',
   canResetCustomerPin:'يمسح الرقم السري للعميل', canEditInventory:'يعدّل/يضيف مخزون', canReceiveGoods:'يستلم/يخرج بضاعة', canChangePrices:'يغيّر الأسعار',
-  canViewReports:'يشوف التقارير المالية', canManageRoles:'يدير الصلاحيات'
+  canViewReports:'يشوف التقارير المالية', canManageRoles:'يدير الصلاحيات', canSwitchBranch:'يبدّل الفرع (أدمن)'
 };
 async function renderRolesScreen(){
   const wrap = document.getElementById('rolePermsWrap');

@@ -442,6 +442,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   <div class="qb-layout">
     <div class="qb-sidebar">
       <div style="color:var(--muted); font-size:11px; margin-bottom:2px;" id="dashWho"></div>
+      <button class="secondary" id="branchSwitchBtn" onclick="openBranchSwitch()" style="display:none; border-color:var(--accent); color:var(--accent);">🏬 بدّل الفرع</button>
       <button onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
       <button onclick="openHeldModal()">⏸️ فواتير معلّقة <span id="heldCountLabel" style="display:block; font-size:10px; font-weight:400; opacity:.8;">0 فاتورة</span></button>
       <button class="secondary" onclick="goToInventory()">📦 قائمة الأصناف</button>
@@ -941,6 +942,16 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ HELD INVOICES MODAL ============ -->
+<div class="modal-overlay" id="branchSwitchModal">
+  <div class="modal-sheet">
+    <h3>🏬 بدّل الفرع</h3>
+    <div style="color:var(--muted); font-size:12px; margin-bottom:10px;">اختار الفرع اللي عايز تشتغل عليه دلوقتي. التبديل مؤقت للجلسة، والجهاز بيرجع لفرعه الأصلي بعد الخروج.</div>
+    <div id="branchSwitchList"><div class="empty-cart">جارٍ التحميل...</div></div>
+    <div class="modal-btns" style="margin-top:10px;">
+      <button class="btn-cancel" onclick="closeBranchSwitch()" style="flex:1;">إغلاق</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="heldModal">
   <div class="modal-sheet">
     <h3>الفواتير المعلّقة</h3>
