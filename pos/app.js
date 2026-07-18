@@ -1179,10 +1179,205 @@ async function renderReportsScreen(){
     <div style="text-align:center; margin-top:6px;"><button class="rep-print-btn" onclick="printReportArea()">🖨️ طباعة</button></div>`;
   }
 
+  else if(currentReportType === 'customers'){ html = await buildCustomersReport(); }
+  else if(currentReportType === 'ratings'){   html = await buildRatingsReport(from, to); }
+  else if(currentReportType === 'staff'){     html = await buildStaffReport(from, to, sales); }
+
   wrap.innerHTML = html;
 }
 
-// طباعة التقرير المعروض (نافذة طباعة مستقلة)
+// ============ تقارير إضافية: العملاء والتطبيق / التقييمات / الموظفين ============
+// كارت رقم صغير موحّد للتقارير الجديدة
+function _repCard(label, value, sub){
+  return `<div style="flex:1; min-width:135px; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px;">
+    <div style="color:var(--muted); font-size:11px; margin-bottom:4px;">${label}</div>
+    <div style="font-weight:900; font-size:20px; color:var(--accent);">${value}</div>
+    ${sub?`<div style="color:var(--muted); font-size:10px; margin-top:2px;">${sub}</div>`:''}
+  </div>`;
+}
+// نفس البراند (كل فروع echarpe مع بعض، أو Glow لوحده)
+function _sameBrandAsCurrent(branch){ return GLOW_BRANCHES.includes(branch||'') === GLOW_BRANCHES.includes(currentBranch); }
+// فاتورة "التطبيق ساهم فيها": استبدال نقط، أو عرض فعّله العميل من التطبيق، أو مكافأة
+function _isAppInfluencedSale(s){
+  if((s.pointsRedeemed||0) > 0) return true;
+  return (s.items||[]).some(it=> it.offerApplied || it.isRewardDiscount);
+}
+
+// 👥 تحليلات العملاء + التطبيق (على كل تاريخ التعامل للبراند — مش متأثر بالفترة)
+async function buildCustomersReport(){
+  let sales = [], customers = [];
+  try{
+    const [ss, cs] = await Promise.all([ db.collection(TEST_SALES).get(), db.collection(TEST_CUSTOMERS).get() ]);
+    sales = ss.docs.map(d=>d.data()).filter(s=> !s.reversed && _sameBrandAsCurrent(s.branch));
+    customers = cs.docs.map(d=> Object.assign({ _id:d.id }, d.data()));
+  }catch(e){ return `<div class="rep-card"><div style="color:var(--muted); text-align:center; padding:20px;">تعذر التحميل: ${e.message}</div></div>`; }
+
+  const isGlow = GLOW_BRANCHES.includes(currentBranch);
+  const brandCode = isGlow ? 'loyaltyCode_glow' : 'loyaltyCode';
+  const custByPhone = {}; customers.forEach(c=>{ custByPhone[c.phone || c._id] = c; });
+  const isAppUser = (c)=> !!c && (!!c.loyaltyPin || !!c[brandCode] || c.source==='loyalty_app');
+
+  const byPhone = {}, spendByPhone = {};
+  let appSalesCount=0, appSalesValue=0, allSalesValue=0, allSalesCount=0;
+  let appAOVsum=0, appAOVn=0, noAOVsum=0, noAOVn=0;
+  sales.forEach(s=>{
+    const tot = s.total||0;
+    const t = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : null;
+    if(tot >= 0){ allSalesValue += tot; allSalesCount++; }
+    if(_isAppInfluencedSale(s)){ appSalesCount++; appSalesValue += Math.max(0,tot); }
+    const ph = s.customerPhone;
+    if(tot >= 0){
+      const au = isAppUser(custByPhone[ph]);
+      if(ph && au){ appAOVsum+=tot; appAOVn++; } else { noAOVsum+=tot; noAOVn++; }
+      if(ph){
+        if(!byPhone[ph]) byPhone[ph]=[];
+        if(t!=null) byPhone[ph].push(t);
+        spendByPhone[ph] = (spendByPhone[ph]||0) + tot;
+      }
+    }
+  });
+
+  const buyers = Object.keys(byPhone);
+  const totalBuyers = buyers.length;
+  const repeatBuyers = buyers.filter(p=> byPhone[p].length >= 2).length;
+  const oneTime = totalBuyers - repeatBuyers;
+  const repeatRate = totalBuyers ? Math.round(repeatBuyers/totalBuyers*100) : 0;
+
+  let gapSum=0, gapCount=0;
+  buyers.forEach(p=>{ const ts = byPhone[p].slice().sort((a,b)=>a-b); for(let i=1;i<ts.length;i++){ gapSum += (ts[i]-ts[i-1]); gapCount++; } });
+  const avgGapDays = gapCount ? (gapSum/gapCount/86400000) : 0;
+
+  const totalInvoices = buyers.reduce((s,p)=> s + byPhone[p].length, 0);
+  const avgInvoicesPerBuyer = totalBuyers ? (totalInvoices/totalBuyers) : 0;
+  const d30 = Date.now() - 30*86400000;
+  const active30 = buyers.filter(p=> byPhone[p].some(t=> t>=d30)).length;
+
+  const appBuyers = buyers.filter(p=> isAppUser(custByPhone[p])).length;
+  const adoption = totalBuyers ? Math.round(appBuyers/totalBuyers*100) : 0;
+  const appAOV = appAOVn? appAOVsum/appAOVn : 0;
+  const noAOV = noAOVn? noAOVsum/noAOVn : 0;
+  const appShareCount = allSalesCount ? Math.round(appSalesCount/allSalesCount*100) : 0;
+  const appShareValue = allSalesValue ? Math.round(appSalesValue/allSalesValue*100) : 0;
+
+  const top = buyers.map(p=> ({ p, name:(custByPhone[p]&&custByPhone[p].name)||'—', spend:spendByPhone[p]||0, n:byPhone[p].length }))
+                    .sort((a,b)=> b.spend-a.spend).slice(0,5);
+
+  const brandName = isGlow ? 'Glow' : 'echarpe (كل الفروع)';
+  return `<div class="rep-card">
+    <h2 style="margin:0 0 2px; font-size:16px;">👥 العملاء والتطبيق</h2>
+    <div style="color:var(--muted); font-size:11px; margin-bottom:12px;">${brandName} · على كل تاريخ التعامل (مش متأثر بفلتر الفترة)</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+      ${_repCard('عملاء اشتروا', totalBuyers)}
+      ${_repCard('نسبة التكرار', repeatRate+'%', `${repeatBuyers} متكرر · ${oneTime} مرة واحدة`)}
+      ${_repCard('متوسط المدة للرجوع', avgGapDays? avgGapDays.toFixed(0)+' يوم' : '—', 'بين كل شرايتين')}
+      ${_repCard('متوسط فواتير العميل', avgInvoicesPerBuyer.toFixed(1))}
+      ${_repCard('نشطين آخر 30 يوم', active30, totalBuyers?Math.round(active30/totalBuyers*100)+'% من العملاء':'')}
+    </div>
+    <h3 style="font-size:13px; margin:14px 0 8px; color:var(--muted);">📱 تطبيق الولاء</h3>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+      ${_repCard('بيستخدموا التطبيق', adoption+'%', `${appBuyers} من ${totalBuyers} عميل`)}
+      ${_repCard('مساهمة التطبيق (عدد)', appShareCount+'%', `${appSalesCount} فاتورة`)}
+      ${_repCard('مساهمة التطبيق (قيمة)', appShareValue+'%', appSalesValue.toFixed(0)+' ج.م')}
+      ${_repCard('متوسط فاتورة (تطبيق)', appAOV.toFixed(0)+' ج.م', `مقابل ${noAOV.toFixed(0)} من غير تطبيق`)}
+    </div>
+    ${top.length?`<h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">🏆 أكتر 5 عملاء إنفاقًا</h3>
+    <table class="rep-tbl"><thead><tr><th>العميل</th><th class="num">فواتير</th><th class="num">إجمالي الإنفاق</th></tr></thead><tbody>
+    ${top.map(t=>`<tr><td>${t.name} <span style="color:var(--muted); font-size:10px; direction:ltr;">${t.p}</span></td><td class="num">${t.n}</td><td class="num">${t.spend.toFixed(2)}</td></tr>`).join('')}
+    </tbody></table>`:''}
+  </div>`;
+}
+
+// ⭐ تقييمات العملاء (من برنامج التقييم — collection entries) — للفرع الحالي وضمن الفترة
+async function buildRatingsReport(from, to){
+  let entries = [];
+  try{
+    const snap = await db.collection('entries').where('branch','==', currentBranch).get();
+    entries = snap.docs.map(d=>d.data());
+  }catch(e){ return `<div class="rep-card"><div style="color:var(--muted); text-align:center; padding:20px;">تعذر التحميل: ${e.message}</div></div>`; }
+  if(from||to){ entries = entries.filter(e=>{ const t=e.ts||0; if(from && t<from.getTime()) return false; if(to && t>to.getTime()) return false; return true; }); }
+
+  const total = entries.length;
+  const dist = {1:0,2:0,3:0,4:0}; let sum=0;
+  entries.forEach(e=>{ if(dist[e.r]!=null){ dist[e.r]++; sum+=e.r; } });
+  const avg = total? sum/total : 0;
+  const satPct = total? Math.round((dist[3]+dist[4])/total*100) : 0;
+  const faces = {4:'😍 عجبهم جدًا',3:'🙂 كويس',2:'🙁 مش عاجبهم',1:'😠 مضايقهم'};
+  const colors = {4:'#22c55e',3:'#84cc16',2:'#f59e0b',1:'#ef4444'};
+  const bar = (r)=>{ const c=dist[r], pct= total? Math.round(c/total*100):0;
+    return `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <div style="width:118px; font-size:12px;">${faces[r]}</div>
+      <div style="flex:1; background:var(--panel2); border-radius:99px; height:14px; overflow:hidden;"><div style="width:${pct}%; height:100%; background:${colors[r]};"></div></div>
+      <div style="width:72px; text-align:left; font-size:12px; color:var(--muted);">${c} (${pct}%)</div></div>`; };
+
+  const byEmp = {};
+  entries.forEach(e=>{ const n=e.servedByEmployeeName; if(!n) return; if(!byEmp[n]) byEmp[n]={sum:0,n:0}; byEmp[n].sum+=e.r; byEmp[n].n++; });
+  const empRows = Object.entries(byEmp).sort((a,b)=> (b[1].sum/b[1].n)-(a[1].sum/a[1].n));
+
+  return `<div class="rep-card">
+    <h2 style="margin:0 0 2px; font-size:16px;">⭐ تقييمات العملاء</h2>
+    <div style="color:var(--muted); font-size:11px; margin-bottom:12px;">${currentBranch||''} · ${reportRangeLabel()}</div>
+    ${total? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+      ${_repCard('عدد التقييمات', total)}
+      ${_repCard('متوسط التقييم', avg.toFixed(2)+' / 4')}
+      ${_repCard('نسبة الرضا', satPct+'%', 'كويس أو عجبهم جدًا')}
+    </div>
+    <div style="margin-bottom:8px;">${bar(4)}${bar(3)}${bar(2)}${bar(1)}</div>
+    ${empRows.length? `<h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">التقييم حسب الموظف</h3>
+      <table class="rep-tbl"><thead><tr><th>الموظف</th><th class="num">عدد</th><th class="num">متوسط</th></tr></thead><tbody>
+      ${empRows.map(([n,d])=>`<tr><td>${n}</td><td class="num">${d.n}</td><td class="num">${(d.sum/d.n).toFixed(2)}</td></tr>`).join('')}
+      </tbody></table>`:''}`
+    : '<div style="text-align:center; color:var(--muted); padding:24px;">مفيش تقييمات في الفترة دي</div>'}
+  </div>`;
+}
+
+// 🕐 الموظفين والحضور (من برنامج الموظفين — collection sales_shifts) — للفرع الحالي وضمن الفترة
+async function buildStaffReport(from, to, periodSales){
+  let shifts = [];
+  try{
+    const snap = await db.collection('sales_shifts').where('branch','==', currentBranch).get();
+    shifts = snap.docs.map(d=>d.data());
+  }catch(e){ return `<div class="rep-card"><div style="color:var(--muted); text-align:center; padding:20px;">تعذر التحميل: ${e.message}</div></div>`; }
+
+  // وقت الحضور: clockInTs هو المتوقع (مقابل clockOutTs)، مع بدائل احتياطية
+  const shiftIn = (s)=> s.clockInTs || s.clockIn || s.inTs || s.ts || null;
+  let scoped = shifts;
+  if(from||to){ scoped = shifts.filter(s=>{ const t=shiftIn(s); if(t==null) return false; if(from && t<from.getTime()) return false; if(to && t>to.getTime()) return false; return true; }); }
+
+  const byEmp = {};
+  scoped.forEach(s=>{
+    const id = s.employeeId || s.employeeName || '—';
+    if(!byEmp[id]) byEmp[id] = { name: s.employeeName || id, days:new Set(), shifts:0, hours:0, open:0 };
+    const inT = shiftIn(s);
+    byEmp[id].shifts++;
+    if(inT!=null){ const d=new Date(inT); byEmp[id].days.add(d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()); }
+    if(s.clockOutTs && inT!=null) byEmp[id].hours += Math.max(0, (s.clockOutTs - inT)/3600000);
+    if(!s.clockOutTs) byEmp[id].open++;
+  });
+
+  const salesByEmp = {};
+  (periodSales||[]).forEach(s=>{ const id = s.sellerEmployeeId || s.employeeId; if(!id) return; if((s.total||0)>=0){ if(!salesByEmp[id]) salesByEmp[id]={count:0,total:0}; salesByEmp[id].count++; salesByEmp[id].total += s.total||0; } });
+
+  const rows = Object.entries(byEmp).sort((a,b)=> b[1].days.size - a[1].days.size);
+  const totalDays = rows.reduce((s,[,d])=> s + d.days.size, 0);
+  const totalHours = rows.reduce((s,[,d])=> s + d.hours, 0);
+  const openNow = rows.reduce((s,[,d])=> s + (d.open>0?1:0), 0);
+
+  return `<div class="rep-card">
+    <h2 style="margin:0 0 2px; font-size:16px;">🕐 الموظفين والحضور</h2>
+    <div style="color:var(--muted); font-size:11px; margin-bottom:12px;">${currentBranch||''} · ${reportRangeLabel()}</div>
+    ${rows.length? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+      ${_repCard('موظفين حضروا', rows.length)}
+      ${_repCard('إجمالي أيام الحضور', totalDays)}
+      ${_repCard('إجمالي ساعات العمل', totalHours.toFixed(1)+' س')}
+      ${_repCard('حاضرين دلوقتي', openNow)}
+    </div>
+    <div style="overflow-x:auto;"><table class="rep-tbl"><thead><tr><th>الموظف</th><th class="num">أيام</th><th class="num">ساعات</th><th class="num">فواتيره</th><th class="num">مبيعاته</th></tr></thead><tbody>
+      ${rows.map(([id,d])=>{ const sb = salesByEmp[id]||{count:0,total:0}; return `<tr><td>${d.name}${d.open?' <span style="color:#22c55e; font-size:10px;">● حاضر</span>':''}</td><td class="num">${d.days.size}</td><td class="num">${d.hours.toFixed(1)}</td><td class="num">${sb.count}</td><td class="num">${sb.total.toFixed(0)}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <div style="color:var(--muted); font-size:10px; margin-top:8px;">الساعات = من الحضور للانصراف · "مبيعاته" حسب البائع المحدَّد على الفاتورة</div>`
+    : '<div style="text-align:center; color:var(--muted); padding:24px;">مفيش حضور مسجّل في الفترة دي</div>'}
+  </div>`;
+}
 function printReportArea(){
   const area = document.getElementById('repPrintArea');
   if(!area) return;
