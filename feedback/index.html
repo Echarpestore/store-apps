@@ -547,18 +547,26 @@ function renderBranchManageList(branches){
 
 // Live sync: any device connected to this Firebase project sees the
 // same data instantly, but each device only shows its own branch's data.
-// قيّدنا الاستماع اللايف بآخر 90 يوم بدل كل التاريخ — بيوفر آلاف القراءات يوميًا
-// (الكشك مفتوح طول اليوم، وكل تحميل كامل كان بيقرا كل تقييم من أول الزمن).
+// الاستماع اللايف للتقييمات بيبدأ **بس لما الداشبورد الإداري يتفتح** —
+// الكشك نفسه (شاشة الوشوش) بيكتب التقييم وخلاص ومش محتاج يقرا أي حاجة.
+// ده بيوفّر آلاف القراءات يوميًا لأن الكشك مفتوح طول اليوم في كل فرع.
 const _entriesSince = Date.now() - 90*24*60*60*1000;
-onSnapshot(query(entriesCol, where('ts','>=', _entriesSince)), (snapshot)=>{
-  allEntries = snapshot.docs.map(d=>({id:d.id, ...d.data()}));
-  applyBranchFilter();
-}, (err)=> console.error('entries sync error', err));
-
-onSnapshot(branchesCol, (snapshot)=>{
-  allBranches = snapshot.docs.map(d=>({id:d.id, ...d.data()}));
-  populateBranchDropdown();
-}, (err)=> console.error('branches sync error', err));
+let _unsubEntries = null, _unsubBranches = null;
+function startDashListeners(){
+  if(_unsubEntries) return;   // شغّالين خلاص
+  _unsubEntries = onSnapshot(query(entriesCol, where('ts','>=', _entriesSince)), (snapshot)=>{
+    allEntries = snapshot.docs.map(d=>({id:d.id, ...d.data()}));
+    applyBranchFilter();
+  }, (err)=> console.error('entries sync error', err));
+  _unsubBranches = onSnapshot(branchesCol, (snapshot)=>{
+    allBranches = snapshot.docs.map(d=>({id:d.id, ...d.data()}));
+    populateBranchDropdown();
+  }, (err)=> console.error('branches sync error', err));
+}
+function stopDashListeners(){
+  if(_unsubEntries){ _unsubEntries(); _unsubEntries = null; }
+  if(_unsubBranches){ _unsubBranches(); _unsubBranches = null; }
+}
 
 async function submitRating(r){
   if(!currentBranch){
@@ -603,12 +611,14 @@ gear.addEventListener('pointerdown', ()=>{
 
 $('#backToKiosk').addEventListener('click', ()=>{
   dashOpen = false;
+  stopDashListeners();   // نوقف قراءة التقييمات — الكشك مش محتاجها
   $('#dash').classList.remove('show');
   $('#kiosk').style.display = 'flex';
 });
 
 function openDashboard(){
   dashOpen = true;
+  startDashListeners();   // نبدأ قراءة التقييمات دلوقتي بس (مش طول اليوم)
   $('#kiosk').style.display = 'none';
   $('#dash').classList.add('show');
   if(unlocked){
@@ -634,6 +644,7 @@ $('#loginBtn').addEventListener('click', doLogin);
 $('#loginPass').addEventListener('keydown', (e)=>{ if(e.key==='Enter') doLogin(); });
 $('#loginCancel').addEventListener('click', ()=>{
   dashOpen = false;
+  stopDashListeners();   // نوقف قراءة التقييمات — الكشك مش محتاجها
   $('#loginGate').classList.remove('show');
   $('#dash').classList.remove('show');
   $('#kiosk').style.display = 'flex';
@@ -641,6 +652,7 @@ $('#loginCancel').addEventListener('click', ()=>{
 $('#logoutBtn').addEventListener('click', ()=>{
   unlocked = false;
   dashOpen = false;
+  stopDashListeners();   // نوقف قراءة التقييمات — الكشك مش محتاجها
   $('#dash').classList.remove('show');
   $('#kiosk').style.display = 'flex';
 });
