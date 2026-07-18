@@ -668,6 +668,7 @@ async function goToCustomerList(){
   }catch(e){ wrap.innerHTML = '<div class="empty-cart">تعذر التحميل: '+e.message+'</div>'; }
 }
 
+let custListShown = 40;
 function renderCustList(){
   const wrap = document.getElementById('customerListWrap');
   if(!wrap) return;
@@ -701,33 +702,26 @@ function renderCustList(){
       ${selCount?`<button onclick="clearCustSelection()" style="padding:11px 14px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-weight:800; cursor:pointer;">✕</button>`:''}
     </div>` : '';
 
-  wrap.innerHTML = bulkBtn + list.map(c=>{
-    const last = c._lastTs ? new Date(c._lastTs).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
-    const hasCode = c.loyaltyCode ? `<span style="background:#eef; color:#5340c8; font-size:10px; font-weight:800; padding:2px 7px; border-radius:99px;">💳 ${c.loyaltyCode}</span>` : '';
-    const hasPin = c.loyaltyPin ? '<span style="font-size:10px; color:var(--muted);">🔒 مؤمّن</span>' : '';
+  const shown = list.slice(0, custListShown);
+  wrap.innerHTML = bulkBtn + shown.map(c=>{
+    const last = c._lastTs ? new Date(c._lastTs).toLocaleDateString('ar-EG', {day:'2-digit', month:'short'}) : '—';
     const checked = selectedCustomers.has(c.phone) ? 'checked' : '';
+    const pts = c[pointsFieldFor(currentBranch)]||0;
     return `
-    <div style="background:var(--panel); border:1px solid ${selectedCustomers.has(c.phone)?'var(--plus)':'var(--border)'}; border-radius:12px; padding:12px 14px; margin-bottom:9px; display:flex; gap:10px; align-items:flex-start;">
-      <input type="checkbox" ${checked} onclick="event.stopPropagation(); toggleCustSelect('${c.phone}', this.checked)" style="width:20px; height:20px; margin-top:2px; flex-shrink:0; cursor:pointer;">
-      <div onclick="openCustomerProfile('${c.phone}')" style="flex:1; min-width:0; cursor:pointer;">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+    <div style="background:var(--panel); border:1px solid ${selectedCustomers.has(c.phone)?'var(--plus)':'var(--border)'}; border-radius:11px; padding:9px 12px; margin-bottom:6px; display:flex; gap:10px; align-items:center;">
+      <input type="checkbox" ${checked} onclick="event.stopPropagation(); toggleCustSelect('${c.phone}', this.checked)" style="width:18px; height:18px; flex-shrink:0; cursor:pointer;">
+      <div onclick="openCustomerProfile('${c.phone}')" style="flex:1; min-width:0; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:8px;">
         <div style="min-width:0;">
-          <div style="font-weight:800; font-size:14px;">${c.name || 'بدون اسم'}</div>
-          <div style="color:var(--muted); font-size:11px; direction:ltr; text-align:right;">${c.phone}</div>
-          <div style="margin-top:5px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">${hasCode} ${hasPin}</div>
+          <div style="font-weight:800; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.name || 'بدون اسم'} ${c.loyaltyPin?'<span style="font-size:9px;">🔒</span>':''}</div>
+          <div style="color:var(--muted); font-size:10.5px; direction:ltr; text-align:right;">${c.phone}</div>
         </div>
         <div style="text-align:left; flex-shrink:0;">
-          <div style="font-weight:900; font-size:15px; color:var(--plus);">${(c._spend||0).toFixed(0)} <span style="font-size:11px; font-weight:700;">ج.م</span></div>
-          <div style="color:var(--warn); font-size:11px; font-weight:700;">${c[pointsFieldFor(currentBranch)]||0} نقطة</div>
+          <div style="font-weight:900; font-size:13.5px; color:var(--plus);">${(c._spend||0).toFixed(0)}<span style="font-size:9.5px; font-weight:700;"> ج.م</span></div>
+          <div style="color:var(--muted); font-size:9.5px;">⭐${pts} · 🧾${c._count||0} · ${last}</div>
         </div>
       </div>
-      <div style="display:flex; justify-content:space-between; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:11px; color:var(--muted);">
-        <span>🧾 ${c._count||0} فاتورة</span>
-        <span>🕐 آخر زيارة: ${last}</span>
-      </div>
-      </div>
     </div>`;
-  }).join('');
+  }).join('') + (list.length > custListShown ? `<button onclick="custListShown+=40; renderCustList();" style="width:100%; margin-top:6px; padding:11px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer; font-size:12.5px; font-weight:700;">عرض كمان (فاضل ${list.length - custListShown} عميل)</button>` : '');
 }
 
 // ---------------- End of Day (إغلاق اليوم / تقفيل الدرج) ----------------

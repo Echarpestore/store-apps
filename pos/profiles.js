@@ -103,10 +103,15 @@ async function openInvoice(saleId){
 }
 
 // ---------------- بروفايل العميل الكامل ----------------
+let _cp = null;   // بيانات بروفايل العميل المفتوح (عشان التنقل بين التبويبات من غير إعادة تحميل)
+let _cpTab = 'invoices';
+let _cpInvLimit = 30;
+
 async function openCustomerProfile(phone){
   pushProfileScreen('customerProfileScreen');
   const wrap = document.getElementById('customerProfileWrap');
-  wrap.innerHTML = 'بيتحمّل...';
+  wrap.innerHTML = '<div style="padding:30px; text-align:center; color:var(--muted);">بيتحمّل...</div>';
+  _cpTab = 'invoices'; _cpInvLimit = 30;
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     const c = doc.exists ? doc.data() : { phone, name:'', points:0 };
@@ -115,142 +120,110 @@ async function openCustomerProfile(phone){
     const sales = (await getBranchSales()).filter(s=> s.customerPhone === phone && !s.reversed);
     const realInvoices = sales.filter(s=> !s.isReversal);
     const lifetimeSpend = sales.reduce((sum,s)=> sum + (s.total||0), 0);
-    const avgOrder = realInvoices.length ? (lifetimeSpend / realInvoices.length) : 0;
-    const lastVisitTs = sales.length ? Math.max(...sales.map(saleTime)) : null;
-    const lastVisitStr = lastVisitTs ? new Date(lastVisitTs).toLocaleDateString('ar-EG', {day:'2-digit', month:'long', year:'numeric'}) : '—';
 
-    // المنتجات المفضلة (تجميع الكميات المشتراة عبر كل الفواتير، مستبعد المرتجعات)
+    // المفضلة
     const fav = {};
-    sales.forEach(s=> (s.items||[]).forEach(it=>{
-      if(it.isReturn || it.price < 0) return;
-      fav[it.name] = (fav[it.name]||0) + it.qty;
-    }));
-    const topFav = Object.entries(fav).sort((a,b)=> b[1]-a[1]).slice(0,5);
+    sales.forEach(s=> (s.items||[]).forEach(it=>{ if(it.isReturn || it.price < 0) return; fav[it.name] = (fav[it.name]||0) + it.qty; }));
 
-    // تقييمات الرضا (Happy or Not) المرتبطة بالعميل ده فعليًا (من مبيعات سابقة اتربطت وقتها)
-    const RATING_MAP = {1:{l:'😠 مضايقني جدًا', c:'var(--minus)'}, 2:{l:'🙁 مش عاجبني', c:'var(--warn)'}, 3:{l:'🙂 كويس', c:'var(--text)'}, 4:{l:'😍 عجبني جدًا', c:'var(--plus)'}};
-
-    // سجل النقاط (كسب/استبدال) — مستخرج من الفواتير مباشرة
-    const ptsEvents = [];
+    // سجل النقاط (موحّد — كسب واستبدال من الفواتير)
+    const pts = [];
     sales.forEach(s=>{
-      const t = saleTime(s);
-      const ref = s.invoiceNo || (s.id ? s.id.slice(-6).toUpperCase() : '');
-      if((s.loyaltyPointsEarned||0) > 0) ptsEvents.push({ type:'earn', pts:s.loyaltyPointsEarned, t, ref });
-      if((s.pointsRedeemed||0) > 0)     ptsEvents.push({ type:'redeem', pts:s.pointsRedeemed, t, ref });
+      const t = saleTime(s), ref = s.invoiceNo || (s.id ? s.id.slice(-6).toUpperCase() : '');
+      if((s.loyaltyPointsEarned||0) > 0) pts.push({ earn:true, n:s.loyaltyPointsEarned, t, ref });
+      let red = s.pointsRedeemed || 0;
+      if(!red){ const rl = (s.items||[]).find(it=> it.isRedemption); if(rl){ const m = String(rl.name||'').match(/(\d+)/); if(m) red = parseInt(m[1]); } }
+      if(red > 0) pts.push({ earn:false, n:red, t, ref });
     });
-    ptsEvents.sort((a,b)=> b.t - a.t);
+    pts.sort((a,b)=> b.t - a.t);
+
     let ratings = [];
     try{
-      const ratingsSnap = await db.collection('entries').where('customerPhone','==', phone).get();
-      ratings = ratingsSnap.docs.map(d=>d.data()).sort((a,b)=> b.ts - a.ts);
-    }catch(e){ console.warn('تعذر تحميل تقييمات العميل', e); }
+      const rs = await db.collection('entries').where('customerPhone','==', phone).get();
+      ratings = rs.docs.map(d=>d.data()).sort((a,b)=> b.ts - a.ts);
+    }catch(e){}
 
-    const statCard = (label, value, color)=> `
-      <div style="flex:1; min-width:110px; background:var(--panel2); border-radius:10px; padding:10px; text-align:center;">
-        <div style="color:var(--muted); font-size:10px;">${label}</div>
-        <div style="font-weight:900; font-size:16px; color:${color||'var(--text)'};">${value}</div>
-      </div>`;
+    _cp = { phone, c, sales: sales.sort((a,b)=> saleTime(b)-saleTime(a)), realCount: realInvoices.length,
+            spend: lifetimeSpend, avg: realInvoices.length? lifetimeSpend/realInvoices.length : 0,
+            lastTs: sales.length? Math.max(...sales.map(saleTime)) : null,
+            fav: Object.entries(fav).sort((a,b)=> b[1]-a[1]).slice(0,6), pts, ratings };
+    renderCustProfile();
+  }catch(e){ wrap.innerHTML = '<div class="empty-cart">تعذر التحميل: ' + e.message + '</div>'; }
+}
 
-    // 📊 سجل النقاط: كسب (من كل فاتورة) + استبدال (من حقل pointsRedeemed أو سطر الاستبدال في الفواتير القديمة)
-    const ptLog = [];
-    sales.forEach(s=>{
-      const t = saleTime(s);
-      const ref = s.invoiceNo || (s.id ? s.id.slice(-6).toUpperCase() : '');
-      if((s.loyaltyPointsEarned||0) > 0) ptLog.push({ type:'earn', points:s.loyaltyPointsEarned, ts:t, ref });
-      let redeemed = s.pointsRedeemed || 0;
-      if(!redeemed){
-        const rl = (s.items||[]).find(it=> it.isRedemption);
-        if(rl){ const m = String(rl.name||'').match(/(\d+)/); if(m) redeemed = parseInt(m[1]); }
-      }
-      if(redeemed > 0) ptLog.push({ type:'redeem', points:redeemed, ts:t, ref });
-    });
-    ptLog.sort((a,b)=> b.ts - a.ts);
-    const ptLogRows = ptLog.slice(0,60).map(e=>{
-      const isEarn = e.type==='earn';
-      const d = e.ts ? new Date(e.ts).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
-      return `<div style="display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid var(--border); font-size:12px;">
-        <span style="font-weight:700; color:${isEarn?'var(--plus)':'var(--warn)'};">${isEarn?'➕ كسب':'🎁 استبدال'} ${e.points} نقطة</span>
-        <span style="color:var(--muted); font-size:11px;">${d}${e.ref?(' · '+e.ref):''}</span>
-      </div>`;
-    }).join('');
+function renderCustProfile(){
+  const wrap = document.getElementById('customerProfileWrap');
+  const d = _cp; if(!d) return;
+  const c = d.c;
+  const ptsBal = c[pointsFieldFor(currentBranch)]||0;
+  const lastStr = d.lastTs ? new Date(d.lastTs).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
+  const chip = (label, value, color)=> `<div style="flex:1; min-width:86px; background:var(--panel2); border-radius:10px; padding:8px 6px; text-align:center;">
+    <div style="color:var(--muted); font-size:9.5px;">${label}</div>
+    <div style="font-weight:900; font-size:14px; color:${color||'var(--text)'};">${value}</div></div>`;
 
-    const invoicesRows = sales.sort((a,b)=> saleTime(b)-saleTime(a)).slice(0,50).map(s=>`
+  const tabs = [ ['invoices','🗂️ المشتريات'], ['points','📊 النقاط'], ['ratings','⭐ التقييم'], ['notes','📝 ملاحظات'] ];
+  const tabBar = `<div style="display:flex; gap:5px; background:var(--panel2); border-radius:11px; padding:4px; margin-bottom:10px;">
+    ${tabs.map(([id,l])=>`<button onclick="_cpTab='${id}'; renderCustProfile();" style="flex:1; padding:9px 4px; border-radius:8px; border:none; cursor:pointer; font-weight:800; font-size:11.5px; ${_cpTab===id?'background:var(--panel); color:var(--text); box-shadow:0 2px 6px rgba(0,0,0,.25);':'background:none; color:var(--muted);'}">${l}</button>`).join('')}
+  </div>`;
+
+  let body = '';
+  if(_cpTab === 'invoices'){
+    const favChips = d.fav.length ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+      ${d.fav.map(([name,qty])=>`<span style="background:var(--panel2); border:1px solid var(--border); border-radius:99px; padding:5px 11px; font-size:11px;">❤️ ${name} <b style="color:var(--muted);">×${qty}</b></span>`).join('')}</div>` : '';
+    const rows = d.sales.slice(0, _cpInvLimit).map(s=>`
       <div onclick="openInvoice('${s.id}')" style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border); cursor:pointer;">
         <div>
           <div style="font-size:12px; font-weight:700;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}${s.isReversal?' <span style="color:var(--warn); font-size:10px;">(عكس)</span>':''} — ${(s.items||[]).length} صنف</div>
           <div style="color:var(--muted); font-size:10px;">${saleDateStr(s)} · ${s.employeeName||'—'}</div>
         </div>
         <span style="font-weight:800; color:${(s.total||0)<0?'var(--minus)':'var(--plus)'};">${(s.total||0).toFixed(2)}</span>
-      </div>`).join('') || '<div style="color:var(--muted); text-align:center; padding:14px 0; font-size:12px;">لسه مفيش مشتريات</div>';
-
-    wrap.innerHTML = `
-      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
-        <div style="font-size:14px; font-weight:800;">${c.name || 'بدون اسم'}</div>
-        <div style="color:var(--muted); font-size:12px; margin-bottom:10px;">📞 ${phone}</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          ${statCard('إجمالي الإنفاق', lifetimeSpend.toFixed(0) + ' ج.م', 'var(--plus)')}
-          ${statCard('عدد الفواتير', realInvoices.length)}
-          ${statCard('متوسط الفاتورة', avgOrder.toFixed(0) + ' ج.م')}
-          ${statCard('نقاط الولاء', c[pointsFieldFor(currentBranch)]||0, 'var(--warn)')}
-        </div>
-        <div style="color:var(--muted); font-size:11px; margin-top:8px;">آخر زيارة: ${lastVisitStr}</div>
-        <button onclick="openRewardModal('${phone}')" style="margin-top:10px; width:100%; padding:11px; border-radius:9px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer;">🎁 ابعت مكافأة خاصة للعميل ده</button>
-      </div>
-
-      ${topFav.length ? `
-      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
-        <div style="font-weight:800; margin-bottom:6px;">❤️ منتجاته المفضلة</div>
-        ${topFav.map(([name,qty],i)=>`<div style="display:flex; justify-content:space-between; padding:4px 0; font-size:12px; border-bottom:1px solid var(--border);"><span>${i+1}. ${name}</span><span style="color:var(--muted);">${qty} قطعة</span></div>`).join('')}
-      </div>` : ''}
-
-      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
-        <div style="font-weight:800; margin-bottom:8px;">📊 سجل النقاط <span style="color:var(--warn); font-size:12px;">(الرصيد الحالي: ${c[pointsFieldFor(currentBranch)]||0})</span></div>
-        ${ptsEvents.length ? ptsEvents.slice(0,40).map(e=>{
-          const isEarn = e.type === 'earn';
-          const dstr = e.t ? new Date(e.t).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
-          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid var(--border); font-size:12.5px;">
-            <div>
-              <span style="font-weight:800; color:${isEarn?'var(--plus)':'var(--warn)'};">${isEarn?'➕ كسب':'🎁 استبدال'} ${e.pts} نقطة</span>
-              <div style="color:var(--muted); font-size:10.5px; margin-top:2px;">${e.ref?('فاتورة #'+e.ref+' · '):''}${dstr}</div>
-            </div>
-            <span style="font-weight:900; font-size:15px; color:${isEarn?'var(--plus)':'var(--warn)'};">${isEarn?'+':'−'}${e.pts}</span>
-          </div>`;
-        }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:8px 0;">لسه مفيش حركات نقاط. (بتتسجّل تلقائي من الفواتير)</div>'}
-      </div>
-
-      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <div style="font-weight:800;">📊 سجل النقاط</div>
-          <div style="font-size:12px; color:var(--warn); font-weight:800;">الرصيد: ${c[pointsFieldFor(currentBranch)]||0} نقطة</div>
-        </div>
-        ${ptLogRows || '<div style="color:var(--muted); text-align:center; padding:10px 0; font-size:12px;">لسه مفيش حركات نقاط</div>'}
-      </div>
-
-      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
-        <div style="font-weight:800; margin-bottom:6px;">⭐ تقييمات الرضا (Happy or Not)</div>
-        ${ratings.length ? ratings.slice(0,10).map(r=>{
-          const info = RATING_MAP[r.r] || {l:'—', c:'var(--muted)'};
-          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; font-size:12px; border-bottom:1px solid var(--border);">
-            <div>
-              <span style="color:${info.c}; font-weight:700;">${info.l}</span>
-              ${r.servedByEmployeeName ? `<div style="color:var(--muted); font-size:10px;">👤 الموظف: ${r.servedByEmployeeName}</div>` : ''}
-            </div>
-            <span style="color:var(--muted);">${new Date(r.ts).toLocaleDateString('ar-EG')}</span>
-          </div>`;
-        }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:8px 0;">لسه مفيش تقييمات مرتبطة بيه (بيترتبط تلقائي من الفواتير الجديدة)</div>'}
-      </div>
-
-      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px;">
-        <div style="font-weight:800; margin-bottom:6px;">📝 ملاحظات</div>
-        <textarea id="custNotes" placeholder="اكتب أي ملاحظات عن العميل ده (مقاسات مفضلة، طلبات خاصة...)" style="width:100%; min-height:70px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-family:inherit; font-size:12px; resize:vertical;">${c.notes||''}</textarea>
-        <button onclick="saveCustomerNotes('${phone}')" style="margin-top:6px; padding:9px 18px; border-radius:8px; border:none; background:var(--accent); color:#fff; font-weight:700; cursor:pointer; font-size:12px;">حفظ الملاحظات</button>
-      </div>
-
-      <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px;">
-        <div style="font-weight:800; margin-bottom:6px;">🗂️ سجل المشتريات (دوس على أي فاتورة)</div>
-        ${invoicesRows}
+      </div>`).join('') || '<div style="color:var(--muted); text-align:center; padding:16px 0; font-size:12px;">لسه مفيش مشتريات</div>';
+    const more = d.sales.length > _cpInvLimit ? `<button onclick="_cpInvLimit+=30; renderCustProfile();" style="width:100%; margin-top:8px; padding:10px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer; font-size:12px;">عرض كمان (${d.sales.length - _cpInvLimit} فاتورة)</button>` : '';
+    body = favChips + rows + more;
+  }
+  else if(_cpTab === 'points'){
+    body = `<div style="text-align:center; margin-bottom:10px;"><span style="background:var(--panel2); border-radius:99px; padding:6px 16px; font-size:12px; color:var(--warn); font-weight:900;">الرصيد الحالي: ${ptsBal} نقطة</span></div>` +
+    (d.pts.length ? d.pts.slice(0,50).map(e=>{
+      const dstr = e.t ? new Date(e.t).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
+      return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:12.5px;">
+        <div><span style="font-weight:800; color:${e.earn?'var(--plus)':'var(--warn)'};">${e.earn?'➕ كسب':'🎁 استبدال'}</span>
+        <div style="color:var(--muted); font-size:10.5px; margin-top:1px;">${e.ref?('#'+e.ref+' · '):''}${dstr}</div></div>
+        <span style="font-weight:900; font-size:15px; color:${e.earn?'var(--plus)':'var(--warn)'};">${e.earn?'+':'−'}${e.n}</span>
       </div>`;
-  }catch(e){ wrap.innerHTML = '<div class="empty-cart">تعذر التحميل: ' + e.message + '</div>'; }
+    }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:14px 0;">لسه مفيش حركات نقاط (بتتسجّل تلقائي من الفواتير)</div>');
+  }
+  else if(_cpTab === 'ratings'){
+    const RM = {1:{l:'😠 مضايقني جدًا', c:'var(--minus)'}, 2:{l:'🙁 مش عاجبني', c:'var(--warn)'}, 3:{l:'🙂 كويس', c:'var(--text)'}, 4:{l:'😍 عجبني جدًا', c:'var(--plus)'}};
+    body = d.ratings.length ? d.ratings.slice(0,15).map(r=>{
+      const info = RM[r.r] || {l:'—', c:'var(--muted)'};
+      return `<div style="display:flex; justify-content:space-between; align-items:center; padding:7px 0; font-size:12px; border-bottom:1px solid var(--border);">
+        <div><span style="color:${info.c}; font-weight:700;">${info.l}</span>
+        ${r.servedByEmployeeName?`<div style="color:var(--muted); font-size:10px;">👤 ${r.servedByEmployeeName}</div>`:''}</div>
+        <span style="color:var(--muted);">${new Date(r.ts).toLocaleDateString('ar-EG')}</span>
+      </div>`;
+    }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:14px 0;">لسه مفيش تقييمات مرتبطة بيه</div>';
+  }
+  else if(_cpTab === 'notes'){
+    body = `<textarea id="custNotes" placeholder="اكتب أي ملاحظات عن العميل ده (مقاسات مفضلة، طلبات خاصة...)" style="width:100%; min-height:110px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-family:inherit; font-size:12.5px; resize:vertical;">${c.notes||''}</textarea>
+    <button onclick="saveCustomerNotes('${d.phone}')" style="margin-top:8px; width:100%; padding:11px; border-radius:9px; border:none; background:var(--accent); color:#fff; font-weight:800; cursor:pointer; font-size:12.5px;">💾 حفظ الملاحظات</button>`;
+  }
+
+  wrap.innerHTML = `
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:13px; margin-bottom:10px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div><div style="font-size:14.5px; font-weight:800;">${c.name || 'بدون اسم'}</div>
+        <div style="color:var(--muted); font-size:11.5px; direction:ltr; text-align:right;">${d.phone}</div></div>
+        <button onclick="openRewardModal('${d.phone}')" style="padding:9px 14px; border-radius:9px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer; font-size:11.5px; flex-shrink:0;">🎁 مكافأة</button>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;">
+        ${chip('الإنفاق', d.spend.toFixed(0)+' ج.م', 'var(--plus)')}
+        ${chip('فواتير', d.realCount)}
+        ${chip('المتوسط', d.avg.toFixed(0))}
+        ${chip('نقاط', ptsBal, 'var(--warn)')}
+      </div>
+      <div style="color:var(--muted); font-size:10.5px; margin-top:7px; text-align:center;">🕐 آخر زيارة: ${lastStr}</div>
+    </div>
+    ${tabBar}
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:13px;">${body}</div>`;
 }
 
 async function saveCustomerNotes(phone){
