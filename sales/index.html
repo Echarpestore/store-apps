@@ -863,8 +863,14 @@ window.currentBranch = localStorage.getItem('sales_branch') || '';
 function refreshBranchUI(){
   $('#branchTag').textContent = '📍 ' + (window.currentBranch || '—');
   const u = _auth.currentUser;
-  if(!window.currentBranch || !u || u.isAnonymous){
-    populateBranchSetupSelect();
+  const staffIn = !!(u && !u.isAnonymous);
+  if(!window.currentBranch || !staffIn){
+    // مرحلتين واضحتين: (1) دخول حساب الفرع → (2) اختيار الفرع
+    $('#branchEmail').style.display = staffIn ? 'none' : '';
+    $('#branchPass').style.display  = staffIn ? 'none' : '';
+    $('#branchSelect').style.display = staffIn ? '' : 'none';
+    $('#branchSaveBtn').textContent = staffIn ? 'حفظ الفرع' : 'دخول';
+    if(staffIn) populateBranchSetupSelect();
     $('#branchSetup').classList.add('show');
   } else {
     $('#branchSetup').classList.remove('show');
@@ -884,25 +890,37 @@ function populateBranchSetupSelect(){
   $('#branchInput').style.display = 'none';
 }
 $('#branchSaveBtn').addEventListener('click', async ()=>{
-  const selVal = $('#branchSelect') ? $('#branchSelect').value : '';
-  const val = (selVal && selVal !== '__new__') ? selVal : $('#branchInput').value.trim();
   const email = ($('#branchEmail').value||'').trim();
   const pass = $('#branchPass').value||'';
   const err = $('#branchErr');
-  if(!val){ err.textContent='اكتب اسم الفرع'; return; }
-  if(!email || !pass){ err.textContent='اكتب إيميل وباسورد حساب الفرع'; return; }
-  err.textContent = 'جارٍ الدخول...';
-  try{
-    await signInWithEmailAndPassword(_auth, email, pass);
-    window.currentBranch = val;
-    localStorage.setItem('sales_branch', val);
-    err.textContent = '';
-    refreshBranchUI();
-    applyBranchFilter();
-  }catch(e){
-    err.textContent = (e && (e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found'))
-      ? 'الإيميل أو الباسورد غلط' : 'تعذر الدخول: ' + (e.message||e);
+  const u = _auth.currentUser;
+
+  // ===== المرحلة 1: تسجيل الدخول الأول (لو لسه مش داخل) =====
+  // القايمة مش بتقدر تتملى قبل الدخول (القواعد بتمنع القراءة) — فالدخول الأول، وبعدها الفروع تظهر
+  if(!u || u.isAnonymous){
+    if(!email || !pass){ err.textContent='اكتب إيميل وباسورد حساب الفرع الأول'; return; }
+    err.textContent = 'جارٍ الدخول...';
+    try{
+      await signInWithEmailAndPassword(_auth, email, pass);
+      err.textContent = '✅ تم الدخول — اختار الفرع من القايمة';
+      refreshBranchUI();   // يبدّل الشاشة لمرحلة اختيار الفرع (بيخفي الإيميل ويظهر القايمة)
+      setTimeout(populateBranchSetupSelect, 800);   // بيانات الموظفين بتوصل بعد الدخول بلحظة
+    }catch(e){
+      err.textContent = (e && (e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found'))
+        ? 'الإيميل أو الباسورد غلط' : 'تعذر الدخول: ' + (e.message||e);
+    }
+    return;
   }
+
+  // ===== المرحلة 2: داخل خلاص — نحفظ الفرع المختار =====
+  const selVal = $('#branchSelect') ? $('#branchSelect').value : '';
+  const val = (selVal && selVal !== '__new__') ? selVal : $('#branchInput').value.trim();
+  if(!val){ err.textContent='اختار الفرع من القايمة'; return; }
+  window.currentBranch = val;
+  localStorage.setItem('sales_branch', val);
+  err.textContent = '';
+  refreshBranchUI();
+  applyBranchFilter();
 });
 // لو الجلسة انتهت (اتمسحت من المتصفح)، نرجّع لشاشة الإعداد تلقائيًا
 onAuthStateChanged(_auth, ()=> refreshBranchUI());
