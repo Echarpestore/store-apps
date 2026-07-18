@@ -132,7 +132,7 @@ const LABEL_ELEMENTS = [
   { id:'code',    label:'🔖 الكود (أرقام)',       kind:'auto', size:9 }
 ];
 function defaultLabelConfig(){
-  return { sizeId:'58x40', customW:58, customH:40, priceStyle:'box', bcHeight:30, bcWidth:1.4, showBcDigits:false, logoWidth:50,
+  return { sizeId:'58x40', customW:58, customH:40, priceStyle:'box', bcHeight:30, bcWidth:1.4, bcWidthPct:85, showBcDigits:false, logoWidth:50,
     elements: LABEL_ELEMENTS.map(e=> ({ id:e.id, on: e.id!=='logo', size:e.size||10 })) };
 }
 let receiptDesignConfig = null;
@@ -295,8 +295,8 @@ async function renderReceiptDesignScreen(){
 
     <div style="${S.card}">
       <div style="font-weight:800; font-size:13px; margin-bottom:6px;">⬛ باركود الليبل</div>
-      ${slider('الارتفاع', lb.bcHeight||30, 14, 60, 2, "receiptDesignConfig.label.bcHeight=+this.value; this.nextElementSibling.textContent=this.value; refreshLabelPreview();")}
-      ${slider('سُمك الخطوط', lb.bcWidth||1.4, 1, 3, 0.1, "receiptDesignConfig.label.bcWidth=+this.value; this.nextElementSibling.textContent=this.value; refreshLabelPreview();")}
+      ${slider('الارتفاع (px)', lb.bcHeight||30, 12, 80, 2, "receiptDesignConfig.label.bcHeight=+this.value; this.nextElementSibling.textContent=this.value; refreshLabelPreview();")}
+      ${slider('العرض %', lb.bcWidthPct||85, 35, 100, 5, "receiptDesignConfig.label.bcWidthPct=+this.value; this.nextElementSibling.textContent=this.value; refreshLabelPreview();")}
       ${c.logo? slider('حجم اللوجو %', lb.logoWidth||50, 20, 90, 5, "receiptDesignConfig.label.logoWidth=+this.value; this.nextElementSibling.textContent=this.value; refreshLabelPreview();") : ''}
     </div>
 
@@ -452,11 +452,18 @@ function buildLabelHTML(it, barcodeSvgId){
         else if(st==='tag')  parts.push(`<div style="font-size:${fs}; font-weight:900; border:2.5px solid #000; border-radius:99px; padding:3px 12px; display:inline-block;">${pv}</div>`);
         else                 parts.push(`<div style="font-size:${fs}; font-weight:900;">${pv}</div>`);
         break; }
-      case 'barcode': if(it.barcode) parts.push(`<div style="line-height:0;"><svg id="${barcodeSvgId}"></svg></div>`); break;
+      case 'barcode': if(it.barcode) parts.push(`<div style="width:${lb.bcWidthPct||85}%; height:${lb.bcHeight||30}px; margin:1px auto; line-height:0;"><svg id="${barcodeSvgId}" preserveAspectRatio="none" style="width:100%; height:100%; display:block;"></svg></div>`); break;
       case 'code': if(it.barcode) parts.push(`<div style="font-size:${fs}; letter-spacing:.5px; direction:ltr;">${it.barcode}</div>`); break;
     }
   }
   return `<div class="one-label" style="width:${w}mm; height:${h}mm; box-sizing:border-box; padding:1.5mm; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; text-align:center; font-family:Tahoma,Arial,sans-serif; overflow:hidden; page-break-after:always;">${parts.join('')}</div>`;
+}
+// بعد ما JsBarcode يرسم بحجم ثابت — بنحوّله viewBox عشان يتمطط جوّه إطاره بالظبط
+function fitBarcodeSvg(svg){
+  try{
+    const w = parseFloat(svg.getAttribute('width')), hh = parseFloat(svg.getAttribute('height'));
+    if(w && hh){ svg.setAttribute('viewBox', '0 0 '+w+' '+hh); svg.removeAttribute('width'); svg.removeAttribute('height'); }
+  }catch(e){}
 }
 function refreshLabelPreview(){
   const box = document.getElementById('labelLivePreview'); if(!box) return;
@@ -471,7 +478,7 @@ function refreshLabelPreview(){
   box.style.width = (w*3.78*scale)+'px'; box.style.height = (h*3.78*scale)+'px';
   const note = document.getElementById('labelSizeNote');
   if(note) note.textContent = w+' × '+h+' مم (المعاينة مصغّرة — الطباعة بالمقاس الحقيقي)';
-  try{ const bc = box.querySelector('#lblPrevBc'); if(bc&&typeof JsBarcode!=='undefined') JsBarcode(bc, demo.barcode, {format:'CODE128', width:(lbc.bcWidth||1.4), height:(lbc.bcHeight||30), fontSize:8, margin:0, displayValue:!!lbc.showBcDigits}); }catch(e){}
+  try{ const bc = box.querySelector('#lblPrevBc'); if(bc&&typeof JsBarcode!=='undefined') { JsBarcode(bc, demo.barcode, {format:'CODE128', width:2, height:60, margin:0, displayValue:false}); fitBarcodeSvg(bc); } }catch(e){}
 }
 
 // ===== نافذة الكمية + الطباعة (مشتركة: صنف واحد أو دفعة من الاستلام) =====
@@ -521,7 +528,7 @@ function doPrintLabels(jobs){
   tmp.style.cssText = 'position:fixed; left:-9999px; top:0;';
   tmp.innerHTML = html;
   document.body.appendChild(tmp);
-  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el) JsBarcode(el, c.code, {format:'CODE128', width:(labelSizeMM(), (receiptDesignConfig.label&&receiptDesignConfig.label.bcWidth)||1.4), height:(receiptDesignConfig.label&&receiptDesignConfig.label.bcHeight)||30, fontSize:9, margin:0, displayValue:false}); }); }catch(e){}
+  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el){ JsBarcode(el, c.code, {format:'CODE128', width:2, height:60, margin:0, displayValue:false}); fitBarcodeSvg(el); } }); }catch(e){}
   const finalHTML = tmp.innerHTML;
   tmp.remove();
 
