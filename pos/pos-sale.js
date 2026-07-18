@@ -143,6 +143,7 @@ let holdSlots = [null, null];
 // بيصفّر سياق العميل المرتبط بالفاتورة (استبدال نقط / مكافأة / عروض مفعّلة)
 // مهم: عشان ما يتسربش لفاتورة تانية بعد Hold أو بدء فاتورة جديدة
 function clearCustomerContext(){
+  custExists = false; custHasApp = false;
   if(typeof lastAddedId !== 'undefined') lastAddedId = null;   // نلغي تمييز آخر منتج مع بداية/تعليق/استرجاع فاتورة
   if(typeof pendingRedemption   !== 'undefined') pendingRedemption   = null;
   if(typeof appliedReward       !== 'undefined') appliedReward       = null;
@@ -447,6 +448,11 @@ async function refreshCustomerInfo(){
   if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); custReward=null; custPendingRedeem=null; custBaseText=''; renderCart(); return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
+    custExists = doc.exists;
+    { const _d = doc.exists ? (doc.data()||{}) : {};
+      // "معاه التطبيق" = عنده PIN أو كود ولاء أو مصدره التطبيق
+      custHasApp = !!(_d.loyaltyPin || _d.loyaltyCode || _d.loyaltyCode_glow || String(_d.source||'').indexOf('app')>=0);
+    }
     let ratingLine = '';
     try{
       // 1) لو العميل ده عنده تقييمات مرتبطة فعليًا من زيارات سابقة (دقيقة 100%)
@@ -568,6 +574,11 @@ async function openRedeemPoints(){
 
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
+    custExists = doc.exists;
+    { const _d = doc.exists ? (doc.data()||{}) : {};
+      // "معاه التطبيق" = عنده PIN أو كود ولاء أو مصدره التطبيق
+      custHasApp = !!(_d.loyaltyPin || _d.loyaltyCode || _d.loyaltyCode_glow || String(_d.source||'').indexOf('app')>=0);
+    }
     const balance = doc.exists ? (doc.data()[pointsFieldFor(currentBranch)] || 0) : 0;
     const rate = loyaltyRedemptionConfig;
     if(balance < rate.pointsPerRedemption){
@@ -595,6 +606,7 @@ async function openRedeemPoints(){
 
 // مكافأة خاصة العميل — تطبيق عند الدفع
 let custReward = null, appliedReward = null;
+let custExists = false, custHasApp = false;   // لعرض QR التطبيق في الفاتورة للغير مسجّل/غير مثبّت
 let custPendingRedeem = null, custBaseText = '';
 
 // بيحدّث صندوق العميل (المكافأة/الاستبدال) حسب إجمالي الفاتورة الحالي — بيتنادى مع كل تغيّر في السلة

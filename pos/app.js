@@ -109,6 +109,7 @@ const RECEIPT_ELEMENTS = [
   { id:'totals',    label:'💰 الإجمالي وطرق الدفع',   kind:'auto', size:13 },
   { id:'invoiceNo', label:'🔢 رقم الفاتورة',          kind:'auto', size:11 },
   { id:'barcode',   label:'⬛ باركود المرتجع',        kind:'auto' },
+  { id:'appQR',     label:'📱 QR تحميل التطبيق (للعملاء الغير مسجّلين/من غير تطبيق)', kind:'auto', size:10 },
   { id:'footer',    label:'💬 رسالة الختام',          kind:'text', def:'شكرًا لتعاملكم معنا 🙏', size:11 }
 ];
 // 🏷️ مقاسات الليبل العالمية (Zebra وغيرها) بالمليمتر
@@ -326,9 +327,42 @@ function buildReceiptHTML(data){
         if(d.invoiceNo) parts.push(`<div style="text-align:center; font-size:${fs};">${L.invoice} ${d.invoiceNo}</div>`); break;
       case 'barcode':
         parts.push(`<div style="text-align:center; margin-top:5px;"><svg id="rBarcodeDyn"></svg></div>`); break;
+      case 'appQR':
+        if(d.showAppQR && d.appQrImg){
+          parts.push(`<div style="text-align:center; margin-top:6px; border-top:1px dashed #999; padding-top:6px;">
+            <div style="font-size:${fs}; font-weight:bold;">📱 ${d.appQrTitle||''}</div>
+            <img src="${d.appQrImg}" style="width:88px; height:88px; margin:3px auto; display:block;">
+            <div style="font-size:${Math.max(8,(el.size||10)-1)}px;">${d.appQrMsg||''}</div>
+          </div>`);
+        }
+        break;
     }
   }
   return `<div dir="${dir}" style="font-family:Arial, sans-serif;">${parts.join('')}</div>`;
+}
+// 📱 QR الفاتورة: بنجيب صورته مرة واحدة ونخزّنها محليًا — عشان الطباعة تبقى فورية وأوفلاين
+function receiptQrKey(){
+  const isGlow = (typeof GLOW_BRANCHES!=='undefined') && GLOW_BRANCHES.includes(currentBranch);
+  return { app: isGlow?'glow':'loyalty', key: 'rcpt_qr_' + (isGlow?'glow':'loyalty') + '_' + (currentBranch||'') };
+}
+async function ensureReceiptQrCached(){
+  try{
+    const {app, key} = receiptQrKey();
+    if(localStorage.getItem(key)) return;
+    const url = 'https://echarpestore.github.io/store-apps/' + app + '/?src=' + encodeURIComponent('qr-rcpt-' + (currentBranch||'').replace(/\s+/g,'-'));
+    const img = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=1&data=' + encodeURIComponent(url);
+    const res = await fetch(img); const blob = await res.blob();
+    const dataUrl = await new Promise((ok,bad)=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=bad; r.readAsDataURL(blob); });
+    localStorage.setItem(key, dataUrl);
+  }catch(e){ /* أوفلاين؟ نجرّب تاني المرة الجاية — الفاتورة بتطبع عادي من غير QR */ }
+}
+function welcomeRewardText(){
+  const isGlow = (typeof GLOW_BRANCHES!=='undefined') && GLOW_BRANCHES.includes(currentBranch);
+  const w = (loyaltyRedemptionConfig && loyaltyRedemptionConfig.welcome) || {};
+  const cfg = w[isGlow?'glow':'echarpe'];
+  if(!cfg || !cfg.enabled || !(cfg.value>0)) return 'سجّلي واكسبي نقط على كل مشترياتك 🎁';
+  const base = cfg.type==='points' ? ('هدية ترحيب: ' + cfg.value + ' نقطة 🎁') : ('هدية ترحيب: خصم ' + cfg.value + ' ج.م 🎁');
+  return base + (cfg.type!=='points' && cfg.minInvoice>0 ? ' (على فاتورة ' + cfg.minInvoice + '+ ج.م)' : '') + ' — حمّلي التطبيق وفعّلي الإشعارات';
 }
 function receiptSampleData(){
   const L = RECEIPT_LABELS[(receiptDesignConfig&&receiptDesignConfig.lang)||'ar'];
@@ -336,7 +370,8 @@ function receiptSampleData(){
     dateStr: new Date().toLocaleString(receiptDesignConfig&&receiptDesignConfig.lang==='en'?'en-GB':'ar-EG'),
     empName: (currentEmployee&&currentEmployee.name)||'أحمد',
     items: [ {name:'إيشارب حرير', qty:1, line:'250.00'}, {name:'طرحة شيفون', qty:2, line:'300.00'} ],
-    totalStr:'550.00', payStr:L.cash+': 550.00', invoiceNo:'INV-000123', scanCode:'FTRH123-DEMO'
+    totalStr:'550.00', payStr:L.cash+': 550.00', invoiceNo:'INV-000123', scanCode:'FTRH123-DEMO',
+    showAppQR:true, appQrImg: localStorage.getItem(receiptQrKey().key)||'', appQrTitle:'حمّلي تطبيقنا!', appQrMsg: welcomeRewardText()
   };
 }
 function refreshReceiptPreview(){
@@ -523,6 +558,12 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
     items: cart.map(it=> ({name:it.name, qty:it.qty, line:(it.price*it.qty).toFixed(2)})),
     totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: invoiceCode||invoiceNo||''
   };
+  // QR التطبيق: يظهر بس لو مفيش رقم، أو الرقم مش مسجّل، أو مسجّل من غير تطبيق
+  const _ph = (document.getElementById('customerPhone')||{value:''}).value.trim();
+  data.showAppQR = !_ph || !custExists || !custHasApp;
+  data.appQrImg = localStorage.getItem(receiptQrKey().key)||'';
+  data.appQrTitle = (!_ph || !custExists) ? 'سجّلي في نادينا! 📱' : 'حمّلي تطبيقنا! 📱';
+  data.appQrMsg = welcomeRewardText();
   _printBuiltReceipt(data, payments);
 }
 function _printBuiltReceipt(data, payments){
@@ -549,6 +590,7 @@ function _printBuiltReceipt(data, payments){
 
 // ---------------- Init ----------------
 (async function init(){
+  ensureReceiptQrCached();   // نخزّن QR الفاتورة محليًا (مرة واحدة لكل جهاز/فرع)
   await ensureDemoInventory();
   await loadInventory();
   await loadReceiptDesignConfig();
