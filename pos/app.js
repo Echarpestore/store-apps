@@ -62,6 +62,16 @@ function branchQty(p, br){
 }
 
 firebase.initializeApp(firebaseConfig);
+// تسجيل دخول مجهول — مطلوب لقواعد الأمان الجديدة (بيشتغل مرة ويتحفظ على الجهاز)
+function ensureAnonAuth(){
+  try{
+    if(firebase.auth && !firebase.auth().currentUser){
+      firebase.auth().signInAnonymously().catch(function(e){ console.warn('anon auth', e && e.code); });
+    }
+  }catch(e){ console.warn('anon auth unavailable', e); }
+}
+ensureAnonAuth();
+window.addEventListener('online', ensureAnonAuth);   // لو فتح أوفلاين، نسجّل أول ما النت يرجع
 const db = firebase.firestore();
 
 // ============================================================
