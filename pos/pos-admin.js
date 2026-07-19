@@ -103,11 +103,18 @@ function invSort(col){
 let invSelected = new Set();   // تحديد متعدد بالـ Ctrl+Click لطباعة الليبلات
 let _invClickTimer = null;
 function invRowClick(e, id){
-  // دوسة واحدة = تحديد/إلغاء تحديد · دبل كليك = فتح صفحة المنتج
+  // زي الويندوز بالظبط:
+  // دوسة = تحديد ده بس (يمسح أي تحديد قديم) · Ctrl+دوسة = إضافة/إزالة تراكمي · دبل كليك = فتح المنتج
+  const ctrl = e.ctrlKey || e.metaKey;
   if(_invClickTimer){ clearTimeout(_invClickTimer); _invClickTimer = null; openProductDetails(id); return; }
   _invClickTimer = setTimeout(()=>{
     _invClickTimer = null;
-    if(invSelected.has(id)) invSelected.delete(id); else invSelected.add(id);
+    if(ctrl){
+      if(invSelected.has(id)) invSelected.delete(id); else invSelected.add(id);
+    }else{
+      if(invSelected.size===1 && invSelected.has(id)) invSelected.clear();   // دوسة تانية على المحدد الوحيد = إلغاء
+      else { invSelected.clear(); invSelected.add(id); }
+    }
     renderInventoryList();
   }, 260);
 }
