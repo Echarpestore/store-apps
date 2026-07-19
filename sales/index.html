@@ -345,6 +345,7 @@
         <h1>مين اللي باع دلوقتي؟ 🔥</h1>
         <div class="branch-tag" id="branchTag">📍 —</div>
         <div class="branch-tag" id="todayAdvancesTag" style="color:var(--gold); margin-top:4px;">💰 سلف النهاردة: 0 ج.م</div>
+        <div class="branch-tag" id="todayStaffOrdersTag" style="color:#c084fc; margin-top:4px; display:none;">🛒 أوردرات الموظفين النهاردة: 0 ج.م</div>
       </div>
       <button class="lbBtn" id="openAdvance" style="margin-left:8px; padding:8px 12px; font-size:11px;">💰 سلفة</button>
       <button class="lbBtn" id="openAttendance" style="margin-left:8px;">⏰ الحضور</button>
@@ -744,6 +745,14 @@
     </div>
 
     <div class="panel">
+      <h3><span>🛒 أوردرات الموظفين (شراء بخصم) <span id="staffOrdersBadge" class="panelBadge" style="display:none;">0</span></span></h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">الموظفة اشترت بكارتها من الكاشير — راجع واعتمد: الاعتماد بيسجّل "خصم الراتب" كسلفة رسمية · الرفض بيحاسبها بالسعر الكامل (الفرق بيتسجل سلفة).</p>
+      <div id="staffOrdersPending"></div>
+      <div class="attSectionTitle" style="margin-top:14px;">📜 السجل (آخر 30)</div>
+      <div id="staffOrdersLog"></div>
+    </div>
+
+    <div class="panel">
       <h3>📱 أكواد دعوة الموظفين (تنزيلات التطبيق)</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">كل موظفة ليها كود شخصي — العميلة اللي تنزّل التطبيق وتفعّل الإشعارات عن طريقه، الموظفة تاخد العمولة المحددة في الكاشير (شاشة برنامج الولاء). اطبع الكارت وخليه معاها.</p>
       <div id="referralList"></div>
@@ -828,6 +837,7 @@ enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence n
 const empCol = collection(db, 'sales_employees');
 const pointsCol = collection(db, 'sales_points');
 const referralsCol = collection(db, 'sales_app_referrals');
+const staffOrdersCol = collection(db, 'sales_staff_orders');
 const entriesCol = collection(db, 'entries'); // shared with the feedback (happy-or-not) app
 const shiftsCol = collection(db, 'sales_shifts');
 const tasksCol = collection(db, 'sales_tasks');
@@ -1020,6 +1030,12 @@ onSnapshot(empCol, (snap)=>{
   if($('#branchSetup').classList.contains('show')) populateBranchSetupSelect();   // الشاشة مفتوحة؟ حدّث القايمة
 }, (err)=> console.error('window.employees sync error', err));
 
+window.staffOrders = [];
+onSnapshot(staffOrdersCol, (snap)=>{
+  window.staffOrders = snap.docs.map(d=> ({id:d.id, ...d.data()}));
+  if(typeof renderTodayStaffOrders==='function') renderTodayStaffOrders();
+  if(typeof renderStaffOrdersPanel==='function') renderStaffOrdersPanel();
+});
 window.appReferrals = [];
 onSnapshot(referralsCol, (snap)=>{
   window.appReferrals = snap.docs.map(d=> ({id:d.id, ...d.data()}));
@@ -2932,6 +2948,74 @@ function getMonthLabel(d){
   return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0');
 }
 
+// ---------- 🛒 أوردرات الموظفين ----------
+function _staffOrderAdvanceOnApprove(o){ return o.payMethod==='salary' ? (o.total||0) : 0; }
+function _staffOrderAdvanceOnReject(o){ return o.payMethod==='salary' ? (o.fullTotal||0) : (o.discountAmount||0); }
+window.renderTodayStaffOrders = function(){
+  const tag = $('#todayStaffOrdersTag'); if(!tag) return;
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  const today = (window.staffOrders||[]).filter(o=> o.ts >= dayStart.getTime() && o.branch === window.currentBranch && o.status !== 'rejected');
+  const total = today.reduce((s,o)=> s + (o.total||0), 0);
+  if(!today.length){ tag.style.display = 'none'; return; }
+  tag.style.display = '';
+  tag.textContent = '🛒 أوردرات الموظفين النهاردة: ' + total.toFixed(0) + ' ج.م (' + today.length + ')';
+};
+window.renderStaffOrdersPanel = function(){
+  const pendWrap = $('#staffOrdersPending'), logWrap = $('#staffOrdersLog'), badge = $('#staffOrdersBadge');
+  if(!pendWrap) return;
+  const all = (window.staffOrders||[]).slice().sort((a,b)=> b.ts - a.ts);
+  const scope = viewBranch==='__ALL__' ? all : all.filter(o=> o.branch === viewBranch);
+  const pending = scope.filter(o=> o.status === 'pending');
+  if(badge){ badge.style.display = pending.length ? '' : 'none'; badge.textContent = pending.length; }
+
+  const payLbl = (o)=> o.payMethod==='salary' ? '📄 خصم من الراتب' : '💵 كاش';
+  const dstr = (ts)=> new Date(ts).toLocaleDateString('ar-EG', {day:'2-digit', month:'short'}) + ' ' + new Date(ts).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'});
+
+  pendWrap.innerHTML = pending.length ? pending.map(o=>`
+    <div class="emp-row" style="flex-wrap:wrap; border:1px solid rgba(192,132,252,.4); border-radius:12px; padding:10px; margin-bottom:8px;">
+      <div style="flex:1; min-width:170px;">
+        <div class="n">${o.employeeName||'؟'} <span style="color:var(--sub); font-size:10px;">· ${o.branch||''}</span></div>
+        <div class="meta">🧾 ${o.invoiceNo||''} · ${dstr(o.ts)}</div>
+        <div class="meta">${(o.fullTotal||0).toFixed(0)} ← <b style="color:var(--gold);">${(o.total||0).toFixed(0)} ج.م</b> (خصم ${o.discountPct||0}%) · ${payLbl(o)}</div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="confirmBtnSmall" data-soact="approve" data-id="${o.id}">✅ اعتماد</button>
+        <button class="confirmBtnSmall" style="background:var(--bad);" data-soact="reject" data-id="${o.id}">❌ رفض</button>
+      </div>
+    </div>`).join('') : '<div class="empty">مفيش أوردرات مستنية 👌</div>';
+
+  logWrap.innerHTML = scope.filter(o=> o.status !== 'pending').slice(0,30).map(o=>`
+    <div class="emp-row" style="flex-wrap:wrap; opacity:.85;">
+      <div class="n">${o.status==='approved'?'✅':'❌'} ${o.employeeName||'؟'}</div>
+      <div class="meta">🧾 ${o.invoiceNo||''} · ${(o.total||0).toFixed(0)} ج.م · ${payLbl(o)} · ${dstr(o.decidedAt||o.ts)}${o.note?' · 📝 '+o.note:''}</div>
+    </div>`).join('') || '<div class="empty">لسه مفيش سجل</div>';
+
+  pendWrap.querySelectorAll('[data-soact]').forEach(btn=> btn.addEventListener('click', ()=> staffOrderDecide(btn.dataset.id, btn.dataset.soact)));
+};
+window.staffOrderDecide = async function(id, act){
+  const o = (window.staffOrders||[]).find(x=> x.id === id); if(!o) return;
+  if(act === 'approve'){
+    const adv = _staffOrderAdvanceOnApprove(o);
+    const msg = o.payMethod==='salary'
+      ? 'اعتماد أوردر ' + o.employeeName + '؟\nهيتسجل خصم راتب (سلفة): ' + adv.toFixed(0) + ' ج.م'
+      : 'اعتماد أوردر ' + o.employeeName + '؟ (مدفوع كاش — مفيش خصم راتب)';
+    if(!confirm(msg)) return;
+    try{
+      if(adv > 0) await addDoc(advancesCol, { employeeId:o.employeeId, employeeName:o.employeeName, branch:o.branch, amount:adv, date:todayStr(), ts:Date.now(), source:'staff_order', invoiceNo:o.invoiceNo||'' });
+      await updateDoc(doc(db,'sales_staff_orders', id), { status:'approved', decidedAt: Date.now() });
+    }catch(e){ alert('حصل خطأ: ' + (e.code||e.message)); }
+  }else{
+    const note = prompt('سبب الرفض (اختياري):') || '';
+    const adv = _staffOrderAdvanceOnReject(o);
+    const msg = 'رفض أوردر ' + o.employeeName + '؟\nهتتحاسب بالسعر الكامل — هيتسجل عليها سلفة: ' + adv.toFixed(0) + ' ج.م' + (o.payMethod==='salary' ? ' (قيمة الفاتورة كاملة)' : ' (فرق الخصم)');
+    if(!confirm(msg)) return;
+    try{
+      if(adv > 0) await addDoc(advancesCol, { employeeId:o.employeeId, employeeName:o.employeeName, branch:o.branch, amount:adv, date:todayStr(), ts:Date.now(), source:'staff_order_reject', invoiceNo:o.invoiceNo||'', note });
+      await updateDoc(doc(db,'sales_staff_orders', id), { status:'rejected', decidedAt: Date.now(), note });
+    }catch(e){ alert('حصل خطأ: ' + (e.code||e.message)); }
+  }
+};
+
 function _refAppFor(branch){
   return /glow/i.test(branch||'') ? 'glow' : 'loyalty';
 }
@@ -3623,6 +3707,7 @@ function renderTodayAdvancesSummary(){
   const tag = $('#todayAdvancesTag');
   if(!tag) return;
   tag.textContent = '💰 سلف النهاردة: ' + todayAdvancesTotal() + ' ج.م';
+  if(typeof renderTodayStaffOrders==='function') renderTodayStaffOrders();
 }
 
 let advSelectedEmp = null;
