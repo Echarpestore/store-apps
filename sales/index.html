@@ -838,6 +838,7 @@ const empCol = collection(db, 'sales_employees');
 const pointsCol = collection(db, 'sales_points');
 const referralsCol = collection(db, 'sales_app_referrals');
 const staffOrdersCol = collection(db, 'sales_staff_orders');
+const printJobsCol = collection(db, 'pos_print_jobs');
 const entriesCol = collection(db, 'entries'); // shared with the feedback (happy-or-not) app
 const shiftsCol = collection(db, 'sales_shifts');
 const tasksCol = collection(db, 'sales_tasks');
@@ -1025,7 +1026,7 @@ function initials(name){
 }
 
 onSnapshot(empCol, (snap)=>{
-  allEmployees = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  allEmployees = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=> !e.isAdminAccount);   // 👑 حساب الأدمن العام مش موظف HR
   applyBranchFilter();
   if($('#branchSetup').classList.contains('show')) populateBranchSetupSelect();   // الشاشة مفتوحة؟ حدّث القايمة
 }, (err)=> console.error('window.employees sync error', err));
@@ -3417,6 +3418,7 @@ function renderSalaryPanel(){
       <div class="meta" style="color:${calc.advancesTotal>0?'var(--bad)':'var(--sub)'}">سلف -${calc.advancesTotal}${calc.advOrders>0?` <span style="font-size:9.5px; color:var(--sub);">(💰 كاش ${calc.advCash} · 🛒 أوردرات ${calc.advOrders})</span>`:''}</div>
       <div class="meta" style="color:var(--good); font-weight:800;">صافي ${calc.netSalary} ج.م</div>
       ${actionHtml}
+      <button class="confirmBtnSmall" style="background:#3b3b52;" onclick="openSalaryPrintDialog('${e.id}', '${periodLabel}')">🖨️ إيصال</button>
     </div>`;
   }).join('');
 
@@ -3430,10 +3432,80 @@ function renderSalaryPanel(){
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
           periodLabel, amount: parseFloat(btn.dataset.amount), paidAt: Date.now()
         });
+        openSalaryPrintDialog(emp.id, periodLabel);   // 🖨️ نطبع الإيصال على طول؟
       }catch(err){ console.error('تعذر تسجيل صرف الراتب', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
     });
   });
 }
+
+// ---------- 🧾 إيصال الراتب (80mm) — بيتطبع من برنتر الفرع عبر الكاشير ----------
+function buildSalaryReceiptPayload(emp, calc, periodLabel){
+  const mr = getMonthRange(new Date());
+  const myPoints = allPoints.filter(p=> p.employeeId===emp.id && p.ts>=mr.start.getTime() && p.ts<=mr.end.getTime()).length;
+  const ptsAmt = Math.round(myPoints * (commissionPerPoint||0) * 100)/100;
+  const myRefs = (window.appReferrals||[]).filter(r=> r.employeeId===emp.id && r.ts>=mr.start.getTime() && r.ts<=mr.end.getTime() && (!r.status || r.status==='active'));
+  const refAmt = myRefs.reduce((s,r)=> s+(r.amount||0), 0);
+  const lines = [
+    ['الراتب الأساسي (' + calc.daysInCalc + ' يوم)', '+' + calc.proratedBase],
+  ];
+  if(calc.overtimePay > 0) lines.push(['أوفرتايم (' + Math.round(calc.overtimeMinutes/60*10)/10 + ' ساعة)', '+' + calc.overtimePay]);
+  if(calc.dayOffBonusAmount > 0) lines.push(['مكافأة اشتغال إجازة', '+' + calc.dayOffBonusAmount]);
+  if(calc.deductionAmount > 0) lines.push(['خصم غياب (' + calc.extraOffDays + ' يوم)', '-' + calc.deductionAmount]);
+  if(calc.advCash > 0) lines.push(['سلف كاش', '-' + calc.advCash]);
+  if(calc.advOrders > 0) lines.push(['🛒 مشتريات (أوردرات)', '-' + calc.advOrders]);
+  const extra = [];
+  if(myPoints > 0) extra.push(['⭐ عمولة النقاط (' + myPoints + ' نقطة)', ptsAmt + ' ج.م']);
+  if(myRefs.length > 0) extra.push(['📱 بونص تنزيلات (' + myRefs.length + ')', refAmt + ' ج.م']);
+  return {
+    title: 'إيصال راتب 🧾',
+    empName: emp.name || '', branch: emp.branch || '',
+    period: periodLabel,
+    lines,
+    net: { label: 'صافي الراتب', value: calc.netSalary + ' ج.م' },
+    extra,
+    extraNote: extra.length ? 'العمولات دي بتتصرف من شاشة العمولات — مذكورة هنا للعلم' : '',
+    footer: 'استلمت المبلغ المذكور — التوقيع: ______________'
+  };
+}
+async function queueSalaryPrint(emp, calc, periodLabel, targetBranch){
+  await addDoc(printJobsCol, {
+    type: 'salary_receipt',
+    branch: targetBranch,
+    payload: buildSalaryReceiptPayload(emp, calc, periodLabel),
+    status: 'pending', ts: Date.now(),
+    requestedBy: 'admin'
+  });
+}
+window.openSalaryPrintDialog = function(empId, periodLabel){
+  const emp = allEmployees.find(e=> e.id === empId); if(!emp) return;
+  const mr = getMonthRange(new Date());
+  const calc = computeSalary(emp, mr.start, mr.end);
+  const branches = [...new Set(allEmployees.map(e=> (e.branch||'').trim()).filter(Boolean))].sort();
+  const old = document.getElementById('salPrintOv'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'salPrintOv';
+  ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px;';
+  ov.innerHTML = `<div style="background:var(--card,#1d1d27); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:18px; max-width:340px; width:100%; text-align:center;">
+    <div style="font-weight:800; font-size:15px;">🖨️ طباعة إيصال راتب ${emp.name}</div>
+    <div style="color:var(--sub); font-size:12px; margin:6px 0 12px;">هيطلع من برنتر الفرع اللي تختاره (لازم برنامج الكاشير مفتوح هناك)</div>
+    <select id="salPrintBranch" style="width:100%; padding:11px; border-radius:10px; font-family:inherit; font-size:13px; text-align:center;">
+      ${branches.map(b=>`<option ${b===emp.branch?'selected':''}>${b}</option>`).join('')}
+    </select>
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button id="salPrintGo" class="confirmBtn" style="flex:2;">🖨️ اطبع</button>
+      <button onclick="document.getElementById('salPrintOv').remove()" class="backBtn" style="flex:1;">إغلاق</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#salPrintGo').addEventListener('click', async ()=>{
+    const b = ov.querySelector('#salPrintBranch').value;
+    try{
+      await queueSalaryPrint(emp, calc, periodLabel, b);
+      ov.remove();
+      alert('🖨️ اتبعت للطباعة على برنتر ' + b + ' — هيطلع خلال ثواني لو الكاشير مفتوح هناك');
+    }catch(e){ alert('حصل خطأ: ' + (e.code||e.message)); }
+  });
+};
 
 function renderSalaryPaymentLog(){
   const wrap = $('#salaryPaymentLogList');
