@@ -363,6 +363,53 @@ async function pinSubmit(){
   }
 }
 
+// ---------- 🎫 الدخول بمسح كارت الموظف ----------
+// السكانر بيكتب الكود بسرعة + Enter — بنلقطه من أي مكان في شاشة الدخول
+// (حتى لو المؤشر جوّه خانة الـ PIN) ونفرّقه عن الكتابة اليدوية بسرعة الضربات
+let _cardBuf = '', _cardLastKey = 0;
+function _loginScreenVisible(){
+  const el = document.getElementById('loginScreen');
+  return !!(el && el.offsetParent !== null);
+}
+document.addEventListener('keydown', function(e){
+  if(!_loginScreenVisible()) return;
+  const now = Date.now();
+  if(now - _cardLastKey > 90) _cardBuf = '';   // وقفة طويلة = كتابة يد، نبدأ من جديد
+  _cardLastKey = now;
+  if(e.key === 'Enter'){
+    const code = _cardBuf; _cardBuf = '';
+    if(/^EC[A-Z2-9]{10}$/.test(code)){
+      e.preventDefault(); e.stopPropagation();
+      const pinInp = document.getElementById('pinInput');
+      if(pinInp) pinInp.value = '';   // نشيل حروف السكانر اللي وقعت في خانة الـ PIN
+      cardLogin(code);
+    }
+    return;
+  }
+  if(e.key.length === 1) _cardBuf += e.key.toUpperCase();
+  if(_cardBuf.length > 20) _cardBuf = _cardBuf.slice(-20);
+}, true);
+
+async function cardLogin(code){
+  const errBox = document.getElementById('loginErr');
+  if(errBox) errBox.textContent = '🎫 جارٍ التحقق من الكارت...';
+  try{
+    const snap = await db.collection(EMPLOYEES_COLLECTION).where('cardCode','==',code).limit(1).get();
+    if(snap.empty){
+      if(errBox) errBox.textContent = 'الكارت ده مش متسجّل (لو اتعملك كارت جديد، القديم اتبطّل)';
+      return;
+    }
+    const doc = snap.docs[0];
+    currentEmployee = { id: doc.id, ...doc.data() };
+    if(errBox) errBox.textContent = '';
+    await loadCurrentEmployeeRole();
+    enterDashboard();
+    showToast('أهلًا ' + (currentEmployee.name||'') + ' 🎫');
+  }catch(e){
+    if(errBox) errBox.textContent = 'خطأ في الاتصال: ' + e.message;
+  }
+}
+
 function logout(){
   currentEmployee = null;
   cart = [];
