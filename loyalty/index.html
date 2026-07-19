@@ -478,7 +478,7 @@ try{
   if(_sp.get('src')){ visitSrc = _sp.get('src'); localStorage.setItem('visit_src', visitSrc); }
   else visitSrc = localStorage.getItem('visit_src') || '';
 }catch(e){}
-var cameFromQR = /^qr/i.test(visitSrc);
+var cameFromQR = /^(qr|emp)/i.test(visitSrc);   // ملصق/فاتورة/كود موظفة — كلهم زيارة موجّهة
 
 // أوفلاين قوي: البيانات محفوظة على الجهاز والتطبيق بيفتح حتى من غير نت
 db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED });
