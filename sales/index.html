@@ -3302,7 +3302,7 @@ function computeSalary(emp, periodStart, end){
   }
 
   if(notYetHired){
-    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, dayOffBonusDays:0, dayOffBonusAmount:0, advancesTotal:0, netSalary:0, daysInCalc:0, notYetHired:true };
+    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, dayOffBonusDays:0, dayOffBonusAmount:0, advancesTotal:0, advCash:0, advOrders:0, netSalary:0, daysInCalc:0, notYetHired:true };
   }
 
   const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
@@ -3367,11 +3367,14 @@ function computeSalary(emp, periodStart, end){
   }
   const dayOffBonusAmount = Math.round(dayOffBonusDays * dailyRate * 100)/100;
 
-  const advancesTotal = allAdvances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= end.getTime())
-    .reduce((sum,a)=> sum + a.amount, 0);
+  const periodAdvances = allAdvances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= end.getTime());
+  const advancesTotal = periodAdvances.reduce((sum,a)=> sum + a.amount, 0);
+  // تفصيلة: سلف كاش عادية vs أوردرات شراء الموظفة (source بيبدأ بـ staff_order)
+  const advCash = periodAdvances.filter(a=> String(a.source||'').indexOf('staff_order') !== 0).reduce((s,a)=> s + a.amount, 0);
+  const advOrders = Math.round((advancesTotal - advCash) * 100)/100;
 
   const netSalary = Math.round((proratedBase - deductionAmount + overtimePay + dayOffBonusAmount - advancesTotal) * 100)/100;
-  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, dayOffBonusDays, dayOffBonusAmount, advancesTotal, netSalary, daysInCalc, notYetHired:false };
+  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, dayOffBonusDays, dayOffBonusAmount, advancesTotal, advCash, advOrders, netSalary, daysInCalc, notYetHired:false };
 }
 
 function renderSalaryPanel(){
@@ -3408,7 +3411,7 @@ function renderSalaryPanel(){
       <div class="meta" style="color:var(--gold);">إضافي +${calc.overtimePay}</div>
       <div class="meta" style="color:${calc.dayOffBonusAmount>0?'var(--good)':'var(--sub)'}">مكافأة اشتغال إجازة +${calc.dayOffBonusAmount} (${calc.dayOffBonusDays} يوم)</div>
       <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم غياب -${calc.deductionAmount} (${calc.extraOffDays} يوم غياب غير مبرر، من أصل ${calc.dayOffOccurrences} إجازة مسموحة)</div>
-      <div class="meta" style="color:${calc.advancesTotal>0?'var(--bad)':'var(--sub)'}">سلف -${calc.advancesTotal}</div>
+      <div class="meta" style="color:${calc.advancesTotal>0?'var(--bad)':'var(--sub)'}">سلف -${calc.advancesTotal}${calc.advOrders>0?` <span style="font-size:9.5px; color:var(--sub);">(💰 كاش ${calc.advCash} · 🛒 أوردرات ${calc.advOrders})</span>`:''}</div>
       <div class="meta" style="color:var(--good); font-weight:800;">صافي ${calc.netSalary} ج.م</div>
       ${actionHtml}
     </div>`;
