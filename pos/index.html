@@ -407,9 +407,29 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .dc-res-break .dc-res-sep{border-top:1.5px solid #bbb; margin-top:4px; padding-top:6px; font-weight:900;}
 </style>
 <script src="jsbarcode.min.js" onerror="(function(){var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js'; document.head.appendChild(s);})()"></script>
+<style>
+.badge-test{ background:#e8e6dc !important; color:#666 !important; font-size:10.5px !important; box-shadow:none !important; }
+</style>
+<script>
+// 🏷️ شارة الإصدار: بتقرا الكاش الفعلي المتفعّل — نظرة واحدة تعرف التحديث وصل ولا لسه
+(function(){
+  function setV(){
+    try{
+      caches.keys().then(function(keys){
+        var k = keys.filter(function(x){ return /^store-apps-shell-v\d+$/.test(x); }).sort(function(a,b){
+          return parseInt(a.replace(/\D/g,'')) - parseInt(b.replace(/\D/g,''));
+        }).pop();
+        var el = document.getElementById('versionBadge');
+        if(el && k) el.textContent = 'echarpe POS · ' + k.replace('store-apps-shell-','');
+      }).catch(function(){});
+    }catch(e){}
+  }
+  setV(); setTimeout(setV, 4000);
+})();
+</script>
 </head>
 <body>
-<div class="badge-test">⚠️ نسخة تجريبية</div>
+<div class="badge-test" id="versionBadge" title="إصدار النسخة الشغّالة على الجهاز ده">echarpe POS</div>
 <div id="onlineStatusBadge" class="online-badge online">🟢 متصل</div>
 
 <div id="loadFailBanner" style="display:none; position:fixed; inset:0; z-index:99999; background:#12141a; color:#eef0f4; direction:rtl; font-family:'Cairo',sans-serif; align-items:center; justify-content:center; flex-direction:column; gap:16px; padding:24px; text-align:center;">
@@ -475,7 +495,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
       <button onclick="resumeOrStartSale()">🖥️ بيع جديد</button>
       <button onclick="openHeldModal()">⏸️ فواتير معلّقة <span id="heldCountLabel" style="display:block; font-size:10px; font-weight:400; opacity:.8;">0 فاتورة</span></button>
       <button class="secondary" onclick="goToInventory()">📦 قائمة الأصناف</button>
-      <button class="secondary" onclick="goToReceiveGoods()">📥 استلام بضاعة</button>
+      <button class="secondary" onclick="goToTransfers()">🚚 التحويلات</button>
       <button class="secondary" onclick="goToCustomerList()">👤 قائمة العملاء</button>
       <button class="secondary" id="reportsSidebarBtn" onclick="goToReports()">📊 التقارير</button>
       <button class="secondary" id="rolesSidebarBtn" onclick="goToRoles()" style="display:none;">🛡️ الصلاحيات</button>

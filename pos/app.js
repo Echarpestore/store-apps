@@ -149,7 +149,7 @@ let receiptDesignConfig = null;
 
 function defaultReceiptConfig(){
   return {
-    lang:'ar', paperWidth:'80', logo:'', logoWidth:60, bcHeight:34, bcWidth:1.4, bcWidthPct:90, bcFont:11, currencyAr:'ج.م', currencyEn:'EGP',
+    lang:'ar', paperWidth:'80', logo:'', logoWidth:60, lineGap:2, endFeed:16, bcHeight:34, bcWidth:1.4, bcWidthPct:90, bcFont:11, currencyAr:'ج.م', currencyEn:'EGP',
     elements: RECEIPT_ELEMENTS.filter(e=> e.kind!=='multi').map(e=> ({ id:e.id, on: !(e.id==='branchName'||e.id==='address'||e.id==='phone'), text: e.def||'', size: e.size||12 }))
   };
 }
@@ -269,6 +269,8 @@ async function renderReceiptDesignScreen(){
         <input value="${c.currencyEn||'EGP'}" oninput="receiptDesignConfig.currencyEn=this.value; refreshReceiptPreview(); refreshLabelPreview();" style="width:80px; text-align:center; direction:ltr; ${S.ctl}" placeholder="EGP">
         <span style="font-size:10.5px; color:var(--muted);">(عربي / English)</span>
       </div>
+      ${slider('تباعد السطور', c.lineGap!=null?c.lineGap:2, 0, 12, 1, "receiptDesignConfig.lineGap=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
+      ${slider('طول إضافي آخر الفاتورة', c.endFeed!=null?c.endFeed:16, 0, 80, 4, "receiptDesignConfig.endFeed=+this.value; this.nextElementSibling.textContent=this.value; refreshReceiptPreview();")}
     </div>
 
     <div style="${S.card}">
@@ -335,7 +337,7 @@ async function renderReceiptDesignScreen(){
       <div>${_designTab==='receipt' ? receiptTab : labelTab}</div>
       <div style="position:sticky; top:8px;">
         <div style="font-size:11px; color:var(--muted); margin-bottom:5px; text-align:center;">👁️ معاينة حيّة</div>
-        <div style="display:${_designTab==='receipt'?'block':'none'};"><div id="receiptLivePreview" style="background:#fff; color:#000; border-radius:10px; padding:10px 8px; box-shadow:0 6px 20px rgba(0,0,0,.4); max-height:62vh; overflow-y:auto; margin:0 auto;"></div></div>
+        <div style="display:${_designTab==='receipt'?'block':'none'};"><div id="receiptLivePreview" style="background:#fff; color:#000; border-radius:10px; padding:10px 8px; box-shadow:0 6px 20px rgba(0,0,0,.4); max-height:78vh; overflow-y:auto; margin:0 auto;"></div></div>
         <div style="display:${_designTab==='label'?'block':'none'};">
           <div style="display:flex; justify-content:center;"><div id="labelLivePreview" style="background:#fff; color:#000; border:1px dashed #999; border-radius:4px; overflow:hidden; box-shadow:0 6px 20px rgba(0,0,0,.4);"></div></div>
           <div id="labelSizeNote" style="font-size:10px; color:var(--muted); text-align:center; margin-top:5px;"></div>
@@ -408,7 +410,9 @@ function buildReceiptHTML(data){
         break;
     }
   }
-  return `<div dir="${dir}" style="font-family:Arial, sans-serif;">${parts.join('')}</div>`;
+  const _gap = (c.lineGap!=null? c.lineGap : 2);
+  const _feed = (c.endFeed!=null? c.endFeed : 16);
+  return `<div dir="${dir}" style="font-family:Arial, sans-serif; display:flex; flex-direction:column; gap:${_gap}px;">${parts.join('')}<div style="height:${_feed}px;"></div></div>`;
 }
 // 📱 QR الفاتورة: بنجيب صورته مرة واحدة ونخزّنها محليًا — عشان الطباعة تبقى فورية وأوفلاين
 function receiptQrKey(){
@@ -739,6 +743,36 @@ function _printBuiltReceipt(data, payments){
   }
 }
 
+// ---------------- 🧰 تولبار موحّد في كل الشاشات ----------------
+// نفس الأزرار بنفس الترتيب في كل شاشة إدارية — والقديم (زراير رجوع المتفرقة) بيتشال
+function _uniToolbarHTML(){
+  const b = (icon, label, fn, show)=> show===false ? '' :
+    `<button onclick="${fn}" title="${label}" style="display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 11px; border-radius:10px; border:1px solid var(--border,#ccc); background:var(--panel,#fff); color:inherit; cursor:pointer; min-width:56px;">
+      <span style="font-size:19px; line-height:1;">${icon}</span><span style="font-size:9.5px; font-weight:800;">${label}</span>
+    </button>`;
+  return `<div class="uniToolbar" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+    ${b('🏠','الرئيسية',"showScreen('dashboardScreen')", true)}
+    ${b('🧾','البيع','resumeOrStartSale()', true)}
+    ${b('🚚','التحويلات','goToTransfers()', true)}
+    ${b('📦','المخزون','goToInventory()', hasPerm('canViewStock'))}
+    ${b('📥','استلام','goToReceiveGoods()', hasPerm('canReceiveGoods'))}
+    ${b('📇','العملاء','goToCustomerList()', true)}
+    ${b('📊','التقارير','goToReports()', hasPerm('canViewReports'))}
+  </div>`;
+}
+function injectUnifiedToolbars(){
+  document.querySelectorAll('.dash-header, .mgmt-topbar').forEach(head=>{
+    if(head.closest('#dashboardScreen')) return;               // الرئيسية ليها القايمة الكبيرة أصلًا
+    if(head.querySelector('.uniToolbar')) { head.querySelector('.uniToolbar').outerHTML = _uniToolbarHTML(); return; }
+    // نشيل زراير الرجوع القديمة المتفرقة + التولبار المخصص القديم بتاع التحويلات
+    head.querySelectorAll('button').forEach(btn=>{
+      const t = (btn.textContent||'');
+      if(t.includes('رجوع') || t.includes('الرئيسية') || btn.title==='شاشة البيع' || btn.title==='المخزون' || btn.title==='استلام بضاعة') btn.remove();
+    });
+    head.insertAdjacentHTML('beforeend', _uniToolbarHTML());
+  });
+}
+
 // ---------------- ⌨️ اختصارات الكيبورد (شاشة البيع) ----------------
 // F1 أو Tab (بره الخانات): شاشة البيع من أي مكان
 // F2/F3/F4: كاش/فيزا/انستا (نفس ضغطة الأيقونة بالظبط) · F8: مسح المدفوعات · Shift+Enter: حفظ وطباعة
@@ -841,7 +875,9 @@ function startPrintJobListener(){
 // ---------------- Init ----------------
 (async function init(){
   ensureReceiptQrCached();
-  setTimeout(startPrintJobListener, 3000);   // بعد ما الفرع والدخول يثبتوا   // نخزّن QR الفاتورة محليًا (مرة واحدة لكل جهاز/فرع)
+  setTimeout(startPrintJobListener, 3000);   // بعد ما الفرع والدخول يثبتوا
+  setTimeout(injectUnifiedToolbars, 800);
+  setTimeout(injectUnifiedToolbars, 5000);   // تاني بعد تحميل الصلاحيات   // نخزّن QR الفاتورة محليًا (مرة واحدة لكل جهاز/فرع)
   await ensureDemoInventory();
   await loadInventory();
   await loadReceiptDesignConfig();
