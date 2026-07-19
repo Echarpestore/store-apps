@@ -107,7 +107,7 @@ function _trNewFormHTML(){
   return `
   <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px;">
     <div style="font-weight:800; margin-bottom:4px;">1️⃣ امسح القطع اللي هتتحوّل</div>
-    <input id="trScanInput" placeholder="امسح الباركود أو اكتبه واضغط Enter..." autocomplete="off"
+    <input id="trScanInput" placeholder="امسح القطع أو كارت الحاملة — أي ترتيب، من أي مكان..." autocomplete="off"
       style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px;">
     <div id="trItemsList" style="margin-top:10px;"></div>
 
@@ -149,31 +149,21 @@ function _trQty(i, d){
   else it.qty = nv;
   _trRenderItems();
 }
-function _trWireNewForm(){
+function _trAddItemByCode(code){
+  const it = allInventory.find(p=> (p.barcode||'') === code || (p.code||'') === code);
+  if(!it){ showToast('مفيش منتج بالكود ده', 'err'); return; }
+  const stock = branchQty(it, currentBranch) || 0;
+  if(stock <= 0){ showToast('مفيش رصيد من الصنف ده في الفرع', 'err'); return; }
+  const ex = _trNewItems.find(x=> x.id === it.id);
+  if(ex){ if(ex.qty < stock) ex.qty++; }
+  else _trNewItems.push({ id: it.id, name: it.name, barcode: it.barcode||'', qty: 1, stock });
   _trRenderItems();
-  const scan = document.getElementById('trScanInput');
-  if(scan) scan.addEventListener('keydown', (e)=>{
-    if(e.key !== 'Enter') return;
-    const code = scan.value.trim(); scan.value = '';
-    if(!code) return;
-    const it = allInventory.find(p=> (p.barcode||'') === code || (p.code||'') === code);
-    if(!it){ showToast('مفيش منتج بالكود ده', 'err'); return; }
-    const stock = branchQty(it, currentBranch) || 0;
-    if(stock <= 0){ showToast('مفيش رصيد من الصنف ده في الفرع', 'err'); return; }
-    const ex = _trNewItems.find(x=> x.id === it.id);
-    if(ex){ if(ex.qty < stock) ex.qty++; }
-    else _trNewItems.push({ id: it.id, name: it.name, barcode: it.barcode||'', qty: 1, stock });
-    _trRenderItems();
-  });
-  const cInp = document.getElementById('trCarrierInput');
-  if(cInp) cInp.addEventListener('keydown', async (e)=>{
-    if(e.key !== 'Enter') return;
-    const code = cInp.value.trim().toUpperCase(); cInp.value = '';
-    if(!/^EC[A-Z2-9]{10}$/.test(code)){ showToast('ده مش كارت موظف', 'err'); return; }
-    try{
-      const snap = await db.collection('sales_employees').where('cardCode','==',code).limit(1).get();
-      if(snap.empty){ showToast('الكارت مش متسجّل', 'err'); return; }
-      const _d = snap.docs[0].data();
+}
+async function _trSetCarrierByCode(code){
+  try{
+    const snap = await db.collection('sales_employees').where('cardCode','==',code).limit(1).get();
+    if(snap.empty){ showToast('الكارت مش متسجّل', 'err'); return; }
+    const _d = snap.docs[0].data();
       _trCarrier = { id: snap.docs[0].id, name: _d.name || '', branch: _d.branch || '' };
       let destMsg = '';
       const sel = document.getElementById('trDestSel');
@@ -185,9 +175,73 @@ function _trWireNewForm(){
         }
       }
       document.getElementById('trCarrierName').textContent = '🧕 الحاملة: ' + _trCarrier.name + ' ✓' + destMsg;
-    }catch(err){ showToast('خطأ: ' + err.message, 'err'); }
+      showToast('🎫 الحاملة: ' + _trCarrier.name);
+  }catch(err){ showToast('خطأ: ' + err.message, 'err'); }
+}
+function _trRouteCode(code){
+  // 🧠 اللاقط الذكي: كارت موظف → حاملة · غير كده → منتج — من أي مكان في الشاشة
+  const up = code.toUpperCase();
+  if(/^EC[A-Z2-9]{10}$/.test(up)) _trSetCarrierByCode(up);
+  else _trAddItemByCode(code);
+}
+function _trWireNewForm(){
+  _trRenderItems();
+  const scan = document.getElementById('trScanInput');
+  if(scan) scan.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Enter') return;
+    const code = scan.value.trim(); scan.value = '';
+    if(code) _trRouteCode(code);
+  });
+  const cInp = document.getElementById('trCarrierInput');
+  if(cInp) cInp.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Enter') return;
+    const code = cInp.value.trim(); cInp.value = '';
+    if(code) _trRouteCode(code);
   });
 }
+// لاقط على مستوى الشاشة كلها (زي شاشة الدخول): السكانر بيكتب بسرعة + Enter
+let _trBuf = '', _trLastKey = 0;
+async function _trConfirmByCard(code){
+  const ov = document.getElementById('trConfirmOv'); if(!ov || !ov.dataset.tid) return false;
+  try{
+    const snap = await db.collection('sales_employees').where('cardCode','==',code).limit(1).get();
+    if(snap.empty){ showToast('الكارت مش متسجّل', 'err'); return true; }
+    const emp = { id: snap.docs[0].id, name: snap.docs[0].data().name||'' };
+    confirmTransfer(ov.dataset.tid, emp);
+  }catch(e){ showToast('خطأ: ' + e.message, 'err'); }
+  return true;
+}
+document.addEventListener('keydown', function(e){
+  // أولوية: نافذة الاستلام مفتوحة → مسح كارت في أي مكان = تأكيد باسم صاحبته
+  const cov = document.getElementById('trConfirmOv');
+  if(cov){
+    const now0 = Date.now();
+    if(now0 - _trLastKey > 90) _trBuf = '';
+    _trLastKey = now0;
+    if(e.key === 'Enter'){
+      const code = _trBuf.toUpperCase(); _trBuf = '';
+      if(/^EC[A-Z2-9]{10}$/.test(code)){ e.preventDefault(); e.stopPropagation(); _trConfirmByCard(code); }
+      return;
+    }
+    if(e.key.length === 1) _trBuf += e.key;
+    return;
+  }
+  const scr = document.getElementById('transfersScreen');
+  if(!scr || scr.offsetParent === null || _trTab !== 'new') return;
+  const a = document.activeElement;
+  const inOurInputs = a && (a.id === 'trScanInput' || a.id === 'trCarrierInput');
+  if(inOurInputs) return;   // الخانات ليها معالجها — ده للمسح وانت مش واقف في خانة
+  const now = Date.now();
+  if(now - _trLastKey > 90) _trBuf = '';
+  _trLastKey = now;
+  if(e.key === 'Enter'){
+    const code = _trBuf; _trBuf = '';
+    if(code.length >= 4){ e.preventDefault(); _trRouteCode(code); }
+    return;
+  }
+  if(e.key.length === 1) _trBuf += e.key;
+  if(_trBuf.length > 30) _trBuf = _trBuf.slice(-30);
+}, true);
 async function sendTransfer(){
   const dest = (document.getElementById('trDestSel')||{}).value;
   if(!_trNewItems.length){ showToast('امسح القطع الأول', 'err'); return; }
@@ -230,6 +284,7 @@ async function openTransferConfirm(id){
   const old = document.getElementById('trConfirmOv'); if(old) old.remove();
   const ov = document.createElement('div');
   ov.id = 'trConfirmOv';
+  ov.dataset.tid = t.id;
   ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:9999; display:flex; align-items:center; justify-content:center; padding:14px;';
   ov.innerHTML = `<div style="background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:16px; max-width:440px; width:100%; max-height:85vh; overflow-y:auto;">
     <div style="font-weight:800; margin-bottom:2px;">📥 استلام تحويلة من ${t.fromBranch}</div>
@@ -240,15 +295,24 @@ async function openTransferConfirm(id){
         <input type="number" min="0" max="${it.qty}" value="${it.qty}" id="trCf_${i}" style="width:64px; padding:8px; text-align:center; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:800;">
       </div>`).join('')}
     <input id="trCfNote" placeholder="ملاحظة (لو فيه نقص اكتب السبب)..." style="width:100%; margin-top:4px; padding:10px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:12px;">
-    <div style="display:flex; gap:8px; margin-top:12px;">
-      <button onclick="confirmTransfer('${t.id}')" style="flex:2; padding:12px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✅ تأكيد الاستلام</button>
-      <button onclick="document.getElementById('trConfirmOv').remove()" style="flex:1; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer;">إلغاء</button>
+    <div style="margin-top:12px; padding:11px; border:1.5px dashed var(--accent); border-radius:11px; text-align:center; background:var(--panel2);">
+      <div style="font-weight:800; font-size:13.5px;">🎫 المستلمة تمسح كارتها = تأكيد فوري</div>
+      <div style="color:var(--muted); font-size:10.5px; margin-top:2px;">عدّي القطع (وعدّلي لو فيه نقص) وبعدين امسحي — التأكيد هيتسجل باسم صاحبة الكارت</div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:8px;">
+      <button onclick="confirmTransfer('${t.id}')" style="flex:2; padding:11px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:700; font-size:12px; cursor:pointer;">✅ تأكيد بدون كارت (باسم المسجّلة دخول)</button>
+      <button onclick="document.getElementById('trConfirmOv').remove()" style="flex:1; padding:11px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer; font-size:12px;">إلغاء</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
 }
-async function confirmTransfer(id){
+async function confirmTransfer(id, confirmer){
   const t = _trList.find(x=> x.id === id); if(!t) return;
+  const who = confirmer || (currentEmployee ? { id: currentEmployee.id, name: currentEmployee.name||'' } : null);
+  if(who && who.id === t.carrierId){
+    showToast('⛔ الحاملة مينفعش تأكد لنفسها — كارت موظف تاني من الفرع', 'err');
+    return;
+  }
   const confirmed = (t.items||[]).map((it,i)=>{
     const v = parseInt((document.getElementById('trCf_'+i)||{}).value);
     return { ...it, confirmedQty: (isNaN(v)||v<0) ? 0 : Math.min(v, it.qty) };
@@ -265,8 +329,9 @@ async function confirmTransfer(id){
     });
     batch.update(db.collection(TRANSFERS_COL).doc(id), {
       status: 'confirmed', confirmedAt: Date.now(),
-      confirmedBy: (currentEmployee&&currentEmployee.name)||'',
-      confirmedById: (currentEmployee&&currentEmployee.id)||'',
+      confirmedBy: (who&&who.name)||'',
+      confirmedById: (who&&who.id)||'',
+      confirmedByCard: !!confirmer,
       items: confirmed, discrepancy, note
     });
     await batch.commit();
