@@ -744,6 +744,12 @@
     </div>
 
     <div class="panel">
+      <h3>📱 أكواد دعوة الموظفين (تنزيلات التطبيق)</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">كل موظفة ليها كود شخصي — العميلة اللي تنزّل التطبيق وتفعّل الإشعارات عن طريقه، الموظفة تاخد العمولة المحددة في الكاشير (شاشة برنامج الولاء). اطبع الكارت وخليه معاها.</p>
+      <div id="referralList"></div>
+    </div>
+
+    <div class="panel">
       <h3>💰 عمولة النقط الشهرية</h3>
       <div class="add-form" style="margin-bottom:16px;">
         <input type="number" min="0" step="0.5" id="commissionPerPointInput" placeholder="عمولة كل نقطة بالجنيه">
@@ -821,6 +827,7 @@ enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence n
 
 const empCol = collection(db, 'sales_employees');
 const pointsCol = collection(db, 'sales_points');
+const referralsCol = collection(db, 'sales_app_referrals');
 const entriesCol = collection(db, 'entries'); // shared with the feedback (happy-or-not) app
 const shiftsCol = collection(db, 'sales_shifts');
 const tasksCol = collection(db, 'sales_tasks');
@@ -1013,6 +1020,12 @@ onSnapshot(empCol, (snap)=>{
   if($('#branchSetup').classList.contains('show')) populateBranchSetupSelect();   // الشاشة مفتوحة؟ حدّث القايمة
 }, (err)=> console.error('window.employees sync error', err));
 
+window.appReferrals = [];
+onSnapshot(referralsCol, (snap)=>{
+  window.appReferrals = snap.docs.map(d=> ({id:d.id, ...d.data()}));
+  if(typeof renderCommissionPanel==='function') renderCommissionPanel();
+  if(typeof renderReferralPanel==='function') renderReferralPanel();
+});
 onSnapshot(pointsCol, (snap)=>{
   window.points = snap.docs.map(d=>({id:d.id, ...d.data()}));
   renderEmpGrid();
@@ -2919,6 +2932,68 @@ function getMonthLabel(d){
   return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0');
 }
 
+function _refAppFor(branch){
+  return /glow/i.test(branch||'') ? 'glow' : 'loyalty';
+}
+function _refUrl(emp, app){
+  return 'https://echarpestore.github.io/store-apps/' + app + '/?src=emp-' + emp.id;
+}
+window.renderReferralPanel = function(){
+  const wrap = $('#referralList'); if(!wrap) return;
+  const emps = reviewEmployeesFor(viewBranch);
+  if(!emps.length){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  const mr = getMonthRange(new Date());
+  wrap.innerHTML = emps.map(e=>{
+    const mine = (window.appReferrals||[]).filter(r=> r.employeeId===e.id);
+    const month = mine.filter(r=> r.ts>=mr.start.getTime() && r.ts<=mr.end.getTime());
+    const monthAmt = month.reduce((s,r)=> s+(r.amount||0), 0);
+    return `<div class="emp-row" style="flex-wrap:wrap;">
+      <div class="n">${e.name}</div>
+      <div class="meta">📱 الشهر ده: ${month.length} تنزيل (${monthAmt} ج.م) · الإجمالي: ${mine.length}</div>
+      <button class="confirmBtnSmall" data-refqr="${e.id}">🎫 كود الدعوة</button>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-refqr]').forEach(btn=> btn.addEventListener('click', ()=>{
+    const emp = allEmployees.find(x=> x.id===btn.dataset.refqr); if(emp) showEmpReferralQR(emp);
+  }));
+};
+window.showEmpReferralQR = function(emp){
+  const old = document.getElementById('empQrOverlay'); if(old) old.remove();
+  const app = _refAppFor(emp.branch || window.currentBranch);
+  const ov = document.createElement('div');
+  ov.id = 'empQrOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px;';
+  const build = (appId)=>{
+    const url = _refUrl(emp, appId);
+    const img = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=2&data=' + encodeURIComponent(url);
+    ov.querySelector('#empQrImg').src = img;
+    ov.querySelector('#empQrApp').textContent = appId==='glow' ? 'Glow' : 'echarpe';
+    ov._img = img; ov._app = appId;
+  };
+  ov.innerHTML = `<div style="background:#fff; color:#111; border-radius:16px; padding:20px; text-align:center; max-width:340px; width:100%;">
+    <div style="font-weight:800; font-size:16px;">🎫 كود دعوة: ${emp.name}</div>
+    <div style="color:#666; font-size:12px; margin:4px 0 10px;">تطبيق <span id="empQrApp"></span> — العميلة تمسحه بكاميرا موبايلها</div>
+    <img id="empQrImg" style="width:230px; height:230px;">
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button id="empQrPrint" style="flex:1; padding:11px; border-radius:9px; border:none; background:#1a7f37; color:#fff; font-weight:800; cursor:pointer;">🖨️ اطبع الكارت</button>
+      <button id="empQrClose" style="flex:1; padding:11px; border-radius:9px; border:1px solid #ccc; background:#f5f5f5; color:#333; font-weight:700; cursor:pointer;">إغلاق</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  build(app);
+  ov.querySelector('#empQrClose').onclick = ()=> ov.remove();
+  ov.querySelector('#empQrPrint').onclick = ()=>{
+    const w = window.open('', '_blank', 'width=420,height=560');
+    w.document.write('<html dir="rtl"><head><meta charset="UTF-8"><style>body{font-family:Tahoma; text-align:center; padding:22px;} h2{margin:4px 0;} .n{font-size:15px; color:#444; margin-bottom:12px;} img{width:270px;} .g{margin-top:10px; font-weight:800; font-size:14px;}</style></head><body>'
+      + '<h2>حمّلي تطبيق ' + (ov._app==='glow'?'Glow':'echarpe') + ' 📱</h2>'
+      + '<div class="n">دعوة من: ' + emp.name + ' 💕</div>'
+      + '<img src="' + ov._img + '">'
+      + '<div class="g">🎁 فعّلي الإشعارات ومستنياكي مكافأة ترحيب!</div>'
+      + '<script>var i=document.querySelector("img"); i.complete?print():i.onload=function(){print(); setTimeout(close,400);};<\/script></body></html>');
+    w.document.close();
+  };
+};
+
 function renderCommissionPanel(){
   const input = $('#commissionPerPointInput');
   if(!input) return;
@@ -2935,11 +3010,21 @@ function renderCommissionPanel(){
   wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=>{
     const pointsThisMonth = window.points.filter(p=> p.employeeId===e.id && p.ts >= monthRange.start.getTime() && p.ts <= monthRange.end.getTime()).length;
     const paidThisMonth = allCommissionPayments.filter(p=> p.employeeId===e.id && p.monthLabel===monthLabel);
-    const pointsAlreadyPaid = paidThisMonth.reduce((sum,p)=> sum + (p.pointsCount||0), 0);
-    const amountAlreadyPaid = paidThisMonth.reduce((sum,p)=> sum + (p.commissionAmount||0), 0);
+    const pointsAlreadyPaid = paidThisMonth.filter(p=> p.type!=='referrals').reduce((sum,p)=> sum + (p.pointsCount||0), 0);
+    const amountAlreadyPaid = paidThisMonth.filter(p=> p.type!=='referrals').reduce((sum,p)=> sum + (p.commissionAmount||0), 0);
     const newPoints = Math.max(0, pointsThisMonth - pointsAlreadyPaid);
     const newAmount = Math.round(newPoints * commissionPerPoint * 100)/100;
 
+    // 📱 عمولة التنزيلات (منفصلة عن النقط — بسعرها المسجل في كل تنزيل)
+    const refsMonth = (window.appReferrals||[]).filter(r=> r.employeeId===e.id && r.ts>=monthRange.start.getTime() && r.ts<=monthRange.end.getTime());
+    const refAmtMonth = refsMonth.reduce((s,r)=> s+(r.amount||0), 0);
+    const refPaid = paidThisMonth.filter(p=> p.type==='referrals');
+    const refCountPaid = refPaid.reduce((s,p)=> s+(p.pointsCount||0), 0);
+    const refAmtPaid = refPaid.reduce((s,p)=> s+(p.commissionAmount||0), 0);
+    const refNewCount = Math.max(0, refsMonth.length - refCountPaid);
+    const refNewAmt = Math.round(Math.max(0, refAmtMonth - refAmtPaid)*100)/100;
+    const refHtml = refsMonth.length ? `<div class="meta">📱 تنزيلات: ${refsMonth.length} (${refAmtMonth} ج.م)</div>` : '';
+    const refPayBtn = refNewCount>0 ? `<button class="confirmBtnSmall" data-act="payref" data-id="${e.id}" data-count="${refNewCount}" data-amount="${refNewAmt}">📱 ادفع ${refNewAmt} ج.م (${refNewCount} تنزيل)</button>` : '';
     const paidNote = amountAlreadyPaid > 0
       ? `<div class="meta" style="color:var(--sub); font-size:10px;">اتدفع قبل كده: ${amountAlreadyPaid} ج.م (${pointsAlreadyPaid} نقطة)</div>` : '';
     const actionHtml = newPoints <= 0
@@ -2949,11 +3034,27 @@ function renderCommissionPanel(){
     <div class="emp-row" style="flex-wrap:wrap;">
       <div class="n">${e.name}</div>
       <div class="meta">${pointsThisMonth} نقطة إجمالي الشهر</div>
+      ${refHtml}
       ${paidNote}
       ${actionHtml}
+      ${refPayBtn}
     </div>`;
   }).join('');
 
+  wrap.querySelectorAll('[data-act="payref"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const emp = allEmployees.find(e=> e.id === btn.dataset.id);
+      if(!emp) return;
+      if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عمولة ${btn.dataset.count} تنزيل تطبيق (شهر ${monthLabel})؟`)) return;
+      try{
+        await addDoc(commissionPaymentsCol, {
+          employeeId: emp.id, employeeName: emp.name, branch: emp.branch, type: 'referrals',
+          monthLabel, pointsCount: parseInt(btn.dataset.count), commissionAmount: parseFloat(btn.dataset.amount),
+          paidAt: Date.now()
+        });
+      }catch(err){ alert('حصل خطأ: ' + (err && err.code ? err.code : '')); }
+    });
+  });
   wrap.querySelectorAll('[data-act="pay"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const emp = allEmployees.find(e=> e.id === btn.dataset.id);
@@ -2970,6 +3071,7 @@ function renderCommissionPanel(){
   });
 }
 
+window._callRefPanel = setInterval(()=>{ if(typeof renderReferralPanel==='function' && $('#referralList')) { renderReferralPanel(); clearInterval(window._callRefPanel);} }, 800);
 function renderCommissionPaymentLog(){
   const wrap = $('#commissionPaymentLogList');
   if(!wrap) return;
