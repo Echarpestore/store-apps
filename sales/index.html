@@ -813,7 +813,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence
+  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, query, where, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -2049,16 +2049,15 @@ function showToast(empName){
 }
 
 function startForEmployee(empId){
-  requestFullscreenOnce();
+  // ⭐ النقط بقت أوتوماتيك من الكاشير — الضغطة بتعرض ملخص نقاطها بس (مفيش سكان)
   selectedEmp = window.employees.find(e=> e.id === empId);
   if(!selectedEmp) return;
-  // Go straight to the camera. Only fall back to manual typing if the
-  // device/browser genuinely can't scan (unsupported browser or no camera API).
-  if(('BarcodeDetector' in window) && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
-    openScanner();
-  } else {
-    openInvoiceModal();
-  }
+  const mr = getMonthRange(new Date());
+  const monthPts = allPoints.filter(p=> p.employeeId===empId && p.ts>=mr.start.getTime() && p.ts<=mr.end.getTime()).length;
+  const todayPts = allPoints.filter(p=> p.employeeId===empId && p.ts>= new Date().setHours(0,0,0,0)).length;
+  $('#toastMsg').textContent = '⭐ ' + selectedEmp.name + ': النهاردة ' + todayPts + ' · الشهر ' + monthPts + ' نقطة — بتتسجل أوتوماتيك من الكاشير';
+  $('#toast').classList.add('show');
+  setTimeout(()=> $('#toast').classList.remove('show'), 2600);
 }
 
 function openInvoiceModal(){
@@ -2289,6 +2288,7 @@ function initCollapsiblePanels(){
 
 function openAdmin(){
   $('#admin').classList.add('show');
+  initAdminTabs();
   $('#targetCelebration').classList.remove('show'); // safety: never let this linger over the admin panel
   initCollapsiblePanels();
   if(adminUnlocked){
@@ -3017,6 +3017,57 @@ window.staffOrderDecide = async function(id, act){
   }
 };
 
+// ---------- 🗂️ تبويبات لوحة الإدارة (بدل السكرول اللانهائي) ----------
+const ADMIN_TAB_GROUPS = [
+  { id:'emps',  label:'👥 الموظفين',        keys:['إضافة موظف','الموظفين الحاليين','إنهاء خدمة','سجل المغادرين'] },
+  { id:'day',   label:'📊 اليوم والأداء',    keys:['رسالة للموظفين','أداء الموظف','نظرة عامة','مواعيد الحضور'] },
+  { id:'tasks', label:'📋 المهام',           keys:['المهام الأسبوعية','مراجعة تنفيذ','المهام المؤكدة','سجل المكافآت'] },
+  { id:'orders',label:'🛒 أوردرات ودعوات',   keys:['أوردرات الموظفين','أكواد دعوة'] },
+  { id:'money', label:'💵 الفلوس',           keys:['عمولة النقط','سجل دفع العمولات','الرواتب الشهرية','سجل صرف الرواتب','سجل السلف'] }
+];
+let _adminTabsInited = false;
+function initAdminTabs(){
+  if(_adminTabsInited){ _refreshAdminTabDots(); return; }
+  const admin = $('#admin'); if(!admin) return;
+  const panels = [...admin.querySelectorAll(':scope > .panel')];
+  panels.forEach(p=>{
+    const t = (p.querySelector('h3')||{}).textContent || '';
+    const g = ADMIN_TAB_GROUPS.find(gr=> gr.keys.some(k=> t.includes(k)));
+    p.dataset.tabGroup = g ? g.id : 'emps';
+  });
+  const bar = document.createElement('div');
+  bar.id = 'adminTabBar';
+  bar.style.cssText = 'position:sticky; top:0; z-index:60; display:flex; gap:6px; flex-wrap:wrap; background:var(--bg,#12121a); padding:10px 0 12px; margin-bottom:6px; border-bottom:1px solid var(--line,#2a2a38);';
+  bar.innerHTML = ADMIN_TAB_GROUPS.map(g=>
+    `<button data-tab="${g.id}" style="position:relative; padding:10px 16px; border-radius:12px; border:1px solid var(--line,#2a2a38); background:var(--panel2,#1b1b26); color:var(--ink,#eee); font-family:'Cairo'; font-weight:800; font-size:12.5px; cursor:pointer;">${g.label}<span class="tabDot" style="display:none; position:absolute; top:-3px; left:-3px; width:10px; height:10px; border-radius:50%; background:var(--bad,#e5484d);"></span></button>`
+  ).join('');
+  const top = admin.querySelector('.admin-top');
+  top.insertAdjacentElement('afterend', bar);
+  bar.querySelectorAll('button[data-tab]').forEach(b=> b.addEventListener('click', ()=> showAdminTab(b.dataset.tab)));
+  _adminTabsInited = true;
+  showAdminTab(localStorage.getItem('admin_tab') || 'emps');
+  setInterval(_refreshAdminTabDots, 3000);
+}
+function showAdminTab(id){
+  localStorage.setItem('admin_tab', id);
+  $('#admin').querySelectorAll(':scope > .panel').forEach(p=>{
+    p.style.display = (p.dataset.tabGroup === id) ? '' : 'none';
+  });
+  const bar = $('#adminTabBar');
+  if(bar) bar.querySelectorAll('button[data-tab]').forEach(b=>{
+    const on = b.dataset.tab === id;
+    b.style.background = on ? 'var(--gold,#d4af37)' : 'var(--panel2,#1b1b26)';
+    b.style.color = on ? '#1a1200' : 'var(--ink,#eee)';
+  });
+  _refreshAdminTabDots();
+}
+function _refreshAdminTabDots(){
+  const bar = $('#adminTabBar'); if(!bar) return;
+  const dotFor = (tab, on)=>{ const b = bar.querySelector('button[data-tab="'+tab+'"] .tabDot'); if(b) b.style.display = on ? '' : 'none'; };
+  const pend = $('#pendingBadge'); dotFor('tasks', pend && pend.style.display !== 'none' && +pend.textContent > 0);
+  const so = $('#staffOrdersBadge'); dotFor('orders', so && so.style.display !== 'none' && +so.textContent > 0);
+}
+
 function _refAppFor(branch){
   return /glow/i.test(branch||'') ? 'glow' : 'loyalty';
 }
@@ -3082,6 +3133,42 @@ window.showEmpReferralQR = function(emp){
   };
 };
 
+// ---------- 🎯 عمولة التارجت (نسبة من المبيعات عند تحقيق تارجت الموظف/الفرع) ----------
+let staffPointsCfg = null;
+let _tgtCache = { month: null, rows: [], loading: false };
+async function loadTargetData(){
+  const mr = getMonthRange(new Date());
+  const mKey = getMonthLabel();
+  if(_tgtCache.loading || _tgtCache.month === mKey) return;
+  _tgtCache.loading = true;
+  try{
+    const cfgSnap = await getDoc(doc(db, 'pos_test_settings', 'staff_points'));
+    staffPointsCfg = cfgSnap.exists() ? cfgSnap.data() : null;
+    if(staffPointsCfg && staffPointsCfg.targetEnabled && (staffPointsCfg.commissionPct||0) > 0){
+      const qs = await getDocs(query(collection(db, 'pos_test_sales'),
+        where('createdAt', '>=', Timestamp.fromMillis(mr.start.getTime()))));
+      _tgtCache.rows = qs.docs.map(d=>{ const s=d.data(); return {
+        branch: s.branch||'', total: +s.total||0,
+        sellerId: s.sellerEmployeeId || '', reversed: !!s.reversed
+      };}).filter(r=> !r.reversed);
+    } else { _tgtCache.rows = []; }
+    _tgtCache.month = mKey;
+  }catch(e){ console.warn('target data', e); }
+  _tgtCache.loading = false;
+  renderCommissionPanel();
+}
+function _targetInfoFor(emp){
+  const cfg = staffPointsCfg;
+  if(!cfg || !cfg.targetEnabled || !(cfg.commissionPct>0) || !(cfg.targetAmount>0)) return null;
+  const empSales = _tgtCache.rows.filter(r=> r.sellerId===emp.id).reduce((s,r)=> s+r.total, 0);
+  const branchSales = _tgtCache.rows.filter(r=> r.branch===emp.branch).reduce((s,r)=> s+r.total, 0);
+  const basis = cfg.targetScope==='branch' ? branchSales : empSales;
+  const achieved = basis >= cfg.targetAmount;
+  const amount = achieved ? Math.round(empSales * cfg.commissionPct) / 100 : 0;  // pct% من مبيعات الموظفة نفسها
+  return { empSales, branchSales, basis, achieved, amount,
+    scopeLabel: cfg.targetScope==='branch' ? 'الفرع' : 'الموظفة',
+    targetAmount: cfg.targetAmount, pct: cfg.commissionPct };
+}
 function renderCommissionPanel(){
   const input = $('#commissionPerPointInput');
   if(!input) return;
@@ -3091,6 +3178,7 @@ function renderCommissionPanel(){
     : 'لسه معملتش عمولة لهذا الفرع';
 
   const wrap = $('#commissionList');
+  loadTargetData();
   if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const monthLabel = getMonthLabel();
   const monthRange = getMonthRange(new Date());
@@ -3118,14 +3206,29 @@ function renderCommissionPanel(){
     const actionHtml = newPoints <= 0
       ? `<span style="color:var(--good); font-size:11px;">✅ كل النقط لحد دلوقتي مدفوعة</span>`
       : `<button class="confirmBtnSmall" data-act="pay" data-id="${e.id}" data-points="${newPoints}" data-amount="${newAmount}">✅ ادفع ${newAmount} ج.م (${newPoints} نقطة جديدة)</button>`;
+    // 🎯 التارجت
+    const tgt = _targetInfoFor(e);
+    let tgtHtml = '', tgtPayBtn = '';
+    if(tgt){
+      const tgtPaid = paidThisMonth.filter(p=> p.type==='target').reduce((s,p)=> s+(p.commissionAmount||0), 0);
+      const tgtNew = Math.round(Math.max(0, tgt.amount - tgtPaid)*100)/100;
+      if(tgt.achieved){
+        tgtHtml = `<div class="meta" style="color:var(--good);">🎯 حقق تارجت ${tgt.scopeLabel} (${tgt.basis.toFixed(0)} من ${tgt.targetAmount}) → ${tgt.pct}% من مبيعاته ${tgt.empSales.toFixed(0)} = ${tgt.amount} ج.م${tgtPaid?` · اتدفع ${tgtPaid}`:''}</div>`;
+        if(tgtNew > 0) tgtPayBtn = `<button class="confirmBtnSmall" style="background:#7c3aed; color:#fff;" data-act="paytarget" data-id="${e.id}" data-amount="${tgtNew}" data-base="${tgt.empSales.toFixed(0)}">🎯 ادفع عمولة التارجت ${tgtNew} ج.م</button>`;
+      }else{
+        tgtHtml = `<div class="meta" style="color:var(--sub); font-size:10.5px;">🎯 تارجت ${tgt.scopeLabel}: ${tgt.basis.toFixed(0)} من ${tgt.targetAmount} — فاضل ${(tgt.targetAmount - tgt.basis).toFixed(0)} ج.م</div>`;
+      }
+    }
     return `
     <div class="emp-row" style="flex-wrap:wrap;">
       <div class="n">${e.name}</div>
       <div class="meta">${pointsThisMonth} نقطة إجمالي الشهر</div>
       ${refHtml}
+      ${tgtHtml}
       ${paidNote}
       ${actionHtml}
       ${refPayBtn}
+      ${tgtPayBtn}
     </div>`;
   }).join('');
 
@@ -3138,6 +3241,20 @@ function renderCommissionPanel(){
         await addDoc(commissionPaymentsCol, {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch, type: 'referrals',
           monthLabel, pointsCount: parseInt(btn.dataset.count), commissionAmount: parseFloat(btn.dataset.amount),
+          paidAt: Date.now()
+        });
+      }catch(err){ alert('حصل خطأ: ' + (err && err.code ? err.code : '')); }
+    });
+  });
+  wrap.querySelectorAll('[data-act="paytarget"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const emp = allEmployees.find(e=> e.id === btn.dataset.id);
+      if(!emp) return;
+      if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عمولة تحقيق التارجت (${btn.dataset.base} ج.م مبيعات — شهر ${monthLabel})؟`)) return;
+      try{
+        await addDoc(commissionPaymentsCol, {
+          employeeId: emp.id, employeeName: emp.name, branch: emp.branch, type: 'target',
+          monthLabel, commissionAmount: parseFloat(btn.dataset.amount), salesBase: parseFloat(btn.dataset.base),
           paidAt: Date.now()
         });
       }catch(err){ alert('حصل خطأ: ' + (err && err.code ? err.code : '')); }
