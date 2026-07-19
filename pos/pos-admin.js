@@ -101,13 +101,15 @@ function invSort(col){
 }
 
 let invSelected = new Set();   // تحديد متعدد بالـ Ctrl+Click لطباعة الليبلات
+let _invClickTimer = null;
 function invRowClick(e, id){
-  if(e.ctrlKey || e.metaKey){
+  // دوسة واحدة = تحديد/إلغاء تحديد · دبل كليك = فتح صفحة المنتج
+  if(_invClickTimer){ clearTimeout(_invClickTimer); _invClickTimer = null; openProductDetails(id); return; }
+  _invClickTimer = setTimeout(()=>{
+    _invClickTimer = null;
     if(invSelected.has(id)) invSelected.delete(id); else invSelected.add(id);
     renderInventoryList();
-    return;
-  }
-  openProductDetails(id);
+  }, 260);
 }
 function printSelectedLabels(){
   if(!hasPerm('canPrintLabel')){ showToast('مفيش صلاحية طباعة الليبل', 'err'); return; }

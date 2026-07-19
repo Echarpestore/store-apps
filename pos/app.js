@@ -213,11 +213,16 @@ async function renderReceiptDesignScreen(){
     if(!def) def = {label:el.id};
     const isText = def.kind==='text', isLogo = def.kind==='logo';
     const isDyn = def.kind==='dyn', isSpacer = el.id.indexOf('spacer')===0;
+    const listKey = togglePath.indexOf('label')>=0 ? 'label' : 'receipt';
     return `
-    <div style="${S.row} ${el.on?'':'opacity:.45;'}">
-      <div style="display:flex; flex-direction:column;">
-        <button onclick="${moveFn}(${i},-1)" ${i===0?'disabled':''} style="border:none; background:none; color:var(--muted); cursor:pointer; padding:0 4px; font-size:13px;">▲</button>
-        <button onclick="${moveFn}(${i},1)" style="border:none; background:none; color:var(--muted); cursor:pointer; padding:0 4px; font-size:13px;">▼</button>
+    <div draggable="true"
+         ondragstart="dsDragStart(event, ${i}, '${listKey}')" ondragover="dsDragOver(event, ${i}, '${listKey}')"
+         ondrop="dsDrop(event, ${i}, '${listKey}')" ondragend="dsDragEnd(event)"
+         style="${S.row} ${el.on?'':'opacity:.45;'}">
+      <div style="display:flex; flex-direction:column; align-items:center;">
+        <span title="اسحب لإعادة الترتيب" style="cursor:grab; color:var(--muted); font-size:14px; line-height:1; padding:1px 4px; user-select:none;">⠿</span>
+        <button onclick="${moveFn}(${i},-1)" ${i===0?'disabled':''} style="border:none; background:none; color:var(--muted); cursor:pointer; padding:0 4px; font-size:12px;">▲</button>
+        <button onclick="${moveFn}(${i},1)" style="border:none; background:none; color:var(--muted); cursor:pointer; padding:0 4px; font-size:12px;">▼</button>
       </div>
       <label class="dsw" style="position:relative; width:38px; height:22px; flex-shrink:0; cursor:pointer;">
         <input type="checkbox" ${el.on?'checked':''} onchange="${togglePath}[${i}].on=this.checked; renderReceiptDesignScreen();" style="opacity:0; width:0; height:0;">
@@ -270,8 +275,8 @@ async function renderReceiptDesignScreen(){
 
     <div style="display:flex; gap:8px; align-items:center; margin:2px 2px 8px;">
       <span style="font-size:11px; color:var(--muted); flex:1;">✥ رتّب بالأسهم · − + للحجم</span>
-      <button onclick="addReceiptSpacer()" style="${S.chip}">➕ مسافة</button>
-      <button onclick="addReceiptDivider()" style="${S.chip}">➕ خط فاصل</button>
+      <span style="display:flex; align-items:center; gap:3px;"><button onclick="addReceiptSpacer()" style="${S.chip}">➕ مسافة</button><button onclick="addReceiptSpacerN(3)" style="${S.chip} padding:7px 8px;">×3</button></span>
+      <span style="display:flex; align-items:center; gap:3px;"><button onclick="addReceiptDivider()" style="${S.chip}">➕ خط</button><button onclick="addReceiptDividerN(3)" style="${S.chip} padding:7px 8px;">×3</button></span>
     </div>
     ${c.elements.map((el,i)=> elRow(el, i, RECEIPT_ELEMENTS, 'moveReceiptEl', 'receiptDesignConfig.elements', 'receiptDesignConfig.elements', 'refreshReceiptPreview')).join('')}`;
 
@@ -443,6 +448,8 @@ function setLabelSize(v){
   if(box) box.style.display = v==='custom' ? 'flex' : 'none';
   refreshLabelPreview();
 }
+function addReceiptSpacerN(n){ for(let k=0;k<n;k++) receiptDesignConfig.elements.push({ id:'spacer_'+Date.now().toString(36)+k, on:true, size:10 }); renderReceiptDesignScreen(); }
+function addReceiptDividerN(n){ for(let k=0;k<n;k++) receiptDesignConfig.elements.push({ id:'divider_'+Date.now().toString(36)+k, on:true }); renderReceiptDesignScreen(); }
 function addReceiptSpacer(){
   receiptDesignConfig.elements.push({ id:'spacer_'+Date.now().toString(36), on:true, size:10 });
   renderReceiptDesignScreen();
@@ -464,6 +471,27 @@ function deleteReceiptEl(i){
   receiptDesignConfig.elements.splice(i,1);
   renderReceiptDesignScreen();
 }
+// 🖱️ سحب وإفلات لإعادة ترتيب عناصر الفاتورة/الليبل
+let _dsDrag = null;   // {from, list}
+function _dsArr(list){ return list==='label' ? receiptDesignConfig.label.elements : receiptDesignConfig.elements; }
+function dsDragStart(e, i, list){ _dsDrag = {from:i, list}; e.dataTransfer.effectAllowed='move'; e.currentTarget.style.opacity='.35'; }
+function dsDragOver(e, i, list){
+  if(!_dsDrag || _dsDrag.list!==list) return;
+  e.preventDefault(); e.dataTransfer.dropEffect='move';
+  e.currentTarget.style.borderTop = i < _dsDrag.from ? '2.5px solid #818cf8' : '';
+  e.currentTarget.style.borderBottom = i > _dsDrag.from ? '2.5px solid #818cf8' : '';
+}
+function dsDrop(e, i, list){
+  if(!_dsDrag || _dsDrag.list!==list) return;
+  e.preventDefault();
+  const arr = _dsArr(list);
+  const [moved] = arr.splice(_dsDrag.from, 1);
+  arr.splice(i, 0, moved);
+  _dsDrag = null;
+  renderReceiptDesignScreen();
+}
+function dsDragEnd(e){ _dsDrag = null; renderReceiptDesignScreen(); }
+
 function moveReceiptEl(i, dir){
   const arr = receiptDesignConfig.elements;
   const j = i + dir; if(j<0 || j>=arr.length) return;
