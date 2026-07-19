@@ -31,6 +31,10 @@ searchBar.addEventListener('keydown', (e)=>{
       addToCart(match);
       searchBar.value = '';
       document.getElementById('suggestBox').innerHTML = '';
+    }else if(/^EC[A-Z2-9]{10}$/.test(code.toUpperCase())){
+      // 🎫 كارت موظف → تفعيل وضع شراء الموظف بالخصم
+      activateStaffPurchase(code.toUpperCase());
+      searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
     }else if(/^ECH/i.test(code) || /^GLW/i.test(code)){
       // كود عضوية عميل (echarpe ECH أو Glow GLW) → نربط العميل بالفاتورة
       resolveLoyaltyScan(code.toUpperCase()).then(found=>{
@@ -436,7 +440,87 @@ function removeFromCart(idx){
   renderCart();
 }
 
-function cartTotal(){ return cart.reduce((s,c)=> s + c.price*c.qty, 0); }
+// ---------- 🎫 وضع شراء الموظف ----------
+let staffPurchase = null;   // {empId, name, pct, usedThisMonth, maxTimes, salaryUsed, salaryCap} لما موظفة تمسح كارتها
+function cartSubtotal(){ return cart.reduce((s,c)=> s + c.price*c.qty, 0); }
+function staffDiscountAmount(){
+  if(!staffPurchase) return 0;
+  const sub = cartSubtotal();
+  if(sub <= 0) return 0;   // مفيش خصم موظف على المرتجعات
+  return +(sub * staffPurchase.pct / 100).toFixed(2);
+}
+function cartTotal(){ return +(cartSubtotal() - staffDiscountAmount()).toFixed(2); }
+
+async function activateStaffPurchase(code){
+  try{
+    if(typeof loadStaffCardsConfig === 'function' && !staffCardsConfig) await loadStaffCardsConfig();
+    const cfg = (typeof staffCardsConfig !== 'undefined' && staffCardsConfig) ? staffCardsConfig : null;
+    if(!cfg || !cfg.enabled){ showToast('خصم شراء الموظفين مش مفعّل (شاشة بطاقات الموظفين)', 'err'); return; }
+    const snap = await db.collection('sales_employees').where('cardCode','==',code).limit(1).get();
+    if(snap.empty){ showToast('الكارت ده مش متسجّل', 'err'); return; }
+    const emp = { id: snap.docs[0].id, ...snap.docs[0].data() };
+
+    // استخدامات الشهر (المعلّقة والمعتمدة بتتحسب — المرفوضة لأ)
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const os = await db.collection('sales_staff_orders').where('employeeId','==',emp.id).get();
+    const monthOrders = os.docs.map(d=>d.data()).filter(o=> o.ts >= monthStart && o.status !== 'rejected');
+    const used = monthOrders.length;
+    const salaryUsed = monthOrders.filter(o=> o.payMethod==='salary').reduce((s,o)=> s + (o.total||0), 0);
+
+    if(used >= (cfg.maxTimesPerMonth||0)){
+      showToast('⛔ ' + emp.name + ' استخدمت كل مرات الشهر (' + cfg.maxTimesPerMonth + ')', 'err');
+      return;
+    }
+    staffPurchase = {
+      empId: emp.id, name: emp.name || '', pct: cfg.discountPct || 0,
+      usedThisMonth: used, maxTimes: cfg.maxTimesPerMonth || 0,
+      salaryUsed: salaryUsed, salaryCap: cfg.maxSalaryEGP || 0
+    };
+    renderStaffPurchaseBar();
+    renderCart();
+    showToast('🎫 وضع شراء موظف: ' + emp.name + ' — خصم ' + staffPurchase.pct + '%');
+  }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
+function cancelStaffPurchase(){
+  staffPurchase = null;
+  renderStaffPurchaseBar();
+  renderCart();
+}
+function renderStaffPurchaseBar(){
+  let bar = document.getElementById('staffPurchaseBar');
+  if(!staffPurchase){ if(bar) bar.remove(); _syncSalaryPayBtn(); return; }
+  const salaryLeft = Math.max(0, staffPurchase.salaryCap - staffPurchase.salaryUsed);
+  const html = `
+    <span>🎫 <b>شراء موظف: ${staffPurchase.name}</b> · خصم ${staffPurchase.pct}% · المرة ${staffPurchase.usedThisMonth+1} من ${staffPurchase.maxTimes} · متاح خصم راتب: ${salaryLeft.toFixed(0)} ج.م</span>
+    <button onclick="cancelStaffPurchase()" style="border:none; background:rgba(255,255,255,.25); color:inherit; border-radius:7px; padding:4px 10px; cursor:pointer; font-weight:800;">✖ إلغاء</button>`;
+  if(!bar){
+    bar = document.createElement('div');
+    bar.id = 'staffPurchaseBar';
+    bar.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:8px; background:linear-gradient(90deg,#7c3aed,#a855f7); color:#fff; padding:9px 14px; font-size:12.5px; border-radius:10px; margin:6px 10px;';
+    const sb = document.getElementById('searchBar');
+    if(sb && sb.parentNode) sb.parentNode.insertBefore(bar, sb);
+    else document.getElementById('saleScreen').prepend(bar);
+  }
+  bar.innerHTML = html;
+  _syncSalaryPayBtn();
+}
+function _syncSalaryPayBtn(){
+  const box = document.querySelector('.qbx-pay-btns');
+  if(!box) return;
+  let btn = document.getElementById('pmSalary');
+  if(staffPurchase && !btn){
+    btn = document.createElement('button');
+    btn.id = 'pmSalary';
+    btn.innerHTML = '<span class="pm-icon">📄</span>خصم من الراتب';
+    btn.onclick = ()=> togglePayMethod('salary');
+    box.appendChild(btn);
+  }
+  if(!staffPurchase && btn){
+    btn.remove();
+    if(selectedPayMethods && selectedPayMethods.has('salary')){ selectedPayMethods.delete('salary'); delete paymentAmounts.salary; updatePaySummary(); }
+  }
+}
 
 // ---------------- Customer lookup (loyalty - test) ----------------
 // لو الرقم متسجلش، بيوري صف "إضافة عميل جديد" عشان الكاشير يكتب الاسم ويسجله على طول.
@@ -860,14 +944,20 @@ function togglePayMethod(method){
   const requiredAbs = Math.abs(total);
   const alreadyEnteredAbs = Object.keys(paymentAmounts).reduce((s,m)=> m===method ? s : s + Math.abs(paymentAmounts[m]), 0);
   const remaining = Math.max(0, +(requiredAbs - alreadyEnteredAbs).toFixed(2));
-  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
+  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي', salary:'📄 خصم من الراتب'};
 
   document.getElementById('payAmountTitle').textContent = labels[method] + (isRefund ? ' (إرجاع للعميل)' : '');
   const input = document.getElementById('payAmountInput');
   // بيع عادي + كاش: فاضية عشان الكاشير يكتب المبلغ اللي استلمه فعليًا (والباقي بيتحسب تلقائي).
   // بيع عادي + فيزا/انستا باي: مقترحة تلقائي بباقي الفاتورة.
   // فاتورة مرتجع (الإجمالي بالسالب): مقترحة تلقائي بقيمة المبلغ المطلوب إرجاعه للعميل، بأي وسيلة.
-  input.value = (method === 'cash' && !isRefund) ? '' : remaining.toFixed(2);
+  let _suggest = remaining;
+  if(method === 'salary' && staffPurchase){
+    const salaryLeft = Math.max(0, staffPurchase.salaryCap - staffPurchase.salaryUsed);
+    _suggest = Math.min(remaining, salaryLeft);
+    if(salaryLeft <= 0){ showToast('⛔ وصلت للحد الأقصى لخصم الراتب الشهر ده (' + staffPurchase.salaryCap + ' ج.م)', 'err'); return; }
+  }
+  input.value = (method === 'cash' && !isRefund) ? '' : _suggest.toFixed(2);
   document.getElementById('payAmountChange').textContent = '';
   document.getElementById('payAmountModal').classList.add('active');
   input.oninput = ()=> updatePayAmountChangeLive(method, total, alreadyEnteredAbs);
@@ -924,7 +1014,7 @@ function updatePaySummary(){
   const change = (!isRefund) ? Math.max(0, +(enteredAbs - requiredAbs).toFixed(2)) : 0;
   const confirmBtn = document.getElementById('confirmPayBtn');
 
-  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
+  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي', salary:'📄 خصم من الراتب'};
   const payList = document.getElementById('qbxPayList');
   if(payList){
     payList.innerHTML = Array.from(selectedPayMethods).map(m=>
@@ -1012,6 +1102,16 @@ async function _doConfirmPayment(){
   const sellerEmployeeName = sellerSel && sellerSel.value ? sellerSel.options[sellerSel.selectedIndex].dataset.name : (currentEmployee.name || '');
 
   try{
+    // 🎫 تحقق شراء الموظف: خصم الراتب في حدود السقف الشهري + سلة مش مرتجع
+    if(staffPurchase && payments.salary){
+      const salaryLeft = Math.max(0, staffPurchase.salaryCap - staffPurchase.salaryUsed);
+      if(payments.salary > salaryLeft + 0.01){
+        showToast('⛔ خصم الراتب المتاح للموظفة الشهر ده: ' + salaryLeft.toFixed(0) + ' ج.م بس', 'err');
+        return;
+      }
+    }
+    if(payments.salary && !staffPurchase){ showToast('خصم الراتب متاح في وضع شراء الموظف بس', 'err'); return; }
+
     // 1) سجل البيع
     await db.collection(TEST_SALES).add({
       invoiceNo,
@@ -1027,8 +1127,30 @@ async function _doConfirmPayment(){
       loyaltyPointsEarned,
       pointsRedeemed: (pendingRedemption ? pendingRedemption.points : 0),
       staffPointEarned: earnsStaffPoint,
+      staffPurchase: staffPurchase ? { empId: staffPurchase.empId, name: staffPurchase.name, pct: staffPurchase.pct, discountAmount: staffDiscountAmount() } : null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
+
+    // 🎫 أوردر الموظف → بيتسجل "مستني اعتماد" في برنامج الحضور (خانة أوردرات الموظفين)
+    if(staffPurchase){
+      try{
+        await db.collection('sales_staff_orders').add({
+          employeeId: staffPurchase.empId,
+          employeeName: staffPurchase.name,
+          branch: currentBranch,
+          invoiceNo, invoiceCode,
+          total,                                   // بعد الخصم
+          fullTotal: +(cartSubtotal()).toFixed(2), // قبل الخصم
+          discountPct: staffPurchase.pct,
+          discountAmount: staffDiscountAmount(),
+          payMethod: payments.salary ? 'salary' : 'cash',
+          payments,
+          status: 'pending',
+          ts: Date.now()
+        });
+      }catch(e){ console.error('staff order log', e); }
+      cancelStaffPurchase();
+    }
 
     // 2) خصم من المخزون التجريبي (باستثناء سطور مش منتجات فعلية: استبدال نقط، مكافأة، أي id محجوز)
     const stockLines = cart.filter(c=> !c.isRedemption && !c.isRewardDiscount && c.id && !String(c.id).startsWith('__'));
