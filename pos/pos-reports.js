@@ -761,7 +761,11 @@ async function goToEndOfDay(){
   let advancesTotal = 0;
   try{
     const advSnap = await db.collection('sales_advances').where('branch','==', currentBranch).get();
-    advSnap.forEach(d=>{ const a=d.data(); const t = a.ts || (a.date ? Date.parse(a.date) : 0); if(t >= dayMs) advancesTotal += (+a.amount||0); });
+    advSnap.forEach(d=>{
+      const a=d.data(); const t = a.ts || (a.date ? Date.parse(a.date) : 0);
+      // سلف أوردرات الموظفين "ورقية" (خصم مرتبات) — مفيش كاش خرج من الدرج، فمش بتدخل حساب الدرج
+      if(t >= dayMs && String(a.source||'').indexOf('staff_order') !== 0) advancesTotal += (+a.amount||0);
+    });
   }catch(e){ console.warn('advances', e); }
 
   dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length };
@@ -795,7 +799,8 @@ async function goToEndOfDay(){
       <div class="dc-card-h">🧾 خصومات من الدرج</div>
       ${dcField('العهدة (فكّة أول اليوم)', 'dc_float', lastFloat, 'بتتخصم — مش إيراد')}
       ${dcField('مصروفات اليوم (طلعت كاش)', 'dc_expenses', '', 'اللي اتصرف من الدرج')}
-      ${dcField('سلف اليوم', 'dc_advances', advancesTotal || '', 'اللي اتاخد سلف من الدرج')}
+      ${dcField('سلف اليوم', 'dc_advances', advancesTotal || '', 'اللي اتاخد سلف كاش من الدرج')}
+      ${salarySales>0 ? dcField('📄 خصم راتب موظفين', 'dc_salary', salarySales.toFixed(0), 'بضاعة خرجت بأوردرات موظفين — بتترحّل للمرتبات، مش عجز') : ''}
     </div>
 
     <div class="dc-card">
@@ -841,9 +846,10 @@ function dcFinish(){
   let counted = 0; denoms.forEach(d=> counted += dcNum('dc_den_'+d) * d);
   const flt = dcNum('dc_float'), exp = dcNum('dc_expenses'), adv = dcNum('dc_advances');
   const visa = dcNum('dc_visa'), insta = dcNum('dc_insta');
+  const salary = dcNum('dc_salary');   // 📄 أوردرات موظفين بخصم الراتب — قيمة مترحّلة للمرتبات (مش فلوس درج)
 
-  // المفروض يتجمّع فعليًا = (كاش معدود − عهدة) + مصروفات + سلف + فيزا + انستا
-  const accounted = (counted - flt) + exp + adv + visa + insta;
+  // المفروض يتجمّع فعليًا = (كاش معدود − عهدة) + مصروفات + سلف + فيزا + انستا + خصم راتب مترحّل
+  const accounted = (counted - flt) + exp + adv + visa + insta + salary;
   const overShort = +(accounted - dcData.systemTotal).toFixed(2);
 
   const isShort = overShort < -0.01, isOver = overShort > 0.01;
@@ -862,6 +868,7 @@ function dcFinish(){
           <div><span>+ سلف</span><b>${adv.toFixed(2)}</b></div>
           <div><span>+ فيزا</span><b>${visa.toFixed(2)}</b></div>
           <div><span>+ انستاباي</span><b>${insta.toFixed(2)}</b></div>
+          ${salary>0?`<div><span>+ 📄 راتب موظفين (للمرتبات)</span><b>${salary.toFixed(2)}</b></div>`:''}
           <div class="dc-res-sep"><span>= إجمالي محسوب</span><b>${accounted.toFixed(2)}</b></div>
           <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>
         </div>
@@ -881,7 +888,7 @@ function dcFinish(){
   // نحفظ سجل التقفيل (جوه pos_test_settings عشان القواعد الحالية تسمح بيه)
   const rec = {
     type:'dayclose', branch: currentBranch, date: todayISO(),
-    countedCash: counted, float: flt, expenses: exp, advances: adv, visa, instapay: insta,
+    countedCash: counted, float: flt, expenses: exp, advances: adv, visa, instapay: insta, salaryDeferred: salary,
     systemTotal: dcData.systemTotal, cashSales: dcData.cashSales, visaSales: dcData.visaSales, instaSales: dcData.instaSales,
     accounted, overShort, invoiceCount: dcData.invoiceCount,
     closedBy: (typeof currentEmployee!=='undefined' && currentEmployee) ? (currentEmployee.name||'') : '',
