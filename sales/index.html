@@ -754,7 +754,7 @@
 
     <div class="panel">
       <h3>📱 أكواد دعوة الموظفين (تنزيلات التطبيق)</h3>
-      <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">كل موظفة ليها كود شخصي — العميلة اللي تنزّل التطبيق وتفعّل الإشعارات عن طريقه، الموظفة تاخد العمولة المحددة في الكاشير (شاشة برنامج الولاء). اطبع الكارت وخليه معاها.</p>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">كل موظفة ليها كود شخصي — العميلة اللي تنزّل التطبيق عن طريقه، العمولة بتتسجل ⏳ وبتتفعّل ✅ تلقائي بعد <b>أول فاتورة شراء حقيقية</b> للعميلة (حماية من التنزيلات الوهمية). القيمة والحد الأدنى من الكاشير → شاشة برنامج الولاء.</p>
       <div id="referralList"></div>
     </div>
 
@@ -3022,6 +3022,7 @@ function _refAppFor(branch){
 function _refUrl(emp, app){
   return 'https://echarpestore.github.io/store-apps/' + app + '/?src=emp-' + emp.id;
 }
+function _refIsActive(r){ return !r.status || r.status === 'active'; }
 window.renderReferralPanel = function(){
   const wrap = $('#referralList'); if(!wrap) return;
   const emps = reviewEmployeesFor(viewBranch);
@@ -3030,10 +3031,12 @@ window.renderReferralPanel = function(){
   wrap.innerHTML = emps.map(e=>{
     const mine = (window.appReferrals||[]).filter(r=> r.employeeId===e.id);
     const month = mine.filter(r=> r.ts>=mr.start.getTime() && r.ts<=mr.end.getTime());
-    const monthAmt = month.reduce((s,r)=> s+(r.amount||0), 0);
+    const monthActive = month.filter(_refIsActive);
+    const monthPending = month.length - monthActive.length;
+    const monthAmt = monthActive.reduce((s,r)=> s+(r.amount||0), 0);
     return `<div class="emp-row" style="flex-wrap:wrap;">
       <div class="n">${e.name}</div>
-      <div class="meta">📱 الشهر ده: ${month.length} تنزيل (${monthAmt} ج.م) · الإجمالي: ${mine.length}</div>
+      <div class="meta">📱 الشهر ده: ✅ ${monthActive.length} مفعّلة (${monthAmt} ج.م)${monthPending?` · ⏳ ${monthPending} مستنية أول شراء`:''} · الإجمالي: ${mine.filter(_refIsActive).length}</div>
       <button class="confirmBtnSmall" data-refqr="${e.id}">🎫 كود الدعوة</button>
     </div>`;
   }).join('');
@@ -3100,7 +3103,7 @@ function renderCommissionPanel(){
     const newAmount = Math.round(newPoints * commissionPerPoint * 100)/100;
 
     // 📱 عمولة التنزيلات (منفصلة عن النقط — بسعرها المسجل في كل تنزيل)
-    const refsMonth = (window.appReferrals||[]).filter(r=> r.employeeId===e.id && r.ts>=monthRange.start.getTime() && r.ts<=monthRange.end.getTime());
+    const refsMonth = (window.appReferrals||[]).filter(r=> r.employeeId===e.id && r.ts>=monthRange.start.getTime() && r.ts<=monthRange.end.getTime() && _refIsActive(r));
     const refAmtMonth = refsMonth.reduce((s,r)=> s+(r.amount||0), 0);
     const refPaid = paidThisMonth.filter(p=> p.type==='referrals');
     const refCountPaid = refPaid.reduce((s,p)=> s+(p.pointsCount||0), 0);
