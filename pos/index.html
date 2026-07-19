@@ -536,6 +536,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
             <div class="qb-nav-item" id="navReceiptDesign" onclick="goToReceiptDesign()" style="display:none;"><div class="qb-icon">🖨️</div><div class="qb-label">تصميم الفاتورة</div></div>
             <div class="qb-nav-item" id="navLoyalty" onclick="goToLoyaltyScreen()" style="display:none;"><div class="qb-icon">🎁</div><div class="qb-label">برنامج الولاء</div></div>
             <div class="qb-nav-item" id="navStaffCards" onclick="goToStaffCards()" style="display:none;"><div class="qb-icon">🎫</div><div class="qb-label">بطاقات الموظفين</div></div>
+            <div class="qb-nav-item" id="navTransfers" onclick="goToTransfers()"><div class="qb-icon">🚚</div><div class="qb-label">التحويلات</div></div>
           </div>
         </div>
       </div>
@@ -777,6 +778,14 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 </div>
 
 <!-- ============ LOYALTY PROGRAM (manager only) ============ -->
+<div class="screen mgmt-light" id="transfersScreen">
+  <div class="mgmt-topbar">
+    <div><h1>🚚 التحويلات بين الفروع</h1></div>
+    <button class="secondary" onclick="showScreen('adminScreen')">⬅️ رجوع</button>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="transfersWrap"></div>
+</div>
+
 <div class="screen mgmt-light" id="staffCardsScreen">
   <div class="mgmt-topbar">
     <div><h1>🎫 بطاقات الموظفين</h1></div>
@@ -1085,5 +1094,6 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <script src="search.js"></script>
 <script src="loyalty.js"></script>
 <script src="staff.js"></script>
+<script src="transfers.js"></script>
 </body>
 </html>

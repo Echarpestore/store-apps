@@ -460,6 +460,12 @@ async function activateStaffPurchase(code){
     if(snap.empty){ showToast('الكارت ده مش متسجّل', 'err'); return; }
     const emp = { id: snap.docs[0].id, ...snap.docs[0].data() };
 
+    // 🚚 أولوية: لو الموظفة دي حاملة تحويلة جاية للفرع ده — نفتح الاستلام بدل الشراء
+    if(typeof checkIncomingTransferFor === 'function'){
+      const hasTransfer = await checkIncomingTransferFor(emp.id);
+      if(hasTransfer) return;
+    }
+
     // استخدامات الشهر (المعلّقة والمعتمدة بتتحسب — المرفوضة لأ)
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
