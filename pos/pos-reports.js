@@ -746,8 +746,16 @@ async function goToEndOfDay(){
   }catch(e){ console.warn('sales', e); }
 
   const systemTotal = sales.reduce((s,x)=> s + (x.total||0), 0);
-  let cashSales=0, visaSales=0, instaSales=0;
-  sales.forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); });
+  let cashSales=0, visaSales=0, instaSales=0, salarySales=0;
+  sales.forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); salarySales+=(p.salary||0); });
+
+  // 🎫 أوردرات الموظفين النهاردة (للعرض في التقفيل — خصم الراتب مش بيدخل الدرج)
+  let staffOrdersToday = [];
+  try{
+    const soSnap = await db.collection('sales_staff_orders').where('branch','==', currentBranch).get();
+    staffOrdersToday = soSnap.docs.map(d=>d.data()).filter(o=> o.ts >= dayMs && o.status !== 'rejected');
+  }catch(e){ console.warn('staff orders', e); }
+  const staffOrdersTotal = staffOrdersToday.reduce((s,o)=> s + (o.total||0), 0);
 
   // سلف النهاردة من برنامج المبيعات (sales_advances)
   let advancesTotal = 0;
@@ -756,7 +764,7 @@ async function goToEndOfDay(){
     advSnap.forEach(d=>{ const a=d.data(); const t = a.ts || (a.date ? Date.parse(a.date) : 0); if(t >= dayMs) advancesTotal += (+a.amount||0); });
   }catch(e){ console.warn('advances', e); }
 
-  dcData = { systemTotal, cashSales, visaSales, instaSales, advancesTotal, invoiceCount: sales.length };
+  dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length };
   const lastFloat = parseFloat(localStorage.getItem('dc_float_'+currentBranch)) || '';
 
   const denoms = [200,100,50,20,10,5];
@@ -773,7 +781,8 @@ async function goToEndOfDay(){
   wrap.innerHTML = `
     ${isMgr ? `<div class="dc-summary">
       <div><div class="dc-sm-lbl">مبيعات النهاردة (السيستم)</div><div class="dc-sm-val">${systemTotal.toFixed(2)} <span>ج.م</span></div></div>
-      <div class="dc-sm-sub">${dcData.invoiceCount} فاتورة · كاش ${cashSales.toFixed(0)} · فيزا ${visaSales.toFixed(0)} · انستا ${instaSales.toFixed(0)}</div>
+      <div class="dc-sm-sub">${dcData.invoiceCount} فاتورة · كاش ${cashSales.toFixed(0)} · فيزا ${visaSales.toFixed(0)} · انستا ${instaSales.toFixed(0)}${salarySales>0?` · 📄 راتب موظفين ${salarySales.toFixed(0)}`:''}</div>
+      ${staffOrdersToday.length?`<div class="dc-sm-sub" style="color:#c084fc;">🎫 أوردرات موظفين النهاردة: ${staffOrdersToday.length} (${staffOrdersTotal.toFixed(0)} ج.م — منها ${salarySales.toFixed(0)} خصم راتب مش داخل الدرج)</div>`:''}
     </div>` : `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:14px; color:var(--muted); font-size:12.5px; text-align:center;">اعدّ الدرج واملأ البيانات، وفي الآخر دوس تأكيد — النتيجة بتتسجّل للمدير.</div>`}
 
     <div class="dc-card">
