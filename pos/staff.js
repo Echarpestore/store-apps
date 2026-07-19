@@ -52,6 +52,25 @@ async function renderStaffCardsScreen(){
       <button onclick="saveStaffCardsConfig()" style="margin-top:14px; width:100%; padding:12px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">حفظ الإعدادات</button>
     </div>
 
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:14px;">
+      <div style="font-weight:800; margin-bottom:4px;">⭐ نقاط البيع الأوتوماتيك + 🎯 نسبة التارجت</div>
+      <p style="color:var(--muted); font-size:12px; margin:0 0 12px;">النقطة بتتسجل لوحدها للبياعة المختارة وقت الدفع لما الفاتورة تستوفي الشروط دي — من غير أي سكان في برنامج الحضور.</p>
+      <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+        <label style="font-size:12.5px;">أقل عدد قطع: <input id="spMinItems" type="number" min="1" style="width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800;"></label>
+        <label style="font-size:12.5px;">أقل قيمة فاتورة: <input id="spMinInvoice" type="number" min="0" style="width:90px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800;"> ج.م (0 = مفيش حد)</label>
+      </div>
+      <div style="border-top:1px dashed var(--border); padding-top:10px; display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <label style="font-size:12.5px; display:flex; align-items:center; gap:6px;"><input type="checkbox" id="spTargetEnabled" style="width:18px; height:18px;"> 🎯 نسبة من المبيعات عند تحقيق تارجت</label>
+        <select id="spTargetScope" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:12px;">
+          <option value="employee">تارجت الموظفة نفسها</option>
+          <option value="branch">تارجت الفرع كله</option>
+        </select>
+        <label style="font-size:12.5px;">التارجت الشهري: <input id="spTargetAmount" type="number" min="0" style="width:100px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800;"> ج.م</label>
+        <label style="font-size:12.5px;">النسبة: <input id="spCommissionPct" type="number" min="0" step="0.1" style="width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800;"> %</label>
+      </div>
+      <button onclick="saveStaffPointsSettings()" style="margin-top:12px; padding:10px 18px; border-radius:9px; border:none; background:var(--accent); color:#fff; font-weight:800; cursor:pointer;">💾 حفظ إعدادات النقاط</button>
+    </div>
+
     <div style="background:var(--panel); border:1.5px solid var(--warn); border-radius:14px; padding:16px; margin-bottom:14px;">
       <div style="font-weight:800; margin-bottom:4px;">👑 حساب الأدمن العام</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 12px;">بيظهر في شاشة الدخول على <b>كل الفروع</b> (والجديدة تلقائيًا) بكل الصلاحيات — انت اللي بتحدد الرقم السري.</p>
@@ -83,9 +102,38 @@ async function renderStaffCardsScreen(){
       </div>`;
     }).join('') || '<div class="empty-cart">لسه مفيش موظفين في نظام المبيعات</div>'}`;
   _refreshAdminAccStatus();
+  _loadStaffPointsSettingsUI();
 }
 
 const ADMIN_ACC_ID = 'admin_master';
+async function _loadStaffPointsSettingsUI(){
+  try{
+    const d = await db.collection(TEST_SETTINGS).doc('staff_points').get();
+    const c = d.exists ? d.data() : {};
+    const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.value = (v!=null? v : ''); };
+    set('spMinItems', c.minItems!=null? c.minItems : 5);
+    set('spMinInvoice', c.minInvoice!=null? c.minInvoice : 0);
+    set('spTargetAmount', c.targetAmount||'');
+    set('spCommissionPct', c.commissionPct||'');
+    const cb=document.getElementById('spTargetEnabled'); if(cb) cb.checked = !!c.targetEnabled;
+    const sc=document.getElementById('spTargetScope'); if(sc) sc.value = c.targetScope||'employee';
+  }catch(e){}
+}
+async function saveStaffPointsSettings(){
+  try{
+    await db.collection(TEST_SETTINGS).doc('staff_points').set({
+      enabled: true,
+      minItems: parseInt(document.getElementById('spMinItems').value)||5,
+      minInvoice: parseFloat(document.getElementById('spMinInvoice').value)||0,
+      targetEnabled: document.getElementById('spTargetEnabled').checked,
+      targetScope: document.getElementById('spTargetScope').value,
+      targetAmount: parseFloat(document.getElementById('spTargetAmount').value)||0,
+      commissionPct: parseFloat(document.getElementById('spCommissionPct').value)||0
+    }, { merge:true });
+    if(typeof staffPointsConfig !== 'undefined') staffPointsConfig = null;   // يتقري تاني في البيعة الجاية
+    showToast('⭐ اتحفظت إعدادات النقاط والتارجت');
+  }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
 async function _refreshAdminAccStatus(){
   const box = document.getElementById('adminAccStatus'); if(!box) return;
   try{

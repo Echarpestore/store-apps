@@ -49,6 +49,7 @@ function focusSearchBar(){
 function resumeOrStartSale(){
   if(cart.length > 0){
     if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
+  if(typeof loadStaffPointsConfig === 'function' && !staffPointsConfig) loadStaffPointsConfig();
     loadLoyaltyRedemptionConfig();
     loadClockedInStaff();
     renderCart();
@@ -77,6 +78,7 @@ function goToSale(){
   clearCustomerContext();   // نصفّي سياق العميل بالكامل (استبدال/مكافأة/عروض) عشان الفاتورة الجديدة تبدأ نضيفة
   // تحميل الخصومات السارية عشان تتطبق تلقائي وقت إضافة الأصناف
   if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
+  if(typeof loadStaffPointsConfig === 'function' && !staffPointsConfig) loadStaffPointsConfig();
   loadLoyaltyRedemptionConfig();
   loadClockedInStaff();
   document.getElementById('customerPhone').value = '';

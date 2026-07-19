@@ -703,6 +703,15 @@ async function openRedeemPoints(){
 // مكافأة خاصة العميل — تطبيق عند الدفع
 let custReward = null, appliedReward = null;
 let custExists = false, custHasApp = false;
+// ⭐ إعدادات نقاط البيع (بيحددها المدير من شاشة البطاقات) — بديل الرقم الثابت القديم
+let staffPointsConfig = null;
+async function loadStaffPointsConfig(){
+  try{
+    const d = await db.collection(TEST_SETTINGS).doc('staff_points').get();
+    staffPointsConfig = d.exists ? d.data() : {};
+  }catch(e){ staffPointsConfig = {}; }
+  return staffPointsConfig;
+}
 // 🕵️ العلبة السودا: تسجيل صامت لأحداث السلة (لتبويب نشاط غريب لاحقًا) — صفر تأثير على الشغل
 let _cartFirstItemAt = null;   // وقت أول قطعة في السلة الحالية
 let _saleJustSaved = false;    // عشان نفرّق مسح-بعد-حفظ (طبيعي) عن مسح-وهروب
@@ -1113,7 +1122,10 @@ async function _doConfirmPayment(){
   const phone = document.getElementById('customerPhone').value.trim();
   const custName = document.getElementById('customerName').value.trim();
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
-  const earnsStaffPoint = !isRefundInvoice && itemCount >= MIN_ITEMS_FOR_STAFF_POINT;
+  const _spCfg = staffPointsConfig || {};
+  const _spMinItems = (_spCfg.minItems!=null && _spCfg.minItems!=='') ? +_spCfg.minItems : MIN_ITEMS_FOR_STAFF_POINT;
+  const _spMinInvoice = +_spCfg.minInvoice || 0;
+  const earnsStaffPoint = (_spCfg.enabled !== false) && !isRefundInvoice && itemCount >= _spMinItems && total >= _spMinInvoice;
   const _rate = loyaltyRedemptionConfig.pointsPerEGP || 100;
   const _rawPts = Math.floor(Math.abs(total) / _rate);
   const loyaltyPointsEarned = phone ? (total < 0 ? -_rawPts : _rawPts) : 0;   // المرتجع بيخصم نقط بالسالب
@@ -1192,6 +1204,14 @@ async function _doConfirmPayment(){
 
     // 3) نقطة الموظف (تجريبي - منفصل عن رصيد الـ HR الحقيقي) — بتتحسب للبائع الفعلي
     if(earnsStaffPoint){
+      // ⭐ النقطة بتتسجل أوتوماتيك في برنامج الحضور (sales_points) — البياعة مش محتاجة تعمل سكان للفاتورة تاني
+      try{
+        await db.collection('sales_points').add({
+          employeeId: sellerEmployeeId, employeeName: sellerEmployeeName,
+          invoiceNumber: String(invoiceNo), branch: currentBranch,
+          itemCount, invoiceTotal: total, auto: true, ts: Date.now()
+        });
+      }catch(e){ console.warn('auto point', e); }
       const ptRef = db.collection(TEST_EMPLOYEE_POINTS).doc(sellerEmployeeId);
       await ptRef.set({
         employeeName: sellerEmployeeName,
