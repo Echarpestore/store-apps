@@ -61,6 +61,16 @@ function resumeOrStartSale(){
 }
 
 function goToSale(){
+  // 🕵️ سلة فيها قطع واتمسحت من غير حفظ = هجر (يتسجل صامت)
+  if(typeof cart !== 'undefined' && cart.length && !(typeof _saleJustSaved !== 'undefined' && _saleJustSaved)){
+    if(typeof _logActivity === 'function') _logActivity('cart_abandoned', {
+      itemCount: cart.length,
+      value: cart.reduce((s,c)=> s + (c.price||0)*(c.qty||1), 0),
+      firstItemAt: (typeof _cartFirstItemAt !== 'undefined') ? _cartFirstItemAt : null
+    });
+  }
+  if(typeof _saleJustSaved !== 'undefined') _saleJustSaved = false;
+  if(typeof _cartFirstItemAt !== 'undefined') _cartFirstItemAt = null;
   editingHeldId = null;
   cart = [];
   selectedCartIdx = null;

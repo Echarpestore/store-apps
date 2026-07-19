@@ -52,6 +52,7 @@ searchBar.addEventListener('keydown', (e)=>{
 });
 
 function addToCart(item){
+  if(!cart.length) _cartFirstItemAt = Date.now();   // 🕵️ بداية السلة
   // البيع مسموح دايمًا حتى لو المخزون مايكفيش (الكمية تنزل بالسالب)
   const existing = cart.find(c => c.id === item.id && !c.isReturn);
   if(existing){ existing.qty += 1; }
@@ -164,11 +165,13 @@ function captureSaleState(){
     customerName: (document.getElementById('customerName')?.value || '').trim(),
     total: cart.reduce((s,c)=> s + c.price*c.qty, 0),
     // سياق الفاتورة دي يتحفظ معاها عشان ما يختلطش مع فاتورة/هولد تاني
+    firstItemAt: _cartFirstItemAt,
     pendingRedemption: (typeof pendingRedemption !== 'undefined') ? pendingRedemption : null,
     appliedReward:     (typeof appliedReward     !== 'undefined') ? appliedReward     : null
   };
 }
 function clearSaleState(){
+  _cartFirstItemAt = null;
   cart = [];
   selectedCartIdx = null;
   clearCustomerContext();
@@ -179,6 +182,7 @@ function clearSaleState(){
   if(typeof resetPaymentUI === 'function') resetPaymentUI();
 }
 function restoreSaleState(s){
+  _cartFirstItemAt = s.firstItemAt || Date.now();
   cart = s.items || [];
   selectedCartIdx = null;
   // نصفّر أي بقايا من الفاتورة اللي كانت مفتوحة قبلها، وبعدين نرجّع سياق الفاتورة دي بالظبط
@@ -254,6 +258,8 @@ function cartQty(idx, delta){
 // مسح صنف من السلة
 function cartRemove(idx){
   if(idx < 0 || idx >= cart.length) return;
+  const _rm = cart[idx];
+  _logActivity('item_removed', { name:_rm.name||'', qty:_rm.qty||1, price:_rm.price||0, cartCountAfter: cart.length-1 });
   cart.splice(idx, 1);
   if(selectedCartIdx === idx) selectedCartIdx = null;
   else if(selectedCartIdx !== null && selectedCartIdx > idx) selectedCartIdx--;
@@ -696,7 +702,20 @@ async function openRedeemPoints(){
 
 // مكافأة خاصة العميل — تطبيق عند الدفع
 let custReward = null, appliedReward = null;
-let custExists = false, custHasApp = false;   // لعرض QR التطبيق في الفاتورة للغير مسجّل/غير مثبّت
+let custExists = false, custHasApp = false;
+// 🕵️ العلبة السودا: تسجيل صامت لأحداث السلة (لتبويب نشاط غريب لاحقًا) — صفر تأثير على الشغل
+let _cartFirstItemAt = null;   // وقت أول قطعة في السلة الحالية
+let _saleJustSaved = false;    // عشان نفرّق مسح-بعد-حفظ (طبيعي) عن مسح-وهروب
+function _logActivity(type, data){
+  try{
+    db.collection('pos_activity_log').add({
+      type, branch: currentBranch,
+      employeeId: (currentEmployee&&currentEmployee.id)||'',
+      employeeName: (currentEmployee&&currentEmployee.name)||'',
+      ts: Date.now(), ...data
+    }).catch(()=>{});
+  }catch(e){}
+}   // لعرض QR التطبيق في الفاتورة للغير مسجّل/غير مثبّت
 let custPendingRedeem = null, custBaseText = '';
 
 // بيحدّث صندوق العميل (المكافأة/الاستبدال) حسب إجمالي الفاتورة الحالي — بيتنادى مع كل تغيّر في السلة
@@ -1133,6 +1152,7 @@ async function _doConfirmPayment(){
       loyaltyPointsEarned,
       pointsRedeemed: (pendingRedemption ? pendingRedemption.points : 0),
       staffPointEarned: earnsStaffPoint,
+      firstItemAt: _cartFirstItemAt || null,   // 🕵️ متى بدأت السلة (لكشف التأخير غير الطبيعي)
       staffPurchase: staffPurchase ? { empId: staffPurchase.empId, name: staffPurchase.name, pct: staffPurchase.pct, discountAmount: staffDiscountAmount() } : null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
@@ -1229,6 +1249,7 @@ async function _doConfirmPayment(){
 
     printReceipt(payments, total, invoiceNo, invoiceCode);
     showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
+    _saleJustSaved = true;   // 🕵️ المسح الجاي طبيعي (بعد حفظ)
     goToSale();
   }catch(e){
     showToast('فشل حفظ الفاتورة: ' + e.message, 'err');
