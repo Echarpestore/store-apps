@@ -27,10 +27,11 @@ async function renderStaffCardsScreen(){
   await loadStaffCardsConfig();
   try{
     const snap = await db.collection('sales_employees').get();
-    staffList = snap.docs.map(d=> ({id:d.id, ...d.data()})).sort((a,b)=> (a.branch||'').localeCompare(b.branch||'') || (a.name||'').localeCompare(b.name||''));
+    staffList = snap.docs.map(d=> ({id:d.id, ...d.data()})).filter(e=> !e.isAdminAccount).sort((a,b)=> (a.branch||'').localeCompare(b.branch||'') || (a.name||'').localeCompare(b.name||''));
   }catch(e){ wrap.innerHTML = '<div class="empty-cart">تعذر تحميل الموظفين: '+e.message+'</div>'; return; }
 
   const c = staffCardsConfig;
+  _refreshAdminAccStatus_pending = true;
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:14px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -49,6 +50,17 @@ async function renderStaffCardsScreen(){
         <input id="sc_max" type="number" min="0" value="${c.maxSalaryEGP}" style="width:85px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800;"> ج.م
       </div>
       <button onclick="saveStaffCardsConfig()" style="margin-top:14px; width:100%; padding:12px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">حفظ الإعدادات</button>
+    </div>
+
+    <div style="background:var(--panel); border:1.5px solid var(--warn); border-radius:14px; padding:16px; margin-bottom:14px;">
+      <div style="font-weight:800; margin-bottom:4px;">👑 حساب الأدمن العام</div>
+      <p style="color:var(--muted); font-size:12px; margin:0 0 12px;">بيظهر في شاشة الدخول على <b>كل الفروع</b> (والجديدة تلقائيًا) بكل الصلاحيات — انت اللي بتحدد الرقم السري.</p>
+      <div id="adminAccStatus" style="font-size:12.5px; margin-bottom:10px; color:var(--muted);">جارٍ التحقق...</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <input id="adminAccName" placeholder="الاسم (مثلًا: الإدارة)" value="الإدارة" style="flex:1; min-width:130px; padding:10px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px;">
+        <input id="adminAccPin" placeholder="الرقم السري الجديد" type="text" inputmode="numeric" style="width:140px; padding:10px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; text-align:center; font-weight:800;">
+        <button onclick="saveAdminAccount()" style="padding:11px 16px; border-radius:9px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer;">💾 حفظ</button>
+      </div>
     </div>
 
     <div style="font-weight:800; margin:14px 2px 8px;">🎫 كروت الموظفين <span style="color:var(--muted); font-size:11.5px; font-weight:400;">(مقاس 5×9 سم — اطبعه وقصّه وغلّفه)</span></div>
@@ -70,8 +82,38 @@ async function renderStaffCardsScreen(){
         ${hasCard?`<button onclick="reissueStaffCard('${e.id}')" title="لو الكارت ضاع — بيبطّل القديم فورًا" style="padding:9px 11px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--warn); font-weight:800; font-size:12px; cursor:pointer;">🔄</button>`:''}
       </div>`;
     }).join('') || '<div class="empty-cart">لسه مفيش موظفين في نظام المبيعات</div>'}`;
+  _refreshAdminAccStatus();
 }
 
+const ADMIN_ACC_ID = 'admin_master';
+async function _refreshAdminAccStatus(){
+  const box = document.getElementById('adminAccStatus'); if(!box) return;
+  try{
+    const d = await db.collection('sales_employees').doc(ADMIN_ACC_ID).get();
+    if(d.exists){
+      const nm = d.data().name || 'الإدارة';
+      box.innerHTML = '✅ الحساب موجود باسم <b>' + nm + '</b> — عايز تغيّر الرقم السري؟ اكتب الجديد واحفظ';
+      const ni = document.getElementById('adminAccName'); if(ni) ni.value = nm;
+    }else{
+      box.textContent = 'لسه مفيش حساب أدمن عام — اكتب الاسم والرقم السري واحفظ';
+    }
+  }catch(e){ box.textContent = 'تعذر التحقق: ' + e.message; }
+}
+async function saveAdminAccount(){
+  const name = (document.getElementById('adminAccName').value || '').trim() || 'الإدارة';
+  const pin = (document.getElementById('adminAccPin').value || '').trim();
+  if(!pin || pin.length < 4){ showToast('الرقم السري 4 أرقام على الأقل', 'err'); return; }
+  try{
+    await db.collection('sales_employees').doc(ADMIN_ACC_ID).set({
+      name, pin, branch: 'الإدارة', active: true, isAdminAccount: true, updatedAt: Date.now()
+    }, { merge: true });
+    // تعيينه "أدمن" في التوزيعات — ده اللي بيخليه يظهر في كل الفروع بكل الصلاحيات
+    await db.collection(TEST_ROLES).doc('_assignments').set({ [ADMIN_ACC_ID]: 'admin' }, { merge: true });
+    document.getElementById('adminAccPin').value = '';
+    showToast('👑 اتحفظ حساب الأدمن — جرّب الدخول بيه من أي فرع');
+    _refreshAdminAccStatus();
+  }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+}
 async function saveStaffCardsConfig(){
   const cfg = {
     enabled: document.getElementById('sc_on').checked,
