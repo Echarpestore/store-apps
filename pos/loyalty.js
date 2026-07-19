@@ -43,6 +43,10 @@ async function renderLoyaltyScreen(){
         <span>👩‍💼 عمولة الموظفة لكل تنزيل عن طريقها:</span>
         <input id="wl_${brand}_ref" type="number" value="${cfg.refBonus||''}" placeholder="0 = مقفولة" style="width:95px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:700;">
         <span>ج.م</span>
+        <span style="color:var(--muted); font-size:11.5px; width:100%; margin-top:2px;">💡 العمولة بتتفعّل بعد <b>أول فاتورة شراء حقيقية</b> للعميل (حماية من التنزيلات الوهمية)</span>
+        <span>بحد أدنى للفاتورة:</span>
+        <input id="wl_${brand}_refmin" type="number" value="${cfg.refMinInvoice||''}" placeholder="0 = أي فاتورة" style="width:110px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:700;">
+        <span>ج.م</span>
       </div>
       <div id="wl_${brand}_minwrap" style="display:${cfg.type==='points'?'none':'flex'}; gap:8px; align-items:center; flex-wrap:wrap; font-size:13.5px; margin-top:10px;">
         <span>حد أدنى للفاتورة (اختياري):</span>
@@ -121,7 +125,8 @@ async function saveLoyaltyConfig(){
     value: parseFloat(document.getElementById('wl_'+brand+'_val').value) || 0,
     minInvoice: parseFloat(document.getElementById('wl_'+brand+'_min').value) || 0,
     days: parseInt(document.getElementById('wl_'+brand+'_days').value) || 30,
-    refBonus: parseFloat(document.getElementById('wl_'+brand+'_ref').value) || 0
+    refBonus: parseFloat(document.getElementById('wl_'+brand+'_ref').value) || 0,
+    refMinInvoice: parseFloat(document.getElementById('wl_'+brand+'_refmin').value) || 0
   });
   config.welcome = { echarpe: readWelcome('echarpe'), glow: readWelcome('glow') };
   for(const b of ['echarpe','glow']){
