@@ -775,9 +775,63 @@ document.addEventListener('keydown', function(e){
   }
 });
 
+// ---------------- 🖨️ طابور الطباعة السحابي (إيصالات من برنامج الحضور وغيره) ----------------
+// برنامج الحضور بيبعت "أمر طباعة" لفرع معيّن → الكاشير المفتوح هناك بيطبعه صامت ويعلّمه
+const _printJobsDone = new Set();
+function buildGenericReceiptHTML(p){
+  const c = receiptDesignConfig || defaultReceiptConfig();
+  const w = (c.paperWidth === '58') ? '54mm' : '72mm';
+  const logo = c.logo ? `<img src="${c.logo}" style="display:block; margin:0 auto 4px; max-width:${c.logoWidth||60}%;">` : '';
+  return `<div style="width:${w}; font-family:Tahoma,Arial; color:#000; direction:rtl; padding:2mm;">
+    ${logo}
+    <div style="text-align:center; font-weight:900; font-size:15px; border-bottom:1.5px dashed #000; padding-bottom:5px;">${p.title||''}</div>
+    <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:6px;"><b>${p.empName||''}</b><span>📍 ${p.branch||''}</span></div>
+    <div style="font-size:11px; color:#333; margin-bottom:6px;">عن شهر: ${p.period||''} · ${new Date().toLocaleDateString('ar-EG',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    <div style="border-top:1px dashed #999; padding-top:5px;">
+      ${(p.lines||[]).map(l=>`<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:2.5px 0;"><span>${l[0]}</span><b>${l[1]}</b></div>`).join('')}
+    </div>
+    ${p.net?`<div style="display:flex; justify-content:space-between; font-size:15px; font-weight:900; border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:5px 0; margin:5px 0;"><span>${p.net.label}</span><span>${p.net.value}</span></div>`:''}
+    ${(p.extra&&p.extra.length)?`
+      <div style="font-size:11px; font-weight:800; margin-top:5px;">— مستحقات بتتصرف منفصلة —</div>
+      ${p.extra.map(l=>`<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:2px 0; color:#222;"><span>${l[0]}</span><b>${l[1]}</b></div>`).join('')}
+      ${p.extraNote?`<div style="font-size:9px; color:#555;">${p.extraNote}</div>`:''}`:''}
+    <div style="font-size:11px; margin-top:12px; padding-top:8px; border-top:1px dashed #999;">${p.footer||''}</div>
+  </div>`;
+}
+function _printGenericJob(job){
+  const holder = document.getElementById('receiptPrint');
+  holder.innerHTML = buildGenericReceiptHTML(job.payload||{});
+  const c = receiptDesignConfig || defaultReceiptConfig();
+  const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
+  if(shellCfg && shellCfg.invoicePrinter){
+    return window.posShell.printReceipt({ printer: shellCfg.invoicePrinter, paperWidth: c.paperWidth||'80', html: holder.outerHTML, openDrawer: null });
+  }
+  window.print();
+  return Promise.resolve();
+}
+function startPrintJobListener(){
+  try{
+    db.collection('pos_print_jobs')
+      .where('branch','==', currentBranch)
+      .where('status','==','pending')
+      .onSnapshot(async (snap)=>{
+        for(const d of snap.docs){
+          if(_printJobsDone.has(d.id)) continue;
+          _printJobsDone.add(d.id);
+          try{
+            await _printGenericJob({ id:d.id, ...d.data() });
+            await db.collection('pos_print_jobs').doc(d.id).update({ status:'printed', printedAt: Date.now(), printedByBranchDevice: currentBranch });
+            showToast('🖨️ اتطبع إيصال جاي من برنامج الحضور');
+          }catch(e){ console.warn('print job', e); _printJobsDone.delete(d.id); }
+        }
+      }, (err)=> console.warn('print jobs listener', err));
+  }catch(e){ console.warn('print jobs', e); }
+}
+
 // ---------------- Init ----------------
 (async function init(){
-  ensureReceiptQrCached();   // نخزّن QR الفاتورة محليًا (مرة واحدة لكل جهاز/فرع)
+  ensureReceiptQrCached();
+  setTimeout(startPrintJobListener, 3000);   // بعد ما الفرع والدخول يثبتوا   // نخزّن QR الفاتورة محليًا (مرة واحدة لكل جهاز/فرع)
   await ensureDemoInventory();
   await loadInventory();
   await loadReceiptDesignConfig();
