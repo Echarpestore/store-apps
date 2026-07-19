@@ -107,8 +107,9 @@ function _trNewFormHTML(){
   return `
   <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px;">
     <div style="font-weight:800; margin-bottom:4px;">1️⃣ امسح القطع اللي هتتحوّل</div>
-    <input id="trScanInput" placeholder="امسح القطع أو كارت الحاملة — أي ترتيب، من أي مكان..." autocomplete="off"
+    <input id="trScanInput" placeholder="امسح أو اكتب اسم/باركود — أو كارت الحاملة..." autocomplete="off" oninput="_trSuggest(this.value)"
       style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px;">
+    <div id="trSuggestBox" style="position:relative;"></div>
     <div id="trItemsList" style="margin-top:10px;"></div>
 
     <div style="font-weight:800; margin:14px 0 6px;">2️⃣ رايحة على فرع: <span style="color:var(--muted); font-size:11px; font-weight:400;">(بيتحدد لوحده من كارت الحاملة — عدّله بس لو الوجهة مختلفة)</span></div>
@@ -133,7 +134,7 @@ function _trRenderItems(){
     <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:10px; margin-bottom:6px; background:var(--panel2);">
       <div style="flex:1; min-width:0;">
         <div style="font-size:12.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${it.name}</div>
-        <div style="color:var(--muted); font-size:10px;">رصيد الفرع: ${it.stock}</div>
+        
       </div>
       <button onclick="_trQty(${i},-1)" style="width:28px; height:28px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;">−</button>
       <b style="min-width:24px; text-align:center;">${it.qty}</b>
@@ -145,9 +146,30 @@ function _trQty(i, d){
   const it = _trNewItems[i]; if(!it) return;
   const nv = it.qty + d;
   if(nv <= 0){ _trNewItems.splice(i,1); }
-  else if(nv > it.stock){ showToast('الرصيد الموجود ' + it.stock + ' بس', 'err'); return; }
+  else if(nv > it.stock){ showToast('الكمية أكبر من المتاح في الفرع', 'err'); return; }
   else it.qty = nv;
   _trRenderItems();
+}
+function _trSuggest(q){
+  const box = document.getElementById('trSuggestBox'); if(!box) return;
+  q = (q||'').trim().toLowerCase();
+  if(q.length < 2 || /^EC[A-Z2-9]{5,}$/i.test(q)){ box.innerHTML=''; return; }
+  const hits = allInventory.filter(p=> p.status!=='hidden' && (
+    (p.name||'').toLowerCase().includes(q) || (p.barcode||'').includes(q) || (p.code||'').includes(q)
+  )).slice(0,7);
+  box.innerHTML = hits.length ? `<div style="position:absolute; top:2px; right:0; left:0; z-index:50; background:var(--panel); border:1px solid var(--border); border-radius:11px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.35);">
+    ${hits.map(p=>`<div onclick="_trPickSuggest('${p.id}')" style="padding:10px 13px; cursor:pointer; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; gap:8px;">
+      <span style="font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.name}</span>
+      <span style="color:var(--muted); font-size:11px; direction:ltr; flex-shrink:0;">${p.barcode||''}</span>
+    </div>`).join('')}
+  </div>` : '';
+}
+function _trPickSuggest(id){
+  const p = allInventory.find(x=> x.id===id); if(!p) return;
+  const inp = document.getElementById('trScanInput'); if(inp) inp.value='';
+  const box = document.getElementById('trSuggestBox'); if(box) box.innerHTML='';
+  _trAddItemByCode(p.barcode || p.code || '');
+  if(inp) inp.focus();
 }
 function _trAddItemByCode(code){
   const it = allInventory.find(p=> (p.barcode||'') === code || (p.code||'') === code);
@@ -190,6 +212,7 @@ function _trWireNewForm(){
   if(scan) scan.addEventListener('keydown', (e)=>{
     if(e.key !== 'Enter') return;
     const code = scan.value.trim(); scan.value = '';
+    const sb = document.getElementById('trSuggestBox'); if(sb) sb.innerHTML='';
     if(code) _trRouteCode(code);
   });
   const cInp = document.getElementById('trCarrierInput');

@@ -514,6 +514,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
           <div class="qb-section-body">
             <div class="qb-nav-item" id="navInventory" onclick="goToInventory()"><div class="qb-icon">📦</div><div class="qb-label">قائمة الأصناف</div></div>
             <div class="qb-nav-item" id="navReceiveGoods" onclick="goToReceiveGoods()"><div class="qb-icon">📥</div><div class="qb-label">استلام بضاعة</div></div>
+            <div class="qb-nav-item" id="navTransfers" onclick="goToTransfers()"><div class="qb-icon">🚚</div><div class="qb-label">التحويلات</div></div>
             <div class="qb-nav-item" id="navPriceLabel" onclick="goToInventory()"><div class="qb-icon">🏷️</div><div class="qb-label">طباعة أسعار</div></div>
             <div class="qb-nav-item" id="navCatalog" onclick="goToCatalogEditor()"><div class="qb-icon">🖼️</div><div class="qb-label">كتالوج العرض</div></div>
           </div>
@@ -536,7 +537,6 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
             <div class="qb-nav-item" id="navReceiptDesign" onclick="goToReceiptDesign()" style="display:none;"><div class="qb-icon">🖨️</div><div class="qb-label">تصميم الفاتورة</div></div>
             <div class="qb-nav-item" id="navLoyalty" onclick="goToLoyaltyScreen()" style="display:none;"><div class="qb-icon">🎁</div><div class="qb-label">برنامج الولاء</div></div>
             <div class="qb-nav-item" id="navStaffCards" onclick="goToStaffCards()" style="display:none;"><div class="qb-icon">🎫</div><div class="qb-label">بطاقات الموظفين</div></div>
-            <div class="qb-nav-item" id="navTransfers" onclick="goToTransfers()"><div class="qb-icon">🚚</div><div class="qb-label">التحويلات</div></div>
           </div>
         </div>
       </div>
@@ -781,7 +781,12 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="transfersScreen">
   <div class="mgmt-topbar">
     <div><h1>🚚 التحويلات بين الفروع</h1></div>
-    <button class="secondary" onclick="showScreen('adminScreen')">⬅️ رجوع</button>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button onclick="resumeOrStartSale()" title="شاشة البيع" style="padding:10px 13px; border-radius:10px; border:1px solid var(--border); background:var(--panel); cursor:pointer; font-size:17px;">🧾</button>
+      <button onclick="goToInventory()" title="المخزون" style="padding:10px 13px; border-radius:10px; border:1px solid var(--border); background:var(--panel); cursor:pointer; font-size:17px;">📦</button>
+      <button onclick="goToReceiveGoods()" title="استلام بضاعة" style="padding:10px 13px; border-radius:10px; border:1px solid var(--border); background:var(--panel); cursor:pointer; font-size:17px;">📥</button>
+      <button onclick="showScreen('dashboardScreen')" style="padding:10px 16px; border-radius:10px; border:none; background:var(--accent); color:#fff; font-weight:800; font-size:13px; cursor:pointer;">🏠 الرئيسية</button>
+    </div>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="transfersWrap"></div>
 </div>
@@ -789,7 +794,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <div class="screen mgmt-light" id="staffCardsScreen">
   <div class="mgmt-topbar">
     <div><h1>🎫 بطاقات الموظفين</h1></div>
-    <button class="secondary" onclick="showScreen('adminScreen')">⬅️ رجوع</button>
+    <button class="secondary" onclick="showScreen('dashboardScreen')">⬅️ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="staffCardsWrap"></div>
 </div>
