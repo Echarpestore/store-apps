@@ -443,6 +443,8 @@ function enterDashboard(){
 
   const canLoyalty = hasPerm('canChangePrices');
   if(document.getElementById('navLoyalty')) document.getElementById('navLoyalty').style.display = canLoyalty ? '' : 'none';
+  const canCards = hasPerm('canManageRoles');
+  if(document.getElementById('navStaffCards')) document.getElementById('navStaffCards').style.display = canCards ? '' : 'none';
   if(document.getElementById('loyaltySidebarBtn')) document.getElementById('loyaltySidebarBtn').style.display = canLoyalty ? '' : 'none';
 
   // بانل "الإدارة" الذهبي بيظهر بس لو فيه على الأقل حاجة واحدة جواه متاحة
