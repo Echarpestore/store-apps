@@ -756,8 +756,7 @@ function _uniBtnsHTML(){
   return b('🏠','الرئيسية',"showScreen('dashboardScreen')", true)
        + b('🧾','البيع','resumeOrStartSale()', true)
        + b('🚚','التحويلات','goToTransfers()', true)
-       + b('📊','التقارير','goToReports()', hasPerm('canViewReports'))
-       + (typeof uiCustomTopbarHTML==='function' ? uiCustomTopbarHTML() : '');   // أزرار المدير المخصصة
+       + b('📊','التقارير','goToReports()', hasPerm('canViewReports'));
 }
 const _UNI_DUP_RE = /(resumeOrStartSale|goToInventory|goToCustomerList|goToReports|goToReceiveGoods|goToTransfers|goToDashboard|goToSale)\s*\(/;
 function injectUnifiedToolbars(){
@@ -768,21 +767,27 @@ function injectUnifiedToolbars(){
     scr.querySelectorAll('.uniToolbar').forEach(el=> el.remove());   // مفيش شريطين أبدًا
     const head = heads[0];
 
-    const bar = document.createElement('div');
-    bar.className = 'uniToolbar';
-    bar.innerHTML = _uniBtnsHTML();
-
     // 1) نمتص زرار الرجوع الأصلي — ونحفظ وجهته على الهيدر نفسه عشان تعيش مع كل إعادة بناء
     const backBtn = [...head.querySelectorAll('button')].find(x=> (x.textContent||'').includes('رجوع') && !x.classList.contains('uniBack'));
     if(backBtn && !head.dataset.backOc){
       head.dataset.backOc = backBtn.getAttribute('onclick') || "showScreen('dashboardScreen')";
       backBtn.remove();
     }
-    const fb = document.createElement('button');
-    fb.className = 'uniBack';
-    fb.innerHTML = '⬅️ <span>رجوع</span>';
-    fb.setAttribute('onclick', head.dataset.backOc || "showScreen('dashboardScreen')");
-    bar.prepend(fb);
+    const backOc = head.dataset.backOc || "showScreen('dashboardScreen')";
+
+    const bar = document.createElement('div');
+    bar.className = 'uniToolbar';
+    // الشريط بالكامل من إعداد المدير (ترتيب/إخفاء/أزرار مخصصة) — ولو الموديول مش موجود نرجع للأساسي
+    if(typeof uiToolbarButtonsHTML === 'function'){
+      bar.innerHTML = uiToolbarButtonsHTML(backOc);
+    }else{
+      const fb = document.createElement('button');
+      fb.className = 'uniBack';
+      fb.innerHTML = '⬅️ <span>رجوع</span>';
+      fb.setAttribute('onclick', backOc);
+      bar.innerHTML = _uniBtnsHTML();
+      bar.prepend(fb);
+    }
 
     // 2) نشيل أزرار التنقل القديمة المكررة في الهيدر (الشريط بياخد وظيفتها) — الفريدة بتفضل
     [...head.querySelectorAll('button')].forEach(btn=>{
@@ -821,6 +826,21 @@ document.addEventListener('keydown', function(e){
   if(e.key === 'Tab' && !_inTypingField()){
     e.preventDefault();
     if(typeof resumeOrStartSale === 'function') resumeOrStartSale(); else showScreen('saleScreen');
+    return;
+  }
+
+  // Esc — رجوع من أي مكان: يقفل لوحة تعديل الشكل، بعدين أي نافذة مفتوحة، بعدين يرجّع للشاشة السابقة
+  if(e.key === 'Escape'){
+    if(typeof uiedIsOpen === 'function' && uiedIsOpen()){ e.preventDefault(); uiedClose(); return; }
+    const openModal = document.querySelector('.modal-overlay.active');
+    if(openModal){ e.preventDefault(); openModal.classList.remove('active'); return; }
+    const active = document.querySelector('.screen.active');
+    if(!active || active.id === 'dashboardScreen' || active.id === 'loginScreen') return;
+    e.preventDefault();
+    if(active.id === 'saleScreen'){ if(typeof goToDashboard==='function') goToDashboard(); else showScreen('dashboardScreen'); return; }
+    const backEl = active.querySelector('.uniBack');
+    if(backEl) backEl.click();
+    else { const oc = active.querySelector('.dash-header, .mgmt-topbar'); if(oc && oc.dataset.backOc){ try{ (0,eval)(oc.dataset.backOc); }catch(_){ showScreen('dashboardScreen'); } } else showScreen('dashboardScreen'); }
     return;
   }
 

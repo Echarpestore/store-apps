@@ -28,6 +28,17 @@ const BUILTINS = [
 ];
 const BUILTIN_BY_UID = {}; BUILTINS.forEach(b=> BUILTIN_BY_UID[b.uid]=b);
 
+// ---- أزرار الشريط العلوي الأصلية (بتظهر في كل الشاشات ماعدا البيع) ----
+//      دي بتترسم من الإعداد في كل مرة (مش عقد ثابتة) فالترتيب/الإخفاء بيشتغل عليها كمان.
+const BUILTIN_TB = [
+  { uid:'tb_back',      ico:'⬅️', name:'رجوع',      special:'back' },
+  { uid:'tb_home',      ico:'🏠', name:'الرئيسية',   call:"showScreen('dashboardScreen')" },
+  { uid:'tb_sale',      ico:'🧾', name:'البيع',      call:'resumeOrStartSale()' },
+  { uid:'tb_transfers', ico:'🚚', name:'التحويلات',  call:'goToTransfers()' },
+  { uid:'tb_reports',   ico:'📊', name:'التقارير',   call:'goToReports()', perm:'canViewReports' }
+];
+const TB_BY_UID = {}; BUILTIN_TB.forEach(t=>{ TB_BY_UID[t.uid]=t; BUILTIN_BY_UID[t.uid]=t; });
+
 // ---- قايمة الوظائف الآمنة للأزرار الجديدة: المدير يختار منها فقط (مفيش كتابة كود) ----
 const ACTIONS_WHITELIST = {
   discount:  { name:'💸 خصم',              call:'openGiveDiscount()' },
@@ -54,11 +65,11 @@ function defaultLayout(){
     layout: {
       actions: BUILTINS.filter(b=>b.panel==='actions').map(b=>b.uid),
       itemops: BUILTINS.filter(b=>b.panel==='itemops').map(b=>b.uid),
-      topbar:  []                       // أزرار مخصصة للشريط العلوي بس (الأساسية ثابتة في app.js)
+      topbar:  BUILTIN_TB.map(t=>t.uid)   // أزرار الشريط الأصلية + أي مخصص المدير بيضيفه بعدها
     },
     hidden: [],                         // قايمة uid المخفية
     custom: {},                         // uid -> { ico, label, action }
-    sizes: { actionsW:170, itemopsW:110, btnFont:13 }
+    sizes: { actionsW:170, itemopsW:110, btnFont:13, tbIco:24 }
   };
 }
 
@@ -75,6 +86,7 @@ function mergeLayout(saved){
     out.sizes.actionsW = _num(saved.sizes.actionsW, base.sizes.actionsW, 90, 320);
     out.sizes.itemopsW = _num(saved.sizes.itemopsW, base.sizes.itemopsW, 70, 260);
     out.sizes.btnFont  = _num(saved.sizes.btnFont,  base.sizes.btnFont,  9, 22);
+    out.sizes.tbIco    = _num(saved.sizes.tbIco,    base.sizes.tbIco,    16, 34);
   }
   // الأزرار المخصصة الآمنة فقط
   out.custom = {};
@@ -95,6 +107,14 @@ function mergeLayout(saved){
   // أي زر أصلي مش موجود في أي بانل (نسخة قديمة) → نضيفه آخر بانله الطبيعي
   const placed = new Set([].concat(out.layout.actions, out.layout.itemops, out.layout.topbar));
   BUILTINS.forEach(b=>{ if(!placed.has(b.uid)) out.layout[b.panel].push(b.uid); });
+  // أزرار الشريط العلوي: لو الإعداد قديم (مفيش ولا واحد منها) رتّبها في الأول قبل المخصص
+  const tbPresent = BUILTIN_TB.some(t=> placed.has(t.uid));
+  if(!tbPresent){
+    out.layout.topbar = BUILTIN_TB.map(t=>t.uid).concat(out.layout.topbar);
+    BUILTIN_TB.forEach(t=> placed.add(t.uid));
+  }else{
+    BUILTIN_TB.forEach(t=>{ if(!placed.has(t.uid)){ out.layout.topbar.push(t.uid); placed.add(t.uid); } });
+  }
   // أي زر مخصص مش متحط في بانل → نحطه في actions (احتياطي)
   Object.keys(out.custom).forEach(uid=>{ if(!placed.has(uid) && out.layout.actions.indexOf(uid)<0 && out.layout.itemops.indexOf(uid)<0 && out.layout.topbar.indexOf(uid)<0) out.layout.actions.push(uid); });
   // حماية ضد التكرار: أي uid يظهر مرة واحدة بس في كل البانلز (لو الإعداد المحفوظ اتبوّظ)
@@ -159,17 +179,44 @@ function applySizes(){
   st.textContent =
     '#saleScreen .qbx-actions{width:'+_num(s.actionsW,170,90,320)+'px !important;}' +
     '#saleScreen .qbx-itemops{width:'+_num(s.itemopsW,110,70,260)+'px !important;}' +
-    '#saleScreen .qbx-actions button, #saleScreen .qbx-itemops button{font-size:'+_num(s.btnFont,13,9,22)+'px !important;}';
+    '#saleScreen .qbx-actions button, #saleScreen .qbx-itemops button{font-size:'+_num(s.btnFont,13,9,22)+'px !important;}' +
+    '.uniToolbar .uniIco{font-size:'+_num(s.tbIco,24,16,34)+'px !important;}' +
+    '.uniToolbar .uniLbl{font-size:'+Math.round(_num(s.tbIco,24,16,34)*0.46)+'px !important;}';
 }
 
-// الشريط العلوي: بيتنده من app.js (_uniBtnsHTML) عشان يضيف أزرارك المخصصة بعد الأساسية
+// الشريط العلوي كامل (رجوع + الأساسية + المخصصة) بالترتيب والإخفاء من الإعداد.
+// بيتنده من app.js (injectUnifiedToolbars) وبياخد وجهة زرار الرجوع للشاشة الحالية.
+function uiToolbarButtonsHTML(backOc){
+  try{
+    const hidden = new Set(CFG.hidden||[]);
+    const order = (CFG.layout.topbar && CFG.layout.topbar.length) ? CFG.layout.topbar : defaultLayout().layout.topbar;
+    let html = '';
+    order.forEach(uid=>{
+      if(hidden.has(uid)) return;
+      const tb = TB_BY_UID[uid];
+      if(tb){
+        if(tb.perm && !((typeof hasPerm==='function') && hasPerm(tb.perm))) return;
+        if(tb.special==='back'){
+          html += '<button class="uniBack" onclick="'+(backOc||"showScreen('dashboardScreen')")+'">⬅️ <span>رجوع</span></button>';
+        }else{
+          html += '<button class="uniBtn" onclick="'+tb.call+'" title="'+_esc(tb.name)+'"><span class="uniIco">'+_esc(tb.ico)+'</span><span class="uniLbl">'+_esc(tb.name)+'</span></button>';
+        }
+      }else{
+        const c = CFG.custom[uid]; if(!c) return;
+        const spec = ACTIONS_WHITELIST[c.action]; if(!spec) return;
+        html += '<button class="uniBtn" data-uicustom="1" onclick="'+spec.call+'" title="'+_esc(c.label||'')+'"><span class="uniIco">'+_esc(c.ico||'⭐')+'</span><span class="uniLbl">'+_esc(c.label||'')+'</span></button>';
+      }
+    });
+    return html;
+  }catch(e){ return ''; }
+}
+// توافق قديم (مش مستخدم بعد التوسعة) — بيرجّع المخصص بس
 function uiCustomTopbarHTML(){
   try{
-    return (CFG.layout.topbar||[]).filter(uid=> (CFG.hidden||[]).indexOf(uid)<0).map(uid=>{
+    return (CFG.layout.topbar||[]).filter(uid=> !TB_BY_UID[uid] && (CFG.hidden||[]).indexOf(uid)<0).map(uid=>{
       const c = CFG.custom[uid]; if(!c) return '';
       const spec = ACTIONS_WHITELIST[c.action]; if(!spec) return '';
-      return '<button class="uniBtn" data-uicustom="1" onclick="'+spec.call+'" title="'+_esc(c.label||'')+'">' +
-             '<span class="uniIco">'+_esc(c.ico||'⭐')+'</span><span class="uniLbl">'+_esc(c.label||'')+'</span></button>';
+      return '<button class="uniBtn" data-uicustom="1" onclick="'+spec.call+'" title="'+_esc(c.label||'')+'"><span class="uniIco">'+_esc(c.ico||'⭐')+'</span><span class="uniLbl">'+_esc(c.label||'')+'</span></button>';
     }).join('');
   }catch(e){ return ''; }
 }
@@ -225,7 +272,7 @@ function uiedToggle(uid){                           // إظهار/إخفاء
   _rerender();
 }
 function uiedSetSize(key, val){
-  const map = { actionsW:[90,320,170], itemopsW:[70,260,110], btnFont:[9,22,13] };
+  const map = { actionsW:[90,320,170], itemopsW:[70,260,110], btnFont:[9,22,13], tbIco:[16,34,24] };
   if(!map[key]) return; CFG.sizes[key] = _num(val, map[key][2], map[key][0], map[key][1]);
   _rerender();
 }
@@ -253,7 +300,7 @@ function uiedReset(){
 }
 
 // إعادة رسم اللوحة + تطبيق حي على الشاشة الحقيقية
-function _rerender(){ try{ applyUiLayout(); }catch(e){} try{ renderEditorDrawer(); }catch(e){} }
+function _rerender(){ try{ applyUiLayout(); }catch(e){} try{ if(typeof injectUnifiedToolbars==='function') injectUnifiedToolbars(); }catch(e){} try{ renderEditorDrawer(); }catch(e){} }
 
 // ============================================================
 // واجهة التعديل (Drawer جنبي فوق شاشة البيع — التغيير بيبان حي على الأزرار ورا)
@@ -267,8 +314,9 @@ function uiedOpen(){
 }
 function uiedClose(){
   _drawerOpen = false;
-  const d = document.getElementById('uiedDrawer'); if(d) d.style.transform = '';
+  const d = document.getElementById('uiedDrawer'); if(d) d.style.transform = 'translateX(105%)';
 }
+function uiedIsOpen(){ return !!_drawerOpen; }
 
 function ensureDrawer(){
   if(document.getElementById('uiedDrawer')) return;
@@ -351,11 +399,12 @@ function renderEditorDrawer(){
     '</div>' +
     _panelBlock('◀ بانل الأزرار (الشمال)', 'actions') +
     _panelBlock('▶ بانل عمليات الصنف (اليمين)', 'itemops') +
-    (CFG.layout.topbar.length ? _panelBlock('⬆️ أزرار الشريط العلوي (باقي الشاشات)', 'topbar') : '') +
+    _panelBlock('⬆️ الشريط العلوي (كل الشاشات التانية)', 'topbar') +
     '<div style="margin:10px 12px 4px; font-size:12px; font-weight:800; color:#9fb;">📐 الأحجام</div>' +
     _sizeSlider('عرض بانل الشمال', 'actionsW', 90, 320) +
     _sizeSlider('عرض بانل اليمين', 'itemopsW', 70, 260) +
-    _sizeSlider('حجم خط الأزرار', 'btnFont', 9, 22) +
+    _sizeSlider('حجم خط أزرار البيع', 'btnFont', 9, 22) +
+    _sizeSlider('حجم أزرار الشريط العلوي', 'tbIco', 16, 34) +
     _addForm() +
     '<div style="display:flex; gap:8px; margin:14px 8px 0;">' +
       '<button onclick="uiedReset()" style="flex:1; padding:12px; border:1px solid #543; background:#241a18; color:#fca; border-radius:10px; font-weight:800; cursor:pointer;">↩️ الافتراضي</button>' +
@@ -420,6 +469,8 @@ function _toast(m, t){ if(typeof showToast==='function') showToast(m, t||''); }
 if(typeof window!=='undefined'){
   window.applyUiLayout = applyUiLayout;
   window.uiCustomTopbarHTML = uiCustomTopbarHTML;
+  window.uiToolbarButtonsHTML = uiToolbarButtonsHTML;
+  window.uiedIsOpen = uiedIsOpen;
   window.uiedOpen=uiedOpen; window.uiedClose=uiedClose;
   window.uiedMove=uiedMove; window.uiedSwitchPanel=uiedSwitchPanel; window.uiedToggle=uiedToggle;
   window.uiedSetSize=uiedSetSize; window.uiedAddFromForm=uiedAddFromForm; window.uiedRemoveCustom=uiedRemoveCustom;
@@ -434,7 +485,7 @@ if(typeof module!=='undefined' && module.exports){
   module.exports = {
     _internals: {
       get CFG(){ return CFG; }, set CFG(v){ CFG=v; },
-      defaultLayout, mergeLayout, applyUiLayout, applySizes, uiCustomTopbarHTML,
+      defaultLayout, mergeLayout, applyUiLayout, applySizes, uiCustomTopbarHTML, uiToolbarButtonsHTML,
       uiedMove, uiedSwitchPanel, uiedToggle, uiedSetSize, uiedAddCustom, uiedRemoveCustom, uiedReset,
       uiedFindPanel, buildCustomNode, ACTIONS_WHITELIST, BUILTINS, BUILTIN_BY_UID, uiedDrop,
       _setDrag(v){ _drag=v; }
