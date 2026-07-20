@@ -223,6 +223,22 @@
   .cap-big-btn:disabled{opacity:.35;}
   .cap-cancel{margin-top:14px; background:none; border:none; color:var(--sub); font-family:'Cairo'; font-size:14px; cursor:pointer; text-decoration:underline;}
   .cap-greet{font-size:30px; font-weight:900; line-height:1.6;}
+
+  /* 📱 وضع بالعرض (landscape): الكيبورد جنب خانة الرقم بدل ما يكون تحتها — يريح الشاشات القصيرة */
+  @media (orientation:landscape) and (max-height:560px){
+    #capOverlay{overflow:auto;}
+    .cap-box{width:min(96vw,680px); padding:10px;}
+    #capPanePhone{display:grid; grid-template-columns:1fr 1.1fr; grid-template-areas:'t p' 's p' 'd p' 'c p'; gap:4px 18px; align-items:center;}
+    #capPanePhone .cap-title{grid-area:t; font-size:19px; margin:0;}
+    #capPanePhone .cap-sub{grid-area:s; margin:0 0 6px;}
+    #capPanePhone .cap-display{grid-area:d; font-size:24px; min-height:52px; padding:10px; margin:0;}
+    #capPanePhone .cap-pad{grid-area:p;}
+    #capPanePhone .cap-cancel{grid-area:c; margin-top:6px;}
+    .cap-pad button{padding:10px 0; font-size:20px;}
+    .cap-pad .cap-ok{font-size:15px;}
+    .cap-name-input{font-size:17px; padding:12px;}
+    .cap-greet{font-size:24px;}
+  }
 </style>
 </head>
 <body>
