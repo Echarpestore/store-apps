@@ -551,6 +551,21 @@ var CONTACT = {
   instagram: ''    // مثال: 'https://instagram.com/glow'
 };
 
+
+/* >>> SOCIAL_CFG_START
+   📲 إعدادات التواصل بتيجي من الكاشير (شاشة برنامج الولاء) وبتركب فوق الافتراضي المكتوب فوق.
+   بتوصل جوه نفس مستند الإعدادات اللي بيتقري أصلًا عند فتح التطبيق → مفيش قراءات زيادة. */
+function applySocialConfig(cfg){
+  var s = cfg && cfg.social && cfg.social.glow;
+  if(!s) return;   // لسه ماتظبطتش من الكاشير → الافتراضي شغال
+  if(Array.isArray(s.whatsapp)) CONTACT.branches = s.whatsapp.map(function(w){ return { name:(w&&w.name)||'', wa:String((w&&w.number)||''), disp:'' }; });
+  if('facebook' in s)  CONTACT.facebook  = s.facebook || '';
+  if('instagram' in s) CONTACT.instagram = s.instagram || '';
+  if('support' in s)   SUPPORT_WHATSAPP  = s.support || '';
+  try{ var wt = $('waTop'); if(wt) wt.style.display = hasSupport() ? 'flex' : 'none'; }catch(e){}
+}
+/* <<< SOCIAL_CFG_END */
+
 var _contactBranches = [];
 
 function waDisp(b){
@@ -684,6 +699,7 @@ function showScreen(id){
 function loadSettings(){
   return db.collection(COL_SETTINGS).doc('loyalty').get().then(function(doc){
     if(doc.exists){ loyaltyCfg = Object.assign({}, loyaltyCfg, doc.data()); }
+    applySocialConfig(loyaltyCfg);   // 📲 أزرار التواصل من الكاشير
   }).catch(function(e){ console.warn('تعذر تحميل إعدادات النقاط', e); });
 }
 
