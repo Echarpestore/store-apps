@@ -773,21 +773,17 @@ function injectUnifiedToolbars(){
     bar.className = 'uniToolbar';
     bar.innerHTML = _uniBtnsHTML();
 
-    // 1) نمتص زرار الرجوع الأصلي (بيحافظ على وجهته الصح)
+    // 1) نمتص زرار الرجوع الأصلي — ونحفظ وجهته على الهيدر نفسه عشان تعيش مع كل إعادة بناء
     const backBtn = [...head.querySelectorAll('button')].find(x=> (x.textContent||'').includes('رجوع') && !x.classList.contains('uniBack'));
-    if(backBtn){
-      backBtn.classList.add('uniBack');
-      backBtn.removeAttribute('style');
-      backBtn.className = 'uniBack';
-      backBtn.innerHTML = '⬅️ <span>رجوع</span>';
-      bar.prepend(backBtn);
-    }else{
-      const fb = document.createElement('button');
-      fb.className = 'uniBack';
-      fb.innerHTML = '⬅️ <span>رجوع</span>';
-      fb.setAttribute('onclick', "showScreen('dashboardScreen')");
-      bar.prepend(fb);
+    if(backBtn && !head.dataset.backOc){
+      head.dataset.backOc = backBtn.getAttribute('onclick') || "showScreen('dashboardScreen')";
+      backBtn.remove();
     }
+    const fb = document.createElement('button');
+    fb.className = 'uniBack';
+    fb.innerHTML = '⬅️ <span>رجوع</span>';
+    fb.setAttribute('onclick', head.dataset.backOc || "showScreen('dashboardScreen')");
+    bar.prepend(fb);
 
     // 2) نشيل أزرار التنقل القديمة المكررة في الهيدر (الشريط بياخد وظيفتها) — الفريدة بتفضل
     [...head.querySelectorAll('button')].forEach(btn=>{
