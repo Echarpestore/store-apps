@@ -205,6 +205,24 @@
   .shiftCard .n{font-family:'Space Grotesk'; font-size:26px; font-weight:700;}
   .shiftCard .c{color:var(--sub); font-size:12px; margin-top:4px;}
   .blockLabel{width:90px !important;}
+
+  /* ---------- 📱 CAPTURE (تسجيل رقم العميل من الكاشير) ---------- */
+  #capOverlay{position:fixed; inset:0; z-index:80; display:none; align-items:center; justify-content:center; background:var(--bg);}
+  #capOverlay.show{display:flex;}
+  .cap-box{width:min(92vw,420px); text-align:center; padding:18px;}
+  .cap-title{font-size:22px; font-weight:900; margin-bottom:4px;}
+  .cap-sub{color:var(--sub); font-size:14px; margin-bottom:18px;}
+  .cap-display{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; font-size:30px; font-weight:900; letter-spacing:3px; direction:ltr; min-height:66px; margin-bottom:16px;}
+  .cap-pad{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .cap-pad button{padding:18px 0; font-size:24px; font-weight:900; border:1px solid var(--line); border-radius:14px; background:var(--panel); color:var(--ink); font-family:'Cairo'; cursor:pointer;}
+  .cap-pad button:active{transform:scale(.96);}
+  .cap-pad .cap-ok{background:var(--r4); color:#0b0c0f; font-size:18px;}
+  .cap-pad .cap-ok:disabled{opacity:.35;}
+  .cap-name-input{width:100%; padding:16px; border-radius:14px; border:1px solid var(--line); background:var(--panel); color:var(--ink); font-family:'Cairo'; font-size:20px; font-weight:800; text-align:center; margin-bottom:14px;}
+  .cap-big-btn{width:100%; padding:16px; border:none; border-radius:14px; background:var(--r4); color:#0b0c0f; font-family:'Cairo'; font-weight:900; font-size:18px; cursor:pointer;}
+  .cap-big-btn:disabled{opacity:.35;}
+  .cap-cancel{margin-top:14px; background:none; border:none; color:var(--sub); font-family:'Cairo'; font-size:14px; cursor:pointer; text-decoration:underline;}
+  .cap-greet{font-size:30px; font-weight:900; line-height:1.6;}
 </style>
 </head>
 <body>
@@ -341,6 +359,35 @@
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <div class="sub" id="branchSub2">الفرع الحالي: —</div>
         <button class="backBtn" id="changeBranchBtn">📍 تغيير الفرع</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 📱 CAPTURE: العميل يسجّل رقمه بنفسه (بيتفعّل من الكاشير) -->
+  <div id="capOverlay">
+    <div class="cap-box">
+      <div id="capPanePhone" style="display:none;">
+        <div class="cap-title">اكتبي رقم موبايلك 📱</div>
+        <div class="cap-sub">عشان نسجّل نقاطك ومشترياتك على رقمك 🌸</div>
+        <div class="cap-display" id="capDisplay">&nbsp;</div>
+        <div class="cap-pad">
+          <button onclick="capKey('1')">1</button><button onclick="capKey('2')">2</button><button onclick="capKey('3')">3</button>
+          <button onclick="capKey('4')">4</button><button onclick="capKey('5')">5</button><button onclick="capKey('6')">6</button>
+          <button onclick="capKey('7')">7</button><button onclick="capKey('8')">8</button><button onclick="capKey('9')">9</button>
+          <button onclick="capKey('del')">⌫</button><button onclick="capKey('0')">0</button><button class="cap-ok" id="capOkBtn" onclick="capSubmitPhone()" disabled>تأكيد ✓</button>
+        </div>
+        <button class="cap-cancel" onclick="capCancel()">إلغاء</button>
+      </div>
+      <div id="capPaneName" style="display:none;">
+        <div class="cap-title">أول مرة معانا 🌷</div>
+        <div class="cap-sub">اكتبي اسمك عشان نرحّب بيكِ</div>
+        <input class="cap-name-input" id="capNameInput" placeholder="الاسم" autocomplete="off">
+        <button class="cap-big-btn" onclick="capSubmitName()">تم ✓</button>
+        <button class="cap-cancel" onclick="capCancel()">إلغاء</button>
+      </div>
+      <div id="capPaneGreet" style="display:none;">
+        <div class="cap-greet" id="capGreetTxt"></div>
       </div>
     </div>
   </div>
@@ -488,6 +535,7 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
   if(!val) return;
   currentBranch = val;
   localStorage.setItem('feedback_branch', val);
+  capStartListener();   // 📱 أول ما الفرع يتحدد، استماع طلبات تسجيل الرقم
   refreshBranchUI();
   applyBranchFilter();
   $('#branchSetup').classList.remove('show');
@@ -952,6 +1000,93 @@ function renderTable(list){
 // off partway through a slow/unstable connection), the safety-net banner
 // above will catch it and prompt a reload instead of leaving buttons silently broken.
 window.__scriptFullyLoaded = true;
+
+/* >>> CAP_KIOSK_START */
+/* 📱 تسجيل رقم العميل: الكاشير بيبعت طلب في pos_capture/{branch} →
+   الشاشة دي بتتحول كيبورد، العميلة تكتب رقمها (واسمها لو جديدة)،
+   والبيانات بتظهر عند الكاشير تلقائي. منطق العرض صافي قابل للاختبار. */
+function capValidPhone(p){ var d = String(p||'').replace(/\D/g,''); return /^01\d{9}$/.test(d) ? d : null; }
+function capFresh(data, now){ return !!(data && data.ts && ((now||Date.now()) - data.ts) < 90000); }
+function capKioskView(data, handledAskId, now){
+  if(!data || !capFresh(data, now)) return { view:'hide' };
+  if(data.mode === 'ask' && data.askId && data.askId !== handledAskId) return { view:'phone', askId:data.askId };
+  if(data.mode === 'need_name' && data.askId) return { view:'name', askId:data.askId, phone:data.phone };
+  if(data.mode === 'greet') return { view:'greet', name:String(data.greetName||''), isNew:!!data.isNew };
+  return { view:'hide' };
+}
+function capGreetText(name, isNew){
+  if(!name) return 'تمام 🌸 اتسجل رقمك';
+  return isNew ? ('أهلًا بيكي يا ' + name + ' 🎉\nاتسجلتي معانا!') : ('شكرًا يا ' + name + ' 🌸');
+}
+/* <<< CAP_KIOSK_END */
+
+let _capDigits = '', _capAskId = null, _capHandled = null, _capGreetTimer = null;
+const _capPanes = ['capPanePhone','capPaneName','capPaneGreet'];
+function _capShowPane(id){
+  document.getElementById('capOverlay').classList.toggle('show', !!id);
+  _capPanes.forEach(pid => document.getElementById(pid).style.display = (pid===id) ? 'block' : 'none');
+}
+function _capRefreshDisplay(){
+  const el = document.getElementById('capDisplay');
+  el.innerHTML = _capDigits ? _capDigits : '&nbsp;';
+  document.getElementById('capOkBtn').disabled = !capValidPhone(_capDigits);
+}
+window.capKey = function(k){
+  if(k === 'del') _capDigits = _capDigits.slice(0,-1);
+  else if(_capDigits.length < 11) _capDigits += k;
+  _capRefreshDisplay();
+};
+function _capWrite(obj){
+  if(!currentBranch) return;
+  setDoc(doc(db, 'pos_capture', currentBranch), obj).catch(e=> console.warn('cap write', e && e.code));
+}
+window.capSubmitPhone = function(){
+  const ph = capValidPhone(_capDigits);
+  if(!ph || !_capAskId) return;
+  _capHandled = _capAskId;
+  _capWrite({ mode:'phone', phone: ph, ts: Date.now(), askId: _capAskId });
+  _capShowPane(null);   // الكاشير هيرد: يا greet يا need_name
+};
+window.capSubmitName = function(){
+  const nm = document.getElementById('capNameInput').value.trim();
+  if(!nm || !_capAskId) return;
+  _capWrite({ mode:'named', phone: capValidPhone(_capDigits), name: nm, ts: Date.now(), askId: _capAskId });
+  _capShowPane(null);
+};
+window.capCancel = function(){
+  if(_capAskId) _capHandled = _capAskId;
+  _capWrite({ mode:'idle', ts: Date.now() });
+  _capShowPane(null);
+};
+function _capApply(data){
+  const v = capKioskView(data, _capHandled);
+  if(v.view === 'phone'){
+    _capAskId = v.askId; _capDigits = ''; _capRefreshDisplay(); _capShowPane('capPanePhone');
+  }else if(v.view === 'name'){
+    _capAskId = v.askId;
+    if(v.phone) _capDigits = v.phone;
+    document.getElementById('capNameInput').value = '';
+    _capShowPane('capPaneName');
+    setTimeout(()=> document.getElementById('capNameInput').focus(), 80);
+  }else if(v.view === 'greet'){
+    document.getElementById('capGreetTxt').textContent = capGreetText(v.name, v.isNew);
+    _capShowPane('capPaneGreet');
+    clearTimeout(_capGreetTimer);
+    _capGreetTimer = setTimeout(()=> _capShowPane(null), 4000);
+  }
+  // hide: منسبش شاشة الترحيب تتقفل بدري — بتتقفل بتايمرها
+  else if(v.view === 'hide' && !document.getElementById('capPaneGreet').style.display.includes('block')){
+    _capShowPane(null);
+  }
+}
+let _capListening = false;
+function capStartListener(){
+  if(!currentBranch || _capListening) return;
+  _capListening = true;
+  onSnapshot(doc(db, 'pos_capture', currentBranch), (d)=> _capApply(d.exists() ? d.data() : null), (e)=> console.warn('cap listen', e && e.code));
+}
+capStartListener();
+
 </script>
 <script>
 if ('serviceWorker' in navigator) {
