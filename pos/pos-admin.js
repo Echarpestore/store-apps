@@ -20,10 +20,30 @@ async function ensureDemoInventory(){
   });
   await batch.commit();
 }
-async function loadInventory(){
-  const snap = await db.collection(TEST_INVENTORY).get();
-  allInventory = snap.docs.map(d=>({id:d.id, ...d.data()}));
+// >>> INV_CACHE_START — كاش المخزون: لستنر واحد حي بدل قراءة الكولكشن كامل كل مرة (يوفّر قراءات كتير + تزامن لايف)
+var _invStarted = false, _invUnsub = null, _invFirstResolve = null;
+function startInventoryListener(){
+  if(_invStarted) return;
+  _invStarted = true;
+  try{
+    _invUnsub = db.collection(TEST_INVENTORY).onSnapshot(function(snap){
+      allInventory = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      if(_invFirstResolve){ _invFirstResolve(); _invFirstResolve = null; }
+    }, function(err){
+      console.warn('inventory listener', err);
+      _invStarted = false;   // نسمح بإعادة المحاولة في أول نداء جاي
+    });
+  }catch(e){ console.warn('inventory listen start', e); _invStarted = false; }
 }
+// بيرجّع Promise عشان يفضل متوافق ١٠٠٪ مع كل الأماكن اللي بتعمل await loadInventory()
+function loadInventory(){
+  if(_invStarted) return Promise.resolve();   // اللستنر شغّال وبيحدّث allInventory لايف — صفر قراءة جديدة
+  var p = new Promise(function(res){ _invFirstResolve = res; });
+  startInventoryListener();
+  setTimeout(function(){ if(_invFirstResolve){ _invFirstResolve(); _invFirstResolve = null; } }, 6000); // أمان لو النت بطيء
+  return p;
+}
+// <<< INV_CACHE_END
 
 // ---------------- Inventory screen (permission-gated) ----------------
 async function renderInventoryScreen(){
