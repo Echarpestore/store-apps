@@ -545,6 +545,21 @@ async function goToSalesHistory(){
 }
 
 const RATING_ICON_MAP = {1:'😠', 2:'🙁', 3:'🙂', 4:'😍'};
+// >>> SALESLOG_GROUP_START — تجميع الفواتير بالأيام (دالة نقية قابلة للاختبار)
+function _groupSalesByDay(sales){
+  const groups = [], byKey = {};
+  (sales||[]).forEach(s=>{
+    const d = (s.createdAt && s.createdAt.toDate) ? s.createdAt.toDate() : (s._d || null);
+    const key = d ? (d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()) : 'no-date';
+    const label = d ? d.toLocaleDateString('ar-EG',{weekday:'long', day:'numeric', month:'long', year:'numeric'}) : 'بدون تاريخ';
+    if(!byKey[key]){ byKey[key] = { key, label, items:[], total:0, count:0 }; groups.push(byKey[key]); }
+    byKey[key].items.push(s);
+    byKey[key].total += (s.total||0);
+    byKey[key].count++;
+  });
+  return groups;
+}
+// <<< SALESLOG_GROUP_END
 async function renderLiveSalesHistory(){
   const wrap = document.getElementById('salesHistoryWrap');
   wrap.innerHTML = 'بيتحمّل...';
@@ -570,7 +585,7 @@ async function renderLiveSalesHistory(){
     });
   }catch(e){ console.warn('تعذر تحميل التقييمات', e); }
 
-  wrap.innerHTML = sales.slice(0,100).map(s=>{
+  const renderRow = (s)=>{
     const d = s.createdAt && s.createdAt.toDate ? s.createdAt.toDate() : null;
     const dateStr = d ? d.toLocaleString('ar-EG') : '—';
     const badge = s.reversed ? ' <span style="color:var(--minus); font-size:11px;">(ملغاة)</span>' : (s.isReversal ? ' <span style="color:var(--warn); font-size:11px;">(عكس)</span>' : '');
@@ -579,7 +594,6 @@ async function renderLiveSalesHistory(){
     if(s.customerPhone && entriesByPhone[s.customerPhone] && d){
       const saleMs = d.getTime();
       const closest = entriesByPhone[s.customerPhone].sort((a,b)=> Math.abs(a.ts-saleMs) - Math.abs(b.ts-saleMs))[0];
-      // نربط التقييم بالفاتورة دي بس لو قريب زمنيًا منها فعلًا (مش تقييم من زيارة تانية قديمة)
       if(closest && Math.abs(closest.ts - saleMs) <= (3*60*1000)){
         ratingBadge = ` <span title="تقييم العميل">${RATING_ICON_MAP[closest.r]||''}</span>`;
       }
@@ -593,7 +607,16 @@ async function renderLiveSalesHistory(){
       </div>
       <div style="font-weight:800; font-size:15px; color:${(s.total||0) < 0 ? 'var(--minus)' : 'var(--plus)'};">${(s.total||0).toFixed(2)} ج.م</div>
     </div>`;
-  }).join('');
+  };
+
+  // تجميع بالأيام: عنوان لكل يوم (اسم اليوم + التاريخ) + عدد الفواتير وإجمالي اليوم
+  const groups = _groupSalesByDay(sales.slice(0,100));
+  wrap.innerHTML = groups.map(g=>
+    `<div style="display:flex; justify-content:space-between; align-items:center; margin:16px 2px 8px; padding-bottom:6px; border-bottom:2px solid var(--border);">
+       <div style="font-weight:800; font-size:13.5px;">📅 ${g.label}</div>
+       <div style="color:var(--muted); font-size:11.5px;">${g.count} فاتورة · <b style="color:var(--text);">${g.total.toFixed(2)} ج.م</b></div>
+     </div>` + g.items.map(renderRow).join('')
+  ).join('');
 }
 
 // المبيعات المستوردة من QuickBooks — للرجوع والاطلاع بس، مش بتدخل في التقارير الحية

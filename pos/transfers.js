@@ -160,7 +160,7 @@ function _trRenderItems(){
     <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:10px; margin-bottom:6px; background:var(--panel2);">
       <div style="flex:1; min-width:0;">
         <div style="font-size:12.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${it.name}</div>
-        
+        ${(it.barcode || it.code) ? `<div style="font-size:10.5px; color:var(--muted); direction:ltr; text-align:right; font-family:monospace; margin-top:2px;">🔖 ${it.barcode || it.code}</div>` : ''}
       </div>
       <button onclick="_trQty(${i},-1)" style="width:28px; height:28px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;">−</button>
       <b style="min-width:24px; text-align:center;">${it.qty}</b>
@@ -204,7 +204,7 @@ function _trAddItemByCode(code){
   if(stock <= 0){ showToast('مفيش رصيد من الصنف ده في الفرع', 'err'); return; }
   const ex = _trNewItems.find(x=> x.id === it.id);
   if(ex){ if(ex.qty < stock) ex.qty++; }
-  else _trNewItems.push({ id: it.id, name: it.name, barcode: it.barcode||'', qty: 1, stock });
+  else _trNewItems.push({ id: it.id, name: it.name, barcode: it.barcode||'', code: it.code||'', qty: 1, stock });
   _trRenderItems();
 }
 async function _trSetCarrierByCode(code){
