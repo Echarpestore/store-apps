@@ -746,32 +746,47 @@ function _printBuiltReceipt(data, payments){
 }
 
 // ---------------- 🧰 تولبار موحّد في كل الشاشات ----------------
-// نفس الأزرار بنفس الترتيب في كل شاشة إدارية — والقديم (زراير رجوع المتفرقة) بيتشال
-function _uniToolbarHTML(){
+// شريط واحد بس لكل شاشة: [⬅️ رجوع] + الأيقونات المهمة — كبير وواضح وثابت في كل حتة
+function _uniBtnsHTML(){
   const b = (icon, label, fn, show)=> show===false ? '' :
-    `<button onclick="${fn}" title="${label}" style="display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 11px; border-radius:10px; border:1px solid var(--border,#ccc); background:var(--panel,#fff); color:inherit; cursor:pointer; min-width:56px;">
-      <span style="font-size:19px; line-height:1;">${icon}</span><span style="font-size:9.5px; font-weight:800;">${label}</span>
+    `<button class="uniBtn" onclick="${fn}" title="${label}">
+      <span class="uniIco">${icon}</span><span class="uniLbl">${label}</span>
     </button>`;
-  return `<div class="uniToolbar" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-    ${b('🏠','الرئيسية',"showScreen('dashboardScreen')", true)}
-    ${b('🧾','البيع','resumeOrStartSale()', true)}
-    ${b('🚚','التحويلات','goToTransfers()', true)}
-    ${b('📦','المخزون','goToInventory()', hasPerm('canViewStock'))}
-    ${b('📥','استلام','goToReceiveGoods()', hasPerm('canReceiveGoods'))}
-    ${b('📇','العملاء','goToCustomerList()', true)}
-    ${b('📊','التقارير','goToReports()', hasPerm('canViewReports'))}
-  </div>`;
+  return b('🏠','الرئيسية',"showScreen('dashboardScreen')", true)
+       + b('🧾','البيع','resumeOrStartSale()', true)
+       + b('🚚','التحويلات','goToTransfers()', true)
+       + b('📦','المخزون','goToInventory()', hasPerm('canViewStock'))
+       + b('📥','استلام','goToReceiveGoods()', hasPerm('canReceiveGoods'))
+       + b('📇','العملاء','goToCustomerList()', true)
+       + b('📊','التقارير','goToReports()', hasPerm('canViewReports'));
 }
 function injectUnifiedToolbars(){
-  document.querySelectorAll('.dash-header, .mgmt-topbar').forEach(head=>{
-    if(head.closest('#dashboardScreen')) return;               // الرئيسية ليها القايمة الكبيرة أصلًا
-    if(head.querySelector('.uniToolbar')) { head.querySelector('.uniToolbar').outerHTML = _uniToolbarHTML(); return; }
-    // نشيل زراير الرجوع القديمة المتفرقة + التولبار المخصص القديم بتاع التحويلات
-    head.querySelectorAll('button').forEach(btn=>{
-      const t = (btn.textContent||'');
-      if(t.includes('رجوع') || t.includes('الرئيسية') || btn.title==='شاشة البيع' || btn.title==='المخزون' || btn.title==='استلام بضاعة') btn.remove();
-    });
-    head.insertAdjacentHTML('beforeend', _uniToolbarHTML());
+  document.querySelectorAll('.screen').forEach(scr=>{
+    if(scr.id === 'dashboardScreen') return;
+    const heads = scr.querySelectorAll('.dash-header, .mgmt-topbar');
+    if(!heads.length) return;
+    // ننضف أي نسخ قديمة (عشان مايبقاش فيه شريطين أبدًا)
+    scr.querySelectorAll('.uniToolbar').forEach(el=> el.remove());
+    const head = heads[0];   // أول هيدر في الشاشة بس
+
+    const bar = document.createElement('div');
+    bar.className = 'uniToolbar';
+    bar.innerHTML = _uniBtnsHTML();
+
+    // زرار الرجوع الأصلي بتاع الصفحة (بيرجع للمكان الصح) — بنلمّه جوه الشريط ونلبسه الستايل
+    const backBtn = [...head.querySelectorAll('button')].find(x=> (x.textContent||'').includes('رجوع'));
+    if(backBtn){
+      backBtn.classList.add('uniBack');
+      backBtn.innerHTML = '⬅️ <span>رجوع</span>';
+      bar.prepend(backBtn);
+    }else{
+      const fb = document.createElement('button');
+      fb.className = 'uniBack';
+      fb.innerHTML = '⬅️ <span>رجوع</span>';
+      fb.onclick = ()=> showScreen('dashboardScreen');
+      bar.prepend(fb);
+    }
+    head.appendChild(bar);
   });
 }
 
