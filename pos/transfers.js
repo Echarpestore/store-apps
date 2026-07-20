@@ -102,6 +102,32 @@ function _trBranches(){
 function _trLastDest(){
   try{ return localStorage.getItem('tr_last_dest_'+currentBranch) || ''; }catch(e){ return ''; }
 }
+// 🌐 قايمة الفروع الحية من السيرفر (الذاكرة المحلية = احتياطي أوفلاين بس)
+async function _trLoadBranchesFresh(){
+  try{
+    const snap = await db.collection('sales_employees').get();
+    const set = new Set();
+    snap.docs.forEach(d=>{
+      const e = d.data();
+      if(e.active === false || e.isAdminAccount) return;
+      const b = (e.branch||'').trim();
+      if(b && b !== 'الإدارة') set.add(b);
+    });
+    (typeof GLOW_BRANCHES !== 'undefined' ? GLOW_BRANCHES : []).forEach(b=> set.add(b));
+    const list = [...set].sort((a,b)=> a.localeCompare(b,'ar'));
+    if(list.length){ try{ localStorage.setItem('pos_branch_list', JSON.stringify(list)); }catch(e){} }
+    return list;
+  }catch(e){ return null; }
+}
+async function _trRefreshDestSelect(){
+  const list = await _trLoadBranchesFresh();
+  const sel = document.getElementById('trDestSel');
+  if(!list || !sel) return;
+  const keep = sel.value || _trLastDest();
+  const dests = list.filter(b=> b !== currentBranch);
+  sel.innerHTML = '<option value="">— اختار الفرع المستلم —</option>' +
+    dests.map(b=> `<option ${b===keep?'selected':''}>${b}</option>`).join('');
+}
 function _trNewFormHTML(){
   const dests = _trBranches();
   return `
@@ -208,6 +234,7 @@ function _trRouteCode(code){
 }
 function _trWireNewForm(){
   _trRenderItems();
+  _trRefreshDestSelect();   // 🌐 فروع طازة من السيرفر — مش رهينة ذاكرة الجهاز
   const scan = document.getElementById('trScanInput');
   if(scan) scan.addEventListener('keydown', (e)=>{
     if(e.key !== 'Enter') return;
@@ -246,7 +273,7 @@ document.addEventListener('keydown', function(e){
       if(/^EC[A-Z2-9]{10}$/.test(code)){ e.preventDefault(); e.stopPropagation(); _trConfirmByCard(code); }
       return;
     }
-    if(e.key.length === 1) _trBuf += e.key;
+    if(e.key && e.key.length === 1) _trBuf += e.key;
     return;
   }
   const scr = document.getElementById('transfersScreen');
@@ -262,7 +289,7 @@ document.addEventListener('keydown', function(e){
     if(code.length >= 4){ e.preventDefault(); _trRouteCode(code); }
     return;
   }
-  if(e.key.length === 1) _trBuf += e.key;
+  if(e.key && e.key.length === 1) _trBuf += e.key;
   if(_trBuf.length > 30) _trBuf = _trBuf.slice(-30);
 }, true);
 async function sendTransfer(){
