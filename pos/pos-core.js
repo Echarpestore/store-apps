@@ -129,7 +129,12 @@ async function loadBranchSetupOptions(){
   try{
     const snap = await db.collection(EMPLOYEES_COLLECTION).get();
     const set = new Set();
-    snap.docs.forEach(d=>{ const b=((d.data().branch)||'').trim(); if(b) set.add(b); });
+    snap.docs.forEach(d=>{
+      const e = d.data();
+      if(e.isAdminAccount) return;   // 👑 حساب الأدمن مش فرع
+      const b = ((e.branch)||'').trim();
+      if(b && b !== 'الإدارة') set.add(b);
+    });
     GLOW_BRANCHES.forEach(b=> set.add(b));
     branches = [...set].sort((a,b)=> a.localeCompare(b,'ar'));
     try{ localStorage.setItem('pos_branch_list', JSON.stringify(branches)); }catch(e){}
@@ -386,7 +391,7 @@ document.addEventListener('keydown', function(e){
     }
     return;
   }
-  if(e.key.length === 1) _cardBuf += e.key.toUpperCase();
+  if(e.key && e.key.length === 1) _cardBuf += e.key.toUpperCase();
   if(_cardBuf.length > 20) _cardBuf = _cardBuf.slice(-20);
 }, true);
 
@@ -429,7 +434,12 @@ async function openBranchSwitch(){
   try{
     const snap = await db.collection(EMPLOYEES_COLLECTION).get();
     const set = new Set();
-    snap.docs.forEach(d=>{ const b=((d.data().branch)||'').trim(); if(b) set.add(b); });
+    snap.docs.forEach(d=>{
+      const e = d.data();
+      if(e.isAdminAccount) return;   // 👑 حساب الأدمن مش فرع
+      const b = ((e.branch)||'').trim();
+      if(b && b !== 'الإدارة') set.add(b);
+    });
     GLOW_BRANCHES.forEach(b=> set.add(b));
     if(currentBranch) set.add(currentBranch);
     const branches = [...set].sort((a,b)=> a.localeCompare(b,'ar'));
