@@ -842,6 +842,7 @@ async function reverseReceipt(saleId){
   if(_busyOps.has('reverse_'+saleId)) return;
   if(!confirm('متأكد إنك عايز تعكس الفاتورة دي؟ الكمية هترجع للمخزون، والإجراء ده نهائي.')) return;
   _busyOps.add('reverse_'+saleId);
+  _offlineQueued = false;
   try{
     const saleDoc = await db.collection(TEST_SALES).doc(saleId).get();
     if(!saleDoc.exists){ showToast('الفاتورة مش موجودة', 'err'); return; }
@@ -860,13 +861,12 @@ async function reverseReceipt(saleId){
       const _net = -(sale.loyaltyPointsEarned||0) + (sale.pointsRedeemed||0);
       if(_net !== 0) batch.update(db.collection(TEST_CUSTOMERS).doc(sale.customerPhone), { [_pf]: firebase.firestore.FieldValue.increment(_net) });
     }
-    await batch.commit();
-    for(const it of (sale.items||[])){
-      await logStockMovement(it.id, it.name, it.isReturn ? -it.qty : it.qty, 'reversal', 'عكس فاتورة كاملة');
-    }
+    const _rvW = await _waitWrite(batch.commit());
+    if(_rvW.error) throw _rvW.error;
+    (sale.items||[]).forEach(it=>{ logStockMovement(it.id, it.name, it.isReturn ? -it.qty : it.qty, 'reversal', 'عكس فاتورة كاملة'); });
 
     // 2) سجل عملية عكس منفصلة (رقم سالب) عشان التقارير تفضل دقيقة
-    await db.collection(TEST_SALES).add({
+    const _rvW2 = await _waitWrite(db.collection(TEST_SALES).add({
       isReversal: true,
       originalSaleId: saleId,
       employeeId: currentEmployee.id,
@@ -876,9 +876,10 @@ async function reverseReceipt(saleId){
       itemCount: -(sale.itemCount||0),
       total: -(sale.total||0),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    }));
+    if(_rvW2.error) console.error('سجل العكس', _rvW2.error);
 
-    showToast('اتعكست الفاتورة ✅ والكمية رجعت للمخزون', 'ok');
+    showToast(_offlineQueued ? '📴 اتعكست أوفلاين ✅ — هتترفع لما النت يرجع' : 'اتعكست الفاتورة ✅ والكمية رجعت للمخزون', 'ok');
     renderReverseList();
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
   finally{ _busyOps.delete('reverse_'+saleId); }
@@ -888,7 +889,8 @@ async function reverseReceipt(saleId){
 async function holdInvoice(){
   if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
   try{
-    await db.collection(TEST_HELD).add({
+    _offlineQueued = false;
+    const _hw = await _waitWrite(db.collection(TEST_HELD).add({
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.name || '',
       branch: currentBranch,
@@ -897,8 +899,9 @@ async function holdInvoice(){
       items: cart,
       total: cartTotal(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    showToast('اتحفظت كـ فاتورة معلّقة ✔', 'ok');
+    }));
+    if(_hw.error) throw _hw.error;
+    showToast(_offlineQueued ? '📴 اتعلّقت أوفلاين ✔ — هتترفع لما النت يرجع' : 'اتحفظت كـ فاتورة معلّقة ✔', 'ok');
     goToDashboard();
   }catch(e){ showToast('فشل الحفظ: ' + e.message, 'err'); }
 }
@@ -953,7 +956,7 @@ async function unholdInvoice(heldId){
     document.getElementById('customerInfo').textContent = '';
     editingHeldId = heldId;
     // تتشال خالص من قائمة المعلّقة فور الاسترجاع
-    await db.collection(TEST_HELD).doc(heldId).delete();
+    await _waitWrite(db.collection(TEST_HELD).doc(heldId).delete());
     closeHeldModal();
     renderCart();
     showScreen('saleScreen');
@@ -1070,21 +1073,50 @@ function updatePaySummary(){
   confirmBtn.disabled = !(cart.length > 0 && selectedPayMethods.size > 0 && enteredAbs >= requiredAbs);
 }
 
+// >>> OFFLINE_SAVE_START
+// 📴 حفظ الفواتير أوفلاين: الكتابة بتتسجل محليًا فورًا (offline persistence)،
+// لكن وعد Firestore مش بيتأكد غير برد السيرفر — فبنستنى ثواني معدودة بس،
+// ولو النت قاطع/بطيء بنكمّل عادي (طباعة + سلة جديدة) والرفع بيحصل في الخلفية لوحده.
+const _WRITE_WAIT_MS = 4000;
+let _offlineQueued = false;   // بتتعلّم لو أي كتابة اتأجلت في العملية الحالية
+
+// بيستنى تأكيد السيرفر لمدة ms: {ok} اتأكدت · {queued} اتأجلت (أوفلاين/بطء) · {error} فشل حقيقي
+function _waitWrite(p, ms){
+  return new Promise(function(res){
+    var done = false;
+    var t = setTimeout(function(){ if(!done){ done = true; _offlineQueued = true; res({ queued:true }); } }, ms || _WRITE_WAIT_MS);
+    Promise.resolve(p).then(function(v){
+      if(!done){ done = true; clearTimeout(t); res({ ok:true, value:v }); }
+    }).catch(function(e){
+      if(!done){ done = true; clearTimeout(t); res({ error:e }); }
+      else console.warn('كتابة مؤجلة فشلت بعدين', e);
+    });
+  });
+}
+
+// سباق مع مهلة: بيرمي خطأ لو العملية خدت أكتر من ms (للمعاملات اللي محتاجة نت)
+function _raceTimeout(p, ms){
+  return Promise.race([ p, new Promise(function(_ignore, rej){ setTimeout(function(){ rej(new Error('timeout')); }, ms); }) ]);
+}
+// <<< OFFLINE_SAVE_END
+
 // رقم فاتورة متسلسل ومميز (زي INV-000123) — بيتولّد بمعاملة Firestore آمنة
 // عشان لو جهازين بيبيعوا في نفس اللحظة، كل واحد ياخد رقم مختلف من غير تعارض.
+// 📴 المعاملات محتاجة نت: لو أوفلاين أو اتأخرت عن 2.5 ثانية → رقم بديل فورًا
+// (كود الفاتورة نفسه فيه لاحقة وقت + رمز الفرع فمفيش خوف من تعارض الأرقام).
 async function generateInvoiceNumber(){
   const counterRef = db.collection(TEST_SETTINGS).doc('invoice_counter_' + currentBranch);
+  if(typeof navigator !== 'undefined' && navigator.onLine === false) return Date.now().toString().slice(-8);
   try{
-    const newNumber = await db.runTransaction(async (tx)=>{
+    const newNumber = await _raceTimeout(db.runTransaction(async (tx)=>{
       const doc = await tx.get(counterRef);
       const current = doc.exists ? (doc.data().value || 0) : 0;
       const next = current + 1;
       tx.set(counterRef, { value: next }, { merge:true });
       return next;
-    });
+    }), 2500);
     return String(newNumber);
   }catch(e){
-    // لو حصلت مشكلة (نادر) نستخدم بديل مبني على الوقت عشان الفاتورة تتحفظ برضو
     console.warn('تعذر توليد رقم فاتورة متسلسل، هيتستخدم رقم بديل', e);
     return Date.now().toString().slice(-8);
   }
@@ -1115,6 +1147,7 @@ async function confirmPayment(){
 }
 
 async function _doConfirmPayment(){
+  _offlineQueued = false;   // 📴 نبدأ صفحة جديدة لكل فاتورة
   const total = cartTotal();
   const isRefundInvoice = total < 0;
   const payments = {};
@@ -1149,8 +1182,8 @@ async function _doConfirmPayment(){
     }
     if(payments.salary && !staffPurchase){ showToast('خصم الراتب متاح في وضع شراء الموظف بس', 'err'); return; }
 
-    // 1) سجل البيع
-    await db.collection(TEST_SALES).add({
+    // 1) سجل البيع (📴 مش بنستنى السيرفر أكتر من ثواني — أوفلاين بتتسجل محليًا وبتترفع بعدين)
+    const _saleW = await _waitWrite(db.collection(TEST_SALES).add({
       invoiceNo,
       invoiceCode,
       employeeId: currentEmployee.id,
@@ -1167,12 +1200,13 @@ async function _doConfirmPayment(){
       firstItemAt: _cartFirstItemAt || null,   // 🕵️ متى بدأت السلة (لكشف التأخير غير الطبيعي)
       staffPurchase: staffPurchase ? { empId: staffPurchase.empId, name: staffPurchase.name, pct: staffPurchase.pct, discountAmount: staffDiscountAmount() } : null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    }));
+    if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
 
     // 🎫 أوردر الموظف → بيتسجل "مستني اعتماد" في برنامج الحضور (خانة أوردرات الموظفين)
     if(staffPurchase){
       try{
-        await db.collection('sales_staff_orders').add({
+        await _waitWrite(db.collection('sales_staff_orders').add({
           employeeId: staffPurchase.empId,
           employeeName: staffPurchase.name,
           branch: currentBranch,
@@ -1185,7 +1219,7 @@ async function _doConfirmPayment(){
           payments,
           status: 'pending',
           ts: Date.now()
-        });
+        }));
       }catch(e){ console.error('staff order log', e); }
       cancelStaffPurchase();
     }
@@ -1197,10 +1231,10 @@ async function _doConfirmPayment(){
       const ref = db.collection(TEST_INVENTORY).doc(c.id);
       batch.update(ref, { ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(c.isReturn ? c.qty : -c.qty) });
     });
-    await batch.commit();
-    for(const c of stockLines){
-      await logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع');
-    }
+    const _stockW = await _waitWrite(batch.commit());
+    if(_stockW.error) console.error('خصم المخزون', _stockW.error);
+    // سجل الحركة: من غير انتظار (جواه catch بتاعه) — أوفلاين بيتقيد محليًا ويترفع بعدين
+    stockLines.forEach(c=>{ logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع'); });
 
     // 3) نقطة الموظف (تجريبي - منفصل عن رصيد الـ HR الحقيقي) — بتتحسب للبائع الفعلي
     if(earnsStaffPoint){
@@ -1213,11 +1247,11 @@ async function _doConfirmPayment(){
         });
       }catch(e){ console.warn('auto point', e); }
       const ptRef = db.collection(TEST_EMPLOYEE_POINTS).doc(sellerEmployeeId);
-      await ptRef.set({
+      await _waitWrite(ptRef.set({
         employeeName: sellerEmployeeName,
         points: firebase.firestore.FieldValue.increment(1),
         salesCount: firebase.firestore.FieldValue.increment(1)
-      }, { merge: true });
+      }, { merge: true }));
     }
 
     // 4) نقاط ولاء العميل (تجريبي) — بتضيف المكتسب وتخصم أي نقط اتستبدلت في نفس الفاتورة دي
@@ -1244,7 +1278,7 @@ async function _doConfirmPayment(){
         }
       });
       if(custName) custUpdate.name = custName;
-      await custRef.set(custUpdate, { merge: true });
+      await _waitWrite(custRef.set(custUpdate, { merge: true }));
     }
     // إحصائيات الاستعمال: عروض اتطبّقت + مكافأة اتستعملت
     try{
@@ -1264,11 +1298,15 @@ async function _doConfirmPayment(){
 
     // 5) محاولة ربط العميل بأقرب تقييم لسه من غير عميل معروف في نفس الفرع (زمنيًا)
     if(phone){
-      await tryLinkFeedbackToCustomer(phone, custName, sellerEmployeeName);
+      await _waitWrite(tryLinkFeedbackToCustomer(phone, custName, sellerEmployeeName));
     }
 
     printReceipt(payments, total, invoiceNo, invoiceCode);
-    showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
+    if(_offlineQueued){
+      showToast('📴 اتحفظت أوفلاين ✔ — هتترفع لوحدها أول ما النت يرجع (متمسحش بيانات البرنامج)', 'ok');
+    }else{
+      showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
+    }
     _saleJustSaved = true;   // 🕵️ المسح الجاي طبيعي (بعد حفظ)
     goToSale();
   }catch(e){
