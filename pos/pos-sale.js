@@ -885,6 +885,77 @@ async function reverseReceipt(saleId){
   finally{ _busyOps.delete('reverse_'+saleId); }
 }
 
+
+// >>> CAP_POS_START
+// 📱 «يسجّل بنفسه»: الكاشير بيدوس زر → شاشة التقييم قدام العميل بتتحول لكيبورد
+// يكتب رقمه (واسمه لو جديد) → البيانات بتنط هنا في خانة العميل تلقائي.
+// التواصل عبر مستند واحد لكل فرع: pos_capture/{branch} — قراءات شبه صفرية.
+const CAP_COL = 'pos_capture';
+const CAP_FRESH_MS = 90 * 1000;   // أي طلب أقدم من 90 ثانية بيتعتبر بايت
+let _capUnsub = null, _capAskId = null;
+
+// رقم موبايل مصري سليم؟ (11 رقم بيبدأ 01)
+function _capValidPhone(p){
+  var d = String(p||'').replace(/\D/g,'');
+  return /^01\d{9}$/.test(d) ? d : null;
+}
+// الطلب لسه طازة؟
+function _capFresh(data, now){ return !!(data && data.ts && ((now||Date.now()) - data.ts) < CAP_FRESH_MS); }
+// POS بيقرر يعمل إيه مع تحديث المستند (منطق صافي قابل للاختبار)
+function _capNextAction(data, myAskId, now){
+  if(!data || data.askId !== myAskId || !_capFresh(data, now)) return null;
+  if(data.mode === 'phone'  && _capValidPhone(data.phone)) return { act:'lookup', phone:_capValidPhone(data.phone) };
+  if(data.mode === 'named' && _capValidPhone(data.phone)) return { act:'fill', phone:_capValidPhone(data.phone), name:String(data.name||'').trim() };
+  return null;
+}
+// <<< CAP_POS_END
+
+function _capDocRef(){ return db.collection(CAP_COL).doc(currentBranch); }
+
+async function capAskCustomer(){
+  if(!currentBranch){ showToast('سجّل دخول الأول', 'err'); return; }
+  _capAskId = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  try{
+    await _waitWrite(_capDocRef().set({ mode:'ask', ts: Date.now(), askId:_capAskId }));
+    showToast('📱 اطلب من العميل يكتب رقمه على شاشة التقييم', 'ok');
+    _capStartListener();
+  }catch(e){ showToast('تعذر إرسال الطلب: ' + e.message, 'err'); }
+}
+
+function _capStartListener(){
+  if(_capUnsub) return;
+  _capUnsub = _capDocRef().onSnapshot(async (d)=>{
+    const data = d.exists ? d.data() : null;
+    const next = _capNextAction(data, _capAskId);
+    if(!next) return;
+    if(next.act === 'lookup'){
+      // موجود؟ نجيب اسمه ونرحّب — مش موجود؟ نطلب اسمه من الكشك
+      let cust = null;
+      try{ const cd = await db.collection(TEST_CUSTOMERS).doc(next.phone).get(); cust = cd.exists ? cd.data() : null; }catch(e){}
+      if(cust){
+        _capFill(next.phone, cust.name || '');
+        _capDocRef().set({ mode:'greet', greetName: cust.name || '', isNew:false, ts:Date.now(), askId:_capAskId }).catch(()=>{});
+        showToast('🙋‍♀️ ' + (cust.name || next.phone) + ' — اتسجلت في الفاتورة', 'ok');
+      }else{
+        _capDocRef().set({ mode:'need_name', phone: next.phone, ts:Date.now(), askId:_capAskId }).catch(()=>{});
+      }
+    }else if(next.act === 'fill'){
+      _capFill(next.phone, next.name);
+      _capDocRef().set({ mode:'greet', greetName: next.name, isNew:true, ts:Date.now(), askId:_capAskId }).catch(()=>{});
+      showToast('🆕 ' + (next.name || next.phone) + ' — عميل جديد اتسجل في الفاتورة', 'ok');
+    }
+    _capAskId = null;   // الطلب اتقفل — أي تحديثات تانية تتطنش
+  }, (e)=> console.warn('cap listener', e));
+}
+
+function _capFill(phone, name){
+  const pEl = document.getElementById('customerPhone');
+  const nEl = document.getElementById('customerName');
+  if(pEl) pEl.value = phone;
+  if(nEl && name) nEl.value = name;
+  if(typeof refreshCustomerInfo === 'function') refreshCustomerInfo();
+}
+
 // ---------------- Hold / Unhold ----------------
 async function holdInvoice(){
   if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
