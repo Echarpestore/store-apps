@@ -435,7 +435,10 @@ const branchesCol = collection(db, 'feedback_branches'); // persists branch name
 (async function loadBranchSuggestionsFromSalesApp(){
   try{
     const snap = await getDocs(collection(db, 'sales_employees'));
-    const branches = [...new Set(snap.docs.map(d=> d.data().branch).filter(Boolean))].sort();
+    const branches = [...new Set(snap.docs
+      .map(d=> d.data())
+      .filter(e=> !e.isAdminAccount && (e.branch||'') !== 'الإدارة')
+      .map(e=> e.branch).filter(Boolean))].sort();
     const wrap = document.getElementById('branchSuggestionsList');
     const chipsWrap = document.getElementById('branchSuggestionsChips');
     if(!wrap || !chipsWrap || branches.length === 0) return;
