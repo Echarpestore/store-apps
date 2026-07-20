@@ -274,6 +274,7 @@ async function loadCurrentEmployeeRole(){
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  if(typeof injectUnifiedToolbars === 'function') try{ injectUnifiedToolbars(); }catch(e){}
 }
 function showToast(msg, type=""){
   const t = document.getElementById('toast');

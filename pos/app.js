@@ -760,32 +760,43 @@ function _uniBtnsHTML(){
        + b('📇','العملاء','goToCustomerList()', true)
        + b('📊','التقارير','goToReports()', hasPerm('canViewReports'));
 }
+const _UNI_DUP_RE = /(resumeOrStartSale|goToInventory|goToCustomerList|goToReports|goToReceiveGoods|goToTransfers|goToDashboard|goToSale)\s*\(/;
 function injectUnifiedToolbars(){
   document.querySelectorAll('.screen').forEach(scr=>{
     if(scr.id === 'dashboardScreen') return;
     const heads = scr.querySelectorAll('.dash-header, .mgmt-topbar');
     if(!heads.length) return;
-    // ننضف أي نسخ قديمة (عشان مايبقاش فيه شريطين أبدًا)
-    scr.querySelectorAll('.uniToolbar').forEach(el=> el.remove());
-    const head = heads[0];   // أول هيدر في الشاشة بس
+    scr.querySelectorAll('.uniToolbar').forEach(el=> el.remove());   // مفيش شريطين أبدًا
+    const head = heads[0];
 
     const bar = document.createElement('div');
     bar.className = 'uniToolbar';
     bar.innerHTML = _uniBtnsHTML();
 
-    // زرار الرجوع الأصلي بتاع الصفحة (بيرجع للمكان الصح) — بنلمّه جوه الشريط ونلبسه الستايل
-    const backBtn = [...head.querySelectorAll('button')].find(x=> (x.textContent||'').includes('رجوع'));
+    // 1) نمتص زرار الرجوع الأصلي (بيحافظ على وجهته الصح)
+    const backBtn = [...head.querySelectorAll('button')].find(x=> (x.textContent||'').includes('رجوع') && !x.classList.contains('uniBack'));
     if(backBtn){
       backBtn.classList.add('uniBack');
+      backBtn.removeAttribute('style');
+      backBtn.className = 'uniBack';
       backBtn.innerHTML = '⬅️ <span>رجوع</span>';
       bar.prepend(backBtn);
     }else{
       const fb = document.createElement('button');
       fb.className = 'uniBack';
       fb.innerHTML = '⬅️ <span>رجوع</span>';
-      fb.onclick = ()=> showScreen('dashboardScreen');
+      fb.setAttribute('onclick', "showScreen('dashboardScreen')");
       bar.prepend(fb);
     }
+
+    // 2) نشيل أزرار التنقل القديمة المكررة في الهيدر (الشريط بياخد وظيفتها) — الفريدة بتفضل
+    [...head.querySelectorAll('button')].forEach(btn=>{
+      if(btn.classList.contains('uniBack') || btn.classList.contains('uniBtn')) return;
+      if(bar.contains(btn)) return;
+      const oc = btn.getAttribute('onclick') || '';
+      if(_UNI_DUP_RE.test(oc)) btn.remove();
+    });
+
     head.appendChild(bar);
   });
 }
