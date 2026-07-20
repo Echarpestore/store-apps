@@ -752,12 +752,10 @@ function _uniBtnsHTML(){
     `<button class="uniBtn" onclick="${fn}" title="${label}">
       <span class="uniIco">${icon}</span><span class="uniLbl">${label}</span>
     </button>`;
+  // مختصر عمدًا: الأكثر استخدامًا بس — الباقي كله ضغطة واحدة من 🏠
   return b('🏠','الرئيسية',"showScreen('dashboardScreen')", true)
        + b('🧾','البيع','resumeOrStartSale()', true)
        + b('🚚','التحويلات','goToTransfers()', true)
-       + b('📦','المخزون','goToInventory()', hasPerm('canViewStock'))
-       + b('📥','استلام','goToReceiveGoods()', hasPerm('canReceiveGoods'))
-       + b('📇','العملاء','goToCustomerList()', true)
        + b('📊','التقارير','goToReports()', hasPerm('canViewReports'));
 }
 const _UNI_DUP_RE = /(resumeOrStartSale|goToInventory|goToCustomerList|goToReports|goToReceiveGoods|goToTransfers|goToDashboard|goToSale)\s*\(/;

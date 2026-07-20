@@ -448,12 +448,12 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 .mgmt-light .uniToolbar .uniBtn{ background:var(--panel); color:var(--text); border-color:var(--border); }
 .dash-header, .mgmt-topbar{ flex-wrap:wrap; gap:8px; }
 @media (max-width: 860px){
-  .uniToolbar{ width:100%; justify-content:flex-start; gap:6px; }
-  .uniToolbar .uniBtn{ min-width:0; flex:1 1 calc(16.5% - 6px); padding:8px 4px; border-radius:12px; }
-  .uniToolbar .uniIco{ font-size:20px; }
-  .uniToolbar .uniLbl{ font-size:9.5px; }
-  .uniToolbar .uniBack{ flex:1 1 100%; justify-content:center; padding:11px; }
-  .badge-test{ top:auto !important; bottom:8px !important; }   /* شارة الإصدار تحت — متتداخلش مع الهيدر في الموبايل */
+  .uniToolbar{ width:100%; gap:6px; flex-wrap:nowrap; }
+  .uniToolbar .uniBack{ flex:0 0 auto; padding:10px 14px; font-size:13px; }
+  .uniToolbar .uniBtn{ min-width:0; flex:1 1 0; padding:7px 2px; border-radius:12px; }
+  .uniToolbar .uniIco{ font-size:19px; }
+  .uniToolbar .uniLbl{ font-size:9px; }
+  .badge-test{ top:auto !important; bottom:8px !important; }
 }
 </style>
 </head>
