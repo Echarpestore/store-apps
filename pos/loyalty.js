@@ -6,6 +6,57 @@
 // TEST_SETTINGS, loyaltyRedemptionConfig, loadLoyaltyRedemptionConfig
 // ============================================================
 
+
+// >>> SOCIAL_POS_START
+// 📲 أزرار التواصل في تطبيق العميل (واتساب فروع + فيسبوك + انستجرام + خدمة عملاء)
+// بتتحفظ جوه نفس مستند loyalty اللي التطبيق بيقراه أصلًا عند الفتح → صفر قراءات إضافية.
+let _socState = { echarpe:{ whatsapp:[] }, glow:{ whatsapp:[] } };
+
+// بيحوّل أي صيغة رقم لصيغة واتساب الدولية (مصر): 01012345678 → 201012345678
+function _waNormalize(raw){
+  var d = String(raw||'').replace(/\D/g,'');
+  if(d.slice(0,2)==='00') d = d.slice(2);              // 0020... → 20...
+  if(d.slice(0,3)==='201' && d.length===12) return d;  // دولي جاهز
+  if(d.slice(0,2)==='01' && d.length===11) return '2'+d; // محلي مصري
+  return d;                                            // أي صيغة تانية زي ما هي
+}
+// بينضف قايمة الأرقام: بيطبّع + بيشيل الفاضي/القصير + اسم افتراضي لو مفيش
+function _socCleanWa(list){
+  return (Array.isArray(list)?list:[]).map(function(r){
+    return { name: (String((r&&r.name)||'').trim() || 'واتساب'), number: _waNormalize(r&&r.number) };
+  }).filter(function(r){ return r.number.length >= 10; });
+}
+function _socInitBrand(b){
+  b = b || {};
+  return { facebook:b.facebook||'', instagram:b.instagram||'', support:b.support||'', whatsapp:Array.isArray(b.whatsapp)?b.whatsapp.map(function(w){return {name:(w&&w.name)||'', number:(w&&w.number)||''};}):[] };
+}
+// <<< SOCIAL_POS_END
+
+function _socWaRowsHTML(brand){
+  const rows = _socState[brand].whatsapp;
+  if(!rows.length) return '<div style="color:var(--muted); font-size:12px; margin-bottom:8px;">مفيش أرقام لسه — دوس ➕ تحت</div>';
+  return rows.map((r,i)=>`
+    <div style="display:flex; gap:6px; margin-bottom:6px;">
+      <input id="soc_${brand}_wname_${i}" value="${String(r.name||'').replace(/"/g,'&quot;')}" placeholder="اسم الفرع" style="flex:1; min-width:90px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:700;">
+      <input id="soc_${brand}_wnum_${i}" value="${String(r.number||'').replace(/"/g,'&quot;')}" placeholder="01xxxxxxxxx" style="flex:1.2; min-width:120px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:700; direction:ltr; text-align:center;">
+      <button onclick="_socDelWa('${brand}',${i})" title="حذف" style="border:none; background:#5a2430; color:#ff9db1; border-radius:8px; padding:0 12px; cursor:pointer; font-weight:800;">✖</button>
+    </div>`).join('');
+}
+function _socSyncFromDom(brand){
+  const st = _socState[brand];
+  st.whatsapp.forEach((r,i)=>{
+    const n = document.getElementById('soc_'+brand+'_wname_'+i);
+    const v = document.getElementById('soc_'+brand+'_wnum_'+i);
+    if(n) r.name = n.value; if(v) r.number = v.value;
+  });
+  const fb=document.getElementById('soc_'+brand+'_fb'), ig=document.getElementById('soc_'+brand+'_ig'), su=document.getElementById('soc_'+brand+'_sup');
+  if(fb) st.facebook = fb.value.trim();
+  if(ig) st.instagram = ig.value.trim();
+  if(su) st.support = su.value.trim();
+}
+function _socAddWa(brand){ _socSyncFromDom(brand); _socState[brand].whatsapp.push({name:'',number:''}); document.getElementById('soc_'+brand+'_walist').innerHTML = _socWaRowsHTML(brand); }
+function _socDelWa(brand,i){ _socSyncFromDom(brand); _socState[brand].whatsapp.splice(i,1); document.getElementById('soc_'+brand+'_walist').innerHTML = _socWaRowsHTML(brand); }
+
 function goToLoyaltyScreen(){
   if(!hasPerm('canChangePrices')){ showToast('الصلاحية دي للمدير بس', 'err'); return; }
   showScreen('loyaltyScreen');
@@ -16,11 +67,14 @@ async function renderLoyaltyScreen(){
   await loadLoyaltyRedemptionConfig();
   const c = loyaltyRedemptionConfig;
   // إعدادات مكافأة الترحيب (لكل براند)
-  let w = {};
+  let w = {}; let _socRaw = {};
   try{
     const d = await db.collection(TEST_SETTINGS).doc('loyalty').get();
-    w = d.exists ? (d.data().welcome || {}) : {};
+    const dd = d.exists ? d.data() : {};
+    w = dd.welcome || {};
+    _socRaw = dd.social || {};
   }catch(e){}
+  _socState = { echarpe: _socInitBrand(_socRaw.echarpe), glow: _socInitBrand(_socRaw.glow) };
   const we = w.echarpe || {}; const wg = w.glow || {};
   const welcomeCard = (brand, label, cfg) => `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
@@ -57,6 +111,20 @@ async function renderLoyaltyScreen(){
       </div>
     </div>`;
 
+
+  const socialCard = (brand, label) => { const sc = _socState[brand]; return `
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
+      <div style="font-weight:800; margin-bottom:4px;">📲 أزرار التواصل في تطبيق ${label}</div>
+      <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">بتظهر للعميلة في تبويب «تواصلي معانا» + الزر الأخضر فوق. أي خانة فاضية → زرارها بيختفي من التطبيق تلقائي. اكتب الأرقام محلي عادي (01xxxxxxxxx) وهتتظبط لوحدها عند الحفظ.</p>
+      <div style="font-size:12.5px; font-weight:800; margin-bottom:6px;">🟢 أرقام واتساب الفروع</div>
+      <div id="soc_${brand}_walist">${_socWaRowsHTML(brand)}</div>
+      <button class="secondary" onclick="_socAddWa('${brand}')" style="padding:8px 14px; margin:2px 0 12px;">➕ إضافة رقم فرع</button>
+      <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+        <input id="soc_${brand}_fb" value="${String(sc.facebook||'').replace(/"/g,'&quot;')}" placeholder="لينك صفحة الفيسبوك (فاضي = الزر مخفي)" style="padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); direction:ltr;">
+        <input id="soc_${brand}_ig" value="${String(sc.instagram||'').replace(/"/g,'&quot;')}" placeholder="لينك الانستجرام (فاضي = الزر مخفي)" style="padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); direction:ltr;">
+        <input id="soc_${brand}_sup" value="${String(sc.support||'').replace(/"/g,'&quot;')}" placeholder="واتساب خدمة العملاء — الزر الأخضر فوق في التطبيق (اختياري)" style="padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); direction:ltr; text-align:center;">
+      </div>
+    </div>`; };
   document.getElementById('loyaltyScreenWrap').innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
       <div style="font-weight:800; margin-bottom:4px;">💰 معدل كسب النقط</div>
@@ -86,6 +154,9 @@ async function renderLoyaltyScreen(){
 
     ${welcomeCard('echarpe', 'إيشارب', we)}
     ${welcomeCard('glow', 'Glow', wg)}
+
+    ${socialCard('echarpe', 'إيشارب')}
+    ${socialCard('glow', 'Glow')}
 
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
       <div style="font-weight:800; margin-bottom:4px;">📱 كود QR لتحميل التطبيق</div>
@@ -129,6 +200,15 @@ async function saveLoyaltyConfig(){
     refMinInvoice: parseFloat(document.getElementById('wl_'+brand+'_refmin').value) || 0
   });
   config.welcome = { echarpe: readWelcome('echarpe'), glow: readWelcome('glow') };
+  // 📲 أزرار التواصل — بنطبّع الأرقام ونشيل الفاضي قبل الحفظ
+  _socSyncFromDom('echarpe'); _socSyncFromDom('glow');
+  const readSocial = (brand) => ({
+    facebook: _socState[brand].facebook || '',
+    instagram: _socState[brand].instagram || '',
+    support: _waNormalize(_socState[brand].support),
+    whatsapp: _socCleanWa(_socState[brand].whatsapp)
+  });
+  config.social = { echarpe: readSocial('echarpe'), glow: readSocial('glow') };
   for(const b of ['echarpe','glow']){
     if(config.welcome[b].enabled && config.welcome[b].value <= 0){
       showToast('اكتب قيمة مكافأة الترحيب لـ ' + (b==='glow'?'Glow':'إيشارب'), 'err'); return;
