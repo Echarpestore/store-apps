@@ -956,16 +956,16 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
     </div>
     <div class="qbx-body">
       <div class="qbx-actions">
-        <button onclick="goToDashboard()">◀ رجوع</button>
-        <button id="holdBtn0" class="hold-slot hs0" onclick="toggleHold(0)">هولد ١<br><span style="opacity:.7;">فاضي</span></button>
-        <button id="holdBtn1" class="hold-slot hs1" onclick="toggleHold(1)">هولد ٢<br><span style="opacity:.7;">فاضي</span></button>
-        <button onclick="openCashDrawer()">فتح الدرج</button>
-        <button onclick="openGiveDiscount()">خصم</button>
-        <button onclick="focusAddCustomer()">إضافة عميل</button>
-        <button onclick="openRedeemPoints()">🎁 استبدال نقاط</button>
-        <button onclick="showCashierInfo()">الكاشير</button>
-        <button onclick="logout()">خروج</button>
-        <button onclick="goToReceiveGoods()">📥 استلام المنتجات</button>
+        <button data-uid="sa_back" onclick="goToDashboard()">◀ رجوع</button>
+        <button data-uid="sa_hold0" id="holdBtn0" class="hold-slot hs0" onclick="toggleHold(0)">هولد ١<br><span style="opacity:.7;">فاضي</span></button>
+        <button data-uid="sa_hold1" id="holdBtn1" class="hold-slot hs1" onclick="toggleHold(1)">هولد ٢<br><span style="opacity:.7;">فاضي</span></button>
+        <button data-uid="sa_drawer" onclick="openCashDrawer()">فتح الدرج</button>
+        <button data-uid="sa_discount" onclick="openGiveDiscount()">خصم</button>
+        <button data-uid="sa_addcust" onclick="focusAddCustomer()">إضافة عميل</button>
+        <button data-uid="sa_redeem" onclick="openRedeemPoints()">🎁 استبدال نقاط</button>
+        <button data-uid="sa_cashier" onclick="showCashierInfo()">الكاشير</button>
+        <button data-uid="sa_logout" onclick="logout()">خروج</button>
+        <button data-uid="sa_receive" onclick="goToReceiveGoods()">📥 استلام المنتجات</button>
       </div>
       <div class="qbx-center">
         <div class="sale-top">
@@ -1008,11 +1008,11 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
         </div>
       </div>
       <div class="qbx-itemops">
-        <button onclick="qbxQty(1)">➕<br>كمية</button>
-        <button onclick="qbxQty(-1)">➖<br>كمية</button>
-        <button onclick="qbxReturnSel()">↩️<br>مرتجع الصنف</button>
-        <button onclick="qbxDeleteSel()">🗑️<br>حذف الصنف</button>
-        <button class="qbx-return-all" onclick="qbxReturnWholeInvoice()">🔄<br>مرتجع الفاتورة كاملة</button>
+        <button data-uid="io_qtyplus" onclick="qbxQty(1)">➕<br>كمية</button>
+        <button data-uid="io_qtyminus" onclick="qbxQty(-1)">➖<br>كمية</button>
+        <button data-uid="io_returnitem" onclick="qbxReturnSel()">↩️<br>مرتجع الصنف</button>
+        <button data-uid="io_delitem" onclick="qbxDeleteSel()">🗑️<br>حذف الصنف</button>
+        <button data-uid="io_returnall" class="qbx-return-all" onclick="qbxReturnWholeInvoice()">🔄<br>مرتجع الفاتورة كاملة</button>
       </div>
     </div>
     <div class="qbx-bottom">
@@ -1144,5 +1144,6 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 <script src="loyalty.js"></script>
 <script src="staff.js"></script>
 <script src="transfers.js"></script>
+<script src="ui-editor.js"></script>
 </body>
 </html>

@@ -756,7 +756,8 @@ function _uniBtnsHTML(){
   return b('🏠','الرئيسية',"showScreen('dashboardScreen')", true)
        + b('🧾','البيع','resumeOrStartSale()', true)
        + b('🚚','التحويلات','goToTransfers()', true)
-       + b('📊','التقارير','goToReports()', hasPerm('canViewReports'));
+       + b('📊','التقارير','goToReports()', hasPerm('canViewReports'))
+       + (typeof uiCustomTopbarHTML==='function' ? uiCustomTopbarHTML() : '');   // أزرار المدير المخصصة
 }
 const _UNI_DUP_RE = /(resumeOrStartSale|goToInventory|goToCustomerList|goToReports|goToReceiveGoods|goToTransfers|goToDashboard|goToSale)\s*\(/;
 function injectUnifiedToolbars(){
