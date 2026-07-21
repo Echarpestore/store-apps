@@ -281,7 +281,7 @@ function uiedToggle(uid){                           // إظهار/إخفاء
   _rerender();
 }
 function uiedSetSize(key, val){
-  const map = { actionsW:[90,320,170], itemopsW:[70,260,110], btnFont:[9,22,13], tbIco:[16,34,24] };
+  const map = { actionsW:[90,320,170], itemopsW:[70,260,110], btnFont:[9,22,13], tbIco:[16,34,24], scanFont:[12,30,15] };
   if(!map[key]) return; CFG.sizes[key] = _num(val, map[key][2], map[key][0], map[key][1]);
   _rerender();
 }
