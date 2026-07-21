@@ -167,34 +167,17 @@ function _refreshMini(){
   const last = mine.length ? mine[mine.length-1] : null;
   box.style.display = 'flex';
   box.classList.toggle('chatGlow', unread > 0);   // ✨ نور بيرفرف بالراحة لما فيه رسالة مستنياك
-  // 🗨️ شات مصغّر: بيعرض آخر رسايل بقد ما البوكس شايل (الأحدث تحت) — والسكرول للباقي
-  const recent = mine.slice(-15);
-  const rows = recent.map(m=>{
-    const my = m.from === me;
-    const prods = (m.products||[]).slice(0,2);
-    return `<div style="display:flex; ${my?'justify-content:flex-start;':'justify-content:flex-end;'} margin-top:3px;">
-      <div style="max-width:92%; background:${my?'rgba(255,255,255,.07)':'rgba(165,180,252,.16)'}; border-radius:8px; padding:2px 8px; min-width:0;">
-        <span style="font-size:12px; color:#f1f5fb; font-weight:700;">
-          <span style="color:#a5b4fc; font-size:10.5px;">${_esc(my?'انت':m.from)}</span>
-          ${_esc(m.text)}
-          <span style="color:#8494ab; font-size:9px;">${_fmtT(m.ts)}</span>
-        </span>
-        ${prods.length ? `<div style="white-space:nowrap; overflow:hidden;">${prods.map(p=> _prodCardHTML(p, true)).join('')}</div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
   box.innerHTML = `
-    <div style="display:flex; flex-direction:column; min-width:0; flex:1; align-self:stretch; min-height:0;">
-      <div style="font-size:11px; color:#9fb0c7; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; border-bottom:1px solid rgba(255,255,255,.09); padding-bottom:3px;">
-        <span style="font-weight:800;">💬 شات الفروع</span>
-        ${unread ? `<span style="background:var(--minus); color:#fff; border-radius:99px; min-width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:900;">${unread}</span>` : ''}
+    <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+      <span style="font-size:18px; flex-shrink:0;">💬</span>
+      <div style="min-width:0; flex:1;">
+        <div style="font-size:12.5px; font-weight:800; color:#f1f5fb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          ${last ? `<span style="color:#a5b4fc;">${_esc(last.from===me?'انت':last.from)}:</span> ${_esc(last.text)}` : 'شات الفروع 👋'}
+        </div>
+        ${last?`<div style="font-size:9.5px; color:#8494ab;">${_fmtT(last.ts)}</div>`:''}
       </div>
-      <div id="chatMiniBody" style="flex:1; overflow-y:auto; min-height:0; scrollbar-width:thin;">
-        ${rows || '<div style="color:#8494ab; font-size:12px; text-align:center; padding:8px 0;">مفيش رسايل النهارده — دوس وابدأ 👋</div>'}
-      </div>
+      ${unread ? `<span style="background:var(--minus); color:#fff; border-radius:99px; min-width:21px; height:21px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; flex-shrink:0;">${unread}</span>` : ''}
     </div>`;
-  const mb = document.getElementById('chatMiniBody');
-  if(mb) mb.scrollTop = mb.scrollHeight;   // الأحدث دايمًا باين
 }
 function _flashMini(){
   const box = document.getElementById('chatMini'); if(!box) return;
