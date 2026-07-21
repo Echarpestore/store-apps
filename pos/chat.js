@@ -146,23 +146,41 @@ function _prodCardHTML(p, mini){
   </div>`;
 }
 
+function _ensureGlowCSS(){
+  if(document.getElementById('chatGlowCSS')) return;
+  const st = document.createElement('style');
+  st.id = 'chatGlowCSS';
+  st.textContent = `
+    @keyframes chatPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); border-color: var(--border); }
+      50%      { box-shadow: 0 0 16px 4px rgba(245,158,11,.5); border-color: var(--warn); }
+    }
+    #chatMini.chatGlow { animation: chatPulse 2.4s ease-in-out infinite; }`;
+  (document.head||document.documentElement).appendChild(st);
+}
 function _refreshMini(){
   const box = document.getElementById('chatMini'); if(!box) return;
   const me = _my(); if(!me){ box.style.display = 'none'; return; }
+  _ensureGlowCSS();
   const mine = _mine();
   const unread = chatUnreadCount(mine, me, _seen());
   const last = mine.length ? mine[mine.length-1] : null;
   box.style.display = 'flex';
+  box.classList.toggle('chatGlow', unread > 0);   // ✨ نور بيرفرف بالراحة لما فيه رسالة مستنياك
+  const lastProds = last ? (last.products||[]).slice(0,2) : [];
   box.innerHTML = `
-    <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1;">
-      <span style="font-size:15px;">💬</span>
+    <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+      <span style="font-size:24px; flex-shrink:0;">💬</span>
       <div style="min-width:0; flex:1;">
-        <div style="font-size:9.5px; color:var(--muted); display:flex; justify-content:space-between;"><span>شات الفروع</span>${last?`<span>${_fmtT(last.ts)}</span>`:''}</div>
-        <div style="font-size:11px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-          ${last ? `${_esc(last.from===me?'انت':last.from)}: ${_esc(last.text)}` : 'مفيش رسايل النهارده'}
+        <div style="font-size:11px; color:var(--muted); display:flex; justify-content:space-between; margin-bottom:2px;">
+          <span style="font-weight:800;">شات الفروع</span>${last?`<span>${_fmtT(last.ts)}</span>`:''}
         </div>
+        <div style="font-size:14px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          ${last ? `<span style="color:var(--accent);">${_esc(last.from===me?'انت':last.from)}:</span> ${_esc(last.text)}` : 'مفيش رسايل النهارده — دوس وابدأ 👋'}
+        </div>
+        ${lastProds.length ? `<div style="white-space:nowrap; overflow:hidden;">${lastProds.map(p=> _prodCardHTML(p, true)).join('')}</div>` : ''}
       </div>
-      ${unread ? `<span style="background:var(--minus); color:#fff; border-radius:99px; min-width:19px; height:19px; display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:900; flex-shrink:0;">${unread}</span>` : ''}
+      ${unread ? `<span style="background:var(--minus); color:#fff; border-radius:99px; min-width:26px; height:26px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:900; flex-shrink:0;">${unread}</span>` : ''}
     </div>`;
 }
 function _flashMini(){
