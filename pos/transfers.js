@@ -172,7 +172,7 @@ function _trQty(i, d){
   const it = _trNewItems[i]; if(!it) return;
   const nv = it.qty + d;
   if(nv <= 0){ _trNewItems.splice(i,1); }
-  else if(nv > it.stock){ showToast('الكمية أكبر من المتاح في الفرع', 'err'); return; }
+  // 🚫 مفيش سقف من المخزون — الرقم استرشادي (it.stock مش موجودة أصلاً بقى)
   else it.qty = nv;
   _trRenderItems();
 }
@@ -200,11 +200,11 @@ function _trPickSuggest(id){
 function _trAddItemByCode(code){
   const it = allInventory.find(p=> (p.barcode||'') === code || (p.code||'') === code);
   if(!it){ showToast('مفيش منتج بالكود ده', 'err'); return; }
-  const stock = branchQty(it, currentBranch) || 0;
-  if(stock <= 0){ showToast('مفيش رصيد من الصنف ده في الفرع', 'err'); return; }
+  // 🚫 سياسة المحل: الرقم اللي في السيستم استرشادي — التحويل مسموح دايمًا
+  // (زي البيع بالظبط: لو الرصيد صفر بينزل بالسالب ويتظبط في الجرد)
   const ex = _trNewItems.find(x=> x.id === it.id);
-  if(ex){ if(ex.qty < stock) ex.qty++; }
-  else _trNewItems.push({ id: it.id, name: it.name, barcode: it.barcode||'', code: it.code||'', qty: 1, stock });
+  if(ex){ ex.qty++; }
+  else _trNewItems.push({ id: it.id, name: it.name, barcode: it.barcode||'', code: it.code||'', qty: 1 });
   _trRenderItems();
 }
 async function _trSetCarrierByCode(code){
