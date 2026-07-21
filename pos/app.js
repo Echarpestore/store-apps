@@ -46,6 +46,54 @@ function focusSearchBar(){
   // نفوكس خانة البحث عشان السكانر يمسح على طول (منتج أو كود عميل) من غير ما الكاشير يدوس عليها
   setTimeout(function(){ var sb=document.getElementById('searchBar'); if(sb) sb.focus(); }, 120);
 }
+
+// >>> GSCAN_START
+// 🌍 سكان في أي مكان: السكانر بيكتب بسرعة + Enter — من غير ما تدوس في خانة البحث.
+// كارت موظف EC → شراء موظف · عضوية عميل ECH/GLW → ربط بالفاتورة · كود فاتورة FT → مرتجع · باركود صنف → يضيف للسلة.
+function _gsClassify(raw){
+  const t = String(raw||'').trim();
+  const code = t.toUpperCase();
+  if(t.length < 4) return { type:'none' };
+  if(/^EC[A-Z2-9]{10}$/.test(code)) return { type:'staff', code };
+  if(/^(ECH|GLW)/.test(code))       return { type:'customer', code };
+  if(/^FT/.test(code))              return { type:'invoice', code };
+  return { type:'maybe_item', code: t };
+}
+// نتخطى المعالجة العامة لو: واقفين في خانة كتابة، أو شاشة الدخول/التحويلات (ليهم لواقطهم الخاصة)
+function _gsShouldSkip(inField, loginVisible, transfersVisible){
+  return !!(inField || loginVisible || transfersVisible);
+}
+// <<< GSCAN_END
+let _gsBuf = '', _gsLast = 0, _gsFirst = 0;
+document.addEventListener('keydown', function(e){
+  const a = document.activeElement;
+  const inField = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable);
+  const lg = document.getElementById('loginScreen');
+  const tr = document.getElementById('transfersScreen');
+  if(_gsShouldSkip(inField, lg && lg.offsetParent !== null, tr && tr.offsetParent !== null)){ _gsBuf=''; return; }
+  const now = Date.now();
+  if(now - _gsLast > 90){ _gsBuf = ''; _gsFirst = now; }
+  _gsLast = now;
+  if(e.key === 'Enter'){
+    const raw = _gsBuf; _gsBuf = '';
+    if(raw.length < 4) return;
+    // سرعة الكتابة لازم تكون سرعة سكانر (مش صوابع) — متوسط أقل من 70ms للحرف
+    if((now - _gsFirst) / raw.length > 70) return;
+    const r = _gsClassify(raw);
+    if(r.type === 'none') return;
+    e.preventDefault();
+    if(r.type === 'staff'){ resumeOrStartSale(); if(typeof activateStaffPurchase==='function') activateStaffPurchase(r.code); }
+    else if(r.type === 'customer'){ resumeOrStartSale(); if(typeof resolveLoyaltyScan==='function') resolveLoyaltyScan(r.code).then(f=>{ if(!f) showToast('كود العضوية مش موجود','err'); }); }
+    else if(r.type === 'invoice'){ if(typeof openInvoiceForReturn==='function') openInvoiceForReturn(r.code); }
+    else if(r.type === 'maybe_item'){
+      const match = (typeof allInventory!=='undefined'?allInventory:[]).find(it=> it.barcode === r.code && it.status !== 'hidden' && it.status !== 'outofstock');
+      if(match){ resumeOrStartSale(); if(typeof addToCart==='function') addToCart(match); }
+    }
+    return;
+  }
+  if(e.key && e.key.length === 1){ _gsBuf += e.key; if(_gsBuf.length > 40) _gsBuf = _gsBuf.slice(-40); }
+});
+
 function resumeOrStartSale(){
   if(cart.length > 0){
     if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();

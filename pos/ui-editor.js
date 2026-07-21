@@ -35,7 +35,14 @@ const BUILTIN_TB = [
   { uid:'tb_home',      ico:'🏠', name:'الرئيسية',   call:"showScreen('dashboardScreen')" },
   { uid:'tb_sale',      ico:'🧾', name:'البيع',      call:'resumeOrStartSale()' },
   { uid:'tb_transfers', ico:'🚚', name:'التحويلات',  call:'goToTransfers()' },
-  { uid:'tb_reports',   ico:'📊', name:'التقارير',   call:'goToReports()', perm:'canViewReports' }
+  { uid:'tb_reports',   ico:'📊', name:'التقارير',   call:'goToReports()', perm:'canViewReports' },
+  { uid:'tb_items',     ico:'📦', name:'الأصناف',    call:'goToInventory()' },
+  { uid:'tb_dayclose',  ico:'🔒', name:'تقفيل اليوم', call:'goToEndOfDay()', perm:'canViewReports' },
+  { uid:'tb_discounts', ico:'🏷️', name:'الخصومات',   call:'goToDiscounts()', perm:'canChangePrices' },
+  { uid:'tb_loyalty',   ico:'💝', name:'الولاء',      call:'goToLoyaltyScreen()', perm:'canChangePrices' },
+  { uid:'tb_staff',     ico:'🪪', name:'كروت الموظفين', call:'goToStaffCards()', perm:'canManageRoles' },
+  { uid:'tb_import',    ico:'📥', name:'الاستيراد',   call:'goToImport()', perm:'canChangePrices' },
+  { uid:'tb_design',    ico:'🖨️', name:'تصميم الفاتورة', call:'goToReceiptDesign()', perm:'canChangePrices' }
 ];
 const TB_BY_UID = {}; BUILTIN_TB.forEach(t=>{ TB_BY_UID[t.uid]=t; BUILTIN_BY_UID[t.uid]=t; });
 
@@ -69,7 +76,7 @@ function defaultLayout(){
     },
     hidden: [],                         // قايمة uid المخفية
     custom: {},                         // uid -> { ico, label, action }
-    sizes: { actionsW:170, itemopsW:110, btnFont:13, tbIco:24 }
+    sizes: { actionsW:170, itemopsW:110, btnFont:13, tbIco:24, scanFont:15 }
   };
 }
 
@@ -87,6 +94,7 @@ function mergeLayout(saved){
     out.sizes.itemopsW = _num(saved.sizes.itemopsW, base.sizes.itemopsW, 70, 260);
     out.sizes.btnFont  = _num(saved.sizes.btnFont,  base.sizes.btnFont,  9, 22);
     out.sizes.tbIco    = _num(saved.sizes.tbIco,    base.sizes.tbIco,    16, 34);
+    out.sizes.scanFont = _num(saved.sizes.scanFont, base.sizes.scanFont, 12, 30);
   }
   // الأزرار المخصصة الآمنة فقط
   out.custom = {};
@@ -181,7 +189,8 @@ function applySizes(){
     '#saleScreen .qbx-itemops{width:'+_num(s.itemopsW,110,70,260)+'px !important;}' +
     '#saleScreen .qbx-actions button, #saleScreen .qbx-itemops button{font-size:'+_num(s.btnFont,13,9,22)+'px !important;}' +
     '.uniToolbar .uniIco{font-size:'+_num(s.tbIco,24,16,34)+'px !important;}' +
-    '.uniToolbar .uniLbl{font-size:'+Math.round(_num(s.tbIco,24,16,34)*0.46)+'px !important;}';
+    '.uniToolbar .uniLbl{font-size:'+Math.round(_num(s.tbIco,24,16,34)*0.46)+'px !important;}' +
+    '#searchBar{font-size:'+_num(s.scanFont,15,12,30)+'px !important; padding:'+Math.round(_num(s.scanFont,15,12,30)*0.8)+'px '+Math.round(_num(s.scanFont,15,12,30)*0.9)+'px !important;}';
 }
 
 // الشريط العلوي كامل (رجوع + الأساسية + المخصصة) بالترتيب والإخفاء من الإعداد.
@@ -405,6 +414,7 @@ function renderEditorDrawer(){
     _sizeSlider('عرض بانل اليمين', 'itemopsW', 70, 260) +
     _sizeSlider('حجم خط أزرار البيع', 'btnFont', 9, 22) +
     _sizeSlider('حجم أزرار الشريط العلوي', 'tbIco', 16, 34) +
+    _sizeSlider('🔍 حجم خانة السكان/البحث', 'scanFont', 12, 30) +
     _addForm() +
     '<div style="display:flex; gap:8px; margin:14px 8px 0;">' +
       '<button onclick="uiedReset()" style="flex:1; padding:12px; border:1px solid #543; background:#241a18; color:#fca; border-radius:10px; font-weight:800; cursor:pointer;">↩️ الافتراضي</button>' +

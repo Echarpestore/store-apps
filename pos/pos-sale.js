@@ -336,6 +336,8 @@ async function openInvoiceForReturn(code){
       : `<span style="background:#fdecec; color:#b91c1c; font-weight:800; font-size:12px; padding:3px 10px; border-radius:99px;">⚠️ عدّى ${daysAgo} يوم — أكتر من ${RETURN_WINDOW_DAYS} يوم</span>`;
 
     const alreadyReversed = s.reversed ? '<div style="background:#fdecec; color:#b91c1c; padding:8px 10px; border-radius:8px; font-size:12px; margin-bottom:8px;">⚠️ الفاتورة دي اترجعت بالكامل قبل كده.</div>' : '';
+    returnInvoiceData._saleMs = saleMs;
+    const sameDayBanner = _isSameLocalDay(saleMs) ? '<div style="background:#fff6e6; border:1.5px solid var(--warn); color:#b45309; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:800; margin-bottom:8px;">⏰ الفاتورة دي متباعة النهارده — المرتجع هيتسجل كملاحظة يوم-بيوم.</div>' : '';
 
     const itemsHtml = (s.items||[]).filter(it=> !it.isRedemption).map((it, i)=>{
       const isRet = it.isReturn || (it.price||0) < 0;
@@ -359,6 +361,7 @@ async function openInvoiceForReturn(code){
       </div>
       ${customerBanner}
       ${alreadyReversed}
+      ${sameDayBanner}
       <div style="font-weight:800; font-size:13px; margin-bottom:4px;">اختار الصنف اللي عايز ترجعه:</div>
       ${itemsHtml || '<div class="empty-cart">مفيش أصناف</div>'}
       <div style="color:var(--muted); font-size:11px; margin-top:8px;">هيتحط في الفاتورة الحالية كمرتجع (بالأحمر) — كمّل واختار طريقة رجوع الفلوس.</div>`;
@@ -367,30 +370,66 @@ async function openInvoiceForReturn(code){
   }
 }
 
+
+// >>> RETCAP_START
+// ↩️ سقف المرتجع: مينفعش ترجّع من الصنف أكتر من اللي اتباع فعلًا في الفاتورة دي.
+// الدوسات المتكررة بتزوّد الكمية واحدة واحدة في نفس السطر لحد السقف — مش سطور جديدة.
+function _retFindLine(cartArr, invoiceNo, it){
+  return (cartArr||[]).find(c => c.isReturn && c.fromInvoice === (invoiceNo||'') &&
+    (c.barcode||'') === (it.barcode||'') && c.name === it.name) || null;
+}
+function _retCanAdd(currentQty, soldQty){ return (currentQty||0) < (soldQty||0); }
+// نفس اليوم المحلي؟ (لتنبيه "الفاتورة دي متباعة النهارده")
+function _isSameLocalDay(ms, now){
+  if(!ms) return false;
+  const a = new Date(ms), b = new Date(now || Date.now());
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+// <<< RETCAP_END
+
 // يضيف صنف من الفاتورة الممسوحة كمرتجع (بالسالب) في السلة الحالية
 function returnItemFromInvoice(itemIdx){
   if(!returnInvoiceData) return;
   const items = returnInvoiceData.items || [];
   const it = items[itemIdx];
   if(!it){ return; }
+  const invoiceNo = returnInvoiceData.invoiceNo || '';
+  const soldQty = it.qty || 1;
+  // ↩️ السقف: اللي في السلة من الصنف ده (من نفس الفاتورة) + 1 لازم ميعدّيش المتباع
+  const line = _retFindLine(cart, invoiceNo, it);
+  const currentQty = line ? (line.qty || 0) : 0;
+  if(!_retCanAdd(currentQty, soldQty)){
+    showToast('⛔ وصلت للحد الأقصى — المتباع من "'+it.name+'" في الفاتورة دي '+soldQty+' بس', 'err');
+    return;
+  }
   // نوزّع أي خصم/مكافأة على مستوى الفاتورة بالنسبة → الصنف يرجع بحصته من اللي اتدفع فعلاً
   const gross = items.filter(x=> !x.isRedemption && !x.isRewardDiscount && (x.price||0) > 0)
                      .reduce((s,x)=> s + (x.price||0)*(x.qty||1), 0);
   const net = (returnInvoiceData.total != null) ? returnInvoiceData.total : gross;
   const ratio = gross > 0 ? Math.min(1, net / gross) : 1;
   const refundEach = Math.round((Math.abs(it.price||0) * ratio) * 100) / 100;
-  cart.push({
-    id: it.id || '__ret__'+itemIdx,
-    name: it.name,
-    barcode: it.barcode || '',
-    price: -refundEach,
-    qty: it.qty || 1,
-    isReturn: true,
-    fromInvoice: returnInvoiceData.invoiceNo || ''
-  });
+  if(line){
+    line.qty += 1;
+  }else{
+    cart.push({
+      id: it.id || '__ret__'+itemIdx,
+      name: it.name,
+      barcode: it.barcode || '',
+      price: -refundEach,
+      qty: 1,
+      isReturn: true,
+      fromInvoice: invoiceNo
+    });
+    // ⏰ أول إضافة مرتجع من فاتورة متباعة النهارده → تنبيه + تسجيل للصندوق الأسود
+    if(_isSameLocalDay(returnInvoiceData._saleMs)){
+      showToast('⏰ خد بالك: الفاتورة دي متباعة النهارده', 'err');
+      if(typeof _logActivity === 'function') _logActivity('same_day_return', { invoiceNo, item: it.name, soldQty });
+    }
+  }
   renderCart();
+  const cur = (line ? line.qty : 1);
   const note = ratio < 1 ? ` (بعد توزيع الخصم: ${refundEach} ج.م للقطعة)` : '';
-  showToast('اتحط "'+it.name+'" كمرتجع بالأحمر ↩️'+note);
+  showToast('↩️ "'+it.name+'" مرتجع: '+cur+' من '+soldQty+note);
 }
 
 function closeReturnInvoiceModal(){
@@ -847,6 +886,13 @@ async function reverseReceipt(saleId){
     const saleDoc = await db.collection(TEST_SALES).doc(saleId).get();
     if(!saleDoc.exists){ showToast('الفاتورة مش موجودة', 'err'); return; }
     const sale = saleDoc.data();
+
+    // ⏰ عكس فاتورة في نفس يوم بيعها → تأكيد إضافي + تسجيل للصندوق الأسود
+    const _rvMs = sale.createdAt && sale.createdAt.toMillis ? sale.createdAt.toMillis() : (sale.createdAt && sale.createdAt.seconds ? sale.createdAt.seconds*1000 : 0);
+    if(_isSameLocalDay(_rvMs)){
+      if(!confirm('⏰ الفاتورة دي متسجلة النهارده — عكسها هيتسجل كملاحظة يوم-بيوم. متأكد؟')) return;
+      if(typeof _logActivity === 'function') _logActivity('same_day_reversal', { invoiceNo: sale.invoiceNo||'', total: sale.total||0 });
+    }
 
     // 1) رجّع الكمية للمخزون (سطور المرتجع جوه الفاتورة بتتعكس هي كمان: كانت رجّعت بضاعة، فبنخصمها تاني)
     const batch = db.batch();
