@@ -63,6 +63,17 @@ function _gsClassify(raw){
 function _gsShouldSkip(inField, loginVisible, transfersVisible){
   return !!(inField || loginVisible || transfersVisible);
 }
+// ⌨️ حرف السكانر من مكان الزرار الفيزيائي (e.code) — مستقل عن لغة الكيبورد:
+// لو الويندوز على عربي، e.key بيطلع "ث/لا/..." والكود يتبعتر — e.code ثابت دايمًا.
+function _scanChar(e){
+  const c = e.code || '';
+  if(/^Key[A-Z]$/.test(c))    return c.slice(3);
+  if(/^Digit[0-9]$/.test(c))  return c.slice(5);
+  if(/^Numpad[0-9]$/.test(c)) return c.slice(6);
+  if(c === 'Minus' || c === 'NumpadSubtract') return '-';
+  const k = e.key || '';
+  return (k.length === 1 && /[\x20-\x7E]/.test(k)) ? k : '';
+}
 // <<< GSCAN_END
 let _gsBuf = '', _gsLast = 0, _gsFirst = 0;
 document.addEventListener('keydown', function(e){
@@ -91,7 +102,7 @@ document.addEventListener('keydown', function(e){
     }
     return;
   }
-  if(e.key && e.key.length === 1){ _gsBuf += e.key; if(_gsBuf.length > 40) _gsBuf = _gsBuf.slice(-40); }
+  const _ch = _scanChar(e); if(_ch){ _gsBuf += _ch; if(_gsBuf.length > 40) _gsBuf = _gsBuf.slice(-40); }
 });
 
 function resumeOrStartSale(){
@@ -617,7 +628,7 @@ function buildLabelHTML(it, barcodeSvgId){
         else if(st==='tag')  parts.push(`<div style="font-size:${fs}; font-weight:900; border:2.5px solid #000; border-radius:99px; padding:3px 12px; display:inline-block;">${pv}</div>`);
         else                 parts.push(`<div style="font-size:${fs}; font-weight:900;">${pv}</div>`);
         break; }
-      case 'barcode': if(it.barcode) parts.push(`<div style="width:${lb.bcWidthPct||85}%; height:${lb.bcHeight||30}px; margin:1px auto; line-height:0;"><svg id="${barcodeSvgId}" preserveAspectRatio="none" style="width:100%; height:100%; display:block;"></svg></div>`); break;
+      case 'barcode': if(it.barcode) parts.push(`<div style="width:${lb.bcWidthPct||85}%; height:${lb.bcHeight||30}px; margin:1px auto; line-height:0;"><svg id="${barcodeSvgId}" preserveAspectRatio="none" shape-rendering="crispEdges" style="width:100%; height:100%; display:block;"></svg></div>`); break;
       case 'code': if(it.barcode) parts.push(`<div style="font-size:${fs}; letter-spacing:.5px; direction:ltr;">${it.barcode}</div>`); break;
     }
   }
@@ -643,7 +654,7 @@ function refreshLabelPreview(){
   box.style.width = (w*3.78*scale)+'px'; box.style.height = (h*3.78*scale)+'px';
   const note = document.getElementById('labelSizeNote');
   if(note) note.textContent = w+' × '+h+' مم (المعاينة مصغّرة — الطباعة بالمقاس الحقيقي)';
-  try{ const bc = box.querySelector('#lblPrevBc'); if(bc&&typeof JsBarcode!=='undefined') { JsBarcode(bc, demo.barcode, {format:'CODE128', width:2, height:60, margin:0, displayValue:false}); fitBarcodeSvg(bc); } }catch(e){}
+  try{ const bc = box.querySelector('#lblPrevBc'); if(bc&&typeof JsBarcode!=='undefined') { JsBarcode(bc, demo.barcode, {format:'CODE128', width:2, height:60, margin:8, displayValue:false}); fitBarcodeSvg(bc); } }catch(e){}
 }
 
 // ===== نافذة الكمية + الطباعة (مشتركة: صنف واحد أو دفعة من الاستلام) =====
@@ -693,7 +704,7 @@ function doPrintLabels(jobs){
   tmp.style.cssText = 'position:fixed; left:-9999px; top:0;';
   tmp.innerHTML = html;
   document.body.appendChild(tmp);
-  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el){ JsBarcode(el, c.code, {format:'CODE128', width:2, height:60, margin:0, displayValue:false}); fitBarcodeSvg(el); } }); }catch(e){}
+  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el){ JsBarcode(el, c.code, {format:'CODE128', width:2, height:60, margin:8, displayValue:false}); fitBarcodeSvg(el); } }); }catch(e){}
   const finalHTML = tmp.innerHTML;
   tmp.remove();
 

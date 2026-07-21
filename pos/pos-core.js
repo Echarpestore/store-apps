@@ -392,7 +392,7 @@ document.addEventListener('keydown', function(e){
     }
     return;
   }
-  if(e.key && e.key.length === 1) _cardBuf += e.key.toUpperCase();
+  { const _c = (typeof _scanChar==='function') ? _scanChar(e) : ((e.key&&e.key.length===1)?e.key:''); if(_c) _cardBuf += _c.toUpperCase(); }
   if(_cardBuf.length > 20) _cardBuf = _cardBuf.slice(-20);
 }, true);
 

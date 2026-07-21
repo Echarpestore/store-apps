@@ -559,7 +559,33 @@ function _groupSalesByDay(sales){
   });
   return groups;
 }
+// تجميع بالشهور: عدّاد لكل شهر (عدد الفواتير + الإجمالي) — عشان مانسحبش لما لانهاية
+function _groupSalesByMonth(sales){
+  const groups = [], byKey = {};
+  (sales||[]).forEach(s=>{
+    const d = (s.createdAt && s.createdAt.toDate) ? s.createdAt.toDate() : (s._d || null);
+    const key = d ? (d.getFullYear()+'-'+(d.getMonth()+1)) : 'no-date';
+    const label = d ? d.toLocaleDateString('ar-EG',{month:'long', year:'numeric'}) : 'بدون تاريخ';
+    if(!byKey[key]){ byKey[key] = { key, label, items:[], total:0, count:0 }; groups.push(byKey[key]); }
+    byKey[key].items.push(s);
+    byKey[key].total += (s.total||0);
+    byKey[key].count++;
+  });
+  return groups;
+}
+// فلترة سريعة: النهارده / امبارح / تاريخ من حقل date (YYYY-MM-DD) → مفتاح يوم موحّد
+function _shDayKeyFromDate(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function _shResolveDayKey(filter, now){
+  const n = now ? new Date(now) : new Date();
+  if(filter === 'today') return _shDayKeyFromDate(n);
+  if(filter === 'yesterday') return _shDayKeyFromDate(new Date(n.getTime() - 86400000));
+  if(/^\d{4}-\d{2}-\d{2}$/.test(filter||'')){ const parts = filter.split('-').map(Number); return parts[0]+'-'+parts[1]+'-'+parts[2]; }
+  return null;
+}
 // <<< SALESLOG_GROUP_END
+let _shMonthKey = null;   // الشهر المختار في سجل المبيعات (null = أحدث شهر)
+let _shDayFilter = null;  // null | 'today' | 'yesterday' | 'YYYY-MM-DD' (فلتر يوم سريع)
+window._shSalesById = {}; // آخر فواتير متحمّلة — لزر 🖨️ طباعة تاني من غير قراءات زيادة
 async function renderLiveSalesHistory(){
   const wrap = document.getElementById('salesHistoryWrap');
   wrap.innerHTML = 'بيتحمّل...';
@@ -572,6 +598,7 @@ async function renderLiveSalesHistory(){
     return bt - at;
   });
   if(sales.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش مبيعات مسجلة</div>'; return; }
+  window._shSalesById = {}; sales.forEach(x=>{ window._shSalesById[x.id] = x; });
 
   // نجيب كل التقييمات المرتبطة بعملاء مرة واحدة، وبعدين نربط كل فاتورة بأقرب تقييم لنفس رقم العميل
   let entriesByPhone = {};
@@ -605,18 +632,75 @@ async function renderLiveSalesHistory(){
         <div style="font-weight:700; font-size:13px;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}${badge} — ${(s.items||[]).length} صنف — ${s.customerPhone ? 'عميل: '+s.customerPhone : 'من غير عميل'}${ratingBadge}</div>
         <div style="color:var(--muted); font-size:11px;">${dateStr} — بواسطة ${s.employeeName||'—'}</div>
       </div>
-      <div style="font-weight:800; font-size:15px; color:${(s.total||0) < 0 ? 'var(--minus)' : 'var(--plus)'};">${(s.total||0).toFixed(2)} ج.م</div>
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <button onclick="event.stopPropagation(); reprintSale('${s.id}')" title="طباعة نسخة تاني" style="border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:9px; padding:7px 10px; font-size:14px; cursor:pointer;">🖨️</button>
+        <div style="font-weight:800; font-size:15px; color:${(s.total||0) < 0 ? 'var(--minus)' : 'var(--plus)'};">${(s.total||0).toFixed(2)} ج.م</div>
+      </div>
     </div>`;
   };
 
-  // تجميع بالأيام: عنوان لكل يوم (اسم اليوم + التاريخ) + عدد الفواتير وإجمالي اليوم
-  const groups = _groupSalesByDay(sales.slice(0,100));
-  wrap.innerHTML = groups.map(g=>
+  // ⚡ فلاتر يوم سريعة: النهارده / امبارح / تاريخ معيّن — فوق شريط الشهور
+  const _chip = (on)=> `flex-shrink:0; padding:8px 14px; border-radius:12px; cursor:pointer; font-weight:800; font-size:12.5px; border:1.5px solid ${on?'#818cf8':'var(--border)'}; background:${on?'rgba(129,140,248,.14)':'var(--panel2)'}; color:var(--text);`;
+  const _dateVal = /^\d{4}-\d{2}-\d{2}$/.test(_shDayFilter||'') ? _shDayFilter : '';
+  const dayBar = `
+    <div style="display:flex; gap:7px; align-items:center; flex-wrap:wrap; padding:2px; margin-bottom:8px;">
+      <button onclick="_shDayFilter = (_shDayFilter==='today' ? null : 'today'); renderLiveSalesHistory();" style="${_chip(_shDayFilter==='today')}">🟢 النهارده</button>
+      <button onclick="_shDayFilter = (_shDayFilter==='yesterday' ? null : 'yesterday'); renderLiveSalesHistory();" style="${_chip(_shDayFilter==='yesterday')}">🌙 امبارح</button>
+      <input type="date" value="${_dateVal}" onchange="_shDayFilter = this.value || null; renderLiveSalesHistory();" style="${_chip(!!_dateVal)} font-family:inherit;">
+      ${_shDayFilter ? `<button onclick="_shDayFilter=null; renderLiveSalesHistory();" style="${_chip(false)} color:var(--minus);">✖ الكل</button>` : ''}
+    </div>`;
+
+  // 📆 العدّاد الشهري: شريط شهور فوق — كل شهر بعدد فواتيره وإجماليه، تدوس عليه يعرض أيامه بس
+  const months = _groupSalesByMonth(sales);
+  if(!_shMonthKey || !months.some(m=> m.key===_shMonthKey)) _shMonthKey = months.length ? months[0].key : null;
+  const monthBar = months.length ? `
+    <div style="display:flex; gap:7px; overflow-x:auto; padding:2px 2px 10px; margin-bottom:4px;">
+      ${months.map(m=>`
+        <button onclick="_shMonthKey='${m.key}'; renderLiveSalesHistory();"
+          style="flex-shrink:0; text-align:center; padding:8px 14px; border-radius:12px; cursor:pointer;
+                 border:1.5px solid ${m.key===_shMonthKey?'#818cf8':'var(--border)'};
+                 background:${m.key===_shMonthKey?'rgba(129,140,248,.14)':'var(--panel2)'}; color:var(--text);">
+          <div style="font-weight:800; font-size:12.5px;">📆 ${m.label}</div>
+          <div style="font-size:10.5px; color:var(--muted); margin-top:2px;">${m.count} فاتورة · <b style="color:var(--text);">${m.total.toFixed(0)} ج.م</b></div>
+        </button>`).join('')}
+    </div>` : '';
+  const selMonth = months.find(m=> m.key===_shMonthKey);
+
+  // لو فيه فلتر يوم → نعرض اليوم ده بس من كل الفواتير المتحمّلة، ونخفي شريط الشهور
+  const _dayKey = _shResolveDayKey(_shDayFilter);
+  const groups = _dayKey
+    ? _groupSalesByDay(sales).filter(g=> g.key === _dayKey)
+    : _groupSalesByDay(selMonth ? selMonth.items : []);
+  wrap.innerHTML = dayBar + (_dayKey ? '' : monthBar) + (groups.map(g=>
     `<div style="display:flex; justify-content:space-between; align-items:center; margin:16px 2px 8px; padding-bottom:6px; border-bottom:2px solid var(--border);">
        <div style="font-weight:800; font-size:13.5px;">📅 ${g.label}</div>
        <div style="color:var(--muted); font-size:11.5px;">${g.count} فاتورة · <b style="color:var(--text);">${g.total.toFixed(2)} ج.م</b></div>
      </div>` + g.items.map(renderRow).join('')
-  ).join('');
+  ).join('') || ('<div class="empty-cart">'+(_dayKey?'مفيش فواتير في اليوم ده':'مفيش فواتير في الشهر ده')+'</div>'));
+}
+
+// 🖨️ طباعة نسخة تاني من فاتورة قديمة — بنفس تصميم الفاتورة، ومن غير فتح الدرج
+function reprintSale(id){
+  const s = (window._shSalesById||{})[id];
+  if(!s){ showToast('مش لاقي بيانات الفاتورة — اعمل تحديث للسجل', 'err'); return; }
+  try{
+    const c = (typeof receiptDesignConfig!=='undefined' && receiptDesignConfig) || (typeof defaultReceiptConfig==='function' ? defaultReceiptConfig() : {lang:'ar'});
+    const L = (typeof RECEIPT_LABELS!=='undefined') ? (RECEIPT_LABELS[c.lang]||RECEIPT_LABELS.ar) : {};
+    const d = s.createdAt && s.createdAt.toDate ? s.createdAt.toDate() : new Date();
+    const payStr = Object.entries(s.payments||{}).filter(([k,v])=> v>0).map(([k,v])=> (L[k]||k)+': '+Number(v).toFixed(2)).join(' | ');
+    const data = {
+      dateStr: d.toLocaleString(c.lang==='en' ? 'en-GB' : 'ar-EG'),
+      empName: s.employeeName || '',
+      items: (s.items||[]).map(it=> ({ name: it.name, qty: it.qty, line: ((it.price||0)*(it.qty||1)).toFixed(2) })),
+      totalStr: Number(s.total||0).toFixed(2),
+      payStr,
+      invoiceNo: s.invoiceNo || '',
+      scanCode: s.invoiceCode || s.invoiceNo || '',
+      showAppQR: false
+    };
+    _printBuiltReceipt(data, {});   // {} = مفيش كاش هنا → الدرج مش هيفتح
+    showToast('🖨️ بتتطبع نسخة من فاتورة ' + (s.invoiceNo || ''));
+  }catch(e){ showToast('تعذر الطباعة: ' + e.message, 'err'); }
 }
 
 // المبيعات المستوردة من QuickBooks — للرجوع والاطلاع بس، مش بتدخل في التقارير الحية

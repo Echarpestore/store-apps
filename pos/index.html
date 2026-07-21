@@ -1087,7 +1087,10 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 
 <div class="modal-overlay" id="returnInvoiceModal">
   <div class="modal-sheet">
-    <h3>↩️ مرتجع من فاتورة</h3>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <h3 style="margin:0;">↩️ مرتجع من فاتورة</h3>
+      <button onclick="closeReturnInvoiceModal()" title="إغلاق" style="border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:10px; width:40px; height:40px; font-size:16px; font-weight:900; cursor:pointer; flex-shrink:0;">✖</button>
+    </div>
     <div id="returnInvoiceBody"><div class="empty-cart">بيتحمّل...</div></div>
     <div class="modal-btns" style="margin-top:10px;">
       <button class="btn-cancel" onclick="closeReturnInvoiceModal()" style="flex:1;">إغلاق</button>

@@ -232,7 +232,7 @@ function buildStaffCardHTML(e, side){
   if(side==='front') return `
   <div class="stcard" style="width:50mm; height:90mm; box-sizing:border-box; background:#fff; border-radius:3.5mm; overflow:hidden; display:flex; flex-direction:column; font-family:Tahoma,Arial; page-break-after:always; border:0.3mm solid #ddd;">
     <div style="background:${b.main}; color:${b.text}; text-align:center; padding:4mm 2mm 3mm;">
-      ${logo?`<img src="${logo}" style="max-height:9mm; max-width:70%; filter:brightness(0) invert(1);">`:`<div style="font-weight:900; font-size:14px; letter-spacing:1px;">${b.name}</div>`}
+      ${logo?`<div style="background:#fff; border-radius:2mm; padding:1mm 2.5mm; display:inline-block; max-width:78%;"><img src="${logo}" style="max-height:8mm; max-width:100%; display:block;"></div>`:`<div style="font-weight:900; font-size:14px; letter-spacing:1px;">${b.name}</div>`}
       <div style="font-size:7px; opacity:.85; margin-top:1mm;">بطاقة موظف · Staff Card</div>
     </div>
     <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:3mm;">

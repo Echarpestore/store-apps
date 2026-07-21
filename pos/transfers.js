@@ -273,7 +273,7 @@ document.addEventListener('keydown', function(e){
       if(/^EC[A-Z2-9]{10}$/.test(code)){ e.preventDefault(); e.stopPropagation(); _trConfirmByCard(code); }
       return;
     }
-    if(e.key && e.key.length === 1) _trBuf += e.key;
+    { const _c = (typeof _scanChar==='function') ? _scanChar(e) : ((e.key&&e.key.length===1)?e.key:''); if(_c) _trBuf += _c; }
     return;
   }
   const scr = document.getElementById('transfersScreen');
@@ -289,7 +289,7 @@ document.addEventListener('keydown', function(e){
     if(code.length >= 4){ e.preventDefault(); _trRouteCode(code); }
     return;
   }
-  if(e.key && e.key.length === 1) _trBuf += e.key;
+  { const _c = (typeof _scanChar==='function') ? _scanChar(e) : ((e.key&&e.key.length===1)?e.key:''); if(_c) _trBuf += _c; }
   if(_trBuf.length > 30) _trBuf = _trBuf.slice(-30);
 }, true);
 async function sendTransfer(){
