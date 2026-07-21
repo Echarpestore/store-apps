@@ -158,6 +158,7 @@ function goToSale(){
 }
 function goToDashboard(){
   refreshHeldCount();
+  loadReceiptDesignConfig().catch(()=>{});   // 🎨 تصميم براند الفرع ده بالذات
   showScreen('dashboardScreen');
 }
 
@@ -207,6 +208,11 @@ function defaultLabelConfig(){
     elements: LABEL_ELEMENTS.map(e=> ({ id:e.id, on: e.id!=='logo', size:e.size||10 })) };
 }
 let receiptDesignConfig = null;
+// 🎨 تصميم لكل براند: إيشارب على المستند القديم (زي ما هو — صفر ترحيل)، وGlow على مستند خاص
+let _designEditBrand = null;   // البراند اللي المحرر فاتح عليه (افتراضيًا براند الجهاز)
+function _brandOfBranch(br){ return (typeof GLOW_BRANCHES !== 'undefined' && GLOW_BRANCHES.includes(br)) ? 'glow' : 'echarpe'; }
+function _deviceBrand(){ return _brandOfBranch(typeof currentBranch !== 'undefined' ? currentBranch : ''); }
+function _designDocIdFor(brand){ return brand === 'glow' ? 'receipt_design_glow' : 'receipt_design'; }
 
 function defaultReceiptConfig(){
   return {
@@ -214,10 +220,15 @@ function defaultReceiptConfig(){
     elements: RECEIPT_ELEMENTS.filter(e=> e.kind!=='multi').map(e=> ({ id:e.id, on: !(e.id==='branchName'||e.id==='address'||e.id==='phone'), text: e.def||'', size: e.size||12 }))
   };
 }
-async function loadReceiptDesignConfig(){
+async function loadReceiptDesignConfig(brand){
+  brand = brand || _deviceBrand();
   receiptDesignConfig = defaultReceiptConfig();
   try{
-    const doc = await db.collection(TEST_SETTINGS).doc('receipt_design').get();
+    let doc = await db.collection(TEST_SETTINGS).doc(_designDocIdFor(brand)).get();
+    // Glow لسه ماتصممش؟ نطبع مؤقتًا بتصميم إيشارب لحد ما تحفظ تصميم Glow من المحرر
+    if(!doc.exists && brand === 'glow'){
+      doc = await db.collection(TEST_SETTINGS).doc('receipt_design').get();
+    }
     if(doc.exists){
       const d = doc.data();
       if(Array.isArray(d.elements)){
@@ -256,6 +267,7 @@ function goToReceiptDesign(){
 
 let _designTab = 'receipt';   // receipt | label
 async function renderReceiptDesignScreen(){
+  if(_designEditBrand === null) _designEditBrand = _deviceBrand();
   if(!receiptDesignConfig) await loadReceiptDesignConfig();
   const c = receiptDesignConfig;
   if(!c.label) c.label = defaultLabelConfig();
@@ -390,6 +402,11 @@ async function renderReceiptDesignScreen(){
     ${lb.elements.map((el,i)=> elRow(el, i, LABEL_ELEMENTS, 'moveLabelEl', 'receiptDesignConfig.label.elements', 'receiptDesignConfig.label.elements', 'refreshLabelPreview')).join('')}`;
 
   document.getElementById('receiptDesignWrap').innerHTML = `
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button onclick="_designEditBrand='echarpe'; loadReceiptDesignConfig('echarpe').then(renderReceiptDesignScreen);" style="flex:1; padding:10px; border-radius:10px; cursor:pointer; font-weight:900; font-size:13px; border:2px solid ${_designEditBrand!=='glow'?'#b76e79':'var(--border)'}; background:${_designEditBrand!=='glow'?'rgba(183,110,121,.15)':'var(--panel2)'}; color:var(--text);">🎀 تصميم إيشارب</button>
+      <button onclick="_designEditBrand='glow'; loadReceiptDesignConfig('glow').then(renderReceiptDesignScreen);" style="flex:1; padding:10px; border-radius:10px; cursor:pointer; font-weight:900; font-size:13px; border:2px solid ${_designEditBrand==='glow'?'#d4af37':'var(--border)'}; background:${_designEditBrand==='glow'?'rgba(212,175,55,.13)':'var(--panel2)'}; color:var(--text);">🖤 تصميم Glow</button>
+    </div>
+    ${_designEditBrand !== _deviceBrand() ? `<div style="background:rgba(245,158,11,.12); border:1px solid var(--warn); color:var(--warn); border-radius:9px; padding:7px 10px; font-size:11.5px; font-weight:700; margin-bottom:10px;">⚠️ بتعدّل تصميم البراند التاني — جهازك هيرجع يطبع بتصميم فرعه بعد الحفظ</div>` : ''}
     <div style="display:flex; gap:6px; margin-bottom:12px; background:var(--panel2); border-radius:12px; padding:5px;">
       <button onclick="_designTab='receipt'; renderReceiptDesignScreen();" style="flex:1; padding:11px; border-radius:9px; border:none; cursor:pointer; font-weight:800; font-size:13px; ${_designTab==='receipt'?'background:var(--panel); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,.25);':'background:none; color:var(--muted);'}">🧾 الفاتورة</button>
       <button onclick="_designTab='label'; renderReceiptDesignScreen();" style="flex:1; padding:11px; border-radius:9px; border:none; cursor:pointer; font-weight:800; font-size:13px; ${_designTab==='label'?'background:var(--panel); color:var(--text); box-shadow:0 2px 8px rgba(0,0,0,.25);':'background:none; color:var(--muted);'}">🏷️ ليبل السعر</button>
@@ -730,9 +747,11 @@ async function saveReceiptDesignConfig(){
     cfg.shopName = (shopEl && shopEl.text) || 'المحل';
     if(typeof cfg.labelShopName === 'undefined') cfg.labelShopName = true;
     if(typeof cfg.showBarcodeOnLabel === 'undefined') cfg.showBarcodeOnLabel = true;
-    await db.collection(TEST_SETTINGS).doc('receipt_design').set(cfg);
+    const _brand = _designEditBrand || _deviceBrand();
+    await db.collection(TEST_SETTINGS).doc(_designDocIdFor(_brand)).set(cfg);
     receiptDesignConfig = cfg;
-    showToast('اتحفظ تصميم الفاتورة ✅');
+    showToast('اتحفظ تصميم ' + (_brand==='glow' ? 'Glow 🖤' : 'إيشارب 🎀') + ' ✅');
+    if(_brand !== _deviceBrand()) await loadReceiptDesignConfig(_deviceBrand());   // جهازك يرجع لتصميم فرعه
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
 }
 
@@ -926,6 +945,27 @@ document.addEventListener('keydown', function(e){
   if(e.key === 'Enter' && e.shiftKey){
     e.preventDefault();
     if(typeof confirmPayment==='function') confirmPayment();
+    return;
+  }
+
+  // ⬆️⬇️ تنقّل بين سطور السلة بالأسهم · Delete يمسح السطر المحدد
+  if((e.key === 'ArrowUp' || e.key === 'ArrowDown') && typeof cart !== 'undefined' && cart.length){
+    e.preventDefault();
+    const d = (e.key === 'ArrowDown') ? 1 : -1;
+    if(selectedCartIdx === null) selectedCartIdx = (d === 1) ? 0 : cart.length - 1;
+    else selectedCartIdx = Math.min(cart.length - 1, Math.max(0, selectedCartIdx + d));
+    renderCart();
+    const sel = document.querySelector('#saleScreen tr.sel');
+    if(sel && sel.scrollIntoView) sel.scrollIntoView({ block:'nearest' });
+    return;
+  }
+  if(e.key === 'Delete' && typeof cart !== 'undefined' && selectedCartIdx !== null && cart[selectedCartIdx]){
+    e.preventDefault();
+    const name = cart[selectedCartIdx].name;
+    removeFromCart(selectedCartIdx);
+    selectedCartIdx = null;
+    renderCart();
+    showToast('🗑️ اتشال "' + name + '" من الفاتورة');
     return;
   }
 });

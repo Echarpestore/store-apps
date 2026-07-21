@@ -215,8 +215,10 @@ async function reissueStaffCard(empId){
 function _staffBrand(e){
   const glow = /glow/i.test(e.branch||'');
   return glow
-    ? { name:'Glow', main:'#111111', accent:'#d4af37', text:'#ffffff', soft:'#2a2a2a', app:'glow' }
-    : { name:'echarpe', main:'#b76e79', accent:'#f7dfe4', text:'#ffffff', soft:'#fdf1f3', app:'loyalty' };
+    ? { name:'Glow', main:'#111111', accent:'#d4af37', text:'#ffffff', soft:'#2a2a2a', app:'glow',
+        logoUrl:'https://echarpestore.github.io/store-apps/glow/wordmark.png' }
+    : { name:'echarpe', main:'#b76e79', accent:'#f7dfe4', text:'#ffffff', soft:'#fdf1f3', app:'loyalty',
+        logoUrl:'https://echarpestore.github.io/store-apps/loyalty/logo-white.png' };
 }
 function _staffAvatarSVG(av, brand){
   const skin = '#f2c9a8', bg = brand.accent;
@@ -232,7 +234,7 @@ function buildStaffCardHTML(e, side){
   if(side==='front') return `
   <div class="stcard" style="width:50mm; height:90mm; box-sizing:border-box; background:#fff; border-radius:3.5mm; overflow:hidden; display:flex; flex-direction:column; font-family:Tahoma,Arial; page-break-after:always; border:0.3mm solid #ddd;">
     <div style="background:${b.main}; color:${b.text}; text-align:center; padding:4mm 2mm 3mm;">
-      ${logo?`<div style="background:#fff; border-radius:2mm; padding:1mm 2.5mm; display:inline-block; max-width:78%;"><img src="${logo}" style="max-height:8mm; max-width:100%; display:block;"></div>`:`<div style="font-weight:900; font-size:14px; letter-spacing:1px;">${b.name}</div>`}
+      <img src="${b.logoUrl}" style="max-height:9mm; max-width:76%; display:block; margin:0 auto;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"><div style="display:none; font-weight:900; font-size:14px; letter-spacing:1px;">${b.name}</div>
       <div style="font-size:7px; opacity:.85; margin-top:1mm;">بطاقة موظف · Staff Card</div>
     </div>
     <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:3mm;">
