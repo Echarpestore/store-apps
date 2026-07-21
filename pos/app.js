@@ -653,6 +653,9 @@ function doPrintLabels(jobs){
     window.posShell.printLabel({ printer: shellCfg.labelPrinter, html: `<style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;}</style>`+finalHTML })
       .then(()=> showToast('اتبعت '+total+' ليبل للطابعة 🏷️'))
       .catch(e=> showToast('فشل طباعة الليبل: '+e.message, 'err'));
+  }else if(typeof window.posShell !== 'undefined'){
+    // جوه برنامج الويندوز من غير طابعة متختارة → رسالة واضحة بدل الفشل الصامت
+    showToast('🏷️ مفيش طابعة ليبل متختارة على الجهاز ده — افتح محرر تصميم الفاتورة، وتحت خالص اختار طابعة الليبل ودوس «حفظ طابعات الجهاز ده»', 'err');
   }else{
     const wdw = window.open('', '_blank', 'width=420,height=560');
     wdw.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;}</style></head><body>${finalHTML}<script>window.print(); setTimeout(()=>window.close(), 500);<\/script></body></html>`);
@@ -691,7 +694,8 @@ async function loadPrinterPickers(){
       mk('labelPrinter', '🏷️ طابعة الليبل (Zebra)', '') +
       mk('drawerPrinter', '💰 الطابعة الموصّل بيها درج الكاش', '(بيفتح تلقائي مع الكاش)') +
       `<button class="secondary" onclick="savePrinterPickers()" style="width:100%; margin-top:12px; padding:10px;">حفظ طابعات الجهاز ده</button>
-       <button class="secondary" onclick="testInvoicePrinter()" style="width:100%; margin-top:8px; padding:10px;">🧪 اختبار طباعة فاتورة تجريبية</button>`;
+       <button class="secondary" onclick="testInvoicePrinter()" style="width:100%; margin-top:8px; padding:10px;">🧪 اختبار طباعة فاتورة تجريبية</button>
+       <button class="secondary" onclick="testLabelPrinter()" style="width:100%; margin-top:8px; padding:10px;">🏷️ اختبار طباعة ليبل تجريبي</button>`;
   }catch(e){ box.innerHTML = '<div style="color:var(--bad); font-size:12px;">تعذر تحميل الطابعات: '+e.message+'</div>'; }
 }
 function savePrinterPickers(){
@@ -703,6 +707,11 @@ function savePrinterPickers(){
   localStorage.setItem('pos_printers', JSON.stringify(cfg));
   showToast('اتحفظت طابعات الجهاز ✅');
 }
+function testLabelPrinter(){
+  // ليبل واحد تجريبي بنفس مسار الطباعة الحقيقي — لو طلع، يبقى كل حاجة متظبطة
+  doPrintLabels([{ name:'ليبل اختبار ✅', price:100, barcode:'TEST123456', qty:1 }]);
+}
+
 function testInvoicePrinter(){
   const d = receiptSampleData();
   _printBuiltReceipt(d, {cash:550});
