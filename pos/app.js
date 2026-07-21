@@ -650,7 +650,7 @@ function doPrintLabels(jobs){
   tmp.remove();
 
   if(shellCfg && shellCfg.labelPrinter){
-    window.posShell.printLabel({ printer: shellCfg.labelPrinter, html: `<style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;}</style>`+finalHTML })
+    window.posShell.printLabel({ printer: shellCfg.labelPrinter, widthMm: w, heightMm: h, html: `<style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;}</style>`+finalHTML })
       .then(()=> showToast('اتبعت '+total+' ليبل للطابعة 🏷️'))
       .catch(e=> showToast('فشل طباعة الليبل: '+e.message, 'err'));
   }else if(typeof window.posShell !== 'undefined'){
