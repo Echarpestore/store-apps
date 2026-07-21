@@ -84,7 +84,7 @@ async function renderInventoryScreen(){
   const lowStock = allInventory.filter(it=> it.status !== 'hidden' && branchQty(it) <= (it.minStock??0) && (it.minStock??0) > 0);
   const alertBar = document.getElementById('lowStockAlertBar');
   if(alertBar){
-    alertBar.innerHTML = lowStock.length ? `
+    alertBar.innerHTML = (lowStock.length && hasPerm('canViewStock')) ? `
       <div style="background:rgba(239,68,68,.12); border:1px solid var(--minus); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:12px;">
         ⚠️ <b>${lowStock.length} صنف وصل للحد الأدنى:</b> ${lowStock.map(i=>i.name).join('، ')}
       </div>` : '';
@@ -197,7 +197,7 @@ function renderInventoryList(){
     const isLow = (it.minStock??0) > 0 && qty <= it.minStock;
     const isOut = it.status==='outofstock' || qty <= 0;
     const qtyCol = isOut ? '#b91c1c' : isLow ? '#b45309' : '#15803d';
-    const qtyTxt = canStock ? qty : (isOut?'نافد':isLow?'ناقص':'متاح');
+    const qtyTxt = canStock ? qty : '';   // 🚫 من غير صلاحية: ولا رقم ولا كلمة عن المخزون
     const sold = invSales[it.id]||0;
     const sel = invSelected.has(it.id);
     return `<tr onclick="invRowClick(event, '${it.id}')" style="cursor:pointer; border-bottom:1px solid var(--border); background:${sel?'rgba(129,140,248,.20)':(i%2?'transparent':'rgba(0,0,0,.02)')}; ${sel?'outline:1.5px solid #818cf8; outline-offset:-1.5px;':''}">

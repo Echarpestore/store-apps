@@ -16,7 +16,8 @@ searchBar.addEventListener('input', ()=>{
   matches.forEach(it=>{
     const row = document.createElement('div');
     row.className = 'sugg-row';
-    const stockNote = branchQty(it) <= 0 ? ' <span style="color:var(--minus); font-size:11px;">(نافد)</span>' : '';
+    // 🚫 سياسة المحل: المخزون مايتذكرش قدام الموظفين — الملاحظة دي للإدارة بس
+    const stockNote = (typeof hasPerm==='function' && hasPerm('canViewStock') && branchQty(it) <= 0) ? ' <span style="color:var(--minus); font-size:11px;">(نافد)</span>' : '';
     row.innerHTML = `<span>${it.name}${stockNote} <span style="color:#aaa; font-size:11px; direction:ltr;">${it.barcode||''}</span></span><span style="color:var(--muted)">${it.price} جنيه</span>`;
     row.onclick = ()=>{ addToCart(it); searchBar.value=''; box.innerHTML=''; };
     box.appendChild(row);
