@@ -320,6 +320,45 @@
   .statusDot.yellow{background:#f2a93c; box-shadow:0 0 8px rgba(242,169,60,.6);}
   .statusDot.red{background:var(--bad); box-shadow:0 0 8px rgba(229,72,77,.6);}
   .statusDot.gray{background:var(--sub);}
+
+  /* ===== 🧭 معالج تسجيل الموظف ===== */
+  #regWizard{position:fixed; inset:0; z-index:60; background:linear-gradient(165deg,#14100a,#12141a 55%); display:none; overflow-y:auto;}
+  #regWizard.show{display:flex; align-items:flex-start; justify-content:center;}
+  .rw-card{width:min(94vw,440px); margin:auto; padding:26px 22px 30px; text-align:center;}
+  .rw-logo{width:120px; margin:6px auto 4px; filter:drop-shadow(0 6px 20px rgba(242,193,78,.25)); animation:rwFloat 3.2s ease-in-out infinite;}
+  @keyframes rwFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-9px);}}
+  @media (prefers-reduced-motion:reduce){.rw-logo{animation:none;}}
+  .rw-dots{display:flex; justify-content:center; gap:7px; margin:14px 0 22px;}
+  .rw-dot{width:8px; height:8px; border-radius:50%; background:var(--line); transition:all .3s;}
+  .rw-dot.on{background:var(--gold); width:22px; border-radius:5px;}
+  .rw-step{animation:rwIn .45s cubic-bezier(.2,.7,.3,1);}
+  @keyframes rwIn{from{opacity:0; transform:translateX(30px);}to{opacity:1; transform:translateX(0);}}
+  .rw-eyebrow{font-family:'Space Grotesk'; letter-spacing:.28em; font-size:11px; color:var(--gold); text-transform:uppercase;}
+  .rw-title{font-size:23px; font-weight:800; margin:6px 0 4px;}
+  .rw-sub{font-size:13.5px; color:var(--sub); margin-bottom:20px; line-height:1.6;}
+  .rw-input{width:100%; padding:15px; border-radius:14px; border:1.5px solid var(--line); background:var(--panel); color:var(--ink); font-family:'Cairo'; font-size:17px; font-weight:700; text-align:center;}
+  .rw-choice{display:flex; flex-direction:column; gap:11px; margin-bottom:6px;}
+  .rw-opt{padding:16px; border-radius:15px; border:2px solid var(--line); background:var(--panel); cursor:pointer; font-weight:800; font-size:16px; transition:all .18s; text-align:center;}
+  .rw-opt small{display:block; font-weight:500; font-size:12px; color:var(--sub); margin-top:3px;}
+  .rw-opt.sel{border-color:var(--gold); background:linear-gradient(180deg,#2a2410,var(--panel)); color:var(--gold); transform:translateY(-2px);}
+  .rw-days{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+  .rw-day{padding:13px 4px; border-radius:12px; border:2px solid var(--line); background:var(--panel); cursor:pointer; font-weight:800; font-size:13px; transition:all .16s;}
+  .rw-day.sel{border-color:var(--gold); background:linear-gradient(180deg,#2a2410,var(--panel)); color:var(--gold);}
+  .rw-rules{text-align:right; display:flex; flex-direction:column; gap:10px; margin-bottom:6px;}
+  .rw-rule{display:flex; gap:11px; align-items:flex-start; background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:12px 14px;}
+  .rw-rule .ic{font-size:20px; flex-shrink:0;}
+  .rw-rule b{font-size:14px;} .rw-rule small{display:block; color:var(--sub); font-size:12px; margin-top:2px; line-height:1.5;}
+  .rw-rule.good{border-color:var(--gold-dim);}
+  .rw-rule.warn{border-color:#5a3a3a;}
+  .rw-agree{display:flex; align-items:center; gap:10px; justify-content:center; margin:18px 0 6px; font-size:14px; font-weight:700; cursor:pointer;}
+  .rw-agree input{width:22px; height:22px; accent-color:var(--gold);}
+  .rw-nav{display:flex; gap:10px; margin-top:24px;}
+  .rw-btn{flex:1; padding:15px; border-radius:14px; border:none; font-family:'Cairo'; font-weight:800; font-size:16px; cursor:pointer;}
+  .rw-next{background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400;}
+  .rw-next:disabled{opacity:.4; cursor:not-allowed;}
+  .rw-back{background:var(--panel2); color:var(--sub); flex:0 0 90px;}
+  .rw-done{font-size:60px; animation:rwPop .5s cubic-bezier(.2,1.4,.4,1);}
+  @keyframes rwPop{from{transform:scale(0);}to{transform:scale(1);}}
 </style>
 </head>
 <body>
@@ -338,6 +377,15 @@
 <div id="app">
 
   <!-- KIOSK -->
+  <!-- 🧭 معالج تسجيل الموظف -->
+  <div id="regWizard">
+    <div class="rw-card">
+      <img class="rw-logo" src="loyalty/logo-white.png" alt="echarpe">
+      <div class="rw-dots" id="rwDots"></div>
+      <div id="rwBody"></div>
+    </div>
+  </div>
+
   <div id="kiosk">
     <div class="top-row">
       <div>
@@ -350,6 +398,7 @@
       <button class="lbBtn" id="openAdvance" style="margin-left:8px; padding:8px 12px; font-size:11px;">💰 سلفة</button>
       <button class="lbBtn" id="openAttendance" style="margin-left:8px;">⏰ الحضور</button>
       <button class="lbBtn" id="openLeaderboard" style="padding:8px 12px; font-size:11px;">🏆 الترتيب</button>
+      <button class="lbBtn" id="openRegBtn" style="padding:8px 12px; font-size:11px;" onclick="openRegWizard()">🙋 تسجيل موظف جديد</button>
     </div>
     <div id="announcementBanner" style="display:none;"></div>
     <div id="dailyTargetCard" style="display:none;"></div>
@@ -478,6 +527,10 @@
       <div class="dhSectionLabel">🎁 المكافآت</div>
       <div class="dayHubRow"><div class="lbl">مكافأة الأسبوع</div><div id="dh_weeklyProgress">—</div></div>
       <div class="dayHubRow"><div class="lbl">مكافأة الشهر</div><div id="dh_monthlyProgress">—</div></div>
+      <div class="dayHubRow" style="flex-direction:column; align-items:stretch; gap:8px;">
+        <div class="lbl">🏆 نتيجة مكافأتك الشهر ده</div>
+        <div id="dh_rewardScore"></div>
+      </div>
 
       <div class="dhSectionLabel">🏁 حالتك في السباق</div>
       <div id="dh_raceStatus"></div>
@@ -638,6 +691,28 @@
     <div class="panel">
       <h3>الموظفين الحاليين</h3>
       <div id="empList"></div>
+    </div>
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <h3 style="margin:0;">🔒 طلبات تسجيل مستنية اعتماد
+          <span id="regPendBadge" style="display:none; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; margin-right:6px; background:var(--gold); color:#1b1400; border-radius:99px; font-size:12px; font-weight:900;">0</span>
+        </h3>
+      </div>
+      <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">الموظف بيسجّل نفسه من الشاشة الرئيسية، وبياناته توصلك هنا — مايتفعّلش غير باعتمادك.</p>
+      <div id="pendingRegsList"></div>
+    </div>
+    <div class="panel">
+      <h3>⚙️ إعدادات الالتزام والمكافآت</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">القيم دي بتتطبّق على الفرع ده. التعديل بيأثر على المكافآت والخصومات الجاية.</p>
+      <div id="complianceSettingsForm"></div>
+    </div>
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
+        <h3 style="margin:0;">💰 كشف الخصومات</h3>
+        <button class="backBtn" id="addSwapDeductionBtn" onclick="openSwapDeduction()">➕ تسجيل خصم يدوي</button>
+      </div>
+      <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">التأخير بيتخصم تلقائي عند الحضور. تبديل الشيفت أو يوم الإجازة تسجّله يدوي من هنا.</p>
+      <div id="deductionsLog"></div>
     </div>
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
@@ -835,6 +910,176 @@ const db = getFirestore(app);
 enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence not enabled:', err.code));
 
 const empCol = collection(db, 'sales_employees');
+
+// ===== 🧭 معالج تسجيل الموظف =====
+const regCol = collection(db, 'sales_registrations');
+let _rwStep = 0;
+let _rwData = { name:'', shift:'', dayOff:'', agreed:false };
+const _rwDayNames = ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
+const RW_STEPS = 6;
+
+window.openRegWizard = function(){
+  _rwStep = 0; _rwData = { name:'', shift:'', dayOff:'', agreed:false };
+  $('#regWizard').classList.add('show');
+  rwRender();
+};
+function rwClose(){ $('#regWizard').classList.remove('show'); }
+
+function rwDots(){
+  let h='';
+  for(let i=0;i<RW_STEPS;i++) h += '<div class="rw-dot'+(i<=_rwStep?' on':'')+'"></div>';
+  $('#rwDots').innerHTML = h;
+}
+function esc(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+function rwRender(){
+  rwDots();
+  const b = $('#rwBody');
+  const cfg = complianceCfg;
+  if(_rwStep===0){
+    b.innerHTML = `<div class="rw-step">
+      <div class="rw-eyebrow">echarpe ⭐</div>
+      <div class="rw-title">أهلاً في فريق echarpe 🤍</div>
+      <div class="rw-sub">سجّل بياناتك في دقيقة، واعرف نظام المكافآت والالتزام اللي بيكافئ اجتهادك 🎁</div>
+      <div class="rw-nav"><button class="rw-btn rw-next" onclick="rwGo(1)">يلا نبدأ ⭐</button></div>
+    </div>`;
+  } else if(_rwStep===1){
+    b.innerHTML = `<div class="rw-step">
+      <div class="rw-eyebrow">خطوة 1</div>
+      <div class="rw-title">اسمك إيه؟</div>
+      <div class="rw-sub">اكتب اسمك زي ما تحب يظهر في الترتيب والمكافآت</div>
+      <input class="rw-input" id="rwName" placeholder="الاسم" value="${esc(_rwData.name)}" oninput="_rwData.name=this.value; $('#rwNext1').disabled=!this.value.trim();">
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(0)">◀</button><button class="rw-btn rw-next" id="rwNext1" onclick="rwGo(2)" ${_rwData.name.trim()?'':'disabled'}>التالي ▶</button></div>
+    </div>`;
+    setTimeout(()=>{ const i=$('#rwName'); if(i) i.focus(); },100);
+  } else if(_rwStep===2){
+    const S=cfg.shifts;
+    b.innerHTML = `<div class="rw-step">
+      <div class="rw-eyebrow">خطوة 2</div>
+      <div class="rw-title">اختار شيفتك</div>
+      <div class="rw-sub">ده معاد حضورك اليومي — والتأخير أكتر من ${cfg.lateGraceMin} دقيقة عليه خصم</div>
+      <div class="rw-choice">
+        <div class="rw-opt ${_rwData.shift==='morning'?'sel':''}" onclick="_rwData.shift='morning'; rwRender();">${S.morning.label}<small>${S.morning.start} → ${S.morning.end}</small></div>
+        <div class="rw-opt ${_rwData.shift==='evening'?'sel':''}" onclick="_rwData.shift='evening'; rwRender();">${S.evening.label}<small>${S.evening.start} → ${S.evening.end}</small></div>
+      </div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(1)">◀</button><button class="rw-btn rw-next" onclick="rwGo(3)" ${_rwData.shift?'':'disabled'}>التالي ▶</button></div>
+    </div>`;
+  } else if(_rwStep===3){
+    b.innerHTML = `<div class="rw-step">
+      <div class="rw-eyebrow">خطوة 3</div>
+      <div class="rw-title">يوم إجازتك</div>
+      <div class="rw-sub">اختار يوم إجازتك الأسبوعي — تغييره بعد كده عليه خصم</div>
+      <div class="rw-days">
+        ${_rwDayNames.map((d,i)=>`<div class="rw-day ${String(_rwData.dayOff)===String(i)?'sel':''}" onclick="_rwData.dayOff='${i}'; rwRender();">${d}</div>`).join('')}
+      </div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(2)">◀</button><button class="rw-btn rw-next" onclick="rwGo(4)" ${_rwData.dayOff!==''?'':'disabled'}>التالي ▶</button></div>
+    </div>`;
+  } else if(_rwStep===4){
+    b.innerHTML = `<div class="rw-step">
+      <div class="rw-eyebrow">خطوة 4</div>
+      <div class="rw-title">نظام المكافآت والالتزام</div>
+      <div class="rw-sub">اقرا كويس — ده اللي بيحدد مكافأتك 🎁</div>
+      <div class="rw-rules">
+        <div class="rw-rule good"><div class="ic">🎁</div><div><b>مكافأة على 3 حاجات</b><small>التزامك (${cfg.weights.commitment}%) + مبيعاتك (${cfg.weights.sales}%) + تقييم العملاء ليك (${cfg.weights.rating}%)</small></div></div>
+        <div class="rw-rule good"><div class="ic">⭐</div><div><b>كل ما تجتهد، مكافأتك تكبر</b><small>الحضور بدري والبيع الكويس والعميل المبسوط = فلوس أكتر</small></div></div>
+        <div class="rw-rule warn"><div class="ic">⏰</div><div><b>التأخير أكتر من ${cfg.lateGraceMin} دقيقة</b><small>خصم ${cfg.penalty} ج.م</small></div></div>
+        <div class="rw-rule warn"><div class="ic">🔄</div><div><b>تبديل الشيفت</b><small>خصم ${cfg.penalty} ج.م</small></div></div>
+        <div class="rw-rule warn"><div class="ic">📅</div><div><b>تبديل يوم الإجازة</b><small>خصم ${cfg.penalty} ج.م</small></div></div>
+      </div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(3)">◀</button><button class="rw-btn rw-next" onclick="rwGo(5)">فهمت ▶</button></div>
+    </div>`;
+  } else if(_rwStep===5){
+    b.innerHTML = `<div class="rw-step">
+      <div class="rw-eyebrow">آخر خطوة</div>
+      <div class="rw-title">تأكيد التسجيل</div>
+      <div class="rw-sub">راجع بياناتك</div>
+      <div class="rw-rules">
+        <div class="rw-rule"><div class="ic">🙋</div><div><b>${esc(_rwData.name)}</b><small>الاسم</small></div></div>
+        <div class="rw-rule"><div class="ic">🕐</div><div><b>${cfg.shifts[_rwData.shift].label} (${cfg.shifts[_rwData.shift].start}→${cfg.shifts[_rwData.shift].end})</b><small>الشيفت</small></div></div>
+        <div class="rw-rule"><div class="ic">📅</div><div><b>${_rwDayNames[Number(_rwData.dayOff)]}</b><small>يوم الإجازة</small></div></div>
+      </div>
+      <label class="rw-agree"><input type="checkbox" id="rwAgree" ${_rwData.agreed?'checked':''} onchange="_rwData.agreed=this.checked; $('#rwSubmit').disabled=!this.checked;"> قرأت النظام ووافقت عليه</label>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(4)">◀</button><button class="rw-btn rw-next" id="rwSubmit" onclick="rwSubmit()" ${_rwData.agreed?'':'disabled'}>تأكيد ✅</button></div>
+    </div>`;
+  }
+}
+function rwGo(step){ _rwStep = step; rwRender(); }
+
+async function rwSubmit(){
+  if(!_rwData.agreed) return;
+  const btn = $('#rwSubmit'); if(btn){ btn.disabled=true; btn.textContent='...'; }
+  try{
+    await addDoc(regCol, {
+      name: _rwData.name.trim(),
+      shift: _rwData.shift,
+      dayOff: _rwData.dayOff,
+      branch: window.currentBranch || '',
+      status: 'pending',            // مستني اعتماد الأدمن
+      agreedAt: Date.now(),
+      ts: Date.now()
+    });
+    $('#rwBody').innerHTML = `<div class="rw-step" style="padding:30px 0;">
+      <div class="rw-done">🎉</div>
+      <div class="rw-title" style="margin-top:14px;">تم التسجيل!</div>
+      <div class="rw-sub">بياناتك وصلت للإدارة — هتتفعّل أول ما تتعتمد ✅<br>ربنا يوفقك يا نجم ⭐</div>
+      <div class="rw-nav"><button class="rw-btn rw-next" onclick="rwClose()">تمام 🤍</button></div>
+    </div>`;
+    $('#rwDots').innerHTML='';
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='تأكيد ✅'; }
+    alert('حصل خطأ، حاول تاني: ' + e.message);
+  }
+}
+
+// ===== 🔒 اعتماد التسجيلات (أدمن) =====
+let allRegistrations = [];
+onSnapshot(regCol, (snap)=>{
+  allRegistrations = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+  if(adminUnlocked) renderPendingRegs();
+  updateRegBadge();
+}, (e)=> console.warn('regs sync', e && e.code));
+
+function updateRegBadge(){
+  const pend = allRegistrations.filter(r=> r.status==='pending' && r.branch===window.currentBranch).length;
+  const el = $('#regPendBadge');
+  if(el){ el.textContent = pend; el.style.display = pend ? 'inline-flex' : 'none'; }
+}
+
+function renderPendingRegs(){
+  const wrap = $('#pendingRegsList'); if(!wrap) return;
+  const pend = allRegistrations.filter(r=> r.status==='pending' && r.branch===window.currentBranch);
+  if(!pend.length){ wrap.innerHTML = '<p style="color:var(--sub); font-size:12px;">مفيش طلبات تسجيل مستنية.</p>'; return; }
+  wrap.innerHTML = pend.map(r=>`
+    <div style="background:var(--panel); border:1px solid var(--gold-dim); border-radius:13px; padding:13px; margin-bottom:9px;">
+      <div style="font-weight:800; font-size:15px;">🙋 ${esc(r.name)}</div>
+      <div style="color:var(--sub); font-size:12.5px; margin:5px 0 11px; line-height:1.7;">
+        🕐 ${complianceCfg.shifts[r.shift] ? complianceCfg.shifts[r.shift].label : r.shift}
+        &nbsp;·&nbsp; 📅 إجازة: ${_rwDayNames[Number(r.dayOff)]||'—'}
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button onclick="approveReg('${r.id}')" style="flex:1; padding:11px; border:none; border-radius:10px; background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400; font-family:'Cairo'; font-weight:800; cursor:pointer;">✅ اعتماد</button>
+        <button onclick="rejectReg('${r.id}')" style="padding:11px 16px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--sub); font-family:'Cairo'; font-weight:700; cursor:pointer;">حذف</button>
+      </div>
+    </div>`).join('');
+}
+
+window.approveReg = async function(id){
+  const r = allRegistrations.find(x=> x.id===id); if(!r) return;
+  try{
+    // بننشئ الموظف فعليًا في sales_employees ببياناته المعتمدة
+    await addDoc(empCol, {
+      name: r.name, shift: r.shift, dayOff: r.dayOff,
+      branch: r.branch, active: true, createdAt: Date.now(), pin: '0000'
+    });
+    await updateDoc(doc(db,'sales_registrations', id), { status:'approved', approvedAt: Date.now() });
+    alert('تم اعتماد ' + r.name + ' ✅ — الـ PIN المبدئي 0000 (غيّره من كارت الموظف)');
+  }catch(e){ alert('تعذر الاعتماد: ' + e.message); }
+};
+window.rejectReg = async function(id){
+  if(!confirm('تحذف طلب التسجيل ده؟')) return;
+  try{ await updateDoc(doc(db,'sales_registrations', id), { status:'rejected' }); }catch(e){}
+};
+
 const pointsCol = collection(db, 'sales_points');
 const referralsCol = collection(db, 'sales_app_referrals');
 const staffOrdersCol = collection(db, 'sales_staff_orders');
@@ -849,6 +1094,8 @@ const commissionPaymentsCol = collection(db, 'sales_commission_payments');
 const salaryPaymentsCol = collection(db, 'sales_salary_payments');
 const terminationsCol = collection(db, 'sales_terminations');
 const advancesCol = collection(db, 'sales_advances');
+const deductionsCol = collection(db, 'sales_deductions');   // 💰 خصومات الالتزام (تأخير/تبديل)
+let allDeductions = [], deductions = [];
 
 // Simple admin access code — checked on-device, no network call.
 // Change this string to whatever code you want, then re-download the file.
@@ -866,6 +1113,71 @@ let allTasks = [], tasks = [];             // current weekly task assignment per
 let allSubmissions = [], submissions = []; // daily task photo submissions
 let allRewards = [], rewards = [];         // earned weekly/monthly rewards
 let commissionPerPoint = 0;                // set by admin, per branch
+
+// ============================================================================
+// >>> COMPLIANCE_START — نظام الالتزام والمكافآت (v20)
+// كل القيم دي افتراضية وبتتحمّل من إعدادات الفرع (الأدمن بيعدّلها من لوحته).
+// ============================================================================
+let complianceCfg = {
+  penalty: 50,                       // خصم الجنيه للمخالفة الواحدة
+  lateGraceMin: 20,                  // سماح التأخير بالدقايق قبل الخصم
+  shifts: {
+    morning: { label: '🌅 صباحي', start: '10:00', end: '18:00' },
+    evening: { label: '🌆 مسائي', start: '14:00', end: '22:00' }
+  },
+  weights: { commitment: 40, sales: 30, rating: 30 }   // أوزان المكافأة (مجموعها 100)
+};
+
+// بيحوّل "HH:MM" لعدد دقايق من نص الليل
+function _hm2min(hm){ const [h,m] = String(hm||'0:0').split(':').map(Number); return (h||0)*60 + (m||0); }
+
+// 🕒 حساب دقايق التأخير: وقت الحضور مقابل بداية شيفت الموظف (+سماح)
+// بيرجع {lateMin, penalized} — penalized=true لو عدّى السماح (يعني خصم)
+function computeLate(clockInDate, shiftKey, cfg){
+  cfg = cfg || complianceCfg;
+  const sh = (cfg.shifts||{})[shiftKey];
+  if(!sh || !clockInDate) return { lateMin: 0, penalized: false };
+  const inMin = clockInDate.getHours()*60 + clockInDate.getMinutes();
+  const lateMin = Math.max(0, inMin - _hm2min(sh.start));
+  return { lateMin, penalized: lateMin > (cfg.lateGraceMin||0) };
+}
+
+// 💰 إجمالي خصومات موظف في فترة: تأخير + تبديل شيفت + تبديل إجازة
+// violations = [{type:'late'|'shiftSwap'|'dayoffSwap', ...}]
+function computeDeductions(violations, cfg){
+  cfg = cfg || complianceCfg;
+  const per = Number(cfg.penalty) || 0;
+  const list = (violations||[]).filter(v => v && (v.type==='late' ? v.penalized : true));
+  return { count: list.length, total: list.length * per, items: list };
+}
+
+// 🏆 نتيجة المكافأة بـ3 عوامل (0..100) — كل عامل بيتطبّع لنسبة ثم بالوزن
+// inp = { commitmentPct(0..100), salesValue, maxSalesValue, ratingPct(0..100) }
+function computeRewardScore(inp, cfg){
+  cfg = cfg || complianceCfg;
+  const w = cfg.weights || { commitment:40, sales:30, rating:30 };
+  const wsum = (w.commitment + w.sales + w.rating) || 100;
+  const commit = Math.max(0, Math.min(100, Number(inp.commitmentPct)||0));
+  const rating = Math.max(0, Math.min(100, Number(inp.ratingPct)||0));
+  const salesPct = (inp.maxSalesValue > 0) ? Math.min(100, (Number(inp.salesValue)||0) / inp.maxSalesValue * 100) : 0;
+  const score = (commit*w.commitment + salesPct*w.sales + rating*w.rating) / wsum;
+  return {
+    score: Math.round(score*10)/10,
+    breakdown: {
+      commitment: Math.round(commit*w.commitment/wsum*10)/10,
+      sales: Math.round(salesPct*w.sales/wsum*10)/10,
+      rating: Math.round(rating*w.rating/wsum*10)/10
+    }
+  };
+}
+
+// 🎯 نسبة الالتزام: تبدأ 100 وينزل منها لكل مخالفة (كل مخالفة -pointsPerViolation)
+function commitmentPct(violationCount, pointsPerViolation){
+  const pen = (pointsPerViolation!=null ? pointsPerViolation : 15);
+  return Math.max(0, 100 - (Number(violationCount)||0) * pen);
+}
+// <<< COMPLIANCE_END
+
 window.currentAnnouncement = '';
 window.dailyTarget = 0;
 let targetCelebrationShownFor = null; // date string, so we only celebrate once per day
@@ -1016,6 +1328,7 @@ function applyBranchFilter(){
   salaryPayments = allSalaryPayments.filter(p => p.branch === window.currentBranch);
   terminations = allTerminations.filter(t => t.branch === window.currentBranch);
   advances = allAdvances.filter(a => a.branch === window.currentBranch);
+  deductions = allDeductions.filter(a => a.branch === window.currentBranch);
   renderEmpGrid();
   renderTodayAdvancesSummary();
   renderAnnouncementBanner();
@@ -1100,10 +1413,23 @@ onSnapshot(settingsCol, (snap)=>{
   commissionPerPoint = data.commissionPerPoint || 0;
   window.currentAnnouncement = data.announcement || '';
   window.dailyTarget = data.dailyTarget || 0;
+  // 🧭 تحميل إعدادات الالتزام لو الأدمن عدّلها للفرع ده (مع الإبقاء على الافتراضي)
+  if(data.compliance){
+    if(data.compliance.penalty != null) complianceCfg.penalty = data.compliance.penalty;
+    if(data.compliance.lateGraceMin != null) complianceCfg.lateGraceMin = data.compliance.lateGraceMin;
+    if(data.compliance.weights) complianceCfg.weights = { ...complianceCfg.weights, ...data.compliance.weights };
+    if(data.compliance.shifts) complianceCfg.shifts = { ...complianceCfg.shifts, ...data.compliance.shifts };
+  }
   renderAnnouncementBanner();
   renderDailyTargetCard();
-  if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); }
+  if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); renderComplianceSettingsForm(); }
 }, (err)=> console.error('settings sync error', err));
+
+onSnapshot(deductionsCol, (snap)=>{
+  allDeductions = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  deductions = allDeductions.filter(x=> x.branch === window.currentBranch);
+  if(adminUnlocked && typeof renderDeductionsLog==='function') renderDeductionsLog();
+}, (e)=> console.warn('deductions sync', e && e.code));
 
 onSnapshot(commissionPaymentsCol, (snap)=>{
   allCommissionPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -1379,21 +1705,36 @@ const SEVERE_LATE_MINUTES = 20; // being later than this even once disqualifies 
 async function clockIn(empId, photoDataUri){
   const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return;
-  let lateMinutes = 0;
-  if(emp.scheduledStartTime){
+  // 🕒 التأخير من بداية شيفت الموظف (complianceCfg) + سماح الأدمن
+  let lateMinutes = 0, latePenalized = false;
+  const lateInfo = computeLate(new Date(), emp.shift, complianceCfg);
+  lateMinutes = lateInfo.lateMin;
+  latePenalized = lateInfo.penalized;
+  // فولباك لو الموظف مالوش شيفت مسجّل (توافق قديم)
+  if(!complianceCfg.shifts[emp.shift] && emp.scheduledStartTime){
     const [h,m] = emp.scheduledStartTime.split(':').map(Number);
-    const scheduled = new Date();
-    scheduled.setHours(h, m, 0, 0);
+    const scheduled = new Date(); scheduled.setHours(h, m, 0, 0);
     const diffMin = Math.round((Date.now() - scheduled.getTime())/60000);
-    if(diffMin > LATE_GRACE_MINUTES) lateMinutes = diffMin;
+    lateMinutes = diffMin > 0 ? diffMin : 0;
+    latePenalized = diffMin > (complianceCfg.lateGraceMin||20);
   }
   try{
     await addDoc(shiftsCol, {
       employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
       clockInTs: Date.now(), clockOutTs: null,
-      scheduledStartTime: emp.scheduledStartTime || null, lateMinutes,
+      scheduledStartTime: emp.scheduledStartTime || null, lateMinutes, latePenalized,
       clockInPhoto: photoDataUri || null
     });
+    // 💰 خصم تلقائي لو التأخير عدّى السماح
+    if(latePenalized){
+      try{
+        await addDoc(collection(db,'sales_deductions'), {
+          employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
+          type: 'late', amount: complianceCfg.penalty, lateMin: lateMinutes,
+          date: todayStr(), ts: Date.now()
+        });
+      }catch(_e){}
+    }
   }catch(err){
     console.error('تعذر تسجيل الحضور', err);
     alert('تعذر تسجيل الحضور: ' + (err && err.code ? err.code : 'غير معروف') + '\n\nتأكد إنك ضايف Firestore Rules الخاصة بـ sales_shifts.');
@@ -1605,7 +1946,36 @@ function renderDayHub(empId){
   // Weekly / monthly progress
   $('#dh_weeklyProgress').innerHTML = getPeriodProgressLabel(empId, 'week');
   $('#dh_monthlyProgress').innerHTML = getPeriodProgressLabel(empId, 'month');
+  renderRewardScoreCard(empId);
   renderRaceStatus(empId);
+}
+
+// 🏆 كارت نتيجة المكافأة بـ3 عوامل (الشهر الحالي) — للموظف في صفحته
+function renderRewardScoreCard(empId){
+  const el = document.querySelector('#dh_rewardScore'); if(!el) return;
+  const now = new Date();
+  const mStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  // مبيعات الشهر (نقاط البيع كبديل عن قيمة المبيعات) — نطبّعها على أعلى موظف
+  const myPts = countsFor(empId, mStart);
+  let maxPts = 1;
+  (window.employees||[]).forEach(e=>{ const v = countsFor(e.id, mStart); if(v>maxPts) maxPts=v; });
+  // التقييم (0..4 → 0..100)
+  const avgR = computeAvgRatingInRange(empId, mStart, Date.now());
+  const ratingPct = avgR!=null ? (avgR/4*100) : 0;
+  // الالتزام: 100 ناقص لكل مخالفة الشهر ده
+  const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const vioCount = (deductions||[]).filter(d=> d.employeeId===empId && String(d.date||'').startsWith(mk)).length;
+  const commit = commitmentPct(vioCount, 15);
+  const res = computeRewardScore({ commitmentPct: commit, salesValue: myPts, maxSalesValue: maxPts, ratingPct });
+  const bar = (val, color)=>`<div style="flex:1; height:7px; background:var(--panel2); border-radius:99px; overflow:hidden;"><div style="width:${Math.max(2,val)}%; height:100%; background:${color};"></div></div>`;
+  el.innerHTML = `
+    <div style="background:linear-gradient(180deg,#2a2410,var(--panel)); border:1px solid var(--gold-dim); border-radius:14px; padding:14px;">
+      <div style="text-align:center; font-size:30px; font-weight:900; color:var(--gold); line-height:1;">${res.score}<span style="font-size:14px; color:var(--sub);"> / 100</span></div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11.5px;"><span style="width:58px;">🎯 التزام</span>${bar(commit,'#5ec88a')}<span style="width:34px; text-align:left;">${Math.round(commit)}%</span></div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:7px; font-size:11.5px;"><span style="width:58px;">🛒 مبيعات</span>${bar(maxPts>0?myPts/maxPts*100:0,'#6aa9f0')}<span style="width:34px; text-align:left;">${myPts}</span></div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:7px; font-size:11.5px;"><span style="width:58px;">⭐ تقييم</span>${bar(ratingPct,'#f2c14e')}<span style="width:34px; text-align:left;">${avgR!=null?avgR.toFixed(1):'—'}</span></div>
+      ${vioCount?`<div style="margin-top:10px; font-size:11px; color:#e0796b; text-align:center;">⚠️ ${vioCount} مخالفة الشهر ده أثّرت على التزامك</div>`:'<div style="margin-top:10px; font-size:11px; color:#5ec88a; text-align:center;">✅ التزام كامل — استمر يا نجم!</div>'}
+    </div>`;
 }
 
 function computeAvgRatingFor(empId){
@@ -2331,7 +2701,7 @@ function doAdminLogin(){
     renderLog();
     renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog(); renderAdminSettingsForm();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog(); renderAdminSettingsForm(); renderPendingRegs(); renderComplianceSettingsForm(); updateRegBadge(); renderDeductionsLog();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -4128,6 +4498,128 @@ function renderDailyTargetCard(){
   }
 }
 document.querySelector('#targetCelebrationClose')?.addEventListener('click', ()=> document.querySelector('#targetCelebration').classList.remove('show'));
+
+// ⚙️ نموذج إعدادات الالتزام والمكافآت (أدمن)
+function renderComplianceSettingsForm(){
+  const wrap = document.querySelector('#complianceSettingsForm'); if(!wrap) return;
+  if(wrap.dataset.editing === '1') return;   // ما نكتبش فوق المستخدم وهو بيكتب
+  const c = complianceCfg;
+  const fld = (label, id, val, suffix)=>`
+    <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:9px; font-size:13px;">
+      <span>${label}</span>
+      <span style="display:flex; align-items:center; gap:6px;">
+        <input id="${id}" value="${val}" inputmode="numeric"
+          onfocus="this.closest('#complianceSettingsForm').dataset.editing='1'"
+          onblur="this.closest('#complianceSettingsForm').dataset.editing='0'"
+          style="width:64px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-weight:800; text-align:center;">
+        <span style="color:var(--sub); font-size:11px;">${suffix||''}</span>
+      </span>
+    </label>`;
+  const wsum = c.weights.commitment + c.weights.sales + c.weights.rating;
+  wrap.innerHTML = `
+    <div style="display:flex; flex-direction:column;">
+      ${fld('💰 الخصم للمخالفة', 'csPenalty', c.penalty, 'ج.م')}
+      ${fld('⏰ سماح التأخير', 'csGrace', c.lateGraceMin, 'دقيقة')}
+      <div style="height:1px; background:var(--line); margin:8px 0 12px;"></div>
+      <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">أوزان المكافأة (المجموع لازم = 100)</div>
+      ${fld('🎯 وزن الالتزام', 'csWc', c.weights.commitment, '%')}
+      ${fld('🛒 وزن المبيعات', 'csWs', c.weights.sales, '%')}
+      ${fld('⭐ وزن التقييم', 'csWr', c.weights.rating, '%')}
+      <div id="csWsum" style="font-size:11.5px; color:${wsum===100?'var(--sub)':'#e0796b'}; margin:2px 0 12px;">المجموع الحالي: ${wsum}${wsum===100?' ✅':' — لازم يبقى 100'}</div>
+      <div style="height:1px; background:var(--line); margin:0 0 12px;"></div>
+      <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">مواعيد الشيفتات (HH:MM بنظام 24 ساعة)</div>
+      <label style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; font-size:13px;">
+        <span>🌅 صباحي</span>
+        <span style="display:flex; gap:6px;">
+          <input id="csMorningStart" value="${c.shifts.morning.start}" onfocus="this.closest('#complianceSettingsForm').dataset.editing='1'" onblur="this.closest('#complianceSettingsForm').dataset.editing='0'" style="width:64px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; text-align:center;">
+          <input id="csMorningEnd" value="${c.shifts.morning.end}" onfocus="this.closest('#complianceSettingsForm').dataset.editing='1'" onblur="this.closest('#complianceSettingsForm').dataset.editing='0'" style="width:64px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; text-align:center;">
+        </span>
+      </label>
+      <label style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:14px; font-size:13px;">
+        <span>🌆 مسائي</span>
+        <span style="display:flex; gap:6px;">
+          <input id="csEveningStart" value="${c.shifts.evening.start}" onfocus="this.closest('#complianceSettingsForm').dataset.editing='1'" onblur="this.closest('#complianceSettingsForm').dataset.editing='0'" style="width:64px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; text-align:center;">
+          <input id="csEveningEnd" value="${c.shifts.evening.end}" onfocus="this.closest('#complianceSettingsForm').dataset.editing='1'" onblur="this.closest('#complianceSettingsForm').dataset.editing='0'" style="width:64px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; text-align:center;">
+        </span>
+      </label>
+      <button onclick="saveComplianceSettings()" style="width:100%; padding:13px; border:none; border-radius:12px; background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer;">💾 حفظ الإعدادات</button>
+    </div>`;
+}
+
+// 💰 كشف الخصومات (الشهر الحالي)
+function renderDeductionsLog(){
+  const wrap = document.querySelector('#deductionsLog'); if(!wrap) return;
+  const now = new Date();
+  const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const rows = (deductions||[]).filter(d=> String(d.date||'').startsWith(mk)).sort((a,b)=> (b.ts||0)-(a.ts||0));
+  if(!rows.length){ wrap.innerHTML = '<p style="color:var(--sub); font-size:12px;">مفيش خصومات الشهر ده ✅</p>'; return; }
+  // إجمالي لكل موظف
+  const byEmp = {};
+  rows.forEach(d=>{ byEmp[d.employeeName] = (byEmp[d.employeeName]||0) + (Number(d.amount)||0); });
+  const total = rows.reduce((x,d)=> x + (Number(d.amount)||0), 0);
+  const label = { late:'⏰ تأخير', shiftSwap:'🔄 تبديل شيفت', dayoffSwap:'📅 تبديل إجازة' };
+  wrap.innerHTML = `
+    <div style="display:flex; flex-wrap:wrap; gap:7px; margin-bottom:12px;">
+      ${Object.entries(byEmp).map(([n,v])=>`<span style="background:var(--panel2); border:1px solid var(--line); border-radius:99px; padding:6px 12px; font-size:12px; font-weight:700;">${n}: <b style="color:#e0796b;">${v} ج</b></span>`).join('')}
+      <span style="background:linear-gradient(180deg,#3a1e1a,var(--panel2)); border:1px solid #5a3a3a; border-radius:99px; padding:6px 12px; font-size:12px; font-weight:800;">الإجمالي: ${total} ج</span>
+    </div>
+    ${rows.map(d=>`
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:9px 11px; border-bottom:1px solid var(--line); font-size:13px;">
+        <span><b>${(d.employeeName||'—')}</b> · ${label[d.type]||d.type}${d.lateMin?(' ('+d.lateMin+'د)'):''}</span>
+        <span style="display:flex; align-items:center; gap:10px;">
+          <span style="color:#e0796b; font-weight:800;">-${d.amount} ج</span>
+          <span style="color:var(--sub); font-size:11px;">${d.date||''}</span>
+          <button onclick="deleteDeduction('${d.id}')" title="حذف" style="border:1px solid var(--line); background:var(--panel2); color:var(--sub); border-radius:8px; padding:4px 9px; cursor:pointer; font-family:'Cairo';">✖</button>
+        </span>
+      </div>`).join('')}`;
+}
+
+window.deleteDeduction = async function(id){
+  if(!confirm('تشيل الخصم ده؟')) return;
+  try{ await deleteDoc(doc(db,'sales_deductions', id)); }catch(e){ alert('تعذر الحذف: '+e.message); }
+};
+
+// ➕ تسجيل خصم يدوي (تبديل شيفت / تبديل يوم إجازة)
+window.openSwapDeduction = function(){
+  const emps = (window.employees||[]).filter(e=> e.active !== false);
+  if(!emps.length){ alert('مفيش موظفين في الفرع ده'); return; }
+  const names = emps.map((e,i)=> (i+1)+') '+e.name).join('\n');
+  const pick = prompt('اختار رقم الموظف:\n'+names);
+  const idx = parseInt(pick,10)-1;
+  if(isNaN(idx) || !emps[idx]) return;
+  const emp = emps[idx];
+  const t = prompt('نوع الخصم:\n1) تبديل شيفت\n2) تبديل يوم إجازة');
+  const type = t==='1' ? 'shiftSwap' : t==='2' ? 'dayoffSwap' : null;
+  if(!type){ return; }
+  addDoc(collection(db,'sales_deductions'), {
+    employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
+    type, amount: complianceCfg.penalty, date: todayStr(), ts: Date.now()
+  }).then(()=> alert('اتسجّل خصم '+complianceCfg.penalty+' ج على '+emp.name+' ✅'))
+    .catch(e=> alert('تعذر التسجيل: '+e.message));
+};
+
+window.saveComplianceSettings = async function(){
+  const num = (id, def)=>{ const v = parseInt(document.querySelector('#'+id).value, 10); return isNaN(v) ? def : v; };
+  const hhmm = (id, def)=>{ const v = (document.querySelector('#'+id).value||'').trim(); return /^\d{1,2}:\d{2}$/.test(v) ? v : def; };
+  const wc = num('csWc', 40), ws = num('csWs', 30), wr = num('csWr', 30);
+  if(wc + ws + wr !== 100){ alert('مجموع أوزان المكافأة لازم يساوي 100 (دلوقتي ' + (wc+ws+wr) + ')'); return; }
+  const payload = {
+    penalty: num('csPenalty', 50),
+    lateGraceMin: num('csGrace', 20),
+    weights: { commitment: wc, sales: ws, rating: wr },
+    shifts: {
+      morning: { label: '🌅 صباحي', start: hhmm('csMorningStart','10:00'), end: hhmm('csMorningEnd','18:00') },
+      evening: { label: '🌆 مسائي', start: hhmm('csEveningStart','14:00'), end: hhmm('csEveningEnd','22:00') }
+    }
+  };
+  try{
+    const b = window.currentBranch;
+    if(!b){ alert('اختار فرع الجهاز الأول'); return; }
+    await setDoc(doc(db,'sales_settings', b), { compliance: payload }, { merge:true });
+    const f = document.querySelector('#complianceSettingsForm'); if(f) f.dataset.editing='0';
+    alert('اتحفظت إعدادات الالتزام ✅');
+  }catch(e){ alert('تعذر الحفظ: ' + e.message); }
+};
 
 function renderAdminSettingsForm(){
   const annInput = document.querySelector('#announcementInput');
