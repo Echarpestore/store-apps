@@ -216,9 +216,9 @@ function _staffBrand(e){
   const glow = /glow/i.test(e.branch||'');
   return glow
     ? { name:'Glow', main:'#111111', accent:'#d4af37', text:'#ffffff', soft:'#2a2a2a', app:'glow',
-        logoUrl:'https://echarpestore.github.io/store-apps/glow/wordmark.png' }
+        logoUrl:'https://www.echarpe.store/glow/wordmark.png' }
     : { name:'echarpe', main:'#b76e79', accent:'#f7dfe4', text:'#ffffff', soft:'#fdf1f3', app:'loyalty',
-        logoUrl:'https://echarpestore.github.io/store-apps/loyalty/logo-white.png' };
+        logoUrl:'https://www.echarpe.store/loyalty/logo-white.png' };
 }
 function _staffAvatarSVG(av, brand){
   const skin = '#f2c9a8', bg = brand.accent;
@@ -228,7 +228,7 @@ function _staffAvatarSVG(av, brand){
 function buildStaffCardHTML(e, side){
   const b = _staffBrand(e);
   const logo = (typeof receiptDesignConfig!=='undefined' && receiptDesignConfig && receiptDesignConfig.logo) ? receiptDesignConfig.logo : '';
-  const qrUrl = 'https://echarpestore.github.io/store-apps/' + b.app + '/?src=emp-' + e.id;
+  const qrUrl = 'https://www.echarpe.store/' + b.app + '/?src=emp-' + e.id;
   const qrImg = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=1&data=' + encodeURIComponent(qrUrl);
 
   if(side==='front') return `

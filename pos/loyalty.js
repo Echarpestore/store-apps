@@ -226,7 +226,7 @@ async function saveLoyaltyConfig(){
 // 📱 توليد QR لتحميل التطبيق — بعلامة الفرع للتتبع
 function generateAppQR(){
   var app = document.getElementById('qrApp').value;
-  var base = 'https://echarpestore.github.io/store-apps/' + app + '/';
+  var base = 'https://www.echarpe.store/' + app + '/';
   var src = 'qr-' + (currentBranch||'').replace(/\s+/g,'-');
   var url = base + '?src=' + encodeURIComponent(src);
   var img = 'https://api.qrserver.com/v1/create-qr-code/?size=340x340&margin=2&data=' + encodeURIComponent(url);

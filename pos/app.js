@@ -495,13 +495,14 @@ function buildReceiptHTML(data){
 // 📱 QR الفاتورة: بنجيب صورته مرة واحدة ونخزّنها محليًا — عشان الطباعة تبقى فورية وأوفلاين
 function receiptQrKey(){
   const isGlow = (typeof GLOW_BRANCHES!=='undefined') && GLOW_BRANCHES.includes(currentBranch);
-  return { app: isGlow?'glow':'loyalty', key: 'rcpt_qr_' + (isGlow?'glow':'loyalty') + '_' + (currentBranch||'') };
+  // v2 = الدومين الجديد echarpe.store — مفتاح جديد فالأجهزة كلها هتولّد QR جديد أول فتحة
+  return { app: isGlow?'glow':'loyalty', key: 'rcpt_qr_v2_' + (isGlow?'glow':'loyalty') + '_' + (currentBranch||'') };
 }
 async function ensureReceiptQrCached(){
   try{
     const {app, key} = receiptQrKey();
     if(localStorage.getItem(key)) return;
-    const url = 'https://echarpestore.github.io/store-apps/' + app + '/?src=' + encodeURIComponent('qr-rcpt-' + (currentBranch||'').replace(/\s+/g,'-'));
+    const url = 'https://www.echarpe.store/' + app + '/?src=' + encodeURIComponent('qr-rcpt-' + (currentBranch||'').replace(/\s+/g,'-'));
     const img = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=1&data=' + encodeURIComponent(url);
     const res = await fetch(img); const blob = await res.blob();
     const dataUrl = await new Promise((ok,bad)=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=bad; r.readAsDataURL(blob); });
