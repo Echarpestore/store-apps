@@ -237,6 +237,11 @@ const DEFAULT_ROLE_PERMISSIONS = {
     canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: false
   }
 };
+// 👑 أدمن ثابت مدمج في الكود — مستقل تمامًا عن الموظفين وقاعدة البيانات.
+// بيظهر دايمًا في شاشة الدخول لكل الفروع، وبصلاحيات أدمن كاملة، ومستحيل يتمسح بأي تصفير.
+// غيّر الـ PIN من هنا لما تحب (رقم سري بينك وبين نفسك).
+const FIXED_ADMIN = { id: '__owner_admin__', name: '👑 المالك (أدمن)', pin: '0000', _admin: true, active: true };
+
 let rolePermissions = JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS));
 let currentEmployeeRole = 'cashier'; // fallback until loaded
 
@@ -246,6 +251,21 @@ function myPerms(){
 }
 function hasPerm(key){
   return !!myPerms()[key];
+}
+
+// تحميل صلاحيات الأدوار بس (للأدمن الثابت — من غير تحديد دور من _assignments)
+async function loadRolePermsOnly(){
+  try{
+    const rolesSnap = await db.collection(TEST_ROLES).get();
+    rolesSnap.forEach(d=>{
+      if(rolePermissions[d.id]) rolePermissions[d.id] = { ...rolePermissions[d.id], ...d.data() };
+    });
+  }catch(e){ /* افتراضي */ }
+  // الأدمن الثابت دايمًا admin كامل مهما اتخصّصت الأدوار
+  rolePermissions.admin = { ...DEFAULT_ROLE_PERMISSIONS.admin, ...(rolePermissions.admin||{}) };
+  rolePermissions.admin.canManageRoles = true;
+  rolePermissions.admin.canViewReports = true;
+  rolePermissions.admin.canSwitchBranch = true;
 }
 
 // تحميل صلاحيات الأدوار (لو الأدمن خصّصها) ودور الموظف الحالي — بيتنفذ بعد كل تسجيل دخول.
@@ -306,7 +326,7 @@ async function loadEmployeePicker(){
       }
     }catch(e){ /* لو فشل، نكمّل بموظفين الفرع بس */ }
 
-    const allEmps = adminEmps.concat(emps);
+    const allEmps = [FIXED_ADMIN].concat(adminEmps, emps);
     if(allEmps.length === 0){
       grid.innerHTML = '';
       errBox.textContent = 'لسه مفيش موظفين مسجلين للفرع ده في نظام المبيعات';
@@ -353,6 +373,21 @@ async function pinSubmit(){
   if(!pin){ errBox.textContent = "اكتب الـ PIN الأول"; return; }
   errBox.textContent = "جارٍ التحقق...";
   try{
+    // 👑 الأدمن الثابت: تحقق محلي، مفيش قاعدة بيانات، دور admin كامل
+    if(selectedLoginEmp.id === FIXED_ADMIN.id){
+      if(pin !== FIXED_ADMIN.pin){
+        errBox.textContent = "الـ PIN غلط، حاول تاني";
+        document.getElementById('pinInput').value = '';
+        return;
+      }
+      currentEmployee = { id: FIXED_ADMIN.id, name: FIXED_ADMIN.name, isAdminAccount: true };
+      currentEmployeeRole = 'admin';
+      errBox.textContent = "";
+      document.getElementById('pinInput').value = '';
+      try{ await loadRolePermsOnly(); }catch(e){}
+      enterDashboard();
+      return;
+    }
     const doc = await db.collection(EMPLOYEES_COLLECTION).doc(selectedLoginEmp.id).get();
     if(!doc.exists || doc.data().pin !== pin){
       errBox.textContent = "الـ PIN غلط، حاول تاني";
