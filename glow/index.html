@@ -1238,7 +1238,7 @@ function renderOffers(){
 function activateOffer(barcode, type, value, maxUses, validDays){
   if(!barcode || !currentCustomer){ return; }
   var offers = currentCustomer.activatedOffers || {};
-  offers[barcode] = { type:type, value:value, brand:CATALOG_BRAND, maxUses:(maxUses||1), uses:0, expiry:(validDays? (Date.now()+validDays*86400000):0) };
+  offers[barcode] = { type:type, value:value, brand:CATALOG_BRAND, maxUses:(maxUses||1), uses:0, activatedAt:Date.now(), expiry:(validDays? (Date.now()+validDays*86400000):0) };
   db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ activatedOffers: offers }, { merge:true }).then(function(){
     currentCustomer.activatedOffers = offers; renderProducts();
     try{ var u={}; u[barcode]={ activated: firebase.firestore.FieldValue.increment(1) }; db.collection(COL_SETTINGS).doc('offer_stats_'+CATALOG_BRAND).set(u,{merge:true}); }catch(e){}
