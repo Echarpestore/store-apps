@@ -87,10 +87,11 @@ function applyCustomerOffers(){
   if(!custActivatedOffers || !cart.length) return;
   cart.forEach(line=>{
     if(line.isReturn || line.isRedemption || line.offerApplied || !line.barcode) return;
-    const off = custActivatedOffers[line.barcode];
+    const act = custActivatedOffers[line.barcode];
+    if(!act) return;
+    // 🛡️ فاز 3أ: النوع والقيمة والمرات والمدة من كتالوج المحل الرسمي — مش من كتابة العميل
+    const off = _offerSanitize(act, _offerOfficial(_offCatalog ? _offCatalog[line.barcode] : null));
     if(!off) return;
-    if(off.expiry && off.expiry < Date.now()) return;          // العرض انتهت صلاحيته
-    if((off.uses||0) >= (off.maxUses||1)) return;               // العميل استهلك مرّاته
     const orig = line.price;
     let np = off.type==='percent' ? orig*(1-Number(off.value)/100) : orig-Number(off.value);
     np = Math.max(0, Math.round(np*100)/100);
@@ -581,7 +582,7 @@ async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
   const newRow = document.getElementById('newCustomerRow');
-  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); custReward=null; custPendingRedeem=null; custBaseText=''; renderCart(); return; }
+  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); custReward=null; custPendingRedeem=null; custPointsBalance=0; custBaseText=''; renderCart(); return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     custExists = doc.exists;
@@ -609,6 +610,8 @@ async function refreshCustomerInfo(){
       const d = doc.data();
       document.getElementById('customerName').value = d.name || '';
       custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
+      custPointsBalance = Number(d[pointsFieldFor(currentBranch)]) || 0;   // 🛡️ الرصيد الحقيقي
+      if(Object.keys(custActivatedOffers).length) await _loadOfficialOffers();   // 🛡️ الشروط الرسمية قبل أي خصم
       revertCustomerOffers(); applyCustomerOffers(); renderCart();
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
       const _now = Date.now();
@@ -766,6 +769,49 @@ function _logActivity(type, data){
   }catch(e){}
 }   // لعرض QR التطبيق في الفاتورة للغير مسجّل/غير مثبّت
 let custPendingRedeem = null, custBaseText = '';
+let custPointsBalance = 0;       // رصيد العميل الفعلي (من المستند) — مصدر الحقيقة للاستبدال
+let _offCatalog = null;          // شروط العروض الرسمية من كتالوج المحل {barcode: item}
+
+// >>> SEC3_START
+// 🛡️ فاز 3أ: الكاشير مبيصدّقش أي أرقام جاية من جهاز العميل — بيعيد حسابها من إعدادات المحل.
+// الاستبدال: بنتجاهل القيمة المكتوبة في الطلب ونحسبها إحنا، مقيّدة بالرصيد الفعلي
+function _redeemSanitize(reqPoints, balance, per, valPer){
+  per = Number(per) || 10; valPer = Number(valPer) || 5;
+  const maxUnits = Math.floor(Math.max(0, Number(balance) || 0) / per);
+  const reqUnits = Math.floor(Math.max(0, Number(reqPoints) || 0) / per);
+  const units = Math.min(maxUnits, reqUnits);
+  return { points: units * per, value: units * valPer, units };
+}
+// شروط العرض الرسمية من بند الكتالوج (اللي انت كاتبه) — مش من كتابة العميل
+function _offerOfficial(catItem){
+  if(!catItem || !catItem.discountType || !(Number(catItem.discountValue) > 0)) return null;
+  return { type: catItem.discountType, value: Number(catItem.discountValue),
+           maxUses: Number(catItem.usesPerCustomer) || 1, validDays: Number(catItem.validDays) || 0 };
+}
+// تفعيل العميل بيثبت حاجتين بس: إنه فعّل + استهلك كام مرة — كل الشروط التانية من الرسمي
+function _offerSanitize(activated, official, now){
+  if(!activated || !official) return null;                 // مش مفعّل، أو العرض مش موجود رسميًا أصلًا
+  now = now || Date.now();
+  const actAt = Number(activated.activatedAt) || 0;
+  if(official.validDays > 0){
+    if(actAt){ if(now > actAt + official.validDays * 86400000) return null; }
+    else if(activated.expiry && Number(activated.expiry) < now) return null;   // توافق مع تفعيلات قديمة
+  }
+  if((Number(activated.uses) || 0) >= official.maxUses) return null;           // سقف المرات الرسمي
+  return { type: official.type, value: official.value };
+}
+// <<< SEC3_END
+
+async function _loadOfficialOffers(){
+  if(_offCatalog !== null) return;
+  try{
+    const _brand = pointsFieldFor(currentBranch) === 'points_glow' ? 'glow' : 'echarpe';
+    const d = await db.collection(TEST_SETTINGS).doc('catalog_' + _brand).get();
+    const items = (d.exists && Array.isArray(d.data().items)) ? d.data().items : [];
+    _offCatalog = {};
+    items.forEach(it => { if(it && it.barcode) _offCatalog[it.barcode] = it; });
+  }catch(e){ _offCatalog = {}; console.warn('official offers load', e && e.code); }
+}
 
 // بيحدّث صندوق العميل (المكافأة/الاستبدال) حسب إجمالي الفاتورة الحالي — بيتنادى مع كل تغيّر في السلة
 function refreshCustomerActionUI(){
@@ -775,9 +821,23 @@ function refreshCustomerActionUI(){
   const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   let html = custBaseText;
   if(custPendingRedeem && !pendingRedemption){
+    // 🛡️ نعيد الحساب من إعدادات المحل والرصيد الفعلي — ولو أرقام الطلب مش مطابقة نعلّم 🚩
+    const _rr = loyaltyRedemptionConfig || {};
+    const _sane = _redeemSanitize(custPendingRedeem.points, custPointsBalance, _rr.pointsPerRedemption, _rr.redemptionValueEGP);
+    const _tampered = (Number(custPendingRedeem.valueEGP) !== _sane.value) || (Number(custPendingRedeem.points) !== _sane.points);
+    if(_tampered && _sane._flagged !== true){
+      _sane._flagged = true;
+      if(typeof _logActivity === 'function') _logActivity('redeem_value_mismatch', {
+        phone: document.getElementById('customerPhone').value.trim(),
+        reqPoints: custPendingRedeem.points, reqValue: custPendingRedeem.valueEGP,
+        sanePoints: _sane.points, saneValue: _sane.value, balance: custPointsBalance
+      });
+    }
+    custPendingRedeem._sane = _sane; custPendingRedeem._tampered = _tampered;
     html += `<div style="margin-top:8px; background:#fff6e6; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
-       <div style="font-weight:800; color:#b45309;">🎁 العميل طلب استبدال ${custPendingRedeem.points} نقطة (خصم ${custPendingRedeem.valueEGP} ج.م)</div>
-       <button onclick="applyPendingRedeem(${custPendingRedeem.points}, ${custPendingRedeem.valueEGP})" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق الاستبدال</button>
+       <div style="font-weight:800; color:#b45309;">🎁 العميل طلب استبدال ${custPendingRedeem._sane.points} نقطة (خصم ${custPendingRedeem._sane.value} ج.م)</div>
+       ${custPendingRedeem._tampered ? '<div style="color:var(--minus); font-size:11px; font-weight:800; margin-top:3px;">🚩 أرقام الطلب الأصلي مش مطابقة لحسابات المحل — اتصححت تلقائي واتسجلت</div>' : ''}
+       <button onclick="applyPendingRedeem()" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق الاستبدال</button>
      </div>`;
   }
   if(custReward && !cart.some(l=> l.isRewardDiscount)){
@@ -808,8 +868,13 @@ function applyCustomerReward(){
 }
 
 // بيطبّق طلب الاستبدال اللي العميل عمله من التطبيق (بيظهر أول ما نكتب رقمه)
-function applyPendingRedeem(points, value){
+function applyPendingRedeem(){
   if(pendingRedemption){ showToast('في استبدال مطبّق بالفعل على الفاتورة', 'err'); return; }
+  // 🛡️ فاز 3أ: بنحسب من إعدادات المحل والرصيد الفعلي — مش من أرقام الطلب
+  const _rr = loyaltyRedemptionConfig || {};
+  const _sane = _redeemSanitize(custPendingRedeem ? custPendingRedeem.points : 0, custPointsBalance, _rr.pointsPerRedemption, _rr.redemptionValueEGP);
+  const points = _sane.points, value = _sane.value;
+  if(points <= 0 || value <= 0){ showToast('رصيد العميل مش كافي للاستبدال ده', 'err'); return; }
   const phone = document.getElementById('customerPhone').value.trim();
   cart.push({
     id: '__loyalty_redemption__', name: `🎁 استبدال ${points} نقطة ولاء`,
