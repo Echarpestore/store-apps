@@ -895,7 +895,7 @@ function refreshBranchUI(){
     $('#branchSaveBtn').textContent = staffIn ? 'حفظ الفرع' : 'دخول';
     if(staffIn) populateBranchSetupSelect();
     $('#branchSetup').classList.add('show');
-  } else {
+  } else if(!$('#branchSetup').classList.contains('manual-open')){
     $('#branchSetup').classList.remove('show');
   }
 }
@@ -942,6 +942,8 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
   window.currentBranch = val;
   localStorage.setItem('sales_branch', val);
   err.textContent = '';
+  $('#branchSetup').classList.remove('manual-open');
+  $('#branchSetup').classList.remove('show');
   refreshBranchUI();
   applyBranchFilter();
 });
@@ -949,7 +951,18 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
 onAuthStateChanged(_auth, ()=> refreshBranchUI());
 $('#changeBranchBtn').addEventListener('click', ()=>{
   $('#admin').classList.remove('show');
-  $('#branchInput').value = window.currentBranch;
+  $('#branchErr').textContent = '';
+  $('#branchInput').value = '';
+  const u = _auth.currentUser;
+  const staffIn = !!(u && !u.isAnonymous);
+  // لو داخل بحساب الفرع بالفعل → علطول لاختيار الفرع (نملّي القايمة).
+  // لو مش داخل → الشاشة هتطلب الإيميل والباسورد الأول.
+  $('#branchEmail').style.display = staffIn ? 'none' : '';
+  $('#branchPass').style.display  = staffIn ? 'none' : '';
+  $('#branchSelect').style.display = staffIn ? '' : 'none';
+  $('#branchSaveBtn').textContent = staffIn ? 'حفظ الفرع' : 'دخول';
+  if(staffIn) populateBranchSetupSelect();
+  $('#branchSetup').classList.add('manual-open');
   $('#branchSetup').classList.add('show');
 });
 refreshBranchUI();
