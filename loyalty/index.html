@@ -1354,7 +1354,6 @@ function closeInvoiceDetail(){ $('invOverlay').classList.remove('on'); }
    ============================================================ */
 function renderAccount(){
   if(!currentCustomer) return;
-  var spent = Number(currentCustomer.totalSpent)||0;
   var sinceFull = regDateText({day:'numeric', month:'long', year:'numeric'}) || '—';
   var code = currentCustomer.loyaltyCode ? prettyCode(currentCustomer.loyaltyCode) : '—';
   $('tab-account').innerHTML =
@@ -1364,7 +1363,7 @@ function renderAccount(){
       '<div class="acct-row"><span class="k">رقم الموبايل</span><span class="v ltr">'+esc(currentCustomer.phone)+'</span></div>'+
       '<div class="acct-row"><span class="k">كود العضوية</span><span class="v ltr">'+esc(code)+'</span></div>'+
       '<div class="acct-row"><span class="k">رصيد النقاط</span><span class="v">'+fmt(currentCustomer.points||0)+' نقطة</span></div>'+
-      (spent>0 ? '<div class="acct-row"><span class="k">إجمالي مشترياتك</span><span class="v">'+fmt(spent)+' ج.م</span></div>' : '')+
+      /* (اتشال عرض إجمالي المشتريات — ملوش قيمة للعميلة) */
       '<div class="acct-row"><span class="k">عضو من</span><span class="v">'+esc(sinceFull)+'</span></div>'+
     '</div>'+
     (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
