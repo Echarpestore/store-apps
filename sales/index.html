@@ -952,10 +952,7 @@ window.fbUpdateDoc = updateDoc;
 window.fbDeleteDoc = deleteDoc;
 window.fbCollection = collection;
 // 🔍 نعرّض دوال الكشف عشان لوحة المراجعة (في بلوك تاني) تستخدمها
-window.detectAttendanceIssues = detectAttendanceIssues;
-window.pairSwaps = pairSwaps;
-window.complianceCfg = complianceCfg;   // الإعدادات (نفس المرجع — التعديلات بتنعكس)
-window.todayStr = todayStr;
+// (التعريض اتنقل لبعد تعريف الدوال والمتغيرات — تحت مباشرة بعد COMPLIANCE_END)
 enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence not enabled:', err.code));
 
 const empCol = collection(db, 'sales_employees');
@@ -1381,6 +1378,12 @@ function pairSwaps(issues){
   return { swaps, singles };
 }
 // <<< COMPLIANCE_END
+
+// 🔗 تعريض أدوات الالتزام على window (لازم بعد تعريفها) عشان بلوكات السكريبت التانية تستخدمها
+window.detectAttendanceIssues = detectAttendanceIssues;
+window.pairSwaps = pairSwaps;
+window.complianceCfg = complianceCfg;
+window.todayStr = todayStr;
 
 window.currentAnnouncement = '';
 window.dailyTarget = 0;
