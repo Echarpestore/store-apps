@@ -1622,7 +1622,7 @@ onSnapshot(settingsCol, (snap)=>{
   // 🧭 تحميل إعدادات الالتزام لو الأدمن عدّلها للفرع ده (مع الإبقاء على الافتراضي)
   // 🙋 حالة إظهار زر تسجيل موظف جديد (افتراضي: مخفي)
   window.regButtonOn = !!(data.regButtonOn);
-  applyRegButtonVisibility();
+  window.applyRegButtonVisibility();
   if(data.compliance){
     if(data.compliance.penalty != null) complianceCfg.penalty = data.compliance.penalty;
     if(data.compliance.lateGraceMin != null) complianceCfg.lateGraceMin = data.compliance.lateGraceMin;
@@ -1631,7 +1631,7 @@ onSnapshot(settingsCol, (snap)=>{
   }
   renderAnnouncementBanner();
   renderDailyTargetCard();
-  if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); renderComplianceSettingsForm(); }
+  if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); }
 }, (err)=> console.error('settings sync error', err));
 
 onSnapshot(vioReviewCol, (snap)=>{
@@ -1642,14 +1642,14 @@ onSnapshot(vioReviewCol, (snap)=>{
 onSnapshot(attDecisionsCol, (snap)=>{
   allAttDecisions = snap.docs.map(d=>({id:d.id, ...d.data()}));
   window.allAttDecisions = allAttDecisions;
-  if(adminUnlocked && typeof renderAttIssues==='function') renderAttIssues();
+  if(adminUnlocked && typeof renderAttIssues==='function') window.renderAttIssues();
 }, (e)=> console.warn('att decisions sync', e && e.code));
 
 onSnapshot(deductionsCol, (snap)=>{
   allDeductions = snap.docs.map(d=>({id:d.id, ...d.data()}));
   deductions = allDeductions.filter(x=> x.branch === window.currentBranch);
   window.deductions = deductions;
-  if(adminUnlocked && typeof renderDeductionsLog==='function') renderDeductionsLog();
+  if(adminUnlocked && typeof renderDeductionsLog==='function') window.renderDeductionsLog();
 }, (e)=> console.warn('deductions sync', e && e.code));
 
 onSnapshot(commissionPaymentsCol, (snap)=>{
@@ -2983,6 +2983,12 @@ function openAdmin(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog(); renderAdminSettingsForm();
+    // اللوحات الجديدة (الالتزام والمكافآت) — محميّة عشان أي خطأ فيها مايوقفش اللوحة كلها
+    try{ renderPendingRegs(); }catch(e){ console.warn('regs', e); }
+    try{ window.renderComplianceSettingsForm(); }catch(e){ console.warn('compliance form', e); }
+    try{ updateRegBadge(); }catch(e){ console.warn('reg badge', e); }
+    try{ window.renderDeductionsLog(); }catch(e){ console.warn('deductions', e); }
+    try{ window.renderAttIssues(); }catch(e){ console.warn('att issues', e); }
   }
   else { $('#adminLoginGate').classList.add('show'); }
 }
@@ -2999,7 +3005,12 @@ function doAdminLogin(){
     renderLog();
     renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog(); renderAdminSettingsForm(); renderPendingRegs(); renderComplianceSettingsForm(); updateRegBadge(); renderDeductionsLog(); renderAttIssues(); renderViolationsReview();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog(); renderAdminSettingsForm();
+    try{ renderPendingRegs(); }catch(e){ console.warn('regs', e); }
+    try{ window.renderComplianceSettingsForm(); }catch(e){ console.warn('compliance form', e); }
+    try{ updateRegBadge(); }catch(e){ console.warn('reg badge', e); }
+    try{ window.renderDeductionsLog(); }catch(e){ console.warn('deductions', e); }
+    try{ window.renderAttIssues(); }catch(e){ console.warn('att issues', e); } renderViolationsReview();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -4798,8 +4809,8 @@ function renderDailyTargetCard(){
 document.querySelector('#targetCelebrationClose')?.addEventListener('click', ()=> document.querySelector('#targetCelebration').classList.remove('show'));
 
 // ⚙️ نموذج إعدادات الالتزام والمكافآت (أدمن)
-function renderComplianceSettingsForm(){
-  applyRegButtonVisibility();
+window.renderComplianceSettingsForm = function(){
+  window.applyRegButtonVisibility();
   const wrap = document.querySelector('#complianceSettingsForm'); if(!wrap) return;
   if(wrap.dataset.editing === '1') return;   // ما نكتبش فوق المستخدم وهو بيكتب
   const c = window.complianceCfg;
@@ -4915,7 +4926,7 @@ window.resolveViolation = async function(empId, date, type, decision){
 };
 
 // 🔍 لوحة المخالفات المكتشفة — الأدمن بيقرر
-function renderAttIssues(){
+window.renderAttIssues = function(){
   const wrap = document.querySelector('#attIssuesList'); if(!wrap) return;
   const emps = (window.employees||[]).filter(e=> e.branch === window.currentBranch);
   const shifts = (window.allShifts||[]).filter(sh=> sh.branch === window.currentBranch);
@@ -4971,7 +4982,7 @@ window.decideIssue = async function(empId, empName, dateKey, kind, action){
 };
 
 // 💰 كشف الخصومات (الشهر الحالي)
-function renderDeductionsLog(){
+window.renderDeductionsLog = function(){
   const wrap = document.querySelector('#deductionsLog'); if(!wrap) return;
   const now = new Date();
   const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -5022,7 +5033,7 @@ window.openSwapDeduction = function(){
     .catch(e=> alert('تعذر التسجيل: '+e.message));
 };
 
-function applyRegButtonVisibility(){
+window.applyRegButtonVisibility = function(){
   const btn = document.querySelector('#openRegBtn');
   if(btn) btn.style.display = window.regButtonOn ? '' : 'none';
   const t = document.querySelector('#regBtnToggle');
@@ -5040,7 +5051,7 @@ window.toggleRegButton = async function(){
     if(!b){ alert('اختار فرع الجهاز الأول'); return; }
     await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', b), { regButtonOn: next }, { merge:true });
     window.regButtonOn = next;
-    applyRegButtonVisibility();
+    window.applyRegButtonVisibility();
   }catch(e){ alert('تعذر الحفظ: ' + e.message); }
 };
 
