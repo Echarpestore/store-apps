@@ -381,7 +381,7 @@
   <div id="regWizard">
     <div class="rw-card">
       <button onclick="rwExit()" title="إلغاء" style="position:absolute; top:14px; left:14px; width:38px; height:38px; border-radius:11px; border:1px solid var(--line); background:var(--panel); color:var(--sub); font-family:'Cairo'; font-size:17px; font-weight:900; cursor:pointer; z-index:2;">✕</button>
-      <img class="rw-logo" src="../loyalty/logo-white.png" alt="echarpe" onerror="this.onerror=null; this.src='../loyalty/icon-192.png';">
+      <img class="rw-logo" id="rwLogo" src="../loyalty/logo-white.png" alt="" onerror="this.onerror=null; this.src='../loyalty/icon-192.png';">
       <div class="rw-dots" id="rwDots"></div>
       <div id="rwBody"></div>
     </div>
@@ -989,7 +989,17 @@ window.rwSetAgree = function(checked){
   const btn = document.querySelector('#rwSubmit');
   if(btn) btn.disabled = !checked;
 };
+function applyWizardBrand(){
+  const isGlow = /glow/i.test(window.currentBranch || '');
+  const img = document.querySelector('#rwLogo');
+  if(img){
+    img.src = isGlow ? '../glow/wordmark.png' : '../loyalty/logo-white.png';
+    img.alt = isGlow ? 'Glow' : 'echarpe';
+    img.onerror = function(){ this.onerror=null; this.src = isGlow ? '../glow/icon-192.png' : '../loyalty/icon-192.png'; };
+  }
+}
 window.openRegWizard = function(){
+  applyWizardBrand();
   _rwStep = 0; _rwData = { name:'', gender:'', shift:'', dayOff:'', pin:'', agreed:false };
   $('#regWizard').classList.add('show');
   window.rwRender();
@@ -1009,8 +1019,8 @@ window.rwRender=function(){
   const cfg = complianceCfg;
   if(_rwStep===0){
     b.innerHTML = `<div class="rw-step">
-      <div class="rw-eyebrow">echarpe ⭐</div>
-      <div class="rw-title">أهلاً بك في فريق echarpe</div>
+      <div class="rw-eyebrow">${/glow/i.test(window.currentBranch||'') ? 'Glow' : 'echarpe'} ⭐</div>
+      <div class="rw-title">أهلاً بك في فريق ${/glow/i.test(window.currentBranch||'') ? 'Glow' : 'echarpe'}</div>
       <div class="rw-sub">سجّل بياناتك، واطّلع على نظام المكافآت والالتزام.</div>
       <div class="rw-nav"><button class="rw-btn rw-next" onclick="rwGo(1)">ابدأ التسجيل</button></div>
     </div>`;
@@ -1200,6 +1210,7 @@ let allAttDecisions = [];
 const vioReviewCol = collection(db, 'sales_violation_reviews'); // 🔍 قرارات الأدمن على المخالفات المكتشفة
 let allVioReviews = [];
 let allDeductions = [], deductions = [];
+let allSettingsDocs = [];   // معرّفات مستندات الإعدادات = أسماء الفروع
 
 // Simple admin access code — checked on-device, no network call.
 // Change this string to whatever code you want, then re-download the file.
@@ -1421,9 +1432,17 @@ function refreshBranchUI(){
 // قايمة الفروع في شاشة الإعداد — من الموظفين المسجّلين + كاش محلي (لو القراءة مقفولة قبل الدخول)
 function populateBranchSetupSelect(){
   const sel = $('#branchSelect'); if(!sel) return;
-  let branches = [...new Set(allEmployees.map(e=>e.branch).filter(Boolean))].sort();
+  // 🏬 بنجمع الفروع من كل المصادر عشان الفرع اللي لسه مالوش موظفين يظهر برضه
+  const set = new Set();
+  (allEmployees||[]).forEach(e=> e.branch && set.add(e.branch));
+  (allShifts||[]).forEach(x=> x.branch && set.add(x.branch));
+  (allSettingsDocs||[]).forEach(id=> id && set.add(id));        // كل فرع ليه مستند إعدادات
+  (allAdvances||[]).forEach(x=> x.branch && set.add(x.branch));
+  if(window.currentBranch) set.add(window.currentBranch);
+  // المحفوظ محليًا (آخر قايمة اتشافت) — عشان الأوفلاين
+  try{ (JSON.parse(localStorage.getItem('sales_branch_list')||'[]')||[]).forEach(b=> b && set.add(b)); }catch(e){}
+  let branches = [...set].filter(Boolean).sort();
   if(branches.length){ try{ localStorage.setItem('sales_branch_list', JSON.stringify(branches)); }catch(e){} }
-  else { try{ branches = JSON.parse(localStorage.getItem('sales_branch_list')||'[]'); }catch(e){ branches=[]; } }
   const saved = window.currentBranch || '';
   sel.innerHTML = '<option value="">— اختار الفرع —</option>'
     + branches.map(b=> `<option value="${b.replace(/"/g,'&quot;')}" ${b===saved?'selected':''}>${b}</option>`).join('')
@@ -1617,6 +1636,7 @@ onSnapshot(rewardsCol, (snap)=>{
 }, (err)=> console.error('rewards sync error', err));
 
 onSnapshot(settingsCol, (snap)=>{
+  allSettingsDocs = snap.docs.map(d=> d.id);   // 🏬 كل مستند إعدادات = فرع موجود
   const branchDoc = snap.docs.find(d=> d.id === window.currentBranch);
   const data = branchDoc ? branchDoc.data() : {};
   commissionPerPoint = data.commissionPerPoint || 0;
