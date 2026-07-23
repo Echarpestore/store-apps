@@ -918,6 +918,10 @@ let _rwData = { name:'', shift:'', dayOff:'', agreed:false };
 const _rwDayNames = ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
 const RW_STEPS = 6;
 
+window.rwPick = function(field, val){
+  _rwData[field] = val;
+  window.rwRender();
+};
 window.rwSetName = function(v){
   _rwData.name = v;
   const btn = document.querySelector('#rwNext1');
@@ -969,8 +973,8 @@ window.rwRender=function(){
       <div class="rw-title">اختار شيفتك</div>
       <div class="rw-sub">ده معاد حضورك اليومي — والتأخير أكتر من ${cfg.lateGraceMin} دقيقة عليه خصم</div>
       <div class="rw-choice">
-        <div class="rw-opt ${_rwData.shift==='morning'?'sel':''}" onclick="_rwData.shift='morning'; window.rwRender();">${S.morning.label}<small>${S.morning.start} → ${S.morning.end}</small></div>
-        <div class="rw-opt ${_rwData.shift==='evening'?'sel':''}" onclick="_rwData.shift='evening'; window.rwRender();">${S.evening.label}<small>${S.evening.start} → ${S.evening.end}</small></div>
+        <div class="rw-opt ${_rwData.shift==='morning'?'sel':''}" onclick="window.rwPick('shift','morning')">${S.morning.label}<small>${S.morning.start} → ${S.morning.end}</small></div>
+        <div class="rw-opt ${_rwData.shift==='evening'?'sel':''}" onclick="window.rwPick('shift','evening')">${S.evening.label}<small>${S.evening.start} → ${S.evening.end}</small></div>
       </div>
       <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(1)">◀</button><button class="rw-btn rw-next" onclick="rwGo(3)" ${_rwData.shift?'':'disabled'}>التالي ▶</button></div>
     </div>`;
@@ -980,7 +984,7 @@ window.rwRender=function(){
       <div class="rw-title">يوم إجازتك</div>
       <div class="rw-sub">اختار يوم إجازتك الأسبوعي — تغييره بعد كده عليه خصم</div>
       <div class="rw-days">
-        ${_rwDayNames.map((d,i)=>`<div class="rw-day ${String(_rwData.dayOff)===String(i)?'sel':''}" onclick="_rwData.dayOff='${i}'; window.rwRender();">${d}</div>`).join('')}
+        ${_rwDayNames.map((d,i)=>`<div class="rw-day ${String(_rwData.dayOff)===String(i)?'sel':''}" onclick="window.rwPick('dayOff','${i}')">${d}</div>`).join('')}
       </div>
       <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(2)">◀</button><button class="rw-btn rw-next" onclick="rwGo(4)" ${_rwData.dayOff!==''?'':'disabled'}>التالي ▶</button></div>
     </div>`;
