@@ -398,7 +398,7 @@
       <button class="lbBtn" id="openAdvance" style="margin-left:8px; padding:8px 12px; font-size:11px;">💰 سلفة</button>
       <button class="lbBtn" id="openAttendance" style="margin-left:8px;">⏰ الحضور</button>
       <button class="lbBtn" id="openLeaderboard" style="padding:8px 12px; font-size:11px;">🏆 الترتيب</button>
-      <button class="lbBtn" id="openRegBtn" style="padding:8px 12px; font-size:11px;" onclick="openRegWizard()">🙋 تسجيل موظف جديد</button>
+      <button class="lbBtn" id="openRegBtn" style="padding:8px 12px; font-size:11px; display:none;" onclick="openRegWizard()">🙋 تسجيل موظف جديد</button>
     </div>
     <div id="announcementBanner" style="display:none;"></div>
     <div id="dailyTargetCard" style="display:none;"></div>
@@ -704,6 +704,13 @@
     <div class="panel">
       <h3>⚙️ إعدادات الالتزام والمكافآت</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">القيم دي بتتطبّق على الفرع ده. التعديل بيأثر على المكافآت والخصومات الجاية.</p>
+      <div id="regBtnToggleRow" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:16px;">
+        <div>
+          <div style="font-weight:800; font-size:14px;">🙋 زر «تسجيل موظف جديد»</div>
+          <div style="color:var(--sub); font-size:11.5px; margin-top:2px;">فعّله بس لما ييجي موظف جديد يسجّل، وأقفله بعد كده.</div>
+        </div>
+        <button id="regBtnToggle" onclick="toggleRegButton()" style="border:none; border-radius:10px; padding:10px 16px; font-family:'Cairo'; font-weight:800; font-size:13px; cursor:pointer;">—</button>
+      </div>
       <div id="complianceSettingsForm"></div>
     </div>
     <div class="panel">
@@ -914,10 +921,16 @@ const empCol = collection(db, 'sales_employees');
 // ===== 🧭 معالج تسجيل الموظف =====
 const regCol = collection(db, 'sales_registrations');
 let _rwStep = 0;
-let _rwData = { name:'', shift:'', dayOff:'', agreed:false };
+let _rwData = { name:'', shift:'', dayOff:'', pin:'', agreed:false };
 const _rwDayNames = ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
-const RW_STEPS = 6;
+const RW_STEPS = 7;
 
+window.rwSetPin = function(v){
+  v = String(v).replace(/[^0-9]/g,'').slice(0,4);
+  _rwData.pin = v;
+  const inp = document.querySelector('#rwPin'); if(inp && inp.value!==v) inp.value = v;
+  const btn = document.querySelector('#rwPinNext'); if(btn) btn.disabled = !/^\d{4}$/.test(v);
+};
 window.rwPick = function(field, val){
   _rwData[field] = val;
   window.rwRender();
@@ -933,7 +946,7 @@ window.rwSetAgree = function(checked){
   if(btn) btn.disabled = !checked;
 };
 window.openRegWizard = function(){
-  _rwStep = 0; _rwData = { name:'', shift:'', dayOff:'', agreed:false };
+  _rwStep = 0; _rwData = { name:'', shift:'', dayOff:'', pin:'', agreed:false };
   $('#regWizard').classList.add('show');
   window.rwRender();
 };
@@ -953,9 +966,9 @@ window.rwRender=function(){
   if(_rwStep===0){
     b.innerHTML = `<div class="rw-step">
       <div class="rw-eyebrow">echarpe ⭐</div>
-      <div class="rw-title">أهلاً في فريق echarpe 🤍</div>
-      <div class="rw-sub">سجّل بياناتك في دقيقة، واعرف نظام المكافآت والالتزام اللي بيكافئ اجتهادك 🎁</div>
-      <div class="rw-nav"><button class="rw-btn rw-next" onclick="rwGo(1)">يلا نبدأ ⭐</button></div>
+      <div class="rw-title">أهلاً بك في فريق echarpe</div>
+      <div class="rw-sub">سجّل بياناتك، واطّلع على نظام المكافآت والالتزام.</div>
+      <div class="rw-nav"><button class="rw-btn rw-next" onclick="rwGo(1)">ابدأ التسجيل</button></div>
     </div>`;
   } else if(_rwStep===1){
     b.innerHTML = `<div class="rw-step">
@@ -1004,6 +1017,14 @@ window.rwRender=function(){
     </div>`;
   } else if(_rwStep===5){
     b.innerHTML = `<div class="rw-step">
+      <div class="rw-eyebrow">خطوة 5</div>
+      <div class="rw-title">رقمك السري</div>
+      <div class="rw-sub">اختار رقم من 4 أرقام تستخدمه لتسجيل حضورك وانصرافك. احفظه كويس ومتقولهوش لحد.</div>
+      <input class="rw-input" id="rwPin" inputmode="numeric" maxlength="4" placeholder="••••" value="${_rwData.pin}" style="letter-spacing:12px; font-size:26px;" oninput="window.rwSetPin(this.value)">
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(4)">◀</button><button class="rw-btn rw-next" id="rwPinNext" onclick="rwGo(6)" ${/^\d{4}$/.test(_rwData.pin)?'':'disabled'}>التالي ▶</button></div>
+    </div>`;
+  } else if(_rwStep===6){
+    b.innerHTML = `<div class="rw-step">
       <div class="rw-eyebrow">آخر خطوة</div>
       <div class="rw-title">تأكيد التسجيل</div>
       <div class="rw-sub">راجع بياناتك</div>
@@ -1013,7 +1034,7 @@ window.rwRender=function(){
         <div class="rw-rule"><div class="ic">📅</div><div><b>${_rwDayNames[Number(_rwData.dayOff)]}</b><small>يوم الإجازة</small></div></div>
       </div>
       <label class="rw-agree"><input type="checkbox" id="rwAgree" ${_rwData.agreed?'checked':''} onchange="window.rwSetAgree(this.checked)"> قرأت النظام ووافقت عليه</label>
-      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(4)">◀</button><button class="rw-btn rw-next" id="rwSubmit" onclick="rwSubmit()" ${_rwData.agreed?'':'disabled'}>تأكيد ✅</button></div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(5)">◀</button><button class="rw-btn rw-next" id="rwSubmit" onclick="rwSubmit()" ${_rwData.agreed?'':'disabled'}>تأكيد ✅</button></div>
     </div>`;
   }
 };
@@ -1027,6 +1048,7 @@ window.rwSubmit=async function(){
       name: _rwData.name.trim(),
       shift: _rwData.shift,
       dayOff: _rwData.dayOff,
+      pin: _rwData.pin || '0000',
       branch: window.currentBranch || '',
       status: 'pending',            // مستني اعتماد الأدمن
       agreedAt: Date.now(),
@@ -1034,8 +1056,8 @@ window.rwSubmit=async function(){
     });
     $('#rwBody').innerHTML = `<div class="rw-step" style="padding:30px 0;">
       <div class="rw-done">🎉</div>
-      <div class="rw-title" style="margin-top:14px;">تم التسجيل!</div>
-      <div class="rw-sub">بياناتك وصلت للإدارة — هتتفعّل أول ما تتعتمد ✅<br>ربنا يوفقك يا نجم ⭐</div>
+      <div class="rw-title" style="margin-top:14px;">تم استلام تسجيلك ✅</div>
+      <div class="rw-sub">بياناتك وصلت للإدارة، والحساب هيتفعّل بعد الاعتماد.<br>الرقم السري اللي اخترته هو اللي هتسجّل بيه حضورك.</div>
       <div class="rw-nav"><button class="rw-btn rw-next" onclick="rwClose()">تمام 🤍</button></div>
     </div>`;
     $('#rwDots').innerHTML='';
@@ -1083,10 +1105,10 @@ window.approveReg = async function(id){
     // بننشئ الموظف فعليًا في sales_employees ببياناته المعتمدة
     await addDoc(empCol, {
       name: r.name, shift: r.shift, dayOff: r.dayOff,
-      branch: r.branch, active: true, createdAt: Date.now(), pin: '0000'
+      branch: r.branch, active: true, createdAt: Date.now(), pin: (r.pin || '0000')
     });
     await updateDoc(doc(db,'sales_registrations', id), { status:'approved', approvedAt: Date.now() });
-    alert('تم اعتماد ' + r.name + ' ✅ — الـ PIN المبدئي 0000 (غيّره من كارت الموظف)');
+    alert('تم اعتماد ' + r.name + ' — الحساب اتفعّل بالرقم السري اللي اختاره الموظف ✅');
   }catch(e){ alert('تعذر الاعتماد: ' + e.message); }
 };
 window.rejectReg = async function(id){
@@ -1428,6 +1450,9 @@ onSnapshot(settingsCol, (snap)=>{
   window.currentAnnouncement = data.announcement || '';
   window.dailyTarget = data.dailyTarget || 0;
   // 🧭 تحميل إعدادات الالتزام لو الأدمن عدّلها للفرع ده (مع الإبقاء على الافتراضي)
+  // 🙋 حالة إظهار زر تسجيل موظف جديد (افتراضي: مخفي)
+  window.regButtonOn = !!(data.regButtonOn);
+  applyRegButtonVisibility();
   if(data.compliance){
     if(data.compliance.penalty != null) complianceCfg.penalty = data.compliance.penalty;
     if(data.compliance.lateGraceMin != null) complianceCfg.lateGraceMin = data.compliance.lateGraceMin;
@@ -1988,7 +2013,7 @@ function renderRewardScoreCard(empId){
       <div style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:11.5px;"><span style="width:58px;">🎯 التزام</span>${bar(commit,'#5ec88a')}<span style="width:34px; text-align:left;">${Math.round(commit)}%</span></div>
       <div style="display:flex; align-items:center; gap:8px; margin-top:7px; font-size:11.5px;"><span style="width:58px;">🛒 مبيعات</span>${bar(maxPts>0?myPts/maxPts*100:0,'#6aa9f0')}<span style="width:34px; text-align:left;">${myPts}</span></div>
       <div style="display:flex; align-items:center; gap:8px; margin-top:7px; font-size:11.5px;"><span style="width:58px;">⭐ تقييم</span>${bar(ratingPct,'#f2c14e')}<span style="width:34px; text-align:left;">${avgR!=null?avgR.toFixed(1):'—'}</span></div>
-      ${vioCount?`<div style="margin-top:10px; font-size:11px; color:#e0796b; text-align:center;">⚠️ ${vioCount} مخالفة الشهر ده أثّرت على التزامك</div>`:'<div style="margin-top:10px; font-size:11px; color:#5ec88a; text-align:center;">✅ التزام كامل — استمر يا نجم!</div>'}
+      ${vioCount?`<div style="margin-top:10px; font-size:11px; color:#e0796b; text-align:center;">⚠️ ${vioCount} مخالفة الشهر ده أثّرت على التزامك</div>`:'<div style="margin-top:10px; font-size:11px; color:#5ec88a; text-align:center;">✅ التزام كامل الشهر ده</div>'}
     </div>`;
 }
 
@@ -4515,6 +4540,7 @@ document.querySelector('#targetCelebrationClose')?.addEventListener('click', ()=
 
 // ⚙️ نموذج إعدادات الالتزام والمكافآت (أدمن)
 function renderComplianceSettingsForm(){
+  applyRegButtonVisibility();
   const wrap = document.querySelector('#complianceSettingsForm'); if(!wrap) return;
   if(wrap.dataset.editing === '1') return;   // ما نكتبش فوق المستخدم وهو بيكتب
   const c = complianceCfg;
@@ -4610,6 +4636,28 @@ window.openSwapDeduction = function(){
     type, amount: complianceCfg.penalty, date: todayStr(), ts: Date.now()
   }).then(()=> alert('اتسجّل خصم '+complianceCfg.penalty+' ج على '+emp.name+' ✅'))
     .catch(e=> alert('تعذر التسجيل: '+e.message));
+};
+
+function applyRegButtonVisibility(){
+  const btn = document.querySelector('#openRegBtn');
+  if(btn) btn.style.display = window.regButtonOn ? '' : 'none';
+  const t = document.querySelector('#regBtnToggle');
+  if(t){
+    t.textContent = window.regButtonOn ? '🟢 ظاهر — اضغط للإخفاء' : '⚪ مخفي — اضغط للإظهار';
+    t.style.background = window.regButtonOn ? 'linear-gradient(180deg,#1e3a2a,#16241c)' : 'var(--panel)';
+    t.style.color = window.regButtonOn ? '#5ec88a' : 'var(--sub)';
+    t.style.border = '1px solid ' + (window.regButtonOn ? '#2e5a42' : 'var(--line)');
+  }
+}
+window.toggleRegButton = async function(){
+  const next = !window.regButtonOn;
+  try{
+    const b = window.currentBranch;
+    if(!b){ alert('اختار فرع الجهاز الأول'); return; }
+    await setDoc(doc(db,'sales_settings', b), { regButtonOn: next }, { merge:true });
+    window.regButtonOn = next;
+    applyRegButtonVisibility();
+  }catch(e){ alert('تعذر الحفظ: ' + e.message); }
 };
 
 window.saveComplianceSettings = async function(){
