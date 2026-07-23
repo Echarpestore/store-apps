@@ -918,6 +918,16 @@ let _rwData = { name:'', shift:'', dayOff:'', agreed:false };
 const _rwDayNames = ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
 const RW_STEPS = 6;
 
+window.rwSetName = function(v){
+  _rwData.name = v;
+  const btn = document.querySelector('#rwNext1');
+  if(btn) btn.disabled = !String(v).trim();
+};
+window.rwSetAgree = function(checked){
+  _rwData.agreed = !!checked;
+  const btn = document.querySelector('#rwSubmit');
+  if(btn) btn.disabled = !checked;
+};
 window.openRegWizard = function(){
   _rwStep = 0; _rwData = { name:'', shift:'', dayOff:'', agreed:false };
   $('#regWizard').classList.add('show');
@@ -948,7 +958,7 @@ window.rwRender=function(){
       <div class="rw-eyebrow">خطوة 1</div>
       <div class="rw-title">اسمك إيه؟</div>
       <div class="rw-sub">اكتب اسمك زي ما تحب يظهر في الترتيب والمكافآت</div>
-      <input class="rw-input" id="rwName" placeholder="الاسم" value="${esc(_rwData.name)}" oninput="_rwData.name=this.value; $('#rwNext1').disabled=!this.value.trim();">
+      <input class="rw-input" id="rwName" placeholder="الاسم" value="${esc(_rwData.name)}" oninput="window.rwSetName(this.value)">
       <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(0)">◀</button><button class="rw-btn rw-next" id="rwNext1" onclick="rwGo(2)" ${_rwData.name.trim()?'':'disabled'}>التالي ▶</button></div>
     </div>`;
     setTimeout(()=>{ const i=$('#rwName'); if(i) i.focus(); },100);
@@ -998,7 +1008,7 @@ window.rwRender=function(){
         <div class="rw-rule"><div class="ic">🕐</div><div><b>${cfg.shifts[_rwData.shift].label} (${cfg.shifts[_rwData.shift].start}→${cfg.shifts[_rwData.shift].end})</b><small>الشيفت</small></div></div>
         <div class="rw-rule"><div class="ic">📅</div><div><b>${_rwDayNames[Number(_rwData.dayOff)]}</b><small>يوم الإجازة</small></div></div>
       </div>
-      <label class="rw-agree"><input type="checkbox" id="rwAgree" ${_rwData.agreed?'checked':''} onchange="_rwData.agreed=this.checked; $('#rwSubmit').disabled=!this.checked;"> قرأت النظام ووافقت عليه</label>
+      <label class="rw-agree"><input type="checkbox" id="rwAgree" ${_rwData.agreed?'checked':''} onchange="window.rwSetAgree(this.checked)"> قرأت النظام ووافقت عليه</label>
       <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(4)">◀</button><button class="rw-btn rw-next" id="rwSubmit" onclick="rwSubmit()" ${_rwData.agreed?'':'disabled'}>تأكيد ✅</button></div>
     </div>`;
   }
