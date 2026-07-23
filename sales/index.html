@@ -380,7 +380,7 @@
   <!-- 🧭 معالج تسجيل الموظف -->
   <div id="regWizard">
     <div class="rw-card">
-      <img class="rw-logo" src="loyalty/logo-white.png" alt="echarpe">
+      <img class="rw-logo" src="../loyalty/logo-white.png" alt="echarpe" onerror="this.onerror=null; this.src='../loyalty/icon-192.png';">
       <div class="rw-dots" id="rwDots"></div>
       <div id="rwBody"></div>
     </div>
@@ -921,9 +921,9 @@ const RW_STEPS = 6;
 window.openRegWizard = function(){
   _rwStep = 0; _rwData = { name:'', shift:'', dayOff:'', agreed:false };
   $('#regWizard').classList.add('show');
-  rwRender();
+  window.rwRender();
 };
-function rwClose(){ $('#regWizard').classList.remove('show'); }
+window.rwClose=function(){ $('#regWizard').classList.remove('show'); };
 
 function rwDots(){
   let h='';
@@ -932,7 +932,7 @@ function rwDots(){
 }
 function esc(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 
-function rwRender(){
+window.rwRender=function(){
   rwDots();
   const b = $('#rwBody');
   const cfg = complianceCfg;
@@ -959,8 +959,8 @@ function rwRender(){
       <div class="rw-title">اختار شيفتك</div>
       <div class="rw-sub">ده معاد حضورك اليومي — والتأخير أكتر من ${cfg.lateGraceMin} دقيقة عليه خصم</div>
       <div class="rw-choice">
-        <div class="rw-opt ${_rwData.shift==='morning'?'sel':''}" onclick="_rwData.shift='morning'; rwRender();">${S.morning.label}<small>${S.morning.start} → ${S.morning.end}</small></div>
-        <div class="rw-opt ${_rwData.shift==='evening'?'sel':''}" onclick="_rwData.shift='evening'; rwRender();">${S.evening.label}<small>${S.evening.start} → ${S.evening.end}</small></div>
+        <div class="rw-opt ${_rwData.shift==='morning'?'sel':''}" onclick="_rwData.shift='morning'; window.rwRender();">${S.morning.label}<small>${S.morning.start} → ${S.morning.end}</small></div>
+        <div class="rw-opt ${_rwData.shift==='evening'?'sel':''}" onclick="_rwData.shift='evening'; window.rwRender();">${S.evening.label}<small>${S.evening.start} → ${S.evening.end}</small></div>
       </div>
       <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(1)">◀</button><button class="rw-btn rw-next" onclick="rwGo(3)" ${_rwData.shift?'':'disabled'}>التالي ▶</button></div>
     </div>`;
@@ -970,7 +970,7 @@ function rwRender(){
       <div class="rw-title">يوم إجازتك</div>
       <div class="rw-sub">اختار يوم إجازتك الأسبوعي — تغييره بعد كده عليه خصم</div>
       <div class="rw-days">
-        ${_rwDayNames.map((d,i)=>`<div class="rw-day ${String(_rwData.dayOff)===String(i)?'sel':''}" onclick="_rwData.dayOff='${i}'; rwRender();">${d}</div>`).join('')}
+        ${_rwDayNames.map((d,i)=>`<div class="rw-day ${String(_rwData.dayOff)===String(i)?'sel':''}" onclick="_rwData.dayOff='${i}'; window.rwRender();">${d}</div>`).join('')}
       </div>
       <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(2)">◀</button><button class="rw-btn rw-next" onclick="rwGo(4)" ${_rwData.dayOff!==''?'':'disabled'}>التالي ▶</button></div>
     </div>`;
@@ -1002,10 +1002,10 @@ function rwRender(){
       <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(4)">◀</button><button class="rw-btn rw-next" id="rwSubmit" onclick="rwSubmit()" ${_rwData.agreed?'':'disabled'}>تأكيد ✅</button></div>
     </div>`;
   }
-}
-function rwGo(step){ _rwStep = step; rwRender(); }
+};
+window.rwGo=function(step){ _rwStep = step; window.rwRender(); };
 
-async function rwSubmit(){
+window.rwSubmit=async function(){
   if(!_rwData.agreed) return;
   const btn = $('#rwSubmit'); if(btn){ btn.disabled=true; btn.textContent='...'; }
   try{
