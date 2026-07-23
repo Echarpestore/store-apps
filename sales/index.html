@@ -324,7 +324,7 @@
   /* ===== 🧭 معالج تسجيل الموظف ===== */
   #regWizard{position:fixed; inset:0; z-index:60; background:linear-gradient(165deg,#14100a,#12141a 55%); display:none; overflow-y:auto;}
   #regWizard.show{display:flex; align-items:flex-start; justify-content:center;}
-  .rw-card{width:min(94vw,440px); margin:auto; padding:26px 22px 30px; text-align:center;}
+  .rw-card{width:min(94vw,440px); margin:auto; padding:26px 22px 30px; text-align:center; position:relative;}
   .rw-logo{width:120px; margin:6px auto 4px; filter:drop-shadow(0 6px 20px rgba(242,193,78,.25)); animation:rwFloat 3.2s ease-in-out infinite;}
   @keyframes rwFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-9px);}}
   @media (prefers-reduced-motion:reduce){.rw-logo{animation:none;}}
@@ -380,6 +380,7 @@
   <!-- 🧭 معالج تسجيل الموظف -->
   <div id="regWizard">
     <div class="rw-card">
+      <button onclick="rwExit()" title="إلغاء" style="position:absolute; top:14px; left:14px; width:38px; height:38px; border-radius:11px; border:1px solid var(--line); background:var(--panel); color:var(--sub); font-family:'Cairo'; font-size:17px; font-weight:900; cursor:pointer; z-index:2;">✕</button>
       <img class="rw-logo" src="../loyalty/logo-white.png" alt="echarpe" onerror="this.onerror=null; this.src='../loyalty/icon-192.png';">
       <div class="rw-dots" id="rwDots"></div>
       <div id="rwBody"></div>
@@ -937,15 +938,20 @@ const empCol = collection(db, 'sales_employees');
 // ===== 🧭 معالج تسجيل الموظف =====
 const regCol = collection(db, 'sales_registrations');
 let _rwStep = 0;
-let _rwData = { name:'', shift:'', dayOff:'', pin:'', agreed:false };
+let _rwData = { name:'', gender:'', shift:'', dayOff:'', pin:'', agreed:false };
 const _rwDayNames = ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
-const RW_STEPS = 7;
+const RW_STEPS = 8;
 
 window.rwSetPin = function(v){
   v = String(v).replace(/[^0-9]/g,'').slice(0,4);
   _rwData.pin = v;
   const inp = document.querySelector('#rwPin'); if(inp && inp.value!==v) inp.value = v;
   const btn = document.querySelector('#rwPinNext'); if(btn) btn.disabled = !/^\d{4}$/.test(v);
+};
+window.rwExit = function(){
+  const started = _rwData.name || _rwData.shift || _rwData.dayOff || _rwData.pin;
+  if(started && !confirm('تلغي التسجيل؟ البيانات اللي كتبتها هتضيع.')) return;
+  window.rwClose();
 };
 window.rwPick = function(field, val){
   _rwData[field] = val;
@@ -962,7 +968,7 @@ window.rwSetAgree = function(checked){
   if(btn) btn.disabled = !checked;
 };
 window.openRegWizard = function(){
-  _rwStep = 0; _rwData = { name:'', shift:'', dayOff:'', pin:'', agreed:false };
+  _rwStep = 0; _rwData = { name:'', gender:'', shift:'', dayOff:'', pin:'', agreed:false };
   $('#regWizard').classList.add('show');
   window.rwRender();
 };
@@ -996,30 +1002,41 @@ window.rwRender=function(){
     </div>`;
     setTimeout(()=>{ const i=$('#rwName'); if(i) i.focus(); },100);
   } else if(_rwStep===2){
-    const S=cfg.shifts;
     b.innerHTML = `<div class="rw-step">
       <div class="rw-eyebrow">خطوة 2</div>
+      <div class="rw-title">النوع</div>
+      <div class="rw-sub">بيستخدم في صياغة الرسايل والتقارير</div>
+      <div class="rw-choice">
+        <div class="rw-opt ${_rwData.gender==='female'?'sel':''}" onclick="window.rwPick('gender','female')">👩 بنت</div>
+        <div class="rw-opt ${_rwData.gender==='male'?'sel':''}" onclick="window.rwPick('gender','male')">👨 ولد</div>
+      </div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(1)">◀</button><button class="rw-btn rw-next" onclick="rwGo(3)" ${_rwData.gender?'':'disabled'}>التالي ▶</button></div>
+    </div>`;
+  } else if(_rwStep===3){
+    const S=cfg.shifts;
+    b.innerHTML = `<div class="rw-step">
+      <div class="rw-eyebrow">خطوة 3</div>
       <div class="rw-title">اختار شيفتك</div>
       <div class="rw-sub">ده معاد حضورك اليومي — والتأخير أكتر من ${cfg.lateGraceMin} دقيقة عليه خصم</div>
       <div class="rw-choice">
         <div class="rw-opt ${_rwData.shift==='morning'?'sel':''}" onclick="window.rwPick('shift','morning')">${S.morning.label}<small>${S.morning.start} → ${S.morning.end}</small></div>
         <div class="rw-opt ${_rwData.shift==='evening'?'sel':''}" onclick="window.rwPick('shift','evening')">${S.evening.label}<small>${S.evening.start} → ${S.evening.end}</small></div>
       </div>
-      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(1)">◀</button><button class="rw-btn rw-next" onclick="rwGo(3)" ${_rwData.shift?'':'disabled'}>التالي ▶</button></div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(2)">◀</button><button class="rw-btn rw-next" onclick="rwGo(4)" ${_rwData.shift?'':'disabled'}>التالي ▶</button></div>
     </div>`;
-  } else if(_rwStep===3){
+  } else if(_rwStep===4){
     b.innerHTML = `<div class="rw-step">
-      <div class="rw-eyebrow">خطوة 3</div>
+      <div class="rw-eyebrow">خطوة 4</div>
       <div class="rw-title">يوم إجازتك</div>
       <div class="rw-sub">اختار يوم إجازتك الأسبوعي — تغييره بعد كده عليه خصم</div>
       <div class="rw-days">
         ${_rwDayNames.map((d,i)=>`<div class="rw-day ${String(_rwData.dayOff)===String(i)?'sel':''}" onclick="window.rwPick('dayOff','${i}')">${d}</div>`).join('')}
       </div>
-      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(2)">◀</button><button class="rw-btn rw-next" onclick="rwGo(4)" ${_rwData.dayOff!==''?'':'disabled'}>التالي ▶</button></div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(3)">◀</button><button class="rw-btn rw-next" onclick="rwGo(5)" ${_rwData.dayOff!==''?'':'disabled'}>التالي ▶</button></div>
     </div>`;
-  } else if(_rwStep===4){
+  } else if(_rwStep===5){
     b.innerHTML = `<div class="rw-step">
-      <div class="rw-eyebrow">خطوة 4</div>
+      <div class="rw-eyebrow">خطوة 5</div>
       <div class="rw-title">نظام المكافآت والالتزام</div>
       <div class="rw-sub">اقرا كويس — ده اللي بيحدد مكافأتك 🎁</div>
       <div class="rw-rules">
@@ -1029,28 +1046,29 @@ window.rwRender=function(){
         <div class="rw-rule warn"><div class="ic">🔄</div><div><b>تبديل الشيفت</b><small>خصم ${cfg.penalty} ج.م</small></div></div>
         <div class="rw-rule warn"><div class="ic">📅</div><div><b>تبديل يوم الإجازة</b><small>خصم ${cfg.penalty} ج.م</small></div></div>
       </div>
-      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(3)">◀</button><button class="rw-btn rw-next" onclick="rwGo(5)">فهمت ▶</button></div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(4)">◀</button><button class="rw-btn rw-next" onclick="rwGo(6)">فهمت ▶</button></div>
     </div>`;
-  } else if(_rwStep===5){
+  } else if(_rwStep===6){
     b.innerHTML = `<div class="rw-step">
-      <div class="rw-eyebrow">خطوة 5</div>
+      <div class="rw-eyebrow">خطوة 6</div>
       <div class="rw-title">رقمك السري</div>
       <div class="rw-sub">اختار رقم من 4 أرقام تستخدمه لتسجيل حضورك وانصرافك. احفظه كويس ومتقولهوش لحد.</div>
       <input class="rw-input" id="rwPin" inputmode="numeric" maxlength="4" placeholder="••••" value="${_rwData.pin}" style="letter-spacing:12px; font-size:26px;" oninput="window.rwSetPin(this.value)">
-      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(4)">◀</button><button class="rw-btn rw-next" id="rwPinNext" onclick="rwGo(6)" ${/^\d{4}$/.test(_rwData.pin)?'':'disabled'}>التالي ▶</button></div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(5)">◀</button><button class="rw-btn rw-next" id="rwPinNext" onclick="rwGo(7)" ${/^\d{4}$/.test(_rwData.pin)?'':'disabled'}>التالي ▶</button></div>
     </div>`;
-  } else if(_rwStep===6){
+  } else if(_rwStep===7){
     b.innerHTML = `<div class="rw-step">
       <div class="rw-eyebrow">آخر خطوة</div>
       <div class="rw-title">تأكيد التسجيل</div>
       <div class="rw-sub">راجع بياناتك</div>
       <div class="rw-rules">
         <div class="rw-rule"><div class="ic">🙋</div><div><b>${esc(_rwData.name)}</b><small>الاسم</small></div></div>
+        <div class="rw-rule"><div class="ic">${_rwData.gender==='female'?'👩':'👨'}</div><div><b>${_rwData.gender==='female'?'بنت':'ولد'}</b><small>النوع</small></div></div>
         <div class="rw-rule"><div class="ic">🕐</div><div><b>${cfg.shifts[_rwData.shift].label} (${cfg.shifts[_rwData.shift].start}→${cfg.shifts[_rwData.shift].end})</b><small>الشيفت</small></div></div>
         <div class="rw-rule"><div class="ic">📅</div><div><b>${_rwDayNames[Number(_rwData.dayOff)]}</b><small>يوم الإجازة</small></div></div>
       </div>
       <label class="rw-agree"><input type="checkbox" id="rwAgree" ${_rwData.agreed?'checked':''} onchange="window.rwSetAgree(this.checked)"> قرأت النظام ووافقت عليه</label>
-      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(5)">◀</button><button class="rw-btn rw-next" id="rwSubmit" onclick="rwSubmit()" ${_rwData.agreed?'':'disabled'}>تأكيد ✅</button></div>
+      <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(6)">◀</button><button class="rw-btn rw-next" id="rwSubmit" onclick="rwSubmit()" ${_rwData.agreed?'':'disabled'}>تأكيد ✅</button></div>
     </div>`;
   }
 };
@@ -1062,7 +1080,11 @@ window.rwSubmit=async function(){
   try{
     await addDoc(regCol, {
       name: _rwData.name.trim(),
+      gender: _rwData.gender || '',
       shift: _rwData.shift,
+      // مواعيد الشيفت المختار بتتسجّل مع الطلب (بيتحسب عليها التأخير)
+      scheduledStartTime: (complianceCfg.shifts[_rwData.shift] || {}).start || null,
+      scheduledEndTime: (complianceCfg.shifts[_rwData.shift] || {}).end || null,
       dayOff: _rwData.dayOff,
       pin: _rwData.pin || '0000',
       branch: window.currentBranch || '',
@@ -1105,7 +1127,9 @@ function renderPendingRegs(){
     <div style="background:var(--panel); border:1px solid var(--gold-dim); border-radius:13px; padding:13px; margin-bottom:9px;">
       <div style="font-weight:800; font-size:15px;">🙋 ${esc(r.name)}</div>
       <div style="color:var(--sub); font-size:12.5px; margin:5px 0 11px; line-height:1.7;">
+        ${r.gender ? (r.gender==='female'?'👩 بنت':'👨 ولد') + ' &nbsp;·&nbsp; ' : ''}
         🕐 ${complianceCfg.shifts[r.shift] ? complianceCfg.shifts[r.shift].label : r.shift}
+        ${r.scheduledStartTime ? ' ('+r.scheduledStartTime+' → '+(r.scheduledEndTime||'')+')' : ''}
         &nbsp;·&nbsp; 📅 إجازة: ${_rwDayNames[Number(r.dayOff)]||'—'}
       </div>
       <div style="display:flex; gap:8px;">
@@ -1120,7 +1144,9 @@ window.approveReg = async function(id){
   try{
     // بننشئ الموظف فعليًا في sales_employees ببياناته المعتمدة
     await addDoc(empCol, {
-      name: r.name, shift: r.shift, dayOff: r.dayOff,
+      name: r.name, gender: r.gender || '', shift: r.shift, dayOff: r.dayOff,
+      scheduledStartTime: r.scheduledStartTime || (complianceCfg.shifts[r.shift]||{}).start || null,
+      scheduledEndTime: r.scheduledEndTime || (complianceCfg.shifts[r.shift]||{}).end || null,
       branch: r.branch, active: true, createdAt: Date.now(), pin: (r.pin || '0000')
     });
     await updateDoc(doc(db,'sales_registrations', id), { status:'approved', approvedAt: Date.now() });
