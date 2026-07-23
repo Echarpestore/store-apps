@@ -711,6 +711,12 @@
       <div id="pendingRegsList"></div>
     </div>
     <div class="panel">
+      <h3>🏬 إدارة الفروع</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">الفروع اللي السيستم شايفها. لو فيه فرع اتكتب بالغلط تقدر تشيله — بس لو مفيهوش أي بيانات.</p>
+      <div id="branchManageList"></div>
+    </div>
+
+    <div class="panel">
       <h3>⚙️ إعدادات الالتزام والمكافآت</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">القيم دي بتتطبّق على الفرع ده. التعديل بيأثر على المكافآت والخصومات الجاية.</p>
       <div id="regBtnToggleRow" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:16px;">
@@ -1584,7 +1590,8 @@ function initials(name){
 }
 
 onSnapshot(empCol, (snap)=>{
-  allEmployees = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=> !e.isAdminAccount);   // 👑 حساب الأدمن العام مش موظف HR
+  allEmployees = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=> !e.isAdminAccount);
+  window.allEmployeesAll = allEmployees;   // 👑 حساب الأدمن العام مش موظف HR
   applyBranchFilter();
   if($('#branchSetup').classList.contains('show')) populateBranchSetupSelect();   // الشاشة مفتوحة؟ حدّث القايمة
 }, (err)=> console.error('window.employees sync error', err));
@@ -1637,6 +1644,7 @@ onSnapshot(rewardsCol, (snap)=>{
 
 onSnapshot(settingsCol, (snap)=>{
   allSettingsDocs = snap.docs.map(d=> d.id);   // 🏬 كل مستند إعدادات = فرع موجود
+  window.allSettingsDocs = allSettingsDocs;
   const branchDoc = snap.docs.find(d=> d.id === window.currentBranch);
   const data = branchDoc ? branchDoc.data() : {};
   commissionPerPoint = data.commissionPerPoint || 0;
@@ -1695,6 +1703,7 @@ onSnapshot(terminationsCol, (snap)=>{
 
 onSnapshot(advancesCol, (snap)=>{
   allAdvances = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  window.allAdvancesAll = allAdvances;
   advances = allAdvances.filter(a=> a.branch === window.currentBranch);
   renderTodayAdvancesSummary();
   if(adminUnlocked){ renderSalaryPanel(); renderAdvancesLog(); }
@@ -5076,6 +5085,56 @@ window.toggleRegButton = async function(){
     window.regButtonOn = next;
     window.applyRegButtonVisibility();
   }catch(e){ alert('تعذر الحفظ: ' + e.message); }
+};
+
+// 🏬 إدارة الفروع: عرض + حذف الفروع الفاضية
+window.renderBranchManage = function(){
+  const wrap = document.querySelector('#branchManageList'); if(!wrap) return;
+  const set = new Set();
+  (window.allEmployeesAll||[]).forEach(e=> e.branch && set.add(e.branch));
+  (window.allShifts||[]).forEach(x=> x.branch && set.add(x.branch));
+  (window.allSettingsDocs||[]).forEach(id=> id && set.add(id));
+  (window.allAdvancesAll||[]).forEach(x=> x.branch && set.add(x.branch));
+  if(window.currentBranch) set.add(window.currentBranch);
+  try{ (JSON.parse(localStorage.getItem('sales_branch_list')||'[]')||[]).forEach(b=> b && set.add(b)); }catch(e){}
+  const branches=[...set].filter(Boolean).sort();
+  if(!branches.length){ wrap.innerHTML='<p style="color:var(--sub); font-size:12px;">مفيش فروع.</p>'; return; }
+
+  wrap.innerHTML = branches.map(b=>{
+    // بنعدّ البيانات المرتبطة بالفرع — لو فيه حاجة مبنسمحش بالحذف
+    const emps  = (window.allEmployeesAll||[]).filter(e=> e.branch===b).length;
+    const shf   = (window.allShifts||[]).filter(x=> x.branch===b).length;
+    const adv   = (window.allAdvancesAll||[]).filter(x=> x.branch===b).length;
+    const used  = emps + shf + adv;
+    const isCur = b === window.currentBranch;
+    const safe  = b.replace(/'/g, "\\'");
+    return `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; background:var(--panel2); border:1px solid ${isCur?'var(--gold-dim)':'var(--line)'}; border-radius:12px; padding:12px 14px; margin-bottom:9px;">
+      <div style="min-width:0;">
+        <div style="font-weight:800; font-size:14px;">${b} ${isCur?'<span style="color:var(--gold); font-size:11px;">(فرع الجهاز ده)</span>':''}</div>
+        <div style="color:var(--sub); font-size:11.5px; margin-top:2px;">
+          ${used ? `${emps} موظف · ${shf} حضور · ${adv} سلفة` : 'فاضي — مفيش أي بيانات'}
+        </div>
+      </div>
+      ${used || isCur
+        ? `<span style="color:var(--sub); font-size:11px; flex-shrink:0;">${isCur?'مش هيتشال':'فيه بيانات'}</span>`
+        : `<button onclick="deleteBranch('${safe}')" style="flex-shrink:0; border:1px solid #5a3a3a; background:var(--panel); color:#e0796b; border-radius:9px; padding:8px 14px; font-family:'Cairo'; font-weight:700; font-size:12.5px; cursor:pointer;">🗑️ شيله</button>`}
+    </div>`;
+  }).join('');
+};
+
+window.deleteBranch = async function(name){
+  if(!confirm('تشيل فرع "'+name+'" من القايمة؟')) return;
+  try{
+    // نشيل مستند إعداداته (لو موجود) + من القايمة المحفوظة محليًا
+    try{ await window.fbDeleteDoc(window.fbDoc(window.db,'sales_settings', name)); }catch(e){}
+    try{
+      const list = JSON.parse(localStorage.getItem('sales_branch_list')||'[]').filter(b=> b!==name);
+      localStorage.setItem('sales_branch_list', JSON.stringify(list));
+    }catch(e){}
+    window.allSettingsDocs = (window.allSettingsDocs||[]).filter(id=> id!==name);
+    window.renderBranchManage();
+    alert('اتشال الفرع من القايمة ✅');
+  }catch(e){ alert('تعذر الحذف: '+e.message); }
 };
 
 window.saveComplianceSettings = async function(){
