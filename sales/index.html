@@ -724,6 +724,26 @@
     </div>
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
+        <h3 style="margin:0;">🔍 مخالفات محتاجة مراجعتك
+          <span id="vioBadge" style="display:none; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; margin-right:6px; background:#e0796b; color:#2a1a18; border-radius:99px; font-size:12px; font-weight:900;">0</span>
+        </h3>
+      </div>
+      <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">السيستم بيقارن جدول كل موظف بحضوره الفعلي. راجع كل حالة وقرر: خصم ولا إجازة بموافقتك.</p>
+      <div id="violationsReview"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
+        <h3 style="margin:0;">🔍 مخالفات محتاجة مراجعتك
+          <span id="issuesBadge" style="display:none; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; margin-right:6px; background:#e0796b; color:#2a1a18; border-radius:99px; font-size:12px; font-weight:900;">0</span>
+        </h3>
+      </div>
+      <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">السيستم بيقارن جدول كل موظف بحضوره الفعلي. راجع كل حالة واقرر: خصم ولا تجاهل (أجازة بموافقتك).</p>
+      <div id="attIssuesList"></div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0;">💰 كشف الخصومات</h3>
         <button class="backBtn" id="addSwapDeductionBtn" onclick="openSwapDeduction()">➕ تسجيل خصم يدوي</button>
       </div>
@@ -931,6 +951,11 @@ window.fbAddDoc = addDoc;
 window.fbUpdateDoc = updateDoc;
 window.fbDeleteDoc = deleteDoc;
 window.fbCollection = collection;
+// 🔍 نعرّض دوال الكشف عشان لوحة المراجعة (في بلوك تاني) تستخدمها
+window.detectAttendanceIssues = detectAttendanceIssues;
+window.pairSwaps = pairSwaps;
+window.complianceCfg = complianceCfg;   // الإعدادات (نفس المرجع — التعديلات بتنعكس)
+window.todayStr = todayStr;
 enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence not enabled:', err.code));
 
 const empCol = collection(db, 'sales_employees');
@@ -1173,6 +1198,10 @@ const salaryPaymentsCol = collection(db, 'sales_salary_payments');
 const terminationsCol = collection(db, 'sales_terminations');
 const advancesCol = collection(db, 'sales_advances');
 const deductionsCol = collection(db, 'sales_deductions');   // 💰 خصومات الالتزام (تأخير/تبديل)
+const attDecisionsCol = collection(db, 'sales_att_decisions'); // 🔍 قرارات الأدمن على المخالفات المكتشفة
+let allAttDecisions = [];
+const vioReviewCol = collection(db, 'sales_violation_reviews'); // 🔍 قرارات الأدمن على المخالفات المكتشفة
+let allVioReviews = [];
 let allDeductions = [], deductions = [];
 
 // Simple admin access code — checked on-device, no network call.
@@ -1253,6 +1282,103 @@ function computeRewardScore(inp, cfg){
 function commitmentPct(violationCount, pointsPerViolation){
   const pen = (pointsPerViolation!=null ? pointsPerViolation : 15);
   return Math.max(0, 100 - (Number(violationCount)||0) * pen);
+}
+
+// ============ 🔍 كشف المخالفات (غياب / تبديل يوم إجازة) ============
+// بنقارن كل يوم شغل بالحضور الفعلي. النتيجة "مشتبه فيها" — الأدمن هو اللي بيقرر.
+// shiftsByDay = { 'YYYY-MM-DD': true }  (الأيام اللي الموظف سجّل فيها حضور)
+// resolved    = { 'YYYY-MM-DD': 'deducted'|'excused' }  (اللي الأدمن حسمها قبل كده)
+function detectViolations(emp, fromDate, toDate, shiftsByDay, resolved, dayKeyFn){
+  const out = [];
+  if(!emp || emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return out;
+  const off = Number(emp.dayOff);
+  const start = new Date(fromDate), end = new Date(toDate);
+  start.setHours(0,0,0,0); end.setHours(0,0,0,0);
+  const key = dayKeyFn;
+  let workedOnDayOff = null, missedWorkDays = [];
+
+  for(let d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
+    const k = key(d);
+    if(resolved && resolved[k]) continue;          // الأدمن حسمها خلاص
+    const attended = !!(shiftsByDay && shiftsByDay[k]);
+    const isOff = d.getDay() === off;
+    if(isOff && attended) workedOnDayOff = k;       // اشتغل في يوم إجازته
+    if(!isOff && !attended) missedWorkDays.push(k); // غاب في يوم شغله
+  }
+
+  // اشتغل في إجازته + غاب يوم شغل = تبديل يوم إجازة (مخالفة واحدة مش اتنين)
+  if(workedOnDayOff && missedWorkDays.length){
+    out.push({ type:'dayoffSwap', date: missedWorkDays[0], workedOn: workedOnDayOff,
+               label:'بدّل يوم إجازته' });
+    missedWorkDays = missedWorkDays.slice(1);
+  }
+  missedWorkDays.forEach(k => out.push({ type:'absence', date:k, label:'غياب في يوم شغل' }));
+  return out;
+}
+
+// ===== 🔍 كشف المخالفات: غياب في يوم شغل / شغل في يوم إجازة (تبديل) =====
+// بيقارن جدول الموظف بحضوره الفعلي على مدى فترة، ويرجع قايمة "مشتبه فيها"
+// مفيش خصم تلقائي هنا — الأدمن هو اللي بيقرر (خصم / تجاهل).
+//
+// emps    : [{id, name, dayOff, createdAt}]
+// shifts  : [{employeeId, clockInTs}]
+// decided : { 'empId|YYYY-MM-DD': 'charged'|'ignored' }  القرارات اللي اتاخدت قبل كده
+// يرجع: [{empId, empName, dateKey, type:'absent'|'workedDayOff', dow}]
+function detectAttendanceIssues(emps, shifts, fromTs, toTs, decided, todayTs){
+  decided = decided || {};
+  const out = [];
+  const DAY = 86400000;
+  const keyOf = (d)=> d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  // حضور كل موظف بمفتاح اليوم
+  const present = {};
+  (shifts||[]).forEach(sh=>{
+    if(!sh || !sh.clockInTs) return;
+    present[sh.employeeId + '|' + keyOf(new Date(sh.clockInTs))] = true;
+  });
+  const start = new Date(fromTs); start.setHours(0,0,0,0);
+  const end   = new Date(toTs);   end.setHours(0,0,0,0);
+  const today = new Date(todayTs || Date.now()); today.setHours(0,0,0,0);
+
+  for(let t = start.getTime(); t <= end.getTime(); t += DAY){
+    const d = new Date(t);
+    if(d.getTime() >= today.getTime()) continue;      // النهاردة لسه مخلصش — مش بنحكم عليه
+    const dateKey = keyOf(d), dow = d.getDay();
+    (emps||[]).forEach(e=>{
+      if(!e || e.active === false) return;
+      if(e.dayOff === undefined || e.dayOff === null || e.dayOff === '') return;   // ملوش جدول
+      if(e.createdAt && t < new Date(e.createdAt).setHours(0,0,0,0)) return;        // قبل ما يتسجّل
+      const k = e.id + '|' + dateKey;
+      if(decided[k]) return;                                                        // اتقرر فيها قبل كده
+      const isOff = Number(e.dayOff) === dow;
+      const came  = !!present[k];
+      if(!isOff && !came)      out.push({ empId:e.id, empName:e.name, dateKey, type:'absent', dow });
+      else if(isOff && came)   out.push({ empId:e.id, empName:e.name, dateKey, type:'workedDayOff', dow });
+    });
+  }
+  return out;
+}
+
+// بيجمّع نتايج الكشف: لو موظف اشتغل يوم إجازته + غاب يوم شغل في نفس الأسبوع → ده تبديل يوم إجازة
+function pairSwaps(issues){
+  const byEmpWeek = {};
+  const weekOf = (dateKey)=>{
+    const d = new Date(dateKey + 'T00:00:00');
+    const s = new Date(d); s.setDate(d.getDate() - d.getDay());
+    return s.toISOString().slice(0,10);
+  };
+  (issues||[]).forEach(i=>{
+    const k = i.empId + '|' + weekOf(i.dateKey);
+    (byEmpWeek[k] = byEmpWeek[k] || []).push(i);
+  });
+  const swaps = [], singles = [];
+  Object.values(byEmpWeek).forEach(list=>{
+    const worked = list.filter(x=> x.type==='workedDayOff');
+    const absent = list.filter(x=> x.type==='absent');
+    const n = Math.min(worked.length, absent.length);
+    for(let i=0;i<n;i++) swaps.push({ ...absent[i], type:'dayoffSwap', pairedWith: worked[i].dateKey });
+    singles.push(...worked.slice(n), ...absent.slice(n));
+  });
+  return { swaps, singles };
 }
 // <<< COMPLIANCE_END
 
@@ -1407,6 +1533,7 @@ function applyBranchFilter(){
   terminations = allTerminations.filter(t => t.branch === window.currentBranch);
   advances = allAdvances.filter(a => a.branch === window.currentBranch);
   deductions = allDeductions.filter(a => a.branch === window.currentBranch);
+  window.deductions = deductions;
   renderEmpGrid();
   renderTodayAdvancesSummary();
   renderAnnouncementBanner();
@@ -1467,6 +1594,7 @@ onSnapshot(entriesCol, (snap)=>{
 
 onSnapshot(shiftsCol, (snap)=>{
   allShifts = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  window.allShifts = allShifts;
   applyBranchFilter();
 }, (err)=> console.error('shifts sync error', err));
 
@@ -1506,9 +1634,21 @@ onSnapshot(settingsCol, (snap)=>{
   if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); renderComplianceSettingsForm(); }
 }, (err)=> console.error('settings sync error', err));
 
+onSnapshot(vioReviewCol, (snap)=>{
+  allVioReviews = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  if(adminUnlocked && typeof renderViolationsReview==='function') renderViolationsReview();
+}, (e)=> console.warn('vio reviews sync', e && e.code));
+
+onSnapshot(attDecisionsCol, (snap)=>{
+  allAttDecisions = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  window.allAttDecisions = allAttDecisions;
+  if(adminUnlocked && typeof renderAttIssues==='function') renderAttIssues();
+}, (e)=> console.warn('att decisions sync', e && e.code));
+
 onSnapshot(deductionsCol, (snap)=>{
   allDeductions = snap.docs.map(d=>({id:d.id, ...d.data()}));
   deductions = allDeductions.filter(x=> x.branch === window.currentBranch);
+  window.deductions = deductions;
   if(adminUnlocked && typeof renderDeductionsLog==='function') renderDeductionsLog();
 }, (e)=> console.warn('deductions sync', e && e.code));
 
@@ -2859,7 +2999,7 @@ function doAdminLogin(){
     renderLog();
     renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog(); renderAdminSettingsForm(); renderPendingRegs(); renderComplianceSettingsForm(); updateRegBadge(); renderDeductionsLog();
+    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog(); renderAdminSettingsForm(); renderPendingRegs(); renderComplianceSettingsForm(); updateRegBadge(); renderDeductionsLog(); renderAttIssues(); renderViolationsReview();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -4647,7 +4787,7 @@ function renderDailyTargetCard(){
   `;
 
   if(isDone){
-    const today = todayStr();
+    const today = window.todayStr();
     const otherScreenOpen = document.querySelector('#admin').classList.contains('show') || document.querySelector('#attendance').classList.contains('show') || document.querySelector('#leaderboard').classList.contains('show');
     if(targetCelebrationShownFor !== today && !otherScreenOpen){
       targetCelebrationShownFor = today;
@@ -4662,7 +4802,7 @@ function renderComplianceSettingsForm(){
   applyRegButtonVisibility();
   const wrap = document.querySelector('#complianceSettingsForm'); if(!wrap) return;
   if(wrap.dataset.editing === '1') return;   // ما نكتبش فوق المستخدم وهو بيكتب
-  const c = complianceCfg;
+  const c = window.complianceCfg;
   const fld = (label, id, val, suffix)=>`
     <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:9px; font-size:13px;">
       <span>${label}</span>
@@ -4705,18 +4845,143 @@ function renderComplianceSettingsForm(){
     </div>`;
 }
 
+// 🔍 لوحة مراجعة المخالفات المكتشفة (آخر 14 يوم)
+function renderViolationsReview(){
+  const wrap = document.querySelector('#violationsReview'); if(!wrap) return;
+  const badge = document.querySelector('#vioBadge');
+  const to = new Date(); to.setDate(to.getDate()-1);           // لحد امبارح (النهاردة لسه شغال)
+  const from = new Date(); from.setDate(from.getDate()-14);
+  const emps = (window.employees||[]).filter(e=> e.active !== false);
+
+  let all = [];
+  emps.forEach(emp=>{
+    // أيام حضوره
+    const byDay = {};
+    (window.allShifts||[]).filter(sh=> sh.employeeId===emp.id).forEach(sh=>{
+      if(sh.clockInTs) byDay[window.todayStr(sh.clockInTs)] = true;
+    });
+    // الأيام اللي الأدمن حسمها
+    const resolved = {};
+    allVioReviews.filter(v=> v.employeeId===emp.id).forEach(v=>{ resolved[v.date] = v.decision; });
+    // ما نرجعش لأيام قبل ما الموظف يتسجّل
+    const createdAt = emp.createdAt ? new Date(emp.createdAt) : from;
+    const realFrom = createdAt > from ? createdAt : from;
+    detectViolations(emp, realFrom, to, byDay, resolved, todayStrFromDate)
+      .forEach(v=> all.push({ ...v, empId: emp.id, empName: emp.name, gender: emp.gender }));
+  });
+
+  all.sort((a,b)=> (a.date < b.date ? 1 : -1));
+  if(badge){ badge.textContent = all.length; badge.style.display = all.length ? 'inline-flex' : 'none'; }
+  if(!all.length){ wrap.innerHTML = '<p style="color:var(--sub); font-size:12px;">مفيش مخالفات محتاجة مراجعة ✅</p>'; return; }
+
+  wrap.innerHTML = all.map(v=>{
+    const dLabel = _rwDayNames[new Date(v.date+'T00:00:00').getDay()] || '';
+    const extra = v.type==='dayoffSwap' && v.workedOn ? ` (اشتغل يوم ${_rwDayNames[new Date(v.workedOn+'T00:00:00').getDay()]||''} بدل إجازته)` : '';
+    return `<div style="background:var(--panel); border:1px solid #5a3a3a; border-radius:13px; padding:13px; margin-bottom:9px;">
+      <div style="font-weight:800; font-size:14.5px;">${v.empName}</div>
+      <div style="color:var(--sub); font-size:12.5px; margin:4px 0 11px; line-height:1.6;">
+        ${v.type==='dayoffSwap' ? '📅' : '🚫'} ${v.label} — ${dLabel} ${v.date}${extra}
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button onclick="resolveViolation('${v.empId}','${v.date}','${v.type}','deducted')" style="flex:1; padding:11px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#f0b0a0; font-family:'Cairo'; font-weight:800; cursor:pointer;">خصم ${window.complianceCfg.penalty} ج</button>
+        <button onclick="resolveViolation('${v.empId}','${v.date}','${v.type}','excused')" style="flex:1; padding:11px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--sub); font-family:'Cairo'; font-weight:700; cursor:pointer;">إجازة بموافقتي</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// مفتاح يوم من كائن تاريخ (نفس صيغة todayStr)
+function todayStrFromDate(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+window.resolveViolation = async function(empId, date, type, decision){
+  const emp = (window.employees||[]).find(e=> e.id===empId);
+  const name = emp ? emp.name : '';
+  if(decision==='deducted' && !confirm('تأكيد خصم ' + window.complianceCfg.penalty + ' ج على ' + name + '؟')) return;
+  try{
+    await window.fbAddDoc(window.fbCollection(window.db,'sales_violation_reviews'), {
+      employeeId: empId, employeeName: name, branch: window.currentBranch,
+      date, type, decision, ts: Date.now()
+    });
+    if(decision==='deducted'){
+      await window.fbAddDoc(window.fbCollection(window.db,'sales_deductions'), {
+        employeeId: empId, employeeName: name, branch: window.currentBranch,
+        type: (type==='dayoffSwap' ? 'dayoffSwap' : 'absence'),
+        amount: window.complianceCfg.penalty, date, ts: Date.now()
+      });
+    }
+  }catch(e){ alert('تعذر الحفظ: ' + e.message); }
+};
+
+// 🔍 لوحة المخالفات المكتشفة — الأدمن بيقرر
+function renderAttIssues(){
+  const wrap = document.querySelector('#attIssuesList'); if(!wrap) return;
+  const emps = (window.employees||[]).filter(e=> e.branch === window.currentBranch);
+  const shifts = (window.allShifts||[]).filter(sh=> sh.branch === window.currentBranch);
+  // قرارات سابقة → عشان متظهرش تاني
+  const decided = {};
+  (window.allAttDecisions||[]).forEach(d=>{ decided[d.empId + '|' + d.dateKey] = d.decision; });
+  // آخر 30 يوم
+  const to = Date.now(), from = to - 30*86400000;
+  const raw = window.detectAttendanceIssues(emps, shifts, from, to, decided, Date.now());
+  const { swaps, singles } = window.pairSwaps(raw);
+  const all = [...swaps, ...singles].sort((a,b)=> a.dateKey < b.dateKey ? 1 : -1);
+
+  const badge = document.querySelector('#issuesBadge');
+  if(badge){ badge.textContent = all.length; badge.style.display = all.length ? 'inline-flex' : 'none'; }
+
+  if(!all.length){ wrap.innerHTML = '<p style="color:var(--sub); font-size:12px;">مفيش مخالفات محتاجة مراجعة ✅</p>'; return; }
+
+  const dayName = ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
+  const meta = {
+    absent:       { icon:'🚫', title:'غياب في يوم شغل',     kind:'absent'      },
+    workedDayOff: { icon:'📅', title:'اشتغل في يوم إجازته', kind:'dayoffSwap'  },
+    dayoffSwap:   { icon:'🔄', title:'بدّل يوم إجازته',      kind:'dayoffSwap'  }
+  };
+  wrap.innerHTML = all.map(i=>{
+    const m = meta[i.type] || meta.absent;
+    const extra = i.pairedWith ? ` (اشتغل بدلها ${i.pairedWith})` : '';
+    return `<div style="background:var(--panel); border:1px solid #5a3a3a; border-radius:13px; padding:12px 13px; margin-bottom:9px;">
+      <div style="font-weight:800; font-size:14px;">${m.icon} ${i.empName}</div>
+      <div style="color:var(--sub); font-size:12.5px; margin:4px 0 11px;">${m.title} — ${dayName[i.dow]} ${i.dateKey}${extra}</div>
+      <div style="display:flex; gap:8px;">
+        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','charge')" style="flex:1; padding:10px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#ffb4a6; font-family:'Cairo'; font-weight:800; cursor:pointer;">خصم ${window.complianceCfg.penalty} ج</button>
+        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','ignore')" style="flex:1; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--sub); font-family:'Cairo'; font-weight:700; cursor:pointer;">تجاهل (بموافقتي)</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// قرار الأدمن على مخالفة: خصم أو تجاهل — الاتنين بيتسجّلوا فمش هتظهر تاني
+window.decideIssue = async function(empId, empName, dateKey, kind, action){
+  try{
+    await window.fbAddDoc(window.fbCollection(window.db,'sales_att_decisions'), {
+      empId, empName, dateKey, type: kind, branch: window.currentBranch,
+      decision: action === 'charge' ? 'charged' : 'ignored',
+      ts: Date.now()
+    });
+    if(action === 'charge'){
+      await window.fbAddDoc(window.fbCollection(window.db,'sales_deductions'), {
+        employeeId: empId, employeeName: empName, branch: window.currentBranch,
+        type: kind, amount: window.complianceCfg.penalty, date: dateKey, ts: Date.now()
+      });
+    }
+  }catch(e){ alert('تعذر تسجيل القرار: ' + e.message); }
+};
+
 // 💰 كشف الخصومات (الشهر الحالي)
 function renderDeductionsLog(){
   const wrap = document.querySelector('#deductionsLog'); if(!wrap) return;
   const now = new Date();
   const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const rows = (deductions||[]).filter(d=> String(d.date||'').startsWith(mk)).sort((a,b)=> (b.ts||0)-(a.ts||0));
+  const rows = (window.deductions||[]).filter(d=> String(d.date||'').startsWith(mk)).sort((a,b)=> (b.ts||0)-(a.ts||0));
   if(!rows.length){ wrap.innerHTML = '<p style="color:var(--sub); font-size:12px;">مفيش خصومات الشهر ده ✅</p>'; return; }
   // إجمالي لكل موظف
   const byEmp = {};
   rows.forEach(d=>{ byEmp[d.employeeName] = (byEmp[d.employeeName]||0) + (Number(d.amount)||0); });
   const total = rows.reduce((x,d)=> x + (Number(d.amount)||0), 0);
-  const label = { late:'⏰ تأخير', shiftSwap:'🔄 تبديل شيفت', dayoffSwap:'📅 تبديل إجازة' };
+  const label = { late:'⏰ تأخير', shiftSwap:'🔄 تبديل شيفت', dayoffSwap:'📅 تبديل إجازة', absence:'🚫 غياب' };
   wrap.innerHTML = `
     <div style="display:flex; flex-wrap:wrap; gap:7px; margin-bottom:12px;">
       ${Object.entries(byEmp).map(([n,v])=>`<span style="background:var(--panel2); border:1px solid var(--line); border-radius:99px; padding:6px 12px; font-size:12px; font-weight:700;">${n}: <b style="color:#e0796b;">${v} ج</b></span>`).join('')}
@@ -4752,8 +5017,8 @@ window.openSwapDeduction = function(){
   if(!type){ return; }
   window.fbAddDoc(window.fbCollection(window.db,'sales_deductions'), {
     employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
-    type, amount: complianceCfg.penalty, date: todayStr(), ts: Date.now()
-  }).then(()=> alert('اتسجّل خصم '+complianceCfg.penalty+' ج على '+emp.name+' ✅'))
+    type, amount: window.complianceCfg.penalty, date: window.todayStr(), ts: Date.now()
+  }).then(()=> alert('اتسجّل خصم '+window.complianceCfg.penalty+' ج على '+emp.name+' ✅'))
     .catch(e=> alert('تعذر التسجيل: '+e.message));
 };
 
