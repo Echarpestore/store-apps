@@ -491,9 +491,17 @@
         <div class="attGrid" id="notInGrid"></div>
       </div>
       <div>
-        <div class="attSectionTitle">حاضر دلوقتي (دوس على اسمك عشان تشوف يومك)</div>
+        <div class="attSectionTitle">حاضر دلوقتي (دوس على اسمك عشان تسجّل انصرافك)</div>
         <div class="attGrid" id="clockedInGrid"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- 🚪 ملخص اليوم عند الانصراف -->
+  <div id="daySummaryOverlay" class="overlay" style="overflow-y:auto; align-items:flex-start; padding:20px 0;">
+    <div class="box" style="width:min(94vw,400px); margin:0 auto; position:relative;">
+      <button class="dhXBtn" onclick="closeDaySummary()">✕</button>
+      <div id="dsBody"></div>
     </div>
   </div>
 
@@ -914,6 +922,14 @@ const app = initializeApp(firebaseConfig);
 const _auth = getAuth(app);
 setPersistence(_auth, browserLocalPersistence).catch(()=>{});
 const db = getFirestore(app);
+// 🔗 نعرّض أدوات Firestore على window عشان بلوكات السكريبت التانية في الصفحة تقدر تستخدمها
+window.db = db;
+window.fbDoc = doc;
+window.fbSetDoc = setDoc;
+window.fbAddDoc = addDoc;
+window.fbUpdateDoc = updateDoc;
+window.fbDeleteDoc = deleteDoc;
+window.fbCollection = collection;
 enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence not enabled:', err.code));
 
 const empCol = collection(db, 'sales_employees');
@@ -1685,6 +1701,83 @@ function isDayOffTomorrow(emp){
   return tomorrow.getDay() === Number(emp.dayOff);
 }
 
+// 📅 ملخّص يوم الموظف (من شاشة الحضور) — حضوره، نقاطه، وزر الانصراف
+window.openDaySummary = function(empId){
+  const emp = window.employees.find(e=> e.id === empId); if(!emp) return;
+  const shift = getOpenShift(empId);
+  const body = document.querySelector('#dsBody'); if(!body) return;
+  window._dsEmpId = empId;
+
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  const pts = countsFor(empId, dayStart.getTime());
+  const inTs = shift ? shift.clockInTs : null;
+  const inTxt = inTs ? new Date(inTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const lateMin = shift ? (shift.lateMinutes||0) : 0;
+  const penalized = shift ? !!shift.latePenalized : false;
+  const dur = inTs ? formatDuration(Date.now() - inTs) : '—';
+
+  // حالة الحضور: في الميعاد / تأخير بسيط / تأخير عليه خصم
+  let attCard;
+  if(!inTs){
+    attCard = `<div class="dhRow"><span class="lbl">الحضور</span><span>لسه</span></div>`;
+  } else if(lateMin === 0){
+    attCard = `<div style="background:linear-gradient(180deg,#16241c,var(--panel)); border:1px solid #2e5a42; border-radius:13px; padding:13px; text-align:center;">
+      <div style="font-size:15px; font-weight:800; color:#5ec88a;">جيت في ميعادك ✅</div>
+      <div style="font-size:12px; color:var(--sub); margin-top:3px;">سجّلت حضور ${inTxt}</div></div>`;
+  } else if(!penalized){
+    attCard = `<div style="background:var(--panel2); border:1px solid var(--line); border-radius:13px; padding:13px; text-align:center;">
+      <div style="font-size:15px; font-weight:800;">اتأخرت ${lateMin} دقيقة</div>
+      <div style="font-size:12px; color:var(--sub); margin-top:3px;">لسه في حدود السماح (${complianceCfg.lateGraceMin} دقيقة) — مفيش خصم</div></div>`;
+  } else {
+    attCard = `<div style="background:linear-gradient(180deg,#2a1a18,var(--panel)); border:1px solid #5a3a3a; border-radius:13px; padding:13px; text-align:center;">
+      <div style="font-size:15px; font-weight:800; color:#e0796b;">اتأخرت ${lateMin} دقيقة</div>
+      <div style="font-size:12px; color:var(--sub); margin-top:3px;">اتسجّل خصم ${complianceCfg.penalty} ج.م — حاول تعوّضها بكرة</div></div>`;
+  }
+
+  // رسالة عن النقاط
+  let ptsMsg;
+  if(pts === 0) ptsMsg = 'لسه مسجّلتش نقط النهاردة.';
+  else if(pts < 5) ptsMsg = 'بداية كويسة، كمّل.';
+  else if(pts < 10) ptsMsg = 'شغل محترم النهاردة.';
+  else ptsMsg = 'يوم قوي — أداء ممتاز.';
+
+  body.innerHTML = `
+    <div style="text-align:center; margin-bottom:16px;">
+      <div class="dhAvatar" style="margin:0 auto 8px;">${initials(emp.name)}</div>
+      <h3 style="margin:0;">${emp.name}</h3>
+      <p class="sub" style="margin:3px 0 0; font-size:12px;">ملخّص يومك</p>
+    </div>
+
+    ${attCard}
+
+    <div style="display:flex; gap:9px; margin-top:12px;">
+      <div style="flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:13px; padding:13px; text-align:center;">
+        <div style="font-size:22px; font-weight:900; color:var(--gold);">${pts}</div>
+        <div style="font-size:11px; color:var(--sub); margin-top:2px;">نقط النهاردة</div>
+      </div>
+      <div style="flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:13px; padding:13px; text-align:center;">
+        <div style="font-size:16px; font-weight:900;">${dur}</div>
+        <div style="font-size:11px; color:var(--sub); margin-top:2px;">مدة الشيفت</div>
+      </div>
+    </div>
+
+    <p style="text-align:center; color:var(--sub); font-size:12.5px; margin:14px 0 0;">${ptsMsg}</p>
+    <p style="text-align:center; color:var(--sub); font-size:11.5px; margin:6px 0 0;">النقط بتتجمّع على طول الشهر وبتدخل في حساب مكافأتك.</p>
+
+    <button class="btnPrimary" onclick="daySummaryClockOut()" style="width:100%; margin-top:18px;">🚪 تسجيل انصراف</button>
+    <button class="cancelBtn" onclick="closeDaySummary()" style="width:100%; margin-top:9px;">رجوع</button>
+  `;
+  document.querySelector('#daySummaryOverlay').classList.add('show');
+};
+window.closeDaySummary = function(){
+  const ov = document.querySelector('#daySummaryOverlay'); if(ov) ov.classList.remove('show');
+};
+window.daySummaryClockOut = function(){
+  const id = window._dsEmpId; if(!id) return;
+  window.closeDaySummary();
+  promptAttPin('out', id);
+};
+
 function renderAttendanceLists(){
   const notIn = window.employees.filter(e=> !isClockedIn(e.id));
   const clockedIn = window.employees.filter(e=> isClockedIn(e.id));
@@ -1735,7 +1828,7 @@ function renderAttendanceLists(){
     card.addEventListener('click', ()=> promptAttPin('in', card.dataset.id));
   });
   inWrap.querySelectorAll('.attCard').forEach(card=>{
-    card.addEventListener('click', ()=> openDayHub(card.dataset.id));
+    card.addEventListener('click', ()=> openDaySummary(card.dataset.id));
   });
 }
 
@@ -4616,7 +4709,7 @@ function renderDeductionsLog(){
 
 window.deleteDeduction = async function(id){
   if(!confirm('تشيل الخصم ده؟')) return;
-  try{ await deleteDoc(doc(db,'sales_deductions', id)); }catch(e){ alert('تعذر الحذف: '+e.message); }
+  try{ await window.fbDeleteDoc(window.fbDoc(window.db,'sales_deductions', id)); }catch(e){ alert('تعذر الحذف: '+e.message); }
 };
 
 // ➕ تسجيل خصم يدوي (تبديل شيفت / تبديل يوم إجازة)
@@ -4631,7 +4724,7 @@ window.openSwapDeduction = function(){
   const t = prompt('نوع الخصم:\n1) تبديل شيفت\n2) تبديل يوم إجازة');
   const type = t==='1' ? 'shiftSwap' : t==='2' ? 'dayoffSwap' : null;
   if(!type){ return; }
-  addDoc(collection(db,'sales_deductions'), {
+  window.fbAddDoc(window.fbCollection(window.db,'sales_deductions'), {
     employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
     type, amount: complianceCfg.penalty, date: todayStr(), ts: Date.now()
   }).then(()=> alert('اتسجّل خصم '+complianceCfg.penalty+' ج على '+emp.name+' ✅'))
@@ -4654,7 +4747,7 @@ window.toggleRegButton = async function(){
   try{
     const b = window.currentBranch;
     if(!b){ alert('اختار فرع الجهاز الأول'); return; }
-    await setDoc(doc(db,'sales_settings', b), { regButtonOn: next }, { merge:true });
+    await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', b), { regButtonOn: next }, { merge:true });
     window.regButtonOn = next;
     applyRegButtonVisibility();
   }catch(e){ alert('تعذر الحفظ: ' + e.message); }
@@ -4677,7 +4770,7 @@ window.saveComplianceSettings = async function(){
   try{
     const b = window.currentBranch;
     if(!b){ alert('اختار فرع الجهاز الأول'); return; }
-    await setDoc(doc(db,'sales_settings', b), { compliance: payload }, { merge:true });
+    await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', b), { compliance: payload }, { merge:true });
     const f = document.querySelector('#complianceSettingsForm'); if(f) f.dataset.editing='0';
     alert('اتحفظت إعدادات الالتزام ✅');
   }catch(e){ alert('تعذر الحفظ: ' + e.message); }
