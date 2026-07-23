@@ -960,6 +960,17 @@ document.addEventListener('keydown', function(e){
     if(sel && sel.scrollIntoView) sel.scrollIntoView({ block:'nearest' });
     return;
   }
+  // ➕➖ زيادة/نقصان كمية السطر المحدد (من الصف العلوي أو النمباد)
+  if(typeof cart !== 'undefined' && cart.length && (e.code === 'NumpadAdd' || e.code === 'NumpadSubtract' || e.key === '+' || e.key === '-')){
+    const isPlus = (e.code === 'NumpadAdd' || e.key === '+');
+    // لو مفيش سطر محدد، نحدد آخر سطر تلقائي عشان الحركة تبقى سلسة
+    if(selectedCartIdx === null) selectedCartIdx = cart.length - 1;
+    e.preventDefault();
+    if(typeof qbxQty === 'function') qbxQty(isPlus ? 1 : -1);
+    const sel = document.querySelector('#saleScreen tr.sel');
+    if(sel && sel.scrollIntoView) sel.scrollIntoView({ block:'nearest' });
+    return;
+  }
   if(e.key === 'Delete' && typeof cart !== 'undefined' && selectedCartIdx !== null && cart[selectedCartIdx]){
     e.preventDefault();
     const name = cart[selectedCartIdx].name;
