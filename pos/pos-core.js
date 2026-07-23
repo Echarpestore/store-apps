@@ -240,7 +240,38 @@ const DEFAULT_ROLE_PERMISSIONS = {
 // 👑 أدمن ثابت مدمج في الكود — مستقل تمامًا عن الموظفين وقاعدة البيانات.
 // بيظهر دايمًا في شاشة الدخول لكل الفروع، وبصلاحيات أدمن كاملة، ومستحيل يتمسح بأي تصفير.
 // غيّر الـ PIN من هنا لما تحب (رقم سري بينك وبين نفسك).
-const FIXED_ADMIN = { id: '__owner_admin__', name: '👑 المالك (أدمن)', pin: '0000', _admin: true, active: true };
+// 👑 الأدمن الثابت — القيم دي افتراضية، والمالك يقدر يغيّرها من شاشة الإعدادات
+// (بتتحفظ في settings/owner_admin؛ لو الداتا اتصفّرت بيرجع للافتراضي ده وده تصرّف آمن)
+const FIXED_ADMIN_DEFAULTS = { id: '__owner_admin__', name: '👑 المالك (أدمن)', pin: '0000', _admin: true, active: true };
+const FIXED_ADMIN = { ...FIXED_ADMIN_DEFAULTS };
+
+// بيحمّل اسم/PIN المالك المخصّص (لو اتغيّروا) — بيتنده قبل رسم شاشة الدخول
+async function loadOwnerAdminConfig(){
+  try{
+    const d = await db.collection(TEST_SETTINGS).doc('owner_admin').get();
+    if(d.exists){
+      const c = d.data() || {};
+      if(c.name) FIXED_ADMIN.name = c.name;
+      if(c.pin)  FIXED_ADMIN.pin  = c.pin;
+    }
+  }catch(e){ /* فشل التحميل → نفضل على الافتراضي */ }
+}
+
+// 🔐 تغيير اسم/رقم المالك — بيتطلب الـ PIN الحالي للتأكيد
+async function saveOwnerAdminConfig(currentPin, newName, newPin){
+  if(String(currentPin) !== String(FIXED_ADMIN.pin)) return { ok:false, msg:'الرقم الحالي غلط' };
+  if(newPin && !/^\d{4,8}$/.test(String(newPin))) return { ok:false, msg:'الرقم الجديد لازم يكون من 4 لـ 8 أرقام' };
+  const payload = {};
+  if(newName && newName.trim()) payload.name = newName.trim();
+  if(newPin) payload.pin = String(newPin);
+  if(!Object.keys(payload).length) return { ok:false, msg:'مفيش حاجة اتغيّرت' };
+  try{
+    await db.collection(TEST_SETTINGS).doc('owner_admin').set(payload, { merge:true });
+    if(payload.name) FIXED_ADMIN.name = payload.name;
+    if(payload.pin)  FIXED_ADMIN.pin  = payload.pin;
+    return { ok:true };
+  }catch(e){ return { ok:false, msg:'تعذر الحفظ: ' + e.message }; }
+}
 
 let rolePermissions = JSON.parse(JSON.stringify(DEFAULT_ROLE_PERMISSIONS));
 let currentEmployeeRole = 'cashier'; // fallback until loaded
@@ -311,22 +342,12 @@ async function loadEmployeePicker(){
   const errBox = document.getElementById('employeePickerErr');
   grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:var(--muted); font-size:12px;">جارٍ التحميل...</div>';
   try{
+    await loadOwnerAdminConfig();   // 👑 نجيب اسم/رقم المالك المخصّص لو اتغيّروا
     const snap = await db.collection(EMPLOYEES_COLLECTION).where('branch','==', currentBranch).get();
     const emps = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=> e.active !== false);
 
-    // كمان نجيب الأدمن (بيظهر في الدخول على أي جهاز/فرع، مش متقيّد بفرع الجهاز)
-    let adminEmps = [];
-    try{
-      const asg = await db.collection(TEST_ROLES).doc('_assignments').get();
-      const assignments = asg.exists ? asg.data() : {};
-      const adminIds = Object.keys(assignments).filter(id=> assignments[id]==='admin' && !emps.some(e=> e.id===id));
-      if(adminIds.length){
-        const docs = await Promise.all(adminIds.map(id=> db.collection(EMPLOYEES_COLLECTION).doc(id).get()));
-        adminEmps = docs.filter(d=> d.exists).map(d=>Object.assign({id:d.id, _admin:true}, d.data())).filter(e=> e.active !== false);
-      }
-    }catch(e){ /* لو فشل، نكمّل بموظفين الفرع بس */ }
-
-    const allEmps = [FIXED_ADMIN].concat(adminEmps, emps);
+    // (اتلغى الأدمن العام القديم بتاع كروت الموظفين — الأدمن الثابت تحت بيغطّي الدور ده)
+    const allEmps = [FIXED_ADMIN].concat(emps);
     if(allEmps.length === 0){
       grid.innerHTML = '';
       errBox.textContent = 'لسه مفيش موظفين مسجلين للفرع ده في نظام المبيعات';
@@ -506,6 +527,10 @@ function enterDashboard(){
   document.getElementById('dashWho').textContent = (currentEmployee.name || currentEmployee.id) + ' — ' + roleLabel + ' · 🏬 ' + currentBranch;
   refreshHeldCount();
 
+  // 👑 زر "حساب المالك" — للأدمن الثابت بس
+  const oab = document.getElementById('ownerAdminBtn');
+  if(oab) oab.style.display = (currentEmployee && currentEmployee.id === FIXED_ADMIN.id) ? '' : 'none';
+
   // زر "بدّل الفرع" — للأدمن بس
   const canSwitch = hasPerm('canSwitchBranch');
   const bb = document.getElementById('branchSwitchBtn');
@@ -564,3 +589,34 @@ function goToRoles(){
   renderRolesScreen();
 }
 
+
+
+// ---------- 👑 شاشة تغيير اسم/رقم المالك ----------
+function openOwnerAdminModal(){
+  if(!currentEmployee || currentEmployee.id !== FIXED_ADMIN.id){
+    showToast('الشاشة دي لحساب المالك بس', 'err'); return;
+  }
+  document.getElementById('oaCurrentPin').value = '';
+  document.getElementById('oaNewName').value = '';
+  document.getElementById('oaNewPin').value = '';
+  document.getElementById('oaErr').textContent = '';
+  document.getElementById('ownerAdminModal').classList.add('active');
+  setTimeout(()=>{ const i=document.getElementById('oaCurrentPin'); if(i) i.focus(); }, 100);
+}
+function closeOwnerAdminModal(){
+  document.getElementById('ownerAdminModal').classList.remove('active');
+}
+async function submitOwnerAdmin(){
+  const err = document.getElementById('oaErr');
+  const cur = (document.getElementById('oaCurrentPin').value || '').trim();
+  const nm  = (document.getElementById('oaNewName').value || '').trim();
+  const np  = (document.getElementById('oaNewPin').value || '').trim();
+  err.textContent = '';
+  if(!cur){ err.textContent = 'اكتب رقمك الحالي الأول'; return; }
+  const res = await saveOwnerAdminConfig(cur, nm, np);
+  if(!res.ok){ err.textContent = res.msg; return; }
+  closeOwnerAdminModal();
+  showToast('اتحفظت بيانات حساب المالك ✅');
+  // نحدّث الاسم الظاهر فوق لو اتغيّر
+  if(nm && currentEmployee){ currentEmployee.name = nm; enterDashboard(); }
+}

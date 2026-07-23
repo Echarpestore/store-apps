@@ -531,6 +531,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
       <button class="secondary" id="discountsSidebarBtn" onclick="goToDiscounts()" style="display:none;">🏷️ الخصومات</button>
       <button class="secondary" id="loyaltySidebarBtn" onclick="goToLoyaltyScreen()" style="display:none;">🎁 برنامج الولاء</button>
       <button class="secondary" id="importSidebarBtn" onclick="goToImport()" style="display:none;">📥 استيراد بيانات</button>
+      <button class="secondary" id="ownerAdminBtn" onclick="openOwnerAdminModal()" style="display:none; border-color:#c9a227; color:#8a6f2c;">👑 حساب المالك</button>
       <div style="flex:1;"></div>
       <button class="secondary" onclick="goToEndOfDay()">🌙 إغلاق اليوم</button>
       <button class="secondary" style="border-color:var(--minus); color:var(--minus);" onclick="logout()">خروج 🔒</button>
@@ -1025,7 +1026,7 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
           <button id="pmVisa" onclick="togglePayMethod('visa')"><span class="pm-icon">💳</span>فيزا</button>
           <button id="pmInsta" onclick="togglePayMethod('instapay')"><span class="pm-icon">📱</span>انستا باي</button>
           <button class="qbx-clear-pay" onclick="resetPaymentUI()">🗑️ مسح المدفوعات</button>
-          <div id="chatMini" onclick="if(typeof chatOpen==='function')chatOpen()" style="display:none; align-items:center; background:#222a35; border:1.5px solid #46536b; border-radius:11px; padding:6px 11px; margin:6px 0; cursor:pointer; height:46px; flex:0 1 300px; min-width:170px; max-width:320px; color:#f1f5fb; overflow:hidden;"></div>
+          <div id="chatMini" onclick="if(typeof chatOpen==='function')chatOpen()" style="display:none; align-items:center; background:#222a35; border:1.5px solid #46536b; border-radius:11px; padding:6px 11px; margin:6px 0; cursor:pointer; height:62px; flex:0 1 360px; min-width:200px; max-width:400px; color:#f1f5fb; overflow:hidden;"></div>
         </div>
       </div>
       <div class="qbx-totals">
@@ -1083,6 +1084,24 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
     <div class="modal-btns" style="margin-top:10px;">
       <button class="btn-cancel" onclick="closeReverseModal()" style="flex:1;">إغلاق</button>
     </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ownerAdminModal">
+  <div class="modal-sheet">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <h3 style="margin:0;">👑 حساب المالك</h3>
+      <button onclick="closeOwnerAdminModal()" style="border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:10px; width:40px; height:40px; font-size:16px; font-weight:900; cursor:pointer;">✖</button>
+    </div>
+    <p style="color:var(--muted); font-size:12px; margin:0 0 14px;">ده حساب الطوارئ بتاعك — مستقل عن الموظفين ومش بيتأثر بأي تصفير.</p>
+    <label style="display:block; font-size:12.5px; margin-bottom:5px;">الرقم السري الحالي</label>
+    <input type="password" id="oaCurrentPin" inputmode="numeric" placeholder="••••" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:16px; text-align:center; letter-spacing:6px; margin-bottom:14px;">
+    <label style="display:block; font-size:12.5px; margin-bottom:5px;">الاسم الجديد (اختياري)</label>
+    <input type="text" id="oaNewName" placeholder="سيبه فاضي لو مش عايز تغيّره" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; margin-bottom:14px;">
+    <label style="display:block; font-size:12.5px; margin-bottom:5px;">الرقم السري الجديد (اختياري)</label>
+    <input type="password" id="oaNewPin" inputmode="numeric" placeholder="من 4 لـ 8 أرقام" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:16px; text-align:center; letter-spacing:6px; margin-bottom:6px;">
+    <div id="oaErr" style="color:var(--minus); font-size:12px; min-height:18px; margin-bottom:8px;"></div>
+    <button onclick="submitOwnerAdmin()" style="width:100%; padding:14px; border:none; border-radius:11px; background:var(--accent); color:#fff; font-weight:900; font-size:15px; cursor:pointer;">💾 حفظ</button>
   </div>
 </div>
 
