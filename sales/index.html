@@ -507,6 +507,14 @@
     </div>
   </div>
 
+  <!-- 📩 طلب إذن / تغيير إجازة -->
+  <div id="leaveReqOverlay" class="overlay" style="overflow-y:auto; align-items:flex-start; padding:20px 0;">
+    <div class="box" style="width:min(94vw,420px); margin:0 auto; position:relative;">
+      <button class="dhXBtn" onclick="closeLeaveReq()">✕</button>
+      <div id="leaveReqBody"></div>
+    </div>
+  </div>
+
   <!-- PERSONAL DAY HUB -->
   <div id="dayHubOverlay" class="overlay" style="overflow-y:auto; align-items:flex-start; padding:20px 0;">
     <div class="box dayHubBox" style="width:min(94vw,420px); position:relative; max-height:none; margin:0 auto;">
@@ -2719,19 +2727,113 @@ function renderDayHubLeave(empId){
   const pendingTxt = mine.length ? `<div style="text-align:center; color:var(--sub); font-size:11.5px; margin-top:6px;">⏳ عندك ${mine.length} طلب مستني الموافقة</div>` : '';
   area.innerHTML = `<button class="cancelBtn" style="width:100%;" onclick="window.reqLeave('${empId}')">📩 طلب إذن / تغيير إجازة</button>${pendingTxt}`;
 }
+// 📩 حالة طلب الإذن (شاشة أنيقة بخريطة الإجازات)
+let _lrState = { empId:'', type:'', dateKey:'', reason:'' };
 window.reqLeave = function(empId){
   const emp = (window.employees||[]).find(e=> e.id===empId); if(!emp) return;
-  const kind = prompt('نوع الطلب:\n1) إجازة يوم\n2) تغيير يوم الإجازة\n3) تبديل شيفت');
-  const kindMap = { '1':'dayoff', '2':'changeDayoff', '3':'shiftSwap' };
-  const type = kindMap[kind]; if(!type) return;
-  const dateKey = prompt('التاريخ المطلوب؟ (بصيغة سنة-شهر-يوم، مثال 2026-08-05)');
-  if(!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)){ if(dateKey!==null) alert('تاريخ غير صحيح'); return; }
-  const reason = prompt('سبب الطلب؟ (اختياري)') || '';
+  _lrState = { empId, empName: emp.name, type:'', dateKey:'', reason:'' };
+  $('#dayHubOverlay').classList.remove('show');
+  renderLeaveReq();
+  $('#leaveReqOverlay').classList.add('show');
+};
+window.closeLeaveReq = function(){ $('#leaveReqOverlay').classList.remove('show'); };
+
+function _dayName(dow){ return ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'][dow]; }
+
+// خريطة تغطية الأيام الجاية (14 يوم) — مين متاح وكام واحد
+function _coverageMap(){
+  const emps = (window.employees||[]).filter(e=> e.branch===window.currentBranch && e.active!==false);
+  const approved = (window.allLeaveReqs||[]).filter(l=> l.status==='approved' && l.branch===window.currentBranch);
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const minStaff = Number(cfg.minStaffPerDay) || 2;
+  const days = [];
+  const today = new Date(); today.setHours(0,0,0,0);
+  for(let i=0;i<14;i++){
+    const d = new Date(today.getTime() + i*86400000);
+    const dateKey = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const cov = window.coverageOnDate(emps, approved, dateKey);
+    // مين آخد إجازة اليوم ده
+    const offNames = [];
+    emps.forEach(e=>{ if(String(e.dayOff)===String(d.getDay())) offNames.push(e.name+' (إجازته)'); });
+    approved.forEach(l=>{ if(l.dateKey===dateKey){ const em=emps.find(x=>x.id===l.empId); if(em) offNames.push(em.name+' (إذن)'); } });
+    days.push({ dateKey, dow:d.getDay(), dayNum:d.getDate(), available:cov.available, minStaff, offNames, isToday:i===0 });
+  }
+  return days;
+}
+
+function renderLeaveReq(){
+  const body = document.querySelector('#leaveReqBody'); if(!body) return;
+  const st = _lrState;
+  const types = [
+    { id:'dayoff', icon:'🌴', label:'إجازة يوم', desc:'عايز تاخد يوم أجازة' },
+    { id:'changeDayoff', icon:'📅', label:'تغيير يوم الإجازة', desc:'تنقل إجازتك الأسبوعية' },
+    { id:'shiftSwap', icon:'🔄', label:'تبديل شيفت', desc:'تغيّر شيفتك مؤقتًا' }
+  ];
+
+  // الخطوة 1: نوع الطلب
+  if(!st.type){
+    body.innerHTML = `
+      <div style="text-align:center; margin-bottom:18px;">
+        <div style="font-size:34px;">📩</div>
+        <h3 style="margin:6px 0 2px;">طلب إذن</h3>
+        <p class="sub" style="font-size:12px;">اختار نوع طلبك</p>
+      </div>
+      ${types.map(t=>`
+        <button onclick="window.lrPickType('${t.id}')" style="width:100%; display:flex; align-items:center; gap:12px; text-align:right; background:var(--panel2); border:1px solid var(--line); border-radius:13px; padding:14px; margin-bottom:10px; cursor:pointer; font-family:'Cairo';">
+          <span style="font-size:24px;">${t.icon}</span>
+          <span style="flex:1;"><b style="font-size:14px; color:var(--ink); display:block;">${t.label}</b><small style="color:var(--sub); font-size:11.5px;">${t.desc}</small></span>
+          <span style="color:var(--sub);">◀</span>
+        </button>`).join('')}
+      <button class="cancelBtn" style="width:100%; margin-top:6px;" onclick="closeLeaveReq()">إلغاء</button>`;
+    return;
+  }
+
+  // الخطوة 2: اختيار اليوم من خريطة التغطية
+  const tObj = types.find(t=> t.id===st.type);
+  const map = _coverageMap();
+  body.innerHTML = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button onclick="window.lrBack()" style="border:1px solid var(--line); background:var(--panel2); color:var(--sub); border-radius:9px; width:34px; height:34px; cursor:pointer; font-family:'Cairo';">◀</button>
+      <h3 style="margin:0;">${tObj.icon} ${tObj.label}</h3>
+    </div>
+    <p class="sub" style="font-size:12px; margin:0 0 12px;">اختار اليوm — الأخضر متاح، الأحمر الفرع محتاجك فيه</p>
+    <div style="max-height:320px; overflow-y:auto; margin-bottom:12px;">
+      ${map.map(d=>{
+        const safe = d.available > d.minStaff;
+        const tight = d.available === d.minStaff;
+        const color = safe ? '#5ec88a' : (tight ? '#e0a020' : '#e0796b');
+        const bg = st.dateKey===d.dateKey ? 'var(--gold-dim)' : 'var(--panel2)';
+        const bar = d.offNames.length ? `<div style="font-size:10.5px; color:var(--sub); margin-top:3px;">${d.offNames.join(' · ')}</div>` : '';
+        return `<button onclick="window.lrPickDate('${d.dateKey}')" style="width:100%; text-align:right; background:${bg}; border:1px solid ${st.dateKey===d.dateKey?'var(--gold)':'var(--line)'}; border-radius:11px; padding:11px 13px; margin-bottom:7px; cursor:pointer; font-family:'Cairo';">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:800; font-size:13.5px; color:var(--ink);">${_dayName(d.dow)} ${d.dayNum} ${d.isToday?'<span style=\'color:var(--gold); font-size:10px;\'>(النهاردة)</span>':''}</span>
+            <span style="display:flex; align-items:center; gap:5px; font-size:12px; font-weight:700; color:${color};">
+              <span style="width:8px; height:8px; border-radius:99px; background:${color}; display:inline-block;"></span>
+              ${d.available} في الفرع
+            </span>
+          </div>
+          ${bar}
+        </button>`;
+      }).join('')}
+    </div>
+    ${st.dateKey ? `
+      <input id="lrReason" placeholder="السبب (اختياري)" value="${st.reason||''}" oninput="_lrState.reason=this.value"
+        style="width:100%; padding:12px; border-radius:11px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; margin-bottom:10px;">
+      <button onclick="window.lrSubmit()" style="width:100%; padding:14px; border:none; border-radius:12px; background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer;">📩 ابعت الطلب للإدارة</button>
+    ` : '<p style="text-align:center; color:var(--sub); font-size:12px;">اختار يوم عشان تكمّل</p>'}`;
+}
+
+window.lrPickType = function(t){ _lrState.type = t; renderLeaveReq(); };
+window.lrBack = function(){ _lrState.type=''; _lrState.dateKey=''; renderLeaveReq(); };
+window.lrPickDate = function(dk){ _lrState.dateKey = dk; renderLeaveReq(); };
+window.lrSubmit = function(){
+  const st = _lrState;
+  if(!st.type || !st.dateKey) return;
   window.fbAddDoc(window.fbCollection(window.db,'sales_leave_requests'), {
-    empId, empName: emp.name, branch: window.currentBranch,
-    type, dateKey, reason, status:'pending', ts: Date.now()
+    empId: st.empId, empName: st.empName, branch: window.currentBranch,
+    type: st.type, dateKey: st.dateKey, reason: st.reason||'', status:'pending', ts: Date.now()
   }).then(()=>{
-    $('#dayHubOverlay').classList.remove('show');
+    closeLeaveReq();
     alert('اتبعت طلبك للإدارة ✅ — هيتراجع قريب');
   }).catch(e=> alert('تعذر إرسال الطلب: '+e.message));
 };
@@ -2757,10 +2859,11 @@ function renderRewardScoreCard(empId){
   // التقييم (0..4 → 0..100)
   const avgR = computeAvgRatingInRange(empId, mStart, Date.now());
   const ratingPct = avgR!=null ? (avgR/4*100) : 0;
-  // الالتزام: 100 ناقص لكل مخالفة الشهر ده
+  // الالتزام: من رصيد الوقت الشهري (النظام الجديد)
   const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const vioCount = (deductions||[]).filter(d=> d.employeeId===empId && String(d.date||'').startsWith(mk)).length;
-  const commit = commitmentPct(vioCount, 15);
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const myHours = (window.allTimeCredit||[]).filter(x=> x.employeeId===empId && !x.excused && String(x.date||'').startsWith(mk)).reduce((a,x)=> a+(Number(x.hours)||0),0);
+  const commit = window.rewardEligibility(myHours, 'month', cfg).commitPct;
   const res = computeRewardScore({ commitmentPct: commit, salesValue: myPts, maxSalesValue: maxPts, ratingPct });
   const bar = (val, color)=>`<div style="flex:1; height:7px; background:var(--panel2); border-radius:99px; overflow:hidden;"><div style="width:${Math.max(2,val)}%; height:100%; background:${color};"></div></div>`;
   el.innerHTML = `
@@ -3025,42 +3128,42 @@ function totalCalendarDaysInRange(start, end){
 // evaluated against the period SO FAR (not waiting for the period to fully end).
 function computeRaceStatus(emp, periodType){
   const range = periodType === 'week' ? getWeekRange(new Date()) : getMonthRange(new Date());
-  const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
-  const elapsedRequiredDays = countElapsedWorkDaysInRange(emp, range.start, range.end);
-  const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
+  const cfg = window.timeCfg || timeCfgDefaults;
 
-  const rangeShifts = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
-  const hasSevereLateness = rangeShifts.some(s=> (s.lateMinutes||0) > SEVERE_LATE_MINUTES);
-  const mildLateCount = rangeShifts.filter(s=> (s.lateMinutes||0) > 0 && (s.lateMinutes||0) <= SEVERE_LATE_MINUTES).length;
+  // 🕒 رصيد الوقت في الفترة (تأخير/بريك/انصراف بدري/تبديل/غياب) — النظام الجديد
+  const mk = periodType === 'month'
+    ? (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'))
+    : null;
+  const credit = (window.allTimeCredit||[]).filter(x=>{
+    if(x.employeeId!==emp.id || x.excused) return false;
+    const t = new Date((x.date||'')+'T00:00:00').getTime();
+    return t >= range.start.getTime() && t <= range.end.getTime();
+  });
+  const hours = credit.reduce((a,x)=> a + (Number(x.hours)||0), 0);
 
+  // الأهلية حسب الفترة (نفس محرك الالتزام)
+  const elig = window.rewardEligibility(hours, periodType, cfg);
+
+  // التقييم (لو فيه بيانات)
   const avgRating = computeAvgRatingInRange(emp.id, range.start.getTime(), range.end.getTime());
-  const ratingOk = avgRating === null || avgRating >= MIN_RATING_FOR_REWARD;
 
-  let pointsOk = true, minPointsForPeriod = null, pointsInRange = null;
-  if(emp.minWeeklyPoints){
-    const periodDaysSoFar = Math.max(1, Math.round((Math.min(Date.now(), range.end.getTime()) - range.start.getTime())/(24*60*60*1000)) + 1);
-    minPointsForPeriod = Math.round(emp.minWeeklyPoints * periodDaysSoFar / 7);
-    pointsInRange = window.points.filter(p=> p.employeeId===emp.id && p.ts >= range.start.getTime() && p.ts <= Math.min(Date.now(), range.end.getTime())).length;
-    pointsOk = pointsInRange >= minPointsForPeriod;
+  // مبيعات الفترة (نقاط)
+  const pts = window.points.filter(pp=> pp.employeeId===emp.id && pp.ts>=range.start.getTime() && pp.ts<=Math.min(Date.now(),range.end.getTime())).length;
+
+  // تفصيل الساعات حسب النوع (للعرض)
+  const byType = {};
+  credit.forEach(x=>{ byType[x.type] = (byType[x.type]||0) + (Number(x.hours)||0); });
+
+  const stillInRace = elig.eligible;
+  const reasons = [];
+  if(!stillInRace){
+    reasons.push(`رصيد وقتك ${hours} ساعة (المسموح ${elig.allowedHours})`);
   }
 
-  const attendanceOk = confirmedDays >= elapsedRequiredDays;
-
-  const reasons = [];
-  if(hasSevereLateness) reasons.push('اتأخرت أكتر من 20 دقيقة مرة واحدة');
-  if(mildLateCount > 1) reasons.push('اتأخرت أكتر من مرة');
-  if(!attendanceOk) reasons.push('فاتك تنفيذ التاسك يوم أو أكتر');
-  if(!ratingOk) reasons.push('متوسط تقييم العميل أقل من 3');
-  if(!pointsOk) reasons.push('نقاطك أقل من المطلوب');
-
-  const stillInRace = reasons.length === 0;
-
   return {
-    requiredDays, elapsedRequiredDays, confirmedDays,
-    hasSevereLateness, mildLateCount,
-    avgRating, ratingOk,
-    pointsOk, minPointsForPeriod, pointsInRange,
-    attendanceOk, stillInRace, reasons
+    hours, allowedHours: elig.allowedHours, commitPct: elig.commitPct,
+    hoursLeft: elig.hoursLeft, byType, avgRating, points: pts,
+    stillInRace, reasons
   };
 }
 
@@ -3070,21 +3173,40 @@ function renderRaceStatus(empId){
   const emp = window.employees.find(e=> e.id === empId);
   if(!emp){ wrap.innerHTML = ''; return; }
 
+  const typeLabel = { late:'⏰ تأخير', break:'☕ بريك', early:'🚪 انصراف بدري', swap:'🔄 تبديل', absence:'🚫 غياب' };
+
   const blocks = ['week','month'].map(periodType=>{
     const st = computeRaceStatus(emp, periodType);
     const title = periodType === 'week' ? '📅 الأسبوع ده' : '🗓️ الشهر ده';
-    const ratingTxt = st.avgRating === null ? '— (مفيش بيانات)' : st.avgRating.toFixed(1) + '/4';
-    const pointsRow = emp.minWeeklyPoints
-      ? `<div class="raceItem"><span>النقاط</span><span style="color:${st.pointsOk?'var(--good)':'var(--bad)'}">${st.pointsOk?'✅':'❌'} ${st.pointsInRange}/${st.minPointsForPeriod}</span></div>`
-      : '';
+    const ratingTxt = st.avgRating === null ? 'لسه مفيش تقييم' : st.avgRating.toFixed(1) + '/4';
+
+    // تفصيل رصيد الوقت
+    const parts = Object.entries(st.byType).map(([k,v])=> `${typeLabel[k]||k} ${v}س`).join(' · ');
+    const commitColor = st.commitPct >= 90 ? 'var(--good)' : (st.commitPct >= 80 ? '#e0a020' : 'var(--bad)');
+
+    // شريط تقدّم الالتزام
+    const bar = `<div style="height:8px; background:var(--panel2); border-radius:99px; overflow:hidden; margin-top:6px;">
+      <div style="width:${Math.max(3,st.commitPct)}%; height:100%; background:${commitColor};"></div></div>`;
+
+    let verdict;
+    if(st.stillInRace){
+      const leftTxt = st.hoursLeft > 0
+        ? `عندك مساحة ${st.hoursLeft} ساعة كمان قبل ما تخرج`
+        : 'انت عند الحد بالظبط — خلّي بالك';
+      verdict = `<div class="raceVerdict ok">🏁 لسه في السباق — ${leftTxt}</div>`;
+    } else {
+      verdict = `<div class="raceVerdict out">⛔ خرجت من ${periodType==='week'?'سباق الأسبوع':'سباق الشهر'} — رصيد وقتك ${st.hours} ساعة (المسموح ${st.allowedHours})<br><small style="opacity:.85; font-weight:400;">تقدر ترجع الشهر الجاي — ابدأ صفحة جديدة</small></div>`;
+    }
+
     return `
     <div class="raceBlock">
       <div class="raceBlockTitle"><span>${title}</span></div>
-      <div class="raceItem"><span>الحضور والتاسك</span><span style="color:${st.attendanceOk?'var(--good)':'var(--bad)'}">${st.attendanceOk?'✅':'❌'} ${st.confirmedDays}/${st.elapsedRequiredDays}</span></div>
-      <div class="raceItem"><span>الالتزام بالمواعيد</span><span style="color:${(!st.hasSevereLateness && st.mildLateCount<=1)?'var(--good)':'var(--bad)'}">${st.hasSevereLateness ? '❌ تأخير شديد' : (st.mildLateCount>1 ? '❌ '+st.mildLateCount+' مرات تأخير' : (st.mildLateCount===1 ? '⚠️ مرة تأخير' : '✅ ملتزم'))}</span></div>
-      <div class="raceItem"><span>تقييم العميل</span><span style="color:${st.ratingOk?'var(--good)':'var(--bad)'}">${st.ratingOk?'✅':'❌'} ${ratingTxt}</span></div>
-      ${pointsRow}
-      <div class="raceVerdict ${st.stillInRace?'ok':'out'}">${st.stillInRace ? '🏁 لسه في السباق!' : '⛔ خرجت من سباق '+(periodType==='week'?'الأسبوع':'الشهر')+' ده: '+st.reasons.join('، ')}</div>
+      <div class="raceItem"><span>🎯 التزامك بالمواعيد</span><span style="color:${commitColor}; font-weight:800;">${st.commitPct}%</span></div>
+      ${bar}
+      ${parts ? `<div style="font-size:11px; color:var(--sub); margin-top:6px;">رصيدك: ${parts}</div>` : '<div style="font-size:11px; color:var(--good); margin-top:6px;">✅ مفيش أي رصيد وقت — التزام كامل</div>'}
+      <div class="raceItem" style="margin-top:8px;"><span>🛒 مبيعاتك</span><span>${st.points} نقطة</span></div>
+      <div class="raceItem"><span>⭐ تقييم العميل</span><span style="color:var(--sub);">${ratingTxt}</span></div>
+      ${verdict}
     </div>`;
   }).join('');
 
@@ -3127,16 +3249,16 @@ async function maybeAwardPeriod(emp, range, type, label){
   const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
   if(confirmedDays < requiredDays || requiredDays === 0) return;
 
-  // Severe lateness (beyond the grace period + severe threshold) even once
-  // in the period disqualifies the reward entirely.
-  const rangeShifts = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= range.start.getTime() && s.clockInTs <= range.end.getTime());
-  const hasSevereLateness = rangeShifts.some(s=> (s.lateMinutes||0) > SEVERE_LATE_MINUTES);
-  if(hasSevereLateness) return;
-
-  // Mild lateness (over the grace period but not severe) is tolerated ONCE per
-  // period — a second mild-late instance in the same week costs the reward.
-  const mildLateCount = rangeShifts.filter(s=> (s.lateMinutes||0) > 0 && (s.lateMinutes||0) <= SEVERE_LATE_MINUTES).length;
-  if(mildLateCount > 1) return;
+  // 🚪 بوابة الالتزام الجديدة: رصيد الوقت في الفترة لازم مايعدّيش المسموح (90% التزام)
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const credit = (window.allTimeCredit||[]).filter(x=>{
+    if(x.employeeId!==emp.id || x.excused) return false;
+    const t = new Date((x.date||'')+'T00:00:00').getTime();
+    return t >= range.start.getTime() && t <= range.end.getTime();
+  });
+  const creditHours = credit.reduce((a,x)=> a + (Number(x.hours)||0), 0);
+  const elig = window.rewardEligibility(creditHours, type === 'monthly' ? 'month' : 'week', cfg);
+  if(!elig.eligible) return;   // خرج من المكافأة — رصيد وقته عدّى المسموح
 
   // Customer rating requirement — only enforced if there's actual rating data
   // for the period (an employee shouldn't be penalized for a lack of feedback).
