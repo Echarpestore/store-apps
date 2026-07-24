@@ -403,6 +403,7 @@
     </div>
     <div id="announcementBanner" style="display:none;"></div>
     <div id="dailyTargetCard" style="display:none;"></div>
+    <div id="breakBanner" style="display:none; margin-bottom:12px;"></div>
     <div class="grid" id="empGrid"></div>
     <div class="empty-hint" id="emptyHint" style="display:none;">لسه مفيش موظفين مضافين. من الترس ⚙️ (ضغطة مطولة) تقدر تضيف موظفين.</div>
     <div class="targetCelebration" id="targetCelebration">
@@ -544,6 +545,8 @@
       <div class="dhSectionLabel">🏁 حالتك في السباق</div>
       <div id="dh_raceStatus"></div>
 
+      <div id="dh_breakArea" style="margin-top:14px;"></div>
+      <div id="dh_leaveArea" style="margin-top:10px;"></div>
       <div class="dhBtnRow">
         <button class="dhBackBtn" id="dh_closeBtn" style="width:100%;">◀ رجوع</button>
       </div>
@@ -729,6 +732,16 @@
       <div id="complianceSettingsForm"></div>
     </div>
     <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <h3 style="margin:0;">📩 طلبات الإذن
+          <span id="leaveBadge" style="display:none; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; margin-right:6px; background:var(--gold); color:#1b1400; border-radius:99px; font-size:12px; font-weight:900;">0</span>
+        </h3>
+      </div>
+      <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">الموظف بيطلب من صفحته، والسيستم بيحسبلك التغطية قبل ما توافق — عشان الفرع مايفضلش ناقص.</p>
+      <div id="leaveRequestsList"></div>
+    </div>
+
+    <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0;">🔍 مخالفات محتاجة مراجعتك
           <span id="vioBadge" style="display:none; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; margin-right:6px; background:#e0796b; color:#2a1a18; border-radius:99px; font-size:12px; font-weight:900;">0</span>
@@ -746,6 +759,18 @@
       </div>
       <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">السيستم بيقارن جدول كل موظف بحضوره الفعلي. راجع كل حالة واقرر: خصم ولا تجاهل (أجازة بموافقتك).</p>
       <div id="attIssuesList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>⏳ رصيد الوقت والخصومات (الشهر الحالي)</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">ساعات كل موظف (تأخير/بريك/انصراف بدري/غياب) وكل 7 ساعات = يوم يتخصم من مرتبه.</p>
+      <div id="timeCreditLog"></div>
+    </div>
+
+    <div class="panel">
+      <h3>⚙️ إعدادات رصيد الوقت</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">كل الأرقام دي تحت إيدك. بتتطبّق على الفرع ده.</p>
+      <div id="timeSettingsForm"></div>
     </div>
 
     <div class="panel">
@@ -1215,11 +1240,17 @@ const salaryPaymentsCol = collection(db, 'sales_salary_payments');
 const terminationsCol = collection(db, 'sales_terminations');
 const advancesCol = collection(db, 'sales_advances');
 const deductionsCol = collection(db, 'sales_deductions');   // 💰 خصومات الالتزام (تأخير/تبديل)
+const breaksCol = collection(db, 'sales_breaks');           // ☕ البريكات
+let allBreaks = [];
 const attDecisionsCol = collection(db, 'sales_att_decisions'); // 🔍 قرارات الأدمن على المخالفات المكتشفة
 let allAttDecisions = [];
 const vioReviewCol = collection(db, 'sales_violation_reviews'); // 🔍 قرارات الأدمن على المخالفات المكتشفة
 let allVioReviews = [];
 let allDeductions = [], deductions = [];
+const timeCreditCol = collection(db, 'sales_time_credit');   // ⏳ رصيد ساعات الوقت
+let allTimeCredit = [];
+const leaveReqCol = collection(db, 'sales_leave_requests');  // 📩 طلبات الإذن/الإجازة
+let allLeaveReqs = [];
 let allSettingsDocs = [];   // معرّفات مستندات الإعدادات = أسماء الفروع
 
 // Simple admin access code — checked on-device, no network call.
@@ -1420,7 +1451,10 @@ const timeCfgDefaults = {
   commitGate: 90,          // 🚪 أقل نسبة التزام لدخول المكافأة (أقل منها = خارج تمامًا)
   allowedHoursWeek: 2,     // الرصيد المسموح في الأسبوع
   allowedHoursMonth: 7,    // الرصيد المسموح في الشهر (= يوم خصم: أول ما توصله تخرج من المكافأة)
-  maxLateHoursPerDay: 0    // 🧢 سقف عقوبة التأخير في اليوم الواحد (0 = مفيش سقف — الأدمن يحدده)
+  maxLateHoursPerDay: 0,   // 🧢 سقف عقوبة التأخير في اليوم الواحد (0 = مفيش سقف — الأدمن يحدده)
+  earlyMinPerHour: 10,     // 🚪 الانصراف بدري: كل كام دقيقة = ساعة (زي التأخير)
+  absenceHours: 7,         // 🚫 غياب بدون عذر = كام ساعة رصيد (7 = خروج فوري من المكافأة)
+  autoCloseBreakMult: 2    // البريك بيتقفل تلقائي بعد كام ضعف من مدته
 };
 
 // 🎯 درجة الالتزام من رصيد الساعات (بديل العد بالمخالفات)
@@ -1524,6 +1558,51 @@ function deductionAmount(days, monthlySalary){
   return Math.round((Number(days)||0) * dayValue);
 }
 
+// 🚪 ساعات الانصراف بدري — نفس منطق التأخير
+// clockOutDate = وقت الانصراف الفعلي · shiftEnd = "HH:MM" نهاية شيفته
+function earlyLeaveHours(clockOutDate, shiftEnd, cfg){
+  cfg = cfg || timeCfgDefaults;
+  if(!clockOutDate || !shiftEnd) return { earlyMin: 0, hours: 0 };
+  const outMin = clockOutDate.getHours()*60 + clockOutDate.getMinutes();
+  const endMin = _hm2min(shiftEnd);
+  const earlyMin = Math.max(0, endMin - outMin);
+  const per = Number(cfg.earlyMinPerHour) || 10;
+  let hours = Math.floor(earlyMin / per);
+  const cap = Number(cfg.maxLateHoursPerDay) || 0;
+  if(cap > 0 && hours > cap) hours = cap;
+  return { earlyMin, hours };
+}
+
+// 🚫 ساعات الغياب بدون عذر
+function absenceHoursFrom(cfg){
+  cfg = cfg || timeCfgDefaults;
+  return Number(cfg.absenceHours) || 0;
+}
+
+// 🩺 تطبيق العذر: بيصفّر ساعات السجل ويحتفظ بيه للتاريخ
+// entry = {type, hours, excused, excuseReason}
+function applyExcuse(entry, reason){
+  return { ...entry, hours: 0, originalHours: entry.hours, excused: true, excuseReason: reason || 'بعذر' };
+}
+
+// ⏰ هل الشيفت محتاج قفل تلقائي؟ (نسي يسجّل انصراف)
+function needsAutoClose(shift, nowTs){
+  if(!shift || shift.clockOutTs) return false;
+  const now = nowTs || Date.now();
+  const start = new Date(shift.clockInTs);
+  const endOfDay = new Date(start); endOfDay.setHours(23,59,59,999);
+  return now > endOfDay.getTime();
+}
+
+// ☕ هل البريك محتاج قفل تلقائي؟
+function breakNeedsAutoClose(brk, nowTs, cfg){
+  cfg = cfg || timeCfgDefaults;
+  if(!brk || brk.endTs) return false;
+  const now = nowTs || Date.now();
+  const limitMin = (Number(cfg.breakMin) || 30) * (Number(cfg.autoCloseBreakMult) || 2);
+  return (now - brk.startTs) > limitMin * 60000;
+}
+
 // ===== 👥 تغطية الفرع: كام موظف متاح يوم معيّن =====
 // بيحسب المتاحين بعد استبعاد: يوم إجازته + الأذونات الموافق عليها
 function coverageOnDate(emps, approvedLeaves, dateKey){
@@ -1560,6 +1639,8 @@ window.detectAttendanceIssues = detectAttendanceIssues;
 window.pairSwaps = pairSwaps;
 window.complianceCfg = complianceCfg;
 window.timeCfg = timeCfgDefaults;   // ⏳ إعدادات رصيد الوقت (الأدمن بيعدّلها)
+window.checkLeaveRequest = checkLeaveRequest;
+window.coverageOnDate = coverageOnDate;
 window.todayStr = todayStr;
 
 window.currentAnnouncement = '';
@@ -1820,9 +1901,13 @@ onSnapshot(settingsCol, (snap)=>{
     if(data.compliance.weights) complianceCfg.weights = { ...complianceCfg.weights, ...data.compliance.weights };
     if(data.compliance.shifts) complianceCfg.shifts = { ...complianceCfg.shifts, ...data.compliance.shifts };
   }
+  // ⏳ تحميل إعدادات رصيد الوقت لو الأدمن عدّلها
+  if(data.timeCfg){
+    window.timeCfg = { ...timeCfgDefaults, ...data.timeCfg };
+  }
   renderAnnouncementBanner();
   renderDailyTargetCard();
-  if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); }
+  if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); try{ window.renderTimeSettings(); }catch(e){} }
 }, (err)=> console.error('settings sync error', err));
 
 onSnapshot(vioReviewCol, (snap)=>{
@@ -1835,6 +1920,26 @@ onSnapshot(attDecisionsCol, (snap)=>{
   window.allAttDecisions = allAttDecisions;
   if(adminUnlocked && typeof renderAttIssues==='function') window.renderAttIssues();
 }, (e)=> console.warn('att decisions sync', e && e.code));
+
+onSnapshot(breaksCol, (snap)=>{
+  allBreaks = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  window.allBreaks = allBreaks;
+  autoCloseStaleBreaks();
+  renderAttendanceLists();
+}, (e)=> console.warn('breaks sync', e && e.code));
+
+onSnapshot(leaveReqCol, (snap)=>{
+  allLeaveReqs = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  window.allLeaveReqs = allLeaveReqs;
+  if(adminUnlocked && typeof window.renderLeaveRequests==='function'){ try{ window.renderLeaveRequests(); }catch(e){} }
+  if(typeof updateLeaveBadge==='function'){ try{ updateLeaveBadge(); }catch(e){} }
+}, (e)=> console.warn('leave sync', e && e.code));
+
+onSnapshot(timeCreditCol, (snap)=>{
+  allTimeCredit = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  window.allTimeCredit = allTimeCredit;
+  if(adminUnlocked && typeof window.renderTimeCreditLog==='function'){ try{ window.renderTimeCreditLog(); }catch(e){} }
+}, (e)=> console.warn('time credit sync', e && e.code));
 
 onSnapshot(deductionsCol, (snap)=>{
   allDeductions = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -2136,7 +2241,26 @@ window.daySummaryClockOut = function(){
   promptAttPin('out', id);
 };
 
+function renderBreakBanner(){
+  const host = document.querySelector('#breakBanner');
+  if(!host) return;
+  const active = (typeof activeBreaks==='function') ? activeBreaks() : [];
+  if(!active.length){ host.style.display='none'; host.innerHTML=''; return; }
+  const cfg = window.timeCfg || (typeof timeCfgDefaults!=='undefined'?timeCfgDefaults:{breakMin:30});
+  host.style.display='block';
+  host.innerHTML = active.map(b=>{
+    const el = Math.round((Date.now()-b.startTs)/60000);
+    const left = Math.max(0, (cfg.breakMin||30) - el);
+    return `<div style="display:flex; align-items:center; justify-content:center; gap:8px; background:linear-gradient(180deg,#2a2410,var(--panel2)); border:1px solid var(--gold-dim); border-radius:11px; padding:9px 14px; font-size:12.5px; font-weight:700;">
+      <span>☕ ${b.employeeName} في بريك</span>
+      <span style="color:var(--gold);">${left>0?('باقي '+left+' د'):'المدة خلصت'}</span>
+    </div>`;
+  }).join('');
+}
+
+setInterval(()=>{ try{ renderBreakBanner(); }catch(e){} }, 30000);
 function renderAttendanceLists(){
+  renderBreakBanner();
   const notIn = window.employees.filter(e=> !isClockedIn(e.id));
   const clockedIn = window.employees.filter(e=> isClockedIn(e.id));
 
@@ -2192,6 +2316,102 @@ function renderAttendanceLists(){
 
 const LATE_GRACE_MINUTES = 10; // no penalty within this window around the scheduled time
 const SEVERE_LATE_MINUTES = 20; // being later than this even once disqualifies the reward for that period
+// ===== ☕ نظام البريك =====
+// بريك النهاردة لموظف
+function todaysBreak(empId){
+  const ds = todayStr();
+  return (allBreaks||[]).find(b=> b.employeeId===empId && b.dateKey===ds && b.branch===window.currentBranch);
+}
+// مين في بريك دلوقتي (مفتوح)
+function activeBreaks(){
+  return (allBreaks||[]).filter(b=> !b.endTs && b.branch===window.currentBranch && b.dateKey===todayStr());
+}
+// هل الوقت مسموح فيه بريك؟ (الأدمن بيحدد فترات الحظر)
+function breakTimeAllowed(cfg){
+  cfg = cfg || (window.timeCfg||timeCfgDefaults);
+  const blocked = cfg.breakBlockedRanges || [];   // [{from:'18:00', to:'21:00'}]
+  const now = new Date(); const nowMin = now.getHours()*60 + now.getMinutes();
+  for(const r of blocked){
+    const f = _hm2min(r.from), t = _hm2min(r.to);
+    if(nowMin >= f && nowMin < t) return { allowed:false, until:r.to };
+  }
+  return { allowed:true };
+}
+
+// بداية البريك — بعد الـPIN والصورة
+async function startBreak(empId, photoDataUri){
+  const emp = window.employees.find(e=> e.id===empId); if(!emp) return;
+  const cfg = window.timeCfg || timeCfgDefaults;
+  // لازم يكون مسجّل حضور
+  if(!isClockedIn(empId)){ alert('لازم تسجّل حضور الأول قبل ما تطلع بريك'); return; }
+  // أخد بريك النهاردة قبل كده؟
+  const prev = todaysBreak(empId);
+  if(prev){ alert('انت خدت بريك النهاردة خلاص'); return; }
+  // فيه حد بره دلوقتي؟ (منع التزامن)
+  const active = activeBreaks();
+  const maxOnBreak = Number(cfg.maxOnBreak) || 1;
+  if(active.length >= maxOnBreak){
+    const names = active.map(b=> b.employeeName).join('، ');
+    alert('مينفعش دلوقتي — ' + names + ' لسه في بريك. استنى لما يرجع.');
+    return;
+  }
+  // الوقت مسموح؟
+  const timeChk = breakTimeAllowed(cfg);
+  if(!timeChk.allowed){ alert('البريك مش مسموح دلوقتي (وقت الزحمة). حاول بعد ' + timeChk.until); return; }
+  try{
+    await window.fbAddDoc(breaksCol, {
+      employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
+      dateKey: todayStr(), startTs: Date.now(), endTs: null,
+      startPhoto: photoDataUri || null
+    });
+  }catch(e){ alert('تعذر بدء البريك: ' + e.message); }
+}
+
+// نهاية البريك
+async function endBreak(empId, photoDataUri){
+  const brk = todaysBreak(empId);
+  if(!brk || brk.endTs){ alert('مفيش بريك مفتوح'); return; }
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const durMin = Math.round((Date.now() - brk.startTs) / 60000);
+  const overHours = breakHoursFrom(durMin, cfg.breakMin, cfg);
+  try{
+    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_breaks', brk.id), {
+      endTs: Date.now(), durationMin: durMin, overHours, endPhoto: photoDataUri || null
+    });
+    // لو فيه ساعات زيادة، تتسجّل في رصيد الوقت
+    if(overHours > 0){
+      await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
+        employeeId: empId, employeeName: brk.employeeName, branch: window.currentBranch,
+        type: 'break', hours: overHours, date: todayStr(), note: `بريك ${durMin} دقيقة`, ts: Date.now()
+      });
+    }
+  }catch(e){ alert('تعذر إنهاء البريك: ' + e.message); }
+}
+
+// قفل تلقائي للبريكات المنسية
+async function autoCloseStaleBreaks(){
+  const cfg = window.timeCfg || timeCfgDefaults;
+  for(const b of (allBreaks||[])){
+    if(breakNeedsAutoClose(b, Date.now(), cfg)){
+      const durMin = Math.round((Date.now() - b.startTs)/60000);
+      const overHours = breakHoursFrom(durMin, cfg.breakMin, cfg);
+      try{
+        await window.fbUpdateDoc(window.fbDoc(window.db,'sales_breaks', b.id), {
+          endTs: b.startTs + (cfg.breakMin*(cfg.autoCloseBreakMult||2))*60000,
+          durationMin: durMin, overHours, autoClosed: true
+        });
+        if(overHours>0){
+          await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
+            employeeId: b.employeeId, employeeName: b.employeeName, branch: b.branch,
+            type:'break', hours: overHours, date: b.dateKey, note:'بريك مقفول تلقائي', ts: Date.now()
+          });
+        }
+      }catch(e){}
+    }
+  }
+}
+window.startBreak = startBreak; window.endBreak = endBreak;
+
 async function clockIn(empId, photoDataUri){
   const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return;
@@ -2247,11 +2467,32 @@ async function clockOut(empId, photoDataUri){
   const totalMin = Math.round((now - shift.clockInTs)/60000);
   const overtimeMinutes = Math.max(0, totalMin - STANDARD_SHIFT_MINUTES);
 
+  // 🚪 انصراف بدري: نقارن وقت الخروج بنهاية شيفت الموظف
+  const cfg = window.timeCfg || timeCfgDefaults;
+  let earlyInfo = { earlyMin: 0, hours: 0 };
+  const shiftDef = complianceCfg.shifts[emp && emp.shift];
+  const shiftEnd = (emp && emp.scheduledEndTime) || (shiftDef && shiftDef.end);
+  if(shiftEnd) earlyInfo = earlyLeaveHours(new Date(now), shiftEnd, cfg);
+
   try{
-    await updateDoc(doc(db,'sales_shifts', shift.id), { clockOutTs: now, overtimeMinutes, clockOutPhoto: photoDataUri || null });
+    await updateDoc(doc(db,'sales_shifts', shift.id), {
+      clockOutTs: now, overtimeMinutes, clockOutPhoto: photoDataUri || null,
+      earlyMin: earlyInfo.earlyMin, earlyHours: earlyInfo.hours
+    });
+    // نسجّل ساعات الانصراف بدري في رصيد الوقت
+    if(earlyInfo.hours > 0){
+      try{
+        await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
+          employeeId: empId, employeeName: (emp&&emp.name)||'', branch: window.currentBranch,
+          type: 'early', hours: earlyInfo.hours, date: todayStr(),
+          note: `مشي ${earlyInfo.earlyMin} دقيقة بدري`, ts: Date.now()
+        });
+      }catch(_e){}
+    }
     const h = Math.floor(totalMin/60), m = totalMin%60;
     let msg = `تم تسجيل الانصراف ✅\nمدة الشيفت: ${h} س ${m} د`;
-    if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي (بعد 8 ساعات وربع): ${overtimeMinutes} دقيقة`;
+    if(earlyInfo.hours > 0) msg += `\n🚪 مشيت ${earlyInfo.earlyMin} دقيقة بدري → ${earlyInfo.hours} ساعة رصيد`;
+    if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة`;
     alert(msg);
   }catch(err){
     console.error('تعذر تسجيل الانصراف', err);
@@ -2263,6 +2504,12 @@ async function clockOut(empId, photoDataUri){
 let pendingAttAction = null; // {type:'in'|'out', empId}
 let attPinBuffer = '';
 
+function attActionLabel(type){
+  if(type==='break-start') return 'اكتب كودك عشان تطلع بريك';
+  if(type==='break-end')   return 'اكتب كودك عشان ترجع من البريك';
+  if(type==='out')         return 'اكتب كودك عشان تسجل انصراف';
+  return 'اكتب كودك عشان تسجل حضور';
+}
 function promptAttPin(type, empId){
   const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return;
@@ -2272,7 +2519,7 @@ function promptAttPin(type, empId){
     // First time this employee is clocking in/out — let them set their own PIN.
     newPinBuffer = '';
     $('#attPinName').textContent = emp.name;
-    $('#attPinAction').textContent = type === 'in' ? 'اكتب كودك عشان تسجل حضور' : 'اكتب كودك عشان تسجل انصراف';
+    $('#attPinAction').textContent = attActionLabel(type);
     $('#attNewPinErrText').textContent = '';
     updateNewPinDots(false);
     $('#attPinKeypadArea').style.display = 'none';
@@ -2283,7 +2530,7 @@ function promptAttPin(type, empId){
 
   attPinBuffer = '';
   $('#attPinName').textContent = emp.name;
-  $('#attPinAction').textContent = type === 'in' ? 'اكتب كودك عشان تسجل حضور' : 'اكتب كودك عشان تسجل انصراف';
+  $('#attPinAction').textContent = attActionLabel(type);
   $('#attPinErrText').textContent = '';
   updateAttPinDots(false);
   $('#attPinKeypadArea').style.display = 'block';
@@ -2437,8 +2684,66 @@ function renderDayHub(empId){
   $('#dh_weeklyProgress').innerHTML = getPeriodProgressLabel(empId, 'week');
   $('#dh_monthlyProgress').innerHTML = getPeriodProgressLabel(empId, 'month');
   renderRewardScoreCard(empId);
+  renderDayHubBreak(empId);
+  renderDayHubLeave(empId);
   renderRaceStatus(empId);
 }
+
+// ☕ زر البريك في صفحة الموظف
+function renderDayHubBreak(empId){
+  const area = document.querySelector('#dh_breakArea'); if(!area) return;
+  if(!isClockedIn(empId)){ area.innerHTML=''; return; }   // لازم يكون حاضر
+  const brk = todaysBreak(empId);
+  if(brk && !brk.endTs){
+    // في بريك دلوقتي — عداد + زر رجوع
+    const cfg = window.timeCfg || timeCfgDefaults;
+    const elapsed = Math.round((Date.now()-brk.startTs)/60000);
+    const left = Math.max(0, (cfg.breakMin||30) - elapsed);
+    area.innerHTML = `<div style="background:linear-gradient(180deg,#2a2410,var(--panel)); border:1px solid var(--gold-dim); border-radius:13px; padding:14px; text-align:center;">
+      <div style="font-size:14px; font-weight:800; color:var(--gold);">☕ في بريك دلوقتي</div>
+      <div style="font-size:12px; color:var(--sub); margin:4px 0 12px;">${left>0 ? ('باقي '+left+' دقيقة تقريبًا') : 'المدة خلصت — ارجع بسرعة'}</div>
+      <button class="btnPrimary" style="width:100%;" onclick="window.reqBreakEnd('${empId}')">🔙 رجعت من البريك</button>
+    </div>`;
+  } else if(brk && brk.endTs){
+    // خلّص بريكه النهاردة
+    area.innerHTML = `<div style="text-align:center; color:var(--sub); font-size:12px; padding:8px;">☕ خدت بريك النهاردة (${brk.durationMin||0} دقيقة)</div>`;
+  } else {
+    // متاح ياخد بريك
+    area.innerHTML = `<button class="btnPrimary" style="width:100%; background:linear-gradient(180deg,#c9a227,#a5851c);" onclick="window.reqBreakStart('${empId}')">☕ أطلع بريك</button>`;
+  }
+}
+// 📩 زر طلب إذن في صفحة الموظف
+function renderDayHubLeave(empId){
+  const area = document.querySelector('#dh_leaveArea'); if(!area) return;
+  const mine = (window.allLeaveReqs||[]).filter(l=> l.empId===empId && l.status==='pending');
+  const pendingTxt = mine.length ? `<div style="text-align:center; color:var(--sub); font-size:11.5px; margin-top:6px;">⏳ عندك ${mine.length} طلب مستني الموافقة</div>` : '';
+  area.innerHTML = `<button class="cancelBtn" style="width:100%;" onclick="window.reqLeave('${empId}')">📩 طلب إذن / تغيير إجازة</button>${pendingTxt}`;
+}
+window.reqLeave = function(empId){
+  const emp = (window.employees||[]).find(e=> e.id===empId); if(!emp) return;
+  const kind = prompt('نوع الطلب:\n1) إجازة يوم\n2) تغيير يوم الإجازة\n3) تبديل شيفت');
+  const kindMap = { '1':'dayoff', '2':'changeDayoff', '3':'shiftSwap' };
+  const type = kindMap[kind]; if(!type) return;
+  const dateKey = prompt('التاريخ المطلوب؟ (بصيغة سنة-شهر-يوم، مثال 2026-08-05)');
+  if(!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)){ if(dateKey!==null) alert('تاريخ غير صحيح'); return; }
+  const reason = prompt('سبب الطلب؟ (اختياري)') || '';
+  window.fbAddDoc(window.fbCollection(window.db,'sales_leave_requests'), {
+    empId, empName: emp.name, branch: window.currentBranch,
+    type, dateKey, reason, status:'pending', ts: Date.now()
+  }).then(()=>{
+    $('#dayHubOverlay').classList.remove('show');
+    alert('اتبعت طلبك للإدارة ✅ — هيتراجع قريب');
+  }).catch(e=> alert('تعذر إرسال الطلب: '+e.message));
+};
+
+window.reqBreakStart = function(empId){
+  $('#dayHubOverlay').classList.remove('show');
+  promptAttPin('break-start', empId);
+};
+window.reqBreakEnd = function(empId){
+  $('#dayHubOverlay').classList.remove('show');
+  promptAttPin('break-end', empId);
+};
 
 // 🏆 كارت نتيجة المكافأة بـ3 عوامل (الشهر الحالي) — للموظف في صفحته
 function renderRewardScoreCard(empId){
@@ -4774,6 +5079,8 @@ async function finishAttPhoto(photoDataUri){
   closeAttPhoto();
   if(!action) return;
   if(action.type === 'in'){ await clockIn(action.empId, photoDataUri); }
+  else if(action.type === 'break-start'){ await startBreak(action.empId, photoDataUri); }
+  else if(action.type === 'break-end'){ await endBreak(action.empId, photoDataUri); }
   else{ await clockOut(action.empId, photoDataUri); renderAttendanceLists(); }
 }
 
@@ -5174,6 +5481,104 @@ window.decideIssue = async function(empId, empName, dateKey, kind, action){
 };
 
 // 💰 كشف الخصومات (الشهر الحالي)
+// ⏳ كشف رصيد الوقت الشهري لكل موظف + زر العذر
+// 📩 لوحة طلبات الإذن (أدمن) — بحساب التغطية
+function updateLeaveBadge(){
+  const pend = (window.allLeaveReqs||[]).filter(l=> l.status==='pending' && l.branch===window.currentBranch).length;
+  const el = document.querySelector('#leaveBadge');
+  if(el){ el.textContent = pend; el.style.display = pend ? 'inline-flex' : 'none'; }
+}
+
+window.renderLeaveRequests = function(){
+  const wrap = document.querySelector('#leaveRequestsList'); if(!wrap) return;
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const pend = (window.allLeaveReqs||[]).filter(l=> l.status==='pending' && l.branch===window.currentBranch)
+                  .sort((a,b)=>(a.dateKey<b.dateKey?-1:1));
+  updateLeaveBadge();
+  if(!pend.length){ wrap.innerHTML='<p style="color:var(--sub); font-size:12px;">مفيش طلبات مستنية ✅</p>'; return; }
+
+  const emps = (window.employees||[]).filter(e=> e.branch===window.currentBranch);
+  const approved = (window.allLeaveReqs||[]).filter(l=> l.status==='approved');
+  const minStaff = Number(cfg.minStaffPerDay)||2;
+  const typeLabel = { dayoff:'🌴 إجازة يوم', changeDayoff:'📅 تغيير يوم الإجازة', shiftSwap:'🔄 تبديل شيفت' };
+  const dayName = ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
+
+  wrap.innerHTML = pend.map(l=>{
+    const chk = window.checkLeaveRequest(emps, approved, l.dateKey, minStaff);
+    const d = new Date(l.dateKey+'T00:00:00');
+    const cov = chk.safe
+      ? `<div style="color:#5ec88a; font-size:12px;">🟢 لو وافقت هيتبقى ${chk.availableAfter} في الفرع (الحد ${minStaff}) — تغطية كويسة</div>`
+      : `<div style="color:#e0796b; font-size:12px;">🔴 تحذير: هيتبقى ${chk.availableAfter} بس (الحد ${minStaff}) — ناقص ${chk.shortBy}</div>`;
+    return `<div style="background:var(--panel); border:1px solid ${chk.safe?'var(--line)':'#5a3a3a'}; border-radius:13px; padding:13px; margin-bottom:9px;">
+      <div style="font-weight:800; font-size:14px;">${l.empName} — ${typeLabel[l.type]||l.type}</div>
+      <div style="color:var(--sub); font-size:12.5px; margin:4px 0;">${dayName[d.getDay()]} ${l.dateKey}${l.reason?(' · '+l.reason):''}</div>
+      ${cov}
+      <div style="display:flex; gap:8px; margin-top:11px;">
+        <button onclick="decideLeave('${l.id}','approved')" style="flex:1; padding:10px; border:none; border-radius:10px; background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; font-family:'Cairo'; font-weight:800; cursor:pointer;">${chk.safe?'✅ موافقة':'موافقة برغم التحذير'}</button>
+        <button onclick="decideLeave('${l.id}','rejected')" style="padding:10px 16px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--sub); font-family:'Cairo'; font-weight:700; cursor:pointer;">رفض</button>
+      </div>
+    </div>`;
+  }).join('');
+};
+
+window.decideLeave = async function(id, decision){
+  const l = (window.allLeaveReqs||[]).find(x=> x.id===id); if(!l) return;
+  try{
+    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_leave_requests', id), { status: decision, decidedAt: Date.now() });
+  }catch(e){ alert('تعذر الحفظ: '+e.message); }
+};
+
+window.renderTimeCreditLog = function(){
+  const wrap = document.querySelector('#timeCreditLog'); if(!wrap) return;
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const now = new Date();
+  const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const rows = (window.allTimeCredit||[]).filter(x=> x.branch===window.currentBranch && String(x.date||'').startsWith(mk));
+  const emps = (window.employees||[]).filter(e=> e.branch===window.currentBranch && e.active!==false);
+  if(!emps.length){ wrap.innerHTML='<p style="color:var(--sub); font-size:12px;">مفيش موظفين.</p>'; return; }
+
+  const typeLabel = { late:'⏰ تأخير', break:'☕ بريك', swap:'🔄 تبديل', early:'🚪 انصراف بدري', absence:'🚫 غياب' };
+  const perDay = Number(cfg.hoursPerDay)||7;
+
+  wrap.innerHTML = emps.map(emp=>{
+    const mine = rows.filter(r=> r.employeeId===emp.id && !r.excused);
+    const totalH = mine.reduce((x,r)=> x+(Number(r.hours)||0), 0);
+    const days = Math.floor(totalH/perDay);
+    const eligible = totalH <= (Number(cfg.allowedHoursMonth)||7);
+    const statusColor = eligible ? '#5ec88a' : '#e0796b';
+    const detail = mine.length
+      ? mine.sort((a,b)=>(b.ts||0)-(a.ts||0)).map(r=>`
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--line); font-size:12.5px;">
+            <span>${typeLabel[r.type]||r.type} · ${r.hours} ساعة <span style="color:var(--sub);">${r.note?('· '+r.note):''} · ${r.date}</span></span>
+            <button onclick="excuseTimeCredit('${r.id}')" style="flex-shrink:0; border:1px solid var(--line); background:var(--panel2); color:var(--sub); border-radius:8px; padding:5px 10px; font-family:'Cairo'; font-size:11px; cursor:pointer;">🩺 بعذر</button>
+          </div>`).join('')
+      : '<div style="color:var(--sub); font-size:12px; padding:6px 0;">مفيش رصيد الشهر ده ✅</div>';
+
+    return `<div style="background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:13px; margin-bottom:10px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+        <div style="font-weight:800; font-size:14px;">${emp.name}</div>
+        <div style="text-align:left;">
+          <div style="font-weight:900; color:${statusColor}; font-size:15px;">${totalH} ساعة</div>
+          <div style="font-size:11px; color:var(--sub);">${eligible?'✅ في المكافأة':'❌ خارج المكافأة'}${days>0?(' · 💰 '+days+' يوم خصم'):''}</div>
+        </div>
+      </div>
+      ${detail}
+    </div>`;
+  }).join('');
+};
+
+// 🩺 عذر بند رصيد وقت — بيصفّر ساعاته ويحتفظ بالسجل
+window.excuseTimeCredit = async function(id){
+  const reason = prompt('سبب العذر؟ (مرض / ظرف / بأمر مني ...)');
+  if(reason===null) return;
+  const item = (window.allTimeCredit||[]).find(x=> x.id===id); if(!item) return;
+  try{
+    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_time_credit', id), {
+      hours: 0, originalHours: item.hours, excused: true, excuseReason: reason || 'بعذر', excusedAt: Date.now()
+    });
+  }catch(e){ alert('تعذر تسجيل العذر: '+e.message); }
+};
+
 window.renderDeductionsLog = function(){
   const wrap = document.querySelector('#deductionsLog'); if(!wrap) return;
   const now = new Date();
@@ -5295,6 +5700,75 @@ window.deleteBranch = async function(name){
     window.renderBranchManage();
     alert('اتشال الفرع من القايمة ✅');
   }catch(e){ alert('تعذر الحذف: '+e.message); }
+};
+
+// ⚙️ لوحة إعدادات رصيد الوقت
+window.renderTimeSettings = function(){
+  const wrap = document.querySelector('#timeSettingsForm'); if(!wrap) return;
+  if(wrap.dataset.editing === '1') return;
+  const c = window.timeCfg || timeCfgDefaults;
+  const row = (label, id, val, hint)=>`
+    <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-size:13px;">
+      <span style="flex:1;">${label}${hint?`<br><small style="color:var(--sub); font-size:10.5px;">${hint}</small>`:''}</span>
+      <input id="${id}" value="${val}" inputmode="numeric"
+        onfocus="this.closest('#timeSettingsForm').dataset.editing='1'"
+        onblur="this.closest('#timeSettingsForm').dataset.editing='0'"
+        style="width:60px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-weight:800; text-align:center; flex-shrink:0;">
+    </label>`;
+  wrap.innerHTML = `
+    <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">⏰ التأخير والانصراف بدري</div>
+    ${row('كل كام دقيقة = ساعة رصيد', 'tsLatePer', c.lateMinPerHour, 'أقل من الرقم ده = سماح مجاني')}
+    ${row('سقف ساعات التأخير في اليوم', 'tsLateCap', c.maxLateHoursPerDay, '0 = مفيش سقف')}
+    <div style="height:1px; background:var(--line); margin:12px 0;"></div>
+    <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">☕ البريك</div>
+    ${row('مدة البريك (دقيقة)', 'tsBreakMin', c.breakMin)}
+    ${row('سماح إضافي بعد المدة (دقيقة)', 'tsBreakGrace', c.breakGraceMin)}
+    ${row('كل كام دقيقة زيادة = ساعة', 'tsBreakPer', c.breakMinPerHour)}
+    ${row('كام بريك في اليوم', 'tsBreakPerDay', c.breakPerDay)}
+    ${row('كام موظف بريك مع بعض', 'tsMaxOnBreak', c.maxOnBreak)}
+    <div style="height:1px; background:var(--line); margin:12px 0;"></div>
+    <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">🔄 التبديل والغياب</div>
+    ${row('تبديل مجاني في الشهر', 'tsSwapFree', c.swapFreePerMonth)}
+    ${row('ساعات التبديل بعد المجاني', 'tsSwapHours', c.swapHours)}
+    ${row('ساعات الغياب بدون عذر', 'tsAbsence', c.absenceHours, 'الغياب = خروج من المكافأة')}
+    <div style="height:1px; background:var(--line); margin:12px 0;"></div>
+    <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">💰 الخصم والمكافأة</div>
+    ${row('كل كام ساعة = يوم خصم', 'tsHoursPerDay', c.hoursPerDay)}
+    ${row('سقف أيام الخصم شهريًا', 'tsMaxDays', c.maxDaysPerMonth, '0 = مفتوح')}
+    ${row('الرصيد المسموح أسبوعيًا (ساعة)', 'tsAllowWeek', c.allowedHoursWeek)}
+    ${row('الرصيد المسموح شهريًا (ساعة)', 'tsAllowMonth', c.allowedHoursMonth, 'أكتر منه = خارج المكافأة')}
+    ${row('أقل عدد موظفين في الفرع', 'tsMinStaff', c.minStaffPerDay, 'لموافقة الأذونات')}
+    <button onclick="saveTimeSettings()" style="width:100%; margin-top:8px; padding:13px; border:none; border-radius:12px; background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer;">💾 حفظ إعدادات الوقت</button>`;
+};
+
+window.saveTimeSettings = async function(){
+  const n = (id, def)=>{ const v = parseInt(document.querySelector('#'+id).value,10); return isNaN(v)?def:v; };
+  const c = window.timeCfg || timeCfgDefaults;
+  const payload = {
+    lateMinPerHour: n('tsLatePer', c.lateMinPerHour),
+    maxLateHoursPerDay: n('tsLateCap', c.maxLateHoursPerDay),
+    breakMin: n('tsBreakMin', c.breakMin),
+    breakGraceMin: n('tsBreakGrace', c.breakGraceMin),
+    breakMinPerHour: n('tsBreakPer', c.breakMinPerHour),
+    breakPerDay: n('tsBreakPerDay', c.breakPerDay),
+    maxOnBreak: n('tsMaxOnBreak', c.maxOnBreak),
+    swapFreePerMonth: n('tsSwapFree', c.swapFreePerMonth),
+    swapHours: n('tsSwapHours', c.swapHours),
+    absenceHours: n('tsAbsence', c.absenceHours),
+    hoursPerDay: n('tsHoursPerDay', c.hoursPerDay),
+    maxDaysPerMonth: n('tsMaxDays', c.maxDaysPerMonth),
+    allowedHoursWeek: n('tsAllowWeek', c.allowedHoursWeek),
+    allowedHoursMonth: n('tsAllowMonth', c.allowedHoursMonth),
+    minStaffPerDay: n('tsMinStaff', c.minStaffPerDay)
+  };
+  try{
+    const b = window.currentBranch;
+    if(!b){ alert('اختار فرع الجهاز الأول'); return; }
+    await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', b), { timeCfg: payload }, { merge:true });
+    window.timeCfg = { ...timeCfgDefaults, ...payload };
+    const f = document.querySelector('#timeSettingsForm'); if(f) f.dataset.editing='0';
+    alert('اتحفظت إعدادات رصيد الوقت ✅');
+  }catch(e){ alert('تعذر الحفظ: ' + e.message); }
 };
 
 window.saveComplianceSettings = async function(){
