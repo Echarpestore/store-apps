@@ -1023,6 +1023,7 @@ window.rwRender=function(){
   rwDots();
   const b = $('#rwBody');
   const cfg = complianceCfg;
+  const tcfg = (typeof timeCfgDefaults !== 'undefined') ? (window.timeCfg || timeCfgDefaults) : {};
   if(_rwStep===0){
     b.innerHTML = `<div class="rw-step">
       <div class="rw-eyebrow">${/glow/i.test(window.currentBranch||'') ? 'Glow' : 'echarpe'} ⭐</div>
@@ -1076,13 +1077,16 @@ window.rwRender=function(){
     b.innerHTML = `<div class="rw-step">
       <div class="rw-eyebrow">خطوة 5</div>
       <div class="rw-title">نظام المكافآت والالتزام</div>
-      <div class="rw-sub">اقرا كويس — ده اللي بيحدد مكافأتك 🎁</div>
+      <div class="rw-sub">اقرا كويس — ده اللي بيحدد مكافأتك ومرتبك</div>
       <div class="rw-rules">
-        <div class="rw-rule good"><div class="ic">🎁</div><div><b>مكافأة على 3 حاجات</b><small>التزامك (${cfg.weights.commitment}%) + مبيعاتك (${cfg.weights.sales}%) + تقييم العملاء ليك (${cfg.weights.rating}%)</small></div></div>
-        <div class="rw-rule good"><div class="ic">⭐</div><div><b>كل ما تجتهد، مكافأتك تكبر</b><small>الحضور بدري والبيع الكويس والعميل المبسوط = فلوس أكتر</small></div></div>
-        <div class="rw-rule warn"><div class="ic">⏰</div><div><b>التأخير أكتر من ${cfg.lateGraceMin} دقيقة</b><small>خصم ${cfg.penalty} ج.م</small></div></div>
-        <div class="rw-rule warn"><div class="ic">🔄</div><div><b>تبديل الشيفت</b><small>خصم ${cfg.penalty} ج.م</small></div></div>
-        <div class="rw-rule warn"><div class="ic">📅</div><div><b>تبديل يوم الإجازة</b><small>خصم ${cfg.penalty} ج.م</small></div></div>
+        <div class="rw-rule good"><div class="ic">🎁</div><div><b>المكافأة على 3 حاجات</b><small>التزامك بالمواعيد (${cfg.weights.commitment}%) + مبيعاتك (${cfg.weights.sales}%) + تقييم العملاء ليك (${cfg.weights.rating}%)</small></div></div>
+        <div class="rw-rule good"><div class="ic">✅</div><div><b>تأخير أقل من ${tcfg.lateMinPerHour} دقايق = مسموح</b><small>عندك سماح يومي، مش هيتحسب عليك حاجة</small></div></div>
+        <div class="rw-rule warn"><div class="ic">⏰</div><div><b>كل ${tcfg.lateMinPerHour} دقايق تأخير = ساعة على رصيدك</b><small>مثال: اتأخرت ${tcfg.lateMinPerHour*2} دقيقة → ساعتين رصيد</small></div></div>
+        <div class="rw-rule warn"><div class="ic">☕</div><div><b>البريك ${tcfg.breakMin} دقيقة (+${tcfg.breakGraceMin} سماح)</b><small>الزيادة بعد كده: كل ${tcfg.breakMinPerHour} دقايق = ساعة رصيد · بريك ${tcfg.breakPerDay} في اليوم</small></div></div>
+        <div class="rw-rule warn"><div class="ic">🔄</div><div><b>تبديل الشيفت أو الإجازة</b><small>أول تبديل في الشهر مجاني · اللي بعده = ${tcfg.swapHours} ساعات رصيد</small></div></div>
+        <div class="rw-rule warn"><div class="ic">💰</div><div><b>كل ${tcfg.hoursPerDay} ساعات رصيد = يوم يتخصم من مرتبك</b><small>يعني لو تأخيرك في الشهر عدّى ${tcfg.hoursPerDay*tcfg.lateMinPerHour} دقيقة</small></div></div>
+        <div class="rw-rule warn"><div class="ic">🚪</div><div><b>رصيدك لازم مايعدّيش ${tcfg.allowedHoursMonth} ساعات في الشهر</b><small>لو عدّاها → بتخرج من المكافأة، مهما كانت مبيعاتك وتقييمك</small></div></div>
+        <div class="rw-rule good"><div class="ic">⭐</div><div><b>الالتزام هو الأساس</b><small>الملتزم بمواعيده هو اللي بياخد المكافأة</small></div></div>
       </div>
       <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(4)">◀</button><button class="rw-btn rw-next" onclick="rwGo(6)">فهمت ▶</button></div>
     </div>`;
@@ -1394,12 +1398,168 @@ function pairSwaps(issues){
   });
   return { swaps, singles };
 }
+
+// ===== ⏳ نظام رصيد الوقت (بديل خصم الـ50 جنيه) =====
+// كل 10 دقايق تأخير = ساعة · بريك زايد >20 دقيقة = ساعة · تبديل بعد الأول = 4 ساعات
+// وكل 7 ساعات متراكمة في الشهر = يوم يتخصم من المرتب
+const timeCfgDefaults = {
+  lateMinPerHour: 10,      // كل كام دقيقة تأخير تساوي ساعة
+  breakMin: 30,            // مدة البريك المسموحة (دقيقة)
+  breakGraceMin: 5,        // سماح إضافي بعد مدة البريك
+  breakMinPerHour: 10,     // كل كام دقيقة زيادة في البريك تساوي ساعة (زي التأخير)
+  swapFreePerMonth: 1,     // كام تبديل مجاني في الشهر
+  swapHours: 4,            // ساعات التبديل بعد المجاني
+  hoursPerDay: 7,          // كل كام ساعة = يوم خصم
+  maxDaysPerMonth: 0,      // سقف أيام الخصم الشهري (0 = مفتوح)
+  minStaffPerDay: 2,       // أقل عدد موظفين لازم يفضلوا في الفرع (لكل فرع يتظبط)
+  breakPerDay: 1,          // كام بريك مسموح في اليوم
+  maxOnBreak: 1,           // كام موظف يقدروا يطلعوا بريك مع بعض
+  commitPointsPerHour: 5,  // كل ساعة رصيد بتنزّل درجة الالتزام كام نقطة
+  outWeeklyHours: 7,       // ساعات الأسبوع اللي بتطلّعه من السباق الأسبوعي
+  outMonthlyHours: 14,     // ساعات الشهر اللي بتطلّعه من السباق الشهري
+  commitGate: 90,          // 🚪 أقل نسبة التزام لدخول المكافأة (أقل منها = خارج تمامًا)
+  allowedHoursWeek: 2,     // الرصيد المسموح في الأسبوع
+  allowedHoursMonth: 7,    // الرصيد المسموح في الشهر (= يوم خصم: أول ما توصله تخرج من المكافأة)
+  maxLateHoursPerDay: 0    // 🧢 سقف عقوبة التأخير في اليوم الواحد (0 = مفيش سقف — الأدمن يحدده)
+};
+
+// 🎯 درجة الالتزام من رصيد الساعات (بديل العد بالمخالفات)
+function commitmentFromHours(hours, cfg){
+  cfg = cfg || timeCfgDefaults;
+  const per = Number(cfg.commitPointsPerHour) || 5;
+  return Math.max(0, Math.min(100, 100 - (Number(hours)||0) * per));
+}
+
+// 🚪 هل الموظف مؤهّل للمكافأة؟ — الالتزام شرط دخول مش مجرد وزن
+// أقل من العتبة (90% افتراضي) = خارج المكافأة مهما كانت مبيعاته وتقييمه
+// period = 'week' | 'month' — كل فترة ليها رصيدها المسموح
+// عند الرصيد المسموح بالظبط → النسبة = العتبة (90%) → لسه مؤهّل
+// أكتر منه → تحت العتبة → خارج المكافأة
+function rewardEligibility(hours, period, cfg){
+  cfg = cfg || timeCfgDefaults;
+  const gate = Number(cfg.commitGate) || 90;
+  const allowed = period === 'month'
+    ? (Number(cfg.allowedHoursMonth) || 8)
+    : (Number(cfg.allowedHoursWeek) || 2);
+  const h = Math.max(0, Number(hours) || 0);
+  // النسبة منسوبة لرصيد الفترة: عند allowed تساوي gate بالظبط
+  const commit = allowed > 0
+    ? Math.max(0, Math.min(100, 100 - (h / allowed) * (100 - gate)))
+    : (h > 0 ? 0 : 100);
+  return {
+    commitPct: Math.round(commit * 10) / 10,
+    gate,
+    period: period === 'month' ? 'month' : 'week',
+    eligible: h <= allowed,
+    hours: h,
+    allowedHours: allowed,
+    hoursLeft: Math.max(0, allowed - h)
+  };
+}
+
+// 🏁 هل الموظف خرج من السباق؟ (أسبوعي/شهري حسب ساعاته)
+function isOutOfRace(hours, period, cfg){
+  cfg = cfg || timeCfgDefaults;
+  const limit = period === 'week'
+    ? (Number(cfg.outWeeklyHours) || 0)
+    : (Number(cfg.outMonthlyHours) || 0);
+  return limit > 0 && (Number(hours)||0) >= limit;
+}
+
+// ساعات التأخير من دقايق التأخير (تقريب لأسفل)
+function lateHoursFrom(lateMin, cfg){
+  cfg = cfg || timeCfgDefaults;
+  const per = Number(cfg.lateMinPerHour) || 10;
+  let h = Math.floor(Math.max(0, Number(lateMin) || 0) / per);
+  const cap = Number(cfg.maxLateHoursPerDay) || 0;   // سقف اليوم الواحد لو الأدمن حدده
+  if(cap > 0 && h > cap) h = cap;
+  return h;
+}
+
+// ساعات البريك الزايد — متدرّجة زي التأخير بالظبط (مفيش ثغرة سماح كبير)
+// الزيادة = مدة البريك الفعلية − المسموحة − السماح الإضافي، وكل (breakMinPerHour) دقيقة = ساعة
+function breakHoursFrom(actualMin, allowedMin, cfg){
+  cfg = cfg || timeCfgDefaults;
+  const allowed = Number(allowedMin != null ? allowedMin : cfg.breakMin) || 30;
+  const grace = Number(cfg.breakGraceMin) || 0;
+  const over = Math.max(0, (Number(actualMin)||0) - allowed - grace);
+  const per = Number(cfg.breakMinPerHour) || 10;
+  return Math.floor(over / per);
+}
+
+// ساعات التبديلات: الأول مجاني، واللي بعده بساعاته
+function swapHoursFrom(swapCount, cfg){
+  cfg = cfg || timeCfgDefaults;
+  const free = Number(cfg.swapFreePerMonth) || 0;
+  const charged = Math.max(0, (Number(swapCount)||0) - free);
+  return charged * (Number(cfg.swapHours) || 0);
+}
+
+// تجميع رصيد الشهر وتحويله لأيام خصم
+// entries = [{type:'late'|'break'|'swap', hours}]
+function monthlyTimeSummary(entries, cfg){
+  cfg = cfg || timeCfgDefaults;
+  const totalHours = (entries||[]).reduce((x,e)=> x + (Number(e.hours)||0), 0);
+  const perDay = Number(cfg.hoursPerDay) || 7;
+  let days = Math.floor(totalHours / perDay);
+  const cap = Number(cfg.maxDaysPerMonth) || 0;
+  const capped = cap > 0 && days > cap;
+  if(capped) days = cap;
+  return {
+    totalHours,
+    days,
+    remainderHours: totalHours - (days * perDay),
+    capped,
+    byType: {
+      late:  (entries||[]).filter(e=> e.type==='late').reduce((x,e)=> x+(Number(e.hours)||0), 0),
+      break: (entries||[]).filter(e=> e.type==='break').reduce((x,e)=> x+(Number(e.hours)||0), 0),
+      swap:  (entries||[]).filter(e=> e.type==='swap').reduce((x,e)=> x+(Number(e.hours)||0), 0)
+    }
+  };
+}
+
+// قيمة الخصم بالجنيه = عدد الأيام × قيمة اليوم (المرتب ÷ 30)
+function deductionAmount(days, monthlySalary){
+  const dayValue = (Number(monthlySalary)||0) / 30;
+  return Math.round((Number(days)||0) * dayValue);
+}
+
+// ===== 👥 تغطية الفرع: كام موظف متاح يوم معيّن =====
+// بيحسب المتاحين بعد استبعاد: يوم إجازته + الأذونات الموافق عليها
+function coverageOnDate(emps, approvedLeaves, dateKey){
+  const d = new Date(dateKey + 'T00:00:00');
+  const dow = d.getDay();
+  const offIds = new Set();
+  (approvedLeaves||[]).forEach(l=>{ if(l.dateKey === dateKey && l.status === 'approved') offIds.add(l.empId); });
+  const available = (emps||[]).filter(e=>{
+    if(e.active === false) return false;
+    if(String(e.dayOff) === String(dow)) return false;   // يوم إجازته الأسبوعي
+    if(offIds.has(e.id)) return false;                    // إذن موافق عليه
+    return true;
+  });
+  return { available: available.length, names: available.map(e=> e.name) };
+}
+
+// هل الطلب ده هيكسر الحد الأدنى للتغطية؟
+function checkLeaveRequest(emps, approvedLeaves, dateKey, minStaff){
+  const before = coverageOnDate(emps, approvedLeaves, dateKey);
+  const after = Math.max(0, before.available - 1);
+  const min = Number(minStaff) || 0;
+  return {
+    availableBefore: before.available,
+    availableAfter: after,
+    minStaff: min,
+    safe: after >= min,
+    shortBy: Math.max(0, min - after)
+  };
+}
 // <<< COMPLIANCE_END
 
 // 🔗 تعريض أدوات الالتزام على window (لازم بعد تعريفها) عشان بلوكات السكريبت التانية تستخدمها
 window.detectAttendanceIssues = detectAttendanceIssues;
 window.pairSwaps = pairSwaps;
 window.complianceCfg = complianceCfg;
+window.timeCfg = timeCfgDefaults;   // ⏳ إعدادات رصيد الوقت (الأدمن بيعدّلها)
 window.todayStr = todayStr;
 
 window.currentAnnouncement = '';
