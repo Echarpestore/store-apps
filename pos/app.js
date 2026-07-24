@@ -467,7 +467,7 @@ function buildReceiptHTML(data){
         parts.push(`<div style="text-align:center; font-size:${fs}; margin:3px 0;">${d.dateStr||''}${d.empName?' · '+L.emp+': '+d.empName:''}</div>`); break;
       case 'items':
         parts.push(`<table style="width:100%; border-collapse:collapse; font-size:${fs}; margin:4px 0;">${(d.items||[]).map(it=>
-          `<tr><td style="padding:2px 0; border-bottom:1px dashed #999;">${it.name}</td><td style="padding:2px 4px; border-bottom:1px dashed #999; white-space:nowrap;">${it.qty}×</td><td style="padding:2px 0; border-bottom:1px dashed #999; white-space:nowrap; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
+          `<tr><td style="padding:2px 0; border-bottom:1px dashed #999;">${it.name}</td><td style="padding:2px 4px; border-bottom:1px dashed #999; white-space:nowrap;">${it.qty} × ${it.unit||''}</td><td style="padding:2px 0; border-bottom:1px dashed #999; white-space:nowrap; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
       case 'totals':
         parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`); break;
       case 'invoiceNo':
@@ -804,7 +804,7 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
   const data = {
     dateStr: new Date().toLocaleString(c.lang==='en'?'en-GB':'ar-EG'),
     empName: (currentEmployee&&currentEmployee.name)||'',
-    items: cart.map(it=> ({name:it.name, qty:it.qty, line:(it.price*it.qty).toFixed(2)})),
+    items: cart.map(it=> ({name:it.name, qty:it.qty, unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2)})),
     totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: invoiceCode||invoiceNo||''
   };
   // QR التطبيق: يظهر بس لو مفيش رقم، أو الرقم مش مسجّل، أو مسجّل من غير تطبيق
