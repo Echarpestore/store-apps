@@ -413,10 +413,11 @@
     <div class="branch-box">
       <h3>اسم الفرع</h3>
       <p class="sub">اكتب اسم الفرع مرة واحدة بس — الجهاز ده هيفتكره وهيشوف بيانات الفرع ده بس.</p>
-      <input id="branchInput" placeholder="مثلاً: فرع المعادي" autocomplete="off">
-      <div id="branchSuggestionsList" style="display:none; text-align:right; margin:-4px 0 12px;">
-        <div style="color:var(--sub); font-size:11px; margin-bottom:6px;">فروع مسجلة بالفعل في برنامج المبيعات — دوس على أي واحد يظبطه في الخانة فوق:</div>
-        <div id="branchSuggestionsChips" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+      <select id="branchSelect" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:14px; text-align:center; margin-bottom:10px;">
+        <option value="">— اختار الفرع —</option>
+      </select>
+      <div id="newBranchWrap" style="display:none; margin-bottom:10px;">
+        <input id="branchInput" placeholder="اكتب اسم الفرع الجديد" autocomplete="off">
       </div>
       <button id="branchSaveBtn">حفظ</button>
     </div>
@@ -497,25 +498,35 @@ const branchesCol = collection(db, 'feedback_branches'); // persists branch name
 // autocomplete is unreliable on many mobile browsers (invisible/non-firing).
 (async function loadBranchSuggestionsFromSalesApp(){
   try{
-    const snap = await getDocs(collection(db, 'sales_employees'));
-    const branches = [...new Set(snap.docs
-      .map(d=> d.data())
-      .filter(e=> !e.isAdminAccount && (e.branch||'') !== 'الإدارة')
-      .map(e=> e.branch).filter(Boolean))].sort();
-    const wrap = document.getElementById('branchSuggestionsList');
-    const chipsWrap = document.getElementById('branchSuggestionsChips');
-    if(!wrap || !chipsWrap || branches.length === 0) return;
-    chipsWrap.innerHTML = branches.map(b=>
-      `<button type="button" class="branch-chip" data-branch="${b}" style="padding:6px 12px; border-radius:20px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:12px; cursor:pointer;">${b}</button>`
-    ).join('');
-    wrap.style.display = 'block';
-    chipsWrap.querySelectorAll('.branch-chip').forEach(chip=>{
-      chip.addEventListener('click', ()=>{
-        document.getElementById('branchInput').value = chip.dataset.branch;
-      });
+    const set = new Set();
+    // 🏬 نجمع الفروع من كل المصادر (موظفين + سجل فروع المبيعات + سجل فروع التقييم)
+    try{
+      const emps = await getDocs(collection(db, 'sales_employees'));
+      emps.docs.map(d=> d.data()).filter(e=> !e.isAdminAccount && (e.branch||'')!=='الإدارة').forEach(e=> e.branch && set.add(e.branch));
+    }catch(e){}
+    try{
+      const sb = await getDocs(collection(db, 'sales_branch_list'));
+      sb.docs.forEach(d=>{ const n=(d.data()||{}).name || d.id; if(n) set.add(n); });
+    }catch(e){}
+    try{
+      const ss = await getDocs(collection(db, 'sales_settings'));
+      ss.docs.forEach(d=> d.id && set.add(d.id));
+    }catch(e){}
+    (allBranches||[]).forEach(b=> b.name && set.add(b.name));
+    const branches = [...set].filter(Boolean).sort();
+
+    const sel = document.getElementById('branchSelect');
+    if(!sel) return;
+    sel.innerHTML = '<option value="">— اختار الفرع —</option>'
+      + branches.map(b=> `<option value="${b}">${b}</option>`).join('')
+      + '<option value="__new__">➕ فرع جديد…</option>';
+    // إظهار خانة الكتابة بس لو اختار "فرع جديد"
+    sel.addEventListener('change', ()=>{
+      const nb = document.getElementById('newBranchWrap');
+      if(nb) nb.style.display = (sel.value === '__new__') ? 'block' : 'none';
     });
   }catch(err){
-    console.warn('تعذر تحميل اقتراحات الفروع من برنامج المبيعات', err);
+    console.warn('تعذر تحميل الفروع', err);
   }
 })();
 
@@ -547,8 +558,10 @@ function refreshBranchUI(){
   $('#branchSub2').textContent = 'الفرع الحالي: ' + (currentBranch || 'مش متحدد على الجهاز ده');
 }
 $('#branchSaveBtn').addEventListener('click', async ()=>{
-  const val = $('#branchInput').value.trim();
-  if(!val) return;
+  const sel = document.getElementById('branchSelect');
+  let val = sel ? sel.value : '';
+  if(val === '__new__'){ val = ($('#branchInput').value||'').trim(); }
+  if(!val || val === '__new__'){ alert('اختار الفرع الأول'); return; }
   currentBranch = val;
   localStorage.setItem('feedback_branch', val);
   capStartListener();   // 📱 أول ما الفرع يتحدد، استماع طلبات تسجيل الرقم
@@ -566,7 +579,15 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
   }
 });
 $('#changeBranchBtn').addEventListener('click', ()=>{
-  $('#branchInput').value = currentBranch;
+  const sel = document.getElementById('branchSelect');
+  if(sel && currentBranch){
+    // نتأكد إن الفرع الحالي موجود في القايمة
+    if(![...sel.options].some(o=> o.value===currentBranch)){
+      const opt = document.createElement('option'); opt.value=currentBranch; opt.textContent=currentBranch;
+      sel.insertBefore(opt, sel.options[sel.options.length-1]);
+    }
+    sel.value = currentBranch;
+  }
   $('#branchSetup').classList.add('show');
 });
 refreshBranchUI();
