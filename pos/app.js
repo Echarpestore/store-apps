@@ -453,7 +453,7 @@ function buildReceiptHTML(data){
     if(!el.on) continue;
     const fs = (el.size||12) + 'px';
     if(el.id.indexOf('spacer')===0){ parts.push(`<div style="height:${el.size||10}px;"></div>`); continue; }
-    if(el.id.indexOf('divider')===0){ parts.push(`<div style="border-top:1.5px dashed #555; margin:4px 2px;"></div>`); continue; }
+    if(el.id.indexOf('divider')===0){ parts.push(`<div style="border-top:2px dashed #000; margin:4px 2px;"></div>`); continue; }
     switch(el.base||el.id){
       case 'spacer': parts.push(`<div style="height:${el.size||8}px;"></div>`); break;
       case 'divider': parts.push(`<div style="border-top:1.5px dashed #000; margin:${el.size||4}px 0;"></div>`); break;
@@ -467,7 +467,7 @@ function buildReceiptHTML(data){
         parts.push(`<div style="text-align:center; font-size:${fs}; margin:3px 0;">${d.dateStr||''}${d.empName?' · '+L.emp+': '+d.empName:''}</div>`); break;
       case 'items':
         parts.push(`<table style="width:100%; border-collapse:collapse; font-size:${fs}; margin:4px 0;">${(d.items||[]).map(it=>
-          `<tr><td style="padding:2px 0; border-bottom:1px dashed #999;">${it.name}</td><td style="padding:2px 4px; border-bottom:1px dashed #999; white-space:nowrap;">${it.qty} × ${it.unit||''}</td><td style="padding:2px 0; border-bottom:1px dashed #999; white-space:nowrap; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
+          `<tr><td style="padding:3px 0; border-bottom:1px solid #000; font-weight:600;">${it.name}</td><td style="padding:3px 4px; border-bottom:1px solid #000; white-space:nowrap; font-weight:600;">${it.qty} × ${it.unit||''}</td><td style="padding:3px 0; border-bottom:1px solid #000; white-space:nowrap; font-weight:700; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
       case 'totals':
         parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`); break;
       case 'invoiceNo':
@@ -479,7 +479,7 @@ function buildReceiptHTML(data){
         break; }
       case 'appQR':
         if(d.showAppQR && d.appQrImg){
-          parts.push(`<div style="text-align:center; margin-top:6px; border-top:1px dashed #999; padding-top:6px;">
+          parts.push(`<div style="text-align:center; margin-top:6px; border-top:2px dashed #000; padding-top:6px;">
             <div style="font-size:${fs}; font-weight:bold;">📱 ${d.appQrTitle||''}</div>
             <img src="${d.appQrImg}" style="width:88px; height:88px; margin:3px auto; display:block;">
             <div style="font-size:${Math.max(8,(el.size||10)-1)}px;">${d.appQrMsg||''}</div>
@@ -490,7 +490,7 @@ function buildReceiptHTML(data){
   }
   const _gap = (c.lineGap!=null? c.lineGap : 2);
   const _feed = (c.endFeed!=null? c.endFeed : 16);
-  return `<div dir="${dir}" style="font-family:Arial, sans-serif; display:flex; flex-direction:column; gap:${_gap}px;">${parts.join('')}<div style="height:${_feed}px;"></div></div>`;
+  return `<div dir="${dir}" style="font-family:Arial, sans-serif; color:#000; font-weight:500; -webkit-font-smoothing:none; display:flex; flex-direction:column; gap:${_gap}px;">${parts.join('')}<div style="height:${_feed}px;"></div></div>`;
 }
 // 📱 QR الفاتورة: بنجيب صورته مرة واحدة ونخزّنها محليًا — عشان الطباعة تبقى فورية وأوفلاين
 function receiptQrKey(){
@@ -630,12 +630,12 @@ function buildLabelHTML(it, barcodeSvgId){
     if(!el.on) continue;
     const fs = (el.size||10)+'px';
     if(el.id.indexOf('spacer')===0){ parts.push(`<div style="height:${el.size||10}px;"></div>`); continue; }
-    if(el.id.indexOf('divider')===0){ parts.push(`<div style="border-top:1.5px dashed #555; margin:4px 2px;"></div>`); continue; }
+    if(el.id.indexOf('divider')===0){ parts.push(`<div style="border-top:2px dashed #000; margin:4px 2px;"></div>`); continue; }
     switch(el.base||el.id){
       case 'spacer': parts.push(`<div style="height:${el.size||8}px;"></div>`); break;
       case 'divider': parts.push(`<div style="border-top:1.5px dashed #000; margin:${el.size||4}px 0;"></div>`); break;
       case 'logo': if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto; max-width:${lb.logoWidth||50}%; max-height:${Math.round(h*0.3)}mm;">`); break;
-      case 'shop': parts.push(`<div style="font-size:${fs}; color:#444;">${(shopEl&&shopEl.text)||''}</div>`); break;
+      case 'shop': parts.push(`<div style="font-size:${fs}; color:#000; font-weight:600;">${(shopEl&&shopEl.text)||''}</div>`); break;
       case 'name': parts.push(`<div style="font-size:${fs}; font-weight:800; line-height:1.15; overflow:hidden;">${it.name||''}</div>`); break;
       case 'price': {
         const cur = currencyLabel();
@@ -722,7 +722,7 @@ function doPrintLabels(jobs){
   tmp.style.cssText = 'position:fixed; left:-9999px; top:0;';
   tmp.innerHTML = html;
   document.body.appendChild(tmp);
-  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el){ JsBarcode(el, c.code, {format:'CODE128', width:2, height:60, margin:8, displayValue:false}); fitBarcodeSvg(el); } }); }catch(e){}
+  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el){ JsBarcode(el, c.code, {format:'CODE128', width:3, height:80, margin:10, displayValue:true, fontSize:16, font:'monospace', textMargin:2, background:'#ffffff', lineColor:'#000000'}); fitBarcodeSvg(el); } }); }catch(e){}
   const finalHTML = tmp.innerHTML;
   tmp.remove();
 
@@ -774,7 +774,8 @@ async function loadPrinterPickers(){
       mk('drawerPrinter', '💰 الطابعة الموصّل بيها درج الكاش', '(بيفتح تلقائي مع الكاش)') +
       `<button class="secondary" onclick="savePrinterPickers()" style="width:100%; margin-top:12px; padding:10px;">حفظ طابعات الجهاز ده</button>
        <button class="secondary" onclick="testInvoicePrinter()" style="width:100%; margin-top:8px; padding:10px;">🧪 اختبار طباعة فاتورة تجريبية</button>
-       <button class="secondary" onclick="testLabelPrinter()" style="width:100%; margin-top:8px; padding:10px;">🏷️ اختبار طباعة ليبل تجريبي</button>`;
+       <button class="secondary" onclick="testLabelPrinter()" style="width:100%; margin-top:8px; padding:10px;">🏷️ اختبار طباعة ليبل تجريبي</button>
+       <button class="secondary" onclick="testCashDrawer()" style="width:100%; margin-top:8px; padding:10px;">💰 اختبار فتح درج الكاش</button>`;
   }catch(e){ box.innerHTML = '<div style="color:var(--bad); font-size:12px;">تعذر تحميل الطابعات: '+e.message+'</div>'; }
 }
 function savePrinterPickers(){
@@ -785,6 +786,25 @@ function savePrinterPickers(){
   };
   localStorage.setItem('pos_printers', JSON.stringify(cfg));
   showToast('اتحفظت طابعات الجهاز ✅');
+}
+function testCashDrawer(){
+  const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
+  if(!shellCfg){ showToast('الاختبار ده بيشتغل من برنامج الويندوز بس', 'err'); return; }
+  const drawerP = shellCfg.drawerPrinter || shellCfg.invoicePrinter;
+  if(!drawerP){ showToast('اختار الطابعة الموصّل بيها الدرج الأول وادوس حفظ', 'err'); return; }
+  // بنبعت أمر فتح الدرج من غير طباعة فاتورة كاملة
+  try{
+    window.posShell.printReceipt({
+      printer: drawerP,
+      paperWidth: (receiptDesignConfig&&receiptDesignConfig.paperWidth)||'80',
+      html: '<div style="height:1px;"></div>',
+      openDrawer: drawerP, openCashDrawer: drawerP, cashDrawer: true
+    }).then(()=>{
+      if(typeof window.posShell.openDrawer === 'function'){ try{ window.posShell.openDrawer({ printer: drawerP }); }catch(e){} }
+      showToast('اتبعت أمر فتح الدرج ✅');
+    })
+      .catch(e=> showToast('فشل إرسال الأمر: '+e.message, 'err'));
+  }catch(e){ showToast('خطأ: '+e.message, 'err'); }
 }
 function testLabelPrinter(){
   // ليبل واحد تجريبي بنفس مسار الطباعة الحقيقي — لو طلع، يبقى كل حاجة متظبطة
@@ -819,18 +839,36 @@ function _printBuiltReceipt(data, payments){
   const c = receiptDesignConfig || defaultReceiptConfig();
   const holder = document.getElementById('receiptPrint');
   holder.innerHTML = buildReceiptHTML(data);
-  const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
-  if(shellCfg && shellCfg.invoicePrinter){
-    const hasCash = payments && Number(payments.cash) > 0;
+  const inShell = (typeof window.posShell !== 'undefined');
+  const shellCfg = inShell ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
+  const hasCash = payments && Number(payments.cash) > 0;
+
+  // داخل برنامج الويندوز (exe): طباعة صامتة + فتح الدرج
+  if(inShell){
+    if(!shellCfg || !shellCfg.invoicePrinter){
+      // مفيش طابعة متختارة → مانعملش window.print (بتقعد تطبع) — نقول للكاشير يظبطها
+      showToast('🖨️ اختار طابعة الفواتير الأول: من تصميم الفاتورة تحت خالص → اختار الطابعة ودوس «حفظ طابعات الجهاز»', 'err');
+      return;
+    }
+    const drawerTarget = hasCash ? (shellCfg.drawerPrinter || shellCfg.invoicePrinter) : null;
     window.posShell.printReceipt({
       printer: shellCfg.invoicePrinter,
       paperWidth: c.paperWidth || '80',
       html: holder.outerHTML,
-      openDrawer: hasCash ? (shellCfg.drawerPrinter || shellCfg.invoicePrinter) : null
-    }).catch(e=> { console.warn('silent print failed, fallback', e); window.print(); });
-  }else{
-    window.print();
+      openDrawer: drawerTarget,
+      openCashDrawer: drawerTarget,   // اسم بديل لو الشِل بيستخدمه
+      cashDrawer: !!drawerTarget
+    }).then(()=>{
+      // ضمان فتح الدرج: لو الشِل عنده أمر مستقل، نبعته كمان
+      if(drawerTarget && typeof window.posShell.openDrawer === 'function'){
+        try{ window.posShell.openDrawer({ printer: drawerTarget }); }catch(e){}
+      }
+    }).catch(e=> { console.warn('silent print failed', e); showToast('تعذر الطباعة الصامتة: '+e.message, 'err'); });
+    return;
   }
+
+  // في المتصفح العادي (مش exe): طباعة المتصفح
+  window.print();
 }
 
 // ---------------- 🧰 تولبار موحّد في كل الشاشات ----------------
