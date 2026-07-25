@@ -1646,6 +1646,7 @@ function checkLeaveRequest(emps, approvedLeaves, dateKey, minStaff){
 window.detectAttendanceIssues = detectAttendanceIssues;
 window.pairSwaps = pairSwaps;
 window.complianceCfg = complianceCfg;
+window.timeCfgDefaults = timeCfgDefaults;
 window.timeCfg = timeCfgDefaults;   // ⏳ إعدادات رصيد الوقت (الأدمن بيعدّلها)
 window.checkLeaveRequest = checkLeaveRequest;
 window.coverageOnDate = coverageOnDate;
@@ -5624,7 +5625,7 @@ function updateLeaveBadge(){
 
 window.renderLeaveRequests = function(){
   const wrap = document.querySelector('#leaveRequestsList'); if(!wrap) return;
-  const cfg = window.timeCfg || timeCfgDefaults;
+  const cfg = window.timeCfg || window.timeCfgDefaults;
   const pend = (window.allLeaveReqs||[]).filter(l=> l.status==='pending' && l.branch===window.currentBranch)
                   .sort((a,b)=>(a.dateKey<b.dateKey?-1:1));
   updateLeaveBadge();
@@ -5663,7 +5664,7 @@ window.decideLeave = async function(id, decision){
 
 window.renderTimeCreditLog = function(){
   const wrap = document.querySelector('#timeCreditLog'); if(!wrap) return;
-  const cfg = window.timeCfg || timeCfgDefaults;
+  const cfg = window.timeCfg || window.timeCfgDefaults;
   const now = new Date();
   const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const rows = (window.allTimeCredit||[]).filter(x=> x.branch===window.currentBranch && String(x.date||'').startsWith(mk));
@@ -5839,7 +5840,7 @@ window.deleteBranch = async function(name){
 window.renderTimeSettings = function(){
   const wrap = document.querySelector('#timeSettingsForm'); if(!wrap) return;
   if(wrap.dataset.editing === '1') return;
-  const c = window.timeCfg || timeCfgDefaults;
+  const c = window.timeCfg || window.timeCfgDefaults;
   const row = (label, id, val, hint)=>`
     <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-size:13px;">
       <span style="flex:1;">${label}${hint?`<br><small style="color:var(--sub); font-size:10.5px;">${hint}</small>`:''}</span>
@@ -5876,7 +5877,7 @@ window.renderTimeSettings = function(){
 
 window.saveTimeSettings = async function(){
   const n = (id, def)=>{ const v = parseInt(document.querySelector('#'+id).value,10); return isNaN(v)?def:v; };
-  const c = window.timeCfg || timeCfgDefaults;
+  const c = window.timeCfg || window.timeCfgDefaults;
   const payload = {
     lateMinPerHour: n('tsLatePer', c.lateMinPerHour),
     maxLateHoursPerDay: n('tsLateCap', c.maxLateHoursPerDay),
@@ -5898,7 +5899,7 @@ window.saveTimeSettings = async function(){
     const b = window.currentBranch;
     if(!b){ alert('اختار فرع الجهاز الأول'); return; }
     await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', b), { timeCfg: payload }, { merge:true });
-    window.timeCfg = { ...timeCfgDefaults, ...payload };
+    window.timeCfg = { ...window.timeCfgDefaults, ...payload };
     const f = document.querySelector('#timeSettingsForm'); if(f) f.dataset.editing='0';
     alert('اتحفظت إعدادات رصيد الوقت ✅');
   }catch(e){ alert('تعذر الحفظ: ' + e.message); }
