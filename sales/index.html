@@ -1785,10 +1785,13 @@ refreshBranchUI();
 // ---------- VIEW BRANCH (for remote review — any device can pick any branch) ----------
 let viewBranch = '__ALL__';
 function reviewEmployeesFor(branch){
-  return branch === '__ALL__' ? allEmployees : allEmployees.filter(e => e.branch === branch);
+  if(branch === '__ALL__') return allEmployees;
+  const norm = (x)=> String(x||'').trim();
+  const target = norm(branch);
+  return allEmployees.filter(e => norm(e.branch) === target);
 }
 function populateBranchSelect(sel){
-  const branches = [...new Set(allEmployees.map(e=>e.branch).filter(Boolean))].sort();
+  const branches = [...new Set(allEmployees.map(e=>String(e.branch||'').trim()).filter(Boolean))].sort();
   const prevValue = sel.value || viewBranch;
   sel.innerHTML = '<option value="__ALL__">كل الفروع</option>' +
     branches.map(b=>`<option value="${b}">${b}</option>`).join('');
