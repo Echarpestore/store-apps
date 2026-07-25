@@ -3641,6 +3641,8 @@ function openAdmin(){
     try{ updateRegBadge(); }catch(e){ console.warn('reg badge', e); }
     try{ window.renderDeductionsLog(); }catch(e){ console.warn('deductions', e); }
     try{ window.renderAttIssues(); }catch(e){ console.warn('att issues', e); }
+    try{ window.renderBranchManage(); }catch(e){ console.warn('branch manage', e); }
+    try{ window.renderTimeSettings(); }catch(e){ console.warn('time settings', e); }
   }
   else { $('#adminLoginGate').classList.add('show'); }
 }
@@ -3662,7 +3664,10 @@ function doAdminLogin(){
     try{ window.renderComplianceSettingsForm(); }catch(e){ console.warn('compliance form', e); }
     try{ updateRegBadge(); }catch(e){ console.warn('reg badge', e); }
     try{ window.renderDeductionsLog(); }catch(e){ console.warn('deductions', e); }
-    try{ window.renderAttIssues(); }catch(e){ console.warn('att issues', e); } renderViolationsReview();
+    try{ window.renderAttIssues(); }catch(e){ console.warn('att issues', e); }
+    try{ window.renderBranchManage(); }catch(e){ console.warn('branch manage', e); }
+    try{ window.renderTimeSettings(); }catch(e){ console.warn('time settings', e); }
+    renderViolationsReview();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
