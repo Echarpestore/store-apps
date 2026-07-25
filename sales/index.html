@@ -2636,15 +2636,21 @@ $('#dh_xBtn').addEventListener('click', closeDayHub);
 
 function renderDayHub(empId){
   const emp = window.employees.find(e=> e.id === empId);
+  if(!emp) return;   // بس لو الموظف نفسه مش موجود
   const shift = getOpenShift(empId);
-  if(!emp || !shift) return;
 
   $('#dh_avatar').textContent = initials(emp.name);
   $('#dh_name').textContent = emp.name;
-  const lateTxt = shift.lateMinutes > 0 ? ` — متأخر ${shift.lateMinutes} دقيقة` : ' — في الميعاد ✅';
-  $('#dh_shiftInfo').textContent = 'دخل الشيفت الساعة ' + new Date(shift.clockInTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) + lateTxt;
-  const elapsedMs = Date.now() - shift.clockInTs;
-  $('#dh_shiftDuration').textContent = formatDuration(elapsedMs) + ' من 8 ساعات';
+  // جزء الشيفت بيظهر بس لو الموظف مسجّل حضور دلوقتي
+  if(shift){
+    const lateTxt = shift.lateMinutes > 0 ? ` — متأخر ${shift.lateMinutes} دقيقة` : ' — في الميعاد ✅';
+    $('#dh_shiftInfo').textContent = 'دخل الشيفت الساعة ' + new Date(shift.clockInTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) + lateTxt;
+    const elapsedMs = Date.now() - shift.clockInTs;
+    $('#dh_shiftDuration').textContent = formatDuration(elapsedMs) + ' من 8 ساعات';
+  }else{
+    $('#dh_shiftInfo').textContent = 'مش مسجّل حضور دلوقتي';
+    $('#dh_shiftDuration').textContent = '—';
+  }
 
   // Task
   const task = getCurrentTask(empId);
@@ -2689,12 +2695,13 @@ function renderDayHub(empId){
   $('#dh_avgRating').innerHTML = computeAvgRatingFor(empId);
 
   // Weekly / monthly progress
-  $('#dh_weeklyProgress').innerHTML = getPeriodProgressLabel(empId, 'week');
-  $('#dh_monthlyProgress').innerHTML = getPeriodProgressLabel(empId, 'month');
-  renderRewardScoreCard(empId);
-  renderDayHubBreak(empId);
-  renderDayHubLeave(empId);
-  renderRaceStatus(empId);
+  // كل جزء محمي عشان لو واحد ضرب، الصفحة تفضل تفتح والباقي يشتغل
+  try{ $('#dh_weeklyProgress').innerHTML = getPeriodProgressLabel(empId, 'week'); }catch(e){ console.warn('weekly', e); }
+  try{ $('#dh_monthlyProgress').innerHTML = getPeriodProgressLabel(empId, 'month'); }catch(e){ console.warn('monthly', e); }
+  try{ renderRewardScoreCard(empId); }catch(e){ console.warn('rewardCard', e); }
+  try{ renderDayHubBreak(empId); }catch(e){ console.warn('break', e); }
+  try{ renderDayHubLeave(empId); }catch(e){ console.warn('leave', e); }
+  try{ renderRaceStatus(empId); }catch(e){ console.warn('race', e); }
 }
 
 // ☕ زر البريك في صفحة الموظف
