@@ -46,6 +46,14 @@ searchBar.addEventListener('keydown', (e)=>{
       // كود فاتورة → نفتحها للمرتجع
       openInvoiceForReturn(code.toUpperCase());
       searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
+    }else if(/^01\d{9}$/.test(code.replace(/\D/g,'')) && code.replace(/\D/g,'').length===11){
+      // 📱 رقم موبايل → نسجّله كعميل الفاتورة على طول
+      const phone = code.replace(/\D/g,'');
+      const ph = document.getElementById('customerPhone');
+      if(ph){ ph.value = phone; }
+      if(typeof refreshCustomerInfo === 'function') refreshCustomerInfo();
+      searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
+      showToast('📱 اتسجّل رقم العميل في الفاتورة', 'ok');
     }else{
       showToast('لا يوجد صنف بهذا الكود', 'err');
     }
