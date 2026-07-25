@@ -1048,15 +1048,18 @@ function _capStartListener(){
         _capFill(next.phone, cust.name || '');
         _capDocRef().set({ mode:'greet', greetName: cust.name || '', isNew:false, ts:Date.now(), askId:_capAskId }).catch(()=>{});
         showToast('🙋‍♀️ ' + (cust.name || next.phone) + ' — اتسجلت في الفاتورة', 'ok');
+        _capAskId = null;   // ✅ اكتمل — نقفل الطلب
       }else{
+        // 🆕 عميلة جديدة: نطلب اسمها من الكشك — والطلب لسه مفتوح لحد ما ترجع بالاسم
         _capDocRef().set({ mode:'need_name', phone: next.phone, ts:Date.now(), askId:_capAskId }).catch(()=>{});
+        // مهم: مانقفلش _capAskId هنا — لسه مستنيين الاسم
       }
     }else if(next.act === 'fill'){
       _capFill(next.phone, next.name);
       _capDocRef().set({ mode:'greet', greetName: next.name, isNew:true, ts:Date.now(), askId:_capAskId }).catch(()=>{});
       showToast('🆕 ' + (next.name || next.phone) + ' — عميل جديد اتسجل في الفاتورة', 'ok');
+      _capAskId = null;   // ✅ اكتمل التسجيل الجديد — نقفل الطلب دلوقتي
     }
-    _capAskId = null;   // الطلب اتقفل — أي تحديثات تانية تتطنش
   }, (e)=> console.warn('cap listener', e));
 }
 
