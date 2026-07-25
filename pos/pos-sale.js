@@ -1038,27 +1038,38 @@ function _capStartListener(){
   if(_capUnsub) return;
   _capUnsub = _capDocRef().onSnapshot(async (d)=>{
     const data = d.exists ? d.data() : null;
-    const next = _capNextAction(data, _capAskId);
-    if(!next) return;
-    if(next.act === 'lookup'){
-      // موجود؟ نجيب اسمه ونرحّب — مش موجود؟ نطلب اسمه من الكشك
+    if(!data || !_capAskId) return;
+    // نتجاهل طلباتنا اللي احنا كتبناها (need_name/greet) — نرد بس على رد الكشك
+    if(data.askId !== _capAskId) return;
+    if(!_capFresh(data)) return;
+
+    // 1) العميلة كتبت رقمها → نلاقيها ولا نطلب اسمها
+    if(data.mode === 'phone'){
+      const phone = _capValidPhone(data.phone);
+      if(!phone) return;
       let cust = null;
-      try{ const cd = await db.collection(TEST_CUSTOMERS).doc(next.phone).get(); cust = cd.exists ? cd.data() : null; }catch(e){}
+      try{ const cd = await db.collection(TEST_CUSTOMERS).doc(phone).get(); cust = cd.exists ? cd.data() : null; }catch(e){}
       if(cust){
-        _capFill(next.phone, cust.name || '');
+        _capFill(phone, cust.name || '');
         _capDocRef().set({ mode:'greet', greetName: cust.name || '', isNew:false, ts:Date.now(), askId:_capAskId }).catch(()=>{});
-        showToast('🙋‍♀️ ' + (cust.name || next.phone) + ' — اتسجلت في الفاتورة', 'ok');
-        _capAskId = null;   // ✅ اكتمل — نقفل الطلب
+        showToast('🙋‍♀️ ' + (cust.name || phone) + ' — اتسجلت في الفاتورة', 'ok');
+        _capAskId = null;   // اكتمل
       }else{
-        // 🆕 عميلة جديدة: نطلب اسمها من الكشك — والطلب لسه مفتوح لحد ما ترجع بالاسم
-        _capDocRef().set({ mode:'need_name', phone: next.phone, ts:Date.now(), askId:_capAskId }).catch(()=>{});
-        // مهم: مانقفلش _capAskId هنا — لسه مستنيين الاسم
+        // عميلة جديدة → نطلب اسمها، والطلب يفضل مفتوح
+        _capDocRef().set({ mode:'need_name', phone: phone, ts:Date.now(), askId:_capAskId }).catch(()=>{});
       }
-    }else if(next.act === 'fill'){
-      _capFill(next.phone, next.name);
-      _capDocRef().set({ mode:'greet', greetName: next.name, isNew:true, ts:Date.now(), askId:_capAskId }).catch(()=>{});
-      showToast('🆕 ' + (next.name || next.phone) + ' — عميل جديد اتسجل في الفاتورة', 'ok');
-      _capAskId = null;   // ✅ اكتمل التسجيل الجديد — نقفل الطلب دلوقتي
+      return;
+    }
+
+    // 2) العميلة الجديدة كتبت اسمها → نكمّل التسجيل
+    if(data.mode === 'named'){
+      const phone = _capValidPhone(data.phone);
+      if(!phone) return;
+      _capFill(phone, String(data.name||'').trim());
+      _capDocRef().set({ mode:'greet', greetName: String(data.name||'').trim(), isNew:true, ts:Date.now(), askId:_capAskId }).catch(()=>{});
+      showToast('🆕 ' + (String(data.name||'').trim() || phone) + ' — عميل جديد اتسجل في الفاتورة', 'ok');
+      _capAskId = null;   // اكتمل
+      return;
     }
   }, (e)=> console.warn('cap listener', e));
 }
