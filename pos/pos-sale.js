@@ -27,6 +27,16 @@ searchBar.addEventListener('keydown', (e)=>{
   if(e.key === 'Enter'){
     const code = searchBar.value.trim();
     if(!code) return;
+    // 📱 رقم موبايل عميل (11 رقم يبدأ بـ01) → نسجّله كعميل الفاتورة (قبل أي بحث منتج)
+    const _digits = code.replace(/\D/g,'');
+    if(/^01\d{9}$/.test(_digits) && _digits.length===11){
+      const ph = document.getElementById('customerPhone');
+      if(ph){ ph.value = _digits; }
+      if(typeof refreshCustomerInfo === 'function') refreshCustomerInfo();
+      searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
+      showToast('📱 اتسجّل رقم العميل في الفاتورة', 'ok');
+      return;
+    }
     const match = allInventory.find(it => it.barcode === code && it.status !== 'hidden' && it.status !== 'outofstock');
     if(match){
       addToCart(match);
@@ -46,14 +56,6 @@ searchBar.addEventListener('keydown', (e)=>{
       // كود فاتورة → نفتحها للمرتجع
       openInvoiceForReturn(code.toUpperCase());
       searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
-    }else if(/^01\d{9}$/.test(code.replace(/\D/g,'')) && code.replace(/\D/g,'').length===11){
-      // 📱 رقم موبايل → نسجّله كعميل الفاتورة على طول
-      const phone = code.replace(/\D/g,'');
-      const ph = document.getElementById('customerPhone');
-      if(ph){ ph.value = phone; }
-      if(typeof refreshCustomerInfo === 'function') refreshCustomerInfo();
-      searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
-      showToast('📱 اتسجّل رقم العميل في الفاتورة', 'ok');
     }else{
       showToast('لا يوجد صنف بهذا الكود', 'err');
     }
