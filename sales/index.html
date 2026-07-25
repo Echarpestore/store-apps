@@ -1719,9 +1719,11 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
     err.textContent = 'جارٍ الدخول...';
     try{
       await signInWithEmailAndPassword(_auth, email, pass);
+      // 💾 نحفظ بيانات دخول الفرع محليًا — عشان لو المتصفح مسح الجلسة، نعيد الدخول تلقائي
+      try{ localStorage.setItem('sales_dev_cred', btoa(unescape(encodeURIComponent(JSON.stringify({e:email,p:pass}))))); }catch(_e){}
       err.textContent = '✅ تم الدخول — اختار الفرع من القايمة';
-      refreshBranchUI();   // يبدّل الشاشة لمرحلة اختيار الفرع (بيخفي الإيميل ويظهر القايمة)
-      setTimeout(populateBranchSetupSelect, 800);   // بيانات الموظفين بتوصل بعد الدخول بلحظة
+      refreshBranchUI();
+      setTimeout(populateBranchSetupSelect, 800);
     }catch(e){
       err.textContent = (e && (e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found'))
         ? 'الإيميل أو الباسورد غلط' : 'تعذر الدخول: ' + (e.message||e);
@@ -1742,7 +1744,26 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
   applyBranchFilter();
 });
 // لو الجلسة انتهت (اتمسحت من المتصفح)، نرجّع لشاشة الإعداد تلقائيًا
-onAuthStateChanged(_auth, ()=> refreshBranchUI());
+// 🔄 إعادة دخول تلقائي: لو المتصفح (زي Brave) مسح الجلسة بس عندنا بيانات محفوظة
+let _autoReloginTried = false;
+async function _tryAutoRelogin(){
+  if(_autoReloginTried) return;
+  _autoReloginTried = true;
+  try{
+    const raw = localStorage.getItem('sales_dev_cred');
+    if(!raw) return;
+    const { e, p } = JSON.parse(decodeURIComponent(escape(atob(raw))));
+    if(e && p){ await signInWithEmailAndPassword(_auth, e, p); }
+  }catch(err){ console.warn('auto relogin failed', err && err.code); }
+}
+onAuthStateChanged(_auth, (u)=>{
+  // مش داخل + عندنا بيانات محفوظة → نجرّب نعيد الدخول لوحدنا قبل ما نزعّج الموظف
+  if((!u || u.isAnonymous) && localStorage.getItem('sales_dev_cred') && !_autoReloginTried){
+    _tryAutoRelogin().then(()=> refreshBranchUI());
+  }else{
+    refreshBranchUI();
+  }
+});
 $('#changeBranchBtn').addEventListener('click', ()=>{
   $('#admin').classList.remove('show');
   $('#branchErr').textContent = '';
