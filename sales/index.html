@@ -1219,7 +1219,7 @@ window.approveReg = async function(id){
   try{
     // بننشئ الموظف فعليًا في sales_employees ببياناته المعتمدة
     await addDoc(empCol, {
-      name: r.name, gender: r.gender || '', shift: r.shift, dayOff: r.dayOff,
+      name: r.name, gender: r.gender || '', avatar: (r.gender === 'male' ? 'boy' : 'girl'), shift: r.shift, dayOff: r.dayOff,
       scheduledStartTime: r.scheduledStartTime || (complianceCfg.shifts[r.shift]||{}).start || null,
       scheduledEndTime: r.scheduledEndTime || (complianceCfg.shifts[r.shift]||{}).end || null,
       branch: r.branch, active: true, createdAt: Date.now(), pin: (r.pin || '0000')
