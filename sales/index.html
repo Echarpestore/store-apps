@@ -2235,8 +2235,12 @@ window.openDaySummary = function(empId){
     <p style="text-align:center; color:var(--sub); font-size:12.5px; margin:14px 0 0;">${ptsMsg}</p>
     <p style="text-align:center; color:var(--sub); font-size:11.5px; margin:6px 0 0;">النقط بتتجمّع على طول الشهر وبتدخل في حساب مكافأتك.</p>
 
-    <button class="btnPrimary" onclick="daySummaryClockOut()" style="width:100%; margin-top:18px;">🚪 تسجيل انصراف</button>
-    <button class="cancelBtn" onclick="closeDaySummary()" style="width:100%; margin-top:9px;">رجوع</button>
+    <button onclick="daySummaryClockOut()" style="width:100%; margin-top:18px; display:flex; align-items:center; justify-content:center; gap:10px; padding:15px; border:none; border-radius:14px; background:linear-gradient(135deg,#ff6b6b,#e0484d); color:#fff; font-family:'Cairo'; font-weight:800; font-size:15.5px; cursor:pointer; box-shadow:0 6px 18px rgba(224,72,77,.35); transition:transform .12s;" onmousedown="this.style.transform='translateY(2px)'" onmouseup="this.style.transform='translateY(0)'">
+      <span style="display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; background:rgba(255,255,255,.22); border-radius:9px; font-size:16px;">🏃</span>
+      <span>تسجيل الانصراف</span>
+      <span style="font-size:18px; opacity:.85;">←</span>
+    </button>
+    <button class="cancelBtn" onclick="closeDaySummary()" style="width:100%; margin-top:10px; padding:13px; border-radius:12px;">رجوع</button>
   `;
   document.querySelector('#daySummaryOverlay').classList.add('show');
 };
