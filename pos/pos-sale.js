@@ -31,6 +31,7 @@ searchBar.addEventListener('keydown', (e)=>{
     if(/^[rR]\s*01\d{9}$/.test(code.replace(/\s/g,''))){
       const rphone = code.replace(/\D/g,'');
       searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
+      window._lastReturnMethod = 'phone';
       if(typeof window.returnByPhone === 'function') window.returnByPhone(rphone);
       return;
     }
@@ -298,6 +299,7 @@ function qbxQty(delta){
   changeQty(selectedCartIdx, delta);
 }
 function qbxReturnSel(){
+  if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس — مش مسموح للكاشير', 'err'); return; }
   if(!requireSelection()) return;
   returnCartItem(selectedCartIdx);
 }
@@ -308,6 +310,7 @@ const RETURN_WINDOW_DAYS = 14;
 
 // ============ مرتجع برقم موبايل العميل ============
 window.returnByPhone = async function(rawPhone){
+  if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس', 'err'); return; }
   const clean = String(rawPhone||'').replace(/\D/g,'');
   if(!/^01\d{9}$/.test(clean)){ showToast('رقم موبايل غير صحيح', 'err'); return; }
 
@@ -356,6 +359,8 @@ window.returnByPhone = async function(rawPhone){
 };
 
 async function openInvoiceForReturn(code){
+  if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس', 'err'); return; }
+  if(!window._lastReturnMethod) window._lastReturnMethod = 'invoice';
   showScreen('saleScreen');   // نتأكد إننا في شاشة البيع عشان المرتجع يتحط في السلة
   document.getElementById('returnInvoiceModal').classList.add('active');
   document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">بندوّر على الفاتورة...</div>';
@@ -407,14 +412,24 @@ async function openInvoiceForReturn(code){
     returnInvoiceData._saleMs = saleMs;
     const sameDayBanner = _isSameLocalDay(saleMs) ? '<div style="background:#fff6e6; border:1.5px solid var(--warn); color:#b45309; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:800; margin-bottom:8px;">⏰ الفاتورة دي متباعة النهارده — المرتجع هيتسجل كملاحظة يوم-بيوم.</div>' : '';
 
+    const _returnedMap = s.returnedQty || {};
     const itemsHtml = (s.items||[]).filter(it=> !it.isRedemption).map((it, i)=>{
       const isRet = it.isReturn || (it.price||0) < 0;
+      const _key = (it.barcode||'') + '|' + it.name;
+      const alreadyRet = _returnedMap[_key] || 0;              // اترجّع قبل كده (جلسات سابقة)
+      const remaining = Math.max(0, (it.qty||0) - alreadyRet); // المتاح للمرتجع
+      const fullyReturned = !isRet && remaining <= 0;
+      let btn;
+      if(isRet){ btn = '<span style="color:var(--muted); font-size:11px;">—</span>'; }
+      else if(fullyReturned){ btn = '<span style="background:#fdecec; color:#b91c1c; font-size:11px; font-weight:800; padding:4px 9px; border-radius:8px;">✓ اترجّع كله</span>'; }
+      else{ btn = `<button onclick="returnItemFromInvoice(${i})" style="flex-shrink:0; padding:8px 12px; border-radius:8px; border:none; background:var(--minus); color:#fff; font-weight:800; font-size:12px; cursor:pointer;">↩️ ارجع ده</button>`; }
+      const retNote = alreadyRet > 0 && !isRet ? ` <span style="color:#b91c1c; font-size:10px;">(اترجّع ${alreadyRet} قبل كده)</span>` : '';
       return `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border);">
         <div style="min-width:0;">
-          <div style="font-weight:700; font-size:13px;">${it.name}${isRet?' <span style="color:var(--warn); font-size:10px;">(مرتجع أصلاً)</span>':''}</div>
-          <div style="color:var(--muted); font-size:11px;">${it.qty} × ${Math.abs(it.price||0).toFixed(2)} ج.م${it.barcode?' · كود '+it.barcode:''}</div>
+          <div style="font-weight:700; font-size:13px;">${it.name}${isRet?' <span style="color:var(--warn); font-size:10px;">(مرتجع أصلاً)</span>':''}${retNote}</div>
+          <div style="color:var(--muted); font-size:11px;">${it.qty} × ${Math.abs(it.price||0).toFixed(2)} ج.م${remaining<it.qty&&!isRet?` · متاح للمرتجع: ${remaining}`:''}${it.barcode?' · كود '+it.barcode:''}</div>
         </div>
-        ${(!isRet) ? `<button onclick="returnItemFromInvoice(${i})" style="flex-shrink:0; padding:8px 12px; border-radius:8px; border:none; background:var(--minus); color:#fff; font-weight:800; font-size:12px; cursor:pointer;">↩️ ارجع ده</button>` : '<span style="color:var(--muted); font-size:11px;">—</span>'}
+        ${btn}
       </div>`;
     }).join('');
 
@@ -463,11 +478,16 @@ function returnItemFromInvoice(itemIdx){
   if(!it){ return; }
   const invoiceNo = returnInvoiceData.invoiceNo || '';
   const soldQty = it.qty || 1;
-  // ↩️ السقف: اللي في السلة من الصنف ده (من نفس الفاتورة) + 1 لازم ميعدّيش المتباع
+  // اللي اترجّع في جلسات سابقة من الصنف ده
+  const _key = (it.barcode||'') + '|' + it.name;
+  const prevReturned = (returnInvoiceData.returnedQty || {})[_key] || 0;
+  const availableToReturn = Math.max(0, soldQty - prevReturned);
+  // ↩️ السقف: (اللي في السلة دلوقتي + اللي اترجّع قبل كده) لازم ميعدّيش المتباع
   const line = _retFindLine(cart, invoiceNo, it);
   const currentQty = line ? (line.qty || 0) : 0;
-  if(!_retCanAdd(currentQty, soldQty)){
-    showToast('⛔ وصلت للحد الأقصى — المتباع من "'+it.name+'" في الفاتورة دي '+soldQty+' بس', 'err');
+  if((currentQty + prevReturned) >= soldQty){
+    if(prevReturned > 0){ showToast('⛔ "'+it.name+'" اترجّع كله قبل كده ('+prevReturned+' من '+soldQty+')', 'err'); }
+    else{ showToast('⛔ وصلت للحد الأقصى — المتباع من "'+it.name+'" '+soldQty+' بس', 'err'); }
     return;
   }
   // نوزّع أي خصم/مكافأة على مستوى الفاتورة بالنسبة → الصنف يرجع بحصته من اللي اتدفع فعلاً
@@ -512,6 +532,7 @@ function qbxDeleteSel(){
 
 // تحويل الفاتورة كلها لمرتجع بتأكيد واحد بس — بدل ما تدوس مرتجع على كل صنف لوحده
 function qbxReturnWholeInvoice(){
+  if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس — مش مسموح للكاشير', 'err'); return; }
   if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
   if(!confirm(`متأكد إنك عايز تحوّل كل الفاتورة (${cart.length} صنف) لمرتجع كامل؟`)) return;
   cart.forEach(line=>{
@@ -766,6 +787,14 @@ function focusAddCustomer(){
 }
 function showCashierInfo(){
   showToast('مسجّل دخول: ' + (currentEmployee.name||'') + ' — ' + (myPerms().label||''));
+  // 🔒 نخفي أزرار المرتجع لو الموظف مالوش صلاحية (كاشير عادي)
+  try{
+    const canRet = hasPerm('canRefund');
+    ['io_returnitem','io_returnall'].forEach(uid=>{
+      const el = document.querySelector('[data-uid="'+uid+'"]');
+      if(el) el.style.display = canRet ? '' : 'none';
+    });
+  }catch(e){}
 }
 
 // ---------------- استبدال نقاط الولاء بخصم ----------------
@@ -1465,6 +1494,51 @@ async function _doConfirmPayment(){
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }));
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
+
+    // ↩️🔒 منع تكرار المرتجع عبر الجلسات: نسجّل الكميات المرجّعة على الفاتورة الأصلية
+    // + سجل مراقَب لكل مرتجع (مين، إمتى، أنهي فاتورة، كام)
+    try{
+      const retLines = cart.filter(c=> c.isReturn && c.fromInvoice);
+      if(retLines.length){
+        // نجمّع المرجّع لكل فاتورة أصلية
+        const byInvoice = {};
+        retLines.forEach(c=>{
+          (byInvoice[c.fromInvoice] = byInvoice[c.fromInvoice] || []).push(c);
+        });
+        for(const invCode of Object.keys(byInvoice)){
+          try{
+            const oq = await db.collection(TEST_SALES).where('invoiceCode','==', invCode).limit(1).get();
+            if(!oq.empty){
+              const origRef = oq.docs[0].ref;
+              const orig = oq.docs[0].data();
+              // نحدّث returnedQty على مستوى كل صنف (باركود+اسم)
+              const returnedMap = orig.returnedQty || {};
+              byInvoice[invCode].forEach(c=>{
+                const key = (c.barcode||'') + '|' + c.name;
+                returnedMap[key] = (returnedMap[key] || 0) + (c.qty||0);
+              });
+              await origRef.update({ returnedQty: returnedMap });
+            }
+          }catch(e){ console.warn('update returnedQty', invCode, e); }
+        }
+        // 📋 سجل المرتجعات المراقَب
+        try{
+          await db.collection('pos_return_log').add({
+            branch: currentBranch,
+            employeeId: currentEmployee.id,
+            employeeName: currentEmployee.name || '',
+            invoiceCode,                          // فاتورة المرتجع الجديدة
+            customerPhone: phone || null,
+            customerName: custName || null,
+            method: window._lastReturnMethod || 'invoice',   // phone | invoice
+            items: retLines.map(c=>({ name:c.name, barcode:c.barcode||'', qty:c.qty, refund:Math.abs(c.price||0)*(c.qty||0), fromInvoice:c.fromInvoice })),
+            totalRefund: retLines.reduce((s,c)=> s + Math.abs(c.price||0)*(c.qty||0), 0),
+            ts: Date.now()
+          });
+        }catch(e){ console.warn('return log', e); }
+        window._lastReturnMethod = null;
+      }
+    }catch(e){ console.warn('return tracking', e); }
 
     // 🎫 أوردر الموظف → بيتسجل "مستني اعتماد" في برنامج الحضور (خانة أوردرات الموظفين)
     if(staffPurchase){
