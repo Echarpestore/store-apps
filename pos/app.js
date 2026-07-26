@@ -256,6 +256,16 @@ async function loadReceiptDesignConfig(brand){
       }
     }
   }catch(e){ console.warn('receipt design load', e); }
+  // 💾 لو السيرفر فشل أو مرجّعش تصميم محفوظ، نقرا النسخة المحلية من الجهاز
+  try{
+    const localRaw = localStorage.getItem('rcpt_design_'+brand);
+    const gotFromServer = receiptDesignConfig && receiptDesignConfig.elements &&
+      receiptDesignConfig.elements.some(el=> el.on);   // مؤشر بسيط إن فيه تصميم فعلي
+    if(localRaw && !gotFromServer){
+      const lc = JSON.parse(localRaw);
+      if(lc && lc.elements) receiptDesignConfig = lc;
+    }
+  }catch(_e){}
   if(!receiptDesignConfig.label) receiptDesignConfig.label = defaultLabelConfig();
 }
 
@@ -715,7 +725,7 @@ function doPrintLabels(jobs){
   }
   const {w,h} = labelSizeMM();
   const total = n;
-  const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
+  const shellCfg = (typeof window.posShell !== 'undefined') ? getPrinterCfg() : null;
 
   // نرسم الباركودات في حاوية مخفية الأول (عشان الـ SVG يبقى جاهز جوّه الـ HTML)
   const tmp = document.createElement('div');
@@ -749,9 +759,13 @@ async function saveReceiptDesignConfig(){
     if(typeof cfg.labelShopName === 'undefined') cfg.labelShopName = true;
     if(typeof cfg.showBarcodeOnLabel === 'undefined') cfg.showBarcodeOnLabel = true;
     const _brand = _designEditBrand || _deviceBrand();
-    await db.collection(TEST_SETTINGS).doc(_designDocIdFor(_brand)).set(cfg);
+    // 💾 نحفظ محليًا الأول (فوري ومضمون) — عشان لو النت/السيرفر فشل، الإعداد يفضل محفوظ على الجهاز
+    try{ localStorage.setItem('rcpt_design_'+_brand, JSON.stringify(cfg)); }catch(_e){}
     receiptDesignConfig = cfg;
     showToast('اتحفظ تصميم ' + (_brand==='glow' ? 'Glow 🖤' : 'إيشارب 🎀') + ' ✅');
+    // بعدين نحاول نحفظ على السيرفر (لو فشل، المحلي شغّال بالفعل)
+    try{ await db.collection(TEST_SETTINGS).doc(_designDocIdFor(_brand)).set(cfg); }
+    catch(_srv){ showToast('اتحفظ على الجهاز ✅ (السيرفر هيتحدّث لما النت يرجع)', 'ok'); }
     if(_brand !== _deviceBrand()) await loadReceiptDesignConfig(_deviceBrand());   // جهازك يرجع لتصميم فرعه
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
 }
@@ -778,17 +792,47 @@ async function loadPrinterPickers(){
        <button class="secondary" onclick="testCashDrawer()" style="width:100%; margin-top:8px; padding:10px;">💰 اختبار فتح درج الكاش</button>`;
   }catch(e){ box.innerHTML = '<div style="color:var(--bad); font-size:12px;">تعذر تحميل الطابعات: '+e.message+'</div>'; }
 }
+// 🖨️ مُعرّف ثابت للجهاز (عشان نربط إعدادات الطابعة بيه على السيرفر)
+function _deviceKey(){
+  let k = localStorage.getItem('pos_device_key');
+  if(!k){ k = 'dev_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); try{ localStorage.setItem('pos_device_key', k); }catch(e){} }
+  return k;
+}
+// كاش في الذاكرة لإعدادات الطابعة (بيتملّى من السيرفر عند بدء التشغيل)
+window._printerCfgCache = window._printerCfgCache || null;
+// قراءة موحّدة: المحلي الأول، وإلا الكاش اللي جه من السيرفر
+function getPrinterCfg(){
+  try{ const l = localStorage.getItem('pos_printers'); if(l) return JSON.parse(l); }catch(e){}
+  return window._printerCfgCache || {};
+}
+// تحميل إعدادات الطابعة من السيرفر لو المحلي فاضي (الجهاز مسح بياناته)
+async function loadPrinterCfgFromServer(){
+  try{
+    const local = localStorage.getItem('pos_printers');
+    if(local){ window._printerCfgCache = JSON.parse(local); return; }   // المحلي موجود، مش محتاج
+    const snap = await db.collection(TEST_SETTINGS).doc('printers_'+_deviceKey()).get();
+    if(snap.exists){
+      const cfg = snap.data();
+      window._printerCfgCache = cfg;
+      try{ localStorage.setItem('pos_printers', JSON.stringify(cfg)); }catch(e){}   // نرجّعه محليًا
+    }
+  }catch(e){ console.warn('load printer cfg from server', e); }
+}
+
 function savePrinterPickers(){
   const cfg = {
     invoicePrinter: document.getElementById('invoicePrinter').value,
     labelPrinter: document.getElementById('labelPrinter').value,
     drawerPrinter: document.getElementById('drawerPrinter').value
   };
-  localStorage.setItem('pos_printers', JSON.stringify(cfg));
+  try{ localStorage.setItem('pos_printers', JSON.stringify(cfg)); }catch(e){}
+  window._printerCfgCache = cfg;
   showToast('اتحفظت طابعات الجهاز ✅');
+  // نحفظها على السيرفر كمان (مربوطة بالجهاز) — عشان لو الجهاز مسح بياناته، ترجع لوحدها
+  try{ db.collection(TEST_SETTINGS).doc('printers_'+_deviceKey()).set(cfg).catch(()=>{}); }catch(e){}
 }
 function testCashDrawer(){
-  const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
+  const shellCfg = (typeof window.posShell !== 'undefined') ? getPrinterCfg() : null;
   if(!shellCfg){ showToast('الاختبار ده بيشتغل من برنامج الويندوز بس', 'err'); return; }
   const drawerP = shellCfg.drawerPrinter || shellCfg.invoicePrinter;
   if(!drawerP){ showToast('اختار الطابعة الموصّل بيها الدرج الأول وادوس حفظ', 'err'); return; }
@@ -840,7 +884,7 @@ function _printBuiltReceipt(data, payments){
   const holder = document.getElementById('receiptPrint');
   holder.innerHTML = buildReceiptHTML(data);
   const inShell = (typeof window.posShell !== 'undefined');
-  const shellCfg = inShell ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
+  const shellCfg = inShell ? getPrinterCfg() : null;
   const hasCash = payments && Number(payments.cash) > 0;
 
   // داخل برنامج الويندوز (exe): طباعة صامتة + فتح الدرج
@@ -1047,7 +1091,7 @@ function _printGenericJob(job){
   const holder = document.getElementById('receiptPrint');
   holder.innerHTML = buildGenericReceiptHTML(job.payload||{});
   const c = receiptDesignConfig || defaultReceiptConfig();
-  const shellCfg = (typeof window.posShell !== 'undefined') ? JSON.parse(localStorage.getItem('pos_printers')||'{}') : null;
+  const shellCfg = (typeof window.posShell !== 'undefined') ? getPrinterCfg() : null;
   if(shellCfg && shellCfg.invoicePrinter){
     return window.posShell.printReceipt({ printer: shellCfg.invoicePrinter, paperWidth: c.paperWidth||'80', html: holder.outerHTML, openDrawer: null });
   }
@@ -1082,4 +1126,6 @@ function startPrintJobListener(){
   await ensureDemoInventory();
   await loadInventory();
   await loadReceiptDesignConfig();
+  // 🖨️ لو الجهاز مسح إعدادات الطابعة محليًا، نرجّعها من السيرفر
+  if(typeof window.posShell !== 'undefined'){ loadPrinterCfgFromServer().catch(()=>{}); }
 })();
