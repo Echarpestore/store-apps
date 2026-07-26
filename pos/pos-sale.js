@@ -27,6 +27,13 @@ searchBar.addEventListener('keydown', (e)=>{
   if(e.key === 'Enter'){
     const code = searchBar.value.trim();
     if(!code) return;
+    // ↩️ R + رقم موبايل → مرتجع بفواتير العميل (مثال: R01012345678)
+    if(/^[rR]\s*01\d{9}$/.test(code.replace(/\s/g,''))){
+      const rphone = code.replace(/\D/g,'');
+      searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
+      if(typeof window.returnByPhone === 'function') window.returnByPhone(rphone);
+      return;
+    }
     // 📱 رقم موبايل عميل (11 رقم يبدأ بـ01) → نسجّله كعميل الفاتورة (قبل أي بحث منتج)
     const _digits = code.replace(/\D/g,'');
     if(/^01\d{9}$/.test(_digits) && _digits.length===11){
@@ -298,6 +305,55 @@ function qbxReturnSel(){
 // ============ مرتجع بمسح باركود الفاتورة ============
 let returnInvoiceData = null;
 const RETURN_WINDOW_DAYS = 14;
+
+// ============ مرتجع برقم موبايل العميل ============
+window.returnByPhone = async function(rawPhone){
+  const clean = String(rawPhone||'').replace(/\D/g,'');
+  if(!/^01\d{9}$/.test(clean)){ showToast('رقم موبايل غير صحيح', 'err'); return; }
+
+  showScreen('saleScreen');
+  document.getElementById('returnInvoiceModal').classList.add('active');
+  document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">بندوّر على فواتير العميل...</div>';
+
+  try{
+    const snap = await db.collection(TEST_SALES).where('customerPhone','==', clean).get();
+    if(snap.empty){
+      document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">مفيش فواتير للرقم ده 🤔<br><span style="font-size:11px;">'+clean+'</span></div>';
+      return;
+    }
+    // نفلتر حسب السلسلة (echarpe/glow) ونرتّب من الأحدث
+    const hereIsGlow = GLOW_BRANCHES.includes(currentBranch);
+    let invoices = snap.docs.map(d=>({ id:d.id, ...d.data() }))
+      .filter(s=> GLOW_BRANCHES.includes(s.branch) === hereIsGlow)
+      .sort((a,b)=> (b.ts||0) - (a.ts||0));
+
+    if(invoices.length === 0){
+      document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">مفيش فواتير من نفس السلسلة للرقم ده</div>';
+      return;
+    }
+
+    // نعرض قايمة الفواتير — يدوس على الفاتورة اللي عايز يرجّع منها
+    document.getElementById('returnInvoiceBody').innerHTML = `
+      <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">📱 ${clean} — ${invoices.length} فاتورة · اختار الفاتورة:</div>
+      <div style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+        ${invoices.map(s=>{
+          const d = new Date(s.ts||Date.now());
+          const dateTxt = d.toLocaleDateString('ar-EG',{day:'2-digit',month:'short',year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+          const itemCount = (s.items||[]).length;
+          const total = Number(s.total||0).toFixed(2);
+          return `<button onclick="openInvoiceForReturn('${(s.invoiceCode||'').replace(/'/g,"")}')" style="text-align:right; background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:12px; cursor:pointer; font-family:'Cairo';">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:800; color:var(--text); font-size:13px;">${s.invoiceCode||'—'}</span>
+              <span style="font-weight:800; color:var(--accent);">${total} ج</span>
+            </div>
+            <div style="font-size:11px; color:var(--muted); margin-top:4px;">${dateTxt} · ${itemCount} صنف · ${s.branch||''}</div>
+          </button>`;
+        }).join('')}
+      </div>`;
+  }catch(e){
+    document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">تعذر جلب الفواتير: '+e.message+'</div>';
+  }
+};
 
 async function openInvoiceForReturn(code){
   showScreen('saleScreen');   // نتأكد إننا في شاشة البيع عشان المرتجع يتحط في السلة
