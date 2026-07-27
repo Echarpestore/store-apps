@@ -1124,7 +1124,7 @@ async function reverseReceipt(saleId){
 // يكتب رقمه (واسمه لو جديد) → البيانات بتنط هنا في خانة العميل تلقائي.
 // التواصل عبر مستند واحد لكل فرع: pos_capture/{branch} — قراءات شبه صفرية.
 const CAP_COL = 'pos_capture';
-const CAP_FRESH_MS = 90 * 1000;   // أي طلب أقدم من 90 ثانية بيتعتبر بايت
+const CAP_FRESH_MS = 300 * 1000;   // 5 دقايق (العميلة بتاخد وقتها في كتابة رقمها)
 let _capUnsub = null, _capAskId = null;
 
 // رقم موبايل مصري سليم؟ (11 رقم بيبدأ 01)
