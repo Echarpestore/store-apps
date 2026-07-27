@@ -303,6 +303,93 @@ let allSettingsDocs = [];   // معرّفات مستندات الإعدادات 
 // Change this string to whatever code you want, then re-download the file.
 const ADMIN_CODE = '2005';
 
+// ===== 🔐 أدوار لوحة الإدارة =====
+// المالك بيشوف كل حاجة. المدير بيشوف الموافقات وشغل اليوم بس —
+// من غير فلوس ولا إعدادات ولا إنهاء خدمة ولا حذف موظفين.
+const SALES_PERMS = {
+  approvals: 'الموافقات (أذونات · مخالفات · طلبات تسجيل)',
+  people:    'بيانات الموظفين (إضافة · PIN · شيفت · مواعيد)',
+  day:       'شغل اليوم (رسالة · أداء · نظرة عامة · سجل)',
+  tasks:     'المهام والمكافآت',
+  orders:    'أوردرات الموظفين وأكواد الدعوة',
+  money:     'الفلوس (مرتبات · عمولات · سلف · خصومات)',
+  settings:  'الإعدادات (التزام · رصيد وقت · تارجت · فروع)',
+  terminate: 'إنهاء الخدمة'
+};
+const SALES_ROLES = {
+  owner:   { label:'👑 المالك', perms: Object.keys(SALES_PERMS) },
+  manager: { label:'🧑‍💼 مدير',  perms: ['approvals','day','tasks','orders'] }
+};
+let adminRole = 'owner';                 // بيتحدد وقت الدخول حسب الكود
+window.adminRole = adminRole;
+window.managerCode = '';   // بيتقرا من الإعدادات (المالك بيحدده) — على window عشان بلوك تاني بيكتبه
+function roleCan(perm){
+  const r = SALES_ROLES[adminRole] || SALES_ROLES.owner;
+  return r.perms.indexOf(perm) >= 0;
+}
+window.roleCan = roleCan;
+
+// أي لوحة تخص أي صلاحية — بالعنوان زي نظام التبويبات بالظبط
+const PANEL_PERM_KEYS = [
+  ['approvals', ['طلبات الإذن','مخالفات محتاجة','طلبات تسجيل']],
+  ['terminate', ['إنهاء خدمة','سجل المغادرين']],
+  ['settings',  ['إعدادات الالتزام','إعدادات رصيد الوقت','تارجت مبيعات الشيفت','إدارة الفروع','كود المدير']],
+  ['money',     ['كشف الخصومات','رصيد الوقت والخصومات','عمولة النقط','سجل دفع العمولات',
+                 'الرواتب الشهرية','سجل صرف الرواتب','سجل السلف']],
+  ['people',    ['إضافة موظف','الموظفين الحاليين','مواعيد الحضور']],
+  ['tasks',     ['المهام الأسبوعية','مراجعة تنفيذ','المهام المؤكدة','سجل المكافآت']],
+  ['orders',    ['أوردرات الموظفين','أكواد دعوة']],
+  ['day',       ['رسالة للموظفين','أداء الموظف','نظرة عامة','سجل العمليات','سجل الحضور',
+                 'التقييم الأسبوعي','سجل الأداء','التقرير الشامل']]
+];
+function permOfPanelTitle(title){
+  const t = title || '';
+  for(const [perm, keys] of PANEL_PERM_KEYS){
+    if(keys.some(k=> t.includes(k))) return perm;
+  }
+  return 'day';   // الافتراضي الأقل خطورة
+}
+window.permOfPanelTitle = permOfPanelTitle;
+
+// بيخفي اللوحات والتبويبات اللي الدور مش مسموح له بيها
+function applyRoleVisibility(){
+  const admin = document.getElementById('admin'); if(!admin) return;
+  const allowedTabs = {};
+  admin.querySelectorAll(':scope > .panel').forEach(p=>{
+    const t = (p.querySelector('h3')||{}).textContent || '';
+    const perm = permOfPanelTitle(t);
+    p.dataset.perm = perm;
+    const ok = roleCan(perm);
+    p.dataset.roleHidden = ok ? '' : '1';
+    if(!ok) p.style.display = 'none';
+    else if(p.dataset.tabGroup) allowedTabs[p.dataset.tabGroup] = true;
+  });
+  const bar = document.getElementById('adminTabBar');
+  if(bar) bar.querySelectorAll('button[data-tab]').forEach(b=>{
+    b.style.display = allowedTabs[b.dataset.tab] ? '' : 'none';
+  });
+  // لو التبويب المفتوح بقى ممنوع، ننقل لأول تبويب مسموح
+  const cur = localStorage.getItem('admin_tab');
+  if(cur && !allowedTabs[cur]){
+    const first = Object.keys(allowedTabs)[0];
+    if(first && typeof showAdminTab === 'function') showAdminTab(first);
+  }
+  // شارة الدور في رأس الشاشة
+  let badge = document.getElementById('roleBadge');
+  if(!badge){
+    const top = admin.querySelector('.admin-top');
+    if(top){
+      badge = document.createElement('span');
+      badge.id = 'roleBadge';
+      badge.style.cssText = 'font-size:12px; font-weight:800; padding:5px 12px; border-radius:99px;'
+        + 'background:var(--panel2); border:1px solid var(--line); color:var(--sub);';
+      top.appendChild(badge);
+    }
+  }
+  if(badge) badge.textContent = (SALES_ROLES[adminRole]||{}).label || '';
+}
+window.applyRoleVisibility = applyRoleVisibility;
+
 const $ = s => document.querySelector(s);
 window.employees = [];   // filtered to this device's own branch (kiosk grid)
 let allEmployees = []; // raw from Firestore
@@ -2825,7 +2912,12 @@ $('#adminPass').addEventListener('keydown', (e)=>{ if(e.key==='Enter') doAdminLo
 function doAdminLogin(){
   const pass = $('#adminPass').value;
   $('#adminLoginErr').textContent = '';
-  if(pass === ADMIN_CODE){
+  // 🔐 الكود بيحدد الدور: كود المالك = كل حاجة · كود المدير = الموافقات وشغل اليوم
+  const isOwner   = pass === ADMIN_CODE;
+  const isManager = !!window.managerCode && pass === window.managerCode && pass !== ADMIN_CODE;
+  if(isOwner || isManager){
+    adminRole = isOwner ? 'owner' : 'manager';
+    window.adminRole = adminRole;
     adminUnlocked = true;
     $('#adminPass').value = '';
     $('#adminLoginGate').classList.remove('show');
@@ -2847,6 +2939,7 @@ function doAdminLogin(){
     try{ window.renderTimeCreditLog(); }catch(e){ console.warn('time credit log', e); }
     try{ updateLeaveBadge(); }catch(e){ console.warn('leave badge', e); }
     renderViolationsReview();
+    try{ applyRoleVisibility(); }catch(e){ console.warn('role visibility', e); }
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
@@ -3631,6 +3724,8 @@ function initAdminTabs(){
 function showAdminTab(id){
   localStorage.setItem('admin_tab', id);
   $('#admin').querySelectorAll(':scope > .panel').forEach(p=>{
+    // 🔐 اللوحات الممنوعة على الدور بتفضل مخفية مهما اتنقل بين التبويبات
+    if(p.dataset.roleHidden === '1'){ p.style.display = 'none'; return; }
     p.style.display = (p.dataset.tabGroup === id) ? '' : 'none';
   });
   const bar = $('#adminTabBar');
@@ -4906,6 +5001,33 @@ function renderAdvancesLog(){
     }
     setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 1800);
   });
+  // ---------- 🔐 كود المدير (المالك بس هو اللي بيحدده) ----------
+  const mgBtn = document.getElementById('saveManagerCodeBtn');
+  if(mgBtn) mgBtn.addEventListener('click', async ()=>{
+    const errB = document.getElementById('managerCodeErr');
+    const val = ((document.getElementById('managerCodeInput')||{}).value || '').trim();
+    if(val && !/^[0-9]{4,8}$/.test(val)){ errB.textContent = 'الكود لازم يكون أرقام من 4 لـ8 خانات'; return; }
+    if(val && val === ADMIN_CODE){ errB.textContent = 'ماينفعش يكون نفس كود المالك'; return; }
+    const orig = mgBtn.textContent; mgBtn.disabled = true;
+    try{
+      await setDoc(doc(db,'pos_test_settings','sales_roles'), { managerCode: val }, { merge:true });
+      window.managerCode = val;
+      errB.textContent = ''; mgBtn.textContent = val ? 'اتحفظ ✅' : 'اتلغى ✅';
+    }catch(e2){
+      errB.textContent = 'خطأ: ' + (e2 && e2.message ? e2.message : e2);
+      mgBtn.textContent = 'خطأ';
+    }
+    setTimeout(()=>{ mgBtn.textContent = orig; mgBtn.disabled = false; }, 1800);
+  });
+  // بنسمع الكود المحفوظ عشان الدخول يشتغل من غير ريفريش
+  try{
+    onSnapshot(doc(db,'pos_test_settings','sales_roles'), (snap)=>{
+      window.managerCode = (snap.exists() && snap.data().managerCode) || '';
+      const inp = document.getElementById('managerCodeInput');
+      if(inp && document.activeElement !== inp) inp.value = window.managerCode;
+    }, (e)=> console.warn('roles cfg', e && e.code));
+  }catch(e){ console.warn('roles listen', e); }
+
   // ---------- 🖥️ وضع تحوّل شاشة البيع (خفيف / كامل / مقفول) ----------
   const mBtn = document.getElementById('saveFramesModeBtn');
   if(mBtn) mBtn.addEventListener('click', async ()=>{

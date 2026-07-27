@@ -722,6 +722,19 @@
       <div id="pendingRegsList"></div>
     </div>
     <div class="panel">
+      <h3>🔐 كود المدير (صلاحيات محدودة)</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
+        المدير بيدخل بالكود ده وبيشوف: <b>طلبات الإذن والمخالفات وطلبات التسجيل</b> + شغل اليوم والمهام والأوردرات.
+        <b>مش</b> هيشوف الفلوس ولا الإعدادات ولا إنهاء الخدمة ولا بيانات الموظفين. سيبه فاضي عشان تلغي دخول المدير.
+      </p>
+      <div class="add-form" style="flex-wrap:wrap;">
+        <input type="text" inputmode="numeric" maxlength="8" id="managerCodeInput" placeholder="كود المدير (4-8 أرقام)" style="min-width:200px; text-align:center; letter-spacing:3px;">
+        <button id="saveManagerCodeBtn">حفظ كود المدير</button>
+      </div>
+      <div class="field-err" id="managerCodeErr"></div>
+    </div>
+
+    <div class="panel">
       <h3>🏬 إدارة الفروع</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">الفروع اللي السيستم شايفها. لو فيه فرع اتكتب بالغلط تقدر تشيله — بس لو مفيهوش أي بيانات.</p>
       <div id="branchManageList"></div>
