@@ -4660,17 +4660,35 @@ function renderAdvancesLog(){
       background:radial-gradient(1200px 300px at 50% -50px, #f59e0b33, transparent 70%);
       animation:tgtGlow 3s ease-in-out infinite; }
     @keyframes tgtGlow{ 0%,100%{opacity:.65;} 50%{opacity:1;} }
-    #tgtBanner{ position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:9999;
-      background:linear-gradient(90deg,#b45309,#f59e0b,#b45309); background-size:200% 100%;
-      animation:tgtBar 2.5s linear infinite; color:#1a1200; font-weight:900; font-family:'Cairo';
-      padding:9px 22px; border-radius:99px; font-size:15px; box-shadow:0 4px 22px #f59e0b88; display:none; }
-    body.tgt-hit #tgtBanner{ display:block; }
-    @keyframes tgtBar{ 0%{background-position:0 0;} 100%{background-position:200% 0;} }
+    /* بانر هادي: لون ثابت من غير حركة، وزرار إغلاق */
+    #tgtBanner{ position:fixed; top:8px; left:50%; transform:translateX(-50%); z-index:9999;
+      background:#3b2c0e; border:1px solid #f59e0b66; color:#f5c451; font-weight:700; font-family:'Cairo';
+      padding:7px 10px 7px 14px; border-radius:99px; font-size:13px; box-shadow:0 3px 14px #00000066;
+      display:none; align-items:center; gap:10px; max-width:92vw; }
+    body.tgt-hit #tgtBanner{ display:flex; }
+    body.tgt-banner-off #tgtBanner{ display:none !important; }
+    #tgtBannerX{ background:transparent; border:none; color:#f5c45199; font-size:16px; line-height:1;
+      cursor:pointer; padding:2px 4px; font-family:'Cairo'; }
+    #tgtBannerX:hover{ color:#f5c451; }
   `;
   document.head.appendChild(st);
   const banner = document.createElement('div');
   banner.id = 'tgtBanner';
+  const bannerTxt = document.createElement('span');
+  const bannerX = document.createElement('button');
+  bannerX.id = 'tgtBannerX'; bannerX.textContent = '✕'; bannerX.title = 'إخفاء';
+  banner.appendChild(bannerTxt); banner.appendChild(bannerX);
   document.body.appendChild(banner);
+  // الإغلاق بيتفضل متذكّر لنفس الاحتفال (نفس اليوم/الشيفت) — ميرجعش تاني
+  const DISMISS_KEY = 'tgt_banner_dismissed';
+  function dismissSig(){
+    const st2 = window.shiftStatus;
+    return st2 ? (st2.dateKey + '|' + activeShiftCelebrations(st2, new Date()).join(',')) : '';
+  }
+  bannerX.addEventListener('click', ()=>{
+    try{ localStorage.setItem(DISMISS_KEY, dismissSig()); }catch(e){}
+    document.body.classList.add('tgt-banner-off');
+  });
 
   // ---------- 🎯 الاستماع لحالة تارجت الشيفت (POS بيكتبها) ----------
   let _stUnsub = null, _stBranch = null;
@@ -4692,7 +4710,12 @@ function renderAdvancesLog(){
     document.body.classList.toggle('tgt-hit', act.length > 0);
     if(act.length){
       const names = act.map(k=> k==='morning' ? 'الصباحي 🌅' : 'المسائي 🌆').join(' + ');
-      banner.textContent = `🎯 مبروك! شيفت ${names} ضرب التارجت — الشاشة ليكم لآخر الشيفت`;
+      bannerTxt.textContent = `🎯 شيفت ${names} ضرب التارجت`;
+      // لو المستخدم قفله لنفس الاحتفال ده قبل كده، يفضل مقفول
+      let saved = ''; try{ saved = localStorage.getItem(DISMISS_KEY) || ''; }catch(e){}
+      document.body.classList.toggle('tgt-banner-off', saved === dismissSig());
+    } else {
+      document.body.classList.remove('tgt-banner-off');
     }
     try{ renderAttendanceLists && renderAttendanceLists(); }catch(e){}
   }
