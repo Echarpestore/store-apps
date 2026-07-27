@@ -321,6 +321,14 @@
       </div>
     </div>
 
+    <div id="alertsBanner" style="display:none; background:linear-gradient(135deg,#3a1a1a,#4a1520); border:1px solid #7a2a35; border-radius:14px; padding:16px 18px; margin-bottom:18px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="font-weight:900; color:#ff8a9a; font-size:15px;">⚠️ تقييمات سيّئة محتاجة انتباهك</span>
+        <button onclick="clearAlerts()" style="background:rgba(255,255,255,.1); border:none; color:#fff; border-radius:8px; padding:6px 12px; font-family:'Cairo'; font-size:12px; cursor:pointer;">تمّت المراجعة ✓</button>
+      </div>
+      <div id="alertsList" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+
     <div class="cards">
       <div class="card"><div class="label">عدد الآراء</div><div class="value" id="cTotal">0</div></div>
       <div class="card"><div class="label">متوسط الرضا (من 4)</div><div class="value" id="cAvg">—</div></div>
@@ -597,7 +605,7 @@ function applyBranchFilter(){
   // Dashboard branch selector now controls what's reviewed — this keeps
   // the dropdown options up to date whenever new branches appear.
   populateBranchDropdown();
-  if(dashOpen && unlocked) renderDashboard();
+  if(dashOpen && unlocked){ renderDashboard(); try{ renderAlerts(); }catch(e){} }
 }
 
 function populateBranchDropdown(){
@@ -668,6 +676,15 @@ async function submitRating(r){
   setTimeout(()=>{ $('#thanks').classList.remove('show'); }, 1600);
   try{ await addDoc(entriesCol, { r, ts: Date.now(), branch: currentBranch }); }
   catch(e){ console.error('تعذر حفظ الرأي', e); }
+  // ⚠️ تقييم سيّئ (نجمة أو اتنين) → تنبيه فوري عشان الإدارة تتصرف والعميل لسه موجود
+  if(r <= 2){
+    try{
+      await addDoc(collection(db, 'feedback_alerts'), {
+        rating: r, branch: currentBranch, ts: Date.now(), seen: false,
+        label: (RATINGS[r] && RATINGS[r].label) || ('تقييم '+r)
+      });
+    }catch(e){ console.warn('alert write', e); }
+  }
 }
 
 document.querySelectorAll('.face-btn').forEach(btn=>{
@@ -690,6 +707,43 @@ document.querySelectorAll('.face-btn').forEach(btn=>{
     if(!firstTapDone){ firstTapDone = true; if(!document.fullscreenElement){ document.documentElement.requestFullscreen?.().catch(()=>{}); } }
   });
 });
+
+// ⚠️ تنبيهات التقييمات السيّئة (فورية)
+let _alerts = [];
+try{
+  onSnapshot(collection(db, 'feedback_alerts'), (snap)=>{
+    _alerts = snap.docs.map(d=>({ id:d.id, ...d.data() })).filter(a=> !a.seen);
+    renderAlerts();
+  }, (e)=> console.warn('alerts listen', e && e.code));
+}catch(e){}
+
+function renderAlerts(){
+  const banner = document.getElementById('alertsBanner');
+  const list = document.getElementById('alertsList');
+  if(!banner || !list) return;
+  // نفلتر حسب الفرع المختار في الداشبورد
+  const sel = (document.getElementById('branchFilter')||{}).value || '__ALL__';
+  const shown = _alerts.filter(a=> sel==='__ALL__' || a.branch===sel).sort((x,y)=> (y.ts||0)-(x.ts||0));
+  if(shown.length === 0){ banner.style.display='none'; return; }
+  banner.style.display='block';
+  list.innerHTML = shown.slice(0,10).map(a=>{
+    const t = new Date(a.ts||Date.now());
+    const timeTxt = t.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) + ' · ' + t.toLocaleDateString('ar-EG',{day:'2-digit',month:'short'});
+    const face = a.rating===1 ? '😡' : '🙁';
+    return `<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,.2); border-radius:9px; padding:9px 12px;">
+      <span style="color:#fff; font-size:13px;">${face} ${a.label||('تقييم '+a.rating)} — <b>${a.branch||''}</b></span>
+      <span style="color:#c99; font-size:11px;">${timeTxt}</span>
+    </div>`;
+  }).join('');
+}
+
+window.clearAlerts = async function(){
+  const sel = (document.getElementById('branchFilter')||{}).value || '__ALL__';
+  const toClear = _alerts.filter(a=> sel==='__ALL__' || a.branch===sel);
+  for(const a of toClear){
+    try{ await setDoc(doc(db,'feedback_alerts', a.id), { seen:true }, { merge:true }); }catch(e){}
+  }
+};
 
 // gear -> long press opens dashboard
 const gear = $('#gear');
@@ -1044,7 +1098,7 @@ window.__scriptFullyLoaded = true;
    الشاشة دي بتتحول كيبورد، العميلة تكتب رقمها (واسمها لو جديدة)،
    والبيانات بتظهر عند الكاشير تلقائي. منطق العرض صافي قابل للاختبار. */
 function capValidPhone(p){ var d = String(p||'').replace(/\D/g,''); return /^01\d{9}$/.test(d) ? d : null; }
-function capFresh(data, now){ return !!(data && data.ts && ((now||Date.now()) - data.ts) < 90000); }
+function capFresh(data, now){ return !!(data && data.ts && ((now||Date.now()) - data.ts) < 300000); }  // 5 دقايق (العميلة بتاخد وقتها)
 function capKioskView(data, handledAskId, now){
   if(!data || !capFresh(data, now)) return { view:'hide' };
   if(data.mode === 'ask' && data.askId && data.askId !== handledAskId) return { view:'phone', askId:data.askId };
@@ -1076,7 +1130,8 @@ window.capKey = function(k){
 };
 function _capWrite(obj){
   if(!currentBranch) return;
-  setDoc(doc(db, 'pos_capture', currentBranch), obj).catch(e=> console.warn('cap write', e && e.code));
+  return setDoc(doc(db, 'pos_capture', currentBranch), obj)
+    .catch(e=>{ console.warn('cap write', e && e.code); alert('حصل مشكلة في الإرسال — جرّبي تاني'); throw e; });
 }
 window.capSubmitPhone = function(){
   const ph = capValidPhone(_capDigits);
