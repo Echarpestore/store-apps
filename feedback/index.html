@@ -561,6 +561,7 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
   const sel = document.getElementById('branchSelect');
   let val = sel ? sel.value : '';
   if(val === '__new__'){ val = ($('#branchInput').value||'').trim(); }
+  val = String(val||'').trim();   // 🔑 نظّف المسافات عشان يطابق فرع الكاشير بالظبط
   if(!val || val === '__new__'){ alert('اختار الفرع الأول'); return; }
   currentBranch = val;
   localStorage.setItem('feedback_branch', val);
@@ -1079,7 +1080,9 @@ function _capWrite(obj){
 }
 window.capSubmitPhone = function(){
   const ph = capValidPhone(_capDigits);
-  if(!ph || !_capAskId) return;
+  if(!ph){ alert('اكتبي رقم موبايل صح (11 رقم يبدأ بـ 01)'); return; }
+  if(!_capAskId){ alert('الطلب اتأخر — اطلبي من الكاشير يبعت الطلب تاني'); _capShowPane(null); return; }
+  if(!currentBranch){ alert('الجهاز مش محدد له فرع — اظبطي الفرع الأول'); return; }
   _capHandled = _capAskId;
   _capWrite({ mode:'phone', phone: ph, ts: Date.now(), askId: _capAskId });
   _capShowPane(null);   // الكاشير هيرد: يا greet يا need_name
