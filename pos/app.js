@@ -468,7 +468,7 @@ function buildReceiptHTML(data){
       case 'spacer': parts.push(`<div style="height:${el.size||8}px;"></div>`); break;
       case 'divider': parts.push(`<div style="border-top:1.5px dashed #000; margin:${el.size||4}px 0;"></div>`); break;
       case 'logo':
-        if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto 6px; max-width:${c.logoWidth||60}%;">`);
+        if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto 6px; max-width:${c.logoWidth||60}%; max-height:120px; object-fit:contain;">`);
         break;
       case 'shopName': if(el.text) parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:2px 0;">${el.text}</div>`); break;
       case 'branchName': case 'address': case 'phone': case 'footer':
@@ -477,7 +477,7 @@ function buildReceiptHTML(data){
         parts.push(`<div style="text-align:center; font-size:${fs}; margin:3px 0;">${d.dateStr||''}${d.empName?' · '+L.emp+': '+d.empName:''}</div>`); break;
       case 'items':
         parts.push(`<table style="width:100%; border-collapse:collapse; font-size:${fs}; margin:4px 0;">${(d.items||[]).map(it=>
-          `<tr><td style="padding:3px 0; border-bottom:1px solid #000; font-weight:600;">${it.name}</td><td style="padding:3px 4px; border-bottom:1px solid #000; white-space:nowrap; font-weight:600;">${it.qty} × ${it.unit||''}</td><td style="padding:3px 0; border-bottom:1px solid #000; white-space:nowrap; font-weight:700; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
+          `<tr><td style="padding:3px 0; border-bottom:1px solid #000; font-weight:600; word-break:break-word; max-width:0; width:100%;">${it.name}</td><td style="padding:3px 4px; border-bottom:1px solid #000; white-space:nowrap; font-weight:600;">${it.qty} × ${it.unit||''}</td><td style="padding:3px 0; border-bottom:1px solid #000; white-space:nowrap; font-weight:700; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
       case 'totals':
         parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`); break;
       case 'invoiceNo':
@@ -645,22 +645,22 @@ function buildLabelHTML(it, barcodeSvgId){
       case 'spacer': parts.push(`<div style="height:${el.size||8}px;"></div>`); break;
       case 'divider': parts.push(`<div style="border-top:1.5px dashed #000; margin:${el.size||4}px 0;"></div>`); break;
       case 'logo': if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto; max-width:${lb.logoWidth||50}%; max-height:${Math.round(h*0.3)}mm;">`); break;
-      case 'shop': parts.push(`<div style="font-size:${fs}; color:#000; font-weight:600;">${(shopEl&&shopEl.text)||''}</div>`); break;
-      case 'name': parts.push(`<div style="font-size:${fs}; font-weight:800; line-height:1.15; overflow:hidden;">${it.name||''}</div>`); break;
+      case 'shop': parts.push(`<div style="font-size:${fs}; color:#000; font-weight:600; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${(shopEl&&shopEl.text)||''}</div>`); break;
+      case 'name': parts.push(`<div style="font-size:${fs}; font-weight:800; line-height:1.15; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; max-width:100%; word-break:break-word;">${it.name||''}</div>`); break;
       case 'price': {
         const cur = currencyLabel();
         const pv = (it.price!=null?it.price:'') + ' ' + cur;
         const st = lb.priceStyle||'plain';
-        if(st==='box')       parts.push(`<div style="font-size:${fs}; font-weight:900; border:2px solid #000; border-radius:4px; padding:1px 8px; display:inline-block;">${pv}</div>`);
-        else if(st==='solid')parts.push(`<div style="font-size:${fs}; font-weight:900; background:#000; color:#fff; border-radius:4px; padding:2px 9px; display:inline-block;">${pv}</div>`);
-        else if(st==='tag')  parts.push(`<div style="font-size:${fs}; font-weight:900; border:2.5px solid #000; border-radius:99px; padding:3px 12px; display:inline-block;">${pv}</div>`);
-        else                 parts.push(`<div style="font-size:${fs}; font-weight:900;">${pv}</div>`);
+        if(st==='box')       parts.push(`<div style="font-size:${fs}; font-weight:900; border:2px solid #000; border-radius:4px; padding:1px 8px; display:inline-block; white-space:nowrap; max-width:100%;">${pv}</div>`);
+        else if(st==='solid')parts.push(`<div style="font-size:${fs}; font-weight:900; background:#000; color:#fff; border-radius:4px; padding:2px 9px; display:inline-block; white-space:nowrap; max-width:100%;">${pv}</div>`);
+        else if(st==='tag')  parts.push(`<div style="font-size:${fs}; font-weight:900; border:2.5px solid #000; border-radius:99px; padding:3px 12px; display:inline-block; white-space:nowrap; max-width:100%;">${pv}</div>`);
+        else                 parts.push(`<div style="font-size:${fs}; font-weight:900; white-space:nowrap; max-width:100%; overflow:hidden;">${pv}</div>`);
         break; }
-      case 'barcode': if(it.barcode) parts.push(`<div style="width:${lb.bcWidthPct||85}%; height:${lb.bcHeight||30}px; margin:1px auto; line-height:0;"><svg id="${barcodeSvgId}" preserveAspectRatio="none" shape-rendering="crispEdges" style="width:100%; height:100%; display:block;"></svg></div>`); break;
-      case 'code': if(it.barcode) parts.push(`<div style="font-size:${fs}; letter-spacing:.5px; direction:ltr;">${it.barcode}</div>`); break;
+      case 'barcode': if(it.barcode) parts.push(`<div style="width:${lb.bcWidthPct||85}%; height:${lb.bcHeight||30}px; min-height:${Math.max(22, lb.bcHeight||30)}px; flex-shrink:0; margin:1px auto; line-height:0;"><svg id="${barcodeSvgId}" preserveAspectRatio="none" shape-rendering="crispEdges" style="width:100%; height:100%; display:block;"></svg></div>`); break;
+      case 'code': if(it.barcode) parts.push(`<div style="font-size:${fs}; letter-spacing:.5px; direction:ltr; max-width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${it.barcode}</div>`); break;
     }
   }
-  return `<div class="one-label" style="width:${w}mm; height:${h}mm; box-sizing:border-box; padding:1.5mm; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; text-align:center; font-family:Tahoma,Arial,sans-serif; overflow:hidden; page-break-after:always;">${parts.join('')}</div>`;
+  return `<div class="one-label" style="width:${w}mm; height:${h}mm; box-sizing:border-box; padding:1.5mm; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; text-align:center; font-family:Tahoma,Arial,sans-serif; overflow:hidden; page-break-after:always;"><div style="width:100%; max-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; overflow:hidden;">${parts.join('')}</div></div>`;
 }
 // بعد ما JsBarcode يرسم بحجم ثابت — بنحوّله viewBox عشان يتمطط جوّه إطاره بالظبط
 function fitBarcodeSvg(svg){
