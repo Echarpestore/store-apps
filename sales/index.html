@@ -811,6 +811,34 @@
       </div>
     </div>
     <div class="panel">
+      <h3>🎯 تارجت مبيعات الشيفت</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
+        لما صافي مبيعات فريق الشيفت (بعد المرتجعات) يوصل للرقم — كل موظفين الشيفت ياخدوا إطار،
+        والشاشات بتتحول ليهم لآخر الشيفت. المبيعات بتتحسب على البياع المسجّل على الفاتورة. سيبه 0 لإلغاء التارجت.
+      </p>
+      <div class="add-form" style="flex-wrap:wrap;">
+        <input type="number" min="0" id="shiftTargetMorning" placeholder="🌅 تارجت الصباحي (ج.م)" style="min-width:180px;">
+        <input type="number" min="0" id="shiftTargetEvening" placeholder="🌆 تارجت المسائي (ج.م)" style="min-width:180px;">
+        <button id="saveShiftTargetsBtn">حفظ تارجت الشيفتات</button>
+      </div>
+      <div class="field-err" id="shiftTargetsErr"></div>
+      <hr style="border:none; border-top:1px solid var(--line); margin:14px 0;">
+      <h4 style="margin:0 0 4px; font-size:14px;">🖥️ تحوّل شاشة البيع في الكاشير</h4>
+      <p style="color:var(--sub); font-size:12px; margin:0 0 10px;">
+        الشاشة الرئيسية وشاشة الحضور بتتحول بالكامل دايمًا. دي بتتحكم في <b>شاشة البيع</b> بس،
+        لأن الكاشير بيقرا عليها أرقام فلوس. جرّب الكامل وارجع للخفيف لو لخبط.
+      </p>
+      <div class="add-form" style="flex-wrap:wrap;">
+        <select id="framesSaleMode" style="min-width:220px;">
+          <option value="light">خفيف — شريط + توهج حوالين الشاشة</option>
+          <option value="full">كامل — خلفية شاشة البيع كلها</option>
+          <option value="off">مقفول — مفيش تحوّل في شاشة البيع</option>
+        </select>
+        <button id="saveFramesModeBtn">حفظ وضع شاشة البيع</button>
+      </div>
+      <div class="field-err" id="framesModeErr"></div>
+    </div>
+    <div class="panel">
       <h3>⭐ أداء الموظف + رضا العميل</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
         ربط تقريبي: كل عملية بيع متربطة بأقرب تقييم عميل جه في حدود دقيقتين قبلها أو بعدها في نفس الفرع. مش رابط مؤكد 100%

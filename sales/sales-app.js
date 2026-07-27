@@ -546,6 +546,72 @@ function isOutOfRace(hours, period, cfg){
   return limit > 0 && (Number(hours)||0) >= limit;
 }
 
+// ===== 🖼️ نظام الإطارات: يومي + تارجت الشيفت + أسبوعي + سلاسل + جماعي =====
+const framesDefaults = {
+  minWeekDays: 5,     // أقل أيام حضور فعلية عشان "أسبوع نضيف" يتحسب (سد ثغرة أسبوع اشتغل فيه يومين)
+  streakSilver: 4,    // 🥈 عدد الأسابيع النضيفة المتتالية للفضي
+  streakGold: 8       // 🥇 وللدهبي
+};
+
+// أسبوع العمل المصري: السبت → الجمعة. المفتاح = تاريخ السبت
+function frameWeekStart(d){
+  const dt = new Date(d); dt.setHours(0,0,0,0);
+  dt.setDate(dt.getDate() - ((dt.getDay() + 1) % 7));   // Sat=6→0 · Sun=0→1 · ... · Fri=5→6
+  return dt;
+}
+function frameWeekLabel(d){ return 'W' + todayStr(frameWeekStart(d)); }
+
+// 🎯 صافي مبيعات فريق شيفت من صفوف مبيعات اليوم
+// نفس منطق عمولة التارجت: المرتجع الكامل بيستبعد الأصل (reversed) وصف العكس (isReversal)
+// عشان ميتحسبش مرتين — والفواتير اللي من غير بياع مسجّل مش بتتحسب لأي شيفت
+function shiftTeamNet(rows, teamIds){
+  const set = new Set(teamIds || []);
+  return (rows || []).filter(r => r && !r.reversed && !r.isReversal && set.has(r.sellerEmployeeId))
+                     .reduce((s, r) => s + (Number(r.total) || 0), 0);
+}
+
+// 🟢 يوم نضيف (حي): حضر النهارده + صفر رصيد غير معذور بتاريخ النهارده
+// "حي" يعني بيتسحب فورًا لو نزل رصيد (تأخير بريك / انصراف بدري) — الحساب بيتعاد مع كل snapshot
+function dailyCleanFrame(empId, dateKey, credit, shiftRows){
+  const attended = (shiftRows || []).some(s => s.employeeId === empId && s.clockInTs
+                    && todayStr(new Date(s.clockInTs)) === dateKey);
+  if(!attended) return false;
+  const hours = (credit || []).filter(x => x && x.employeeId === empId && !x.excused && x.date === dateKey)
+                              .reduce((a, x) => a + (Number(x.hours) || 0), 0);
+  return hours === 0;
+}
+
+// 🏅 أسبوع نضيف (بيتحسب على أسبوع مكتمل): صفر رصيد + حد أدنى أيام حضور فعلية
+function weeklyCleanFrame(empId, weekStartDate, credit, shiftRows, cfg){
+  cfg = cfg || framesDefaults;
+  const daySet = new Set();
+  for(let i = 0; i < 7; i++){
+    const d = new Date(weekStartDate); d.setDate(d.getDate() + i);
+    daySet.add(todayStr(d));
+  }
+  const attendedDays = new Set(
+    (shiftRows || []).filter(s => s.employeeId === empId && s.clockInTs && daySet.has(todayStr(new Date(s.clockInTs))))
+                     .map(s => todayStr(new Date(s.clockInTs))));
+  if(attendedDays.size < (Number(cfg.minWeekDays) || 5)) return false;
+  const hours = (credit || []).filter(x => x && x.employeeId === empId && !x.excused && daySet.has(x.date))
+                              .reduce((a, x) => a + (Number(x.hours) || 0), 0);
+  return hours === 0;
+}
+
+// 🥈🥇 مستوى السلسلة من عدد الأسابيع النضيفة المتتالية (0 = مفيش، 1 = فضي، 2 = دهبي)
+function streakLevel(count, cfg){
+  cfg = cfg || framesDefaults;
+  const n = Number(count) || 0;
+  return n >= (cfg.streakGold || 8) ? 2 : n >= (cfg.streakSilver || 4) ? 1 : 0;
+}
+window.frameWeekStart = frameWeekStart;
+window.frameWeekLabel = frameWeekLabel;
+window.shiftTeamNet = shiftTeamNet;
+window.dailyCleanFrame = dailyCleanFrame;
+window.weeklyCleanFrame = weeklyCleanFrame;
+window.streakLevel = streakLevel;
+window.framesDefaults = framesDefaults;
+
 // ساعات التأخير من دقايق التأخير (تقريب لأسفل)
 function lateHoursFrom(lateMin, cfg){
   cfg = cfg || timeCfgDefaults;
@@ -4468,3 +4534,233 @@ function renderAdvancesLog(){
     });
   });
 }
+
+// ============================================================
+// 🖼️ نظام الإطارات — المزامنة والعرض والاحتفال
+// ------------------------------------------------------------
+// • يومي (حي): بيتحسب كل شوية من البيانات المحمّلة وبيتكتب على
+//   مستند الموظف (frames.daily) عشان POS يعرضه في شاشة الدخول.
+// • أسبوعي + سلسلة + جماعي: بيتحسب مرة لكل أسبوع مكتمل (idempotent
+//   بمفتاح الأسبوع — لو جهازين حسبوه هيكتبوا نفس النتيجة).
+// • تارجت الشيفت: POS هو اللي بيحسب الصافي وبيكتب مستند الحالة
+//   pos_test_settings/shift_status_<branch> — هنا بنسمعه ونحوّل الشاشة.
+// ============================================================
+(function initFramesSystem(){
+
+  // ---------- CSS محقون (مفيش تعديل ستايلات في index.html) ----------
+  const st = document.createElement('style');
+  st.textContent = `
+    .attCard .av{ position:relative; }
+    .attCard.fr-daily .av{ box-shadow:0 0 0 3px #22c55e, 0 0 12px #22c55e88; }
+    .attCard.fr-weekly .av{ box-shadow:0 0 0 3px #22c55e, 0 0 0 6px #22c55e44, 0 0 16px #22c55eaa; }
+    .attCard.fr-silver .av{ box-shadow:0 0 0 3px #cbd5e1, 0 0 0 6px #cbd5e155, 0 0 16px #cbd5e1aa; }
+    .attCard.fr-gold .av{ box-shadow:0 0 0 3px #f59e0b, 0 0 0 6px #f59e0b44, 0 0 18px #f59e0bcc; }
+    .attCard.fr-shift .av{ box-shadow:0 0 0 3px #f59e0b, 0 0 18px #f59e0bee; animation:frPulse 1.6s ease-in-out infinite; }
+    .attCard .frSpark{ position:absolute; top:-6px; right:-6px; font-size:13px; filter:drop-shadow(0 0 4px #22c55e); }
+    .attCard .frBranch{ position:absolute; top:-6px; left:-6px; font-size:12px; }
+    @keyframes frPulse{ 0%,100%{ filter:brightness(1);} 50%{ filter:brightness(1.35);} }
+    /* 🎯 تحوّل الشاشة كلها لما الشيفت يضرب التارجت */
+    body.tgt-hit{ --panel:#221a0d; --panel2:#2a2110; --panel3:#332813; --line:#584312; }
+    body.tgt-hit::after{ content:''; position:fixed; inset:0; pointer-events:none; z-index:9998;
+      background:radial-gradient(1200px 300px at 50% -50px, #f59e0b33, transparent 70%);
+      animation:tgtGlow 3s ease-in-out infinite; }
+    @keyframes tgtGlow{ 0%,100%{opacity:.65;} 50%{opacity:1;} }
+    #tgtBanner{ position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:9999;
+      background:linear-gradient(90deg,#b45309,#f59e0b,#b45309); background-size:200% 100%;
+      animation:tgtBar 2.5s linear infinite; color:#1a1200; font-weight:900; font-family:'Cairo';
+      padding:9px 22px; border-radius:99px; font-size:15px; box-shadow:0 4px 22px #f59e0b88; display:none; }
+    body.tgt-hit #tgtBanner{ display:block; }
+    @keyframes tgtBar{ 0%{background-position:0 0;} 100%{background-position:200% 0;} }
+  `;
+  document.head.appendChild(st);
+  const banner = document.createElement('div');
+  banner.id = 'tgtBanner';
+  document.body.appendChild(banner);
+
+  // ---------- 🎯 الاستماع لحالة تارجت الشيفت (POS بيكتبها) ----------
+  let _stUnsub = null, _stBranch = null;
+  window.shiftStatus = null;
+  function hm(now){ const d = now || new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+  // الاحتفال شغال "طول الشيفت ليهم هما": التارجت متضروب + إحنا لسه جوه نافذة الشيفت ده
+  function activeShiftCelebrations(stat, now){
+    if(!stat || stat.dateKey !== todayStr()) return [];
+    const t = hm(now);
+    return ['morning','evening'].filter(k=>{
+      const s = stat[k];
+      return s && s.hit && s.start && s.end && t >= s.start && t < s.end;
+    });
+  }
+  window.activeShiftCelebrations = activeShiftCelebrations;
+  function applyShiftStatus(stat){
+    window.shiftStatus = stat;
+    const act = activeShiftCelebrations(stat, new Date());
+    document.body.classList.toggle('tgt-hit', act.length > 0);
+    if(act.length){
+      const names = act.map(k=> k==='morning' ? 'الصباحي 🌅' : 'المسائي 🌆').join(' + ');
+      banner.textContent = `🎯 مبروك! شيفت ${names} ضرب التارجت — الشاشة ليكم لآخر الشيفت`;
+    }
+    try{ renderAttendanceLists && renderAttendanceLists(); }catch(e){}
+  }
+  function watchShiftStatus(){
+    if(!window.currentBranch || window.currentBranch === _stBranch) return;
+    if(_stUnsub) _stUnsub();
+    _stBranch = window.currentBranch;
+    _stUnsub = onSnapshot(doc(db, 'pos_test_settings', 'shift_status_' + _stBranch),
+      (snap)=> applyShiftStatus(snap.exists() ? snap.data() : null),
+      (err)=> console.warn('shift status listen', err));
+  }
+  setInterval(watchShiftStatus, 3000);        // بيتوصّل أول ما الفرع يبقى معروف وبيتبدّل معاه
+  setInterval(()=> applyShiftStatus(window.shiftStatus), 60000);  // نهاية نافذة الشيفت بتطفّي الاحتفال حتى من غير كتابة جديدة
+
+  // ---------- 🖼️ زينة كروت الحضور (بيتنده من renderEmployeeCards بعد الرسم) ----------
+  // بيرجع {cls, spark, branchIcon} للموظف — الأعلى بيغطي الأقل: شيفت > دهبي > فضي > أسبوعي، واليومي شرارة جنبه
+  function frameDecorFor(e){
+    const f = (e && e.frames) || {};
+    const wk = frameWeekLabel(new Date(new Date().getTime() - 7*86400000));   // مفتاح آخر أسبوع مكتمل
+    const act = activeShiftCelebrations(window.shiftStatus, new Date());
+    const inShiftParty = act.some(k=> (window.shiftStatus[k].team || []).includes(e.id));
+    let cls = '';
+    if(inShiftParty) cls = 'fr-shift';
+    else if(f.streak && f.streak.week === wk && streakLevel(f.streak.count) === 2) cls = 'fr-gold';
+    else if(f.streak && f.streak.week === wk && streakLevel(f.streak.count) === 1) cls = 'fr-silver';
+    else if(f.weekly && f.weekly.week === wk && f.weekly.clean) cls = 'fr-weekly';
+    const daily = f.daily && f.daily.date === todayStr() && f.daily.clean;
+    if(daily && !cls) cls = 'fr-daily';
+    return {
+      cls,
+      spark: daily && cls !== 'fr-daily' ? '<div class="frSpark">⚡</div>' : '',
+      branchIcon: (f.branchWeek && f.branchWeek.week === wk && f.branchWeek.on) ? '<div class="frBranch" title="الفرع كله عمل أسبوع نضيف">🏆</div>' : ''
+    };
+  }
+  window.frameDecorFor = frameDecorFor;
+  function decorateAttCards(){
+    document.querySelectorAll('.attCard[data-id]').forEach(card=>{
+      const e = (window.allEmployeesAll || (window.employees||[])).find(x=> x.id === card.dataset.id)
+             || (window.employees||[]).find(x=> x.id === card.dataset.id);
+      if(!e) return;
+      const d = frameDecorFor(e);
+      card.classList.remove('fr-daily','fr-weekly','fr-silver','fr-gold','fr-shift');
+      if(d.cls) card.classList.add(d.cls);
+      if(d.spark && !card.querySelector('.frSpark')) card.insertAdjacentHTML('beforeend', d.spark);
+      if(d.branchIcon && !card.querySelector('.frBranch')) card.insertAdjacentHTML('beforeend', d.branchIcon);
+    });
+  }
+  // نلف على رسم الكروت من غير ما نعدّل جواه: نزيّن بعد كل رسم
+  // الرسم بيحصل من renderAttendanceLists (module-scope) — بنزيّن بعده بشبكة أمان دورية
+  setInterval(decorateAttCards, 3000);
+
+  // ---------- 🟢 مزامنة الإطار اليومي (حي) → sales_employees.frames.daily ----------
+  let _lastDailySig = '';
+  async function syncDailyFrames(){
+    try{
+      const branch = window.currentBranch; if(!branch) return;
+      const emps = (window.employees || []).filter(e=> e.active !== false);
+      if(!emps.length) return;
+      const dk = todayStr();
+      const credit = window.allTimeCredit || [], shiftsArr = window.allShifts || [];
+      const sig = dk + '|' + emps.map(e=>{
+        return e.id + ':' + (dailyCleanFrame(e.id, dk, credit, shiftsArr) ? 1 : 0);
+      }).join(',');
+      if(sig === _lastDailySig) return;
+      _lastDailySig = sig;
+      for(const e of emps){
+        const clean = dailyCleanFrame(e.id, dk, credit, shiftsArr);
+        const cur = (e.frames && e.frames.daily) || {};
+        if(cur.date === dk && !!cur.clean === clean) continue;   // مفيش تغيير → مفيش كتابة
+        await updateDoc(doc(db,'sales_employees', e.id), { 'frames.daily': { clean, date: dk } })
+          .catch(err=> console.warn('daily frame write', e.id, err));
+      }
+    }catch(e){ console.warn('syncDailyFrames', e); }
+  }
+  setInterval(syncDailyFrames, 30000);
+  setTimeout(syncDailyFrames, 8000);
+
+  // ---------- 🏅 مزامنة الأسبوعي + السلسلة + الجماعي (آخر أسبوع مكتمل) ----------
+  async function syncWeeklyFrames(){
+    try{
+      const branch = window.currentBranch; if(!branch) return;
+      const emps = (window.employees || []).filter(e=> e.active !== false);
+      if(!emps.length) return;
+      const lastWeekStart = frameWeekStart(new Date(Date.now() - 7*86400000));
+      const wk = 'W' + todayStr(lastWeekStart);
+      const prevWk = 'W' + todayStr(new Date(lastWeekStart.getTime() - 7*86400000));
+      const pending = emps.filter(e=> !(e.frames && e.frames.weekly && e.frames.weekly.week === wk));
+      if(!pending.length) return;
+      const credit = window.allTimeCredit || [], shiftsArr = window.allShifts || [];
+      const results = {};
+      for(const e of emps) results[e.id] = weeklyCleanFrame(e.id, lastWeekStart, credit, shiftsArr);
+      const branchClean = emps.length > 0 && emps.every(e=> results[e.id]);
+      for(const e of pending){
+        const clean = results[e.id];
+        const prev = (e.frames && e.frames.streak) || {};
+        const count = clean ? ((prev.week === prevWk ? (Number(prev.count)||0) : 0) + 1) : 0;
+        await updateDoc(doc(db,'sales_employees', e.id), {
+          'frames.weekly': { clean, week: wk },
+          'frames.streak': { count, week: wk },
+          'frames.branchWeek': { on: branchClean, week: wk }
+        }).catch(err=> console.warn('weekly frame write', e.id, err));
+      }
+    }catch(e){ console.warn('syncWeeklyFrames', e); }
+  }
+  setTimeout(syncWeeklyFrames, 12000);
+  setInterval(syncWeeklyFrames, 10*60000);
+
+  // ---------- ⚙️ حفظ تارجت الشيفتات (أدمن) → pos_test_settings/shift_targets ----------
+  const btn = document.getElementById('saveShiftTargetsBtn');
+  if(btn) btn.addEventListener('click', async ()=>{
+    const err = document.getElementById('shiftTargetsErr');
+    const mv = parseInt(document.getElementById('shiftTargetMorning').value) || 0;
+    const ev = parseInt(document.getElementById('shiftTargetEvening').value) || 0;
+    const sh = (window.complianceCfg && window.complianceCfg.shifts) || {};
+    const cfg = {
+      morning: { target: Math.max(0, mv), start: (sh.morning||{}).start || '10:00', end: (sh.morning||{}).end || '18:00' },
+      evening: { target: Math.max(0, ev), start: (sh.evening||{}).start || '14:00', end: (sh.evening||{}).end || '22:00' }
+    };
+    const orig = btn.textContent; btn.disabled = true;
+    try{
+      await setDoc(doc(db,'pos_test_settings','shift_targets'),
+        { byBranch: { [window.currentBranch]: cfg } }, { merge:true });
+      err.textContent = '';
+      btn.textContent = 'اتحفظ ✅';
+    }catch(e2){
+      err.textContent = 'خطأ: ' + (e2 && e2.message ? e2.message : e2);
+      btn.textContent = 'خطأ';
+    }
+    setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 1800);
+  });
+  // ---------- 🖥️ وضع تحوّل شاشة البيع (خفيف / كامل / مقفول) ----------
+  const mBtn = document.getElementById('saveFramesModeBtn');
+  if(mBtn) mBtn.addEventListener('click', async ()=>{
+    const errB = document.getElementById('framesModeErr');
+    const val = (document.getElementById('framesSaleMode')||{}).value || 'light';
+    const orig = mBtn.textContent; mBtn.disabled = true;
+    try{
+      await setDoc(doc(db,'pos_test_settings','frames_cfg'), { posSaleMode: val }, { merge:true });
+      errB.textContent = ''; mBtn.textContent = 'اتحفظ ✅';
+    }catch(e2){
+      errB.textContent = 'خطأ: ' + (e2 && e2.message ? e2.message : e2);
+      mBtn.textContent = 'خطأ';
+    }
+    setTimeout(()=>{ mBtn.textContent = orig; mBtn.disabled = false; }, 1800);
+  });
+  (async ()=>{
+    try{
+      const fs2 = await getDoc(doc(db,'pos_test_settings','frames_cfg'));
+      const sel = document.getElementById('framesSaleMode');
+      if(sel && fs2.exists() && fs2.data().posSaleMode) sel.value = fs2.data().posSaleMode;
+    }catch(e){}
+  })();
+
+  // نملى القيم المحفوظة عند الفتح
+  (async ()=>{
+    try{
+      const s = await getDoc(doc(db,'pos_test_settings','shift_targets'));
+      const cfg = s.exists() ? ((s.data().byBranch||{})[window.currentBranch]) : null;
+      if(cfg){
+        const m = document.getElementById('shiftTargetMorning'), v = document.getElementById('shiftTargetEvening');
+        if(m && cfg.morning && cfg.morning.target) m.value = cfg.morning.target;
+        if(v && cfg.evening && cfg.evening.target) v.value = cfg.evening.target;
+      }
+    }catch(e){}
+  })();
+})();
