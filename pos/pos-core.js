@@ -68,6 +68,15 @@ firebase.initializeApp(firebaseConfig);
 // حساب الفرع (Email/Password) — الجهاز بيسجّل دخول مرة واحدة وبيتحفظ.
 // ده اللي بيدّي الكاشير صلاحية كتابة النقط/المبيعات في قواعد الأمان (المرحلة 2).
 firebase.auth().setPersistence && firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
+// 🔒 تثبيت التخزين: من غيره المتصفح ممكن يمسح IndexedDB (اللي فيها جلسة
+// الدخول) تحت ضغط المساحة — وده سبب "الجهاز بيطلب إيميل وباسورد فجأة".
+// اسم الفرع كان بيفضل محفوظ لأنه في localStorage (مخزن مختلف مش بيتمسح).
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().then(function(granted){
+    console.log(granted ? '🔒 التخزين مثبّت — الجلسة محمية من المسح التلقائي'
+                        : '⚠️ المتصفح رفض تثبيت التخزين — الجلسة ممكن تضيع تحت ضغط المساحة');
+  }).catch(function(){});
+}
 function isStaffSignedIn(){
   var u = firebase.auth().currentUser;
   return !!(u && !u.isAnonymous);
@@ -82,6 +91,12 @@ firebase.auth().onAuthStateChanged(function(u){
       document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
       bs.classList.add('active');
       if(typeof loadBranchSetupOptions === 'function') setTimeout(loadBranchSetupOptions, 50);
+      // نملى الإيميل المحفوظ تلقائي — الكاشير يكتب الباسورد بس
+      setTimeout(function(){
+        var em = document.getElementById('branchSetupEmail');
+        var saved = localStorage.getItem('pos_branch_email') || '';
+        if(em && saved && !em.value) em.value = saved;
+      }, 60);
     }
   }
 });
@@ -179,6 +194,7 @@ async function saveBranchSetup(){
     }catch(e){ console.warn('staff uid register', e); }
     currentBranch = val;
     localStorage.setItem('pos_branch', val);
+    localStorage.setItem('pos_branch_email', email);   // للملء التلقائي لو الجلسة ضاعت
     if(errBox) errBox.textContent = '';
     showScreen('loginScreen');
     loadEmployeePicker();
