@@ -2799,6 +2799,12 @@ function renderAdminList(){
   wrap.innerHTML = listed.map(e=>`
     <div class="emp-row" style="flex-wrap:wrap;">
       <div class="n">${e.name}${e.cardCode ? ' <span title="ليه كارت مطبوع — كود ' + e.cardCode + '" style="font-size:12px; background:var(--gold-dim); color:#0b0c0f; padding:1px 7px; border-radius:8px; font-weight:800;">🪪 كارت</span>' : ''}${viewBranch==='__ALL__' ? ' <span style="color:var(--sub); font-weight:400; font-size:12px;">— '+(e.branch||'—')+'</span>' : ''}</div>
+      <select data-shift-id="${e.id}" title="الشيفت — لازم يتحدد عشان إطارات تارجت الشيفت تشتغل"
+        style="padding:8px; border-radius:8px; border:1px solid ${e.shift ? 'var(--line)' : 'var(--bad)'}; background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:12px;">
+        <option value=""        ${!e.shift ? 'selected' : ''}>⚠️ بدون شيفت</option>
+        <option value="morning" ${e.shift==='morning' ? 'selected' : ''}>🌅 صباحي</option>
+        <option value="evening" ${e.shift==='evening' ? 'selected' : ''}>🌆 مسائي</option>
+      </select>
       <input type="text" inputmode="numeric" maxlength="4" placeholder="كود PIN" data-pin-id="${e.id}" value="${e.pin || ''}"
         style="width:80px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; text-align:center;">
       <button data-act="savePin" data-id="${e.id}" style="border:none; background:var(--good); color:#fff; padding:8px 12px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">حفظ الكود</button>
@@ -2828,6 +2834,28 @@ function renderAdminList(){
       }
       try{ await deleteDoc(doc(db,'sales_employees', btn.dataset.id)); }
       catch(err){ console.error('تعذر الحذف', err); }
+    });
+  });
+  // 🌅🌆 حفظ الشيفت فورًا عند الاختيار (زي يوم الإجازة — مفيش زرار حفظ)
+  wrap.querySelectorAll('[data-shift-id]').forEach(sel=>{
+    sel.addEventListener('change', async ()=>{
+      const id = sel.dataset.shiftId, val = sel.value || '';
+      const prev = sel.style.borderColor;
+      sel.style.borderColor = 'var(--gold)';
+      const patch = { shift: val };
+      // نضبط ميعاد الحضور من إعدادات الشيفت لو متسجّلة (زي ما بيحصل في wizard التسجيل)
+      const sh = (window.complianceCfg && window.complianceCfg.shifts && window.complianceCfg.shifts[val]) || null;
+      if(sh && sh.start) patch.scheduledStartTime = sh.start;
+      if(sh && sh.end)   patch.scheduledEndTime   = sh.end;
+      try{
+        await updateDoc(doc(db,'sales_employees', id), patch);
+        sel.style.borderColor = val ? 'var(--good)' : 'var(--bad)';
+      }catch(err){
+        console.error('تعذر حفظ الشيفت', err);
+        sel.style.borderColor = 'var(--bad)';
+        alert('تعذر حفظ الشيفت: ' + (err && err.code ? err.code : 'خطأ غير معروف'));
+      }
+      setTimeout(()=>{ sel.style.borderColor = val ? 'var(--line)' : 'var(--bad)'; }, 1500);
     });
   });
   wrap.querySelectorAll('[data-act="resetPin"]').forEach(btn=>{
