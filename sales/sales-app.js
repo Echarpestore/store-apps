@@ -967,6 +967,70 @@ function initials(name){
   return (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
 }
 
+// 🎭 نافذة اختيار الشكل — بتتبني في اللحظة (مفيش HTML إضافي)
+function openAvatarPicker(empId){
+  const emp = (window.employees||[]).find(e=> e.id === empId);
+  if(!emp) return;
+  document.getElementById('avPickOverlay')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'avPickOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,.72);'
+                   + 'display:flex; align-items:center; justify-content:center; padding:18px;';
+  const cur = emp.avatarEmoji || '';
+  ov.innerHTML = `
+    <div style="background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px;
+                max-width:360px; width:100%; max-height:82vh; overflow:auto;">
+      <h3 style="margin:0 0 4px; font-size:16px;">🎭 اختار شكلك</h3>
+      <p style="color:var(--sub); font-size:12px; margin:0 0 14px;">الشكل ده هيظهر لزمايلك في شاشة الحضور وشاشة دخول الكاشير.</p>
+      <div id="avPickGrid" style="display:grid; grid-template-columns:repeat(6,1fr); gap:8px;">
+        ${AVATAR_CHOICES.map(a=>`
+          <button data-av="${a}" style="font-size:24px; padding:8px 0; cursor:pointer; border-radius:10px;
+            background:${a===cur?'var(--gold-dim)':'var(--panel2)'}; border:1px solid ${a===cur?'var(--gold)':'var(--line)'};">${a}</button>`).join('')}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button id="avPickClear" style="flex:1; padding:10px; border-radius:10px; background:var(--panel2);
+          border:1px solid var(--line); color:var(--sub); font-family:'Cairo'; font-weight:700; cursor:pointer;">الحروف الأولى</button>
+        <button id="avPickClose" style="flex:1; padding:10px; border-radius:10px; background:var(--panel2);
+          border:1px solid var(--line); color:var(--ink); font-family:'Cairo'; font-weight:700; cursor:pointer;">إغلاق</button>
+      </div>
+      <div id="avPickErr" style="color:var(--bad); font-size:12px; margin-top:8px;"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = ()=> ov.remove();
+  ov.addEventListener('click', (ev)=>{ if(ev.target === ov) close(); });
+  ov.querySelector('#avPickClose').addEventListener('click', close);
+  async function save(val){
+    try{
+      await updateDoc(doc(db,'sales_employees', empId), { avatarEmoji: val });
+      emp.avatarEmoji = val;                        // تحديث فوري قبل ما الـ snapshot يرجع
+      const av = document.getElementById('dh_avatar');
+      if(av) av.textContent = avatarOf(emp);
+      try{ renderAttendanceLists(); }catch(e){}
+      close();
+    }catch(err){
+      const box = ov.querySelector('#avPickErr');
+      if(box) box.textContent = 'تعذر الحفظ: ' + (err && err.code ? err.code : 'خطأ غير معروف');
+    }
+  }
+  ov.querySelectorAll('[data-av]').forEach(b=> b.addEventListener('click', ()=> save(b.dataset.av)));
+  ov.querySelector('#avPickClear').addEventListener('click', ()=> save(''));
+}
+window.openAvatarPicker = openAvatarPicker;
+
+// ===== 🎭 الأفاتارات: الموظف بيختار شكله بنفسه =====
+// إيموجي بس — مفيش رفع صور (مفيش تكلفة تخزين ولا مراجعة محتوى)
+const AVATAR_CHOICES = [
+  '🌸','🌺','🌻','🌷','🦋','🐱','🐰','🦊',
+  '🐼','🦄','⭐','🌙','☀️','🍓','🍒','🧁',
+  '💎','👑','🎀','🪷','🕊️','🐬','🌈','✨'
+];
+// شكل الموظف: اختياره لو موجود، وإلا أول حرفين من اسمه
+function avatarOf(emp){
+  return (emp && emp.avatarEmoji) ? emp.avatarEmoji : initials((emp && emp.name) || '');
+}
+window.AVATAR_CHOICES = AVATAR_CHOICES;
+window.avatarOf = avatarOf;
+
 onSnapshot(empCol, (snap)=>{
   allEmployees = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=> !e.isAdminAccount);
   window.allEmployeesAll = allEmployees;   // 👑 حساب الأدمن العام مش موظف HR
@@ -1414,7 +1478,7 @@ function renderAttendanceLists(){
     return `
     <div class="attCard" data-act="in" data-id="${e.id}">
       ${reminderBadge}
-      <div class="av">${initials(e.name)}</div>
+      <div class="av">${avatarOf(e)}</div>
       <div class="n">${e.name}</div>
       <div class="t">${subText}</div>
     </div>`;
@@ -1441,7 +1505,7 @@ function renderAttendanceLists(){
     <div class="attCard present${late?' late':''}" data-act="hub" data-id="${e.id}">
       ${badge ? `<div class="pendingBadge">${badge}</div>` : ''}
       ${late ? `<div class="lateTag">متأخر ${shift.lateMinutes}د</div>` : ''}
-      <div class="av">${initials(e.name)}</div>
+      <div class="av">${avatarOf(e)}</div>
       <div class="n">${e.name}</div>
       <div class="t">${formatDuration(Date.now() - shift.clockInTs)}</div>
     </div>`;
@@ -1772,7 +1836,10 @@ function renderDayHub(empId){
   if(!emp) return;   // بس لو الموظف نفسه مش موجود
   const shift = getOpenShift(empId);
 
-  $('#dh_avatar').textContent = initials(emp.name);
+  $('#dh_avatar').textContent = avatarOf(emp);
+  $('#dh_avatar').style.cursor = 'pointer';
+  $('#dh_avatar').title = 'دوس عشان تغيّر شكلك';
+  $('#dh_avatar').onclick = ()=> openAvatarPicker(emp.id);
   $('#dh_name').textContent = emp.name;
   // جزء الشيفت بيظهر بس لو الموظف مسجّل حضور دلوقتي
   if(shift){

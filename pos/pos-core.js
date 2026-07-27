@@ -380,7 +380,8 @@ async function loadEmployeePicker(){
     }
     errBox.textContent = '';
     grid.innerHTML = allEmps.map(e=>{
-      const initials = (e.name||'؟').trim().split(' ').slice(0,2).map(w=>w[0]).join('');
+      // 🎭 شكل الموظف: اختياره لو موجود، وإلا أول حرفين من اسمه
+      const initials = e.avatarEmoji || (e.name||'؟').trim().split(' ').slice(0,2).map(w=>w[0]).join('');
       const adminBadge = e._admin ? '<div style="font-size:9px; color:var(--accent); font-weight:800; margin-top:2px;">🌐 أدمن</div>' : '';
       return `<div class="emp-pick-tile" data-emp-id="${e.id}" onclick="selectEmployeeForLogin('${e.id}', '${(e.name||'').replace(/'/g,"\\'")}')"><div class="av">${initials}</div><div class="n">${e.name}</div>${adminBadge}</div>`;
     }).join('');

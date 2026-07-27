@@ -12,6 +12,7 @@ const { sandbox: S } = loadSalesApp();
 const mustExpose = [
   'coverageOnDate','complianceCfg','approveReg','checkLeaveRequest',
   'closeLeaveReq','closeDaySummary','currentBranch',
+  'avatarOf','AVATAR_CHOICES','openAvatarPicker',
 ];
 for(const k of mustExpose){
   assert(S.window[k] !== undefined, `window.${k} متعرّض (cross-block safety)`);

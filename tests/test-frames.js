@@ -127,3 +127,34 @@ assert(PF.computeShiftStatus(faked, emps, cfg, now).morning.hit === true, 'قب�
 const afterReverse = faked.map(r=> r.total===5000 ? { ...r, reversed:true } : r)
                           .concat([{ sellerEmployeeId:'a', total:-5000, isReversal:true }]);
 assertEq(PF.teamNet(afterReverse, ['a','b']), 1100, 'بعد الترجيع الصافي رجع لـ1100 (الغش مش بينفع)');
+
+// ---------- 🌍 حماية من باج الـ cross-block: الوصول لـ db/currentBranch ----------
+// pos-core.js معرّفهم بـ const/let (مش على window) — لازم frames.js يلاقيهم برضه
+{
+  const vm2 = require('vm'), fs2 = require('fs');
+  const ctx = { console:{log(){},warn(){},error(){}}, window:{}, setTimeout:()=>0, setInterval:()=>0 };
+  ctx.window.window = ctx.window;
+  const stubEl = ()=>({ style:{}, classList:{toggle(){},add(){},remove(){}}, querySelector:()=>null,
+                        appendChild(){}, setAttribute(){}, removeAttribute(){}, remove(){} });
+  ctx.document = { head:{appendChild(){}}, body:{appendChild(){}, classList:{toggle(){}}},
+                   createElement: stubEl, getElementById: ()=>null, querySelectorAll: ()=>[] };
+  vm2.createContext(ctx);
+  // نحاكي pos-core.js بالظبط: const/let على المستوى الأعلى
+  vm2.runInContext("const db={_tag:'db'}; let currentBranch='الرحاب';", ctx);
+  vm2.runInContext(fs2.readFileSync(path.resolve(__dirname,'..','pos','frames.js'),'utf8'), ctx, {filename:'frames.js'});
+  assert(ctx.window.db === undefined, 'المحاكاة صحيحة: db مش على window (زي الواقع)');
+  assert(!!ctx.window.posFrames, 'frames.js اتحمّل والجزء الرسومي اشتغل مع DOM وهمي');
+  assert(typeof ctx.window.pfDiag === 'function', 'دالة التشخيص pfDiag متاحة');
+  assert(typeof ctx.window.pfDecorateLoginTiles === 'function', 'دالة تزيين كروت الدخول متعرّضة');
+}
+
+// ---------- 🎭 الأفاتارات ----------
+// (معرّفين بـ const → مش بيبقوا globals، فبنقراهم من window زي ما الـ HTML بيعمل)
+const AV = S.window.AVATAR_CHOICES, avatarOf = S.window.avatarOf;
+assert(Array.isArray(AV) && AV.length >= 12, 'قايمة الأشكال متاحة');
+assert(new Set(AV).size === AV.length, 'مفيش شكل مكرر');
+assertEq(avatarOf({ name:'Rawan Ahmed', avatarEmoji:'🦋' }), '🦋', 'اختيار الموظف بيتعرض');
+assertEq(avatarOf({ name:'Rawan Ahmed' }), 'RA', 'من غير اختيار = الحروف الأولى');
+assertEq(avatarOf({ name:'Noha', avatarEmoji:'' }), 'N', 'الرجوع للحروف بيشتغل (اختيار فاضي)');
+assertEq(avatarOf(null), '', 'موظف مش موجود = آمن');
+assert(typeof S.window.openAvatarPicker === 'function', 'منتقي الأشكال متعرّض على window');
