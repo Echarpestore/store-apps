@@ -4670,6 +4670,17 @@ function renderAdvancesLog(){
     #tgtBannerX{ background:transparent; border:none; color:#f5c45199; font-size:16px; line-height:1;
       cursor:pointer; padding:2px 4px; font-family:'Cairo'; }
     #tgtBannerX:hover{ color:#f5c451; }
+    /* 📊 شريط تقدم التارجت — بيفضل ظاهر طول الشيفت */
+    #tgtProg{ display:none; margin:10px 12px 0; padding:10px 12px; border-radius:12px;
+      background:var(--panel2); border:1px solid var(--line); }
+    #tgtProg.show{ display:block; }
+    #tgtProg .r{ display:flex; justify-content:space-between; align-items:center;
+      font-size:12.5px; font-weight:700; margin-bottom:7px; }
+    #tgtProg .left{ color:var(--gold); }
+    #tgtProg .track{ height:9px; border-radius:99px; background:#00000055; overflow:hidden; }
+    #tgtProg .fill{ height:100%; border-radius:99px; background:linear-gradient(90deg,#b45309,#f59e0b);
+      transition:width .6s ease; }
+    #tgtProg .fill.done{ background:linear-gradient(90deg,#16a34a,#22c55e); }
   `;
   document.head.appendChild(st);
   const banner = document.createElement('div');
@@ -4679,6 +4690,14 @@ function renderAdvancesLog(){
   bannerX.id = 'tgtBannerX'; bannerX.textContent = '✕'; bannerX.title = 'إخفاء';
   banner.appendChild(bannerTxt); banner.appendChild(bannerX);
   document.body.appendChild(banner);
+  // 📊 شريط التقدم — بيتحط فوق شبكة الحضور
+  const prog = document.createElement('div');
+  prog.id = 'tgtProg';
+  (function place(){
+    const host = document.getElementById('notInGrid');
+    if(host && host.parentNode) host.parentNode.insertBefore(prog, host);
+    else setTimeout(place, 1500);
+  })();
   // الإغلاق بيتفضل متذكّر لنفس الاحتفال (نفس اليوم/الشيفت) — ميرجعش تاني
   const DISMISS_KEY = 'tgt_banner_dismissed';
   function dismissSig(){
@@ -4704,8 +4723,41 @@ function renderAdvancesLog(){
     });
   }
   window.activeShiftCelebrations = activeShiftCelebrations;
+  // الشيفتات اللي إحنا جواها دلوقتي وليها تارجت — بغض النظر عن التحقيق
+  function shiftsInWindow(stat, now){
+    if(!stat || stat.dateKey !== todayStr()) return [];
+    const t = hm(now);
+    return ['morning','evening'].filter(k=>{
+      const x = stat[k];
+      return x && (Number(x.target)||0) > 0 && x.start && x.end && t >= x.start && t < x.end;
+    });
+  }
+  window.shiftsInWindow = shiftsInWindow;
+  function renderProgress(stat){
+    const ks = shiftsInWindow(stat, new Date());
+    if(!ks.length){ prog.classList.remove('show'); return; }
+    prog.classList.add('show');
+    prog.innerHTML = ks.map(k=>{
+      const x = stat[k];
+      const unit = x.metric === 'pieces' ? 'قطعة' : 'ج.م';
+      const net = Number(x.net)||0, target = Number(x.target)||0;
+      const pct = target > 0 ? Math.min(100, Math.round(net / target * 100)) : 0;
+      const left = Math.max(0, target - net);
+      const name = k === 'morning' ? '🌅 الصباحي' : '🌆 المسائي';
+      const right = x.hit
+        ? '<span style="color:var(--good);">✅ اتحقق</span>'
+        : `<span class="left">فاضل ${left} ${unit}</span>`;
+      return `
+        <div style="margin-bottom:${ks.length>1?'10px':'0'};">
+          <div class="r"><span>${name} · ${net} من ${target} ${unit}</span>${right}</div>
+          <div class="track"><div class="fill${x.hit?' done':''}" style="width:${pct}%;"></div></div>
+        </div>`;
+    }).join('');
+  }
+
   function applyShiftStatus(stat){
     window.shiftStatus = stat;
+    try{ renderProgress(stat); }catch(e){ console.warn('progress', e); }
     const act = activeShiftCelebrations(stat, new Date());
     document.body.classList.toggle('tgt-hit', act.length > 0);
     if(act.length){

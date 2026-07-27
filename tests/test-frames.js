@@ -137,7 +137,8 @@ assertEq(PF.teamNet(afterReverse, ['a','b']), 1100, 'بعد الترجيع ال�
   const stubEl = ()=>({ style:{}, classList:{toggle(){},add(){},remove(){}}, querySelector:()=>null,
                         appendChild(){}, setAttribute(){}, removeAttribute(){}, remove(){} });
   ctx.document = { head:{appendChild(){}}, body:{appendChild(){}, classList:{toggle(){}}},
-                   createElement: stubEl, getElementById: ()=>null, querySelectorAll: ()=>[] };
+                   createElement: stubEl, getElementById: ()=>null,
+                   querySelector: ()=>null, querySelectorAll: ()=>[] };
   vm2.createContext(ctx);
   // نحاكي pos-core.js بالظبط: const/let على المستوى الأعلى
   vm2.runInContext("const db={_tag:'db'}; let currentBranch='الرحاب';", ctx);
@@ -192,4 +193,51 @@ assert(typeof S.window.openAvatarPicker === 'function', 'منتقي الأشكا
   // نفس البيانات بتارجت فلوس بتدي نتيجة مختلفة — المقياسين مستقلين
   const cfgAmt = { morning:{ target:1200, metric:'amount', start:'10:00', end:'18:00' }, evening:{ target:0 } };
   assert(PF.computeShiftStatus(rowsP, empsP, cfgAmt, nowP).morning.hit === false, 'تارجت فلوس 1200 لسه (1150)');
+}
+
+// ---------- 📊 شريط التقدم: أنهي شيفت يتعرض ----------
+{
+  const empsW = [{ id:'a', shift:'morning', active:true }];
+  const rowsW = [{ sellerEmployeeId:'a', total:400, items:[{qty:4}] }];
+  const nowW  = new Date('2026-07-27T11:00:00');
+  const cfgW  = { morning:{ target:1000, start:'10:00', end:'18:00' }, evening:{ target:1000, start:'14:00', end:'22:00' } };
+  const stW   = PF.computeShiftStatus(rowsW, empsW, cfgW, nowW);
+  assertEq(PF.shiftsInWindow(stW, nowW), ['morning'], 'التقدم بيبان للشيفت اللي جوه نافذته');
+  assertEq(PF.activeCelebrations(stW, nowW), [], 'التقدم بيبان من غير احتفال (التارجت لسه)');
+  // الساعة 3 العصر: الاتنين جوه النافذة (تداخل الشيفتات)
+  assertEq(PF.shiftsInWindow(stW, new Date('2026-07-27T15:00:00')), ['morning','evening'],
+    'وقت التداخل بيظهر الشيفتين');
+  assertEq(PF.shiftsInWindow(stW, new Date('2026-07-27T23:00:00')), [], 'برة كل النوافذ = مفيش تقدم');
+  // تارجت صفر = مفيش شريط أصلًا
+  const stZero = PF.computeShiftStatus(rowsW, empsW, { morning:{target:0, start:'10:00', end:'18:00'}, evening:{target:0} }, nowW);
+  assertEq(PF.shiftsInWindow(stZero, nowW), [], 'تارجت صفر = مفيش شريط تقدم');
+  assertEq(PF.shiftsInWindow(null, nowW), [], 'مفيش حالة = آمن');
+  // النسبة المعروضة
+  assertEq(Math.round(stW.morning.net / stW.morning.target * 100), 40, 'التقدم 40% (400 من 1000)');
+}
+
+// ---------- 📍 مكان شريط التقدم: فوق بار البحث في شاشة البيع ----------
+{
+  const vm3 = require('vm'), fs3 = require('fs');
+  const placed = [];
+  const searchWrap = { tag:'search-wrap' };
+  const saleTop = { firstChild: searchWrap,
+    insertBefore(n, ref){ placed.push({ id:n.id, before:ref.tag }); n.parentNode = saleTop; },
+    appendChild(n){ placed.push({ id:n.id, before:'(آخر حاجة)' }); n.parentNode = saleTop; } };
+  const dash = { firstChild:{}, insertBefore(n){ n.parentNode = dash; }, appendChild(n){ n.parentNode = dash; } };
+  const ctx3 = { console:{log(){},warn(){}}, window:{},
+    setTimeout:(fn)=>{ try{ fn(); }catch(e){} return 0; }, setInterval:()=>0 };
+  ctx3.window.window = ctx3.window;
+  ctx3.document = { head:{appendChild(){}}, body:{appendChild(){}, classList:{toggle(){}}},
+    createElement: ()=>({ style:{}, className:'', innerHTML:'', id:'',
+      classList:{toggle(){},add(){},remove(){}}, querySelector:()=>null, appendChild(){},
+      setAttribute(){}, removeAttribute(){} }),
+    getElementById: (id)=> id === 'dashboardScreen' ? dash : null,
+    querySelector: (sel)=> sel === '#saleScreen .sale-top' ? saleTop : null,
+    querySelectorAll: ()=>[] };
+  vm3.createContext(ctx3);
+  vm3.runInContext("const db={}; let currentBranch='الرحاب';", ctx3);
+  vm3.runInContext(fs3.readFileSync(path.resolve(__dirname,'..','pos','frames.js'),'utf8'), ctx3, {filename:'frames.js'});
+  const hit = placed.filter(p=> p.id === 'pfProgSale' && p.before === 'search-wrap');
+  assert(hit.length === 1, 'شريط التقدم اتحط فوق بار البحث في شاشة البيع');
 }

@@ -80,6 +80,15 @@
     });
     return out;
   }
+  // الشيفتات اللي جوه نافذتها وليها تارجت — للتقدم (مش شرط تكون متحققة)
+  function shiftsInWindow(stat, now){
+    if(!stat || stat.dateKey !== dayKey(now)) return [];
+    var t = hm(now);
+    return SHIFT_KEYS.filter(function(k){
+      var x = stat[k];
+      return !!(x && (Number(x.target)||0) > 0 && inWindow(t, x.start, x.end));
+    });
+  }
   // الاحتفالات الشغّالة دلوقتي: التارجت متضروب + إحنا جوه نافذة الشيفت
   function activeCelebrations(stat, now){
     if(!stat || stat.dateKey !== dayKey(now)) return [];
@@ -93,7 +102,8 @@
   window.posFrames = {
     dayKey: dayKey, hm: hm, inWindow: inWindow,
     teamNet: teamNet, teamPieces: teamPieces, teamMetric: teamMetric, teamOf: teamOf,
-    computeShiftStatus: computeShiftStatus, activeCelebrations: activeCelebrations
+    computeShiftStatus: computeShiftStatus, activeCelebrations: activeCelebrations,
+    shiftsInWindow: shiftsInWindow
   };
 
   // ============================================================
@@ -129,6 +139,24 @@
     '  font-weight:900; color:#f59e0b; font-size:15px; }',
     /* شاشة البيع: توهج إطاري فقط (وضع light) — منطقة الأرقام مش بتتلمس */
     'body.pf-sale-light #saleScreen{ box-shadow: inset 0 0 0 3px #f59e0baa, inset 0 0 26px #f59e0b33; border-radius:12px; }',
+    /* 📊 شريط تقدم التارجت — ظاهر طول الشيفت في الشاشة الرئيسية */
+    '#pfProg{ display:none; margin:0 0 12px; padding:10px 12px; border-radius:12px;',
+    '  background:rgba(255,255,255,.04); border:1px solid rgba(245,158,11,.35); }',
+    '#pfProg.show{ display:block; }',
+    '#pfProg .r{ display:flex; justify-content:space-between; align-items:center; font-size:12.5px; font-weight:700; margin-bottom:7px; }',
+    '#pfProg .left{ color:#f59e0b; }',
+    '#pfProg .track{ height:9px; border-radius:99px; background:rgba(0,0,0,.35); overflow:hidden; }',
+    '#pfProg .fill{ height:100%; border-radius:99px; background:linear-gradient(90deg,#b45309,#f59e0b); transition:width .6s ease; }',
+    '#pfProg .fill.done{ background:linear-gradient(90deg,#16a34a,#22c55e); }',
+    /* نسخة شاشة البيع — فوق بار البحث، أنحف عشان متاخدش مساحة من الشغل */
+    '#pfProgSale{ display:none; margin:0 0 8px; padding:7px 11px; border-radius:10px;',
+    '  background:rgba(255,255,255,.04); border:1px solid rgba(245,158,11,.35); }',
+    '#pfProgSale.show{ display:block; }',
+    '#pfProgSale .r{ display:flex; justify-content:space-between; align-items:center; font-size:11.5px; font-weight:700; margin-bottom:5px; }',
+    '#pfProgSale .left{ color:#f59e0b; }',
+    '#pfProgSale .track{ height:7px; border-radius:99px; background:rgba(0,0,0,.35); overflow:hidden; }',
+    '#pfProgSale .fill{ height:100%; border-radius:99px; background:linear-gradient(90deg,#b45309,#f59e0b); transition:width .6s ease; }',
+    '#pfProgSale .fill.done{ background:linear-gradient(90deg,#16a34a,#22c55e); }',
     /* شاشة البيع: تحوّل كامل (وضع full) */
     'body.pf-sale-full #saleScreen{ background:radial-gradient(900px 400px at 50% -60px, #f59e0b2e, transparent 70%);',
     '  box-shadow: inset 0 0 0 3px #f59e0bcc, inset 0 0 30px #f59e0b44; border-radius:12px; }'
@@ -137,6 +165,48 @@
 
   var bar = document.createElement('div'); bar.id = 'pfBar'; document.body.appendChild(bar);
   var banner = document.createElement('div'); banner.id = 'pfBanner'; document.body.appendChild(banner);
+  var prog = document.createElement('div'); prog.id = 'pfProg';          // الشاشة الرئيسية
+  var progSale = document.createElement('div'); progSale.id = 'pfProgSale'; // شاشة البيع — فوق بار البحث
+  (function place(){
+    var done = 0;
+    var dash = document.getElementById('dashboardScreen');
+    if(dash && !prog.parentNode){
+      if(dash.firstChild) dash.insertBefore(prog, dash.firstChild); else dash.appendChild(prog);
+    }
+    if(prog.parentNode) done++;
+    // فوق بار البحث بالظبط: أول عنصر جوه .sale-top
+    var saleTop = document.querySelector('#saleScreen .sale-top');
+    if(saleTop && !progSale.parentNode){
+      if(saleTop.firstChild) saleTop.insertBefore(progSale, saleTop.firstChild); else saleTop.appendChild(progSale);
+    }
+    if(progSale.parentNode) done++;
+    if(done < 2) setTimeout(place, 1500);
+  })();
+  function renderProgress(){
+    var ks = shiftsInWindow(state.status, new Date());
+    if(!ks.length){
+      prog.className = ''; prog.innerHTML = '';
+      progSale.className = ''; progSale.innerHTML = '';
+      return;
+    }
+    prog.className = 'show';
+    progSale.className = 'show';
+    prog.innerHTML = ks.map(function(k){
+      var x = state.status[k];
+      var unit = x.metric === 'pieces' ? 'قطعة' : 'ج.م';
+      var net = Number(x.net)||0, target = Number(x.target)||0;
+      var pct = target > 0 ? Math.min(100, Math.round(net/target*100)) : 0;
+      var left = Math.max(0, target - net);
+      var name = k === 'morning' ? '🌅 الصباحي' : '🌆 المسائي';
+      var right = x.hit ? '<span style="color:#22c55e;">✅ اتحقق</span>'
+                        : '<span class="left">فاضل ' + left + ' ' + unit + '</span>';
+      return '<div style="margin-bottom:' + (ks.length>1?'10px':'0') + ';">'
+           + '<div class="r"><span>' + name + ' · ' + net + ' من ' + target + ' ' + unit + '</span>' + right + '</div>'
+           + '<div class="track"><div class="fill' + (x.hit?' done':'') + '" style="width:' + pct + '%;"></div></div>'
+           + '</div>';
+    }).join('');
+    progSale.innerHTML = prog.innerHTML;   // نفس المحتوى في الشاشتين
+  }
 
   // ---------- الحالة ----------
   var state = { status:null, cfg:null, mode:'light', lastHitSig:'' };
@@ -169,6 +239,7 @@
     if(!on) state.lastHitSig = '';
 
     decorateLoginTiles();
+    try{ renderProgress(); }catch(e){ console.warn('pf progress', e); }
   }
 
   // ---------- إطارات شاشة الدخول ----------
