@@ -220,10 +220,10 @@ assert(typeof S.window.openAvatarPicker === 'function', 'منتقي الأشكا
 {
   const vm3 = require('vm'), fs3 = require('fs');
   const placed = [];
-  const searchWrap = { tag:'search-wrap' };
-  const saleTop = { firstChild: searchWrap,
-    insertBefore(n, ref){ placed.push({ id:n.id, before:ref.tag }); n.parentNode = saleTop; },
-    appendChild(n){ placed.push({ id:n.id, before:'(آخر حاجة)' }); n.parentNode = saleTop; } };
+  // .sale-top عنده display:flex → لازم الشريط يتحط قبله في العمود اللي فوقه
+  const col = { tag:'qbx-center',
+    insertBefore(n, ref){ placed.push({ id:n.id, beforeTag:ref.tag }); n.parentNode = col; } };
+  const saleTop = { tag:'sale-top', parentNode: col };
   const dash = { firstChild:{}, insertBefore(n){ n.parentNode = dash; }, appendChild(n){ n.parentNode = dash; } };
   const ctx3 = { console:{log(){},warn(){}}, window:{},
     setTimeout:(fn)=>{ try{ fn(); }catch(e){} return 0; }, setInterval:()=>0 };
@@ -238,6 +238,7 @@ assert(typeof S.window.openAvatarPicker === 'function', 'منتقي الأشكا
   vm3.createContext(ctx3);
   vm3.runInContext("const db={}; let currentBranch='الرحاب';", ctx3);
   vm3.runInContext(fs3.readFileSync(path.resolve(__dirname,'..','pos','frames.js'),'utf8'), ctx3, {filename:'frames.js'});
-  const hit = placed.filter(p=> p.id === 'pfProgSale' && p.before === 'search-wrap');
-  assert(hit.length === 1, 'شريط التقدم اتحط فوق بار البحث في شاشة البيع');
+  const hit = placed.filter(p=> p.id === 'pfProgSale' && p.beforeTag === 'sale-top');
+  assert(hit.length === 1, 'شريط التقدم اتحط كسطر كامل فوق بار البحث (قبل .sale-top)');
+  assert(!placed.some(p=> p.id === 'pfProg'), 'شريط الشاشة الرئيسية اتشال خلاص');
 }

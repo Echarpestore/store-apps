@@ -133,23 +133,10 @@
     '#pfBanner{ position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:9999; display:none;',
     '  background:linear-gradient(90deg,#b45309,#f59e0b,#b45309); color:#1a1200; font-weight:900;',
     '  padding:10px 24px; border-radius:99px; font-size:15px; box-shadow:0 6px 26px #f59e0b99; }',
-    /* الشاشة الرئيسية: تحوّل كامل دايمًا */
-    'body.pf-on #dashboardScreen{ background:radial-gradient(900px 400px at 50% -80px, #f59e0b26, transparent 70%); }',
-    'body.pf-on #dashboardScreen::before{ content:attr(data-pf-msg); display:block; margin:0 0 10px; text-align:center;',
-    '  font-weight:900; color:#f59e0b; font-size:15px; }',
     /* شاشة البيع: توهج إطاري فقط (وضع light) — منطقة الأرقام مش بتتلمس */
     'body.pf-sale-light #saleScreen{ box-shadow: inset 0 0 0 3px #f59e0baa, inset 0 0 26px #f59e0b33; border-radius:12px; }',
-    /* 📊 شريط تقدم التارجت — ظاهر طول الشيفت في الشاشة الرئيسية */
-    '#pfProg{ display:none; margin:0 0 12px; padding:10px 12px; border-radius:12px;',
-    '  background:rgba(255,255,255,.04); border:1px solid rgba(245,158,11,.35); }',
-    '#pfProg.show{ display:block; }',
-    '#pfProg .r{ display:flex; justify-content:space-between; align-items:center; font-size:12.5px; font-weight:700; margin-bottom:7px; }',
-    '#pfProg .left{ color:#f59e0b; }',
-    '#pfProg .track{ height:9px; border-radius:99px; background:rgba(0,0,0,.35); overflow:hidden; }',
-    '#pfProg .fill{ height:100%; border-radius:99px; background:linear-gradient(90deg,#b45309,#f59e0b); transition:width .6s ease; }',
-    '#pfProg .fill.done{ background:linear-gradient(90deg,#16a34a,#22c55e); }',
-    /* نسخة شاشة البيع — فوق بار البحث، أنحف عشان متاخدش مساحة من الشغل */
-    '#pfProgSale{ display:none; margin:0 0 8px; padding:7px 11px; border-radius:10px;',
+    /* 📊 شريط تقدم التارجت — سطر كامل فوق بار البحث في شاشة البيع */
+    '#pfProgSale{ display:none; width:100%; margin:0 0 8px; padding:7px 11px; border-radius:10px;',
     '  background:rgba(255,255,255,.04); border:1px solid rgba(245,158,11,.35); }',
     '#pfProgSale.show{ display:block; }',
     '#pfProgSale .r{ display:flex; justify-content:space-between; align-items:center; font-size:11.5px; font-weight:700; margin-bottom:5px; }',
@@ -165,33 +152,22 @@
 
   var bar = document.createElement('div'); bar.id = 'pfBar'; document.body.appendChild(bar);
   var banner = document.createElement('div'); banner.id = 'pfBanner'; document.body.appendChild(banner);
-  var prog = document.createElement('div'); prog.id = 'pfProg';          // الشاشة الرئيسية
-  var progSale = document.createElement('div'); progSale.id = 'pfProgSale'; // شاشة البيع — فوق بار البحث
+  // شريط واحد بس — في شاشة البيع فوق بار البحث (الشاشة الرئيسية اتشالت بقرار المالك)
+  var progSale = document.createElement('div'); progSale.id = 'pfProgSale';
   (function place(){
-    var done = 0;
-    var dash = document.getElementById('dashboardScreen');
-    if(dash && !prog.parentNode){
-      if(dash.firstChild) dash.insertBefore(prog, dash.firstChild); else dash.appendChild(prog);
-    }
-    if(prog.parentNode) done++;
-    // فوق بار البحث بالظبط: أول عنصر جوه .sale-top
+    if(progSale.parentNode) return;
+    // ⚠️ .sale-top عنده display:flex — لو حطيناه جواه هيبقى جنب بار البحث.
+    // فبنحطه قبله في .qbx-center (عمود) عشان ياخد سطر كامل فوقه.
     var saleTop = document.querySelector('#saleScreen .sale-top');
-    if(saleTop && !progSale.parentNode){
-      if(saleTop.firstChild) saleTop.insertBefore(progSale, saleTop.firstChild); else saleTop.appendChild(progSale);
-    }
-    if(progSale.parentNode) done++;
-    if(done < 2) setTimeout(place, 1500);
+    var col = saleTop && saleTop.parentNode;
+    if(col){ col.insertBefore(progSale, saleTop); }
+    else setTimeout(place, 1500);
   })();
   function renderProgress(){
     var ks = shiftsInWindow(state.status, new Date());
-    if(!ks.length){
-      prog.className = ''; prog.innerHTML = '';
-      progSale.className = ''; progSale.innerHTML = '';
-      return;
-    }
-    prog.className = 'show';
+    if(!ks.length){ progSale.className = ''; progSale.innerHTML = ''; return; }
     progSale.className = 'show';
-    prog.innerHTML = ks.map(function(k){
+    progSale.innerHTML = ks.map(function(k){
       var x = state.status[k];
       var unit = x.metric === 'pieces' ? 'قطعة' : 'ج.م';
       var net = Number(x.net)||0, target = Number(x.target)||0;
@@ -205,7 +181,6 @@
            + '<div class="track"><div class="fill' + (x.hit?' done':'') + '" style="width:' + pct + '%;"></div></div>'
            + '</div>';
     }).join('');
-    progSale.innerHTML = prog.innerHTML;   // نفس المحتوى في الشاشتين
   }
 
   // ---------- الحالة ----------
@@ -219,14 +194,6 @@
     document.body.classList.toggle('pf-on', on);
     document.body.classList.toggle('pf-sale-light', on && saleMode() === 'light');
     document.body.classList.toggle('pf-sale-full',  on && saleMode() === 'full');
-
-    var dash = document.getElementById('dashboardScreen');
-    if(dash){
-      if(on){
-        var names = act.map(function(k){ return SHIFT_LABEL[k]; }).join(' + ');
-        dash.setAttribute('data-pf-msg', '🎯 شيفت ' + names + ' ضرب التارجت — الشاشة ليكم لآخر الشيفت');
-      } else { dash.removeAttribute('data-pf-msg'); }
-    }
 
     // بانر لحظي مرة واحدة لكل تحقيق
     var sig = act.join(',') + '|' + (state.status ? state.status.dateKey : '');

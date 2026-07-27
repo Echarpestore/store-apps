@@ -4670,17 +4670,15 @@ function renderAdvancesLog(){
     #tgtBannerX{ background:transparent; border:none; color:#f5c45199; font-size:16px; line-height:1;
       cursor:pointer; padding:2px 4px; font-family:'Cairo'; }
     #tgtBannerX:hover{ color:#f5c451; }
-    /* 📊 شريط تقدم التارجت — بيفضل ظاهر طول الشيفت */
-    #tgtProg{ display:none; margin:10px 12px 0; padding:10px 12px; border-radius:12px;
-      background:var(--panel2); border:1px solid var(--line); }
+    /* 📊 تقدم التارجت — سطر بسيط جدًا، من غير صندوق ولا إطار */
+    #tgtProg{ display:none; margin:2px 4px 10px; }
     #tgtProg.show{ display:block; }
     #tgtProg .r{ display:flex; justify-content:space-between; align-items:center;
-      font-size:12.5px; font-weight:700; margin-bottom:7px; }
-    #tgtProg .left{ color:var(--gold); }
-    #tgtProg .track{ height:9px; border-radius:99px; background:#00000055; overflow:hidden; }
-    #tgtProg .fill{ height:100%; border-radius:99px; background:linear-gradient(90deg,#b45309,#f59e0b);
-      transition:width .6s ease; }
-    #tgtProg .fill.done{ background:linear-gradient(90deg,#16a34a,#22c55e); }
+      font-size:11.5px; color:var(--sub); margin-bottom:4px; }
+    #tgtProg .left{ color:var(--gold); font-weight:700; }
+    #tgtProg .track{ height:4px; border-radius:99px; background:#ffffff14; overflow:hidden; }
+    #tgtProg .fill{ height:100%; border-radius:99px; background:var(--gold); transition:width .6s ease; }
+    #tgtProg .fill.done{ background:var(--good); }
   `;
   document.head.appendChild(st);
   const banner = document.createElement('div');
@@ -4745,11 +4743,11 @@ function renderAdvancesLog(){
       const left = Math.max(0, target - net);
       const name = k === 'morning' ? '🌅 الصباحي' : '🌆 المسائي';
       const right = x.hit
-        ? '<span style="color:var(--good);">✅ اتحقق</span>'
+        ? '<span style="color:var(--good);">✅</span>'
         : `<span class="left">فاضل ${left} ${unit}</span>`;
       return `
-        <div style="margin-bottom:${ks.length>1?'10px':'0'};">
-          <div class="r"><span>${name} · ${net} من ${target} ${unit}</span>${right}</div>
+        <div style="margin-bottom:${ks.length>1?'8px':'0'};">
+          <div class="r"><span>${name} · ${net}/${target}</span>${right}</div>
           <div class="track"><div class="fill${x.hit?' done':''}" style="width:${pct}%;"></div></div>
         </div>`;
     }).join('');
