@@ -46,6 +46,7 @@ const MIN_ITEMS_FOR_STAFF_POINT = 5; // كل فاتورة فيها 5 قطع أو
 
 // كل جهاز POS بيتبع فرع محدد (نفس فكرة باقي البرامج) — بيتحفظ على الجهاز نفسه
 let currentBranch = localStorage.getItem('pos_branch') || '';
+window.currentBranch = currentBranch;   // 🌍 mirror للملفات التانية (frames.js)
 // فروع Glow ليها رصيد نقاط منفصل (points_glow) عن echarpe (points) — عشان ما تتلخبطش
 const GLOW_BRANCHES = ['Glow'];
 function pointsFieldFor(branch){ return GLOW_BRANCHES.includes(branch) ? 'points_glow' : 'points'; }
@@ -101,6 +102,9 @@ firebase.auth().onAuthStateChanged(function(u){
   }
 });
 const db = firebase.firestore();
+// 🌍 تعريض على window: const/let مش بيتحطوا على window تلقائيًا،
+// والملفات التانية (frames.js وغيرها) محتاجة توصلهم — القاعدة الذهبية في docs/DEVELOPER.md
+window.db = db;
 // قايمة الفروع في شاشة الإعداد بتتحمّل عند فتح الصفحة (لو الشاشة ظاهرة)
 setTimeout(function(){ if(typeof loadBranchSetupOptions === 'function' && document.querySelector('#branchSetupScreen.active')) loadBranchSetupOptions(); }, 300);
 
@@ -193,6 +197,7 @@ async function saveBranchSetup(){
       await db.collection(TEST_SETTINGS).doc('staff_uids').set({ [cred.user.uid]: { branch: val, email: email, ts: Date.now() } }, { merge:true });
     }catch(e){ console.warn('staff uid register', e); }
     currentBranch = val;
+    window.currentBranch = val;   // 🌍 mirror للملفات التانية
     localStorage.setItem('pos_branch', val);
     localStorage.setItem('pos_branch_email', email);   // للملء التلقائي لو الجلسة ضاعت
     if(errBox) errBox.textContent = '';

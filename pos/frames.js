@@ -188,25 +188,57 @@
   }
   window.pfDecorateLoginTiles = decorateLoginTiles;
 
-  // ---------- الاستماع للإعدادات + كتابة الحالة ----------
-  function branch(){ return window.currentBranch || null; }
+  // ---------- الوصول للمتغيرات العامة ----------
+  // ⚠️ pos-core.js معرّف db و currentBranch بـ const/let — دول مش بيتحطوا على window،
+  // لكن بيتحطوا في الـ global lexical scope اللي كل ملفات الـ classic scripts بتشوفه.
+  // فبنقراهم بالاسم مباشرة مع fallback على window (لو اتعرضوا هناك في المستقبل).
+  function getDb(){
+    try{ if(typeof db !== 'undefined' && db) return db; }catch(e){}
+    return window.db || null;
+  }
+  function branch(){
+    try{ if(typeof currentBranch !== 'undefined' && currentBranch) return currentBranch; }catch(e){}
+    return window.currentBranch || null;
+  }
+
+  // 🩺 تشخيص سريع: اكتب pfDiag() في الـ console لو مفيش حاجة ظاهرة
+  window.pfDiag = async function(){
+    var b = branch(), D = getDb();
+    console.log('الفرع:', b || '❌ مش متعرّف');
+    console.log('قاعدة البيانات:', D ? '✅' : '❌');
+    if(!b || !D) return;
+    var cfgDoc = await D.collection('pos_test_settings').doc('shift_targets').get();
+    var cfg = cfgDoc.exists ? ((cfgDoc.data().byBranch||{})[b]) : null;
+    console.log('تارجت الشيفتات للفرع ده:', cfg || '❌ مش متحفوظ — احفظه من شاشة الأدمن');
+    var empSnap = await D.collection('sales_employees').where('branch','==', b).get();
+    var emps = empSnap.docs.map(function(d){ var o=d.data(); o.id=d.id; return o; });
+    console.log('عدد الموظفين:', emps.length);
+    console.log('فريق الصبح:', teamOf(emps,'morning'), '· فريق المسا:', teamOf(emps,'evening'));
+    var noShift = emps.filter(function(e){ return e.active !== false && e.shift !== 'morning' && e.shift !== 'evening'; });
+    if(noShift.length) console.warn('⚠️ موظفين من غير شيفت محدد (مش هياخدوا إطار الشيفت):',
+      noShift.map(function(e){ return e.name + ' → shift=' + JSON.stringify(e.shift); }));
+    console.log('الحالة المحسوبة دلوقتي:', state.status);
+    console.log('الاحتفالات الشغالة:', activeCelebrations(state.status, new Date()));
+    console.log('وضع شاشة البيع:', state.mode);
+  };
 
   async function refreshStatus(){
     try{
-      var b = branch(); if(!b || !window.db) return;
-      var cfgDoc = await db.collection('pos_test_settings').doc('shift_targets').get();
+      var b = branch(); var D = getDb();
+      if(!b || !D){ console.warn('🖼️ frames: الفرع أو قاعدة البيانات لسه مش جاهزين'); return; }
+      var cfgDoc = await D.collection('pos_test_settings').doc('shift_targets').get();
       var byBranch = cfgDoc.exists ? (cfgDoc.data().byBranch || {}) : {};
       var cfg = byBranch[b] || null;
-      var modeDoc = await db.collection('pos_test_settings').doc('frames_cfg').get();
+      var modeDoc = await D.collection('pos_test_settings').doc('frames_cfg').get();
       state.mode = (modeDoc.exists && modeDoc.data().posSaleMode) || 'light';
       if(!cfg){ state.status = null; applyVisuals(); return; }
 
       var start = new Date(); start.setHours(0,0,0,0);
-      var snap = await db.collection('pos_test_sales')
+      var snap = await D.collection('pos_test_sales')
         .where('createdAt','>=', firebase.firestore.Timestamp.fromDate(start)).get();
       var rows = snap.docs.map(function(d){ return d.data(); });
 
-      var empSnap = await db.collection('sales_employees').where('branch','==', b).get();
+      var empSnap = await D.collection('sales_employees').where('branch','==', b).get();
       var emps = empSnap.docs.map(function(d){ var o = d.data(); o.id = d.id; return o; });
       window._pfEmployees = emps;
 
@@ -216,15 +248,15 @@
       var sig = JSON.stringify([stat.dateKey, stat.morning.hit, stat.morning.net, stat.evening.hit, stat.evening.net]);
       if(sig !== state._wsig){
         state._wsig = sig;
-        db.collection('pos_test_settings').doc('shift_status_' + b).set(stat, { merge:false })
+        D.collection('pos_test_settings').doc('shift_status_' + b).set(stat, { merge:false })
           .catch(function(e){ console.warn('shift status write', e); });
       }
       applyVisuals();
     }catch(e){ console.warn('posFrames refresh', e); }
   }
 
-  setTimeout(refreshStatus, 6000);
-  setInterval(refreshStatus, 60000);      // تحديث الصافي كل دقيقة
+  setTimeout(refreshStatus, 3000);
+  setInterval(refreshStatus, 30000);      // تحديث الصافي كل نص دقيقة
   setInterval(applyVisuals, 30000);       // نهاية نافذة الشيفت بتطفّي الاحتفال لوحدها
   window.pfRefreshStatus = refreshStatus;
 })();
