@@ -2732,7 +2732,7 @@ function renderAdminList(){
   }
   wrap.innerHTML = listed.map(e=>`
     <div class="emp-row" style="flex-wrap:wrap;">
-      <div class="n">${e.name}${viewBranch==='__ALL__' ? ' <span style="color:var(--sub); font-weight:400; font-size:12px;">— '+(e.branch||'—')+'</span>' : ''}</div>
+      <div class="n">${e.name}${e.cardCode ? ' <span title="ليه كارت مطبوع — كود ' + e.cardCode + '" style="font-size:12px; background:var(--gold-dim); color:#0b0c0f; padding:1px 7px; border-radius:8px; font-weight:800;">🪪 كارت</span>' : ''}${viewBranch==='__ALL__' ? ' <span style="color:var(--sub); font-weight:400; font-size:12px;">— '+(e.branch||'—')+'</span>' : ''}</div>
       <input type="text" inputmode="numeric" maxlength="4" placeholder="كود PIN" data-pin-id="${e.id}" value="${e.pin || ''}"
         style="width:80px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; text-align:center;">
       <button data-act="savePin" data-id="${e.id}" style="border:none; background:var(--good); color:#fff; padding:8px 12px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">حفظ الكود</button>
@@ -2742,7 +2742,24 @@ function renderAdminList(){
   `).join('');
   wrap.querySelectorAll('[data-act="del"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      if(!confirm('متأكد إنك عايز تحذف الموظف ده؟')) return;
+      // 🪪 لو الموظف ده ليه كارت مطبوع (cardCode) — تحذير أقوى قبل الحذف:
+      // الحذف بيبطّل الكارت الورقي فورًا (دخول POS + شراء الموظفين + QR الإحالة)
+      const emp = (window.allEmployeesAll||[]).find(x=> x.id === btn.dataset.id);
+      if(emp && emp.cardCode){
+        const ok = confirm(
+          '⚠️ الموظف ده ليه كارت مطبوع!\n\n' +
+          'كود الكارت: ' + emp.cardCode + '\n' +
+          (emp.cardIssuedAt ? 'اتطبع بتاريخ: ' + new Date(emp.cardIssuedAt).toLocaleDateString('ar-EG') + '\n' : '') +
+          '\nلو حذفته، الكارت الورقي اللي معاه هيبطل يشتغل نهائيًا:\n' +
+          '• سكان الدخول على الكاشير\n' +
+          '• خصم شراء الموظفين\n' +
+          '• QR الإحالة اللي على ضهر الكارت\n\n' +
+          'لو ده تكرار — اتأكد إنك بتحذف النسخة اللي *من غير* كارت.\n\n' +
+          'متأكد إنك عايز تحذف الموظف اللي ليه الكارت؟');
+        if(!ok) return;
+      } else {
+        if(!confirm('متأكد إنك عايز تحذف الموظف ده؟')) return;
+      }
       try{ await deleteDoc(doc(db,'sales_employees', btn.dataset.id)); }
       catch(err){ console.error('تعذر الحذف', err); }
     });
