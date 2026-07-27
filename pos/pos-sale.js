@@ -702,7 +702,13 @@ async function refreshCustomerInfo(){
       revertCustomerOffers(); applyCustomerOffers(); renderCart();
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
       const _now = Date.now();
-      custPendingRedeem = (d.pendingRedeem && d.pendingRedeem.brand === _brand && d.pendingRedeem.points > 0) ? d.pendingRedeem : null;
+      // 🛡️ نتأكد إن طلب الاستبدال اللي العميل بعته من التطبيق ≤ رصيده الحقيقي (منع تلاعب)
+      custPendingRedeem = (d.pendingRedeem && d.pendingRedeem.brand === _brand
+        && d.pendingRedeem.points > 0
+        && d.pendingRedeem.points <= custPointsBalance) ? d.pendingRedeem : null;
+      if(d.pendingRedeem && d.pendingRedeem.points > custPointsBalance){
+        showToast('⚠️ طلب استبدال العميل أكبر من رصيده — اتجاهل. اعمل الاستبدال يدوي بالرصيد الصح', 'warn');
+      }
       custReward = (d.rewards||[]).find(r=> r && !r.used && r.brand===_brand && (!r.expiry || r.expiry>_now)) || null;
       custBaseText = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
       refreshCustomerActionUI();
