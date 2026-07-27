@@ -813,12 +813,20 @@
     <div class="panel">
       <h3>🎯 تارجت مبيعات الشيفت</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
-        لما صافي مبيعات فريق الشيفت (بعد المرتجعات) يوصل للرقم — كل موظفين الشيفت ياخدوا إطار،
+        اختار التارجت بالفلوس أو بعدد القطع. لما فريق الشيفت (بعد المرتجعات) يوصل للرقم — كل موظفين الشيفت ياخدوا إطار،
         والشاشات بتتحول ليهم لآخر الشيفت. المبيعات بتتحسب على البياع المسجّل على الفاتورة. سيبه 0 لإلغاء التارجت.
       </p>
       <div class="add-form" style="flex-wrap:wrap;">
-        <input type="number" min="0" id="shiftTargetMorning" placeholder="🌅 تارجت الصباحي (ج.م)" style="min-width:180px;">
-        <input type="number" min="0" id="shiftTargetEvening" placeholder="🌆 تارجت المسائي (ج.م)" style="min-width:180px;">
+        <input type="number" min="0" id="shiftTargetMorning" placeholder="🌅 تارجت الصباحي" style="min-width:150px;">
+        <select id="shiftMetricMorning" style="min-width:120px;">
+          <option value="amount">💵 فلوس (ج.م)</option>
+          <option value="pieces">📦 قطع</option>
+        </select>
+        <input type="number" min="0" id="shiftTargetEvening" placeholder="🌆 تارجت المسائي" style="min-width:150px;">
+        <select id="shiftMetricEvening" style="min-width:120px;">
+          <option value="amount">💵 فلوس (ج.م)</option>
+          <option value="pieces">📦 قطع</option>
+        </select>
         <button id="saveShiftTargetsBtn">حفظ تارجت الشيفتات</button>
       </div>
       <div class="field-err" id="shiftTargetsErr"></div>

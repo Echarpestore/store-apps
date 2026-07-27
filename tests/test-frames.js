@@ -158,3 +158,38 @@ assertEq(avatarOf({ name:'Rawan Ahmed' }), 'RA', 'من غير اختيار = ا�
 assertEq(avatarOf({ name:'Noha', avatarEmoji:'' }), 'N', 'الرجوع للحروف بيشتغل (اختيار فاضي)');
 assertEq(avatarOf(null), '', 'موظف مش موجود = آمن');
 assert(typeof S.window.openAvatarPicker === 'function', 'منتقي الأشكال متعرّض على window');
+
+// ---------- 📦 تارجت بعدد القطع ----------
+{
+  const rowsP = [
+    { sellerEmployeeId:'a', total:500, items:[{qty:3},{qty:2}] },              // 5 قطع
+    { sellerEmployeeId:'b', total:300, items:[{qty:4}] },                      // 4 قطع
+    { sellerEmployeeId:'a', total:900, items:[{qty:10}], reversed:true },      // فاتورة مرتجعة
+    { sellerEmployeeId:'a', total:-100, items:[{qty:5}], isReversal:true },    // صف العكس
+    { sellerEmployeeId:'z', total:400, items:[{qty:9}] },                      // برة الفريق
+    { sellerEmployeeId:'a', total:200, items:[{qty:2},{qty:1, isReturn:true}] },// 2 − 1 = 1
+    { sellerEmployeeId:'b', total:0,   items:[{qty:1, isRedemption:true}] },   // استبدال بنقط = مش قطعة مبيعة
+    { sellerEmployeeId:'a', total:150 },                                       // فاتورة من غير items
+  ];
+  assertEq(PF.teamPieces(rowsP, ['a','b']), 10, 'عدّ القطع: 5+4+1 = 10 (مع استبعاد المرتجع والعكس والاستبدال)');
+  assertEq(PF.teamPieces(rowsP, []), 0, 'فريق فاضي = صفر قطع');
+  assertEq(PF.teamPieces(null, ['a']), 0, 'مفيش مبيعات = صفر آمن');
+  assertEq(PF.teamMetric(rowsP, ['a','b'], 'pieces'), 10, 'المقياس بالقطع');
+  assertEq(PF.teamMetric(rowsP, ['a','b'], 'amount'), 1150, 'المقياس بالفلوس (500+300+200+150)');
+  assertEq(PF.teamMetric(rowsP, ['a','b'], undefined), 1150, 'الافتراضي = فلوس');
+
+  const empsP = [{ id:'a', shift:'morning', active:true }, { id:'b', shift:'morning', active:true }];
+  const nowP = new Date('2026-07-27T11:00:00');
+  const cfgPieces = { morning:{ target:10, metric:'pieces', start:'10:00', end:'18:00' }, evening:{ target:0 } };
+  const stP = PF.computeShiftStatus(rowsP, empsP, cfgPieces, nowP);
+  assert(stP.morning.hit === true, '10 قطع = التارجت متضروب بالظبط');
+  assertEq(stP.morning.metric, 'pieces', 'المقياس متسجّل في الحالة');
+  assertEq(stP.morning.net, 10, 'الصافي بالقطع');
+
+  const cfg11 = { morning:{ target:11, metric:'pieces', start:'10:00', end:'18:00' }, evening:{ target:0 } };
+  assert(PF.computeShiftStatus(rowsP, empsP, cfg11, nowP).morning.hit === false, '11 قطعة = لسه');
+
+  // نفس البيانات بتارجت فلوس بتدي نتيجة مختلفة — المقياسين مستقلين
+  const cfgAmt = { morning:{ target:1200, metric:'amount', start:'10:00', end:'18:00' }, evening:{ target:0 } };
+  assert(PF.computeShiftStatus(rowsP, empsP, cfgAmt, nowP).morning.hit === false, 'تارجت فلوس 1200 لسه (1150)');
+}

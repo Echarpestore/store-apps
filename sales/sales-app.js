@@ -4710,7 +4710,10 @@ function renderAdvancesLog(){
     document.body.classList.toggle('tgt-hit', act.length > 0);
     if(act.length){
       const names = act.map(k=> k==='morning' ? 'الصباحي 🌅' : 'المسائي 🌆').join(' + ');
-      bannerTxt.textContent = `🎯 شيفت ${names} ضرب التارجت`;
+      const st3 = window.shiftStatus, k0 = act[0], info = st3 && st3[k0];
+      const unit = info && info.metric === 'pieces' ? 'قطعة' : 'ج.م';
+      const detail = info ? ` (${info.net} ${unit})` : '';
+      bannerTxt.textContent = `🎯 شيفت ${names} ضرب التارجت${detail}`;
       // لو المستخدم قفله لنفس الاحتفال ده قبل كده، يفضل مقفول
       let saved = ''; try{ saved = localStorage.getItem(DISMISS_KEY) || ''; }catch(e){}
       document.body.classList.toggle('tgt-banner-off', saved === dismissSig());
@@ -4830,9 +4833,11 @@ function renderAdvancesLog(){
     const mv = parseInt(document.getElementById('shiftTargetMorning').value) || 0;
     const ev = parseInt(document.getElementById('shiftTargetEvening').value) || 0;
     const sh = (window.complianceCfg && window.complianceCfg.shifts) || {};
+    const mm = (document.getElementById('shiftMetricMorning')||{}).value === 'pieces' ? 'pieces' : 'amount';
+    const em = (document.getElementById('shiftMetricEvening')||{}).value === 'pieces' ? 'pieces' : 'amount';
     const cfg = {
-      morning: { target: Math.max(0, mv), start: (sh.morning||{}).start || '10:00', end: (sh.morning||{}).end || '18:00' },
-      evening: { target: Math.max(0, ev), start: (sh.evening||{}).start || '14:00', end: (sh.evening||{}).end || '22:00' }
+      morning: { target: Math.max(0, mv), metric: mm, start: (sh.morning||{}).start || '10:00', end: (sh.morning||{}).end || '18:00' },
+      evening: { target: Math.max(0, ev), metric: em, start: (sh.evening||{}).start || '14:00', end: (sh.evening||{}).end || '22:00' }
     };
     const orig = btn.textContent; btn.disabled = true;
     try{
@@ -4878,6 +4883,9 @@ function renderAdvancesLog(){
         const m = document.getElementById('shiftTargetMorning'), v = document.getElementById('shiftTargetEvening');
         if(m && cfg.morning && cfg.morning.target) m.value = cfg.morning.target;
         if(v && cfg.evening && cfg.evening.target) v.value = cfg.evening.target;
+        const mSel = document.getElementById('shiftMetricMorning'), vSel = document.getElementById('shiftMetricEvening');
+        if(mSel && cfg.morning && cfg.morning.metric) mSel.value = cfg.morning.metric;
+        if(vSel && cfg.evening && cfg.evening.metric) vSel.value = cfg.evening.metric;
       }
     }catch(e){}
   })();

@@ -38,6 +38,24 @@
       return sum + (Number(r.total)||0);
     }, 0);
   }
+  // 🧮 عدد القطع المباعة للفريق — نفس قواعد الاستبعاد بالظبط
+  // المرتجع جوه الفاتورة (isReturn) بيتخصم، والاستبدال بالنقط (isRedemption) مش قطعة مبيعة
+  function teamPieces(rows, teamIds){
+    var set = {}; (teamIds||[]).forEach(function(id){ set[id] = 1; });
+    return (rows||[]).reduce(function(sum, r){
+      if(!r || r.reversed || r.isReversal) return sum;
+      if(!set[r.sellerEmployeeId]) return sum;
+      return sum + (r.items||[]).reduce(function(n, it){
+        if(!it || it.isRedemption) return n;
+        var q = Number(it.qty)||0;
+        return n + (it.isReturn ? -q : q);
+      }, 0);
+    }, 0);
+  }
+  // المقياس حسب نوع التارجت: 'pieces' = قطع · غير كده = فلوس
+  function teamMetric(rows, teamIds, metric){
+    return metric === 'pieces' ? teamPieces(rows, teamIds) : teamNet(rows, teamIds);
+  }
   // فريق الشيفت = موظفي الفرع النشطين اللي شيفتهم كده
   // (اللي غطّى شيفت غير بتاعه بياخد إطار شيفته المسجّل — التغطية بتتحسب في تطبيق الحضور)
   function teamOf(emps, shiftKey){
@@ -50,10 +68,11 @@
     SHIFT_KEYS.forEach(function(k){
       var c = (cfgByShift && cfgByShift[k]) || {};
       var target = Number(c.target)||0;
+      var metric = c.metric === 'pieces' ? 'pieces' : 'amount';
       var team = teamOf(emps, k);
-      var net = teamNet(rows, team);
+      var net = teamMetric(rows, team, metric);
       out[k] = {
-        target: target, net: net, team: team,
+        target: target, net: net, team: team, metric: metric,
         start: c.start || DEFAULT_WIN[k].start,
         end:   c.end   || DEFAULT_WIN[k].end,
         hit: target > 0 && net >= target      // تارجت صفر = الشيفت ده مفيهوش تارجت
@@ -73,7 +92,7 @@
 
   window.posFrames = {
     dayKey: dayKey, hm: hm, inWindow: inWindow,
-    teamNet: teamNet, teamOf: teamOf,
+    teamNet: teamNet, teamPieces: teamPieces, teamMetric: teamMetric, teamOf: teamOf,
     computeShiftStatus: computeShiftStatus, activeCelebrations: activeCelebrations
   };
 
@@ -217,6 +236,14 @@
     var noShift = emps.filter(function(e){ return e.active !== false && e.shift !== 'morning' && e.shift !== 'evening'; });
     if(noShift.length) console.warn('⚠️ موظفين من غير شيفت محدد (مش هياخدوا إطار الشيفت):',
       noShift.map(function(e){ return e.name + ' → shift=' + JSON.stringify(e.shift); }));
+    if(state.status){
+      ['morning','evening'].forEach(function(k){
+        var x = state.status[k]; if(!x) return;
+        var unit = x.metric === 'pieces' ? 'قطعة' : 'ج.م';
+        console.log((k==='morning'?'🌅 الصباحي':'🌆 المسائي') + ':', x.net + ' ' + unit + ' من ' + x.target + ' ' + unit,
+                    x.hit ? '✅ متضروب' : '⏳ لسه');
+      });
+    }
     console.log('الحالة المحسوبة دلوقتي:', state.status);
     console.log('الاحتفالات الشغالة:', activeCelebrations(state.status, new Date()));
     console.log('وضع شاشة البيع:', state.mode);
