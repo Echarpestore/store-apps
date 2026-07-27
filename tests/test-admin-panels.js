@@ -1,0 +1,46 @@
+// ============================================================
+// 🛡️ حماية دائمة: كل لوحة أدمن بترسم محتواها عند فتح الأدمن
+// الباج الأصلي: الشارة بتقول 3 واللوحة فاضية، وبتظهر بعد خروج ودخول —
+// لأن المحتوى كان بيترسم من الـ snapshot بس مش وقت الفتح.
+// ============================================================
+'use strict';
+const fs = require('fs');
+const path = require('path');
+
+const SALES = path.resolve(__dirname, '..', 'sales');
+const appSrc = fs.existsSync(path.join(SALES,'sales-app.js'))
+  ? fs.readFileSync(path.join(SALES,'sales-app.js'),'utf8')
+  : fs.readFileSync(path.join(SALES,'index.html'),'utf8');
+
+const m = appSrc.match(/adminUnlocked = true;[\s\S]*?renderViolationsReview\(\);/);
+assert(!!m, 'بلوك فتح الأدمن موجود');
+const block = m ? m[0] : '';
+
+// اللوحات اللي محتواها بيتقرا من بيانات حية — لازم كلها تترسم وقت الفتح
+[
+  'renderLeaveRequests',   // 📩 طلبات الإذن (ده اللي كان باظ)
+  'renderTimeCreditLog',   // ⏳ رصيد الوقت
+  'renderAttIssues',       // 🔍 المخالفات
+  'renderPendingRegs',     // 🔒 طلبات التسجيل
+  'renderDeductionsLog',   // 💸 الخصومات
+  'renderStaffOverview',   // 👥 نظرة عامة
+  'renderScheduleList',    // 🕐 المواعيد
+  'renderCommissionPanel', // 💰 العمولات
+  'renderSalaryPanel',     // 🧾 المرتبات
+  'renderAdvancesLog',     // 💵 السلف
+].forEach(fn=>{
+  assert(block.includes(fn), `${fn} بيترسم عند فتح الأدمن`);
+});
+
+// الشارات لازم تتحدث وقت الفتح كمان (مش من الـ snapshot بس)
+['updateLeaveBadge','updateRegBadge'].forEach(fn=>{
+  assert(block.includes(fn), `${fn} بيتحدث عند فتح الأدمن`);
+});
+
+// 🚫 مفيش لوحتين ظاهرين بنفس العنوان
+const html = fs.readFileSync(path.join(SALES,'index.html'),'utf8');
+const panels = html.split('<div class="panel"');
+const visibleWithTitle = panels.filter(p=>
+  p.includes('🔍 مخالفات محتاجة مراجعتك') && !p.slice(0,60).includes('display:none'));
+assert(visibleWithTitle.length === 1,
+  `لوحة واحدة بس ظاهرة بعنوان "مخالفات محتاجة مراجعتك" (لقينا ${visibleWithTitle.length})`);

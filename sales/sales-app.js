@@ -2841,6 +2841,11 @@ function doAdminLogin(){
     try{ window.renderAttIssues(); }catch(e){ console.warn('att issues', e); }
     try{ window.renderBranchManage(); }catch(e){ console.warn('branch manage', e); }
     try{ window.renderTimeSettings(); }catch(e){ console.warn('time settings', e); }
+    // ⚠️ اللوحات دي كانت ناقصة هنا: الشارة كانت بتتحدث من الـ snapshot لكن
+    // المحتوى ميترسمش غير لما يوصل snapshot جديد — فالشارة تقول 3 واللوحة فاضية.
+    try{ window.renderLeaveRequests(); }catch(e){ console.warn('leave reqs', e); }
+    try{ window.renderTimeCreditLog(); }catch(e){ console.warn('time credit log', e); }
+    try{ updateLeaveBadge(); }catch(e){ console.warn('leave badge', e); }
     renderViolationsReview();
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
