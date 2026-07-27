@@ -352,8 +352,15 @@ function permOfPanelTitle(title){
 window.permOfPanelTitle = permOfPanelTitle;
 
 // بيخفي اللوحات والتبويبات اللي الدور مش مسموح له بيها
+let _roleApplying = false;
 function applyRoleVisibility(){
+  if(_roleApplying) return;
   const admin = document.getElementById('admin'); if(!admin) return;
+  _roleApplying = true;
+  try{ _applyRoleVisibilityInner(admin); }
+  finally{ _roleApplying = false; }
+}
+function _applyRoleVisibilityInner(admin){
   const allowedTabs = {};
   admin.querySelectorAll(':scope > .panel').forEach(p=>{
     const t = (p.querySelector('h3')||{}).textContent || '';
@@ -389,6 +396,25 @@ function applyRoleVisibility(){
   if(badge) badge.textContent = (SALES_ROLES[adminRole]||{}).label || '';
 }
 window.applyRoleVisibility = applyRoleVisibility;
+
+// 🩺 تشخيص الأدوار — اكتب roleDiag() في الـ console
+window.roleDiag = function(){
+  console.log('الدور الحالي:', adminRole, '·', (SALES_ROLES[adminRole]||{}).label);
+  console.log('صلاحياته:', (SALES_ROLES[adminRole]||{}).perms);
+  console.log('كود المدير محفوظ؟', window.managerCode ? ('أيوه (' + String(window.managerCode).length + ' خانات)') : '❌ فاضي');
+  const admin = document.getElementById('admin');
+  if(!admin){ console.log('❌ شاشة الأدمن مش موجودة'); return; }
+  const rows = [];
+  admin.querySelectorAll(':scope > .panel').forEach(p=>{
+    const t = ((p.querySelector('h3')||{}).textContent||'').replace('▾','').trim();
+    rows.push({ اللوحة: t.slice(0,34), الصلاحية: p.dataset.perm || '—',
+                مسموح: roleCan(p.dataset.perm || permOfPanelTitle(t)) ? '✅' : '🚫',
+                ظاهرة: p.style.display === 'none' ? 'لأ' : 'أيوه' });
+  });
+  console.table(rows);
+  const leak = rows.filter(r=> r.مسموح === '🚫' && r.ظاهرة === 'أيوه');
+  console.log(leak.length ? ('⚠️ لوحات ممنوعة وظاهرة: ' + leak.length) : '✅ مفيش تسريب');
+};
 
 const $ = s => document.querySelector(s);
 window.employees = [];   // filtered to this device's own branch (kiosk grid)
@@ -2890,6 +2916,8 @@ function initCollapsiblePanels(){
 function openAdmin(){
   $('#admin').classList.add('show');
   initAdminTabs();
+  // 🔐 لازم تتطبّق كل مرة الشاشة تتفتح — مش وقت الدخول بس
+  try{ applyRoleVisibility(); }catch(e){ console.warn('role visibility (open)', e); }
   $('#targetCelebration').classList.remove('show'); // safety: never let this linger over the admin panel
   initCollapsiblePanels();
   if(adminUnlocked){
@@ -3723,6 +3751,7 @@ function initAdminTabs(){
 }
 function showAdminTab(id){
   localStorage.setItem('admin_tab', id);
+  try{ if(typeof applyRoleVisibility === 'function' && !_roleApplying) applyRoleVisibility(); }catch(e){}
   $('#admin').querySelectorAll(':scope > .panel').forEach(p=>{
     // 🔐 اللوحات الممنوعة على الدور بتفضل مخفية مهما اتنقل بين التبويبات
     if(p.dataset.roleHidden === '1'){ p.style.display = 'none'; return; }

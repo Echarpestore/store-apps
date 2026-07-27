@@ -69,3 +69,51 @@ assert(/isManager\s*=\s*!!window\.managerCode/.test(src2),
   'كود المدير الفاضي مش بيفتح الدخول (شرط !! موجود)');
 assert(/pass\s*!==\s*ADMIN_CODE/.test(src2), 'كود المدير ماينفعش يساوي كود المالك');
 assert(/roleHidden\s*===\s*'1'/.test(src2), 'اللوحات الممنوعة بتفضل مخفية مع تبديل التبويبات');
+
+// ---------- 🔒 اختبار الإخفاء الفعلي على كل لوحات الشاشة ----------
+{
+  const vm4 = require('vm');
+  const { makeSandbox, makeFirebaseStubs, makeEl } = require('./helpers/dom-stubs');
+  const SB = makeSandbox(); Object.assign(SB, makeFirebaseStubs());
+  const htmlR = fs.readFileSync(path.resolve(__dirname,'..','sales','index.html'),'utf8');
+  const ts = (htmlR.split('id="admin"')[1]||'').split('<h3').slice(1)
+    .map(x=> x.split('</h3>')[0].replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim()).filter(Boolean);
+  const panels = ts.map(t=>({ _t:t, style:{}, dataset:{}, querySelector:()=>({textContent:t}) }));
+  const adminEl = { querySelectorAll:(sel)=> String(sel).includes('.panel') ? panels : [],
+                    querySelector:(s)=> s==='.admin-top' ? makeEl() : null };
+  SB.document.getElementById = (id)=> id==='admin' ? adminEl : (id==='adminTabBar' ? null : makeEl());
+  SB.document.querySelector = (s)=> String(s).includes('#admin') ? adminEl : makeEl();
+  SB.setInterval = ()=>0; SB.setTimeout = ()=>0;
+  vm4.createContext(SB);
+  const appSrc = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-app.js'),'utf8')
+    .replace(/^import[\s\S]*?from\s+"[^"]+";\s*$/gm,'');
+  try{ vm4.runInContext(appSrc, SB, {filename:'sales-app.js'}); }catch(e){}
+  // نحاكي دخول المدير من جوه الموديول (زي doAdminLogin بالظبط)
+  vm4.runInContext("adminRole='manager'; applyRoleVisibility();", SB);
+
+  const shown = panels.filter(p=> p.style.display !== 'none');
+  const hidden = panels.filter(p=> p.style.display === 'none');
+  assert(hidden.length > 10, `المدير: اتخفى ${hidden.length} لوحة`);
+  assert(shown.length > 5,  `المدير: فاضل شايف ${shown.length} لوحة`);
+  const FORBIDDEN = ['money','settings','terminate','people'];
+  const leaked = shown.filter(p=> FORBIDDEN.indexOf(p.dataset.perm) >= 0);
+  assertEq(leaked.map(p=> p._t.slice(0,24)), [], 'مفيش لوحة ممنوعة ظاهرة للمدير');
+  // اللوحات اللي لازم يشوفها فعلاً
+  ['طلبات الإذن','مخالفات محتاجة','طلبات تسجيل'].forEach(k=>{
+    assert(shown.some(p=> p._t.includes(k)), `المدير شايف: ${k}`);
+  });
+  // واللي ممنوعة قطعًا
+  ['الرواتب الشهرية','سجل السلف','إنهاء خدمة','كود المدير','إعدادات رصيد الوقت'].forEach(k=>{
+    assert(hidden.some(p=> p._t.includes(k)), `مخفي عن المدير: ${k}`);
+  });
+
+  // المالك يشوف كل حاجة
+  panels.forEach(p=> p.style.display = '');
+  vm4.runInContext("adminRole='owner'; applyRoleVisibility();", SB);
+  assertEq(panels.filter(p=> p.style.display === 'none').length, 0, 'المالك بيشوف كل اللوحات');
+
+  // الحماية بتتطبّق كل مرة الشاشة تتفتح (مش وقت الدخول بس)
+  assert(/function openAdmin\(\)[\s\S]{0,220}applyRoleVisibility/.test(appSrc),
+    'الصلاحيات بتتطبّق داخل openAdmin كمان');
+  assert(typeof SB.window.roleDiag === 'function', 'دالة التشخيص roleDiag متاحة');
+}
