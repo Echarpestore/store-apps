@@ -832,6 +832,7 @@ function savePrinterPickers(){
   try{ db.collection(TEST_SETTINGS).doc('printers_'+_deviceKey()).set(cfg).catch(()=>{}); }catch(e){}
 }
 function testCashDrawer(){
+  if(typeof hasPerm === 'function' && !hasPerm('canOpenDrawer')){ showToast('فتح الدرج للمشرف/المدير بس', 'err'); return; }
   const shellCfg = (typeof window.posShell !== 'undefined') ? getPrinterCfg() : null;
   if(!shellCfg){ showToast('الاختبار ده بيشتغل من برنامج الويندوز بس', 'err'); return; }
   const drawerP = shellCfg.drawerPrinter || shellCfg.invoicePrinter;

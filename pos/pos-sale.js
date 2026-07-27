@@ -774,13 +774,19 @@ async function registerNewCustomer(){
 // ---------------- Sidebar actions (Give Discount / Accept Return / Cashier / Ship) ----------------
 function openGiveDiscount(){
   if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
-  const pct = prompt('نسبة الخصم % على إجمالي الفاتورة:', '0');
+  if(!hasPerm('canDiscount')){ showToast('الخصم للمشرف/المدير بس — مش مسموح للكاشير', 'err'); return; }
+  const maxPct = Number(myPerms().maxDiscountPct);
+  const cap = isNaN(maxPct) ? 0 : maxPct;
+  const pct = prompt(`نسبة الخصم % على إجمالي الفاتورة:${cap<100?`\n(الحد الأقصى المسموح ليك: ${cap}%)`:''}`, '0');
   if(pct === null) return;
   const p = parseFloat(pct);
   if(isNaN(p) || p < 0 || p > 100){ showToast('نسبة غير صحيحة', 'err'); return; }
+  if(p > cap){ showToast(`⛔ الحد الأقصى للخصم المسموح ليك ${cap}% — اطلب مدير لو محتاج أكتر`, 'err'); return; }
   cart.forEach(c=> c.price = c.price * (1 - p/100));
   renderCart();
   showToast(`اتحط خصم ${p}% ✅`);
+  // 📋 تسجيل الخصم في سجل النشاط
+  try{ if(typeof _logActivity === 'function') _logActivity('manual_discount', { pct: p, by: currentEmployee.name||'', cartCount: cart.length }); }catch(e){}
 }
 function focusAddCustomer(){
   document.getElementById('customerPhone').focus();
@@ -794,6 +800,11 @@ function showCashierInfo(){
       const el = document.querySelector('[data-uid="'+uid+'"]');
       if(el) el.style.display = canRet ? '' : 'none';
     });
+    // 🔒 نخفي الخصم وفتح الدرج لو مفيش صلاحية
+    const dEl = document.querySelector('[data-uid="sa_discount"]');
+    if(dEl) dEl.style.display = hasPerm('canDiscount') ? '' : 'none';
+    const drEl = document.querySelector('[data-uid="sa_drawer"]');
+    if(drEl) drEl.style.display = hasPerm('canOpenDrawer') ? '' : 'none';
   }catch(e){}
 }
 
@@ -986,11 +997,19 @@ function applyPendingRedeem(){
 // (RJ11) موصّل بالدرج، ومُعدّة تفتحه تلقائي كل ما تستقبل أمر طباعة. الزرار ده بيطبع
 // إيصال فاضي صغير كمحاولة — لازم تتأكد إن الطابعة معمول لها الإعداد ده من قبل.
 function openCashDrawer(){
+  if(!hasPerm('canOpenDrawer')){ showToast('فتح الدرج للمشرف/المدير بس', 'err'); return; }
+  // 📋 نسجّل فتح الدرج اليدوي (من غير بيع) — عشان المراقبة
+  try{ if(typeof _logActivity === 'function') _logActivity('manual_drawer_open', { by: currentEmployee.name||'' }); }catch(e){}
+  // لو داخل الـexe: نبعت أمر فتح الدرج مباشرة (من غير نافذة طباعة)
+  if(typeof window.posShell !== 'undefined' && typeof testCashDrawer === 'function'){
+    testCashDrawer();
+    return;
+  }
   try{
     const w = window.open('', '_blank', 'width=200,height=100');
     w.document.write('<html><body onload="window.print(); setTimeout(()=>window.close(), 300);"></body></html>');
     w.document.close();
-    showToast('اتبعت أمر فتح الدرج للطابعة — لو مفتحش، اتأكد إن الطابعة معمول لها إعداد فتح الدرج تلقائي', 'warn');
+    showToast('اتبعت أمر فتح الدرج للطابعة', 'warn');
   }catch(e){
     showToast('تعذر إرسال أمر فتح الدرج: ' + e.message, 'err');
   }
@@ -1039,6 +1058,7 @@ async function renderReverseList(){
 }
 
 async function reverseReceipt(saleId){
+  if(!hasPerm('canReverse') && !hasPerm('canRefund')){ showToast('عكس الفاتورة للمشرف/المدير بس', 'err'); return; }
   if(_busyOps.has('reverse_'+saleId)) return;
   if(!confirm('متأكد إنك عايز تعكس الفاتورة دي؟ الكمية هترجع للمخزون، والإجراء ده نهائي.')) return;
   _busyOps.add('reverse_'+saleId);

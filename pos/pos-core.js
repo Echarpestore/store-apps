@@ -219,22 +219,26 @@ const DEFAULT_ROLE_PERMISSIONS = {
   admin: {
     label: 'أدمن', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
-    canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: true
+    canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: true,
+    canDiscount: true, canOpenDrawer: true, canReverse: true, maxDiscountPct: 100
   },
   cashier: {
     label: 'كاشير', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: false, canViewStock: true, canViewLogs: false, canRefund: false, canResetCustomerPin: false,
-    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false
+    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false,
+    canDiscount: false, canOpenDrawer: false, canReverse: false, maxDiscountPct: 0
   },
   supervisor: {
     label: 'مشرف', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: false, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
-    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false
+    canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false,
+    canDiscount: true, canOpenDrawer: true, canReverse: true, maxDiscountPct: 20
   },
   manager: {
     label: 'مدير', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
-    canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: false
+    canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: false,
+    canDiscount: true, canOpenDrawer: true, canReverse: true, maxDiscountPct: 100
   }
 };
 // 👑 أدمن ثابت مدمج في الكود — مستقل تمامًا عن الموظفين وقاعدة البيانات.
