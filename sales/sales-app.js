@@ -397,6 +397,93 @@ function _applyRoleVisibilityInner(admin){
 }
 window.applyRoleVisibility = applyRoleVisibility;
 
+// ===== 🔴 شريط "محتاج منك" — كل حاجة مستنية قرارك في مكان واحد =====
+// بيظهر فوق شاشة الأدمن، أحمر ونابض، وبيحترم صلاحيات الدور:
+// المدير بيشوف اللي يقدر يتصرف فيه بس.
+function pendingActions(){
+  const br = window.currentBranch;
+  const out = [];
+  const push = (perm, tab, icon, label, count)=>{
+    if(count > 0 && roleCan(perm)) out.push({ perm, tab, icon, label, count });
+  };
+  // 📩 طلبات الإذن
+  const leave = (window.allLeaveReqs||[]).filter(l=> l.status==='pending' && l.branch===br).length;
+  push('approvals','emps','📩','طلبات إذن مستنية', leave);
+  // 🔒 طلبات التسجيل
+  const regs = (window.allRegistrations||[]).filter(r=> r.status==='pending' && r.branch===br).length;
+  push('approvals','emps','🔒','طلبات تسجيل مستنية', regs);
+  // 🔍 المخالفات
+  let vio = 0;
+  try{
+    const emps = (window.employees||[]).filter(e=> e.branch===br);
+    const shifts = (window.allShifts||[]).filter(sh=> sh.branch===br);
+    const decided = {};
+    (window.allAttDecisions||[]).forEach(d=>{ decided[d.empId + '|' + d.dateKey] = d.decision; });
+    const to = Date.now(), from = to - 30*86400000;
+    const raw = window.detectAttendanceIssues(emps, shifts, from, to, decided, Date.now());
+    const paired = window.pairSwaps(raw);
+    vio = (paired.swaps||[]).length + (paired.singles||[]).length;
+  }catch(e){}
+  push('approvals','emps','🔍','مخالفات محتاجة مراجعة', vio);
+  // 📸 تاسكات محتاجة تأكيد
+  const empIds = new Set((window.employees||[]).filter(e=> e.branch===br).map(e=> e.id));
+  const subs = (window.allSubmissions||[]).filter(x=> empIds.has(x.employeeId) && !x.confirmed && !x.rejected).length;
+  push('tasks','tasks','📸','تاسكات محتاجة تأكيد', subs);
+  // 🛒 أوردرات الموظفين
+  const orders = (window.staffOrders||[]).filter(o=> o.status==='pending' && o.branch===br).length;
+  push('orders','orders','🛒','أوردرات موظفين مستنية', orders);
+  return out;
+}
+window.pendingActions = pendingActions;
+
+function renderActionBar(){
+  const admin = document.getElementById('admin');
+  if(!admin || !adminUnlocked) return;
+  let bar = document.getElementById('actionBar');
+  if(!bar){
+    bar = document.createElement('div');
+    bar.id = 'actionBar';
+    const st = document.createElement('style');
+    st.textContent = `
+      #actionBar{ display:none; margin:0 0 12px; padding:12px 14px; border-radius:14px;
+        background:linear-gradient(180deg, #3a1416, #2a0f11); border:1px solid #e5484d88;
+        box-shadow:0 0 0 1px #e5484d33, 0 6px 22px #00000055; animation:abPulse 2.2s ease-in-out infinite; }
+      #actionBar.show{ display:block; }
+      @keyframes abPulse{ 0%,100%{ box-shadow:0 0 0 1px #e5484d33, 0 6px 22px #00000055; }
+                          50%{ box-shadow:0 0 0 3px #e5484d55, 0 6px 26px #e5484d33; } }
+      #actionBar .abTitle{ font-size:13px; font-weight:900; color:#ff9a9d; margin-bottom:9px; }
+      #actionBar .abItem{ display:flex; align-items:center; justify-content:space-between; gap:10px;
+        background:#ffffff0a; border:1px solid #ffffff14; border-radius:10px;
+        padding:9px 11px; margin-bottom:6px; cursor:pointer; }
+      #actionBar .abItem:last-child{ margin-bottom:0; }
+      #actionBar .abItem:hover{ background:#ffffff14; }
+      #actionBar .abN{ min-width:24px; height:24px; padding:0 7px; border-radius:99px;
+        background:#e5484d; color:#fff; font-weight:900; font-size:12.5px;
+        display:inline-flex; align-items:center; justify-content:center; }
+      #actionBar .abTxt{ font-size:12.5px; font-weight:700; color:#ffd9da; }`;
+    document.head.appendChild(st);
+    const top = admin.querySelector('.admin-top');
+    if(top) top.insertAdjacentElement('afterend', bar); else admin.insertBefore(bar, admin.firstChild);
+  }
+  const items = pendingActions();
+  if(!items.length){ bar.className = ''; bar.innerHTML = ''; return; }
+  const total = items.reduce((n,i)=> n + i.count, 0);
+  bar.className = 'show';
+  bar.innerHTML = `<div class="abTitle">🔴 محتاج منك (${total})</div>` + items.map(i=>
+    `<div class="abItem" data-goto="${i.tab}">
+       <span class="abTxt">${i.icon} ${i.label}</span><span class="abN">${i.count}</span>
+     </div>`).join('');
+  bar.querySelectorAll('[data-goto]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      try{ showAdminTab(el.dataset.goto); }catch(e){}
+      const admin2 = document.getElementById('admin');
+      if(admin2 && admin2.scrollTo) admin2.scrollTo({ top:0, behavior:'smooth' });
+    });
+  });
+}
+window.renderActionBar = renderActionBar;
+setInterval(()=>{ try{ renderActionBar(); }catch(e){} }, 5000);
+
 // 🩺 تشخيص الأدوار — اكتب roleDiag() في الـ console
 window.roleDiag = function(){
   console.log('الدور الحالي:', adminRole, '·', (SALES_ROLES[adminRole]||{}).label);
@@ -2918,6 +3005,7 @@ function openAdmin(){
   initAdminTabs();
   // 🔐 لازم تتطبّق كل مرة الشاشة تتفتح — مش وقت الدخول بس
   try{ applyRoleVisibility(); }catch(e){ console.warn('role visibility (open)', e); }
+  try{ renderActionBar(); }catch(e){ console.warn('action bar (open)', e); }
   $('#targetCelebration').classList.remove('show'); // safety: never let this linger over the admin panel
   initCollapsiblePanels();
   if(adminUnlocked){
@@ -2968,6 +3056,7 @@ function doAdminLogin(){
     try{ updateLeaveBadge(); }catch(e){ console.warn('leave badge', e); }
     renderViolationsReview();
     try{ applyRoleVisibility(); }catch(e){ console.warn('role visibility', e); }
+    try{ renderActionBar(); }catch(e){ console.warn('action bar', e); }
   } else {
     $('#adminLoginErr').textContent = 'كود غلط، حاول تاني';
   }
