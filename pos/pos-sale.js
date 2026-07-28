@@ -1741,66 +1741,59 @@ async function generateInvoiceNumber(){
   }
 }
 
-// 💵 شاشة الباقي: بتظهر قبل الحفظ في حالة الكاش عشان الكاشير يتأكد من الفكة
-// قبل ما الفاتورة تتطبع — غلطة الفكة مش بتترد بعد ما العميل يمشي.
-function showChangeConfirm(change, onOk){
+// 💵 شاشة الباقي — بتظهر **بعد** الطباعة وفتح الدرج، عشان الكاشير
+// يعدّ الفكة وهو شايف الرقم قدامه. مش بتعطّل أي حاجة، وبتقفل بأي زرار
+// أو بمجرد ما يبدأ يمسح المنتج اللي بعده.
+function showChangeAfterPrint(change){
   const old = document.getElementById('changeConfirmOverlay');
   if(old) old.remove();
   const ov = document.createElement('div');
   ov.id = 'changeConfirmOverlay';
-  ov.style.cssText = 'position:fixed; inset:0; z-index:12000; background:rgba(0,0,0,.78);'
+  ov.style.cssText = 'position:fixed; inset:0; z-index:12000; background:rgba(0,0,0,.82);'
     + 'display:flex; align-items:center; justify-content:center; padding:20px;';
   ov.innerHTML = `
-    <div style="background:var(--panel); border:2px solid #22c55e; border-radius:18px;
-                padding:26px 22px; text-align:center; max-width:420px; width:100%;">
-      <div style="color:var(--muted); font-size:14px; font-weight:700; margin-bottom:10px;">الباقي للعميل</div>
-      <div id="changeConfirmVal" style="font-size:52px; font-weight:900; color:#22c55e; line-height:1.1;
+    <div style="background:var(--panel); border:3px solid #22c55e; border-radius:20px;
+                padding:30px 24px; text-align:center; max-width:460px; width:100%;">
+      <div style="color:var(--muted); font-size:16px; font-weight:800; margin-bottom:10px;">💵 الباقي للعميل</div>
+      <div style="font-size:76px; font-weight:900; color:#22c55e; line-height:1;
                   direction:ltr; unicode-bidi:isolate;">${Number(change).toFixed(2)}</div>
-      <div style="color:var(--muted); font-size:14px; margin-top:4px;">جنيه</div>
-      <button id="changeConfirmOk" style="margin-top:20px; width:100%; padding:16px; border:none;
-              border-radius:12px; background:linear-gradient(#16a34a,#15803d); color:#fff;
-              font-family:'Cairo'; font-weight:900; font-size:17px; cursor:pointer;">
-        تمام — اطبع الفاتورة</button>
-      <button id="changeConfirmCancel" style="margin-top:8px; width:100%; padding:11px; border-radius:10px;
-              background:var(--panel2); border:1px solid var(--border); color:var(--muted);
-              font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;">رجوع</button>
+      <div style="color:var(--muted); font-size:15px; margin-top:6px;">جنيه</div>
+      <button id="changeCloseBtn" style="margin-top:22px; width:100%; padding:15px; border:none;
+              border-radius:12px; background:var(--panel2); border:1px solid var(--border);
+              color:var(--text); font-family:'Cairo'; font-weight:800; font-size:15px; cursor:pointer;">
+        إغلاق</button>
+      <div style="color:var(--muted); font-size:11.5px; margin-top:8px;">بتتقفل لوحدها أول ما تمسح المنتج اللي بعده</div>
     </div>`;
   document.body.appendChild(ov);
-  const ok = ov.querySelector('#changeConfirmOk');
-  ok.focus();
-  const close = ()=> ov.remove();
-  ok.addEventListener('click', ()=>{ close(); onOk(); });
-  ov.querySelector('#changeConfirmCancel').addEventListener('click', close);
-  // Enter يأكد — الكاشير مش هيسيب الكيبورد
-  ov.addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter'){ e.preventDefault(); close(); onOk(); }
-    if(e.key === 'Escape'){ close(); }
+  const close = ()=>{ const el = document.getElementById('changeConfirmOverlay'); if(el) el.remove(); };
+  ov.querySelector('#changeCloseBtn').addEventListener('click', close);
+  ov.addEventListener('click', (e)=>{ if(e.target === ov) close(); });
+  // أي مسح/كتابة في بار البحث بيقفلها — الكاشير مش هيحتاج يدوس حاجة
+  const sb = document.getElementById('searchBar');
+  if(sb){
+    const onType = ()=>{ close(); sb.removeEventListener('input', onType); };
+    sb.addEventListener('input', onType);
+    setTimeout(function(){ try{ sb.focus(); }catch(e){} }, 80);
+  }
+  document.addEventListener('keydown', function esc(e){
+    if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); }
   });
 }
-window.showChangeConfirm = showChangeConfirm;
+window.showChangeAfterPrint = showChangeAfterPrint;
+
 
 let _confirmSaving = false;
-let _changeConfirmed = false;   // اتأكد الباقي خلاص لنفس العملية
 async function confirmPayment(){
   if(_confirmSaving){ showToast('الفاتورة بتتحفظ... استنى ثانية', 'err'); return; }   // منع التكرار
-  // 💵 كاش وفيه باقي؟ نوقف ونعرض الرقم كبير، والطباعة بعد التأكيد
-  if(!_changeConfirmed){
-    const _btnChk = document.getElementById('confirmPayBtn');
-    if(!(_btnChk && _btnChk.disabled) && cart.length){
-      const _total = cartTotal();
-      let _entered = 0;
-      selectedPayMethods.forEach(m=> _entered += paymentAmounts[m] || 0);
-      const _change = +(Math.abs(_entered) - Math.abs(_total)).toFixed(2);
-      const _cashOnly = (paymentAmounts.cash || 0) > 0;
-      if(_total > 0 && _cashOnly && _change > 0){
-        showChangeConfirm(_change, function(){
-          _changeConfirmed = true;
-          confirmPayment().finally(function(){ _changeConfirmed = false; });
-        });
-        return;
-      }
-    }
-  }
+  // 💵 بنحسب الباقي دلوقتي قبل ما السلة تتفضّى — وبنعرضه بعد الطباعة
+  let _pendingChange = 0;
+  try{
+    const _total = cartTotal();
+    let _entered = 0;
+    selectedPayMethods.forEach(m=> _entered += paymentAmounts[m] || 0);
+    const _diff = +(Math.abs(_entered) - Math.abs(_total)).toFixed(2);
+    if(_total > 0 && (paymentAmounts.cash || 0) > 0 && _diff > 0) _pendingChange = _diff;
+  }catch(e){}
   const _btn = document.getElementById('confirmPayBtn');
   // حماية: نفس شروط الزرار بالظبط — لو معطّل يبقى السلة فاضية أو المدفوعات ناقصة
   // (مهم للاختصار Shift+Enter اللي كان بيتخطى الزرار ويطبع فاتورة فاضية)
@@ -1810,12 +1803,18 @@ async function confirmPayment(){
   }
   _confirmSaving = true;
   if(_btn){ _btn.dataset.lbl = _btn.textContent; _btn.disabled = true; _btn.textContent = '⏳ بيحفظ...'; }
+  let _saved = false;
   try{
     await _doConfirmPayment();
+    _saved = true;
   }catch(e){
     console.error('confirmPayment', e);
     showToast('فشل حفظ الفاتورة: ' + (e && e.message ? e.message : e), 'err');
   }finally{
+    // 💵 الفاتورة اتطبعت والدرج فتح — دلوقتي بس بنعرض الباقي عشان تعدّه
+    if(_saved && _pendingChange > 0){
+      try{ showChangeAfterPrint(_pendingChange); }catch(e){ console.warn('change', e); }
+    }
     _confirmSaving = false;
     if(_btn){ _btn.textContent = _btn.dataset.lbl || 'حفظ وطباعة'; }
     if(typeof updatePaySummary === 'function') updatePaySummary();   // بيظبط تفعيل/تعطيل الزر حسب السلة
