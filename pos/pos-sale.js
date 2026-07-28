@@ -144,6 +144,33 @@ function renderCart(){
   }
   const total = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   document.getElementById('cartTotal').textContent = total.toFixed(2);
+  // 🔄 فاتورة تبديل: فيها مرتجع وبيع مع بعض — بنوضّح للكاشير المطلوب بالظبط
+  (function(){
+    let box = document.getElementById('exchangeNote');
+    const hasRet  = cart.some(function(c){ return c.isReturn; });
+    const hasSale = cart.some(function(c){ return !c.isReturn && !c.isRedemption; });
+    if(!hasRet || !hasSale){ if(box) box.style.display = 'none'; return; }
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'exchangeNote';
+      box.style.cssText = 'margin:6px 0; padding:8px 10px; border-radius:10px; font-size:12.5px;'
+        + 'font-weight:800; text-align:center; background:#2a2010; border:1px solid #f59e0b66; color:#f5c451;';
+      const anchor = document.getElementById('cartTotal');
+      const row = anchor && anchor.closest ? anchor.closest('.t-row') : null;
+      if(row && row.parentNode) row.parentNode.insertBefore(box, row);
+      else return;
+    }
+    box.style.display = 'block';
+    const retSum  = cart.filter(function(c){ return c.isReturn; })
+                        .reduce(function(n,c){ return n + Math.abs((c.price||0)*(c.qty||0)); }, 0);
+    const saleSum = cart.filter(function(c){ return !c.isReturn && !c.isRedemption; })
+                        .reduce(function(n,c){ return n + ((c.price||0)*(c.qty||0)); }, 0);
+    const diff = +(saleSum - retSum).toFixed(2);
+    box.textContent = '🔄 تبديل — مرتجع ' + retSum.toFixed(2) + ' · جديد ' + saleSum.toFixed(2) + ' → '
+      + (diff > 0 ? ('تاخد من العميل ' + diff.toFixed(2) + ' ج.م')
+        : diff < 0 ? ('ترجّع للعميل ' + Math.abs(diff).toFixed(2) + ' ج.م')
+        : 'مفيش فرق — تبديل متساوي');
+  })();
   const _pieces = cart.filter(c=>!c.isRedemption).reduce((s,c)=> s + (c.isReturn?-c.qty:c.qty), 0);
   const _icEl = document.getElementById('cartItemCount'); if(_icEl) _icEl.textContent = _pieces;
   refreshCustomerActionUI();
@@ -574,7 +601,28 @@ function returnItemFromInvoice(itemIdx){
 
 function closeReturnInvoiceModal(){
   document.getElementById('returnInvoiceModal').classList.remove('active');
+  // 🔄 التبديل: بعد اختيار المرتجع، الكاشير غالبًا هيمسح منتج جديد —
+  // فبنرجّع التركيز لبار البحث فورًا عشان المسح يشتغل من غير ما يدوس عليه.
+  setTimeout(function(){
+    const sb = document.getElementById('searchBar');
+    if(sb && document.getElementById('saleScreen') &&
+       !document.querySelector('.modal-overlay.active')){ try{ sb.focus(); }catch(e){} }
+  }, 60);
 }
+
+// 🔄 خلصت المرتجع وكمّل بيع — بيقفل النافذة ويجهّز الشاشة للمسح
+function finishReturnAndSell(){
+  const retLines = (cart||[]).filter(function(c){ return c.isReturn; });
+  closeReturnInvoiceModal();
+  if(!retLines.length){
+    showToast('متختارش أي صنف للمرتجع — امسح المنتجات عادي', 'err');
+    return;
+  }
+  const retTotal = retLines.reduce(function(n,c){ return n + Math.abs((c.price||0) * (c.qty||0)); }, 0);
+  showToast('↩️ اترجع ' + retLines.length + ' صنف بـ ' + retTotal.toFixed(2) +
+            ' ج.م — امسح المنتج الجديد دلوقتي', 'ok');
+}
+window.finishReturnAndSell = finishReturnAndSell;
 function qbxDeleteSel(){
   if(!requireSelection()) return;
   removeFromCart(selectedCartIdx);
