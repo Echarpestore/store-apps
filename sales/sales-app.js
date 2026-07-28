@@ -364,25 +364,31 @@ function applyRoleVisibility(){
 }
 function _applyRoleVisibilityInner(admin){
   const allowedTabs = {};
-  admin.querySelectorAll(':scope > .panel').forEach(p=>{
+  const panels = admin.querySelectorAll(':scope > .panel');
+  // الخطوة ١: نحدد المسموح والممنوع
+  panels.forEach(p=>{
     const t = (p.querySelector('h3')||{}).textContent || '';
     const perm = permOfPanelTitle(t);
     p.dataset.perm = perm;
     const ok = roleCan(perm);
     p.dataset.roleHidden = ok ? '' : '1';
-    if(!ok) p.style.display = 'none';
-    else if(p.dataset.tabGroup) allowedTabs[p.dataset.tabGroup] = true;
+    if(ok && p.dataset.tabGroup) allowedTabs[p.dataset.tabGroup] = true;
+  });
+  // الخطوة ٢: نحدد التبويب المعروض (لازم يكون من المسموح)
+  let cur = localStorage.getItem('admin_tab') || 'emps';
+  if(!allowedTabs[cur]) cur = Object.keys(allowedTabs)[0] || null;
+  if(cur) localStorage.setItem('admin_tab', cur);
+  // الخطوة ٣: العرض — الممنوع مخفي، والمسموح بيرجع حسب تبويبه
+  // (لازم نرجّع العرض بنفسنا: القفل بيخفي الكل، ومن غير الرجوع دي الشاشة بتفضل فاضية)
+  panels.forEach(p=>{
+    if(p.dataset.roleHidden === '1'){ p.style.display = 'none'; return; }
+    p.style.display = (!p.dataset.tabGroup || p.dataset.tabGroup === cur) ? '' : 'none';
   });
   const bar = document.getElementById('adminTabBar');
   if(bar) bar.querySelectorAll('button[data-tab]').forEach(b=>{
     b.style.display = allowedTabs[b.dataset.tab] ? '' : 'none';
+    b.classList.toggle('active', b.dataset.tab === cur);
   });
-  // لو التبويب المفتوح بقى ممنوع، ننقل لأول تبويب مسموح
-  const cur = localStorage.getItem('admin_tab');
-  if(cur && !allowedTabs[cur]){
-    const first = Object.keys(allowedTabs)[0];
-    if(first && typeof showAdminTab === 'function') showAdminTab(first);
-  }
   // شارة الدور في رأس الشاشة
   let badge = document.getElementById('roleBadge');
   if(!badge){
