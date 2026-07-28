@@ -192,6 +192,8 @@ function captureSaleState(){
 }
 function clearSaleState(){
   _cartFirstItemAt = null;
+  // 🔒 أي متابعة دفع بالكارت من العملية اللي فاتت لازم تتقفل مع السلة الجديدة
+  try{ paymobReset(); }catch(e){}
   cart = [];
   selectedCartIdx = null;
   clearCustomerContext();
@@ -1376,11 +1378,49 @@ function paymobTerminalId(){
   return byBr[currentBranch] || paymobCfg.terminalId || null;
 }
 
+// 🔒 حالة الدفع بالكارت للعملية الحالية — بتتصفّر مع كل سلة جديدة
+let paymobPending = null;     // { ref, unsub, amount }
+let paymobApproved = false;   // بيبقى true بس لما Paymob يأكد النجاح
+window.paymobApproved = false;
+
+function paymobReset(){
+  _paymobAutoFired = false;
+  if(paymobPending && paymobPending.unsub){ try{ paymobPending.unsub(); }catch(e){} }
+  paymobPending = null;
+  paymobApproved = false;
+  window.paymobApproved = false;
+  const box = document.getElementById('paymobStatus');
+  if(box){ box.style.display = 'none'; box.textContent = ''; }
+  if(typeof updatePaySummary === 'function') updatePaySummary();
+}
+window.paymobReset = paymobReset;
+
+function paymobShow(text, kind){
+  let box = document.getElementById('paymobStatus');
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'paymobStatus';
+    box.style.cssText = 'margin:8px 0; padding:10px 12px; border-radius:10px; font-size:13px; font-weight:700; text-align:center;';
+    const list = document.getElementById('qbxPayList');
+    if(list && list.parentNode) list.parentNode.insertBefore(box, list);
+    else return;
+  }
+  const colors = {
+    wait: 'background:#3a2c0e; border:1px solid #f59e0b66; color:#f5c451;',
+    ok:   'background:#0f2e18; border:1px solid #22c55e66; color:#7ee2a0;',
+    err:  'background:#3a1416; border:1px solid #e5484d66; color:#ff9a9d;'
+  };
+  box.style.cssText = box.style.cssText.replace(/background:[^;]*;|border:[^;]*;|color:[^;]*;/g,'') + (colors[kind] || colors.wait);
+  box.style.display = 'block';
+  box.textContent = text;
+}
+
 async function sendToPaymobTerminal(amountEGP){
   const tid = paymobTerminalId();
   if(!tid) return;   // الربط مش متفعّل — ولا كلمة، الفلو العادي زي ما هو
   const orderRef = currentBranch + '-' + Date.now();   // مرجع فريد لكل محاولة
-  showToast('📟 بنبعت المبلغ للماكينة…', 'ok');
+  paymobReset();
+  paymobShow('📟 بنبعت المبلغ للماكينة…', 'wait');
   try{
     const res = await fetch(PAYMOB_FN_URL, {
       method: 'POST',
@@ -1394,13 +1434,71 @@ async function sendToPaymobTerminal(amountEGP){
     });
     const out = await res.json().catch(function(){ return {}; });
     if(res.ok && out.ok){
-      showToast('📟 المبلغ على الماكينة (' + amountEGP.toFixed(2) + ' ج.م) — العميل يحط الكارت', 'ok');
+      paymobShow('📟 المبلغ على الماكينة (' + amountEGP.toFixed(2) + ' ج.م) — العميل يحط الكارت…', 'wait');
+      paymobWatch(orderRef, amountEGP);
     } else {
-      showToast('⚠️ الماكينة مستجابتش (' + (out.error || res.status) + ') — كمّل يدوي من الماكينة', 'err');
+      paymobShow('⚠️ الماكينة مستجابتش (' + (out.error || res.status) + ') — كمّل يدوي من الماكينة', 'err');
     }
   }catch(e){
-    showToast('⚠️ مفيش اتصال بخدمة الماكينة — كمّل يدوي من الماكينة', 'err');
+    paymobShow('⚠️ مفيش اتصال بخدمة الماكينة — كمّل يدوي من الماكينة', 'err');
   }
+}
+
+// ⚡ الطباعة التلقائية شغّالة؟ (من إعدادات Paymob — المالك بيقفلها لو حب)
+function paymobAutoPrint(){
+  return !!(paymobCfg && paymobCfg.autoPrint !== false);   // الافتراضي: شغّالة
+}
+let _paymobAutoFired = false;   // ⛔ مرة واحدة بس لكل عملية — يمنع الطباعة المكررة
+
+// 🔒 الشروط اللي لازم تتحقق قبل ما نحفظ ونطبع من غير الكاشير
+function paymobCanAutoFinish(amountEGP, txn){
+  if(_paymobAutoFired) return false;                       // اتنفذت خلاص
+  if(!cart || !cart.length) return false;                  // السلة اتفضّت
+  // المبلغ اللي اتدفع فعلًا لازم يطابق اللي بعتناه للماكينة
+  const paidCents = Number(txn && txn.amountCents) || 0;
+  if(Math.round(amountEGP * 100) !== paidCents) return false;
+  // ولازم المدفوعات المسجّلة تغطي إجمالي الفاتورة (يعني مفيش جزء كاش ناقص)
+  let entered = 0;
+  try{ selectedPayMethods.forEach(function(m){ entered += paymentAmounts[m] || 0; }); }catch(e){ return false; }
+  if(Math.abs(entered) + 0.001 < Math.abs(cartTotal())) return false;
+  return true;
+}
+
+// 👂 بنراقب نتيجة العملية اللي الـ webhook بيكتبها — الكاشير مش بيقرر بنفسه
+function paymobWatch(orderRef, amountEGP){
+  const unsub = db.collection('pos_paymob_txns').doc(orderRef).onSnapshot(function(snap){
+    if(!snap.exists) return;
+    const d = snap.data() || {};
+    if(d.status === 'success'){
+      paymobApproved = true; window.paymobApproved = true;
+      const last4 = d.cardLast4 ? (' •' + String(d.cardLast4).slice(-4)) : '';
+      try{ unsub(); }catch(e){}
+      if(typeof updatePaySummary === 'function') updatePaySummary();
+      // ⚡ الحفظ والطباعة تلقائيًا — بس لو الشروط كلها سليمة
+      if(paymobAutoPrint() && paymobCanAutoFinish(amountEGP, d)){
+        paymobShow('✅ الدفع اتقبل' + last4 + ' — بيحفظ ويطبع…', 'ok');
+        _paymobAutoFired = true;
+        setTimeout(function(){ try{ confirmPayment(); }catch(e){ console.warn('auto print', e); } }, 400);
+      } else {
+        paymobShow('✅ الدفع اتقبل' + last4 + ' — تقدر تحفظ وتطبع', 'ok');
+      }
+    } else if(d.status === 'failed' || d.status === 'voided'){
+      paymobApproved = false; window.paymobApproved = false;
+      paymobShow('❌ الدفع اترفض' + (d.declineReason ? (' (' + d.declineReason + ')') : '') + ' — جرّب تاني', 'err');
+      try{ unsub(); }catch(e){}
+      if(typeof updatePaySummary === 'function') updatePaySummary();
+    }
+  }, function(err){
+    console.warn('paymob watch', err);
+    paymobShow('⚠️ مش قادر أتابع نتيجة الدفع — راجع الماكينة', 'err');
+  });
+  paymobPending = { ref: orderRef, unsub: unsub, amount: amountEGP };
+  // مهلة 3 دقايق: لو مفيش رد، مش هنسيب الكاشير مستني للأبد
+  setTimeout(function(){
+    if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
+      paymobShow('⏳ الماكينة مردتش خلال 3 دقايق — اتأكد منها قبل ما تحفظ', 'err');
+    }
+  }, 180000);
 }
 // رابط الدالة — بيتفعّل مع خطوة النشر الأخيرة
 const PAYMOB_FN_URL = 'https://us-central1-customer-feedback-8ac1d.cloudfunctions.net/paymobTerminalOrder';
@@ -1439,7 +1537,10 @@ function updatePaySummary(){
   if(changeEl) changeEl.textContent = change.toFixed(2);
 
   // زرار الحفظ بيتفعّل لما المبلغ المُدخل (بصرف النظر عن الاتجاه) يغطي المطلوب بالكامل
-  confirmBtn.disabled = !(cart.length > 0 && selectedPayMethods.size > 0 && enteredAbs >= requiredAbs);
+  // 🔒 لو فيه دفع بالكارت على ماكينة Paymob، الحفظ مقفول لحد ما Paymob يأكد النجاح
+  const cardPending = (typeof paymobPending !== 'undefined') && paymobPending && !paymobApproved;
+  confirmBtn.disabled = !(cart.length > 0 && selectedPayMethods.size > 0 && enteredAbs >= requiredAbs) || cardPending;
+  if(cardPending) confirmBtn.title = 'مستنيين تأكيد الدفع من الماكينة';
 }
 
 // >>> OFFLINE_SAVE_START
