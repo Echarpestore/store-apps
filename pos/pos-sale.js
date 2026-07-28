@@ -360,6 +360,27 @@ window.returnByPhone = async function(rawPhone){
   }
 };
 
+// 📋 نسخ رقم العملية — الكاشير محتاجه في لوحة Paymob
+function copyTxnId(id){
+  const done = ()=> showToast('📋 رقم العملية اتنسخ: ' + id, 'ok');
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(String(id)).then(done).catch(fallback);
+    } else fallback();
+  }catch(e){ fallback(); }
+  function fallback(){
+    // متصفحات قديمة أو صفحة مش https — بنستخدم الطريقة اليدوية
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = String(id); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      done();
+    }catch(e2){ showToast('انسخه يدوي: ' + id, 'err'); }
+  }
+}
+window.copyTxnId = copyTxnId;
+
 async function openInvoiceForReturn(code){
   if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس', 'err'); return; }
   if(!window._lastReturnMethod) window._lastReturnMethod = 'invoice';
@@ -410,6 +431,33 @@ async function openInvoiceForReturn(code){
       ? `<span style="background:#eafaf0; color:#15803d; font-weight:800; font-size:12px; padding:3px 10px; border-radius:99px;">✅ خلال الـ${RETURN_WINDOW_DAYS} يوم (فاضل ${RETURN_WINDOW_DAYS - daysAgo} يوم)</span>`
       : `<span style="background:#fdecec; color:#b91c1c; font-weight:800; font-size:12px; padding:3px 10px; border-radius:99px;">⚠️ عدّى ${daysAgo} يوم — أكتر من ${RETURN_WINDOW_DAYS} يوم</span>`;
 
+    // 🏬 الفاتورة من نفس الفرع ولا من فرع تاني؟
+    const sameBranch = (s.branch || '') === currentBranch;
+    const branchBanner = sameBranch
+      ? `<div style="background:#eafaf0; border:1.5px solid #86efac; color:#15803d; padding:8px 10px; border-radius:8px; font-size:12.5px; font-weight:800; margin-bottom:8px;">
+           🏬 اتشرت من نفس الفرع (${currentBranch})
+         </div>`
+      : `<div style="background:#fff6e6; border:1.5px solid var(--warn); color:#b45309; padding:9px 11px; border-radius:8px; font-size:12.5px; font-weight:800; margin-bottom:8px;">
+           🏬 اتشرت من فرع تاني: <span style="font-size:14px;">${s.branch || 'غير معروف'}</span>
+           <div style="font-weight:600; font-size:11.5px; margin-top:3px;">راجع سياسة المرتجع بين الفروع قبل ما تكمّل.</div>
+         </div>`;
+
+    // 💳 بيانات الدفع بالكارت — لازمة عشان تعمل المرتجع من Paymob
+    const ct = s.cardTxn || null;
+    const cardBanner = ct ? `
+      <div style="background:#0f1a2e; border:1.5px solid #3b82f6; border-radius:10px; padding:10px 12px; margin-bottom:8px; color:#dbeafe;">
+        <div style="font-weight:800; font-size:12.5px; margin-bottom:6px;">💳 اتدفعت بالكارت — المرتجع من Paymob</div>
+        <div dir="ltr" style="font-family:monospace; font-size:13px; text-align:left; line-height:1.7;">
+          ${ct.scheme || 'CARD'} **** ${ct.last4 || '----'}<br>
+          ${ct.approvalCode ? ('APPROVAL: ' + ct.approvalCode + '<br>') : ''}
+          <b style="font-size:14.5px;">TXN ID: ${ct.transactionId || '—'}</b>
+        </div>
+        ${ct.transactionId ? `<button onclick="copyTxnId('${String(ct.transactionId).replace(/'/g,'')}')"
+          style="margin-top:8px; width:100%; padding:8px; border-radius:8px; border:1px solid #3b82f6;
+                 background:#1e3a8a; color:#fff; font-family:'Cairo'; font-weight:800; font-size:12.5px; cursor:pointer;">
+          📋 انسخ رقم العملية</button>` : ''}
+      </div>` : '';
+
     const alreadyReversed = s.reversed ? '<div style="background:#fdecec; color:#b91c1c; padding:8px 10px; border-radius:8px; font-size:12px; margin-bottom:8px;">⚠️ الفاتورة دي اترجعت بالكامل قبل كده.</div>' : '';
     returnInvoiceData._saleMs = saleMs;
     const sameDayBanner = _isSameLocalDay(saleMs) ? '<div style="background:#fff6e6; border:1.5px solid var(--warn); color:#b45309; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:800; margin-bottom:8px;">⏰ الفاتورة دي متباعة النهارده — المرتجع هيتسجل كملاحظة يوم-بيوم.</div>' : '';
@@ -444,6 +492,8 @@ async function openInvoiceForReturn(code){
         <div style="color:var(--muted); font-size:12px; margin-bottom:8px;">📅 ${dateStr} · من ${daysAgo} يوم</div>
         ${windowBadge}
       </div>
+      ${branchBanner}
+      ${cardBanner}
       ${customerBanner}
       ${alreadyReversed}
       ${sameDayBanner}
