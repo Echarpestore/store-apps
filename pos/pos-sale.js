@@ -23,6 +23,29 @@ searchBar.addEventListener('input', ()=>{
     box.appendChild(row);
   });
 });
+// 🔍 البحث بالباركود مع التسامح مع الأصفار البادئة
+// السبب: ليبلات QuickBooks القديمة مطبوعة بأصفار (000948) بينما الباركود
+// المستورد رقم مجرد (948). بنجرب المطابقة التامة الأول، وبعدين بعد شيل الأصفار.
+function stripZeros(v){
+  const t = String(v == null ? '' : v).trim();
+  return /^\d+$/.test(t) ? t.replace(/^0+/, '') || '0' : t;
+}
+function findByBarcode(code){
+  const usable = (it)=> it && it.status !== 'hidden' && it.status !== 'outofstock';
+  const raw = String(code || '').trim();
+  // (١) مطابقة تامة — دي الأصل ومبتتغيرش
+  let hit = allInventory.find(it => it.barcode === raw && usable(it));
+  if(hit) return hit;
+  // (٢) مقارنة بعد شيل الأصفار من الطرفين — للأرقام بس عشان منعملش تطابق وهمي
+  const norm = stripZeros(raw);
+  if(!/^\d+$/.test(norm)) return null;
+  const matches = allInventory.filter(it => usable(it) && stripZeros(it.barcode) === norm);
+  // لو أكتر من صنف يطابق، مش هنخمّن — بنسيبها للبحث العادي
+  return matches.length === 1 ? matches[0] : null;
+}
+window.findByBarcode = findByBarcode;
+window.stripZeros = stripZeros;
+
 searchBar.addEventListener('keydown', (e)=>{
   if(e.key === 'Enter'){
     const code = searchBar.value.trim();
@@ -45,7 +68,7 @@ searchBar.addEventListener('keydown', (e)=>{
       showToast('📱 اتسجّل رقم العميل في الفاتورة', 'ok');
       return;
     }
-    const match = allInventory.find(it => it.barcode === code && it.status !== 'hidden' && it.status !== 'outofstock');
+    const match = findByBarcode(code);
     if(match){
       addToCart(match);
       searchBar.value = '';
