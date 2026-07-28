@@ -335,7 +335,7 @@ window.roleCan = roleCan;
 const PANEL_PERM_KEYS = [
   ['approvals', ['طلبات الإذن','مخالفات محتاجة','طلبات تسجيل']],
   ['terminate', ['إنهاء خدمة','سجل المغادرين']],
-  ['settings',  ['إعدادات الالتزام','إعدادات رصيد الوقت','تارجت مبيعات الشيفت','إدارة الفروع','كود المدير']],
+  ['settings',  ['إعدادات الالتزام','إعدادات رصيد الوقت','تارجت مبيعات الشيفت','إدارة الفروع','كود المدير','إعدادات السلف']],
   ['money',     ['كشف الخصومات','رصيد الوقت والخصومات','عمولة النقط','سجل دفع العمولات',
                  'الرواتب الشهرية','سجل صرف الرواتب','سجل السلف']],
   ['people',    ['إضافة موظف','الموظفين الحاليين','مواعيد الحضور']],
@@ -1145,6 +1145,7 @@ function applyBranchFilter(){
   commissionPayments = allCommissionPayments.filter(p => p.branch === window.currentBranch);
   salaryPayments = allSalaryPayments.filter(p => p.branch === window.currentBranch);
   terminations = allTerminations.filter(t => t.branch === window.currentBranch);
+  window.allAdvances = allAdvances;   // 🌍 للفحوصات (advCheck)
   advances = allAdvances.filter(a => a.branch === window.currentBranch);
   deductions = allDeductions.filter(a => a.branch === window.currentBranch);
   window.deductions = deductions;
@@ -2231,6 +2232,27 @@ function renderLeaveReq(){
         </button>`;
       }).join('')}
     </div>
+    ${st.dateKey && st.type==='shiftSwap' ? (()=>{
+      // 🔄 اختيار الشيفت المطلوب — شيفته الحالي معلّم ومقفول، والعكسي مختار تلقائيًا
+      const me = (window.employees||[]).find(e=> e.id===st.empId) || {};
+      const cur = me.shift === 'evening' ? 'evening' : (me.shift === 'morning' ? 'morning' : '');
+      if(cur && !st.toShift) st.toShift = cur === 'morning' ? 'evening' : 'morning';
+      const opt = (key, icon, label)=>{
+        const isCur = key === cur;
+        const sel = st.toShift === key;
+        return `<button ${isCur ? 'disabled' : `onclick="window.lrPickShift('${key}')"`}
+          style="flex:1; padding:13px 8px; border-radius:12px; font-family:'Cairo'; font-weight:800; font-size:13px; cursor:${isCur?'not-allowed':'pointer'};
+                 background:${sel ? 'var(--gold-dim)' : 'var(--panel2)'}; color:${isCur ? 'var(--sub)' : 'var(--ink)'};
+                 border:1.5px solid ${sel ? 'var(--gold)' : 'var(--line)'}; opacity:${isCur ? '.5' : '1'};">
+          ${icon} ${label}${isCur ? '<br><small style="font-weight:400; font-size:10px;">(شيفتك الحالي)</small>' : (sel ? ' ✓' : '')}
+        </button>`;
+      };
+      return `<p class="sub" style="font-size:12px; margin:2px 0 8px;">عايز تتبدل لأنهي شيفت اليوم ده؟</p>
+        <div style="display:flex; gap:10px; margin-bottom:12px;">
+          ${opt('morning','🌅','صباحي')}
+          ${opt('evening','🌆','مسائي')}
+        </div>`;
+    })() : ''}
     ${st.dateKey ? `
       <input id="lrReason" placeholder="السبب (اختياري)" value="${st.reason||''}" oninput="_lrState.reason=this.value"
         style="width:100%; padding:12px; border-radius:11px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; margin-bottom:10px;">
@@ -2239,14 +2261,18 @@ function renderLeaveReq(){
 }
 
 window.lrPickType = function(t){ _lrState.type = t; renderLeaveReq(); };
-window.lrBack = function(){ _lrState.type=''; _lrState.dateKey=''; renderLeaveReq(); };
+window.lrBack = function(){ _lrState.type=''; _lrState.dateKey=''; _lrState.toShift=''; renderLeaveReq(); };
 window.lrPickDate = function(dk){ _lrState.dateKey = dk; renderLeaveReq(); };
+window.lrPickShift = function(sh){ _lrState.toShift = sh; renderLeaveReq(); };
 window.lrSubmit = function(){
   const st = _lrState;
   if(!st.type || !st.dateKey) return;
+  if(st.type === 'shiftSwap' && !st.toShift){ alert('اختار الشيفت اللي عايز تتبدل ليه'); return; }
+  const me = (window.employees||[]).find(e=> e.id===st.empId) || {};
   window.fbAddDoc(window.fbCollection(window.db,'sales_leave_requests'), {
     empId: st.empId, empName: st.empName, branch: window.currentBranch,
-    type: st.type, dateKey: st.dateKey, reason: st.reason||'', status:'pending', ts: Date.now()
+    type: st.type, dateKey: st.dateKey, reason: st.reason||'', status:'pending', ts: Date.now(),
+    ...(st.type === 'shiftSwap' ? { fromShift: me.shift || '', toShift: st.toShift } : {})
   }).then(()=>{
     closeLeaveReq();
     alert('اتبعت طلبك للإدارة ✅ — هيتراجع قريب');
@@ -4750,6 +4776,50 @@ $('#openAdvance')?.addEventListener('click', ()=>{
   $('#advanceOverlay').classList.add('show');
 });
 
+// ===== 💵 قواعد السلف (المالك بيحددها من الإعدادات) =====
+// advCfg = { maxPerMonth: سقف الشهر بالجنيه (0 = مفيش سقف), openDay: أول يوم مسموح (0 = مفتوح طول الشهر) }
+window.advCfg = { maxPerMonth: 0, openDay: 0 };
+try{
+  onSnapshot(doc(db,'pos_test_settings','advances_cfg'), (snap)=>{
+    if(snap.exists()){
+      const d = snap.data();
+      window.advCfg = { maxPerMonth: Number(d.maxPerMonth)||0, openDay: Number(d.openDay)||0 };
+    }
+  }, (e)=> console.warn('adv cfg', e && e.code));
+}catch(e){}
+
+// السلف مفتوحة النهارده؟ (يوم الفتح 15 يعني من 15 لآخر الشهر)
+function advWindowOpen(openDay, now){
+  const d = (now || new Date()).getDate();
+  return !openDay || d >= openDay;
+}
+// مجموع سلف الموظف الشهر ده
+function advMonthTotal(advances, empId, monthKey){
+  return (advances||[]).reduce((sum,a)=>{
+    if(!a || a.employeeId !== empId) return sum;
+    if(String(a.date||'').slice(0,7) !== monthKey) return sum;
+    return sum + (Number(a.amount)||0);
+  }, 0);
+}
+// فحص كامل لطلب سلفة — بيرجع {ok, reason, left}
+function advCheck(cfg, advances, empId, amount, now){
+  cfg = cfg || { maxPerMonth:0, openDay:0 };
+  if(!advWindowOpen(cfg.openDay, now)){
+    return { ok:false, reason:'closed', openDay: cfg.openDay };
+  }
+  if(cfg.maxPerMonth > 0){
+    const mk = (now || new Date()).toISOString().slice(0,7);
+    const used = advMonthTotal(advances, empId, mk);
+    const left = Math.max(0, cfg.maxPerMonth - used);
+    if(amount > left) return { ok:false, reason:'limit', left, used, max: cfg.maxPerMonth };
+    return { ok:true, left: left - amount, used };
+  }
+  return { ok:true };
+}
+window.advWindowOpen = advWindowOpen;
+window.advMonthTotal = advMonthTotal;
+window.advCheck = advCheck;
+
 function showAdvStep(n){
   $('#advStep1').style.display = n===1 ? 'block' : 'none';
   $('#advStep2').style.display = n===2 ? 'block' : 'none';
@@ -4812,6 +4882,14 @@ $('#advConfirmBtn')?.addEventListener('click', async ()=>{
   if(advSubmitting) return;
   const amount = parseFloat($('#advAmountInput').value);
   if(isNaN(amount) || amount <= 0){ $('#advAmountErr').textContent = 'اكتب مبلغ صحيح'; return; }
+  // 💵 قواعد السلف: نافذة الفتح + سقف الشهر
+  const chk = advCheck(window.advCfg, window.allAdvances, advSelectedEmp.id, amount, new Date());
+  if(!chk.ok){
+    $('#advAmountErr').textContent = chk.reason === 'closed'
+      ? `السلف بتفتح من يوم ${chk.openDay} في الشهر — مش متاحة دلوقتي`
+      : `تعدّيت سقف الشهر (${chk.max} ج.م) — واخد ${chk.used} وفاضلك ${chk.left} بس`;
+    return;
+  }
   advSubmitting = true;
   const btn = $('#advConfirmBtn');
   btn.disabled = true;
@@ -5173,6 +5251,31 @@ function renderAdvancesLog(){
       if(inp && document.activeElement !== inp) inp.value = window.managerCode;
     }, (e)=> console.warn('roles cfg', e && e.code));
   }catch(e){ console.warn('roles listen', e); }
+
+  // ---------- 💵 إعدادات السلف ----------
+  const advBtn = document.getElementById('saveAdvCfgBtn');
+  if(advBtn) advBtn.addEventListener('click', async ()=>{
+    const errB = document.getElementById('advCfgErr');
+    const mx = Math.max(0, Number((document.getElementById('advMaxInput')||{}).value) || 0);
+    const od = Math.max(0, Math.min(28, Number((document.getElementById('advOpenDayInput')||{}).value) || 0));
+    const orig = advBtn.textContent; advBtn.disabled = true;
+    try{
+      await setDoc(doc(db,'pos_test_settings','advances_cfg'), { maxPerMonth: mx, openDay: od }, { merge:true });
+      errB.textContent = ''; advBtn.textContent = 'اتحفظ ✅';
+    }catch(e2){ errB.textContent = 'خطأ: ' + (e2 && e2.message ? e2.message : e2); advBtn.textContent = 'خطأ'; }
+    setTimeout(()=>{ advBtn.textContent = orig; advBtn.disabled = false; }, 1800);
+  });
+  (async ()=>{
+    try{
+      const c = await getDoc(doc(db,'pos_test_settings','advances_cfg'));
+      if(c.exists()){
+        const d = c.data();
+        const a = document.getElementById('advMaxInput'), b = document.getElementById('advOpenDayInput');
+        if(a && d.maxPerMonth) a.value = d.maxPerMonth;
+        if(b && d.openDay) b.value = d.openDay;
+      }
+    }catch(e){}
+  })();
 
   // ---------- 🖥️ وضع تحوّل شاشة البيع (خفيف / كامل / مقفول) ----------
   const mBtn = document.getElementById('saveFramesModeBtn');

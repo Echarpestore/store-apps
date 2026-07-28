@@ -256,7 +256,10 @@ window.renderLeaveRequests = function(){
       ? `<div style="color:#5ec88a; font-size:12px;">🟢 لو وافقت هيتبقى ${chk.availableAfter} في الفرع (الحد ${minStaff}) — تغطية كويسة</div>`
       : `<div style="color:#e0796b; font-size:12px;">🔴 تحذير: هيتبقى ${chk.availableAfter} بس (الحد ${minStaff}) — ناقص ${chk.shortBy}</div>`;
     return `<div style="background:var(--panel); border:1px solid ${chk.safe?'var(--line)':'#5a3a3a'}; border-radius:13px; padding:13px; margin-bottom:9px;">
-      <div style="font-weight:800; font-size:14px;">${l.empName} — ${typeLabel[l.type]||l.type}</div>
+      <div style="font-weight:800; font-size:14px;">${l.empName} — ${typeLabel[l.type]||l.type}${
+        (l.type==='shiftSwap' && l.toShift)
+          ? ` <small style="color:var(--gold); font-weight:700;">(${l.fromShift==='evening'?'🌆 مسائي':'🌅 صباحي'} ← ${l.toShift==='evening'?'🌆 مسائي':'🌅 صباحي'})</small>`
+          : ''}</div>
       <div style="color:var(--sub); font-size:12.5px; margin:4px 0;">${dayName[d.getDay()]} ${l.dateKey}${l.reason?(' · '+l.reason):''}</div>
       ${cov}
       <div style="display:flex; gap:8px; margin-top:11px;">

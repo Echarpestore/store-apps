@@ -735,6 +735,20 @@
     </div>
 
     <div class="panel">
+      <h3>💵 إعدادات السلف</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
+        سقف السلف لكل موظف في الشهر، وأول يوم تفتح فيه (مثلاً بعد القبض يوم 6، تفتح من يوم 15).
+        سيب السقف 0 يعني من غير حد، ويوم الفتح 0 يعني مفتوحة طول الشهر.
+      </p>
+      <div class="add-form" style="flex-wrap:wrap;">
+        <input type="number" min="0" id="advMaxInput" placeholder="سقف الشهر للموظف (ج.م)" style="min-width:190px;">
+        <input type="number" min="0" max="28" id="advOpenDayInput" placeholder="تفتح من يوم (1-28)" style="min-width:160px;">
+        <button id="saveAdvCfgBtn">حفظ إعدادات السلف</button>
+      </div>
+      <div class="field-err" id="advCfgErr"></div>
+    </div>
+
+    <div class="panel">
       <h3>🏬 إدارة الفروع</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">الفروع اللي السيستم شايفها. لو فيه فرع اتكتب بالغلط تقدر تشيله — بس لو مفيهوش أي بيانات.</p>
       <div id="branchManageList"></div>
