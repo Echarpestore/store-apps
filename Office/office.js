@@ -129,10 +129,45 @@ function buildInbox(data){
   return out.sort(function(a,b){ return b.ts - a.ts; });
 }
 
+// 💹 تقرير الربح والخسارة لشهر معيّن
+// الإيراد: صافي مبيعات كل فرع (استبعاد المرتجع وصف العكس)
+// التكاليف: المرتبات الأساسية + بضاعة الشهر (أوردرات التجار) + المصاريف (شاملة الإيجار)
+// السلف: بتتعرض كمعلومة (متدفعة مقدمًا من المرتبات) — مش خصم إضافي عشان ميتحسبش مرتين
+function profitReport(data, mk){
+  const byBranch = {};
+  let revenue = 0;
+  (data.sales||[]).forEach(function(s){
+    if(!s || s.reversed || s.isReversal) return;
+    const t = Number(s.total)||0;
+    const br = s.branch || '—';
+    byBranch[br] = (byBranch[br]||0) + t;
+    revenue += t;
+  });
+  const salaries = (data.employees||[]).reduce(function(sum,e){
+    if(!e || e.active === false || e.isAdminAccount) return sum;
+    return sum + (Number(e.baseSalary)||0);
+  }, 0);
+  const advances = (data.advances||[]).reduce(function(sum,a){
+    if(!a || String(a.date||'').slice(0,7) !== mk) return sum;
+    return sum + (Number(a.amount)||0);
+  }, 0);
+  const goods = (data.mtxns||[]).reduce(function(sum,t){
+    if(!t || t.type !== 'order') return sum;
+    const tm = new Date(Number(t.ts)||0);
+    const tmk = tm.getFullYear()+'-'+String(tm.getMonth()+1).padStart(2,'0');
+    if(tmk !== mk) return sum;
+    return sum + (Number(t.amount)||0);
+  }, 0);
+  const expenses = expensesMonthTotal(data.expenses, mk);
+  const profit = revenue - salaries - goods - expenses;
+  return { byBranch:byBranch, revenue:revenue, salaries:salaries, advances:advances,
+           goods:goods, expenses:expenses, profit:profit };
+}
+
 // للاختبارات
 if (typeof window !== 'undefined'){
   window.officeCalc = { merchantBalance:merchantBalance, expensesMonthTotal:expensesMonthTotal,
-    topSellers:topSellers, branchQtyOf:branchQtyOf, salarySummary:salarySummary, buildInbox:buildInbox };
+    topSellers:topSellers, branchQtyOf:branchQtyOf, salarySummary:salarySummary, buildInbox:buildInbox, profitReport:profitReport };
 }
 
 /* ============================================================
@@ -263,19 +298,19 @@ function startData(){
   });
   db.collection('office_merchant_txns').onSnapshot(function(s){
     D.mtxns = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
-    renderMerchants();
+    renderMerchants(); renderPL();
   });
   db.collection('office_expenses').onSnapshot(function(s){
     D.expenses = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
-    renderExpenses();
+    renderExpenses(); renderPL();
   });
   db.collection('sales_employees').onSnapshot(function(s){
     D.employees = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
-    renderSalaries(); fillBranchSel();
+    renderSalaries(); fillBranchSel(); renderPL();
   });
   db.collection('sales_advances').onSnapshot(function(s){
     D.advances = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
-    renderSalaries();
+    renderSalaries(); renderPL();
   });
   // مبيعات آخر 30 يوم (قراءة دورية مش snapshot — أخف على الموبايل)
   loadSales(); setInterval(loadSales, 5*60*1000);
@@ -294,6 +329,74 @@ function loadSales(){
       D.sales = s.docs.map(function(d){ return d.data(); });
       renderTop();
     }).catch(function(e){ console.warn('sales load', e); });
+}
+
+/* ============================================================
+   💹 الربح والخسارة
+   ============================================================ */
+let plMonthSales = null;      // مبيعات الشهر المختار (منفصلة عن آخر 30 يوم)
+let plLoadedMonth = '';
+function plSelectedMonth(){
+  const sel = $('#plMonthSel');
+  return (sel && sel.value) || monthKey();
+}
+function fillPlMonths(){
+  const sel = $('#plMonthSel'); if(!sel || sel.options.length) return;
+  const now = new Date();
+  const opts = [];
+  for(let i=0;i<6;i++){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const mk = monthKey(d);
+    const label = d.toLocaleDateString('ar-EG', { month:'long', year:'numeric' });
+    opts.push('<option value="'+mk+'">'+label+(i===0?' (الحالي)':'')+'</option>');
+  }
+  sel.innerHTML = opts.join('');
+  sel.onchange = loadPlMonth;
+}
+function loadPlMonth(){
+  const mk = plSelectedMonth();
+  if(mk === plLoadedMonth && plMonthSales){ renderPL(); return; }
+  const parts = mk.split('-');
+  const from = new Date(Number(parts[0]), Number(parts[1])-1, 1);
+  const to   = new Date(Number(parts[0]), Number(parts[1]), 1);
+  db.collection('pos_test_sales')
+    .where('createdAt','>=', firebase.firestore.Timestamp.fromDate(from))
+    .where('createdAt','<',  firebase.firestore.Timestamp.fromDate(to)).get()
+    .then(function(s){
+      plMonthSales = s.docs.map(function(d){ return d.data(); });
+      plLoadedMonth = mk;
+      renderPL();
+    }).catch(function(e){ console.warn('pl load', e); $('#plBody').innerHTML = '<div class="empty">تعذر تحميل المبيعات</div>'; });
+}
+function renderPL(){
+  const body = $('#plBody'); if(!body) return;
+  fillPlMonths();
+  const mk = plSelectedMonth();
+  if(plLoadedMonth !== mk || !plMonthSales){ loadPlMonth(); return; }
+  const r = profitReport({ sales:plMonthSales, employees:D.employees, advances:D.advances,
+                           mtxns:D.mtxns, expenses:D.expenses }, mk);
+  // مبيعات الفروع
+  const brs = Object.keys(r.byBranch).sort();
+  $('#plBranches').innerHTML = brs.length ? brs.map(function(b){
+    return '<div class="card row"><span>🏬 مبيعات '+esc(b)+'</span><span class="amount pos">'+egp(r.byBranch[b])+'</span></div>';
+  }).join('') : '<div class="empty">مفيش مبيعات متسجلة للشهر ده</div>';
+  // البنود
+  body.innerHTML =
+    '<div class="card row" style="border-color:var(--good);"><b>إجمالي المبيعات</b><span class="amount pos">'+egp(r.revenue)+'</span></div>' +
+    '<div class="card row"><span>👥 المرتبات الأساسية' +
+      (r.advances ? '<div class="muted">متدفع منها مقدمًا كسلف: '+egp(r.advances)+'</div>' : '') +
+    '</span><span class="amount neg">− '+egp(r.salaries)+'</span></div>' +
+    '<div class="card row"><span>📦 البضاعة (أوردرات التجار)</span><span class="amount neg">− '+egp(r.goods)+'</span></div>' +
+    '<div class="card row"><span>💸 المصاريف والإيجارات</span><span class="amount neg">− '+egp(r.expenses)+'</span></div>';
+  // النتيجة
+  const res = $('#plResult');
+  if(r.profit >= 0){
+    res.style.background = 'rgba(63,191,96,.12)'; res.style.border = '1px solid var(--good)'; res.style.color = 'var(--good)';
+    res.textContent = '✅ مكسب ' + egp(r.profit);
+  } else {
+    res.style.background = 'rgba(224,121,107,.12)'; res.style.border = '1px solid var(--bad)'; res.style.color = 'var(--bad)';
+    res.textContent = '🔻 خسارة ' + egp(Math.abs(r.profit));
+  }
 }
 
 /* ============================================================
