@@ -601,14 +601,24 @@ function returnItemFromInvoice(itemIdx){
 
 function closeReturnInvoiceModal(){
   document.getElementById('returnInvoiceModal').classList.remove('active');
-  // 🔄 التبديل: بعد اختيار المرتجع، الكاشير غالبًا هيمسح منتج جديد —
-  // فبنرجّع التركيز لبار البحث فورًا عشان المسح يشتغل من غير ما يدوس عليه.
+  // 🔄 التبديل: بعد اختيار المرتجع، الكاشير غالبًا هيمسح منتج جديد.
+  // بننضّف البار من أي بقايا (كود الفاتورة اللي اتمسح) ونرجّع التركيز —
+  // من غير كده البار بيبان "معلّق" لأن الكتابة بتروح لحتة تانية.
   setTimeout(function(){
     const sb = document.getElementById('searchBar');
-    if(sb && document.getElementById('saleScreen') &&
-       !document.querySelector('.modal-overlay.active')){ try{ sb.focus(); }catch(e){} }
+    const box = document.getElementById('suggestBox');
+    if(box) box.innerHTML = '';
+    if(sb && !document.querySelector('.modal-overlay.active')){
+      try{ sb.value = ''; sb.focus(); sb.select && sb.select(); }catch(e){}
+    }
   }, 60);
 }
+// Escape بيقفل نافذة المرتجع — مخرج سريع لو الكاشير اتلغبط
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Escape') return;
+  const m = document.getElementById('returnInvoiceModal');
+  if(m && m.classList.contains('active')) closeReturnInvoiceModal();
+});
 
 // 🔄 خلصت المرتجع وكمّل بيع — بيقفل النافذة ويجهّز الشاشة للمسح
 function finishReturnAndSell(){
@@ -656,11 +666,11 @@ function returnCartItem(idx){
     showToast('رجع بيع عادي ✅');
     return;
   }
-  if(!confirm(`تحويل "${item.name}" (${item.qty} قطعة) لمرتجع بالكامل؟`)) return;
+  // مفيش تأكيد: الإجراء بيترد بضغطة تانية على نفس الصنف، فالتأكيد كان بيعطّل بس
   item.price = -Math.abs(item.price);
   item.isReturn = true;
   renderCart();
-  showToast('اتحول لمرتجع بالأحمر ✅ — قلل من إجمالي الفاتورة');
+  showToast('↩️ "' + item.name + '" بقى مرتجع — دوس تاني عليه لو عايز ترجعه بيع', 'ok');
 }
 function changeQty(idx, delta){
   const line = cart[idx];
