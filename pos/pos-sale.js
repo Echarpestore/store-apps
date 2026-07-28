@@ -70,6 +70,50 @@ function askText(opts){
 }
 window.askText = askText;
 
+// ============================================================
+// ⌨️ ترجمة حروف الكيبورد العربي
+// قارئ الباركود بيشتغل زي الكيبورد: لو لغة ويندوز عربي، الحرف F
+// بيطلع "ب" وهكذا. بدل ما الكاشير يغيّر اللغة كل مرة، بنترجم إحنا.
+// ============================================================
+const AR_KEYS = {
+  // الصف الأول
+  'ض':'q','ص':'w','ث':'e','ق':'r','ف':'t','غ':'y','ع':'u','ه':'i','خ':'o','ح':'p','ج':'[','د':']',
+  // الصف التاني
+  'ش':'a','س':'s','ي':'d','ب':'f','ل':'g','ا':'h','ت':'j','ن':'k','م':'l','ك':';','ط':"'",
+  // الصف التالت
+  'ئ':'z','ء':'x','ؤ':'c','ر':'v','لا':'b','ى':'n','ة':'m','و':',','ز':'.','ظ':'/',
+  // مع Shift
+  'َ':'Q','ً':'W','ُ':'E','ٌ':'R','لإ':'T','إ':'Y','÷':'I','×':'O','؛':'P',
+  'ِ':'A','ٍ':'S','لأ':'G','أ':'H','ـ':'J','،':'K',
+  'ْ':'X','لآ':'B','آ':'N','ذ':'`'
+};
+function fixArabicKeyboard(text){
+  const t = String(text == null ? '' : text);
+  let out = '';
+  for(let i = 0; i < t.length; i++){
+    // "لا" وأخواتها حرفين لازم نجربهم الأول
+    const two = t.substr(i, 2);
+    if(AR_KEYS[two] !== undefined){ out += AR_KEYS[two]; i++; continue; }
+    const ch = t[i];
+    out += (AR_KEYS[ch] !== undefined) ? AR_KEYS[ch] : ch;
+  }
+  return out;
+}
+window.fixArabicKeyboard = fixArabicKeyboard;
+
+// بيرجّع الكود بعد الترجمة لو الأصلي فيه عربي والمترجم بيطابق شكل معروف
+function normalizeScan(code){
+  const raw = String(code || '').trim();
+  if(!/[\u0600-\u06FF]/.test(raw)) return raw;      // مفيش عربي = زي ما هو
+  const fixed = fixArabicKeyboard(raw).toUpperCase();
+  // بنقبل الترجمة بس لو طلعت شكل كود معروف — عشان منخربش بحث بالاسم العربي
+  if(/^FT[A-Z0-9-]+$/.test(fixed)) return fixed;      // كود فاتورة
+  if(/^ECH\d+$/.test(fixed) || /^GLW\d+$/.test(fixed)) return fixed;   // كود عضوية
+  if(/^EC[A-Z2-9]{10}$/.test(fixed)) return fixed;    // كارت موظف
+  return raw;
+}
+window.normalizeScan = normalizeScan;
+
 // 🔍 البحث بالباركود مع التسامح مع الأصفار البادئة
 // السبب: ليبلات QuickBooks القديمة مطبوعة بأصفار (000948) بينما الباركود
 // المستورد رقم مجرد (948). بنجرب المطابقة التامة الأول، وبعدين بعد شيل الأصفار.
@@ -95,7 +139,8 @@ window.stripZeros = stripZeros;
 
 searchBar.addEventListener('keydown', (e)=>{
   if(e.key === 'Enter'){
-    const code = searchBar.value.trim();
+    // ⌨️ لو الكيبورد كان عربي، بنرجّع الكود لأصله قبل أي مطابقة
+    const code = normalizeScan(searchBar.value.trim());
     if(!code) return;
     // ↩️ R + رقم موبايل → مرتجع بفواتير العميل (مثال: R01012345678)
     if(/^[rR]\s*01\d{9}$/.test(code.replace(/\s/g,''))){
