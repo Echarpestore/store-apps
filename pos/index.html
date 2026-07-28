@@ -208,7 +208,9 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 }
 .qbx-itemops button.qbx-return-all{background:linear-gradient(#d9534f,#a5271f); margin-top:7px;}
 .qbx-bottom{
-  display:flex; gap:10px; padding:8px 10px 10px; align-items:stretch;
+  /* 🔄 معكوس بطلب المالك: الإجمالي مكان أزرار الدفع والعكس */
+  display:flex; flex-direction:row-reverse;
+  gap:10px; padding:8px 10px 10px; align-items:stretch;
   border-top:1px solid #b8b5ad; background:#e0ddd5;
 }
 .qbx-pay{flex:1; background:#f4f3ef; border:1px solid #b8b5ad; border-radius:6px; padding:8px 10px;}

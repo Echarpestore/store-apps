@@ -337,7 +337,51 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if(typeof injectUnifiedToolbars === 'function') try{ injectUnifiedToolbars(); }catch(e){}
+  try{ clearStuckOverlays(id); }catch(e){ console.warn('overlays', e); }
 }
+
+// 🧹 تنضيف النوافذ العالقة
+// المشكلة: لو نافذة اتقفلت بطريقة غير متوقعة، بتفضل طبقة شفافة فوق الشاشة
+// بتبلع الكتابة والضغط — الشكل عادي بس مفيش حاجة بتستجيب، والحل الوحيد
+// كان الخروج والدخول. بننضّف أي بقايا مع كل تنقل بين الشاشات.
+function clearStuckOverlays(screenId){
+  // نوافذ بنبنيها في اللحظة — لو فاضلة يبقى حصل خطأ، بنشيلها
+  ['askTextOverlay','changeConfirmOverlay','cancelTerminalOverlay','avPickOverlay']
+    .forEach(function(elId){
+      const el = document.getElementById(elId);
+      if(el) el.remove();
+    });
+  // النوافذ الثابتة اللي بتتقفل بكلاس
+  document.querySelectorAll('.modal-overlay.active').forEach(function(m){
+    m.classList.remove('active');
+  });
+  // التركيز يرجع لبار البحث في شاشة البيع عشان المسح يشتغل فورًا
+  if(screenId === 'saleScreen'){
+    setTimeout(function(){
+      const sb = document.getElementById('searchBar');
+      if(sb && !document.querySelector('.modal-overlay.active')){
+        try{ sb.focus(); }catch(e){}
+      }
+    }, 80);
+  }
+}
+window.clearStuckOverlays = clearStuckOverlays;
+
+// 🆘 مخرج طوارئ: Escape مرتين ورا بعض بينضّف الشاشة من أي نافذة عالقة
+(function(){
+  let lastEsc = 0;
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Escape') return;
+    const now = Date.now();
+    if(now - lastEsc < 700){
+      lastEsc = 0;
+      try{
+        clearStuckOverlays('saleScreen');
+        if(typeof showToast === 'function') showToast('🧹 اتنضفت الشاشة', 'ok');
+      }catch(err){}
+    } else { lastEsc = now; }
+  });
+})();
 function showToast(msg, type=""){
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = 'toast show ' + type;

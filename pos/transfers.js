@@ -163,11 +163,25 @@ function _trRenderItems(){
         ${(it.barcode || it.code) ? `<div style="font-size:10.5px; color:var(--muted); direction:ltr; text-align:right; font-family:monospace; margin-top:2px;">🔖 ${it.barcode || it.code}</div>` : ''}
       </div>
       <button onclick="_trQty(${i},-1)" style="width:28px; height:28px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;">−</button>
-      <b style="min-width:24px; text-align:center;">${it.qty}</b>
+      <input type="number" min="1" value="${it.qty}" onchange="_trSetQty(${i}, this.value)"
+        onfocus="this.select()" onkeydown="if(event.key==='Enter'){ this.blur(); }"
+        style="width:56px; height:30px; text-align:center; font-weight:800; font-size:13px;
+               border-radius:8px; border:1px solid var(--border); background:var(--panel);
+               color:var(--text); font-family:'Cairo';">
       <button onclick="_trQty(${i},1)" style="width:28px; height:28px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;">+</button>
       <button onclick="_trNewItems.splice(${i},1); _trRenderItems();" style="border:none; background:none; color:var(--bad); cursor:pointer; font-size:14px;">🗑️</button>
     </div>`).join('') || '<div style="color:var(--muted); font-size:12px; text-align:center; padding:8px;">لسه مفيش قطع — امسح فوق ⬆️</div>';
 }
+// ✍️ كتابة الكمية مباشرة بدل الضغط قطعة قطعة
+function _trSetQty(i, val){
+  const it = _trNewItems[i]; if(!it) return;
+  let v = parseInt(val, 10);
+  if(isNaN(v) || v <= 0){ _trNewItems.splice(i, 1); }   // صفر أو فاضي = شيل الصنف
+  else it.qty = v;
+  _trRenderItems();
+}
+window._trSetQty = _trSetQty;
+
 function _trQty(i, d){
   const it = _trNewItems[i]; if(!it) return;
   const nv = it.qty + d;
