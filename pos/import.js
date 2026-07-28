@@ -59,6 +59,23 @@ function renderImportPanel(){
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
       <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" style="margin-bottom:10px;">
+      <div id="adjRow" style="display:none; background:#0f2438; border:1.5px solid #3b82f680;
+           border-radius:10px; padding:10px 12px; margin-bottom:10px; color:#dbeafe; font-size:12.5px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:700;">
+          <input type="checkbox" id="adjustSold" style="width:18px; height:18px; cursor:pointer;">
+          ⚖️ اخصم اللي اتباع على النظام الجديد
+        </label>
+        <div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span style="font-size:12px;">من تاريخ ووقت تصدير ملف QuickBooks:</span>
+          <input type="datetime-local" id="adjustSince"
+            style="padding:6px 8px; border-radius:8px; border:1.5px solid var(--border);
+                   background:var(--panel2); color:var(--text); font-size:12px;">
+        </div>
+        <div style="font-size:11px; color:#93c5fd; margin-top:6px;">
+          بيخصم من فرع <b>${'' + (typeof currentBranch !== 'undefined' ? currentBranch : '')}</b> بس ·
+          المرتجعات بتترجع للكمية · الفواتير المعكوسة مش محسوبة
+        </div>
+      </div>
       <label id="wipeRow" style="display:none; align-items:center; gap:8px; background:#3a1416;
              border:1.5px solid #e5484d66; border-radius:10px; padding:10px 12px; margin-bottom:10px;
              cursor:pointer; color:#ffd9da; font-size:12.5px; font-weight:700;">
@@ -195,8 +212,11 @@ function parseCSV(text){
 }
 
 function renderImportMapping(){
+  const show = (importTab === 'inventory' && importParsedRows.length);
   const wr = document.getElementById('wipeRow');
-  if(wr) wr.style.display = (importTab === 'inventory' && importParsedRows.length) ? 'flex' : 'none';
+  if(wr) wr.style.display = show ? 'flex' : 'none';
+  const ar = document.getElementById('adjRow');
+  if(ar) ar.style.display = show ? 'block' : 'none';
   const wrap = document.getElementById('importPreviewWrap');
   const targets = IMPORT_TARGETS[importTab];
   const headerOptions = ['<option value="">— تجاهل —</option>'].concat(
@@ -249,6 +269,51 @@ function renderImportMapping(){
   });
 }
 
+// ============================================================
+// ⚖️ ضبط الكميات بعد الاستيراد
+// ملف QuickBooks بيعكس الكميات وقت التصدير بس. أي بيعة اتعملت على النظام
+// الجديد بعد كده مش محسوبة فيه — فبنخصمها، وبنضيف المرتجعات.
+// ============================================================
+
+// بيحسب صافي القطع المباعة لكل باركود من تاريخ معيّن (الفرع الحالي بس)
+function netSoldByBarcode(sales, sinceMs, branch){
+  const out = {};
+  (sales||[]).forEach(function(s){
+    if(!s) return;
+    if(s.branch !== branch) return;              // الفرع الحالي بس
+    if(s.reversed || s.isReversal) return;       // الفاتورة المعكوسة كأنها محصلتش
+    var ts = s._ts || 0;
+    if(!(ts >= sinceMs)) return;
+    (s.items||[]).forEach(function(it){
+      if(!it || it.isRedemption) return;         // الاستبدال بالنقط مش بيعة
+      var code = String(it.barcode || '').trim();
+      if(!code) return;
+      var q = Number(it.qty) || 0;
+      // المرتجع جوه الفاتورة بيرجّع للمخزون → بيتضاف مش بيتخصم
+      out[code] = (out[code] || 0) + (it.isReturn ? -q : q);
+    });
+  });
+  return out;
+}
+if(typeof window !== 'undefined') window.netSoldByBarcode = netSoldByBarcode;
+
+// بيطبّق الخصم على الكميات المستوردة
+function applySoldAdjustment(rows, sold){
+  const changes = [];
+  (rows||[]).forEach(function(r){
+    var code = String(r.barcode || '').trim();
+    var n = sold[code];
+    if(!n) return;                                // مفيش بيعات للصنف ده
+    var before = Number(r.qty) || 0;
+    var after  = before - n;                      // المباع بيتخصم، المرتجع بيتضاف
+    if(after < 0) after = 0;                      // الكمية عمرها ما تبقى بالسالب
+    r.qty = after;
+    changes.push({ barcode: code, name: r.name, before: before, sold: n, after: after });
+  });
+  return changes;
+}
+if(typeof window !== 'undefined') window.applySoldAdjustment = applySoldAdjustment;
+
 // 🗑️ مسح كل المخزون قبل استيراد جديد
 // محمي بتأكيد بالكتابة لأن الإجراء نهائي — البضاعة والكميات كلها بتروح.
 async function wipeInventory(resultBox){
@@ -296,6 +361,55 @@ async function runImport(){
       if(!ok){ resultBox.textContent = 'اتلغى — المخزون زي ما هو'; return; }
     }
     const rows = importParsedRows;
+    // ⚖️ خصم المباع على النظام الجديد قبل ما نكتب الكميات
+    const adjEl = document.getElementById('adjustSold');
+    if(adjEl && adjEl.checked){
+      const sinceVal = (document.getElementById('adjustSince')||{}).value;
+      if(!sinceVal){ showToast('حدد تاريخ ووقت تصدير الملف الأول', 'err'); resultBox.textContent=''; return; }
+      const sinceMs = new Date(sinceVal).getTime();
+      if(isNaN(sinceMs)){ showToast('التاريخ مش مظبوط', 'err'); resultBox.textContent=''; return; }
+      resultBox.textContent = 'بيقرا بيعات النظام الجديد...';
+      try{
+        const salesSnap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+        const sales = salesSnap.docs.map(function(d){
+          const x = d.data() || {};
+          const c = x.createdAt;
+          x._ts = c && c.toMillis ? c.toMillis() : (c && c.seconds ? c.seconds*1000 : (x.ts || 0));
+          return x;
+        });
+        // بنجهّز الصفوف بالباركود عشان المطابقة
+        const prepped = rows.map(function(r){
+          return { barcode: mapping.barcode ? String(r[mapping.barcode]||'').trim() : '',
+                   name: String(r[mapping.name]||'').trim(),
+                   qty: mapping.quantity ? (parseInt(r[mapping.quantity]) || 0) : 0,
+                   _row: r };
+        });
+        const sold = netSoldByBarcode(sales, sinceMs, currentBranch);
+        const changes = applySoldAdjustment(prepped, sold);
+        if(!changes.length){
+          if(!confirm('مفيش أي بيعات على النظام الجديد بعد التاريخ ده.\nنكمّل الاستيراد من غير خصم؟')){
+            resultBox.textContent = 'اتلغى'; return;
+          }
+        } else {
+          const top = changes.slice(0, 12).map(function(c){
+            return '• ' + (c.name||c.barcode) + ': ' + c.before + ' − ' + c.sold + ' = ' + c.after;
+          }).join('\n');
+          const more = changes.length > 12 ? ('\n… و' + (changes.length-12) + ' صنف كمان') : '';
+          if(!confirm('⚖️ هيتعدّل ' + changes.length + ' صنف:\n\n' + top + more + '\n\nنكمّل؟')){
+            resultBox.textContent = 'اتلغى'; return;
+          }
+          // نرجّع الكميات المعدّلة للصفوف الأصلية
+          prepped.forEach(function(pr){
+            if(mapping.quantity) pr._row[mapping.quantity] = pr.qty;
+          });
+          if(typeof _logActivity === 'function')
+            _logActivity('import_qty_adjusted', { count: changes.length, since: sinceVal });
+        }
+      }catch(e){
+        showToast('تعذر حساب المباع: ' + (e && e.message ? e.message : e), 'err');
+        resultBox.textContent = ''; return;
+      }
+    }
     const CHUNK = 400;   // حد Firestore للدفعة 500
     try{
       for(let i=0; i<rows.length; i+=CHUNK){
