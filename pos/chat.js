@@ -171,7 +171,7 @@ function _refreshMini(){
     <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
       <span style="font-size:18px; flex-shrink:0;">💬</span>
       <div style="min-width:0; flex:1;">
-        <div style="font-size:12.5px; font-weight:800; color:#f1f5fb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+        <div style="font-size:12.5px; font-weight:800; color:#f1f5fb; line-height:1.35; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; word-break:break-word;">
           ${last ? `<span style="color:#a5b4fc;">${_esc(last.from===me?'انت':last.from)}:</span> ${_esc(last.text)}` : 'شات الفروع 👋'}
         </div>
         ${last?`<div style="font-size:9.5px; color:#8494ab;">${_fmtT(last.ts)}</div>`:''}
@@ -191,10 +191,10 @@ async function _openPanel(){
   if(!ov){
     ov = document.createElement('div');
     ov.id = 'chatPanelOv';
-    ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:9990; display:flex; justify-content:flex-start;';
+    ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:9990; display:flex; justify-content:flex-end;';   // 🔄 بتفتح من الشمال (كانت يمين)
     ov.onclick = (e)=>{ if(e.target === ov) _closePanel(); };
     ov.innerHTML = `
-      <div style="width:min(94vw,430px); height:100%; background:var(--bg); border-left:1px solid var(--border); display:flex; flex-direction:column;">
+      <div style="width:min(94vw,430px); height:100%; background:var(--bg); border-right:1px solid var(--border); display:flex; flex-direction:column;">
         <div style="display:flex; align-items:center; gap:8px; padding:11px 13px; border-bottom:1px solid var(--border);">
           <span style="font-size:17px;">💬</span><b style="flex:1;">شات الفروع <span style="color:var(--muted); font-size:10.5px; font-weight:400;">(اليوم بس — بيتنضف تلقائي)</span></b>
           <button onclick="if(typeof chatNudge==='function')chatNudge()" title="نداء بصوت أعلى" style="border:1px solid var(--warn); background:rgba(245,158,11,.12); color:var(--warn); border-radius:9px; padding:7px 11px; font-weight:800; cursor:pointer;">👋 تنبيه</button>
