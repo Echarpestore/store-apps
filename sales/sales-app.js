@@ -320,11 +320,13 @@ const SALES_ROLES = {
   owner:   { label:'👑 المالك', perms: Object.keys(SALES_PERMS) },
   manager: { label:'🧑‍💼 مدير',  perms: ['approvals','day','tasks','orders'] }
 };
-let adminRole = 'owner';                 // بيتحدد وقت الدخول حسب الكود
+let adminRole = null;                    // 🔒 مفيش دور غير بعد إدخال الكود (الافتراضي مش المالك)
 window.adminRole = adminRole;
 window.managerCode = '';   // بيتقرا من الإعدادات (المالك بيحدده) — على window عشان بلوك تاني بيكتبه
 function roleCan(perm){
-  const r = SALES_ROLES[adminRole] || SALES_ROLES.owner;
+  if(!adminUnlocked) return false;            // 🔒 الجلسة مقفولة = مفيش أي صلاحية
+  const r = SALES_ROLES[adminRole];
+  if(!r) return false;                         // دور غير معروف = مفيش صلاحيات (مش المالك!)
   return r.perms.indexOf(perm) >= 0;
 }
 window.roleCan = roleCan;
@@ -393,7 +395,7 @@ function _applyRoleVisibilityInner(admin){
       top.appendChild(badge);
     }
   }
-  if(badge) badge.textContent = (SALES_ROLES[adminRole]||{}).label || '';
+  if(badge) badge.textContent = adminUnlocked ? ((SALES_ROLES[adminRole]||{}).label || '') : '';
 }
 window.applyRoleVisibility = applyRoleVisibility;
 
@@ -3063,13 +3065,25 @@ function doAdminLogin(){
 }
 $('#adminLoginCancel').addEventListener('click', ()=>{
   $('#adminLoginGate').classList.remove('show');
-  $('#admin').classList.remove('show');
+  if(typeof lockAdmin === 'function') lockAdmin(); else $('#admin').classList.remove('show');
 });
-$('#backFromAdmin').addEventListener('click', ()=> $('#admin').classList.remove('show'));
-$('#adminLogout').addEventListener('click', ()=>{
+// 🔒 قفل الجلسة: أي خروج من الشاشة بيقفل الصلاحيات ويطلب الكود تاني.
+// السبب: زرار الرجوع كان بيخفي الشاشة بس — فأي حد يفتحها بعدها كان بيدخل
+// من غير كود وبصلاحيات آخر واحد دخل (وغالبًا المالك).
+function lockAdmin(){
   adminUnlocked = false;
+  adminRole = null;
+  window.adminRole = null;
   $('#admin').classList.remove('show');
-});
+  const badge = document.getElementById('roleBadge');
+  if(badge) badge.textContent = '';
+  const bar = document.getElementById('actionBar');
+  if(bar){ bar.className = ''; bar.innerHTML = ''; }
+  try{ applyRoleVisibility(); }catch(e){}     // كل اللوحات تتقفل ورا القفل
+}
+window.lockAdmin = lockAdmin;
+$('#backFromAdmin').addEventListener('click', lockAdmin);
+$('#adminLogout').addEventListener('click', lockAdmin);
 
 function renderAdminList(){
   const wrap = $('#empList');
