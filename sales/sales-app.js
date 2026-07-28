@@ -2049,6 +2049,9 @@ function renderDayHub(empId){
   const shift = getOpenShift(empId);
 
   $('#dh_avatar').textContent = avatarOf(emp);
+  // 📦 زرار طلب النواقص اللي جنب عنوان التاسك
+  const shBtn = document.getElementById('dh_shortageBtn');
+  if(shBtn) shBtn.onclick = ()=> window.reqShortage(emp.id);
   $('#dh_avatar').style.cursor = 'pointer';
   $('#dh_avatar').title = 'دوس عشان تغيّر شكلك';
   $('#dh_avatar').onclick = ()=> openAvatarPicker(emp.id);
@@ -2146,8 +2149,8 @@ function renderDayHubLeave(empId){
   const pendingTxt = mine.length ? `<div style="text-align:center; color:var(--sub); font-size:11.5px; margin-top:6px;">⏳ عندك ${mine.length} طلب مستني الموافقة</div>` : '';
   const myShort = (window.allShortages||[]).filter(x=> x.empId===empId && x.status==='open').length;
   const shortTxt = myShort ? `<div style="text-align:center; color:var(--sub); font-size:11.5px; margin-top:4px;">📦 عندك ${myShort} طلب نواقص مفتوح</div>` : '';
-  area.innerHTML = `<button class="cancelBtn" style="width:100%;" onclick="window.reqLeave('${empId}')">📩 طلب إذن / تغيير إجازة</button>${pendingTxt}
-    <button class="cancelBtn" style="width:100%; margin-top:8px;" onclick="window.reqShortage('${empId}')">📦 طلب نواقص من الإدارة</button>${shortTxt}`;
+  // (زرار النواقص اتنقل فوق جنب عنوان التاسك — هنا بيفضل العداد بس لو فيه طلبات مفتوحة)
+  area.innerHTML = `<button class="cancelBtn" style="width:100%;" onclick="window.reqLeave('${empId}')">📩 طلب إذن / تغيير إجازة</button>${pendingTxt}${shortTxt}`;
 }
 // ===== 📦 طلب النواقص: الموظف يكتب الكود → الاسم من الكتالوج → التفاصيل =====
 // بيتسجل في sales_shortages وبيوصل للمالك (وهيظهر في echarpe office بالاسم والفرع)
