@@ -105,7 +105,11 @@ async function pdAdjustStock(direction){
   const doc = await db.collection(TEST_INVENTORY).doc(currentProductId).get();
   const p = { id: doc.id, ...doc.data() };
 
-  const qtyStr = prompt(direction > 0 ? 'كام قطعة هتضاف للمخزون؟' : 'كام قطعة هتتخصم من المخزون؟', '');
+  const qtyStr = await askText({
+    title: direction > 0 ? '📥 إضافة للمخزون' : '📤 خصم من المخزون',
+    message: direction > 0 ? 'كام قطعة هتضاف؟' : 'كام قطعة هتتخصم؟',
+    type: 'number', value: '', okText: 'تمام'
+  });
   if(qtyStr === null) return;
   const qty = parseInt(qtyStr);
   if(isNaN(qty) || qty <= 0){ showToast('كمية غير صحيحة', 'err'); return; }
@@ -116,7 +120,11 @@ async function pdAdjustStock(direction){
     return;
   }
 
-  const reason = prompt('اكتب سبب التسوية (إجباري — بيتسجل في سجل المخزون):', direction > 0 ? 'توريد جديد' : '');
+  const reason = await askText({
+    title: '📝 سبب التسوية',
+    message: 'إجباري — بيتسجل في سجل المخزون',
+    value: direction > 0 ? 'توريد جديد' : '', okText: 'احفظ'
+  });
   if(reason === null) return;
   if(!reason.trim()){ showToast('لازم تكتب السبب', 'err'); return; }
 

@@ -23,6 +23,53 @@ searchBar.addEventListener('input', ()=>{
     box.appendChild(row);
   });
 });
+// ============================================================
+// ✍️ askText — بديل prompt()
+// ⚠️ Electron مش بيدعم window.prompt خالص: النداء بيفشل بصمت
+// فالشاشة بتقف من غير أي رسالة. ده كان سبب وقوف الاستيراد والخصم.
+// الدالة دي نافذة عادية بتشتغل في المتصفح وفي الـ exe.
+// ============================================================
+function askText(opts){
+  const o = opts || {};
+  return new Promise(function(resolve){
+    const old = document.getElementById('askTextOverlay');
+    if(old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'askTextOverlay';
+    ov.style.cssText = 'position:fixed; inset:0; z-index:13000; background:rgba(0,0,0,.8);'
+      + 'display:flex; align-items:center; justify-content:center; padding:20px;';
+    ov.innerHTML = '<div style="background:var(--panel); border:2px solid ' + (o.danger ? '#e5484d' : 'var(--border)')
+      + '; border-radius:16px; padding:22px; max-width:440px; width:100%;">'
+      + '<div style="font-weight:900; font-size:15px; margin-bottom:8px;">' + (o.title || '') + '</div>'
+      + (o.message ? '<div style="color:var(--muted); font-size:12.5px; line-height:1.8; margin-bottom:12px; white-space:pre-line;">' + o.message + '</div>' : '')
+      + '<input id="askTextInput" type="' + (o.type || 'text') + '" value="' + (o.value == null ? '' : String(o.value)) + '"'
+      + (o.placeholder ? ' placeholder="' + o.placeholder + '"' : '')
+      + ' style="width:100%; padding:13px; border-radius:10px; border:1.5px solid var(--border);'
+      + ' background:var(--panel2); color:var(--text); font-family:\'Cairo\'; font-weight:800;'
+      + ' font-size:17px; text-align:center;">'
+      + '<div style="display:flex; gap:8px; margin-top:14px;">'
+      + '<button id="askTextOk" style="flex:2; padding:13px; border:none; border-radius:10px;'
+      + ' background:' + (o.danger ? 'linear-gradient(#dc2626,#b91c1c)' : 'linear-gradient(#16a34a,#15803d)')
+      + '; color:#fff; font-family:\'Cairo\'; font-weight:900; font-size:14px; cursor:pointer;">'
+      + (o.okText || 'تمام') + '</button>'
+      + '<button id="askTextCancel" style="flex:1; padding:13px; border-radius:10px; background:var(--panel2);'
+      + ' border:1px solid var(--border); color:var(--muted); font-family:\'Cairo\'; font-weight:700;'
+      + ' font-size:13px; cursor:pointer;">إلغاء</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    const inp = ov.querySelector('#askTextInput');
+    const done = function(val){ ov.remove(); resolve(val); };
+    ov.querySelector('#askTextOk').addEventListener('click', function(){ done(inp.value); });
+    ov.querySelector('#askTextCancel').addEventListener('click', function(){ done(null); });
+    inp.addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ e.preventDefault(); done(inp.value); }
+      if(e.key === 'Escape'){ e.preventDefault(); done(null); }
+    });
+    setTimeout(function(){ try{ inp.focus(); inp.select(); }catch(e){} }, 60);
+  });
+}
+window.askText = askText;
+
 // 🔍 البحث بالباركود مع التسامح مع الأصفار البادئة
 // السبب: ليبلات QuickBooks القديمة مطبوعة بأصفار (000948) بينما الباركود
 // المستورد رقم مجرد (948). بنجرب المطابقة التامة الأول، وبعدين بعد شيل الأصفار.
@@ -911,12 +958,16 @@ async function registerNewCustomer(){
 }
 
 // ---------------- Sidebar actions (Give Discount / Accept Return / Cashier / Ship) ----------------
-function openGiveDiscount(){
+async function openGiveDiscount(){
   if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
   if(!hasPerm('canDiscount')){ showToast('الخصم للمشرف/المدير بس — مش مسموح للكاشير', 'err'); return; }
   const maxPct = Number(myPerms().maxDiscountPct);
   const cap = isNaN(maxPct) ? 0 : maxPct;
-  const pct = prompt(`نسبة الخصم % على إجمالي الفاتورة:${cap<100?`\n(الحد الأقصى المسموح ليك: ${cap}%)`:''}`, '0');
+  const pct = await askText({
+    title: '🏷️ خصم على إجمالي الفاتورة',
+    message: cap < 100 ? ('الحد الأقصى المسموح ليك: ' + cap + '%') : '',
+    type: 'number', value: '0', okText: 'طبّق الخصم'
+  });
   if(pct === null) return;
   const p = parseFloat(pct);
   if(isNaN(p) || p < 0 || p > 100){ showToast('نسبة غير صحيحة', 'err'); return; }
@@ -970,7 +1021,12 @@ async function openRedeemPoints(){
       return;
     }
     const maxRedemptions = Math.floor(balance / rate.pointsPerRedemption);
-    const input = prompt(`رصيد العميل: ${balance} نقطة\nكل ${rate.pointsPerRedemption} نقطة = ${rate.redemptionValueEGP} ج.م خصم\nكام "وحدة استبدال" عايز تستخدم؟ (الحد الأقصى: ${maxRedemptions})`, '1');
+    const input = await askText({
+      title: '🎁 استبدال نقط',
+      message: 'رصيد العميل: ' + balance + ' نقطة\nكل ' + rate.pointsPerRedemption + ' نقطة = '
+             + rate.redemptionValueEGP + ' ج.م خصم\nالحد الأقصى: ' + maxRedemptions,
+      type: 'number', value: '1', okText: 'استبدل'
+    });
     if(input === null) return;
     const units = parseInt(input);
     if(isNaN(units) || units <= 0 || units > maxRedemptions){ showToast('عدد غير صحيح', 'err'); return; }

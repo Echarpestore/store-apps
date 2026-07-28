@@ -320,10 +320,12 @@ async function wipeInventory(resultBox){
   const snap = await db.collection(TEST_INVENTORY).get();
   const total = snap.size;
   if(total === 0) return true;
-  const typed = prompt(
-    '⚠️ ده هيمسح ' + total + ' صنف من المخزون نهائيًا (الأسماء والأسعار والكميات).\n' +
-    'الإجراء مفيهوش رجوع.\n\n' +
-    'اكتب كلمة:  مسح   عشان تأكد');
+  const typed = await askText({
+    title: '🗑️ مسح المخزون بالكامل',
+    message: 'ده هيمسح ' + total + ' صنف نهائيًا (الأسماء والأسعار والكميات).\n'
+           + 'الإجراء مفيهوش رجوع.\n\nاكتب كلمة: مسح',
+    placeholder: 'اكتب: مسح', danger: true, okText: 'امسح المخزون'
+  });
   if(String(typed || '').trim() !== 'مسح') return false;
   const docs = snap.docs;
   const CHUNK = 400;                       // حد Firestore للدفعة 500
