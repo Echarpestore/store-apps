@@ -1,45 +1,45 @@
+// 📱 إحصائيات تحميل التطبيق — بتتحسب من بيانات العميل نفسها
+// hasApp: عنده توكن إشعارات = التطبيق متسطّب وفاتح فعلًا
+// fromApp: اتسجّل من التطبيق (source بيبدأ بـ loyalty_app أو glow_app)
+function customerAppStats(list){
+  const out = { hasApp:0, fromApp:0, fromCashier:0, bySource:{ qr:0, receipt:0, emp:0, other:0 },
+                welcomeGranted:0, welcomeUsed:0, welcomePoints:0 };
+  (list||[]).forEach(function(c){
+    if(!c) return;
+    // 🎁 مكافأة الترحيب: الدالة بتحط welcomeGranted_<brand> بتاريخ أول ما تتصرف
+    const gotWelcome = !!(c.welcomeGranted_echarpe || c.welcomeGranted_glow);
+    if(gotWelcome) out.welcomeGranted++;
+    // المكافأة نفسها متعلّمة welcome:true — بنشوف اتستعملت ولا لسه
+    let usedWl = false, hasWlReward = false;
+    (Array.isArray(c.rewards) ? c.rewards : []).forEach(function(r){
+      if(!r || !r.welcome) return;
+      hasWlReward = true;
+      if(r.used) usedWl = true;
+    });
+    if(usedWl) out.welcomeUsed++;
+    // اللي مكافأته كانت نقط (مش قسيمة) مالهاش سطر في rewards
+    if(gotWelcome && !hasWlReward) out.welcomePoints++;
+    const t = c.fcmTokens;
+    const hasToken = Array.isArray(t) ? t.length > 0 : (t && typeof t === 'object' ? Object.keys(t).length > 0 : !!t);
+    if(hasToken) out.hasApp++;
+    const src = String(c.source || '');
+    if(/^(loyalty_app|glow_app)/.test(src)){
+      out.fromApp++;
+      const tail = src.split(':')[1] || '';
+      if(/^qr/.test(tail)) out.bySource.qr++;
+      else if(/^(rcpt|receipt)/.test(tail)) out.bySource.receipt++;
+      else if(/^emp/.test(tail)) out.bySource.emp++;
+      else out.bySource.other++;
+    } else {
+      out.fromCashier++;
+    }
+  });
+  return out;
+}
+if(typeof window !== 'undefined') window.customerAppStats = customerAppStats;
+
 // ⚠️ ملف مُقسّم من app.js — جزء من نظام POS. الترتيب في index.html مهم:
 // pos-core.js ← pos-admin.js ← pos-reports.js ← pos-sale.js ← app.js
-
-// 📟 إعدادات ماكينة Paymob — كل جهاز بيكتب Terminal ID فرعه
-async function renderPaymobCfg(){
-  const en = document.getElementById('pmbEnabled');
-  const inp = document.getElementById('pmbTerminalId');
-  if(!en || !inp) return;
-  const bn = document.getElementById('pmbBranchName');
-  if(bn) bn.textContent = currentBranch;
-  try{
-    const snap = await db.collection(TEST_SETTINGS).doc('paymob').get();
-    const cfg = snap.exists ? snap.data() : {};
-    en.checked = !!cfg.enabled;
-    const byBr = cfg.terminalIdByBranch || {};
-    inp.value = byBr[currentBranch] || '';
-    // ماكينات باقي الفروع (عرض بس — كل فرع يعدّل بتاعته من جهازه)
-    const others = Object.keys(byBr).filter(b=> b !== currentBranch);
-    const box = document.getElementById('pmbOthers');
-    if(box) box.textContent = others.length
-      ? 'باقي الفروع: ' + others.map(b=> b + ' → ' + byBr[b]).join(' · ')
-      : '';
-  }catch(e){ console.warn('paymob cfg load', e); }
-}
-window.renderPaymobCfg = renderPaymobCfg;
-
-window.savePaymobCfg = async function(){
-  const err = document.getElementById('pmbErr');
-  const en = document.getElementById('pmbEnabled').checked;
-  const raw = document.getElementById('pmbTerminalId').value.trim();
-  if(err) err.textContent = '';
-  if(raw && !/^[0-9]{1,10}$/.test(raw)){ if(err) err.textContent = 'الـ Terminal ID أرقام بس'; return; }
-  try{
-    // كل فرع بيكتب ماكينته هو بس — merge عشان محدش يمسح ماكينة فرع تاني
-    await db.collection(TEST_SETTINGS).doc('paymob').set({
-      enabled: en,
-      terminalIdByBranch: { [currentBranch]: raw ? Number(raw) : firebase.firestore.FieldValue.delete() }
-    }, { merge:true });
-    showToast('📟 اتحفظت إعدادات الماكينة ✅', 'ok');
-    renderPaymobCfg();
-  }catch(e){ if(err) err.textContent = 'تعذر الحفظ: ' + e.message; }
-};
 
 // ---------------- Roles / permissions screen (manager only) ----------------
 const PERM_LABELS = {
@@ -80,7 +80,6 @@ async function renderRolesScreen(){
       <select data-emp="${emp.id}" onchange="setEmployeeRole(this)" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">${options}</select>
     </div>`;
   }).join('') || '<div class="empty-cart">لسه مفيش موظفين في الفرع ده</div>';
-  try{ renderPaymobCfg(); }catch(e){ console.warn('paymob panel', e); }
 }
 async function toggleRolePerm(checkbox){
   const role = checkbox.dataset.role;
@@ -825,13 +824,42 @@ function renderCustList(){
   const sort = document.getElementById('custSort')?.value || 'spend';
 
   // إحصائيات عامة (على كل العملاء مش المفلترين)
+
   const totalCustomers = custListData.length;
   const totalPoints = custListData.reduce((s,c)=> s + (c[pointsFieldFor(currentBranch)]||0), 0);
   const totalSpend = custListData.reduce((s,c)=> s + (c._spend||0), 0);
   const sumEl = document.getElementById('custSummary');
   if(sumEl){
     const chip = (lbl,val,col)=>`<div style="flex:1; min-width:100px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 12px; text-align:center;"><div style="color:var(--muted); font-size:10px;">${lbl}</div><div style="font-weight:900; font-size:16px; color:${col||'var(--text)'};">${val}</div></div>`;
-    sumEl.innerHTML = chip('عملاء مسجّلين', totalCustomers) + chip('إجمالي إنفاقهم', totalSpend.toFixed(0)+' ج.م','var(--plus)') + chip('إجمالي النقاط', totalPoints,'var(--warn)') + chip('مكافآت: اتبعت/اتستعمل', (rewardStats.sent||0)+' / '+(rewardStats.used||0),'var(--accent)');
+    // 📱 مين نزّل التطبيق فعلًا؟
+    // fcmTokens = العميل فتح التطبيق ووافق على الإشعارات (دليل قاطع إنه محمّل)
+    // source = العميل اتسجّل من التطبيق نفسه (مش من الكاشير)
+    const appStats = customerAppStats(custListData);
+    const pct = totalCustomers ? Math.round(appStats.hasApp / totalCustomers * 100) : 0;
+    sumEl.innerHTML = chip('عملاء مسجّلين', totalCustomers)
+      + chip('📱 معاهم التطبيق', appStats.hasApp + ' (' + pct + '%)', 'var(--accent)')
+      + chip('إجمالي إنفاقهم', totalSpend.toFixed(0)+' ج.م','var(--plus)')
+      + chip('إجمالي النقاط', totalPoints,'var(--warn)')
+      + chip('🎁 مكافأة الترحيب', appStats.welcomeGranted + ' اتصرفت · ' + appStats.welcomeUsed + ' اتستعملت','var(--warn)')
+      + chip('كل المكافآت: اتبعت/اتستعمل', (rewardStats.sent||0)+' / '+(rewardStats.used||0),'var(--accent)');
+    // تفصيل مصادر التحميل — تحت الشرائح مباشرة
+    const src = appStats.bySource;
+    const srcRows = [
+      ['📱 سجّلوا من التطبيق', appStats.fromApp],
+      ['🔳 من QR المحل', src.qr],
+      ['🧾 من كود الإيصال', src.receipt],
+      ['👤 من كارت موظفة', src.emp],
+      ['🏪 اتسجّلوا من الكاشير', appStats.fromCashier]
+    ].filter(function(r){ return r[1] > 0; });
+    if(srcRows.length){
+      sumEl.insertAdjacentHTML('beforeend',
+        '<div style="flex-basis:100%; display:flex; gap:6px; flex-wrap:wrap; margin-top:2px;">'
+        + srcRows.map(function(r){
+            return '<span style="background:var(--panel2); border:1px solid var(--border); border-radius:8px;'
+              + 'padding:5px 9px; font-size:11px; font-weight:700;">' + r[0] + ': ' + r[1] + '</span>';
+          }).join('')
+        + '</div>');
+    }
   }
 
   let list = custListData.filter(c=> !q || (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q));
