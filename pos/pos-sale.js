@@ -1386,8 +1386,31 @@ function resetPaymentUI(){
   selectedPayMethods = new Set();
   paymentAmounts = {};
   document.querySelectorAll('.qbx-pay-btns button').forEach(el=>el.classList.remove('selected', 'filled'));
+  // 🔄 إلغاء طلب الفيزا المعلّق — من غير كده الطلب بيفضل مستني ويعطّل أي طريقة دفع تانية
+  try{
+    if(typeof paymobPending !== 'undefined' && paymobPending){
+      paymobCancelPending();
+    } else if(typeof paymobReset === 'function'){ paymobReset(); }
+  }catch(e){ console.warn('paymob cancel', e); }
   updatePaySummary();
 }
+
+// ❌ إلغاء طلب الفيزا المعلّق
+// ملاحظة مهمة: Paymob مفيهاش أمر يسحب الطلب من الماكينة بعد ما يوصلها —
+// فإحنا بنوقف الانتظار من ناحيتنا وبننبّه الكاشير يلغي من الماكينة نفسها.
+function paymobCancelPending(){
+  const had = !!paymobPending;
+  paymobReset();
+  if(had){
+    paymobShow('❌ اتلغى انتظار الفيزا — لو الماكينة لسه فيها طلب، الغيه منها', 'err');
+    setTimeout(function(){
+      const box = document.getElementById('paymobStatus');
+      if(box) box.style.display = 'none';
+    }, 6000);
+    if(typeof _logActivity === 'function') _logActivity('paymob_cancelled', {});
+  }
+}
+window.paymobCancelPending = paymobCancelPending;
 
 let paymentAmounts = {}; // {cash: 50, visa: 120, ...} — filled in via the popup
 let pendingPayMethod = null;
@@ -1650,8 +1673,11 @@ function updatePaySummary(){
   if(changeEl) changeEl.textContent = change.toFixed(2);
 
   // زرار الحفظ بيتفعّل لما المبلغ المُدخل (بصرف النظر عن الاتجاه) يغطي المطلوب بالكامل
-  // 🔒 لو فيه دفع بالكارت على ماكينة Paymob، الحفظ مقفول لحد ما Paymob يأكد النجاح
-  const cardPending = (typeof paymobPending !== 'undefined') && paymobPending && !paymobApproved;
+  // 🔒 القفل بيشتغل بس لو الفيزا لسه مختارة فعلًا كطريقة دفع.
+  // من غير الشرط ده، طلب فيزا اتلغى كان بيفضل معطّل الحفظ ويمنع الانستا باي.
+  const visaStillSelected = selectedPayMethods.has('visa') && (paymentAmounts.visa || 0) !== 0;
+  const cardPending = visaStillSelected &&
+    (typeof paymobPending !== 'undefined') && paymobPending && !paymobApproved;
   confirmBtn.disabled = !(cart.length > 0 && selectedPayMethods.size > 0 && enteredAbs >= requiredAbs) || cardPending;
   if(cardPending) confirmBtn.title = 'مستنيين تأكيد الدفع من الماكينة';
 }
@@ -1705,9 +1731,66 @@ async function generateInvoiceNumber(){
   }
 }
 
+// 💵 شاشة الباقي: بتظهر قبل الحفظ في حالة الكاش عشان الكاشير يتأكد من الفكة
+// قبل ما الفاتورة تتطبع — غلطة الفكة مش بتترد بعد ما العميل يمشي.
+function showChangeConfirm(change, onOk){
+  const old = document.getElementById('changeConfirmOverlay');
+  if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'changeConfirmOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; z-index:12000; background:rgba(0,0,0,.78);'
+    + 'display:flex; align-items:center; justify-content:center; padding:20px;';
+  ov.innerHTML = `
+    <div style="background:var(--panel); border:2px solid #22c55e; border-radius:18px;
+                padding:26px 22px; text-align:center; max-width:420px; width:100%;">
+      <div style="color:var(--muted); font-size:14px; font-weight:700; margin-bottom:10px;">الباقي للعميل</div>
+      <div id="changeConfirmVal" style="font-size:52px; font-weight:900; color:#22c55e; line-height:1.1;
+                  direction:ltr; unicode-bidi:isolate;">${Number(change).toFixed(2)}</div>
+      <div style="color:var(--muted); font-size:14px; margin-top:4px;">جنيه</div>
+      <button id="changeConfirmOk" style="margin-top:20px; width:100%; padding:16px; border:none;
+              border-radius:12px; background:linear-gradient(#16a34a,#15803d); color:#fff;
+              font-family:'Cairo'; font-weight:900; font-size:17px; cursor:pointer;">
+        تمام — اطبع الفاتورة</button>
+      <button id="changeConfirmCancel" style="margin-top:8px; width:100%; padding:11px; border-radius:10px;
+              background:var(--panel2); border:1px solid var(--border); color:var(--muted);
+              font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;">رجوع</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const ok = ov.querySelector('#changeConfirmOk');
+  ok.focus();
+  const close = ()=> ov.remove();
+  ok.addEventListener('click', ()=>{ close(); onOk(); });
+  ov.querySelector('#changeConfirmCancel').addEventListener('click', close);
+  // Enter يأكد — الكاشير مش هيسيب الكيبورد
+  ov.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); close(); onOk(); }
+    if(e.key === 'Escape'){ close(); }
+  });
+}
+window.showChangeConfirm = showChangeConfirm;
+
 let _confirmSaving = false;
+let _changeConfirmed = false;   // اتأكد الباقي خلاص لنفس العملية
 async function confirmPayment(){
   if(_confirmSaving){ showToast('الفاتورة بتتحفظ... استنى ثانية', 'err'); return; }   // منع التكرار
+  // 💵 كاش وفيه باقي؟ نوقف ونعرض الرقم كبير، والطباعة بعد التأكيد
+  if(!_changeConfirmed){
+    const _btnChk = document.getElementById('confirmPayBtn');
+    if(!(_btnChk && _btnChk.disabled) && cart.length){
+      const _total = cartTotal();
+      let _entered = 0;
+      selectedPayMethods.forEach(m=> _entered += paymentAmounts[m] || 0);
+      const _change = +(Math.abs(_entered) - Math.abs(_total)).toFixed(2);
+      const _cashOnly = (paymentAmounts.cash || 0) > 0;
+      if(_total > 0 && _cashOnly && _change > 0){
+        showChangeConfirm(_change, function(){
+          _changeConfirmed = true;
+          confirmPayment().finally(function(){ _changeConfirmed = false; });
+        });
+        return;
+      }
+    }
+  }
   const _btn = document.getElementById('confirmPayBtn');
   // حماية: نفس شروط الزرار بالظبط — لو معطّل يبقى السلة فاضية أو المدفوعات ناقصة
   // (مهم للاختصار Shift+Enter اللي كان بيتخطى الزرار ويطبع فاتورة فاضية)
