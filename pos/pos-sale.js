@@ -1406,21 +1406,76 @@ function resetPaymentUI(){
 }
 
 // ❌ إلغاء طلب الفيزا المعلّق
-// ملاحظة مهمة: Paymob مفيهاش أمر يسحب الطلب من الماكينة بعد ما يوصلها —
-// فإحنا بنوقف الانتظار من ناحيتنا وبننبّه الكاشير يلغي من الماكينة نفسها.
+// ⚠️ Paymob مفيهاش أمر يسحب الطلب من الماكينة بعد ما يوصلها. لو سبناه،
+// عميل تاني ممكن يدفع عليه فتدخل فلوس من غير فاتورة مقابلة —
+// فبنوقف الكاشير بشاشة تأكيد إجبارية قبل ما نكمّل.
 function paymobCancelPending(){
-  const had = !!paymobPending;
-  paymobReset();
-  if(had){
-    paymobShow('❌ اتلغى انتظار الفيزا — لو الماكينة لسه فيها طلب، الغيه منها', 'err');
+  if(!paymobPending){ paymobReset(); return; }
+  const amount = paymobPending.amount || 0;
+  showCancelTerminalConfirm(amount, function(){
+    paymobReset();
+    paymobShow('❌ اتلغى طلب الفيزا', 'err');
     setTimeout(function(){
       const box = document.getElementById('paymobStatus');
       if(box) box.style.display = 'none';
-    }, 6000);
-    if(typeof _logActivity === 'function') _logActivity('paymob_cancelled', {});
-  }
+    }, 5000);
+    if(typeof _logActivity === 'function') _logActivity('paymob_cancelled', { amount: amount });
+  });
 }
 window.paymobCancelPending = paymobCancelPending;
+
+// 🛑 شاشة تأكيد إلغاء الطلب من الماكينة — إجبارية، مفيش تخطي
+function showCancelTerminalConfirm(amount, onConfirm){
+  const old = document.getElementById('cancelTerminalOverlay');
+  if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'cancelTerminalOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; z-index:12500; background:rgba(0,0,0,.86);'
+    + 'display:flex; align-items:center; justify-content:center; padding:20px;';
+  ov.innerHTML = `
+    <div style="background:var(--panel); border:3px solid #e5484d; border-radius:18px;
+                padding:26px 22px; max-width:460px; width:100%; text-align:center;">
+      <div style="font-size:40px; line-height:1; margin-bottom:10px;">🛑</div>
+      <div style="font-size:17px; font-weight:900; color:#ff9a9d; margin-bottom:8px;">
+        الغي الطلب من الماكينة الأول
+      </div>
+      <div style="color:var(--muted); font-size:13.5px; line-height:1.8; margin-bottom:6px;">
+        فيه طلب بمبلغ <b style="color:var(--text);">${Number(amount).toFixed(2)} ج.م</b> لسه على الماكينة.
+        لو سيبته، أي عميل جاي ممكن يدفعه بالغلط وتدخل فلوس من غير فاتورة.
+      </div>
+      <div style="background:#2a1416; border:1px solid #e5484d55; border-radius:10px;
+                  padding:10px 12px; margin:12px 0; color:#ffd9da; font-size:12.5px; font-weight:700;">
+        روح للماكينة دلوقتي والغي الطلب، وبعدين ارجع دوس تحت
+      </div>
+      <button id="cancelTermOk" disabled style="width:100%; padding:15px; border:none; border-radius:12px;
+              background:#4b1c1e; color:#ffffff66; font-family:'Cairo'; font-weight:900; font-size:15px;
+              cursor:not-allowed;">اتأكد… (<span id="cancelTermCount">3</span>)</button>
+      <button id="cancelTermBack" style="margin-top:8px; width:100%; padding:11px; border-radius:10px;
+              background:var(--panel2); border:1px solid var(--border); color:var(--muted);
+              font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;">
+        رجوع — سيب الطلب زي ما هو</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const ok = ov.querySelector('#cancelTermOk');
+  const cnt = ov.querySelector('#cancelTermCount');
+  // 3 ثواني قبل ما الزرار يشتغل — عشان محدش يدوس بسرعة من غير ما يروح للماكينة
+  let left = 3;
+  const tick = setInterval(function(){
+    left--;
+    if(left > 0){ if(cnt) cnt.textContent = left; return; }
+    clearInterval(tick);
+    ok.disabled = false;
+    ok.style.cssText = 'width:100%; padding:15px; border:none; border-radius:12px;'
+      + 'background:linear-gradient(#dc2626,#b91c1c); color:#fff; font-family:\'Cairo\';'
+      + 'font-weight:900; font-size:15px; cursor:pointer;';
+    ok.textContent = 'الغيته من الماكينة ✅ — كمّل';
+  }, 1000);
+  const close = ()=>{ clearInterval(tick); const el = document.getElementById('cancelTerminalOverlay'); if(el) el.remove(); };
+  ok.addEventListener('click', function(){ if(ok.disabled) return; close(); onConfirm(); });
+  ov.querySelector('#cancelTermBack').addEventListener('click', close);
+  // مفيش قفل بالضغط برة ولا بـ Escape — لازم قرار واضح
+}
+window.showCancelTerminalConfirm = showCancelTerminalConfirm;
 
 let paymentAmounts = {}; // {cash: 50, visa: 120, ...} — filled in via the popup
 let pendingPayMethod = null;
@@ -1585,18 +1640,43 @@ let paymobCardInfo = null;      // 💳 بيانات الكارت للفاتور
 window.paymobCardInfo = null;
 
 // 🔒 الشروط اللي لازم تتحقق قبل ما نحفظ ونطبع من غير الكاشير
-function paymobCanAutoFinish(amountEGP, txn){
-  if(_paymobAutoFired) return false;                       // اتنفذت خلاص
-  if(!cart || !cart.length) return false;                  // السلة اتفضّت
-  // المبلغ اللي اتدفع فعلًا لازم يطابق اللي بعتناه للماكينة
+// بترجّع سبب المنع بالاسم عشان نعرف ليه مطبعتش (بدل ما نخمّن)
+function paymobAutoSkipReason(amountEGP, txn){
+  if(_paymobAutoFired) return 'اتنفذت قبل كده';
+  if(!cart || !cart.length) return 'السلة فضيت قبل ما التأكيد يوصل';
   const paidCents = Number(txn && txn.amountCents) || 0;
-  if(Math.round(amountEGP * 100) !== paidCents) return false;
-  // ولازم المدفوعات المسجّلة تغطي إجمالي الفاتورة (يعني مفيش جزء كاش ناقص)
+  const wantCents = Math.round(amountEGP * 100);
+  if(wantCents !== paidCents){
+    return 'المبلغ مش مطابق — اتبعت ' + (wantCents/100).toFixed(2)
+         + ' واتدفع ' + (paidCents/100).toFixed(2);
+  }
   let entered = 0;
-  try{ selectedPayMethods.forEach(function(m){ entered += paymentAmounts[m] || 0; }); }catch(e){ return false; }
-  if(Math.abs(entered) + 0.001 < Math.abs(cartTotal())) return false;
-  return true;
+  try{ selectedPayMethods.forEach(function(m){ entered += paymentAmounts[m] || 0; }); }
+  catch(e){ return 'تعذر قراءة المدفوعات'; }
+  const need = Math.abs(cartTotal());
+  if(Math.abs(entered) + 0.001 < need){
+    return 'المدفوعات ناقصة — مسجّل ' + Math.abs(entered).toFixed(2)
+         + ' من ' + need.toFixed(2) + ' (كمّل الباقي)';
+  }
+  return null;   // مفيش مانع
 }
+function paymobCanAutoFinish(amountEGP, txn){
+  const why = paymobAutoSkipReason(amountEGP, txn);
+  window._paymobLastSkip = why;   // بيفضل محفوظ للتشخيص
+  return why === null;
+}
+window.paymobAutoSkipReason = paymobAutoSkipReason;
+
+// 🩺 ليه الفاتورة الأخيرة مطبعتش لوحدها؟ اكتب payDiag() في الـ console
+window.payDiag = function(){
+  console.log('آخر سبب منع الطباعة التلقائية:', window._paymobLastSkip || '— مفيش (طبعت عادي)');
+  console.log('الطباعة التلقائية مفعّلة؟', (typeof paymobAutoPrint === 'function' && paymobAutoPrint()) ? 'أيوه' : 'لأ');
+  console.log('طلب معلّق؟', paymobPending ? paymobPending.ref : 'مفيش');
+  console.log('اتأكد الدفع؟', paymobApproved ? 'أيوه' : 'لأ');
+  console.log('السلة:', (cart||[]).length, 'صنف · الإجمالي:', cartTotal());
+  const e = {}; try{ selectedPayMethods.forEach(function(m){ e[m] = paymentAmounts[m] || 0; }); }catch(x){}
+  console.log('المدفوعات المسجّلة:', e);
+};
 
 // 👂 بنراقب نتيجة العملية اللي الـ webhook بيكتبها — الكاشير مش بيقرر بنفسه
 function paymobWatch(orderRef, amountEGP){
@@ -1626,7 +1706,9 @@ function paymobWatch(orderRef, amountEGP){
         _paymobAutoFired = true;
         setTimeout(function(){ try{ confirmPayment(); }catch(e){ console.warn('auto print', e); } }, 400);
       } else {
-        paymobShow('✅ الدفع اتقبل' + last4 + ' — تقدر تحفظ وتطبع', 'ok');
+        const why = window._paymobLastSkip;
+        paymobShow('✅ الدفع اتقبل' + last4 + ' — دوس حفظ وطباعة'
+          + (why ? (' (' + why + ')') : ''), 'ok');
       }
     } else if(d.status === 'failed' || d.status === 'voided'){
       paymobApproved = false; window.paymobApproved = false;
