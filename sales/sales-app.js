@@ -340,7 +340,7 @@ const PANEL_PERM_KEYS = [
                  'الرواتب الشهرية','سجل صرف الرواتب','سجل السلف']],
   ['people',    ['إضافة موظف','الموظفين الحاليين','مواعيد الحضور']],
   ['tasks',     ['المهام الأسبوعية','مراجعة تنفيذ','المهام المؤكدة','سجل المكافآت']],
-  ['orders',    ['أوردرات الموظفين','أكواد دعوة']],
+  ['orders',    ['أوردرات الموظفين','أكواد دعوة','طلبات النواقص']],
   ['day',       ['رسالة للموظفين','أداء الموظف','نظرة عامة','سجل العمليات','سجل الحضور',
                  'التقييم الأسبوعي','سجل الأداء','التقرير الشامل']]
 ];
@@ -440,6 +440,9 @@ function pendingActions(){
   // 🛒 أوردرات الموظفين
   const orders = (window.staffOrders||[]).filter(o=> o.status==='pending' && o.branch===br).length;
   push('orders','orders','🛒','أوردرات موظفين مستنية', orders);
+  // 📦 طلبات النواقص المفتوحة
+  const shorts = (window.allShortages||[]).filter(x=> x.status==='open' && x.branch===br).length;
+  push('orders','orders','📦','طلبات نواقص مفتوحة', shorts);
   return out;
 }
 window.pendingActions = pendingActions;
@@ -2141,8 +2144,152 @@ function renderDayHubLeave(empId){
   const area = document.querySelector('#dh_leaveArea'); if(!area) return;
   const mine = (window.allLeaveReqs||[]).filter(l=> l.empId===empId && l.status==='pending');
   const pendingTxt = mine.length ? `<div style="text-align:center; color:var(--sub); font-size:11.5px; margin-top:6px;">⏳ عندك ${mine.length} طلب مستني الموافقة</div>` : '';
-  area.innerHTML = `<button class="cancelBtn" style="width:100%;" onclick="window.reqLeave('${empId}')">📩 طلب إذن / تغيير إجازة</button>${pendingTxt}`;
+  const myShort = (window.allShortages||[]).filter(x=> x.empId===empId && x.status==='open').length;
+  const shortTxt = myShort ? `<div style="text-align:center; color:var(--sub); font-size:11.5px; margin-top:4px;">📦 عندك ${myShort} طلب نواقص مفتوح</div>` : '';
+  area.innerHTML = `<button class="cancelBtn" style="width:100%;" onclick="window.reqLeave('${empId}')">📩 طلب إذن / تغيير إجازة</button>${pendingTxt}
+    <button class="cancelBtn" style="width:100%; margin-top:8px;" onclick="window.reqShortage('${empId}')">📦 طلب نواقص من الإدارة</button>${shortTxt}`;
 }
+// ===== 📦 طلب النواقص: الموظف يكتب الكود → الاسم من الكتالوج → التفاصيل =====
+// بيتسجل في sales_shortages وبيوصل للمالك (وهيظهر في echarpe office بالاسم والفرع)
+let _shState = { empId:'', empName:'', code:'', product:null, notFound:false, detail:'', qty:1, sending:false };
+window.allShortages = [];
+try{
+  onSnapshot(collection(db,'sales_shortages'), (snap)=>{
+    window.allShortages = snap.docs.map(d=> ({ id:d.id, ...d.data() }));
+    if(typeof adminUnlocked !== 'undefined' && adminUnlocked){
+      try{ window.renderShortagesList(); }catch(e){}
+      try{ renderActionBar(); }catch(e){}
+    }
+  }, (e)=> console.warn('shortages', e && e.code));
+}catch(e){}
+
+// البحث في كتالوج الفرع بالباركود (مطابقة كاملة الأول، وبعدين احتواء)
+function shortageLookup(inventory, code){
+  const c = String(code||'').trim();
+  if(!c) return null;
+  const items = inventory || [];
+  return items.find(p=> String(p.barcode||'') === c)
+      || items.find(p=> String(p.barcode||'').includes(c) && c.length >= 3)
+      || null;
+}
+window.shortageLookup = shortageLookup;
+
+// كتالوج الأصناف بيتقرا عند فتح الشاشة (قراءة واحدة — مش snapshot دائم)
+// ⚠️ المخزون مستند واحد للصنف لكل الفروع: الكمية في qtyByBranch[الفرع]
+// (أو quantity القديمة)، والصنف ممكن يتحدد لفروع معينة في p.branches
+let _shInventory = null;
+function shBranchQty(p, br){
+  if(p && p.qtyByBranch) return Number(p.qtyByBranch[br]) || 0;
+  return Number(p && p.quantity) || 0;
+}
+window.shBranchQty = shBranchQty;
+async function loadShortageInventory(){
+  if(_shInventory) return _shInventory;
+  const snap = await getDocs(collection(db,'pos_test_inventory'));
+  const br = window.currentBranch;
+  _shInventory = snap.docs
+    .map(d=> ({ id:d.id, ...d.data() }))
+    .filter(p=> !p.branches || p.branches.includes(br));   // أصناف فرعه بس (أو المتاحة للكل)
+  return _shInventory;
+}
+
+window.reqShortage = function(empId){
+  const emp = (window.employees||[]).find(e=> e.id===empId); if(!emp) return;
+  _shState = { empId, empName: emp.name, code:'', product:null, notFound:false, detail:'', qty:1, sending:false };
+  _shInventory = null;
+  renderShortageReq();
+  $('#dayHubOverlay').classList.remove('show');
+  $('#leaveReqOverlay').classList.add('show');
+  loadShortageInventory().catch(e=> console.warn('inv load', e));
+};
+
+function renderShortageReq(){
+  const body = document.querySelector('#leaveReqBody'); if(!body) return;
+  const st = _shState;
+  const p = st.product;
+  body.innerHTML = `
+    <div style="text-align:center; margin-bottom:14px;">
+      <div style="font-size:34px;">📦</div>
+      <h3 style="margin:6px 0 2px;">طلب نواقص</h3>
+      <p class="sub" style="font-size:12px;">اكتب كود المنتج (الباركود) والإدارة هتوفره</p>
+    </div>
+    <input id="shCode" inputmode="numeric" placeholder="كود المنتج / الباركود" value="${st.code}"
+      oninput="window.shCodeInput(this.value)"
+      style="width:100%; padding:13px; border-radius:11px; border:1.5px solid ${p ? 'var(--good)' : (st.notFound ? 'var(--bad)' : 'var(--line)')}; background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:15px; text-align:center; letter-spacing:2px; margin-bottom:8px;">
+    ${p ? `
+      <div style="background:var(--gold-dim); border:1px solid var(--gold); border-radius:11px; padding:11px 13px; margin-bottom:10px;">
+        <div style="font-weight:800; font-size:14px; color:var(--ink);">✅ ${p.name}</div>
+        <div style="color:var(--sub); font-size:11.5px; margin-top:2px;">كود ${p.barcode} · المخزون الحالي في فرعك: ${shBranchQty(p, window.currentBranch)}</div>
+      </div>
+      <input id="shDetail" placeholder="التفاصيل: اللون / المقاس / الموديل المطلوب" value="${st.detail}"
+        oninput="_shState.detail=this.value"
+        style="width:100%; padding:12px; border-radius:11px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; margin-bottom:8px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <span style="color:var(--sub); font-size:12.5px;">الكمية المطلوبة:</span>
+        <button onclick="window.shQty(-1)" style="width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-size:18px; cursor:pointer;">−</button>
+        <b style="font-size:17px; min-width:26px; text-align:center;">${st.qty}</b>
+        <button onclick="window.shQty(1)" style="width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-size:18px; cursor:pointer;">+</button>
+      </div>
+      <button onclick="window.shSubmit()" ${st.sending?'disabled':''} style="width:100%; padding:14px; border:none; border-radius:12px; background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer; opacity:${st.sending?'.6':'1'};">${st.sending?'ثواني...':'📦 ابعت الطلب'}</button>
+    ` : (st.notFound
+        ? '<p style="text-align:center; color:var(--bad); font-size:12.5px;">الكود ده مش في كتالوج فرعك — راجعه أو اكتب التفاصيل لمشرفك</p>'
+        : '<p style="text-align:center; color:var(--sub); font-size:12px;">اكتب الكود وهنجيب اسم المنتج</p>')}
+    <button class="cancelBtn" style="width:100%; margin-top:10px;" onclick="closeLeaveReq()">إلغاء</button>`;
+  const inp = document.getElementById('shCode');
+  if(inp && !p){ inp.focus(); try{ inp.setSelectionRange(st.code.length, st.code.length); }catch(e){} }
+}
+
+window.shCodeInput = function(v){
+  _shState.code = String(v||'').trim();
+  _shState.product = null; _shState.notFound = false;
+  if(_shState.code.length >= 3 && _shInventory){
+    const p = shortageLookup(_shInventory, _shState.code);
+    if(p) _shState.product = p;
+    else if(_shState.code.length >= 4) _shState.notFound = true;
+  }
+  renderShortageReq();
+};
+window.shQty = function(d){ _shState.qty = Math.max(1, Math.min(99, _shState.qty + d)); renderShortageReq(); };
+window.shSubmit = function(){
+  const st = _shState;
+  if(!st.product || st.sending) return;
+  st.sending = true; renderShortageReq();
+  addDoc(collection(db,'sales_shortages'), {
+    empId: st.empId, empName: st.empName, branch: window.currentBranch,
+    barcode: String(st.product.barcode||''), productName: st.product.name || '',
+    detail: st.detail || '', qty: st.qty, currentStock: shBranchQty(st.product, window.currentBranch),
+    status: 'open', ts: Date.now()
+  }).then(()=>{
+    closeLeaveReq();
+    alert('اتبعت طلب النواقص للإدارة ✅');
+  }).catch(e=>{ st.sending = false; renderShortageReq(); alert('تعذر الإرسال: ' + e.message); });
+};
+
+// 📦 لوحة النواقص في الأدمن
+window.renderShortagesList = function(){
+  const wrap = document.querySelector('#shortagesList'); if(!wrap) return;
+  const open = (window.allShortages||[]).filter(x=> x.status==='open' && x.branch===window.currentBranch)
+    .sort((a,b)=> b.ts - a.ts);
+  if(!open.length){ wrap.innerHTML = '<p style="color:var(--sub); font-size:12px;">مفيش نواقص مطلوبة ✅</p>'; return; }
+  wrap.innerHTML = open.map(x=> `
+    <div style="background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 13px; margin-bottom:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div>
+          <div style="font-weight:800; font-size:13.5px;">${x.productName || 'كود ' + x.barcode} <small style="color:var(--gold);">× ${x.qty}</small></div>
+          <div style="color:var(--sub); font-size:11.5px; margin-top:3px;">
+            ${x.detail ? x.detail + ' · ' : ''}كود ${x.barcode} · مخزون وقت الطلب: ${x.currentStock ?? '—'}
+          </div>
+          <div style="color:var(--sub); font-size:11px; margin-top:2px;">طلبها: ${x.empName} · ${new Date(x.ts).toLocaleDateString('ar-EG')}</div>
+        </div>
+        <button onclick="window.closeShortage('${x.id}')" style="padding:9px 14px; border:none; border-radius:10px; background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; font-family:'Cairo'; font-weight:800; cursor:pointer; white-space:nowrap;">✅ اتجاب</button>
+      </div>
+    </div>`).join('');
+};
+window.closeShortage = async function(id){
+  try{ await updateDoc(doc(db,'sales_shortages', id), { status:'done', doneAt: Date.now() }); }
+  catch(e){ alert('تعذر الحفظ: ' + e.message); }
+};
+
 // 📩 حالة طلب الإذن (شاشة أنيقة بخريطة الإجازات)
 let _lrState = { empId:'', type:'', dateKey:'', reason:'' };
 window.reqLeave = function(empId){
@@ -3096,6 +3243,7 @@ function doAdminLogin(){
     try{ window.renderTimeCreditLog(); }catch(e){ console.warn('time credit log', e); }
     try{ updateLeaveBadge(); }catch(e){ console.warn('leave badge', e); }
     _safe(()=> renderViolationsReview(), 'violations');
+    _safe(()=> window.renderShortagesList(), 'shortages');
     // إعادة تطبيق ختامية (بعض اللوحات بتتبني أثناء الرسم) + الشريط الأحمر
     try{ applyRoleVisibility(); }catch(e){ console.warn('role visibility', e); }
     try{ renderActionBar(); }catch(e){ console.warn('action bar', e); }
