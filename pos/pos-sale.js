@@ -1352,7 +1352,58 @@ function confirmPayAmount(){
   document.getElementById('payAmountModal').classList.remove('active');
   pendingPayMethod = null;
   updatePaySummary();
+  // 📟 فيزا في بيع عادي → المبلغ يروح لماكينة Paymob تلقائيًا (لو الربط متفعّل)
+  if(method === 'visa' && paymentAmounts.visa > 0) sendToPaymobTerminal(paymentAmounts.visa);
 }
+
+// ============================================================
+// 📟 Paymob POS Terminal — المبلغ بيظهر على الماكينة لوحده
+// الكاشير مش بيشوف ولا يلمس أي مفاتيح: الطلب بيروح لـ Cloud Function
+// (paymobTerminalOrder) اللي شايلة API Key وبتكلم Paymob:
+//   1) auth token   2) order registration + terminal_id + card
+// الإعداد في pos_test_settings/paymob: { enabled, terminalIdByBranch: {فرع: رقم} }
+// ============================================================
+let paymobCfg = null;
+try{
+  db.collection(TEST_SETTINGS).doc('paymob').onSnapshot(function(snap){
+    paymobCfg = snap.exists ? snap.data() : null;
+  }, function(){});
+}catch(e){}
+
+function paymobTerminalId(){
+  if(!paymobCfg || !paymobCfg.enabled) return null;
+  const byBr = paymobCfg.terminalIdByBranch || {};
+  return byBr[currentBranch] || paymobCfg.terminalId || null;
+}
+
+async function sendToPaymobTerminal(amountEGP){
+  const tid = paymobTerminalId();
+  if(!tid) return;   // الربط مش متفعّل — ولا كلمة، الفلو العادي زي ما هو
+  const orderRef = currentBranch + '-' + Date.now();   // مرجع فريد لكل محاولة
+  showToast('📟 بنبعت المبلغ للماكينة…', 'ok');
+  try{
+    const res = await fetch(PAYMOB_FN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount_cents: Math.round(amountEGP * 100),
+        terminal_id: Number(tid),
+        merchant_order_id: orderRef,
+        branch: currentBranch
+      })
+    });
+    const out = await res.json().catch(function(){ return {}; });
+    if(res.ok && out.ok){
+      showToast('📟 المبلغ على الماكينة (' + amountEGP.toFixed(2) + ' ج.م) — العميل يحط الكارت', 'ok');
+    } else {
+      showToast('⚠️ الماكينة مستجابتش (' + (out.error || res.status) + ') — كمّل يدوي من الماكينة', 'err');
+    }
+  }catch(e){
+    showToast('⚠️ مفيش اتصال بخدمة الماكينة — كمّل يدوي من الماكينة', 'err');
+  }
+}
+// رابط الدالة — بيتفعّل مع خطوة النشر الأخيرة
+const PAYMOB_FN_URL = 'https://us-central1-customer-feedback-8ac1d.cloudfunctions.net/paymobTerminalOrder';
 // دعم Enter بدل ما تدوس OK يدويًا
 document.getElementById('payAmountInput').addEventListener('keydown', (e)=>{
   if(e.key === 'Enter'){ e.preventDefault(); confirmPayAmount(); }

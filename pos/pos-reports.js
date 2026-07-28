@@ -1,6 +1,46 @@
 // ⚠️ ملف مُقسّم من app.js — جزء من نظام POS. الترتيب في index.html مهم:
 // pos-core.js ← pos-admin.js ← pos-reports.js ← pos-sale.js ← app.js
 
+// 📟 إعدادات ماكينة Paymob — كل جهاز بيكتب Terminal ID فرعه
+async function renderPaymobCfg(){
+  const en = document.getElementById('pmbEnabled');
+  const inp = document.getElementById('pmbTerminalId');
+  if(!en || !inp) return;
+  const bn = document.getElementById('pmbBranchName');
+  if(bn) bn.textContent = currentBranch;
+  try{
+    const snap = await db.collection(TEST_SETTINGS).doc('paymob').get();
+    const cfg = snap.exists ? snap.data() : {};
+    en.checked = !!cfg.enabled;
+    const byBr = cfg.terminalIdByBranch || {};
+    inp.value = byBr[currentBranch] || '';
+    // ماكينات باقي الفروع (عرض بس — كل فرع يعدّل بتاعته من جهازه)
+    const others = Object.keys(byBr).filter(b=> b !== currentBranch);
+    const box = document.getElementById('pmbOthers');
+    if(box) box.textContent = others.length
+      ? 'باقي الفروع: ' + others.map(b=> b + ' → ' + byBr[b]).join(' · ')
+      : '';
+  }catch(e){ console.warn('paymob cfg load', e); }
+}
+window.renderPaymobCfg = renderPaymobCfg;
+
+window.savePaymobCfg = async function(){
+  const err = document.getElementById('pmbErr');
+  const en = document.getElementById('pmbEnabled').checked;
+  const raw = document.getElementById('pmbTerminalId').value.trim();
+  if(err) err.textContent = '';
+  if(raw && !/^[0-9]{1,10}$/.test(raw)){ if(err) err.textContent = 'الـ Terminal ID أرقام بس'; return; }
+  try{
+    // كل فرع بيكتب ماكينته هو بس — merge عشان محدش يمسح ماكينة فرع تاني
+    await db.collection(TEST_SETTINGS).doc('paymob').set({
+      enabled: en,
+      terminalIdByBranch: { [currentBranch]: raw ? Number(raw) : firebase.firestore.FieldValue.delete() }
+    }, { merge:true });
+    showToast('📟 اتحفظت إعدادات الماكينة ✅', 'ok');
+    renderPaymobCfg();
+  }catch(e){ if(err) err.textContent = 'تعذر الحفظ: ' + e.message; }
+};
+
 // ---------------- Roles / permissions screen (manager only) ----------------
 const PERM_LABELS = {
   canSell:'يبيع', canHold:'يعمل Hold/Unhold', canPrintLabel:'يطبع Price Label',
@@ -40,6 +80,7 @@ async function renderRolesScreen(){
       <select data-emp="${emp.id}" onchange="setEmployeeRole(this)" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">${options}</select>
     </div>`;
   }).join('') || '<div class="empty-cart">لسه مفيش موظفين في الفرع ده</div>';
+  try{ renderPaymobCfg(); }catch(e){ console.warn('paymob panel', e); }
 }
 async function toggleRolePerm(checkbox){
   const role = checkbox.dataset.role;
