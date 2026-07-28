@@ -1754,8 +1754,9 @@ function updatePaySummary(){
       || `<div style="color:#999; font-size:11px; padding:6px 0;">${isRefund ? 'اختار طريقة إرجاع المبلغ للعميل' : 'لسه مفيش مدفوعات — دوس كاش/فيزا/انستا باي'}</div>`;
   }
 
-  const dueLabel = document.querySelector('.qbx-totals .t-row:nth-child(3) span:first-child');
-  if(dueLabel) dueLabel.textContent = isRefund ? 'متبقي إرجاعه' : 'المتبقي';
+  const dueLabel = document.getElementById('qbxDueLabel')
+    || document.querySelector('.qbx-totals .t-row:nth-child(3) span:first-child');
+  if(dueLabel) dueLabel.textContent = isRefund ? 'ناقص إرجاعه' : 'ناقص';
 
   const paidEl = document.getElementById('qbxPaid');
   const dueEl = document.getElementById('qbxDue');
