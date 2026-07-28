@@ -1410,7 +1410,9 @@ function resetPaymentUI(){
 // عميل تاني ممكن يدفع عليه فتدخل فلوس من غير فاتورة مقابلة —
 // فبنوقف الكاشير بشاشة تأكيد إجبارية قبل ما نكمّل.
 function paymobCancelPending(){
-  if(!paymobPending){ paymobReset(); return; }
+  // ✅ لو الدفع اتقبل خلاص، مفيش طلب معلّق على الماكينة أصلًا —
+  // فالتنضيف بعد الفاتورة الناجحة بيعدّي بصمت من غير أي شاشة.
+  if(!paymobPending || paymobApproved){ paymobReset(); return; }
   const amount = paymobPending.amount || 0;
   showCancelTerminalConfirm(amount, function(){
     paymobReset();
