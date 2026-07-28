@@ -46,7 +46,6 @@ const MIN_ITEMS_FOR_STAFF_POINT = 5; // كل فاتورة فيها 5 قطع أو
 
 // كل جهاز POS بيتبع فرع محدد (نفس فكرة باقي البرامج) — بيتحفظ على الجهاز نفسه
 let currentBranch = localStorage.getItem('pos_branch') || '';
-window.currentBranch = currentBranch;   // 🌍 mirror للملفات التانية (frames.js)
 // فروع Glow ليها رصيد نقاط منفصل (points_glow) عن echarpe (points) — عشان ما تتلخبطش
 const GLOW_BRANCHES = ['Glow'];
 function pointsFieldFor(branch){ return GLOW_BRANCHES.includes(branch) ? 'points_glow' : 'points'; }
@@ -69,15 +68,6 @@ firebase.initializeApp(firebaseConfig);
 // حساب الفرع (Email/Password) — الجهاز بيسجّل دخول مرة واحدة وبيتحفظ.
 // ده اللي بيدّي الكاشير صلاحية كتابة النقط/المبيعات في قواعد الأمان (المرحلة 2).
 firebase.auth().setPersistence && firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
-// 🔒 تثبيت التخزين: من غيره المتصفح ممكن يمسح IndexedDB (اللي فيها جلسة
-// الدخول) تحت ضغط المساحة — وده سبب "الجهاز بيطلب إيميل وباسورد فجأة".
-// اسم الفرع كان بيفضل محفوظ لأنه في localStorage (مخزن مختلف مش بيتمسح).
-if (navigator.storage && navigator.storage.persist) {
-  navigator.storage.persist().then(function(granted){
-    console.log(granted ? '🔒 التخزين مثبّت — الجلسة محمية من المسح التلقائي'
-                        : '⚠️ المتصفح رفض تثبيت التخزين — الجلسة ممكن تضيع تحت ضغط المساحة');
-  }).catch(function(){});
-}
 function isStaffSignedIn(){
   var u = firebase.auth().currentUser;
   return !!(u && !u.isAnonymous);
@@ -92,19 +82,10 @@ firebase.auth().onAuthStateChanged(function(u){
       document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
       bs.classList.add('active');
       if(typeof loadBranchSetupOptions === 'function') setTimeout(loadBranchSetupOptions, 50);
-      // نملى الإيميل المحفوظ تلقائي — الكاشير يكتب الباسورد بس
-      setTimeout(function(){
-        var em = document.getElementById('branchSetupEmail');
-        var saved = localStorage.getItem('pos_branch_email') || '';
-        if(em && saved && !em.value) em.value = saved;
-      }, 60);
     }
   }
 });
 const db = firebase.firestore();
-// 🌍 تعريض على window: const/let مش بيتحطوا على window تلقائيًا،
-// والملفات التانية (frames.js وغيرها) محتاجة توصلهم — القاعدة الذهبية في docs/DEVELOPER.md
-window.db = db;
 // قايمة الفروع في شاشة الإعداد بتتحمّل عند فتح الصفحة (لو الشاشة ظاهرة)
 setTimeout(function(){ if(typeof loadBranchSetupOptions === 'function' && document.querySelector('#branchSetupScreen.active')) loadBranchSetupOptions(); }, 300);
 
@@ -197,9 +178,7 @@ async function saveBranchSetup(){
       await db.collection(TEST_SETTINGS).doc('staff_uids').set({ [cred.user.uid]: { branch: val, email: email, ts: Date.now() } }, { merge:true });
     }catch(e){ console.warn('staff uid register', e); }
     currentBranch = val;
-    window.currentBranch = val;   // 🌍 mirror للملفات التانية
     localStorage.setItem('pos_branch', val);
-    localStorage.setItem('pos_branch_email', email);   // للملء التلقائي لو الجلسة ضاعت
     if(errBox) errBox.textContent = '';
     showScreen('loginScreen');
     loadEmployeePicker();
@@ -303,7 +282,14 @@ let currentEmployeeRole = 'cashier'; // fallback until loaded
 
 // بيرجع صلاحيات الموظف الحالي (كائن bool)، مبني على دوره المخصص.
 function myPerms(){
-  return rolePermissions[currentEmployeeRole] || DEFAULT_ROLE_PERMISSIONS.cashier;
+  const role = currentEmployeeRole;
+  const def  = DEFAULT_ROLE_PERMISSIONS[role] || DEFAULT_ROLE_PERMISSIONS.cashier;
+  const saved = rolePermissions[role];
+  if(!saved) return def;
+  // ⚠️ المستند المحفوظ بيحتوي المفاتيح اللي اتعلّمت في شاشة الأدوار بس.
+  // أي حقل مش موجود فيه (زي maxDiscountPct) لازم ياخد قيمته الافتراضية —
+  // من غير كده بيتقرا undefined ويتحسب صفر فالخصم بيترفض دايمًا.
+  return Object.assign({}, def, saved);
 }
 function hasPerm(key){
   return !!myPerms()[key];
@@ -380,13 +366,10 @@ async function loadEmployeePicker(){
     }
     errBox.textContent = '';
     grid.innerHTML = allEmps.map(e=>{
-      // 🎭 شكل الموظف: اختياره لو موجود، وإلا أول حرفين من اسمه
-      const initials = e.avatarEmoji || (e.name||'؟').trim().split(' ').slice(0,2).map(w=>w[0]).join('');
+      const initials = (e.name||'؟').trim().split(' ').slice(0,2).map(w=>w[0]).join('');
       const adminBadge = e._admin ? '<div style="font-size:9px; color:var(--accent); font-weight:800; margin-top:2px;">🌐 أدمن</div>' : '';
-      return `<div class="emp-pick-tile" data-emp-id="${e.id}" onclick="selectEmployeeForLogin('${e.id}', '${(e.name||'').replace(/'/g,"\\'")}')"><div class="av">${initials}</div><div class="n">${e.name}</div>${adminBadge}</div>`;
+      return `<div class="emp-pick-tile" onclick="selectEmployeeForLogin('${e.id}', '${(e.name||'').replace(/'/g,"\\'")}')"><div class="av">${initials}</div><div class="n">${e.name}</div>${adminBadge}</div>`;
     }).join('');
-    window._pfEmployees = allEmps;                       // 🖼️ عشان الإطارات تلاقي بيانات الموظف
-    if(window.pfDecorateLoginTiles) window.pfDecorateLoginTiles();
   }catch(e){
     grid.innerHTML = '';
     errBox.textContent = 'تعذر تحميل الموظفين: ' + e.message;
