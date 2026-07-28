@@ -56,25 +56,111 @@ function renderImportPanel(){
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
-        صدّر الملف من QuickBooks (Excel أو CSV)، احفظه كـ CSV لو كان Excel (File → Save As → CSV)، وارفعه هنا.
+        صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
-      <input type="file" id="importFileInput" accept=".csv" style="margin-bottom:10px;">
+      <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" style="margin-bottom:10px;">
+      <div id="importLoadNote" style="color:var(--muted); font-size:12px; margin-bottom:8px;"></div>
       <div id="importPreviewWrap"></div>
     </div>`;
   document.getElementById('importFileInput').addEventListener('change', handleImportFile);
 }
 
+// 📊 مكتبة Excel — بتتحمّل عند أول استخدام بس (مش مع كل فتح للتطبيق)
+let _xlsxLoading = null;
+function ensureXlsxLib(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(_xlsxLoading) return _xlsxLoading;
+  _xlsxLoading = new Promise((resolve, reject)=>{
+    const tryLoad = (src, next)=>{
+      const sc = document.createElement('script');
+      sc.src = src;
+      sc.onload = ()=> window.XLSX ? resolve(window.XLSX) : (next ? next() : reject(new Error('المكتبة اتحمّلت ناقصة')));
+      sc.onerror = ()=> next ? next() : reject(new Error('مش قادر أحمّل مكتبة Excel — اتأكد من النت'));
+      document.head.appendChild(sc);
+    };
+    // نسخة محلية الأول (لو اترفعت)، وبعدين CDN كبديل
+    tryLoad('xlsx.full.min.js', ()=>
+      tryLoad('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', null));
+  });
+  return _xlsxLoading;
+}
+
 function handleImportFile(e){
   const file = e.target.files[0];
   if(!file) return;
+  const note = document.getElementById('importLoadNote');
+  const isExcel = /\.(xlsx?|xlsm)$/i.test(file.name || '');
+  if(isExcel){
+    if(note) note.textContent = '⏳ بيحمّل مكتبة Excel…';
+    ensureXlsxLib().then((XLSX)=>{
+      if(note) note.textContent = '⏳ بيقرا الملف…';
+      const reader = new FileReader();
+      reader.onload = (ev)=>{
+        try{
+          parseExcel(XLSX, ev.target.result);
+          if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
+          renderImportMapping();
+        }catch(err){
+          if(note) note.textContent = '';
+          showToast('تعذر قراءة الملف: ' + err.message, 'err');
+        }
+      };
+      reader.onerror = ()=>{ if(note) note.textContent=''; showToast('تعذر فتح الملف', 'err'); };
+      reader.readAsArrayBuffer(file);
+    }).catch((err)=>{
+      if(note) note.textContent = '';
+      showToast(err.message + ' — أو احفظ الملف كـ CSV UTF-8 وارفعه', 'err');
+    });
+    return;
+  }
   const reader = new FileReader();
   reader.onload = (ev)=>{
     try{
       parseCSV(ev.target.result);
+      if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
       renderImportMapping();
-    }catch(err){ showToast('تعذر قراءة الملف: ' + err.message, 'err'); }
+    }catch(err){
+      if(note) note.textContent = '';
+      showToast('تعذر قراءة الملف: ' + err.message, 'err');
+    }
   };
   reader.readAsText(file, 'UTF-8');
+}
+
+// بيقرا أول شيت ويحوّله لنفس شكل الـ CSV (أعمدة + صفوف)
+function parseExcel(XLSX, buf){
+  const wb = XLSX.read(new Uint8Array(buf), { type:'array' });
+  const first = wb.SheetNames && wb.SheetNames[0];
+  if(!first) throw new Error('الملف مفيهوش شيتات');
+  const ws = wb.Sheets[first];
+  // header:1 → صفوف خام، عشان نتحكم في أسماء الأعمدة بنفسنا
+  const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });
+  if(!rows.length) throw new Error('الشيت فاضي');
+  // أول صف فيه عناوين = صف العناوين (QuickBooks أحيانًا بيحط سطور فاضية فوق)
+  let hIdx = rows.findIndex(r=> r.some(c=> String(c).trim() !== ''));
+  if(hIdx < 0) throw new Error('مفيش عناوين أعمدة');
+  const rawHeaders = rows[hIdx].map(h=> String(h == null ? '' : h).trim());
+  // بنستبعد الأعمدة اللي من غير اسم (الملف ممكن يبقى فيه عشرات الأعمدة الفاضية)
+  const keep = [];
+  const seen = {};
+  rawHeaders.forEach((h, i)=>{
+    if(!h) return;
+    let name = h;
+    if(seen[name]){ seen[name]++; name = h + ' (' + seen[name] + ')'; }   // عنوان مكرر
+    else seen[name] = 1;
+    keep.push({ i, name });
+  });
+  if(!keep.length) throw new Error('مفيش أعمدة ليها أسماء');
+  importHeaders = keep.map(k=> k.name);
+  importParsedRows = rows.slice(hIdx + 1).map(r=>{
+    const row = {};
+    keep.forEach(k=>{
+      const v = r[k.i];
+      row[k.name] = (v === null || v === undefined) ? '' : String(v).trim();
+    });
+    return row;
+  }).filter(row=> Object.values(row).some(v=> v !== ''));   // بنشيل الصفوف الفاضية
+  if(!importParsedRows.length) throw new Error('مفيش صفوف بيانات تحت العناوين');
 }
 
 // قارئ CSV بسيط (بيتعامل مع الفواصل جوه علامات التنصيص "")
