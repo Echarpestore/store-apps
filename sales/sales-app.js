@@ -1708,8 +1708,10 @@ function renderAttendanceLists(){
     const sub = getTodaysSubmission(e.id);
     const hasTask = !!getCurrentTask(e.id);
     const hasUnseenReward = rewards.some(r=> r.employeeId===e.id && !r.seen);
+    const hasDecision = unseenDecisions(window.allLeaveReqs, e.id).length > 0;
     let badge = '';
-    if(hasUnseenReward) badge = '🎁';
+    if(hasDecision) badge = '📩';                 // فيه رد على طلبه — يفتح يشوف
+    else if(hasUnseenReward) badge = '🎁';
     else if(sub && sub.rejected) badge = '❗';
     else if(!sub && hasTask) badge = '📸';
 
@@ -2143,14 +2145,57 @@ function renderDayHubBreak(empId){
   }
 }
 // 📩 زر طلب إذن في صفحة الموظف
+// 📣 وصف الطلب للبانر — بيوضح النوع والاتجاه واليوم
+function leaveReqLabel(l){
+  const sh = (k)=> k==='morning' ? '🌅 صباحي' : (k==='evening' ? '🌆 مسائي' : '');
+  const t = l.type==='dayoff' ? 'إجازة يوم'
+          : (l.type==='changeDayoff' ? 'تغيير يوم الإجازة'
+          : 'تبديل شيفت' + (l.toShift ? ' ('+sh(l.fromShift)+' ← '+sh(l.toShift)+')' : ''));
+  return t + (l.dateKey ? ' — ' + l.dateKey : '');
+}
+window.leaveReqLabel = leaveReqLabel;
+
+// القرارات اللي الموظف لسه مشافهاش (متوافقة أو مرفوضة، ومن غير علامة "شافه")
+function unseenDecisions(reqs, empId){
+  return (reqs||[]).filter(l=>
+    l && l.empId === empId &&
+    (l.status === 'approved' || l.status === 'rejected') &&
+    !l.seenByEmp
+  ).sort((a,b)=> (b.decidedAt||0) - (a.decidedAt||0));
+}
+window.unseenDecisions = unseenDecisions;
+
+window.ackLeaveDecision = function(id, empId){
+  updateDoc(doc(db,'sales_leave_requests', id), { seenByEmp: true, seenAt: Date.now() })
+    .catch(e=> console.warn('ack', e));
+  // تحديث فوري محلي قبل ما الـ snapshot يرجع
+  const l = (window.allLeaveReqs||[]).find(x=> x.id===id);
+  if(l) l.seenByEmp = true;
+  renderDayHubLeave(empId);
+};
+
 function renderDayHubLeave(empId){
   const area = document.querySelector('#dh_leaveArea'); if(!area) return;
   const mine = (window.allLeaveReqs||[]).filter(l=> l.empId===empId && l.status==='pending');
   const pendingTxt = mine.length ? `<div style="text-align:center; color:var(--sub); font-size:11.5px; margin-top:6px;">⏳ عندك ${mine.length} طلب مستني الموافقة</div>` : '';
   const myShort = (window.allShortages||[]).filter(x=> x.empId===empId && x.status==='open').length;
   const shortTxt = myShort ? `<div style="text-align:center; color:var(--sub); font-size:11.5px; margin-top:4px;">📦 عندك ${myShort} طلب نواقص مفتوح</div>` : '';
+  // 📣 بانرات القرارات — بتفضل ظاهرة لحد ما يأكد إنه شافها
+  const decisions = unseenDecisions(window.allLeaveReqs, empId);
+  const banners = decisions.map(l=>{
+    const ok = l.status === 'approved';
+    return `<div style="background:${ok?'rgba(63,191,96,.13)':'rgba(224,121,107,.13)'};
+        border:1.5px solid ${ok?'var(--good)':'var(--bad)'}; border-radius:12px; padding:11px 13px; margin-bottom:8px;">
+      <div style="font-weight:800; font-size:13px; color:${ok?'var(--good)':'var(--bad)'};">
+        ${ok?'✅ اتوافق على طلبك':'❌ اترفض طلبك'}</div>
+      <div style="color:var(--ink); font-size:12.5px; margin:3px 0 8px;">${leaveReqLabel(l)}</div>
+      <button onclick="window.ackLeaveDecision('${l.id}','${empId}')"
+        style="width:100%; padding:9px; border:1px solid var(--line); border-radius:9px; background:var(--panel2);
+               color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">تمام، شفته 👍</button>
+    </div>`;
+  }).join('');
   // (زرار النواقص اتنقل فوق جنب عنوان التاسك — هنا بيفضل العداد بس لو فيه طلبات مفتوحة)
-  area.innerHTML = `<button class="cancelBtn" style="width:100%;" onclick="window.reqLeave('${empId}')">📩 طلب إذن / تغيير إجازة</button>${pendingTxt}${shortTxt}`;
+  area.innerHTML = banners + `<button class="cancelBtn" style="width:100%;" onclick="window.reqLeave('${empId}')">📩 طلب إذن / تغيير إجازة</button>${pendingTxt}${shortTxt}`;
 }
 // ===== 📦 طلب النواقص: الموظف يكتب الكود → الاسم من الكتالوج → التفاصيل =====
 // بيتسجل في sales_shortages وبيوصل للمالك (وهيظهر في echarpe office بالاسم والفرع)
@@ -2265,7 +2310,13 @@ window.shSubmit = function(){
   }).then(()=>{
     closeLeaveReq();
     alert('اتبعت طلب النواقص للإدارة ✅');
-  }).catch(e=>{ st.sending = false; renderShortageReq(); alert('تعذر الإرسال: ' + e.message); });
+  }).catch(e=>{
+    const msg = String((e && e.message) || e);
+    if((e && e.code === 'already-exists') || /already exists/i.test(msg)){
+      closeLeaveReq(); alert('اتبعت طلب النواقص للإدارة ✅'); return;   // وصل فعلًا — النت قطع بعد الإرسال
+    }
+    st.sending = false; renderShortageReq(); alert('تعذر الإرسال: ' + msg);
+  });
 };
 
 // 📦 لوحة النواقص في الأدمن
@@ -2414,19 +2465,26 @@ window.lrPickType = function(t){ _lrState.type = t; renderLeaveReq(); };
 window.lrBack = function(){ _lrState.type=''; _lrState.dateKey=''; _lrState.toShift=''; renderLeaveReq(); };
 window.lrPickDate = function(dk){ _lrState.dateKey = dk; renderLeaveReq(); };
 window.lrPickShift = function(sh){ _lrState.toShift = sh; renderLeaveReq(); };
+let _lrSending = false;
 window.lrSubmit = function(){
   const st = _lrState;
-  if(!st.type || !st.dateKey) return;
+  if(!st.type || !st.dateKey || _lrSending) return;
   if(st.type === 'shiftSwap' && !st.toShift){ alert('اختار الشيفت اللي عايز تتبدل ليه'); return; }
+  _lrSending = true;
   const me = (window.employees||[]).find(e=> e.id===st.empId) || {};
+  const done = ()=>{ _lrSending = false; closeLeaveReq(); alert('اتبعت طلبك للإدارة ✅ — هيتراجع قريب'); };
   window.fbAddDoc(window.fbCollection(window.db,'sales_leave_requests'), {
     empId: st.empId, empName: st.empName, branch: window.currentBranch,
     type: st.type, dateKey: st.dateKey, reason: st.reason||'', status:'pending', ts: Date.now(),
     ...(st.type === 'shiftSwap' ? { fromShift: me.shift || '', toShift: st.toShift } : {})
-  }).then(()=>{
-    closeLeaveReq();
-    alert('اتبعت طلبك للإدارة ✅ — هيتراجع قريب');
-  }).catch(e=> alert('تعذر إرسال الطلب: '+e.message));
+  }).then(done).catch(e=>{
+    // ⚠️ "already exists" معناها إن الطلب وصل فعلًا والنت قطع قبل الرد،
+    // فالـ SDK أعاد المحاولة بنفس الـ ID — دي نجاح مش فشل.
+    const msg = String((e && e.message) || e);
+    if((e && e.code === 'already-exists') || /already exists/i.test(msg)){ done(); return; }
+    _lrSending = false;
+    alert('تعذر إرسال الطلب: ' + msg);
+  });
 };
 
 window.reqBreakStart = function(empId){
