@@ -3017,9 +3017,10 @@ function openAdmin(){
   $('#targetCelebration').classList.remove('show'); // safety: never let this linger over the admin panel
   initCollapsiblePanels();
   if(adminUnlocked){
-    renderAdminList(); renderLog(); renderPerformanceLink();
-    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog(); renderAdminSettingsForm();
+    const _safe = (fn, name)=>{ try{ fn(); }catch(e){ console.warn('render:', name, e); } };
+    _safe(()=> renderAdminList(),'adminList'); _safe(()=> renderLog(),'log'); _safe(()=> renderPerformanceLink(),'perfLink');
+    _safe(()=> renderStaffOverview(),'staffOverview'); _safe(()=> renderScheduleList(),'schedule'); _safe(()=> renderTaskAssignList(),'taskAssign');
+    _safe(()=> renderPendingSubmissions(),'pendingSubs'); _safe(()=> renderConfirmedSubmissions(),'confirmedSubs'); _safe(()=> renderRewardsList(),'rewards'); _safe(()=> renderAttendanceHistory(),'attHistory'); _safe(()=> renderWeeklyAggregate(),'weeklyAgg'); _safe(()=> renderPerfHistory(),'perfHistory'); _safe(()=> renderFullReport(),'fullReport'); _safe(()=> renderCommissionPanel(),'commission'); _safe(()=> renderCommissionPaymentLog(),'commLog'); _safe(()=> renderSalaryPanel(),'salary'); _safe(()=> renderSalaryPaymentLog(),'salaryLog'); _safe(()=> renderTerminationPanel(),'termination'); _safe(()=> renderTerminationLog(),'termLog'); _safe(()=> renderAdvancesLog(),'advances'); _safe(()=> renderAdminSettingsForm(),'settingsForm');
     // اللوحات الجديدة (الالتزام والمكافآت) — محميّة عشان أي خطأ فيها مايوقفش اللوحة كلها
     try{ renderPendingRegs(); }catch(e){ console.warn('regs', e); }
     try{ window.renderComplianceSettingsForm(); }catch(e){ console.warn('compliance form', e); }
@@ -3045,11 +3046,17 @@ function doAdminLogin(){
     adminUnlocked = true;
     $('#adminPass').value = '';
     $('#adminLoginGate').classList.remove('show');
-    renderAdminList();
-    renderLog();
-    renderPerformanceLink();
-    renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
-    renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport(); renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog(); renderAdminSettingsForm();
+    // 🔓 أهم سطر: إظهار اللوحات فورًا بعد فتح الجلسة — قبل أي رسم.
+    // الباج القديم: استدعاء رسم بيقع قبل ما نوصل هنا → الجلسة مفتوحة
+    // واللوحات مخفية من القفل السابق → شاشة فاضية.
+    try{ applyRoleVisibility(); }catch(e){ console.warn('role visibility (login)', e); }
+    // كل استدعاء رسم محمي لوحده — واحدة تقع، الباقي يكمّل
+    const _safe = (fn, name)=>{ try{ fn(); }catch(e){ console.warn('render:', name, e); } };
+    _safe(()=> renderAdminList(), 'adminList');
+    _safe(()=> renderLog(), 'log');
+    _safe(()=> renderPerformanceLink(), 'perfLink');
+    _safe(()=> renderStaffOverview(), 'staffOverview'); _safe(()=> renderScheduleList(), 'schedule'); _safe(()=> renderTaskAssignList(), 'taskAssign');
+    _safe(()=> renderPendingSubmissions(), 'pendingSubs'); _safe(()=> renderConfirmedSubmissions(), 'confirmedSubs'); _safe(()=> renderRewardsList(), 'rewards'); _safe(()=> renderAttendanceHistory(), 'attHistory'); _safe(()=> renderWeeklyAggregate(), 'weeklyAgg'); _safe(()=> renderPerfHistory(), 'perfHistory'); _safe(()=> renderFullReport(), 'fullReport'); _safe(()=> renderCommissionPanel(), 'commission'); _safe(()=> renderCommissionPaymentLog(), 'commLog'); _safe(()=> renderSalaryPanel(), 'salary'); _safe(()=> renderSalaryPaymentLog(), 'salaryLog'); _safe(()=> renderTerminationPanel(), 'termination'); _safe(()=> renderTerminationLog(), 'termLog'); _safe(()=> renderAdvancesLog(), 'advances'); _safe(()=> renderAdminSettingsForm(), 'settingsForm');
     try{ renderPendingRegs(); }catch(e){ console.warn('regs', e); }
     try{ window.renderComplianceSettingsForm(); }catch(e){ console.warn('compliance form', e); }
     try{ updateRegBadge(); }catch(e){ console.warn('reg badge', e); }
@@ -3062,7 +3069,8 @@ function doAdminLogin(){
     try{ window.renderLeaveRequests(); }catch(e){ console.warn('leave reqs', e); }
     try{ window.renderTimeCreditLog(); }catch(e){ console.warn('time credit log', e); }
     try{ updateLeaveBadge(); }catch(e){ console.warn('leave badge', e); }
-    renderViolationsReview();
+    _safe(()=> renderViolationsReview(), 'violations');
+    // إعادة تطبيق ختامية (بعض اللوحات بتتبني أثناء الرسم) + الشريط الأحمر
     try{ applyRoleVisibility(); }catch(e){ console.warn('role visibility', e); }
     try{ renderActionBar(); }catch(e){ console.warn('action bar', e); }
   } else {
