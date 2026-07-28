@@ -59,6 +59,13 @@ function renderImportPanel(){
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
       <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" style="margin-bottom:10px;">
+      <label id="wipeRow" style="display:none; align-items:center; gap:8px; background:#3a1416;
+             border:1.5px solid #e5484d66; border-radius:10px; padding:10px 12px; margin-bottom:10px;
+             cursor:pointer; color:#ffd9da; font-size:12.5px; font-weight:700;">
+        <input type="checkbox" id="wipeBeforeImport" style="width:18px; height:18px; cursor:pointer;">
+        🗑️ امسح كل المخزون الحالي قبل الاستيراد
+        <span style="font-weight:400; color:#ff9a9d;">— للمرة الأولى بس، الإجراء نهائي</span>
+      </label>
       <div id="importLoadNote" style="color:var(--muted); font-size:12px; margin-bottom:8px;"></div>
       <div id="importPreviewWrap"></div>
     </div>`;
@@ -188,6 +195,8 @@ function parseCSV(text){
 }
 
 function renderImportMapping(){
+  const wr = document.getElementById('wipeRow');
+  if(wr) wr.style.display = (importTab === 'inventory' && importParsedRows.length) ? 'flex' : 'none';
   const wrap = document.getElementById('importPreviewWrap');
   const targets = IMPORT_TARGETS[importTab];
   const headerOptions = ['<option value="">— تجاهل —</option>'].concat(
@@ -240,6 +249,31 @@ function renderImportMapping(){
   });
 }
 
+// 🗑️ مسح كل المخزون قبل استيراد جديد
+// محمي بتأكيد بالكتابة لأن الإجراء نهائي — البضاعة والكميات كلها بتروح.
+async function wipeInventory(resultBox){
+  const snap = await db.collection(TEST_INVENTORY).get();
+  const total = snap.size;
+  if(total === 0) return true;
+  const typed = prompt(
+    '⚠️ ده هيمسح ' + total + ' صنف من المخزون نهائيًا (الأسماء والأسعار والكميات).\n' +
+    'الإجراء مفيهوش رجوع.\n\n' +
+    'اكتب كلمة:  مسح   عشان تأكد');
+  if(String(typed || '').trim() !== 'مسح') return false;
+  const docs = snap.docs;
+  const CHUNK = 400;                       // حد Firestore للدفعة 500
+  for(let i=0; i<docs.length; i+=CHUNK){
+    const batch = db.batch();
+    docs.slice(i, i+CHUNK).forEach(function(d){ batch.delete(d.ref); });
+    await batch.commit();
+    if(resultBox) resultBox.textContent =
+      'بيمسح القديم... ' + Math.min(i+CHUNK, docs.length) + ' / ' + docs.length;
+  }
+  if(typeof _logActivity === 'function') _logActivity('inventory_wiped', { count: total });
+  return true;
+}
+if(typeof window !== 'undefined') window.wipeInventory = wipeInventory;
+
 async function runImport(){
   const targets = IMPORT_TARGETS[importTab];
   const mapping = {};
@@ -255,6 +289,12 @@ async function runImport(){
 
   // ===== المخزون: كتابة بالدفعات + تحديث بالباركود (مش تكرار) =====
   if(importTab === 'inventory'){
+    // 🗑️ مسح المخزون القديم — بتأكيد بالكتابة، الإجراء نهائي ومفيش رجوع
+    const wipeEl = document.getElementById('wipeBeforeImport');
+    if(wipeEl && wipeEl.checked){
+      const ok = await wipeInventory(resultBox);
+      if(!ok){ resultBox.textContent = 'اتلغى — المخزون زي ما هو'; return; }
+    }
     const rows = importParsedRows;
     const CHUNK = 400;   // حد Firestore للدفعة 500
     try{
