@@ -183,6 +183,7 @@ const RECEIPT_ELEMENTS = [
   { id:'meta',      label:'🕐 التاريخ والموظف',       kind:'auto', size:10 },
   { id:'items',     label:'🛒 جدول الأصناف',          kind:'auto', size:12 },
   { id:'totals',    label:'💰 الإجمالي وطرق الدفع',   kind:'auto', size:13 },
+  { id:'cardTxn',   label:'💳 بيانات الدفع بالكارت (آخر 4 أرقام · نوع الكارت · رقم العملية)', kind:'auto', size:10 },
   { id:'invoiceNo', label:'🔢 رقم الفاتورة',          kind:'auto', size:11 },
   { id:'barcode',   label:'⬛ باركود المرتجع',        kind:'auto' },
   { id:'appQR',     label:'📱 QR تحميل التطبيق (للعملاء الغير مسجّلين/من غير تطبيق)', kind:'auto', size:10 },
@@ -480,6 +481,22 @@ function buildReceiptHTML(data){
           `<tr><td style="padding:3px 0; border-bottom:1px solid #000; font-weight:600; word-break:break-word; max-width:0; width:100%;">${it.name}</td><td style="padding:3px 4px; border-bottom:1px solid #000; white-space:nowrap; font-weight:600;">${it.qty} × ${it.unit||''}</td><td style="padding:3px 0; border-bottom:1px solid #000; white-space:nowrap; font-weight:700; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
       case 'totals':
         parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`); break;
+      case 'cardTxn': {
+        // 💳 بيانات الدفع بالكارت — بتظهر بس لو الدفع اتم بالماكينة
+        const ct = d.cardTxn;
+        if(!ct) break;
+        // إنجليزي + اتجاه LTR: الأرقام الطويلة بتتقلب في السياق العربي، وده بيمنع اللخبطة
+        const rows = [];
+        const scheme = ct.scheme ? String(ct.scheme) : 'CARD';
+        if(ct.last4) rows.push(`${scheme} **** ${ct.last4}`);
+        else if(ct.scheme) rows.push(scheme);
+        if(ct.approvalCode) rows.push(`APPROVAL: ${ct.approvalCode}`);
+        if(ct.transactionId) rows.push(`TXN ID: ${ct.transactionId}`);
+        if(!rows.length) break;
+        parts.push(`<div dir="ltr" style="border-top:1px dashed #000; margin:5px 0 2px; padding-top:4px; text-align:center; font-size:${fs}; font-family:monospace; letter-spacing:.5px;">`
+          + rows.map(r=> `<div style="font-weight:700; unicode-bidi:isolate;">${r}</div>`).join('')
+          + `</div>`);
+        break; }
       case 'invoiceNo':
         if(d.invoiceNo) parts.push(`<div style="text-align:center; font-size:${fs};">${L.invoice} ${d.invoiceNo}</div>`); break;
       case 'barcode': {
@@ -534,6 +551,7 @@ function receiptSampleData(){
     empName: (currentEmployee&&currentEmployee.name)||'أحمد',
     items: [ {name:'إيشارب حرير', qty:1, line:'250.00'}, {name:'طرحة شيفون', qty:2, line:'300.00'} ],
     totalStr:'550.00', payStr:L.cash+': 550.00', invoiceNo:'INV-000123', scanCode:'FTRH123-DEMO',
+    cardTxn:{ scheme:'MasterCard', last4:'4321', approvalCode:'012345', transactionId:504208925 },
     showAppQR:true, appQrImg: localStorage.getItem(receiptQrKey().key)||'', appQrTitle:'حمّلي تطبيقنا!', appQrMsg: welcomeRewardText()
   };
 }
@@ -870,7 +888,8 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
     dateStr: new Date().toLocaleString(c.lang==='en'?'en-GB':'ar-EG'),
     empName: (currentEmployee&&currentEmployee.name)||'',
     items: cart.map(it=> ({name:it.name, qty:it.qty, unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2)})),
-    totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: invoiceCode||invoiceNo||''
+    totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: invoiceCode||invoiceNo||'',
+    cardTxn: (typeof window.paymobCardInfo !== 'undefined' && window.paymobCardInfo) ? window.paymobCardInfo : null
   };
   // QR التطبيق: يظهر بس لو مفيش رقم، أو الرقم مش مسجّل، أو مسجّل من غير تطبيق
   const _ph = (document.getElementById('customerPhone')||{value:''}).value.trim();

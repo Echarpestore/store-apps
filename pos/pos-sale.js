@@ -1385,6 +1385,7 @@ window.paymobApproved = false;
 
 function paymobReset(){
   _paymobAutoFired = false;
+  paymobCardInfo = null; window.paymobCardInfo = null;
   if(paymobPending && paymobPending.unsub){ try{ paymobPending.unsub(); }catch(e){} }
   paymobPending = null;
   paymobApproved = false;
@@ -1449,6 +1450,8 @@ function paymobAutoPrint(){
   return !!(paymobCfg && paymobCfg.autoPrint !== false);   // الافتراضي: شغّالة
 }
 let _paymobAutoFired = false;   // ⛔ مرة واحدة بس لكل عملية — يمنع الطباعة المكررة
+let paymobCardInfo = null;      // 💳 بيانات الكارت للفاتورة الحالية
+window.paymobCardInfo = null;
 
 // 🔒 الشروط اللي لازم تتحقق قبل ما نحفظ ونطبع من غير الكاشير
 function paymobCanAutoFinish(amountEGP, txn){
@@ -1471,6 +1474,18 @@ function paymobWatch(orderRef, amountEGP){
     const d = snap.data() || {};
     if(d.status === 'success'){
       paymobApproved = true; window.paymobApproved = true;
+      // 💳 بنحتفظ ببيانات الكارت عشان تتطبع في الفاتورة وتتسجل مع البيعة
+      paymobCardInfo = {
+        last4: d.cardLast4 ? String(d.cardLast4).slice(-4) : null,
+        scheme: d.cardScheme || null,
+        transactionId: d.transactionId || null,
+        approvalCode: d.approvalCode || null,
+        rrn: d.rrn || null,
+        terminalId: paymobTerminalId() || null,
+        orderRef: orderRef,
+        amountCents: d.amountCents || null
+      };
+      window.paymobCardInfo = paymobCardInfo;
       const last4 = d.cardLast4 ? (' •' + String(d.cardLast4).slice(-4)) : '';
       try{ unsub(); }catch(e){}
       if(typeof updatePaySummary === 'function') updatePaySummary();
@@ -1669,6 +1684,7 @@ async function _doConfirmPayment(){
       staffPointEarned: earnsStaffPoint,
       firstItemAt: _cartFirstItemAt || null,   // 🕵️ متى بدأت السلة (لكشف التأخير غير الطبيعي)
       staffPurchase: staffPurchase ? { empId: staffPurchase.empId, name: staffPurchase.name, pct: staffPurchase.pct, discountAmount: staffDiscountAmount() } : null,
+      cardTxn: paymobCardInfo || null,   // 💳 بيانات الدفع بالكارت (للمرتجع والنزاعات)
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }));
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
