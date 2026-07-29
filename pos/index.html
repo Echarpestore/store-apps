@@ -213,8 +213,20 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
 #cartTotal{ font-size:23px !important; }
 #qbxChange{ font-size:21px !important; }
 .qbx-totals{ gap:2px !important; width:238px !important; }
+/* ⚠️ الخانات دي كانت خلفيتها سودا ونصها أبيض. بعد ما التصميم بقى فاتح،
+   النص الأبيض فضل أبيض على أبيض ومبقاش باين. لكل خانة لون واضح دلوقتي. */
 .t-green{ color:#047857 !important; border-color:#a7f3d0 !important; background:#ecfdf5 !important; }
 .t-red{ color:#B91C1C !important; border-color:#fecaca !important; background:#fef2f2 !important; }
+/* ناقص — برتقالي: تنبيه إن الفاتورة لسه مش مكتملة */
+.t-val.t-dark{
+  color:#B45309 !important; border-color:#fcd34d !important;
+  background:#fffbeb !important;
+}
+/* ولما يبقى صفر (مفيش ناقص) يهدى ويبقى رمادي */
+.t-val.t-dark.t-zero{
+  color:#6b7280 !important; border-color:#e6e9ef !important;
+  background:#f7f8fa !important;
+}
 .qbx-pay-btns{ gap:6px !important; margin-top:6px !important; }
 .qbx-pay-btns button{
   border-radius:11px !important; font-family:'Cairo',sans-serif !important;

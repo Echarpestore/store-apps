@@ -2245,7 +2245,11 @@ function updatePaySummary(){
   const dueEl = document.getElementById('qbxDue');
   const changeEl = document.getElementById('qbxChange');
   if(paidEl) paidEl.textContent = enteredAbs.toFixed(2);
-  if(dueEl) dueEl.textContent = due.toFixed(2);
+  if(dueEl){
+    dueEl.textContent = due.toFixed(2);
+    // برتقالي لما يبقى فيه ناقص، ورمادي هادي لما يخلص
+    dueEl.classList.toggle('t-zero', !(due > 0));
+  }
   if(changeEl) changeEl.textContent = change.toFixed(2);
 
   // زرار الحفظ بيتفعّل لما المبلغ المُدخل (بصرف النظر عن الاتجاه) يغطي المطلوب بالكامل
