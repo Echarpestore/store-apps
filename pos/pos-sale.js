@@ -122,6 +122,77 @@ function askText(opts){
 window.askText = askText;
 
 // ============================================================
+// ============================================================
+// 👤 اختيار البياعة — قايمة أو كود
+// أي بيعة من غير بياعة مبتتحسبش لحد (بقرار المالك) — أحسن من إنها
+// تروح لواحدة غلط زي ما كان بيحصل مع حساب الكاشير.
+// ============================================================
+function sellerPaint(){
+  const sel = document.getElementById('sellerEmployeeSelect');
+  const code = document.getElementById('sellerCodeInput');
+  const nm = document.getElementById('sellerName');
+  const on = !!(sel && sel.value);
+  const purple = '#8B5CF6', purpleBg = '#f5f3ff';
+  [sel, code].forEach(function(el){
+    if(!el) return;
+    el.style.borderColor = on ? purple : '#d8dce4';
+    el.style.background  = on ? purpleBg : '#fff';
+    el.style.boxShadow   = on ? '0 0 0 3px rgba(139,92,246,.15)' : 'none';
+  });
+  if(nm){
+    if(on){
+      const opt = sel.options[sel.selectedIndex];
+      nm.textContent = '✓ ' + ((opt && opt.dataset.name) || '');
+      nm.style.color = purple;
+    } else {
+      nm.textContent = 'من غير بياعة — مش هتتحسب لحد';
+      nm.style.color = '#9ca3af';
+    }
+  }
+}
+window.sellerPaint = sellerPaint;
+
+// الكود بيختار من القايمة
+function sellerByCode(v){
+  const sel = document.getElementById('sellerEmployeeSelect');
+  if(!sel) return;
+  const code = String(v || '').trim();
+  if(!code){ sel.value = ''; sellerPaint(); return; }
+  const hit = Array.from(sel.options).find(function(o){
+    return o.dataset && o.dataset.code && String(o.dataset.code) === code;
+  });
+  if(hit){ sel.value = hit.value; }
+  sellerPaint();
+}
+window.sellerByCode = sellerByCode;
+
+// ربط الأحداث أول ما الصفحة تجهز
+(function(){
+  function wire(){
+    const sel = document.getElementById('sellerEmployeeSelect');
+    const code = document.getElementById('sellerCodeInput');
+    if(!sel || !code) return false;
+    if(sel._wired) return true;
+    sel._wired = true;
+    sel.addEventListener('change', function(){
+      // لما يختار من القايمة، الكود يتملّى لوحده
+      const opt = sel.options[sel.selectedIndex];
+      code.value = (opt && opt.dataset && opt.dataset.code) || '';
+      sellerPaint();
+    });
+    code.addEventListener('input', function(){ sellerByCode(code.value); });
+    code.addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ e.preventDefault(); focusSearchBar(); }
+    });
+    sellerPaint();
+    return true;
+  }
+  if(!wire()){
+    const t = setInterval(function(){ if(wire()) clearInterval(t); }, 400);
+    setTimeout(function(){ clearInterval(t); }, 15000);
+  }
+})();
+
 // ⌨️ ترجمة حروف الكيبورد العربي
 // قارئ الباركود بيشتغل زي الكيبورد: لو لغة ويندوز عربي، الحرف F
 // بيطلع "ب" وهكذا. بدل ما الكاشير يغيّر اللغة كل مرة، بنترجم إحنا.
@@ -2258,7 +2329,15 @@ function updatePaySummary(){
   const visaStillSelected = selectedPayMethods.has('visa') && (paymentAmounts.visa || 0) !== 0;
   const cardPending = visaStillSelected &&
     (typeof paymobPending !== 'undefined') && paymobPending && !paymobApproved;
-  confirmBtn.disabled = !(cart.length > 0 && selectedPayMethods.size > 0 && enteredAbs >= requiredAbs) || cardPending;
+  // 🔄 التبديل المتساوي: الإجمالي صفر فمفيش دفع مطلوب أصلًا.
+  // الشرط القديم كان بيطلب طريقة دفع دايمًا، فالزرار كان بيفضل مقفول
+  // والكاشير مش قادر يحفظ عملية تبديل سليمة.
+  const isEvenSwap = cart.length > 0 && requiredAbs < 0.005;
+  const paidOk = isEvenSwap || (selectedPayMethods.size > 0 && enteredAbs >= requiredAbs);
+  confirmBtn.disabled = !(cart.length > 0 && paidOk) || cardPending;
+  if(isEvenSwap && !confirmBtn.disabled){
+    confirmBtn.title = 'تبديل متساوي — مفيش فلوس بتتحصّل ولا تترد';
+  }
   if(cardPending) confirmBtn.title = 'مستنيين تأكيد الدفع من الماكينة';
 }
 
@@ -2420,9 +2499,13 @@ async function _doConfirmPayment(){
   const invoiceCode = 'FT' + branchCode(currentBranch) + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
 
   // الموظف اللي فعليًا باع للعميل (ممكن يكون مختلف عن اللي مسجّل دخول في جهاز الـPOS نفسه)
+  // 👤 البياعة: من غير اختيار = **مش بتتحسب لحد** (قرار المالك).
+  // قبل كده كانت بتروح للي فاتح الجهاز — والكاشير مش بيبيع أصلًا.
   const sellerSel = document.getElementById('sellerEmployeeSelect');
-  const sellerEmployeeId = sellerSel && sellerSel.value ? sellerSel.value : currentEmployee.id;
-  const sellerEmployeeName = sellerSel && sellerSel.value ? sellerSel.options[sellerSel.selectedIndex].dataset.name : (currentEmployee.name || '');
+  const _hasSeller = !!(sellerSel && sellerSel.value);
+  const sellerEmployeeId = _hasSeller ? sellerSel.value : null;
+  const sellerEmployeeName = _hasSeller
+    ? (sellerSel.options[sellerSel.selectedIndex].dataset.name || '') : '';
 
   try{
     // 🎫 تحقق شراء الموظف: خصم الراتب في حدود السقف الشهري + سلة مش مرتجع
@@ -2537,7 +2620,9 @@ async function _doConfirmPayment(){
     stockLines.forEach(c=>{ logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع'); });
 
     // 3) نقطة الموظف (تجريبي - منفصل عن رصيد الـ HR الحقيقي) — بتتحسب للبائع الفعلي
-    if(earnsStaffPoint){
+    // 🔒 من غير بياعة = مفيش نقط لحد. (من غير الشرط ده، الكتابة بمعرّف فاضي
+    //    كانت هتفشل أو تعمل مستند غلط.)
+    if(earnsStaffPoint && sellerEmployeeId){
       // ⭐ النقطة بتتسجل أوتوماتيك في برنامج الحضور (sales_points) — البياعة مش محتاجة تعمل سكان للفاتورة تاني
       try{
         await db.collection('sales_points').add({

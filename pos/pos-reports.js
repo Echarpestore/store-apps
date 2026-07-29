@@ -42,6 +42,62 @@ if(typeof window !== 'undefined') window.customerAppStats = customerAppStats;
 // pos-core.js ← pos-admin.js ← pos-reports.js ← pos-sale.js ← app.js
 
 // ---------------- Roles / permissions screen (manager only) ----------------
+// 🔢 توليد أكواد البياعات
+// الكود ثابت للموظف ومبيتعادش استخدامه بعد ما يمشي — عشان الكاشير
+// اللي بيكتب الكود من العادة ما يبعتش بيعة لموظفة جديدة أخدت نفس الرقم.
+async function genSellerCodes(){
+  try{
+    const snap = await db.collection('sales_employees').get();
+    const all = snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    // كل الأكواد المستخدمة قبل كده — حتى بتاعة اللي مشيوا
+    const used = new Set();
+    all.forEach(function(e){ if(e.sellerCode) used.add(String(e.sellerCode)); });
+    const cfgDoc = await db.collection(TEST_SETTINGS).doc('seller_codes').get();
+    const retired = (cfgDoc.exists ? (cfgDoc.data().retired || []) : []).map(String);
+    retired.forEach(function(c){ used.add(c); });
+
+    const need = all.filter(function(e){
+      return e.active !== false && !e.isAdminAccount && !e.sellerCode;
+    });
+    if(!need.length){ showToast('كل الموظفين عندهم أكواد ✅', 'ok'); listSellerCodes(all); return; }
+
+    let n = 1, done = 0;
+    const batch = db.batch();
+    need.forEach(function(e){
+      while(used.has(String(n).padStart(2,'0'))) n++;
+      const code = String(n).padStart(2,'0');
+      used.add(code); n++;
+      batch.update(db.collection('sales_employees').doc(e.id), { sellerCode: code });
+      e.sellerCode = code; done++;
+    });
+    await batch.commit();
+    // نسجّل الأكواد كمستخدمة للأبد
+    await db.collection(TEST_SETTINGS).doc('seller_codes')
+      .set({ retired: Array.from(used) }, { merge:true });
+    showToast('✅ اتولّد ' + done + ' كود', 'ok');
+    listSellerCodes(all);
+  }catch(e){ showToast('تعذر التوليد: ' + (e.message || e), 'err'); }
+}
+if(typeof window !== 'undefined') window.genSellerCodes = genSellerCodes;
+
+function listSellerCodes(all){
+  const box = document.getElementById('sellerCodesList'); if(!box) return;
+  const rows = (all || []).filter(function(e){ return e.active !== false && !e.isAdminAccount; })
+    .sort(function(a,b){ return String(a.sellerCode||'zz').localeCompare(String(b.sellerCode||'zz')); });
+  if(!rows.length){ box.innerHTML = ''; return; }
+  box.innerHTML = rows.map(function(e){
+    return '<div style="display:flex; justify-content:space-between; align-items:center;'
+      + 'padding:8px 11px; border:1px solid var(--ui-line); border-radius:10px; margin-bottom:5px;'
+      + 'background:' + (e.sellerCode ? '#f5f3ff' : '#fff') + ';">'
+      + '<span style="font-weight:700; font-size:13px;">' + (e.name || '—')
+      + '<span style="color:var(--ui-mut); font-weight:400; font-size:11px;"> · '
+      + (e.branch || '') + '</span></span>'
+      + '<b style="font-size:17px; color:' + (e.sellerCode ? '#6D28D9' : '#9ca3af') + ';">'
+      + (e.sellerCode || '—') + '</b></div>';
+  }).join('');
+}
+if(typeof window !== 'undefined') window.listSellerCodes = listSellerCodes;
+
 // 🕕 إعداد ساعة بداية يوم الشغل
 async function saveDayStartHour(el){
   let v = parseInt(el.value, 10);

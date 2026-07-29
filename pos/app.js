@@ -11,7 +11,7 @@
 async function loadClockedInStaff(){
   const sel = document.getElementById('sellerEmployeeSelect');
   if(!sel) return;
-  sel.innerHTML = '<option value="">👤 مين اللي باع؟ (اختياري)</option>';
+  sel.innerHTML = '<option value="">👤 مين اللي باعت؟</option>';
   try{
     // نجيب قايمة الموظفين الحاليين الحقيقية للفرع ده الأول (عشان نستبعد أي حد
     // اتمسح أو بقى غير نشط، حتى لو لسه ليه سجل شيفت قديم "مفتوح" بالغلط)
@@ -29,16 +29,23 @@ async function loadClockedInStaff(){
     openShifts.forEach(s=>{
       if(seen.has(s.employeeId)) return;
       seen.add(s.employeeId);
+      // 🔢 كود البياعة — ثابت من مستند الموظف نفسه، فمش بيتغيّر بين الشيفتات
+      // ولو موظفة مشيت، كودها بيمشي معاها ومحدش بياخده (منع بيعة تروح لواحدة غلط)
+      const emp = empSnap.docs.find(function(d){ return d.id === s.employeeId; });
+      const eData = emp ? (emp.data() || {}) : {};
+      const code = eData.sellerCode || '';
       const opt = document.createElement('option');
       opt.value = s.employeeId;
-      opt.textContent = s.employeeName || s.employeeId;
+      opt.textContent = (code ? (code + ' · ') : '') + (s.employeeName || s.employeeId);
       opt.dataset.name = s.employeeName || '';
+      if(code) opt.dataset.code = String(code);
       sel.appendChild(opt);
     });
-    // افتراضيًا، لو الموظف المسجل دخول في الـPOS نفسه حاضر في القايمة، يتفضّل تلقائي
-    if(seen.has(currentEmployee.id)){
-      sel.value = currentEmployee.id;
-    }
+    // ⚠️ مفيش اختيار تلقائي بقى.
+    // كان بيختار اللي فاتح الجهاز، والنتيجة إن كل البيعات بتروح للكاشير
+    // اللي مش بيبيع أصلًا. دلوقتي: من غير اختيار = مش بتتحسب لحد.
+    sel.value = '';
+    if(typeof sellerPaint === 'function') sellerPaint();
   }catch(e){ console.warn('تعذر تحميل قايمة الموظفين الحاضرين', e); }
 }
 
