@@ -1,4 +1,4 @@
-const CACHE_NAME = 'store-apps-shell-v220';
+const CACHE_NAME = 'store-apps-shell-v221';
 
 // ⚠️ مفيش skipWaiting تلقائي.
 // النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر

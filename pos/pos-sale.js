@@ -1081,6 +1081,14 @@ function changeQty(idx, delta){
 function removeFromCart(idx){
   if(cart[idx] && cart[idx].isRedemption) pendingRedemption = null;
   cart.splice(idx,1);
+  // 🛡️ لو حذف المنتج ساب سطر الاستبدال أكبر من باقي الفاتورة (إجمالي سالب)
+  // بنشيل الاستبدال تلقائي — وإلا السلة بتتحول "مرتجع" بيطلّع كاش مقابل نقط
+  if(pendingRedemption && cartTotal() < 0){
+    const ri = cart.findIndex(c=> c.isRedemption);
+    if(ri >= 0) cart.splice(ri, 1);
+    pendingRedemption = null;
+    showToast('اتشال استبدال النقط — قيمته بقت أكبر من الفاتورة بعد الحذف', 'err');
+  }
   renderCart();
 }
 
@@ -1302,7 +1310,9 @@ async function openGiveDiscount(){
   const p = parseFloat(pct);
   if(isNaN(p) || p < 0 || p > 100){ showToast('نسبة غير صحيحة', 'err'); return; }
   if(p > cap){ showToast(`⛔ الحد الأقصى للخصم المسموح ليك ${cap}% — اطلب مدير لو محتاج أكتر`, 'err'); return; }
-  cart.forEach(c=> c.price = c.price * (1 - p/100));
+  // الخصم على المنتجات بس — سطور الاستبدال/المكافأة السالبة متتلمسش
+  // (خصم نسبة من سطر سالب بيقلل قيمة الاستبدال والعميل خصم نقطه كاملة)
+  cart.forEach(c=>{ if(!c.isRedemption && !c.isRewardDiscount) c.price = c.price * (1 - p/100); });
   renderCart();
   showToast(`اتحط خصم ${p}% ✅`);
   // 📋 تسجيل الخصم في سجل النشاط
@@ -1350,11 +1360,15 @@ async function openRedeemPoints(){
       showToast(`رصيد العميل ${balance} نقطة بس — محتاج ${rate.pointsPerRedemption} نقطة على الأقل للاستبدال`, 'err');
       return;
     }
-    const maxRedemptions = Math.floor(balance / rate.pointsPerRedemption);
+    const maxRedemptions = _redeemMaxUnits(balance, cartTotal(), rate.pointsPerRedemption, rate.redemptionValueEGP);
+    if(maxRedemptions <= 0){
+      showToast('قيمة الفاتورة أقل من أصغر وحدة استبدال (' + rate.redemptionValueEGP + ' ج.م) — الاستبدال خصم على الفاتورة مش فلوس بتترد', 'err');
+      return;
+    }
     const input = await askText({
       title: '🎁 استبدال نقط',
       message: 'رصيد العميل: ' + balance + ' نقطة\nكل ' + rate.pointsPerRedemption + ' نقطة = '
-             + rate.redemptionValueEGP + ' ج.م خصم\nالحد الأقصى: ' + maxRedemptions,
+             + rate.redemptionValueEGP + ' ج.م خصم\nالحد الأقصى (بالرصيد وقيمة الفاتورة): ' + maxRedemptions,
       type: 'number', value: '1', okText: 'استبدل'
     });
     if(input === null) return;
@@ -1413,6 +1427,16 @@ function _redeemSanitize(reqPoints, balance, per, valPer){
   const units = Math.min(maxUnits, reqUnits);
   return { points: units * per, value: units * valPer, units };
 }
+// 🛡️ سقف الاستبدال بقيمة الفاتورة نفسها — ثغرة تحويل النقط لكاش:
+// من غير السقف ده، سلة بـ50 ج + استبدال بـ100 ج = إجمالي −50 → السيستم
+// بيعاملها مرتجع ويطلّع كاش من الدرج. النقط خصم على فاتورة، مش فلوس بتترد.
+function _redeemMaxUnits(balance, cartTot, per, valPer){
+  per = Number(per) || 10; valPer = Number(valPer) || 5;
+  const byBalance = Math.floor(Math.max(0, Number(balance) || 0) / per);
+  const byCart = Math.floor(Math.max(0, Number(cartTot) || 0) / valPer);
+  return Math.min(byBalance, byCart);
+}
+window._redeemMaxUnits = _redeemMaxUnits;
 // شروط العرض الرسمية من بند الكتالوج (اللي انت كاتبه) — مش من كتابة العميل
 function _offerOfficial(catItem){
   if(!catItem || !catItem.discountType || !(Number(catItem.discountValue) > 0)) return null;
@@ -1504,8 +1528,12 @@ function applyPendingRedeem(){
   // 🛡️ فاز 3أ: بنحسب من إعدادات المحل والرصيد الفعلي — مش من أرقام الطلب
   const _rr = loyaltyRedemptionConfig || {};
   const _sane = _redeemSanitize(custPendingRedeem ? custPendingRedeem.points : 0, custPointsBalance, _rr.pointsPerRedemption, _rr.redemptionValueEGP);
-  const points = _sane.points, value = _sane.value;
-  if(points <= 0 || value <= 0){ showToast('رصيد العميل مش كافي للاستبدال ده', 'err'); return; }
+  // 🛡️ وسقف تاني بقيمة الفاتورة (ثغرة تحويل النقط لكاش)
+  const _capUnits = _redeemMaxUnits(custPointsBalance, cartTotal(), _rr.pointsPerRedemption, _rr.redemptionValueEGP);
+  const _units = Math.min(_sane.units, _capUnits);
+  const points = _units * (Number(_rr.pointsPerRedemption) || 10);
+  const value = _units * (Number(_rr.redemptionValueEGP) || 5);
+  if(points <= 0 || value <= 0){ showToast('رصيد العميل أو قيمة الفاتورة مش كافيين للاستبدال ده', 'err'); return; }
   const phone = document.getElementById('customerPhone').value.trim();
   cart.push({
     id: '__loyalty_redemption__', name: `🎁 استبدال ${points} نقطة ولاء`,
@@ -2497,6 +2525,12 @@ async function _doConfirmPayment(){
   _offlineQueued = false;   // 📴 نبدأ صفحة جديدة لكل فاتورة
   const total = cartTotal();
   const isRefundInvoice = total < 0;
+  // 🛡️ خط الدفاع الأخير لثغرة النقط→كاش: أي مسار وصّل السلة لإجمالي سالب
+  // وفيها استبدال نقط بيترفض قبل الحفظ (تغيير كمية، تحويل صنف لمرتجع، ...)
+  if(isRefundInvoice && pendingRedemption){
+    showToast('⛔ الاستبدال أكبر من قيمة الفاتورة — شيل سطر الاستبدال أو زوّد منتجات (النقط خصم، مش فلوس بتترد)', 'err');
+    return;
+  }
   const paymentsEntered = {};
   selectedPayMethods.forEach(m=> paymentsEntered[m] = paymentAmounts[m] || 0);
   // المحفوظ في الفاتورة = المطبّق فعلًا (بعد خصم الفكة من الكاش)
