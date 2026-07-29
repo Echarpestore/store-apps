@@ -224,6 +224,10 @@ document.querySelectorAll('#tabsNav button').forEach(function(b){
     document.querySelectorAll('.tabPage').forEach(function(x){ x.classList.remove('on'); });
     b.classList.add('on');
     document.getElementById('page-' + b.dataset.page).classList.add('on');
+    // ⚡ بيانات التقارير بتتحمّل أول ما تفتح التبويب — مش في الخلفية طول الوقت
+    if(b.dataset.page === 'reports'){
+      try{ loadCustomers(); loadRatings(); }catch(e){ console.warn('reports load', e); }
+    }
   });
 });
 document.getElementById('page-inbox').classList.add('on');
@@ -313,9 +317,12 @@ function startData(){
     renderSalaries(); renderPL();
   });
   // مبيعات آخر 30 يوم (قراءة دورية مش snapshot — أخف على الموبايل)
-  loadSales(); setInterval(loadSales, 5*60*1000);
-  loadCustomers(); setInterval(loadCustomers, 10*60*1000);
-  loadRatings(); setInterval(loadRatings, 5*60*1000);
+  // ⚡ ترشيد القراءات:
+  //   • التحديث بيقف تمامًا والتطبيق في الخلفية
+  //   • بيانات التقارير بتتحمّل عند فتح تبويب التقارير بس، ومع كاش
+  //   • الفترات اتوسّعت (كانت 5 دقايق = آلاف القراءات في الساعة)
+  loadSales();
+  setInterval(function(){ if(!document.hidden) loadSales(); }, 20*60*1000);
   db.collection('pos_test_inventory').get().then(function(s){
     D.inventory = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     renderTop();
@@ -334,7 +341,12 @@ function loadSales(){
 }
 
 // 👥 العملاء — للتقارير (تحميلات التطبيق والمكافآت والنقط)
-function loadCustomers(){
+// ⚡ بتتحمّل عند فتح تبويب التقارير بس، والكاش صالح ربع ساعة.
+const REPORT_CACHE_MS = 15*60*1000;
+let _custAt = 0, _ratAt = 0;
+function loadCustomers(force){
+  if(!force && _custAt && (Date.now() - _custAt) < REPORT_CACHE_MS) return;
+  _custAt = Date.now();
   db.collection('pos_test_customers').get().then(function(s){
     D.customers = s.docs.map(function(d){ return Object.assign({ _id:d.id }, d.data()); });
     try{ renderActivityReports(); }catch(e){ console.warn('activity', e); }
@@ -342,7 +354,9 @@ function loadCustomers(){
 }
 
 // ⭐ تقييمات العملاء (آخر 30 يوم)
-function loadRatings(){
+function loadRatings(force){
+  if(!force && _ratAt && (Date.now() - _ratAt) < REPORT_CACHE_MS) return;
+  _ratAt = Date.now();
   var from = Date.now() - 30*86400000;
   db.collection('entries').where('ts','>=', from).get().then(function(s){
     D.ratings = s.docs.map(function(d){ return d.data(); });
