@@ -495,6 +495,87 @@ function showUpdateBar(){
 }
 window.showUpdateBar = showUpdateBar;
 
+// ============================================================
+// 📡 إشارة التحديث الفورية
+// السؤال كل 10 دقايق كان بيخلي الشريط يتأخر. دلوقتي: المالك يدوس
+// "أبلغ الأجهزة" → الرقم بيتغيّر في Firestore → كل جهاز سامع بيسأل فورًا.
+// وكل جهاز بيسجّل نسخته عشان تعرف مين اتحدّث ومين لأ.
+// ============================================================
+const APP_VERSION = (typeof CACHE_NAME_HINT !== 'undefined') ? CACHE_NAME_HINT : null;
+let _updSignalSeen = null;
+
+function reportMyVersion(){
+  try{
+    if(!currentBranch || !db) return;
+    const v = (document.getElementById('verBadge') || {}).textContent || '';
+    db.collection(TEST_SETTINGS).doc('device_versions').set({
+      [currentBranch + '|' + (navigator.userAgent.slice(-24) || 'dev')]: {
+        branch: currentBranch, version: v.trim(), at: Date.now()
+      }
+    }, { merge:true }).catch(function(){});
+  }catch(e){}
+}
+
+function watchUpdateSignal(reg){
+  try{
+    db.collection(TEST_SETTINGS).doc('app_release').onSnapshot(function(snap){
+      const sig = snap.exists ? (snap.data().signal || 0) : 0;
+      if(_updSignalSeen === null){ _updSignalSeen = sig; return; }   // أول قراءة
+      if(sig === _updSignalSeen) return;
+      _updSignalSeen = sig;
+      // 📡 وصلت إشارة → نسأل عن التحديث فورًا بدل ما نستنى الدورة
+      try{ reg.update(); }catch(e){}
+    }, function(e){ console.warn('release watch', e && e.code); });
+  }catch(e){ console.warn('release watch init', e); }
+}
+
+// 📢 المالك بيدوس الزرار ده بعد ما يرفع — الأجهزة بتعرف في ثانية
+async function notifyDevicesUpdate(){
+  try{
+    await db.collection(TEST_SETTINGS).doc('app_release')
+      .set({ signal: Date.now(), by: currentBranch || '' }, { merge:true });
+    showToast('📡 اتبلغت كل الأجهزة — الشريط هيظهر عندهم دلوقتي', 'ok');
+  }catch(e){ showToast('تعذر الإبلاغ: ' + (e.message || e), 'err'); }
+}
+window.notifyDevicesUpdate = notifyDevicesUpdate;
+
+// 📋 مين اتحدّث ومين لأ
+async function showDeviceVersions(){
+  try{
+    const snap = await db.collection(TEST_SETTINGS).doc('device_versions').get();
+    const data = snap.exists ? snap.data() : {};
+    const rows = Object.values(data).sort(function(a,b){ return (b.at||0) - (a.at||0); });
+    if(!rows.length){ showToast('لسه مفيش أجهزة سجّلت نسختها', 'err'); return; }
+    const newest = rows.map(function(r){ return r.version || ''; }).sort().pop();
+    const html = rows.map(function(r){
+      const old = (r.version || '') !== newest;
+      const mins = Math.round((Date.now() - (r.at||0)) / 60000);
+      return '<div style="display:flex; justify-content:space-between; align-items:center;'
+        + 'padding:9px 11px; border-radius:9px; margin-bottom:5px;'
+        + 'background:' + (old ? '#fef2f2' : '#ecfdf5') + ';'
+        + 'border:1px solid ' + (old ? '#fca5a5' : '#6ee7b7') + ';">'
+        + '<span style="font-weight:700; font-size:13px;">' + (r.branch || '—') + '</span>'
+        + '<span style="font-size:12px; font-weight:800; color:' + (old ? '#B91C1C' : '#047857') + ';">'
+        + (r.version || '؟') + (old ? ' ⚠️ قديمة' : ' ✅') + '</span>'
+        + '<span style="font-size:10.5px; color:#6b7280;">' + (mins < 60 ? (mins + ' د') : (Math.round(mins/60) + ' س')) + '</span>'
+        + '</div>';
+    }).join('');
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed; inset:0; z-index:13800; background:rgba(0,0,0,.8);'
+      + 'display:flex; align-items:center; justify-content:center; padding:20px;';
+    box.innerHTML = '<div style="background:#fff; border-radius:16px; padding:20px;'
+      + "max-width:420px; width:100%; font-family:'Cairo',sans-serif;\">"
+      + '<div style="font-weight:900; font-size:16px; margin-bottom:12px;">📋 نسخ الأجهزة</div>'
+      + html
+      + '<button onclick="this.closest(\'div[style*=fixed]\').remove()"'
+      + " style=\"width:100%; margin-top:12px; padding:12px; border:none; border-radius:11px;"
+      + " background:#2f3545; color:#fff; font-family:'Cairo'; font-weight:800; cursor:pointer;\">إغلاق</button>"
+      + '</div>';
+    document.body.appendChild(box);
+  }catch(e){ showToast('تعذر التحميل: ' + (e.message || e), 'err'); }
+}
+window.showDeviceVersions = showDeviceVersions;
+
 function initAutoUpdate(){
   if(!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.register('sw.js').then(function(reg){
@@ -512,8 +593,11 @@ function initAutoUpdate(){
         }
       });
     });
-    // بنسأل عن تحديث كل 10 دقايق
+    // 📡 إشارة فورية من المالك (الأساس) + سؤال كل 10 دقايق كشبكة أمان
+    watchUpdateSignal(reg);
     setInterval(function(){ try{ reg.update(); }catch(e){} }, 10*60*1000);
+    setTimeout(reportMyVersion, 4000);
+    setInterval(reportMyVersion, 30*60*1000);
   }).catch(function(e){ console.warn('sw register', e); });
 
   // أول ما النسخة الجديدة تشتغل، الصفحة بتتحدث مرة واحدة بس

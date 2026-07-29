@@ -1266,6 +1266,23 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 4px;">
     <h3 style="margin:8px 0;">تخصيص صلاحيات كل دور</h3>
+    <div class="panel" style="margin-bottom:14px;">
+      <h3>🔄 تحديثات الأجهزة</h3>
+      <p style="color:var(--ui-mut); font-size:12.5px; margin:4px 0 12px; line-height:1.7;">
+        بعد ما ترفع الملفات على GitHub وتستنى العلامة الخضراء، اضغط
+        <b>«أبلغ الأجهزة»</b> — شريط التحديث هيظهر عند كل الكاشيرات في ثانية،
+        وكل واحد يفعّله في الوقت المناسب ليه.
+      </p>
+      <div style="display:flex; gap:9px; flex-wrap:wrap;">
+        <button onclick="notifyDevicesUpdate()" style="flex:2; min-width:180px; padding:13px;
+          border:none; border-radius:12px; background:linear-gradient(135deg,#3B82F6,#1D4ED8);
+          color:#fff; font-weight:900; font-size:14px; cursor:pointer;">📡 أبلغ الأجهزة بالتحديث</button>
+        <button onclick="showDeviceVersions()" style="flex:1; min-width:130px; padding:13px;
+          border:1px solid var(--ui-line); border-radius:12px; background:#fff;
+          color:#374151; font-weight:800; font-size:13px; cursor:pointer;">📋 نسخ الأجهزة</button>
+      </div>
+    </div>
+
     <div id="rolePermsWrap"></div>
 
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin:16px 0;">
