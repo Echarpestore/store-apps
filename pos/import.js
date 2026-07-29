@@ -328,13 +328,14 @@ async function claimUnscoped(){
   const btn = document.getElementById('claimBtn');
   const docs = await countUnscoped();
   if(!docs.length){ showToast('مفيش أصناف قديمة محتاجة ترحيل ✅', 'ok'); return; }
-  const typed = await askText({
-    title: '🏬 نقل الأصناف لفرع ' + currentBranch,
+  const okClaim = await askConfirm({
+    icon: '🏬', waitSec: 2,
+    title: 'نقل الأصناف لفرع ' + currentBranch,
     message: 'هيتنقل ' + docs.length + ' صنف لفرع ' + currentBranch + ' ويبقوا مخصوصين بيه.\n'
-           + 'الفروع التانية مش هتشوفهم بعد كده.\n\nاكتب: تمام',
-    placeholder: 'اكتب: تمام', okText: 'انقل الأصناف'
+           + 'الفروع التانية مش هتشوفهم بعد كده.',
+    okText: 'انقل الأصناف', cancelText: 'إلغاء'
   });
-  if(String(typed || '').trim() !== 'تمام') return;
+  if(!okClaim) return;
   if(btn){ btn.disabled = true; btn.textContent = 'بينقل...'; }
   const CHUNK = 400;
   for(let i = 0; i < docs.length; i += CHUNK){
@@ -380,20 +381,21 @@ async function wipeInventory(resultBox){
   const total = mine.length;
   const others = all.size - total;
   if(total === 0){
-    await askText({ title:'مفيش أصناف مخصوصة بفرع ' + currentBranch,
+    await askConfirm({ waitSec:0, okText:'تمام', cancelText:'إغلاق',
+      title:'مفيش أصناف مخصوصة بفرع ' + currentBranch,
       message:'مفيش أي صنف مخصوص بالفرع ده عشان يتمسح.\n'
-            + (others ? ('فيه ' + others + ' صنف بتوع فروع تانية أو مشتركة — دول مش هيتمسحوا.') : ''),
-      value:'', okText:'تمام' });
+            + (others ? ('فيه ' + others + ' صنف بتوع فروع تانية أو مشتركة — دول مش هيتمسحوا.') : '') });
     return true;
   }
-  const typed = await askText({
-    title: '🗑️ مسح مخزون فرع ' + currentBranch,
-    message: 'ده هيمسح ' + total + ' صنف من فرع ' + currentBranch + ' نهائيًا.\n'
+  const okWipe = await askConfirm({
+    icon: '🗑️', danger: true, waitSec: 3,
+    title: 'مسح مخزون فرع ' + currentBranch,
+    message: 'هيتمسح ' + total + ' صنف من فرع ' + currentBranch + ' نهائيًا.\n'
            + (others ? ('✅ ' + others + ' صنف بتوع الفروع التانية أو المشتركة مش هيتلمسوا.\n') : '')
-           + 'الإجراء مفيهوش رجوع.\n\nاكتب كلمة: مسح',
-    placeholder: 'اكتب: مسح', danger: true, okText: 'امسح المخزون'
+           + 'الإجراء مفيهوش رجوع.',
+    okText: 'امسح مخزون الفرع', cancelText: 'إلغاء — سيب المخزون زي ما هو'
   });
-  if(String(typed || '').trim() !== 'مسح') return false;
+  if(!okWipe) return false;
   const docs = mine;
   const CHUNK = 400;                       // حد Firestore للدفعة 500
   for(let i=0; i<docs.length; i+=CHUNK){

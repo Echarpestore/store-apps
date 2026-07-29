@@ -30,6 +30,56 @@ searchBar.addEventListener('input', ()=>{
 // فالشاشة بتقف من غير أي رسالة. ده كان سبب وقوف الاستيراد والخصم.
 // الدالة دي نافذة عادية بتشتغل في المتصفح وفي الـ exe.
 // ============================================================
+// ✅ askConfirm — تأكيد بزرارين من غير كتابة
+// السبب: خانة الكتابة في الـ exe التركيز بيضيع منها، والكاشير مش بيعرف يكتب.
+// بدل ما نلغي الحماية خالص، الزرار الخطر بيتقفل شوية عشان محدش يدوس بالعادة.
+function askConfirm(opts){
+  const o = opts || {};
+  const waitSec = (o.waitSec == null) ? 3 : o.waitSec;
+  return new Promise(function(resolve){
+    const old = document.getElementById('askConfirmOverlay');
+    if(old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'askConfirmOverlay';
+    ov.style.cssText = 'position:fixed; inset:0; z-index:13500; background:rgba(0,0,0,.84);'
+      + 'display:flex; align-items:center; justify-content:center; padding:20px;';
+    ov.innerHTML = '<div style="background:var(--panel); border:2.5px solid '
+      + (o.danger ? '#e5484d' : 'var(--border)') + '; border-radius:16px; padding:24px; max-width:460px; width:100%;">'
+      + (o.icon ? ('<div style="font-size:38px; text-align:center; line-height:1; margin-bottom:8px;">' + o.icon + '</div>') : '')
+      + '<div style="font-weight:900; font-size:16px; margin-bottom:10px; text-align:center;">' + (o.title || '') + '</div>'
+      + (o.message ? ('<div style="color:var(--muted); font-size:13px; line-height:1.9; margin-bottom:16px;'
+          + ' white-space:pre-line; text-align:center;">' + o.message + '</div>') : '')
+      + '<button id="askConfirmOk" ' + (waitSec > 0 ? 'disabled' : '') + ' style="width:100%; padding:15px;'
+      + ' border:none; border-radius:12px; font-family:\'Cairo\'; font-weight:900; font-size:15px;'
+      + (waitSec > 0 ? ' background:#4b1c1e; color:#ffffff66; cursor:not-allowed;'
+                     : (' background:' + (o.danger ? 'linear-gradient(#dc2626,#b91c1c)' : 'linear-gradient(#16a34a,#15803d)')
+                        + '; color:#fff; cursor:pointer;'))
+      + '">' + (waitSec > 0 ? ('استنى… (<span id="askConfirmCount">' + waitSec + '</span>)') : (o.okText || 'تمام')) + '</button>'
+      + '<button id="askConfirmCancel" style="margin-top:9px; width:100%; padding:12px; border-radius:10px;'
+      + ' background:var(--panel2); border:1px solid var(--border); color:var(--muted);'
+      + ' font-family:\'Cairo\'; font-weight:700; font-size:13.5px; cursor:pointer;">'
+      + (o.cancelText || 'إلغاء') + '</button></div>';
+    document.body.appendChild(ov);
+    const ok = ov.querySelector('#askConfirmOk');
+    const done = function(v){ clearInterval(tick); ov.remove(); resolve(v); };
+    let left = waitSec;
+    const tick = waitSec > 0 ? setInterval(function(){
+      left--;
+      const c = ov.querySelector('#askConfirmCount');
+      if(left > 0){ if(c) c.textContent = left; return; }
+      clearInterval(tick);
+      ok.disabled = false;
+      ok.style.background = o.danger ? 'linear-gradient(#dc2626,#b91c1c)' : 'linear-gradient(#16a34a,#15803d)';
+      ok.style.color = '#fff';
+      ok.style.cursor = 'pointer';
+      ok.textContent = o.okText || 'تمام';
+    }, 1000) : null;
+    ok.addEventListener('click', function(){ if(!ok.disabled) done(true); });
+    ov.querySelector('#askConfirmCancel').addEventListener('click', function(){ done(false); });
+  });
+}
+window.askConfirm = askConfirm;
+
 function askText(opts){
   const o = opts || {};
   return new Promise(function(resolve){
