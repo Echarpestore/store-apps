@@ -696,11 +696,41 @@ function showScreen(id){
 }
 
 /* ---------- تحميل إعدادات النقاط ---------- */
+// ⚠️ الباج اللي كان: الدخول المجهول غير متزامن، والقراءة بتتنده فورًا بعده.
+// لو الدخول ماخلّصش، القراءة بتترفض والتطبيق بيفضل على القيم الافتراضية
+// المكتوبة في الكود (100 و10 و5) — والعميلة بتشوف أرقام غلط طول الوقت.
+// الحل: مستمع حي بيتظبط لوحده أول ما الدخول يخلص، وبيوصّل أي تعديل لحظيًا.
+let _cfgUnsub = null;
+function watchSettings(){
+  if(_cfgUnsub) return;
+  try{
+    _cfgUnsub = db.collection(COL_SETTINGS).doc('loyalty').onSnapshot(function(doc){
+      if(doc.exists){
+        loyaltyCfg = Object.assign({}, loyaltyCfg, doc.data());
+        applySocialConfig(loyaltyCfg);
+        // نعيد رسم الكارت عشان الأرقام الجديدة تبان فورًا
+        try{ if(typeof renderCard === 'function' && currentCustomer) renderCard(); }catch(e){}
+      }
+    }, function(e){
+      console.warn('cfg watch', e && e.code);
+      _cfgUnsub = null;
+      ensureAnonAuth();
+      setTimeout(watchSettings, 2500);        // إعادة المحاولة
+    });
+  }catch(e){ console.warn('cfg watch init', e); _cfgUnsub = null; setTimeout(watchSettings, 2500); }
+}
+// نبدأ أول ما الدخول يخلص فعلًا — مش وقت تحميل الصفحة
+try{ firebase.auth().onAuthStateChanged(function(u){ if(u) watchSettings(); }); }catch(e){}
+setInterval(function(){ if(!_cfgUnsub) watchSettings(); }, 5000);   // شبكة أمان
+
 function loadSettings(){
   return db.collection(COL_SETTINGS).doc('loyalty').get().then(function(doc){
     if(doc.exists){ loyaltyCfg = Object.assign({}, loyaltyCfg, doc.data()); }
     applySocialConfig(loyaltyCfg);   // 📲 أزرار التواصل من الكاشير
-  }).catch(function(e){ console.warn('تعذر تحميل إعدادات النقاط', e); });
+  }).catch(function(e){
+    console.warn('تعذر تحميل إعدادات النقاط', e);
+    watchSettings();                 // المستمع هيجيبها أول ما الدخول يخلص
+  });
 }
 
 /* ============================================================
