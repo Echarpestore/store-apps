@@ -983,6 +983,16 @@ window.timeCfg = timeCfgDefaults;   // ⏳ إعدادات رصيد الوقت (�
 window.checkLeaveRequest = checkLeaveRequest;
 window.coverageOnDate = coverageOnDate;
 window.todayStr = todayStr;
+// ⏳ محرك رصيد الوقت — sales-ui.js بيستخدم swapHoursFrom في تسجيل التبديل،
+// ومن غير التعريض هنا النداء بيقع بصمت (القاعدة الذهبية: بلوك ≠ بلوك)
+window.lateHoursFrom = lateHoursFrom;
+window.breakHoursFrom = breakHoursFrom;
+window.swapHoursFrom = swapHoursFrom;
+window.earlyLeaveHours = earlyLeaveHours;
+window.absenceHoursFrom = absenceHoursFrom;
+window.monthlyTimeSummary = monthlyTimeSummary;
+window.rewardEligibility = rewardEligibility;
+window.commitmentFromHours = commitmentFromHours;
 
 window.currentAnnouncement = '';
 window.dailyTarget = 0;
@@ -1874,15 +1884,21 @@ async function clockIn(empId, photoDataUri){
       scheduledStartTime: emp.scheduledStartTime || null, lateMinutes, latePenalized,
       clockInPhoto: photoDataUri || null
     });
-    // 💰 خصم تلقائي لو التأخير عدّى السماح
+    // ⏳ التأخير بيتسجل ساعات في رصيد الوقت (10 دقايق = ساعة — قرار المالك):
+    // المحرك ده حل محل الغرامة الثابتة القديمة. الكود القديم كان لسه بيكتب
+    // خصم فلوس ثابت في sales_deductions — فالتأخير كان بيتحاسب بالنظام القديم
+    // (اللي أصلًا مش بيتخصم من المرتب) ومش بيدخل رصيد الوقت ولا بوابة المكافأة خالص.
     if(latePenalized){
-      try{
-        await addDoc(collection(db,'sales_deductions'), {
-          employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
-          type: 'late', amount: complianceCfg.penalty, lateMin: lateMinutes,
-          date: todayStr(), ts: Date.now()
-        });
-      }catch(_e){}
+      const _lateHours = lateHoursFrom(lateMinutes, window.timeCfg || timeCfgDefaults);
+      if(_lateHours > 0){
+        try{
+          await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
+            employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
+            type: 'late', hours: _lateHours, date: todayStr(),
+            note: `تأخير ${lateMinutes} دقيقة`, ts: Date.now()
+          });
+        }catch(_e){}
+      }
     }
   }catch(err){
     console.error('تعذر تسجيل الحضور', err);
@@ -2817,7 +2833,7 @@ function computeRaceStatus(emp, periodType){
   const avgRating = computeAvgRatingInRange(emp.id, range.start.getTime(), range.end.getTime());
 
   // مبيعات الفترة (نقاط)
-  const pts = window.points.filter(pp=> pp.employeeId===emp.id && pp.ts>=range.start.getTime() && pp.ts<=Math.min(Date.now(),range.end.getTime())).length;
+  const pts = sumPoints(window.points.filter(pp=> pp.employeeId===emp.id && pp.ts>=range.start.getTime() && pp.ts<=Math.min(Date.now(),range.end.getTime())));
 
   // تفصيل الساعات حسب النوع (للعرض)
   const byType = {};
@@ -4499,7 +4515,7 @@ function computeSalary(emp, periodStart, end){
   }
 
   if(notYetHired){
-    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, dayOffBonusDays:0, dayOffBonusAmount:0, advancesTotal:0, advCash:0, advOrders:0, netSalary:0, daysInCalc:0, notYetHired:true };
+    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, timeCreditHours:0, timeCreditDays:0, timeCreditDeduction:0, adminDeductions:0, dayOffBonusDays:0, extraOffDaysBonus:0, dayOffBonusAmount:0, advancesTotal:0, advCash:0, advOrders:0, netSalary:0, daysInCalc:0, notYetHired:true };
   }
 
   const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
@@ -4564,14 +4580,44 @@ function computeSalary(emp, periodStart, end){
   }
   const dayOffBonusAmount = Math.round(dayOffBonusDays * dailyRate * 100)/100;
 
-  const periodAdvances = allAdvances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= end.getTime());
+  // ⏳ خصم رصيد الوقت — الوصلة اللي كانت ناقصة في المحرك كله:
+  // اللوحات كانت بتعرض "💰 X يوم خصم" لكن المرتب الصافي ماكانش بيخصمهم.
+  // كل hoursPerDay (7) ساعات غير معذورة في الفترة = يوم × قيمة اليوم (بسقف اختياري).
+  const _tcfg = (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
+  const tcEntries = ((typeof window !== 'undefined' && window.allTimeCredit) || []).filter(x=>{
+    if(x.employeeId !== emp.id || x.excused) return false;
+    const t = new Date((x.date||'') + 'T00:00:00').getTime();
+    return t >= start.getTime() && t <= end.getTime();
+  });
+  const tcSummary = monthlyTimeSummary(tcEntries, _tcfg);
+  const timeCreditHours = tcSummary.totalHours;
+  const timeCreditDays = tcSummary.days;
+  const timeCreditDeduction = Math.round(timeCreditDays * dailyRate * 100)/100;
+
+  // 💰 الخصومات الإدارية بالجنيه (كشف الخصومات): قرارات الأدمن على المخالفات
+  // والخصومات اليدوية — كانت بتتسجل وتتعرض ومتتخصمش من المرتب خالص.
+  const adminDeductions = ((typeof window !== 'undefined' && window.deductions) || []).filter(d=>{
+    if(d.employeeId !== emp.id) return false;
+    const t = d.ts || new Date((d.date||'') + 'T00:00:00').getTime();
+    return t >= start.getTime() && t <= end.getTime();
+  }).reduce((s,d)=> s + (Number(d.amount)||0), 0);
+
+  // 💵 السلف دين مش وقت شغل: فترة المرتب 1→30 (قرار المالك)، لكن سلفة يوم 31
+  // كانت بتقع في فجوة — مش داخلة في الشهر ده ولا الشهر الجاي (اللي بيبدأ يوم 1)
+  // فمكانتش بتتخصم من أي مرتب أبدًا. النافذة بتمتد لآخر اليوم التقويمي للشهر
+  // في الحسبة الكاملة (التصفيات المقطوعة بتفضل لحد تاريخ القطع زي ما هي).
+  const _calMonthEnd = new Date(periodStart.getFullYear(), periodStart.getMonth()+1, 0, 23,59,59,999);
+  const advEnd = end >= naturalMonthEnd ? _calMonthEnd : end;
+  const periodAdvances = allAdvances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= advEnd.getTime());
   const advancesTotal = periodAdvances.reduce((sum,a)=> sum + a.amount, 0);
   // تفصيلة: سلف كاش عادية vs أوردرات شراء الموظفة (source بيبدأ بـ staff_order)
   const advCash = periodAdvances.filter(a=> String(a.source||'').indexOf('staff_order') !== 0).reduce((s,a)=> s + a.amount, 0);
   const advOrders = Math.round((advancesTotal - advCash) * 100)/100;
 
-  const netSalary = Math.round((proratedBase - deductionAmount + overtimePay + dayOffBonusAmount - advancesTotal) * 100)/100;
-  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount, dayOffBonusDays, dayOffBonusAmount, advancesTotal, advCash, advOrders, netSalary, daysInCalc, notYetHired:false };
+  const netSalary = Math.round((proratedBase - deductionAmount - timeCreditDeduction - adminDeductions + overtimePay + dayOffBonusAmount - advancesTotal) * 100)/100;
+  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount,
+           timeCreditHours, timeCreditDays, timeCreditDeduction, adminDeductions,
+           dayOffBonusDays, dayOffBonusAmount, advancesTotal, advCash, advOrders, netSalary, daysInCalc, notYetHired:false };
 }
 
 function renderSalaryPanel(){
@@ -4608,6 +4654,8 @@ function renderSalaryPanel(){
       <div class="meta" style="color:var(--gold);">إضافي +${calc.overtimePay}</div>
       <div class="meta" style="color:${calc.dayOffBonusAmount>0?'var(--good)':'var(--sub)'}">مكافأة اشتغال إجازة +${calc.dayOffBonusAmount} (${calc.dayOffBonusDays} يوم)</div>
       <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم غياب -${calc.deductionAmount} (${calc.extraOffDays} يوم غياب غير مبرر، من أصل ${calc.dayOffOccurrences} إجازة مسموحة)</div>
+      <div class="meta" style="color:${calc.timeCreditDeduction>0?'var(--bad)':'var(--sub)'}">⏳ خصم رصيد الوقت -${calc.timeCreditDeduction} (${calc.timeCreditHours} ساعة = ${calc.timeCreditDays} يوم)</div>
+      ${calc.adminDeductions>0?`<div class="meta" style="color:var(--bad);">💰 خصومات إدارية -${calc.adminDeductions}</div>`:''}
       <div class="meta" style="color:${calc.advancesTotal>0?'var(--bad)':'var(--sub)'}">سلف -${calc.advancesTotal}${calc.advOrders>0?` <span style="font-size:9.5px; color:var(--sub);">(💰 كاش ${calc.advCash} · 🛒 أوردرات ${calc.advOrders})</span>`:''}</div>
       <div class="meta" style="color:var(--good); font-weight:800;">صافي ${calc.netSalary} ج.م</div>
       ${actionHtml}
@@ -4634,7 +4682,10 @@ function renderSalaryPanel(){
 // ---------- 🧾 إيصال الراتب (80mm) — بيتطبع من برنتر الفرع عبر الكاشير ----------
 function buildSalaryReceiptPayload(emp, calc, periodLabel){
   const mr = getMonthRange(new Date());
-  const myPoints = allPoints.filter(p=> p.employeeId===emp.id && p.ts>=mr.start.getTime() && p.ts<=mr.end.getTime()).length;
+  // ⭐ النقط بالوزن الكسري (sumPoints) مش بعدد المستندات — POS بقى بيسجل نقط
+  // بقيم كسرية للقطع الزيادة، والعدّ بالمستندات كان بيظلم/يظلم حسب الحالة
+  const myPtsList = allPoints.filter(p=> p.employeeId===emp.id && p.ts>=mr.start.getTime() && p.ts<=mr.end.getTime());
+  const myPoints = (typeof sumPoints === 'function') ? sumPoints(myPtsList) : myPtsList.length;
   const ptsAmt = Math.round(myPoints * (commissionPerPoint||0) * 100)/100;
   const myRefs = (window.appReferrals||[]).filter(r=> r.employeeId===emp.id && r.ts>=mr.start.getTime() && r.ts<=mr.end.getTime() && (!r.status || r.status==='active'));
   const refAmt = myRefs.reduce((s,r)=> s+(r.amount||0), 0);
@@ -4644,6 +4695,8 @@ function buildSalaryReceiptPayload(emp, calc, periodLabel){
   if(calc.overtimePay > 0) lines.push(['أوفرتايم (' + Math.round(calc.overtimeMinutes/60*10)/10 + ' ساعة)', '+' + calc.overtimePay]);
   if(calc.dayOffBonusAmount > 0) lines.push(['مكافأة اشتغال إجازة', '+' + calc.dayOffBonusAmount]);
   if(calc.deductionAmount > 0) lines.push(['خصم غياب (' + calc.extraOffDays + ' يوم)', '-' + calc.deductionAmount]);
+  if(calc.timeCreditDeduction > 0) lines.push(['⏳ رصيد الوقت (' + calc.timeCreditHours + ' ساعة = ' + calc.timeCreditDays + ' يوم)', '-' + calc.timeCreditDeduction]);
+  if(calc.adminDeductions > 0) lines.push(['خصومات إدارية', '-' + calc.adminDeductions]);
   if(calc.advCash > 0) lines.push(['سلف كاش', '-' + calc.advCash]);
   if(calc.advOrders > 0) lines.push(['🛒 مشتريات (أوردرات)', '-' + calc.advOrders]);
   const extra = [];
@@ -5037,7 +5090,10 @@ function advCheck(cfg, advances, empId, amount, now){
     return { ok:false, reason:'closed', openDay: cfg.openDay };
   }
   if(cfg.maxPerMonth > 0){
-    const mk = (now || new Date()).toISOString().slice(0,7);
+    // 🌍 مفتاح الشهر محلي مش UTC — toISOString كانت بترجّع الشهر اللي فات
+    // لأي سلفة بين 12 و2/3 الفجر أول الشهر (مصر UTC+2/+3) فالسقف بيتحسب غلط
+    const _d = now || new Date();
+    const mk = _d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0');
     const used = advMonthTotal(advances, empId, mk);
     const left = Math.max(0, cfg.maxPerMonth - used);
     if(amount > left) return { ok:false, reason:'limit', left, used, max: cfg.maxPerMonth };

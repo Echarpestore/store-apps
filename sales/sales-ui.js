@@ -360,7 +360,8 @@ window.deleteDeduction = async function(id){
   try{ await window.fbDeleteDoc(window.fbDoc(window.db,'sales_deductions', id)); }catch(e){ alert('تعذر الحذف: '+e.message); }
 };
 
-// ➕ تسجيل خصم يدوي (تبديل شيفت / تبديل يوم إجازة)
+// ➕ تسجيل تبديل (شيفت / يوم إجازة) — بيتسجل ساعات رصيد وقت مش غرامة ثابتة:
+// أول تبديل في الشهر مجاني وبعده كل تبديل بساعاته (قرار المالك — swapHoursFrom)
 window.openSwapDeduction = function(){
   const emps = (window.employees||[]).filter(e=> e.active !== false);
   if(!emps.length){ alert('مفيش موظفين في الفرع ده'); return; }
@@ -369,14 +370,21 @@ window.openSwapDeduction = function(){
   const idx = parseInt(pick,10)-1;
   if(isNaN(idx) || !emps[idx]) return;
   const emp = emps[idx];
-  const t = prompt('نوع الخصم:\n1) تبديل شيفت\n2) تبديل يوم إجازة');
-  const type = t==='1' ? 'shiftSwap' : t==='2' ? 'dayoffSwap' : null;
-  if(!type){ return; }
-  window.fbAddDoc(window.fbCollection(window.db,'sales_deductions'), {
+  const t = prompt('نوع التبديل:\n1) تبديل شيفت\n2) تبديل يوم إجازة');
+  if(t!=='1' && t!=='2'){ return; }
+  const cfg = window.timeCfg || window.timeCfgDefaults;
+  const mk = new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
+  const priorSwaps = (window.allTimeCredit||[]).filter(x=>
+    x.employeeId===emp.id && x.type==='swap' && !x.excused && String(x.date||'').startsWith(mk)).length;
+  const hours = window.swapHoursFrom(priorSwaps + 1, cfg) - window.swapHoursFrom(priorSwaps, cfg);
+  const note = t==='1' ? 'تبديل شيفت' : 'تبديل يوم إجازة';
+  window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
     employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
-    type, amount: window.complianceCfg.penalty, date: window.todayStr(), ts: Date.now()
-  }).then(()=> alert('اتسجّل خصم '+window.complianceCfg.penalty+' ج على '+emp.name+' ✅'))
-    .catch(e=> alert('تعذر التسجيل: '+e.message));
+    type:'swap', hours, date: window.todayStr(), note, ts: Date.now()
+  }).then(()=> alert(hours > 0
+      ? ('اتسجّل تبديل بـ'+hours+' ساعة رصيد على '+emp.name+' ✅')
+      : ('اتسجّل التبديل — الأول في الشهر مجاني لـ'+emp.name+' ✅'))
+  ).catch(e=> alert('تعذر التسجيل: '+e.message));
 };
 
 window.applyRegButtonVisibility = function(){
