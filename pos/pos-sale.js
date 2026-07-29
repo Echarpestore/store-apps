@@ -1978,12 +1978,32 @@ function confirmPayAmount(){
 //   1) auth token   2) order registration + terminal_id + card
 // الإعداد في pos_test_settings/paymob: { enabled, terminalIdByBranch: {فرع: رقم} }
 // ============================================================
+// ⚠️ الباج اللي وقف الطباعة التلقائية:
+// المستمع لو فشل مرة (سباق دخول الفرع مثلًا) كان بيفضل فاضي طول الجلسة،
+// و paymobAutoPrint() بترجع false لو الإعداد فاضي → الطباعة التلقائية تقف
+// **من غير أي رسالة**. دلوقتي: إعادة محاولة + الإعداد مبيتصفّرش.
 let paymobCfg = null;
-try{
-  db.collection(TEST_SETTINGS).doc('paymob').onSnapshot(function(snap){
-    paymobCfg = snap.exists ? snap.data() : null;
-  }, function(){});
-}catch(e){}
+let _pmCfgUnsub = null, _pmCfgLoaded = false;
+function watchPaymobCfg(){
+  if(_pmCfgUnsub) return;
+  try{
+    _pmCfgUnsub = db.collection(TEST_SETTINGS).doc('paymob').onSnapshot(function(snap){
+      _pmCfgLoaded = true;
+      if(snap.exists) paymobCfg = snap.data();
+      // المستند مش موجود → بنسيب اللي محمّل زي ما هو (مش بنصفّره)
+    }, function(e){
+      console.warn('paymob cfg', e && e.code);
+      _pmCfgUnsub = null;
+      setTimeout(watchPaymobCfg, 3000);      // إعادة المحاولة
+    });
+  }catch(e){ _pmCfgUnsub = null; setTimeout(watchPaymobCfg, 3000); }
+}
+// (بيشتغل في المتصفح بس — الاختبارات بتقرا الملف من غير بيئة متصفح)
+if(typeof window !== 'undefined' && typeof setInterval === 'function'){
+  watchPaymobCfg();
+  setInterval(function(){ if(!_pmCfgUnsub) watchPaymobCfg(); }, 10000);   // شبكة أمان
+}
+window.paymobCfgLoaded = function(){ return _pmCfgLoaded; };
 
 function paymobTerminalId(){
   if(!paymobCfg || !paymobCfg.enabled) return null;
@@ -2086,7 +2106,9 @@ async function sendToPaymobTerminal(amountEGP){
 
 // ⚡ الطباعة التلقائية شغّالة؟ (من إعدادات Paymob — المالك بيقفلها لو حب)
 function paymobAutoPrint(){
-  return !!(paymobCfg && paymobCfg.autoPrint !== false);   // الافتراضي: شغّالة
+  // 🔑 الافتراضي **شغّالة** فعلًا — الإعداد الفاضي (لسه محمّلش) مايوقفهاش.
+  // بتتقفل بس لو الأدمن كتب autoPrint:false صراحةً.
+  return !paymobCfg || paymobCfg.autoPrint !== false;
 }
 let _paymobAutoFired = false;   // ⛔ مرة واحدة بس لكل عملية — يمنع الطباعة المكررة
 let paymobCardInfo = null;      // 💳 بيانات الكارت للفاتورة الحالية
@@ -2155,6 +2177,11 @@ function paymobWatch(orderRef, amountEGP){
       try{ unsub(); }catch(e){}
       if(typeof updatePaySummary === 'function') updatePaySummary();
       // ⚡ الحفظ والطباعة تلقائيًا — بس لو الشروط كلها سليمة
+      const _skip = paymobAutoSkipReason(amountEGP, d);
+      if(_skip && paymobAutoPrint()){
+        // 🩺 السبب بيظهر للكاشير — قبل كده كان بيسكت والكاشير مش عارف ليه
+        paymobShow('✅ الدفع اتقبل' + last4 + ' — احفظ يدوي (' + _skip + ')', 'ok');
+      }
       if(paymobAutoPrint() && paymobCanAutoFinish(amountEGP, d)){
         paymobShow('✅ الدفع اتقبل' + last4 + ' — بيحفظ ويطبع…', 'ok');
         _paymobAutoFired = true;
