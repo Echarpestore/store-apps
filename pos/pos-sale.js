@@ -1662,6 +1662,21 @@ function capWatchAlive(){
 }
 window.capWatchAlive = capWatchAlive;
 
+// ⭐ قيمة نقطة البياعة للفاتورة الواحدة
+// بترجّع صفر لو الفاتورة مش مستوفية الشروط، وإلا 1 + كسور القطع الزيادة.
+function calcStaffPoint(itemCount, total, minItems, minInvoice, enabled, isRefund){
+  if(enabled === false) return 0;
+  if(isRefund) return 0;                                   // المرتجع مبياخدش نقط
+  const need = Number(minItems);
+  const gate = (isNaN(need) || need <= 0) ? 1 : need;      // الحد الأدنى للقطع
+  const n = Number(itemCount) || 0;
+  if(n < gate) return 0;                                   // لازم توصل الحد الأول
+  if(Number(total) < (Number(minInvoice) || 0)) return 0;   // بوابة القيمة (مش بتدي كسور)
+  const extra = n - gate;                                   // القطع الزيادة
+  return +(1 + extra / gate).toFixed(3);                    // نقطة + كسور
+}
+if(typeof window !== 'undefined') window.calcStaffPoint = calcStaffPoint;
+
 async function capAskCustomer(){
   if(!currentBranch){ showToast('سجّل دخول الأول', 'err'); return; }
   _capAskId = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
@@ -2354,7 +2369,15 @@ async function _doConfirmPayment(){
   const _spCfg = staffPointsConfig || {};
   const _spMinItems = (_spCfg.minItems!=null && _spCfg.minItems!=='') ? +_spCfg.minItems : MIN_ITEMS_FOR_STAFF_POINT;
   const _spMinInvoice = +_spCfg.minInvoice || 0;
-  const earnsStaffPoint = (_spCfg.enabled !== false) && !isRefundInvoice && itemCount >= _spMinItems && total >= _spMinInvoice;
+  // ⭐ حساب نقطة البياعة:
+  //   • الفاتورة لازم تعدّي البوابتين: عدد القطع الأدنى + قيمة الفاتورة الأدنى
+  //   • أول (الحد) قطع = نقطة كاملة
+  //   • وكل قطعة زيادة = كسر من نقطة (1 ÷ الحد)
+  // كان قبل كده: نقطة واحدة مهما زادت القطع — فالموظفة اللي بتبيع 20 قطعة
+  // بتاخد زي اللي بتبيع 5، والزيادة كلها بتضيع.
+  const staffPointValue = calcStaffPoint(itemCount, total, _spMinItems, _spMinInvoice,
+                                         _spCfg.enabled !== false, isRefundInvoice);
+  const earnsStaffPoint = staffPointValue > 0;
   const _rate = loyaltyRedemptionConfig.pointsPerEGP || 100;
   const _rawPts = Math.floor(Math.abs(total) / _rate);
   const loyaltyPointsEarned = phone ? (total < 0 ? -_rawPts : _rawPts) : 0;   // المرتجع بيخصم نقط بالسالب
@@ -2393,6 +2416,7 @@ async function _doConfirmPayment(){
       loyaltyPointsEarned,
       pointsRedeemed: (pendingRedemption ? pendingRedemption.points : 0),
       staffPointEarned: earnsStaffPoint,
+      staffPointValue,                       // ⭐ القيمة بالكسور (1 = الحد الأدنى بالظبط)
       firstItemAt: _cartFirstItemAt || null,   // 🕵️ متى بدأت السلة (لكشف التأخير غير الطبيعي)
       staffPurchase: staffPurchase ? { empId: staffPurchase.empId, name: staffPurchase.name, pct: staffPurchase.pct, discountAmount: staffDiscountAmount() } : null,
       cardTxn: paymobCardInfo || null,   // 💳 بيانات الدفع بالكارت (للمرتجع والنزاعات)
@@ -2485,7 +2509,8 @@ async function _doConfirmPayment(){
         await db.collection('sales_points').add({
           employeeId: sellerEmployeeId, employeeName: sellerEmployeeName,
           invoiceNumber: String(invoiceNo), branch: currentBranch,
-          itemCount, invoiceTotal: total, auto: true, ts: Date.now()
+          itemCount, invoiceTotal: total, auto: true, ts: Date.now(),
+          value: staffPointValue             // ⭐ الوزن الحقيقي للنقطة (كسور للقطع الزيادة)
         });
       }catch(e){ console.warn('auto point', e); }
       const ptRef = db.collection(TEST_EMPLOYEE_POINTS).doc(sellerEmployeeId);

@@ -54,6 +54,13 @@ async function renderStaffCardsScreen(){
 
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:14px;">
       <div style="font-weight:800; margin-bottom:4px;">⭐ نقاط البيع الأوتوماتيك + 🎯 نسبة التارجت</div>
+      <div style="background:var(--panel2); border:1px solid var(--border); border-radius:8px;
+                  padding:8px 10px; margin:6px 0 8px; font-size:11.5px; line-height:1.75; color:var(--muted);">
+        <b style="color:var(--text);">إزاي بتتحسب:</b> الفاتورة لازم تعدّي الحدين تحت.
+        أول <b>[عدد القطع]</b> = نقطة كاملة، وكل قطعة زيادة = كسر من نقطة.<br>
+        <span style="color:var(--text);">مثال (الحد 5): 5 قطع = 1 نقطة · 8 قطع = 1.6 · 10 قطع = 2 نقطة.</span><br>
+        الفاتورة اللي أقل من الحد مبتاخدش نقط خالص.
+      </div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 12px;">النقطة بتتسجل لوحدها للبياعة المختارة وقت الدفع لما الفاتورة تستوفي الشروط دي — من غير أي سكان في برنامج الحضور.</p>
       <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
         <label style="font-size:12.5px;">أقل عدد قطع: <input id="spMinItems" type="number" min="1" style="width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800;"></label>
