@@ -1,4 +1,4 @@
-const CACHE_NAME = 'store-apps-shell-v209';
+const CACHE_NAME = 'store-apps-shell-v211';
 
 // ⚠️ مفيش skipWaiting تلقائي.
 // النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر
@@ -12,11 +12,22 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// ⚠️ الباج اللي عمل شاشة سودا:
+// كان بيمسح كل الكاشات القديمة **قبل** ما الجديد يتملّي، وبعدها الصفحة
+// بتعمل reload فورًا. لو النت اتأخر لحظة → مفيش نت ومفيش كاش → صفحة فاضية.
+// الحل: نمسك التحكم الأول، والكاش القديم يفضل شبكة أمان لحد ما الجديد يتملّي.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((names) =>
-      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
-    ).then(() => self.clients.claim())
+    self.clients.claim().then(() => {
+      // تنضيف مؤجل — بعد دقيقة كاملة، والجديد يكون اتملّى
+      setTimeout(() => {
+        caches.keys().then((names) =>
+          Promise.all(names
+            .filter((n) => n !== CACHE_NAME && n.startsWith('store-apps-shell-'))
+            .map((n) => caches.delete(n)))
+        ).catch(() => {});
+      }, 60000);
+    })
   );
 });
 
@@ -30,13 +41,26 @@ self.addEventListener('fetch', (event) => {
   // is left completely alone.
   if (url.origin !== self.location.origin) return;
 
+  // 🔒 سلسلة احتياطية كاملة: النت ← الكاش الحالي ← أي كاش قديم ← رد واضح.
+  // من غيرها، فشل الشبكة كان بيرجّع undefined والصفحة بتطلع سودا.
   event.respondWith(
     fetch(req, { cache: 'no-store' })
       .then((res) => {
-        const resClone = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
+        if (res && res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(req, clone)).catch(() => {});
+        }
         return res;
       })
-      .catch(() => caches.match(req))
+      .catch(() =>
+        caches.match(req, { ignoreSearch: true })          // أي كاش (قديم أو جديد)
+          .then((hit) => hit || new Response(
+            '<!doctype html><meta charset="utf-8">'
+            + '<div style="font-family:sans-serif;padding:40px;text-align:center">'
+            + '<h2>مفيش اتصال</h2><p>افتح النت وحدّث الصفحة</p>'
+            + '<button onclick="location.reload()" style="padding:12px 24px;font-size:16px">إعادة المحاولة</button></div>',
+            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          ))
+      )
   );
 });

@@ -179,6 +179,9 @@ async function saveBranchSetup(){
     }catch(e){ console.warn('staff uid register', e); }
     currentBranch = val;
     localStorage.setItem('pos_branch', val);
+    // 🔑 بنحفظ دخول الفرع على الجهاز ده عشان لو الجلسة ضاعت (تحديث/كاش)
+    // الجهاز يرجع لوحده — الموظفة مش معاها الإيميل ولا المفروض تشوفه.
+    try{ saveBranchLogin(email, pass); }catch(e){ console.warn('save login', e); }
     if(errBox) errBox.textContent = '';
     showScreen('loginScreen');
     loadEmployeePicker();
@@ -189,10 +192,69 @@ async function saveBranchSetup(){
   }
 }
 
+// ============================================================
+// 🔐 دخول الفرع التلقائي
+// المشكلة: بعد أي تحديث أو تنضيف كاش، جلسة Auth بتضيع فالجهاز بيطلب
+// إيميل وباسورد الفرع — والموظفة مش معاها ولا المفروض تكون معاها.
+// الحل: الجهاز بيفتكر دخول الفرع ويرجع لوحده في الخلفية.
+// (ترميز بسيط — الهدف إن الموظفة ماتشوفش الإيميل، مش حماية من مخترق
+//  عنده الجهاز فعليًا. الحماية الحقيقية في قواعد Firestore.)
+// ============================================================
+const _BL_KEY = 'pos_branch_login';
+function _blEnc(s){
+  try{ return btoa(unescape(encodeURIComponent(s)).split('').map(function(c,i){
+    return String.fromCharCode(c.charCodeAt(0) ^ (7 + (i % 11)));
+  }).join('')); }catch(e){ return ''; }
+}
+function _blDec(s){
+  try{ return decodeURIComponent(escape(atob(s).split('').map(function(c,i){
+    return String.fromCharCode(c.charCodeAt(0) ^ (7 + (i % 11)));
+  }).join(''))); }catch(e){ return ''; }
+}
+function saveBranchLogin(email, pass){
+  if(!email || !pass) return;
+  localStorage.setItem(_BL_KEY, _blEnc(JSON.stringify({ e: email, p: pass })));
+}
+function getBranchLogin(){
+  const raw = localStorage.getItem(_BL_KEY);
+  if(!raw) return null;
+  try{ const o = JSON.parse(_blDec(raw)); return (o && o.e && o.p) ? o : null; }
+  catch(e){ return null; }
+}
+window.saveBranchLogin = saveBranchLogin;
+window.getBranchLogin = getBranchLogin;
+
+// بيحاول يرجّع الجلسة لوحده — بيرجع true لو نجح
+async function tryAutoBranchLogin(){
+  if(firebase.auth().currentUser) return true;
+  const saved = getBranchLogin();
+  if(!saved) return false;
+  try{
+    await firebase.auth().signInWithEmailAndPassword(saved.e, saved.p);
+    console.log('🔐 رجع دخول الفرع تلقائي');
+    return true;
+  }catch(e){
+    console.warn('auto branch login', e && e.code);
+    // الباسورد اتغيّر → نمسح المحفوظ عشان ما نفضلش نحاول
+    if(e && (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password')){
+      localStorage.removeItem(_BL_KEY);
+    }
+    return false;
+  }
+}
+window.tryAutoBranchLogin = tryAutoBranchLogin;
+
 // أول ما الصفحة تفتح: لو مفيش فرع متسجل على الجهاز ده، اطلب تسجيله الأول قبل أي حاجة تانية.
 // أول ما الصفحة تفتح: الجهاز يعدّي بس لو عنده فرع محفوظ + جلسة حساب فرع سارية.
 // (onAuthStateChanged فوق بيرجّعه لشاشة الإعداد تلقائيًا لو الجلسة مش موجودة)
 if(currentBranch){
+  // 🔐 لو الجلسة ضاعت (تحديث/تنضيف كاش)، بنحاول نرجّعها لوحدنا الأول —
+  // الموظفة مش المفروض تشوف شاشة الإيميل والباسورد خالص.
+  (async function(){
+    if(!firebase.auth().currentUser){
+      try{ await tryAutoBranchLogin(); }catch(e){ console.warn('auto login', e); }
+    }
+  })();
   firebase.auth().onAuthStateChanged(function once(u){
     if(u && !u.isAnonymous){
       document.getElementById('branchSetupScreen').classList.remove('active');
@@ -459,7 +521,16 @@ function initAutoUpdate(){
   navigator.serviceWorker.addEventListener('controllerchange', function(){
     if(reloaded) return;
     reloaded = true;
-    location.reload();
+    // 🔐 نتأكد إن جلسة الفرع موجودة قبل ما نعيد التحميل — عشان الصفحة
+    // ما تفتحش على شاشة الإيميل. ومهلة قصيرة عشان ما نعلّقش لو النت واقع.
+    const go = function(){ location.reload(); };
+    try{
+      if(firebase.auth().currentUser){ go(); return; }
+      Promise.race([
+        tryAutoBranchLogin(),
+        new Promise(function(r){ setTimeout(r, 2500); })
+      ]).then(go).catch(go);
+    }catch(e){ go(); }
   });
 
   // لو الشريط استنى عشان الشاشة مكانتش فاضية، بنجرب كل نص دقيقة
