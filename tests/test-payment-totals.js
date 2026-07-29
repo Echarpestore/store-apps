@@ -156,7 +156,51 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 }
 
 // ============================================================
-// ٥) حراسات على المصدر — عشان الباجات دي متترجعش تاني
+// ٦) 📴 saleTs: فواتير الأوفلاين متختفيش من الحسابات
+// ============================================================
+{
+  const fns = loadFns(repSrc, ['saleTs']);
+  const saleTs = (s)=> vm.runInContext('saleTs(' + JSON.stringify(s).replace(/"__FN__"/,'') + ')', fns);
+  // فاتورة متزامنة: طابع السيرفر هو المرجع
+  vm.runInContext('this._r = saleTs({ createdAt: { toMillis: function(){ return 111; } }, createdAtMs: 999 });', fns);
+  assertEq(fns._r, 111, 'الطابع المؤكد من السيرفر له الأولوية');
+  // فاتورة أوفلاين: serverTimestamp لسه null → الطابع المحلي
+  vm.runInContext('this._r = saleTs({ createdAt: null, createdAtMs: 555 });', fns);
+  assertEq(fns._r, 555, 'فاتورة الأوفلاين بتتحسب بالطابع المحلي (كانت بتختفي)');
+  // فاتورة قديمة جدًا من غير أي طابع
+  vm.runInContext('this._r = saleTs({});', fns);
+  assertEq(fns._r, null, 'من غير أي طابع = null (بتتستبعد بأمان)');
+
+  // الحفظ بيكتب الطابع المحلي في البيع والعكس
+  assertEq((saleSrc.match(/createdAtMs: Date\.now\(\)/g)||[]).length >= 2, true,
+    'createdAtMs بيتسجل في فاتورة البيع وفاتورة العكس');
+}
+
+// ============================================================
+// ٧) 🚫 حد الـ300/1500 اتشال: استعلام بنطاق زمني
+// ============================================================
+{
+  const dcBody = extractFn(repSrc, 'goToEndOfDay');
+  assert(!/\.limit\(300\)\.get\(\)/.test(dcBody), 'حد الـ300 في التقفيل اتشال');
+  assert(/where\('createdAt','>=',/.test(dcBody), 'التقفيل بيستعلم بنطاق زمني');
+  assert(/where\('createdAtMs','>=',/.test(dcBody), 'التقفيل بيكمّل فواتير الأوفلاين');
+  assert(/fromCache/.test(dcBody) && /hasPendingWrites/.test(dcBody),
+    'التقفيل بيكشف الكاش المحلي والفواتير المعلقة');
+  assert(/sales = _allFetched\.filter\(s=>\{ const t = saleTs\(s\)/.test(dcBody),
+    'فلتر مبيعات التقفيل نفسه بيستخدم saleTs (مش createdAt مباشرة)');
+  assert(!/s\.createdAt && s\.createdAt\.toMillis && s\.createdAt\.toMillis\(\) >= dayMs/.test(dcBody),
+    'الفلتر القديم اللي بيرمي فواتير الأوفلاين اتشال');
+  const repBody = extractFn(repSrc, 'renderReportsScreen');
+  assert(/where\('createdAt','>=', from\)/.test(repBody), 'التقارير بتستعلم بنطاق الفترة');
+  assert(/saleTs\(s\)/.test(repBody), 'فلتر الفترة في التقارير بيستخدم saleTs');
+  // التقفيل مش بيتسجل والنت قاطع من غير تأكيد صريح
+  const finBody = extractFn(repSrc, 'dcFinish');
+  assert(/fromCache/.test(finBody) && /confirm\(/.test(finBody),
+    'تقفيل والنت قاطع = تأكيد إجباري');
+}
+
+// ============================================================
+// ٨) حراسات على المصدر — عشان الباجات دي متترجعش تاني
 // ============================================================
 {
   // التطبيع فعلًا مستخدم قبل الحفظ (مش دالة مهجورة)
