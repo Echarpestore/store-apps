@@ -178,6 +178,8 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
 /* السلة */
 .cart-table{ font-family:'Cairo',sans-serif !important; font-size:13px !important; }
 .cart-area{
+  /* 🔑 السلة بتاخد كل المساحة الفاضية — الشريط التحتاني بياخد قده بس */
+  flex:1 1 auto !important; min-height:0 !important; overflow-y:auto !important;
   background:#fff !important; border-radius:16px !important;
   border:1px solid #e6e9ef !important;
   box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
@@ -189,24 +191,31 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
   /* ⚠️ العكس (row-reverse) مكرر هنا عن قصد — الإجمالي مكان أزرار الدفع.
      من غيره القاعدة دي ممكن تلغي العكس حسب ترتيب التحميل. */
   display:flex !important; flex-direction:row-reverse !important;
+  flex-shrink:0 !important;                  /* مياخدش من مساحة السلة */
   background:#fff !important; border-top:1px solid #e6e9ef !important;
-  border-radius:20px 20px 0 0 !important;
-  box-shadow:0 -3px 16px rgba(20,25,40,.07) !important;
-  padding:14px 16px 16px !important; gap:10px !important; align-items:stretch !important;
+  border-radius:18px 18px 0 0 !important;
+  box-shadow:0 -3px 14px rgba(20,25,40,.07) !important;
+  padding:9px 12px 11px !important; gap:9px !important; align-items:flex-end !important;
 }
-.t-row{ font-family:'Cairo',sans-serif !important; font-size:14px !important; }
+.t-row{
+  font-family:'Cairo',sans-serif !important; font-size:12.5px !important;
+  gap:8px !important; margin:0 !important;
+}
 .t-val{
-  border-radius:11px !important; border:1.5px solid #e6e9ef !important;
+  border-radius:9px !important; border:1.5px solid #e6e9ef !important;
   background:#f7f8fa !important; font-family:'Cairo',sans-serif !important;
-  font-size:18px !important; padding:7px 12px !important;
+  font-size:15px !important; padding:3px 9px !important; min-width:96px !important;
 }
+.qbx-totals{ gap:2px !important; }
 .t-green{ color:#047857 !important; border-color:#a7f3d0 !important; background:#ecfdf5 !important; }
 .t-red{ color:#B91C1C !important; border-color:#fecaca !important; background:#fef2f2 !important; }
 .qbx-pay-btns button{
-  border-radius:15px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:800 !important; padding:13px 18px !important;
-  box-shadow:0 4px 12px rgba(20,25,40,.16) !important; transition:transform .12s;
+  border-radius:13px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:800 !important; padding:9px 14px !important; min-width:74px !important;
+  box-shadow:0 3px 9px rgba(20,25,40,.14) !important; transition:transform .12s;
 }
+.qbx-pay-btns button .pm-icon{ font-size:20px !important; }
+.qbx-pay{ padding:8px 10px !important; border-radius:12px !important; }
 .qbx-pay-btns button:hover{ transform:translateY(-2px); }
 .qbx-pay-btns button.selected{ box-shadow:0 0 0 3px rgba(37,99,235,.35) !important; }
 .qbx-clear-pay{
@@ -214,9 +223,9 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
   font-weight:700 !important;
 }
 #confirmPayBtn{
-  border-radius:14px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:900 !important; font-size:16px !important;
-  box-shadow:0 5px 15px rgba(5,150,105,.3) !important;
+  border-radius:12px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:900 !important; font-size:14.5px !important; padding:11px !important;
+  box-shadow:0 4px 12px rgba(5,150,105,.28) !important;
 }
 
 /* 🧩 العناصر المشتركة في الشاشات الداخلية */
