@@ -1134,6 +1134,19 @@ const _capPanes = ['capPanePhone','capPaneName','capPaneGreet'];
 function _capShowPane(id){
   document.getElementById('capOverlay').classList.toggle('show', !!id);
   _capPanes.forEach(pid => document.getElementById(pid).style.display = (pid===id) ? 'block' : 'none');
+  // ✅ تأكيد للكاشير: الشاشة ظهرت فعلًا قدام العميل دلوقتي (أو اتقفلت).
+  // الكاشير مش بيخمّن — الإطار الأخضر عنده بيتبني على التأكيد ده بالظبط.
+  capAckShown(id === 'capPanePhone' || id === 'capPaneName');
+}
+let _capLastAck = null;
+function capAckShown(shown){
+  if(!currentBranch || !_auth || !_auth.currentUser) return;
+  const val = shown ? (_capAskId || 'on') : null;
+  if(val === _capLastAck) return;             // نفس الحالة — مفيش كتابة زيادة
+  _capLastAck = val;
+  setDoc(doc(db, 'pos_capture', currentBranch),
+    { shownAskId: val, shownAt: shown ? Date.now() : 0, kioskSeen: Date.now() }, { merge:true })
+    .catch(function(e){ console.warn('cap ack', e && e.code); });
 }
 function _capRefreshDisplay(){
   const el = document.getElementById('capDisplay');
@@ -1234,7 +1247,8 @@ capStartListener();
 let _capBeatTimer = null;
 function capBeat(){
   if(!currentBranch || !_auth.currentUser) return;
-  setDoc(doc(db, 'pos_capture', currentBranch), { kioskSeen: Date.now() }, { merge:true })
+  setDoc(doc(db, 'pos_capture', currentBranch),
+    { kioskSeen: Date.now() }, { merge:true })
     .catch(function(e){ console.warn('cap beat', e && e.code); });
 }
 function capStartBeat(){
@@ -1244,6 +1258,13 @@ function capStartBeat(){
 }
 onAuthStateChanged(_auth, function(u){ if(u) capStartBeat(); });
 document.addEventListener('visibilitychange', function(){ if(!document.hidden) capBeat(); });
+// 🔌 قفل الصفحة → علامة فورية إنها فصلت، عشان الإطار عند الكاشير يطفي على طول
+window.addEventListener('pagehide', function(){
+  if(!currentBranch || !_auth.currentUser) return;
+  try{
+    setDoc(doc(db, 'pos_capture', currentBranch), { kioskSeen: 0 }, { merge:true });
+  }catch(e){}
+});
 
 // 🩺 تشخيص: اكتب capDiag() في الـ console
 window.capDiag = function(){
