@@ -149,7 +149,12 @@ function _trNewFormHTML(){
     </select>
     <div style="color:var(--muted); font-size:10.5px; margin-top:4px;">💡 الجهاز بيفتكر آخر فرع بعتّله — جاهز تلقائي المرة الجاية</div>
 
-    <div style="font-weight:800; margin:14px 0 4px;">3️⃣ الحاملة تمسح كارتها 🎫</div>
+    <div style="font-weight:800; margin:14px 0 4px;">3️⃣ الحاملة تمسح كارتها 🎫
+      <button type="button" onclick="_trPickCarrierByPin()"
+        style="float:left; padding:5px 11px; border-radius:8px; border:1px solid var(--border);
+               background:var(--panel2); color:var(--text); font-family:'Cairo'; font-weight:700;
+               font-size:11.5px; cursor:pointer;">🔢 من غير كارت</button>
+    </div>
     <div style="color:var(--muted); font-size:11px; margin-bottom:6px;">اللي هتاخد البضاعة معاها — القطع على عهدتها لحد التأكيد · <b>مسح كارتها بيحدد فرعها كوجهة تلقائي</b></div>
     <input id="trCarrierInput" placeholder="مسح كارت الموظفة الحاملة..." autocomplete="off"
       style="width:100%; padding:12px; border-radius:10px; border:1.5px dashed var(--accent); background:var(--panel2); color:var(--text); font-size:14px;">
@@ -254,6 +259,100 @@ function _trAddItemByCode(code){
   else _trNewItems.push({ id: it.id, name: it.name, barcode: it.barcode||'', code: it.code||'', qty: 1 });
   _trRenderItems();
 }
+// 🔢 تحديد الحاملة بالاسم + الـ PIN — بديل الكارت لحد ما الكروت تيجي
+// نفس الحماية: مربوط بشخص بالاسم، وبيتسجل مين شال البضاعة.
+async function _trPickCarrierByPin(){
+  let emps = [];
+  try{
+    const snap = await db.collection('sales_employees').get();
+    emps = snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); })
+      .filter(function(e){ return e.active !== false && !e.isAdminAccount && e.pin; })
+      .sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||''), 'ar'); });
+  }catch(e){ showToast('تعذر تحميل الموظفين: ' + e.message, 'err'); return; }
+  if(!emps.length){ showToast('مفيش موظفين ليهم رقم سري', 'err'); return; }
+
+  const pick = await _trEmpPinDialog(emps, {
+    title: '🧕 مين هتشيل البضاعة؟',
+    note: 'اختار الموظفة واكتبي رقمك السري — نفس الرقم بتاع تطبيق الحضور.'
+  });
+  if(!pick) return;
+
+  _trCarrier = { id: pick.id, name: pick.name || '', branch: pick.branch || '' };
+  let destMsg = '';
+  const sel = document.getElementById('trDestSel');
+  if(sel && _trCarrier.branch && _trCarrier.branch !== currentBranch){
+    if([...sel.options].some(function(o){ return o.value === _trCarrier.branch; })){
+      sel.value = _trCarrier.branch;
+      destMsg = ' → رايحة ' + _trCarrier.branch + ' تلقائي';
+    }
+  }
+  const nameEl = document.getElementById('trCarrierName');
+  if(nameEl) nameEl.textContent = '🧕 الحاملة: ' + _trCarrier.name + ' ✓' + destMsg;
+  showToast('🔢 الحاملة: ' + _trCarrier.name);
+}
+window._trPickCarrierByPin = _trPickCarrierByPin;
+
+// نافذة مشتركة: اختيار موظف + رقم سري (بتستخدم في الإرسال والاستلام)
+// excludeId: عشان الحاملة ما تأكدش استلامها بنفسها
+function _trEmpPinDialog(emps, opts){
+  const o = opts || {};
+  return new Promise(function(resolve){
+    const old = document.getElementById('trPinOverlay'); if(old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'trPinOverlay';
+    ov.style.cssText = 'position:fixed; inset:0; z-index:12900; background:rgba(0,0,0,.85);'
+      + 'display:flex; align-items:center; justify-content:center; padding:18px;';
+    ov.innerHTML = '<div style="background:var(--panel); border:2px solid var(--border);'
+      + ' border-radius:16px; padding:20px; max-width:400px; width:100%;">'
+      + '<div style="font-weight:900; font-size:15.5px; margin-bottom:4px;">' + (o.title || '') + '</div>'
+      + '<div style="color:var(--muted); font-size:12px; line-height:1.7; margin-bottom:14px;">'
+      + (o.note || '') + '</div>'
+      + '<select id="trPinEmp" style="width:100%; padding:13px; border-radius:10px;'
+      + ' border:1.5px solid var(--border); background:var(--panel2); color:var(--text);'
+      + " font-family:'Cairo'; font-weight:800; font-size:15px; margin-bottom:10px;\">"
+      + emps.map(function(e){
+          return '<option value="' + e.id + '">' + (e.name || '—')
+               + (e.branch ? (' · ' + e.branch) : '') + '</option>';
+        }).join('')
+      + '</select>'
+      + '<input id="trPinVal" type="password" inputmode="numeric" placeholder="الرقم السري"'
+      + ' style="width:100%; padding:14px; border-radius:10px; border:1.5px solid var(--border);'
+      + " background:var(--panel2); color:var(--text); font-family:'Cairo'; font-weight:800;"
+      + ' font-size:20px; text-align:center; letter-spacing:6px;">'
+      + '<div id="trPinErr" style="color:var(--bad); font-size:12px; min-height:16px; margin-top:6px;"></div>'
+      + '<div style="display:flex; gap:8px; margin-top:8px;">'
+      + '<button id="trPinOk" style="flex:2; padding:14px; border:none; border-radius:11px;'
+      + " background:linear-gradient(#16a34a,#15803d); color:#fff; font-family:'Cairo';"
+      + ' font-weight:900; font-size:15px; cursor:pointer;">تأكيد</button>'
+      + '<button id="trPinCancel" style="flex:1; padding:14px; border-radius:11px;'
+      + ' background:var(--panel2); border:1px solid var(--border); color:var(--muted);'
+      + " font-family:'Cairo'; font-weight:700; font-size:13.5px; cursor:pointer;\">إلغاء</button>"
+      + '</div></div>';
+    document.body.appendChild(ov);
+    const sel = ov.querySelector('#trPinEmp'), val = ov.querySelector('#trPinVal'),
+          err = ov.querySelector('#trPinErr');
+    const close = function(v){ ov.remove(); resolve(v); };
+    function ok(){
+      const emp = emps.find(function(e){ return e.id === sel.value; });
+      if(!emp){ err.textContent = 'اختار الموظفة الأول'; return; }
+      if(String(val.value || '').trim() !== String(emp.pin || '')){
+        err.textContent = '❌ الرقم السري غلط';
+        val.value = ''; val.focus();
+        return;
+      }
+      close(emp);
+    }
+    ov.querySelector('#trPinOk').addEventListener('click', ok);
+    ov.querySelector('#trPinCancel').addEventListener('click', function(){ close(null); });
+    val.addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ e.preventDefault(); ok(); }
+      if(e.key === 'Escape'){ close(null); }
+    });
+    setTimeout(function(){ try{ val.focus(); }catch(e){} }, 60);
+  });
+}
+window._trEmpPinDialog = _trEmpPinDialog;
+
 async function _trSetCarrierByCode(code){
   try{
     const snap = await db.collection('sales_employees').where('cardCode','==',code).limit(1).get();
@@ -395,14 +494,46 @@ async function openTransferConfirm(id){
     <div style="margin-top:12px; padding:11px; border:1.5px dashed var(--accent); border-radius:11px; text-align:center; background:var(--panel2);">
       <div style="font-weight:800; font-size:13.5px;">🎫 المستلمة تمسح كارتها = تأكيد فوري</div>
       <div style="color:var(--muted); font-size:10.5px; margin-top:2px;">عدّي القطع (وعدّلي لو فيه نقص) وبعدين امسحي — التأكيد هيتسجل باسم صاحبة الكارت</div>
+      <div style="color:var(--muted); font-size:10.5px; margin-top:4px;">لسه معندكيش كارت؟ استخدمي زرار الرقم السري تحت</div>
     </div>
     <div style="display:flex; gap:8px; margin-top:8px;">
-      <button onclick="confirmTransfer('${t.id}')" style="flex:2; padding:11px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:700; font-size:12px; cursor:pointer;">✅ تأكيد بدون كارت (باسم المسجّلة دخول)</button>
+      <button onclick="confirmTransferByPin('${t.id}')" style="flex:2; padding:11px; border-radius:10px; border:none; background:linear-gradient(#16a34a,#15803d); color:#fff; font-weight:800; font-size:12.5px; cursor:pointer;">🔢 تأكيد بالرقم السري (من غير كارت)</button>
       <button onclick="document.getElementById('trConfirmOv').remove()" style="flex:1; padding:11px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer; font-size:12px;">إلغاء</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
 }
+// 🔢 تأكيد الاستلام بالاسم + الرقم السري — بديل الكارت
+// الحاملة مستبعدة من القايمة أصلًا عشان ما تأكدش استلامها بنفسها.
+async function confirmTransferByPin(id){
+  const t = _trList.find(function(x){ return x.id === id; });
+  if(!t){ showToast('التحويلة مش موجودة', 'err'); return; }
+  let emps = [];
+  try{
+    const snap = await db.collection('sales_employees').get();
+    emps = snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); })
+      .filter(function(e){
+        if(e.active === false || e.isAdminAccount || !e.pin) return false;
+        if(e.id === t.carrierId) return false;              // ⛔ الحاملة مستبعدة
+        if(e.branch && e.branch !== t.toBranch) return false; // موظفي الفرع المستلم بس
+        return true;
+      })
+      .sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||''), 'ar'); });
+  }catch(e){ showToast('تعذر تحميل الموظفين: ' + e.message, 'err'); return; }
+
+  if(!emps.length){
+    showToast('مفيش موظف تاني في ' + t.toBranch + ' ليه رقم سري — الحاملة مينفعش تأكد لنفسها', 'err');
+    return;
+  }
+  const pick = await _trEmpPinDialog(emps, {
+    title: '📥 مين بيستلم؟',
+    note: 'اختاري اسمك واكتبي رقمك السري.\nالحاملة (' + (t.carrierName || '—') + ') مش في القايمة عشان مينفعش تأكد لنفسها.'
+  });
+  if(!pick) return;
+  confirmTransfer(id, { id: pick.id, name: pick.name || '' });
+}
+window.confirmTransferByPin = confirmTransferByPin;
+
 async function confirmTransfer(id, confirmer){
   const t = _trList.find(x=> x.id === id); if(!t) return;
   const who = confirmer || (currentEmployee ? { id: currentEmployee.id, name: currentEmployee.name||'' } : null);
