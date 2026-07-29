@@ -8,7 +8,7 @@
 const TRANSFERS_COL = 'pos_test_transfers';
 const TRANSFER_DEADLINE_MIN = 30;
 
-let _trTab = 'in';           // in | out | new | log
+let _trTab = 'new';          // new | in | out | log — التحويل الجديد أول حاجة (بطلب المالك)
 let _trList = [];            // آخر تحميل
 let _trNewItems = [];        // أصناف التحويلة الجديدة
 let _trCarrier = null;       // {id, name} بعد مسح الكارت
@@ -47,9 +47,9 @@ async function renderTransfersScreen(){
   const pendOut = outgoing.filter(t=> t.status==='in_transit').length;
 
   const tabs = [
+    ['new', '➕ تحويل جديد'],
     ['in',  `📥 وارد ${pendIn?`<span style="background:var(--bad); color:#fff; border-radius:99px; padding:1px 7px; font-size:10px;">${pendIn}</span>`:''}`],
     ['out', `📤 صادر ${pendOut?`<span style="background:var(--warn); color:#3a2600; border-radius:99px; padding:1px 7px; font-size:10px;">${pendOut}</span>`:''}`],
-    ['new', '➕ تحويل جديد'],
     ['log', '📜 السجل']
   ];
   const tabBar = `<div style="display:flex; gap:5px; background:var(--panel2); border-radius:12px; padding:5px; margin-bottom:12px;">
@@ -136,7 +136,11 @@ function _trNewFormHTML(){
     <input id="trScanInput" placeholder="امسح أو اكتب اسم/باركود — أو كارت الحاملة..." autocomplete="off" oninput="_trSuggest(this.value)"
       style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px;">
     <div id="trSuggestBox" style="position:relative;"></div>
-    <div id="trItemsList" style="margin-top:10px;"></div>
+    <!-- 🧮 الإجمالي — الرقم اللي المستلم هيعد بيه -->
+    <div id="trSummary" style="display:none; justify-content:space-between; align-items:center;
+         background:var(--panel2); border:1.5px solid var(--gold, #f59e0b); border-radius:12px;
+         padding:11px 14px; margin-top:10px; font-size:13.5px; font-weight:800;"></div>
+    <div id="trItemsList" style="margin-top:10px; max-height:46vh; overflow-y:auto;"></div>
 
     <div style="font-weight:800; margin:14px 0 6px;">2️⃣ رايحة على فرع: <span style="color:var(--muted); font-size:11px; font-weight:400;">(بيتحدد لوحده من كارت الحاملة — عدّله بس لو الوجهة مختلفة)</span></div>
     <select id="trDestSel" style="width:100%; padding:11px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px;">
@@ -156,22 +160,51 @@ function _trNewFormHTML(){
 }
 function _trRenderItems(){
   const box = document.getElementById('trItemsList'); if(!box) return;
-  box.innerHTML = _trNewItems.map((it,i)=>`
-    <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:10px; margin-bottom:6px; background:var(--panel2);">
+  const lastIdx = _trNewItems.length - 1;
+  box.innerHTML = _trNewItems.map((it,i)=>{
+    const isLast = i === lastIdx;
+    return `
+    <div style="display:flex; align-items:center; gap:10px; padding:12px 12px; margin-bottom:8px;
+                border:1.5px solid ${isLast ? 'var(--good)' : 'var(--border)'};
+                border-radius:12px; background:${isLast ? 'rgba(34,197,94,.07)' : 'var(--panel2)'};">
       <div style="flex:1; min-width:0;">
-        <div style="font-size:12.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${it.name}</div>
-        ${(it.barcode || it.code) ? `<div style="font-size:10.5px; color:var(--muted); direction:ltr; text-align:right; font-family:monospace; margin-top:2px;">🔖 ${it.barcode || it.code}</div>` : ''}
+        ${isLast ? '<div style="font-size:10px; font-weight:900; color:var(--good); margin-bottom:2px;">آخر واحد اتضاف ✅</div>' : ''}
+        <div style="font-size:14.5px; font-weight:800; line-height:1.35;">${it.name}</div>
+        ${(it.barcode || it.code) ? `<div style="font-size:11px; color:var(--muted); direction:ltr; text-align:right; font-family:monospace; margin-top:3px;">🔖 ${it.barcode || it.code}</div>` : ''}
       </div>
-      <button onclick="_trQty(${i},-1)" style="width:28px; height:28px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;">−</button>
-      <input type="number" min="1" value="${it.qty}" onchange="_trSetQty(${i}, this.value)"
-        onfocus="this.select()" onkeydown="if(event.key==='Enter'){ this.blur(); }"
-        style="width:56px; height:30px; text-align:center; font-weight:800; font-size:13px;
-               border-radius:8px; border:1px solid var(--border); background:var(--panel);
-               color:var(--text); font-family:'Cairo';">
-      <button onclick="_trQty(${i},1)" style="width:28px; height:28px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;">+</button>
-      <button onclick="_trNewItems.splice(${i},1); _trRenderItems();" style="border:none; background:none; color:var(--bad); cursor:pointer; font-size:14px;">🗑️</button>
-    </div>`).join('') || '<div style="color:var(--muted); font-size:12px; text-align:center; padding:8px;">لسه مفيش قطع — امسح فوق ⬆️</div>';
+      <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+        <button onclick="_trQty(${i},-1)" title="ناقص"
+          style="width:36px; height:40px; border-radius:10px; border:1px solid var(--border);
+                 background:var(--panel); color:var(--text); cursor:pointer; font-size:19px; font-weight:800;">−</button>
+        <input type="number" min="1" value="${it.qty}" onchange="_trSetQty(${i}, this.value)"
+          onfocus="this.select()" onkeydown="if(event.key==='Enter'){ this.blur(); }"
+          style="width:72px; height:44px; text-align:center; font-weight:900; font-size:20px;
+                 border-radius:11px; border:2px solid var(--gold, #f59e0b); background:var(--panel);
+                 color:var(--text); font-family:'Cairo';">
+        <button onclick="_trQty(${i},1)" title="زيادة"
+          style="width:36px; height:40px; border-radius:10px; border:1px solid var(--border);
+                 background:var(--panel); color:var(--text); cursor:pointer; font-size:19px; font-weight:800;">+</button>
+      </div>
+      <button onclick="_trNewItems.splice(${i},1); _trRenderItems();" title="شيل الصنف"
+        style="border:none; background:none; color:var(--bad); cursor:pointer; font-size:18px; flex-shrink:0;">🗑️</button>
+    </div>`;
+  }).join('') || '<div style="color:var(--muted); font-size:13px; text-align:center; padding:26px 8px;">لسه مفيش قطع — امسح الباركود فوق ⬆️</div>';
+  _trRenderSummary();
 }
+
+// 🧮 إجمالي القطع والأصناف — الرقم اللي المستلم هيعد بيه
+function _trRenderSummary(){
+  const el = document.getElementById('trSummary'); if(!el) return;
+  const lines = _trNewItems.length;
+  const pieces = _trNewItems.reduce(function(n,it){ return n + (Number(it.qty)||0); }, 0);
+  if(!lines){ el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = '<span>📦 <b>' + lines + '</b> صنف</span>'
+    + '<span style="font-size:20px; font-weight:900; color:var(--gold, #f59e0b);">'
+    + pieces + ' قطعة</span>';
+}
+window._trRenderSummary = _trRenderSummary;
+
 // ✍️ كتابة الكمية مباشرة بدل الضغط قطعة قطعة
 function _trSetQty(i, val){
   const it = _trNewItems[i]; if(!it) return;

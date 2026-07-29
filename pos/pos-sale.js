@@ -244,7 +244,7 @@ function renderCart(){
     tbody.innerHTML = cart.map((c, idx)=>`
       <tr class="${idx===selectedCartIdx?'sel ':''}${c.isReturn?'ret':''}${_isLastAdded(c)?' just-added':''}" onclick="selectCartRow(${idx})" style="${c.offerApplied?'background:linear-gradient(90deg,#ffeef5,#fff); box-shadow:inset 4px 0 0 #e27a97;':''}">
         <td>${idx+1}</td>
-        <td class="item-name">${_isLastAdded(c)?'<span class="last-badge">آخر ✅</span> ':''}${c.offerApplied?'🎁 ':''}${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.offerApplied?' <span style="color:#c0397a; font-size:10px; font-weight:800;">🎁 عرض مفعّل</span>':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}${c.barcode?`<div class="cart-code">${c.barcode}</div>`:''}</td>
+        <td class="item-name">${_isLastAdded(c)?'<span class="last-badge">آخر ✅</span> ':''}${c.offerApplied?'🎁 ':''}${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.edited?` <span style="color:#f59e0b; font-size:10px; font-weight:800;">✏️ متعدّل${c.editPct?` −${c.editPct}%`:''}</span>`:''}${c.offerApplied?' <span style="color:#c0397a; font-size:10px; font-weight:800;">🎁 عرض مفعّل</span>':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}${c.barcode?`<div class="cart-code">${c.barcode}</div>`:''}</td>
         <td>${c.offerApplied && c.origPrice!=null ? `<s style="color:#c0397a; font-size:10px;">${c.origPrice.toFixed(2)}</s> ` : (c.originalPrice ? `<s style="color:#999; font-size:10px;">${c.originalPrice.toFixed(2)}</s> ` : '')}${c.price.toFixed(2)}</td>
         <td>
           <div class="qty-cell">
@@ -751,6 +751,66 @@ function finishReturnAndSell(){
             ' ج.م — امسح المنتج الجديد دلوقتي', 'ok');
 }
 window.finishReturnAndSell = finishReturnAndSell;
+// ✏️ تعديل صنف في السلة — السعر والكمية وخصم للقطعة دي بس
+// مقصور على مين عنده صلاحية الخصم (canDiscount)، وبيحترم أقصى نسبة مسموحة للدور.
+async function qbxEditSel(){
+  if(!requireSelection()) return;
+  const line = cart[selectedCartIdx];
+  if(!line){ showToast('اختار صنف الأول', 'err'); return; }
+  if(!hasPerm('canDiscount')){ showToast('تعديل الأصناف للمشرف/المدير بس', 'err'); return; }
+  if(line.isRedemption){ showToast('الصنف المستبدل بالنقط ماينفعش يتعدّل', 'err'); return; }
+
+  const base = Math.abs(Number(line.origPrice != null ? line.origPrice : line.price) || 0);
+  const cap  = (function(){ const v = Number(myPerms().maxDiscountPct); return isNaN(v) ? 0 : v; })();
+
+  const priceStr = await askText({
+    title: '✏️ ' + line.name,
+    message: 'سعر البيع للقطعة (الأصلي: ' + base.toFixed(2) + ' ج.م)',
+    type: 'number', value: Math.abs(Number(line.price)||0).toFixed(2), okText: 'التالي'
+  });
+  if(priceStr === null) return;
+  let price = parseFloat(priceStr);
+  if(isNaN(price) || price < 0){ showToast('سعر مش مظبوط', 'err'); return; }
+
+  const qtyStr = await askText({
+    title: '✏️ ' + line.name,
+    message: 'الكمية', type: 'number', value: String(line.qty || 1), okText: 'التالي'
+  });
+  if(qtyStr === null) return;
+  const qty = parseInt(qtyStr, 10);
+  if(isNaN(qty) || qty <= 0){ showToast('كمية مش مظبوطة', 'err'); return; }
+
+  const pctStr = await askText({
+    title: '🏷️ خصم على الصنف ده بس',
+    message: cap < 100 ? ('الحد الأقصى المسموح ليك: ' + cap + '%\nسيبها صفر لو مش عايز خصم')
+                       : 'سيبها صفر لو مش عايز خصم',
+    type: 'number', value: '0', okText: 'احفظ التعديل'
+  });
+  if(pctStr === null) return;
+  const pct = parseFloat(pctStr) || 0;
+  if(pct < 0 || pct > 100){ showToast('نسبة مش صحيحة', 'err'); return; }
+  // 🔒 نفس سقف الدور المطبّق على خصم الفاتورة — عشان مايبقاش فيه باب خلفي
+  if(pct > cap){ showToast('⛔ الحد الأقصى للخصم المسموح ليك ' + cap + '%', 'err'); return; }
+
+  if(line.origPrice == null) line.origPrice = base;   // بنحتفظ بالأصلي مرة واحدة
+  const finalPrice = +(price * (1 - pct/100)).toFixed(2);
+  line.price = line.isReturn ? -finalPrice : finalPrice;
+  line.qty = qty;
+  line.edited = true;
+  line.editPct = pct || null;
+
+  if(typeof _logActivity === 'function'){
+    _logActivity('cart_item_edited', {
+      name: line.name, barcode: line.barcode || null,
+      from: base, to: finalPrice, qty: qty, pct: pct || 0
+    });
+  }
+  renderCart();
+  showToast('✏️ اتعدّل: ' + line.name + ' → ' + finalPrice.toFixed(2) + ' ج.م × ' + qty
+    + (pct ? (' (خصم ' + pct + '%)') : ''), 'ok');
+}
+window.qbxEditSel = qbxEditSel;
+
 function qbxDeleteSel(){
   if(!requireSelection()) return;
   removeFromCart(selectedCartIdx);
