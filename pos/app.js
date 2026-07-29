@@ -146,11 +146,15 @@ function goToSale(){
   document.getElementById('newCustomerRow').style.display = 'none';
   setCustBox(false);
   // التاريخ والوقت واسم الموظف في ركن الشاشة (زي الجهاز الحقيقي بالظبط)
+  // 🕐 الوقت بأرقام إنجليزي — كان بأرقام عربية وبيتلخبط مع النصوص حواليه
   const now = new Date();
+  const _d = now.toLocaleDateString('ar-EG-u-nu-latn', {weekday:'long', day:'numeric', month:'long'});
+  const _t = now.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'});
   document.getElementById('qbxMeta').innerHTML =
-    now.toLocaleDateString('ar-EG', {weekday:'long', year:'numeric', month:'long', day:'numeric'}) +
-    '<br>' + now.toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) +
-    '<br><b>' + (currentEmployee.name || '') + '</b>';
+    '<div style="font-size:11.5px; color:#6b7280;">' + _d + '</div>'
+    + '<div dir="ltr" style="font-size:19px; font-weight:900; letter-spacing:.5px; margin:1px 0;">'
+    + _t + '</div>'
+    + '<b style="font-size:13px;">' + (currentEmployee.name || '') + '</b>';
   renderCart();
   resetPaymentUI();
   showScreen('saleScreen');

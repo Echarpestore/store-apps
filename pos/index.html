@@ -386,10 +386,13 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
 .screen#loginScreen, .screen#dashboardScreen, .screen#branchSetupScreen{
   overflow-y:auto; -webkit-overflow-scrolling:touch;
 }
+/* 🏷️ شارة النسخة: في الشاشة الرئيسية بس — كانت في كل شاشة وبتغطي الساعة */
 .badge-test{
   position:fixed;top:8px;left:8px;background:var(--warn);color:#1a1200;
   font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;z-index:999;
+  display:none;
 }
+body.on-dashboard .badge-test{ display:block; }
 .online-badge{
   position:fixed; top:8px; right:8px; font-size:11px; font-weight:800;
   padding:5px 12px; border-radius:20px; z-index:999;

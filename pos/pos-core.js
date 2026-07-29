@@ -631,6 +631,8 @@ function showScreen(id){
   document.getElementById(id).classList.add('active');
   if(typeof injectUnifiedToolbars === 'function') try{ injectUnifiedToolbars(); }catch(e){}
   try{ clearStuckOverlays(id); }catch(e){ console.warn('overlays', e); }
+  // 🏷️ شارة النسخة تبان في الشاشة الرئيسية بس
+  document.body.classList.toggle('on-dashboard', id === 'dashboardScreen');
   // 💚 مؤشر اتصال شاشة التقييم — بيبدأ أول ما نوصل شاشة البيع
   if(id === 'saleScreen' && typeof capWatchAlive === 'function'){
     try{ capWatchAlive(); }catch(e){ console.warn('cap alive', e); }
