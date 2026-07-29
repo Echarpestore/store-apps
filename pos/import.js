@@ -80,8 +80,8 @@ function renderImportPanel(){
              border:1.5px solid #e5484d66; border-radius:10px; padding:10px 12px; margin-bottom:10px;
              cursor:pointer; color:#ffd9da; font-size:12.5px; font-weight:700;">
         <input type="checkbox" id="wipeBeforeImport" style="width:18px; height:18px; cursor:pointer;">
-        🗑️ امسح كل المخزون الحالي قبل الاستيراد
-        <span style="font-weight:400; color:#ff9a9d;">— للمرة الأولى بس، الإجراء نهائي</span>
+        🗑️ امسح مخزون الفرع ده قبل الاستيراد
+        <span style="font-weight:400; color:#ff9a9d;">— فرعك بس، والفروع التانية مش هتتأثر</span>
       </label>
       <div id="importLoadNote" style="color:var(--muted); font-size:12px; margin-bottom:8px;"></div>
       <div id="importPreviewWrap"></div>
@@ -213,6 +213,7 @@ function parseCSV(text){
 
 function renderImportMapping(){
   const show = (importTab === 'inventory' && importParsedRows.length);
+  if(importTab === 'inventory'){ try{ refreshClaimRow(); }catch(e){} }
   const wr = document.getElementById('wipeRow');
   if(wr) wr.style.display = show ? 'flex' : 'none';
   const ar = document.getElementById('adjRow');
@@ -314,20 +315,86 @@ function applySoldAdjustment(rows, sold){
 }
 if(typeof window !== 'undefined') window.applySoldAdjustment = applySoldAdjustment;
 
+// 🏬 ترحيل الأصناف القديمة (اللي مالهاش فرع) لفرع محدد — مرة واحدة
+// قبل نظام فصل المخزون كانت كل الأصناف مشتركة، فكانت تظهر في كل الفروع.
+async function countUnscoped(){
+  const snap = await db.collection(TEST_INVENTORY).get();
+  return snap.docs.filter(function(d){
+    const b = (d.data()||{}).branches;
+    return !Array.isArray(b) || !b.length;
+  });
+}
+async function claimUnscoped(){
+  const btn = document.getElementById('claimBtn');
+  const docs = await countUnscoped();
+  if(!docs.length){ showToast('مفيش أصناف قديمة محتاجة ترحيل ✅', 'ok'); return; }
+  const typed = await askText({
+    title: '🏬 نقل الأصناف لفرع ' + currentBranch,
+    message: 'هيتنقل ' + docs.length + ' صنف لفرع ' + currentBranch + ' ويبقوا مخصوصين بيه.\n'
+           + 'الفروع التانية مش هتشوفهم بعد كده.\n\nاكتب: تمام',
+    placeholder: 'اكتب: تمام', okText: 'انقل الأصناف'
+  });
+  if(String(typed || '').trim() !== 'تمام') return;
+  if(btn){ btn.disabled = true; btn.textContent = 'بينقل...'; }
+  const CHUNK = 400;
+  for(let i = 0; i < docs.length; i += CHUNK){
+    const batch = db.batch();
+    docs.slice(i, i+CHUNK).forEach(function(d){
+      batch.set(d.ref, { branches: [currentBranch] }, { merge:true });
+    });
+    await batch.commit();
+    if(btn) btn.textContent = 'بينقل... ' + Math.min(i+CHUNK, docs.length) + '/' + docs.length;
+  }
+  if(typeof _logActivity === 'function')
+    _logActivity('inventory_claimed', { count: docs.length, branch: currentBranch });
+  showToast('✅ اتنقل ' + docs.length + ' صنف لفرع ' + currentBranch, 'ok');
+  if(btn){ btn.disabled = false; btn.textContent = 'اتنقلوا ✅'; }
+  refreshClaimRow();
+}
+async function refreshClaimRow(){
+  const row = document.getElementById('claimRow'); if(!row) return;
+  try{
+    const docs = await countUnscoped();
+    if(!docs.length){ row.style.display = 'none'; return; }
+    row.style.display = 'block';
+    const c = document.getElementById('claimCount'); if(c) c.textContent = docs.length;
+    ['claimBranch','claimBranch2'].forEach(function(id){
+      const el = document.getElementById(id); if(el) el.textContent = currentBranch;
+    });
+    const btn = document.getElementById('claimBtn');
+    if(btn && !btn._wired){ btn._wired = true; btn.addEventListener('click', claimUnscoped); }
+  }catch(e){ console.warn('claim row', e); }
+}
+if(typeof window !== 'undefined'){ window.claimUnscoped = claimUnscoped; window.refreshClaimRow = refreshClaimRow; }
+
 // 🗑️ مسح كل المخزون قبل استيراد جديد
 // محمي بتأكيد بالكتابة لأن الإجراء نهائي — البضاعة والكميات كلها بتروح.
 async function wipeInventory(resultBox){
-  const snap = await db.collection(TEST_INVENTORY).get();
-  const total = snap.size;
-  if(total === 0) return true;
+  const all = await db.collection(TEST_INVENTORY).get();
+  // 🏬 بنمسح أصناف الفرع الحالي بس — أصناف الفروع التانية والمشتركة متتلمسش
+  const mine = all.docs.filter(function(d){
+    const x = d.data() || {};
+    const br = x.branches;
+    return Array.isArray(br) && br.length === 1 && br[0] === currentBranch;
+  });
+  const total = mine.length;
+  const others = all.size - total;
+  if(total === 0){
+    await askText({ title:'مفيش أصناف مخصوصة بفرع ' + currentBranch,
+      message:'مفيش أي صنف مخصوص بالفرع ده عشان يتمسح.\n'
+            + (others ? ('فيه ' + others + ' صنف بتوع فروع تانية أو مشتركة — دول مش هيتمسحوا.') : ''),
+      value:'', okText:'تمام' });
+    return true;
+  }
   const typed = await askText({
-    title: '🗑️ مسح المخزون بالكامل',
-    message: 'ده هيمسح ' + total + ' صنف نهائيًا (الأسماء والأسعار والكميات).\n'
+    title: '🗑️ مسح مخزون فرع ' + currentBranch,
+    message: 'ده هيمسح ' + total + ' صنف من فرع ' + currentBranch + ' نهائيًا.\n'
+           + (others ? ('✅ ' + others + ' صنف بتوع الفروع التانية أو المشتركة مش هيتلمسوا.\n') : '')
            + 'الإجراء مفيهوش رجوع.\n\nاكتب كلمة: مسح',
     placeholder: 'اكتب: مسح', danger: true, okText: 'امسح المخزون'
   });
   if(String(typed || '').trim() !== 'مسح') return false;
-  const docs = snap.docs;
+  const docs = mine;
   const CHUNK = 400;                       // حد Firestore للدفعة 500
   for(let i=0; i<docs.length; i+=CHUNK){
     const batch = db.batch();
@@ -336,7 +403,7 @@ async function wipeInventory(resultBox){
     if(resultBox) resultBox.textContent =
       'بيمسح القديم... ' + Math.min(i+CHUNK, docs.length) + ' / ' + docs.length;
   }
-  if(typeof _logActivity === 'function') _logActivity('inventory_wiped', { count: total });
+  if(typeof _logActivity === 'function') _logActivity('inventory_wiped', { count: total, branch: currentBranch });
   return true;
 }
 if(typeof window !== 'undefined') window.wipeInventory = wipeInventory;
@@ -431,10 +498,14 @@ async function runImport(){
             minStock: mapping.minStock ? (Math.max(0, parseInt(row[mapping.minStock])||0)) : 0,
             department: mapping.department ? (row[mapping.department]||'') : '',
             status:'active', importedFrom:'quickbooks',
+            branches: [currentBranch],        // 🏬 مقصور على الفرع ده — مش بيأثر على باقي الفروع
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           };
-          // الباركود = ID الوثيقة عشان لو استوردت تاني يتحدّث بدل ما يتكرر
-          const ref = barcode ? db.collection(TEST_INVENTORY).doc(barcode) : db.collection(TEST_INVENTORY).doc();
+          // 🔑 مفتاح الوثيقة = الباركود + الفرع.
+          // من غير الفرع، صنف رقم 271 في فرع بيكتب على 271 في فرع تاني ويمسح اسمه وسعره.
+          const ref = barcode
+            ? db.collection(TEST_INVENTORY).doc(barcode + '__' + currentBranch)
+            : db.collection(TEST_INVENTORY).doc();
           batch.set(ref, data, { merge:true });
           done++;
         });

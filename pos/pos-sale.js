@@ -11,6 +11,7 @@ searchBar.addEventListener('input', ()=>{
   // المنتجات المخفية أو المعلّمة "نافدة" مش بتظهر في البحث خالص
   const matches = allInventory.filter(it =>
     it.status !== 'hidden' && it.status !== 'outofstock' &&
+    inMyBranch(it) &&                                   // 🏬 بضاعة فرعي والمشتركة بس
     ((it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q))
   ).slice(0,10);
   matches.forEach(it=>{
@@ -121,18 +122,39 @@ function stripZeros(v){
   const t = String(v == null ? '' : v).trim();
   return /^\d+$/.test(t) ? t.replace(/^0+/, '') || '0' : t;
 }
+// 🏬 الصنف ده يخص فرعي؟
+//   • branches فيها فرعي = صنف مخصوص بفرعي
+//   • مفيش branches خالص = صنف مشترك بين كل الفروع
+function inMyBranch(it){
+  if(!it) return false;
+  if(!Array.isArray(it.branches) || !it.branches.length) return true;   // مشترك
+  return it.branches.indexOf(currentBranch) >= 0;
+}
+function isBranchOwned(it){
+  return !!(it && Array.isArray(it.branches) && it.branches.indexOf(currentBranch) >= 0);
+}
+window.inMyBranch = inMyBranch;
+
 function findByBarcode(code){
-  const usable = (it)=> it && it.status !== 'hidden' && it.status !== 'outofstock';
+  const usable = (it)=> it && it.status !== 'hidden' && it.status !== 'outofstock' && inMyBranch(it);
   const raw = String(code || '').trim();
-  // (١) مطابقة تامة — دي الأصل ومبتتغيرش
-  let hit = allInventory.find(it => it.barcode === raw && usable(it));
+  // 🔑 أولوية صنف الفرع على الصنف المشترك — لو الفرع عنده نسخته الخاصة بسعرها واسمها،
+  // هي اللي تتاخد، مش النسخة العامة القديمة.
+  const pick = (list)=>{
+    if(!list.length) return null;
+    const own = list.filter(isBranchOwned);
+    if(own.length === 1) return own[0];
+    if(own.length > 1) return null;            // غموض جوه فرعي → مش هنخمّن
+    return list.length === 1 ? list[0] : null;
+  };
+  // (١) مطابقة تامة
+  const exact = allInventory.filter(it => it.barcode === raw && usable(it));
+  const hit = pick(exact);
   if(hit) return hit;
-  // (٢) مقارنة بعد شيل الأصفار من الطرفين — للأرقام بس عشان منعملش تطابق وهمي
+  // (٢) بعد شيل الأصفار — للأرقام بس عشان منعملش تطابق وهمي
   const norm = stripZeros(raw);
   if(!/^\d+$/.test(norm)) return null;
-  const matches = allInventory.filter(it => usable(it) && stripZeros(it.barcode) === norm);
-  // لو أكتر من صنف يطابق، مش هنخمّن — بنسيبها للبحث العادي
-  return matches.length === 1 ? matches[0] : null;
+  return pick(allInventory.filter(it => usable(it) && stripZeros(it.barcode) === norm));
 }
 window.findByBarcode = findByBarcode;
 window.stripZeros = stripZeros;
