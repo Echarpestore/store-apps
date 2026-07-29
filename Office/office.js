@@ -232,7 +232,7 @@ document.getElementById('page-inbox').classList.add('on');
    📡 البيانات الحية + الإشعارات
    ============================================================ */
 const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], expenses:[],
-            employees:[], advances:[], sales:[], inventory:[] };
+            employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[] };
 let started = false;
 let firstLoadDone = false;
 const seenIds = {};   // عشان الإشعار يطلع للجديد بس
@@ -314,6 +314,8 @@ function startData(){
   });
   // مبيعات آخر 30 يوم (قراءة دورية مش snapshot — أخف على الموبايل)
   loadSales(); setInterval(loadSales, 5*60*1000);
+  loadCustomers(); setInterval(loadCustomers, 10*60*1000);
+  loadRatings(); setInterval(loadRatings, 5*60*1000);
   db.collection('pos_test_inventory').get().then(function(s){
     D.inventory = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     renderTop();
@@ -330,6 +332,229 @@ function loadSales(){
       renderTop();
     }).catch(function(e){ console.warn('sales load', e); });
 }
+
+// 👥 العملاء — للتقارير (تحميلات التطبيق والمكافآت والنقط)
+function loadCustomers(){
+  db.collection('pos_test_customers').get().then(function(s){
+    D.customers = s.docs.map(function(d){ return Object.assign({ _id:d.id }, d.data()); });
+    try{ renderActivityReports(); }catch(e){ console.warn('activity', e); }
+  }).catch(function(e){ console.warn('customers load', e); });
+}
+
+// ⭐ تقييمات العملاء (آخر 30 يوم)
+function loadRatings(){
+  var from = Date.now() - 30*86400000;
+  db.collection('entries').where('ts','>=', from).get().then(function(s){
+    D.ratings = s.docs.map(function(d){ return d.data(); });
+    try{ renderActivityReports(); }catch(e){ console.warn('ratings', e); }
+  }).catch(function(e){ console.warn('ratings load', e); });
+}
+
+/* ============================================================
+   📈 تقارير النشاط اليومي
+   ============================================================ */
+// بيحوّل أي شكل تاريخ (Timestamp / رقم / نص) لبداية اليوم
+function _dayKeyOf(v){
+  if(v == null) return null;
+  var ms = null;
+  if(typeof v === 'number') ms = v;
+  else if(v.toMillis) ms = v.toMillis();
+  else if(v.seconds) ms = v.seconds * 1000;
+  else { var t = new Date(v).getTime(); if(!isNaN(t)) ms = t; }
+  if(!ms) return null;
+  var d = new Date(ms);
+  var p = function(n){ return String(n).padStart(2,'0'); };
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+}
+
+// 📥 تحميلات التطبيق يوم بيوم (العميل اللي اتسجّل من التطبيق)
+function dailyDownloads(customers, days){
+  var out = {};
+  (customers||[]).forEach(function(c){
+    if(!c) return;
+    var src = String(c.source || '');
+    if(!/^(loyalty_app|glow_app)/.test(src)) return;   // اللي اتسجّل من الكاشير مش تحميل
+    var k = _dayKeyOf(c.createdAt);
+    if(k) out[k] = (out[k] || 0) + 1;
+  });
+  return _lastDays(out, days || 14);
+}
+
+// 🎁 مكافآت الترحيب يوم بيوم (أول تحميل)
+function dailyWelcome(customers, days){
+  var out = {};
+  (customers||[]).forEach(function(c){
+    if(!c) return;
+    var t = c.welcomeGranted_echarpe || c.welcomeGranted_glow;
+    var k = _dayKeyOf(t);
+    if(k) out[k] = (out[k] || 0) + 1;
+  });
+  return _lastDays(out, days || 14);
+}
+
+// ⭐ النقط المكتسبة يوم بيوم + عدد العملاء اللي أخدوا نقط
+function dailyPoints(sales, days){
+  var pts = {}, custs = {};
+  (sales||[]).forEach(function(sl){
+    if(!sl || sl.reversed || sl.isReversal) return;
+    var earned = Number(sl.loyaltyPointsEarned) || 0;
+    if(earned <= 0) return;
+    var k = _dayKeyOf(sl.createdAt);
+    if(!k) return;
+    pts[k] = (pts[k] || 0) + earned;
+    if(!custs[k]) custs[k] = {};
+    if(sl.customerPhone) custs[k][sl.customerPhone] = 1;
+  });
+  var rows = _lastDays(pts, days || 14);
+  rows.forEach(function(r){ r.people = custs[r.day] ? Object.keys(custs[r.day]).length : 0; });
+  return rows;
+}
+
+// بيرجّع آخر N يوم مرتبين من الأحدث، وبيحط صفر لليوم اللي مفيهوش حاجة
+function _lastDays(map, n){
+  var out = [];
+  var d = new Date(); d.setHours(0,0,0,0);
+  var p = function(x){ return String(x).padStart(2,'0'); };
+  for(var i = 0; i < n; i++){
+    var k = d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+    out.push({ day: k, count: map[k] || 0 });
+    d.setDate(d.getDate() - 1);
+  }
+  return out;
+}
+window.dailyDownloads = dailyDownloads;
+window.dailyWelcome = dailyWelcome;
+window.dailyPoints = dailyPoints;
+
+// ⭐ ملخص التقييمات: المتوسط والتوزيع وأعداد السيّئ
+function ratingsSummary(entries, sinceMs){
+  var out = { total:0, avg:0, dist:{1:0,2:0,3:0,4:0,5:0}, bad:0, good:0, byBranch:{} };
+  var sum = 0;
+  (entries||[]).forEach(function(e){
+    if(!e) return;
+    var r = Number(e.r);
+    if(!(r >= 1 && r <= 5)) return;                  // تقييم مش صالح
+    if(sinceMs && !(Number(e.ts) >= sinceMs)) return;
+    out.total++; sum += r;
+    out.dist[r] = (out.dist[r] || 0) + 1;
+    if(r <= 2) out.bad++;
+    if(r >= 4) out.good++;
+    var b = e.branch || '—';
+    if(!out.byBranch[b]) out.byBranch[b] = { n:0, sum:0, bad:0 };
+    out.byBranch[b].n++; out.byBranch[b].sum += r;
+    if(r <= 2) out.byBranch[b].bad++;
+  });
+  out.avg = out.total ? +(sum / out.total).toFixed(2) : 0;
+  Object.keys(out.byBranch).forEach(function(b){
+    var x = out.byBranch[b];
+    x.avg = x.n ? +(x.sum / x.n).toFixed(2) : 0;
+  });
+  return out;
+}
+// تقييمات يوم بيوم
+function dailyRatings(entries, days){
+  var map = {}, sums = {};
+  (entries||[]).forEach(function(e){
+    if(!e) return;
+    var r = Number(e.r); if(!(r >= 1 && r <= 5)) return;
+    var k = _dayKeyOf(e.ts); if(!k) return;
+    map[k] = (map[k] || 0) + 1;
+    sums[k] = (sums[k] || 0) + r;
+  });
+  var rows = _lastDays(map, days || 14);
+  rows.forEach(function(x){
+    x.avg = x.count ? +(sums[x.day] / x.count).toFixed(1) : 0;
+  });
+  return rows;
+}
+window.ratingsSummary = ratingsSummary;
+window.dailyRatings = dailyRatings;
+
+function _miniBars(rows, unit, color){
+  var max = rows.reduce(function(m,r){ return Math.max(m, r.count); }, 0) || 1;
+  return rows.map(function(r){
+    var pct = Math.round(r.count / max * 100);
+    var dd = r.day.slice(5).replace('-','/');
+    return '<div class="row" style="align-items:center; gap:8px; padding:3px 0;">'
+      + '<span class="muted" style="font-size:11px; min-width:42px;">' + dd + '</span>'
+      + '<span style="flex:1; height:14px; background:#ffffff10; border-radius:99px; overflow:hidden;">'
+      + '<span style="display:block; height:100%; width:' + pct + '%; background:' + color + ';"></span></span>'
+      + '<b style="min-width:64px; text-align:left; font-size:12px;">' + r.count + ' ' + unit
+      + (r.people != null ? ' <span class="muted" style="font-weight:400;">· ' + r.people + ' عميل</span>' : '')
+      + '</b></div>';
+  }).join('');
+}
+
+function renderActivityReports(){
+  var box = document.getElementById('activityReports'); if(!box) return;
+  var dl = dailyDownloads(D.customers, 14);
+  var wl = dailyWelcome(D.customers, 14);
+  var pt = dailyPoints(D.sales, 14);
+  var sum = function(rows){ return rows.reduce(function(n,r){ return n + r.count; }, 0); };
+  var today = function(rows){ return rows.length ? rows[0].count : 0; };
+
+  box.innerHTML =
+    '<div class="card"><h3>📱 تحميلات التطبيق</h3>'
+    + '<div class="row" style="margin-bottom:8px;"><span class="muted">النهاردة</span>'
+    + '<b style="font-size:19px;">' + today(dl) + '</b></div>'
+    + '<div class="row" style="margin-bottom:10px;"><span class="muted">آخر 14 يوم</span>'
+    + '<b>' + sum(dl) + '</b></div>'
+    + _miniBars(dl, 'تحميل', '#3b82f6') + '</div>'
+
+    + '<div class="card"><h3>🎁 مكافأة أول تحميل</h3>'
+    + '<div class="row" style="margin-bottom:8px;"><span class="muted">النهاردة</span>'
+    + '<b style="font-size:19px;">' + today(wl) + '</b></div>'
+    + '<div class="row" style="margin-bottom:10px;"><span class="muted">آخر 14 يوم</span>'
+    + '<b>' + sum(wl) + '</b></div>'
+    + _miniBars(wl, 'مكافأة', '#f59e0b') + '</div>'
+
+    + '<div class="card"><h3>⭐ النقط المكتسبة</h3>'
+    + '<div class="row" style="margin-bottom:8px;"><span class="muted">النهاردة</span>'
+    + '<b style="font-size:19px;">' + today(pt) + ' نقطة</b></div>'
+    + '<div class="row" style="margin-bottom:10px;"><span class="muted">آخر 14 يوم</span>'
+    + '<b>' + sum(pt) + ' نقطة</b></div>'
+    + _miniBars(pt, 'نقطة', '#22c55e') + '</div>'
+
+    + (function(){
+        var rt = dailyRatings(D.ratings, 14);
+        var sm = ratingsSummary(D.ratings, Date.now() - 30*86400000);
+        var stars = function(n){ return '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5-n); };
+        var distRows = [5,4,3,2,1].map(function(r){
+          var c = sm.dist[r] || 0;
+          var pct = sm.total ? Math.round(c / sm.total * 100) : 0;
+          var col = r >= 4 ? '#22c55e' : (r === 3 ? '#f59e0b' : '#e5484d');
+          return '<div class="row" style="align-items:center; gap:8px; padding:3px 0;">'
+            + '<span style="min-width:58px; font-size:12px; color:' + col + ';">' + stars(r) + '</span>'
+            + '<span style="flex:1; height:14px; background:#ffffff10; border-radius:99px; overflow:hidden;">'
+            + '<span style="display:block; height:100%; width:' + pct + '%; background:' + col + ';"></span></span>'
+            + '<b style="min-width:64px; text-align:left; font-size:12px;">' + c
+            + ' <span class="muted" style="font-weight:400;">(' + pct + '%)</span></b></div>';
+        }).join('');
+        var brRows = Object.keys(sm.byBranch).sort(function(a,b){
+          return sm.byBranch[b].n - sm.byBranch[a].n;
+        }).map(function(b){
+          var x = sm.byBranch[b];
+          var col = x.avg >= 4 ? '#22c55e' : (x.avg >= 3 ? '#f59e0b' : '#e5484d');
+          return '<div class="card row"><span>' + esc(b) + ' <span class="muted">· ' + x.n + ' تقييم</span></span>'
+            + '<span><b style="color:' + col + ';">' + x.avg.toFixed(2) + '</b>'
+            + (x.bad ? ' <span class="muted" style="font-size:11px;">· ' + x.bad + ' سيّئ</span>' : '')
+            + '</span></div>';
+        }).join('');
+        return '<div class="card"><h3>⭐ تقييمات العملاء (آخر 30 يوم)</h3>'
+          + '<div class="row" style="margin-bottom:6px;"><span class="muted">المتوسط العام</span>'
+          + '<b style="font-size:19px; color:' + (sm.avg >= 4 ? '#22c55e' : (sm.avg >= 3 ? '#f59e0b' : '#e5484d')) + ';">'
+          + sm.avg.toFixed(2) + ' / 5</b></div>'
+          + '<div class="row" style="margin-bottom:4px;"><span class="muted">عدد التقييمات</span><b>' + sm.total + '</b></div>'
+          + '<div class="row" style="margin-bottom:10px;"><span class="muted">تقييمات سيّئة (1-2)</span>'
+          + '<b style="color:' + (sm.bad ? '#e5484d' : '#22c55e') + ';">' + sm.bad + '</b></div>'
+          + distRows
+          + (brRows ? ('<div style="margin-top:12px; font-size:12.5px; font-weight:800;">حسب الفرع</div>' + brRows) : '')
+          + '<div style="margin-top:12px; font-size:12.5px; font-weight:800;">يوم بيوم</div>'
+          + _miniBars(rt, 'تقييم', '#a855f7')
+          + '</div>';
+      })();
+}
+window.renderActivityReports = renderActivityReports;
 
 /* ============================================================
    💹 الربح والخسارة
