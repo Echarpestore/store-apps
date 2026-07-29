@@ -93,6 +93,9 @@
     opacity:0; pointer-events:none; transition:opacity .25s ease;
   }
   #thanks.show{opacity:1; pointer-events:all;}
+  /* 🔒 طبقة الحجب بتشتغل فورًا مع أول لمسة — قبل ما الرسالة تظهر بالكامل */
+  #thanks{ pointer-events:none; }
+  body.rating-locked #thanks{ pointer-events:all; }
   #thanks .check{
     width:96px; height:96px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     animation:pop .35s cubic-bezier(.2,1.4,.4,1);
@@ -665,15 +668,29 @@ function stopDashListeners(){
   if(_unsubBranches){ _unsubBranches(); _unsubBranches = null; }
 }
 
+// 🔒 قفل بعد كل تقييم — العميل بيدوس كذا مرة ورا بعض فبتتسجل تقييمات مكررة
+// بتلخبط المتوسط. القفل بيبدأ من أول لمسة، قبل ما رسالة الشكر تظهر أصلًا.
+let _ratingLock = false;
+const RATING_LOCK_MS = 4000;     // مدة القفل بين تقييم والتاني
+const THANKS_MS      = 3200;     // مدة رسالة الشكر على الشاشة
+
 async function submitRating(r){
+  if(_ratingLock) return;                       // ⛔ ضغطة مكررة — بتتجاهل تمامًا
   if(!currentBranch){
     $('#branchSetup').classList.add('show');
     return;
   }
+  _ratingLock = true;
+  document.body.classList.add('rating-locked');
+  setTimeout(()=>{
+    _ratingLock = false;
+    document.body.classList.remove('rating-locked');
+  }, RATING_LOCK_MS);
+
   const info = RATINGS[r];
   $('#checkCircle').style.background = info.hex;
   $('#thanks').classList.add('show');
-  setTimeout(()=>{ $('#thanks').classList.remove('show'); }, 1600);
+  setTimeout(()=>{ $('#thanks').classList.remove('show'); }, THANKS_MS);
   try{ await addDoc(entriesCol, { r, ts: Date.now(), branch: currentBranch }); }
   catch(e){ console.error('تعذر حفظ الرأي', e); }
   // ⚠️ تقييم سيّئ (نجمة أو اتنين) → تنبيه فوري عشان الإدارة تتصرف والعميل لسه موجود
