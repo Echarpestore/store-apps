@@ -170,8 +170,8 @@ function currencyLabel(){
   return (c.lang==='en') ? (c.currencyEn||'EGP') : (c.currencyAr||'ج.م');
 }
 const RECEIPT_LABELS = {
-  ar: { emp:'الموظف', total:'الإجمالي', cash:'كاش', visa:'فيزا', instapay:'انستا باي', currency:'ج.م', invoice:'فاتورة رقم', item:'الصنف', qty:'كمية', price:'السعر' },
-  en: { emp:'Cashier', total:'Total', cash:'Cash', visa:'Visa', instapay:'InstaPay', currency:'EGP', invoice:'Invoice #', item:'Item', qty:'Qty', price:'Price' }
+  ar: { emp:'الموظف', total:'الإجمالي', cash:'كاش', visa:'فيزا', instapay:'انستا باي', currency:'ج.م', invoice:'فاتورة رقم', item:'الصنف', qty:'كمية', price:'السعر', change:'الباقي' },
+  en: { emp:'Cashier', total:'Total', cash:'Cash', visa:'Visa', instapay:'InstaPay', currency:'EGP', invoice:'Invoice #', item:'Item', qty:'Qty', price:'Price', change:'Change' }
 };
 // تعريف عناصر الفاتورة: fixed = نصه تلقائي من النظام، text = بتكتبه انت
 const RECEIPT_ELEMENTS = [
@@ -477,10 +477,23 @@ function buildReceiptHTML(data){
       case 'meta':
         parts.push(`<div style="text-align:center; font-size:${fs}; margin:3px 0;">${d.dateStr||''}${d.empName?' · '+L.emp+': '+d.empName:''}</div>`); break;
       case 'items':
-        parts.push(`<table style="width:100%; border-collapse:collapse; font-size:${fs}; margin:4px 0;">${(d.items||[]).map(it=>
+        // عناوين الأعمدة إنجليزي، والبيانات تحتها في نفس الأعمدة بالظبط
+        parts.push(`<table style="width:100%; border-collapse:collapse; font-size:${fs}; margin:4px 0;">`
+          + `<tr>`
+          + `<th style="padding:2px 0 4px; border-bottom:2px solid #000; text-align:${dir==='rtl'?'right':'left'}; font-size:${Math.max(8, (parseInt(fs)||11) - 1)}px; font-weight:800;">Item</th>`
+          + `<th style="padding:2px 4px 4px; border-bottom:2px solid #000; white-space:nowrap; font-size:${Math.max(8, (parseInt(fs)||11) - 1)}px; font-weight:800;" dir="ltr">Qty × Price</th>`
+          + `<th style="padding:2px 0 4px; border-bottom:2px solid #000; white-space:nowrap; text-align:${dir==='rtl'?'left':'right'}; font-size:${Math.max(8, (parseInt(fs)||11) - 1)}px; font-weight:800;">Total</th>`
+          + `</tr>`
+          + `${(d.items||[]).map(it=>
           `<tr><td style="padding:3px 0; border-bottom:1px solid #000; font-weight:600; word-break:break-word; max-width:0; width:100%;">${it.name}</td><td style="padding:3px 4px; border-bottom:1px solid #000; white-space:nowrap; font-weight:600;">${it.qty} × ${it.unit||''}</td><td style="padding:3px 0; border-bottom:1px solid #000; white-space:nowrap; font-weight:700; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
       case 'totals':
-        parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`); break;
+        parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`);
+        // 💵 الباقي — بيظهر بس لما يكون فيه فكة فعلًا
+        if(Number(d.changeStr) > 0){
+          parts.push(`<div style="text-align:center; font-weight:800; font-size:${fs}; margin:1px 0 3px;">`
+            + `${L.change || 'الباقي'}: ${Number(d.changeStr).toFixed(2)} ${currencyLabel()}</div>`);
+        }
+        break;
       case 'cardTxn': {
         // 💳 بيانات الدفع بالكارت — بتظهر بس لو الدفع اتم بالماكينة
         const ct = d.cardTxn;
@@ -551,7 +564,7 @@ function receiptSampleData(){
     empName: (currentEmployee&&currentEmployee.name)||'أحمد',
     items: [ {name:'إيشارب حرير', qty:1, line:'250.00'}, {name:'طرحة شيفون', qty:2, line:'300.00'} ],
     totalStr:'550.00', payStr:L.cash+': 550.00', invoiceNo:'INV-000123', scanCode:'FTRH123-DEMO',
-    cardTxn:{ scheme:'MasterCard', last4:'4321', approvalCode:'012345', transactionId:504208925 },
+    cardTxn:{ scheme:'MasterCard', last4:'4321', approvalCode:'012345', transactionId:504208925 }, changeStr:50,
     showAppQR:true, appQrImg: localStorage.getItem(receiptQrKey().key)||'', appQrTitle:'حمّلي تطبيقنا!', appQrMsg: welcomeRewardText()
   };
 }
@@ -857,14 +870,18 @@ function testCashDrawer(){
   if(!drawerP){ showToast('اختار الطابعة الموصّل بيها الدرج الأول وادوس حفظ', 'err'); return; }
   // بنبعت أمر فتح الدرج من غير طباعة فاتورة كاملة
   try{
+    // من غير html خالص → الغلاف بيفتح الدرج بس ومبيطبعش ورق
     window.posShell.printReceipt({
       printer: drawerP,
       paperWidth: (receiptDesignConfig&&receiptDesignConfig.paperWidth)||'80',
-      html: '<div style="height:1px;"></div>',
+      html: '',
       openDrawer: drawerP, openCashDrawer: drawerP, cashDrawer: true
-    }).then(()=>{
-      if(typeof window.posShell.openDrawer === 'function'){ try{ window.posShell.openDrawer({ printer: drawerP }); }catch(e){} }
-      showToast('اتبعت أمر فتح الدرج ✅');
+    }).then((res)=>{
+      // 🩺 لو ويندوز رفض الأمر، بنعرض السبب الحقيقي بدل ما نقول "اتبعت" وخلاص
+      const err = res && (res.error || res.drawerError);
+      if(err){ showToast('❌ الدرج مفتحش: ' + err, 'err'); console.warn('drawer error', err); return; }
+      if(res && res.drawerOnly) showToast('اتبعت أمر فتح الدرج ✅ (من غير طباعة)');
+      else showToast('اتبعت أمر فتح الدرج ✅ — لو طبع ورقة يبقى نسخة الويندوز قديمة');
     })
       .catch(e=> showToast('فشل إرسال الأمر: '+e.message, 'err'));
   }catch(e){ showToast('خطأ: '+e.message, 'err'); }
@@ -889,7 +906,22 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
     empName: (currentEmployee&&currentEmployee.name)||'',
     items: cart.map(it=> ({name:it.name, qty:it.qty, unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2)})),
     totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: invoiceCode||invoiceNo||'',
-    cardTxn: (typeof window.paymobCardInfo !== 'undefined' && window.paymobCardInfo) ? window.paymobCardInfo : null
+    // 💳 بيانات الكارت بتتطبع بشرطين مع بعض:
+    //   (١) الفاتورة دي فيها دفع فيزا فعلًا  (٢) وفيه بيانات كارت متأكدة
+    // الشرط الأول ضروري: البيانات متخزنة على window، ولو مااتصفرتش لأي سبب
+    // كانت هتتنقل لفاتورة الكاش اللي بعدها وتطبع "فيزا" غلط.
+    cardTxn: (Number((payments||{}).visa) > 0 && window.paymobCardInfo) ? window.paymobCardInfo : null,
+    // 💵 الفكة = المدفوع − المطلوب (في فواتير البيع بس، ولما يكون فيه كاش)
+    changeStr: (function(){
+      try{
+        const paid = Object.values(payments||{}).reduce((n,v)=> n + (Number(v)||0), 0);
+        const t = Number(total)||0;
+        if(t <= 0) return 0;                              // مرتجع = مفيش فكة
+        if(!((payments||{}).cash > 0)) return 0;          // الفكة بتترد كاش بس
+        const diff = +(Math.abs(paid) - Math.abs(t)).toFixed(2);
+        return diff > 0 ? diff : 0;
+      }catch(e){ return 0; }
+    })()
   };
   // QR التطبيق: يظهر بس لو مفيش رقم، أو الرقم مش مسجّل، أو مسجّل من غير تطبيق
   const _ph = (document.getElementById('customerPhone')||{value:''}).value.trim();
