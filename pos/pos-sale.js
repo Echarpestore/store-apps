@@ -1593,6 +1593,55 @@ function _capNextAction(data, myAskId, now){
 
 function _capDocRef(){ return db.collection(CAP_COL).doc(currentBranch); }
 
+// 💚 مؤشر اتصال شاشة التقييم
+// الشاشة بتبعت نبضة كل 20 ثانية. لو آخر نبضة أحدث من 60 ثانية = شغّالة.
+// من غير المؤشر ده، الكاشير بيدوس ويستنى من غير ما يعرف الجهاز التاني فاتح ولا لأ.
+const CAP_ALIVE_MS = 60000;
+let _capAliveUnsub = null;
+function capIsAlive(seen, now){
+  const t = Number(seen) || 0;
+  if(!t) return false;
+  return ((now == null ? Date.now() : now) - t) < CAP_ALIVE_MS;
+}
+window.capIsAlive = capIsAlive;
+
+function capPaintBtn(alive){
+  const btn = document.querySelector('[onclick="capAskCustomer()"]');
+  if(!btn) return;
+  if(alive){
+    btn.style.border = '2px solid #22c55e';
+    btn.style.boxShadow = '0 0 8px #22c55e55';
+    btn.title = 'شاشة التقييم متصلة ✅ — اضغط والعميل يكتب رقمه';
+  } else {
+    btn.style.border = '1px solid var(--border)';
+    btn.style.boxShadow = 'none';
+    btn.title = 'شاشة التقييم مش متصلة — اتأكد إنها فاتحة على نفس الفرع';
+  }
+}
+function capWatchAlive(){
+  if(_capAliveUnsub || !currentBranch) return;
+  try{
+    _capAliveUnsub = _capDocRef().onSnapshot(function(d){
+      const data = d.exists ? d.data() : null;
+      capPaintBtn(capIsAlive(data && data.kioskSeen));
+    }, function(e){
+      console.warn('cap alive', e && e.code);
+      _capAliveUnsub = null;
+      capPaintBtn(false);
+    });
+  }catch(e){ console.warn('cap alive start', e); }
+  // النبضة بتقدم مع الوقت — بنعيد الحساب كل 20 ثانية عشان الإطار يختفي لو الشاشة قفلت
+  setInterval(function(){
+    try{
+      _capDocRef().get().then(function(d){
+        const data = d.exists ? d.data() : null;
+        capPaintBtn(capIsAlive(data && data.kioskSeen));
+      }).catch(function(){});
+    }catch(e){}
+  }, 20000);
+}
+window.capWatchAlive = capWatchAlive;
+
 async function capAskCustomer(){
   if(!currentBranch){ showToast('سجّل دخول الأول', 'err'); return; }
   _capAskId = Date.now().toString(36) + Math.random().toString(36).slice(2,6);

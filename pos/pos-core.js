@@ -383,6 +383,10 @@ function showScreen(id){
   document.getElementById(id).classList.add('active');
   if(typeof injectUnifiedToolbars === 'function') try{ injectUnifiedToolbars(); }catch(e){}
   try{ clearStuckOverlays(id); }catch(e){ console.warn('overlays', e); }
+  // 💚 مؤشر اتصال شاشة التقييم — بيبدأ أول ما نوصل شاشة البيع
+  if(id === 'saleScreen' && typeof capWatchAlive === 'function'){
+    try{ capWatchAlive(); }catch(e){ console.warn('cap alive', e); }
+  }
 }
 
 // 🧹 تنضيف النوافذ العالقة
