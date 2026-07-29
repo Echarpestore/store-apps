@@ -464,7 +464,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
   getFirestore, collection, addDoc, onSnapshot,
   doc, deleteDoc, enableIndexedDbPersistence, getDocs, setDoc, query, where
@@ -1191,13 +1191,66 @@ function _capApply(data){
     _capShowPane(null);
   }
 }
-let _capListening = false;
+let _capListening = false, _capUnsub = null, _capRetryTimer = null;
+// ⚠️ الباج اللي كان: المستمع بيبدأ وقت تحميل الصفحة، والدخول المجهول لسه
+// مخلصش، فالقراءة بتترفض (permission-denied) والعلامة بتفضل true —
+// فعمره ما بيحاول تاني والشاشة مبتفتحش خالص.
+// دلوقتي: بيعيد المحاولة لو فشل، وبيبدأ لوحده أول ما الدخول يخلص.
 function capStartListener(){
   if(!currentBranch || _capListening) return;
   _capListening = true;
-  onSnapshot(doc(db, 'pos_capture', currentBranch), (d)=> _capApply(d.exists() ? d.data() : null), (e)=> console.warn('cap listen', e && e.code));
+  try{
+    _capUnsub = onSnapshot(
+      doc(db, 'pos_capture', currentBranch),
+      (d)=> _capApply(d.exists() ? d.data() : null),
+      (e)=>{
+        console.warn('cap listen', e && e.code);
+        // فشل الاستماع (غالبًا الدخول لسه مخلصش) → نفك ونعيد المحاولة
+        _capListening = false;
+        try{ if(_capUnsub) _capUnsub(); }catch(x){}
+        _capUnsub = null;
+        ensureAnonAuth();
+        clearTimeout(_capRetryTimer);
+        _capRetryTimer = setTimeout(capStartListener, 2500);
+      }
+    );
+  }catch(e){
+    console.warn('cap start', e);
+    _capListening = false;
+    clearTimeout(_capRetryTimer);
+    _capRetryTimer = setTimeout(capStartListener, 2500);
+  }
 }
+// 🔑 نبدأ أول ما الدخول المجهول يخلص فعلًا — مش وقت تحميل الصفحة
+onAuthStateChanged(_auth, function(u){ if(u) capStartListener(); });
+// وشبكة أمان: محاولة كل 5 ثواني لحد ما يشتغل (لو الفرع اتحدد متأخر)
+setInterval(function(){ if(!_capListening) capStartListener(); }, 5000);
+// ولما النت يرجع
+window.addEventListener('online', function(){ if(!_capListening) capStartListener(); });
 capStartListener();
+
+// 💚 نبضة: بنكتب علامة كل 20 ثانية عشان الكاشير يعرف إن الشاشة دي شغّالة
+// (بـ merge عشان منمسحش حالة الطلب الجارية)
+let _capBeatTimer = null;
+function capBeat(){
+  if(!currentBranch || !_auth.currentUser) return;
+  setDoc(doc(db, 'pos_capture', currentBranch), { kioskSeen: Date.now() }, { merge:true })
+    .catch(function(e){ console.warn('cap beat', e && e.code); });
+}
+function capStartBeat(){
+  if(_capBeatTimer) return;
+  capBeat();
+  _capBeatTimer = setInterval(capBeat, 20000);
+}
+onAuthStateChanged(_auth, function(u){ if(u) capStartBeat(); });
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) capBeat(); });
+
+// 🩺 تشخيص: اكتب capDiag() في الـ console
+window.capDiag = function(){
+  console.log('الفرع:', currentBranch || '❌ مش متحدد');
+  console.log('الاستماع شغال؟', _capListening ? '✅ أيوه' : '❌ لأ');
+  console.log('الدخول المجهول:', _auth.currentUser ? '✅ متسجّل' : '❌ لسه');
+};
 
 </script>
 <script>
