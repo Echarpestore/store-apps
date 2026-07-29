@@ -709,16 +709,36 @@ async function renderLiveSalesHistory(){
       }
     }
 
+    const isRet = (s.total||0) < 0;
+    const nItems = (s.items||[]).reduce((n,it)=> n + (it.qty||1), 0);
+    const accent = isRet ? '#DC2626' : '#059669';
     return `
-    <div onclick="openInvoice('${s.id}')" style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-      <div>
-        <div style="font-weight:700; font-size:13px;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}${badge} — ${(s.items||[]).length} صنف — ${s.customerPhone ? 'عميل: '+s.customerPhone : 'من غير عميل'}${ratingBadge}</div>
-        <div style="color:var(--muted); font-size:11px;">${dateStr} — بواسطة ${s.employeeName||'—'}</div>
+    <div class="sh-card" data-sid="${s.id}" style="
+      background:#fff; border:1px solid #e6e9ef; border-right:4px solid ${accent};
+      border-radius:14px; margin-bottom:10px; overflow:hidden;
+      box-shadow:0 2px 8px rgba(20,25,40,.05); transition:box-shadow .15s;">
+      <div onclick="shToggle('${s.id}')" style="padding:13px 15px; display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer;">
+        <div style="min-width:0; flex:1;">
+          <div style="display:flex; align-items:center; gap:7px; flex-wrap:wrap;">
+            <span style="font-weight:900; font-size:15px; letter-spacing:.3px;">${s.invoiceNo || s.id.slice(-6).toUpperCase()}</span>
+            ${badge}${ratingBadge}
+          </div>
+          <div style="color:#6b7280; font-size:12px; margin-top:3px; display:flex; gap:10px; flex-wrap:wrap;">
+            <span>🕐 ${dateStr}</span>
+            <span>👤 ${s.employeeName||'—'}</span>
+            <span>📦 ${nItems} قطعة</span>
+            ${s.customerPhone ? `<span style="direction:ltr; display:inline-block;">📱 ${s.customerPhone}</span>` : ''}
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px; flex-shrink:0;">
+          <div style="text-align:left;">
+            <div style="font-weight:900; font-size:17px; color:${accent}; line-height:1.2;">${Math.abs(s.total||0).toFixed(2)}</div>
+            <div style="font-size:10px; color:#9ca3af;">${isRet ? 'مرتجع' : 'ج.م'}</div>
+          </div>
+          <div id="shChev_${s.id}" style="color:#9ca3af; font-size:15px; transition:transform .2s;">▾</div>
+        </div>
       </div>
-      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-        <button onclick="event.stopPropagation(); reprintSale('${s.id}')" title="طباعة نسخة تاني" style="border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:9px; padding:7px 10px; font-size:14px; cursor:pointer;">🖨️</button>
-        <div style="font-weight:800; font-size:15px; color:${(s.total||0) < 0 ? 'var(--minus)' : 'var(--plus)'};">${(s.total||0).toFixed(2)} ج.م</div>
-      </div>
+      <div id="shBody_${s.id}" style="display:none; border-top:1px solid #eef0f4; background:#fafbfc; padding:12px 15px;"></div>
     </div>`;
   };
 
@@ -763,6 +783,68 @@ async function renderLiveSalesHistory(){
 }
 
 // 🖨️ طباعة نسخة تاني من فاتورة قديمة — بنفس تصميم الفاتورة، ومن غير فتح الدرج
+// 🔽 فتح تفاصيل الفاتورة **جوه الكارت** — من غير ما نفتح صفحة تانية
+function shToggle(id){
+  const body = document.getElementById('shBody_' + id);
+  const chev = document.getElementById('shChev_' + id);
+  if(!body) return;
+  const open = body.style.display !== 'none';
+  if(open){
+    body.style.display = 'none';
+    if(chev) chev.style.transform = 'rotate(0deg)';
+    return;
+  }
+  const s = (window._shSalesById || {})[id];
+  if(!s){ body.innerHTML = '<div style="color:#9ca3af; font-size:12px;">مش لاقي تفاصيل الفاتورة</div>'; }
+  else {
+    const rows = (s.items || []).map(function(it){
+      const q = it.qty || 1;
+      const unit = Number(it.price || 0);
+      const line = unit * q;
+      const ret = it.isReturn || unit < 0;
+      return '<tr>'
+        + '<td style="padding:7px 4px; font-size:13px; font-weight:600;">' + (it.name || '—')
+        + (ret ? ' <span style="color:#DC2626; font-size:11px;">↩️ مرتجع</span>' : '')
+        + (it.barcode ? '<div style="font-size:10.5px; color:#9ca3af; direction:ltr; text-align:right; font-family:monospace;">' + it.barcode + '</div>' : '')
+        + '</td>'
+        + '<td style="padding:7px 4px; text-align:center; font-size:12.5px; white-space:nowrap; direction:ltr;">'
+        + q + ' × ' + Math.abs(unit).toFixed(2) + '</td>'
+        + '<td style="padding:7px 4px; text-align:left; font-weight:800; font-size:13px; white-space:nowrap;'
+        + (ret ? ' color:#DC2626;' : '') + '">' + Math.abs(line).toFixed(2) + '</td>'
+        + '</tr>';
+    }).join('');
+    const pays = Object.entries(s.payments || {}).filter(function(e){ return e[1] > 0; })
+      .map(function(e){
+        const names = { cash:'كاش', visa:'فيزا', insta:'انستا باي', salary:'خصم راتب' };
+        return '<span style="background:#eef2ff; color:#4338CA; border-radius:99px; padding:4px 11px; font-size:11.5px; font-weight:700;">'
+             + (names[e[0]] || e[0]) + ': ' + Number(e[1]).toFixed(2) + '</span>';
+      }).join(' ');
+    const card = s.cardTxn;
+    body.innerHTML =
+      '<table style="width:100%; border-collapse:collapse;">'
+      + '<tr style="color:#6b7280; font-size:11px; border-bottom:1px solid #e6e9ef;">'
+      + '<th style="text-align:right; padding:0 4px 6px; font-weight:700;">الصنف</th>'
+      + '<th style="text-align:center; padding:0 4px 6px; font-weight:700;">الكمية × السعر</th>'
+      + '<th style="text-align:left; padding:0 4px 6px; font-weight:700;">الإجمالي</th></tr>'
+      + rows + '</table>'
+      + (pays ? '<div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">' + pays + '</div>' : '')
+      + (card ? '<div style="margin-top:9px; background:#0f1a2e; color:#dbeafe; border-radius:9px; padding:8px 11px; font-family:monospace; font-size:11.5px; direction:ltr; text-align:left;">'
+          + (card.scheme || 'CARD') + ' **** ' + (card.last4 || '----')
+          + (card.transactionId ? ' · TXN ' + card.transactionId : '') + '</div>' : '')
+      + '<div style="display:flex; gap:8px; margin-top:12px;">'
+      + '<button onclick="reprintSale(\'' + id + '\')" style="flex:2; padding:10px; border:none; border-radius:10px;'
+      + " background:linear-gradient(135deg,#3B82F6,#1D4ED8); color:#fff; font-family:'Cairo'; font-weight:800;"
+      + ' font-size:13px; cursor:pointer;">🖨️ اطبع نسخة تانية</button>'
+      + '<button onclick="openInvoice(\'' + id + '\')" style="flex:1; padding:10px; border:1px solid #d1d5db;'
+      + " border-radius:10px; background:#fff; color:#374151; font-family:'Cairo'; font-weight:700;"
+      + ' font-size:12.5px; cursor:pointer;">تفاصيل أكتر</button>'
+      + '</div>';
+  }
+  body.style.display = 'block';
+  if(chev) chev.style.transform = 'rotate(180deg)';
+}
+if(typeof window !== 'undefined') window.shToggle = shToggle;
+
 function reprintSale(id){
   const s = (window._shSalesById||{})[id];
   if(!s){ showToast('مش لاقي بيانات الفاتورة — اعمل تحديث للسجل', 'err'); return; }
@@ -774,11 +856,19 @@ function reprintSale(id){
     const data = {
       dateStr: d.toLocaleString(c.lang==='en' ? 'en-GB' : 'ar-EG'),
       empName: s.employeeName || '',
-      items: (s.items||[]).map(it=> ({ name: it.name, qty: it.qty, line: ((it.price||0)*(it.qty||1)).toFixed(2) })),
+      // 🧾 نفس تصميم الفاتورة الأصلية بالظبط — بسعر الوحدة وبيانات الكارت
+      items: (s.items||[]).map(it=> ({
+        name: it.name, qty: it.qty,
+        unit: Math.abs(Number(it.price||0)).toFixed(2),
+        line: Math.abs((it.price||0)*(it.qty||1)).toFixed(2)
+      })),
       totalStr: Number(s.total||0).toFixed(2),
       payStr,
       invoiceNo: s.invoiceNo || '',
       scanCode: s.invoiceCode || s.invoiceNo || '',
+      cardTxn: s.cardTxn || null,
+      isCopy: true,                       // 🔁 علامة إن دي نسخة تانية مش الأصلية
+      copyAt: new Date().toLocaleString(c.lang==='en' ? 'en-GB' : 'ar-EG'),
       showAppQR: false
     };
     _printBuiltReceipt(data, {});   // {} = مفيش كاش هنا → الدرج مش هيفتح

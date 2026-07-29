@@ -183,6 +183,7 @@ const RECEIPT_ELEMENTS = [
   { id:'meta',      label:'🕐 التاريخ والموظف',       kind:'auto', size:10 },
   { id:'items',     label:'🛒 جدول الأصناف',          kind:'auto', size:12 },
   { id:'totals',    label:'💰 الإجمالي وطرق الدفع',   kind:'auto', size:13 },
+  { id:'copyMark',  label:'🔁 علامة «نسخة تانية» (بتظهر في إعادة الطباعة بس)', kind:'auto', size:11 },
   { id:'cardTxn',   label:'💳 بيانات الدفع بالكارت (آخر 4 أرقام · نوع الكارت · رقم العملية)', kind:'auto', size:10 },
   { id:'invoiceNo', label:'🔢 رقم الفاتورة',          kind:'auto', size:11 },
   { id:'barcode',   label:'⬛ باركود المرتجع',        kind:'auto' },
@@ -476,6 +477,16 @@ function buildReceiptHTML(data){
         if(el.text) parts.push(`<div style="text-align:center; font-size:${fs}; margin:2px 0;">${el.text}</div>`); break;
       case 'meta':
         parts.push(`<div style="text-align:center; font-size:${fs}; margin:3px 0;">${d.dateStr||''}${d.empName?' · '+L.emp+': '+d.empName:''}</div>`); break;
+      case 'copyMark': {
+        // 🔁 علامة النسخة التانية — بتظهر بس في إعادة الطباعة
+        if(!d.isCopy) break;
+        parts.push('<div style="border:2px dashed #000; border-radius:4px; margin:4px 0 6px;'
+          + ' padding:5px 6px; text-align:center; font-weight:900; font-size:' + fs + ';">'
+          + 'نسخة تانية — مش الفاتورة الأصلية'
+          + (d.copyAt ? ('<div style="font-weight:600; font-size:' + Math.max(8,(parseInt(fs)||11)-2) + 'px;">'
+              + 'اتطبعت: ' + d.copyAt + '</div>') : '')
+          + '</div>');
+        break; }
       case 'items':
         // عناوين الأعمدة إنجليزي، والبيانات تحتها في نفس الأعمدة بالظبط
         parts.push(`<table style="width:100%; border-collapse:collapse; font-size:${fs}; margin:4px 0;">`
