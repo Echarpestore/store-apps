@@ -1630,6 +1630,7 @@ async function reverseReceipt(saleId){
       items: sale.items,
       itemCount: -(sale.itemCount||0),
       total: -(sale.total||0),
+      createdAtMs: Date.now(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }));
     if(_rvW2.error) console.error('سجل العكس', _rvW2.error);
@@ -2563,6 +2564,9 @@ async function _doConfirmPayment(){
       firstItemAt: _cartFirstItemAt || null,   // 🕵️ متى بدأت السلة (لكشف التأخير غير الطبيعي)
       staffPurchase: staffPurchase ? { empId: staffPurchase.empId, name: staffPurchase.name, pct: staffPurchase.pct, discountAmount: staffDiscountAmount() } : null,
       cardTxn: paymobCardInfo || null,   // 💳 بيانات الدفع بالكارت (للمرتجع والنزاعات)
+      // 📴 طابع وقت محلي: serverTimestamp بيفضل null لحد ما فاتورة الأوفلاين تترفع،
+      // فكانت بتختفي من التقفيل والتقارير وهي كاشها في الدرج. ده البديل الفوري.
+      createdAtMs: Date.now(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }));
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية

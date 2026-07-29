@@ -276,19 +276,38 @@ async function renderReportsScreen(){
   document.querySelectorAll('.rep-type-btn').forEach(b=> b.classList.toggle('active', b.dataset.rtype === currentReportType));
 
   let sales = [];
+  const { from, to } = getReportDateBounds();
   try{
-    // بدل تحميل كل تاريخ الفرع: أحدث 1500 فاتورة بس (بتغطي شهور، والتقارير أصلاً بفترات قصيرة)
-    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
-      .orderBy('createdAt','desc').limit(1500).get()
-      .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(1500).get());
-    sales = snap.docs.map(d=>d.data());
+    // استعلام بنطاق الفترة بدل limit(1500) — الحد الثابت كان بيغطي ~10 أيام بس
+    // في الفروع النشطة، فتقرير "آخر 30 يوم" كان ناقص من غير ما يقول
+    let snap;
+    if(from){
+      snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
+        .where('createdAt','>=', from).orderBy('createdAt','desc').get()
+        .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch)
+          .orderBy('createdAt','desc').limit(1500).get())
+        .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(1500).get());
+    }else{
+      snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
+        .orderBy('createdAt','desc').limit(1500).get()
+        .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(1500).get());
+    }
+    const _byId = new Map();
+    snap.docs.forEach(d=>{ const o = d.data(); _byId.set(d.id, o); });
+    // 📴 فواتير الأوفلاين (createdAt لسه null) — بالطابع المحلي
+    if(from){
+      try{
+        const q2 = await db.collection(TEST_SALES).where('createdAtMs','>=', from.getTime()).get();
+        q2.docs.forEach(d=>{ const o = d.data(); if(o.branch === currentBranch && !_byId.has(d.id)) _byId.set(d.id, o); });
+      }catch(e2){}
+    }
+    sales = Array.from(_byId.values());
   }catch(e){ console.warn(e); }
 
-  const { from, to } = getReportDateBounds();
   if(from || to){
     sales = sales.filter(s=>{
-      const t = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : null;
-      if(!t) return false;
+      const t = saleTs(s);
+      if(t == null) return false;
       if(from && t < from.getTime()) return false;
       if(to && t > to.getTime()) return false;
       return true;
@@ -1124,6 +1143,15 @@ function dcAggregate(sales){
 }
 window.dcAggregate = dcAggregate;
 
+// 🕐 وقت الفاتورة: طابع السيرفر لو اتأكد، وإلا الطابع المحلي (فواتير الأوفلاين
+// اللي لسه مرفعتش serverTimestamp بتاعها null — كانت بتختفي من الحسابات)
+function saleTs(s){
+  if(s && s.createdAt && typeof s.createdAt.toMillis === 'function') return s.createdAt.toMillis();
+  if(s && typeof s.createdAtMs === 'number') return s.createdAtMs;
+  return null;
+}
+window.saleTs = saleTs;
+
 async function goToEndOfDay(){
   showScreen('endOfDayScreen');
   const wrap = document.getElementById('endOfDayWrap');
@@ -1134,23 +1162,8 @@ async function goToEndOfDay(){
     ? bizDayStartMs()
     : (function(){ const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
 
-  // مبيعات النهاردة (نفس الفرع)
-  let sales = [], _allFetched = [];
-  try{
-    // أحدث 300 فاتورة تكفي وزيادة ليوم واحد — بدل تحميل التاريخ كله
-    const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
-      .orderBy('createdAt','desc').limit(300).get()
-      .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(300).get());
-    _allFetched = snap.docs.map(d=>d.data());
-    sales = _allFetched.filter(s=> s.createdAt && s.createdAt.toMillis && s.createdAt.toMillis() >= dayMs);
-  }catch(e){ console.warn('sales', e); }
-
-  const { systemTotal, cashSales, visaSales, instaSales, salarySales } = dcAggregate(sales);
-
-  // 🕵️ السبب الأول للأوفر اليومي: فواتير اتعملت **بعد تقفيل امبارح وقبل بداية
-  // يوم الشغل الحالي** — دي مش داخلة في مبيعات النهاردة ولا دخلت تقفيل امبارح
-  // (التقفيل اتعمل قبلها)، لكن كاشها موجود في الدرج → أوفر بنفس المبلغ.
-  let lateSales = [], lateTotal = 0, lateCash = 0, lastCloseTs = 0;
+  // آخر تقفيل الأول — عشان نجيب فواتير من بدايته (الفجوة) مش من بداية اليوم بس
+  let lastCloseTs = 0;
   try{
     const cq = await db.collection(TEST_SETTINGS)
       .where(firebase.firestore.FieldPath.documentId(), '>=', 'dayclose_'+currentBranch+'_')
@@ -1158,10 +1171,56 @@ async function goToEndOfDay(){
       .get();
     cq.forEach(d=>{ const t = (d.data()||{}).ts || 0; if(t < dayMs) lastCloseTs = Math.max(lastCloseTs, t); });
   }catch(e){ console.warn('last close', e); }
-  if(lastCloseTs && (dayMs - lastCloseTs) < 48*3600000){
+  const _gapValid = lastCloseTs && (dayMs - lastCloseTs) < 48*3600000;
+  const fetchFromMs = _gapValid ? Math.min(lastCloseTs, dayMs) : dayMs;
+
+  // مبيعات من بداية النافذة — استعلام بنطاق زمني مش limit(300):
+  // الحد الثابت كان ثغرة في أيام المواسم (يوم يعدّي 300 فاتورة = فواتير بتقع من الحساب)
+  let sales = [], _allFetched = [], _byId = new Map(), _fromCache = false, _pendingCount = 0;
+  try{
+    let snap;
+    try{
+      snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
+        .where('createdAt','>=', new Date(fetchFromMs))
+        .orderBy('createdAt','desc').get();
+    }catch(e1){
+      // فولباك لو الاستعلام بالنطاق اترفض: الطريقة القديمة بحد مرفوع
+      snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
+        .orderBy('createdAt','desc').limit(1000).get()
+        .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(1000).get());
+    }
+    _fromCache = !!(snap.metadata && snap.metadata.fromCache);
+    snap.docs.forEach(d=>{
+      const o = d.data(); o._id = d.id;
+      o._pending = !!(d.metadata && d.metadata.hasPendingWrites);
+      _byId.set(d.id, o);
+    });
+    // 📴 فواتير الأوفلاين من الجهاز ده: createdAt لسه null فمش بترجع في استعلام
+    // السيرفر — بنكملها من الطابع المحلي (استعلام حقل واحد، من غير index مركب)
+    try{
+      const q2 = await db.collection(TEST_SALES).where('createdAtMs','>=', fetchFromMs).get();
+      q2.docs.forEach(d=>{
+        const o = d.data();
+        if(o.branch !== currentBranch || _byId.has(d.id)) return;
+        o._id = d.id; o._pending = !!(d.metadata && d.metadata.hasPendingWrites);
+        _byId.set(d.id, o);
+      });
+    }catch(e2){ console.warn('offline sales q', e2); }
+    _allFetched = Array.from(_byId.values());
+    sales = _allFetched.filter(s=>{ const t = saleTs(s); return t != null && t >= dayMs; });
+    _pendingCount = sales.filter(s=> s._pending).length;
+  }catch(e){ console.warn('sales', e); }
+
+  const { systemTotal, cashSales, visaSales, instaSales, salarySales } = dcAggregate(sales);
+
+  // 🕵️ السبب الأول للأوفر اليومي: فواتير اتعملت **بعد تقفيل امبارح وقبل بداية
+  // يوم الشغل الحالي** — دي مش داخلة في مبيعات النهاردة ولا دخلت تقفيل امبارح
+  // (التقفيل اتعمل قبلها)، لكن كاشها موجود في الدرج → أوفر بنفس المبلغ.
+  let lateSales = [], lateTotal = 0, lateCash = 0;
+  if(_gapValid){
     lateSales = _allFetched.filter(s=>{
-      const t = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : 0;
-      return t >= lastCloseTs && t < dayMs;
+      const t = saleTs(s);
+      return t != null && t >= lastCloseTs && t < dayMs;
     });
     const _lateAgg = dcAggregate(lateSales);
     lateTotal = _lateAgg.systemTotal;
@@ -1187,7 +1246,7 @@ async function goToEndOfDay(){
     });
   }catch(e){ console.warn('advances', e); }
 
-  dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length, lateTotal, lateCash, lateCount: lateSales.length, lastCloseTs };
+  dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length, lateTotal, lateCash, lateCount: lateSales.length, lastCloseTs, pendingCount: _pendingCount, fromCache: _fromCache };
   const lastFloat = parseFloat(localStorage.getItem('dc_float_'+currentBranch)) || '';
 
   const denoms = [200,100,50,20,10,5];
@@ -1207,6 +1266,8 @@ async function goToEndOfDay(){
       <div class="dc-sm-sub">${dcData.invoiceCount} فاتورة · كاش ${cashSales.toFixed(0)} · فيزا ${visaSales.toFixed(0)} · انستا ${instaSales.toFixed(0)}${salarySales>0?` · 📄 راتب موظفين ${salarySales.toFixed(0)}`:''}</div>
       ${staffOrdersToday.length?`<div class="dc-sm-sub" style="color:#c084fc;">🎫 أوردرات موظفين النهاردة: ${staffOrdersToday.length} (${staffOrdersTotal.toFixed(0)} ج.م — منها ${salarySales.toFixed(0)} خصم راتب مش داخل الدرج)</div>`:''}
       ${lateSales.length?`<div class="dc-sm-sub" style="color:#f59e0b; font-weight:800;">⚠️ ${lateSales.length} فاتورة اتعملت بعد آخر تقفيل وقبل بداية اليوم (${lateTotal.toFixed(0)} ج.م — منها كاش ${lateCash.toFixed(0)}). الكاش ده في الدرج بس مش في مبيعات النهاردة → هيبان أوفر بنفس المبلغ.</div>`:''}
+      ${_fromCache?`<div class="dc-sm-sub" style="color:#ef4444; font-weight:900;">📴 النت قاطع — الأرقام دي من الكاش المحلي للجهاز ده، وفواتير الأجهزة التانية ممكن تكون مش ظاهرة. استنى النت يرجع قبل التقفيل.</div>`:''}
+      ${_pendingCount?`<div class="dc-sm-sub" style="color:#f59e0b; font-weight:800;">📴 ${_pendingCount} فاتورة من الجهاز ده لسه مرفعتش للسيرفر — محسوبة في الأرقام دي وهتترفع لوحدها.</div>`:''}
     </div>` : `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:14px; color:var(--muted); font-size:12.5px; text-align:center;">اعدّ الدرج واملأ البيانات، وفي الآخر دوس تأكيد — النتيجة بتتسجّل للمدير.</div>`}
 
     <div class="dc-card">
@@ -1262,6 +1323,10 @@ function dcRecalc(){
 
 // لما يدوس OK: يحسب الأوفر/العجز ويحفظ سجل التقفيل
 function dcFinish(){
+  // 📴 تقفيل والنت قاطع = أرقام ناقصة محتملة (فواتير أجهزة تانية مش واصلة) — تأكيد إجباري
+  if(dcData && dcData.fromCache){
+    if(!confirm('📴 النت قاطع والأرقام من الكاش المحلي — فواتير الأجهزة التانية ممكن تكون ناقصة.\nالأفضل تستنى النت يرجع. متأكد إنك عايز تقفل دلوقتي؟')) return;
+  }
   const denoms = [200,100,50,20,10,5];
   let counted = 0; denoms.forEach(d=> counted += dcNum('dc_den_'+d) * d);
   const flt = dcNum('dc_float'), exp = dcNum('dc_expenses'), adv = dcNum('dc_advances');
@@ -1317,6 +1382,7 @@ function dcFinish(){
     countedCash: counted, float: flt, expenses: exp, advances: adv, visa, instapay: insta, salaryDeferred: salary,
     systemTotal: dcData.systemTotal, cashSales: dcData.cashSales, visaSales: dcData.visaSales, instaSales: dcData.instaSales,
     accounted, overShort, overShortReal, lateCash: _lateCash, lateTotal: +(dcData.lateTotal||0), lateCount: dcData.lateCount||0, invoiceCount: dcData.invoiceCount,
+    pendingCount: dcData.pendingCount||0, closedFromCache: !!dcData.fromCache,
     closedBy: (typeof currentEmployee!=='undefined' && currentEmployee) ? (currentEmployee.name||'') : '',
     ts: Date.now()
   };
