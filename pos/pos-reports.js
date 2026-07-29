@@ -211,18 +211,25 @@ function setReportType(t){
 function getReportDateBounds(){
   const now = new Date();
   let from = null, to = null;
+  // 🕕 النهاردة/امبارح بيوم الشغل (الساعة الفاصلة) — مش نص الليل.
+  // ده كان سبب إن "تقارير النهاردة" فيها فاتورة زيادة عن "تقفيل اليوم":
+  // فواتير بعد نص الليل بتظهر في التقارير وميظهروش في التقفيل.
+  const _bizStart = (typeof bizDayStartMs === 'function')
+    ? bizDayStartMs()
+    : (function(){ const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+  const DAY = 24*3600000;
   if(currentReportRange === 'today'){
-    from = new Date(); from.setHours(0,0,0,0);
-    to = new Date(); to.setHours(23,59,59,999);
+    from = new Date(_bizStart);
+    to = new Date(_bizStart + DAY - 1);
   }else if(currentReportRange === 'yesterday'){
-    from = new Date(); from.setDate(from.getDate()-1); from.setHours(0,0,0,0);
-    to = new Date(); to.setDate(to.getDate()-1); to.setHours(23,59,59,999);
+    from = new Date(_bizStart - DAY);
+    to = new Date(_bizStart - 1);
   }else if(currentReportRange === 'week'){
-    from = new Date(); from.setDate(from.getDate()-6); from.setHours(0,0,0,0);
-    to = new Date(); to.setHours(23,59,59,999);
+    from = new Date(_bizStart - 6*DAY);
+    to = new Date(_bizStart + DAY - 1);
   }else if(currentReportRange === 'month'){
-    from = new Date(); from.setDate(from.getDate()-29); from.setHours(0,0,0,0);
-    to = new Date(); to.setHours(23,59,59,999);
+    from = new Date(_bizStart - 29*DAY);
+    to = new Date(_bizStart + DAY - 1);
   }else if(currentReportRange === 'custom'){
     const fromVal = document.getElementById('repFrom').value;
     const toVal = document.getElementById('repTo').value;
@@ -236,6 +243,32 @@ function reportRangeLabel(){
   return map[currentReportRange] || '';
 }
 
+// 📊 تجميع أرقام التقارير — دالة نقية عشان تتختبر بالـ harness.
+// قاعدة العكس: الفاتورة المعكوسة "كأنها محصلتش" → بنستبعد الأصلية (reversed)
+// **وفاتورة العكس نفسها (isReversal) كمان**. قبل كده كانت الأصلية بتتستبعد
+// وفاتورة العكس السالبة بتتحسب → المبلغ بيتخصم مرتين والتقرير بينقص بقيمة كل عكس.
+function repAggregate(sales){
+  const clean = (sales||[]).filter(s=> !s.reversed && !s.isReversal);
+  let salesTotal=0, returnsTotal=0, itemsSold=0;
+  const byMethod = {}, methodCount = {}, itemAgg = {};
+  clean.forEach(s=>{
+    const tot = s.total||0;
+    if(tot >= 0) salesTotal += tot; else returnsTotal += tot;
+    Object.entries(s.payments||{}).forEach(([m,amt])=>{ byMethod[m]=(byMethod[m]||0)+amt; methodCount[m]=(methodCount[m]||0)+1; });
+    (s.items||[]).forEach(it=>{
+      const qty = it.qty||0, line = (it.price||0)*qty;
+      if(!it.isReturn && (it.price||0) >= 0) itemsSold += qty;
+      if(!itemAgg[it.name]) itemAgg[it.name] = { qty:0, revenue:0 };
+      itemAgg[it.name].qty += qty;
+      itemAgg[it.name].revenue += line;
+    });
+  });
+  const netTotal = salesTotal + returnsTotal;
+  const invoiceCount = clean.filter(s=> (s.total||0) >= 0).length;
+  return { sales: clean, salesTotal, returnsTotal, netTotal, itemsSold, byMethod, methodCount, itemAgg, invoiceCount };
+}
+window.repAggregate = repAggregate;
+
 async function renderReportsScreen(){
   const wrap = document.getElementById('reportsWrap');
   wrap.innerHTML = '<div style="padding:30px; text-align:center; color:var(--muted);">بيتحمّل...</div>';
@@ -248,7 +281,7 @@ async function renderReportsScreen(){
     const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
       .orderBy('createdAt','desc').limit(1500).get()
       .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(1500).get());
-    sales = snap.docs.map(d=>d.data()).filter(s=> !s.reversed);
+    sales = snap.docs.map(d=>d.data());
   }catch(e){ console.warn(e); }
 
   const { from, to } = getReportDateBounds();
@@ -262,24 +295,13 @@ async function renderReportsScreen(){
     });
   }
 
-  // إجماليات عامة
-  let salesTotal=0, returnsTotal=0, itemsSold=0;
-  const byMethod = {}, methodCount = {};
-  const itemAgg = {};
-  sales.forEach(s=>{
-    const tot = s.total||0;
-    if(tot >= 0) salesTotal += tot; else returnsTotal += tot;
-    Object.entries(s.payments||{}).forEach(([m,amt])=>{ byMethod[m]=(byMethod[m]||0)+amt; methodCount[m]=(methodCount[m]||0)+1; });
-    (s.items||[]).forEach(it=>{
-      const qty = it.qty||0, line = (it.price||0)*qty;
-      if(!it.isReturn && (it.price||0) >= 0) itemsSold += qty;
-      if(!itemAgg[it.name]) itemAgg[it.name] = { qty:0, revenue:0 };
-      itemAgg[it.name].qty += qty;
-      itemAgg[it.name].revenue += line;
-    });
-  });
-  const netTotal = salesTotal + returnsTotal;
-  const invoiceCount = sales.filter(s=> !s.isReversal && (s.total||0) >= 0).length;
+  // إجماليات عامة (الدالة بتستبعد المعكوس وفواتير العكس مع بعض — مش خصم مزدوج)
+  const _agg = repAggregate(sales);
+  sales = _agg.sales;
+  const salesTotal = _agg.salesTotal, returnsTotal = _agg.returnsTotal, itemsSold = _agg.itemsSold;
+  const byMethod = _agg.byMethod, methodCount = _agg.methodCount, itemAgg = _agg.itemAgg;
+  const netTotal = _agg.netTotal;
+  const invoiceCount = _agg.invoiceCount;
   const methodLabels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستاباي'};
 
   let html = '';
@@ -287,7 +309,7 @@ async function renderReportsScreen(){
   if(currentReportType === 'receipt'){
     // 🧾 إيصال اليوم — ملخص على شكل إيصال
     const _byDay = {};
-    sales.forEach(s=>{ const _t=s.createdAt&&s.createdAt.toMillis?s.createdAt.toMillis():null; if(_t==null) return; const _d=new Date(_t); const _k=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0'); _byDay[_k]=(_byDay[_k]||0)+(s.total||0); });
+    sales.forEach(s=>{ const _t=s.createdAt&&s.createdAt.toMillis?s.createdAt.toMillis():null; if(_t==null) return; const _k=(typeof bizDayKey==='function')?bizDayKey(_t):(function(){const _d=new Date(_t); return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0');})(); _byDay[_k]=(_byDay[_k]||0)+(s.total||0); });
     const _dayPts = Object.keys(_byDay).sort().map(k=>({label:k, short:k.slice(5), value:Math.max(0,_byDay[k])}));
     const _trend = _dayPts.length>1 ? `<div class="rep-card" style="margin-top:12px;"><h3 style="font-size:13px; margin:0 0 6px; color:var(--muted);">📈 المبيعات على مدار الفترة</h3>${chartColumns(_dayPts,{fmt:v=>v.toFixed(0)})}</div>` : '';
     const methodLines = Object.keys(byMethod).length
@@ -1092,6 +1114,16 @@ function renderCustList(){
 // ---------------- End of Day (إغلاق اليوم / تقفيل الدرج) ----------------
 let dcData = {};   // بيانات النهاردة من السيستم (للحساب والحفظ)
 
+// 💰 تجميع أرقام التقفيل — دالة نقية عشان تتختبر بالـ harness.
+// بتشمل المعكوس وفاتورة عكسه مع بعض (بيصفّروا بعض) — دي فلوس دخلت وخرجت فعلًا من الدرج.
+function dcAggregate(sales){
+  const systemTotal = (sales||[]).reduce((s,x)=> s + (x.total||0), 0);
+  let cashSales=0, visaSales=0, instaSales=0, salarySales=0;
+  (sales||[]).forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); salarySales+=(p.salary||0); });
+  return { systemTotal, cashSales, visaSales, instaSales, salarySales };
+}
+window.dcAggregate = dcAggregate;
+
 async function goToEndOfDay(){
   showScreen('endOfDayScreen');
   const wrap = document.getElementById('endOfDayWrap');
@@ -1103,18 +1135,38 @@ async function goToEndOfDay(){
     : (function(){ const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
 
   // مبيعات النهاردة (نفس الفرع)
-  let sales = [];
+  let sales = [], _allFetched = [];
   try{
     // أحدث 300 فاتورة تكفي وزيادة ليوم واحد — بدل تحميل التاريخ كله
     const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
       .orderBy('createdAt','desc').limit(300).get()
       .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(300).get());
-    sales = snap.docs.map(d=>d.data()).filter(s=> s.createdAt && s.createdAt.toMillis && s.createdAt.toMillis() >= dayMs);
+    _allFetched = snap.docs.map(d=>d.data());
+    sales = _allFetched.filter(s=> s.createdAt && s.createdAt.toMillis && s.createdAt.toMillis() >= dayMs);
   }catch(e){ console.warn('sales', e); }
 
-  const systemTotal = sales.reduce((s,x)=> s + (x.total||0), 0);
-  let cashSales=0, visaSales=0, instaSales=0, salarySales=0;
-  sales.forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); salarySales+=(p.salary||0); });
+  const { systemTotal, cashSales, visaSales, instaSales, salarySales } = dcAggregate(sales);
+
+  // 🕵️ السبب الأول للأوفر اليومي: فواتير اتعملت **بعد تقفيل امبارح وقبل بداية
+  // يوم الشغل الحالي** — دي مش داخلة في مبيعات النهاردة ولا دخلت تقفيل امبارح
+  // (التقفيل اتعمل قبلها)، لكن كاشها موجود في الدرج → أوفر بنفس المبلغ.
+  let lateSales = [], lateTotal = 0, lateCash = 0, lastCloseTs = 0;
+  try{
+    const cq = await db.collection(TEST_SETTINGS)
+      .where(firebase.firestore.FieldPath.documentId(), '>=', 'dayclose_'+currentBranch+'_')
+      .where(firebase.firestore.FieldPath.documentId(), '<', 'dayclose_'+currentBranch+'_\uf8ff')
+      .get();
+    cq.forEach(d=>{ const t = (d.data()||{}).ts || 0; if(t < dayMs) lastCloseTs = Math.max(lastCloseTs, t); });
+  }catch(e){ console.warn('last close', e); }
+  if(lastCloseTs && (dayMs - lastCloseTs) < 48*3600000){
+    lateSales = _allFetched.filter(s=>{
+      const t = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : 0;
+      return t >= lastCloseTs && t < dayMs;
+    });
+    const _lateAgg = dcAggregate(lateSales);
+    lateTotal = _lateAgg.systemTotal;
+    lateCash = _lateAgg.cashSales;
+  }
 
   // 🎫 أوردرات الموظفين النهاردة (للعرض في التقفيل — خصم الراتب مش بيدخل الدرج)
   let staffOrdersToday = [];
@@ -1135,7 +1187,7 @@ async function goToEndOfDay(){
     });
   }catch(e){ console.warn('advances', e); }
 
-  dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length };
+  dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length, lateTotal, lateCash, lateCount: lateSales.length, lastCloseTs };
   const lastFloat = parseFloat(localStorage.getItem('dc_float_'+currentBranch)) || '';
 
   const denoms = [200,100,50,20,10,5];
@@ -1154,6 +1206,7 @@ async function goToEndOfDay(){
       <div><div class="dc-sm-lbl">مبيعات النهاردة (السيستم)</div><div class="dc-sm-val">${systemTotal.toFixed(2)} <span>ج.م</span></div></div>
       <div class="dc-sm-sub">${dcData.invoiceCount} فاتورة · كاش ${cashSales.toFixed(0)} · فيزا ${visaSales.toFixed(0)} · انستا ${instaSales.toFixed(0)}${salarySales>0?` · 📄 راتب موظفين ${salarySales.toFixed(0)}`:''}</div>
       ${staffOrdersToday.length?`<div class="dc-sm-sub" style="color:#c084fc;">🎫 أوردرات موظفين النهاردة: ${staffOrdersToday.length} (${staffOrdersTotal.toFixed(0)} ج.م — منها ${salarySales.toFixed(0)} خصم راتب مش داخل الدرج)</div>`:''}
+      ${lateSales.length?`<div class="dc-sm-sub" style="color:#f59e0b; font-weight:800;">⚠️ ${lateSales.length} فاتورة اتعملت بعد آخر تقفيل وقبل بداية اليوم (${lateTotal.toFixed(0)} ج.م — منها كاش ${lateCash.toFixed(0)}). الكاش ده في الدرج بس مش في مبيعات النهاردة → هيبان أوفر بنفس المبلغ.</div>`:''}
     </div>` : `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:14px; color:var(--muted); font-size:12.5px; text-align:center;">اعدّ الدرج واملأ البيانات، وفي الآخر دوس تأكيد — النتيجة بتتسجّل للمدير.</div>`}
 
     <div class="dc-card">
@@ -1218,12 +1271,18 @@ function dcFinish(){
   // المفروض يتجمّع فعليًا = (كاش معدود − عهدة) + مصروفات + سلف + فيزا + انستا + خصم راتب مترحّل
   const accounted = (counted - flt) + exp + adv + visa + insta + salary;
   const overShort = +(accounted - dcData.systemTotal).toFixed(2);
+  // ⚠️ الأوفر المتوقع من فواتير ما بعد آخر تقفيل (كاشها في الدرج ومش في مبيعات النهاردة)
+  const _lateCash = +(dcData.lateCash || 0);
+  const overShortReal = +(overShort - _lateCash).toFixed(2);
 
   const isShort = overShort < -0.01, isOver = overShort > 0.01;
   const state = isShort ? {c:'var(--minus)', t:'⚠️ عجز', bg:'#fdecec'} : isOver ? {c:'var(--warn)', t:'🔺 أوفر (زيادة)', bg:'#fff6e6'} : {c:'var(--plus)', t:'✅ مظبوط بالظبط', bg:'#eafaf0'};
 
   if(hasPerm('canViewReports')){
     // المدير يشوف النتيجة كاملة
+    const _lateBlock = _lateCash > 0 ? `
+          <div style="color:#b45309;"><span>منها كاش فواتير بعد آخر تقفيل (${dcData.lateCount||0} فاتورة)</span><b>${_lateCash.toFixed(2)}</b></div>
+          <div style="font-weight:900;"><span>الفرق الحقيقي بعد استبعادها</span><b>${overShortReal.toFixed(2)}</b></div>` : '';
     document.getElementById('dc_result').innerHTML = `
       <div class="dc-result" style="background:${state.bg}; border-color:${state.c};">
         <div class="dc-res-head" style="color:${state.c};">${state.t}</div>
@@ -1237,7 +1296,7 @@ function dcFinish(){
           <div><span>+ انستاباي</span><b>${insta.toFixed(2)}</b></div>
           ${salary>0?`<div><span>+ 📄 راتب موظفين (للمرتبات)</span><b>${salary.toFixed(2)}</b></div>`:''}
           <div class="dc-res-sep"><span>= إجمالي محسوب</span><b>${accounted.toFixed(2)}</b></div>
-          <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>
+          <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>${_lateBlock}
         </div>
       </div>`;
   }else{
@@ -1257,7 +1316,7 @@ function dcFinish(){
     type:'dayclose', branch: currentBranch, date: todayISO(),
     countedCash: counted, float: flt, expenses: exp, advances: adv, visa, instapay: insta, salaryDeferred: salary,
     systemTotal: dcData.systemTotal, cashSales: dcData.cashSales, visaSales: dcData.visaSales, instaSales: dcData.instaSales,
-    accounted, overShort, invoiceCount: dcData.invoiceCount,
+    accounted, overShort, overShortReal, lateCash: _lateCash, lateTotal: +(dcData.lateTotal||0), lateCount: dcData.lateCount||0, invoiceCount: dcData.invoiceCount,
     closedBy: (typeof currentEmployee!=='undefined' && currentEmployee) ? (currentEmployee.name||'') : '',
     ts: Date.now()
   };

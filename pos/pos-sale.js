@@ -1620,6 +1620,9 @@ async function reverseReceipt(saleId){
     // 2) سجل عملية عكس منفصلة (رقم سالب) عشان التقارير تفضل دقيقة
     const _rvW2 = await _waitWrite(db.collection(TEST_SALES).add({
       isReversal: true,
+      // 💳 مدفوعات سالبة بنفس طرق الفاتورة الأصلية — من غيرها كاش/فيزا التقفيل
+      // كانوا بيفضلوا شايلين مبلغ فاتورة اتعكست (الإجمالي بس اللي كان بيتصفّر)
+      payments: (function(p){ const o = {}; Object.entries(p||{}).forEach(([k,v])=>{ o[k] = -(+v||0); }); return o; })(sale.payments),
       originalSaleId: saleId,
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.name || '',
@@ -2470,12 +2473,33 @@ async function confirmPayment(){
   }
 }
 
+// 💵 تطبيع المدفوعات قبل الحفظ — سبب رئيسي لاختلاف أرقام الكاش:
+// الكاشير بيكتب المبلغ اللي **استلمه** (مثلًا 600 لفاتورة 500) والفكة بترجع للعميل،
+// لكن الفاتورة كانت بتتسجل payments.cash=600 → كاش السيستم أعلى من الدرج الحقيقي
+// في كل فاتورة فيها فكة، وتقارير المدفوعات مجموعها أكبر من صافي المبيعات.
+// القاعدة: الفكة بتترد كاش بس، فبتتخصم من الكاش المسجّل. المستلم الفعلي بيتحفظ
+// في cashReceived/changeGiven (للفاتورة المطبوعة والمراجعة).
+function normalizePayments(payments, total){
+  const applied = {};
+  Object.entries(payments || {}).forEach(([k, v]) => { applied[k] = +v || 0; });
+  let changeGiven = 0;
+  if(total > 0 && (applied.cash || 0) > 0){
+    const paid = Object.values(applied).reduce((n, v) => n + v, 0);
+    changeGiven = Math.max(0, +(paid - total).toFixed(2));
+    if(changeGiven > 0) applied.cash = Math.max(0, +(applied.cash - changeGiven).toFixed(2));
+  }
+  return { applied, changeGiven };
+}
+window.normalizePayments = normalizePayments;
+
 async function _doConfirmPayment(){
   _offlineQueued = false;   // 📴 نبدأ صفحة جديدة لكل فاتورة
   const total = cartTotal();
   const isRefundInvoice = total < 0;
-  const payments = {};
-  selectedPayMethods.forEach(m=> payments[m] = paymentAmounts[m] || 0);
+  const paymentsEntered = {};
+  selectedPayMethods.forEach(m=> paymentsEntered[m] = paymentAmounts[m] || 0);
+  // المحفوظ في الفاتورة = المطبّق فعلًا (بعد خصم الفكة من الكاش)
+  const { applied: payments, changeGiven } = normalizePayments(paymentsEntered, total);
   const phone = document.getElementById('customerPhone').value.trim();
   const custName = document.getElementById('customerName').value.trim();
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
@@ -2528,6 +2552,8 @@ async function _doConfirmPayment(){
       branch: currentBranch,
       items: cart,
       itemCount, total, payments,
+      cashReceived: paymentsEntered.cash || 0,   // 💵 اللي اتسلّم فعلًا من العميل
+      changeGiven,                                // 💵 الفكة اللي رجعت له
       customerPhone: phone || null,
       customerName: custName || null,
       loyaltyPointsEarned,
@@ -2687,7 +2713,7 @@ async function _doConfirmPayment(){
       await _waitWrite(tryLinkFeedbackToCustomer(phone, custName, sellerEmployeeName));
     }
 
-    printReceipt(payments, total, invoiceNo, invoiceCode);
+    printReceipt(paymentsEntered, total, invoiceNo, invoiceCode);
     if(_offlineQueued){
       showToast('📴 اتحفظت أوفلاين ✔ — هتترفع لوحدها أول ما النت يرجع (متمسحش بيانات البرنامج)', 'ok');
     }else{
