@@ -59,6 +59,10 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
 }
 .screen{display:none;height:100vh;flex-direction:column;}
 .screen.active{display:flex;}
+/* 📜 شاشات الإدارة كانت height:100vh من غير overflow — المحتوى اللي أطول
+   من الشاشة كان بيتقص ومفيش تمرير خالص (باين في شاشة استلام البضاعة). */
+.screen.mgmt-light{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.screen.mgmt-light > *:last-child{ padding-bottom:24px; }
 .badge-test{
   position:fixed;top:8px;left:8px;background:var(--warn);color:#1a1200;
   font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;z-index:999;

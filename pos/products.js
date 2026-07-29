@@ -263,6 +263,15 @@ function receiveRemove(idx){
   renderReceiveCart();
 }
 
+// ⚠️ الـ inline handlers بتشتغل في النطاق العام، و`receiveCart` معرّف بـ let
+// فمش بيوصلها — كان بيفشل بصمت. (نفس الباج المتكرر: const/let مش بتتعلّق على window)
+function receiveTogglePick(idx, checked){
+  const r = receiveCart[idx];
+  if(!r) return;
+  r._lblPick = !!checked;
+}
+if(typeof window !== 'undefined') window.receiveTogglePick = receiveTogglePick;
+
 function renderReceiveCart(){
   const wrap = document.getElementById('receiveCartWrap');
   const btn = document.getElementById('receiveConfirmBtn');
@@ -273,20 +282,24 @@ function renderReceiveCart(){
     const lb0 = document.getElementById('receiveLabelsBtn'); if(lb0) lb0.style.display = 'none';
     return;
   }
+  const lastIdx = receiveCart.length - 1;
   wrap.innerHTML = receiveCart.map((r, idx)=>{
+    const isLast = idx === lastIdx;
     // نحسب المخزون الجديد من الرصيد الحالي الفعلي
     const p = allInventory.find(x=> x.id === r.id);
     const cur = p ? branchQty(p) : r.currentQty;
     const newQty = cur + (r.qty || 0);
     const isNeg = (r.qty || 0) < 0;                       // كمية بالسالب = تالف/مرتجع
     const price = p ? p.price : '';
-    const border = isNeg ? 'var(--minus)' : '#b9c9a0';
-    const bg = isNeg ? '#fdecec' : '#fff';
+    // 🆕 آخر صنف اتضاف بإطار واضح — عشان الكاشير ميشكّش ويمسح تاني
+    const border = isNeg ? 'var(--minus)' : (isLast ? '#16a34a' : '#b9c9a0');
+    const bg = isNeg ? '#fdecec' : (isLast ? '#f0fdf4' : '#fff');
     return `
-    <div style="background:${bg}; border:1.5px solid ${border}; border-radius:12px; padding:12px 14px; margin-bottom:9px;">
+    <div id="rcRow_${idx}" style="background:${bg}; border:${isLast?'2px':'1.5px'} solid ${border}; border-radius:12px; padding:12px 14px; margin-bottom:9px;">
+      ${isLast ? '<div style="font-size:10.5px; font-weight:900; color:#16a34a; margin-bottom:5px;">🆕 آخر واحد اتضاف</div>' : ''}
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
         <label style="display:flex; align-items:flex-start; gap:6px; padding-top:2px;" title="تحديد لطباعة الليبل">
-          <input type="checkbox" class="lbl-pick" data-idx="${idx}" ${r._lblPick!==false && !isNeg ?'checked':''} onchange="receiveCart[${idx}]._lblPick=this.checked" style="width:17px; height:17px;">
+          <input type="checkbox" class="lbl-pick" data-idx="${idx}" ${r._lblPick!==false && !isNeg ?'checked':''} onchange="receiveTogglePick(${idx}, this.checked)" style="width:17px; height:17px;">
         </label>
         <div style="min-width:0;">
           <div style="font-weight:800; font-size:14px; color:${isNeg?'var(--minus)':'inherit'};">${r.name}${isNeg?' ↩️':''}</div>
@@ -306,6 +319,13 @@ function renderReceiveCart(){
     </div>`;
   }).join('');
   if(btn){ btn.style.display = 'block'; btn.textContent = '✔️ تأكيد الاستلام (' + receiveCart.length + ' صنف)'; }
+  // 📜 نمرّر لآخر صنف اتضاف — من غير كده بيضيف ومايشوفش النتيجة
+  if(lastIdx >= 0){
+    setTimeout(function(){
+      const el = document.getElementById('rcRow_' + lastIdx);
+      if(el && el.scrollIntoView) el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    }, 60);
+  }
   // زرار طباعة ليبلات المحدد (بيظهر مع القايمة)
   let lb = document.getElementById('receiveLabelsBtn');
   if(!lb && btn){
