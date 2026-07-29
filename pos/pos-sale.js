@@ -823,63 +823,142 @@ function finishReturnAndSell(){
             ' ج.م — امسح المنتج الجديد دلوقتي', 'ok');
 }
 window.finishReturnAndSell = finishReturnAndSell;
-// ✏️ تعديل صنف في السلة — السعر والكمية وخصم للقطعة دي بس
-// مقصور على مين عنده صلاحية الخصم (canDiscount)، وبيحترم أقصى نسبة مسموحة للدور.
-async function qbxEditSel(){
+// ✏️ تعديل صنف في السلة — شاشة واحدة فيها السعر والكمية والخصم
+// (كانت 3 نوافذ ورا بعض، وده اللي كان بيعمل إحساس بالبطء)
+// الصلاحية: المدير والأدمن بس.
+function canEditCartItem(){
+  const role = (typeof currentEmployeeRole !== 'undefined') ? currentEmployeeRole : '';
+  return role === 'manager' || role === 'admin';
+}
+window.canEditCartItem = canEditCartItem;
+
+function qbxEditSel(){
   if(!requireSelection()) return;
   const line = cart[selectedCartIdx];
   if(!line){ showToast('اختار صنف الأول', 'err'); return; }
-  if(!hasPerm('canDiscount')){ showToast('تعديل الأصناف للمشرف/المدير بس', 'err'); return; }
+  if(!canEditCartItem()){ showToast('تعديل الصنف للمدير والأدمن بس', 'err'); return; }
   if(line.isRedemption){ showToast('الصنف المستبدل بالنقط ماينفعش يتعدّل', 'err'); return; }
 
   const base = Math.abs(Number(line.origPrice != null ? line.origPrice : line.price) || 0);
-  const cap  = (function(){ const v = Number(myPerms().maxDiscountPct); return isNaN(v) ? 0 : v; })();
+  const cur  = Math.abs(Number(line.price) || 0);
 
-  const priceStr = await askText({
-    title: '✏️ ' + line.name,
-    message: 'سعر البيع للقطعة (الأصلي: ' + base.toFixed(2) + ' ج.م)',
-    type: 'number', value: Math.abs(Number(line.price)||0).toFixed(2), okText: 'التالي'
-  });
-  if(priceStr === null) return;
-  let price = parseFloat(priceStr);
-  if(isNaN(price) || price < 0){ showToast('سعر مش مظبوط', 'err'); return; }
+  const old = document.getElementById('editItemOverlay');
+  if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'editItemOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; z-index:12800; background:rgba(0,0,0,.82);'
+    + 'display:flex; align-items:center; justify-content:center; padding:18px;';
+  const fld = 'width:100%; padding:13px; border-radius:10px; border:1.5px solid var(--border);'
+            + 'background:var(--panel2); color:var(--text); font-family:\'Cairo\'; font-weight:800;'
+            + 'font-size:18px; text-align:center;';
+  ov.innerHTML = `
+    <div style="background:var(--panel); border:2px solid var(--border); border-radius:16px;
+                padding:20px; max-width:440px; width:100%; max-height:88vh; overflow-y:auto;">
+      <div style="font-weight:900; font-size:15.5px; margin-bottom:3px;">✏️ ${line.name}</div>
+      <div style="color:var(--muted); font-size:11.5px; margin-bottom:14px;">
+        السعر الأصلي: ${base.toFixed(2)} ج.م${line.barcode ? (' · ' + line.barcode) : ''}
+      </div>
 
-  const qtyStr = await askText({
-    title: '✏️ ' + line.name,
-    message: 'الكمية', type: 'number', value: String(line.qty || 1), okText: 'التالي'
-  });
-  if(qtyStr === null) return;
-  const qty = parseInt(qtyStr, 10);
-  if(isNaN(qty) || qty <= 0){ showToast('كمية مش مظبوطة', 'err'); return; }
+      <div style="display:flex; gap:10px; margin-bottom:11px;">
+        <div style="flex:1;">
+          <div style="font-size:12px; font-weight:700; margin-bottom:4px;">سعر القطعة</div>
+          <input type="number" id="eiPrice" step="0.01" min="0" value="${cur.toFixed(2)}" style="${fld}">
+        </div>
+        <div style="width:110px;">
+          <div style="font-size:12px; font-weight:700; margin-bottom:4px;">الكمية</div>
+          <input type="number" id="eiQty" min="1" step="1" value="${line.qty || 1}" style="${fld}">
+        </div>
+      </div>
 
-  const pctStr = await askText({
-    title: '🏷️ خصم على الصنف ده بس',
-    message: cap < 100 ? ('الحد الأقصى المسموح ليك: ' + cap + '%\nسيبها صفر لو مش عايز خصم')
-                       : 'سيبها صفر لو مش عايز خصم',
-    type: 'number', value: '0', okText: 'احفظ التعديل'
-  });
-  if(pctStr === null) return;
-  const pct = parseFloat(pctStr) || 0;
-  if(pct < 0 || pct > 100){ showToast('نسبة مش صحيحة', 'err'); return; }
-  // 🔒 نفس سقف الدور المطبّق على خصم الفاتورة — عشان مايبقاش فيه باب خلفي
-  if(pct > cap){ showToast('⛔ الحد الأقصى للخصم المسموح ليك ' + cap + '%', 'err'); return; }
+      <div style="margin-bottom:11px;">
+        <div style="font-size:12px; font-weight:700; margin-bottom:4px;">خصم على الصنف ده بس (%)</div>
+        <input type="number" id="eiPct" min="0" max="100" step="1" value="${line.editPct || 0}" style="${fld}">
+        <div style="display:flex; gap:6px; margin-top:7px;">
+          ${[0,5,10,15,20,25,50].map(p=>
+            `<button type="button" data-pct="${p}" style="flex:1; padding:8px 0; border-radius:8px;
+              border:1px solid var(--border); background:var(--panel2); color:var(--text);
+              font-family:'Cairo'; font-weight:800; font-size:12px; cursor:pointer;">${p}%</button>`).join('')}
+        </div>
+      </div>
 
-  if(line.origPrice == null) line.origPrice = base;   // بنحتفظ بالأصلي مرة واحدة
-  const finalPrice = +(price * (1 - pct/100)).toFixed(2);
-  line.price = line.isReturn ? -finalPrice : finalPrice;
-  line.qty = qty;
-  line.edited = true;
-  line.editPct = pct || null;
+      <div id="eiPreview" style="background:var(--panel2); border:1.5px solid var(--good);
+           border-radius:10px; padding:11px 13px; margin-bottom:14px; font-size:13px; font-weight:800;
+           display:flex; justify-content:space-between; align-items:center;"></div>
 
-  if(typeof _logActivity === 'function'){
-    _logActivity('cart_item_edited', {
-      name: line.name, barcode: line.barcode || null,
-      from: base, to: finalPrice, qty: qty, pct: pct || 0
-    });
+      <div id="eiErr" style="color:var(--minus); font-size:12px; margin-bottom:8px; min-height:16px;"></div>
+
+      <div style="display:flex; gap:8px;">
+        <button id="eiSave" style="flex:2; padding:14px; border:none; border-radius:11px;
+          background:linear-gradient(#16a34a,#15803d); color:#fff; font-family:'Cairo';
+          font-weight:900; font-size:15px; cursor:pointer;">احفظ التعديل</button>
+        <button id="eiCancel" style="flex:1; padding:14px; border-radius:11px; background:var(--panel2);
+          border:1px solid var(--border); color:var(--muted); font-family:'Cairo';
+          font-weight:700; font-size:13.5px; cursor:pointer;">إلغاء</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  const $p = ov.querySelector('#eiPrice'), $q = ov.querySelector('#eiQty'),
+        $c = ov.querySelector('#eiPct'), $prev = ov.querySelector('#eiPreview'),
+        $err = ov.querySelector('#eiErr');
+
+  function read(){
+    const price = parseFloat($p.value);
+    const qty   = parseInt($q.value, 10);
+    const pct   = parseFloat($c.value) || 0;
+    return { price, qty, pct };
   }
-  renderCart();
-  showToast('✏️ اتعدّل: ' + line.name + ' → ' + finalPrice.toFixed(2) + ' ج.م × ' + qty
-    + (pct ? (' (خصم ' + pct + '%)') : ''), 'ok');
+  function refresh(){
+    const v = read();
+    let msg = '';
+    if(isNaN(v.price) || v.price < 0) msg = 'سعر مش مظبوط';
+    else if(isNaN(v.qty) || v.qty <= 0) msg = 'الكمية لازم تكون 1 على الأقل';
+    else if(v.pct < 0 || v.pct > 100) msg = 'نسبة الخصم لازم تكون من 0 لـ100';
+    $err.textContent = msg;
+    if(msg){ $prev.style.display = 'none'; return null; }
+    $prev.style.display = 'flex';
+    const unit  = +(v.price * (1 - v.pct/100)).toFixed(2);
+    const total = +(unit * v.qty).toFixed(2);
+    $prev.innerHTML = '<span>' + v.qty + ' × ' + unit.toFixed(2) + ' ج.م'
+      + (v.pct ? ('<span style="color:var(--warn); font-weight:700;"> (بعد خصم ' + v.pct + '%)</span>') : '')
+      + '</span><span style="font-size:17px; color:var(--good);">' + total.toFixed(2) + ' ج.م</span>';
+    return { unit: unit, total: total, v: v };
+  }
+  [$p, $q, $c].forEach(function(el){ el.addEventListener('input', refresh); });
+  ov.querySelectorAll('[data-pct]').forEach(function(b){
+    b.addEventListener('click', function(){ $c.value = b.dataset.pct; refresh(); });
+  });
+  refresh();
+
+  const close = ()=>{ const el = document.getElementById('editItemOverlay'); if(el) el.remove(); };
+  ov.querySelector('#eiCancel').addEventListener('click', close);
+  ov.addEventListener('keydown', function(e){
+    if(e.key === 'Escape'){ close(); }
+    if(e.key === 'Enter'){ e.preventDefault(); save(); }
+  });
+
+  function save(){
+    const out = refresh();
+    if(!out) return;
+    const v = out.v;
+    if(line.origPrice == null) line.origPrice = base;   // الأصلي بيتحفظ مرة واحدة
+    line.price   = line.isReturn ? -out.unit : out.unit;
+    line.qty     = v.qty;
+    line.edited  = true;
+    line.editPct = v.pct || null;
+    if(typeof _logActivity === 'function'){
+      _logActivity('cart_item_edited', {
+        name: line.name, barcode: line.barcode || null,
+        from: base, to: out.unit, qty: v.qty, pct: v.pct || 0
+      });
+    }
+    close();
+    renderCart();
+    showToast('✏️ اتعدّل: ' + line.name + ' → ' + out.unit.toFixed(2) + ' × ' + v.qty
+      + (v.pct ? (' (خصم ' + v.pct + '%)') : ''), 'ok');
+  }
+  ov.querySelector('#eiSave').addEventListener('click', save);
+  setTimeout(function(){ try{ $p.focus(); $p.select(); }catch(e){} }, 60);
 }
 window.qbxEditSel = qbxEditSel;
 
@@ -1832,6 +1911,7 @@ window.paymobApproved = false;
 
 function paymobReset(){
   _paymobAutoFired = false;
+  try{ paymobWaitBar(false); }catch(e){}
   paymobCardInfo = null; window.paymobCardInfo = null;
   if(paymobPending && paymobPending.unsub){ try{ paymobPending.unsub(); }catch(e){} }
   paymobPending = null;
@@ -1842,6 +1922,30 @@ function paymobReset(){
   if(typeof updatePaySummary === 'function') updatePaySummary();
 }
 window.paymobReset = paymobReset;
+
+// ⏳ شريط متحرك أثناء انتظار رد Paymob
+// التأخير نفسه من عندهم ومش في إيدنا — بس الشاشة الواقفة بتحسّس بضعف البطء الحقيقي.
+function paymobWaitBar(on){
+  let bar = document.getElementById('paymobWaitBar');
+  if(!on){ if(bar) bar.remove(); return; }
+  if(bar) return;
+  const box = document.getElementById('paymobStatus');
+  if(!box || !box.parentNode) return;
+  const st = document.createElement('style');
+  st.id = 'paymobWaitStyle';
+  if(!document.getElementById('paymobWaitStyle')){
+    st.textContent = '@keyframes pmSlide{0%{transform:translateX(-100%);}100%{transform:translateX(400%);}}';
+    document.head.appendChild(st);
+  }
+  bar = document.createElement('div');
+  bar.id = 'paymobWaitBar';
+  bar.style.cssText = 'height:4px; border-radius:99px; margin:6px 0 0; overflow:hidden;'
+    + 'background:rgba(255,255,255,.08);';
+  bar.innerHTML = '<div style="height:100%; width:25%; border-radius:99px;'
+    + 'background:linear-gradient(90deg,#f59e0b,#fcd34d,#f59e0b);'
+    + 'animation:pmSlide 1.1s linear infinite;"></div>';
+  box.parentNode.insertBefore(bar, box.nextSibling);
+}
 
 function paymobShow(text, kind){
   let box = document.getElementById('paymobStatus');
@@ -1883,6 +1987,7 @@ async function sendToPaymobTerminal(amountEGP){
     const out = await res.json().catch(function(){ return {}; });
     if(res.ok && out.ok){
       paymobShow('📟 المبلغ على الماكينة (' + amountEGP.toFixed(2) + ' ج.م) — العميل يحط الكارت…', 'wait');
+      paymobWaitBar(true);
       paymobWatch(orderRef, amountEGP);
     } else {
       paymobShow('⚠️ الماكينة مستجابتش (' + (out.error || res.status) + ') — كمّل يدوي من الماكينة', 'err');
@@ -1946,6 +2051,7 @@ function paymobWatch(orderRef, amountEGP){
     const d = snap.data() || {};
     if(d.status === 'success'){
       paymobApproved = true; window.paymobApproved = true;
+      paymobWaitBar(false);
       // 💳 بنحتفظ ببيانات الكارت عشان تتطبع في الفاتورة وتتسجل مع البيعة
       paymobCardInfo = {
         last4: d.cardLast4 ? String(d.cardLast4).slice(-4) : null,
@@ -1965,7 +2071,8 @@ function paymobWatch(orderRef, amountEGP){
       if(paymobAutoPrint() && paymobCanAutoFinish(amountEGP, d)){
         paymobShow('✅ الدفع اتقبل' + last4 + ' — بيحفظ ويطبع…', 'ok');
         _paymobAutoFired = true;
-        setTimeout(function(){ try{ confirmPayment(); }catch(e){ console.warn('auto print', e); } }, 400);
+        // من غير أي تأخير — كل جزء من الثانية بيفرق قدام العميل
+        try{ confirmPayment(); }catch(e){ console.warn('auto print', e); }
       } else {
         const why = window._paymobLastSkip;
         paymobShow('✅ الدفع اتقبل' + last4 + ' — دوس حفظ وطباعة'
@@ -1973,6 +2080,7 @@ function paymobWatch(orderRef, amountEGP){
       }
     } else if(d.status === 'failed' || d.status === 'voided'){
       paymobApproved = false; window.paymobApproved = false;
+      paymobWaitBar(false);
       paymobShow('❌ الدفع اترفض' + (d.declineReason ? (' (' + d.declineReason + ')') : '') + ' — جرّب تاني', 'err');
       try{ unsub(); }catch(e){}
       if(typeof updatePaySummary === 'function') updatePaySummary();
