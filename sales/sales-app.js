@@ -75,6 +75,10 @@ function applyWizardBrand(){
     img.onerror = function(){ this.onerror=null; this.src = isGlow ? '../glow/icon-192.png' : '../loyalty/icon-192.png'; };
   }
 }
+// الافتراضي قبل ما الإعدادات تتحمّل: ظاهر — أسوأ حالة إن حد يفتح
+// معالج التسجيل ويتقدّم بطلب، والأدمن هو اللي بيقرر.
+if(typeof window.regButtonOn === 'undefined') window.regButtonOn = true;
+
 window.openRegWizard = function(){
   applyWizardBrand();
   _rwStep = 0; _rwData = { name:'', gender:'', shift:'', dayOff:'', pin:'', agreed:false };
@@ -526,6 +530,19 @@ let allTasks = [], tasks = [];             // current weekly task assignment per
 let allSubmissions = [], submissions = []; // daily task photo submissions
 let allRewards = [], rewards = [];         // earned weekly/monthly rewards
 let commissionPerPoint = 0;                // set by admin, per branch
+
+// ⭐ وزن النقطة الواحدة.
+// النقط الأوتوماتيك بقت بكسور: الفاتورة اللي فيها قطع زيادة عن الحد
+// بتاخد 1 + كسر. النقط القديمة والمسجّلة يدوي مالهاش value = نقطة كاملة.
+function pointWeight(p){
+  const v = Number(p && p.value);
+  return (isNaN(v) || v <= 0) ? 1 : v;
+}
+function sumPoints(list){
+  return Math.round((list||[]).reduce(function(n,p){ return n + pointWeight(p); }, 0) * 1000) / 1000;
+}
+window.pointWeight = pointWeight;
+window.sumPoints = sumPoints;
 
 // ============================================================================
 // >>> COMPLIANCE_START — نظام الالتزام والمكافآت (v20)
@@ -1305,8 +1322,11 @@ onSnapshot(settingsCol, (snap)=>{
   window.currentAnnouncement = data.announcement || '';
   window.dailyTarget = data.dailyTarget || 0;
   // 🧭 تحميل إعدادات الالتزام لو الأدمن عدّلها للفرع ده (مع الإبقاء على الافتراضي)
-  // 🙋 حالة إظهار زر تسجيل موظف جديد (افتراضي: مخفي)
-  window.regButtonOn = !!(data.regButtonOn);
+  // 🙋 زر تسجيل موظف جديد — الافتراضي **ظاهر**.
+  // كان مخفي افتراضيًا، والنتيجة إن الفرع اللي ملوش مستند إعدادات
+  // الزرار مكانش بيظهر فيه أبدًا مهما اتعمل. والإخفاء أصلًا مش حماية:
+  // التسجيل بيروح كطلب معلّق لازم الأدمن يعتمده.
+  window.regButtonOn = (data.regButtonOn !== false);
   window.applyRegButtonVisibility();
   if(data.compliance){
     if(data.compliance.penalty != null) complianceCfg.penalty = data.compliance.penalty;
@@ -3949,7 +3969,7 @@ function buildFullReportData(){
     const avgRatingHtml = computeAvgRatingFor(e.id);
     const avgRatingPlain = avgRatingHtml.replace(/<[^>]*>/g,'');
     return {
-      name: e.name, totalPoints: empPoints.length, confirmedTasks, rejectedTasks,
+      name: e.name, totalPoints: sumPoints(empPoints), confirmedTasks, rejectedTasks,
       daysPresent, lateCount, totalLateMin, totalOvertimeMin,
       rewardsCount: empRewards.length, totalRewardAmount, avgRatingPlain
     };
@@ -4240,7 +4260,7 @@ function renderCommissionPanel(){
   const monthRange = getMonthRange(new Date());
 
   wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=>{
-    const pointsThisMonth = window.points.filter(p=> p.employeeId===e.id && p.ts >= monthRange.start.getTime() && p.ts <= monthRange.end.getTime()).length;
+    const pointsThisMonth = sumPoints(window.points.filter(p=> p.employeeId===e.id && p.ts >= monthRange.start.getTime() && p.ts <= monthRange.end.getTime()));
     const paidThisMonth = allCommissionPayments.filter(p=> p.employeeId===e.id && p.monthLabel===monthLabel);
     const pointsAlreadyPaid = paidThisMonth.filter(p=> p.type!=='referrals').reduce((sum,p)=> sum + (p.pointsCount||0), 0);
     const amountAlreadyPaid = paidThisMonth.filter(p=> p.type!=='referrals').reduce((sum,p)=> sum + (p.commissionAmount||0), 0);
