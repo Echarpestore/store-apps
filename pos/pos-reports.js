@@ -42,6 +42,17 @@ if(typeof window !== 'undefined') window.customerAppStats = customerAppStats;
 // pos-core.js ← pos-admin.js ← pos-reports.js ← pos-sale.js ← app.js
 
 // ---------------- Roles / permissions screen (manager only) ----------------
+// 🕕 إعداد ساعة بداية يوم الشغل
+async function saveDayStartHour(el){
+  let v = parseInt(el.value, 10);
+  if(isNaN(v) || v < 0 || v > 23){ showToast('الساعة لازم تكون من 0 لـ23', 'err'); return; }
+  try{
+    await db.collection(TEST_SETTINGS).doc('day_cfg').set({ startHour: v }, { merge:true });
+    showToast('اتحفظ: يوم الشغل بيبدأ الساعة ' + v + ' صباحًا', 'ok');
+  }catch(e){ showToast('تعذر الحفظ: ' + (e && e.message ? e.message : e), 'err'); }
+}
+if(typeof window !== 'undefined') window.saveDayStartHour = saveDayStartHour;
+
 const PERM_LABELS = {
   canSell:'يبيع', canHold:'يعمل Hold/Unhold', canPrintLabel:'يطبع Price Label',
   canViewCostPrice:'يشوف سعر التكلفة', canViewStock:'يشوف المخزون (الكميات)', canViewLogs:'يشوف السجلات', canRefund:'يعمل استرجاع',
@@ -49,6 +60,24 @@ const PERM_LABELS = {
   canViewReports:'يشوف التقارير المالية', canManageRoles:'يدير الصلاحيات', canSwitchBranch:'يبدّل الفرع (أدمن)',
   canDiscount:'يعمل خصم', canOpenDrawer:'يفتح الدرج', canReverse:'يعكس فاتورة'
 };
+// 🔢 حفظ أقصى نسبة خصم للدور
+async function setRoleMaxDiscount(el){
+  const roleKey = el.dataset.role;
+  let v = parseInt(el.value, 10);
+  if(isNaN(v) || v < 0) v = 0;
+  if(v > 100) v = 100;
+  el.value = v;
+  try{
+    await db.collection(TEST_ROLES).doc(roleKey).set({ maxDiscountPct: v }, { merge:true });
+    if(!rolePermissions[roleKey]) rolePermissions[roleKey] = {};
+    rolePermissions[roleKey].maxDiscountPct = v;
+    showToast('اتحفظ: أقصى خصم ' + v + '% لـ' + ((rolePermissions[roleKey]||{}).label || roleKey), 'ok');
+  }catch(e){
+    showToast('تعذر الحفظ: ' + (e && e.message ? e.message : e), 'err');
+  }
+}
+if(typeof window !== 'undefined') window.setRoleMaxDiscount = setRoleMaxDiscount;
+
 async function renderRolesScreen(){
   const wrap = document.getElementById('rolePermsWrap');
   wrap.innerHTML = Object.keys(DEFAULT_ROLE_PERMISSIONS).map(roleKey=>{
@@ -58,10 +87,23 @@ async function renderRolesScreen(){
         <input type="checkbox" data-role="${roleKey}" data-perm="${permKey}" ${perms[permKey]?'checked':''} onchange="toggleRolePerm(this)">
         ${PERM_LABELS[permKey]}
       </label>`).join('');
+    // 🔢 أقصى نسبة خصم — رقم مش checkbox، فمحتاج حقل خاص بيه
+    const defPct = (DEFAULT_ROLE_PERMISSIONS[roleKey]||{}).maxDiscountPct;
+    const curPct = (perms.maxDiscountPct === undefined || perms.maxDiscountPct === null)
+      ? (defPct === undefined ? 0 : defPct) : perms.maxDiscountPct;
     return `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:10px;">
       <div style="font-weight:800; margin-bottom:6px;">${perms.label}</div>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px;">${toggles}</div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border);">
+        <span style="font-size:12px; font-weight:700;">أقصى نسبة خصم</span>
+        <input type="number" min="0" max="100" step="1" value="${curPct}"
+          data-role="${roleKey}" data-pct="1" onchange="setRoleMaxDiscount(this)"
+          style="width:80px; padding:6px 8px; border-radius:8px; border:1.5px solid var(--border);
+                 background:var(--panel2); color:var(--text); font-weight:800; text-align:center;">
+        <span style="font-size:12px; color:var(--muted);">%</span>
+        <span style="font-size:11px; color:var(--muted);">(صفر = ممنوع يخصم)</span>
+      </div>
     </div>`;
   }).join('');
 
@@ -909,8 +951,10 @@ async function goToEndOfDay(){
   const wrap = document.getElementById('endOfDayWrap');
   wrap.innerHTML = '<div style="padding:34px; text-align:center; color:var(--muted);">بيتحمّل بيانات النهاردة...</div>';
 
-  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-  const dayMs = dayStart.getTime();
+  // 🕕 يوم الشغل مش اليوم التقويمي — البيع بعد نص الليل بيتحسب على اليوم اللي فات
+  const dayMs = (typeof bizDayStartMs === 'function')
+    ? bizDayStartMs()
+    : (function(){ const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
 
   // مبيعات النهاردة (نفس الفرع)
   let sales = [];

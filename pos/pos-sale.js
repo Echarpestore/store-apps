@@ -659,6 +659,9 @@ function _retCanAdd(currentQty, soldQty){ return (currentQty||0) < (soldQty||0);
 // نفس اليوم المحلي؟ (لتنبيه "الفاتورة دي متباعة النهارده")
 function _isSameLocalDay(ms, now){
   if(!ms) return false;
+  // 🕕 المقارنة بيوم الشغل مش باليوم التقويمي — فاتورة الساعة 2 الفجر
+  // لسه "النهاردة" طول ما إحنا في نفس يوم الشغل.
+  if(typeof isSameBizDay === 'function') return isSameBizDay(ms, now);
   const a = new Date(ms), b = new Date(now || Date.now());
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }

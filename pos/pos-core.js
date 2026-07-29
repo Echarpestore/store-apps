@@ -333,6 +333,51 @@ async function loadCurrentEmployeeRole(){
   }
 }
 
+// ============================================================
+// 🕕 يوم الشغل (Business Day)
+// المحل بيفضل فاتح بعد نص الليل، فالبيعة الساعة 2 الفجر تخص يوم أمس.
+// الساعة الفاصلة بتتحدد من الإعدادات (الافتراضي 6 صباحًا):
+//   أي وقت قبلها ينتمي لليوم اللي فات.
+// ⚠️ الفواتير القديمة متسابة بتاريخها التقويمي بقرار المالك.
+// ============================================================
+let businessDayStartHour = 6;   // بيتحدّث من pos_test_settings/day_cfg
+window.businessDayStartHour = 6;
+
+function bizDayStartMs(now){
+  const d = new Date(now == null ? Date.now() : now);
+  const h = Number(businessDayStartHour);
+  const cut = (isNaN(h) || h < 0 || h > 23) ? 6 : h;
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), cut, 0, 0, 0);
+  // لسه مجاش وقت البداية النهاردة → إحنا في يوم أمس
+  if(d.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+  return start.getTime();
+}
+function bizDayKey(ts){
+  const d = new Date(bizDayStartMs(ts == null ? Date.now() : ts));
+  const p = (n)=> String(n).padStart(2,'0');
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+}
+function isSameBizDay(a, b){
+  if(!a) return false;
+  return bizDayKey(a) === bizDayKey(b == null ? Date.now() : b);
+}
+window.bizDayStartMs = bizDayStartMs;
+window.bizDayKey = bizDayKey;
+window.isSameBizDay = isSameBizDay;
+
+// قراءة الساعة الفاصلة من الإعدادات
+(function loadDayCfg(){
+  try{
+    db.collection(TEST_SETTINGS).doc('day_cfg').onSnapshot(function(snap){
+      const v = snap.exists ? Number((snap.data()||{}).startHour) : NaN;
+      if(!isNaN(v) && v >= 0 && v <= 23){
+        businessDayStartHour = v;
+        window.businessDayStartHour = v;
+      }
+    }, function(e){ console.warn('day_cfg', e && e.code); });
+  }catch(e){ console.warn('day_cfg listen', e); }
+})();
+
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');

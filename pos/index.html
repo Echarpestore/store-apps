@@ -940,6 +940,27 @@ body{margin:0;font-family:-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;backg
   <div style="flex:1; overflow-y:auto; padding:0 4px;">
     <h3 style="margin:8px 0;">تخصيص صلاحيات كل دور</h3>
     <div id="rolePermsWrap"></div>
+
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin:16px 0;">
+      <h3 style="margin:0 0 6px; font-size:15px;">🕕 بداية يوم الشغل</h3>
+      <p style="color:var(--muted); font-size:12px; margin:0 0 10px; line-height:1.7;">
+        المحل بيفضل فاتح بعد نص الليل، فالبيعة الساعة 2 الفجر تخص يوم أمس.
+        حدد الساعة اللي اليوم الجديد بيبدأ عندها — أي بيعة قبلها بتتحسب على اليوم اللي فات.
+        <b>الافتراضي 6 صباحًا</b> (مناسب لمحل بيقفل 5 الفجر).
+      </p>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span style="font-size:13px; font-weight:700;">اليوم يبدأ الساعة</span>
+        <input type="number" min="0" max="23" step="1" id="dayStartHour" value="6"
+          onchange="saveDayStartHour(this)"
+          style="width:80px; padding:8px; border-radius:8px; border:1.5px solid var(--border);
+                 background:var(--panel2); color:var(--text); font-weight:800; text-align:center; font-size:15px;">
+        <span style="font-size:13px; color:var(--muted);">صباحًا</span>
+      </div>
+      <div style="color:var(--muted); font-size:11.5px; margin-top:8px;">
+        ⚠️ الفواتير القديمة هتفضل بتاريخها زي ما هي — التغيير بيسري على الجديد بس.
+      </div>
+    </div>
+
     <h3 style="margin:20px 0 8px;">دور كل موظف</h3>
     <div id="employeeRolesWrap"></div>
 
