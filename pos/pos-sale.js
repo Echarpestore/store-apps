@@ -1593,52 +1593,72 @@ function _capNextAction(data, myAskId, now){
 
 function _capDocRef(){ return db.collection(CAP_COL).doc(currentBranch); }
 
-// 💚 مؤشر اتصال شاشة التقييم
-// الشاشة بتبعت نبضة كل 20 ثانية. لو آخر نبضة أحدث من 60 ثانية = شغّالة.
-// من غير المؤشر ده، الكاشير بيدوس ويستنى من غير ما يعرف الجهاز التاني فاتح ولا لأ.
-const CAP_ALIVE_MS = 60000;
+// 💚 الإطار الأخضر = الشاشة **ظاهرة فعلًا** قدام العميل دلوقتي
+// مش تخمين ولا مؤشر اتصال: شاشة التقييم بتكتب تأكيد لما تعرض الشاشة فعلًا،
+// والإطار بيتبني على التأكيد ده. يظهر ويختفي في نفس اللحظة.
 let _capAliveUnsub = null;
-function capIsAlive(seen, now){
-  const t = Number(seen) || 0;
-  if(!t) return false;
-  return ((now == null ? Date.now() : now) - t) < CAP_ALIVE_MS;
+function capShowing(data, askId){
+  if(!data) return false;
+  const shown = data.shownAskId;
+  if(!shown) return false;                       // اتقفلت أو اتلغت
+  if(askId && shown !== askId && shown !== 'on') return false;  // طلب تاني مش بتاعنا
+  return true;
 }
-window.capIsAlive = capIsAlive;
+window.capShowing = capShowing;
 
-function capPaintBtn(alive){
+function capPaintBtn(showing){
   const btn = document.querySelector('[onclick="capAskCustomer()"]');
-  if(!btn) return;
-  if(alive){
-    btn.style.border = '2px solid #22c55e';
-    btn.style.boxShadow = '0 0 8px #22c55e55';
-    btn.title = 'شاشة التقييم متصلة ✅ — اضغط والعميل يكتب رقمه';
-  } else {
-    btn.style.border = '1px solid var(--border)';
-    btn.style.boxShadow = 'none';
-    btn.title = 'شاشة التقييم مش متصلة — اتأكد إنها فاتحة على نفس الفرع';
+  if(btn){
+    if(showing){
+      btn.style.border = '2px solid #22c55e';
+      btn.style.boxShadow = '0 0 10px #22c55e66';
+      btn.title = '✅ الشاشة ظاهرة قدام العميل دلوقتي';
+    } else {
+      btn.style.border = '1px solid var(--border)';
+      btn.style.boxShadow = 'none';
+      btn.title = 'العميل يكتب رقمه بنفسه على شاشة التقييم';
+    }
   }
+  // زرار إلغاء بيظهر تحت الزرار طول ما الشاشة شغالة
+  let c = document.getElementById('capCancelBtn');
+  if(showing){
+    if(!c && btn && btn.parentNode){
+      c = document.createElement('button');
+      c.id = 'capCancelBtn';
+      c.type = 'button';
+      c.textContent = '✖ إلغاء الطلب';
+      c.style.cssText = 'display:block; width:100%; margin-top:5px; padding:6px 10px;'
+        + 'border-radius:8px; border:1px solid var(--minus); background:transparent;'
+        + "color:var(--minus); font-family:'Cairo'; font-weight:800; font-size:11.5px; cursor:pointer;";
+      c.addEventListener('click', capCancelAsk);
+      btn.parentNode.insertBefore(c, btn.nextSibling);
+    }
+  } else if(c){ c.remove(); }
 }
+
+// ✖ إلغاء الطلب من الكاشير — الشاشة بتتقفل عند العميل فورًا
+async function capCancelAsk(){
+  try{
+    await _capDocRef().set({ mode:'idle', ts: Date.now(), askId:null }, { merge:true });
+    _capAskId = null;
+    capPaintBtn(false);
+    showToast('اتلغى طلب التسجيل', 'ok');
+  }catch(e){ showToast('تعذر الإلغاء: ' + e.message, 'err'); }
+}
+window.capCancelAsk = capCancelAsk;
+
 function capWatchAlive(){
   if(_capAliveUnsub || !currentBranch) return;
   try{
     _capAliveUnsub = _capDocRef().onSnapshot(function(d){
       const data = d.exists ? d.data() : null;
-      capPaintBtn(capIsAlive(data && data.kioskSeen));
+      capPaintBtn(capShowing(data, _capAskId));
     }, function(e){
-      console.warn('cap alive', e && e.code);
+      console.warn('cap watch', e && e.code);
       _capAliveUnsub = null;
       capPaintBtn(false);
     });
-  }catch(e){ console.warn('cap alive start', e); }
-  // النبضة بتقدم مع الوقت — بنعيد الحساب كل 20 ثانية عشان الإطار يختفي لو الشاشة قفلت
-  setInterval(function(){
-    try{
-      _capDocRef().get().then(function(d){
-        const data = d.exists ? d.data() : null;
-        capPaintBtn(capIsAlive(data && data.kioskSeen));
-      }).catch(function(){});
-    }catch(e){}
-  }, 20000);
+  }catch(e){ console.warn('cap watch start', e); }
 }
 window.capWatchAlive = capWatchAlive;
 
