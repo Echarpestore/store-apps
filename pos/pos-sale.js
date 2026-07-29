@@ -1626,10 +1626,13 @@ function capPaintBtn(showing){
       c = document.createElement('button');
       c.id = 'capCancelBtn';
       c.type = 'button';
-      c.textContent = '✖ إلغاء الطلب';
-      c.style.cssText = 'display:block; width:100%; margin-top:5px; padding:6px 10px;'
-        + 'border-radius:8px; border:1px solid var(--minus); background:transparent;'
-        + "color:var(--minus); font-family:'Cairo'; font-weight:800; font-size:11.5px; cursor:pointer;";
+      c.textContent = '✖ إلغاء';
+      // زرار صغير جنب الزرار الأصلي — كان سطر كامل وواخد مساحة كبيرة
+      c.style.cssText = 'display:inline-block; margin-right:5px; padding:5px 9px;'
+        + 'border-radius:7px; border:1px solid var(--minus); background:transparent;'
+        + "color:var(--minus); font-family:'Cairo'; font-weight:800; font-size:10.5px;"
+        + 'cursor:pointer; white-space:nowrap; line-height:1.3;';
+      c.title = 'إلغاء طلب التسجيل';
       c.addEventListener('click', capCancelAsk);
       btn.parentNode.insertBefore(c, btn.nextSibling);
     }
