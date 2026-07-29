@@ -173,7 +173,46 @@ if (typeof window !== 'undefined'){
 /* ============================================================
    🔐 البوابة: حساب فرع + كود المالك
    ============================================================ */
-let ownerOk = sessionStorage.getItem('office_owner_ok') === '1';
+// 🔐 الجهاز بيفتكر الدخول — كان بيطلب الإيميل والباسورد وكود المالك كل مرة
+// (الباسورد مكانش بيتحفظ خالص، وكود المالك في sessionStorage بيتمسح مع القفل)
+const _OF_KEY = 'office_login';
+function _ofEnc(s){
+  try{ return btoa(unescape(encodeURIComponent(s)).split('').map(function(c,i){
+    return String.fromCharCode(c.charCodeAt(0) ^ (13 + (i % 9)));
+  }).join('')); }catch(e){ return ''; }
+}
+function _ofDec(s){
+  try{ return decodeURIComponent(escape(atob(s).split('').map(function(c,i){
+    return String.fromCharCode(c.charCodeAt(0) ^ (13 + (i % 9)));
+  }).join(''))); }catch(e){ return ''; }
+}
+function saveOfficeLogin(em, pw){
+  try{ localStorage.setItem(_OF_KEY, _ofEnc(JSON.stringify({ e:em, p:pw }))); }catch(e){}
+}
+function getOfficeLogin(){
+  try{
+    const raw = localStorage.getItem(_OF_KEY);
+    if(!raw) return null;
+    const o = JSON.parse(_ofDec(raw));
+    return (o && o.e && o.p) ? o : null;
+  }catch(e){ return null; }
+}
+async function tryAutoOfficeLogin(){
+  if(firebase.auth().currentUser) return true;
+  const s = getOfficeLogin();
+  if(!s) return false;
+  try{ await firebase.auth().signInWithEmailAndPassword(s.e, s.p); return true; }
+  catch(e){
+    if(e && (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password')){
+      localStorage.removeItem(_OF_KEY);
+    }
+    return false;
+  }
+}
+
+// كود المالك بقى في localStorage — بيفضل بعد القفل والفتح
+let ownerOk = localStorage.getItem('office_owner_ok') === '1'
+           || sessionStorage.getItem('office_owner_ok') === '1';
 
 $('#gLogin').addEventListener('click', async function(){
   const em = $('#gEmail').value.trim(), pw = $('#gPass').value;
@@ -182,16 +221,31 @@ $('#gLogin').addEventListener('click', async function(){
   try{
     await firebase.auth().signInWithEmailAndPassword(em, pw);
     localStorage.setItem('office_email', em);
+    saveOfficeLogin(em, pw);          // 🔑 الجهاز يفتكر
   }catch(e){ $('#gateErr').textContent = 'دخول غلط: ' + (e.code||''); }
 });
+// محاولة دخول تلقائي أول ما البرنامج يفتح
+tryAutoOfficeLogin();
 $('#gCodeBtn').addEventListener('click', function(){
   if($('#gCode').value === OWNER_CODE){
     ownerOk = true;
+    localStorage.setItem('office_owner_ok','1');   // بيفضل بعد القفل والفتح
     sessionStorage.setItem('office_owner_ok','1');
     refreshGate(firebase.auth().currentUser);
   } else { $('#gateErr').textContent = 'كود غلط'; $('#gCode').value=''; }
 });
 $('#gCode').addEventListener('keydown', function(e){ if(e.key==='Enter') $('#gCodeBtn').click(); });
+
+// 🚪 خروج صريح — بيمسح المحفوظ ويقفل. (من غيره الجهاز بيفضل فاتح للأبد)
+window.officeLogout = async function(){
+  if(!confirm('هتخرج من البرنامج والجهاز هينسى الدخول. متأكد؟')) return;
+  try{ localStorage.removeItem(_OF_KEY); }catch(e){}
+  try{ localStorage.removeItem('office_owner_ok'); }catch(e){}
+  try{ sessionStorage.removeItem('office_owner_ok'); }catch(e){}
+  ownerOk = false;
+  try{ await firebase.auth().signOut(); }catch(e){}
+  location.reload();
+};
 
 function refreshGate(user){
   const saved = localStorage.getItem('office_email') || '';
@@ -705,34 +759,163 @@ $('#mAdd').addEventListener('click', function(){
     .then(function(){ $('#mName').value=''; })
     .catch(function(e){ alert('تعذر الإضافة: '+e.message); });
 });
+// 🧾 كارت التاجر — سجل كامل بدل آخر 3 حركات
+let _mOpen = {};      // مين مفتوح سجله
+window.toggleMerchLog = function(id){ _mOpen[id] = !_mOpen[id]; renderMerchants(); };
+
 function renderMerchants(){
   const wrap = $('#merchantsList'); if(!wrap) return;
-  if(!D.merchants.length){ wrap.innerHTML = '<div class="empty">ضيف أول تاجر</div>'; return; }
-  wrap.innerHTML = D.merchants
-    .slice().sort(function(a,b){ return (a.name||'') < (b.name||'') ? -1 : 1; })
+  if(!D.merchants.length){
+    wrap.innerHTML = '<div class="empty">لسه مفيش تجار — ضيف أول واحد من فوق ⬆️</div>';
+    return;
+  }
+  // 📊 ملخص فوق: إجمالي اللي عليك
+  const totalDue = D.merchants.reduce(function(n, m){
+    const t = D.mtxns.filter(function(x){ return x.merchantId === m.id; });
+    const b = merchantBalance(t);
+    return n + (b > 0 ? b : 0);
+  }, 0);
+  const head = '<div class="card" style="border-right:4px solid var(--bad); margin-bottom:12px;">'
+    + '<div class="row"><span class="muted">إجمالي اللي عليك للتجار</span>'
+    + '<span class="amount neg" style="font-size:20px;">' + egp(totalDue) + '</span></div>'
+    + '<div class="muted" style="font-size:11.5px; margin-top:3px;">'
+    + D.merchants.length + ' تاجر</div></div>';
+
+  wrap.innerHTML = head + D.merchants
+    .slice().sort(function(a,b){
+      // اللي عليه أكتر يظهر الأول
+      const ba = merchantBalance(D.mtxns.filter(function(t){ return t.merchantId === a.id; }));
+      const bb = merchantBalance(D.mtxns.filter(function(t){ return t.merchantId === b.id; }));
+      return bb - ba;
+    })
     .map(function(m){
-      const txns = D.mtxns.filter(function(t){ return t.merchantId === m.id; });
+      const txns = D.mtxns.filter(function(t){ return t.merchantId === m.id; })
+        .sort(function(a,b){ return b.ts - a.ts; });
       const bal = merchantBalance(txns);
-      const last3 = txns.slice().sort(function(a,b){ return b.ts - a.ts; }).slice(0,3);
-      return '<div class="card">' +
-        '<div class="row"><b style="font-size:14px;">'+esc(m.name)+'</b>' +
-        '<span class="amount '+(bal>0?'neg':'pos')+'">'+(bal>0?'عليك ':'')+egp(Math.abs(bal))+'</span></div>' +
-        (last3.length ? '<div class="muted" style="margin-top:5px;">'+ last3.map(function(t){
-            return (t.type==='order'?'🧾 أوردر ':'💵 دفعة ') + egp(t.amount) + (t.note?' ('+esc(t.note)+')':'') + ' · ' + dstr(t.ts);
-          }).join('<br>') + '</div>' : '') +
-        '<div style="display:flex; gap:7px; margin-top:10px;">' +
-        '<button class="btn no" style="flex:1;" onclick="officeMtxn(\''+m.id+'\',\'order\')">🧾 أوردر جديد</button>' +
-        '<button class="btn gold" style="flex:1;" onclick="officeMtxn(\''+m.id+'\',\'payment\')">💵 دفعة</button>' +
-        '</div></div>';
+      const orders = txns.filter(function(t){ return t.type === 'order'; });
+      const pays   = txns.filter(function(t){ return t.type !== 'order'; });
+      const sumO = orders.reduce(function(n,t){ return n + (t.amount||0); }, 0);
+      const sumP = pays.reduce(function(n,t){ return n + (t.amount||0); }, 0);
+      const open = !!_mOpen[m.id];
+      const accent = bal > 0 ? 'var(--bad)' : 'var(--good)';
+
+      const log = open ? ('<div style="margin-top:11px; border-top:1px solid var(--line); padding-top:11px;">'
+        + (txns.length ? txns.map(function(t){
+            const isOrd = t.type === 'order';
+            return '<div class="row" style="padding:7px 9px; border-radius:9px; margin-bottom:5px;'
+              + 'background:' + (isOrd ? '#fef2f2' : '#ecfdf5') + ';">'
+              + '<span style="font-size:12.5px; font-weight:700;">'
+              + (isOrd ? '🧾 أوردر' : '💵 دفعة')
+              + (t.note ? ('<span class="muted" style="font-weight:400;"> · ' + esc(t.note) + '</span>') : '')
+              + '<div class="muted" style="font-size:10.5px; font-weight:400;">' + dstr(t.ts) + '</div></span>'
+              + '<span style="display:flex; align-items:center; gap:7px;">'
+              + '<b style="color:' + (isOrd ? 'var(--bad)' : 'var(--good)') + '; font-size:13.5px;">'
+              + (isOrd ? '+' : '−') + egp(t.amount) + '</b>'
+              + '<button class="ghost" style="padding:3px 8px; font-size:11px;"'
+              + ' onclick="deleteMtxn(\'' + t.id + '\')">🗑️</button>'
+              + '</span></div>';
+          }).join('') : '<div class="muted" style="font-size:12.5px;">مفيش حركات لسه</div>')
+        + '</div>') : '';
+
+      return '<div class="card" style="border-right:4px solid ' + accent + '; margin-bottom:10px;">'
+        + '<div class="row">'
+        + '<div style="min-width:0;"><b style="font-size:15px;">' + esc(m.name) + '</b>'
+        + '<div class="muted" style="font-size:11px; margin-top:2px;">'
+        + orders.length + ' أوردر · ' + pays.length + ' دفعة</div></div>'
+        + '<div style="text-align:left;">'
+        + '<div class="amount ' + (bal > 0 ? 'neg' : 'pos') + '" style="font-size:18px;">'
+        + egp(Math.abs(bal)) + '</div>'
+        + '<div class="muted" style="font-size:10.5px;">' + (bal > 0 ? 'عليك' : (bal < 0 ? 'ليك' : 'متساوي')) + '</div>'
+        + '</div></div>'
+        + '<div class="muted" style="font-size:11.5px; margin-top:6px;">'
+        + 'إجمالي الأوردرات ' + egp(sumO) + ' · المدفوع ' + egp(sumP) + '</div>'
+        + '<div style="display:flex; gap:7px; margin-top:11px; flex-wrap:wrap;">'
+        + '<button style="flex:2; min-width:110px;" onclick="officeMtxn(\'' + m.id + '\',\'order\')">🧾 أوردر</button>'
+        + '<button style="flex:2; min-width:110px; background:linear-gradient(135deg,#10B981,#047857);"'
+        + ' onclick="officeMtxn(\'' + m.id + '\',\'payment\')">💵 دفعة</button>'
+        + '<button class="ghost" style="flex:1; min-width:88px;" onclick="toggleMerchLog(\'' + m.id + '\')">'
+        + (open ? '▲ اقفل' : '📜 السجل (' + txns.length + ')') + '</button>'
+        + '<button class="ghost danger" style="padding:11px 13px;" title="مسح التاجر"'
+        + ' onclick="deleteMerchant(\'' + m.id + '\', \'' + esc(m.name).replace(/'/g, "") + '\')">🗑️</button>'
+        + '</div>' + log + '</div>';
     }).join('');
 }
-window.officeMtxn = function(mid, type){
-  const label = type === 'order' ? 'قيمة الأوردر الجديد (بيزوّد اللي عليك)' : 'قيمة الدفعة (بتخصم)';
-  const v = prompt(label + ' بالجنيه:');
-  if(v === null) return;
-  const amount = parseFloat(v);
-  if(isNaN(amount) || amount <= 0){ alert('اكتب مبلغ صحيح'); return; }
-  const note = prompt('ملاحظة (اختياري):') || '';
+
+// 🗑️ مسح تاجر — بيتأكد ويقول كام حركة هتتمسح معاه
+window.deleteMerchant = async function(id, name){
+  const txns = D.mtxns.filter(function(t){ return t.merchantId === id; });
+  const bal = merchantBalance(txns);
+  let msg = 'هتمسح التاجر «' + name + '» نهائيًا';
+  if(txns.length) msg += '\nومعاه ' + txns.length + ' حركة مسجّلة';
+  if(bal > 0) msg += '\n⚠️ لسه عليك ' + egp(bal) + ' للتاجر ده!';
+  msg += '\n\nالإجراء مفيهوش رجوع. متأكد؟';
+  if(!confirm(msg)) return;
+  try{
+    for(let i = 0; i < txns.length; i += 400){
+      const batch = db.batch();
+      txns.slice(i, i+400).forEach(function(t){
+        batch.delete(db.collection('office_merchant_txns').doc(t.id));
+      });
+      await batch.commit();
+    }
+    await db.collection('office_merchants').doc(id).delete();
+  }catch(e){ alert('تعذر المسح: ' + e.message); }
+};
+
+// 🗑️ مسح حركة واحدة (لو اتسجلت بالغلط)
+window.deleteMtxn = async function(id){
+  if(!confirm('تمسح الحركة دي؟')) return;
+  try{ await db.collection('office_merchant_txns').doc(id).delete(); }
+  catch(e){ alert('تعذر المسح: ' + e.message); }
+};
+// 💬 نافذة إدخال — بديل prompt اللي بيفشل في التطبيق المثبّت
+function officeAsk(opts){
+  const o = opts || {};
+  return new Promise(function(resolve){
+    const old = document.getElementById('ofAskOv'); if(old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'ofAskOv';
+    ov.style.cssText = 'position:fixed; inset:0; z-index:9000; background:rgba(0,0,0,.6);'
+      + 'display:flex; align-items:center; justify-content:center; padding:18px;';
+    ov.innerHTML = '<div class="card" style="max-width:400px; width:100%;">'
+      + '<div style="font-weight:900; font-size:16px; margin-bottom:4px;">' + (o.title||'') + '</div>'
+      + (o.note ? '<div class="muted" style="font-size:12.5px; margin-bottom:12px;">' + o.note + '</div>' : '')
+      + '<input id="ofAskA" type="number" inputmode="decimal" placeholder="' + (o.ph||'المبلغ') + '"'
+      + ' style="font-size:20px; text-align:center; font-weight:900; margin-bottom:9px;">'
+      + '<input id="ofAskB" type="text" placeholder="ملاحظة (اختياري)">'
+      + '<div id="ofAskErr" style="color:var(--bad); font-size:12px; min-height:16px; margin-top:5px;"></div>'
+      + '<div style="display:flex; gap:8px; margin-top:6px;">'
+      + '<button id="ofAskOk" style="flex:2;">تمام</button>'
+      + '<button id="ofAskNo" class="ghost" style="flex:1;">إلغاء</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    const a = ov.querySelector('#ofAskA'), b = ov.querySelector('#ofAskB'), er = ov.querySelector('#ofAskErr');
+    const done = function(v){ ov.remove(); resolve(v); };
+    const ok = function(){
+      const n = parseFloat(a.value);
+      if(isNaN(n) || n <= 0){ er.textContent = 'اكتب مبلغ صحيح'; a.focus(); return; }
+      done({ amount:n, note:(b.value||'').trim() });
+    };
+    ov.querySelector('#ofAskOk').addEventListener('click', ok);
+    ov.querySelector('#ofAskNo').addEventListener('click', function(){ done(null); });
+    [a,b].forEach(function(el){ el.addEventListener('keydown', function(e){
+      if(e.key === 'Enter'){ e.preventDefault(); ok(); }
+      if(e.key === 'Escape'){ done(null); }
+    }); });
+    setTimeout(function(){ try{ a.focus(); }catch(e){} }, 60);
+  });
+}
+window.officeAsk = officeAsk;
+
+window.officeMtxn = async function(mid, type){
+  const m = D.merchants.find(function(x){ return x.id === mid; }) || {};
+  const res = await officeAsk({
+    title: (type === 'order' ? '🧾 أوردر جديد' : '💵 دفعة') + ' — ' + (m.name || ''),
+    note: type === 'order' ? 'بيزوّد اللي عليك للتاجر' : 'بتخصم من اللي عليك',
+    ph: 'المبلغ بالجنيه'
+  });
+  if(!res) return;
+  const amount = res.amount, note = res.note;
   db.collection('office_merchant_txns').add({ merchantId:mid, type:type, amount:amount, note:note, ts:Date.now() })
     .catch(function(e){ alert('تعذر التسجيل: '+e.message); });
 };
