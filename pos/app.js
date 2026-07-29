@@ -727,7 +727,11 @@ function openLabelQtyModal(items){
     <h3 style="margin:0 0 4px;">🏷️ طباعة ليبلات</h3>
     <div style="color:var(--muted); font-size:12px; margin-bottom:12px;">حدّد عدد الليبلات لكل صنف (متقترح تلقائيًا)</div>
     ${items.map((it,i)=>`<div style="display:flex; align-items:center; gap:10px; padding:9px; border:1px solid var(--border); border-radius:10px; margin-bottom:7px;">
-      <div style="flex:1; min-width:0;"><div style="font-weight:700; font-size:13px;">${it.name}</div><div style="color:var(--muted); font-size:11px; direction:ltr; text-align:right;">${it.barcode||''}</div></div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:700; font-size:13px;">${it.name}</div>
+        <div style="color:var(--muted); font-size:11px; direction:ltr; text-align:right;">${it.barcode||''}</div>
+        ${it.stockQty != null ? `<div style="color:var(--warn); font-size:11px; font-weight:700; margin-top:2px;">📦 المتاح في الفرع: ${it.stockQty}</div>` : ''}
+      </div>
       <input type="number" min="0" id="lq_${i}" value="${Math.max(0, it.suggestedQty||1)}" style="width:70px; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800; font-size:15px;">
     </div>`).join('')}
     <div style="display:flex; gap:8px; margin-top:12px;">

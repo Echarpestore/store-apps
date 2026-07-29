@@ -142,7 +142,11 @@ function printSelectedLabels(){
   if(!hasPerm('canPrintLabel')){ showToast('مفيش صلاحية طباعة الليبل', 'err'); return; }
   const picked = allInventory.filter(it=> invSelected.has(it.id));
   if(!picked.length){ showToast('حدد منتجات الأول: Ctrl + دوسة على كل منتج', 'err'); return; }
-  openLabelQtyModal(picked.map(it=> ({ name:it.name, price:it.price, barcode:it.barcode, suggestedQty: Math.max(1, branchQty(it)||1) })));
+  // 🏷️ الافتراضي قطعة واحدة لكل صنف — الاقتراح بكمية الفرع كان خطر:
+  // اختيار 20 صنف وضغطة سريعة = مئات الليبلات تتطبع بالغلط.
+  // (الاستلام لسه بيقترح الكمية المستلمة لأنها المنطقية هناك.)
+  openLabelQtyModal(picked.map(it=> ({ name:it.name, price:it.price, barcode:it.barcode, suggestedQty: 1,
+    stockQty: (typeof branchQty==='function') ? (branchQty(it)||0) : null })));
 }
 function renderInventoryList(){
   const listWrap = document.getElementById('inventoryListWrap');
@@ -692,8 +696,9 @@ function printPriceLabel(id){
   if(!hasPerm('canPrintLabel')){ showToast('مفيش صلاحية', 'err'); return; }
   const it = allInventory.find(x=>x.id===id);
   if(!it) return;
-  // نافذة الكمية — الاقتراح = رصيد الفرع الحالي
-  const suggested = (typeof branchQty==='function') ? Math.max(1, branchQty(it)||1) : 1;
-  openLabelQtyModal([{ name: it.name, price: it.price, barcode: it.barcode, suggestedQty: suggested }]);
+  // نافذة الكمية — الافتراضي قطعة واحدة، والكمية المتاحة بتظهر للعلم بس
+  const suggested = 1;
+  openLabelQtyModal([{ name: it.name, price: it.price, barcode: it.barcode, suggestedQty: suggested,
+    stockQty: (typeof branchQty==='function') ? (branchQty(it)||0) : null }]);
 }
 
