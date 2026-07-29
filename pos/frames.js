@@ -287,41 +287,89 @@
     console.log('وضع شاشة البيع:', state.mode);
   };
 
-  async function refreshStatus(){
-    try{
-      var b = branch(); var D = getDb();
-      if(!b || !D){ console.warn('🖼️ frames: الفرع أو قاعدة البيانات لسه مش جاهزين'); return; }
-      var cfgDoc = await D.collection('pos_test_settings').doc('shift_targets').get();
-      var byBranch = cfgDoc.exists ? (cfgDoc.data().byBranch || {}) : {};
-      var cfg = byBranch[b] || null;
-      var modeDoc = await D.collection('pos_test_settings').doc('frames_cfg').get();
-      state.mode = (modeDoc.exists && modeDoc.data().posSaleMode) || 'light';
-      if(!cfg){ state.status = null; applyVisuals(); return; }
+  // ⚡ إعادة كتابة كاملة لتوفير القراءات.
+  // كان: كل 30 ثانية بيقرا الإعدادات + **كل مبيعات اليوم** + كل الموظفين.
+  // فرع بـ200 فاتورة = ~24 ألف قراءة في الساعة من جهاز واحد.
+  // بقى: مستمعين حيّين — القراءة الأولى بس، وبعدها الجديد فقط.
+  var _pfRows = [], _pfEmps = [], _pfCfg = null, _pfDay = null;
+  var _pfUnsubSales = null, _pfUnsubEmps = null, _pfUnsubCfg = null;
 
-      var start = new Date(); start.setHours(0,0,0,0);
-      var snap = await D.collection('pos_test_sales')
-        .where('createdAt','>=', firebase.firestore.Timestamp.fromDate(start)).get();
-      var rows = snap.docs.map(function(d){ return d.data(); });
+  function _pfDayKey(){ var d = new Date(); return d.toDateString(); }
 
-      var empSnap = await D.collection('sales_employees').where('branch','==', b).get();
-      var emps = empSnap.docs.map(function(d){ var o = d.data(); o.id = d.id; return o; });
-      window._pfEmployees = emps;
-
-      var stat = computeShiftStatus(rows, emps, cfg, new Date());
-      state.status = stat;
-      // الكتابة بس لما تتغير (توفير عمليات)
-      var sig = JSON.stringify([stat.dateKey, stat.morning.hit, stat.morning.net, stat.evening.hit, stat.evening.net]);
-      if(sig !== state._wsig){
-        state._wsig = sig;
-        D.collection('pos_test_settings').doc('shift_status_' + b).set(stat, { merge:false })
-          .catch(function(e){ console.warn('shift status write', e); });
-      }
-      applyVisuals();
-    }catch(e){ console.warn('posFrames refresh', e); }
+  function _pfWatchCfg(D){
+    if(_pfUnsubCfg) return;
+    _pfUnsubCfg = D.collection('pos_test_settings').doc('shift_targets')
+      .onSnapshot(function(doc){
+        var byBranch = doc.exists ? (doc.data().byBranch || {}) : {};
+        _pfCfg = byBranch[branch()] || null;
+        recompute();
+      }, function(e){ console.warn('pf cfg', e && e.code); });
+    D.collection('pos_test_settings').doc('frames_cfg')
+      .onSnapshot(function(doc){
+        state.mode = (doc.exists && doc.data().posSaleMode) || 'light';
+        applyVisuals();
+      }, function(e){ console.warn('pf mode', e && e.code); });
   }
 
-  setTimeout(refreshStatus, 3000);
-  setInterval(refreshStatus, 30000);      // تحديث الصافي كل نص دقيقة
+  function _pfWatchEmps(D, b){
+    if(_pfUnsubEmps) return;
+    _pfUnsubEmps = D.collection('sales_employees').where('branch','==', b)
+      .onSnapshot(function(snap){
+        _pfEmps = snap.docs.map(function(d){ var o = d.data(); o.id = d.id; return o; });
+        window._pfEmployees = _pfEmps;
+        recompute();
+      }, function(e){ console.warn('pf emps', e && e.code); });
+  }
+
+  // مبيعات اليوم: مستمع واحد. القراءة الأولى بعدد فواتير اليوم،
+  // وبعدها كل فاتورة جديدة = قراءة واحدة بس.
+  function _pfWatchSales(D, b){
+    var today = _pfDayKey();
+    if(_pfUnsubSales && _pfDay === today) return;
+    if(_pfUnsubSales){ try{ _pfUnsubSales(); }catch(e){} _pfUnsubSales = null; }
+    _pfDay = today;
+    var start = new Date(); start.setHours(0,0,0,0);
+    _pfUnsubSales = D.collection('pos_test_sales')
+      .where('branch','==', b)
+      .where('createdAt','>=', firebase.firestore.Timestamp.fromDate(start))
+      .onSnapshot(function(snap){
+        _pfRows = snap.docs.map(function(d){ return d.data(); });
+        recompute();
+      }, function(e){ console.warn('pf sales', e && e.code); });
+  }
+
+  // الحساب محلي — مفيش أي قراءة
+  function recompute(){
+    try{
+      if(!_pfCfg){ state.status = null; applyVisuals(); return; }
+      var stat = computeShiftStatus(_pfRows, _pfEmps, _pfCfg, new Date());
+      state.status = stat;
+      var sig = JSON.stringify([stat.dateKey, stat.morning.hit, stat.morning.net,
+                                stat.evening.hit, stat.evening.net]);
+      if(sig !== state._wsig){
+        state._wsig = sig;
+        var D = getDb(), b = branch();
+        if(D && b){
+          D.collection('pos_test_settings').doc('shift_status_' + b).set(stat, { merge:false })
+            .catch(function(e){ console.warn('shift status write', e); });
+        }
+      }
+      applyVisuals();
+    }catch(e){ console.warn('pf recompute', e); }
+  }
+
+  function refreshStatus(){
+    var b = branch(), D = getDb();
+    if(!b || !D){ return; }        // لسه مش جاهز — هيتحاول تاني
+    _pfWatchCfg(D);
+    _pfWatchEmps(D, b);
+    _pfWatchSales(D, b);           // بيعيد الاشتراك لوحده مع بداية يوم جديد
+    recompute();                   // إعادة حساب محلية (الوقت بيتغير)
+  }
+
+  // ⚡ الاستدعاء ده بقى **محلي بالكامل** — مفيش أي قراءة من قاعدة البيانات.
+  // بيعيد الحساب بس عشان الوقت بيتغير (نوافذ الشيفتات) وبيتأكد إن المستمعين شغالين.
+  setInterval(refreshStatus, 30000);
   setInterval(applyVisuals, 30000);       // نهاية نافذة الشيفت بتطفّي الاحتفال لوحدها
   window.pfRefreshStatus = refreshStatus;
 })();
