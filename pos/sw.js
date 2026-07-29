@@ -1,7 +1,15 @@
-const CACHE_NAME = 'store-apps-shell-v202';
+const CACHE_NAME = 'store-apps-shell-v204';
 
+// ⚠️ مفيش skipWaiting تلقائي.
+// النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر
+// إمتى تفعّلها — عشان التحديث ميحصلش والكاشير في نص فاتورة.
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  // بنستنى إشارة من الصفحة
+});
+
+// الصفحة بتبعت 'SKIP_WAITING' لما الكاشير يوافق
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {

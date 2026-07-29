@@ -378,6 +378,99 @@ window.isSameBizDay = isSameBizDay;
   }catch(e){ console.warn('day_cfg listen', e); }
 })();
 
+// ============================================================
+// 🔄 التحديث التلقائي (من غير قفل وفتح)
+// النسخة الجديدة بتنزل في الخلفية وتستنى. الشريط بيظهر بس لما
+// الشاشة تكون فاضية — مش في نص فاتورة ولا وسط تأكيد فيزا.
+// ============================================================
+let _swReg = null, _swWaiting = null, _updBarShown = false;
+
+// الشاشة فاضية = مفيش شغل ممكن يضيع
+function updSafeNow(){
+  try{
+    if(typeof cart !== 'undefined' && cart && cart.length) return false;      // سلة فيها منتجات
+    if(typeof paymobPending !== 'undefined' && paymobPending) return false;   // فيزا مستنية
+    if(document.querySelector('.modal-overlay.active')) return false;         // نافذة مفتوحة
+    if(document.getElementById('askTextOverlay')) return false;
+    if(document.getElementById('editItemOverlay')) return false;
+    return true;
+  }catch(e){ return false; }
+}
+
+function showUpdateBar(){
+  if(_updBarShown || !_swWaiting) return;
+  if(!updSafeNow()) return;                 // مش وقته — هنجرب تاني بعد شوية
+  _updBarShown = true;
+  const bar = document.createElement('div');
+  bar.id = 'updBar';
+  bar.style.cssText = 'position:fixed; left:0; right:0; bottom:0; z-index:14000;'
+    + 'background:linear-gradient(135deg,#1D4ED8,#1E40AF); color:#fff;'
+    + "padding:14px 18px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;"
+    + "font-family:'Cairo',sans-serif; box-shadow:0 -6px 22px rgba(0,0,0,.28);"
+    + 'transform:translateY(100%); transition:transform .35s ease;';
+  bar.innerHTML =
+    '<div style="flex:1; min-width:180px;">'
+    + '<div style="font-weight:900; font-size:15px;">🔄 فيه تحديث جاهز</div>'
+    + '<div style="font-size:12px; opacity:.9;">هيتفعّل في ثانية — من غير ما تقفل البرنامج</div>'
+    + '</div>'
+    + '<button id="updNow" style="padding:11px 22px; border:none; border-radius:10px;'
+    + " background:#fff; color:#1D4ED8; font-family:'Cairo'; font-weight:900; font-size:14px;"
+    + ' cursor:pointer;">فعّل التحديث</button>'
+    + '<button id="updLater" style="padding:11px 16px; border:1px solid rgba(255,255,255,.45);'
+    + " border-radius:10px; background:transparent; color:#fff; font-family:'Cairo';"
+    + ' font-weight:700; font-size:13px; cursor:pointer;">بعدين</button>';
+  document.body.appendChild(bar);
+  setTimeout(function(){ bar.style.transform = 'translateY(0)'; }, 40);
+
+  bar.querySelector('#updNow').addEventListener('click', function(){
+    bar.querySelector('#updNow').textContent = 'بيحدّث…';
+    try{ _swWaiting.postMessage({ type:'SKIP_WAITING' }); }catch(e){ location.reload(); }
+  });
+  bar.querySelector('#updLater').addEventListener('click', function(){
+    bar.style.transform = 'translateY(100%)';
+    setTimeout(function(){ bar.remove(); _updBarShown = false; }, 350);
+  });
+}
+window.showUpdateBar = showUpdateBar;
+
+function initAutoUpdate(){
+  if(!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('sw.js').then(function(reg){
+    _swReg = reg;
+    // نسخة مستنية موجودة خلاص
+    if(reg.waiting){ _swWaiting = reg.waiting; showUpdateBar(); }
+    // نسخة جديدة بتنزل دلوقتي
+    reg.addEventListener('updatefound', function(){
+      const nw = reg.installing;
+      if(!nw) return;
+      nw.addEventListener('statechange', function(){
+        if(nw.state === 'installed' && navigator.serviceWorker.controller){
+          _swWaiting = nw;
+          showUpdateBar();
+        }
+      });
+    });
+    // بنسأل عن تحديث كل 10 دقايق
+    setInterval(function(){ try{ reg.update(); }catch(e){} }, 10*60*1000);
+  }).catch(function(e){ console.warn('sw register', e); });
+
+  // أول ما النسخة الجديدة تشتغل، الصفحة بتتحدث مرة واحدة بس
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if(reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
+
+  // لو الشريط استنى عشان الشاشة مكانتش فاضية، بنجرب كل نص دقيقة
+  setInterval(function(){ if(_swWaiting && !_updBarShown) showUpdateBar(); }, 30000);
+}
+if(typeof window !== 'undefined'){
+  window.initAutoUpdate = initAutoUpdate;
+  if(document.readyState === 'complete') initAutoUpdate();
+  else window.addEventListener('load', initAutoUpdate);
+}
+
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');

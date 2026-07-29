@@ -858,7 +858,7 @@ function reprintSale(id){
       empName: s.employeeName || '',
       // 🧾 نفس تصميم الفاتورة الأصلية بالظبط — بسعر الوحدة وبيانات الكارت
       items: (s.items||[]).map(it=> ({
-        name: it.name, qty: it.qty,
+        name: it.name, qty: it.qty, barcode: it.barcode || '',
         unit: Math.abs(Number(it.price||0)).toFixed(2),
         line: Math.abs((it.price||0)*(it.qty||1)).toFixed(2)
       })),

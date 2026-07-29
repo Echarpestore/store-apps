@@ -496,7 +496,7 @@ function buildReceiptHTML(data){
           + `<th style="padding:2px 0 4px; border-bottom:2px solid #000; white-space:nowrap; text-align:${dir==='rtl'?'left':'right'}; font-size:${Math.max(8, (parseInt(fs)||11) - 1)}px; font-weight:800;">Total</th>`
           + `</tr>`
           + `${(d.items||[]).map(it=>
-          `<tr><td style="padding:3px 0; border-bottom:1px solid #000; font-weight:600; word-break:break-word; max-width:0; width:100%;">${it.name}</td><td style="padding:3px 4px; border-bottom:1px solid #000; white-space:nowrap; font-weight:600;">${it.qty} × ${it.unit||''}</td><td style="padding:3px 0; border-bottom:1px solid #000; white-space:nowrap; font-weight:700; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
+          `<tr><td style="padding:3px 0; border-bottom:1px solid #000; font-weight:600; word-break:break-word; max-width:0; width:100%;">${it.name}${it.barcode ? `<div dir="ltr" style="font-size:${Math.max(7, (parseInt(fs)||11) - 3)}px; font-weight:500; letter-spacing:.4px; text-align:${dir==='rtl'?'right':'left'};">${it.barcode}</div>` : ''}</td><td style="padding:3px 4px; border-bottom:1px solid #000; white-space:nowrap; font-weight:600;">${it.qty} × ${it.unit||''}</td><td style="padding:3px 0; border-bottom:1px solid #000; white-space:nowrap; font-weight:700; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
       case 'totals':
         parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`);
         // 💵 الباقي — بيظهر بس لما يكون فيه فكة فعلًا
@@ -919,7 +919,8 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
   const data = {
     dateStr: new Date().toLocaleString(c.lang==='en'?'en-GB':'ar-EG'),
     empName: (currentEmployee&&currentEmployee.name)||'',
-    items: cart.map(it=> ({name:it.name, qty:it.qty, unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2)})),
+    items: cart.map(it=> ({name:it.name, qty:it.qty, barcode:it.barcode||'',
+      unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2)})),
     totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: invoiceCode||invoiceNo||'',
     // 💳 بيانات الكارت بتتطبع بشرطين مع بعض:
     //   (١) الفاتورة دي فيها دفع فيزا فعلًا  (٢) وفيه بيانات كارت متأكدة

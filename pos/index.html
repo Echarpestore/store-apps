@@ -66,6 +66,13 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
    من الشاشة كان بيتقص ومفيش تمرير خالص (باين في شاشة استلام البضاعة). */
 .screen.mgmt-light{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
 .screen.mgmt-light > *:last-child{ padding-bottom:24px; }
+/* 📜 شاشة الدخول (كروت الموظفين بتكبر مع كل موظفة) والقايمة الرئيسية
+   (بتتقص على الشاشات الصغيرة) — نفس المشكلة بالظبط.
+   ⚠️ شاشة البيع مستثناة عن قصد: عندها تمرير داخلي للسلة،
+   والتمرير على مستوى الشاشة بيبوّظ تخطيطها. */
+.screen#loginScreen, .screen#dashboardScreen, .screen#branchSetupScreen{
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+}
 .badge-test{
   position:fixed;top:8px;left:8px;background:var(--warn);color:#1a1200;
   font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;z-index:999;
