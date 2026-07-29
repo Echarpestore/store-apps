@@ -62,6 +62,301 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
 }
 .screen{display:none;height:100vh;flex-direction:column;}
 .screen.active{display:flex;}
+/* ============================================================
+   🎨 نظام التصميم الموحّد
+   نفس أسلوب سجل المبيعات: خلفية فاتحة · كروت بيضا · ظلال خفيفة
+   · شريط لوني على الجنب · خط Cairo
+   ============================================================ */
+.mgmt-light{
+  --ui-line:#e6e9ef; --ui-soft:#f7f8fa; --ui-mut:#6b7280; --ui-ink:#1a1f2b;
+  --ui-blue:#2563EB; --ui-green:#059669; --ui-red:#DC2626;
+  --ui-amber:#D97706; --ui-violet:#7C3AED; --ui-dark:#2f3545;
+  background:#eef1f6 !important;
+}
+
+/* الشريط العلوي — أيقونات دايرية ملوّنة بدل الأزرار الرمادية */
+.mgmt-light .dash-header, .mgmt-light .mgmt-topbar{
+  background:#fff !important; border:none !important;
+  border-radius:0 0 20px 20px !important;
+  box-shadow:0 3px 16px rgba(20,25,40,.07) !important;
+  padding:14px 18px !important; margin-bottom:18px !important;
+  gap:9px !important;
+}
+.mgmt-light .dash-header h1{
+  font-size:19px !important; font-weight:900 !important; color:var(--ui-ink) !important;
+}
+.mgmt-light .logout-btn{
+  background:var(--ui-soft) !important; color:#374151 !important;
+  border:1px solid var(--ui-line) !important; border-radius:12px !important;
+  padding:9px 15px !important; font-weight:700 !important; font-size:13px !important;
+  font-family:'Cairo',sans-serif !important; transition:all .15s;
+}
+.mgmt-light .logout-btn:hover{
+  background:#fff !important; border-color:#c7cdd8 !important;
+  box-shadow:0 2px 8px rgba(20,25,40,.08) !important;
+}
+.mgmt-light .btn-newsale{
+  background:linear-gradient(135deg,#10B981,#047857) !important;
+  border-radius:12px !important; padding:10px 20px !important;
+  font-weight:800 !important; font-family:'Cairo',sans-serif !important;
+  box-shadow:0 4px 12px rgba(5,150,105,.28) !important;
+}
+
+/* الكروت */
+.mgmt-light .panel, .mgmt-light .card{
+  background:#fff !important; border:1px solid var(--ui-line) !important;
+  border-radius:16px !important; box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
+  padding:16px 18px !important;
+}
+.mgmt-light h3{
+  font-size:16px !important; font-weight:900 !important; color:var(--ui-ink) !important;
+}
+
+/* الجداول */
+.mgmt-light table{
+  border-collapse:separate !important; border-spacing:0 !important;
+  border-radius:14px !important; overflow:hidden !important;
+  box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
+}
+.mgmt-light th{
+  background:var(--ui-dark) !important; color:#fff !important;
+  padding:12px 15px !important; font-weight:700 !important; font-size:14px !important;
+}
+.mgmt-light td{
+  padding:11px 15px !important; border-bottom:1px solid var(--ui-line) !important;
+  font-size:14px !important; background:#fff !important;
+}
+.mgmt-light tr:nth-child(even) td{ background:#fbfcfd !important; }
+.mgmt-light tr:last-child td{ border-bottom:none !important; }
+
+/* المدخلات */
+.mgmt-light input, .mgmt-light select, .mgmt-light textarea{
+  border-radius:11px !important; border:1.5px solid var(--ui-line) !important;
+  font-family:'Cairo',sans-serif !important; padding:11px 13px !important;
+  background:#fff !important;
+}
+.mgmt-light input:focus, .mgmt-light select:focus{
+  outline:none !important; border-color:var(--ui-blue) !important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.12) !important;
+}
+.mgmt-light button{ font-family:'Cairo',sans-serif !important; }
+
+/* ============================================================
+   🛒 شاشة البيع — نفس الأسلوب مع الحفاظ على وضوح الشاشة الحرارية
+   ملاحظة: التخطيط (flex والتمرير الداخلي) متسابش زي ما هو عن قصد.
+   ============================================================ */
+.qbx-wrap{ background:#eef1f6 !important; }
+#searchBar{
+  border-radius:13px !important; border:2px solid #d8dce4 !important;
+  background:#fff !important; padding:14px 16px !important;
+  font-family:'Cairo',sans-serif !important; font-size:15px !important;
+  font-weight:600 !important; box-shadow:0 2px 8px rgba(20,25,40,.05) !important;
+  transition:border-color .15s, box-shadow .15s;
+}
+#searchBar:focus{
+  outline:none !important; border-color:#2563EB !important;
+  box-shadow:0 0 0 4px rgba(37,99,235,.12) !important;
+}
+.qbx-quickbtn{
+  border-radius:13px !important; border:none !important; width:50px !important;
+  height:50px !important; font-size:21px !important;
+  background:linear-gradient(135deg,#475569,#334155) !important;
+  box-shadow:0 3px 9px rgba(20,25,40,.16) !important; transition:transform .12s;
+}
+.qbx-quickbtn:hover{ transform:translateY(-1px); }
+.qbx-quickbtn-del{ background:linear-gradient(135deg,#EF4444,#B91C1C) !important; }
+.qbx-itemops button{
+  border-radius:13px !important; border:none !important;
+  background:linear-gradient(135deg,#475569,#334155) !important;
+  font-family:'Cairo',sans-serif !important; font-weight:800 !important;
+  box-shadow:0 3px 9px rgba(20,25,40,.14) !important;
+  padding:13px 6px !important; transition:transform .12s;
+}
+.qbx-itemops button:hover{ transform:translateY(-1px); }
+.qbx-return-all{ background:linear-gradient(135deg,#F59E0B,#B45309) !important; }
+
+/* السلة */
+.cart-table{ font-family:'Cairo',sans-serif !important; font-size:13px !important; }
+.cart-area{
+  background:#fff !important; border-radius:16px !important;
+  border:1px solid #e6e9ef !important;
+  box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
+}
+.cart-code{ font-size:11.5px !important; color:#6b7280 !important; }
+
+/* الإجمالي وأزرار الدفع */
+.qbx-bottom{
+  /* ⚠️ العكس (row-reverse) مكرر هنا عن قصد — الإجمالي مكان أزرار الدفع.
+     من غيره القاعدة دي ممكن تلغي العكس حسب ترتيب التحميل. */
+  display:flex !important; flex-direction:row-reverse !important;
+  background:#fff !important; border-top:1px solid #e6e9ef !important;
+  border-radius:20px 20px 0 0 !important;
+  box-shadow:0 -3px 16px rgba(20,25,40,.07) !important;
+  padding:14px 16px 16px !important; gap:10px !important; align-items:stretch !important;
+}
+.t-row{ font-family:'Cairo',sans-serif !important; font-size:14px !important; }
+.t-val{
+  border-radius:11px !important; border:1.5px solid #e6e9ef !important;
+  background:#f7f8fa !important; font-family:'Cairo',sans-serif !important;
+  font-size:18px !important; padding:7px 12px !important;
+}
+.t-green{ color:#047857 !important; border-color:#a7f3d0 !important; background:#ecfdf5 !important; }
+.t-red{ color:#B91C1C !important; border-color:#fecaca !important; background:#fef2f2 !important; }
+.qbx-pay-btns button{
+  border-radius:15px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:800 !important; padding:13px 18px !important;
+  box-shadow:0 4px 12px rgba(20,25,40,.16) !important; transition:transform .12s;
+}
+.qbx-pay-btns button:hover{ transform:translateY(-2px); }
+.qbx-pay-btns button.selected{ box-shadow:0 0 0 3px rgba(37,99,235,.35) !important; }
+.qbx-clear-pay{
+  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:700 !important;
+}
+#confirmPayBtn{
+  border-radius:14px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:900 !important; font-size:16px !important;
+  box-shadow:0 5px 15px rgba(5,150,105,.3) !important;
+}
+
+/* 🧩 العناصر المشتركة في الشاشات الداخلية */
+.mgmt-light .rep-card{
+  background:#fff !important; border:1px solid var(--ui-line) !important;
+  border-radius:16px !important; box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
+}
+.mgmt-light .empty-cart{
+  color:var(--ui-mut) !important; text-align:center; padding:34px 16px !important;
+  font-size:14px !important; background:var(--ui-soft) !important;
+  border:1.5px dashed var(--ui-line) !important; border-radius:14px !important;
+}
+.mgmt-light .sugg-row{
+  border-bottom:1px solid var(--ui-line) !important; padding:11px 14px !important;
+  font-size:14px !important; transition:background .12s;
+}
+.mgmt-light .sugg-row:hover{ background:#eff6ff !important; }
+.mgmt-light .qty-cell{
+  display:flex; align-items:center; gap:7px;
+}
+.mgmt-light .qty-cell button{
+  width:36px !important; height:38px !important; border-radius:11px !important;
+  border:1.5px solid var(--ui-line) !important; background:#fff !important;
+  color:var(--ui-ink) !important; font-size:19px !important; font-weight:800 !important;
+  cursor:pointer; transition:all .12s;
+}
+.mgmt-light .qty-cell button:hover{ background:var(--ui-soft) !important; border-color:#c7cdd8 !important; }
+.mgmt-light .cart-del{
+  border:none !important; background:transparent !important; color:var(--ui-red) !important;
+  font-size:18px !important; cursor:pointer; padding:6px !important; border-radius:9px;
+}
+.mgmt-light .cart-del:hover{ background:#fef2f2 !important; }
+
+/* النوافذ */
+.modal-sheet{
+  border-radius:20px !important; box-shadow:0 20px 60px rgba(0,0,0,.3) !important;
+  font-family:'Cairo',sans-serif !important;
+}
+.mgmt-light .modal-sheet{ background:#fff !important; border:none !important; }
+
+/* الشرائح والتبويبات */
+.mgmt-light .tab, .mgmt-light .chip{
+  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:700 !important; transition:all .12s;
+}
+.mgmt-light .tab.active{
+  background:var(--ui-dark) !important; color:#fff !important; border-color:var(--ui-dark) !important;
+}
+
+/* رسايل الخطأ */
+.mgmt-light .field-err{
+  color:var(--ui-red) !important; font-size:12.5px !important; font-weight:700 !important;
+  margin-top:5px !important;
+}
+
+/* نماذج الإضافة */
+.mgmt-light .add-form{
+  display:flex; gap:9px; flex-wrap:wrap; align-items:center;
+  background:var(--ui-soft) !important; border:1px solid var(--ui-line) !important;
+  border-radius:14px !important; padding:14px !important;
+}
+
+/* الأزرار الأساسية جوه الشاشات */
+.mgmt-light .panel button:not(.logout-btn):not(.cart-del):not(.qty-cell button){
+  border-radius:11px !important; font-weight:700 !important; padding:10px 16px !important;
+  cursor:pointer;
+}
+
+/* 🏠 القايمة الرئيسية — أقسام وأزرار موحّدة */
+.qb-section-head{
+  font-size:14px !important; font-weight:900 !important; color:#374151 !important;
+  margin:18px 0 10px !important; display:flex; align-items:center; gap:8px;
+}
+.qb-section-head::before{
+  content:''; width:4px; height:17px; border-radius:99px;
+  background:linear-gradient(180deg,#3B82F6,#1D4ED8); display:inline-block;
+}
+.qb-section-body{
+  background:#fff !important; border:1px solid var(--ui-line) !important;
+  border-radius:18px !important; padding:16px 14px !important;
+  box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
+}
+
+/* الأزرار الثانوية والنوافذ */
+.mgmt-light .secondary, .secondary{
+  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:700 !important;
+}
+.modal-btns button, .btn-cancel{
+  border-radius:12px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:800 !important; padding:13px !important;
+}
+.rep-range-btn, .rep-type-btn{
+  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:700 !important; padding:9px 15px !important; transition:all .12s;
+}
+.rep-range-btn.active, .rep-type-btn.active{
+  background:var(--ui-dark) !important; color:#fff !important; border-color:var(--ui-dark) !important;
+}
+
+/* لوحة الأرقام (الدخول بالـ PIN) */
+.pin-pad button{
+  border-radius:15px !important; font-family:'Cairo',sans-serif !important;
+  font-weight:800 !important; font-size:21px !important; padding:16px !important;
+  transition:transform .1s;
+}
+.pin-pad button:active{ transform:scale(.95); }
+
+/* 🔵 أيقونات القايمة الرئيسية — دوائر ملوّنة بدل الإيموجي السادة */
+.qb-nav-item{
+  transition:transform .15s, background .15s;
+}
+.qb-nav-item:hover{ transform:translateY(-2px); }
+.qb-icon{
+  width:56px !important; height:56px !important; border-radius:18px !important;
+  display:flex !important; align-items:center; justify-content:center;
+  font-size:27px !important; margin:0 auto;
+  box-shadow:0 4px 12px rgba(20,25,40,.14);
+}
+/* لون لكل قسم — العين بتوصل للمكان من غير ما تقرا */
+.qb-nav-item[onclick*="Sale"]      .qb-icon,
+.qb-nav-item[onclick*="resumeOr"]  .qb-icon{ background:linear-gradient(135deg,#10B981,#047857); }
+.qb-nav-item[onclick*="Inventory"] .qb-icon{ background:linear-gradient(135deg,#F59E0B,#B45309); }
+.qb-nav-item[onclick*="Receive"]   .qb-icon{ background:linear-gradient(135deg,#8B5CF6,#6D28D9); }
+.qb-nav-item[onclick*="Transfer"]  .qb-icon{ background:linear-gradient(135deg,#06B6D4,#0E7490); }
+.qb-nav-item[onclick*="Report"]    .qb-icon{ background:linear-gradient(135deg,#3B82F6,#1D4ED8); }
+.qb-nav-item[onclick*="History"]   .qb-icon{ background:linear-gradient(135deg,#6366F1,#4338CA); }
+.qb-nav-item[onclick*="Customer"]  .qb-icon{ background:linear-gradient(135deg,#EC4899,#BE185D); }
+.qb-nav-item[onclick*="Loyalty"]   .qb-icon{ background:linear-gradient(135deg,#F43F5E,#BE123C); }
+.qb-nav-item[onclick*="Discount"]  .qb-icon{ background:linear-gradient(135deg,#F97316,#C2410C); }
+.qb-nav-item[onclick*="EndOfDay"]  .qb-icon,
+.qb-nav-item[onclick*="Day"]       .qb-icon{ background:linear-gradient(135deg,#64748B,#334155); }
+.qb-nav-item[onclick*="Staff"]     .qb-icon,
+.qb-nav-item[onclick*="Roles"]     .qb-icon{ background:linear-gradient(135deg,#14B8A6,#0F766E); }
+.qb-nav-item[onclick*="Import"]    .qb-icon{ background:linear-gradient(135deg,#A855F7,#7E22CE); }
+.qb-nav-item[onclick*="Receipt"]   .qb-icon{ background:linear-gradient(135deg,#0EA5E9,#0369A1); }
+.qb-nav-item .qb-label{
+  font-size:12px !important; font-weight:700 !important; margin-top:7px !important;
+}
+
 /* 📜 شاشات الإدارة كانت height:100vh من غير overflow — المحتوى اللي أطول
    من الشاشة كان بيتقص ومفيش تمرير خالص (باين في شاشة استلام البضاعة). */
 .screen.mgmt-light{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
