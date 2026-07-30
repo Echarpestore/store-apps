@@ -203,8 +203,12 @@ document.getElementById('receiveGoodsBarcode').addEventListener('input', (e)=>{
   if(!box) return;
   box.innerHTML = '';
   if(!q) return;
+  // 🧷 حزام أمان نسخ الملفات: وقت التحديث ممكن ملف يتحمّل جديد وملف قديم للحظة —
+  // لو دالة التطبيع لسه موصلتش، بنرجع للبحث الحرفي بدل ما البحث يموت خالص
+  const _sm = (typeof searchMatch === 'function') ? searchMatch
+            : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
   const matches = allInventory.filter(it=>
-    searchMatch(it.name, q) || (it.barcode||'').toLowerCase().includes(q)   // 🔎 تطبيع عربي
+    _sm(it.name, q) || (it.barcode||'').toLowerCase().includes(q)   // 🔎 تطبيع عربي
   ).slice(0, 12);
   if(!matches.length){
     box.innerHTML = '<div style="padding:11px; color:#999; font-size:13px;">مفيش منتج بالاسم/الكود ده</div>';
@@ -229,7 +233,11 @@ document.getElementById('receiveGoodsBarcode').addEventListener('keydown', (e)=>
   if(!product){
     // مفيش تطابق تام؟ لو فيه نتيجة واحدة بس في البحث خدها
     const q = code.toLowerCase();
-    const ms = allInventory.filter(it=> searchMatch(it.name, code) || (it.barcode||'').toLowerCase().includes(q));
+  // 🧷 حزام أمان نسخ الملفات: وقت التحديث ممكن ملف يتحمّل جديد وملف قديم للحظة —
+  // لو دالة التطبيع لسه موصلتش، بنرجع للبحث الحرفي بدل ما البحث يموت خالص
+  const _sm = (typeof searchMatch === 'function') ? searchMatch
+            : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
+    const ms = allInventory.filter(it=> _sm(it.name, code) || (it.barcode||'').toLowerCase().includes(q));
     if(ms.length === 1) product = ms[0];
   }
   if(!product){

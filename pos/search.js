@@ -23,10 +23,14 @@ async function runGlobalSearch(q){
   box.innerHTML = '<div style="padding:12px; color:#888; font-size:12px;">بيدوّر...</div>';
 
   const results = { invoices: [], customers: [], products: [] };
+  // 🧷 حزام أمان نسخ الملفات: وقت التحديث ممكن ملف يتحمّل جديد وملف قديم للحظة —
+  // لو دالة التطبيع لسه موصلتش، بنرجع للبحث الحرفي بدل ما البحث يموت خالص
+  const _sm = (typeof searchMatch === 'function') ? searchMatch
+            : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
 
   // 1) المنتجات (من الكاش المحلي، سريع وبدون قراءة إضافية)
   results.products = allInventory.filter(p=>
-    searchMatch(p.name, q) || (p.barcode||'').includes(q)   // 🔎 تطبيع عربي
+    _sm(p.name, q) || (p.barcode||'').includes(q)   // 🔎 تطبيع عربي
   ).slice(0, 5);
 
   // 📉 كارثة القراءات القديمة: كل بحثة كانت بتقرا **كل** فواتير وعملاء الفرع
@@ -39,7 +43,7 @@ async function runGlobalSearch(q){
     try{
       const custs = await _customersCached();
       results.customers = custs.filter(c=>
-        (c.phone||'').includes(q) || searchMatch(c.name, q)
+        (c.phone||'').includes(q) || _sm(c.name, q)
       ).slice(0, 5);
     }catch(e){}
 

@@ -8,11 +8,15 @@ searchBar.addEventListener('input', ()=>{
   const box = document.getElementById('suggestBox');
   box.innerHTML = '';
   if(!q){ return; }
+  // 🧷 حزام أمان نسخ الملفات: وقت التحديث ممكن ملف يتحمّل جديد وملف قديم للحظة —
+  // لو دالة التطبيع لسه موصلتش، بنرجع للبحث الحرفي بدل ما البحث يموت خالص
+  const _sm = (typeof searchMatch === 'function') ? searchMatch
+            : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
   // المنتجات المخفية أو المعلّمة "نافدة" مش بتظهر في البحث خالص
   const matches = allInventory.filter(it =>
     it.status !== 'hidden' && it.status !== 'outofstock' &&
     inMyBranch(it) &&                                   // 🏬 بضاعة فرعي والمشتركة بس
-    (searchMatch(it.name, q) || (it.barcode||'').toLowerCase().includes(q))   // 🔎 اسم بالتطبيع العربي، كود حرفي
+    (_sm(it.name, q) || (it.barcode||'').toLowerCase().includes(q))   // 🔎 اسم بالتطبيع العربي، كود حرفي
   ).slice(0,10);
   matches.forEach(it=>{
     const row = document.createElement('div');
