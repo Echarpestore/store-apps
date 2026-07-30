@@ -1307,6 +1307,11 @@ async function goToEndOfDay(){
       ${dcField('العهدة (فكّة أول اليوم)', 'dc_float', lastFloat, 'بتتخصم — مش إيراد')}
       ${dcField('مصروفات اليوم (طلعت كاش)', 'dc_expenses', '', 'اللي اتصرف من الدرج')}
       ${dcField('سلف اليوم', 'dc_advances', advancesTotal || '', 'اللي اتاخد سلف كاش من الدرج')}
+      <div class="dc-field" style="align-items:stretch;">
+        <div><div class="dc-field-lbl">📝 بيان المصروفات/السلف</div>
+        <div class="dc-field-hint">إجباري لو كتبت مصروفات أو غيّرت رقم السلف عن المسجّل بالسيستم</div></div>
+        <input type="text" id="dc_expNote" placeholder="مثال: 120 نضافة + 80 سباك" oninput="dcClearResult()" class="dc-inp" style="text-align:right; direction:rtl;">
+      </div>
       ${salarySales>0 ? dcField('📄 خصم راتب موظفين', 'dc_salary', salarySales.toFixed(0), 'بضاعة خرجت بأوردرات موظفين — بتترحّل للمرتبات، مش عجز') : ''}
     </div>
 
@@ -1356,6 +1361,17 @@ function dcFinish(){
   const denoms = [200,100,50,20,10,5];
   let counted = 0; denoms.forEach(d=> counted += dcNum('dc_den_'+d) * d);
   const flt = dcNum('dc_float'), exp = dcNum('dc_expenses'), adv = dcNum('dc_advances');
+  // 🛡️ ثغرة "المصروفات المطاطة": خانة المصروفات إدخال حر — أي رقم فيها بيغطي
+  // عجز بنفس المبلغ من غير أي أثر. من دلوقتي: مصروفات > 0 أو تعديل رقم السلف
+  // عن المسجّل بالسيستم = بيان مكتوب إجباري، وبيتسجل في سجل التقفيل للمراجعة.
+  const expNote = ((document.getElementById('dc_expNote')||{}).value || '').trim();
+  const advSystem = +(dcData.advancesTotal || 0);
+  const advChanged = Math.abs(adv - advSystem) > 0.01;
+  if((exp > 0 || advChanged) && !expNote){
+    showToast('📝 اكتب بيان المصروفات/السلف الأول — مين خد إيه وليه (إجباري)', 'err');
+    const ne = document.getElementById('dc_expNote'); if(ne) ne.focus();
+    return;
+  }
   const visa = dcNum('dc_visa'), insta = dcNum('dc_insta');
   const salary = dcNum('dc_salary');   // 📄 أوردرات موظفين بخصم الراتب — قيمة مترحّلة للمرتبات (مش فلوس درج)
 
@@ -1409,6 +1425,7 @@ function dcFinish(){
     systemTotal: dcData.systemTotal, cashSales: dcData.cashSales, visaSales: dcData.visaSales, instaSales: dcData.instaSales,
     accounted, overShort, overShortReal, lateCash: _lateCash, lateTotal: +(dcData.lateTotal||0), lateCount: dcData.lateCount||0, invoiceCount: dcData.invoiceCount,
     pendingCount: dcData.pendingCount||0, closedFromCache: !!dcData.fromCache,
+    expNote, advSystem, advChanged,
     closedBy: (typeof currentEmployee!=='undefined' && currentEmployee) ? (currentEmployee.name||'') : '',
     ts: Date.now()
   };
