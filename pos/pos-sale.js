@@ -751,19 +751,25 @@ async function openInvoiceForReturn(code){
          </div>`;
 
     // 💳 بيانات الدفع بالكارت — لازمة عشان تعمل المرتجع من Paymob
-    const ct = s.cardTxn || null;
-    const cardBanner = ct ? `
+    // 💳💳 الفاتورة ممكن تكون اتدفعت بكارتين — كل عملية بترجع لوحدها من Paymob،
+    // فبنعرض العمليتين بمبلغ كل واحدة عشان الكاشير ما يرجّعش المبلغ كله على كارت واحد
+    const _cts = (s.cardTxns && s.cardTxns.length) ? s.cardTxns : (s.cardTxn ? [s.cardTxn] : []);
+    const cardBanner = _cts.length ? `
       <div style="background:#0f1a2e; border:1.5px solid #3b82f6; border-radius:10px; padding:10px 12px; margin-bottom:8px; color:#dbeafe;">
-        <div style="font-weight:800; font-size:12.5px; margin-bottom:6px;">💳 اتدفعت بالكارت — المرتجع من Paymob</div>
-        <div dir="ltr" style="font-family:monospace; font-size:13px; text-align:left; line-height:1.7;">
-          ${ct.scheme || 'CARD'} **** ${ct.last4 || '----'}<br>
-          ${ct.approvalCode ? ('APPROVAL: ' + ct.approvalCode + '<br>') : ''}
-          <b style="font-size:14.5px;">TXN ID: ${ct.transactionId || '—'}</b>
-        </div>
-        ${ct.transactionId ? `<button onclick="copyTxnId('${String(ct.transactionId).replace(/'/g,'')}')"
-          style="margin-top:8px; width:100%; padding:8px; border-radius:8px; border:1px solid #3b82f6;
-                 background:#1e3a8a; color:#fff; font-family:'Cairo'; font-weight:800; font-size:12.5px; cursor:pointer;">
-          📋 انسخ رقم العملية</button>` : ''}
+        <div style="font-weight:800; font-size:12.5px; margin-bottom:6px;">💳 اتدفعت بالكارت — المرتجع من Paymob${_cts.length > 1 ? ` (${_cts.length} كروت)` : ''}</div>
+        ${_cts.map(function(ct, i){ return `
+        <div style="${i ? 'margin-top:8px; border-top:1px dashed #3b82f688; padding-top:7px;' : ''}">
+          ${_cts.length > 1 ? `<div style="font-weight:800; font-size:12px; margin-bottom:3px;">كارت ${ct.seq || (i+1)}${ct.amount != null ? ' — ' + Math.abs(ct.amount).toFixed(2) + ' ج.م' : ''}</div>` : ''}
+          <div dir="ltr" style="font-family:monospace; font-size:13px; text-align:left; line-height:1.7;">
+            ${ct.scheme || 'CARD'} **** ${ct.last4 || '----'}<br>
+            ${ct.approvalCode ? ('APPROVAL: ' + ct.approvalCode + '<br>') : ''}
+            <b style="font-size:14.5px;">TXN ID: ${ct.transactionId || '—'}</b>
+          </div>
+          ${ct.transactionId ? `<button onclick="copyTxnId('${String(ct.transactionId).replace(/'/g,'')}')"
+            style="margin-top:8px; width:100%; padding:8px; border-radius:8px; border:1px solid #3b82f6;
+                   background:#1e3a8a; color:#fff; font-family:'Cairo'; font-weight:800; font-size:12.5px; cursor:pointer;">
+            📋 انسخ رقم العملية${_cts.length > 1 ? ' ' + (ct.seq || (i+1)) : ''}</button>` : ''}
+        </div>`; }).join('')}
       </div>` : '';
 
     const alreadyReversed = s.reversed ? '<div style="background:#fdecec; color:#b91c1c; padding:8px 10px; border-radius:8px; font-size:12px; margin-bottom:8px;">⚠️ الفاتورة دي اترجعت بالكامل قبل كده.</div>' : '';
@@ -1943,9 +1949,20 @@ async function unholdInvoice(heldId){
 }
 
 // ---------------- Payment ----------------
-function resetPaymentUI(){
+function resetPaymentUI(_force){
+  // 💳 كارت اتسحب فعلًا: مسح المدفوعات بيلغي أثره من الشاشة بس — الفلوس عند العميل
+  // مسحوبة. لازم تأكيد صريح، وإلا هيتحفظ نقص في الفاتورة وأوفر في التقفيل.
+  const _appr = Math.abs(cardApprovedSum(cardLegs));
+  if(!_force && _appr > 0){
+    const ok = confirm('⚠️ فيه ' + _appr.toFixed(2) + ' ج.م اتسحبوا فعلًا من الكارت.\n'
+      + 'مسح المدفوعات مش بيرجّع الفلوس — لازم مرتجع من Paymob.\nتكمّل المسح؟');
+    if(!ok) return;
+    if(typeof _logActivity === 'function') _logActivity('card_payments_cleared', { amount: _appr });
+  }
   selectedPayMethods = new Set();
   paymentAmounts = {};
+  cardLegs = []; window.cardLegs = cardLegs;
+  const _ob = document.getElementById('cardOverBanner'); if(_ob) _ob.remove();
   document.querySelectorAll('.qbx-pay-btns button').forEach(el=>el.classList.remove('selected', 'filled'));
   // 🔄 إلغاء طلب الفيزا المعلّق — من غير كده الطلب بيفضل مستني ويعطّل أي طريقة دفع تانية
   try{
@@ -2033,16 +2050,128 @@ window.showCancelTerminalConfirm = showCancelTerminalConfirm;
 let paymentAmounts = {}; // {cash: 50, visa: 120, ...} — filled in via the popup
 let pendingPayMethod = null;
 
+// ============================================================
+// 💳💳 الدفع بكارتين — «شرائح الكارت» (card legs)
+// الفاتورة ممكن تتقسم على كارتين (كارت 1 و كارت 2). القاعدة الأساسية:
+//   ❗ مفيش مفتاح دفع جديد في الفاتورة — payments.visa يفضل **مجموع** الكروت،
+//     عشان التقارير والتقفيل (بيقروا p.visa) ما يتلمسوش خالص.
+//   ❗ التفاصيل (كل كارت لوحده بمبلغه ورقم عمليته) بتتحفظ في cardTxns[].
+// كل شريحة: { seq, amount, ref, status, txn }
+//   status: 'entered' (اتسجل من غير ماكينة) · 'pending' (على الماكينة)
+//           · 'approved' (اتأكد) · 'failed' (اترفض)
+// ============================================================
+const MAX_CARD_LEGS = 2;              // قرار المالك: كارتين بس
+let cardLegs = [];
+window.cardLegs = cardLegs;
+
+// 💰 مجموع الكروت الحيّة (المسجّل + المعلّق + المؤكد) — ده اللي بيتحط في payments.visa
+function cardLegsSum(legs){
+  return +((legs || []).filter(function(l){ return l && l.status !== 'failed'; })
+    .reduce(function(n, l){ return n + (Number(l.amount) || 0); }, 0)).toFixed(2);
+}
+// ✅ مجموع اللي اتسحب فعلًا من الماكينة (ده اللي مايتلغيش إلا بمرتجع من Paymob)
+function cardApprovedSum(legs){
+  return +((legs || []).filter(function(l){ return l && l.status === 'approved'; })
+    .reduce(function(n, l){ return n + (Number(l.amount) || 0); }, 0)).toFixed(2);
+}
+function cardLegsPending(legs){
+  return (legs || []).some(function(l){ return l && l.status === 'pending'; });
+}
+function cardLegBySeq(legs, seq){
+  return (legs || []).filter(function(l){ return l && l.seq === seq; })[0] || null;
+}
+// ⚠️ اتسحب من الكروت أكتر من الفاتورة بكام؟ (بيحصل بس لو السلة اتعدّلت بعد السحب)
+function cardOvercharge(legs, total){
+  const d = +(Math.abs(cardApprovedSum(legs)) - Math.abs(Number(total) || 0)).toFixed(2);
+  return d > 0.005 ? d : 0;
+}
+// 🚧 هل مسموح أفتح شريحة الكارت رقم seq دلوقتي؟ (بترجّع سبب المنع أو null)
+function cardLegBlockReason(legs, seq, isRefund, maxLegs){
+  const max = maxLegs || 2;
+  if(seq > max) return 'أقصى عدد كروت في الفاتورة الواحدة ' + max;
+  // ⛔ الأهم: Paymob مفيهاش سحب طلب من الماكينة — طلبين على نفس الماكينة = كارثة
+  if(cardLegsPending(legs)) return 'استنى رد الماكينة على الكارت اللي قبله';
+  const ex = cardLegBySeq(legs, seq);
+  if(ex && ex.status === 'approved'){
+    return 'الكارت ده اتسحب خلاص (' + Math.abs(ex.amount).toFixed(2) + ' ج.م) — مايتعدلش';
+  }
+  if(seq > 1){
+    if(isRefund) return 'المرتجع بكارت واحد بس';
+    const prev = cardLegBySeq(legs, seq - 1);
+    if(!prev) return 'ابدأ بالكارت الأول';
+    if(prev.status !== 'approved') return 'لازم الكارت الأول يتأكد الأول';
+  }
+  return null;
+}
+// 💳 الكارت مفيهوش فكة: ممنوع المبلغ يزيد عن الباقي
+function cardAmountReject(val, remainingAbs){
+  if(!(Number(val) > 0)) return 'اكتب مبلغ صحيح';
+  if(Number(val) > Number(remainingAbs) + 0.005){
+    return 'الكارت مفيهوش فكة — أقصى مبلغ ' + Number(remainingAbs).toFixed(2) + ' ج.م';
+  }
+  return null;
+}
+// 🔢 أنهي شريحة كارت المفروض تتفتح لما الكاشير يدوس «فيزا» أو F3
+function nextCardSeq(legs, maxLegs){
+  const max = maxLegs || 2;
+  for(let s = 1; s <= max; s++){
+    const l = cardLegBySeq(legs, s);
+    if(!l || l.status === 'failed') return s;
+  }
+  return 0;   // كله اتسحب
+}
+window.cardLegsSum = cardLegsSum;
+window.cardApprovedSum = cardApprovedSum;
+window.cardLegsPending = cardLegsPending;
+window.cardLegBySeq = cardLegBySeq;
+window.cardOvercharge = cardOvercharge;
+window.cardLegBlockReason = cardLegBlockReason;
+window.cardAmountReject = cardAmountReject;
+window.nextCardSeq = nextCardSeq;
+
+// 🔄 بيزامن paymentAmounts.visa مع الشرائح + بيشيل الفيزا خالص لو مفيش شريحة حيّة
+function syncCardPayment(){
+  const live = (cardLegs || []).filter(function(l){ return l && l.status !== 'failed'; });
+  const total = cartTotal();
+  if(!live.length){
+    delete paymentAmounts.visa;
+    if(selectedPayMethods && selectedPayMethods.delete) selectedPayMethods.delete('visa');
+  } else {
+    const sum = cardLegsSum(cardLegs);
+    paymentAmounts.visa = total < 0 ? -Math.abs(sum) : Math.abs(sum);
+    selectedPayMethods.add('visa');
+  }
+  window.cardLegs = cardLegs;
+}
+window.syncCardPayment = syncCardPayment;
+
+let pendingCardSeq = 0;   // 💳 شريحة الكارت المفتوحة في البوب-أب (1 أو 2)
+
 function togglePayMethod(method){
-  pendingPayMethod = method;
   const total = cartTotal();
   const isRefund = total < 0;
+  const isCard = (method === 'visa' || method === 'visa2');
+  // 💳 «فيزا» (والاختصار F3) بيروح لأول كارت متاح: لو الأول اتأكد يفتح التاني على طول
+  let seq = 0;
+  if(isCard){
+    seq = (method === 'visa2') ? 2 : nextCardSeq(cardLegs, MAX_CARD_LEGS);
+    if(!seq){ showToast('⛔ الكارتين اتسحبوا خلاص', 'err'); return; }
+    const block = cardLegBlockReason(cardLegs, seq, isRefund, MAX_CARD_LEGS);
+    if(block){ showToast('⛔ ' + block, 'err'); return; }
+    method = 'visa';        // 🔑 المفتاح في الفاتورة يفضل visa دايمًا (مجموع الكروت)
+  }
+  pendingCardSeq = seq;
+  pendingPayMethod = method;
   const requiredAbs = Math.abs(total);
-  const alreadyEnteredAbs = Object.keys(paymentAmounts).reduce((s,m)=> m===method ? s : s + Math.abs(paymentAmounts[m]), 0);
+  // شرائح الكارت **بتتجمع** مش بتستبدل بعضها — فمجموع الفيزا الحالي محسوب ضمن المدفوع
+  const alreadyEnteredAbs = Object.keys(paymentAmounts).reduce((s,m)=> (!isCard && m===method) ? s : s + Math.abs(paymentAmounts[m]||0), 0);
   const remaining = Math.max(0, +(requiredAbs - alreadyEnteredAbs).toFixed(2));
+  if(isCard && remaining <= 0.005){ showToast('✅ الفاتورة اتغطت بالكامل', 'err'); return; }
   const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي', salary:'📄 خصم من الراتب'};
 
-  document.getElementById('payAmountTitle').textContent = labels[method] + (isRefund ? ' (إرجاع للعميل)' : '');
+  document.getElementById('payAmountTitle').textContent =
+    (isCard ? ('💳 كارت ' + seq + (seq > 1 ? ' — باقي ' + remaining.toFixed(2) + ' ج.م' : '')) : labels[method])
+    + (isRefund ? ' (إرجاع للعميل)' : '');
   const input = document.getElementById('payAmountInput');
   // بيع عادي + كاش: فاضية عشان الكاشير يكتب المبلغ اللي استلمه فعليًا (والباقي بيتحسب تلقائي).
   // بيع عادي + فيزا/انستا باي: مقترحة تلقائي بباقي الفاتورة.
@@ -2080,25 +2209,51 @@ function closePayAmountPopup(){
   pendingPayMethod = null;
 }
 
+// 🖲️ زرار كل طريقة دفع — كان فيه باج: 'salary' كان بيلوّن زرار الانستا باي
+function payBtnId(method, seq){
+  if(method === 'visa') return (seq > 1) ? 'pmVisa2' : 'pmVisa';
+  return { cash:'pmCash', instapay:'pmInsta', salary:'pmSalary' }[method] || '';
+}
+window.payBtnId = payBtnId;
+
 function confirmPayAmount(){
   const method = pendingPayMethod;
   if(!method) return;
+  const seq = pendingCardSeq;
+  const isCard = (method === 'visa');
   const val = parseFloat(document.getElementById('payAmountInput').value) || 0;
   if(val <= 0){ showToast('اكتب مبلغ صحيح', 'err'); return; }
   // في فاتورة المرتجع (إجمالي بالسالب) المبلغ بيتسجل بالسالب (فلوس خارجة)، وفي البيع العادي بالموجب.
   const total = cartTotal();
-  paymentAmounts[method] = total < 0 ? -val : val;
-  selectedPayMethods.add(method);
-  document.getElementById('pm' + (method==='cash'?'Cash':method==='visa'?'Visa':'Insta')).classList.add('selected','filled');
+  const requiredAbs = Math.abs(total);
+  const alreadyAbs = Object.keys(paymentAmounts).reduce((s,m)=> (!isCard && m===method) ? s : s + Math.abs(paymentAmounts[m]||0), 0);
+  const remaining = Math.max(0, +(requiredAbs - alreadyAbs).toFixed(2));
+  let sentToTerminal = false;
+  if(isCard){
+    // 💳 سقف صارم: الكارت مفيهوش فكة — لو سحبنا أكتر من الفاتورة هيطلع أوفر في التقفيل
+    const bad = cardAmountReject(val, remaining);
+    if(bad){ showToast('⛔ ' + bad, 'err'); return; }
+    // محاولة قديمة مرفوضة بنفس الرقم بتتشال ومكانها المحاولة الجديدة
+    cardLegs = cardLegs.filter(function(l){ return !(l.seq === seq && l.status !== 'approved'); });
+    cardLegs.push({ seq: seq, amount: total < 0 ? -val : val, ref: null, status: 'entered', txn: null });
+    cardLegs.sort(function(a,b){ return a.seq - b.seq; });
+    syncCardPayment();
+  } else {
+    paymentAmounts[method] = total < 0 ? -val : val;
+    selectedPayMethods.add(method);
+  }
+  const _btn = document.getElementById(payBtnId(method, seq));
+  if(_btn) _btn.classList.add('selected','filled');
   document.getElementById('payAmountModal').classList.remove('active');
   pendingPayMethod = null;
+  pendingCardSeq = 0;
   updatePaySummary();
   // 📟 فيزا في بيع عادي → المبلغ يروح لماكينة Paymob تلقائيًا (لو الربط متفعّل)
-  if(method === 'visa' && paymentAmounts.visa > 0) sendToPaymobTerminal(paymentAmounts.visa);
+  if(isCard && val > 0 && total > 0){ sentToTerminal = true; sendToPaymobTerminal(val, seq); }
   // ⚡ دفع مقسّم (فيزا + كاش): الماكينة أكدت الأول والكاشير كمّل الباقي دلوقتي —
   // قبل كده فرصة الطباعة التلقائية كانت بتضيع (بتتفحص مرة واحدة وقت تأكيد
   // الماكينة بس) وكان لازم يدوس حفظ بنفسه. دلوقتي بنعيد الفحص بعد كل تسجيل دفع.
-  if(method !== 'visa'
+  if(!sentToTerminal
      && typeof paymobApproved !== 'undefined' && paymobApproved
      && !_paymobAutoFired
      && typeof paymobAutoPrint === 'function' && paymobAutoPrint()
@@ -2156,15 +2311,24 @@ let paymobPending = null;     // { ref, unsub, amount }
 let paymobApproved = false;   // بيبقى true بس لما Paymob يأكد النجاح
 window.paymobApproved = false;
 
-function paymobReset(){
-  _paymobAutoFired = false;
+// 🔌 بيقفل المتابعة الحالية بس (شريحة كارت خلصت أو اتلغت) —
+// الشرائح المؤكدة وبياناتها بتفضل زي ما هي عشان الكارت التاني يكمّل عليها
+function paymobResetActive(){
   try{ paymobWaitBar(false); }catch(e){}
-  paymobCardInfo = null; window.paymobCardInfo = null;
   if(paymobPending && paymobPending.unsub){ try{ paymobPending.unsub(); }catch(e){} }
   if(paymobPending && paymobPending.poll){ try{ clearInterval(paymobPending.poll); }catch(e){} }
   paymobPending = null;
   paymobApproved = false;
   window.paymobApproved = false;
+}
+window.paymobResetActive = paymobResetActive;
+
+function paymobReset(){
+  _paymobAutoFired = false;
+  paymobResetActive();
+  paymobCardInfo = null; window.paymobCardInfo = null;
+  paymobCardTxns = []; window.paymobCardTxns = paymobCardTxns;
+  cardLegs = []; window.cardLegs = cardLegs;
   const box = document.getElementById('paymobStatus');
   if(box){ box.style.display = 'none'; box.textContent = ''; }
   if(typeof updatePaySummary === 'function') updatePaySummary();
@@ -2215,7 +2379,9 @@ function paymobShow(text, kind){
   box.textContent = text;
 }
 
-async function sendToPaymobTerminal(amountEGP){
+async function sendToPaymobTerminal(amountEGP, seq){
+  seq = seq || 1;
+  const legTag = (MAX_CARD_LEGS > 1) ? ('كارت ' + seq + ': ') : '';
   const tid = paymobTerminalId();
   if(!tid){
     // الربط مش متفعّل للفرع ده — نقولها صراحةً بدل الصمت، عشان الكاشير
@@ -2225,8 +2391,9 @@ async function sendToPaymobTerminal(amountEGP){
     return;
   }
   const orderRef = currentBranch + '-' + Date.now();   // مرجع فريد لكل محاولة
-  paymobReset();
-  paymobShow('📟 بنبعت المبلغ للماكينة…', 'wait');
+  // 🔌 بنقفل متابعة الشريحة اللي فاتت بس — الكارت الأول المؤكد بيفضل محفوظ
+  paymobResetActive();
+  paymobShow('📟 ' + legTag + 'بنبعت المبلغ للماكينة…', 'wait');
   try{
     const res = await fetch(PAYMOB_FN_URL, {
       method: 'POST',
@@ -2240,14 +2407,17 @@ async function sendToPaymobTerminal(amountEGP){
     });
     const out = await res.json().catch(function(){ return {}; });
     if(res.ok && out.ok){
-      paymobShow('📟 المبلغ على الماكينة (' + amountEGP.toFixed(2) + ' ج.م) — العميل يحط الكارت…', 'wait');
+      const leg = cardLegBySeq(cardLegs, seq);
+      if(leg){ leg.ref = orderRef; leg.status = 'pending'; }
+      paymobShow('📟 ' + legTag + 'المبلغ على الماكينة (' + amountEGP.toFixed(2) + ' ج.م) — العميل يحط الكارت…', 'wait');
       paymobWaitBar(true);
-      paymobWatch(orderRef, amountEGP);
+      if(typeof updatePaySummary === 'function') updatePaySummary();
+      paymobWatch(orderRef, amountEGP, 0, seq);
     } else {
-      paymobShow('⚠️ الماكينة مستجابتش (' + (out.error || res.status) + ') — كمّل يدوي من الماكينة', 'err');
+      paymobShow('⚠️ ' + legTag + 'الماكينة مستجابتش (' + (out.error || res.status) + ') — كمّل يدوي من الماكينة', 'err');
     }
   }catch(e){
-    paymobShow('⚠️ مفيش اتصال بخدمة الماكينة — كمّل يدوي من الماكينة', 'err');
+    paymobShow('⚠️ ' + legTag + 'مفيش اتصال بخدمة الماكينة — كمّل يدوي من الماكينة', 'err');
   }
 }
 
@@ -2258,8 +2428,10 @@ function paymobAutoPrint(){
   return !paymobCfg || paymobCfg.autoPrint !== false;
 }
 let _paymobAutoFired = false;   // ⛔ مرة واحدة بس لكل عملية — يمنع الطباعة المكررة
-let paymobCardInfo = null;      // 💳 بيانات الكارت للفاتورة الحالية
+let paymobCardInfo = null;      // 💳 بيانات أول كارت (توافق مع الفواتير القديمة)
 window.paymobCardInfo = null;
+let paymobCardTxns = [];        // 💳💳 بيانات كل الكروت المؤكدة في الفاتورة الحالية
+window.paymobCardTxns = paymobCardTxns;
 
 // 🔒 الشروط اللي لازم تتحقق قبل ما نحفظ ونطبع من غير الكاشير
 // بترجّع سبب المنع بالاسم عشان نعرف ليه مطبعتش (بدل ما نخمّن)
@@ -2304,8 +2476,10 @@ window.payDiag = function(){
 // 🔁 المستمع اللحظي بيموت نهائيًا لو النت اتنفض ثانية في نص العملية —
 // وده كان سبب "فاتورة أو اتنين في اليوم مش بيطبعوا لوحدهم": الماكينة بتأكد
 // والسيستم أصم. دلوقتي: إعادة اتصال تلقائية + استعلام احتياطي كل 4 ثواني.
-function paymobWatch(orderRef, amountEGP, _retry){
+function paymobWatch(orderRef, amountEGP, _retry, seq){
   _retry = _retry || 0;
+  seq = seq || 1;
+  const legTag = (MAX_CARD_LEGS > 1) ? ('كارت ' + seq + ': ') : '';
   function handleResult(d){
     if(!d) return false;
     if(d.status === 'success'){
@@ -2313,7 +2487,9 @@ function paymobWatch(orderRef, amountEGP, _retry){
       paymobApproved = true; window.paymobApproved = true;
       paymobWaitBar(false);
       // 💳 بنحتفظ ببيانات الكارت عشان تتطبع في الفاتورة وتتسجل مع البيعة
-      paymobCardInfo = {
+      const _txn = {
+        seq: seq,
+        amount: +Number(amountEGP).toFixed(2),
         last4: d.cardLast4 ? String(d.cardLast4).slice(-4) : null,
         scheme: d.cardScheme || null,
         transactionId: d.transactionId || null,
@@ -2323,30 +2499,50 @@ function paymobWatch(orderRef, amountEGP, _retry){
         orderRef: orderRef,
         amountCents: d.amountCents || null
       };
+      // 💳💳 الشريحة اتأكدت — الفلوس اتسحبت فعلًا وبقت مقفولة (مفيش تعديل إلا بمرتجع)
+      const _leg = cardLegBySeq(cardLegs, seq);
+      if(_leg){ _leg.status = 'approved'; _leg.txn = _txn; _leg.ref = orderRef; }
+      paymobCardTxns = (cardLegs || []).filter(function(l){ return l.status === 'approved' && l.txn; })
+                                       .map(function(l){ return l.txn; });
+      window.paymobCardTxns = paymobCardTxns;
+      paymobCardInfo = paymobCardTxns[0] || _txn;   // أول كارت — للتوافق مع الفواتير القديمة
       window.paymobCardInfo = paymobCardInfo;
+      try{ syncCardPayment(); }catch(e){}
       const last4 = d.cardLast4 ? (' •' + String(d.cardLast4).slice(-4)) : '';
       if(typeof updatePaySummary === 'function') updatePaySummary();
       // ⚡ الحفظ والطباعة تلقائيًا — بس لو الشروط كلها سليمة
+      // 💳 لسه فيه باقي؟ نقول للكاشير صراحةً إن الكارت التاني هو الخطوة الجاية
+      const _dueNow = +(Math.abs(cartTotal()) - Math.abs(cardLegsSum(cardLegs)
+                        + Object.keys(paymentAmounts).reduce(function(s,m){
+                            return m === 'visa' ? s : s + Math.abs(paymentAmounts[m]||0); }, 0))).toFixed(2);
+      const _nextHint = (_dueNow > 0.005 && nextCardSeq(cardLegs, MAX_CARD_LEGS))
+        ? (' — باقي ' + _dueNow.toFixed(2) + ' ج.م، دوس «فيزا ' + nextCardSeq(cardLegs, MAX_CARD_LEGS) + '»') : '';
       const _skip = paymobAutoSkipReason(amountEGP, d);
       if(_skip && paymobAutoPrint()){
         // 🩺 السبب بيظهر للكاشير — قبل كده كان بيسكت والكاشير مش عارف ليه
-        paymobShow('✅ الدفع اتقبل' + last4 + ' — احفظ يدوي (' + _skip + ')', 'ok');
+        paymobShow('✅ ' + legTag + 'الدفع اتقبل' + last4 + (_nextHint || (' — احفظ يدوي (' + _skip + ')')), 'ok');
       }
       if(paymobAutoPrint() && paymobCanAutoFinish(amountEGP, d)){
-        paymobShow('✅ الدفع اتقبل' + last4 + ' — بيحفظ ويطبع…', 'ok');
+        paymobShow('✅ ' + legTag + 'الدفع اتقبل' + last4 + ' — بيحفظ ويطبع…', 'ok');
         _paymobAutoFired = true;
         // من غير أي تأخير — كل جزء من الثانية بيفرق قدام العميل
         try{ confirmPayment(); }catch(e){ console.warn('auto print', e); }
-      } else {
+      } else if(!_skip){
         const why = window._paymobLastSkip;
-        paymobShow('✅ الدفع اتقبل' + last4 + ' — دوس حفظ وطباعة'
+        paymobShow('✅ ' + legTag + 'الدفع اتقبل' + last4 + ' — دوس حفظ وطباعة'
           + (why ? (' (' + why + ')') : ''), 'ok');
       }
       return true;
     } else if(d.status === 'failed' || d.status === 'voided'){
       paymobApproved = false; window.paymobApproved = false;
       paymobWaitBar(false);
-      paymobShow('❌ الدفع اترفض' + (d.declineReason ? (' (' + d.declineReason + ')') : '') + ' — جرّب تاني', 'err');
+      // ❌ الشريحة دي اترفضت: بتتشال من المدفوعات عشان الكاشير يعيد المحاولة على طول
+      const _leg = cardLegBySeq(cardLegs, seq);
+      if(_leg && _leg.status !== 'approved'){ _leg.status = 'failed'; }
+      cardLegs = cardLegs.filter(function(l){ return l.status !== 'failed'; });
+      try{ syncCardPayment(); }catch(e){}
+      paymobPending = null;
+      paymobShow('❌ ' + legTag + 'الدفع اترفض' + (d.declineReason ? (' (' + d.declineReason + ')') : '') + ' — جرّب تاني', 'err');
       if(typeof updatePaySummary === 'function') updatePaySummary();
       return true;
     }
@@ -2365,7 +2561,7 @@ function paymobWatch(orderRef, amountEGP, _retry){
     if(_retry < 6 && paymobPending && paymobPending.ref === orderRef && !paymobApproved){
       setTimeout(function(){
         if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
-          paymobWatch(orderRef, amountEGP, _retry + 1);
+          paymobWatch(orderRef, amountEGP, _retry + 1, seq);
         }
       }, 2000);
     } else {
@@ -2381,12 +2577,12 @@ function paymobWatch(orderRef, amountEGP, _retry){
       if(snap.exists && handleResult(snap.data() || {})) stopAll();
     }catch(e){}
   }, 4000);
-  paymobPending = { ref: orderRef, unsub: unsub, poll: poll, amount: amountEGP };
+  paymobPending = { ref: orderRef, unsub: unsub, poll: poll, amount: amountEGP, seq: seq };
   // مهلة 3 دقايق: لو مفيش رد، مش هنسيب الكاشير مستني للأبد
   setTimeout(function(){
     if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
       clearInterval(poll);
-      paymobShow('⏳ الماكينة مردتش خلال 3 دقايق — اتأكد منها قبل ما تحفظ', 'err');
+      paymobShow('⏳ ' + legTag + 'الماكينة مردتش خلال 3 دقايق — اتأكد منها. لو الطلب اتلغى، دوس «مسح المدفوعات» وابدأ من جديد', 'err');
     }
   }, 180000);
 }
@@ -2405,16 +2601,66 @@ function updatePaySummary(){
   const enteredAbs = Math.abs(entered);
   const requiredAbs = Math.abs(total);
   const due = Math.max(0, +(requiredAbs - enteredAbs).toFixed(2));
-  const change = (!isRefund) ? Math.max(0, +(enteredAbs - requiredAbs).toFixed(2)) : 0;
+  // 💵 الفكة بتترد كاش بس (نفس قاعدة normalizePayments) — زيادة الكارت مش فكة،
+  // دي فلوس اتسحبت زيادة ولازم ترجع بمرتجع من Paymob
+  const change = (!isRefund && (paymentAmounts.cash || 0) > 0)
+    ? Math.max(0, +(enteredAbs - requiredAbs).toFixed(2)) : 0;
   const confirmBtn = document.getElementById('confirmPayBtn');
 
   const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي', salary:'📄 خصم من الراتب'};
   const payList = document.getElementById('qbxPayList');
   if(payList){
-    payList.innerHTML = Array.from(selectedPayMethods).map(m=>
-      `<div class="pl-row"><span>${labels[m]}</span><span>${Math.abs(paymentAmounts[m]||0).toFixed(2)} ج.م</span></div>`).join('')
+    const rows = [];
+    Array.from(selectedPayMethods).forEach(function(m){
+      if(m === 'visa'){
+        // 💳💳 كل كارت في سطر لوحده بحالته — الكاشير لازم يشوف أنهي كارت اتأكد
+        (cardLegs || []).filter(function(l){ return l.status !== 'failed'; }).forEach(function(l){
+          const st = l.status === 'approved'
+            ? '<span style="color:#15803d; font-weight:900;">✅</span>'
+            : l.status === 'pending'
+              ? '<span style="color:#b45309; font-weight:900;">⏳</span>'
+              : '<span style="color:#6b7280;">•</span>';
+          const t = l.txn || {};
+          const last4 = t.last4 ? ` <span style="color:#6b7280; font-size:10.5px;" dir="ltr">${(t.scheme||'CARD')} ••${t.last4}</span>` : '';
+          rows.push(`<div class="pl-row"><span>${st} 💳 كارت ${l.seq}${last4}</span><span>${Math.abs(l.amount||0).toFixed(2)} ج.م</span></div>`);
+        });
+      } else {
+        rows.push(`<div class="pl-row"><span>${labels[m]}</span><span>${Math.abs(paymentAmounts[m]||0).toFixed(2)} ج.م</span></div>`);
+      }
+    });
+    payList.innerHTML = rows.join('')
       || `<div style="color:#999; font-size:11px; padding:6px 0;">${isRefund ? 'اختار طريقة إرجاع المبلغ للعميل' : 'لسه مفيش مدفوعات — دوس كاش/فيزا/انستا باي'}</div>`;
   }
+  // 🖲️ حالة زراير الكروت: الكارت التاني مايفتحش قبل ما الأول يتأكد
+  (function(){
+    for(let s = 1; s <= MAX_CARD_LEGS; s++){
+      const b = document.getElementById(s > 1 ? 'pmVisa2' : 'pmVisa');
+      if(!b) continue;
+      const leg = cardLegBySeq(cardLegs, s);
+      const blocked = !!cardLegBlockReason(cardLegs, s, isRefund, MAX_CARD_LEGS);
+      b.classList.toggle('pm-locked', blocked);
+      b.classList.toggle('pm-done', !!(leg && leg.status === 'approved'));
+      b.classList.toggle('selected', !!leg && leg.status !== 'failed');
+      b.title = blocked ? cardLegBlockReason(cardLegs, s, isRefund, MAX_CARD_LEGS) : '';
+    }
+  })();
+  // ⚠️ اتسحب من الكروت أكتر من الفاتورة (السلة اتعدّلت بعد السحب) — تحذير ظاهر
+  (function(){
+    const over = cardOvercharge(cardLegs, total);
+    let box = document.getElementById('cardOverBanner');
+    const holder = document.getElementById('qbxPayList');
+    if(!over){ if(box) box.remove(); return; }
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'cardOverBanner';
+      box.style.cssText = 'background:#fdecec; border:1.5px solid #dc2626; color:#991b1b;'
+        + 'border-radius:8px; padding:7px 9px; margin:6px 0; font-size:11.5px; font-weight:800; line-height:1.6;';
+      if(holder && holder.parentNode) holder.parentNode.insertBefore(box, holder);
+    }
+    box.innerHTML = '⚠️ اتسحب من الكروت ' + Math.abs(cardApprovedSum(cardLegs)).toFixed(2)
+      + ' ج.م والفاتورة بقت ' + requiredAbs.toFixed(2)
+      + ' ج.م — زيادة ' + over.toFixed(2) + ' ج.م.<br>الفرق ده لازم يترد للعميل بمرتجع من Paymob، مش من الدرج.';
+  })();
 
   const dueLabel = document.getElementById('qbxDueLabel')
     || document.querySelector('.qbx-totals .t-row:nth-child(3) span:first-child');
@@ -2434,9 +2680,12 @@ function updatePaySummary(){
   // زرار الحفظ بيتفعّل لما المبلغ المُدخل (بصرف النظر عن الاتجاه) يغطي المطلوب بالكامل
   // 🔒 القفل بيشتغل بس لو الفيزا لسه مختارة فعلًا كطريقة دفع.
   // من غير الشرط ده، طلب فيزا اتلغى كان بيفضل معطّل الحفظ ويمنع الانستا باي.
-  const visaStillSelected = selectedPayMethods.has('visa') && (paymentAmounts.visa || 0) !== 0;
-  const cardPending = visaStillSelected &&
-    (typeof paymobPending !== 'undefined') && paymobPending && !paymobApproved;
+  // 💳💳 مع الكارتين: القفل بقى من حالة الشرائح نفسها — أي شريحة لسه على الماكينة
+  // بتقفل الحفظ. الشريحة المرفوضة بتتشال فورًا فمش بتقفل حاجة (كان الزرار بيفضل
+  // معطّل بعد رفض الفيزا لحد ما الكاشير يمسح المدفوعات).
+  const cardPending = cardLegsPending(cardLegs) ||
+    (selectedPayMethods.has('visa') && !cardLegs.length &&
+     (typeof paymobPending !== 'undefined') && paymobPending && !paymobApproved);
   // 🔄 التبديل المتساوي: الإجمالي صفر فمفيش دفع مطلوب أصلًا.
   // الشرط القديم كان بيطلب طريقة دفع دايمًا، فالزرار كان بيفضل مقفول
   // والكاشير مش قادر يحفظ عملية تبديل سليمة.
@@ -2558,6 +2807,21 @@ async function confirmPayment(){
     showToast(cart.length ? '💳 كمّل المدفوعات الأول (F2 كاش · F3 فيزا · F4 انستا)' : '🛒 السلة فاضية — ضيف منتجات الأول', 'err');
     return;
   }
+  // ⚠️ الكروت اتسحب منها أكتر من الفاتورة (السلة اتعدّلت بعد السحب) — قرار الكاشير
+  // بس لازم يبقى واعي: الفرق ده هيطلع أوفر في التقفيل لحد ما يترد من Paymob.
+  try{
+    const _over = cardOvercharge(cardLegs, cartTotal());
+    if(_over > 0){
+      const ok = confirm('⚠️ اتسحب من الكروت ' + Math.abs(cardApprovedSum(cardLegs)).toFixed(2)
+        + ' ج.م والفاتورة ' + Math.abs(cartTotal()).toFixed(2) + ' ج.م.\n'
+        + 'زيادة ' + _over.toFixed(2) + ' ج.م لازم تترد بمرتجع من Paymob — مش من الدرج.\n\n'
+        + 'تحفظ الفاتورة بالمبلغ ده؟');
+      if(!ok) return;
+      if(typeof _logActivity === 'function') _logActivity('card_overcharge_saved', {
+        charged: Math.abs(cardApprovedSum(cardLegs)), total: Math.abs(cartTotal()), diff: _over
+      });
+    }
+  }catch(e){ console.warn('overcharge check', e); }
   _confirmSaving = true;
   if(_btn){ _btn.dataset.lbl = _btn.textContent; _btn.disabled = true; _btn.textContent = '⏳ بيحفظ...'; }
   let _saved = false;
@@ -2676,7 +2940,10 @@ async function _doConfirmPayment(){
       staffPointValue,                       // ⭐ القيمة بالكسور (1 = الحد الأدنى بالظبط)
       firstItemAt: _cartFirstItemAt || null,   // 🕵️ متى بدأت السلة (لكشف التأخير غير الطبيعي)
       staffPurchase: staffPurchase ? { empId: staffPurchase.empId, name: staffPurchase.name, pct: staffPurchase.pct, discountAmount: staffDiscountAmount() } : null,
-      cardTxn: paymobCardInfo || null,   // 💳 بيانات الدفع بالكارت (للمرتجع والنزاعات)
+      cardTxn: paymobCardInfo || null,   // 💳 بيانات أول كارت (توافق مع الفواتير القديمة)
+      // 💳💳 كل الكروت المستخدمة في الفاتورة بمبالغها وأرقام عملياتها —
+      // ضروري للمرتجع: كل عملية بترجع لوحدها من Paymob
+      cardTxns: (paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : null,
       // 📴 طابع وقت محلي: serverTimestamp بيفضل null لحد ما فاتورة الأوفلاين تترفع،
       // فكانت بتختفي من التقفيل والتقارير وهي كاشها في الدرج. ده البديل الفوري.
       createdAtMs: Date.now(),
@@ -2837,6 +3104,9 @@ async function _doConfirmPayment(){
       showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
     }
     _saleJustSaved = true;   // 🕵️ المسح الجاي طبيعي (بعد حفظ)
+    // 💳 الفاتورة اتحفظت واتطبعت وبيانات الكروت اتسجلت جواها — الشرائح بتتصفّر هنا
+    // (قبل goToSale) عشان شاشة الفاتورة الجديدة ما تسألش عن كارت اتسحب خلاص
+    try{ paymobReset(); }catch(e){}
     goToSale();
   }catch(e){
     showToast('فشل حفظ الفاتورة: ' + e.message, 'err');

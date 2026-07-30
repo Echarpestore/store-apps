@@ -531,15 +531,24 @@ function buildReceiptHTML(data){
         break;
       case 'cardTxn': {
         // 💳 بيانات الدفع بالكارت — بتظهر بس لو الدفع اتم بالماكينة
-        const ct = d.cardTxn;
-        if(!ct) break;
+        // 💳💳 الفاتورة ممكن تكون اتقسمت على كارتين → كل كارت بمبلغه ورقم عمليته،
+        // ضروري للمرتجع (كل عملية بترجع لوحدها من Paymob)
+        const _list = (d.cardTxns && d.cardTxns.length) ? d.cardTxns : (d.cardTxn ? [d.cardTxn] : []);
+        if(!_list.length) break;
         // إنجليزي + اتجاه LTR: الأرقام الطويلة بتتقلب في السياق العربي، وده بيمنع اللخبطة
         const rows = [];
-        const scheme = ct.scheme ? String(ct.scheme) : 'CARD';
-        if(ct.last4) rows.push(`${scheme} **** ${ct.last4}`);
-        else if(ct.scheme) rows.push(scheme);
-        if(ct.approvalCode) rows.push(`APPROVAL: ${ct.approvalCode}`);
-        if(ct.transactionId) rows.push(`TXN ID: ${ct.transactionId}`);
+        _list.forEach(function(ct, i){
+          if(!ct) return;
+          if(i) rows.push('- - - - - - - -');
+          const scheme = ct.scheme ? String(ct.scheme) : 'CARD';
+          if(_list.length > 1){
+            rows.push('CARD ' + (ct.seq || (i+1)) + (ct.amount != null ? ('  ' + Math.abs(ct.amount).toFixed(2)) : ''));
+          }
+          if(ct.last4) rows.push(`${scheme} **** ${ct.last4}`);
+          else if(ct.scheme) rows.push(scheme);
+          if(ct.approvalCode) rows.push(`APPROVAL: ${ct.approvalCode}`);
+          if(ct.transactionId) rows.push(`TXN ID: ${ct.transactionId}`);
+        });
         if(!rows.length) break;
         parts.push(`<div dir="ltr" style="border-top:1px dashed #000; margin:5px 0 2px; padding-top:4px; text-align:center; font-size:${fs}; font-family:monospace; letter-spacing:.5px;">`
           + rows.map(r=> `<div style="font-weight:700; unicode-bidi:isolate;">${r}</div>`).join('')
@@ -599,7 +608,12 @@ function receiptSampleData(){
     empName: (currentEmployee&&currentEmployee.name)||'أحمد',
     items: [ {name:'إيشارب حرير', qty:1, line:'250.00'}, {name:'طرحة شيفون', qty:2, line:'300.00'} ],
     totalStr:'550.00', payStr:L.cash+': 550.00', invoiceNo:'INV-000123', scanCode:'FTRH123-DEMO',
-    cardTxn:{ scheme:'MasterCard', last4:'4321', approvalCode:'012345', transactionId:504208925 }, changeStr:50,
+    cardTxn:{ scheme:'MasterCard', last4:'4321', approvalCode:'012345', transactionId:504208925 },
+    // 💳💳 معاينة الدفع بكارتين — عشان المالك يشوف شكل البلوك في محرر التصميم
+    cardTxns:[
+      { seq:1, amount:200, scheme:'MasterCard', last4:'4321', approvalCode:'012345', transactionId:504208925 },
+      { seq:2, amount:350, scheme:'Visa',       last4:'8890', approvalCode:'447120', transactionId:504208931 }
+    ], changeStr:50,
     showAppQR:true, appQrImg: localStorage.getItem(receiptQrKey().key)||'', appQrTitle:'حمّلي تطبيقنا!', appQrMsg: welcomeRewardText()
   };
 }
@@ -981,6 +995,10 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
     // الشرط الأول ضروري: البيانات متخزنة على window، ولو مااتصفرتش لأي سبب
     // كانت هتتنقل لفاتورة الكاش اللي بعدها وتطبع "فيزا" غلط.
     cardTxn: (Number((payments||{}).visa) > 0 && window.paymobCardInfo) ? window.paymobCardInfo : null,
+    // 💳💳 كل الكروت المؤكدة (نفس الشرطين بالظبط — من غير كده بيانات كارت قديمة
+    // ممكن تتطبع على فاتورة كاش)
+    cardTxns: (Number((payments||{}).visa) > 0 && window.paymobCardTxns && window.paymobCardTxns.length)
+      ? window.paymobCardTxns : null,
     // 💵 الفكة = المدفوع − المطلوب (في فواتير البيع بس، ولما يكون فيه كاش)
     changeStr: (function(){
       try{
@@ -1142,7 +1160,8 @@ document.addEventListener('keydown', function(e){
   if(!_onSaleScreen()) return;
 
   if(e.key === 'F2'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('cash'); return; }
-  if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('visa'); return; }
+  // 💳 F3 بيروح لأول كارت متاح لوحده (لو الأول اتأكد بيفتح التاني) · Shift+F3 = كارت 2 مباشرة
+  if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod(e.shiftKey ? 'visa2' : 'visa'); return; }
   if(e.key === 'F4'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('instapay'); return; }
   if(e.key === 'F8'){
     e.preventDefault();
