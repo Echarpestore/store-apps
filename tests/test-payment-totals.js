@@ -160,14 +160,19 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 // ============================================================
 {
   const fns = loadFns(repSrc, ['saleTs']);
-  const saleTs = (s)=> vm.runInContext('saleTs(' + JSON.stringify(s).replace(/"__FN__"/,'') + ')', fns);
-  // فاتورة متزامنة: طابع السيرفر هو المرجع
-  vm.runInContext('this._r = saleTs({ createdAt: { toMillis: function(){ return 111; } }, createdAtMs: 999 });', fns);
-  assertEq(fns._r, 111, 'الطابع المؤكد من السيرفر له الأولوية');
-  // فاتورة أوفلاين: serverTimestamp لسه null → الطابع المحلي
+  // فاتورة اتباعت 8 مساءً واترفعت 11:30 (أوفلاين) — وقت البيع هو المرجع
+  vm.runInContext('this._r = saleTs({ createdAt: { toMillis: function(){ return 1000000 + 3*3600000; } }, createdAtMs: 1000000 });', fns);
+  assertEq(fns._r, 1000000, 'الأوفلاين المتأخر بيتحسب بوقت البيع الفعلي مش وقت الرفع');
+  // 🛡️ فرق أكبر من 48 ساعة = ساعة جهاز متلعوب فيها → طابع السيرفر
+  vm.runInContext('this._r = saleTs({ createdAt: { toMillis: function(){ return 1000000 + 60*3600000; } }, createdAtMs: 1000000 });', fns);
+  assertEq(fns._r, 1000000 + 60*3600000, 'فرق 60 ساعة = تلاعب → السيرفر هو المرجع');
+  // فاتورة أوفلاين لسه مرفعتش: serverTimestamp لسه null → الطابع المحلي
   vm.runInContext('this._r = saleTs({ createdAt: null, createdAtMs: 555 });', fns);
-  assertEq(fns._r, 555, 'فاتورة الأوفلاين بتتحسب بالطابع المحلي (كانت بتختفي)');
-  // فاتورة قديمة جدًا من غير أي طابع
+  assertEq(fns._r, 555, 'فاتورة الأوفلاين المعلقة بتتحسب بالطابع المحلي (كانت بتختفي)');
+  // فاتورة قديمة (قبل التحديث): طابع السيرفر بس
+  vm.runInContext('this._r = saleTs({ createdAt: { toMillis: function(){ return 111; } } });', fns);
+  assertEq(fns._r, 111, 'الفواتير القديمة من غير createdAtMs بطابع السيرفر');
+  // فاتورة من غير أي طابع
   vm.runInContext('this._r = saleTs({});', fns);
   assertEq(fns._r, null, 'من غير أي طابع = null (بتتستبعد بأمان)');
 
@@ -198,6 +203,60 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(/fromCache/.test(finBody) && /confirm\(/.test(finBody),
     'تقفيل والنت قاطع = تأكيد إجباري');
 }
+
+// ============================================================
+// ١٠) 🌍 يوم الشغل بتوقيت المحل (القاهرة) — مش ساعة الجهاز
+// المالك بيفتح من بره مصر والكاشير من مصر: لازم يشوفوا نفس الأرقام بالظبط
+// ============================================================
+{
+  const coreSrc = fs.readFileSync(path.join(POS, 'pos-core.js'), 'utf8');
+  const bStart = coreSrc.indexOf('const SHOP_TZ');
+  const bEnd = coreSrc.indexOf('function isSameBizDay');
+  assert(bStart > 0 && bEnd > bStart, 'بلوك توقيت المحل موجود في pos-core');
+  const tzCode = 'let businessDayStartHour = 6;\n' + coreSrc.slice(bStart, bEnd);
+  const sbTz = { Intl, Date, Math, Number, String, isNaN, console };
+  vm.createContext(sbTz);
+  vm.runInContext(tzCode + '\nthis._start = bizDayStartMs; this._key = bizDayKey;', sbTz);
+
+  // 30 يوليو 2026 الساعة 02:00 فجر القاهرة (UTC+3 صيفي) = 29 يوليو 23:00 UTC
+  const t = Date.UTC(2026, 6, 29, 23, 0, 0);
+  assertEq(sbTz._key(t), '2026-07-29', 'الساعة 2 فجر القاهرة = يوم أمس (البداية 6 ص)');
+  assertEq(sbTz._start(t), Date.UTC(2026, 6, 29, 3, 0, 0), 'بداية يوم الشغل بالملّي بتوقيت القاهرة');
+  // بعد البداية: 7 ص القاهرة = اليوم الجديد
+  assertEq(sbTz._key(Date.UTC(2026, 6, 30, 4, 0, 0)), '2026-07-30', '7 ص القاهرة = يوم جديد');
+  // على الحد بالظبط: 6:00:00 ص القاهرة = أول لحظة في اليوم الجديد
+  assertEq(sbTz._key(Date.UTC(2026, 6, 30, 3, 0, 0)), '2026-07-30', '6:00 بالظبط = بداية اليوم');
+  // وقبلها بثانية = يوم أمس
+  assertEq(sbTz._key(Date.UTC(2026, 6, 30, 2, 59, 59)), '2026-07-29', '5:59:59 = لسه يوم أمس');
+  // الشتوي (مصر UTC+2): 15 يناير 2026 الساعة 3 فجر القاهرة = 1:00 UTC
+  assertEq(sbTz._key(Date.UTC(2026, 0, 15, 1, 0, 0)), '2026-01-14', 'التوقيت الشتوي محسوب صح');
+  // المرجع ثابت
+  assert(/Africa\/Cairo/.test(tzCode), 'توقيت المحل ثابت: Africa/Cairo');
+}
+
+  // 📒 سجل المبيعات موحّد على يوم الشغل زي التقارير (كان تقويمي → أرقام مختلفة)
+  {
+    const grpSrc = extractFn(repSrc, '_groupSalesByDay');
+    assert(/_shBizKey\(ts\)/.test(grpSrc), 'تجميع أيام السجل بمفتاح يوم الشغل');
+    const resSrc = extractFn(repSrc, '_shResolveDayKey');
+    assert(/_shBizKey\(n\)/.test(resSrc) && /_shBizKey\(n - 86400000\)/.test(resSrc),
+      'فلتر النهارده/امبارح في السجل بيوم الشغل');
+    // سلوكيًا: فاتورة فجرية (2 ص القاهرة) بتتجمع مع يوم أمس
+    const sbG = { window:{}, Date, String, Number, isNaN, Math,
+      saleTs: (s)=> s.__ts,
+      bizDayKey: (ts)=>{ // نفس منطق القاهرة مبسّط للاختبار: قبل 3:00 UTC = يوم أمس
+        const cut = Date.UTC(2026, 6, 30, 3, 0, 0);
+        return ts < cut ? '2026-07-29' : '2026-07-30'; } };
+    vm.createContext(sbG);
+    vm.runInContext(extractFn(repSrc,'_shTsOf') + '\n' + extractFn(repSrc,'_shBizKey') + '\n'
+      + extractFn(repSrc,'_shLabelOf') + '\n' + grpSrc + '\nthis._g = _groupSalesByDay;', sbG);
+    const dawn = Date.UTC(2026, 6, 30, 1, 0, 0);   // 4 فجرًا بتوقيت القاهرة
+    const noon = Date.UTC(2026, 6, 30, 9, 0, 0);   // 12 ظهرًا
+    const groups = vm.runInContext(`_groupSalesByDay([{__ts:${dawn}, total:375},{__ts:${noon}, total:8415}])`, sbG);
+    assertEq(groups.length, 2, 'فاتورة الفجر انفصلت عن يوم النهاردة');
+    assertEq(groups.find(g=> g.key==='2026-07-29').total, 375, 'فاتورة الفجر مع يوم أمس');
+    assertEq(groups.find(g=> g.key==='2026-07-30').total, 8415, 'فاتورة النهار مع النهاردة');
+  }
 
 // ============================================================
 // ٩) 🎁 ثغرة النقط→كاش مقفولة من كل المسارات
