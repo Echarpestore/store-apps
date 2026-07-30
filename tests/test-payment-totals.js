@@ -233,6 +233,44 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 }
 
 // ============================================================
+// ١٦) 🔢 بحث الأكواد بالبداية + شاشة المخزون + التكرار
+// ============================================================
+{
+  const core2 = fs.readFileSync(path.join(POS,'pos-core.js'),'utf8');
+  const admin2 = fs.readFileSync(path.join(POS,'pos-admin.js'),'utf8');
+  const html2 = fs.readFileSync(path.join(POS,'index.html'),'utf8');
+
+  // barcodePrefix سلوكيًا: 33 متلاقيش 533/833، وتلاقي 33 و330
+  const bpFns = loadFns(core2, ['barcodePrefix']);
+  const bp = (b,q)=> vm.runInContext(`barcodePrefix(${JSON.stringify(b)}, ${JSON.stringify(q)})`, bpFns);
+  assertEq(bp('33','33'), true, '33 بتلاقي 33 نفسه');
+  assertEq(bp('330','33'), true, '33 بتلاقي 330 (امتداد وانت بتكتب)');
+  assertEq(bp('533','33'), false, '33 مش بتلاقي 533 (كان مصدر الإزعاج)');
+  assertEq(bp('833','33'), false, '33 مش بتلاقي 833');
+  assertEq(bp('33',''), false, 'بحث فاضي = لأ');
+  // مستخدمة في المواضع الخمسة
+  assert(/_bp\(it\.barcode, q\)/.test(fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8')), 'بيع: كود بالبداية');
+  const prod2 = fs.readFileSync(path.join(POS,'products.js'),'utf8');
+  assert(/_bp\(it\.barcode, q\)/.test(prod2), 'استلام: كود بالبداية');
+  assert(/_bp\(p\.barcode, q\)/.test(fs.readFileSync(path.join(POS,'search.js'),'utf8')), 'البحث الشامل: كود بالبداية');
+  assert(/_bp\(it\.barcode, q\)/.test(admin2), 'قايمة المخزون: كود بالبداية');
+
+  // شاشة المخزون: البحث فوق بخلفية + إضافة ورا زرار أخضر
+  assert(html2.indexOf('id="invSearch"') < html2.indexOf('id="inventoryAddRow"'),
+    'شريط البحث فوق صف الإضافة');
+  assert(/rgba\(90,140,60,\.12\)/.test(html2), 'خلفية مميزة لصندوق البحث');
+  assert(/toggleInvAddForm/.test(admin2) && /➕ إضافة منتج/.test(admin2),
+    'الإضافة ورا زرار أخضر بيفرد الفورم');
+  assert(/display:none; gap:6px/.test(admin2), 'الفورم مقفول افتراضيًا');
+
+  // التكرار: منع + كشف
+  assert(/متسجل بالفعل على/.test(admin2), 'إضافة باركود موجود بتترفض بالاسم');
+  assert(/openDupBarcodeCheck/.test(admin2) && /متسجل \$\{arr\.length\} مرات/.test(admin2),
+    'أداة كشف الأكواد المتكررة موجودة');
+  assert(/الصنف ده عليه كمية/.test(admin2), 'حذف نسخة عليها كمية = تحذير صريح');
+}
+
+// ============================================================
 // ١٥) 📜 تقفيل اليوم: تعبئة تلقائية للمدير + عمى الكاشير + السجل والطباعة
 // ============================================================
 {
@@ -365,6 +403,22 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(/fontSize:13, font:'monospace', textMargin:0/.test(appSrc2),
     'ليبل: الرقم أصغر والخطوط أطول جوه نفس الصندوق');
 
+  // 🔢 الأكواد بالبداية + المطابقة التامة الأول
+  {
+    const bpFns = loadFns(coreSrc2, ['barcodePrefix']);
+    const bp = (bc,q)=> vm.runInContext(`barcodePrefix(${JSON.stringify(bc)}, ${JSON.stringify(q)})`, bpFns);
+    assertEq(bp('33','33'), true, 'كود 33 بيطلع مع 33');
+    assertEq(bp('330','33'), true, 'وامتداده 330');
+    assertEq(bp('533','33'), false, '533 مش بتطلع مع 33 (الاحتواء اتشال)');
+    assertEq(bp('833','33'), false, 'ولا 833');
+    const saleS = fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8');
+    assert(/_bp\(it\.barcode, q\)/.test(saleS), 'بحث البيع بالبداية');
+    assert(/\(\(qb===q\)-\(qa===q\)\) \|\| \(qa\.length - qb\.length\)/.test(saleS),
+      'المطابقة التامة الأول ثم الأقصر');
+    assert(/\(\(qb===q\)-\(qa===q\)\)/.test(fs.readFileSync(path.join(POS,'products.js'),'utf8')),
+      'ونفس الترتيب في الاستلام');
+  }
+
   // الليبل: رسم الكود مرة واحدة ونسخ الباقي (إصلاح اللاج)
   const lbl = extractFn(appSrc2, 'doPrintLabels');
   assert(/const prev = firstByCode\[c\.code\];[\s\S]{0,40}if\(prev\)\{[\s\S]{0,120}cloneNode\(true\)/.test(lbl),
@@ -374,13 +428,15 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   // Paymob: رسالة الفرع غير المربوط + إعادة المحاولة بعد الدفع المقسم
   const saleSrc2 = fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8');
   assert(/الماكينة مش مربوطة بالسيستم في الفرع ده/.test(saleSrc2), 'فرع من غير ماكينة = رسالة واضحة مش صمت');
-  assert(/if\(method !== 'visa'\n/.test(saleSrc2) && /paymobApproved[\s\S]{0,300}_paymobAutoFired = true;[\s\S]{0,120}المدفوعات كملت/.test(saleSrc2),
+  // 💳💳 بعد دعم الكارتين الشرط بقى \"مش اتبعت للماكينة\" بدل \"مش فيزا\" — عشان
+  // الكارت التاني اللي اتسجل من غير ماكينة يعيد الفحص برضه
+  assert(/if\(!sentToTerminal\n/.test(saleSrc2) && /paymobApproved[\s\S]{0,300}_paymobAutoFired = true;[\s\S]{0,120}المدفوعات كملت/.test(saleSrc2),
     'الدفع المقسم بيعيد فحص الطباعة التلقائية (الشرط والتنفيذ سليمين)');
   assert(/المدفوعات كملت — بيحفظ ويطبع/.test(saleSrc2), 'رسالة اكتمال الدفع المقسم موجودة');
 
   // 📟 مرونة مراقبة الماكينة: إعادة اتصال + استعلام احتياطي (سبب فاتورة/2 يوميًا مش بيطبعوا)
   const watchSrc = extractFn(saleSrc2, 'paymobWatch');
-  assert(/paymobWatch\(orderRef, amountEGP, _retry \+ 1\)/.test(watchSrc),
+  assert(/paymobWatch\(orderRef, amountEGP, _retry \+ 1(, seq)?\)/.test(watchSrc),
     'المستمع بيعيد الاتصال لو وقع (مش بيموت نهائيًا)');
   assert(/setInterval/.test(watchSrc) && /\.get\(\)/.test(watchSrc),
     'استعلام احتياطي دوري بيلقط النتيجة لو المستمع مات');
