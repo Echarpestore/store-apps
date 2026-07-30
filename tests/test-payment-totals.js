@@ -233,6 +233,30 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 }
 
 // ============================================================
+// ١٥) 📜 تقفيل اليوم: تعبئة تلقائية للمدير + عمى الكاشير + السجل والطباعة
+// ============================================================
+{
+  const repSrc3 = fs.readFileSync(path.join(POS,'pos-reports.js'),'utf8');
+  // الفيزا/الانستا متكتبين تلقائي للمدير بس — الكاشير أعمى (يكتب من الماكينة)
+  assert(/isMgr \? \(visaSales \? visaSales\.toFixed\(0\) : ''\) : ''/.test(repSrc3),
+    'الفيزا متعبية تلقائي للمدير بس (قابلة للتعديل)');
+  assert(/isMgr \? \(instaSales \? instaSales\.toFixed\(0\) : ''\) : ''/.test(repSrc3),
+    'الانستا متعبية تلقائي للمدير بس');
+  // الكاشير يشوف الحالة من غير أرقام
+  const finSrc2 = extractFn(repSrc3, 'dcFinish');
+  assert(/فيه عجز/.test(finSrc2) && /فيه زيادة \(أوفر\)/.test(finSrc2) && /تمام — مظبوط/.test(finSrc2),
+    'الكاشير بيشوف الحالة (تمام/عجز/أوفر)');
+  assert(!/\$\{Math\.abs\(overShort\)/.test(finSrc2.slice(finSrc2.indexOf('_cState'))),
+    'من غير أي أرقام في نتيجة الكاشير');
+  // السجل والطباعة
+  assert(/function openDayCloseLog/.test(repSrc3) && /canViewReports/.test(extractFn(repSrc3,'openDayCloseLog')),
+    'سجل التقفيلات موجود ومحمي بالصلاحية');
+  assert(/function printDayCloseRec/.test(repSrc3) && /تقرير إغلاق اليوم/.test(repSrc3),
+    'طباعة تقرير التقفيل موجودة');
+  assert(/سجل التقفيلات \+ طباعة/.test(repSrc3), 'زرار السجل في شاشة الإغلاق (للمدير)');
+}
+
+// ============================================================
 // ١٣) 💸 المصروفات المطاطة + التصفيتين + أثر حذف السلفة
 // ============================================================
 {
@@ -323,6 +347,23 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
     assert(/typeof searchMatch === 'function'\) \? searchMatch/.test(src),
       'حزام أمان البحث موجود في ' + f);
   });
+
+  // 💰 الدرج بيفتح فورًا بالتوازي مش بعد الطباعة
+  const pbSrc = extractFn(appSrc2, '_printBuiltReceipt');
+  assert(/openDrawer === 'function'[\s\S]{0,120}window\.posShell\.printReceipt\(/.test(pbSrc),
+    'أمر الدرج المستقل بيطلع قبل أمر الطباعة');
+  assert(!/\.then\(\(\)=>\{[\s\S]{0,200}openDrawer/.test(pbSrc),
+    'أمر الدرج المتأخر (بعد اكتمال الطباعة) اتشال');
+  // 📷 باركود الفاتورة: منطقة هدوء صحيحة + رسم حاد
+  const rbSrc = extractFn(appSrc2, 'receiptBarcodeImg');
+  assert(/margin:30/.test(rbSrc), 'منطقة الهدوء 30px (كانت 6 — سبب بطء القراءة)');
+  assert(/background:'#ffffff', lineColor:'#000000'/.test(rbSrc), 'أبيض/أسود صريح');
+  assert(/image-rendering:crisp-edges/.test(appSrc2), 'الصورة بتتعرض من غير تنعيم');
+
+  // 📷 باركود الليبل: منطقة هدوء ≥10 موديولات (سبب بطء المسدس على الليبل الصغير)
+  assert(/margin:33,\s+\/\/ منطقة الهدوء/.test(appSrc2), 'ليبل: منطقة الهدوء 33px');
+  assert(/fontSize:13, font:'monospace', textMargin:0/.test(appSrc2),
+    'ليبل: الرقم أصغر والخطوط أطول جوه نفس الصندوق');
 
   // الليبل: رسم الكود مرة واحدة ونسخ الباقي (إصلاح اللاج)
   const lbl = extractFn(appSrc2, 'doPrintLabels');
