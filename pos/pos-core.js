@@ -479,6 +479,27 @@ window.bizDayStartMs = bizDayStartMs;
 window.bizDayKey = bizDayKey;
 window.isSameBizDay = isSameBizDay;
 
+// 🔎 تطبيع البحث العربي — سبب "بكتب الاسم ومش بيظهر لازم الكود":
+// الاسم متسجل "تايلاندي" والكاشير بتكتب "تايلاندى" (ى/ي)، أو "بيجامه/بيجامة"،
+// أو همزة مختلفة (أ/إ/آ/ا)، أو مسافة زيادة — المقارنة الحرفية بتفشل وهو نفس الاسم.
+function searchNorm(s){
+  return String(s || '').toLowerCase()
+    .replace(/[\u064B-\u0652\u0640]/g, '')   // التشكيل والتطويل ـــ
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/ؤ/g, 'و')
+    .replace(/\s+/g, ' ').trim();
+}
+// كل كلمة اتكتبت لازم تتلاقى — بأي ترتيب: "قطن كويت" بتلاقي "قطن تايلاندي كويت ليدي"
+function searchMatch(hay, q){
+  const h = searchNorm(hay);
+  const parts = searchNorm(q).split(' ').filter(Boolean);
+  return parts.length > 0 && parts.every(p => h.includes(p));
+}
+window.searchNorm = searchNorm;
+window.searchMatch = searchMatch;
+
 // قراءة الساعة الفاصلة من الإعدادات
 (function loadDayCfg(){
   try{

@@ -789,7 +789,29 @@ function doPrintLabels(jobs){
   tmp.style.cssText = 'position:fixed; left:-9999px; top:0;';
   tmp.innerHTML = html;
   document.body.appendChild(tmp);
-  try{ if(typeof JsBarcode!=='undefined') codes.forEach(c=>{ const el = tmp.querySelector('#'+c.id); if(el){ JsBarcode(el, c.code, {format:'CODE128', width:3, height:80, margin:10, displayValue:true, fontSize:16, font:'monospace', textMargin:2, background:'#ffffff', lineColor:'#000000'}); fitBarcodeSvg(el); } }); }catch(e){}
+  // ⚡ إصلاح اللاج: نفس الكود = نفس الرسمة بالظبط — بنرسم كل كود **مرة واحدة**
+  // وننسخ الـ SVG لباقي الليبلات. قبل كده 50 ليبل من 3 أصناف كانوا 50 رسمة
+  // متتالية بتهنّج الصفحة، دلوقتي 3 رسمات و47 نسخة فورية.
+  try{
+    if(typeof JsBarcode!=='undefined'){
+      const byId = {};
+      tmp.querySelectorAll('svg[id]').forEach(s=>{ byId[s.id] = s; });
+      const firstByCode = {};
+      codes.forEach(c=>{
+        const el = byId[c.id]; if(!el) return;
+        const prev = firstByCode[c.code];
+        if(prev){
+          const cl = prev.cloneNode(true);
+          cl.id = c.id;
+          el.replaceWith(cl);
+        }else{
+          JsBarcode(el, c.code, {format:'CODE128', width:3, height:80, margin:10, displayValue:true, fontSize:16, font:'monospace', textMargin:2, background:'#ffffff', lineColor:'#000000'});
+          fitBarcodeSvg(el);
+          firstByCode[c.code] = el;
+        }
+      });
+    }
+  }catch(e){}
   const finalHTML = tmp.innerHTML;
   tmp.remove();
 

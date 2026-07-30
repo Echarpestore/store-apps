@@ -27,14 +27,14 @@ async function runGlobalSearch(q){
 
   // 1) المنتجات (من الكاش المحلي، سريع وبدون قراءة إضافية)
   results.products = allInventory.filter(p=>
-    (p.name||'').toLowerCase().includes(qLower) || (p.barcode||'').includes(q)
+    searchMatch(p.name, q) || (p.barcode||'').includes(q)   // 🔎 تطبيع عربي
   ).slice(0, 5);
 
   // 2) العملاء (بالاسم أو رقم التليفون)
   try{
     const custSnap = await db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get();
     results.customers = custSnap.docs.map(d=>d.data()).filter(c=>
-      (c.phone||'').includes(q) || (c.name||'').toLowerCase().includes(qLower)
+      (c.phone||'').includes(q) || searchMatch(c.name, q)
     ).slice(0, 5);
   }catch(e){}
 

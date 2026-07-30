@@ -12,7 +12,7 @@ searchBar.addEventListener('input', ()=>{
   const matches = allInventory.filter(it =>
     it.status !== 'hidden' && it.status !== 'outofstock' &&
     inMyBranch(it) &&                                   // 🏬 بضاعة فرعي والمشتركة بس
-    ((it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q))
+    (searchMatch(it.name, q) || (it.barcode||'').toLowerCase().includes(q))   // 🔎 اسم بالتطبيع العربي، كود حرفي
   ).slice(0,10);
   matches.forEach(it=>{
     const row = document.createElement('div');
@@ -2084,6 +2084,20 @@ function confirmPayAmount(){
   updatePaySummary();
   // 📟 فيزا في بيع عادي → المبلغ يروح لماكينة Paymob تلقائيًا (لو الربط متفعّل)
   if(method === 'visa' && paymentAmounts.visa > 0) sendToPaymobTerminal(paymentAmounts.visa);
+  // ⚡ دفع مقسّم (فيزا + كاش): الماكينة أكدت الأول والكاشير كمّل الباقي دلوقتي —
+  // قبل كده فرصة الطباعة التلقائية كانت بتضيع (بتتفحص مرة واحدة وقت تأكيد
+  // الماكينة بس) وكان لازم يدوس حفظ بنفسه. دلوقتي بنعيد الفحص بعد كل تسجيل دفع.
+  if(method !== 'visa'
+     && typeof paymobApproved !== 'undefined' && paymobApproved
+     && !_paymobAutoFired
+     && typeof paymobAutoPrint === 'function' && paymobAutoPrint()
+     && paymobPending
+     && paymobCanAutoFinish(paymobPending.amount,
+          { amountCents: (paymobCardInfo && paymobCardInfo.amountCents) || Math.round((paymobPending.amount || 0) * 100) })){
+    _paymobAutoFired = true;
+    paymobShow('✅ المدفوعات كملت — بيحفظ ويطبع…', 'ok');
+    try{ confirmPayment(); }catch(e){ console.warn('auto print (split)', e); }
+  }
 }
 
 // ============================================================
@@ -2136,6 +2150,7 @@ function paymobReset(){
   try{ paymobWaitBar(false); }catch(e){}
   paymobCardInfo = null; window.paymobCardInfo = null;
   if(paymobPending && paymobPending.unsub){ try{ paymobPending.unsub(); }catch(e){} }
+  if(paymobPending && paymobPending.poll){ try{ clearInterval(paymobPending.poll); }catch(e){} }
   paymobPending = null;
   paymobApproved = false;
   window.paymobApproved = false;
@@ -2191,7 +2206,13 @@ function paymobShow(text, kind){
 
 async function sendToPaymobTerminal(amountEGP){
   const tid = paymobTerminalId();
-  if(!tid) return;   // الربط مش متفعّل — ولا كلمة، الفلو العادي زي ما هو
+  if(!tid){
+    // الربط مش متفعّل للفرع ده — نقولها صراحةً بدل الصمت، عشان الكاشير
+    // ميستناش طباعة تلقائية مش جاية (ده الوضع الحالي في فروع echarpe
+    // لحد ما Paymob يحلوا "You haven't set up a POS")
+    paymobShow('ℹ️ الماكينة مش مربوطة بالسيستم في الفرع ده — بعد ما الماكينة تطبع التأكيد، دوس «حفظ وطباعة» بنفسك', 'wait');
+    return;
+  }
   const orderRef = currentBranch + '-' + Date.now();   // مرجع فريد لكل محاولة
   paymobReset();
   paymobShow('📟 بنبعت المبلغ للماكينة…', 'wait');
@@ -2269,11 +2290,15 @@ window.payDiag = function(){
 };
 
 // 👂 بنراقب نتيجة العملية اللي الـ webhook بيكتبها — الكاشير مش بيقرر بنفسه
-function paymobWatch(orderRef, amountEGP){
-  const unsub = db.collection('pos_paymob_txns').doc(orderRef).onSnapshot(function(snap){
-    if(!snap.exists) return;
-    const d = snap.data() || {};
+// 🔁 المستمع اللحظي بيموت نهائيًا لو النت اتنفض ثانية في نص العملية —
+// وده كان سبب "فاتورة أو اتنين في اليوم مش بيطبعوا لوحدهم": الماكينة بتأكد
+// والسيستم أصم. دلوقتي: إعادة اتصال تلقائية + استعلام احتياطي كل 4 ثواني.
+function paymobWatch(orderRef, amountEGP, _retry){
+  _retry = _retry || 0;
+  function handleResult(d){
+    if(!d) return false;
     if(d.status === 'success'){
+      if(paymobApproved) return true;   // اتعالجت خلاص — منع التكرار
       paymobApproved = true; window.paymobApproved = true;
       paymobWaitBar(false);
       // 💳 بنحتفظ ببيانات الكارت عشان تتطبع في الفاتورة وتتسجل مع البيعة
@@ -2289,7 +2314,6 @@ function paymobWatch(orderRef, amountEGP){
       };
       window.paymobCardInfo = paymobCardInfo;
       const last4 = d.cardLast4 ? (' •' + String(d.cardLast4).slice(-4)) : '';
-      try{ unsub(); }catch(e){}
       if(typeof updatePaySummary === 'function') updatePaySummary();
       // ⚡ الحفظ والطباعة تلقائيًا — بس لو الشروط كلها سليمة
       const _skip = paymobAutoSkipReason(amountEGP, d);
@@ -2307,21 +2331,50 @@ function paymobWatch(orderRef, amountEGP){
         paymobShow('✅ الدفع اتقبل' + last4 + ' — دوس حفظ وطباعة'
           + (why ? (' (' + why + ')') : ''), 'ok');
       }
+      return true;
     } else if(d.status === 'failed' || d.status === 'voided'){
       paymobApproved = false; window.paymobApproved = false;
       paymobWaitBar(false);
       paymobShow('❌ الدفع اترفض' + (d.declineReason ? (' (' + d.declineReason + ')') : '') + ' — جرّب تاني', 'err');
-      try{ unsub(); }catch(e){}
       if(typeof updatePaySummary === 'function') updatePaySummary();
+      return true;
     }
+    return false;
+  }
+  function stopAll(){
+    try{ if(paymobPending && paymobPending.unsub) paymobPending.unsub(); }catch(e){}
+    if(paymobPending && paymobPending.poll) clearInterval(paymobPending.poll);
+  }
+  const unsub = db.collection('pos_paymob_txns').doc(orderRef).onSnapshot(function(snap){
+    if(!snap.exists) return;
+    if(handleResult(snap.data() || {})) stopAll();
   }, function(err){
     console.warn('paymob watch', err);
-    paymobShow('⚠️ مش قادر أتابع نتيجة الدفع — راجع الماكينة', 'err');
+    // 🔁 المستمع وقع — نعيد الاشتراك (الاستعلام الاحتياطي شغال في الخلفية برضه)
+    if(_retry < 6 && paymobPending && paymobPending.ref === orderRef && !paymobApproved){
+      setTimeout(function(){
+        if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
+          paymobWatch(orderRef, amountEGP, _retry + 1);
+        }
+      }, 2000);
+    } else {
+      paymobShow('⚠️ مش قادر أتابع نتيجة الدفع — راجع الماكينة', 'err');
+    }
   });
-  paymobPending = { ref: orderRef, unsub: unsub, amount: amountEGP };
+  // 🛟 شبكة الأمان: استعلام مباشر كل 4 ثواني — حتى لو المستمع مات في لحظة
+  // نت وحشة، النتيجة بتتلقط في أول استعلام ناجح بعد رجوع النت.
+  const poll = setInterval(async function(){
+    if(!paymobPending || paymobPending.ref !== orderRef || paymobApproved){ clearInterval(poll); return; }
+    try{
+      const snap = await db.collection('pos_paymob_txns').doc(orderRef).get();
+      if(snap.exists && handleResult(snap.data() || {})) stopAll();
+    }catch(e){}
+  }, 4000);
+  paymobPending = { ref: orderRef, unsub: unsub, poll: poll, amount: amountEGP };
   // مهلة 3 دقايق: لو مفيش رد، مش هنسيب الكاشير مستني للأبد
   setTimeout(function(){
     if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
+      clearInterval(poll);
       paymobShow('⏳ الماكينة مردتش خلال 3 دقايق — اتأكد منها قبل ما تحفظ', 'err');
     }
   }, 180000);
@@ -2508,6 +2561,9 @@ async function confirmPayment(){
     if(_saved && _pendingChange > 0){
       try{ showChangeAfterPrint(_pendingChange); }catch(e){ console.warn('change', e); }
     }
+    // 📟 تنضيف حالة Paymob بعد أي حفظ ناجح — بيانات كارت فاتورة اتحفظت يدوي
+    // كانت بتفضل معلّقة وتلوث الفاتورة اللي بعدها (cardTxn قديم على فاتورة كاش)
+    if(_saved && typeof paymobReset === 'function'){ try{ paymobReset(); }catch(e){} }
     _confirmSaving = false;
     if(_btn){ _btn.textContent = _btn.dataset.lbl || 'حفظ وطباعة'; }
     if(typeof updatePaySummary === 'function') updatePaySummary();   // بيظبط تفعيل/تعطيل الزر حسب السلة

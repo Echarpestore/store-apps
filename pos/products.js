@@ -204,7 +204,7 @@ document.getElementById('receiveGoodsBarcode').addEventListener('input', (e)=>{
   box.innerHTML = '';
   if(!q) return;
   const matches = allInventory.filter(it=>
-    (it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q)
+    searchMatch(it.name, q) || (it.barcode||'').toLowerCase().includes(q)   // 🔎 تطبيع عربي
   ).slice(0, 12);
   if(!matches.length){
     box.innerHTML = '<div style="padding:11px; color:#999; font-size:13px;">مفيش منتج بالاسم/الكود ده</div>';
@@ -229,7 +229,7 @@ document.getElementById('receiveGoodsBarcode').addEventListener('keydown', (e)=>
   if(!product){
     // مفيش تطابق تام؟ لو فيه نتيجة واحدة بس في البحث خدها
     const q = code.toLowerCase();
-    const ms = allInventory.filter(it=> (it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q));
+    const ms = allInventory.filter(it=> searchMatch(it.name, code) || (it.barcode||'').toLowerCase().includes(q));
     if(ms.length === 1) product = ms[0];
   }
   if(!product){
