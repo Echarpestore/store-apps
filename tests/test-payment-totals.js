@@ -205,6 +205,32 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 }
 
 // ============================================================
+// ١٣) 💸 المصروفات المطاطة + التصفيتين + أثر حذف السلفة
+// ============================================================
+{
+  const repSrc2 = fs.readFileSync(path.join(POS,'pos-reports.js'),'utf8');
+  const salesSrc2 = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+
+  // التقفيل: مصروفات > 0 أو تعديل سلف = بيان إجباري متسجل
+  const finSrc = extractFn(repSrc2, 'dcFinish');
+  assert(/dc_expNote/.test(finSrc) && /exp > 0 \|\| advChanged/.test(finSrc),
+    'مصروفات أو تعديل سلف من غير بيان = مرفوض');
+  assert(/expNote, advSystem, advChanged,/.test(finSrc),
+    'البيان ورقم سلف السيستم بيتسجلوا في سجل التقفيل');
+  assert(/dc_expNote/.test(repSrc2.slice(repSrc2.indexOf('بيان المصروفات'))),
+    'حقل البيان موجود في شاشة التقفيل');
+
+  // إنهاء الخدمة: مفيش تصفيتين أبدًا
+  assert(/_terminating/.test(salesSrc2), 'حارس انشغال على إنهاء الخدمة');
+  assert(/متنهية خدمته خلاص/.test(salesSrc2), 'موظف غير نشط بيترفض');
+  assert(/فيه تصفية متسجلة بالفعل/.test(salesSrc2), 'تصفية تانية لنفس الموظف بتترفض');
+
+  // حذف السلفة بيسيب أثر
+  assert(/sales_deleted_log/.test(salesSrc2) && /kind:'advance'/.test(salesSrc2),
+    'حذف السلفة بيتسجل في سجل المحذوفات قبل التنفيذ');
+}
+
+// ============================================================
 // ١٢) 🛡️ سباقات ازدواج الفلوس (دبل كليك / جهازين)
 // ============================================================
 {
