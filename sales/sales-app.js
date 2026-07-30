@@ -1284,12 +1284,21 @@ onSnapshot(staffOrdersCol, (snap)=>{
   if(typeof renderStaffOrdersPanel==='function') renderStaffOrdersPanel();
 });
 window.appReferrals = [];
+// 📉 خفض قراءات Firestore: الاشتراك على المجموعات الزمنية كان **بلا حدود** —
+// كل فتحة للتطبيق على أي موبايل بتقرا تاريخ الحضور/النقط/السلف كله من أول يوم.
+// المجموعات دي بتكبر كل يوم للأبد، فالقراءات بتتضاعف مع الوقت.
+// النافذة: آخر 190 يوم (شهر المرتب الحالي + اللي قبله + هامش واسع للتقارير).
+// السجلات الأقدم موجودة في قاعدة البيانات عادي — بس مش بتتقرا مع كل فتحة.
+const READ_WINDOW_MS = 190 * 24 * 3600000;
+const _winStart = Date.now() - READ_WINDOW_MS;
+const _scoped = (col, field)=> query(col, where(field, '>=', _winStart));
+
 onSnapshot(referralsCol, (snap)=>{
   window.appReferrals = snap.docs.map(d=> ({id:d.id, ...d.data()}));
   if(typeof renderCommissionPanel==='function') renderCommissionPanel();
   if(typeof renderReferralPanel==='function') renderReferralPanel();
 });
-onSnapshot(pointsCol, (snap)=>{
+onSnapshot(_scoped(pointsCol,'ts'), (snap)=>{
   window.points = snap.docs.map(d=>({id:d.id, ...d.data()}));
   renderEmpGrid();
   renderDailyTargetCard();
@@ -1302,7 +1311,7 @@ onSnapshot(entriesCol, (snap)=>{
   if(adminUnlocked) renderPerformanceLink();
 }, (err)=> console.error('feedback sync error', err));
 
-onSnapshot(shiftsCol, (snap)=>{
+onSnapshot(_scoped(shiftsCol,'clockInTs'), (snap)=>{
   allShifts = snap.docs.map(d=>({id:d.id, ...d.data()}));
   window.allShifts = allShifts;
   applyBranchFilter();
@@ -1364,7 +1373,7 @@ onSnapshot(attDecisionsCol, (snap)=>{
   if(adminUnlocked && typeof renderAttIssues==='function') window.renderAttIssues();
 }, (e)=> console.warn('att decisions sync', e && e.code));
 
-onSnapshot(breaksCol, (snap)=>{
+onSnapshot(_scoped(breaksCol,'startTs'), (snap)=>{
   allBreaks = snap.docs.map(d=>({id:d.id, ...d.data()}));
   window.allBreaks = allBreaks;
   autoCloseStaleBreaks();
@@ -1378,26 +1387,26 @@ onSnapshot(leaveReqCol, (snap)=>{
   if(typeof updateLeaveBadge==='function'){ try{ updateLeaveBadge(); }catch(e){} }
 }, (e)=> console.warn('leave sync', e && e.code));
 
-onSnapshot(timeCreditCol, (snap)=>{
+onSnapshot(_scoped(timeCreditCol,'ts'), (snap)=>{
   allTimeCredit = snap.docs.map(d=>({id:d.id, ...d.data()}));
   window.allTimeCredit = allTimeCredit;
   if(adminUnlocked && typeof window.renderTimeCreditLog==='function'){ try{ window.renderTimeCreditLog(); }catch(e){} }
 }, (e)=> console.warn('time credit sync', e && e.code));
 
-onSnapshot(deductionsCol, (snap)=>{
+onSnapshot(_scoped(deductionsCol,'ts'), (snap)=>{
   allDeductions = snap.docs.map(d=>({id:d.id, ...d.data()}));
   deductions = allDeductions.filter(x=> x.branch === window.currentBranch);
   window.deductions = deductions;
   if(adminUnlocked && typeof renderDeductionsLog==='function') window.renderDeductionsLog();
 }, (e)=> console.warn('deductions sync', e && e.code));
 
-onSnapshot(commissionPaymentsCol, (snap)=>{
+onSnapshot(_scoped(commissionPaymentsCol,'paidAt'), (snap)=>{
   allCommissionPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
   commissionPayments = allCommissionPayments.filter(p=> p.branch === window.currentBranch);
   if(adminUnlocked) renderCommissionPanel();
 }, (err)=> console.error('commission payments sync error', err));
 
-onSnapshot(salaryPaymentsCol, (snap)=>{
+onSnapshot(_scoped(salaryPaymentsCol,'paidAt'), (snap)=>{
   allSalaryPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
   salaryPayments = allSalaryPayments.filter(p=> p.branch === window.currentBranch);
   if(adminUnlocked){ renderSalaryPanel(); renderSalaryPaymentLog(); }
@@ -1409,7 +1418,7 @@ onSnapshot(terminationsCol, (snap)=>{
   if(adminUnlocked){ renderTerminationPanel(); renderTerminationLog(); }
 }, (err)=> console.error('terminations sync error', err));
 
-onSnapshot(advancesCol, (snap)=>{
+onSnapshot(_scoped(advancesCol,'ts'), (snap)=>{
   allAdvances = snap.docs.map(d=>({id:d.id, ...d.data()}));
   window.allAdvancesAll = allAdvances;
   advances = allAdvances.filter(a=> a.branch === window.currentBranch);
@@ -4855,11 +4864,22 @@ $('#terminateConfirmCancel')?.addEventListener('click', ()=>{
   pendingTerminateEmpId = null;
 });
 
+let _terminating = false;
 $('#terminateConfirmBtn')?.addEventListener('click', async ()=>{
   const pass = $('#terminateConfirmPass').value;
   if(pass !== ADMIN_CODE){ $('#terminateConfirmErr').textContent = 'كود غلط'; return; }
   const emp = allEmployees.find(e=> e.id === pendingTerminateEmpId);
   if(!emp){ $('#terminateConfirmOverlay').classList.remove('show'); return; }
+  // 🛡️ ثغرة التصفيتين: دبل كليك (أو موظف متنهي خدمته أصلًا) كان بيسجل
+  // **تصفيتين** بنفس المستحقات — والاتنين بيظهروا للصرف. حارس انشغال +
+  // رفض لو الموظف مش active أو ليه تصفية متسجلة بالفعل.
+  if(_terminating) return;
+  if(emp.active === false){ $('#terminateConfirmErr').textContent = 'الموظف ده متنهية خدمته خلاص'; return; }
+  if((allTerminations||[]).some(t=> t.employeeId === emp.id)){
+    $('#terminateConfirmErr').textContent = 'فيه تصفية متسجلة بالفعل للموظف ده — شوف سجل المغادرين';
+    return;
+  }
+  _terminating = true;
 
   const now = new Date();
   const range = getMonthDateRange(now);
@@ -4877,6 +4897,7 @@ $('#terminateConfirmBtn')?.addEventListener('click', async ()=>{
     console.error('تعذر إنهاء الخدمة', err);
     alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف'));
   }
+  _terminating = false;
   $('#terminateConfirmOverlay').classList.remove('show');
   pendingTerminateEmpId = null;
 });
@@ -5270,7 +5291,20 @@ function renderAdvancesLog(){
   wrap.querySelectorAll('button[data-id]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       if(!confirm('متأكد إنك عايز تحذف السلفة دي؟')) return;
-      try{ await deleteDoc(doc(db,'sales_advances', btn.dataset.id)); }
+      try{
+        // 🛡️ أثر إجباري: السلفة المحذوفة كانت بتختفي من غير أي سجل —
+        // لو اتحذفت بالغلط (أو بقصد) بعد ما اتصرفت كاش، مفيش دليل إنها كانت موجودة.
+        const _a = (allAdvances||[]).find(x=> x.id === btn.dataset.id);
+        if(_a){
+          await addDoc(collection(db,'sales_deleted_log'), {
+            kind:'advance', refId: btn.dataset.id,
+            employeeId:_a.employeeId||'', employeeName:_a.employeeName||'',
+            amount:_a.amount||0, origDate:_a.date||'', origTs:_a.ts||0,
+            source:_a.source||'', deletedAt: Date.now()
+          });
+        }
+        await deleteDoc(doc(db,'sales_advances', btn.dataset.id));
+      }
       catch(err){ console.error('تعذر حذف السلفة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
     });
   });
