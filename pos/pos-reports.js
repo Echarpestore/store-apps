@@ -1294,6 +1294,7 @@ async function goToEndOfDay(){
       ${lateSales.length?`<div class="dc-sm-sub" style="color:#f59e0b; font-weight:800;">⚠️ ${lateSales.length} فاتورة اتعملت بعد آخر تقفيل وقبل بداية اليوم (${lateTotal.toFixed(0)} ج.م — منها كاش ${lateCash.toFixed(0)}). الكاش ده في الدرج بس مش في مبيعات النهاردة → هيبان أوفر بنفس المبلغ.</div>`:''}
       ${_fromCache?`<div class="dc-sm-sub" style="color:#ef4444; font-weight:900;">📴 النت قاطع — الأرقام دي من الكاش المحلي للجهاز ده، وفواتير الأجهزة التانية ممكن تكون مش ظاهرة. استنى النت يرجع قبل التقفيل.</div>`:''}
       ${_pendingCount?`<div class="dc-sm-sub" style="color:#f59e0b; font-weight:800;">📴 ${_pendingCount} فاتورة من الجهاز ده لسه مرفعتش للسيرفر — محسوبة في الأرقام دي وهتترفع لوحدها.</div>`:''}
+      <button onclick="openDayCloseLog()" style="margin-top:8px; padding:8px 16px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-family:'Cairo'; font-weight:800; font-size:12.5px; cursor:pointer;">📜 سجل التقفيلات + طباعة</button>
     </div>` : `<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:14px; color:var(--muted); font-size:12.5px; text-align:center;">اعدّ الدرج واملأ البيانات، وفي الآخر دوس تأكيد — النتيجة بتتسجّل للمدير.</div>`}
 
     <div class="dc-card">
@@ -1317,8 +1318,12 @@ async function goToEndOfDay(){
 
     <div class="dc-card">
       <div class="dc-card-h">💳 الفيزا والانستاباي</div>
-      ${dcField('فيزا (من الماكينة)', 'dc_visa', '', 'اكتب اللي على ماكينة الفيزا')}
-      ${dcField('انستاباي', 'dc_insta', '', 'اكتب إجمالي الانستاباي')}
+      ${dcField('فيزا (من الماكينة)', 'dc_visa',
+          isMgr ? (visaSales ? visaSales.toFixed(0) : '') : '',
+          isMgr ? 'متكتب تلقائي من السيستم — عدّله لو رقم الماكينة مختلف' : 'اكتب اللي على ماكينة الفيزا')}
+      ${dcField('انستاباي', 'dc_insta',
+          isMgr ? (instaSales ? instaSales.toFixed(0) : '') : '',
+          isMgr ? 'متكتب تلقائي من السيستم — عدّله لو مختلف' : 'اكتب إجمالي الانستاباي')}
     </div>
 
     <button class="dc-ok" onclick="dcFinish()">✔️ ${isMgr ? 'احسب النتيجة (أوفر / عجز)' : 'تأكيد وتسليم الدرج'}</button>
@@ -1408,10 +1413,17 @@ function dcFinish(){
       </div>`;
   }else{
     // الكاشير: تأكيد بس من غير أي إجماليات (عدّ أعمى)
+    // 👁️ الكاشير يشوف الحالة بس (تمام / عجز / أوفر) من غير أي أرقام —
+    // لا مبيعات السيستم ولا قيمة الفرق، عشان ميعرفش يوصل للتوتال بالحساب العكسي
+    const _cState = isShort
+      ? { c:'var(--minus)', bg:'#fdecec', t:'⚠️ فيه عجز', tip:'راجع عدّ الكاش وأرقام الماكينة تاني، ولو الرقم زي ما هو بلّغ المدير' }
+      : isOver
+      ? { c:'var(--warn)', bg:'#fff6e6', t:'🔺 فيه زيادة (أوفر)', tip:'راجع العدّ وأرقام الماكينة — ولو زي ما هو بلّغ المدير' }
+      : { c:'var(--plus)', bg:'#eafaf0', t:'✅ تمام — مظبوط', tip:'سلّم الدرج للمدير. تسلم إيدك 👌' };
     document.getElementById('dc_result').innerHTML = `
-      <div class="dc-result" style="background:#eafaf0; border-color:var(--plus);">
-        <div class="dc-res-head" style="color:var(--plus);">✅ اتسجّل التقفيل</div>
-        <div style="color:#555; font-size:13px; margin-top:6px;">سلّم الدرج والمبلغ للمدير. المدير هو اللي يشوف الفرق.</div>
+      <div class="dc-result" style="background:${_cState.bg}; border-color:${_cState.c};">
+        <div class="dc-res-head" style="color:${_cState.c}; font-size:19px;">${_cState.t}</div>
+        <div style="color:#555; font-size:13px; margin-top:6px;">${_cState.tip}</div>
       </div>`;
   }
 
@@ -1434,3 +1446,98 @@ function dcFinish(){
     .catch(e=> console.warn('dayclose save', e));
 }
 
+
+// ============================================================
+// 📜 سجل التقفيلات — عرض وطباعة أيام مقفولة (للمدير/المالك بس)
+// ============================================================
+async function openDayCloseLog(){
+  if(!hasPerm('canViewReports')){ showToast('السجل للمشرف/المدير بس', 'err'); return; }
+  let recs = [];
+  try{
+    const snap = await db.collection(TEST_SETTINGS)
+      .where(firebase.firestore.FieldPath.documentId(), '>=', 'dayclose_'+currentBranch+'_')
+      .where(firebase.firestore.FieldPath.documentId(), '<', 'dayclose_'+currentBranch+'_\uf8ff')
+      .get();
+    recs = snap.docs.map(d=> d.data()).filter(r=> r && r.type==='dayclose')
+      .sort((a,b)=> (b.ts||0)-(a.ts||0)).slice(0, 45);
+  }catch(e){ showToast('تعذر تحميل السجل: '+e.message, 'err'); return; }
+  const old = document.getElementById('dcLogOv'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'dcLogOv';
+  ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:900; display:flex; align-items:center; justify-content:center; padding:14px;';
+  const rows = recs.map((r,i)=>{
+    const os = +(r.overShort||0);
+    const col = Math.abs(os) < 0.01 ? 'var(--plus)' : (os > 0 ? 'var(--warn)' : 'var(--minus)');
+    const lbl = Math.abs(os) < 0.01 ? '✅ مظبوط' : (os > 0 ? '🔺 أوفر '+os.toFixed(2) : '⚠️ عجز '+Math.abs(os).toFixed(2));
+    return `
+    <div style="border:1px solid var(--border); border-radius:11px; padding:10px 12px; margin-bottom:8px; background:var(--panel);">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <b style="font-size:13.5px;">📅 ${r.date||''}</b>
+        <span style="color:${col}; font-weight:900; font-size:13px;">${lbl}</span>
+        <span style="color:var(--muted); font-size:11.5px;">${r.invoiceCount||0} فاتورة · ${r.closedBy||'—'}</span>
+        <span>
+          <button onclick="this.closest('div').parentNode.querySelector('.dcl-det').style.display = this.closest('div').parentNode.querySelector('.dcl-det').style.display==='none'?'block':'none'" style="padding:5px 12px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-family:'Cairo'; font-size:11.5px; font-weight:700; cursor:pointer;">تفاصيل</button>
+          <button onclick='printDayCloseRec(${JSON.stringify(JSON.stringify(r))})' style="padding:5px 12px; border-radius:8px; border:none; background:var(--plus); color:#062; font-family:'Cairo'; font-size:11.5px; font-weight:800; cursor:pointer;">🖨️ طباعة</button>
+        </span>
+      </div>
+      <div class="dcl-det" style="display:none; margin-top:8px; font-size:12px; color:var(--text); line-height:2;">
+        كاش معدود <b>${(+(r.countedCash||0)).toFixed(2)}</b> · عهدة <b>${(+(r.float||0)).toFixed(2)}</b> · مصروفات <b>${(+(r.expenses||0)).toFixed(2)}</b>${r.expNote?` <span style="color:var(--muted);">(${r.expNote})</span>`:''}<br>
+        سلف <b>${(+(r.advances||0)).toFixed(2)}</b>${r.advChanged?' <span style="color:var(--warn);">⚠️ متعدّلة عن السيستم ('+(+(r.advSystem||0)).toFixed(0)+')</span>':''} · 📄 راتب <b>${(+(r.salaryDeferred||0)).toFixed(2)}</b><br>
+        فيزا مكتوبة <b>${(+(r.visa||0)).toFixed(2)}</b> (السيستم ${(+(r.visaSales||0)).toFixed(0)}) · انستا <b>${(+(r.instapay||0)).toFixed(2)}</b> (السيستم ${(+(r.instaSales||0)).toFixed(0)})<br>
+        محسوب <b>${(+(r.accounted||0)).toFixed(2)}</b> · السيستم <b>${(+(r.systemTotal||0)).toFixed(2)}</b>
+        ${(+(r.lateCash||0))>0?`<br><span style="color:#b45309;">منها كاش فواتير بعد آخر تقفيل ${(+(r.lateCash||0)).toFixed(2)} (${r.lateCount||0} فاتورة) — الفرق الحقيقي ${(+(r.overShortReal||0)).toFixed(2)}</span>`:''}
+        ${r.closedFromCache?`<br><span style="color:var(--minus);">📴 اتقفل والنت قاطع</span>`:''}${(r.pendingCount||0)>0?` · <span style="color:var(--warn);">📴 ${r.pendingCount} فاتورة كانت معلقة</span>`:''}
+      </div>
+    </div>`;
+  }).join('') || '<div style="text-align:center; color:var(--muted); padding:30px;">لسه مفيش تقفيلات متسجلة</div>';
+  ov.innerHTML = `
+    <div style="background:var(--bg); border-radius:16px; width:min(660px, 96vw); max-height:88vh; display:flex; flex-direction:column; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border);">
+        <b style="font-size:15px;">📜 سجل التقفيلات — ${currentBranch}</b>
+        <button onclick="document.getElementById('dcLogOv').remove()" style="border:none; background:var(--panel2); color:var(--text); border-radius:8px; padding:6px 14px; font-family:'Cairo'; font-weight:800; cursor:pointer;">إغلاق ✖</button>
+      </div>
+      <div style="padding:12px 14px; overflow-y:auto;">${rows}</div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+window.openDayCloseLog = openDayCloseLog;
+
+// 🖨️ طباعة تقرير تقفيل يوم — على طابعة الفواتير الحرارية (أو نافذة طباعة المتصفح)
+function printDayCloseRec(recJson){
+  const r = (typeof recJson === 'string') ? JSON.parse(recJson) : recJson;
+  const os = +(r.overShort||0);
+  const stateTxt = Math.abs(os) < 0.01 ? '✅ مظبوط بالظبط' : (os > 0 ? '🔺 أوفر '+os.toFixed(2)+' ج.م' : '⚠️ عجز '+Math.abs(os).toFixed(2)+' ج.م');
+  const line = (l, v)=> `<div style="display:flex; justify-content:space-between; font-size:13px; padding:2.5px 0;"><span>${l}</span><b style="direction:ltr;">${v}</b></div>`;
+  const html = `
+  <div style="font-family:'Cairo',sans-serif; direction:rtl; color:#000; width:100%; padding:4px 6px;">
+    <div style="text-align:center; font-weight:900; font-size:17px;">تقرير إغلاق اليوم</div>
+    <div style="text-align:center; font-size:12.5px; margin-bottom:6px;">${currentBranch} · ${r.date||''}${r.closedBy?` · قفل: ${r.closedBy}`:''}</div>
+    <div style="border-top:2px dashed #000; margin:5px 0;"></div>
+    ${line('عدد الفواتير', r.invoiceCount||0)}
+    ${line('كاش معدود', (+(r.countedCash||0)).toFixed(2))}
+    ${line('− عهدة', (+(r.float||0)).toFixed(2))}
+    ${line('+ مصروفات', (+(r.expenses||0)).toFixed(2))}
+    ${r.expNote?`<div style="font-size:11px; color:#333;">📝 ${r.expNote}</div>`:''}
+    ${line('+ سلف', (+(r.advances||0)).toFixed(2))}
+    ${line('+ فيزا', (+(r.visa||0)).toFixed(2))}
+    ${line('+ انستاباي', (+(r.instapay||0)).toFixed(2))}
+    ${(+(r.salaryDeferred||0))>0 ? line('+ 📄 راتب موظفين', (+(r.salaryDeferred||0)).toFixed(2)) : ''}
+    <div style="border-top:2px dashed #000; margin:5px 0;"></div>
+    ${line('= إجمالي محسوب', (+(r.accounted||0)).toFixed(2))}
+    ${line('مبيعات السيستم', (+(r.systemTotal||0)).toFixed(2))}
+    ${(+(r.lateCash||0))>0 ? line('منها متأخر بعد آخر تقفيل', (+(r.lateCash||0)).toFixed(2)) + line('الفرق الحقيقي', (+(r.overShortReal||0)).toFixed(2)) : ''}
+    <div style="border-top:2px dashed #000; margin:5px 0;"></div>
+    <div style="text-align:center; font-weight:900; font-size:16px; padding:4px 0;">${stateTxt}</div>
+  </div>`;
+  const inShell = (typeof window.posShell !== 'undefined');
+  const cfg = inShell && typeof getPrinterCfg === 'function' ? getPrinterCfg() : null;
+  if(inShell && cfg && cfg.invoicePrinter){
+    window.posShell.printReceipt({ printer: cfg.invoicePrinter, paperWidth: (window.receiptDesignConfig && receiptDesignConfig.paperWidth) || '80', html })
+      .catch(e=> showToast('تعذر الطباعة: '+e.message, 'err'));
+    return;
+  }
+  const w = window.open('', '_blank', 'width=420,height=640');
+  w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><style>@page{margin:4mm;}</style></head><body>${html}<script>window.print(); setTimeout(()=>window.close(), 500);<\/script></body></html>`);
+  w.document.close();
+}
+window.printDayCloseRec = printDayCloseRec;
