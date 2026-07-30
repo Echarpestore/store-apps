@@ -205,6 +205,56 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 }
 
 // ============================================================
+// ١١) 🔎 البحث العربي + 🏷️ الليبل + 📟 Paymob
+// ============================================================
+{
+  const coreSrc2 = fs.readFileSync(path.join(POS, 'pos-core.js'), 'utf8');
+  const appSrc2 = fs.readFileSync(path.join(POS, 'app.js'), 'utf8');
+  const prodSrc = fs.readFileSync(path.join(POS, 'products.js'), 'utf8');
+  const gsSrc = fs.readFileSync(path.join(POS, 'search.js'), 'utf8');
+
+  // البحث: التطبيع العربي بيشتغل فعليًا
+  const sFns = loadFns(coreSrc2, ['searchNorm', 'searchMatch']);
+  const match = (h, q)=> vm.runInContext(`searchMatch(${JSON.stringify(h)}, ${JSON.stringify(q)})`, sFns);
+  assertEq(match('قطن تايلاندي كويت ليدي', 'تايلاندى'), true, 'ى/ي: تايلاندى بتلاقي تايلاندي');
+  assertEq(match('بيجامة قطيفة', 'بيجامه'), true, 'ة/ه: بيجامه بتلاقي بيجامة');
+  assertEq(match('إيشارب أسود', 'ايشارب اسود'), true, 'الهمزات: ا بتلاقي أ/إ');
+  assertEq(match('قطن تايلاندي كويت ليدي', 'قطن كويت'), true, 'كلمتين بأي ترتيب');
+  assertEq(match('قطن  تايلاندي', 'قطن تايلاندي'), true, 'المسافة الزيادة في الاسم مش مشكلة');
+  assertEq(match('قطن تايلاندي', 'حرير'), false, 'اللي مش موجود مبيطلعش');
+  assertEq(match('أي حاجة', ''), false, 'بحث فاضي = مفيش نتايج');
+  // ومستخدم في المواضع الثلاثة
+  assert(/searchMatch\(it\.name, q\)/.test(fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8')), 'بحث البيع بالتطبيع');
+  assert(/searchMatch\(it\.name, q\)/.test(prodSrc) && /searchMatch\(it\.name, code\)/.test(prodSrc), 'بحث الاستلام بالتطبيع (اقتراحات + إنتر)');
+  assert(/searchMatch\(p\.name, q\)/.test(gsSrc) && /searchMatch\(c\.name, q\)/.test(gsSrc), 'البحث الشامل بالتطبيع');
+
+  // الليبل: رسم الكود مرة واحدة ونسخ الباقي (إصلاح اللاج)
+  const lbl = extractFn(appSrc2, 'doPrintLabels');
+  assert(/const prev = firstByCode\[c\.code\];[\s\S]{0,40}if\(prev\)\{[\s\S]{0,120}cloneNode\(true\)/.test(lbl),
+    'الليبل: نفس الكود بيترسم مرة ويتنسخ (فرع النسخ سليم)');
+  assert(!/codes\.forEach\(c=>\{ const el = tmp\.querySelector/.test(lbl), 'الرسم المتكرر القديم اتشال');
+
+  // Paymob: رسالة الفرع غير المربوط + إعادة المحاولة بعد الدفع المقسم
+  const saleSrc2 = fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8');
+  assert(/الماكينة مش مربوطة بالسيستم في الفرع ده/.test(saleSrc2), 'فرع من غير ماكينة = رسالة واضحة مش صمت');
+  assert(/if\(method !== 'visa'\n/.test(saleSrc2) && /paymobApproved[\s\S]{0,300}_paymobAutoFired = true;[\s\S]{0,120}المدفوعات كملت/.test(saleSrc2),
+    'الدفع المقسم بيعيد فحص الطباعة التلقائية (الشرط والتنفيذ سليمين)');
+  assert(/المدفوعات كملت — بيحفظ ويطبع/.test(saleSrc2), 'رسالة اكتمال الدفع المقسم موجودة');
+
+  // 📟 مرونة مراقبة الماكينة: إعادة اتصال + استعلام احتياطي (سبب فاتورة/2 يوميًا مش بيطبعوا)
+  const watchSrc = extractFn(saleSrc2, 'paymobWatch');
+  assert(/paymobWatch\(orderRef, amountEGP, _retry \+ 1\)/.test(watchSrc),
+    'المستمع بيعيد الاتصال لو وقع (مش بيموت نهائيًا)');
+  assert(/setInterval/.test(watchSrc) && /\.get\(\)/.test(watchSrc),
+    'استعلام احتياطي دوري بيلقط النتيجة لو المستمع مات');
+  assert(/if\(paymobApproved\) return true;/.test(watchSrc),
+    'النتيجة بتتعالج مرة واحدة (المستمع والاستعلام مش بيكرروا بعض');
+  // تنضيف الحالة بعد أي حفظ ناجح — بيانات كارت قديمة متلوثش فاتورة جاية
+  assert(/if\(_saved && typeof paymobReset === 'function'\)/.test(saleSrc2),
+    'paymobReset بعد كل حفظ ناجح');
+}
+
+// ============================================================
 // ١٠) 🌍 يوم الشغل بتوقيت المحل (القاهرة) — مش ساعة الجهاز
 // المالك بيفتح من بره مصر والكاشير من مصر: لازم يشوفوا نفس الأرقام بالظبط
 // ============================================================
