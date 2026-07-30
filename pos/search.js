@@ -22,7 +22,6 @@ async function runGlobalSearch(q){
   box.style.display = 'block';
   box.innerHTML = '<div style="padding:12px; color:#888; font-size:12px;">بيدوّر...</div>';
 
-  const qLower = q.toLowerCase();
   const results = { invoices: [], customers: [], products: [] };
 
   // 1) المنتجات (من الكاش المحلي، سريع وبدون قراءة إضافية)
@@ -30,24 +29,59 @@ async function runGlobalSearch(q){
     searchMatch(p.name, q) || (p.barcode||'').includes(q)   // 🔎 تطبيع عربي
   ).slice(0, 5);
 
-  // 2) العملاء (بالاسم أو رقم التليفون)
-  try{
-    const custSnap = await db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get();
-    results.customers = custSnap.docs.map(d=>d.data()).filter(c=>
-      (c.phone||'').includes(q) || searchMatch(c.name, q)
-    ).slice(0, 5);
-  }catch(e){}
+  // 📉 كارثة القراءات القديمة: كل بحثة كانت بتقرا **كل** فواتير وعملاء الفرع
+  // من أول يوم (آلاف المستندات × كل ضغطة بحث) — ده كان المصدر الأول
+  // لفاتورة القراءات (254 ألف/يوم). دلوقتي:
+  // - العملاء: بيتقروا مرة كل 10 دقايق ويتفلتروا محلي
+  // - الفواتير: استعلامات مستهدفة (رقم فاتورة/تليفون بالظبط) بحد 5 مستندات
+  if(q.length >= 3){
+    // 2) العملاء (بالاسم أو رقم التليفون) — من كاش الجلسة
+    try{
+      const custs = await _customersCached();
+      results.customers = custs.filter(c=>
+        (c.phone||'').includes(q) || searchMatch(c.name, q)
+      ).slice(0, 5);
+    }catch(e){}
 
-  // 3) الفواتير (برقم الفاتورة — آخر 6 حروف من المعرّف — أو رقم تليفون العميل المرتبط بيها)
-  try{
-    const salesSnap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
-    results.invoices = salesSnap.docs
-      .map(d=>({id:d.id, ...d.data()}))
-      .filter(s=> (s.invoiceNo||s.id.slice(-6).toUpperCase()).toUpperCase().includes(q.toUpperCase()) || (s.customerPhone||'').includes(q))
-      .slice(0, 5);
-  }catch(e){}
+    // 3) الفواتير: مطابقة تامة لرقم الفاتورة أو تليفون العميل — مش مسح شامل.
+    // (البحث الجزئي في أرقام الفواتير القديمة اتشال عمدًا — كان بيكلف قراءة
+    // المجموعة كلها. رقم الفاتورة بيتكتب كامل من الإيصال.)
+    try{
+      const qU = q.toUpperCase();
+      const [byNo, byPhone] = await Promise.all([
+        db.collection(TEST_SALES).where('branch','==', currentBranch)
+          .where('invoiceNo','==', qU).limit(5).get().catch(()=> null),
+        /^\d{6,}$/.test(q)
+          ? db.collection(TEST_SALES).where('branch','==', currentBranch)
+              .where('customerPhone','==', q).limit(5).get().catch(()=> null)
+          : Promise.resolve(null)
+      ]);
+      const seen = new Set();
+      [byNo, byPhone].forEach(snap=>{
+        if(!snap) return;
+        snap.docs.forEach(d=>{
+          if(seen.has(d.id)) return; seen.add(d.id);
+          results.invoices.push({id:d.id, ...d.data()});
+        });
+      });
+      results.invoices = results.invoices.slice(0, 5);
+    }catch(e){}
+  }
 
   renderGlobalSearchResults(q, results);
+}
+
+// 👥 كاش عملاء الجلسة — قراءة واحدة كل 10 دقايق بدل قراءة كاملة مع كل بحثة
+let _custCache = null, _custCacheAt = 0, _custCacheBranch = null;
+async function _customersCached(){
+  const fresh = _custCache && _custCacheBranch === currentBranch
+             && (Date.now() - _custCacheAt) < 10*60000;
+  if(fresh) return _custCache;
+  const snap = await db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get();
+  _custCache = snap.docs.map(d=>d.data());
+  _custCacheAt = Date.now();
+  _custCacheBranch = currentBranch;
+  return _custCache;
 }
 
 function renderGlobalSearchResults(q, results){
