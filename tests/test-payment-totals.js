@@ -205,6 +205,42 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 }
 
 // ============================================================
+// ١٢) 🛡️ سباقات ازدواج الفلوس (دبل كليك / جهازين)
+// ============================================================
+{
+  const salesAppSrc = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+  const trSrc = fs.readFileSync(path.join(POS,'transfers.js'),'utf8');
+
+  // اعتماد أوردر الموظفة: معاملة ذرية بشرط pending — مش سلفتين أبدًا
+  assert(/runTransaction/.test(salesAppSrc.slice(0, 800)), 'runTransaction مستوردة في sales');
+  const soBlock = salesAppSrc.slice(salesAppSrc.indexOf('window.staffOrderDecide'), salesAppSrc.indexOf('window.staffOrderDecide') + 3000);
+  assert(/runTransaction\(db, async \(tx\)=>\{/.test(soBlock), 'قرار الأوردر جوه معاملة ذرية');
+  assert(/cur !== 'pending'/.test(soBlock) && /من جهاز تاني/.test(soBlock),
+    'الأوردر المتقرر فيه بيترفض (شرط pending على السيرفر)');
+  assert(/tx\.set\(doc\(advancesCol\)/.test(soBlock), 'السلفة بتتكتب جوه نفس المعاملة');
+  assert(/_soDeciding/.test(soBlock), 'حارس انشغال ضد الدبل كليك');
+  assert(!/await addDoc\(advancesCol, \{ employeeId:o\.employeeId/.test(salesAppSrc),
+    'الكتابة القديمة المنفصلة (سلفة ثم حالة) اتشالت');
+
+  // تأكيد التحويلة: معاملة ذرية بشرط in_transit — المخزون ميدخلش مرتين
+  const ctBlock = trSrc.slice(trSrc.indexOf('async function confirmTransfer(id, confirmer)'), trSrc.indexOf('async function confirmTransfer(id, confirmer)') + 2600);
+  assert(/db\.runTransaction\(async \(tx\)=>\{/.test(ctBlock), 'تأكيد التحويلة جوه معاملة ذرية');
+  assert(/cur !== 'in_transit'/.test(ctBlock) && /اتأكدت خلاص من جهاز تاني/.test(ctBlock),
+    'التحويلة المتأكدة بتترفض (شرط in_transit على السيرفر)');
+  assert(/confirmTransfer\._busy/.test(ctBlock), 'حارس انشغال للتحويلة');
+  assert(!/const batch = db\.batch\(\);/.test(ctBlock), 'الـ batch القديم (من غير شرط) اتشال');
+
+  // أزرار الصرف الأربعة: حارس انشغال لكل واحد
+  assertEq((salesAppSrc.match(/if\(btn\.dataset\.busy\) return;/g)||[]).length >= 4, true,
+    'حراس انشغال على أزرار الصرف (مرتب + نقط + تنزيلات + تارجت)');
+  assertEq((salesAppSrc.match(/finally\{ delete btn\.dataset\.busy; \}/g)||[]).length >= 4, true,
+    'الحراس بيتفكوا بعد انتهاء الكتابة');
+  // المرتب: تحذير الصرف المكرر لنفس الشهر
+  assert(/فيه صرف متسجل بالفعل/.test(salesAppSrc) && /_prevPay/.test(salesAppSrc),
+    'صرف مرتب تاني لنفس الشهر = تحذير صريح');
+}
+
+// ============================================================
 // ١١) 🔎 البحث العربي + 🏷️ الليبل + 📟 Paymob
 // ============================================================
 {
