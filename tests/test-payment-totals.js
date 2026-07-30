@@ -314,9 +314,15 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assertEq(match('قطن تايلاندي', 'حرير'), false, 'اللي مش موجود مبيطلعش');
   assertEq(match('أي حاجة', ''), false, 'بحث فاضي = مفيش نتايج');
   // ومستخدم في المواضع الثلاثة
-  assert(/searchMatch\(it\.name, q\)/.test(fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8')), 'بحث البيع بالتطبيع');
-  assert(/searchMatch\(it\.name, q\)/.test(prodSrc) && /searchMatch\(it\.name, code\)/.test(prodSrc), 'بحث الاستلام بالتطبيع (اقتراحات + إنتر)');
-  assert(/searchMatch\(p\.name, q\)/.test(gsSrc) && /searchMatch\(c\.name, q\)/.test(gsSrc), 'البحث الشامل بالتطبيع');
+  assert(/_sm\(it\.name, q\)/.test(fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8')), 'بحث البيع بالتطبيع');
+  assert(/_sm\(it\.name, q\)/.test(prodSrc) && /_sm\(it\.name, code\)/.test(prodSrc), 'بحث الاستلام بالتطبيع (اقتراحات + إنتر)');
+  assert(/_sm\(p\.name, q\)/.test(gsSrc) && /_sm\(c\.name, q\)/.test(gsSrc), 'البحث الشامل بالتطبيع');
+  // 🧷 حزام أمان النسخ المتلخبطة وقت التحديث: البحث ميموتش لو التطبيع مش متحمّل
+  ['pos-sale.js','products.js','search.js'].forEach(f=>{
+    const src = fs.readFileSync(path.join(POS, f),'utf8');
+    assert(/typeof searchMatch === 'function'\) \? searchMatch/.test(src),
+      'حزام أمان البحث موجود في ' + f);
+  });
 
   // الليبل: رسم الكود مرة واحدة ونسخ الباقي (إصلاح اللاج)
   const lbl = extractFn(appSrc2, 'doPrintLabels');
