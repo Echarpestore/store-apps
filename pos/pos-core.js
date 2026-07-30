@@ -405,19 +405,71 @@ async function loadCurrentEmployeeRole(){
 let businessDayStartHour = 6;   // بيتحدّث من pos_test_settings/day_cfg
 window.businessDayStartHour = 6;
 
+// 🌍 توقيت المحل ثابت (القاهرة) مش ساعة الجهاز:
+// المالك بيفتح السيستم من بره مصر أحيانًا — بساعة الجهاز كانت "بداية اليوم"
+// بتتزحزح بفرق التوقيت، فبيشوف فواتير وأرقام مختلفة عن اللي الكاشير شايفه
+// (وبانر الفواتير المتأخرة بيطلع أرقام مضللة). دلوقتي كل الأجهزة في أي حتة
+// في العالم بتحسب اليوم بتوقيت مصر — الكل شايف نفس الأرقام بالظبط.
+const SHOP_TZ = 'Africa/Cairo';
+const _tzFmt = (function(){
+  try{
+    return new Intl.DateTimeFormat('en-GB', { timeZone: SHOP_TZ,
+      year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+  }catch(e){ return null; }   // جهاز قديم من غير Intl → فولباك ساعة الجهاز
+})();
+function _shopClock(ms){
+  // الساعة الحيطة بتوقيت المحل للحظة معينة {y,m,d,h,min,s}
+  const out = {};
+  _tzFmt.formatToParts(new Date(ms)).forEach(function(p){
+    if(p.type !== 'literal') out[p.type] = parseInt(p.value, 10);
+  });
+  if(out.hour === 24) out.hour = 0;   // en-GB بيطلّع نص الليل "24"
+  return { y: out.year, m: out.month, d: out.day, h: out.hour, min: out.minute, s: out.second };
+}
+function _shopWallToMs(y, m, d, h){
+  // تحويل "الساعة h يوم y-m-d بتوقيت المحل" لطابع مطلق — تخمينتين عشان
+  // فرق الصيفي/الشتوي (الإزاحة بتتحسب من نفس اللحظة المستهدفة)
+  function offAt(ms){
+    const c = _shopClock(ms);
+    return Date.UTC(c.y, c.m - 1, c.d, c.h, c.min, c.s) - Math.floor(ms / 1000) * 1000;
+  }
+  let guess = Date.UTC(y, m - 1, d, h) - offAt(Date.now());
+  guess = Date.UTC(y, m - 1, d, h) - offAt(guess);
+  return guess;
+}
+
 function bizDayStartMs(now){
-  const d = new Date(now == null ? Date.now() : now);
+  const t = (now == null) ? Date.now()
+          : (now instanceof Date) ? now.getTime() : Number(now);
   const h = Number(businessDayStartHour);
   const cut = (isNaN(h) || h < 0 || h > 23) ? 6 : h;
-  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), cut, 0, 0, 0);
-  // لسه مجاش وقت البداية النهاردة → إحنا في يوم أمس
-  if(d.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
-  return start.getTime();
+  if(!_tzFmt){
+    // فولباك الجهاز القديم — نفس السلوك القديم بالظبط
+    const d = new Date(t);
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), cut, 0, 0, 0);
+    if(d.getTime() < start.getTime()) start.setDate(start.getDate() - 1);
+    return start.getTime();
+  }
+  const c = _shopClock(t);
+  let y = c.y, m = c.m, d = c.d;
+  // لسه مجاش وقت البداية النهاردة (بتوقيت المحل) → إحنا في يوم أمس
+  if(c.h < cut){
+    const prev = new Date(Date.UTC(y, m - 1, d));
+    prev.setUTCDate(prev.getUTCDate() - 1);
+    y = prev.getUTCFullYear(); m = prev.getUTCMonth() + 1; d = prev.getUTCDate();
+  }
+  return _shopWallToMs(y, m, d, cut);
 }
 function bizDayKey(ts){
-  const d = new Date(bizDayStartMs(ts == null ? Date.now() : ts));
+  const start = bizDayStartMs(ts == null ? Date.now() : ts);
   const p = (n)=> String(n).padStart(2,'0');
-  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+  if(!_tzFmt){
+    const d = new Date(start);
+    return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+  }
+  const c = _shopClock(start + 60000);   // دقيقة بعد البداية — جوه اليوم أكيد
+  return c.y + '-' + p(c.m) + '-' + p(c.d);
 }
 function isSameBizDay(a, b){
   if(!a) return false;

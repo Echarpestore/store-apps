@@ -726,12 +726,30 @@ async function goToSalesHistory(){
 
 const RATING_ICON_MAP = {1:'😠', 2:'🙁', 3:'🙂', 4:'😍'};
 // >>> SALESLOG_GROUP_START — تجميع الفواتير بالأيام (دالة نقية قابلة للاختبار)
+// 🕕 موحّد على يوم الشغل: فاتورة الفجر (قبل 6 ص بتوقيت المحل) بتتجمع مع يوم
+// أمس — زي التقارير والتقفيل بالظبط. قبل كده السجل كان باليوم التقويمي،
+// فكان بيطلع رقم مختلف عن التقارير بقيمة فواتير الفجر (سبب 8790 مقابل 8415).
+function _shTsOf(s){
+  if(typeof saleTs === 'function') return saleTs(s);
+  return (s.createdAt && s.createdAt.toMillis) ? s.createdAt.toMillis() : null;
+}
+function _shBizKey(ts){
+  if(typeof bizDayKey === 'function') return bizDayKey(ts);
+  const d = new Date(ts);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _shLabelOf(key){
+  // الاسم من المفتاح نفسه (مش من ساعة الجهاز) — عشان يطلع نفس اليوم من أي بلد
+  const p = String(key).split('-').map(Number);
+  if(p.length !== 3 || p.some(isNaN)) return 'بدون تاريخ';
+  return new Date(p[0], p[1]-1, p[2], 12).toLocaleDateString('ar-EG',{weekday:'long', day:'numeric', month:'long', year:'numeric'});
+}
 function _groupSalesByDay(sales){
   const groups = [], byKey = {};
   (sales||[]).forEach(s=>{
-    const d = (s.createdAt && s.createdAt.toDate) ? s.createdAt.toDate() : (s._d || null);
-    const key = d ? (d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()) : 'no-date';
-    const label = d ? d.toLocaleDateString('ar-EG',{weekday:'long', day:'numeric', month:'long', year:'numeric'}) : 'بدون تاريخ';
+    const ts = _shTsOf(s);
+    const key = ts != null ? _shBizKey(ts) : 'no-date';
+    const label = ts != null ? _shLabelOf(key) : 'بدون تاريخ';
     if(!byKey[key]){ byKey[key] = { key, label, items:[], total:0, count:0 }; groups.push(byKey[key]); }
     byKey[key].items.push(s);
     byKey[key].total += (s.total||0);
@@ -743,9 +761,10 @@ function _groupSalesByDay(sales){
 function _groupSalesByMonth(sales){
   const groups = [], byKey = {};
   (sales||[]).forEach(s=>{
-    const d = (s.createdAt && s.createdAt.toDate) ? s.createdAt.toDate() : (s._d || null);
-    const key = d ? (d.getFullYear()+'-'+(d.getMonth()+1)) : 'no-date';
-    const label = d ? d.toLocaleDateString('ar-EG',{month:'long', year:'numeric'}) : 'بدون تاريخ';
+    const ts = _shTsOf(s);
+    const key = ts != null ? _shBizKey(ts).slice(0,7) : 'no-date';
+    const p = key.split('-').map(Number);
+    const label = (ts != null && !p.some(isNaN)) ? new Date(p[0], p[1]-1, 15).toLocaleDateString('ar-EG',{month:'long', year:'numeric'}) : 'بدون تاريخ';
     if(!byKey[key]){ byKey[key] = { key, label, items:[], total:0, count:0 }; groups.push(byKey[key]); }
     byKey[key].items.push(s);
     byKey[key].total += (s.total||0);
@@ -754,12 +773,12 @@ function _groupSalesByMonth(sales){
   return groups;
 }
 // فلترة سريعة: النهارده / امبارح / تاريخ من حقل date (YYYY-MM-DD) → مفتاح يوم موحّد
-function _shDayKeyFromDate(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+// فلترة سريعة: النهارده / امبارح / تاريخ من حقل date (YYYY-MM-DD) → مفتاح يوم شغل موحّد
 function _shResolveDayKey(filter, now){
-  const n = now ? new Date(now) : new Date();
-  if(filter === 'today') return _shDayKeyFromDate(n);
-  if(filter === 'yesterday') return _shDayKeyFromDate(new Date(n.getTime() - 86400000));
-  if(/^\d{4}-\d{2}-\d{2}$/.test(filter||'')){ const parts = filter.split('-').map(Number); return parts[0]+'-'+parts[1]+'-'+parts[2]; }
+  const n = now ? new Date(now).getTime() : Date.now();
+  if(filter === 'today') return _shBizKey(n);
+  if(filter === 'yesterday') return _shBizKey(n - 86400000);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(filter||'')){ const parts = filter.split('-').map(Number); return parts[0]+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0'); }
   return null;
 }
 // <<< SALESLOG_GROUP_END
@@ -1143,12 +1162,19 @@ function dcAggregate(sales){
 }
 window.dcAggregate = dcAggregate;
 
-// 🕐 وقت الفاتورة: طابع السيرفر لو اتأكد، وإلا الطابع المحلي (فواتير الأوفلاين
-// اللي لسه مرفعتش serverTimestamp بتاعها null — كانت بتختفي من الحسابات)
+// 🕐 وقت الفاتورة = وقت البيع الفعلي مش وقت الوصول للسيرفر:
+// فاتورة أوفلاين بتترفع بعد ما النت يرجع — ممكن بعد التقفيل — وطابع السيرفر
+// بيبقى وقت الرفع، فكانت بتظهر "اتعملت بعد التقفيل" وهي اتباعت بدري وفلوسها
+// اتعدت. الطابع المحلي (createdAtMs) هو لحظة البيع الحقيقية.
+// 🛡️ حارس تلاعب: لو الفرق بين الطابعين أكبر من 48 ساعة (ساعة جهاز مضروبة أو
+// متلعوب فيها) بنرجع لطابع السيرفر — البيع الطبيعي أوفلاين بيتزامن في ساعات.
 function saleTs(s){
-  if(s && s.createdAt && typeof s.createdAt.toMillis === 'function') return s.createdAt.toMillis();
-  if(s && typeof s.createdAtMs === 'number') return s.createdAtMs;
-  return null;
+  const server = (s && s.createdAt && typeof s.createdAt.toMillis === 'function') ? s.createdAt.toMillis() : null;
+  const local = (s && typeof s.createdAtMs === 'number') ? s.createdAtMs : null;
+  if(local != null && server != null){
+    return Math.abs(server - local) <= 48*3600000 ? local : server;
+  }
+  return local != null ? local : server;
 }
 window.saleTs = saleTs;
 
