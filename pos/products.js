@@ -207,9 +207,16 @@ document.getElementById('receiveGoodsBarcode').addEventListener('input', (e)=>{
   // لو دالة التطبيع لسه موصلتش، بنرجع للبحث الحرفي بدل ما البحث يموت خالص
   const _sm = (typeof searchMatch === 'function') ? searchMatch
             : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
+  const _bp = (typeof barcodePrefix === 'function') ? barcodePrefix
+            : (bc, qq)=> String(bc||'').toLowerCase().startsWith(String(qq||'').toLowerCase());
   const matches = allInventory.filter(it=>
-    _sm(it.name, q) || (it.barcode||'').toLowerCase().includes(q)   // 🔎 تطبيع عربي
+    _sm(it.name, q) || _bp(it.barcode, q)   // 🔎 تطبيع عربي + كود بالبداية
   ).slice(0, 12);
+  // 🥇 المطابقة التامة الأول، وبعدها الأقصر (33 ← 330 ← 331...) — مش بترتيب المخزون العشوائي
+  matches.sort((a,b)=>{
+    const qa = String(a.barcode||''), qb = String(b.barcode||'');
+    return ((qb===q)-(qa===q)) || (qa.length - qb.length);
+  });
   if(!matches.length){
     box.innerHTML = '<div style="padding:11px; color:#999; font-size:13px;">مفيش منتج بالاسم/الكود ده</div>';
     return;
@@ -237,7 +244,9 @@ document.getElementById('receiveGoodsBarcode').addEventListener('keydown', (e)=>
   // لو دالة التطبيع لسه موصلتش، بنرجع للبحث الحرفي بدل ما البحث يموت خالص
   const _sm = (typeof searchMatch === 'function') ? searchMatch
             : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
-    const ms = allInventory.filter(it=> _sm(it.name, code) || (it.barcode||'').toLowerCase().includes(q));
+  const _bp = (typeof barcodePrefix === 'function') ? barcodePrefix
+            : (bc, qq)=> String(bc||'').toLowerCase().startsWith(String(qq||'').toLowerCase());
+    const ms = allInventory.filter(it=> _sm(it.name, code) || _bp(it.barcode, q));
     if(ms.length === 1) product = ms[0];
   }
   if(!product){
