@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, query, where, Timestamp
+  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, query, where, Timestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -4082,28 +4082,47 @@ window.renderStaffOrdersPanel = function(){
 
   pendWrap.querySelectorAll('[data-soact]').forEach(btn=> btn.addEventListener('click', ()=> staffOrderDecide(btn.dataset.id, btn.dataset.soact)));
 };
+// 🛡️ ثغرة الازدواج: اعتماد الأوردر مرتين (دبل كليك أو جهازين في نفس اللحظة)
+// كان بيسجل **سلفتين** بنفس المبلغ — خصم مضاعف من مرتب الموظفة.
+// الحل: معاملة ذرية — القرار مش بيتسجل غير لو الأوردر لسه pending فعلًا
+// على السيرفر، والسلفة بتتكتب جوه نفس المعاملة (يا الاتنين يا ولا حاجة).
+let _soDeciding = new Set();
 window.staffOrderDecide = async function(id, act){
   const o = (window.staffOrders||[]).find(x=> x.id === id); if(!o) return;
+  if(o.status && o.status !== 'pending'){ alert('الأوردر ده اتقرر فيه خلاص (' + o.status + ')'); return; }
+  if(_soDeciding.has(id)) return;   // ضغطة تانية والأولى شغالة
+  let note = '';
+  let adv = 0;
   if(act === 'approve'){
-    const adv = _staffOrderAdvanceOnApprove(o);
+    adv = _staffOrderAdvanceOnApprove(o);
     const msg = o.payMethod==='salary'
       ? 'اعتماد أوردر ' + o.employeeName + '؟\nهيتسجل خصم راتب (سلفة): ' + adv.toFixed(0) + ' ج.م'
       : 'اعتماد أوردر ' + o.employeeName + '؟ (مدفوع كاش — مفيش خصم راتب)';
     if(!confirm(msg)) return;
-    try{
-      if(adv > 0) await addDoc(advancesCol, { employeeId:o.employeeId, employeeName:o.employeeName, branch:o.branch, amount:adv, date:todayStr(), ts:Date.now(), source:'staff_order', invoiceNo:o.invoiceNo||'' });
-      await updateDoc(doc(db,'sales_staff_orders', id), { status:'approved', decidedAt: Date.now() });
-    }catch(e){ alert('حصل خطأ: ' + (e.code||e.message)); }
   }else{
-    const note = prompt('سبب الرفض (اختياري):') || '';
-    const adv = _staffOrderAdvanceOnReject(o);
+    note = prompt('سبب الرفض (اختياري):') || '';
+    adv = _staffOrderAdvanceOnReject(o);
     const msg = 'رفض أوردر ' + o.employeeName + '؟\nهتتحاسب بالسعر الكامل — هيتسجل عليها سلفة: ' + adv.toFixed(0) + ' ج.م' + (o.payMethod==='salary' ? ' (قيمة الفاتورة كاملة)' : ' (فرق الخصم)');
     if(!confirm(msg)) return;
-    try{
-      if(adv > 0) await addDoc(advancesCol, { employeeId:o.employeeId, employeeName:o.employeeName, branch:o.branch, amount:adv, date:todayStr(), ts:Date.now(), source:'staff_order_reject', invoiceNo:o.invoiceNo||'', note });
-      await updateDoc(doc(db,'sales_staff_orders', id), { status:'rejected', decidedAt: Date.now(), note });
-    }catch(e){ alert('حصل خطأ: ' + (e.code||e.message)); }
   }
+  _soDeciding.add(id);
+  try{
+    await runTransaction(db, async (tx)=>{
+      const ref = doc(db,'sales_staff_orders', id);
+      const snap = await tx.get(ref);
+      if(!snap.exists()) throw new Error('الأوردر مش موجود');
+      const cur = snap.data().status || 'pending';
+      if(cur !== 'pending') throw new Error('الأوردر اتقرر فيه من جهاز تاني (' + cur + ')');
+      if(act === 'approve'){
+        if(adv > 0) tx.set(doc(advancesCol), { employeeId:o.employeeId, employeeName:o.employeeName, branch:o.branch, amount:adv, date:todayStr(), ts:Date.now(), source:'staff_order', invoiceNo:o.invoiceNo||'' });
+        tx.update(ref, { status:'approved', decidedAt: Date.now() });
+      }else{
+        if(adv > 0) tx.set(doc(advancesCol), { employeeId:o.employeeId, employeeName:o.employeeName, branch:o.branch, amount:adv, date:todayStr(), ts:Date.now(), source:'staff_order_reject', invoiceNo:o.invoiceNo||'', note });
+        tx.update(ref, { status:'rejected', decidedAt: Date.now(), note });
+      }
+    });
+  }catch(e){ alert('حصل خطأ: ' + (e.code||e.message)); }
+  finally{ _soDeciding.delete(id); }
 };
 
 // ---------- 🗂️ تبويبات لوحة الإدارة (بدل السكرول اللانهائي) ----------
@@ -4328,7 +4347,9 @@ function renderCommissionPanel(){
     btn.addEventListener('click', async ()=>{
       const emp = allEmployees.find(e=> e.id === btn.dataset.id);
       if(!emp) return;
+      if(btn.dataset.busy) return;
       if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عمولة ${btn.dataset.count} تنزيل تطبيق (شهر ${monthLabel})؟`)) return;
+      btn.dataset.busy = '1';
       try{
         await addDoc(commissionPaymentsCol, {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch, type: 'referrals',
@@ -4336,13 +4357,16 @@ function renderCommissionPanel(){
           paidAt: Date.now()
         });
       }catch(err){ alert('حصل خطأ: ' + (err && err.code ? err.code : '')); }
+      finally{ delete btn.dataset.busy; }
     });
   });
   wrap.querySelectorAll('[data-act="paytarget"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const emp = allEmployees.find(e=> e.id === btn.dataset.id);
       if(!emp) return;
+      if(btn.dataset.busy) return;
       if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عمولة تحقيق التارجت (${btn.dataset.base} ج.م مبيعات — شهر ${monthLabel})؟`)) return;
+      btn.dataset.busy = '1';
       try{
         await addDoc(commissionPaymentsCol, {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch, type: 'target',
@@ -4350,13 +4374,16 @@ function renderCommissionPanel(){
           paidAt: Date.now()
         });
       }catch(err){ alert('حصل خطأ: ' + (err && err.code ? err.code : '')); }
+      finally{ delete btn.dataset.busy; }
     });
   });
   wrap.querySelectorAll('[data-act="pay"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const emp = allEmployees.find(e=> e.id === btn.dataset.id);
       if(!emp) return;
+      if(btn.dataset.busy) return;   // 🛡️ ضغطة تانية = صرفتين
       if(!confirm(`تأكيد دفع ${btn.dataset.amount} ج.م لـ ${emp.name} عن ${btn.dataset.points} نقطة جديدة (شهر ${monthLabel})؟`)) return;
+      btn.dataset.busy = '1';
       try{
         await addDoc(commissionPaymentsCol, {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
@@ -4364,6 +4391,7 @@ function renderCommissionPanel(){
           paidAt: Date.now()
         });
       }catch(err){ console.error('تعذر تسجيل الدفع', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
+      finally{ delete btn.dataset.busy; }
     });
   });
 }
@@ -4667,7 +4695,15 @@ function renderSalaryPanel(){
     btn.addEventListener('click', async ()=>{
       const emp = allEmployees.find(e=> e.id === btn.dataset.id);
       if(!emp) return;
+      if(btn.dataset.busy) return;   // 🛡️ ضغطة تانية والأولى بتتسجل = صرفتين
+      // 🛡️ صرف متسجل بالفعل لنفس الشهر؟ تحذير صريح قبل الازدواج
+      const _prevPay = (allSalaryPayments||[]).filter(p=> p.employeeId===emp.id && p.periodLabel===periodLabel);
+      if(_prevPay.length){
+        const _prevSum = _prevPay.reduce((n,p)=> n+(p.amount||0), 0);
+        if(!confirm(`⚠️ فيه صرف متسجل بالفعل لـ ${emp.name} عن شهر ${periodLabel} بمبلغ ${_prevSum.toFixed(0)} ج.م.\nمتأكد إنك عايز تسجل صرف تاني لنفس الشهر؟`)) return;
+      }
       if(!confirm(`تأكيد صرف ${btn.dataset.amount} ج.م لـ ${emp.name} عن شهر ${periodLabel}؟`)) return;
+      btn.dataset.busy = '1';
       try{
         await addDoc(salaryPaymentsCol, {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
@@ -4675,6 +4711,7 @@ function renderSalaryPanel(){
         });
         openSalaryPrintDialog(emp.id, periodLabel);   // 🖨️ نطبع الإيصال على طول؟
       }catch(err){ console.error('تعذر تسجيل صرف الراتب', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
+      finally{ delete btn.dataset.busy; }
     });
   });
 }
