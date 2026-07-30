@@ -456,13 +456,26 @@ async function renderReceiptDesignScreen(){
   if(shell) loadPrinterPickers();
 }
 // بيرسم الباركود على canvas ويرجّعه صورة — مضمون في المعاينة والطباعة (الصامتة كمان) وبدقة عالية
+// 📷 سرعة القراءة بمقاس صغير — التلات حاجات اللي بتفرق فعلًا:
+// ١) منطقة الهدوء (الفراغ الأبيض حوالين الخطوط): كانت 6px والمواصفة ≥10 موديولات —
+//    ده أول سبب إن المسدس بياخد وقت. بقت 30px (≈10 موديولات).
+// ٢) مقاس الرسم قريب من نقاط الطابعة الحرارية (80مم ≈ 576 نقطة) بدل التكبير ×3
+//    والتصغير بعدين — التصغير بنسب مش صحيحة كان بيهزهز الخطوط.
+// ٣) الصورة بتتعرض crisp من غير تنعيم.
 function receiptBarcodeImg(code){
   try{
     if(!code) return '';
     if(typeof JsBarcode==='undefined'){ console.warn('JsBarcode مش متحمّلة — الباركود مش هيترسم'); return ''; }
     const c = receiptDesignConfig||defaultReceiptConfig();
     const cv = document.createElement('canvas');
-    JsBarcode(cv, code, {format:'CODE128', width:3, height:(c.bcHeight||34)*3, fontSize:(c.bcFont||11)*3, margin:6, displayValue:true});
+    JsBarcode(cv, code, {
+      format:'CODE128',
+      width:3, height:(c.bcHeight||34)*2,
+      fontSize:(c.bcFont||11)*2, textMargin:1,
+      margin:30,                                  // منطقة الهدوء
+      background:'#ffffff', lineColor:'#000000',
+      displayValue:true
+    });
     return cv.toDataURL('image/png');
   }catch(e){ return ''; }
 }
@@ -536,7 +549,7 @@ function buildReceiptHTML(data){
         if(d.invoiceNo) parts.push(`<div style="text-align:center; font-size:${fs};">${L.invoice} ${d.invoiceNo}</div>`); break;
       case 'barcode': {
         const bimg = receiptBarcodeImg(d.scanCode);
-        if(bimg) parts.push(`<img src="${bimg}" style="width:${c.bcWidthPct||90}%; display:block; margin:4px auto 0;">`);
+        if(bimg) parts.push(`<img src="${bimg}" style="width:${c.bcWidthPct||90}%; display:block; margin:4px auto 0; image-rendering:crisp-edges; image-rendering:pixelated;">`);
         else if(d.scanCode && typeof JsBarcode==='undefined') parts.push(`<div style="text-align:center; font-size:10px; border:1px dashed #999; padding:6px; margin:4px 0;">⚠️ مكتبة الباركود مش متحمّلة — اعمل ريفريش وانت متوصل بالنت مرة واحدة</div>`);
         break; }
       case 'appQR':
@@ -735,7 +748,7 @@ function refreshLabelPreview(){
   box.style.width = (w*3.78*scale)+'px'; box.style.height = (h*3.78*scale)+'px';
   const note = document.getElementById('labelSizeNote');
   if(note) note.textContent = w+' × '+h+' مم (المعاينة مصغّرة — الطباعة بالمقاس الحقيقي)';
-  try{ const bc = box.querySelector('#lblPrevBc'); if(bc&&typeof JsBarcode!=='undefined') { JsBarcode(bc, demo.barcode, {format:'CODE128', width:2, height:60, margin:8, displayValue:false}); fitBarcodeSvg(bc); } }catch(e){}
+  try{ const bc = box.querySelector('#lblPrevBc'); if(bc&&typeof JsBarcode!=='undefined') { JsBarcode(bc, demo.barcode, {format:'CODE128', width:3, height:88, margin:33, displayValue:false, background:'#ffffff', lineColor:'#000000'}); fitBarcodeSvg(bc); } }catch(e){}
 }
 
 // ===== نافذة الكمية + الطباعة (مشتركة: صنف واحد أو دفعة من الاستلام) =====
@@ -805,7 +818,15 @@ function doPrintLabels(jobs){
           cl.id = c.id;
           el.replaceWith(cl);
         }else{
-          JsBarcode(el, c.code, {format:'CODE128', width:3, height:80, margin:10, displayValue:true, fontSize:16, font:'monospace', textMargin:2, background:'#ffffff', lineColor:'#000000'});
+          JsBarcode(el, c.code, {
+            // 📷 سرعة قراءة الليبل الصغير: منطقة الهدوء كانت ~3 موديولات والمواصفة ≥10
+            // (أول سبب لبطء المسدس) · الرقم المكتوب اتصغّر عشان الخطوط تاخد ارتفاع
+            // أكبر جوه نفس صندوق الليبل — مفيش أي تكبير في مقاس الليبل نفسه.
+            format:'CODE128', width:3, height:88,
+            margin:33,                     // منطقة الهدوء ≈ 11 موديول
+            displayValue:true, fontSize:13, font:'monospace', textMargin:0,
+            background:'#ffffff', lineColor:'#000000'
+          });
           fitBarcodeSvg(el);
           firstByCode[c.code] = el;
         }
@@ -996,6 +1017,13 @@ function _printBuiltReceipt(data, payments){
       return;
     }
     const drawerTarget = hasCash ? (shellCfg.drawerPrinter || shellCfg.invoicePrinter) : null;
+    // 💰 الدرج يفتح **فورًا وبالتوازي** — كان الأمر راكب مع الطباعة فبيستنى
+    // الفاتورة كلها تتصف وتتطبع، وأمر الضمان كان بيتبعت بعد ما الطباعة تخلص
+    // (أبطأ وأبطأ). دلوقتي: أمر مستقل بيطلع في نفس اللحظة، والفلاجات جوه أمر
+    // الطباعة فاضلة كاحتياطي للأجهزة اللي مفيهاش openDrawer مستقل.
+    if(drawerTarget && typeof window.posShell.openDrawer === 'function'){
+      try{ window.posShell.openDrawer({ printer: drawerTarget }); }catch(e){}
+    }
     window.posShell.printReceipt({
       printer: shellCfg.invoicePrinter,
       paperWidth: c.paperWidth || '80',
@@ -1003,11 +1031,6 @@ function _printBuiltReceipt(data, payments){
       openDrawer: drawerTarget,
       openCashDrawer: drawerTarget,   // اسم بديل لو الشِل بيستخدمه
       cashDrawer: !!drawerTarget
-    }).then(()=>{
-      // ضمان فتح الدرج: لو الشِل عنده أمر مستقل، نبعته كمان
-      if(drawerTarget && typeof window.posShell.openDrawer === 'function'){
-        try{ window.posShell.openDrawer({ printer: drawerTarget }); }catch(e){}
-      }
     }).catch(e=> { console.warn('silent print failed', e); showToast('تعذر الطباعة الصامتة: '+e.message, 'err'); });
     return;
   }
