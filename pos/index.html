@@ -186,6 +186,15 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
 }
 .cart-code{ font-size:11.5px !important; color:#6b7280 !important; }
 
+/* 📏 تكبير مساحة القطع لتحت: السلة flex:1 فبتاخد أي مساحة العناصر اللي تحتها
+   بتسيبها — ضغط رأسي خفيف (هوامش وحشوات بس، مفيش تغيير مقاسات خط ولا أزرار) */
+.customer-row{ margin:4px 0 2px !important; }
+#custBox{ padding:5px 7px !important; margin:4px 0 2px !important; }
+.customer-row input{ padding:7px 11px !important; }
+#sellerRow{ margin-bottom:2px !important; }
+#sellerRow select, #sellerRow input{ padding:7px 11px !important; }
+.customer-info{ max-height:96px !important; }   /* أطول من كده بتعمل سكرول لوحدها */
+
 /* الإجمالي وأزرار الدفع */
 .qbx-bottom{
   /* ⚠️ العكس (row-reverse) مكرر هنا عن قصد — الإجمالي مكان أزرار الدفع.
@@ -195,8 +204,8 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
   background:#fff !important; border-top:1px solid #e6e9ef !important;
   border-radius:18px 18px 0 0 !important;
   box-shadow:0 -3px 14px rgba(20,25,40,.07) !important;
-  padding:7px 11px 9px !important; gap:8px !important; align-items:flex-end !important;
-  max-height:29vh !important;                /* سقف: مياخدش أكتر من ربع الشاشة */
+  padding:6px 11px 7px !important; gap:8px !important; align-items:flex-end !important;
+  max-height:26vh !important;                /* سقف: مياخدش أكتر من ربع الشاشة */
 }
 .t-row{
   font-family:'Cairo',sans-serif !important; font-size:13px !important;
