@@ -205,6 +205,34 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 }
 
 // ============================================================
+// ١٤) 📉 خفض قراءات Firestore (كانت 254 ألف/يوم)
+// ============================================================
+{
+  const gsSrc2 = fs.readFileSync(path.join(POS,'search.js'),'utf8');
+  const salesSrc3 = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+
+  // البحث الشامل: مفيش قراءة كاملة للفواتير خالص
+  assert(!/TEST_SALES\)\.where\('branch','==', currentBranch\)\.get\(\)/.test(gsSrc2),
+    'المسح الكامل لفواتير الفرع اتشال من البحث');
+  assert(/where\('invoiceNo','==', qU\)\.limit\(5\)/.test(gsSrc2),
+    'الفواتير باستعلام مستهدف برقم الفاتورة (حد 5)');
+  assert(/where\('customerPhone','==', q\)/.test(gsSrc2) && /limit\(5\)/.test(gsSrc2),
+    'وبالتليفون بالظبط (حد 5)');
+  assert(/_customersCached/.test(gsSrc2) && /10\*60000/.test(gsSrc2),
+    'العملاء من كاش الجلسة (10 دقايق) مش قراءة كاملة كل بحثة');
+  assert(/q\.length >= 3/.test(gsSrc2), 'مفيش استعلامات لحروف أقل من 3');
+
+  // sales: الاشتراكات الزمنية الكبيرة متحددة بنافذة 190 يوم
+  assert(/READ_WINDOW_MS = 190/.test(salesSrc3) && /_scoped = \(col, field\)=> query\(col, where\(field, '>=', _winStart\)\)/.test(salesSrc3),
+    'نافذة القراءة معرّفة');
+  ['pointsCol,\'ts\'','shiftsCol,\'clockInTs\'','timeCreditCol,\'ts\'','deductionsCol,\'ts\'',
+   'advancesCol,\'ts\'','commissionPaymentsCol,\'paidAt\'','salaryPaymentsCol,\'paidAt\'','breaksCol,\'startTs\'']
+  .forEach(c=> assert(salesSrc3.includes('_scoped('+c+')'), 'اشتراك متحدد النطاق: '+c));
+  assert(!/onSnapshot\(shiftsCol,/.test(salesSrc3) && !/onSnapshot\(pointsCol,/.test(salesSrc3),
+    'الاشتراكات الكاملة القديمة اتشالت');
+}
+
+// ============================================================
 // ١٣) 💸 المصروفات المطاطة + التصفيتين + أثر حذف السلفة
 // ============================================================
 {
