@@ -305,6 +305,18 @@ searchBar.addEventListener('keydown', (e)=>{
     }
     const match = findByBarcode(code);
     if(match){
+      // 🔫 المسدس أحيانًا بيقرا نفس الباركود مرتين في جزء من الثانية (ضغطة طويلة
+      // أو وضع القراءة التلقائية) → الكمية بتزيد لوحدها. إعادة مسح بشرية حقيقية
+      // لنفس القطعة بتاخد أكتر من نص ثانية بكتير، فالتكرار الأسرع من كده بيتتجاهل.
+      const _nowScan = Date.now();
+      if(window._lastScanCode === code && (_nowScan - (window._lastScanAt || 0)) < 500){
+        window._lastScanAt = _nowScan;
+        searchBar.value = '';
+        document.getElementById('suggestBox').innerHTML = '';
+        showToast('⚠️ نفس الباركود اتقرا مرتين ورا بعض — اتحسبت مرة واحدة. لو قصدك قطعتين دوس +', 'err');
+        return;
+      }
+      window._lastScanCode = code; window._lastScanAt = _nowScan;
       addToCart(match);
       searchBar.value = '';
       document.getElementById('suggestBox').innerHTML = '';
