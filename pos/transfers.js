@@ -541,6 +541,7 @@ async function confirmTransfer(id, confirmer){
     showToast('⛔ الحاملة مينفعش تأكد لنفسها — كارت موظف تاني من الفرع', 'err');
     return;
   }
+  if(confirmTransfer._busy === id) return;   // ضغطة تانية والأولى شغالة
   const confirmed = (t.items||[]).map((it,i)=>{
     const v = parseInt((document.getElementById('trCf_'+i)||{}).value);
     return { ...it, confirmedQty: (isNaN(v)||v<0) ? 0 : Math.min(v, it.qty) };
@@ -548,26 +549,36 @@ async function confirmTransfer(id, confirmer){
   const note = (document.getElementById('trCfNote')||{}).value.trim();
   const discrepancy = confirmed.some(it=> it.confirmedQty !== it.qty);
   if(discrepancy && !note){ showToast('فيه فرق في العدد — اكتب ملاحظة بالسبب', 'err'); return; }
+  confirmTransfer._busy = id;
   try{
-    const batch = db.batch();
-    confirmed.forEach(it=>{
-      if(it.confirmedQty > 0) batch.update(db.collection(TEST_INVENTORY).doc(it.id), {
-        ['qtyByBranch.'+t.toBranch]: firebase.firestore.FieldValue.increment(it.confirmedQty)
+    // 🛡️ ثغرة الازدواج: تأكيد التحويلة من جهازين في نفس اللحظة (أو دبل كليك)
+    // كان بيضيف الكمية للمخزون **مرتين**. المعاملة الذرية بتقرا حالة التحويلة
+    // من السيرفر — لو اتأكدت خلاص بترفض، والمخزون والحالة بيتكتبوا مع بعض.
+    await db.runTransaction(async (tx)=>{
+      const trRef = db.collection(TRANSFERS_COL).doc(id);
+      const snap = await tx.get(trRef);
+      if(!snap.exists) throw new Error('التحويلة مش موجودة');
+      const cur = (snap.data() || {}).status;
+      if(cur !== 'in_transit') throw new Error('التحويلة اتأكدت خلاص من جهاز تاني');
+      confirmed.forEach(it=>{
+        if(it.confirmedQty > 0) tx.update(db.collection(TEST_INVENTORY).doc(it.id), {
+          ['qtyByBranch.'+t.toBranch]: firebase.firestore.FieldValue.increment(it.confirmedQty)
+        });
+      });
+      tx.update(trRef, {
+        status: 'confirmed', confirmedAt: Date.now(),
+        confirmedBy: (who&&who.name)||'',
+        confirmedById: (who&&who.id)||'',
+        confirmedByCard: !!confirmer,
+        items: confirmed, discrepancy, note
       });
     });
-    batch.update(db.collection(TRANSFERS_COL).doc(id), {
-      status: 'confirmed', confirmedAt: Date.now(),
-      confirmedBy: (who&&who.name)||'',
-      confirmedById: (who&&who.id)||'',
-      confirmedByCard: !!confirmer,
-      items: confirmed, discrepancy, note
-    });
-    await batch.commit();
     const ov = document.getElementById('trConfirmOv'); if(ov) ov.remove();
     showToast(discrepancy ? '🚩 اتسجل الاستلام بفرق — الفرق على عهدة ' + t.carrierName : '✅ اتأكد الاستلام والرصيد دخل الفرع');
     if(typeof loadInventory === 'function') loadInventory();
     renderTransfersScreen();
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
+  finally{ confirmTransfer._busy = null; }
 }
 
 // ---------- ربط مسح كارت الحاملة في شاشة البيع (أولوية التحويلة الواردة) ----------
