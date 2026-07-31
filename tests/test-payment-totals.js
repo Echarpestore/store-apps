@@ -585,3 +585,47 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
     'التقفيل بيحسب فواتير ما بعد آخر تقفيل (سبب الأوفر)');
   assert(/overShortReal/.test(repSrc), 'الفرق الحقيقي بعد استبعادها بيتحسب ويتسجل');
 }
+
+// ============================================================
+// ١٧) 🔴 الباركود المكرر — سلوكيًا مش بالنص
+// الباج: addInventoryItem كانت `.add(data)` على طول من غير أي فحص.
+// صنفين بنفس الكود = المسدس بيقف قدام تطابقين، والبيع بياخد أول واحد
+// يلاقيه — ممكن يكون بسعر تاني. الفحص القديم في الاختبارات كان بيدوّر على
+// النص في المصدر بس، فتعطيل المنع كان بيعدّي من غير ما اختبار يقع.
+// ============================================================
+{
+  const adm = fs.readFileSync(path.join(POS,'pos-admin.js'),'utf8');
+  const D = loadFns(adm, ['barcodeDupReject']);
+  const rej = (list, bc, self)=> vm.runInContext(
+    `barcodeDupReject(${JSON.stringify(list)}, ${JSON.stringify(bc)}, ${JSON.stringify(self||null)})`, D);
+
+  const inv = [
+    { id:'a', barcode:'3301', name:'قميص قطن' },
+    { id:'b', barcode:'3302', name:'بيچاما ساتان' },
+    { id:'c', barcode:'',     name:'صنف من غير كود' },
+    { id:'d', barcode:' 3303 ', name:'طرحة' }
+  ];
+
+  assertEq(rej(inv,'9999'), null, 'كود جديد → مفيش منع');
+  assert(/متسجل بالفعل على/.test(rej(inv,'3301')||''), '🔑 كود موجود → بيترفض');
+  assert(/قميص قطن/.test(rej(inv,'3301')||''), 'الرسالة بتقول اسم الصنف اللي ماسك الكود');
+  assert(/3301/.test(rej(inv,'3301')||''), 'والرسالة فيها الكود نفسه');
+  assertEq(rej(inv,' 3301 '), rej(inv,'3301'), 'المسافات حوالين الكود مبتخدعش الفحص');
+  assert(/طرحة/.test(rej(inv,'3303')||''), 'والمسافات في الكود المتسجل كمان');
+  assertEq(rej(inv,''), null, 'كود فاضي = مفيش منع (السيستم بيولّد متسلسل)');
+  assertEq(rej(inv,'   '), null, 'مسافات بس = فاضي');
+  assertEq(rej([],'3301'), null, 'مخزون فاضي → مفيش منع');
+  assertEq(rej(null,'3301'), null, 'قايمة null → مبتقعش');
+  assertEq(rej(inv,'3301','a'), null, '✏️ تعديل نفس الصنف مايتبلّغش على نفسه');
+  assert(/متسجل بالفعل على/.test(rej(inv,'3301','b')||''), 'بس تعديل صنف تاني لنفس الكود بيترفض');
+
+  // 🔗 والدالة موصّلة فعلًا في مسار الإضافة — مش معرّفة وسايبة
+  const addFn = extractFn(adm, 'addInventoryItem');
+  assert(addFn.length > 0, 'addInventoryItem اتلقت');
+  assert(/barcodeDupReject\(allInventory, barcode\)/.test(addFn),
+    '🔗 الإضافة بتنادي الفحص فعلًا');
+  assert(/if\(_dupMsg\)\{[^}]*return; \}/.test(addFn),
+    '⛔ والمنع بيوقف الإضافة (مش تحذير وبيكمّل)');
+  assert(addFn.indexOf('barcodeDupReject') < addFn.indexOf('.add(data)'),
+    'الفحص قبل الكتابة في قاعدة البيانات');
+}
