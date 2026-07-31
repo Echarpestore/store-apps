@@ -41,7 +41,11 @@ SB.window.detectAttendanceIssues = ()=> [];
 SB.window.pairSwaps = ()=> ({ swaps:[{}], singles:[{},{}] });   // 3 مخالفات
 
 // ---- المالك: بيشوف كل الأنواع ----
-vm.runInContext("adminRole='owner';", SB);
+// 🔓 الجلسة لازم تكون مفتوحة: roleCan فيها حارس `adminUnlocked` (قرار المالك —
+// جلسة مقفولة = صفر صلاحيات). الاختبار كان بيحط الدور بس فكل الصلاحيات
+// بترجع false والشاشة تطلع فاضية. مش باج في الكود — الاختبار هو اللي
+// كان متأخر عن الحارس.
+vm.runInContext("adminRole='owner'; adminUnlocked=true;", SB);
 let items = SB.window.pendingActions();
 const byLabel = {}; items.forEach(i=> byLabel[i.label] = i.count);
 assertEq(byLabel['طلبات إذن مستنية'], 2, 'الأذونات: المستنية في الفرع بس');
@@ -52,7 +56,7 @@ assertEq(byLabel['أوردرات موظفين مستنية'], 3, 'أوردرات
 assertEq(items.reduce((n,i)=> n+i.count, 0), 10, 'الإجمالي 10');
 
 // ---- المدير: مايشوفش غير اللي في صلاحياته ----
-vm.runInContext("adminRole='manager';", SB);
+vm.runInContext("adminRole='manager'; adminUnlocked=true;", SB);
 items = SB.window.pendingActions();
 const perms = [...new Set(items.map(i=> i.perm))];
 perms.forEach(p=> assert(['approvals','tasks','orders','day'].indexOf(p) >= 0,
@@ -65,7 +69,7 @@ assert(!items.some(i=> ['money','settings','terminate','people'].indexOf(i.perm)
 SB.window.allLeaveReqs = []; SB.window.allRegistrations = [];
 SB.window.allSubmissions = []; SB.window.staffOrders = [];
 SB.window.pairSwaps = ()=> ({ swaps:[], singles:[] });
-vm.runInContext("adminRole='owner';", SB);
+vm.runInContext("adminRole='owner'; adminUnlocked=true;", SB);
 assertEq(SB.window.pendingActions().length, 0, 'صفر مستنيات = الشريط بيختفي');
 
 // ---- بيانات ناقصة متكسرش الشريط ----

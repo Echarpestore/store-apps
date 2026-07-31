@@ -12,9 +12,28 @@ const appSrc = fs.existsSync(path.join(SALES,'sales-app.js'))
   ? fs.readFileSync(path.join(SALES,'sales-app.js'),'utf8')
   : fs.readFileSync(path.join(SALES,'index.html'),'utf8');
 
-const m = appSrc.match(/adminUnlocked = true;[\s\S]*?renderViolationsReview\(\);/);
-assert(!!m, 'بلوك فتح الأدمن موجود');
-const block = m ? m[0] : '';
+// 🔴 كان: regex بينتهي عند `renderViolationsReview();` — والكود اتعمله
+// refactor لـ`_safe(()=> renderViolationsReview(), 'violations')` فالregex
+// اتكسر وطلّع 13 فشل وهمي شكلهم باجات حقيقية. البلوك والدوال الـ12 كانوا
+// موجودين طول الوقت.
+// الحل (قاعدة §0): استخراج بالأقواس المتوازنة — البلوك بيمتد لآخر الدالة
+// الحاوية مهما اتغيّر جواها.
+function extractFn(src, name){
+  const at = src.indexOf('function ' + name + '(');
+  if(at < 0) return '';
+  const open = src.indexOf('{', at);
+  if(open < 0) return '';
+  let depth = 0;
+  for(let i = open; i < src.length; i++){
+    const c = src[i];
+    if(c === '{') depth++;
+    else if(c === '}'){ depth--; if(depth === 0) return src.slice(at, i + 1); }
+  }
+  return '';
+}
+const block = extractFn(appSrc, 'doAdminLogin');
+assert(block.length > 0, 'بلوك فتح الأدمن موجود');
+assert(/adminUnlocked = true;/.test(block), 'وبيفتح الجلسة فعلًا');
 
 // اللوحات اللي محتواها بيتقرا من بيانات حية — لازم كلها تترسم وقت الفتح
 [

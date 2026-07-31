@@ -117,8 +117,12 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
     'دالة النطاق شغالة بمقارنة رقمية');
 
   // 🔑 كل مجموعة والحقل بتاعها — الحقول دي مؤكدة من مكان الكتابة (Date.now())
+  // 🔬 التقييمات ليها نافذة أضيق (65 يوم) — فترات المرتبات بس، والمجموعة ضخمة
+  assert(/onSnapshot\(_scopedDays\(entriesCol,'ts', 65\)/.test(appSrc),
+    'entriesCol مقيّدة بنافذة 65 يوم المخصوصة');
+  assert(!/onSnapshot\(entriesCol,/.test(appSrc), 'entriesCol: مفيش اشتراك مفتوح');
+  assert(/const _scopedDays = \(col, field, days\)/.test(appSrc), '_scopedDays متعرّفة');
   const scoped = {
-    entriesCol: 'ts',              // feedback/index.html: addDoc(entriesCol,{ ts: Date.now() })
     submissionsCol: 'submittedAt', // sales-app.js: submittedAt: Date.now()
     rewardsCol: 'earnedAt',        // sales-app.js: earnedAt: Date.now()
     attDecisionsCol: 'ts',         // sales-ui.js: ts: Date.now()
@@ -149,5 +153,5 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
 
   // كاش الـsw اترفع مع التعديل (وإلا الأجهزة تفضل على القديم)
   const swSrc = fs2.readFileSync(path2.resolve(__dirname, '..', 'sales', 'sw.js'), 'utf8');
-  assert(/store-apps-shell-v73/.test(swSrc), 'CACHE_NAME اترفع لـv73');
+  assert(/store-apps-shell-v74/.test(swSrc), 'CACHE_NAME اترفع لـv74');
 }
