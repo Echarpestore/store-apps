@@ -164,6 +164,33 @@
 
 <main>
   <!-- 🔔 الوارد -->
+  <section class="tabPage on" id="page-day">
+    <div class="card" style="position:sticky; top:0; z-index:5;">
+      <div style="display:flex; gap:6px;">
+        <select id="dayBranch" style="flex:1;"></select>
+        <input id="dayDate" type="date" style="flex:1; direction:ltr;">
+      </div>
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <button class="dayNav" data-d="-1" style="flex:1;">◀ امبارح</button>
+        <button class="dayNav" data-d="0"  style="flex:1;">النهاردة</button>
+        <button class="dayNav" data-d="1"  style="flex:1;">بكرة ▶</button>
+      </div>
+      <div id="dayWindow" style="font-size:11px; color:var(--sub); margin-top:7px; text-align:center;"></div>
+    </div>
+
+    <div class="card">
+      <div id="daySubNav" style="display:flex; gap:4px;">
+        <button class="daySub on" data-s="pay"   style="flex:1;">💵 الدفع</button>
+        <button class="daySub" data-s="sales"    style="flex:1;">🧾 المبيعات</button>
+        <button class="daySub" data-s="items"    style="flex:1;">📦 الأصناف</button>
+      </div>
+    </div>
+
+    <div id="dayPay"   class="daySec"></div>
+    <div id="daySales" class="daySec" style="display:none;"></div>
+    <div id="dayItems" class="daySec" style="display:none;"></div>
+  </section>
+
   <section class="tabPage" id="page-inbox">
     <div class="panel">
       <h3>🔔 الوارد — محتاج قرارك</h3>
@@ -245,7 +272,8 @@
 </main>
 
 <nav id="tabsNav">
-  <button data-page="inbox" class="on"><span class="ic">🔔</span>الوارد<span class="nb badge" id="nbInbox" style="display:none;">0</span></button>
+  <button data-page="day" class="on"><span class="ic">📅</span>اليوم</button>
+  <button data-page="inbox"><span class="ic">🔔</span>الوارد<span class="nb badge" id="nbInbox" style="display:none;">0</span></button>
   <button data-page="short"><span class="ic">📦</span>النواقص<span class="nb badge" id="nbShort" style="display:none;">0</span></button>
   <button data-page="money"><span class="ic">💰</span>الفلوس</button>
   <button data-page="reports"><span class="ic">📊</span>تقارير</button>

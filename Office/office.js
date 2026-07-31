@@ -464,6 +464,8 @@ function startData(){
   db.collection('sales_employees').onSnapshot(function(s){
     D.employees = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     renderSalaries(); fillBranchSel(); renderPL();
+    // 📅 شاشة اليوم — بعد ما الموظفين يوصلوا (منهم بنعرف الفروع)
+    ofLoadDayCut().then(function(){ try{ ofWireDay(); }catch(e){ console.warn('day', e); } });
   });
   db.collection('sales_advances').onSnapshot(function(s){
     D.advances = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -1087,3 +1089,274 @@ function renderSalaries(){
       '<span class="amount '+(r.net<0?'neg':'')+'">'+egp(r.net)+'</span></div>';
   }).join('');
 }
+
+// ============================================================
+// 📅 شاشة اليوم — سجل المبيعات · ملخص الدفع · ملخص الأصناف
+// ------------------------------------------------------------
+// ⚠️ الأرقام هنا **لازم تطابق تقفيل الفرع بالظبط**، وإلا الشاشة بلا فايدة.
+//    عشان كده اتنسخ منطق الـPOS حرفيًا:
+//    · يوم الشغل من الساعة الفاصلة (day_cfg.startHour، افتراضي 6) مش اليوم
+//      التقويمي — فاتورة 11 بالليل بتتحسب على يومها، وفاتورة 2 الفجر على اليوم
+//      اللي فات (زي ما الكاشير شايفة).
+//    · وقت الفاتورة = الطابع المحلي (createdAtMs) مش طابع السيرفر — فاتورة
+//      أوفلاين بتترفع متأخر وطابع السيرفر بيبقى وقت الرفع مش وقت البيع.
+//    · ملخص الدفع بيشمل الفاتورة الأصلية **والعكس** مع بعض (بيلغوا بعض) —
+//      نفس ما بيعمل التقفيل. التقارير هي اللي بتستبعد الطرفين.
+// ============================================================
+const OF_TZ = 'Africa/Cairo';
+let _ofDayCut = 6;          // الساعة الفاصلة — بتتقرا من الإعدادات
+let _ofDaySales = [];
+let _ofDaySub = 'pay';
+
+async function ofLoadDayCut(){
+  try{
+    const d = await db.collection('pos_test_settings').doc('day_cfg').get();
+    const h = d.exists ? Number((d.data()||{}).startHour) : NaN;
+    if(!isNaN(h) && h >= 0 && h <= 23) _ofDayCut = h;
+  }catch(e){ console.warn('day_cfg', e && e.code); }
+}
+
+// ساعة المحل — نفس فكرة _shopClock في الـPOS
+function _ofShopParts(ts){
+  const f = new Intl.DateTimeFormat('en-GB', { timeZone: OF_TZ, year:'numeric',
+    month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+  const o = {};
+  f.formatToParts(new Date(ts)).forEach(function(p){ o[p.type] = p.value; });
+  return { y:+o.year, m:+o.month, d:+o.day, hh:+(o.hour === '24' ? '0' : o.hour), mm:+o.minute };
+}
+// إزاحة القاهرة باللحظة دي (بتفرق صيفًا وشتاءً)
+function _ofOffsetMs(ts){
+  const p = _ofShopParts(ts);
+  return Date.UTC(p.y, p.m - 1, p.d, p.hh, p.mm) - (Math.floor(ts / 60000) * 60000);
+}
+// نطاق يوم الشغل لتاريخ مكتوب YYYY-MM-DD
+function ofBizDayRange(dateStr){
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const guess = Date.UTC(y, m - 1, d, 12, 0);          // الظهر عشان نعرف الإزاحة
+  const off = _ofOffsetMs(guess);
+  const start = Date.UTC(y, m - 1, d, _ofDayCut, 0) - off;
+  return { start: start, end: start + 24 * 3600 * 1000 };
+}
+// وقت البيع الحقيقي — نفس saleTs في الـPOS بحارس الـ48 ساعة
+function ofSaleTs(s){
+  const server = (s && s.createdAt && typeof s.createdAt.toMillis === 'function') ? s.createdAt.toMillis() : null;
+  const local  = (s && typeof s.createdAtMs === 'number') ? s.createdAtMs : null;
+  if(local != null && server != null){
+    return Math.abs(server - local) <= 48 * 3600000 ? local : server;
+  }
+  return local != null ? local : server;
+}
+function ofTime(ts){
+  try{ return new Date(ts).toLocaleTimeString('ar-EG', { timeZone:OF_TZ, hour:'2-digit', minute:'2-digit' }); }
+  catch(e){ return ''; }
+}
+function ofNum(n){ return (Math.round((Number(n)||0) * 100) / 100).toLocaleString('ar-EG'); }
+
+// ---- تحميل فواتير اليوم ----
+async function ofLoadDay(){
+  const br = ($('#dayBranch') || {}).value || '';
+  const dt = ($('#dayDate') || {}).value || '';
+  if(!br || !dt) return;
+  const r = ofBizDayRange(dt);
+  const w = $('#dayWindow');
+  if(w) w.textContent = 'يوم الشغل: ' + ofTime(r.start) + ' → ' + ofTime(r.end)
+        + ' (الساعة الفاصلة ' + _ofDayCut + ')';
+  ['#dayPay','#daySales','#dayItems'].forEach(function(id){
+    const el = $(id); if(el) el.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">بيحمّل…</div>';
+  });
+  try{
+    // ⚠️ استعلام بنطاق زمني على السيرفر — مش سحب كل الفواتير وفلترة على الجهاز
+    const snap = await db.collection('pos_test_sales')
+      .where('branch','==', br)
+      .where('createdAt','>=', firebase.firestore.Timestamp.fromMillis(r.start))
+      .where('createdAt','<',  firebase.firestore.Timestamp.fromMillis(r.end))
+      .get();
+    let rows = snap.docs.map(function(d){ const o = d.data(); o.id = d.id; return o; });
+    // 🕐 وفلترة تانية بالوقت الحقيقي — فواتير الأوفلاين طابع سيرفرها وقت الرفع
+    rows = rows.filter(function(s){ const t = ofSaleTs(s); return t >= r.start && t < r.end; });
+    rows.sort(function(a,b){ return ofSaleTs(a) - ofSaleTs(b); });
+    _ofDaySales = rows;
+  }catch(e){
+    console.warn('day load', e);
+    ['#dayPay','#daySales','#dayItems'].forEach(function(id){
+      const el = $(id);
+      if(el) el.innerHTML = '<div class="card" style="color:var(--minus);">تعذر التحميل: '
+        + esc(e.code || e.message) + '<div style="font-size:11px; color:var(--sub); margin-top:6px;">'
+        + 'لو الرسالة بتقول index، افتح اللينك اللي في الكونسول مرة واحدة.</div></div>';
+    });
+    return;
+  }
+  ofRenderDay();
+}
+
+function ofRenderDay(){
+  ofRenderPay(); ofRenderSales(); ofRenderItems();
+}
+
+// ---- 💵 ملخص الدفع ----
+function ofRenderPay(){
+  const el = $('#dayPay'); if(!el) return;
+  const S = _ofDaySales;
+  if(!S.length){ el.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">مفيش فواتير في اليوم ده</div>'; return; }
+  let cash=0, visa=0, insta=0, salary=0, total=0;
+  let retCount=0, revCount=0, changeGiven=0;
+  S.forEach(function(s){
+    const p = s.payments || {};
+    cash += (p.cash||0); visa += (p.visa||0); insta += (p.instapay||0); salary += (p.salary||0);
+    total += (s.total||0);
+    if((s.total||0) < 0) retCount++;
+    if(s.reversed) revCount++;
+    changeGiven += (s.changeGiven||0);
+  });
+  const row = function(lbl, val, col){
+    return '<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line);">'
+      + '<span>' + lbl + '</span><b style="color:' + (col||'var(--txt)') + ';">' + ofNum(val) + ' ج.م</b></div>';
+  };
+  el.innerHTML = '<div class="card">'
+    + '<div style="font-weight:900; margin-bottom:6px;">💵 ملخص الدفع</div>'
+    + row('كاش', cash) + row('فيزا', visa) + row('انستا باي', insta)
+    + row('خصم من الراتب', salary)
+    + '<div style="display:flex; justify-content:space-between; padding:9px 0; margin-top:4px; border-top:2px solid var(--line);">'
+    + '<b>إجمالي المبيعات</b><b style="color:var(--gold);">' + ofNum(total) + ' ج.م</b></div>'
+    + '<div style="font-size:11px; color:var(--sub); margin-top:8px;">'
+    + S.length + ' فاتورة'
+    + (retCount ? ' · ' + retCount + ' مرتجع' : '')
+    + (revCount ? ' · ' + revCount + ' معكوسة' : '')
+    + (changeGiven ? ' · فكة اتردت ' + ofNum(changeGiven) + ' ج.م' : '')
+    + '</div>'
+    + '<div style="font-size:11px; color:var(--sub); margin-top:6px; line-height:1.7;">'
+    + '⚠️ الأرقام دي بمنطق التقفيل بالظبط: الفاتورة المعكوسة وفاتورة العكس '
+    + 'محسوبين مع بعض (بيلغوا بعض)، فالمجموع بيطابق اللي الكاشير شايفاه.'
+    + '</div></div>';
+}
+
+// ---- 🧾 سجل المبيعات ----
+function ofRenderSales(){
+  const el = $('#daySales'); if(!el) return;
+  const S = _ofDaySales;
+  if(!S.length){ el.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">مفيش فواتير</div>'; return; }
+  const PAY = { cash:'كاش', visa:'فيزا', instapay:'انستا', salary:'راتب' };
+  const rows = S.map(function(s){
+    const t = ofSaleTs(s);
+    const p = s.payments || {};
+    const ways = Object.keys(PAY).filter(function(k){ return Math.abs(p[k]||0) > 0.005; })
+      .map(function(k){ return PAY[k]; }).join(' + ') || '—';
+    const isRet = (s.total||0) < 0;
+    const tag = s.reversed ? '<span style="color:var(--minus); font-size:10px;"> · معكوسة</span>'
+              : (isRet ? '<span style="color:var(--minus); font-size:10px;"> · مرتجع</span>' : '');
+    const items = (s.items||[]).length;
+    return '<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--line);">'
+      + '<div style="min-width:0;">'
+      +   '<div style="font-weight:800;">' + ofTime(t) + tag + '</div>'
+      +   '<div style="font-size:11px; color:var(--sub);">'
+      +     esc(s.employeeName || s.cashierName || '—')
+      +     ' · ' + ways + ' · ' + items + ' صنف'
+      +     (s.invoiceCode ? (' · ' + esc(s.invoiceCode)) : '')
+      +   '</div>'
+      + '</div>'
+      + '<b style="white-space:nowrap; color:' + (isRet ? 'var(--minus)' : 'var(--txt)') + ';">'
+      +   ofNum(s.total) + ' ج.م</b>'
+      + '</div>';
+  }).join('');
+  el.innerHTML = '<div class="card"><div style="font-weight:900; margin-bottom:4px;">🧾 سجل المبيعات ('
+    + S.length + ')</div>' + rows + '</div>';
+}
+
+// ---- 📦 ملخص الأصناف ----
+function ofRenderItems(){
+  const el = $('#dayItems'); if(!el) return;
+  const S = _ofDaySales;
+  if(!S.length){ el.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">مفيش أصناف</div>'; return; }
+  const map = {};
+  S.forEach(function(s){
+    // ⚠️ الفاتورة المعكوسة وفاتورة العكس **بيتستبعدوا الطرفين** — ده تقرير
+    //    أصناف مش تقفيل، والمنتج اللي اتباع واترد مايتحسبش مرتين.
+    if(s.reversed || s.isReversal) return;
+    (s.items||[]).forEach(function(it){
+      if(!it || it.isRedemption || it.isRewardDiscount) return;
+      const k = it.id || it.barcode || it.name;
+      if(!k) return;
+      const q = (it.qty||0) * (it.isReturn ? -1 : 1);
+      const m = map[k] || (map[k] = { name: it.name||'—', qty:0, rev:0, cost:0 });
+      m.qty += q;
+      m.rev += q * (it.price||0);
+      m.cost += q * (it.cost||0);
+    });
+  });
+  const arr = Object.keys(map).map(function(k){ return map[k]; })
+    .filter(function(m){ return m.qty !== 0; })
+    .sort(function(a,b){ return b.rev - a.rev; });
+  if(!arr.length){ el.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">مفيش أصناف</div>'; return; }
+  const totQ = arr.reduce(function(n,m){ return n + m.qty; }, 0);
+  const totR = arr.reduce(function(n,m){ return n + m.rev; }, 0);
+  const totC = arr.reduce(function(n,m){ return n + m.cost; }, 0);
+  const rows = arr.map(function(m){
+    const profit = m.rev - m.cost;
+    return '<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:7px 0; border-bottom:1px solid var(--line);">'
+      + '<div style="min-width:0;"><div style="font-weight:700;">' + esc(m.name) + '</div>'
+      + '<div style="font-size:11px; color:var(--sub);">' + ofNum(m.qty) + ' قطعة'
+      + (m.cost ? (' · ربح ' + ofNum(profit) + ' ج.م') : '') + '</div></div>'
+      + '<b style="white-space:nowrap;">' + ofNum(m.rev) + ' ج.م</b></div>';
+  }).join('');
+  el.innerHTML = '<div class="card">'
+    + '<div style="font-weight:900; margin-bottom:4px;">📦 ملخص الأصناف (' + arr.length + ' صنف)</div>'
+    + rows
+    + '<div style="display:flex; justify-content:space-between; padding:9px 0; border-top:2px solid var(--line); margin-top:4px;">'
+    + '<b>' + ofNum(totQ) + ' قطعة</b><b style="color:var(--gold);">' + ofNum(totR) + ' ج.م</b></div>'
+    + (totC ? ('<div style="text-align:left; font-size:12px; color:var(--plus); font-weight:800;">ربح: '
+        + ofNum(totR - totC) + ' ج.م</div>') : '')
+    + '<div style="font-size:11px; color:var(--sub); margin-top:8px;">'
+    + '⚠️ الفواتير المعكوسة مستبعدة من الطرفين هنا — عشان الصنف مايتعدّش مرتين. '
+    + 'عشان كده الإجمالي هنا ممكن يفرق عن ملخص الدفع.</div>'
+    + '</div>';
+}
+
+// ---- الربط ----
+function ofWireDay(){
+  const bs = $('#dayBranch'), dd = $('#dayDate');
+  if(!bs || !dd) return;
+  if(!dd.value){
+    const p = _ofShopParts(Date.now());
+    // قبل الساعة الفاصلة = لسه في يوم أمس
+    let ms = Date.now();
+    if(p.hh < _ofDayCut) ms -= 24 * 3600 * 1000;
+    const q = _ofShopParts(ms);
+    dd.value = q.y + '-' + String(q.m).padStart(2,'0') + '-' + String(q.d).padStart(2,'0');
+  }
+  const set = {};
+  (D.employees||[]).forEach(function(e){ if(e.branch) set[e.branch] = 1; });
+  const brs = Object.keys(set).sort();
+  if(brs.length && !bs.options.length){
+    bs.innerHTML = brs.map(function(b){ return '<option value="'+esc(b)+'">'+esc(b)+'</option>'; }).join('');
+  }
+  bs.onchange = ofLoadDay;
+  dd.onchange = ofLoadDay;
+  document.querySelectorAll('.dayNav').forEach(function(b){
+    b.onclick = function(){
+      const d = Number(b.dataset.d);
+      if(d === 0){
+        const p = _ofShopParts(Date.now());
+        let ms = Date.now(); if(p.hh < _ofDayCut) ms -= 24*3600*1000;
+        const q = _ofShopParts(ms);
+        dd.value = q.y + '-' + String(q.m).padStart(2,'0') + '-' + String(q.d).padStart(2,'0');
+      } else {
+        const [y,m,dy] = dd.value.split('-').map(Number);
+        const nx = new Date(Date.UTC(y, m-1, dy + d));
+        dd.value = nx.toISOString().slice(0,10);
+      }
+      ofLoadDay();
+    };
+  });
+  document.querySelectorAll('.daySub').forEach(function(b){
+    b.onclick = function(){
+      _ofDaySub = b.dataset.s;
+      document.querySelectorAll('.daySub').forEach(function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      $('#dayPay').style.display   = (_ofDaySub === 'pay')   ? '' : 'none';
+      $('#daySales').style.display = (_ofDaySub === 'sales') ? '' : 'none';
+      $('#dayItems').style.display = (_ofDaySub === 'items') ? '' : 'none';
+    };
+  });
+  ofLoadDay();
+}
+window.ofLoadDay = ofLoadDay;
