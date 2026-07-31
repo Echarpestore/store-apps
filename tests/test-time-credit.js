@@ -98,3 +98,56 @@ ms = S.monthlyTimeSummary([], undefined);
 assertEq(ms.days, 0, 'قايمة فاضية = صفر أيام');
 ms = S.monthlyTimeSummary([{type:'late',hours:21}], { hoursPerDay:7, maxDaysPerMonth:2 });
 assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بيشتغل');
+
+// ============================================================
+// 📉 خفض قراءات Firestore — نافذة زمنية على المجموعات اللي بتكبر
+// السبب: 442 ألف قراءة مقابل 5.8 ألف كتابة في 24 ساعة (76 قراءة لكل كتابة).
+// كل فتحة للتطبيق كانت بتقرا مجموعات كاملة من أول يوم — وبتكبر للأبد.
+// ⚠️ الخطر في الإصلاح ده: لو الحقل غلط أو مش موجود، Firestore بيرجّع **صفر**
+// مستندات بصمت — اللوحة تفضى ومحدش ياخد باله. فكل حقل هنا متأكد من مكان كتابته.
+// ============================================================
+{
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const appSrc = fs2.readFileSync(path2.resolve(__dirname, '..', 'sales', 'sales-app.js'), 'utf8');
+
+  // النافذة نفسها
+  assert(/const READ_WINDOW_MS = 190 \* 24 \* 3600000/.test(appSrc), 'نافذة القراءة 190 يوم متعرّفة');
+  assert(/const _scoped = \(col, field\)=> query\(col, where\(field, '>=', _winStart\)\)/.test(appSrc),
+    'دالة النطاق شغالة بمقارنة رقمية');
+
+  // 🔑 كل مجموعة والحقل بتاعها — الحقول دي مؤكدة من مكان الكتابة (Date.now())
+  const scoped = {
+    entriesCol: 'ts',              // feedback/index.html: addDoc(entriesCol,{ ts: Date.now() })
+    submissionsCol: 'submittedAt', // sales-app.js: submittedAt: Date.now()
+    rewardsCol: 'earnedAt',        // sales-app.js: earnedAt: Date.now()
+    attDecisionsCol: 'ts',         // sales-ui.js: ts: Date.now()
+    vioReviewCol: 'ts',            // sales-ui.js: ts: Date.now()
+    pointsCol: 'ts', shiftsCol: 'clockInTs', breaksCol: 'startTs',
+    timeCreditCol: 'ts', deductionsCol: 'ts',
+    commissionPaymentsCol: 'paidAt', salaryPaymentsCol: 'paidAt', advancesCol: 'ts'
+  };
+  Object.keys(scoped).forEach(function(col){
+    const re = new RegExp('onSnapshot\\(_scoped\\(' + col + ",'" + scoped[col] + "'\\)");
+    assert(re.test(appSrc), col + ' مقيّدة بالنافذة على الحقل ' + scoped[col]);
+    // 🔴 اختبار سلبي: مفيش اشتراك مفتوح على نفس المجموعة كمان
+    assert(!(new RegExp('onSnapshot\\(' + col + ',')).test(appSrc),
+      col + ': مفيش اشتراك مفتوح على المجموعة كاملة');
+  });
+
+  // ⏱️ الترتيب مهم: _scoped لازم تتعرّف قبل أي استخدام (وإلا TDZ وقوع صامت)
+  const defAt = appSrc.indexOf('const _scoped =');
+  assert(defAt > 0, '_scoped متعرّفة');
+  let firstUse = appSrc.indexOf('onSnapshot(_scoped');
+  assert(firstUse > defAt, '_scoped بتتعرّف قبل أول استخدام (مفيش TDZ)');
+
+  // 🛡️ المجموعات الصغيرة/الثابتة بتفضل مفتوحة عن قصد — مالهاش حقل وقت مؤكد
+  ['empCol', 'settingsCol', 'regCol'].forEach(function(col){
+    assert((new RegExp('onSnapshot\\(' + col + ',')).test(appSrc),
+      col + ' سايبينها مفتوحة عن قصد (صغيرة/ثابتة ومالهاش حقل وقت)');
+  });
+
+  // كاش الـsw اترفع مع التعديل (وإلا الأجهزة تفضل على القديم)
+  const swSrc = fs2.readFileSync(path2.resolve(__dirname, '..', 'sales', 'sw.js'), 'utf8');
+  assert(/store-apps-shell-v73/.test(swSrc), 'CACHE_NAME اترفع لـv73');
+}
