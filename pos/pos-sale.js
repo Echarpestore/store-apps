@@ -2314,6 +2314,12 @@ window.paymobApproved = false;
 // 🔌 بيقفل المتابعة الحالية بس (شريحة كارت خلصت أو اتلغت) —
 // الشرائح المؤكدة وبياناتها بتفضل زي ما هي عشان الكارت التاني يكمّل عليها
 function paymobResetActive(){
+  // 🔴 باج: الكود القديم كان بينادي paymobReset() كامل مع كل إرسال للماكينة،
+  // وهي كانت بتصفّر _paymobAutoFired. لما اتقسمت الدالة عشان الكارتين، التصفير
+  // ده ضاع — فأول ما الحارس يعلق على true (لو حصل خطأ بعد الطباعة)، كل الفواتير
+  // اللي بعده بتترفض بـ«اتنفذت قبل كده» للأبد لحد ما التطبيق يقفل ويفتح.
+  // طلب جديد للماكينة = محاولة دفع جديدة، يبقى الحارس لازم يتصفّر.
+  _paymobAutoFired = false;
   try{ paymobWaitBar(false); }catch(e){}
   if(paymobPending && paymobPending.unsub){ try{ paymobPending.unsub(); }catch(e){} }
   if(paymobPending && paymobPending.poll){ try{ clearInterval(paymobPending.poll); }catch(e){} }
@@ -2467,6 +2473,9 @@ window.payDiag = function(){
   console.log('الطباعة التلقائية مفعّلة؟', (typeof paymobAutoPrint === 'function' && paymobAutoPrint()) ? 'أيوه' : 'لأ');
   console.log('طلب معلّق؟', paymobPending ? paymobPending.ref : 'مفيش');
   console.log('اتأكد الدفع؟', paymobApproved ? 'أيوه' : 'لأ');
+  console.log('حارس الطباعة (_paymobAutoFired):', _paymobAutoFired ? '⚠️ متعلّق على true — ده بيمنع الطباعة' : 'سليم (false)');
+  console.log('شرائح الكارت:', JSON.stringify((cardLegs||[]).map(function(l){
+    return { كارت: l.seq, مبلغ: l.amount, حالة: l.status }; })));
   console.log('السلة:', (cart||[]).length, 'صنف · الإجمالي:', cartTotal());
   const e = {}; try{ selectedPayMethods.forEach(function(m){ e[m] = paymentAmounts[m] || 0; }); }catch(x){}
   console.log('المدفوعات المسجّلة:', e);
