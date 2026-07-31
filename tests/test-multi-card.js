@@ -234,10 +234,14 @@ const L_MIX       = [{seq:1, amount:200, status:'approved'}, {seq:2, amount:300,
   assert(typeof why === 'string' && why.indexOf('السلة') >= 0, 'سلة فاضية → ممنوع الطباعة');
   vm.runInContext(`cart = [{name:'x', qty:1, price:500}];`, S);
 
-  // 🔴 اختبار سلبي: منع التكرار
-  vm.runInContext(`_paymobAutoFired = true; _total = 500; paymentAmounts = {visa:500};`, S);
-  why = call(`paymobAutoSkipReason(500, { amountCents: 50000 })`);
-  assert(typeof why === 'string', 'الطباعة التلقائية بتتنفذ مرة واحدة بس لكل فاتورة');
+  // 🔴 منع التكرار — بقى **لكل طلب لوحده** بعد ما المفتاح العام علق مرتين
+  // وعطّل الطباعة لكل الفواتير اللي بعده لحد ما التطبيق يتقفل
+  vm.runInContext(`_paymobAutoFired = 'REF-1'; _total = 500; paymentAmounts = {visa:500};`, S);
+  why = call(`paymobAutoSkipReason(500, { amountCents: 50000 }, 'REF-1')`);
+  assert(typeof why === 'string', 'نفس الطلب مش بيتطبع مرتين');
+  assertEq(call(`paymobAutoSkipReason(500, { amountCents: 50000 }, 'REF-2')`), null,
+    '🔑 طلب جديد بيطبع عادي حتى لو الحارس متعلّق من طلب قديم — دي الثغرة اللي اتقفلت 100%');
+  vm.runInContext(`_paymobAutoFired = false;`, S);
 }
 
 // ============================================================
@@ -491,5 +495,5 @@ const L_MIX       = [{seq:1, amount:200, status:'approved'}, {seq:2, amount:300,
   assert(/paymobResetActive\(\)/.test(fullReset), 'التصفير الكامل بينادي تصفير المتابعة');
 
   // 🩺 التشخيص بيوري الحارس — عشان لو حصل تاني نعرفه في ثانية
-  assert(/_paymobAutoFired \? '⚠️ متعلّق/.test(saleSrc), 'payDiag() بيوري حالة حارس الطباعة');
+  assert(/مقفول على الطلب ' \+ _paymobAutoFired/.test(saleSrc), 'payDiag() بيوري أنهي طلب الحارس مقفول عليه');
 }

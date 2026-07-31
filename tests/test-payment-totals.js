@@ -430,7 +430,7 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(/الماكينة مش مربوطة بالسيستم في الفرع ده/.test(saleSrc2), 'فرع من غير ماكينة = رسالة واضحة مش صمت');
   // 💳💳 بعد دعم الكارتين الشرط بقى \"مش اتبعت للماكينة\" بدل \"مش فيزا\" — عشان
   // الكارت التاني اللي اتسجل من غير ماكينة يعيد الفحص برضه
-  assert(/if\(!sentToTerminal\n/.test(saleSrc2) && /paymobApproved[\s\S]{0,300}_paymobAutoFired = true;[\s\S]{0,120}المدفوعات كملت/.test(saleSrc2),
+  assert(/if\(!sentToTerminal\n/.test(saleSrc2) && /paymobApproved[\s\S]{0,400}_paymobAutoFired = paymobPending\.ref;[\s\S]{0,120}المدفوعات كملت/.test(saleSrc2),
     'الدفع المقسم بيعيد فحص الطباعة التلقائية (الشرط والتنفيذ سليمين)');
   assert(/المدفوعات كملت — بيحفظ ويطبع/.test(saleSrc2), 'رسالة اكتمال الدفع المقسم موجودة');
 
