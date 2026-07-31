@@ -101,3 +101,30 @@ function extractFn(src, name){
   assert(/print-color-adjust:exact/.test(appSrc), 'الحبر الكامل مفروض في مستند الطباعة');
   assert(/text-rendering:geometricPrecision/.test(appSrc), 'دقة النص الهندسية للخطوط الصغيرة');
 }
+
+// ============================================================
+// 💰 درج الكاش في المرتجع
+// الباج: `hasCash = Number(payments.cash) > 0` — وفاتورة المرتجع بتحمل
+// مدفوعات سالبة (cash: -500)، فالدرج مكانش بيفتح في المرتجع الكاش خالص.
+// ============================================================
+{
+  const m = appSrc.match(/const hasCash = payments &&[^;]*;/);
+  assert(!!m, 'سطر hasCash اتلقى');
+  const line = m[0];
+  assert(/Math\.abs\(/.test(line), '💰 الشرط بيستخدم القيمة المطلقة (حركة كاش، مش دخول بس)');
+  assert(!/Number\(payments\.cash\) > 0\s*;/.test(line), '❌ الشرط القديم `> 0` اتشال');
+
+  // سلوكيًا — نفس السطر بالظبط من المصدر
+  const hasCash = new Function('payments', 'return ' + line.replace('const hasCash =','').replace(/;$/,'') + ';');
+  const t = (p)=> !!hasCash(p);
+  assert(t({cash:500})        === true,  'بيع كاش → الدرج يفتح');
+  assert(t({cash:-500})       === true,  '🔑 مرتجع كاش → الدرج يفتح (ده كان الباج)');
+  assert(t({cash:-120})       === true,  'مرتجع كاش جزئي → يفتح');
+  assert(t({cash:-200,visa:-300}) === true, 'مرتجع مختلط فيه كاش → يفتح');
+  assert(t({cash:200,visa:300})   === true, 'بيع مختلط فيه كاش → يفتح');
+  assert(t({visa:800})        === false, 'بيع فيزا بالكامل → مايفتحش');
+  assert(t({visa:-800})       === false, 'مرتجع فيزا → مايفتحش (مفيش كاش بيتحرك)');
+  assert(t({})                === false, 'تبديل متساوي → مايفتحش');
+  assert(t({cash:0})          === false, 'كاش صفر → مايفتحش');
+  assert(t(null)              === false, 'مفيش مدفوعات → مايفتحش من غير ما تقع');
+}
