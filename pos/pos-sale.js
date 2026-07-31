@@ -2255,12 +2255,12 @@ function confirmPayAmount(){
   // الماكينة بس) وكان لازم يدوس حفظ بنفسه. دلوقتي بنعيد الفحص بعد كل تسجيل دفع.
   if(!sentToTerminal
      && typeof paymobApproved !== 'undefined' && paymobApproved
-     && !_paymobAutoFired
      && typeof paymobAutoPrint === 'function' && paymobAutoPrint()
      && paymobPending
      && paymobCanAutoFinish(paymobPending.amount,
-          { amountCents: (paymobCardInfo && paymobCardInfo.amountCents) || Math.round((paymobPending.amount || 0) * 100) })){
-    _paymobAutoFired = true;
+          { amountCents: (paymobCardInfo && paymobCardInfo.amountCents) || Math.round((paymobPending.amount || 0) * 100) },
+          paymobPending.ref)){
+    _paymobAutoFired = paymobPending.ref;   // 🔑 قفل الطلب ده بس
     paymobShow('✅ المدفوعات كملت — بيحفظ ويطبع…', 'ok');
     try{ confirmPayment(); }catch(e){ console.warn('auto print (split)', e); }
   }
@@ -2433,7 +2433,11 @@ function paymobAutoPrint(){
   // بتتقفل بس لو الأدمن كتب autoPrint:false صراحةً.
   return !paymobCfg || paymobCfg.autoPrint !== false;
 }
-let _paymobAutoFired = false;   // ⛔ مرة واحدة بس لكل عملية — يمنع الطباعة المكررة
+// ⛔ حارس الطباعة المكررة — 🔑 مربوط برقم الطلب نفسه، مش مفتاح عام:
+// المفتاح العام (true/false) علق مرتين وعطّل الطباعة لكل الفواتير اللي بعده.
+// دلوقتي بيخزّن orderRef بتاع الطلب اللي اتطبع — فأسوأ حاجة يمنعها هي تكرار
+// طباعة **نفس الطلب**، وعمره ما يقدر يمنع طلب جديد (رقم جديد ≠ المخزّن).
+let _paymobAutoFired = false;   // false أو orderRef بتاع الطلب اللي اتطبع
 let paymobCardInfo = null;      // 💳 بيانات أول كارت (توافق مع الفواتير القديمة)
 window.paymobCardInfo = null;
 let paymobCardTxns = [];        // 💳💳 بيانات كل الكروت المؤكدة في الفاتورة الحالية
@@ -2441,8 +2445,9 @@ window.paymobCardTxns = paymobCardTxns;
 
 // 🔒 الشروط اللي لازم تتحقق قبل ما نحفظ ونطبع من غير الكاشير
 // بترجّع سبب المنع بالاسم عشان نعرف ليه مطبعتش (بدل ما نخمّن)
-function paymobAutoSkipReason(amountEGP, txn){
-  if(_paymobAutoFired) return 'اتنفذت قبل كده';
+function paymobAutoSkipReason(amountEGP, txn, orderRef){
+  // 🔑 بيمنع بس لو **نفس الطلب** اتطبع قبل كده — طلب جديد مايتمنعش أبدًا
+  if(_paymobAutoFired && orderRef && String(_paymobAutoFired) === String(orderRef)) return 'اتنفذت قبل كده';
   if(!cart || !cart.length) return 'السلة فضيت قبل ما التأكيد يوصل';
   const paidCents = Number(txn && txn.amountCents) || 0;
   const wantCents = Math.round(amountEGP * 100);
@@ -2460,8 +2465,8 @@ function paymobAutoSkipReason(amountEGP, txn){
   }
   return null;   // مفيش مانع
 }
-function paymobCanAutoFinish(amountEGP, txn){
-  const why = paymobAutoSkipReason(amountEGP, txn);
+function paymobCanAutoFinish(amountEGP, txn, orderRef){
+  const why = paymobAutoSkipReason(amountEGP, txn, orderRef);
   window._paymobLastSkip = why;   // بيفضل محفوظ للتشخيص
   return why === null;
 }
@@ -2473,7 +2478,9 @@ window.payDiag = function(){
   console.log('الطباعة التلقائية مفعّلة؟', (typeof paymobAutoPrint === 'function' && paymobAutoPrint()) ? 'أيوه' : 'لأ');
   console.log('طلب معلّق؟', paymobPending ? paymobPending.ref : 'مفيش');
   console.log('اتأكد الدفع؟', paymobApproved ? 'أيوه' : 'لأ');
-  console.log('حارس الطباعة (_paymobAutoFired):', _paymobAutoFired ? '⚠️ متعلّق على true — ده بيمنع الطباعة' : 'سليم (false)');
+  console.log('حارس الطباعة (_paymobAutoFired):', _paymobAutoFired
+    ? ('مقفول على الطلب ' + _paymobAutoFired + ' بس — الطلبات الجديدة مش بتتأثر')
+    : 'سليم (false)');
   console.log('شرائح الكارت:', JSON.stringify((cardLegs||[]).map(function(l){
     return { كارت: l.seq, مبلغ: l.amount, حالة: l.status }; })));
   console.log('السلة:', (cart||[]).length, 'صنف · الإجمالي:', cartTotal());
@@ -2526,14 +2533,14 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
                             return m === 'visa' ? s : s + Math.abs(paymentAmounts[m]||0); }, 0))).toFixed(2);
       const _nextHint = (_dueNow > 0.005 && nextCardSeq(cardLegs, MAX_CARD_LEGS))
         ? (' — باقي ' + _dueNow.toFixed(2) + ' ج.م، دوس «فيزا ' + nextCardSeq(cardLegs, MAX_CARD_LEGS) + '»') : '';
-      const _skip = paymobAutoSkipReason(amountEGP, d);
+      const _skip = paymobAutoSkipReason(amountEGP, d, orderRef);
       if(_skip && paymobAutoPrint()){
         // 🩺 السبب بيظهر للكاشير — قبل كده كان بيسكت والكاشير مش عارف ليه
         paymobShow('✅ ' + legTag + 'الدفع اتقبل' + last4 + (_nextHint || (' — احفظ يدوي (' + _skip + ')')), 'ok');
       }
-      if(paymobAutoPrint() && paymobCanAutoFinish(amountEGP, d)){
+      if(paymobAutoPrint() && paymobCanAutoFinish(amountEGP, d, orderRef)){
         paymobShow('✅ ' + legTag + 'الدفع اتقبل' + last4 + ' — بيحفظ ويطبع…', 'ok');
-        _paymobAutoFired = true;
+        _paymobAutoFired = orderRef;   // 🔑 بيقفل الطلب ده بس — مش الدنيا كلها
         // من غير أي تأخير — كل جزء من الثانية بيفرق قدام العميل
         try{ confirmPayment(); }catch(e){ console.warn('auto print', e); }
       } else if(!_skip){
