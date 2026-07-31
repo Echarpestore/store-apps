@@ -398,10 +398,11 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(/background:'#ffffff', lineColor:'#000000'/.test(rbSrc), 'أبيض/أسود صريح');
   assert(/image-rendering:crisp-edges/.test(appSrc2), 'الصورة بتتعرض من غير تنعيم');
 
-  // 📷 باركود الليبل: منطقة هدوء ≥10 موديولات (سبب بطء المسدس على الليبل الصغير)
-  assert(/margin:33,\s+\/\/ منطقة الهدوء/.test(appSrc2), 'ليبل: منطقة الهدوء 33px');
-  assert(/fontSize:13, font:'monospace', textMargin:0/.test(appSrc2),
-    'ليبل: الرقم أصغر والخطوط أطول جوه نفس الصندوق');
+  // 📷 باركود الليبل: الإصلاح القديم (هدوء 33px + أرقام جوه الـSVG) اتلغى
+  // بإصلاح أعمق — مقاس فيزيائي بالمليمتر وكل خط = نقط حرارية صحيحة.
+  // التغطية الكاملة في test-labels.js؛ هنا بنتأكد بس إن المسار الجديد موصّل.
+  assert(/sizeBarcodeForThermal/.test(appSrc2), 'ليبل: التثبيت الحراري بالمليمتر موجود');
+  assert(/labelBarcodeMm/.test(appSrc2), 'ليبل: حساب الموديول بالنقط الصحيحة موجود');
 
   // 🔢 الأكواد بالبداية + المطابقة التامة الأول
   {

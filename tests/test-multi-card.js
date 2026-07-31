@@ -497,3 +497,49 @@ const L_MIX       = [{seq:1, amount:200, status:'approved'}, {seq:2, amount:300,
   // 🩺 التشخيص بيوري الحارس — عشان لو حصل تاني نعرفه في ثانية
   assert(/مقفول على الطلب ' \+ _paymobAutoFired/.test(saleSrc), 'payDiag() بيوري أنهي طلب الحارس مقفول عليه');
 }
+
+// ============================================================
+// ١٣) 🛡️ سلسلة التأكيد 100% — الفجوات التلاتة اللي كانت بتضيّع تأكيد الماكينة
+// ============================================================
+{
+  const sendFn = (function(){
+    const st = saleSrc.indexOf('async function sendToPaymobTerminal(');
+    const o = saleSrc.indexOf('{', st);
+    let d = 0;
+    for(let i = o; i < saleSrc.length; i++){
+      if(saleSrc[i] === '{') d++;
+      else if(saleSrc[i] === '}'){ d--; if(d === 0) return saleSrc.slice(st, i + 1); }
+    }
+    return '';
+  })();
+  assert(sendFn.length > 0, 'sendToPaymobTerminal موجودة');
+
+  // 🔴 فجوة ١: المتابعة لازم تبدأ **قبل** الإرسال — رد ضايع في الشبكة والطلب
+  // وصل الماكينة = عميل دفع وتأكيد اتكتب في مستند محدش بيراقبه
+  const watchAt = sendFn.indexOf('paymobWatch(orderRef');
+  const fetchAt = sendFn.indexOf('await fetch(');
+  assert(watchAt > 0 && fetchAt > 0 && watchAt < fetchAt,
+    '🔴 المتابعة بتبدأ قبل الإرسال — تأكيد الماكينة عمره ما يضيع حتى لو الرد ضاع');
+  // مفيش فتح متابعة تاني بعد النجاح (كانت هتعمل متابعتين متوازيتين)
+  assert(sendFn.split('paymobWatch(orderRef').length === 2, 'متابعة واحدة بس لكل إرسال');
+  // رسالة الفشل بقت بتقول إن المتابعة شغالة (مش «كمّل يدوي» وخلاص)
+  assert(/هتاكد لوحدها/.test(sendFn), 'رسائل الفشل بتطمّن إن المتابعة لسه شغالة');
+
+  // 🔴 فجوة ٢: مهلة الـ3 دقايق كانت بتقتل المتابعة — عميل أكّد في الدقيقة الرابعة = ضايع
+  const watchFn = (function(){
+    const st = saleSrc.indexOf('function paymobWatch(');
+    const o = saleSrc.indexOf('{', st);
+    let d = 0;
+    for(let i = o; i < saleSrc.length; i++){
+      if(saleSrc[i] === '{') d++;
+      else if(saleSrc[i] === '}'){ d--; if(d === 0) return saleSrc.slice(st, i + 1); }
+    }
+    return '';
+  })();
+  const warnBlock = watchFn.slice(watchFn.indexOf('180000') - 600, watchFn.indexOf('180000'));
+  assert(!/clearInterval\(poll\)/.test(warnBlock),
+    '🔴 تحذير الـ3 دقايق مبيقتلش الاستعلام الاحتياطي — المتابعة مستمرة');
+  assert(/600000/.test(watchFn), 'الوقف النهائي بعد 10 دقايق موجود');
+  assert(/stopAll\(\);[\s\S]{0,80}600000|600000[\s\S]{0,200}stopAll\(\)/.test(watchFn) || watchFn.indexOf('stopAll()') < watchFn.indexOf('600000'),
+    'الوقف النهائي بيقفل المستمع والاستعلام مع بعض');
+}
