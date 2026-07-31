@@ -2400,6 +2400,10 @@ async function sendToPaymobTerminal(amountEGP, seq){
   // 🔌 بنقفل متابعة الشريحة اللي فاتت بس — الكارت الأول المؤكد بيفضل محفوظ
   paymobResetActive();
   paymobShow('📟 ' + legTag + 'بنبعت المبلغ للماكينة…', 'wait');
+  // 👂 المتابعة بتبدأ **قبل** الإرسال — 🔴 كانت فجوة حقيقية: لو رد الخدمة ضاع
+  // في الشبكة بس الطلب وصل الماكينة فعلًا، العميل يدفع والماكينة تطبع والتأكيد
+  // يتكتب في مستند محدش بيراقبه. دلوقتي الأذن مفتوحة قبل ما الطلب يخرج أصلًا.
+  paymobWatch(orderRef, amountEGP, 0, seq);
   try{
     const res = await fetch(PAYMOB_FN_URL, {
       method: 'POST',
@@ -2418,12 +2422,14 @@ async function sendToPaymobTerminal(amountEGP, seq){
       paymobShow('📟 ' + legTag + 'المبلغ على الماكينة (' + amountEGP.toFixed(2) + ' ج.م) — العميل يحط الكارت…', 'wait');
       paymobWaitBar(true);
       if(typeof updatePaySummary === 'function') updatePaySummary();
-      paymobWatch(orderRef, amountEGP, 0, seq);
     } else {
-      paymobShow('⚠️ ' + legTag + 'الماكينة مستجابتش (' + (out.error || res.status) + ') — كمّل يدوي من الماكينة', 'err');
+      // الرد رفض — بس المتابعة فاضلة شغالة: لو الطلب كان وصل الماكينة رغم الرفض
+      // الظاهري، التأكيد هيتلقط لوحده ويطبع عادي
+      paymobShow('⚠️ ' + legTag + 'الماكينة مستجابتش (' + (out.error || res.status) + ') — لو المبلغ ظهر عليها كمّل عادي وهتاكد لوحدها، ولو لأ جرّب تاني', 'err');
     }
   }catch(e){
-    paymobShow('⚠️ ' + legTag + 'مفيش اتصال بخدمة الماكينة — كمّل يدوي من الماكينة', 'err');
+    // 🔴 نفس الفجوة: انقطاع لحظة الرد ≠ إن الطلب موصلش — المتابعة شغالة والتأكيد مش هيضيع
+    paymobShow('⚠️ ' + legTag + 'مفيش اتصال بخدمة الماكينة — لو المبلغ ظهر عليها كمّل عادي وهتاكد لوحدها', 'err');
   }
 }
 
@@ -2594,13 +2600,22 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
     }catch(e){}
   }, 4000);
   paymobPending = { ref: orderRef, unsub: unsub, poll: poll, amount: amountEGP, seq: seq };
-  // مهلة 3 دقايق: لو مفيش رد، مش هنسيب الكاشير مستني للأبد
+  // ⏳ 3 دقايق = تحذير بس — 🔴 كانت بتقتل المتابعة نهائيًا: عميل اتلكّع وأكّد
+  // في الدقيقة الرابعة كان تأكيده بيضيع رغم إن الماكينة طبعت. دلوقتي المتابعة
+  // مستمرة لحد 10 دقايق، وبعدها بس بتقف بمسح كامل.
   setTimeout(function(){
     if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
-      clearInterval(poll);
-      paymobShow('⏳ ' + legTag + 'الماكينة مردتش خلال 3 دقايق — اتأكد منها. لو الطلب اتلغى، دوس «مسح المدفوعات» وابدأ من جديد', 'err');
+      paymobShow('⏳ ' + legTag + 'الماكينة مردتش خلال 3 دقايق — لسه بتابع لحد 10 دقايق. لو الطلب اتلغى من الماكينة، دوس «مسح المدفوعات»', 'err');
     }
   }, 180000);
+  setTimeout(function(){
+    if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
+      stopAll();
+      paymobPending = null;
+      paymobShow('⏹️ ' + legTag + 'مفيش رد بعد 10 دقايق — راجع الماكينة، ولو العملية تمت عليها احفظ يدوي', 'err');
+      if(typeof updatePaySummary === 'function') updatePaySummary();
+    }
+  }, 600000);
 }
 // رابط الدالة — بيتفعّل مع خطوة النشر الأخيرة
 const PAYMOB_FN_URL = 'https://us-central1-customer-feedback-8ac1d.cloudfunctions.net/paymobTerminalOrder';
