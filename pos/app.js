@@ -1068,7 +1068,12 @@ function _printBuiltReceipt(data, payments){
   holder.innerHTML = buildReceiptHTML(data);
   const inShell = (typeof window.posShell !== 'undefined');
   const shellCfg = inShell ? getPrinterCfg() : null;
-  const hasCash = payments && Number(payments.cash) > 0;
+  // 💰 أي **حركة كاش** لازم تفتح الدرج — داخلة أو خارجة.
+  // 🔴 الباج: الشرط كان `> 0` بس. فاتورة المرتجع بتحمل مدفوعات **سالبة**
+  // (cash: -500)، فالشرط كان بيرجع false والدرج مايفتحش خالص — بالظبط في
+  // اللحظة اللي الكاشير محتاجة تفتحه فيها عشان تطلّع فلوس للعميلة.
+  // الفيزا والتبديل المتساوي لسه مش بيفتحوا الدرج (مفيش كاش بيتحرك) ✅
+  const hasCash = payments && Math.abs(Number(payments.cash) || 0) > 0.005;
 
   // داخل برنامج الويندوز (exe): طباعة صامتة + فتح الدرج
   if(inShell){

@@ -482,20 +482,45 @@ window.isSameBizDay = isSameBizDay;
 // 🔎 تطبيع البحث العربي — سبب "بكتب الاسم ومش بيظهر لازم الكود":
 // الاسم متسجل "تايلاندي" والكاشير بتكتب "تايلاندى" (ى/ي)، أو "بيجامه/بيجامة"،
 // أو همزة مختلفة (أ/إ/آ/ا)، أو مسافة زيادة — المقارنة الحرفية بتفشل وهو نفس الاسم.
+// ⚡ ذاكرة تطبيع الأسماء.
+// 🔴 المشكلة: كل ضغطة زرار في شاشة البيع كانت بتعيد تطبيع **اسم كل صنف في
+// المخزون من الأول** — 7 عمليات regex × عدد الأصناف × كل حرف بيتكتب.
+// بالقياس: 8000 صنف = 19.6 مللي/ضغطة · 20000 = 50 مللي (على معالج سيرفر —
+// جهاز الكاشير أبطأ بمرات). ده اللاج اللي الكاشير بتشتكي منه.
+// الأسماء ثابتة بين الضغطات، فأول تطبيع بيتخزن والباقي قراءة من الذاكرة.
+// ⚠️ التطبيع نفسه ما اتغيرش ولا حرف — نفس النتيجة بالظبط، أسرع بس.
+// 🧪 الذاكرة متعلّقة على الدالة نفسها (searchNorm._c) مش متغير برّاني —
+//    الاختبارات بتستخرج الدوال فرادى، وأي حالة برّانية بتوقّع الهارنس.
 function searchNorm(s){
-  return String(s || '').toLowerCase()
+  const k = String(s || '');
+  const c = searchNorm._c || (searchNorm._c = new Map());
+  const hit = c.get(k);
+  if(hit !== undefined) return hit;
+  const v = k.toLowerCase()
     .replace(/[\u064B-\u0652\u0640]/g, '')   // التشكيل والتطويل ـــ
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .replace(/ؤ/g, 'و')
+    .replace(/[\u0623\u0625\u0622\u0671]/g, '\u0627')
+    .replace(/\u0649/g, '\u064A')
+    .replace(/\u0629/g, '\u0647')
+    .replace(/\u0624/g, '\u0648')
     .replace(/\s+/g, ' ').trim();
+  if(c.size > 40000) c.clear();          // سقف أمان — المخزون مش بيوصله
+  c.set(k, v);
+  return v;
 }
 // كل كلمة اتكتبت لازم تتلاقى — بأي ترتيب: "قطن كويت" بتلاقي "قطن تايلاندي كويت ليدي"
+// ⚡ كلمات البحث بتتقطّع مرة واحدة لكل استعلام مش مرة لكل صنف
 function searchMatch(hay, q){
+  if(q !== searchMatch._q){
+    searchMatch._q = q;
+    searchMatch._parts = searchNorm(q).split(' ').filter(Boolean);
+  }
+  const parts = searchMatch._parts;
+  if(!parts || parts.length === 0) return false;
   const h = searchNorm(hay);
-  const parts = searchNorm(q).split(' ').filter(Boolean);
-  return parts.length > 0 && parts.every(p => h.includes(p));
+  for(let i = 0; i < parts.length; i++){
+    if(h.indexOf(parts[i]) < 0) return false;   // خروج بدري
+  }
+  return true;
 }
 // 🔢 مطابقة الكود بالبداية — مش بالاحتواء.
 // الباج الأصلي: البحث بـ"33" كان بيطلّع 533 و833 و1330 كمان، فالكاشير لازم

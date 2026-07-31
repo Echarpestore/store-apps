@@ -19,12 +19,13 @@ searchBar.addEventListener('input', ()=>{
     it.status !== 'hidden' && it.status !== 'outofstock' &&
     inMyBranch(it) &&                                   // 🏬 بضاعة فرعي والمشتركة بس
     (_sm(it.name, q) || _bp(it.barcode, q))   // 🔎 اسم بالتطبيع، كود بالبداية
-  ).slice(0,10);
   // 🥇 المطابقة التامة الأول، وبعدها الأقصر (33 ← 330 ← 331...) — مش بترتيب المخزون العشوائي
-  matches.sort((a,b)=>{
+  // ⚠️ الترتيب **قبل** القص: كان بيقص أول 10 وبعدين يرتبهم، فالمطابقة التامة
+  // نفسها ممكن تكون اتقصت وهي أصلًا اللي المفروض تطلع أول واحدة.
+  ).sort((a,b)=>{
     const qa = String(a.barcode||''), qb = String(b.barcode||'');
     return ((qb===q)-(qa===q)) || (qa.length - qb.length);
-  });
+  }).slice(0,10);
   matches.forEach(it=>{
     const row = document.createElement('div');
     row.className = 'sugg-row';
