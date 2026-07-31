@@ -2085,6 +2085,26 @@ function cardOvercharge(legs, total){
   const d = +(Math.abs(cardApprovedSum(legs)) - Math.abs(Number(total) || 0)).toFixed(2);
   return d > 0.005 ? d : 0;
 }
+// 🔎 لقّي الشريحة اللي التأكيد ده بتاعها.
+// 🔴 الباج الأصلي: التأكيد كان بيدور بالـseq **بس**، ولو مالقاش كان بيعدي بصمت
+// (`if(_leg)` من غير else). النتيجة: Paymob يأكد والفلوس تتسحب، والشريحة تفضل
+// pending للأبد → زرار الحفظ مقفول، و cardTxns بتتبني من approved بس →
+// الفاتورة تطلع من غير بيانات كارت. العرضين من إصابة واحدة.
+// دلوقتي 3 طبقات: الرقم ← مرجع الطلب (فريد لكل محاولة) ← الشريحة المعلّقة الوحيدة.
+function findCardLeg(legs, seq, ref){
+  const arr = (legs || []).filter(function(l){ return !!l; });
+  let hit = arr.filter(function(l){ return l.seq === seq; })[0];
+  if(hit) return hit;
+  if(ref){
+    hit = arr.filter(function(l){ return l.ref && String(l.ref) === String(ref); })[0];
+    if(hit) return hit;
+  }
+  // تأكيد واحد + شريحة واحدة لسه على الماكينة = هي هي بالضرورة
+  const pend = arr.filter(function(l){ return l.status === 'pending'; });
+  return (pend.length === 1) ? pend[0] : null;
+}
+window.findCardLeg = findCardLeg;
+
 // 💳 الشرائح اللي لسه على الماكينة (مبعوتة ومستنية رد)
 // ⚠️ الحالة دي كانت بتقفل زرار الحفظ للأبد: لو التأكيد ماوصلش خالص (الـwebhook
 // اتأخر أو الشبكة بلعته) والماكينة تكون طبعت وسحبت فعلًا — الكاشير كان محبوس
@@ -2557,8 +2577,18 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
         amountCents: d.amountCents || null
       };
       // 💳💳 الشريحة اتأكدت — الفلوس اتسحبت فعلًا وبقت مقفولة (مفيش تعديل إلا بمرتجع)
-      const _leg = cardLegBySeq(cardLegs, seq);
-      if(_leg){ _leg.status = 'approved'; _leg.txn = _txn; _leg.ref = orderRef; }
+      let _leg = findCardLeg(cardLegs, seq, orderRef);
+      if(!_leg){
+        // 🔴 تأكيد وصل ومفيش شريحة تستقبله. قبل كده كان بيتجاهل بصمت والفلوس
+        // تضيع من الفاتورة. دلوقتي بننشئ الشريحة — التأكيد من Paymob دليل كافٍ.
+        _leg = { seq: seq, amount: +Number(amountEGP).toFixed(2), ref: orderRef, status: 'pending', txn: null };
+        cardLegs.push(_leg);
+        cardLegs.sort(function(a, b){ return a.seq - b.seq; });
+        if(typeof _logActivity === 'function') _logActivity('card_leg_recovered', {
+          seq: seq, ref: orderRef, amount: +Number(amountEGP).toFixed(2)
+        });
+      }
+      _leg.status = 'approved'; _leg.txn = _txn; _leg.ref = orderRef;
       paymobCardTxns = (cardLegs || []).filter(function(l){ return l.status === 'approved' && l.txn; })
                                        .map(function(l){ return l.txn; });
       window.paymobCardTxns = paymobCardTxns;
@@ -2590,18 +2620,28 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
           + (why ? (' (' + why + ')') : ''), 'ok');
       }
       return true;
-    } else if(d.status === 'failed' || d.status === 'voided'){
+    } else if(d.status === 'failed' || d.status === 'voided' || d.status === 'refunded'){
       paymobApproved = false; window.paymobApproved = false;
       paymobWaitBar(false);
       // ❌ الشريحة دي اترفضت: بتتشال من المدفوعات عشان الكاشير يعيد المحاولة على طول
-      const _leg = cardLegBySeq(cardLegs, seq);
+      // ↩️ والمرتجع/الإلغاء كمان: العملية اترجعت عند Paymob فمينفعش تتسجل كبيع.
+      // 🔴 قبل كده `refunded` ماكانتش متعالجة خالص — المتابعة تفضل مستنية للأبد.
+      const _leg = findCardLeg(cardLegs, seq, orderRef);
       if(_leg && _leg.status !== 'approved'){ _leg.status = 'failed'; }
       cardLegs = cardLegs.filter(function(l){ return l.status !== 'failed'; });
       try{ syncCardPayment(); }catch(e){}
       paymobPending = null;
-      paymobShow('❌ ' + legTag + 'الدفع اترفض' + (d.declineReason ? (' (' + d.declineReason + ')') : '') + ' — جرّب تاني', 'err');
+      paymobShow((d.status === 'refunded' ? '↩️ ' : '❌ ') + legTag
+        + (d.status === 'refunded'
+            ? 'العملية دي اترجعت من Paymob — متسجلهاش كبيع'
+            : ('الدفع اترفض' + (d.declineReason ? (' (' + d.declineReason + ')') : '') + ' — جرّب تاني')), 'err');
       if(typeof updatePaySummary === 'function') updatePaySummary();
       return true;
+    } else if(d.status === 'pending'){
+      // ⏳ البنك بيشتغل على مرحلتين (حجز ثم تحصيل) — دي المرحلة الأولى.
+      // بنفضل مستنيين، بس الكاشير تشوف إن فيه حركة بدل شاشة ساكتة.
+      paymobShow('⏳ ' + legTag + 'الماكينة استلمت الطلب — مستنيين تأكيد البنك…', 'wait');
+      return false;
     }
     return false;
   }
