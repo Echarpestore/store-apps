@@ -629,3 +629,49 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(addFn.indexOf('barcodeDupReject') < addFn.indexOf('.add(data)'),
     'الفحص قبل الكتابة في قاعدة البيانات');
 }
+
+// ============================================================
+// ⌨️ مسح كارت الموظف واللغة عربي
+// الشكوى: «بيقرا كلام غريب والكارت مش بيظهر».
+// السبب: خريطة الكيبورد فيها حروف بس — ولا رقم. كارت الموظف EC + 10 خانة
+// فيها أرقام، فلو ويندوز طلّع ٢٣٤ الحروف تتصلّح والأرقام تفضل عربية →
+// الشكل ميطابقش. وده بالظبط «نص متصلّح ونص لأ».
+// ============================================================
+{
+  const saleS = fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8');
+  const i = saleS.indexOf('const AR_KEYS'), j = saleS.indexOf('window.normalizeScan');
+  assert(i >= 0 && j > i, 'بلوك ترجمة الكيبورد اتلقى');
+  const box = { String: String, window: {} };
+  vm.createContext(box);
+  vm.runInContext(saleS.slice(i, j), box);
+  const fx = (x)=> vm.runInContext(`fixArabicKeyboard(${JSON.stringify(x)})`, box);
+  const ns = (x)=> vm.runInContext(`normalizeScan(${JSON.stringify(x)})`, box);
+
+  // ---- الأرقام ----
+  assertEq(fx('٠١٢٣٤٥٦٧٨٩'), '0123456789', '🔢 الأرقام الهندية بتترجم');
+  assertEq(fx('۰۱۲۳۴۵۶۷۸۹'), '0123456789', '🔢 والفارسية كمان');
+  assertEq(fx('12345'), '12345', 'والإنجليزية زي ما هي');
+
+  // ---- كارت الموظف بأرقام هندية ----
+  assertEq(ns('ECAB٢٣CD٤٥EF'), 'ECAB23CD45EF', '🔑 كارت موظف بأرقام هندية بيتعرف');
+  assertEq(ns('ECAB23CD45EF'), 'ECAB23CD45EF', 'وبالإنجليزي زي ما هو');
+
+  // ---- ⚠️ ومايخربش البحث بالاسم العربي ----
+  assertEq(ns('قميص قطن'), 'قميص قطن', 'اسم عربي عادي مايتترجمش');
+  assertEq(ns('طرحة ٣٤'), 'طرحة ٣٤', 'اسم عربي فيه أرقام هندية مايتترجمش');
+  assertEq(ns('بيچاما ساتان'), 'بيچاما ساتان', 'ولا الأسماء الطويلة');
+  assertEq(ns(''), '', 'فاضي = فاضي');
+  assertEq(ns(null), '', 'null مبيقعش');
+
+  // ---- خانات التحويلات بقت بتترجم ----
+  const trS = fs.readFileSync(path.join(POS,'transfers.js'),'utf8');
+  const rt = extractFn(trS, '_trRouteCode');
+  assert(rt.length > 0, '_trRouteCode اتلقت');
+  // ⚠️ لازم نمسك **التطبيق** مش التعريف — سطر `const _ns = ...` بيخلي أي بحث
+  //    عن الاسم يعدّي حتى لو النداء نفسه اتشال (نفس فخ §0).
+  assert(/code = _ns\(String\(code \|\| ''\)\.trim\(\)\);/.test(rt),
+    '🔗 التحويلات بتطبّق الترجمة فعلًا (مش بس معرّفاها)');
+  assert(/window\.normalizeScan/.test(rt), 'وبتاخدها من المصدر الصح');
+  assert(rt.indexOf('code = _ns(') < rt.indexOf('const up = code.toUpperCase()'),
+    'والترجمة قبل الفحص مش بعده');
+}
