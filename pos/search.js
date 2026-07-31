@@ -27,11 +27,19 @@ async function runGlobalSearch(q){
   // لو دالة التطبيع لسه موصلتش، بنرجع للبحث الحرفي بدل ما البحث يموت خالص
   const _sm = (typeof searchMatch === 'function') ? searchMatch
             : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
+  const _bp = (typeof barcodePrefix === 'function') ? barcodePrefix
+            : (bc, qq)=> String(bc||'').toLowerCase().startsWith(String(qq||'').toLowerCase());
 
   // 1) المنتجات (من الكاش المحلي، سريع وبدون قراءة إضافية)
+  // 🔢 الكود بالبداية مش بالاحتواء — الاحتواء كان بيطلّع 533 و833 مع البحث بـ33.
+  // البحث الشامل كان آخر مكان فاضل على السلوك القديم بعد إصلاح البيع والاستلام.
+  // ⚠️ الترتيب قبل القص: لو قصينا الأول ممكن المطابقة التامة نفسها تتقص.
   results.products = allInventory.filter(p=>
-    _sm(p.name, q) || (p.barcode||'').includes(q)   // 🔎 تطبيع عربي
-  ).slice(0, 5);
+    _sm(p.name, q) || _bp(p.barcode, q)   // 🔎 تطبيع عربي للاسم، بداية للكود
+  ).sort((a,b)=>{                          // 🥇 التامة الأول ثم الأقصر (33 ← 330 ← 331)
+    const qa = String(a.barcode||''), qb = String(b.barcode||'');
+    return ((qb===q)-(qa===q)) || (qa.length - qb.length);
+  }).slice(0, 5);
 
   // 📉 كارثة القراءات القديمة: كل بحثة كانت بتقرا **كل** فواتير وعملاء الفرع
   // من أول يوم (آلاف المستندات × كل ضغطة بحث) — ده كان المصدر الأول

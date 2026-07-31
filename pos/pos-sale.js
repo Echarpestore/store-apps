@@ -2085,6 +2085,41 @@ function cardOvercharge(legs, total){
   const d = +(Math.abs(cardApprovedSum(legs)) - Math.abs(Number(total) || 0)).toFixed(2);
   return d > 0.005 ? d : 0;
 }
+// 💳 الشرائح اللي لسه على الماكينة (مبعوتة ومستنية رد)
+// ⚠️ الحالة دي كانت بتقفل زرار الحفظ للأبد: لو التأكيد ماوصلش خالص (الـwebhook
+// اتأخر أو الشبكة بلعته) والماكينة تكون طبعت وسحبت فعلًا — الكاشير كان محبوس
+// في الفاتورة، ورسالة الـ10 دقايق بتقوله «احفظ يدوي» وهو مش قادر.
+function cardPendingLegs(legs){
+  return (legs || []).filter(function(l){ return l && l.status === 'pending'; });
+}
+function cardPendingSum(legs){
+  return +cardPendingLegs(legs).reduce(function(n, l){
+    return n + Math.abs(Number(l.amount) || 0); }, 0).toFixed(2);
+}
+// ✍️ تحويل شريحة معلّقة لتسجيل يدوي — الكاشير شاف إيصال الماكينة بعينه.
+// الفلوس بتتسجل في الفاتورة عادي، بس **من غير رقم عملية** وبعلامة manual
+// عشان مراجعة كشف Paymob تعرف اللي اتسجل بإيد مين. مش بتلمس المؤكد (approved).
+function cardLegToManual(leg, terminalId, now){
+  if(!leg || leg.status !== 'pending') return null;
+  leg.status = 'manual';
+  leg.manualAt = now || Date.now();
+  if(!leg.txn){
+    leg.txn = {
+      seq: leg.seq,
+      amount: +Math.abs(Number(leg.amount) || 0).toFixed(2),
+      manual: true,                       // 🔑 علامة المراجعة
+      orderRef: leg.ref || null,
+      terminalId: terminalId || null,
+      transactionId: null, approvalCode: null, rrn: null,
+      last4: null, scheme: null, amountCents: null
+    };
+  }
+  return leg.txn;
+}
+window.cardPendingLegs = cardPendingLegs;
+window.cardPendingSum = cardPendingSum;
+window.cardLegToManual = cardLegToManual;
+
 // 🚧 هل مسموح أفتح شريحة الكارت رقم seq دلوقتي؟ (بترجّع سبب المنع أو null)
 function cardLegBlockReason(legs, seq, isRefund, maxLegs){
   const max = maxLegs || 2;
@@ -2605,14 +2640,14 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
   // مستمرة لحد 10 دقايق، وبعدها بس بتقف بمسح كامل.
   setTimeout(function(){
     if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
-      paymobShow('⏳ ' + legTag + 'الماكينة مردتش خلال 3 دقايق — لسه بتابع لحد 10 دقايق. لو الطلب اتلغى من الماكينة، دوس «مسح المدفوعات»', 'err');
+      paymobShow('⏳ ' + legTag + 'الماكينة مردتش خلال 3 دقايق — لسه بتابع لحد 10 دقايق. لو الإيصال طلع من الماكينة تقدر تدوس «حفظ وطباعة» وتأكّد، ولو الطلب اتلغى دوس «مسح المدفوعات»', 'err');
     }
   }, 180000);
   setTimeout(function(){
     if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
       stopAll();
       paymobPending = null;
-      paymobShow('⏹️ ' + legTag + 'مفيش رد بعد 10 دقايق — راجع الماكينة، ولو العملية تمت عليها احفظ يدوي', 'err');
+      paymobShow('⏹️ ' + legTag + 'مفيش رد بعد 10 دقايق — لو إيصال الموافقة طلع من الماكينة دوس «حفظ وطباعة» وأكّد، ولو مطبعتش دوس «مسح المدفوعات»', 'err');
       if(typeof updatePaySummary === 'function') updatePaySummary();
     }
   }, 600000);
@@ -2650,7 +2685,9 @@ function updatePaySummary(){
             ? '<span style="color:#15803d; font-weight:900;">✅</span>'
             : l.status === 'pending'
               ? '<span style="color:#b45309; font-weight:900;">⏳</span>'
-              : '<span style="color:#6b7280;">•</span>';
+              : l.status === 'manual'
+                ? '<span style="color:#b45309; font-weight:900;">✍️</span>'
+                : '<span style="color:#6b7280;">•</span>';
           const t = l.txn || {};
           const last4 = t.last4 ? ` <span style="color:#6b7280; font-size:10.5px;" dir="ltr">${(t.scheme||'CARD')} ••${t.last4}</span>` : '';
           rows.push(`<div class="pl-row"><span>${st} 💳 كارت ${l.seq}${last4}</span><span>${Math.abs(l.amount||0).toFixed(2)} ج.م</span></div>`);
@@ -2722,11 +2759,21 @@ function updatePaySummary(){
   // والكاشير مش قادر يحفظ عملية تبديل سليمة.
   const isEvenSwap = cart.length > 0 && requiredAbs < 0.005;
   const paidOk = isEvenSwap || (selectedPayMethods.size > 0 && enteredAbs >= requiredAbs);
-  confirmBtn.disabled = !(cart.length > 0 && paidOk) || cardPending;
+  // 💳 الشريحة المعلّقة **مابقتش تقفل الحفظ**: الماكينة ممكن تكون سحبت وطبعت
+  // والتأكيد اتأخر أو ضاع — الكاشير لازم يقدر يقفل الفاتورة. الحماية اتنقلت
+  // لشاشة تأكيد إجبارية جوه confirmPayment بدل قفل أعمى بلا مخرج.
+  confirmBtn.disabled = !(cart.length > 0 && paidOk);
   if(isEvenSwap && !confirmBtn.disabled){
     confirmBtn.title = 'تبديل متساوي — مفيش فلوس بتتحصّل ولا تترد';
   }
-  if(cardPending) confirmBtn.title = 'مستنيين تأكيد الدفع من الماكينة';
+  if(cardPending && !confirmBtn.disabled){
+    confirmBtn.title = '⚠️ الماكينة لسه ماأكدتش — الحفظ هيسألك تأكيد الأول';
+    confirmBtn.style.outline = '2px solid #f59e0b';
+    confirmBtn.style.outlineOffset = '2px';
+  } else {
+    confirmBtn.style.outline = '';
+    confirmBtn.style.outlineOffset = '';
+  }
 }
 
 // >>> OFFLINE_SAVE_START
@@ -2838,6 +2885,37 @@ async function confirmPayment(){
     showToast(cart.length ? '💳 كمّل المدفوعات الأول (F2 كاش · F3 فيزا · F4 انستا)' : '🛒 السلة فاضية — ضيف منتجات الأول', 'err');
     return;
   }
+  // 💳 الماكينة لسه ماأكدتش والكاشير عايز يقفل الفاتورة يدوي.
+  // ⚠️ ده المكان الوحيد اللي بيحوّل شريحة معلّقة لتسجيل يدوي — وبتأكيد صريح،
+  // لأن الغلط هنا بيطلع عجز في التقفيل (فاتورة متسجلة وفلوس ماسحبتش).
+  try{
+    const _pend = cardPendingLegs(cardLegs);
+    if(_pend.length){
+      const _sum = cardPendingSum(cardLegs);
+      const ok = confirm('⚠️ الماكينة لسه ماأكدتش ' + _sum.toFixed(2) + ' ج.م.\n\n'
+        + 'متحفظش غير لو إيصال الماكينة طلع فعلًا ومكتوب عليه موافقة/APPROVED.\n'
+        + 'لو الماكينة مطبعتش أو رفضت العملية، الفاتورة دي هتطلع عجز في التقفيل.\n\n'
+        + 'إيصال الموافقة طلع من الماكينة؟');
+      if(!ok) return;
+      const _tid = (typeof paymobTerminalId === 'function') ? paymobTerminalId() : null;
+      const _added = [];
+      _pend.forEach(function(l){
+        const t = cardLegToManual(l, _tid);
+        if(t) _added.push(t);
+      });
+      // 💳 التسجيل اليدوي بيدخل الفاتورة زي المؤكد، بعلامة manual للمراجعة
+      if(_added.length){
+        paymobCardTxns = (paymobCardTxns || []).concat(_added);
+        window.paymobCardTxns = paymobCardTxns;
+        if(!paymobCardInfo){ paymobCardInfo = paymobCardTxns[0] || null; window.paymobCardInfo = paymobCardInfo; }
+      }
+      try{ syncCardPayment(); }catch(e){}
+      if(typeof _logActivity === 'function') _logActivity('card_saved_manual', {
+        amount: _sum, legs: _pend.length,
+        refs: _pend.map(function(l){ return l.ref || null; })
+      });
+    }
+  }catch(e){ console.warn('manual card save', e); }
   // ⚠️ الكروت اتسحب منها أكتر من الفاتورة (السلة اتعدّلت بعد السحب) — قرار الكاشير
   // بس لازم يبقى واعي: الفرق ده هيطلع أوفر في التقفيل لحد ما يترد من Paymob.
   try{

@@ -497,8 +497,22 @@ function searchMatch(hay, q){
   const parts = searchNorm(q).split(' ').filter(Boolean);
   return parts.length > 0 && parts.every(p => h.includes(p));
 }
+// 🔢 مطابقة الكود بالبداية — مش بالاحتواء.
+// الباج الأصلي: البحث بـ"33" كان بيطلّع 533 و833 و1330 كمان، فالكاشير لازم
+// تكتب الكود كامل أو تدوّر بعينها في قايمة نتايج غلط. المطلوب: "33" تلاقي 33
+// و330 (امتداد وانت بتكتب) وبس. المطابقة التامة بتتقدّم في الترتيب عند النداء.
+// ⚠️ الدالة دي ليها بدايل احتياطية (_bp) في pos-sale/products/search/pos-admin —
+// البدايل حزام أمان للحظة تحميل ملفات مختلطة، مش بديل دايم. لو الدالة ضاعت من
+// هنا تاني، البحث بيرجع لسلوك أبسط من غير أي رسالة خطأ.
+function barcodePrefix(bc, q){
+  const b = String(bc == null ? '' : bc).toLowerCase().trim();
+  const s = String(q  == null ? '' : q ).toLowerCase().trim();
+  if(!s || !b) return false;          // بحث فاضي = مفيش نتايج (مش "كل حاجة")
+  return b.startsWith(s);
+}
 window.searchNorm = searchNorm;
 window.searchMatch = searchMatch;
+window.barcodePrefix = barcodePrefix;
 
 // قراءة الساعة الفاصلة من الإعدادات
 (function loadDayCfg(){
