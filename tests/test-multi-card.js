@@ -543,3 +543,154 @@ const L_MIX       = [{seq:1, amount:200, status:'approved'}, {seq:2, amount:300,
   assert(/stopAll\(\);[\s\S]{0,80}600000|600000[\s\S]{0,200}stopAll\(\)/.test(watchFn) || watchFn.indexOf('stopAll()') < watchFn.indexOf('600000'),
     'الوقف النهائي بيقفل المستمع والاستعلام مع بعض');
 }
+
+// ============================================================
+// ١١) ✍️ الحفظ اليدوي والماكينة لسه ماأكدتش
+// الباج: الشريحة المعلّقة كانت بتقفل زرار الحفظ، والـtimeout بيصفّر
+// paymobPending بس من غير ما يغيّر حالة الشريحة → cardLegsPending تفضل true
+// للأبد. النتيجة: الماكينة تسحب وتطبع، والكاشير محبوس في الفاتورة نهائيًا
+// ورسالة الـ10 دقايق بتقوله «احفظ يدوي» وهو مش قادر.
+// ============================================================
+{
+  // ---- ١) الزرار مابقاش بيتقفل بالشريحة المعلّقة ----
+  const ups = extractFn(saleSrc, 'updatePaySummary');
+  assert(ups.length > 0, 'updatePaySummary اتلقت');
+  assert(/confirmBtn\.disabled = !\(cart\.length > 0 && paidOk\);/.test(ups),
+    '🔓 زرار الحفظ مابقاش مقفول بالشريحة المعلّقة');
+  assert(!/disabled = [^\n]*\|\| cardPending/.test(ups),
+    'مفيش أي فرع تاني لسه بيقفل الزرار بـcardPending');
+  assert(/cardPending && !confirmBtn\.disabled/.test(ups),
+    'الحالة المعلّقة بتتعلّم على الزرار (تحذير مش قفل)');
+
+  // ---- ٢) الدوال النقية: pending → manual ----
+  const M = loadFns(saleSrc, ['cardPendingLegs','cardPendingSum','cardLegToManual',
+                              'cardLegsPending','cardLegsSum','cardApprovedSum']);
+  const mk = (e)=> vm.runInContext(e, M);
+  mk(`legs = [
+    { seq:1, amount:860, status:'pending', ref:'الرحاب-1' },
+    { seq:2, amount:100, status:'approved', txn:{ transactionId: 99 } },
+    { seq:3, amount:50,  status:'failed' }
+  ];`);
+  assertEq(mk('cardPendingLegs(legs).length'), 1, 'شريحة معلّقة واحدة');
+  assertEq(mk('cardPendingSum(legs)'), 860, 'مجموع المعلّق = 860');
+  assertEq(mk('cardLegsPending(legs)'), true, 'قبل التسجيل اليدوي: معلّق');
+
+  mk(`t = cardLegToManual(legs[0], '905225', 1700000000000);`);
+  assertEq(mk('legs[0].status'), 'manual', 'الشريحة بقت manual');
+  assertEq(mk('legs[0].manualAt'), 1700000000000, 'وقت التسجيل اليدوي متسجل');
+  assertEq(mk('t.manual'), true, '🔑 علامة manual على العملية (للمراجعة مع كشف Paymob)');
+  assertEq(mk('t.amount'), 860, 'المبلغ اتسجل');
+  assertEq(mk('t.transactionId'), null, 'مفيش رقم عملية — لأننا مسمعناش من Paymob');
+  assertEq(mk('t.orderRef'), 'الرحاب-1', 'مرجع الطلب محفوظ عشان المطابقة بعدين');
+  assertEq(mk('t.terminalId'), '905225', 'رقم الماكينة محفوظ');
+
+  // ---- ٣) بعد التسجيل اليدوي: الحفظ مفتوح والفلوس محسوبة ----
+  assertEq(mk('cardLegsPending(legs)'), false, '🔓 مفيش معلّق بعد التسجيل → الحفظ مفتوح');
+  assertEq(mk('cardLegsSum(legs)'), 960, 'المسجّل يدوي بيتحسب في المدفوعات (860+100)');
+  assertEq(mk('cardApprovedSum(legs)'), 100, 'بس مش بيتحسب كمسحوب مؤكد — المؤكد 100 بس');
+
+  // ---- ٤) المؤكد مايتلمسش بالتسجيل اليدوي ----
+  assertEq(mk('cardLegToManual(legs[1])'), null, 'الكارت المؤكد مايتحولش يدوي');
+  assertEq(mk('legs[1].status'), 'approved', 'وحالته زي ما هي');
+  assertEq(mk('cardLegToManual(legs[2])'), null, 'والمرفوض كمان مايتحولش');
+  assertEq(mk('cardLegToManual(null)'), null, 'مدخل فاضي = null من غير ما تقع');
+
+  // ---- ٥) التحويل مرة واحدة: نداء تاني مايكررش العملية ----
+  mk(`legs2 = [{ seq:1, amount:200, status:'pending', ref:'r1' }];
+      a = cardLegToManual(legs2[0]); b = cardLegToManual(legs2[0]);`);
+  assertEq(mk('b'), null, 'الشريحة اللي اتسجلت مابتتسجلش تاني');
+  assertEq(mk('legs2[0].txn.amount'), 200, 'وبيانات العملية زي ما هي');
+
+  // ---- ٦) شاشة التأكيد الإجبارية موصّلة في مسار الحفظ ----
+  const cp = extractFn(saleSrc, 'confirmPayment');
+  assert(cp.length > 0, 'confirmPayment اتلقت');
+  assert(/cardPendingLegs\(cardLegs\)/.test(cp), 'الحفظ بيفحص الشرائح المعلّقة');
+  assert(/confirm\(/.test(cp) && /إيصال الموافقة طلع من الماكينة/.test(cp),
+    '⛔ تأكيد إجباري: الكاشير بتأكد إنها شافت الإيصال');
+  assert(/إيصال الموافقة طلع من الماكينة[\s\S]{0,80}\);[\s\S]{0,40}if\(!ok\) return;[\s\S]{0,400}cardLegToManual/.test(cp),
+    '⛔ الرفض بيوقف الحفظ **قبل** أي تحويل يدوي (مش بيعدي على التأكيد)');
+  assert(/cardLegToManual\(l, _tid\)/.test(cp), 'التحويل بيحصل بعد التأكيد بس');
+  assert(/_logActivity\('card_saved_manual'/.test(cp),
+    '📓 الصندوق الأسود بيسجل كل حفظ يدوي');
+  assert(cp.indexOf('cardPendingLegs') < cp.indexOf('cardOvercharge'),
+    'فحص المعلّق قبل فحص السحب الزايد');
+
+  // ---- ٧) 🔒 الطباعة التلقائية ما اتلمستش ----
+  const auto = extractFn(saleSrc, 'paymobAutoSkipReason');
+  assert(auto.length > 0 && /_paymobAutoFired && orderRef/.test(auto),
+    'حارس الطباعة المكررة لسه مربوط بـorderRef زي ما هو');
+  const watch2 = extractFn(saleSrc, 'paymobWatch');
+  assert(/paymobCanAutoFinish\(amountEGP, d, orderRef\)/.test(watch2),
+    '⚡ التأكيد لما يوصل لسه بيحفظ ويطبع لوحده');
+  assert(/السلة فضيت قبل ما التأكيد يوصل/.test(auto),
+    '🔁 تأكيد بعد الحفظ اليدوي مش هيطبع تاني (السلة اتفضّت)');
+
+  // ---- ٨) رسايل المهلة بقت تقول الحقيقة ----
+  assert(/دوس «حفظ وطباعة» وأكّد/.test(watch2),
+    'رسالة الـ10 دقايق بتوجّه للحفظ اليدوي (كانت بتقول «احفظ يدوي» وهو مقفول)');
+}
+
+// ============================================================
+// ١٢) 🔴 التأكيد اللي بيضيع: البحث بالـseq وحده
+// الباج: التأكيد كان بيدور `cardLegBySeq(cardLegs, seq)` ولو مالقاش يعدي بصمت
+// (if من غير else). النتيجة إصابة واحدة بعرضين: الشريحة تفضل pending (زرار
+// الحفظ مقفول) و cardTxns تتبني من approved بس (فاتورة من غير بيانات كارت).
+// مكانش بيحصل قبل الكارتين — البحث ده نفسه لسه موجودش.
+// ============================================================
+{
+  const F = loadFns(saleSrc, ['findCardLeg','cardLegBySeq','cardLegsPending']);
+  const f = (e)=> vm.runInContext(e, F);
+
+  // ---- ١) الطريق العادي: بالرقم ----
+  f(`legs = [{ seq:1, amount:200, status:'pending', ref:'r1' },
+             { seq:2, amount:300, status:'pending', ref:'r2' }];`);
+  assertEq(f(`findCardLeg(legs, 2, 'r2').amount`), 300, 'اللقط بالرقم شغال');
+
+  // ---- ٢) الرقم اتلخبط → مرجع الطلب بينقذ ----
+  assertEq(f(`findCardLeg(legs, 9, 'r1').seq`), 1,
+    '🔑 رقم غلط + مرجع صح → بيلاقي بالمرجع (المرجع فريد لكل محاولة)');
+
+  // ---- ٣) لا رقم ولا مرجع → الشريحة المعلّقة الوحيدة ----
+  f(`one = [{ seq:2, amount:860, status:'pending', ref:'ref-A' }];`);
+  assertEq(f(`findCardLeg(one, 1, 'ref-B').amount`), 860,
+    'تأكيد واحد + معلّقة واحدة = هي هي بالضرورة');
+  assertEq(f(`cardLegBySeq(one, 1)`), null,
+    '⚠️ الدالة القديمة كانت بترجع null هنا — وده كان بيضيّع التأكيد');
+
+  // ---- ٤) أكتر من معلّقة = مبيخمّنش ----
+  f(`two = [{ seq:1, status:'pending', ref:'a' }, { seq:2, status:'pending', ref:'b' }];`);
+  assertEq(f(`findCardLeg(two, 7, 'zzz')`), null,
+    'معلّقتين ومفيش دليل → بيرجع null بدل ما يخمّن على شريحة غلط');
+
+  // ---- ٥) مبيرجعش شريحة مؤكدة بالغلط ----
+  f(`ap = [{ seq:1, status:'approved', ref:'x', txn:{} }];`);
+  assertEq(f(`findCardLeg(ap, 5, 'yyy')`), null, 'المؤكد مش بيتاخد كبديل');
+  assertEq(f(`findCardLeg([], 1, 'r')`), null, 'قايمة فاضية = null من غير ما تقع');
+
+  // ---- ٦) التأكيد اليتيم بيعمل شريحة بدل ما يضيع ----
+  const wf = extractFn(saleSrc, 'paymobWatch');
+  // ⚠️ لازم نمسك فرع النجاح تحديدًا (`let _leg`) — فرع الرفض بيستخدم نفس
+  // الدالة بـ`const`، فالبحث عن الاسم لوحده كان بيعدّي على الباج.
+  assert(/let _leg = findCardLeg\(cardLegs, seq, orderRef\);/.test(wf),
+    'فرع النجاح بيستخدم اللقط الثلاثي مش الرقم وحده');
+  assert(!/let _leg = cardLegBySeq\(cardLegs, seq\);/.test(wf),
+    'وماحدش رجّع البحث بالرقم وحده في فرع النجاح');
+  assert(/if\(!_leg\)\{[\s\S]{0,400}cardLegs\.push\(_leg\)/.test(wf),
+    '🔑 تأكيد مالقاش شريحة → بينشئ واحدة (مش بيعدي بصمت)');
+  assert(/_logActivity\('card_leg_recovered'/.test(wf),
+    '📓 الحالة دي بتتسجل في الصندوق الأسود');
+  assert(/_leg\.status = 'approved'; _leg\.txn = _txn;/.test(wf),
+    'وبعد الإنقاذ بتتحط approved ومعاها بيانات العملية');
+  assert(!/const _leg = cardLegBySeq\(cardLegs, seq\);\s*\n\s*if\(_leg\)\{ _leg\.status = 'approved'/.test(wf),
+    '❌ الشكل القديم (if من غير else) اتشال');
+
+  // ---- ٧) حالات الـwebhook اللي كانت بتستنى للأبد ----
+  // ⚠️ الشرط نفسه مش مجرد ذكر الكلمة — الرسالة فيها 'refunded' كمان
+  assert(/d\.status === 'failed' \|\| d\.status === 'voided' \|\| d\.status === 'refunded'/.test(wf),
+    "↩️ الحالة 'refunded' داخلة في شرط الفرع — كانت بتخلي المتابعة تستنى للأبد");
+  assert(/العملية دي اترجعت من Paymob/.test(wf), 'ورسالتها واضحة للكاشير');
+  assert(/d\.status === 'pending'/.test(wf) && /مستنيين تأكيد البنك/.test(wf),
+    "⏳ الحالة 'pending' (حجز البنك) بتتعرض بدل شاشة ساكتة");
+  assert(/مستنيين تأكيد البنك[\s\S]{0,120}return false;/.test(wf),
+    "و'pending' بتكمّل المتابعة (مش بتوقفها)");
+}
