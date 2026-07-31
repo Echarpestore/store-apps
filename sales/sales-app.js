@@ -1306,7 +1306,8 @@ onSnapshot(_scoped(pointsCol,'ts'), (snap)=>{
   if(adminUnlocked){ renderLog(); renderPerformanceLink(); }
 }, (err)=> console.error('points sync error', err));
 
-onSnapshot(entriesCol, (snap)=>{
+// 📉 تقييمات العملاء بتكبر مع كل تقييم للأبد — دي أكبر مصدر قراءات في التطبيق
+onSnapshot(_scoped(entriesCol,'ts'), (snap)=>{
   allFeedback = snap.docs.map(d=>({id:d.id, ...d.data()}));
   if(adminUnlocked) renderPerformanceLink();
 }, (err)=> console.error('feedback sync error', err));
@@ -1322,12 +1323,12 @@ onSnapshot(tasksCol, (snap)=>{
   applyBranchFilter();
 }, (err)=> console.error('tasks sync error', err));
 
-onSnapshot(submissionsCol, (snap)=>{
+onSnapshot(_scoped(submissionsCol,'submittedAt'), (snap)=>{
   allSubmissions = snap.docs.map(d=>({id:d.id, ...d.data()}));
   applyBranchFilter();
 }, (err)=> console.error('submissions sync error', err));
 
-onSnapshot(rewardsCol, (snap)=>{
+onSnapshot(_scoped(rewardsCol,'earnedAt'), (snap)=>{
   allRewards = snap.docs.map(d=>({id:d.id, ...d.data()}));
   applyBranchFilter();
 }, (err)=> console.error('rewards sync error', err));
@@ -1362,12 +1363,12 @@ onSnapshot(settingsCol, (snap)=>{
   if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); try{ window.renderTimeSettings(); }catch(e){} }
 }, (err)=> console.error('settings sync error', err));
 
-onSnapshot(vioReviewCol, (snap)=>{
+onSnapshot(_scoped(vioReviewCol,'ts'), (snap)=>{
   allVioReviews = snap.docs.map(d=>({id:d.id, ...d.data()}));
   if(adminUnlocked && typeof renderViolationsReview==='function') renderViolationsReview();
 }, (e)=> console.warn('vio reviews sync', e && e.code));
 
-onSnapshot(attDecisionsCol, (snap)=>{
+onSnapshot(_scoped(attDecisionsCol,'ts'), (snap)=>{
   allAttDecisions = snap.docs.map(d=>({id:d.id, ...d.data()}));
   window.allAttDecisions = allAttDecisions;
   if(adminUnlocked && typeof renderAttIssues==='function') window.renderAttIssues();
