@@ -229,7 +229,16 @@ function fixArabicKeyboard(text){
     const two = t.substr(i, 2);
     if(AR_KEYS[two] !== undefined){ out += AR_KEYS[two]; i++; continue; }
     const ch = t[i];
-    out += (AR_KEYS[ch] !== undefined) ? AR_KEYS[ch] : ch;
+    if(AR_KEYS[ch] !== undefined){ out += AR_KEYS[ch]; continue; }
+    // 🔢 أرقام هندية/فارسية → إنجليزي.
+    // 🔴 الخريطة كانت حروف بس (52 مدخل، ولا رقم). وكارت الموظف شكله
+    //    EC + 10 خانة فيها أرقام — فلو ويندوز طلّع ٢٣٤ بدل 234، الحروف
+    //    تتصلّح والأرقام تفضل عربية، الشكل ميطابقش والكارت ميظهرش.
+    //    ده اللي بيبان «كلام غريب»: نص متصلّح ونص لأ.
+    const cp = ch.charCodeAt(0);
+    if(cp >= 0x0660 && cp <= 0x0669){ out += String(cp - 0x0660); continue; }  // ٠-٩
+    if(cp >= 0x06F0 && cp <= 0x06F9){ out += String(cp - 0x06F0); continue; }  // ۰-۹ فارسي
+    out += ch;
   }
   return out;
 }

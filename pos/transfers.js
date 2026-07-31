@@ -374,6 +374,11 @@ async function _trSetCarrierByCode(code){
 }
 function _trRouteCode(code){
   // 🧠 اللاقط الذكي: كارت موظف → حاملة · غير كده → منتج — من أي مكان في الشاشة
+  // ⌨️ ترجمة الكيبورد العربي: المعالج العام بيقرا مكان الزرار فمستقل عن اللغة،
+  // لكن لما التركيز يكون **جوه خانة** بيتخطّى، والحروف بتقع خام. الخانات دي
+  // كانت بتاخد القيمة زي ما هي — فكارت الموظف بلغة عربي ماكانش بيتعرف.
+  const _ns = (typeof window.normalizeScan === 'function') ? window.normalizeScan : function(x){ return x; };
+  code = _ns(String(code || '').trim());
   const up = code.toUpperCase();
   if(/^EC[A-Z2-9]{10}$/.test(up)) _trSetCarrierByCode(up);
   else _trAddItemByCode(code);
