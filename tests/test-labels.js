@@ -128,3 +128,31 @@ function extractFn(src, name){
   assert(t({cash:0})          === false, 'كاش صفر → مايفتحش');
   assert(t(null)              === false, 'مفيش مدفوعات → مايفتحش من غير ما تقع');
 }
+
+// ============================================================
+// 🎯 حارس التركيز في شاشة البيع
+// الشكوى: «بيعمل لاج ومش بيكتب» في كل الفروع. التركيز بيضيع بعد قفل أي
+// نافذة، والحروف بتتبلع في مخزن المسح العام بدل خانة البحث.
+// ============================================================
+{
+  const g = appSrc.match(/\(function\(\)\{\s*\n\s*if\(window\._focusGuardOn\) return;[\s\S]*?\n\}\)\(\);/);
+  assert(!!g, 'بلوك حارس التركيز موجود');
+  const blk = g ? g[0] : '';
+
+  assert(/window\._focusGuardOn = true;/.test(blk), '🔒 بيتركّب مرة واحدة بس');
+  assert(/if\(!saleVisible\(\) \|\| busy\(\)\) return;/.test(blk),
+    'مابيشتغلش غير في شاشة البيع ولما مفيش نافذة مفتوحة');
+  assert(/if\(a && a !== document\.body && a\.tagName !== 'HTML'\) return;/.test(blk),
+    '🔑 الشرط الضيق: بيرجّع التركيز بس لو مفيش أي حاجة متفوكسة');
+  assert(/\.modal-overlay\.active/.test(blk), 'بيحترم النوافذ الثابتة');
+  ['askTextOverlay','askConfirmOverlay','cancelTerminalOverlay'].forEach(id=>{
+    assert(blk.indexOf(id) >= 0, `بيحترم نافذة ${id}`);
+  });
+  assert(/sb\.offsetParent !== null/.test(blk), 'ومابيفوكسش خانة مخفية');
+  assert(/\}catch\(e\)\{\}/.test(blk), '🛡️ أي خطأ فيه ميوقفش الشاشة');
+
+  // ⚠️ الحارس علاج للعرض — الأصل إن focusSearchBar بتتنادى وقت الدخول بس
+  assert(/function focusSearchBar\(\)/.test(appSrc), 'focusSearchBar لسه موجودة');
+  assert(appSrc.indexOf('_focusGuardOn') < appSrc.indexOf('// >>> GSCAN_START'),
+    'الحارس متعرّف قبل معالج المسح العام');
+}

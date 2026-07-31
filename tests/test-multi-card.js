@@ -694,3 +694,31 @@ const L_MIX       = [{seq:1, amount:200, status:'approved'}, {seq:2, amount:300,
   assert(/مستنيين تأكيد البنك[\s\S]{0,120}return false;/.test(wf),
     "و'pending' بتكمّل المتابعة (مش بتوقفها)");
 }
+
+// ============================================================
+// ⏱️ قياس زمن الطباعة — القياس نفسه ميأخّرش الطباعة
+// ============================================================
+{
+  const wf3 = extractFn(saleSrc, 'paymobWatch');
+  assert(/_pmPrintMark = \{/.test(wf3), 'الطابع بيتاخد لما التأكيد يوصل الجهاز');
+  assert(/gotAtMs: Date\.now\(\)/.test(wf3), 'وبلحظة الوصول الفعلية');
+  assert(wf3.indexOf('_pmPrintMark') < wf3.indexOf('confirmPayment()'),
+    '⚡ الطابع قبل نداء الحفظ — مش بيضيف أي تأخير عليه');
+
+  const dcp = extractFn(saleSrc, '_doConfirmPayment');
+  assert(dcp.length > 0, '_doConfirmPayment اتلقت');
+  assert(/_logActivity\('print_latency'/.test(dcp), '📓 القياس بيتسجل في سجل النشاط');
+  assert(dcp.indexOf("_logActivity('print_latency'") < dcp.indexOf('printReceipt(paymentsEntered'),
+    'القياس بيقفل قبل الطباعة (مش بيقيس نفسه)');
+  assert(/\}catch\(e\)\{ console\.warn\('print latency', e\); \}/.test(dcp),
+    '🛡️ أي خطأ في القياس ميوقفش الفاتورة');
+  assert(/_pmPrintMark = null; window\._pmPrintMark = null;/.test(dcp),
+    'الطابع بيتصفّر — فاتورة واحدة لكل قياس، مفيش تلوث للي بعدها');
+  assert(dcp.indexOf('_pmPrintMark = null') < dcp.indexOf('printReceipt(paymentsEntered'),
+    'والتصفير قبل الطباعة كمان');
+
+  // الحساب نفسه: طوابع حقيقية من عملية اتقاست بإيد
+  const a = Date.parse('2026-07-31T23:25:57.774921+03:00');
+  const decidedAt = 1785529561286;
+  assertEq(Math.round((decidedAt - a) / 100) / 10, 3.5, 'حساب جزء Paymob مطابق للقياس اليدوي');
+}
