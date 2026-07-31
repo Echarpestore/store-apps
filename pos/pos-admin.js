@@ -63,8 +63,14 @@ async function renderInventoryScreen(){
   const addWrap = document.getElementById('inventoryAddRow');
   const listWrap = document.getElementById('inventoryListWrap');
 
+  // ➕ الإضافة بقت ورا زرار: الفورم كان مفرود على طول وبياخد نص الشاشة فوق
+  //    القايمة، والكاشير بتلف حواليه في كل مرة تدوّر على صنف.
   addWrap.innerHTML = hasPerm('canEditInventory') ? `
-    <div style="display:flex; gap:6px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px;">
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+      <button id="invAddToggle" onclick="toggleInvAddForm()" style="padding:9px 16px; border-radius:9px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">➕ إضافة منتج</button>
+      <button onclick="openDupBarcodeCheck()" style="padding:9px 14px; border-radius:9px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-weight:700; cursor:pointer;">🔍 أكواد متكررة</button>
+    </div>
+    <div id="invAddForm" style="display:none; gap:6px; flex-wrap:wrap; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px;">
       <input id="newItemName" placeholder="اسم الصنف" style="flex:2; min-width:100px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
       <input id="newItemBarcode" placeholder="الباركود" value="${nextBarcode()}" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
       <input id="newItemPrice" type="number" placeholder="السعر" style="flex:1; min-width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
@@ -158,9 +164,16 @@ function renderInventoryList(){
   const q = (document.getElementById('invSearch')?.value || '').trim().toLowerCase();
   const filter = document.getElementById('invFilter')?.value || 'all';
 
+  // 🔎 نفس بحث شاشة البيع بالظبط: الاسم بالتطبيع العربي، والكود **بالبداية**
+  // مش بالاحتواء — البحث بـ33 كان بيطلّع 533 و833 وسط قايمة المخزون.
+  const _sm = (typeof searchMatch === 'function') ? searchMatch
+            : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
+  const _bp = (typeof barcodePrefix === 'function') ? barcodePrefix
+            : (bc, qq)=> String(bc||'').toLowerCase().startsWith(String(qq||'').toLowerCase());
+
   let items = allInventory.filter(it=>{
     if(it.branches && !it.branches.includes(currentBranch)) return false;
-    if(q && !((it.name||'').toLowerCase().includes(q) || (it.barcode||'').toLowerCase().includes(q))) return false;
+    if(q && !(_sm(it.name, q) || _bp(it.barcode, q))) return false;
     const isLow = (it.minStock??0) > 0 && branchQty(it) <= it.minStock;
     const isOut = it.status==='outofstock' || branchQty(it) <= 0;
     if(filter==='low') return isLow && it.status!=='hidden';
@@ -648,6 +661,89 @@ async function toggleCustomerVisible(id){
   }catch(e){ showToast('حصل خطأ: '+e.message, 'err'); it.showToCustomer = !newVal; renderInventoryList(); }
 }
 
+// 🔴 منع الباركود المكرر — **دالة نقية عشان تتختبر بالـharness**.
+// مكانش فيه أي منع خالص: `.add()` على طول. صنفين بنفس الكود = المسدس بيقف
+// قدام تطابقين، والبيع بياخد أول واحد يلاقيه (اللي ممكن يكون بسعر تاني).
+// بترجّع رسالة المنع أو null لو الكود نضيف.
+// selfId: عشان تعديل صنف مايتبلّغش على نفسه.
+function barcodeDupReject(list, barcode, selfId){
+  const b = String(barcode || '').trim();
+  if(!b) return null;                      // مفيش كود = مفيش تكرار نمنعه
+  const hit = (list || []).filter(function(x){
+    return x && String(x.barcode || '').trim() === b
+        && (!selfId || x.id !== selfId);
+  })[0];
+  if(!hit) return null;
+  return 'الكود ' + b + ' متسجل بالفعل على «' + (hit.name || '') + '»';
+}
+window.barcodeDupReject = barcodeDupReject;
+
+// ➕ فتح/قفل فورم إضافة الصنف
+function toggleInvAddForm(){
+  const f = document.getElementById('invAddForm');
+  if(!f) return;
+  const isOpen = f.style.display !== 'none';
+  f.style.display = isOpen ? 'none' : 'flex';
+  const b = document.getElementById('invAddToggle');
+  if(b) b.textContent = isOpen ? '\u2795 إضافة منتج' : '\u2716\ufe0f إقفال الفورم';
+  if(!isOpen){
+    const n = document.getElementById('newItemName');
+    if(n) try{ n.focus(); }catch(e){}
+  }
+}
+window.toggleInvAddForm = toggleInvAddForm;
+
+// 🔍 كشف الأكواد المتكررة — الأصناف اللي بتتشارك نفس الباركود.
+// ⚠️ المنع اتحط على الإضافة الجديدة، بس اللي اتسجل قبل كده لسه موجود —
+//    والمسدس بيقف قدامهم. الأداة دي بتوريهم عشان يتصلحوا يدوي.
+function openDupBarcodeCheck(){
+  if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
+  const map = {};
+  (allInventory || []).forEach(function(it){
+    const b = String((it && it.barcode) || '').trim();
+    if(!b) return;
+    (map[b] = map[b] || []).push(it);
+  });
+  const dups = Object.keys(map).filter(function(b){ return map[b].length > 1; })
+    .sort(function(a, b){ return map[b].length - map[a].length; });
+  const noBarcode = (allInventory || []).filter(function(it){
+    return it && !String(it.barcode || '').trim(); }).length;
+
+  const rows = dups.map(function(b){
+    const arr = map[b];
+    const names = arr.map(function(it){
+      return '<div style="padding:3px 0; border-top:1px dashed var(--border);">'
+        + '<b>' + (it.name || '(بدون اسم)') + '</b>'
+        + ' <span style="color:var(--muted); font-size:11px;">' + (it.price != null ? (it.price + ' ج.م') : '') + '</span>'
+        + '</div>';
+    }).join('');
+    return '<div style="background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px;">'
+      + '<div style="font-weight:900; direction:ltr; text-align:right;">' + b + '</div>'
+      + '<div style="color:var(--minus); font-size:12px; font-weight:700; margin:2px 0 4px;">متسجل ${arr.length} مرات</div>'.replace('${arr.length}', String(arr.length))
+      + names + '</div>';
+  }).join('');
+
+  const ov = document.createElement('div');
+  ov.id = 'dupBarcodeOverlay';
+  ov.style.cssText = 'position:fixed; inset:0; z-index:13000; background:rgba(0,0,0,.84);'
+    + 'display:flex; align-items:center; justify-content:center; padding:18px;';
+  ov.innerHTML = '<div style="background:var(--panel); border:2px solid var(--border); border-radius:16px;'
+    + ' padding:18px; max-width:520px; width:100%; max-height:82vh; overflow:auto;">'
+    + '<div style="font-weight:900; font-size:16px; margin-bottom:10px;">🔍 أكواد متكررة</div>'
+    + (dups.length
+        ? ('<div style="font-size:12px; color:var(--muted); margin-bottom:10px;">'
+           + dups.length + ' كود متكرر — المسدس بيقف قدامهم. صلّحهم من تعديل الصنف.</div>' + rows)
+        : '<div style="color:var(--plus); font-weight:700;">✅ مفيش أي كود متكرر</div>')
+    + (noBarcode ? ('<div style="margin-top:10px; font-size:12px; color:var(--warn);">⚠️ '
+        + noBarcode + ' صنف من غير باركود خالص</div>') : '')
+    + '<button onclick="document.getElementById(\'dupBarcodeOverlay\').remove()"'
+    + ' style="margin-top:14px; width:100%; padding:10px; border-radius:10px; border:none;'
+    + ' background:var(--panel2); color:var(--text); font-weight:800; cursor:pointer;">إقفال</button>'
+    + '</div>';
+  document.body.appendChild(ov);
+}
+window.openDupBarcodeCheck = openDupBarcodeCheck;
+
 async function addInventoryItem(){
   if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
   const name = document.getElementById('newItemName').value.trim();
@@ -658,6 +754,11 @@ async function addInventoryItem(){
   const quantity = parseInt(document.getElementById('newItemQty').value) || 0;
   const allBranches = document.getElementById('newItemAllBranches').checked;
   if(!name || !price){ showToast('اكتب الاسم والسعر على الأقل', 'err'); return; }
+  // 🔴 الباركود المكرر: مكانش فيه أي منع خالص — `.add()` على طول.
+  //    صنفين بنفس الكود = المسدس بيقف قدام تطابقين، والبيع بياخد أول واحد
+  //    يلاقيه (اللي ممكن يكون بسعر تاني). المنع هنا أرخص من التنضيف بعدين.
+  const _dupMsg = barcodeDupReject(allInventory, barcode);
+  if(_dupMsg){ showToast('❌ ' + _dupMsg, 'err'); return; }
   const data = {
     name, barcode, price, cost,
     qtyByBranch: { [currentBranch]: quantity },   // الكمية لفرعك، باقي الفروع صفر لحد ما يستلموا
@@ -687,7 +788,16 @@ async function logStockMovement(productId, productName, delta, type, reason){
 }
 async function deleteInventoryItem(id){
   if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
-  if(!confirm('متأكد إنك عايز تمسح الصنف ده؟')) return;
+  // ⚠️ المسح بيشيل الصنف نهائيًا ومبيسجلش خروج مخزون — لو عليه كمية،
+  //    الكمية دي بتختفي من الحسابات من غير أي أثر في سجل الحركة.
+  const _it = (allInventory || []).filter(function(x){ return x && x.id === id; })[0];
+  const _q = (_it && typeof branchQty === 'function') ? (branchQty(_it) || 0) : 0;
+  const _msg = (_q > 0)
+    ? ('⚠️ الصنف ده عليه كمية ' + _q + ' في فرعك.\n\n'
+       + 'المسح بيشيله نهائيًا ومش بيسجل خروج مخزون — الكمية دي هتختفي من الحسابات.\n'
+       + 'لو الصنف خلص، الأنسب تعلّمه «نافد» بدل ما تمسحه.\n\nمتأكد إنك عايز تمسح؟')
+    : 'متأكد إنك عايز تمسح الصنف ده؟';
+  if(!confirm(_msg)) return;
   await db.collection(TEST_INVENTORY).doc(id).delete();
   showToast('اتمسح ✅');
   renderInventoryScreen();
