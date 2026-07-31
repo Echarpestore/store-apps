@@ -178,6 +178,8 @@ async function renderRolesScreen(){
       <select data-emp="${emp.id}" onchange="setEmployeeRole(this)" style="padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">${options}</select>
     </div>`;
   }).join('') || '<div class="empty-cart">لسه مفيش موظفين في الفرع ده</div>';
+  // 📟 لوحة ماكينة الفيزا بتتملا مع فتح الشاشة (كانت بتفضل فاضية)
+  try{ loadPaymobCfgUI(); }catch(e){ console.warn('paymob cfg ui', e); }
 }
 async function toggleRolePerm(checkbox){
   const role = checkbox.dataset.role;
@@ -192,6 +194,100 @@ async function setEmployeeRole(sel){
   await db.collection(TEST_ROLES).doc('_assignments').set({ [empId]: role }, { merge:true });
   showToast('اتحفظ ✅');
 }
+
+// ============================================================
+// 📟 ماكينة الفيزا (Paymob) — تسجيل رقم الماكينة لكل فرع
+// ⚠️ الشاشة كانت مبنية في index.html وزرار «حفظ» بينادي savePaymobCfg()
+// اللي ماكانتش متكتبة أصلًا — الزرار كان بيدوس على فراغ من غير أي رسالة.
+// الإعداد بيتقري في pos-sale.js من pos_test_settings/paymob:
+//   { enabled, autoPrint, terminalIdByBranch: { الفرع: الرقم } }
+// ============================================================
+
+// 🚧 التحقق — دالة نقية عشان تتختبر بالـharness
+// ⛔ الأهم: فرعين بنفس رقم الماكينة = فلوس فرع بتتسجل على فرع تاني،
+// والتقفيل بيطلع عجز في واحد وأوفر في التاني.
+function paymobCfgReject(terminalId, branch, byBranch){
+  const t = String(terminalId == null ? '' : terminalId).trim();
+  if(!branch) return 'مفيش فرع محدد — اقفل وافتح تاني';
+  if(!t) return 'اكتب رقم الماكينة';
+  if(!/^\d+$/.test(t)) return 'رقم الماكينة أرقام إنجليزي بس — من غير مسافات ولا حروف';
+  if(t.length > 12) return 'رقم الماكينة طويل أوي — راجعه من لوحة Paymob';
+  if(/^0+$/.test(t)) return 'رقم الماكينة مش صح';
+  const map = byBranch || {};
+  const clash = Object.keys(map).filter(function(b){
+    return b !== branch && String(map[b] || '').trim() === t;
+  })[0];
+  if(clash) return 'الرقم ده متسجل على فرع «' + clash + '» — كل فرع لازم يكون له ماكينة لوحده';
+  return null;
+}
+if(typeof window !== 'undefined') window.paymobCfgReject = paymobCfgReject;
+
+function _pmbErr(msg){
+  const box = document.getElementById('pmbErr');
+  if(box) box.textContent = msg || '';
+}
+
+// 📥 بيملا الشاشة بالمحفوظ + بيعرض ماكينات باقي الفروع
+async function loadPaymobCfgUI(){
+  const nameEl = document.getElementById('pmbBranchName');
+  const idEl   = document.getElementById('pmbTerminalId');
+  const enEl   = document.getElementById('pmbEnabled');
+  const others = document.getElementById('pmbOthers');
+  if(!idEl) return;                       // الشاشة مش مفتوحة
+  if(nameEl) nameEl.textContent = currentBranch || 'الفرع ده';
+  _pmbErr('');
+  try{
+    const snap = await db.collection(TEST_SETTINGS).doc('paymob').get();
+    const cfg = snap.exists ? (snap.data() || {}) : {};
+    const map = cfg.terminalIdByBranch || {};
+    idEl.value = map[currentBranch] || '';
+    if(enEl) enEl.checked = cfg.enabled === true;
+    if(others){
+      const rows = Object.keys(map).filter(function(b){ return b !== currentBranch && map[b]; });
+      others.innerHTML = rows.length
+        ? ('الفروع التانية: ' + rows.map(function(b){
+            return b + ' → <b>' + map[b] + '</b>'; }).join(' · '))
+        : 'لسه مفيش فروع تانية مسجّلة ماكينة.';
+    }
+  }catch(e){
+    _pmbErr('تعذر تحميل الإعداد: ' + (e && e.message ? e.message : e));
+  }
+}
+if(typeof window !== 'undefined') window.loadPaymobCfgUI = loadPaymobCfgUI;
+
+// 💾 الحفظ — بيكتب رقم الفرع الحالي بس، وباقي الفروع متتلمسش
+async function savePaymobCfg(){
+  const idEl = document.getElementById('pmbTerminalId');
+  const enEl = document.getElementById('pmbEnabled');
+  if(!idEl) return;
+  if(typeof hasPerm === 'function' && !hasPerm('canManageRoles')){
+    showToast('الصلاحية دي للمدير بس', 'err'); return;
+  }
+  const branch = currentBranch;
+  const tid = String(idEl.value || '').trim();
+  _pmbErr('');
+  try{
+    // بنقرا المحفوظ الأول عشان نتأكد إن الرقم مش متسجل على فرع تاني
+    const snap = await db.collection(TEST_SETTINGS).doc('paymob').get();
+    const cfg = snap.exists ? (snap.data() || {}) : {};
+    const map = cfg.terminalIdByBranch || {};
+    const bad = paymobCfgReject(tid, branch, map);
+    if(bad){ _pmbErr('⛔ ' + bad); showToast(bad, 'err'); return; }
+    // 🔑 merge بيدمج الخريطة جوه جوه — فرع واحد بس هو اللي بيتغير
+    await db.collection(TEST_SETTINGS).doc('paymob').set({
+      enabled: !!(enEl && enEl.checked),
+      terminalIdByBranch: Object.assign({}, { [branch]: tid })
+    }, { merge:true });
+    showToast('اتحفظت ماكينة ' + branch + ': ' + tid + ' ✅', 'ok');
+    if(typeof _logActivity === 'function') _logActivity('paymob_terminal_saved', { branch: branch, terminalId: tid });
+    loadPaymobCfgUI();
+  }catch(e){
+    const m = (e && e.message ? e.message : String(e));
+    _pmbErr('تعذر الحفظ: ' + m);
+    showToast('تعذر الحفظ: ' + m, 'err');
+  }
+}
+if(typeof window !== 'undefined') window.savePaymobCfg = savePaymobCfg;
 
 // ---------------- Reports (manager only) ----------------
 let currentReportRange = 'today';
@@ -935,7 +1031,17 @@ function shToggle(id){
         return '<span style="background:#eef2ff; color:#4338CA; border-radius:99px; padding:4px 11px; font-size:11.5px; font-weight:700;">'
              + (names[e[0]] || e[0]) + ': ' + Number(e[1]).toFixed(2) + '</span>';
       }).join(' ');
-    const card = s.cardTxn;
+    // 💳💳 الفاتورة ممكن تكون اتدفعت بكارتين — بنعرضهم كلهم بمبالغهم
+    const _cardList = (s.cardTxns && s.cardTxns.length) ? s.cardTxns : (s.cardTxn ? [s.cardTxn] : []);
+    const card = _cardList.length ? {
+      scheme: null, last4: null, transactionId: null,
+      html: _cardList.map(function(c, i){
+        return (_cardList.length > 1 ? ('CARD ' + (c.seq || (i+1))
+                 + (c.amount != null ? ' · ' + Math.abs(c.amount).toFixed(2) + ' EGP' : '') + '<br>') : '')
+             + (c.scheme || 'CARD') + ' **** ' + (c.last4 || '----')
+             + (c.transactionId ? ' · TXN ' + c.transactionId : '');
+      }).join('<br>')
+    } : null;
     body.innerHTML =
       '<table style="width:100%; border-collapse:collapse;">'
       + '<tr style="color:#6b7280; font-size:11px; border-bottom:1px solid #e6e9ef;">'
@@ -944,9 +1050,8 @@ function shToggle(id){
       + '<th style="text-align:left; padding:0 4px 6px; font-weight:700;">الإجمالي</th></tr>'
       + rows + '</table>'
       + (pays ? '<div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">' + pays + '</div>' : '')
-      + (card ? '<div style="margin-top:9px; background:#0f1a2e; color:#dbeafe; border-radius:9px; padding:8px 11px; font-family:monospace; font-size:11.5px; direction:ltr; text-align:left;">'
-          + (card.scheme || 'CARD') + ' **** ' + (card.last4 || '----')
-          + (card.transactionId ? ' · TXN ' + card.transactionId : '') + '</div>' : '')
+      + (card ? '<div style="margin-top:9px; background:#0f1a2e; color:#dbeafe; border-radius:9px; padding:8px 11px; font-family:monospace; font-size:11.5px; direction:ltr; text-align:left; line-height:1.7;">'
+          + card.html + '</div>' : '')
       + '<div style="display:flex; gap:8px; margin-top:12px;">'
       + '<button onclick="reprintSale(\'' + id + '\')" style="flex:2; padding:10px; border:none; border-radius:10px;'
       + " background:linear-gradient(135deg,#3B82F6,#1D4ED8); color:#fff; font-family:'Cairo'; font-weight:800;"
@@ -983,6 +1088,7 @@ function reprintSale(id){
       invoiceNo: s.invoiceNo || '',
       scanCode: s.invoiceCode || s.invoiceNo || '',
       cardTxn: s.cardTxn || null,
+      cardTxns: (s.cardTxns && s.cardTxns.length) ? s.cardTxns : null,   // 💳💳 نسخة تانية بالكارتين
       isCopy: true,                       // 🔁 علامة إن دي نسخة تانية مش الأصلية
       copyAt: new Date().toLocaleString(c.lang==='en' ? 'en-GB' : 'ar-EG'),
       showAppQR: false
