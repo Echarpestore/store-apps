@@ -1292,6 +1292,10 @@ window.appReferrals = [];
 const READ_WINDOW_MS = 190 * 24 * 3600000;
 const _winStart = Date.now() - READ_WINDOW_MS;
 const _scoped = (col, field)=> query(col, where(field, '>=', _winStart));
+// 🔬 نافذة أضيق للمجموعات الضخمة: تقييمات العملاء بتتستخدم في مطابقة النقط
+// على فترات المرتبات (الشهر الحالي والسابق بس) — 65 يوم بتغطيهم بهامش،
+// و190 يوم منها كانت لوحدها عشرات الآلاف قراءة مع كل فتحة للتطبيق.
+const _scopedDays = (col, field, days)=> query(col, where(field, '>=', Date.now() - days * 24 * 3600000));
 
 onSnapshot(referralsCol, (snap)=>{
   window.appReferrals = snap.docs.map(d=> ({id:d.id, ...d.data()}));
@@ -1307,7 +1311,7 @@ onSnapshot(_scoped(pointsCol,'ts'), (snap)=>{
 }, (err)=> console.error('points sync error', err));
 
 // 📉 تقييمات العملاء بتكبر مع كل تقييم للأبد — دي أكبر مصدر قراءات في التطبيق
-onSnapshot(_scoped(entriesCol,'ts'), (snap)=>{
+onSnapshot(_scopedDays(entriesCol,'ts', 65), (snap)=>{
   allFeedback = snap.docs.map(d=>({id:d.id, ...d.data()}));
   if(adminUnlocked) renderPerformanceLink();
 }, (err)=> console.error('feedback sync error', err));
