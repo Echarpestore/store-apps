@@ -6,7 +6,13 @@
    ============================================================ */
 'use strict';
 
-const OWNER_CODE = '2005';
+// 🔴 كان فيه كود مالك **مكتوب صريح** في الملف ده.
+// GitHub Pages بيقدّم الملف ده لأي متصفح — أي حد يفتح /Office/office.js يقرا
+// الكود. مش محتاج جهازك ولا devtools. اتشال خالص، والكود بقى **بصمة** محفوظة
+// في Firestore ومتقارنة بالـhash. الكود نفسه عمره ما بيتخزّن في أي مكان.
+const OF_GATE_DOC = 'office_gate';        // pos_test_settings/office_gate
+const OF_SESS_KEY = 'office_gate_sess';   // جلسة بصلاحية، مش علامة دائمة
+const OF_SESS_HOURS = 10;                 // تنتهي كل 10 ساعات
 
 const firebaseConfig = {
   apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
@@ -176,43 +182,78 @@ if (typeof window !== 'undefined'){
 // 🔐 الجهاز بيفتكر الدخول — كان بيطلب الإيميل والباسورد وكود المالك كل مرة
 // (الباسورد مكانش بيتحفظ خالص، وكود المالك في sessionStorage بيتمسح مع القفل)
 const _OF_KEY = 'office_login';
-function _ofEnc(s){
-  try{ return btoa(unescape(encodeURIComponent(s)).split('').map(function(c,i){
-    return String.fromCharCode(c.charCodeAt(0) ^ (13 + (i % 9)));
-  }).join('')); }catch(e){ return ''; }
-}
-function _ofDec(s){
-  try{ return decodeURIComponent(escape(atob(s).split('').map(function(c,i){
-    return String.fromCharCode(c.charCodeAt(0) ^ (13 + (i % 9)));
-  }).join(''))); }catch(e){ return ''; }
-}
-function saveOfficeLogin(em, pw){
-  try{ localStorage.setItem(_OF_KEY, _ofEnc(JSON.stringify({ e:em, p:pw }))); }catch(e){}
-}
-function getOfficeLogin(){
-  try{
-    const raw = localStorage.getItem(_OF_KEY);
-    if(!raw) return null;
-    const o = JSON.parse(_ofDec(raw));
-    return (o && o.e && o.p) ? o : null;
-  }catch(e){ return null; }
-}
-async function tryAutoOfficeLogin(){
-  if(firebase.auth().currentUser) return true;
-  const s = getOfficeLogin();
-  if(!s) return false;
-  try{ await firebase.auth().signInWithEmailAndPassword(s.e, s.p); return true; }
-  catch(e){
-    if(e && (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password')){
-      localStorage.removeItem(_OF_KEY);
-    }
-    return false;
-  }
+// ============================================================
+// 🔐 الدخول
+// 🔴 كان الباسورد بيتحفظ في localStorage بـXOR + base64 — **تشويش مش تشفير**،
+//    وأي حد ياخد الجهاز يطلّع بيانات الحساب ويدخل بيها من أي مكان في الدنيا
+//    وميقدرش حد يوقفه غير بتغيير الباسورد.
+//    اتشال خالص. Firebase أصلًا بيحتفظ بالجلسة (refresh token) — والفرق إن
+//    التوكن ده **ينفع يتلغي من الكونسول** والباسورد لأ.
+// ============================================================
+try{
+  firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+}catch(e){ console.warn('persistence', e); }
+
+// 🧹 تنضيف لمرة واحدة: أي بيانات دخول قديمة متخزنة على الجهاز بتتمسح
+try{
+  ['office_login','office_creds','office_owner_ok'].forEach(function(k){
+    try{ localStorage.removeItem(k); }catch(e){}
+  });
+  if(typeof _OF_KEY !== 'undefined') localStorage.removeItem(_OF_KEY);
+}catch(e){}
+
+// 🔑 بصمة الكود (SHA-256 بملح ثابت) — الكود نفسه عمره ما بيتخزّن ولا بيتبعت
+async function ofHash(code){
+  const data = new TextEncoder().encode('echarpe-office:' + String(code || ''));
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(function(b){
+    return b.toString(16).padStart(2,'0'); }).join('');
 }
 
-// كود المالك بقى في localStorage — بيفضل بعد القفل والفتح
-let ownerOk = localStorage.getItem('office_owner_ok') === '1'
-           || sessionStorage.getItem('office_owner_ok') === '1';
+// Firebase بيرجّع الجلسة لوحده مع setPersistence — مفيش أي باسورد بيتخزّن
+async function tryAutoOfficeLogin(){
+  return !!firebase.auth().currentUser;
+}
+
+// ============================================================
+// 🔐 بوابة كود المالك
+// 🔴 كان: علامة office_owner_ok='1' في localStorage — أي حد يكتبها في
+//    devtools يعدّي البوابة، وبتفضل للأبد.
+//    دلوقتي: جلسة **بصلاحية** فيها بصمة الكود نفسه. لو الكود اتغيّر من
+//    الكونسول، كل الجلسات القديمة بتبطل تلقائي.
+// ⚠️ بصراحة: أي حاجة على المتصفح ممكن حد يزرعها لو معاه الجهاز مفتوح
+//    و devtools. الحماية الحقيقية هي حساب Firebase + قواعد Firestore.
+//    البوابة دي لسرقة الجهاز — والانتهاء بعد 10 ساعات هو اللي بيحدّ الضرر.
+// ============================================================
+let ownerOk = false;
+let _gateHash = null;        // البصمة المحفوظة في Firestore
+let _gateTries = 0;
+
+function _sessRead(){
+  try{
+    const o = JSON.parse(sessionStorage.getItem(OF_SESS_KEY) || 'null');
+    if(!o || !o.exp || !o.h) return null;
+    if(Date.now() > o.exp) return null;                 // انتهت
+    if(_gateHash && o.h !== _gateHash) return null;     // الكود اتغيّر
+    return o;
+  }catch(e){ return null; }
+}
+function _sessWrite(h){
+  try{
+    sessionStorage.setItem(OF_SESS_KEY, JSON.stringify({
+      h: h, exp: Date.now() + OF_SESS_HOURS * 3600 * 1000
+    }));
+  }catch(e){}
+}
+
+// بتقرا البصمة من Firestore (محتاجة تسجيل دخول Firebase — ودي الحماية الحقيقية)
+async function loadGateHash(){
+  try{
+    const d = await db.collection('pos_test_settings').doc(OF_GATE_DOC).get();
+    _gateHash = (d.exists && d.data() && d.data().hash) || null;
+  }catch(e){ _gateHash = null; console.warn('gate', e && e.code); }
+  return _gateHash;
+}
 
 $('#gLogin').addEventListener('click', async function(){
   const em = $('#gEmail').value.trim(), pw = $('#gPass').value;
@@ -220,28 +261,76 @@ $('#gLogin').addEventListener('click', async function(){
   if(!em || !pw){ $('#gateErr').textContent = 'اكتب الإيميل والباسورد'; return; }
   try{
     await firebase.auth().signInWithEmailAndPassword(em, pw);
-    localStorage.setItem('office_email', em);
-    saveOfficeLogin(em, pw);          // 🔑 الجهاز يفتكر
+    localStorage.setItem('office_email', em);   // الإيميل بس — مفيش باسورد
+    $('#gPass').value = '';
   }catch(e){ $('#gateErr').textContent = 'دخول غلط: ' + (e.code||''); }
 });
-// محاولة دخول تلقائي أول ما البرنامج يفتح
 tryAutoOfficeLogin();
-$('#gCodeBtn').addEventListener('click', function(){
-  if($('#gCode').value === OWNER_CODE){
-    ownerOk = true;
-    localStorage.setItem('office_owner_ok','1');   // بيفضل بعد القفل والفتح
-    sessionStorage.setItem('office_owner_ok','1');
-    refreshGate(firebase.auth().currentUser);
-  } else { $('#gateErr').textContent = 'كود غلط'; $('#gCode').value=''; }
+
+$('#gCodeBtn').addEventListener('click', async function(){
+  const val = $('#gCode').value.trim();
+  $('#gateErr').textContent = '';
+  if(!val){ return; }
+  // 🐢 تهدئة بعد المحاولات الغلط — عشان التخمين ميبقاش رخيص
+  if(_gateTries >= 5){
+    $('#gateErr').textContent = 'محاولات كتير — اقفل البرنامج وافتحه تاني';
+    return;
+  }
+  try{
+    const h = await ofHash(val);
+    if(_gateHash === null) await loadGateHash();
+
+    // 🆕 أول تشغيل: مفيش كود متسجّل — بنسجّله دلوقتي.
+    // آمن لأن اللي وصل هنا **داخل بحساب Firebase أصلًا**.
+    if(!_gateHash){
+      if(val.length < 4){ $('#gateErr').textContent = 'اختار كود 4 أرقام على الأقل'; return; }
+      await db.collection('pos_test_settings').doc(OF_GATE_DOC)
+        .set({ hash: h, setAt: Date.now() }, { merge: true });
+      _gateHash = h;
+      ownerOk = true; _sessWrite(h);
+      $('#gCode').value = '';
+      refreshGate(firebase.auth().currentUser);
+      return;
+    }
+
+    if(h === _gateHash){
+      _gateTries = 0;
+      ownerOk = true; _sessWrite(h);
+      $('#gCode').value = '';
+      refreshGate(firebase.auth().currentUser);
+    } else {
+      _gateTries++;
+      $('#gateErr').textContent = 'كود غلط' + (_gateTries >= 3 ? (' (' + (5 - _gateTries) + ' محاولات فاضلة)') : '');
+      $('#gCode').value = '';
+    }
+  }catch(e){
+    $('#gateErr').textContent = 'تعذر التحقق — راجع النت';
+    console.warn('gate check', e);
+  }
 });
 $('#gCode').addEventListener('keydown', function(e){ if(e.key==='Enter') $('#gCodeBtn').click(); });
 
-// 🚪 خروج صريح — بيمسح المحفوظ ويقفل. (من غيره الجهاز بيفضل فاتح للأبد)
+// 🔑 تغيير كود المالك — من جوه البرنامج وانت داخل
+window.officeChangeCode = async function(){
+  if(!ownerOk){ alert('افتح البوابة الأول'); return; }
+  const a = prompt('الكود الجديد (4 أرقام على الأقل):');
+  if(!a || a.trim().length < 4) return;
+  const b = prompt('اكتبه تاني للتأكيد:');
+  if(a.trim() !== (b||'').trim()){ alert('الكودين مش زي بعض'); return; }
+  try{
+    const h = await ofHash(a.trim());
+    await db.collection('pos_test_settings').doc(OF_GATE_DOC)
+      .set({ hash: h, setAt: Date.now() }, { merge: true });
+    _gateHash = h; _sessWrite(h);
+    alert('اتغيّر ✅ — الأجهزة التانية هتطلب الكود الجديد');
+  }catch(e){ alert('ماتغيرش: ' + (e.code||e.message)); }
+};
+
+// 🚪 خروج صريح
 window.officeLogout = async function(){
   if(!confirm('هتخرج من البرنامج والجهاز هينسى الدخول. متأكد؟')) return;
-  try{ localStorage.removeItem(_OF_KEY); }catch(e){}
+  try{ sessionStorage.removeItem(OF_SESS_KEY); }catch(e){}
   try{ localStorage.removeItem('office_owner_ok'); }catch(e){}
-  try{ sessionStorage.removeItem('office_owner_ok'); }catch(e){}
   ownerOk = false;
   try{ await firebase.auth().signOut(); }catch(e){}
   location.reload();
@@ -260,6 +349,9 @@ function refreshGate(user){
     $('#gate').style.display = 'flex';
     $('#gateStep1').style.display = 'none';
     $('#gateStep2').style.display = 'block';
+    // 🆕 أول تشغيل: مفيش كود متسجّل — بنقول له صراحةً إنه بيختار كود جديد
+    const gc = $('#gCode');
+    if(gc) gc.placeholder = (_gateHash === null) ? 'اختار كود المالك (4 أرقام+)' : 'كود المالك';
     setTimeout(function(){ $('#gCode').focus(); }, 100);
     return;
   }
@@ -267,7 +359,14 @@ function refreshGate(user){
   $('#hdrSub').textContent = 'متوصّل ✅ · ' + new Date().toLocaleDateString('ar-EG', { weekday:'long', day:'numeric', month:'long' });
   startData();
 }
-firebase.auth().onAuthStateChanged(refreshGate);
+// 🔐 أول ما الدخول يتأكد: نجيب بصمة الكود ونشوف الجلسة لسه سارية
+firebase.auth().onAuthStateChanged(async function(user){
+  if(!user){ ownerOk = false; refreshGate(null); return; }
+  await loadGateHash();
+  // جلسة سارية ومطابقة للبصمة الحالية = مفيش داعي نسأل الكود تاني
+  ownerOk = !!_sessRead();
+  refreshGate(user);
+});
 
 /* ============================================================
    🗂️ التبويبات
