@@ -1601,6 +1601,7 @@ function openCashDrawer(){
     const w = window.open('', '_blank', 'width=200,height=100');
     w.document.write('<html><body onload="window.print(); setTimeout(()=>window.close(), 300);"></body></html>');
     w.document.close();
+    if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(300);
     showToast('اتبعت أمر فتح الدرج للطابعة', 'warn');
   }catch(e){
     showToast('تعذر إرسال أمر فتح الدرج: ' + e.message, 'err');

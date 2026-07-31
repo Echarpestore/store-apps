@@ -301,6 +301,7 @@ function printStaffCard(empId){
   const w = window.open('', '_blank', 'width=460,height=680');
   w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><style>@page{size:50mm 90mm; margin:0;} body{margin:0;} .stcard{border-radius:0 !important;}</style></head><body>${html}</body></html>`);
   w.document.close();
+  if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(1100);
   const draw = ()=>{ try{
     const JB = w.JsBarcode || (typeof JsBarcode!=='undefined' ? JsBarcode : null);
     if(typeof JsBarcode!=='undefined'){

@@ -801,8 +801,15 @@ function printReportArea(){
     '.rc-h{text-align:center;font-weight:900;font-size:16px;}.rc-sub{text-align:center;font-size:12px;color:#555;margin-bottom:10px;}'+
     '.rc-line{display:flex;justify-content:space-between;padding:3px 0;}.rc-sep{border-top:1px dashed #888;margin:7px 0;}.rc-big{font-weight:900;}'+
     '</style></head><body>'+area.innerHTML+'</body></html>');
+  // 🔴 النافذة دي كانت بتاخد التركيز (w.focus) وتطبع — و**عمرها ما بتقفل**.
+  //    بتفضل مفتوحة ماسكة تركيز الويندوز، فالنافذة الرئيسية تبطّل تستقبل
+  //    كتابة في كل الشاشات. القفل + استرجاع التركيز إجباريين.
   w.document.close(); w.focus();
-  setTimeout(function(){ w.print(); }, 250);
+  setTimeout(function(){
+    try{ w.print(); }catch(e){}
+    setTimeout(function(){ try{ w.close(); }catch(e){} }, 600);
+  }, 250);
+  if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(850);
 }
 
 // ---------------- Sales History ----------------
@@ -1645,5 +1652,6 @@ function printDayCloseRec(recJson){
   const w = window.open('', '_blank', 'width=420,height=640');
   w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><style>@page{margin:4mm;}</style></head><body>${html}<script>window.print(); setTimeout(()=>window.close(), 500);<\/script></body></html>`);
   w.document.close();
+  if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(500);
 }
 window.printDayCloseRec = printDayCloseRec;

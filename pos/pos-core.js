@@ -755,6 +755,42 @@ function showScreen(id){
 // المشكلة: لو نافذة اتقفلت بطريقة غير متوقعة، بتفضل طبقة شفافة فوق الشاشة
 // بتبلع الكتابة والضغط — الشكل عادي بس مفيش حاجة بتستجيب، والحل الوحيد
 // كان الخروج والدخول. بننضّف أي بقايا مع كل تنقل بين الشاشات.
+// ============================================================
+// 🪟 استرجاع تركيز الويندوز بعد أي نافذة طباعة
+// ------------------------------------------------------------
+// 🔴 الشكوى: «السيستم بيقف عن الكتابة في كل الشاشات — لازم نفتح QuickBooks
+//    ونكتب فيه ونرجع». ده **مش** ضياع تركيز جوه الصفحة: الرجوع من برنامج
+//    تاني كان هيرجّع نفس الحالة الباظة. ده الويندوز نفسه مش بيوصّل الحروف
+//    للنافذة.
+// السبب: البرنامج بيفتح نوافذ منبثقة للطباعة (8 مواضع). كل واحدة بتاخد
+//    تركيز نظام التشغيل. لما تتقفل، الويندوز بيقرر لوحده التركيز يروح فين —
+//    وساعات بيفضل على نافذة اتقفلت، فالنافذة الرئيسية شكلها شغال بس
+//    الكيبورد مش بيوصلها. فتح QuickBooks بيجبر الويندوز يعيد التوزيع.
+//
+// الدالة دي بتتنادى بعد فتح أي نافذة طباعة: بترجّع التركيز للنافذة الرئيسية
+// وللخانة اللي كان الكاشير واقف فيها، وبتحاول مرتين (الطباعة بتتأخر أحيانًا).
+// ============================================================
+function reclaimWindowFocus(afterMs){
+  const el = document.activeElement;
+  const back = function(){
+    try{ window.focus(); }catch(e){}
+    try{
+      if(el && typeof el.focus === 'function' && document.contains(el)
+         && el !== document.body){ el.focus(); return; }
+    }catch(e){}
+    // مفيش خانة نرجعله؟ خانة البحث لو شاشة البيع مفتوحة
+    try{
+      const sc = document.getElementById('saleScreen');
+      const sb = document.getElementById('searchBar');
+      if(sc && sc.offsetParent !== null && sb && sb.offsetParent !== null) sb.focus();
+    }catch(e){}
+  };
+  const t = Math.max(300, Number(afterMs) || 500);
+  setTimeout(back, t + 400);
+  setTimeout(back, t + 1800);   // محاولة تانية لو نافذة الطباعة اتأخرت
+}
+window.reclaimWindowFocus = reclaimWindowFocus;
+
 function clearStuckOverlays(screenId){
   // نوافذ بنبنيها في اللحظة — لو فاضلة يبقى حصل خطأ، بنشيلها
   ['askTextOverlay','changeConfirmOverlay','cancelTerminalOverlay','avPickOverlay']

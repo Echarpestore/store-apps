@@ -246,4 +246,5 @@ function printAppQR(){
     + '<script>var i=document.querySelector("img"); if(i.complete){window.print(); setTimeout(function(){window.close();},400);} else i.onload=function(){window.print(); setTimeout(function(){window.close();},400);};<\/script>'
     + '</body></html>');
   w.document.close();
+  if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(400);
 }
