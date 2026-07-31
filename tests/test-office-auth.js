@@ -62,4 +62,65 @@ assert(/if\(!ownerOk\)\{ alert/.test(src), 'ومحجوبة لحد ما البو�
 
 // ---- ٨) الكاش اترفع ----
 const sw = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-assert(/echarpe-office-v6/.test(sw), 'CACHE_NAME اترفع لـv6');
+assert(/echarpe-office-v7/.test(sw), 'CACHE_NAME اترفع لـv7');
+
+// ============================================================
+// 📅 شاشة اليوم — لازم تطابق تقفيل الفرع بالظبط
+// ============================================================
+{
+  const html = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const vm = require('vm');
+
+  // ---- الواجهة موجودة ----
+  ['page-day','dayBranch','dayDate','dayPay','daySales','dayItems','dayWindow']
+    .forEach(id=> assert(html.indexOf('id="' + id + '"') >= 0, 'الواجهة: ' + id));
+  assert(/data-page="day"/.test(html), 'زرار التنقل موجود');
+  assert(html.indexOf('data-page="day"') < html.indexOf('data-page="inbox"'),
+    'اليوم أول تبويب');
+
+  // ---- منطق يوم الشغل ----
+  const i = src.indexOf('const OF_TZ'), j = src.indexOf('// ---- تحميل فواتير اليوم');
+  assert(i > 0 && j > i, 'بلوك يوم الشغل اتلقى');
+  const box = { Intl:Intl, Date:Date, Math:Math, Number:Number, String:String, console:console };
+  vm.createContext(box);
+  vm.runInContext(src.slice(i, j).replace(/^async function ofLoadDayCut[\s\S]*?\n\}\n/m, ''), box);
+  const range = (d)=> vm.runInContext(`ofBizDayRange(${JSON.stringify(d)})`, box);
+  const inDay = (day, iso)=>{ const r = range(day), x = Date.parse(iso); return x >= r.start && x < r.end; };
+
+  assert(inDay('2026-07-31','2026-07-31T23:25:00+03:00'), '🕕 فاتورة 11 بالليل على يومها');
+  assert(inDay('2026-07-31','2026-08-01T02:00:00+03:00'), '🕕 فاتورة الفجر على اليوم اللي فات');
+  assert(!inDay('2026-07-31','2026-08-01T07:00:00+03:00'), 'وبعد الفاصلة على اليوم الجديد');
+  assert(!inDay('2026-07-31','2026-07-31T05:00:00+03:00'), 'وقبل الفاصلة على اليوم اللي قبله');
+  const r1 = range('2026-07-31');
+  assertEq(r1.end - r1.start, 24*3600*1000, 'اليوم 24 ساعة بالظبط');
+  // الشتا (توقيت مختلف) لازم يشتغل برضه
+  const r2 = range('2026-01-15');
+  assertEq(r2.end - r2.start, 24*3600*1000, 'وبرضه في الشتا (إزاحة مختلفة)');
+
+  // ---- وقت البيع الحقيقي: نفس saleTs في الـPOS ----
+  const ts = (s)=> vm.runInContext(`ofSaleTs(${JSON.stringify(s)})`, box);
+  assertEq(ts({ createdAtMs: 1000 }), 1000, 'الطابع المحلي لوحده');
+  assertEq(ts({ createdAtMs: 1000, createdAt: null }), 1000, 'ومع سيرفر فاضي');
+  assert(ts({}) === null || ts({}) === undefined, 'مفيش طابع = null');
+
+  // ---- ملخص الدفع بمنطق التقفيل / الأصناف بمنطق التقارير ----
+  const payFn = src.slice(src.indexOf('function ofRenderPay'), src.indexOf('function ofRenderSales'));
+  assert(!/s\.reversed\) return/.test(payFn),
+    '💵 ملخص الدفع بيشمل المعكوسة والعكس مع بعض (زي التقفيل)');
+  const itemFn = src.slice(src.indexOf('function ofRenderItems'), src.indexOf('function ofWireDay'));
+  assert(/if\(s\.reversed \|\| s\.isReversal\) return;/.test(itemFn),
+    '📦 وملخص الأصناف بيستبعد الطرفين (زي التقارير) — الصنف مايتعدّش مرتين');
+  assert(/isRedemption \|\| it\.isRewardDiscount/.test(itemFn),
+    'وسطور الاستبدال والمكافأة مستبعدة من الأصناف');
+
+  // ---- الاستعلام على السيرفر مش فلترة على الجهاز ----
+  const loadFn = src.slice(src.indexOf('async function ofLoadDay'), src.indexOf('function ofRenderDay'));
+  assert(/\.where\('createdAt','>='/.test(loadFn) && /\.where\('createdAt','<'/.test(loadFn),
+    '⚡ استعلام بنطاق زمني على السيرفر');
+  assert(/\.where\('branch','==', br\)/.test(loadFn), 'وبالفرع');
+  assert(/rows\.filter\(/.test(loadFn) && /ofSaleTs\(s\)/.test(loadFn),
+    '🕐 وفلترة تانية بالوقت الحقيقي (فواتير الأوفلاين طابع سيرفرها وقت الرفع)');
+
+  const sw2 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
+  assert(/echarpe-office-v7/.test(sw2), 'CACHE_NAME اترفع لـv7');
+}
