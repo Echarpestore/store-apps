@@ -736,13 +736,55 @@ function buildLabelHTML(it, barcodeSvgId){
         else if(st==='tag')  parts.push(`<div style="font-size:${fs}; font-weight:900; border:2.5px solid #000; border-radius:99px; padding:3px 12px; display:inline-block; white-space:nowrap; max-width:100%;">${pv}</div>`);
         else                 parts.push(`<div style="font-size:${fs}; font-weight:900; white-space:nowrap; max-width:100%; overflow:hidden;">${pv}</div>`);
         break; }
-      case 'barcode': if(it.barcode) parts.push(`<div style="width:${lb.bcWidthPct||85}%; height:${lb.bcHeight||30}px; min-height:${Math.max(22, lb.bcHeight||30)}px; flex-shrink:0; margin:1px auto; line-height:0;"><svg id="${barcodeSvgId}" preserveAspectRatio="none" shape-rendering="crispEdges" style="width:100%; height:100%; display:block;"></svg></div>`); break;
-      case 'code': if(it.barcode) parts.push(`<div style="font-size:${fs}; letter-spacing:.5px; direction:ltr; max-width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${it.barcode}</div>`); break;
+      case 'barcode': if(it.barcode){
+        // العرض بيتثبت بالمليمتر بعد الرسم (sizeBarcodeForThermal) — مفيش نسبة مئوية
+        parts.push(`<div style="height:${lb.bcHeight||30}px; min-height:${Math.max(22, lb.bcHeight||30)}px; flex-shrink:0; margin:1px auto; line-height:0; max-width:100%; overflow:hidden;"><svg id="${barcodeSvgId}" shape-rendering="crispEdges"></svg></div>`);
+        // 🔢 الرقم المكتوب بقى **جزء ثابت** من بلوك الباركود — قبل كده كان عنصر
+        // منفصل ممكن يتقفل في تصميم براند ويفضل شغال في التاني، وده كان سبب
+        // «ساعات الكود يظهر تحت الباركود وساعات لأ» بين المنتجات والفروع.
+        parts.push(`<div style="font-size:9px; font-family:monospace; letter-spacing:1px; direction:ltr; max-width:100%; overflow:hidden; white-space:nowrap; color:#000;">${it.barcode}</div>`);
+        break; }
+      case 'code': if(it.barcode && !(lb.elements||[]).some(e=> e.on && (e.base||e.id)==='barcode')){
+        // العنصر المنفصل بيشتغل بس لو الباركود نفسه مقفول — منع التكرار
+        parts.push(`<div style="font-size:${fs}; letter-spacing:.5px; direction:ltr; max-width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${it.barcode}</div>`);
+      } break;
     }
   }
   return `<div class="one-label" style="width:${w}mm; height:${h}mm; box-sizing:border-box; padding:1.5mm; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; text-align:center; font-family:Tahoma,Arial,sans-serif; overflow:hidden; page-break-after:always;"><div style="width:100%; max-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; overflow:hidden;">${parts.join('')}</div></div>`;
 }
-// بعد ما JsBarcode يرسم بحجم ثابت — بنحوّله viewBox عشان يتمطط جوّه إطاره بالظبط
+// 🏷️ حساب عرض الباركود الفعلي بالمليمتر — قلب إصلاح الجودة:
+// الطابعات الحرارية 203dpi = 8 نقط/مم. التمطيط بالنسبة المئوية كان بيوقّع الخطوط
+// على أنصاف نقط → الطابعة تبعثرها → باركود مهزوز والماسح مش بيقرا.
+// القاعدة: كل موديول = عدد نقط **صحيح**. 2 نقطة (0.25مم) هو المقروء المضمون،
+// ولو الكود طويل والليبل ضيق بننزل لنقطة واحدة (0.125مم) بدل ما نمطط.
+function labelBarcodeMm(modules, labelWmm){
+  const QUIET_MM = 3;                          // منطقة هدوء ≥10 موديولات على الجنبين
+  const printable = Math.max(10, (Number(labelWmm)||40) - QUIET_MM*2);
+  let moduleMm = 0.25;                         // 2 نقطة لكل خط
+  if(modules * moduleMm > printable) moduleMm = 0.125;   // نقطة واحدة — آخر حل قبل ما يبوظ
+  return { moduleMm: moduleMm, totalMm: +(modules * moduleMm).toFixed(3), quietMm: QUIET_MM };
+}
+window.labelBarcodeMm = labelBarcodeMm;
+
+// بعد ما JsBarcode يرسم — بنثبت العرض بالمليمتر بالظبط (مفيش تمطيط أفقي)
+// الارتفاع بس هو اللي بيتمطط لملء الصندوق، وده مش بيأثر على القراءة (الخطوط رأسية)
+function sizeBarcodeForThermal(svg, labelWmm){
+  try{
+    const naturalW = parseFloat(svg.getAttribute('width'));   // = عدد الموديولات (width:1)
+    const naturalH = parseFloat(svg.getAttribute('height'));
+    if(!naturalW || !naturalH) return;
+    const mm = labelBarcodeMm(naturalW, labelWmm);
+    svg.setAttribute('viewBox', '0 0 ' + naturalW + ' ' + naturalH);
+    svg.removeAttribute('width'); svg.removeAttribute('height');
+    svg.style.width = mm.totalMm + 'mm';
+    svg.style.height = '100%';
+    svg.style.display = 'block';
+    svg.style.margin = '0 auto';
+    svg.setAttribute('preserveAspectRatio', 'none');
+  }catch(e){}
+}
+window.sizeBarcodeForThermal = sizeBarcodeForThermal;
+
 function fitBarcodeSvg(svg){
   try{
     const w = parseFloat(svg.getAttribute('width')), hh = parseFloat(svg.getAttribute('height'));
@@ -808,6 +850,7 @@ function doPrintLabels(jobs){
     }
   }
   const {w,h} = labelSizeMM();
+  const labelWmmForPrint = w;
   const total = n;
   const shellCfg = (typeof window.posShell !== 'undefined') ? getPrinterCfg() : null;
 
@@ -832,16 +875,16 @@ function doPrintLabels(jobs){
           cl.id = c.id;
           el.replaceWith(cl);
         }else{
+          // 🖨️ width:1 عشان width attr بتاع الـSVG = عدد الموديولات بالظبط —
+          // وبعدها بنثبت المقاس بالمليمتر (كل خط = نقط حرارية صحيحة، صفر تمطيط أفقي).
+          // الأرقام مش جوه الـSVG (كانت بتتعصر مع الصندوق وتختفي) — بقت سطر HTML ثابت.
           JsBarcode(el, c.code, {
-            // 📷 سرعة قراءة الليبل الصغير: منطقة الهدوء كانت ~3 موديولات والمواصفة ≥10
-            // (أول سبب لبطء المسدس) · الرقم المكتوب اتصغّر عشان الخطوط تاخد ارتفاع
-            // أكبر جوه نفس صندوق الليبل — مفيش أي تكبير في مقاس الليبل نفسه.
-            format:'CODE128', width:3, height:88,
-            margin:33,                     // منطقة الهدوء ≈ 11 موديول
-            displayValue:true, fontSize:13, font:'monospace', textMargin:0,
+            format:'CODE128', width:1, height:80,
+            margin:0,                      // الهدوء من حاوية الليبل بالمليمتر
+            displayValue:false,
             background:'#ffffff', lineColor:'#000000'
           });
-          fitBarcodeSvg(el);
+          sizeBarcodeForThermal(el, labelWmmForPrint);
           firstByCode[c.code] = el;
         }
       });
@@ -851,7 +894,7 @@ function doPrintLabels(jobs){
   tmp.remove();
 
   if(shellCfg && shellCfg.labelPrinter){
-    window.posShell.printLabel({ printer: shellCfg.labelPrinter, widthMm: w, heightMm: h, html: `<style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;}</style>`+finalHTML })
+    window.posShell.printLabel({ printer: shellCfg.labelPrinter, widthMm: w, heightMm: h, html: `<style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;} *{-webkit-print-color-adjust:exact; print-color-adjust:exact; text-rendering:geometricPrecision;}</style>`+finalHTML })
       .then(()=> showToast('اتبعت '+total+' ليبل للطابعة 🏷️'))
       .catch(e=> showToast('فشل طباعة الليبل: '+e.message, 'err'));
   }else if(typeof window.posShell !== 'undefined'){
@@ -859,7 +902,7 @@ function doPrintLabels(jobs){
     showToast('🏷️ مفيش طابعة ليبل متختارة على الجهاز ده — افتح محرر تصميم الفاتورة، وتحت خالص اختار طابعة الليبل ودوس «حفظ طابعات الجهاز ده»', 'err');
   }else{
     const wdw = window.open('', '_blank', 'width=420,height=560');
-    wdw.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;}</style></head><body>${finalHTML}<script>window.print(); setTimeout(()=>window.close(), 500);<\/script></body></html>`);
+    wdw.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;} *{-webkit-print-color-adjust:exact; print-color-adjust:exact; text-rendering:geometricPrecision;}</style></head><body>${finalHTML}<script>window.print(); setTimeout(()=>window.close(), 500);<\/script></body></html>`);
     wdw.document.close();
   }
 }
