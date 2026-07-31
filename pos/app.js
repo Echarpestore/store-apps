@@ -54,6 +54,57 @@ function focusSearchBar(){
   setTimeout(function(){ var sb=document.getElementById('searchBar'); if(sb) sb.focus(); }, 120);
 }
 
+// ============================================================
+// 🎯 حارس التركيز في شاشة البيع
+// ------------------------------------------------------------
+// 🔴 الشكوى: «بيعمل لاج ومش بيكتب» في كل الفروع. مش بطء —
+//    التركيز بيضيع من خانة البحث ومحدش بيرجّعه.
+// السبب: focusSearchBar() بتتنادى وقت **الدخول** للشاشة بس (goToSale /
+//    resumeOrStartSale). أي نافذة بتتقفل (askConfirm · askText · شاشة إلغاء
+//    الماكينة · نافذة المرتجع · أي modal) بتتشال من الـDOM، والعنصر اللي كان
+//    متفوكس جواها بيتشال معاها → التركيز بيقع على document.body.
+// وبيبان لاج ليه: لما مفيش خانة متفوكسة، معالج المسح العام (فوق) بيعتبر
+//    إن اللي بيتكتب باركود وبيبلع الحروف في _gsBuf — فالكاشير بتكتب ومفيش
+//    حاجة بتظهر، وEnter بيتفسّر كمسح كود.
+// عشان كده الخروج والرجوع بيصلحها: goToSale بتنادي focusSearchBar.
+//
+// ⚠️ محافظ عمدًا: بيرجّع التركيز **بس** لما مفيش أي حاجة متفوكسة خالص
+//    (activeElement = body أو null). لو الكاشير واقفة في أي خانة تانية
+//    (المبلغ · تليفون العميلة · كود البياعة) أو أي نافذة مفتوحة — بيسيبها.
+// ============================================================
+(function(){
+  if(window._focusGuardOn) return;          // مرة واحدة مهما اتنادى الملف
+  window._focusGuardOn = true;
+
+  // النوافذ اللي بتتبني في اللحظة — وجود أي واحدة = الكاشير شغالة فيها
+  const LIVE_OVERLAYS = ['askTextOverlay','askConfirmOverlay','changeConfirmOverlay',
+    'cancelTerminalOverlay','avPickOverlay','dupBarcodeOverlay','labelQtyOverlay'];
+
+  function busy(){
+    if(document.querySelector('.modal-overlay.active')) return true;
+    for(let i = 0; i < LIVE_OVERLAYS.length; i++){
+      if(document.getElementById(LIVE_OVERLAYS[i])) return true;
+    }
+    return false;
+  }
+
+  function saleVisible(){
+    const sc = document.getElementById('saleScreen');
+    return !!(sc && sc.offsetParent !== null);
+  }
+
+  setInterval(function(){
+    try{
+      if(!saleVisible() || busy()) return;
+      const a = document.activeElement;
+      // 🔑 الشرط الضيق: مفيش أي حاجة متفوكسة. لو فيه، مابلمسش.
+      if(a && a !== document.body && a.tagName !== 'HTML') return;
+      const sb = document.getElementById('searchBar');
+      if(sb && sb.offsetParent !== null) sb.focus();
+    }catch(e){}
+  }, 700);
+})();
+
 // >>> GSCAN_START
 // 🌍 سكان في أي مكان: السكانر بيكتب بسرعة + Enter — من غير ما تدوس في خانة البحث.
 // كارت موظف EC → شراء موظف · عضوية عميل ECH/GLW → ربط بالفاتورة · كود فاتورة FT → مرتجع · باركود صنف → يضيف للسلة.

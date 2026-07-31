@@ -2499,6 +2499,8 @@ function paymobAutoPrint(){
 // المفتاح العام (true/false) علق مرتين وعطّل الطباعة لكل الفواتير اللي بعده.
 // دلوقتي بيخزّن orderRef بتاع الطلب اللي اتطبع — فأسوأ حاجة يمنعها هي تكرار
 // طباعة **نفس الطلب**، وعمره ما يقدر يمنع طلب جديد (رقم جديد ≠ المخزّن).
+let _pmPrintMark = null;        // ⏱️ طوابع قياس زمن الطباعة (بتتصفّر بعد كل فاتورة)
+window._pmPrintMark = null;
 let _paymobAutoFired = false;   // false أو orderRef بتاع الطلب اللي اتطبع
 let paymobCardInfo = null;      // 💳 بيانات أول كارت (توافق مع الفواتير القديمة)
 window.paymobCardInfo = null;
@@ -2613,6 +2615,16 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
       if(paymobAutoPrint() && paymobCanAutoFinish(amountEGP, d, orderRef)){
         paymobShow('✅ ' + legTag + 'الدفع اتقبل' + last4 + ' — بيحفظ ويطبع…', 'ok');
         _paymobAutoFired = orderRef;   // 🔑 بيقفل الطلب ده بس — مش الدنيا كلها
+        // ⏱️ قياس: الفرق بين ورقة الماكينة وورقتنا. الجزء الأول (موافقة البنك ←
+        // كتابة Firestore) بيتحسب من طوابع المستند نفسه، والجزء التاني (وصول
+        // التأكيد للجهاز ← الطباعة) مكانش متقاس خالص. الاتنين بيتسجلوا هنا.
+        _pmPrintMark = {
+          gotAtMs: Date.now(),
+          decidedAt: (d && d.decidedAt) || null,     // إمتى الـwebhook كتب
+          authorizedAt: (d && d.authorizedAt) || null, // إمتى البنك وافق
+          ref: orderRef
+        };
+        window._pmPrintMark = _pmPrintMark;
         // من غير أي تأخير — كل جزء من الثانية بيفرق قدام العميل
         try{ confirmPayment(); }catch(e){ console.warn('auto print', e); }
       } else if(!_skip){
@@ -3247,6 +3259,28 @@ async function _doConfirmPayment(){
       await _waitWrite(tryLinkFeedbackToCustomer(phone, custName, sellerEmployeeName));
     }
 
+    // ⏱️ قبل الطباعة على طول — القياس بيقفل هنا
+    try{
+      const _mk = _pmPrintMark;
+      if(_mk && _mk.gotAtMs){
+        const _now = Date.now();
+        const _rec = {
+          ref: _mk.ref || null,
+          saveMs: _now - _mk.gotAtMs            // وصول التأكيد ← الطباعة (اللي عندنا)
+        };
+        // موافقة البنك ← كتابة Firestore (اللي عند Paymob) — لو الطوابع موجودة
+        if(_mk.decidedAt && _mk.authorizedAt){
+          const _a = Date.parse(String(_mk.authorizedAt).indexOf('+') > 0
+            ? _mk.authorizedAt : (_mk.authorizedAt + '+03:00'));
+          if(!isNaN(_a)) _rec.paymobMs = _mk.decidedAt - _a;
+        }
+        if(_mk.decidedAt) _rec.deliverMs = _mk.gotAtMs - _mk.decidedAt;  // Firestore ← الجهاز
+        if(_rec.paymobMs != null) _rec.totalMs = _rec.paymobMs + _rec.saveMs;
+        if(typeof _logActivity === 'function') _logActivity('print_latency', _rec);
+        console.log('⏱️ زمن الطباعة', _rec);
+      }
+    }catch(e){ console.warn('print latency', e); }
+    _pmPrintMark = null; window._pmPrintMark = null;   // فاتورة واحدة لكل قياس
     printReceipt(paymentsEntered, total, invoiceNo, invoiceCode);
     if(_offlineQueued){
       showToast('📴 اتحفظت أوفلاين ✔ — هتترفع لوحدها أول ما النت يرجع (متمسحش بيانات البرنامج)', 'ok');
