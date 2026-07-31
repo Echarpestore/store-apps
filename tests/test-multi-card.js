@@ -402,3 +402,94 @@ const L_MIX       = [{seq:1, amount:200, status:'approved'}, {seq:2, amount:300,
   assertEq(paid, 500, '💰 مختلط: 100 كاش + 100 انستا + 150 + 150 = 500 بالظبط');
   assertEq(get('paymentAmounts.visa'), 300, 'مجموع الكارتين في مفتاح واحد');
 }
+
+// ============================================================
+// ١١) 📟 لوحة تسجيل ماكينة الفيزا لكل فرع
+// 🔴 الباج الأصلي: زرار «حفظ» في index.html بينادي savePaymobCfg()
+// والدالة ماكانتش موجودة في أي ملف JS — الزرار بيدوس على فراغ من غير رسالة.
+// ============================================================
+{
+  const repSrc = fs.readFileSync(path.join(POS, 'pos-reports.js'), 'utf8');
+
+  // الدالة اللي الزرار بينادها لازم تكون موجودة فعلًا ومتعرّضة
+  assert(/function savePaymobCfg\(/.test(repSrc), '🔴 savePaymobCfg اتكتبت (الزرار كان بينادي دالة مش موجودة)');
+  assert(/window\.savePaymobCfg = savePaymobCfg/.test(repSrc), 'savePaymobCfg متعرّضة على window (القاعدة الذهبية)');
+  assert(/window\.loadPaymobCfgUI = loadPaymobCfgUI/.test(repSrc), 'loadPaymobCfgUI متعرّضة على window');
+  assert(htmlSrc.indexOf('onclick="savePaymobCfg()"') >= 0, 'الزرار موصّل بالدالة');
+  assert(/loadPaymobCfgUI\(\);[\s\S]{0,60}catch/.test(repSrc), 'اللوحة بتتملا مع فتح شاشة الصلاحيات');
+  assert(/terminalIdByBranch: Object\.assign/.test(repSrc), 'الحفظ بيكتب خريطة الفروع بالدمج');
+  assert(/\{ merge:true \}/.test(repSrc.slice(repSrc.indexOf('function savePaymobCfg'))),
+    'merge:true — باقي الفروع متتلمسش');
+  assert(/hasPerm\('canManageRoles'\)/.test(repSrc.slice(repSrc.indexOf('function savePaymobCfg'))),
+    'الحفظ محمي بصلاحية');
+
+  const V = loadFns(repSrc, ['paymobCfgReject'], '');
+  const rej = function(t, b, map){
+    return vm.runInContext('paymobCfgReject(' + JSON.stringify(t) + ',' + JSON.stringify(b) + ',' + JSON.stringify(map) + ')', V);
+  };
+  const MAP = { 'echarpe El Rehab': '905225', 'Glow مدينتي': '905301' };
+
+  assertEq(rej('905225', 'echarpe El Rehab', MAP), null, 'نفس الفرع يعدّل رقمه عادي');
+  assertEq(rej('905999', 'echarpe سيتي سنتر', MAP), null, 'فرع جديد برقم جديد مقبول');
+
+  // ⛔ الثغرة الحقيقية: فرعين بنفس الماكينة = فلوس فرع تتسجل على التاني
+  let r = rej('905225', 'echarpe سيتي سنتر', MAP);
+  assert(typeof r === 'string' && r.indexOf('echarpe El Rehab') >= 0,
+    '⛔ رقم متسجل على فرع تاني مرفوض — والرسالة بتقول الفرع');
+
+  assert(typeof rej('', 'الرحاب', MAP) === 'string', '⛔ رقم فاضي مرفوض');
+  assert(typeof rej('   ', 'الرحاب', MAP) === 'string', '⛔ مسافات بس مرفوضة');
+  assert(typeof rej('9052 25', 'الرحاب', MAP) === 'string', '⛔ مسافة جوه الرقم مرفوضة');
+  assert(typeof rej('٩٠٥٢٢٥', 'الرحاب', MAP) === 'string', '⛔ أرقام عربية مرفوضة (Paymob بيقرا إنجليزي)');
+  assert(typeof rej('90a225', 'الرحاب', MAP) === 'string', '⛔ حروف مرفوضة');
+  assert(typeof rej('0000', 'الرحاب', MAP) === 'string', '⛔ أصفار بس مرفوضة');
+  assert(typeof rej('9052250000000', 'الرحاب', MAP) === 'string', '⛔ رقم طويل أوي مرفوض');
+  assert(typeof rej('905225', '', MAP) === 'string', '⛔ من غير فرع محدد مرفوض');
+  assertEq(rej(' 905999 ', 'فرع جديد', MAP), null, 'المسافات حوالين الرقم بتتشال');
+  assertEq(rej('905225', 'الرحاب', null), null, 'أول ماكينة في السيستم (خريطة فاضية) مقبولة');
+}
+
+// ============================================================
+// ١٢) 🖨️ حارس الطباعة التلقائية لازم يتصفّر مع كل إرسال جديد للماكينة
+// 🔴 الباج: paymobReset() القديمة كانت بتصفّر _paymobAutoFired مع كل إرسال.
+// لما اتقسمت لـpaymobResetActive عشان الكارتين، التصفير ضاع — فالحارس كان
+// بيعلق على true وكل الفواتير بعده تترفض بـ«اتنفذت قبل كده» للأبد.
+// ============================================================
+{
+  const resetActive = (function(){
+    const st = saleSrc.indexOf('function paymobResetActive(');
+    const o = saleSrc.indexOf('{', st);
+    let d = 0;
+    for(let i = o; i < saleSrc.length; i++){
+      if(saleSrc[i] === '{') d++;
+      else if(saleSrc[i] === '}'){ d--; if(d === 0) return saleSrc.slice(st, i + 1); }
+    }
+    return '';
+  })();
+  assert(resetActive.length > 0, 'paymobResetActive موجودة');
+  assert(/_paymobAutoFired = false;/.test(resetActive),
+    '🔴 إرسال جديد للماكينة بيصفّر حارس الطباعة (وإلا الطباعة التلقائية تقف نهائيًا)');
+  assert(/paymobPending = null;/.test(resetActive), 'المتابعة القديمة بتتقفل');
+  assert(/paymobApproved = false;/.test(resetActive), 'حالة التأكيد بتتصفّر للشريحة الجديدة');
+  // ⚠️ لكن بيانات الكروت المؤكدة **متتلمسش** — الكارت التاني بيكمّل على الأول
+  assert(!/cardLegs = \[\]/.test(resetActive), 'شرائح الكارت متتمسحش مع الإرسال الجديد');
+  assert(!/paymobCardInfo = null/.test(resetActive), 'بيانات الكارت المؤكد بتفضل');
+
+  // والتصفير الكامل (فاتورة جديدة) بيمسح كل حاجة
+  const fullReset = (function(){
+    const st = saleSrc.indexOf('function paymobReset(');
+    const o = saleSrc.indexOf('{', st);
+    let d = 0;
+    for(let i = o; i < saleSrc.length; i++){
+      if(saleSrc[i] === '{') d++;
+      else if(saleSrc[i] === '}'){ d--; if(d === 0) return saleSrc.slice(st, i + 1); }
+    }
+    return '';
+  })();
+  assert(/cardLegs = \[\]/.test(fullReset), 'التصفير الكامل بيمسح شرائح الكارت');
+  assert(/paymobCardTxns = \[\]/.test(fullReset), 'التصفير الكامل بيمسح بيانات الكروت');
+  assert(/paymobResetActive\(\)/.test(fullReset), 'التصفير الكامل بينادي تصفير المتابعة');
+
+  // 🩺 التشخيص بيوري الحارس — عشان لو حصل تاني نعرفه في ثانية
+  assert(/_paymobAutoFired \? '⚠️ متعلّق/.test(saleSrc), 'payDiag() بيوري حالة حارس الطباعة');
+}
