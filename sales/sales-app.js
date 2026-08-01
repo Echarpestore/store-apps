@@ -609,15 +609,15 @@ let complianceCfg = {
   shifts: {
     morning: { label: '🌅 صباحي', start: '10:00', end: '18:00' },
     evening: { label: '🌆 مسائي', start: '14:00', end: '22:00' },
-    // 🧹 شيفت التظبيط — قبل الفتح، تجهيز وعرض البضاعة الجديدة.
+    // ✨ شيفت التجهيز — قبل الفتح: ترتيب الفرع وعرض البضاعة الجديدة.
     //    مفيش بيع ولا عملاء، فمفيش مبيعات ولا تقييم عميل — يعني معادلة
     //    المكافأة (التزام + مبيعات + رضا) مالهاش معنى عليه. مرتب شهري ثابت.
-    setup:   { label: '🧹 تظبيط الفرع', start: '07:00', end: '10:00', noBonus: true }
+    setup:   { label: '✨ تجهيز الفرع', start: '07:00', end: '10:00', noBonus: true }
   },
   weights: { commitment: 40, sales: 30, rating: 30 }   // أوزان المكافأة (مجموعها 100)
 };
 
-// 🧹 شيفت التظبيط خارج نظام المكافآت ورصيد الوقت والتاسك.
+// ✨ شيفت التجهيز خارج نظام المكافآت ورصيد الوقت والتاسك.
 //    السبب مش تفضيل — هو ببساطة مش بيبيع ومفيش عميل بيقيّمه، فالمعادلة
 //    مالهاش معنى عليه. الغياب لسه بيتخصم زي أي حد.
 function isSetupShift(emp){
@@ -2007,7 +2007,7 @@ async function clockIn(empId, photoDataUri){
     // المحرك ده حل محل الغرامة الثابتة القديمة. الكود القديم كان لسه بيكتب
     // خصم فلوس ثابت في sales_deductions — فالتأخير كان بيتحاسب بالنظام القديم
     // (اللي أصلًا مش بيتخصم من المرتب) ومش بيدخل رصيد الوقت ولا بوابة المكافأة خالص.
-    // 🧹 شيفت التظبيط: التأخير بيتسجّل في الشيفت للمتابعة، بس **مش**
+    // ✨ شيفت التجهيز: التأخير بيتسجّل في الشيفت للمتابعة، بس **مش**
     //    بيتحوّل رصيد وقت — مفيش عميل بيتأثر بتأخيره.
     if(latePenalized && !isSetupShift(emp)){
       const _lateHours = lateHoursFrom(lateMinutes, window.timeCfg || timeCfgDefaults);
@@ -4800,7 +4800,7 @@ function computeSalary(emp, periodStart, end){
   // كل hoursPerDay (7) ساعات غير معذورة في الفترة = يوم × قيمة اليوم (بسقف اختياري).
   const _tcfg = (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
   const tcEntries = ((typeof window !== 'undefined' && window.allTimeCredit) || []).filter(x=>{
-    if(isSetupShift(emp)) return false;      // 🧹 التظبيط خارج رصيد الوقت
+    if(isSetupShift(emp)) return false;      // ✨ التجهيز خارج رصيد الوقت
     if(x.employeeId !== emp.id || !tcCounts(x, _tcfg)) return false;
     const t = new Date((x.date||'') + 'T00:00:00').getTime();
     return t >= start.getTime() && t <= end.getTime();
