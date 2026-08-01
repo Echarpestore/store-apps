@@ -244,7 +244,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
     'وبتتحدّث لما مصروف يتسجل (حالة "اتدفع" بتتغير)');
 
   const sw4 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-  assert(/echarpe-office-v10/.test(sw4), 'CACHE_NAME اترفع لـv10');
+  assert(/echarpe-office-v\d+/.test(sw4), 'CACHE_NAME فيه رقم نسخة (المتكررة)');
 }
 
 // ⚠️ TDZ: OF_RECUR_COL لازم تتعرّف قبل أول استخدام — const مبتترفعش
@@ -254,4 +254,43 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
   assert(defAt > 0 && useAt > 0, 'التعريف والاستخدام موجودين');
   assert(defAt < useAt,
     '🔑 التعريف قبل الاستخدام (كان بعده — الاشتراك بيرمي TDZ ويوقف باقي التحميل)');
+}
+
+// ============================================================
+// 🔔 Push حقيقي — إشعارات توصل والتطبيق مقفول
+// الإشعارات القديمة كانت محلية (بتتولد من الصفحة) فبتشتغل والتطبيق مفتوح بس.
+// ============================================================
+{
+  const html4 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const sw5 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
+
+  // ---- SDK والـSW ----
+  assert(/firebase-messaging-compat\.js/.test(html4), 'SDK الرسايل متحمّل');
+  assert(/addEventListener\('push'/.test(sw5), '🔔 الـSW بيستقبل push');
+  assert(/showNotification/.test(sw5), 'وبيعرض الإشعار');
+  assert(/requireInteraction: true/.test(sw5), 'وبيفضل ظاهر لحد ما المالك يشوفه');
+  assert(/addEventListener\('notificationclick'/.test(sw5), 'والضغط عليه بيفتح التطبيق');
+  assert(/c\.focus\(\)/.test(sw5), 'أو بيرجّعه لو مفتوح');
+
+  // ---- التسجيل ----
+  const reg = src.slice(src.indexOf('async function ofRegisterPush'), src.indexOf('async function ofUnregisterPush'));
+  assert(reg.length > 0, 'دالة التسجيل موجودة');
+  assert(/vapidKey: OF_VAPID/.test(reg), 'بمفتاح VAPID');
+  assert(/'tokens\.' \+ token/.test(reg), '🔑 التوكن بيتحفظ كمفتاح — أجهزة كتير للمالك');
+  assert(/doc\('office_push'\)/.test(reg), 'في مستند مخصص');
+  assert(/Notification\.permission === 'denied'/.test(reg),
+    'وبيتعامل مع الرفض السابق برسالة واضحة');
+  assert(/setTimeout\(function\(\)\{ ofRegisterPush\(\)/.test(src),
+    '🔁 تجديد صامت — التوكن بيتغيّر لوحده والإشعارات كانت هتقف بصمت');
+
+  // ---- ⚠️ مفيش تكرار ----
+  const mn = src.slice(src.indexOf('function maybeNotifyNew'), src.indexOf('function maybeNotifyNew') + 700);
+  assert(/_hasPush/.test(mn) && /firstLoadDone && !_hasPush/.test(mn),
+    '⚠️ الإشعار المحلي بيتوقف لو الـpush مفعّل — مفيش إشعارين لنفس الحاجة');
+
+  // ---- إلغاء التسجيل ----
+  assert(/FieldValue\.delete\(\)/.test(src), '🔕 الإلغاء بيمسح التوكن فعلًا');
+
+  const sw6 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
+  assert(/echarpe-office-v11/.test(sw6), 'CACHE_NAME اترفع لـv11');
 }
