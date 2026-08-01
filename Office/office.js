@@ -1684,7 +1684,9 @@ window.ofLoadDay = ofLoadDay;
 const OF_WEEK_START = 6;      // 0=الأحد … 6=السبت
 let _tkOffset = 0;            // 0 = الأسبوع ده · -1 اللي فات · +1 اللي جاي
 let _tkWeeks = {};            // {empId__weekKey: doc}
-let _tkSubs = [];             // تسليمات التاسكات
+let _tkSubs = [];             // تسليمات التاسكات (فيها id عشان القبول/الرفض)
+let _tkSubsErr = '';          // سبب فشل قراءة التسليمات (لو حصل) — الشاشة بتفضل شغالة
+let _tkBr = '', _tkWk = '';   // الفرع والأسبوع المعروضين حاليًا
 
 function ofWeekStartMs(offset){
   // 🕕 بيوم الشغل مش اليوم التقويمي: الساعة 2 فجرًا يوم السبت لسه **يوم
@@ -1720,15 +1722,15 @@ async function ofLoadTasks(){
   if(rg) rg.textContent = 'الأسبوع: ' + ofWeekLabel(wkMs)
     + (_tkOffset === 0 ? ' (الحالي)' : '');
   list.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">بيحمّل…</div>';
+  // 🔴 الباج: الاستعلامين كانوا مع بعض في Promise.all — فأي فشل في **التسليمات**
+  //    (صلاحيات أو index) كان بيقتل الشاشة كلها. والغريب إنها كانت تشتغل عادي
+  //    لما مافيش تسليمات: Firestore بيرفض الاستعلام وقت ما يلاقي مستند ممنوع بس.
+  //    دلوقتي كل استعلام لوحده — التاسكات بتشتغل حتى لو التسليمات فشلت.
   try{
-    const [wSnap, sSnap] = await Promise.all([
-      db.collection('sales_task_weeks').where('branch','==', br).where('weekKey','==', wk).get(),
-      db.collection('sales_task_submissions').where('branch','==', br)
-        .where('submittedAt','>=', wkMs).where('submittedAt','<', wkMs + 7 * 86400000).get()
-    ]);
+    const wSnap = await db.collection('sales_task_weeks')
+      .where('branch','==', br).where('weekKey','==', wk).get();
     _tkWeeks = {};
     wSnap.docs.forEach(function(d){ _tkWeeks[d.id] = d.data(); });
-    _tkSubs = sSnap.docs.map(function(d){ return d.data(); });
   }catch(e){
     console.warn('tasks load', e);
     list.innerHTML = '<div class="card" style="color:var(--minus);">تعذر التحميل: '
@@ -1736,10 +1738,99 @@ async function ofLoadTasks(){
       + 'لو الرسالة بتقول index، افتح اللينك اللي في الكونسول مرة واحدة.</div></div>';
     return;
   }
+  _tkSubs = []; _tkSubsErr = '';
+  try{
+    const sSnap = await db.collection('sales_task_submissions').where('branch','==', br)
+      .where('submittedAt','>=', wkMs).where('submittedAt','<', wkMs + 7 * 86400000).get();
+    // 🔑 الـid لازم يتحفظ — من غيره مفيش قبول ولا رفض (update محتاج المستند)
+    _tkSubs = sSnap.docs.map(function(d){ const o = d.data() || {}; o.id = d.id; return o; });
+  }catch(e){
+    console.warn('subs load', e);
+    _tkSubsErr = String(e.code || e.message || 'خطأ');
+  }
   ofRenderTasks(br, wk);
 }
 
+// 🖼️ عرض الصورة كبيرة — الصورة متخزّنة data-uri جوه المستند نفسه
+//    (مش Firebase Storage) عشان الخطة المجانية.
+function ofLightbox(src){
+  if(!src) return;
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.88);'
+    + 'display:flex; align-items:center; justify-content:center; padding:12px;';
+  ov.innerHTML = '<img src="' + esc(src) + '" style="max-width:100%; max-height:88%;'
+    + ' border-radius:10px;">'
+    + '<div style="position:absolute; top:14px; inset-inline-end:16px; color:#fff;'
+    + ' font-size:26px; font-weight:900;">✕</div>';
+  ov.onclick = function(){ ov.remove(); };
+  document.body.appendChild(ov);
+}
+
+// 🧮 شكل التعديل — دالة صافية عشان تتختبر لوحدها.
+// ⚠️ لازم كل قرار **يلغي القرار المضاد صراحة** — لو الرفض ساب `confirmed:true`
+//    من قرار قديم، التسليم يفضل محسوب مقبول وهو مرفوض.
+function ofTaskPatch(act, now){
+  const t = Number(now) || Date.now();
+  return (act === 'ok')
+    ? { confirmed:true,  confirmedAt: t,    rejected:false, rejectedAt:null }
+    : { confirmed:false, confirmedAt:null,  rejected:true,  rejectedAt:t };
+}
+
+// ✅/✖ قرار المكتب على تسليم التاسك — بيكتب على نفس المستند اللي تطبيق
+//     الحضور بيقراه، فالموظفة بتشوف النتيجة على طول (والمرفوض تصوّر تاني).
+async function ofTaskDecide(id, act){
+  const s = _tkSubs.filter(function(x){ return x.id === id; })[0];
+  if(!s) return;
+  const head = (act === 'ok' ? '✅ تقبل التنفيذ ده؟' : '✖ ترفض التنفيذ ده؟');
+  if(!confirm(head + '\n\n' + (s.employeeName || '—') + ' — ' + (s.branch || '—')
+    + '\nالتاسك: ' + (s.taskDescription || '—')
+    + (act === 'ok' ? '' : '\n\nالموظفة هتشوف علامة رفض وهتقدر تصوّر تاني.'))) return;
+  const patch = ofTaskPatch(act, Date.now());
+  try{
+    await db.collection('sales_task_submissions').doc(id).update(patch);
+    Object.keys(patch).forEach(function(k){ s[k] = patch[k]; });
+    ofRenderTasks(_tkBr, _tkWk);
+  }catch(err){
+    alert('ماتسجّلش: ' + (err.code || err.message));
+  }
+}
+
+function ofSubCard(s){
+  const state = s.confirmed ? 'ok' : (s.rejected ? 'rej' : 'wait');
+  const badge = state === 'ok'
+      ? '<span style="color:var(--plus); font-weight:800;">✅ اتقبل</span>'
+    : state === 'rej'
+      ? '<span style="color:var(--minus); font-weight:800;">✖ اترفض</span>'
+      : '<span style="color:var(--gold); font-weight:800;">⏳ مستني قرارك</span>';
+  const when = s.submittedAt
+    ? new Date(s.submittedAt).toLocaleString('ar-EG', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
+    : '';
+  const thumb = s.photoURL
+    ? '<img class="tkThumb" data-full="' + esc(s.photoURL) + '" src="' + esc(s.photoURL) + '" '
+      + 'style="width:54px; height:54px; object-fit:cover; border-radius:8px; cursor:pointer; flex:0 0 auto;">'
+    : '<div style="width:54px; height:54px; border-radius:8px; background:#00000012; display:flex;'
+      + ' align-items:center; justify-content:center; font-size:11px; color:var(--sub);">مفيش صورة</div>';
+  // الأزرار بتفضل ظاهرة حتى بعد القرار — عشان تقدر تغيّره لو غلطت
+  const btns = '<div style="display:flex; gap:5px; flex:0 0 auto;">'
+    + '<button class="tkAct" data-id="' + esc(s.id) + '" data-act="ok" '
+    +   'style="min-width:42px; padding:6px 8px;' + (state === 'ok' ? ' opacity:.45;' : '') + '">✅</button>'
+    + '<button class="tkAct" data-id="' + esc(s.id) + '" data-act="rej" '
+    +   'style="min-width:42px; padding:6px 8px; background:var(--minus);'
+    +   (state === 'rej' ? ' opacity:.45;' : '') + '">✖</button>'
+    + '</div>';
+  return '<div style="display:flex; gap:8px; align-items:center; margin-top:7px;'
+    + ' padding:7px; border-radius:9px; background:#00000008;">'
+    + thumb
+    + '<div style="flex:1; min-width:0;">'
+    +   '<div style="font-size:11.5px;">' + badge + '</div>'
+    +   '<div style="font-size:10.5px; color:var(--sub); margin-top:2px;">' + esc(when) + '</div>'
+    + '</div>'
+    + btns
+    + '</div>';
+}
+
 function ofRenderTasks(br, wk){
+  _tkBr = br; _tkWk = wk;
   const list = $('#tkList'); if(!list) return;
   const emps = (D.employees || []).filter(function(e){
     return e.branch === br && e.status !== 'terminated';
@@ -1772,14 +1863,34 @@ function ofRenderTasks(br, wk){
       + '</div>'
       + (rec && rec.assignedAt ? ('<div style="font-size:10px; color:var(--sub); margin-top:5px;">اتحدد '
           + dstr(rec.assignedAt) + '</div>') : '')
+      + subs.slice().sort(function(a,b){ return (b.submittedAt||0) - (a.submittedAt||0); })
+            .map(ofSubCard).join('')
       + '</div>';
   }).join('');
 
-  list.innerHTML = rows
+  const errBox = _tkSubsErr
+    ? ('<div class="card" style="color:var(--minus); font-size:12px;">'
+       + '⚠️ التاسكات ظاهرة، لكن <b>التسليمات مش بتتقري</b>: ' + esc(_tkSubsErr)
+       + '<div style="font-size:11px; color:var(--sub); margin-top:6px;">'
+       + (/permission/i.test(_tkSubsErr)
+          ? 'ده منع من قواعد Firestore — لازم تسمح لحساب المكتب يقرا ويعدّل <b>sales_task_submissions</b>.'
+          : 'لو الرسالة بتقول index، افتح اللينك اللي في الكونسول مرة واحدة.')
+       + '</div></div>')
+    : '';
+
+  list.innerHTML = errBox + rows
     + '<div class="card" style="font-size:11px; color:var(--sub); line-height:1.8;">'
     + '⚠️ التاسك اللي بتكتبه هنا هو اللي الموظفة بتشوفه في تطبيق الحضور وبتسلّم عليه صورة.<br>'
+    + 'دوس على الصورة تكبر · ✅ تقبل التنفيذ · ✖ ترفضه والموظفة تصوّر تاني.<br>'
     + 'الأسابيع القديمة محفوظة — ارجع بالأسهم فوق وشوفها.'
     + '</div>';
+
+  list.querySelectorAll('.tkThumb').forEach(function(im){
+    im.onclick = function(){ ofLightbox(im.dataset.full); };
+  });
+  list.querySelectorAll('.tkAct').forEach(function(b){
+    b.onclick = function(){ ofTaskDecide(b.dataset.id, b.dataset.act); };
+  });
 
   list.querySelectorAll('.tkSave').forEach(function(btn){
     btn.onclick = async function(){
