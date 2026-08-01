@@ -422,6 +422,18 @@ function applyCustomerOffers(){
 function renderCart(){
   applyCustomerOffers();
   const tbody = document.getElementById('cartTbody');
+  // 🛡️ إعادة الرسم بتشيل الصفوف كلها. لو الكاشير كانت بتكتب كمية في صف،
+  //    الخانة بتتشال والتركيز بيروح لـbody والكتابة تقف. بنحفظ مكانها ونرجّعه.
+  let _focusQty = -1, _selStart = null;
+  try{
+    const _a = document.activeElement;
+    if(_a && _a.classList && _a.classList.contains('qn-input') && tbody && tbody.contains(_a)){
+      const _tr = _a.closest('tr');
+      const _m = _tr && String(_tr.getAttribute('onclick') || '').match(/selectCartRow\((\d+)\)/);
+      if(_m) _focusQty = Number(_m[1]);
+      _selStart = _a.selectionStart;
+    }
+  }catch(e){}
   if(selectedCartIdx !== null && selectedCartIdx >= cart.length) selectedCartIdx = null;
   if(cart.length === 0){
     selectedCartIdx = null;
@@ -445,6 +457,17 @@ function renderCart(){
         <td>${(c.price*c.qty).toFixed(2)}</td>
         <td><button class="cart-del" onclick="event.stopPropagation(); cartRemove(${idx})" title="مسح">🗑️</button></td>
       </tr>`).join('');
+  }
+  // نرجّع التركيز لخانة الكمية اللي كانت مفتوحة
+  if(_focusQty >= 0){
+    try{
+      const _tr = tbody.querySelector('tr[onclick="selectCartRow(' + _focusQty + ')"]');
+      const _in = _tr && _tr.querySelector('.qn-input');
+      if(_in){
+        _in.focus();
+        if(_selStart != null) try{ _in.setSelectionRange(_selStart, _selStart); }catch(e){}
+      }
+    }catch(e){}
   }
   const total = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   document.getElementById('cartTotal').textContent = total.toFixed(2);
@@ -1284,6 +1307,16 @@ function setCustState(state, name, phone){
       : '';
   }
   if(pts && st !== 'found') pts.textContent = '';
+  // 🛡️ خانة الاسم بتتقفل بالـCSS لما الحالة تتغيّر. لو التركيز كان عليها،
+  //    بيروح لـbody والكتابة/المسح بيقفوا. بنحوّله بنفسنا قبل ما تتقفل.
+  if(nm && st !== 'new' && document.activeElement === nm){
+    try{
+      const _sb = document.getElementById('searchBar');
+      const _ph = document.getElementById('customerPhone');
+      const _to = (_sb && _sb.offsetParent !== null) ? _sb : _ph;
+      if(_to) _to.focus(); else nm.blur();
+    }catch(e){}
+  }
   // 📝 الرقم مش مسجّل → المؤشر بينط لخانة الاسم لوحده
   if(nm && st === 'new' && document.activeElement !== nm){
     try{ setTimeout(function(){ try{ nm.focus(); }catch(e){} }, 30); }catch(e){}

@@ -793,11 +793,18 @@ function reclaimWindowFocus(afterMs){
 window.reclaimWindowFocus = reclaimWindowFocus;
 
 // ============================================================
-// 🎯 حارس التركيز — الشكوى: الكتابة بتقف، والحل اليدوي كان الدوس على
-// أيقونة البرنامج في شريط ويندوز. السبب: نافذة (طباعة/دفع/حوار ويندوز)
-// بتاخد التركيز وترجّعه للنافذة **من غير** ما ترجّعه لأي خانة جواها،
-// فالكيبورد بيروح للصفحة نفسها ومحدش بيسمعه.
-// الحارس بيراقب رجوع التركيز للنافذة وبيرجّعه لخانة البحث لو ضايع.
+// 🎯 حارس التركيز — مسح شامل لكل الطرق اللي بيضيع بيها
+// ------------------------------------------------------------
+// الشكوى: الكتابة/المسح بيقفوا فجأة، والحل اليدوي كان الدوس على أيقونة
+// البرنامج في شريط ويندوز. التركيز بيضيع بأكتر من طريق:
+//   ١) نافذة الطباعة أو ماكينة الكارت أو حوار ويندوز بتاخده وترجّعه
+//      **للنافذة** من غير ما ترجّعه لخانة جواها
+//   ٢) confirm/alert — بيرجّعوا التركيز للصفحة مش للخانة
+//   ٣) عنصر عليه التركيز بيتخفي (خانة الاسم بتتقفل مع تغيّر الحالة)
+//   ٤) عنصر عليه التركيز بيتشال مع إعادة رسم (السلة · مكان الزرار)
+//   ٥) نافذة بتتقفل وماحدش رجّع التركيز لحد
+// كلهم بينتهوا لنفس النتيجة: activeElement = body، والماسح بيقرا في الهوا.
+// الحارس بيمسك النتيجة دي نفسها — فبيغطي أي طريق جديد كمان.
 // ============================================================
 function _focusIsLost(){
   const a = document.activeElement;
@@ -805,31 +812,79 @@ function _focusIsLost(){
   const t = String(a.tagName || '').toUpperCase();
   return !(t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || a.isContentEditable);
 }
-function _focusRescue(){
-  if(!_focusIsLost()) return;                       // الكاشير ماسكة خانة → مالناش دعوة
+// 🛡️ مفيش نافذة/حوار مفتوح؟ عشان ما نخطفش التركيز من موديل
+// (بالاصطلاح المتّبع في المشروع: أي id بينتهي بـModal أو Overlay + .modal)
+function _focusBlocked(){
   try{
-    const sc = document.getElementById('saleScreen');
-    if(!sc || sc.offsetParent === null) return;      // مش في شاشة البيع
-    // 🛡️ مفيش نافذة/حوار مفتوح — عشان ما نخطفش التركيز من موديل
-    if(document.querySelector('.modal-open, .ask-modal, #paymobWatch')) return;
-    const sb = document.getElementById('searchBar');
-    if(sb && sb.offsetParent !== null) sb.focus();
+    const list = document.querySelectorAll('[id$="Modal"], [id$="Overlay"], .modal, [role="dialog"]');
+    for(let i = 0; i < list.length; i++){
+      if(list[i] && list[i].offsetParent !== null) return true;
+    }
   }catch(e){}
+  return false;
+}
+function _focusTarget(){
+  const sc = document.getElementById('saleScreen');
+  if(!sc || sc.offsetParent === null) return null;      // مش في شاشة البيع
+  const sb = document.getElementById('searchBar');
+  return (sb && sb.offsetParent !== null) ? sb : null;
+}
+function _focusRescue(){
+  if(!_focusIsLost()) return false;                     // الكاشير ماسكة خانة
+  if(_focusBlocked()) return false;
+  const t = _focusTarget();
+  if(!t) return false;
+  try{ t.focus(); }catch(e){ return false; }
+  return true;
 }
 window._focusIsLost = _focusIsLost;
-window._focusRescue = _focusRescue;
-// رجوع النافذة من نافذة تانية (الطباعة · ماكينة الكارت · حوار ويندوز)
+window._focusBlocked = _focusBlocked;
+window._focusRescue  = _focusRescue;
+
+// ⌨️ إنقاذ الضربة نفسها: لو الماسح ضرب والتركيز ضايع، الحرف الأول كان
+//    بيضيع حتى بعد ما نرجّع التركيز. هنا بنرجّع التركيز **ونحط الحرف**.
+document.addEventListener('keydown', function(e){
+  if(!_focusIsLost() || _focusBlocked()) return;
+  if(e.ctrlKey || e.altKey || e.metaKey) return;
+  const t = _focusTarget();
+  if(!t) return;
+  if(e.key && e.key.length === 1){
+    e.preventDefault();
+    t.focus();
+    t.value = (t.value || '') + e.key;
+    try{ t.dispatchEvent(new Event('input', { bubbles:true })); }catch(_e){}
+  }else if(e.key === 'Enter' || e.key === 'Backspace'){
+    t.focus();                                          // من غير منع — يكمّل عادي
+  }
+}, true);
+
+// ① رجوع النافذة من نافذة تانية (طباعة · ماكينة كارت · حوار ويندوز)
 window.addEventListener('focus', function(){ setTimeout(_focusRescue, 120); });
 document.addEventListener('visibilitychange', function(){
   if(!document.hidden) setTimeout(_focusRescue, 160);
 });
-// شبكة أمان أخيرة: أول ما الكاشير تدوس أي مكان في الشاشة
+// ② أي دوسة في مكان مش خانة
 document.addEventListener('pointerdown', function(e){
   setTimeout(function(){
-    try{ if(e.target && e.target.closest && e.target.closest('input,textarea,select,button')) return; }catch(_e){}
+    try{ if(e.target && e.target.closest && e.target.closest('input,textarea,select')) return; }catch(_e){}
     _focusRescue();
   }, 60);
 }, true);
+// ③ عنصر عليه التركيز اتشال أو اتخفى (إعادة رسم السلة · قفل خانة الاسم)
+document.addEventListener('focusout', function(){
+  setTimeout(function(){
+    // بس لو التركيز مراحش لحاجة تانية
+    if(_focusIsLost()) _focusRescue();
+  }, 90);
+}, true);
+// ④ شبكة أمان دورية — بتغطي أي طريق مالناش خبر بيه
+setInterval(function(){
+  try{
+    if(document.hidden) return;
+    if(typeof document.hasFocus === 'function' && !document.hasFocus()) return;  // النافذة نفسها مش نشطة
+    _focusRescue();
+  }catch(e){}
+}, 1500);
 
 function clearStuckOverlays(screenId){
   // نوافذ بنبنيها في اللحظة — لو فاضلة يبقى حصل خطأ، بنشيلها
