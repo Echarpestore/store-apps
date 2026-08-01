@@ -824,3 +824,67 @@ window.renderGraceDay = function(){
     window.renderGraceDay();
   };
 };
+
+// ============================================================
+// 🗂️ تبويبات شاشة الإعدادات
+// ------------------------------------------------------------
+// الشكوى: ٣٨ بانل في تمرير واحد — الوصول لأي حاجة بقى بحث في الشاشة.
+// ⚠️ ملحوظة تنفيذية: الإخفاء بكلاس `g-off` مش بتعديل `style.display` —
+//    لأن فيه بانل متخفي أصلًا بـinline style (نسخة قديمة من المخالفات)،
+//    ولو لعبنا في display هيظهر تاني أول ما تبويبه يتفتح.
+// ============================================================
+window.ADMIN_GROUPS = ['emp','time','task','money','req','rep','set'];
+
+window.adminShowGroup = function(g){
+  if(window.ADMIN_GROUPS.indexOf(g) < 0) g = 'emp';
+  document.querySelectorAll('#admin .panel[data-g]').forEach(function(p){
+    p.classList.toggle('g-off', p.dataset.g !== g);
+  });
+  document.querySelectorAll('#adminTabs button').forEach(function(b){
+    b.classList.toggle('on', b.dataset.gt === g);
+  });
+  try{ localStorage.setItem('admin_group', g); }catch(e){}
+  try{ window.scrollTo({ top:0, behavior:'smooth' }); }catch(e){}
+};
+
+// 🔴 نقطة حمرا على التبويب اللي فيه حاجة مستنية — عشان الحاجات المخفية
+//    في تبويب تاني ما تعدّيش من غير ما المالك ياخد باله.
+window.adminSyncDots = function(){
+  const badges = {
+    time: ['leaveBadge','issuesBadge'],
+    task: ['pendingBadge'],
+    req:  ['staffOrdersBadge'],
+    emp:  ['regPendBadge']
+  };
+  Object.keys(badges).forEach(function(g){
+    const on = badges[g].some(function(id){
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none' && (el.textContent || '').trim() !== '0';
+    });
+    const dot = document.getElementById('gdot-' + g);
+    if(dot) dot.classList.toggle('on', on);
+    // تبويب الموظفين مالوش نقطة خاصة في الشاشة — بنحطها على زراره
+    if(g === 'emp'){
+      const b = document.querySelector('#adminTabs button[data-gt="emp"]');
+      if(b && on && !b.querySelector('.gdot')){
+        const d = document.createElement('span');
+        d.className = 'gdot on'; b.appendChild(d);
+      }else if(b && !on){
+        const d = b.querySelector('.gdot'); if(d) d.remove();
+      }
+    }
+  });
+};
+
+(function wireAdminTabs(){
+  const bar = document.getElementById('adminTabs');
+  if(!bar){ setTimeout(wireAdminTabs, 400); return; }
+  bar.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click', function(){ window.adminShowGroup(b.dataset.gt); });
+  });
+  let last = 'emp';
+  try{ last = localStorage.getItem('admin_group') || 'emp'; }catch(e){}
+  window.adminShowGroup(last);
+  setInterval(window.adminSyncDots, 3000);
+  window.adminSyncDots();
+})();

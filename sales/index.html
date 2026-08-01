@@ -321,6 +321,32 @@
   .statusDot.red{background:var(--bad); box-shadow:0 0 8px rgba(229,72,77,.6);}
   .statusDot.gray{background:var(--sub);}
 
+  /* 🗂️ تبويبات شاشة الإعدادات */
+  #adminTabs{
+    position:sticky; bottom:0; z-index:30; display:flex; gap:7px;
+    overflow-x:auto; padding:9px 4px calc(9px + env(safe-area-inset-bottom));
+    margin:0 -4px 12px; background:var(--bg);
+    border-top:1px solid var(--line); scrollbar-width:none;
+    order:99;
+  }
+  #adminTabs::-webkit-scrollbar{ display:none; }
+  #adminTabs button{
+    flex:0 0 auto; position:relative; padding:10px 14px; border-radius:12px;
+    border:1.5px solid var(--line); background:var(--panel); color:var(--sub);
+    font-family:'Cairo'; font-weight:800; font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+  #adminTabs button.on{
+    border-color:var(--gold); background:linear-gradient(180deg,#2a2410,var(--panel));
+    color:var(--gold);
+  }
+  #adminTabs .gdot{
+    display:none; position:absolute; top:5px; inset-inline-start:6px;
+    width:8px; height:8px; border-radius:50%; background:var(--bad);
+  }
+  #adminTabs .gdot.on{ display:block; }
+  #admin{ display:flex; flex-direction:column; }
+  #admin .panel{ order:1; }
+  .g-off{ display:none !important; }
   /* ===== 🧭 معالج تسجيل الموظف ===== */
   #regWizard{position:fixed; inset:0; z-index:60; background:linear-gradient(165deg,#14100a,#12141a 55%); display:none; overflow-y:auto;}
   #regWizard.show{display:flex; align-items:flex-start; justify-content:center;}
@@ -711,7 +737,18 @@
         <button class="backBtn" id="backFromAdmin">◀ رجوع للشاشة</button>
       </div>
     </div>
-    <div class="panel">
+    <!-- 🗂️ تبويبات الإعدادات — 38 بانل في تمرير واحد كانت بتخلي الوصول
+         لأي حاجة بحث في الشاشة. دلوقتي كل مجموعة متعلّقة مع بعض. -->
+    <div id="adminTabs">
+      <button data-gt="emp"   class="on">👥 الموظفين</button>
+      <button data-gt="time">⏰ الالتزام<span class="gdot" id="gdot-time"></span></button>
+      <button data-gt="task">📋 المهام<span class="gdot" id="gdot-task"></span></button>
+      <button data-gt="money">💰 الفلوس</button>
+      <button data-gt="req">🛒 الطلبات<span class="gdot" id="gdot-req"></span></button>
+      <button data-gt="rep">📊 تقارير</button>
+      <button data-gt="set">⚙️ إعدادات</button>
+    </div>
+    <div class="panel" data-g="emp">
       <h3>إضافة موظف جديد</h3>
       <div class="add-form">
         <input id="newEmpName" placeholder="اسم الموظف">
@@ -719,11 +756,11 @@
       </div>
       <div class="field-err" id="addEmpErr"></div>
     </div>
-    <div class="panel">
+    <div class="panel" data-g="emp">
       <h3>الموظفين الحاليين</h3>
       <div id="empList"></div>
     </div>
-    <div class="panel">
+    <div class="panel" data-g="emp">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
         <h3 style="margin:0;">🔒 طلبات تسجيل مستنية اعتماد
           <span id="regPendBadge" style="display:none; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; margin-right:6px; background:var(--gold); color:#1b1400; border-radius:99px; font-size:12px; font-weight:900;">0</span>
@@ -732,7 +769,7 @@
       <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">الموظف بيسجّل نفسه من الشاشة الرئيسية، وبياناته توصلك هنا — مايتفعّلش غير باعتمادك.</p>
       <div id="pendingRegsList"></div>
     </div>
-    <div class="panel">
+    <div class="panel" data-g="set">
       <h3>🔐 كود المدير (صلاحيات محدودة)</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
         المدير بيدخل بالكود ده وبيشوف: <b>طلبات الإذن والمخالفات وطلبات التسجيل</b> + شغل اليوم والمهام والأوردرات.
@@ -745,7 +782,7 @@
       <div class="field-err" id="managerCodeErr"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="money">
       <h3>💵 إعدادات السلف</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
         سقف السلف لكل موظف في الشهر، وأول يوم تفتح فيه (مثلاً بعد القبض يوم 6، تفتح من يوم 15).
@@ -760,13 +797,13 @@
       <div class="field-err" id="advCfgErr"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="emp">
       <h3>🏬 إدارة الفروع</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">الفروع اللي السيستم شايفها. لو فيه فرع اتكتب بالغلط تقدر تشيله — بس لو مفيهوش أي بيانات.</p>
       <div id="branchManageList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="time">
       <h3>⚙️ إعدادات الالتزام والمكافآت</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">القيم دي بتتطبّق على الفرع ده. التعديل بيأثر على المكافآت والخصومات الجاية.</p>
       <div id="regBtnToggleRow" style="display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:16px;">
@@ -778,7 +815,7 @@
       </div>
       <div id="complianceSettingsForm"></div>
     </div>
-    <div class="panel">
+    <div class="panel" data-g="time">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
         <h3 style="margin:0;">📩 طلبات الإذن
           <span id="leaveBadge" style="display:none; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; margin-right:6px; background:var(--gold); color:#1b1400; border-radius:99px; font-size:12px; font-weight:900;">0</span>
@@ -790,7 +827,7 @@
 
     <!-- ⚠️ اللوحة القديمة — اتبدلت بلوحة "مخالفات محتاجة مراجعتك" اللي تحت (attIssuesList)
          اللي بتغطي 30 يوم وبتجمّع التبديلات. مخفية بدل ما تتمسح عشان الرجوع يبقى بسطر واحد. -->
-    <div class="panel" style="display:none;">
+    <div class="panel" style="display:none;" data-g="time">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0;">🔍 مخالفات محتاجة مراجعتك (نسخة قديمة)
           <span id="vioBadge" style="display:none; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; margin-right:6px; background:#e0796b; color:#2a1a18; border-radius:99px; font-size:12px; font-weight:900;">0</span>
@@ -800,7 +837,7 @@
       <div id="violationsReview"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="time">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0;">🔍 مخالفات محتاجة مراجعتك
           <span id="issuesBadge" style="display:none; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px; margin-right:6px; background:#e0796b; color:#2a1a18; border-radius:99px; font-size:12px; font-weight:900;">0</span>
@@ -810,7 +847,7 @@
       <div id="attIssuesList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="time">
       <h3>🩺 يوم سماح (تجميع بيانات)</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
         بيقفل الشيفتات المفتوحة ويعذر كل بنود الرصيد في يوم معيّن — البيانات بتتسجل كاملة
@@ -818,19 +855,19 @@
       <div id="graceDayPanel"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="time">
       <h3>⏳ رصيد الوقت والخصومات (الشهر الحالي)</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">ساعات كل موظف (تأخير/بريك/انصراف بدري/غياب) وكل 7 ساعات = يوم يتخصم من مرتبه.</p>
       <div id="timeCreditLog"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="time">
       <h3>⚙️ إعدادات رصيد الوقت</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">كل الأرقام دي تحت إيدك. بتتطبّق على الفرع ده.</p>
       <div id="timeSettingsForm"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="time">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0;">💰 كشف الخصومات</h3>
         <button class="backBtn" id="addSwapDeductionBtn" onclick="openSwapDeduction()">➕ تسجيل خصم يدوي</button>
@@ -838,7 +875,7 @@
       <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">التأخير بيتخصم تلقائي عند الحضور. تبديل الشيفت أو يوم الإجازة تسجّله يدوي من هنا.</p>
       <div id="deductionsLog"></div>
     </div>
-    <div class="panel">
+    <div class="panel" data-g="rep">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
         <h3 style="margin:0;">سجل العمليات (مقسّم باليوم)</h3>
         <button class="backBtn" id="exportPointsCsvBtn">⬇️ CSV كامل</button>
@@ -846,7 +883,7 @@
       <p style="color:var(--sub); font-size:12px; margin:-4px 0 14px;">كل يوم يفتح لوحده بالضغط عليه. آخر 60 يوم بيظهروا هنا؛ التاريخ الأقدم من كده متاح بالكامل عن طريق تصدير CSV.</p>
       <div id="logList"></div>
     </div>
-    <div class="panel">
+    <div class="panel" data-g="set">
       <h3>📢 رسالة للموظفين + 🎯 التارجت اليومي</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">الرسالة والتارجت بيظهروا لكل الموظفين في الشاشة الرئيسية بتاعت الفرع ده.</p>
       <div class="add-form" style="flex-direction:column; align-items:stretch;">
@@ -859,7 +896,7 @@
         <button id="saveDailyTargetBtn">حفظ التارجت</button>
       </div>
     </div>
-    <div class="panel">
+    <div class="panel" data-g="set">
       <h3>🎯 تارجت مبيعات الشيفت</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
         اختار التارجت بالفلوس أو بعدد القطع. لما فريق الشيفت (بعد المرتجعات) يوصل للرقم — كل موظفين الشيفت ياخدوا إطار،
@@ -895,7 +932,7 @@
       </div>
       <div class="field-err" id="framesModeErr"></div>
     </div>
-    <div class="panel">
+    <div class="panel" data-g="rep">
       <h3>⭐ أداء الموظف + رضا العميل</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
         ربط تقريبي: كل عملية بيع متربطة بأقرب تقييم عميل جه في حدود دقيقتين قبلها أو بعدها في نفس الفرع. مش رابط مؤكد 100%
@@ -904,7 +941,7 @@
       <div id="perfList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="emp">
       <h3>📊 نظرة عامة على الموظفين النهاردة</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
         🟢 في الميعاد &nbsp; 🟡 متأخر 10-29 دقيقة &nbsp; 🔴 متأخر 30 دقيقة فأكتر أو لسه محضرش
@@ -912,34 +949,34 @@
       <div id="staffOverviewList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="emp">
       <h3>⏰ مواعيد الحضور المحددة</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">حدّد ميعاد الحضور الرسمي لكل موظف عشان التأخير يتحسب منه.</p>
       <div id="scheduleList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="task">
       <h3>📋 المهام الأسبوعية</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">حدّد تاسك كل موظف للأسبوع ده (مثلاً "سكشن A"). الموظف لازم ينفذه ويصور كل يوم.</p>
       <div id="taskAssignList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="task">
       <h3><span>📸 مراجعة تنفيذ المهام (محتاجة تأكيد) <span id="pendingBadge" class="panelBadge" style="display:none;">0</span></span></h3>
       <div id="pendingSubmissionsList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="task">
       <h3>✅ المهام المؤكدة (آخر 30)</h3>
       <div id="confirmedSubmissionsList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="task">
       <h3>🎁 سجل المكافآت</h3>
       <div id="rewardsList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="rep">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
         <h3 style="margin:0;">📅 سجل الحضور الكامل (كل السنة)</h3>
         <button class="backBtn" id="exportAttendanceCsvBtn">⬇️ CSV</button>
@@ -950,7 +987,7 @@
       <div id="attendanceHistoryList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="rep">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
         <h3 style="margin:0;">📅 التقييم الأسبوعي المجمّع (الأسبوع الحالي)</h3>
       </div>
@@ -960,7 +997,7 @@
       <div id="weeklyAggregateList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="rep">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
         <h3 style="margin:0;">📈 سجل الأداء الشهري (تطور الموظف)</h3>
       </div>
@@ -971,7 +1008,7 @@
       <div id="perfHistoryList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="rep">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
         <h3 style="margin:0;">📊 التقرير الشامل لكل الموظفين</h3>
         <button class="backBtn" id="exportFullReportCsvBtn">⬇️ CSV</button>
@@ -979,7 +1016,7 @@
       <div id="fullReportList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="req">
       <h3>📦 طلبات النواقص من الموظفين</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
         الموظف بيطلب من صفحته بكود المنتج — بيوصلك هنا (وهيظهر في echarpe office). علّم "اتجاب" لما توفّره.
@@ -987,7 +1024,7 @@
       <div id="shortagesList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="req">
       <h3><span>🛒 أوردرات الموظفين (شراء بخصم) <span id="staffOrdersBadge" class="panelBadge" style="display:none;">0</span></span></h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">الموظفة اشترت بكارتها من الكاشير — راجع واعتمد: الاعتماد بيسجّل "خصم الراتب" كسلفة رسمية · الرفض بيحاسبها بالسعر الكامل (الفرق بيتسجل سلفة).</p>
       <div id="staffOrdersPending"></div>
@@ -995,13 +1032,13 @@
       <div id="staffOrdersLog"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="req">
       <h3>📱 أكواد دعوة الموظفين (تنزيلات التطبيق)</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">كل موظفة ليها كود شخصي — العميلة اللي تنزّل التطبيق عن طريقه، العمولة بتتسجل ⏳ وبتتفعّل ✅ تلقائي بعد <b>أول فاتورة شراء حقيقية</b> للعميلة (حماية من التنزيلات الوهمية). القيمة والحد الأدنى من الكاشير → شاشة برنامج الولاء.</p>
       <div id="referralList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="money">
       <h3>💰 عمولة النقط الشهرية</h3>
       <div class="add-form" style="margin-bottom:16px;">
         <input type="number" min="0" step="0.5" id="commissionPerPointInput" placeholder="عمولة كل نقطة بالجنيه">
@@ -1011,12 +1048,12 @@
       <div id="commissionList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="money">
       <h3>📜 سجل دفع العمولات</h3>
       <div id="commissionPaymentLogList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="money">
       <h3>💵 الرواتب الشهرية</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
         الراتب الأساسي شهري ثابت (مش بيتقسم على أيام الشهر) طالما الموظف اشتغل الفترة كاملة. الوقت الإضافي بيتحسب من مدة الشيفت الفعلية (أكتر من 8 ساعات وربع) بسعر الساعة (الراتب÷30÷8).
@@ -1026,12 +1063,12 @@
       <div id="salaryList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="money">
       <h3>📜 سجل صرف الرواتب (كل الشهور)</h3>
       <div id="salaryPaymentLogList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="emp">
       <h3>🚪 إنهاء خدمة موظف</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">
         بيتحسب مستحقاته بالتناسب لغاية يوم خروجه في الشهر الحالي، وبيتنقل لسجل المغادرين تحت.
@@ -1039,12 +1076,12 @@
       <div id="terminateEmpList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="emp">
       <h3>📋 سجل المغادرين</h3>
       <div id="terminationLogList"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-g="money">
       <h3>💰 سجل السلف</h3>
       <div id="advancesLogList"></div>
     </div>
