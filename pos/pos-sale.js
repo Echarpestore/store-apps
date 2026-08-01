@@ -2386,6 +2386,7 @@ function paymobResetActive(){
   // اللي بعده بتترفض بـ«اتنفذت قبل كده» للأبد لحد ما التطبيق يقفل ويفتح.
   // طلب جديد للماكينة = محاولة دفع جديدة، يبقى الحارس لازم يتصفّر.
   _paymobAutoFired = false;
+  _pmPollFails = 0;              // 📴 محاولة جديدة = عداد فشل الشبكة يبدأ من الأول
   try{ paymobWaitBar(false); }catch(e){}
   if(paymobPending && paymobPending.unsub){ try{ paymobPending.unsub(); }catch(e){} }
   if(paymobPending && paymobPending.poll){ try{ clearInterval(paymobPending.poll); }catch(e){} }
@@ -2509,6 +2510,7 @@ function paymobAutoPrint(){
 // المفتاح العام (true/false) علق مرتين وعطّل الطباعة لكل الفواتير اللي بعده.
 // دلوقتي بيخزّن orderRef بتاع الطلب اللي اتطبع — فأسوأ حاجة يمنعها هي تكرار
 // طباعة **نفس الطلب**، وعمره ما يقدر يمنع طلب جديد (رقم جديد ≠ المخزّن).
+let _pmPollFails = 0;           // 📴 محاولات متتالية فشلت في الوصول للسيرفر
 let _pmPrintMark = null;        // ⏱️ طوابع قياس زمن الطباعة (بتتصفّر بعد كل فاتورة)
 window._pmPrintMark = null;
 let _paymobAutoFired = false;   // false أو orderRef بتاع الطلب اللي اتطبع
@@ -2693,9 +2695,24 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
   const poll = setInterval(async function(){
     if(!paymobPending || paymobPending.ref !== orderRef || paymobApproved){ clearInterval(poll); return; }
     try{
-      const snap = await db.collection('pos_paymob_txns').doc(orderRef).get();
+      // 🔴 كانت .get() عادية — و enablePersistence شغّالة، فالقراءة كانت ممكن
+      //    ترد **من الكاش المحلي**. لما الاتصال يتعب: الـonSnapshot مبيوصلش،
+      //    والـpoll يقرا كاش قديم فاضي، والخطأ يتبلع في catch فاضي.
+      //    يعني الشبكة الاحتياطية بتفشل في نفس الحالة اللي اتعملت عشانها.
+      //    { source: 'server' } بتجبرها تروح السيرفر — ولو مقدرتش بترمي خطأ
+      //    وده بالظبط اللي عايزينه نعرفه.
+      const snap = await db.collection('pos_paymob_txns').doc(orderRef).get({ source: 'server' });
+      _pmPollFails = 0;
       if(snap.exists && handleResult(snap.data() || {})) stopAll();
-    }catch(e){}
+    }catch(e){
+      // 📴 مفيش وصول للسيرفر — نقول للكاشير بدل ما تفضل تبص على شاشة ساكتة.
+      //    3 محاولات ≈ 12 ثانية قبل ما نتكلم، عشان الوميض العابر ميزعّجش.
+      _pmPollFails++;
+      if(_pmPollFails === 3 && paymobPending && paymobPending.ref === orderRef){
+        paymobShow('📴 ' + legTag + 'النت مش واصل للسيرفر — الماكينة ممكن تكون أكدت خلاص. '
+          + 'لو إيصال الموافقة طلع، دوس «حفظ وطباعة» وأكّد.', 'err');
+      }
+    }
   }, 4000);
   paymobPending = { ref: orderRef, unsub: unsub, poll: poll, amount: amountEGP, seq: seq };
   // ⏳ 3 دقايق = تحذير بس — 🔴 كانت بتقتل المتابعة نهائيًا: عميل اتلكّع وأكّد
