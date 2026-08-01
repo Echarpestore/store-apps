@@ -728,7 +728,12 @@ function startData(){
         (_hrDocs[o.regId] = _hrDocs[o.regId] || []).push(o);
       });
       try{ ofRenderHireRegs(); }catch(e){ console.warn('hire docs', e); }
-    }, function(e){ console.warn('docs sync', e && e.code); });
+    }, function(e){
+      // 🩺 فشل القراءة كان بيتبلع في الكونسول — دلوقتي بيبان على الشاشة
+      _hrDocsErr = String((e && (e.code || e.message)) || 'خطأ');
+      console.warn('docs sync', e);
+      try{ ofRenderHireRegs(); }catch(_e){}
+    });
   db.collection('sales_staff_orders').onSnapshot(function(s){
     D.orders = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     maybeNotifyNew('so', D.orders.filter(function(x){ return x.status==='pending'; }),
@@ -2137,7 +2142,7 @@ const HIRE_ROLES = { sales_social:'مبيعات ومساعدة تسويق رقم
 const HIRE_DOCS  = { id_front:'وجه البطاقة', id_back:'ظهر البطاقة',
                      edu_front:'المؤهل — الوجه', edu_back:'المؤهل — الظهر',
                      bill:'إثبات السكن', signature:'التوقيع' };
-let _hvInvites = [], _hrDocs = {};
+let _hvInvites = [], _hrDocs = {}, _hrDocsErr = '';
 
 // الكود: حروف وأرقام من غير الحروف اللي بتتلخبط (O/0 · I/1)
 function hvCode(){
@@ -2282,7 +2287,19 @@ function ofRenderHireRegs(){
                    + 'title="' + esc(HIRE_DOCS[d.kind] || d.kind) + '" '
                    + 'style="width:62px; height:62px; object-fit:cover; border-radius:9px; cursor:pointer; flex:0 0 auto;">';
                }).join('') + '</div>')
-          : '<div style="font-size:11.5px; color:var(--minus); margin-top:8px;">⚠️ المستندات لسه ماوصلتش</div>')
+          : ('<div style="font-size:11.5px; color:var(--minus); margin-top:8px; line-height:1.9;">'
+             + '⚠️ مفيش مستندات معروضة<br>'
+             // 🩺 الفرق بين الحالتين هو كل الحكاية:
+             //   جهاز المتقدِّمة قال إنه رفع N ملف → المشكلة في **القراءة**
+             //   مفيش docKeys أصلًا       → الرفع نفسه وقع على جهازها
+             + '<span style="color:var(--sub);">جهازها قال: '
+             + ((r.docKeys && r.docKeys.length)
+                 ? ('رفع ' + r.docKeys.length + ' ملف (' + esc((r.docKeys||[]).join('، ')) + ')'
+                    + ' — يبقى المشكلة في القراءة مش الرفع')
+                 : 'مرفعش أي ملف — الاستمارة وقعت عنده قبل الرفع')
+             + '</span>'
+             + (_hrDocsErr ? ('<br><b style="color:var(--minus);">سبب فشل القراءة: ' + esc(_hrDocsErr) + '</b>') : '')
+             + '</div>'))
       + (r.status === 'pending'
           ? ('<div style="display:flex; gap:6px; margin-top:10px;">'
              + '<button onclick="hrApprove(\'' + esc(r.id) + '\')" style="flex:1;">✅ اعتماد وفتح الحساب</button>'
