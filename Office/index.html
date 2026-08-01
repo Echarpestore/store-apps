@@ -22,7 +22,14 @@
   button{ font-family:'Cairo'; }
 
   /* ===== الدخول ===== */
-  #gate{ position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:22px; }
+  /* 🔴 كانت display:flex — يعني شاشة الإيميل ظاهرة من أول لحظة تحميل الصفحة،
+     قبل ما أي كود يشتغل. Firebase بياخد جزء من الثانية عشان يرجّع الجلسة
+     المحفوظة، فالشاشة كانت تومض وبعدين تختفي.
+     دلوقتي بتبدأ **مخفية**، والكود هو اللي بيقرر يعرضها ولا لأ. */
+  #gate{ position:fixed; inset:0; z-index:100; background:var(--bg); display:none; align-items:center; justify-content:center; padding:22px; }
+  #gate.on{ display:flex; }
+  #bootWait{ position:fixed; inset:0; z-index:99; background:var(--bg); display:flex;
+    align-items:center; justify-content:center; color:var(--sub); font-size:13px; }
   #gate .card{ width:100%; max-width:360px; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:26px 22px; text-align:center; }
   #gate .logo{ font-size:44px; }
   #gate h1{ font-size:20px; margin:8px 0 2px; }
@@ -133,6 +140,7 @@
 <body>
 
 <!-- ===== بوابة الدخول: حساب فرع (Firebase) + كود المالك ===== -->
+<div id="bootWait">⏳ لحظة…</div>
 <div id="gate">
   <div class="card">
     <div class="logo">🏢</div>

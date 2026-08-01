@@ -482,17 +482,22 @@ window.officeLogout = async function(){
   location.reload();
 };
 
+// بيشيل شاشة الانتظار أول ما نعرف الحالة الحقيقية
+function _bootDone(){
+  const b = document.getElementById('bootWait');
+  if(b) b.remove();
+}
 function refreshGate(user){
   const saved = localStorage.getItem('office_email') || '';
   if(saved && !$('#gEmail').value) $('#gEmail').value = saved;
   if(!user){
-    $('#gate').style.display = 'flex';
+    $('#gate').classList.add('on'); _bootDone();
     $('#gateStep1').style.display = 'block';
     $('#gateStep2').style.display = 'none';
     return;
   }
   if(!ownerOk){
-    $('#gate').style.display = 'flex';
+    $('#gate').classList.add('on'); _bootDone();
     $('#gateStep1').style.display = 'none';
     $('#gateStep2').style.display = 'block';
     // 🆕 أول تشغيل: مفيش كود متسجّل — بنقول له صراحةً إنه بيختار كود جديد
@@ -511,7 +516,7 @@ function refreshGate(user){
     setTimeout(function(){ $('#gCode').focus(); }, 100);
     return;
   }
-  $('#gate').style.display = 'none';
+  $('#gate').classList.remove('on'); _bootDone();
   $('#hdrSub').textContent = 'متوصّل ✅ · ' + new Date().toLocaleDateString('ar-EG', { weekday:'long', day:'numeric', month:'long' });
   startData();
 }
@@ -534,6 +539,13 @@ firebase.auth().onAuthStateChanged(async function(user){
   await loadGateHash();
   // جلسة سارية ومطابقة للبصمة الحالية = مفيش داعي نسأل الكود تاني
   ownerOk = !!_sessRead();
+  // 👆 البصمة **قبل** ما البوابة تترسم — عشان شاشة الكود متومضش ثم تختفي.
+  //    لو نجحت، ofBioUnlock بتنادي refreshGate بنفسها.
+  if(!ownerOk && typeof ofBioEnabled === 'function' && ofBioEnabled() && !window._bioTried){
+    window._bioTried = true;
+    const okBio = await ofBioUnlock().catch(function(){ return false; });
+    if(okBio) return;
+  }
   refreshGate(user);
 });
 
@@ -619,10 +631,24 @@ async function ofRegisterPush(){
     const reg = await navigator.serviceWorker.ready;
     const token = await firebase.messaging().getToken({ vapidKey: OF_VAPID, serviceWorkerRegistration: reg });
     if(!token) return { ok:false, why:'ماقدرناش نجيب توكن الجهاز' };
-    // 🔑 مستند واحد لكل أجهزة المالك — مفتاح لكل توكن
-    const u = {};
-    u['tokens.' + token] = { ts: Date.now(), ua: (navigator.userAgent||'').slice(0,80) };
-    await db.collection('pos_test_settings').doc('office_push').set(u, { merge: true });
+    // 🔴 كان: u['tokens.' + token] — وتوكن FCM ممكن يحتوي على **نقط**،
+    //    والنقطة في Firestore بتفصل مسار. النتيجة:
+    //      tokens.abc:APA91b.xyz  →  tokens → abc:APA91b → xyz
+    //    فالدالة بتقرا Object.keys(tokens) وبتجيب **جزء** من التوكن —
+    //    رسالة رايحة لعنوان مقطوع. الدالة بترجع 200 والإشعار عمره ما يوصل.
+    //    الحل: التوكن **قيمة** مش مفتاح، والأجهزة في مصفوفة.
+    const ref = db.collection('pos_test_settings').doc('office_push');
+    const cur = await ref.get();
+    let list = (cur.exists && Array.isArray((cur.data()||{}).list)) ? cur.data().list : [];
+    // 🧹 نشيل التسجيل القديم لنفس الجهاز — كان بيتراكم كل مرة
+    let prev = null;
+    try{ prev = localStorage.getItem('office_fcm'); }catch(e){}
+    list = list.filter(function(x){
+      return x && x.token && x.token !== token && x.token !== prev;
+    });
+    list.push({ token: token, ts: Date.now(), ua: (navigator.userAgent||'').slice(0,80) });
+    if(list.length > 10) list = list.slice(-10);      // سقف أمان
+    await ref.set({ list: list }, { merge: true });
     try{ localStorage.setItem('office_fcm', token); }catch(e){}
     return { ok:true };
   }catch(e){
@@ -637,9 +663,10 @@ async function ofUnregisterPush(){
   try{ token = localStorage.getItem('office_fcm'); }catch(e){}
   if(!token) return;
   try{
-    const u = {};
-    u['tokens.' + token] = firebase.firestore.FieldValue.delete();
-    await db.collection('pos_test_settings').doc('office_push').set(u, { merge: true });
+    const ref = db.collection('pos_test_settings').doc('office_push');
+    const cur = await ref.get();
+    const list = (cur.exists && Array.isArray((cur.data()||{}).list)) ? cur.data().list : [];
+    await ref.set({ list: list.filter(function(x){ return x && x.token !== token; }) }, { merge: true });
     localStorage.removeItem('office_fcm');
   }catch(e){ console.warn('office unpush', e); }
 }
