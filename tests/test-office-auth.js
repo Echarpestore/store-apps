@@ -276,7 +276,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
   const reg = src.slice(src.indexOf('async function ofRegisterPush'), src.indexOf('async function ofUnregisterPush'));
   assert(reg.length > 0, 'دالة التسجيل موجودة');
   assert(/vapidKey: OF_VAPID/.test(reg), 'بمفتاح VAPID');
-  assert(/'tokens\.' \+ token/.test(reg), '🔑 التوكن بيتحفظ كمفتاح — أجهزة كتير للمالك');
+  assert(/list\.push\(\{ token: token/.test(reg), '🔑 التوكن بيتحفظ في مصفوفة — أجهزة كتير للمالك');
   assert(/doc\('office_push'\)/.test(reg), 'في مستند مخصص');
   assert(/Notification\.permission === 'denied'/.test(reg),
     'وبيتعامل مع الرفض السابق برسالة واضحة');
@@ -289,7 +289,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
     '⚠️ الإشعار المحلي بيتوقف لو الـpush مفعّل — مفيش إشعارين لنفس الحاجة');
 
   // ---- إلغاء التسجيل ----
-  assert(/FieldValue\.delete\(\)/.test(src), '🔕 الإلغاء بيمسح التوكن فعلًا');
+  assert(/x\.token !== token/.test(src), '🔕 الإلغاء بيشيل التوكن من المصفوفة');
 
   const sw6 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
   assert(/echarpe-office-v\d+/.test(sw6), 'CACHE_NAME فيه رقم نسخة (push)');
@@ -346,5 +346,69 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
     'والكميات (عدد القطع) فضلت ظاهرة — مش سرّية');
 
   const sw7 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-  assert(/echarpe-office-v13/.test(sw7), 'CACHE_NAME اترفع لـv13');
+  assert(/echarpe-office-v15/.test(sw7), 'CACHE_NAME اترفع لـv15');
+}
+
+// ============================================================
+// ⏳ وميض شاشة الإيميل عند الفتح
+// الشكوى: كل مرة تفتح، الإيميل يظهر شوية وبعدين يختفي وتيجي البصمة.
+// السبب الحقيقي: #gate كان display:flex في الـCSS — يعني ظاهر من أول لحظة
+// تحميل الصفحة، **قبل** ما أي كود يشتغل. الحارس في JS مكانش بيكفي.
+// ============================================================
+{
+  const h6 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  assert(/#gate\{[^}]*display:none/.test(h6),
+    '🔴 البوابة بتبدأ **مخفية** — الكود هو اللي بيقرر يعرضها');
+  assert(/#gate\.on\{ display:flex; \}/.test(h6), 'وبتظهر بكلاس');
+  assert(/id="bootWait"/.test(h6), '⏳ شاشة انتظار بدل الوميض');
+  assert(h6.indexOf('id="bootWait"') < h6.indexOf('id="gate"'), 'وقبل البوابة');
+
+  assert(/classList\.add\('on'\); _bootDone\(\)/.test(src), 'العرض بالكلاس');
+  assert(/classList\.remove\('on'\); _bootDone\(\)/.test(src), 'والإخفاء كمان');
+  assert(!/\$\('#gate'\)\.style\.display/.test(src), 'مفيش أي تحكم مباشر بـstyle فاضل');
+  assert(/function _bootDone/.test(src) && /b\.remove\(\)/.test(src),
+    'وشاشة الانتظار بتتشال أول ما نعرف الحالة');
+
+  // ⏳ الحارس على أول ضربة null
+  assert(/_authSettled/.test(src), 'حارس أول ضربة من onAuthStateChanged');
+  assert(/if\(!user && !_authSettled\)/.test(src),
+    'بيستنى قبل ما يقرر إن مفيش دخول');
+
+  // 👆 البصمة قبل رسم البوابة
+  // ⚠️ من بداية الحارس لآخر البلوك — _bootDone بقت فوقه في الملف
+  const auth = src.slice(src.indexOf('let _authSettled'),
+                         src.indexOf('let _authSettled') + 1400);
+  assert(/if\(okBio\) return;/.test(auth),
+    '👆 البصمة بتتجرّب **قبل** refreshGate — عشان شاشة الكود متومضش');
+  assert(auth.indexOf('ofBioUnlock') < auth.lastIndexOf('refreshGate(user)'),
+    'وترتيبها قبل الرسم');
+}
+
+// ============================================================
+// 🔴 التوكن كمفتاح — النقط بتكسر المسار
+// الشكوى: الإشعارات مش بتوصل رغم إن الدالة بترجع 200 والتوكنات متسجلة.
+// السبب: u['tokens.' + token] — وتوكن FCM ممكن يحتوي على نقط، والنقطة في
+// Firestore بتفصل مسار:  tokens.abc:APA91b.xyz → tokens → abc:APA91b → xyz
+// فـObject.keys(tokens) بترجع **جزء** من التوكن. رسالة رايحة لعنوان مقطوع.
+// ============================================================
+{
+  // ⚠️ التعليق اللي بيشرح الباج فيه نص الكود القديم — لازم نستثني السطور
+  //    اللي بتبدأ بـ// وإلا التأكيد يقع على شرحه هو (نفس فخ §0)
+  const _codeOnly = src.split('\n').filter(function(l){ return !/^\s*\/\//.test(l); }).join('\n');
+  assert(!/u\['tokens\.' \+ token\]/.test(_codeOnly),
+    "🔴 كتابة التوكن كمفتاح اتشالت (النقط كانت بتكسر المسار)");
+  assert(/list\.push\(\{ token: token/.test(src),
+    '🔑 التوكن بقى **قيمة** في مصفوفة — النقط مالهاش أي تأثير');
+  assert(/x\.token !== token && x\.token !== prev/.test(src),
+    '🧹 والتسجيل القديم لنفس الجهاز بيتشال — كان بيتراكم كل مرة');
+  assert(/list\.length > 10/.test(src), 'وسقف أمان للعدد');
+
+  // سلوكيًا: الفرق بين الطريقتين
+  const tok = 'cHHC_sGI4kfk:APA91bF.xyz_realpart';
+  const asKey = {}; asKey['tokens.' + tok] = 1;
+  const firstSeg = Object.keys(asKey)[0].split('.')[1];
+  assert(firstSeg !== tok,
+    '🔬 المفتاح بيتقطع عند النقطة (ده كان الباج)');
+  const asVal = [{ token: tok }];
+  assertEq(asVal.map(x=> x.token)[0], tok, 'والقيمة بتفضل كاملة');
 }
