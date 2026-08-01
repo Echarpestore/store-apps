@@ -709,7 +709,26 @@ function startData(){
     maybeNotifyNew('rg', D.regs.filter(function(x){ return x.status==='pending'; }),
       '🔒 طلب تسجيل موظف', function(x){ return (x.name||'') + ' — ' + (x.branch||''); });
     renderInbox();
+    try{ ofRenderHireRegs(); }catch(e){ console.warn('hire regs', e); }
   }, function(){ /* الكولكشن ممكن ميكونش موجود */ });
+
+  // 🧑‍💼 الدعوات
+  db.collection('staff_invites').onSnapshot(function(s2){
+    _hvInvites = s2.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    try{ ofRenderInvites(); }catch(e){ console.warn('invites', e); }
+  }, function(e){ console.warn('invites sync', e && e.code); });
+
+  // 📎 مستندات الطلبات — بتتجمّع تحت رقم الطلب
+  // ⚠️ الصور كبيرة، فبنقرا آخر ٦٠ يوم بس بدل المجموعة كلها.
+  db.collection('staff_docs').where('ts', '>=', Date.now() - 60*86400000)
+    .onSnapshot(function(s3){
+      _hrDocs = {};
+      s3.docs.forEach(function(d){
+        const o = d.data() || {}; o.id = d.id;
+        (_hrDocs[o.regId] = _hrDocs[o.regId] || []).push(o);
+      });
+      try{ ofRenderHireRegs(); }catch(e){ console.warn('hire docs', e); }
+    }, function(e){ console.warn('docs sync', e && e.code); });
   db.collection('sales_staff_orders').onSnapshot(function(s){
     D.orders = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     maybeNotifyNew('so', D.orders.filter(function(x){ return x.status==='pending'; }),
@@ -746,6 +765,7 @@ function startData(){
     // 📅 شاشة اليوم — بعد ما الموظفين يوصلوا (منهم بنعرف الفروع)
     ofLoadDayCut().then(function(){ try{ ofWireDay(); }catch(e){ console.warn('day', e); } });
     try{ ofWireTasks(); }catch(e){ console.warn('tasks', e); }
+    try{ ofWireHire(); }catch(e){ console.warn('hire', e); }
   });
   db.collection('sales_advances').onSnapshot(function(s){
     D.advances = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -1686,6 +1706,7 @@ let _tkOffset = 0;            // 0 = الأسبوع ده · -1 اللي فات �
 let _tkWeeks = {};            // {empId__weekKey: doc}
 let _tkSubs = [];             // تسليمات التاسكات (فيها id عشان القبول/الرفض)
 let _tkSubsErr = '';          // سبب فشل قراءة التسليمات (لو حصل) — الشاشة بتفضل شغالة
+let _tkLive = {};             // sales_tasks/{empId} — التاسك المتحدد من تطبيق الحضور
 let _tkBr = '', _tkWk = '';   // الفرع والأسبوع المعروضين حاليًا
 
 function ofWeekStartMs(offset){
@@ -1748,6 +1769,16 @@ async function ofLoadTasks(){
     console.warn('subs load', e);
     _tkSubsErr = String(e.code || e.message || 'خطأ');
   }
+  // 🔴 التاسك المتحدد من **تطبيق الحضور** كان بيتكتب في `sales_tasks` بس —
+  //    من غير `weekKey` ومن غير مستند أسبوع. يعني Office (اللي بيقرا
+  //    `sales_task_weeks`) مكانش بيشوفه خالص والخانة تفضل فاضية.
+  //    بنقراه هنا كمصدر احتياطي للأسبوع الحالي. استعلام مساواة واحدة =
+  //    مش محتاج index.
+  _tkLive = {};
+  try{
+    const lSnap = await db.collection('sales_tasks').where('branch','==', br).get();
+    lSnap.docs.forEach(function(d){ const o = d.data() || {}; _tkLive[d.id] = o; });
+  }catch(e){ console.warn('live tasks load', e); }
   ofRenderTasks(br, wk);
 }
 
@@ -1838,7 +1869,14 @@ function ofRenderTasks(br, wk){
   if(!emps.length){ list.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">مفيش موظفين في الفرع ده</div>'; return; }
 
   const rows = emps.map(function(e){
-    const rec = _tkWeeks[e.id + '__' + wk] || null;
+    let rec = _tkWeeks[e.id + '__' + wk] || null;
+    // 🩹 مصدر احتياطي: تاسك متحدد من تطبيق الحضور (مالوش مستند أسبوع).
+    //    للأسبوع الحالي بس — عشان ما يظهرش غلط في أسبوع فات أو جاي.
+    let fromLive = false;
+    if(!rec && _tkOffset === 0){
+      const lv = _tkLive[e.id];
+      if(lv && lv.taskDescription && (!lv.weekKey || lv.weekKey === wk)){ rec = lv; fromLive = true; }
+    }
     const desc = rec ? (rec.taskDescription || '') : '';
     const subs = _tkSubs.filter(function(s){ return s.employeeId === e.id; });
     const okCount = subs.filter(function(s){ return s.confirmed; }).length;
@@ -1862,7 +1900,7 @@ function ofRenderTasks(br, wk){
       +   '<button class="tkSave" data-id="' + esc(e.id) + '" style="min-width:64px;">حفظ</button>'
       + '</div>'
       + (rec && rec.assignedAt ? ('<div style="font-size:10px; color:var(--sub); margin-top:5px;">اتحدد '
-          + dstr(rec.assignedAt) + '</div>') : '')
+          + dstr(rec.assignedAt) + (fromLive ? ' — من تطبيق الحضور' : '') + '</div>') : '')
       + subs.slice().sort(function(a,b){ return (b.submittedAt||0) - (a.submittedAt||0); })
             .map(ofSubCard).join('')
       + '</div>';
@@ -2086,3 +2124,190 @@ function ofRenderRecurring(){
   };
 }
 window.ofRenderRecurring = ofRenderRecurring;
+
+/* ============================================================
+   🧑‍💼 التوظيف — دعوة برابط لمرة واحدة + مراجعة الطلبات
+   ------------------------------------------------------------
+   ⚠️ الرابط **مش مفتوح** (قرار المالك). الدعوة مستند في
+   `staff_invites/{code}` بتحمل الفرع والوظيفة وتاريخ الانتهاء،
+   وقواعد Firestore بترفض أي طلب تسجيل مالوش دعوة مفتوحة —
+   يعني المنع من السيرفر مش من الصفحة.
+   ============================================================ */
+const HIRE_ROLES = { sales_social:'مبيعات ومساعدة تسويق رقمي', cashier:'كاشير ومبيعات' };
+const HIRE_DOCS  = { id_front:'وجه البطاقة', id_back:'ظهر البطاقة',
+                     edu_front:'المؤهل — الوجه', edu_back:'المؤهل — الظهر',
+                     bill:'إثبات السكن', signature:'التوقيع' };
+let _hvInvites = [], _hrDocs = {};
+
+// الكود: حروف وأرقام من غير الحروف اللي بتتلخبط (O/0 · I/1)
+function hvCode(){
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  const r = new Uint32Array(6);
+  (window.crypto || {}).getRandomValues ? crypto.getRandomValues(r) : r.forEach(function(_,i){ r[i] = Math.random()*4e9; });
+  for(let i = 0; i < 6; i++) out += A[r[i] % A.length];
+  return out;
+}
+function hvLink(code){ return location.origin + '/join/?c=' + code; }
+
+function hvBranches(){
+  const set = {};
+  (D.employees || []).forEach(function(e){ if(e.branch) set[e.branch] = 1; });
+  return Object.keys(set).sort();
+}
+
+function ofWireHire(){
+  const bs = $('#hvBrand'), br = $('#hvBranch'), mk = $('#hvMake');
+  if(!bs || !br || !mk) return;
+  const fill = function(){
+    // Glow محل واحد — مفيش قايمة فروع
+    if(bs.value === 'glow'){ br.innerHTML = '<option value="Glow">Glow</option>'; br.disabled = true; return; }
+    br.disabled = false;
+    const list = hvBranches().filter(function(x){ return !/glow/i.test(x); });
+    br.innerHTML = (list.length ? list : ['الرحاب','مدينتي','سيتي سنتر'])
+      .map(function(b){ return '<option value="' + esc(b) + '">' + esc(b) + '</option>'; }).join('');
+  };
+  bs.onchange = fill; fill();
+
+  mk.onclick = async function(){
+    const code = hvCode();
+    const days = Number(($('#hvDays')||{}).value) || 3;
+    const role = ($('#hvRole')||{}).value || 'sales_social';
+    const brand = bs.value, branch = br.value;
+    if(!confirm('🔗 دعوة جديدة\n\n' + (brand === 'glow' ? 'Glow' : 'echarpe — ' + branch)
+      + '\n' + (HIRE_ROLES[role] || role) + '\nتنتهي بعد ' + days + ' يوم\n\nتكمّل؟')) return;
+    mk.disabled = true; mk.textContent = 'بيتعمل…';
+    try{
+      await db.collection('staff_invites').doc(code).set({
+        code: code, brand: brand, branch: branch, role: role,
+        createdAt: Date.now(), expiresAt: Date.now() + days*86400000,
+        usedAt: null, createdBy: 'office'
+      });
+      const link = hvLink(code);
+      const out = $('#hvOut');
+      if(out) out.innerHTML = '<div class="card" style="margin-top:11px; border:1px solid var(--gold);">'
+        + '<div style="font-size:12px; color:var(--sub);">الرابط جاهز — ابعته على واتساب</div>'
+        + '<div style="font-weight:900; font-size:14px; word-break:break-all; margin:7px 0;">' + esc(link) + '</div>'
+        + '<button onclick="hvCopy(\'' + esc(link) + '\')" style="width:100%;">📋 انسخ الرابط</button></div>';
+    }catch(e){ alert('ماتعملش: ' + (e.code || e.message)); }
+    mk.disabled = false; mk.textContent = '🔗 اعمل رابط دعوة';
+  };
+}
+window.hvCopy = function(link){
+  try{ navigator.clipboard.writeText(link); alert('اتنسخ ✅'); }
+  catch(e){ prompt('انسخ الرابط:', link); }
+};
+
+function ofRenderInvites(){
+  const w = $('#hvList'); if(!w) return;
+  const open = _hvInvites.filter(function(x){ return !x.usedAt && (!x.expiresAt || x.expiresAt > Date.now()); })
+                         .sort(function(a,b){ return (b.createdAt||0) - (a.createdAt||0); });
+  if(!open.length){ w.innerHTML = '<div class="hint" style="margin-top:11px;">مفيش دعوات مفتوحة</div>'; return; }
+  w.innerHTML = '<div style="margin-top:13px; font-weight:800; font-size:13px;">دعوات مفتوحة ('
+    + open.length + ')</div>' + open.map(function(x){
+    const left = Math.max(0, Math.ceil(((x.expiresAt||0) - Date.now()) / 86400000));
+    return '<div class="card" style="padding:11px; margin-top:8px;">'
+      + '<div style="display:flex; justify-content:space-between; gap:9px; align-items:center;">'
+      +   '<b style="font-family:monospace; letter-spacing:2px;">' + esc(x.id) + '</b>'
+      +   '<span style="font-size:11px; color:' + (left <= 1 ? 'var(--minus)' : 'var(--sub)') + ';">'
+      +     'باقي ' + left + ' يوم</span></div>'
+      + '<div style="font-size:11.5px; color:var(--sub); margin-top:4px;">'
+      +   esc(x.brand === 'glow' ? 'Glow' : 'echarpe — ' + (x.branch||'')) + ' · '
+      +   esc(HIRE_ROLES[x.role] || x.role || '') + '</div>'
+      + '<div style="display:flex; gap:6px; margin-top:8px;">'
+      +   '<button onclick="hvCopy(\'' + esc(hvLink(x.id)) + '\')" style="flex:1;">📋 نسخ</button>'
+      +   '<button onclick="hvKill(\'' + esc(x.id) + '\')" style="flex:0 0 92px; background:var(--minus);">إلغاء</button>'
+      + '</div></div>';
+  }).join('');
+}
+window.hvKill = async function(code){
+  if(!confirm('تلغي الدعوة ' + code + '؟\n\nالرابط هيبطّل يشتغل فورًا.')) return;
+  try{ await db.collection('staff_invites').doc(code).update({ expiresAt: Date.now() - 1, cancelledAt: Date.now() }); }
+  catch(e){ alert('ماتلغتش: ' + (e.code || e.message)); }
+};
+
+// 📥 طلبات التوظيف — الجاية من الرابط بس (source:'join')
+function ofRenderHireRegs(){
+  const w = $('#hrList'); if(!w) return;
+  const rows = (D.regs || []).filter(function(r){ return r && r.source === 'join'; })
+    .sort(function(a,b){ return (b.ts||0) - (a.ts||0); }).slice(0, 40);
+  if(!rows.length){ w.innerHTML = '<div class="hint" style="margin-top:11px;">مفيش طلبات لسه</div>'; return; }
+  w.innerHTML = rows.map(function(r){
+    const st = r.status === 'approved' ? '<span style="color:var(--plus);">✅ متعمد</span>'
+             : r.status === 'rejected' ? '<span style="color:var(--minus);">✖ مرفوض</span>'
+             : '<span style="color:var(--gold);">⏳ مستني قرارك</span>';
+    const docs = (_hrDocs[r.id] || []).sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
+    return '<div class="card" style="padding:12px; margin-top:9px;">'
+      + '<div style="display:flex; justify-content:space-between; gap:9px; align-items:center;">'
+      +   '<b>' + esc(r.name || '—') + '</b>' + st + '</div>'
+      + '<div style="font-size:11.5px; color:var(--sub); margin-top:3px; line-height:1.9;">'
+      +   esc(r.brand === 'glow' ? 'Glow' : 'echarpe — ' + (r.branch||'')) + ' · '
+      +   esc(HIRE_ROLES[r.role] || r.role || '') + '<br>'
+      +   '📱 ' + esc(r.phone || '—') + ' · 🪪 ' + esc(r.nid || '—') + '<br>'
+      +   (r.birth ? ('🎂 ' + esc(r.birth) + ' · ' + esc(r.gov || '') + '<br>') : '')
+      +   '🕐 ' + esc(r.shift === 'evening' ? 'مسائي' : 'صباحي')
+      +   ' · إجازة ' + esc(['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][Number(r.dayOff)] || '—')
+      +   '<br>⏳ فترة اختبار ' + esc(String(r.trialDays || 30)) + ' يوم'
+      +   (r.emergency ? ('<br>🆘 ' + esc(r.emergency.name||'') + ' (' + esc(r.emergency.relation||'') + ') '
+                          + esc(r.emergency.phone||'')) : '')
+      +   (r.address ? ('<br>🏠 ' + esc(r.address)) : '')
+      + '</div>'
+      + (docs.length
+          ? ('<div style="display:flex; gap:6px; overflow-x:auto; margin-top:9px; padding-bottom:3px;">'
+             + docs.map(function(d){
+                 return '<img class="hrThumb" data-full="' + esc(d.photo) + '" src="' + esc(d.photo) + '" '
+                   + 'title="' + esc(HIRE_DOCS[d.kind] || d.kind) + '" '
+                   + 'style="width:62px; height:62px; object-fit:cover; border-radius:9px; cursor:pointer; flex:0 0 auto;">';
+               }).join('') + '</div>')
+          : '<div style="font-size:11.5px; color:var(--minus); margin-top:8px;">⚠️ المستندات لسه ماوصلتش</div>')
+      + (r.status === 'pending'
+          ? ('<div style="display:flex; gap:6px; margin-top:10px;">'
+             + '<button onclick="hrApprove(\'' + esc(r.id) + '\')" style="flex:1;">✅ اعتماد وفتح الحساب</button>'
+             + '<button onclick="hrReject(\'' + esc(r.id) + '\')" style="flex:0 0 88px; background:var(--minus);">رفض</button>'
+             + '</div>')
+          : '')
+      + '</div>';
+  }).join('');
+  w.querySelectorAll('.hrThumb').forEach(function(im){
+    im.onclick = function(){ ofLightbox(im.dataset.full); };
+  });
+}
+
+// ✅ الاعتماد — بنفس ضمانة تطبيق الحضور: الحجز بـtransaction الأول،
+//    وإنشاء الموظف **بعد** نجاح الحجز، فمستحيل يتسجّل مرتين.
+window.hrApprove = async function(id){
+  const r = (D.regs || []).filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  if(!confirm('✅ اعتماد ' + (r.name||'') + '؟\n\n'
+    + (r.brand === 'glow' ? 'Glow' : 'echarpe — ' + (r.branch||'')) + '\n'
+    + (HIRE_ROLES[r.role] || '') + '\n\n'
+    + 'هيتفتح حساب على تابلت الفرع بالرقم السري اللي اختارته،\n'
+    + 'وفترة الاختبار (' + (r.trialDays || 30) + ' يوم) بتبدأ من أول يوم شغل.')) return;
+  try{
+    const ref = db.collection('sales_registrations').doc(id);
+    await db.runTransaction(async function(tx){
+      const snap = await tx.get(ref);
+      if(!snap.exists) throw new Error('الطلب مش موجود');
+      if((snap.data()||{}).status === 'approved') throw new Error('__ALREADY__');
+      tx.update(ref, { status:'approved', approvedAt: Date.now(), approvedBy:'office' });
+    });
+    await db.collection('sales_employees').add({
+      name: r.name, gender: r.gender || '', avatar: (r.gender === 'male' ? 'boy' : 'girl'),
+      shift: r.shift, dayOff: r.dayOff,
+      scheduledStartTime: r.scheduledStartTime || null,
+      scheduledEndTime: r.scheduledEndTime || null,
+      branch: r.branch, active: true, createdAt: Date.now(), pin: (r.pin || '0000'),
+      phone: r.phone || '', role: r.role || '', trialDays: Number(r.trialDays) || 30,
+      trialFrom: Date.now(), regId: id
+    });
+    alert('اتعمد ✅ الحساب اتفعّل على تابلت الفرع');
+  }catch(e){
+    alert(e && e.message === '__ALREADY__' ? 'الطلب ده اتعمد خلاص ✅' : ('ماتعمدش: ' + (e.code || e.message)));
+  }
+};
+window.hrReject = async function(id){
+  const r = (D.regs || []).filter(function(x){ return x.id === id; })[0];
+  if(!confirm('✖ ترفض طلب ' + ((r&&r.name)||'') + '؟')) return;
+  try{ await db.collection('sales_registrations').doc(id).update({ status:'rejected', rejectedAt: Date.now() }); }
+  catch(e){ alert('ماترفضش: ' + (e.code || e.message)); }
+};

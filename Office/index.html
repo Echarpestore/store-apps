@@ -222,6 +222,38 @@
       <div class="hint">أذونات وتسجيلات وأوردرات ونواقص من كل الفروع، لحظة بلحظة.</div>
       <div id="inboxList"></div>
     </div>
+
+    <!-- 🧑‍💼 التوظيف: دعوة برابط لمرة واحدة + مراجعة الطلبات ومستنداتها -->
+    <div class="panel">
+      <h3>🧑‍💼 دعوة موظف جديد</h3>
+      <div class="hint">بيتولّد رابط بكود لمرة واحدة — الفرع والوظيفة محدّدين فيه،
+        فالموظفة مش بتختارهم ومفيش فرصة غلط.</div>
+      <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;">
+        <select id="hvBrand" style="flex:1 1 120px;">
+          <option value="echarpe">echarpe</option>
+          <option value="glow">Glow</option>
+        </select>
+        <select id="hvBranch" style="flex:1 1 130px;"></select>
+        <select id="hvRole" style="flex:1 1 190px;">
+          <option value="sales_social">مبيعات ومساعدة تسويق رقمي</option>
+          <option value="cashier">كاشير ومبيعات</option>
+        </select>
+        <select id="hvDays" style="flex:1 1 110px;">
+          <option value="3">تنتهي بعد 3 أيام</option>
+          <option value="1">تنتهي بعد يوم</option>
+          <option value="7">تنتهي بعد 7 أيام</option>
+        </select>
+      </div>
+      <button id="hvMake" style="width:100%; margin-top:10px;">🔗 اعمل رابط دعوة</button>
+      <div id="hvOut"></div>
+      <div id="hvList"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📥 طلبات التوظيف</h3>
+      <div class="hint">الطلبات الجاية من رابط الدعوة — بمستنداتها.</div>
+      <div id="hrList"></div>
+    </div>
   </section>
 
   <!-- 📦 النواقص -->
