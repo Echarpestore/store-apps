@@ -588,6 +588,15 @@ function pointWeight(p){
 function sumPoints(list){
   return Math.round((list||[]).reduce(function(n,p){ return n + pointWeight(p); }, 0) * 1000) / 1000;
 }
+// 🔢 عرض النقط: الصحيح من غير كسور، والكسري برقم عشري واحد
+//    (18 مش 18.0 · و18.2 مش 18.200000000000003)
+function fmtPts(n){
+  const v = Math.round((Number(n)||0) * 10) / 10;
+  return (v % 1 === 0) ? String(v) : v.toFixed(1);
+}
+window.fmtPts = fmtPts;
+// ⚠️ متعرّفة هنا (جنب sumPoints) مش تحت — بتتستخدم في مواضع أعلى في
+//    الملف، وأي نقل للكود تحت كان هيكسرها بصمت.
 window.pointWeight = pointWeight;
 window.sumPoints = sumPoints;
 
@@ -2217,7 +2226,7 @@ function renderDayHub(empId){
 
   // Points today
   const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-  $('#dh_pointsToday').textContent = countsFor(empId, dayStart.getTime());
+  $('#dh_pointsToday').textContent = fmtPts(countsFor(empId, dayStart.getTime()));
 
   // Average customer rating linked to this employee (reusing the same
   // approximate time-based matching used in the performance-link report).
@@ -2721,7 +2730,7 @@ function renderStaffOverview(){
         <div class="m">${statusText}</div>
       </div>
       <div>${taskText}</div>
-      <div>${pointsToday} نقطة</div>
+      <div>${fmtPts(pointsToday)} نقطة</div>
       <div>${ratingText}</div>
     </div>`;
   }).join('');
@@ -2965,7 +2974,7 @@ function renderRaceStatus(empId){
       <div class="raceItem"><span>🎯 التزامك بالمواعيد</span><span style="color:${commitColor}; font-weight:800;">${st.commitPct}%</span></div>
       ${bar}
       ${parts ? `<div style="font-size:11px; color:var(--sub); margin-top:6px;">رصيدك: ${parts}</div>` : '<div style="font-size:11px; color:var(--good); margin-top:6px;">✅ مفيش أي رصيد وقت — التزام كامل</div>'}
-      <div class="raceItem" style="margin-top:8px;"><span>🛒 مبيعاتك</span><span>${st.points} نقطة</span></div>
+      <div class="raceItem" style="margin-top:8px;"><span>🛒 مبيعاتك</span><span>${fmtPts(st.points)} نقطة</span></div>
       <div class="raceItem"><span>⭐ تقييم العميل</span><span style="color:var(--sub);">${ratingTxt}</span></div>
       ${verdict}
     </div>`;
@@ -3056,8 +3065,17 @@ function showUnseenRewardsIfAny(){
   setTimeout(()=> $('#giftBoxToast').classList.remove('show'), 4000);
 }
 
+// 🔴 كانت `.length` — بتعد **عدد الفواتير** مش النقط.
+//    والنقطة الواحدة ليها وزن: أول (الحد) قطع = نقطة كاملة، وكل قطعة زيادة
+//    = كسر. يعني فاتورة 7 قطع (بحد 5) = 1.4 نقطة مش 1.
+//    النتيجة: لوحة الترتيب تقول 9 والموظفة شايفة 18.2 في شاشتها —
+//    ومرتبها بيتحسب على 18.2. رقمين مختلفين لنفس الحاجة.
+// ✅ دلوقتي بيجمع الأوزان بنفس دالة sumPoints اللي المرتب والعمولة بيمشوا عليها.
 function countsFor(empId, sinceTs){
-  return window.points.filter(p=> p.employeeId === empId && (!sinceTs || p.ts >= sinceTs)).length;
+  const list = (window.points||[]).filter(function(p){
+    return p.employeeId === empId && (!sinceTs || p.ts >= sinceTs);
+  });
+  return sumPoints(list);
 }
 
 let highlightEmpId = null;
@@ -3091,7 +3109,7 @@ function renderEmpGrid(){
       ${hasUnseenReward ? `<div class="giftBadge">🎁</div>` : ''}
       <div class="emp-avatar">${initials(e.name)}</div>
       <div class="emp-name">${e.name}</div>
-      <div class="emp-count">${countsFor(e.id)} نقطة</div>
+      <div class="emp-count">${fmtPts(countsFor(e.id))} نقطة</div>
     </div>
   `;}).join('');
   grid.querySelectorAll('.emp-tile').forEach(tile=>{
@@ -3287,7 +3305,7 @@ function buildRows(list, key){
       <div class="lb-rank">${medalOrRank(i)}</div>
       <div class="lb-avatar">${initials(e.name)}</div>
       <div class="lb-name">${e.name} ${i===0 && key==='w' ? '<span class="crown">👑</span>' : ''}</div>
-      <div class="lb-points">${e.count} نقطة</div>
+      <div class="lb-points">${fmtPts(e.count)} نقطة</div>
     </div>
   `).join('');
 }
@@ -4493,7 +4511,7 @@ function renderCommissionPaymentLog(){
     const monthTotal = items.reduce((sum,p)=> sum + p.commissionAmount, 0);
     const rows = items.map(p=>{
       const dateStr = new Date(p.paidAt).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'});
-      return `<tr><td>${p.employeeName}</td><td>${p.pointsCount} نقطة</td><td style="color:var(--gold); font-weight:700;">${p.commissionAmount} ج.م</td><td>${dateStr}</td></tr>`;
+      return `<tr><td>${p.employeeName}</td><td>${fmtPts(p.pointsCount)} نقطة</td><td style="color:var(--gold); font-weight:700;">${p.commissionAmount} ج.م</td><td>${dateStr}</td></tr>`;
     }).join('');
     return `
     <div class="dayLogGroup">
