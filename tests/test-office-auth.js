@@ -62,7 +62,7 @@ assert(/if\(!ownerOk\)\{ alert/.test(src), 'ومحجوبة لحد ما البو�
 
 // ---- ٨) الكاش اترفع ----
 const sw = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-assert(/echarpe-office-v7/.test(sw), 'CACHE_NAME اترفع لـv7');
+assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
 
 // ============================================================
 // 📅 شاشة اليوم — لازم تطابق تقفيل الفرع بالظبط
@@ -122,5 +122,65 @@ assert(/echarpe-office-v7/.test(sw), 'CACHE_NAME اترفع لـv7');
     '🕐 وفلترة تانية بالوقت الحقيقي (فواتير الأوفلاين طابع سيرفرها وقت الرفع)');
 
   const sw2 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-  assert(/echarpe-office-v7/.test(sw2), 'CACHE_NAME اترفع لـv7');
+  assert(/echarpe-office-v\d+/.test(sw2), 'CACHE_NAME فيه رقم نسخة (شاشة اليوم)');
+}
+
+// ============================================================
+// ✅ التاسك الأسبوعي
+// النظام القديم: sales_tasks/{empId} — مستند واحد لكل موظفة، فأي تاسك جديد
+// بيمسح القديم. مفيش أسبوع ولا حالة ولا تاريخ.
+// ============================================================
+{
+  const html2 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const vm2 = require('vm');
+
+  ['page-tasks','tkBranch','tkRange','tkList'].forEach(id=>
+    assert(html2.indexOf('id="' + id + '"') >= 0, 'الواجهة: ' + id));
+  assert(/data-page="tasks"/.test(html2), 'زرار التاسكات موجود');
+
+  // ---- 🔑 تطبيق الحضور مايتكسرش ----
+  const save = src.slice(src.indexOf("btn.onclick = async function()"), src.indexOf('function ofWireTasks'));
+  assert(/db\.collection\('sales_tasks'\)\.doc\(emp\.id\)\.set\(/.test(save),
+    "🔑 لسه بيكتب sales_tasks/{empId} — ده اللي تطبيق الحضور بيقراه");
+  ['employeeId','taskDescription','branch'].forEach(f=>
+    assert(new RegExp(f + ':').test(save), 'الحقل ' + f + ' اللي الحضور محتاجه لسه موجود'));
+  assert(/\{ merge: true \}/.test(save), 'وبـmerge — مش بيمسح حقول تانية');
+
+  // ---- 🗂️ وسجل الأسبوع الجديد ----
+  assert(/db\.collection\('sales_task_weeks'\)\.doc\(emp\.id \+ '__' \+ wk\)/.test(save),
+    '🗂️ مستند لكل (موظفة × أسبوع) = التاريخ بيفضل');
+  assert(/weekKey: wk/.test(save), 'ومفتاح الأسبوع متسجل في الاتنين');
+
+  // ---- 📅 حسبة الأسبوع ----
+  const i2 = src.indexOf('const OF_WEEK_START'), j2 = src.indexOf('async function ofLoadTasks');
+  const k2 = src.indexOf('function _ofShopParts'), l2 = src.indexOf('function _ofOffsetMs');
+  assert(i2 > 0 && j2 > i2, 'بلوك الأسبوع اتلقى');
+  const b2 = { Intl:Intl, Date:Date, Number:Number, String:String, Math:Math, console:console };
+  vm2.createContext(b2);
+  vm2.runInContext("const OF_TZ='Africa/Cairo'; let _ofDayCut=6;" + src.slice(k2,l2) + src.slice(i2,j2), b2);
+  const ws = (o)=> vm2.runInContext('ofWeekStartMs(' + o + ')', b2);
+  const wkk = (m)=> vm2.runInContext('ofWeekKey(' + m + ')', b2);
+
+  assert([-9,-3,-1,0,1,5,20].every(o=> new Date(ws(o)).getUTCDay() === 6),
+    '📅 الأسبوع بيبدأ السبت دايمًا (أسبوع الشغل في مصر)');
+  assertEq(ws(1) - ws(0), 7*86400000, 'وكل أسبوع 7 أيام بالظبط');
+  assertEq(ws(0) - ws(-1), 7*86400000, 'والرجوع كمان');
+  assert(wkk(ws(0)) !== wkk(ws(1)), 'مفتاح مختلف لكل أسبوع');
+  assert(/^w\d{4}-\d{2}-\d{2}$/.test(wkk(ws(0))), 'شكل المفتاح ثابت ومقروء');
+
+  // ---- 🕕 بيوم الشغل مش التقويمي ----
+  const wsFn = src.slice(src.indexOf('function ofWeekStartMs'), src.indexOf('function ofWeekKey'));
+  assert(/_ofShopParts\(ms\)\.hh < _ofDayCut/.test(wsFn),
+    '🕕 الساعة 2 فجرًا يوم السبت لسه أسبوع الجمعة (نفس فاصلة التقفيل)');
+  assert(/ms -= 86400000/.test(wsFn), 'وبيرجع يوم كامل');
+
+  // ---- الاستعلامات ----
+  const load = src.slice(src.indexOf('async function ofLoadTasks'), src.indexOf('function ofRenderTasks'));
+  assert(/\.where\('weekKey','==', wk\)/.test(load), 'بيجيب أسبوع واحد بس');
+  assert(/\.where\('branch','==', br\)/.test(load), 'وفرع واحد');
+  assert(/submittedAt','>=', wkMs/.test(load) && /submittedAt','<', wkMs \+ 7/.test(load),
+    'والتسليمات بنطاق الأسبوع — مش كل التسليمات');
+
+  const sw3 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
+  assert(/echarpe-office-v8/.test(sw3), 'CACHE_NAME اترفع لـv8');
 }
