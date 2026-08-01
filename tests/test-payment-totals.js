@@ -675,3 +675,58 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(rt.indexOf('code = _ns(') < rt.indexOf('const up = code.toUpperCase()'),
     'والترجمة قبل الفحص مش بعده');
 }
+
+// ============================================================
+// 📱 تسجيل عميل جديد برقم غلط
+// الباج: الفحص الوحيد كان `if(!phone)` — يعني الخانة مش فاضية وبس.
+// والرقم ده **مفتاح المستند**، فرقم ناقص = عميلة جديدة بنقط منفصلة،
+// و"0101 234 5678" ≠ "01012345678" = مستندين لنفس الشخص.
+// ============================================================
+{
+  const saleS2 = fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8');
+  const P = loadFns(saleS2, ['normalizePhone','phoneRejectReason']);
+  const nrm = (x)=> vm.runInContext(`normalizePhone(${JSON.stringify(x)})`, P);
+  const rej = (x)=> vm.runInContext(`phoneRejectReason(normalizePhone(${JSON.stringify(x)}))`, P);
+
+  // ---- التطبيع: نفس العميلة = نفس المستند ----
+  assertEq(nrm('0101 234 5678'), '01012345678', '📱 المسافات بتتشال');
+  assertEq(nrm('0101-234-5678'), '01012345678', 'والشرطات');
+  assertEq(nrm('+201012345678'), '01012345678', '🌍 +20 بتتحول لصفر');
+  assertEq(nrm('00201012345678'), '01012345678', 'و0020 كمان');
+  assertEq(nrm('201012345678'), '01012345678', 'و20 من غير +');
+  assertEq(nrm('1012345678'), '01012345678', 'والصفر الناقص بيتزاد');
+  assertEq(nrm('٠١٠١٢٣٤٥٦٧٨'), '01012345678', '🔢 والأرقام الهندية (الكيبورد العربي)');
+  assertEq(nrm('01012345678'), '01012345678', 'والرقم الصح زي ما هو');
+  // 🔑 كل الأشكال دي = نفس المستند
+  const forms = ['01012345678','0101 234 5678','+201012345678','1012345678','٠١٠١٢٣٤٥٦٧٨'];
+  const uniq = forms.map(nrm).filter(function(v,i,a){ return a.indexOf(v) === i; });
+  assertEq(uniq.length, 1, '🔑 كل أشكال نفس الرقم بتوصل لمستند واحد');
+
+  // ---- المنع ----
+  assertEq(rej('01012345678'), null, '✅ الرقم الصح بيعدّي');
+  assert(/11 رقم/.test(rej('123')||''), '⛔ رقم قصير بيترفض');
+  assert(/11 رقم/.test(rej('010123456789')||''), '⛔ ورقم طويل');
+  assert(!!rej('abc'), '⛔ وحروف');
+  assert(!!rej(''), '⛔ وفاضي');
+  assert(/010 أو 011/.test(rej('01912345678')||''), '⛔ وبادئة مش مصرية');
+  assertEq(rej('01112345678'), null, 'و011 بتعدّي');
+  assertEq(rej('01512345678'), null, 'و015 كمان');
+
+  // ---- موصّل في مسار التسجيل ----
+  const reg = extractFn(saleS2, 'registerNewCustomer');
+  assert(reg.length > 0, 'registerNewCustomer اتلقت');
+  assert(/const phone = normalizePhone\(raw\)/.test(reg), '🔗 التطبيع قبل الحفظ');
+  assert(/phoneRejectReason\(phone\)/.test(reg), 'والتحقق كمان');
+  assert(/if\(_bad\)\{ showToast/.test(reg), '⛔ والمنع بيوقف التسجيل');
+  assert(reg.indexOf('phoneRejectReason') < reg.indexOf('.set({ name, phone'),
+    'التحقق **قبل** الكتابة');
+  assert(/if\(phone !== raw\)/.test(reg) && /confirm\(/.test(reg),
+    '🔄 ولو التطبيع غيّر الرقم، الكاشير بتشوفه وتأكّد');
+
+  // ---- ⚠️ العملاء القدام ماتأثروش ----
+  const rci = extractFn(saleS2, 'refreshCustomerInfo');
+  assert(rci.length > 0, 'refreshCustomerInfo اتلقت');
+  assert(!/normalizePhone/.test(rci),
+    '⚠️ فتح ملف عميل **مش** بيمر على التحقق — القدام بأرقام غلط لسه بيشتغلوا');
+  assert(!/phoneRejectReason/.test(rci), 'ولا على المنع');
+}
