@@ -1222,11 +1222,38 @@ function _syncSalaryPayBtn(){
 // ---------------- Customer lookup (loyalty - test) ----------------
 // لو الرقم متسجلش، بيوري صف "إضافة عميل جديد" عشان الكاشير يكتب الاسم ويسجله على طول.
 const RATING_PREVIEW_MAP = {1:'😠 مضايقني جدًا', 2:'🙁 مش عاجبني', 3:'🙂 كويس', 4:'😍 عجبني جدًا'};
+// ✕ شيل العميل من الفاتورة بضغطة.
+// 🔴 قبل كده كان لازم تمسح الرقم كله وتدوس Enter أو تدوس في مكان تاني —
+//    ومحدش بيعرف ده. الزرار بيظهر بس لما يكون فيه رقم مكتوب.
+function clearCustomer(){
+  const ph = document.getElementById('customerPhone');
+  const nm = document.getElementById('customerName');
+  if(ph) ph.value = '';
+  if(nm){ nm.value = ''; nm.style.display = 'none'; }
+  const btn = document.getElementById('custClearBtn');
+  if(btn) btn.style.display = 'none';
+  if(typeof refreshCustomerInfo === 'function') refreshCustomerInfo();
+  if(ph) try{ ph.focus(); }catch(e){}
+}
+window.clearCustomer = clearCustomer;
+
+// 👁️ زرار المسح يظهر/يختفي حسب وجود رقم
+function _custBtnSync(){
+  const ph = document.getElementById('customerPhone');
+  const btn = document.getElementById('custClearBtn');
+  if(btn) btn.style.display = (ph && ph.value.trim()) ? 'inline-block' : 'none';
+}
+window._custBtnSync = _custBtnSync;
+
 async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
   const newRow = document.getElementById('newCustomerRow');
-  if(!phone){ infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); custReward=null; custPendingRedeem=null; custPointsBalance=0; custBaseText=''; renderCart(); return; }
+  _custBtnSync();
+  if(!phone){
+    const _nm0 = document.getElementById('customerName');
+    if(_nm0){ _nm0.value = ''; _nm0.style.display = 'none'; }
+    infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); custReward=null; custPendingRedeem=null; custPointsBalance=0; custBaseText=''; renderCart(); return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     custExists = doc.exists;
@@ -1252,7 +1279,8 @@ async function refreshCustomerInfo(){
 
     if(doc.exists){
       const d = doc.data();
-      document.getElementById('customerName').value = d.name || '';
+      const _nm2 = document.getElementById('customerName');
+      if(_nm2){ _nm2.value = d.name || ''; _nm2.style.display = 'none'; }   // الاسم بيبان في سطر المعلومات
       custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
       custPointsBalance = Number(d[pointsFieldFor(currentBranch)]) || 0;   // 🛡️ الرصيد الحقيقي
       if(Object.keys(custActivatedOffers).length) await _loadOfficialOffers();   // 🛡️ الشروط الرسمية قبل أي خصم
@@ -1277,6 +1305,9 @@ async function refreshCustomerInfo(){
       infoBox.textContent = ratingLine ? ratingLine.replace(' | ','') : '';
       newRow.style.display = 'flex';
       setCustBox(false);
+      // 📝 الاسم بيظهر **هنا بس** — لما الرقم مش مسجّل ومحتاجين نضيفه
+      const _nm = document.getElementById('customerName');
+      if(_nm){ _nm.style.display = ''; if(!_nm.value) try{ _nm.focus(); }catch(e){} }
       const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
     }
   }catch(e){ infoBox.textContent=''; setCustBox(false); }
@@ -1287,6 +1318,13 @@ document.getElementById('customerPhone').addEventListener('blur', refreshCustome
 // دوس Enter في خانة رقم العميل يظهر العميل على طول (من غير ما تحتاج تدوس في مكان تاني)
 document.getElementById('customerPhone').addEventListener('keydown', function(e){
   if(e.key === 'Enter'){ e.preventDefault(); refreshCustomerInfo(); }
+});
+// ✕ زرار المسح يبان أول ما تكتب رقم — مش مستني blur
+document.getElementById('customerPhone').addEventListener('input', _custBtnSync);
+// 📱 11 رقم = بحث تلقائي، من غير Enter ولا نقرة برّه
+document.getElementById('customerPhone').addEventListener('input', function(){
+  const v = this.value.replace(/[^0-9]/g, '');
+  if(v.length === 11) refreshCustomerInfo();
 });
 
 // الكاشير بيمسح الرقم السري للعميل (لو نسيه) — العميل هيحدد واحد جديد أول ما يفتح التطبيق
