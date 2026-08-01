@@ -151,3 +151,84 @@ const call = (expr)=> vm.runInContext(expr, SB);
   const v = (sw.match(/echarpe-office-v(\d+)/) || [])[1];
   assert(!!v && Number(v) >= 17, 'CACHE_NAME بتاع Office ≥ v17 (الحالي v' + (v || '?') + ')');
 }
+
+// ============================================================
+// ٧) 🔑 مفتاح الأسبوع لازم يطابق بين Office وتطبيق الحضور
+// الباج: تطبيق الحضور كان بيكتب `sales_tasks` بس من غير أسبوع، فOffice
+// (اللي بيقرا `sales_task_weeks`) مكانش بيشوف التاسك خالص. دلوقتي
+// الاتنين بيكتبوا — ولو الحسبة اختلفت ولو بيوم، كل تطبيق هيكتب مستند
+// أسبوع مختلف لنفس الأسبوع والتاريخ يتفرتك.
+// ============================================================
+{
+  const SALES = path.resolve(__dirname, '..', 'sales', 'sales-app.js');
+  const salesSrc = fs.readFileSync(SALES, 'utf8');
+
+  function weekKeyAt(nowMs){
+    const FakeDate = new Proxy(Date, { get(t, k){ return k === 'now' ? ()=> nowMs : t[k]; } });
+
+    // --- Office ---
+    const ob = { Intl, Date: FakeDate, Number, String, Math, OF_TZ: 'Africa/Cairo',
+                 OF_WEEK_START: 6, _ofDayCut: 6, console };
+    vm.createContext(ob);
+    ['_ofShopParts', 'ofWeekStartMs', 'ofWeekKey'].forEach(n=>{
+      vm.runInContext(extractFn(src, n), ob);
+    });
+    const off = vm.runInContext('ofWeekKey(ofWeekStartMs(0))', ob);
+
+    // --- sales ---
+    const sbx = { Intl, Date: FakeDate, Number, String, Math, console,
+                  SL_TZ: 'Africa/Cairo', SL_WEEK_START: 6, SL_DAY_CUT: 6 };
+    vm.createContext(sbx);
+    ['slShopParts', 'slWeekStartMs', 'slWeekKey'].forEach(n=>{
+      const code = extractFn(salesSrc, n);
+      assert(code.length > 0, `الدالة ${n} موجودة في sales-app.js`);
+      vm.runInContext(code, sbx);
+    });
+    const sal = vm.runInContext('slWeekKey()', sbx);
+    return { off, sal };
+  }
+
+  // نلف على أسبوعين كاملين كل ساعتين — بيغطي كل الأيام والفجر وقلب الأسبوع
+  let checked = 0, mismatch = null;
+  const start = Date.UTC(2026, 6, 27, 0, 0);          // الاتنين 27 يوليو 2026
+  for(let h = 0; h < 24 * 14 && !mismatch; h += 2){
+    const t = start + h * 3600000;
+    const r = weekKeyAt(t);
+    checked++;
+    if(r.off !== r.sal) mismatch = new Date(t).toISOString() + ' → Office ' + r.off + ' / sales ' + r.sal;
+  }
+  assert(checked > 100, 'اتفحص ' + checked + ' وقت على مدار أسبوعين');
+  assertEq(mismatch, null, '🔑 نفس مفتاح الأسبوع في التطبيقين في كل وقت اتفحص');
+
+  // وفحص محدد: فجر السبت (٤ صباحًا) لسه **الأسبوع اللي فات** — فاصلة الـ6
+  const satDawn = weekKeyAt(Date.UTC(2026, 7, 1, 1, 0));   // 4 ص بتوقيت القاهرة
+  const satNoon = weekKeyAt(Date.UTC(2026, 7, 1, 9, 0));   // 12 ظ بتوقيت القاهرة
+  assert(satDawn.off !== satNoon.off,
+    '🕕 فجر السبت أسبوع، وظهر السبت أسبوع جديد — فاصلة يوم الشغل شغالة');
+  assertEq(satDawn.sal, satDawn.off, 'وتطبيق الحضور ماشي على نفس الفاصلة');
+
+  // --- الكتابة نفسها ---
+  const save = salesSrc.slice(salesSrc.indexOf('.saveTaskBtn'));
+  const block = save.slice(0, save.indexOf('function ') > 0 ? save.indexOf('function ') : 3000);
+  // ⚠️ §0: الفحص لازم يمسك **النداء** مش الاسم — الاسم مكتوب في تعليق فوقه
+  //    والاختبار كان بينجح والباج راجع.
+  assert(/setDoc\(doc\(db,'sales_task_weeks'/.test(block),
+    "🔴 تطبيق الحضور بقى بيكتب مستند الأسبوع كمان — من غيره Office أعمى");
+  assert(/weekKey:\s*wk/.test(block), 'وبيكتب weekKey جوه sales_tasks نفسه');
+}
+
+// ============================================================
+// ٨) Office بيشوف التاسك المتحدد من تطبيق الحضور (للأسابيع القديمة)
+// ============================================================
+{
+  const load2 = extractFn(src, 'ofLoadTasks');
+  assert(/collection\('sales_tasks'\)/.test(load2),
+    'Office بيقرا sales_tasks كمصدر احتياطي');
+  const rend2 = extractFn(src, 'ofRenderTasks');
+  assert(/_tkLive\[e\.id\]/.test(rend2), 'وبيستخدمه لما مافيش مستند أسبوع');
+  assert(/_tkOffset === 0/.test(rend2),
+    '🔴 للأسبوع الحالي **بس** — وإلا التاسك الحالي هيظهر غلط في أسبوع فات');
+  assert(/lv\.weekKey === wk/.test(rend2),
+    'ولو التاسك مكتوب عليه أسبوع، لازم يطابق الأسبوع المعروض');
+  assert(/fromLive/.test(rend2), 'وبيتعلّم إنه جاي من تطبيق الحضور');
+}

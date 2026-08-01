@@ -224,3 +224,56 @@ const el = (sb, id)=> sb.document.getElementById(id);
   const v = (sw.match(/store-apps-shell-v(\d+)/) || [])[1];
   assert(!!v && Number(v) >= 253, 'CACHE_NAME بتاع POS ≥ v253 (الحالي v' + (v || '?') + ')');
 }
+
+// ============================================================
+// ٩) 🔲 مستطيلين جنب بعض — مساحة السلة متتغيّرش
+// الشكوى: خانة العميل واخدة عرض الصفحة كله من غير فايدة، وأول ما يظهر
+// طلب استبدال أو مكافأة الشاشة بتنزل لتحت وتاكل من مساحة الشغل.
+// ============================================================
+{
+  const sb = makeCtx();
+  el(sb, 'customerPhone').value = '01012345678';
+  run(sb, `setCustState('found', 'سارة', '01012345678')`);
+  assertEq(el(sb, 'custSide').style.display, 'flex', '🔲 المستطيل التاني بيظهر مع العميل');
+  assert(el(sb, 'custBox').classList.contains('has-side'),
+    'وخانة الرقم بتنزل لنص العرض (has-side)');
+
+  run(sb, `setCustState('new', '', '01012345678')`);
+  assertEq(el(sb, 'custSide').style.display, 'flex', 'وبيظهر كمان مع الرقم المش مسجّل');
+
+  el(sb, 'customerPhone').value = '';
+  run(sb, `setCustState('')`);
+  assertEq(el(sb, 'custSide').style.display, 'none', '⚪ وبيختفي لما مفيش عميل');
+  assert(!el(sb, 'custBox').classList.contains('has-side'),
+    'وخانة الرقم بترجع تاخد العرض كله');
+}
+
+// الشكل نفسه: سقف ارتفاع ثابت + العناصر جوه المستطيل مش تحته
+{
+  assert(/\.cust-grid\{[^}]*display:flex/.test(htmlSrc), 'الاتنين جنب بعض بـflex');
+  const side = (htmlSrc.match(/\.cust-side\{[^}]*\}/) || [''])[0];
+  assert(/max-height:\s*\d+px/.test(side),
+    '🔴 سقف ارتفاع ثابت للمستطيل — ده اللي بيمنع الشاشة تنزل لما يظهر استبدال');
+  assert(/overflow-y:\s*auto/.test(side), 'واللي زيادة بيتزحلق جواه بدل ما يزقّ');
+
+  // customerInfo و newCustomerRow لازم يكونوا **جوه** المستطيل مش تحته
+  const sideStart = htmlSrc.indexOf('id="custSide"');
+  const sideEnd = htmlSrc.indexOf('</div>\n        </div>', sideStart);
+  const inside = htmlSrc.slice(sideStart, sideEnd);
+  assert(inside.indexOf('id="customerInfo"') > 0, 'سطر النقط جوه المستطيل');
+  assert(inside.indexOf('id="newCustomerRow"') > 0, 'وصف التسجيل الجديد جواه كمان');
+  assert(inside.indexOf('id="resetPinRow"') < 0,
+    '🔑 ماعدا «مسح الرقم السري» — ده تحت زي ما المالك طلب');
+  assert(htmlSrc.indexOf('id="resetPinRow"') > sideStart, 'وموقعه فعلًا بعد المستطيل');
+}
+
+// بطاقات الاستبدال والمكافأة بقت أشرطة مضغوطة مش بلوكات
+{
+  const ui = extractFn(saleSrc, 'refreshCustomerActionUI');
+  assert(ui.length > 0, 'refreshCustomerActionUI موجودة');
+  assert(!/margin-top:8px; background:#fff6e6/.test(ui),
+    '🔴 بلوك الاستبدال الكبير اتشال');
+  assert(!/padding:10px 12px/.test(ui), 'ومفيش حشو كبير فاضل في أي بطاقة');
+  assert((ui.match(/flex-wrap:wrap/g) || []).length >= 2,
+    'الاتنين بقوا أشرطة بتلفّ جوه المستطيل');
+}

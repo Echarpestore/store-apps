@@ -181,10 +181,10 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
   assert(/excusedBy: 'grace_day'/.test(g), 'وبعلامة تفرّقه عن العذر الفردي');
   assert(!/fbDeleteDoc/.test(g), '⛔ مفيش أي مسح — البند بيفضل في السجل');
 
-  // ---- المحرك بيستبعد excused فعلًا ----
-  assert(/x\.employeeId !== emp\.id \|\| x\.excused/.test(appSrc),
+  // ---- المحرك بيستبعد المعذور فعلًا (بقى عبر tcCounts عشان العفو الشامل كمان) ----
+  assert(/x\.employeeId !== emp\.id \|\| !tcCounts\(x, _tcfg\)/.test(appSrc),
     '💰 محرك المرتب بيستبعد المعذور');
-  assert(/!x\.excused/.test(appSrc), 'وبوابة الالتزام كمان');
+  assert(/!tcCounts\(x\)/.test(appSrc), 'وبوابة الالتزام كمان');
 
   // ---- 🕕 الافتراضي بيوم الشغل مش التقويمي ----
   assert(/n\.getHours\(\) < 6/.test(g),
@@ -299,4 +299,51 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
   assertEq(lh(7),  0, 'مريم: 7 دقايق = مفيش رصيد (بس مش بسبب "سماح 20 دقيقة")');
   assertEq(lh(10), 1, 'و10 دقايق = ساعة — تحت السماح القديم وكانت بتتقال "مفيش خصم"');
   assertEq(lh(68, 10, 4), 4, 'والسقف اليومي بيتحترم');
+}
+
+// ============================================================
+// 🩹 العفو الشامل — «اللي فات كله، ومن بكرا نحسب»
+// الطلب: رصيد الوقت المتراكم يتلغي كله لحد النهاردة عشان القبض يطلع مظبوط،
+// والحساب يبدأ من بكرا.
+// ⚠️ ليه إعداد بتاريخ مش تعليم البنود واحد واحد: بند ممكن يتسجّل **بعد**
+//    ما العفو يتنفّذ وهو على يوم قديم — التعليم اليدوي بيفوّته ويتخصم.
+// ============================================================
+{
+  assert(typeof S.tcAmnestied === 'function', 'tcAmnestied موجودة في المحرك');
+  assert(typeof S.tcCounts === 'function', 'tcCounts موجودة كمان');
+  const amn = (date, until)=> S.tcAmnestied(date, { timeAmnestyUntil: until });
+  const counts = (x, until)=> S.tcCounts(x, { timeAmnestyUntil: until });
+
+  assertEq(amn('2026-07-20', ''), false, 'من غير عفو مفيش أي بند بيتلغي');
+  assertEq(counts({ hours:5, date:'2026-07-20' }, ''), true, 'والبند بيتحسب عادي');
+
+  assertEq(amn('2026-07-20', '2026-07-31'), true, 'بند قديم داخل العفو');
+  assertEq(amn('2026-07-31', '2026-07-31'), true, '🔑 ويوم العفو نفسه **داخل** (اللي فات كله)');
+  assertEq(amn('2026-08-01', '2026-07-31'), false, '🔑 وبكرا برّه — الحساب بيبدأ من تاني يوم');
+  assertEq(counts({ hours:16, date:'2026-07-25' }, '2026-07-31'), false,
+    '🔴 بند 16 ساعة قديم مبقاش بيتحسب في الخصم');
+  assertEq(counts({ hours:3, date:'2026-08-02' }, '2026-07-31'), true,
+    'وبند بعد العفو بيتحسب زي ما هو');
+
+  assertEq(amn('2025-12-31', '2026-01-01'), true, 'سنة فاتت داخلة');
+  assertEq(amn('2026-01-02', '2026-01-01'), false, 'ويوم واحد بعده برّه');
+  assertEq(amn('2026-09-30', '2026-10-01'), true, 'وترتيب الشهور صح (9 قبل 10)');
+
+  assertEq(amn('', '2026-07-31'), false, '🔴 بند من غير تاريخ مش بيتغطى بالعفو');
+  assertEq(counts({ hours:4 }, '2026-07-31'), true, 'وبيفضل بيتخصم — أأمن من إنه يضيع');
+
+  assertEq(counts({ hours:5, date:'2026-08-05', excused:true }, ''), false,
+    'البند المعذور يدويًا مبيتحسبش زي ما كان');
+}
+
+// كل مكان بيجمع رصيد وقت لازم يعدّي على tcCounts — مش !excused لوحدها
+{
+  const appSrc = require('fs').readFileSync(
+    require('path').resolve(__dirname, '..', 'sales', 'sales-app.js'), 'utf8');
+  // بنشيل جسم tcCounts نفسها — هي المكان الوحيد المسموح فيه بالفحص الخام
+  const body = appSrc.replace(/function tcCounts\([\s\S]*?\n\}/, '');
+  const spots = body.match(/!x\.excused|!r\.excused/g) || [];
+  assertEq(spots.length, 0,
+    '🔴 مفيش فلتر رصيد لسه شايف excused لوحده — وإلا العفو هيتجاهل في المكان ده');
+  assert(/timeAmnestyUntil/.test(appSrc), 'والإعداد نفسه متعرّف في الافتراضيات');
 }

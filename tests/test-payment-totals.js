@@ -755,15 +755,22 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   const cc = extractFn(saleS3, 'clearCustomer');
   assert(cc.length > 0, 'دالة المسح موجودة');
   assert(/ph\.value = ''/.test(cc) && /nm\.value = ''/.test(cc), 'بتفضّي الرقم والاسم');
-  assert(/refreshCustomerInfo\(\)/.test(cc), 'وبتحدّث الشاشة');
+  // 🔄 اتغيّرت: المسح بقى **محلي** — بيفك سياق العميل من غير قراءة جديدة
+  //    من الداتابيز (كان بينادي refreshCustomerInfo وبيعمل قراءة على الفاضي).
+  assert(/clearCustomerContext\(\)/.test(cc), 'وبتفك سياق العميل (استبدال/مكافأة/عروض)');
+  assert(/setCustState\(''\)/.test(cc), 'وبترجّع الخانة لحالتها الفاضية');
+  assert(!/refreshCustomerInfo\(\)/.test(cc),
+    '🔴 ومفيش قراءة جديدة من الداتابيز على رقم فاضي');
   assert(/ph\.focus\(\)/.test(cc), 'وبترجّع المؤشر للرقم — جاهزة للعميل اللي بعده');
 
   // الزرار بيظهر بس لما فيه رقم
   const sync = extractFn(saleS3, '_custBtnSync');
-  assert(/ph\.value\.trim\(\)\) \? 'inline-block' : 'none'/.test(sync),
+  assert(/ph\.value\.trim\(\)\) \? 'inline-flex' : 'none'/.test(sync),
     '👁️ الزرار بيظهر بس لما يكون فيه رقم');
-  assert(/addEventListener\('input', _custBtnSync\)/.test(saleS3),
+  assert(/_custBtnSync\(\);/.test(saleS3) && /addEventListener\('input'/.test(saleS3),
     'وبيتحدّث مع الكتابة — مش مستني blur');
+  assert(/_custDetachIfChanged\(\);/.test(saleS3),
+    '✏️ وتغيير رقم عميل متربط بيفك الربط فورًا');
 
   // ---- 📱 بحث تلقائي على 11 رقم ----
   assert(/v\.length === 11\) refreshCustomerInfo\(\)/.test(saleS3),
