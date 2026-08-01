@@ -1219,6 +1219,23 @@ function _syncSalaryPayBtn(){
   }
 }
 
+// ⏳ صلاحية طلب الاستبدال — العميل بيطلب وهو واقف على الكاشير، فساعة
+//    مدة كريمة. المدة بتتظبط من إعدادات الولاء (`redeemRequestTtlMin`).
+function redeemReqTtlMs(){
+  const m = Number((typeof loyaltyRedemptionConfig !== 'undefined' && loyaltyRedemptionConfig)
+    ? loyaltyRedemptionConfig.redeemRequestTtlMin : 0);
+  return (m > 0 ? m : 60) * 60000;
+}
+function redeemReqFresh(req, now){
+  if(!req) return false;
+  const ts = Number(req.ts);
+  // 🔴 طلب من غير وقت = طلب قديم من نسخة قبل ما نسجّل الوقت → بيتجاهل
+  if(!ts) return false;
+  return (Number(now) || Date.now()) - ts <= redeemReqTtlMs();
+}
+window.redeemReqFresh = redeemReqFresh;
+window.redeemReqTtlMs = redeemReqTtlMs;
+
 // ---------------- Customer lookup (loyalty - test) ----------------
 // لو الرقم متسجلش، بيوري صف "إضافة عميل جديد" عشان الكاشير يكتب الاسم ويسجله على طول.
 const RATING_PREVIEW_MAP = {1:'😠 مضايقني جدًا', 2:'🙁 مش عاجبني', 3:'🙂 كويس', 4:'😍 عجبني جدًا'};
@@ -1385,9 +1402,15 @@ async function refreshCustomerInfo(){
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
       const _now = Date.now();
       // 🛡️ نتأكد إن طلب الاستبدال اللي العميل بعته من التطبيق ≤ رصيده الحقيقي (منع تلاعب)
+      // ⏳ الطلب لازم يكون **جديد**. الباج: `pendingRedeem` مبيتمسحش غير
+      //    لما الفاتورة تتقفل والاستبدال مطبّق فيها. فلو العميل طلب
+      //    وماخدش، الطلب بيفضل في مستنده **للأبد** — وكل ما تكتب رقمه
+      //    الزرار يظهر، فيبان كإن النظام بيقترح الاستبدال من نفسه.
+      //    دلوقتي الطلب بيسقط بعد المدة، والقديم اللي من غير وقت بيتجاهل.
       custPendingRedeem = (d.pendingRedeem && d.pendingRedeem.brand === _brand
         && d.pendingRedeem.points > 0
-        && d.pendingRedeem.points <= custPointsBalance) ? d.pendingRedeem : null;
+        && d.pendingRedeem.points <= custPointsBalance
+        && redeemReqFresh(d.pendingRedeem, _now)) ? d.pendingRedeem : null;
       if(d.pendingRedeem && d.pendingRedeem.points > custPointsBalance){
         showToast('⚠️ طلب استبدال العميل أكبر من رصيده — اتجاهل. اعمل الاستبدال يدوي بالرصيد الصح', 'warn');
       }
@@ -1560,6 +1583,12 @@ function showCashierInfo(){
 let pendingRedemption = null; // {points, value} — بيتثبّت فعليًا (خصم النقط) بس لما الفاتورة تتحفظ
 
 async function openRedeemPoints(){
+  // 🔐 الاستبدال اليدوي (من غير طلب من التطبيق) بقى بصلاحية —
+  //    الطريق الطبيعي إن العميل يطلب من التطبيق والكاشير تأكّد بس.
+  if(typeof hasPerm === 'function' && !hasPerm('canRedeemManual')){
+    showToast('🎁 الاستبدال اليدوي للمشرف/المدير بس — العميل يطلب من التطبيق والكاشير تأكّد', 'err');
+    return;
+  }
   const phone = document.getElementById('customerPhone').value.trim();
   if(!phone){ showToast('لازم تكتب رقم تليفون العميل الأول', 'err'); return; }
   if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }

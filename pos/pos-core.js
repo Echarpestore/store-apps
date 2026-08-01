@@ -282,25 +282,26 @@ const DEFAULT_ROLE_PERMISSIONS = {
     label: 'أدمن', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
     canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: true,
-    canDiscount: true, canOpenDrawer: true, canReverse: true, maxDiscountPct: 100
+    canDiscount: true, canOpenDrawer: true, canReverse: true, canRedeemManual: true, maxDiscountPct: 100
   },
   cashier: {
     label: 'كاشير', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: false, canViewStock: true, canViewLogs: false, canRefund: false, canResetCustomerPin: false,
     canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false,
-    canDiscount: false, canOpenDrawer: false, canReverse: false, maxDiscountPct: 0
+    // 🎁 الاستبدال اليدوي مقفول على الكاشير — الاستبدال بيتطلب من التطبيق
+    canDiscount: false, canOpenDrawer: false, canReverse: false, canRedeemManual: false, maxDiscountPct: 0
   },
   supervisor: {
     label: 'مشرف', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: false, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
     canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false,
-    canDiscount: true, canOpenDrawer: true, canReverse: true, maxDiscountPct: 20
+    canDiscount: true, canOpenDrawer: true, canReverse: true, canRedeemManual: true, maxDiscountPct: 20
   },
   manager: {
     label: 'مدير', canSell: true, canHold: true, canPrintLabel: true,
     canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
     canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: false,
-    canDiscount: true, canOpenDrawer: true, canReverse: true, maxDiscountPct: 100
+    canDiscount: true, canOpenDrawer: true, canReverse: true, canRedeemManual: true, maxDiscountPct: 100
   }
 };
 // 👑 أدمن ثابت مدمج في الكود — مستقل تمامًا عن الموظفين وقاعدة البيانات.
@@ -791,6 +792,45 @@ function reclaimWindowFocus(afterMs){
 }
 window.reclaimWindowFocus = reclaimWindowFocus;
 
+// ============================================================
+// 🎯 حارس التركيز — الشكوى: الكتابة بتقف، والحل اليدوي كان الدوس على
+// أيقونة البرنامج في شريط ويندوز. السبب: نافذة (طباعة/دفع/حوار ويندوز)
+// بتاخد التركيز وترجّعه للنافذة **من غير** ما ترجّعه لأي خانة جواها،
+// فالكيبورد بيروح للصفحة نفسها ومحدش بيسمعه.
+// الحارس بيراقب رجوع التركيز للنافذة وبيرجّعه لخانة البحث لو ضايع.
+// ============================================================
+function _focusIsLost(){
+  const a = document.activeElement;
+  if(!a || a === document.body || a === document.documentElement) return true;
+  const t = String(a.tagName || '').toUpperCase();
+  return !(t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || a.isContentEditable);
+}
+function _focusRescue(){
+  if(!_focusIsLost()) return;                       // الكاشير ماسكة خانة → مالناش دعوة
+  try{
+    const sc = document.getElementById('saleScreen');
+    if(!sc || sc.offsetParent === null) return;      // مش في شاشة البيع
+    // 🛡️ مفيش نافذة/حوار مفتوح — عشان ما نخطفش التركيز من موديل
+    if(document.querySelector('.modal-open, .ask-modal, #paymobWatch')) return;
+    const sb = document.getElementById('searchBar');
+    if(sb && sb.offsetParent !== null) sb.focus();
+  }catch(e){}
+}
+window._focusIsLost = _focusIsLost;
+window._focusRescue = _focusRescue;
+// رجوع النافذة من نافذة تانية (الطباعة · ماكينة الكارت · حوار ويندوز)
+window.addEventListener('focus', function(){ setTimeout(_focusRescue, 120); });
+document.addEventListener('visibilitychange', function(){
+  if(!document.hidden) setTimeout(_focusRescue, 160);
+});
+// شبكة أمان أخيرة: أول ما الكاشير تدوس أي مكان في الشاشة
+document.addEventListener('pointerdown', function(e){
+  setTimeout(function(){
+    try{ if(e.target && e.target.closest && e.target.closest('input,textarea,select,button')) return; }catch(_e){}
+    _focusRescue();
+  }, 60);
+}, true);
+
 function clearStuckOverlays(screenId){
   // نوافذ بنبنيها في اللحظة — لو فاضلة يبقى حصل خطأ، بنشيلها
   ['askTextOverlay','changeConfirmOverlay','cancelTerminalOverlay','avPickOverlay']
@@ -1047,6 +1087,11 @@ function enterDashboard(){
   if(document.getElementById('rolesSidebarBtn')) document.getElementById('rolesSidebarBtn').style.display = canSeeRoles ? '' : 'none';
   if(document.getElementById('navRoles')) document.getElementById('navRoles').style.display = canSeeRoles ? '' : 'none';
 
+  // 🎁 زرار الاستبدال اليدوي بيتخفي أصلًا لو مالهاش صلاحية
+  try{
+    const _rb = document.querySelector('[data-uid="sa_redeem"]');
+    if(_rb) _rb.style.display = hasPerm('canRedeemManual') ? '' : 'none';
+  }catch(e){}
   const canDiscounts = hasPerm('canChangePrices');
   if(document.getElementById('discountsSidebarBtn')) document.getElementById('discountsSidebarBtn').style.display = canDiscounts ? '' : 'none';
   if(document.getElementById('navDiscounts')) document.getElementById('navDiscounts').style.display = canDiscounts ? '' : 'none';
