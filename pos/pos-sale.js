@@ -1316,6 +1316,7 @@ window.setCustAction = setCustAction;
 // ✕ شيل العميل من الفاتورة بضغطة — بيمسح الرقم والاسم وسياق العميل كله
 //   (استبدال/مكافأة/عروض) من غير أي دوسة زيادة.
 function clearCustomer(){
+  _custInvalidate();          // 🛡️ أي قراءة في الطريق تتلغي — مايرجعش لوحده
   const ph = document.getElementById('customerPhone');
   const nm = document.getElementById('customerName');
   if(ph) ph.value = '';
@@ -1346,6 +1347,7 @@ function _custDetachIfChanged(){
   if(!ph) return false;
   const v = String(ph.value || '').trim();
   if(!_custMatchedPhone || v === _custMatchedPhone) return false;
+  _custInvalidate();          // 🛡️ نفس الحكاية مع تغيير الرقم
   _custMatchedPhone = '';
   if(typeof clearCustomerContext === 'function') clearCustomerContext();
   const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
@@ -1357,7 +1359,21 @@ function _custDetachIfChanged(){
 }
 window._custDetachIfChanged = _custDetachIfChanged;
 
+// 🔢 عدّاد الطلبات — بيمنع "العميل بيرجع لوحده".
+//    القراءة من الداتابيز غير متزامنة. لو الكاشير مسحت العميل (أو غيّرت
+//    الرقم) والقراءة القديمة لسه في الطريق، بترجع بعد المسح **وتكتب
+//    العميل تاني**. فبنرقّم كل طلب، وأي نتيجة مش من آخر طلب بتتجاهل.
+let _custReqSeq = 0;
+function _custInvalidate(){ _custReqSeq++; }
+window._custInvalidate = _custInvalidate;
+
 async function refreshCustomerInfo(){
+  const _req = ++_custReqSeq;
+  const _stale = function(){
+    // اتغيّر الطلب؟ أو الكاشير غيّرت الرقم وإحنا بنقرا؟
+    const el = document.getElementById('customerPhone');
+    return _req !== _custReqSeq || !el || el.value.trim() !== phone;
+  };
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
   _custBtnSync();
@@ -1383,6 +1399,7 @@ async function refreshCustomerInfo(){
   }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
+    if(_stale()) return;                      // الكاشير مسحت أو غيّرت الرقم وإحنا بنقرا
     custExists = doc.exists;
     { const _d = doc.exists ? (doc.data()||{}) : {};
       // "معاه التطبيق" = عنده PIN أو كود ولاء أو مصدره التطبيق
@@ -1392,6 +1409,7 @@ async function refreshCustomerInfo(){
     try{
       // 1) لو العميل ده عنده تقييمات مرتبطة فعليًا من زيارات سابقة (دقيقة 100%)
       const linkedSnap = await db.collection('entries').where('customerPhone','==', phone).get();
+      if(_stale()) return;
       const linked = linkedSnap.docs.map(d=>d.data()).sort((a,b)=> b.ts-a.ts);
       if(linked.length){
         ratingLine = ` | آخر تقييمه: ${RATING_PREVIEW_MAP[linked[0].r]||'—'}`;
@@ -1399,6 +1417,7 @@ async function refreshCustomerInfo(){
         // 2) مفيش تقييم متربط بيه قبل كده — نديله تخمين تقريبي (تقييم قريب في نفس الفرع في آخر دقيقتين)
         const twoMinAgo = Date.now() - (2*60*1000);
         const branchSnap = await db.collection('entries').where('branch','==', currentBranch).get();
+        if(_stale()) return;
         const recent = branchSnap.docs.map(d=>d.data()).filter(e=> e.ts >= twoMinAgo).sort((a,b)=> b.ts-a.ts);
         if(recent.length) ratingLine = ` | تقييم قريب (تخمين مش مؤكد): ${RATING_PREVIEW_MAP[recent[0].r]||'—'}`;
       }
@@ -1410,7 +1429,7 @@ async function refreshCustomerInfo(){
       if(_nm2) _nm2.value = d.name || '';   // الاسم بيبان في الشريط
       custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
       custPointsBalance = Number(d[pointsFieldFor(currentBranch)]) || 0;   // 🛡️ الرصيد الحقيقي
-      if(Object.keys(custActivatedOffers).length) await _loadOfficialOffers();   // 🛡️ الشروط الرسمية قبل أي خصم
+      if(Object.keys(custActivatedOffers).length){ await _loadOfficialOffers(); if(_stale()) return; }   // 🛡️ الشروط الرسمية قبل أي خصم
       revertCustomerOffers(); applyCustomerOffers(); renderCart();
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
       const _now = Date.now();
@@ -1609,6 +1628,7 @@ async function openRedeemPoints(){
 
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
+    if(_stale()) return;                      // الكاشير مسحت أو غيّرت الرقم وإحنا بنقرا
     custExists = doc.exists;
     { const _d = doc.exists ? (doc.data()||{}) : {};
       // "معاه التطبيق" = عنده PIN أو كود ولاء أو مصدره التطبيق
