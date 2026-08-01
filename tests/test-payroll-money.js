@@ -259,3 +259,60 @@ const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
   const html = fsA.readFileSync(pathA.resolve(__dirname,'..','sales','index.html'),'utf8');
   assert(/id="advCloseDayInput"/.test(html), 'وخانة يوم القفل في الإعدادات');
 }
+
+// ============================================================
+// 🏆 لوحة الترتيب كانت بتعد الفواتير مش النقط
+// الشكوى: الموظفة شايفة "18.2 نقطة" في شاشتها و"9" في لوحة الترتيب.
+// السبب: countsFor كانت `.length` — بتعد **عدد الفواتير**. والنقطة ليها وزن:
+// أول (الحد) قطع = نقطة كاملة، وكل قطعة زيادة = كسر. فاتورة 7 قطع (حد 5) = 1.4.
+// والمرتب والعمولة بيتحسبوا على الوزن — فلوحة الترتيب كانت الوحيدة الغلط.
+// ============================================================
+{
+  const fsB = require('fs'), pathB = require('path'), vmB = require('vm');
+  const srcB = fsB.readFileSync(pathB.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+
+  const cf = srcB.slice(srcB.indexOf('function countsFor'), srcB.indexOf('function countsFor') + 400);
+  assert(!/\.length;/.test(cf), '🔴 عد الفواتير اتشال');
+  assert(/return sumPoints\(list\)/.test(cf),
+    '🔑 بيجمع الأوزان بنفس دالة sumPoints اللي المرتب ماشي عليها');
+
+  // سلوكيًا: نفس أرقام الشكوى
+  const box2 = { Math:Math, Number:Number, String:String, window:{} };
+  vmB.createContext(box2);
+  const i2 = srcB.indexOf('function pointWeight'), j2 = srcB.indexOf('// ====', i2);
+  vmB.runInContext(srcB.slice(i2, j2), box2);
+  const sum = (l)=> vmB.runInContext(`sumPoints(${JSON.stringify(l)})`, box2);
+  const nine = [{value:1},{value:1.4},{value:2},{value:1.2},{value:2.4},{value:1},{value:3},{value:4},{value:2.2}];
+  assertEq(nine.length, 9, 'العدد القديم كان 9 فاتورة');
+  assertEq(sum(nine), 18.2, '🔑 والمجموع الصح 18.2 — زي ما الموظفة شايفة');
+  assertEq(sum([{}, {value:2}]), 3, '⚠️ الفواتير القديمة (من غير value) بتتحسب 1');
+  assertEq(sum([]), 0, 'وقايمة فاضية = صفر');
+
+  // 🔢 العرض نضيف
+  const fmt = srcB.slice(srcB.indexOf('function fmtPts'), srcB.indexOf('function fmtPts') + 260);
+  assert(fmt.length > 0, 'دالة عرض النقط موجودة');
+  const f = (n)=>{ const v = Math.round((Number(n)||0)*10)/10; return (v % 1 === 0) ? String(v) : v.toFixed(1); };
+  assertEq(f(18.200000000000003), '18.2', '🔢 الكسور العشرية الطويلة بتتنضف');
+  assertEq(f(18), '18', 'والصحيح من غير .0');
+  assertEq(f(0), '0', 'والصفر');
+  // كل مواضع عرض النقط بتعدي عليها
+  const shown = (srcB.match(/\$\{[^}]*\} نقطة</g) || []);
+  const raw = shown.filter(function(x){ return x.indexOf('fmtPts') < 0; });
+  assertEq(raw, [], '🔍 مفيش أي مكان بيعرض نقط من غير تنسيق');
+}
+
+// ⚠️ fmtPts لازم تتعرّف قبل أول استخدام (القاعدة الذهبية §15)
+{
+  const fsC = require('fs'), pathC = require('path');
+  const srcC = fsC.readFileSync(pathC.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+  const def = srcC.indexOf('function fmtPts');
+  const uses = [];
+  let k = srcC.indexOf('fmtPts(');
+  while(k >= 0){ uses.push(k); k = srcC.indexOf('fmtPts(', k + 1); }
+  assert(def > 0 && uses.length > 1, 'التعريف والاستخدامات موجودين');
+  // ⚠️ الاستخدام الوحيد المسموح قبل التعريف هو مفيش — كلهم لازم يبقوا بعده
+  const before = uses.filter(function(u){ return u < def; });
+  assertEq(before, [],
+    '🔑 مفيش أي استخدام قبل التعريف (كانت متعرّفة تحت وبتتستخدم فوق)');
+  assert(/window\.fmtPts = fmtPts;/.test(srcC), 'ومتعرّضة على window');
+}
