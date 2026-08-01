@@ -183,7 +183,7 @@ function extractFn(src, name){
   });
   const sw = fs.readFileSync(path.join(ROOT, 'Office', 'sw.js'), 'utf8');
   const v = (sw.match(/echarpe-office-v(\d+)/) || [])[1];
-  assert(!!v && Number(v) >= 23, 'CACHE_NAME بتاع Office ≥ v23 (الحالي v' + (v || '?') + ')');
+  assert(!!v && Number(v) >= 24, 'CACHE_NAME بتاع Office ≥ v24 (الحالي v' + (v || '?') + ')');
 }
 
 // ============================================================
@@ -335,11 +335,14 @@ function extractFn(src, name){
   assert(/status: 'new'/.test(ap), 'وكل طلب بيبدأ جديد');
 
   // الشيفت الجديد موجود في الاختيارات
-  assert(/setup:\s*'🧹 تظبيط/.test(ap), '🧹 شيفت التظبيط ٧–١٠ في الاستمارة');
-  assert(/تظبيط الفرع \(٧–١٠ ص · قبل الفتح\)/.test(ap), 'وكوظيفة كمان');
+  assert(/setup:\s*'✨ تجهيز الفرع/.test(ap), '✨ شيفت التجهيز ٧–١٠ في الاستمارة');
+  assert(/تجهيز وترتيب الفرع/.test(ap), 'وكوظيفة كمان');
+  assert(ap.indexOf('🧹') < 0 && ap.indexOf('تظبيط') < 0,
+    '🔴 مفيش مكنسة ولا كلمة تظبيط — الشغل ترتيب وعرض بضاعة مش نظافة');
 
   // الأسئلة اللي بتفرق في الفرز
-  ['commute','startWhen','studying','classes','transport','source','notes','portfolio']
+  ['commute','startWhen','studying','classes','transport','source','notes','portfolio',
+   'workType','hoursFrom','otherJob']
     .forEach(function(f){
       assert(ap.indexOf("'" + f + "'") > 0 || ap.indexOf(f + ':') > 0,
         '📋 سؤال `' + f + '` موجود');
@@ -364,16 +367,47 @@ function extractFn(src, name){
 
   // 🧹 شيفت التظبيط خارج المكافأة ورصيد الوقت
   const sa = fs.readFileSync(path.join(ROOT, 'sales', 'sales-app.js'), 'utf8');
-  assert(/setup:\s*\{ label: '🧹 تظبيط الفرع', start: '07:00', end: '10:00', noBonus: true \}/.test(sa),
-    '🧹 الشيفت متعرّف بمواعيده وعلامة noBonus');
+  assert(/setup:\s*\{ label: '✨ تجهيز الفرع', start: '07:00', end: '10:00', noBonus: true \}/.test(sa),
+    '✨ الشيفت متعرّف بمواعيده وعلامة noBonus');
   const iss = extractFn(sa, 'isSetupShift');
   assert(iss.length > 0 && /sh\.noBonus/.test(iss),
     'ودالة واحدة بتحدد الاستثناء — مش شرط مكرر في كل مكان');
   assert(/if\(latePenalized && !isSetupShift\(emp\)\)/.test(sa),
     '🔴 التأخير مبيتحوّلش رصيد وقت — مفيش عميل بيتأثر بتأخيره');
-  assert(/if\(isSetupShift\(emp\)\) return false;\s*\/\/ 🧹 التظبيط خارج رصيد الوقت/.test(sa),
+  assert(/if\(isSetupShift\(emp\)\) return false;/.test(sa),
     '🔴 وخارج خصم رصيد الوقت في المرتب');
   // شاشة اختيار الشيفت بقت من الإعدادات — عشان أي شيفت جديد يبان لوحده
   assert(/Object\.keys\(S\)\.map/.test(sa),
     '🔴 قايمة الشيفتات بقت من الإعدادات — كانت مكتوبة بالإيد فالشيفت الجديد مكانش هيبان');
+}
+
+// ============================================================
+// 📌 الشواغر — إنت اللي بتحدد أي فرع محتاج أي وظيفة
+// ============================================================
+{
+  const ap2 = fs.readFileSync(path.join(ROOT, 'apply', 'index.html'), 'utf8');
+  assert(/doc\('job_openings'\)/.test(ap2), '📌 الاستمارة بتقرا الشواغر');
+  assert(/if\(!OPEN\.length\)/.test(ap2) && /لا توجد شواغر/.test(ap2),
+    '🔴 ومفيش شواغر = الاستمارة مبتفتحش أصلًا — مش يقدّم على فرع مش محتاج حد');
+  const lo = ap2.slice(ap2.indexOf('async function loadOpenings'), ap2.indexOf('function render()'));
+  assert(/ROLES\[o\.role\]/.test(lo),
+    '🛡️ وشاغر بوظيفة مش معروفة بيتجاهل — مش بيكسر الاستمارة');
+  assert(/openBranches\(\)/.test(ap2) && /openRolesFor\(D\.branches\)/.test(ap2),
+    '🔗 والفروع والوظائف المعروضة من الشواغر مش قايمة ثابتة');
+  // الوصول للفرع اتنقل بعد اختيار الفرع
+  const who = ap2.slice(ap2.indexOf('V.who'), ap2.indexOf('V.avail'));
+  assert(who.indexOf("chips('commute'") < 0,
+    '🔴 سؤال مدة الوصول اتشال من شاشة البيانات — المتقدّم لسه ماعرفش الفرع');
+  const av = ap2.slice(ap2.indexOf('V.avail'), ap2.indexOf('V.exp'));
+  assert(av.indexOf("chips('commute'") > 0 && av.indexOf("chips('branches'") < av.indexOf("chips('commute'"),
+    '✅ وبقى **بعد** اختيار الفرع — «تصل إلى الفرع الذي اخترته في كم؟»');
+  // الكاشير اتشال
+  assert(ap2.indexOf('expCashier') < 0, '🔴 وسؤال الكاشير اتشال — مش فارق في الفرز');
+
+  // شاشة Office
+  assert(/ofRenderOpenings/.test(off) && /job_openings/.test(off), '📌 شاشة الشواغر في Office');
+  assert(offH.indexOf('id="opGrid"') > 0 && offH.indexOf('id="opSave"') > 0, 'وعناصرها موجودة');
+  const opt = extractFn(off, 'opToggle') || off.slice(off.indexOf('window.opToggle'), off.indexOf('function ofRenderOpenings'));
+  assert(/o\.branch === br && o\.role === role/.test(opt),
+    '🔑 والعلامة على (فرع + وظيفة) مع بعض — مش الفرع لوحده');
 }
