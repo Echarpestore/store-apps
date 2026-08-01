@@ -182,5 +182,65 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
     'والتسليمات بنطاق الأسبوع — مش كل التسليمات');
 
   const sw3 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-  assert(/echarpe-office-v8/.test(sw3), 'CACHE_NAME اترفع لـv8');
+  assert(/echarpe-office-v\d+/.test(sw3), 'CACHE_NAME فيه رقم نسخة (التاسكات)');
+}
+
+// ============================================================
+// 🔁 المصاريف المتكررة — قوالب شهرية لكل فرع
+// الإيجار ثابت والكهربا متغيّرة، وكل فرع لوحده.
+// ============================================================
+{
+  const html3 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  assert(html3.indexOf('id="recurringBox"') >= 0, 'الواجهة موجودة');
+  assert(html3.indexOf('id="recurringBox"') < html3.indexOf('id="expensesList"'),
+    'المتكررة فوق قايمة المصاريف');
+
+  const R = src.slice(src.indexOf('const OF_RECUR_COL'));
+  assert(R.length > 0, 'بلوك المتكررة اتلقى');
+
+  // ---- 🔑 شكل المصروف القديم مالوش لمسة ----
+  assert(/amount: amount,/.test(R) && /note:/.test(R) && /ts: Date\.now\(\)/.test(R) && /month: mk/.test(R),
+    '🔑 التسجيل بنفس شكل المصروف القديم (الأرباح والإجماليات مش هتتأثر)');
+  assert(/db\.collection\('office_expenses'\)\.add\(/.test(R),
+    'وبيتكتب في نفس المجموعة');
+  assert(/recurringId: t\.id/.test(R), '🔗 وبربط بالقالب عشان نعرف اتدفع ولا لأ');
+  assert(/OF_RECUR_COL = 'office_recurring'/.test(src),
+    'القوالب في مجموعة منفصلة — مش مصاريف فعلية');
+
+  // ---- ثابت مقابل متغيّر ----
+  assert(/t\.kind !== 'fixed'/.test(R), 'المتغيّر بيسأل عن المبلغ');
+  assert(/prompt\('مبلغ '/.test(R), 'في كل مرة');
+  assert(/kind: isFixed \? 'fixed' : 'variable'/.test(R), 'والنوع بيتحفظ في القالب');
+  assert(/amount: isFixed \? amount : null/.test(R), 'والثابت بس هو اللي ليه مبلغ محفوظ');
+
+  // ---- كل فرع لوحده ----
+  assert(/branch: brTxt\.trim\(\)/.test(R), '🏬 القالب مربوط بفرع');
+  assert(/branch: t\.branch \|\| null/.test(R), 'والمصروف المتسجل كمان');
+
+  // ---- 🛡️ مفيش تسجيل تلقائي ----
+  assert(!/setInterval|autoPay|autoGenerate/.test(R),
+    '🛡️ مفيش تسجيل تلقائي — النظام بيقترح والمالك بيأكد');
+
+  // ---- منع الدفع مرتين ----
+  const paidFn = src.slice(src.indexOf('function ofRecurPaid'), src.indexOf('function ofRenderRecurring'));
+  assert(/e\.month === mk && e\.recurringId === tpl\.id/.test(paidFn),
+    'فحص "اتدفع" بالشهر والقالب مع بعض');
+  assert(/if\(ofRecurPaid\(t, mk\)\)\{ alert/.test(R),
+    '⛔ فحص أخير قبل الكتابة — يمنع الدفع مرتين من جهازين');
+
+  // ---- مسح القالب مايمسحش التاريخ ----
+  assert(/المصاريف اللي اتسجلت منه قبل كده هتفضل/.test(R),
+    '🗑️ مسح القالب بيوقف التذكير بس — المصاريف بتفضل');
+  assert(/db\.collection\(OF_RECUR_COL\)\.doc\(t\.id\)\.delete\(\)/.test(R),
+    'وبيمسح القالب مش المصروف');
+
+  // ---- موصّلة ----
+  assert(/D\.recurring = s\.docs\.map/.test(src), 'الاشتراك موصّل');
+  assert(/recurring:\[\]/.test(src), 'ومعرّفة في مخزن البيانات');
+  const expSnap = src.slice(src.indexOf("db.collection('office_expenses').onSnapshot"), src.indexOf('// 🔁 قوالب'));
+  assert(/ofRenderRecurring\(\)/.test(expSnap),
+    'وبتتحدّث لما مصروف يتسجل (حالة "اتدفع" بتتغير)');
+
+  const sw4 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
+  assert(/echarpe-office-v9/.test(sw4), 'CACHE_NAME اترفع لـv9');
 }
