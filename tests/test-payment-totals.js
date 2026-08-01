@@ -730,3 +730,51 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
     '⚠️ فتح ملف عميل **مش** بيمر على التحقق — القدام بأرقام غلط لسه بيشتغلوا');
   assert(!/phoneRejectReason/.test(rci), 'ولا على المنع');
 }
+
+// ============================================================
+// 📱 صف العميل في شاشة البيع
+// الشكوى: الصف طويل جدًا · خانة الاسم مفرودة طول الوقت من غير لازمة ·
+// ومسح العميل محتاج تمسح الرقم كله وتدوس Enter أو تنقر برّه.
+// ============================================================
+{
+  const html = fs.readFileSync(path.join(POS,'index.html'),'utf8');
+  const saleS3 = fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8');
+
+  // ---- 📱 الرقم أولًا والاسم مخفي ----
+  const row = html.slice(html.indexOf('<div class="customer-row">'),
+                         html.indexOf('<div id="newCustomerRow">'));
+  assert(row.indexOf('id="customerPhone"') < row.indexOf('id="customerName"'),
+    '📱 خانة الرقم قبل الاسم — الكاشير بتسجّل بالرقم');
+  assert(/id="customerName"[^>]*style="display:none;"/.test(row),
+    '🔴 خانة الاسم مخفية افتراضيًا (كانت مفرودة طول الوقت)');
+  assert(/#customerPhone\{ flex:1 1 auto/.test(html), 'والرقم بياخد المساحة');
+
+  // ---- ✕ زرار المسح ----
+  assert(/id="custClearBtn"/.test(row), '✕ زرار مسح العميل موجود');
+  assert(/onclick="clearCustomer\(\)"/.test(row), 'وموصّل');
+  const cc = extractFn(saleS3, 'clearCustomer');
+  assert(cc.length > 0, 'دالة المسح موجودة');
+  assert(/ph\.value = ''/.test(cc) && /nm\.value = ''/.test(cc), 'بتفضّي الرقم والاسم');
+  assert(/refreshCustomerInfo\(\)/.test(cc), 'وبتحدّث الشاشة');
+  assert(/ph\.focus\(\)/.test(cc), 'وبترجّع المؤشر للرقم — جاهزة للعميل اللي بعده');
+
+  // الزرار بيظهر بس لما فيه رقم
+  const sync = extractFn(saleS3, '_custBtnSync');
+  assert(/ph\.value\.trim\(\)\) \? 'inline-block' : 'none'/.test(sync),
+    '👁️ الزرار بيظهر بس لما يكون فيه رقم');
+  assert(/addEventListener\('input', _custBtnSync\)/.test(saleS3),
+    'وبيتحدّث مع الكتابة — مش مستني blur');
+
+  // ---- 📱 بحث تلقائي على 11 رقم ----
+  assert(/v\.length === 11\) refreshCustomerInfo\(\)/.test(saleS3),
+    '📱 11 رقم = بحث تلقائي (من غير Enter ولا نقرة برّه)');
+
+  // ---- 📝 الاسم بيظهر وقت الحاجة بس ----
+  const rci2 = extractFn(saleS3, 'refreshCustomerInfo');
+  assert(/_nm\.style\.display = ''/.test(rci2),
+    '📝 الاسم بيظهر لما الرقم مش مسجّل');
+  assert(/_nm2\.style\.display = 'none'/.test(rci2),
+    'وبيتخفي لما العميل مسجّل (اسمه بيبان في سطر المعلومات)');
+  assert(/_nm0\.style\.display = 'none'/.test(rci2),
+    'وبيتخفي لما الخانة تفضى');
+}
