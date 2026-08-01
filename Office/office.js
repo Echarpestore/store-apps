@@ -852,6 +852,7 @@ function startData(){
     try{ ofWireHire(); }catch(e){ console.warn('hire', e); }
     try{ ofWireEmpFile(); }catch(e){ console.warn('empfile', e); }
     try{ ofWireApplicants(); }catch(e){ console.warn('applicants', e); }
+    try{ ofWireOpenings(); }catch(e){ console.warn('openings', e); }
   });
   db.collection('sales_advances').onSnapshot(function(s){
     D.advances = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -2598,8 +2599,8 @@ function ofWireEmpFile(){
    بالمستندات. زرار «ادعُه للتسجيل» بيربط الشاشتين.
    ⚠️ القراءة بنافذة ٩٠ يوم — الطلبات بتتراكم ومحدش بيرجع لطلب من سنة.
    ============================================================ */
-const AP_ROLES  = { sales_social:'مبيعات وسوشيال', cashier:'كاشير ومبيعات', setup:'تظبيط الفرع' };
-const AP_SHIFTS = { morning:'🌅 صباحي', evening:'🌆 مسائي', setup:'🧹 تظبيط ٧–١٠', any:'🤝 أي شيفت' };
+const AP_ROLES  = { sales_social:'مبيعات وسوشيال', cashier:'كاشير ومبيعات', setup:'تجهيز الفرع' };
+const AP_SHIFTS = { morning:'🌅 صباحي', evening:'🌆 مسائي', setup:'✨ تجهيز ٧–١٠', any:'🤝 أي شيفت' };
 const AP_STATUS = { new:'🆕 جديد', interview:'📞 للمقابلة', hired:'✅ اتوظف', rejected:'❌ مرفوض' };
 let _apList = [];
 
@@ -2693,4 +2694,64 @@ function ofWireApplicants(){
     const el = $(q); if(el) el.onchange = ofRenderApplicants;
   });
   ofRenderApplicants();
+}
+
+/* ============================================================
+   📌 الشواغر — أي فرع محتاج أي وظيفة
+   استمارة التقديم بتقرا من هنا وبتعرض المتاح بس، فمحدش بيقدّم على فرع
+   مش محتاج حد. والقايمة في `pos_test_settings/job_openings`.
+   ============================================================ */
+const OP_ROLES = { sales_social:'مبيعات وسوشيال', cashier:'كاشير ومبيعات', setup:'تجهيز الفرع ٧–١٠' };
+let _opOpen = [];
+
+function opHas(br, role){
+  return _opOpen.some(function(o){ return o && o.branch === br && o.role === role; });
+}
+window.opToggle = function(br, role){
+  if(opHas(br, role)){
+    _opOpen = _opOpen.filter(function(o){ return !(o.branch === br && o.role === role); });
+  }else{
+    _opOpen.push({ branch: br, role: role });
+  }
+  ofRenderOpenings();
+};
+
+function ofRenderOpenings(){
+  const w = $('#opGrid'); if(!w) return;
+  const brs = hvBranches();
+  const list = brs.length ? brs : ['الرحاب','مدينتي','سيتي سنتر','Glow'];
+  w.innerHTML = list.map(function(br){
+    return '<div class="card" style="padding:11px; margin-top:9px;">'
+      + '<b style="font-size:13.5px;">' + esc(br) + '</b>'
+      + '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">'
+      + Object.keys(OP_ROLES).map(function(r){
+          const on = opHas(br, r);
+          return '<button onclick="opToggle(\'' + esc(br) + '\',\'' + r + '\')" '
+            + 'style="flex:1 1 auto; font-size:11.5px; padding:8px 10px;'
+            + (on ? ' background:var(--plus); color:#062;' : ' background:var(--panel2); color:var(--sub);')
+            + '">' + (on ? '✅ ' : '') + esc(OP_ROLES[r]) + '</button>';
+        }).join('')
+      + '</div></div>';
+  }).join('')
+  + '<div class="hint" style="margin-top:10px;">المفتوح دلوقتي: <b>' + _opOpen.length + '</b> شاغر</div>';
+}
+
+function ofWireOpenings(){
+  const btn = $('#opSave'); if(!btn) return;
+  db.collection('pos_test_settings').doc('job_openings').get().then(function(d){
+    _opOpen = (d.exists && Array.isArray((d.data() || {}).list)) ? d.data().list : [];
+    ofRenderOpenings();
+  }).catch(function(){ ofRenderOpenings(); });
+  btn.onclick = async function(){
+    btn.disabled = true; btn.textContent = 'بيحفظ…';
+    try{
+      await db.collection('pos_test_settings').doc('job_openings')
+        .set({ list: _opOpen, at: Date.now() }, { merge:true });
+      btn.textContent = 'اتحفظ ✅';
+      setTimeout(function(){ btn.textContent = '💾 احفظ الشواغر'; btn.disabled = false; }, 1400);
+    }catch(e){
+      btn.disabled = false; btn.textContent = '💾 احفظ الشواغر';
+      alert('ماتحفظش: ' + (e.code || e.message));
+    }
+  };
 }
