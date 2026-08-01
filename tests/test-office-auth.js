@@ -346,7 +346,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
     'والكميات (عدد القطع) فضلت ظاهرة — مش سرّية');
 
   const sw7 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-  assert(/echarpe-office-v15/.test(sw7), 'CACHE_NAME اترفع لـv15');
+  assert(/echarpe-office-v16/.test(sw7), 'CACHE_NAME اترفع لـv16');
 }
 
 // ============================================================
@@ -411,4 +411,31 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
     '🔬 المفتاح بيتقطع عند النقطة (ده كان الباج)');
   const asVal = [{ token: tok }];
   assertEq(asVal.map(x=> x.token)[0], tok, 'والقيمة بتفضل كاملة');
+}
+
+// ============================================================
+// ⛔ تأكيد قبل أي قرار — دوسة غلط على الموبايل ملهاش رجوع
+// ============================================================
+{
+  const dl = src.slice(src.indexOf('window.officeDecideLeave'), src.indexOf('window.officeCloseShort'));
+  assert(/if\(!confirm\(/.test(dl), '⛔ الموافقة/الرفض وراهم تأكيد يوقف التنفيذ');
+  assert(/r\.empName/.test(dl) && /r\.branch/.test(dl),
+    '🔑 التأكيد بيقول الاسم والفرع — مش مجرد "متأكد؟"');
+  assert(/decision === 'approved'\) \? '✅ توافق على' : '❌ ترفض'/.test(dl),
+    'وبيوضح القرار نفسه');
+  assert(/if\(!confirm\([\s\S]{0,200}\)\) return;/.test(dl), 'والرفض بيوقف التنفيذ');
+  assert(dl.indexOf('confirm(') < dl.indexOf('.update('),
+    'التأكيد **قبل** الكتابة');
+
+  const cs = src.slice(src.indexOf('window.officeCloseShort'), src.indexOf('window.officeCloseShort') + 700);
+  assert(/if\(!confirm\(/.test(cs), '⛔ وقفل النقص كمان');
+  assert(/x\.productName/.test(cs), 'بيقول اسم الصنف');
+  assert(cs.indexOf('confirm(') < cs.indexOf('.update('), 'وقبل الكتابة');
+
+  // 💵 حركات التجار — فلوس
+  const mt = src.slice(src.indexOf('window.officeMtxn'), src.indexOf('window.officeMtxn') + 1200);
+  // ⚠️ لازم نمسك `if(!confirm(` — مجرد وجود confirm بيعدّي على التعطيل
+  assert(/if\(!confirm\(/.test(mt), '💵 حركة التاجر وراها تأكيد يوقف التنفيذ');
+  assert(/egp\(amount\)/.test(mt), 'بيعرض المبلغ');
+  assert(mt.indexOf('confirm(') < mt.indexOf('.add('), 'وقبل الحفظ');
 }
