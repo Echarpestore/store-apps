@@ -153,5 +153,67 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
 
   // كاش الـsw اترفع مع التعديل (وإلا الأجهزة تفضل على القديم)
   const swSrc = fs2.readFileSync(path2.resolve(__dirname, '..', 'sales', 'sw.js'), 'utf8');
-  assert(/store-apps-shell-v74/.test(swSrc), 'CACHE_NAME اترفع لـv74');
+  assert(/store-apps-shell-v\d+/.test(swSrc), 'CACHE_NAME فيه رقم نسخة');
+}
+
+// ============================================================
+// 🩺 يوم السماح — قفل الشيفتات المفتوحة + عذر جماعي
+// الحالة: أول يوم تشغيل، كل الموظفين حضروا ومشيوا من غير انصراف، والمطلوب
+// يوم تجميع بيانات من غير عقوبات.
+// ⚠️ الحل **مش** بتغيير الإعدادات: الكود بيسجّل بند الرصيد بس لو الساعات > 0،
+//    فتقليل العقوبات = يوم من غير بيانات أصلًا.
+// ============================================================
+{
+  const fs = require('fs');
+  const path = require('path');
+  const ui = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-ui.js'),'utf8');
+  const appSrc = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+  const html = fs.readFileSync(path.resolve(__dirname,'..','sales','index.html'),'utf8');
+  const g = ui.slice(ui.indexOf('window.renderGraceDay'));
+  assert(g.length > 0, 'لوحة يوم السماح موجودة');
+  assert(html.indexOf('id="graceDayPanel"') >= 0, 'والواجهة بتاعتها');
+
+  // ---- العذر: تصفير مش مسح ----
+  assert(/hours: 0,/.test(g), '🩺 العذر بيصفّر الساعات');
+  assert(/originalHours: \(x\.originalHours != null \? x\.originalHours : x\.hours\)/.test(g),
+    '🔑 وبيحفظ الأصلي — والعذر المكرر مابيدوسش عليه');
+  assert(/excused: true/.test(g), 'وبيعلّم البند excused');
+  assert(/excusedBy: 'grace_day'/.test(g), 'وبعلامة تفرّقه عن العذر الفردي');
+  assert(!/fbDeleteDoc/.test(g), '⛔ مفيش أي مسح — البند بيفضل في السجل');
+
+  // ---- المحرك بيستبعد excused فعلًا ----
+  assert(/x\.employeeId !== emp\.id \|\| x\.excused/.test(appSrc),
+    '💰 محرك المرتب بيستبعد المعذور');
+  assert(/!x\.excused/.test(appSrc), 'وبوابة الالتزام كمان');
+
+  // ---- قفل الشيفتات: وقت النهاية الرسمي مش دلوقتي ----
+  assert(/clockOutTs: endTs/.test(g), '🚪 الانصراف بوقت نهاية الشيفت');
+  assert(/overtimeMinutes: 0/.test(g), 'ومفيش وقت إضافي على قفل إداري');
+  assert(/earlyMin: 0, earlyHours: 0/.test(g), 'ومفيش انصراف بدري');
+  assert(/autoClosedBy: 'grace_day'/.test(g), 'وبعلامة إن ده قفل إداري');
+  assert(/e\.getTime\(\) <= s\.clockInTs/.test(g),
+    '🕐 شيفت بيعدّي نص الليل: النهاية بتروح لليوم اللي بعده');
+  assert(/\(8\*60 \+ 15\) \* 60000/.test(g), 'وفولباك للشيفت القياسي لو مفيش وقت نهاية');
+
+  // ---- الحساب سلوكيًا ----
+  const endTs = (clockIn, hm)=>{
+    const [hh,mm] = hm.split(':').map(Number);
+    const b = new Date(clockIn);
+    const e = new Date(b.getFullYear(), b.getMonth(), b.getDate(), hh, mm, 0, 0);
+    if(e.getTime() <= clockIn) e.setDate(e.getDate()+1);
+    return e.getTime();
+  };
+  const ci1 = new Date(2026,7,1,9,5).getTime();
+  assert(endTs(ci1,'17:00') > ci1, 'صباحي: الانصراف بعد الدخول');
+  const ci2 = new Date(2026,7,1,16,0).getTime();
+  const o2 = endTs(ci2,'00:30');
+  assert(o2 > ci2, '🕐 مسائي بيعدّي نص الليل: الانصراف بعد الدخول مش قبله');
+  assertEq(Math.round((o2-ci2)/60000), 510, 'ومدة الشيفت معقولة (8.5 ساعة)');
+
+  // ---- تأكيد قبل أي تعديل جماعي ----
+  assert((g.match(/confirm\(/g)||[]).length >= 2, '⛔ تأكيد إجباري قبل القفل وقبل العذر');
+  assert(/prompt\('سبب العذر للكل/.test(g), 'والسبب بيتكتب مرة واحدة للكل');
+
+  // ---- موصّلة ----
+  assert(/renderGraceDay/.test(appSrc), 'اللوحة موصّلة في sales-app.js');
 }

@@ -162,3 +162,48 @@ assert(/roleHidden\s*===\s*'1'/.test(src2), 'اللوحات الممنوعة ب�
     'الصلاحيات بتتطبّق داخل openAdmin كمان');
   assert(typeof SB.window.roleDiag === 'function', 'دالة التشخيص roleDiag متاحة');
 }
+
+// ============================================================
+// 🏬 حذف الفرع — كان بيقول "اتشال ✅" وهو ماتشالش
+// سببين: (١) خطأ الحذف بيتبلع في catch فاضي · (٢) القاعدة الذهبية —
+// إعادة إسناد window.allSettingsDocs مابتوصلش لنسخة البلوك في sales-app.js،
+// فالقايمة المحلية بترجع تكتب الفرع تاني من هناك ويفضل يرجع للأبد.
+// ============================================================
+{
+  const ui = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-ui.js'),'utf8');
+  const del = ui.slice(ui.indexOf('window.deleteBranch'), ui.indexOf('window.renderTimeSettings'));
+  assert(del.length > 0, 'deleteBranch اتلقت');
+
+  // ---- ١) الخطأ مابقاش يتبلع ----
+  assert(!/try\{ await window\.fbDeleteDoc\([^)]*\); \}catch\(e\)\{\}/.test(del),
+    '🔴 catch الفاضي على الحذف اتشال');
+  assert(/docErr = e/.test(del), 'الخطأ بيتخزّن');
+  assert(/if\(docErr\)\{/.test(del) && /ماتشالش من السيرفر/.test(del),
+    '⛔ وبيتبلّغ للمستخدم بدل رسالة نجاح كاذبة');
+  assert(del.indexOf('if(docErr){') < del.indexOf('اتشال الفرع ✅'),
+    'وبيرجع قبل ما يقول نجح');
+  assert(/permission/.test(del), 'وبيلمّح لقواعد الأمان لو دي المشكلة');
+
+  // ---- ٢) 🔑 القاعدة الذهبية: تعديل في المكان مش إعادة إسناد ----
+  assert(!/window\.allSettingsDocs = \(window\.allSettingsDocs\|\|\[\]\)\.filter/.test(del),
+    '🔴 إعادة الإسناد اتشالت (مكانتش بتوصل لنسخة sales-app.js)');
+  assert(/arr\.splice\(i, 1\)/.test(del),
+    '🔑 التعديل بقى في نفس المصفوفة — المرجعين بيشوفوه');
+  assert(/Array\.isArray\(arr\)/.test(del), 'وبحارس لو المصفوفة مش موجودة');
+
+  // ---- سلوكيًا: الفرق بين الطريقتين ----
+  const oldWay = ()=>{ const m = ['A','B','C']; let w = m; w = w.filter(x=> x !== 'B'); return m; };
+  const newWay = ()=>{ const m = ['A','B','C']; const w = m;
+    for(let i = w.length-1; i >= 0; i--){ if(w[i] === 'B') w.splice(i,1); } return m; };
+  assert(oldWay().indexOf('B') >= 0, 'إعادة الإسناد: نسخة البلوك لسه شايلة الفرع (ده كان الباج)');
+  assertEq(newWay(), ['A','C'], 'والـsplice بيشيله من الاتنين');
+
+  // ---- ٣) بيقول لو الفرع لسه مربوط بحاجة ----
+  assert(/allEmployeesAll/.test(del) && /allShifts/.test(del) && /allAdvancesAll/.test(del),
+    '🔎 بيفحص المصادر اللي ممكن ترجّع الفرع');
+  assert(/لسه مربوط بـ/.test(del), 'وبيقولها للمستخدم');
+  assert(/الأجهزة التانية/.test(del), 'وبينبّه إن الأجهزة التانية عندها نسخة محلية');
+
+  const swS = fs.readFileSync(path.resolve(__dirname,'..','sales','sw.js'),'utf8');
+  assert(/store-apps-shell-v\d+/.test(swS), 'CACHE_NAME بتاع sales فيه رقم نسخة');
+}
