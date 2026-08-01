@@ -292,5 +292,59 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
   assert(/FieldValue\.delete\(\)/.test(src), '🔕 الإلغاء بيمسح التوكن فعلًا');
 
   const sw6 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-  assert(/echarpe-office-v11/.test(sw6), 'CACHE_NAME اترفع لـv11');
+  assert(/echarpe-office-v\d+/.test(sw6), 'CACHE_NAME فيه رقم نسخة (push)');
+}
+
+// ============================================================
+// 👆 البصمة · 🙈 إخفاء الأرقام · 🔒 كود المالك مخفي
+// ============================================================
+{
+  const html5 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+
+  // ---- 🔒 كود المالك مابقاش ظاهر على الشاشة ----
+  assert(/id="gCode"[^>]*type="password"/.test(html5),
+    '🔒 كود المالك بقى مخفي (كان بيتكتب ظاهر قدام أي حد)');
+  assert(/id="gPass"[^>]*type="password"/.test(html5), 'والباسورد زي ما هو');
+
+  // ---- 👆 البصمة ----
+  const bio = src.slice(src.indexOf('const OF_BIO_KEY'), src.indexOf("$('#gCodeBtn').addEventListener"));
+  assert(bio.length > 0, 'بلوك البصمة موجود');
+  assert(/navigator\.credentials\.create/.test(bio), 'WebAuthn للربط');
+  assert(/navigator\.credentials\.get/.test(bio), 'وللفتح');
+  assert(/authenticatorAttachment: 'platform'/.test(bio),
+    '👆 بصمة/وش الجهاز نفسه — مش مفتاح خارجي');
+  assert(/userVerification: 'required'/.test(bio),
+    '⚠️ تحقق فعلي إجباري — مش مجرد وجود الجهاز');
+  assert(/rec\.h !== _gateHash/.test(bio),
+    '🔑 تغيير كود المالك بيبطّل البصمة تلقائي');
+  assert(/localStorage\.removeItem\(OF_BIO_KEY\)/.test(bio), 'وبتتشال من الجهاز');
+  assert(/if\(!ownerOk\)\{ alert\('افتح بالكود الأول/.test(bio),
+    '⛔ الربط بعد الكود بس — مينفعش حد يربط بصمته من غير ما يعرف الكود');
+  assert(/_sessWrite\(/.test(bio), 'والفتح بيكتب جلسة بمدة زي الكود بالظبط');
+  assert(html5.indexOf('id="gBioBtn"') >= 0 && html5.indexOf('id="gBioEnroll"') >= 0,
+    'الواجهة: زرار الفتح + شيك-بوكس الربط');
+  assert(/window\._bioTried/.test(src),
+    '🔁 الفتح التلقائي مرة واحدة لكل فتحة — مش كل رسم للشاشة');
+
+  // ---- 🙈 إخفاء الأرقام ----
+  assert(html5.indexOf('id="eyeBtn"') >= 0, 'زرار العين موجود');
+  const eg = src.slice(src.indexOf('function egp(n)'), src.indexOf('function ofToggleMoney'));
+  assert(/if\(_ofHideMoney\) return '••••';/.test(eg),
+    "🙈 كل الفلوس بتعدي من egp — الإخفاء نقطة واحدة");
+  assert(/localStorage\.setItem\('office_hide_money'/.test(src), 'والحالة بتفضل بين الفتحات');
+
+  // ⚠️ شاشة اليوم مكانتش بتعدي على egp
+  const om = src.slice(src.indexOf('function ofMoney'), src.indexOf('function ofMoney') + 300);
+  assert(/_ofHideMoney\) return '••••'/.test(om),
+    '⚠️ وشاشة اليوم كمان (كانت بتستخدم ofNum وتفضل مكشوفة)');
+  const dayBlock = src.slice(src.indexOf('function ofRenderPay'));
+  // ⚠️ التأكيد لازم يمسك ofNum **الملاصقة** لـج.م — سطر واحد ممكن يشيل
+  //    كمية وفلوس مع بعض (totQ قطعة + totR ج.م)، والفحص الفضفاض بيقع عليه غلط.
+  const moneyLines = (dayBlock.match(/ofNum\([^)]*\)\s*\+\s*' ج\.م/g) || []);
+  assertEq(moneyLines, [], '🔍 مفيش أي رقم فلوس في شاشة اليوم لسه بيعدي على ofNum');
+  assert(/ofNum\(m\.qty\)/.test(dayBlock) && /ofNum\(totQ\)/.test(dayBlock),
+    'والكميات (عدد القطع) فضلت ظاهرة — مش سرّية');
+
+  const sw7 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
+  assert(/echarpe-office-v12/.test(sw7), 'CACHE_NAME اترفع لـv12');
 }
