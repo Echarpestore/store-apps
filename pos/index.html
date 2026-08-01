@@ -196,7 +196,8 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
 #customerName{ flex:0 1 40% !important; min-width:0 !important; }
 #sellerRow{ margin-bottom:2px !important; }
 #sellerRow select, #sellerRow input{ padding:7px 11px !important; }
-.customer-info{ max-height:96px !important; }   /* أطول من كده بتعمل سكرول لوحدها */
+/* السقف بقى على المستطيل نفسه (.cust-side) — السطر ده مبقاش له لازمة */
+.customer-info{ max-height:none !important; }
 
 /* الإجمالي وأزرار الدفع */
 .qbx-bottom{
@@ -651,6 +652,20 @@ body.on-dashboard .badge-test{ display:block; }
 .sugg-row:active{background:#eef0f3;}
 
 .customer-row{display:flex;gap:8px;margin:8px 0 4px;}
+/* 🔲 مستطيلين جنب بعض — الرقم على جنب وكل بيانات العميل على الجنب التاني.
+   السقف الثابت هو الفكرة كلها: أي حاجة تظهر (نقط/استبدال/مكافأة) بتتزحلق
+   جوه المستطيل نفسه، فمساحة السلة **متتغيّرش أبدًا**. */
+.cust-grid{display:flex; gap:8px; align-items:stretch;}
+.cust-col{min-width:0;}
+.cust-main{flex:1 1 100%;}
+#custBox.has-side .cust-main{flex:1 1 50%;}
+.cust-side{
+  flex:1 1 50%; max-height:64px; overflow-y:auto; overflow-x:hidden;
+  border-radius:8px; padding:4px 7px; background:#ffffffb0;
+  display:flex; flex-direction:column; gap:3px; align-items:flex-start;
+}
+#custBox.st-found .cust-side{border:1px solid #7fd0a0;}
+#custBox.st-new   .cust-side{border:1px solid #e5b567;}
 #custBox{border:2px solid #cfcabf; border-radius:8px; padding:7px; background:#efeee9; opacity:.72; transition:border-color .2s, background .2s, opacity .2s; margin:8px 0 4px;}
 #custBox.on{border-color:#2c9a3e; background:#eafaf0; opacity:1; box-shadow:0 0 0 2px rgba(44,154,62,.15);}
 #custBox .customer-row{margin:0;}
@@ -660,9 +675,9 @@ body.on-dashboard .badge-test{ display:block; }
 #customerPhone.st-found{background:#e6f9ed !important; border-color:#2c9a3e !important; color:#0f5c25 !important; font-weight:900 !important; letter-spacing:.5px;}
 #customerPhone.st-new{background:#fff3dc !important; border-color:#e08a17 !important; color:#8a5200 !important; font-weight:800 !important;}
 #custNamePill{
-  margin-top:6px; padding:5px 10px; border-radius:999px; font-size:12.5px;
+  padding:3px 9px; border-radius:999px; font-size:12px;
   font-weight:900; align-items:center; gap:6px; max-width:100%;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0;
 }
 #custBox.st-found #custNamePill{background:#d8f5e3; color:#0f5c25; border:1px solid #7fd0a0;}
 #custBox.st-new   #custNamePill{background:#ffe9c2; color:#8a5200; border:1px solid #e5b567;}
@@ -673,9 +688,9 @@ body.on-dashboard .badge-test{ display:block; }
   flex:1;padding:9px 11px;border-radius:4px;border:1px solid #a8a49b;
   background:#fff;color:#1a1a1a;font-size:13px;
 }
-.customer-info{font-size:12px;color:#1c7a2e;padding:2px 0;min-height:15px;max-height:132px;overflow-y:auto;}
-#newCustomerRow{display:none; gap:8px; margin:4px 0; background:#fff8e0; border:1px solid #d8b73e; border-radius:6px; padding:8px;}
-#newCustomerRow button{padding:8px 14px; border-radius:5px; border:1px solid #2c7a35; background:linear-gradient(#4db658,#348c3e); color:#fff; font-weight:700; cursor:pointer;}
+.customer-info{font-size:11.5px;color:#1c7a2e;padding:0;min-height:0;width:100%;}
+#newCustomerRow{display:none; gap:6px; margin:0; align-items:center; flex-wrap:wrap; background:transparent; border:none; padding:0;}
+#newCustomerRow button{padding:5px 10px; border-radius:5px; border:1px solid #2c7a35; background:linear-gradient(#4db658,#348c3e); color:#fff; font-weight:700; font-size:11.5px; cursor:pointer; white-space:nowrap;}
 
 /* ---------- Item table (QuickBooks style, white, no Tax column) ---------- */
 .cart-area{flex:1;overflow-y:auto; border:1px solid #a8a49b; border-radius:4px; background:#fff;}
@@ -1498,29 +1513,36 @@ body.on-dashboard .badge-test{ display:block; }
             white-space:nowrap;"></span>
         </div>
         <div id="custBox">
-        <div class="customer-row">
-          <!-- 📱 الرقم أولًا وهو الأساس — الكاشير بتسجّل بالرقم دايمًا.
-               🔴 قبل كده: خانة الاسم كانت مفرودة طول الوقت وواخدة نص السطر
-               من غير لازمة، والصف كله طويل. دلوقتي الاسم **مخفي** ومبيظهرش
-               غير لما الرقم يطلع مش مسجّل (وقتها بس بنحتاجه). -->
-          <input type="tel" id="customerPhone" placeholder="📱 رقم العميل" inputmode="numeric">
-          <button type="button" id="custClearBtn" onclick="clearCustomer()" title="شيل العميل من الفاتورة"
-            style="display:none; border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:8px; padding:6px 11px; cursor:pointer; font-weight:800;">✕</button>
-          <input type="text" id="customerName" placeholder="اسم العميل" style="display:none;">
-          <button type="button" onclick="capAskCustomer()" title="العميل يكتب رقمه بنفسه على شاشة التقييم" style="border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:800; white-space:nowrap;">📱</button>
+        <!-- 🔲 مستطيلين جنب بعض: الشمال = الرقم · اليمين = كل بيانات العميل
+             (الاسم والرقم والنقط وطلب الاستبدال والمكافأة).
+             🔴 قبل كده كان كل ده أسطر تحت بعضها بتنزّل الشاشة وتاكل مساحة
+             السلة كل ما يظهر تأكيد نقط أو مكافأة. -->
+        <div class="cust-grid">
+          <div class="cust-col cust-main">
+            <div class="customer-row">
+              <!-- 📱 الرقم هو الأساس — الكاشير بتسجّل بالرقم دايمًا.
+                   خانة الاسم مخفية ومبتظهرش غير لما الرقم يطلع مش مسجّل. -->
+              <input type="tel" id="customerPhone" placeholder="📱 رقم العميل" inputmode="numeric">
+              <button type="button" id="custClearBtn" onclick="clearCustomer()" title="شيل العميل من الفاتورة"
+                style="display:none; border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:8px; padding:6px 11px; cursor:pointer; font-weight:800;">✕</button>
+              <input type="text" id="customerName" placeholder="اسم العميل" style="display:none;">
+              <button type="button" onclick="capAskCustomer()" title="العميل يكتب رقمه بنفسه على شاشة التقييم" style="border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:800; white-space:nowrap;">📱</button>
+            </div>
+          </div>
+          <!-- المستطيل التاني: بيظهر بس لما يكون فيه عميل/حالة -->
+          <div class="cust-col cust-side" id="custSide" style="display:none;">
+            <div id="custNamePill" style="display:none;"></div>
+            <div class="customer-info" id="customerInfo"></div>
+            <div id="newCustomerRow">
+              <span style="font-size:11.5px; color:#8a6d00;">⚠️ الرقم مش مسجل</span>
+              <button onclick="registerNewCustomer()">➕ سجّله بالاسم المكتوب</button>
+            </div>
+          </div>
         </div>
-        <!-- 👤 هوية العميل: بتبان بس لما يكون فيه حالة (متسجّل = أخضر · مش
-             مسجّل = برتقالي). مكانها سطر لوحدها عشان ما تزقّش خانة الرقم. -->
-        <div id="custNamePill" style="display:none;"></div>
-        </div>
-        <div id="newCustomerRow">
-          <span style="font-size:12px; color:#8a6d00; align-self:center;">⚠️ الرقم ده مش مسجل</span>
-          <button onclick="registerNewCustomer()">إضافة كعميل جديد بالاسم المكتوب</button>
-        </div>
-        <div class="customer-info" id="customerInfo"></div>
         <div id="resetPinRow" style="display:none; margin-top:4px;">
           <button onclick="resetLoyaltyPin()" style="padding:6px 12px; border-radius:6px; border:1px solid #c98; background:#fff3ef; color:#a23; font-size:12px; font-weight:700; cursor:pointer;">🔑 مسح الرقم السري للعميل</button>
           <span style="font-size:11px; color:#8a6d00; margin-inline-start:6px;">لو العميل نسي رقمه السري في التطبيق</span>
+        </div>
         </div>
       </div>
       <div class="qbx-itemops">

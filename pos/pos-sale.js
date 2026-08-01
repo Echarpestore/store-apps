@@ -1243,7 +1243,12 @@ function setCustState(state, name, phone){
     box.classList.remove('st-found', 'st-new');
     if(st) box.classList.add('st-' + st);
     box.classList.toggle('on', st === 'found');   // متوافق مع القديم
+    // 🔲 المستطيل التاني بيظهر بس لما يكون فيه حالة — ومعاه خانة الرقم
+    //    بتنزل لنص العرض بدل ما تفضل مفرودة على الصفحة كلها.
+    box.classList.toggle('has-side', !!st);
   }
+  const side = document.getElementById('custSide');
+  if(side) side.style.display = st ? 'flex' : 'none';
   if(ph){
     ph.classList.remove('st-found', 'st-new');
     if(st) ph.classList.add('st-' + st);
@@ -1367,7 +1372,7 @@ async function refreshCustomerInfo(){
         showToast('⚠️ طلب استبدال العميل أكبر من رصيده — اتجاهل. اعمل الاستبدال يدوي بالرصيد الصح', 'warn');
       }
       custReward = (d.rewards||[]).find(r=> r && !r.used && r.brand===_brand && (!r.expiry || r.expiry>_now)) || null;
-      custBaseText = `💳 رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
+      custBaseText = `<span style="font-weight:800;">💳 ${d[pointsFieldFor(currentBranch)] || 0} نقطة</span>${ratingLine}`;
       refreshCustomerActionUI();
       newRow.style.display = 'none';
       // 🟢 عميل متسجّل ومربوط بالفاتورة → الخانة خضرا والاسم والرقم بينوا
@@ -1689,21 +1694,22 @@ function refreshCustomerActionUI(){
       });
     }
     custPendingRedeem._sane = _sane; custPendingRedeem._tampered = _tampered;
-    html += `<div style="margin-top:8px; background:#fff6e6; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
-       <div style="font-weight:800; color:#b45309;">🎁 العميل طلب استبدال ${custPendingRedeem._sane.points} نقطة (خصم ${custPendingRedeem._sane.value} ج.م)</div>
-       ${custPendingRedeem._tampered ? '<div style="color:var(--minus); font-size:11px; font-weight:800; margin-top:3px;">🚩 أرقام الطلب الأصلي مش مطابقة لحسابات المحل — اتصححت تلقائي واتسجلت</div>' : ''}
-       <button onclick="applyPendingRedeem()" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق الاستبدال</button>
+    // 🔲 شريط مضغوط جوه المستطيل — قبل كده كان بلوك كبير بيزقّ الشاشة لتحت
+    html += `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:3px; background:#fff6e6; border:1px solid var(--warn); border-radius:8px; padding:4px 7px; width:100%;">
+       <span style="font-weight:800; color:#b45309; font-size:11.5px;">🎁 طلب استبدال ${custPendingRedeem._sane.points} نقطة (${custPendingRedeem._sane.value} ج.م)</span>
+       <button onclick="applyPendingRedeem()" style="padding:4px 10px; border-radius:6px; border:none; background:var(--plus); color:#062; font-weight:800; font-size:11.5px; cursor:pointer;">✔️ طبّق</button>
+       ${custPendingRedeem._tampered ? '<div style="color:var(--minus); font-size:10.5px; font-weight:800; width:100%;">🚩 أرقام الطلب مش مطابقة لحسابات المحل — اتصححت واتسجلت</div>' : ''}
      </div>`;
   }
   if(custReward && !cart.some(l=> l.isRewardDiscount)){
     const okMin = cartTot >= (custReward.minInvoice||0);
     const rTxt = custReward.type==='percent' ? `${custReward.value}% خصم` : `${custReward.value} ج.م خصم`;
     const cond = custReward.minInvoice ? ` (لفاتورة ${custReward.minInvoice} ج.م أو أكتر)` : '';
-    html += `<div style="margin-top:8px; background:#fdeef5; border:1.5px solid var(--warn); border-radius:10px; padding:10px 12px;">
-       <div style="font-weight:800; color:#b45309;">🎁 مكافأة خاصة: ${rTxt}${cond}</div>
+    html += `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:3px; background:#fdeef5; border:1px solid var(--warn); border-radius:8px; padding:4px 7px; width:100%;">
+       <span style="font-weight:800; color:#b45309; font-size:11.5px;">🎁 مكافأة: ${rTxt}${cond}</span>
        ${okMin
-         ? `<button onclick="applyCustomerReward()" style="margin-top:8px; padding:8px 14px; border-radius:8px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">✔️ طبّق المكافأة</button>`
-         : `<div style="font-size:11px; color:var(--muted); margin-top:4px;">لسه محتاج فاتورة ${custReward.minInvoice} ج.م — الحالي ${cartTot.toFixed(0)}</div>`}
+         ? `<button onclick="applyCustomerReward()" style="padding:4px 10px; border-radius:6px; border:none; background:var(--plus); color:#062; font-weight:800; font-size:11.5px; cursor:pointer;">✔️ طبّق</button>`
+         : `<span style="font-size:10.5px; color:var(--muted);">لسه محتاج ${custReward.minInvoice} ج.م — الحالي ${cartTot.toFixed(0)}</span>`}
      </div>`;
   }
   infoBox.innerHTML = html;
