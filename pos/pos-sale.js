@@ -1225,14 +1225,65 @@ const RATING_PREVIEW_MAP = {1:'😠 مضايقني جدًا', 2:'🙁 مش عا�
 // ✕ شيل العميل من الفاتورة بضغطة.
 // 🔴 قبل كده كان لازم تمسح الرقم كله وتدوس Enter أو تدوس في مكان تاني —
 //    ومحدش بيعرف ده. الزرار بيظهر بس لما يكون فيه رقم مكتوب.
+// 🎨 خانة العميل — **٣ حالات بلون واحد لكل واحدة** (مكان ما كان فيه لون واحد
+//    غامض والاسم مخفي خالص):
+//    · 'found' 🟢 أخضر — العميل متسجّل: الاسم **والرقم** بينوا جنب الخانة
+//    · 'new'   🟠 برتقالي — الرقم كامل ومش مسجّل: خانة الاسم بتفتح للتسجيل
+//    · ''      ⚪ رمادي — فاضية
+// 🔴 الباج اللي بيقفله: الحالة كانت `custBox.on` بس (نوّر/مطفي) — الكاشير
+//    مش عارف هل العميل اترّبط بالفاتورة ولا لأ، والاسم مش ظاهر في أي حالة.
+let _custMatchedPhone = '';   // آخر رقم اتربط فعليًا بالفاتورة
+function setCustState(state, name, phone){
+  const st   = (state === 'found' || state === 'new') ? state : '';
+  const box  = document.getElementById('custBox');
+  const ph   = document.getElementById('customerPhone');
+  const pill = document.getElementById('custNamePill');
+  const btn  = document.getElementById('custClearBtn');
+  if(box){
+    box.classList.remove('st-found', 'st-new');
+    if(st) box.classList.add('st-' + st);
+    box.classList.toggle('on', st === 'found');   // متوافق مع القديم
+  }
+  if(ph){
+    ph.classList.remove('st-found', 'st-new');
+    if(st) ph.classList.add('st-' + st);
+  }
+  if(pill){
+    if(st === 'found'){
+      // 👤 الاسم **والرقم** — ده اللي المالك طلبه: يشوف مين اللي متربط بالفاتورة
+      pill.textContent = '👤 ' + (String(name || '').trim() || 'بدون اسم')
+        + ' · 📱 ' + String(phone || '').trim();
+      pill.style.display = 'inline-flex';
+    }else if(st === 'new'){
+      pill.textContent = '🆕 رقم مش مسجّل';
+      pill.style.display = 'inline-flex';
+    }else{
+      pill.textContent = '';
+      pill.style.display = 'none';
+    }
+  }
+  // ✕ بيبان طول ما فيه رقم مكتوب — مش مستني Enter ولا نقرة برّه
+  if(btn) btn.style.display = (ph && String(ph.value || '').trim()) ? 'inline-flex' : 'none';
+  return st;
+}
+window.setCustState = setCustState;
+
+// ✕ شيل العميل من الفاتورة بضغطة — بيمسح الرقم والاسم وسياق العميل كله
+//   (استبدال/مكافأة/عروض) من غير أي دوسة زيادة.
 function clearCustomer(){
   const ph = document.getElementById('customerPhone');
   const nm = document.getElementById('customerName');
   if(ph) ph.value = '';
   if(nm){ nm.value = ''; nm.style.display = 'none'; }
-  const btn = document.getElementById('custClearBtn');
-  if(btn) btn.style.display = 'none';
-  if(typeof refreshCustomerInfo === 'function') refreshCustomerInfo();
+  _custMatchedPhone = '';
+  if(typeof clearCustomerContext === 'function') clearCustomerContext();
+  const ci = document.getElementById('customerInfo'); if(ci) ci.innerHTML = '';
+  const nr = document.getElementById('newCustomerRow'); if(nr) nr.style.display = 'none';
+  const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
+  if(typeof revertCustomerOffers === 'function') revertCustomerOffers();
+  if(typeof custPointsBalance !== 'undefined') custPointsBalance = 0;
+  setCustState('');
+  if(typeof renderCart === 'function') renderCart();
   if(ph) try{ ph.focus(); }catch(e){}
 }
 window.clearCustomer = clearCustomer;
@@ -1241,9 +1292,29 @@ window.clearCustomer = clearCustomer;
 function _custBtnSync(){
   const ph = document.getElementById('customerPhone');
   const btn = document.getElementById('custClearBtn');
-  if(btn) btn.style.display = (ph && ph.value.trim()) ? 'inline-block' : 'none';
+  if(btn) btn.style.display = (ph && ph.value.trim()) ? 'inline-flex' : 'none';
 }
 window._custBtnSync = _custBtnSync;
+
+// ✏️ أول ما الكاشير تغيّر رقم عميل **متربط**، اللون الأخضر لازم يقع فورًا
+//    وسياق العميل يتفك — عشان ما تفضلش الفاتورة شايلة عميل غير اللي مكتوب.
+function _custDetachIfChanged(){
+  const ph = document.getElementById('customerPhone');
+  if(!ph) return false;
+  const v = String(ph.value || '').trim();
+  if(!_custMatchedPhone || v === _custMatchedPhone) return false;
+  _custMatchedPhone = '';
+  if(typeof clearCustomerContext === 'function') clearCustomerContext();
+  const ci = document.getElementById('customerInfo'); if(ci) ci.innerHTML = '';
+  const nr = document.getElementById('newCustomerRow'); if(nr) nr.style.display = 'none';
+  const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
+  if(typeof revertCustomerOffers === 'function') revertCustomerOffers();
+  if(typeof custPointsBalance !== 'undefined') custPointsBalance = 0;
+  setCustState('');
+  if(typeof renderCart === 'function') renderCart();
+  return true;
+}
+window._custDetachIfChanged = _custDetachIfChanged;
 
 async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
@@ -1253,7 +1324,8 @@ async function refreshCustomerInfo(){
   if(!phone){
     const _nm0 = document.getElementById('customerName');
     if(_nm0){ _nm0.value = ''; _nm0.style.display = 'none'; }
-    infoBox.textContent=''; newRow.style.display='none'; setCustBox(false); custActivatedOffers={}; revertCustomerOffers(); custReward=null; custPendingRedeem=null; custPointsBalance=0; custBaseText=''; renderCart(); return; }
+    _custMatchedPhone = '';
+    infoBox.innerHTML=''; newRow.style.display='none'; setCustState(''); custActivatedOffers={}; revertCustomerOffers(); custReward=null; custPendingRedeem=null; custPointsBalance=0; custBaseText=''; renderCart(); return; }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     custExists = doc.exists;
@@ -1295,32 +1367,44 @@ async function refreshCustomerInfo(){
         showToast('⚠️ طلب استبدال العميل أكبر من رصيده — اتجاهل. اعمل الاستبدال يدوي بالرصيد الصح', 'warn');
       }
       custReward = (d.rewards||[]).find(r=> r && !r.used && r.brand===_brand && (!r.expiry || r.expiry>_now)) || null;
-      custBaseText = `عميل حالي (${d.name||'—'}) - رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
+      custBaseText = `💳 رصيد النقاط: ${d[pointsFieldFor(currentBranch)] || 0} نقطة${ratingLine}`;
       refreshCustomerActionUI();
       newRow.style.display = 'none';
-      setCustBox(true);   // 🟢 عميل متسجّل ومختار → المربع ينوّر أخضر
+      // 🟢 عميل متسجّل ومربوط بالفاتورة → الخانة خضرا والاسم والرقم بينوا
+      _custMatchedPhone = phone;
+      setCustState('found', d.name || '', phone);
       const rp = document.getElementById('resetPinRow');
       if(rp) rp.style.display = (d.loyaltyPin && hasPerm('canResetCustomerPin')) ? 'block' : 'none';   // بيان لو العميل حاطط رقم + الموظف عنده صلاحية
     }else{
       infoBox.textContent = ratingLine ? ratingLine.replace(' | ','') : '';
       newRow.style.display = 'flex';
-      setCustBox(false);
+      // 🟠 الرقم مش مسجّل → لون تاني واضح + خانة الاسم بتفتح للتسجيل
+      _custMatchedPhone = '';
+      setCustState('new', '', phone);
       // 📝 الاسم بيظهر **هنا بس** — لما الرقم مش مسجّل ومحتاجين نضيفه
       const _nm = document.getElementById('customerName');
       if(_nm){ _nm.style.display = ''; if(!_nm.value) try{ _nm.focus(); }catch(e){} }
       const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
     }
-  }catch(e){ infoBox.textContent=''; setCustBox(false); }
+  }catch(e){ infoBox.textContent=''; _custMatchedPhone=''; setCustState(''); }
 }
-// تلوين مربع العميل: أخضر لو فيه عميل مختار، مطفي لو لأ
-function setCustBox(on){ const b = document.getElementById('custBox'); if(b) b.classList.toggle('on', !!on); }
+// تلوين مربع العميل — باقية للتوافق مع النداءات القديمة (app.js/clearSaleState)
+function setCustBox(on){
+  if(!on) _custMatchedPhone = '';
+  setCustState(on ? 'found' : '', (document.getElementById('customerName')||{}).value || '',
+    (document.getElementById('customerPhone')||{}).value || '');
+}
 document.getElementById('customerPhone').addEventListener('blur', refreshCustomerInfo);
 // دوس Enter في خانة رقم العميل يظهر العميل على طول (من غير ما تحتاج تدوس في مكان تاني)
 document.getElementById('customerPhone').addEventListener('keydown', function(e){
   if(e.key === 'Enter'){ e.preventDefault(); refreshCustomerInfo(); }
 });
 // ✕ زرار المسح يبان أول ما تكتب رقم — مش مستني blur
-document.getElementById('customerPhone').addEventListener('input', _custBtnSync);
+// ✏️ ولو غيّرت رقم عميل متربط، الأخضر يقع فورًا وسياق العميل يتفك
+document.getElementById('customerPhone').addEventListener('input', function(){
+  _custDetachIfChanged();
+  _custBtnSync();
+});
 // 📱 11 رقم = بحث تلقائي، من غير Enter ولا نقرة برّه
 document.getElementById('customerPhone').addEventListener('input', function(){
   const v = this.value.replace(/[^0-9]/g, '');

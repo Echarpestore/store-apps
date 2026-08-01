@@ -654,6 +654,21 @@ body.on-dashboard .badge-test{ display:block; }
 #custBox{border:2px solid #cfcabf; border-radius:8px; padding:7px; background:#efeee9; opacity:.72; transition:border-color .2s, background .2s, opacity .2s; margin:8px 0 4px;}
 #custBox.on{border-color:#2c9a3e; background:#eafaf0; opacity:1; box-shadow:0 0 0 2px rgba(44,154,62,.15);}
 #custBox .customer-row{margin:0;}
+/* 🎨 حالات خانة العميل — الكاشير بتعرف من اللون على طول:
+   🟢 st-found = متسجّل ومربوط بالفاتورة · 🟠 st-new = رقم كامل مش مسجّل */
+#custBox.st-new{border-color:#e08a17; background:#fff6e6; opacity:1; box-shadow:0 0 0 2px rgba(224,138,23,.14);}
+#customerPhone.st-found{background:#e6f9ed !important; border-color:#2c9a3e !important; color:#0f5c25 !important; font-weight:900 !important; letter-spacing:.5px;}
+#customerPhone.st-new{background:#fff3dc !important; border-color:#e08a17 !important; color:#8a5200 !important; font-weight:800 !important;}
+#custNamePill{
+  margin-top:6px; padding:5px 10px; border-radius:999px; font-size:12.5px;
+  font-weight:900; align-items:center; gap:6px; max-width:100%;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+#custBox.st-found #custNamePill{background:#d8f5e3; color:#0f5c25; border:1px solid #7fd0a0;}
+#custBox.st-new   #custNamePill{background:#ffe9c2; color:#8a5200; border:1px solid #e5b567;}
+#custClearBtn{line-height:1; align-items:center; justify-content:center;}
+#custBox.st-found #custClearBtn{background:#fff !important; border-color:#2c9a3e !important; color:#0f5c25 !important;}
+#custBox.st-new   #custClearBtn{background:#fff !important; border-color:#e08a17 !important; color:#8a5200 !important;}
 .customer-row input{
   flex:1;padding:9px 11px;border-radius:4px;border:1px solid #a8a49b;
   background:#fff;color:#1a1a1a;font-size:13px;
@@ -1494,6 +1509,9 @@ body.on-dashboard .badge-test{ display:block; }
           <input type="text" id="customerName" placeholder="اسم العميل" style="display:none;">
           <button type="button" onclick="capAskCustomer()" title="العميل يكتب رقمه بنفسه على شاشة التقييم" style="border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:800; white-space:nowrap;">📱</button>
         </div>
+        <!-- 👤 هوية العميل: بتبان بس لما يكون فيه حالة (متسجّل = أخضر · مش
+             مسجّل = برتقالي). مكانها سطر لوحدها عشان ما تزقّش خانة الرقم. -->
+        <div id="custNamePill" style="display:none;"></div>
         </div>
         <div id="newCustomerRow">
           <span style="font-size:12px; color:#8a6d00; align-self:center;">⚠️ الرقم ده مش مسجل</span>
