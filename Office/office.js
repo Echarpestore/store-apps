@@ -771,6 +771,7 @@ function startData(){
     ofLoadDayCut().then(function(){ try{ ofWireDay(); }catch(e){ console.warn('day', e); } });
     try{ ofWireTasks(); }catch(e){ console.warn('tasks', e); }
     try{ ofWireHire(); }catch(e){ console.warn('hire', e); }
+    try{ ofWireEmpFile(); }catch(e){ console.warn('empfile', e); }
   });
   db.collection('sales_advances').onSnapshot(function(s){
     D.advances = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -2351,3 +2352,136 @@ window.hrReject = async function(id){
   try{ await db.collection('sales_registrations').doc(id).update({ status:'rejected', rejectedAt: Date.now() }); }
   catch(e){ alert('ماترفضش: ' + (e.code || e.message)); }
 };
+
+/* ============================================================
+   🗂️ ملف الموظفة — الرجوع لأي بيانات في أي وقت
+   ------------------------------------------------------------
+   ⚠️ شاشة «طلبات التوظيف» بتقرا آخر ٦٠ يوم بس (الصور تقيلة). الملف ده
+   بيحل المشكلة من الناحية التانية: البحث في **كل** التسجيلات (نصوص
+   خفيفة، متحمّلة أصلًا)، والمستندات بتتجاب **عند الطلب** باستعلام على
+   رقم الطلب — فمفيش حد زمني ومفيش قراءات على الفاضي.
+   ============================================================ */
+let _efDocs = null, _efSel = null;
+
+function efMatch(q, o){
+  const n = String(o.name || '').toLowerCase();
+  const p = String(o.phone || '').replace(/\D/g, '');
+  const qq = String(q || '').trim().toLowerCase();
+  const qd = qq.replace(/\D/g, '');
+  return (qq.length >= 2 && n.indexOf(qq) >= 0) || (qd.length >= 3 && p.indexOf(qd) >= 0);
+}
+
+function ofRenderEmpFile(){
+  const q = ($('#efQ') || {}).value || '';
+  const list = $('#efList'), card = $('#efCard');
+  if(!list) return;
+  if(String(q).trim().length < 2){
+    list.innerHTML = ''; if(card) card.innerHTML = '';
+    _efSel = null; _efDocs = null;
+    return;
+  }
+  // التسجيلات (فيها المستندات) + الموظفين المعتمدين
+  const hits = [];
+  (D.regs || []).forEach(function(r){
+    if(efMatch(q, r)) hits.push({ kind:'reg', id:r.id, name:r.name, phone:r.phone,
+      sub:(r.branch||'') + ' · ' + (r.status === 'approved' ? 'متعمد' : r.status === 'rejected' ? 'مرفوض' : 'مستني'),
+      ts:r.ts || 0, reg:r });
+  });
+  (D.employees || []).forEach(function(e){
+    if(!efMatch(q, e)) return;
+    // لو ليه طلب، بنكون عرضناه فوق — منكررش
+    if(e.regId && hits.some(function(h){ return h.id === e.regId; })) return;
+    hits.push({ kind:'emp', id:e.id, name:e.name, phone:e.phone,
+      sub:(e.branch||'') + ' · ' + (e.active === false ? 'موقوف' : 'شغّال'),
+      ts:e.createdAt || 0, emp:e, regRef:e.regId || '' });
+  });
+  hits.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+
+  if(!hits.length){ list.innerHTML = '<div class="hint" style="margin-top:10px;">مفيش نتايج</div>'; return; }
+  list.innerHTML = hits.slice(0, 12).map(function(h){
+    return '<button class="efPick" data-kind="' + esc(h.kind) + '" data-id="' + esc(h.id) + '" '
+      + 'data-reg="' + esc(h.regRef || (h.kind === 'reg' ? h.id : '')) + '" '
+      + 'style="width:100%; text-align:right; margin-top:7px;">'
+      + '<b>' + esc(h.name || '—') + '</b>'
+      + '<span style="font-size:11px; color:var(--sub);"> · ' + esc(h.sub) + '</span></button>';
+  }).join('');
+  list.querySelectorAll('.efPick').forEach(function(b){
+    b.onclick = function(){ efOpen(b.dataset.reg, b.dataset.id, b.dataset.kind); };
+  });
+}
+
+// 📎 المستندات بتتجاب هنا بالطلب — استعلام مساواة واحدة، مش محتاج index
+async function efOpen(regId, id, kind){
+  const card = $('#efCard'); if(!card) return;
+  _efSel = { regId: regId, id: id, kind: kind };
+  const r = (D.regs || []).filter(function(x){ return x.id === regId; })[0];
+  const e = (D.employees || []).filter(function(x){ return x.id === id; })[0]
+         || (D.employees || []).filter(function(x){ return x.regId === regId; })[0];
+  const who = (r && r.name) || (e && e.name) || '—';
+
+  card.innerHTML = '<div class="card" style="margin-top:12px;">'
+    + '<b style="font-size:15px;">' + esc(who) + '</b>'
+    + '<div style="font-size:12px; color:var(--sub); margin-top:5px; line-height:1.9;">'
+    +   (r ? ('📱 ' + esc(r.phone || '—') + (r.whatsapp && r.whatsapp !== r.phone ? (' · واتساب ' + esc(r.whatsapp)) : '') + '<br>'
+             + '🪪 ' + esc(r.nid || '—') + (r.birth ? (' · 🎂 ' + esc(r.birth)) : '') + (r.gov ? (' · ' + esc(r.gov)) : '') + '<br>'
+             + '🏬 ' + esc(r.brand === 'glow' ? 'Glow' : 'echarpe — ' + (r.branch||'')) + ' · '
+             + esc(HIRE_ROLES[r.role] || r.role || '') + '<br>'
+             + (r.address ? ('🏠 ' + esc(r.address) + '<br>') : '')
+             + (r.emergency ? ('🆘 ' + esc(r.emergency.name||'') + ' (' + esc(r.emergency.relation||'')
+                               + ') ' + esc(r.emergency.phone||'') + '<br>') : '')
+             + '📅 اتسجّل ' + esc(dstr(r.ts || 0)))
+          : '📱 ' + esc((e && e.phone) || '—') + '<br>🏬 ' + esc((e && e.branch) || '—'))
+    + '</div>'
+    + (e ? efTrialLine(e) : '')
+    + '<div id="efDocs" style="margin-top:10px; font-size:12px; color:var(--sub);">بيحمّل المستندات…</div>'
+    + '</div>';
+
+  if(!regId){
+    const d = $('#efDocs');
+    if(d) d.innerHTML = '⚠️ الموظفة دي اتسجّلت من تابلت الفرع — مفيش مستندات مرفوعة.';
+    return;
+  }
+  try{
+    const snap = await db.collection('staff_docs').where('regId', '==', regId).get();
+    const docs = snap.docs.map(function(x){ return x.data() || {}; })
+                          .sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
+    const d = $('#efDocs'); if(!d) return;
+    if(!docs.length){ d.innerHTML = 'مفيش مستندات على الطلب ده.'; return; }
+    d.innerHTML = '<div style="margin-bottom:6px;">📎 ' + docs.length + ' مستند</div>'
+      + '<div style="display:flex; gap:7px; overflow-x:auto; padding-bottom:4px;">'
+      + docs.map(function(x){
+          return '<div style="flex:0 0 auto; text-align:center;">'
+            + '<img class="efThumb" data-full="' + esc(x.photo) + '" src="' + esc(x.photo) + '" '
+            + 'style="width:78px; height:78px; object-fit:cover; border-radius:10px; cursor:pointer; display:block;">'
+            + '<div style="font-size:10px; color:var(--sub); margin-top:3px; max-width:78px;">'
+            + esc(HIRE_DOCS[x.kind] || x.kind || '') + '</div></div>';
+        }).join('') + '</div>';
+    d.querySelectorAll('.efThumb').forEach(function(im){
+      im.onclick = function(){ ofLightbox(im.dataset.full); };
+    });
+  }catch(err){
+    const d = $('#efDocs');
+    if(d) d.innerHTML = '<span style="color:var(--minus);">تعذّر تحميل المستندات: '
+      + esc(err.code || err.message) + '</span>';
+  }
+}
+
+// ⏳ فترة الاختبار — فاضل كام يوم، ولا خلصت
+function efTrialLine(e){
+  const days = Number(e.trialDays) || 0, from = Number(e.trialFrom) || 0;
+  if(!days || !from) return '';
+  const passed = Math.floor((Date.now() - from) / 86400000);
+  const left = days - passed;
+  return '<div style="margin-top:9px; padding:9px 11px; border-radius:10px; font-size:12px;'
+    + ' background:var(--panel2); border:1px solid ' + (left > 0 ? 'var(--gold)' : 'var(--plus)') + ';">'
+    + (left > 0
+        ? ('⏳ فترة اختبار — فاضل <b style="color:var(--gold);">' + left + ' يوم</b> من ' + days)
+        : ('✅ خلّصت فترة الاختبار (' + days + ' يوم) — موظفة دائمة'))
+    + '<div style="color:var(--sub); font-size:11px; margin-top:2px;">بدأت ' + esc(dstr(from)) + '</div></div>';
+}
+
+function ofWireEmpFile(){
+  const q = $('#efQ'); if(!q) return;
+  let t = 0;
+  q.oninput = function(){ clearTimeout(t); t = setTimeout(ofRenderEmpFile, 260); };
+}
