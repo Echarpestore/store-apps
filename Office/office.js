@@ -37,7 +37,34 @@ const $ = function(s){ return document.querySelector(s); };
    🧮 دوال الحساب النقية والمساعدات (متغطّاة بالاختبارات في tests/)
    ============================================================ */
 function esc(t){ return String(t==null?'':t).replace(/[<>&"]/g, function(c){ return ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'})[c]; }); }
-function egp(n){ return (Number(n)||0).toLocaleString('ar-EG') + ' ج.م'; }
+// 🙈 إخفاء الأرقام — كل الفلوس في التطبيق بتعدي من هنا، فالإخفاء نقطة واحدة.
+//    الغرض: تفتح البرنامج قدام حد من غير ما يشوف المبيعات والمرتبات والمصاريف.
+// ⚠️ إخفاء بصري بس — البيانات محمّلة في الجهاز عادي. مش بديل عن قفل الشاشة.
+let _ofHideMoney = false;
+try{ _ofHideMoney = localStorage.getItem('office_hide_money') === '1'; }catch(e){}
+function egp(n){
+  if(_ofHideMoney) return '••••';
+  return (Number(n)||0).toLocaleString('ar-EG') + ' ج.م';
+}
+function ofToggleMoney(){
+  _ofHideMoney = !_ofHideMoney;
+  try{ localStorage.setItem('office_hide_money', _ofHideMoney ? '1' : '0'); }catch(e){}
+  ofPaintEyeBtn();
+  // إعادة رسم كل حاجة بتعرض فلوس
+  ['renderInbox','renderShort','renderMerchants','renderExpenses','renderSalaries',
+   'renderPL','renderTop','ofRenderRecurring','ofRenderDay','ofRenderPay',
+   'ofRenderSales','ofRenderItems','renderActivityReports'].forEach(function(fn){
+    try{ if(typeof window[fn] === 'function') window[fn](); else if(typeof eval(fn) === 'function') eval(fn+'()'); }
+    catch(e){}
+  });
+}
+function ofPaintEyeBtn(){
+  const b = document.getElementById('eyeBtn');
+  if(!b) return;
+  b.textContent = _ofHideMoney ? '🙈' : '👁️';
+  b.title = _ofHideMoney ? 'الأرقام مخفية — دوس للإظهار' : 'إخفاء الأرقام';
+}
+window.ofToggleMoney = ofToggleMoney;
 function dstr(ts){ try{ return new Date(ts).toLocaleDateString('ar-EG', { day:'numeric', month:'short' }); }catch(e){ return ''; } }
 function monthKey(d){ const x=d||new Date(); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0'); }
 
@@ -267,6 +294,112 @@ $('#gLogin').addEventListener('click', async function(){
 });
 tryAutoOfficeLogin();
 
+// ============================================================
+// 👆 فتح بالبصمة / Face ID — WebAuthn
+// ------------------------------------------------------------
+// المشكلة: كتابة كود المالك كل مرة مزعجة.
+// الحل: بعد ما تفتح بالكود مرة، تقدر تربط بصمة الجهاز. المرة اللي بعدها
+// بصمة واحدة وخلاص.
+// 🔑 إزاي بيشتغل: WebAuthn بيتحقق من البصمة **محليًا على الجهاز** —
+//    البصمة نفسها عمرها ما بتسيب الموبايل ولا بتوصل لأي سيرفر.
+//    إحنا بنستخدمه كـ"قفل" على مفتاح مخزّن: البصمة بتفتح الجلسة، والجلسة
+//    فيها بصمة الكود اللي في Firestore.
+// ⚠️ الأمان: البصمة بديل للكود مش للحساب. حساب Firebase لسه مطلوب —
+//    اللي معاه الجهاز من غير حساب مش هيدخل. ولو غيّرت كود المالك،
+//    البصمة بتبطل تلقائي (نفس فحص _sessRead).
+// ⚠️ ومربوطة بالجهاز ده بس — كل جهاز يسجّل بصمته لوحده.
+// ============================================================
+const OF_BIO_KEY = 'office_bio_cred';
+
+function ofBioSupported(){
+  return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create);
+}
+function ofBioEnabled(){
+  try{ return !!localStorage.getItem(OF_BIO_KEY); }catch(e){ return false; }
+}
+function _b64u(buf){
+  return btoa(String.fromCharCode.apply(null, new Uint8Array(buf)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function _unb64u(str){
+  const s = String(str).replace(/-/g,'+').replace(/_/g,'/');
+  const bin = atob(s + '==='.slice((s.length + 3) % 4));
+  const out = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+
+// 🔗 ربط البصمة — بعد ما البوابة تكون مفتوحة بالكود
+async function ofBioEnroll(){
+  if(!ofBioSupported()){ alert('الجهاز ده مش بيدعم البصمة في المتصفح'); return false; }
+  if(!ownerOk){ alert('افتح بالكود الأول، وبعدين اربط البصمة'); return false; }
+  try{
+    const ch = crypto.getRandomValues(new Uint8Array(32));
+    const uid = crypto.getRandomValues(new Uint8Array(16));
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        challenge: ch,
+        rp: { name: 'echarpe office' },
+        user: { id: uid, name: 'office', displayName: 'echarpe office' },
+        pubKeyCredParams: [{ type:'public-key', alg:-7 }, { type:'public-key', alg:-257 }],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',   // 👆 بصمة/وش الجهاز نفسه
+          userVerification: 'required'           // ⚠️ لازم تحقق فعلي مش مجرد وجود الجهاز
+        },
+        timeout: 60000,
+        attestation: 'none'
+      }
+    });
+    if(!cred || !cred.rawId) return false;
+    localStorage.setItem(OF_BIO_KEY, JSON.stringify({
+      id: _b64u(cred.rawId),
+      h: _gateHash || null,        // 🔑 بصمة الكود وقت الربط — لو الكود اتغيّر تبطل
+      at: Date.now()
+    }));
+    return true;
+  }catch(e){
+    console.warn('bio enroll', e);
+    alert('ماتربطتش: ' + (e && (e.name || e.message) || ''));
+    return false;
+  }
+}
+
+// 👆 الفتح بالبصمة
+async function ofBioUnlock(){
+  if(!ofBioSupported() || !ofBioEnabled()) return false;
+  let rec = null;
+  try{ rec = JSON.parse(localStorage.getItem(OF_BIO_KEY) || 'null'); }catch(e){}
+  if(!rec || !rec.id) return false;
+  // ⚠️ الكود اتغيّر بعد الربط؟ البصمة تبطل — نفس منطق إبطال الجلسات
+  if(_gateHash && rec.h && rec.h !== _gateHash){
+    try{ localStorage.removeItem(OF_BIO_KEY); }catch(e){}
+    return false;
+  }
+  try{
+    const ch = crypto.getRandomValues(new Uint8Array(32));
+    const asr = await navigator.credentials.get({
+      publicKey: {
+        challenge: ch,
+        allowCredentials: [{ type:'public-key', id: _unb64u(rec.id) }],
+        userVerification: 'required',
+        timeout: 60000
+      }
+    });
+    if(!asr) return false;
+    ownerOk = true;
+    _sessWrite(_gateHash || rec.h || 'bio');
+    refreshGate(firebase.auth().currentUser);
+    return true;
+  }catch(e){ console.warn('bio unlock', e); return false; }
+}
+window.ofBioEnroll = ofBioEnroll;
+window.ofBioUnlock = ofBioUnlock;
+window.ofBioEnabled = ofBioEnabled;
+window.ofBioForget = function(){
+  try{ localStorage.removeItem(OF_BIO_KEY); }catch(e){}
+  alert('اتشالت البصمة من الجهاز ده');
+};
+
 $('#gCodeBtn').addEventListener('click', async function(){
   const val = $('#gCode').value.trim();
   $('#gateErr').textContent = '';
@@ -297,6 +430,12 @@ $('#gCodeBtn').addEventListener('click', async function(){
       _gateTries = 0;
       ownerOk = true; _sessWrite(h);
       $('#gCode').value = '';
+      // 👆 ربط البصمة لو المالك طلب — بعد ما الكود يتأكد
+      const _cb = $('#gBioEnroll');
+      if(_cb && _cb.checked){
+        const okBio = await ofBioEnroll();
+        if(okBio) alert('اتربطت ✅ — المرة الجاية بصمة واحدة وخلاص');
+      }
       refreshGate(firebase.auth().currentUser);
     } else {
       _gateTries++;
@@ -309,6 +448,13 @@ $('#gCodeBtn').addEventListener('click', async function(){
   }
 });
 $('#gCode').addEventListener('keydown', function(e){ if(e.key==='Enter') $('#gCodeBtn').click(); });
+$('#gBioBtn').addEventListener('click', async function(){
+  const b = $('#gBioBtn');
+  b.textContent = '👆 استنى…'; b.disabled = true;
+  const ok = await ofBioUnlock();
+  b.disabled = false; b.textContent = '👆 افتح بالبصمة';
+  if(!ok) $('#gateErr').textContent = 'البصمة ماتعرفتش — اكتب الكود';
+});
 
 // 🔑 تغيير كود المالك — من جوه البرنامج وانت داخل
 window.officeChangeCode = async function(){
@@ -352,6 +498,16 @@ function refreshGate(user){
     // 🆕 أول تشغيل: مفيش كود متسجّل — بنقول له صراحةً إنه بيختار كود جديد
     const gc = $('#gCode');
     if(gc) gc.placeholder = (_gateHash === null) ? 'اختار كود المالك (4 أرقام+)' : 'كود المالك';
+    // 👆 البصمة: الزرار يظهر لو مربوطة، والشيك-بوكس يظهر لو مش مربوطة
+    const bio = $('#gBioBtn'), row = $('#gBioEnrollRow');
+    const canBio = (typeof ofBioSupported === 'function') && ofBioSupported() && _gateHash !== null;
+    if(bio) bio.style.display = (canBio && ofBioEnabled()) ? 'block' : 'none';
+    if(row) row.style.display = (canBio && !ofBioEnabled()) ? 'flex' : 'none';
+    // بنجرّب الفتح التلقائي مرة واحدة لكل فتحة تطبيق — مش كل رسم للشاشة
+    if(canBio && ofBioEnabled() && !window._bioTried){
+      window._bioTried = true;
+      setTimeout(function(){ ofBioUnlock().catch(function(){}); }, 350);
+    }
     setTimeout(function(){ $('#gCode').focus(); }, 100);
     return;
   }
@@ -491,6 +647,7 @@ $('#notifBtn').addEventListener('click', async function(){
     alert('ماتفعّلتش: ' + (r.why || '') );
   }
 });
+try{ ofPaintEyeBtn(); }catch(e){}   // 🙈 حالة العين محفوظة بين الفتحات
 if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
   $('#notifBtn').textContent = '🔔 الإشعارات شغالة ✅';
   // 🔁 تجديد صامت: التوكن بيتغيّر لوحده أحيانًا (تنضيف المتصفح/تحديث النظام).
@@ -1233,7 +1390,15 @@ function ofTime(ts){
   try{ return new Date(ts).toLocaleTimeString('ar-EG', { timeZone:OF_TZ, hour:'2-digit', minute:'2-digit' }); }
   catch(e){ return ''; }
 }
+// أرقام عادية (كميات · عدد قطع) — دي مش سرّية ومبتتخفيش
 function ofNum(n){ return (Math.round((Number(n)||0) * 100) / 100).toLocaleString('ar-EG'); }
+// 💵 أرقام فلوس في شاشة اليوم — بتحترم العين.
+// ⚠️ شاشة اليوم مكانتش بتعدي على egp، فكانت المبيعات والأرباح تفضل مكشوفة
+//    والعين مقفولة.
+function ofMoney(n){
+  if(typeof _ofHideMoney !== 'undefined' && _ofHideMoney) return '••••';
+  return ofNum(n);
+}
 
 // ---- تحميل فواتير اليوم ----
 async function ofLoadDay(){
@@ -1293,19 +1458,19 @@ function ofRenderPay(){
   });
   const row = function(lbl, val, col){
     return '<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line);">'
-      + '<span>' + lbl + '</span><b style="color:' + (col||'var(--txt)') + ';">' + ofNum(val) + ' ج.م</b></div>';
+      + '<span>' + lbl + '</span><b style="color:' + (col||'var(--txt)') + ';">' + ofMoney(val) + ' ج.م</b></div>';
   };
   el.innerHTML = '<div class="card">'
     + '<div style="font-weight:900; margin-bottom:6px;">💵 ملخص الدفع</div>'
     + row('كاش', cash) + row('فيزا', visa) + row('انستا باي', insta)
     + row('خصم من الراتب', salary)
     + '<div style="display:flex; justify-content:space-between; padding:9px 0; margin-top:4px; border-top:2px solid var(--line);">'
-    + '<b>إجمالي المبيعات</b><b style="color:var(--gold);">' + ofNum(total) + ' ج.م</b></div>'
+    + '<b>إجمالي المبيعات</b><b style="color:var(--gold);">' + ofMoney(total) + ' ج.م</b></div>'
     + '<div style="font-size:11px; color:var(--sub); margin-top:8px;">'
     + S.length + ' فاتورة'
     + (retCount ? ' · ' + retCount + ' مرتجع' : '')
     + (revCount ? ' · ' + revCount + ' معكوسة' : '')
-    + (changeGiven ? ' · فكة اتردت ' + ofNum(changeGiven) + ' ج.م' : '')
+    + (changeGiven ? ' · فكة اتردت ' + ofMoney(changeGiven) + ' ج.م' : '')
     + '</div>'
     + '<div style="font-size:11px; color:var(--sub); margin-top:6px; line-height:1.7;">'
     + '⚠️ الأرقام دي بمنطق التقفيل بالظبط: الفاتورة المعكوسة وفاتورة العكس '
@@ -1338,7 +1503,7 @@ function ofRenderSales(){
       +   '</div>'
       + '</div>'
       + '<b style="white-space:nowrap; color:' + (isRet ? 'var(--minus)' : 'var(--txt)') + ';">'
-      +   ofNum(s.total) + ' ج.م</b>'
+      +   ofMoney(s.total) + ' ج.م</b>'
       + '</div>';
   }).join('');
   el.innerHTML = '<div class="card"><div style="font-weight:900; margin-bottom:4px;">🧾 سجل المبيعات ('
@@ -1378,16 +1543,16 @@ function ofRenderItems(){
     return '<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:7px 0; border-bottom:1px solid var(--line);">'
       + '<div style="min-width:0;"><div style="font-weight:700;">' + esc(m.name) + '</div>'
       + '<div style="font-size:11px; color:var(--sub);">' + ofNum(m.qty) + ' قطعة'
-      + (m.cost ? (' · ربح ' + ofNum(profit) + ' ج.م') : '') + '</div></div>'
-      + '<b style="white-space:nowrap;">' + ofNum(m.rev) + ' ج.م</b></div>';
+      + (m.cost ? (' · ربح ' + ofMoney(profit) + ' ج.م') : '') + '</div></div>'
+      + '<b style="white-space:nowrap;">' + ofMoney(m.rev) + ' ج.م</b></div>';
   }).join('');
   el.innerHTML = '<div class="card">'
     + '<div style="font-weight:900; margin-bottom:4px;">📦 ملخص الأصناف (' + arr.length + ' صنف)</div>'
     + rows
     + '<div style="display:flex; justify-content:space-between; padding:9px 0; border-top:2px solid var(--line); margin-top:4px;">'
-    + '<b>' + ofNum(totQ) + ' قطعة</b><b style="color:var(--gold);">' + ofNum(totR) + ' ج.م</b></div>'
+    + '<b>' + ofNum(totQ) + ' قطعة</b><b style="color:var(--gold);">' + ofMoney(totR) + ' ج.م</b></div>'
     + (totC ? ('<div style="text-align:left; font-size:12px; color:var(--plus); font-weight:800;">ربح: '
-        + ofNum(totR - totC) + ' ج.م</div>') : '')
+        + ofMoney(totR - totC) + ' ج.م</div>') : '')
     + '<div style="font-size:11px; color:var(--sub); margin-top:8px;">'
     + '⚠️ الفواتير المعكوسة مستبعدة من الطرفين هنا — عشان الصنف مايتعدّش مرتين. '
     + 'عشان كده الإجمالي هنا ممكن يفرق عن ملخص الدفع.</div>'
