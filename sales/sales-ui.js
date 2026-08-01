@@ -601,3 +601,126 @@ function renderAdminSettingsForm(){
 // below will catch it and prompt a reload instead of leaving buttons silently broken.
 window.__scriptFullyLoaded = true;
 console.log('%c✅ Script fully loaded (all ' + document.querySelectorAll('script').length + ' script tags parsed)', 'color:lime');
+
+// ============================================================
+// 🩺 يوم السماح — قفل الشيفتات المفتوحة + عذر جماعي
+// ------------------------------------------------------------
+// الحالة: أول يوم تشغيل — كل الموظفين سجّلوا حضور ومشيوا من غير انصراف،
+// والمطلوب يوم تجميع بيانات من غير أي عقوبة.
+// ⚠️ **مش بتغيير الإعدادات**: الكود بيسجّل بند الرصيد بس لو الساعات > 0
+//    (`if(overHours > 0)`), فتقليل العقوبات من الإعدادات = يوم من غير بيانات
+//    أصلًا — عكس المطلوب. الصح: يشتغل عادي، وبعدين نعذر.
+// 🔑 العذر مش مسح: بيصفّر hours ويحفظ originalHours ويعلّم excused —
+//    البند بيفضل في السجل، ومحرك المرتب وبوابة الـ90% بيستبعدوا excused.
+// ============================================================
+window.renderGraceDay = function(){
+  const wrap = document.querySelector('#graceDayPanel'); if(!wrap) return;
+  const d = wrap.dataset.day || window.todayStr();
+  const br = window.currentBranch;
+
+  const open = (window.allShifts||[]).filter(function(s){
+    return s && s.branch === br && s.dateKey === d && s.clockInTs && !s.clockOutTs;
+  });
+  const credits = (window.allTimeCredit||[]).filter(function(x){
+    return x && x.branch === br && x.date === d && !x.excused;
+  });
+  const hours = credits.reduce(function(n,x){ return n + (Number(x.hours)||0); }, 0);
+  const byType = {};
+  credits.forEach(function(x){ byType[x.type] = (byType[x.type]||0) + 1; });
+  const LBL = { late:'⏰ تأخير', break:'☕ بريك', swap:'🔄 تبديل', early:'🚪 انصراف بدري', absence:'🚫 غياب' };
+  const chips = Object.keys(byType).map(function(t){
+    return '<span style="display:inline-block; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:3px 9px; margin:2px 3px 2px 0; font-size:11.5px;">'
+      + (LBL[t]||t) + ' × ' + byType[t] + '</span>'; }).join('');
+
+  wrap.innerHTML =
+    '<label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:11px;">'
+    + '<span>اليوم:</span>'
+    + '<input type="date" id="gdDate" value="' + d + '" style="flex:1; padding:8px; border-radius:9px;'
+    + ' border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:\'Cairo\';">'
+    + '</label>'
+    + '<div style="background:var(--panel2); border:1px solid var(--line); border-radius:11px; padding:12px; margin-bottom:11px;">'
+    +   '<div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:5px;">'
+    +     '<span>شيفتات مفتوحة (منسيش انصراف)</span><b style="color:' + (open.length?'#e0796b':'#5ec88a') + ';">' + open.length + '</b></div>'
+    +   '<div style="display:flex; justify-content:space-between; font-size:13px;">'
+    +     '<span>بنود رصيد غير معذورة</span><b style="color:' + (hours?'#e0796b':'#5ec88a') + ';">'
+    +       credits.length + ' بند · ' + hours + ' ساعة</b></div>'
+    +   (chips ? ('<div style="margin-top:7px;">' + chips + '</div>') : '')
+    + '</div>'
+    + (open.length
+        ? ('<button id="gdCloseBtn" style="width:100%; padding:12px; margin-bottom:8px; border:none; border-radius:11px;'
+           + ' background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; font-family:\'Cairo\'; font-weight:800; cursor:pointer;">'
+           + '🚪 اقفل الـ' + open.length + ' شيفت المفتوحين</button>')
+        : '<div style="color:#5ec88a; font-size:12.5px; margin-bottom:8px;">✅ مفيش شيفتات مفتوحة</div>')
+    + (credits.length
+        ? ('<button id="gdExcuseBtn" style="width:100%; padding:12px; border:1px solid #5a4a2a; border-radius:11px;'
+           + ' background:var(--panel); color:var(--gold); font-family:\'Cairo\'; font-weight:800; cursor:pointer;">'
+           + '🩺 اعذر الـ' + credits.length + ' بند كلهم</button>')
+        : '<div style="color:#5ec88a; font-size:12.5px;">✅ مفيش بنود محتاجة عذر</div>')
+    + '<div style="font-size:11px; color:var(--sub); margin-top:10px; line-height:1.8;">'
+    +   'العذر بيصفّر الساعات وبيحتفظ بالأصلي — البند بيفضل في السجل للمراجعة،'
+    +   ' ومش بيتخصم من المرتب ولا بيأثر على بوابة الالتزام.</div>';
+
+  const dt = wrap.querySelector('#gdDate');
+  if(dt) dt.onchange = function(){ wrap.dataset.day = dt.value; window.renderGraceDay(); };
+
+  const cb = wrap.querySelector('#gdCloseBtn');
+  if(cb) cb.onclick = async function(){
+    if(!confirm('هتقفل ' + open.length + ' شيفت مفتوح ليوم ' + d + '.\n\n'
+      + 'الانصراف هيتسجل بوقت نهاية الشيفت الرسمي — مش بوقت دلوقتي.\n'
+      + 'مش هيتسجل أي "انصراف بدري" على الشيفتات دي.\n\nتكمّل؟')) return;
+    cb.disabled = true; cb.textContent = 'بيقفل…';
+    let ok = 0, fail = 0;
+    for(const s of open){
+      try{
+        // 🕐 وقت الانصراف = نهاية الشيفت الرسمي، مش دلوقتي — عشان الوقت
+        //    الإضافي ميتحسبش غلط لو اتقفل بعد نص الليل.
+        const emp = (window.employees||[]).find(function(e){ return e.id === s.employeeId; });
+        const sdef = (window.complianceCfg && window.complianceCfg.shifts)
+          ? window.complianceCfg.shifts[emp && emp.shift] : null;
+        const endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
+        let endTs = null;
+        if(/^\d{1,2}:\d{2}$/.test(endHM)){
+          const [hh,mm] = endHM.split(':').map(Number);
+          const base = new Date(s.clockInTs);
+          const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hh, mm, 0, 0);
+          if(e.getTime() <= s.clockInTs) e.setDate(e.getDate() + 1);   // شيفت بيعدّي نص الليل
+          endTs = e.getTime();
+        }
+        if(!endTs) endTs = s.clockInTs + (8*60 + 15) * 60000;          // فولباك: الشيفت القياسي
+        await window.fbUpdateDoc(window.fbDoc(window.db,'sales_shifts', s.id), {
+          clockOutTs: endTs,
+          overtimeMinutes: 0,          // مفيش وقت إضافي على قفل إداري
+          earlyMin: 0, earlyHours: 0,  // ومفيش انصراف بدري
+          autoClosedBy: 'grace_day', autoClosedAt: Date.now()
+        });
+        ok++;
+      }catch(e){ fail++; console.warn('grace close', e); }
+    }
+    alert('اتقفل ' + ok + ' شيفت' + (fail ? (' · فشل ' + fail) : '') + ' ✅');
+    cb.disabled = false;
+    window.renderGraceDay();
+  };
+
+  const eb = wrap.querySelector('#gdExcuseBtn');
+  if(eb) eb.onclick = async function(){
+    const reason = prompt('سبب العذر للكل:', 'أول يوم تشغيل — تجميع بيانات');
+    if(reason === null) return;
+    if(!confirm('هتعذر ' + credits.length + ' بند (' + hours + ' ساعة) ليوم ' + d + '.\n\n'
+      + 'البنود هتفضل في السجل بس من غير أي خصم أو تأثير على المكافأة.\n\nتكمّل؟')) return;
+    eb.disabled = true; eb.textContent = 'بيتعذر…';
+    let ok = 0, fail = 0;
+    for(const x of credits){
+      try{
+        await window.fbUpdateDoc(window.fbDoc(window.db,'sales_time_credit', x.id), {
+          hours: 0, originalHours: (x.originalHours != null ? x.originalHours : x.hours),
+          excused: true, excuseReason: reason || 'يوم سماح', excusedAt: Date.now(),
+          excusedBy: 'grace_day'
+        });
+        ok++;
+      }catch(e){ fail++; console.warn('grace excuse', e); }
+    }
+    alert('اتعذر ' + ok + ' بند' + (fail ? (' · فشل ' + fail) : '') + ' ✅');
+    eb.disabled = false;
+    window.renderGraceDay();
+  };
+};

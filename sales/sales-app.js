@@ -1396,6 +1396,7 @@ onSnapshot(_scoped(timeCreditCol,'ts'), (snap)=>{
   allTimeCredit = snap.docs.map(d=>({id:d.id, ...d.data()}));
   window.allTimeCredit = allTimeCredit;
   if(adminUnlocked && typeof window.renderTimeCreditLog==='function'){ try{ window.renderTimeCreditLog(); }catch(e){} }
+  if(adminUnlocked && typeof window.renderGraceDay==='function'){ try{ window.renderGraceDay(); }catch(e){} }
 }, (e)=> console.warn('time credit sync', e && e.code));
 
 onSnapshot(_scoped(deductionsCol,'ts'), (snap)=>{
@@ -3352,6 +3353,7 @@ function doAdminLogin(){
     // المحتوى ميترسمش غير لما يوصل snapshot جديد — فالشارة تقول 3 واللوحة فاضية.
     try{ window.renderLeaveRequests(); }catch(e){ console.warn('leave reqs', e); }
     try{ window.renderTimeCreditLog(); }catch(e){ console.warn('time credit log', e); }
+    _safe(()=> window.renderGraceDay(), 'grace day');
     try{ updateLeaveBadge(); }catch(e){ console.warn('leave badge', e); }
     _safe(()=> renderViolationsReview(), 'violations');
     _safe(()=> window.renderShortagesList(), 'shortages');
