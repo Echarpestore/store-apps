@@ -388,6 +388,11 @@ document.getElementById('page-inbox').classList.add('on');
 /* ============================================================
    📡 البيانات الحية + الإشعارات
    ============================================================ */
+// 🔁 مجموعة قوالب المصاريف المتكررة
+// ⚠️ لازم تتعرّف **قبل** أي استخدام: const مبتترفعش (TDZ)، وكانت متعرّفة
+//    في آخر الملف وبتتنادى في startData فوق → الاشتراك كان بيرمي خطأ.
+const OF_RECUR_COL = 'office_recurring';
+
 const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], expenses:[],
             employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[],
             recurring:[] };
@@ -1549,7 +1554,6 @@ window.ofLoadTasks = ofLoadTasks;
 // 🛡️ ومفيش تسجيل تلقائي: النظام بيقترح، وانت اللي بتأكد. مصروف بيتسجل
 //    لوحده من غير ما حد يشوفه = رقم غلط في الأرباح ومحدش واخد باله.
 // ============================================================
-const OF_RECUR_COL = 'office_recurring';
 
 function ofRecurKey(tpl, mk){ return String(tpl.id) + '__' + mk; }
 
