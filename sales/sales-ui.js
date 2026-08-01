@@ -618,8 +618,19 @@ window.renderGraceDay = function(){
   const d = wrap.dataset.day || window.todayStr();
   const br = window.currentBranch;
 
+  // 🔴 مستند الشيفت **مفيهوش dateKey** — التاريخ بيتحسب من clockInTs.
+  //    (dateKey موجود في البريكات مش الشيفتات.) الفلترة بحقل مش موجود
+  //    كانت بترجّع صفر دايمًا.
+  const _dayOf = function(ts){
+    try{ return window.todayStr(new Date(ts)); }
+    catch(e){
+      const x = new Date(ts);
+      return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0')
+           + '-' + String(x.getDate()).padStart(2,'0');
+    }
+  };
   const open = (window.allShifts||[]).filter(function(s){
-    return s && s.branch === br && s.dateKey === d && s.clockInTs && !s.clockOutTs;
+    return s && s.branch === br && s.clockInTs && !s.clockOutTs && _dayOf(s.clockInTs) === d;
   });
   const credits = (window.allTimeCredit||[]).filter(function(x){
     return x && x.branch === br && x.date === d && !x.excused;
