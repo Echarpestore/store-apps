@@ -186,6 +186,16 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
     '💰 محرك المرتب بيستبعد المعذور');
   assert(/!x\.excused/.test(appSrc), 'وبوابة الالتزام كمان');
 
+  // ---- 🔴 الفلترة بالتاريخ: مستند الشيفت مفيهوش dateKey ----
+  assert(!/s\.dateKey === d/.test(g),
+    '🔴 الفلترة بـdateKey اتشالت — الحقل ده مش موجود في مستند الشيفت (بتاع البريكات)');
+  assert(/_dayOf\(s\.clockInTs\) === d/.test(g),
+    '🔑 التاريخ بيتحسب من clockInTs — ده اللي موجود فعلًا');
+  assert(/clockInTs: Date\.now\(\), clockOutTs: null/.test(appSrc),
+    'تأكيد إن مستند الشيفت فعلًا كده (لو اتغير، الفلترة تتراجع)');
+  assert(!/addDoc\(shiftsCol, \{[^}]*dateKey/.test(appSrc),
+    'ولسه مفيهوش dateKey');
+
   // ---- قفل الشيفتات: وقت النهاية الرسمي مش دلوقتي ----
   assert(/clockOutTs: endTs/.test(g), '🚪 الانصراف بوقت نهاية الشيفت');
   assert(/overtimeMinutes: 0/.test(g), 'ومفيش وقت إضافي على قفل إداري');
