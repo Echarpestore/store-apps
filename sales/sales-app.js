@@ -30,7 +30,14 @@ window.fbDeleteDoc = deleteDoc;
 window.fbCollection = collection;
 // 🔍 نعرّض دوال الكشف عشان لوحة المراجعة (في بلوك تاني) تستخدمها
 // (التعريض اتنقل لبعد تعريف الدوال والمتغيرات — تحت مباشرة بعد COMPLIANCE_END)
-enableIndexedDbPersistence(db).catch((err)=> console.warn('Offline persistence not enabled:', err.code));
+// 🔴 كان من غير synchronizeTabs — والـPOS بيستخدمها. تبويبين من نفس
+//    التطبيق (أو الأيقونة المثبّتة + المتصفح) بيتعاركوا على نفس قاعدة
+//    البيانات المحلية، والنتيجة:
+//    "FIRESTORE INTERNAL ASSERTION FAILED: Unexpected state"
+//    وبتفضل لحد ما التطبيق يتقفل. مع synchronizeTabs التبويبات بتتشارك
+//    الكاش بدل ما تتعارك عليه.
+enableIndexedDbPersistence(db, { synchronizeTabs: true })
+  .catch((err)=> console.warn('Offline persistence not enabled:', err && err.code));
 
 const empCol = collection(db, 'sales_employees');
 
@@ -256,19 +263,59 @@ function renderPendingRegs(){
     </div>`).join('');
 }
 
+// 🔴 الاعتماد كان بيسجّل الموظف **مرتين** لو الشبكة لخبطت والأدمن دوس تاني:
+//    مفيش قفل للزرار، ومفيش فحص إن الطلب اتعمد خلاص، والإنشاء بيتم قبل
+//    تحديث الحالة. حصلت فعليًا 1/8/2026.
+// 3 طبقات:
+//   ① قفل فوري في الذاكرة — يمنع ضغطتين سريعتين على نفس الجهاز
+//   ② transaction على مستند الطلب — يمنع جهازين يعتمدوا مع بعض:
+//      اللي يخلص الأول بس هو اللي يعدّي، والتاني بيلاقي الحالة اتغيّرت
+//   ③ فحص بالاسم والفرع — يمسك اللي اتسجل قبل كده بأي طريقة
+const _approvingRegs = {};
 window.approveReg = async function(id){
   const r = allRegistrations.find(x=> x.id===id); if(!r) return;
+  if(_approvingRegs[id]) return;             // ① ضغطة تانية والأولى شغالة
+  _approvingRegs[id] = 1;
+  const _btn = document.querySelector(`button[onclick="approveReg('${id}')"]`);
+  if(_btn){ _btn.disabled = true; _btn.textContent = '⏳ بيعتمد…'; }
+  const _release = function(){
+    delete _approvingRegs[id];
+    if(_btn){ _btn.disabled = false; _btn.textContent = '✅ اعتماد'; }
+  };
   try{
-    // بننشئ الموظف فعليًا في sales_employees ببياناته المعتمدة
+    // ③ الموظف موجود خلاص؟ (اعتماد اتم قبل كده وحالة الطلب ماتحدّثتش)
+    const _dup = (allEmployees||[]).find(e=>
+      e && String(e.name||'').trim() === String(r.name||'').trim()
+        && e.branch === r.branch && e.active !== false);
+    if(_dup){
+      if(!confirm('⚠️ فيه موظف بنفس الاسم في نفس الفرع ('+ r.name +').\n\n'
+        + 'ممكن يكون الطلب ده اتعمد قبل كده والحالة ماتحدّثتش.\n'
+        + 'الاعتماد هيسجّله **تاني**.\n\nمتأكد؟')){ _release(); return; }
+    }
+    // ② الحجز بـtransaction: اللي يقرا pending ويكتب approved الأول بس هو اللي يعدّي
+    const regRef = doc(db,'sales_registrations', id);
+    await runTransaction(db, async (tx)=>{
+      const snap = await tx.get(regRef);
+      if(!snap.exists()) throw new Error('الطلب مش موجود');
+      const cur = snap.data() || {};
+      if(cur.status === 'approved') throw new Error('__ALREADY__');
+      tx.update(regRef, { status:'approved', approvedAt: Date.now() });
+    });
+    // بننشئ الموظف **بعد** ما الحجز ينجح — فمستحيل اتنين يوصلوا هنا
     await addDoc(empCol, {
       name: r.name, gender: r.gender || '', avatar: (r.gender === 'male' ? 'boy' : 'girl'), shift: r.shift, dayOff: r.dayOff,
       scheduledStartTime: r.scheduledStartTime || (complianceCfg.shifts[r.shift]||{}).start || null,
       scheduledEndTime: r.scheduledEndTime || (complianceCfg.shifts[r.shift]||{}).end || null,
       branch: r.branch, active: true, createdAt: Date.now(), pin: (r.pin || '0000')
     });
-    await updateDoc(doc(db,'sales_registrations', id), { status:'approved', approvedAt: Date.now() });
     alert('تم اعتماد ' + r.name + ' — الحساب اتفعّل بالرقم السري اللي اختاره الموظف ✅');
-  }catch(e){ alert('تعذر الاعتماد: ' + e.message); }
+  }catch(e){
+    if(e && e.message === '__ALREADY__'){
+      alert('الطلب ده اتعمد خلاص ✅ — مش هيتسجّل تاني');
+    } else {
+      alert('تعذر الاعتماد: ' + (e && e.message ? e.message : ''));
+    }
+  }finally{ _release(); }
 };
 window.rejectReg = async function(id){
   if(!confirm('تحذف طلب التسجيل ده؟')) return;
@@ -5297,7 +5344,9 @@ function renderAdvancesLog(){
   wireDayLogToggles(wrap);
   wrap.querySelectorAll('button[data-id]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
+      if(btn.dataset.busy) return;              // 🛡️ ضغطة تانية = سجل حذف مكرر
       if(!confirm('متأكد إنك عايز تحذف السلفة دي؟')) return;
+      btn.dataset.busy = '1'; btn.disabled = true;
       try{
         // 🛡️ أثر إجباري: السلفة المحذوفة كانت بتختفي من غير أي سجل —
         // لو اتحذفت بالغلط (أو بقصد) بعد ما اتصرفت كاش، مفيش دليل إنها كانت موجودة.
@@ -5313,6 +5362,7 @@ function renderAdvancesLog(){
         await deleteDoc(doc(db,'sales_advances', btn.dataset.id));
       }
       catch(err){ console.error('تعذر حذف السلفة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
+      finally{ delete btn.dataset.busy; btn.disabled = false; }
     });
   });
 }
