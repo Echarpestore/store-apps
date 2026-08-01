@@ -446,17 +446,54 @@ window.renderBranchManage = function(){
 
 window.deleteBranch = async function(name){
   if(!confirm('تشيل فرع "'+name+'" من القايمة؟')) return;
+
+  // 1️⃣ مستند الإعدادات — 🔴 كان الخطأ بيتبلع في catch فاضي والرسالة تقول
+  //    "اتشال ✅" حتى لو القواعد رفضت الحذف. دلوقتي بيتبلّغ صراحةً.
+  let docErr = null;
   try{
-    // نشيل مستند إعداداته (لو موجود) + من القايمة المحفوظة محليًا
-    try{ await window.fbDeleteDoc(window.fbDoc(window.db,'sales_settings', name)); }catch(e){}
-    try{
-      const list = JSON.parse(localStorage.getItem('sales_branch_list')||'[]').filter(b=> b!==name);
-      localStorage.setItem('sales_branch_list', JSON.stringify(list));
-    }catch(e){}
-    window.allSettingsDocs = (window.allSettingsDocs||[]).filter(id=> id!==name);
-    window.renderBranchManage();
-    alert('اتشال الفرع من القايمة ✅');
-  }catch(e){ alert('تعذر الحذف: '+e.message); }
+    await window.fbDeleteDoc(window.fbDoc(window.db,'sales_settings', name));
+  }catch(e){ docErr = e; }
+
+  // 2️⃣ 🔴 القاعدة الذهبية: `window.allSettingsDocs = [...].filter()` كان بيعمل
+  //    **مصفوفة جديدة** على window بس، و sales-app.js بيقرا نسخة البلوك بتاعته
+  //    اللي لسه شايلة الفرع. فالقايمة المحلية بترجع تكتبه تاني من هناك —
+  //    ويفضل يرجع للأبد. الحل: تعديل **نفس المصفوفة في مكانها** (splice)
+  //    عشان المرجعين يشوفوا التغيير.
+  try{
+    const arr = window.allSettingsDocs;
+    if(Array.isArray(arr)){
+      for(let i = arr.length - 1; i >= 0; i--){ if(arr[i] === name) arr.splice(i, 1); }
+    }
+  }catch(e){}
+
+  // 3️⃣ القايمة المحلية
+  try{
+    const list = JSON.parse(localStorage.getItem('sales_branch_list')||'[]').filter(b=> b!==name);
+    localStorage.setItem('sales_branch_list', JSON.stringify(list));
+  }catch(e){}
+
+  window.renderBranchManage();
+
+  // 4️⃣ نقول الحقيقة — مش "اتشال ✅" على طول
+  if(docErr){
+    alert('❌ الفرع ماتشالش من السيرفر.\n\n' + (docErr.code || docErr.message)
+      + '\n\nاتشال من الجهاز ده بس، وهيرجع يظهر أول ما البيانات تتحدّث.'
+      + (String(docErr.code||'').indexOf('permission') >= 0
+          ? '\n\nالسبب على الأرجح قواعد الأمان — محتاجة تسمح بالحذف من sales_settings.' : ''));
+    return;
+  }
+  // 🔎 فيه مصادر تانية ممكن ترجّع الفرع — نقولها بدل ما يستغرب
+  const others = [];
+  if((window.allEmployeesAll||[]).some(function(e){ return e.branch === name; })) others.push('موظفين');
+  if((window.allShifts||[]).some(function(x){ return x.branch === name; })) others.push('حضور');
+  if((window.allAdvancesAll||[]).some(function(x){ return x.branch === name; })) others.push('سلف');
+  if(others.length){
+    alert('⚠️ اتشال مستند الإعدادات، بس الفرع لسه مربوط بـ: ' + others.join(' · ')
+      + '\nهيفضل ظاهر لحد ما البيانات دي تتنقل أو تتمسح.');
+  } else {
+    alert('اتشال الفرع ✅\n\nملحوظة: الأجهزة التانية محتفظة بنسخة محلية من القايمة —'
+      + ' هتتحدّث لوحدها أول ما تفتح البرنامج.');
+  }
 };
 
 // ⚙️ لوحة إعدادات رصيد الوقت
