@@ -1234,44 +1234,56 @@ const RATING_PREVIEW_MAP = {1:'😠 مضايقني جدًا', 2:'🙁 مش عا�
 //    مش عارف هل العميل اترّبط بالفاتورة ولا لأ، والاسم مش ظاهر في أي حالة.
 let _custMatchedPhone = '';   // آخر رقم اتربط فعليًا بالفاتورة
 function setCustState(state, name, phone){
-  const st   = (state === 'found' || state === 'new') ? state : '';
+  const st = (state === 'found' || state === 'new' || state === 'bad') ? state : '';
   const box  = document.getElementById('custBox');
   const ph   = document.getElementById('customerPhone');
-  const pill = document.getElementById('custNamePill');
+  const info = document.getElementById('customerInfo');
   const btn  = document.getElementById('custClearBtn');
+  const nm   = document.getElementById('customerName');
   if(box){
-    box.classList.remove('st-found', 'st-new');
+    box.classList.remove('st-found', 'st-new', 'st-bad');
     if(st) box.classList.add('st-' + st);
     box.classList.toggle('on', st === 'found');   // متوافق مع القديم
-    // 🔲 المستطيل التاني بيظهر بس لما يكون فيه حالة — ومعاه خانة الرقم
-    //    بتنزل لنص العرض بدل ما تفضل مفرودة على الصفحة كلها.
-    box.classList.toggle('has-side', !!st);
   }
-  const side = document.getElementById('custSide');
-  if(side) side.style.display = st ? 'flex' : 'none';
-  if(ph){
-    ph.classList.remove('st-found', 'st-new');
-    if(st) ph.classList.add('st-' + st);
-  }
-  if(pill){
+  if(info){
     if(st === 'found'){
-      // 👤 الاسم **والرقم** — ده اللي المالك طلبه: يشوف مين اللي متربط بالفاتورة
-      pill.textContent = '👤 ' + (String(name || '').trim() || 'بدون اسم')
-        + ' · 📱 ' + String(phone || '').trim();
-      pill.style.display = 'inline-flex';
+      // 👤 الاسم والرقم في سطر واحد — النقط بتتضاف من refreshCustomerActionUI
+      info.textContent = '👤 ' + (String(name || '').trim() || 'بدون اسم')
+        + ' · ' + String(phone || '').trim();
     }else if(st === 'new'){
-      pill.textContent = '🆕 رقم مش مسجّل';
-      pill.style.display = 'inline-flex';
+      info.textContent = '🆕 مش مسجّل — اكتب الاسم';
+    }else if(st === 'bad'){
+      info.textContent = '⚠️ الرقم ناقص — لازم ١١ رقم';
     }else{
-      pill.textContent = '';
-      pill.style.display = 'none';
+      info.textContent = '';
     }
   }
-  // ✕ بيبان طول ما فيه رقم مكتوب — مش مستني Enter ولا نقرة برّه
-  if(btn) btn.style.display = (ph && String(ph.value || '').trim()) ? 'inline-flex' : 'none';
+  // 📝 الرقم مش مسجّل → المؤشر بينط لخانة الاسم لوحده
+  if(nm && st === 'new' && document.activeElement !== nm){
+    try{ setTimeout(function(){ try{ nm.focus(); }catch(e){} }, 30); }catch(e){}
+  }
+  // ✕ مكانه محجوز دايمًا — بيبان ويختفي من غير ما يزقّ حاجة
+  if(btn) btn.classList.toggle('on', !!(ph && String(ph.value || '').trim()));
+  if(st !== 'found' && st !== 'new') setCustAction('');
   return st;
 }
 window.setCustState = setCustState;
+
+// 🎯 مكان الزرار ثابت — بيتملى وقت الحاجة وبيفضّى وقت ما مفيش
+function setCustAction(html){
+  const a = document.getElementById('custAction');
+  if(!a) return;
+  const reg = document.getElementById('newCustomerRow');
+  // صف التسجيل الجديد جوه نفس المكان — بيتحكم فيه الـCSS بحالة st-new
+  a.innerHTML = '';
+  if(reg) a.appendChild(reg);
+  if(html){
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    a.appendChild(d.firstElementChild);
+  }
+}
+window.setCustAction = setCustAction;
 
 // ✕ شيل العميل من الفاتورة بضغطة — بيمسح الرقم والاسم وسياق العميل كله
 //   (استبدال/مكافأة/عروض) من غير أي دوسة زيادة.
@@ -1282,8 +1294,6 @@ function clearCustomer(){
   if(nm){ nm.value = ''; nm.style.display = 'none'; }
   _custMatchedPhone = '';
   if(typeof clearCustomerContext === 'function') clearCustomerContext();
-  const ci = document.getElementById('customerInfo'); if(ci) ci.innerHTML = '';
-  const nr = document.getElementById('newCustomerRow'); if(nr) nr.style.display = 'none';
   const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
   if(typeof revertCustomerOffers === 'function') revertCustomerOffers();
   if(typeof custPointsBalance !== 'undefined') custPointsBalance = 0;
@@ -1297,7 +1307,7 @@ window.clearCustomer = clearCustomer;
 function _custBtnSync(){
   const ph = document.getElementById('customerPhone');
   const btn = document.getElementById('custClearBtn');
-  if(btn) btn.style.display = (ph && ph.value.trim()) ? 'inline-flex' : 'none';
+  if(btn) btn.classList.toggle('on', !!(ph && ph.value.trim()));
 }
 window._custBtnSync = _custBtnSync;
 
@@ -1310,8 +1320,6 @@ function _custDetachIfChanged(){
   if(!_custMatchedPhone || v === _custMatchedPhone) return false;
   _custMatchedPhone = '';
   if(typeof clearCustomerContext === 'function') clearCustomerContext();
-  const ci = document.getElementById('customerInfo'); if(ci) ci.innerHTML = '';
-  const nr = document.getElementById('newCustomerRow'); if(nr) nr.style.display = 'none';
   const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
   if(typeof revertCustomerOffers === 'function') revertCustomerOffers();
   if(typeof custPointsBalance !== 'undefined') custPointsBalance = 0;
@@ -1324,13 +1332,27 @@ window._custDetachIfChanged = _custDetachIfChanged;
 async function refreshCustomerInfo(){
   const phone = document.getElementById('customerPhone').value.trim();
   const infoBox = document.getElementById('customerInfo');
-  const newRow = document.getElementById('newCustomerRow');
   _custBtnSync();
   if(!phone){
     const _nm0 = document.getElementById('customerName');
-    if(_nm0){ _nm0.value = ''; _nm0.style.display = 'none'; }
+    if(_nm0) _nm0.value = '';
     _custMatchedPhone = '';
-    infoBox.innerHTML=''; newRow.style.display='none'; setCustState(''); custActivatedOffers={}; revertCustomerOffers(); custReward=null; custPendingRedeem=null; custPointsBalance=0; custBaseText=''; renderCart(); return; }
+    setCustState(''); custActivatedOffers={}; revertCustomerOffers(); custReward=null;
+    custPendingRedeem=null; custPointsBalance=0; custBaseText=''; renderCart(); return; }
+  // 🔴 الرقم الناقص مبقاش يعدّي: قبل كده أي رقم (٤ أرقام مثلاً) كان بيتعامل
+  //    معاملة "مش مسجّل" ويفتح التسجيل — فتتسجّل عميلة بمفتاح غلط ونقطها
+  //    تروح لمستند مش بتاعها ومفيش رجوع.
+  {
+    const _bad = (typeof phoneRejectReason === 'function')
+      ? phoneRejectReason(typeof normalizePhone === 'function' ? normalizePhone(phone) : phone) : null;
+    if(_bad){
+      _custMatchedPhone = '';
+      clearCustomerContext(); revertCustomerOffers(); custPointsBalance = 0;
+      setCustState('bad');
+      renderCart();
+      return;
+    }
+  }
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     custExists = doc.exists;
@@ -1357,7 +1379,7 @@ async function refreshCustomerInfo(){
     if(doc.exists){
       const d = doc.data();
       const _nm2 = document.getElementById('customerName');
-      if(_nm2){ _nm2.value = d.name || ''; _nm2.style.display = 'none'; }   // الاسم بيبان في سطر المعلومات
+      if(_nm2) _nm2.value = d.name || '';   // الاسم بيبان في الشريط
       custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
       custPointsBalance = Number(d[pointsFieldFor(currentBranch)]) || 0;   // 🛡️ الرصيد الحقيقي
       if(Object.keys(custActivatedOffers).length) await _loadOfficialOffers();   // 🛡️ الشروط الرسمية قبل أي خصم
@@ -1372,26 +1394,19 @@ async function refreshCustomerInfo(){
         showToast('⚠️ طلب استبدال العميل أكبر من رصيده — اتجاهل. اعمل الاستبدال يدوي بالرصيد الصح', 'warn');
       }
       custReward = (d.rewards||[]).find(r=> r && !r.used && r.brand===_brand && (!r.expiry || r.expiry>_now)) || null;
-      custBaseText = `<span style="font-weight:800;">💳 ${d[pointsFieldFor(currentBranch)] || 0} نقطة</span>${ratingLine}`;
-      refreshCustomerActionUI();
-      newRow.style.display = 'none';
-      // 🟢 عميل متسجّل ومربوط بالفاتورة → الخانة خضرا والاسم والرقم بينوا
+      custBaseText = 'loaded';   // مؤشر إن فيه عميل متحمّل — العرض في الشريط
       _custMatchedPhone = phone;
       setCustState('found', d.name || '', phone);
+      refreshCustomerActionUI();
       const rp = document.getElementById('resetPinRow');
       if(rp) rp.style.display = (d.loyaltyPin && hasPerm('canResetCustomerPin')) ? 'block' : 'none';   // بيان لو العميل حاطط رقم + الموظف عنده صلاحية
     }else{
-      infoBox.textContent = ratingLine ? ratingLine.replace(' | ','') : '';
-      newRow.style.display = 'flex';
-      // 🟠 الرقم مش مسجّل → لون تاني واضح + خانة الاسم بتفتح للتسجيل
+      // 🟠 الرقم مش مسجّل → خانة الاسم بتفتح والمؤشر بينط فيها لوحده
       _custMatchedPhone = '';
       setCustState('new', '', phone);
-      // 📝 الاسم بيظهر **هنا بس** — لما الرقم مش مسجّل ومحتاجين نضيفه
-      const _nm = document.getElementById('customerName');
-      if(_nm){ _nm.style.display = ''; if(!_nm.value) try{ _nm.focus(); }catch(e){} }
       const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
     }
-  }catch(e){ infoBox.textContent=''; _custMatchedPhone=''; setCustState(''); }
+  }catch(e){ _custMatchedPhone=''; setCustState(''); }
 }
 // تلوين مربع العميل — باقية للتوافق مع النداءات القديمة (app.js/clearSaleState)
 function setCustBox(on){
@@ -1679,7 +1694,11 @@ function refreshCustomerActionUI(){
   if(!infoBox) return;
   if(!custBaseText){ return; }   // مفيش عميل متحمّل
   const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
-  let html = custBaseText;
+  // 💳 النقط بتتضاف لسطر الهوية — مش سطر لوحده
+  const _pts = Number(custPointsBalance) || 0;
+  const _base = infoBox.textContent.split(' · 💳')[0];
+  infoBox.textContent = _base + ' · 💳 ' + _pts + ' نقطة';
+
   if(custPendingRedeem && !pendingRedemption){
     // 🛡️ نعيد الحساب من إعدادات المحل والرصيد الفعلي — ولو أرقام الطلب مش مطابقة نعلّم 🚩
     const _rr = loyaltyRedemptionConfig || {};
@@ -1694,25 +1713,25 @@ function refreshCustomerActionUI(){
       });
     }
     custPendingRedeem._sane = _sane; custPendingRedeem._tampered = _tampered;
-    // 🔲 شريط مضغوط جوه المستطيل — قبل كده كان بلوك كبير بيزقّ الشاشة لتحت
-    html += `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:3px; background:#fff6e6; border:1px solid var(--warn); border-radius:8px; padding:4px 7px; width:100%;">
-       <span style="font-weight:800; color:#b45309; font-size:11.5px;">🎁 طلب استبدال ${custPendingRedeem._sane.points} نقطة (${custPendingRedeem._sane.value} ج.م)</span>
-       <button onclick="applyPendingRedeem()" style="padding:4px 10px; border-radius:6px; border:none; background:var(--plus); color:#062; font-weight:800; font-size:11.5px; cursor:pointer;">✔️ طبّق</button>
-       ${custPendingRedeem._tampered ? '<div style="color:var(--minus); font-size:10.5px; font-weight:800; width:100%;">🚩 أرقام الطلب مش مطابقة لحسابات المحل — اتصححت واتسجلت</div>' : ''}
-     </div>`;
+    if(_tampered) infoBox.textContent += ' · 🚩 أرقام الطلب اتصححت';
+    // 🎁 الزرار في مكانه الثابت — كبير ومقروء
+    setCustAction('<button class="act-redeem" onclick="applyPendingRedeem()">🎁 استبدال '
+      + _sane.points + ' نقطة (' + _sane.value + ' ج.م)</button>');
+    return;
   }
   if(custReward && !cart.some(l=> l.isRewardDiscount)){
     const okMin = cartTot >= (custReward.minInvoice||0);
-    const rTxt = custReward.type==='percent' ? `${custReward.value}% خصم` : `${custReward.value} ج.م خصم`;
-    const cond = custReward.minInvoice ? ` (لفاتورة ${custReward.minInvoice} ج.م أو أكتر)` : '';
-    html += `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:3px; background:#fdeef5; border:1px solid var(--warn); border-radius:8px; padding:4px 7px; width:100%;">
-       <span style="font-weight:800; color:#b45309; font-size:11.5px;">🎁 مكافأة: ${rTxt}${cond}</span>
-       ${okMin
-         ? `<button onclick="applyCustomerReward()" style="padding:4px 10px; border-radius:6px; border:none; background:var(--plus); color:#062; font-weight:800; font-size:11.5px; cursor:pointer;">✔️ طبّق</button>`
-         : `<span style="font-size:10.5px; color:var(--muted);">لسه محتاج ${custReward.minInvoice} ج.م — الحالي ${cartTot.toFixed(0)}</span>`}
-     </div>`;
+    const rTxt = custReward.type==='percent' ? `${custReward.value}%` : `${custReward.value} ج.م`;
+    if(okMin){
+      setCustAction('<button class="act-reward" onclick="applyCustomerReward()">🎁 مكافأة '
+        + rTxt + '</button>');
+    }else{
+      setCustAction('<button class="act-wait" disabled>🎁 مكافأة من '
+        + custReward.minInvoice + ' ج.م</button>');
+    }
+    return;
   }
-  infoBox.innerHTML = html;
+  setCustAction('');
 }
 
 function applyCustomerReward(){
