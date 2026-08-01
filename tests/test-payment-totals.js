@@ -723,12 +723,18 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(/if\(phone !== raw\)/.test(reg) && /confirm\(/.test(reg),
     '🔄 ولو التطبيع غيّر الرقم، الكاشير بتشوفه وتأكّد');
 
-  // ---- ⚠️ العملاء القدام ماتأثروش ----
+  // ---- 🔴 اتغيّر بقرار المالك: الرقم الناقص مبقاش يعدّي ----
+  // قبل كده أي رقم (٤ أرقام مثلاً) كان بيتعامل معاملة "مش مسجّل" ويفتح
+  // التسجيل — فتتسجّل عميلة بمفتاح غلط ونقطها تروح لمستند مش بتاعها.
   const rci = extractFn(saleS2, 'refreshCustomerInfo');
   assert(rci.length > 0, 'refreshCustomerInfo اتلقت');
-  assert(!/normalizePhone/.test(rci),
-    '⚠️ فتح ملف عميل **مش** بيمر على التحقق — القدام بأرقام غلط لسه بيشتغلوا');
-  assert(!/phoneRejectReason/.test(rci), 'ولا على المنع');
+  assert(/phoneRejectReason/.test(rci),
+    '🔴 البحث بقى بيمرّ على المنع — الرقم الناقص مبيفتحش تسجيل');
+  assert(/setCustState\('bad'\)/.test(rci),
+    'وبيوري حالة واضحة إن الرقم ناقص بدل ما يقول "مش مسجّل"');
+  const badIdx = rci.indexOf("setCustState('bad')");
+  assert(badIdx > 0 && badIdx < rci.indexOf('TEST_CUSTOMERS'),
+    '🔴 والفحص **قبل** القراءة من الداتابيز — مفيش قراءة على رقم غلط أصلًا');
 }
 
 // ============================================================
@@ -740,18 +746,19 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   const html = fs.readFileSync(path.join(POS,'index.html'),'utf8');
   const saleS3 = fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8');
 
-  // ---- 📱 الرقم أولًا والاسم مخفي ----
-  const row = html.slice(html.indexOf('<div class="customer-row">'),
-                         html.indexOf('<div id="newCustomerRow">'));
-  assert(row.indexOf('id="customerPhone"') < row.indexOf('id="customerName"'),
+  // ---- 📱 الرقم أولًا والاسم بيبان بالحالة ----
+  const box = html.slice(html.indexOf('<div id="custBox">'), html.indexOf('id="resetPinRow"'));
+  assert(box.indexOf('id="customerPhone"') < box.indexOf('id="customerName"'),
     '📱 خانة الرقم قبل الاسم — الكاشير بتسجّل بالرقم');
-  assert(/id="customerName"[^>]*style="display:none;"/.test(row),
-    '🔴 خانة الاسم مخفية افتراضيًا (كانت مفرودة طول الوقت)');
-  assert(/#customerPhone\{ flex:1 1 auto/.test(html), 'والرقم بياخد المساحة');
+  assert(/#customerName\{[^}]*display:none/.test(html),
+    '🔴 خانة الاسم مقفولة افتراضيًا');
+  assert(/#custBox\.st-new #customerName\{ display:block/.test(html),
+    'وبتفتح بالحالة (CSS) — مش بتلاعب بالـstyle من الجافاسكربت');
+  assert(/#customerPhone\{[\s\S]{0,200}flex:1 1 auto/.test(html), 'والرقم بياخد المساحة');
 
   // ---- ✕ زرار المسح ----
-  assert(/id="custClearBtn"/.test(row), '✕ زرار مسح العميل موجود');
-  assert(/onclick="clearCustomer\(\)"/.test(row), 'وموصّل');
+  assert(/id="custClearBtn"/.test(box), '✕ زرار مسح العميل موجود');
+  assert(/onclick="clearCustomer\(\)"/.test(box), 'وموصّل');
   const cc = extractFn(saleS3, 'clearCustomer');
   assert(cc.length > 0, 'دالة المسح موجودة');
   assert(/ph\.value = ''/.test(cc) && /nm\.value = ''/.test(cc), 'بتفضّي الرقم والاسم');
@@ -765,8 +772,10 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 
   // الزرار بيظهر بس لما فيه رقم
   const sync = extractFn(saleS3, '_custBtnSync');
-  assert(/ph\.value\.trim\(\)\) \? 'inline-flex' : 'none'/.test(sync),
-    '👁️ الزرار بيظهر بس لما يكون فيه رقم');
+  assert(/classList\.toggle\('on'/.test(sync),
+    '👁️ الزرار بيبان ويختفي بالكلاس — ومكانه محجوز فمبيزقّش حاجة');
+  assert(/#custClearBtn\{[^}]*visibility:hidden/.test(html),
+    '🔴 visibility مش display — عشان الزراير اللي جنبه ما تتحركش');
   assert(/_custBtnSync\(\);/.test(saleS3) && /addEventListener\('input'/.test(saleS3),
     'وبيتحدّث مع الكتابة — مش مستني blur');
   assert(/_custDetachIfChanged\(\);/.test(saleS3),
@@ -776,12 +785,10 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(/v\.length === 11\) refreshCustomerInfo\(\)/.test(saleS3),
     '📱 11 رقم = بحث تلقائي (من غير Enter ولا نقرة برّه)');
 
-  // ---- 📝 الاسم بيظهر وقت الحاجة بس ----
-  const rci2 = extractFn(saleS3, 'refreshCustomerInfo');
-  assert(/_nm\.style\.display = ''/.test(rci2),
-    '📝 الاسم بيظهر لما الرقم مش مسجّل');
-  assert(/_nm2\.style\.display = 'none'/.test(rci2),
-    'وبيتخفي لما العميل مسجّل (اسمه بيبان في سطر المعلومات)');
-  assert(/_nm0\.style\.display = 'none'/.test(rci2),
-    'وبيتخفي لما الخانة تفضى');
+  // ---- 📝 المؤشر بينط لخانة الاسم لوحده ----
+  const scs = extractFn(saleS3, 'setCustState');
+  assert(/st === 'new'/.test(scs) && /nm\.focus\(\)/.test(scs),
+    '📝 الرقم مش مسجّل → المؤشر بينط لخانة الاسم من غير ما الكاشير تدوس');
+  assert(/document\.activeElement !== nm/.test(scs),
+    '🔴 ومبيخطفش المؤشر لو الكاشير بتكتب فيها أصلًا');
 }

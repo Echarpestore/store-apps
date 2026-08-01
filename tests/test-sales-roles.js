@@ -207,3 +207,128 @@ assert(/roleHidden\s*===\s*'1'/.test(src2), 'اللوحات الممنوعة ب�
   const swS = fs.readFileSync(path.resolve(__dirname,'..','sales','sw.js'),'utf8');
   assert(/store-apps-shell-v\d+/.test(swS), 'CACHE_NAME بتاع sales فيه رقم نسخة');
 }
+
+// ============================================================
+// 🔴 الضغط المزدوج — الموظف اتسجل مرتين (حصلت فعليًا 1/8/2026)
+// الشبكة لخبطت، الأدمن دوس اعتماد تاني، والموظف اتضاف مرتين.
+// ============================================================
+{
+  const app = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+  const ui2 = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-ui.js'),'utf8');
+  const ap = app.slice(app.indexOf('window.approveReg'), app.indexOf('window.rejectReg'));
+  assert(ap.length > 0, 'approveReg اتلقت');
+
+  // ---- ① قفل فوري ----
+  assert(/if\(_approvingRegs\[id\]\) return;/.test(ap), '① ضغطة تانية والأولى شغالة = تتجاهل');
+  assert(/_btn\.disabled = true/.test(ap), 'والزرار بيتقفل');
+  assert(/finally\{ _release\(\); \}/.test(ap), 'وبيتفتح تاني مهما حصل');
+
+  // ---- ② transaction: الحماية الحقيقية ----
+  assert(/runTransaction\(db, async \(tx\)=>/.test(ap),
+    '② transaction — جهازين يعتمدوا مع بعض، واحد بس بيعدّي');
+  assert(/cur\.status === 'approved'/.test(ap), 'بيفحص الحالة جوه المعاملة');
+  assert(/throw new Error\('__ALREADY__'\)/.test(ap), 'وبيوقف لو اتعمد خلاص');
+  // ⚠️ الحجز لازم **يكتب** الحالة — من غير الكتابة، الاتنين هيقروا pending وهيعدّوا
+  assert(/tx\.update\(regRef, \{ status:'approved'/.test(ap),
+    '🔑 المعاملة بتكتب approved فعلًا (مش تحديث فاضي)');
+  assert(ap.indexOf('runTransaction') < ap.indexOf('addDoc(empCol'),
+    '🔑 الحجز **قبل** إنشاء الموظف — مستحيل اتنين يوصلوا للإنشاء');
+  assert(/اتعمد خلاص/.test(ap), 'ورسالة واضحة بدل خطأ غامض');
+
+  // ---- ③ فحص التكرار بالاسم ----
+  assert(/String\(e\.name\|\|''\)\.trim\(\) === String\(r\.name\|\|''\)\.trim\(\)/.test(ap),
+    '③ بيفحص موظف بنفس الاسم في نفس الفرع');
+  assert(/e\.branch === r\.branch/.test(ap), 'والفرع كمان');
+  assert(/الاعتماد هيسجّله \*\*تاني\*\*/.test(ap), 'وبيحذّر صراحةً');
+
+  // ---- 🛡️ ومسح السلفة كمان ----
+  const delAdv = app.slice(app.indexOf("if(!confirm('متأكد إنك عايز تحذف السلفة دي؟')") - 200,
+                            app.indexOf("if(!confirm('متأكد إنك عايز تحذف السلفة دي؟')") + 1400);
+  // ⚠️ لازم يمسك سطر الحارس نفسه — النمط العام بيتلاقى في أي مكان في النطاق
+  assert(/if\(btn\.dataset\.busy\) return;/.test(delAdv),
+    '🛡️ مسح السلفة بحارس ضغط مزدوج');
+  assert(/finally\{ delete btn\.dataset\.busy/.test(delAdv), 'وبيتفتح تاني مهما حصل');
+
+  // ---- 🔍 مسح شامل: كل معالج فيه addDoc لازم يكون محمي ----
+  const both = app + '\n' + ui2;
+  const re = /addEventListener\('click',\s*async[\s\S]{0,900}?\n  \}\);/g;
+  let m; const unguarded = [];
+  while((m = re.exec(both))){
+    const b = m[0];
+    if(!/addDoc\(/.test(b)) continue;
+    if(/dataset\.busy|\.disabled\s*=\s*true|_busy|_approving/.test(b)) continue;
+    unguarded.push((b.match(/addDoc\([^,)]*/) || [''])[0]);
+  }
+  assertEq(unguarded, [], '🔍 مفيش أي زرار بيضيف مستند من غير حارس ضغط مزدوج');
+
+  // ---- 💰 وأزرار الفلوس محمية (كانت محمية أصلًا — تثبيت) ----
+  // ⚠️ لازم نمسك **المعالج** مش أول ذكر للـdata-act (اللي هو في الـHTML)
+  ['paysalary','payref'].forEach(act=>{
+    const i = app.indexOf(`querySelectorAll('[data-act="${act}"]')`);
+    assert(i > 0, `معالج ${act} اتلقى`);
+    const blk = app.slice(i, i + 1400);
+    assert(/if\(btn\.dataset\.busy\) return;/.test(blk), `💰 ${act} بحارس ضغط مزدوج`);
+    assert(/btn\.dataset\.busy = '1'/.test(blk), `و${act} بيقفل الحارس فعلًا`);
+    assert(/confirm\(/.test(blk), `و${act} بتأكيد`);
+  });
+  assert(/const btn = \$\('#advConfirmBtn'\);[\s\S]{0,60}btn\.disabled = true;/.test(app),
+    '💰 تسجيل السلفة بحارس');
+}
+
+// ============================================================
+// 🗂️ تبويبات شاشة الإعدادات
+// ⚠️ درس محروق: الشاشة كان **فيها نظام تبويبات جاهز** (`initAdminTabs`)
+//    مربوط بالصلاحيات، وضفنا نظام تاني فوقه بتقسيم مختلف — فبقى البانل
+//    لازم يعدّي من الاتنين والتقاطع شبه صفر → الشاشة طلعت فاضية تمامًا.
+//    الاختبار ده بيمنع تكرارها: **نظام واحد بس**.
+// ============================================================
+{
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const SD = path2.resolve(__dirname, '..', 'sales');
+  const html = fs2.readFileSync(path2.join(SD, 'index.html'), 'utf8');
+  const ui = fs2.readFileSync(path2.join(SD, 'sales-ui.js'), 'utf8');
+  const app = fs2.readFileSync(path2.join(SD, 'sales-app.js'), 'utf8');
+
+  // 🔴 نظام واحد لا غير
+  assert(html.indexOf('id="adminTabs"') < 0 && html.indexOf('data-g="') < 0,
+    '🔴 مفيش نظام تبويبات تاني في الـHTML — نظام واحد بس');
+  assert(ui.indexOf('adminShowGroup') < 0 && ui.indexOf('g-off') < 0,
+    '🔴 ولا في sales-ui — الإخفاء بيتم من مكان واحد (initAdminTabs)');
+  assert(/function initAdminTabs/.test(app), 'والنظام الأصلي موجود');
+
+  // المجموعات كلها ليها مفاتيح، ومفيش مجموعة فاضية
+  const block2 = app.slice(app.indexOf('const ADMIN_TAB_GROUPS'), app.indexOf('let _adminTabsInited'));
+  const ids = (block2.match(/id:'([a-z]+)'/g) || []).map(function(m){ return m.slice(4, -1); });
+  assert(ids.length >= 6, '🗂️ التقسيم على ' + ids.length + ' تبويبات');
+  ids.forEach(function(id){
+    const seg = block2.slice(block2.indexOf("id:'" + id + "'"));
+    const keys = seg.slice(0, seg.indexOf(']'));
+    assert((keys.match(/'/g) || []).length > 4,
+      '🔴 التبويب `' + id + '` ليه مفاتيح — التبويب الفاضي بيبان زرار بيفتح على لا شيء');
+  });
+
+  // كل بانل في الشاشة لازم يلاقي مفتاح — وإلا بيقع في emps ويلخبطها
+  const adminHtml = html.slice(html.indexOf('<div id="admin">'));
+  const titles = (adminHtml.match(/<h3[^>]*>([^<]{3,60})/g) || [])
+    .map(function(t){ return t.replace(/<h3[^>]*>/, '').trim(); });
+  const allKeys = (block2.match(/'([^']{4,})'/g) || []).map(function(k){ return k.slice(1, -1); });
+  const orphan = titles.filter(function(t){
+    return !allKeys.some(function(k){ return t.indexOf(k) >= 0; });
+  });
+  assert(orphan.length <= 2,
+    '🗂️ كل بانل بيلاقي تبويبه (بدون تبويب: ' + orphan.slice(0, 4).join(' · ') + ')');
+
+  // النقط: الحاجات المستنية في تبويب مقفول ما تعدّيش
+  const dots = app.slice(app.indexOf('function _refreshAdminTabDots'));
+  ['pendingBadge','staffOrdersBadge','leaveBadge','issuesBadge','regPendBadge'].forEach(function(id){
+    assert(dots.indexOf(id) > 0, '🔴 البادج `' + id + '` داخل في نقط التبويبات');
+    assert(html.indexOf('id="' + id + '"') > 0, 'وموجود في الشاشة');
+  });
+  assert(/dotFor\('time'/.test(dots) && /dotFor\('emps'/.test(dots),
+    'وتبويبي الالتزام والموظفين ليهم نقط');
+
+  // الصلاحيات فوق التبويبات
+  assert(/if\(p\.dataset\.roleHidden === '1'\)\{ p\.style\.display = 'none'; return; \}/.test(app),
+    '🔐 والممنوع على الدور بيفضل مخفي مهما اتنقلت بين التبويبات');
+}

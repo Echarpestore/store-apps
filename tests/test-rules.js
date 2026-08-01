@@ -124,6 +124,10 @@ const OPS = [
     { auth:'anon', inviteOpen:true }, true, 'رفع المستندات بدعوة مفتوحة'],
   ['استمارة التوظيف', 'staff_invites', 'update', ANON, true, 'قفل الدعوة بعد الإرسال'],
 
+  // ---- التقديم على وظيفة (مفتوح للعامة عن قصد) ----
+  ['استمارة التقديم', 'job_applications', 'create', ANON, true, 'أي حد يقدر يقدّم — ده إعلان'],
+  ['استمارة التقديم', 'job_applications', 'get',    ANON, true, 'بيقرا طلبه هو بمفتاحه'],
+
   // ---- POS و sales و Office (دخول بإيميل وباسورد) ----
   ['POS',    'pos_test_sales',     'create', STAFF, true, 'حفظ الفاتورة'],
   ['POS',    'pos_test_customers', 'list',   STAFF, true, 'بحث الكاشير'],
@@ -132,7 +136,9 @@ const OPS = [
   ['sales',  'sales_time_credit',  'create', STAFF, true, 'تسجيل رصيد وقت'],
   ['Office', 'staff_invites',      'create', STAFF, true, 'توليد الدعوة'],
   ['Office', 'staff_docs',         'read',   STAFF, true, 'عرض المستندات'],
-  ['Office', 'sales_registrations','update', STAFF, true, 'اعتماد الطلب']
+  ['Office', 'sales_registrations','update', STAFF, true, 'اعتماد الطلب'],
+  ['Office', 'job_applications',  'list',   STAFF, true, 'فرز المتقدّمين'],
+  ['Office', 'job_applications',  'update', STAFF, true, 'تغيير حالة المتقدّم']
 ];
 
 OPS.forEach(function(o){
@@ -168,7 +174,9 @@ const DENY = [
   ['pos_paymob_txns',   'create', STAFF, '🔒 وعمليات الكارت بتتكتب من الويب هوك بس'],
   ['office_expenses',   'read',   ANON, '🔒 ومصاريف المكتب مقفولة على العملاء'],
   ['sales_advances',    'read',   ANON, '🔒 والسلف كذلك'],
-  ['pos_test_sales',    'read',   OUT,  '🔒 ومن غير دخول أصلًا: مفيش أي حاجة']
+  ['pos_test_sales',    'read',   OUT,  '🔒 ومن غير دخول أصلًا: مفيش أي حاجة'],
+  ['job_applications',  'list',   ANON, '🔒 ومحدش ينزّل بيانات المتقدّمين كلهم'],
+  ['job_applications',  'delete', ANON, '🔒 ولا يمسح طلب حد']
 ];
 DENY.forEach(function(d){
   assert(can(d[0], d[1], d[2]) === false, d[3]);
