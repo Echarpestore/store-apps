@@ -260,3 +260,43 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
   const core2 = fs2.readFileSync(path2.resolve(__dirname,'..','pos','pos-core.js'),'utf8');
   assert(/synchronizeTabs: true/.test(core2), 'والـPOS لسه عليها');
 }
+
+// ============================================================
+// 🔴 شاشة ملخّص اليوم كانت بتكذب على الموظفة
+// النظام اتحوّل من غرامة ثابتة (+سماح 20 دقيقة) لرصيد ساعات في جلسة الفلوس،
+// لكن شاشة الملخّص فضلت على النص القديم: بتقرا complianceCfg.penalty و
+// lateGraceMin وهما ملغيين.
+// الواقع من الصور: روان 68 دقيقة → الشاشة "خصم 50 ج.م" والحقيقة 6 ساعات رصيد.
+// ============================================================
+{
+  const fs3 = require('fs'), path3 = require('path');
+  const a3 = fs3.readFileSync(path3.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+  const card = a3.slice(a3.indexOf('let attCard;'), a3.indexOf('// رسالة عن النقاط'));
+  assert(card.length > 0, 'بلوك كارت الحضور اتلقى');
+
+  // ⚠️ التعليق اللي بيشرح الباج فيه أسماء الحقول القديمة — نستثني السطور
+  //    اللي بتبدأ بـ// وإلا التأكيد يقع على شرحه هو (فخ §0)
+  const _card = card.split('\n').filter(function(l){ return !/^\s*\/\//.test(l); }).join('\n');
+  assert(!/complianceCfg\.penalty/.test(_card),
+    '🔴 الغرامة الثابتة اتشالت من الملخّص (النظام بقى ساعات)');
+  assert(!/حدود السماح/.test(_card), 'ورسالة "حدود السماح" كمان');
+  assert(/lateHoursFrom\(lateMin, _tc\)/.test(card),
+    '🔑 بيتحسب من **نفس الدالة** اللي بتسجّل الرصيد فعلًا');
+  assert(/رصيد وقت/.test(card), 'وبيقول رصيد وقت مش خصم جنيهات');
+  assert(/كل \$\{_per\} دقيقة = ساعة/.test(card), 'وبيشرح القاعدة');
+  assert(/_hrs <= 0/.test(card), 'وبيفرّق بين اللي اتسجل واللي لأ');
+  assert(/maxLateHoursPerDay/.test(card), 'وبيوضح سقف اليوم لو موجود');
+
+  // شاشة التسجيل كانت بتقول نفس الكلام الغلط
+  assert(!/التأخير أكتر من \$\{cfg\.lateGraceMin\} دقيقة عليه خصم/.test(a3),
+    '🔴 وشاشة تسجيل الموظف الجديد كمان اتصلحت');
+  assert(/التأخير بيتسجل رصيد وقت/.test(a3), 'وبتقول الحقيقة');
+
+  // سلوكيًا: نفس أرقام الصور
+  const lh = (m, per, cap)=>{ let h = Math.floor(Math.max(0, m) / (per||10));
+    if(cap > 0 && h > cap) h = cap; return h; };
+  assertEq(lh(68), 6, 'روان: 68 دقيقة = 6 ساعات رصيد (مش خصم 50 ج.م)');
+  assertEq(lh(7),  0, 'مريم: 7 دقايق = مفيش رصيد (بس مش بسبب "سماح 20 دقيقة")');
+  assertEq(lh(10), 1, 'و10 دقايق = ساعة — تحت السماح القديم وكانت بتتقال "مفيش خصم"');
+  assertEq(lh(68, 10, 4), 4, 'والسقف اليومي بيتحترم');
+}
