@@ -389,7 +389,8 @@ document.getElementById('page-inbox').classList.add('on');
    📡 البيانات الحية + الإشعارات
    ============================================================ */
 const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], expenses:[],
-            employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[] };
+            employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[],
+            recurring:[] };
 let started = false;
 let firstLoadDone = false;
 const seenIds = {};   // عشان الإشعار يطلع للجديد بس
@@ -460,7 +461,13 @@ function startData(){
   db.collection('office_expenses').onSnapshot(function(s){
     D.expenses = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     renderExpenses(); renderPL();
+    try{ ofRenderRecurring(); }catch(e){ console.warn('recurring', e); }   // حالة "اتدفع" بتتغير
   });
+  // 🔁 قوالب المصاريف المتكررة
+  db.collection(OF_RECUR_COL).onSnapshot(function(s){
+    D.recurring = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    try{ ofRenderRecurring(); }catch(e){ console.warn('recurring', e); }
+  }, function(e){ console.warn('recurring sync', e && e.code); });
   db.collection('sales_employees').onSnapshot(function(s){
     D.employees = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     renderSalaries(); fillBranchSel(); renderPL();
@@ -1524,3 +1531,150 @@ function ofWireTasks(){
   ofLoadTasks();
 }
 window.ofLoadTasks = ofLoadTasks;
+
+// ============================================================
+// 🔁 المصاريف المتكررة — قوالب شهرية لكل فرع
+// ------------------------------------------------------------
+// المشكلة: الإيجار والكهربا بيتكتبوا يدوي كل شهر، وسهل ينسوا.
+// الحل: قالب لكل مصروف (الفرع · النوع · المبلغ)، والنظام بيوريك اللي
+// **لسه ماتدفعش الشهر ده** بزرار تسجيل بضغطة.
+//
+// 🔑 نوعين:
+//   · ثابت (الإيجار) — المبلغ محفوظ، بتدوس تسجيل وخلاص
+//   · متغيّر (الكهربا) — بيسألك المبلغ في كل مرة
+//
+// ⚠️ التسجيل بيكتب في `office_expenses` بنفس الشكل القديم بالظبط
+//    (amount · note · ts · month) + حقول زيادة، فحساب الأرباح والإجماليات
+//    مايتأثرش. القوالب في مجموعة منفصلة — مش مصاريف فعلية.
+// 🛡️ ومفيش تسجيل تلقائي: النظام بيقترح، وانت اللي بتأكد. مصروف بيتسجل
+//    لوحده من غير ما حد يشوفه = رقم غلط في الأرباح ومحدش واخد باله.
+// ============================================================
+const OF_RECUR_COL = 'office_recurring';
+
+function ofRecurKey(tpl, mk){ return String(tpl.id) + '__' + mk; }
+
+// اتدفع الشهر ده؟ بندوّر على مصروف متسجّل من القالب ده
+function ofRecurPaid(tpl, mk){
+  return (D.expenses || []).filter(function(e){
+    return e && e.month === mk && e.recurringId === tpl.id;
+  })[0] || null;
+}
+
+function ofRenderRecurring(){
+  const wrap = $('#recurringBox'); if(!wrap) return;
+  const mk = monthKey();
+  const tpls = (D.recurring || []).slice().sort(function(a,b){
+    return String(a.branch||'').localeCompare(String(b.branch||''),'ar')
+        || String(a.note||'').localeCompare(String(b.note||''),'ar');
+  });
+
+  const due = tpls.filter(function(t){ return !ofRecurPaid(t, mk); });
+  const dueTotal = due.reduce(function(n,t){ return n + (t.kind === 'fixed' ? (Number(t.amount)||0) : 0); }, 0);
+
+  const rows = tpls.map(function(t){
+    const paid = ofRecurPaid(t, mk);
+    const isFixed = t.kind === 'fixed';
+    const amtTxt = isFixed ? egp(t.amount) : '<span style="color:var(--sub);">متغيّر</span>';
+    return '<div style="background:var(--panel2); border:1px solid ' + (paid ? 'var(--line)' : '#5a4a2a')
+      + '; border-radius:11px; padding:11px; margin-bottom:8px;">'
+      + '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">'
+      +   '<div style="min-width:0;">'
+      +     '<div style="font-weight:800;">' + esc(t.note || 'مصروف') + '</div>'
+      +     '<div style="font-size:11px; color:var(--sub);">' + esc(t.branch || 'الشركة')
+      +       ' · ' + (isFixed ? 'ثابت' : 'متغيّر') + '</div>'
+      +   '</div>'
+      +   '<div style="text-align:left; white-space:nowrap;">' + amtTxt + '</div>'
+      + '</div>'
+      + '<div style="display:flex; gap:6px; margin-top:9px;">'
+      +   (paid
+          ? ('<div style="flex:1; color:var(--plus); font-size:12px; font-weight:700;">✅ اتدفع '
+             + dstr(paid.ts) + ' · ' + egp(paid.amount) + '</div>')
+          : ('<button class="recPay" data-id="' + esc(t.id) + '" style="flex:1; padding:9px; border:none;'
+             + ' border-radius:9px; background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff;'
+             + ' font-family:\'Cairo\'; font-weight:800; cursor:pointer;">💰 سجّل الدفع</button>'))
+      +   '<button class="recDel" data-id="' + esc(t.id) + '" style="padding:9px 12px; border:1px solid var(--line);'
+      +     ' border-radius:9px; background:var(--panel); color:var(--sub); font-family:\'Cairo\'; cursor:pointer;">🗑️</button>'
+      + '</div></div>';
+  }).join('');
+
+  wrap.innerHTML =
+    '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:9px;">'
+    + '<b style="font-size:14px;">🔁 المصاريف المتكررة</b>'
+    + (due.length
+        ? ('<span style="background:#5a4a2a; color:var(--gold); border-radius:8px; padding:3px 10px; font-size:11.5px; font-weight:800;">'
+           + due.length + ' لسه ماتدفعش</span>')
+        : '<span style="color:var(--plus); font-size:11.5px; font-weight:700;">✅ الشهر ده كامل</span>')
+    + '</div>'
+    + (dueTotal ? ('<div style="font-size:11.5px; color:var(--sub); margin-bottom:8px;">المستحق الثابت: '
+        + egp(dueTotal) + '</div>') : '')
+    + (rows || '<div style="color:var(--sub); font-size:12px; margin-bottom:8px;">مفيش قوالب — ضيف الإيجار والكهربا مرة واحدة وهيفضلوا يتكرروا.</div>')
+    + '<button id="recAdd" style="width:100%; padding:10px; border:1px dashed var(--line); border-radius:10px;'
+    + ' background:var(--panel); color:var(--sub); font-family:\'Cairo\'; font-weight:700; cursor:pointer;">➕ قالب جديد</button>';
+
+  // 💰 تسجيل الدفع
+  wrap.querySelectorAll('.recPay').forEach(function(b){
+    b.onclick = async function(){
+      const t = (D.recurring||[]).filter(function(x){ return x.id === b.dataset.id; })[0];
+      if(!t) return;
+      let amount = Number(t.amount) || 0;
+      if(t.kind !== 'fixed'){
+        const v = prompt('مبلغ ' + (t.note||'المصروف') + ' لشهر ' + mk + ':', '');
+        if(v === null) return;
+        amount = parseFloat(v);
+      }
+      if(!(amount > 0)){ alert('اكتب مبلغ صحيح'); return; }
+      // ⚠️ فحص أخير قبل الكتابة — يمنع الدفع مرتين لو الشاشة قديمة أو
+      //    الجهاز التاني سجّلها في نفس اللحظة
+      if(ofRecurPaid(t, mk)){ alert('المصروف ده اتسجل خلاص الشهر ده'); ofRenderRecurring(); return; }
+      b.disabled = true; b.textContent = 'بيتسجل…';
+      try{
+        await db.collection('office_expenses').add({
+          amount: amount,
+          note: (t.note || 'مصروف') + (t.branch ? (' — ' + t.branch) : ''),
+          ts: Date.now(), month: mk,
+          recurringId: t.id, branch: t.branch || null   // 🔗 الربط بالقالب
+        });
+      }catch(e){ alert('تعذر التسجيل: ' + e.message); b.disabled = false; b.textContent = '💰 سجّل الدفع'; }
+    };
+  });
+
+  // 🗑️ مسح القالب — المصاريف المتسجلة بتفضل
+  wrap.querySelectorAll('.recDel').forEach(function(b){
+    b.onclick = async function(){
+      const t = (D.recurring||[]).filter(function(x){ return x.id === b.dataset.id; })[0];
+      if(!t) return;
+      if(!confirm('تمسح قالب "' + (t.note||'') + '"؟\n\nالمصاريف اللي اتسجلت منه قبل كده هتفضل زي ما هي — '
+        + 'ده بيوقف التذكير الشهري بس.')) return;
+      try{ await db.collection(OF_RECUR_COL).doc(t.id).delete(); }
+      catch(e){ alert('تعذر المسح: ' + e.message); }
+    };
+  });
+
+  const add = wrap.querySelector('#recAdd');
+  if(add) add.onclick = async function(){
+    const note = prompt('اسم المصروف؟ (إيجار / كهربا / نت ...)');
+    if(!note || !note.trim()) return;
+    const set = {};
+    (D.employees||[]).forEach(function(e){ if(e.branch) set[e.branch] = 1; });
+    const brs = Object.keys(set).sort();
+    const brTxt = prompt('الفرع؟ اكتب الاسم بالظبط:\n\n' + brs.join('\n'), brs[0] || '');
+    if(brTxt === null) return;
+    const isFixed = confirm('المبلغ ثابت كل شهر؟\n\nموافق = ثابت (زي الإيجار)\nإلغاء = متغيّر (زي الكهربا)');
+    let amount = 0;
+    if(isFixed){
+      const v = prompt('المبلغ الثابت:', '');
+      if(v === null) return;
+      amount = parseFloat(v);
+      if(!(amount > 0)){ alert('اكتب مبلغ صحيح'); return; }
+    }
+    try{
+      await db.collection(OF_RECUR_COL).add({
+        note: note.trim(), branch: brTxt.trim() || null,
+        kind: isFixed ? 'fixed' : 'variable',
+        amount: isFixed ? amount : null,
+        createdAt: Date.now()
+      });
+    }catch(e){ alert('تعذر الحفظ: ' + e.message); }
+  };
+}
+window.ofRenderRecurring = ofRenderRecurring;
