@@ -140,8 +140,7 @@ window.rwRender=function(){
       <div class="rw-title">اختار شيفتك</div>
       <div class="rw-sub">ده معاد حضورك اليومي — والتأخير بيتسجل رصيد وقت (كل ${(window.timeCfg||timeCfgDefaults).lateMinPerHour||10} دقيقة = ساعة)</div>
       <div class="rw-choice">
-        <div class="rw-opt ${_rwData.shift==='morning'?'sel':''}" onclick="window.rwPick('shift','morning')">${S.morning.label}<small>${S.morning.start} → ${S.morning.end}</small></div>
-        <div class="rw-opt ${_rwData.shift==='evening'?'sel':''}" onclick="window.rwPick('shift','evening')">${S.evening.label}<small>${S.evening.start} → ${S.evening.end}</small></div>
+        ${Object.keys(S).map(k=>`<div class="rw-opt ${_rwData.shift===k?'sel':''}" onclick="window.rwPick('shift','${k}')">${S[k].label}<small>${S[k].start} → ${S[k].end}${S[k].noBonus?' · قبل الفتح':''}</small></div>`).join('')}
       </div>
       <div class="rw-nav"><button class="rw-btn rw-back" onclick="rwGo(2)">◀</button><button class="rw-btn rw-next" onclick="rwGo(4)" ${_rwData.shift?'':'disabled'}>التالي ▶</button></div>
     </div>`;
@@ -609,10 +608,25 @@ let complianceCfg = {
   lateGraceMin: 20,                  // سماح التأخير بالدقايق قبل الخصم
   shifts: {
     morning: { label: '🌅 صباحي', start: '10:00', end: '18:00' },
-    evening: { label: '🌆 مسائي', start: '14:00', end: '22:00' }
+    evening: { label: '🌆 مسائي', start: '14:00', end: '22:00' },
+    // 🧹 شيفت التظبيط — قبل الفتح، تجهيز وعرض البضاعة الجديدة.
+    //    مفيش بيع ولا عملاء، فمفيش مبيعات ولا تقييم عميل — يعني معادلة
+    //    المكافأة (التزام + مبيعات + رضا) مالهاش معنى عليه. مرتب شهري ثابت.
+    setup:   { label: '🧹 تظبيط الفرع', start: '07:00', end: '10:00', noBonus: true }
   },
   weights: { commitment: 40, sales: 30, rating: 30 }   // أوزان المكافأة (مجموعها 100)
 };
+
+// 🧹 شيفت التظبيط خارج نظام المكافآت ورصيد الوقت والتاسك.
+//    السبب مش تفضيل — هو ببساطة مش بيبيع ومفيش عميل بيقيّمه، فالمعادلة
+//    مالهاش معنى عليه. الغياب لسه بيتخصم زي أي حد.
+function isSetupShift(emp){
+  if(!emp) return false;
+  const sh = (typeof complianceCfg !== 'undefined' && complianceCfg.shifts)
+    ? complianceCfg.shifts[emp.shift] : null;
+  return !!(sh && sh.noBonus) || emp.shift === 'setup';
+}
+window.isSetupShift = isSetupShift;
 
 // بيحوّل "HH:MM" لعدد دقايق من نص الليل
 function _hm2min(hm){ const [h,m] = String(hm||'0:0').split(':').map(Number); return (h||0)*60 + (m||0); }
@@ -1993,7 +2007,9 @@ async function clockIn(empId, photoDataUri){
     // المحرك ده حل محل الغرامة الثابتة القديمة. الكود القديم كان لسه بيكتب
     // خصم فلوس ثابت في sales_deductions — فالتأخير كان بيتحاسب بالنظام القديم
     // (اللي أصلًا مش بيتخصم من المرتب) ومش بيدخل رصيد الوقت ولا بوابة المكافأة خالص.
-    if(latePenalized){
+    // 🧹 شيفت التظبيط: التأخير بيتسجّل في الشيفت للمتابعة، بس **مش**
+    //    بيتحوّل رصيد وقت — مفيش عميل بيتأثر بتأخيره.
+    if(latePenalized && !isSetupShift(emp)){
       const _lateHours = lateHoursFrom(lateMinutes, window.timeCfg || timeCfgDefaults);
       if(_lateHours > 0){
         try{
@@ -4784,6 +4800,7 @@ function computeSalary(emp, periodStart, end){
   // كل hoursPerDay (7) ساعات غير معذورة في الفترة = يوم × قيمة اليوم (بسقف اختياري).
   const _tcfg = (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
   const tcEntries = ((typeof window !== 'undefined' && window.allTimeCredit) || []).filter(x=>{
+    if(isSetupShift(emp)) return false;      // 🧹 التظبيط خارج رصيد الوقت
     if(x.employeeId !== emp.id || !tcCounts(x, _tcfg)) return false;
     const t = new Date((x.date||'') + 'T00:00:00').getTime();
     return t >= start.getTime() && t <= end.getTime();
