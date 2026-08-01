@@ -516,7 +516,20 @@ function refreshGate(user){
   startData();
 }
 // 🔐 أول ما الدخول يتأكد: نجيب بصمة الكود ونشوف الجلسة لسه سارية
+// ⏳ أول ضربة من onAuthStateChanged بتيجي بـuser=null **قبل** ما Firebase
+//    يرجّع الجلسة المحفوظة. من غير الحارس ده، شاشة الإيميل بتومض كل مرة
+//    وبعدين تختفي وتظهر البصمة — وده اللي كان شكله "لاج".
+let _authSettled = false;
 firebase.auth().onAuthStateChanged(async function(user){
+  if(!user && !_authSettled){
+    // مستنيين لحظة: يا إما الجلسة ترجع، يا إما نتأكد إنه مفيش دخول فعلًا
+    setTimeout(function(){
+      _authSettled = true;
+      if(!firebase.auth().currentUser){ ownerOk = false; refreshGate(null); }
+    }, 1200);
+    return;
+  }
+  _authSettled = true;
   if(!user){ ownerOk = false; refreshGate(null); return; }
   await loadGateHash();
   // جلسة سارية ومطابقة للبصمة الحالية = مفيش داعي نسأل الكود تاني
