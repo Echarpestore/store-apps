@@ -687,6 +687,78 @@ $('#notifBtn').addEventListener('click', async function(){
     alert('ماتفعّلتش: ' + (r.why || '') );
   }
 });
+
+// 🔔 إشعار تجربة + تشخيص حقيقي
+// ------------------------------------------------------------
+// الدالة السحابية بترجع 200 حتى لو الإرسال فشل — فالتشخيص كان واقف على
+// "الكود سليم". دلوقتي بنغيّر `test` في المستند، والدالة بتبعت وبتسجّل
+// النتيجة في `lastSend`، وإحنا بنستنى النتيجة ونوريها بالنص.
+async function ofPushTest(btn){
+  const ref = db.collection('pos_test_settings').doc('office_push');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيبعت…'; }
+  const reset = function(){ if(btn){ btn.disabled = false; btn.textContent = '🧪 ابعت إشعار تجربة'; } };
+  try{
+    const cur = await ref.get();
+    const d = cur.exists ? (cur.data() || {}) : {};
+    const n = Array.isArray(d.list) ? d.list.length : 0;
+    if(!n){
+      alert('⛔ مفيش أي جهاز متسجّل\n\nدوس «🔔 الإشعارات» الأول عشان تسجّل الجهاز ده.');
+      reset(); return;
+    }
+    const before = (d.lastSend && d.lastSend.at) || 0;
+    await ref.set({ test: Date.now() }, { merge: true });
+    // ⏳ ننتظر الدالة تسجّل النتيجة — 12 ثانية بحد أقصى
+    let out = null;
+    for(let i = 0; i < 12; i++){
+      await new Promise(function(r2){ setTimeout(r2, 1000); });
+      const s2 = await ref.get();
+      const ls = (s2.exists && (s2.data() || {}).lastSend) || null;
+      if(ls && ls.at && ls.at !== before){ out = ls; break; }
+    }
+    reset();
+    if(!out){
+      alert('⏱️ الدالة ماردّتش خلال ١٢ ثانية\n\n'
+        + 'يعني إما `onOfficePushTest` مش منشورة، أو النشر لسه مااكتملش.\n'
+        + 'اتأكد من النشر: firebase deploy --only functions');
+      return;
+    }
+    let msg = 'نتيجة الإرسال:\n\n'
+      + '— أجهزة متسجّلة: ' + (out.sent || 0) + '\n'
+      + '— نجح: ' + (out.ok || 0) + '\n'
+      + '— فشل: ' + (out.fail || 0) + '\n';
+    if(out.errors && out.errors.length){
+      msg += '\nالأخطاء:\n' + out.errors.map(function(e){
+        return '• ' + e.code + '  (…' + (e.token || '') + ')';
+      }).join('\n');
+      msg += '\n\n' + ofPushHint(out.errors[0].code);
+    }else if(out.ok > 0){
+      msg += '\n✅ الإرسال نجح من ناحية السيرفر.\n'
+        + 'لو الإشعار مش ظاهر على الجهاز، المشكلة في استقبال الجهاز نفسه:\n'
+        + '• الإعدادات → التطبيقات → office → البطارية → **غير مقيّد**\n'
+        + '• والإشعارات → الأهمية **عالية**';
+    }
+    alert(msg);
+  }catch(e){
+    reset();
+    alert('ماتبعتش: ' + (e.code || e.message));
+  }
+}
+window.ofPushTest = ofPushTest;
+
+// ترجمة أكواد FCM لسبب مفهوم
+function ofPushHint(code){
+  const c = String(code || '');
+  if(/third-party-auth|authentication/i.test(c))
+    return '🔑 مفتاح VAPID في التطبيق مش متطابق مع مفتاح المشروع.\n'
+      + 'Firebase → إعدادات المشروع → Cloud Messaging → Web Push certificates.';
+  if(/registration-token|not-registered|invalid-argument/i.test(c))
+    return '📵 توكن الجهاز باطل (اتمسح أو اتجدّد). دوس «🔔 الإشعارات» تاني عشان يتسجّل من جديد.';
+  if(/sender-id|mismatched/i.test(c))
+    return '🔀 التوكن اتعمل بمشروع تاني — امسح بيانات الموقع وسجّل تاني.';
+  if(/quota|unavailable|internal/i.test(c))
+    return '⏳ خدمة FCM مضغوطة أو مؤقتًا مش متاحة — جرّب بعد شوية.';
+  return 'ابعتلي الكود ده زي ما هو.';
+}
 try{ ofPaintEyeBtn(); }catch(e){}   // 🙈 حالة العين محفوظة بين الفتحات
 if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
   $('#notifBtn').textContent = '🔔 الإشعارات شغالة ✅';
@@ -791,12 +863,37 @@ function startData(){
 
   setTimeout(function(){ firstLoadDone = true; }, 8000);
 }
+// 💸 كانت بتسحب **٣٠ يوم فواتير كاملة كل ٢٠ دقيقة** طول ما التطبيق
+//    مفتوح — يعني ٧٢ سحبة كاملة في اليوم لنفس البيانات. دلوقتي أول مرة
+//    بس بتسحب الـ٣٠ يوم، وبعدها بتجيب **الجديد من آخر فاتورة اتحمّلت**
+//    وتدمجه. السحبات اللي بعد الأولى بتبقى فواتير الفترة القصيرة دي بس.
+let _salesTo = 0;                    // آخر createdAt اتحمّل (ملي ثانية)
+function _saleMs(x){
+  try{
+    if(x && x.createdAt && typeof x.createdAt.toMillis === 'function') return x.createdAt.toMillis();
+    if(x && typeof x.createdAtMs === 'number') return x.createdAtMs;
+  }catch(e){}
+  return 0;
+}
 function loadSales(){
-  const from = new Date(); from.setDate(from.getDate()-30); from.setHours(0,0,0,0);
+  const cut = new Date(); cut.setDate(cut.getDate()-30); cut.setHours(0,0,0,0);
+  const cutMs = cut.getTime();
+  // ⚠️ بنرجع دقيقة ورا آخر واحدة اتحمّلت — فواتير الأوفلاين بتوصل متأخرة
+  //    وطابع السيرفر بتاعها ممكن يكون قبل آخر واحدة شفناها بثواني.
+  const fromMs = _salesTo ? Math.max(cutMs, _salesTo - 60000) : cutMs;
   db.collection('pos_test_sales')
-    .where('createdAt','>=', firebase.firestore.Timestamp.fromDate(from)).get()
+    .where('createdAt','>=', firebase.firestore.Timestamp.fromMillis(fromMs)).get()
     .then(function(s){
-      D.sales = s.docs.map(function(d){ return d.data(); });
+      const fresh = s.docs.map(function(d){ const o = d.data() || {}; o._id = d.id; return o; });
+      if(!_salesTo){
+        D.sales = fresh;
+      }else{
+        // دمج بالـid — الفاتورة اللي اتحدّثت بتاخد نسختها الجديدة
+        const seen = {};
+        fresh.forEach(function(x){ seen[x._id] = 1; });
+        D.sales = D.sales.filter(function(x){ return !seen[x._id] && _saleMs(x) >= cutMs; }).concat(fresh);
+      }
+      D.sales.forEach(function(x){ const t = _saleMs(x); if(t > _salesTo) _salesTo = t; });
       renderTop();
     }).catch(function(e){ console.warn('sales load', e); });
 }
