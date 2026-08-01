@@ -1101,11 +1101,23 @@ function renderInbox(){
       actions + '</div>';
   }).join('');
 }
+// ⚠️ الأزرار دي كانت بتنفّذ على طول — دوسة غلط على شاشة موبايل = قرار
+//    اتاخد ومفيش رجوع. التأكيد بيقول **الاسم والفرع والقرار** عشان تعرف
+//    إنك بتوافق على مين بالظبط، مش مجرد "متأكد؟".
 window.officeDecideLeave = function(id, decision){
+  const r = (D.leaves || []).filter(function(x){ return x.id === id; })[0] || {};
+  const who = (r.empName || 'الموظفة') + (r.branch ? (' — ' + r.branch) : '');
+  const when = r.dateKey ? ('\nيوم: ' + r.dateKey) : '';
+  const word = (decision === 'approved') ? '✅ توافق على' : '❌ ترفض';
+  if(!confirm(word + ' طلب إذن\n\n' + who + when + '\n\nمتأكد؟')) return;
   db.collection('sales_leave_requests').doc(id).update({ status:decision, decidedAt:Date.now(), decidedFrom:'office' })
     .catch(function(e){ alert('تعذر الحفظ: '+e.message); });
 };
 window.officeCloseShort = function(id){
+  const x = (D.shorts || []).filter(function(y){ return y.id === id; })[0] || {};
+  const what = (x.productName || ('كود ' + (x.barcode || ''))) + ' × ' + (x.qty || 1);
+  if(!confirm('✅ تعلّم النقص ده إنه اتجاب؟\n\n' + what
+    + (x.branch ? ('\n' + x.branch) : '') + '\n\nهيختفي من القايمة.')) return;
   db.collection('sales_shortages').doc(id).update({ status:'done', doneAt:Date.now(), doneFrom:'office' })
     .catch(function(e){ alert('تعذر الحفظ: '+e.message); });
 };
@@ -1297,6 +1309,12 @@ window.officeMtxn = async function(mid, type){
   });
   if(!res) return;
   const amount = res.amount, note = res.note;
+  // 💵 تأكيد أخير على المبلغ — الحركة دي بتغيّر رصيد التاجر، والرقم ممكن
+  //    يتكتب غلط على شاشة موبايل (صفر زيادة أو ناقص).
+  if(!confirm((type === 'order' ? '🧾 أوردر' : '💵 دفعة') + ' لـ' + (m.name || '')
+    + '\n\nالمبلغ: ' + egp(amount)
+    + '\n' + (type === 'order' ? 'هيزوّد اللي عليك للتاجر' : 'هيخصم من اللي عليك')
+    + '\n\nمتأكد؟')) return;
   db.collection('office_merchant_txns').add({ merchantId:mid, type:type, amount:amount, note:note, ts:Date.now() })
     .catch(function(e){ alert('تعذر التسجيل: '+e.message); });
 };
