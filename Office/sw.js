@@ -1,4 +1,4 @@
-const CACHE_NAME = 'echarpe-office-v10';
+const CACHE_NAME = 'echarpe-office-v11';
 self.addEventListener('install', (e)=> self.skipWaiting());
 self.addEventListener('activate', (e)=>{
   e.waitUntil(
@@ -25,4 +25,40 @@ self.addEventListener('notificationclick', (e)=>{
     for(const c of list){ if('focus' in c) return c.focus(); }
     return clients.openWindow('./');
   }));
+});
+
+// ============ 🔔 استقبال إشعارات Push (حتى والتطبيق مقفول) ============
+// نفس نمط تطبيق العميلة بالظبط — الحدث 'push' الخام، مش firebase-messaging-sw.
+// كده مش محتاجين ملف SW تاني ولا تحميل SDK جوه الـSW.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) {}
+  const n = data.notification || data || {};
+  const title = n.title || 'echarpe office';
+  const body  = n.body  || 'فيه جديد محتاج منك';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: body,
+      icon: 'icon.png',
+      badge: 'icon.png',
+      dir: 'rtl',
+      lang: 'ar',
+      vibrate: [200, 80, 200],
+      requireInteraction: true,          // 🔔 يفضل ظاهر لحد ما المالك يشوفه
+      data: { url: (data.data && data.data.url) || './' },
+      tag: (data.data && data.data.tag) || 'office-general'
+    })
+  );
+});
+
+// الضغط على الإشعار بيفتح التطبيق (أو بيرجّعه لو مفتوح)
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) { if ('focus' in c) return c.focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
+  );
 });

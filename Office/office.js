@@ -416,16 +416,86 @@ function maybeNotifyNew(kind, arr, label, describe){
     const key = kind + ':' + x.id;
     if(seenIds[key]) return;
     seenIds[key] = 1;
-    if(firstLoadDone) notify(label, describe(x));
+    // ⚠️ لو الـpush مفعّل، السيرفر هو اللي بيبعت — والإشعار المحلي هيبقى
+    //    تكرار للنفس الحاجة. المحلي بيفضل احتياطي للأجهزة اللي مفعّلتش push.
+    let _hasPush = false;
+    try{ _hasPush = !!localStorage.getItem('office_fcm'); }catch(e){}
+    if(firstLoadDone && !_hasPush) notify(label, describe(x));
   });
 }
-$('#notifBtn').addEventListener('click', function(){
-  Notification.requestPermission().then(function(p){
-    $('#notifBtn').textContent = p === 'granted' ? '🔔 الإشعارات شغالة ✅' : '🔕 الإشعارات مرفوضة';
-  });
+// ============================================================
+// 🔔 Push حقيقي — إشعارات توصل والتطبيق مقفول
+// ------------------------------------------------------------
+// ⚠️ الفرق عن اللي كان موجود: الإشعارات القديمة كانت **محلية** — بتتولد من
+//    الصفحة نفسها، فبتشتغل والتطبيق مفتوح بس. دي Push من السيرفر.
+// 🔑 نفس نمط تطبيق العميلة بالظبط (نفس VAPID، ونفس شكل التوكن).
+// التوكن بيتحفظ في pos_test_settings/office_push — مستند واحد فيه كل أجهزة
+// المالك. الدالة السحابية بتقرا منه وبتبعت.
+// ============================================================
+var OF_VAPID = 'BLKGot1x5UyHYfGqK24sIxT3Wesnyq-wOt68l77CAS45-FA5giCDs3KbhG0h5rJ5FSGVjTIuCsoIOjyA4EPzFcc';
+
+function ofPushSupported(){
+  return 'Notification' in window && 'serviceWorker' in navigator
+      && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported();
+}
+
+async function ofRegisterPush(){
+  if(!ofPushSupported()){ return { ok:false, why:'الجهاز/المتصفح مش بيدعم الإشعارات' }; }
+  if(Notification.permission === 'denied'){
+    return { ok:false, why:'الإشعارات مرفوضة من إعدادات المتصفح — لازم تسمح بيها يدوي' };
+  }
+  const perm = await Notification.requestPermission();
+  if(perm !== 'granted') return { ok:false, why:'مسمحتش بالإشعارات' };
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const token = await firebase.messaging().getToken({ vapidKey: OF_VAPID, serviceWorkerRegistration: reg });
+    if(!token) return { ok:false, why:'ماقدرناش نجيب توكن الجهاز' };
+    // 🔑 مستند واحد لكل أجهزة المالك — مفتاح لكل توكن
+    const u = {};
+    u['tokens.' + token] = { ts: Date.now(), ua: (navigator.userAgent||'').slice(0,80) };
+    await db.collection('pos_test_settings').doc('office_push').set(u, { merge: true });
+    try{ localStorage.setItem('office_fcm', token); }catch(e){}
+    return { ok:true };
+  }catch(e){
+    console.warn('office push', e);
+    return { ok:false, why: (e && (e.code || e.message)) || 'خطأ غير معروف' };
+  }
+}
+
+// 🔕 إلغاء التسجيل — بيشيل توكن الجهاز ده بس
+async function ofUnregisterPush(){
+  let token = null;
+  try{ token = localStorage.getItem('office_fcm'); }catch(e){}
+  if(!token) return;
+  try{
+    const u = {};
+    u['tokens.' + token] = firebase.firestore.FieldValue.delete();
+    await db.collection('pos_test_settings').doc('office_push').set(u, { merge: true });
+    localStorage.removeItem('office_fcm');
+  }catch(e){ console.warn('office unpush', e); }
+}
+window.ofUnregisterPush = ofUnregisterPush;
+
+$('#notifBtn').addEventListener('click', async function(){
+  const b = $('#notifBtn');
+  b.textContent = '⏳ بيفعّل…'; b.disabled = true;
+  const r = await ofRegisterPush();
+  b.disabled = false;
+  if(r.ok){
+    b.textContent = '🔔 الإشعارات شغالة ✅';
+    alert('اتفعّلت ✅\n\nهتوصلك إشعارات حتى والتطبيق مقفول.\n\n'
+      + '⚠️ لو مش بتسمع صوت: من إعدادات الموبايل → التطبيقات → echarpe office '
+      + '→ الإشعارات → خلي الأهمية عالية.');
+  } else {
+    b.textContent = '🔕 الإشعارات متعطّلة';
+    alert('ماتفعّلتش: ' + (r.why || '') );
+  }
 });
 if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
   $('#notifBtn').textContent = '🔔 الإشعارات شغالة ✅';
+  // 🔁 تجديد صامت: التوكن بيتغيّر لوحده أحيانًا (تنضيف المتصفح/تحديث النظام).
+  //    من غير التجديد ده الإشعارات بتقف بعد فترة والمالك مش هيعرف ليه.
+  setTimeout(function(){ ofRegisterPush().catch(function(){}); }, 5000);
 }
 
 function startData(){
