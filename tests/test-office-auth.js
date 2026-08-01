@@ -346,7 +346,9 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
     'والكميات (عدد القطع) فضلت ظاهرة — مش سرّية');
 
   const sw7 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-  assert(/echarpe-office-v16/.test(sw7), 'CACHE_NAME اترفع لـv16');
+  // ⚠️ رقم صريح هنا كان بيكسر الاختبار مع كل رفعة نسخة — بقى فحص رقمي
+  const _ov = (sw7.match(/echarpe-office-v(\d+)/) || [])[1];
+  assert(!!_ov && Number(_ov) >= 16, 'CACHE_NAME بتاع Office ≥ v16 (الحالي v' + (_ov || '?') + ')');
 }
 
 // ============================================================
