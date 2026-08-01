@@ -1,0 +1,186 @@
+// ============================================================
+// 🔐 test-office-auth — أمان الدخول في تطبيق Office
+// الباجات: كود المالك مكتوب صريح في ملف بيتقدّم للعامة · الباسورد متخزّن
+// على الجهاز بتشويش · علامة "أنا المالك" قابلة للزرع · مفيش انتهاء صلاحية.
+// ============================================================
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const OF = path.resolve(__dirname, '..', 'Office');
+const src = fs.readFileSync(path.join(OF, 'office.js'), 'utf8');
+console.log('  (المصدر: Office/office.js)');
+
+// ---- ١) مفيش أي كود مالك في الملف ----
+assert(!/OWNER_CODE\s*=\s*['"]/.test(src), '🔴 مفيش ثابت كود مالك في المصدر');
+assert(!/\b2005\b/.test(src), '🔴 ولا الكود القديم نفسه (حتى في تعليق)');
+assert(/OF_GATE_DOC/.test(src) && /pos_test_settings/.test(src),
+  'الكود بقى بصمة في Firestore');
+
+// ---- ٢) الباسورد مابقاش يتخزّن ----
+assert(!/function _ofEnc/.test(src), 'دالة التشويش اتشالت');
+assert(!/function _ofDec/.test(src), 'وفك التشويش كمان');
+assert(!/saveOfficeLogin\s*\(/.test(src), 'مفيش حفظ لبيانات الدخول');
+assert(!/signInWithEmailAndPassword\(s\.e, s\.p\)/.test(src),
+  '🔑 مفيش دخول تلقائي بباسورد مخزّن');
+assert(/setPersistence/.test(src), 'الجلسة على Firebase نفسه (توكن ينفع يتلغي)');
+assert(/localStorage\.removeItem/.test(src), '🧹 وبيمسح أي بيانات قديمة من الأجهزة');
+
+// ---- ٣) العلامة الدائمة اتشالت ----
+assert(!/localStorage\.setItem\('office_owner_ok'/.test(src),
+  "🔴 علامة office_owner_ok='1' مابقتش بتتكتب (كانت بتتزرع من devtools)");
+assert(/OF_SESS_HOURS/.test(src), 'الجلسة بقى ليها مدة');
+const m = src.match(/OF_SESS_HOURS\s*=\s*(\d+)/);
+assert(!!m && Number(m[1]) > 0 && Number(m[1]) <= 24,
+  'المدة معقولة (' + (m ? m[1] : '?') + ' ساعة)');
+assert(/Date\.now\(\) > o\.exp/.test(src), 'وبتتفحص فعلًا عند القراءة');
+assert(/o\.h !== _gateHash/.test(src),
+  '🔑 تغيير الكود بيبطّل كل الجلسات القديمة تلقائي');
+
+// ---- ٤) تهدئة المحاولات ----
+assert(/_gateTries/.test(src), 'فيه عداد محاولات');
+assert(/_gateTries >= 5/.test(src), 'وبيقف بعد 5 محاولات غلط');
+
+// ---- ٥) البصمة نفسها ----
+assert(/crypto\.subtle\.digest\('SHA-256'/.test(src), 'SHA-256 مش تشويش');
+assert(/'echarpe-office:'/.test(src), 'وبملح ثابت مش الكود عريان');
+const h = (x)=> crypto.createHash('sha256').update('echarpe-office:' + x, 'utf8').digest('hex');
+assert(h('1234') !== h('1235'), 'أكواد مختلفة = بصمات مختلفة');
+assert(h('1234') === h('1234'), 'ونفس الكود = نفس البصمة');
+assert(h('1234').length === 64, 'طول البصمة صح');
+
+// ---- ٦) أول تشغيل آمن ----
+assert(/if\(!_gateHash\)\{/.test(src), '🆕 أول تشغيل بيسجّل كود جديد');
+assert(/val\.length < 4/.test(src), 'وبحد أدنى 4 أرقام');
+assert(src.indexOf('signInWithEmailAndPassword') < src.indexOf('if(!_gateHash){'),
+  '⚠️ التسجيل ده بعد دخول Firebase — مش مفتوح لأي حد');
+
+// ---- ٧) تغيير الكود من جوه ----
+assert(/officeChangeCode/.test(src), 'فيه طريقة يغيّر بيها الكود');
+assert(/if\(!ownerOk\)\{ alert/.test(src), 'ومحجوبة لحد ما البوابة تتفتح');
+
+// ---- ٨) الكاش اترفع ----
+const sw = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
+assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
+
+// ============================================================
+// 📅 شاشة اليوم — لازم تطابق تقفيل الفرع بالظبط
+// ============================================================
+{
+  const html = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const vm = require('vm');
+
+  // ---- الواجهة موجودة ----
+  ['page-day','dayBranch','dayDate','dayPay','daySales','dayItems','dayWindow']
+    .forEach(id=> assert(html.indexOf('id="' + id + '"') >= 0, 'الواجهة: ' + id));
+  assert(/data-page="day"/.test(html), 'زرار التنقل موجود');
+  assert(html.indexOf('data-page="day"') < html.indexOf('data-page="inbox"'),
+    'اليوم أول تبويب');
+
+  // ---- منطق يوم الشغل ----
+  const i = src.indexOf('const OF_TZ'), j = src.indexOf('// ---- تحميل فواتير اليوم');
+  assert(i > 0 && j > i, 'بلوك يوم الشغل اتلقى');
+  const box = { Intl:Intl, Date:Date, Math:Math, Number:Number, String:String, console:console };
+  vm.createContext(box);
+  vm.runInContext(src.slice(i, j).replace(/^async function ofLoadDayCut[\s\S]*?\n\}\n/m, ''), box);
+  const range = (d)=> vm.runInContext(`ofBizDayRange(${JSON.stringify(d)})`, box);
+  const inDay = (day, iso)=>{ const r = range(day), x = Date.parse(iso); return x >= r.start && x < r.end; };
+
+  assert(inDay('2026-07-31','2026-07-31T23:25:00+03:00'), '🕕 فاتورة 11 بالليل على يومها');
+  assert(inDay('2026-07-31','2026-08-01T02:00:00+03:00'), '🕕 فاتورة الفجر على اليوم اللي فات');
+  assert(!inDay('2026-07-31','2026-08-01T07:00:00+03:00'), 'وبعد الفاصلة على اليوم الجديد');
+  assert(!inDay('2026-07-31','2026-07-31T05:00:00+03:00'), 'وقبل الفاصلة على اليوم اللي قبله');
+  const r1 = range('2026-07-31');
+  assertEq(r1.end - r1.start, 24*3600*1000, 'اليوم 24 ساعة بالظبط');
+  // الشتا (توقيت مختلف) لازم يشتغل برضه
+  const r2 = range('2026-01-15');
+  assertEq(r2.end - r2.start, 24*3600*1000, 'وبرضه في الشتا (إزاحة مختلفة)');
+
+  // ---- وقت البيع الحقيقي: نفس saleTs في الـPOS ----
+  const ts = (s)=> vm.runInContext(`ofSaleTs(${JSON.stringify(s)})`, box);
+  assertEq(ts({ createdAtMs: 1000 }), 1000, 'الطابع المحلي لوحده');
+  assertEq(ts({ createdAtMs: 1000, createdAt: null }), 1000, 'ومع سيرفر فاضي');
+  assert(ts({}) === null || ts({}) === undefined, 'مفيش طابع = null');
+
+  // ---- ملخص الدفع بمنطق التقفيل / الأصناف بمنطق التقارير ----
+  const payFn = src.slice(src.indexOf('function ofRenderPay'), src.indexOf('function ofRenderSales'));
+  assert(!/s\.reversed\) return/.test(payFn),
+    '💵 ملخص الدفع بيشمل المعكوسة والعكس مع بعض (زي التقفيل)');
+  const itemFn = src.slice(src.indexOf('function ofRenderItems'), src.indexOf('function ofWireDay'));
+  assert(/if\(s\.reversed \|\| s\.isReversal\) return;/.test(itemFn),
+    '📦 وملخص الأصناف بيستبعد الطرفين (زي التقارير) — الصنف مايتعدّش مرتين');
+  assert(/isRedemption \|\| it\.isRewardDiscount/.test(itemFn),
+    'وسطور الاستبدال والمكافأة مستبعدة من الأصناف');
+
+  // ---- الاستعلام على السيرفر مش فلترة على الجهاز ----
+  const loadFn = src.slice(src.indexOf('async function ofLoadDay'), src.indexOf('function ofRenderDay'));
+  assert(/\.where\('createdAt','>='/.test(loadFn) && /\.where\('createdAt','<'/.test(loadFn),
+    '⚡ استعلام بنطاق زمني على السيرفر');
+  assert(/\.where\('branch','==', br\)/.test(loadFn), 'وبالفرع');
+  assert(/rows\.filter\(/.test(loadFn) && /ofSaleTs\(s\)/.test(loadFn),
+    '🕐 وفلترة تانية بالوقت الحقيقي (فواتير الأوفلاين طابع سيرفرها وقت الرفع)');
+
+  const sw2 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
+  assert(/echarpe-office-v\d+/.test(sw2), 'CACHE_NAME فيه رقم نسخة (شاشة اليوم)');
+}
+
+// ============================================================
+// ✅ التاسك الأسبوعي
+// النظام القديم: sales_tasks/{empId} — مستند واحد لكل موظفة، فأي تاسك جديد
+// بيمسح القديم. مفيش أسبوع ولا حالة ولا تاريخ.
+// ============================================================
+{
+  const html2 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const vm2 = require('vm');
+
+  ['page-tasks','tkBranch','tkRange','tkList'].forEach(id=>
+    assert(html2.indexOf('id="' + id + '"') >= 0, 'الواجهة: ' + id));
+  assert(/data-page="tasks"/.test(html2), 'زرار التاسكات موجود');
+
+  // ---- 🔑 تطبيق الحضور مايتكسرش ----
+  const save = src.slice(src.indexOf("btn.onclick = async function()"), src.indexOf('function ofWireTasks'));
+  assert(/db\.collection\('sales_tasks'\)\.doc\(emp\.id\)\.set\(/.test(save),
+    "🔑 لسه بيكتب sales_tasks/{empId} — ده اللي تطبيق الحضور بيقراه");
+  ['employeeId','taskDescription','branch'].forEach(f=>
+    assert(new RegExp(f + ':').test(save), 'الحقل ' + f + ' اللي الحضور محتاجه لسه موجود'));
+  assert(/\{ merge: true \}/.test(save), 'وبـmerge — مش بيمسح حقول تانية');
+
+  // ---- 🗂️ وسجل الأسبوع الجديد ----
+  assert(/db\.collection\('sales_task_weeks'\)\.doc\(emp\.id \+ '__' \+ wk\)/.test(save),
+    '🗂️ مستند لكل (موظفة × أسبوع) = التاريخ بيفضل');
+  assert(/weekKey: wk/.test(save), 'ومفتاح الأسبوع متسجل في الاتنين');
+
+  // ---- 📅 حسبة الأسبوع ----
+  const i2 = src.indexOf('const OF_WEEK_START'), j2 = src.indexOf('async function ofLoadTasks');
+  const k2 = src.indexOf('function _ofShopParts'), l2 = src.indexOf('function _ofOffsetMs');
+  assert(i2 > 0 && j2 > i2, 'بلوك الأسبوع اتلقى');
+  const b2 = { Intl:Intl, Date:Date, Number:Number, String:String, Math:Math, console:console };
+  vm2.createContext(b2);
+  vm2.runInContext("const OF_TZ='Africa/Cairo'; let _ofDayCut=6;" + src.slice(k2,l2) + src.slice(i2,j2), b2);
+  const ws = (o)=> vm2.runInContext('ofWeekStartMs(' + o + ')', b2);
+  const wkk = (m)=> vm2.runInContext('ofWeekKey(' + m + ')', b2);
+
+  assert([-9,-3,-1,0,1,5,20].every(o=> new Date(ws(o)).getUTCDay() === 6),
+    '📅 الأسبوع بيبدأ السبت دايمًا (أسبوع الشغل في مصر)');
+  assertEq(ws(1) - ws(0), 7*86400000, 'وكل أسبوع 7 أيام بالظبط');
+  assertEq(ws(0) - ws(-1), 7*86400000, 'والرجوع كمان');
+  assert(wkk(ws(0)) !== wkk(ws(1)), 'مفتاح مختلف لكل أسبوع');
+  assert(/^w\d{4}-\d{2}-\d{2}$/.test(wkk(ws(0))), 'شكل المفتاح ثابت ومقروء');
+
+  // ---- 🕕 بيوم الشغل مش التقويمي ----
+  const wsFn = src.slice(src.indexOf('function ofWeekStartMs'), src.indexOf('function ofWeekKey'));
+  assert(/_ofShopParts\(ms\)\.hh < _ofDayCut/.test(wsFn),
+    '🕕 الساعة 2 فجرًا يوم السبت لسه أسبوع الجمعة (نفس فاصلة التقفيل)');
+  assert(/ms -= 86400000/.test(wsFn), 'وبيرجع يوم كامل');
+
+  // ---- الاستعلامات ----
+  const load = src.slice(src.indexOf('async function ofLoadTasks'), src.indexOf('function ofRenderTasks'));
+  assert(/\.where\('weekKey','==', wk\)/.test(load), 'بيجيب أسبوع واحد بس');
+  assert(/\.where\('branch','==', br\)/.test(load), 'وفرع واحد');
+  assert(/submittedAt','>=', wkMs/.test(load) && /submittedAt','<', wkMs \+ 7/.test(load),
+    'والتسليمات بنطاق الأسبوع — مش كل التسليمات');
+
+  const sw3 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
+  assert(/echarpe-office-v8/.test(sw3), 'CACHE_NAME اترفع لـv8');
+}
