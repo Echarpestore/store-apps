@@ -207,3 +207,70 @@ function extractFn(src, name){
         `${f}: بحزام أمان لو الملف اتحمّل قبل pos-core`);
     });
 }
+
+// ============================================================
+// 🔢 الرقم تحت الباركود كان **بيختفي** — السبب الحقيقي
+// الليبل flex عمودي + overflow:hidden. بلوك الباركود كان flex-shrink:0،
+// وسطر الرقم كان overflow:hidden — وده في الفليكس بيخلي أقل حجم = صفر.
+// فأول ما المحتوى يزيد عن ارتفاع الليبل، الرقم هو اللي بيتعصر لحد ما يختفي،
+// والباركود واقف مكانه فمفيش مساحة ترجع.
+// ============================================================
+{
+  const vm2 = require('vm');
+  function render(labelH, bcHeight){
+    const sb = {
+      Math, Number, String, JSON,
+      receiptDesignConfig: {
+        logo: '',
+        elements: [{ id:'shopName', text:'echarpe' }],
+        label: {
+          bcHeight: bcHeight,
+          elements: [
+            { id:'shop',    base:'shop',    on:true, size:9 },
+            { id:'name',    base:'name',    on:true, size:13 },
+            { id:'price',   base:'price',   on:true, size:20 },
+            { id:'barcode', base:'barcode', on:true },
+          ]
+        }
+      },
+      defaultReceiptConfig: ()=>({ elements:[], label:{} }),
+      defaultLabelConfig: ()=>({ elements:[] }),
+      labelSizeMM: ()=>({ w:40, h:labelH }),
+      currencyLabel: ()=>'EGP',
+    };
+    vm2.createContext(sb);
+    vm2.runInContext(extractFn(appSrc, 'buildLabelHTML'), sb);
+    return vm2.runInContext(
+      `buildLabelHTML({ name:'طرحة سادة', price:200, barcode:'ECH0012345' }, 'bc_0')`, sb);
+  }
+
+  const out = render(25, 30);
+  assert(out.indexOf('ECH0012345') >= 0, '🔢 الرقم موجود في ناتج الليبل');
+
+  // الرقم لازم يكون **جوه** بلوك مبيصغّرش مع الـsvg — مش سطر منفصل بيتعصر
+  const wrapAt = out.indexOf('flex-shrink:0; width:100%');
+  assert(wrapAt >= 0, 'فيه بلوك واحد مبيصغّرش حوالين الباركود');
+  assert(out.indexOf('id="bc_0"') > wrapAt, 'والـsvg جواه');
+  assert(out.indexOf('ECH0012345') > out.indexOf('id="bc_0"'), 'والرقم بعده جوه نفس البلوك');
+  const wrapEnd = out.indexOf('</div></div>', wrapAt);
+  assert(wrapEnd > out.indexOf('ECH0012345'),
+    '🔴 الرقم جوه البلوك اللي مبيصغّرش — مش برّه (ده كان سبب اختفائه)');
+
+  // سطر الرقم نفسه مالوش overflow:hidden (ده اللي كان بيسمح له يوصل لصفر)
+  const numLine = out.slice(out.lastIndexOf('<div style="flex-shrink:0; font-size'),
+                            out.indexOf('ECH0012345'));
+  assert(numLine.indexOf('overflow:hidden') < 0,
+    '🔴 overflow:hidden اتشال من سطر الرقم — هو اللي بيخلي أقل ارتفاع = صفر في الفليكس');
+  assert(/flex-shrink:0/.test(numLine), 'وبقى صراحةً مبيصغّرش');
+  const fsz = Number((numLine.match(/font-size:(\d+)px/) || [])[1]);
+  assert(fsz >= 10, 'وحجم الخط اترفع لـ' + fsz + 'px (كان 9)');
+
+  // ارتفاع الباركود مسقوف بنسبة من الليبل — وإلا البلوك لوحده أطول من الليبل
+  function bcPx(html){ return Number((html.match(/height:(\d+)px; line-height:0/) || [])[1]); }
+  assertEq(bcPx(render(40, 30)), 30, 'ليبل 40مم: الارتفاع المطلوب زي ما هو');
+  const small = bcPx(render(25, 200));
+  assert(small > 0 && small < 200, 'ليبل 25مم وارتفاع مبالغ: اتسقف لـ' + small + 'px');
+  assert(small <= Math.round(25 * 0.45 * 3.7795) ,
+    '🔴 السقف = 45% من ارتفاع الليبل — من غيره البلوك أطول من الليبل والرقم يتقص برّه');
+  assert(bcPx(render(50, 200)) > small, 'وليبل أكبر = سقف أكبر (النسبة مش رقم ثابت)');
+}
