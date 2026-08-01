@@ -550,6 +550,40 @@ firebase.auth().onAuthStateChanged(async function(user){
 });
 
 /* ============================================================
+   🩺 حارس الجلسة
+   ------------------------------------------------------------
+   كل التطبيقات على نفس الدومين وبتشارك نفس تخزين جلسة Firebase. لو جلسة
+   Office اتبدلت بحساب مجهول (من تطبيق الولاء أو شاشة التقييم)، القراءات
+   بتفضل شغالة من الكاش والشاشة شكلها سليم — والكتابة بس هي اللي بترفض.
+   الحارس ده بيقول للمالك على طول بدل ما يكتشفها من زرار بيفشل.
+   ============================================================ */
+let _sessWarned = false;
+function ofSessionCheck(){
+  try{
+    const u = firebase.auth().currentUser;
+    const anon = u && (u.isAnonymous ||
+      ((u.providerData || []).length === 0));
+    const bar = document.getElementById('sessWarn');
+    if(u && anon){
+      if(!bar){
+        const d = document.createElement('div');
+        d.id = 'sessWarn';
+        d.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:90; background:#7F1D1D;'
+          + 'color:#fff; font-size:12.5px; font-weight:800; padding:9px 14px; text-align:center;'
+          + 'cursor:pointer; line-height:1.6;';
+        d.innerHTML = '⚠️ الجلسة اتبدلت لحساب مجهول — أي حفظ هيترفض.<br>'
+          + '<u>دوس هنا: اخرج وادخل بالإيميل</u>';
+        d.onclick = function(){ try{ firebase.auth().signOut(); }catch(e){} location.reload(); };
+        document.body.appendChild(d);
+      }
+      if(!_sessWarned){ _sessWarned = true; console.warn('office session became anonymous'); }
+    }else if(bar){ bar.remove(); _sessWarned = false; }
+  }catch(e){}
+}
+setInterval(ofSessionCheck, 4000);
+try{ firebase.auth().onAuthStateChanged(ofSessionCheck); }catch(e){}
+
+/* ============================================================
    🗂️ التبويبات
    ============================================================ */
 document.querySelectorAll('#tabsNav button').forEach(function(b){
@@ -2363,6 +2397,7 @@ window.hvKill = async function(code){
 
 // 📥 طلبات التوظيف — الجاية من الرابط بس (source:'join')
 function ofRenderHireRegs(){
+  try{ ofSyncHireBadge(); }catch(e){}
   const w = $('#hrList'); if(!w) return;
   const rows = (D.regs || []).filter(function(r){ return r && r.source === 'join'; })
     .sort(function(a,b){ return (b.ts||0) - (a.ts||0); }).slice(0, 40);
@@ -2604,7 +2639,19 @@ const AP_SHIFTS = { morning:'🌅 صباحي', evening:'🌆 مسائي', setup:
 const AP_STATUS = { new:'🆕 جديد', interview:'📞 للمقابلة', hired:'✅ اتوظف', rejected:'❌ مرفوض' };
 let _apList = [];
 
+// 🔴 شارة تبويب التوظيف — المتقدّمين الجداد وطلبات التسجيل المستنية.
+//    من غيرها الحاجات دي بتفضل في تبويب مقفول ومحدش واخد باله.
+function ofSyncHireBadge(){
+  const el = document.getElementById('nbHire'); if(!el) return;
+  const a = (_apList || []).filter(function(x){ return (x.status || 'new') === 'new'; }).length;
+  const r = (D.regs || []).filter(function(x){ return x && x.source === 'join' && x.status === 'pending'; }).length;
+  const n = a + r;
+  el.textContent = n;
+  el.style.display = n ? '' : 'none';
+}
+
 function ofRenderApplicants(){
+  ofSyncHireBadge();
   const w = $('#apList'); if(!w) return;
   const st = ($('#apStatus') || {}).value;
   const br = ($('#apBranch') || {}).value;

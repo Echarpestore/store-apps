@@ -135,6 +135,11 @@
   nav button .ic{ font-size:20px; }
   nav button.on{ color:var(--gold); }
   nav button .nb{ position:absolute; top:0; right:calc(50% - 20px); }
+  /* 8 تبويبات على شاشة ضيقة — الأيقونة والخط بيصغّروا شوية بدل ما الكلام يتقص */
+  @media (max-width:400px){
+    nav button{ font-size:9px; padding:6px 0; }
+    nav button .ic{ font-size:18px; }
+  }
 </style>
 </head>
 <body>
@@ -225,6 +230,10 @@
       <div id="inboxList"></div>
     </div>
 
+  </section>
+
+  <!-- 💼 التوظيف: الحلقة كاملة — شواغر ← متقدّمين ← دعوة ← طلبات ← ملف -->
+  <section class="tabPage" id="page-hire">
     <!-- 🧑‍💼 التوظيف: دعوة برابط لمرة واحدة + مراجعة الطلبات ومستنداتها -->
     <div class="panel">
       <h3>🧑‍💼 دعوة موظف جديد</h3>
@@ -383,6 +392,7 @@
   <button data-page="short"><span class="ic">📦</span>النواقص<span class="nb badge" id="nbShort" style="display:none;">0</span></button>
   <button data-page="money"><span class="ic">💰</span>الفلوس</button>
   <button data-page="reports"><span class="ic">📊</span>تقارير</button>
+  <button data-page="hire"><span class="ic">💼</span>توظيف<span class="nb badge" id="nbHire" style="display:none;">0</span></button>
   <button data-page="odd"><span class="ic">🕵️</span>نشاط</button>
 </nav>
 
