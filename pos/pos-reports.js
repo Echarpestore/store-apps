@@ -695,10 +695,14 @@ async function buildCustomersReport(){
 async function buildRatingsReport(from, to){
   let entries = [];
   try{
-    const snap = await db.collection('entries').where('branch','==', currentBranch).get();
-    entries = snap.docs.map(d=>d.data());
+    // 💸 الفلترة الزمنية على السيرفر بدل ما نسحب تقييمات الفرع كلها ونفلتر هنا.
+    //    `ts` حقل واحد → مفيش index مركّب. والفرع بيتفلتر محليًا.
+    let q = db.collection('entries');
+    if(from) q = q.where('ts','>=', from.getTime());
+    if(to)   q = q.where('ts','<=', to.getTime());
+    const snap = await q.get();
+    entries = snap.docs.map(d=>d.data()).filter(e=> e.branch === currentBranch);
   }catch(e){ return `<div class="rep-card"><div style="color:var(--muted); text-align:center; padding:20px;">تعذر التحميل: ${e.message}</div></div>`; }
-  if(from||to){ entries = entries.filter(e=>{ const t=e.ts||0; if(from && t<from.getTime()) return false; if(to && t>to.getTime()) return false; return true; }); }
 
   const total = entries.length;
   const dist = {1:0,2:0,3:0,4:0}; let sum=0;
@@ -905,9 +909,14 @@ async function renderLiveSalesHistory(){
   // نجيب كل التقييمات المرتبطة بعملاء مرة واحدة، وبعدين نربط كل فاتورة بأقرب تقييم لنفس رقم العميل
   let entriesByPhone = {};
   try{
-    const entriesSnap = await db.collection('entries').where('branch','==', currentBranch).get();
+    // 💸 بنفس منطق الفترة — مش كل تقييمات الفرع من أول يوم
+    let _eq = db.collection('entries');
+    if(from) _eq = _eq.where('ts','>=', from.getTime());
+    if(to)   _eq = _eq.where('ts','<=', to.getTime());
+    const entriesSnap = await _eq.get();
     entriesSnap.docs.forEach(d=>{
       const e = d.data();
+      if(e.branch !== currentBranch) return;
       if(!e.customerPhone) return;
       if(!entriesByPhone[e.customerPhone]) entriesByPhone[e.customerPhone] = [];
       entriesByPhone[e.customerPhone].push(e);

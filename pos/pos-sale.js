@@ -1448,10 +1448,16 @@ async function refreshCustomerInfo(){
         ratingLine = ` | آخر تقييمه: ${RATING_PREVIEW_MAP[linked[0].r]||'—'}`;
       }else{
         // 2) مفيش تقييم متربط بيه قبل كده — نديله تخمين تقريبي (تقييم قريب في نفس الفرع في آخر دقيقتين)
+        // 💸 كان بيسحب **كل** تقييمات الفرع مع كل بحث عن عميل، ويفلتر
+        //    آخر دقيقتين على الجهاز. مع آلاف التقييمات ده مئات الآلاف من
+        //    القراءات في اليوم. دلوقتي الفلترة الزمنية على السيرفر —
+        //    `ts` حقل واحد فمفيش index مركّب مطلوب — والفرع بيتفلتر محليًا
+        //    على نتيجة صغيرة (تقييمات آخر دقيقتين في كل الفروع).
         const twoMinAgo = Date.now() - (2*60*1000);
-        const branchSnap = await db.collection('entries').where('branch','==', currentBranch).get();
+        const branchSnap = await db.collection('entries').where('ts','>=', twoMinAgo).get();
         if(_stale()) return;
-        const recent = branchSnap.docs.map(d=>d.data()).filter(e=> e.ts >= twoMinAgo).sort((a,b)=> b.ts-a.ts);
+        const recent = branchSnap.docs.map(d=>d.data())
+          .filter(e=> e.branch === currentBranch).sort((a,b)=> b.ts-a.ts);
         if(recent.length) ratingLine = ` | تقييم قريب (تخمين مش مؤكد): ${RATING_PREVIEW_MAP[recent[0].r]||'—'}`;
       }
     }catch(e){}
@@ -3623,10 +3629,12 @@ async function tryLinkFeedbackToCustomer(phone, name, sellerName){
     try{
       const windowStart = saleTime - (2 * 60 * 1000);  // دقيقتين قبل الفاتورة
       const windowEnd = saleTime + (3 * 60 * 1000);    // 3 دقايق بعد الفاتورة (وقت واقعي إن العميل يمشي للكشك ويقيّم)
-      const snap = await db.collection('entries').where('branch','==', currentBranch).get();
+      // 💸 نفس الحكاية: النافذة ٥ دقايق، فمفيش داعي نسحب تقييمات الفرع كلها
+      const snap = await db.collection('entries')
+        .where('ts','>=', windowStart).where('ts','<=', windowEnd).get();
       const candidates = snap.docs
         .map(d=>({id:d.id, ...d.data()}))
-        .filter(e=> e.ts >= windowStart && e.ts <= windowEnd && !e.customerPhone)
+        .filter(e=> e.branch === currentBranch && !e.customerPhone)
         .sort((a,b)=> Math.abs(a.ts - saleTime) - Math.abs(b.ts - saleTime)); // الأقرب زمنيًا للفاتورة الأول
       if(candidates.length === 0) return;
       await db.collection('entries').doc(candidates[0].id).update({
