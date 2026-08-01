@@ -784,6 +784,13 @@ function startData(){
     try{ ofRenderHireRegs(); }catch(e){ console.warn('hire regs', e); }
   }, function(){ /* الكولكشن ممكن ميكونش موجود */ });
 
+  // 💼 المتقدّمين — نافذة ٩٠ يوم (الطلبات بتتراكم ومحدش بيرجع لطلب من سنة)
+  db.collection('job_applications').where('ts','>=', Date.now() - 90*86400000)
+    .onSnapshot(function(s4){
+      _apList = s4.docs.map(function(d){ const o = d.data() || {}; o.id = d.id; return o; });
+      try{ ofRenderApplicants(); }catch(e){ console.warn('applicants', e); }
+    }, function(e){ console.warn('applicants sync', e && e.code); });
+
   // 🧑‍💼 الدعوات
   db.collection('staff_invites').onSnapshot(function(s2){
     _hvInvites = s2.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -844,6 +851,7 @@ function startData(){
     try{ ofWireTasks(); }catch(e){ console.warn('tasks', e); }
     try{ ofWireHire(); }catch(e){ console.warn('hire', e); }
     try{ ofWireEmpFile(); }catch(e){ console.warn('empfile', e); }
+    try{ ofWireApplicants(); }catch(e){ console.warn('applicants', e); }
   });
   db.collection('sales_advances').onSnapshot(function(s){
     D.advances = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -2581,4 +2589,108 @@ function ofWireEmpFile(){
   const q = $('#efQ'); if(!q) return;
   let t = 0;
   q.oninput = function(){ clearTimeout(t); t = setTimeout(ofRenderEmpFile, 260); };
+}
+
+/* ============================================================
+   💼 المتقدّمين للوظائف — الفرز قبل المقابلة
+   ------------------------------------------------------------
+   الحلقة كاملة: إعلان ← تقديم ← فرز ← مقابلة ← **دعوة تسجيل** ← تسجيل
+   بالمستندات. زرار «ادعُه للتسجيل» بيربط الشاشتين.
+   ⚠️ القراءة بنافذة ٩٠ يوم — الطلبات بتتراكم ومحدش بيرجع لطلب من سنة.
+   ============================================================ */
+const AP_ROLES  = { sales_social:'مبيعات وسوشيال', cashier:'كاشير ومبيعات', setup:'تظبيط الفرع' };
+const AP_SHIFTS = { morning:'🌅 صباحي', evening:'🌆 مسائي', setup:'🧹 تظبيط ٧–١٠', any:'🤝 أي شيفت' };
+const AP_STATUS = { new:'🆕 جديد', interview:'📞 للمقابلة', hired:'✅ اتوظف', rejected:'❌ مرفوض' };
+let _apList = [];
+
+function ofRenderApplicants(){
+  const w = $('#apList'); if(!w) return;
+  const st = ($('#apStatus') || {}).value;
+  const br = ($('#apBranch') || {}).value;
+  const sh = ($('#apShift')  || {}).value;
+  let rows = (_apList || []).filter(function(a){
+    if(st && (a.status || 'new') !== st) return false;
+    if(br && (!Array.isArray(a.branches) || a.branches.indexOf(br) < 0)) return false;
+    if(sh && a.shift !== sh && a.shift !== 'any') return false;
+    return true;
+  }).sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+
+  if(!rows.length){ w.innerHTML = '<div class="hint" style="margin-top:11px;">مفيش متقدّمين بالفلتر ده</div>'; return; }
+  w.innerHTML = '<div style="margin:11px 0 4px; font-size:12px; color:var(--sub);">'
+    + rows.length + ' متقدّم</div>' + rows.slice(0, 60).map(function(a){
+    const roles = (a.roles || []).map(function(r){ return AP_ROLES[r] || r; }).join(' · ');
+    return '<div class="card" style="padding:12px; margin-top:9px;">'
+      + '<div style="display:flex; justify-content:space-between; gap:9px; align-items:center;">'
+      +   '<b>' + esc(a.name || '—') + '</b>'
+      +   '<span style="font-size:11.5px;">' + esc(AP_STATUS[a.status || 'new'] || '') + '</span></div>'
+      + '<div style="font-size:11.5px; color:var(--sub); margin-top:4px; line-height:1.9;">'
+      +   '🎂 ' + esc(String(a.age || '—')) + ' سنة · 📱 ' + esc(a.phone || '') + '<br>'
+      +   '📍 ' + esc(a.area || '—') + ' · 🚌 ' + esc(a.commute || '—') + '<br>'
+      +   '💼 ' + esc(roles || '—') + '<br>'
+      +   '🏬 ' + esc((a.branches || []).join(' · ')) + ' · ' + esc(AP_SHIFTS[a.shift] || '') + '<br>'
+      +   '🕐 يبدأ ' + esc(a.startWhen || '—')
+      +   ((a.offDays && a.offDays.length) ? (' · مش متاح ' + esc(a.offDays.join('،'))) : '') + '<br>'
+      +   '🧰 ' + (a.expRetail ? esc(a.expWhere || 'خبرة سابقة') : 'أول مرة')
+      +   ' · كاشير: ' + esc({ good:'يعرف', some:'شوية', no:'لأ' }[a.expCashier] || '—') + '<br>'
+      +   (a.studying ? ('🎓 ' + esc(a.college || '') + (a.classes ? (' · ' + esc(a.classes)) : '') + '<br>') : '')
+      +   (a.portfolio ? ('🔗 <a href="' + esc(a.portfolio) + '" target="_blank" rel="noopener" style="color:var(--gold);">شغله</a><br>') : '')
+      +   (a.notes ? ('📝 ' + esc(a.notes) + '<br>') : '')
+      +   '📣 عرف عننا من: ' + esc(a.source || '—') + ' · ' + esc(dstr(a.ts || 0))
+      + '</div>'
+      + '<div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;">'
+      +   '<a href="https://wa.me/2' + esc(a.whatsapp || a.phone) + '" target="_blank" rel="noopener"'
+      +     ' style="flex:1 1 88px; text-align:center; padding:9px; border-radius:9px;'
+      +     ' background:var(--plus); color:#062; font-weight:800; font-size:12.5px; text-decoration:none;">💬 واتساب</a>'
+      +   '<button onclick="apSet(\'' + esc(a.id) + '\',\'interview\')" style="flex:1 1 78px;">📞 مقابلة</button>'
+      +   '<button onclick="apInvite(\'' + esc(a.id) + '\')" style="flex:1 1 108px; background:var(--gold); color:#241a05;">🔗 ادعُه للتسجيل</button>'
+      +   '<button onclick="apSet(\'' + esc(a.id) + '\',\'rejected\')" style="flex:0 0 68px; background:var(--minus);">✖</button>'
+      + '</div></div>';
+  }).join('');
+}
+
+window.apSet = async function(id, status){
+  const a = (_apList || []).filter(function(x){ return x.id === id; })[0];
+  if(!a) return;
+  if(status === 'rejected' && !confirm('✖ ترفض ' + (a.name || '') + '؟')) return;
+  try{ await db.collection('job_applications').doc(id).update({ status: status, statusAt: Date.now() }); }
+  catch(e){ alert('ماتغيّرش: ' + (e.code || e.message)); }
+};
+
+// 🔗 من متقدّم لدعوة تسجيل — ده اللي بيقفل الحلقة
+window.apInvite = async function(id){
+  const a = (_apList || []).filter(function(x){ return x.id === id; })[0];
+  if(!a) return;
+  const br = (a.branches && a.branches[0]) || '';
+  const role = (a.roles && a.roles[0]) || 'sales_social';
+  const brand = /glow/i.test(br) ? 'glow' : 'echarpe';
+  if(!confirm('🔗 دعوة تسجيل لـ' + (a.name || '') + '\n\n'
+    + (brand === 'glow' ? 'Glow' : 'echarpe — ' + br) + '\n'
+    + (HIRE_ROLES[role] || AP_ROLES[role] || role) + '\n\n'
+    + 'الرابط شغّال مرة واحدة وينتهي بعد ٣ أيام.')) return;
+  const code = hvCode();
+  try{
+    await db.collection('staff_invites').doc(code).set({
+      code: code, brand: brand, branch: (brand === 'glow' ? 'Glow' : br), role: role,
+      createdAt: Date.now(), expiresAt: Date.now() + 3*86400000,
+      usedAt: null, createdBy: 'office', applicantPhone: a.phone || '', applicantName: a.name || ''
+    });
+    await db.collection('job_applications').doc(id)
+      .update({ status:'hired', statusAt: Date.now(), inviteCode: code }).catch(function(){});
+    const link = hvLink(code);
+    if(confirm('✅ الرابط جاهز:\n\n' + link + '\n\nتنسخه؟')) hvCopy(link);
+  }catch(e){ alert('ماتعملش: ' + (e.code || e.message)); }
+};
+
+function ofWireApplicants(){
+  const sel = $('#apStatus'); if(!sel) return;
+  const bs = $('#apBranch');
+  if(bs && bs.options.length <= 1){
+    hvBranches().forEach(function(b){
+      const o = document.createElement('option'); o.value = b; o.textContent = b; bs.appendChild(o);
+    });
+  }
+  ['#apStatus','#apBranch','#apShift'].forEach(function(q){
+    const el = $(q); if(el) el.onchange = ofRenderApplicants;
+  });
+  ofRenderApplicants();
 }

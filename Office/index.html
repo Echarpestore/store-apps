@@ -257,6 +257,31 @@
       <div id="hrList"></div>
     </div>
 
+    <!-- 💼 المتقدّمين للوظائف — الفرز قبل المقابلة -->
+    <div class="panel">
+      <h3>💼 المتقدّمين للوظائف</h3>
+      <div class="hint">الطلبات الجاية من رابط الإعلان. افرز، وابعت دعوة تسجيل
+        لأي حد بعد المقابلة.</div>
+      <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;">
+        <select id="apStatus" style="flex:1 1 130px;">
+          <option value="new">🆕 جديد</option>
+          <option value="interview">📞 للمقابلة</option>
+          <option value="hired">✅ اتوظف</option>
+          <option value="rejected">❌ مرفوض</option>
+          <option value="">الكل</option>
+        </select>
+        <select id="apBranch" style="flex:1 1 120px;"><option value="">كل الفروع</option></select>
+        <select id="apShift" style="flex:1 1 120px;">
+          <option value="">كل الشيفتات</option>
+          <option value="morning">صباحي</option>
+          <option value="evening">مسائي</option>
+          <option value="setup">تظبيط ٧–١٠</option>
+          <option value="any">أي شيفت</option>
+        </select>
+      </div>
+      <div id="apList"></div>
+    </div>
+
     <!-- 🗂️ ملف الموظفة: بحث بالاسم أو الرقم في **كل** التاريخ، والمستندات
          بتتجاب على الطلب مش على نافذة زمنية -->
     <div class="panel">
