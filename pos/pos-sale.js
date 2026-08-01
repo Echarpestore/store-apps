@@ -1321,11 +1321,50 @@ async function resolveLoyaltyScan(code){
     return true;
   }catch(e){ console.warn('resolveLoyaltyScan', e); return false; }
 }
+// 📱 تطبيع رقم الموبايل + التحقق منه.
+// 🔴 المشكلة: الرقم ده **مفتاح المستند** في pos_test_customers، والفحص الوحيد
+//    كان إن الخانة مش فاضية. يعني:
+//    · رقم ناقص أو فيه حروف = عميلة جديدة بنقط منفصلة
+//    · نفس العميلة بـ"0101 234 5678" و"01012345678" = مستندين مختلفين
+//    والنقط بتروح للمستند الغلط ومفيش تراجع.
+// ⚠️ التحقق على **الجديد بس** — العملاء المتسجلين قبل كده بأرقام غلط
+//    بيفضلوا يفتحوا ويصرفوا نقطهم عادي (refreshCustomerInfo ماتلمستش).
+function normalizePhone(raw){
+  let v = String(raw == null ? '' : raw);
+  // أرقام هندية/فارسية → إنجليزي (الكيبورد العربي)
+  v = v.replace(/[\u0660-\u0669]/g, function(d){ return String(d.charCodeAt(0) - 0x0660); })
+       .replace(/[\u06F0-\u06F9]/g, function(d){ return String(d.charCodeAt(0) - 0x06F0); });
+  v = v.replace(/[^0-9+]/g, '');           // مسافات وشرطات وأقواس
+  if(v.indexOf('+20') === 0) v = '0' + v.slice(3);   // +201… → 01…
+  else if(v.indexOf('0020') === 0) v = '0' + v.slice(4);
+  else if(v.indexOf('20') === 0 && v.length === 12) v = '0' + v.slice(2);
+  v = v.replace(/\+/g, '');
+  if(v.length === 10 && v.indexOf('1') === 0) v = '0' + v;   // نسيت الصفر
+  return v;
+}
+// بترجّع رسالة المنع أو null لو الرقم سليم
+function phoneRejectReason(p){
+  if(!p) return 'اكتب رقم التليفون الأول';
+  if(!/^[0-9]+$/.test(p)) return 'الرقم لازم يكون أرقام بس';
+  if(p.length !== 11) return 'رقم الموبايل لازم 11 رقم — اللي كتبته ' + p.length;
+  if(!/^01[0125]/.test(p)) return 'رقم الموبايل لازم يبدأ بـ010 أو 011 أو 012 أو 015';
+  return null;
+}
+window.normalizePhone = normalizePhone;
+window.phoneRejectReason = phoneRejectReason;
+
 async function registerNewCustomer(){
-  const phone = document.getElementById('customerPhone').value.trim();
+  const raw = document.getElementById('customerPhone').value.trim();
+  const phone = normalizePhone(raw);
   const name = document.getElementById('customerName').value.trim();
-  if(!phone){ showToast('اكتب رقم التليفون الأول', 'err'); return; }
+  const _bad = phoneRejectReason(phone);
+  if(_bad){ showToast('❌ ' + _bad, 'err'); return; }
   if(!name){ showToast('اكتب اسم العميل', 'err'); return; }
+  // 🔄 لو التطبيع غيّر الرقم، نوريه للكاشير قبل ما نسجّل — عشان تتأكد
+  if(phone !== raw){
+    if(!confirm('الرقم هيتسجل كده:\n\n' + phone + '\n\nصح؟')) return;
+    document.getElementById('customerPhone').value = phone;
+  }
   try{
     await db.collection(TEST_CUSTOMERS).doc(phone).set({ name, phone, points:0, branch: currentBranch, createdAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
     document.getElementById('customerInfo').textContent = `اتسجل عميل جديد: ${name}`;
