@@ -195,7 +195,9 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
   assert(html3.indexOf('id="recurringBox"') < html3.indexOf('id="expensesList"'),
     'المتكررة فوق قايمة المصاريف');
 
-  const R = src.slice(src.indexOf('const OF_RECUR_COL'));
+  // ⚠️ من دالة العرض لآخر البلوك — مش من تعريف الثابت (اللي بقى فوق الملف
+  //    بعد إصلاح الـTDZ، فكان بيسحب startData كله معاه)
+  const R = src.slice(src.indexOf('function ofRenderRecurring'));
   assert(R.length > 0, 'بلوك المتكررة اتلقى');
 
   // ---- 🔑 شكل المصروف القديم مالوش لمسة ----
@@ -242,5 +244,14 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
     'وبتتحدّث لما مصروف يتسجل (حالة "اتدفع" بتتغير)');
 
   const sw4 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-  assert(/echarpe-office-v9/.test(sw4), 'CACHE_NAME اترفع لـv9');
+  assert(/echarpe-office-v10/.test(sw4), 'CACHE_NAME اترفع لـv10');
+}
+
+// ⚠️ TDZ: OF_RECUR_COL لازم تتعرّف قبل أول استخدام — const مبتترفعش
+{
+  const defAt = src.indexOf("const OF_RECUR_COL");
+  const useAt = src.indexOf("db.collection(OF_RECUR_COL)");
+  assert(defAt > 0 && useAt > 0, 'التعريف والاستخدام موجودين');
+  assert(defAt < useAt,
+    '🔑 التعريف قبل الاستخدام (كان بعده — الاشتراك بيرمي TDZ ويوقف باقي التحميل)');
 }
