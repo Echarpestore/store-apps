@@ -2177,6 +2177,19 @@ function ofWireHire(){
     if(!confirm('🔗 دعوة جديدة\n\n' + (brand === 'glow' ? 'Glow' : 'echarpe — ' + branch)
       + '\n' + (HIRE_ROLES[role] || role) + '\nتنتهي بعد ' + days + ' يوم\n\nتكمّل؟')) return;
     mk.disabled = true; mk.textContent = 'بيتعمل…';
+    // 🩺 تشخيص قبل الكتابة: القاعدة بتشترط دخول بإيميل وباسورد.
+    //    كل التطبيقات على نفس الدومين وبتشارك نفس جلسة المتصفح — فلو
+    //    اتفتح تطبيق الولاء أو شاشة التقييم على نفس المتصفح، الجلسة
+    //    ممكن تكون اتبدلت لحساب **مجهول** والرول يرفض وهو سليم.
+    const _u = firebase.auth().currentUser;
+    const _prov = _u ? ((_u.providerData && _u.providerData[0] && _u.providerData[0].providerId) || (_u.isAnonymous ? 'anonymous' : '?')) : 'مفيش';
+    if(!_u || _u.isAnonymous || _prov === 'anonymous'){
+      alert('⛔ الجلسة الحالية مش بإيميل\n\n'
+        + 'الدخول: ' + (_u ? (_u.isAnonymous ? 'مجهول (anonymous)' : _prov) : 'مفيش حساب داخل') + '\n\n'
+        + 'القاعدة بتشترط دخول بإيميل وباسورد. اقفل التطبيق واخرج وادخل تاني بالإيميل.');
+      mk.disabled = false; mk.textContent = '🔗 اعمل رابط دعوة';
+      return;
+    }
     try{
       await db.collection('staff_invites').doc(code).set({
         code: code, brand: brand, branch: branch, role: role,
@@ -2189,7 +2202,17 @@ function ofWireHire(){
         + '<div style="font-size:12px; color:var(--sub);">الرابط جاهز — ابعته على واتساب</div>'
         + '<div style="font-weight:900; font-size:14px; word-break:break-all; margin:7px 0;">' + esc(link) + '</div>'
         + '<button onclick="hvCopy(\'' + esc(link) + '\')" style="width:100%;">📋 انسخ الرابط</button></div>';
-    }catch(e){ alert('ماتعملش: ' + (e.code || e.message)); }
+    }catch(e){
+      // 🩺 الرسالة بتقول **مين اللي داخل** — الكود لوحده مش بيفرّق بين
+      //    "الرول مش منشور" و"الجلسة مش بإيميل"، والاتنين بيدوا نفس الكود.
+      alert('ماتعملش: ' + (e.code || e.message) + '\n\n'
+        + '— الدخول: ' + _prov + '\n'
+        + '— الإيميل: ' + ((_u && _u.email) || 'مفيش') + '\n'
+        + '— المشروع: ' + (firebase.app().options.projectId || '?') + '\n\n'
+        + (String(e.code||'').indexOf('permission') >= 0
+            ? 'الدخول بإيميل تمام، يبقى الرول اللي فيه staff_invites لسه مانشرش.'
+            : 'دي مش مشكلة صلاحيات — ابعت الرسالة دي كلها.'));
+    }
     mk.disabled = false; mk.textContent = '🔗 اعمل رابط دعوة';
   };
 }
