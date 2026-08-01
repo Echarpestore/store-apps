@@ -481,12 +481,20 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-// تسجيل دخول مجهول — مطلوب لقواعد الأمان الجديدة
+// 🔴 نفس حكاية تطبيق الولاء: الدخول المجهول كان بيدوس على جلسة الإيميل
+// بتاعة Office لأن الاستعادة غير متزامنة و`currentUser` بيرجع null في أول
+// لحظة. دلوقتي بنستنى أول إشارة من onAuthStateChanged الأول.
 const _auth = getAuth(app);
+let _anonReady = false;
 function ensureAnonAuth(){
-  if(!_auth.currentUser){ signInAnonymously(_auth).catch((e)=> console.warn('anon auth', e && e.code)); }
+  if(_auth.currentUser) return;                        // فيه جلسة — مانلمسهاش
+  if(!_anonReady) return;                              // لسه ماستنيناش الاستعادة
+  signInAnonymously(_auth).catch((e)=> console.warn('anon auth', e && e.code));
 }
-ensureAnonAuth();
+onAuthStateChanged(_auth, (u)=>{
+  _anonReady = true;
+  if(!u) ensureAnonAuth();
+});
 window.addEventListener('online', ensureAnonAuth);
 const db = getFirestore(app);
 
