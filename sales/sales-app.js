@@ -5197,30 +5197,73 @@ try{
 }catch(e){}
 
 // السلف مفتوحة النهارده؟ (يوم الفتح 15 يعني من 15 لآخر الشهر)
-function advWindowOpen(openDay, now){
+// 📅 نافذة السلف — **دائرية**: بتفتح يوم `openDay` وتفضل مفتوحة لحد يوم
+//    `closeDay` من الشهر اللي بعده.
+// 🔴 كانت "من يوم كذا لآخر الشهر" وبس — مفيش يوم قفل أصلًا.
+//    المطلوب (قرار المالك): تفتح 12 وتقفل 6.
+//      يوم 1→6    = مفتوحة (امتداد من نافذة الشهر اللي فات)
+//      يوم 7→11   = مقفولة
+//      يوم 12→آخر = مفتوحة (نافذة الشهر ده)
+function advWindowOpen(openDay, now, closeDay){
+  const od = Number(openDay) || 0;
+  if(!od) return true;                       // مفيش نافذة متظبطة = مفتوحة دايمًا
+  const cd = Number(closeDay) || 0;
   const d = (now || new Date()).getDate();
-  return !openDay || d >= openDay;
+  if(!cd) return d >= od;                    // توافق: من غير يوم قفل = زي الأول
+  if(od > cd) return (d >= od) || (d <= cd); // بتعدّي الشهر (12 → 6)
+  return d >= od && d <= cd;                 // جوه نفس الشهر (5 → 20)
 }
+// 🗓️ **شهر السلفة** — مش الشهر التقويمي.
+// قرار المالك: سلفة يوم 3 أغسطس تتحسب على سقف **يوليو** لأنها من نافذته.
+// من غير ده، الموظفة تاخد سقف يوليو كامل يوم 30، وسقف أغسطس كامل يوم 3 —
+// ضعف السقف في 4 أيام.
+function advCycleKey(now, openDay, closeDay){
+  const d = now || new Date();
+  const od = Number(openDay) || 0, cd = Number(closeDay) || 0;
+  let y = d.getFullYear(), m = d.getMonth();   // 0-based
+  // في الأيام اللي قبل يوم الفتح (امتداد النافذة السابقة) بنرجع شهر
+  if(od && cd && od > cd && d.getDate() <= cd){
+    m -= 1;
+    if(m < 0){ m = 11; y -= 1; }
+  }
+  return y + '-' + String(m + 1).padStart(2, '0');
+}
+window.advCycleKey = advCycleKey;
 // مجموع سلف الموظف الشهر ده
-function advMonthTotal(advances, empId, monthKey){
+function advMonthTotal(advances, empId, monthKey, openDay, closeDay){
   return (advances||[]).reduce((sum,a)=>{
     if(!a || a.employeeId !== empId) return sum;
-    if(String(a.date||'').slice(0,7) !== monthKey) return sum;
+    // 🗓️ المقارنة بشهر **النافذة** مش التاريخ التقويمي.
+    // 🔴 كانت `a.date.slice(0,7)` — فسلفة 3 أغسطس تاريخها 2026-08 ومش
+    //    بتتطابق مع مفتاح النافذة 2026-07، فالسقف بيتحسب ناقص والموظفة
+    //    تقدر تاخد سقفين في 4 أيام.
+    // بنستخدم cycleKey المحفوظ لو موجود (السلف الجديدة)، وإلا بنحسبه من
+    // التاريخ (السلف القديمة — توافق).
+    let key = a.cycleKey;
+    if(!key){
+      const ds = String(a.date||'');
+      if(ds.length >= 10 && openDay){
+        const [yy,mm,dd] = ds.slice(0,10).split('-').map(Number);
+        key = advCycleKey(new Date(yy, mm-1, dd), openDay, closeDay);
+      } else key = ds.slice(0,7);
+    }
+    if(key !== monthKey) return sum;
     return sum + (Number(a.amount)||0);
   }, 0);
 }
 // فحص كامل لطلب سلفة — بيرجع {ok, reason, left}
 function advCheck(cfg, advances, empId, amount, now){
-  cfg = cfg || { maxPerMonth:0, openDay:0 };
-  if(!advWindowOpen(cfg.openDay, now)){
-    return { ok:false, reason:'closed', openDay: cfg.openDay };
+  cfg = cfg || { maxPerMonth:0, openDay:0, closeDay:0 };
+  if(!advWindowOpen(cfg.openDay, now, cfg.closeDay)){
+    return { ok:false, reason:'closed', openDay: cfg.openDay, closeDay: cfg.closeDay };
   }
   if(cfg.maxPerMonth > 0){
     // 🌍 مفتاح الشهر محلي مش UTC — toISOString كانت بترجّع الشهر اللي فات
     // لأي سلفة بين 12 و2/3 الفجر أول الشهر (مصر UTC+2/+3) فالسقف بيتحسب غلط
+    // 🗓️ وبيتحسب بشهر **النافذة** مش التقويمي (قرار المالك)
     const _d = now || new Date();
-    const mk = _d.getFullYear() + '-' + String(_d.getMonth()+1).padStart(2,'0');
-    const used = advMonthTotal(advances, empId, mk);
+    const mk = advCycleKey(_d, cfg.openDay, cfg.closeDay);
+    const used = advMonthTotal(advances, empId, mk, cfg.openDay, cfg.closeDay);
     const left = Math.max(0, cfg.maxPerMonth - used);
     if(amount > left) return { ok:false, reason:'limit', left, used, max: cfg.maxPerMonth };
     return { ok:true, left: left - amount, used };
@@ -5307,7 +5350,10 @@ $('#advConfirmBtn')?.addEventListener('click', async ()=>{
   try{
     await addDoc(advancesCol, {
       employeeId: advSelectedEmp.id, employeeName: advSelectedEmp.name, branch: window.currentBranch,
-      amount, date: todayStr(), ts: Date.now()
+      amount, date: todayStr(), ts: Date.now(),
+      // 🗓️ شهر النافذة وقت التسجيل — بيتحفظ عشان الحسبة متتغيرش لو
+      //    الإعدادات اتعدّلت بعدين
+      cycleKey: advCycleKey(new Date(), (window.advCfg||{}).openDay, (window.advCfg||{}).closeDay)
     });
     $('#advanceOverlay').classList.remove('show');
     alert(`تم تسجيل سلفة ${amount} ج.م لـ ${advSelectedEmp.name} ✅`);
@@ -5687,7 +5733,8 @@ function renderAdvancesLog(){
     const od = Math.max(0, Math.min(28, Number((document.getElementById('advOpenDayInput')||{}).value) || 0));
     const orig = advBtn.textContent; advBtn.disabled = true;
     try{
-      await setDoc(doc(db,'pos_test_settings','advances_cfg'), { maxPerMonth: mx, openDay: od }, { merge:true });
+      const cdv = Math.max(0, Math.min(28, Number((document.getElementById('advCloseDayInput')||{}).value) || 0));
+      await setDoc(doc(db,'pos_test_settings','advances_cfg'), { maxPerMonth: mx, openDay: od, closeDay: cdv }, { merge:true });
       errB.textContent = ''; advBtn.textContent = 'اتحفظ ✅';
     }catch(e2){ errB.textContent = 'خطأ: ' + (e2 && e2.message ? e2.message : e2); advBtn.textContent = 'خطأ'; }
     setTimeout(()=>{ advBtn.textContent = orig; advBtn.disabled = false; }, 1800);
@@ -5698,6 +5745,8 @@ function renderAdvancesLog(){
       if(c.exists()){
         const d = c.data();
         const a = document.getElementById('advMaxInput'), b = document.getElementById('advOpenDayInput');
+        const c2 = document.getElementById('advCloseDayInput');
+        if(c2 && d.closeDay) c2.value = d.closeDay;
         if(a && d.maxPerMonth) a.value = d.maxPerMonth;
         if(b && d.openDay) b.value = d.openDay;
       }
