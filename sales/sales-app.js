@@ -782,6 +782,7 @@ const timeCfgDefaults = {
   allowedHoursWeek: 2,     // الرصيد المسموح في الأسبوع
   allowedHoursMonth: 7,    // الرصيد المسموح في الشهر (= يوم خصم: أول ما توصله تخرج من المكافأة)
   maxLateHoursPerDay: 0,   // 🧢 سقف عقوبة التأخير في اليوم الواحد (0 = مفيش سقف — الأدمن يحدده)
+  timeAmnestyUntil: '',    // 🩹 عفو شامل: أي رصيد بتاريخه ≤ ده مبيتحسبش خالص
   earlyMinPerHour: 10,     // 🚪 الانصراف بدري: كل كام دقيقة = ساعة (زي التأخير)
   absenceHours: 7,         // 🚫 غياب بدون عذر = كام ساعة رصيد (7 = خروج فوري من المكافأة)
   autoCloseBreakMult: 2    // البريك بيتقفل تلقائي بعد كام ضعف من مدته
@@ -860,7 +861,7 @@ function dailyCleanFrame(empId, dateKey, credit, shiftRows){
   const attended = (shiftRows || []).some(s => s.employeeId === empId && s.clockInTs
                     && todayStr(new Date(s.clockInTs)) === dateKey);
   if(!attended) return false;
-  const hours = (credit || []).filter(x => x && x.employeeId === empId && !x.excused && x.date === dateKey)
+  const hours = (credit || []).filter(x => x && x.employeeId === empId && tcCounts(x) && x.date === dateKey)
                               .reduce((a, x) => a + (Number(x.hours) || 0), 0);
   return hours === 0;
 }
@@ -877,7 +878,7 @@ function weeklyCleanFrame(empId, weekStartDate, credit, shiftRows, cfg){
     (shiftRows || []).filter(s => s.employeeId === empId && s.clockInTs && daySet.has(todayStr(new Date(s.clockInTs))))
                      .map(s => todayStr(new Date(s.clockInTs))));
   if(attendedDays.size < (Number(cfg.minWeekDays) || 5)) return false;
-  const hours = (credit || []).filter(x => x && x.employeeId === empId && !x.excused && daySet.has(x.date))
+  const hours = (credit || []).filter(x => x && x.employeeId === empId && tcCounts(x) && daySet.has(x.date))
                               .reduce((a, x) => a + (Number(x.hours) || 0), 0);
   return hours === 0;
 }
@@ -975,6 +976,23 @@ function absenceHoursFrom(cfg){
   return Number(cfg.absenceHours) || 0;
 }
 
+// 🩹 العفو الشامل — «اللي فات كله، ومن بكرا نحسب»
+// ليه إعداد بتاريخ مش تعليم البنود واحد واحد: البند ممكن يتسجّل **بعد** ما
+// العفو يتنفّذ وهو على يوم قديم (شيفت اتقفل متأخر، بند اتزرع من الأدمن) —
+// التعليم اليدوي كان هيفوّته وهو يتخصم. التاريخ بيغطي أي بند قديم للأبد.
+// المقارنة نصية لأن YYYY-MM-DD بترتّب نصيًا صح.
+function tcAmnestied(dateStr, cfg){
+  cfg = cfg || (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
+  const until = String((cfg && cfg.timeAmnestyUntil) || '').trim();
+  const d = String(dateStr || '').trim();
+  if(!until || !d) return false;       // بند من غير تاريخ **بيتحسب** (مش بيفلت بالعفو)
+  return d <= until;
+}
+// بند رصيد وقت بيتحسب في الخصم/المكافأة ولا لأ
+function tcCounts(x, cfg){
+  return !!x && !x.excused && !tcAmnestied(x.date, cfg);
+}
+
 // 🩺 تطبيق العذر: بيصفّر ساعات السجل ويحتفظ بيه للتاريخ
 // entry = {type, hours, excused, excuseReason}
 function applyExcuse(entry, reason){
@@ -1046,6 +1064,8 @@ window.breakHoursFrom = breakHoursFrom;
 window.swapHoursFrom = swapHoursFrom;
 window.earlyLeaveHours = earlyLeaveHours;
 window.absenceHoursFrom = absenceHoursFrom;
+window.tcAmnestied = tcAmnestied;
+window.tcCounts = tcCounts;
 window.monthlyTimeSummary = monthlyTimeSummary;
 window.rewardEligibility = rewardEligibility;
 window.commitmentFromHours = commitmentFromHours;
@@ -2632,7 +2652,7 @@ function renderRewardScoreCard(empId){
   // الالتزام: من رصيد الوقت الشهري (النظام الجديد)
   const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const cfg = window.timeCfg || timeCfgDefaults;
-  const myHours = (window.allTimeCredit||[]).filter(x=> x.employeeId===empId && !x.excused && String(x.date||'').startsWith(mk)).reduce((a,x)=> a+(Number(x.hours)||0),0);
+  const myHours = (window.allTimeCredit||[]).filter(x=> x.employeeId===empId && tcCounts(x) && String(x.date||'').startsWith(mk)).reduce((a,x)=> a+(Number(x.hours)||0),0);
   const commit = window.rewardEligibility(myHours, 'month', cfg).commitPct;
   const res = computeRewardScore({ commitmentPct: commit, salesValue: myPts, maxSalesValue: maxPts, ratingPct });
   const bar = (val, color)=>`<div style="flex:1; height:7px; background:var(--panel2); border-radius:99px; overflow:hidden;"><div style="width:${Math.max(2,val)}%; height:100%; background:${color};"></div></div>`;
@@ -2905,7 +2925,7 @@ function computeRaceStatus(emp, periodType){
     ? (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'))
     : null;
   const credit = (window.allTimeCredit||[]).filter(x=>{
-    if(x.employeeId!==emp.id || x.excused) return false;
+    if(x.employeeId!==emp.id || !tcCounts(x)) return false;
     const t = new Date((x.date||'')+'T00:00:00').getTime();
     return t >= range.start.getTime() && t <= range.end.getTime();
   });
@@ -3022,7 +3042,7 @@ async function maybeAwardPeriod(emp, range, type, label){
   // 🚪 بوابة الالتزام الجديدة: رصيد الوقت في الفترة لازم مايعدّيش المسموح (90% التزام)
   const cfg = window.timeCfg || timeCfgDefaults;
   const credit = (window.allTimeCredit||[]).filter(x=>{
-    if(x.employeeId!==emp.id || x.excused) return false;
+    if(x.employeeId!==emp.id || !tcCounts(x)) return false;
     const t = new Date((x.date||'')+'T00:00:00').getTime();
     return t >= range.start.getTime() && t <= range.end.getTime();
   });
@@ -3670,6 +3690,35 @@ function renderScheduleList(){
 }
 
 // ---------- TASK ASSIGNMENT (admin) ----------
+// 📅 مفتاح الأسبوع — **لازم يطابق Office حرف بحرف**، وإلا كل تطبيق يكتب
+//    مستند أسبوع مختلف لنفس الأسبوع والتاريخ يتفرتك.
+//    نفس القواعد: الأسبوع يبدأ السبت · فاصلة يوم الشغل 6 صباحًا ·
+//    التوقيت ثابت على القاهرة (مش ساعة الجهاز).
+const SL_WEEK_START = 6;      // 0=الأحد … 6=السبت
+const SL_DAY_CUT    = 6;      // نفس الافتراضي بتاع pos_test_settings/day_cfg.startHour
+const SL_TZ         = 'Africa/Cairo';
+function slShopParts(ts){
+  const f = new Intl.DateTimeFormat('en-GB', { timeZone: SL_TZ, year:'numeric',
+    month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+  const o = {};
+  f.formatToParts(new Date(ts)).forEach(p=>{ o[p.type] = p.value; });
+  return { y:+o.year, m:+o.month, d:+o.day, hh:+(o.hour === '24' ? '0' : o.hour) };
+}
+function slWeekStartMs(){
+  let ms = Date.now();
+  if(slShopParts(ms).hh < SL_DAY_CUT) ms -= 86400000;   // فجر السبت لسه جمعة شغلًا
+  const p = slShopParts(ms);
+  const todayUTC = Date.UTC(p.y, p.m - 1, p.d);
+  const back = (new Date(todayUTC).getUTCDay() - SL_WEEK_START + 7) % 7;
+  return todayUTC - back * 86400000;
+}
+function slWeekKey(){
+  const d = new Date(slWeekStartMs());
+  return 'w' + d.getUTCFullYear() + '-'
+    + String(d.getUTCMonth() + 1).padStart(2,'0') + '-'
+    + String(d.getUTCDate()).padStart(2,'0');
+}
+window.slWeekKey = slWeekKey;   // 🔑 القاعدة الذهبية: بلوكات <script> متعرفش const بعضها
 function renderTaskAssignList(){
   const wrap = $('#taskAssignList');
   if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
@@ -3690,10 +3739,17 @@ function renderTaskAssignList(){
       const emp = allEmployees.find(e=> e.id === btn.dataset.id);
       if(!desc || !emp) return;
       try{
-        await setDoc(doc(db,'sales_tasks', btn.dataset.id), {
+        // 🔴 قبل كده: التاسك كان بيتكتب في `sales_tasks` بس — من غير `weekKey`
+        //    ومن غير مستند أسبوع. فتطبيق Office (اللي بيقرا `sales_task_weeks`)
+        //    مكانش بيشوف التاسكات المتحددة من هنا **خالص**، والخانة تفضل فاضية.
+        //    دلوقتي بنكتب الاتنين بنفس شكل Office بالظبط.
+        const wk = slWeekKey();
+        const payload = {
           employeeId: btn.dataset.id, employeeName: emp.name, branch: emp.branch,
-          taskDescription: desc, assignedAt: Date.now()
-        });
+          taskDescription: desc, weekKey: wk, assignedAt: Date.now(), assignedBy: 'sales'
+        };
+        await setDoc(doc(db,'sales_tasks', btn.dataset.id), payload);
+        await setDoc(doc(db,'sales_task_weeks', btn.dataset.id + '__' + wk), payload, { merge:true });
         btn.textContent = 'اتحفظت ✅';
         setTimeout(()=> btn.textContent = 'حفظ', 1500);
       }catch(err){ console.error('تعذر حفظ التاسك', err); }
@@ -4708,7 +4764,7 @@ function computeSalary(emp, periodStart, end){
   // كل hoursPerDay (7) ساعات غير معذورة في الفترة = يوم × قيمة اليوم (بسقف اختياري).
   const _tcfg = (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
   const tcEntries = ((typeof window !== 'undefined' && window.allTimeCredit) || []).filter(x=>{
-    if(x.employeeId !== emp.id || x.excused) return false;
+    if(x.employeeId !== emp.id || !tcCounts(x, _tcfg)) return false;
     const t = new Date((x.date||'') + 'T00:00:00').getTime();
     return t >= start.getTime() && t <= end.getTime();
   });

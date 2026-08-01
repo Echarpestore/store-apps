@@ -290,7 +290,7 @@ window.renderTimeCreditLog = function(){
   const perDay = Number(cfg.hoursPerDay)||7;
 
   wrap.innerHTML = emps.map(emp=>{
-    const mine = rows.filter(r=> r.employeeId===emp.id && !r.excused);
+    const mine = rows.filter(r=> r.employeeId===emp.id && (window.tcCounts ? window.tcCounts(r) : !r.excused));
     const totalH = mine.reduce((x,r)=> x+(Number(r.hours)||0), 0);
     const days = Math.floor(totalH/perDay);
     const eligible = totalH <= (Number(cfg.allowedHoursMonth)||7);
@@ -375,7 +375,7 @@ window.openSwapDeduction = function(){
   const cfg = window.timeCfg || window.timeCfgDefaults;
   const mk = new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
   const priorSwaps = (window.allTimeCredit||[]).filter(x=>
-    x.employeeId===emp.id && x.type==='swap' && !x.excused && String(x.date||'').startsWith(mk)).length;
+    x.employeeId===emp.id && x.type==='swap' && (window.tcCounts ? window.tcCounts(x) : !x.excused) && String(x.date||'').startsWith(mk)).length;
   const hours = window.swapHoursFrom(priorSwaps + 1, cfg) - window.swapHoursFrom(priorSwaps, cfg);
   const note = t==='1' ? 'تبديل شيفت' : 'تبديل يوم إجازة';
   window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
@@ -613,9 +613,27 @@ console.log('%c✅ Script fully loaded (all ' + document.querySelectorAll('scrip
 // 🔑 العذر مش مسح: بيصفّر hours ويحفظ originalHours ويعلّم excused —
 //    البند بيفضل في السجل، ومحرك المرتب وبوابة الـ90% بيستبعدوا excused.
 // ============================================================
+// اليوم اللي بعد تاريخ مكتوب YYYY-MM-DD
+function _nextDayStr(d){
+  const p = String(d||'').split('-').map(Number);
+  const x = new Date(Date.UTC(p[0], (p[1]||1)-1, p[2]||1) + 86400000);
+  return x.getUTCFullYear() + '-' + String(x.getUTCMonth()+1).padStart(2,'0')
+       + '-' + String(x.getUTCDate()).padStart(2,'0');
+}
+window._nextDayStr = _nextDayStr;
+
 window.renderGraceDay = function(){
   const wrap = document.querySelector('#graceDayPanel'); if(!wrap) return;
-  const d = wrap.dataset.day || window.todayStr();
+  // 🕕 يوم الشغل مش اليوم التقويمي: الساعة 5 الفجر إحنا لسه في يوم امبارح
+  //    شغلًا، والشيفتات المفتوحة بتاعته. الافتراضي كان بيفتح على تاريخ اليوم
+  //    التقويمي فيطلّع صفر.
+  //    (الفاصلة 6 — نفس اللي ماشي عليه التقفيل والتقارير في الـPOS.)
+  const _bizToday = function(){
+    const n = new Date();
+    if(n.getHours() < 6) n.setDate(n.getDate() - 1);
+    return window.todayStr(n);
+  };
+  const d = wrap.dataset.day || _bizToday();
   const br = window.currentBranch;
 
   // 🔴 مستند الشيفت **مفيهوش dateKey** — التاريخ بيتحسب من clockInTs.
@@ -633,9 +651,18 @@ window.renderGraceDay = function(){
     return s && s.branch === br && s.clockInTs && !s.clockOutTs && _dayOf(s.clockInTs) === d;
   });
   const credits = (window.allTimeCredit||[]).filter(function(x){
-    return x && x.branch === br && x.date === d && !x.excused;
+    return x && x.branch === br && x.date === d && (window.tcCounts ? window.tcCounts(x) : !x.excused);
   });
   const hours = credits.reduce(function(n,x){ return n + (Number(x.hours)||0); }, 0);
+  // 🩹 العفو الشامل: كل رصيد **غير معذور** بتاريخ ≤ اليوم المختار
+  const _cfg = window.timeCfg || window.timeCfgDefaults || {};
+  const amnUntil = String(_cfg.timeAmnestyUntil || '');
+  const allPast = (window.allTimeCredit||[]).filter(function(x){
+    return x && x.branch === br && !x.excused && String(x.date||'') && String(x.date) <= d
+        && !(amnUntil && String(x.date) <= amnUntil);
+  });
+  const allPastHours = allPast.reduce(function(n,x){ return n + (Number(x.hours)||0); }, 0);
+  const allPastEmps = Object.keys(allPast.reduce(function(o,x){ o[x.employeeId]=1; return o; }, {})).length;
   const byType = {};
   credits.forEach(function(x){ byType[x.type] = (byType[x.type]||0) + 1; });
   const LBL = { late:'⏰ تأخير', break:'☕ بريك', swap:'🔄 تبديل', early:'🚪 انصراف بدري', absence:'🚫 غياب' };
@@ -669,7 +696,28 @@ window.renderGraceDay = function(){
         : '<div style="color:#5ec88a; font-size:12.5px;">✅ مفيش بنود محتاجة عذر</div>')
     + '<div style="font-size:11px; color:var(--sub); margin-top:10px; line-height:1.8;">'
     +   'العذر بيصفّر الساعات وبيحتفظ بالأصلي — البند بيفضل في السجل للمراجعة،'
-    +   ' ومش بيتخصم من المرتب ولا بيأثر على بوابة الالتزام.</div>';
+    +   ' ومش بيتخصم من المرتب ولا بيأثر على بوابة الالتزام.</div>'
+    // 🩹 عفو شامل — «اللي فات كله، ومن بكرا نحسب»
+    + '<div style="border-top:1px solid var(--line); margin-top:13px; padding-top:12px;">'
+    +   '<div style="font-weight:800; font-size:13px; margin-bottom:6px;">🩹 عفو شامل عن كل اللي فات</div>'
+    +   (amnUntil
+        ? ('<div style="background:var(--panel2); border:1px solid #5a4a2a; border-radius:10px; padding:10px; font-size:12.5px; color:var(--gold);">'
+           + 'سارٍ دلوقتي: كل رصيد لحد <b>' + amnUntil + '</b> ملغي — الحساب بيبدأ من اليوم اللي بعده.'
+           + '<button id="gdAmnUndo" style="display:block; width:100%; margin-top:9px; padding:8px; border:1px solid var(--line);'
+           + ' border-radius:9px; background:var(--panel); color:var(--sub); font-family:\'Cairo\'; font-weight:700; cursor:pointer;">'
+           + '↩️ ألغِ العفو ورجّع الحساب</button></div>')
+        : (allPast.length
+           ? ('<div style="font-size:12.5px; color:var(--sub); margin-bottom:9px;">'
+              + 'المتراكم لحد ' + d + ': <b style="color:#e0796b;">' + allPast.length + ' بند · '
+              + allPastHours + ' ساعة · ' + allPastEmps + ' موظف</b></div>'
+              + '<button id="gdAmnBtn" style="width:100%; padding:12px; border:none; border-radius:11px;'
+              + ' background:linear-gradient(180deg,#e0a23f,#b87a1c); color:#241a05; font-family:\'Cairo\';'
+              + ' font-weight:800; cursor:pointer;">🩹 سماح عن الـ' + allPastHours + ' ساعة كلها</button>')
+           : '<div style="color:#5ec88a; font-size:12.5px;">✅ مفيش رصيد متراكم</div>'))
+    +   '<div style="font-size:11px; color:var(--sub); margin-top:9px; line-height:1.8;">'
+    +     'بيتسجّل كتاريخ في الإعدادات — فأي بند قديم يتسجّل متأخر بيتغطّى كمان.'
+    +     ' البنود بتفضل في السجل، والحساب بيبدأ من أول اليوم اللي بعده.</div>'
+    + '</div>';
 
   const dt = wrap.querySelector('#gdDate');
   if(dt) dt.onchange = function(){ wrap.dataset.day = dt.value; window.renderGraceDay(); };
@@ -709,6 +757,47 @@ window.renderGraceDay = function(){
     }
     alert('اتقفل ' + ok + ' شيفت' + (fail ? (' · فشل ' + fail) : '') + ' ✅');
     cb.disabled = false;
+    window.renderGraceDay();
+  };
+
+  const ab = wrap.querySelector('#gdAmnBtn');
+  if(ab) ab.onclick = async function(){
+    if(!confirm('🩹 سماح شامل عن كل رصيد الوقت لحد ' + d + '\n\n'
+      + allPast.length + ' بند · ' + allPastHours + ' ساعة · ' + allPastEmps + ' موظف\n\n'
+      + 'مش هيتخصم أي حاجة منهم، ومش هيأثروا على بوابة الالتزام.\n'
+      + 'الحساب بيبدأ من أول ' + _nextDayStr(d) + '.\n\nتكمّل؟')) return;
+    ab.disabled = true; ab.textContent = 'بيتسجّل…';
+    try{
+      // التاريخ في الإعدادات هو الحاسم — بيغطي حتى البنود اللي هتتسجّل بعدين
+      await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', br),
+        { timeCfg: { timeAmnestyUntil: d } }, { merge:true });
+      // وبنعلّم البنود الموجودة كمان — عشان السجل واللوحات تبان متسقة
+      let ok = 0;
+      for(const x of allPast){
+        try{
+          await window.fbUpdateDoc(window.fbDoc(window.db,'sales_time_credit', x.id), {
+            hours: 0, originalHours: (x.originalHours != null ? x.originalHours : x.hours),
+            excused: true, excuseReason: 'سماح شامل لحد ' + d, excusedAt: Date.now(),
+            excusedBy: 'amnesty'
+          });
+          ok++;
+        }catch(_e){ console.warn('amnesty mark', _e); }
+      }
+      alert('اتسجّل السماح ✅\nاتعلّم ' + ok + ' بند من ' + allPast.length
+        + (ok < allPast.length ? '\n(الباقي مش هيتخصم برضه — التاريخ في الإعدادات هو الحاسم)' : ''));
+    }catch(e){ alert('ماتسجّلش: ' + (e.code || e.message)); }
+    ab.disabled = false;
+    window.renderGraceDay();
+  };
+
+  const au = wrap.querySelector('#gdAmnUndo');
+  if(au) au.onclick = async function(){
+    if(!confirm('هترجّع حساب رصيد الوقت من أول الأيام تاني؟\n\n'
+      + 'البنود اللي اتعلّمت «معذورة» بالسماح هتفضل معذورة — دي محتاجة رفع يدوي.')) return;
+    try{
+      await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', br),
+        { timeCfg: { timeAmnestyUntil: '' } }, { merge:true });
+    }catch(e){ alert('ماتغيّرش: ' + (e.code || e.message)); }
     window.renderGraceDay();
   };
 
