@@ -186,6 +186,20 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
     '💰 محرك المرتب بيستبعد المعذور');
   assert(/!x\.excused/.test(appSrc), 'وبوابة الالتزام كمان');
 
+  // ---- 🕕 الافتراضي بيوم الشغل مش التقويمي ----
+  assert(/n\.getHours\(\) < 6/.test(g),
+    '🕕 الساعة 5 الفجر = لسه يوم امبارح شغلًا (كان بيفتح على تاريخ النهاردة ويطلّع صفر)');
+  assert(/_bizToday\(\)/.test(g), 'والافتراضي بيستخدمه');
+  {
+    const biz = (h)=>{ const n = new Date(2026,7,1,h,0);
+      if(n.getHours() < 6) n.setDate(n.getDate()-1);
+      return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); };
+    assertEq(biz(5),  '2026-07-31', 'الساعة 5 الفجر → يوم امبارح');
+    assertEq(biz(0),  '2026-07-31', 'ونص الليل كمان');
+    assertEq(biz(7),  '2026-08-01', 'وبعد الفاصلة → اليوم الجديد');
+    assertEq(biz(23), '2026-08-01', 'و11 بالليل على يومه');
+  }
+
   // ---- 🔴 الفلترة بالتاريخ: مستند الشيفت مفيهوش dateKey ----
   assert(!/s\.dateKey === d/.test(g),
     '🔴 الفلترة بـdateKey اتشالت — الحقل ده مش موجود في مستند الشيفت (بتاع البريكات)');
@@ -226,4 +240,23 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
 
   // ---- موصّلة ----
   assert(/renderGraceDay/.test(appSrc), 'اللوحة موصّلة في sales-app.js');
+}
+
+// ============================================================
+// 🔴 FIRESTORE INTERNAL ASSERTION FAILED: Unexpected state
+// الشكوى: الخطأ ده بيظهر في sales أثناء الاعتماد، وبيفضل لحد ما التطبيق يتقفل.
+// السبب: enableIndexedDbPersistence من غير synchronizeTabs — تبويبين من نفس
+// التطبيق (أو الأيقونة المثبّتة + المتصفح) بيتعاركوا على نفس قاعدة البيانات
+// المحلية. الـPOS بيستخدمها وsales كان لأ.
+// ============================================================
+{
+  const fs2 = require('fs'), path2 = require('path');
+  const app2 = fs2.readFileSync(path2.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+  assert(/enableIndexedDbPersistence\(db, \{ synchronizeTabs: true \}\)/.test(app2),
+    '🔑 synchronizeTabs مفعّلة — التبويبات بتتشارك الكاش بدل ما تتعارك');
+  assert(!/enableIndexedDbPersistence\(db\)\.catch/.test(app2),
+    'والشكل القديم اتشال');
+  // الـPOS كان بيعملها صح من الأول — نتأكد إنها لسه كده
+  const core2 = fs2.readFileSync(path2.resolve(__dirname,'..','pos','pos-core.js'),'utf8');
+  assert(/synchronizeTabs: true/.test(core2), 'والـPOS لسه عليها');
 }

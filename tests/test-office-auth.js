@@ -346,5 +346,5 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
     'والكميات (عدد القطع) فضلت ظاهرة — مش سرّية');
 
   const sw7 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
-  assert(/echarpe-office-v12/.test(sw7), 'CACHE_NAME اترفع لـv12');
+  assert(/echarpe-office-v13/.test(sw7), 'CACHE_NAME اترفع لـv13');
 }
