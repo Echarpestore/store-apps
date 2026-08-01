@@ -192,3 +192,70 @@ const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
     'سلفة أول الشهر بتتحسب على الشهر الجديد (مش UTC)');
   assertEq(S.advMonthTotal(advances, 'e1', '2026-08'), 500, 'advMonthTotal بمفتاح محلي');
 }
+
+// ============================================================
+// 📅 نافذة السلف الدائرية — تفتح 12 وتقفل 6
+// 🔴 كانت "من يوم كذا لآخر الشهر" وبس — مفيش يوم قفل أصلًا.
+// وقرار المالك: سلفة يوم 3 أغسطس تتحسب على سقف **يوليو** لأنها من نافذته.
+// من غير ده الموظفة تاخد سقف يوليو كامل يوم 30 وسقف أغسطس كامل يوم 3.
+// ============================================================
+{
+  const fsA = require('fs'), pathA = require('path'), vmA = require('vm');
+  const srcA = fsA.readFileSync(pathA.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
+  const i = srcA.indexOf('function advWindowOpen'), j = srcA.indexOf('function advCheck');
+  assert(i > 0 && j > i, 'بلوك السلف اتلقى');
+  const box = { Number:Number, String:String, Date:Date, window:{} };
+  vmA.createContext(box);
+  vmA.runInContext(srcA.slice(i, j), box);
+  const wo  = (od,d,cd)=> vmA.runInContext(`advWindowOpen(${od}, new Date(2026,6,${d}), ${cd})`, box);
+  const ck  = (y,m,d,od,cd)=> vmA.runInContext(`advCycleKey(new Date(${y},${m},${d}), ${od}, ${cd})`, box);
+  const amt = (arr,id,mk,od,cd)=> vmA.runInContext(
+    `advMonthTotal(${JSON.stringify(arr)}, ${JSON.stringify(id)}, ${JSON.stringify(mk)}, ${od}, ${cd})`, box);
+
+  // ---- النافذة ----
+  [1,3,6].forEach(d=> assert(wo(12,d,6) === true,  `يوم ${d}: مفتوحة (امتداد الشهر اللي فات)`));
+  [7,9,11].forEach(d=> assert(wo(12,d,6) === false, `🔒 يوم ${d}: مقفولة`));
+  [12,20,31].forEach(d=> assert(wo(12,d,6) === true, `يوم ${d}: مفتوحة`));
+  assertEq(wo(0,9,0), true, 'من غير إعداد = مفتوحة دايمًا');
+  assertEq(wo(12,9,0), false, 'توافق: يوم فتح من غير قفل = زي الأول');
+  assertEq(wo(12,20,0), true, 'وبعد يوم الفتح مفتوحة');
+  assertEq(wo(5,10,20), true, 'نافذة جوه نفس الشهر (5→20)');
+  assertEq(wo(5,25,20), false, 'وبرّاها مقفولة');
+
+  // ---- 🗓️ شهر النافذة ----
+  assertEq(ck(2026,6,15,12,6), '2026-07', '15 يوليو → سقف يوليو');
+  assertEq(ck(2026,6,30,12,6), '2026-07', '30 يوليو → يوليو');
+  assertEq(ck(2026,7,3,12,6),  '2026-07', '🔑 3 أغسطس → سقف **يوليو** (قرار المالك)');
+  assertEq(ck(2026,7,6,12,6),  '2026-07', 'و6 أغسطس آخر يوم في نافذة يوليو');
+  assertEq(ck(2026,7,12,12,6), '2026-08', 'و12 أغسطس → نافذة أغسطس الجديدة');
+  assertEq(ck(2027,0,3,12,6),  '2026-12', '🎊 3 يناير → ديسمبر (رأس السنة)');
+  assertEq(ck(2026,7,3,0,0),   '2026-08', 'من غير إعداد = الشهر التقويمي');
+
+  // ---- السقف بيتحسب بشهر النافذة ----
+  const advs = [
+    { employeeId:'a', amount:300, date:'2026-07-20', cycleKey:'2026-07' },
+    { employeeId:'a', amount:200, date:'2026-08-03', cycleKey:'2026-07' },  // من نافذة يوليو
+    { employeeId:'a', amount:100, date:'2026-08-15', cycleKey:'2026-08' },
+    { employeeId:'b', amount:900, date:'2026-07-20', cycleKey:'2026-07' }
+  ];
+  assertEq(amt(advs,'a','2026-07',12,6), 500,
+    '🔑 سلفة 3 أغسطس محسوبة على يوليو (300+200) — مش على أغسطس');
+  assertEq(amt(advs,'a','2026-08',12,6), 100, 'وأغسطس فيها المتاخد بعد يوم 12 بس');
+  assertEq(amt(advs,'b','2026-07',12,6), 900, 'وكل موظفة لوحدها');
+
+  // ---- توافق: السلف القديمة من غير cycleKey ----
+  const old = [{ employeeId:'a', amount:250, date:'2026-08-03' }];
+  assertEq(amt(old,'a','2026-07',12,6), 250,
+    '⚠️ السلف القديمة (من غير cycleKey) بيتحسب شهرها من التاريخ');
+  assertEq(amt(old,'a','2026-08',12,6), 0, 'ومش بتتعد مرتين');
+
+  // ---- موصّل ----
+  assert(/advWindowOpen\(cfg\.openDay, now, cfg\.closeDay\)/.test(srcA),
+    'الفحص بيمرّر يوم القفل');
+  assert(/advCycleKey\(_d, cfg\.openDay, cfg\.closeDay\)/.test(srcA),
+    'والسقف بيتحسب بشهر النافذة');
+  assert(/cycleKey: advCycleKey\(new Date\(\)/.test(srcA),
+    '🗓️ وكل سلفة بتتسجل بشهر نافذتها — الحسبة متتغيرش لو الإعدادات اتعدّلت');
+  const html = fsA.readFileSync(pathA.resolve(__dirname,'..','sales','index.html'),'utf8');
+  assert(/id="advCloseDayInput"/.test(html), 'وخانة يوم القفل في الإعدادات');
+}
