@@ -646,84 +646,105 @@ body.on-dashboard .badge-test{ display:block; }
 
 .customer-row{display:flex;gap:8px;margin:8px 0 4px;}
 /* ============================================================
-   🎯 خانة العميل — ارتفاع ثابت ومفيش أي حركة
-   سطر الرقم فوق، وتحته شريط واحد: الهوية على الشمال ومكان الزرار
-   ثابت على اليمين. الشريط موجود دايمًا (محجوز) فمفيش زقّ ولا سكرول.
+   🎯 خانة العميل — **خط واحد** لا غير
+   المربع الملوّن فيه بيانات العميل بس · وأيقونة «يكتب رقمه» وزرار
+   الاستبدال برّه المربع على نفس السطر. خانة الرقم طويلة وهي فاضية،
+   وبتقصر لما العميل يبان عشان تفسح للاسم والنقط.
+   الأيقونة آخر السطر دايمًا فمكانها ثابت مهما ظهر أو اختفى.
    ============================================================ */
+.cust-line{ display:flex; align-items:center; gap:7px; margin:5px 0 3px; min-width:0; }
+
 #custBox{
-  border:1.5px solid #e1e4ea !important; border-radius:12px !important;
-  background:#fbfcfd !important; padding:7px 8px !important; margin:5px 0 3px !important;
-  opacity:1 !important; transition:border-color .2s, background .2s;
+  flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:7px;
+  border:1.5px solid #e1e4ea !important; border-radius:11px !important;
+  background:#fbfcfd !important; padding:4px 6px 4px 4px !important; margin:0 !important;
+  opacity:1 !important; transition:border-color .18s, background .18s;
 }
 #custBox.st-found{ border-color:#5cb377 !important; background:#f2fbf5 !important; }
 #custBox.st-new  { border-color:#e0a33f !important; background:#fffaf0 !important; }
 #custBox.st-bad  { border-color:#e07b7b !important; background:#fff5f5 !important; }
 
-.cust-row{ display:flex; gap:7px; align-items:center; }
+/* 📱 طويلة وهي فاضية · بتقصر أول ما العميل يبان */
 #customerPhone{
-  flex:1 1 auto !important; min-width:0 !important;
-  padding:8px 12px !important; border-radius:9px !important;
+  flex:1 1 auto !important; min-width:110px !important;
+  padding:7px 11px !important; border-radius:8px !important;
   border:1.5px solid #d8dce4 !important; background:#fff !important;
-  font-size:15px !important; font-weight:800 !important; letter-spacing:.5px;
-  direction:ltr; text-align:right;
+  font-size:14.5px !important; font-weight:800 !important; letter-spacing:.4px;
+  direction:ltr; text-align:right; transition:flex-basis .18s;
 }
 #customerPhone:focus{ outline:none; border-color:#5b9bd5 !important; }
+#custBox.st-found #customerPhone,
+#custBox.st-new   #customerPhone,
+#custBox.st-bad   #customerPhone{ flex:0 0 132px !important; }
 #custBox.st-found #customerPhone{ border-color:#5cb377 !important; color:#14663a !important; }
 #custBox.st-new   #customerPhone{ border-color:#e0a33f !important; color:#8a5200 !important; }
 #custBox.st-bad   #customerPhone{ border-color:#e07b7b !important; color:#a33 !important; }
 
-/* الزراير بمقاسات ثابتة — مبتتحركش لما حاجة تظهر أو تختفي */
-#custClearBtn, #custCapBtn{
-  flex:0 0 auto; border:1.5px solid #d8dce4; background:#fff; color:#4a5160;
-  border-radius:9px; cursor:pointer; font-weight:800; font-family:'Cairo';
-  font-size:13px; padding:8px 11px; white-space:nowrap; line-height:1;
+/* 👤 الاسم — بياخد الباقي وبيتقص بنقط لو طويل */
+#customerInfo{
+  flex:1 1 auto; min-width:0; font-size:13px !important; font-weight:800;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  padding:0 !important; max-height:none !important; color:#6b7280 !important;
 }
-#custClearBtn{ width:40px; visibility:hidden; }     /* مكانه محجوز دايمًا */
-#custClearBtn.on{ visibility:visible; }
-#custClearBtn:hover, #custCapBtn:hover{ background:#f2f5f9; }
+#custBox.st-found #customerInfo{ color:#14663a !important; }
+#custBox.st-new   #customerInfo{ color:#8a5200 !important; }
+#custBox.st-bad   #customerInfo{ color:#a33 !important; }
 
-/* الشريط: ارتفاع ثابت، مفيش overflow ولا سكرول */
-.cust-band{
-  display:flex; align-items:center; gap:7px; margin-top:6px;
-  height:38px; min-height:38px;
+/* 💳 النقط — شارة صغيرة، بتبان بس لما يكون فيه عميل */
+#custPts{
+  flex:0 0 auto; display:none; font-size:12.5px; font-weight:900;
+  background:#fff; border:1.5px solid #7fd0a0; color:#14663a;
+  border-radius:999px; padding:4px 10px; white-space:nowrap;
 }
-.customer-info{
-  flex:1 1 auto; min-width:0; font-size:12.5px !important; font-weight:800;
-  color:#6b7280 !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  padding:0 !important; max-height:none !important;
-}
-#custBox.st-found .customer-info{ color:#14663a !important; }
-#custBox.st-new   .customer-info{ color:#8a5200 !important; }
-#custBox.st-bad   .customer-info{ color:#a33 !important; }
+#custBox.st-found #custPts{ display:inline-block; }
+
 #customerName{
-  flex:0 0 46%; min-width:0; display:none;
-  padding:8px 11px !important; border-radius:9px !important;
+  flex:1 1 auto; min-width:0; display:none;
+  padding:7px 10px !important; border-radius:8px !important;
   border:1.5px solid #e0a33f !important; background:#fff !important;
-  font-size:14px !important; font-weight:700 !important;
+  font-size:13.5px !important; font-weight:700 !important;
 }
 #customerName:focus{ outline:none; box-shadow:0 0 0 3px rgba(224,163,63,.18); }
 #custBox.st-new #customerName{ display:block; }
+#custBox.st-new #customerInfo{ flex:0 0 auto; }
 
-/* مكان الزرار — عرض ثابت، والزرار بيظهر جواه وقت الحاجة */
-.cust-act{ flex:0 0 186px; display:flex; justify-content:flex-end; }
-.cust-act > *{ width:100%; }
-.cust-act button{
-  width:100%; padding:9px 12px; border-radius:9px; border:none; cursor:pointer;
-  font-family:'Cairo'; font-weight:900; font-size:13.5px; white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; line-height:1.2;
+/* ✕ جوه المربع، مكانه محجوز فمفيش حاجة بتتحرك */
+#custClearBtn{
+  flex:0 0 auto; width:30px; height:30px; visibility:hidden;
+  border:1.5px solid #d8dce4; background:#fff; color:#7a8090; border-radius:8px;
+  cursor:pointer; font-weight:900; font-family:'Cairo'; font-size:13px; line-height:1; padding:0;
 }
-.cust-act .act-redeem{ background:linear-gradient(#4db658,#348c3e); color:#fff; }
-.cust-act .act-reward{ background:linear-gradient(#e8a13c,#c9821c); color:#3a2500; }
-.cust-act .act-wait{ background:#f0f2f6; color:#8a90a0; cursor:default; font-weight:700; }
-#newCustomerRow{
-  display:none !important; gap:0 !important; margin:0 !important;
-  padding:0 !important; background:none !important; border:none !important;
+#custClearBtn.on{ visibility:visible; }
+#custClearBtn:hover{ background:#f2f5f9; color:#a33; }
+
+/* 📱 الأيقونة برّه المربع وآخر السطر — مكانها ثابت دايمًا */
+#custCapBtn{
+  flex:0 0 auto; width:38px; height:38px; padding:0; line-height:1;
+  border:1.5px solid #d8dce4; background:#fff; color:#4a5160;
+  border-radius:10px; cursor:pointer; font-size:16px; font-family:'Cairo';
 }
-#custBox.st-new #newCustomerRow{ display:block !important; }
+#custCapBtn:hover{ background:#f2f5f9; }
+
+/* 🎁 زرار الاستبدال/المكافأة — نفس السطر، وبيبان وقت الحاجة بس */
+#custAction{ flex:0 0 auto; display:flex; }
+#custAction:empty{ display:none; }
+#custAction button{
+  padding:8px 13px; border-radius:10px; border:none; cursor:pointer;
+  font-family:'Cairo'; font-weight:900; font-size:13px; white-space:nowrap; line-height:1.2;
+}
+#custAction .act-redeem{ background:linear-gradient(#4db658,#348c3e); color:#fff; }
+#custAction .act-reward{ background:linear-gradient(#e8a13c,#c9821c); color:#3a2500; }
+#custAction .act-wait{ background:#f0f2f6; color:#8a90a0; cursor:default; font-weight:700; }
+#newCustomerRow{ display:none !important; margin:0 !important; padding:0 !important;
+  background:none !important; border:none !important; }
+.cust-line:has(#custBox.st-new) #newCustomerRow{ display:block !important; }
+#custAction.reg #newCustomerRow{ display:block !important; }   /* فولباك لو :has مش مدعومة */
 #newCustomerRow button{
-  border:1px solid #2c7a35; background:linear-gradient(#4db658,#348c3e); color:#fff;
+  padding:8px 13px; border-radius:10px; border:none; cursor:pointer;
+  font-family:'Cairo'; font-weight:900; font-size:13px;
+  background:linear-gradient(#4db658,#348c3e); color:#fff;
 }
-#resetPinRow{ margin-top:6px; }
+#resetPinRow{ margin-top:5px; }
 #resetPinRow button{
   padding:6px 12px; border-radius:8px; border:1px solid #c98; background:#fff3ef;
   color:#a23; font-size:12px; font-weight:800; cursor:pointer; font-family:'Cairo';
@@ -1557,30 +1578,24 @@ body.on-dashboard .badge-test{ display:block; }
           <span id="sellerName" style="font-size:12.5px; font-weight:800; color:#6b7280;
             white-space:nowrap;"></span>
         </div>
-        <div id="custBox">
-        <!-- 🎯 كل عنصر ليه **مكان ثابت** ومحجوز حتى وهو فاضي — مفيش أي
-             حاجة بتتحرك ولا سكرول. الشريط بيبان وقت الحاجة في مكانه.
-             🔴 قبل كده: البلوكات كانت بتظهر وتزقّ اللي تحتها، والزراير
-             كانت بتغيّر مكانها، والشريط كان بيعمل سكرول جواه. -->
-        <div class="cust-row">
-          <input type="tel" id="customerPhone" placeholder="📱 رقم العميل" inputmode="numeric" maxlength="11">
-          <button type="button" id="custClearBtn" onclick="clearCustomer()" title="شيل العميل من الفاتورة">✕</button>
-          <button type="button" id="custCapBtn" onclick="capAskCustomer()" title="العميل يكتب رقمه بنفسه على شاشة التقييم">📱 يكتب رقمه</button>
-        </div>
-        <!-- الشريط: هوية على الشمال · مكان الزرار ثابت على اليمين -->
-        <div class="cust-band" id="custBand">
-          <div class="customer-info" id="customerInfo"></div>
-          <input type="text" id="customerName" placeholder="اسم العميل" autocomplete="off">
-          <div class="cust-act" id="custAction">
-            <div id="newCustomerRow">
-              <button onclick="registerNewCustomer()">➕ سجّل العميل</button>
-            </div>
+        <!-- 🎯 كله في **خط واحد**: المربع الملوّن فيه بيانات العميل بس،
+             وأيقونة «يكتب رقمه» وزرار الاستبدال برّه المربع على نفس السطر.
+             خانة الرقم بتبقى طويلة وهي فاضية، وبتقصر لما العميل يبان
+             عشان تفسح للاسم والنقط. مفيش أي سطر تاني بياكل من مساحة البيع. -->
+        <div class="cust-line">
+          <div id="custBox">
+            <input type="tel" id="customerPhone" placeholder="📱 رقم العميل" inputmode="numeric" maxlength="11">
+            <span id="customerInfo"></span>
+            <input type="text" id="customerName" placeholder="اسم العميل" autocomplete="off">
+            <span id="custPts"></span>
+            <button type="button" id="custClearBtn" onclick="clearCustomer()" title="شيل العميل من الفاتورة">✕</button>
           </div>
+          <div id="custAction"><div id="newCustomerRow"><button onclick="registerNewCustomer()">➕ سجّل</button></div></div>
+          <button type="button" id="custCapBtn" onclick="capAskCustomer()" title="العميل يكتب رقمه بنفسه على شاشة التقييم">📱</button>
         </div>
         <div id="resetPinRow" style="display:none;">
           <button onclick="resetLoyaltyPin()">🔑 مسح الرقم السري للعميل</button>
           <span>لو العميل نسي رقمه السري في التطبيق</span>
-        </div>
         </div>
       </div>
       <div class="qbx-itemops">

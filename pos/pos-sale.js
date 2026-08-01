@@ -1238,6 +1238,7 @@ function setCustState(state, name, phone){
   const box  = document.getElementById('custBox');
   const ph   = document.getElementById('customerPhone');
   const info = document.getElementById('customerInfo');
+  const pts  = document.getElementById('custPts');
   const btn  = document.getElementById('custClearBtn');
   const nm   = document.getElementById('customerName');
   if(box){
@@ -1245,42 +1246,39 @@ function setCustState(state, name, phone){
     if(st) box.classList.add('st-' + st);
     box.classList.toggle('on', st === 'found');   // متوافق مع القديم
   }
+  // 👤 الاسم في نفس السطر جنب الرقم
   if(info){
-    if(st === 'found'){
-      // 👤 الاسم والرقم في سطر واحد — النقط بتتضاف من refreshCustomerActionUI
-      info.textContent = '👤 ' + (String(name || '').trim() || 'بدون اسم')
-        + ' · ' + String(phone || '').trim();
-    }else if(st === 'new'){
-      info.textContent = '🆕 مش مسجّل — اكتب الاسم';
-    }else if(st === 'bad'){
-      info.textContent = '⚠️ الرقم ناقص — لازم ١١ رقم';
-    }else{
-      info.textContent = '';
-    }
+    info.textContent = st === 'found' ? ('👤 ' + (String(name || '').trim() || 'بدون اسم'))
+      : st === 'new'  ? '🆕 مش مسجّل'
+      : st === 'bad'  ? '⚠️ الرقم ناقص'
+      : '';
   }
+  if(pts && st !== 'found') pts.textContent = '';
   // 📝 الرقم مش مسجّل → المؤشر بينط لخانة الاسم لوحده
   if(nm && st === 'new' && document.activeElement !== nm){
     try{ setTimeout(function(){ try{ nm.focus(); }catch(e){} }, 30); }catch(e){}
   }
-  // ✕ مكانه محجوز دايمًا — بيبان ويختفي من غير ما يزقّ حاجة
   if(btn) btn.classList.toggle('on', !!(ph && String(ph.value || '').trim()));
-  if(st !== 'found' && st !== 'new') setCustAction('');
+  // زرار «سجّل» بيبان بالحالة — بكلاس صريح مش بـ:has (فيه متصفحات قديمة)
+  const act = document.getElementById('custAction');
+  if(act) act.classList.toggle('reg', st === 'new');
+  if(st !== 'found') setCustAction('');
   return st;
 }
 window.setCustState = setCustState;
 
-// 🎯 مكان الزرار ثابت — بيتملى وقت الحاجة وبيفضّى وقت ما مفيش
+// 🎁 زرار الاستبدال/المكافأة — نفس السطر، وبيبان وقت الحاجة بس.
+//    صف التسجيل الجديد بيفضل جواه دايمًا والـCSS هو اللي بيوريه بالحالة.
 function setCustAction(html){
   const a = document.getElementById('custAction');
   if(!a) return;
   const reg = document.getElementById('newCustomerRow');
-  // صف التسجيل الجديد جوه نفس المكان — بيتحكم فيه الـCSS بحالة st-new
   a.innerHTML = '';
   if(reg) a.appendChild(reg);
   if(html){
     const d = document.createElement('div');
     d.innerHTML = html;
-    a.appendChild(d.firstElementChild);
+    if(d.firstElementChild) a.appendChild(d.firstElementChild);
   }
 }
 window.setCustAction = setCustAction;
@@ -1695,9 +1693,8 @@ function refreshCustomerActionUI(){
   if(!custBaseText){ return; }   // مفيش عميل متحمّل
   const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   // 💳 النقط بتتضاف لسطر الهوية — مش سطر لوحده
-  const _pts = Number(custPointsBalance) || 0;
-  const _base = infoBox.textContent.split(' · 💳')[0];
-  infoBox.textContent = _base + ' · 💳 ' + _pts + ' نقطة';
+  const _ptsEl = document.getElementById('custPts');
+  if(_ptsEl) _ptsEl.textContent = '💳 ' + (Number(custPointsBalance) || 0);
 
   if(custPendingRedeem && !pendingRedemption){
     // 🛡️ نعيد الحساب من إعدادات المحل والرصيد الفعلي — ولو أرقام الطلب مش مطابقة نعلّم 🚩
@@ -1713,7 +1710,7 @@ function refreshCustomerActionUI(){
       });
     }
     custPendingRedeem._sane = _sane; custPendingRedeem._tampered = _tampered;
-    if(_tampered) infoBox.textContent += ' · 🚩 أرقام الطلب اتصححت';
+    if(_tampered && _ptsEl) _ptsEl.textContent += ' 🚩';
     // 🎁 الزرار في مكانه الثابت — كبير ومقروء
     setCustAction('<button class="act-redeem" onclick="applyPendingRedeem()">🎁 استبدال '
       + _sane.points + ' نقطة (' + _sane.value + ' ج.م)</button>');
