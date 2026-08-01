@@ -788,12 +788,21 @@ function buildLabelHTML(it, barcodeSvgId){
         else                 parts.push(`<div style="font-size:${fs}; font-weight:900; white-space:nowrap; max-width:100%; overflow:hidden;">${pv}</div>`);
         break; }
       case 'barcode': if(it.barcode){
-        // العرض بيتثبت بالمليمتر بعد الرسم (sizeBarcodeForThermal) — مفيش نسبة مئوية
-        parts.push(`<div style="height:${lb.bcHeight||30}px; min-height:${Math.max(22, lb.bcHeight||30)}px; flex-shrink:0; margin:1px auto; line-height:0; max-width:100%; overflow:hidden;"><svg id="${barcodeSvgId}" shape-rendering="crispEdges"></svg></div>`);
-        // 🔢 الرقم المكتوب بقى **جزء ثابت** من بلوك الباركود — قبل كده كان عنصر
-        // منفصل ممكن يتقفل في تصميم براند ويفضل شغال في التاني، وده كان سبب
-        // «ساعات الكود يظهر تحت الباركود وساعات لأ» بين المنتجات والفروع.
-        parts.push(`<div style="font-size:9px; font-family:monospace; letter-spacing:1px; direction:ltr; max-width:100%; overflow:hidden; white-space:nowrap; color:#000;">${it.barcode}</div>`);
+        // 🔴 ليه الرقم كان بيختفي: الليبل `display:flex` عمودي و`overflow:hidden`.
+        //    بلوك الباركود كان `flex-shrink:0` (مبيصغّرش)، وسطر الرقم كان
+        //    `overflow:hidden` — وده في الفليكس بيخلي أقل حجم = **صفر**.
+        //    فأول ما المحتوى يزيد عن ارتفاع الليبل، السطر الوحيد اللي بيتعصر
+        //    لحد ما يختفي هو الرقم. والباركود واقف مكانه فمفيش مساحة ترجع.
+        //    الحل: الباركود **والرقم** بلوك واحد `flex-shrink:0` — واللي
+        //    بيتقص لو ضاقت الدنيا هو اسم المنتج (مقصوص أصلًا بسطرين).
+        const MM_PX = 3.7795;                                   // 1مم = 3.78px عند 96dpi
+        const bcPx = Math.min(Number(lb.bcHeight) || 30, Math.round(h * 0.45 * MM_PX));
+        parts.push(`<div style="flex-shrink:0; width:100%; max-width:100%;">`
+          + `<div style="height:${bcPx}px; line-height:0; overflow:hidden; margin:1px auto;"><svg id="${barcodeSvgId}" shape-rendering="crispEdges"></svg></div>`
+          // 🔢 الرقم جزء ثابت من بلوك الباركود — قبل كده كان عنصر منفصل ممكن
+          // يتقفل في تصميم براند ويفضل شغال في التاني.
+          + `<div style="flex-shrink:0; font-size:10px; font-weight:700; font-family:Consolas,'Courier New',monospace; letter-spacing:.6px; line-height:1.15; direction:ltr; max-width:100%; white-space:nowrap; color:#000;">${it.barcode}</div>`
+          + `</div>`);
         break; }
       case 'code': if(it.barcode && !(lb.elements||[]).some(e=> e.on && (e.base||e.id)==='barcode')){
         // العنصر المنفصل بيشتغل بس لو الباركود نفسه مقفول — منع التكرار
@@ -955,6 +964,7 @@ function doPrintLabels(jobs){
     const wdw = window.open('', '_blank', 'width=420,height=560');
     wdw.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;} *{-webkit-print-color-adjust:exact; print-color-adjust:exact; text-rendering:geometricPrecision;}</style></head><body>${finalHTML}<script>window.print(); setTimeout(()=>window.close(), 500);<\/script></body></html>`);
     wdw.document.close();
+    if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(500);
   }
 }
 
