@@ -236,25 +236,39 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-const BRANCHES = ['الرحاب', 'مدينتي', 'سيتي سنتر', 'Glow'];
+const ALL_BRANCHES = ['الرحاب', 'مدينتي', 'سيتي سنتر', 'Glow'];
 const ROLES = {
   sales_social: 'مبيعات ومساعدة تسويق رقمي',
   cashier: 'كاشير ومبيعات',
-  setup: 'تظبيط الفرع (٧–١٠ ص · قبل الفتح)'
+  setup: 'تجهيز وترتيب الفرع (٧–١٠ ص)'
 };
 const SHIFTS = {
   morning: '🌅 صباحي — ١٠ ص إلى ٦ م',
   evening: '🌆 مسائي — ٢ م إلى ١٠ م',
-  setup:   '🧹 تظبيط — ٧ ص إلى ١٠ ص (قبل الفتح)',
+  setup:   '✨ تجهيز الفرع — ٧ ص إلى ١٠ ص',
   any:     '🤝 أي شيفت'
+};
+// 📌 الشواغر — الإدارة بتحدد أي فرع محتاج أي وظيفة، والاستمارة بتعرض
+//    المتاح بس. من غير كده المتقدّم بيختار فرع مش محتاج حد.
+let OPEN = null;                    // [{branch, role}] — null = لسه بتحمّل
+const openBranches = ()=> OPEN ? Array.from(new Set(OPEN.map(function(o){ return o.branch; }))) : [];
+const openRolesFor = function(branches){
+  if(!OPEN) return [];
+  const set = {};
+  OPEN.forEach(function(o){
+    if(!branches.length || branches.indexOf(o.branch) >= 0) set[o.role] = 1;
+  });
+  return Object.keys(set);
 };
 const SOURCES = ['إنستجرام', 'فيسبوك', 'صديق يعمل معكم', 'إعلان في الفرع', 'مكان آخر'];
 const DAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
 
 const D = { name:'', age:'', phone:'', whatsapp:'', area:'', commute:'',
-            roles:[], branches:[], shift:'', startWhen:'', offDays:[],
+            roles:[], branches:[], shift:'', workType:'', hoursFrom:'', hoursTo:'',
+            startWhen:'', offDays:[],
             studying:'', college:'', classes:'',
-            expRetail:'', expWhere:'', expCashier:'', portfolio:'',
+            otherJob:'', otherJobWhere:'',
+            expRetail:'', expWhere:'', portfolio:'',
             transport:'', notes:'', source:'', ok:{} };
 
 const STEPS = ['welcome','who','avail','exp','extra','review','done'];
@@ -293,25 +307,27 @@ const BLOCK = {
     if(!phoneOk(D.phone)) return 'رقم الهاتف ١١ رقمًا ويبدأ بـ ٠١٠ أو ٠١١ أو ٠١٢ أو ٠١٥';
     if(D.whatsapp && !phoneOk(D.whatsapp)) return 'رقم واتساب غير صحيح — أو يُترك فارغًا';
     if(D.area.trim().length < 3) return 'يُرجى كتابة المنطقة التي تسكن فيها';
-    if(!D.commute) return 'يُرجى تحديد مدة الوصول إلى الفرع';
     return '';
   },
   avail: ()=>{
-    if(!D.roles.length) return 'يُرجى اختيار وظيفة واحدة على الأقل';
     if(!D.branches.length) return 'يُرجى اختيار فرع واحد على الأقل';
+    if(!D.roles.length) return 'يُرجى اختيار وظيفة واحدة على الأقل';
+    if(!D.commute) return 'يُرجى تحديد مدة الوصول إلى الفرع الذي اخترته';
     if(!D.shift) return 'يُرجى تحديد الشيفت المفضَّل';
+    if(!D.workType) return 'يُرجى تحديد نوع الدوام';
     if(!D.startWhen) return 'يُرجى تحديد موعد الاستعداد للبدء';
     return '';
   },
   exp: ()=>{
     if(!D.expRetail) return 'يُرجى تحديد إن كانت لديك خبرة سابقة';
     if(D.expRetail === 'yes' && D.expWhere.trim().length < 3) return 'يُرجى ذكر مكان العمل السابق ومدته';
-    if(!D.expCashier) return 'يُرجى تحديد خبرتك بالكاشير';
     return '';
   },
   extra: ()=>{
     if(!D.studying) return 'يُرجى تحديد إن كنت تدرس حاليًا';
     if(D.studying === 'yes' && D.college.trim().length < 3) return 'يُرجى ذكر الكلية';
+    if(!D.otherJob) return 'يُرجى تحديد إن كنت تعمل في مكان آخر حاليًا';
+    if(D.otherJob === 'yes' && D.otherJobWhere.trim().length < 3) return 'يُرجى ذكر مكان العمل الحالي ومواعيده';
     if(!D.transport) return 'يُرجى تحديد وسيلة المواصلات';
     if(!D.source) return 'يُرجى تحديد كيف عرفت عنا';
     return '';
@@ -353,7 +369,7 @@ V.welcome = ()=> `<div class="fade">
   </div>
   <div class="cards">
     <div class="card c-info"><b>🕐 الشيفتات المتاحة</b>
-      <p>صباحي ١٠–٦ · مسائي ٢–١٠ · <b>تظبيط ٧–١٠ ص</b> (قبل الفتح).</p></div>
+      <p>صباحي ١٠–٦ · مسائي ٢–١٠ · <b>تجهيز الفرع ٧–١٠ ص</b> (قبل الفتح).</p></div>
     <div class="card c-ok"><b>✅ لا مستندات الآن</b>
       <p>لن نطلب بطاقة أو شهادات إلا بعد المقابلة.</p></div>
   </div>
@@ -378,27 +394,46 @@ V.who = ()=> `<div class="fade">
   <div class="field"><label>المنطقة التي تسكن فيها</label>
     <input class="inp" value="${esc(D.area)}" placeholder="مثال: الرحاب — المرحلة الخامسة"
       oninput="setQ('area',this.value)"></div>
-  <div class="field"><label>توصل إلى الفرع في كم؟</label>
-    ${chips('commute', ['أقل من ٢٠ دقيقة','٢٠–٤٥ دقيقة','٤٥–٩٠ دقيقة','أكثر من ساعة ونصف'])}
-    <div class="tip">مهم جدًا لشيفت التظبيط الذي يبدأ ٧ صباحًا.</div>
-  </div>
   ${nav(I('welcome'), I('avail'))}
 </div>`;
 
-V.avail = ()=> `<div class="fade">
+V.avail = ()=>{
+  const brs = openBranches();
+  const rls = openRolesFor(D.branches);
+  return `<div class="fade">
   <h2 class="h-viol"><span class="ico">🗓️</span> إتاحتك</h2>
-  <div class="field"><label>الوظيفة المطلوبة <span style="font-weight:500; color:var(--mut); font-size:13px;">— يمكن اختيار أكثر من واحدة</span></label>
-    ${chips('roles', Object.keys(ROLES).map(function(k){ return { v:k, l:ROLES[k] }; }), true)}</div>
   <div class="field"><label>الفرع المفضَّل <span style="font-weight:500; color:var(--mut); font-size:13px;">— يمكن اختيار أكثر من فرع</span></label>
-    ${chips('branches', BRANCHES, true)}</div>
+    ${chips('branches', brs, true)}
+    <div class="tip">المعروض هنا هو الفروع التي بها شواغر حاليًا.</div></div>
+  ${D.branches.length ? `
+  <div class="field"><label>الوظيفة <span style="font-weight:500; color:var(--mut); font-size:13px;">— المتاح في الفروع التي اخترتها</span></label>
+    ${chips('roles', rls.map(function(k){ return { v:k, l:ROLES[k] || k }; }), true)}</div>
+  <div class="field"><label>تصل إلى الفرع الذي اخترته في كم؟</label>
+    ${chips('commute', ['أقل من ٢٠ دقيقة','٢٠–٤٥ دقيقة','٤٥–٩٠ دقيقة','أكثر من ساعة ونصف'])}
+    <div class="tip">مهم لشيفت التجهيز الذي يبدأ السابعة صباحًا.</div></div>
   <div class="field"><label>الشيفت المفضَّل</label>
     ${chips('shift', Object.keys(SHIFTS).map(function(k){ return { v:k, l:SHIFTS[k] }; }))}</div>
+  <div class="field"><label>نوع الدوام</label>
+    ${chips('workType', [
+      { v:'full', l:'دوام كامل' },
+      { v:'part', l:'دوام جزئي (part-time)' },
+      { v:'both', l:'الاثنان مناسبان' }])}
+    <div class="tip">لدينا فرص بدوام جزئي — منها شيفت التجهيز صباحًا.</div></div>
+  <div class="field"><label>الساعات المتاحة لديك
+      <span style="font-weight:500; color:var(--mut); font-size:13px;">— اختياري، إن كانت لديك مواعيد محددة</span></label>
+    <div style="display:flex; gap:9px;">
+      <input class="inp ltr" style="flex:1;" placeholder="من: 9 ص" value="${esc(D.hoursFrom)}"
+        oninput="setQ('hoursFrom',this.value)">
+      <input class="inp ltr" style="flex:1;" placeholder="إلى: 3 م" value="${esc(D.hoursTo)}"
+        oninput="setQ('hoursTo',this.value)">
+    </div></div>
   <div class="field"><label>مستعد للبدء</label>
     ${chips('startWhen', ['فورًا','خلال أسبوع','خلال شهر','بعد أكثر من شهر'])}</div>
   <div class="field"><label>أيام غير متاح فيها <span style="font-weight:500; color:var(--mut); font-size:13px;">— اختياري</span></label>
-    ${chips('offDays', DAYS, true)}</div>
+    ${chips('offDays', DAYS, true)}</div>` : ''}
   ${nav(I('who'), I('exp'))}
 </div>`;
+};
 
 V.exp = ()=> `<div class="fade">
   <h2 class="h-green"><span class="ico">💼</span> خبرتك</h2>
@@ -407,8 +442,6 @@ V.exp = ()=> `<div class="fade">
   ${D.expRetail === 'yes' ? `<div class="field"><label>أين وكم مدة؟</label>
     <input class="inp" value="${esc(D.expWhere)}" placeholder="مثال: محل ملابس بمدينتي — سنة ونصف"
       oninput="setQ('expWhere',this.value)"></div>` : ''}
-  <div class="field"><label>خبرتك بالكاشير</label>
-    ${chips('expCashier', [{v:'good',l:'أجيده'},{v:'some',l:'استخدمته قليلًا'},{v:'no',l:'لم أستخدمه'}])}</div>
   ${D.roles.indexOf('sales_social') >= 0 ? `
   <div class="field"><label>رابط عمل من تصويرك أو مونتاجك
       <span style="font-weight:500; color:var(--mut); font-size:13px;">— ريل أو بوست، اختياري</span></label>
@@ -431,6 +464,13 @@ V.extra = ()=> `<div class="fade">
     <input class="inp" value="${esc(D.classes)}" placeholder="مثال: الأحد والثلاثاء صباحًا"
       oninput="setQ('classes',this.value)">
     <div class="tip">نحاول ترتيب الشيفت بما لا يتعارض معها.</div></div>` : ''}
+  <div class="field"><label>تعمل في مكان آخر حاليًا؟</label>
+    ${chips('otherJob', [{v:'yes',l:'نعم'},{v:'no',l:'لا'}])}</div>
+  ${D.otherJob === 'yes' ? `
+  <div class="field"><label>أين ومواعيده</label>
+    <input class="inp" value="${esc(D.otherJobWhere)}" placeholder="مثال: كافيه بالرحاب — مسائي ٤ إلى ١٢"
+      oninput="setQ('otherJobWhere',this.value)">
+    <div class="tip">لا مانع لدينا من ذلك، لكن نحتاج معرفته لترتيب المواعيد.</div></div>` : ''}
   <div class="field"><label>وسيلة المواصلات</label>
     ${chips('transport', ['مواصلات عامة','سيارة خاصة','قريب — على الأقدام','أخرى'])}</div>
   <div class="field"><label>كيف عرفت عنا؟</label>
@@ -451,13 +491,16 @@ V.review = ()=>{
     <tr><td>الاسم</td><td class="k">${esc(D.name)}</td></tr>
     <tr><td>السن</td><td class="k">${N(esc(D.age))} سنة</td></tr>
     <tr><td>الهاتف</td><td class="k">${N(esc(D.phone))}</td></tr>
-    <tr><td>المنطقة</td><td class="k">${esc(D.area)} · ${esc(D.commute)}</td></tr>
+    <tr><td>المنطقة</td><td class="k">${esc(D.area)} · يصل في ${esc(D.commute)}</td></tr>
     <tr><td>الوظيفة</td><td class="k">${esc(rl)}</td></tr>
     <tr><td>الفروع</td><td class="k">${esc(D.branches.join(' · '))}</td></tr>
     <tr><td>الشيفت</td><td class="k">${esc(SHIFTS[D.shift] || '')}</td></tr>
     <tr><td>البدء</td><td class="k">${esc(D.startWhen)}</td></tr>
     ${D.offDays.length ? `<tr><td>غير متاح</td><td class="k">${esc(D.offDays.join(' · '))}</td></tr>` : ''}
+    <tr><td>الدوام</td><td class="k">${esc({ full:'كامل', part:'جزئي', both:'الاثنان' }[D.workType] || '')}${
+      (D.hoursFrom || D.hoursTo) ? (' · ' + esc(D.hoursFrom) + ' → ' + esc(D.hoursTo)) : ''}</td></tr>
     <tr><td>خبرة سابقة</td><td class="k">${D.expRetail === 'yes' ? esc(D.expWhere) : 'أول مرة'}</td></tr>
+    ${D.otherJob === 'yes' ? `<tr><td>عمل حالي</td><td class="k">${esc(D.otherJobWhere)}</td></tr>` : ''}
     ${D.studying === 'yes' ? `<tr><td>الدراسة</td><td class="k">${esc(D.college)}</td></tr>` : ''}
   </table>
   <div style="height:14px"></div>
@@ -514,7 +557,9 @@ async function submitApp(btn){
       startWhen: D.startWhen, offDays: D.offDays,
       studying: D.studying === 'yes', college: D.college.trim(), classes: D.classes.trim(),
       expRetail: D.expRetail === 'yes', expWhere: D.expWhere.trim(),
-      expCashier: D.expCashier, portfolio: D.portfolio.trim(),
+      portfolio: D.portfolio.trim(),
+      workType: D.workType, hoursFrom: D.hoursFrom.trim(), hoursTo: D.hoursTo.trim(),
+      otherJob: D.otherJob === 'yes', otherJobWhere: D.otherJobWhere.trim(),
       transport: D.transport, source: D.source, notes: D.notes.trim(),
       status: 'new', ts: Date.now()
     });
@@ -527,6 +572,24 @@ async function submitApp(btn){
   }
 }
 window.submitApp = submitApp;
+
+// 📌 تحميل الشواغر — لو مفيش شواغر، الاستمارة مبتفتحش أصلًا
+async function loadOpenings(){
+  try{
+    await firebase.auth().signInAnonymously();
+    const d = await db.collection('pos_test_settings').doc('job_openings').get();
+    const raw = (d.exists && Array.isArray((d.data() || {}).list)) ? d.data().list : [];
+    OPEN = raw.filter(function(o){ return o && o.branch && ROLES[o.role]; });
+  }catch(e){ OPEN = []; }
+  if(!OPEN.length){
+    document.getElementById('body').innerHTML =
+      '<div class="fade"><h2 class="h-amber"><span class="ico">🔕</span> لا توجد شواغر حاليًا</h2>'
+      + '<p class="lead">لا توجد وظائف متاحة في الوقت الحالي. تابع صفحاتنا على وسائل '
+      + 'التواصل — نعلن عن الشواغر فور توفرها.</p></div>';
+    return;
+  }
+  render();
+}
 
 function render(){
   const cur = S(), pi = PHASES.findIndex(p=> p.steps.indexOf(cur) >= 0);
@@ -541,7 +604,7 @@ function render(){
   const f = document.querySelector('[data-focus]');
   if(f) setTimeout(function(){ try{ f.focus(); }catch(e){} }, 130);
 }
-render();
+loadOpenings();
 </script>
 </body>
 </html>
