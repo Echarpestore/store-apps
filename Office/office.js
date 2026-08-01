@@ -466,6 +466,7 @@ function startData(){
     renderSalaries(); fillBranchSel(); renderPL();
     // 📅 شاشة اليوم — بعد ما الموظفين يوصلوا (منهم بنعرف الفروع)
     ofLoadDayCut().then(function(){ try{ ofWireDay(); }catch(e){ console.warn('day', e); } });
+    try{ ofWireTasks(); }catch(e){ console.warn('tasks', e); }
   });
   db.collection('sales_advances').onSnapshot(function(s){
     D.advances = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -1360,3 +1361,166 @@ function ofWireDay(){
   ofLoadDay();
 }
 window.ofLoadDay = ofLoadDay;
+
+// ============================================================
+// ✅ التاسك الأسبوعي
+// ------------------------------------------------------------
+// ⚠️ النظام القديم: `sales_tasks/{رقم الموظفة}` — مستند واحد لكل موظفة،
+//    فأي تاسك جديد **بيمسح القديم**. مفيش أسبوع ولا حالة ولا تاريخ.
+// 🔑 الحل من غير ما نكسر تطبيق الحضور:
+//    · `sales_tasks/{empId}` بيفضل زي ما هو (ده اللي الحضور بيقراه) + حقول
+//      زيادة (weekKey · assignedBy · assignedAt) — إضافة مش تغيير.
+//    · `sales_task_weeks/{empId}__{weekKey}` مستند لكل أسبوع = التاريخ الكامل.
+//    تطبيق الحضور محتاج `employeeId` و`taskDescription` و`branch` بس — وكلهم
+//    باقيين بنفس الأسماء والمعنى.
+// 📅 الأسبوع بيبدأ **السبت** (أسبوع الشغل في مصر). لو عايزها تبدأ يوم تاني،
+//    غيّر OF_WEEK_START بس — والنطاق ظاهر على الشاشة عشان تتأكد بعينك.
+// ============================================================
+const OF_WEEK_START = 6;      // 0=الأحد … 6=السبت
+let _tkOffset = 0;            // 0 = الأسبوع ده · -1 اللي فات · +1 اللي جاي
+let _tkWeeks = {};            // {empId__weekKey: doc}
+let _tkSubs = [];             // تسليمات التاسكات
+
+function ofWeekStartMs(offset){
+  // 🕕 بيوم الشغل مش اليوم التقويمي: الساعة 2 فجرًا يوم السبت لسه **يوم
+  //    الجمعة** شغلًا، والكاشير اللي في الشيفت ده لازم تشوف تاسك الأسبوع
+  //    اللي فات مش الجديد. نفس الفاصلة اللي بيمشي عليها التقفيل والتقارير.
+  let ms = Date.now();
+  if(_ofShopParts(ms).hh < _ofDayCut) ms -= 86400000;
+  const p = _ofShopParts(ms);
+  const todayUTC = Date.UTC(p.y, p.m - 1, p.d);
+  const dow = new Date(todayUTC).getUTCDay();
+  const back = (dow - OF_WEEK_START + 7) % 7;
+  return todayUTC - back * 86400000 + (Number(offset) || 0) * 7 * 86400000;
+}
+function ofWeekKey(ms){
+  const d = new Date(ms);
+  return 'w' + d.getUTCFullYear() + '-'
+    + String(d.getUTCMonth() + 1).padStart(2,'0') + '-'
+    + String(d.getUTCDate()).padStart(2,'0');
+}
+function ofWeekLabel(ms){
+  const a = new Date(ms), b = new Date(ms + 6 * 86400000);
+  const f = function(x){ return x.getUTCDate() + '/' + (x.getUTCMonth() + 1); };
+  return f(a) + ' → ' + f(b);
+}
+
+async function ofLoadTasks(){
+  const br = ($('#tkBranch') || {}).value || '';
+  const list = $('#tkList');
+  if(!br || !list) return;
+  const wkMs = ofWeekStartMs(_tkOffset);
+  const wk = ofWeekKey(wkMs);
+  const rg = $('#tkRange');
+  if(rg) rg.textContent = 'الأسبوع: ' + ofWeekLabel(wkMs)
+    + (_tkOffset === 0 ? ' (الحالي)' : '');
+  list.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">بيحمّل…</div>';
+  try{
+    const [wSnap, sSnap] = await Promise.all([
+      db.collection('sales_task_weeks').where('branch','==', br).where('weekKey','==', wk).get(),
+      db.collection('sales_task_submissions').where('branch','==', br)
+        .where('submittedAt','>=', wkMs).where('submittedAt','<', wkMs + 7 * 86400000).get()
+    ]);
+    _tkWeeks = {};
+    wSnap.docs.forEach(function(d){ _tkWeeks[d.id] = d.data(); });
+    _tkSubs = sSnap.docs.map(function(d){ return d.data(); });
+  }catch(e){
+    console.warn('tasks load', e);
+    list.innerHTML = '<div class="card" style="color:var(--minus);">تعذر التحميل: '
+      + esc(e.code || e.message) + '<div style="font-size:11px; color:var(--sub); margin-top:6px;">'
+      + 'لو الرسالة بتقول index، افتح اللينك اللي في الكونسول مرة واحدة.</div></div>';
+    return;
+  }
+  ofRenderTasks(br, wk);
+}
+
+function ofRenderTasks(br, wk){
+  const list = $('#tkList'); if(!list) return;
+  const emps = (D.employees || []).filter(function(e){
+    return e.branch === br && e.status !== 'terminated';
+  }).sort(function(a,b){ return String(a.name||'').localeCompare(String(b.name||''),'ar'); });
+  if(!emps.length){ list.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">مفيش موظفين في الفرع ده</div>'; return; }
+
+  const rows = emps.map(function(e){
+    const rec = _tkWeeks[e.id + '__' + wk] || null;
+    const desc = rec ? (rec.taskDescription || '') : '';
+    const subs = _tkSubs.filter(function(s){ return s.employeeId === e.id; });
+    const okCount = subs.filter(function(s){ return s.confirmed; }).length;
+    const rejCount = subs.filter(function(s){ return s.rejected; }).length;
+    const waiting = subs.length - okCount - rejCount;
+    let chip = '<span style="color:var(--sub); font-size:11px;">مفيش تسليم</span>';
+    if(subs.length){
+      chip = '<span style="font-size:11px;">'
+        + (okCount ? '<span style="color:var(--plus);">✅ ' + okCount + '</span> ' : '')
+        + (waiting ? '<span style="color:var(--gold);">⏳ ' + waiting + '</span> ' : '')
+        + (rejCount ? '<span style="color:var(--minus);">✖ ' + rejCount + '</span>' : '')
+        + '</span>';
+    }
+    return '<div class="card" style="padding:11px;">'
+      + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:7px;">'
+      +   '<b>' + esc(e.name || '—') + '</b>' + chip
+      + '</div>'
+      + '<div style="display:flex; gap:6px;">'
+      +   '<input class="tkIn" data-id="' + esc(e.id) + '" data-name="' + esc(e.name||'') + '" '
+      +     'placeholder="تاسك الأسبوع… (مثلاً: سكشن A)" value="' + esc(desc).replace(/"/g,'&quot;') + '" style="flex:1;">'
+      +   '<button class="tkSave" data-id="' + esc(e.id) + '" style="min-width:64px;">حفظ</button>'
+      + '</div>'
+      + (rec && rec.assignedAt ? ('<div style="font-size:10px; color:var(--sub); margin-top:5px;">اتحدد '
+          + dstr(rec.assignedAt) + '</div>') : '')
+      + '</div>';
+  }).join('');
+
+  list.innerHTML = rows
+    + '<div class="card" style="font-size:11px; color:var(--sub); line-height:1.8;">'
+    + '⚠️ التاسك اللي بتكتبه هنا هو اللي الموظفة بتشوفه في تطبيق الحضور وبتسلّم عليه صورة.<br>'
+    + 'الأسابيع القديمة محفوظة — ارجع بالأسهم فوق وشوفها.'
+    + '</div>';
+
+  list.querySelectorAll('.tkSave').forEach(function(btn){
+    btn.onclick = async function(){
+      const inp = list.querySelector('.tkIn[data-id="' + btn.dataset.id + '"]');
+      if(!inp) return;
+      const desc = inp.value.trim();
+      const emp = emps.filter(function(x){ return x.id === btn.dataset.id; })[0];
+      if(!emp) return;
+      const old = btn.textContent;
+      btn.textContent = '…'; btn.disabled = true;
+      try{
+        const payload = {
+          employeeId: emp.id, employeeName: emp.name || '', branch: br,
+          taskDescription: desc, weekKey: wk, assignedAt: Date.now(), assignedBy: 'office'
+        };
+        // 📖 اللي تطبيق الحضور بيقراه — نفس الشكل بالظبط + حقول زيادة
+        await db.collection('sales_tasks').doc(emp.id).set(payload, { merge: true });
+        // 🗂️ وسجل الأسبوع — ده اللي بيخلي التاريخ يفضل
+        await db.collection('sales_task_weeks').doc(emp.id + '__' + wk).set(payload, { merge: true });
+        _tkWeeks[emp.id + '__' + wk] = payload;
+        btn.textContent = 'اتحفظ ✅';
+        setTimeout(function(){ btn.textContent = old; btn.disabled = false; }, 1400);
+      }catch(err){
+        btn.textContent = 'فشل'; btn.disabled = false;
+        alert('ماتحفظش: ' + (err.code || err.message));
+      }
+    };
+  });
+}
+
+function ofWireTasks(){
+  const bs = $('#tkBranch'); if(!bs) return;
+  const set = {};
+  (D.employees || []).forEach(function(e){ if(e.branch) set[e.branch] = 1; });
+  const brs = Object.keys(set).sort();
+  if(brs.length && !bs.options.length){
+    bs.innerHTML = brs.map(function(b){ return '<option value="'+esc(b)+'">'+esc(b)+'</option>'; }).join('');
+  }
+  bs.onchange = ofLoadTasks;
+  document.querySelectorAll('.tkNav').forEach(function(b){
+    b.onclick = function(){
+      const d = Number(b.dataset.d);
+      _tkOffset = (d === 0) ? 0 : _tkOffset + d;
+      ofLoadTasks();
+    };
+  });
+  ofLoadTasks();
+}
+window.ofLoadTasks = ofLoadTasks;
