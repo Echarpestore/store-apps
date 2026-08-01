@@ -138,7 +138,7 @@ window.rwRender=function(){
     b.innerHTML = `<div class="rw-step">
       <div class="rw-eyebrow">خطوة 3</div>
       <div class="rw-title">اختار شيفتك</div>
-      <div class="rw-sub">ده معاد حضورك اليومي — والتأخير أكتر من ${cfg.lateGraceMin} دقيقة عليه خصم</div>
+      <div class="rw-sub">ده معاد حضورك اليومي — والتأخير بيتسجل رصيد وقت (كل ${(window.timeCfg||timeCfgDefaults).lateMinPerHour||10} دقيقة = ساعة)</div>
       <div class="rw-choice">
         <div class="rw-opt ${_rwData.shift==='morning'?'sel':''}" onclick="window.rwPick('shift','morning')">${S.morning.label}<small>${S.morning.start} → ${S.morning.end}</small></div>
         <div class="rw-opt ${_rwData.shift==='evening'?'sel':''}" onclick="window.rwPick('shift','evening')">${S.evening.label}<small>${S.evening.start} → ${S.evening.end}</small></div>
@@ -1692,14 +1692,28 @@ window.openDaySummary = function(empId){
     attCard = `<div style="background:linear-gradient(180deg,#16241c,var(--panel)); border:1px solid #2e5a42; border-radius:13px; padding:13px; text-align:center;">
       <div style="font-size:15px; font-weight:800; color:#5ec88a;">جيت في ميعادك ✅</div>
       <div style="font-size:12px; color:var(--sub); margin-top:3px;">سجّلت حضور ${inTxt}</div></div>`;
-  } else if(!penalized){
-    attCard = `<div style="background:var(--panel2); border:1px solid var(--line); border-radius:13px; padding:13px; text-align:center;">
-      <div style="font-size:15px; font-weight:800;">اتأخرت ${lateMin} دقيقة</div>
-      <div style="font-size:12px; color:var(--sub); margin-top:3px;">لسه في حدود السماح (${complianceCfg.lateGraceMin} دقيقة) — مفيش خصم</div></div>`;
   } else {
-    attCard = `<div style="background:linear-gradient(180deg,#2a1a18,var(--panel)); border:1px solid #5a3a3a; border-radius:13px; padding:13px; text-align:center;">
-      <div style="font-size:15px; font-weight:800; color:#e0796b;">اتأخرت ${lateMin} دقيقة</div>
-      <div style="font-size:12px; color:var(--sub); margin-top:3px;">اتسجّل خصم ${complianceCfg.penalty} ج.م — حاول تعوّضها بكرة</div></div>`;
+    // 🔴 الشاشة دي كانت بتكذب على الموظفة: فضلت على **النظام القديم**
+    //    (غرامة ثابتة + سماح 20 دقيقة) بعد ما النظام اتحوّل لرصيد ساعات
+    //    في جلسة الفلوس. كانت بتقرا complianceCfg.penalty و lateGraceMin
+    //    وهما ملغيين — فموظفة اتأخرت 68 دقيقة تشوف "خصم 50 ج.م" والحقيقة
+    //    6 ساعات رصيد، وواحدة اتأخرت 7 دقايق تشوف "مفيش خصم" والحقيقة ساعة.
+    // ✅ دلوقتي بيتحسب من **نفس الدالة** اللي بتسجّل الرصيد فعلًا.
+    const _tc = window.timeCfg || timeCfgDefaults;
+    const _hrs = lateHoursFrom(lateMin, _tc);
+    const _per = Number(_tc.lateMinPerHour) || 10;
+    const _daily = Number(_tc.maxLateHoursPerDay) || 0;
+    if(_hrs <= 0){
+      attCard = `<div style="background:var(--panel2); border:1px solid var(--line); border-radius:13px; padding:13px; text-align:center;">
+        <div style="font-size:15px; font-weight:800;">اتأخرت ${lateMin} دقيقة</div>
+        <div style="font-size:12px; color:var(--sub); margin-top:3px;">أقل من ${_per} دقيقة — مفيش رصيد وقت اتسجل</div></div>`;
+    } else {
+      const _capNote = (_daily > 0 && _hrs >= _daily) ? ` (سقف اليوم ${_daily})` : '';
+      attCard = `<div style="background:linear-gradient(180deg,#2a1a18,var(--panel)); border:1px solid #5a3a3a; border-radius:13px; padding:13px; text-align:center;">
+        <div style="font-size:15px; font-weight:800; color:#e0796b;">اتأخرت ${lateMin} دقيقة</div>
+        <div style="font-size:12px; color:var(--sub); margin-top:3px;">اتسجّل <b>${_hrs} ساعة</b> رصيد وقت${_capNote} — كل ${_per} دقيقة = ساعة</div>
+        <div style="font-size:11px; color:var(--sub); margin-top:5px; opacity:.85;">الرصيد بيتجمّع، وكل ${Number(_tc.hoursPerDay)||7} ساعة = يوم يتخصم من المرتب</div></div>`;
+    }
   }
 
   // رسالة عن النقاط
