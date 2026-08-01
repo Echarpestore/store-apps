@@ -383,6 +383,16 @@ function addToCart(item){
     cart.push({id:item.id, name:item.name, barcode:item.barcode, price:finalPrice, originalPrice, discountName, qty:1, attribute:item.attribute||'', size:item.size||''});
   }
   lastAddedId = item.id;   // ده آخر منتج ضربته — هيتميّز في السلة
+  // 🎯 وبيتحدد تلقائي — عشان + و− و«تعديل» و«حذف» يشتغلوا عليه على طول
+  //    من غير ما الكاشير تدوّر على صفه وتدوس عليه.
+  {
+    let _i = -1;
+    for(let k = cart.length - 1; k >= 0; k--){
+      if(cart[k] && cart[k].id === item.id && !cart[k].isReturn
+         && !cart[k].isRedemption && !cart[k].isRewardDiscount){ _i = k; break; }
+    }
+    if(_i >= 0) selectedCartIdx = _i;
+  }
   renderCart();
 }
 
@@ -417,7 +427,10 @@ function renderCart(){
     selectedCartIdx = null;
     tbody.innerHTML = '<tr><td colspan="6" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>';
   }else{
-    tbody.innerHTML = cart.map((c, idx)=>`
+    // 🔃 الأحدث فوق — **العرض بس**. مصفوفة السلة نفسها بترتيبها الأصلي،
+    //    فأرقام السطور والفاتورة المطبوعة والعكس والحسابات كلها زي ما هي،
+    //    وكل زرار في الصف شايل فهرسه الحقيقي (idx) مش ترتيب العرض.
+    tbody.innerHTML = cart.map((c, idx)=> ({ c, idx })).reverse().map(({ c, idx })=>`
       <tr class="${idx===selectedCartIdx?'sel ':''}${c.isReturn?'ret':''}${_isLastAdded(c)?' just-added':''}" onclick="selectCartRow(${idx})" style="${c.offerApplied?'background:linear-gradient(90deg,#ffeef5,#fff); box-shadow:inset 4px 0 0 #e27a97;':''}">
         <td>${idx+1}</td>
         <td class="item-name">${_isLastAdded(c)?'<span class="last-badge">آخر ✅</span> ':''}${c.offerApplied?'🎁 ':''}${c.name}${c.isReturn?' ↩️ (مرتجع)':''}${c.edited?` <span style="color:#f59e0b; font-size:10px; font-weight:800;">✏️ متعدّل${c.editPct?` −${c.editPct}%`:''}</span>`:''}${c.offerApplied?' <span style="color:#c0397a; font-size:10px; font-weight:800;">🎁 عرض مفعّل</span>':''}${c.discountName?` <span style="color:#1c7a2e; font-size:10px;">🏷️ ${c.discountName}</span>`:''}${c.barcode?`<div class="cart-code">${c.barcode}</div>`:''}</td>
@@ -3138,7 +3151,7 @@ function showChangeAfterPrint(change){
               border-radius:12px; background:var(--panel2); border:1px solid var(--border);
               color:var(--text); font-family:'Cairo'; font-weight:800; font-size:15px; cursor:pointer;">
         إغلاق</button>
-      <div style="color:var(--muted); font-size:11.5px; margin-top:8px;">بتتقفل لوحدها أول ما تمسح المنتج اللي بعده</div>
+      <div style="color:var(--muted); font-size:11.5px; margin-top:8px;">دوس <b>Enter</b> تقفل — أو امسح المنتج اللي بعده</div>
     </div>`;
   document.body.appendChild(ov);
   const close = ()=>{ const el = document.getElementById('changeConfirmOverlay'); if(el) el.remove(); };
@@ -3151,9 +3164,18 @@ function showChangeAfterPrint(change){
     sb.addEventListener('input', onType);
     setTimeout(function(){ try{ sb.focus(); }catch(e){} }, 80);
   }
-  document.addEventListener('keydown', function esc(e){
-    if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', esc); }
-  });
+  // ⌨️ Enter بيقفلها — الكاشير إيده على الكيبورد أو الماسح، مش على الماوس.
+  //    (وEscape برضه.) بنمسك الحدث في مرحلة الالتقاط ونمنع انتشاره عشان
+  //    الـEnter ما يروحش لبار البحث ويعمل بحث على الفاضي.
+  const onKey = function(e){
+    if(e.key === 'Enter' || e.key === 'Escape' || e.key === 'NumpadEnter'){
+      e.preventDefault(); e.stopPropagation();
+      close();
+      document.removeEventListener('keydown', onKey, true);
+      try{ const b = document.getElementById('searchBar'); if(b) b.focus(); }catch(_e){}
+    }
+  };
+  document.addEventListener('keydown', onKey, true);
 }
 window.showChangeAfterPrint = showChangeAfterPrint;
 
