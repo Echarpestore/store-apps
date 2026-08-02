@@ -43,6 +43,15 @@ const empCol = collection(db, 'sales_employees');
 
 // ===== 🧭 معالج تسجيل الموظف =====
 const regCol = collection(db, 'sales_registrations');
+
+// 👤 أول اسمين بس للعرض. الاسم الرسمي الكامل مبيتشالش — بيتحفظ في `fullName`.
+// ⚠️ بيشيل المسافات الزيادة والتشكيل الفاضي، ولو الاسم كلمة واحدة بيرجعها زي ما هي.
+function shortName(n){
+  const parts = String(n == null ? '' : n).trim().split(/\s+/).filter(Boolean);
+  if(parts.length === 0) return '';
+  return parts.slice(0, 2).join(' ');
+}
+if(typeof window !== 'undefined') window.shortName = shortName;
 let _rwStep = 0;
 let _rwData = { name:'', gender:'', shift:'', dayOff:'', pin:'', agreed:false };
 const _rwDayNames = ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
@@ -301,13 +310,18 @@ window.approveReg = async function(id){
       tx.update(regRef, { status:'approved', approvedAt: Date.now() });
     });
     // بننشئ الموظف **بعد** ما الحجز ينجح — فمستحيل اتنين يوصلوا هنا
+    // 👤 الاسم المعروض = **أول اسمين بس**. استمارة التوظيف بتطلب الاسم كامل
+    //    زي البطاقة (ده مطلوب للسجل والعقد)، لكن عرضه كامل في كل الشاشات
+    //    وحش ومزحوم. الاسم الرسمي متحفوظ في `fullName` وفي طلب التسجيل.
     await addDoc(empCol, {
-      name: r.name, gender: r.gender || '', avatar: (r.gender === 'male' ? 'boy' : 'girl'), shift: r.shift, dayOff: r.dayOff,
+      name: shortName(r.name), fullName: (r.name || '').trim(),
+      gender: r.gender || '', avatar: (r.gender === 'male' ? 'boy' : 'girl'), shift: r.shift, dayOff: r.dayOff,
       scheduledStartTime: r.scheduledStartTime || (complianceCfg.shifts[r.shift]||{}).start || null,
       scheduledEndTime: r.scheduledEndTime || (complianceCfg.shifts[r.shift]||{}).end || null,
       branch: r.branch, active: true, createdAt: Date.now(), pin: (r.pin || '0000')
     });
-    alert('تم اعتماد ' + r.name + ' — الحساب اتفعّل بالرقم السري اللي اختاره الموظف ✅');
+    alert('تم اعتماد ' + shortName(r.name) + ' — الحساب اتفعّل بالرقم السري اللي اختاره الموظف ✅\n\n'
+      + 'الاسم المعروض: ' + shortName(r.name) + '\nالاسم الرسمي محفوظ: ' + (r.name||'').trim());
   }catch(e){
     if(e && e.message === '__ALREADY__'){
       alert('الطلب ده اتعمد خلاص ✅ — مش هيتسجّل تاني');
@@ -5059,6 +5073,34 @@ function renderSalaryPaymentLog(){
   wireDayLogToggles(wrap);
 }
 
+// ---------- ✏️ تعديل اسم الموظف (admin) ----------
+// ⚠️ السجلات القديمة (النقط · التقييمات · كشوف المرتبات) بتحتفظ بنسخة من
+//    الاسم وقت ما اتسجلت — التعديل مش بيرجع يغيّرها. عشان كده نسبة التقييم
+//    بتشتغل بالـ`servedByEmployeeId` الأول والاسم فولباك، فالتعديل مش
+//    بيكسّرها. بس بننبّه المستخدم بصراحة.
+window.renameEmp = async function(id){
+  const emp = allEmployees.find(e=> e.id === id);
+  if(!emp) return;
+  const cur = emp.name || '';
+  const v = prompt('الاسم المعروض للموظف'
+    + (emp.fullName && emp.fullName !== cur ? '\nالاسم الرسمي: ' + emp.fullName : '')
+    + '\n\n⚠️ السجلات القديمة هتفضل بالاسم القديم.', cur);
+  if(v === null) return;
+  const next = String(v).trim().replace(/\s+/g, ' ');
+  if(next.length < 2){ alert('الاسم قصير أوي'); return; }
+  if(next === cur) return;
+  const clash = allEmployees.find(e=> e.id !== id && e.branch === emp.branch
+    && e.active !== false && (e.name || '') === next);
+  if(clash && !confirm('⚠️ فيه موظف تاني بنفس الاسم في نفس الفرع.\n\nالتقارير القديمة بتربط بالاسم في بعض الحالات — ممكن يحصل لخبطة.\n\nتكمّل؟')) return;
+  try{
+    await updateDoc(doc(db, 'sales_employees', id), { name: next, nameEditedAt: Date.now() });
+    emp.name = next;
+    if(typeof renderTerminationPanel === 'function') renderTerminationPanel();
+    if(typeof renderStaffOverview === 'function') renderStaffOverview();
+    alert('تم ✅ الاسم بقى: ' + next);
+  }catch(e){ alert('تعذر التعديل: ' + (e && e.message ? e.message : '')); }
+};
+
 // ---------- EMPLOYEE TERMINATION (admin) ----------
 let pendingTerminateEmpId = null;
 
@@ -5068,11 +5110,16 @@ function renderTerminationPanel(){
   if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=> `
     <div class="emp-row">
-      <div class="n">${e.name}</div>
+      <div class="n">${e.name}${e.fullName && e.fullName !== e.name
+        ? `<div style="font-size:10px; color:var(--sub); font-weight:400;">${e.fullName}</div>` : ''}</div>
+      <button class="renameBtn" data-id="${e.id}" style="border:1px solid var(--line); background:transparent; color:var(--fg); padding:8px 11px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">✏️ الاسم</button>
       <button data-id="${e.id}" style="border:none; background:var(--bad); color:#fff; padding:8px 14px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:12px; cursor:pointer;">🚪 إنهاء الخدمة</button>
     </div>
   `).join('');
-  wrap.querySelectorAll('button').forEach(btn=>{
+  wrap.querySelectorAll('.renameBtn').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{ ev.stopPropagation(); renameEmp(btn.dataset.id); });
+  });
+  wrap.querySelectorAll('button:not(.renameBtn)').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       pendingTerminateEmpId = btn.dataset.id;
       const emp = allEmployees.find(e=> e.id === pendingTerminateEmpId);
