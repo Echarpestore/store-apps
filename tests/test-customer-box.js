@@ -597,8 +597,17 @@ const el = (sb, id)=> sb.document.getElementById(id);
   // التقارير بتحترم الفترة المطلوبة
   assert(/if\(from\) q = q\.where\('ts','>=', from\.getTime\(\)\)/.test(rep),
     '📊 وتقرير التقييمات بيسحب الفترة المطلوبة بس');
-  assert(/if\(from\) _eq = _eq\.where\('ts','>=', from\.getTime\(\)\)/.test(rep),
-    'وتقرير الربط كمان');
+  // ⚠️ الفحص ده كان بيثبّت `from`/`to` في renderLiveSalesHistory — وهما
+  //    أصلًا **مش معرّفين في الدالة دي** (محليين جوه renderReportsScreen).
+  //    يعني كان بيحرس على كود بيرمي ReferenceError كل مرة. النافذة دلوقتي
+  //    متحسوبة من الفواتير المتحمّلة نفسها، وبرضه مسقوفة من الطرفين.
+  const hist = extractFn(rep, 'renderLiveSalesHistory');
+  const histCode = hist.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert(histCode.indexOf("collection('entries')") >= 0, 'سجل الفواتير بيسحب التقييمات');
+  assert(/\.where\('ts','>=',/.test(histCode) && /\.where\('ts','<=',/.test(histCode),
+    'وتقرير الربط بنافذة مسقوفة من الطرفين — مش سحب المجموعة كلها');
+  assert(!/\bfrom\.getTime\(\)/.test(histCode) && !/\bto\.getTime\(\)/.test(histCode),
+    '🔴 ومن غير from/to (المتغيرين اللي مش موجودين في نطاق الدالة دي)');
 }
 
 // ============================================================
