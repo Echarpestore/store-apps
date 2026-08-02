@@ -708,16 +708,16 @@ window.ofUnregisterPush = ofUnregisterPush;
 
 $('#notifBtn').addEventListener('click', async function(){
   const b = $('#notifBtn');
-  b.textContent = '⏳ بيفعّل…'; b.disabled = true;
+  b.textContent = '⏳'; b.disabled = true;
   const r = await ofRegisterPush();
   b.disabled = false;
   if(r.ok){
-    b.textContent = '🔔 الإشعارات شغالة ✅';
+    b.textContent = '🔔'; b.title = 'الإشعارات شغالة ✅';
     alert('اتفعّلت ✅\n\nهتوصلك إشعارات حتى والتطبيق مقفول.\n\n'
       + '⚠️ لو مش بتسمع صوت: من إعدادات الموبايل → التطبيقات → echarpe office '
       + '→ الإشعارات → خلي الأهمية عالية.');
   } else {
-    b.textContent = '🔕 الإشعارات متعطّلة';
+    b.textContent = '🔕'; b.title = 'الإشعارات متعطّلة';
     alert('ماتفعّلتش: ' + (r.why || '') );
   }
 });
@@ -729,8 +729,8 @@ $('#notifBtn').addEventListener('click', async function(){
 // النتيجة في `lastSend`، وإحنا بنستنى النتيجة ونوريها بالنص.
 async function ofPushTest(btn){
   const ref = db.collection('pos_test_settings').doc('office_push');
-  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيبعت…'; }
-  const reset = function(){ if(btn){ btn.disabled = false; btn.textContent = '🧪 ابعت إشعار تجربة'; } };
+  if(btn){ btn.disabled = true; btn.textContent = '⏳'; }
+  const reset = function(){ if(btn){ btn.disabled = false; btn.textContent = '🧪'; } };
   try{
     const cur = await ref.get();
     const d = cur.exists ? (cur.data() || {}) : {};
@@ -795,7 +795,7 @@ function ofPushHint(code){
 }
 try{ ofPaintEyeBtn(); }catch(e){}   // 🙈 حالة العين محفوظة بين الفتحات
 if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
-  $('#notifBtn').textContent = '🔔 الإشعارات شغالة ✅';
+  $('#notifBtn').textContent = '🔔'; $('#notifBtn').title = 'الإشعارات شغالة ✅';
   // 🔁 تجديد صامت: التوكن بيتغيّر لوحده أحيانًا (تنضيف المتصفح/تحديث النظام).
   //    من غير التجديد ده الإشعارات بتقف بعد فترة والمالك مش هيعرف ليه.
   setTimeout(function(){ ofRegisterPush().catch(function(){}); }, 5000);
