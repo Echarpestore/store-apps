@@ -1,4 +1,4 @@
-const CACHE_NAME = 'echarpe-loyalty-v38';
+const CACHE_NAME = 'echarpe-loyalty-v39';
 
 // ============ استقبال إشعارات Push (حتى والتطبيق مقفول) ============
 self.addEventListener('push', (event) => {

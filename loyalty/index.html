@@ -1631,12 +1631,23 @@ if ('serviceWorker' in navigator) {
     sending = true;
     send.disabled = true; send.textContent = 'بيتبعت…';
     try{
+      // ⚠️ لو جلب الفاتورة وقع (نت وحش) الـ`sale` بيفضل فاضي → التقييم كان
+      //    هيتسجل من غير فرع ولا بياعة، ويختفي من كل التقارير المفلترة
+      //    بالفرع. محاولة تانية هنا قبل الحفظ.
+      if(!sale || !sale.branch){
+        try{ var _sd = await db.collection(COL_SALES).doc(saleId).get(); if(_sd.exists) sale = _sd.data() || sale; }catch(_e){}
+      }
       await db.collection('entries').add({
         r: picked,
         ts: Date.now(),
         branch: (sale && sale.branch) || '',
         customerPhone: (sale && sale.customerPhone) || '',
         saleId: saleId,
+        // 👤 التقييم لازم ينزل على **البياعة اللي كانت معاها**، مش على أقرب
+        //    فاتورة زمنيًا. الفاتورة نفسها فيها البياعة — فبناخدها من هنا
+        //    وننسبها صراحةً بدل ما شاشة الأداء تخمّن بالوقت.
+        servedByEmployeeId:   (sale && (sale.sellerEmployeeId   || sale.employeeId))   || '',
+        servedByEmployeeName: (sale && (sale.sellerEmployeeName || sale.employeeName)) || '',
         note: String(note.value || '').trim().slice(0, 300),
         source: 'app_after_visit'
       });
