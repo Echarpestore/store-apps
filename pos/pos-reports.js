@@ -721,6 +721,30 @@ async function buildRatingsReport(from, to){
   entries.forEach(e=>{ const n=e.servedByEmployeeName; if(!n) return; if(!byEmp[n]) byEmp[n]={sum:0,n:0}; byEmp[n].sum+=e.r; byEmp[n].n++; });
   const empRows = Object.entries(byEmp).sort((a,b)=> (b[1].sum/b[1].n)-(a[1].sum/a[1].n));
 
+  // 📍 مصدرين مختلفين تمامًا وكانوا بيتخلطوا في نفس المتوسط:
+  //    الكشك = ضغطة سريعة مجهولة في الفرع · التطبيق = بعد نص ساعة ومربوط بفاتورة.
+  const _src = { app:{sum:0,n:0}, kiosk:{sum:0,n:0} };
+  entries.forEach(e=>{ const k = (e.source === 'app_after_visit' || e.saleId) ? 'app' : 'kiosk'; _src[k].sum += e.r; _src[k].n++; });
+  const _srcCell = (k, label, hint)=> _src[k].n
+    ? `<tr><td>${label}<div style="font-size:10.5px; color:var(--muted);">${hint}</div></td>
+        <td class="num">${_src[k].n}</td><td class="num">${(_src[k].sum/_src[k].n).toFixed(2)}</td></tr>` : '';
+  const srcRows = (_src.app.n && _src.kiosk.n)
+    ? `<h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">التقييم حسب المصدر</h3>
+       <table class="rep-tbl"><thead><tr><th>المصدر</th><th class="num">عدد</th><th class="num">متوسط</th></tr></thead><tbody>
+       ${_srcCell('app','📱 تطبيق الولاء','بعد الزيارة بنص ساعة · مربوط بالفاتورة')}
+       ${_srcCell('kiosk','🖥️ شاشة الفرع','ضغطة سريعة مجهولة')}
+       </tbody></table>` : '';
+
+  // 💬 الكلام المكتوب — كان بيتخزن ومحدش بيقراه في أي شاشة
+  const withNotes = entries.filter(e=> e.note && String(e.note).trim())
+    .sort((a,b)=> (a.r - b.r) || (b.ts - a.ts)).slice(0, 40);
+  const noteRows = withNotes.length
+    ? `<h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">💬 كلام العملاء (${withNotes.length}) — الأسوأ الأول</h3>
+       ${withNotes.map(e=>`<div style="border-right:3px solid ${colors[e.r]||'#9ca3af'}; background:var(--panel2); border-radius:8px; padding:8px 11px; margin-bottom:7px;">
+         <div style="font-size:11px; color:var(--muted); margin-bottom:3px;">${RATING_ICON_MAP[e.r]||''} ${faces[e.r]||''} · ${new Date(e.ts).toLocaleString('ar-EG')}</div>
+         <div style="font-size:12.5px; line-height:1.7; white-space:pre-wrap;">${_rtEsc(e.note)}</div>
+       </div>`).join('')}` : '';
+
   return `<div class="rep-card">
     <h2 style="margin:0 0 2px; font-size:16px;">⭐ تقييمات العملاء</h2>
     <div style="color:var(--muted); font-size:11px; margin-bottom:12px;">${currentBranch||''} · ${reportRangeLabel()}</div>
@@ -736,7 +760,9 @@ async function buildRatingsReport(from, to){
     ${empRows.length? `<h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">التقييم حسب الموظف</h3>
       <table class="rep-tbl"><thead><tr><th>الموظف</th><th class="num">عدد</th><th class="num">متوسط</th></tr></thead><tbody>
       ${empRows.map(([n,d])=>`<tr><td>${n}</td><td class="num">${d.n}</td><td class="num">${(d.sum/d.n).toFixed(2)}</td></tr>`).join('')}
-      </tbody></table>`:''}`
+      </tbody></table>`:''}
+    ${srcRows}
+    ${noteRows}`
     : '<div style="text-align:center; color:var(--muted); padding:24px;">مفيش تقييمات في الفترة دي</div>'}
   </div>`;
 }
@@ -892,6 +918,36 @@ function _shResolveDayKey(filter, now){
 let _shMonthKey = null;   // الشهر المختار في سجل المبيعات (null = أحدث شهر)
 let _shDayFilter = null;  // null | 'today' | 'yesterday' | 'YYYY-MM-DD' (فلتر يوم سريع)
 window._shSalesById = {}; // آخر فواتير متحمّلة — لزر 🖨️ طباعة تاني من غير قراءات زيادة
+// ⭐ ربط التقييمات بالفواتير — **دالة نقية** (بيانات داخلة، خريطة خارجة)
+//    عشان تتختبر لوحدها من غير Firestore ولا DOM.
+//    القاعدة: `saleId` أولًا (رابط مؤكد من تطبيق الولاء)، وبعدين تخمين
+//    زمني ضيق (3 دقايق) لتقييم الكشك المجهول اللي مفيهوش saleId.
+function shLinkRatings(sales, entries, branch){
+  const map = {};
+  const byPhone = {};
+  (entries || []).forEach(e=>{
+    if(!e) return;
+    if(e.saleId){                       // ✅ الفاتورة نفسها — مفيش تخمين
+      map[e.saleId] = { r: e.r, note: e.note || '', source: e.source || 'app', ts: e.ts, exact: true };
+      return;
+    }
+    if(branch && e.branch !== branch) return;
+    if(!e.customerPhone) return;
+    (byPhone[e.customerPhone] = byPhone[e.customerPhone] || []).push(e);
+  });
+  (sales || []).forEach(s=>{
+    if(map[s.id]) return;               // الرابط المؤكد بيغلب دايمًا
+    const arr = s.customerPhone ? byPhone[s.customerPhone] : null;
+    const t = _shTsOf(s);
+    if(!arr || !t) return;
+    let best = null;
+    arr.forEach(e=>{ const dd = Math.abs(e.ts - t); if(dd <= 3*60*1000 && (!best || dd < best.d)) best = { e, d: dd }; });
+    if(best) map[s.id] = { r: best.e.r, note: best.e.note || '', source: best.e.source || 'kiosk', ts: best.e.ts, exact: false };
+  });
+  return map;
+}
+if(typeof window !== 'undefined') window.shLinkRatings = shLinkRatings;
+
 async function renderLiveSalesHistory(){
   const wrap = document.getElementById('salesHistoryWrap');
   wrap.innerHTML = 'بيتحمّل...';
@@ -906,21 +962,31 @@ async function renderLiveSalesHistory(){
   if(sales.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش مبيعات مسجلة</div>'; return; }
   window._shSalesById = {}; sales.forEach(x=>{ window._shSalesById[x.id] = x; });
 
-  // نجيب كل التقييمات المرتبطة بعملاء مرة واحدة، وبعدين نربط كل فاتورة بأقرب تقييم لنفس رقم العميل
-  let entriesByPhone = {};
+  // ⭐ تقييمات العملاء على الفواتير
+  // 🔴 كان فيه باجين هنا خلّوا التقييم **مايظهرش خالص**:
+  //  ١) الكود كان بيستخدم `from`/`to` وهما متغيرين محليين جوه
+  //     renderReportsScreen — مش موجودين في الدالة دي. فأول سطر كان بيرمي
+  //     ReferenceError، والـcatch بيبلعه بصمت، والخريطة تفضل فاضية على طول.
+  //  ٢) الربط كان بالتليفون + **3 دقايق** بس. وتقييم تطبيق الولاء بيوصل
+  //     **بعد نص ساعة** من الشراء — يعني بره النافذة دايمًا، مهما حصل.
+  //     مع إن التقييم ده جواه `saleId` = رقم الفاتورة بالظبط (رابط مؤكد
+  //     100%) وإحنا كنا بنتجاهله ونخمّن بالوقت.
+  // الحل: الربط بالـ`saleId` الأول (مؤكد)، والتخمين الزمني فولباك لتقييم
+  // الكشك بس (الكشك مجهول — مفيهوش saleId).
+  window._shRatingById = {};
   try{
-    // 💸 بنفس منطق الفترة — مش كل تقييمات الفرع من أول يوم
-    let _eq = db.collection('entries');
-    if(from) _eq = _eq.where('ts','>=', from.getTime());
-    if(to)   _eq = _eq.where('ts','<=', to.getTime());
-    const entriesSnap = await _eq.get();
-    entriesSnap.docs.forEach(d=>{
-      const e = d.data();
-      if(e.branch !== currentBranch) return;
-      if(!e.customerPhone) return;
-      if(!entriesByPhone[e.customerPhone]) entriesByPhone[e.customerPhone] = [];
-      entriesByPhone[e.customerPhone].push(e);
-    });
+    let _minTs = Infinity, _maxTs = -Infinity;
+    sales.forEach(s=>{ const t = _shTsOf(s); if(t){ if(t < _minTs) _minTs = t; if(t > _maxTs) _maxTs = t; } });
+    if(_minTs !== Infinity){
+      // 💸 النافذة متحسوبة من الفواتير المتحمّلة نفسها — مش سحب كل التقييمات.
+      //    وبنمد الآخر يومين لأن تقييم التطبيق بيتأخر (إشعار بعد نص ساعة،
+      //    والعميلة ممكن تدوس عليه تاني يوم).
+      const entriesSnap = await db.collection('entries')
+        .where('ts','>=', _minTs - 5*60*1000)
+        .where('ts','<=', _maxTs + 48*60*60*1000).get();
+
+      window._shRatingById = shLinkRatings(sales, entriesSnap.docs.map(d=>d.data()), currentBranch);
+    }
   }catch(e){ console.warn('تعذر تحميل التقييمات', e); }
 
   const renderRow = (s)=>{
@@ -928,13 +994,15 @@ async function renderLiveSalesHistory(){
     const dateStr = d ? d.toLocaleString('ar-EG') : '—';
     const badge = s.reversed ? ' <span style="color:var(--minus); font-size:11px;">(ملغاة)</span>' : (s.isReversal ? ' <span style="color:var(--warn); font-size:11px;">(عكس)</span>' : '');
 
+    // ⭐ التقييم: الشكل بيفرّق بين المؤكد والتقريبي — التقريبي عليه «~»
+    //    عشان محدش يحاسب بياعة على تقييم مخمّن بالوقت.
     let ratingBadge = '';
-    if(s.customerPhone && entriesByPhone[s.customerPhone] && d){
-      const saleMs = d.getTime();
-      const closest = entriesByPhone[s.customerPhone].sort((a,b)=> Math.abs(a.ts-saleMs) - Math.abs(b.ts-saleMs))[0];
-      if(closest && Math.abs(closest.ts - saleMs) <= (3*60*1000)){
-        ratingBadge = ` <span title="تقييم العميل">${RATING_ICON_MAP[closest.r]||''}</span>`;
-      }
+    const _rt = (window._shRatingById || {})[s.id];
+    if(_rt){
+      ratingBadge = ` <span title="${_rt.exact ? 'تقييم العميلة على الفاتورة دي بالظبط' : 'تقييم تقريبي — اترّبط بالوقت مش برقم الفاتورة'}"`
+        + ` style="font-size:15px;">${RATING_ICON_MAP[_rt.r] || ''}`
+        + `${_rt.exact ? '' : '<span style="font-size:10px; color:#9ca3af; vertical-align:super;">~</span>'}`
+        + `${_rt.note ? '<span style="font-size:11px;"> 📝</span>' : ''}</span>`;
     }
 
     const isRet = (s.total||0) < 0;
@@ -1010,6 +1078,37 @@ async function renderLiveSalesHistory(){
   ).join('') || ('<div class="empty-cart">'+(_dayKey?'مفيش فواتير في اليوم ده':'مفيش فواتير في الشهر ده')+'</div>'));
 }
 
+// ⭐ كارت تقييم العميلة جوه تفاصيل الفاتورة (مع الكلام المكتوب لو موجود)
+// ⚠️ `note` كلام مكتوب من العميلة من تطبيق الولاء — **لازم يتهرّب** قبل ما
+//    يتحط في innerHTML، وإلا بقى ثغرة حقن HTML من برّه النظام.
+const RATING_TEXT_MAP = {1:'😠 مضايقني جدًا', 2:'🙁 مش عاجبني', 3:'🙂 كويس', 4:'😍 عجبني جدًا'};
+const RATING_HUE_MAP  = {1:'#DC2626', 2:'#F59E0B', 3:'#65A30D', 4:'#059669'};
+function _rtEsc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function _shRatingBlock(id){
+  const rt = (window._shRatingById || {})[id];
+  if(!rt) return '';
+  const hue = RATING_HUE_MAP[rt.r] || '#6b7280';
+  const when = rt.ts ? new Date(rt.ts).toLocaleString('ar-EG') : '';
+  return '<div style="margin-top:11px; border:1px solid ' + hue + '33; background:' + hue + '0f;'
+    + ' border-radius:10px; padding:10px 12px;">'
+    + '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">'
+    +   '<b style="color:' + hue + '; font-size:13.5px;">' + (RATING_TEXT_MAP[rt.r] || 'تقييم') + '</b>'
+    +   '<span style="font-size:10.5px; color:#6b7280;">'
+    +     (rt.exact ? '✅ تقييم الفاتورة دي' : '≈ ربط تقريبي بالوقت')
+    +     (when ? ' · ' + when : '') + '</span>'
+    + '</div>'
+    + (rt.note
+        ? '<div style="margin-top:7px; background:#fff; border-radius:8px; padding:8px 10px; font-size:12.5px; line-height:1.7; color:#374151; white-space:pre-wrap;">📝 '
+          + _rtEsc(rt.note) + '</div>'
+        : '')
+    + '</div>';
+}
+if(typeof window !== 'undefined'){ window._shRatingBlock = _shRatingBlock; window._rtEsc = _rtEsc; }
+
 // 🖨️ طباعة نسخة تاني من فاتورة قديمة — بنفس تصميم الفاتورة، ومن غير فتح الدرج
 // 🔽 فتح تفاصيل الفاتورة **جوه الكارت** — من غير ما نفتح صفحة تانية
 function shToggle(id){
@@ -1068,6 +1167,7 @@ function shToggle(id){
       + (pays ? '<div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">' + pays + '</div>' : '')
       + (card ? '<div style="margin-top:9px; background:#0f1a2e; color:#dbeafe; border-radius:9px; padding:8px 11px; font-family:monospace; font-size:11.5px; direction:ltr; text-align:left; line-height:1.7;">'
           + card.html + '</div>' : '')
+      + _shRatingBlock(id)
       + '<div style="display:flex; gap:8px; margin-top:12px;">'
       + '<button onclick="reprintSale(\'' + id + '\')" style="flex:2; padding:10px; border:none; border-radius:10px;'
       + " background:linear-gradient(135deg,#3B82F6,#1D4ED8); color:#fff; font-family:'Cairo'; font-weight:800;"
