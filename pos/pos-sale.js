@@ -382,7 +382,10 @@ searchBar.addEventListener('keydown', (e)=>{
 function addToCart(item){
   if(!cart.length) _cartFirstItemAt = Date.now();   // 🕵️ بداية السلة
   // البيع مسموح دايمًا حتى لو المخزون مايكفيش (الكمية تنزل بالسالب)
-  const existing = cart.find(c => c.id === item.id && !c.isReturn);
+  // 🔑 `noSplit` مش موجودة على السطور العادية — بس السطر اللي الكاشير فصلته
+  //    بإيدها (عشان تخصم على قطعة واحدة) بيتعلّم `noMerge` وبيتستثنى من الدمج،
+  //    وإلا الضربة الجاية لنفس الباركود كانت هترجع تدمجهم وتلغي الفصل.
+  const existing = cart.find(c => c.id === item.id && !c.isReturn && !c.noMerge);
   if(existing){ existing.qty += 1; }
   else{
     // تطبيق أفضل خصم ساري تلقائيًا (لو فيه) — بقاعدة "الأفضل للعميل بس، مش تجميع"
@@ -406,7 +409,7 @@ function addToCart(item){
   {
     let _i = -1;
     for(let k = cart.length - 1; k >= 0; k--){
-      if(cart[k] && cart[k].id === item.id && !cart[k].isReturn
+      if(cart[k] && cart[k].id === item.id && !cart[k].isReturn && !cart[k].noMerge
          && !cart[k].isRedemption && !cart[k].isRewardDiscount){ _i = k; break; }
     }
     if(_i >= 0) selectedCartIdx = _i;
@@ -672,6 +675,13 @@ function qbxQty(delta){
   if(!requireSelection()) return;
   changeQty(selectedCartIdx, delta);
 }
+// ✂️ زرار «افصل قطعة» — للسطر اللي كميته أكتر من واحدة
+function qbxSplitSel(){
+  if(!requireSelection()) return;
+  splitCartLine(selectedCartIdx);
+}
+if(typeof window !== 'undefined') window.qbxSplitSel = qbxSplitSel;
+
 function qbxReturnSel(){
   if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس — مش مسموح للكاشير', 'err'); return; }
   if(!requireSelection()) return;
@@ -1165,6 +1175,30 @@ function returnCartItem(idx){
   renderCart();
   showToast('↩️ "' + item.name + '" بقى مرتجع — دوس تاني عليه لو عايز ترجعه بيع', 'ok');
 }
+// ✂️ فصل قطعة واحدة من سطر كميته أكتر من واحدة
+// ------------------------------------------------------------
+// المشكلة: عميلة بتاخد قطعتين نفس الشكل، وواحدة فيهم فيها عيب. السلة
+// بتدمج المتشابهين في **سطر واحد بكمية 2**، فأي خصم أو تعديل سعر بينزل
+// على الاتنين — مفيش طريقة تخصم على واحدة بس.
+// الحل: نفصل قطعة في سطر لوحدها، والسطر المفصول بيتعلّم `noMerge` عشان
+// الضربة الجاية لنفس الباركود ماترجعش تدمجهم.
+// ✅ باقي النظام مش محتاج تعديل: كل عمليات السلة (تعديل/خصم/حذف/مرتجع)
+//    شغالة بـ**رقم السطر** مش بكود المنتج، وخصم المخزون بيجمع الكميات،
+//    فسطرين بنفس الكود بيخصموا صح.
+function splitCartLine(idx){
+  const line = cart[idx];
+  if(!line) return;
+  if(line.isRedemption || line.isRewardDiscount){ showToast('السطر ده مينفعش يتفصل', 'err'); return; }
+  if((line.qty || 0) <= 1){ showToast('السطر ده قطعة واحدة أصلًا', 'err'); return; }
+  line.qty -= 1;
+  const copy = Object.assign({}, line, { qty: 1, noMerge: true });
+  cart.splice(idx + 1, 0, copy);
+  selectedCartIdx = idx + 1;               // القطعة المفصولة هي المحددة
+  renderCart();
+  showToast('✂️ اتفصلت قطعة لوحدها — التعديل والخصم دلوقتي عليها بس', 'ok');
+}
+if(typeof window !== 'undefined') window.splitCartLine = splitCartLine;
+
 function changeQty(idx, delta){
   const line = cart[idx];
   line.qty += delta;   // مسموح بأي كمية حتى لو أكبر من المخزون
