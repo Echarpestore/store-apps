@@ -1630,34 +1630,49 @@ function renderPerformanceLink(){
   // Greedy nearest-match: each feedback entry can only be matched once,
   // to the closest-in-time sale — whether the feedback came shortly before
   // or shortly after the sale — within the allowed window.
+  // 🔴 التخمين الزمني لوحده كان بينزّل تقييم عميلة على بياعة تانية.
+  //    دلوقتي: التقييم المنسوب صراحةً (servedByEmployee*) بيروح لصاحبته
+  //    بس — بنافذة أوسع (6 ساعات) لأن تقييم تطبيق الولاء بيوصل بعد نص
+  //    ساعة. والتخمين الزمني الضيق فضل للتقييمات المجهولة بس.
+  const ATTRIB_WINDOW_MS = 6 * 60 * 60 * 1000;
   const usedFeedback = new Set();
   const matched = branchPoints.slice().sort((a,b)=> b.ts - a.ts).map(p=>{
-    let bestIdx = -1, bestAbsDelta = Infinity, bestDelta = 0;
+    let bestIdx = -1, bestAbsDelta = Infinity, bestDelta = 0, bestAttrib = false;
     for(let i=0;i<branchFeedback.length;i++){
       if(usedFeedback.has(i)) continue;
-      const delta = branchFeedback[i].ts - p.ts; // positive = feedback after sale, negative = before
+      const f = branchFeedback[i];
+      const owned = !!window._fbOwner(f);
+      // تقييم مكتوب عليه اسم بياعة تانية عمره ما يتخمّن على دي
+      if(owned && !window._fbIsFor(f, p.employeeId, p.employeeName)) continue;
+      const delta = f.ts - p.ts; // موجب = التقييم بعد البيع
       const absDelta = Math.abs(delta);
-      if(absDelta <= MATCH_WINDOW_MS && absDelta < bestAbsDelta){
-        bestAbsDelta = absDelta; bestDelta = delta; bestIdx = i;
-      }
+      const win = owned ? ATTRIB_WINDOW_MS : MATCH_WINDOW_MS;
+      if(absDelta > win) continue;
+      // المنسوب صراحةً بيغلب المخمّن مهما كان الفرق الزمني
+      if(bestIdx >= 0 && bestAttrib && !owned) continue;
+      if(bestIdx >= 0 && bestAttrib === owned && absDelta >= bestAbsDelta) continue;
+      bestAbsDelta = absDelta; bestDelta = delta; bestIdx = i; bestAttrib = owned;
     }
-    let fb = null, minutesDiff = null, direction = null;
+    let fb = null, minutesDiff = null, direction = null, attributed = false;
     if(bestIdx >= 0){
       fb = branchFeedback[bestIdx];
       usedFeedback.add(bestIdx);
       minutesDiff = Math.round(bestAbsDelta/60000);
       direction = bestDelta >= 0 ? 'بعد' : 'قبل';
+      attributed = bestAttrib;
     }
-    return { point: p, feedback: fb, minutesDiff, direction };
+    return { point: p, feedback: fb, minutesDiff, direction, attributed };
   }).slice(0, 100);
 
-  const rows = matched.map(({point, feedback, minutesDiff, direction})=>{
+  const rows = matched.map(({point, feedback, minutesDiff, direction, attributed})=>{
     const d = new Date(point.ts);
     const time = d.toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
     let ratingCell = '<span class="ratingBadge none">مفيش تقييم قريب</span>';
     if(feedback){
       const r = RATING_LABELS[feedback.r];
-      ratingCell = `<span class="ratingBadge r${feedback.r}">${r.emoji} ${r.label}</span> <span style="color:var(--sub); font-size:10px;">(${direction} ${minutesDiff} د)</span>`;
+      // ✅ = التقييم مكتوب عليه اسم البياعة · ≈ = تخمين زمني
+      ratingCell = `<span class="ratingBadge r${feedback.r}">${r.emoji} ${r.label}</span> <span style="color:var(--sub); font-size:10px;">${attributed ? '✅ منسوب لها' : '≈ تخمين'} · ${direction} ${minutesDiff} د</span>`
+        + (feedback.note ? `<div style="color:var(--sub); font-size:11px; margin-top:3px; line-height:1.6; white-space:pre-wrap;">📝 ${String(feedback.note).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : '');
     }
     return `<tr>
       <td>${time}</td>
@@ -2701,21 +2716,52 @@ function computeAvgRatingFor(empId){
   return `${avg} / 4 (${count} تقييم مرتبط)`;
 }
 
+// ⭐ متوسط تقييم موظفة في فترة — بيتحكم في **بوابة المكافأة** (فلوس).
+// 🔴 كان بالتخمين الزمني بالكامل: أقرب تقييم في دقيقتين من عملية بيعها.
+//    يعني تقييم وحش لعميلة بياعة تانية ممكن ينزل عليها وياكل مكافأتها،
+//    حتى لو التقييم نفسه **مكتوب عليه اسم البياعة الصح**.
+// دلوقتي: النسبة الصريحة أولًا (`servedByEmployeeId`/`servedByEmployeeName`
+// — بيتحطوا من POS للكشك ومن تطبيق الولاء للتقييم بعد الزيارة)، والتخمين
+// الزمني فولباك **للتقييمات المجهولة بس**. وتقييم منسوب لموظفة تانية
+// عمره ما يتخمّن على دي.
+function _fbOwner(f){
+  return (f && (f.servedByEmployeeId || f.servedByEmployeeName)) ? f : null;
+}
+function _fbIsFor(f, empId, empName){
+  if(f.servedByEmployeeId) return f.servedByEmployeeId === empId;
+  if(f.servedByEmployeeName) return !!empName && f.servedByEmployeeName === empName;
+  return false;
+}
 function computeAvgRatingInRange(empId, startTs, endTs){
+  const emp = (window.allEmployees || []).find(e=> e.id === empId);
+  const empName = emp && emp.name;
   const empPointsInRange = window.points.filter(p=> p.employeeId === empId && p.ts >= startTs && p.ts <= endTs);
   const branchFeedbackInRange = allFeedback.filter(f=> f.branch === window.currentBranch && f.ts >= startTs && f.ts <= endTs);
-  const usedFeedback = new Set();
+
   let sum = 0, count = 0;
+  // (١) المنسوب صراحةً للموظفة دي — بيتحسب من غير أي تخمين
+  branchFeedbackInRange.forEach(f=>{
+    if(_fbOwner(f) && _fbIsFor(f, empId, empName)){ sum += f.r; count++; }
+  });
+
+  // (٢) المجهول بس — تخمين زمني زي الأول. المنسوب لغيرها **مستبعد تمامًا**.
+  const anon = branchFeedbackInRange.filter(f=> !_fbOwner(f));
+  const usedFeedback = new Set();
   empPointsInRange.forEach(p=>{
     let bestIdx=-1, bestAbsDelta=Infinity;
-    for(let i=0;i<branchFeedbackInRange.length;i++){
+    for(let i=0;i<anon.length;i++){
       if(usedFeedback.has(i)) continue;
-      const absDelta = Math.abs(branchFeedbackInRange[i].ts - p.ts);
+      const absDelta = Math.abs(anon[i].ts - p.ts);
       if(absDelta <= MATCH_WINDOW_MS && absDelta < bestAbsDelta){ bestAbsDelta=absDelta; bestIdx=i; }
     }
-    if(bestIdx>=0){ usedFeedback.add(bestIdx); sum += branchFeedbackInRange[bestIdx].r; count++; }
+    if(bestIdx>=0){ usedFeedback.add(bestIdx); sum += anon[bestIdx].r; count++; }
   });
   return count === 0 ? null : sum/count;
+}
+if(typeof window !== 'undefined'){
+  window.computeAvgRatingInRange = computeAvgRatingInRange;
+  window._fbOwner = _fbOwner;
+  window._fbIsFor = _fbIsFor;
 }
 function computeAvgRatingToday(empId){
   const dayStart = new Date(); dayStart.setHours(0,0,0,0);
