@@ -105,6 +105,50 @@ function focusSearchBar(){
   }, 700);
 })();
 
+// ============================================================
+// 🩺 focusDiag() — بيفرّق بين باجين مختلفين تمامًا بنفس العرض
+// ------------------------------------------------------------
+// (أ) تركيز DOM ضايع: النافذة نشطة، بس مفيش خانة متفوكسة.
+//     → الحارس اللي فوق بيصلحها لوحده كل 700ms.
+// (ب) تركيز النظام ضايع: ويندوز مش مديّة النافذة الـfocus أصلًا.
+//     → `document.hasFocus()` بترجع false. الكاشير بتكتب ومفيش حاجة بتحصل،
+//       ولازم تخرج وترجع للبرنامج (زرار ويندوز) عشان يشتغل.
+//     ⚠️ ده **مستحيل** يتصلح من هنا: صفحة الويب معندهاش أي سلطة تخطف
+//        تركيز النظام. الإصلاح في main.js بتاع Electron بس.
+// بيسجّل آخر 40 حدث تركيز عشان نعرف مين بيسرقه (طباعة/درج/Paymob).
+// ============================================================
+window._focusLog = [];
+function _fl(kind, extra){
+  try{
+    window._focusLog.push({ t: new Date().toLocaleTimeString('ar-EG'), kind: kind,
+      hasFocus: document.hasFocus(), active: (document.activeElement && document.activeElement.id) || (document.activeElement && document.activeElement.tagName) || '—', extra: extra || '' });
+    if(window._focusLog.length > 40) window._focusLog.shift();
+  }catch(e){}
+}
+window.addEventListener('blur',  function(){ _fl('window blur'); });
+window.addEventListener('focus', function(){ _fl('window focus'); });
+document.addEventListener('visibilitychange', function(){ _fl('visibility: ' + document.visibilityState); });
+window.focusDiag = function(){
+  const hf = document.hasFocus();
+  const a = document.activeElement;
+  const aid = (a && (a.id || a.tagName)) || '—';
+  console.log('%c🩺 تشخيص التركيز', 'font-size:15px; font-weight:bold');
+  console.log('النافذة نشطة (hasFocus):', hf);
+  console.log('العنصر المتفوكس:', aid);
+  console.log('شاشة البيع ظاهرة:', !!(document.getElementById('saleScreen') && document.getElementById('saleScreen').offsetParent !== null));
+  console.table(window._focusLog);
+  if(!hf){
+    console.log('%c⛔ النوع (ب): تركيز النظام ضايع — مفيش حل من الويب. الإصلاح في main.js.',
+      'color:#DC2626; font-weight:bold');
+  }else if(!a || a === document.body){
+    console.log('%c⚠️ النوع (أ): تركيز DOM ضايع — الحارس المفروض يصلحها خلال ثانية.',
+      'color:#F59E0B; font-weight:bold');
+  }else{
+    console.log('%c✅ التركيز سليم دلوقتي.', 'color:#059669; font-weight:bold');
+  }
+  return { hasFocus: hf, active: aid, log: window._focusLog };
+};
+
 // >>> GSCAN_START
 // 🌍 سكان في أي مكان: السكانر بيكتب بسرعة + Enter — من غير ما تدوس في خانة البحث.
 // كارت موظف EC → شراء موظف · عضوية عميل ECH/GLW → ربط بالفاتورة · كود فاتورة FT → مرتجع · باركود صنف → يضيف للسلة.
@@ -1070,7 +1114,9 @@ function testCashDrawer(){
       if(res && res.drawerOnly) showToast('اتبعت أمر فتح الدرج ✅ (من غير طباعة)');
       else showToast('اتبعت أمر فتح الدرج ✅ — لو طبع ورقة يبقى نسخة الويندوز قديمة');
     })
-      .catch(e=> showToast('فشل إرسال الأمر: '+e.message, 'err'));
+      .catch(e=> showToast('فشل إرسال الأمر: '+e.message, 'err'))
+      // أمر الدرج بيشغّل عملية بره المتصفح زي الطباعة — نفس ضياع التركيز
+      .then(function(){ if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(700); });
   }catch(e){ showToast('خطأ: '+e.message, 'err'); }
 }
 function testLabelPrinter(){
@@ -1158,12 +1204,18 @@ function _printBuiltReceipt(data, payments){
       openDrawer: drawerTarget,
       openCashDrawer: drawerTarget,   // اسم بديل لو الشِل بيستخدمه
       cashDrawer: !!drawerTarget
-    }).catch(e=> { console.warn('silent print failed', e); showToast('تعذر الطباعة الصامتة: '+e.message, 'err'); });
+    }).catch(e=> { console.warn('silent print failed', e); showToast('تعذر الطباعة الصامتة: '+e.message, 'err'); })
+      // 🔴 الطباعة الصامتة بتشغّل عملية طباعة/درج بره المتصفح، وويندوز
+      //    ساعات مبيرجّعش التركيز للبرنامج بعدها. كل مسارات الطباعة التانية
+      //    في النظام بتنادي reclaimWindowFocus — **إيصال البيع كان الوحيد
+      //    اللي مش بيناديها**. وده بالظبط «بيحصل بعد عملية البيع، مش دايمًا».
+      .then(function(){ if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(700); });
     return;
   }
 
   // في المتصفح العادي (مش exe): طباعة المتصفح
   window.print();
+  if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(500);
 }
 
 // ---------------- 🧰 تولبار موحّد في كل الشاشات ----------------
@@ -1348,6 +1400,7 @@ function _printGenericJob(job){
     return window.posShell.printReceipt({ printer: shellCfg.invoicePrinter, paperWidth: c.paperWidth||'80', html: holder.outerHTML, openDrawer: null });
   }
   window.print();
+  if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(500);
   return Promise.resolve();
 }
 function startPrintJobListener(){

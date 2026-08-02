@@ -277,8 +277,17 @@ function isBranchOwned(it){
 }
 window.inMyBranch = inMyBranch;
 
-function findByBarcode(code){
-  const usable = (it)=> it && it.status !== 'hidden' && it.status !== 'outofstock' && inMyBranch(it);
+// 🔴 الباج: علامة `outofstock` كانت بتخلي الصنف **مش موجود خالص** في البحث،
+//    فالكود الصح بيرد «لا يوجد صنف بهذا الكود» — رسالة غلط ومضللة.
+//    وده بيناقض سياسة المحل المكتوبة في نفس الملف: «البيع مسموح دايمًا حتى
+//    لو المخزون مايكفيش». يعني قطعة موجودة في إيد الكاشير مكانش ينفع تتباع
+//    لمجرد إن الرقم في النظام وصل صفر.
+//    الصح: العلامة معناها «ميظهرش في الاقتراحات» — مش «مش موجود».
+//    لما الكاشير يكتب/يمسح الكود **بالظبط**، الصنف بييجي مع تنبيه.
+function findByBarcode(code, opts){
+  const includeOut = !!(opts && opts.includeOut);
+  const usable = (it)=> it && it.status !== 'hidden'
+    && (includeOut || it.status !== 'outofstock') && inMyBranch(it);
   const raw = String(code || '').trim();
   // 🔑 أولوية صنف الفرع على الصنف المشترك — لو الفرع عنده نسخته الخاصة بسعرها واسمها،
   // هي اللي تتاخد، مش النسخة العامة القديمة.
@@ -324,8 +333,17 @@ searchBar.addEventListener('keydown', (e)=>{
       showToast('📱 اتسجّل رقم العميل في الفاتورة', 'ok');
       return;
     }
-    const match = findByBarcode(code);
+    // المطابقة العادية الأول، وبعدين نفس البحث بس شامل الأصناف المعلّمة نافد
+    let match = findByBarcode(code);
+    let outFlagged = false;
+    if(!match){
+      const m2 = findByBarcode(code, { includeOut: true });
+      if(m2){ match = m2; outFlagged = true; }
+    }
     if(match){
+      if(outFlagged){
+        showToast('⛔ "' + match.name + '" متعلّم نافد في النظام — اتضاف للفاتورة برضه. راجع الجرد.', 'err');
+      }
       // 🔫 المسدس أحيانًا بيقرا نفس الباركود مرتين في جزء من الثانية (ضغطة طويلة
       // أو وضع القراءة التلقائية) → الكمية بتزيد لوحدها. إعادة مسح بشرية حقيقية
       // لنفس القطعة بتاخد أكتر من نص ثانية بكتير، فالتكرار الأسرع من كده بيتتجاهل.

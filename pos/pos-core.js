@@ -541,6 +541,37 @@ window.searchMatch = searchMatch;
 window.barcodePrefix = barcodePrefix;
 
 // قراءة الساعة الفاصلة من الإعدادات
+// ============================================================
+// 📦 إعداد المخزون السالب — `pos_test_settings/inventory_cfg`
+// ------------------------------------------------------------
+// { allowNegativeStock: true|false }   (الافتراضي: **false**)
+//
+// ⚠️ ده إعداد مقصود إنه يفضل **مقفول** في أي محل جديد يشتري النظام.
+//    مخزون سالب معناه إن الأرقام مش مطابقة للواقع، وده وضع مؤقت مش صحّي.
+//
+// المالك فتحه لفروعه لسبب محدد: شاشة **استلام البضاعة** بتتسجل فيها
+// كمان القطع **التالفة** بكمية سالبة، والتالف غالبًا صنف رصيده في
+// النظام صفر (لأن الجرد لسه ماتعملش). المنع كان بيوقّف تسجيل التالف
+// أصلًا — يعني بيخلي الأرقام **أبعد** عن الواقع مش أقرب.
+//
+// 🔓 لما الجرد الفعلي يتعمل، الإعداد ده يترجع false.
+// 🔒 عند بيع النظام لمحل تاني: مايتفتحش. الافتراضي هو الصح.
+//
+// ملحوظة: البيع في شاشة الكاشير مسموح ينزّل المخزون سالب **دايمًا**
+// (قرار قديم منفصل) — الإعداد ده بيخص شاشات المخزون بس.
+// ============================================================
+let allowNegativeStock = false;
+window.allowNegativeStock = false;
+(function loadInventoryCfg(){
+  try{
+    db.collection(TEST_SETTINGS).doc('inventory_cfg').onSnapshot(function(snap){
+      const v = snap.exists ? !!(snap.data()||{}).allowNegativeStock : false;
+      allowNegativeStock = v;
+      window.allowNegativeStock = v;
+    }, function(e){ console.warn('inventory_cfg', e && e.code); });
+  }catch(e){ console.warn('inventory_cfg listen', e); }
+})();
+
 (function loadDayCfg(){
   try{
     db.collection(TEST_SETTINGS).doc('day_cfg').onSnapshot(function(snap){

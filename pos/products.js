@@ -114,10 +114,14 @@ async function pdAdjustStock(direction){
   const qty = parseInt(qtyStr);
   if(isNaN(qty) || qty <= 0){ showToast('كمية غير صحيحة', 'err'); return; }
 
-  // منع المخزون السالب: مينفعش تخصم أكتر من الموجود
+  // منع المخزون السالب — إلا لو المالك فاتح `allowNegativeStock`
+  // (شرحه الكامل في pos-core.js فوق `loadInventoryCfg`).
   if(direction < 0 && qty > branchQty(p)){
-    showToast(`مينفعش تخصم ${qty} — الموجود فعليًا ${branchQty(p)} بس`, 'err');
-    return;
+    if(!window.allowNegativeStock){
+      showToast(`مينفعش تخصم ${qty} — الموجود فعليًا ${branchQty(p)} بس`, 'err');
+      return;
+    }
+    showToast(`⚠️ الرصيد هينزل سالب (${branchQty(p) - qty}) — الجرد لسه ماتعملش`, 'warn');
   }
 
   const reason = await askText({
@@ -358,13 +362,33 @@ function renderReceiveCart(){
 async function confirmReceiveCart(){
   if(!hasPerm('canReceiveGoods') && !hasPerm('canEditInventory')){ showToast('محتاج صلاحية استلام البضاعة', 'err'); return; }
   const rows = receiveCart.filter(r=> (r.qty || 0) !== 0);
+  const _negRows = [];   // الأصناف اللي رصيدها هينزل سالب — للتأكيد والسجل
   if(!rows.length){ showToast('القايمة فاضية أو كل الكميات صفر', 'err'); return; }
   // تأكد إن مفيش خصم أكتر من الموجود
   for(const r of rows){
     const p = allInventory.find(x=> x.id === r.id);
     const cur = p ? branchQty(p) : r.currentQty;
-    if(cur + r.qty < 0){ showToast(`«${r.name}» مينفعش تخصم أكتر من الموجود (${cur})`, 'err'); return; }
+    // 🔴 دي كانت بتوقّف تسجيل **التالف**: القطعة اتكسرت فعلًا في الفرع،
+    //    بس رصيدها في النظام صفر (الجرد لسه ماتعملش) → النظام يرفض. النتيجة
+    //    إن التالف مايتسجلش خالص، والأرقام تبعد عن الواقع أكتر مش أقل.
+    if(cur + r.qty < 0){
+      if(!window.allowNegativeStock){
+        showToast(`«${r.name}» مينفعش تخصم أكتر من الموجود (${cur})`, 'err');
+        return;
+      }
+      _negRows.push(`${r.name} → ${cur + r.qty}`);
+    }
   }
+  // ⚠️ تأكيد صريح قبل ما نسجّل رصيد سالب — مش حاجة تعدي بصمت
+  if(_negRows.length){
+    const ok = await askConfirm({
+      title: '⚠️ رصيد سالب',
+      body: 'الأصناف دي رصيدها هينزل تحت الصفر:\n\n' + _negRows.join('\n')
+        + '\n\nمعناه إن أرقام النظام مش مطابقة للواقع (الجرد لسه ماتعملش). تكمّل؟'
+    });
+    if(!ok) return;
+  }
+
   const btn = document.getElementById('receiveConfirmBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'جارٍ التأكيد...'; }
   try{
