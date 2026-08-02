@@ -704,6 +704,60 @@ async function buildRatingsReport(from, to){
     entries = snap.docs.map(d=>d.data()).filter(e=> e.branch === currentBranch);
   }catch(e){ return `<div class="rep-card"><div style="color:var(--muted); text-align:center; padding:20px;">تعذر التحميل: ${e.message}</div></div>`; }
 
+  // ============================================================
+  // 📊 قمع التقييم — الرقم اللي كان ناقص
+  // ------------------------------------------------------------
+  // متوسط 3.6 من غير مقام مش بيقول حاجة: هو ده من 25 عميلة ولا من 400؟
+  // والفرق مش تفصيلة — **اللي مبيقيّمش غالبًا هو اللي مبسوطش**، فمتوسط
+  // عالي مع استجابة واطية ممكن يكون بيخبّي مشكلة مش بيقيس رضا.
+  // البيانات كانت موجودة أصلًا: دالة الإشعار بتكتب `ratePushAt` على
+  // الفاتورة وقت ما تبعت (functions/index.js) — بس محدش كان بيعرضها.
+  // ============================================================
+  let funnel = null;
+  try{
+    let sq = db.collection(TEST_SALES).where('branch','==', currentBranch);
+    if(from) sq = sq.where('createdAt','>=', from);
+    if(to)   sq = sq.where('createdAt','<=', to);
+    const ss = await sq.get();
+    let withPhone = 0, pushed = 0;
+    ss.docs.forEach(d=>{
+      const v = d.data() || {};
+      if(!v.customerPhone) return;
+      withPhone++;
+      if(v.ratePushAt) pushed++;
+    });
+    // اللي قيّم فعلًا = التقييمات اللي جاية من التطبيق (مربوطة بفاتورة)
+    const rated = entries.filter(e=> e.saleId || e.source === 'app_after_visit').length;
+    const noted = entries.filter(e=> (e.saleId || e.source === 'app_after_visit')
+      && e.note && String(e.note).trim()).length;
+    if(withPhone) funnel = { withPhone, pushed, rated, noted };
+  }catch(e){ console.warn('rating funnel', e && e.code); }
+
+  const _pct = (a, b)=> b ? Math.round(a / b * 100) : 0;
+  const _fRow = (label, val, pct, hint, hue)=>
+    `<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line);">
+      <div><div style="font-size:12.5px; font-weight:700;">${label}</div>
+        <div style="font-size:10.5px; color:var(--muted);">${hint}</div></div>
+      <div style="text-align:left; white-space:nowrap;">
+        <b style="font-size:16px; color:${hue||'var(--fg)'};">${val}</b>
+        ${pct != null ? `<span style="font-size:11px; color:var(--muted);"> · ${pct}%</span>` : ''}
+      </div>
+    </div>`;
+  const funnelHtml = funnel ? `<div class="rep-card">
+      <h3 style="font-size:13px; margin:0 0 6px;">📊 قمع التقييم</h3>
+      ${_fRow('فواتير بعميلة مسجّلة', funnel.withPhone, null, 'الأساس — دول اللي ممكن يوصلهم تقييم')}
+      ${_fRow('اتبعت لهم إشعار', funnel.pushed, _pct(funnel.pushed, funnel.withPhone),
+              'بعد الشراء بنص ساعة', funnel.pushed < funnel.withPhone * 0.8 ? '#f59e0b' : '')}
+      ${_fRow('قيّموا فعلًا', funnel.rated, _pct(funnel.rated, funnel.pushed),
+              'نسبة الاستجابة', funnel.rated < funnel.pushed * 0.1 ? '#ef4444' : '#22c55e')}
+      ${_fRow('كتبوا تعليق', funnel.noted, _pct(funnel.noted, funnel.rated), 'من اللي قيّموا')}
+      <div style="font-size:10.5px; color:var(--muted); margin-top:9px; line-height:1.7;">
+        ⚠️ الفرق بين «اتبعت» و«قيّم» مش كله لا مبالاة — ممكن الإشعار مايكونش
+        وصل أصلًا (توكن باظ · إشعارات مقفولة · التطبيق اتمسح). الرقم بيوريك
+        إن فيه فجوة، مش بيقولك سببها.
+      </div>
+    </div>` : '';
+
   const total = entries.length;
   const dist = {1:0,2:0,3:0,4:0}; let sum=0;
   entries.forEach(e=>{ if(dist[e.r]!=null){ dist[e.r]++; sum+=e.r; } });
@@ -745,7 +799,7 @@ async function buildRatingsReport(from, to){
          <div style="font-size:12.5px; line-height:1.7; white-space:pre-wrap;">${_rtEsc(e.note)}</div>
        </div>`).join('')}` : '';
 
-  return `<div class="rep-card">
+  return `${funnelHtml}<div class="rep-card">
     <h2 style="margin:0 0 2px; font-size:16px;">⭐ تقييمات العملاء</h2>
     <div style="color:var(--muted); font-size:11px; margin-bottom:12px;">${currentBranch||''} · ${reportRangeLabel()}</div>
     ${total? `<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
