@@ -1,11 +1,11 @@
-const CACHE_NAME = 'echarpe-loyalty-v39';
+const CACHE_NAME = 'glow-loyalty-v32';
 
 // ============ استقبال إشعارات Push (حتى والتطبيق مقفول) ============
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) {}
   const n = data.notification || data || {};
-  const title = n.title || 'echarpe 🌸';
+  const title = n.title || 'Glow 🖤';
   const body = n.body || 'فيه جديد مستنيكي في التطبيق';
   event.waitUntil(
     self.registration.showNotification(title, {
@@ -15,12 +15,11 @@ self.addEventListener('push', (event) => {
       dir: 'rtl',
       lang: 'ar',
       data: { url: (data.data && data.data.url) || './' },
-      tag: (data.data && data.data.tag) || 'echarpe-general'
+      tag: (data.data && data.data.tag) || 'glow-general'
     })
   );
 });
 
-// الضغط على الإشعار يفتح التطبيق (أو يركّز عليه لو مفتوح)
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   // مسار التطبيق المطلق (مبني على مكان الـ sw نفسه — مضمون سواء التطبيق مثبّت أو من المتصفح)
