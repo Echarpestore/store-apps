@@ -600,3 +600,61 @@ const el = (sb, id)=> sb.document.getElementById(id);
   assert(/if\(from\) _eq = _eq\.where\('ts','>=', from\.getTime\(\)\)/.test(rep),
     'وتقرير الربط كمان');
 }
+
+// ============================================================
+// ٧) 🔴 خانة اسم العميل لازم ترجع تبان بعد ✕
+//    الشكوى (المالك، صورة من الفرع): رقم مش مسجّل والخانة مش موجودة.
+//    السبب: clearCustomer كانت بتحط `style="display:none"` سطري على
+//    #customerName، والستايل السطري بيغلب قاعدة الـCSS اللي بتوريها.
+//    فبعد أول دوسة على ✕ الخانة مبتبانش تاني **لحد ما الصفحة تتقفل**.
+//    ⚠️ اختبار **متسلسل**: عملية واحدة لوحدها بتعدّي — الباج بيبان في
+//       التتابع (امسح ← اكتب رقم تاني).
+// ============================================================
+{
+  const sb = makeCtx();
+
+  // (١) عميل متسجّل، والكاشير دوست ✕
+  el(sb, 'customerPhone').value = '01012345678';
+  el(sb, 'customerName').value = 'سارة';
+  run(sb, `setCustState('found', 'سارة', '01012345678'); _custMatchedPhone = '01012345678';`);
+  run(sb, `clearCustomer()`);
+
+  assertEq(el(sb, 'customerName').style.display, '',
+    '🔴 ✕ مبيزرعش display:none سطري على خانة الاسم — العرض شغلة الـCSS');
+
+  // (٢) الكاشير كتبت رقم تاني مش مسجّل — الخانة لازم تبان
+  el(sb, 'customerPhone').value = '01098765432';
+  run(sb, `setCustState('new', '', '01098765432')`);
+  assert(el(sb, 'customerName').style.display !== 'none',
+    '🔴 بعد ✕ ورقم جديد مش مسجّل، خانة الاسم مش مخفية بستايل سطري');
+  assert(el(sb, 'customerName').focused,
+    'والمؤشر نطّ لها — يعني هي فعلًا موجودة وشغّالة');
+
+  // (٣) وتفضل شغّالة بعد دورة كاملة تانية
+  run(sb, `clearCustomer()`);
+  el(sb, 'customerPhone').value = '01555555555';
+  run(sb, `setCustState('new', '', '01555555555')`);
+  assert(el(sb, 'customerName').style.display !== 'none',
+    'وبعد دورة تانية كمان (الباج كان بيتراكم مش بيتصلح لوحده)');
+}
+
+// والقاعدة نفسها لازم تكون محصّنة ضد أي ستايل سطري جاي بعدين
+{
+  const m = htmlSrc.match(/#custBox\.st-new\s+#customerName\s*\{([^}]*)\}/);
+  assert(!!m, 'قاعدة إظهار خانة الاسم في حالة «مش مسجّل» موجودة');
+  assert(m && /display\s*:\s*block\s*!important/.test(m[1]),
+    '🛡️ وعليها !important — من غيرها أي display:none سطري بيغلبها ويرجّع الباج');
+}
+
+// وخانة الاسم على **نفس السطر** جوه المربع — مش سطر تاني
+{
+  const line = htmlSrc.match(/<div class="cust-line">([\s\S]*?)<\/div>\s*<div id="resetPinRow"/);
+  assert(!!line, 'سطر العميل (.cust-line) اتلقى');
+  const box = line && line[1].match(/<div id="custBox">([\s\S]*?)<\/div>/);
+  assert(!!box, 'ومربع العميل جواه');
+  assert(box && /id="customerName"/.test(box[1]),
+    '🎯 خانة الاسم جوه #custBox — يعني نفس السطر مع الرقم، مش سطر تحته');
+  const rule = htmlSrc.match(/#customerName\s*\{([^}]*)\}/);
+  assert(rule && /flex\s*:\s*1 1 auto/.test(rule[1]),
+    'وبتاخد الباقي من السطر (flex) فمفيش لفّ لسطر تاني');
+}
