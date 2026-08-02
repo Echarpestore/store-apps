@@ -1353,7 +1353,11 @@ function clearCustomer(){
   const ph = document.getElementById('customerPhone');
   const nm = document.getElementById('customerName');
   if(ph) ph.value = '';
-  if(nm){ nm.value = ''; nm.style.display = 'none'; }
+  // 🔴 كان `nm.style.display = 'none'` — والستايل السطري بيغلب قاعدة الـCSS
+  //    `#custBox.st-new #customerName{display:block}`. فبعد أول دوسة على ✕،
+  //    خانة الاسم مكانتش بترجع تبان **خالص** لأي رقم مش مسجّل لحد ما الصفحة
+  //    تتقفل وتتفتح. بنسيب العرض للـCSS بالكامل.
+  if(nm){ nm.value = ''; nm.style.display = ''; }
   _custMatchedPhone = '';
   if(typeof clearCustomerContext === 'function') clearCustomerContext();
   const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';

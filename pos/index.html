@@ -184,7 +184,15 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
   border:1px solid #e6e9ef !important;
   box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
 }
-.cart-code{ font-size:11.5px !important; color:#6b7280 !important; }
+.cart-code{ font-size:13px !important; font-weight:900 !important; color:#374151 !important; letter-spacing:.6px !important; }
+/* 🔑 كود القطعة على السطر المحدّد: الخلفية بتبقى زرقا (أو حمرا للمرتجع)
+   والرمادي كان بيختفي فيها. لازم !important عشان القاعدة اللي فوق
+   عليها !important — من غيره القاعدة دي بتخسر مهما كانت أوطى. */
+.cart-table tbody tr.sel .cart-code,
+.cart-table tbody tr.ret.sel .cart-code,
+.cart-table tbody tr.just-added.sel .cart-code{
+  color:#fff !important; text-shadow:0 1px 2px rgba(0,0,0,.45) !important;
+}
 
 /* 📏 تكبير مساحة القطع لتحت: السلة flex:1 فبتاخد أي مساحة العناصر اللي تحتها
    بتسيبها — ضغط رأسي خفيف (هوامش وحشوات بس، مفيش تغيير مقاسات خط ولا أزرار) */
@@ -705,7 +713,9 @@ body.on-dashboard .badge-test{ display:block; }
   font-size:13.5px !important; font-weight:700 !important;
 }
 #customerName:focus{ outline:none; box-shadow:0 0 0 3px rgba(224,163,63,.18); }
-#custBox.st-new #customerName{ display:block; }
+/* 🛡️ !important عشان أي `style="display:none"` سطري (من كود قديم أو إضافة
+   جديدة) ميقدرش يخفي خانة الاسم وهي مفروض تبان — ده كان الباج بالظبط. */
+#custBox.st-new #customerName{ display:block !important; }
 #custBox.st-new #customerInfo{ flex:0 0 auto; }
 
 /* ✕ جوه المربع، مكانه محجوز فمفيش حاجة بتتحرك */
