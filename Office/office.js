@@ -1570,6 +1570,10 @@ function renderSalaries(){
 const OF_TZ = 'Africa/Cairo';
 let _ofDayCut = 6;          // الساعة الفاصلة — بتتقرا من الإعدادات
 let _ofDaySales = [];
+// ⭐ تقييم العميلة لكل فاتورة (saleId → {r, note, ts}) — بيتملي مع تحميل اليوم
+let _ofRatingBySale = {};
+const OF_RATING_ICON = {1:'😠', 2:'🙁', 3:'🙂', 4:'😍'};
+const OF_RATING_HUE  = {1:'var(--minus)', 2:'#F59E0B', 3:'#65A30D', 4:'var(--plus)'};
 let _ofDaySub = 'pay';
 
 async function ofLoadDayCut(){
@@ -1648,6 +1652,20 @@ async function ofLoadDay(){
     rows = rows.filter(function(s){ const t = ofSaleTs(s); return t >= r.start && t < r.end; });
     rows.sort(function(a,b){ return ofSaleTs(a) - ofSaleTs(b); });
     _ofDaySales = rows;
+
+    // ⭐ تقييمات العملاء على فواتير اليوم — الربط بالـ`saleId` (رابط مؤكد).
+    //    بنمد آخر النافذة يومين لأن تقييم تطبيق الولاء بيتبعت بعد نص ساعة
+    //    من الشراء والعميلة ممكن تدوس عليه تاني يوم.
+    _ofRatingBySale = {};
+    try{
+      const _es = await db.collection('entries')
+        .where('ts','>=', r.start - 5*60*1000)
+        .where('ts','<=', r.end + 48*60*60*1000).get();
+      _es.docs.forEach(function(d){
+        const e = d.data();
+        if(e.saleId) _ofRatingBySale[e.saleId] = { r:e.r, note:e.note||'', ts:e.ts };
+      });
+    }catch(e2){ console.warn('day ratings', e2); }
   }catch(e){
     console.warn('day load', e);
     ['#dayPay','#daySales','#dayItems'].forEach(function(id){
@@ -1702,6 +1720,20 @@ function ofRenderPay(){
     + '</div></div>';
 }
 
+// ⭐ تقييم العميلة تحت سطر الفاتورة
+// ⚠️ `note` كلام مكتوب من العميلة من تطبيق الولاء — بيتهرّب بـesc قبل العرض.
+function ofSaleRating(s){
+  const rt = _ofRatingBySale[s.id];
+  if(!rt) return '';
+  const hue = OF_RATING_HUE[rt.r] || 'var(--sub)';
+  return '<div style="margin-top:5px; font-size:11px; color:' + hue + '; font-weight:800;">'
+    + (OF_RATING_ICON[rt.r] || '') + ' تقييم العميلة: ' + rt.r + '/4'
+    + (rt.note
+        ? '</div><div style="margin-top:3px; font-size:11.5px; color:var(--sub); line-height:1.6; white-space:pre-wrap;">📝 '
+          + esc(rt.note) + '</div>'
+        : '</div>');
+}
+
 // ---- 🧾 سجل المبيعات ----
 function ofRenderSales(){
   const el = $('#daySales'); if(!el) return;
@@ -1725,6 +1757,7 @@ function ofRenderSales(){
       +     ' · ' + ways + ' · ' + items + ' صنف'
       +     (s.invoiceCode ? (' · ' + esc(s.invoiceCode)) : '')
       +   '</div>'
+      +   ofSaleRating(s)
       + '</div>'
       + '<b style="white-space:nowrap; color:' + (isRet ? 'var(--minus)' : 'var(--txt)') + ';">'
       +   ofMoney(s.total) + ' ج.م</b>'
