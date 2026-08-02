@@ -480,15 +480,28 @@ var firebaseConfig = {
   measurementId: "G-6K33TSHDZ6"
 };
 firebase.initializeApp(firebaseConfig);
-// تسجيل دخول مجهول — مطلوب لقواعد الأمان (بيتحفظ على الجهاز، ويعيد المحاولة أول ما النت يرجع)
+// 🔴 تسجيل دخول مجهول — بس **بعد** ما نتأكد إن مفيش جلسة قايمة.
+// السبب: كل التطبيقات على نفس الدومين وبتشارك نفس تخزين الجلسة. استعادة
+// الجلسة غير متزامنة، فـ`currentUser` بيرجع null في أول لحظة حتى لو المالك
+// داخل بإيميله في Office — فالدخول المجهول كان **بيدوس على جلسته**، ويقعد
+// يطلع ويدخل بالإيميل تاني كل شوية.
+// الحل: نستنى أول إشارة من onAuthStateChanged (دي بتيجي بعد الاستعادة)،
+// وساعتها بس لو لسه مفيش حد داخل نعمل دخول مجهول.
+let _anonReady = false;
 function ensureAnonAuth(){
   try{
-    if(firebase.auth && !firebase.auth().currentUser){
-      firebase.auth().signInAnonymously().catch(function(e){ console.warn('anon auth', e && e.code); });
-    }
+    if(!firebase.auth) return;
+    if(firebase.auth().currentUser) return;            // فيه جلسة — مانلمسهاش
+    if(!_anonReady) return;                            // لسه ماستنيناش الاستعادة
+    firebase.auth().signInAnonymously().catch(function(e){ console.warn('anon auth', e && e.code); });
   }catch(e){ console.warn('anon auth unavailable', e); }
 }
-ensureAnonAuth();
+try{
+  firebase.auth().onAuthStateChanged(function(u){
+    _anonReady = true;
+    if(!u) ensureAnonAuth();                           // مفيش حد فعلًا → مجهول
+  });
+}catch(e){ _anonReady = true; ensureAnonAuth(); }
 window.addEventListener('online', ensureAnonAuth);
 var db = firebase.firestore();
 
@@ -1499,6 +1512,163 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function(){});
   });
 }
+</script>
+
+<style>
+/* ============================================================
+   ⭐ شاشة تقييم الزيارة — بتتفتح من إشعار بعد نص ساعة من الشراء
+   ============================================================ */
+#rtWrap{position:fixed; inset:0; z-index:9999; background:rgba(12,10,14,.72);
+  backdrop-filter:blur(6px); display:none; align-items:flex-end; justify-content:center;}
+#rtWrap.on{display:flex;}
+#rtCard{width:100%; max-width:520px; background:#fff; color:#1a1f2b;
+  border-radius:26px 26px 0 0; padding:26px 22px calc(26px + env(safe-area-inset-bottom));
+  font-family:'Cairo',sans-serif; transform:translateY(100%);
+  transition:transform .42s cubic-bezier(.2,.9,.3,1);}
+#rtWrap.on #rtCard{transform:translateY(0);}
+#rtGrab{width:44px; height:5px; border-radius:99px; background:#e3e6ec; margin:-8px auto 16px;}
+#rtCard h3{font-size:20px; font-weight:900; text-align:center; margin:0 0 4px;}
+#rtCard .sub{font-size:13.5px; color:#6b7280; text-align:center; margin-bottom:20px; line-height:1.8;}
+.rtFaces{display:flex; gap:9px; justify-content:center; margin-bottom:6px;}
+.rtF{flex:1; max-width:92px; border:2px solid #e6e9ef; border-radius:18px; background:#fbfcfd;
+  padding:14px 4px 11px; cursor:pointer; text-align:center; transition:all .2s cubic-bezier(.2,.9,.3,1);}
+.rtF .e{font-size:32px; display:block; line-height:1; filter:grayscale(.65); transition:all .2s;}
+.rtF .t{font-size:11.5px; font-weight:800; color:#9aa0ad; margin-top:7px; display:block;}
+.rtF:active{transform:scale(.94);}
+.rtF.on{border-color:var(--rtC,#E8467C); background:var(--rtB,#fff0f5); transform:translateY(-6px);
+  box-shadow:0 10px 24px rgba(20,25,40,.13);}
+.rtF.on .e{filter:none; transform:scale(1.16);}
+.rtF.on .t{color:var(--rtC,#C22A5E);}
+#rtMore{max-height:0; overflow:hidden; transition:max-height .38s ease;}
+#rtMore.on{max-height:320px;}
+#rtNote{width:100%; margin-top:16px; padding:14px; border-radius:15px; border:2px solid #e6e9ef;
+  background:#fbfcfd; font-family:'Cairo'; font-size:14.5px; line-height:1.8; resize:none; min-height:84px;}
+#rtNote:focus{outline:none; border-color:#E8467C; background:#fff;}
+#rtSend{width:100%; margin-top:14px; padding:16px; border-radius:15px; border:none;
+  background:linear-gradient(135deg,#E8467C,#C22A5E); color:#fff; font-family:'Cairo';
+  font-weight:900; font-size:16.5px; cursor:pointer; box-shadow:0 8px 20px rgba(232,70,124,.32);}
+#rtSend:disabled{background:#e3e6ec; color:#a3a8b4; box-shadow:none;}
+#rtSkip{width:100%; margin-top:9px; padding:11px; border:none; background:none; color:#9aa0ad;
+  font-family:'Cairo'; font-weight:700; font-size:13.5px; cursor:pointer;}
+#rtDone{text-align:center; padding:14px 0 6px;}
+#rtDone .big{font-size:58px; animation:rtPop .55s cubic-bezier(.2,1.5,.4,1);}
+@keyframes rtPop{from{transform:scale(.3); opacity:0;} to{transform:scale(1); opacity:1;}}
+@media (prefers-reduced-motion:reduce){
+  #rtCard,.rtF,#rtMore{transition:none;} #rtDone .big{animation:none;}
+}
+</style>
+
+<script>
+/* ============================================================
+   ⭐ تقييم الزيارة — بيتفتح من الإشعار (?rate=رقم الفاتورة)
+   ------------------------------------------------------------
+   ⚠️ من غير أي مكافأة عن قصد. المكافأة بتخلي الناس تدوس أعلى تقييم
+      في تلات ثواني عشان تاخدها — فالرقم يحلو والحقيقة تسوء، وتضيع
+      الأداة اللي بتعرف بيها الفرع اللي فيه مشكلة.
+   ============================================================ */
+(function(){
+  var RT = [
+    { v:1, e:'😠', t:'وحش',   c:'#DC2626', b:'#fef2f2' },
+    { v:2, e:'🙁', t:'عادي',  c:'#D97706', b:'#fffbeb' },
+    { v:3, e:'🙂', t:'كويس',  c:'#0891B2', b:'#ecfeff' },
+    { v:4, e:'😍', t:'ممتاز', c:'#059669', b:'#ecfdf5' }
+  ];
+  var q = new URLSearchParams(location.search);
+  var saleId = String(q.get('rate') || '').trim();
+  if(!saleId) return;
+
+  var picked = 0, sale = null, sending = false;
+
+  var wrap = document.createElement('div');
+  wrap.id = 'rtWrap';
+  wrap.innerHTML =
+    '<div id="rtCard">'
+    + '<div id="rtGrab"></div>'
+    + '<div id="rtBody">'
+    +   '<h3>إزاي كانت زيارتك؟</h3>'
+    +   '<div class="sub" id="rtSub">رأيك بيوصل للإدارة مباشرة</div>'
+    +   '<div class="rtFaces">'
+    +     RT.map(function(o){
+            return '<div class="rtF" data-v="' + o.v + '" style="--rtC:' + o.c + '; --rtB:' + o.b + ';">'
+              + '<span class="e">' + o.e + '</span><span class="t">' + o.t + '</span></div>';
+          }).join('')
+    +   '</div>'
+    +   '<div id="rtMore">'
+    +     '<textarea id="rtNote" placeholder="تحب تقولنا إيه اللي حصل؟ (اختياري)"></textarea>'
+    +   '</div>'
+    +   '<button id="rtSend" disabled>إرسال التقييم</button>'
+    +   '<button id="rtSkip">مش دلوقتي</button>'
+    + '</div></div>';
+  document.body.appendChild(wrap);
+
+  var body = wrap.querySelector('#rtBody');
+  var send = wrap.querySelector('#rtSend');
+  var more = wrap.querySelector('#rtMore');
+  var note = wrap.querySelector('#rtNote');
+
+  function close(){
+    wrap.classList.remove('on');
+    setTimeout(function(){ try{ wrap.remove(); }catch(e){} }, 420);
+    // 🧹 بنشيل ?rate من العنوان — فتحديث الصفحة مايفتحش التقييم تاني
+    try{ history.replaceState({}, '', location.pathname); }catch(e){}
+  }
+
+  wrap.querySelectorAll('.rtF').forEach(function(el){
+    el.onclick = function(){
+      picked = Number(el.dataset.v);
+      wrap.querySelectorAll('.rtF').forEach(function(x){ x.classList.toggle('on', x === el); });
+      // 📝 خانة الكلام بتفتح بعد الاختيار — مش من الأول عشان الشاشة تفضل بسيطة
+      more.classList.add('on');
+      send.disabled = false;
+      var sub = wrap.querySelector('#rtSub');
+      if(sub) sub.textContent = picked <= 2
+        ? 'آسفين — قولنا إيه اللي حصل وهنتصرف'
+        : 'شكرًا — تحب تضيف حاجة؟';
+      if(picked <= 2) setTimeout(function(){ try{ note.focus(); }catch(e){} }, 340);
+    };
+  });
+  wrap.querySelector('#rtSkip').onclick = close;
+  wrap.onclick = function(e){ if(e.target === wrap) close(); };
+
+  send.onclick = async function(){
+    if(!picked || sending) return;
+    sending = true;
+    send.disabled = true; send.textContent = 'بيتبعت…';
+    try{
+      await db.collection('entries').add({
+        r: picked,
+        ts: Date.now(),
+        branch: (sale && sale.branch) || '',
+        customerPhone: (sale && sale.customerPhone) || '',
+        saleId: saleId,
+        note: String(note.value || '').trim().slice(0, 300),
+        source: 'app_after_visit'
+      });
+      body.innerHTML = '<div id="rtDone">'
+        + '<div class="big">' + (picked >= 3 ? '💚' : '🤍') + '</div>'
+        + '<h3 style="margin-top:12px;">' + (picked >= 3 ? 'شكرًا لك' : 'وصلنا رأيك') + '</h3>'
+        + '<div class="sub">' + (picked >= 3
+            ? 'سعداء إن الزيارة عجبتك — نتشرف بزيارتك القادمة.'
+            : 'الإدارة هتشوف رأيك وهنشتغل عليه. آسفين على أي إزعاج.')
+        + '</div></div>';
+      setTimeout(close, 2600);
+    }catch(e){
+      sending = false;
+      send.disabled = false; send.textContent = 'إرسال التقييم';
+      var sub = wrap.querySelector('#rtSub');
+      if(sub){ sub.textContent = 'تعذّر الإرسال — جرّب تاني'; sub.style.color = '#DC2626'; }
+    }
+  };
+
+  // بنجيب الفرع من الفاتورة — التقييم لازم يبقى على الفرع الصح
+  (async function(){
+    try{
+      var d = await db.collection(COL_SALES).doc(saleId).get();
+      if(d.exists) sale = d.data() || {};
+    }catch(e){}
+    setTimeout(function(){ wrap.classList.add('on'); }, 260);
+  })();
+})();
 </script>
 </body>
 </html>
