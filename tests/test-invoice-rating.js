@@ -185,3 +185,93 @@ const BR = 'الرحاب';
   assert(/ofSaleRating\(s\)/.test(rowSrc),
     'وسطر الفاتورة في سجل المبيعات بيعرض التقييم');
 }
+
+// ============================================================
+// ٩) 💰 نسبة التقييم للبياعة — ده بيتحكم في **بوابة المكافأة** (فلوس)
+//    الباج: `computeAvgRatingInRange` كانت بالتخمين الزمني بالكامل، فتقييم
+//    وحش لعميلة بياعة تانية كان ممكن ينزل على دي وياكل مكافأتها — حتى لو
+//    التقييم نفسه مكتوب عليه اسم البياعة الصح.
+// ============================================================
+{
+  const salesSrc = fs.readFileSync(path.resolve(__dirname, '..', 'sales', 'sales-app.js'), 'utf8');
+  const c = {
+    console, MATCH_WINDOW_MS: 2 * 60 * 1000,
+    window: { currentBranch: 'الرحاب', points: [], allEmployees: [] },
+    allFeedback: []
+  };
+  c.globalThis = c;
+  vm.createContext(c);
+  ['_fbOwner', '_fbIsFor', 'computeAvgRatingInRange'].forEach(n=>{
+    const src = extractFn(salesSrc, n);
+    assert(src.length > 30, 'استخرجنا ' + n + ' من sales-app.js');
+    vm.runInContext(src, c);
+  });
+
+  const T2 = Date.UTC(2026, 6, 15, 12, 0, 0);
+  const setup = (feedback, points, emps)=>{
+    c.allFeedback = feedback;
+    c.window.points = points;
+    c.window.allEmployees = emps || [{ id:'E1', name:'سارة' }, { id:'E2', name:'منى' }];
+  };
+  const P = (id, ts)=> ({ employeeId:id, employeeName: id==='E1'?'سارة':'منى', ts });
+
+  // (أ) 🔴 تقييم وحش مكتوب عليه اسم بياعة تانية — ممنوع ينزل على سارة
+  setup(
+    [{ r:1, ts:T2 + 30*1000, branch:'الرحاب', servedByEmployeeId:'E2' }],
+    [P('E1', T2)]
+  );
+  assertEq(c.computeAvgRatingInRange('E1', T2 - 10*MIN, T2 + 10*MIN), null,
+    '🔴 تقييم منسوب لبياعة تانية منزلش على سارة (كان بياكل مكافأتها)');
+  assertEq(c.computeAvgRatingInRange('E2', T2 - 10*MIN, T2 + 10*MIN), 1,
+    'ونزل على صاحبته الصح — حتى من غير أي عملية بيع ليها في الفترة');
+
+  // (ب) 🔑 تقييم التطبيق بعد 45 دقيقة منسوب لسارة — لازم يتحسب
+  setup(
+    [{ r:4, ts:T2 + 45*MIN, branch:'الرحاب', servedByEmployeeId:'E1', saleId:'INV_A' }],
+    [P('E1', T2)]
+  );
+  assertEq(c.computeAvgRatingInRange('E1', T2 - MIN, T2 + 60*MIN), 4,
+    '⭐ تقييم التطبيق بعد 45 دقيقة اتحسب لسارة (نافذة الدقيقتين كانت بتضيّعه)');
+
+  // (ج) تقييم مجهول لسه بيتخمّن زمنيًا — والبعيد لأ
+  setup([{ r:3, ts:T2 + 60*1000, branch:'الرحاب' }], [P('E1', T2)]);
+  assertEq(c.computeAvgRatingInRange('E1', T2 - MIN, T2 + 10*MIN), 3,
+    'تقييم مجهول جوه الدقيقتين لسه بيتخمّن (مانكسرش)');
+  setup([{ r:3, ts:T2 + 9*MIN, branch:'الرحاب' }], [P('E1', T2)]);
+  assertEq(c.computeAvgRatingInRange('E1', T2 - MIN, T2 + 20*MIN), null,
+    'ومجهول بعيد (9 دقايق) مبيتخمّنش');
+
+  // (د) خلطة: المنسوب + المجهول
+  setup([
+    { r:4, ts:T2 + 45*MIN, branch:'الرحاب', servedByEmployeeName:'سارة' },
+    { r:2, ts:T2 + 60*1000, branch:'الرحاب' },
+    { r:1, ts:T2 + 40*MIN, branch:'الرحاب', servedByEmployeeId:'E2' }
+  ], [P('E1', T2)]);
+  assertEq(c.computeAvgRatingInRange('E1', T2 - MIN, T2 + 60*MIN), 3,
+    '🧮 المتوسط = (4 منسوب + 2 مخمّن) ÷ 2 — وتقييم منى الوحش مستبعد');
+
+  // (هـ) النسبة بالاسم لما مفيش id
+  setup([{ r:4, ts:T2, branch:'الرحاب', servedByEmployeeName:'منى' }], [P('E1', T2)]);
+  assertEq(c.computeAvgRatingInRange('E1', T2 - MIN, T2 + MIN), null,
+    'والنسبة بالاسم بتتحترم برضه — تقييم منى مانزلش على سارة');
+
+  // (و) فرع تاني متعديش
+  setup([{ r:1, ts:T2, branch:'مدينتي', servedByEmployeeId:'E1' }], [P('E1', T2)]);
+  assertEq(c.computeAvgRatingInRange('E1', T2 - MIN, T2 + MIN), null,
+    '🏬 وتقييم من فرع تاني مبيعديش');
+}
+
+// ============================================================
+// ١٠) تطبيق الولاء وGlow بيبعتوا البياعة مع التقييم
+// ============================================================
+{
+  ['loyalty', 'glow'].forEach(app=>{
+    const src = fs.readFileSync(path.resolve(__dirname, '..', app, 'index.html'), 'utf8');
+    assert(src.indexOf('servedByEmployeeId') >= 0 && src.indexOf('servedByEmployeeName') >= 0,
+      '📱 ' + app + ' بيبعت البياعة مع التقييم');
+    assert(src.indexOf('sale.sellerEmployeeName') >= 0,
+      'ومن حقل البياعة في الفاتورة (مش الكاشير) — ' + app);
+    assert(/if\(!sale \|\| !sale\.branch\)/.test(src),
+      '🛡️ ' + app + ' بيعيد جلب الفاتورة لو الأولى وقعت — التقييم ميتسجلش من غير فرع');
+  });
+}
