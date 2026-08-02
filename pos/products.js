@@ -379,15 +379,11 @@ async function confirmReceiveCart(){
       _negRows.push(`${r.name} → ${cur + r.qty}`);
     }
   }
-  // ⚠️ تأكيد صريح قبل ما نسجّل رصيد سالب — مش حاجة تعدي بصمت
-  if(_negRows.length){
-    const ok = await askConfirm({
-      title: '⚠️ رصيد سالب',
-      body: 'الأصناف دي رصيدها هينزل تحت الصفر:\n\n' + _negRows.join('\n')
-        + '\n\nمعناه إن أرقام النظام مش مطابقة للواقع (الجرد لسه ماتعملش). تكمّل؟'
-    });
-    if(!ok) return;
-  }
+  // 🤫 قرار المالك: **مفيش شاشة تأكيد للموظف**. الرصيد السالب وضع مؤقت
+  //    لحد ما الجرد يتعمل، ومش مطلوب الموظفين ياخدوا بالهم منه.
+  //    ⚠️ بس مش بيعدي من غير أثر: كل حركة رصيدها بينزل تحت الصفر بتتسجل
+  //       في سجل حركة المخزون بعلامة واضحة، والمالك بيشوفها في التقارير.
+  //       الصمت للموظف مش للسجل — ده الفرق اللي بيخلي الثغرة مؤقتة مش دايمة.
 
   const btn = document.getElementById('receiveConfirmBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'جارٍ التأكيد...'; }
@@ -400,7 +396,10 @@ async function confirmReceiveCart(){
       if(newQty <= 0) update.status = 'outofstock';
       else if(p && p.status === 'outofstock') update.status = 'active';
       await db.collection(TEST_INVENTORY).doc(r.id).update(update);
-      await logStockMovement(r.id, r.name, r.qty, r.qty > 0 ? 'receipt' : 'adjustment', r.qty > 0 ? 'استلام بضاعة (توريد)' : 'خصم بضاعة (تالف/مرتجع للمورد)');
+      const _wentNeg = newQty < 0;
+      await logStockMovement(r.id, r.name, r.qty, r.qty > 0 ? 'receipt' : 'adjustment',
+        (r.qty > 0 ? 'استلام بضاعة (توريد)' : 'خصم بضاعة (تالف/مرتجع للمورد)')
+        + (_wentNeg ? ` — ⚠️ الرصيد نزل سالب (${newQty}) · الجرد لسه ماتعملش` : ''));
       receiveGoodsTodayLog.unshift({ name:r.name, qtyChange:r.qty, ts:Date.now() });
     }
     showToast(`اتأكد استلام ${rows.length} صنف ✅`);
