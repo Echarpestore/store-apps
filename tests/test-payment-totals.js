@@ -265,8 +265,12 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 
   // التكرار: منع + كشف
   assert(/متسجل بالفعل على/.test(admin2), 'إضافة باركود موجود بتترفض بالاسم');
-  assert(/openDupBarcodeCheck/.test(admin2) && /متسجل \$\{arr\.length\} مرات/.test(admin2),
+  // ⚠️ كان هنا فحص على نص حرفي (`متسجل ${arr.length} مرات`) — النوع ده بيقع
+  //    مع أي إعادة صياغة وميقيسش سلوك. السلوك نفسه متختبر في test-dup-merge.
+  assert(/openDupBarcodeCheck/.test(admin2) && /function findDupGroups/.test(admin2),
     'أداة كشف الأكواد المتكررة موجودة');
+  assert(/function mergeDupGroup/.test(admin2) && /function planDupMerge/.test(admin2),
+    'وأداة الدمج موجودة معاها');
   assert(/الصنف ده عليه كمية/.test(admin2), 'حذف نسخة عليها كمية = تحذير صريح');
 }
 

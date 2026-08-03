@@ -215,24 +215,49 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
   assert(/overtimeMinutes: 0/.test(g), 'ومفيش وقت إضافي على قفل إداري');
   assert(/earlyMin: 0, earlyHours: 0/.test(g), 'ومفيش انصراف بدري');
   assert(/autoClosedBy: 'grace_day'/.test(g), 'وبعلامة إن ده قفل إداري');
-  assert(/e\.getTime\(\) <= s\.clockInTs/.test(g),
-    '🕐 شيفت بيعدّي نص الليل: النهاية بتروح لليوم اللي بعده');
-  assert(/\(8\*60 \+ 15\) \* 60000/.test(g), 'وفولباك للشيفت القياسي لو مفيش وقت نهاية');
+  // ---- الحساب سلوكيًا — على الدالة الحقيقية مش نسخة منها ----
+  // ⚠️ كان هنا فحصين بـregex على جوه الكود (`e.getTime() <= s.clockInTs`
+  //    و`(8*60 + 15) * 60000`) + إعادة كتابة الحساب في الاختبار نفسه.
+  //    النوع ده بيقع مع أي إعادة تنظيم وبيختبر نسخة مش الإنتاج.
+  //    دلوقتي بنشغّل `graceCloseTsFor` نفسها.
+  const _gf = ui.slice(ui.indexOf('window.graceCloseTsFor'));
+  const _gfEnd = _gf.indexOf('\n};');
+  assert(_gfEnd > 0, 'graceCloseTsFor موجودة في sales-ui.js');
+  const _ctx = { window: {}, Date: Date, String: String, Number: Number };
+  _ctx.globalThis = _ctx;
+  require('vm').createContext(_ctx);
+  require('vm').runInContext(_gf.slice(0, _gfEnd + 3), _ctx);
+  const graceTs = _ctx.window.graceCloseTsFor;
+  assert(typeof graceTs === 'function', 'واتحمّلت');
 
-  // ---- الحساب سلوكيًا ----
-  const endTs = (clockIn, hm)=>{
-    const [hh,mm] = hm.split(':').map(Number);
-    const b = new Date(clockIn);
-    const e = new Date(b.getFullYear(), b.getMonth(), b.getDate(), hh, mm, 0, 0);
-    if(e.getTime() <= clockIn) e.setDate(e.getDate()+1);
-    return e.getTime();
-  };
+  const endTs = (clockIn, hm)=> graceTs({ clockInTs: clockIn }, { scheduledEndTime: hm }, null);
   const ci1 = new Date(2026,7,1,9,5).getTime();
   assert(endTs(ci1,'17:00') > ci1, 'صباحي: الانصراف بعد الدخول');
   const ci2 = new Date(2026,7,1,16,0).getTime();
   const o2 = endTs(ci2,'00:30');
   assert(o2 > ci2, '🕐 مسائي بيعدّي نص الليل: الانصراف بعد الدخول مش قبله');
   assertEq(Math.round((o2-ci2)/60000), 510, 'ومدة الشيفت معقولة (8.5 ساعة)');
+
+  // فولباك الشيفت القياسي لما مفيش ميعاد نهاية مسجّل
+  const ci3 = new Date(2026,7,1,10,0).getTime();
+  assertEq(Math.round((graceTs({ clockInTs: ci3 }, {}, null) - ci3)/60000), 495,
+    'من غير ميعاد نهاية: فولباك 8 ساعات و15 دقيقة');
+  assertEq(graceTs(null, {}, null), null, 'شيفت مش موجود بيرجّع null');
+
+  // ---- 👤 القفل الفردي: نفس الحساب بالظبط ----
+  assert(/window\.graceCloseShift/.test(ui), 'فيه قفل لشيفت موظف واحد');
+  const _oneStart = ui.indexOf('window.graceCloseShift');
+  const one = ui.slice(_oneStart, ui.indexOf('window.renderGraceDay = function', _oneStart));
+  assert(one.length > 200, 'استخرجنا جسم graceCloseShift');
+  assert(/graceCloseTsFor\(/.test(one), 'والقفل الفردي بيستخدم نفس دالة الحساب');
+  assert(/autoClosedBy: 'grace_day'/.test(one), 'وبيتعلّم إنه قفل إداري');
+  assert(/overtimeMinutes: 0/.test(one) && /earlyMin: 0/.test(one),
+    'ومفيش وقت إضافي ولا انصراف بدري على القفل الفردي');
+  assert(/confirm\(/.test(one), 'وفيه تأكيد قبل القفل الفردي');
+  assert(/clockOutTs\)\{ alert/.test(one) || /if\(s\.clockOutTs\)/.test(one),
+    'وبيرفض يقفل شيفت مقفول خلاص');
+  assert(/data-close-shift/.test(g), 'وكل شيفت مفتوح ليه زرار لوحده في اللوحة');
+  assert(/graceCloseTsFor\(/.test(g), 'واللوحة بتوري وقت القفل قبل ما تدوس');
 
   // ---- تأكيد قبل أي تعديل جماعي ----
   assert((g.match(/confirm\(/g)||[]).length >= 2, '⛔ تأكيد إجباري قبل القفل وقبل العذر');

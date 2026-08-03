@@ -153,5 +153,8 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
 
   // كاش الـsw اترفع مع التعديل (وإلا الأجهزة تفضل على القديم)
   const swSrc = fs2.readFileSync(path2.resolve(__dirname, '..', 'sales', 'sw.js'), 'utf8');
-  assert(/store-apps-shell-v74/.test(swSrc), 'CACHE_NAME اترفع لـv74');
+  // ⚠️ كان مربوط برقم ثابت (v74) فبقى بيقع مع كل رفعة — النوع ده بيقيس
+  //    نسخة مش سلوك. الصح: الرقم موجود ومش أقل من النسخة اللي اتصلح فيها.
+  const _v = (swSrc.match(/store-apps-shell-v(\d+)/) || [])[1];
+  assert(!!_v && Number(_v) >= 74, 'CACHE_NAME بتاع sales ≥ v74 (الحالي v' + (_v || '?') + ')');
 }
