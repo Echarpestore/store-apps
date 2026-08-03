@@ -2081,14 +2081,220 @@ window.ofHubSheet = async function(empId){
   }
   if(acts) body += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">' + acts + '</div>';
 
+  // 💰 قسم الفلوس — بيتحمّل بدوسة (مش مع كل فتحة صفحة، عشان القراءات)
+  body += '<div style="margin-top:12px; padding-top:8px; border-top:2px solid var(--line);">'
+    + '<button onclick="ofHubMoney(' + "'" + esc(empId) + "'" + ')" style="background:#3b3b52; color:#fff; border:none; border-radius:10px; padding:8px 12px; font-size:12.5px; font-weight:700; cursor:pointer; width:100%;">💰 الفلوس — العمولة والمرتب</button>'
+    + '<div id="ofHubMoneyBox"></div></div>';
+
   ov.firstChild.innerHTML =
     '<div style="display:flex; justify-content:space-between; align-items:center;">'
     + '<div><div style="font-weight:900; font-size:16px;">' + esc(emp.name || 'موظف') + '</div>'
     + '<div style="font-size:11.5px; color:var(--sub);">' + esc(emp.branch || '') + ' · ' + stat + '</div></div>'
     + '<button onclick="document.getElementById(\'ofHubOv\').remove()" style="background:none; border:none; color:var(--sub); font-size:20px; cursor:pointer;">✖</button></div>'
     + '<div style="margin-top:8px;">' + body + '</div>'
-    + '<div style="margin-top:12px; font-size:11px; color:var(--sub); text-align:center;">الفلوس (النقط والراتب ودفعهم) جاية في المرحلة الجاية</div>';
+    ;
 };
+
+// ============================================================
+// 💰 المرحلة 3: الفلوس — محرك المرتب والعمولة
+// ------------------------------------------------------------
+// ⚠️ القاعدة الحاكمة: الأرقام هنا **لازم تطابق sales للقرش** —
+//    نفس المعادلات حرفيًا. فيه اختبار بيشغّل المحركين على نفس
+//    البيانات ويقارن كل حقل: لو حد عدّل نسخة ونسي التانية، بيقع.
+// الفرق الوحيد: sales بيقرا من متغيرات عامة، وهنا كل البيانات
+//    بتتبعت صريحة في data — عشان الدالة نقية وقابلة للاختبار.
+// ============================================================
+function ofMonthDateRange(d){
+  // فترة المرتب دايمًا 1 → 30 (قرار المالك — يوم 31 مش بيتحسب لوحده)
+  const dt = d || new Date();
+  return { start: new Date(dt.getFullYear(), dt.getMonth(), 1, 0, 0, 0, 0),
+           end: new Date(dt.getFullYear(), dt.getMonth(), 30, 23, 59, 59, 999) };
+}
+function ofMonthRange(d){
+  // شهر العمولة = الشهر التقويمي كامل (زي sales بالظبط — مختلف عن فترة المرتب)
+  const dt = new Date(d || Date.now());
+  return { start: new Date(dt.getFullYear(), dt.getMonth(), 1, 0, 0, 0, 0),
+           end: new Date(dt.getFullYear(), dt.getMonth() + 1, 0, 23, 59, 59, 999) };
+}
+function ofMonthLabel(d){
+  const dt = d || new Date();
+  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+}
+function ofCountDayOffInRange(emp, start, end){
+  if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return 0;
+  let count = 0;
+  const cur = new Date(start);
+  while(cur <= end){
+    if(cur.getDay() === Number(emp.dayOff)) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+function ofCountRequiredInRange(emp, start, end){
+  let count = 0;
+  const cur = new Date(start);
+  while(cur <= end){
+    const isDayOff = (emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== '') && cur.getDay() === Number(emp.dayOff);
+    if(!isDayOff) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+function ofCountAttendedInRange(shifts, empId, start, end){
+  const daySet = {};
+  (shifts || []).filter(function(sh){ return sh.employeeId === empId && sh.clockInTs >= start.getTime() && sh.clockInTs <= end.getTime(); })
+    .forEach(function(sh){
+      const d = new Date(sh.clockInTs);
+      daySet[d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate()] = 1;
+    });
+  return Object.keys(daySet).length;
+}
+function ofTcAmnestied(dateStr, cfg){
+  const until = String((cfg && cfg.timeAmnestyUntil) || '').trim();
+  const d = String(dateStr || '').trim();
+  if(!until || !d) return false;   // بند من غير تاريخ **بيتحسب** — مش بيفلت بالعفو
+  return d <= until;
+}
+function ofTcCounts(x, cfg){
+  return !!x && !x.excused && !ofTcAmnestied(x.date, cfg);
+}
+function ofMonthlyTimeSummary(entries, cfg){
+  cfg = cfg || {};
+  const totalHours = (entries || []).reduce(function(x, e){ return x + (Number(e.hours) || 0); }, 0);
+  const perDay = Number(cfg.hoursPerDay) || 7;
+  let days = Math.floor(totalHours / perDay);
+  const cap = Number(cfg.maxDaysPerMonth) || 0;
+  if(cap > 0 && days > cap) days = cap;
+  return { totalHours: totalHours, days: days };
+}
+function ofIsSetupShift(emp, shiftDefs){
+  if(!emp) return false;
+  const sh = shiftDefs ? shiftDefs[emp.shift] : null;
+  return !!(sh && sh.noBonus) || emp.shift === 'setup';
+}
+
+// المحرك — نفس computeSalary في sales سطر بسطر، والبيانات في data:
+// data = { shifts, timeCredit, deductions, advances, timeCfg, shiftDefs }
+function ofComputeSalary(emp, periodStart, end, data){
+  data = data || {};
+  const baseSalary = emp.baseSalary || 0;
+  // قيمة اليوم بقاسم 30 ثابت مهما كان الشهر 28/30/31 — الشهر الكامل بياخد
+  // الأساسي زي ما هو، والقاسم بيلعب في الفترات الجزئية والخصومات بس
+  const dailyRate = baseSalary / 30;
+  const hourlyRate = dailyRate / 8;
+  const naturalMonthEnd = ofMonthDateRange(periodStart).end;
+
+  let start = periodStart;
+  let notYetHired = false;
+  let isPartialPeriod = end < naturalMonthEnd;
+  if(emp.hireDate){
+    const hireDate = new Date(emp.hireDate + 'T00:00:00');
+    if(hireDate > end){ notYetHired = true; }
+    else if(hireDate > start){ start = hireDate; isPartialPeriod = true; }
+  }
+  if(notYetHired){
+    return { proratedBase: 0, overtimeMinutes: 0, overtimePay: 0, dayOffOccurrences: 0, extraOffDays: 0, deductionAmount: 0, timeCreditHours: 0, timeCreditDays: 0, timeCreditDeduction: 0, adminDeductions: 0, dayOffBonusDays: 0, dayOffBonusAmount: 0, advancesTotal: 0, advCash: 0, advOrders: 0, netSalary: 0, daysInCalc: 0, notYetHired: true };
+  }
+
+  const daysInCalc = Math.max(1, Math.round((end - start) / (24 * 60 * 60 * 1000)) + 1);
+  const proratedBase = isPartialPeriod
+    ? Math.round(dailyRate * daysInCalc * 100) / 100
+    : baseSalary;
+
+  const allShifts = data.shifts || [];
+  const rangeShifts = allShifts.filter(function(sh){ return sh.employeeId === emp.id && sh.clockInTs >= start.getTime() && sh.clockInTs <= end.getTime(); });
+  const overtimeMinutes = rangeShifts.reduce(function(sum, sh){ return sum + (sh.overtimeMinutes || 0); }, 0);
+  const overtimePay = Math.round((overtimeMinutes / 60) * hourlyRate * 100) / 100;
+
+  // كشف الغياب الحقيقي: أيام الشغل اللي عدّت مقابل الأيام اللي حضر فيها فعلًا
+  let absenceRangeStart = start;
+  if(emp.attendanceTrackingStart){
+    const trackStart = new Date(emp.attendanceTrackingStart + 'T00:00:00');
+    if(trackStart > absenceRangeStart) absenceRangeStart = trackStart;
+  }
+  const now = new Date();
+  const elapsedEnd = now < end ? now : end;
+  const elapsedWorkDays = elapsedEnd < absenceRangeStart ? 0 : ofCountRequiredInRange(emp, absenceRangeStart, elapsedEnd);
+  const attendedDays = elapsedEnd < absenceRangeStart ? 0 : ofCountAttendedInRange(allShifts, emp.id, absenceRangeStart, elapsedEnd);
+  const absenceDays = Math.max(0, elapsedWorkDays - attendedDays);
+  const dayOffOccurrences = elapsedEnd < absenceRangeStart ? 0 : ofCountDayOffInRange(emp, absenceRangeStart, elapsedEnd);
+  const extraOffDays = Math.max(0, absenceDays - dayOffOccurrences);
+  const deductionAmount = Math.round(extraOffDays * dailyRate * 100) / 100;
+
+  // مكافأة الاشتغال يوم الإجازة الأسبوعية
+  let dayOffBonusDays = 0;
+  if(emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== ''){
+    const cur = new Date(start);
+    while(cur <= end){
+      if(cur.getDay() === Number(emp.dayOff)){
+        const dayKey = cur.getFullYear() + '-' + cur.getMonth() + '-' + cur.getDate();
+        const workedThatDay = rangeShifts.some(function(sh){
+          const d = new Date(sh.clockInTs);
+          return (d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate()) === dayKey;
+        });
+        if(workedThatDay) dayOffBonusDays++;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  const dayOffBonusAmount = Math.round(dayOffBonusDays * dailyRate * 100) / 100;
+
+  // ⏳ رصيد الوقت: كل hoursPerDay (7) ساعات غير معذورة = يوم × قيمة اليوم
+  const _tcfg = data.timeCfg || {};
+  const tcEntries = (data.timeCredit || []).filter(function(x){
+    if(ofIsSetupShift(emp, data.shiftDefs)) return false;   // ✨ التجهيز خارج الرصيد
+    if(x.employeeId !== emp.id || !ofTcCounts(x, _tcfg)) return false;
+    const t = new Date((x.date || '') + 'T00:00:00').getTime();
+    return t >= start.getTime() && t <= end.getTime();
+  });
+  const tcSummary = ofMonthlyTimeSummary(tcEntries, _tcfg);
+  const timeCreditHours = tcSummary.totalHours;
+  const timeCreditDays = tcSummary.days;
+  const timeCreditDeduction = Math.round(timeCreditDays * dailyRate * 100) / 100;
+
+  // 💰 الخصومات الإدارية بالجنيه
+  const adminDeductions = (data.deductions || []).filter(function(d){
+    if(d.employeeId !== emp.id) return false;
+    const t = d.ts || new Date((d.date || '') + 'T00:00:00').getTime();
+    return t >= start.getTime() && t <= end.getTime();
+  }).reduce(function(x, d){ return x + (Number(d.amount) || 0); }, 0);
+
+  // 💵 السلف دين: نافذتها بتمتد لآخر اليوم التقويمي (ثغرة يوم 31)
+  const _calMonthEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0, 23, 59, 59, 999);
+  const advEnd = end >= naturalMonthEnd ? _calMonthEnd : end;
+  const periodAdvances = (data.advances || []).filter(function(a){ return a.employeeId === emp.id && a.ts >= start.getTime() && a.ts <= advEnd.getTime(); });
+  const advancesTotal = periodAdvances.reduce(function(sum, a){ return sum + a.amount; }, 0);
+  const advCash = periodAdvances.filter(function(a){ return String(a.source || '').indexOf('staff_order') !== 0; }).reduce(function(x, a){ return x + a.amount; }, 0);
+  const advOrders = Math.round((advancesTotal - advCash) * 100) / 100;
+
+  const netSalary = Math.round((proratedBase - deductionAmount - timeCreditDeduction - adminDeductions + overtimePay + dayOffBonusAmount - advancesTotal) * 100) / 100;
+  return { proratedBase: proratedBase, overtimeMinutes: overtimeMinutes, overtimePay: overtimePay,
+           dayOffOccurrences: dayOffOccurrences, extraOffDays: extraOffDays, deductionAmount: deductionAmount,
+           timeCreditHours: timeCreditHours, timeCreditDays: timeCreditDays, timeCreditDeduction: timeCreditDeduction,
+           adminDeductions: adminDeductions, dayOffBonusDays: dayOffBonusDays, dayOffBonusAmount: dayOffBonusAmount,
+           advancesTotal: advancesTotal, advCash: advCash, advOrders: advOrders,
+           netSalary: netSalary, daysInCalc: daysInCalc, notYetHired: false };
+}
+
+// ⭐ عمولة النقط — نفس حساب لوحة sales: وزن الشهر − المدفوع (تنزيلات التطبيق
+//    ليها نوعها المنفصل type='referrals' ومش بتتحسب هنا)
+function ofCommissionCalc(points, payments, empId, startMs, endMs, monthLabel, rate){
+  let pointsMonth = 0;
+  (points || []).forEach(function(pp){
+    if(!pp || pp.employeeId !== empId) return;
+    if(!(pp.ts >= startMs && pp.ts <= endMs)) return;
+    const v = Number(pp.value);
+    pointsMonth += (isNaN(v) || v <= 0) ? 1 : v;
+  });
+  pointsMonth = Math.round(pointsMonth * 1000) / 1000;
+  const paid = (payments || []).filter(function(pm){ return pm.employeeId === empId && pm.monthLabel === monthLabel && pm.type !== 'referrals'; });
+  const pointsAlreadyPaid = paid.reduce(function(x, pm){ return x + (pm.pointsCount || 0); }, 0);
+  const amountAlreadyPaid = paid.reduce(function(x, pm){ return x + (pm.commissionAmount || 0); }, 0);
+  const newPoints = Math.max(0, Math.round((pointsMonth - pointsAlreadyPaid) * 1000) / 1000);
+  const newAmount = Math.round(newPoints * (Number(rate) || 0) * 100) / 100;
+  return { pointsMonth: pointsMonth, pointsAlreadyPaid: pointsAlreadyPaid,
+           amountAlreadyPaid: amountAlreadyPaid, newPoints: newPoints, newAmount: newAmount };
+}
 
 // ------------------------------------------------------------
 // 🩺 الإجراءات — **بنفس مستندات sales وبنفس الحقول بالظبط**
@@ -2167,10 +2373,171 @@ window.ofHubGraceClose = async function(shiftId, empId){
   }catch(e){ alert('تعذر القفل: ' + (e && e.code ? e.code : e)); }
 };
 
+// ------------------------------------------------------------
+// 💰 تحميل بيانات الفلوس — عند فتح قسم الفلوس بس (مش مع كل صفحة)
+// استعلامات بالمساواة على الموظف (مفيش فهارس مركبة مطلوبة) + شيفتات
+// ونقط الشهر مشتركين بكاش دقيقتين.
+// ------------------------------------------------------------
+let _ofMoney = { at: 0, monthShifts: [], monthPts: [] };
+let _ofMoneyEmp = {};   // { empId: { at, credits, deductions, advances, salPays, commPays } }
+
+async function _ofMoneyLoad(emp){
+  const salR = ofMonthDateRange(new Date());
+  const fresh = (Date.now() - _ofMoney.at) < 2 * 60 * 1000;
+  const jobs = [];
+  if(!fresh){
+    jobs.push(db.collection('sales_shifts').where('clockInTs', '>=', salR.start.getTime()).get()
+      .then(function(r){ _ofMoney.monthShifts = r.docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); }); }));
+    jobs.push(db.collection('sales_points').where('ts', '>=', salR.start.getTime()).get()
+      .then(function(r){ _ofMoney.monthPts = r.docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); }); }));
+  }
+  const ec = _ofMoneyEmp[emp.id];
+  if(!ec || (Date.now() - ec.at) >= 2 * 60 * 1000){
+    const q = function(col){ return db.collection(col).where('employeeId', '==', emp.id).get()
+      .then(function(r){ return r.docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); }); }); };
+    jobs.push(Promise.all([
+      q('sales_time_credit'), q('sales_deductions'), q('sales_advances'),
+      q('sales_salary_payments'), q('sales_commission_payments')
+    ]).then(function(rs){
+      _ofMoneyEmp[emp.id] = { at: Date.now(), credits: rs[0], deductions: rs[1],
+                              advances: rs[2], salPays: rs[3], commPays: rs[4] };
+    }));
+  }
+  await Promise.all(jobs);
+  if(!fresh) _ofMoney.at = Date.now();
+  return _ofMoneyEmp[emp.id];
+}
+
+// 💰 قسم الفلوس جوه صفحة الموظف
+window.ofHubMoney = async function(empId){
+  const box = document.getElementById('ofHubMoneyBox');
+  if(box) box.innerHTML = '<div style="color:var(--sub); font-size:12px; padding:8px 0;">بيحسب…</div>';
+  const emp = (D.employees || []).find(function(e){ return e && e.id === empId; });
+  if(!emp) return;
+  let ec, cfg;
+  try{
+    const rs = await Promise.all([ _ofMoneyLoad(emp), _ofBranchCfg(emp.branch || '') ]);
+    ec = rs[0]; cfg = rs[1];
+  }catch(e){
+    if(box) box.innerHTML = '<div style="color:var(--minus); font-size:12px;">تعذر التحميل: ' + esc(e && e.code || e) + '</div>';
+    return;
+  }
+  let rate = 0;
+  try{
+    const sd = await db.collection('sales_settings').doc(emp.branch || '').get();
+    rate = (sd.exists && (sd.data() || {}).commissionPerPoint) || 0;
+  }catch(e){}
+
+  const now = new Date();
+  const salR = ofMonthDateRange(now);
+  const comR = ofMonthRange(now);
+  const label = ofMonthLabel(now);
+
+  // ⭐ العمولة
+  const cm = ofCommissionCalc(_ofMoney.monthPts, ec.commPays, empId,
+    comR.start.getTime(), comR.end.getTime(), label, rate);
+  const _fp = function(n){ return (n % 1 === 0) ? String(n) : n.toFixed(1); };
+  let ch = '<div style="font-weight:800; font-size:13px; margin-top:4px;">⭐ عمولة النقط (شهر ' + label + ')</div>'
+    + '<div style="font-size:12px; color:var(--sub); margin-top:3px;">نقط الشهر: <b>' + _fp(cm.pointsMonth) + '</b>'
+    + ' · السعر: ' + egp(rate) + '/نقطة'
+    + (cm.amountAlreadyPaid > 0 ? (' · اتدفع قبل كده: ' + egp(cm.amountAlreadyPaid) + ' (' + _fp(cm.pointsAlreadyPaid) + ' نقطة)') : '') + '</div>';
+  ch += (cm.newPoints > 0 && rate > 0)
+    ? '<button onclick="ofHubPayComm(\'' + esc(empId) + '\',' + cm.newPoints + ',' + cm.newAmount + ',\'' + label + '\')" style="margin-top:6px; background:#166534; color:#fff; border:none; border-radius:10px; padding:8px 12px; font-size:12.5px; font-weight:700; cursor:pointer;">✅ ادفع ' + egp(cm.newAmount) + ' (' + _fp(cm.newPoints) + ' نقطة جديدة)</button>'
+    : '<div style="font-size:11.5px; color:var(--good); margin-top:4px;">' + (rate > 0 ? '✅ كل النقط لحد دلوقتي مدفوعة' : '⚠️ سعر النقطة مش متظبط للفرع (من sales)') + '</div>';
+
+  // 💵 المرتب — نفس محرك sales على بيانات حقيقية
+  const calc = ofComputeSalary(emp, salR.start, salR.end, {
+    shifts: _ofMoney.monthShifts, timeCredit: ec.credits, deductions: ec.deductions,
+    advances: ec.advances, timeCfg: cfg.timeCfg, shiftDefs: cfg.shifts
+  });
+  const row = function(l, v, color){ return '<div style="display:flex; justify-content:space-between; font-size:12px; padding:3px 0;' + (color ? ' color:' + color + ';' : '') + '"><span>' + l + '</span><b>' + v + '</b></div>'; };
+  let sh = '<div style="font-weight:800; font-size:13px; margin-top:12px; padding-top:8px; border-top:1px solid var(--line);">💵 المرتب (فترة ' + label + ')</div>';
+  if(calc.notYetHired){
+    sh += '<div style="font-size:12px; color:var(--sub); margin-top:4px;">اتعين بعد الفترة دي</div>';
+  } else {
+    sh += '<div style="margin-top:4px;">'
+      + row('الأساسي' + (calc.daysInCalc < 28 ? ' (' + calc.daysInCalc + ' يوم)' : ''), egp(calc.proratedBase))
+      + (calc.overtimePay > 0 ? row('إضافي (' + calc.overtimeMinutes + 'د)', '+' + egp(calc.overtimePay), '#4ade80') : '')
+      + (calc.dayOffBonusAmount > 0 ? row('مكافأة اشتغال إجازة (' + calc.dayOffBonusDays + ' يوم)', '+' + egp(calc.dayOffBonusAmount), '#4ade80') : '')
+      + (calc.deductionAmount > 0 ? row('خصم غياب (' + calc.extraOffDays + ' يوم)', '−' + egp(calc.deductionAmount), '#f87171') : '')
+      + (calc.timeCreditDeduction > 0 ? row('⏳ رصيد الوقت (' + calc.timeCreditHours + ' ساعة = ' + calc.timeCreditDays + ' يوم)', '−' + egp(calc.timeCreditDeduction), '#f87171') : '')
+      + (calc.adminDeductions > 0 ? row('خصومات إدارية', '−' + egp(calc.adminDeductions), '#f87171') : '')
+      + (calc.advancesTotal > 0 ? row('سلف' + (calc.advOrders > 0 ? ' (كاش ' + calc.advCash + ' · أوردرات ' + calc.advOrders + ')' : ''), '−' + egp(calc.advancesTotal), '#f87171') : '')
+      + '<div style="display:flex; justify-content:space-between; font-size:13.5px; font-weight:900; padding:6px 0; margin-top:4px; border-top:1px solid var(--line);"><span>الصافي</span><span style="color:#4ade80;">' + egp(calc.netSalary) + '</span></div></div>';
+    const prev = (ec.salPays || []).filter(function(pm){ return pm.periodLabel === label; });
+    if(prev.length){
+      const pSum = prev.reduce(function(n, pm){ return n + (pm.amount || 0); }, 0);
+      sh += '<div style="font-size:11.5px; color:#fbbf24; margin-top:2px;">⚠️ متسجل صرف للشهر ده قبل كده: ' + egp(pSum) + '</div>';
+    }
+    sh += '<button onclick="ofHubPaySalary(\'' + esc(empId) + '\',' + calc.netSalary + ',\'' + label + '\')" style="margin-top:6px; background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:8px 12px; font-size:12.5px; font-weight:700; cursor:pointer;">✅ تسجيل صرف المرتب</button>';
+  }
+
+  // 🗂️ سجل المدفوعات (آخر 8)
+  const logs = (ec.salPays || []).map(function(pm){ return { t: pm.paidAt || 0, txt: '💵 مرتب ' + (pm.periodLabel || '') + ' — ' + egp(pm.amount || 0) }; })
+    .concat((ec.commPays || []).map(function(pm){ return { t: pm.paidAt || 0, txt: (pm.type === 'referrals' ? '📱 تنزيلات ' : (pm.type === 'target' ? '🎯 تارجت ' : '⭐ عمولة ')) + (pm.monthLabel || '') + ' — ' + egp(pm.commissionAmount || 0) }; }))
+    .sort(function(a, b){ return b.t - a.t; }).slice(0, 8);
+  let lh = '';
+  if(logs.length){
+    lh = '<div style="font-weight:800; font-size:13px; margin-top:12px; padding-top:8px; border-top:1px solid var(--line);">🗂️ سجل المدفوعات</div>'
+      + logs.map(function(x){
+          return '<div style="font-size:11.5px; color:var(--sub); padding:3px 0;">' + x.txt
+            + (x.t ? (' · ' + new Date(x.t).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })) : '') + '</div>';
+        }).join('');
+  }
+  if(box) box.innerHTML = ch + sh + lh;
+};
+
+let _ofPayBusy = false;   // 🛡️ ضغطتين ورا بعض = صرفتين
+window.ofHubPayComm = async function(empId, pts, amount, label){
+  if(_ofPayBusy) return;
+  const emp = (D.employees || []).find(function(e){ return e && e.id === empId; });
+  if(!emp) return;
+  if(!confirm('تأكيد دفع ' + amount + ' ج.م لـ ' + (emp.name || '') + ' عن ' + pts + ' نقطة جديدة (شهر ' + label + ')؟')) return;
+  _ofPayBusy = true;
+  try{
+    // نفس حقول sales بالظبط — الشاشتين بيقروا نفس السجل
+    await db.collection('sales_commission_payments').add({
+      employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
+      monthLabel: label, pointsCount: pts, commissionAmount: amount,
+      paidAt: Date.now(), paidFrom: 'office'
+    });
+    delete _ofMoneyEmp[empId];
+    window.ofHubMoney(empId);
+  }catch(e){ alert('حصل خطأ: ' + (e && e.code ? e.code : e)); }
+  _ofPayBusy = false;
+};
+
+window.ofHubPaySalary = async function(empId, amount, label){
+  if(_ofPayBusy) return;
+  const emp = (D.employees || []).find(function(e){ return e && e.id === empId; });
+  if(!emp) return;
+  const ec = _ofMoneyEmp[empId] || {};
+  // 🛡️ صرف متسجل لنفس الشهر؟ تحذير صريح قبل الازدواج — نفس حارس sales
+  const prev = (ec.salPays || []).filter(function(pm){ return pm.employeeId === empId && pm.periodLabel === label; });
+  if(prev.length){
+    const pSum = prev.reduce(function(n, pm){ return n + (pm.amount || 0); }, 0);
+    if(!confirm('⚠️ فيه صرف متسجل بالفعل لـ ' + (emp.name || '') + ' عن شهر ' + label + ' بمبلغ ' + pSum.toFixed(0) + ' ج.م.\nمتأكد إنك عايز تسجل صرف تاني لنفس الشهر؟')) return;
+  }
+  if(!confirm('تأكيد صرف ' + amount + ' ج.م لـ ' + (emp.name || '') + ' عن شهر ' + label + '؟')) return;
+  _ofPayBusy = true;
+  try{
+    await db.collection('sales_salary_payments').add({
+      employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
+      periodLabel: label, amount: amount, paidAt: Date.now(), paidFrom: 'office'
+    });
+    delete _ofMoneyEmp[empId];
+    window.ofHubMoney(empId);
+  }catch(e){ alert('حصل خطأ: ' + (e && e.code ? e.code : e)); }
+  _ofPayBusy = false;
+};
+
 window.ofRenderPresent = ofRenderPresent;
 window.ofHubRows = ofHubRows;
 window.ofHubPoints = ofHubPoints;
 window.ofGraceCloseTs = ofGraceCloseTs;
+window.ofComputeSalary = ofComputeSalary;
+window.ofCommissionCalc = ofCommissionCalc;
+window.ofMonthlyTimeSummary = ofMonthlyTimeSummary;
 window.ofBreakOverHours = ofBreakOverHours;
 window.ofHubCredits = ofHubCredits;
 
