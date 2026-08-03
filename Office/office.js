@@ -1814,7 +1814,7 @@ function ofPresentDur(mins){
 // ------------------------------------------------------------
 // التحميل: شيفتات + بريكات اليوم (كاش 4 دقايق) · النقط عند فتح الصفحة بس
 // ------------------------------------------------------------
-let _ofHub = { at: 0, start: 0, key: '', shifts: [], breaks: [], loading: false,
+let _ofHub = { at: 0, start: 0, key: '', shifts: [], breaks: [], credits: [], loading: false,
                ptsAt: 0, pts: [] };
 let _ofHubOpen = false, _ofHubAwayOpen = false;
 
@@ -1826,10 +1826,12 @@ async function _ofHubLoad(force){
   try{
     const rs = await Promise.all([
       db.collection('sales_shifts').where('clockInTs', '>=', d.start).get(),
-      db.collection('sales_breaks').where('startTs', '>=', d.start).get()
+      db.collection('sales_breaks').where('startTs', '>=', d.start).get(),
+      db.collection('sales_time_credit').where('ts', '>=', d.start).get()
     ]);
     _ofHub.shifts = rs[0].docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); });
     _ofHub.breaks = rs[1].docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); });
+    _ofHub.credits = rs[2].docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); });
     _ofHub.at = Date.now(); _ofHub.start = d.start; _ofHub.key = d.key;
     _ofHub.loading = false;
     ofRenderPresent();
@@ -1844,6 +1846,66 @@ function _ofHubShifts(){
     return sh && !sh.clockOutTs && !seen[sh.id];
   });
   return _ofHub.shifts.concat(old);
+}
+
+// ------------------------------------------------------------
+// ⚙️ إعدادات الفرع (مواعيد الشيفتات + إعدادات رصيد الوقت) —
+//    من `sales_settings/<الفرع>` — **نفس المستند اللي sales بيقرا منه**،
+//    عشان قفل الشيفت وحساب البريك يطلعوا نفس أرقام sales بالظبط.
+// ------------------------------------------------------------
+const OF_TIME_DEFAULTS = { breakMin: 30, breakGraceMin: 5, breakMinPerHour: 10 };
+let _ofCfgBy = {};   // { branch: { shifts, timeCfg, at } }
+async function _ofBranchCfg(branch){
+  const c = _ofCfgBy[branch];
+  if(c && (Date.now() - c.at) < 10 * 60 * 1000) return c;
+  let shifts = {}, timeCfg = Object.assign({}, OF_TIME_DEFAULTS);
+  try{
+    const d = await db.collection('sales_settings').doc(branch).get();
+    const x = d.exists ? (d.data() || {}) : {};
+    if(x.compliance && x.compliance.shifts) shifts = x.compliance.shifts;
+    if(x.timeCfg) timeCfg = Object.assign(timeCfg, x.timeCfg);
+  }catch(e){ console.warn('branch cfg', e && e.code); }
+  return (_ofCfgBy[branch] = { shifts: shifts, timeCfg: timeCfg, at: Date.now() });
+}
+
+// 🚪 وقت القفل الإداري — **نسخة طبق الأصل من graceCloseTsFor في sales**:
+// الانصراف = نهاية الشيفت المجدولة مش دلوقتي (مفيش وقت إضافي)،
+// وبيتعامل مع الشيفت اللي بيعدّي نص الليل، وفولباك 8س15د.
+function ofGraceCloseTs(shift, emp, shiftDefs){
+  if(!shift || !shift.clockInTs) return null;
+  const sdef = shiftDefs ? shiftDefs[emp && emp.shift] : null;
+  const endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
+  let endTs = null;
+  if(/^\d{1,2}:\d{2}$/.test(endHM)){
+    const parts = String(endHM).split(':').map(Number);
+    const base = new Date(shift.clockInTs);
+    const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), parts[0], parts[1], 0, 0);
+    if(e.getTime() <= shift.clockInTs) e.setDate(e.getDate() + 1);
+    endTs = e.getTime();
+  }
+  if(!endTs) endTs = shift.clockInTs + (8 * 60 + 15) * 60000;
+  return endTs;
+}
+
+// ☕ ساعات زيادة البريك — نفس حساب breakHoursFrom في sales بالظبط:
+// الزيادة = الفعلي − المسموح − السماح، وكل (breakMinPerHour) دقيقة = ساعة (floor)
+function ofBreakOverHours(actualMin, cfg){
+  cfg = cfg || OF_TIME_DEFAULTS;
+  const allowed = Number(cfg.breakMin) || 30;
+  const grace = Number(cfg.breakGraceMin) || 0;
+  const over = Math.max(0, (Number(actualMin) || 0) - allowed - grace);
+  const per = Number(cfg.breakMinPerHour) || 10;
+  return Math.floor(over / per);
+}
+
+// 🩺 بنود رصيد الوقت بتاعة موظف: المفتوح (هيتخصم) والمعذور
+function ofHubCredits(credits, empId){
+  const mine = (credits || []).filter(function(c){ return c && c.employeeId === empId; });
+  return {
+    open: mine.filter(function(c){ return !c.excused && (Number(c.hours) || 0) > 0; })
+               .sort(function(a, b){ return (a.ts || 0) - (b.ts || 0); }),
+    excused: mine.filter(function(c){ return !!c.excused; })
+  };
 }
 
 function _ofHubBranch(){
@@ -1988,18 +2050,129 @@ window.ofHubSheet = async function(empId){
   const _pw = (pts.weight % 1 === 0) ? String(pts.weight) : pts.weight.toFixed(1);
   body += line('⭐ نقط البيع النهاردة', pts.count ? (_pw + ' نقطة (' + pts.count + ' عملية)') : 'مفيش');
 
+  // 🩺 بنود رصيد الوقت النهاردة (تأخير/بريك زايد/غياب) + زرار العذر
+  const cr = ofHubCredits(_ofHub.credits, empId);
+  const _tn = { late: '⏰ تأخير', 'break': '☕ بريك زايد', swap: '🔁 تبديل', absence: '🚫 غياب', early: '🚪 انصراف بدري' };
+  if(cr.open.length || cr.excused.length){
+    let ch = '<div style="padding:7px 0; border-top:1px solid var(--line);">'
+      + '<div style="color:var(--sub); font-size:12px; margin-bottom:4px;">رصيد الوقت النهاردة</div>';
+    cr.open.forEach(function(c){
+      ch += '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 0; font-size:12.5px;">'
+        + '<span>' + (_tn[c.type] || c.type) + ' — <b style="color:#f87171;">' + (Number(c.hours) || 0) + ' ساعة</b>'
+        + (c.note ? ' <span style="color:var(--sub); font-size:11px;">(' + esc(c.note) + ')</span>' : '') + '</span>'
+        + '<button onclick="ofHubExcuse(\'' + esc(c.id) + '\',\'' + esc(empId) + '\')" style="background:#166534; color:#fff; border:none; border-radius:8px; padding:4px 10px; font-size:12px; cursor:pointer;">🩺 اعذره</button></div>';
+    });
+    cr.excused.forEach(function(c){
+      ch += '<div style="padding:4px 0; font-size:12px; color:var(--sub); text-decoration:line-through;">'
+        + (_tn[c.type] || c.type) + ' ' + (Number(c.originalHours) || 0) + ' ساعة — معذور'
+        + (c.excuseReason ? ' (' + esc(c.excuseReason) + ')' : '') + '</div>';
+    });
+    body += ch + '</div>';
+  }
+
+  // 🚪 أزرار الإجراءات حسب الحالة
+  let acts = '';
+  if(p && p.brk && p.brk.open){
+    const bel = Math.round((now - p.brk.open.startTs) / 60000);
+    acts += '<button onclick="ofHubBreakClose(\'' + esc(p.brk.open.id) + '\',\'' + esc(empId) + '\')" style="background:#92400e; color:#fff; border:none; border-radius:10px; padding:9px 12px; font-size:13px; font-weight:700; cursor:pointer;">☕ اقفل البريك (' + bel + 'د)</button>';
+  }
+  if(p && p.reason === 'stale'){
+    acts += '<button onclick="ofHubGraceClose(\'' + esc(p.shiftId) + '\',\'' + esc(empId) + '\')" style="background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:9px 12px; font-size:13px; font-weight:700; cursor:pointer;">🚪 اقفل الشيفت (نهاية معاده)</button>';
+  }
+  if(acts) body += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">' + acts + '</div>';
+
   ov.firstChild.innerHTML =
     '<div style="display:flex; justify-content:space-between; align-items:center;">'
     + '<div><div style="font-weight:900; font-size:16px;">' + esc(emp.name || 'موظف') + '</div>'
     + '<div style="font-size:11.5px; color:var(--sub);">' + esc(emp.branch || '') + ' · ' + stat + '</div></div>'
     + '<button onclick="document.getElementById(\'ofHubOv\').remove()" style="background:none; border:none; color:var(--sub); font-size:20px; cursor:pointer;">✖</button></div>'
     + '<div style="margin-top:8px;">' + body + '</div>'
-    + '<div style="margin-top:12px; font-size:11px; color:var(--sub); text-align:center;">الإجراءات (عذر · قفل شيفت · صرف) جاية في التحديث الجاي</div>';
+    + '<div style="margin-top:12px; font-size:11px; color:var(--sub); text-align:center;">الفلوس (النقط والراتب ودفعهم) جاية في المرحلة الجاية</div>';
+};
+
+// ------------------------------------------------------------
+// 🩺 الإجراءات — **بنفس مستندات sales وبنفس الحقول بالظبط**
+// ------------------------------------------------------------
+// العذر مش مسح: بيصفّر hours ويحفظ originalHours ويعلّم excused —
+// نفس اللي بيحصل من شاشة sales حرفيًا، فالمرتب والمكافأة بيشوفوه فورًا.
+window.ofHubExcuse = async function(creditId, empId){
+  const c = (_ofHub.credits || []).find(function(x){ return x.id === creditId; });
+  if(!c || c.excused) return;
+  const reason = prompt('سبب العذر؟ (هيظهر في كشف ' + (c.employeeName || 'الموظف') + ')', 'بعذر');
+  if(reason === null) return;
+  try{
+    await db.collection('sales_time_credit').doc(creditId).update({
+      hours: 0,
+      originalHours: (c.originalHours != null ? c.originalHours : c.hours),
+      excused: true, excuseReason: reason || 'بعذر',
+      excusedAt: Date.now(), excusedFrom: 'office'
+    });
+    c.hours = 0; c.originalHours = (c.originalHours != null ? c.originalHours : c.hours);
+    c.excused = true; c.excuseReason = reason || 'بعذر';
+    window.ofHubSheet(empId);
+  }catch(e){ alert('تعذر العذر: ' + (e && e.code ? e.code : e)); }
+};
+
+// ☕ قفل بريك مفتوح — نفس endBreak في sales: durationMin + overHours،
+// والزيادة بتتسجّل رصيد وقت (اللي الأدمن يقدر يعذره بعدها من نفس الصفحة).
+window.ofHubBreakClose = async function(breakId, empId){
+  const b = (_ofHub.breaks || []).find(function(x){ return x.id === breakId; });
+  if(!b || b.endTs) return;
+  const emp = (D.employees || []).find(function(e){ return e && e.id === empId; }) || {};
+  const cfg = await _ofBranchCfg(emp.branch || '');
+  const durMin = Math.round((Date.now() - b.startTs) / 60000);
+  const overHours = ofBreakOverHours(durMin, cfg.timeCfg);
+  if(!confirm('☕ قفل بريك ' + (emp.name || '') + ' (' + durMin + ' دقيقة)؟'
+    + (overHours > 0 ? ('\n\n⚠️ فيه زيادة هتتسجل ' + overHours + ' ساعة رصيد (تقدر تعذرها بعدها).') : '\n\nمفيش زيادة.'))) return;
+  try{
+    await db.collection('sales_breaks').doc(breakId).update({
+      endTs: Date.now(), durationMin: durMin, overHours: overHours, closedFrom: 'office'
+    });
+    if(overHours > 0){
+      const dp = _ofShopParts(Date.now());
+      await db.collection('sales_time_credit').add({
+        employeeId: empId, employeeName: emp.name || b.employeeName || '',
+        branch: emp.branch || '', type: 'break', hours: overHours,
+        date: dp.y + '-' + String(dp.m).padStart(2, '0') + '-' + String(dp.d).padStart(2, '0'),
+        note: 'بريك ' + durMin + ' دقيقة (اتقفل من office)', ts: Date.now()
+      });
+    }
+    _ofHubLoad(true);
+    setTimeout(function(){ window.ofHubSheet(empId); }, 400);
+  }catch(e){ alert('تعذر القفل: ' + (e && e.code ? e.code : e)); }
+};
+
+// 🚪 قفل شيفت منسي — **نفس حساب وحقول graceCloseShift في sales**:
+// الانصراف = نهاية شيفته الرسمية مش دلوقتي · مفيش وقت إضافي · مفيش خصم بدري.
+window.ofHubGraceClose = async function(shiftId, empId){
+  const sh = _ofHubShifts().find(function(x){ return x.id === shiftId; });
+  if(!sh){ alert('مش لاقي الشيفت ده'); return; }
+  if(sh.clockOutTs){ alert('الشيفت ده مقفول خلاص'); return; }
+  const emp = (D.employees || []).find(function(e){ return e && e.id === empId; }) || {};
+  const cfg = await _ofBranchCfg(emp.branch || '');
+  const endTs = ofGraceCloseTs(sh, emp, cfg.shifts);
+  const tTxt = new Date(endTs).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+  if(!confirm('🚪 قفل شيفت ' + (emp.name || 'الموظف') + '؟\n\n'
+    + 'الانصراف هيتسجل الساعة ' + tTxt + ' (نهاية شيفته الرسمية) — مش وقت دلوقتي.\n'
+    + 'مفيش وقت إضافي ومفيش خصم انصراف بدري.')) return;
+  try{
+    await db.collection('sales_shifts').doc(shiftId).update({
+      clockOutTs: endTs,
+      overtimeMinutes: 0,
+      earlyMin: 0, earlyHours: 0,
+      autoClosedBy: 'grace_day', autoClosedAt: Date.now(), autoClosedFrom: 'office'
+    });
+    _ofHubLoad(true);
+    setTimeout(function(){ window.ofHubSheet(empId); }, 400);
+  }catch(e){ alert('تعذر القفل: ' + (e && e.code ? e.code : e)); }
 };
 
 window.ofRenderPresent = ofRenderPresent;
 window.ofHubRows = ofHubRows;
 window.ofHubPoints = ofHubPoints;
+window.ofGraceCloseTs = ofGraceCloseTs;
+window.ofBreakOverHours = ofBreakOverHours;
+window.ofHubCredits = ofHubCredits;
 
 // تحديث المدة كل دقيقة — والتطبيق في المقدمة بس
 setInterval(function(){
