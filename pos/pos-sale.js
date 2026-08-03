@@ -3813,3 +3813,121 @@ async function tryLinkFeedbackToCustomer(phone, name, sellerName){
   setTimeout(attemptLink, 200000); // محاولة تالتة بعد حوالي 3 دقايق ونص (تغطي آخر حدود النافذة براحة)
 }
 
+
+/* ============================================================
+   ☕🔔 تنبيه رجوع البريك في شاشة البيع (POS)
+   ------------------------------------------------------------
+   المشكلة: الموظفة بتنسى تسجّل رجوعها من البريك على كشك sales،
+   والنظام بيقفله تلقائي بعد ضعف المدة **وبيتخصم عليها** حتى لو رجعت
+   في ميعادها. الكشك بعيد عنها — بس الـPOS ده اللي هي واقفة قدامه.
+
+   فبنعرض مربع فوق خالص في صفحة البيع أول ما مدة البريك تخلص.
+   ⚠️ من غير صوت هنا عن قصد (قرار المالك): الكاشير بتكون قدام عميلة،
+      الرنين على كشك sales. هنا تنبيه بصري بس.
+
+   المصدر: مجموعة `sales_breaks` (تطبيق sales) — بنشترك على البريكات
+   **المفتوحة في الفرع ده بس** (شرطين تساوي = مستند أو اتنين على الأكثر،
+   يعني قراءات شبه معدومة، ومفيش index مركب مطلوب).
+
+   لو القواعد رفضت القراءة → بنسكت تمامًا (مفيش رسالة للكاشير) والبيع
+   بيكمّل عادي — الميزة دي مساعدة، مش شرط لأي عملية.
+   ============================================================ */
+var POS_BREAK_CFG_DEFAULT = { breakMin: 30, breakGraceMin: 5, breakAlertBeeps: 4, autoCloseBreakMult: 2 };
+var _posBreakCfg = POS_BREAK_CFG_DEFAULT;
+var _posBreaks = [];
+var _posBreakUnsub = null, _posBreakBranch = '';
+
+// نفس دالة sales بالحرف (breakAlertState) — الاختبار بيقارن الاتنين على نفس الحالات
+function posBreakAlertState(brk, cfg, nowTs){
+  cfg = cfg || POS_BREAK_CFG_DEFAULT;
+  if(!brk || brk.endTs) return { phase:'none', elapsedMin:0, beep:false };
+  var start = Number(brk.startTs);
+  if(!start) return { phase:'none', elapsedMin:0, beep:false };
+  var now = Number(nowTs) || Date.now();
+  var elapsedMin = Math.floor((now - start) / 60000);
+  if(elapsedMin < 0) return { phase:'none', elapsedMin:0, beep:false };
+
+  var allowed = Number(cfg.breakMin) || 30;
+  var grace   = Math.max(0, Number(cfg.breakGraceMin) || 0);
+  var beeps   = Math.max(0, cfg.breakAlertBeeps == null ? 4 : Number(cfg.breakAlertBeeps));
+  var staleAfter = allowed * (Number(cfg.autoCloseBreakMult) || 2) + 120;
+  if(elapsedMin > staleAfter) return { phase:'stale', elapsedMin, beep:false };
+
+  if(elapsedMin < allowed){
+    return { phase:'ok', elapsedMin, leftMin: allowed - elapsedMin, overMin:0, graceLeftMin: grace, beep:false };
+  }
+  var overMin = elapsedMin - allowed;
+  var inGrace = overMin < grace;
+  return {
+    phase: inGrace ? 'alert' : 'over',
+    elapsedMin: elapsedMin, leftMin: 0, overMin: overMin,
+    graceLeftMin: Math.max(0, grace - overMin),
+    beep: inGrace && overMin < beeps
+  };
+}
+window.posBreakAlertState = posBreakAlertState;
+
+function watchBranchBreaks(){
+  if(!currentBranch || typeof db === 'undefined' || !db) return;
+  if(_posBreakUnsub && _posBreakBranch === currentBranch) return;
+  if(_posBreakUnsub){ try{ _posBreakUnsub(); }catch(e){} _posBreakUnsub = null; _posBreaks = []; }
+  _posBreakBranch = currentBranch;
+  // إعدادات وقت الفرع (مدة البريك والسماح) — قراءة واحدة، وفولباك للافتراضي
+  try{
+    db.collection('sales_settings').doc(currentBranch).get().then(function(d){
+      var t = d && d.exists && d.data() ? d.data().timeCfg : null;
+      if(t) _posBreakCfg = Object.assign({}, POS_BREAK_CFG_DEFAULT, t);
+    }).catch(function(){});
+  }catch(e){}
+  try{
+    _posBreakUnsub = db.collection('sales_breaks')
+      .where('branch','==', currentBranch)
+      .where('endTs','==', null)
+      .onSnapshot(function(snap){
+        _posBreaks = snap.docs.map(function(d){ var o = d.data()||{}; o.id = d.id; return o; });
+        renderPosBreakAlert();
+      }, function(e){
+        // القواعد رافضة أو النت قاطع — بنسيبها بهدوء، والبيع مش بيتأثر
+        console.warn('breaks watch', e && e.code);
+        _posBreakUnsub = null; _posBreaks = []; renderPosBreakAlert();
+      });
+  }catch(e){ _posBreakUnsub = null; }
+}
+window.watchBranchBreaks = watchBranchBreaks;
+
+function renderPosBreakAlert(){
+  var host = document.getElementById('posBreakAlert');
+  if(!host) return;
+  var now = Date.now();
+  var rows = [];
+  (_posBreaks || []).forEach(function(b){
+    var st = posBreakAlertState(b, _posBreakCfg, now);
+    if(st.phase !== 'alert' && st.phase !== 'over') return;
+    var over = st.phase === 'over';
+    rows.push(
+      '<div style="background:' + (over ? '#7f1d1d' : '#b45309') + '; color:#fff; border-radius:10px;'
+      + 'padding:11px 14px; margin-bottom:8px; font-weight:800; font-size:15px; text-align:center;">'
+      + '⏰ ' + _bkEsc(b.employeeName || 'الموظفة') + ' — البريك خلص من ' + st.overMin + ' دقيقة'
+      + '<div style="font-size:12.5px; font-weight:600; opacity:.95; margin-top:3px;">'
+      + (over ? 'الوقت الزيادة بيتحسب رصيد دلوقتي — لازم تسجّل رجوعها على جهاز الحضور'
+              : 'تسجّل رجوعها خلال ' + st.graceLeftMin + ' دقيقة قبل ما يتحسب خصم')
+      + '</div></div>'
+    );
+  });
+  if(!rows.length){ host.style.display = 'none'; host.innerHTML = ''; return; }
+  host.style.display = 'block';
+  host.innerHTML = rows.join('');
+}
+window.renderPosBreakAlert = renderPosBreakAlert;
+
+function _bkEsc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c];
+  });
+}
+
+if(typeof window !== 'undefined' && typeof setInterval === 'function'){
+  setInterval(function(){
+    try{ watchBranchBreaks(); renderPosBreakAlert(); }catch(e){}
+  }, 10000);
+}
