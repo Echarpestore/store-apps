@@ -1,13 +1,18 @@
 // ============================================================
-// 👥 test-office-present — «الحاضرين دلوقتي» في تطبيق office
+// 👥 test-office-present — مركز موظفين الفرع في office (المرحلة 1)
 //
-// الشيفت المفتوح = فيه clockInTs ومفيش clockOutTs. اللوحة بتعرض
-// الشغالين متجمعين بالفرع مع مدة كل واحد.
-//
+// الكارت بيعرض الفرع المختار بس، والتصنيف من ofHubRows:
+//   present = شيفت مفتوح مش منسي
+//   away    = stale (نسي انصراف) · left (خلّص شيفته) ·
+//             leave (أجازة معتمدة النهاردة) · absent (ماجاش)
 // القواعد اللي لازم تفضل صح:
-//  • الشيفت المقفول عمره ما يظهر كحاضر
-//  • الشيفت اللي فات عليه أكتر من 16 ساعة = نسي انصراف، مش حاضر فعلًا
-//  • الاستعلام بيجيب المفتوحين بس (مش كل الشيفتات) — القراءات
+//  • موظف فرع تاني عمره ما يظهر
+//  • الشيفت المقفول مش «حاضر» — بيظهر «خلّص شيفته» بمواعيده
+//  • >16 ساعة مفتوح = نسي انصراف مش شغال
+//  • الأجازة لازم تكون approved وبتاريخ النهاردة — pending أو تاريخ
+//    تاني بيتحسب «ماجاش» (وإلا هيبان إن الغايب معذور وهو مش معذور)
+//  • تبديل الشيفت (shiftSwap) مش أجازة
+//  • النقط بنفس وزن sales (value>0 وإلا 1) — المرتب بيمشي عليها
 // ============================================================
 'use strict';
 const fs = require('fs');
@@ -30,7 +35,8 @@ function extractFn(s, name){
   return '';
 }
 
-const ctx = { console: { warn(){}, log(){} }, Date: Date, Math: Math, Object: Object, Number: Number, String: String };
+const ctx = { console: { warn(){}, log(){} }, Date: Date, Math: Math, Object: Object,
+              Number: Number, String: String, isNaN: isNaN };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
 {
@@ -38,7 +44,7 @@ vm.createContext(ctx);
   assert(!!m, 'حد الشيفت المنسي معرّف');
   vm.runInContext(m[0], ctx);
 }
-['ofPresentRows', 'ofPresentDur'].forEach(function(n){
+['ofHubRows', 'ofHubPoints', 'ofPresentDur'].forEach(function(n){
   const f = extractFn(src, n);
   assert(f.length > 30, 'استخرجنا ' + n + ' من office.js');
   vm.runInContext(f, ctx);
@@ -46,126 +52,135 @@ vm.createContext(ctx);
 
 const NOW = new Date(2026, 7, 3, 14, 0).getTime();
 const H = 3600000;
+const KEY = '2026-08-03';
 const EMPS = [
-  { id:'e1', name:'سارة' },
-  { id:'e2', name:'منى' },
-  { id:'e3', name:'هدى' }
+  { id:'e1', name:'سارة', branch:'الرحاب', scheduledStartTime:'10:00' },
+  { id:'e2', name:'منى',  branch:'الرحاب' },
+  { id:'e3', name:'هدى',  branch:'الرحاب' },
+  { id:'g1', name:'نور',  branch:'Glow' }
 ];
+function run(shifts, breaks, leaves){
+  return ctx.ofHubRows('الرحاب', EMPS, shifts||[], breaks||[], leaves||[], NOW, KEY);
+}
 
-// ============================================================
-// 1) الشغالين دلوقتي بيظهروا بفرعهم
-// ============================================================
+// 1) الشيفت المفتوح = حاضر · وموظفة الفرع التاني مش بتظهر خالص
 (function(){
-  const rows = ctx.ofPresentRows([
-    { id:'s1', employeeId:'e1', branch:'الرحاب', clockInTs: NOW - 3*H, clockOutTs:null },
-    { id:'s2', employeeId:'e2', branch:'الرحاب', clockInTs: NOW - 1*H, clockOutTs:null },
-    { id:'s3', employeeId:'e3', branch:'مدينتي', clockInTs: NOW - 2*H, clockOutTs:null }
-  ], EMPS, NOW);
-  assertEq(rows.length, 2, 'فرعين');
-  assertEq(rows.map(function(g){ return g.branch; }), ['الرحاب','مدينتي'], 'متجمعين بالفرع');
-  assertEq(rows[0].people.length, 2, 'اتنين في الرحاب');
-  assertEq(rows[0].people.map(function(p){ return p.name; }), ['سارة','منى'], 'بالاسم ومرتبين بوقت الحضور');
-  assertEq(rows[0].people[0].minutes, 180, 'المدة محسوبة صح (3 ساعات)');
+  const r = run([
+    { id:'s1', employeeId:'e1', clockInTs: NOW - 3*H, clockOutTs: null, lateMinutes: 25, latePenalized: true },
+    { id:'sg', employeeId:'g1', clockInTs: NOW - 2*H, clockOutTs: null }
+  ]);
+  assertEq(r.present.length, 1, 'حاضرة واحدة');
+  assertEq(r.present[0].name, 'سارة', 'وهي سارة');
+  assertEq(r.present[0].minutes, 180, 'بقالها 3 ساعات');
+  assertEq(r.present[0].lateMin, 25, 'والتأخير محمول على الصف');
+  assert(r.present[0].latePenalized === true, 'ومتعلّم إنه بعد السماح');
+  const names = r.present.concat(r.away).map(function(x){ return x.name; });
+  assert(names.indexOf('نور') === -1, '⛔ موظفة Glow مش موجودة في كارت الرحاب');
 })();
 
-// ============================================================
-// 2) 🔴 الشيفت المقفول عمره ما يظهر كحاضر
-// ============================================================
+// 2) 🏁 الشيفت المقفول عمره ما يبقى «حاضر» — بيظهر خلّص شيفته بمواعيده
 (function(){
-  const rows = ctx.ofPresentRows([
-    { id:'s1', employeeId:'e1', branch:'الرحاب', clockInTs: NOW - 5*H, clockOutTs: NOW - 1*H },
-    { id:'s2', employeeId:'e2', branch:'الرحاب', clockInTs: NOW - 2*H, clockOutTs: null }
-  ], EMPS, NOW);
-  assertEq(rows.length, 1, 'فرع واحد');
-  assertEq(rows[0].people.length, 1, 'اللي انصرف مش بيتحسب');
-  assertEq(rows[0].people[0].name, 'منى', 'الشغالة بس هي اللي ظاهرة');
+  const r = run([
+    { id:'s1', employeeId:'e1', clockInTs: NOW - 8*H, clockOutTs: NOW - 1*H }
+  ]);
+  assertEq(r.present.length, 0, 'مفيش حاضرين');
+  const x = r.away.find(function(a){ return a.empId === 'e1'; });
+  assertEq(x.reason, 'left', 'السبب: خلّص شيفته');
+  assertEq(x.minutes, 420, 'اشتغل 7 ساعات');
 })();
 
-// ============================================================
-// 3) ⚠️ شيفت فات عليه أكتر من 16 ساعة = نسي انصراف، مش حاضر
-// ============================================================
+// 3) ⚠️ >16 ساعة مفتوح = نسي انصراف مش حاضر
 (function(){
-  const rows = ctx.ofPresentRows([
-    { id:'s1', employeeId:'e1', branch:'الرحاب', clockInTs: NOW - 20*H, clockOutTs:null },
-    { id:'s2', employeeId:'e2', branch:'الرحاب', clockInTs: NOW - 2*H,  clockOutTs:null }
-  ], EMPS, NOW);
-  const p = rows[0].people;
-  assertEq(p.length, 2, 'الاتنين بيظهروا في القايمة');
-  assertEq(p[0].stale, true, '⚠️ اللي 20 ساعة متعلّم كمنسي');
-  assertEq(p[1].stale, false, 'واللي ساعتين شغالة عادي');
-  assertEq(p.filter(function(x){ return !x.stale; }).length, 1, 'العدد الحقيقي واحد بس');
+  const r = run([
+    { id:'s1', employeeId:'e1', clockInTs: NOW - 17*H, clockOutTs: null }
+  ]);
+  assertEq(r.present.length, 0, 'مش محسوب حاضر');
+  const x = r.away.find(function(a){ return a.empId === 'e1'; });
+  assertEq(x.reason, 'stale', 'معلّم نسي انصراف');
 })();
 
-// ============================================================
-// 4) الحدود: 15 ساعة لسه شغال · 17 ساعة منسي
-// ============================================================
+// 4) 🌴 الأجازة: approved + النهاردة بس
 (function(){
-  const mk = function(hrs){
-    return ctx.ofPresentRows([{ id:'x', employeeId:'e1', branch:'ب', clockInTs: NOW - hrs*H, clockOutTs:null }], EMPS, NOW)[0].people[0];
-  };
-  assertEq(mk(15).stale, false, '15 ساعة لسه محسوب شغال');
-  assertEq(mk(17).stale, true,  '17 ساعة منسي');
+  const ok = run([], [], [{ empId:'e1', status:'approved', dateKey: KEY, type:'leave', reason:'ظرف' }]);
+  assertEq(ok.away.find(function(a){ return a.empId==='e1'; }).reason, 'leave', 'أجازة معتمدة النهاردة بتظهر');
+
+  const pend = run([], [], [{ empId:'e1', status:'pending', dateKey: KEY, type:'leave' }]);
+  assertEq(pend.away.find(function(a){ return a.empId==='e1'; }).reason, 'absent',
+    '⛔ pending مش أجازة — يبان غايب مش معذور');
+
+  const other = run([], [], [{ empId:'e1', status:'approved', dateKey:'2026-08-01', type:'leave' }]);
+  assertEq(other.away.find(function(a){ return a.empId==='e1'; }).reason, 'absent',
+    '⛔ أجازة يوم تاني مش النهاردة');
+
+  const swap = run([], [], [{ empId:'e1', status:'approved', dateKey: KEY, type:'shiftSwap' }]);
+  assertEq(swap.away.find(function(a){ return a.empId==='e1'; }).reason, 'absent',
+    '⛔ تبديل الشيفت مش أجازة');
 })();
 
-// ============================================================
-// 5) شيفت من غير حضور أصلًا بيتشال
-// ============================================================
+// 5) ☕ البريكات بتتربط بصاحبها: المفتوح والمجاميع
 (function(){
-  const rows = ctx.ofPresentRows([
-    { id:'s1', employeeId:'e1', branch:'الرحاب', clockInTs: null, clockOutTs: null }
-  ], EMPS, NOW);
-  assertEq(rows.length, 0, 'مستند ناقص مش بيكسر اللوحة');
-  assertEq(ctx.ofPresentRows(null, null, NOW), [], 'مفيش داتا = قايمة فاضية');
+  const r = run(
+    [{ id:'s1', employeeId:'e1', clockInTs: NOW - 5*H, clockOutTs: null }],
+    [{ id:'b1', employeeId:'e1', startTs: NOW - 4*H, endTs: NOW - 4*H + 20*60000, durationMin: 20 },
+     { id:'b2', employeeId:'e1', startTs: NOW - 10*60000, endTs: null },
+     { id:'b3', employeeId:'e2', startTs: NOW - 1*H, endTs: NOW - 1*H + 15*60000, durationMin: 15 }]
+  );
+  const p = r.present[0];
+  assertEq(p.brk.totalMin, 20, 'مجموع المقفول 20د');
+  assert(!!p.brk.open, 'وفيه بريك مفتوح دلوقتي');
+  const m = r.away.find(function(a){ return a.empId === 'e2'; });
+  assertEq(m.brk.totalMin, 15, 'وبريك منى على منى مش على سارة');
 })();
 
-// ============================================================
-// 6) موظف اتشال من الجدول: الشيفت بيفضل ظاهر باسم بديل
-// ============================================================
+// 6) لو فيه شيفت مقفول وواحد مفتوح لنفس الموظفة — المفتوح بيغلب
 (function(){
-  const rows = ctx.ofPresentRows([
-    { id:'s1', employeeId:'مش-موجود', branch:'الرحاب', clockInTs: NOW - H, clockOutTs:null }
-  ], EMPS, NOW);
-  assertEq(rows[0].people[0].name, 'موظف', 'اسم بديل بدل ما السطر يختفي');
+  const r = run([
+    { id:'s1', employeeId:'e1', clockInTs: NOW - 9*H, clockOutTs: NOW - 6*H },
+    { id:'s2', employeeId:'e1', clockInTs: NOW - 2*H, clockOutTs: null }
+  ]);
+  assertEq(r.present.length, 1, 'حاضرة (رجعت تاني)');
+  assertEq(r.present[0].shiftId, 's2', 'بالشيفت المفتوح');
 })();
 
-// ============================================================
-// 7) شيفت من غير فرع بيتجمع تحت خانة واضحة (مش بيضيع)
-// ============================================================
+// 7) الترتيب: نسي انصراف الأول ثم خلّص ثم أجازة ثم ماجاش
 (function(){
-  const rows = ctx.ofPresentRows([
-    { id:'s1', employeeId:'e1', clockInTs: NOW - H, clockOutTs:null }
-  ], EMPS, NOW);
-  assertEq(rows.length, 1, 'ظهر');
-  assertEq(rows[0].branch, 'من غير فرع', 'تحت خانة واضحة');
+  const r = run(
+    [{ id:'s1', employeeId:'e1', clockInTs: NOW - 20*H, clockOutTs: null },
+     { id:'s2', employeeId:'e2', clockInTs: NOW - 9*H, clockOutTs: NOW - 2*H }],
+    [],
+    [{ empId:'e3', status:'approved', dateKey: KEY, type:'leave' }]
+  );
+  assertEq(r.away.map(function(a){ return a.reason; }).join(','), 'stale,left,leave', 'ترتيب الأسباب ثابت');
 })();
 
-// ============================================================
-// 8) صيغة المدة
-// ============================================================
+// 8) ⭐ النقط بوزن sales: value>0 وإلا 1
 (function(){
-  assertEq(ctx.ofPresentDur(45), '45 د', 'أقل من ساعة');
-  assertEq(ctx.ofPresentDur(60), '1 س 0 د', 'ساعة');
-  assertEq(ctx.ofPresentDur(185), '3 س 5 د', 'ساعات ودقايق');
+  const pts = [
+    { employeeId:'e1', ts: NOW },
+    { employeeId:'e1', ts: NOW, value: 0.5 },
+    { employeeId:'e1', ts: NOW, value: 0 },
+    { employeeId:'e2', ts: NOW, value: 3 }
+  ];
+  const a = ctx.ofHubPoints(pts, 'e1');
+  assertEq(a.count, 3, '3 عمليات لسارة');
+  assertEq(a.weight, 2.5, 'الوزن 1 + 0.5 + 1 (الصفر بيتحسب 1 زي sales)');
+  assertEq(ctx.ofHubPoints(pts, 'e2').weight, 3, 'ومنى بوزنها');
+  assertEq(ctx.ofHubPoints(pts, 'e3').count, 0, 'وهدى مفيش');
 })();
 
-// ============================================================
-// 9) التوصيل: الاستعلام على المفتوحين بس + اللوحة موجودة في الصفحة
-// ============================================================
+// 9) التوصيل في الواجهة
 (function(){
-  assert(/collection\('sales_shifts'\)\s*\.where\('clockOutTs','==', null\)/.test(src),
-    '⚡ الاستعلام بيجيب الشيفتات المفتوحة بس — مش كل الشيفتات');
-  assert(/openShifts:\s*\[\]/.test(src), 'مكان تخزينها متعرّف في D');
-  assert(/ofRenderPresent\(\)/.test(src), 'اللوحة بتترسم');
-  assert(/id="dayPresent"/.test(html), 'مكان اللوحة موجود في صفحة اليوم');
-  assert(/window\.ofPresentRows\s*=/.test(src), 'الدالة متعرّضة على window');
-  assert(/document\.hidden/.test(src), 'التحديث الدوري بيقف والتطبيق في الخلفية');
-})();
-
-// ============================================================
-// 10) الكاش اترفع (وإلا التعديل مش هيوصل للأجهزة)
-// ============================================================
-(function(){
-  const sw = fs.readFileSync(path.join(OFF, 'sw.js'), 'utf8');
-  const v = (sw.match(/echarpe-office-v(\d+)/) || [])[1];
-  assert(!!v && Number(v) >= 29, 'CACHE_NAME بتاع office ≥ v29 (الحالي v' + (v || '?') + ')');
+  assert(/id="dayPresent"/.test(html), 'عنصر الكارت موجود في page-day');
+  const rp = extractFn(src, 'ofRenderPresent');
+  assert(/_ofHubBranch\(\)/.test(rp), 'الكارت بيقرا الفرع المختار');
+  const hb = extractFn(src, '_ofHubBranch');
+  assert(/#dayBranch/.test(hb), 'من نفس منسدلة اليوم');
+  assert(/_ofHubOpen/.test(rp), 'ومقفول/بيتفتح بالدوسة');
+  assert(/ofHubSheet/.test(rp), 'ودوسة الموظف بتفتح صفحته');
+  assert(/window\.ofHubRows = ofHubRows/.test(src), 'الدالة النقية متعرّضة');
+  // 📉 القراءات: النقط مش في التحميل الدوري — بتتقرا عند فتح الصفحة بس
+  const load = extractFn(src, '_ofHubLoad');
+  assert(!/sales_points/.test(load), '⛔ النقط مش بتتقرا كل 4 دقايق');
+  const pl = extractFn(src, '_ofHubPtsLoad');
+  assert(/sales_points/.test(pl), 'بتتقرا في صفحة الموظف بس');
 })();
