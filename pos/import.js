@@ -410,6 +410,130 @@ async function wipeInventory(resultBox){
 }
 if(typeof window !== 'undefined') window.wipeInventory = wipeInventory;
 
+// ============================================================
+// 🔁 منع تكرار الأصناف عند الاستيراد  (إصلاح 2 أغسطس 2026)
+// ------------------------------------------------------------
+// الباج: الصنف اللي بيتضاف من شاشة المخزون بياخد **مفتاح عشوائي**
+// (`.doc()` / `.add()` في pos-admin.js)، والاستيراد كان بيكتب بمفتاح
+// `الباركود__الفرع` — المفتاحين عمرهم ما يتقابلوا، فكل صنف كان موجود قبل
+// الاستيراد بيتسجّل **مرة تانية بنفس الكود**. النتيجة: المخزون بيتقسّم على
+// نسختين، الكاشير بتبيع من واحدة والتانية بتفضل بكميتها الأصلية → الجرد غلط.
+//
+// الحل: قبل الكتابة بنفهرس المخزون الموجود بالباركود، ولو الكود موجود
+// بنكتب **على نفس المستند** بدل ما نعمل واحد جديد.
+// ============================================================
+
+// بيرجّع { الباركود: { id: مفتاح المستند اللي نكتب عليه, count: عدد المستندات بنفس الكود } }
+function indexInventoryByCode(items, branch){
+  const groups = {};
+  (items || []).forEach(function(it){
+    if(!it) return;
+    if(it.status === 'merged') return;              // اتدمج قبل كده — مش هدف للكتابة
+    const code = String(it.barcode || '').trim();
+    if(!code) return;
+    (groups[code] = groups[code] || []).push(it);
+  });
+  const idx = {};
+  Object.keys(groups).forEach(function(code){
+    const arr = groups[code];
+    // الأولوية: مستند الاستيراد السابق لنفس الفرع ← صنف مخصوص بفرعي ← صنف مشترك
+    const byId   = arr.filter(function(x){ return x.id === code + '__' + branch; })[0];
+    const mine   = arr.filter(function(x){ return Array.isArray(x.branches) && x.branches.indexOf(branch) >= 0; })[0];
+    const shared = arr.filter(function(x){ return !Array.isArray(x.branches) || !x.branches.length; })[0];
+    const pick = byId || mine || shared;
+    // ⚠️ مفيش fallback على أي مستند: الكود 271 في فرع ممكن يكون صنف تاني خالص
+    // في فرع تاني. لو مفيش مستند ظاهر لفرعي، بنسيبه ونعمل مستند خاص بفرعي.
+    if(!pick) return;
+    const visible = arr.filter(function(x){
+      return x.id === code + '__' + branch
+        || (Array.isArray(x.branches) && x.branches.indexOf(branch) >= 0)
+        || !Array.isArray(x.branches) || !x.branches.length;
+    });
+    idx[code] = { id: pick.id, count: visible.length };
+  });
+  return idx;
+}
+
+// 🧮 تخطيط الكتابة (دالة نقية — كل منطق منع التكرار هنا وبيتختبر لوحده)
+// بترجّع { writes: [{ id, data }], stats }  ·  id = null معناه مستند بمفتاح تلقائي
+function planInventoryWrites(rows, mapping, branch, idx, FV){
+  const stats = { done:0, failed:0, updated:0, created:0, dupCodes:[] };
+  const writes = [];
+  idx = idx || {};
+  Object.keys(idx).forEach(function(c){ if(idx[c].count > 1) stats.dupCodes.push(c); });
+
+  (rows || []).forEach(function(row){
+    const name = String(row[mapping.name] || '').trim();
+    if(!name){ stats.failed++; return; }
+    const barcode = mapping.barcode ? String(row[mapping.barcode]||'').trim() : '';
+    const qtyNum = mapping.quantity ? Math.max(0, parseInt(row[mapping.quantity]) || 0) : 0;   // السالب يبقى صفر
+    const data = {
+      name: name, barcode: barcode,
+      price: mapping.price ? (parseFloat(row[mapping.price]) || 0) : 0,
+      cost: mapping.cost ? (parseFloat(row[mapping.cost]) || 0) : 0,
+      qtyByBranch: { [branch]: qtyNum },   // كمية الفرع الحالي بس (مخزون منفصل لكل فرع)
+      supplier: mapping.supplier ? (row[mapping.supplier]||'') : '',
+      minStock: mapping.minStock ? (Math.max(0, parseInt(row[mapping.minStock])||0)) : 0,
+      department: mapping.department ? (row[mapping.department]||'') : '',
+      status:'active', importedFrom:'quickbooks',
+      // 🏬 arrayUnion مش استبدال: لو الصنف موجود في فروع تانية ميتشالش منها
+      branches: FV ? FV.arrayUnion(branch) : [branch],
+      updatedAt: FV ? FV.serverTimestamp() : new Date()
+    };
+    let id;
+    if(barcode && idx[barcode]){
+      id = idx[barcode].id;                       // ✅ تحديث الموجود — ده الإصلاح
+      stats.updated++;
+    } else if(barcode){
+      id = barcode + '__' + branch;               // صنف جديد فعلًا
+      idx[barcode] = { id: id, count: 1 };        // صف تاني بنفس الكود في نفس الملف يروح لنفس المستند
+      stats.created++;
+    } else {
+      id = null;                                   // من غير باركود = مفتاح تلقائي
+      stats.created++;
+    }
+    writes.push({ id: id, data: data });
+    stats.done++;
+  });
+  return { writes: writes, stats: stats };
+}
+
+// كتابة صفوف المخزون بالدفعات — بترجّع إحصائية { done, failed, updated, created, dupCodes }
+async function writeInventoryRows(rows, mapping, branch, onProgress){
+  let idx = {};
+  try{
+    const snap = await db.collection(TEST_INVENTORY).get();
+    idx = indexInventoryByCode(snap.docs.map(function(d){
+      return Object.assign({ id: d.id }, d.data());
+    }), branch);
+  }catch(e){
+    // فشل القراءة = نرجع للسلوك القديم (مفتاح الباركود+الفرع) بدل ما الاستيراد كله يقف
+    console.warn('[import] تعذّر فهرسة المخزون:', e && e.message);
+    idx = {};
+  }
+
+  const FV = (typeof firebase !== 'undefined' && firebase.firestore && firebase.firestore.FieldValue)
+    ? firebase.firestore.FieldValue : null;
+  const plan = planInventoryWrites(rows, mapping, branch, idx, FV);
+
+  const CHUNK = 400;   // حد Firestore للدفعة 500
+  for(let i=0; i<plan.writes.length; i+=CHUNK){
+    const batch = db.batch();
+    plan.writes.slice(i, i+CHUNK).forEach(function(w){
+      const ref = (w.id == null)
+        ? db.collection(TEST_INVENTORY).doc()
+        : db.collection(TEST_INVENTORY).doc(w.id);
+      batch.set(ref, w.data, { merge:true });
+    });
+    await batch.commit();
+    if(typeof onProgress === 'function') onProgress(Math.min(i+CHUNK, plan.writes.length), plan.writes.length);
+  }
+  return plan.stats;
+}
+window.indexInventoryByCode = indexInventoryByCode;
+window.planInventoryWrites = planInventoryWrites;
+window.writeInventoryRows  = writeInventoryRows;
+
 async function runImport(){
   const targets = IMPORT_TARGETS[importTab];
   const mapping = {};
@@ -481,41 +605,18 @@ async function runImport(){
         resultBox.textContent = ''; return;
       }
     }
-    const CHUNK = 400;   // حد Firestore للدفعة 500
+    let stats;
     try{
-      for(let i=0; i<rows.length; i+=CHUNK){
-        const batch = db.batch();
-        const slice = rows.slice(i, i+CHUNK);
-        slice.forEach(row=>{
-          const name = (row[mapping.name]||'').trim();
-          if(!name){ failed++; return; }
-          const barcode = mapping.barcode ? String(row[mapping.barcode]||'').trim() : '';
-          const qtyNum = mapping.quantity ? Math.max(0, parseInt(row[mapping.quantity]) || 0) : 0;   // السالب يبقى صفر
-          const data = {
-            name, barcode,
-            price: mapping.price ? (parseFloat(row[mapping.price]) || 0) : 0,
-            cost: mapping.cost ? (parseFloat(row[mapping.cost]) || 0) : 0,
-            qtyByBranch: { [currentBranch]: qtyNum },   // كمية الفرع الحالي (مخزون منفصل لكل فرع)
-            supplier: mapping.supplier ? (row[mapping.supplier]||'') : '',
-            minStock: mapping.minStock ? (Math.max(0, parseInt(row[mapping.minStock])||0)) : 0,
-            department: mapping.department ? (row[mapping.department]||'') : '',
-            status:'active', importedFrom:'quickbooks',
-            branches: [currentBranch],        // 🏬 مقصور على الفرع ده — مش بيأثر على باقي الفروع
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          };
-          // 🔑 مفتاح الوثيقة = الباركود + الفرع.
-          // من غير الفرع، صنف رقم 271 في فرع بيكتب على 271 في فرع تاني ويمسح اسمه وسعره.
-          const ref = barcode
-            ? db.collection(TEST_INVENTORY).doc(barcode + '__' + currentBranch)
-            : db.collection(TEST_INVENTORY).doc();
-          batch.set(ref, data, { merge:true });
-          done++;
-        });
-        await batch.commit();
-        resultBox.textContent = `جارٍ الاستيراد... ${Math.min(i+CHUNK, rows.length)}/${rows.length}`;
-      }
+      stats = await writeInventoryRows(rows, mapping, currentBranch, function(n, total){
+        resultBox.textContent = `جارٍ الاستيراد... ${n}/${total}`;
+      });
     }catch(e){ resultBox.innerHTML = '⚠️ حصل خطأ أثناء الاستيراد: '+e.message; showToast('فشل الاستيراد', 'err'); return; }
-    resultBox.innerHTML = `✅ اتستورد ${done} صنف${failed ? ` — ${failed} صف اتخطّى (اسم فاضي)` : ''}`;
+    done = stats.done; failed = stats.failed;
+    resultBox.innerHTML = `✅ اتستورد ${done} صنف${failed ? ` — ${failed} صف اتخطّى (اسم فاضي)` : ''}`
+      + `<div style="font-size:12px; color:var(--muted); margin-top:4px;">🔁 ${stats.updated} تحديث لأصناف موجودة · ➕ ${stats.created} صنف جديد</div>`
+      + (stats.dupCodes.length
+          ? `<div style="font-size:12px; color:var(--warn); margin-top:6px; font-weight:700;">⚠️ ${stats.dupCodes.length} كود متسجّل أكتر من مرة من استيراد قديم — افتح «🔍 أكواد متكررة» من شاشة المخزون وادمجهم</div>`
+          : '');
     showToast('خلص استيراد المخزون ✅');
     if(typeof loadInventory === 'function') await loadInventory();
     return;

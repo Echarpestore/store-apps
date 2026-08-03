@@ -187,6 +187,34 @@ async function renderPdStockLog(){
 let receiveCart = [];          // {id, name, barcode, currentQty, qty}
 let receiveGoodsTodayLog = [];
 
+// ============================================================
+// 🧾 سجل الاستلامات — بيعيش بعد قفل التطبيق
+// ------------------------------------------------------------
+// 🔴 الباج: السجل كان في الذاكرة بس (`let ... = []`) — أول ما الكاشير
+//    تقفل التطبيق أو الصفحة تعمل reload، السجل يرجع فاضي وهي كانت
+//    مستلمة بضاعة فعلًا. النتيجة: «سجل الاستلامات مش شغال».
+// الحل: نسخة في localStorage بمفتاح الفرع + يوم الشغل.
+// ⚡ صفر قراءات إضافية من Firestore — الحركة نفسها متسجلة أصلًا في
+//    `pos_test_stock_log`، ودي نسخة عرض سريعة للكاشير.
+// ⏰ بيوم الشغل (6 صباحًا) مش نص الليل — استلام الفجر بتاع نفس الوردية.
+// ============================================================
+function _recvLogKey(){
+  const day = (typeof bizDayKey === 'function') ? bizDayKey() : new Date().toDateString();
+  return 'pos_recv_log_' + (typeof currentBranch !== 'undefined' ? currentBranch : '') + '_' + day;
+}
+function _recvLogSave(){
+  try{ localStorage.setItem(_recvLogKey(), JSON.stringify(receiveGoodsTodayLog.slice(0, 200))); }
+  catch(e){ console.warn('recv log save', e && e.message); }
+}
+function _recvLogLoad(){
+  try{
+    const raw = localStorage.getItem(_recvLogKey());
+    if(!raw) return;
+    const arr = JSON.parse(raw);
+    if(Array.isArray(arr)) receiveGoodsTodayLog = arr;
+  }catch(e){ console.warn('recv log load', e && e.message); }
+}
+
 function goToReceiveGoods(){
   if(!hasPerm('canReceiveGoods') && !hasPerm('canEditInventory')){ showToast('محتاج صلاحية استلام البضاعة', 'err'); return; }
   showScreen('receiveGoodsScreen');
@@ -304,7 +332,10 @@ function renderReceiveCart(){
     return;
   }
   const lastIdx = receiveCart.length - 1;
-  wrap.innerHTML = receiveCart.map((r, idx)=>{
+  // 🔝 آخر صنف اتضاف يبقى **أول سطر** — نفس ترتيب شاشة البيع.
+  // ⚠️ بنعكس العرض بس، والـ idx الأصلي بيفضل زي ما هو عشان أزرار
+  //    الكمية والمسح تشتغل على الصف الصح (نفس أسلوب renderCart).
+  wrap.innerHTML = receiveCart.map((r, idx)=> ({ r, idx })).reverse().map(({ r, idx })=>{
     const isLast = idx === lastIdx;
     // نحسب المخزون الجديد من الرصيد الحالي الفعلي
     const p = allInventory.find(x=> x.id === r.id);
@@ -401,6 +432,7 @@ async function confirmReceiveCart(){
         (r.qty > 0 ? 'استلام بضاعة (توريد)' : 'خصم بضاعة (تالف/مرتجع للمورد)')
         + (_wentNeg ? ` — ⚠️ الرصيد نزل سالب (${newQty}) · الجرد لسه ماتعملش` : ''));
       receiveGoodsTodayLog.unshift({ name:r.name, qtyChange:r.qty, ts:Date.now() });
+      _recvLogSave();                       // يفضل موجود بعد قفل التطبيق
     }
     showToast(`اتأكد استلام ${rows.length} صنف ✅`);
     await loadInventory();
@@ -415,13 +447,33 @@ async function confirmReceiveCart(){
 function renderReceiveGoodsLog(){
   const wrap = document.getElementById('receiveGoodsLog');
   if(!wrap) return;
-  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-  const todays = receiveGoodsTodayLog.filter(l=> l.ts >= dayStart.getTime());
-  wrap.innerHTML = todays.length ? todays.map(l=> `
-    <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee; font-size:12px;">
-      <span>${l.name}</span>
-      <span style="font-weight:800; color:${l.qtyChange>0?'var(--plus)':'var(--minus)'};">${l.qtyChange>0?'+':''}${l.qtyChange}</span>
-    </div>`).join('') : '<div style="color:#999; font-size:12px; text-align:center; padding:10px 0;">لسه مفيش عمليات استلام النهاردة</div>';
+  if(!receiveGoodsTodayLog.length) _recvLogLoad();     // بعد فتح التطبيق من جديد
+  const dayStart = (typeof bizDayStartMs === 'function')
+    ? bizDayStartMs(Date.now())                        // ⏰ يوم الشغل مش نص الليل
+    : (function(){ const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+  const todays = receiveGoodsTodayLog.filter(l=> l && l.ts >= dayStart);
+  if(!todays.length){
+    wrap.innerHTML = '<div style="color:#999; font-size:12px; text-align:center; padding:10px 0;">لسه مفيش عمليات استلام النهاردة</div>';
+    return;
+  }
+  const totalIn = todays.reduce(function(n,l){ return n + (l.qtyChange > 0 ? l.qtyChange : 0); }, 0);
+  const totalOut = todays.reduce(function(n,l){ return n + (l.qtyChange < 0 ? -l.qtyChange : 0); }, 0);
+  wrap.innerHTML = todays.map(function(l){
+    const t = new Date(l.ts).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+    return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;'
+      + ' padding:6px 0; border-bottom:1px solid #eee; font-size:12px;">'
+      + '<span style="min-width:0;">' + l.name
+      +   '<span style="color:#999; font-size:10.5px; margin-right:5px;">' + t + '</span></span>'
+      + '<span style="font-weight:800; white-space:nowrap; color:'
+      +   (l.qtyChange > 0 ? 'var(--plus)' : 'var(--minus)') + ';">'
+      +   (l.qtyChange > 0 ? '+' : '') + l.qtyChange + '</span>'
+      + '</div>';
+  }).join('')
+  + '<div style="display:flex; justify-content:space-between; padding:8px 0 2px; font-size:12px; font-weight:900;">'
+  +   '<span>الإجمالي</span>'
+  +   '<span><span style="color:var(--plus);">+' + totalIn + '</span>'
+  +   (totalOut ? (' <span style="color:var(--minus);">-' + totalOut + '</span>') : '') + '</span>'
+  + '</div>';
 }
 
 

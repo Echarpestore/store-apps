@@ -693,34 +693,107 @@ function toggleInvAddForm(){
 }
 window.toggleInvAddForm = toggleInvAddForm;
 
-// 🔍 كشف الأكواد المتكررة — الأصناف اللي بتتشارك نفس الباركود.
-// ⚠️ المنع اتحط على الإضافة الجديدة، بس اللي اتسجل قبل كده لسه موجود —
-//    والمسدس بيقف قدامهم. الأداة دي بتوريهم عشان يتصلحوا يدوي.
+// ============================================================
+// 🔍 الأكواد المتكررة + 🔗 الدمج  (إصلاح 2 أغسطس 2026)
+// ------------------------------------------------------------
+// إزاي اتعمل التكرار: الصنف اللي بيتضاف من الشاشة دي بياخد مفتاح عشوائي،
+// والاستيراد كان بيكتب بمفتاح `الباركود__الفرع` — فالصنف الموجود اتسجّل
+// مرة تانية بنفس الكود واسم مختلف شوية من QuickBooks. النتيجة إن المخزون
+// اتقسّم على نسختين: الكاشير بتبيع من واحدة والتانية بتفضل بكميتها الأصلية.
+//
+// الدمج: بنجمع كميات كل فرع من النسختين في نسخة واحدة (اللي الأدمن يختارها)،
+// والباقي بيتقفل: status='merged' + mergedInto + كميات صفر + branches
+// = ['(مدموج)'] عشان يختفي من كل الفروع من غير حذف نهائي — قابل للمراجعة.
+// ============================================================
+
+// نقية: بتجمع الأصناف الظاهرة لفرعي حسب الباركود وترجّع المتكرر بس
+function findDupGroups(items, branch){
+  const groups = {};
+  (items || []).forEach(function(it){
+    if(!it || it.status === 'merged') return;
+    const code = String(it.barcode || '').trim();
+    if(!code) return;
+    // ⚠️ الفرع مهم: كود 271 في فرع ممكن يكون صنف تاني خالص في فرع تاني —
+    // دول مش تكرار وممنوع ندمجهم.
+    const visible = !Array.isArray(it.branches) || !it.branches.length
+      || it.branches.indexOf(branch) >= 0;
+    if(!visible) return;
+    (groups[code] = groups[code] || []).push(it);
+  });
+  return Object.keys(groups)
+    .filter(function(c){ return groups[c].length > 1; })
+    .sort(function(a, b){ return groups[b].length - groups[a].length; })
+    .map(function(c){ return { code: c, items: groups[c] }; });
+}
+
+// نقية: بتحسب المستند المدموج + إقفال الباقي. بترجّع { keeper, losers }
+function planDupMerge(items, keeperId){
+  const list = items || [];
+  const keeper = list.filter(function(x){ return x.id === keeperId; })[0] || list[0];
+  if(!keeper) return null;
+  const qty = {};
+  const branches = {};
+  list.forEach(function(it){
+    const q = it.qtyByBranch || {};
+    Object.keys(q).forEach(function(b){ qty[b] = (qty[b] || 0) + (Number(q[b]) || 0); });
+    (Array.isArray(it.branches) ? it.branches : []).forEach(function(b){ branches[b] = 1; });
+  });
+  const losers = list.filter(function(x){ return x.id !== keeper.id; }).map(function(x){
+    const zero = {};
+    Object.keys(x.qtyByBranch || {}).forEach(function(b){ zero[b] = 0; });
+    return {
+      id: x.id,
+      update: {
+        status: 'merged',
+        mergedInto: keeper.id,
+        mergedAt: Date.now(),
+        qtyByBranch: zero,
+        branches: ['(مدموج)']   // مش فرع حقيقي = يختفي من كل الشاشات
+      }
+    };
+  });
+  const update = { qtyByBranch: qty };
+  // الاسم/السعر بتوع النسخة المختارة — بس لو ناقصين بناخدهم من التانية
+  if(!keeper.name){
+    const alt = list.filter(function(x){ return x.id !== keeper.id && x.name; })[0];
+    if(alt) update.name = alt.name;
+  }
+  if(!(Number(keeper.price) > 0)){
+    const alt = list.filter(function(x){ return x.id !== keeper.id && Number(x.price) > 0; })[0];
+    if(alt) update.price = Number(alt.price);
+  }
+  if(Object.keys(branches).filter(function(b){ return b !== '(مدموج)'; }).length){
+    update.branches = Object.keys(branches).filter(function(b){ return b !== '(مدموج)'; });
+  }
+  return { keeper: { id: keeper.id, update: update }, losers: losers };
+}
+
 function openDupBarcodeCheck(){
   if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
-  const map = {};
-  (allInventory || []).forEach(function(it){
-    const b = String((it && it.barcode) || '').trim();
-    if(!b) return;
-    (map[b] = map[b] || []).push(it);
-  });
-  const dups = Object.keys(map).filter(function(b){ return map[b].length > 1; })
-    .sort(function(a, b){ return map[b].length - map[a].length; });
+  const groups = findDupGroups(allInventory || [], currentBranch);
   const noBarcode = (allInventory || []).filter(function(it){
-    return it && !String(it.barcode || '').trim(); }).length;
+    return it && it.status !== 'merged' && !String(it.barcode || '').trim(); }).length;
 
-  const rows = dups.map(function(b){
-    const arr = map[b];
-    const names = arr.map(function(it){
-      return '<div style="padding:3px 0; border-top:1px dashed var(--border);">'
+  const rows = groups.map(function(g){
+    const opts = g.items.map(function(it, i){
+      const q = it.qtyByBranch || {};
+      const qtxt = Object.keys(q).map(function(b){ return b + ': ' + (Number(q[b])||0); }).join(' · ') || 'مفيش كمية';
+      const sold = (typeof invSales === 'object' && invSales && invSales[it.id]) ? Number(invSales[it.id]) : 0;
+      return '<label style="display:block; padding:6px 4px; border-top:1px dashed var(--border); cursor:pointer;">'
+        + '<input type="radio" name="keep_' + g.code + '" value="' + it.id + '"' + (i === 0 ? ' checked' : '') + ' style="margin-left:6px;">'
         + '<b>' + (it.name || '(بدون اسم)') + '</b>'
         + ' <span style="color:var(--muted); font-size:11px;">' + (it.price != null ? (it.price + ' ج.م') : '') + '</span>'
-        + '</div>';
+        + '<div style="font-size:11px; color:var(--muted);">' + qtxt
+        + (sold ? (' · اتباع منه ' + sold) : '') + '</div>'
+        + '</label>';
     }).join('');
     return '<div style="background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px;">'
-      + '<div style="font-weight:900; direction:ltr; text-align:right;">' + b + '</div>'
-      + '<div style="color:var(--minus); font-size:12px; font-weight:700; margin:2px 0 4px;">متسجل ${arr.length} مرات</div>'.replace('${arr.length}', String(arr.length))
-      + names + '</div>';
+      + '<div style="font-weight:900; direction:ltr; text-align:right;">' + g.code + '</div>'
+      + '<div style="color:var(--minus); font-size:12px; font-weight:700; margin:2px 0 4px;">متسجل ' + g.items.length + ' مرات</div>'
+      + '<div style="font-size:11px; color:var(--muted); margin-bottom:2px;">اختار النسخة اللي تفضل (الاسم والسعر بتوعها هما اللي هيبقوا):</div>'
+      + opts
+      + '<button onclick="mergeDupGroup(\'' + g.code + '\')" style="margin-top:8px; width:100%; padding:9px; border-radius:9px; border:none; background:var(--accent); color:#fff; font-weight:800; cursor:pointer;">🔗 دمج — الكميات هتتجمع في النسخة المختارة</button>'
+      + '</div>';
   }).join('');
 
   const ov = document.createElement('div');
@@ -729,11 +802,12 @@ function openDupBarcodeCheck(){
     + 'display:flex; align-items:center; justify-content:center; padding:18px;';
   ov.innerHTML = '<div style="background:var(--panel); border:2px solid var(--border); border-radius:16px;'
     + ' padding:18px; max-width:520px; width:100%; max-height:82vh; overflow:auto;">'
-    + '<div style="font-weight:900; font-size:16px; margin-bottom:10px;">🔍 أكواد متكررة</div>'
-    + (dups.length
+    + '<div style="font-weight:900; font-size:16px; margin-bottom:10px;">🔍 أكواد متكررة — ' + currentBranch + '</div>'
+    + (groups.length
         ? ('<div style="font-size:12px; color:var(--muted); margin-bottom:10px;">'
-           + dups.length + ' كود متكرر — المسدس بيقف قدامهم. صلّحهم من تعديل الصنف.</div>' + rows)
-        : '<div style="color:var(--plus); font-weight:700;">✅ مفيش أي كود متكرر</div>')
+           + groups.length + ' كود متسجّل أكتر من مرة. الدمج بيجمع كميات النسخ في واحدة'
+           + ' والباقي بيتقفل (مش بيتمسح).</div>' + rows)
+        : '<div style="color:var(--plus); font-weight:700;">✅ مفيش أي كود متكرر في الفرع ده</div>')
     + (noBarcode ? ('<div style="margin-top:10px; font-size:12px; color:var(--warn);">⚠️ '
         + noBarcode + ' صنف من غير باركود خالص</div>') : '')
     + '<button onclick="document.getElementById(\'dupBarcodeOverlay\').remove()"'
@@ -742,7 +816,54 @@ function openDupBarcodeCheck(){
     + '</div>';
   document.body.appendChild(ov);
 }
+
+async function mergeDupGroup(code){
+  if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
+  const groups = findDupGroups(allInventory || [], currentBranch);
+  const g = groups.filter(function(x){ return x.code === String(code); })[0];
+  if(!g){ showToast('الكود مبقاش متكرر', 'err'); return; }
+
+  let keeperId = g.items[0].id;
+  try{
+    const sel = document.querySelector('input[name="keep_' + code + '"]:checked');
+    if(sel && sel.value) keeperId = sel.value;
+  }catch(e){}
+
+  const plan = planDupMerge(g.items, keeperId);
+  if(!plan){ showToast('تعذّر حساب الدمج', 'err'); return; }
+  const keeperItem = g.items.filter(function(x){ return x.id === plan.keeper.id; })[0] || {};
+  const myQty = (plan.keeper.update.qtyByBranch || {})[currentBranch] || 0;
+
+  const ok = await askConfirm({
+    icon: '🔗', danger: true, okText: 'دمج',
+    title: 'دمج كود ' + code,
+    message: 'هتفضل نسخة واحدة: «' + (keeperItem.name || '') + '»\n'
+      + 'كمية ' + currentBranch + ' بعد الدمج: ' + myQty + '\n'
+      + (plan.losers.length) + ' نسخة هتتقفل (مش هتتمسح — ممكن ترجعها).'
+  });
+  if(!ok){ showToast('اتلغى'); return; }
+
+  try{
+    const batch = db.batch();
+    batch.set(db.collection(TEST_INVENTORY).doc(plan.keeper.id), plan.keeper.update, { merge:true });
+    plan.losers.forEach(function(l){
+      batch.set(db.collection(TEST_INVENTORY).doc(l.id), l.update, { merge:true });
+    });
+    await batch.commit();
+    if(typeof _logActivity === 'function')
+      _logActivity('inventory_merge', { code: String(code), keeper: plan.keeper.id, merged: plan.losers.length });
+    showToast('اتدمج ✅ — كمية ' + currentBranch + ': ' + myQty);
+    const ovOld = document.getElementById('dupBarcodeOverlay');
+    if(ovOld) ovOld.remove();
+    setTimeout(function(){ try{ openDupBarcodeCheck(); }catch(e){} }, 600);   // اللستنر بيحدّث allInventory
+  }catch(e){
+    showToast('فشل الدمج: ' + (e && e.message ? e.message : e), 'err');
+  }
+}
 window.openDupBarcodeCheck = openDupBarcodeCheck;
+window.findDupGroups = findDupGroups;
+window.planDupMerge = planDupMerge;
+window.mergeDupGroup = mergeDupGroup;
 
 async function addInventoryItem(){
   if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
