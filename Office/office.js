@@ -1692,85 +1692,314 @@ function ofRenderDay(){
 }
 
 // ============================================================
-// 👥 الحاضرين دلوقتي
+// 👥 موظفين الفرع دلوقتي — مركز الموظفين (المرحلة 1: العرض)
 // ------------------------------------------------------------
-// الشيفت المفتوح = فيه clockInTs ومفيش clockOutTs. بنعرضهم متجمعين
-// بالفرع مع مدة الشيفت لحد دلوقتي.
-// ⚠️ الشيفت اللي فات عليه أكتر من 16 ساعة غالبًا نسي انصراف مش شغال
-//    فعلًا — بيتعلّم عشان ميتحسبش «حاضر» بالغلط.
+// الكارت بيعرض **الفرع المختار فوق** بس، مقفول افتراضيًا:
+//   سطر واحد بعدد الحاضرين — دوسة تفتح التفاصيل.
+// جوه: الحاضرين (بالبريك والتأخير) + قسم «مش موجودين» بيتفتح لوحده
+//   وبيقول السبب: خلّص شيفته / أجازة معتمدة / نسي انصراف / ماجاش.
+// ودوسة على أي موظف بتفتح صفحته: الحضور والميعاد والتأخير والبريكات
+//   ونقط البيع النهاردة.
+// ⚠️ الشيفت اللي فات عليه أكتر من 16 ساعة = نسي انصراف مش شغال فعلًا.
+// 📉 القراءات: الشيفتات والبريكات كل 4 دقايق (مستندات قليلة) —
+//   والنقط بتتقرا **بس** لما صفحة موظف تتفتح (أتقل استعلام، مش دوري).
 // ============================================================
 const OF_STALE_SHIFT_MS = 16 * 60 * 60 * 1000;
+const OF_HUB_CACHE_MS = 4 * 60 * 1000;
 
-// دالة نقية: بترجّع [{ branch, people:[{ name, clockInTs, minutes, stale }] }]
-function ofPresentRows(shifts, employees, nowTs){
+// بداية يوم الشغل «دلوقتي» (مش تاريخ البيكر — الكارت لحظي دايمًا)
+function ofHubDayStart(nowTs){
+  let ms = nowTs || Date.now();
+  if(_ofShopParts(ms).hh < _ofDayCut) ms -= 86400000;
+  const p = _ofShopParts(ms);
+  const key = p.y + '-' + String(p.m).padStart(2,'0') + '-' + String(p.d).padStart(2,'0');
+  return { start: ofBizDayRange(key).start, key: key };
+}
+
+// ------------------------------------------------------------
+// دالة نقية: تصنيف موظفين فرع واحد
+// بترجّع { present:[...], away:[...] } — away فيها reason:
+//   'stale' نسي انصراف · 'left' خلّص شيفته · 'leave' أجازة معتمدة · 'absent' ماجاش
+// ------------------------------------------------------------
+function ofHubRows(branch, employees, shifts, breaks, leaves, nowTs, dayKey){
   const now = nowTs || Date.now();
-  const byId = {};
-  (employees || []).forEach(function(e){ if(e && e.id) byId[e.id] = e; });
-  const groups = {};
-  (shifts || []).forEach(function(s){
-    if(!s || !s.clockInTs || s.clockOutTs) return;
-    const emp = byId[s.employeeId] || {};
-    const br = s.branch || emp.branch || 'من غير فرع';
-    const mins = Math.max(0, Math.round((now - s.clockInTs) / 60000));
-    (groups[br] = groups[br] || []).push({
-      id: s.id,
-      name: emp.name || 'موظف',
-      clockInTs: s.clockInTs,
-      minutes: mins,
-      stale: (now - s.clockInTs) > OF_STALE_SHIFT_MS
-    });
+  const emps = (employees || []).filter(function(e){ return e && e.id && e.branch === branch; });
+  const empIds = {};
+  emps.forEach(function(e){ empIds[e.id] = 1; });
+
+  // أحدث شيفت النهاردة لكل موظف (المفتوح بيغلب المقفول لو الاتنين موجودين)
+  const byEmp = {};
+  (shifts || []).forEach(function(sh){
+    if(!sh || !sh.clockInTs || !empIds[sh.employeeId]) return;
+    const cur = byEmp[sh.employeeId];
+    if(!cur || (!sh.clockOutTs && cur.clockOutTs) || sh.clockInTs > cur.clockInTs)
+      byEmp[sh.employeeId] = sh;
   });
-  return Object.keys(groups).sort(function(a,b){ return a.localeCompare(b,'ar'); }).map(function(br){
-    return {
-      branch: br,
-      people: groups[br].sort(function(a,b){ return a.clockInTs - b.clockInTs; })
+
+  // بريكات اليوم لكل موظف
+  const brkBy = {};
+  (breaks || []).forEach(function(b){
+    if(!b || !b.startTs || !empIds[b.employeeId]) return;
+    const g = (brkBy[b.employeeId] = brkBy[b.employeeId] || { list: [], totalMin: 0, open: null });
+    g.list.push(b);
+    if(!b.endTs){ g.open = b; }
+    else g.totalMin += Number(b.durationMin) || Math.max(0, Math.round((b.endTs - b.startTs) / 60000));
+  });
+
+  // أجازة معتمدة النهاردة (التبديل مش غياب)
+  const leaveBy = {};
+  (leaves || []).forEach(function(l){
+    if(!l || l.status !== 'approved' || l.dateKey !== dayKey) return;
+    if(l.type === 'shiftSwap') return;
+    if(empIds[l.empId]) leaveBy[l.empId] = l;
+  });
+
+  const present = [], away = [];
+  emps.forEach(function(e){
+    const sh = byEmp[e.id];
+    const brk = brkBy[e.id] || { list: [], totalMin: 0, open: null };
+    const base = {
+      empId: e.id, name: e.name || 'موظف',
+      sched: e.scheduledStartTime || (sh && sh.scheduledStartTime) || null,
+      brk: brk
     };
+    if(sh && !sh.clockOutTs){
+      const mins = Math.max(0, Math.round((now - sh.clockInTs) / 60000));
+      if(now - sh.clockInTs > OF_STALE_SHIFT_MS){
+        away.push(Object.assign(base, { reason: 'stale', shiftId: sh.id,
+          clockInTs: sh.clockInTs, minutes: mins }));
+      } else {
+        present.push(Object.assign(base, { shiftId: sh.id,
+          clockInTs: sh.clockInTs, minutes: mins,
+          lateMin: Number(sh.lateMinutes) || 0, latePenalized: !!sh.latePenalized }));
+      }
+    } else if(sh && sh.clockOutTs){
+      away.push(Object.assign(base, { reason: 'left', shiftId: sh.id,
+        clockInTs: sh.clockInTs, clockOutTs: sh.clockOutTs,
+        minutes: Math.max(0, Math.round((sh.clockOutTs - sh.clockInTs) / 60000)),
+        lateMin: Number(sh.lateMinutes) || 0, latePenalized: !!sh.latePenalized }));
+    } else if(leaveBy[e.id]){
+      away.push(Object.assign(base, { reason: 'leave',
+        leaveType: leaveBy[e.id].type || '', leaveNote: leaveBy[e.id].reason || '' }));
+    } else {
+      away.push(Object.assign(base, { reason: 'absent' }));
+    }
   });
+
+  present.sort(function(a, b){ return a.clockInTs - b.clockInTs; });
+  const ord = { stale: 0, left: 1, leave: 2, absent: 3 };
+  away.sort(function(a, b){
+    return (ord[a.reason] - ord[b.reason]) || String(a.name).localeCompare(String(b.name), 'ar');
+  });
+  return { present: present, away: away };
+}
+
+// وزن النقطة — نفس قاعدة sales بالظبط (المرتب والعمولة بيمشوا عليها)
+function ofHubPoints(points, empId){
+  let count = 0, weight = 0;
+  (points || []).forEach(function(pp){
+    if(!pp || pp.employeeId !== empId) return;
+    count++;
+    const v = Number(pp.value);
+    weight += (isNaN(v) || v <= 0) ? 1 : v;
+  });
+  return { count: count, weight: Math.round(weight * 10) / 10 };
 }
 
 function ofPresentDur(mins){
-  const h = Math.floor((Number(mins)||0) / 60), m = (Number(mins)||0) % 60;
+  const h = Math.floor((Number(mins) || 0) / 60), m = (Number(mins) || 0) % 60;
   return h ? (h + ' س ' + m + ' د') : (m + ' د');
+}
+
+// ------------------------------------------------------------
+// التحميل: شيفتات + بريكات اليوم (كاش 4 دقايق) · النقط عند فتح الصفحة بس
+// ------------------------------------------------------------
+let _ofHub = { at: 0, start: 0, key: '', shifts: [], breaks: [], loading: false,
+               ptsAt: 0, pts: [] };
+let _ofHubOpen = false, _ofHubAwayOpen = false;
+
+async function _ofHubLoad(force){
+  const d = ofHubDayStart(Date.now());
+  const fresh = (_ofHub.key === d.key) && (Date.now() - _ofHub.at) < OF_HUB_CACHE_MS;
+  if((!force && fresh) || _ofHub.loading) return;
+  _ofHub.loading = true;
+  try{
+    const rs = await Promise.all([
+      db.collection('sales_shifts').where('clockInTs', '>=', d.start).get(),
+      db.collection('sales_breaks').where('startTs', '>=', d.start).get()
+    ]);
+    _ofHub.shifts = rs[0].docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); });
+    _ofHub.breaks = rs[1].docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); });
+    _ofHub.at = Date.now(); _ofHub.start = d.start; _ofHub.key = d.key;
+    _ofHub.loading = false;
+    ofRenderPresent();
+  }catch(e){ _ofHub.loading = false; console.warn('hub load', e && e.code); }
+}
+
+// شيفتات اليوم + أي شيفت مفتوح قديم (نسي انصراف من قبل النهاردة)
+function _ofHubShifts(){
+  const seen = {};
+  _ofHub.shifts.forEach(function(sh){ seen[sh.id] = 1; });
+  const old = (D.openShifts || []).filter(function(sh){
+    return sh && !sh.clockOutTs && !seen[sh.id];
+  });
+  return _ofHub.shifts.concat(old);
+}
+
+function _ofHubBranch(){
+  const el = $('#dayBranch');
+  if(el && el.value) return el.value;
+  const e0 = (D.employees || []).find(function(e){ return e && e.branch; });
+  return e0 ? e0.branch : '';
+}
+
+function _ofHubBadges(p, now){
+  let out = '';
+  if(p.latePenalized && p.lateMin)
+    out += '<span style="font-size:10.5px; background:#7f1d1d; color:#fecaca; border-radius:6px; padding:1px 6px;">⏰ اتأخر ' + p.lateMin + 'د</span> ';
+  if(p.brk && p.brk.open){
+    const el = Math.max(0, Math.round((now - p.brk.open.startTs) / 60000));
+    out += '<span style="font-size:10.5px; background:#78350f; color:#fde68a; border-radius:6px; padding:1px 6px;">☕ في بريك من ' + el + 'د</span> ';
+  } else if(p.brk && p.brk.totalMin)
+    out += '<span style="font-size:10.5px; color:var(--sub);">☕ ' + p.brk.totalMin + 'د</span> ';
+  return out;
 }
 
 function ofRenderPresent(){
   const el = document.getElementById('dayPresent'); if(!el) return;
-  const rows = ofPresentRows(D.openShifts, D.employees, Date.now());
-  const total = rows.reduce(function(n, g){
-    return n + g.people.filter(function(p){ return !p.stale; }).length; }, 0);
-
-  if(!rows.length){
-    el.innerHTML = '<div class="card"><div style="font-weight:800; margin-bottom:4px;">👥 الحاضرين دلوقتي</div>'
-      + '<div style="color:var(--sub); font-size:12.5px;">مفيش حد مسجّل حضور دلوقتي</div></div>';
+  const br = _ofHubBranch();
+  if(!br){ el.innerHTML = ''; return; }
+  if(!_ofHub.at){
+    el.innerHTML = '<div class="card" style="color:var(--sub);">👥 بيحمّل حضور الفرع…</div>';
+    _ofHubLoad();
     return;
   }
+  _ofHubLoad();   // بيتجدد لوحده لو الكاش قدم — رخيص لو لسه طازة
+  const now = Date.now();
+  const d = ofHubDayStart(now);
+  const rows = ofHubRows(br, D.employees, _ofHubShifts(), _ofHub.breaks, D.leaves, now, d.key);
 
-  const body = rows.map(function(g){
-    const people = g.people.map(function(p){
-      const t = new Date(p.clockInTs).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
-      return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--line);">'
-        + '<div style="min-width:0;"><div style="font-weight:700; font-size:13px;">'
-        +   (p.stale ? '⚠️ ' : '🟢 ') + p.name + '</div>'
-        + '<div style="font-size:11px; color:var(--sub);">من ' + t
-        +   (p.stale ? ' · شكله نسي انصراف' : '') + '</div></div>'
-        + '<div style="font-size:12px; color:var(--sub); white-space:nowrap;">' + ofPresentDur(p.minutes) + '</div>'
-        + '</div>';
-    }).join('');
-    const live = g.people.filter(function(p){ return !p.stale; }).length;
-    return '<div style="margin-top:10px;">'
-      + '<div style="display:flex; justify-content:space-between; font-weight:800; font-size:13px;">'
-      +   '<span>' + g.branch + '</span><span>' + live + '</span></div>'
-      + people + '</div>';
-  }).join('');
+  const head = '<div onclick="ofHubToggle()" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;">'
+    + '<div><div style="font-weight:800;">👥 موظفين ' + esc(br) + '</div>'
+    + '<div style="font-size:11.5px; color:var(--sub); margin-top:2px;">'
+    +   rows.present.length + ' حاضرين · ' + rows.away.length + ' مش موجودين — '
+    +   (_ofHubOpen ? 'دوس للقفل' : 'دوس للتفاصيل') + '</div></div>'
+    + '<div style="font-weight:900; font-size:17px;">' + rows.present.length + '</div></div>';
 
-  el.innerHTML = '<div class="card">'
-    + '<div style="display:flex; justify-content:space-between; align-items:center;">'
-    +   '<div style="font-weight:800;">👥 الحاضرين دلوقتي</div>'
-    +   '<div style="font-weight:900; font-size:15px;">' + total + '</div></div>'
-    + body + '</div>';
+  if(!_ofHubOpen){ el.innerHTML = '<div class="card">' + head + '</div>'; return; }
+
+  const pHtml = rows.present.length ? rows.present.map(function(p){
+    const t = new Date(p.clockInTs).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    return '<div onclick="ofHubSheet(\'' + esc(p.empId) + '\')" style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 0; border-top:1px solid var(--line); cursor:pointer;">'
+      + '<div style="min-width:0;"><div style="font-weight:700; font-size:13px;">🟢 ' + esc(p.name) + '</div>'
+      + '<div style="font-size:11px; color:var(--sub); margin-top:1px;">من ' + t + ' ' + _ofHubBadges(p, now) + '</div></div>'
+      + '<div style="font-size:12px; color:var(--sub); white-space:nowrap;">' + ofPresentDur(p.minutes) + '</div></div>';
+  }).join('') : '<div style="padding:8px 0; color:var(--sub); font-size:12px; border-top:1px solid var(--line);">مفيش حد حاضر دلوقتي</div>';
+
+  let aHtml = '';
+  if(rows.away.length){
+    aHtml = '<div onclick="ofHubAway()" style="display:flex; justify-content:space-between; margin-top:10px; padding-top:8px; border-top:2px solid var(--line); font-weight:800; font-size:12.5px; cursor:pointer;">'
+      + '<span>😴 مش موجودين (' + rows.away.length + ')</span><span>' + (_ofHubAwayOpen ? '▲' : '▼') + '</span></div>';
+    if(_ofHubAwayOpen){
+      aHtml += rows.away.map(function(p){
+        let why = '', ic = '';
+        if(p.reason === 'stale'){ ic = '⚠️'; why = 'شكله نسي انصراف — شيفت مفتوح من '
+          + new Date(p.clockInTs).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }); }
+        else if(p.reason === 'left'){ ic = '🏁'; why = 'خلّص شيفته '
+          + new Date(p.clockInTs).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) + ' → '
+          + new Date(p.clockOutTs).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+          + ' (' + ofPresentDur(p.minutes) + ')'; }
+        else if(p.reason === 'leave'){ ic = '🌴'; why = 'أجازة معتمدة' + (p.leaveNote ? ' — ' + esc(p.leaveNote) : ''); }
+        else { ic = '⚪'; why = 'ماجاش النهاردة' + (p.sched ? ' — ميعاده ' + esc(p.sched) : ''); }
+        return '<div onclick="ofHubSheet(\'' + esc(p.empId) + '\')" style="padding:7px 0; border-top:1px solid var(--line); cursor:pointer;">'
+          + '<div style="font-weight:700; font-size:13px;">' + ic + ' ' + esc(p.name) + '</div>'
+          + '<div style="font-size:11px; color:var(--sub); margin-top:1px;">' + why + '</div></div>';
+      }).join('');
+    }
+  }
+  el.innerHTML = '<div class="card">' + head + pHtml + aHtml + '</div>';
 }
+window.ofHubToggle = function(){ _ofHubOpen = !_ofHubOpen; ofRenderPresent(); };
+window.ofHubAway = function(){ _ofHubAwayOpen = !_ofHubAwayOpen; ofRenderPresent(); };
+
+// ------------------------------------------------------------
+// 📄 صفحة الموظف — المرحلة 1: عرض بس (الإجراءات جاية في مرحلة تانية)
+// ------------------------------------------------------------
+async function _ofHubPtsLoad(){
+  const d = ofHubDayStart(Date.now());
+  if(_ofHub.ptsAt && (Date.now() - _ofHub.ptsAt) < OF_HUB_CACHE_MS && _ofHub.key === d.key) return;
+  const snap = await db.collection('sales_points').where('ts', '>=', d.start).get();
+  _ofHub.pts = snap.docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); });
+  _ofHub.ptsAt = Date.now();
+}
+
+window.ofHubSheet = async function(empId){
+  const emp = (D.employees || []).find(function(e){ return e && e.id === empId; });
+  if(!emp) return;
+  let ov = document.getElementById('ofHubOv');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'ofHubOv';
+    ov.style.cssText = 'position:fixed; inset:0; background:#000a; z-index:600; display:flex; align-items:flex-end; justify-content:center;';
+    ov.onclick = function(ev){ if(ev.target === ov) ov.remove(); };
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = '<div style="background:var(--card,#1c1c22); width:100%; max-width:560px; border-radius:16px 16px 0 0; padding:16px; max-height:82vh; overflow:auto;">بيحمّل…</div>';
+  try{ await _ofHubPtsLoad(); }catch(e){ console.warn('hub pts', e && e.code); }
+
+  const now = Date.now();
+  const d = ofHubDayStart(now);
+  const rows = ofHubRows(emp.branch, D.employees, _ofHubShifts(), _ofHub.breaks, D.leaves, now, d.key);
+  const p = rows.present.find(function(x){ return x.empId === empId; })
+        || rows.away.find(function(x){ return x.empId === empId; });
+  const pts = ofHubPoints(_ofHub.pts, empId);
+  const T = function(ts){ return new Date(ts).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }); };
+  const line = function(l, v){ return '<div style="display:flex; justify-content:space-between; padding:7px 0; border-top:1px solid var(--line); font-size:13px;"><span style="color:var(--sub);">' + l + '</span><b>' + v + '</b></div>'; };
+
+  let stat = '', body = '';
+  if(p && p.clockInTs && !p.clockOutTs && p.reason !== 'stale'){
+    stat = '🟢 شغال دلوقتي';
+    body += line('جه', T(p.clockInTs)) + line('شغال بقاله', ofPresentDur(p.minutes));
+  } else if(p && p.reason === 'stale'){
+    stat = '⚠️ شيفت مفتوح — شكله نسي انصراف';
+    body += line('جه', T(p.clockInTs)) + line('مفتوح بقاله', ofPresentDur(p.minutes));
+  } else if(p && p.reason === 'left'){
+    stat = '🏁 خلّص شيفته';
+    body += line('جه', T(p.clockInTs)) + line('مشي', T(p.clockOutTs)) + line('اشتغل', ofPresentDur(p.minutes));
+  } else if(p && p.reason === 'leave'){
+    stat = '🌴 أجازة معتمدة';
+    if(p.leaveNote) body += line('السبب', esc(p.leaveNote));
+  } else stat = '⚪ ماجاش النهاردة';
+
+  if(p && p.sched){
+    let lt = 'في معاده ✅';
+    if(p.latePenalized && p.lateMin) lt = '<span style="color:#f87171;">اتأخر ' + p.lateMin + ' دقيقة</span>';
+    else if(p.lateMin) lt = 'اتأخر ' + p.lateMin + 'د (في السماح)';
+    body += line('ميعاده', esc(p.sched)) + ((p.clockInTs) ? line('الالتزام', lt) : '');
+  }
+  if(p && p.brk && p.brk.list.length){
+    const bl = p.brk.list.map(function(b){
+      return b.endTs
+        ? ('☕ ' + T(b.startTs) + ' → ' + T(b.endTs) + ' (' + (Number(b.durationMin) || Math.round((b.endTs - b.startTs) / 60000)) + 'د)')
+        : ('<span style="color:#fbbf24;">☕ مفتوح من ' + T(b.startTs) + ' (' + Math.round((now - b.startTs) / 60000) + 'د)</span>');
+    }).join('<br>');
+    body += '<div style="padding:7px 0; border-top:1px solid var(--line); font-size:12.5px;"><div style="color:var(--sub); margin-bottom:3px;">البريكات النهاردة</div>' + bl + '</div>';
+  }
+  const _pw = (pts.weight % 1 === 0) ? String(pts.weight) : pts.weight.toFixed(1);
+  body += line('⭐ نقط البيع النهاردة', pts.count ? (_pw + ' نقطة (' + pts.count + ' عملية)') : 'مفيش');
+
+  ov.firstChild.innerHTML =
+    '<div style="display:flex; justify-content:space-between; align-items:center;">'
+    + '<div><div style="font-weight:900; font-size:16px;">' + esc(emp.name || 'موظف') + '</div>'
+    + '<div style="font-size:11.5px; color:var(--sub);">' + esc(emp.branch || '') + ' · ' + stat + '</div></div>'
+    + '<button onclick="document.getElementById(\'ofHubOv\').remove()" style="background:none; border:none; color:var(--sub); font-size:20px; cursor:pointer;">✖</button></div>'
+    + '<div style="margin-top:8px;">' + body + '</div>'
+    + '<div style="margin-top:12px; font-size:11px; color:var(--sub); text-align:center;">الإجراءات (عذر · قفل شيفت · صرف) جاية في التحديث الجاي</div>';
+};
+
 window.ofRenderPresent = ofRenderPresent;
-window.ofPresentRows = ofPresentRows;
+window.ofHubRows = ofHubRows;
+window.ofHubPoints = ofHubPoints;
 
 // تحديث المدة كل دقيقة — والتطبيق في المقدمة بس
 setInterval(function(){
