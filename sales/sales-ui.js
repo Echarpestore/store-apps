@@ -622,6 +622,51 @@ function _nextDayStr(d){
 }
 window._nextDayStr = _nextDayStr;
 
+// 🕐 وقت القفل الإداري = نهاية شيفت الموظف المجدولة (مش دلوقتي) —
+// عشان الوقت الإضافي ميتحسبش غلط لو اتقفل بعد نص الليل.
+// دالة نقية عشان القفل الفردي والجماعي يشتغلوا بنفس الحساب بالظبط.
+window.graceCloseTsFor = function(shift, emp, cfg){
+  if(!shift || !shift.clockInTs) return null;
+  const sdef = (cfg && cfg.shifts) ? cfg.shifts[emp && emp.shift] : null;
+  const endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
+  let endTs = null;
+  if(/^\d{1,2}:\d{2}$/.test(endHM)){
+    const parts = String(endHM).split(':').map(Number);
+    const base = new Date(shift.clockInTs);
+    const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), parts[0], parts[1], 0, 0);
+    if(e.getTime() <= shift.clockInTs) e.setDate(e.getDate() + 1);   // شيفت بيعدّي نص الليل
+    endTs = e.getTime();
+  }
+  if(!endTs) endTs = shift.clockInTs + (8*60 + 15) * 60000;          // فولباك: الشيفت القياسي
+  return endTs;
+};
+
+// 🚪 قفل شيفت **موظف واحد** — نفس حساب القفل الجماعي بالظبط
+window.graceCloseShift = async function(shiftId){
+  const s = (window.allShifts||[]).filter(function(x){ return x && x.id === shiftId; })[0];
+  if(!s){ alert('مش لاقي الشيفت ده'); return; }
+  if(s.clockOutTs){ alert('الشيفت ده مقفول خلاص'); window.renderGraceDay(); return; }
+  const emp = (window.employees||[]).filter(function(e){ return e.id === s.employeeId; })[0];
+  const endTs = window.graceCloseTsFor(s, emp, window.complianceCfg);
+  const tTxt = new Date(endTs).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+  if(!confirm('🚪 قفل شيفت: ' + ((emp && emp.name) || 'الموظف') + '\n\n'
+    + 'الانصراف هيتسجل الساعة ' + tTxt + ' (نهاية شيفته الرسمية) — مش وقت دلوقتي.\n'
+    + 'مفيش وقت إضافي ومفيش خصم انصراف بدري.\n\nتكمّل؟')) return;
+  try{
+    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_shifts', s.id), {
+      clockOutTs: endTs,
+      overtimeMinutes: 0,          // مفيش وقت إضافي على قفل إداري
+      earlyMin: 0, earlyHours: 0,  // ومفيش انصراف بدري
+      autoClosedBy: 'grace_day', autoClosedAt: Date.now()
+    });
+    alert('اتقفل ✅ — ' + ((emp && emp.name) || '') + ' الساعة ' + tTxt);
+  }catch(e){
+    console.warn('grace close one', e);
+    alert('تعذر القفل: ' + (e && e.message ? e.message : e));
+  }
+  window.renderGraceDay();
+};
+
 window.renderGraceDay = function(){
   const wrap = document.querySelector('#graceDayPanel'); if(!wrap) return;
   // 🕕 يوم الشغل مش اليوم التقويمي: الساعة 5 الفجر إحنا لسه في يوم امبارح
@@ -685,10 +730,30 @@ window.renderGraceDay = function(){
     +   (chips ? ('<div style="margin-top:7px;">' + chips + '</div>') : '')
     + '</div>'
     + (open.length
-        ? ('<button id="gdCloseBtn" style="width:100%; padding:12px; margin-bottom:8px; border:none; border-radius:11px;'
-           + ' background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; font-family:\'Cairo\'; font-weight:800; cursor:pointer;">'
-           + '🚪 اقفل الـ' + open.length + ' شيفت المفتوحين</button>')
-        : '<div style="color:#5ec88a; font-size:12.5px; margin-bottom:8px;">✅ مفيش شيفتات مفتوحة</div>')
+        ? (
+            // 👤 قفل فردي: كل شيفت مفتوح بصف لوحده — مش لازم تقفل الكل
+            '<div style="margin-bottom:9px;">' + open.map(function(s){
+              const emp = (window.employees||[]).filter(function(e){ return e.id === s.employeeId; })[0];
+              const inT = new Date(s.clockInTs).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+              const outTs = window.graceCloseTsFor(s, emp, window.complianceCfg);
+              const outT = outTs ? new Date(outTs).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' }) : '—';
+              return '<div style="display:flex; align-items:center; gap:8px; background:var(--panel2);'
+                + ' border:1px solid var(--line); border-radius:10px; padding:9px 10px; margin-bottom:6px;">'
+                + '<div style="flex:1; min-width:0;">'
+                +   '<div style="font-weight:800; font-size:13px;">' + ((emp && emp.name) || 'موظف') + '</div>'
+                +   '<div style="font-size:11px; color:var(--sub);">حضور ' + inT + ' → هيقفل ' + outT + '</div>'
+                + '</div>'
+                + '<button data-close-shift="' + s.id + '" style="padding:8px 13px; border:none; border-radius:9px;'
+                + ' background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; font-family:\'Cairo\';'
+                + ' font-weight:800; cursor:pointer; white-space:nowrap;">🚪 اقفل</button>'
+                + '</div>';
+            }).join('') + '</div>'
+          + (open.length > 1
+              ? ('<button id="gdCloseBtn" style="width:100%; padding:12px; margin-bottom:8px; border:none; border-radius:11px;'
+                 + ' background:var(--panel); border:1px solid #1f9440; color:#5ec88a; font-family:\'Cairo\'; font-weight:800; cursor:pointer;">'
+                 + '🚪 اقفلهم كلهم (' + open.length + ')</button>')
+              : ''))
+        : '<div style="color:#5ec88a; font-size:12.5px; margin-bottom:8px;">✅ مفيش شيفتات مفتوحة في اليوم ده</div>')
     + (credits.length
         ? ('<button id="gdExcuseBtn" style="width:100%; padding:12px; border:1px solid #5a4a2a; border-radius:11px;'
            + ' background:var(--panel); color:var(--gold); font-family:\'Cairo\'; font-weight:800; cursor:pointer;">'
@@ -722,6 +787,11 @@ window.renderGraceDay = function(){
   const dt = wrap.querySelector('#gdDate');
   if(dt) dt.onchange = function(){ wrap.dataset.day = dt.value; window.renderGraceDay(); };
 
+  // أزرار القفل الفردي
+  Array.prototype.forEach.call(wrap.querySelectorAll('[data-close-shift]'), function(b){
+    b.onclick = function(){ window.graceCloseShift(b.getAttribute('data-close-shift')); };
+  });
+
   const cb = wrap.querySelector('#gdCloseBtn');
   if(cb) cb.onclick = async function(){
     if(!confirm('هتقفل ' + open.length + ' شيفت مفتوح ليوم ' + d + '.\n\n'
@@ -734,18 +804,7 @@ window.renderGraceDay = function(){
         // 🕐 وقت الانصراف = نهاية الشيفت الرسمي، مش دلوقتي — عشان الوقت
         //    الإضافي ميتحسبش غلط لو اتقفل بعد نص الليل.
         const emp = (window.employees||[]).find(function(e){ return e.id === s.employeeId; });
-        const sdef = (window.complianceCfg && window.complianceCfg.shifts)
-          ? window.complianceCfg.shifts[emp && emp.shift] : null;
-        const endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
-        let endTs = null;
-        if(/^\d{1,2}:\d{2}$/.test(endHM)){
-          const [hh,mm] = endHM.split(':').map(Number);
-          const base = new Date(s.clockInTs);
-          const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), hh, mm, 0, 0);
-          if(e.getTime() <= s.clockInTs) e.setDate(e.getDate() + 1);   // شيفت بيعدّي نص الليل
-          endTs = e.getTime();
-        }
-        if(!endTs) endTs = s.clockInTs + (8*60 + 15) * 60000;          // فولباك: الشيفت القياسي
+        const endTs = window.graceCloseTsFor(s, emp, window.complianceCfg);   // نفس حساب القفل الفردي
         await window.fbUpdateDoc(window.fbDoc(window.db,'sales_shifts', s.id), {
           clockOutTs: endTs,
           overtimeMinutes: 0,          // مفيش وقت إضافي على قفل إداري
