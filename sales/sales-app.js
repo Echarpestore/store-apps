@@ -813,7 +813,8 @@ const timeCfgDefaults = {
   timeAmnestyUntil: '',    // 🩹 عفو شامل: أي رصيد بتاريخه ≤ ده مبيتحسبش خالص
   earlyMinPerHour: 10,     // 🚪 الانصراف بدري: كل كام دقيقة = ساعة (زي التأخير)
   absenceHours: 7,         // 🚫 غياب بدون عذر = كام ساعة رصيد (7 = خروج فوري من المكافأة)
-  autoCloseBreakMult: 2    // البريك بيتقفل تلقائي بعد كام ضعف من مدته
+  autoCloseBreakMult: 2,   // البريك بيتقفل تلقائي بعد كام ضعف من مدته
+  breakAlertBeeps: 4       // 🔔 بعد ما مدة البريك تخلص: بيرن كام مرة (مرة كل دقيقة) جوه فترة السماح
 };
 
 // 🎯 درجة الالتزام من رصيد الساعات (بديل العد بالمخالفات)
@@ -944,6 +945,48 @@ function breakHoursFrom(actualMin, allowedMin, cfg){
   const over = Math.max(0, (Number(actualMin)||0) - allowed - grace);
   const per = Number(cfg.breakMinPerHour) || 10;
   return Math.floor(over / per);
+}
+
+/* ============================================================
+   🔔 حالة تنبيه البريك — دالة نقية (نفسها بالظبط متكررة في POS)
+   ------------------------------------------------------------
+   الفكرة اللي اتفقنا عليها: الموظفة بتنسى ترجّع تسجيل البريك، فبدل ما
+   تتفاجئ بخصم، بننبّهها **قبل** ما الخصم يبدأ:
+     · قبل الـ breakMin           → 'ok'    (عداد عادي)
+     · من breakMin لحد +grace     → 'alert' (تنبيه + رنة كل دقيقة)
+     · بعد grace                  → 'over'  (الخصم بيتحسب عادي — من غير رنين)
+   الرنين محدود بـ breakAlertBeeps دقيقة عشان ميبقاش إزعاج مستمر.
+
+   ⚠️ الرنة بتتقاس بالدقيقة الصحيحة (overMin) مش بالثواني — عشان أي ticker
+   (10 ثانية أو 30) يطلّع نفس عدد الرنّات بالظبط.
+   ============================================================ */
+function breakAlertState(brk, cfg, nowTs){
+  cfg = cfg || timeCfgDefaults;
+  if(!brk || brk.endTs) return { phase:'none', elapsedMin:0, beep:false };
+  const start = Number(brk.startTs);
+  if(!start) return { phase:'none', elapsedMin:0, beep:false };
+  const now = Number(nowTs) || Date.now();
+  const elapsedMin = Math.floor((now - start) / 60000);
+  if(elapsedMin < 0) return { phase:'none', elapsedMin:0, beep:false };
+
+  const allowed = Number(cfg.breakMin) || 30;
+  const grace   = Math.max(0, Number(cfg.breakGraceMin) || 0);
+  const beeps   = Math.max(0, cfg.breakAlertBeeps == null ? 4 : Number(cfg.breakAlertBeeps));
+  // 🧟 بريك منسي من يوم فات (السيستم بيقفله تلقائي لما التطبيق يفتح) — مننبّهش عليه
+  const staleAfter = allowed * (Number(cfg.autoCloseBreakMult) || 2) + 120;
+  if(elapsedMin > staleAfter) return { phase:'stale', elapsedMin, beep:false };
+
+  if(elapsedMin < allowed){
+    return { phase:'ok', elapsedMin, leftMin: allowed - elapsedMin, overMin:0, graceLeftMin: grace, beep:false };
+  }
+  const overMin = elapsedMin - allowed;
+  const inGrace = overMin < grace;
+  return {
+    phase: inGrace ? 'alert' : 'over',
+    elapsedMin, leftMin: 0, overMin,
+    graceLeftMin: Math.max(0, grace - overMin),
+    beep: inGrace && overMin < beeps          // رنة واحدة في كل دقيقة من دقايق التنبيه
+  };
 }
 
 // ساعات التبديلات: الأول مجاني، واللي بعده بساعاته
@@ -1089,6 +1132,7 @@ window.todayStr = todayStr;
 // ومن غير التعريض هنا النداء بيقع بصمت (القاعدة الذهبية: بلوك ≠ بلوك)
 window.lateHoursFrom = lateHoursFrom;
 window.breakHoursFrom = breakHoursFrom;
+window.breakAlertState = breakAlertState;
 window.swapHoursFrom = swapHoursFrom;
 window.earlyLeaveHours = earlyLeaveHours;
 window.absenceHoursFrom = absenceHoursFrom;
@@ -1487,6 +1531,8 @@ onSnapshot(_scoped(breaksCol,'startTs'), (snap)=>{
   window.allBreaks = allBreaks;
   autoCloseStaleBreaks();
   renderAttendanceLists();
+  // 🔔 التنبيه يختفي فورًا أول ما تسجّل رجوعها — مستنيش الـ10 ثواني
+  try{ renderBreakAlert(); }catch(e){}
 }, (e)=> console.warn('breaks sync', e && e.code));
 
 onSnapshot(leaveReqCol, (snap)=>{
@@ -1853,7 +1899,95 @@ function renderBreakBanner(){
   }).join('');
 }
 
+/* ============================================================
+   🔔 تنبيه رجوع البريك (كشك sales) — صوت + شاشة فوق أي صفحة
+   ------------------------------------------------------------
+   المشكلة: الموظفة بتنسى تسجّل رجوعها من البريك، فالنظام بيقفله تلقائي
+   بعد ضعف المدة **وبيتخصم عليها** حتى لو رجعت في ميعادها.
+   الحل: أول ما المدة تخلص → مربع أحمر فوق أي شاشة + رنة كل دقيقة
+   طول فترة السماح (breakAlertBeeps مرات). بعد السماح الرنين بيقف
+   والمربع بيفضل بس بلون الخصم — يعني الخصم بيتحسب عادي زي ما هو.
+
+   البانر القديم (#breakBanner جوه شاشة الحضور) زي ما هو — ده فوقه.
+   ============================================================ */
+let _bkAudioCtx = null;
+function _bkAudio(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return null;
+    if(!_bkAudioCtx) _bkAudioCtx = new AC();
+    if(_bkAudioCtx.state === 'suspended') _bkAudioCtx.resume();
+    return _bkAudioCtx;
+  }catch(e){ return null; }
+}
+// ⚠️ المتصفح بيمنع الصوت من غير لمسة من المستخدم — بنجهّز السياق مع أول لمسة
+//    (والكشك أصلًا مش بيبدأ بريك من غير PIN، يعني اللمسة مضمونة قبل التنبيه)
+try{
+  ['pointerdown','keydown','touchstart'].forEach(function(ev){
+    document.addEventListener(ev, function(){ _bkAudio(); }, { passive:true });
+  });
+}catch(e){}
+
+function breakBeep(){
+  const ac = _bkAudio(); if(!ac) return;
+  [0, 0.30, 0.60].forEach(function(off){
+    try{
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'square'; o.frequency.value = 920;
+      o.connect(g); g.connect(ac.destination);
+      const t = ac.currentTime + off;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+      o.start(t); o.stop(t + 0.26);
+    }catch(e){}
+  });
+  try{ if(navigator.vibrate) navigator.vibrate([180,90,180]); }catch(e){}
+}
+window.breakBeep = breakBeep;
+
+const _bkBeeped = {};   // { breakId: آخر دقيقة رنّينا فيها } — يمنع تكرار الرنة في نفس الدقيقة
+function renderBreakAlert(){
+  let host = document.querySelector('#breakAlertOverlay');
+  if(!host){
+    host = document.createElement('div');
+    host.id = 'breakAlertOverlay';
+    host.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:99999; display:none; pointer-events:none;';
+    document.body.appendChild(host);
+  }
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const active = (typeof activeBreaks === 'function') ? activeBreaks() : [];
+  const now = Date.now();
+  const rows = [];
+  active.forEach(function(b){
+    const st = breakAlertState(b, cfg, now);
+    if(st.phase !== 'alert' && st.phase !== 'over') return;
+    if(st.beep && _bkBeeped[b.id] !== st.elapsedMin){
+      _bkBeeped[b.id] = st.elapsedMin;
+      breakBeep();
+    }
+    const over = st.phase === 'over';
+    rows.push(
+      '<div style="pointer-events:auto; background:' + (over ? '#7f1d1d' : '#b45309') + ';'
+      + 'color:#fff; padding:14px 18px; text-align:center; font-weight:800; font-size:17px;'
+      + 'box-shadow:0 6px 20px rgba(0,0,0,.45); border-bottom:2px solid rgba(255,255,255,.25);">'
+      + '⏰ ' + (b.employeeName || 'الموظفة') + ' — البريك خلص من ' + st.overMin + ' دقيقة'
+      + '<div style="font-size:13.5px; font-weight:600; opacity:.95; margin-top:4px;">'
+      + (over
+          ? 'الوقت الزيادة بيتحسب رصيد دلوقتي — سجّلي رجوعك حالًا'
+          : 'سجّلي رجوعك خلال ' + st.graceLeftMin + ' دقيقة قبل ما يتحسب خصم')
+      + '</div></div>'
+    );
+  });
+  if(!rows.length){ host.style.display = 'none'; host.innerHTML = ''; return; }
+  host.style.display = 'block';
+  host.innerHTML = rows.join('');
+}
+window.renderBreakAlert = renderBreakAlert;
+
 setInterval(()=>{ try{ renderBreakBanner(); }catch(e){} }, 30000);
+// ⏱️ التنبيه بيتحدّث كل 10 ثواني — الرنة نفسها مربوطة بالدقيقة مش بالتيك
+setInterval(()=>{ try{ renderBreakAlert(); }catch(e){} }, 10000);
 function renderAttendanceLists(){
   renderBreakBanner();
   const notIn = window.employees.filter(e=> !isClockedIn(e.id));
