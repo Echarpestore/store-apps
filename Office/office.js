@@ -610,7 +610,7 @@ const OF_RECUR_COL = 'office_recurring';
 
 const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], expenses:[],
             employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[],
-            recurring:[] };
+            recurring:[], openShifts:[] };
 let started = false;
 let firstLoadDone = false;
 const seenIds = {};   // عشان الإشعار يطلع للجديد بس
@@ -888,6 +888,14 @@ function startData(){
     try{ ofWireApplicants(); }catch(e){ console.warn('applicants', e); }
     try{ ofWireOpenings(); }catch(e){ console.warn('openings', e); }
   });
+  // 👥 الحاضرين دلوقتي — الشيفتات المفتوحة (حضور من غير انصراف).
+  // ⚡ الاستعلام على clockOutTs == null بيرجّع الشغالين بس (عدد صغير جدًا)،
+  //    مش كل الشيفتات — قراءات شبه معدومة.
+  db.collection('sales_shifts').where('clockOutTs','==', null).onSnapshot(function(s){
+    D.openShifts = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    try{ ofRenderPresent(); }catch(e){ console.warn('present', e); }
+  }, function(e){ console.warn('present sync', e && e.code); });
+
   db.collection('sales_advances').onSnapshot(function(s){
     D.advances = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     renderSalaries(); renderPL();
@@ -1680,8 +1688,95 @@ async function ofLoadDay(){
 }
 
 function ofRenderDay(){
-  ofRenderPay(); ofRenderSales(); ofRenderItems();
+  ofRenderPay(); ofRenderSales(); ofRenderItems(); ofRenderPresent();
 }
+
+// ============================================================
+// 👥 الحاضرين دلوقتي
+// ------------------------------------------------------------
+// الشيفت المفتوح = فيه clockInTs ومفيش clockOutTs. بنعرضهم متجمعين
+// بالفرع مع مدة الشيفت لحد دلوقتي.
+// ⚠️ الشيفت اللي فات عليه أكتر من 16 ساعة غالبًا نسي انصراف مش شغال
+//    فعلًا — بيتعلّم عشان ميتحسبش «حاضر» بالغلط.
+// ============================================================
+const OF_STALE_SHIFT_MS = 16 * 60 * 60 * 1000;
+
+// دالة نقية: بترجّع [{ branch, people:[{ name, clockInTs, minutes, stale }] }]
+function ofPresentRows(shifts, employees, nowTs){
+  const now = nowTs || Date.now();
+  const byId = {};
+  (employees || []).forEach(function(e){ if(e && e.id) byId[e.id] = e; });
+  const groups = {};
+  (shifts || []).forEach(function(s){
+    if(!s || !s.clockInTs || s.clockOutTs) return;
+    const emp = byId[s.employeeId] || {};
+    const br = s.branch || emp.branch || 'من غير فرع';
+    const mins = Math.max(0, Math.round((now - s.clockInTs) / 60000));
+    (groups[br] = groups[br] || []).push({
+      id: s.id,
+      name: emp.name || 'موظف',
+      clockInTs: s.clockInTs,
+      minutes: mins,
+      stale: (now - s.clockInTs) > OF_STALE_SHIFT_MS
+    });
+  });
+  return Object.keys(groups).sort(function(a,b){ return a.localeCompare(b,'ar'); }).map(function(br){
+    return {
+      branch: br,
+      people: groups[br].sort(function(a,b){ return a.clockInTs - b.clockInTs; })
+    };
+  });
+}
+
+function ofPresentDur(mins){
+  const h = Math.floor((Number(mins)||0) / 60), m = (Number(mins)||0) % 60;
+  return h ? (h + ' س ' + m + ' د') : (m + ' د');
+}
+
+function ofRenderPresent(){
+  const el = document.getElementById('dayPresent'); if(!el) return;
+  const rows = ofPresentRows(D.openShifts, D.employees, Date.now());
+  const total = rows.reduce(function(n, g){
+    return n + g.people.filter(function(p){ return !p.stale; }).length; }, 0);
+
+  if(!rows.length){
+    el.innerHTML = '<div class="card"><div style="font-weight:800; margin-bottom:4px;">👥 الحاضرين دلوقتي</div>'
+      + '<div style="color:var(--sub); font-size:12.5px;">مفيش حد مسجّل حضور دلوقتي</div></div>';
+    return;
+  }
+
+  const body = rows.map(function(g){
+    const people = g.people.map(function(p){
+      const t = new Date(p.clockInTs).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+      return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--line);">'
+        + '<div style="min-width:0;"><div style="font-weight:700; font-size:13px;">'
+        +   (p.stale ? '⚠️ ' : '🟢 ') + p.name + '</div>'
+        + '<div style="font-size:11px; color:var(--sub);">من ' + t
+        +   (p.stale ? ' · شكله نسي انصراف' : '') + '</div></div>'
+        + '<div style="font-size:12px; color:var(--sub); white-space:nowrap;">' + ofPresentDur(p.minutes) + '</div>'
+        + '</div>';
+    }).join('');
+    const live = g.people.filter(function(p){ return !p.stale; }).length;
+    return '<div style="margin-top:10px;">'
+      + '<div style="display:flex; justify-content:space-between; font-weight:800; font-size:13px;">'
+      +   '<span>' + g.branch + '</span><span>' + live + '</span></div>'
+      + people + '</div>';
+  }).join('');
+
+  el.innerHTML = '<div class="card">'
+    + '<div style="display:flex; justify-content:space-between; align-items:center;">'
+    +   '<div style="font-weight:800;">👥 الحاضرين دلوقتي</div>'
+    +   '<div style="font-weight:900; font-size:15px;">' + total + '</div></div>'
+    + body + '</div>';
+}
+window.ofRenderPresent = ofRenderPresent;
+window.ofPresentRows = ofPresentRows;
+
+// تحديث المدة كل دقيقة — والتطبيق في المقدمة بس
+setInterval(function(){
+  if(document.hidden) return;
+  try{ ofRenderPresent(); }catch(e){}
+}, 60000);
 
 // ---- 💵 ملخص الدفع ----
 function ofRenderPay(){
