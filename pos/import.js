@@ -63,7 +63,10 @@ function renderImportPanel(){
            border-radius:10px; padding:10px 12px; margin-bottom:10px; color:#dbeafe; font-size:12.5px;">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:700;">
           <input type="checkbox" id="adjustSold" style="width:18px; height:18px; cursor:pointer;">
-          ⚖️ اخصم اللي اتباع على النظام الجديد
+          ⚖️ اظبط الكميات على حركة النظام الجديد
+        </label>
+        <div style="font-size:11.5px; opacity:.85; margin:4px 0 0 26px;">
+          يخصم اللي اتباع · ويضيف اللي اتسجل في «استلام بضاعة» · ويخصم التالف/المرتجع للمورد
         </label>
         <div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
           <span style="font-size:12px;">من تاريخ ووقت تصدير ملف QuickBooks:</span>
@@ -260,6 +263,17 @@ function renderImportMapping(){
         </tbody>
       </table>
     </div>
+    <label style="display:flex; align-items:flex-start; gap:8px; background:var(--panel2); border:1.5px solid var(--warn);
+      border-radius:10px; padding:10px 12px; margin-bottom:10px; cursor:pointer;">
+      <input type="checkbox" id="impZeroMissing" style="margin-top:3px;">
+      <span style="font-size:12px;">
+        <b>الملف ده هو الجرد الكامل للفرع</b>
+        <div style="color:var(--muted); margin-top:2px;">
+          أي صنف في الفرع ده مش موجود في الملف <b>هيختفي من شاشات الفرع</b> وكميته صفر.
+          مفيش حذف — الصنف وتاريخه باقيين، وفروع تانية مش بتتلمس خالص.
+        </div>
+      </span>
+    </label>
     <button onclick="runImport()" style="width:100%; padding:13px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">استورد ${importParsedRows.length} صف الآن</button>
     <div id="importResult" style="margin-top:10px; font-size:12px;"></div>`;
 
@@ -299,6 +313,45 @@ function netSoldByBarcode(sales, sinceMs, branch){
 if(typeof window !== 'undefined') window.netSoldByBarcode = netSoldByBarcode;
 
 // بيطبّق الخصم على الكميات المستوردة
+// 📥 صافي حركة «استلام بضاعة» بعد وقت التصدير — للفرع الحالي بس.
+// ⚠️ الأنواع المسموحة: receipt (توريد) و adjustment (تالف/مرتجع للمورد) بس.
+//    البيع والمرتجع والعكس بيتحسبوا من الفواتير في netSoldByBarcode —
+//    لو حسبناهم هنا كمان هيتخصموا **مرتين**.
+// سجل المخزون فيه productId مش باركود، فبنترجم بخريطة من الكتالوج.
+function netMovedByBarcode(logs, sinceMs, branch, barcodeById){
+  const out = {};
+  const map = barcodeById || {};
+  (logs || []).forEach(function(l){
+    if(!l) return;
+    if(l.branch !== branch) return;
+    if(l.type !== 'receipt' && l.type !== 'adjustment') return;
+    var ts = l._ts || 0;
+    if(!(ts >= sinceMs)) return;
+    var code = String(map[l.productId] || '').trim();
+    if(!code) return;
+    out[code] = (out[code] || 0) + (Number(l.delta) || 0);
+  });
+  return out;
+}
+if(typeof window !== 'undefined') window.netMovedByBarcode = netMovedByBarcode;
+
+// بيضيف حركة الاستلام على صفوف الملف (التوريد بيزوّد، التالف بيخصم)
+function applyMovedAdjustment(rows, moved){
+  const changes = [];
+  (rows||[]).forEach(function(r){
+    var code = String(r.barcode || '').trim();
+    var n = moved[code];
+    if(!n) return;
+    var before = Number(r.qty) || 0;
+    var after = before + n;
+    if(after < 0) after = 0;                      // الكمية عمرها ما تبقى بالسالب
+    r.qty = after;
+    changes.push({ barcode: code, name: r.name, before: before, moved: n, after: after });
+  });
+  return changes;
+}
+if(typeof window !== 'undefined') window.applyMovedAdjustment = applyMovedAdjustment;
+
 function applySoldAdjustment(rows, sold){
   const changes = [];
   (rows||[]).forEach(function(r){
@@ -498,6 +551,58 @@ function planInventoryWrites(rows, mapping, branch, idx, FV){
   return { writes: writes, stats: stats };
 }
 
+// ============================================================
+// 🚫 استبعاد الأصناف اللي مش في الملف  («الملف ده هو الجرد الكامل»)
+// ------------------------------------------------------------
+// المطلوب (المالك): الصنف القديم **ميظهرش أصلًا** — مش يفضل ظاهر بصفر
+// جنب صنف بنفس الكود فيه مخزون. الكاشير المفروض تشوف نسخة واحدة.
+//
+// الطريقة: الكمية بتتصفّر + الصنف بيتشال من قايمة فروعك، فيختفي من كل
+// شاشات الفرع (البحث · البيع · المخزون · الأكواد المتكررة).
+// ⚠️ حراس:
+//   • مفيش حذف — المستند وتاريخه باقيين، بس مش ظاهرين عندك.
+//   • فرع تاني مبيتلمسش: الصنف اللي في Glow يفضل في Glow بكميته.
+//   • لو الصنف مشترك (مفيش قايمة فروع) ومعرفناش قايمة الفروع،
+//     بنصفّر الكمية بس ومنشيلوش — الاستبعاد الغلط أخطر من صفر ظاهر.
+//   • الأصناف اللي في الملف مبتتلمسش خالص.
+// ============================================================
+const IMPORT_EXCLUDED_TAG = '(مستبعد)';
+
+function planRemoveMissing(items, branch, codesInFile, allBranchList){
+  const inFile = {};
+  (codesInFile || []).forEach(function(c){
+    const k = String(c || '').trim();
+    if(k) inFile[k] = 1;
+  });
+  const others = (allBranchList || []).filter(function(b){ return b && b !== branch; });
+  const out = [];
+  (items || []).forEach(function(it){
+    if(!it || it.status === 'merged') return;
+    const code = String(it.barcode || '').trim();
+    if(code && inFile[code]) return;                       // موجود في الملف — سيبه
+    const hasList = Array.isArray(it.branches) && it.branches.length;
+    const visible = !hasList || it.branches.indexOf(branch) >= 0;
+    if(!visible) return;                                   // مش ظاهر عندي أصلًا
+    const cur = Number((it.qtyByBranch || {})[branch]) || 0;
+
+    let newBranches = null;                                // null = سيب الفروع زي ما هي
+    if(hasList){
+      const rest = it.branches.filter(function(b){ return b !== branch; });
+      newBranches = rest.length ? rest : [IMPORT_EXCLUDED_TAG];
+    } else if(others.length){
+      newBranches = others;                                // كان مشترك → بقى لباقي الفروع
+    }
+    if(!newBranches && cur === 0) return;                  // مفيش أي حاجة تتعمل
+    out.push({
+      id: it.id, name: it.name || '', was: cur,
+      hidden: !!newBranches,
+      branches: newBranches
+    });
+  });
+  return out;
+}
+window.planRemoveMissing = planRemoveMissing;
+
 // كتابة صفوف المخزون بالدفعات — بترجّع إحصائية { done, failed, updated, created, dupCodes }
 async function writeInventoryRows(rows, mapping, branch, onProgress){
   let idx = {};
@@ -581,6 +686,42 @@ async function runImport(){
         });
         const sold = netSoldByBarcode(sales, sinceMs, currentBranch);
         const changes = applySoldAdjustment(prepped, sold);
+
+        // 📥 وحركة «استلام بضاعة» بعد نفس التاريخ (توريد + تالف/مرتجع للمورد)
+        resultBox.textContent = 'بيقرا حركة الاستلام...';
+        let movedChanges = [];
+        try{
+          const sinceTs = firebase.firestore.Timestamp.fromMillis(sinceMs);
+          const logSnap = await db.collection(TEST_STOCK_LOG).where('createdAt','>=', sinceTs).get();
+          const logs = logSnap.docs.map(function(d){
+            const x = d.data() || {};
+            const c = x.createdAt;
+            x._ts = c && c.toMillis ? c.toMillis() : (c && c.seconds ? c.seconds*1000 : 0);
+            return x;
+          });
+          const barcodeById = {};
+          (allInventory || []).forEach(function(p){
+            if(p && p.id) barcodeById[p.id] = String(p.barcode || '').trim(); });
+          const moved = netMovedByBarcode(logs, sinceMs, currentBranch, barcodeById);
+          movedChanges = applyMovedAdjustment(prepped, moved);
+        }catch(e){
+          // فشل قراءة السجل ميوقفش الاستيراد — بس المستخدم لازم يعرف
+          console.warn('[import] تعذّر قراءة حركة الاستلام:', e && e.message);
+          if(!confirm('⚠️ متعرفناش نقرا حركة «استلام بضاعة» بعد التاريخ ده.\n'
+            + 'الاستيراد هيخصم المباع بس.\n\nنكمّل؟')){ resultBox.textContent = 'اتلغى'; return; }
+        }
+        if(movedChanges.length){
+          const topM = movedChanges.slice(0, 12).map(function(c){
+            return '• ' + (c.name||c.barcode) + ': ' + c.before + ' ' + (c.moved > 0 ? '+ ' + c.moved : '− ' + (-c.moved)) + ' = ' + c.after;
+          }).join('\n');
+          const moreM = movedChanges.length > 12 ? ('\n… و' + (movedChanges.length-12) + ' صنف كمان') : '';
+          if(!confirm('📥 حركة استلام على ' + movedChanges.length + ' صنف:\n\n' + topM + moreM + '\n\nنكمّل؟')){
+            resultBox.textContent = 'اتلغى'; return;
+          }
+          prepped.forEach(function(pr){ if(mapping.quantity) pr._row[mapping.quantity] = pr.qty; });
+          if(typeof _logActivity === 'function')
+            _logActivity('import_qty_moved', { count: movedChanges.length, since: sinceVal });
+        }
         if(!changes.length){
           if(!confirm('مفيش أي بيعات على النظام الجديد بعد التاريخ ده.\nنكمّل الاستيراد من غير خصم؟')){
             resultBox.textContent = 'اتلغى'; return;
@@ -612,7 +753,57 @@ async function runImport(){
       });
     }catch(e){ resultBox.innerHTML = '⚠️ حصل خطأ أثناء الاستيراد: '+e.message; showToast('فشل الاستيراد', 'err'); return; }
     done = stats.done; failed = stats.failed;
+
+    // 0️⃣ «الملف ده هو الجرد الكامل» — تصفير اللي مش فيه
+    let zeroed = 0;
+    const wantZero = (function(){
+      const c = document.getElementById('impZeroMissing');
+      return !!(c && c.checked);
+    })();
+    if(wantZero){
+      const codes = rows.map(function(r){
+        return mapping.barcode ? String(r[mapping.barcode]||'').trim() : ''; });
+      let branchList = [];
+      try{ branchList = JSON.parse(localStorage.getItem('pos_branch_list') || '[]'); }catch(e){}
+      const targets = planRemoveMissing(allInventory || [], currentBranch, codes, branchList);
+      if(targets.length){
+        const hiddenCount = targets.filter(function(t){ return t.hidden; }).length;
+        const okZero = await askConfirm({
+          icon:'🚫', danger:true, okText:'استبعدهم', waitSec:5,
+          title:'استبعاد ' + targets.length + ' صنف',
+          message: targets.length + ' صنف في ' + currentBranch + ' مش موجودين في الملف.\n'
+            + hiddenCount + ' منهم هيختفوا من شاشات الفرع تمامًا (كميتهم صفر).\n'
+            + (targets.length - hiddenCount ? ((targets.length - hiddenCount) + ' هيتصفّروا بس.\n') : '')
+            + '\nمفيش أي حذف — الأصناف وتاريخها باقيين، وفروع تانية مش هتتلمس.\n\nتكمّل؟'
+        });
+        if(okZero){
+          const FVz = firebase.firestore.FieldValue;
+          const CH = 400;
+          for(let i=0; i<targets.length; i+=CH){
+            try{
+              const b2 = db.batch();
+              targets.slice(i, i+CH).forEach(function(t){
+                const upd = {
+                  ['qtyByBranch.'+currentBranch]: 0,
+                  excludedByImportAt: Date.now(),
+                  updatedAt: FVz.serverTimestamp()
+                };
+                if(t.branches) upd.branches = t.branches;   // بيختفي من الفرع
+                b2.set(db.collection(TEST_INVENTORY).doc(t.id), upd, { merge:true });
+              });
+              await b2.commit();
+              zeroed += Math.min(CH, targets.length - i);
+              resultBox.textContent = 'جارٍ الاستبعاد... ' + zeroed + '/' + targets.length;
+            }catch(e){ console.warn('exclude missing', e && e.message); }
+          }
+          if(typeof _logActivity === 'function')
+            _logActivity('import_excluded_missing', { count: zeroed, branch: currentBranch });
+        }
+      }
+    }
+
     resultBox.innerHTML = `✅ اتستورد ${done} صنف${failed ? ` — ${failed} صف اتخطّى (اسم فاضي)` : ''}`
+      + (zeroed ? `<div style="font-size:12px; color:var(--warn); margin-top:4px;">🚫 ${zeroed} صنف مش في الملف اتستبعدوا من ${currentBranch}</div>` : '')
       + `<div style="font-size:12px; color:var(--muted); margin-top:4px;">🔁 ${stats.updated} تحديث لأصناف موجودة · ➕ ${stats.created} صنف جديد</div>`
       + (stats.dupCodes.length
           ? `<div style="font-size:12px; color:var(--warn); margin-top:6px; font-weight:700;">⚠️ ${stats.dupCodes.length} كود متسجّل أكتر من مرة من استيراد قديم — افتح «🔍 أكواد متكررة» من شاشة المخزون وادمجهم</div>`

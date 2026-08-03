@@ -2904,6 +2904,45 @@ window.payDiag = function(){
   console.log('المدفوعات المسجّلة:', e);
 };
 
+// ============================================================
+// 🕵️ إنقاذ المعاملة اليتيمة
+// ------------------------------------------------------------
+// الحالة الصامتة الوحيدة اللي كانت فاضلة: لو الويبهوك كتب المعاملة
+// **برقم طلب مختلف** عن اللي السيستم مستنيه، كل طبقات المتابعة
+// (المستمع + الاستعلام الاحتياطي + إعادة الاشتراك) بتفضل مستنية رقم
+// عمره ما هيجي. الفلوس اتسحبت والفاتورة مش بتتقفل.
+//
+// الحل: بعد انتظار طويل بنبص على المعاملات الناجحة الجديدة ونشوف فيه
+// واحدة **مطابقة** للطلب بتاعنا. المطابقة صارمة عشان ما ناخدش معاملة
+// عميل تاني بالغلط:
+//   • نفس الفرع  • نفس الماكينة  • نفس المبلغ بالقرش بالظبط
+//   • ناجحة      • بعد ما بعتنا الطلب  • مش مستهلكة في فاتورة تانية
+// وحتى بعد كل ده — **الكاشير هي اللي تأكّد**، مش السيستم.
+// ============================================================
+const PM_RESCUE_AFTER_MS = 25000;   // مبنبصش قبل ما الانتظار يطوّل فعلًا
+const _pmUsedRefs = {};             // أرقام اتستهلكت في الجلسة دي
+
+function findOrphanTxn(docs, opts){
+  const o = opts || {};
+  const want = Math.round(Number(o.amountEGP || 0) * 100);
+  const list = (docs || []).filter(function(d){
+    if(!d || d.status !== 'success') return false;
+    if(o.orderRef && String(d.orderRef || d.id) === String(o.orderRef)) return false;  // ده طلبنا نفسه
+    if(d.branch !== o.branch) return false;                       // فرع تاني
+    if(o.terminalId && d.terminalId && String(d.terminalId) !== String(o.terminalId)) return false;
+    if(Number(d.amountCents) !== want) return false;              // المبلغ بالقرش بالظبط
+    var ts = Number(d.createdAt) || 0;
+    if(!(ts >= (o.sinceMs || 0))) return false;                   // اتعملت بعد ما بعتنا
+    if(o.usedRefs && o.usedRefs[String(d.orderRef || d.id)]) return false;
+    if(d.consumedByInvoice) return false;                         // اترصدت في فاتورة قبل كده
+    return true;
+  });
+  // ⚠️ أكتر من واحدة مطابقة = مفيش ترجيح آمن — منختارش ونسيب الكاشير
+  if(list.length !== 1) return null;
+  return list[0];
+}
+if(typeof window !== 'undefined') window.findOrphanTxn = findOrphanTxn;
+
 // 👂 بنراقب نتيجة العملية اللي الـ webhook بيكتبها — الكاشير مش بيقرر بنفسه
 // 🔁 المستمع اللحظي بيموت نهائيًا لو النت اتنفض ثانية في نص العملية —
 // وده كان سبب "فاتورة أو اتنين في اليوم مش بيطبعوا لوحدهم": الماكينة بتأكد
@@ -3013,6 +3052,7 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
   function stopAll(){
     try{ if(paymobPending && paymobPending.unsub) paymobPending.unsub(); }catch(e){}
     if(paymobPending && paymobPending.poll) clearInterval(paymobPending.poll);
+    if(paymobPending && paymobPending.rescue) clearInterval(paymobPending.rescue);
   }
   const unsub = db.collection('pos_paymob_txns').doc(orderRef).onSnapshot(function(snap){
     if(!snap.exists) return;
@@ -3030,6 +3070,41 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
       paymobShow('⚠️ مش قادر أتابع نتيجة الدفع — راجع الماكينة', 'err');
     }
   });
+  // 🕵️ كشف صامت للمعاملة اليتيمة — **تسجيل بس، مفيش أي تدخل**
+  // ⚠️ قرار المالك: ممنوع نعرض للكاشير شاشة تسألها تربط معاملة برقم طلب
+  //    مختلف. كاشير مستعجلة قدام عميل ممكن تدوس «أيوه» على معاملة عميل
+  //    تاني بنفس المبلغ — والضرر ده أكبر من الحالة اللي بنحلها (لسه ما
+  //    حصلتش أصلًا). فبنسجّل بس، والفاتورة ما بتتلمسش خالص.
+  const _sentAt = Date.now();
+  let _orphanLogged = false;
+  const rescue = setInterval(async function(){
+    if(!paymobPending || paymobPending.ref !== orderRef || paymobApproved){ clearInterval(rescue); return; }
+    if(_orphanLogged) return;                       // مرة واحدة لكل طلب
+    if(Date.now() - _sentAt < PM_RESCUE_AFTER_MS) return;
+    try{
+      const snap = await db.collection('pos_paymob_txns')
+        .where('createdAt', '>=', _sentAt - 60000).get({ source: 'server' });
+      const docs = snap.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); });
+      const hit = findOrphanTxn(docs, {
+        amountEGP: amountEGP, branch: currentBranch,
+        terminalId: paymobTerminalId(), orderRef: orderRef,
+        sinceMs: _sentAt - 60000, usedRefs: _pmUsedRefs
+      });
+      if(!hit) return;
+      _orphanLogged = true;
+      // 🗄️ تسجيل للتشخيص بس — مفيش شاشة ومفيش ربط تلقائي
+      if(typeof _logActivity === 'function') _logActivity('paymob_orphan_detected', {
+        expected: orderRef,
+        matched: String(hit.orderRef || hit.id),
+        amount: amountEGP,
+        last4: hit.cardLast4 || null,
+        branch: currentBranch
+      });
+      console.warn('🕵️ معاملة ناجحة بنفس المبلغ برقم طلب مختلف:',
+        { expected: orderRef, matched: String(hit.orderRef || hit.id) });
+    }catch(e){ console.warn('paymob orphan scan', e && e.message); }
+  }, 8000);
+
   // 🛟 شبكة الأمان: استعلام مباشر كل 4 ثواني — حتى لو المستمع مات في لحظة
   // نت وحشة، النتيجة بتتلقط في أول استعلام ناجح بعد رجوع النت.
   const poll = setInterval(async function(){
@@ -3054,7 +3129,7 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
       }
     }
   }, 4000);
-  paymobPending = { ref: orderRef, unsub: unsub, poll: poll, amount: amountEGP, seq: seq };
+  paymobPending = { ref: orderRef, unsub: unsub, poll: poll, rescue: rescue, amount: amountEGP, seq: seq };
   // ⏳ 3 دقايق = تحذير بس — 🔴 كانت بتقتل المتابعة نهائيًا: عميل اتلكّع وأكّد
   // في الدقيقة الرابعة كان تأكيده بيضيع رغم إن الماكينة طبعت. دلوقتي المتابعة
   // مستمرة لحد 10 دقايق، وبعدها بس بتقف بمسح كامل.
@@ -3489,6 +3564,52 @@ async function _doConfirmPayment(){
     }));
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
 
+    // ============================================================
+    // 🖨️ الورقة الأول — قبل باقي الكتابات
+    // ------------------------------------------------------------
+    // 🔴 الباج: الطباعة كانت **آخر سطر** بعد سلسلة كتابات كل واحدة فيها
+    //    بتستنى الشبكة لحد 4 ثواني: المخزون · النقط · العميل · ربط التقييم.
+    //    في نت تقيل ده يوصل لـ16 ثانية والعميل واقف مستني الورقة —
+    //    وده سبب إن الكاشير كانت بتطبع يدوي في الفيزا.
+    //    الكتابات دي **مالهاش أي لازمة للورقة**: الورقة محتاجة رقم الفاتورة
+    //    والمدفوعات والإجمالي، وكلهم جاهزين هنا.
+    // ✅ آمن: الفاتورة اتسجلت خلاص (محليًا على الأقل — offline persistence
+    //    بتضمن رفعها)، فالورقة مش بتسبق الحفظ.
+    // ============================================================
+    let _didPrint = false;
+    const _printNow = function(){
+      if(_didPrint) return;
+      _didPrint = true;
+      try{
+        const _mk = _pmPrintMark;
+        if(_mk && _mk.gotAtMs){
+          const _now = Date.now();
+          const _rec = {
+            ref: _mk.ref || null,
+            saveMs: _now - _mk.gotAtMs            // وصول التأكيد ← الطباعة (اللي عندنا)
+          };
+          // موافقة البنك ← كتابة Firestore (اللي عند Paymob) — لو الطوابع موجودة
+          if(_mk.decidedAt && _mk.authorizedAt){
+            const _a = Date.parse(String(_mk.authorizedAt).indexOf('+') > 0
+              ? _mk.authorizedAt : (_mk.authorizedAt + '+03:00'));
+            if(!isNaN(_a)) _rec.paymobMs = _mk.decidedAt - _a;
+          }
+          if(_mk.decidedAt) _rec.deliverMs = _mk.gotAtMs - _mk.decidedAt;  // Firestore ← الجهاز
+          if(_rec.paymobMs != null) _rec.totalMs = _rec.paymobMs + _rec.saveMs;
+          if(typeof _logActivity === 'function') _logActivity('print_latency', _rec);
+          console.log('⏱️ زمن الطباعة', _rec);
+        }
+      }catch(e){ console.warn('print latency', e); }
+      _pmPrintMark = null; window._pmPrintMark = null;   // فاتورة واحدة لكل قياس
+      // ⚠️ حارس حرج: الطباعة بقت **قبل** خصم المخزون، فلو رمت استثناء كانت
+      //    هتوقف الدالة والمخزون ما يتخصمش. الورقة ممكن تتأجل — المخزون لأ.
+      try{ printReceipt(paymentsEntered, total, invoiceNo, invoiceCode); }
+      catch(e){
+        console.error('فشل الطباعة — الفاتورة والمخزون كملوا عادي', e);
+        try{ showToast('⚠️ الطباعة فشلت — الفاتورة اتسجلت، اطبعها من سجل المبيعات', 'err'); }catch(e2){}
+      }
+    };
+
     // ↩️🔒 منع تكرار المرتجع عبر الجلسات: نسجّل الكميات المرجّعة على الفاتورة الأصلية
     // + سجل مراقَب لكل مرتجع (مين، إمتى، أنهي فاتورة، كام)
     try{
@@ -3562,7 +3683,16 @@ async function _doConfirmPayment(){
       const ref = db.collection(TEST_INVENTORY).doc(c.id);
       batch.update(ref, { ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(c.isReturn ? c.qty : -c.qty) });
     });
-    const _stockW = await _waitWrite(batch.commit());
+    // 🖨️ الورقة هنا بالظبط — بعد ما خصم المخزون **اتقيّد** وقبل ما نستنى تأكيد السيرفر.
+    // ⚠️ الترتيب ده مقصود ومهم للمخزون:
+    //   • commit() بمجرد ما تتنادى، الخصم بيتقيّد محليًا وFirestore بترفعه لوحدها
+    //     حتى لو النت قطع — فالورقة عمرها ما تطلع والمخزون لسه ما اتخصمش.
+    //   • وفي نفس الوقت مش بنستنى تأكيد السيرفر (4 ثواني) قبل الطباعة، ولا
+    //     كتابات النقط والعميل وربط التقييم اللي بعدها (12 ثانية كمان) —
+    //     دي كانت بتخلي الورقة تتأخر لحد 16 ثانية في النت التقيل.
+    const _stockP = batch.commit();
+    _printNow();
+    const _stockW = await _waitWrite(_stockP);
     if(_stockW.error) console.error('خصم المخزون', _stockW.error);
     // سجل الحركة: من غير انتظار (جواه catch بتاعه) — أوفلاين بيتقيد محليًا ويترفع بعدين
     stockLines.forEach(c=>{ logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع'); });
@@ -3635,29 +3765,9 @@ async function _doConfirmPayment(){
       await _waitWrite(tryLinkFeedbackToCustomer(phone, custName, sellerEmployeeName));
     }
 
-    // ⏱️ قبل الطباعة على طول — القياس بيقفل هنا
-    try{
-      const _mk = _pmPrintMark;
-      if(_mk && _mk.gotAtMs){
-        const _now = Date.now();
-        const _rec = {
-          ref: _mk.ref || null,
-          saveMs: _now - _mk.gotAtMs            // وصول التأكيد ← الطباعة (اللي عندنا)
-        };
-        // موافقة البنك ← كتابة Firestore (اللي عند Paymob) — لو الطوابع موجودة
-        if(_mk.decidedAt && _mk.authorizedAt){
-          const _a = Date.parse(String(_mk.authorizedAt).indexOf('+') > 0
-            ? _mk.authorizedAt : (_mk.authorizedAt + '+03:00'));
-          if(!isNaN(_a)) _rec.paymobMs = _mk.decidedAt - _a;
-        }
-        if(_mk.decidedAt) _rec.deliverMs = _mk.gotAtMs - _mk.decidedAt;  // Firestore ← الجهاز
-        if(_rec.paymobMs != null) _rec.totalMs = _rec.paymobMs + _rec.saveMs;
-        if(typeof _logActivity === 'function') _logActivity('print_latency', _rec);
-        console.log('⏱️ زمن الطباعة', _rec);
-      }
-    }catch(e){ console.warn('print latency', e); }
-    _pmPrintMark = null; window._pmPrintMark = null;   // فاتورة واحدة لكل قياس
-    printReceipt(paymentsEntered, total, invoiceNo, invoiceCode);
+    // 🖨️ اتطبعت فوق بعد حفظ الفاتورة على طول — ده احتياطي مش أكتر
+    // (الحارس `_didPrint` بيمنع ورقتين لنفس الفاتورة)
+    _printNow();
     if(_offlineQueued){
       showToast('📴 اتحفظت أوفلاين ✔ — هتترفع لوحدها أول ما النت يرجع (متمسحش بيانات البرنامج)', 'ok');
     }else{
