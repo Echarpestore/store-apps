@@ -401,7 +401,7 @@ const PANEL_PERM_KEYS = [
   ['terminate', ['إنهاء خدمة','سجل المغادرين']],
   ['settings',  ['إعدادات الالتزام','إعدادات رصيد الوقت','تارجت مبيعات الشيفت','إدارة الفروع','كود المدير','إعدادات السلف']],
   ['money',     ['كشف الخصومات','رصيد الوقت والخصومات','عمولة النقط','سجل دفع العمولات',
-                 'الرواتب الشهرية','سجل صرف الرواتب','سجل السلف','أوفرتايم مستني']],
+                 'الرواتب الشهرية','سجل صرف الرواتب','سجل السلف','أوفرتايم مستني','ميزانية المكافآت']],
   ['people',    ['إضافة موظف','الموظفين الحاليين','مواعيد الحضور']],
   ['tasks',     ['المهام الأسبوعية','مراجعة تنفيذ','المهام المؤكدة','سجل المكافآت']],
   ['orders',    ['أوردرات الموظفين','أكواد دعوة','طلبات النواقص']],
@@ -513,6 +513,8 @@ function pendingActions(){
     push('day','time','🚪','شيفتات مفتوحة (نسيت انصراف)', window.forgottenShifts(brShifts).length);
     // ⏱️ أوفرتايم مستني موافقتك — من غير الموافقة مبيتدفعش
     push('money','money','⏱️','أوفرتايم مستني موافقتك', window.pendingOvertimeShifts(brShifts).length);
+    // 🎁 مكافآت عدّت الميزانية ومستنية قرارك
+    push('money','money','🎁','مكافآت فوق الميزانية', window.pendingBudgetRewards(window.allRewards||[]).length);
   }catch(e){}
   return out;
 }
@@ -1438,7 +1440,7 @@ function applyBranchFilter(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport();
-    renderOvertimeApprovals();
+    renderOvertimeApprovals(); renderRewardBudget();
     renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
@@ -3213,7 +3215,6 @@ function getPeriodProgressLabel(empId, periodType){
 }
 
 // ---------- REWARD AUTO-GENERATION ----------
-function randomReward(){ return Math.floor(Math.random()*(1000-200+1))+200; }
 
 async function checkAndAwardRewards(){
   if(!window.currentBranch || window.employees.length === 0) return;
@@ -3221,18 +3222,16 @@ async function checkAndAwardRewards(){
   const thisWeek = getWeekRange(now);
   const thisMonth = getMonthRange(now);
 
-  for(const emp of window.employees){
-    // Previous (fully completed) week
-    const prevWeekEnd = new Date(thisWeek.start.getTime() - 1);
-    const prevWeek = getWeekRange(prevWeekEnd);
-    await maybeAwardPeriod(emp, prevWeek, 'weekly', 'أسبوع ' + todayStr(prevWeek.start));
+  // 🎁 المكافأة بقت بميزانية مشتركة على كل الفروع، فبتتحسب **مرة واحدة
+  //    للفترة كلها** مش موظف موظف — لازم نعرف عدد المستحكين قبل المبلغ.
+  const prevWeekEnd = new Date(thisWeek.start.getTime() - 1);
+  const prevWeek = getWeekRange(prevWeekEnd);
+  await awardPeriod(prevWeek, 'weekly', 'أسبوع ' + todayStr(prevWeek.start));
 
-    // Previous (fully completed) month
-    if(now.getDate() <= 3){ // only need to check right after month changes; cheap enough to always check anyway
-      const prevMonthEnd = new Date(thisMonth.start.getTime() - 1);
-      const prevMonth = getMonthRange(prevMonthEnd);
-      await maybeAwardPeriod(emp, prevMonth, 'monthly', prevMonth.start.toLocaleDateString('ar-EG',{month:'long', year:'numeric'}));
-    }
+  if(now.getDate() <= 3){
+    const prevMonthEnd = new Date(thisMonth.start.getTime() - 1);
+    const prevMonth = getMonthRange(prevMonthEnd);
+    await awardPeriod(prevMonth, 'monthly', prevMonth.start.toLocaleDateString('ar-EG',{month:'long', year:'numeric'}));
   }
 }
 
@@ -3331,14 +3330,15 @@ function renderRaceStatus(empId){
   wrap.innerHTML = blocks;
 }
 
-async function maybeAwardPeriod(emp, range, type, label){
-  const already = allRewards.some(r=> r.employeeId===emp.id && r.type===type && r.periodLabel===label);
-  if(already) return;
+/* 🎁 هل الموظفة مستحقة مكافأة الفترة دي؟ (فحص بس — من غير أي كتابة)
+   ------------------------------------------------------------
+   اتفصلت عن الكتابة عشان المبلغ بقى بيعتمد على **عدد المستحقين كلهم**
+   في كل الفروع، فلازم نعرفهم الأول وبعدين نحسب النصيب. */
+function qualifiesForReward(emp, range, type){
+  if(!emp || emp.active === false) return false;
 
   if(type === 'monthly'){
-    // Monthly reward: split the month into ~4 weekly chunks and average their
-    // composite scores (attendance% + punctuality% + task% + rating%). Reaching
-    // 80% overall qualifies — no need for a flawless month, just solid consistency.
+    // الشهرية: الشهر بيتقسم ~4 أسابيع ومتوسط درجاتها لازم يعدّي 80%
     const MONTHLY_THRESHOLD_PCT = 80;
     const chunks = [];
     let chunkStart = new Date(range.start);
@@ -3348,26 +3348,18 @@ async function maybeAwardPeriod(emp, range, type, label){
       chunks.push({ start: chunkStart, end: chunkEnd });
       chunkStart = new Date(chunkEnd.getTime() + 24*60*60*1000);
     }
-    if(chunks.length === 0) return;
+    if(chunks.length === 0) return false;
     const composites = chunks.map(c=> computeWeekComposite(emp, c.start, c.end));
     const avgComposite = Math.round(composites.reduce((a,b)=>a+b,0)/composites.length);
-    if(avgComposite < MONTHLY_THRESHOLD_PCT) return;
-
-    try{
-      await addDoc(rewardsCol, {
-        employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
-        type, periodLabel: label, amount: randomReward(), earnedAt: Date.now(), seen: false
-      });
-    }catch(err){ console.error('تعذر إنشاء المكافأة', err); }
-    return;
+    return avgComposite >= MONTHLY_THRESHOLD_PCT;
   }
 
-  // Weekly reward: strict criteria — every single requirement must hold for the week.
+  // الأسبوعية: كل شرط لازم يتحقق
   const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
   const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
-  if(confirmedDays < requiredDays || requiredDays === 0) return;
+  if(confirmedDays < requiredDays || requiredDays === 0) return false;
 
-  // 🚪 بوابة الالتزام الجديدة: رصيد الوقت في الفترة لازم مايعدّيش المسموح (90% التزام)
+  // 🚪 بوابة الالتزام: رصيد الوقت مايعدّيش المسموح
   const cfg = window.timeCfg || timeCfgDefaults;
   const credit = (window.allTimeCredit||[]).filter(x=>{
     if(x.employeeId!==emp.id || !tcCounts(x)) return false;
@@ -3376,33 +3368,112 @@ async function maybeAwardPeriod(emp, range, type, label){
   });
   const creditHours = credit.reduce((a,x)=> a + (Number(x.hours)||0), 0);
   const elig = window.rewardEligibility(creditHours, type === 'monthly' ? 'month' : 'week', cfg);
-  if(!elig.eligible) return;   // خرج من المكافأة — رصيد وقته عدّى المسموح
+  if(!elig.eligible) return false;
 
-  // Customer rating requirement — only enforced if there's actual rating data
-  // for the period (an employee shouldn't be penalized for a lack of feedback).
+  // تقييم العملاء — بيتطبّق بس لو فيه تقييمات فعلًا في الفترة
   const avgRating = computeAvgRatingInRange(emp.id, range.start.getTime(), range.end.getTime());
-  if(avgRating !== null && avgRating < MIN_RATING_FOR_REWARD) return;
+  if(avgRating !== null && avgRating < MIN_RATING_FOR_REWARD) return false;
 
-  // Minimum sales points requirement — only enforced if the admin set a
-  // per-employee weekly threshold.
+  // حد أدنى للنقط — بس لو الأدمن حطه للموظفة دي
   if(emp.minWeeklyPoints){
     const periodDays = totalCalendarDaysInRange(range.start, range.end);
     const minPointsForPeriod = Math.round(emp.minWeeklyPoints * periodDays / 7);
     const pointsInRange = window.points.filter(p=> p.employeeId===emp.id && p.ts >= range.start.getTime() && p.ts <= range.end.getTime()).length;
-    if(pointsInRange < minPointsForPeriod) return;
+    if(pointsInRange < minPointsForPeriod) return false;
   }
-
-  try{
-    await addDoc(rewardsCol, {
-      employeeId: emp.id, employeeName: emp.name, branch: window.currentBranch,
-      type, periodLabel: label, amount: randomReward(), earnedAt: Date.now(), seen: false
-    });
-  }catch(err){ console.error('تعذر إنشاء المكافأة', err); }
+  return true;
 }
+window.qualifiesForReward = qualifiesForReward;
+
+/* 💰 نصيب الواحد من ميزانية الفترة
+   ------------------------------------------------------------
+   القاعدة (قرار المالك): الميزانية مقفولة — 4000 للأسبوعي في الشهر
+   كله + 4000 للشهري. بتتقسّم **بالتساوي** على كل المستحقين في كل
+   الفروع، بسقف 200 للأسبوعية و400 للشهرية وحد أدنى 100.
+   ⚠️ لو الحد الأدنى خلّى الإجمالي يعدّي الميزانية → المكافآت بتتسجّل
+   **مستنية موافقة المالك** ومبتظهرش للموظفين لحد ما يعتمدها.
+   قبل كده كان المبلغ رقم عشوائي بين 200 و1000 — مفتوح تمامًا:
+   20 موظف × 4 أسابيع كان ممكن يوصل 30,000 ج في الشهر. */
+const REWARD_CFG = {
+  weeklyBudgetMonth: 4000,   // إجمالي الأسبوعي في الشهر كله (كل الفروع)
+  weeksPerMonth: 4,          // الأسبوعي بيتقسم على 4 → 1000 للأسبوع
+  monthlyBudget: 4000,       // الشهري مرة واحدة (كل الفروع)
+  maxWeeklyAward: 200,       // 🧢 سقف المكافأة الأسبوعية الواحدة
+  maxMonthlyAward: 400,      // 🧢 وسقف الشهرية
+  minPerAward: 100
+};
+window.REWARD_CFG = REWARD_CFG;
+
+function rewardShare(count, type, cfg){
+  cfg = cfg || REWARD_CFG;
+  const n = Math.max(0, Math.round(Number(count)||0));
+  if(n === 0) return { amount:0, count:0, budget:0, total:0, overBudget:false };
+  const budget = type === 'monthly'
+    ? Number(cfg.monthlyBudget)||0
+    : Math.round((Number(cfg.weeklyBudgetMonth)||0) / (Number(cfg.weeksPerMonth)||4));
+  const cap = type === 'monthly' ? (Number(cfg.maxMonthlyAward)||400) : (Number(cfg.maxWeeklyAward)||200);
+  let amount = Math.floor(budget / n);
+  if(amount > cap) amount = cap;                           // 🧢 السقف (الأسبوعي أقل من الشهري)
+  if(amount < cfg.minPerAward) amount = cfg.minPerAward;   // 🛡️ الحد الأدنى يحمي معنى المكافأة
+  const total = amount * n;
+  return { amount, count:n, budget, total, overBudget: total > budget };
+}
+window.rewardShare = rewardShare;
+
+// مفتاح ثابت للفترة — أساس معرّف المستند عشان جهازين في فرعين
+// مايكتبوش نفس المكافأة مرتين
+function rewardPeriodKey(type, range){
+  const d = range.start;
+  const p = (n)=> String(n).padStart(2,'0');
+  return type + '_' + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate());
+}
+window.rewardPeriodKey = rewardPeriodKey;
+
+async function awardPeriod(range, type, label){
+  const emps = (allEmployees || []).filter(e=> e.active !== false);
+  const winners = emps.filter(e=> qualifiesForReward(e, range, type));
+  if(!winners.length) return;
+  // اتصرفت خلاص؟ (نفس الفترة ونفس النوع)
+  const done = winners.every(e=> allRewards.some(r=>
+    r.employeeId === e.id && r.type === type && r.periodLabel === label));
+  if(done) return;
+
+  const share = rewardShare(winners.length, type, REWARD_CFG);
+  const key = rewardPeriodKey(type, range);
+  for(const e of winners){
+    try{
+      // 🔒 معرّف ثابت: لو جهازين حسبوا نفس الفترة، هيكتبوا نفس المستند
+      //    مش مستندين — وده اللي بيمنع صرف المكافأة مرتين.
+      await setDoc(doc(db,'sales_rewards', key + '_' + e.id), {
+        employeeId: e.id, employeeName: e.name, branch: e.branch || window.currentBranch,
+        type, periodLabel: label, amount: share.amount,
+        earnedAt: Date.now(), seen: false,
+        winners: share.count, budget: share.budget,
+        // 🚧 فوق الميزانية → مستنية موافقة، ومتظهرش للموظفين قبلها
+        status: share.overBudget ? 'pending' : 'approved'
+      }, { merge: true });
+    }catch(err){ console.error('تعذر إنشاء المكافأة', err); }
+  }
+}
+window.awardPeriod = awardPeriod;
+
+// المكافآت اللي فوق الميزانية ومستنية قرار المالك
+function pendingBudgetRewards(list){
+  return (list || []).filter(r=> r && r.status === 'pending');
+}
+window.pendingBudgetRewards = pendingBudgetRewards;
+
+// المكافآت اللي ينفع تتعرض للموظفة (القديمة من غير status = معتمدة)
+function visibleRewards(list){
+  return (list || []).filter(r=> r && (!r.status || r.status === 'approved'));
+}
+window.visibleRewards = visibleRewards;
 
 // Show a celebratory gift-box toast for any unseen reward, once per app load per reward.
 function showUnseenRewardsIfAny(){
-  const unseen = rewards.filter(r=> !r.seen);
+  // 🚧 المكافآت المستنية موافقة الميزانية مبتظهرش للموظفة —
+  //    وعد بمكافأة ممكن ترفضها أسوأ من إنها متظهرش أصلًا.
+  const unseen = visibleRewards(rewards).filter(r=> !r.seen);
   if(unseen.length === 0) return;
   const r = unseen[0];
   $('#giftBoxName').textContent = '🎉 مبروك يا ' + r.employeeName + '!';
@@ -4618,7 +4689,7 @@ const ADMIN_TAB_GROUPS = [
       'المهام الأسبوعية','مراجعة تنفيذ','المهام المؤكدة','سجل المكافآت'] },
   { id:'money', label:'💵 الفلوس', keys:[
       'عمولة النقط','سجل دفع العمولات','الرواتب الشهرية','سجل صرف الرواتب',
-      'سجل السلف','إعدادات السلف','أوفرتايم مستني'] },
+      'سجل السلف','إعدادات السلف','أوفرتايم مستني','ميزانية المكافآت'] },
   { id:'orders',label:'🛒 الطلبات', keys:[
       'طلبات النواقص','أوردرات الموظفين','أكواد دعوة'] },
   { id:'reports',label:'📊 تقارير', keys:[
@@ -6331,3 +6402,91 @@ async function decideOvertime(shiftId, kind){
   }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
 }
 window.decideOvertime = decideOvertime;
+
+/* ============================================================
+   🎁 لوحة ميزانية المكافآت
+   بتوريك المصروف الشهر ده مقابل الميزانية، وبتستأذنك في أي مكافآت
+   عدّت السقف (بدل ما تتصرف لوحدها وتفاجئك آخر الشهر).
+   ============================================================ */
+function rewardMonthSpend(list, nowTs){
+  const now = new Date(Number(nowTs) || Date.now());
+  const mk = now.getFullYear() + '-' + now.getMonth();
+  let weekly = 0, monthly = 0;
+  (list || []).forEach(r=>{
+    if(!r || (r.status && r.status !== 'approved')) return;
+    const d = new Date(r.earnedAt || 0);
+    if(d.getFullYear() + '-' + d.getMonth() !== mk) return;
+    if(r.type === 'monthly') monthly += Number(r.amount)||0;
+    else weekly += Number(r.amount)||0;
+  });
+  return { weekly, monthly, total: weekly + monthly,
+           weeklyBudget: REWARD_CFG.weeklyBudgetMonth, monthlyBudget: REWARD_CFG.monthlyBudget };
+}
+window.rewardMonthSpend = rewardMonthSpend;
+
+function renderRewardBudget(){
+  const host = document.getElementById('rewardBudgetPanel');
+  if(!host) return;
+  const all = window.allRewards || [];
+  const sp = rewardMonthSpend(all);
+  const bar = (label, spent, budget)=>{
+    const pct = budget > 0 ? Math.min(100, Math.round(spent/budget*100)) : 0;
+    const col = pct >= 100 ? '#e5484d' : (pct >= 80 ? '#d4af37' : '#3fb950');
+    return `<div style="margin-bottom:10px;">
+      <div style="display:flex; justify-content:space-between; font-size:12.5px; font-weight:800; margin-bottom:4px;">
+        <span>${label}</span><span style="color:${col};">${spent} / ${budget} ج</span></div>
+      <div style="height:8px; border-radius:99px; background:var(--panel2); overflow:hidden;">
+        <div style="height:100%; width:${pct}%; background:${col};"></div></div></div>`;
+  };
+  const pend = pendingBudgetRewards(all);
+  let html = bar('📅 الأسبوعي (الشهر ده)', sp.weekly, sp.weeklyBudget)
+           + bar('🗓️ الشهري', sp.monthly, sp.monthlyBudget);
+
+  if(!pend.length){
+    html += '<p style="color:var(--sub); font-size:12.5px; margin:6px 0 0;">مفيش مكافآت مستنية موافقتك ✅</p>';
+  }else{
+    const groups = {};
+    pend.forEach(r=>{ const k = r.type + '|' + r.periodLabel; (groups[k] = groups[k] || []).push(r); });
+    html += Object.keys(groups).map(k=>{
+      const g = groups[k];
+      const total = g.reduce((a,r)=> a + (Number(r.amount)||0), 0);
+      const budget = Number(g[0].budget)||0;
+      return `<div style="border:1px solid #7f1d1d; background:#2a1111; border-radius:12px; padding:11px 13px; margin-top:10px;">
+        <b style="font-size:13.5px;">${g[0].type === 'monthly' ? '🗓️ شهرية' : '📅 أسبوعية'} — ${g[0].periodLabel}</b>
+        <div style="font-size:12.5px; margin-top:5px;">
+          ${g.length} مستحق × ${g[0].amount} ج = <b>${total} ج</b>
+          ${budget ? ' · الميزانية <b>' + budget + ' ج</b> · الزيادة <b style="color:#ff9a9d;">' + Math.max(0, total-budget) + ' ج</b>' : ''}
+        </div>
+        <div style="font-size:12px; color:var(--sub); margin-top:4px;">
+          الحد الأدنى ${REWARD_CFG.minPerAward} ج للمكافأة خلّى الإجمالي يعدّي الميزانية.</div>
+        <div style="display:flex; gap:7px; margin-top:9px; flex-wrap:wrap;">
+          <button data-rwok="${k}" style="flex:1; min-width:110px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--gold-dim); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">✅ اعتمدها</button>
+          <button data-rwno="${k}" style="flex:1; min-width:110px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:#ff9a9d; font-family:'Cairo'; font-weight:800; cursor:pointer;">🚫 مش دلوقتي</button>
+        </div></div>`;
+    }).join('');
+  }
+  host.innerHTML = html;
+  host.querySelectorAll('[data-rwok]').forEach(b=>
+    b.addEventListener('click', ()=> decideRewardBudget(b.dataset.rwok, 'approved')));
+  host.querySelectorAll('[data-rwno]').forEach(b=>
+    b.addEventListener('click', ()=> decideRewardBudget(b.dataset.rwno, 'rejected')));
+}
+window.renderRewardBudget = renderRewardBudget;
+
+async function decideRewardBudget(groupKey, status){
+  const parts = String(groupKey).split('|');
+  const list = pendingBudgetRewards(window.allRewards || [])
+    .filter(r=> r.type === parts[0] && r.periodLabel === parts[1]);
+  if(!list.length) return;
+  const total = list.reduce((a,r)=> a + (Number(r.amount)||0), 0);
+  const msg = status === 'approved'
+    ? 'هتعتمد ' + list.length + ' مكافأة بإجمالي ' + total + ' ج (فوق الميزانية). تكمّل؟'
+    : 'هترفض ' + list.length + ' مكافأة. الموظفين مشافوهاش أصلًا. تكمّل؟';
+  if(!confirm(msg)) return;
+  for(const r of list){
+    try{ await updateDoc(doc(db,'sales_rewards', r.id), { status, budgetDecidedAt: Date.now() }); }
+    catch(e){ console.error('reward decision', e); }
+  }
+  renderRewardBudget();
+}
+window.decideRewardBudget = decideRewardBudget;
