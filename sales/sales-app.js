@@ -401,7 +401,7 @@ const PANEL_PERM_KEYS = [
   ['terminate', ['إنهاء خدمة','سجل المغادرين']],
   ['settings',  ['إعدادات الالتزام','إعدادات رصيد الوقت','تارجت مبيعات الشيفت','إدارة الفروع','كود المدير','إعدادات السلف']],
   ['money',     ['كشف الخصومات','رصيد الوقت والخصومات','عمولة النقط','سجل دفع العمولات',
-                 'الرواتب الشهرية','سجل صرف الرواتب','سجل السلف']],
+                 'الرواتب الشهرية','سجل صرف الرواتب','سجل السلف','أوفرتايم مستني']],
   ['people',    ['إضافة موظف','الموظفين الحاليين','مواعيد الحضور']],
   ['tasks',     ['المهام الأسبوعية','مراجعة تنفيذ','المهام المؤكدة','سجل المكافآت']],
   ['orders',    ['أوردرات الموظفين','أكواد دعوة','طلبات النواقص']],
@@ -507,6 +507,13 @@ function pendingActions(){
   // 📦 طلبات النواقص المفتوحة
   const shorts = (window.allShortages||[]).filter(x=> x.status==='open' && x.branch===br).length;
   push('orders','orders','📦','طلبات نواقص مفتوحة', shorts);
+  // 🚨 شيفتات نسيت انصرافها (مفتوحة أطول من المعقول) — بننبّه بس، مش بنقفل
+  try{
+    const brShifts = (window.allShifts||[]).filter(sh=> sh.branch===br);
+    push('day','time','🚪','شيفتات مفتوحة (نسيت انصراف)', window.forgottenShifts(brShifts).length);
+    // ⏱️ أوفرتايم مستني موافقتك — من غير الموافقة مبيتدفعش
+    push('money','money','⏱️','أوفرتايم مستني موافقتك', window.pendingOvertimeShifts(brShifts).length);
+  }catch(e){}
   return out;
 }
 window.pendingActions = pendingActions;
@@ -814,7 +821,9 @@ const timeCfgDefaults = {
   earlyMinPerHour: 10,     // 🚪 الانصراف بدري: كل كام دقيقة = ساعة (زي التأخير)
   absenceHours: 7,         // 🚫 غياب بدون عذر = كام ساعة رصيد (7 = خروج فوري من المكافأة)
   autoCloseBreakMult: 2,   // البريك بيتقفل تلقائي بعد كام ضعف من مدته
-  breakAlertBeeps: 4       // 🔔 بعد ما مدة البريك تخلص: بيرن كام مرة (مرة كل دقيقة) جوه فترة السماح
+  breakAlertBeeps: 4,      // 🔔 بعد ما مدة البريك تخلص: بيرن كام مرة (مرة كل دقيقة) جوه فترة السماح
+  maxShiftHours: 14,       // 🚨 أطول شيفت معقول — فوق كده يبقى "نسيت الانصراف" مش شغل
+  overtimeNeedsApproval: true   // ⏱️ الأوفرتايم مبيتدفعش غير بموافقة المالك (قرار المالك)
 };
 
 // 🎯 درجة الالتزام من رصيد الساعات (بديل العد بالمخالفات)
@@ -989,6 +998,58 @@ function breakAlertState(brk, cfg, nowTs){
   };
 }
 
+/* 🚨 شيفتات مفتوحة أطول من المعقول = نسيان انصراف
+   قرار المالك: **مبنقفلهاش تلقائي** — بننبّه بس، وهو يقفلها من "يوم سماح". */
+function forgottenShifts(shifts, cfg, nowTs){
+  cfg = cfg || (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
+  const now = Number(nowTs) || Date.now();
+  const maxMin = (Number(cfg.maxShiftHours) || 14) * 60;
+  return (shifts || []).filter(s=>{
+    if(!s || s.clockOutTs || !s.clockInTs) return false;
+    return Math.round((now - s.clockInTs)/60000) > maxMin;
+  });
+}
+
+/* ⏱️ الشيفتات اللي ليها أوفرتايم مستني موافقة المالك */
+function pendingOvertimeShifts(shifts){
+  return (shifts || []).filter(s=>
+    s && s.otRequiresApproval && (Number(s.overtimeMinutes)||0) > 0 && s.overtimeDecision === 'pending');
+}
+
+/* 🚫 الغياب مبيتحسبش غير بعد ما الشيفت يخلص
+   ------------------------------------------------------------
+   الباج: الحساب كان بيقارن أيام الشغل اللي "عدّت" لحد **دلوقتي** بأيام
+   الحضور. يعني الساعة 11 الصبح والشيفت بيبدأ 2 الضهر → اليوم بيتحسب
+   يوم شغل مطلوب والموظفة لسه ماجتش → غياب وخصم في لوحة المرتب،
+   وهي أصلًا لسه معادهاش جه. القاعدة دلوقتي: اليوم مبيتحكمش عليه
+   غير بعد ما شيفت الموظفة نفسها يخلص. */
+function shiftEndTsForDay(emp, dayDate, cCfg){
+  const sdef = (cCfg && cCfg.shifts) ? cCfg.shifts[emp && emp.shift] : null;
+  const endHM   = (emp && emp.scheduledEndTime)   || (sdef && sdef.end)   || '';
+  const startHM = (emp && emp.scheduledStartTime) || (sdef && sdef.start) || '';
+  if(!/^\d{1,2}:\d{2}$/.test(String(endHM))) return null;
+  const parts = String(endHM).split(':').map(Number);
+  const e = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), parts[0], parts[1], 0, 0);
+  // شيفت بيعدّي نص الليل (يبدأ 6 مساءً وينتهي 2 فجرًا) → بيخلص تاني يوم
+  if(/^\d{1,2}:\d{2}$/.test(String(startHM)) && _hm2min(endHM) <= _hm2min(startHM)) e.setDate(e.getDate()+1);
+  return e.getTime();
+}
+function lastAbsenceJudgeDay(emp, nowTs, cCfg){
+  const now = Number(nowTs) || Date.now();
+  let d = new Date(now);
+  for(let i = 0; i < 3; i++){
+    const endTs = shiftEndTsForDay(emp, d, cCfg);
+    if(endTs == null){
+      // مفيش ميعاد مسجّل → اليوم بيتحسب بعد ما يخلص بالكامل
+      const eod = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59,999).getTime();
+      if(now >= eod) break;
+    }else if(now >= endTs) break;
+    d = new Date(d.getTime() - 86400000);
+  }
+  d.setHours(23,59,59,999);
+  return d;
+}
+
 // ساعات التبديلات: الأول مجاني، واللي بعده بساعاته
 function swapHoursFrom(swapCount, cfg){
   cfg = cfg || timeCfgDefaults;
@@ -1028,12 +1089,42 @@ function deductionAmount(days, monthlySalary){
 
 // 🚪 ساعات الانصراف بدري — نفس منطق التأخير
 // clockOutDate = وقت الانصراف الفعلي · shiftEnd = "HH:MM" نهاية شيفته
-function earlyLeaveHours(clockOutDate, shiftEnd, cfg){
+/* ⏰ نهاية شيفت الموظف كـ **طابع زمني** (مش ساعة في اليوم)
+   ------------------------------------------------------------
+   ⚠️ الباج اللي ده بيقفله: earlyLeaveHours كان بيقارن ساعة الخروج بساعة
+   نهاية الشيفت كأرقام في نفس اليوم. لو الموظفة نسيت الانصراف وسجّلته
+   تاني يوم الصبح 11 وشيفتها بينتهي 22:00 → النظام يفهمها "مشيت بدري
+   11 ساعة" = 66 ساعة رصيد = 9 أيام خصم من مرتبها. بالطابع الزمني
+   الخروج بعد نهاية الشيفت مبيطلّعش أي "بدري" مهما عدّى الوقت. */
+function expectedShiftEndTs(shift, emp, cCfg){
+  if(!shift || !shift.clockInTs) return null;
+  const cfg = cCfg || (typeof complianceCfg !== 'undefined' ? complianceCfg : null);
+  const sdef = (cfg && cfg.shifts) ? cfg.shifts[emp && emp.shift] : null;
+  const endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
+  if(!/^\d{1,2}:\d{2}$/.test(String(endHM))) return null;
+  const parts = String(endHM).split(':').map(Number);
+  const base = new Date(shift.clockInTs);
+  const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), parts[0], parts[1], 0, 0);
+  if(e.getTime() <= shift.clockInTs) e.setDate(e.getDate() + 1);   // شيفت بيعدّي نص الليل
+  return e.getTime();
+}
+
+// 🚪 ساعات الانصراف بدري — نفس منطق التأخير
+// clockOutDate = وقت الانصراف الفعلي · shiftEnd = "HH:MM" نهاية شيفته
+// expectedEndTs (اختياري) = نهاية الشيفت كطابع زمني — لو اتبعت بيتحسب بيه
+//   وده الصح، لأن مقارنة "ساعة اليوم" بتنهار لو الخروج اتسجّل بعد نص الليل.
+function earlyLeaveHours(clockOutDate, shiftEnd, cfg, expectedEndTs){
   cfg = cfg || timeCfgDefaults;
-  if(!clockOutDate || !shiftEnd) return { earlyMin: 0, hours: 0 };
-  const outMin = clockOutDate.getHours()*60 + clockOutDate.getMinutes();
-  const endMin = _hm2min(shiftEnd);
-  const earlyMin = Math.max(0, endMin - outMin);
+  if(!clockOutDate) return { earlyMin: 0, hours: 0 };
+  let earlyMin;
+  if(expectedEndTs){
+    earlyMin = Math.max(0, Math.round((Number(expectedEndTs) - clockOutDate.getTime()) / 60000));
+  }else{
+    if(!shiftEnd) return { earlyMin: 0, hours: 0 };
+    const outMin = clockOutDate.getHours()*60 + clockOutDate.getMinutes();
+    const endMin = _hm2min(shiftEnd);
+    earlyMin = Math.max(0, endMin - outMin);
+  }
   const per = Number(cfg.earlyMinPerHour) || 10;
   let hours = Math.floor(earlyMin / per);
   const cap = Number(cfg.maxLateHoursPerDay) || 0;
@@ -1133,6 +1224,11 @@ window.todayStr = todayStr;
 window.lateHoursFrom = lateHoursFrom;
 window.breakHoursFrom = breakHoursFrom;
 window.breakAlertState = breakAlertState;
+window.expectedShiftEndTs = expectedShiftEndTs;
+window.shiftEndTsForDay = shiftEndTsForDay;
+window.lastAbsenceJudgeDay = lastAbsenceJudgeDay;
+window.forgottenShifts = forgottenShifts;
+window.pendingOvertimeShifts = pendingOvertimeShifts;
 window.swapHoursFrom = swapHoursFrom;
 window.earlyLeaveHours = earlyLeaveHours;
 window.absenceHoursFrom = absenceHoursFrom;
@@ -1342,6 +1438,7 @@ function applyBranchFilter(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport();
+    renderOvertimeApprovals();
     renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
@@ -2202,21 +2299,42 @@ async function clockOut(empId, photoDataUri){
   // for lateness: if the employee arrived late, they simply need to work
   // past 8h15m of ACTUAL time before it counts as overtime, regardless of
   // what time of day their shift started or ends.
+  /* ⏱️ الأوفرتايم بيتسجّل بس **مش بيتدفع تلقائي** (قرار المالك).
+     ------------------------------------------------------------
+     الباج اللي ده بيقفله: الحساب كان (المدة − 8:15) من غير أي سقف.
+     موظفة نسيت الانصراف وسجّلته تاني يوم → 1440 − 495 = 945 دقيقة
+     = ~15.75 ساعة أوفرتايم **مدفوعة** من غير ما حد يوافق.
+     دلوقتي: الرقم بيتسجّل زي ما هو للمراجعة، والمرتب مبياخدش منه
+     غير الدقايق اللي المالك يعتمدها من لوحة "أوفرتايم مستني موافقتك". */
   const STANDARD_SHIFT_MINUTES = 8*60 + 15; // 495
   const totalMin = Math.round((now - shift.clockInTs)/60000);
   const overtimeMinutes = Math.max(0, totalMin - STANDARD_SHIFT_MINUTES);
 
-  // 🚪 انصراف بدري: نقارن وقت الخروج بنهاية شيفت الموظف
   const cfg = window.timeCfg || timeCfgDefaults;
+  const maxShiftMin = (Number(cfg.maxShiftHours) || 14) * 60;
+  // 🚨 شيفت أطول من المعقول = نسيان انصراف، مش شغل
+  const forgotten = totalMin > maxShiftMin;
+
+  // 🚪 انصراف بدري: بالطابع الزمني لنهاية الشيفت (مش بساعة اليوم)
   let earlyInfo = { earlyMin: 0, hours: 0 };
   const shiftDef = complianceCfg.shifts[emp && emp.shift];
   const shiftEnd = (emp && emp.scheduledEndTime) || (shiftDef && shiftDef.end);
-  if(shiftEnd) earlyInfo = earlyLeaveHours(new Date(now), shiftEnd, cfg);
+  const endTs = expectedShiftEndTs(shift, emp, complianceCfg);
+  // ⛔ الشيفت المنسي مبياخدش خصم انصراف بدري خالص — هي اتأخرت مش مشيت بدري
+  if(!forgotten && (endTs || shiftEnd)) earlyInfo = earlyLeaveHours(new Date(now), shiftEnd, cfg, endTs);
 
   try{
     await updateDoc(doc(db,'sales_shifts', shift.id), {
       clockOutTs: now, overtimeMinutes, clockOutPhoto: photoDataUri || null,
-      earlyMin: earlyInfo.earlyMin, earlyHours: earlyInfo.hours
+      earlyMin: earlyInfo.earlyMin, earlyHours: earlyInfo.hours,
+      // ⏱️ العلامة دي هي اللي بتخلي المرتب يستنى الموافقة. الشيفتات القديمة
+      //    (اللي اتقفلت قبل التحديث) مفيهاش العلامة، فبتفضل شغالة بالقديم —
+      //    مفيش تغيير بأثر رجعي (قرار المالك).
+      otRequiresApproval: true,
+      overtimeApprovedMin: 0,
+      overtimeDecision: overtimeMinutes > 0 ? 'pending' : 'none',
+      shiftMinutes: totalMin,
+      forgotClockOut: forgotten || false
     });
     // نسجّل ساعات الانصراف بدري في رصيد الوقت
     if(earlyInfo.hours > 0){
@@ -2231,7 +2349,7 @@ async function clockOut(empId, photoDataUri){
     const h = Math.floor(totalMin/60), m = totalMin%60;
     let msg = `تم تسجيل الانصراف ✅\nمدة الشيفت: ${h} س ${m} د`;
     if(earlyInfo.hours > 0) msg += `\n🚪 مشيت ${earlyInfo.earlyMin} دقيقة بدري → ${earlyInfo.hours} ساعة رصيد`;
-    if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة`;
+    if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة (مستني موافقة الإدارة)`;
     alert(msg);
   }catch(err){
     console.error('تعذر تسجيل الانصراف', err);
@@ -4500,7 +4618,7 @@ const ADMIN_TAB_GROUPS = [
       'المهام الأسبوعية','مراجعة تنفيذ','المهام المؤكدة','سجل المكافآت'] },
   { id:'money', label:'💵 الفلوس', keys:[
       'عمولة النقط','سجل دفع العمولات','الرواتب الشهرية','سجل صرف الرواتب',
-      'سجل السلف','إعدادات السلف'] },
+      'سجل السلف','إعدادات السلف','أوفرتايم مستني'] },
   { id:'orders',label:'🛒 الطلبات', keys:[
       'طلبات النواقص','أوردرات الموظفين','أكواد دعوة'] },
   { id:'reports',label:'📊 تقارير', keys:[
@@ -4924,7 +5042,7 @@ function computeSalary(emp, periodStart, end){
   }
 
   if(notYetHired){
-    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, timeCreditHours:0, timeCreditDays:0, timeCreditDeduction:0, adminDeductions:0, dayOffBonusDays:0, extraOffDaysBonus:0, dayOffBonusAmount:0, advancesTotal:0, advCash:0, advOrders:0, netSalary:0, daysInCalc:0, notYetHired:true };
+    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, overtimePendingMin:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, timeCreditHours:0, timeCreditDays:0, timeCreditDeduction:0, adminDeductions:0, dayOffBonusDays:0, extraOffDaysBonus:0, dayOffBonusAmount:0, advancesTotal:0, advCash:0, advOrders:0, netSalary:0, daysInCalc:0, notYetHired:true };
   }
 
   const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
@@ -4936,7 +5054,16 @@ function computeSalary(emp, periodStart, end){
     : baseSalary;
 
   const rangeShifts = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime());
-  const overtimeMinutes = rangeShifts.reduce((sum,s)=> sum + (s.overtimeMinutes||0), 0);
+  /* ⏱️ الأوفرتايم المدفوع = المعتمد بس.
+     الشيفتات اللي اتقفلت بعد التحديث بتيجي وعليها `otRequiresApproval` —
+     دي مبتتدفعش غير بالدقايق اللي المالك اعتمدها. الشيفتات الأقدم مفيهاش
+     العلامة فبتتحسب زي الأول بالظبط (مفيش تغيير بأثر رجعي — قرار المالك).
+     ⚠️ من غير الفصل ده، شيفت منسي واحد (24 ساعة) كان بيدفع ~15.75 ساعة. */
+  const overtimeMinutes = rangeShifts.reduce((sum,s)=>
+    sum + (s.otRequiresApproval ? (Number(s.overtimeApprovedMin)||0) : (Number(s.overtimeMinutes)||0)), 0);
+  // المستني موافقة (معروض بس — مش داخل الحساب)
+  const overtimePendingMin = rangeShifts.reduce((sum,s)=>
+    sum + ((s.otRequiresApproval && s.overtimeDecision === 'pending') ? (Number(s.overtimeMinutes)||0) : 0), 0);
   const overtimePay = Math.round((overtimeMinutes/60) * hourlyRate * 100)/100;
 
   // Real unauthorized-absence detection: compare how many work days (excluding
@@ -4955,7 +5082,10 @@ function computeSalary(emp, periodStart, end){
   }
 
   const now = new Date();
-  const elapsedEnd = now < end ? now : end;
+  let elapsedEnd = now < end ? now : end;
+  // 🚫 اليوم مبيتحسبش غياب قبل ما شيفتها يخلص (ولا حتى في معاينة المرتب)
+  const _judge = lastAbsenceJudgeDay(emp, now.getTime(), (typeof complianceCfg !== 'undefined' ? complianceCfg : null));
+  if(_judge < elapsedEnd) elapsedEnd = _judge;
   const elapsedWorkDays = elapsedEnd < absenceRangeStart ? 0 : countRequiredWorkDaysInRange(emp, absenceRangeStart, elapsedEnd);
   const attendedDays = elapsedEnd < absenceRangeStart ? 0 : countAttendedDaysInRange(emp.id, absenceRangeStart, elapsedEnd);
   const absenceDays = Math.max(0, elapsedWorkDays - attendedDays);
@@ -4969,24 +5099,14 @@ function computeSalary(emp, periodStart, end){
   const extraOffDays = Math.max(0, absenceDays - dayOffOccurrences);
   const deductionAmount = Math.round(extraOffDays * dailyRate * 100)/100;
 
-  // Bonus for working ON the scheduled day off instead of resting: for every
-  // occurrence of the employee's weekly day off within the period where they
-  // actually clocked in anyway, they earn an extra day's pay.
-  let dayOffBonusDays = 0;
-  if(emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== ''){
-    const cur = new Date(start);
-    while(cur <= end){
-      if(cur.getDay() === Number(emp.dayOff)){
-        const dayKey = cur.getFullYear()+'-'+cur.getMonth()+'-'+cur.getDate();
-        const workedThatDay = rangeShifts.some(s=>{
-          const d = new Date(s.clockInTs);
-          return (d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()) === dayKey;
-        });
-        if(workedThatDay) dayOffBonusDays++;
-      }
-      cur.setDate(cur.getDate()+1);
-    }
-  }
+  /* 🎁 مكافأة اشتغال يوم الإجازة = **الصافي** مش كل مرة
+     ------------------------------------------------------------
+     الباج: كل مرة تشتغل في يوم إجازتها كانت بتاخد يوم زيادة فورًا —
+     حتى لو بدّلت وارتاحت يوم تاني بدله. يعني التبديل كان بيتدفع كأنه
+     شغل إضافي. القاعدة دلوقتي: بنعدّ آخر الشهر — أيام الحضور الفعلية
+     ناقص أيام الشغل المطلوبة. بدّلت (اشتغلت الجمعة وارتاحت التلات)؟
+     العدد متساوي → مفيش زيادة. اشتغلت فوق المطلوب فعلًا؟ الفرق بيتدفع. */
+  const dayOffBonusDays = Math.max(0, attendedDays - elapsedWorkDays);
   const dayOffBonusAmount = Math.round(dayOffBonusDays * dailyRate * 100)/100;
 
   // ⏳ خصم رصيد الوقت — الوصلة اللي كانت ناقصة في المحرك كله:
@@ -5025,7 +5145,7 @@ function computeSalary(emp, periodStart, end){
   const advOrders = Math.round((advancesTotal - advCash) * 100)/100;
 
   const netSalary = Math.round((proratedBase - deductionAmount - timeCreditDeduction - adminDeductions + overtimePay + dayOffBonusAmount - advancesTotal) * 100)/100;
-  return { proratedBase, overtimeMinutes, overtimePay, dayOffOccurrences, extraOffDays, deductionAmount,
+  return { proratedBase, overtimeMinutes, overtimePay, overtimePendingMin, dayOffOccurrences, extraOffDays, deductionAmount,
            timeCreditHours, timeCreditDays, timeCreditDeduction, adminDeductions,
            dayOffBonusDays, dayOffBonusAmount, advancesTotal, advCash, advOrders, netSalary, daysInCalc, notYetHired:false };
 }
@@ -6130,3 +6250,84 @@ function renderAdvancesLog(){
     }catch(e){}
   })();
 })();
+
+/* ============================================================
+   ⏱️ لوحة "أوفرتايم مستني موافقتك"
+   ------------------------------------------------------------
+   قرار المالك: الأوفرتايم مبيتدفعش تلقائي خالص. الشيفت بيتسجّل بدقايقه،
+   والمرتب مبياخد منه غير اللي يتعتمد هنا. ده اللي بيمنع تكرار حادثة
+   "نسيت الانصراف → 15 ساعة أوفرتايم مدفوعة" من غير ما حد ياخد باله.
+   ============================================================ */
+function _otFmt(ts){
+  try{ return new Date(ts).toLocaleString('ar-EG', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); }
+  catch(e){ return ''; }
+}
+function renderOvertimeApprovals(){
+  const host = document.getElementById('overtimeApprovals');
+  if(!host) return;
+  const br = window.currentBranch;
+  const list = pendingOvertimeShifts((window.allShifts||[]).filter(s=> s.branch === br))
+    .sort((a,b)=> (b.clockInTs||0) - (a.clockInTs||0));
+  if(!list.length){
+    host.innerHTML = '<p style="color:var(--sub); font-size:12.5px; margin:0;">مفيش أوفرتايم مستني موافقة ✅</p>';
+    return;
+  }
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const maxMin = (Number(cfg.maxShiftHours) || 14) * 60;
+  host.innerHTML = list.map(s=>{
+    const mins = Number(s.overtimeMinutes)||0;
+    const dur  = Number(s.shiftMinutes) || Math.round(((s.clockOutTs||0) - (s.clockInTs||0))/60000);
+    const susp = s.forgotClockOut || dur > maxMin;
+    return `<div style="border:1px solid ${susp?'#7f1d1d':'var(--line)'}; background:${susp?'#2a1111':'var(--panel2)'};
+                border-radius:12px; padding:11px 13px; margin-bottom:9px;">
+      <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:center;">
+        <b style="font-size:13.5px;">${s.employeeName||''}</b>
+        <span style="font-size:12px; color:var(--sub);">${_otFmt(s.clockInTs)} ← ${_otFmt(s.clockOutTs)}</span>
+      </div>
+      <div style="font-size:12.5px; margin-top:5px;">
+        مدة الشيفت <b>${Math.floor(dur/60)} س ${dur%60} د</b> ·
+        أوفرتايم مطلوب <b style="color:var(--gold);">${mins} دقيقة</b>
+      </div>
+      ${susp ? '<div style="font-size:12px; color:#ff9a9d; font-weight:800; margin-top:5px;">🚨 شكله نسيان انصراف مش شغل فعلي — راجعه كويس</div>' : ''}
+      <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:9px;">
+        <button data-ot-full="${s.id}" style="flex:1; min-width:96px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--gold-dim); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">✅ اعتمد كامل</button>
+        <button data-ot-part="${s.id}" style="flex:1; min-width:96px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">✏️ اعتمد جزء</button>
+        <button data-ot-no="${s.id}"   style="flex:1; min-width:96px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:#ff9a9d; font-family:'Cairo'; font-weight:800; cursor:pointer;">🚫 مش معتمد</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  host.querySelectorAll('[data-ot-full]').forEach(b=>
+    b.addEventListener('click', ()=> decideOvertime(b.dataset.otFull, 'full')));
+  host.querySelectorAll('[data-ot-part]').forEach(b=>
+    b.addEventListener('click', ()=> decideOvertime(b.dataset.otPart, 'part')));
+  host.querySelectorAll('[data-ot-no]').forEach(b=>
+    b.addEventListener('click', ()=> decideOvertime(b.dataset.otNo, 'none')));
+}
+window.renderOvertimeApprovals = renderOvertimeApprovals;
+
+async function decideOvertime(shiftId, kind){
+  const s = (window.allShifts||[]).find(x=> x.id === shiftId);
+  if(!s) return;
+  const asked = Number(s.overtimeMinutes)||0;
+  let approved = 0;
+  if(kind === 'full') approved = asked;
+  else if(kind === 'part'){
+    const v = prompt('اعتمد كام دقيقة أوفرتايم؟ (المطلوب ' + asked + ' دقيقة)', String(Math.min(asked, 60)));
+    if(v === null) return;
+    approved = Math.max(0, Math.min(asked, Math.round(Number(v)||0)));   // 🧢 مينفعش يزيد عن المسجّل
+  }
+  const emp = (window.employees||[]).find(e=> e.id === s.employeeId);
+  const nice = approved > 0 ? (approved + ' دقيقة') : 'مفيش (مش معتمد)';
+  if(!confirm('أوفرتايم ' + ((emp && emp.name) || s.employeeName || '') + '\n\nالمعتمد: ' + nice + '\n\nده اللي هيتدفع في المرتب. تكمّل؟')) return;
+  try{
+    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_shifts', shiftId), {
+      overtimeApprovedMin: approved,
+      overtimeDecision: approved > 0 ? 'approved' : 'rejected',
+      overtimeDecidedAt: Date.now(),
+      overtimeDecidedBy: (typeof adminRole !== 'undefined' ? adminRole : '') || ''
+    });
+    renderOvertimeApprovals();
+  }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
+}
+window.decideOvertime = decideOvertime;
