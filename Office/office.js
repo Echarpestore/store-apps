@@ -87,6 +87,89 @@ function expensesMonthTotal(expenses, mk){
   }, 0);
 }
 
+/* ============================================================
+   💵 معاك في إيدك — الكاش الفعلي
+   ------------------------------------------------------------
+   الفكرة: المالك بيحدد المبلغ اللي معاه **دلوقتي** (رصيد افتتاحي بتاريخه)،
+   وبعدها النظام بيمشي لوحده: بيضيف كاش الفروع وبيخصم اللي اتصرف.
+
+   ⚠️ قرارات محسوبة في الدالة دي:
+   · **كاش بس** (payments.cash) — فلوس الفيزا بتروح لحساب Paymob مش لإيده.
+     من غير الفصل ده الرقم بيطلع أكبر من الحقيقة بكتير.
+   · فواتير العكس **بتتحسب** (مدفوعاتها سالبة) — الفلوس رجعت للعميلة فعلًا،
+     فالمرتجع بيقلّل الكاش زي ما هو بالظبط.
+   · الرواتب من **المصروف الفعلي** (sales_salary_payments) مش المستحق —
+     المستحق مخرجش من الدرج.
+   · المكافآت **المعتمدة بس** — اللي مستنية موافقة لسه ماتصرفتش.
+   ============================================================ */
+function _ohTs(x){
+  if(!x) return 0;
+  if(x.ts) return Number(x.ts) || 0;
+  if(x.paidAt) return Number(x.paidAt) || 0;
+  if(x.earnedAt) return Number(x.earnedAt) || 0;
+  if(x.date){ const t = Date.parse(String(x.date) + 'T12:00:00'); return isNaN(t) ? 0 : t; }
+  return 0;
+}
+function cashOnHand(base, data, nowTs){
+  const from = Number(base && base.atMs) || 0;
+  const to = Number(nowTs) || Date.now();
+  const opening = Number(base && base.amount) || 0;
+  const inWin = function(t){ return t > from && t <= to; };
+
+  let cashIn = 0;
+  (data.sales || []).forEach(function(s){
+    const t = _saleMs(s);
+    if(!inWin(t)) return;
+    const p = s.payments || {};
+    cashIn += Number(p.cash) || 0;     // 💵 كاش بس — الفيزا مش في إيدك
+  });
+
+  const sumOf = function(arr){
+    return (arr || []).reduce(function(a, x){
+      return inWin(_ohTs(x)) ? a + (Number(x.amount) || 0) : a;
+    }, 0);
+  };
+  const advances = sumOf(data.advances);
+  const salaries = sumOf(data.salaryPays);
+  const expenses = sumOf(data.expenses);
+  const rewards = (data.rewards || []).reduce(function(a, r){
+    if(!r || (r.status && r.status !== 'approved')) return a;   // المستني مش متصرف
+    return inWin(_ohTs(r)) ? a + (Number(r.amount) || 0) : a;
+  }, 0);
+
+  const out = advances + salaries + expenses + rewards;
+  return { opening: opening, cashIn: cashIn, advances: advances, salaries: salaries,
+           expenses: expenses, rewards: rewards, out: out,
+           now: Math.round((opening + cashIn - out) * 100) / 100,
+           from: from, to: to };
+}
+
+/* 📅 حركة الكاش يوم بيوم (لآخر n يوم) */
+function cashDaily(base, data, nowTs, days){
+  const to = Number(nowTs) || Date.now();
+  const n = Math.max(1, Number(days) || 7);
+  const out = [];
+  for(let i = 0; i < n; i++){
+    const d = new Date(to - i * 86400000);
+    const st = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const en = st + 86400000 - 1;
+    if(en < (Number(base && base.atMs) || 0)) break;   // قبل ما يحدد رصيده = مش بتاعنا
+    const a = cashOnHand({ amount: 0, atMs: Math.max(st - 1, Number(base && base.atMs) || 0) },
+                         data, Math.min(en, to));
+    out.push({ dayMs: st, inAmt: a.cashIn, outAmt: a.out, net: a.cashIn - a.out });
+  }
+  return out;
+}
+
+/* ⚠️ office بيحمّل مبيعات آخر 30 يوم بس — فالرصيد الافتتاحي ميقدرش يبقى
+   أقدم من كده وإلا الفواتير القديمة تقع بره النافذة والرقم يبوظ. */
+const OH_STALE_DAYS = 25;
+function cashBaseStale(base, nowTs){
+  const at = Number(base && base.atMs) || 0;
+  if(!at) return false;
+  return ((Number(nowTs) || Date.now()) - at) > OH_STALE_DAYS * 86400000;
+}
+
 // الأكثر مبيعًا لفرع: تجميع قطع آخر N يوم من الفواتير (استبعاد المرتجع والعكس والاستبدال)
 function topSellers(sales, branch, limit){
   const agg = {};
@@ -200,6 +283,7 @@ function profitReport(data, mk){
 // للاختبارات
 if (typeof window !== 'undefined'){
   window.officeCalc = { merchantBalance:merchantBalance, expensesMonthTotal:expensesMonthTotal,
+    cashOnHand:cashOnHand, cashDaily:cashDaily, cashBaseStale:cashBaseStale,
     topSellers:topSellers, branchQtyOf:branchQtyOf, salarySummary:salarySummary, buildInbox:buildInbox, profitReport:profitReport };
 }
 
@@ -593,6 +677,7 @@ document.querySelectorAll('#tabsNav button').forEach(function(b){
     b.classList.add('on');
     document.getElementById('page-' + b.dataset.page).classList.add('on');
     // ⚡ بيانات التقارير بتتحمّل أول ما تفتح التبويب — مش في الخلفية طول الوقت
+    if(b.dataset.page === 'cash'){ try{ renderCashHand(); }catch(e){ console.warn('cash', e); } }
     if(b.dataset.page === 'reports'){
       try{ loadCustomers(); loadRatings(); }catch(e){ console.warn('reports load', e); }
     }
@@ -610,7 +695,7 @@ const OF_RECUR_COL = 'office_recurring';
 
 const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], expenses:[],
             employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[],
-            recurring:[], openShifts:[] };
+            recurring:[], openShifts:[], salaryPays:[], rewards:[], cashBase:null };
 let started = false;
 let firstLoadDone = false;
 const seenIds = {};   // عشان الإشعار يطلع للجديد بس
@@ -870,6 +955,7 @@ function startData(){
   db.collection('office_expenses').onSnapshot(function(s){
     D.expenses = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     renderExpenses(); renderPL();
+    try{ renderCashHand(); }catch(e){}
     try{ ofRenderRecurring(); }catch(e){ console.warn('recurring', e); }   // حالة "اتدفع" بتتغير
   });
   // 🔁 قوالب المصاريف المتكررة
@@ -896,6 +982,19 @@ function startData(){
     try{ ofRenderPresent(); }catch(e){ console.warn('present', e); }
   }, function(e){ console.warn('present sync', e && e.code); });
 
+  // 💵 المصروف الفعلي للرواتب والمكافآت — للكاش اللي في الإيد
+  db.collection('sales_salary_payments').onSnapshot(function(s){
+    D.salaryPays = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    try{ renderCashHand(); }catch(e){}
+  }, function(e){ console.warn('salary pays sync', e && e.code); });
+  db.collection('sales_rewards').onSnapshot(function(s){
+    D.rewards = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    try{ renderCashHand(); }catch(e){}
+  }, function(e){ console.warn('rewards sync', e && e.code); });
+  db.collection('pos_test_settings').doc('office_cash').onSnapshot(function(d){
+    D.cashBase = d.exists ? (d.data() || null) : null;
+    try{ renderCashHand(); }catch(e){}
+  }, function(e){ console.warn('cash base sync', e && e.code); });
   db.collection('sales_advances').onSnapshot(function(s){
     D.advances = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     renderSalaries(); renderPL();
@@ -946,6 +1045,7 @@ function loadSales(){
       }
       D.sales.forEach(function(x){ const t = _saleMs(x); if(t > _salesTo) _salesTo = t; });
       renderTop();
+      try{ renderCashHand(); }catch(e){}
     }).catch(function(e){ console.warn('sales load', e); });
 }
 
@@ -3699,3 +3799,80 @@ function ofWireOpenings(){
     }
   };
 }
+
+/* ============================================================
+   💵 تبويب "معاك في إيدك"
+   ============================================================ */
+function renderCashHand(){
+  const host = document.getElementById('cashHandBody');
+  if(!host) return;
+  const base = D.cashBase;
+  if(!base || !base.atMs){
+    host.innerHTML = '<div class="empty">💵 حدّد المبلغ اللي معاك دلوقتي عشان نبدأ نحسب</div>'
+      + '<button class="btn" onclick="ofSetCashBase()" style="width:100%; margin-top:10px;">✏️ معايا دلوقتي كام؟</button>';
+    return;
+  }
+  const now = Date.now();
+  const c = cashOnHand(base, D, now);
+  const stale = cashBaseStale(base, now);
+  const row = function(lbl, val, sign){
+    const col = sign < 0 ? 'var(--bad)' : (sign > 0 ? 'var(--good)' : 'var(--muted)');
+    return '<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line); font-size:13px;">'
+      + '<span>' + lbl + '</span><b style="color:' + col + ';">' + (sign < 0 ? '−' : (sign > 0 ? '+' : '')) + egp(Math.abs(val)) + '</b></div>';
+  };
+  const days = cashDaily(base, D, now, 7);
+
+  host.innerHTML =
+    '<div style="text-align:center; padding:18px 12px; background:var(--card); border:1px solid var(--line); border-radius:16px;">'
+    + '<div class="muted" style="font-size:12px;">معاك في إيدك دلوقتي</div>'
+    + '<div style="font-size:34px; font-weight:900; color:' + (c.now < 0 ? 'var(--bad)' : 'var(--good)') + '; margin:4px 0;">'
+    + egp(c.now) + '</div>'
+    + '<div class="muted" style="font-size:11px;">من ' + dstr(base.atMs) + ' لحد دلوقتي</div>'
+    + '</div>'
+
+    + (stale ? '<div style="background:#2a1111; border:1px solid #7f1d1d; color:#ff9a9d; border-radius:12px; padding:11px 13px; margin-top:10px; font-size:12.5px; font-weight:700;">'
+        + '⚠️ عدّى ' + OH_STALE_DAYS + ' يوم على آخر مرة حدّدت فيها رصيدك. التطبيق بيقرا مبيعات آخر 30 يوم بس — '
+        + 'عدّ اللي معاك دلوقتي وحدّده من تاني عشان الرقم يفضل مظبوط.</div>' : '')
+
+    + '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
+    + row('الرصيد اللي حدّدته', c.opening, 0)
+    + row('💵 كاش الفروع', c.cashIn, 1)
+    + row('🤝 سلف', c.advances, -1)
+    + row('💼 رواتب اتصرفت', c.salaries, -1)
+    + row('🎁 مكافآت', c.rewards, -1)
+    + row('🧾 مصاريف', c.expenses, -1)
+    + '<div style="display:flex; justify-content:space-between; padding:10px 0 2px; font-size:15px; font-weight:900;">'
+    + '<span>الصافي</span><span>' + egp(c.now) + '</span></div>'
+    + '</div>'
+
+    + '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
+    + '<div style="font-weight:800; font-size:13px; margin-bottom:6px;">📅 آخر أيام</div>'
+    + (days.length ? days.map(function(d){
+        return '<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line); font-size:12.5px;">'
+          + '<span>' + dstr(d.dayMs) + '</span>'
+          + '<span><span style="color:var(--good);">+' + egp(d.inAmt) + '</span> · '
+          + '<span style="color:var(--bad);">−' + egp(d.outAmt) + '</span> · '
+          + '<b>' + (d.net >= 0 ? '+' : '−') + egp(Math.abs(d.net)) + '</b></span></div>';
+      }).join('') : '<div class="muted" style="font-size:12px;">لسه مفيش حركة</div>')
+    + '</div>'
+
+    + '<button class="btn" onclick="ofSetCashBase()" style="width:100%; margin-top:12px;">✏️ عدّ الفلوس وحدّدها من تاني</button>'
+    + '<div class="hint" style="margin-top:8px;">الفيزا مش محسوبة هنا — بتروح لحساب Paymob مش لإيدك.</div>';
+}
+window.renderCashHand = renderCashHand;
+
+async function ofSetCashBase(){
+  const cur = D.cashBase && D.cashBase.amount != null ? String(D.cashBase.amount) : '';
+  const v = prompt('عدّ اللي معاك دلوقتي بالظبط واكتبه.\nكل حاجة بعد كده هتتحسب من الرقم ده.', cur);
+  if(v === null) return;
+  const amount = Math.round((Number(v) || 0) * 100) / 100;
+  if(!isFinite(amount) || amount < 0){ alert('رقم مش صح'); return; }
+  if(!confirm('الرصيد الجديد: ' + egp(amount) + '\n\nالحساب هيبدأ من دلوقتي. تكمّل؟')) return;
+  try{
+    await db.collection('pos_test_settings').doc('office_cash').set({
+      amount: amount, atMs: Date.now(), by: 'office'
+    }, { merge: true });
+    // ✅ مش بنحدّث D يدوي — الـsnapshot هو اللي بيحدّثه (مصدر واحد للحقيقة)
+  }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
+}
+window.ofSetCashBase = ofSetCashBase;
