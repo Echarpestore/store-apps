@@ -3896,12 +3896,34 @@ function renderCashHand(){
   const host = document.getElementById('cashHandBody');
   if(!host) return;
   const base = D.cashBase;
+  const now = Date.now();
+
+  /* 💳 كارت Paymob مستقل تمامًا عن رصيد الكاش — الفيزا محسوبة من الفواتير
+     نفسها، فمفيش سبب يخليه مستني لحد ما المالك يعدّ اللي في إيده.
+     ⚠️ كان متعرّف **بعد** فحص الرصيد، فمكانش بيظهر خالص قبل التحديد. */
+  const pmBase = (base && base.atMs) ? base : { amount: 0, atMs: 0 };
+  const pm = paymobLedger(pmBase, D, now);
+  const pmCard = function(){
+    return '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
+      + '<div style="display:flex; justify-content:space-between; align-items:center;">'
+      + '<span style="font-weight:800; font-size:13px;">💳 فلوسك عند Paymob</span>'
+      + '<b style="font-size:19px; color:' + (pm.due > 0 ? 'var(--warn)' : 'var(--muted)') + ';">' + egp(pm.due) + '</b></div>'
+      + (pm.due > 0 ? '<div class="muted" style="font-size:11.5px; margin-top:3px;">'
+          + 'متوقع يوصلك منها ≈ <b>' + egp(pm.dueNet) + '</b> (بعد ' + pm.effPct + '%)</div>' : '')
+      + '<div class="muted" style="font-size:11.5px; margin-top:5px;">'
+      + 'فيزا اتباعت ' + egp(pm.visaSales) + ' · اتحصّل ' + egp(pm.grossCleared)
+      + (pm.fees ? ' · عمولة ' + egp(pm.fees) : '') + '</div>'
+      + '<button class="btn" onclick="ofAddSettlement()" style="width:100%; margin-top:9px;">💰 وصلني تحويل</button>'
+      + '<div class="hint" style="margin-top:6px;">اكتب الإجمالي والصافي زي ما هما من شاشة Paymob — الخصومات بتتحسب لوحدها.</div>'
+      + '</div>';
+  };
+
   if(!base || !base.atMs){
-    host.innerHTML = '<div class="empty">💵 حدّد المبلغ اللي معاك دلوقتي عشان نبدأ نحسب</div>'
-      + '<button class="btn" onclick="ofSetCashBase()" style="width:100%; margin-top:10px;">✏️ معايا دلوقتي كام؟</button>';
+    host.innerHTML = '<div class="empty">💵 حدّد المبلغ اللي معاك دلوقتي عشان نبدأ نحسب الكاش</div>'
+      + '<button class="btn" onclick="ofSetCashBase()" style="width:100%; margin-top:10px;">✏️ معايا دلوقتي كام؟</button>'
+      + pmCard();
     return;
   }
-  const now = Date.now();
   const c = cashOnHand(base, D, now);
   // 🔄 الترحيل التلقائي: office بيحمّل مبيعات آخر 30 يوم بس، فلو نقطة
   //    البداية قدمت، الفواتير القديمة بتقع بره النافذة والرقم بينقص بهدوء.
@@ -3915,22 +3937,6 @@ function renderCashHand(){
   };
   const days = cashDaily(base, D, now, 7);
 
-  // 💳 كارت "فلوسك عند Paymob"
-  const pm = paymobLedger(base, D, now);
-  const pmCard = function(){
-    return '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
-      + '<div style="display:flex; justify-content:space-between; align-items:center;">'
-      + '<span style="font-weight:800; font-size:13px;">💳 فلوسك عند Paymob</span>'
-      + '<b style="font-size:19px; color:' + (pm.due > 0 ? 'var(--warn)' : 'var(--muted)') + ';">' + egp(pm.due) + '</b></div>'
-      + (pm.due > 0 ? '<div class="muted" style="font-size:11.5px; margin-top:3px;">'
-          + 'متوقع يوصلك منها ≈ <b>' + egp(pm.dueNet) + '</b> (بعد ' + pm.effPct + '%)</div>' : '')
-      + '<div class="muted" style="font-size:11.5px; margin-top:5px;">'
-      + 'فيزا اتباعت ' + egp(pm.visaSales) + ' · اتحصّل ' + egp(pm.grossCleared)
-      + (pm.fees ? ' · عمولة ' + egp(pm.fees) : '') + '</div>'
-      + '<button class="btn" onclick="ofAddSettlement()" style="width:100%; margin-top:9px;">💰 وصلني تحويل</button>'
-      + '<div class="hint" style="margin-top:6px;">اكتب اللي نزل عندك بالظبط — العمولة (' + PAYMOB_FEE_PCT + '%) بتتحسب لوحدها.</div>'
-      + '</div>';
-  };
 
   host.innerHTML =
     '<div style="text-align:center; padding:18px 12px; background:var(--card); border:1px solid var(--line); border-radius:16px;">'
