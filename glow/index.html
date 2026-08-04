@@ -671,8 +671,20 @@ function initPushForCustomer(){
           if(!token || !currentCustomer) return;
           var saved = localStorage.getItem('glow_fcm_' + currentCustomer.phone);
           if(saved === token) return;
-          db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).update(
-            (function(){ var u={}; u['fcmTokens.'+token]={ brand: CATALOG_BRAND, ts: Date.now() }; return u; })()
+          db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set(
+            (function(){
+              // 🔑 التوكن بيتخزن **عنصر في مصفوفة** مش مفتاح حقل.
+              //    الغلط القديم: التوكن كان بيتحط كاسم حقل — وFirestore بيقرا أي
+              //    نقطة جوه التوكن كفاصل مسارات، فالتوكن كان بيتشرشح
+              //    لمستويات متداخلة ويتخزن مقطوع → الإشعار مبيوصلش أبدًا.
+              //    والبراند اتحط في **اسم الحقل** عشان نفضل عارفين كل توكن
+              //    لأنهي تطبيق من غير ما نحتاج نخزّن كائنات (arrayUnion
+              //    بيكرّر الكائنات لو أي حقل جواها اتغير).
+              var u = {};
+              u['fcmTokens_' + CATALOG_BRAND] = firebase.firestore.FieldValue.arrayUnion(token);
+              u['fcmTokenAt'] = Date.now();
+              return u;
+            })(), { merge: true }
           ).then(function(){
             localStorage.setItem('glow_fcm_' + currentCustomer.phone, token);
           }).catch(function(e){ console.warn('fcm token save', e); });
