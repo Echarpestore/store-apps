@@ -2720,6 +2720,7 @@ window.paymobApproved = false;
 // 🔌 بيقفل المتابعة الحالية بس (شريحة كارت خلصت أو اتلغت) —
 // الشرائح المؤكدة وبياناتها بتفضل زي ما هي عشان الكارت التاني يكمّل عليها
 function paymobResetActive(){
+  try{ paymobStuckClear(); }catch(e){}
   // 🔴 باج: الكود القديم كان بينادي paymobReset() كامل مع كل إرسال للماكينة،
   // وهي كانت بتصفّر _paymobAutoFired. لما اتقسمت الدالة عشان الكارتين، التصفير
   // ده ضاع — فأول ما الحارس يعلق على true (لو حصل خطأ بعد الطباعة)، كل الفواتير
@@ -2957,6 +2958,8 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
       if(paymobApproved) return true;   // اتعالجت خلاص — منع التكرار
       paymobApproved = true; window.paymobApproved = true;
       paymobWaitBar(false);
+      // 🛟 من لحظة القبول: لو الفاتورة ماتحفظتش خلال 20 ثانية، الكاشير هتعرف ليه
+      try{ paymobStuckStart(orderRef); }catch(e){}
       // 💳 بنحتفظ ببيانات الكارت عشان تتطبع في الفاتورة وتتسجل مع البيعة
       const _txn = {
         seq: seq,
@@ -3930,4 +3933,112 @@ if(typeof window !== 'undefined' && typeof setInterval === 'function'){
   setInterval(function(){
     try{ watchBranchBreaks(); renderPosBreakAlert(); }catch(e){}
   }, 10000);
+}
+
+/* ============================================================
+   🛟 حارس الفاتورة المعلّقة بعد قبول الدفع
+   ------------------------------------------------------------
+   حصلت مرتين: الدفع بالفيزا اتقبل (الماكينة طبعت موافقة) والشاشة
+   فضلت ساكتة — لا فاتورة اتحفظت ولا ورقة طلعت، والكاشير قدام عميلة
+   مش عارفة تعمل إيه.
+
+   ⚠️ الحارس ده **مش إصلاح للسبب** — السبب لسه بيتحدد من البيانات.
+   ده بيحوّل التعليق الصامت لحاجة قابلة للتصرف: بعد 10 ثواني من
+   القبول والفاتورة لسه ماتحفظتش → بانر أحمر بيقول إيه اللي واقف
+   بالظبط + زرار حفظ يدوي + تسجيل الحالة في pos_activity_log عشان
+   نعرف أنهي مسار من التلاتة بيحصل فعلًا.
+
+   الزرار بينادي confirmPayment() العادية — بكل حراسها (منع التكرار،
+   تأكيد الشرائح المعلّقة، تطبيع المدفوعات). مفيش أي مسار جديد للفلوس.
+   ============================================================ */
+/* ⏱️ 10 ثواني. مينفعش أقل من كده: أبطأ حفظ **طبيعي** بياخد ~6.5 ثانية
+   (رقم الفاتورة 2.5 + كتابة البيعة 4) — لو نزّلناها تحت كده الكاشير
+   هتشوف بانر أحمر على فواتير سليمة كل ما النت يتقل، وتبطّل تصدّقه. */
+var PM_STUCK_MS = 10000;
+var _pmStuck = null;      // { ref, at, timer, logged }
+
+function paymobStuckStart(orderRef){
+  paymobStuckClear();
+  _pmStuck = { ref: orderRef || null, at: Date.now(), timer: null, logged: false };
+  _pmStuck.timer = setInterval(paymobStuckTick, 1000);
+}
+window.paymobStuckStart = paymobStuckStart;
+
+function paymobStuckClear(){
+  if(_pmStuck && _pmStuck.timer){ try{ clearInterval(_pmStuck.timer); }catch(e){} }
+  _pmStuck = null;
+  var box = document.getElementById('paymobStuckBox');
+  if(box){ box.style.display = 'none'; box.innerHTML = ''; }
+}
+window.paymobStuckClear = paymobStuckClear;
+
+/* ليه الفاتورة لسه واقفة؟ — دالة نقية عشان تتختبر
+   بترجع null لو مفيش مشكلة، أو { reason, canSave } */
+function paymobStuckReason(st){
+  if(!st) return null;
+  if(!st.approved) return null;              // الدفع لسه ماتقبلش — ده مسار تاني
+  if(!st.cartCount) return null;             // السلة اتفضّت = الفاتورة اتحفظت
+  if(st.elapsedMs < PM_STUCK_MS) return null;
+  if(st.saving) return { reason:'الحفظ لسه شغال على الشبكة — استنى شوية', canSave:false };
+  if(st.autoFired) return { reason:'الطباعة التلقائية اتنفذت بس الفاتورة ماكملتش الحفظ', canSave:true };
+  if(st.skipReason) return { reason:'الحفظ التلقائي اتوقف: ' + st.skipReason, canSave:true };
+  return { reason:'الدفع اتقبل والحفظ التلقائي ما اشتغلش', canSave:true };
+}
+window.paymobStuckReason = paymobStuckReason;
+
+function paymobStuckTick(){
+  if(!_pmStuck) return;
+  var st = {
+    approved: !!window.paymobApproved,
+    cartCount: (typeof cart !== 'undefined' && cart) ? cart.length : 0,
+    elapsedMs: Date.now() - _pmStuck.at,
+    saving: !!_confirmSaving,
+    autoFired: !!_paymobAutoFired,
+    skipReason: window._paymobLastSkip || null
+  };
+  // ✅ الفاتورة خلصت (السلة اتفضّت) → الحارس بيقفل نفسه
+  if(!st.cartCount || !st.approved){ paymobStuckClear(); return; }
+  var r = paymobStuckReason(st);
+  if(!r) return;
+
+  // 📝 بيتسجل مرة واحدة بس — ده الدليل اللي هيحدد السبب الجذري
+  if(!_pmStuck.logged && typeof _logActivity === 'function'){
+    _pmStuck.logged = true;
+    try{ _logActivity('paymob_stuck', {
+      ref: _pmStuck.ref, waitedMs: st.elapsedMs, reason: r.reason,
+      saving: st.saving, autoFired: st.autoFired, skip: st.skipReason,
+      legs: (typeof cardLegs !== 'undefined' && cardLegs) ? cardLegs.length : 0,
+      online: (typeof navigator !== 'undefined') ? navigator.onLine : null
+    }); }catch(e){}
+  }
+  paymobStuckRender(r);
+}
+
+function paymobStuckRender(r){
+  var box = document.getElementById('paymobStuckBox');
+  if(!box) return;
+  var info = (window.paymobCardInfo || {});
+  var tail = info.last4 ? (' •' + info.last4) : '';
+  var ref  = (_pmStuck && _pmStuck.ref) ? _pmStuck.ref : (info.orderRef || '');
+  box.style.display = 'block';
+  box.innerHTML =
+    '<div style="background:#7f1d1d; color:#fff; border-radius:12px; padding:13px 15px; text-align:center;">'
+    + '<div style="font-weight:900; font-size:16px;">🛟 الدفع اتقبل' + _bkEsc(tail) + ' — بس الفاتورة لسه ماتحفظتش</div>'
+    + '<div style="font-size:13px; font-weight:700; margin-top:5px; opacity:.95;">' + _bkEsc(r.reason) + '</div>'
+    + (ref ? '<div style="font-size:11.5px; margin-top:4px; opacity:.85; direction:ltr;">' + _bkEsc(ref) + '</div>' : '')
+    + '<div style="font-size:12px; margin-top:7px; opacity:.9;">متعملش العملية تاني على الماكينة — الفلوس اتسحبت خلاص</div>'
+    + (r.canSave
+        ? '<button id="pmStuckSaveBtn" style="margin-top:10px; width:100%; padding:12px; border:none;'
+          + ' border-radius:10px; background:#fff; color:#7f1d1d; font-family:\'Cairo\'; font-weight:900;'
+          + ' font-size:15px; cursor:pointer;">💾 احفظ واطبع دلوقتي</button>'
+        : '')
+    + '</div>';
+  var btn = document.getElementById('pmStuckSaveBtn');
+  if(btn) btn.addEventListener('click', function(){
+    if(typeof _logActivity === 'function'){
+      try{ _logActivity('paymob_stuck_rescue', { ref: ref }); }catch(e){}
+    }
+    // نفس مسار الحفظ العادي بكل حراسه — مفيش طريق جانبي للفلوس
+    try{ confirmPayment(); }catch(e){ console.warn('rescue save', e); }
+  });
 }
