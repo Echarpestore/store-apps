@@ -142,9 +142,34 @@ async function openCustomerProfile(phone){
       ratings = rs.docs.map(d=>d.data()).sort((a,b)=> b.ts - a.ts);
     }catch(e){}
 
+    // 🔁 المرتجعات: فاتورة عكس كاملة أو سطر مرتجع جوه فاتورة بيع
+    let returnCount = 0, returnValue = 0;
+    sales.forEach(s=>{
+      const retLines = (s.items||[]).filter(it=> it.isReturn || (it.price||0) < 0);
+      if(s.isReversal){ returnCount++; returnValue += Math.abs(s.total||0); }
+      else if(retLines.length){
+        returnCount++;
+        returnValue += retLines.reduce((a,it)=> a + Math.abs((it.price||0) * (it.qty||1)), 0);
+      }
+    });
+
+    // 🏬 الفرع اللي بتشتري منه أكتر
+    const byBranch = {};
+    sales.forEach(s=> { if(s.branch) byBranch[s.branch] = (byBranch[s.branch]||0) + 1; });
+    const topBranch = Object.entries(byBranch).sort((a,b)=> b[1]-a[1])[0] || null;
+
+    const times = sales.map(saleTime).filter(t=> t > 0).sort((a,b)=> a-b);
+    const firstTs = times.length ? times[0] : null;
+    const lastTs  = times.length ? times[times.length-1] : null;
+    // 📅 متوسط الفترة بين الزيارات (بالأيام) — محتاج زيارتين على الأقل
+    const gapDays = times.length > 1
+      ? Math.round((times[times.length-1] - times[0]) / (times.length - 1) / 86400000) : null;
+    const daysSince = lastTs ? Math.floor((Date.now() - lastTs) / 86400000) : null;
+
     _cp = { phone, c, sales: sales.sort((a,b)=> saleTime(b)-saleTime(a)), realCount: realInvoices.length,
             spend: lifetimeSpend, avg: realInvoices.length? lifetimeSpend/realInvoices.length : 0,
-            lastTs: sales.length? Math.max(...sales.map(saleTime)) : null,
+            lastTs, firstTs, gapDays, daysSince, returnCount, returnValue,
+            topBranch, lastEmp: sales.length ? (sales[0].employeeName || '') : '',
             fav: Object.entries(fav).sort((a,b)=> b[1]-a[1]).slice(0,6), pts, ratings };
     renderCustProfile();
   }catch(e){ wrap.innerHTML = '<div class="empty-cart">تعذر التحميل: ' + e.message + '</div>'; }
@@ -160,7 +185,7 @@ function renderCustProfile(){
     <div style="color:var(--muted); font-size:9.5px;">${label}</div>
     <div style="font-weight:900; font-size:14px; color:${color||'var(--text)'};">${value}</div></div>`;
 
-  const tabs = [ ['invoices','🗂️ المشتريات'], ['points','📊 النقاط'], ['ratings','⭐ التقييم'], ['notes','📝 ملاحظات'] ];
+  const tabs = [ ['invoices','🗂️ المشتريات'], ['points','📊 النقاط'], ['rewards','🎁 المكافآت'], ['ratings','⭐ التقييم'], ['notes','📝 ملاحظات'] ];
   const tabBar = `<div style="display:flex; gap:5px; background:var(--panel2); border-radius:11px; padding:4px; margin-bottom:10px;">
     ${tabs.map(([id,l])=>`<button onclick="_cpTab='${id}'; renderCustProfile();" style="flex:1; padding:9px 4px; border-radius:8px; border:none; cursor:pointer; font-weight:800; font-size:11.5px; ${_cpTab===id?'background:var(--panel); color:var(--text); box-shadow:0 2px 6px rgba(0,0,0,.25);':'background:none; color:var(--muted);'}">${l}</button>`).join('')}
   </div>`;
@@ -191,6 +216,23 @@ function renderCustProfile(){
       </div>`;
     }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:14px 0;">لسه مفيش حركات نقاط (بتتسجّل تلقائي من الفواتير)</div>');
   }
+  else if(_cpTab === 'rewards'){
+    // 🎁 المكافآت متخزّنة في مصفوفة جوه مستند العميل (arrayUnion من شاشة المكافأة)
+    const rw = (c.rewards || []).slice().sort((a,b)=> (b.ts||0) - (a.ts||0));
+    const now = Date.now();
+    body = rw.length ? rw.map(r=>{
+      const expired = (r.expiry||0) < now;
+      const state = r.used ? ['✅ اتصرفت','var(--muted)'] : (expired ? ['⌛ خلصت','var(--minus)'] : ['🟢 سارية','var(--plus)']);
+      const val = r.type === 'percent' ? (r.value + '%') : (r.value + ' ج.م');
+      return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:12.5px;">
+        <div><b>${val}</b>${r.minInvoice? ` <span style="color:var(--muted); font-size:10.5px;">(فاتورة ${r.minInvoice}+)</span>`:''}
+          <div style="color:var(--muted); font-size:10.5px; margin-top:1px;">
+            ${r.ts? new Date(r.ts).toLocaleDateString('ar-EG',{day:'2-digit',month:'short'}):'—'}
+            · تنتهي ${r.expiry? new Date(r.expiry).toLocaleDateString('ar-EG',{day:'2-digit',month:'short'}):'—'}</div></div>
+        <span style="font-weight:800; color:${state[1]};">${state[0]}</span>
+      </div>`;
+    }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:14px 0;">لسه مفيش مكافآت اتبعتت</div>';
+  }
   else if(_cpTab === 'ratings'){
     const RM = {1:{l:'😠 مضايقني جدًا', c:'var(--minus)'}, 2:{l:'🙁 مش عاجبني', c:'var(--warn)'}, 3:{l:'🙂 كويس', c:'var(--text)'}, 4:{l:'😍 عجبني جدًا', c:'var(--plus)'}};
     body = d.ratings.length ? d.ratings.slice(0,15).map(r=>{
@@ -207,20 +249,64 @@ function renderCustProfile(){
     <button onclick="saveCustomerNotes('${d.phone}')" style="margin-top:8px; width:100%; padding:11px; border-radius:9px; border:none; background:var(--accent); color:#fff; font-weight:800; cursor:pointer; font-size:12.5px;">💾 حفظ الملاحظات</button>`;
   }
 
+  // 📱 حالة الولاء: مسجّلة في التطبيق؟ إشعاراتها شغالة؟
+  const inApp   = !!(c.loyaltyCode || c.loyaltyPin || String(c.source||'').indexOf('loyalty_app') === 0);
+  const hasPush = custHasPush(c);
+  const badge = (txt, ok)=> `<span style="background:${ok?'rgba(34,197,94,.14)':'var(--panel2)'}; color:${ok?'var(--plus)':'var(--muted)'};
+    border:1px solid ${ok?'rgba(34,197,94,.35)':'var(--border)'}; border-radius:99px; padding:4px 10px; font-size:10.5px; font-weight:800;">${txt}</span>`;
+
+  const regTs = c.createdAt ? (c.createdAt.toMillis ? c.createdAt.toMillis() : Number(c.createdAt)) : null;
+  const dstr = (t)=> t ? new Date(t).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
+  const waPhone = String(d.phone||'').replace(/[^0-9]/g,'').replace(/^0/, '20');
+
+  const gone = d.daysSince == null ? '' :
+    (d.daysSince <= 0 ? 'النهاردة'
+     : (d.gapDays && d.daysSince > d.gapDays * 2
+        ? `<span style="color:var(--minus); font-weight:800;">غايبة من ${d.daysSince} يوم ⚠️</span>`
+        : `غايبة من ${d.daysSince} يوم`));
+
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:13px; margin-bottom:10px;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-        <div><div style="font-size:14.5px; font-weight:800;">${c.name || 'بدون اسم'}</div>
-        <div style="color:var(--muted); font-size:11.5px; direction:ltr; text-align:right;">${d.phone}</div></div>
+        <div style="min-width:0;">
+          <div style="font-size:14.5px; font-weight:800;">${c.name || 'بدون اسم'}
+            <button onclick="editCustomerName('${d.phone}')" title="تعديل الاسم"
+              style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; padding:2px 4px;">✏️</button></div>
+          <div style="color:var(--muted); font-size:11.5px; direction:ltr; text-align:right;">${d.phone}</div>
+        </div>
         <button onclick="openRewardModal('${d.phone}')" style="padding:9px 14px; border-radius:9px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer; font-size:11.5px; flex-shrink:0;">🎁 مكافأة</button>
       </div>
+
+      <div style="display:flex; gap:6px; margin-top:9px;">
+        <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener" style="flex:1; text-align:center; text-decoration:none; padding:8px; border-radius:9px; background:var(--panel2); border:1px solid var(--border); color:var(--text); font-size:11.5px; font-weight:800;">💬 واتساب</a>
+        <a href="tel:${d.phone}" style="flex:1; text-align:center; text-decoration:none; padding:8px; border-radius:9px; background:var(--panel2); border:1px solid var(--border); color:var(--text); font-size:11.5px; font-weight:800;">📞 اتصال</a>
+      </div>
+
+      <div style="display:flex; gap:5px; flex-wrap:wrap; margin-top:9px; justify-content:center;">
+        ${badge(inApp ? '📱 مسجّلة في التطبيق' : '📱 مش على التطبيق', inApp)}
+        ${badge(hasPush ? '🔔 إشعاراتها شغالة' : '🔕 مفيش إشعارات', hasPush)}
+      </div>
+
       <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;">
         ${chip('الإنفاق', d.spend.toFixed(0)+' ج.م', 'var(--plus)')}
         ${chip('فواتير', d.realCount)}
         ${chip('المتوسط', d.avg.toFixed(0))}
         ${chip('نقاط', ptsBal, 'var(--warn)')}
       </div>
-      <div style="color:var(--muted); font-size:10.5px; margin-top:7px; text-align:center;">🕐 آخر زيارة: ${lastStr}</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">
+        ${chip('مرتجعات', d.returnCount + (d.returnValue ? ` · ${d.returnValue.toFixed(0)}ج` : ''), d.returnCount ? 'var(--minus)' : 'var(--muted)')}
+        ${chip('كل قد إيه', d.gapDays != null ? d.gapDays + ' يوم' : '—')}
+        ${chip('فرعها', d.topBranch ? d.topBranch[0] : '—')}
+      </div>
+
+      <div style="color:var(--muted); font-size:10.5px; margin-top:8px; text-align:center; line-height:1.9;">
+        🕐 آخر زيارة: ${lastStr}${gone ? ' · ' + gone : ''}<br>
+        📅 مسجّلة من ${dstr(regTs)} · أول شرا ${dstr(d.firstTs)}${d.lastEmp ? ' · آخر كاشير: ' + d.lastEmp : ''}
+      </div>
+
+      ${hasPerm('canRedeemManual') ? `<button onclick="editCustomerPoints('${d.phone}')"
+        style="width:100%; margin-top:9px; padding:9px; border-radius:9px; border:1px solid var(--border);
+        background:var(--panel2); color:var(--muted); font-family:'Cairo'; font-weight:800; font-size:11.5px; cursor:pointer;">⚖️ تعديل النقط يدوي</button>` : ''}
     </div>
     ${tabBar}
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:13px;">${body}</div>`;
@@ -331,3 +417,69 @@ async function renderPdTimeline(productId){
     document.getElementById('pdTimelineList').innerHTML = '<div style="color:var(--minus);">تعذر التحميل: ' + e.message + '</div>';
   }
 }
+
+/* ============================================================
+   ✏️ تعديل اسم العميل
+   ------------------------------------------------------------
+   الاسم كان بيتكتب مرة واحدة بس وقت التسجيل ومفيش أي طريق لتعديله
+   بعدها — لو الكاشير كتبته غلط بيفضل غلط للأبد.
+   ⚠️ الاسم بس. الرقم هو **معرّف المستند** — تغييره نقل مش تعديل
+      (مستند جديد + ترحيل النقط + تحديث كل الفواتير القديمة).
+   ============================================================ */
+async function editCustomerName(phone){
+  const cur = (_cp && _cp.c && _cp.c.name) || '';
+  const name = await askText({
+    title: '✏️ تعديل اسم العميل',
+    message: 'الرقم ' + phone + ' مش هيتغير — الاسم بس.',
+    value: cur, placeholder: 'اسم العميل', okText: 'حفظ'
+  });
+  if(name === null) return;
+  const clean = String(name).trim();
+  if(!clean){ showToast('الاسم ماينفعش يبقى فاضي', 'err'); return; }
+  if(clean === cur) return;
+  try{
+    await db.collection(TEST_CUSTOMERS).doc(phone).set({ name: clean }, { merge:true });
+    _cp.c.name = clean;
+    document.getElementById('custProfTitle').textContent = '👤 ' + clean;
+    renderCustProfile();
+    _logActivity('customer_name_edit', { phone, from: cur, to: clean });
+    showToast('الاسم اتغيّر ✅');
+  }catch(e){ showToast('تعذر الحفظ: ' + e.message, 'err'); }
+}
+window.editCustomerName = editCustomerName;
+
+/* ⚖️ تعديل النقط يدوي — بصلاحية وتسجيل
+   النقط فلوس فعليًا (بتتحوّل خصم في الفاتورة)، فالتعديل هنا:
+   · محجوب على الكاشير (نفس صلاحية الاستبدال اليدوي)
+   · لازم سبب مكتوب
+   · بيتسجل في pos_activity_log بالقديم والجديد */
+async function editCustomerPoints(phone){
+  if(!hasPerm('canRedeemManual')){ showToast('مش من صلاحياتك', 'err'); return; }
+  const field = pointsFieldFor(currentBranch);
+  const cur = Number((_cp && _cp.c && _cp.c[field]) || 0);
+  const v = await askText({
+    title: '⚖️ تعديل رصيد النقط',
+    message: 'الرصيد الحالي: ' + cur + ' نقطة\nاكتب الرصيد الجديد (مش الفرق).',
+    value: String(cur), type: 'number', okText: 'التالي'
+  });
+  if(v === null) return;
+  const next = Math.round(Number(v));
+  if(!isFinite(next) || next < 0){ showToast('رقم مش صح', 'err'); return; }
+  if(next === cur) return;
+  const why = await askText({
+    title: '📝 السبب',
+    message: 'من ' + cur + ' لـ ' + next + ' نقطة. السبب هيتسجّل.',
+    placeholder: 'مثال: تعويض عن خطأ في فاتورة', okText: 'حفظ', danger:true
+  });
+  if(why === null) return;
+  const reason = String(why).trim();
+  if(!reason){ showToast('لازم تكتب السبب', 'err'); return; }
+  try{
+    await db.collection(TEST_CUSTOMERS).doc(phone).set({ [field]: next }, { merge:true });
+    _cp.c[field] = next;
+    renderCustProfile();
+    _logActivity('customer_points_edit', { phone, field, from: cur, to: next, diff: next - cur, reason });
+    showToast('الرصيد اتعدّل ✅');
+  }catch(e){ showToast('تعذر الحفظ: ' + e.message, 'err'); }
+}
+window.editCustomerPoints = editCustomerPoints;

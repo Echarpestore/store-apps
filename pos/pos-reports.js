@@ -1,6 +1,22 @@
 // 📱 إحصائيات تحميل التطبيق — بتتحسب من بيانات العميل نفسها
 // hasApp: عنده توكن إشعارات = التطبيق متسطّب وفاتح فعلًا
 // fromApp: اتسجّل من التطبيق (source بيبدأ بـ loyalty_app أو glow_app)
+/* 🔔 عنده توكن إشعارات؟ — بيقرا الشكلين:
+   · الجديد: fcmTokens_echarpe / fcmTokens_glow (مصفوفات)
+   · القديم: fcmTokens (خريطة بمفاتيح توكنات — كانت بتتقطّع لو التوكن فيه نقطة)
+   لازم الاتنين لأن العملاء القدام لسه بياناتهم بالشكل القديم لحد ما
+   يفتحوا التطبيق تاني. */
+function custHasPush(c){
+  if(!c) return false;
+  if(Array.isArray(c.fcmTokens_echarpe) && c.fcmTokens_echarpe.length) return true;
+  if(Array.isArray(c.fcmTokens_glow) && c.fcmTokens_glow.length) return true;
+  const t = c.fcmTokens;
+  if(Array.isArray(t)) return t.length > 0;
+  if(t && typeof t === 'object') return Object.keys(t).length > 0;
+  return !!t;
+}
+window.custHasPush = custHasPush;
+
 function customerAppStats(list){
   const out = { hasApp:0, fromApp:0, fromCashier:0, bySource:{ qr:0, receipt:0, emp:0, other:0 },
                 welcomeGranted:0, welcomeUsed:0, welcomePoints:0 };
@@ -19,8 +35,7 @@ function customerAppStats(list){
     if(usedWl) out.welcomeUsed++;
     // اللي مكافأته كانت نقط (مش قسيمة) مالهاش سطر في rewards
     if(gotWelcome && !hasWlReward) out.welcomePoints++;
-    const t = c.fcmTokens;
-    const hasToken = Array.isArray(t) ? t.length > 0 : (t && typeof t === 'object' ? Object.keys(t).length > 0 : !!t);
+    const hasToken = custHasPush(c);
     if(hasToken) out.hasApp++;
     const src = String(c.source || '');
     if(/^(loyalty_app|glow_app)/.test(src)){
