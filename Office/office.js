@@ -137,10 +137,16 @@ function cashOnHand(base, data, nowTs){
     return inWin(_ohTs(r)) ? a + (Number(r.amount) || 0) : a;
   }, 0);
 
+  // 💳 تحويلات Paymob: الصافي بس هو اللي بينزل في إيدك (العمولة اتخصمت قبل ما توصل)
+  const settled = (data.settlements || []).reduce(function(a, x){
+    return inWin(_ohTs(x)) ? a + (Number(x.net) || 0) : a;
+  }, 0);
+
   const out = advances + salaries + expenses + rewards;
-  return { opening: opening, cashIn: cashIn, advances: advances, salaries: salaries,
+  return { opening: opening, cashIn: cashIn, settled: settled,
+           advances: advances, salaries: salaries,
            expenses: expenses, rewards: rewards, out: out,
-           now: Math.round((opening + cashIn - out) * 100) / 100,
+           now: Math.round((opening + cashIn + settled - out) * 100) / 100,
            from: from, to: to };
 }
 
@@ -168,6 +174,83 @@ function cashBaseStale(base, nowTs){
   const at = Number(base && base.atMs) || 0;
   if(!at) return false;
   return ((Number(nowTs) || Date.now()) - at) > OH_STALE_DAYS * 86400000;
+}
+
+/* ============================================================
+   💳 فلوسك عند Paymob
+   ------------------------------------------------------------
+   كل فاتورة فيزا فلوسها بتروح لـPaymob مش لإيدك. لما التحويل يوصل،
+   المالك بيسجّل **اللي نزل عنده فعلًا (الصافي)**، والنظام بيرجّع
+   الإجمالي المقابل له ويطلّع العمولة.
+
+   ⚠️ درس من تحويل حقيقي: **العمولة مش نسبة ثابتة**.
+      · عملية ماستركارد واحدة: 525.00 → 10.19 رسوم = 1.94%
+      · تحويل مجمّع: 74,033.39 → 1,305.16 رسوم = **1.763%**
+      السبب إن التحويل بيجمّع كروت بنسب مختلفة (ميزة أرخص من فيزا/ماستر).
+      وكمان فيه بند **"تسويات"** (مرتجعات/تسويات بنكية) مالوش علاقة بالعمولة.
+      عشان كده المالك بيكتب **الإجمالي والصافي زي ما هما من شاشة Paymob**
+      والفرق هو الخصومات — من غير أي تخمين. النسبة تحت للتقدير بس.
+   ============================================================ */
+const PAYMOB_FEE_PCT = 1.94;
+
+function paymobFeeOn(gross, pct){
+  const p = (pct == null ? PAYMOB_FEE_PCT : Number(pct)) / 100;
+  return Math.round((Number(gross) || 0) * p * 100) / 100;
+}
+// اللي نزل عندك صافي → الإجمالي اللي اتقفل بيه من رصيدك عند Paymob
+function paymobGrossFromNet(net, pct){
+  const p = (pct == null ? PAYMOB_FEE_PCT : Number(pct)) / 100;
+  if(p >= 1) return 0;
+  return Math.round(((Number(net) || 0) / (1 - p)) * 100) / 100;
+}
+
+/* 📈 نسبتك الفعلية — بتتعلّم من تحويلاتك المسجّلة
+   ------------------------------------------------------------
+   العملية الواحدة بالكارت 1.94% (3 إيصالات بيضبطوا بالمليم)، لكن
+   التحويل المجمّع طلع 1.763% — يعني جواه عمليات بنسبة أقل (ميزة).
+   فبدل ما نقدّر برقم ثابت غلط، بنحسب المتوسط الموزون من اللي اتسجّل
+   فعلًا. ولحد ما يبقى فيه تحويل واحد على الأقل، بنستخدم 1.94%. */
+function paymobEffectivePct(settlements, fallback){
+  let g = 0, d = 0;
+  (settlements || []).forEach(function(x){
+    const gr = Number(x && x.gross) || 0;
+    if(gr <= 0) return;
+    const nt = Number(x.net) || 0;
+    if(nt <= 0 || nt > gr) return;
+    g += gr; d += (gr - nt);
+  });
+  if(g <= 0) return (fallback == null ? PAYMOB_FEE_PCT : Number(fallback));
+  return Math.round((d / g) * 10000) / 100;
+}
+
+function paymobLedger(base, data, nowTs){
+  const from = Number(base && base.atMs) || 0;
+  const to = Number(nowTs) || Date.now();
+  const inWin = function(t){ return t > from && t <= to; };
+
+  let visaSales = 0;
+  (data.sales || []).forEach(function(s){
+    const t = _saleMs(s);
+    if(!inWin(t)) return;
+    visaSales += Number((s.payments || {}).visa) || 0;
+  });
+
+  let netReceived = 0, grossCleared = 0;
+  (data.settlements || []).forEach(function(x){
+    const t = _ohTs(x);
+    if(!inWin(t)) return;
+    const net = Number(x.net) || 0;
+    netReceived += net;
+    grossCleared += Number(x.gross) || paymobGrossFromNet(net, x.feePct);
+  });
+
+  const fees = Math.round((grossCleared - netReceived) * 100) / 100;
+  const due = Math.round((visaSales - grossCleared) * 100) / 100;
+  const pct = paymobEffectivePct(data.settlements, PAYMOB_FEE_PCT);
+  return { visaSales: visaSales, netReceived: netReceived, grossCleared: grossCleared,
+           fees: fees, due: due, effPct: pct,
+           // 💡 المتوقع يوصلك من الباقي — تقدير بنسبتك الفعلية مش برقم ثابت
+           dueNet: Math.round(due * (1 - pct/100) * 100) / 100 };
 }
 
 // الأكثر مبيعًا لفرع: تجميع قطع آخر N يوم من الفواتير (استبعاد المرتجع والعكس والاستبدال)
@@ -284,6 +367,8 @@ function profitReport(data, mk){
 if (typeof window !== 'undefined'){
   window.officeCalc = { merchantBalance:merchantBalance, expensesMonthTotal:expensesMonthTotal,
     cashOnHand:cashOnHand, cashDaily:cashDaily, cashBaseStale:cashBaseStale,
+    paymobLedger:paymobLedger, paymobFeeOn:paymobFeeOn, paymobGrossFromNet:paymobGrossFromNet,
+    paymobEffectivePct:paymobEffectivePct,
     topSellers:topSellers, branchQtyOf:branchQtyOf, salarySummary:salarySummary, buildInbox:buildInbox, profitReport:profitReport };
 }
 
@@ -695,7 +780,7 @@ const OF_RECUR_COL = 'office_recurring';
 
 const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], expenses:[],
             employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[],
-            recurring:[], openShifts:[], salaryPays:[], rewards:[], cashBase:null };
+            recurring:[], openShifts:[], salaryPays:[], rewards:[], cashBase:null, settlements:[] };
 let started = false;
 let firstLoadDone = false;
 const seenIds = {};   // عشان الإشعار يطلع للجديد بس
@@ -991,6 +1076,10 @@ function startData(){
     D.rewards = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     try{ renderCashHand(); }catch(e){}
   }, function(e){ console.warn('rewards sync', e && e.code); });
+  db.collection('office_paymob_settlements').onSnapshot(function(s){
+    D.settlements = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    try{ renderCashHand(); }catch(e){}
+  }, function(e){ console.warn('settlements sync', e && e.code); });
   db.collection('pos_test_settings').doc('office_cash').onSnapshot(function(d){
     D.cashBase = d.exists ? (d.data() || null) : null;
     try{ renderCashHand(); }catch(e){}
@@ -3814,13 +3903,34 @@ function renderCashHand(){
   }
   const now = Date.now();
   const c = cashOnHand(base, D, now);
-  const stale = cashBaseStale(base, now);
+  // 🔄 الترحيل التلقائي: office بيحمّل مبيعات آخر 30 يوم بس، فلو نقطة
+  //    البداية قدمت، الفواتير القديمة بتقع بره النافذة والرقم بينقص بهدوء.
+  //    بدل ما نطلب منه يعدّ الفلوس، بنثبّت الرصيد الحالي كنقطة بداية جديدة
+  //    ونكمّل منها — نفس الرقم بالظبط، بس بتاريخ جديد.
+  if(cashBaseStale(base, now)) { ofRollCashBase(c.now); }
   const row = function(lbl, val, sign){
     const col = sign < 0 ? 'var(--bad)' : (sign > 0 ? 'var(--good)' : 'var(--muted)');
     return '<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line); font-size:13px;">'
       + '<span>' + lbl + '</span><b style="color:' + col + ';">' + (sign < 0 ? '−' : (sign > 0 ? '+' : '')) + egp(Math.abs(val)) + '</b></div>';
   };
   const days = cashDaily(base, D, now, 7);
+
+  // 💳 كارت "فلوسك عند Paymob"
+  const pm = paymobLedger(base, D, now);
+  const pmCard = function(){
+    return '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
+      + '<div style="display:flex; justify-content:space-between; align-items:center;">'
+      + '<span style="font-weight:800; font-size:13px;">💳 فلوسك عند Paymob</span>'
+      + '<b style="font-size:19px; color:' + (pm.due > 0 ? 'var(--warn)' : 'var(--muted)') + ';">' + egp(pm.due) + '</b></div>'
+      + (pm.due > 0 ? '<div class="muted" style="font-size:11.5px; margin-top:3px;">'
+          + 'متوقع يوصلك منها ≈ <b>' + egp(pm.dueNet) + '</b> (بعد ' + pm.effPct + '%)</div>' : '')
+      + '<div class="muted" style="font-size:11.5px; margin-top:5px;">'
+      + 'فيزا اتباعت ' + egp(pm.visaSales) + ' · اتحصّل ' + egp(pm.grossCleared)
+      + (pm.fees ? ' · عمولة ' + egp(pm.fees) : '') + '</div>'
+      + '<button class="btn" onclick="ofAddSettlement()" style="width:100%; margin-top:9px;">💰 وصلني تحويل</button>'
+      + '<div class="hint" style="margin-top:6px;">اكتب اللي نزل عندك بالظبط — العمولة (' + PAYMOB_FEE_PCT + '%) بتتحسب لوحدها.</div>'
+      + '</div>';
+  };
 
   host.innerHTML =
     '<div style="text-align:center; padding:18px 12px; background:var(--card); border:1px solid var(--line); border-radius:16px;">'
@@ -3830,13 +3940,12 @@ function renderCashHand(){
     + '<div class="muted" style="font-size:11px;">من ' + dstr(base.atMs) + ' لحد دلوقتي</div>'
     + '</div>'
 
-    + (stale ? '<div style="background:#2a1111; border:1px solid #7f1d1d; color:#ff9a9d; border-radius:12px; padding:11px 13px; margin-top:10px; font-size:12.5px; font-weight:700;">'
-        + '⚠️ عدّى ' + OH_STALE_DAYS + ' يوم على آخر مرة حدّدت فيها رصيدك. التطبيق بيقرا مبيعات آخر 30 يوم بس — '
-        + 'عدّ اللي معاك دلوقتي وحدّده من تاني عشان الرقم يفضل مظبوط.</div>' : '')
+    + pmCard()
 
     + '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
     + row('الرصيد اللي حدّدته', c.opening, 0)
     + row('💵 كاش الفروع', c.cashIn, 1)
+    + row('💳 محصّل من Paymob', c.settled, 1)
     + row('🤝 سلف', c.advances, -1)
     + row('💼 رواتب اتصرفت', c.salaries, -1)
     + row('🎁 مكافآت', c.rewards, -1)
@@ -3876,3 +3985,48 @@ async function ofSetCashBase(){
   }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
 }
 window.ofSetCashBase = ofSetCashBase;
+
+/* 🔄 ترحيل نقطة البداية تلقائيًا (مرة واحدة) */
+let _ofRolling = false;
+async function ofRollCashBase(amount){
+  if(_ofRolling) return;
+  if(!isFinite(amount)) return;
+  _ofRolling = true;
+  try{
+    await db.collection('pos_test_settings').doc('office_cash').set({
+      amount: Math.round(Number(amount) * 100) / 100,
+      atMs: Date.now(), by: 'auto_roll'
+    }, { merge: true });
+  }catch(e){ console.warn('roll cash base', e); }
+  // ⚠️ مبنرجعش _ofRolling لـfalse — الترحيل مرة واحدة في الجلسة،
+  //    وبعدها الـsnapshot بيجيب النقطة الجديدة.
+}
+window.ofRollCashBase = ofRollCashBase;
+
+/* 💰 تسجيل تحويل وصل من Paymob */
+async function ofAddSettlement(){
+  // 📄 الرقمين من شاشة "تفاصيل التحويل" في Paymob — مش حساب ولا تخمين
+  const g = prompt('من شاشة التحويل في Paymob:\n\n💠 المبلغ الإجمالي كام؟');
+  if(g === null) return;
+  const gross = Math.round((Number(g) || 0) * 100) / 100;
+  if(!isFinite(gross) || gross <= 0){ alert('رقم مش صح'); return; }
+
+  const n = prompt('💚 والمبلغ الصافي اللي نزل في حسابك كام؟');
+  if(n === null) return;
+  const net = Math.round((Number(n) || 0) * 100) / 100;
+  if(!isFinite(net) || net <= 0){ alert('رقم مش صح'); return; }
+  if(net > gross){ alert('الصافي ماينفعش يبقى أكبر من الإجمالي — راجع الأرقام'); return; }
+
+  const ded = Math.round((gross - net) * 100) / 100;
+  const pct = gross > 0 ? Math.round((ded / gross) * 10000) / 100 : 0;
+  if(!confirm('إجمالي: ' + egp(gross)
+    + '\nخصومات (رسوم + تسويات): ' + egp(ded) + ' (' + pct + '%)'
+    + '\nنزل في حسابك: ' + egp(net)
+    + '\n\nالصافي هيتضاف للكاش اللي في إيدك. تكمّل؟')) return;
+  try{
+    await db.collection('office_paymob_settlements').add({
+      gross: gross, net: net, deductions: ded, feePct: pct, ts: Date.now(), by: 'office'
+    });
+  }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
+}
+window.ofAddSettlement = ofAddSettlement;
