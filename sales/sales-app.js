@@ -656,12 +656,39 @@ function _hm2min(hm){ const [h,m] = String(hm||'0:0').split(':').map(Number); re
 
 // 🕒 حساب دقايق التأخير: وقت الحضور مقابل بداية شيفت الموظف (+سماح)
 // بيرجع {lateMin, penalized} — penalized=true لو عدّى السماح (يعني خصم)
-function computeLate(clockInDate, shiftKey, cfg){
+/* ⏰ ميعاد بداية الموظف الفعلي
+   ------------------------------------------------------------
+   ⚠️ الباج اللي ده بيقفله: التأخير كان بيتحسب من بداية **الشيفت**
+   (صباحي 10:00) وبيتجاهل الميعاد الفردي اللي الأدمن حدده للموظف
+   (11:00). الفولباك للميعاد الفردي كان بشرط إن الموظف **مالوش شيفت
+   مسجّل** — فاللي عنده شيفت + تعديل فردي كان التعديل بيتلغي.
+   النتيجة: نفس الشاشة تقول "ميعاده 11:00" وتحتها "اتأخر 69 دقيقة"
+   (جه 11:09 واتحسب من 10:00) = 6 ساعات رصيد ≈ يوم خصم على غير حق.
+   وكان فيه تناقض تاني: نهاية الشيفت بتحترم `scheduledEndTime` الفردي
+   والبداية لأ. القاعدة دلوقتي واحدة: **الفردي يغلب، والشيفت افتراضي**. */
+function effectiveStartHM(emp, cfg){
   cfg = cfg || complianceCfg;
-  const sh = (cfg.shifts||{})[shiftKey];
-  if(!sh || !clockInDate) return { lateMin: 0, penalized: false };
+  const own = emp && emp.scheduledStartTime;
+  if(/^\d{1,2}:\d{2}$/.test(String(own || ''))) return own;
+  const sh = (cfg.shifts || {})[emp && emp.shift];
+  return (sh && sh.start) || '';
+}
+
+// clockInDate = وقت الحضور · empOrShiftKey = مستند الموظف (الأفضل) أو مفتاح
+//   الشيفت (توافق قديم — الاختبارات القديمة بتناديها كده)
+function computeLate(clockInDate, empOrShiftKey, cfg){
+  cfg = cfg || complianceCfg;
+  if(!clockInDate) return { lateMin: 0, penalized: false };
+  let startHM;
+  if(empOrShiftKey && typeof empOrShiftKey === 'object'){
+    startHM = effectiveStartHM(empOrShiftKey, cfg);
+  }else{
+    const sh = (cfg.shifts||{})[empOrShiftKey];
+    startHM = sh && sh.start;
+  }
+  if(!startHM) return { lateMin: 0, penalized: false };
   const inMin = clockInDate.getHours()*60 + clockInDate.getMinutes();
-  const lateMin = Math.max(0, inMin - _hm2min(sh.start));
+  const lateMin = Math.max(0, inMin - _hm2min(startHM));
   return { lateMin, penalized: lateMin > (cfg.lateGraceMin||0) };
 }
 
@@ -1227,6 +1254,7 @@ window.lateHoursFrom = lateHoursFrom;
 window.breakHoursFrom = breakHoursFrom;
 window.breakAlertState = breakAlertState;
 window.expectedShiftEndTs = expectedShiftEndTs;
+window.effectiveStartHM = effectiveStartHM;
 window.shiftEndTsForDay = shiftEndTsForDay;
 window.lastAbsenceJudgeDay = lastAbsenceJudgeDay;
 window.forgottenShifts = forgottenShifts;
@@ -2247,17 +2275,11 @@ async function clockIn(empId, photoDataUri){
   if(!emp) return;
   // 🕒 التأخير من بداية شيفت الموظف (complianceCfg) + سماح الأدمن
   let lateMinutes = 0, latePenalized = false;
-  const lateInfo = computeLate(new Date(), emp.shift, complianceCfg);
+  // 🕒 بنبعت مستند الموظف نفسه — عشان الميعاد الفردي يغلب بداية الشيفت
+  //    (الفولباك القديم اتشال: كان بيشتغل بس لو الموظف مالوش شيفت أصلًا)
+  const lateInfo = computeLate(new Date(), emp, complianceCfg);
   lateMinutes = lateInfo.lateMin;
   latePenalized = lateInfo.penalized;
-  // فولباك لو الموظف مالوش شيفت مسجّل (توافق قديم)
-  if(!complianceCfg.shifts[emp.shift] && emp.scheduledStartTime){
-    const [h,m] = emp.scheduledStartTime.split(':').map(Number);
-    const scheduled = new Date(); scheduled.setHours(h, m, 0, 0);
-    const diffMin = Math.round((Date.now() - scheduled.getTime())/60000);
-    lateMinutes = diffMin > 0 ? diffMin : 0;
-    latePenalized = diffMin > (complianceCfg.lateGraceMin||20);
-  }
   try{
     await addDoc(shiftsCol, {
       employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
@@ -3051,10 +3073,14 @@ function renderStaffOverview(){
       if(lm === 0){ statusColor='green'; statusText='في الميعاد'; }
       else if(lm <= SEVERE_LATE_MINUTES){ statusColor='yellow'; statusText='متأخر '+lm+' د'; }
       else { statusColor='red'; statusText='متأخر '+lm+' د'; }
-    } else if(e.scheduledStartTime){
-      const [h,m] = e.scheduledStartTime.split(':').map(Number);
-      const scheduled = new Date(); scheduled.setHours(h,m,0,0);
-      if(Date.now() > scheduled.getTime()){ statusColor = 'red'; statusText = 'لسه محضرش (فات ميعاده)'; }
+    } else {
+      // نفس قاعدة التأخير: الميعاد الفردي يغلب، والشيفت افتراضي
+      const hm = effectiveStartHM(e, complianceCfg);
+      if(hm){
+        const [h,m] = hm.split(':').map(Number);
+        const scheduled = new Date(); scheduled.setHours(h,m,0,0);
+        if(Date.now() > scheduled.getTime()){ statusColor = 'red'; statusText = 'لسه محضرش (فات ميعاده)'; }
+      }
     }
 
     const sub = getTodaysSubmission(e.id);
