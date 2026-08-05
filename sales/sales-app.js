@@ -512,7 +512,8 @@ function pendingActions(){
     const brShifts = (window.allShifts||[]).filter(sh=> sh.branch===br);
     push('day','time','🚪','شيفتات مفتوحة (نسيت انصراف)', window.forgottenShifts(brShifts).length);
     // ⏱️ أوفرتايم مستني موافقتك — من غير الموافقة مبيتدفعش
-    push('money','money','⏱️','أوفرتايم مستني موافقتك', window.pendingOvertimeShifts(brShifts).length);
+    // نفس نطاق اللوحة بالظبط (كل الفروع) — وإلا العدد يقول حاجة واللوحة تقول تانية
+    push('money','money','⏱️','أوفرتايم مستني موافقتك', window.pendingOvertimeShifts(window.allShifts||[]).length);
     // 🎁 مكافآت عدّت الميزانية ومستنية قرارك
     push('money','money','🎁','مكافآت فوق الميزانية', window.pendingBudgetRewards(window.allRewards||[]).length);
   }catch(e){}
@@ -1468,7 +1469,10 @@ function applyBranchFilter(){
     renderAdminList(); renderLog(); renderPerformanceLink();
     renderStaffOverview(); renderScheduleList(); renderTaskAssignList();
     renderPendingSubmissions(); renderConfirmedSubmissions(); renderRewardsList(); renderAttendanceHistory(); renderWeeklyAggregate(); renderPerfHistory(); renderFullReport();
-    renderOvertimeApprovals(); renderRewardBudget();
+    // 🛡️ معزولين عن السلسلة: لو أي دالة قبلهم وقعت، دول لازم يفضلوا يشتغلوا
+    //    (اللوحة كانت بتطلع فاضية والبانر بيقول إن فيه بنود مستنية)
+    try{ renderOvertimeApprovals(); }catch(e){ console.warn('overtime panel', e); }
+    try{ renderRewardBudget(); }catch(e){ console.warn('reward budget panel', e); }
     renderCommissionPanel(); renderCommissionPaymentLog(); renderSalaryPanel(); renderSalaryPaymentLog(); renderTerminationPanel(); renderTerminationLog(); renderAdvancesLog();
   }
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
@@ -4748,6 +4752,13 @@ function initAdminTabs(){
   setInterval(_refreshAdminTabDots, 3000);
 }
 function showAdminTab(id){
+  // 💵 لوحات الفلوس بتترسم من تاني مع فتح التبويب — مش مرة واحدة عند التحميل
+  if(id === 'money'){
+    setTimeout(function(){
+      try{ renderOvertimeApprovals(); }catch(e){ console.warn('overtime panel', e); }
+      try{ renderRewardBudget(); }catch(e){ console.warn('reward budget panel', e); }
+    }, 0);
+  }
   localStorage.setItem('admin_tab', id);
   try{ if(typeof applyRoleVisibility === 'function' && !_roleApplying) applyRoleVisibility(); }catch(e){}
   $('#admin').querySelectorAll(':scope > .panel').forEach(p=>{
@@ -6362,8 +6373,10 @@ function _otFmt(ts){
 function renderOvertimeApprovals(){
   const host = document.getElementById('overtimeApprovals');
   if(!host) return;
-  const br = window.currentBranch;
-  const list = pendingOvertimeShifts((window.allShifts||[]).filter(s=> s.branch === br))
+  /* 🌍 كل الفروع مش فرع الجهاز بس — المالك بيعتمد صرف على الشبكة كلها،
+     ومكانش منطقي إنه يمشي على كل جهاز فرع عشان يعتمد أوفرتايمه.
+     (وكمان ده كان بيخلي اللوحة تطلع فاضية والبانر بيقول إن فيه بنود.) */
+  const list = pendingOvertimeShifts(window.allShifts || [])
     .sort((a,b)=> (b.clockInTs||0) - (a.clockInTs||0));
   if(!list.length){
     host.innerHTML = '<p style="color:var(--sub); font-size:12.5px; margin:0;">مفيش أوفرتايم مستني موافقة ✅</p>';
@@ -6378,7 +6391,7 @@ function renderOvertimeApprovals(){
     return `<div style="border:1px solid ${susp?'#7f1d1d':'var(--line)'}; background:${susp?'#2a1111':'var(--panel2)'};
                 border-radius:12px; padding:11px 13px; margin-bottom:9px;">
       <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:center;">
-        <b style="font-size:13.5px;">${s.employeeName||''}</b>
+        <b style="font-size:13.5px;">${s.employeeName||''}${s.branch ? ` <span style="font-size:11px; font-weight:600; color:var(--sub);">· ${s.branch}</span>` : ''}</b>
         <span style="font-size:12px; color:var(--sub);">${_otFmt(s.clockInTs)} ← ${_otFmt(s.clockOutTs)}</span>
       </div>
       <div style="font-size:12.5px; margin-top:5px;">
