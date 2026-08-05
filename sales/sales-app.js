@@ -511,6 +511,11 @@ function pendingActions(){
   try{
     const brShifts = (window.allShifts||[]).filter(sh=> sh.branch===br);
     push('day','time','🚪','شيفتات مفتوحة (نسيت انصراف)', window.forgottenShifts(brShifts).length);
+    // ☕ بريكات اتقفلت على إنها نسيان — تستاهل نظرة
+    push('day','time','📷','بريكات من غير صورة رجوع', window.breaksMissingPhoto(
+      (window.allBreaks||[]).filter(b=> b.branch===br && b.dateKey===todayStr())).length);
+    push('day','time','☕','بريكات منسية', window.forgottenBreaks(
+      (window.allBreaks||[]).filter(b=> b.branch===br && b.dateKey===todayStr())).length);
     // ⏱️ أوفرتايم مستني موافقتك — من غير الموافقة مبيتدفعش
     // نفس نطاق اللوحة بالظبط (كل الفروع) — وإلا العدد يقول حاجة واللوحة تقول تانية
     push('money','money','⏱️','أوفرتايم مستني موافقتك', window.pendingOvertimeShifts(window.allShifts||[]).length);
@@ -1028,6 +1033,43 @@ function breakAlertState(brk, cfg, nowTs){
   };
 }
 
+/* ☕🚨 قفل البريك — بسقف
+   ------------------------------------------------------------
+   الباج: `durMin = now − startTs` من غير أي سقف. الموظفة تنسى تقفل
+   البريك وترجع تاني يوم تدوس "رجعت" → 1200 دقيقة = 20 ساعة →
+   breakHoursFrom بتطلّع ~116 ساعة رصيد ≈ 16 يوم خصم من مرتبها.
+   والقفل التلقائي كان بيعمل نفس الغلط: بيحط endTs على الحد (60 دقيقة)
+   وبيسجّل durationMin بالمدة الحقيقية ويخصم عليها.
+
+   القاعدة: بريك أطول من breakMin × autoCloseBreakMult = **نسيان**،
+   بيتسجّل بالسقف ويتعلّم `forgotEndBreak` للمراجعة. الخصم بيبقى على
+   السقف (ساعتين) مش على النسيان. */
+function breakCloseInfo(brk, cfg, nowTs){
+  cfg = cfg || timeCfgDefaults;
+  const start = Number(brk && brk.startTs) || 0;
+  const now = Number(nowTs) || Date.now();
+  const raw = start ? Math.max(0, Math.round((now - start) / 60000)) : 0;
+  const allowed = Number(cfg.breakMin) || 30;
+  const capMin = Math.round(allowed * (Number(cfg.autoCloseBreakMult) || 2));
+  const forgot = raw > capMin;
+  const durMin = forgot ? capMin : raw;
+  return {
+    rawMin: raw, durMin: durMin, forgot: forgot, capMin: capMin,
+    endTs: forgot ? (start + capMin * 60000) : now,
+    overHours: breakHoursFrom(durMin, allowed, cfg)
+  };
+}
+
+/* 📷 بريكات اتقفلت من غير صورة رجوع — الكاميرا فشلت، محتاجة مراجعة */
+function breaksMissingPhoto(breaks){
+  return (breaks || []).filter(b=> b && b.endTs && b.endPhotoMissing);
+}
+
+/* 🚨 بريكات اتقفلت على إنها نسيان — للمراجعة */
+function forgottenBreaks(breaks){
+  return (breaks || []).filter(b=> b && b.forgotEndBreak);
+}
+
 /* 🚨 شيفتات مفتوحة أطول من المعقول = نسيان انصراف
    قرار المالك: **مبنقفلهاش تلقائي** — بننبّه بس، وهو يقفلها من "يوم سماح". */
 function forgottenShifts(shifts, cfg, nowTs){
@@ -1254,6 +1296,10 @@ window.todayStr = todayStr;
 window.lateHoursFrom = lateHoursFrom;
 window.breakHoursFrom = breakHoursFrom;
 window.breakAlertState = breakAlertState;
+window.breakCloseInfo = breakCloseInfo;
+window.openBreakFor = openBreakFor;
+window.breaksMissingPhoto = breaksMissingPhoto;
+window.forgottenBreaks = forgottenBreaks;
 window.expectedShiftEndTs = expectedShiftEndTs;
 window.effectiveStartHM = effectiveStartHM;
 window.shiftEndTsForDay = shiftEndTsForDay;
@@ -2180,6 +2226,16 @@ const LATE_GRACE_MINUTES = 10; // no penalty within this window around the sched
 const SEVERE_LATE_MINUTES = 20; // being later than this even once disqualifies the reward for that period
 // ===== ☕ نظام البريك =====
 // بريك النهاردة لموظف
+/* 🔎 البريك المفتوح للموظف — **من غير قيد تاريخ**
+   ------------------------------------------------------------
+   todaysBreak بتشترط dateKey === النهاردة. فأي بريك فضل مفتوح
+   (النت وقع، الكاميرا فشلت، الجهاز اتقفل) بيبقى **مستحيل يتقفل**
+   بعد منتصف الليل — الدالة مش شايفاه أصلًا وبتقول "مفيش بريك مفتوح".
+   القفل لازم يمشي على البريك المفتوح نفسه مهما كان تاريخه. */
+function openBreakFor(empId){
+  return (allBreaks||[]).find(b=> b.employeeId===empId && !b.endTs && b.branch===window.currentBranch);
+}
+
 function todaysBreak(empId){
   const ds = todayStr();
   return (allBreaks||[]).find(b=> b.employeeId===empId && b.dateKey===ds && b.branch===window.currentBranch);
@@ -2207,6 +2263,9 @@ async function startBreak(empId, photoDataUri){
   // لازم يكون مسجّل حضور
   if(!isClockedIn(empId)){ alert('لازم تسجّل حضور الأول قبل ما تطلع بريك'); return; }
   // أخد بريك النهاردة قبل كده؟
+  // 🚫 فيه بريك مفتوح (حتى لو من يوم فات) → لازم يتقفل الأول
+  const stillOpen = openBreakFor(empId);
+  if(stillOpen){ alert('عندك بريك لسه مفتوح — اقفليه الأول.'); return; }
   const prev = todaysBreak(empId);
   if(prev){ alert('انت خدت بريك النهاردة خلاص'); return; }
   // فيه حد بره دلوقتي؟ (منع التزامن)
@@ -2230,24 +2289,47 @@ async function startBreak(empId, photoDataUri){
 }
 
 // نهاية البريك
+let photoFailedFor = null;   // اتسجّل إن الكاميرا فشلت في العملية دي
+
 async function endBreak(empId, photoDataUri){
-  const brk = todaysBreak(empId);
+  const brk = openBreakFor(empId) || todaysBreak(empId);
   if(!brk || brk.endTs){ alert('مفيش بريك مفتوح'); return; }
   const cfg = window.timeCfg || timeCfgDefaults;
-  const durMin = Math.round((Date.now() - brk.startTs) / 60000);
-  const overHours = breakHoursFrom(durMin, cfg.breakMin, cfg);
+  const info = breakCloseInfo(brk, cfg, Date.now());
+  const durMin = info.durMin, overHours = info.overHours;
   try{
     await window.fbUpdateDoc(window.fbDoc(window.db,'sales_breaks', brk.id), {
-      endTs: Date.now(), durationMin: durMin, overHours, endPhoto: photoDataUri || null
+      endTs: info.endTs, durationMin: durMin, overHours, endPhoto: photoDataUri || null,
+      // 📷 الصورة إجبارية — غيابها مش عادي، فبيتعلّم ويوصل للمسؤول
+      endPhotoMissing: !photoDataUri,
+      // 🚨 نسيت تقفله — المدة الحقيقية متسجّلة للمراجعة بس الخصم على السقف
+      forgotEndBreak: info.forgot, rawMin: info.rawMin
     });
     // لو فيه ساعات زيادة، تتسجّل في رصيد الوقت
     if(overHours > 0){
       await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
         employeeId: empId, employeeName: brk.employeeName, branch: window.currentBranch,
-        type: 'break', hours: overHours, date: todayStr(), note: `بريك ${durMin} دقيقة`, ts: Date.now()
+        type: 'break', hours: overHours, date: todayStr(),
+        note: info.forgot ? `بريك منسي (اتحسب ${durMin} دقيقة)` : `بريك ${durMin} دقيقة`, ts: Date.now()
       });
     }
-  }catch(e){ alert('تعذر إنهاء البريك: ' + e.message); }
+    /* ✅ تأكيد بعد ما الكتابة تتأكد فعلًا.
+       قبل كده السكوت كان معناه نجاح ومعناه فشل — الموظفة تدوس وتمشي
+       وهي فاكرة إنه اتقفل، وتلاقي 20 ساعة بعدين. دلوقتي مفيش رسالة
+       = مفيش قفل. */
+    photoFailedFor = null;
+    if(info.forgot){
+      alert('⚠️ البريك ده فضل مفتوح ' + info.rawMin + ' دقيقة.\nاتحسب ' + durMin + ' دقيقة بس (الحد الأقصى) والباقي متسجّل للمراجعة.');
+    }else{
+      alert('✅ رجعتي — البريك كان ' + durMin + ' دقيقة'
+        + (overHours > 0 ? ('\n⏳ زيادة ' + overHours + ' ساعة رصيد') : '')
+        + (photoDataUri ? '' : '\n\n📷 الصورة مأخدتش — المسؤول هيراجعها معاكي.'));
+    }
+  }catch(e){
+    // ❗ فشل صريح — البريك **لسه مفتوح** ولازم تعرف
+    alert('❌ البريك ماتقفلش!\n' + (e && e.message ? e.message : e)
+      + '\n\nجرّبي تاني. لو فضل كده، بلّغي المسؤول قبل ما تمشي.');
+  }
 }
 
 // قفل تلقائي للبريكات المنسية
@@ -2255,12 +2337,14 @@ async function autoCloseStaleBreaks(){
   const cfg = window.timeCfg || timeCfgDefaults;
   for(const b of (allBreaks||[])){
     if(breakNeedsAutoClose(b, Date.now(), cfg)){
-      const durMin = Math.round((Date.now() - b.startTs)/60000);
-      const overHours = breakHoursFrom(durMin, cfg.breakMin, cfg);
+      // ⚠️ كان بيحط endTs على الحد وبيسجّل المدة الحقيقية ويخصم عليها —
+      //    الاتنين بقوا من نفس المصدر دلوقتي فمستحيل يختلفوا
+      const info = breakCloseInfo(b, cfg, Date.now());
+      const durMin = info.durMin, overHours = info.overHours;
       try{
         await window.fbUpdateDoc(window.fbDoc(window.db,'sales_breaks', b.id), {
-          endTs: b.startTs + (cfg.breakMin*(cfg.autoCloseBreakMult||2))*60000,
-          durationMin: durMin, overHours, autoClosed: true
+          endTs: info.endTs, durationMin: durMin, overHours, autoClosed: true,
+          forgotEndBreak: info.forgot, rawMin: info.rawMin
         });
         if(overHours>0){
           await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
@@ -5694,8 +5778,22 @@ function captureAttPhoto(video, retriesLeft){
   }catch(err){
     console.error('تعذر التقاط الصورة', err);
     $('#attPhotoStatus').textContent = '';
-    $('#attPhotoErr').textContent = 'حصل خطأ في التقاط الصورة. الصورة إجبارية — حاول تاني.';
+    $('#attPhotoErr').textContent = 'حصل خطأ في التقاط الصورة. حاول تاني.';
     $('#attPhotoRetryBtn').style.display = 'block';
+    /* 📷 الصورة إجبارية في كل الحالات — بس **وقت الرجوع مش رهينة الكاميرا**.
+       الاتنين حاجتين مختلفتين: الوقت فلوس (بيتحول خصم)، والصورة إثبات.
+       لما الجهاز يفشل، الموظفة اللي رجعت في ميعادها مينفعش تتحاسب
+       على 20 ساعة عشان الكاميرا باظت. فالبريك بيتقفل على ميعاده الصح
+       والصورة بتتعلّم إنها ناقصة وبتوصل للمسؤول للمراجعة —
+       مش خيار للموظفة، شبكة أمان لما الجهاز يخذلها.
+       الحضور والانصراف وبدء البريك: الصورة إجبارية بلا استثناء. */
+    if(pendingPhotoAction && pendingPhotoAction.type === 'break-end'){
+      const act = pendingPhotoAction;
+      $('#attPhotoErr').textContent = 'الكاميرا مش شغالة. البريك هيتقفل على ميعاده '
+        + 'والصورة هتتسجّل ناقصة للمراجعة.';
+      photoFailedFor = act.type;
+      setTimeout(function(){ try{ finishAttPhoto(null); }catch(e){ console.warn('break end fallback', e); } }, 1200);
+    }
   }
 }
 
@@ -5710,6 +5808,7 @@ async function finishAttPhoto(photoDataUri){
 }
 
 function closeAttPhoto(){
+  photoFailedFor = null;
   if(attPhotoStream){ attPhotoStream.getTracks().forEach(t=>t.stop()); attPhotoStream=null; }
   $('#attPhotoOverlay').classList.remove('show');
   pendingPhotoAction = null;
