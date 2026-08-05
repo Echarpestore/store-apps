@@ -319,3 +319,33 @@ try{ fs.unlinkSync(runnerPath); }catch(e){}
   const m = sw.match(/store-apps-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 91, 'sales: CACHE_NAME v91+');
 })();
+
+// ============================================================
+// ١١) 🖥️ اللوحة لازم تعرض اللي البانر بيعدّه — بالظبط
+//
+// الحادثة: البانر قال "4 مستنية موافقتك" واللوحة طلعت **فاضية**.
+// سببين اتصلحوا: اللوحة كانت مفلترة بفرع الجهاز، وكانت بتترسم في
+// سلسلة طويلة — أي دالة تقع قبلها توقفها.
+// ============================================================
+(function(){
+  const panel = extractFn(appSrc, 'function renderOvertimeApprovals(');
+  assert(!!panel, 'لقينا renderOvertimeApprovals');
+  if(!panel) return;
+  assert(!/s\.branch === br/.test(panel),
+    '⛔ اللوحة مش مفلترة بفرع الجهاز (المالك بيعتمد على الشبكة كلها)');
+  assert(/pendingOvertimeShifts\(window\.allShifts \|\| \[\]\)/.test(panel),
+    '⭐ بتقرا كل الشيفتات');
+  assert(/s\.branch \?/.test(panel), '⭐ واسم الفرع ظاهر في كل سطر');
+
+  // البانر بنفس النطاق — وإلا رقم يقول حاجة وشاشة تقول تانية
+  const pa = extractFn(appSrc, 'function pendingActions(');
+  assert(!!pa && /pendingOvertimeShifts\(window\.allShifts\|\|\[\]\)/.test(pa),
+    '⭐⭐ البانر بيعدّ نفس نطاق اللوحة بالظبط');
+
+  // معزولة عن السلسلة
+  assert(/try\{ renderOvertimeApprovals\(\); \}catch/.test(appSrc),
+    '⭐⭐ الرسم معزول في try — دالة تانية تقع مبتوقفهاش');
+  assert(/try\{ renderRewardBudget\(\); \}catch/.test(appSrc), 'ونفس الحاجة للمكافآت');
+  assert(/if\(id === 'money'\)/.test(appSrc),
+    '⭐ وبتترسم من تاني مع فتح تبويب الفلوس مش مرة واحدة عند التحميل');
+})();

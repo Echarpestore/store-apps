@@ -80,6 +80,18 @@ function merchantBalance(txns){
 }
 
 // مجموع مصاريف شهر معين
+/* 🔢 كود الصنف في طلب النواقص
+   الطلبات القديمة اتسجّلت من غير كود (الحقل مكانش موجود في المنتج —
+   الكود هو معرّف المستند). بنحاول نلاقيه بالاسم عشان الطلبات القديمة
+   متفضلش من غير كود. */
+function shortCode(x){
+  if(x && x.barcode) return String(x.barcode);
+  const nm = String((x && x.productName) || '').trim();
+  if(!nm) return '';
+  const hit = (D.products || []).find(function(p){ return String(p.name||'').trim() === nm; });
+  return hit ? String(hit.barcode || hit.id || '') : '';
+}
+
 function expensesMonthTotal(expenses, mk){
   return (expenses||[]).reduce(function(sum, e){
     if(!e || String(e.month||'') !== mk) return sum;
@@ -320,9 +332,13 @@ function buildInbox(data){
   });
   (data.shorts||[]).forEach(function(x){
     if(x.status !== 'open') return;
+    x = Object.assign({}, x, { barcode: shortCode(x) });
     out.push({ kind:'short', id:x.id, ts:x.ts||0, branch:x.branch||'', who:x.empName||'',
                title:'📦 نواقص: ' + (x.productName||('كود '+x.barcode)) + ' × ' + (x.qty||1),
-               sub:(x.detail ? x.detail+' · ' : '') + 'مخزون وقت الطلب: ' + (x.currentStock==null?'—':x.currentStock),
+               // 🔢 الكود مع الاسم — من غيره الطلب مش قابل للتنفيذ عند المورّد
+               sub:(x.barcode ? 'كود ' + x.barcode + ' · ' : '')
+                   + (x.detail ? x.detail+' · ' : '')
+                   + 'مخزون وقت الطلب: ' + (x.currentStock==null?'—':x.currentStock),
                actionable:true });
   });
   return out.sort(function(a,b){ return b.ts - a.ts; });
@@ -1497,8 +1513,9 @@ function renderShort(){
     return '<div class="card">' +
       '<div class="row"><b style="font-size:13px;">'+esc(x.productName||('كود '+x.barcode))+' × '+(x.qty||1)+'</b>' +
       '<span class="pill g">'+esc(x.branch||'')+'</span></div>' +
-      '<div class="muted" style="margin-top:3px;">'+(x.detail?esc(x.detail)+' · ':'')+'كود '+esc(x.barcode)+
-      ' · مخزون وقت الطلب: '+(x.currentStock==null?'—':x.currentStock)+'</div>' +
+      '<div class="muted" style="margin-top:3px;">'+(x.detail?esc(x.detail)+' · ':'')
+      +(shortCode(x) ? 'كود '+esc(shortCode(x))+' · ' : '')+
+      'مخزون وقت الطلب: '+(x.currentStock==null?'—':x.currentStock)+'</div>' +
       '<div class="muted" style="margin-top:2px;">طلبها: '+esc(x.empName||'')+' · '+dstr(x.ts)+'</div>' +
       '<div style="margin-top:9px;"><button class="btn ok" style="width:100%;" onclick="officeCloseShort(\''+x.id+'\')">✅ اتجاب</button></div>' +
       '</div>';

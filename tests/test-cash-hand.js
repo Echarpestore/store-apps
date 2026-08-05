@@ -323,7 +323,7 @@ const sale = (ms, cash, visa)=> ({ createdAt: { toMillis: ()=> ms }, payments: {
   assert(/window\.ofAddSettlement = ofAddSettlement/.test(src), 'ofAddSettlement معروضة');
   const sw = fs.readFileSync(path.join(ROOT,'Office','sw.js'),'utf8');
   const m = sw.match(/echarpe-office-v(\d+)/);
-  assert(!!m && Number(m[1]) >= 33, 'office: CACHE_NAME v33+');
+  assert(!!m && Number(m[1]) >= 35, 'office: CACHE_NAME v35+');
 })();
 
 // ============================================================
@@ -360,4 +360,59 @@ const sale = (ms, cash, visa)=> ({ createdAt: { toMillis: ()=> ms }, payments: {
     settlements: [ { gross:74033.39, net:72333.23, ts: T0 + DAY } ] }, NOW);
   assertEq(p2.effPct, 2.3, '⭐⭐ النسبة اتعلّمت من التحويل الحقيقي');
   assert(p2.dueNet < p2.due, 'والمتوقع أقل من الإجمالي');
+})();
+
+// ============================================================
+// ١٩) 💳 كارت Paymob بيظهر من غير ما يحدد رصيد الكاش
+//     (كان جوه الفرع اللي بعد التحديد، فمكانش بيظهر خالص قبله)
+// ============================================================
+(function(){
+  const fn = extractFn(src, 'function renderCashHand(');
+  assert(!!fn, 'لقينا renderCashHand');
+  if(!fn) return;
+  const noBase = fn.indexOf("if(!base || !base.atMs)");
+  const pmDef  = fn.indexOf('const pmCard = function()');
+  assert(pmDef > 0 && pmDef < noBase,
+    '⭐⭐ الكارت متعرّف **قبل** فحص الرصيد — يعني بيظهر في الحالتين');
+  const branch = fn.slice(noBase, fn.indexOf('const row = function'));
+  assert(/pmCard\(\)/.test(branch),
+    '⭐ وفعلًا معروض في شاشة "حدّد المبلغ" كمان');
+  assert(/pmBase = \(base && base\.atMs\) \? base : \{ amount: 0, atMs: 0 \}/.test(fn),
+    '⭐ ومن غير رصيد بيحسب الفيزا من كل الفواتير المحمّلة');
+})();
+
+// ============================================================
+// ٢٠) 🔢 كود المنتج مع النواقص في تبويب الوارد
+//     (تبويب النواقص كان بيعرضه والوارد لأ — والطلب من غير كود
+//      مش قابل للتنفيذ عند المورّد)
+// ============================================================
+(function(){
+  const i = src.indexOf("out.push({ kind:'short'");
+  assert(i > 0, 'لقينا بطاقة النواقص في الوارد');
+  const card = src.slice(i, i + 700);
+  assert(/x\.barcode \? 'كود ' \+ x\.barcode/.test(card),
+    '⭐ الكود ظاهر في بطاقة الوارد');
+  assert(/x\.barcode \?/.test(card),
+    '⛔ ومن غير كود مبيطبعش "كود undefined"');
+  // تبويب النواقص نفسه لسه بيعرضه
+  const sh = src.slice(src.indexOf('function renderShort('), src.indexOf('function renderShort(') + 900);
+  assert(/shortCode\(x\) \? 'كود '/.test(sh),
+    '⭐ وتبويب النواقص بيعرض الكود كمان — ومن غير كود مبيطبعش "كود" فاضية');
+
+  /* 🔢 الطلبات القديمة اتسجّلت من غير كود: في المنتجات الكود هو معرّف
+     المستند مش حقل، فـ st.product.barcode كان بيطلع فاضي. الفولباك
+     بيدوّر على الصنف بالاسم عشان الطلبات القديمة متفضلش من غير كود. */
+  const fn = extractFn(src, 'function shortCode(');
+  assert(!!fn, 'لقينا shortCode');
+  if(fn){
+    const b = { D: { products: [ { name:'قطن سادة', id:'832', barcode:'' } ] } };
+    b.globalThis = b; vm.createContext(b);
+    vm.runInContext(fn + '\n;shortCode;', b);
+    const code = vm.runInContext('shortCode', b);
+    assertEq(code({ barcode:'901' }), '901', 'الكود المسجّل بيتاخد زي ما هو');
+    assertEq(code({ productName:'قطن سادة' }), '832',
+      '⭐⭐ طلب قديم من غير كود: بيتلاقى بالاسم من المنتجات');
+    assertEq(code({ productName:'مش موجود' }), '', 'ومش لاقيه = فاضي مش undefined');
+    assertEq(code({}), '', 'وطلب فاضي مبيكسرش');
+  }
 })();

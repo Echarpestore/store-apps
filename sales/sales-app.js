@@ -2854,7 +2854,9 @@ window.shSubmit = function(){
   st.sending = true; renderShortageReq();
   addDoc(collection(db,'sales_shortages'), {
     empId: st.empId, empName: st.empName, branch: window.currentBranch,
-    barcode: String(st.product.barcode||''), productName: st.product.name || '',
+    // 🔢 الكود = معرّف المستند في المنتجات، والحقل `barcode` مش دايمًا موجود.
+    //    من غير الفولباك ده الطلب بيوصل للإدارة **من غير كود** ومش قابل للتنفيذ.
+    barcode: String(st.product.barcode || st.product.id || ''), productName: st.product.name || '',
     detail: st.detail || '', qty: st.qty, currentStock: shBranchQty(st.product, window.currentBranch),
     status: 'open', ts: Date.now()
   }).then(()=>{

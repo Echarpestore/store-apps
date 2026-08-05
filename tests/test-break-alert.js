@@ -281,3 +281,127 @@ function runSalesTicks(cfgOverride, endAtMin){
   assert(!!S.window && typeof S.window.breakAlertState === 'function',
     'وفعلًا موجودة بعد تحميل الملف');
 })();
+
+// ============================================================
+// ١٢) ☕🚨 البريك المنسي — "قفلت البريك لقيت 20 ساعة"
+//
+// الباج: durMin = now − startTs من غير سقف. نسيت تقفله ورجعت تاني
+// يوم → 1200 دقيقة = 20 ساعة → breakHoursFrom تطلّع ~116 ساعة رصيد
+// ≈ 16 يوم خصم. والقفل التلقائي كان بيحط endTs على الحد (60 دقيقة)
+// وبيسجّل durationMin بالمدة الحقيقية ويخصم عليها — تناقض في نفس المستند.
+// ============================================================
+(function(){
+  const t0 = 1750000000000;
+  const brk = { id:'b1', startTs: t0 };
+  const info = (mins)=> S.window.breakCloseInfo(brk, CFG, t0 + mins*MIN);
+
+  // بريك عادي
+  const ok = info(25);
+  assertEq(ok.durMin, 25, 'بريك 25 دقيقة بيتسجّل 25');
+  assertEq(ok.forgot, false, 'ومش نسيان');
+  assertEq(ok.overHours, 0, 'وجوه السماح = مفيش رصيد');
+
+  // بريك زيادة بس معقول
+  const over = info(50);
+  assertEq(over.durMin, 50, 'بريك 50 دقيقة بيتسجّل 50');
+  assertEq(over.forgot, false, 'ولسه مش نسيان (تحت الحد 60)');
+  assertEq(over.overHours, 1, 'و(50−30−5)÷10 = ساعة رصيد');
+
+  // ⭐ الحادثة: 20 ساعة
+  const forgot = info(20 * 60);
+  assertEq(forgot.rawMin, 1200, 'المدة الحقيقية متسجّلة للمراجعة');
+  assertEq(forgot.durMin, 60, '⭐⭐ المحسوب 60 دقيقة (الحد) مش 1200');
+  assertEq(forgot.forgot, true, '⭐ ومتعلّم إنه نسيان');
+  assertEq(forgot.overHours, 2, '⭐⭐ ساعتين رصيد مش 116');
+  assertEq(forgot.endTs, t0 + 60*MIN, '⭐ والقفل على الحد');
+
+  // 🔴 إثبات الباج القديم
+  assertEq(S.window.breakHoursFrom(1200, 30, CFG), 116,
+    'إثبات: من غير السقف كانت 116 ساعة رصيد ≈ 16 يوم خصم');
+
+  // الحد نفسه إعداد
+  const wide = S.window.breakCloseInfo(brk, Object.assign({}, CFG, { autoCloseBreakMult: 4 }), t0 + 1200*MIN);
+  assertEq(wide.durMin, 120, 'الحد = breakMin × autoCloseBreakMult (إعداد)');
+
+  // حالات حدّية
+  assertEq(S.window.breakCloseInfo(brk, CFG, t0 - 5*MIN).durMin, 0, 'وقت سالب = صفر مش رقم غريب');
+  assertEq(S.window.breakCloseInfo({}, CFG, t0).durMin, 0, 'ومن غير بداية مبيكسرش');
+})();
+
+// ============================================================
+// ١٣) القفل التلقائي واليدوي بيقولوا نفس الحاجة
+//     (كان endTs على الحد وdurationMin على المدة الحقيقية)
+// ============================================================
+(function(){
+  const src = fs.readFileSync(path.join(ROOT,'sales','sales-app.js'),'utf8');
+  const auto = src.slice(src.indexOf('async function autoCloseStaleBreaks('),
+                         src.indexOf('async function autoCloseStaleBreaks(') + 1400);
+  assert(/breakCloseInfo\(b, cfg/.test(auto), '⭐ القفل التلقائي بيستخدم نفس الدالة');
+  assert(!/durationMin: Math\.round\(\(Date\.now\(\) - b\.startTs\)/.test(auto),
+    '⛔ ومبيسجّلش المدة الحقيقية كمدة محسوبة');
+  const manual = src.slice(src.indexOf('async function endBreak('),
+                           src.indexOf('async function endBreak(') + 1600);
+  assert(/breakCloseInfo\(brk, cfg/.test(manual), '⭐ والقفل اليدوي كمان');
+  assert(/forgotEndBreak: info\.forgot/.test(manual) && /rawMin: info\.rawMin/.test(manual),
+    '⭐ والاتنين بيسجّلوا العلامة والمدة الحقيقية');
+  assert(/window\.breakCloseInfo = breakCloseInfo/.test(src), 'معروضة على window');
+  assert(/forgottenBreaks/.test(src), 'وفيه كاشف للبريكات المنسية في شريط "محتاج منك"');
+})();
+
+// ============================================================
+// ١٤) 🔒 "دوست قفل البريك ومقفلش" — كل مسار فشل اتقفل
+// ============================================================
+const bsrc = fs.readFileSync(path.join(ROOT,'sales','sales-app.js'),'utf8');
+
+(function(){
+  // (أ) البحث عن البريك المفتوح من غير قيد تاريخ
+  const open = extractFnB(bsrc, 'function openBreakFor(');
+  assert(!!open, 'لقينا openBreakFor');
+  assert(!!open && /!b\.endTs/.test(open), '⭐ بيدوّر على المفتوح');
+  assert(!!open && !/dateKey/.test(open),
+    '⭐⭐ من غير قيد التاريخ — بريك فضل مفتوح كان مستحيل يتقفل بعد نص الليل');
+
+  const end = extractFnB(bsrc, 'async function endBreak(');
+  assert(!!end && /openBreakFor\(empId\) \|\| todaysBreak\(empId\)/.test(end),
+    '⭐ القفل بيستخدمه الأول والقديم فولباك');
+
+  // (ب) تأكيد بعد الكتابة — السكوت مبقاش معناه نجاح
+  assert(!!end && /✅ رجعتي/.test(end),
+    '⭐⭐ رسالة تأكيد بعد ما الكتابة تنجح فعلًا');
+  const okIdx = end.indexOf('✅ رجعتي');
+  const writeIdx = end.indexOf('fbUpdateDoc');
+  assert(writeIdx > 0 && okIdx > writeIdx,
+    '⭐ والتأكيد **بعد** الكتابة مش قبلها');
+  assert(/❌ البريك ماتقفلش/.test(end), '⭐⭐ والفشل صريح مش رسالة تقنية');
+
+  // (ج) بريك تاني وواحد مفتوح
+  const start = extractFnB(bsrc, 'async function startBreak(');
+  assert(!!start && /openBreakFor\(empId\)/.test(start),
+    '⭐ مينفعش بريك جديد وفيه واحد لسه مفتوح');
+
+  // (د) الكاميرا مبتمنعش القفل — بس الصورة تفضل إجبارية ومطلوبة
+  assert(/pendingPhotoAction\.type === 'break-end'/.test(bsrc),
+    '⭐⭐ فشل الكاميرا في قفل البريك مبيمنعش القفل');
+  assert(!/attPhotoSkipBtn/.test(bsrc),
+    '⛔ ومفيش زرار "من غير صورة" للموظفة — مش خيار ليها');
+  assert(/endPhotoMissing: !photoDataUri/.test(bsrc),
+    '⭐⭐ الصورة الناقصة بتتعلّم في المستند');
+  assert(/breaksMissingPhoto/.test(bsrc) && /بريكات من غير صورة رجوع/.test(bsrc),
+    '⭐ وبتوصل للمسؤول في شريط "محتاج منك"');
+  assert(/📷 الصورة مأخدتش/.test(bsrc), 'والموظفة بتتبلّغ إنها هتتراجع');
+  // ⛔ والاستثناء للقفل بس — الحضور والانصراف لسه الصورة إجبارية
+  const cam = bsrc.slice(bsrc.indexOf('تعذر التقاط الصورة'), bsrc.indexOf('async function finishAttPhoto'));
+  assert(!/type === 'in'|type === 'out'|break-start/.test(cam),
+    '⛔ التخطي لقفل البريك بس — مفيش تخطي للحضور أو الانصراف أو بدء البريك');
+})();
+
+function extractFnB(src, header){
+  const i = src.indexOf(header);
+  if(i < 0) return null;
+  let d = 0, st = false;
+  for(let j = src.indexOf('{', i); j < src.length; j++){
+    if(src[j] === '{'){ d++; st = true; }
+    else if(src[j] === '}'){ d--; if(st && d === 0) return src.slice(i, j + 1); }
+  }
+  return null;
+}
