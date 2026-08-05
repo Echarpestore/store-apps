@@ -220,3 +220,40 @@ for(const app of APPS){
 }
 
 try { fs.unlinkSync(runnerPath); } catch(e){}
+
+// ============================================================
+// 🔁 التقييم مش مربوط بالإشعار
+//
+// الإشعار حاجة لحظية — فشل التوصيل = ضاع. والدالة بتعلّم الفاتورة
+// `ratePushAt` **قبل** الإرسال، فحتى التوكن الميت بيخلي الفاتورة
+// "اتبعتت" ومحدش يرجعلها. يعني أي عميلة إشعاراتها مقفولة (وهما
+// الأغلبية: 157 من 208) عمرها ما كانت هتشوف شاشة التقييم.
+// ============================================================
+[['loyalty','echarpe'], ['glow','glow']].forEach(function(pair){
+  const html = fs.readFileSync(path.join(ROOT, pair[0], 'index.html'), 'utf8');
+  const L = pair[0] + ': ';
+
+  assert(/function findRatableSale\(/.test(html),
+    L + '⭐ فيه مسار بيدوّر على فاتورة تستاهل تقييم من غير إشعار');
+  assert(/if\(!saleId\)\{[\s\S]{0,260}findRatableSale\(\)/.test(html),
+    L + '⭐⭐ ومن غير ?rate في اللينك بيشتغل المسار ده');
+
+  const fn = html.slice(html.indexOf('function findRatableSale('),
+                        html.indexOf('if(!saleId){'));
+  assert(/where\('customerPhone', '==', String\(phone\)\)/.test(fn),
+    L + '⭐ الاستعلام مقيّد برقمها هي');
+  assert(/limit\(1\)/.test(fn), L + '⭐ ومستند واحد بس — قراءة واحدة لكل فتحة');
+  assert(/ms < since/.test(fn), L + '⭐ وفاتورة أقدم من 48 ساعة مبتتعرضش');
+  assert(/d\.reversed \|\| d\.isReversal/.test(fn),
+    L + '⛔ وفاتورة اتعكست مبتتقيّمش');
+  assert(/localStorage\.getItem\('rated_' \+ doc\.id\)/.test(fn),
+    L + '⭐⭐ واللي اتقيّمت من الجهاز ده مبتتعرضش تاني');
+  assert(/localStorage\.setItem\('rated_' \+ saleId/.test(html),
+    L + '⭐ والعلامة بتتحط عند الإرسال');
+
+  // الإصدار اتزوّد
+  const sw = fs.readFileSync(path.join(ROOT, pair[0], 'sw.js'), 'utf8');
+  const m = sw.match(/-v(\d+)'/);
+  assert(!!m && Number(m[1]) >= (pair[0] === 'loyalty' ? 42 : 35),
+    L + 'CACHE_NAME اتزوّد');
+});

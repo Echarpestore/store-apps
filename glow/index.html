@@ -1587,7 +1587,55 @@ if ('serviceWorker' in navigator) {
   ];
   var q = new URLSearchParams(location.search);
   var saleId = String(q.get('rate') || '').trim();
-  if(!saleId) return;
+
+  /* ============================================================
+     🔁 التقييم مش مربوط بالإشعار
+     ------------------------------------------------------------
+     الإشعار حاجة لحظية: FCM بيحاول يوصّله، فشل → **راح**. مفيش طابور
+     بيستنى العميلة تفتح التطبيق. والدالة بتعلّم الفاتورة `ratePushAt`
+     **قبل** ما تبعت (عشان متزنّش كل 5 دقايق) — يعني حتى لو التوكن
+     كان ميت، الفاتورة مكتوب عليها "اتبعت" ومحدش هيرجعلها.
+
+     النتيجة: أي عميلة إشعاراتها مقفولة (وهما الأغلبية) عمرها ما هتشوف
+     شاشة التقييم. فبدل ما نستنى الإشعار، أول ما التطبيق يفتح بندوّر
+     على آخر فاتورة ليها مش متقيّمة في آخر 48 ساعة ونعرضها.
+     الإشعار بقى **تذكير** مش الطريق الوحيد.
+
+     ⚠️ الاستعلام مقيّد برقمها هي + آخر 48 ساعة + مستند واحد —
+        يعني قراءة واحدة لكل فتحة، مش استعلام مفتوح.
+     ============================================================ */
+  var RATE_LOOKBACK_H = 48;
+  function findRatableSale(){
+    var phone = localStorage.getItem(LS_PHONE);
+    if(!phone || !window.db) return Promise.resolve(null);
+    var since = Date.now() - RATE_LOOKBACK_H * 3600000;
+    try{
+      return db.collection(COL_SALES)
+        .where('customerPhone', '==', String(phone))
+        .orderBy('createdAt', 'desc').limit(1).get()
+        .then(function(sn){
+          if(sn.empty) return null;
+          var doc = sn.docs[0], d = doc.data() || {};
+          var ms = d.createdAt && d.createdAt.toMillis ? d.createdAt.toMillis() : 0;
+          if(!ms || ms < since) return null;          // أقدم من 48 ساعة
+          if(d.reversed || d.isReversal) return null; // فاتورة اتعكست
+          if(d.ratedAt) return null;                  // اتقيّمت خلاص
+          if(localStorage.getItem('rated_' + doc.id)) return null;  // اتقيّمت من الجهاز ده
+          return doc.id;
+        }).catch(function(){ return null; });
+    }catch(e){ return Promise.resolve(null); }
+  }
+
+  if(!saleId){
+    // مفيش لينك تقييم — نشوف لو فيه فاتورة تستاهل
+    findRatableSale().then(function(id){
+      if(id){ saleId = id; setTimeout(startRating, 1200); }
+    });
+    return;
+  }
+  startRating();
+
+  function startRating(){
 
   var picked = 0, sale = null, sending = false;
 
@@ -1653,6 +1701,7 @@ if ('serviceWorker' in navigator) {
       if(!sale || !sale.branch){
         try{ var _sd = await db.collection(COL_SALES).doc(saleId).get(); if(_sd.exists) sale = _sd.data() || sale; }catch(_e){}
       }
+      try{ localStorage.setItem('rated_' + saleId, '1'); }catch(_e){}
       await db.collection('entries').add({
         r: picked,
         ts: Date.now(),
@@ -1691,6 +1740,7 @@ if ('serviceWorker' in navigator) {
     }catch(e){}
     setTimeout(function(){ wrap.classList.add('on'); }, 260);
   })();
+  }   // نهاية startRating
 })();
 </script>
 </body>
