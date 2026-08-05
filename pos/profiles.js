@@ -304,6 +304,9 @@ function renderCustProfile(){
         📅 مسجّلة من ${dstr(regTs)} · أول شرا ${dstr(d.firstTs)}${d.lastEmp ? ' · آخر كاشير: ' + d.lastEmp : ''}
       </div>
 
+      ${hasPush ? `<button onclick="sendRateRequest('${d.phone}')"
+        style="width:100%; margin-top:9px; padding:9px; border-radius:9px; border:1px solid var(--border);
+        background:var(--panel2); color:var(--muted); font-family:'Cairo'; font-weight:800; font-size:11.5px; cursor:pointer;">⭐ ابعت طلب تقييم</button>` : ''}
       ${hasPerm('canRedeemManual') ? `<button onclick="editCustomerPoints('${d.phone}')"
         style="width:100%; margin-top:9px; padding:9px; border-radius:9px; border:1px solid var(--border);
         background:var(--panel2); color:var(--muted); font-family:'Cairo'; font-weight:800; font-size:11.5px; cursor:pointer;">⚖️ تعديل النقط يدوي</button>` : ''}
@@ -483,3 +486,29 @@ async function editCustomerPoints(phone){
   }catch(e){ showToast('تعذر الحفظ: ' + e.message, 'err'); }
 }
 window.editCustomerPoints = editCustomerPoints;
+
+
+/* ⭐ إرسال طلب تقييم يدوي
+   ------------------------------------------------------------
+   الـPOS ميقدرش يبعت إشعار بنفسه (المفتاح جوه Cloud Functions).
+   فبنعلّم الفاتورة بـ`rateForce` والدالة المجدولة (كل 5 دقايق)
+   بتلقطها وتبعت — نفس المسار الحقيقي بالظبط، مش محاكاة.
+   ⚠️ المسار ده مش مقيّد بمهلة الـ30–90 دقيقة، فينفع على أي فاتورة. */
+async function sendRateRequest(phone){
+  const sales = (_cp && _cp.sales) || [];
+  const last = sales.find(s=> !s.isReversal && !s.reversed && (s.total||0) > 0);
+  if(!last){ showToast('مفيش فاتورة تصلح للتقييم', 'err'); return; }
+  const when = saleDateStr(last);
+  const name = (_cp.c && _cp.c.name) || phone;
+  if(!confirm('هيتبعت طلب تقييم لـ' + name + ' (' + phone + ')\n'
+    + 'على فاتورة ' + when + '\n\nالإشعار بيوصل خلال 5 دقايق. تكمّل؟')) return;
+  try{
+    await db.collection(TEST_SALES).doc(last.id).update({
+      rateForce: true,
+      ratePushAt: firebase.firestore.FieldValue.delete()
+    });
+    _logActivity('rate_request_manual', { phone, saleId: last.id });
+    showToast('اتبعت ✅ هيوصل خلال 5 دقايق');
+  }catch(e){ showToast('تعذر الإرسال: ' + e.message, 'err'); }
+}
+window.sendRateRequest = sendRateRequest;
