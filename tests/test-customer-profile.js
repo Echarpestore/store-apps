@@ -207,3 +207,28 @@ function extractFn(s, header){
   const m = sw.match(/store-apps-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 281, 'POS: CACHE_NAME v281+');
 })();
+
+// ============================================================
+// ٩) ⭐ زرار "ابعت طلب تقييم"
+//    الـPOS ميقدرش يبعت إشعار (المفتاح جوه Cloud Functions) — فبيعلّم
+//    الفاتورة والدالة المجدولة بتلقطها. نفس المسار الحقيقي مش محاكاة.
+// ============================================================
+(function(){
+  const fn = extractFn(src, 'async function sendRateRequest(');
+  assert(!!fn, 'لقينا sendRateRequest');
+  if(!fn) return;
+  assert(/rateForce: true/.test(fn), '⭐ بيعلّم الفاتورة للإرسال');
+  assert(/ratePushAt: firebase\.firestore\.FieldValue\.delete\(\)/.test(fn),
+    '⭐ وبيشيل علامة "اتبعت قبل كده" وإلا الدالة هتتخطاها');
+  assert(/!s\.isReversal && !s\.reversed/.test(fn),
+    '⭐⭐ بيختار آخر فاتورة **حقيقية** — مش فاتورة عكس ولا متعكسة');
+  assert(/\(s\.total\|\|0\) > 0/.test(fn), 'ولا فاتورة بصفر');
+  assert(/confirm\(/.test(fn) && /phone/.test(fn),
+    '⭐ وفيه تأكيد فيه اسم العميلة ورقمها — الإشعار بيروح لعميلة حقيقية');
+  assert(/_logActivity\('rate_request_manual'/.test(fn), 'والإرسال بيتسجل');
+  assert(!/createdAt/.test(fn),
+    '⛔⛔ ومبيلمسش تاريخ الفاتورة خالص — ده كان هيخرّب كل التقارير');
+  // الزرار بيظهر بس لو عندها إشعارات
+  assert(/hasPush \? `<button onclick="sendRateRequest/.test(src),
+    '⭐ والزرار مبيظهرش لعميلة مفيهاش إشعارات أصلًا');
+})();
