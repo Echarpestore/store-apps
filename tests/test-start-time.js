@@ -129,3 +129,65 @@ const at = (h, m)=> new Date(2026, 6, 10, h, m, 0, 0);
   const m = sw.match(/store-apps-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 94, 'sales: CACHE_NAME v94+');
 })();
+
+// ============================================================
+// ٩) 📩 الأذونات المعتمدة داخلة الحساب
+//
+// الفجوة: طلبات الإذن فيها type/dateKey/toShift ومحدش كان بيقراها.
+//  · تبديل شيفت معتمد → الموظفة تيجي في ميعاد الشيفت الجديد
+//    والنظام يحسبها متأخرة بفرق الشيفتين (8 ساعات = خصم أيام)
+//  · إجازة معتمدة → اليوم يتحسب غياب رغم إن الأدمن وافق بنفسه
+// ============================================================
+const LV = [
+  { empId:'e1', status:'approved', dateKey:'2026-07-10', type:'shiftSwap', toShift:'night' },
+  { empId:'e1', status:'approved', dateKey:'2026-07-12', type:'dayoff' },
+  { empId:'e1', status:'approved', dateKey:'2026-07-13', type:'changeDayoff' },
+  { empId:'e1', status:'pending',  dateKey:'2026-07-14', type:'shiftSwap', toShift:'night' }
+];
+
+(function(){
+  const find = S.window.approvedLeaveFor;
+  assertEq(find('e1','2026-07-10', LV).type, 'shiftSwap', 'بيلاقي الإذن المعتمد');
+  assertEq(find('e1','2026-07-14', LV), null, '⛔ والطلب المعلّق مش معتمد — مبيتحسبش');
+  assertEq(find('e2','2026-07-10', LV), null, 'وموظف تاني مالوش علاقة');
+  assertEq(find('e1','2026-07-11', LV), null, 'ويوم من غير إذن = null');
+})();
+
+(function(){
+  S.window.allLeaveReqs = LV;
+  const emp = { id:'e1', shift:'morning' };
+  // 🔄 يوم فيه تبديل معتمد للشيفت الليلي (18:00)
+  assertEq(S.window.effectiveStartHM(emp, CFG, '2026-07-10'), '18:00',
+    '⭐⭐ يوم التبديل: الميعاد بتاع الشيفت الجديد');
+  assertEq(S.window.effectiveEndHM(emp, CFG, '2026-07-10'), '02:00',
+    '⭐ والنهاية كمان');
+  // يوم عادي
+  assertEq(S.window.effectiveStartHM(emp, CFG, '2026-07-11'), '10:00',
+    'ويوم من غير إذن: الشيفت الأصلي');
+
+  // ⭐ الحالة العملية: جت 18:05 يوم التبديل
+  const at = (y,m,d,h,mi)=> new Date(y, m, d, h, mi, 0, 0);
+  const r = S.window.computeLate(at(2026,6,10,18,5), emp, CFG);
+  assertEq(r.lateMin, 5, '⭐⭐ جت في ميعاد الشيفت الجديد = 5 دقايق مش 485');
+  assertEq(r.penalized, false, '⭐⭐ وجوه السماح = مفيش خصم');
+
+  // 🔴 من غير قراءة الإذن (نفس اليوم بس بمفتاح الشيفت الأصلي)
+  const oldWay = S.window.computeLate(at(2026,6,10,18,5), 'morning', CFG);
+  assertEq(oldWay.lateMin, 485, 'إثبات: من غير الإذن كانت 485 دقيقة تأخير');
+
+  S.window.allLeaveReqs = [];
+})();
+
+(function(){
+  S.window.allLeaveReqs = LV;
+  const emp = { id:'e1', dayOff:5 };   // الجمعة
+  // 6→13 يوليو 2026: الاتنين → الاتنين. الجمعة 10 إجازته الأسبوعية
+  const req = S.window.countRequiredWorkDaysInRange(emp,
+    new Date(2026,6,6), new Date(2026,6,13));
+  // 8 أيام − جمعة واحدة (10) − إجازتين معتمدتين (12 و13) = 5
+  assertEq(req, 5, '⭐⭐ الأيام اللي فيها إذن معتمد مش أيام شغل مطلوبة');
+
+  S.window.allLeaveReqs = [];
+  assertEq(S.window.countRequiredWorkDaysInRange(emp, new Date(2026,6,6), new Date(2026,6,13)), 7,
+    'ومن غير أذونات: 8 أيام − الجمعة = 7');
+})();

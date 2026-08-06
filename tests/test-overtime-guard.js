@@ -349,3 +349,38 @@ try{ fs.unlinkSync(runnerPath); }catch(e){}
   assert(/if\(id === 'money'\)/.test(appSrc),
     '⭐ وبتترسم من تاني مع فتح تبويب الفلوس مش مرة واحدة عند التحميل');
 })();
+
+// ============================================================
+// ١٢) 🕐 المالك بيحدد ساعة المشي ويقفل الشيفت
+//
+// قرار المالك: الشيفت 10ص→12ص، وأي قعدة بعد كده = نسيان. ساعتها
+// هو اللي يحدد الساعة اللي مشيت فيها فعلًا والنظام يحسب عليها.
+// ============================================================
+(function(){
+  const fn = extractFn(appSrc, 'async function ownerCloseShift(');
+  assert(!!fn, 'لقينا ownerCloseShift');
+  if(!fn) return;
+
+  assert(/out\.getTime\(\) <= sh\.clockInTs\) out\.setDate\(out\.getDate\(\) \+ 1\)/.test(fn),
+    '⭐⭐ ساعة أصغر من الدخول = مشيت بعد نص الليل (00:30 يبقى تاني يوم مش نفس اليوم)');
+  assert(/totalMin > maxShiftMin/.test(fn),
+    '⭐ ولو الوقت المكتوب طلّع شيفت غير معقول، بيترفض قبل الحفظ');
+  assert(/!\/\^\\d\{1,2\}:\\d\{2\}\$\//.test(fn) || /\\d\{1,2\}:\\d\{2\}/.test(fn),
+    'وصيغة الوقت بتتفحص');
+  assert(/parts\[0\] > 23 \|\| parts\[1\] > 59/.test(fn), 'وساعة زي 99:99 مرفوضة');
+
+  assert(/overtimeApprovedMin: overtimeMinutes/.test(fn),
+    '⭐⭐ هو اللي حدد الوقت → الأوفرتايم معتمد بقراره (مش هيراجعه تاني)');
+  assert(/earlyMin: 0, earlyHours: 0/.test(fn),
+    '⭐⭐ ومفيش خصم انصراف بدري — الوقت اتحدد يدوي مش من الجهاز');
+  assert(/forgotClockOut: false/.test(fn), 'والعلامة بتتشال بعد ما يتحسم');
+  assert(/closedByOwner: true/.test(fn), 'وبيتسجّل إن المالك هو اللي قفله');
+  assert(/confirm\(/.test(fn), 'وفيه تأكيد بيوري المدة والأوفرتايم قبل الحفظ');
+
+  // اللوحة بتعرض الشيفتات المفتوحة كمان مش المستني موافقة بس
+  const panel = extractFn(appSrc, 'function renderOvertimeApprovals(');
+  assert(!!panel && /!sh\.clockOutTs \|\| sh\.forgotClockOut/.test(panel),
+    '⭐ اللوحة بتضم الشيفتات المفتوحة والمنسية — مكان واحد للقرار');
+  assert(!!panel && /data-ot-time/.test(panel), 'وفيها زرار تحديد الساعة');
+  assert(/window\.ownerCloseShift = ownerCloseShift/.test(appSrc), 'معروضة على window');
+})();
