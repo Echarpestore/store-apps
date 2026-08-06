@@ -672,12 +672,54 @@ function _hm2min(hm){ const [h,m] = String(hm||'0:0').split(':').map(Number); re
    (جه 11:09 واتحسب من 10:00) = 6 ساعات رصيد ≈ يوم خصم على غير حق.
    وكان فيه تناقض تاني: نهاية الشيفت بتحترم `scheduledEndTime` الفردي
    والبداية لأ. القاعدة دلوقتي واحدة: **الفردي يغلب، والشيفت افتراضي**. */
-function effectiveStartHM(emp, cfg){
+/* 📩 إذن معتمد للموظف في يوم معيّن
+   ------------------------------------------------------------
+   ⚠️ الفجوة اللي ده بيقفلها: الطلبات (`sales_leave_requests`) فيها
+   `type` و`dateKey` و`toShift` — ومحدش كان بيقراها في أي حساب.
+   النتيجة: موظفة اتوافق لها على **تبديل شيفت** ليوم معيّن، وجت في
+   ميعاد الشيفت الجديد، والنظام حسبها **متأخرة** بالفرق بين الشيفتين
+   (تبديل من الصباحي للمسائي = 8 ساعات تأخير = خصم أيام).
+   وموظفة اتوافق لها على **إجازة/تغيير يوم إجازة** كان اليوم بيتحسب
+   عليها غياب رغم إن الأدمن نفسه وافق.
+   type: 'dayoff' | 'changeDayoff' | 'shiftSwap' */
+function approvedLeaveFor(empId, dateKey, reqs){
+  const list = reqs || (typeof window !== 'undefined' && window.allLeaveReqs) || [];
+  return list.find(l=> l && l.empId === empId && l.status === 'approved' && l.dateKey === dateKey) || null;
+}
+function _dayKeyOf(d){
+  const x = new Date(d);
+  return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0');
+}
+
+function effectiveStartHM(emp, cfg, dateKey){
   cfg = cfg || complianceCfg;
+  // 🔄 تبديل شيفت معتمد لليوم ده → الميعاد بتاع الشيفت الجديد
+  if(dateKey && emp){
+    const lv = approvedLeaveFor(emp.id, dateKey);
+    if(lv && lv.type === 'shiftSwap' && lv.toShift){
+      const sw = (cfg.shifts || {})[lv.toShift];
+      if(sw && sw.start) return sw.start;
+    }
+  }
   const own = emp && emp.scheduledStartTime;
   if(/^\d{1,2}:\d{2}$/.test(String(own || ''))) return own;
   const sh = (cfg.shifts || {})[emp && emp.shift];
   return (sh && sh.start) || '';
+}
+// نهاية الشيفت بنفس القاعدة
+function effectiveEndHM(emp, cfg, dateKey){
+  cfg = cfg || complianceCfg;
+  if(dateKey && emp){
+    const lv = approvedLeaveFor(emp.id, dateKey);
+    if(lv && lv.type === 'shiftSwap' && lv.toShift){
+      const sw = (cfg.shifts || {})[lv.toShift];
+      if(sw && sw.end) return sw.end;
+    }
+  }
+  const own = emp && emp.scheduledEndTime;
+  if(/^\d{1,2}:\d{2}$/.test(String(own || ''))) return own;
+  const sh = (cfg.shifts || {})[emp && emp.shift];
+  return (sh && sh.end) || '';
 }
 
 // clockInDate = وقت الحضور · empOrShiftKey = مستند الموظف (الأفضل) أو مفتاح
@@ -687,7 +729,7 @@ function computeLate(clockInDate, empOrShiftKey, cfg){
   if(!clockInDate) return { lateMin: 0, penalized: false };
   let startHM;
   if(empOrShiftKey && typeof empOrShiftKey === 'object'){
-    startHM = effectiveStartHM(empOrShiftKey, cfg);
+    startHM = effectiveStartHM(empOrShiftKey, cfg, _dayKeyOf(clockInDate));
   }else{
     const sh = (cfg.shifts||{})[empOrShiftKey];
     startHM = sh && sh.start;
@@ -1096,9 +1138,9 @@ function pendingOvertimeShifts(shifts){
    وهي أصلًا لسه معادهاش جه. القاعدة دلوقتي: اليوم مبيتحكمش عليه
    غير بعد ما شيفت الموظفة نفسها يخلص. */
 function shiftEndTsForDay(emp, dayDate, cCfg){
-  const sdef = (cCfg && cCfg.shifts) ? cCfg.shifts[emp && emp.shift] : null;
-  const endHM   = (emp && emp.scheduledEndTime)   || (sdef && sdef.end)   || '';
-  const startHM = (emp && emp.scheduledStartTime) || (sdef && sdef.start) || '';
+  const _dk = _dayKeyOf(dayDate);
+  const endHM   = effectiveEndHM(emp, cCfg, _dk);
+  const startHM = effectiveStartHM(emp, cCfg, _dk);
   if(!/^\d{1,2}:\d{2}$/.test(String(endHM))) return null;
   const parts = String(endHM).split(':').map(Number);
   const e = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), parts[0], parts[1], 0, 0);
@@ -1302,6 +1344,8 @@ window.breaksMissingPhoto = breaksMissingPhoto;
 window.forgottenBreaks = forgottenBreaks;
 window.expectedShiftEndTs = expectedShiftEndTs;
 window.effectiveStartHM = effectiveStartHM;
+window.effectiveEndHM = effectiveEndHM;
+window.approvedLeaveFor = approvedLeaveFor;
 window.shiftEndTsForDay = shiftEndTsForDay;
 window.lastAbsenceJudgeDay = lastAbsenceJudgeDay;
 window.forgottenShifts = forgottenShifts;
@@ -3305,7 +3349,11 @@ function countRequiredWorkDaysInRange(emp, start, end){
   const cur = new Date(start);
   while(cur <= end){
     const isDayOff = (emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== '') && cur.getDay() === Number(emp.dayOff);
-    if(!isDayOff) count++;
+    // 📩 إجازة أو تغيير يوم إجازة **معتمد** = اليوم ده مش مطلوب فيه شغل
+    //    (الأدمن وافق بنفسه، فمينفعش يتحسب غياب عليها)
+    const lv = approvedLeaveFor(emp.id, _dayKeyOf(cur));
+    const excused = !!(lv && (lv.type === 'dayoff' || lv.type === 'changeDayoff'));
+    if(!isDayOff && !excused) count++;
     cur.setDate(cur.getDate()+1);
   }
   return count;
@@ -6477,8 +6525,13 @@ function renderOvertimeApprovals(){
   /* 🌍 كل الفروع مش فرع الجهاز بس — المالك بيعتمد صرف على الشبكة كلها،
      ومكانش منطقي إنه يمشي على كل جهاز فرع عشان يعتمد أوفرتايمه.
      (وكمان ده كان بيخلي اللوحة تطلع فاضية والبانر بيقول إن فيه بنود.) */
-  const list = pendingOvertimeShifts(window.allShifts || [])
-    .sort((a,b)=> (b.clockInTs||0) - (a.clockInTs||0));
+  /* اللوحة بقت مكان واحد للاتنين: أوفرتايم مستني موافقة، **و**الشيفتات
+     اللي فضلت مفتوحة أو اتقفلت على إنها نسيان — دي محتاجة قرار المالك
+     على ساعة المشي أصلًا قبل ما يتكلم عن أوفرتايم. */
+  const pend = pendingOvertimeShifts(window.allShifts || []);
+  const needTime = (window.allShifts || []).filter(sh=>
+    sh && (!sh.clockOutTs || sh.forgotClockOut) && !pend.some(p=> p.id === sh.id));
+  const list = needTime.concat(pend).sort((a,b)=> (b.clockInTs||0) - (a.clockInTs||0));
   if(!list.length){
     host.innerHTML = '<p style="color:var(--sub); font-size:12.5px; margin:0;">مفيش أوفرتايم مستني موافقة ✅</p>';
     return;
@@ -6501,6 +6554,7 @@ function renderOvertimeApprovals(){
       </div>
       ${susp ? '<div style="font-size:12px; color:#ff9a9d; font-weight:800; margin-top:5px;">🚨 شكله نسيان انصراف مش شغل فعلي — راجعه كويس</div>' : ''}
       <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:9px;">
+        ${(!s.clockOutTs || susp) ? `<button data-ot-time="${s.id}" style="flex:1 1 100%; padding:9px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--gold); font-family:'Cairo'; font-weight:800; cursor:pointer;">🕐 حدّد ساعة المشي واقفل الشيفت</button>` : ''}
         <button data-ot-full="${s.id}" style="flex:1; min-width:96px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--gold-dim); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">✅ اعتمد كامل</button>
         <button data-ot-part="${s.id}" style="flex:1; min-width:96px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">✏️ اعتمد جزء</button>
         <button data-ot-no="${s.id}"   style="flex:1; min-width:96px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:#ff9a9d; font-family:'Cairo'; font-weight:800; cursor:pointer;">🚫 مش معتمد</button>
@@ -6508,6 +6562,8 @@ function renderOvertimeApprovals(){
     </div>`;
   }).join('');
 
+  host.querySelectorAll('[data-ot-time]').forEach(b=>
+    b.addEventListener('click', ()=> ownerCloseShift(b.dataset.otTime)));
   host.querySelectorAll('[data-ot-full]').forEach(b=>
     b.addEventListener('click', ()=> decideOvertime(b.dataset.otFull, 'full')));
   host.querySelectorAll('[data-ot-part]').forEach(b=>
@@ -6630,3 +6686,62 @@ async function decideRewardBudget(groupKey, status){
   renderRewardBudget();
 }
 window.decideRewardBudget = decideRewardBudget;
+
+/* ============================================================
+   🕐 المالك بيحدد ساعة المشي ويقفل الشيفت
+   ------------------------------------------------------------
+   قرار المالك: الشيفت 10ص→12ص، وأي قعدة بعد كده = نسيان انصراف.
+   ساعتها هو اللي بيحدد الساعة اللي مشيت فيها فعلًا، والنظام بيحسب
+   على أساسها — بدل ما يستنى رقم غلط أو يلغيه بالكامل.
+
+   ⚠️ الوقت بيتحسب على **يوم دخولها** — لو كتب ساعة أصغر من ساعة
+   الدخول (مشيت بعد نص الليل) بيتحسب تاني يوم تلقائي.
+   ============================================================ */
+async function ownerCloseShift(shiftId){
+  const sh = (window.allShifts||[]).find(x=> x.id === shiftId);
+  if(!sh || !sh.clockInTs){ alert('الشيفت مش موجود'); return; }
+  const emp = (window.employees||[]).find(e=> e.id === sh.employeeId) || {};
+  const inD = new Date(sh.clockInTs);
+  const fmt = (d)=> String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+
+  const v = prompt('دخلت ' + fmt(inD) + ' يوم ' + inD.toLocaleDateString('ar-EG')
+    + '\nمشيت الساعة كام؟ (بصيغة 24 ساعة، مثال 00:30)',
+    sh.clockOutTs ? fmt(new Date(sh.clockOutTs)) : '00:00');
+  if(v === null) return;
+  const t = String(v).trim();
+  if(!/^\d{1,2}:\d{2}$/.test(t)){ alert('اكتب الوقت بصيغة HH:MM'); return; }
+  const parts = t.split(':').map(Number);
+  if(parts[0] > 23 || parts[1] > 59){ alert('وقت مش صح'); return; }
+
+  const out = new Date(inD.getFullYear(), inD.getMonth(), inD.getDate(), parts[0], parts[1], 0, 0);
+  if(out.getTime() <= sh.clockInTs) out.setDate(out.getDate() + 1);   // مشيت بعد نص الليل
+  const totalMin = Math.round((out.getTime() - sh.clockInTs) / 60000);
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const maxShiftMin = (Number(cfg.maxShiftHours) || 14) * 60;
+  if(totalMin > maxShiftMin){
+    alert('كده الشيفت بقى ' + Math.floor(totalMin/60) + ' ساعة — أكتر من المعقول.\nراجع الوقت اللي كتبته.');
+    return;
+  }
+  const overtimeMinutes = Math.max(0, totalMin - (8*60 + 15));
+
+  if(!confirm((emp.name || sh.employeeName || '') + '\n\n'
+    + 'دخلت ' + fmt(inD) + ' · مشيت ' + t + '\n'
+    + 'مدة الشيفت: ' + Math.floor(totalMin/60) + ' س ' + (totalMin%60) + ' د\n'
+    + 'أوفرتايم: ' + overtimeMinutes + ' دقيقة (هيتعتمد بالكامل)\n\n'
+    + 'تكمّل؟')) return;
+
+  try{
+    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_shifts', shiftId), {
+      clockOutTs: out.getTime(), shiftMinutes: totalMin,
+      overtimeMinutes,
+      // 🕐 هو اللي حدد الوقت، فالأوفرتايم معتمد بقراره
+      otRequiresApproval: true, overtimeApprovedMin: overtimeMinutes,
+      overtimeDecision: overtimeMinutes > 0 ? 'approved' : 'none',
+      // ⛔ مفيش خصم انصراف بدري — الوقت اتحدد يدوي مش من الجهاز
+      earlyMin: 0, earlyHours: 0,
+      forgotClockOut: false, closedByOwner: true, closedAt: Date.now()
+    });
+    renderOvertimeApprovals();
+  }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
+}
+window.ownerCloseShift = ownerCloseShift;
