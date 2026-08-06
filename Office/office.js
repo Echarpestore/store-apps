@@ -162,21 +162,36 @@ function cashOnHand(base, data, nowTs){
            from: from, to: to };
 }
 
-/* 📅 حركة الكاش يوم بيوم (لآخر n يوم) */
+/* 📅 حركة كل يوم بالتفصيل — ده قلب التبويب
+   كل يوم: كاش الفروع · فيزا · اللي اتصرف (مصاريف/رواتب/سلف/مكافآت)
+   · صافي اليوم · والرصيد التراكمي لحد اليوم ده. */
 function cashDaily(base, data, nowTs, days){
   const to = Number(nowTs) || Date.now();
-  const n = Math.max(1, Number(days) || 7);
-  const out = [];
+  const n = Math.max(1, Number(days) || 14);
+  const from = Number(base && base.atMs) || 0;
+  const opening = Number(base && base.amount) || 0;
+
+  const rows = [];
   for(let i = 0; i < n; i++){
     const d = new Date(to - i * 86400000);
     const st = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    const en = st + 86400000 - 1;
-    if(en < (Number(base && base.atMs) || 0)) break;   // قبل ما يحدد رصيده = مش بتاعنا
-    const a = cashOnHand({ amount: 0, atMs: Math.max(st - 1, Number(base && base.atMs) || 0) },
-                         data, Math.min(en, to));
-    out.push({ dayMs: st, inAmt: a.cashIn, outAmt: a.out, net: a.cashIn - a.out });
+    const en = Math.min(st + 86400000 - 1, to);
+    if(en < from) break;                       // قبل ما يحدد رصيده
+    const lo = Math.max(st - 1, from);         // أول يوم بيبدأ من لحظة التحديد
+    const a = cashOnHand({ amount: 0, atMs: lo }, data, en);
+    const p = paymobLedger({ amount: 0, atMs: lo }, data, en);
+    rows.push({
+      dayMs: st,
+      cash: a.cashIn, visa: p.visaSales, settled: a.settled,
+      advances: a.advances, salaries: a.salaries,
+      expenses: a.expenses, rewards: a.rewards,
+      out: a.out, net: a.cashIn + a.settled - a.out
+    });
   }
-  return out;
+  // الرصيد التراكمي: من الأقدم للأحدث
+  let run = opening;
+  for(let k = rows.length - 1; k >= 0; k--){ run += rows[k].net; rows[k].balance = Math.round(run*100)/100; }
+  return rows;
 }
 
 /* ⚠️ office بيحمّل مبيعات آخر 30 يوم بس — فالرصيد الافتتاحي ميقدرش يبقى
@@ -3952,7 +3967,7 @@ function renderCashHand(){
     return '<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line); font-size:13px;">'
       + '<span>' + lbl + '</span><b style="color:' + col + ';">' + (sign < 0 ? '−' : (sign > 0 ? '+' : '')) + egp(Math.abs(val)) + '</b></div>';
   };
-  const days = cashDaily(base, D, now, 7);
+  const days = cashDaily(base, D, now, 14);
 
 
   host.innerHTML =
@@ -3978,13 +3993,25 @@ function renderCashHand(){
     + '</div>'
 
     + '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
-    + '<div style="font-weight:800; font-size:13px; margin-bottom:6px;">📅 آخر أيام</div>'
+    + '<div style="font-weight:800; font-size:13px; margin-bottom:8px;">📅 يوم بيوم</div>'
     + (days.length ? days.map(function(d){
-        return '<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line); font-size:12.5px;">'
-          + '<span>' + dstr(d.dayMs) + '</span>'
-          + '<span><span style="color:var(--good);">+' + egp(d.inAmt) + '</span> · '
-          + '<span style="color:var(--bad);">−' + egp(d.outAmt) + '</span> · '
-          + '<b>' + (d.net >= 0 ? '+' : '−') + egp(Math.abs(d.net)) + '</b></span></div>';
+        const bits = [];
+        if(d.expenses) bits.push('🧾 ' + egp(d.expenses));
+        if(d.salaries) bits.push('💼 ' + egp(d.salaries));
+        if(d.advances) bits.push('🤝 ' + egp(d.advances));
+        if(d.rewards)  bits.push('🎁 ' + egp(d.rewards));
+        if(d.settled)  bits.push('💳 +' + egp(d.settled));
+        return '<div style="border-bottom:1px solid var(--line); padding:9px 0;">'
+          + '<div style="display:flex; justify-content:space-between; align-items:center;">'
+          + '<b style="font-size:12.5px;">' + dstr(d.dayMs) + '</b>'
+          + '<span style="font-size:12.5px;">معاك <b>' + egp(d.balance) + '</b></span></div>'
+          + '<div style="font-size:12px; color:var(--muted); margin-top:3px;">'
+          + '💵 كاش <b style="color:var(--good);">' + egp(d.cash) + '</b>'
+          + ' · 💳 فيزا <b>' + egp(d.visa) + '</b>'
+          + (d.out ? ' · خرج <b style="color:var(--bad);">' + egp(d.out) + '</b>' : '')
+          + '</div>'
+          + (bits.length ? '<div style="font-size:11.5px; color:var(--muted); margin-top:2px;">' + bits.join(' · ') + '</div>' : '')
+          + '</div>';
       }).join('') : '<div class="muted" style="font-size:12px;">لسه مفيش حركة</div>')
     + '</div>'
 
