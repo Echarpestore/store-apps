@@ -804,6 +804,50 @@ async function buildRatingsReport(from, to){
        ${_srcCell('kiosk','🖥️ شاشة الفرع','ضغطة سريعة مجهولة')}
        </tbody></table>` : '';
 
+  /* 🔎 مين قيّم — **للمالك بس** (`canManageRoles`)
+     ------------------------------------------------------------
+     كل تقييم من تطبيق الولاء بيتسجّل ومعاه رقم العميلة ورقم الفاتورة
+     واسم البياعة — بس مكانش بيتعرض في أي شاشة، فالمالك يشوف "3 سيّئة"
+     ومايعرفش مين يكلم.
+     ⚠️ مقفول على المالك عن قصد: لو كل بياعة تعرف مين إداها تقييم واطي،
+        التقييم نفسه بيبقى خطر على العميلة. تقييمات شاشة الفرع مجهولة
+        أصلًا ومش بنخمّن ليها هوية. */
+  let whoRatedHtml = '';
+  const _canSeeWho = (typeof hasPerm === 'function') && hasPerm('canManageRoles');
+  if(_canSeeWho){
+    const named = entries.filter(e=> e.customerPhone).sort((a,b)=> (a.r - b.r) || (b.ts - a.ts));
+    if(named.length){
+      // أسماء العملاء — بنجيبها مرة واحدة بدل استعلام لكل تقييم
+      const nameByPhone = {};
+      try{
+        const phones = [...new Set(named.map(e=> e.customerPhone))].slice(0, 30);
+        const docs = await Promise.all(phones.map(p=>
+          db.collection(TEST_CUSTOMERS).doc(p).get().catch(()=> null)));
+        docs.forEach((d, i)=>{ if(d && d.exists) nameByPhone[phones[i]] = (d.data()||{}).name || ''; });
+      }catch(e){ console.warn('rating names', e && e.code); }
+
+      const rows = named.slice(0, 60).map(e=>{
+        const nm = nameByPhone[e.customerPhone] || '';
+        const when = new Date(e.ts).toLocaleString('ar-EG', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+        return `<tr>
+          <td style="white-space:nowrap;">${RATING_ICON_MAP[e.r]||''}</td>
+          <td><a href="tel:${_rtEsc(e.customerPhone)}" style="color:#2563eb; font-weight:700;">${_rtEsc(nm || e.customerPhone)}</a>
+            ${nm ? `<div style="font-size:10.5px; color:var(--muted);">${_rtEsc(e.customerPhone)}</div>` : ''}</td>
+          <td style="font-size:11.5px;">${_rtEsc(e.servedByEmployeeName || '—')}</td>
+          <td style="font-size:11px; color:var(--muted); white-space:nowrap;">${when}</td>
+        </tr>${e.note && String(e.note).trim()
+          ? `<tr><td colspan="4" style="font-size:12px; color:var(--muted); padding-top:0; white-space:pre-wrap;">💬 ${_rtEsc(e.note)}</td></tr>`
+          : ''}`;
+      }).join('');
+      const badNamed = named.filter(e=> e.r <= 2).length;
+      whoRatedHtml = `<h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">
+          🔎 مين قيّم (${named.length}) — 🔒 للمالك بس · الأسوأ الأول${badNamed? ` · ${badNamed} محتاج متابعة`:''}</h3>
+        <table class="rep-tbl"><thead><tr><th></th><th>العميلة</th><th>مع مين</th><th>إمتى</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+        ${named.length > 60 ? `<div style="font-size:11px; color:var(--muted);">معروض 60 من ${named.length}</div>` : ''}`;
+    }
+  }
+
   // 💬 الكلام المكتوب — كان بيتخزن ومحدش بيقراه في أي شاشة
   const withNotes = entries.filter(e=> e.note && String(e.note).trim())
     .sort((a,b)=> (a.r - b.r) || (b.ts - a.ts)).slice(0, 40);
@@ -831,6 +875,7 @@ async function buildRatingsReport(from, to){
       ${empRows.map(([n,d])=>`<tr><td>${n}</td><td class="num">${d.n}</td><td class="num">${(d.sum/d.n).toFixed(2)}</td></tr>`).join('')}
       </tbody></table>`:''}
     ${srcRows}
+    ${whoRatedHtml}
     ${noteRows}`
     : '<div style="text-align:center; color:var(--muted); padding:24px;">مفيش تقييمات في الفترة دي</div>'}
   </div>`;
