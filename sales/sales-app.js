@@ -686,10 +686,72 @@ function approvedLeaveFor(empId, dateKey, reqs){
   const list = reqs || (typeof window !== 'undefined' && window.allLeaveReqs) || [];
   return list.find(l=> l && l.empId === empId && l.status === 'approved' && l.dateKey === dateKey) || null;
 }
-function _dayKeyOf(d){
-  const x = new Date(d);
-  return x.getFullYear() + '-' + String(x.getMonth()+1).padStart(2,'0') + '-' + String(x.getDate()).padStart(2,'0');
+/* ============================================================
+   🕒 التوقيت — **ثابت على القاهرة**، مش ساعة الجهاز
+   ------------------------------------------------------------
+   الباج اللي ده بيقفله (اتكشف والمالك بره مصر):
+   التطبيق كله كان بيحسب بـ`getHours/getDate` بتاعت الجهاز. المالك فتح
+   من البرازيل (فرق 6 ساعات) فـ:
+     · شيفت 10:08ص → 6:14م بالقاهرة ظهر 4:08ص → 12:14م
+     · والانصراف بدري اتحسب بميعاد نهاية الشيفت بتوقيت البرازيل
+     · وأي حاجة تتسجّل من جهازه بتاخد **تاريخ** البرازيل
+     · وسجل أيام الشغل بيوزّع الشيفت على اليوم الغلط
+   وده مش عرض غلط بس — ده بيتكتب في قاعدة البيانات ويتخصم من مرتبات.
+   POS كان متظبط على القاهرة من زمان (bizDayStartMs)، وsales لأ.
+
+   الأدوات:
+     cai(ts)      → Date \"عرض\": قرايتها المحلية = قيم القاهرة
+                    (cai(x).getHours() = ساعة القاهرة · getDay() = يوم القاهرة)
+     caiStamp(…)  → الطابع الزمني الحقيقي لوقت حائط بالقاهرة (بيحترم التوقيت الصيفي)
+     _fmtKey(d)   → تنسيق YYYY-MM-DD من Date **من غير أي تحويل**
+                    (للتواريخ المبنية بإيدنا أو الراجعة من cai — تحويلها تاني = يوم غلط)
+   ============================================================ */
+const CAI_TZ = 'Africa/Cairo';
+const _caiFmt = new Intl.DateTimeFormat('en-GB', { timeZone: CAI_TZ, year:'numeric',
+  month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+function caiParts(ts){
+  const o = {};
+  _caiFmt.formatToParts(new Date(Number(ts) || 0)).forEach(p=>{ o[p.type] = p.value; });
+  return { y:+o.year, m:+o.month, d:+o.day,
+           hh:+(o.hour === '24' ? '0' : o.hour), mi:+o.minute, ss:+o.second };
 }
+// فرق القاهرة عن UTC عند لحظة معيّنة (بيتغيّر مع التوقيت الصيفي)
+function caiOffsetMs(ts){
+  const p = caiParts(ts);
+  return Date.UTC(p.y, p.m-1, p.d, p.hh, p.mi, p.ss) - (Math.floor(Number(ts)/1000)*1000);
+}
+function cai(x){
+  const ts = (x instanceof Date) ? x.getTime() : (typeof x === 'number' ? x : new Date(x).getTime());
+  const d = new Date(ts);
+  return new Date(ts + caiOffsetMs(ts) + d.getTimezoneOffset()*60000);
+}
+function caiNow(){ return cai(Date.now()); }
+// الطابع الزمني الحقيقي لوقت حائط بالقاهرة — بالتقريب المتكرر عشان التوقيت الصيفي
+function caiStamp(y, m, d, hh, mi, ss, ms){
+  const want = Date.UTC(y, m-1, d, hh||0, mi||0, ss||0, ms||0);
+  let guess = want - 3*3600000;
+  for(let i = 0; i < 4; i++){
+    const next = want - caiOffsetMs(guess);
+    if(next === guess) break;
+    guess = next;
+  }
+  return guess;
+}
+// بداية/نهاية يوم بالقاهرة كطابع زمني حقيقي
+function caiDayStart(y, m, d){ return caiStamp(y, m, d, 0, 0, 0, 0); }
+function caiDayEnd(y, m, d){ return caiStamp(y, m, d, 23, 59, 59, 999); }
+function _fmtKey(x){
+  const d = (x instanceof Date) ? x : new Date(x);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+// مفتاح يوم بالقاهرة من لحظة حقيقية
+function caiDayKey(x){ return _fmtKey(cai(x)); }
+window.cai = cai; window.caiNow = caiNow; window.caiStamp = caiStamp;
+window.caiParts = caiParts; window.caiDayStart = caiDayStart; window.caiDayEnd = caiDayEnd;
+window._fmtKey = _fmtKey; window.caiDayKey = caiDayKey;
+
+// ⚠️ بيحوّل للقاهرة. لو التاريخ **مبني بإيدنا** أو جاي من cai() استخدم _fmtKey.
+function _dayKeyOf(d){ return _fmtKey(cai(d)); }
 
 function effectiveStartHM(emp, cfg, dateKey){
   cfg = cfg || complianceCfg;
@@ -735,7 +797,8 @@ function computeLate(clockInDate, empOrShiftKey, cfg){
     startHM = sh && sh.start;
   }
   if(!startHM) return { lateMin: 0, penalized: false };
-  const inMin = clockInDate.getHours()*60 + clockInDate.getMinutes();
+  const _inC = cai(clockInDate);                       // 🕒 بساعة القاهرة
+  const inMin = _inC.getHours()*60 + _inC.getMinutes();
   const lateMin = Math.max(0, inMin - _hm2min(startHM));
   return { lateMin, penalized: lateMin > (cfg.lateGraceMin||0) };
 }
@@ -819,25 +882,35 @@ function detectAttendanceIssues(emps, shifts, fromTs, toTs, decided, todayTs){
   decided = decided || {};
   const out = [];
   const DAY = 86400000;
-  const keyOf = (d)=> d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const keyOf = (d)=> _fmtKey(cai(d));                  // 🕒 بيوم القاهرة
   // حضور كل موظف بمفتاح اليوم
   const present = {};
   (shifts||[]).forEach(sh=>{
     if(!sh || !sh.clockInTs) return;
-    present[sh.employeeId + '|' + keyOf(new Date(sh.clockInTs))] = true;
+    present[sh.employeeId + '|' + caiDayKey(sh.clockInTs)] = true;
   });
-  const start = new Date(fromTs); start.setHours(0,0,0,0);
-  const end   = new Date(toTs);   end.setHours(0,0,0,0);
-  const today = new Date(todayTs || Date.now()); today.setHours(0,0,0,0);
+  // 🕒 حدود الأيام ببداية اليوم في القاهرة (مش نص الليل المحلي)
+  const _fs = caiParts(fromTs), _ts_ = caiParts(toTs), _ns = caiParts(todayTs || Date.now());
+  const start = new Date(caiDayStart(_fs.y, _fs.m, _fs.d));
+  const end   = new Date(caiDayStart(_ts_.y, _ts_.m, _ts_.d));
+  const today = new Date(caiDayStart(_ns.y, _ns.m, _ns.d));
 
-  for(let t = start.getTime(); t <= end.getTime(); t += DAY){
+  for(let t = start.getTime(); t <= end.getTime(); ){
     const d = new Date(t);
-    if(d.getTime() >= today.getTime()) continue;      // النهاردة لسه مخلصش — مش بنحكم عليه
-    const dateKey = keyOf(d), dow = d.getDay();
+    const _p = caiParts(t);
+    const _next = caiDayStart(_p.y, _p.m, _p.d + 1);   // خطوة يوم قاهري كامل (التوقيت الصيفي)
+    if(d.getTime() >= today.getTime()){ t = _next; continue; }   // النهاردة لسه مخلصش
+    const _dc = cai(t);
+    const dateKey = _fmtKey(_dc), dow = _dc.getDay();
+    const _tCur = t;                                   // ⚠️ نمسك اليوم الحالي قبل ما نخطي
+    t = _next;
     (emps||[]).forEach(e=>{
       if(!e || e.active === false) return;
       if(e.dayOff === undefined || e.dayOff === null || e.dayOff === '') return;   // ملوش جدول
-      if(e.createdAt && t < new Date(e.createdAt).setHours(0,0,0,0)) return;        // قبل ما يتسجّل
+      if(e.createdAt){                                                            // قبل ما يتسجّل
+        const _cp = caiParts(new Date(e.createdAt).getTime());
+        if(_tCur < caiDayStart(_cp.y, _cp.m, _cp.d)) return;
+      }
       const k = e.id + '|' + dateKey;
       if(decided[k]) return;                                                        // اتقرر فيها قبل كده
       const isOff = Number(e.dayOff) === dow;
@@ -896,6 +969,8 @@ const timeCfgDefaults = {
   maxLateHoursPerDay: 0,   // 🧢 سقف عقوبة التأخير في اليوم الواحد (0 = مفيش سقف — الأدمن يحدده)
   timeAmnestyUntil: '',    // 🩹 عفو شامل: أي رصيد بتاريخه ≤ ده مبيتحسبش خالص
   earlyMinPerHour: 10,     // 🚪 الانصراف بدري: كل كام دقيقة = ساعة (زي التأخير)
+  earlyGraceMin: 5,        // 🚪 سماح النقص عن مدة الشيفت قبل أي خصم
+  maxEarlyHoursPerDay: 7,  // 🧢 سقف عقوبة الانصراف بدري في اليوم (7 = يوم واحد بحد أقصى)
   absenceHours: 7,         // 🚫 غياب بدون عذر = كام ساعة رصيد (7 = خروج فوري من المكافأة)
   autoCloseBreakMult: 2,   // البريك بيتقفل تلقائي بعد كام ضعف من مدته
   breakAlertBeeps: 4,      // 🔔 بعد ما مدة البريك تخلص: بيرن كام مرة (مرة كل دقيقة) جوه فترة السماح
@@ -955,11 +1030,11 @@ const framesDefaults = {
 
 // أسبوع العمل المصري: السبت → الجمعة. المفتاح = تاريخ السبت
 function frameWeekStart(d){
-  const dt = new Date(d); dt.setHours(0,0,0,0);
+  const dt = cai(d); dt.setHours(0,0,0,0);             // 🕒 يوم القاهرة
   dt.setDate(dt.getDate() - ((dt.getDay() + 1) % 7));   // Sat=6→0 · Sun=0→1 · ... · Fri=5→6
-  return dt;
+  return dt;                                           // ⚠️ Date "عرض" — استخدم _fmtKey مش todayStr
 }
-function frameWeekLabel(d){ return 'W' + todayStr(frameWeekStart(d)); }
+function frameWeekLabel(d){ return 'W' + _fmtKey(frameWeekStart(d)); }
 
 // 🎯 صافي مبيعات فريق شيفت من صفوف مبيعات اليوم
 // نفس منطق عمولة التارجت: المرتجع الكامل بيستبعد الأصل (reversed) وصف العكس (isReversal)
@@ -974,7 +1049,7 @@ function shiftTeamNet(rows, teamIds){
 // "حي" يعني بيتسحب فورًا لو نزل رصيد (تأخير بريك / انصراف بدري) — الحساب بيتعاد مع كل snapshot
 function dailyCleanFrame(empId, dateKey, credit, shiftRows){
   const attended = (shiftRows || []).some(s => s.employeeId === empId && s.clockInTs
-                    && todayStr(new Date(s.clockInTs)) === dateKey);
+                    && caiDayKey(s.clockInTs) === dateKey);
   if(!attended) return false;
   const hours = (credit || []).filter(x => x && x.employeeId === empId && tcCounts(x) && x.date === dateKey)
                               .reduce((a, x) => a + (Number(x.hours) || 0), 0);
@@ -987,11 +1062,11 @@ function weeklyCleanFrame(empId, weekStartDate, credit, shiftRows, cfg){
   const daySet = new Set();
   for(let i = 0; i < 7; i++){
     const d = new Date(weekStartDate); d.setDate(d.getDate() + i);
-    daySet.add(todayStr(d));
+    daySet.add(_fmtKey(d));                            // weekStartDate جاية من frameWeekStart (عرض)
   }
   const attendedDays = new Set(
-    (shiftRows || []).filter(s => s.employeeId === empId && s.clockInTs && daySet.has(todayStr(new Date(s.clockInTs))))
-                     .map(s => todayStr(new Date(s.clockInTs))));
+    (shiftRows || []).filter(s => s.employeeId === empId && s.clockInTs && daySet.has(caiDayKey(s.clockInTs)))
+                     .map(s => caiDayKey(s.clockInTs)));
   if(attendedDays.size < (Number(cfg.minWeekDays) || 5)) return false;
   const hours = (credit || []).filter(x => x && x.employeeId === empId && tcCounts(x) && daySet.has(x.date))
                               .reduce((a, x) => a + (Number(x.hours) || 0), 0);
@@ -1143,10 +1218,14 @@ function shiftEndTsForDay(emp, dayDate, cCfg){
   const startHM = effectiveStartHM(emp, cCfg, _dk);
   if(!/^\d{1,2}:\d{2}$/.test(String(endHM))) return null;
   const parts = String(endHM).split(':').map(Number);
-  const e = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), parts[0], parts[1], 0, 0);
+  const c = cai(dayDate);                                // 🕒 اليوم بالقاهرة
+  let ts = caiStamp(c.getFullYear(), c.getMonth()+1, c.getDate(), parts[0], parts[1], 0, 0);
   // شيفت بيعدّي نص الليل (يبدأ 6 مساءً وينتهي 2 فجرًا) → بيخلص تاني يوم
-  if(/^\d{1,2}:\d{2}$/.test(String(startHM)) && _hm2min(endHM) <= _hm2min(startHM)) e.setDate(e.getDate()+1);
-  return e.getTime();
+  if(/^\d{1,2}:\d{2}$/.test(String(startHM)) && _hm2min(endHM) <= _hm2min(startHM)){
+    const n = cai(ts + 86400000);
+    ts = caiStamp(n.getFullYear(), n.getMonth()+1, n.getDate(), parts[0], parts[1], 0, 0);
+  }
+  return ts;
 }
 function lastAbsenceJudgeDay(emp, nowTs, cCfg){
   const now = Number(nowTs) || Date.now();
@@ -1155,13 +1234,14 @@ function lastAbsenceJudgeDay(emp, nowTs, cCfg){
     const endTs = shiftEndTsForDay(emp, d, cCfg);
     if(endTs == null){
       // مفيش ميعاد مسجّل → اليوم بيتحسب بعد ما يخلص بالكامل
-      const eod = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59,999).getTime();
+      const _c = cai(d);
+      const eod = caiDayEnd(_c.getFullYear(), _c.getMonth()+1, _c.getDate());
       if(now >= eod) break;
     }else if(now >= endTs) break;
     d = new Date(d.getTime() - 86400000);
   }
-  d.setHours(23,59,59,999);
-  return d;
+  const _dc = cai(d);                                    // 🕒 آخر اليوم بالقاهرة
+  return new Date(caiDayEnd(_dc.getFullYear(), _dc.getMonth()+1, _dc.getDate()));
 }
 
 // ساعات التبديلات: الأول مجاني، واللي بعده بساعاته
@@ -1217,10 +1297,13 @@ function expectedShiftEndTs(shift, emp, cCfg){
   const endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
   if(!/^\d{1,2}:\d{2}$/.test(String(endHM))) return null;
   const parts = String(endHM).split(':').map(Number);
-  const base = new Date(shift.clockInTs);
-  const e = new Date(base.getFullYear(), base.getMonth(), base.getDate(), parts[0], parts[1], 0, 0);
-  if(e.getTime() <= shift.clockInTs) e.setDate(e.getDate() + 1);   // شيفت بيعدّي نص الليل
-  return e.getTime();
+  const base = cai(shift.clockInTs);                     // 🕒 يوم الحضور بالقاهرة
+  let ts = caiStamp(base.getFullYear(), base.getMonth()+1, base.getDate(), parts[0], parts[1], 0, 0);
+  if(ts <= shift.clockInTs){                                        // شيفت بيعدّي نص الليل
+    const n = cai(ts + 86400000);
+    ts = caiStamp(n.getFullYear(), n.getMonth()+1, n.getDate(), parts[0], parts[1], 0, 0);
+  }
+  return ts;
 }
 
 // 🚪 ساعات الانصراف بدري — نفس منطق التأخير
@@ -1235,7 +1318,8 @@ function earlyLeaveHours(clockOutDate, shiftEnd, cfg, expectedEndTs){
     earlyMin = Math.max(0, Math.round((Number(expectedEndTs) - clockOutDate.getTime()) / 60000));
   }else{
     if(!shiftEnd) return { earlyMin: 0, hours: 0 };
-    const outMin = clockOutDate.getHours()*60 + clockOutDate.getMinutes();
+    const _outC = cai(clockOutDate);                   // 🕒 بساعة القاهرة
+    const outMin = _outC.getHours()*60 + _outC.getMinutes();
     const endMin = _hm2min(shiftEnd);
     earlyMin = Math.max(0, endMin - outMin);
   }
@@ -1245,6 +1329,45 @@ function earlyLeaveHours(clockOutDate, shiftEnd, cfg, expectedEndTs){
   if(cap > 0 && hours > cap) hours = cap;
   return { earlyMin, hours };
 }
+
+/* 🚪 الانصراف بدري — **بالنقص في الساعات، مش بساعة الخروج**
+   ------------------------------------------------------------
+   الباج اللي ده بيقفله (حالة حبيبة، 6 أغسطس):
+   الحساب القديم كان بيقارن ساعة الانصراف بميعاد نهاية الشيفت وخلاص.
+   موظفة جت بدري وكمّلت 8 ساعات كاملة ومشيت قبل ميعاد النهاية →
+   285 دقيقة "بدري" = 28 ساعة رصيد = **4 أيام خصم من مرتبها** وهي
+   شغّالة شيفتها كامل. النظام مكانش بيسأل أصلًا "هي اشتغلت كام ساعة؟".
+
+   القاعدة دلوقتي: الخصم على **النقص الحقيقي** =
+       مدة الشيفت المجدولة − اللي اشتغلته فعلًا − دقايق التأخير (اتخصمت أصلًا)
+   • جت بدري وكمّلت ساعاتها  → صفر
+   • اتأخرت ومشيت في ميعادها → صفر هنا (التأخير بياخد حقه لوحده، مش مرتين)
+   • مشيت فعلًا قبل ما تكمّل  → النقص بس
+   وبونص: الحساب ده **مالوش دعوة بأي توقيت** — فروق الساعة مش هتلمسه. */
+function scheduledShiftMinutes(emp, cfg, dayKey){
+  cfg = cfg || complianceCfg;
+  const sHM = effectiveStartHM(emp, cfg, dayKey);
+  const eHM = effectiveEndHM(emp, cfg, dayKey);
+  if(!/^\d{1,2}:\d{2}$/.test(String(sHM)) || !/^\d{1,2}:\d{2}$/.test(String(eHM))) return 0;
+  let mins = _hm2min(eHM) - _hm2min(sHM);
+  if(mins <= 0) mins += 1440;            // شيفت بيعدّي نص الليل
+  return mins;
+}
+function earlyLeaveFromWorked(workedMin, requiredMin, lateMin, cfg){
+  cfg = cfg || timeCfgDefaults;
+  const req = Number(requiredMin) || 0;
+  if(req <= 0) return { earlyMin: 0, hours: 0 };       // ملوش شيفت مجدول = مفيش حكم
+  const grace = Number(cfg.earlyGraceMin);
+  const g = isNaN(grace) ? 5 : grace;
+  const shortfall = Math.max(0, req - (Number(workedMin)||0) - (Number(lateMin)||0) - g);
+  const per = Number(cfg.earlyMinPerHour) || 10;
+  let hours = Math.floor(shortfall / per);
+  const cap = Number(cfg.maxEarlyHoursPerDay) || Number(cfg.maxLateHoursPerDay) || 0;
+  if(cap > 0 && hours > cap) hours = cap;              // 🧢 حادثة واحدة متاكلش المرتب
+  return { earlyMin: shortfall, hours };
+}
+window.scheduledShiftMinutes = scheduledShiftMinutes;
+window.earlyLeaveFromWorked = earlyLeaveFromWorked;
 
 // 🚫 ساعات الغياب بدون عذر
 function absenceHoursFrom(cfg){
@@ -1967,10 +2090,8 @@ function renderPerformanceLink(){
 }
 
 // ==================== ATTENDANCE / TASKS / REWARDS ====================
-function todayStr(d){
-  const dt = d ? new Date(d) : new Date();
-  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
-}
+// 📅 اليوم بالقاهرة — كل التسجيلات (سلف/خصومات/رصيد وقت) بتاخد منه تاريخها
+function todayStr(d){ return _dayKeyOf(d != null ? d : Date.now()); }
 function getOpenShift(empId){
   return allShifts.find(s=> s.employeeId === empId && !s.clockOutTs);
 }
@@ -2000,11 +2121,11 @@ $('#closeAttendance').addEventListener('click', ()=> $('#attendance').classList.
 
 function isDayOffToday(emp){
   if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return false;
-  return new Date().getDay() === Number(emp.dayOff);
+  return caiNow().getDay() === Number(emp.dayOff);
 }
 function isDayOffTomorrow(emp){
   if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return false;
-  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+  const tomorrow = caiNow(); tomorrow.setDate(tomorrow.getDate()+1);
   return tomorrow.getDay() === Number(emp.dayOff);
 }
 
@@ -2292,7 +2413,7 @@ function activeBreaks(){
 function breakTimeAllowed(cfg){
   cfg = cfg || (window.timeCfg||timeCfgDefaults);
   const blocked = cfg.breakBlockedRanges || [];   // [{from:'18:00', to:'21:00'}]
-  const now = new Date(); const nowMin = now.getHours()*60 + now.getMinutes();
+  const now = caiNow(); const nowMin = now.getHours()*60 + now.getMinutes();   // 🕒 القاهرة
   for(const r of blocked){
     const f = _hm2min(r.from), t = _hm2min(r.to);
     if(nowMin >= f && nowMin < t) return { allowed:false, until:r.to };
@@ -2477,7 +2598,9 @@ async function clockOut(empId, photoDataUri){
   const shiftEnd = (emp && emp.scheduledEndTime) || (shiftDef && shiftDef.end);
   const endTs = expectedShiftEndTs(shift, emp, complianceCfg);
   // ⛔ الشيفت المنسي مبياخدش خصم انصراف بدري خالص — هي اتأخرت مش مشيت بدري
-  if(!forgotten && (endTs || shiftEnd)) earlyInfo = earlyLeaveHours(new Date(now), shiftEnd, cfg, endTs);
+  // 🚪 الخصم بقى على النقص في الساعات مش على ساعة الخروج (شوف earlyLeaveFromWorked)
+  const _reqMin = scheduledShiftMinutes(emp, complianceCfg, caiDayKey(shift.clockInTs));
+  if(!forgotten) earlyInfo = earlyLeaveFromWorked(totalMin, _reqMin, Number(shift.lateMinutes)||0, cfg);
 
   try{
     await updateDoc(doc(db,'sales_shifts', shift.id), {
@@ -2497,14 +2620,14 @@ async function clockOut(empId, photoDataUri){
       try{
         await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
           employeeId: empId, employeeName: (emp&&emp.name)||'', branch: window.currentBranch,
-          type: 'early', hours: earlyInfo.hours, date: todayStr(),
-          note: `مشي ${earlyInfo.earlyMin} دقيقة بدري`, ts: Date.now()
+          type: 'early', hours: earlyInfo.hours, date: caiDayKey(shift.clockInTs),
+          note: `ناقص ${earlyInfo.earlyMin} دقيقة عن مدة شيفته`, ts: Date.now()
         });
       }catch(_e){}
     }
     const h = Math.floor(totalMin/60), m = totalMin%60;
     let msg = `تم تسجيل الانصراف ✅\nمدة الشيفت: ${h} س ${m} د`;
-    if(earlyInfo.hours > 0) msg += `\n🚪 مشيت ${earlyInfo.earlyMin} دقيقة بدري → ${earlyInfo.hours} ساعة رصيد`;
+    if(earlyInfo.hours > 0) msg += `\n🚪 ناقص ${earlyInfo.earlyMin} دقيقة عن مدة شيفتك → ${earlyInfo.hours} ساعة رصيد`;
     if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة (مستني موافقة الإدارة)`;
     alert(msg);
   }catch(err){
@@ -2960,16 +3083,17 @@ function _coverageMap(){
   const cfg = window.timeCfg || timeCfgDefaults;
   const minStaff = Number(cfg.minStaffPerDay) || 2;
   const days = [];
-  const today = new Date(); today.setHours(0,0,0,0);
+  const _tc = caiNow();                                // 🕒 القاهرة
   for(let i=0;i<14;i++){
-    const d = new Date(today.getTime() + i*86400000);
-    const dateKey = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const d = new Date(caiDayStart(_tc.getFullYear(), _tc.getMonth()+1, _tc.getDate() + i));
+    const _dc = cai(d);
+    const dateKey = _fmtKey(_dc);
     const cov = window.coverageOnDate(emps, approved, dateKey);
     // مين آخد إجازة اليوم ده
     const offNames = [];
-    emps.forEach(e=>{ if(String(e.dayOff)===String(d.getDay())) offNames.push(e.name+' (إجازته)'); });
+    emps.forEach(e=>{ if(String(e.dayOff)===String(_dc.getDay())) offNames.push(e.name+' (إجازته)'); });
     approved.forEach(l=>{ if(l.dateKey===dateKey){ const em=emps.find(x=>x.id===l.empId); if(em) offNames.push(em.name+' (إذن)'); } });
-    days.push({ dateKey, dow:d.getDay(), dayNum:d.getDate(), available:cov.available, minStaff, offNames, isToday:i===0 });
+    days.push({ dateKey, dow:_dc.getDay(), dayNum:_dc.getDate(), available:cov.available, minStaff, offNames, isToday:i===0 });
   }
   return days;
 }
@@ -3095,8 +3219,8 @@ window.reqBreakEnd = function(empId){
 // 🏆 كارت نتيجة المكافأة بـ3 عوامل (الشهر الحالي) — للموظف في صفحته
 function renderRewardScoreCard(empId){
   const el = document.querySelector('#dh_rewardScore'); if(!el) return;
-  const now = new Date();
-  const mStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const now = caiNow();                                // 🕒 القاهرة
+  const mStart = caiDayStart(now.getFullYear(), now.getMonth()+1, 1);
   // مبيعات الشهر (نقاط البيع كبديل عن قيمة المبيعات) — نطبّعها على أعلى موظف
   const myPts = countsFor(empId, mStart);
   let maxPts = 1;
@@ -3105,7 +3229,7 @@ function renderRewardScoreCard(empId){
   const avgR = computeAvgRatingInRange(empId, mStart, Date.now());
   const ratingPct = avgR!=null ? (avgR/4*100) : 0;
   // الالتزام: من رصيد الوقت الشهري (النظام الجديد)
-  const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const mk = getMonthLabel();
   const cfg = window.timeCfg || timeCfgDefaults;
   const myHours = (window.allTimeCredit||[]).filter(x=> x.employeeId===empId && tcCounts(x) && String(x.date||'').startsWith(mk)).reduce((a,x)=> a+(Number(x.hours)||0),0);
   const commit = window.rewardEligibility(myHours, 'month', cfg).commitPct;
@@ -3319,19 +3443,22 @@ $('#dh_submitTaskBtn').addEventListener('click', async ()=>{
 });
 
 // ---------- WEEK/MONTH HELPERS ----------
+// 🕒 كل النطاقات دي بتتقارن بطوابع زمنية حقيقية (clockInTs …) فلازم
+//    حدودها تبقى بداية/نهاية اليوم **في القاهرة** مش على ساعة الجهاز.
 function getWeekRange(d){
-  const dt = new Date(d);
-  const day = dt.getDay(); // 0=Sun
+  const c = cai(d != null ? d : Date.now());
+  const day = c.getDay(); // 0=Sun
   const diffToMonday = (day === 0 ? -6 : 1 - day);
-  const monday = new Date(dt); monday.setDate(dt.getDate()+diffToMonday); monday.setHours(0,0,0,0);
-  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6); sunday.setHours(23,59,59,999);
-  return { start: monday, end: sunday };
+  const mon = new Date(c); mon.setDate(c.getDate()+diffToMonday);
+  const start = caiDayStart(mon.getFullYear(), mon.getMonth()+1, mon.getDate());
+  const end   = caiDayEnd(mon.getFullYear(), mon.getMonth()+1, mon.getDate()+6);
+  return { start: new Date(start), end: new Date(end) };
 }
 function getMonthRange(d){
-  const dt = new Date(d);
-  const start = new Date(dt.getFullYear(), dt.getMonth(), 1, 0,0,0,0);
-  const end = new Date(dt.getFullYear(), dt.getMonth()+1, 0, 23,59,59,999);
-  return { start, end };
+  const c = cai(d != null ? d : Date.now());
+  const y = c.getFullYear(), m = c.getMonth()+1;
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { start: new Date(caiDayStart(y, m, 1)), end: new Date(caiDayEnd(y, m, lastDay)) };
 }
 function countConfirmedDaysInRange(empId, start, end){
   const days = new Set();
@@ -3346,12 +3473,12 @@ function countConfirmedDaysInRange(empId, start, end){
 // since they're not expected to work (or submit a task) on that day.
 function countRequiredWorkDaysInRange(emp, start, end){
   let count = 0;
-  const cur = new Date(start);
-  while(cur <= end){
+  const cur = cai(start), _endC = cai(end);            // 🕒 أيام القاهرة
+  while(cur <= _endC){
     const isDayOff = (emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== '') && cur.getDay() === Number(emp.dayOff);
     // 📩 إجازة أو تغيير يوم إجازة **معتمد** = اليوم ده مش مطلوب فيه شغل
     //    (الأدمن وافق بنفسه، فمينفعش يتحسب غياب عليها)
-    const lv = approvedLeaveFor(emp.id, _dayKeyOf(cur));
+    const lv = approvedLeaveFor(emp.id, _fmtKey(cur));   // cur تاريخ عرض — من غير تحويل تاني
     const excused = !!(lv && (lv.type === 'dayoff' || lv.type === 'changeDayoff'));
     if(!isDayOff && !excused) count++;
     cur.setDate(cur.getDate()+1);
@@ -3392,7 +3519,7 @@ async function checkAndAwardRewards(){
   const prevWeek = getWeekRange(prevWeekEnd);
   await awardPeriod(prevWeek, 'weekly', 'أسبوع ' + todayStr(prevWeek.start));
 
-  if(now.getDate() <= 3){
+  if(caiNow().getDate() <= 3){
     const prevMonthEnd = new Date(thisMonth.start.getTime() - 1);
     const prevMonth = getMonthRange(prevMonthEnd);
     await awardPeriod(prevMonth, 'monthly', prevMonth.start.toLocaleDateString('ar-EG',{month:'long', year:'numeric'}));
@@ -3412,9 +3539,7 @@ function computeRaceStatus(emp, periodType){
   const cfg = window.timeCfg || timeCfgDefaults;
 
   // 🕒 رصيد الوقت في الفترة (تأخير/بريك/انصراف بدري/تبديل/غياب) — النظام الجديد
-  const mk = periodType === 'month'
-    ? (new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'))
-    : null;
+  const mk = periodType === 'month' ? getMonthLabel() : null;   // 🕒 القاهرة
   const credit = (window.allTimeCredit||[]).filter(x=>{
     if(x.employeeId!==emp.id || !tcCounts(x)) return false;
     const t = new Date((x.date||'')+'T00:00:00').getTime();
@@ -3587,7 +3712,7 @@ window.rewardShare = rewardShare;
 // مفتاح ثابت للفترة — أساس معرّف المستند عشان جهازين في فرعين
 // مايكتبوش نفس المكافأة مرتين
 function rewardPeriodKey(type, range){
-  const d = range.start;
+  const d = cai(range.start);                          // 🕒 حدود الفترة طوابع قاهرية
   const p = (n)=> String(n).padStart(2,'0');
   return type + '_' + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate());
 }
@@ -4623,10 +4748,10 @@ $('#perfHistoryEmpSelect')?.addEventListener('change', renderPerfHistory);
 function buildMonthlyPerformanceData(empId, monthsBack){
   const emp = allEmployees.find(e=> e.id === empId);
   if(!emp) return [];
-  const now = new Date();
+  const now = caiNow();                                // 🕒 القاهرة
   const results = [];
   for(let i=0; i<monthsBack; i++){
-    const refDate = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const refDate = new Date(caiDayStart(now.getFullYear(), now.getMonth()+1-i, 1));
     const range = getMonthRange(refDate);
     const monthLabel = refDate.toLocaleDateString('ar-EG', {month:'long', year:'numeric'});
 
@@ -4748,8 +4873,8 @@ $('#exportFullReportCsvBtn')?.addEventListener('click', ()=>{
 
 // ---------- COMMISSION PER POINT (admin) ----------
 function getMonthLabel(d){
-  const dt = d || new Date();
-  return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0');
+  const c = cai(d != null ? d : Date.now());           // 🕒 الشهر بالقاهرة
+  return c.getFullYear() + '-' + String(c.getMonth()+1).padStart(2,'0');
 }
 
 // ---------- 🛒 أوردرات الموظفين ----------
@@ -5366,10 +5491,9 @@ const FREE_DAYOFF_PER_MONTH = 4;
 function getMonthDateRange(d){
   // Salary period is always day 1 to day 30 of the calendar month, per the
   // simplified pay-cycle rule (day 31, if any, isn't counted separately).
-  const dt = d || new Date();
-  const start = new Date(dt.getFullYear(), dt.getMonth(), 1, 0,0,0,0);
-  const end = new Date(dt.getFullYear(), dt.getMonth(), 30, 23,59,59,999);
-  return { start, end };
+  const c = cai(d != null ? d : Date.now());           // 🕒 بتوقيت القاهرة
+  const y = c.getFullYear(), m = c.getMonth()+1;
+  return { start: new Date(caiDayStart(y, m, 1)), end: new Date(caiDayEnd(y, m, 30)) };
 }
 
 /* ============================================================
@@ -5391,7 +5515,7 @@ function payDayOfMonth(){
 function _mkKey(y, m){ return y + '-' + String(m + 1).padStart(2, '0'); }
 // مفتاح دورة القبض لتاريخ معيّن: يوم <= يوم القبض ⇒ الشهر اللي فات
 function payCycleKeyOfDate(d, payDay){
-  const dt = d instanceof Date ? d : new Date(d);
+  const dt = cai(d);                                   // 🕒 بتوقيت القاهرة
   const pd = Number(payDay) || 0;
   let y = dt.getFullYear(), m = dt.getMonth();
   if(pd > 0 && dt.getDate() <= pd){ m -= 1; if(m < 0){ m = 11; y -= 1; } }
@@ -5403,27 +5527,28 @@ function advPayCycleOf(a, payDay){
   const ds = String(a.date || '');
   if(ds.length >= 10){
     const p = ds.slice(0,10).split('-').map(Number);
-    if(p.length === 3 && p.every(n=> !isNaN(n))) return payCycleKeyOfDate(new Date(p[0], p[1]-1, p[2]), payDay);
+    // 🕒 الظهر مش نص الليل — تاريخ نصي + أي فرق توقيت مايزحلقش اليوم
+    if(p.length === 3 && p.every(n=> !isNaN(n))) return payCycleKeyOfDate(caiStamp(p[0], p[1], p[2], 12, 0, 0, 0), payDay);
   }
   return a.ts ? payCycleKeyOfDate(new Date(a.ts), payDay) : '';
 }
 // فترة المرتب من مفتاح شهر (نفس قاعدة 1→30 بتاعة getMonthDateRange)
 function payPeriodRange(key){
   const p = String(key || '').split('-').map(Number);
-  const y = p[0], m = (p[1] || 1) - 1;
-  return { start: new Date(y, m, 1, 0,0,0,0), end: new Date(y, m, 30, 23,59,59,999) };
+  const y = p[0], m = (p[1] || 1);
+  return { start: new Date(caiDayStart(y, m, 1)), end: new Date(caiDayEnd(y, m, 30)) };
 }
 /* الفترة المعروضة افتراضيًا = **اللي بتتقبض**، مش اللي إحنا عايشين فيها.
    يوم 6 أغسطس المالك بيصرف شهر 7 — والشاشة كانت بتفتح على أغسطس (6 أيام)
    وزرار الصرف مقفول \"لحد ما الشهر يخلص\"، يعني شهر 7 مكانش ليه طريق أصلًا. */
 function defaultPayPeriodKey(now){
-  const d = now || new Date();
+  const d = cai(now != null ? now : Date.now());       // 🕒 بتوقيت القاهرة
   let y = d.getFullYear(), m = d.getMonth();
   if(d.getDate() < 30){ m -= 1; if(m < 0){ m = 11; y -= 1; } }
   return _mkKey(y, m);
 }
 function payPeriodOptions(now, count){
-  const d = now || new Date();
+  const d = cai(now != null ? now : Date.now());       // 🕒 بتوقيت القاهرة
   const out = [];
   let y = d.getFullYear(), m = d.getMonth();
   for(let i = 0; i < (count || 8); i++){
@@ -5454,8 +5579,8 @@ function attendedDaysDetail(empId, start, end, emp){
   (window.allShifts || []).forEach(s=>{
     if(s.employeeId !== empId || !s.clockInTs) return;
     if(s.clockInTs < start.getTime() || s.clockInTs > end.getTime()) return;
-    const d = new Date(s.clockInTs);
-    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const d = cai(s.clockInTs);                        // 🕒 يوم القاهرة
+    const key = _fmtKey(d);
     const cur = byDay.get(key) || { key, dow: d.getDay(), inTs: s.clockInTs, outTs: s.clockOutTs || null, shifts: 0 };
     if(s.clockInTs < cur.inTs) cur.inTs = s.clockInTs;
     if(s.clockOutTs && (!cur.outTs || s.clockOutTs > cur.outTs)) cur.outTs = s.clockOutTs;
@@ -5472,8 +5597,8 @@ window.attendedDaysDetail = attendedDaysDetail;
 function countDayOffOccurrencesInRange(emp, start, end){
   if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return 0;
   let count = 0;
-  const cur = new Date(start);
-  while(cur <= end){
+  const cur = cai(start), _endC = cai(end);            // 🕒 أيام القاهرة
+  while(cur <= _endC){
     if(cur.getDay() === Number(emp.dayOff)) count++;
     cur.setDate(cur.getDate()+1);
   }
@@ -5486,10 +5611,7 @@ function countDayOffOccurrencesInRange(emp, start, end){
 function countAttendedDaysInRange(empId, start, end){
   const daySet = new Set();
   allShifts.filter(s=> s.employeeId===empId && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime())
-    .forEach(s=>{
-      const d = new Date(s.clockInTs);
-      daySet.add(d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate());
-    });
+    .forEach(s=>{ daySet.add(caiDayKey(s.clockInTs)); });   // 🕒 يوم القاهرة
   return daySet.size;
 }
 
@@ -5630,7 +5752,8 @@ function computeSalary(emp, periodStart, end){
     // ⚠️ سلف أيام 1→6 من نفس الشهر التقويمي بتتبع دورة الشهر **اللي قبله**.
     //    لو الشهر ده أول شهر بيتصرف من البرنامج، دي مش هتتخصم من أي حتة —
     //    فبنعرضها للمالك بدل ما تضيع في صمت.
-    const _gapEnd = new Date(periodStart.getFullYear(), periodStart.getMonth(), _payDay, 23,59,59,999);
+    const _psC = cai(periodStart);                     // 🕒 بالقاهرة
+    const _gapEnd = new Date(caiDayEnd(_psC.getFullYear(), _psC.getMonth()+1, _payDay));
     advPrevCycle = allAdvances.filter(a=> a.employeeId===emp.id
       && a.ts >= periodStart.getTime() && a.ts <= _gapEnd.getTime()
       && advPayCycleOf(a, _payDay) !== _periodKey)
@@ -5638,7 +5761,9 @@ function computeSalary(emp, periodStart, end){
     advPrevCycle = Math.round(advPrevCycle*100)/100;
   } else {
     // تصفية مقطوعة (إنهاء خدمة) — بتفضل لحد تاريخ القطع زي ما هي
-    const _calMonthEnd = new Date(periodStart.getFullYear(), periodStart.getMonth()+1, 0, 23,59,59,999);
+    const _pc = cai(periodStart);                      // 🕒 بالقاهرة
+    const _lastDay = new Date(Date.UTC(_pc.getFullYear(), _pc.getMonth()+1, 0)).getUTCDate();
+    const _calMonthEnd = new Date(caiDayEnd(_pc.getFullYear(), _pc.getMonth()+1, _lastDay));
     const advEnd = _fullPeriod ? _calMonthEnd : end;
     periodAdvances = allAdvances.filter(a=> a.employeeId===emp.id && a.ts >= start.getTime() && a.ts <= advEnd.getTime());
   }
@@ -6347,7 +6472,7 @@ function advWindowOpen(openDay, now, closeDay){
   const od = Number(openDay) || 0;
   if(!od) return true;                       // مفيش نافذة متظبطة = مفتوحة دايمًا
   const cd = Number(closeDay) || 0;
-  const d = (now || new Date()).getDate();
+  const d = cai(now != null ? now : Date.now()).getDate();   // 🕒 يوم القاهرة
   if(!cd) return d >= od;                    // توافق: من غير يوم قفل = زي الأول
   if(od > cd) return (d >= od) || (d <= cd); // بتعدّي الشهر (12 → 6)
   return d >= od && d <= cd;                 // جوه نفس الشهر (5 → 20)
@@ -6357,7 +6482,7 @@ function advWindowOpen(openDay, now, closeDay){
 // من غير ده، الموظفة تاخد سقف يوليو كامل يوم 30، وسقف أغسطس كامل يوم 3 —
 // ضعف السقف في 4 أيام.
 function advCycleKey(now, openDay, closeDay){
-  const d = now || new Date();
+  const d = cai(now != null ? now : Date.now());       // 🕒 بتوقيت القاهرة
   const od = Number(openDay) || 0, cd = Number(closeDay) || 0;
   let y = d.getFullYear(), m = d.getMonth();   // 0-based
   // في الأيام اللي قبل يوم الفتح (امتداد النافذة السابقة) بنرجع شهر
@@ -6383,7 +6508,7 @@ function advMonthTotal(advances, empId, monthKey, openDay, closeDay){
       const ds = String(a.date||'');
       if(ds.length >= 10 && openDay){
         const [yy,mm,dd] = ds.slice(0,10).split('-').map(Number);
-        key = advCycleKey(new Date(yy, mm-1, dd), openDay, closeDay);
+        key = advCycleKey(caiStamp(yy, mm, dd, 12, 0, 0, 0), openDay, closeDay);
       } else key = ds.slice(0,7);
     }
     if(key !== monthKey) return sum;
@@ -7029,12 +7154,12 @@ window.decideOvertime = decideOvertime;
    عدّت السقف (بدل ما تتصرف لوحدها وتفاجئك آخر الشهر).
    ============================================================ */
 function rewardMonthSpend(list, nowTs){
-  const now = new Date(Number(nowTs) || Date.now());
+  const now = cai(Number(nowTs) || Date.now());        // 🕒 القاهرة
   const mk = now.getFullYear() + '-' + now.getMonth();
   let weekly = 0, monthly = 0;
   (list || []).forEach(r=>{
     if(!r || (r.status && r.status !== 'approved')) return;
-    const d = new Date(r.earnedAt || 0);
+    const d = cai(r.earnedAt || 0);
     if(d.getFullYear() + '-' + d.getMonth() !== mk) return;
     if(r.type === 'monthly') monthly += Number(r.amount)||0;
     else weekly += Number(r.amount)||0;
@@ -7125,21 +7250,25 @@ async function ownerCloseShift(shiftId){
   const sh = (window.allShifts||[]).find(x=> x.id === shiftId);
   if(!sh || !sh.clockInTs){ alert('الشيفت مش موجود'); return; }
   const emp = (window.employees||[]).find(e=> e.id === sh.employeeId) || {};
-  const inD = new Date(sh.clockInTs);
-  const fmt = (d)=> String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  const inD = cai(sh.clockInTs);                       // 🕒 كله بتوقيت القاهرة
+  const fmt = (d)=> { const c = cai(d); return String(c.getHours()).padStart(2,'0') + ':' + String(c.getMinutes()).padStart(2,'0'); };
 
-  const v = prompt('دخلت ' + fmt(inD) + ' يوم ' + inD.toLocaleDateString('ar-EG')
+  const v = prompt('دخلت ' + fmt(sh.clockInTs) + ' يوم ' + inD.toLocaleDateString('ar-EG')
     + '\nمشيت الساعة كام؟ (بصيغة 24 ساعة، مثال 00:30)',
-    sh.clockOutTs ? fmt(new Date(sh.clockOutTs)) : '00:00');
+    sh.clockOutTs ? fmt(sh.clockOutTs) : '00:00');
   if(v === null) return;
   const t = String(v).trim();
   if(!/^\d{1,2}:\d{2}$/.test(t)){ alert('اكتب الوقت بصيغة HH:MM'); return; }
   const parts = t.split(':').map(Number);
   if(parts[0] > 23 || parts[1] > 59){ alert('وقت مش صح'); return; }
 
-  const out = new Date(inD.getFullYear(), inD.getMonth(), inD.getDate(), parts[0], parts[1], 0, 0);
-  if(out.getTime() <= sh.clockInTs) out.setDate(out.getDate() + 1);   // مشيت بعد نص الليل
-  const totalMin = Math.round((out.getTime() - sh.clockInTs) / 60000);
+  let outTs = caiStamp(inD.getFullYear(), inD.getMonth()+1, inD.getDate(), parts[0], parts[1], 0, 0);
+  if(outTs <= sh.clockInTs){                                          // مشيت بعد نص الليل
+    const n = cai(outTs + 86400000);
+    outTs = caiStamp(n.getFullYear(), n.getMonth()+1, n.getDate(), parts[0], parts[1], 0, 0);
+  }
+  const out = new Date(outTs);
+  const totalMin = Math.round((outTs - sh.clockInTs) / 60000);
   const cfg = window.timeCfg || timeCfgDefaults;
   const maxShiftMin = (Number(cfg.maxShiftHours) || 14) * 60;
   if(totalMin > maxShiftMin){
