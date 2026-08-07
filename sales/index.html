@@ -1024,6 +1024,10 @@
         <button id="saveCommissionBtn">حفظ العمولة</button>
       </div>
       <div id="commissionCurrentRate" style="color:var(--sub); font-size:12px; margin-bottom:14px;"></div>
+      <div class="add-form" style="margin-bottom:14px;">
+        <label style="color:var(--sub); font-size:12px; align-self:center;">📅 فترة القبض:</label>
+        <select id="commPeriodSelect" style="min-width:190px; padding:10px; border-radius:10px; font-family:inherit; font-size:13px;"></select>
+      </div>
       <div id="commissionList"></div>
     </div>
 
@@ -1039,6 +1043,11 @@
         الغياب غير المبرر بيتقارن بعدد مرات يوم إجازته الأسبوعي الفعلي في الفترة (مش رقم ثابت)، وأي غياب زيادة عليه بيتخصم يوم كامل (الراتب÷30). لو اشتغل في يوم إجازته، بياخد يوم كامل زيادة على راتبه.
         "تتبع الحضور من" بيحدد أول يوم يبدأ منه حساب الغياب (منفصل عن تاريخ التعيين اللي بيأثر بس على حساب الراتب المتناسب).
       </p>
+      <div class="add-form" style="margin-bottom:14px;">
+        <label style="color:var(--sub); font-size:12px; align-self:center;">📅 فترة القبض:</label>
+        <select id="salaryPeriodSelect" style="min-width:190px; padding:10px; border-radius:10px; font-family:inherit; font-size:13px;"></select>
+      </div>
+      <p style="color:var(--sub); font-size:11.5px; margin:-4px 0 12px;">القبض يوم <b>6</b>: مرتب الشهر بيتصرف يوم 6 من الشهر اللي بعده، وأي <b>سلفة لحد يوم 6</b> بتتخصم منه. السلف بعد يوم 6 بتروح للشهر اللي بعده.</p>
       <div id="salaryList"></div>
     </div>
 
