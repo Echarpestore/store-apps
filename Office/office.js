@@ -1270,13 +1270,15 @@ window.dailyWelcome = dailyWelcome;
 window.dailyPoints = dailyPoints;
 
 // ⭐ ملخص التقييمات: المتوسط والتوزيع وأعداد السيّئ
+// ⭐ المقياس **من 4** — زي تطبيق الولاء و POS بالظبط (😠 🙁 🙂 😍)
+var RATING_MAX = 4;
 function ratingsSummary(entries, sinceMs){
-  var out = { total:0, avg:0, dist:{1:0,2:0,3:0,4:0,5:0}, bad:0, good:0, byBranch:{} };
+  var out = { total:0, avg:0, dist:{1:0,2:0,3:0,4:0}, bad:0, good:0, byBranch:{} };
   var sum = 0;
   (entries||[]).forEach(function(e){
     if(!e) return;
     var r = Number(e.r);
-    if(!(r >= 1 && r <= 5)) return;                  // تقييم مش صالح
+    if(!(r >= 1 && r <= RATING_MAX)) return;          // تقييم مش صالح
     if(sinceMs && !(Number(e.ts) >= sinceMs)) return;
     out.total++; sum += r;
     out.dist[r] = (out.dist[r] || 0) + 1;
@@ -1328,6 +1330,95 @@ function _miniBars(rows, unit, color){
   }).join('');
 }
 
+/* ============================================================
+   🔎 مين قيّم — الأسماء والأرقام
+   ------------------------------------------------------------
+   كل تقييم جاي من **تطبيق الولاء** بيتسجّل ومعاه رقم العميلة ورقم
+   الفاتورة واسم البياعة اللي كانت معاها. الأرقام دي كانت متخزنة من
+   زمان و**محدش بيعرضها في أي شاشة** — فالمالك يشوف \"3 تقييمات سيّئة\"
+   ومايعرفش مين عشان يكلمها.
+   ⚠️ تقييمات **شاشة الفرع** مجهولة بطبيعتها (ضغطة سريعة من غير هوية) —
+      بتتعرض هنا كـ\"مجهول\" ومش بينختلقلها هوية بالتخمين الزمني.
+   ============================================================ */
+window._ratFilter = window._ratFilter || 'bad';
+window.setRatFilter = function(f){ window._ratFilter = f; renderWhoRated(); };
+
+function _ratCustName(phone){
+  if(!phone) return '';
+  var c = (D.customers || []).find(function(x){
+    return x && (x._id === phone || x.phone === phone);
+  });
+  return (c && c.name) ? c.name : '';
+}
+function _ratRows(list, filter){
+  var rows = (list || []).filter(function(e){
+    if(!e || !(Number(e.r) >= 1 && Number(e.r) <= RATING_MAX)) return false;
+    if(filter === 'bad')   return Number(e.r) <= 2;
+    if(filter === 'notes') return !!(e.note && String(e.note).trim());
+    if(filter === 'named') return !!e.customerPhone;
+    return true;
+  });
+  // الأسوأ الأول، وبعدين الأحدث — ده ترتيب المتابعة مش ترتيب العرض
+  rows.sort(function(a,b){ return (Number(a.r) - Number(b.r)) || (Number(b.ts) - Number(a.ts)); });
+  return rows;
+}
+function renderWhoRated(){
+  var box = document.getElementById('whoRated'); if(!box) return;
+  var FACE = {1:'😠', 2:'🙁', 3:'🙂', 4:'😍'};
+  var COL  = {1:'#e5484d', 2:'#f59e0b', 3:'#84cc16', 4:'#22c55e'};
+  var all  = D.ratings || [];
+  var f    = window._ratFilter || 'bad';
+  var rows = _ratRows(all, f);
+  var counts = {
+    all:   _ratRows(all, 'all').length,
+    bad:   _ratRows(all, 'bad').length,
+    notes: _ratRows(all, 'notes').length,
+    named: _ratRows(all, 'named').length
+  };
+  var tab = function(k, label){
+    var on = (f === k);
+    return '<button onclick="setRatFilter(\'' + k + '\')" class="ghost" style="padding:7px 11px; border-radius:9px; font-size:12px;'
+      + (on ? 'background:#ffffff22; font-weight:800;' : '') + '">' + label + ' (' + counts[k] + ')</button>';
+  };
+
+  var body = rows.length ? rows.slice(0, 120).map(function(e){
+    var r = Number(e.r);
+    var phone = e.customerPhone || '';
+    var name = _ratCustName(phone);
+    var who = phone
+      ? '<a href="tel:' + esc(phone) + '" style="color:#60a5fa; font-weight:800;">'
+        + esc(name || phone) + '</a>' + (name ? ' <span class="muted" style="font-size:11px;">' + esc(phone) + '</span>' : '')
+      : '<span class="muted">مجهول · شاشة الفرع</span>';
+    var when = new Date(Number(e.ts) || 0).toLocaleString('ar-EG', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    return '<div style="border-right:3px solid ' + COL[r] + '; background:#ffffff08; border-radius:10px; padding:9px 11px; margin-bottom:7px;">'
+      + '<div class="row" style="align-items:center; gap:8px;">'
+        + '<span style="font-size:17px;">' + FACE[r] + '</span>'
+        + '<span style="flex:1;">' + who + '</span>'
+        + '<span class="muted" style="font-size:11px; white-space:nowrap;">' + when + '</span>'
+      + '</div>'
+      + '<div class="muted" style="font-size:11px; margin-top:3px;">'
+        + esc(e.branch || '—')
+        + (e.servedByEmployeeName ? ' · مع ' + esc(e.servedByEmployeeName) : '')
+        + (e.saleId ? ' · فاتورة ' + esc(String(e.saleId).slice(-6)) : '')
+      + '</div>'
+      + (e.note && String(e.note).trim()
+          ? '<div style="font-size:12.5px; line-height:1.7; margin-top:5px; white-space:pre-wrap;">' + esc(e.note) + '</div>'
+          : '')
+    + '</div>';
+  }).join('') : '<div class="empty">مفيش تقييمات في الفلتر ده</div>';
+
+  box.innerHTML = '<div class="panel"><h3>🔎 مين قيّم (آخر 30 يوم)</h3>'
+    + '<div class="hint">التقييمات السيّئة الأول — دي اللي محتاجة مكالمة. دوس على الاسم عشان تتصل.</div>'
+    + '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">'
+      + tab('bad', '😠 محتاج متابعة') + tab('notes', '💬 كتبوا كلام')
+      + tab('named', '👤 معروفين') + tab('all', 'الكل')
+    + '</div>'
+    + body
+    + (rows.length > 120 ? '<div class="hint" style="margin-top:8px;">معروض أول 120 من ' + rows.length + '</div>' : '')
+  + '</div>';
+}
+window.renderWhoRated = renderWhoRated;
+
 function renderActivityReports(){
   var box = document.getElementById('activityReports'); if(!box) return;
   var dl = dailyDownloads(D.customers, 14);
@@ -1361,13 +1452,13 @@ function renderActivityReports(){
     + (function(){
         var rt = dailyRatings(D.ratings, 14);
         var sm = ratingsSummary(D.ratings, Date.now() - 30*86400000);
-        var stars = function(n){ return '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5-n); };
-        var distRows = [5,4,3,2,1].map(function(r){
+        var faceOf = function(n){ return ({1:'😠 وحش',2:'🙁 عادي',3:'🙂 كويس',4:'😍 ممتاز'})[n] || n; };
+        var distRows = [4,3,2,1].map(function(r){
           var c = sm.dist[r] || 0;
           var pct = sm.total ? Math.round(c / sm.total * 100) : 0;
           var col = r >= 4 ? '#22c55e' : (r === 3 ? '#f59e0b' : '#e5484d');
           return '<div class="row" style="align-items:center; gap:8px; padding:3px 0;">'
-            + '<span style="min-width:58px; font-size:12px; color:' + col + ';">' + stars(r) + '</span>'
+            + '<span style="min-width:74px; font-size:12px; color:' + col + ';">' + faceOf(r) + '</span>'
             + '<span style="flex:1; height:14px; background:#ffffff10; border-radius:99px; overflow:hidden;">'
             + '<span style="display:block; height:100%; width:' + pct + '%; background:' + col + ';"></span></span>'
             + '<b style="min-width:64px; text-align:left; font-size:12px;">' + c
@@ -1386,7 +1477,7 @@ function renderActivityReports(){
         return '<div class="card"><h3>⭐ تقييمات العملاء (آخر 30 يوم)</h3>'
           + '<div class="row" style="margin-bottom:6px;"><span class="muted">المتوسط العام</span>'
           + '<b style="font-size:19px; color:' + (sm.avg >= 4 ? '#22c55e' : (sm.avg >= 3 ? '#f59e0b' : '#e5484d')) + ';">'
-          + sm.avg.toFixed(2) + ' / 5</b></div>'
+          + sm.avg.toFixed(2) + ' / ' + RATING_MAX + '</b></div>'
           + '<div class="row" style="margin-bottom:4px;"><span class="muted">عدد التقييمات</span><b>' + sm.total + '</b></div>'
           + '<div class="row" style="margin-bottom:10px;"><span class="muted">تقييمات سيّئة (1-2)</span>'
           + '<b style="color:' + (sm.bad ? '#e5484d' : '#22c55e') + ';">' + sm.bad + '</b></div>'
@@ -1396,6 +1487,7 @@ function renderActivityReports(){
           + _miniBars(rt, 'تقييم', '#a855f7')
           + '</div>';
       })();
+  try{ renderWhoRated(); }catch(e){ console.warn('whoRated', e); }
 }
 window.renderActivityReports = renderActivityReports;
 
