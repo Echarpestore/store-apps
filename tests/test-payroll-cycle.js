@@ -40,7 +40,9 @@ function extractFn(s, header){
 }
 
 const WANTED = [
-  'function payDayOfMonth(', 'function _mkKey(', 'function payCycleKeyOfDate(',
+  'function caiParts(', 'function caiOffsetMs(', 'function cai(', 'function caiNow(',
+  'function caiStamp(', 'function caiDayStart(', 'function caiDayEnd(',
+  'function _fmtKey(', 'function caiDayKey(', 'function payDayOfMonth(', 'function _mkKey(', 'function payCycleKeyOfDate(',
   'function advPayCycleOf(', 'function payPeriodRange(', 'function defaultPayPeriodKey(',
   'function payPeriodOptions(', 'function _nextMonthKey(', 'function attendedDaysDetail(',
   'function getMonthDateRange(', 'function getMonthLabel(', 'function countDayOffOccurrencesInRange(',
@@ -57,9 +59,13 @@ assert(!missing, 'كل الدوال المطلوبة اتلقت في المصد�
 
 // يوم القبض الافتراضي بيتقرا من المصدر نفسه — مش رقم مكرر في الاختبار
 const _pf = src.match(/const PAYDAY_FALLBACK = (\d+);/);
+const _tzc = src.match(/const CAI_TZ = '([^']+)'/);
+assert(!!_tzc && _tzc[1] === 'Africa/Cairo', 'التوقيت مثبّت على القاهرة');
 assert(!!_pf && Number(_pf[1]) === 6, 'يوم القبض الافتراضي = 6');
 
 const STUBS = `
+const CAI_TZ = '${_tzc ? _tzc[1] : 'Africa/Cairo'}';
+const _caiFmt = new Intl.DateTimeFormat('en-GB', { timeZone: CAI_TZ, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
 const PAYDAY_FALLBACK = ${_pf ? Number(_pf[1]) : 6};
 var timeCfgDefaults = { hoursPerDay: 7 };
 var complianceCfg = null;
@@ -116,8 +122,11 @@ const adv = (id, dateStr, amount, src_) => ({
   assert(c.defaultPayPeriodKey(new Date(2026,7,30)) === '2026-08', 'يوم 30 أغسطس خلص → أغسطس');
   assert(c.defaultPayPeriodKey(new Date(2026,0,5)) === '2025-12', 'عبور السنة');
   const r = c.payPeriodRange('2026-07');
-  assert(r.start.getMonth() === 6 && r.start.getDate() === 1, 'الفترة بتبدأ يوم 1');
-  assert(r.end.getMonth() === 6 && r.end.getDate() === 30, 'وبتنتهي يوم 30 (قرار المالك)');
+  // ⚠️ الحدود دلوقتي **طوابع زمنية بتوقيت القاهرة** — قراءتها بساعة الجهاز
+  //    هتدي يوم تاني، وده بالظبط الباج اللي اتقفل. فبنقراها بالقاهرة.
+  const ps = c.caiParts(r.start.getTime()), pe = c.caiParts(r.end.getTime());
+  assert(ps.m === 7 && ps.d === 1 && ps.hh === 0, 'الفترة بتبدأ 1 يوليو 00:00 بتوقيت القاهرة');
+  assert(pe.m === 7 && pe.d === 30 && pe.hh === 23, 'وبتنتهي 30 يوليو آخر اليوم بتوقيت القاهرة');
   assert(c._nextMonthKey('2026-07') === '2026-08' && c._nextMonthKey('2026-12') === '2027-01',
     'الشهر اللي بعده (بيعدّي السنة صح)');
   assert(c.payPeriodOptions(new Date(2026,7,6), 3).join(',') === '2026-08,2026-07,2026-06',
