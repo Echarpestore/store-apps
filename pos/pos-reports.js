@@ -815,12 +815,16 @@ async function buildRatingsReport(from, to){
   let whoRatedHtml = '';
   const _canSeeWho = (typeof hasPerm === 'function') && hasPerm('canManageRoles');
   if(_canSeeWho){
-    const named = entries.filter(e=> e.customerPhone).sort((a,b)=> (a.r - b.r) || (b.ts - a.ts));
+    // 📱/🖥️ نفس تصنيف المصدر المستخدم فوق بالظبط — مصدر واحد للحقيقة
+    const _srcOf = (e)=> ((e.source === 'app_after_visit' || e.saleId) ? 'app' : 'kiosk');
+    // بنعرض **كل** التقييمات مش اللي معاها رقم بس — عشان تشوف الصورة كاملة
+    // وتعرف أي سطر جاي منين. اللي من شاشة الفرع مجهول بطبيعته.
+    const named = entries.slice().sort((a,b)=> (a.r - b.r) || (b.ts - a.ts));
     if(named.length){
       // أسماء العملاء — بنجيبها مرة واحدة بدل استعلام لكل تقييم
       const nameByPhone = {};
       try{
-        const phones = [...new Set(named.map(e=> e.customerPhone))].slice(0, 30);
+        const phones = [...new Set(named.filter(e=> e.customerPhone).map(e=> e.customerPhone))].slice(0, 30);
         const docs = await Promise.all(phones.map(p=>
           db.collection(TEST_CUSTOMERS).doc(p).get().catch(()=> null)));
         docs.forEach((d, i)=>{ if(d && d.exists) nameByPhone[phones[i]] = (d.data()||{}).name || ''; });
@@ -829,20 +833,33 @@ async function buildRatingsReport(from, to){
       const rows = named.slice(0, 60).map(e=>{
         const nm = nameByPhone[e.customerPhone] || '';
         const when = new Date(e.ts).toLocaleString('ar-EG', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+        const isApp = _srcOf(e) === 'app';
+        const srcTag = isApp
+          ? `<span style="font-size:10.5px; background:#eef2ff; color:#4338ca; padding:2px 6px; border-radius:6px; white-space:nowrap;">📱 التطبيق</span>`
+          : `<span style="font-size:10.5px; background:#f1f5f9; color:#64748b; padding:2px 6px; border-radius:6px; white-space:nowrap;">🖥️ شاشة الفرع</span>`;
+        // 👤 الاسم بيفتح **ملف العميلة** (زي أي مكان تاني في POS)، والتليفون
+        //    زرار منفصل جنبه — الدوسة على الاسم كانت بتفتح الاتصال بالغلط.
+        const who = e.customerPhone
+          ? `<a onclick="openCustomerProfile('${_rtEsc(e.customerPhone)}')" style="color:#2563eb; font-weight:700; cursor:pointer; text-decoration:underline;">${_rtEsc(nm || e.customerPhone)}</a>
+             <a href="tel:${_rtEsc(e.customerPhone)}" style="text-decoration:none; margin-inline-start:5px;" title="اتصال">📞</a>
+             ${nm ? `<div style="font-size:10.5px; color:var(--muted); direction:ltr;">${_rtEsc(e.customerPhone)}</div>` : ''}`
+          : `<span style="color:var(--muted);">مجهول</span>`;
         return `<tr>
           <td style="white-space:nowrap;">${RATING_ICON_MAP[e.r]||''}</td>
-          <td><a href="tel:${_rtEsc(e.customerPhone)}" style="color:#2563eb; font-weight:700;">${_rtEsc(nm || e.customerPhone)}</a>
-            ${nm ? `<div style="font-size:10.5px; color:var(--muted);">${_rtEsc(e.customerPhone)}</div>` : ''}</td>
+          <td>${who}</td>
+          <td>${srcTag}</td>
           <td style="font-size:11.5px;">${_rtEsc(e.servedByEmployeeName || '—')}</td>
           <td style="font-size:11px; color:var(--muted); white-space:nowrap;">${when}</td>
         </tr>${e.note && String(e.note).trim()
-          ? `<tr><td colspan="4" style="font-size:12px; color:var(--muted); padding-top:0; white-space:pre-wrap;">💬 ${_rtEsc(e.note)}</td></tr>`
+          ? `<tr><td colspan="5" style="font-size:12px; color:var(--muted); padding-top:0; white-space:pre-wrap;">💬 ${_rtEsc(e.note)}</td></tr>`
           : ''}`;
       }).join('');
       const badNamed = named.filter(e=> e.r <= 2).length;
+      const appN = named.filter(e=> _srcOf(e) === 'app').length;
       whoRatedHtml = `<h3 style="font-size:13px; margin:16px 0 8px; color:var(--muted);">
           🔎 مين قيّم (${named.length}) — 🔒 للمالك بس · الأسوأ الأول${badNamed? ` · ${badNamed} محتاج متابعة`:''}</h3>
-        <table class="rep-tbl"><thead><tr><th></th><th>العميلة</th><th>مع مين</th><th>إمتى</th></tr></thead>
+        <div style="font-size:11.5px; color:var(--muted); margin-bottom:6px;">📱 ${appN} من التطبيق · 🖥️ ${named.length - appN} من شاشة الفرع (مجهولة)</div>
+        <table class="rep-tbl"><thead><tr><th></th><th>العميلة</th><th>المصدر</th><th>مع مين</th><th>إمتى</th></tr></thead>
         <tbody>${rows}</tbody></table>
         ${named.length > 60 ? `<div style="font-size:11px; color:var(--muted);">معروض 60 من ${named.length}</div>` : ''}`;
     }

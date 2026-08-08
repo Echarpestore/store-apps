@@ -3037,6 +3037,7 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
       if(_leg && _leg.status !== 'approved'){ _leg.status = 'failed'; }
       cardLegs = cardLegs.filter(function(l){ return l.status !== 'failed'; });
       try{ syncCardPayment(); }catch(e){}
+      stopAll();                 // ⚠️ نقفل المتابعة **قبل** ما نصفّر المؤشر
       paymobPending = null;
       paymobShow((d.status === 'refunded' ? '↩️ ' : '❌ ') + legTag
         + (d.status === 'refunded'
@@ -3052,10 +3053,23 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
     }
     return false;
   }
+  /* 🔴 باج: الدالة دي كانت بتقفل المتابعة **عن طريق `paymobPending`** —
+     ومسار الرفض/المرتجع جوه handleResult بيعمل `paymobPending = null`
+     وبعدين بيرجّع true، فـstopAll بتلاقيها فاضية و**المستمع مبيتقفلش خالص**.
+     يعني كل كارت مرفوض بيسيب مستمع Firestore حي للأبد على مستند الطلب
+     القديم. ولو الويبهوك حدّث المستند ده بعدين (Paymob بيبعت أكتر من حدث
+     لنفس العملية)، المستمع الزومبي بينده handleResult على **السلة الحالية**:
+     paymobApproved بترجع true وحارس التعليق بيشتغل على فاتورة مالهاش دعوة.
+     الحل: نمسك المقابض المحلية مباشرة — مش من متغيّر ممكن يكون اتصفّر. */
+  let _stopped = false;
   function stopAll(){
-    try{ if(paymobPending && paymobPending.unsub) paymobPending.unsub(); }catch(e){}
-    if(paymobPending && paymobPending.poll) clearInterval(paymobPending.poll);
-    if(paymobPending && paymobPending.rescue) clearInterval(paymobPending.rescue);
+    if(_stopped) return;
+    _stopped = true;
+    try{ if(unsub) unsub(); }catch(e){}
+    try{ clearInterval(poll); }catch(e){}
+    try{ clearInterval(rescue); }catch(e){}
+    try{ clearTimeout(_warnT); }catch(e){}
+    try{ clearTimeout(_giveUpT); }catch(e){}
   }
   const unsub = db.collection('pos_paymob_txns').doc(orderRef).onSnapshot(function(snap){
     if(!snap.exists) return;
@@ -3136,12 +3150,12 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
   // ⏳ 3 دقايق = تحذير بس — 🔴 كانت بتقتل المتابعة نهائيًا: عميل اتلكّع وأكّد
   // في الدقيقة الرابعة كان تأكيده بيضيع رغم إن الماكينة طبعت. دلوقتي المتابعة
   // مستمرة لحد 10 دقايق، وبعدها بس بتقف بمسح كامل.
-  setTimeout(function(){
+  const _warnT = setTimeout(function(){
     if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
       paymobShow('⏳ ' + legTag + 'الماكينة مردتش خلال 3 دقايق — لسه بتابع لحد 10 دقايق. لو الإيصال طلع من الماكينة تقدر تدوس «حفظ وطباعة» وتأكّد، ولو الطلب اتلغى دوس «مسح المدفوعات»', 'err');
     }
   }, 180000);
-  setTimeout(function(){
+  const _giveUpT = setTimeout(function(){
     if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
       stopAll();
       paymobPending = null;
@@ -3635,13 +3649,17 @@ async function _doConfirmPayment(){
                 const key = (c.barcode||'') + '|' + c.name;
                 returnedMap[key] = (returnedMap[key] || 0) + (c.qty||0);
               });
-              await origRef.update({ returnedQty: returnedMap });
+              // ⏱️ مهلة: نفس سبب نقط البياعة — كتابة من غير آك سيرفر بتفضل
+              //    معلّقة ومبترميش خطأ. ودي **قبل** الطباعة، فتعليقها كان
+              //    بيوقف المرتجع كله قبل ما الورقة تطلع أصلًا.
+              const _rqW = await _waitWrite(origRef.update({ returnedQty: returnedMap }));
+              if(_rqW.error) console.warn('update returnedQty', invCode, _rqW.error);
             }
           }catch(e){ console.warn('update returnedQty', invCode, e); }
         }
         // 📋 سجل المرتجعات المراقَب
         try{
-          await db.collection('pos_return_log').add({
+          await _waitWrite(db.collection('pos_return_log').add({
             branch: currentBranch,
             employeeId: currentEmployee.id,
             employeeName: currentEmployee.name || '',
@@ -3652,7 +3670,7 @@ async function _doConfirmPayment(){
             items: retLines.map(c=>({ name:c.name, barcode:c.barcode||'', qty:c.qty, refund:Math.abs(c.price||0)*(c.qty||0), fromInvoice:c.fromInvoice })),
             totalRefund: retLines.reduce((s,c)=> s + Math.abs(c.price||0)*(c.qty||0), 0),
             ts: Date.now()
-          });
+          }));
         }catch(e){ console.warn('return log', e); }
         window._lastReturnMethod = null;
       }
@@ -3705,14 +3723,23 @@ async function _doConfirmPayment(){
     //    كانت هتفشل أو تعمل مستند غلط.)
     if(earnsStaffPoint && sellerEmployeeId){
       // ⭐ النقطة بتتسجل أوتوماتيك في برنامج الحضور (sales_points) — البياعة مش محتاجة تعمل سكان للفاتورة تاني
-      try{
-        await db.collection('sales_points').add({
-          employeeId: sellerEmployeeId, employeeName: sellerEmployeeName,
-          invoiceNumber: String(invoiceNo), branch: currentBranch,
-          itemCount, invoiceTotal: total, auto: true, ts: Date.now(),
-          value: staffPointValue             // ⭐ الوزن الحقيقي للنقطة (كسور للقطع الزيادة)
-        });
-      }catch(e){ console.warn('auto point', e); }
+      // 🔴 الكتابة دي كانت `await` عارية — الوحيدة في السلسلة كلها من غير
+      //    `_waitWrite`. ووعد كتابة Firestore **مبيتحلّش أصلًا** لما السيرفر
+      //    مايبقاش واصل (الـ offline persistence بتقيّد محليًا وتستنى الآك) —
+      //    مبيرميش خطأ عشان الـcatch يمسكه، بيفضل معلّق وبس.
+      //    ولأنها بعد الطباعة، النتيجة كانت: الورقة تطلع، الفاتورة تتحفظ،
+      //    المخزون يتخصم — وبعدين **كل اللي بعدها مايشتغلش**: نقط العميلة
+      //    والمكافأة وربط التقييم وتصفير الكارت و`goToSale()`. الشاشة تفضل
+      //    على صفحة الدفع بسلة مليانة وزرار «⏳ بيحفظ...» للأبد، و`_confirmSaving`
+      //    تفضل true فأي محاولة تانية ترد «الفاتورة بتتحفظ... استنى ثانية».
+      //    مهلة 4 ثواني وبعدها بنكمّل — Firestore بترفعها لوحدها لما النت يرجع.
+      const _spW = await _waitWrite(db.collection('sales_points').add({
+        employeeId: sellerEmployeeId, employeeName: sellerEmployeeName,
+        invoiceNumber: String(invoiceNo), branch: currentBranch,
+        itemCount, invoiceTotal: total, auto: true, ts: Date.now(),
+        value: staffPointValue             // ⭐ الوزن الحقيقي للنقطة (كسور للقطع الزيادة)
+      }));
+      if(_spW.error) console.warn('auto point', _spW.error);
       const ptRef = db.collection(TEST_EMPLOYEE_POINTS).doc(sellerEmployeeId);
       await _waitWrite(ptRef.set({
         employeeName: sellerEmployeeName,
@@ -3954,7 +3981,17 @@ if(typeof window !== 'undefined' && typeof setInterval === 'function'){
 /* ⏱️ 10 ثواني. مينفعش أقل من كده: أبطأ حفظ **طبيعي** بياخد ~6.5 ثانية
    (رقم الفاتورة 2.5 + كتابة البيعة 4) — لو نزّلناها تحت كده الكاشير
    هتشوف بانر أحمر على فواتير سليمة كل ما النت يتقل، وتبطّل تصدّقه. */
-var PM_STUCK_MS = 10000;
+/* 🛟 حارس "الدفع اتقبل والفاتورة ماتحفظتش"
+   🔴 كان 10 ثواني **من لحظة قبول الدفع** — والعدّاد بيبدأ قبل ما الحفظ
+      يبدأ أصلًا. الحفظ الطبيعي (كتابة Firestore + طابور الطباعة + النقط)
+      على نت الفرع بياخد أكتر من كده كتير، فالكاشير كانت بتشوف مربع أحمر
+      مفزع "الفاتورة لسه ماتحفظتش" **بعد كل عملية فيزا تقريبًا** رغم إن
+      كل حاجة تمام — وبعدين تدوس عليه فتحفظ مرتين أو تعيد على الماكينة.
+      إنذار بيرن كل مرة = إنذار محدش بيسمعه.
+   دلوقتي: طول ما الحفظ **شغال فعلًا** بنديله مهلة كاملة وبنعرض رسالة
+      هادية مش حمرا؛ الإنذار الأحمر للحالات اللي الحفظ فيها واقف بجد. */
+var PM_STUCK_MS = 20000;          // مفيش حفظ شغال → 20 ثانية
+var PM_SAVING_GRACE_MS = 60000;   // الحفظ شغال على الشبكة → دقيقة كاملة
 var _pmStuck = null;      // { ref, at, timer, logged }
 
 function paymobStuckStart(orderRef){
@@ -3978,8 +4015,12 @@ function paymobStuckReason(st){
   if(!st) return null;
   if(!st.approved) return null;              // الدفع لسه ماتقبلش — ده مسار تاني
   if(!st.cartCount) return null;             // السلة اتفضّت = الفاتورة اتحفظت
+  // ⏳ الحفظ شغال دلوقتي؟ يبقى مفيش تعليق — ده انتظار عادي، مش عطل
+  if(st.saving){
+    if(st.elapsedMs < PM_SAVING_GRACE_MS) return null;
+    return { reason:'الحفظ لسه شغال على الشبكة — استنى شوية', canSave:false, calm:true };
+  }
   if(st.elapsedMs < PM_STUCK_MS) return null;
-  if(st.saving) return { reason:'الحفظ لسه شغال على الشبكة — استنى شوية', canSave:false };
   if(st.autoFired) return { reason:'الطباعة التلقائية اتنفذت بس الفاتورة ماكملتش الحفظ', canSave:true };
   if(st.skipReason) return { reason:'الحفظ التلقائي اتوقف: ' + st.skipReason, canSave:true };
   return { reason:'الدفع اتقبل والحفظ التلقائي ما اشتغلش', canSave:true };
@@ -4021,9 +4062,13 @@ function paymobStuckRender(r){
   var tail = info.last4 ? (' •' + info.last4) : '';
   var ref  = (_pmStuck && _pmStuck.ref) ? _pmStuck.ref : (info.orderRef || '');
   box.style.display = 'block';
+  // 🎨 الهادي (الحفظ شغال) ≠ الإنذار (الحفظ واقف) — الكاشير لازم تفرّق بينهم
+  var calm = !!r.calm;
   box.innerHTML =
-    '<div style="background:#7f1d1d; color:#fff; border-radius:12px; padding:13px 15px; text-align:center;">'
-    + '<div style="font-weight:900; font-size:16px;">🛟 الدفع اتقبل' + _bkEsc(tail) + ' — بس الفاتورة لسه ماتحفظتش</div>'
+    '<div style="background:' + (calm ? '#3a2c0e' : '#7f1d1d') + '; color:#fff; border-radius:12px; padding:13px 15px; text-align:center;">'
+    + '<div style="font-weight:900; font-size:16px;">'
+      + (calm ? ('⏳ الدفع اتقبل' + _bkEsc(tail) + ' — بيحفظ…')
+              : ('🛟 الدفع اتقبل' + _bkEsc(tail) + ' — بس الفاتورة لسه ماتحفظتش')) + '</div>'
     + '<div style="font-size:13px; font-weight:700; margin-top:5px; opacity:.95;">' + _bkEsc(r.reason) + '</div>'
     + (ref ? '<div style="font-size:11.5px; margin-top:4px; opacity:.85; direction:ltr;">' + _bkEsc(ref) + '</div>' : '')
     + '<div style="font-size:12px; margin-top:7px; opacity:.9;">متعملش العملية تاني على الماكينة — الفلوس اتسحبت خلاص</div>'
