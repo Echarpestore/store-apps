@@ -1350,12 +1350,16 @@ function _ratCustName(phone){
   });
   return (c && c.name) ? c.name : '';
 }
+// 📱/🖥️ نفس تصنيف المصدر المستخدم في POS بالظبط
+function _ratSource(e){ return (e && (e.source === 'app_after_visit' || e.saleId)) ? 'app' : 'kiosk'; }
 function _ratRows(list, filter){
   var rows = (list || []).filter(function(e){
     if(!e || !(Number(e.r) >= 1 && Number(e.r) <= RATING_MAX)) return false;
     if(filter === 'bad')   return Number(e.r) <= 2;
     if(filter === 'notes') return !!(e.note && String(e.note).trim());
     if(filter === 'named') return !!e.customerPhone;
+    if(filter === 'app')   return _ratSource(e) === 'app';
+    if(filter === 'kiosk') return _ratSource(e) === 'kiosk';
     return true;
   });
   // الأسوأ الأول، وبعدين الأحدث — ده ترتيب المتابعة مش ترتيب العرض
@@ -1373,7 +1377,9 @@ function renderWhoRated(){
     all:   _ratRows(all, 'all').length,
     bad:   _ratRows(all, 'bad').length,
     notes: _ratRows(all, 'notes').length,
-    named: _ratRows(all, 'named').length
+    named: _ratRows(all, 'named').length,
+    app:   _ratRows(all, 'app').length,
+    kiosk: _ratRows(all, 'kiosk').length
   };
   var tab = function(k, label){
     var on = (f === k);
@@ -1387,13 +1393,18 @@ function renderWhoRated(){
     var name = _ratCustName(phone);
     var who = phone
       ? '<a href="tel:' + esc(phone) + '" style="color:#60a5fa; font-weight:800;">'
-        + esc(name || phone) + '</a>' + (name ? ' <span class="muted" style="font-size:11px;">' + esc(phone) + '</span>' : '')
-      : '<span class="muted">مجهول · شاشة الفرع</span>';
+        + esc(name || phone) + '</a>' + (name ? ' <span class="muted" style="font-size:11px; direction:ltr;">' + esc(phone) + '</span>' : '')
+      : '<span class="muted">مجهول</span>';
     var when = new Date(Number(e.ts) || 0).toLocaleString('ar-EG', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    var isApp = _ratSource(e) === 'app';
+    var srcTag = '<span style="font-size:10.5px; padding:2px 6px; border-radius:6px; white-space:nowrap; '
+      + (isApp ? 'background:#4338ca33; color:#a5b4fc;">📱 التطبيق' : 'background:#ffffff14; color:#94a3b8;">🖥️ شاشة الفرع')
+      + '</span>';
     return '<div style="border-right:3px solid ' + COL[r] + '; background:#ffffff08; border-radius:10px; padding:9px 11px; margin-bottom:7px;">'
       + '<div class="row" style="align-items:center; gap:8px;">'
         + '<span style="font-size:17px;">' + FACE[r] + '</span>'
         + '<span style="flex:1;">' + who + '</span>'
+        + srcTag
         + '<span class="muted" style="font-size:11px; white-space:nowrap;">' + when + '</span>'
       + '</div>'
       + '<div class="muted" style="font-size:11px; margin-top:3px;">'
@@ -1411,7 +1422,7 @@ function renderWhoRated(){
     + '<div class="hint">التقييمات السيّئة الأول — دي اللي محتاجة مكالمة. دوس على الاسم عشان تتصل.</div>'
     + '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">'
       + tab('bad', '😠 محتاج متابعة') + tab('notes', '💬 كتبوا كلام')
-      + tab('named', '👤 معروفين') + tab('all', 'الكل')
+      + tab('app', '📱 التطبيق') + tab('kiosk', '🖥️ شاشة الفرع') + tab('all', 'الكل')
     + '</div>'
     + body
     + (rows.length > 120 ? '<div class="hint" style="margin-top:8px;">معروض أول 120 من ' + rows.length + '</div>' : '')
