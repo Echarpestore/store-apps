@@ -39,7 +39,7 @@ function extractFn(s, header){
   return null;
 }
 
-const WANTED = ['function esc(', 'function ratingsSummary(', 'function _ratCustName(',
+const WANTED = ['function esc(', 'function ratingsSummary(', 'function _ratSource(', 'function _ratCustName(',
                 'function _ratRows(', 'function renderWhoRated('];
 const parts = [];
 let missing = null;
@@ -112,6 +112,18 @@ const R = (r, o)=> Object.assign({ r, ts: Date.now() - 3600000, branch: 'الر�
   assert(ctx._ratRows(list, 'bad').length === 3, 'فلتر محتاج متابعة (1 و2) = 3');
   assert(ctx._ratRows(list, 'notes').length === 2, 'فلتر اللي كتبوا كلام = 2');
   assert(ctx._ratRows(list, 'named').length === 4, 'فلتر المعروفين = 4 (الكشك بره)');
+  // 📱/🖥️ المصدر: تقييم التطبيق ليه saleId أو source=app_after_visit
+  const mixed = [
+    R(4, { customerPhone:'011', saleId:'INV1' }),          // تطبيق (بفاتورة)
+    R(3, { source:'app_after_visit', customerPhone:'012' }),// تطبيق (بالمصدر)
+    R(2, {}),                                              // شاشة الفرع
+    R(1, { source:'kiosk' }),                              // شاشة الفرع
+  ];
+  const c2 = build(mixed).ctx;
+  assert(c2._ratSource(mixed[0]) === 'app' && c2._ratSource(mixed[1]) === 'app', 'تقييم التطبيق متعرّف بالاتنين');
+  assert(c2._ratSource(mixed[2]) === 'kiosk' && c2._ratSource(mixed[3]) === 'kiosk', 'وتقييم شاشة الفرع');
+  assert(c2._ratRows(mixed, 'app').length === 2, '⭐ فلتر 📱 التطبيق = 2');
+  assert(c2._ratRows(mixed, 'kiosk').length === 2, '⭐ فلتر 🖥️ شاشة الفرع = 2');
   assert(ctx._ratRows(list, 'bad').every(e=> e.r <= 2), '⛔ مفيش تقييم كويس متسرّب لقايمة المتابعة');
   assert(ctx._ratRows([R(5, {customerPhone:'01'}), R(4)], 'all').length === 1, 'القيم الغلط مستبعدة من القوايم كمان');
 })();
@@ -138,6 +150,11 @@ const R = (r, o)=> Object.assign({ r, ts: Date.now() - 3600000, branch: 'الر�
   assert(h.indexOf('استنيت كتير') >= 0, 'وكلامها ظاهر');
   assert(h.indexOf('سارة') >= 0, 'واسم البياعة اللي كانت معاها');
   assert(h.indexOf('مجهول') >= 0, '⭐ وتقييم الكشك متعلّم مجهول — مش بنخمّنله هوية');
+  // ⚠️ فخ الأسيرشن الرخم: نفس الكلمتين موجودين في **أزرار الفلتر** كمان،
+  //    فمجرد وجودهم في الصفحة مش دليل إن الشارة اتحطت على السطر. بنعدّ.
+  const cnt = (t)=> h.split(t).length - 1;
+  assert(cnt('📱 التطبيق') >= 2 && cnt('🖥️ شاشة الفرع') >= 2,
+    '⭐⭐ الشارة على السطر نفسه مش بس في زرار الفلتر (تطبيق ' + cnt('📱 التطبيق') + ' · فرع ' + cnt('🖥️ شاشة الفرع') + ')');
 
   // تهريب HTML — الكلام جاي من العميلة
   const evil = [R(1, { customerPhone: '011', note: '<img src=x onerror=alert(1)>' })];
@@ -169,6 +186,14 @@ const R = (r, o)=> Object.assign({ r, ts: Date.now() - 3600000, branch: 'الر�
       '⛔⛔ مفيش أي عرض لرقم العميلة بره بوابة المالك');
     assert(outside.indexOf('tel:') < 0, '⛔ ومفيش لينك اتصال بره البوابة');
     assert(/tel:/.test(gate), 'ولينك الاتصال جوه البوابة');
+    // 👤 الدوسة على الاسم لازم تفتح **ملف العميلة** مش تفتح الاتصال
+    assert(/openCustomerProfile\('/.test(gate),
+      '⭐⭐ اسم العميلة بيفتح ملفها (كان بيفتح الاتصال بالغلط)');
+    assert(/<td>\$\{srcTag\}<\/td>/.test(gate),
+      '⭐⭐ شارة المصدر متحطوطة في خانة في الجدول (مش متعرّفة وبس)');
+    assert(/شاشة الفرع/.test(gate) && /التطبيق/.test(gate), 'والشارتين موجودين');
+    assert(/e\.source === 'app_after_visit' \|\| e\.saleId/.test(gate),
+      '⭐ نفس تصنيف المصدر المستخدم في باقي التقرير (مصدر واحد للحقيقة)');
     assert(/TEST_CUSTOMERS/.test(gate), 'والأسماء بتتجاب من ملفات العملاء');
     assert(/\[\.\.\.new Set\(/.test(gate),
       '⭐ الأرقام بتتجاب مرة واحدة لكل عميلة — مش استعلام لكل تقييم');
