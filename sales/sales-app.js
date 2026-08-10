@@ -3862,29 +3862,20 @@ window.todaysRewardWinners = todaysRewardWinners;
 
 function _esc(t){ return String(t == null ? '' : t).replace(/[<>&"]/g, function(c){ return ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'})[c]; }); }
 window._esc = _esc;
+/* 🏅 مكافأة اليوم لموظفة معيّنة — بتترسم **على كارتها** في الشاشة
+   الرئيسية، مش في بانر فوق. الكارت هو المكان اللي عين الفريق عليه. */
+function todaysRewardFor(empId){
+  return todaysRewardWinners().find(r=> r && r.employeeId === empId) || null;
+}
+window.todaysRewardFor = todaysRewardFor;
+
+/* البانر الفوقاني اتلغى — كان بيركب على الهيدر ويغطّي الترس، والفوز
+   مكانه الطبيعي كارت الموظفة نفسها (شوف `winnerTile` في renderEmpGrid).
+   الدالة سايبة بالاسم لأن فيه أماكن بتناديها بعد أي تحديث للمكافآت. */
 function renderWinnerBanner(){
   const host = document.getElementById('winnerBanner');
-  if(!host) return;
-  const wins = todaysRewardWinners();
-  if(!wins.length){ host.style.display = 'none'; host.innerHTML = ''; return; }
-  host.style.display = 'block';
-  /* 🔴 كان بيلزق الأسماء جنب بعض ويحط **مجموعهم** في رقم واحد —
-     اتنين خدوا 200 كل واحدة كانوا بيبانوا كأنهم خدوا 400. الفلوس
-     مبتتجمّعش على أسماء: كل فايزة سطرها ومبلغها هي. */
-  host.innerHTML = '<div class="winWrap">'
-    + wins.map(r=>
-        '<div class="winFrame">'
-        + '<div class="winShine"></div>'
-        + '<div class="winGift">🎁</div>'
-        + '<div class="winBody">'
-          + '<div class="winTitle">فايزة النهاردة</div>'
-          + '<div class="winNameWrap"><span class="winName">' + _esc(r.employeeName || '') + '</span></div>'
-          + '<div class="winSub">' + (r.type === 'monthly' ? 'مكافأة الالتزام الشهرية' : 'مكافأة الالتزام الأسبوعية')
-            + ' — ' + _esc(r.periodLabel || '') + '</div>'
-        + '</div>'
-        + '<div class="winAmount">' + (Number(r.amount)||0) + '<span>ج.م</span></div>'
-      + '</div>').join('')
-  + '</div>';
+  if(host){ host.style.display = 'none'; host.innerHTML = ''; }
+  try{ renderEmpGrid(); }catch(e){}
 }
 window.renderWinnerBanner = renderWinnerBanner;
 
@@ -3970,13 +3961,19 @@ function renderEmpGrid(){
       taskIcon = '📸'; // task assigned, nothing submitted yet today
     }
     const hasUnseenReward = rewards.some(r=> r.employeeId===e.id && !r.seen);
+    // 🏅 فازت النهاردة؟ الكارت بياخد إطار دهبي متحرك ومبلغها عليه —
+    //    وبيفضل كده طول اليوم، مش 4 ثواني وتمشي.
+    const win = todaysRewardFor(e.id);
     return `
-    <div class="emp-tile attTile${e.id===highlightEmpId?' just-scored':''}" data-id="${e.id}">
+    <div class="emp-tile attTile${e.id===highlightEmpId?' just-scored':''}${win?' winnerTile':''}" data-id="${e.id}">
       ${taskIcon ? `<div class="taskBadge${sub && sub.rejected ? ' rejected' : ''}">${taskIcon}</div>` : ''}
       ${hasUnseenReward ? `<div class="giftBadge">🎁</div>` : ''}
+      ${win ? `<div class="winGiftBadge">🎁</div>` : ''}
       <div class="emp-avatar">${initials(e.name)}</div>
       <div class="emp-name">${e.name}</div>
       <div class="emp-count">${fmtPts(countsFor(e.id))} نقطة</div>
+      ${win ? `<div class="winPrize">${Number(win.amount)||0} <span>ج.م</span></div>
+               <div class="winPrizeSub">${win.type === 'monthly' ? 'مكافأة الشهر' : 'مكافأة الأسبوع'}</div>` : ''}
     </div>
   `;}).join('');
   grid.querySelectorAll('.emp-tile').forEach(tile=>{

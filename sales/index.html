@@ -300,7 +300,29 @@
   .giftBoxToast h2{font-size:24px; margin:0; color:var(--gold);}
   .giftBoxToast .amount{font-family:'Space Grotesk'; font-size:44px; font-weight:900; color:var(--good);}
 
-  /* ===== 🎁 بانر الفايزة — ثابت طول اليوم ===== */
+  /* ===== 🏅 كارت الفايزة — إطار متحرك طول اليوم ===== */
+  .emp-tile.winnerTile{
+    position:relative; border:2px solid transparent;
+    background:
+      linear-gradient(var(--panel),var(--panel)) padding-box,
+      linear-gradient(90deg,#8a6f2c,#f2c14e,#fff6d0,#f2c14e,#8a6f2c) border-box;
+    background-size:100% 100%, 300% 100%;
+    animation:winRing 3s linear infinite, winGlow 2.4s ease-in-out infinite;
+  }
+  .emp-tile.winnerTile .emp-name{color:var(--gold);}
+  .winGiftBadge{
+    position:absolute; top:8px; inset-inline-end:8px; font-size:20px; line-height:1;
+    animation:winBob 1.8s ease-in-out infinite;
+    filter:drop-shadow(0 2px 5px rgba(0,0,0,.45));
+  }
+  .winPrize{
+    margin-top:7px; font-family:'Space Grotesk'; font-size:20px; font-weight:900; color:var(--gold);
+    line-height:1;
+  }
+  .winPrize span{font-family:'Cairo'; font-size:11px; font-weight:700; color:var(--sub); margin-inline-start:3px;}
+  .winPrizeSub{font-size:10px; color:var(--sub); margin-top:2px;}
+
+  /* ===== 🎁 بانر الفايزة (ملغي — الستايل متساب للتوافق) ===== */
   #winnerBanner{margin-bottom:12px;}
   .winFrame{
     position:relative; overflow:hidden; display:flex; align-items:center; gap:12px;
