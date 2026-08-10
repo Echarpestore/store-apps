@@ -321,10 +321,26 @@
   .winGift{font-size:34px; flex-shrink:0; animation:winBob 1.8s ease-in-out infinite;
            filter:drop-shadow(0 3px 6px rgba(0,0,0,.4));}
   @keyframes winBob{0%,100%{transform:translateY(0) rotate(-5deg);} 50%{transform:translateY(-6px) rotate(5deg);}}
+  .winWrap{display:flex; flex-direction:column; gap:9px;}
   .winBody{flex:1; min-width:0;}
   .winTitle{font-size:10.5px; color:var(--gold); font-weight:800; letter-spacing:.5px;}
-  .winNames{font-size:15px; font-weight:900; color:var(--ink); margin-top:1px;
-            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  /* 🏅 إطار متحرك حوالين الاسم — شغّال على طول مش مرة واحدة */
+  .winNameWrap{display:inline-block; margin-top:3px; padding:4px 13px; border-radius:99px;
+    border:2px solid transparent;
+    background:
+      linear-gradient(#241e0e,#241e0e) padding-box,
+      linear-gradient(90deg,#8a6f2c,#f2c14e,#fff6d0,#f2c14e,#8a6f2c) border-box;
+    background-size:100% 100%, 300% 100%;
+    animation:winRing 3s linear infinite, winGlow 2.4s ease-in-out infinite;
+    max-width:100%; overflow:hidden;
+  }
+  @keyframes winRing{from{background-position:0 0, 0% 50%;} to{background-position:0 0, 300% 50%;}}
+  @keyframes winGlow{
+    0%,100%{box-shadow:0 0 0 rgba(242,193,78,0);}
+    50%{box-shadow:0 0 14px rgba(242,193,78,.35);}
+  }
+  .winName{font-size:15px; font-weight:900; color:var(--ink);
+           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;}
   .winSub{font-size:10.5px; color:var(--sub); margin-top:2px;}
   .winAmount{font-family:'Space Grotesk'; font-size:24px; font-weight:900; color:var(--gold);
              flex-shrink:0; line-height:1;}

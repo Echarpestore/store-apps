@@ -1660,6 +1660,15 @@ function applyBranchFilter(){
   tasks = allTasks.filter(t => t.branch === window.currentBranch);
   submissions = allSubmissions.filter(s => s.branch === window.currentBranch);
   rewards = allRewards.filter(r => r.branch === window.currentBranch);
+  /* 🔴 §18 القاعدة الذهبية — `allRewards` كانت `let` على مستوى الموديول
+     و**عمرها ما اتعرضت على window**. وفيه حتتين بيقروها من هناك:
+       · لوحة "مكافآت فوق الميزانية" (`renderRewardBudget`) — كانت بتاخد []
+         فبتقول "مفيش مكافآت مستنية موافقتك ✅" **دايمًا**، حتى لو فيه،
+         وشرايط الميزانية بتفضل على صفر.
+       · وعدّاد شريط "محتاج منك" — نفس الحكاية، بيعد صفر على طول.
+     يعني أي مكافأة عدّت الميزانية كانت بتستنى قرار **مايوصلش**. */
+  window.allRewards = allRewards;
+  window.rewards = rewards;
   commissionPayments = allCommissionPayments.filter(p => p.branch === window.currentBranch);
   salaryPayments = allSalaryPayments.filter(p => p.branch === window.currentBranch);
   terminations = allTerminations.filter(t => t.branch === window.currentBranch);
@@ -3845,30 +3854,36 @@ window.visibleRewards = visibleRewards;
    ============================================================ */
 function todaysRewardWinners(){
   const today = caiDayKey(Date.now());
-  return visibleRewards(window.allRewards || rewards || [])
+  return visibleRewards(rewards || window.allRewards || [])
     .filter(r=> r && r.earnedAt && caiDayKey(r.earnedAt) === today)
     .sort((a,b)=> (Number(b.amount)||0) - (Number(a.amount)||0));
 }
 window.todaysRewardWinners = todaysRewardWinners;
 
+function _esc(t){ return String(t == null ? '' : t).replace(/[<>&"]/g, function(c){ return ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'})[c]; }); }
+window._esc = _esc;
 function renderWinnerBanner(){
   const host = document.getElementById('winnerBanner');
   if(!host) return;
   const wins = todaysRewardWinners();
   if(!wins.length){ host.style.display = 'none'; host.innerHTML = ''; return; }
   host.style.display = 'block';
-  const total = wins.reduce((a,r)=> a + (Number(r.amount)||0), 0);
-  host.innerHTML = '<div class="winFrame">'
-    + '<div class="winShine"></div>'
-    + '<div class="winGift">🎁</div>'
-    + '<div class="winBody">'
-      + '<div class="winTitle">' + (wins.length > 1 ? 'فايزين النهاردة' : 'فايزة النهاردة') + '</div>'
-      + '<div class="winNames">' + wins.map(r=> r.employeeName || '').join(' · ') + '</div>'
-      + '<div class="winSub">' + (wins[0].type === 'monthly' ? 'مكافأة الالتزام الشهرية' : 'مكافأة الالتزام الأسبوعية')
-        + ' — ' + (wins[0].periodLabel || '') + '</div>'
-    + '</div>'
-    + '<div class="winAmount">' + (wins.length > 1 ? total : (Number(wins[0].amount)||0))
-      + '<span>ج.م</span></div>'
+  /* 🔴 كان بيلزق الأسماء جنب بعض ويحط **مجموعهم** في رقم واحد —
+     اتنين خدوا 200 كل واحدة كانوا بيبانوا كأنهم خدوا 400. الفلوس
+     مبتتجمّعش على أسماء: كل فايزة سطرها ومبلغها هي. */
+  host.innerHTML = '<div class="winWrap">'
+    + wins.map(r=>
+        '<div class="winFrame">'
+        + '<div class="winShine"></div>'
+        + '<div class="winGift">🎁</div>'
+        + '<div class="winBody">'
+          + '<div class="winTitle">فايزة النهاردة</div>'
+          + '<div class="winNameWrap"><span class="winName">' + _esc(r.employeeName || '') + '</span></div>'
+          + '<div class="winSub">' + (r.type === 'monthly' ? 'مكافأة الالتزام الشهرية' : 'مكافأة الالتزام الأسبوعية')
+            + ' — ' + _esc(r.periodLabel || '') + '</div>'
+        + '</div>'
+        + '<div class="winAmount">' + (Number(r.amount)||0) + '<span>ج.م</span></div>'
+      + '</div>').join('')
   + '</div>';
 }
 window.renderWinnerBanner = renderWinnerBanner;
