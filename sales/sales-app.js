@@ -1674,6 +1674,7 @@ function applyBranchFilter(){
   updateGearBadge();
   populateBranchDropdowns();
   checkAndAwardRewards();
+  try{ renderWinnerBanner(); }catch(e){ console.warn('winner banner', e); }
   if(!rewardToastLock){
     rewardToastLock = true;
     setTimeout(()=>{ showUnseenRewardsIfAny(); rewardToastLock = false; }, 800);
@@ -3623,6 +3624,74 @@ function renderRaceStatus(empId){
    ------------------------------------------------------------
    اتفصلت عن الكتابة عشان المبلغ بقى بيعتمد على **عدد المستحقين كلهم**
    في كل الفروع، فلازم نعرفهم الأول وبعدين نحسب النصيب. */
+/* ============================================================
+   🎫 إسقاط شرط المهام لفترة بعينها
+   ------------------------------------------------------------
+   شرط المكافأة الأسبوعية كان: **كل يوم شغل** في الأسبوع لازم يكون فيه
+   صورة مهمة معتمدة من الأدمن. يوم واحد ناقص أو اعتماد واحد اتنسي =
+   الأسبوع كله ضاع — ولو الميزة مش مستخدمة أصلًا، **محدش بيأهل أبدًا**
+   مهما كان التزامه ومبيعاته وتقييمه.
+   الحل مش إلغاء الشرط: الحل إن المالك يقدر **يسقّطه لأسبوع معيّن** لما
+   يكون هو السبب الوحيد. بيتخزن كقايمة مفاتيح فترات، فالإسقاط بيفضل
+   مسجّل ومعروف مين أسقطه — مش إعداد عام حد ينساه مفتوح.
+   ============================================================ */
+window.rewardWaivers = window.rewardWaivers || { periods: [] };
+function taskGateWaived(range, type){
+  if(!range) return false;
+  const key = rewardPeriodKey(type === 'monthly' ? 'monthly' : 'weekly', range);
+  return ((window.rewardWaivers && window.rewardWaivers.periods) || []).indexOf(key) >= 0;
+}
+window.taskGateWaived = taskGateWaived;
+
+async function setTaskGateWaiver(key, on){
+  const cur = ((window.rewardWaivers && window.rewardWaivers.periods) || []).slice();
+  const i = cur.indexOf(key);
+  if(on && i < 0) cur.push(key);
+  if(!on && i >= 0) cur.splice(i, 1);
+  await setDoc(doc(db,'pos_test_settings','reward_waivers'),
+    { periods: cur, updatedAt: Date.now() }, { merge: true });
+}
+window.setTaskGateWaiver = setTaskGateWaiver;
+
+/* 🔍 ليه الموظفة مخدتش المكافأة؟ — نفس شروط qualifiesForReward بالظبط،
+   بس بترجّع البوابات واحدة واحدة بأرقامها بدل نعم/لأ. */
+function rewardGateReport(emp, range, type){
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const waived = taskGateWaived(range, type);
+  const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
+  const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
+  const credit = (window.allTimeCredit || []).filter(x=>{
+    if(x.employeeId !== emp.id || !tcCounts(x)) return false;
+    const t = new Date((x.date||'') + 'T00:00:00').getTime();
+    return t >= range.start.getTime() && t <= range.end.getTime();
+  });
+  const creditHours = credit.reduce((a,x)=> a + (Number(x.hours)||0), 0);
+  const elig = window.rewardEligibility(creditHours, type === 'monthly' ? 'month' : 'week', cfg);
+  const avgRating = computeAvgRatingInRange(emp.id, range.start.getTime(), range.end.getTime());
+
+  const gates = [];
+  gates.push({ key:'days', label:'أيام شغل مطلوبة', ok: requiredDays > 0,
+               txt: requiredDays + ' يوم' });
+  gates.push({ key:'tasks', label:'مهام معتمدة', waived,
+               ok: waived || confirmedDays >= requiredDays,
+               txt: confirmedDays + ' من ' + requiredDays + (waived ? ' (ساقط)' : '') });
+  gates.push({ key:'commit', label:'رصيد الوقت', ok: elig.eligible,
+               txt: elig.hours + ' من ' + elig.allowedHours + ' ساعة مسموحة' });
+  gates.push({ key:'rating', label:'تقييم العملاء',
+               ok: (avgRating === null || avgRating >= MIN_RATING_FOR_REWARD),
+               txt: avgRating === null ? 'مفيش تقييمات' : (Math.round(avgRating*10)/10 + ' من 4') });
+  if(emp.minWeeklyPoints){
+    const periodDays = totalCalendarDaysInRange(range.start, range.end);
+    const need = Math.round(emp.minWeeklyPoints * periodDays / 7);
+    const got = sumPoints((window.points||[]).filter(p=> p.employeeId === emp.id
+      && p.ts >= range.start.getTime() && p.ts <= range.end.getTime()));
+    gates.push({ key:'points', label:'حد أدنى للنقط', ok: got >= need,
+                 txt: fmtPts(got) + ' من ' + need });
+  }
+  return { gates, passed: gates.every(g=> g.ok), waived };
+}
+window.rewardGateReport = rewardGateReport;
+
 function qualifiesForReward(emp, range, type){
   if(!emp || emp.active === false) return false;
 
@@ -3645,8 +3714,13 @@ function qualifiesForReward(emp, range, type){
 
   // الأسبوعية: كل شرط لازم يتحقق
   const requiredDays = countRequiredWorkDaysInRange(emp, range.start, range.end);
-  const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
-  if(confirmedDays < requiredDays || requiredDays === 0) return false;
+  if(requiredDays === 0) return false;                 // مفيش أيام شغل أصلًا
+  // 🎫 شرط المهام ممكن يكون مسقّط للفترة دي بقرار المالك — وباقي الشروط
+  //    (الالتزام والتقييم والنقط) بتفضل شغالة زي ما هي.
+  if(!taskGateWaived(range, type)){
+    const confirmedDays = countConfirmedDaysInRange(emp.id, range.start, range.end);
+    if(confirmedDays < requiredDays) return false;
+  }
 
   // 🚪 بوابة الالتزام: رصيد الوقت مايعدّيش المسموح
   const cfg = window.timeCfg || timeCfgDefaults;
@@ -3758,6 +3832,47 @@ function visibleRewards(list){
 }
 window.visibleRewards = visibleRewards;
 
+/* ============================================================
+   🎁 الفوز بالمكافأة — بانر ثابت + احتفال بيستنى الفايزة
+   ------------------------------------------------------------
+   اللي كان بيحصل: شاشة بتظهر 4 ثواني وتمشي لوحدها (setTimeout).
+   لو الموظفة كانت بتخدم عميلة أو الشاشة في إيد حد تاني، الفوز
+   بيعدّي وهي متشوفهوش خالص — ومفيش أي أثر بعد كده.
+   دلوقتي:
+     • الاحتفال **مبيمشيش لوحده** — لازم تدوس (وده اللي بيعلّم seen)
+     • وبعد الاحتفال، **بانر بيفضل طول اليوم** فوق الشاشة الرئيسية
+       باسم الفايزة والمبلغ — الفريق كله يشوفه
+   ============================================================ */
+function todaysRewardWinners(){
+  const today = caiDayKey(Date.now());
+  return visibleRewards(window.allRewards || rewards || [])
+    .filter(r=> r && r.earnedAt && caiDayKey(r.earnedAt) === today)
+    .sort((a,b)=> (Number(b.amount)||0) - (Number(a.amount)||0));
+}
+window.todaysRewardWinners = todaysRewardWinners;
+
+function renderWinnerBanner(){
+  const host = document.getElementById('winnerBanner');
+  if(!host) return;
+  const wins = todaysRewardWinners();
+  if(!wins.length){ host.style.display = 'none'; host.innerHTML = ''; return; }
+  host.style.display = 'block';
+  const total = wins.reduce((a,r)=> a + (Number(r.amount)||0), 0);
+  host.innerHTML = '<div class="winFrame">'
+    + '<div class="winShine"></div>'
+    + '<div class="winGift">🎁</div>'
+    + '<div class="winBody">'
+      + '<div class="winTitle">' + (wins.length > 1 ? 'فايزين النهاردة' : 'فايزة النهاردة') + '</div>'
+      + '<div class="winNames">' + wins.map(r=> r.employeeName || '').join(' · ') + '</div>'
+      + '<div class="winSub">' + (wins[0].type === 'monthly' ? 'مكافأة الالتزام الشهرية' : 'مكافأة الالتزام الأسبوعية')
+        + ' — ' + (wins[0].periodLabel || '') + '</div>'
+    + '</div>'
+    + '<div class="winAmount">' + (wins.length > 1 ? total : (Number(wins[0].amount)||0))
+      + '<span>ج.م</span></div>'
+  + '</div>';
+}
+window.renderWinnerBanner = renderWinnerBanner;
+
 // Show a celebratory gift-box toast for any unseen reward, once per app load per reward.
 function showUnseenRewardsIfAny(){
   // 🚧 المكافآت المستنية موافقة الميزانية مبتظهرش للموظفة —
@@ -3765,12 +3880,41 @@ function showUnseenRewardsIfAny(){
   const unseen = visibleRewards(rewards).filter(r=> !r.seen);
   if(unseen.length === 0) return;
   const r = unseen[0];
-  $('#giftBoxName').textContent = '🎉 مبروك يا ' + r.employeeName + '!';
+  const box = $('#giftBoxToast');
+  $('#giftBoxName').textContent = 'مبروك يا ' + r.employeeName + '!';
   $('#giftBoxAmount').textContent = r.amount + ' ج.م';
   $('#giftBoxSub').textContent = (r.type==='weekly' ? 'مكافأة الالتزام الأسبوعية' : 'مكافأة الالتزام الشهرية') + ' — ' + r.periodLabel;
-  $('#giftBoxToast').classList.add('show');
-  updateDoc(doc(db,'sales_rewards', r.id), { seen: true }).catch(()=>{});
-  setTimeout(()=> $('#giftBoxToast').classList.remove('show'), 4000);
+
+  // 🎊 قصاصات ورق — بتتولد مرة واحدة مع كل احتفال
+  const fx = $('#giftBoxFx');
+  if(fx){
+    const cols = ['#f2c14e','#2fa36b','#e5484d','#7aa2f7','#f7a8d8'];
+    fx.innerHTML = Array.from({ length: 26 }, (_, i)=>
+      '<i style="left:' + Math.round(Math.random()*100) + '%;'
+      + 'background:' + cols[i % cols.length] + ';'
+      + 'animation-delay:' + (Math.random()*1.2).toFixed(2) + 's;'
+      + 'animation-duration:' + (2.2 + Math.random()*1.6).toFixed(2) + 's;"></i>').join('');
+  }
+
+  box.classList.remove('opened');
+  box.classList.add('show');
+  // الصندوق بيترج شوية وبعدين يتفتح — مش بيظهر مفتوح من أول لحظة
+  setTimeout(()=> box.classList.add('opened'), 900);
+
+  // ⛔ مفيش setTimeout بيقفلها: الاحتفال بيستنى الفايزة تدوس.
+  //    الدوسة هي اللي بتعلّم `seen` — يعني مفيش فوز بيتعلّم إنه اتشاف
+  //    وهو ماتشافش، وبكده مبيضيعش لو الشاشة كانت مشغولة.
+  const close = ()=>{
+    box.classList.remove('show', 'opened');
+    if(fx) fx.innerHTML = '';
+    updateDoc(doc(db,'sales_rewards', r.id), { seen: true })
+      .catch(()=>{})
+      .then(()=>{ try{ renderWinnerBanner(); }catch(e){} });
+    setTimeout(()=>{ try{ showUnseenRewardsIfAny(); }catch(e){} }, 400);   // فايزة تانية؟
+  };
+  const btn = $('#giftBoxOk');
+  if(btn) btn.onclick = close;
+  box.onclick = (ev)=>{ if(ev.target === box) close(); };
 }
 
 // 🔴 كانت `.length` — بتعد **عدد الفواتير** مش النقط.
@@ -4679,6 +4823,9 @@ $('#exportAttendanceCsvBtn')?.addEventListener('click', ()=>{
 // ---------- COMPREHENSIVE REPORT (admin) ----------
 // ---------- WEEKLY AGGREGATE PERFORMANCE (admin) ----------
 function computeWeekComposite(emp, weekStart, weekEnd){
+  // 🎫 لو شرط المهام مسقّط للأسبوع ده، بنشيله من المتوسط خالص —
+  //    مش بنحسبه 100% (ده كان هيرفع الدرجة بالغلط) ولا 0% (يظلمهم).
+  const _tw = taskGateWaived({ start: weekStart, end: weekEnd }, 'weekly');
   const elapsedRequiredDays = countElapsedWorkDaysInRange(emp, weekStart, weekEnd);
   const daysPresent = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= weekStart.getTime() && s.clockInTs <= weekEnd.getTime()).length;
   const weekShifts = allShifts.filter(s=> s.employeeId===emp.id && s.clockInTs >= weekStart.getTime() && s.clockInTs <= weekEnd.getTime());
@@ -4690,7 +4837,7 @@ function computeWeekComposite(emp, weekStart, weekEnd){
   const punctualityPct = daysPresent > 0 ? Math.round((daysPresent-lateCount)/daysPresent*100) : 100;
   const taskPct = elapsedRequiredDays > 0 ? Math.min(100, Math.round(confirmedTasks/elapsedRequiredDays*100)) : 100;
   const ratingPct = avgRating === null ? null : Math.round((avgRating-1)/3*100); // maps 1..4 scale to 0..100%
-  const parts = [attendancePct, punctualityPct, taskPct];
+  const parts = _tw ? [attendancePct, punctualityPct] : [attendancePct, punctualityPct, taskPct];
   if(ratingPct !== null) parts.push(ratingPct);
   return Math.round(parts.reduce((a,b)=>a+b,0)/parts.length);
 }
@@ -6447,6 +6594,14 @@ $('#openAdvance')?.addEventListener('click', ()=>{
 // advCfg = { maxPerMonth: سقف الشهر بالجنيه (0 = مفيش سقف), openDay: أول يوم مسموح (0 = مفتوح طول الشهر) }
 window.advCfg = { maxPerMonth: 0, openDay: 0, closeDay: 0 };
 try{
+  // 🎫 فترات اتسقط فيها شرط المهام
+  onSnapshot(doc(db,'pos_test_settings','reward_waivers'), (snap)=>{
+    const d = snap.exists() ? (snap.data() || {}) : {};
+    window.rewardWaivers = { periods: Array.isArray(d.periods) ? d.periods : [] };
+    try{ if(typeof renderRewardBudget === 'function') renderRewardBudget(); }catch(_){}
+    try{ if(typeof checkAndAwardRewards === 'function') checkAndAwardRewards(); }catch(_){}
+  }, (e)=> console.warn('reward waivers', e && e.code));
+
   onSnapshot(doc(db,'pos_test_settings','advances_cfg'), (snap)=>{
     if(snap.exists()){
       const d = snap.data();
@@ -7065,7 +7220,10 @@ function renderAdvancesLog(){
    "نسيت الانصراف → 15 ساعة أوفرتايم مدفوعة" من غير ما حد ياخد باله.
    ============================================================ */
 function _otFmt(ts){
-  try{ return new Date(ts).toLocaleString('ar-EG', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); }
+  // 🔴 من غير الحارس ده، شيفت لسه مفتوح (مفيش clockOutTs) كان بيتعرض
+  //    "٣١/١٢، ٩:٠٠ م" — ده تاريخ الصفر (1970) مش وقت حقيقي.
+  if(!Number(ts)) return '—';
+  try{ return cai(ts).toLocaleString('ar-EG', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); }
   catch(e){ return ''; }
 }
 function renderOvertimeApprovals(){
@@ -7077,19 +7235,33 @@ function renderOvertimeApprovals(){
   /* اللوحة بقت مكان واحد للاتنين: أوفرتايم مستني موافقة، **و**الشيفتات
      اللي فضلت مفتوحة أو اتقفلت على إنها نسيان — دي محتاجة قرار المالك
      على ساعة المشي أصلًا قبل ما يتكلم عن أوفرتايم. */
+  const cfg0 = window.timeCfg || timeCfgDefaults;
   const pend = pendingOvertimeShifts(window.allShifts || []);
-  const needTime = (window.allShifts || []).filter(sh=>
-    sh && (!sh.clockOutTs || sh.forgotClockOut) && !pend.some(p=> p.id === sh.id));
+  /* 🔴 كان بيجيب **كل** شيفت مفتوح — يعني كل موظفة شغّالة دلوقتي بتظهر
+     في لوحة "مستني موافقتك" وهي لسه على الكاشير من ساعة. اللوحة كانت
+     بتمتلي كل يوم ببنود مش محتاجة أي قرار، والمالك يبطّل يبصلها —
+     وساعتها النسيان الحقيقي بيضيع وسطها.
+     الصح: الشيفت المفتوح مايبقاش "نسيان" غير لما يعدّي الحد الأقصى
+     (14 ساعة افتراضيًا) — وده اللي forgottenShifts بتعمله بالظبط. */
+  const needTime = forgottenShifts(window.allShifts || [], cfg0)
+    .concat((window.allShifts || []).filter(sh=> sh && sh.forgotClockOut))
+    .filter((sh, i, arr)=> arr.findIndex(x=> x.id === sh.id) === i)
+    .filter(sh=> !pend.some(p=> p.id === sh.id));
   const list = needTime.concat(pend).sort((a,b)=> (b.clockInTs||0) - (a.clockInTs||0));
   if(!list.length){
     host.innerHTML = '<p style="color:var(--sub); font-size:12.5px; margin:0;">مفيش أوفرتايم مستني موافقة ✅</p>';
     return;
   }
-  const cfg = window.timeCfg || timeCfgDefaults;
+  const cfg = cfg0;
   const maxMin = (Number(cfg.maxShiftHours) || 14) * 60;
   host.innerHTML = list.map(s=>{
     const mins = Number(s.overtimeMinutes)||0;
-    const dur  = Number(s.shiftMinutes) || Math.round(((s.clockOutTs||0) - (s.clockInTs||0))/60000);
+    // 🔴 لسه مفتوح؟ المدة بتتحسب لحد **دلوقتي**، مش من صفر التاريخ.
+    //    (0 − طابع الدخول) كان بيطلّع "-496165 ساعة" في اللوحة.
+    const open = !Number(s.clockOutTs);
+    const dur  = open
+      ? Math.round((Date.now() - (Number(s.clockInTs)||Date.now()))/60000)
+      : (Number(s.shiftMinutes) || Math.round((Number(s.clockOutTs) - (Number(s.clockInTs)||0))/60000));
     const susp = s.forgotClockOut || dur > maxMin;
     return `<div style="border:1px solid ${susp?'#7f1d1d':'var(--line)'}; background:${susp?'#2a1111':'var(--panel2)'};
                 border-radius:12px; padding:11px 13px; margin-bottom:9px;">
@@ -7098,7 +7270,7 @@ function renderOvertimeApprovals(){
         <span style="font-size:12px; color:var(--sub);">${_otFmt(s.clockInTs)} ← ${_otFmt(s.clockOutTs)}</span>
       </div>
       <div style="font-size:12.5px; margin-top:5px;">
-        مدة الشيفت <b>${Math.floor(dur/60)} س ${dur%60} د</b> ·
+        ${open ? 'مفتوح من' : 'مدة الشيفت'} <b>${Math.max(0,Math.floor(dur/60))} س ${Math.max(0,dur%60)} د</b>${open ? ' — لسه ماسجّلتش انصراف' : ''} ·
         أوفرتايم مطلوب <b style="color:var(--gold);">${mins} دقيقة</b>
       </div>
       ${susp ? '<div style="font-size:12px; color:#ff9a9d; font-weight:800; margin-top:5px;">🚨 شكله نسيان انصراف مش شغل فعلي — راجعه كويس</div>' : ''}
@@ -7169,6 +7341,82 @@ function rewardMonthSpend(list, nowTs){
 }
 window.rewardMonthSpend = rewardMonthSpend;
 
+/* 🎯 لوحة "مين هياخد المكافأة وليه" — بتتحط فوق لوحة الميزانية.
+   بتوري لكل أسبوع: مين مؤهّل، ومين لأ وبأي بوابة بالظبط، وزرار
+   يسقّط شرط المهام للأسبوع ده لو هو السبب الوحيد. */
+function renderRewardGates(){
+  const host = document.getElementById('rewardGatesPanel');
+  if(!host) return;
+  const emps = reviewEmployeesFor(viewBranch).filter(e=> e.active !== false);
+  const weeks = [];
+  let ref = new Date();
+  for(let i = 0; i < 3; i++){
+    const r = getWeekRange(ref);
+    weeks.push({ range: r, key: rewardPeriodKey('weekly', r),
+                 label: 'أسبوع ' + _fmtKey(cai(r.start)), current: i === 0 });
+    ref = new Date(r.start.getTime() - 1);
+  }
+
+  host.innerHTML = weeks.map(w=>{
+    const waived = taskGateWaived(w.range, 'weekly');
+    const rows = emps.map(e=>{
+      const rep = rewardGateReport(e, w.range, 'weekly');
+      const bad = rep.gates.filter(g=> !g.ok);
+      const badge = rep.passed
+        ? '<span style="color:var(--good); font-weight:800;">✅ مؤهّلة</span>'
+        : '<span style="color:var(--bad); font-weight:800;">❌</span>';
+      const why = rep.passed ? '' :
+        '<div style="font-size:11.5px; color:var(--sub); margin-top:2px;">'
+        + bad.map(g=> '⛔ ' + g.label + ': ' + g.txt).join(' · ') + '</div>';
+      const okTxt = '<div style="font-size:11px; color:var(--sub); margin-top:2px;">'
+        + rep.gates.filter(g=> g.ok).map(g=> g.label + ' ' + g.txt).join(' · ') + '</div>';
+      return '<div style="padding:7px 0; border-top:1px solid var(--line);">'
+        + '<div style="display:flex; justify-content:space-between; gap:8px; font-size:12.5px;">'
+        + '<b>' + e.name + '</b>' + badge + '</div>' + why + okTxt + '</div>';
+    }).join('');
+
+    const nOk = emps.filter(e=> rewardGateReport(e, w.range, 'weekly').passed).length;
+    // مين كان هيأهل لو شرط المهام اتشال؟ (عشان الزرار يبقى قرار مش تخمين)
+    const nIfWaived = waived ? nOk : emps.filter(e=>{
+      const r = rewardGateReport(e, w.range, 'weekly');
+      return r.gates.every(g=> g.ok || g.key === 'tasks');
+    }).length;
+
+    return '<div style="border:1px solid var(--line); border-radius:12px; padding:11px 13px; margin-top:10px; background:var(--panel);">'
+      + '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">'
+        + '<b style="font-size:13px;">' + w.label + (w.current ? ' <span style="color:var(--sub); font-weight:400;">(شغّال دلوقتي)</span>' : '') + '</b>'
+        + '<span style="font-size:12.5px; color:' + (nOk ? 'var(--good)' : 'var(--sub)') + ';">' + nOk + ' مؤهّلة</span>'
+      + '</div>'
+      + (waived
+          ? '<div style="font-size:11.5px; color:var(--gold); margin-top:5px;">🎫 شرط المهام مسقّط للأسبوع ده</div>'
+          : (nIfWaived > nOk
+              ? '<div style="font-size:11.5px; color:var(--sub); margin-top:5px;">لو أسقطت شرط المهام هيبقى <b style="color:var(--good);">' + nIfWaived + '</b> مؤهّلة</div>'
+              : '<div style="font-size:11.5px; color:var(--sub); margin-top:5px;">شرط المهام مش هو المانع هنا</div>'))
+      + '<button data-wv="' + w.key + '" data-on="' + (waived ? '0' : '1') + '"'
+        + ' style="width:100%; margin-top:8px; padding:8px; border-radius:9px; border:1px solid var(--line);'
+        + ' background:' + (waived ? 'var(--panel2)' : 'var(--gold-dim)') + '; color:' + (waived ? 'var(--text)' : 'var(--ink)')
+        + "; font-family:'Cairo'; font-weight:800; cursor:pointer;\">"
+        + (waived ? '↩️ رجّع شرط المهام' : '🎫 أسقط شرط المهام للأسبوع ده') + '</button>'
+      + '<div style="margin-top:6px;">' + (rows || '<div class="empty">مفيش موظفين</div>') + '</div>'
+    + '</div>';
+  }).join('');
+
+  host.querySelectorAll('[data-wv]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      if(b.dataset.busy) return;
+      const on = b.dataset.on === '1';
+      if(!confirm(on
+        ? 'هتسقّط شرط المهام المعتمدة للأسبوع ده. باقي الشروط (رصيد الوقت والتقييم والنقط) هتفضل شغالة زي ما هي. تكمّل؟'
+        : 'هترجّع شرط المهام للأسبوع ده. اللي اتصرفلهم مكافأة خلاص مش هتترجع منهم. تكمّل؟')) return;
+      b.dataset.busy = '1'; b.disabled = true;
+      try{ await setTaskGateWaiver(b.dataset.wv, on); }
+      catch(e){ alert('حصل خطأ: ' + (e && e.code ? e.code : 'غير معروف')); }
+      finally{ delete b.dataset.busy; b.disabled = false; }
+    });
+  });
+}
+window.renderRewardGates = renderRewardGates;
+
 function renderRewardBudget(){
   const host = document.getElementById('rewardBudgetPanel');
   if(!host) return;
@@ -7211,6 +7459,7 @@ function renderRewardBudget(){
     }).join('');
   }
   host.innerHTML = html;
+  try{ renderRewardGates(); }catch(e){ console.warn('reward gates', e); }
   host.querySelectorAll('[data-rwok]').forEach(b=>
     b.addEventListener('click', ()=> decideRewardBudget(b.dataset.rwok, 'approved')));
   host.querySelectorAll('[data-rwno]').forEach(b=>

@@ -293,13 +293,74 @@
 
   .giftBoxToast{
     position:absolute; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
-    background:rgba(8,9,12,.92); flex-direction:column; gap:16px; text-align:center;
+    background:radial-gradient(circle at 50% 38%, rgba(60,48,16,.96), rgba(8,9,12,.97) 68%);
+    flex-direction:column; gap:14px; text-align:center; padding:20px;
   }
   .giftBoxToast.show{display:flex;}
-  .giftBoxToast .box-emoji{font-size:70px; animation:giftBounce .6s ease-in-out infinite alternate;}
-  @keyframes giftBounce{from{transform:translateY(0) rotate(-4deg);} to{transform:translateY(-12px) rotate(4deg);}}
   .giftBoxToast h2{font-size:24px; margin:0; color:var(--gold);}
-  .giftBoxToast .amount{font-family:'Space Grotesk'; font-size:38px; font-weight:900; color:var(--good);}
+  .giftBoxToast .amount{font-family:'Space Grotesk'; font-size:44px; font-weight:900; color:var(--good);}
+
+  /* ===== 🎁 بانر الفايزة — ثابت طول اليوم ===== */
+  #winnerBanner{margin-bottom:12px;}
+  .winFrame{
+    position:relative; overflow:hidden; display:flex; align-items:center; gap:12px;
+    padding:13px 15px; border-radius:16px;
+    background:linear-gradient(135deg,#241e0e 0%,#2a2413 55%,#1d1a10 100%);
+    border:1.5px solid var(--gold-dim);
+    box-shadow:0 0 0 1px rgba(242,193,78,.12), 0 8px 24px rgba(0,0,0,.35);
+    animation:winIn .55s cubic-bezier(.2,.9,.25,1.15) both;
+  }
+  @keyframes winIn{from{opacity:0; transform:translateY(-10px) scale(.97);} to{opacity:1; transform:none;}}
+  /* لمعة بتعدّي على الإطار كل شوية */
+  .winShine{
+    position:absolute; top:0; bottom:0; width:38%; pointer-events:none;
+    background:linear-gradient(100deg,transparent,rgba(242,193,78,.16),transparent);
+    animation:winShine 3.6s ease-in-out infinite;
+  }
+  @keyframes winShine{0%{transform:translateX(-160%);} 55%,100%{transform:translateX(360%);}}
+  .winGift{font-size:34px; flex-shrink:0; animation:winBob 1.8s ease-in-out infinite;
+           filter:drop-shadow(0 3px 6px rgba(0,0,0,.4));}
+  @keyframes winBob{0%,100%{transform:translateY(0) rotate(-5deg);} 50%{transform:translateY(-6px) rotate(5deg);}}
+  .winBody{flex:1; min-width:0;}
+  .winTitle{font-size:10.5px; color:var(--gold); font-weight:800; letter-spacing:.5px;}
+  .winNames{font-size:15px; font-weight:900; color:var(--ink); margin-top:1px;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .winSub{font-size:10.5px; color:var(--sub); margin-top:2px;}
+  .winAmount{font-family:'Space Grotesk'; font-size:24px; font-weight:900; color:var(--gold);
+             flex-shrink:0; line-height:1;}
+  .winAmount span{font-family:'Cairo'; font-size:11px; font-weight:700; margin-inline-start:3px; color:var(--sub);}
+
+  /* ===== 🎉 شاشة الاحتفال ===== */
+  .giftBoxToast .fx{position:absolute; inset:0; overflow:hidden; pointer-events:none;}
+  .giftBoxToast .fx i{position:absolute; top:-14px; width:8px; height:14px; border-radius:2px;
+                      animation:confFall linear infinite;}
+  @keyframes confFall{
+    0%{transform:translateY(-20px) rotate(0deg); opacity:1;}
+    100%{transform:translateY(105vh) rotate(720deg); opacity:.15;}
+  }
+  .giftBoxToast .box-emoji{
+    font-size:76px; animation:giftShake .5s ease-in-out 3;
+    filter:drop-shadow(0 8px 18px rgba(0,0,0,.5));
+  }
+  @keyframes giftShake{
+    0%,100%{transform:rotate(-7deg) scale(1);} 25%{transform:rotate(8deg) scale(1.04);}
+    50%{transform:rotate(-8deg) scale(1.04);} 75%{transform:rotate(7deg) scale(1.02);}
+  }
+  /* بعد الرجّة الصندوق بيتفتح والمحتوى بيطلع منه */
+  .giftBoxToast .reveal{opacity:0; transform:translateY(14px) scale(.94);}
+  .giftBoxToast.opened .box-emoji{animation:giftPop .5s cubic-bezier(.2,.9,.25,1.4) forwards;}
+  @keyframes giftPop{to{transform:scale(1.25) translateY(-8px); filter:drop-shadow(0 0 26px rgba(242,193,78,.55));}}
+  .giftBoxToast.opened .reveal{animation:revealUp .5s cubic-bezier(.2,.9,.25,1.15) forwards;}
+  .giftBoxToast.opened .reveal:nth-of-type(2){animation-delay:.08s;}
+  .giftBoxToast.opened .reveal:nth-of-type(3){animation-delay:.16s;}
+  .giftBoxToast.opened .reveal:nth-of-type(4){animation-delay:.24s;}
+  @keyframes revealUp{to{opacity:1; transform:none;}}
+  .giftOkBtn{
+    padding:12px 34px; border-radius:99px; border:none; cursor:pointer;
+    background:var(--gold); color:#1a1608; font-family:'Cairo'; font-weight:900; font-size:15px;
+    box-shadow:0 6px 20px rgba(242,193,78,.3);
+  }
+
 
   .subRow{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); flex-wrap:wrap;}
   .subRow:last-child{border-bottom:none;}
@@ -401,6 +462,8 @@
       <button class="lbBtn" id="openLeaderboard" style="padding:8px 12px; font-size:11px;">🏆 الترتيب</button>
       <button class="lbBtn" id="openRegBtn" style="padding:8px 12px; font-size:11px; display:none;" onclick="openRegWizard()">🙋 تسجيل موظف جديد</button>
     </div>
+    <!-- 🎁 بانر الفايزة — بيفضل ظاهر طول اليوم -->
+    <div id="winnerBanner" style="display:none;"></div>
     <div id="announcementBanner" style="display:none;"></div>
     <div id="dailyTargetCard" style="display:none;"></div>
     <div id="breakBanner" style="display:none; margin-bottom:12px;"></div>
@@ -575,10 +638,12 @@
 
   <!-- GIFT BOX CELEBRATION -->
   <div id="giftBoxToast" class="giftBoxToast">
+    <div class="fx" id="giftBoxFx"></div>
     <div class="box-emoji">🎁</div>
-    <h2 id="giftBoxName">مبروك!</h2>
-    <div class="amount" id="giftBoxAmount">0 ج.م</div>
-    <p style="color:var(--sub); font-size:13px;" id="giftBoxSub">مكافأة الالتزام</p>
+    <h2 id="giftBoxName" class="reveal">مبروك!</h2>
+    <div class="amount reveal" id="giftBoxAmount">0 ج.م</div>
+    <p class="reveal" style="color:var(--sub); font-size:13px; margin:0;" id="giftBoxSub">مكافأة الالتزام</p>
+    <button class="giftOkBtn reveal" id="giftBoxOk">يلا 🎉</button>
   </div>
 
   <!-- TERMINATION CONFIRM (admin password) -->
@@ -824,6 +889,8 @@
         المكافآت ليها ميزانية مقفولة بتتقسّم على المستحقين في كل الفروع.
         لو الحد الأدنى خلّى الإجمالي يعدّي الميزانية، بتستنى موافقتك هنا ومتظهرش للموظفين قبلها.</p>
       <div id="rewardBudgetPanel"></div>
+      <!-- 🎯 مين هياخد المكافأة وليه + إسقاط شرط المهام لأسبوع -->
+      <div id="rewardGatesPanel"></div>
     </div>
 
     <div class="panel">
