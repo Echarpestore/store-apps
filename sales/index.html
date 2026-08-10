@@ -301,26 +301,27 @@
   .giftBoxToast .amount{font-family:'Space Grotesk'; font-size:44px; font-weight:900; color:var(--good);}
 
   /* ===== 🏅 كارت الفايزة — إطار متحرك طول اليوم ===== */
+  /* ⚠️ نفس مقاس الكارت العادي بالظبط: نفس الـpadding ونفس الـgap ونفس
+     عدد العناصر (دايرة + اسم + سطر). اللي بيتغيّر هو **الشكل** بس —
+     خلفية دهبية ولمعة بتعدّي وإطار متحرك. مفيش أي حاجة بتزوّد الطول. */
   .emp-tile.winnerTile{
-    position:relative; border:2px solid transparent;
+    position:relative; overflow:hidden; border:2px solid transparent; padding:21px 13px;
     background:
-      linear-gradient(var(--panel),var(--panel)) padding-box,
+      linear-gradient(135deg,#241e0e 0%,#2a2413 55%,#1d1a10 100%) padding-box,
       linear-gradient(90deg,#8a6f2c,#f2c14e,#fff6d0,#f2c14e,#8a6f2c) border-box;
     background-size:100% 100%, 300% 100%;
     animation:winRing 3s linear infinite, winGlow 2.4s ease-in-out infinite;
   }
   .emp-tile.winnerTile .emp-name{color:var(--gold);}
-  .winGiftBadge{
-    position:absolute; top:8px; inset-inline-end:8px; font-size:20px; line-height:1;
+  /* الدايرة بقت صندوق هدية — نفس المقاس بالظبط عشان الكارت مايتحركش */
+  .emp-avatar.winAvatar{
+    font-size:30px; background:rgba(242,193,78,.10); border-color:var(--gold);
     animation:winBob 1.8s ease-in-out infinite;
-    filter:drop-shadow(0 2px 5px rgba(0,0,0,.45));
   }
   .winPrize{
-    margin-top:7px; font-family:'Space Grotesk'; font-size:20px; font-weight:900; color:var(--gold);
-    line-height:1;
+    font-family:'Space Grotesk'; font-size:19px; font-weight:900; color:var(--gold); line-height:1;
   }
-  .winPrize span{font-family:'Cairo'; font-size:11px; font-weight:700; color:var(--sub); margin-inline-start:3px;}
-  .winPrizeSub{font-size:10px; color:var(--sub); margin-top:2px;}
+  .winPrize span{font-family:'Cairo'; font-size:10.5px; font-weight:700; color:var(--sub); margin-inline-start:3px;}
 
   /* ===== 🎁 بانر الفايزة (ملغي — الستايل متساب للتوافق) ===== */
   #winnerBanner{margin-bottom:12px;}
@@ -347,7 +348,7 @@
   .winBody{flex:1; min-width:0;}
   .winTitle{font-size:10.5px; color:var(--gold); font-weight:800; letter-spacing:.5px;}
   /* 🏅 إطار متحرك حوالين الاسم — شغّال على طول مش مرة واحدة */
-  .winNameWrap{display:inline-block; margin-top:3px; padding:4px 13px; border-radius:99px;
+  .winNameWrap{display:inline-block; padding:3px 12px; border-radius:99px; max-width:100%;
     border:2px solid transparent;
     background:
       linear-gradient(#241e0e,#241e0e) padding-box,

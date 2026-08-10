@@ -3968,12 +3968,13 @@ function renderEmpGrid(){
     <div class="emp-tile attTile${e.id===highlightEmpId?' just-scored':''}${win?' winnerTile':''}" data-id="${e.id}">
       ${taskIcon ? `<div class="taskBadge${sub && sub.rejected ? ' rejected' : ''}">${taskIcon}</div>` : ''}
       ${hasUnseenReward ? `<div class="giftBadge">🎁</div>` : ''}
-      ${win ? `<div class="winGiftBadge">🎁</div>` : ''}
-      <div class="emp-avatar">${initials(e.name)}</div>
-      <div class="emp-name">${e.name}</div>
-      <div class="emp-count">${fmtPts(countsFor(e.id))} نقطة</div>
-      ${win ? `<div class="winPrize">${Number(win.amount)||0} <span>ج.م</span></div>
-               <div class="winPrizeSub">${win.type === 'monthly' ? 'مكافأة الشهر' : 'مكافأة الأسبوع'}</div>` : ''}
+      ${win ? `<div class="winShine"></div>` : ''}
+      <div class="emp-avatar${win?' winAvatar':''}">${win ? '🎁' : initials(e.name)}</div>
+      ${win
+        ? `<div class="winNameWrap"><span class="emp-name">${e.name}</span></div>
+           <div class="winPrize">${Number(win.amount)||0} <span>ج.م</span></div>`
+        : `<div class="emp-name">${e.name}</div>
+           <div class="emp-count">${fmtPts(countsFor(e.id))} نقطة</div>`}
     </div>
   `;}).join('');
   grid.querySelectorAll('.emp-tile').forEach(tile=>{
