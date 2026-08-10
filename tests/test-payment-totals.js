@@ -356,7 +356,8 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assertEq((salesAppSrc.match(/finally\{ delete btn\.dataset\.busy; \}/g)||[]).length >= 4, true,
     'الحراس بيتفكوا بعد انتهاء الكتابة');
   // المرتب: تحذير الصرف المكرر لنفس الشهر
-  assert(/فيه صرف متسجل بالفعل/.test(salesAppSrc) && /_prevPay/.test(salesAppSrc),
+  // 🔀 اتنقل جوه شاشة الصرف الموحّدة (المرتب + النقط في عملية واحدة)
+  assert(/فيه صرف متسجل بالفعل/.test(salesAppSrc) && /periodLabel === pk/.test(salesAppSrc),
     'صرف مرتب تاني لنفس الشهر = تحذير صريح');
 }
 

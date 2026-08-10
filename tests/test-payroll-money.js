@@ -141,7 +141,9 @@ const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
   const pts = [ { value:1 }, { value:1.4 }, { value:0.6 }, {} ];   // القديمة من غير value = 1
   assertEq(S.sumPoints(pts), 4, 'sumPoints: 1+1.4+0.6+1 = 4');
   // الإيصال بيستخدم sumPoints مش length
-  assert(/sumPoints\(myPtsList\)/.test(appSrc) || /sumPoints === 'function'\)\s*\?\s*sumPoints\(myPtsList\)/.test(appSrc),
+  // 🔀 الإيصال بقى بياخد النقط من commissionDueFor (نفس الدالة اللي
+  //    شاشة العمولات بتقرا منها) — وهي بتجمع بـsumPoints جواها.
+  assert(/const ptsTotal = sumPoints\(/.test(appSrc),
     'إيصال الراتب بيحسب النقط بالوزن');
   assert(!/allPoints\.filter\([^)]*\)\.length;\s*\n\s*const ptsAmt/.test(appSrc),
     'عدّ المستندات القديم اتشال من الإيصال');
@@ -204,8 +206,23 @@ const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
   const srcA = fsA.readFileSync(pathA.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
   const i = srcA.indexOf('function advWindowOpen'), j = srcA.indexOf('function advCheck');
   assert(i > 0 && j > i, 'بلوك السلف اتلقى');
-  const box = { Number:Number, String:String, Date:Date, window:{} };
+  const box = { Number:Number, String:String, Date:Date, Math:Math, Intl:Intl, window:{} };
   vmA.createContext(box);
+  // 🕒 نافذة السلف ودورتها بقوا بيحسبوا بتوقيت القاهرة — لازم أدوات القاهرة معاهم
+  function _grab(h){
+    const k = srcA.indexOf(h); if(k < 0) return '';
+    let d = 0, st = false;
+    for(let z = srcA.indexOf('{', k); z < srcA.length; z++){
+      if(srcA[z] === '{'){ d++; st = true; }
+      else if(srcA[z] === '}'){ d--; if(st && d === 0) return srcA.slice(k, z + 1); }
+    }
+    return '';
+  }
+  vmA.runInContext(
+    "const CAI_TZ='Africa/Cairo';" +
+    "const _caiFmt=new Intl.DateTimeFormat('en-GB',{timeZone:CAI_TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});" +
+    ['function caiParts(','function caiOffsetMs(','function cai(','function caiStamp(']
+      .map(_grab).join('\n'), box);
   vmA.runInContext(srcA.slice(i, j), box);
   const wo  = (od,d,cd)=> vmA.runInContext(`advWindowOpen(${od}, new Date(2026,6,${d}), ${cd})`, box);
   const ck  = (y,m,d,od,cd)=> vmA.runInContext(`advCycleKey(new Date(${y},${m},${d}), ${od}, ${cd})`, box);

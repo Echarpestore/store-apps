@@ -263,7 +263,7 @@ assert(/roleHidden\s*===\s*'1'/.test(src2), 'اللوحات الممنوعة ب�
 
   // ---- 💰 وأزرار الفلوس محمية (كانت محمية أصلًا — تثبيت) ----
   // ⚠️ لازم نمسك **المعالج** مش أول ذكر للـdata-act (اللي هو في الـHTML)
-  ['paysalary','payref'].forEach(act=>{
+  ['payref'].forEach(act=>{
     const i = app.indexOf(`querySelectorAll('[data-act="${act}"]')`);
     assert(i > 0, `معالج ${act} اتلقى`);
     const blk = app.slice(i, i + 1400);
@@ -271,6 +271,22 @@ assert(/roleHidden\s*===\s*'1'/.test(src2), 'اللوحات الممنوعة ب�
     assert(/btn\.dataset\.busy = '1'/.test(blk), `و${act} بيقفل الحارس فعلًا`);
     assert(/confirm\(/.test(blk), `و${act} بتأكيد`);
   });
+  // 💰 صرف المرتب اتنقل لشاشة صرف موحّدة (المرتب + النقط في عملية واحدة
+  //    عشان النقط ماتتصرفش مرتين) — نفس الحراس لازم تكون موجودة فيها.
+  {
+    const i = app.indexOf('window.openSalaryPayoutDialog = function(');
+    assert(i > 0, 'شاشة صرف المرتب اتلقت');
+    // الدالة طويلة (بتبني HTML) — نقصّها بالأقواس المتوازنة مش بعدد حروف
+    let _d = 0, _st = false, _end = i;
+    for(let z = app.indexOf('{', i); z < app.length; z++){
+      if(app[z] === '{'){ _d++; _st = true; }
+      else if(app[z] === '}'){ _d--; if(_st && _d === 0){ _end = z + 1; break; } }
+    }
+    const blk = app.slice(i, _end);
+    assert(/if\(btn\.dataset\.busy\) return;/.test(blk), '💰 صرف المرتب بحارس ضغط مزدوج');
+    assert(/btn\.dataset\.busy = '1'/.test(blk), 'والحارس بيتقفل فعلًا');
+    assert(/confirm\(/.test(blk), 'وبتأكيد قبل الصرف');
+  }
   assert(/const btn = \$\('#advConfirmBtn'\);[\s\S]{0,60}btn\.disabled = true;/.test(app),
     '💰 تسجيل السلفة بحارس');
 }

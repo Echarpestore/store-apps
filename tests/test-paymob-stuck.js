@@ -32,7 +32,9 @@ function extractFn(src, header){
 // المهلة بتتقرا من الملف نفسه مش مكتوبة في الاختبار — عشان لو اتغيرت
 // الاختبارات تتحرك معاها بدل ما تقع بالغلط
 const PM_MS = Number((posSrc.match(/PM_STUCK_MS *= *(\d+)/) || [])[1]);
-const box = { window:{}, PM_STUCK_MS: PM_MS };
+// مهلة "الحفظ شغال على الشبكة" — بتتقرا من الملف زي أختها
+const PM_SAVE_MS = Number((posSrc.match(/PM_SAVING_GRACE_MS *= *(\d+)/) || [])[1]) || 60000;
+const box = { window:{}, PM_STUCK_MS: PM_MS, PM_SAVING_GRACE_MS: PM_SAVE_MS };
 vm.createContext(box);
 (function(){
   const src = extractFn(posSrc, 'function paymobStuckReason(');
@@ -62,7 +64,11 @@ const st = (o)=> Object.assign({}, OK, o||{});
 // ٢) الحالات التلاتة — كل واحدة برسالتها ومعاها القرار الصح
 // ============================================================
 (function(){
-  const saving = reason(st({ saving:true }));
+  // ⏳ الحفظ الشغال ليه مهلة أطول (دقيقة) قبل ما يتعلن كتعليق — الانتظار
+  //    على الشبكة مش عطل. جوه المهلة **مفيش بانر** أصلًا.
+  assert(reason(st({ saving:true })) === null,
+    '⭐ جوه مهلة الحفظ (' + PM_SAVE_MS/1000 + ' ثانية) مفيش بانر — ده انتظار عادي');
+  const saving = reason(st({ saving:true, elapsedMs: PM_SAVE_MS + 1000 }));
   assert(!!saving, 'الحفظ واقف على الشبكة → بانر');
   assertEq(saving.canSave, false,
     '⭐⭐ والحفظ لسه شغال → مفيش زرار حفظ (منع الحفظ مرتين والفلوس مسحوبة)');
@@ -85,7 +91,7 @@ const st = (o)=> Object.assign({}, OK, o||{});
 //    (لو الاتنين اتقالوا مع بعض، الزرار لازم يختفي)
 // ============================================================
 (function(){
-  const both = reason(st({ saving:true, autoFired:true, skipReason:'أي حاجة' }));
+  const both = reason(st({ saving:true, autoFired:true, skipReason:'أي حاجة', elapsedMs: PM_SAVE_MS + 1000 }));
   assertEq(both.canSave, false,
     '⭐⭐ الحفظ شغال = ممنوع زرار حفظ تاني مهما كانت الأسباب التانية');
 })();

@@ -205,9 +205,22 @@ function extractFn(s, header){
 const CFG = JSON.parse(cfgJson);
 const IN = Number(inTs), NOW = Number(nowTs);
 // بنجيب الدالتين النقيتين من الملف نفسه (مش نسخة تانية)
-const box0 = { window:{}, timeCfgDefaults: CFG, _hm2min: function(x){ var p = String(x).split(':'); return (+p[0])*60 + (+p[1]); } };
+const box0 = { window:{}, timeCfgDefaults: CFG, complianceCfg: { shifts:{} }, allLeaveReqs: [],
+  _hm2min: function(x){ var p = String(x).split(':'); return (+p[0])*60 + (+p[1]); },
+  Intl: Intl, Date: Date, Math: Math, Number: Number, String: String, console: console };
+box0.globalThis = box0;
 vm.createContext(box0);
-vm.runInContext(extractFn(src, 'function expectedShiftEndTs(') + '\\n' + extractFn(src, 'function earlyLeaveHours('), box0);
+// 🕒 دوال القاهرة لازمة — clockOut بقت بتحسب الانصراف بدري بالنقص في
+//    الساعات (earlyLeaveFromWorked) وبتاخد مفتاح اليوم بتوقيت القاهرة.
+vm.runInContext(
+  "const CAI_TZ='Africa/Cairo';" +
+  "const _caiFmt=new Intl.DateTimeFormat('en-GB',{timeZone:CAI_TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});" +
+  [ 'function caiParts(', 'function caiOffsetMs(', 'function cai(', 'function caiStamp(',
+    'function caiDayStart(', 'function caiDayEnd(', 'function _fmtKey(', 'function caiDayKey(',
+    'function approvedLeaveFor(', 'function effectiveStartHM(', 'function effectiveEndHM(',
+    'function scheduledShiftMinutes(', 'function earlyLeaveFromWorked(',
+    'function expectedShiftEndTs(', 'function earlyLeaveHours(' ]
+    .map(function(h){ return extractFn(src, h); }).join('\\n'), box0);
 
 const written = {};
 const box = {
@@ -219,6 +232,14 @@ const box = {
   timeCfgDefaults: CFG,
   expectedShiftEndTs: box0.expectedShiftEndTs,
   earlyLeaveHours: box0.earlyLeaveHours,
+  cai: box0.cai, caiDayKey: box0.caiDayKey, caiStamp: box0.caiStamp,
+  caiParts: box0.caiParts, caiDayStart: box0.caiDayStart, caiDayEnd: box0.caiDayEnd,
+  _fmtKey: box0._fmtKey, _hm2min: box0._hm2min,
+  effectiveStartHM: box0.effectiveStartHM, effectiveEndHM: box0.effectiveEndHM,
+  approvedLeaveFor: box0.approvedLeaveFor, allLeaveReqs: [],
+  scheduledShiftMinutes: box0.scheduledShiftMinutes,
+  earlyLeaveFromWorked: box0.earlyLeaveFromWorked,
+  Intl: Intl,
   todayStr: function(){ return '2026-07-11'; },
   doc: function(){ return {}; }, db: {}, alert: function(){}, console: console,
   updateDoc: function(ref, payload){ Object.assign(written, payload); return Promise.resolve(); },
@@ -361,8 +382,12 @@ try{ fs.unlinkSync(runnerPath); }catch(e){}
   assert(!!fn, 'لقينا ownerCloseShift');
   if(!fn) return;
 
-  assert(/out\.getTime\(\) <= sh\.clockInTs\) out\.setDate\(out\.getDate\(\) \+ 1\)/.test(fn),
+  // 🕒 الساعة بقت بتتبني بتوقيت القاهرة (caiStamp) مش بساعة الجهاز —
+  //    نفس القاعدة، تنفيذ مختلف: لو الوقت أصغر من الدخول يبقى تاني يوم.
+  assert(/outTs <= sh\.clockInTs/.test(fn) && /outTs \+ 86400000/.test(fn),
     '⭐⭐ ساعة أصغر من الدخول = مشيت بعد نص الليل (00:30 يبقى تاني يوم مش نفس اليوم)');
+  assert(/caiStamp\(/.test(fn),
+    '⭐ والساعة بتتحسب بتوقيت القاهرة مش بساعة جهاز المالك');
   assert(/totalMin > maxShiftMin/.test(fn),
     '⭐ ولو الوقت المكتوب طلّع شيفت غير معقول، بيترفض قبل الحفظ');
   assert(/!\/\^\\d\{1,2\}:\\d\{2\}\$\//.test(fn) || /\\d\{1,2\}:\\d\{2\}/.test(fn),
@@ -377,10 +402,21 @@ try{ fs.unlinkSync(runnerPath); }catch(e){}
   assert(/closedByOwner: true/.test(fn), 'وبيتسجّل إن المالك هو اللي قفله');
   assert(/confirm\(/.test(fn), 'وفيه تأكيد بيوري المدة والأوفرتايم قبل الحفظ');
 
-  // اللوحة بتعرض الشيفتات المفتوحة كمان مش المستني موافقة بس
+  // اللوحة بتضم الشيفتات المنسية كمان مش المستني موافقة بس
   const panel = extractFn(appSrc, 'function renderOvertimeApprovals(');
-  assert(!!panel && /!sh\.clockOutTs \|\| sh\.forgotClockOut/.test(panel),
-    '⭐ اللوحة بتضم الشيفتات المفتوحة والمنسية — مكان واحد للقرار');
+  assert(!!panel && /forgottenShifts\(window\.allShifts/.test(panel)
+                 && /sh\.forgotClockOut/.test(panel),
+    '⭐ اللوحة بتضم الشيفتات المنسية والمعلّمة نسيان — مكان واحد للقرار');
+  // 🔴 لكن **مش** كل شيفت مفتوح: الموظفة اللي لسه شغّالة من ساعة
+  //    مالهاش لازمة هنا — ده كان بيملا اللوحة كل يوم ببنود مش محتاجة قرار.
+  assert(!!panel && !/\(!sh\.clockOutTs \|\| sh\.forgotClockOut\)/.test(panel),
+    '⭐⭐ الشيفت المفتوح العادي مش بيظهر — بس اللي عدّى الحد الأقصى');
+  // ولو ظهر (نسيان فعلي) المدة بتتحسب لحد دلوقتي مش من صفر التاريخ
+  assert(!!panel && /Date\.now\(\) - \(Number\(s\.clockInTs\)/.test(panel),
+    '⭐⭐ مدة الشيفت المفتوح من الدخول لحد دلوقتي (كانت بتطلع بالسالب من 1970)');
+  const f = extractFn(appSrc, 'function _otFmt(');
+  assert(!!f && /if\(!Number\(ts\)\) return '—'/.test(f),
+    '⭐ ومفيش clockOut = شرطة، مش "٣١/١٢ ٩:٠٠ م"');
   assert(!!panel && /data-ot-time/.test(panel), 'وفيها زرار تحديد الساعة');
   assert(/window\.ownerCloseShift = ownerCloseShift/.test(appSrc), 'معروضة على window');
 })();
