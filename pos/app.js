@@ -293,6 +293,7 @@ const RECEIPT_ELEMENTS = [
   { id:'cardTxn',   label:'💳 بيانات الدفع بالكارت (آخر 4 أرقام · نوع الكارت · رقم العملية)', kind:'auto', size:10 },
   { id:'invoiceNo', label:'🔢 رقم الفاتورة',          kind:'auto', size:11 },
   { id:'barcode',   label:'⬛ باركود المرتجع',        kind:'auto' },
+  { id:'custPoints',label:'🎁 نقط العميلة (الاسم · كسبت كام · رصيدها الحالي)', kind:'auto', size:11 },
   { id:'appQR',     label:'📱 QR تحميل التطبيق (للعملاء الغير مسجّلين/من غير تطبيق)', kind:'auto', size:10 },
   { id:'footer',    label:'💬 رسالة الختام',          kind:'text', def:'شكرًا لتعاملكم معنا 🙏', size:11 }
 ];
@@ -649,6 +650,30 @@ function buildReceiptHTML(data){
           + rows.map(r=> `<div style="font-weight:700; unicode-bidi:isolate;">${r}</div>`).join('')
           + `</div>`);
         break; }
+      case 'custPoints': {
+        // 🎁 بلوك نقط العميلة — الاسم الأول بس، وكسبت كام، ورصيدها بعد الفاتورة دي
+        //
+        // ⚠️ الاسم الأول بس عن قصد: الفاتورة بتتساب على الترابيزة وبتترمى
+        //    في الشارع. اسم كامل + رقم موبايل على ورقة = مشكلة خصوصية
+        //    حقيقية، والاسم الأول بيعمل نفس اللمسة الشخصية من غير الخطر.
+        //
+        // ⚠️ الرصيد المكتوب هو **بعد** الفاتورة دي — لو كتبنا رصيد قبلها
+        //    العميلة هتفتح التطبيق وتلاقي رقم تاني وتفتكر إن فيه غلط.
+        //    وكمان بيطرح النقط اللي استبدلتها في نفس الفاتورة.
+        const cp = d.custPoints;
+        if(!cp || !cp.show) break;            // مفيش عميلة على الفاتورة = البلوك مبيظهرش خالص
+        const rows = [];
+        if(cp.name) rows.push('<div style="font-weight:900;">' + cp.name + '</div>');
+        // المرتجع بيخصم نقط — بنقولها صراحة بدل ما نكتب "كسبتي −٣"
+        if(cp.earned > 0) rows.push('<div>كسبتي <b>' + cp.earned + '</b> نقطة من الفاتورة دي 🎁</div>');
+        else if(cp.earned < 0) rows.push('<div>اتخصم <b>' + Math.abs(cp.earned) + '</b> نقطة (مرتجع)</div>');
+        if(cp.redeemed > 0) rows.push('<div>استبدلتي <b>' + cp.redeemed + '</b> نقطة</div>');
+        rows.push('<div style="font-weight:900;">رصيدك دلوقتي: ' + cp.balance + ' نقطة</div>');
+        if(!rows.length) break;
+        parts.push('<div style="border-top:1px dashed #000; border-bottom:1px dashed #000;'
+          + ' margin:5px 0; padding:5px 0; text-align:center; font-size:' + fs + '; line-height:1.55;">'
+          + rows.join('') + '</div>');
+        break; }
       case 'invoiceNo':
         if(d.invoiceNo) parts.push(`<div style="text-align:center; font-size:${fs};">${L.invoice} ${d.invoiceNo}</div>`); break;
       case 'barcode': {
@@ -709,6 +734,8 @@ function receiptSampleData(){
       { seq:1, amount:200, scheme:'MasterCard', last4:'4321', approvalCode:'012345', transactionId:504208925 },
       { seq:2, amount:350, scheme:'Visa',       last4:'8890', approvalCode:'447120', transactionId:504208931 }
     ], changeStr:50,
+    // 🎁 معاينة بلوك النقط — المالك لازم يشوف شكله قبل ما يشغّله
+    custPoints:{ show:true, name:'منى', earned:5, redeemed:0, balance:23 },
     showAppQR:true, appQrImg: localStorage.getItem(receiptQrKey().key)||'', appQrTitle:'حمّلي تطبيقنا!', appQrMsg: welcomeRewardText()
   };
 }
@@ -1149,6 +1176,25 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
     // ممكن تتطبع على فاتورة كاش)
     cardTxns: (Number((payments||{}).visa) > 0 && window.paymobCardTxns && window.paymobCardTxns.length)
       ? window.paymobCardTxns : null,
+    // 🎁 نقط العميلة — بتتحسب هنا لأن الطباعة بتحصل **قبل** ما النقط تتكتب
+    //    في Firestore (الورقة اتقدّمت عمدًا عشان العميلة ماتستناش الشبكة).
+    //    يعني ممنوع نقرا الرصيد من المستند — لازم نحسبه محليًا.
+    custPoints: (function(){
+      try{
+        const src = window.receiptCustPoints;
+        if(!src || !src.phone) return { show:false };
+        return {
+          show: true,
+          // الاسم الأول بس — الفاتورة بتترمى في الشارع (خصوصية)
+          name: String(src.name||'').trim().split(/\s+/)[0] || '',
+          earned: Number(src.earned) || 0,
+          redeemed: Number(src.redeemed) || 0,
+          // ⭐ الرصيد **بعد** الفاتورة = رصيدها قبلها + المكتسب − المستبدل
+          balance: Math.max(0, (Number(src.balanceBefore)||0)
+                     + (Number(src.earned)||0) - (Number(src.redeemed)||0))
+        };
+      }catch(e){ return { show:false }; }
+    })(),
     // 💵 الفكة = المدفوع − المطلوب (في فواتير البيع بس، ولما يكون فيه كاش)
     changeStr: (function(){
       try{

@@ -3597,6 +3597,19 @@ async function _doConfirmPayment(){
     const _printNow = function(){
       if(_didPrint) return;
       _didPrint = true;
+      // 🎁 بيانات نقط العميلة للورقة — بتتحط **جوه** لحظة الطباعة بالظبط
+      //    عشان مايبقاش فيه أي مسافة تسيبها معلّقة على window.
+      //    ⚠️ نفس درس `paymobCardInfo`: أي بيانات بتتخزّن على window
+      //       بتلوّث الفاتورة اللي بعدها لو ماتصفرتش.
+      try{
+        window.receiptCustPoints = phone ? {
+          phone: phone,
+          name: custName || '',
+          earned: loyaltyPointsEarned,
+          redeemed: pendingRedemption ? pendingRedemption.points : 0,
+          balanceBefore: custPointsBalance
+        } : null;
+      }catch(e){ window.receiptCustPoints = null; }
       try{
         const _mk = _pmPrintMark;
         if(_mk && _mk.gotAtMs){
@@ -3625,6 +3638,9 @@ async function _doConfirmPayment(){
         console.error('فشل الطباعة — الفاتورة والمخزون كملوا عادي', e);
         try{ showToast('⚠️ الطباعة فشلت — الفاتورة اتسجلت، اطبعها من سجل المبيعات', 'err'); }catch(e2){}
       }
+      // 🧹 تصفير فوري — حتى لو الطباعة وقعت. البيانات دي لفاتورة واحدة بس،
+      //    ولو فضلت هتتطبع نقط عميلة على فاتورة عميلة تانية.
+      finally{ try{ window.receiptCustPoints = null; }catch(e){} }
     };
 
     // ↩️🔒 منع تكرار المرتجع عبر الجلسات: نسجّل الكميات المرجّعة على الفاتورة الأصلية

@@ -1466,6 +1466,11 @@ function reprintSale(id){
       scanCode: s.invoiceCode || s.invoiceNo || '',
       cardTxn: s.cardTxn || null,
       cardTxns: (s.cardTxns && s.cardTxns.length) ? s.cardTxns : null,   // 💳💳 نسخة تانية بالكارتين
+      // 🎁 نقط العميلة **مبتظهرش في النسخة التانية** — وده مقصود:
+      //    الرصيد اللي على الأصلية كان صح لحظة البيع. النسخة ممكن تتطبع
+      //    بعد أيام والعميلة اشترت واستبدلت من ساعتها، فالرقم هيبقى قديم.
+      //    ورقة مكتوب عليها رصيد غلط أوحش من ورقة مش مكتوب عليها رصيد.
+      custPoints: { show:false },
       isCopy: true,                       // 🔁 علامة إن دي نسخة تانية مش الأصلية
       copyAt: new Date().toLocaleString(c.lang==='en' ? 'en-GB' : 'ar-EG'),
       showAppQR: false
