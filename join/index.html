@@ -806,8 +806,37 @@ const firebaseConfig = {
   messagingSenderId: "408860081491",
   appId: "1:408860081491:web:c5fa8b8e757c13196375a6"
 };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+/* FB-APP-INIT-START */
+// ============================================================
+// 🔐 §20 — عزل جلسة Firebase (نفس حكاية loyalty/glow)
+//
+// استمارة انضمام الموظفة كانت على التطبيق الافتراضي `[DEFAULT]` — نفس
+// المساحة اللي فيها جلسة إيميل المالك في Office. أول ما موظفة تفتح رابط
+// الدعوة، الدخول المجهول كان **بيمسح جلسة Office**.
+// الحل: تطبيق باسمه = مساحة تخزين مستقلة.
+//
+// ⚠️ الصفحة مبتستخدمش FCM، فالتطبيق الافتراضي مش بيتهيّأ هنا خالص.
+// ============================================================
+const fbApp  = firebase.initializeApp(firebaseConfig, 'join');
+const fbAuth = firebase.auth(fbApp);
+const db     = firebase.firestore(fbApp);
+
+let _anonPending = null;
+function ensureAnonAuth(){
+  try{
+    if(!firebase.auth) return Promise.resolve();
+    if(fbAuth.currentUser) return Promise.resolve();
+    if(_anonPending) return _anonPending;
+    _anonPending = fbAuth.signInAnonymously()
+      .then(function(){ _anonPending = null; })
+      .catch(function(e){ _anonPending = null; console.warn('anon auth', e && e.code); throw e; });
+    return _anonPending;
+  }catch(e){ _anonPending = null; return Promise.reject(e); }
+}
+// §18 القاعدة الذهبية — الملف فيه أكتر من <script>
+window.fbApp = fbApp; window.fbAuth = fbAuth; window.ensureAnonAuth = ensureAnonAuth;
+window.db = db;
+/* FB-APP-INIT-END */
 let INVITE = null, INVITE_CODE = '';
 
 function gateFail(title, msg, body){
@@ -826,7 +855,7 @@ async function openGate(){
     return;
   }
   try{
-    await firebase.auth().signInAnonymously();
+    await ensureAnonAuth();
   }catch(e){
     gateFail('تعذّر الاتصال', 'يُرجى التأكد من الاتصال بالإنترنت وإعادة المحاولة.',
       '<div class="card c-bad"><b>⛔ ' + esc(e.code || e.message) + '</b></div>');
