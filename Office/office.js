@@ -443,6 +443,9 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
     return {
       key: k,
       frozen: !!fz,
+      // 🚧 يوم قديم مالحقش يتجمّد وفواتيره خرجت من نافظة التحميل —
+      //    أرقامه ناقصة، فبنعلّمه بدل ما نعرضه كأنه حقيقة.
+      untrusted: !fz && k < ofDayShift(todayKey, -OF_SALES_WINDOW_DAYS),
       dayMs: ofBizDayRange(k).start,
       weekend: ofIsWeekend(k, cfg),
       future: k > todayKey,
@@ -496,10 +499,17 @@ function ofFreezeDue(ledger, overrides, nowTs){
   const now = Number(nowTs) || Date.now();
   const todayKey = ofDayKeyOf(now);
   const cutKey = ofDayShift(todayKey, -OF_FREEZE_AFTER_DAYS);
+  // ⚠️⚠️ الحد الأدنى ده **حرج**: اليوم اللي خرج خلاص من نافذة الـ٣٠ يوم
+  //    فواتيره مش محمّلة، فأرقامه دلوقتي **أصفار كدّابة**. لو جمّدناه
+  //    بنكون ثبّتنا الصفر ده للأبد — وده أوحش من إننا مانجمّدهوش.
+  //    بنجمّد بس اللي **لسه جوه النافذة**: بين ٢٠ و٢٨ يوم.
+  //    (٢٨ مش ٣٠ — هامش أمان عشان حدود اليوم والتوقيت.)
+  const floorKey = ofDayShift(todayKey, -(OF_SALES_WINDOW_DAYS - 2));
   const ov = overrides || {};
   return (ledger && ledger.rows ? ledger.rows : []).filter(function(r){
     if(r.key >= todayKey) return false;              // لسه بيتحرك
     if(r.key > cutKey) return false;                 // لسه بدري
+    if(r.key < floorKey) return false;               // ⭐ خرج من النافذة — أرقامه مش موثوقة
     if(r.frozen) return false;                       // متجمّد خلاص
     if((ov[r.key] || {}).frozen) return false;
     return true;
@@ -4466,6 +4476,7 @@ function ofLedgerRow(r, L){
     +   (r.weekend ? ' <span class="muted" style="font-size:10.5px;">إجازة بنك</span>' : '')
     +   (anyEdit ? ' <span style="font-size:10.5px;">✏️</span>' : '')
     +   (r.frozen ? ' <span class="muted" style="font-size:10.5px;">🧊 مقفول</span>' : '')
+    +   (r.untrusted ? ' <span style="font-size:10.5px; color:var(--warn);">🚧 أرقام ناقصة</span>' : '')
     + '</b>'
     + '<span style="font-size:12.5px;">معاك <b>' + egp(r.balance) + '</b></span>'
     + '</div>';
