@@ -499,8 +499,138 @@ async function renderReportsScreen(){
   else if(currentReportType === 'customers'){ html = await buildCustomersReport(); }
   else if(currentReportType === 'ratings'){   html = await buildRatingsReport(from, to); }
   else if(currentReportType === 'staff'){     html = await buildStaffReport(from, to, sales); }
+  else if(currentReportType === 'qtydisc'){  html = await buildQtyDiscountReport(sales); }
 
   wrap.innerHTML = html;
+}
+
+/* ============================================================
+   🎁 تحليل خصم الكمية — "أرخص قطعة بنص التمن" من كام قطعة؟
+   ------------------------------------------------------------
+   الرقم ده مينفعش يتخمّن: لو حطيته واطي بتديّ خصم لفواتير كانت
+   هتحصل من غيره أصلًا (خسارة صافية)، ولو حطيته عالي محدش بيوصله
+   فمفيش أي تأثير. التقرير ده بيحسب من **فواتيرك انت**:
+     · عدد الفواتير اللي بتوصل كل حد أصلًا  → التكلفة المباشرة
+     · وعدد اللي واقفة على بُعد قطعة واحدة  → دي الفرصة الحقيقية
+     · وكام فاتورة من دول لازم تزوّد قطعة عشان تتعادل
+   ============================================================ */
+function _qdCheapestUnit(items){
+  let min = Infinity;
+  (items || []).forEach(it=>{
+    const p = Number(it && it.price);
+    const q = Number(it && it.qty) || 0;
+    if(!isFinite(p) || p <= 0 || q <= 0) return;      // المرتجع والسطور الصفرية بره
+    if(p < min) min = p;
+  });
+  return isFinite(min) ? min : 0;
+}
+function _qdPieces(items){
+  return (items || []).reduce((n, it)=>{
+    const q = Number(it && it.qty) || 0;
+    return n + (q > 0 ? q : 0);                        // الكميات السالبة (مرتجع) مش قطع مبيعة
+  }, 0);
+}
+// بيرجّع تحليل لكل حد محتمل من الفواتير المدّاها
+function qtyDiscountAnalysis(sales, thresholds){
+  const rows = (sales || [])
+    .filter(s=> s && !s.isRefund && !s.reversalOf && Array.isArray(s.items) && s.items.length)
+    .map(s=> ({ pieces: _qdPieces(s.items), cheapest: _qdCheapestUnit(s.items),
+                total: Number(s.total) || 0 }))
+    .filter(r=> r.pieces > 0);
+
+  const dist = {};
+  rows.forEach(r=>{ const k = Math.min(r.pieces, 8); dist[k] = (dist[k] || 0) + 1; });
+
+  const out = (thresholds || [2,3,4,5,6]).map(n=>{
+    const reach = rows.filter(r=> r.pieces >= n);
+    const near  = rows.filter(r=> r.pieces === n - 1);
+    // التكلفة = نص أرخص قطعة في كل فاتورة بتوصل الحد
+    const cost = reach.reduce((a, r)=> a + r.cheapest / 2, 0);
+    // متوسط سعر القطعة — تقدير للإيراد الإضافي من قطعة زيادة
+    const avgPiece = rows.length
+      ? rows.reduce((a, r)=> a + (r.pieces ? r.total / r.pieces : 0), 0) / rows.length : 0;
+    const avgCheapNear = near.length
+      ? near.reduce((a, r)=> a + r.cheapest, 0) / near.length : 0;
+    // صافي المكسب من فاتورة زوّدت قطعة = سعر القطعة − نص أرخص قطعة
+    const gainPer = avgPiece - avgCheapNear / 2;
+    const needConv = gainPer > 0 ? Math.ceil(cost / gainPer) : 0;
+    return {
+      n, reach: reach.length, near: near.length,
+      cost: Math.round(cost),
+      gainPer: Math.round(gainPer),
+      needConv,
+      needPct: near.length ? Math.round(needConv / near.length * 100) : null
+    };
+  });
+  return { total: rows.length, dist, rows: out,
+           avgPieces: rows.length ? +(rows.reduce((a,r)=> a + r.pieces, 0) / rows.length).toFixed(2) : 0 };
+}
+if(typeof window !== 'undefined'){
+  window.qtyDiscountAnalysis = qtyDiscountAnalysis;
+  window._qdPieces = _qdPieces;
+  window._qdCheapestUnit = _qdCheapestUnit;
+}
+
+async function buildQtyDiscountReport(sales){
+  const a = qtyDiscountAnalysis(sales);
+  if(!a.total){
+    return `<div class="rep-card"><div class="rep-inner">
+      <h2 style="margin:0 0 4px; font-size:16px;">🎁 من كام قطعة نبدأ الخصم؟</h2>
+      <div style="color:var(--muted); font-size:12px;">مفيش فواتير في الفترة دي</div>
+    </div></div>`;
+  }
+  const maxD = Math.max.apply(null, Object.values(a.dist));
+  const distRows = [1,2,3,4,5,6,7,8].map(k=>{
+    const c = a.dist[k] || 0;
+    const pct = a.total ? Math.round(c / a.total * 100) : 0;
+    return `<tr>
+      <td>${k === 8 ? '8 فأكتر' : k + ' قطعة'}</td>
+      <td style="width:55%;"><div style="background:var(--panel2); border-radius:5px; height:9px;">
+        <div style="width:${maxD ? Math.round(c/maxD*100) : 0}%; height:100%; background:var(--gold, #b8860b); border-radius:5px;"></div></div></td>
+      <td class="num">${c}</td><td class="num">${pct}%</td></tr>`;
+  }).join('');
+
+  // أحسن ترشيح: الحد اللي فرصته أكبر (أكتر فواتير على بُعد قطعة) وتكلفته أقل
+  const best = a.rows.slice().sort((x,y)=>
+    (y.near - x.near) || (x.cost - y.cost))[0];
+
+  const tRows = a.rows.map(r=>`<tr${best && r.n === best.n ? ' style="background:rgba(184,134,11,.10);"' : ''}>
+    <td><b>${r.n} قطع</b></td>
+    <td class="num">${r.reach}</td>
+    <td class="num">${r.near}</td>
+    <td class="num">${r.cost} ج.م</td>
+    <td class="num">${r.needConv}${r.needPct != null ? ` <span style="color:var(--muted); font-size:10.5px;">(${r.needPct}%)</span>` : ''}</td>
+  </tr>`).join('');
+
+  return `<div class="rep-card"><div class="rep-inner">
+    <h2 style="margin:0 0 4px; font-size:16px;">🎁 من كام قطعة نبدأ الخصم؟ — ${reportRangeLabel()}</h2>
+    <div style="color:var(--muted); font-size:12px; margin-bottom:12px;">${currentBranch||''} · ${a.total} فاتورة · متوسط السلة <b>${a.avgPieces}</b> قطعة</div>
+
+    <h3 style="font-size:13px; margin:0 0 6px; color:var(--muted);">توزيع الفواتير بعدد القطع</h3>
+    <table class="rep-tbl"><tbody>${distRows}</tbody></table>
+
+    <h3 style="font-size:13px; margin:16px 0 6px; color:var(--muted);">لو الخصم بدأ من…</h3>
+    <table class="rep-tbl">
+      <thead><tr>
+        <th>الحد</th><th class="num">فواتير بتوصله</th><th class="num">على بُعد قطعة</th>
+        <th class="num">تكلفة الفترة</th><th class="num">محتاج يزوّدوا</th>
+      </tr></thead>
+      <tbody>${tRows}</tbody>
+    </table>
+
+    <div style="margin-top:12px; padding:11px 13px; border:1px solid var(--border); border-radius:10px; font-size:12.5px; line-height:1.9;">
+      <b>إزاي تقرا الجدول:</b><br>
+      • <b>فواتير بتوصله</b> = دول هياخدوا الخصم <b>وهما شارين أصلًا</b> — دي تكلفة صافية عليك.<br>
+      • <b>على بُعد قطعة</b> = دي الفرصة الحقيقية، اللي البياعة ممكن تقنعهم يزوّدوا.<br>
+      • <b>محتاج يزوّدوا</b> = كام فاتورة من دول لازم تزوّد قطعة عشان تغطّي التكلفة وتتعادل.
+      لو الرقم ده قريب من عدد "على بُعد قطعة" كله، يبقى الحد ده <b>صعب</b> — اختار حد أعلى.<br>
+      ${best ? `• الأقرب للمنطق هنا: <b>${best.n} قطع</b> — أكبر عدد فواتير واقفة على بُعد قطعة واحدة.` : ''}
+    </div>
+    <div style="margin-top:8px; color:var(--muted); font-size:11px;">
+      ⚠️ الأرقام دي تقديرية ومبنية على متوسط سعر القطعة في الفترة — استخدمها للمقارنة بين الحدود، مش كتوقّع دقيق.
+    </div>
+  </div></div>
+  <div style="text-align:center; margin-top:6px;"><button class="rep-print-btn" onclick="printReportArea()">🖨️ طباعة</button></div>`;
 }
 
 // ============ تقارير إضافية: العملاء والتطبيق / التقييمات / الموظفين ============
