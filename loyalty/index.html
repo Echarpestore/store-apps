@@ -457,31 +457,44 @@ var firebaseConfig = {
   appId: "1:408860081491:web:c5fa8b8e757c13196375a6",
   measurementId: "G-6K33TSHDZ6"
 };
-firebase.initializeApp(firebaseConfig);
-// 🔴 تسجيل دخول مجهول — بس **بعد** ما نتأكد إن مفيش جلسة قايمة.
-// السبب: كل التطبيقات على نفس الدومين وبتشارك نفس تخزين الجلسة. استعادة
-// الجلسة غير متزامنة، فـ`currentUser` بيرجع null في أول لحظة حتى لو المالك
-// داخل بإيميله في Office — فالدخول المجهول كان **بيدوس على جلسته**، ويقعد
-// يطلع ويدخل بالإيميل تاني كل شوية.
-// الحل: نستنى أول إشارة من onAuthStateChanged (دي بتيجي بعد الاستعادة)،
-// وساعتها بس لو لسه مفيش حد داخل نعمل دخول مجهول.
-let _anonReady = false;
+/* FB-APP-INIT-START */
+// 🔐 تطبيق Firebase **ثانوي باسمه** — مساحة جلسة منفصلة تمامًا
+// -------------------------------------------------------------
+// الباج: كل التطبيقات على نفس الدومين (echarpe.store)، وFirebase Auth بيخزّن
+// الجلسة بمفتاح فيه **اسم التطبيق**. كل التطبيقات كانت على التطبيق الافتراضي
+// `[DEFAULT]` → مفتاح واحد مشترك. فأول ما المالك يفتح التطبيق ده، الدخول
+// المجهول كان بيكتب فوق جلسة الإيميل بتاعت office ويطلّعه بره.
+// الحل: اسم منفصل → مساحة تخزين منفصلة → صفر تصادم مع office أو أي تطبيق تاني.
+//
+// ⚠️ التطبيق الافتراضي لسه بيتهيّأ — بس **للإشعارات (FCM)**، عشان التوكن
+//    الموجود على أجهزة العميلات يفضل هو هو بالظبط ومحدش يفقد إشعاراته.
+//    وإحنا **عمرنا ما بنطلب خدمة auth على التطبيق الافتراضي** — ومن غير
+//    تسجيل دخول مفيش أي كتابة، فجلسة office مأمّنة.
+firebase.initializeApp(firebaseConfig);                          // FCM بس
+var fbApp  = firebase.initializeApp(firebaseConfig, 'loyalty');  // auth + firestore
+var fbAuth = firebase.auth(fbApp);
+
+// دخول مجهول **فورًا** — مفيش داعي نستنى استعادة جلسة حد تاني، المساحة بتاعتنا
+// لوحدنا. (وده بيقفل باج تاني كان جنبه: الانتظار ده كان بيخلي أول قراءات
+// Firestore تتنفّذ أحيانًا من غير مستخدم وترجع permission-denied.)
+var _anonPending = false;
 function ensureAnonAuth(){
   try{
     if(!firebase.auth) return;
-    if(firebase.auth().currentUser) return;            // فيه جلسة — مانلمسهاش
-    if(!_anonReady) return;                            // لسه ماستنيناش الاستعادة
-    firebase.auth().signInAnonymously().catch(function(e){ console.warn('anon auth', e && e.code); });
-  }catch(e){ console.warn('anon auth unavailable', e); }
+    if(fbAuth.currentUser || _anonPending) return;   // داخل بالفعل أو الطلب في السكة
+    _anonPending = true;
+    fbAuth.signInAnonymously()
+      .then(function(){ _anonPending = false; })
+      .catch(function(e){ _anonPending = false; console.warn('anon auth', e && e.code); });
+  }catch(e){ _anonPending = false; console.warn('anon auth unavailable', e); }
 }
-try{
-  firebase.auth().onAuthStateChanged(function(u){
-    _anonReady = true;
-    if(!u) ensureAnonAuth();                           // مفيش حد فعلًا → مجهول
-  });
-}catch(e){ _anonReady = true; ensureAnonAuth(); }
+ensureAnonAuth();
+try{ fbAuth.onAuthStateChanged(function(u){ if(!u) ensureAnonAuth(); }); }catch(e){}
 window.addEventListener('online', ensureAnonAuth);
-var db = firebase.firestore();
+// §18 القاعدة الذهبية — الملف فيه أكتر من <script>
+window.fbApp = fbApp; window.fbAuth = fbAuth; window.ensureAnonAuth = ensureAnonAuth;
+var db = firebase.firestore(fbApp);
+/* FB-APP-INIT-END */
 
 // 📱 تتبّع مصدر الزيارة (QR أو غيره): ?src=qr-rehab مثلاً
 // بنخزّنه عشان يتسجّل مع العميل عند الدخول + بنستخدمه لإظهار البانر بأولوية
@@ -729,7 +742,7 @@ function watchSettings(){
   }catch(e){ console.warn('cfg watch init', e); _cfgUnsub = null; setTimeout(watchSettings, 2500); }
 }
 // نبدأ أول ما الدخول يخلص فعلًا — مش وقت تحميل الصفحة
-try{ firebase.auth().onAuthStateChanged(function(u){ if(u) watchSettings(); }); }catch(e){}
+try{ fbAuth.onAuthStateChanged(function(u){ if(u) watchSettings(); }); }catch(e){}
 setInterval(function(){ if(!_cfgUnsub) watchSettings(); }, 5000);   // شبكة أمان
 
 function loadSettings(){
