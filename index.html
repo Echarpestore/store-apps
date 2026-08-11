@@ -186,13 +186,48 @@
 <script>
 (function(){
   try{
-    firebase.initializeApp({
+    /* FB-APP-INIT-START */
+    // ============================================================
+    // 🔐 §20 — عزل جلسة Firebase (نفس حكاية loyalty/glow)
+    //
+    // كل تطبيقات echarpe على دومين واحد، وFirebase Auth بيخزّن الجلسة
+    // بمفتاح **فيه اسم التطبيق**. لما الصفحة دي كانت على التطبيق الافتراضي
+    // `[DEFAULT]`، الدخول المجهول بتاعها كان بيكتب فوق جلسة الإيميل بتاعت
+    // Office — يعني مجرد ما حد يفتح `echarpe.store` المالك يتسجّل خروج.
+    // الحل: تطبيق باسمه → مساحة تخزين لوحدها → صفر تصادم.
+    //
+    // ⚠️ الصفحة دي **مبتستخدمش FCM خالص** (مفيش messaging ولا service worker)
+    //    فمش محتاجين نهيّئ التطبيق الافتراضي أصلًا — وده أنضف من loyalty/glow
+    //    اللي مضطرين يسيبوه شغّال عشان توكن الإشعارات مايتغيّرش.
+    // ============================================================
+    var firebaseConfig = {
       apiKey:"AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
       authDomain:"customer-feedback-8ac1d.firebaseapp.com",
       projectId:"customer-feedback-8ac1d"
-    });
-    firebase.auth().signInAnonymously().then(function(){
-      return firebase.firestore().collection('pos_test_settings').doc('catalog_echarpe').get();
+    };
+    var fbApp  = firebase.initializeApp(firebaseConfig, 'site');
+    var fbAuth = firebase.auth(fbApp);
+    var db     = firebase.firestore(fbApp);
+
+    // دخول مجهول فورًا — المساحة بتاعتنا لوحدنا فمفيش داعي نستنى استعادة
+    // جلسة حد تاني (الانتظار ده كان بيخلّي أول قراءة ترجع permission-denied).
+    var _anonPending = false;
+    function ensureAnonAuth(){
+      try{
+        if(!firebase.auth) return;
+        if(fbAuth.currentUser || _anonPending) return;
+        _anonPending = true;
+        return fbAuth.signInAnonymously()
+          .then(function(){ _anonPending = false; })
+          .catch(function(e){ _anonPending = false; console.warn('anon auth', e && e.code); });
+      }catch(e){ _anonPending = false; console.warn('anon auth unavailable', e); }
+    }
+    // §18 القاعدة الذهبية — الملف فيه أكتر من <script>
+    window.fbApp = fbApp; window.fbAuth = fbAuth; window.ensureAnonAuth = ensureAnonAuth;
+    /* FB-APP-INIT-END */
+
+    Promise.resolve(ensureAnonAuth()).then(function(){
+      return db.collection('pos_test_settings').doc('catalog_echarpe').get();
     }).then(function(d){
       var items = (d.exists && Array.isArray(d.data().items)) ? d.data().items : [];
       items.sort(function(a,b){ return (b.discountValue?1:0) - (a.discountValue?1:0); });
