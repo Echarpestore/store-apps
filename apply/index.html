@@ -233,8 +233,38 @@ const firebaseConfig = {
   messagingSenderId: "408860081491",
   appId: "1:408860081491:web:c5fa8b8e757c13196375a6"
 };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+/* FB-APP-INIT-START */
+// ============================================================
+// 🔐 §20 — عزل جلسة Firebase (نفس حكاية loyalty/glow)
+//
+// الصفحة دي كانت على التطبيق الافتراضي `[DEFAULT]`، ودي نفس المساحة اللي
+// Office حافظ فيها جلسة إيميل المالك. أي متقدّمة تفتح الرابط → دخول مجهول
+// → **جلسة Office اتمسحت**. الحل: تطبيق باسمه = مساحة تخزين مستقلة.
+//
+// ⚠️ الصفحة مبتستخدمش FCM، فالتطبيق الافتراضي مش بيتهيّأ هنا خالص.
+// ============================================================
+const fbApp  = firebase.initializeApp(firebaseConfig, 'apply');
+const fbAuth = firebase.auth(fbApp);
+const db     = firebase.firestore(fbApp);
+
+// دخول مجهول مرة واحدة بس — الاستدعاءات اللي بعدها بترجع نفس الوعد بدل
+// ما تطلب دخول جديد كل شوية (كان فيه نداءين مستقلين في الملف).
+let _anonPending = null;
+function ensureAnonAuth(){
+  try{
+    if(!firebase.auth) return Promise.resolve();
+    if(fbAuth.currentUser) return Promise.resolve();
+    if(_anonPending) return _anonPending;
+    _anonPending = fbAuth.signInAnonymously()
+      .then(function(){ _anonPending = null; })
+      .catch(function(e){ _anonPending = null; console.warn('anon auth', e && e.code); throw e; });
+    return _anonPending;
+  }catch(e){ _anonPending = null; return Promise.reject(e); }
+}
+// §18 القاعدة الذهبية — الملف فيه أكتر من <script>
+window.fbApp = fbApp; window.fbAuth = fbAuth; window.ensureAnonAuth = ensureAnonAuth;
+window.db = db;
+/* FB-APP-INIT-END */
 
 const ALL_BRANCHES = ['الرحاب', 'مدينتي', 'سيتي سنتر', 'Glow'];
 const ROLES = {
@@ -534,7 +564,7 @@ async function submitApp(btn){
   btn.disabled = true; btn.textContent = 'جارٍ الإرسال…';
   const phone = String(D.phone).replace(/\D/g, '');
   try{
-    await firebase.auth().signInAnonymously();
+    await ensureAnonAuth();
     const ref = db.collection('job_applications').doc(phone);
     // 🚫 مفيش تقديم تاني قبل ٣٠ يوم — بيمنع التكرار من غير ما يمنع
     //    اللي غيّر ظروفه فعلًا
@@ -576,7 +606,7 @@ window.submitApp = submitApp;
 // 📌 تحميل الشواغر — لو مفيش شواغر، الاستمارة مبتفتحش أصلًا
 async function loadOpenings(){
   try{
-    await firebase.auth().signInAnonymously();
+    await ensureAnonAuth();
     const d = await db.collection('pos_test_settings').doc('job_openings').get();
     const raw = (d.exists && Array.isArray((d.data() || {}).list)) ? d.data().list : [];
     OPEN = raw.filter(function(o){ return o && o.branch && ROLES[o.role]; });
