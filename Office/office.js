@@ -122,86 +122,16 @@ function _ohTs(x){
   if(x.date){ const t = Date.parse(String(x.date) + 'T12:00:00'); return isNaN(t) ? 0 : t; }
   return 0;
 }
-function cashOnHand(base, data, nowTs){
-  const from = Number(base && base.atMs) || 0;
-  const to = Number(nowTs) || Date.now();
-  const opening = Number(base && base.amount) || 0;
-  const inWin = function(t){ return t > from && t <= to; };
 
-  let cashIn = 0;
-  (data.sales || []).forEach(function(s){
-    const t = _saleMs(s);
-    if(!inWin(t)) return;
-    const p = s.payments || {};
-    cashIn += Number(p.cash) || 0;     // 💵 كاش بس — الفيزا مش في إيدك
-  });
-
-  const sumOf = function(arr){
-    return (arr || []).reduce(function(a, x){
-      return inWin(_ohTs(x)) ? a + (Number(x.amount) || 0) : a;
-    }, 0);
-  };
-  const advances = sumOf(data.advances);
-  const salaries = sumOf(data.salaryPays);
-  const expenses = sumOf(data.expenses);
-  const rewards = (data.rewards || []).reduce(function(a, r){
-    if(!r || (r.status && r.status !== 'approved')) return a;   // المستني مش متصرف
-    return inWin(_ohTs(r)) ? a + (Number(r.amount) || 0) : a;
-  }, 0);
-
-  // 💳 تحويلات Paymob: الصافي بس هو اللي بينزل في إيدك (العمولة اتخصمت قبل ما توصل)
-  const settled = (data.settlements || []).reduce(function(a, x){
-    return inWin(_ohTs(x)) ? a + (Number(x.net) || 0) : a;
-  }, 0);
-
-  const out = advances + salaries + expenses + rewards;
-  return { opening: opening, cashIn: cashIn, settled: settled,
-           advances: advances, salaries: salaries,
-           expenses: expenses, rewards: rewards, out: out,
-           now: Math.round((opening + cashIn + settled - out) * 100) / 100,
-           from: from, to: to };
-}
 
 /* 📅 حركة كل يوم بالتفصيل — ده قلب التبويب
    كل يوم: كاش الفروع · فيزا · اللي اتصرف (مصاريف/رواتب/سلف/مكافآت)
    · صافي اليوم · والرصيد التراكمي لحد اليوم ده. */
-function cashDaily(base, data, nowTs, days){
-  const to = Number(nowTs) || Date.now();
-  const n = Math.max(1, Number(days) || 14);
-  const from = Number(base && base.atMs) || 0;
-  const opening = Number(base && base.amount) || 0;
 
-  const rows = [];
-  for(let i = 0; i < n; i++){
-    const d = new Date(to - i * 86400000);
-    const st = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    const en = Math.min(st + 86400000 - 1, to);
-    if(en < from) break;                       // قبل ما يحدد رصيده
-    const lo = Math.max(st - 1, from);         // أول يوم بيبدأ من لحظة التحديد
-    const a = cashOnHand({ amount: 0, atMs: lo }, data, en);
-    const p = paymobLedger({ amount: 0, atMs: lo }, data, en);
-    rows.push({
-      dayMs: st,
-      cash: a.cashIn, visa: p.visaSales, settled: a.settled,
-      advances: a.advances, salaries: a.salaries,
-      expenses: a.expenses, rewards: a.rewards,
-      out: a.out, net: a.cashIn + a.settled - a.out
-    });
-  }
-  // الرصيد التراكمي: من الأقدم للأحدث
-  let run = opening;
-  for(let k = rows.length - 1; k >= 0; k--){ run += rows[k].net; rows[k].balance = Math.round(run*100)/100; }
-  return rows;
-}
 
 /* ⚠️ office بيحمّل مبيعات آخر 30 يوم بس — فالرصيد الافتتاحي ميقدرش يبقى
    أقدم من كده وإلا الفواتير القديمة تقع بره النافذة والرقم يبوظ. */
-const OH_STALE_DAYS = 25;
-function cashBaseStale(base, nowTs){
-  const at = Number(base && base.atMs) || 0;
-  if(!at) return false;
-  return ((Number(nowTs) || Date.now()) - at) > OH_STALE_DAYS * 86400000;
-}
+
 
 /* ============================================================
    💳 فلوسك عند Paymob
@@ -250,34 +180,372 @@ function paymobEffectivePct(settlements, fallback){
   return Math.round((d / g) * 10000) / 100;
 }
 
-function paymobLedger(base, data, nowTs){
-  const from = Number(base && base.atMs) || 0;
-  const to = Number(nowTs) || Date.now();
-  const inWin = function(t){ return t > from && t <= to; };
 
-  let visaSales = 0;
+
+/* ============================================================
+   📒 دفتر اليومية — الفلوس يوم بيوم
+   ------------------------------------------------------------
+   الفكرة: صفحة زي شيت الإكسل. كل يوم سطر، كل خانة تتعدّل بالإيد،
+   والرصيد بيمشي لوحده من أول يوم للآخر.
+
+   ⚠️ ٤ قرارات محاسبية مبنية جوه، ولو اتغيّرت الأرقام تكدب:
+
+   ١. **الفيزا مش كاش.** فلوس الفيزا بتروح لـPaymob مش لدرج الفرع.
+      فبتتحسب في دفتر تاني (رصيدك عند Paymob)، وبتدخل إيدك يوم
+      التحويل بس — بالصافي بعد العمولة.
+
+   ٢. **المتوقع متفصول عن المؤكد.** بنحسب رصيدين لكل يوم:
+      · `balance`    = المؤكد بس (فلوس فعلًا في إيدك)
+      · `balanceExp` = المؤكد + المتوقع من Paymob
+      خلطهم في رقم واحد بيخلّي المالك يصرف فلوس لسه ماوصلتش.
+
+   ٣. **التعديل اليدوي بيغلب المحسوب دايمًا** — بس بيتسجّل مين وامتى
+      وإيه الرقم المحسوب الأصلي. من غير كده الشيت بيبقى مش قابل للمراجعة.
+
+   ٤. **العدّ الفعلي مش تعديل للرصيد.** لما يعدّ الدرج وياكتب الرقم،
+      بنطلّع **الفرق** (عجز/أوفر) بدل ما نبلع الغلط بهدوء. الفرق ده
+      هو أداة الحكم على الفلوس — من غيره الشيت بيوصف مش بيراقب.
+   ============================================================ */
+
+/* 📅 مفتاح يوم الشغل بتوقيت القاهرة (بيحترم الساعة الفاصلة)
+   ⚠️ ممنوع نستخدم ساعة الجهاز — نفس الباج اللي ضرب تطبيق sales لما
+      المالك كان بره مصر. الفلوس لازم تتحسب بيوم المحل مهما كان
+      الجهاز فين. */
+function ofDayKeyOf(ts){
+  const cut = Number(_ofDayCut) || 0;
+  const p = _ofShopParts(Number(ts) || 0);
+  // قبل الساعة الفاصلة = لسه اليوم اللي فات (فاتورة ٢ الفجر = يوم إمبارح)
+  let y = p.y, m = p.m, d = p.d;
+  if(p.hh < cut){
+    const back = new Date(Date.UTC(y, m - 1, d) - 86400000);
+    y = back.getUTCFullYear(); m = back.getUTCMonth() + 1; d = back.getUTCDate();
+  }
+  return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+// اليوم اللي بعده / قبله بالمفتاح — حساب تقويمي صافي، مالوش دعوة بأي توقيت
+function ofDayShift(key, n){
+  const [y, m, d] = String(key).split('-').map(Number);
+  const t = Date.UTC(y, m - 1, d) + (Number(n) || 0) * 86400000;
+  const x = new Date(t);
+  return x.getUTCFullYear() + '-' + String(x.getUTCMonth() + 1).padStart(2, '0')
+    + '-' + String(x.getUTCDate()).padStart(2, '0');
+}
+// رقم اليوم في الأسبوع للمفتاح (0=الأحد … 5=الجمعة، 6=السبت)
+function ofDowOf(key){
+  const [y, m, d] = String(key).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/* 🗓️ إجازة الأسبوع — الجمعة والسبت افتراضيًا (البنوك في مصر)
+   قابلة للتغيير من الإعدادات لو Paymob أو البنك غيّر. */
+const OF_WEEKEND_DEFAULT = [5, 6];
+function ofIsWeekend(key, cfg){
+  const w = (cfg && Array.isArray(cfg.weekendDays) && cfg.weekendDays.length)
+    ? cfg.weekendDays : OF_WEEKEND_DEFAULT;
+  return w.indexOf(ofDowOf(key)) >= 0;
+}
+// أول يوم عمل بعد المفتاح ده
+function ofNextBizDay(key, cfg){
+  let k = ofDayShift(key, 1), guard = 0;
+  while(ofIsWeekend(k, cfg) && guard++ < 14) k = ofDayShift(k, 1);
+  return k;
+}
+
+/* 💳 اليوم اللي فلوس فيزا يوم معيّن بتنزل فيه
+   ------------------------------------------------------------
+   قاعدة Paymob عند المالك: الفلوس بتنزل **تاني يوم عمل**.
+   يعني مبيعات الخميس بتنزل الأحد، لأن الجمعة والسبت إجازة.
+   عدد أيام العمل قابل للتغيير (`settleLagBizDays`) لو النظام اتغيّر. */
+function ofSettleDayFor(saleDayKey, cfg){
+  const lag = Math.max(0, Number(cfg && cfg.settleLagBizDays != null
+    ? cfg.settleLagBizDays : 1));
+  let k = String(saleDayKey);
+  for(let i = 0; i < lag; i++) k = ofNextBizDay(k, cfg);
+  // لو التأخير صفر بس اليوم نفسه إجازة، الفلوس بتستنى أول يوم عمل
+  if(lag === 0){ let g = 0; while(ofIsWeekend(k, cfg) && g++ < 14) k = ofDayShift(k, 1); }
+  return k;
+}
+
+/* 🔢 تجميع حركة كل يوم من البيانات الخام */
+function ofCollectDays(data, fromKey, toKey){
+  const days = {};
+  const touch = function(k){
+    if(!k || k < fromKey || k > toKey) return null;
+    if(!days[k]) days[k] = { key:k, cashSales:0, visaSales:0, expenses:0,
+      salaries:0, advances:0, rewards:0, pmActual:0, pmGross:0 };
+    return days[k];
+  };
+  // نضمن وجود كل يوم في المدى حتى لو مفيهوش حركة (الشيت لازم يبقى متصل)
+  for(let k = fromKey; k <= toKey; k = ofDayShift(k, 1)) touch(k);
+
   (data.sales || []).forEach(function(s){
-    const t = _saleMs(s);
-    if(!inWin(t)) return;
-    visaSales += Number((s.payments || {}).visa) || 0;
+    const r = touch(ofDayKeyOf(_saleMs(s)));
+    if(!r) return;
+    const p = s.payments || {};
+    r.cashSales += Number(p.cash) || 0;      // 💵 كاش الدرج
+    r.visaSales += Number(p.visa) || 0;      // 💳 بيروح لـPaymob
   });
 
-  let netReceived = 0, grossCleared = 0;
+  const bucket = function(arr, field, filter){
+    (arr || []).forEach(function(x){
+      if(filter && !filter(x)) return;
+      const r = touch(ofDayKeyOf(_ohTs(x)));
+      if(r) r[field] += Number(x.amount) || 0;
+    });
+  };
+  bucket(data.expenses,   'expenses');
+  bucket(data.salaryPays, 'salaries');
+  bucket(data.advances,   'advances');
+  // المكافآت المعتمدة بس — اللي مستنية موافقة ماخرجتش من الدرج
+  bucket(data.rewards,    'rewards', function(r){
+    return !!r && (!r.status || r.status === 'approved');
+  });
+
+  // 💳 التحويلات اللي نزلت فعلًا
   (data.settlements || []).forEach(function(x){
-    const t = _ohTs(x);
-    if(!inWin(t)) return;
+    const r = touch(ofDayKeyOf(_ohTs(x)));
+    if(!r) return;
     const net = Number(x.net) || 0;
-    netReceived += net;
-    grossCleared += Number(x.gross) || paymobGrossFromNet(net, x.feePct);
+    r.pmActual += net;
+    r.pmGross  += Number(x.gross) || paymobGrossFromNet(net, x.feePct);
   });
 
-  const fees = Math.round((grossCleared - netReceived) * 100) / 100;
-  const due = Math.round((visaSales - grossCleared) * 100) / 100;
+  return days;
+}
+
+/* 🔮 توقّع تحويلات Paymob الجاية
+   ------------------------------------------------------------
+   ⚠️ أخطر حتة في الملف كله: **الحساب المزدوج**. لو توقّعنا تحويل
+      وبعدين اتسجّل التحويل الحقيقي، الفلوس تتعدّ مرتين والمالك
+      يفتكر معاه أكتر من الحقيقة.
+
+   طبقتين حماية:
+   ١. مبنتوقّعش لأي يوم بيع اتقفل تحويله — بنبدأ من بعد آخر تحويل مسجّل.
+   ٢. **سقف صلب**: مجموع المتوقّع عمره ما يزيد عن الرصيد المستحق فعلًا
+      (كل الفيزا − اللي اتحصّل). حتى لو الطبقة الأولى غلطت، السقف بيمسك. */
+function ofPredictSettlements(days, data, cfg, lastSettledKey){
   const pct = paymobEffectivePct(data.settlements, PAYMOB_FEE_PCT);
-  return { visaSales: visaSales, netReceived: netReceived, grossCleared: grossCleared,
-           fees: fees, due: due, effPct: pct,
-           // 💡 المتوقع يوصلك من الباقي — تقدير بنسبتك الفعلية مش برقم ثابت
-           dueNet: Math.round(due * (1 - pct/100) * 100) / 100 };
+  const keys = Object.keys(days).sort();
+
+  // الرصيد المستحق الحقيقي — ده السقف
+  let allVisa = 0, allCleared = 0;
+  (data.sales || []).forEach(function(s){
+    allVisa += Number((s.payments || {}).visa) || 0;
+  });
+  (data.settlements || []).forEach(function(x){
+    const net = Number(x.net) || 0;
+    allCleared += Number(x.gross) || paymobGrossFromNet(net, x.feePct);
+  });
+  let room = Math.max(0, allVisa - allCleared);
+
+  const out = {};
+  keys.forEach(function(k){
+    const v = days[k].visaSales;
+    if(v <= 0) return;
+    if(lastSettledKey && k <= lastSettledKey) return;   // طبقة ١
+    const gross = Math.min(v, room);                    // طبقة ٢ — السقف
+    if(gross <= 0) return;
+    room -= gross;
+    const land = ofSettleDayFor(k, cfg);
+    if(!out[land]) out[land] = { net:0, gross:0, from:[] };
+    out[land].gross += gross;
+    out[land].net   += Math.round(gross * (1 - pct / 100) * 100) / 100;
+    out[land].from.push(k);
+  });
+  Object.keys(out).forEach(function(k){
+    out[k].net   = Math.round(out[k].net * 100) / 100;
+    out[k].gross = Math.round(out[k].gross * 100) / 100;
+  });
+  return { byDay: out, pct: pct, outstanding: Math.round((allVisa - allCleared) * 100) / 100 };
+}
+
+const OF_LEDGER_FIELDS = ['cashSales','visaSales','pmIn','expenses','salaries',
+                          'advances','rewards','otherIn','otherOut'];
+
+/* 📒 الدفتر الكامل — ده اللي الشاشة بتتبني منه
+   base      : { amount, atMs, paymobOpening }  نقطة البداية
+   data      : D (المبيعات والمصاريف… إلخ)
+   overrides : { '2026-08-11': { ov:{field:val}, counted:n, note:'' } }
+   cfg       : { weekendDays, settleLagBizDays, predict, carryCount }
+   ⚠️ بيرجع أيام **من الأقدم للأحدث** عشان الرصيد يتراكم صح. */
+function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
+  cfg = cfg || {};
+  const now = Number(nowTs) || Date.now();
+  const openAt = Number(base && base.atMs) || 0;
+  const opening = Number(base && base.amount) || 0;
+  const fromKey = ofDayKeyOf(openAt);
+  const todayKey = ofDayKeyOf(now);
+  // بنمد قدام كام يوم عشان التوقّعات تبان قبل ما توصل
+  const ahead = Math.max(0, Number(aheadDays == null ? 5 : aheadDays));
+  const toKey = ofDayShift(todayKey, ahead);
+
+  const days = ofCollectDays(data, fromKey, toKey);
+
+  // آخر يوم اتسجّل فيه تحويل حقيقي — بعده بس بنتوقّع
+  let lastSettledKey = '';
+  (data.settlements || []).forEach(function(x){
+    const k = ofDayKeyOf(_ohTs(x));
+    const sk = String(x && x.forDay || '') || ofDayShift(k, -1);
+    if(sk > lastSettledKey) lastSettledKey = sk;
+  });
+
+  // ⚠️ باج مسكه الاختبار: كنت بصفّر `outstanding` لما التوقّع يبقى مقفول —
+  //    فـ"فلوسك عند Paymob" كانت بتبان صفر وهي مش صفر، وإجمالي الثروة
+  //    بيقلّ بقيمة كل الفيزا اللي لسه مانزلتش. المستحق حقيقة قايمة
+  //    مالهاش دعوة بإن إحنا بنتوقّع ولا لأ.
+  const pred = ofPredictSettlements(days, data, cfg, lastSettledKey);
+  if(cfg.predict === false) pred.byDay = {};
+
+  const ovAll = overrides || {};
+  const rows = Object.keys(days).sort().map(function(k){
+    const d = days[k];
+    const o = ovAll[k] || {};
+    const ov = o.ov || {};
+    const p = pred.byDay[k] || null;
+
+    /* 🧊 اليوم "المتجمّد"
+       ⚠️ office بيحمّل مبيعات آخر ٣٠ يوم بس. من غير الحتة دي، أول ما اليوم
+          يعدّي الـ٣٠، فواتيره بتقع بره النافذة و**سطره في الشيت بيرجع صفر
+          من غير أي رسالة** — يعني الشيت بيكدب بهدوء بعد شهر بالظبط.
+          الحل: أول ما اليوم يقفل، أرقامه بتتحفظ في مستنده، وبعد كده
+          الشيت بيقراها من المحفوظ مش بيعيد حسابها من بيانات ناقصة.
+       الترتيب مقصود: المحفوظ يغلب المحسوب، والتعديل اليدوي يغلب الاتنين. */
+    const fz = o.frozen || null;
+    const raw = fz ? {
+      cashSales: Number(fz.cashSales) || 0, visaSales: Number(fz.visaSales) || 0,
+      pmIn: Number(fz.pmIn) || 0,
+      expenses: Number(fz.expenses) || 0, salaries: Number(fz.salaries) || 0,
+      advances: Number(fz.advances) || 0, rewards: Number(fz.rewards) || 0,
+      otherIn: 0, otherOut: 0
+    } : {
+      cashSales: d.cashSales, visaSales: d.visaSales,
+      pmIn: d.pmActual,
+      expenses: d.expenses, salaries: d.salaries,
+      advances: d.advances, rewards: d.rewards,
+      otherIn: 0, otherOut: 0
+    };
+    const val = {}, edited = {};
+    OF_LEDGER_FIELDS.forEach(function(f){
+      const has = Object.prototype.hasOwnProperty.call(ov, f) && ov[f] !== null && ov[f] !== '';
+      val[f] = has ? (Number(ov[f]) || 0) : raw[f];
+      edited[f] = has;
+    });
+
+    // 💳 المتوقّع بيتحسب **بس** لو مفيش تحويل حقيقي اتسجّل لليوم ده
+    //    ولا تعديل يدوي على الخانة — الحقيقة دايمًا بتغلب التوقّع.
+    const showPred = !!p && val.pmIn === 0 && !edited.pmIn;
+    const pmExp = showPred ? p.net : 0;
+
+    const inConf  = val.cashSales + val.pmIn + val.otherIn;
+    const outAll  = val.expenses + val.salaries + val.advances + val.rewards + val.otherOut;
+    const counted = (o.counted === 0 || o.counted) ? Number(o.counted) : null;
+
+    return {
+      key: k,
+      frozen: !!fz,
+      dayMs: ofBizDayRange(k).start,
+      weekend: ofIsWeekend(k, cfg),
+      future: k > todayKey,
+      isToday: k === todayKey,
+      raw: raw, val: val, edited: edited,
+      pmExpected: pmExp,
+      pmExpectedGross: showPred ? p.gross : 0,
+      pmFrom: showPred ? p.from : [],
+      inConf: Math.round(inConf * 100) / 100,
+      out: Math.round(outAll * 100) / 100,
+      net: Math.round((inConf - outAll) * 100) / 100,
+      netExp: Math.round((inConf + pmExp - outAll) * 100) / 100,
+      counted: counted,
+      note: o.note || ''
+    };
+  });
+
+  // 🏃 الرصيد التراكمي — مرّة للمؤكد ومرّة للمتوقّع
+  let run = opening, runExp = opening;
+  rows.forEach(function(r){
+    run += r.net; runExp += r.netExp;
+    r.balance = Math.round(run * 100) / 100;
+    r.balanceExp = Math.round(runExp * 100) / 100;
+    // 🔍 العدّ الفعلي: بنطلّع الفرق، وبعدين بنكمّل من الرقم المعدود
+    //    (زي دفتر الخزنة — المراجعة بتصحّح المسار مش بتلغي الغلط)
+    if(r.counted !== null){
+      r.variance = Math.round((r.counted - r.balance) * 100) / 100;
+      if(cfg.carryCount !== false){
+        const diff = r.counted - run;
+        run = r.counted; runExp += diff;
+        r.balance = Math.round(run * 100) / 100;
+        r.balanceExp = Math.round(runExp * 100) / 100;
+      }
+    } else { r.variance = null; }
+  });
+
+  return { rows: rows, opening: opening, openKey: fromKey, todayKey: todayKey,
+           effPct: pred.pct, outstanding: pred.outstanding,
+           paymobOpening: Number(base && base.paymobOpening) || 0,
+           now: rows.length ? rows[rows.length - 1].balance : opening };
+}
+
+/* 🧊 مين محتاج يتجمّد دلوقتي؟
+   بنجمّد الأيام اللي **قفلت خلاص** وقربت تخرج من نافذة التحميل.
+   العتبة أقل من الـ٣٠ بهامش أمان — لو المالك مافتحش البرنامج كام يوم
+   الأيام تفضل لسه جوه النافذة لما يفتحه.
+   ⚠️ عمرنا ما بنجمّد النهاردة ولا يوم جاي — لسه بيتحرك. */
+const OF_FREEZE_AFTER_DAYS = 20;
+const OF_SALES_WINDOW_DAYS = 30;
+function ofFreezeDue(ledger, overrides, nowTs){
+  const now = Number(nowTs) || Date.now();
+  const todayKey = ofDayKeyOf(now);
+  const cutKey = ofDayShift(todayKey, -OF_FREEZE_AFTER_DAYS);
+  const ov = overrides || {};
+  return (ledger && ledger.rows ? ledger.rows : []).filter(function(r){
+    if(r.key >= todayKey) return false;              // لسه بيتحرك
+    if(r.key > cutKey) return false;                 // لسه بدري
+    if(r.frozen) return false;                       // متجمّد خلاص
+    if((ov[r.key] || {}).frozen) return false;
+    return true;
+  }).map(function(r){
+    return { key: r.key, frozen: {
+      cashSales: r.raw.cashSales, visaSales: r.raw.visaSales, pmIn: r.raw.pmIn,
+      expenses: r.raw.expenses, salaries: r.raw.salaries,
+      advances: r.raw.advances, rewards: r.raw.rewards, at: now } };
+  });
+}
+
+/* 🥇 الدهب — قيمة الرصيد بسعر الجرام
+   ------------------------------------------------------------
+   ⚠️ بنقيّم بسعر **الشراء** (اللي التاجر بيشتري بيه منك) مش سعر البيع.
+      الفرق بينهم ٥٠–٢٠٠ جنيه في الجرام، ولو حسبنا بسعر البيع الرقم
+      بيطلع أكبر من اللي هتقبضه فعلًا لو بعت — وده بالظبط نوع الكذب
+      اللي التبويب ده موجود عشان يمنعه.
+   ⚠️ السعر بيتقدّم بطابع وقته. لو بقاله أكتر من يوم بيتعلّم "قديم"
+      بدل ما يتحسب كأنه لحظي. */
+const OF_GOLD_STALE_MS = 26 * 3600 * 1000;
+function ofGoldValue(cfg, nowTs){
+  const g = Number(cfg && cfg.goldGrams) || 0;
+  const price = Number(cfg && cfg.goldBuyPrice) || 0;
+  const at = Number(cfg && cfg.goldPriceAt) || 0;
+  const now = Number(nowTs) || Date.now();
+  return {
+    grams: g, price: price, at: at,
+    stale: !at || (now - at) > OF_GOLD_STALE_MS,
+    value: Math.round(g * price * 100) / 100,
+    source: (cfg && cfg.goldSource) || ''
+  };
+}
+
+/* 🧮 إجمالي ثروتك — تلات طبقات متفصولة عن بعض عن قصد
+   الكاش في إيدك · المستحق عند Paymob · قيمة الدهب
+   الفصل ده مهم: الدهب مش سيولة، وفلوس Paymob لسه ماوصلتش. */
+function ofWealth(ledger, cfg, nowTs){
+  const cash = ledger ? ledger.now : 0;
+  const pm = (ledger ? ledger.outstanding : 0) + (ledger ? ledger.paymobOpening : 0);
+  const pmNet = Math.round(pm * (1 - (ledger ? ledger.effPct : 0) / 100) * 100) / 100;
+  const gold = ofGoldValue(cfg, nowTs);
+  return {
+    cash: cash, paymobGross: Math.round(pm * 100) / 100, paymobNet: pmNet,
+    gold: gold.value, goldInfo: gold,
+    total: Math.round((cash + pmNet + gold.value) * 100) / 100
+  };
 }
 
 // الأكثر مبيعًا لفرع: تجميع قطع آخر N يوم من الفواتير (استبعاد المرتجع والعكس والاستبدال)
@@ -397,8 +665,11 @@ function profitReport(data, mk){
 // للاختبارات
 if (typeof window !== 'undefined'){
   window.officeCalc = { merchantBalance:merchantBalance, expensesMonthTotal:expensesMonthTotal,
-    cashOnHand:cashOnHand, cashDaily:cashDaily, cashBaseStale:cashBaseStale,
-    paymobLedger:paymobLedger, paymobFeeOn:paymobFeeOn, paymobGrossFromNet:paymobGrossFromNet,
+    ofCashLedger:ofCashLedger, ofSettleDayFor:ofSettleDayFor, ofNextBizDay:ofNextBizDay,
+    ofIsWeekend:ofIsWeekend, ofDayKeyOf:ofDayKeyOf, ofDayShift:ofDayShift,
+    ofGoldValue:ofGoldValue, ofWealth:ofWealth, ofPredictSettlements:ofPredictSettlements,
+    ofFreezeDue:ofFreezeDue,
+    paymobFeeOn:paymobFeeOn, paymobGrossFromNet:paymobGrossFromNet,
     paymobEffectivePct:paymobEffectivePct,
     topSellers:topSellers, branchQtyOf:branchQtyOf, salarySummary:salarySummary, buildInbox:buildInbox, profitReport:profitReport };
 }
@@ -811,7 +1082,8 @@ const OF_RECUR_COL = 'office_recurring';
 
 const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], expenses:[],
             employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[],
-            recurring:[], openShifts:[], salaryPays:[], rewards:[], cashBase:null, settlements:[] };
+            recurring:[], openShifts:[], salaryPays:[], rewards:[], cashBase:null, settlements:[],
+            cashDays:{}, cashCfg:{} };
 let started = false;
 let firstLoadDone = false;
 const seenIds = {};   // عشان الإشعار يطلع للجديد بس
@@ -1111,6 +1383,18 @@ function startData(){
     D.settlements = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     try{ renderCashHand(); }catch(e){}
   }, function(e){ console.warn('settlements sync', e && e.code); });
+  // 📒 تعديلات الشيت اليدوية + العدّ الفعلي (مستند لكل يوم)
+  db.collection('office_cash_days').onSnapshot(function(s){
+    const m = {};
+    s.docs.forEach(function(d){ m[d.id] = Object.assign({ id:d.id }, d.data()); });
+    D.cashDays = m;
+    try{ renderCashHand(); }catch(e){}
+  }, function(e){ console.warn('cash days sync', e && e.code); });
+  // ⚙️ إعدادات الدفتر: إجازة الأسبوع · تأخير Paymob · الدهب
+  db.collection('pos_test_settings').doc('office_cash_cfg').onSnapshot(function(d){
+    D.cashCfg = d.exists ? (d.data() || {}) : {};
+    try{ renderCashHand(); }catch(e){}
+  }, function(e){ console.warn('cash cfg sync', e && e.code); });
   db.collection('pos_test_settings').doc('office_cash').onSnapshot(function(d){
     D.cashBase = d.exists ? (d.data() || null) : null;
     try{ renderCashHand(); }catch(e){}
@@ -4025,136 +4309,369 @@ function ofWireOpenings(){
 }
 
 /* ============================================================
-   💵 تبويب "معاك في إيدك"
+   📒 شاشة دفتر اليومية
+   ------------------------------------------------------------
+   شيت زي الإكسل: كل يوم سطر، كل خانة تتدوس تتعدّل.
+   ⚠️ الشاشة **مبتحسبش أي حاجة** — كل الأرقام جاية من `ofCashLedger`
+      اللي متختبر لوحده. الفصل ده هو اللي بيخلي الأرقام قابلة للمراجعة.
    ============================================================ */
+
+let _ofLedgerDays = 14;        // كام يوم بيبان
+let _ofLedgerOpen = '';        // اليوم المفتوح بالتفصيل
+
+function ofLedgerCfg(){
+  return (D.cashCfg || {});
+}
+
+// الخانات وأسماؤها في الشاشة — مصدر واحد عشان الشاشة والتعديل مايختلفوش
+const OF_CELL_META = {
+  cashSales: { ic:'💵', name:'كاش الفروع',  dir:1  },
+  visaSales: { ic:'💳', name:'فيزا اتباعت', dir:0  },
+  pmIn:      { ic:'🏦', name:'نزل من Paymob', dir:1 },
+  otherIn:   { ic:'➕', name:'وارد تاني',    dir:1  },
+  expenses:  { ic:'🧾', name:'مصاريف',      dir:-1 },
+  salaries:  { ic:'💼', name:'رواتب',       dir:-1 },
+  advances:  { ic:'🤝', name:'سلف',         dir:-1 },
+  rewards:   { ic:'🎁', name:'مكافآت',      dir:-1 },
+  otherOut:  { ic:'➖', name:'منصرف تاني',  dir:-1 }
+};
+
+function ofDayName(key){
+  try{
+    const [y, m, d] = String(key).split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('ar-EG',
+      { weekday:'short', day:'numeric', month:'short', timeZone:'UTC' });
+  }catch(e){ return key; }
+}
+
 function renderCashHand(){
   const host = document.getElementById('cashHandBody');
   if(!host) return;
   const base = D.cashBase;
   const now = Date.now();
-
-  /* 💳 كارت Paymob مستقل تمامًا عن رصيد الكاش — الفيزا محسوبة من الفواتير
-     نفسها، فمفيش سبب يخليه مستني لحد ما المالك يعدّ اللي في إيده.
-     ⚠️ كان متعرّف **بعد** فحص الرصيد، فمكانش بيظهر خالص قبل التحديد. */
-  const pmBase = (base && base.atMs) ? base : { amount: 0, atMs: 0 };
-  const pm = paymobLedger(pmBase, D, now);
-  const pmCard = function(){
-    return '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
-      + '<div style="display:flex; justify-content:space-between; align-items:center;">'
-      + '<span style="font-weight:800; font-size:13px;">💳 فلوسك عند Paymob</span>'
-      + '<b style="font-size:19px; color:' + (pm.due > 0 ? 'var(--warn)' : 'var(--muted)') + ';">' + egp(pm.due) + '</b></div>'
-      + (pm.due > 0 ? '<div class="muted" style="font-size:11.5px; margin-top:3px;">'
-          + 'متوقع يوصلك منها ≈ <b>' + egp(pm.dueNet) + '</b> (بعد ' + pm.effPct + '%)</div>' : '')
-      + '<div class="muted" style="font-size:11.5px; margin-top:5px;">'
-      + 'فيزا اتباعت ' + egp(pm.visaSales) + ' · اتحصّل ' + egp(pm.grossCleared)
-      + (pm.fees ? ' · عمولة ' + egp(pm.fees) : '') + '</div>'
-      + '<button class="btn" onclick="ofAddSettlement()" style="width:100%; margin-top:9px;">💰 وصلني تحويل</button>'
-      + '<div class="hint" style="margin-top:6px;">اكتب الإجمالي والصافي زي ما هما من شاشة Paymob — الخصومات بتتحسب لوحدها.</div>'
-      + '</div>';
-  };
+  const cfg = ofLedgerCfg();
 
   if(!base || !base.atMs){
-    host.innerHTML = '<div class="empty">💵 حدّد المبلغ اللي معاك دلوقتي عشان نبدأ نحسب الكاش</div>'
-      + '<button class="btn" onclick="ofSetCashBase()" style="width:100%; margin-top:10px;">✏️ معايا دلوقتي كام؟</button>'
-      + pmCard();
+    host.innerHTML =
+      '<div class="empty">💵 قول للنظام معاك كام دلوقتي، وابدأ الحساب من نقطة نضيفة</div>'
+      + '<button class="btn" onclick="ofStartFresh()" style="width:100%; margin-top:10px;">🆕 ابدأ من الصفر</button>';
     return;
   }
-  const c = cashOnHand(base, D, now);
-  // 🔄 الترحيل التلقائي: office بيحمّل مبيعات آخر 30 يوم بس، فلو نقطة
-  //    البداية قدمت، الفواتير القديمة بتقع بره النافذة والرقم بينقص بهدوء.
-  //    بدل ما نطلب منه يعدّ الفلوس، بنثبّت الرصيد الحالي كنقطة بداية جديدة
-  //    ونكمّل منها — نفس الرقم بالظبط، بس بتاريخ جديد.
-  if(cashBaseStale(base, now)) { ofRollCashBase(c.now); }
-  const row = function(lbl, val, sign){
-    const col = sign < 0 ? 'var(--bad)' : (sign > 0 ? 'var(--good)' : 'var(--muted)');
-    return '<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line); font-size:13px;">'
-      + '<span>' + lbl + '</span><b style="color:' + col + ';">' + (sign < 0 ? '−' : (sign > 0 ? '+' : '')) + egp(Math.abs(val)) + '</b></div>';
-  };
-  const days = cashDaily(base, D, now, 14);
 
+  const L = ofCashLedger(base, D, D.cashDays || {}, cfg, now, 5);
+  ofAutoFreeze(L);                       // 🧊 تثبيت الأيام اللي قربت تخرج من النافذة
+  const W = ofWealth(L, cfg, now);
+  const gold = W.goldInfo;
 
-  host.innerHTML =
-    '<div style="text-align:center; padding:18px 12px; background:var(--card); border:1px solid var(--line); border-radius:16px;">'
-    + '<div class="muted" style="font-size:12px;">معاك في إيدك دلوقتي</div>'
-    + '<div style="font-size:34px; font-weight:900; color:' + (c.now < 0 ? 'var(--bad)' : 'var(--good)') + '; margin:4px 0;">'
-    + egp(c.now) + '</div>'
-    + '<div class="muted" style="font-size:11px;">من ' + dstr(base.atMs) + ' لحد دلوقتي</div>'
+  /* ── الكارت الكبير: تلات طبقات متفصولة عن بعض عن قصد ────────
+     خلطهم في رقم واحد بيخلي المالك يصرف فلوس لسه ماوصلتش. */
+  const head =
+    '<div style="background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 13px;">'
+    + '<div class="muted" style="font-size:12px; text-align:center;">💵 معاك في إيدك دلوقتي</div>'
+    + '<div style="font-size:33px; font-weight:900; text-align:center; margin:3px 0 12px;'
+    +   ' color:' + (L.now < 0 ? 'var(--bad)' : 'var(--good)') + ';">' + egp(L.now) + '</div>'
+    + '<div style="display:flex; gap:7px;">'
+    +   ofMiniCard('🏦 عند Paymob', W.paymobNet, 'متوقّع يوصلك')
+    +   ofMiniCard('🥇 دهب', W.gold, gold.grams ? (gold.grams + ' جرام') : 'مش متسجّل')
     + '</div>'
+    + '<div style="display:flex; justify-content:space-between; align-items:center;'
+    +   ' margin-top:12px; padding-top:11px; border-top:2px solid var(--line);">'
+    +   '<span style="font-weight:800; font-size:13.5px;">🧮 إجمالي فلوسك</span>'
+    +   '<b style="font-size:21px;">' + egp(W.total) + '</b></div>'
+    + '<div class="hint" style="margin-top:5px;">الكاش + المتوقّع من Paymob + قيمة الدهب</div>'
+    + '</div>';
 
-    + pmCard()
+  /* ── كارت الدهب ───────────────────────────────────────── */
+  const goldCard =
+    '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
+    + '<div style="display:flex; justify-content:space-between; align-items:center;">'
+    +   '<b style="font-size:13px;">🥇 الدهب</b>'
+    +   '<b style="font-size:17px;">' + egp(W.gold) + '</b></div>'
+    + '<div class="muted" style="font-size:11.5px; margin-top:4px;">'
+    +   (gold.grams
+        ? gold.grams + ' جرام عيار ٢٤ × ' + egp(gold.price) + ' للجرام'
+        : 'لسه ماحددتش عندك كام جرام')
+    + '</div>'
+    + (gold.stale && gold.grams
+        ? '<div style="background:rgba(245,158,11,.12); border:1px solid var(--warn); border-radius:9px;'
+          + ' padding:7px 9px; margin-top:7px; font-size:11.5px;">⚠️ السعر قديم'
+          + (gold.at ? ' (آخر تحديث ' + dstr(gold.at) + ')' : '')
+          + ' — حدّثه عشان الرقم يبقى حقيقي</div>'
+        : '')
+    + '<div style="display:flex; gap:7px; margin-top:9px;">'
+    +   '<button class="btn" onclick="ofSetGoldGrams()" style="flex:1;">⚖️ الجرامات</button>'
+    +   '<button class="btn" onclick="ofSetGoldPrice()" style="flex:1;">💱 سعر الجرام</button>'
+    + '</div>'
+    + '<div class="hint" style="margin-top:6px;">بنقيّم بسعر <b>الشراء</b> (اللي الصايغ بيشتري بيه منك) '
+    + 'مش سعر البيع — عشان الرقم يبقى اللي هتقبضه فعلًا.</div>'
+    + '</div>';
 
+  /* ── الشيت ────────────────────────────────────────────── */
+  const rows = L.rows.slice(-_ofLedgerDays).reverse();   // الأحدث فوق
+  const sheet = rows.map(function(r){ return ofLedgerRow(r, L); }).join('');
+
+  host.innerHTML = head + goldCard
     + '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
-    + row('الرصيد اللي حدّدته', c.opening, 0)
-    + row('💵 كاش الفروع', c.cashIn, 1)
-    + row('💳 محصّل من Paymob', c.settled, 1)
-    + row('🤝 سلف', c.advances, -1)
-    + row('💼 رواتب اتصرفت', c.salaries, -1)
-    + row('🎁 مكافآت', c.rewards, -1)
-    + row('🧾 مصاريف', c.expenses, -1)
-    + '<div style="display:flex; justify-content:space-between; padding:10px 0 2px; font-size:15px; font-weight:900;">'
-    + '<span>الصافي</span><span>' + egp(c.now) + '</span></div>'
+    + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:9px;">'
+    +   '<b style="font-size:13px;">📒 يوم بيوم</b>'
+    +   '<span class="muted" style="font-size:11px;">دوس على أي يوم تعدّله</span>'
     + '</div>'
-
-    + '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
-    + '<div style="font-weight:800; font-size:13px; margin-bottom:8px;">📅 يوم بيوم</div>'
-    + (days.length ? days.map(function(d){
-        const bits = [];
-        if(d.expenses) bits.push('🧾 ' + egp(d.expenses));
-        if(d.salaries) bits.push('💼 ' + egp(d.salaries));
-        if(d.advances) bits.push('🤝 ' + egp(d.advances));
-        if(d.rewards)  bits.push('🎁 ' + egp(d.rewards));
-        if(d.settled)  bits.push('💳 +' + egp(d.settled));
-        return '<div style="border-bottom:1px solid var(--line); padding:9px 0;">'
-          + '<div style="display:flex; justify-content:space-between; align-items:center;">'
-          + '<b style="font-size:12.5px;">' + dstr(d.dayMs) + '</b>'
-          + '<span style="font-size:12.5px;">معاك <b>' + egp(d.balance) + '</b></span></div>'
-          + '<div style="font-size:12px; color:var(--muted); margin-top:3px;">'
-          + '💵 كاش <b style="color:var(--good);">' + egp(d.cash) + '</b>'
-          + ' · 💳 فيزا <b>' + egp(d.visa) + '</b>'
-          + (d.out ? ' · خرج <b style="color:var(--bad);">' + egp(d.out) + '</b>' : '')
-          + '</div>'
-          + (bits.length ? '<div style="font-size:11.5px; color:var(--muted); margin-top:2px;">' + bits.join(' · ') + '</div>' : '')
-          + '</div>';
-      }).join('') : '<div class="muted" style="font-size:12px;">لسه مفيش حركة</div>')
+    + (sheet || '<div class="muted" style="font-size:12px;">لسه مفيش حركة</div>')
+    + (L.rows.length > _ofLedgerDays
+        ? '<button class="btn" onclick="ofMoreDays()" style="width:100%; margin-top:9px;">📆 أيام أكتر</button>' : '')
     + '</div>'
-
-    + '<button class="btn" onclick="ofSetCashBase()" style="width:100%; margin-top:12px;">✏️ عدّ الفلوس وحدّدها من تاني</button>'
-    + '<div class="hint" style="margin-top:8px;">الفيزا مش محسوبة هنا — بتروح لحساب Paymob مش لإيدك.</div>';
+    + '<div style="display:flex; gap:7px; margin-top:10px;">'
+    +   '<button class="btn" onclick="ofAddSettlement()" style="flex:1;">🏦 وصلني تحويل</button>'
+    +   '<button class="btn" onclick="ofStartFresh()" style="flex:1;">🆕 صفّر وابدأ</button>'
+    + '</div>'
+    + '<div class="hint" style="margin-top:8px;">التوقّع بالخط المتقطّع لسه ماوصلش. '
+    + 'أول ما التحويل ينزل سجّله — التوقّع بيتلغى لوحده ومفيش عدّ مرتين.</div>';
 }
 window.renderCashHand = renderCashHand;
 
-async function ofSetCashBase(){
-  const cur = D.cashBase && D.cashBase.amount != null ? String(D.cashBase.amount) : '';
-  const v = prompt('عدّ اللي معاك دلوقتي بالظبط واكتبه.\nكل حاجة بعد كده هتتحسب من الرقم ده.', cur);
-  if(v === null) return;
-  const amount = Math.round((Number(v) || 0) * 100) / 100;
-  if(!isFinite(amount) || amount < 0){ alert('رقم مش صح'); return; }
-  if(!confirm('الرصيد الجديد: ' + egp(amount) + '\n\nالحساب هيبدأ من دلوقتي. تكمّل؟')) return;
+/* 🧊 التثبيت التلقائي — مرة واحدة في الجلسة لكل يوم
+   بيكتب أرقام اليوم في مستنده قبل ما فواتيره تخرج من نافذة الـ٣٠ يوم. */
+const _ofFrozen = {};
+function ofAutoFreeze(L){
   try{
-    await db.collection('pos_test_settings').doc('office_cash').set({
-      amount: amount, atMs: Date.now(), by: 'office'
-    }, { merge: true });
-    // ✅ مش بنحدّث D يدوي — الـsnapshot هو اللي بيحدّثه (مصدر واحد للحقيقة)
-  }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
+    const due = ofFreezeDue(L, D.cashDays || {}, Date.now());
+    due.forEach(function(x){
+      if(_ofFrozen[x.key]) return;
+      _ofFrozen[x.key] = 1;
+      db.collection('office_cash_days').doc(x.key)
+        .set({ frozen: x.frozen, updatedAt: Date.now() }, { merge: true })
+        .catch(function(e){ console.warn('freeze ' + x.key, e && e.code); });
+    });
+  }catch(e){ console.warn('autofreeze', e); }
 }
-window.ofSetCashBase = ofSetCashBase;
 
-/* 🔄 ترحيل نقطة البداية تلقائيًا (مرة واحدة) */
-let _ofRolling = false;
-async function ofRollCashBase(amount){
-  if(_ofRolling) return;
-  if(!isFinite(amount)) return;
-  _ofRolling = true;
-  try{
-    await db.collection('pos_test_settings').doc('office_cash').set({
-      amount: Math.round(Number(amount) * 100) / 100,
-      atMs: Date.now(), by: 'auto_roll'
-    }, { merge: true });
-  }catch(e){ console.warn('roll cash base', e); }
-  // ⚠️ مبنرجعش _ofRolling لـfalse — الترحيل مرة واحدة في الجلسة،
-  //    وبعدها الـsnapshot بيجيب النقطة الجديدة.
+function ofMiniCard(title, val, sub){
+  return '<div style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:11px; padding:9px;">'
+    + '<div class="muted" style="font-size:11px;">' + title + '</div>'
+    + '<b style="font-size:15px;">' + egp(val) + '</b>'
+    + '<div class="muted" style="font-size:10.5px; margin-top:1px;">' + sub + '</div></div>';
 }
-window.ofRollCashBase = ofRollCashBase;
+
+/* سطر اليوم — مقفول بيبان ملخّص، مفتوح بيبان كل خانة قابلة للتعديل */
+function ofLedgerRow(r, L){
+  const open = _ofLedgerOpen === r.key;
+  const anyEdit = Object.keys(r.edited).some(function(k){ return r.edited[k]; });
+  const bg = r.weekend ? 'background:rgba(148,163,184,.07);' : '';
+
+  let head = '<div onclick="ofToggleDay(\'' + r.key + '\')" style="cursor:pointer; padding:9px 7px; '
+    + bg + ' border-bottom:1px solid var(--line);">'
+    + '<div style="display:flex; justify-content:space-between; align-items:center;">'
+    + '<b style="font-size:12.5px;">' + (open ? '▾ ' : '▸ ') + ofDayName(r.key)
+    +   (r.isToday ? ' <span style="color:var(--good); font-size:10.5px;">النهاردة</span>' : '')
+    +   (r.weekend ? ' <span class="muted" style="font-size:10.5px;">إجازة بنك</span>' : '')
+    +   (anyEdit ? ' <span style="font-size:10.5px;">✏️</span>' : '')
+    +   (r.frozen ? ' <span class="muted" style="font-size:10.5px;">🧊 مقفول</span>' : '')
+    + '</b>'
+    + '<span style="font-size:12.5px;">معاك <b>' + egp(r.balance) + '</b></span>'
+    + '</div>';
+
+  const bits = [];
+  if(r.val.cashSales) bits.push('💵 ' + egp(r.val.cashSales));
+  if(r.val.visaSales) bits.push('💳 ' + egp(r.val.visaSales));
+  if(r.val.pmIn)      bits.push('🏦 +' + egp(r.val.pmIn));
+  if(r.out)           bits.push('📤 −' + egp(r.out));
+  if(bits.length) head += '<div class="muted" style="font-size:11.5px; margin-top:3px;">' + bits.join(' · ') + '</div>';
+
+  // 🔮 المتوقّع — بالخط المتقطّع عشان يبان إنه لسه ماوصلش
+  if(r.pmExpected > 0){
+    head += '<div style="margin-top:5px; border:1px dashed var(--warn); border-radius:8px;'
+      + ' padding:5px 8px; font-size:11.5px;">🔮 متوقّع ينزل <b>' + egp(r.pmExpected) + '</b>'
+      + (r.pmFrom.length ? ' <span class="muted">(فيزا ' + r.pmFrom.map(ofDayName).join(' و') + ')</span>' : '')
+      + '</div>';
+  }
+  // 🔍 فرق العدّ — ده أداة الحكم على الفلوس
+  if(r.variance !== null && r.variance !== 0){
+    const bad = r.variance < 0;
+    head += '<div style="margin-top:5px; font-size:11.5px; color:' + (bad ? 'var(--bad)' : 'var(--warn)') + ';">'
+      + (bad ? '🔻 عجز ' : '🔺 أوفر ') + egp(Math.abs(r.variance))
+      + ' <span class="muted">(عدّيت ' + egp(r.counted) + ')</span></div>';
+  }
+  head += '</div>';
+  if(!open) return head;
+
+  /* ── مفتوح: كل خانة سطر بيتدوس عليه ── */
+  const cells = Object.keys(OF_CELL_META).map(function(f){
+    const m = OF_CELL_META[f];
+    const v = r.val[f];
+    if(!v && !r.edited[f] && f !== 'cashSales' && f !== 'expenses') return '';
+    const col = m.dir < 0 ? 'var(--bad)' : (m.dir > 0 ? 'var(--good)' : 'var(--muted)');
+    return '<div onclick="ofEditCell(\'' + r.key + '\',\'' + f + '\')" '
+      + 'style="display:flex; justify-content:space-between; padding:7px 4px; cursor:pointer;'
+      + ' border-bottom:1px solid var(--line); font-size:12.5px;">'
+      + '<span>' + m.ic + ' ' + m.name + (r.edited[f] ? ' ✏️' : '') + '</span>'
+      + '<b style="color:' + col + ';">' + egp(v)
+      + (r.edited[f] ? ' <span class="muted" style="font-weight:400; font-size:10.5px;">(محسوب ' + egp(r.raw[f]) + ')</span>' : '')
+      + '</b></div>';
+  }).join('');
+
+  return head
+    + '<div style="' + bg + ' padding:8px 9px 12px; border-bottom:1px solid var(--line);">'
+    + cells
+    + '<div style="display:flex; justify-content:space-between; padding:8px 4px 0; font-weight:900; font-size:13px;">'
+    +   '<span>الرصيد آخر اليوم</span><span>' + egp(r.balance) + '</span></div>'
+    + (r.pmExpected > 0
+        ? '<div class="muted" style="display:flex; justify-content:space-between; padding:2px 4px; font-size:11.5px;">'
+          + '<span>لو التوقّع نزل</span><span>' + egp(r.balanceExp) + '</span></div>' : '')
+    + '<div style="display:flex; gap:6px; margin-top:9px;">'
+    +   '<button class="btn" onclick="ofCountDay(\'' + r.key + '\')" style="flex:1; font-size:12px;">🔍 عدّيت كام؟</button>'
+    +   (Object.keys(r.edited).some(function(k){ return r.edited[k]; }) || r.counted !== null
+        ? '<button class="btn" onclick="ofResetDay(\'' + r.key + '\')" style="flex:1; font-size:12px;">↩️ رجّع المحسوب</button>' : '')
+    + '</div>'
+    + (r.note ? '<div class="muted" style="font-size:11px; margin-top:6px;">📝 ' + esc(r.note) + '</div>' : '')
+    + '</div>';
+}
+
+function ofToggleDay(k){ _ofLedgerOpen = (_ofLedgerOpen === k ? '' : k); renderCashHand(); }
+function ofMoreDays(){ _ofLedgerDays += 14; renderCashHand(); }
+window.ofToggleDay = ofToggleDay; window.ofMoreDays = ofMoreDays;
+
+/* ✏️ تعديل خانة — بيتسجّل مين وامتى وإيه الرقم المحسوب الأصلي */
+async function ofEditCell(key, field){
+  const m = OF_CELL_META[field];
+  if(!m) return;
+  const L = ofCashLedger(D.cashBase, D, D.cashDays || {}, ofLedgerCfg(), Date.now(), 5);
+  const r = L.rows.filter(function(x){ return x.key === key; })[0];
+  if(!r) return;
+  const v = prompt(m.ic + ' ' + m.name + ' — ' + ofDayName(key)
+    + '\n\nالنظام حسبها: ' + egp(r.raw[field])
+    + '\nاكتب الرقم الصح (سيبها فاضية عشان ترجع للمحسوب):',
+    r.edited[field] ? String(r.val[field]) : '');
+  if(v === null) return;
+
+  const doc = db.collection('office_cash_days').doc(key);
+  try{
+    if(String(v).trim() === ''){
+      const cur = (D.cashDays || {})[key] || {};
+      const ov = Object.assign({}, cur.ov || {});
+      delete ov[field];
+      await doc.set({ ov: ov, updatedAt: Date.now() }, { merge: true });
+      return;
+    }
+    const n = Math.round((Number(v) || 0) * 100) / 100;
+    if(!isFinite(n) || n < 0){ alert('رقم مش صح'); return; }
+    // 🧾 أثر المراجعة: بنسجّل الرقم المحسوب وقت التعديل ومين عدّله
+    await doc.set({
+      ov: Object.assign({}, ((D.cashDays || {})[key] || {}).ov || {}, { [field]: n }),
+      audit: firebase.firestore.FieldValue.arrayUnion({
+        field: field, from: r.raw[field], to: n, at: Date.now(), by: 'office'
+      }),
+      updatedAt: Date.now()
+    }, { merge: true });
+  }catch(e){ alert('ماتحفظش: ' + (e.code || e.message)); }
+}
+window.ofEditCell = ofEditCell;
+
+/* 🔍 العدّ الفعلي — الفرق هو أداة الحكم، مش تعديل صامت للرصيد */
+async function ofCountDay(key){
+  const L = ofCashLedger(D.cashBase, D, D.cashDays || {}, ofLedgerCfg(), Date.now(), 5);
+  const r = L.rows.filter(function(x){ return x.key === key; })[0];
+  if(!r) return;
+  const v = prompt('🔍 عدّ الفلوس الفعلي — ' + ofDayName(key)
+    + '\n\nالنظام حاسب: ' + egp(r.balance)
+    + '\nاكتب اللي عدّيته بإيدك (فاضي = امسح العدّ):',
+    r.counted !== null ? String(r.counted) : '');
+  if(v === null) return;
+  try{
+    if(String(v).trim() === ''){
+      await db.collection('office_cash_days').doc(key)
+        .set({ counted: null, updatedAt: Date.now() }, { merge: true });
+      return;
+    }
+    const n = Math.round((Number(v) || 0) * 100) / 100;
+    if(!isFinite(n) || n < 0){ alert('رقم مش صح'); return; }
+    const diff = Math.round((n - r.balance) * 100) / 100;
+    if(diff !== 0 && !confirm((diff < 0 ? '🔻 عجز ' : '🔺 أوفر ') + egp(Math.abs(diff))
+      + '\n\nالنظام حاسب ' + egp(r.balance) + ' وإنت عدّيت ' + egp(n)
+      + '\n\nالفرق هيتسجّل، والأيام اللي بعده هتكمّل من ' + egp(n) + '. تكمّل؟')) return;
+    await db.collection('office_cash_days').doc(key).set({
+      counted: n, countedAt: Date.now(), countedDiff: diff, by: 'office', updatedAt: Date.now()
+    }, { merge: true });
+  }catch(e){ alert('ماتحفظش: ' + (e.code || e.message)); }
+}
+window.ofCountDay = ofCountDay;
+
+async function ofResetDay(key){
+  if(!confirm('ترجّع يوم ' + ofDayName(key) + ' للأرقام المحسوبة؟\n\nالتعديلات اليدوية والعدّ هيتشالوا.')) return;
+  try{
+    await db.collection('office_cash_days').doc(key)
+      .set({ ov: {}, counted: null, updatedAt: Date.now() }, { merge: true });
+  }catch(e){ alert('ماتحفظش: ' + (e.code || e.message)); }
+}
+window.ofResetDay = ofResetDay;
+
+/* 🥇 الدهب */
+async function ofSetGoldGrams(){
+  const cur = Number(ofLedgerCfg().goldGrams) || 0;
+  const v = prompt('⚖️ عندك كام جرام دهب عيار ٢٤؟', cur ? String(cur) : '');
+  if(v === null) return;
+  const n = Math.round((Number(v) || 0) * 1000) / 1000;
+  if(!isFinite(n) || n < 0){ alert('رقم مش صح'); return; }
+  await ofSaveCashCfg({ goldGrams: n });
+}
+async function ofSetGoldPrice(){
+  const cur = Number(ofLedgerCfg().goldBuyPrice) || 0;
+  const v = prompt('💱 سعر جرام الدهب عيار ٢٤ — سعر **الشراء**\n'
+    + '(اللي الصايغ بيشتري بيه منك، مش اللي بيبيع بيه)\n\nاكتب السعر بالجنيه:',
+    cur ? String(cur) : '');
+  if(v === null) return;
+  const n = Math.round((Number(v) || 0) * 100) / 100;
+  if(!isFinite(n) || n <= 0){ alert('رقم مش صح'); return; }
+  await ofSaveCashCfg({ goldBuyPrice: n, goldPriceAt: Date.now(), goldSource: 'يدوي' });
+}
+window.ofSetGoldGrams = ofSetGoldGrams; window.ofSetGoldPrice = ofSetGoldPrice;
+
+async function ofSaveCashCfg(patch){
+  try{
+    await db.collection('pos_test_settings').doc('office_cash_cfg')
+      .set(Object.assign({}, patch, { updatedAt: Date.now() }), { merge: true });
+  }catch(e){ alert('ماتحفظش: ' + (e.code || e.message)); }
+}
+
+/* 🆕 التصفير — البداية من نقطة نضيفة
+   ⚠️ محتاج **رقمين** مش رقم واحد:
+      · الكاش اللي في إيدك
+      · واللي لسه عند Paymob من مبيعات فيزا قبل التصفير
+   لو أخدنا الكاش بس، فلوس الفيزا اللي في السكة هتنزل بعد التصفير
+   وتبان كأنها فلوس من العدم — ومن غير رصيد افتتاحي يقابلها الرقم بيكدب. */
+async function ofStartFresh(){
+  const c = prompt('💵 عدّ الكاش اللي معاك دلوقتي بالظبط واكتبه.\n\n'
+    + 'كل حاجة قبل كده هتتنسى، والحساب هيبدأ من الرقم ده.');
+  if(c === null) return;
+  const cash = Math.round((Number(c) || 0) * 100) / 100;
+  if(!isFinite(cash) || cash < 0){ alert('رقم مش صح'); return; }
+
+  const p = prompt('🏦 وعند Paymob لسه ليك كام؟\n\n'
+    + 'ده مبيعات الفيزا اللي اتباعت ولسه فلوسها مانزلتش.\n'
+    + 'لو مش عارف اكتب صفر — بس ساعتها التحويل اللي هينزل هيبان زيادة.', '0');
+  if(p === null) return;
+  const pmOpen = Math.round((Number(p) || 0) * 100) / 100;
+  if(!isFinite(pmOpen) || pmOpen < 0){ alert('رقم مش صح'); return; }
+
+  if(!confirm('💵 كاش في إيدك: ' + egp(cash)
+    + '\n🏦 عند Paymob: ' + egp(pmOpen)
+    + '\n\nالحساب هيبدأ من دلوقتي. الأيام اللي فاتت هتختفي من الشيت '
+    + '(البيانات نفسها مش بتتمسح). تكمّل؟')) return;
+  try{
+    // 🧾 النقطة القديمة بتتأرشف — عمرنا ما بنمسح تاريخ فلوس
+    if(D.cashBase && D.cashBase.atMs){
+      await db.collection('office_cash_epochs').add(
+        Object.assign({}, D.cashBase, { closedAt: Date.now() }));
+    }
+    await db.collection('pos_test_settings').doc('office_cash').set({
+      amount: cash, paymobOpening: pmOpen, atMs: Date.now(), by: 'office'
+    }, { merge: true });
+  }catch(e){ alert('ماتحفظش: ' + (e.code || e.message)); }
+}
+window.ofStartFresh = ofStartFresh;
+
+
+
+
 
 /* 💰 تسجيل تحويل وصل من Paymob */
 async function ofAddSettlement(){
