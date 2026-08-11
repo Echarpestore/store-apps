@@ -480,23 +480,45 @@ const firebaseConfig = {
   measurementId: "G-6K33TSHDZ6"
 };
 
-const app = initializeApp(firebaseConfig);
-// 🔴 نفس حكاية تطبيق الولاء: الدخول المجهول كان بيدوس على جلسة الإيميل
-// بتاعة Office لأن الاستعادة غير متزامنة و`currentUser` بيرجع null في أول
-// لحظة. دلوقتي بنستنى أول إشارة من onAuthStateChanged الأول.
+/* FB-APP-INIT-START */
+// ============================================================
+// 🔐 §20 — عزل جلسة Firebase (نفس حكاية loyalty/glow)
+//
+// كان فيه هنا علاج **بالتوقيت**: استنى `onAuthStateChanged` الأول، ولو لقيت
+// مستخدم ماتدخلش مجهول. ده كان بيقلّل الضرر مش بيمنعه، وكان بيفتح باب أوحش:
+//
+//   لو جلسة إيميل المالك كانت موجودة في المساحة المشتركة، الكشك كان
+//   **بيشتغل بحساب المالك** — كل تقييم يتكتب بصلاحيات المالك من جهاز
+//   في الصالة مفتوح لأي حد. وده كشك عمومي مالوش هوية أصلًا.
+//
+// دلوقتي الكشك على تطبيق باسمه = مساحة تخزين مستقلة تمامًا:
+//   • مبيلمسش جلسة Office لا من قريب ولا من بعيد
+//   • ومستحيل يشتغل بحساب المالك — عنده مستخدمه المجهول بتاعه
+// وبكده العلاج بقى **معماري مش توقيتي**، والسباق اتلغى من أصله فبنقدر
+// ندخل فورًا من غير انتظار.
+//
+// ⚠️ الكشك مبيستخدمش FCM (الـservice worker بتاعه للكاش الأوفلاين بس)
+//    فالتطبيق الافتراضي مش بيتهيّأ هنا خالص.
+// ============================================================
+const app = initializeApp(firebaseConfig, 'feedback');
 const _auth = getAuth(app);
-let _anonReady = false;
+
+let _anonPending = false;
 function ensureAnonAuth(){
-  if(_auth.currentUser) return;                        // فيه جلسة — مانلمسهاش
-  if(!_anonReady) return;                              // لسه ماستنيناش الاستعادة
-  signInAnonymously(_auth).catch((e)=> console.warn('anon auth', e && e.code));
+  try{
+    if(_auth.currentUser || _anonPending) return;      // داخل بالفعل أو الطلب في السكة
+    _anonPending = true;
+    signInAnonymously(_auth)
+      .then(()=>{ _anonPending = false; })
+      .catch((e)=>{ _anonPending = false; console.warn('anon auth', e && e.code); });
+  }catch(e){ _anonPending = false; console.warn('anon auth unavailable', e); }
 }
-onAuthStateChanged(_auth, (u)=>{
-  _anonReady = true;
-  if(!u) ensureAnonAuth();
-});
+ensureAnonAuth();
+try{ onAuthStateChanged(_auth, (u)=>{ if(!u) ensureAnonAuth(); }); }catch(e){}
 window.addEventListener('online', ensureAnonAuth);
+window.fbApp = app; window.fbAuth = _auth; window.ensureAnonAuth = ensureAnonAuth;
 const db = getFirestore(app);
+/* FB-APP-INIT-END */
 
 // Keeps unsynced data on-device (IndexedDB) if the tab is closed/reloaded
 // while offline — it's sent to Firebase automatically once back online.
