@@ -40,7 +40,7 @@ const tzc = src.match(/const CAI_TZ = '([^']+)'/);
 const WANTED = [
   'function caiParts(', 'function caiOffsetMs(', 'function cai(', 'function caiStamp(',
   'function _fmtKey(', 'function caiDayKey(', 'function visibleRewards(',
-  'function todaysRewardWinners(', 'function renderWinnerBanner(',
+  'function _esc(', 'function todaysRewardWinners(', 'function todaysRewardFor(', 'function renderWinnerBanner(',
 ];
 const parts = [];
 let missing = null;
@@ -101,26 +101,53 @@ const R = (o)=> Object.assign({ id:'r1', employeeName:'سارة', amount:200, ty
 })();
 
 // ============================================================
-// ٣) 🖼️ البانر فيه الاسم والمبلغ وصندوق الهدية
+// ٣) 🏅 الفوز بيتعرض **على كارت الموظفة** — مش بانر فوق
+//    (البانر الفوقاني كان بيركب على الهيدر ويغطّي الترس)
 // ============================================================
 (function(){
-  const { ctx, host } = build([ R({ amount: 175 }) ]);
-  ctx.renderWinnerBanner();
-  const h = host.innerHTML;
-  assert(host.style.display === 'block', 'البانر ظاهر');
-  assert(h.indexOf('سارة') >= 0, '⭐ اسم الفايزة');
-  assert(h.indexOf('175') >= 0 && h.indexOf('ج.م') >= 0, '⭐ والمبلغ');
-  assert(h.indexOf('🎁') >= 0, '⭐ وصندوق الهدية');
-  assert(h.indexOf('winFrame') >= 0 && h.indexOf('winShine') >= 0, 'وإطار بلمعة متحركة');
-  assert(h.indexOf('2026-08-03') >= 0, 'والفترة اللي فازت عنها');
+  const grid = extractFn(src, 'function renderEmpGrid(');
+  assert(!!grid, 'اتلقى راسم الكروت');
+  if(!grid) return;
+  const bare = stripComments(grid);
 
-  // أكتر من فايزة = الأسماء كلها والمجموع
-  const many = build([ R({ id:'a', amount:100 }), R({ id:'b', employeeName:'هند', amount:150 }) ]);
-  many.ctx.renderWinnerBanner();
-  const h2 = many.host.innerHTML;
-  assert(h2.indexOf('سارة') >= 0 && h2.indexOf('هند') >= 0, '⭐ الفايزتين الاتنين بالاسم');
-  assert(h2.indexOf('250') >= 0, 'والمجموع 250');
-  assert(h2.indexOf('فايزين') >= 0, 'وبصيغة الجمع');
+  assert(/const win = todaysRewardFor\(e\.id\)/.test(bare),
+    '⭐ كل كارت بيسأل: الموظفة دي فازت النهاردة؟');
+  assert(/win\?' winnerTile'/.test(bare) || /win \? ' winnerTile'/.test(bare),
+    '⭐⭐ الكارت بياخد كلاس الإطار المتحرك');
+  assert(/winPrize/.test(bare) && /Number\(win\.amount\)/.test(bare),
+    '⭐⭐ ومبلغها هي على كارتها هي (مش مجموع في بانر)');
+  assert(/winAvatar/.test(bare) && /'🎁'/.test(bare),
+    '⭐ الدايرة بتتحول صندوق هدية (نفس المقاس — الكارت مايكبرش)');
+  assert(/winShine/.test(bare), 'ولمعة بتعدّي على الكارت');
+  // ⚠️ نفس عدد العناصر: دايرة + اسم + سطر واحد — أي سطر زيادة بيكبّر الكارت
+  //    ويبوّظ صف الشبكة كله (الكروت جنبه بتتمطّ معاه).
+  assert(/emp-count/.test(bare) && /winPrize/.test(bare),
+    'الفايزة بتاخد المبلغ **بدل** سطر النقط مش زيادة عليه');
+  const winBranch = bare.slice(bare.indexOf('${win'), bare.indexOf('`;}).join'));
+  assert(winBranch.indexOf('winPrizeSub') < 0,
+    '⭐⭐ مفيش سطر رابع في الكارت الفايز (الطول لازم يفضل زي باقي الكروت)');
+
+  // ⛔ الفوز مايتلزقش على كارت غير صاحبته
+  const one = build([ R({ employeeId:'e1', employeeName:'سارة', amount:175 }) ]);
+  assert(!!one.ctx.todaysRewardFor('e1'), 'صاحبة المكافأة بتلاقيها');
+  assert(one.ctx.todaysRewardFor('e2') === null, '⛔⛔ وموظفة تانية مبتلاقيش حاجة');
+  assert(one.ctx.todaysRewardFor('e1').amount === 175, 'وبمبلغها الصح');
+
+  // اتنين فايزين = كل واحد بمبلغه
+  const two = build([
+    R({ id:'a', employeeId:'e1', amount:100 }),
+    R({ id:'b', employeeId:'e2', employeeName:'هند', amount:150 }),
+  ]);
+  assert(two.ctx.todaysRewardFor('e1').amount === 100
+      && two.ctx.todaysRewardFor('e2').amount === 150,
+    '⭐⭐ كل واحدة بمبلغها هي — مفيش أي جمع (100 و150 مش 250)');
+
+  // والبانر الفوقاني اتقفل خالص
+  const b = build([ R({}) ]);
+  b.ctx.renderEmpGrid = function(){};
+  b.ctx.renderWinnerBanner();
+  assert(b.host.style.display === 'none' && b.host.innerHTML === '',
+    '⭐ البانر الفوقاني مبقاش بيرسم حاجة');
 })();
 
 // ============================================================
@@ -157,20 +184,28 @@ const R = (o)=> Object.assign({ id:'r1', employeeName:'سارة', amount:200, ty
 (function(){
   assert(/id="winnerBanner"/.test(html), 'مكان البانر في الشاشة');
   assert(/id="giftBoxOk"/.test(html) && /id="giftBoxFx"/.test(html), 'زرار الاحتفال والقصاصات');
-  ['winFrame','winShine','winGift','winAmount','giftOkBtn'].forEach(c=>{
+  ['winPrize','winNameWrap','giftOkBtn'].forEach(c=>{
     assert(new RegExp('\\.' + c + '\\{').test(html), 'ستايل .' + c + ' موجود');
   });
-  ['winIn','winShine','winBob','confFall','giftShake','giftPop','revealUp'].forEach(k=>{
+  assert(/\.emp-tile\.winnerTile\{/.test(html), '⭐ إطار الكارت الفايز');
+  assert(/\.emp-avatar\.winAvatar\{/.test(html), 'وستايل صندوق الهدية بدل الحروف');
+  // 🔒 نفس المقاس: الكارت الفايز padding قريب من العادي (2px إطار − 1px بادينج)
+  const base = (html.match(/\.emp-tile\{[\s\S]*?padding:(\d+)px (\d+)px/) || []);
+  const win  = (html.match(/\.emp-tile\.winnerTile\{[\s\S]*?padding:(\d+)px (\d+)px/) || []);
+  assert(base[1] && win[1] && Math.abs(Number(base[1]) - Number(win[1])) <= 1
+      && Math.abs(Number(base[2]) - Number(win[2])) <= 1,
+    '⭐⭐ البادينج معوّض بفرق الإطار — الكارت الفايز بنفس المقاس بالظبط');
+  ['winBob','confFall','giftShake','giftPop','revealUp','winRing','winGlow'].forEach(k=>{
     assert(new RegExp('@keyframes ' + k + '\\{').test(html), 'أنيميشن ' + k);
   });
   // البانر لازم يترسم مع تحديث المكافآت مش مرة واحدة عند التحميل
   const bare = stripComments(src);
   assert(/try\{ renderWinnerBanner\(\); \}catch/.test(bare),
     '⭐ الرسم معزول في try — دالة تانية تقع مبتوقفهاش');
-  ['todaysRewardWinners','renderWinnerBanner'].forEach(n=>{
+  ['todaysRewardWinners','todaysRewardFor','renderWinnerBanner'].forEach(n=>{
     assert(new RegExp('window\\.' + n + ' *= *' + n).test(bare), '§18 ' + n + ' على window');
   });
   const sw = fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8');
   const m = sw.match(/store-apps-shell-v(\d+)/);
-  assert(!!m && Number(m[1]) >= 107, 'sales/sw.js: v107+ (لقينا ' + (m ? m[1] : '—') + ')');
+  assert(!!m && Number(m[1]) >= 109, 'sales/sw.js: v109+ (لقينا ' + (m ? m[1] : '—') + ')');
 })();
