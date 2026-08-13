@@ -25,6 +25,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <!-- 💳 لازم لاستلام كروت الهدايا -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+<!-- 💬 محرك الشات المشترك — مصدر واحد مع POS (مفيش نسخة تانية تتنسى) -->
+<script src="../pos/chat-core.js"></script>
 
 <style>
   :root{
@@ -335,6 +337,44 @@
   #installBanner.ios .ib-btn{display:none;}
 
   @media (prefers-reduced-motion: reduce){ .card::after{animation:none; display:none;} .card-inner{transition:none;} #installBanner{transition:opacity .3s;} }
+
+  /* ============ 💬 شات الفرع ============ */
+  .chat-entry{display:flex; align-items:center; gap:12px; background:linear-gradient(135deg,#fff,#FBF3DF);
+    border:1.5px solid var(--gold); border-radius:16px; padding:14px; margin-bottom:14px; cursor:pointer;}
+  .chat-entry .ce-ic{font-size:26px;}
+  .chat-entry .ce-t{flex:1;}
+  .chat-entry .ce-t b{display:block; font-size:15px;}
+  .chat-entry .ce-t span{font-size:12px; color:var(--muted);}
+  .chat-entry .ce-badge{background:#E5484D; color:#fff; border-radius:99px; min-width:22px; height:22px;
+    display:none; align-items:center; justify-content:center; font-size:12px; font-weight:800; padding:0 6px;}
+  #chatWrap{position:fixed; inset:0; z-index:60; background:var(--bg); display:none; flex-direction:column;
+    max-width:480px; margin:0 auto;}
+  #chatWrap.on{display:flex;}
+  .ch-head{display:flex; align-items:center; gap:10px; padding:12px 14px; background:#fff;
+    border-bottom:1px solid var(--line);}
+  .ch-head .ch-back{border:none; background:none; font-size:22px; cursor:pointer; color:var(--ink); padding:4px;}
+  .ch-head .ch-t b{display:block; font-size:15px;}
+  .ch-head .ch-t span{font-size:11.5px; color:var(--muted);}
+  #chMsgs{flex:1; overflow-y:auto; padding:14px 12px; display:flex; flex-direction:column; gap:8px;}
+  .msg{max-width:82%; border-radius:14px; padding:9px 12px; font-size:14px; line-height:1.6;
+    word-break:break-word; white-space:pre-wrap;}
+  .msg.me{align-self:flex-start; background:#F7D6E4; color:var(--ink); border-bottom-right-radius:4px;}
+  .msg.them{align-self:flex-end; background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px;}
+  .msg .m-time{display:block; font-size:10.5px; color:var(--muted); margin-top:4px; text-align:left;}
+  .msg img{max-width:100%; border-radius:10px; display:block; margin-bottom:6px;}
+  .msg .m-try{display:inline-flex; align-items:center; gap:6px; margin-top:8px; background:var(--ink);
+    color:#fff; border:none; border-radius:99px; padding:9px 16px; font-weight:700; font-size:13.5px;
+    font-family:inherit; cursor:pointer;}
+  .ch-note{align-self:center; background:#FBF3DF; color:#7A5A16; font-size:12px; border-radius:99px;
+    padding:5px 14px; text-align:center;}
+  .ch-inputbar{display:flex; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+    background:#fff; border-top:1px solid var(--line);}
+  .ch-inputbar textarea{flex:1; border:1.5px solid var(--line); border-radius:14px; padding:10px 12px;
+    font-family:inherit; font-size:14px; resize:none; max-height:96px; outline:none; background:var(--bg);}
+  .ch-inputbar textarea:focus{border-color:var(--gold);}
+  .ch-send{border:none; background:var(--gold-deep); color:#fff; border-radius:50%; width:44px; height:44px;
+    font-size:18px; cursor:pointer; align-self:flex-end; flex:0 0 auto;}
+  .ch-send:disabled{opacity:.4;}
 </style>
 </head>
 <body>
@@ -408,6 +448,22 @@
     </div>
   </section>
 
+  <!-- 💬 شاشة الشات (فوق كل حاجة) -->
+  <div id="chatWrap">
+    <div class="ch-head">
+      <button class="ch-back" onclick="closeChat()">→</button>
+      <div class="ch-t">
+        <b>echarpe ✿</b>
+        <span id="chStatus">بنرد من ١٠ الصبح لـ١٠ بالليل</span>
+      </div>
+    </div>
+    <div id="chMsgs"></div>
+    <div class="ch-inputbar">
+      <textarea id="chInput" rows="1" placeholder="اكتبي رسالتك…" maxlength="500"></textarea>
+      <button class="ch-send" id="chSend" onclick="chatSend()">➤</button>
+    </div>
+  </div>
+
   <!-- تبويبات -->
   <nav class="tabbar" id="tabbar" style="display:none;">
     <button class="tab active" data-tab="card"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6 14.5h4"/></svg></span><span class="tl">بطاقتي</span></button>
@@ -415,7 +471,7 @@
     <button class="tab" data-tab="products"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8.5h13l-1 11.2a1 1 0 0 1-1 .9H7.5a1 1 0 0 1-1-.9z"/><path d="M8.8 8.5V7a3.2 3.2 0 0 1 6.4 0v1.5"/></svg></span><span class="tl">آخر العروض</span><span class="tab-badge" id="badge-products"></span></button>
     <button class="tab" data-tab="invoices"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12v17l-2.2-1.3-2.2 1.3-2.2-1.3-2.2 1.3-2.2-1.3L6 20.5z"/><path d="M9 8.5h6"/><path d="M9 12h6"/></svg></span><span class="tl">فواتيري</span></button>
     <button class="tab" data-tab="account"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.3" r="3.3"/><path d="M5.2 20c0-3.4 3-6 6.8-6s6.8 2.6 6.8 6"/></svg></span><span class="tl">حسابي</span></button>
-    <button class="tab" data-tab="contact"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.7a7.3 7.3 0 0 1-10.6 6.5L4.8 19.5l1.25-4.3A7.3 7.3 0 1 1 20 11.7z"/></svg></span><span class="tl">تواصل</span></button>
+    <button class="tab" data-tab="contact"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.7a7.3 7.3 0 0 1-10.6 6.5L4.8 19.5l1.25-4.3A7.3 7.3 0 1 1 20 11.7z"/></svg></span><span class="tl">تواصل</span><span class="tab-badge" id="badge-contact"></span></button>
   </nav>
 
   <!-- شريط تحميل رفيع أعلى الشاشة -->
@@ -616,7 +672,14 @@ var IG_ICON = '<svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.8
 function renderContact(){
   _contactBranches = (CONTACT.branches||[]).filter(function(b){ return digits(b.wa).length >= 8; });
   var html = '<div class="sec-h">تواصلي معانا <span class="em">💬</span></div>' +
-             '<p class="contact-intro">اختاري الفرع الأقرب ليكي وكلّمينا على واتساب مباشرة 🌸</p>';
+             // 💬 الشات الداخلي — الأول والأساسي. الواتساب فضل تحته للي تحبه.
+             '<div class="chat-entry" onclick="openChat()">' +
+               '<span class="ce-ic">💬</span>' +
+               '<span class="ce-t"><b>كلمينا هنا على طول</b>' +
+               '<span>اسألي عن مقاس، لون، توفّر — بنرد جوه التطبيق</span></span>' +
+               '<span class="ce-badge" id="chatEntryBadge"></span>' +
+             '</div>' +
+             '<p class="contact-intro">أو اختاري الفرع الأقرب ليكي وكلّمينا على واتساب 🌸</p>';
   if(_contactBranches.length){
     _contactBranches.forEach(function(b, i){
       html += '<div class="branch-card">' +
@@ -910,6 +973,10 @@ function enterApp(phone){
   creditUnsub = watchCredit(phone);
   if(reqUnsub){ reqUnsub(); }
   reqUnsub = watchMyRequests(phone);
+
+  // 💬 مستمع المحادثة (مستند واحد) — للشارة الحمرا لايف. رسايل
+  //    الشات نفسها مبتتحملش غير لما الشاشة تتفتح (توفير قراءات).
+  if(window.watchChatConv) watchChatConv(phone);
 
   if(custUnsub){ custUnsub(); }
   custUnsub = db.collection(COL_CUSTOMERS).doc(phone).onSnapshot(function(doc){
@@ -1665,6 +1732,8 @@ function logout(silent){
   //    هتشوف حركات فلوس مش بتاعتها.
   if(creditUnsub){ creditUnsub(); creditUnsub=null; }
   if(reqUnsub){ reqUnsub(); reqUnsub=null; }
+  // 💬 نفس القاعدة: عميلة تانية على نفس الجهاز ممنوع تشوف شات غيرها
+  if(window.chatCleanup) chatCleanup();
   _creditRows = [];
   _myRequests = [];
   currentCustomer = null;
@@ -1970,6 +2039,183 @@ if ('serviceWorker' in navigator) {
   })();
   }   // نهاية startRating
 })();
+</script>
+<script>
+/* ============================================================
+   💬 شات العميلة — الواجهة (المنطق في ../pos/chat-core.js المشترك)
+   ------------------------------------------------------------
+   قواعد التكلفة (نفس مبدأ تحسين القراءات):
+   - مستمع **مستند المحادثة بس** طول الجلسة (للشارة الحمرا).
+   - مستمع الرسايل بيشتغل **وقت فتح الشاشة بس** وبيتقفل معاها.
+   §18: كل الدوال هنا declarations → جلوبال، ومتأكدين بالفحص.
+   ============================================================ */
+var COL_CHAT = 'customer_chat';
+var chatConv = null, chatConvUnsub = null, chatMsgsUnsub = null;
+var chatImgs = {};          // msgId → dataURL (لزرار جربيها)
+var chatSending = false;
+
+function watchChatConv(phone){
+  if(chatConvUnsub){ chatConvUnsub(); chatConvUnsub = null; }
+  chatConvUnsub = db.collection(COL_CHAT).doc(phone).onSnapshot(function(doc){
+    chatConv = doc.exists ? doc.data() : null;
+    chatUpdateBadge();
+    if($('chatWrap').classList.contains('on')) chatRenderStatus();
+  }, function(err){ console.warn('chat conv', err); });
+}
+
+function chatUpdateBadge(){
+  var n = (chatConv && Number(chatConv.unreadCust)) || 0;
+  if($('chatWrap').classList.contains('on')) n = 0;   // وهي فاتحاه مفيش شارة
+  setTabBadge('contact', n);
+  var b = $('chatEntryBadge');
+  if(b){ b.style.display = n ? 'inline-flex' : 'none'; b.textContent = n; }
+}
+
+function chatRenderStatus(){
+  var el = $('chStatus');
+  if(chatConv && chatConv.blocked === true){ el.textContent = 'مش متاح'; return; }
+  el.textContent = chatIsOpen(Date.now())
+    ? 'متواجدين دلوقتي — بنرد في دقايق 🌸'
+    : 'مقفولين دلوقتي — سيبي رسالتك وهنرد أول ما نفتح';
+}
+
+function openChat(){
+  if(!currentCustomer) return;
+  $('chatWrap').classList.add('on');
+  chatRenderStatus();
+  chatUpdateBadge();
+  var phone = currentCustomer.phone;
+  if(chatMsgsUnsub) chatMsgsUnsub();
+  // ⚠️ نافذة محدودة مش مستمع مفتوح — limit(80) بالأحدث
+  chatMsgsUnsub = db.collection(COL_CHAT).doc(phone).collection('messages')
+    .orderBy('atMs', 'desc').limit(80)
+    .onSnapshot(function(snap){
+      var arr = [];
+      snap.forEach(function(d){ arr.push(Object.assign({ id: d.id }, d.data())); });
+      arr.reverse();
+      chatRenderMsgs(arr);
+      // فتحت وشافت = صفّر غير المقروء (بس لو فيه — توفير كتابة)
+      if(chatConv && Number(chatConv.unreadCust) > 0)
+        db.collection(COL_CHAT).doc(phone).set({ unreadCust: 0 }, { merge: true }).catch(function(){});
+    }, function(err){ console.warn('chat msgs', err); });
+}
+
+function closeChat(){
+  $('chatWrap').classList.remove('on');
+  if(chatMsgsUnsub){ chatMsgsUnsub(); chatMsgsUnsub = null; }
+  chatImgs = {};
+  chatUpdateBadge();
+}
+
+function chatCleanup(){
+  closeChat();
+  if(chatConvUnsub){ chatConvUnsub(); chatConvUnsub = null; }
+  chatConv = null;
+  $('chMsgs').innerHTML = '';
+  setTabBadge('contact', 0);
+}
+
+function chatRenderMsgs(arr){
+  var box = $('chMsgs');
+  chatImgs = {};
+  if(!arr.length){
+    box.innerHTML = '<div class="ch-note">ابدأي الكلام — اسألي عن أي حاجة 🌸</div>';
+    return;
+  }
+  var html = '';
+  arr.forEach(function(m){
+    var me = m.from === 'cust';
+    var body = '';
+    // 🔒 الصور data:image بس — أي حاجة تانية بتتتجاهل (مصدر الرسايل
+    //    مش مضمون ١٠٠٪ بحكم قواعد signedIn المعروفة)
+    if(m.img && String(m.img).indexOf('data:image/') === 0){
+      chatImgs[m.id] = m.img;
+      body += '<img src="' + m.img.replace(/"/g, '') + '" alt="">';
+    }
+    if(m.text) body += esc(m.text);
+    if(m.tryon && chatImgs[m.id])
+      body += '<br><button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">🧕 جرّبيها بنفسك</button>';
+    var t = m.atMs ? new Date(Number(m.atMs)).toLocaleTimeString('ar-EG',
+              { hour: '2-digit', minute: '2-digit' }) : '';
+    if(m.from === 'auto')
+      html += '<div class="ch-note">' + esc(m.text || '') + '</div>';
+    else
+      html += '<div class="msg ' + (me ? 'me' : 'them') + '">' + body +
+              '<span class="m-time">' + t + '</span></div>';
+  });
+  box.innerHTML = html;
+  box.scrollTop = box.scrollHeight;
+}
+
+function chatTryOn(id){
+  var img = chatImgs[id];
+  if(!img) return;
+  try{ sessionStorage.setItem('echarpe_tryon_img', img); }catch(e){}
+  window.open('../tryon/?imgkey=1', '_blank');
+}
+
+// 🏢 الفرع الافتراضي — آخر فرع اشترت منه (قرار المالك)، مرة واحدة بس
+function chatResolveBranch(phone){
+  if(chatConv && chatConv.branch) return Promise.resolve(chatConv.branch);
+  return db.collection(COL_SALES).where('customerPhone', '==', phone).limit(50).get()
+    .then(function(snap){
+      var sales = [];
+      snap.forEach(function(d){ sales.push(d.data()); });
+      return chatDefaultBranch(sales, phone) || '';
+    }).catch(function(){ return ''; });
+}
+
+function chatSend(){
+  if(chatSending || !currentCustomer) return;
+  var v = chatValidate($('chInput').value, chatConv);
+  if(!v.ok){ showToast(v.msg, true); return; }
+  chatSending = true;
+  $('chSend').disabled = true;
+  var phone = currentCustomer.phone;
+  var ts = Date.now();
+  var convRef = db.collection(COL_CHAT).doc(phone);
+  chatResolveBranch(phone).then(function(branch){
+    var batch = db.batch();
+    batch.set(convRef.collection('messages').doc(), {
+      from: 'cust', text: v.text, atMs: ts,
+      at: firebase.firestore.FieldValue.serverTimestamp(),
+      expireAt: chatExpireAt(ts)
+    });
+    batch.set(convRef, {
+      phone: phone, name: currentCustomer.name || '', branch: branch,
+      lastAt: ts, lastText: v.text.slice(0, 80), lastFrom: 'cust',
+      unreadStaff: firebase.firestore.FieldValue.increment(1),
+      unreadCust: 0, expireAt: chatExpireAt(ts)
+    }, { merge: true });
+    // 🤖 الرد الآلي بره المواعيد — مرة لكل فترة إغلاق (المحرك بيحكم)
+    var auto = chatAutoReply(chatConv, ts);
+    if(auto){
+      batch.set(convRef.collection('messages').doc(), {
+        from: 'auto', text: auto, atMs: ts + 1,
+        at: firebase.firestore.FieldValue.serverTimestamp(),
+        expireAt: chatExpireAt(ts)
+      });
+      batch.set(convRef, { autoReplyAt: ts }, { merge: true });
+    }
+    return batch.commit();
+  }).then(function(){
+    $('chInput').value = '';
+  }).catch(function(err){
+    console.warn('chat send', err);
+    showToast('الرسالة موصلتش — جرّبي تاني', true);
+  }).then(function(){
+    chatSending = false;
+    $('chSend').disabled = false;
+  });
+}
+
+// §18 — تأكيد صريح إن كله على window (declarations جلوبال أصلًا، بس القاعدة قاعدة)
+window.watchChatConv = watchChatConv;
+window.openChat = openChat;
+window.closeChat = closeChat;
+window.chatSend = chatSend;
+window.chatTryOn = chatTryOn;
+window.chatCleanup = chatCleanup;
 </script>
 </body>
 </html>
