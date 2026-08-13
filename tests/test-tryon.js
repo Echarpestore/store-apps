@@ -211,30 +211,38 @@ const Rz = (t) => [[Math.cos(t),-Math.sin(t),0],[Math.sin(t),Math.cos(t),0],[0,0
 // ٨) 🖼️ لون المنتج من صورة واحدة — قلب "نفس الخطوة"
 // ============================================================
 (function(){
-  // صورة 4 بكسل: 3 حمرا + 1 أبيض (خلفية) → الغالب أحمر والأبيض متجاهل
+  // ٣ حمرا + أبيض نقي (خلفية) → الوسيط أحمر والأبيض متجاهل
   const px = new Uint8ClampedArray([
     200,30,40,255,  201,31,41,255,  199,28,38,255,  250,250,250,255
   ]);
   const d = T.dominantColor(px);
-  assert(d.hex && parseInt(d.hex.slice(1,3),16) > 180, 'اللون الغالب أحمر');
+  assert(d.hex && parseInt(d.hex.slice(1,3),16) === 200, 'الوسيط أحمر');
   assert(parseInt(d.hex.slice(3,5),16) < 60, 'مش متلوث بالأبيض');
-  assert(near(d.confidence, 0.75, 0.01), 'الثقة = نسبة بكسلات اللون (٣ من ٤)');
+  assert(near(d.confidence, 0.75, 0.01), 'الثقة = نسبة بكسلات المنتج (٣ من ٤)');
 
-  // 🔴 نيجاتيف: من غير تجاهل الخلفية، طرحة كحلي على خلفية بيضا كانت
-  //    هتطلع "بيبي بلو" — الفحص (مش متلوث بالأبيض) بيقع لو التجاهل اتشال
+  // ⭐ ريجريشن صورة المالك الحقيقية: خلفية استوديو **كريمي** (مش أبيض
+  //   نقي — 236) أكتر من القماش. القاعدة القديمة (>235 بس) كانت
+  //   بتطلّع "أوف وايت" بدل الروز. 🔴 النيجاتيف بيرجّع القاعدة القديمة.
+  const studio = [];
+  for(let i=0;i<6;i++) studio.push(236,234,232,255);   // خلفية كريمي غالبة
+  for(let i=0;i<4;i++) studio.push(153+i,104,92,255);  // قماش روز أقلية
+  const ds = T.dominantColor(new Uint8ClampedArray(studio));
+  assert(parseInt(ds.hex.slice(1,3),16) < 200 && parseInt(ds.hex.slice(1,3),16) > 120,
+    '⭐ الروز كسب رغم إن الخلفية الكريمي أكتر عددًا');
+  assert(near(ds.confidence, 0.4, 0.01), 'والثقة بتعكس نسبة القماش الفعلية');
+
+  // نسيج حقيقي متدرج + حافة مشغولة غامقة أقلية → الوسيط من القماش
+  const tex = [];
+  for(let i=0;i<7;i++) tex.push(150+i*4,105+i*3,92+i*3,255); // درجات القماش
+  tex.push(60,35,30,255); tex.push(55,30,25,255);            // حافة غامقة
+  const dt = T.dominantColor(new Uint8ClampedArray(tex));
+  assert(parseInt(dt.hex.slice(1,3),16) > 120,
+    'الحافة الغامقة الأقلية مش خاطفة اللون (متانة الوسيط)');
 
   // صورة كلها أبيض/شفاف = مفيش لون — المتصل يفضل على الافتراضي
   const w = new Uint8ClampedArray([250,250,250,255, 255,255,255,255, 10,10,10,50]);
   const dw = T.dominantColor(w);
   assert(dw.hex === null && dw.confidence === 0, 'كلها خلفية = null مش لون وهمي');
-
-  // لونين والأغلبية بتكسب: 2 كحلي + 1 بيج → كحلي
-  const mix = new Uint8ClampedArray([
-    43,53,80,255,  45,55,82,255,  201,172,134,255
-  ]);
-  const dm = T.dominantColor(mix);
-  assert(parseInt(dm.hex.slice(5,7),16) > parseInt(dm.hex.slice(1,3),16),
-    'الباكت الأكبر (الكحلي) هو اللي بيكسب مش المتوسط الكلي');
 
   assertEq(T.dominantColor(new Uint8ClampedArray(0)).hex, null,
     'صورة فاضية مش بتكسر');
@@ -269,13 +277,24 @@ const R = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
   const wSkin = R.maskWeight(skin, mauve, 0.35);
   assert(wSkin < wLight, 'والبشرة أبعد من القماش نفسه');
 
-  // إعادة التلوين لكحلي: الغامق يفضل أغمق من الفاتح (L محفوظة)
+  // إعادة التلوين لكحلي مع نقل الإضاءة (مركز القماش 0.42):
   const navyHsl = R.rgbToHsl(43, 53, 80);
-  const nLight = R.recolorPixel(mauve, navyHsl);
-  const nDark = R.recolorPixel(mauveDark, navyHsl);
+  const medL = 0.42;
+  const nLight = R.recolorPixel(mauve, navyHsl, medL);
+  const nDark = R.recolorPixel(mauveDark, navyHsl, medL);
   const lum = (p) => 0.299*p[0] + 0.587*p[1] + 0.114*p[2];
   assert(lum(nDark) < lum(nLight), 'الظل فضل أغمق — الطيّات محفوظة');
   assert(nLight[2] > nLight[0], 'واللون فعلًا بقى ناحية الأزرق');
+  // ⭐ ريجريشن صورة القالب: قماش **فاتح** (L≈0.75) + هدف كحلي غامق —
+  //    من غير نقل الإضاءة كان بيطلع بيبي بلو فاتح.
+  //    🔴 النيجاتيف: شيل fabricL من recolorPixel والفحص ده بيقع.
+  const lightFabric = [210, 201, 185];
+  const nv = R.recolorPixel(lightFabric, navyHsl, 0.75);
+  assert(lum(nv) < 120, '⭐ الكحلي طلع غامق بجد مش بيبي بلو');
+  const med = R.fabricMedianL(
+    new Uint8ClampedArray([210,201,185,255, 140,128,110,255, 20,20,20,255]),
+    new Float32Array([1, 1, 0]));
+  assert(med > 0.4 && med < 0.8, 'وسيط إضاءة القماش من الماسك بس (الأسود برا)');
 
   // applyRecolor: وزن صفر = البكسل ميتلمسش خالص
   const px = new Uint8ClampedArray([150,110,115,255, 235,228,210,255]);
@@ -312,4 +331,102 @@ const R = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
 
   assertEq(T.imageSourceFromQuery(q({}), store({})).kind, 'none',
     'ومن غير حاجة خالص = none');
+})();
+
+// ============================================================
+// ١٢) 🧕 الأصل الحقيقي الأول — التوصيلات
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const cat = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'assets', 'catalog.js'), 'utf8');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const html = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'index.html'), 'utf8');
+
+  assert(cat.indexOf("id: 'template-01'") > -1
+      && cat.indexOf('template-01-head.png') > -1,
+    'الأصل الحقيقي أول عنصر في الكتالوج (= الافتراضي)');
+  assert(fs.existsSync(path.resolve(__dirname, '..', 'tryon', 'assets', 'template-01-head.png')),
+    'وملف الصورة موجود فعلًا (درس frames.js: مرجع من غير ملف = ميزة ميتة)');
+  assert(cat.indexOf('recolor: { seeds:') > -1, 'وعيّنات إعادة التلوين معرّفة');
+
+  assert(html.indexOf('<script src="recolor-core.js"></script>') > -1,
+    'محرك إعادة التلوين متحمّل في الصفحة');
+  assert(app.indexOf('RECOLOR.buildMask') > -1 && app.indexOf('RECOLOR.applyRecolor') > -1,
+    'والتلوين موصّل في التطبيق');
+  // 🔴 نيجاتيف: الرسم لازم يستخدم النسخة الملونة — لو رجع لـasset.head
+  //    مباشرة، لون المنتج من الشات بيتطنّش بصمت
+  assert(app.indexOf('asset.headTinted || asset.head') > -1
+      && app.indexOf('ctx.drawImage(headImg, 0, 0)') > -1,
+    '🔴 الرسم بيستخدم الملونة الأول');
+  assert(app.indexOf("asset.failed") > -1 && app.indexOf("x.type === 'procedural'") > -1,
+    '🛟 فولباك الرسمة لو الصورة ماتحملتش');
+})();
+
+// ============================================================
+// ١٣) 🧊 AR-1 — حسابات الرندرر (tryon-3d-core)
+// ============================================================
+const D3 = require(path.resolve(__dirname, '..', 'tryon', 'tryon-3d-core.js'));
+(function(){
+  // ١) شباك الوش: قدام مفتوح · فوق/ورا/الجناب قماش
+  assert(D3.inFaceWindow(0, 0.1, 0.95), 'قدام بالظبط = جوه الشباك (الوش بيبان)');
+  assert(!D3.inFaceWindow(0, 0.95, 0.1), 'فوق الراس = قماش');
+  assert(!D3.inFaceWindow(0, 0, -0.9), 'ورا الراس = قماش');
+  assert(!D3.inFaceWindow(0.9, 0, 0.3), 'الجنب = قماش');
+  assert(!D3.inFaceWindow(0, -0.8, 0.5), 'تحت الدقن بمسافة = قماش (اللفة بتقفل)');
+  // 🔴 نيجاتيف: عكس شرط الشباك = الطرحة تترسم على الوش نفسه
+  //    وتسيب فتحة في القمة — الفحوصات دي كلها بتقع فورًا
+
+  // ٢) طيّات مقيدة — طيّة أكبر من الحد بتخرم جوه راس العميلة
+  let mx = 0;
+  for(let t = 0; t < 3; t += 0.11)
+    for(let p = -3.14; p < 3.14; p += 0.09)
+      mx = Math.max(mx, Math.abs(D3.foldNoise(t, p)));
+  assert(mx <= D3.FOLD_MAX + 1e-9, 'الطيّات جوه الحد الصارم');
+  assert(mx > 0.3, 'وموجودة فعلًا مش قماش مسطح');
+  assert(D3.foldNoise(1, 1) === D3.foldNoise(1, 1), 'ومحددة (نفس المدخل = نفس الطيّة، مفيش رعشة)');
+
+  // ٣) قرار اتجاه Z من أول مصفوفة حقيقية
+  assertEq(D3.zFlipSign(-42), 1, 'وش على Z سالب = نظام Three زي ما هو');
+  assertEq(D3.zFlipSign(35), -1, 'وش على Z موجب = لازم قلب');
+
+  // ٤) تنعيم متكيّف: رعشة صغيرة تتبلع وحركة كبيرة تتلحق
+  assert(D3.adaptAlpha(0.05) < 0.3, 'رعشة ملّي = تنعيم قوي');
+  assert(D3.adaptAlpha(3) > 0.85, 'حركة ٣ سم = تتبّع شبه فوري');
+  assert(D3.adaptAlpha(100) <= 0.90 + 1e-9, 'ومسقوف — عمره ما يتخطى الحد');
+
+  // ٥) الهندسة: القشرة حوالين الراس والانسدال تحته وأوسع منه
+  const top = D3.hoodPoint(0, 0);
+  assert(top.y > 10, 'قمة القشرة فوق الراس');
+  const side = D3.hoodPoint(Math.PI / 2, Math.PI / 2);
+  assert(Math.abs(side.x) < Math.abs(D3.hoodPoint(Math.PI / 2, 0).z) + 3
+      && Math.abs(side.x) > 8, 'الجنب حوالين الراس بعرض معقول');
+  const sTop = D3.skirtPoint(0, 0), sBot = D3.skirtPoint(1, 0);
+  assert(sTop.y < -8 && sBot.y < sTop.y, 'الانسدال من الرقبة لتحت');
+  assert(Math.abs(sBot.z) > Math.abs(sTop.z), 'وبيوسع على الصدر');
+})();
+
+// ============================================================
+// ١٤) 🔌 توصيلات AR-1
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const html = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const r3d = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-3d.js'), 'utf8');
+
+  assert(html.indexOf('id="stage3d"') > -1
+      && html.indexOf('<script src="tryon-3d.js"></script>') > -1,
+    'كانفاس وسكريبتات الـ3D متوصلين في الصفحة');
+  assert(app.indexOf('TRYON3D.init') > -1 && app.indexOf('TRYON3D.update(mat.data') > -1,
+    'واللوب بيبعت المصفوفة للرندرر');
+  assert(app.indexOf("get('ar')") > -1,
+    '?ar=1 بتفعّل الوضع التجريبي — الافتراضي القالب المصوّر (قرار الشكل)');
+  assert(app.indexOf('if(S.r3d) TRYON3D.clear();') > -1,
+    'مفيش وش = الطبقة الـ3D بتتمسح (مش لفة معلقة في الهوا)');
+  assert(r3d.indexOf('colorWrite: false') > -1 && r3d.indexOf('renderOrder = -1') > -1,
+    '👤 occluder الراس: عمق من غير لون وبيترسم الأول');
+  assert(r3d.indexOf('preserveDrawingBuffer: true') > -1,
+    'الالتقاط شغال (من غيرها الصورة بتطلع فاضية)');
+  assert(app.indexOf("drawImage($('stage3d')") > -1,
+    'والالتقاط بيركّب طبقة الـ3D فوق الفيديو');
 })();
