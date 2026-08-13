@@ -35,13 +35,18 @@
      ١) تحميل MediaPipe — GPU والفولباك CPU
      ============================================================ */
   async function loadLandmarker(){
-    setLoad('بنحمّل موديل الوش… أول مرة بس بتاخد شوية');
+    setLoad('بنجهّز… ٠٪');
     const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
     const vision = await import(CDN + '/+esm');
     const files = await vision.FilesetResolver.forVisionTasks(CDN + '/wasm');
-    const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+
+    // 📦 الموديل: من echarpe.store لو مرفوع، وإلا من جوجل — ومرة
+    //    واحدة في العمر: بيتخزن في Cache Storage والفتحات الجاية فورية.
+    const buffer = await fetchModelBuffer((pct) =>
+      setLoad('بنحمّل موديل الوش… ' + pct + '٪ (أول مرة بس)'));
+
     const opts = (delegate) => ({
-      baseOptions: { modelAssetPath: MODEL, delegate },
+      baseOptions: { modelAssetBuffer: buffer, delegate },
       runningMode: 'VIDEO',
       numFaces: 1,
       outputFacialTransformationMatrixes: true
@@ -54,6 +59,48 @@
     }
     S.setImageMode = async () => { try{ await S.landmarker.setOptions({ runningMode:'IMAGE' }); }catch(e){} };
     S.setVideoMode = async () => { try{ await S.landmarker.setOptions({ runningMode:'VIDEO' }); }catch(e){} };
+  }
+
+  const MODEL_LOCAL = 'assets/face_landmarker.task';
+  const MODEL_REMOTE = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+  const MODEL_CACHE = 'echarpe-tryon-model-v1';
+
+  async function fetchModelBuffer(onPct){
+    // ١) من الكاش الدايم — تحميل واحد في العمر
+    try{
+      const cache = await caches.open(MODEL_CACHE);
+      const hit = await cache.match('model');
+      if(hit) return new Uint8Array(await hit.arrayBuffer());
+    }catch(e){}
+    // ٢) المحلي الأول (نفس الدومين = أسرع في مصر)، وإلا جوجل
+    let buf = await fetchWithProgress(MODEL_LOCAL, onPct).catch(() => null);
+    if(!buf) buf = await fetchWithProgress(MODEL_REMOTE, onPct);
+    try{
+      const cache = await caches.open(MODEL_CACHE);
+      await cache.put('model', new Response(buf.slice(0)));
+    }catch(e){}
+    return buf;
+  }
+
+  async function fetchWithProgress(url, onPct){
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const total = Number(res.headers.get('content-length')) || 0;
+    if(!res.body || !total){
+      onPct && onPct('…');
+      return new Uint8Array(await res.arrayBuffer());
+    }
+    const reader = res.body.getReader();
+    const out = new Uint8Array(total);
+    let got = 0, lastPct = -1;
+    for(;;){
+      const { done, value } = await reader.read();
+      if(done) break;
+      out.set(value, got); got += value.length;
+      const pct = Math.min(99, Math.round(got / total * 100));
+      if(pct !== lastPct && onPct){ onPct(pct); lastPct = pct; }
+    }
+    return out;
   }
 
   /* ============================================================
