@@ -1905,6 +1905,37 @@ function refreshCustomerActionUI(){
     }
     return;
   }
+  /* 🧠 شريط الفرصة
+     ------------------------------------------------------------
+     ⚠️ السلسلة فوق **متسابة زي ما هي عن قصد**: جواها منطق أمني
+        (كشف التلاعب في طلب الاستبدال + التعقيم بالرصيد الحقيقي)،
+        وأزرار حقيقية بتنفّذ. استبدالها بمحرك عام كان هيخاطر بمسار
+        فلوس شغّال عشان تنظيم شكلي.
+
+     ✅ اللي المحرك بيضيفه هو اللي **مفيش مكانه دلوقتي**: التلميحات
+        اللي مالهاش زرار — "ناقصها ١٠٠ وتفتح مكافأة" و"كانت طالبة".
+        يعني بيملا الفراغ مش بيزاحم. */
+  try{
+    if(typeof oppTop === 'function'){
+      const _opp = oppTop({
+        phone: (document.getElementById('customerPhone')||{value:''}).value.trim(),
+        loyalty: loyaltyRedemptionConfig || {},
+        cartTotal: cartTot,
+        pointsBalance: custPointsBalance,
+        creditBalance: Number(window.custCreditBalance) || 0,
+        creditApplied: cart.some(function(l){ return l.isCreditSpend; }),
+        redeemApplied: !!pendingRedemption,
+        reward: custReward,
+        rewardApplied: cart.some(function(l){ return l.isRewardDiscount; }),
+        requestHit: window.custRequestHit || null
+      });
+      // ⭐ التلميحات بس — اللي ليها زرار اتعرض فوق خلاص
+      if(_opp && !_opp.action){
+        setCustAction('<span class="act-hint">' + _opp.icon + ' ' + esc(_opp.text) + '</span>');
+        return;
+      }
+    }
+  }catch(e){ console.warn('opportunity', e); }
   setCustAction('');
 }
 

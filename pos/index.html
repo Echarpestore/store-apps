@@ -747,6 +747,13 @@ body.on-dashboard .badge-test{ display:block; }
 #custAction .act-redeem{ background:linear-gradient(#4db658,#348c3e); color:#fff; }
 #custAction .act-reward{ background:linear-gradient(#e8a13c,#c9821c); color:#3a2500; }
 #custAction .act-wait{ background:#f0f2f6; color:#8a90a0; cursor:default; font-weight:700; }
+/* 🧠 تلميح شريط الفرصة — معلومة مالهاش زرار.
+   ⚠️ شكله **مختلف عن الأزرار عن قصد**: مفيش خلفية زرار ومفيش
+      مؤشر يد. لو شبه زرار، الكاشير هتدوس عليه ومايحصلش حاجة
+      وتفتكر إن البرنامج واقف. */
+#custAction .act-hint{ display:inline-block; padding:6px 10px; border-radius:8px;
+  background:rgba(37,99,235,.08); border:1px dashed #93b4f5; color:#1d4ed8;
+  font-weight:700; font-size:12.5px; cursor:default; }
 #newCustomerRow{ display:none !important; margin:0 !important; padding:0 !important;
   background:none !important; border:none !important; }
 .cust-line:has(#custBox.st-new) #newCustomerRow{ display:block !important; }
@@ -1799,5 +1806,7 @@ body.on-dashboard .badge-test{ display:block; }
 <!-- 💳 منظومة الرصيد وكروت الهدايا -->
 <script src="credit-core.js"></script>
 <script src="credit-ui.js"></script>
+<!-- 🧠 شريط الفرصة -->
+<script src="opportunity-core.js"></script>
 </body>
 </html>
