@@ -430,3 +430,316 @@ const D3 = require(path.resolve(__dirname, '..', 'tryon', 'tryon-3d-core.js'));
   assert(app.indexOf("drawImage($('stage3d')") > -1,
     'والالتقاط بيركّب طبقة الـ3D فوق الفيديو');
 })();
+
+// ============================================================
+// ١٥) 🧵 فيزياء الشبكة القماشية (tryon-mesh-core)
+// ============================================================
+const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'));
+(function(){
+  const grid = TM.buildGrid(640, 1124, 8, 12, 480);
+  const n = grid.pts.length;
+  assertEq(n, 9 * 13, 'الشبكة كاملة');
+  assert(grid.pts[0].rigid && grid.pts[0].free === 0, 'أول صف صلب (على الوش)');
+  assert(grid.pts[n-1].free > 0.8, 'وآخر صف حر (آخر الانسدال)');
+
+  const targets = grid.pts.map(p => ({ x: p.ax, y: p.ay }));
+  const st = TM.initState(targets);
+
+  // ١) قماش ساكن على هدف ثابت = بيفضل مكانه (مفيش رعشة ذاتية)
+  for(let i = 0; i < 30; i++) TM.step(st, targets, grid, 1);
+  assert(TM.isSettled(st), 'هدف ثابت = الشبكة بتهدى');
+
+  // ٢) الراس اتحرك فجأة: الصف الصلب فورًا، والانسدال بيلحق **متأخر**
+  //    (ده التمايل نفسه) وبعدين يهدى على الهدف
+  const moved = grid.pts.map(p => ({ x: p.ax + 60, y: p.ay }));
+  TM.step(st, moved, grid, 1);
+  const C = grid.cols + 1;
+  assert(Math.abs(st[0].x - moved[0].x) < 1e-9, 'الصلب على الوش فورًا');
+  const lag1 = Math.abs(st[n-1].x - moved[n-1].x);
+  assert(lag1 > 25, 'وآخر الانسدال متأخر (قصور ذاتي = تمايل)');
+  for(let i = 0; i < 90; i++) TM.step(st, moved, grid, 1);
+  assert(Math.abs(st[n-1].x - moved[n-1].x) < 2, 'وبيهدى على مكانه الجديد');
+  // 🔴 نيجاتيف: من غير القصور الذاتي (k=1) القماش يبقى لزقة جامدة —
+  //    فحص lag1 > 25 بيقع فورًا
+
+  // ٣) قيد المسافات: أثناء الحركة العنيفة نفسها، المسافة بين كل
+  //    نقطة واللي فوقها متقيدة بطول القماش الطبيعي (±12٪) — يعني
+  //    القماش بيتمايل من غير ما "يتمزّع" صفوف بعيدة عن بعض
+  const jump = grid.pts.map(p => ({ x: p.ax + 200, y: p.ay + 80 }));
+  const st2 = TM.initState(grid.pts.map(p => ({ x: p.ax, y: p.ay })));
+  TM.step(st2, jump, grid, 1);                 // أول فريم بعد نطة كبيرة
+  let worst = 0;
+  for(let i = C; i < n; i++){
+    if(grid.pts[i].free <= 0) continue;
+    const rest = Math.hypot(jump[i].x - jump[i-C].x, jump[i].y - jump[i-C].y) || 1;
+    const got = Math.hypot(st2[i].x - st2[i-C].x, st2[i].y - st2[i-C].y);
+    worst = Math.max(worst, got / rest);
+  }
+  assert(worst <= 1.13, 'المسافة مقيدة أثناء الحركة — مفيش تمزيع (worst=' + worst.toFixed(2) + ')');
+  assert(worst > 0.85, 'ومش منهارة على بعضها');
+
+  // ٤) لفّة الراس: الجانب البعيد بينضغط ويتلاشى، والقريب لأ
+  const t3 = grid.pts.map(p => ({ x: p.ax, y: p.ay }));
+  const a3 = TM.yawWarp(t3, grid, 45, 320);
+  const leftI = 12 * C, rightI = 12 * C + grid.cols;   // آخر صف: أول وآخر عمود
+  assert(t3[leftI].x > grid.pts[leftI].ax, 'لفة يمين = الجانب الشمال (البعيد) اتضغط للمركز');
+  assert(Math.abs(t3[rightI].x - grid.pts[rightI].ax) < 1e-6, 'والقريب ثابت');
+  assert(a3[leftI] < 1 && a3[rightI] === 1, 'والتلاشي على البعيد بس');
+  const a0 = TM.yawWarp(grid.pts.map(p => ({x:p.ax,y:p.ay})), grid, 3, 320);
+  assert(a0.every(v => v === 1), 'لفة خفيفة = مفيش أي تدخل');
+})();
+
+// ============================================================
+// ١٦) 🔌 توصيلات الشبكة
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const html = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'index.html'), 'utf8');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  assert(html.indexOf('tryon-mesh-core.js') > -1 && html.indexOf('tryon-mesh.js') > -1,
+    'سكريبتات الشبكة متحملة');
+  assert(app.indexOf('TRYON_MESH.init') > -1 && app.indexOf('TRYON_MESH.update(') > -1,
+    'واللايف بيرندر بيها');
+  assert(app.indexOf("S.mesh && S.scarf.type === 'photo' && S.mode === 'live'") > -1,
+    'الشبكة للايف على أصل الصورة بس — الصورة الثابتة والفولباك بالمسطح');
+  assert(app.indexOf('if(S.mesh) TRYON_MESH.clear();') > -1,
+    'مفيش وش = الشبكة بتتمسح');
+})();
+
+// ============================================================
+// ١٧) 🖼️ AR-2 — الإسقاط الأمامي (حسابات tryon-3d-core)
+// ============================================================
+(function(){
+  // نقط الصورة الحقيقية من الكتالوج — أي تغيير فيها لازم يفضل شغّال
+  const IMG = { l:[213,190], r:[396,190], top:[304,52] };
+  const AW = 640, AH = 1124;
+
+  /* ١) نقط التثبيت ثلاثية الأبعاد */
+  const h3 = D3.faceAnchors3D();
+  assert(Math.abs(h3.l[0] + h3.r[0]) < 1e-9 && h3.l[1] === h3.r[1],
+    'الصدغين متماثلين حوالين المركز');
+  assert(h3.l[0] > 0 && h3.r[0] < 0,
+    'نقطة الصورة الشمال (l) = يمين الراس (+X) — تصوير قدامي مش مرايا');
+  assert(h3.top[1] > h3.l[1] + 3, 'الجبهة فوق الصدغ');
+  // مربوطة بالهندسة نفسها مش أرقام مكتوبة بالإيد
+  assert(Math.abs(h3.l[0] - D3.FACE_WINDOW.maxAbsX * D3.SHAPE.hoodR * D3.SHAPE.hoodSquashX) < 1e-9,
+    'ونصف عرض الفتحة مأخوذ من شباك الوش نفسه (يتحرك معاه تلقائي)');
+
+  /* ٢) عكس الأفيني */
+  const A = { a:2, b:0.5, c:10, d:-1, e:3, f:-4 };
+  const iA = D3.invertAffine(A);
+  const fwd = (T,x,y) => [T.a*x + T.b*y + T.c, T.d*x + T.e*y + T.f];
+  const [u1,v1] = fwd(A, 7, -2);
+  const [x1,y1] = fwd(iA, u1, v1);
+  assert(near(x1, 7, 1e-9) && near(y1, -2, 1e-9), 'العكس بيرجّع نفس النقطة');
+  assertEq(D3.invertAffine({a:1,b:2,c:0,d:2,e:4,f:0}), null,
+    'أفيني منهار (محدد صفر) = null مش أرقام لانهاية');
+
+  /* ٣) الإسقاط: فتحة الوش في الصورة بتقع على شباك الوش بالظبط */
+  const P = D3.buildProjector(IMG, AW, AH);
+  assert(!!P, 'الإسقاط اتبنى');
+  const pl = P.uvAt(h3.l[0], h3.l[1]), pr = P.uvAt(h3.r[0], h3.r[1]),
+        pt = P.uvAt(h3.top[0], h3.top[1]);
+  assert(near(pl.px, IMG.l[0], 0.01) && near(pl.py, IMG.l[1], 0.01)
+      && near(pr.px, IMG.r[0], 0.01) && near(pr.py, IMG.r[1], 0.01)
+      && near(pt.px, IMG.top[0], 0.01) && near(pt.py, IMG.top[1], 0.01),
+    '🔑 النقط الثلاثة بتقع على بكسلها بالظبط — الفتحة على الفتحة');
+  // 🔴 نيجاتيف: لو الأفيني اتبنى بنقط مقلوبة (l مع r) النقط دي
+  //    هتبعد مئات البكسلات — يعني الوش هيتغطى بالقماش
+  const Pf = D3.buildProjector(IMG, AW, AH, { flipU: true });
+  const plf = Pf.uvAt(h3.l[0], h3.l[1]);
+  assert(Math.abs(plf.px - IMG.l[0]) > 100,
+    '🔴 قلب الاتجاه بينقل الصدغ لنص الصورة التاني (الفرق مش تجميلي)');
+
+  /* ٤) اتجاه V مقلوب لـWebGL (أصل الصورة فوق وأصل الخامة تحت) */
+  assert(pt.v > 0.9, 'أعلى الصورة = v قريبة من ١');
+  assert(P.uvAt(0, -40).v < 0.15, 'وأسفلها = v قريبة من صفر');
+  // 🔴 نيجاتيف: من غير القلب الطرحة بتتركب مقلوبة رأسًا على عقب
+
+  /* ٥) الرجوع بالعكس: بكسل → سم */
+  const back = P.cmAt(IMG.top[0], IMG.top[1]);
+  assert(near(back.x, h3.top[0], 1e-6) && near(back.y, h3.top[1], 1e-6),
+    'cmAt عكس uvAt بالظبط');
+
+  assertEq(D3.buildProjector(null, AW, AH), null, 'من غير نقط = null (مفيش كراش)');
+  assertEq(D3.buildProjector(IMG, 0, AH), null, 'ومن غير مقاس صورة = null');
+
+  /* ٦) وزن الإسقاط: قدام صورة · جنب وضهر ملمس مكرر */
+  assertEq(D3.projWeight(1, 0.5, 0.5), 1, 'مواجه للكاميرا = صورة ١٠٠٪');
+  assertEq(D3.projWeight(-1, 0.5, 0.5), 0, 'ضهر الراس = صفر (ملمس مكرر)');
+  assertEq(D3.projWeight(0.02, 0.5, 0.5), 0, 'والسيلويت (سطح موازي للنظر) = صفر');
+  const wMid = D3.projWeight(0.3, 0.5, 0.5);
+  assert(wMid > 0 && wMid < 1, 'وبينهم انتقال متدرّج مش قطع حاد');
+  // 🔴 نيجاتيف: لو الانتقال بقى شرط واحد (nz>0) هيبقى خط قطع بيّن
+  //    على الجنب — الفحص ده بيقع
+
+  /* ٧) برّه الصورة = ملمس مكرر (مش تمديد حافة) */
+  assertEq(D3.projWeight(1, 1.4, 0.5), 0, 'UV برّه الصورة أفقيًا = صفر');
+  assertEq(D3.projWeight(1, 0.5, -0.2), 0, 'وبرّاها رأسيًا = صفر');
+  assert(D3.projWeight(1, 0.004, 0.5) < 0.3, 'وعند الحافة بالظبط بيتلاشى');
+  // 🔴 نيجاتيف: من غير edgeFade الحافة بتتمطط (ClampToEdge) وتعمل
+  //    شريط لون واقف على القماش
+
+  /* ٨) على الهندسة الحقيقية: قدام بياخد صورة وورا لأ */
+  (function(){
+    const pos = [], nor = [];
+    const push = (th, ph) => {
+      const p = D3.hoodPoint(th, ph);
+      pos.push(p.x, p.y, p.z); nor.push(p.dir.x, p.dir.y, p.dir.z);
+    };
+    push(1.2, 0);            // ٠: قدام (جنب الفتحة)
+    push(1.2, Math.PI);      // ١: ورا الراس
+    push(1.2, Math.PI/2);    // ٢: الجنب
+    push(0.2, 0);            // ٣: قمة الراس مايلة لقدام
+    const res = D3.projectVertices(pos, nor, P);
+    assert(res.w[0] > 0.5, 'قدام = صورة');
+    assertEq(res.w[1], 0, 'ورا = ملمس مكرر');
+    assertEq(res.w[2], 0, 'الجنب = ملمس مكرر');
+    assert(res.uv[0] >= 0 && res.uv[0] <= 1 && res.uv[1] >= 0 && res.uv[1] <= 1,
+      'وUV القدام جوه الصورة');
+    // النورمال مش موحّد الطول؟ لازم يتطبّع قبل الحكم.
+    // بنجرّب على رأس **في منطقة الانتقال** (وزن كسري) — لأن اللي
+    // وزنه ١ أصلًا بيفضل ١ حتى من غير تطبيع فمبيمسكش الباج.
+    const g0 = D3.hoodPoint(1.2, 0);
+    const posG = [g0.x, g0.y, g0.z];
+    const norG = [0, 0.92, 0.34];                 // nz في نص المدى
+    const wG = D3.projectVertices(posG, norG, P).w[0];
+    assert(wG > 0.05 && wG < 0.95, 'الرأس ده فعلًا في منطقة الانتقال');
+    const wG7 = D3.projectVertices(posG, norG.map((v) => v * 7), P).w[0];
+    assert(Math.abs(wG7 - wG) < 1e-6,
+      '🔴 طول النورمال مبيغيّرش الوزن (متطبّع جوه)');
+    // 🔴 نيجاتيف: من غير التطبيع أي سكيل في الجيوميتري بيشبّع الأوزان
+    //    ويحوّل الجناب كلها لصورة ممطوطة
+
+    const none = D3.projectVertices(pos, nor, null);
+    assert(none.w.every((v) => v === 0),
+      'مفيش صورة لسه = وزن صفر = شكل AR-1 بالظبط (مش شاشة سودا)');
+  })();
+
+  /* ٩) ملف الصورة من الألفا */
+  (function(){
+    const w = 40, h = 20, rgba = new Uint8ClampedArray(w * h * 4);
+    for(let y = 0; y < h; y++){
+      const half = 4 + y;                       // بيوسع لتحت زي الانسدال
+      for(let x = 0; x < w; x++){
+        if(Math.abs(x - w/2) <= half) rgba[(y*w + x)*4 + 3] = 255;
+      }
+    }
+    const prof = D3.assetProfile(rgba, w, h, 10);
+    assertEq(prof.length, 10, 'عيّنة لكل صف مطلوب');
+    assert(prof[0].halfW < prof[prof.length-1].halfW, 'والعرض بيزيد لتحت');
+    assert(near(prof[0].cx, w/2, 1), 'والمركز في النص');
+    const empty = new Uint8ClampedArray(w * h * 4);
+    assertEq(D3.assetProfile(empty, w, h, 6).length, 0,
+      'صورة شفافة بالكامل = ملف فاضي (مش صفوف وهمية)');
+  })();
+
+  /* ١٠) تفصيل الانسدال على مقاس الصورة */
+  (function(){
+    // القالب أطول من جسم AR-1 بكتير — ده سبب وجود الخطوة دي أصلًا
+    const imgBottomY = P.cmAt(AW/2, AH - 6).y;
+    assert(imgBottomY < D3.SHAPE.skirtBotY - 10,
+      '🔎 قاع الصورة أنزل بكتير من قاع انسدال AR-1 (من غير تفصيل نص الصورة بيتقطع)');
+
+    const prof = [];
+    for(let k = 0; k < 12; k++)
+      prof.push({ py: (k + 0.5) * AH / 12, cx: AW/2, halfW: 40 + k * 20 });
+    const before = { botY: D3.SHAPE.skirtBotY, botR: D3.SHAPE.skirtBotR };
+    const fit = D3.fitSkirtToAsset(P, prof);
+    assert(!!fit, 'التفصيل رجّع أرقام');
+    assert(fit.skirtBotY < before.botY, 'الانسدال بقى أطول');
+    assert(fit.skirtBotY >= -D3.PROJ.maxDropCm - 1e-9,
+      'ومسقوف بحد أقصى (مش لحد الركبة لو الصورة طويلة)');
+    assert(fit.skirtBotY <= D3.SHAPE.skirtTopY - 4,
+      'وعمره ما يطلع فوق بداية الانسدال (جسم مقلوب)');
+    assert(fit.skirtBotR > fit.skirtTopR && fit.skirtBotR <= 30,
+      'وعرض القاع أوسع من أعلاه وجوه حد معقول');
+    assertEq(D3.fitSkirtToAsset(P, []), null, 'ملف فاضي = null (نسيب هندسة AR-1)');
+    assertEq(D3.fitSkirtToAsset(null, prof), null, 'ومن غير إسقاط = null');
+
+    // سقف الطول: صورة خيالية الطول متخليش الطرحة تلف الجسم كله
+    const tall = D3.fitSkirtToAsset(P, prof, { maxDropCm: 12 });
+    assert(near(tall.skirtBotY, -12, 1e-6), 'السقف بيتطبّق فعلًا');
+
+    // setShape بيدمج ويرجّع — وبنرجّع الحالة عشان مانلوّثش باقي الاختبارات
+    D3.setShape({ skirtBotY: fit.skirtBotY });
+    assertEq(D3.SHAPE.skirtBotY, fit.skirtBotY, 'setShape بيعدّل الهندسة فعلًا');
+    D3.setShape({ skirtBotY: before.botY, skirtBotR: before.botR });
+    assertEq(D3.SHAPE.skirtBotY, before.botY, 'ورجّعناها');
+  })();
+})();
+
+// ============================================================
+// ١٨) 🔌 توصيلات AR-2
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const p = (f) => path.resolve(__dirname, '..', 'tryon', f);
+  const r3d = fs.readFileSync(p('tryon-3d.js'), 'utf8');
+  const app = fs.readFileSync(p('tryon-app.js'), 'utf8');
+  const sw  = fs.readFileSync(p('sw.js'), 'utf8');
+  const html = fs.readFileSync(p('index.html'), 'utf8');
+  // ⚠️ الفحص النصي على الكود بعد شيل التعليقات (الدرس المتسجل:
+  //    تعليق بيشرح المنع بيوقّع الفحص)
+  const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const r3dC = code(r3d), appC = code(app);
+
+  assert(r3dC.indexOf('attribute vec2 aProjUv;') > -1
+      && r3dC.indexOf('attribute float aProjW;') > -1,
+    'الشيدر بياخد UV الإسقاط ووزنه لكل رأس');
+  assert(r3dC.indexOf('#include <map_fragment>') > -1
+      && r3dC.indexOf('texture2D(uProjMap, vProjUv)') > -1,
+    'والمزج متحقون في MeshStandardMaterial (بنكسب إضاءته)');
+  assert(r3dC.indexOf('pc.a') > -1,
+    'وألفا الصورة داخلة في الوزن — الفاضي في الصورة بيرجع ملمس مش أسود');
+  assert(r3dC.indexOf("geo.setAttribute('aProjUv'") > -1
+      && r3dC.indexOf('C.projectVertices(') > -1,
+    'والأوزان محسوبة من الكور مش من أرقام في الرندرر');
+
+  // 🔴 نيجاتيف: لو اللون رجع على material.color هيتضرب في بكسل
+  //    الصورة الملوّنة أصلًا = اللون مرتين (الكحلي يطلع أسود)
+  assert(r3dC.indexOf('R.uni.uTint.value.set(opts.hex)') > -1
+      && r3dC.indexOf('fabricMat.color.set(opts.hex)') === -1,
+    '🔴 لون المنتج على uTint بس — مش على material.color');
+  assert(r3dC.indexOf('color: 0xffffff') > -1, 'وخامة القماش بيضا (اللون من الشيدر)');
+
+  assert(r3dC.indexOf('opts.assetKey !== R.projKey') > -1,
+    'إعادة بناء الإسقاط بمفتاح — مش كل فريم (قراءة بكسلات غالية)');
+  assert(r3dC.indexOf('C.fitSkirtToAsset(') > -1
+      && r3dC.indexOf('R.skirt.geometry = buildSkirt(') > -1,
+    'وتفصيل الانسدال بيعيد بناء الجسم فعلًا');
+  assert(r3dC.indexOf('reproject') > -1 && r3dC.indexOf('window.T3D_TUNE.proj') > -1,
+    '🎛️ معايرة حية: إطفاء الإسقاط + إعادة حساب من الكونسول');
+
+  assert(appC.indexOf('asset: p3 && p3.img') > -1
+      && appC.indexOf('anchors: p3 && p3.anchors') > -1,
+    'التطبيق بيسلّم الصورة ونقطها للرندرر');
+  // 🔴 نيجاتيف: لو سلّم asset.head مباشرة، لون المنتج من الشات
+  //    هيتطنّش في الـ3D بالظبط زي باج المسار 2D القديم.
+  //    ⚠️ الفحص لازم يبقى **جوه projSource** — النص ده موجود في
+  //    مسار الـ2D كمان، ففحص على الملف كله بيعدّي وهو مكسور (§0).
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+  const ps = extractFn(appC, 'function projSource()');
+  assert(ps.length > 40, 'دالة projSource اتلقت (البلوك اتقرا صح)');
+  assert(ps.indexOf('asset.headTinted || asset.head') > -1
+      && ps.indexOf('ensureTint(asset, scarf, S.color)') > -1,
+    '🔴 والمسقّط هو النسخة الملوّنة — نفس أصل المسار 2D');
+  assert(appC.indexOf("scarf.type !== 'photo'") > -1,
+    'والطرحة المرسومة بالكود مالهاش إسقاط (نقطها مش من تصوير)');
+
+  assert(html.indexOf('<script src="tryon-3d-core.js"></script>') > -1
+      && html.indexOf('tryon-core.js') < html.indexOf('tryon-3d-core.js'),
+    'ترتيب التحميل: الكور قبل كور الـ3D (بيستعمل أفيني ٣ نقط بتاعه)');
+
+  assert(sw.indexOf("echarpe-tryon-v17") > -1 && appC.indexOf("'v17'") > -1,
+    'النسخة اتحدّثت في sw والكونسول (من غيرها الجهاز يفضل على القديم)');
+})();
