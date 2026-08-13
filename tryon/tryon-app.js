@@ -31,7 +31,7 @@
     smChin: T.Smoother2D(), smYaw: T.Smoother(), smBright: T.Smoother({minAlpha:0.05, maxAlpha:0.2}),
     gov: T.FrameGovernor(),
     assetCache: {},               // (scarfId|colorId) → {head, drape, anchors}
-    lastHint: '', lostFrames: 0
+    lastHint: '', lostFrames: 0, r3d: false
   };
 
   /* ============================================================
@@ -122,6 +122,9 @@
     // مقاس الرسم = مقاس الفيديو الحقيقي (مش مقاس الشاشة)
     S.canvas.width = S.video.videoWidth || 720;
     S.canvas.height = S.video.videoHeight || 960;
+    const c3 = $('stage3d');
+    c3.width = S.canvas.width; c3.height = S.canvas.height;
+    if(S.r3d) TRYON3D.resize(S.canvas.width, S.canvas.height);
     setLoad('');
   }
 
@@ -283,6 +286,7 @@
     const faces = result && result.faceLandmarks;
     if(!faces || !faces.length){
       S.lostFrames++;
+      if(S.r3d) TRYON3D.clear();
       if(S.lostFrames > 20) hint('قرّبي وشّك للكاميرا 📷');
       return;
     }
@@ -292,6 +296,20 @@
     const mat = result.facialTransformationMatrixes
              && result.facialTransformationMatrixes[0];
     const pose = T.poseFromMatrix(mat && mat.data);
+
+    if(S.r3d && mat){
+      // 🧊 المسار 3D: occluder الراس بيتكفل باللفّات — حد الإخفاء أوسع
+      const an3 = T.anchorsFromLandmarks(lm, w, h);
+      const br3 = S.smBright.push(sampleLuma(ctx, an3));
+      TRYON3D.update(mat.data, {
+        hex: S.color.hex,
+        bright: T.lumaToBrightness(br3),
+        fade: Math.abs(pose.yaw) > 62 || Math.abs(pose.pitch) > 45
+      });
+      hint('');
+      return;
+    }
+
     const q = T.fitQuality(pose);
     hint(q.hint);
     if(q.fade) return;                       // لفّة جامدة = نخفي بدل ما نشوّه
@@ -386,6 +404,8 @@
     $('btnPhoto').classList.add('on'); $('btnLive').classList.remove('on');
     S.canvas.classList.remove('mirror');
     S.canvas.width = img.naturalWidth; S.canvas.height = img.naturalHeight;
+    const c3p = $('stage3d'); c3p.width = S.canvas.width; c3p.height = S.canvas.height;
+    if(S.r3d) TRYON3D.resize(S.canvas.width, S.canvas.height);
     await S.setImageMode();
     S.stillResult = S.landmarker.detect(img);
     S.stillImg = img;
@@ -401,6 +421,8 @@
     $('btnLive').classList.add('on'); $('btnPhoto').classList.remove('on');
     S.canvas.classList.add('mirror');
     S.canvas.width = S.video.videoWidth; S.canvas.height = S.video.videoHeight;
+    const c3l = $('stage3d'); c3l.width = S.canvas.width; c3l.height = S.canvas.height;
+    if(S.r3d) TRYON3D.resize(S.canvas.width, S.canvas.height);
     await S.setVideoMode();
     resetSmooth();
     S.running = true; loop();
@@ -419,6 +441,9 @@
     const g = out.getContext('2d');
     if(S.mode === 'live'){ g.translate(out.width, 0); g.scale(-1, 1); }  // زي ما هي شايفة نفسها
     g.drawImage(S.canvas, 0, 0);
+    if(S.r3d){
+      try{ g.drawImage($('stage3d'), 0, 0, out.width, out.height); }catch(e){}
+    }
     // ختم البراند خفيف
     g.setTransform(1,0,0,1,0,0);
     g.font = '600 ' + Math.round(out.width*0.045) + 'px Tajawal, sans-serif';
@@ -504,6 +529,9 @@
     try{
       await loadLandmarker();
       await startCamera();
+      // 🧊 رندرر الـAR — فشله مش بيوقف حاجة: المسار 2D فولباك جاهز
+      if(!new URLSearchParams(location.search).get('flat'))
+        S.r3d = await TRYON3D.init(S.canvas.width, S.canvas.height);
       setLoad('');
       S.running = true;
       loop();

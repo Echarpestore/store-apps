@@ -32,6 +32,9 @@
              box-shadow:0 10px 30px rgba(58,34,51,.12);}
   #stage{width:100%; height:100%; object-fit:cover; display:block;}
   #stage.mirror{transform:scaleX(-1);}
+  #stage3d{position:absolute; inset:0; width:100%; height:100%;
+           pointer-events:none;}
+  #stage3d.mirror{transform:scaleX(-1);}
   #cam{display:none;}
 
   #hint{position:absolute; top:14px; right:50%; transform:translateX(50%);
@@ -86,6 +89,7 @@
   <div class="stageWrap">
     <video id="cam" playsinline muted></video>
     <canvas id="stage" class="mirror"></canvas>
+    <canvas id="stage3d" class="mirror"></canvas>
     <div id="hint"></div>
     <div id="loader"><div class="spin"></div><p>ثواني…</p></div>
   </div>
@@ -103,6 +107,8 @@
 <script src="assets/catalog.js"></script>
 <script src="tryon-core.js"></script>
 <script src="recolor-core.js"></script>
+<script src="tryon-3d-core.js"></script>
+<script src="tryon-3d.js"></script>
 <script src="tryon-app.js"></script>
 <script>
   if('serviceWorker' in navigator)
