@@ -52,6 +52,10 @@
       R.group = new THREE.Group();
       R.group.matrixAutoUpdate = false;
       R.scene.add(R.group);
+      // ⭐ كل الأجسام جوه rig متزحزح لمركز الجمجمة (المصفوفة أصلها عند الوش)
+      R.rig = new THREE.Group();
+      R.rig.position.set(0, 0, C.SHAPE.rigDz);
+      R.group.add(R.rig);
 
       // 👤 occluder الراس: بيكتب في العمق بس (colorWrite=false) —
       //    أي قماش وراه بيختفي، والوش بيبان من الشباك لأن مفيش لون
@@ -62,15 +66,16 @@
       oc.scale.set(occ.x, occ.y, occ.z);
       oc.position.set(0, occ.dy, occ.dz);
       oc.renderOrder = -1;
-      R.group.add(oc);
+      R.rig.add(oc);
 
       // 🧵 القماش — AR-2 هتبدل اللون بخامة صورة المنتج
       R.fabricMat = new THREE.MeshStandardMaterial({
         color: 0xc9ac86, roughness: 0.88, metalness: 0,
         side: THREE.DoubleSide
       });
-      R.group.add(new THREE.Mesh(buildHood(THREE), R.fabricMat));
-      R.group.add(new THREE.Mesh(buildSkirt(THREE), R.fabricMat));
+      R.rig.add(new THREE.Mesh(buildHood(THREE), R.fabricMat));
+      R.rig.add(new THREE.Mesh(buildSkirt(THREE), R.fabricMat));
+      loadFabricTexture(THREE);   // 🧵 ملمس القماش الحقيقي من صورة القالب
 
       R.sp = new THREE.Vector3();
       R.sq = new THREE.Quaternion();
@@ -87,6 +92,45 @@
       R.failed = true;
     }
     return R.ready;
+  }
+
+  /* ---------- 🧵 خامة القماش من صورة القالب ---------- */
+  // رقعة قماش سادة من الأصل المصوّر → إزالة اللون وتوحيد السطوع →
+  // خريطة ملمس مكررة. اللون نفسه بييجي من fabricMat.color (لون
+  // المنتج من الشات) — فنفس الملمس بيشتغل بكل الألوان.
+  function loadFabricTexture(THREE){
+    const img = new Image();
+    img.onload = () => {
+      try{
+        const P = 256;
+        const c = document.createElement('canvas'); c.width = P; c.height = P;
+        const g = c.getContext('2d');
+        // رقعة من منتصف القماش الشمال (منطقة سادة في الأصل 640×1124)
+        g.drawImage(img, 60, 520, 220, 220, 0, 0, P, P);
+        const im = g.getImageData(0, 0, P, P);
+        let sum = 0;
+        for(let i = 0; i < im.data.length; i += 4){
+          const l = 0.299*im.data[i] + 0.587*im.data[i+1] + 0.114*im.data[i+2];
+          im.data[i] = im.data[i+1] = im.data[i+2] = l;
+          im.data[i+3] = 255;
+          sum += l;
+        }
+        const mean = sum / (im.data.length / 4);
+        const k = 208 / Math.max(1, mean);        // توحيد السطوع حوالين درجة فاتحة
+        for(let i = 0; i < im.data.length; i += 4){
+          const v = Math.max(0, Math.min(255, im.data[i] * k));
+          im.data[i] = im.data[i+1] = im.data[i+2] = v;
+        }
+        g.putImageData(im, 0, 0);
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(5, 7);
+        R.fabricMat.map = tex;
+        R.fabricMat.needsUpdate = true;
+      }catch(e){ console.warn('fabric tex', e); }
+    };
+    img.onerror = () => {};
+    img.src = 'assets/template-01-head.png';
   }
 
   /* ---------- بناء القشرة (بفتحة الوش) ---------- */

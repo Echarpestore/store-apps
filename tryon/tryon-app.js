@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v8';
+  const TRYON_VER = 'v14';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -529,8 +529,9 @@
     try{
       await loadLandmarker();
       await startCamera();
-      // 🧊 رندرر الـAR — فشله مش بيوقف حاجة: المسار 2D فولباك جاهز
-      if(!new URLSearchParams(location.search).get('flat'))
+      // 🧊 وضع الـAR التجريبي خلف ?ar=1 — قرار: العميلة تشوف القالب
+      //    المصوّر (شكل طرحة حقيقية) لحد ما الـ3D ياخد خامته وشكله النهائي
+      if(new URLSearchParams(location.search).get('ar'))
         S.r3d = await TRYON3D.init(S.canvas.width, S.canvas.height);
       setLoad('');
       S.running = true;

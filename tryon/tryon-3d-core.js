@@ -55,15 +55,22 @@ T3D.adaptAlpha = function(dist, minA, maxA, speed){
 // أنصاف أقطار بالسم حوالين راس بالغة نموذجية — قابلة للمعايرة
 // من الكونسول وقت الاختبار الحي (window.T3D_TUNE في الرندرر).
 T3D.SHAPE = {
-  hoodR: 10.8,        // نصف قطر القشرة حوالين الراس
-  hoodSquashX: 0.86,  // الراس أضيق من طولها
-  hoodLift: 0.8,      // رفع مركز القشرة فوق مركز الوش
-  hoodBack: -0.5,     // وسحبها لورا شوية
-  thetaEnd: 2.75,     // القشرة نازلة لتحت الدقن (راديان من فوق)
-  skirtTopY: -9.5,    // بداية الانسدال (الرقبة)
-  skirtBotY: -30,     // نهايته (الصدر)
-  skirtTopR: 8.2,
-  skirtBotR: 19.5,
+  // ⭐ معايرة من أول سكرين حي: أصل مصفوفة MediaPipe عند **سطح الوش** —
+  //    التمركز عليه خلّى القشرة خاتم على الوش والشعر ظاهر وراها.
+  //    rigDz بيرجّع الجسم كله لمركز الجمجمة.
+  rigDz: -3.2,
+  hoodR: 10.4,
+  hoodSquashX: 0.86,
+  hoodLift: 0.8,
+  hoodBack: -0.5,
+  thetaEnd: 2.75,
+  // الانسدال كان مريلة عملاقة قدام الصدر — أنحف ولازق بالجسم وأقصر
+  skirtTopY: -9.5,
+  skirtBotY: -25,
+  skirtTopR: 7.4,
+  skirtBotR: 14.5,
+  skirtSquashZ: 0.62,
+  skirtBack: -1.5,
   occluder: { x: 7.6, y: 10.6, z: 9.4, dy: 0.6, dz: -0.6 }
 };
 
@@ -90,7 +97,7 @@ T3D.skirtPoint = function(v, phi){
   return {
     x: Math.sin(phi) * r * 0.94,
     y: s.skirtTopY + (s.skirtBotY - s.skirtTopY) * v + wave,
-    z: Math.cos(phi) * r * 0.80   // الصدر أفلطح من دايرة
+    z: Math.cos(phi) * r * s.skirtSquashZ + s.skirtBack   // لازق بالجسم
   };
 };
 
