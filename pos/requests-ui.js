@@ -136,7 +136,10 @@ function showRequestMatches(groups){
             +   '<button onclick="reqWhatsApp(\'' + q.id + '\')"'
             +     ' style="padding:7px 10px; border-radius:8px; border:none; background:#25d366;'
             +     ' color:#fff; font-family:Cairo; font-weight:800; font-size:12px;">💬</button>'
-            +   '<button onclick="reqClose(\'' + q.id + '\')"'
+            +   '<button onclick="reqSold(\'' + q.id + '\')" title="اتباعت لها"'
+            +     ' style="padding:7px 10px; border-radius:8px; border:none;'
+            +     ' background:#2563eb; color:#fff; font-family:Cairo; font-weight:800; font-size:12px;">💰</button>'
+            +   '<button onclick="reqClose(\'' + q.id + '\')" title="اقفل الطلب"'
             +     ' style="padding:7px 10px; border-radius:8px; border:1px solid #888;'
             +     ' background:transparent; color:#ddd; font-family:Cairo; font-size:12px;">✓</button>'
             + '</div></div>';
@@ -176,6 +179,39 @@ function reqWhatsApp(reqId){
 }
 window.reqWhatsApp = reqWhatsApp;
 
+/* 💰 نسبة الموظفة — الطلب اتحوّل بيعة
+   ------------------------------------------------------------
+   ⚠️ ليه دي مهمة: لو الموظفة سجّلت الطلب وتعبت في متابعته، وبعدين
+      البيعة اتحسبت لموظفة تانية (اللي كانت واقفة يوم ما العميلة
+      جت)، الموظفين هيبطّلوا يسجّلوا طلبات خالص — والميزة تموت مش
+      لأنها وحشة، لأن محدش مستفيد منها.
+
+   ⚠️ ودي **نسبة مش تحويل**: الموظفة اللي باعت فعلًا بتاخد بيعتها
+      زي ما هي. اللي بيتسجّل هنا إن الطلب ده كان سببه — سجل منفصل
+      عشان المالك يقرر يكافئ إزاي.
+   ⚠️ ومبنكتبش في `sales_points` مباشرة — دي فلوس، والقرار للمالك. */
+async function reqCreditSeller(reqId, invoiceCode){
+  try{
+    const r = _reqCache.filter(function(x){ return x.id === reqId; })[0];
+    if(!r || !r.by) return;
+    await db.collection('request_attributions').add({
+      requestId: reqId,
+      requestText: r.text || '',
+      phone: r.phone || '',
+      // 👤 اللي سجّلت الطلب
+      byId: r.by, byName: r.byName || '',
+      requestedAt: r.createdAt || 0,
+      // 🧾 البيعة اللي اتقفل عليها
+      invoiceCode: invoiceCode || '',
+      soldBranch: currentBranch,
+      soldById: (currentEmployee && currentEmployee.id) || '',
+      soldByName: (currentEmployee && currentEmployee.name) || '',
+      ts: Date.now()
+    });
+  }catch(e){ console.warn('req attribution', e); }
+}
+window.reqCreditSeller = reqCreditSeller;
+
 /* ✓ قفل الطلب */
 async function reqClose(reqId, reason){
   try{
@@ -188,6 +224,20 @@ async function reqClose(reqId, reason){
   }catch(e){ showToast('ماتقفلش: ' + (e.code || e.message), 'err'); }
 }
 window.reqClose = reqClose;
+
+/* 💰 الطلب اتباع — بيقفل وبيسجّل نسبة الموظفة */
+async function reqSold(reqId){
+  const inv = await askText({
+    title:'💰 الطلب اتباع',
+    message:'اكتبي رقم الفاتورة (اختياري) — عشان النسبة تبقى مربوطة ببيعة حقيقية.',
+    placeholder:'اختياري'
+  });
+  if(inv === null) return;
+  await reqCreditSeller(reqId, String(inv || '').trim());
+  await reqClose(reqId, 'اتباعت');
+  showToast('اتسجّلت النسبة للموظفة اللي سجّلت الطلب ✅');
+}
+window.reqSold = reqSold;
 
 /* 📋 تبويب الطلبات */
 function renderRequestsTab(){
