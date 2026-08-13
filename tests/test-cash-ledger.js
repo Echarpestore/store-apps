@@ -367,11 +367,25 @@ const THU = '2026-08-06', FRI = '2026-08-07', SAT = '2026-08-08', SUN = '2026-08
 
   const due = ofFreezeDue(L, {}, now);
   const keys = due.map(x => x.key);
-  assert(keys.indexOf('2026-07-02') >= 0, '⭐ يوم عمره ٣٩ يوم محتاج يتجمّد');
+  // ⚠️⚠️ يوم ٢ يوليو عمره ٣٩ يوم — خرج خلاص من نافذة الـ٣٠، يعني فواتيره
+  //    مش محمّلة وأرقامه دلوقتي **أصفار كدّابة**. تجميده = تثبيت الصفر للأبد.
+  assert(keys.indexOf('2026-07-02') < 0,
+    '⭐⭐ اليوم اللي خرج من النافذة مبيتجمّدش — أرقامه مش موثوقة');
+  assert(keys.indexOf('2026-07-20') >= 0,
+    '⭐ اللي لسه جوه النافذة وعدّى العتبة بيتجمّد (٢١ يوم)');
   assert(keys.indexOf('2026-08-10') < 0, '⛔ ومبنجمّدش النهاردة — لسه بيتحرك');
   assert(keys.indexOf('2026-08-09') < 0, '⛔ ولا إمبارح — لسه بدري على العتبة');
-  const jul2 = due.filter(x => x.key === '2026-07-02')[0];
-  assertEq(jul2.frozen.cashSales, 800, 'والأرقام المحفوظة هي المحسوبة وقت التجميد');
+  // 🚧 واليوم ده بيتعلّم في الشيت بدل ما يتعرض كأنه حقيقة
+  const oldRow = L.rows.filter(x => x.key === '2026-07-02')[0];
+  assert(oldRow.untrusted === true, '🚧 ومعلّم إن أرقامه ناقصة');
+  const recent = L.rows.filter(x => x.key === '2026-08-05')[0];
+  assert(recent.untrusted === false, 'واليوم القريب مش معلّم');
+
+  // والأرقام المحفوظة وقت التجميد هي المحسوبة
+  const L2 = ofCashLedger({ amount:0, atMs: at(2026,7,19,7) },
+    { sales:[ sale(at(2026,7,20,15), 640, 0) ] }, {}, { predict:false }, now, 0);
+  const d2 = ofFreezeDue(L2, {}, now).filter(x => x.key === '2026-07-20')[0];
+  assertEq(d2.frozen.cashSales, 640, 'والأرقام المحفوظة هي المحسوبة وقت التجميد');
 
   // 🧊 بعد التجميد: حتى لو المبيعات اختفت من النافذة، الرقم ثابت
   const ov = { '2026-07-02': { frozen: { cashSales: 800 } } };
@@ -397,4 +411,151 @@ const THU = '2026-08-06', FRI = '2026-08-07', SAT = '2026-08-08', SUN = '2026-08
   // مبنجمّدش اللي متجمّد
   assertEq(ofFreezeDue(L, { '2026-07-02': { frozen:{ cashSales: 800 } } }, now)
     .filter(x => x.key === '2026-07-02').length, 0, '⛔ ومبنعيدش تجميد اللي اتجمّد');
+})();
+
+// ============================================================
+// ١٨) 🥇 دالة سعر الدهب — حراس "السعر الغلط أوحش من مفيش سعر"
+//     (functions/goldPriceUpdate.js — بتتنشر من echarpe-push)
+// ============================================================
+(function(){
+  const fnPath = path.join(ROOT, 'functions', 'goldPriceUpdate.js');
+  assert(fs.existsSync(fnPath), 'ملف الدالة موجود في الريبو');
+  if(!fs.existsSync(fnPath)) return;
+  const gsrc = fs.readFileSync(fnPath, 'utf8');
+
+  const gbox = { Math: Math, Number: Number, isFinite: isFinite, String: String };
+  vm.createContext(gbox);
+  const f = extractFn(gsrc, 'function decideGoldPrice(');
+  assert(!!f, 'لقينا decideGoldPrice');
+  if(!f) return;
+  vm.runInContext('const SANE_MIN=1000, SANE_MAX=30000, MAX_JUMP_PCT=15;', gbox);
+  vm.runInContext(f, gbox);
+  const decide = vm.runInContext('decideGoldPrice', gbox);
+
+  // ✅ الحالة العادية
+  const ok = decide([{ buy: 6960, sell: 6983, source: 'custom' }], { goldBuyPrice: 6900 });
+  assert(ok.ok === true, '✅ سعر قريب من السابق بيعدّي');
+  assertEq(ok.buy, 6960, 'وبالقيمة الصح');
+
+  // 🛡️ القفزة — الرقم ده **جوه** حدود العقل، فالحارس الوحيد اللي
+  //    بيمسكه هو حارس القفزة. (٢١٦٠٠٠ بتتمسك بحدود العقل قبل كده،
+  //    فهي مش اختبار حقيقي لحارس القفزة.)
+  const jump = decide([{ buy: 12000, source: 'custom' }], { goldBuyPrice: 6960 });
+  assert(jump.ok === false, '⭐⭐ قفزة ٧٢% مرفوضة — المصدر غالبًا باظ');
+  assert(/قفزة/.test(jump.reason || ''), 'والسبب مكتوب صراحة');
+  assertEq(jump.suspect, 12000, 'والرقم المشبوه محفوظ للمراجعة');
+
+  // وسعر الأوقية بالغلط بيتمسك بحدود العقل
+  const oz = decide([{ buy: 216000, source: 'custom' }], { goldBuyPrice: 6960 });
+  assert(oz.ok === false, '⭐ وسعر أوقية بدل جرام مرفوض برضه');
+
+  const small = decide([{ buy: 7100, source: 'custom' }], { goldBuyPrice: 6960 });
+  assert(small.ok === true, '⭐ بس تحرك ٢% طبيعي بيعدّي عادي');
+
+  // 🛡️ حدود العقل
+  assert(decide([{ buy: 5, source:'x' }], {}).ok === false, '🛡️ رقم صغير مستحيل مرفوض');
+  assert(decide([{ buy: 999999, source:'x' }], {}).ok === false, '🛡️ ورقم كبير مستحيل مرفوض');
+  assert(decide([{ buy: 0, source:'x' }], {}).ok === false, 'وصفر مرفوض');
+  assert(decide([], {}).ok === false, 'ومفيش مصادر = مفيش كتابة');
+  assert(decide([{ buy: NaN, source:'x' }], {}).ok === false, 'وNaN مرفوض');
+
+  // ⭐ أول مرة (مفيش سعر سابق) — حارس القفزة مبيمنعش البداية
+  const first = decide([{ buy: 6960, source:'custom' }], {});
+  assert(first.ok === true, '⭐ أول تشغيل من غير سعر سابق بيعدّي');
+
+  // 🛡️ الشراء عمره ما يزيد عن البيع
+  const rev = decide([{ buy: 7000, sell: 6500, source:'x' }], {});
+  assertEq(rev.sell, 0, '🛡️ بيانات متعكوسة (شراء > بيع) → بنتجاهل سعر البيع');
+
+  // 🔒 القفل اليدوي والاحتفاظ بالسعر القديم
+  assert(/goldManualLock === true/.test(gsrc),
+    '⭐⭐ فيه قفل يدوي — رقم المالك مبيتمسحش بالأتمتة');
+  assert(/goldLastError/.test(gsrc), 'والرفض بيتسجّل');
+  assert(!/goldBuyPrice: 0/.test(gsrc),
+    '⛔ ومفيش أي مسار بيكتب صفر — السعر القديم بيفضل مكانه');
+  assert(/Africa\/Cairo/.test(gsrc), '⏰ والجدولة بتوقيت القاهرة');
+})();
+
+// ============================================================
+// ١٩) 🎁 دين كروت الهدايا — "فلوس في إيدك مش بتاعتك"
+//
+// 🔴 من غير الحتة دي الشيت بيكدب في اتجاهين مع بعض:
+//    · يوم البيع: بيعدّ الكارت إيراد وهو لسه دين
+//    · يوم الصرف: بيعدّه تاني لما البضاعة تخرج
+//    يعني ٥٠٠ بتتحسب ١٠٠٠، والمالك يصرف على أساس فلوس مش بتاعته.
+// ============================================================
+(function(){
+  const gcSale = (ms, cash, gcValue) => ({
+    createdAt:{ toMillis:()=>ms }, payments:{ cash: cash || 0 },
+    items: [{ name:'🎁 كارت هدية', price: gcValue, qty:1, isGiftCard:true }]
+  });
+  const gcSpend = (ms, cash, spent) => ({
+    createdAt:{ toMillis:()=>ms }, payments:{ cash: cash || 0 },
+    items: [{ name:'بضاعة', price: spent, qty:1 },
+            { name:'💳 خصم من الرصيد', price: -spent, qty:1, isCreditSpend:true }]
+  });
+
+  const base = { amount: 0, atMs: at(2026, 8, 6, 7) };
+
+  // ── يوم البيع: الكاش دخل، والدين زاد
+  const L1 = ofCashLedger(base, { sales:[ gcSale(at(2026,8,6,15), 500, 500) ] },
+    {}, { predict:false }, at(2026, 8, 6, 20), 0);
+  const d1 = rowOf(L1, THU);
+  assertEq(d1.val.cashSales, 500, '💵 الكاش دخل الدرج فعلًا');
+  assertEq(d1.gcSold, 500, '🎁 والكارت اتسجّل كدين');
+  assertEq(d1.balance, 500, 'والرصيد الكاشي ٥٠٠ (صح — الفلوس موجودة)');
+  assertEq(d1.giftLiability, 500, '⭐⭐ بس عليك دين ٥٠٠');
+
+  const W1 = ofWealth(L1, {}, at(2026, 8, 6, 20));
+  assertEq(W1.gross, 500, '💵 اللي في إيدك ٥٠٠');
+  assertEq(W1.giftLiability, 500, '🎁 والدين ٥٠٠');
+  assertEq(W1.total, 0, '⭐⭐ واللي ليك فعلًا = صفر (لسه مبعتش حاجة)');
+
+  // ── يوم الصرف: البضاعة خرجت، الدين اتسدّد، مفيش كاش جديد
+  const L2 = ofCashLedger(base, { sales:[
+    gcSale(at(2026,8,6,15), 500, 500),
+    gcSpend(at(2026,8,9,15), 0, 500)
+  ] }, {}, { predict:false }, at(2026, 8, 9, 20), 0);
+  const d2 = rowOf(L2, SUN);
+  assertEq(d2.gcSpent, 500, '💳 الرصيد اتصرف');
+  assertEq(d2.val.cashSales, 0, '⭐ ومفيش كاش جديد دخل يوم الصرف (اتقبض قبل كده)');
+  assertEq(d2.balance, 500, 'والكاش لسه ٥٠٠ في الدرج');
+  assertEq(d2.giftLiability, 0, '⭐⭐ والدين اتقفل');
+
+  const W2 = ofWealth(L2, {}, at(2026, 8, 9, 20));
+  assertEq(W2.total, 500, '⭐⭐ ودلوقتي بس الـ٥٠٠ بقت بتاعتك فعلًا');
+
+  // 🔴 نيجاتيف — الطريقة الغلط بتعدّ الفلوس مرتين
+  assert(W1.gross + 500 !== W2.total,
+    '🔴 نيجاتيف — لو حسبنا البيع والصرف الاتنين، ٥٠٠ تبقى ١٠٠٠');
+
+  // ── صرف جزئي
+  const L3 = ofCashLedger(base, { sales:[
+    gcSale(at(2026,8,6,15), 500, 500),
+    gcSpend(at(2026,8,9,15), 0, 200)
+  ] }, {}, { predict:false }, at(2026, 8, 9, 20), 0);
+  assertEq(rowOf(L3, SUN).giftLiability, 300, '⭐ صرف ٢٠٠ من ٥٠٠ → الدين ٣٠٠');
+  assertEq(ofWealth(L3, {}, at(2026,8,9,20)).total, 200, 'واللي ليك ٢٠٠');
+
+  // 🛡️ الدين مبينزلش تحت الصفر (كروت اتباعت قبل التصفير)
+  const L4 = ofCashLedger(base, { sales:[ gcSpend(at(2026,8,6,15), 0, 300) ] },
+    {}, { predict:false }, at(2026, 8, 6, 20), 0);
+  assertEq(rowOf(L4, THU).giftLiability, 0,
+    '🛡️ صرف من غير بيع مسجّل → الدين صفر مش سالب');
+  assertEq(rowOf(L4, THU).giftLiabilityRaw, -300,
+    '⭐ والرقم الحقيقي محفوظ (−٣٠٠ = فيه كروت اتباعت قبل التصفير)');
+
+  // 🆕 رصيد افتتاحي للدين عند التصفير
+  const L5 = ofCashLedger({ amount:0, atMs: at(2026,8,6,7), giftLiabilityOpening: 1000 },
+    { sales:[] }, {}, { predict:false }, at(2026, 8, 6, 20), 0);
+  assertEq(rowOf(L5, THU).giftLiability, 1000,
+    '🆕 ⭐ ودين الكروت القديمة بيتحمل عند التصفير');
+
+  // 🔌 متوصّل في الشاشة
+  const src2 = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
+  assert(/W\.giftLiability > 0/.test(src2),
+    '🔌 والدين بيبان في الشاشة لما يكون موجود');
+  assert(/اللي ليك فعلًا/.test(src2),
+    '⭐⭐ والعنوان بقى "اللي ليك فعلًا" مش "إجمالي فلوسك"');
+  assert(/فلوس في إيدك مش بتاعتك/.test(src2), 'ومكتوب المعنى صراحة');
 })();

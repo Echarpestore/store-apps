@@ -96,6 +96,9 @@ const bare = stripComments(src);
   assert(/confirm\(/.test(fn), '⭐ فيه تأكيد قبل ما الرصيد يتصفّر');
   assert(/paymobOpening/.test(fn),
     '⭐⭐ بيسأل عن رصيد Paymob كمان — الكاش لوحده مش كفاية');
+  assert(/giftLiabilityOpening/.test(fn),
+    '🎁 ⭐⭐ وعن دين كروت الهدايا القديمة — وإلا كارت قديم يتصرف'
+    + ' بعد التصفير ويقلّل أرقامك من غير سبب ظاهر');
   assert((fn.match(/< 0/g) || []).length >= 2, 'والأرقام السالبة مرفوضة');
   assert(/office_cash_epochs/.test(fn),
     '⭐ والنقطة القديمة بتتأرشف — عمرنا ما بنمسح تاريخ فلوس');
