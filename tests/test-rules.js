@@ -206,6 +206,20 @@ const OPS = [
     '⭐⭐ العميلة مبتسجّلش بنفسها — تقدر تسجّل باسم أي رقم'],
   ['POS',    'customer_requests', 'delete', STAFF, false, '🔒 الطلب بيتقفل مش بيتمسح'],
 
+  // 💬 الشات
+  ['تطبيق الولاء', 'customer_chat', 'get',    ANON, true, 'العميلة تفتح محادثتها'],
+  ['تطبيق الولاء', 'customer_chat', 'create', ANON, true, 'أول رسالة بتفتح المحادثة'],
+  ['POS',    'customer_chat', 'list',   STAFF, true, 'الفرع يشوف المحادثات'],
+  ['POS',    'customer_chat', 'update', STAFF, true, 'الموظفة بترد وبتعلّم مقروء'],
+  ['POS',    'customer_chat', 'delete', STAFF, false, '🔒 المحادثة مبتتمسحش'],
+
+  // 💰 نسبة الموظفة
+  ['POS',    'request_attributions', 'create', STAFF, true, 'تسجيل النسبة'],
+  ['Office', 'request_attributions', 'list',   STAFF, true, 'المالك يشوفها'],
+  ['POS',    'request_attributions', 'update', STAFF, false,
+    '🔒⭐ سجل مراقَب — مدخل لمكافآت، فتعديله بعد الواقعة معناه إن الرقم مش موثوق'],
+  ['تطبيق الولاء', 'request_attributions', 'list', ANON, false, '🔒 مش شغل العميلة'],
+
   // 💳📒 دفتر اليومية في Office
   ['Office', 'office_cash_days', 'list',   STAFF, true, 'الشيت اليومي'],
   ['Office', 'office_cash_days', 'update', STAFF, true, 'تعديل خانة بالإيد'],
