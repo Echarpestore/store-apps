@@ -23,6 +23,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<!-- 💳 لازم لاستلام كروت الهدايا -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 
 <style>
   :root{
@@ -419,6 +421,11 @@
     <div class="inv-sheet" id="invSheet"></div>
   </div>
 
+  <!-- 💳 شيت الرصيد وكروت الهدايا (نفس شكل شيت الفاتورة) -->
+  <div class="overlay" id="crOverlay" onclick="if(event.target===this) closeSheet()">
+    <div class="inv-sheet" id="crSheet"></div>
+  </div>
+
   <!-- بانر تثبيت التطبيق (بيظهر تلقائي في المتصفح) -->
   <div id="installBanner">
     <div class="ib-ico"><img id="ibLogo" alt=""></div>
@@ -637,6 +644,7 @@ var loyaltyCfg = { pointsPerEGP:100, pointsPerRedemption:10, redemptionValueEGP:
 
 var currentCustomer = null;   // { name, phone, points, ... }
 var custUnsub = null;         // مستمع realtime على وثيقة العميل
+var creditUnsub = null;       // 📒 مستمع دفتر الرصيد
 // (كل تبويب بيتحمّل كسول أول ما تفتحه فقط، بحد أقصى للعدد، وبعدها بيعرض من الذاكرة فورًا)
 
 function $(id){ return document.getElementById(id); }
@@ -891,6 +899,10 @@ function enterApp(phone){
   switchTab('card');
   loadBadgeSources();   // مصادر الشارات (عروض/منتجات) مرة واحدة للجلسة
   initPushForCustomer();   // إشعارات Push (لو المفتاح متظبط والإذن متاح)
+
+  // 📒 مستمع دفتر الرصيد — للكشف. بيتقفل مع الخروج زي مستمع العميلة.
+  if(creditUnsub){ creditUnsub(); }
+  creditUnsub = watchCredit(phone);
 
   if(custUnsub){ custUnsub(); }
   custUnsub = db.collection(COL_CUSTOMERS).doc(phone).onSnapshot(function(doc){
@@ -1431,9 +1443,17 @@ function renderAccount(){
       '<div class="acct-row"><span class="k">رقم الموبايل</span><span class="v ltr">'+esc(currentCustomer.phone)+'</span></div>'+
       '<div class="acct-row"><span class="k">كود العضوية</span><span class="v ltr">'+esc(code)+'</span></div>'+
       '<div class="acct-row"><span class="k">رصيد النقاط</span><span class="v">'+fmt(currentCustomer.points||0)+' نقطة</span></div>'+
+      /* 💰 رصيد الفلوس — منفصل عن النقط عن قصد.
+         النقط بتتكسب بقاعدة، والرصيد فلوس اتدفعت. خلطهم بيلخبط. */
+      ((Number(currentCustomer.credit)||0) > 0
+        ? '<div class="acct-row"><span class="k">💰 رصيدي</span><span class="v" style="font-weight:900;">'
+          + fmt(currentCustomer.credit) + ' ج.م</span></div>' : '')+
       /* (اتشال عرض إجمالي المشتريات — ملوش قيمة للعميلة) */
       '<div class="acct-row"><span class="k">عضو من</span><span class="v">'+esc(sinceFull)+'</span></div>'+
     '</div>'+
+    '<button class="btn-outline" onclick="openClaimGift()">🎁 عندي كود كارت هدية</button>'+
+    ((Number(currentCustomer.credit)||0) > 0 || _creditRows.length
+      ? '<button class="btn-outline" onclick="openCreditStatement()">📒 كشف حساب الرصيد</button>' : '')+
     (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
     '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
     '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
@@ -1445,9 +1465,135 @@ function renderAccount(){
   if(isIOS() && !isStandalone()){ $('iosTip').style.display='block'; }
 }
 
+/* ============================================================
+   💳 الرصيد وكروت الهدايا — جانب العميلة
+   ------------------------------------------------------------
+   ⚠️ التطبيق **مبيكتبش رصيد خالص**. قواعد الأمان بتمنعه، والاستلام
+      بيتم عن طريق Cloud Function. لو أي كتابة رصيد ظهرت هنا، يبقى
+      فيه باب خلفي.
+   ⚠️ الدوال بتتنادى على **التطبيق المسمّى** (§20) — لو ندهناها على
+      الافتراضي، بتشتغل بجلسة تانية أو تفشل.
+   ============================================================ */
+var _creditRows = [];
+
+/* 📄 شيت بسيط — بيستخدم نفس آلية شيت الفاتورة الموجودة.
+   ⚠️ أول نسخة من الكود ده كانت بتنادي `showSheet` وهي **مش
+      موجودة أصلًا** في التطبيق. الاختبار النصي كان هيعدّي أخضر
+      (الاسم مكتوب في الكود) والزرار كان هيقع صامت على موبايل
+      العميلة. الدرس: أي دالة بننديها لازم نتأكد إنها موجودة. */
+function showSheet(title, bodyHtml){
+  var sh = document.getElementById('crSheet');
+  var ov = document.getElementById('crOverlay');
+  if(!sh || !ov) return;
+  sh.innerHTML = '<div class="ish-h"><div class="ish-title">' + title + '</div>'
+    + '<button class="ish-x" onclick="closeSheet()">✕</button></div>' + bodyHtml;
+  ov.classList.add('on');
+}
+function closeSheet(){
+  var ov = document.getElementById('crOverlay');
+  if(ov) ov.classList.remove('on');
+}
+window.showSheet = showSheet; window.closeSheet = closeSheet;
+
+/* 📒 كشف الحساب — كل حركة بسطر.
+   ⚠️ مش رفاهية: لما العميلة تلاقي رقم مش فاهماه، هتيجي تخانق
+      الكاشير. الكشف بيرد عنها. */
+function watchCredit(phone){
+  try{
+    return db.collection('credit_ledger')
+      .where('phone','==', String(phone))
+      .orderBy('at','desc').limit(50)
+      .onSnapshot(function(snap){
+        _creditRows = snap.docs.map(function(d){ return d.data(); });
+      }, function(e){ console.warn('credit ledger', e && e.code); });
+  }catch(e){ console.warn('watchCredit', e); return null; }
+}
+window.watchCredit = watchCredit;
+
+function creditRowLabel(r){
+  var t = r && r.type;
+  if(t === 'gift_card')   return '🎁 كارت هدية';
+  if(t === 'change_kept') return '💵 باقي محفوظ' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
+  if(t === 'spend')       return '🛍️ فاتورة' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
+  if(t === 'manual')      return '✏️ ' + (r.reason || 'تعديل');
+  return 'حركة';
+}
+
+function openCreditStatement(){
+  var rows = _creditRows.map(function(r){
+    var amt = Number(r.amount) || 0;
+    var d = r.at ? new Date(r.at).toLocaleDateString('ar-EG',
+      { day:'numeric', month:'short', year:'numeric' }) : '';
+    return '<div class="acct-row">'
+      + '<span class="k">' + esc(creditRowLabel(r)) + '<br>'
+      +   '<span style="font-size:11px; opacity:.7;">' + esc(d) + '</span></span>'
+      + '<span class="v" style="font-weight:900; color:' + (amt < 0 ? '#c0392b' : '#1e8449') + ';">'
+      +   (amt < 0 ? '−' : '+') + fmt(Math.abs(amt)) + ' ج.م</span></div>';
+  }).join('');
+  showSheet('📒 كشف حساب الرصيد',
+    '<div class="acct-card">'
+    + '<div class="acct-row"><span class="k">رصيدك دلوقتي</span>'
+    +   '<span class="v" style="font-weight:900;">' + fmt(currentCustomer.credit || 0) + ' ج.م</span></div>'
+    + '</div>'
+    + (rows ? '<div class="acct-card">' + rows + '</div>'
+            : '<div class="muted" style="text-align:center; padding:14px;">لسه مفيش حركات</div>'));
+}
+window.openCreditStatement = openCreditStatement;
+
+/* 🎁 استلام كارت هدية — الكود بيتحوّل رصيد والكود يموت */
+function openClaimGift(){
+  showSheet('🎁 كارت هدية',
+    '<div style="padding:4px 2px;">'
+    + '<div style="font-size:13px; line-height:1.9; margin-bottom:10px;">'
+    +   'اكتبي كود الكارت اللي وصلك. هيتحوّل رصيد في حسابك على طول،'
+    +   ' وتقدري تصرفيه في أي فرع.</div>'
+    + '<input id="gcInput" type="text" dir="ltr" placeholder="GC-XXXX-XXXX-XXXX-XXXX" '
+    +   'autocomplete="off" autocapitalize="characters" '
+    +   'style="width:100%; padding:14px; border-radius:12px; border:1.5px solid #ddd;'
+    +   ' font-size:16px; font-family:monospace; letter-spacing:1px; text-align:center;">'
+    + '<div id="gcMsg" style="font-size:12.5px; margin-top:8px; min-height:18px;"></div>'
+    + '<button class="btn-outline" style="width:100%; margin-top:8px;" onclick="claimGift()">استلمي الرصيد</button>'
+    + '</div>');
+  setTimeout(function(){ var el = document.getElementById('gcInput'); if(el) el.focus(); }, 200);
+}
+window.openClaimGift = openClaimGift;
+
+var _gcBusy = false;
+async function claimGift(){
+  if(_gcBusy) return;
+  var el = document.getElementById('gcInput');
+  var msg = document.getElementById('gcMsg');
+  var code = (el && el.value || '').trim();
+  if(!code){ if(msg){ msg.style.color='#c0392b'; msg.textContent='اكتبي الكود'; } return; }
+  if(!navigator.onLine){
+    if(msg){ msg.style.color='#c0392b'; msg.textContent='محتاجة نت عشان تستلمي'; } return;
+  }
+  _gcBusy = true;
+  if(msg){ msg.style.color='#666'; msg.textContent='ثانية واحدة...'; }
+  try{
+    // ⚠️ على التطبيق المسمّى (§20) — مش الافتراضي
+    var fn = firebase.app('loyalty').functions('us-central1').httpsCallable('giftCardClaim');
+    var res = await fn({ code: code, phone: currentCustomer.phone });
+    var d = res.data || {};
+    if(msg){
+      msg.style.color = '#1e8449';
+      msg.textContent = '🎉 اتضاف ' + fmt(d.amount) + ' ج.م — رصيدك دلوقتي ' + fmt(d.balance) + ' ج.م';
+    }
+    if(el) el.value = '';
+    // الرصيد بيتحدّث لوحده من مستمع العميلة
+  }catch(e){
+    if(msg){ msg.style.color = '#c0392b'; msg.textContent = (e && e.message) || 'الكود مش صحيح'; }
+  }finally{ _gcBusy = false; }
+}
+window.claimGift = claimGift;
+
 function logout(silent){
   if(!silent && !confirm('تسجيل الخروج من حسابك؟')) return;
   if(custUnsub){ custUnsub(); custUnsub=null; }
+  // ⚠️ لازم يتقفل: لو فضل شغّال، عميلة تانية على نفس الجهاز
+  //    هتشوف حركات فلوس مش بتاعتها.
+  if(creditUnsub){ creditUnsub(); creditUnsub=null; }
+  _creditRows = [];
   currentCustomer = null;
   localStorage.removeItem(LS_PHONE);
   $('phoneInput').value=''; $('nameInput').value='';
