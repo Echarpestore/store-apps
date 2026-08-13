@@ -272,7 +272,9 @@ function ofCollectDays(data, fromKey, toKey){
   const touch = function(k){
     if(!k || k < fromKey || k > toKey) return null;
     if(!days[k]) days[k] = { key:k, cashSales:0, visaSales:0, expenses:0,
-      salaries:0, advances:0, rewards:0, pmActual:0, pmGross:0 };
+      salaries:0, advances:0, rewards:0, pmActual:0, pmGross:0,
+      // 🎁 كروت الهدايا — بتتجمّع منفصلة عن المبيعات
+      gcSold:0, gcSpent:0 };
     return days[k];
   };
   // نضمن وجود كل يوم في المدى حتى لو مفيهوش حركة (الشيت لازم يبقى متصل)
@@ -284,6 +286,24 @@ function ofCollectDays(data, fromKey, toKey){
     const p = s.payments || {};
     r.cashSales += Number(p.cash) || 0;      // 💵 كاش الدرج
     r.visaSales += Number(p.visa) || 0;      // 💳 بيروح لـPaymob
+
+    /* 🎁 كروت الهدايا — الفلوس في إيدك بس **مش بتاعتك**
+       ------------------------------------------------------------
+       بيع كارت: الفلوس دخلت الدرج، بس البضاعة لسه ماتباعتش → ده
+       **دين عليك**. الكاش فوق صح (دخل فعلًا)، بس لو حسبناه بيع
+       كمان، الرقم بيتعدّ مرتين: مرة يوم البيع ومرة يوم الصرف.
+
+       صرف كارت: البضاعة خرجت والدين اتسدّد، بس **مفيش كاش داخل**
+       يوم الصرف (اتقبض قبل كده).
+
+       ⚠️ من غير الحتة دي، الشيت بيوريك رصيد أكبر من اللي ليك —
+          وإنت بنيت التبويب ده عشان تبطّل تشوف أرقام كدّابة. */
+    (s.items || []).forEach(function(it){
+      if(!it) return;
+      const line = Math.abs(Number(it.price) || 0) * (Number(it.qty) || 0);
+      if(it.isGiftCard)    r.gcSold  += line;   // اتباع كارت → الدين زاد
+      if(it.isCreditSpend) r.gcSpent += line;   // اتصرف رصيد → الدين قلّ
+    });
   });
 
   const bucket = function(arr, field, filter){
@@ -442,6 +462,9 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
 
     return {
       key: k,
+      // 🎁 حركة الدين اليومية (مش داخلة في الرصيد — الكاش محسوب فوق)
+      gcSold: Math.round(d.gcSold * 100) / 100,
+      gcSpent: Math.round(d.gcSpent * 100) / 100,
       frozen: !!fz,
       // 🚧 يوم قديم مالحقش يتجمّد وفواتيره خرجت من نافظة التحميل —
       //    أرقامه ناقصة، فبنعلّمه بدل ما نعرضه كأنه حقيقة.
@@ -465,7 +488,15 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
 
   // 🏃 الرصيد التراكمي — مرّة للمؤكد ومرّة للمتوقّع
   let run = opening, runExp = opening;
+  // 🎁 الدين التراكمي: بيبدأ من رصيد افتتاحي (كروت مباعة قبل التصفير)
+  let liab = Number(base && base.giftLiabilityOpening) || 0;
   rows.forEach(function(r){
+    liab = Math.round((liab + r.gcSold - r.gcSpent) * 100) / 100;
+    // 🛡️ الدين عمره ما ينزل تحت الصفر — لو حصل يبقى فيه كروت
+    //    اتصرفت وإحنا مش شايفين بيعها (اتباعت قبل التصفير مثلًا).
+    //    بنعلّمها بدل ما نخبّيها.
+    r.giftLiability = Math.max(0, liab);
+    r.giftLiabilityRaw = liab;
     run += r.net; runExp += r.netExp;
     r.balance = Math.round(run * 100) / 100;
     r.balanceExp = Math.round(runExp * 100) / 100;
@@ -482,7 +513,10 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
     } else { r.variance = null; }
   });
 
+  const lastRow = rows.length ? rows[rows.length - 1] : null;
   return { rows: rows, opening: opening, openKey: fromKey, todayKey: todayKey,
+           giftLiability: lastRow ? lastRow.giftLiability : 0,
+           giftLiabilityRaw: lastRow ? lastRow.giftLiabilityRaw : 0,
            effPct: pred.pct, outstanding: pred.outstanding,
            paymobOpening: Number(base && base.paymobOpening) || 0,
            now: rows.length ? rows[rows.length - 1].balance : opening };
@@ -551,10 +585,19 @@ function ofWealth(ledger, cfg, nowTs){
   const pm = (ledger ? ledger.outstanding : 0) + (ledger ? ledger.paymobOpening : 0);
   const pmNet = Math.round(pm * (1 - (ledger ? ledger.effPct : 0) / 100) * 100) / 100;
   const gold = ofGoldValue(cfg, nowTs);
+  // 🎁 دين كروت الهدايا — **بيتطرح** من الإجمالي
+  //    الفلوس دي في إيدك بس مش بتاعتك: العميلة دفعت ولسه ماخدتش
+  //    بضاعتها. لو ما طرحناهاش، الشيت بيوريك فلوس أكتر من اللي ليك
+  //    وتصرف على أساسها — وده بالظبط اللي التبويب موجود يمنعه.
+  const giftLiab = Math.max(0, Number(ledger && ledger.giftLiability) || 0);
+  const owned = Math.round((cash + pmNet + gold.value - giftLiab) * 100) / 100;
   return {
     cash: cash, paymobGross: Math.round(pm * 100) / 100, paymobNet: pmNet,
     gold: gold.value, goldInfo: gold,
-    total: Math.round((cash + pmNet + gold.value) * 100) / 100
+    giftLiability: giftLiab,
+    // 💵 اللي في إيدك فعلًا (قبل خصم الدين) — للمطابقة مع الدرج
+    gross: Math.round((cash + pmNet + gold.value) * 100) / 100,
+    total: owned
   };
 }
 
@@ -1093,7 +1136,8 @@ const OF_RECUR_COL = 'office_recurring';
 const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], expenses:[],
             employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[],
             recurring:[], openShifts:[], salaryPays:[], rewards:[], cashBase:null, settlements:[],
-            cashDays:{}, cashCfg:{} };
+            cashDays:{}, cashCfg:{},
+            creditRequests:[], giftCards:[], creditLedger:[] };
 let started = false;
 let firstLoadDone = false;
 const seenIds = {};   // عشان الإشعار يطلع للجديد بس
@@ -1393,6 +1437,29 @@ function startData(){
     D.settlements = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     try{ renderCashHand(); }catch(e){}
   }, function(e){ console.warn('settlements sync', e && e.code); });
+  // 💳 طلبات الرصيد المستنية موافقة
+  db.collection('credit_requests').where('status','==','pending')
+    .onSnapshot(function(s){
+      D.creditRequests = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+      // ⚠️ العدّاد الأول: renderCreditAdmin بترجع بدري لو التبويب مقفول،
+      //    فلو اعتمدنا عليها العدّاد ما كانش هيظهر غير لما تفتح الشاشة.
+      try{ ofSyncCreditBadge(); }catch(e){}
+      try{ renderCreditAdmin(); }catch(e){}
+    }, function(e){ console.warn('credit reqs', e && e.code); });
+  // 🎁 نسخة الكروت للعرض (من غير البصمة — مجموعة gift_cards مقفولة)
+  db.collection('gift_cards_public').onSnapshot(function(s){
+    D.giftCards = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    try{ renderCreditAdmin(); }catch(e){}
+  }, function(e){ console.warn('gift cards', e && e.code); });
+  // 📒 آخر حركات الرصيد
+  // ⚠️ محدودة بـ٥٠ عن قصد — الدفتر بيكبر بلا حدود، واستعلام مفتوح
+  //    عليه بيولّع فاتورة القراءات (نفس درس التقفيل).
+  db.collection('credit_ledger').orderBy('at','desc').limit(50)
+    .onSnapshot(function(s){
+      D.creditLedger = s.docs.map(function(d){ return d.data(); });
+      try{ renderCreditAdmin(); }catch(e){}
+    }, function(e){ console.warn('credit ledger', e && e.code); });
+
   // 📒 تعديلات الشيت اليدوية + العدّ الفعلي (مستند لكل يوم)
   db.collection('office_cash_days').onSnapshot(function(s){
     const m = {};
@@ -4319,6 +4386,158 @@ function ofWireOpenings(){
 }
 
 /* ============================================================
+   💳 لوحة الرصيد وكروت الهدايا — Office
+   ------------------------------------------------------------
+   ٣ حاجات:
+     ١. 📝 طابور طلبات الكاشير (المالك بيوافق أو يرفض)
+     ٢. 🎁 حالة الكروت (مباع · متصرف · معلّق)
+     ٣. 📒 آخر حركات الرصيد
+
+   ⚠️ الموافقة **مبتكتبش رصيد من هنا**. بتنادي `creditAdjust`
+      وهي بتكتب. لو Office كتب مباشرة، يبقى فيه بابين للفلوس —
+      وباب الدفتر والتكرار والمعاملة الذرّية كله بيتلف.
+   ============================================================ */
+
+/* 🔔 عدّاد طلبات الرصيد المستنية
+   ⚠️ من غيره الطلب بيفضل في الشاشة ومحدش واخد باله — والكاشير
+      اللي طلبت فاكرة إنك شفته. الطلبات دي فلوس بتتضاف من العدم،
+      فتأخيرها مش تفصيلة. */
+function ofSyncCreditBadge(){
+  const el = document.getElementById('nbMoney'); if(!el) return;
+  const n = (D.creditRequests || []).filter(function(r){
+    return r && r.status === 'pending'; }).length;
+  el.textContent = n;
+  el.style.display = n ? '' : 'none';
+}
+window.ofSyncCreditBadge = ofSyncCreditBadge;
+
+function renderCreditAdmin(){
+  ofSyncCreditBadge();
+  const host = document.getElementById('creditAdminBody');
+  if(!host) return;
+
+  const reqs = (D.creditRequests || []).filter(function(r){ return r.status === 'pending'; });
+  const cards = D.giftCards || [];
+  const led = D.creditLedger || [];
+
+  // 🎁 ملخص الكروت
+  let sold = 0, spent = 0, pending = 0, live = 0;
+  cards.forEach(function(c){
+    const v = Number(c.value) || 0;
+    if(c.status === 'pending'){ pending += v; return; }
+    if(c.status === 'void') return;
+    sold += v;
+    const rem = Number(c.remaining) || 0;
+    spent += (v - rem);
+    live += rem;
+  });
+
+  const box = function(ic, label, val, color){
+    return '<div style="flex:1; background:var(--bg); border:1px solid var(--line);'
+      + ' border-radius:11px; padding:9px; min-width:0;">'
+      + '<div class="muted" style="font-size:11px;">' + ic + ' ' + label + '</div>'
+      + '<b style="font-size:15px;' + (color ? ' color:' + color + ';' : '') + '">'
+      + egp(val) + '</b></div>';
+  };
+
+  host.innerHTML =
+    // ── ١) طابور الموافقات ──────────────────────────────
+    (reqs.length
+      ? '<div style="background:rgba(245,158,11,.1); border:1px solid var(--warn);'
+        + ' border-radius:12px; padding:11px; margin-bottom:11px;">'
+        + '<b style="font-size:13px;">📝 طلبات مستنية موافقتك (' + reqs.length + ')</b>'
+        + '<div class="hint" style="margin:5px 0 8px;">دي فلوس هتتضاف من العدم — '
+        + 'راجعها كويس قبل ما توافق.</div>'
+        + reqs.map(function(r){
+            return '<div style="background:var(--card); border:1px solid var(--line);'
+              + ' border-radius:10px; padding:9px; margin-top:7px;">'
+              + '<div style="display:flex; justify-content:space-between; align-items:center;">'
+              +   '<b style="font-size:13px;">' + egp(r.amount) + '</b>'
+              +   '<span class="muted" style="font-size:11px;">' + esc(r.byName || '') + '</span></div>'
+              + '<div style="font-size:12px; margin-top:3px;">📱 ' + esc(r.phone) + '</div>'
+              + '<div class="muted" style="font-size:11.5px; margin-top:2px;">'
+              +   esc(r.reason || '') + ' · ' + esc(r.branch || '') + ' · ' + dstr(r.at) + '</div>'
+              + '<div style="display:flex; gap:6px; margin-top:8px;">'
+              +   '<button class="btn" onclick="approveCreditReq(\'' + r.id + '\')"'
+              +     ' style="flex:1; font-size:12px;">✅ وافق</button>'
+              +   '<button class="btn" onclick="rejectCreditReq(\'' + r.id + '\')"'
+              +     ' style="flex:1; font-size:12px;">✖️ ارفض</button>'
+              + '</div></div>';
+          }).join('')
+        + '</div>'
+      : '')
+
+    // ── ٢) ملخص الكروت ──────────────────────────────────
+    + '<div style="display:flex; gap:7px; flex-wrap:wrap;">'
+    +   box('🎁', 'كروت مباعة', sold)
+    +   box('💳', 'اتصرف', spent, 'var(--good)')
+    +   box('📕', 'لسه عليك', live, 'var(--warn)')
+    + '</div>'
+    + (pending > 0
+        ? '<div class="hint" style="margin-top:7px;">⏳ كروت اتصدرت ومااتدفعتش: '
+          + egp(pending) + ' — دي مش محسوبة عليك (مش شغّالة).</div>'
+        : '')
+    + '<div class="hint" style="margin-top:7px;">📕 "لسه عليك" = فلوس قبضتها '
+    + 'والعميلات لسه ماخدوش بضاعتها. بتتطرح من "اللي ليك فعلًا" في تبويب 💵 إيدك.</div>'
+
+    // ── ٣) آخر الحركات ──────────────────────────────────
+    + (led.length
+        ? '<div style="margin-top:12px;">'
+          + '<b style="font-size:12.5px;">📒 آخر حركات الرصيد</b>'
+          + led.slice(0, 12).map(function(x){
+              const a = Number(x.amount) || 0;
+              return '<div style="display:flex; justify-content:space-between;'
+                + ' padding:7px 2px; border-bottom:1px solid var(--line); font-size:12px;">'
+                + '<span>' + creditKindLabel(x) + '<br>'
+                +   '<span class="muted" style="font-size:10.5px;">' + esc(x.phone || '')
+                +   ' · ' + dstr(x.at) + '</span></span>'
+                + '<b style="color:' + (a < 0 ? 'var(--bad)' : 'var(--good)') + ';">'
+                +   (a < 0 ? '−' : '+') + egp(Math.abs(a)) + '</b></div>';
+            }).join('')
+          + '</div>'
+        : '<div class="hint" style="margin-top:10px;">لسه مفيش حركات رصيد</div>');
+}
+window.renderCreditAdmin = renderCreditAdmin;
+
+function creditKindLabel(x){
+  const t = x && x.type;
+  if(t === 'gift_card')   return '🎁 كارت هدية';
+  if(t === 'change_kept') return '💵 باقي محفوظ';
+  if(t === 'spend')       return '🛍️ صرف على فاتورة';
+  if(t === 'manual')      return '✏️ ' + esc(x.reason || 'تعديل');
+  return 'حركة';
+}
+
+/* ✅ الموافقة — بتنادي الفنكشن، مبتكتبش رصيد بنفسها */
+async function approveCreditReq(id){
+  const r = (D.creditRequests || []).filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  if(!confirm('توافق على إضافة ' + egp(r.amount) + ' لحساب ' + r.phone + '؟\n\n'
+    + 'السبب: ' + (r.reason || '—') + '\n'
+    + 'طالبها: ' + (r.byName || '—') + '\n\n'
+    + '⚠️ دي فلوس بتتضاف من العدم.')) return;
+  try{
+    const fn = firebase.app().functions('us-central1').httpsCallable('creditAdjust');
+    // 🔁 مفتاح التكرار من الطلب نفسه — الموافقة مرتين بالغلط
+    //    مبتضيفش الفلوس مرتين.
+    await fn({ phone: r.phone, amount: r.amount, reason: r.reason,
+               idem: 'req:' + id, source: 'approved' });
+    await db.collection('credit_requests').doc(id)
+      .set({ status:'approved', decidedAt: Date.now() }, { merge: true });
+  }catch(e){ alert('ماتمّتش: ' + (e.message || e.code)); }
+}
+window.approveCreditReq = approveCreditReq;
+
+async function rejectCreditReq(id){
+  if(!confirm('ترفض الطلب ده؟')) return;
+  try{
+    await db.collection('credit_requests').doc(id)
+      .set({ status:'rejected', decidedAt: Date.now() }, { merge: true });
+  }catch(e){ alert('ماتمّتش: ' + (e.message || e.code)); }
+}
+window.rejectCreditReq = rejectCreditReq;
+
+/* ============================================================
    📒 شاشة دفتر اليومية
    ------------------------------------------------------------
    شيت زي الإكسل: كل يوم سطر، كل خانة تتدوس تتعدّل.
@@ -4384,11 +4603,21 @@ function renderCashHand(){
     +   ofMiniCard('🏦 عند Paymob', W.paymobNet, 'متوقّع يوصلك')
     +   ofMiniCard('🥇 دهب', W.gold, gold.grams ? (gold.grams + ' جرام') : 'مش متسجّل')
     + '</div>'
+    // 🎁 دين الكروت — بيبان **قبل** الإجمالي عشان الطرح يبقى مفهوم
+    + (W.giftLiability > 0
+        ? '<div style="display:flex; justify-content:space-between; align-items:center;'
+          + ' margin-top:11px; padding:8px 10px; border-radius:10px;'
+          + ' background:rgba(245,158,11,.1); border:1px solid var(--warn);">'
+          + '<span style="font-size:12.5px;">🎁 كروت هدايا مباعة'
+          +   '<div class="muted" style="font-size:10.5px;">فلوس في إيدك مش بتاعتك</div></span>'
+          + '<b style="font-size:15px; color:var(--warn);">− ' + egp(W.giftLiability) + '</b></div>'
+        : '')
     + '<div style="display:flex; justify-content:space-between; align-items:center;'
     +   ' margin-top:12px; padding-top:11px; border-top:2px solid var(--line);">'
-    +   '<span style="font-weight:800; font-size:13.5px;">🧮 إجمالي فلوسك</span>'
+    +   '<span style="font-weight:800; font-size:13.5px;">🧮 اللي ليك فعلًا</span>'
     +   '<b style="font-size:21px;">' + egp(W.total) + '</b></div>'
-    + '<div class="hint" style="margin-top:5px;">الكاش + المتوقّع من Paymob + قيمة الدهب</div>'
+    + '<div class="hint" style="margin-top:5px;">الكاش + المتوقّع من Paymob + الدهب'
+    +   (W.giftLiability > 0 ? ' − دين الكروت' : '') + '</div>'
     + '</div>';
 
   /* ── كارت الدهب ───────────────────────────────────────── */
@@ -4485,6 +4714,8 @@ function ofLedgerRow(r, L){
   if(r.val.cashSales) bits.push('💵 ' + egp(r.val.cashSales));
   if(r.val.visaSales) bits.push('💳 ' + egp(r.val.visaSales));
   if(r.val.pmIn)      bits.push('🏦 +' + egp(r.val.pmIn));
+  if(r.gcSold)        bits.push('🎁 ' + egp(r.gcSold));
+  if(r.gcSpent)       bits.push('💳 −' + egp(r.gcSpent));
   if(r.out)           bits.push('📤 −' + egp(r.out));
   if(bits.length) head += '<div class="muted" style="font-size:11.5px; margin-top:3px;">' + bits.join(' · ') + '</div>';
 
@@ -4663,8 +4894,19 @@ async function ofStartFresh(){
   const pmOpen = Math.round((Number(p) || 0) * 100) / 100;
   if(!isFinite(pmOpen) || pmOpen < 0){ alert('رقم مش صح'); return; }
 
+  // 🎁 دين الكروت القديمة — لازم يتحمل مع التصفير
+  //    من غيره، كارت اتباع قبل التصفير ويتصرف بعده هيقلّل أرقامك
+  //    من غير ما يبان سبب، والشيت يوريك خسارة مش موجودة.
+  const gl = prompt('🎁 وكروت هدايا مباعة ولسه ماتصرفتش بكام؟\n\n'
+    + 'دي فلوس قبضتها والعميلات لسه ماخدوش بضاعتها.\n'
+    + 'لو مفيش كروت اكتب صفر.', '0');
+  if(gl === null) return;
+  const giftOpen = Math.round((Number(gl) || 0) * 100) / 100;
+  if(!isFinite(giftOpen) || giftOpen < 0){ alert('رقم مش صح'); return; }
+
   if(!confirm('💵 كاش في إيدك: ' + egp(cash)
     + '\n🏦 عند Paymob: ' + egp(pmOpen)
+    + '\n🎁 دين كروت: ' + egp(giftOpen)
     + '\n\nالحساب هيبدأ من دلوقتي. الأيام اللي فاتت هتختفي من الشيت '
     + '(البيانات نفسها مش بتتمسح). تكمّل؟')) return;
   try{
@@ -4674,7 +4916,8 @@ async function ofStartFresh(){
         Object.assign({}, D.cashBase, { closedAt: Date.now() }));
     }
     await db.collection('pos_test_settings').doc('office_cash').set({
-      amount: cash, paymobOpening: pmOpen, atMs: Date.now(), by: 'office'
+      amount: cash, paymobOpening: pmOpen, giftLiabilityOpening: giftOpen,
+      atMs: Date.now(), by: 'office'
     }, { merge: true });
   }catch(e){ alert('ماتحفظش: ' + (e.code || e.message)); }
 }
