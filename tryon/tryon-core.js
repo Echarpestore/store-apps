@@ -177,29 +177,34 @@ TRYON.pickByQuery = function(catalog, colors, getParam){
 };
 
 /* ---------- ١١) لون الطرحة من صورة المنتج — نفس الخطوة ---------- */
-// pixels = RGBA (من canvas مصغّر 64×64). بنتجاهل الخلفية (أبيض/فاتح
-// قوي وشفاف) وبنطلّع اللون الغالب بمتوسط الباكت الأكبر.
-// confidence واطي = الصورة كلها خلفية/مش واضحة → المتصل يستخدم الافتراضي.
+// pixels = RGBA (من canvas مصغّر 64×64).
+// ⭐ اتصلحت على صورة منتج **حقيقية** من المالك، وطلّعت باجين:
+//   ١) الخلفية الاستوديو مش أبيض نقي (كريمي ~236) — شرط >235 كان
+//      بيسيبها تعدي وتكسب كأنها "اللون". الرفض بقى: فاتح + باهت.
+//   ٢) القماش الحقيقي مليان درجات (نسيج/إضاءة) — الباكت الواحد
+//      بيتفتت والغالب بيطلع غلط. الحل: **الوسيط** لكل قناة —
+//      متين ضد الحواف المشغولة والديكور في الصورة.
+// confidence = نسبة بكسلات المنتج. واطي = الصورة كلها خلفية.
 TRYON.dominantColor = function(pixels){
-  const buckets = {};                       // مفتاح 4-بت لكل قناة
-  let counted = 0, total = 0;
+  const rs = [], gs = [], bs = [];
+  let total = 0;
   for(let i = 0; i < pixels.length; i += 4){
     total++;
     const r = pixels[i], g = pixels[i+1], b = pixels[i+2], a = pixels[i+3];
     if(a < 128) continue;                                   // شفاف
-    if(r > 235 && g > 235 && b > 235) continue;             // خلفية بيضا
-    const key = (r >> 4) + '_' + (g >> 4) + '_' + (b >> 4);
-    const bk = buckets[key] || (buckets[key] = { n:0, r:0, g:0, b:0 });
-    bk.n++; bk.r += r; bk.g += g; bk.b += b;
-    counted++;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if(mx > 200 && (mx - mn) < 18) continue;                // خلفية فاتحة باهتة
+    rs.push(r); gs.push(g); bs.push(b);
   }
-  if(!total || !counted) return { hex:null, confidence:0 };
-  let best = null;
-  for(const k in buckets) if(!best || buckets[k].n > best.n) best = buckets[k];
-  const h = (v) => Math.round(v / best.n).toString(16).padStart(2, '0');
+  if(!total || !rs.length) return { hex:null, confidence:0 };
+  const med = (arr) => {
+    arr.sort((x, y) => x - y);
+    return arr[Math.floor(arr.length / 2)];
+  };
+  const h = (v) => v.toString(16).padStart(2, '0');
   return {
-    hex: '#' + h(best.r) + h(best.g) + h(best.b),
-    confidence: Math.round((best.n / total) * 100) / 100
+    hex: '#' + h(med(rs)) + h(med(gs)) + h(med(bs)),
+    confidence: Math.round((rs.length / total) * 100) / 100
   };
 };
 
