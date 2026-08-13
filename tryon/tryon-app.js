@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v17';
+  const TRYON_VER = 'v19';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -31,7 +31,9 @@
     smChin: T.Smoother2D(), smYaw: T.Smoother(), smBright: T.Smoother({minAlpha:0.05, maxAlpha:0.2}),
     gov: T.FrameGovernor(),
     assetCache: {},               // (scarfId|colorId) → {head, drape, anchors}
-    lastHint: '', lostFrames: 0, r3d: false, mesh: false, lastFrameT: 0
+    lastHint: '', lostFrames: 0, r3d: false, mesh: false, lastFrameT: 0,
+    camErr: null, fatalShown: false,
+    stage: 'boot', lastErr: null      // 🩺 تشخيص: فين وقفنا وإيه الخطأ
   };
 
   /* ============================================================
@@ -112,6 +114,15 @@
   async function startCamera(){
     if(S.stream) return;                       // شغالة خلاص
     setLoad('بنفتح الكاميرا…');
+    // 🌐 الفحص **قبل** اللمس — الوصول لـmediaDevices الغير موجودة
+    //    بيرمي TypeError غامض بيتحوّل لشاشة خطأ مالهاش معنى
+    const sup = T.cameraSupport(navigator,
+      typeof window.isSecureContext === 'boolean' ? window.isSecureContext : true);
+    if(!sup.ok){
+      const err = new Error('camera unavailable: ' + sup.reason);
+      err.name = 'NoCameraAPI';
+      throw err;
+    }
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode:'user', width:{ideal:1280}, height:{ideal:720} },
       audio: false
@@ -431,6 +442,8 @@
     const img = new Image();
     img.src = URL.createObjectURL(file);
     await img.decode();
+    // اختارت صورة = رسالة "الكاميرا مش شغالة" خلاص عملت شغلها
+    if(!S.fatalShown) $('fatal').style.display = 'none';
     S.mode = 'photo'; S.running = false;
     stopCamera();                              // 🟢 الدوت الأخضر يطفي في وضع الصورة
     $('btnPhoto').classList.add('on'); $('btnLive').classList.remove('on');
@@ -449,8 +462,16 @@
   }
 
   async function backToLive(){
+    // 🛟 الكاميرا ممكن تفضل مش متاحة (WebView) — منرجعش للايف على
+    //    كانفاس مقاسه undefined، بنفضل على الصورة ونقول السبب.
+    try{
+      await startCamera();
+    }catch(e){
+      S.camErr = e; S.lastErr = e;
+      photoOnly(e);
+      return;
+    }
     S.mode = 'live';
-    await startCamera().catch(() => {});
     $('btnLive').classList.add('on'); $('btnPhoto').classList.remove('on');
     S.canvas.classList.add('mirror');
     S.canvas.width = S.video.videoWidth; S.canvas.height = S.video.videoHeight;
@@ -561,28 +582,105 @@
     S.ctx = S.canvas.getContext('2d', { willReadFrequently:true });
     buildUI();
     try{
+      S.stage = 'model';
       await loadLandmarker();
-      await startCamera();
-      // 🧊 وضع الـAR التجريبي خلف ?ar=1 — قرار: العميلة تشوف القالب
-      //    المصوّر (شكل طرحة حقيقية) لحد ما الـ3D ياخد خامته وشكله النهائي
-      const qsb = new URLSearchParams(location.search);
-      if(qsb.get('ar'))
-        S.r3d = await TRYON3D.init(S.canvas.width, S.canvas.height);
-      else if(!qsb.get('flat'))
-        // 🧵 الشبكة القماشية: نفس صورة القالب + فيزياء تمايل — الافتراضي
-        S.mesh = await TRYON_MESH.init(S.canvas.width, S.canvas.height);
+      S.stage = 'camera';
+      // 🛟 فشل الكاميرا **مش** نهاية الصفحة: وضع الصورة شغّال من
+      //    غيرها خالص. الشاشة السودا + رسالة خطأ كانت بتضيّع
+      //    العميلة وهي قادرة تجرّب بصورة.
+      try{
+        await startCamera();
+      }catch(e){
+        S.camErr = e; S.lastErr = e;
+        S.canvas.width = S.canvas.width || 720;
+        S.canvas.height = S.canvas.height || 960;
+        photoOnly(e);
+        return;
+      }
+      S.stage = 'renderer';
+      // 🛟 فشل الرندرر (3D أو الشبكة) عمره ما ياخد الصفحة معاه —
+      //    الكاميرا شغالة خلاص، فبنكمّل بالمسار المسطح بدل شاشة خطأ.
+      try{
+        // 🧊 وضع الـAR التجريبي خلف ?ar=1 — قرار: العميلة تشوف القالب
+        //    المصوّر (شكل طرحة حقيقية) لحد ما الـ3D ياخد شكله النهائي
+        const qsb = new URLSearchParams(location.search);
+        if(qsb.get('ar'))
+          S.r3d = await TRYON3D.init(S.canvas.width, S.canvas.height);
+        else if(!qsb.get('flat'))
+          // 🧵 الشبكة القماشية: نفس صورة القالب + فيزياء تمايل — الافتراضي
+          S.mesh = await TRYON_MESH.init(S.canvas.width, S.canvas.height);
+      }catch(e){
+        S.lastErr = e;
+        console.warn('الرندرر فشل — كمّلنا بالمسار المسطح:', e);
+      }
+      S.stage = 'live';
       setLoad('');
       S.running = true;
       loop();
     }catch(e){
       console.error(e);
+      S.lastErr = e;
       setLoad('');
-      const denied = e && (e.name === 'NotAllowedError' || e.name === 'NotFoundError');
-      $('fatal').style.display = 'block';
-      $('fatal').textContent = denied
-        ? 'محتاجين إذن الكاميرا عشان التجربة تشتغل — افتحي الإعدادات واسمحي بيها، أو جرّبي على صورة من زرار 📷'
-        : 'حصلت مشكلة في التحميل — جرّبي تقفلي الصفحة وتفتحيها تاني، ولو اتكررت كلّمينا من التطبيق 💬';
+      showFatal(e);
     }
+  }
+
+  /* 🩺 شاشة الخطأ: رسالة مؤدبة للعميلة + سطر تقني صغير (النسخة
+     والمرحلة ونص الخطأ) — من غيره التشخيص على الموبايل مستحيل،
+     مفيش كونسول. اللمس عليه بينسخه عشان تبعته في الشات. */
+  function showFatal(e){
+    const adv = T.failureAdvice(S.stage, e && e.name);
+    msgBox(adv.text, e, true);
+  }
+
+  /* 📷 الكاميرا وقعت بس التجربة لسه ممكنة: بنفضل واقفين على وضع
+     الصورة بدل شاشة خطأ — وزرار الصورة بيتفتح من الرسالة نفسها. */
+  function photoOnly(e){
+    const adv = T.failureAdvice(S.stage, e && e.name);
+    S.mode = 'photo'; S.running = false;
+    S.stage = 'photo-only';
+    setLoad('');
+    $('btnPhoto').classList.add('on');
+    $('btnLive').classList.remove('on');
+    S.canvas.classList.remove('mirror');
+    msgBox(adv.text, e, false, '📷 اختاري صورة', () => $('photoInput').click());
+  }
+
+  // صندوق رسالة واحد للحالتين — زرار إجراء + السطر التقني
+  function msgBox(text, e, isFatal, btnText, onBtn){
+    const box = $('fatal');
+    box.textContent = '';
+    const p1 = document.createElement('div');
+    p1.textContent = text;
+    box.appendChild(p1);
+
+    const b = document.createElement('button');
+    b.textContent = btnText || '🔄 جرّبي تاني';
+    b.style.cssText = 'margin-top:10px; padding:8px 18px; border:0; border-radius:99px;'
+                    + 'font-family:inherit; font-weight:700; font-size:14px;'
+                    + 'background:var(--gold-deep,#b8912f); color:#fff;';
+    b.onclick = onBtn || (() => location.reload());
+    box.appendChild(b);
+
+    const p2 = document.createElement('div');
+    p2.style.cssText = 'margin-top:10px; font-size:11px; opacity:.7; direction:ltr;'
+                     + 'text-align:left; word-break:break-word; line-height:1.5;';
+    p2.textContent = errLine(e);
+    p2.title = 'المس للنسخ';
+    p2.addEventListener('click', () => {
+      const t = errLine(e);
+      try{ navigator.clipboard.writeText(t); }catch(x){}
+      p2.textContent = t + '  ✓ اتنسخ';
+    });
+    box.appendChild(p2);
+    box.style.display = 'block';
+    if(isFatal) S.fatalShown = true;
+  }
+
+  function errLine(e){
+    return TRYON_VER + ' · ' + (S.stage || '?') + ' · '
+         + ((e && e.name) || 'Error') + ': '
+         + String((e && e.message) || e || '').slice(0, 200);
   }
 
   if(document.readyState === 'loading')
@@ -590,7 +688,9 @@
   else boot();
 
   // للقاعدة الذهبية §18 + التشخيص من الكونسول
-  window.tryonDiag = () => ({ mode:S.mode, running:S.running,
+  window.tryonDiag = () => ({ ver: TRYON_VER, mode:S.mode, running:S.running,
+    stage: S.stage, r3d: S.r3d, mesh: S.mesh,
+    err: S.lastErr ? errLine(S.lastErr) : null,
     frameMs: Math.round(S.gov.avg()), scarf:S.scarf && S.scarf.id,
     color:S.color && S.color.id });
 })();

@@ -223,6 +223,36 @@ TRYON.imageSourceFromQuery = function(getParam, getStore){
   return { kind:'none', value:null };
 };
 
+/* ---------- ١٣) 🌐 هل الكاميرا متاحة أصلًا في المتصفح ده؟ ---------- */
+// متصفح جوّه تطبيق (WebView) كتير مبيدّيش `navigator.mediaDevices`
+// خالص — والوصول ليها من غير فحص بيرمي TypeError غامض بيوقّع
+// الصفحة كلها بشاشة "حصلت مشكلة في التحميل" واللي مالهاش أي معنى
+// للعميلة. الفحص بيفرّق بين "المتصفح مش بيدعم" و"النت/الإذن".
+TRYON.cameraSupport = function(nav, secure){
+  if(secure === false) return { ok:false, reason:'insecure' };   // مش https
+  if(!nav || !nav.mediaDevices || typeof nav.mediaDevices.getUserMedia !== 'function')
+    return { ok:false, reason:'no-api' };
+  return { ok:true, reason:'' };
+};
+
+/* ---------- ١٤) 🩺 الرسالة الصح حسب مكان الفشل ---------- */
+// stage = المرحلة اللي وقفنا فيها · name = اسم الخطأ.
+// canPhoto = الكاميرا هي اللي فشلت بس، ووضع الصورة لسه شغّال —
+// ساعتها ممنوع نقفل الصفحة، بنحوّلها لوضع الصورة.
+TRYON.failureAdvice = function(stage, name){
+  if(name === 'NotAllowedError' || name === 'PermissionDeniedError')
+    return { kind:'denied', canPhoto:true,
+      text:'محتاجين إذن الكاميرا عشان اللايف يشتغل — اسمحي بيه من إعدادات المتصفح، أو جرّبي على صورة 📷' };
+  if(name === 'NoCameraAPI' || name === 'NotFoundError' || name === 'NotReadableError')
+    return { kind:'nocam', canPhoto:true,
+      text:'المتصفح اللي فاتحة منه مش بيشغّل الكاميرا — افتحي اللينك في متصفح الموبايل، أو كمّلي على صورة من زرار 📷' };
+  if(stage === 'model')
+    return { kind:'model', canPhoto:false,
+      text:'مشكلة في تحميل ملفات التجربة — اتأكدي إن النت شغال وإن مفيش حاجب إعلانات مقفّل الصفحة، وجرّبي تاني 🔄' };
+  return { kind:'generic', canPhoto:false,
+    text:'حصلت مشكلة في التحميل — جرّبي تاني، ولو اتكررت كلّمينا من التطبيق 💬' };
+};
+
 /* ---------- التصدير (القاعدة الذهبية §18) ---------- */
 if(typeof module !== 'undefined' && module.exports){ module.exports = TRYON; }
 if(typeof window !== 'undefined'){
