@@ -1471,7 +1471,7 @@ async function refreshCustomerInfo(){
     if(_nm0) _nm0.value = '';
     _custMatchedPhone = '';
     setCustState(''); custActivatedOffers={}; revertCustomerOffers(); custReward=null;
-    custPendingRedeem=null; custPointsBalance=0; custBaseText=''; renderCart(); return; }
+    custPendingRedeem=null; custPointsBalance=0; window.custCreditBalance=0; custBaseText=''; renderCart(); return; }
   // 🔴 الرقم الناقص مبقاش يعدّي: قبل كده أي رقم (٤ أرقام مثلاً) كان بيتعامل
   //    معاملة "مش مسجّل" ويفتح التسجيل — فتتسجّل عميلة بمفتاح غلط ونقطها
   //    تروح لمستند مش بتاعها ومفيش رجوع.
@@ -1480,7 +1480,7 @@ async function refreshCustomerInfo(){
       ? phoneRejectReason(typeof normalizePhone === 'function' ? normalizePhone(phone) : phone) : null;
     if(_bad){
       _custMatchedPhone = '';
-      clearCustomerContext(); revertCustomerOffers(); custPointsBalance = 0;
+      clearCustomerContext(); revertCustomerOffers(); custPointsBalance = 0; window.custCreditBalance = 0;
       setCustState('bad');
       renderCart();
       return;
@@ -1524,6 +1524,9 @@ async function refreshCustomerInfo(){
       if(_nm2) _nm2.value = d.name || '';   // الاسم بيبان في الشريط
       custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
       custPointsBalance = Number(d[pointsFieldFor(currentBranch)]) || 0;   // 🛡️ الرصيد الحقيقي
+      // 💳 رصيد الفلوس — منفصل تمامًا عن النقط. للعرض بس؛
+      //    الفنكشن بتتأكد من الرصيد الحقيقي وقت الصرف.
+      window.custCreditBalance = Number(d.credit) || 0;
       if(Object.keys(custActivatedOffers).length){ await _loadOfficialOffers(); if(_stale()) return; }   // 🛡️ الشروط الرسمية قبل أي خصم
       revertCustomerOffers(); applyCustomerOffers(); renderCart();
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
@@ -1851,7 +1854,24 @@ function refreshCustomerActionUI(){
   const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   // 💳 النقط بتتضاف لسطر الهوية — مش سطر لوحده
   const _ptsEl = document.getElementById('custPts');
-  if(_ptsEl) _ptsEl.textContent = '💳 ' + (Number(custPointsBalance) || 0);
+  if(_ptsEl){
+    // 💳 النقط · 💰 ورصيد الفلوس لو عندها.
+    //    ⚠️ الاتنين متفصولين في العرض عن قصد: النقط بتتكسب بقاعدة
+    //       والرصيد فلوس دفعتها — خلطهم بيلخبط العميلة والكاشير.
+    const _cr = Number(window.custCreditBalance) || 0;
+    _ptsEl.textContent = '💳 ' + (Number(custPointsBalance) || 0)
+      + (_cr > 0 ? '  ·  💰 ' + _cr.toFixed(2) + ' ج.م' : '');
+  }
+
+  // 💰 زرار استخدام الرصيد — بيظهر بس لما يكون فيه رصيد وفاتورة موجبة
+  //    ومفيش خصم رصيد متطبّق خلاص على الفاتورة دي.
+  if((Number(window.custCreditBalance) || 0) > 0 && cartTot > 0
+     && !cart.some(l => l.isCreditSpend) && !window.pendingCreditSpend){
+    const _use = Math.min(Number(window.custCreditBalance) || 0, cartTot);
+    setCustAction('<button class="act-redeem" onclick="useCustomerCredit()">💰 استخدمي الرصيد ('
+      + _use.toFixed(2) + ' ج.م)</button>');
+    return;
+  }
 
   if(custPendingRedeem && !pendingRedemption){
     // 🛡️ نعيد الحساب من إعدادات المحل والرصيد الفعلي — ولو أرقام الطلب مش مطابقة نعلّم 🚩
@@ -3340,7 +3360,7 @@ async function generateInvoiceNumber(){
 // 💵 شاشة الباقي — بتظهر **بعد** الطباعة وفتح الدرج، عشان الكاشير
 // يعدّ الفكة وهو شايف الرقم قدامه. مش بتعطّل أي حاجة، وبتقفل بأي زرار
 // أو بمجرد ما يبدأ يمسح المنتج اللي بعده.
-function showChangeAfterPrint(change){
+function showChangeAfterPrint(change, ctx){
   const old = document.getElementById('changeConfirmOverlay');
   if(old) old.remove();
   const ov = document.createElement('div');
@@ -3354,15 +3374,39 @@ function showChangeAfterPrint(change){
       <div style="font-size:76px; font-weight:900; color:#22c55e; line-height:1;
                   direction:ltr; unicode-bidi:isolate;">${Number(change).toFixed(2)}</div>
       <div style="color:var(--muted); font-size:15px; margin-top:6px;">جنيه</div>
-      <button id="changeCloseBtn" style="margin-top:22px; width:100%; padding:15px; border:none;
+      ${(ctx && ctx.phone) ? `
+      <button id="keepChangeBtn" style="margin-top:20px; width:100%; padding:15px; border:none;
+              border-radius:12px; background:#1d4ed8; color:#fff;
+              font-family:'Cairo'; font-weight:800; font-size:15px; cursor:pointer;">
+        💳 سيبي الباقي في حسابها</button>
+      <div style="color:var(--muted); font-size:11.5px; margin-top:6px;">
+        تصرفه في أي فاتورة جاية</div>` : ''}
+      <button id="changeCloseBtn" style="margin-top:${(ctx && ctx.phone) ? '10px' : '22px'}; width:100%; padding:15px; border:none;
               border-radius:12px; background:var(--panel2); border:1px solid var(--border);
               color:var(--text); font-family:'Cairo'; font-weight:800; font-size:15px; cursor:pointer;">
-        إغلاق</button>
+        ${(ctx && ctx.phone) ? 'ادّيتها كاش — إغلاق' : 'إغلاق'}</button>
       <div style="color:var(--muted); font-size:11.5px; margin-top:8px;">دوس <b>Enter</b> تقفل — أو امسح المنتج اللي بعده</div>
     </div>`;
   document.body.appendChild(ov);
   const close = ()=>{ const el = document.getElementById('changeConfirmOverlay'); if(el) el.remove(); };
   ov.querySelector('#changeCloseBtn').addEventListener('click', close);
+  // 💳 "سيبي الباقي في الحساب"
+  //    ⚠️ الزرار بيتقفل فورًا بعد الضغط — من غير كده ضغطتين سريعتين
+  //       بيبعتوا نداءين، ومفتاح التكرار بيمسك الثاني بس ده هدر وقت
+  //       والكاشير بتفتكر إن الأولى فشلت.
+  const _keep = ov.querySelector('#keepChangeBtn');
+  if(_keep){
+    _keep.addEventListener('click', async function(){
+      _keep.disabled = true; _keep.textContent = 'بيتحفظ...';
+      try{
+        const r = await keepChangeAsCredit(change, (ctx && ctx.invoiceCode) || '', (ctx && ctx.phone) || '');
+        if(r){ showToast('اتحفظ ' + Number(change).toFixed(2) + ' ج.م في حسابها ✅'); close(); }
+        else { _keep.disabled = false; _keep.textContent = '💳 سيبي الباقي في حسابها'; }
+      }catch(e){
+        _keep.disabled = false; _keep.textContent = '💳 سيبي الباقي في حسابها';
+      }
+    });
+  }
   ov.addEventListener('click', (e)=>{ if(e.target === ov) close(); });
   // أي مسح/كتابة في بار البحث بيقفلها — الكاشير مش هيحتاج يدوس حاجة
   const sb = document.getElementById('searchBar');
@@ -3392,6 +3436,12 @@ async function confirmPayment(){
   if(_confirmSaving){ showToast('الفاتورة بتتحفظ... استنى ثانية', 'err'); return; }   // منع التكرار
   // 💵 بنحسب الباقي دلوقتي قبل ما السلة تتفضّى — وبنعرضه بعد الطباعة
   let _pendingChange = 0;
+  // 💵 رقم العميلة ورقم الفاتورة لازم يتمسكوا **قبل** ما السلة تتفضّى —
+  //    شاشة الباقي بتظهر بعد كده والخانات بتكون اتمسحت خلاص.
+  let _changeCtx = { phone:'', invoiceCode:'' };
+  try{
+    _changeCtx.phone = (document.getElementById('customerPhone') || {value:''}).value.trim();
+  }catch(e){}
   try{
     const _total = cartTotal();
     let _entered = 0;
@@ -3464,7 +3514,10 @@ async function confirmPayment(){
   }finally{
     // 💵 الفاتورة اتطبعت والدرج فتح — دلوقتي بس بنعرض الباقي عشان تعدّه
     if(_saved && _pendingChange > 0){
-      try{ showChangeAfterPrint(_pendingChange); }catch(e){ console.warn('change', e); }
+      try{
+        _changeCtx.invoiceCode = window._lastInvoiceCode || '';
+        showChangeAfterPrint(_pendingChange, _changeCtx);
+      }catch(e){ console.warn('change', e); }
     }
     // 📟 تنضيف حالة Paymob بعد أي حفظ ناجح — بيانات كارت فاتورة اتحفظت يدوي
     // كانت بتفضل معلّقة وتلوث الفاتورة اللي بعدها (cardTxn قديم على فاتورة كاش)
@@ -3571,6 +3624,9 @@ window.returnPointsDeduction = returnPointsDeduction;
   const invoiceNo = await generateInvoiceNumber();
   // بادئة الفرع في كود الفاتورة (FT + رمز الفرع) — عشان الكود يقول الفرع فورًا ويمنع تعارض الأوفلاين
   const invoiceCode = 'FT' + branchCode(currentBranch) + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
+  // 💵 شاشة الباقي بتظهر بعد ما الدالة دي تخلص، ومحتاجة رقم الفاتورة
+  //    عشان "سيبي الباقي في الحساب" تربط الحركة بفاتورة حقيقية.
+  window._lastInvoiceCode = invoiceCode;
 
   // الموظف اللي فعليًا باع للعميل (ممكن يكون مختلف عن اللي مسجّل دخول في جهاز الـPOS نفسه)
   // 👤 البياعة: من غير اختيار = **مش بتتحسب لحد** (قرار المالك).
@@ -3683,6 +3739,22 @@ window.returnPointsDeduction = returnPointsDeduction;
       // 🧹 تصفير فوري — حتى لو الطباعة وقعت. البيانات دي لفاتورة واحدة بس،
       //    ولو فضلت هتتطبع نقط عميلة على فاتورة عميلة تانية.
       finally{ try{ window.receiptCustPoints = null; }catch(e){} }
+
+      // 💳 الرصيد وكروت الهدايا — **بعد** الطباعة عشان الورقة
+      //    ماتستناش الشبكة (نفس سبب تقديم الطباعة أصلًا).
+      //    ⚠️ ومش داخل try الطباعة: لو الطباعة وقعت، الرصيد
+      //       لازم يتخصم برضه — الفلوس أهم من الورقة.
+      (async function(){
+        try{
+          if(typeof commitCreditSpend === 'function')
+            await commitCreditSpend(invoiceCode, total);
+          if(typeof activatePendingGiftCards === 'function'){
+            const _cards = await activatePendingGiftCards(invoiceCode);
+            if(_cards && _cards.length && typeof printGiftCardSlips === 'function')
+              await printGiftCardSlips(_cards);
+          }
+        }catch(e){ console.error('credit post-sale', e); }
+      })();
     };
 
     // ↩️🔒 منع تكرار المرتجع عبر الجلسات: نسجّل الكميات المرجّعة على الفاتورة الأصلية

@@ -7,6 +7,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<!-- 💳 لازم للرصيد وكروت الهدايا: كل عملية فلوس بتروح لـCloud Function -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
@@ -1608,6 +1610,11 @@ body.on-dashboard .badge-test{ display:block; }
           <div id="custAction"><div id="newCustomerRow"><button onclick="registerNewCustomer()">➕ سجّل</button></div></div>
           <button type="button" id="custCapBtn" onclick="capAskCustomer()" title="العميل يكتب رقمه بنفسه على شاشة التقييم">📱</button>
         </div>
+        <!-- 🎁 بيع كارت هدية — بيدخل السلة كسطر بقيمته والعميلة بتدفعه عادي -->
+        <div id="giftCardRow" style="margin-top:6px;">
+          <button type="button" onclick="sellGiftCard()"
+            title="كارت هدية العميلة بتشتريه وتديه لأي حد">🎁 كارت هدية</button>
+        </div>
         <div id="resetPinRow" style="display:none;">
           <button onclick="resetLoyaltyPin()">🔑 مسح الرقم السري للعميل</button>
           <span>لو العميل نسي رقمه السري في التطبيق</span>
@@ -1789,5 +1796,8 @@ body.on-dashboard .badge-test{ display:block; }
      ⚠️ بيشتغل لوحده أول ما `db` و`currentBranch` يجهزوا، فلازم يفضل
         آخر واحد بعد pos-core.js. -->
 <script src="frames.js"></script>
+<!-- 💳 منظومة الرصيد وكروت الهدايا -->
+<script src="credit-core.js"></script>
+<script src="credit-ui.js"></script>
 </body>
 </html>
