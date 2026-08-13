@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v15';
+  const TRYON_VER = 'v17';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -31,7 +31,7 @@
     smChin: T.Smoother2D(), smYaw: T.Smoother(), smBright: T.Smoother({minAlpha:0.05, maxAlpha:0.2}),
     gov: T.FrameGovernor(),
     assetCache: {},               // (scarfId|colorId) → {head, drape, anchors}
-    lastHint: '', lostFrames: 0, r3d: false
+    lastHint: '', lostFrames: 0, r3d: false, mesh: false, lastFrameT: 0
   };
 
   /* ============================================================
@@ -125,6 +125,7 @@
     const c3 = $('stage3d');
     c3.width = S.canvas.width; c3.height = S.canvas.height;
     if(S.r3d) TRYON3D.resize(S.canvas.width, S.canvas.height);
+    if(S.mesh) TRYON_MESH.resize(S.canvas.width, S.canvas.height);
     setLoad('');
   }
 
@@ -269,6 +270,22 @@
     }catch(e){ console.warn('tint', e); asset.headTinted = null; }
   }
 
+  /* 🖼️ AR-2: مصدر الصورة المسقّطة — **نفس** أصل المسار 2D وبنفس
+     التلوين، عشان اللي العميلة بتشوفه في الـ3D هو نفس القالب مش
+     نسخة تانية بتفرق عنه. مفيش صورة جاهزة = null (الرندرر بيفضل
+     على الملمس المكرر بلون المنتج). */
+  function projSource(){
+    const scarf = S.scarf;
+    if(!scarf || scarf.type !== 'photo') return null;
+    const asset = getAsset(scarf, S.color);
+    if(!asset.ready || asset.failed) return null;
+    ensureTint(asset, scarf, S.color);
+    const img = asset.headTinted || asset.head;
+    if(!img) return null;
+    return { img: img, anchors: asset.anchors,
+             key: scarf.id + '|' + (asset.tintHex || 'raw') };
+  }
+
   function shade(hex, amt){
     const n = parseInt(hex.slice(1), 16);
     const f = (v) => Math.max(0, Math.min(255, v + amt));
@@ -287,6 +304,7 @@
     if(!faces || !faces.length){
       S.lostFrames++;
       if(S.r3d) TRYON3D.clear();
+      if(S.mesh) TRYON_MESH.clear();
       if(S.lostFrames > 20) hint('قرّبي وشّك للكاميرا 📷');
       return;
     }
@@ -301,10 +319,13 @@
       // 🧊 المسار 3D: occluder الراس بيتكفل باللفّات — حد الإخفاء أوسع
       const an3 = T.anchorsFromLandmarks(lm, w, h);
       const br3 = S.smBright.push(sampleLuma(ctx, an3));
+      // 🖼️ AR-2: نفس صورة القالب (وبعد التلوين) بتتسقّط على الجسم
+      const p3 = projSource();
       TRYON3D.update(mat.data, {
         hex: S.color.hex,
         bright: T.lumaToBrightness(br3),
-        fade: Math.abs(pose.yaw) > 62 || Math.abs(pose.pitch) > 45
+        fade: Math.abs(pose.yaw) > 62 || Math.abs(pose.pitch) > 45,
+        asset: p3 && p3.img, anchors: p3 && p3.anchors, assetKey: p3 && p3.key
       });
       hint('');
       return;
@@ -358,7 +379,18 @@
       [A.l, A.r, A.top],
       [squash(dstL), squash(dstR), dstT]
     );
-    if(Tr){
+    if(Tr && S.mesh && S.scarf.type === 'photo' && S.mode === 'live'){
+      // 🧵 الراس ثابت على الوش والانسدال بيتمايل ويهدى — قماش
+      const now2 = performance.now();
+      const dt = S.lastFrameT ? now2 - S.lastFrameT : 16.7;
+      S.lastFrameT = now2;
+      const hw = headImg.naturalWidth || headImg.width;
+      const hh = headImg.naturalHeight || headImg.height;
+      const chinY = A.l[1] + (A.r[0] - A.l[0]) * 1.15;   // خط الدقن في الأصل
+      TRYON_MESH.update(headImg, hw, hh, chinY, Tr, pose.yaw,
+                        (ex.l[0] + ex.r[0]) / 2, dt);
+    } else if(Tr){
+      if(S.mesh) TRYON_MESH.clear();
       ctx.save();
       ctx.setTransform(Tr.a, Tr.d, Tr.b, Tr.e, Tr.c, Tr.f);
       ctx.drawImage(headImg, 0, 0);
@@ -406,6 +438,7 @@
     S.canvas.width = img.naturalWidth; S.canvas.height = img.naturalHeight;
     const c3p = $('stage3d'); c3p.width = S.canvas.width; c3p.height = S.canvas.height;
     if(S.r3d) TRYON3D.resize(S.canvas.width, S.canvas.height);
+    if(S.mesh){ TRYON_MESH.resize(S.canvas.width, S.canvas.height); TRYON_MESH.clear(); }
     await S.setImageMode();
     S.stillResult = S.landmarker.detect(img);
     S.stillImg = img;
@@ -423,6 +456,7 @@
     S.canvas.width = S.video.videoWidth; S.canvas.height = S.video.videoHeight;
     const c3l = $('stage3d'); c3l.width = S.canvas.width; c3l.height = S.canvas.height;
     if(S.r3d) TRYON3D.resize(S.canvas.width, S.canvas.height);
+    if(S.mesh) TRYON_MESH.resize(S.canvas.width, S.canvas.height);
     await S.setVideoMode();
     resetSmooth();
     S.running = true; loop();
@@ -531,8 +565,12 @@
       await startCamera();
       // 🧊 وضع الـAR التجريبي خلف ?ar=1 — قرار: العميلة تشوف القالب
       //    المصوّر (شكل طرحة حقيقية) لحد ما الـ3D ياخد خامته وشكله النهائي
-      if(new URLSearchParams(location.search).get('ar'))
+      const qsb = new URLSearchParams(location.search);
+      if(qsb.get('ar'))
         S.r3d = await TRYON3D.init(S.canvas.width, S.canvas.height);
+      else if(!qsb.get('flat'))
+        // 🧵 الشبكة القماشية: نفس صورة القالب + فيزياء تمايل — الافتراضي
+        S.mesh = await TRYON_MESH.init(S.canvas.width, S.canvas.height);
       setLoad('');
       S.running = true;
       loop();

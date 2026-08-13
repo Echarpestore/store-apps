@@ -5,8 +5,11 @@
    الراس بيختفي وراه فعلًا) + تتبّع مصفوفة MediaPipe كاملة
    (position/scale/rotation XYZ) بتنعيم متكيّف.
 
-   المعمار المتفق عليه: geometry ثابتة + material متغيرة —
-   AR-2 هتركّب خامة صورة المنتج على نفس الجسم ده.
+   AR-2 (الجديد): **إسقاط صورة القالب** من قدام على نفس الجسم —
+   كل رأس بياخد UV إسقاطي (aProjUv) ووزن (aProjW). الشيدر بيمزج:
+   وزن عالي = بكسل الصورة الحقيقي · وزن واطي (الجناب/الضهر/برّه
+   الصورة) = الملمس المكرر بلون المنتج. النتيجة الصورة نفسها 3D.
+   + تفصيل طول الانسدال على مقاس الصورة (القالب أطول من جسم AR-1).
 
    🛟 أي فشل (WebGL ضعيف/CDN واقع) = false → التطبيق بيكمل
    بالمسار 2D القديم زي ما هو. و`?flat=1` بتجبر الـ2D للتشخيص.
@@ -21,11 +24,31 @@
     THREE: null, renderer: null, scene: null, camera: null,
     group: null, fabricMat: null, hemi: null, dirLight: null,
     ready: false, failed: false, zFlip: 0,
-    sp: null, sq: null, tmp: null
+    sp: null, sq: null, tmp: null,
+    // AR-2
+    uni: null, hood: null, skirt: null, projector: null,
+    projKey: null, projTex: null, fitted: null
   };
 
   // 🎛️ لو اللفة محتاجة تظبيطة على وش حقيقي — أرقام من غير deploy
-  window.T3D_TUNE = { fov: 63, exposure: 1.0 };
+  //    (بعد أي تغيير في أرقام الإسقاط: TRYON3D.reproject())
+  window.T3D_TUNE = {
+    fov: 63, exposure: 1.0,
+    proj: 1,            // 0 = اطفي الإسقاط وشوف AR-1 بالملمس المكرر
+    frontFull: null, frontNone: null, edge: null,   // null = قيمة الكور
+    flipU: null,        // اقلبها لو الصورة طالعة معكوسة على الجسم
+    templeDirY: null,   // ارتفاع نقطة الصدغ — أهم رقم لو الفتحة مش مظبوطة
+    autoFit: 1          // فصّل طول الانسدال على مقاس الصورة
+  };
+
+  // خد أرقام المعايرة الحية لو المالك غيّرها، وإلا سيب الكور يقرر
+  function tuneOpts(){
+    const t = window.T3D_TUNE, o = {};
+    ['frontFull','frontNone','edge','flipU','templeDirY'].forEach((k) => {
+      if(t[k] != null) o[k] = t[k];
+    });
+    return o;
+  }
 
   async function init(w, h){
     if(R.ready) return true;
@@ -68,13 +91,24 @@
       oc.renderOrder = -1;
       R.rig.add(oc);
 
-      // 🧵 القماش — AR-2 هتبدل اللون بخامة صورة المنتج
+      // 🧵 القماش — اللون بييجي من uTint (مش من material.color) عشان
+      //    الشيدر يقدر يمزج بين الملمس الملوّن وبكسل الصورة المسقّطة
+      //    اللي جاي ملوّن أصلًا من محرك recolor.
+      R.uni = {
+        uProjMap: { value: null },
+        uHasProj: { value: 0 },
+        uProjMix: { value: 1 },
+        uTint:    { value: new THREE.Color(0xc9ac86) }
+      };
       R.fabricMat = new THREE.MeshStandardMaterial({
-        color: 0xc9ac86, roughness: 0.88, metalness: 0,
+        color: 0xffffff, roughness: 0.88, metalness: 0,
         side: THREE.DoubleSide
       });
-      R.rig.add(new THREE.Mesh(buildHood(THREE), R.fabricMat));
-      R.rig.add(new THREE.Mesh(buildSkirt(THREE), R.fabricMat));
+      R.fabricMat.onBeforeCompile = injectProjection;
+      R.hood = new THREE.Mesh(buildHood(THREE), R.fabricMat);
+      R.skirt = new THREE.Mesh(buildSkirt(THREE), R.fabricMat);
+      R.rig.add(R.hood);
+      R.rig.add(R.skirt);
       loadFabricTexture(THREE);   // 🧵 ملمس القماش الحقيقي من صورة القالب
 
       R.sp = new THREE.Vector3();
@@ -92,6 +126,117 @@
       R.failed = true;
     }
     return R.ready;
+  }
+
+  /* ============================================================
+     🖼️ AR-2 — الإسقاط الأمامي
+     ============================================================ */
+
+  // حقن المزج في MeshStandardMaterial (بنكسب الإضاءة والظل بتوعه
+  // بدل ما نكتب شيدر من الصفر ونخسرهم).
+  function injectProjection(sh){
+    Object.assign(sh.uniforms, R.uni);
+    sh.vertexShader =
+      'attribute vec2 aProjUv;\nattribute float aProjW;\n' +
+      'varying vec2 vProjUv;\nvarying float vProjW;\n' + sh.vertexShader
+        .replace('#include <begin_vertex>',
+                 '#include <begin_vertex>\n  vProjUv = aProjUv;\n  vProjW = aProjW;');
+    sh.fragmentShader =
+      'uniform sampler2D uProjMap;\nuniform float uHasProj;\nuniform float uProjMix;\n' +
+      'uniform vec3 uTint;\nvarying vec2 vProjUv;\nvarying float vProjW;\n' + sh.fragmentShader
+        .replace('#include <map_fragment>',
+                 '#include <map_fragment>\n' +
+                 '  diffuseColor.rgb *= uTint;\n' +
+                 '  if(uHasProj > 0.5){\n' +
+                 '    vec4 pc = texture2D(uProjMap, vProjUv);\n' +
+                 '    float w = clamp(vProjW, 0.0, 1.0) * pc.a * uProjMix;\n' +
+                 '    diffuseColor.rgb = mix(diffuseColor.rgb, pc.rgb, w);\n' +
+                 '  }');
+  }
+
+  // حساب UV والوزن لكل رأس في جسم واحد (وتحديثهم في مكانهم)
+  function applyProjTo(geo){
+    const THREE = R.THREE;
+    const pos = geo.getAttribute('position');
+    const nor = geo.getAttribute('normal');
+    const n = pos.count;
+    const on = window.T3D_TUNE.proj ? R.projector : null;
+    const res = C.projectVertices(pos.array, nor && nor.array, on, tuneOpts());
+    let au = geo.getAttribute('aProjUv'), aw = geo.getAttribute('aProjW');
+    if(!au || au.count !== n){
+      au = new THREE.Float32BufferAttribute(res.uv, 2);
+      aw = new THREE.Float32BufferAttribute(res.w, 1);
+      geo.setAttribute('aProjUv', au);
+      geo.setAttribute('aProjW', aw);
+    } else {
+      au.array.set(res.uv); aw.array.set(res.w);
+      au.needsUpdate = true; aw.needsUpdate = true;
+    }
+  }
+
+  function reproject(){
+    if(!R.ready) return false;
+    try{
+      if(R.hood) applyProjTo(R.hood.geometry);
+      if(R.skirt) applyProjTo(R.skirt.geometry);
+      R.uni.uHasProj.value = (R.projector && R.projTex && window.T3D_TUNE.proj) ? 1 : 0;
+      return true;
+    }catch(e){ console.warn('reproject', e); return false; }
+  }
+
+  // 📏 تفصيل الانسدال على مقاس الصورة: بنقرا ألفا الصورة، نطلّع ملف
+  //    العرض، ونعيد بناء الانسدال بالطول والعرض الحقيقيين.
+  //    أي فشل (كانفاس ملوّث/صورة غريبة) = نسيب هندسة AR-1 زي ما هي.
+  function fitSkirt(src, w, h){
+    if(!window.T3D_TUNE.autoFit) return false;
+    try{
+      const c = document.createElement('canvas');
+      c.width = Math.min(160, w); c.height = Math.round(c.width * h / w);
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(src, 0, 0, c.width, c.height);
+      const data = g.getImageData(0, 0, c.width, c.height).data;
+      const prof = C.assetProfile(data, c.width, c.height, 28);
+      // الملف مقاس مصغّر — نرجّعه لبكسل الأصل عشان يتكلم مع الإسقاط
+      const kx = w / c.width, ky = h / c.height;
+      const scaled = prof.map((p) => ({
+        py: p.py * ky, cx: p.cx * kx, halfW: p.halfW * kx,
+        xMin: p.xMin * kx, xMax: p.xMax * kx
+      }));
+      const fit = C.fitSkirtToAsset(R.projector, scaled);
+      if(!fit) return false;
+      const cur = C.SHAPE;
+      if(R.fitted && Math.abs(R.fitted.skirtBotY - fit.skirtBotY) < 0.3
+                  && Math.abs(R.fitted.skirtBotR - fit.skirtBotR) < 0.3) return false;
+      if(Math.abs(cur.skirtBotY - fit.skirtBotY) < 0.3
+      && Math.abs(cur.skirtBotR - fit.skirtBotR) < 0.3){ R.fitted = fit; return false; }
+      C.setShape(fit);
+      R.fitted = fit;
+      const old = R.skirt.geometry;
+      R.skirt.geometry = buildSkirt(R.THREE);
+      old.dispose();
+      return true;
+    }catch(e){ console.warn('fitSkirt', e); return false; }
+  }
+
+  // src = صورة/كانفاس القالب **بعد التلوين** · anchors = نقط الكتالوج
+  function setProjection(src, anchors, w, h){
+    if(!R.ready || !src || !anchors) return false;
+    try{
+      const THREE = R.THREE;
+      R.projector = C.buildProjector(anchors, w, h, tuneOpts());
+      if(!R.projector) return false;
+      fitSkirt(src, w, h);
+      const tex = (typeof HTMLCanvasElement !== 'undefined' && src instanceof HTMLCanvasElement)
+        ? new THREE.CanvasTexture(src) : new THREE.Texture(src);
+      tex.needsUpdate = true;
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      if(THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+      if(R.projTex) R.projTex.dispose();
+      R.projTex = tex;
+      R.uni.uProjMap.value = tex;
+      reproject();
+      return true;
+    }catch(e){ console.warn('setProjection', e); return false; }
   }
 
   /* ---------- 🧵 خامة القماش من صورة القالب ---------- */
@@ -162,6 +307,7 @@
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     g.setIndex(idx);
     g.computeVertexNormals();
+    applyProjTo(g);                 // AR-2: UV إسقاطي + وزن لكل رأس
     return g;
   }
 
@@ -187,15 +333,26 @@
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     g.setIndex(idx);
     g.computeVertexNormals();
+    applyProjTo(g);                 // AR-2: نفس الإسقاط بيكمّل على الانسدال
     return g;
   }
 
   /* ---------- التحديث لكل فريم ---------- */
   // matData = Float32Array(16) column-major أو null (مفيش وش)
-  // opts = { hex, bright (0.75..1.15), fade }
+  // opts = { hex, bright (0.75..1.15), fade,
+  //          asset, assetKey, anchors, assetW, assetH }  ← AR-2
   function update(matData, opts){
     if(!R.ready) return false;
     opts = opts || {};
+
+    // 🖼️ صورة القالب (الملوّنة) وصلت أو اتغيّرت → نعيد بناء الإسقاط.
+    //    المفتاح بيمنع إعادة البناء كل فريم (بناء = قراءة بكسلات).
+    if(opts.asset && opts.anchors && opts.assetKey !== R.projKey){
+      if(setProjection(opts.asset, opts.anchors,
+                       opts.assetW || opts.asset.naturalWidth || opts.asset.width,
+                       opts.assetH || opts.asset.naturalHeight || opts.asset.height))
+        R.projKey = opts.assetKey;
+    }
     if(!matData || opts.fade){
       R.group.visible = false;
       R.renderer.render(R.scene, R.camera);
@@ -220,8 +377,11 @@
     R.group.matrix.compose(R.sp, R.sq, t.s);
 
     if(opts.hex){
-      try{ R.fabricMat.color.set(opts.hex); }catch(e){}
+      // ⚠️ اللون على uTint مش على material.color — لأن material.color
+      //    بيضرب في الكل، وبكسل الصورة المسقّطة ملوّن أصلًا (يتلوّن مرتين).
+      try{ R.uni.uTint.value.set(opts.hex); }catch(e){}
     }
+    R.uni.uProjMix.value = window.T3D_TUNE.proj ? 1 : 0;
     // 💡 مطابقة الإضاءة: نفس عيّنة الخدود بتاعة المسار 2D
     const br = (opts.bright || 1) * window.T3D_TUNE.exposure;
     R.hemi.intensity = 1.05 * br;
@@ -247,7 +407,9 @@
     R.renderer.render(R.scene, R.camera);
   }
 
-  window.TRYON3D = { init, update, resize, clear,
+  window.TRYON3D = { init, update, resize, clear, reproject,
     isReady: () => R.ready,
-    diag: () => ({ ready: R.ready, failed: R.failed, zFlip: R.zFlip }) };
+    diag: () => ({ ready: R.ready, failed: R.failed, zFlip: R.zFlip,
+      proj: !!(R.projector && R.projTex), projKey: R.projKey,
+      fitted: R.fitted, tune: window.T3D_TUNE }) };
 })();
