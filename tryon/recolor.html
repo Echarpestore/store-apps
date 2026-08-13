@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>echarpe 🎨 مولّد ألوان القالب</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --gold-deep:#C79A38; --bg:#FFF6FA; --ink:#3A2233;
+         --muted:#9E8792; --line:#F3DEE9; }
+  *{margin:0; padding:0; box-sizing:border-box;}
+  body{font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--ink);}
+  .app{max-width:520px; margin:0 auto; padding:16px;}
+  h1{font-size:19px; margin-bottom:2px;} h1 span{color:var(--gold-deep);}
+  .sub{font-size:12.5px; color:var(--muted); line-height:1.7; margin-bottom:12px;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:16px;
+        padding:14px; margin-bottom:12px;}
+  .card h2{font-size:14px; margin-bottom:8px;}
+  #stageWrap{position:relative; border-radius:12px; overflow:hidden;
+             background:#f2ecef; min-height:120px;}
+  #stage{width:100%; display:block; cursor:crosshair;}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;}
+  button{font-family:inherit; border:none; border-radius:10px; padding:10px 14px;
+         font-weight:700; font-size:13.5px; background:var(--ink); color:#fff;
+         cursor:pointer;}
+  button.lite{background:#fff; color:var(--ink); border:1.5px solid var(--line);}
+  input[type=range]{flex:1;}
+  input[type=file]{display:none;}
+  .lbl{font-size:12.5px; color:var(--muted);}
+  #seedInfo{font-size:12.5px;}
+  .sw{width:34px; height:34px; border-radius:50%; border:3px solid #fff;
+      box-shadow:0 0 0 1.5px var(--line); cursor:pointer;}
+  .sw.on{box-shadow:0 0 0 2.5px var(--gold-deep);}
+  #outGrid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:10px;}
+  #outGrid figure{border:1px solid var(--line); border-radius:12px; overflow:hidden;
+                  background:#fff;}
+  #outGrid img{width:100%; display:block;}
+  #outGrid figcaption{display:flex; justify-content:space-between; align-items:center;
+                      padding:6px 10px; font-size:12.5px; font-weight:700;}
+  #outGrid a{color:var(--gold-deep); text-decoration:none; font-size:12px;}
+  .warn{background:#FCF3E2; color:#7A5A16; border-radius:12px; padding:10px 12px;
+        font-size:12.5px; line-height:1.7; margin-bottom:12px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>مولّد ألوان القالب <span>✿</span></h1>
+  <p class="sub">أداة للمالك — كلها على الجهاز، مفيش رفع لأي سيرفر.</p>
+
+  <div class="warn">⚠️ الصورة لازم تكون <b>من تصويرك انت</b> (طرحتك، على
+  مانيكان أو موديل عندك حقوق صورها). صور مواقع تانية ممنوعة —
+  دي بتتنشر كصور منتجاتك في الشات.</div>
+
+  <div class="card">
+    <h2>١) صورة القالب</h2>
+    <div id="stageWrap"><canvas id="stage"></canvas></div>
+    <div class="row">
+      <button id="btnPick">📁 اختار الصورة</button>
+      <button id="btnClear" class="lite">↺ صفّر النقط</button>
+      <span id="seedInfo" class="lbl">دوس على القماش في الصورة — كل دوسة بتعلّم لون (اللمعة والضل دوستين زيادة)</span>
+    </div>
+    <div class="row">
+      <span class="lbl">السماحية</span>
+      <input type="range" id="tol" min="10" max="70" value="35">
+      <button id="btnMask" class="lite">👁 شوف الماسك</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>٢) الألوان</h2>
+    <div class="row" id="colors"></div>
+    <div class="row">
+      <button id="btnGen">🎨 طلّع كل الألوان</button>
+      <span class="lbl">كل صورة بتتنزّل باسم لونها</span>
+    </div>
+    <div id="outGrid"></div>
+  </div>
+</div>
+
+<input type="file" id="file" accept="image/*">
+<script src="assets/catalog.js"></script>
+<script src="recolor-core.js"></script>
+<script>
+(function(){
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const R = window.RECOLOR;
+  const st = { img:null, seeds:[], showMask:false, sel:{} };
+  const cv = $('stage'), cx = cv.getContext('2d', { willReadFrequently:true });
+
+  // الألوان من نفس كتالوج الـtry-on — مصدر واحد للاتنين
+  window.TRYON_COLORS.forEach((c) => {
+    const b = document.createElement('button');
+    b.className = 'sw on'; b.style.background = c.hex; b.title = c.name;
+    st.sel[c.id] = true;
+    b.onclick = () => { st.sel[c.id] = !st.sel[c.id];
+                        b.classList.toggle('on', st.sel[c.id]); };
+    $('colors').appendChild(b);
+  });
+
+  $('btnPick').onclick = () => $('file').click();
+  $('file').onchange = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const img = new Image();
+    img.src = URL.createObjectURL(f);
+    await img.decode();
+    // نشتغل على مقاس معقول — 1400 عرض كفاية لصور الشات
+    const scale = Math.min(1, 1400 / img.naturalWidth);
+    cv.width = Math.round(img.naturalWidth * scale);
+    cv.height = Math.round(img.naturalHeight * scale);
+    st.img = img; st.seeds = [];
+    redraw();
+    e.target.value = '';
+  };
+
+  cv.onclick = (ev) => {
+    if(!st.img) return;
+    const r = cv.getBoundingClientRect();
+    const x = Math.round((ev.clientX - r.left) * cv.width / r.width);
+    const y = Math.round((ev.clientY - r.top) * cv.height / r.height);
+    redraw();                                     // نقرا من الأصل مش الماسك
+    const d = cx.getImageData(x, y, 1, 1).data;
+    st.seeds.push([d[0], d[1], d[2]]);
+    $('seedInfo').textContent = st.seeds.length + ' نقطة معلّمة';
+    if(st.showMask) showMask(); else markSeeds();
+  };
+
+  $('btnClear').onclick = () => { st.seeds = []; st.showMask = false;
+    $('seedInfo').textContent = 'دوس على القماش في الصورة'; redraw(); };
+  $('tol').oninput = () => { if(st.showMask) showMask(); };
+  $('btnMask').onclick = () => { st.showMask = !st.showMask;
+    st.showMask ? showMask() : (redraw(), markSeeds()); };
+
+  function redraw(){
+    if(st.img) cx.drawImage(st.img, 0, 0, cv.width, cv.height);
+  }
+  function markSeeds(){ /* علامات خفيفة على مواضع النقط مش محفوظة — يكفي العدّاد */ }
+
+  function currentMask(pixels){
+    return R.buildMask(pixels, st.seeds, Number($('tol').value) / 100);
+  }
+
+  function showMask(){
+    if(!st.img || !st.seeds.length) return;
+    redraw();
+    const im = cx.getImageData(0, 0, cv.width, cv.height);
+    const mask = currentMask(im.data);
+    for(let i = 0; i < mask.length; i++){
+      const w = mask[i];
+      im.data[i*4]   = Math.round(im.data[i*4]   * (1-w) + 230 * w);
+      im.data[i*4+1] = Math.round(im.data[i*4+1] * (1-w) + 60  * w);
+      im.data[i*4+2] = Math.round(im.data[i*4+2] * (1-w) + 120 * w);
+    }
+    cx.putImageData(im, 0, 0);
+  }
+
+  $('btnGen').onclick = () => {
+    if(!st.img){ alert('اختار الصورة الأول'); return; }
+    if(!st.seeds.length){ alert('دوس على القماش الأول عشان نعرف لونه'); return; }
+    const grid = $('outGrid'); grid.innerHTML = '';
+    redraw();
+    const base = cx.getImageData(0, 0, cv.width, cv.height);
+    const mask = currentMask(base.data);
+    const picked = window.TRYON_COLORS.filter((c) => st.sel[c.id]);
+    picked.forEach((c) => {
+      const im = new ImageData(new Uint8ClampedArray(base.data), cv.width, cv.height);
+      R.applyRecolor(im.data, mask, c.hex);
+      const oc = document.createElement('canvas');
+      oc.width = cv.width; oc.height = cv.height;
+      oc.getContext('2d').putImageData(im, 0, 0);
+      const fig = document.createElement('figure');
+      const img = document.createElement('img');
+      const cap = document.createElement('figcaption');
+      const a = document.createElement('a');
+      oc.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        img.src = url;
+        a.href = url; a.download = 'template-' + c.id + '.jpg';
+        a.textContent = '⬇ تنزيل';
+      }, 'image/jpeg', 0.92);
+      cap.textContent = c.name;
+      cap.appendChild(a);
+      fig.appendChild(img); fig.appendChild(cap);
+      grid.appendChild(fig);
+    });
+  };
+})();
+</script>
+</body>
+</html>
