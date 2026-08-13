@@ -13,6 +13,9 @@
 'use strict';
 (function(){
 
+  const TRYON_VER = 'v8';
+  console.log('echarpe tryon', TRYON_VER);
+
   const $ = (id) => document.getElementById(id);
   const T = window.TRYON;
 
@@ -107,17 +110,38 @@
      ٢) الكاميرا
      ============================================================ */
   async function startCamera(){
+    if(S.stream) return;                       // شغالة خلاص
     setLoad('بنفتح الكاميرا…');
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode:'user', width:{ideal:1280}, height:{ideal:720} },
       audio: false
     });
+    S.stream = stream;
     S.video.srcObject = stream;
     await S.video.play();
     // مقاس الرسم = مقاس الفيديو الحقيقي (مش مقاس الشاشة)
     S.canvas.width = S.video.videoWidth || 720;
     S.canvas.height = S.video.videoHeight || 960;
+    setLoad('');
   }
+
+  // 🟢 قفل حقيقي للكاميرا — من غيره النقطة الخضرا بتفضل نور طول
+  //    ما التاب مفتوح، حتى والعميلة في تطبيق تاني
+  function stopCamera(){
+    if(!S.stream) return;
+    try{ S.stream.getTracks().forEach((t) => t.stop()); }catch(e){}
+    S.stream = null;
+    S.video.srcObject = null;
+  }
+
+  // التاب اتخبى (رجعت للشات مثلًا) = الكاميرا تتقفل فورًا،
+  // ورجوعها = تشتغل تاني لوحدها لو إحنا في وضع اللايف
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden){ stopCamera(); return; }
+    if(S.mode === 'live' && S.running)
+      startCamera().catch(() => {});
+  });
+  window.addEventListener('pagehide', stopCamera);
 
   /* ============================================================
      ٣) أصول الطرحة — procedural أو صور
@@ -324,6 +348,7 @@
     img.src = URL.createObjectURL(file);
     await img.decode();
     S.mode = 'photo'; S.running = false;
+    stopCamera();                              // 🟢 الدوت الأخضر يطفي في وضع الصورة
     $('btnPhoto').classList.add('on'); $('btnLive').classList.remove('on');
     S.canvas.classList.remove('mirror');
     S.canvas.width = img.naturalWidth; S.canvas.height = img.naturalHeight;
@@ -338,6 +363,7 @@
 
   async function backToLive(){
     S.mode = 'live';
+    await startCamera().catch(() => {});
     $('btnLive').classList.add('on'); $('btnPhoto').classList.remove('on');
     S.canvas.classList.add('mirror');
     S.canvas.width = S.video.videoWidth; S.canvas.height = S.video.videoHeight;
