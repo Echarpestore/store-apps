@@ -188,3 +188,59 @@ const mk = (text, extra) => Object.assign({
   assert(R.reqIsStale({}, now) === false, 'وطلب من غير تاريخ مبيتحسبش قديم');
   assertEq(R.REQ_STALE_DAYS, 90, 'والافتراضي ٩٠ يوم');
 })();
+
+// ============================================================
+// ٩) 🔌 التوصيل في POS
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const ROOT = path.resolve(__dirname, '..');
+  const ui   = fs.readFileSync(path.join(ROOT, 'pos', 'requests-ui.js'), 'utf8');
+  const prod = fs.readFileSync(path.join(ROOT, 'pos', 'products.js'), 'utf8');
+  const sale = fs.readFileSync(path.join(ROOT, 'pos', 'pos-sale.js'), 'utf8');
+  const html = fs.readFileSync(path.join(ROOT, 'pos', 'index.html'), 'utf8');
+
+  // متحمّل ومربوط
+  assert(/<script src="requests-core\.js"><\/script>/.test(html), '🔌 المحرك متحمّل');
+  assert(/<script src="requests-ui\.js"><\/script>/.test(html), 'والشاشات');
+  assert(/onclick="addCustomerRequest\(\)"/.test(html), '➕ وزرار تسجيل الطلب');
+  assert(/id="requestsBody"/.test(html), '📋 ومكان عرض الطلبات');
+
+  // ⭐⭐ الاستلام عمره ما يقف عشان التنبيه
+  assert(/checkRequestsAfterReceive\(rows\)/.test(prod),
+    '⭐ التنبيه متنادى بعد الاستلام');
+  const at = prod.indexOf('checkRequestsAfterReceive(rows)');
+  const ctx = prod.slice(Math.max(0, at - 260), at);
+  assert(/try\{/.test(ctx),
+    '⭐⭐ وجوّه try — الاستلام عملية شغل يومية وعمره ما يقف عشان تنبيه');
+  const doneAt = prod.indexOf('اتأكد استلام');
+  assert(doneAt > 0 && at > doneAt,
+    '⭐⭐ والتنبيه **بعد** ما الاستلام يخلص مش قبله');
+
+  // 📡 المستمع على المفتوحة بس
+  assert(/where\('status','==','open'\)/.test(ui),
+    '📡⭐ المستمع على الطلبات المفتوحة بس — المقفولة بتتراكم للأبد');
+
+  // 🟢 تلميح العميلة: المؤكد بس
+  const hit = ui.slice(ui.indexOf('function refreshCustRequestHit('));
+  assert(/level === 'exact'/.test(hit),
+    "🟢⭐⭐ تلميح العميلة بالمطابقة المؤكدة بس — الاقتراح مينفعش يتقال قدامها كأنه حقيقة");
+  assert(/qtyByBranch/.test(hit),
+    '⭐ ولازم يكون موجود في الفرع فعلًا');
+
+  // 🧠 متوصّل بشريط الفرصة
+  assert(/refreshCustRequestHit\(phone\)/.test(sale), '🧠 بيتحدّث مع العميلة');
+  assert(/window\.custRequestHit = null/.test(sale) || /custRequestHit=null/.test(sale),
+    '🧹 وبيتصفّر لما العميلة تتشال (وإلا بيتسرب لعميلة تانية)');
+
+  // 💬 واتساب يدوي مش آلي
+  assert(/wa\.me\//.test(ui), '💬 واتساب برسالة جاهزة');
+  assert(/window\.open\(/.test(ui), 'والمالك بيبص ويبعت');
+  assert(!/httpsCallable|sendMessage|twilio/i.test(ui),
+    '⚠️⭐ ومفيش إرسال آلي — ده قرار المالك ومحتاج WhatsApp API أصلًا');
+
+  // ⚠️ مفيش حجز ولا اختيار آلي
+  assert(!/reserve|حجز تلقائي/i.test(ui) || /نحجزهالك/.test(ui),
+    '⚠️ مفيش حجز آلي — المالك بيقرر');
+  assert(/الأقدم الأول/.test(ui), '⭐ والعميلات مرتبين بالأقدم عشان يقرر');
+})();

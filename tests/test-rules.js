@@ -57,6 +57,13 @@ function evalTerm(t, ctx){
     const neg = t.trim().charAt(0) === '!';
     return neg ? !ctx.secretDoc : !!ctx.secretDoc;
   }
+  // 💳 مستندات الدوال بس (staff_access) — ممنوعة حتى على الموظفين.
+  //    ⚠️ من غير السطر ده المحاكي بيعتبر الشرط "غير مفهوم = مسموح"،
+  //       فكان بيقول إن الولاء ممنوع من pos_test_settings وهو مسموح.
+  if(t.indexOf('settingsLocked(id)') >= 0){
+    const neg = t.trim().charAt(0) === '!';
+    return neg ? !ctx.lockedDoc : !!ctx.lockedDoc;
+  }
   if(t.indexOf('request.query.limit') >= 0){
     const m = t.match(/limit <= (\d+)/);
     return !!m && ctx.limit != null && ctx.limit <= Number(m[1]);
@@ -67,13 +74,45 @@ function evalTerm(t, ctx){
   // هو عن **الوصول** مش عن صحة الحقول
   return true;
 }
+// ✂️ تقسيم بيحترم الأقواس
+// ⚠️⚠️ التقسيم البسيط بـ`split('||')` بيقرا `A && (B || C)` غلط:
+//    بيطلّع "A && (B" و "C)" — فالجزء التاني بيتقيّم لوحده ويسمح.
+//    ده مسك رول **صح** وقال عليه غلط، والأخطر إنه ممكن يمسك رول
+//    **غلط** ويقول عليه صح. ولأن الاختبار ده بقى بيحرس قواعد فلوس،
+//    القراءة الغلط مش خيار.
+function splitTop(str, op){
+  const out = []; let depth = 0, cur = '';
+  for(let i = 0; i < str.length; i++){
+    const ch = str[i];
+    if(ch === '(') depth++;
+    else if(ch === ')') depth--;
+    if(depth === 0 && str.substr(i, op.length) === op){
+      out.push(cur); cur = ''; i += op.length - 1; continue;
+    }
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
 function evalCond(cond, ctx){
-  const c = cond.trim();
+  let c = cond.trim();
   if(c === 'false') return false;
   if(c === 'true')  return true;
-  return c.split('||').some(function(part){
-    return part.split('&&').every(function(t){ return evalTerm(t, ctx); });
-  });
+  // شيل الأقواس الخارجية لو بتغلّف الشرط كله
+  while(c.charAt(0) === '(' && c.charAt(c.length - 1) === ')'){
+    let d = 0, wraps = true;
+    for(let i = 0; i < c.length; i++){
+      if(c[i] === '(') d++;
+      else if(c[i] === ')'){ d--; if(d === 0 && i < c.length - 1){ wraps = false; break; } }
+    }
+    if(!wraps) break;
+    c = c.slice(1, -1).trim();
+  }
+  const ors = splitTop(c, '||');
+  if(ors.length > 1) return ors.some(function(p){ return evalCond(p, ctx); });
+  const ands = splitTop(c, '&&');
+  if(ands.length > 1) return ands.every(function(p){ return evalCond(p, ctx); });
+  return evalTerm(c, ctx);
 }
 function can(col, op, ctx){
   const b = blockFor(col);
@@ -127,6 +166,59 @@ const OPS = [
   // ---- التقديم على وظيفة (مفتوح للعامة عن قصد) ----
   ['استمارة التقديم', 'job_applications', 'create', ANON, true, 'أي حد يقدر يقدّم — ده إعلان'],
   ['استمارة التقديم', 'job_applications', 'get',    ANON, true, 'بيقرا طلبه هو بمفتاحه'],
+
+  // ---- 💳 منظومة الرصيد وكروت الهدايا ----
+  // ⚠️ القاعدة الحاكمة: **مفيش تطبيق بيكتب فلوس**. كل الكتابة من
+  //    Cloud Functions (بتشتغل بـAdmin SDK فالقواعد مبتتطبّقش عليها).
+  ['تطبيق الولاء', 'credit_ledger', 'list', { auth:'anon', limit:50 }, true,
+    'loyalty — كشف حساب الرصيد (نفس نمط «فواتيري»)'],
+  ['تطبيق الولاء', 'credit_ledger', 'create', ANON, false,
+    '⭐⭐ التطبيق مايكتبش في الدفتر — الدوال بس'],
+  ['POS',    'credit_ledger', 'create', STAFF, false,
+    '⭐⭐ ولا حتى الموظفين — كاشير يكتب في الدفتر = يطبع فلوس'],
+  ['Office', 'credit_ledger', 'update', STAFF, false,
+    '⭐⭐ ومفيش تعديل ولا حتى للمالك (append-only)'],
+  ['Office', 'credit_ledger', 'delete', STAFF, false, 'ولا مسح'],
+
+  ['Office', 'gift_cards_public', 'list', STAFF, true, 'تقرير الكروت في Office'],
+  ['تطبيق الولاء', 'gift_cards_public', 'list', ANON, false,
+    '🔒 العميلة مش محتاجة تشوف الكروت'],
+  ['POS', 'gift_cards', 'get', STAFF, false,
+    '🔒⭐⭐ مجموعة الكروت مقفولة حتى على الموظفين (فيها بصمة الكود = الفلوس)'],
+  ['Office', 'gift_cards', 'get', STAFF, false, '🔒 ولا المالك'],
+
+  ['Office', 'credit_requests', 'list', STAFF, true, 'طابور طلبات الكاشير'],
+  ['POS', 'credit_requests', 'create', STAFF, false,
+    '⭐ الطلب بيتسجّل من الفنكشن مش من POS مباشرة'],
+  ['تطبيق الولاء', 'credit_requests', 'list', ANON, false, '🔒 مش شغل العميلة'],
+
+  ['POS', 'credit_idem',  'get', STAFF, false,
+    '🔒⭐⭐ مفاتيح التكرار مقفولة — لو اتمسحت، العملية تتعاد وتتحسب مرتين'],
+  ['تطبيق الولاء', 'credit_guard', 'update', ANON, false,
+    '🔒⭐⭐ وحارس المحاولات مقفول — لو اتصفّر، تخمين أكواد الكروت بلا حدود'],
+
+  // 🔖 طلبات الزباين
+  ['POS',    'customer_requests', 'create', STAFF, true, 'الكاشير بتسجّل الطلب'],
+  ['POS',    'customer_requests', 'list',   STAFF, true, 'قايمة الطلبات المفتوحة'],
+  ['تطبيق الولاء', 'customer_requests', 'list', { auth:'anon', limit:50 }, true,
+    'العميلة تشوف طلباتها'],
+  ['تطبيق الولاء', 'customer_requests', 'create', ANON, false,
+    '⭐⭐ العميلة مبتسجّلش بنفسها — تقدر تسجّل باسم أي رقم'],
+  ['POS',    'customer_requests', 'delete', STAFF, false, '🔒 الطلب بيتقفل مش بيتمسح'],
+
+  // 💳📒 دفتر اليومية في Office
+  ['Office', 'office_cash_days', 'list',   STAFF, true, 'الشيت اليومي'],
+  ['Office', 'office_cash_days', 'update', STAFF, true, 'تعديل خانة بالإيد'],
+  ['Office', 'office_cash_days', 'delete', STAFF, false, '🔒 يوم اتسجّل عمره ما بيتمسح'],
+  ['تطبيق الولاء', 'office_cash_days', 'list', ANON, false, '🔒 أرقام فلوسك'],
+  ['Office', 'office_cash_epochs', 'create', STAFF, true, 'أرشيف التصفير'],
+  ['Office', 'office_cash_epochs', 'delete', STAFF, false, '🔒 تاريخ فلوس مبيتمسحش'],
+
+  // 🔒 إعدادات حساسة جديدة
+  ['تطبيق الولاء', 'pos_test_settings', 'get', { auth:'anon', secretDoc:true }, false,
+    '🔒 office_cash / gift_cards / staff_access مقفولين على العملاء'],
+  ['POS', 'pos_test_settings', 'update', { auth:'staff', lockedDoc:true }, false,
+    '🔒⭐⭐ staff_access (قايمة مين يلمس فلوس) ممنوعة حتى على الموظفين'],
 
   // ---- POS و sales و Office (دخول بإيميل وباسورد) ----
   ['POS',    'pos_test_sales',     'create', STAFF, true, 'حفظ الفاتورة'],
@@ -221,4 +313,43 @@ DENY.forEach(function(d){
     '🔒 أي مجموعة مش مذكورة في الرول = ممنوعة تمامًا');
   assert(can('مجموعة_مش_موجودة', 'read', STAFF) === false,
     'والمحاكي بيعامل المجموعات المجهولة بنفس المنطق');
+}
+
+// ============================================================
+// ٥) 💳 أقفال الفلوس — فحص نصّي مباشر
+//
+// ⚠️ ليه فحص نصّي مش محاكاة: المحاكي **بيتجاهل شروط شكل المستند**
+//    (hasAny · hasOnly · is int) عن قصد — هو عن الوصول مش عن
+//    صحة الحقول. بس أهم حارس فلوس عندنا **هو بالظبط** من النوع
+//    ده: قفل حقل `credit` جوّه مستند مفتوح للتعديل.
+//    اتأكدت من الفجوة دي باختبار سلبي: شلت القفل والمحاكي عدّى.
+//    فالحارس لازم يبقى نصّي، وإلا بيفضل مكشوف.
+// ============================================================
+{
+  const custBlock = rules.slice(rules.indexOf('match /pos_test_customers/'),
+                                rules.indexOf('match /pos_test_sales/'));
+
+  assert(/hasAny\(\['credit', 'creditAt'\]\)/.test(custBlock),
+    '💳⭐⭐ حقل الرصيد مقفول على التعديل — ولا حتى الموظفين');
+  assert(/!\('credit' in request\.resource\.data\)/.test(custBlock),
+    '💳⭐⭐ ومفيش رصيد ابتدائي عند إنشاء العميلة');
+
+  // 🔴 نيجاتيف — لو القفل اتشال، الفحص ده لازم يقع
+  const broken = custBlock.replace(/hasAny\(\['credit', 'creditAt'\]\)/, 'hasAny([])');
+  assert(!/hasAny\(\['credit', 'creditAt'\]\)/.test(broken),
+    '🔴 نيجاتيف — نسخة من غير القفل اتبنت والفحص كان هيقع عليها');
+
+  // 🔒 وقايمة الموظفين المسموح لهم
+  assert(/function settingsLocked/.test(rules),
+    '🔒 فيه دالة للمستندات اللي الدوال بس بتكتبها');
+  assert(/id == 'staff_access'/.test(rules),
+    '🔒⭐⭐ و staff_access جواها (قايمة مين يلمس فلوس)');
+  assert(/'staff_access', 'gift_cards', 'office_cash', 'office_cash_cfg'/.test(rules),
+    '🔒 والمستندات الحساسة الجديدة في قايمة السرّي');
+
+  // ⚠️ القفل لازم يبقى **برّه** فرعي الشرط مش جوّه واحد بس
+  const setBlock = rules.slice(rules.indexOf('match /pos_test_settings/'),
+                               rules.indexOf('match /pos_test_inventory/'));
+  assert(/allow create, update: if !settingsLocked\(id\) && \(/.test(setBlock),
+    '⚠️⭐⭐ والقفل على برّه الشرط كله — حطّه جوّه فرع واحد كان بيخليه وهمي');
 }
