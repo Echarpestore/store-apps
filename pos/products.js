@@ -219,6 +219,8 @@ function goToReceiveGoods(){
   if(!hasPerm('canReceiveGoods') && !hasPerm('canEditInventory')){ showToast('محتاج صلاحية استلام البضاعة', 'err'); return; }
   showScreen('receiveGoodsScreen');
   renderReceiveCart();   // القايمة بتفضل زي ما هي (مبتتمسحش إلا بعد التأكيد)
+  // 🔖 الطلبات المفتوحة بتبان مع فتح الشاشة — قبل ما يبدأ يستلم
+  try{ if(typeof renderRequestsTab === 'function') renderRequestsTab(); }catch(e){}
   // نتأكد إن المخزون متحمّل عشان البحث يلاقي المنتجات
   if(typeof loadInventory === 'function') loadInventory().catch(()=>{});
   const input = document.getElementById('receiveGoodsBarcode');
@@ -436,6 +438,12 @@ async function confirmReceiveCart(){
     }
     showToast(`اتأكد استلام ${rows.length} صنف ✅`);
     await loadInventory();
+    // 🔖 مين كان طالب حاجة وصلت؟
+    //    ⚠️ **بعد** الاستلام ما يخلص وجوّه try — الاستلام عملية شغل
+    //       يومية وعمره ما يقف عشان تنبيه.
+    try{
+      if(typeof checkRequestsAfterReceive === 'function') checkRequestsAfterReceive(rows);
+    }catch(e){ console.warn('requests after receive', e); }
     receiveCart = [];
     renderReceiveCart();
     renderReceiveGoodsLog();

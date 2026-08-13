@@ -40,6 +40,8 @@ function loadInventory(){
   if(_invStarted) return Promise.resolve();   // اللستنر شغّال وبيحدّث allInventory لايف — صفر قراءة جديدة
   var p = new Promise(function(res){ _invFirstResolve = res; });
   startInventoryListener();
+  // 🔖 مستمع الطلبات المفتوحة — بيشتغل مع المخزون لأنه بيطابق عليه
+  try{ if(typeof startRequestsListener === 'function') startRequestsListener(); }catch(e){}
   setTimeout(function(){ if(_invFirstResolve){ _invFirstResolve(); _invFirstResolve = null; } }, 6000); // أمان لو النت بطيء
   return p;
 }

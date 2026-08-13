@@ -1267,7 +1267,14 @@ body.on-dashboard .badge-test{ display:block; }
     </div>
     <div id="receiveCartWrap"></div>
     <button id="receiveConfirmBtn" onclick="confirmReceiveCart()" style="display:none; width:100%; padding:15px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:900; font-size:15px; cursor:pointer; margin-bottom:16px;">✔️ تأكيد الاستلام</button>
+    <!-- 🔖 طلبات الزباين المفتوحة — مكانها هنا عن قصد:
+         دي الشاشة اللي بتتفتح وقت الاستلام، يعني اللحظة اللي
+         المالك بيحتاج يعرف فيها مين طالب إيه. -->
     <div style="margin-top:8px;">
+      <div style="font-weight:800; margin-bottom:6px;">🔖 طلبات الزباين المفتوحة</div>
+      <div id="requestsBody"></div>
+    </div>
+    <div style="margin-top:14px;">
       <div style="font-weight:800; margin-bottom:6px;">📋 آخر عمليات الاستلام اليوم</div>
       <div id="receiveGoodsLog"></div>
     </div>
@@ -1619,6 +1626,8 @@ body.on-dashboard .badge-test{ display:block; }
         </div>
         <!-- 🎁 بيع كارت هدية — بيدخل السلة كسطر بقيمته والعميلة بتدفعه عادي -->
         <div id="giftCardRow" style="margin-top:6px;">
+          <button type="button" onclick="addCustomerRequest()"
+            title="العميلة بتدوّر على حاجة مش موجودة">🔖 طلب خاص</button>
           <button type="button" onclick="sellGiftCard()"
             title="كارت هدية العميلة بتشتريه وتديه لأي حد">🎁 كارت هدية</button>
         </div>
@@ -1808,5 +1817,8 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="credit-ui.js"></script>
 <!-- 🧠 شريط الفرصة -->
 <script src="opportunity-core.js"></script>
+<!-- 🔖 طلبات الزباين -->
+<script src="requests-core.js"></script>
+<script src="requests-ui.js"></script>
 </body>
 </html>

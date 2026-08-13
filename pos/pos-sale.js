@@ -1471,7 +1471,7 @@ async function refreshCustomerInfo(){
     if(_nm0) _nm0.value = '';
     _custMatchedPhone = '';
     setCustState(''); custActivatedOffers={}; revertCustomerOffers(); custReward=null;
-    custPendingRedeem=null; custPointsBalance=0; window.custCreditBalance=0; custBaseText=''; renderCart(); return; }
+    custPendingRedeem=null; custPointsBalance=0; window.custCreditBalance=0; window.custRequestHit=null; custBaseText=''; renderCart(); return; }
   // 🔴 الرقم الناقص مبقاش يعدّي: قبل كده أي رقم (٤ أرقام مثلاً) كان بيتعامل
   //    معاملة "مش مسجّل" ويفتح التسجيل — فتتسجّل عميلة بمفتاح غلط ونقطها
   //    تروح لمستند مش بتاعها ومفيش رجوع.
@@ -1480,7 +1480,7 @@ async function refreshCustomerInfo(){
       ? phoneRejectReason(typeof normalizePhone === 'function' ? normalizePhone(phone) : phone) : null;
     if(_bad){
       _custMatchedPhone = '';
-      clearCustomerContext(); revertCustomerOffers(); custPointsBalance = 0; window.custCreditBalance = 0;
+      clearCustomerContext(); revertCustomerOffers(); custPointsBalance = 0; window.custCreditBalance = 0; window.custRequestHit = null;
       setCustState('bad');
       renderCart();
       return;
@@ -1527,6 +1527,8 @@ async function refreshCustomerInfo(){
       // 💳 رصيد الفلوس — منفصل تمامًا عن النقط. للعرض بس؛
       //    الفنكشن بتتأكد من الرصيد الحقيقي وقت الصرف.
       window.custCreditBalance = Number(d.credit) || 0;
+      // 🔖 طلب مسجّل ليها ووصل؟ (حساب محلي — صفر قراءات)
+      try{ if(typeof refreshCustRequestHit === 'function') refreshCustRequestHit(phone); }catch(e){}
       if(Object.keys(custActivatedOffers).length){ await _loadOfficialOffers(); if(_stale()) return; }   // 🛡️ الشروط الرسمية قبل أي خصم
       revertCustomerOffers(); applyCustomerOffers(); renderCart();
       const _brand = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
