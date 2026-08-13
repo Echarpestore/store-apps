@@ -295,6 +295,11 @@
   .inv-pts{color:var(--gold-deep); font-weight:800;}
   .overlay{position:fixed; inset:0; background:rgba(58,34,51,.55); display:none; align-items:flex-end; justify-content:center; z-index:60;}
   .overlay.on{display:flex;}
+  /* 🎯 شريط هدف الشراية الجاية */
+  .goal-wrap{margin-top:10px;}
+  .goal-bar{height:7px; border-radius:99px; background:rgba(255,255,255,.28); overflow:hidden;}
+  .goal-bar i{display:block; height:100%; border-radius:99px; background:#fff; transition:width .5s ease;}
+  .goal-txt{font-size:11.5px; margin-top:5px; opacity:.95; line-height:1.6;}
   .inv-sheet{background:#fff; width:100%; max-width:480px; border-radius:24px 24px 0 0; padding:20px 20px calc(24px + env(safe-area-inset-bottom)); max-height:82vh; overflow-y:auto;}
   .inv-sheet .ish-h{display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;}
   .inv-sheet .ish-title{font-weight:800; font-size:17px;}
@@ -903,6 +908,8 @@ function enterApp(phone){
   // 📒 مستمع دفتر الرصيد — للكشف. بيتقفل مع الخروج زي مستمع العميلة.
   if(creditUnsub){ creditUnsub(); }
   creditUnsub = watchCredit(phone);
+  if(reqUnsub){ reqUnsub(); }
+  reqUnsub = watchMyRequests(phone);
 
   if(custUnsub){ custUnsub(); }
   custUnsub = db.collection(COL_CUSTOMERS).doc(phone).onSnapshot(function(doc){
@@ -1192,6 +1199,9 @@ function renderCard(){
   var worth = units * val;                          // القيمة القابلة للاستبدال دلوقتي
   var toNext = per - (pts % per);                    // كام نقطة للوحدة الجاية
   var pct = Math.round(((pts % per) / per) * 100);
+  // 🎯 الناقص **بالجنيه** — ده اللي بيخلي الرقم قابل للتصرف
+  //    (ولو خلصت وحدة كاملة، مفيش "ناقص" — فيه "جاهزة")
+  var toNextEGP = (pts % per === 0 && pts > 0) ? 0 : Math.ceil(toNext * earn);
 
   var sinceTxt = regDateText({day:'numeric', month:'long', year:'numeric'});
   if(sinceTxt) sinceTxt = 'عضو من ' + sinceTxt;
@@ -1211,6 +1221,17 @@ function renderCard(){
           '<div class="pts-block">'+
             '<span class="pts-num">'+fmt(pts)+'</span><span class="pts-unit">نقطة</span>'+
             '<div class="pts-worth">'+(worth>0 ? ('تقدري تستبدليها بخصم ~'+fmt(worth)+' ج.م') : 'اجمعي نقاط أكتر عشان تبدأي تستبدلي')+'</div>'+
+            /* 🎯 هدف الشراية الجاية — نفس اللي الكاشير بتشوفه في POS
+               ⚠️ بالجنيه مش بالنقط: "ناقصك ٣ نقط" رقم مالوش معنى
+                  عند العميلة. "ناقصك ٣٠٠ ج.م" حاجة تقدر تتصرف بيها. */
+            '<div class="goal-wrap">'+
+              '<div class="goal-bar"><i style="width:'+pct+'%"></i></div>'+
+              '<div class="goal-txt">'+
+                (toNextEGP > 0
+                  ? ('🎯 ناقصك <b>'+fmt(toNextEGP)+' ج.م</b> وتفتحي مكافأة '+fmt(val)+' ج.م')
+                  : ('🎉 مكافأتك جاهزة — استبدليها في أي فرع'))+
+              '</div>'+
+            '</div>'+
           '</div>'+
           '<div class="holder">'+
             '<div class="name">'+esc(currentCustomer.name||'—')+'</div>'+
@@ -1451,6 +1472,8 @@ function renderAccount(){
       /* (اتشال عرض إجمالي المشتريات — ملوش قيمة للعميلة) */
       '<div class="acct-row"><span class="k">عضو من</span><span class="v">'+esc(sinceFull)+'</span></div>'+
     '</div>'+
+    '<button class="btn-outline" onclick="openMyRequests()">🔖 طلباتي'
+      + (_myRequests.length ? ' (' + _myRequests.length + ')' : '') + '</button>'+
     '<button class="btn-outline" onclick="openClaimGift()">🎁 عندي كود كارت هدية</button>'+
     ((Number(currentCustomer.credit)||0) > 0 || _creditRows.length
       ? '<button class="btn-outline" onclick="openCreditStatement()">📒 كشف حساب الرصيد</button>' : '')+
@@ -1475,6 +1498,54 @@ function renderAccount(){
       الافتراضي، بتشتغل بجلسة تانية أو تفشل.
    ============================================================ */
 var _creditRows = [];
+var _myRequests = [];        // 🔖 طلبات العميلة المفتوحة
+var reqUnsub = null;
+
+/* 🔖 مستمع الطلبات
+   ⚠️ المفتوحة بس — المقفولة بتتراكم ومالهاش لازمة تتعرض. */
+function watchMyRequests(phone){
+  try{
+    return db.collection('customer_requests')
+      .where('phone','==', String(phone))
+      .where('status','==','open')
+      .limit(30)
+      .onSnapshot(function(snap){
+        _myRequests = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+        if($('tab-account') && $('tab-account').style.display !== 'none') renderAccount();
+      }, function(e){ console.warn('my requests', e && e.code); });
+  }catch(e){ console.warn('watchMyRequests', e); return null; }
+}
+window.watchMyRequests = watchMyRequests;
+
+/* 🔖 شاشة طلباتي
+   ⚠️⚠️ النص هنا **وعد بمحاولة مش وعد بنتيجة**:
+      "هنكلّمك لو وصل" مش "هنجيبهولك". لو وعدنا بالنتيجة والقطعة
+      ماوصلتش، العميلة بتحس إن المحل كدب عليها — والوعد اللي
+      مااتحققش أوحش من إننا ماوعدناش أصلًا.
+   ⚠️ ومفيش ميعاد ولا "قريبًا" — إحنا مش عارفين. */
+function openMyRequests(){
+  var rows = _myRequests.map(function(r){
+    var days = r.createdAt ? Math.floor((Date.now() - r.createdAt) / 86400000) : 0;
+    return '<div class="acct-row">'
+      + '<span class="k">' + esc(r.text || '') + '<br>'
+      +   '<span style="font-size:11px; opacity:.7;">'
+      +     (days === 0 ? 'اتسجّل النهاردة' : 'من ' + days + ' يوم')
+      +     (r.branch ? ' · ' + esc(r.branch) : '') + '</span></span>'
+      + '<span class="v" style="font-size:11.5px; opacity:.8;">بندوّرلك</span></div>';
+  }).join('');
+
+  showSheet('🔖 طلباتي',
+    (rows
+      ? '<div class="acct-card">' + rows + '</div>'
+        + '<div style="font-size:12px; line-height:1.9; opacity:.8; padding:4px 2px;">'
+        +   'الحاجات دي مسجّلة عندنا. أول ما توصل، هنكلّمك على رقمك 🌸</div>'
+      : '<div style="text-align:center; padding:18px 10px; font-size:13px; line-height:1.9;">'
+        + '<div style="font-size:34px;">🔖</div>'
+        + '<div style="font-weight:800; margin-top:6px;">لسه مفيش طلبات</div>'
+        + '<div style="opacity:.75; margin-top:4px;">لو دوّرتي على حاجة ومالقيتيهاش في الفرع،'
+        + ' قولي للبياعة تسجّلها — ونكلّمك أول ما توصل.</div></div>'));
+}
+window.openMyRequests = openMyRequests;
 
 /* 📄 شيت بسيط — بيستخدم نفس آلية شيت الفاتورة الموجودة.
    ⚠️ أول نسخة من الكود ده كانت بتنادي `showSheet` وهي **مش
@@ -1593,7 +1664,9 @@ function logout(silent){
   // ⚠️ لازم يتقفل: لو فضل شغّال، عميلة تانية على نفس الجهاز
   //    هتشوف حركات فلوس مش بتاعتها.
   if(creditUnsub){ creditUnsub(); creditUnsub=null; }
+  if(reqUnsub){ reqUnsub(); reqUnsub=null; }
   _creditRows = [];
+  _myRequests = [];
   currentCustomer = null;
   localStorage.removeItem(LS_PHONE);
   $('phoneInput').value=''; $('nameInput').value='';
