@@ -228,15 +228,42 @@
   }
 
   function loadPhotoScarf(scarf, color){
-    const asset = { ready:false, head:null, drape:null,
+    const asset = { ready:false, failed:false, head:null, drape:null,
+                    headTinted:null, tintHex:null, _mask:null,
                     anchors: scarf.head.anchors };
-    const hi = new Image(); hi.onload = () => { asset.head = hi; asset.ready = !!(!scarf.drape || asset.drape); };
+    const hi = new Image();
+    hi.onload = () => { asset.head = hi; asset.ready = !!(!scarf.drape || asset.drape); };
+    // 🛟 الصورة ماتحملتش (لسه ماترفعتش؟) = الرسمة بدل شاشة فاضية
+    hi.onerror = () => { asset.failed = true; };
     hi.src = scarf.head.url;
-    if(scarf.drape){
+    if(scarf.drape && scarf.drape.url){
       const di = new Image(); di.onload = () => { asset.drape = di; asset.ready = !!asset.head; };
+      di.onerror = () => {};
       di.src = scarf.drape.url;
     }
     return asset;
+  }
+
+  /* 🎨 تلوين الأصل الحقيقي بلون المنتج — محرك recolor-core نفسه:
+     ماسك من عيّنات القماش (بيتحسب مرة) + نقل إضاءة، والحواف
+     المشغولة بتفضل زي ما هي. من غير لون منتج = الصورة الأصلية. */
+  function ensureTint(asset, scarf, color){
+    if(!asset.ready || !scarf.recolor) return;
+    if(color.id !== 'from-img'){ asset.headTinted = null; asset.tintHex = null; return; }
+    if(asset.tintHex === color.hex) return;
+    try{
+      const c = document.createElement('canvas');
+      c.width = asset.head.naturalWidth; c.height = asset.head.naturalHeight;
+      const g = c.getContext('2d');
+      g.drawImage(asset.head, 0, 0);
+      const im = g.getImageData(0, 0, c.width, c.height);
+      if(!asset._mask)
+        asset._mask = RECOLOR.buildMask(im.data, scarf.recolor.seeds, scarf.recolor.tol);
+      RECOLOR.applyRecolor(im.data, asset._mask, color.hex);
+      g.putImageData(im, 0, 0);
+      asset.headTinted = c;
+      asset.tintHex = color.hex;
+    }catch(e){ console.warn('tint', e); asset.headTinted = null; }
   }
 
   function shade(hex, amt){
@@ -278,8 +305,15 @@
     }
     const ex = T.expandAnchors(an);
 
-    const asset = getAsset(S.scarf, S.color);
+    let asset = getAsset(S.scarf, S.color);
+    if(asset.failed){
+      // 🛟 الأصل الحقيقي مش متاح — نرجع للرسمة بدل ما الشاشة تفضى
+      const fb = window.TRYON_CATALOG.find((x) => x.type === 'procedural');
+      if(fb){ S.scarf = fb; asset = getAsset(S.scarf, S.color); }
+    }
     if(!asset.ready) return;
+    ensureTint(asset, S.scarf, S.color);
+    const headImg = asset.headTinted || asset.head;
 
     // 💡 مطابقة الإضاءة — عيّنة من الخدود
     const bright = S.smBright.push(sampleLuma(ctx, an));
@@ -309,7 +343,7 @@
     if(Tr){
       ctx.save();
       ctx.setTransform(Tr.a, Tr.d, Tr.b, Tr.e, Tr.c, Tr.f);
-      ctx.drawImage(asset.head, 0, 0);
+      ctx.drawImage(headImg, 0, 0);
       ctx.restore();
     }
     ctx.filter = 'none';
