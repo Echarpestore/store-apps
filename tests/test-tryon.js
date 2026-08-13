@@ -740,6 +740,168 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
       && html.indexOf('tryon-core.js') < html.indexOf('tryon-3d-core.js'),
     'ترتيب التحميل: الكور قبل كور الـ3D (بيستعمل أفيني ٣ نقط بتاعه)');
 
-  assert(sw.indexOf("echarpe-tryon-v17") > -1 && appC.indexOf("'v17'") > -1,
+  assert(sw.indexOf("echarpe-tryon-v19") > -1 && appC.indexOf("'v19'") > -1,
     'النسخة اتحدّثت في sw والكونسول (من غيرها الجهاز يفضل على القديم)');
+})();
+
+// ============================================================
+// ١٩) 🩺 الإقلاع: فشل الرندرر ≠ موت الصفحة + شاشة خطأ بتقول إيه
+// ------------------------------------------------------------
+// شاشة سودا + "حصلت مشكلة في التحميل" على موبايل = صفر معلومات
+// (مفيش كونسول). الدرس: أي شاشة خطأ لازم تحمل النسخة والمرحلة
+// ونص الخطأ، وأي طبقة زيادة (3D/شبكة) متسقّطش اللي قبلها.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let depth = 0;
+    for(let k = src.indexOf('{', i); k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  const bootFn = extractFn(code, 'async function boot()');
+  assert(bootFn.length > 100, 'بلوك boot اتلقى (لو الاستخراج فشل باقي الفحوصات وهمية)');
+
+  // ١) تهيئة الرندرر جوه try/catch **جواني** — مش نفس catch الكاميرا
+  const initIdx = bootFn.indexOf('TRYON3D.init');
+  const meshIdx = bootFn.indexOf('TRYON_MESH.init');
+  assert(initIdx > -1 && meshIdx > -1, 'الاتنين بيتنادوا في الإقلاع');
+  const guard = bootFn.slice(0, initIdx);
+  assert((guard.match(/try\{|try \{/g) || []).length >= 2,
+    '🔴 فيه try تانية جوانية قبل تهيئة الرندرر — فشل WebGL/CDN بيكمّل مسطح');
+  assert(bootFn.indexOf('كمّلنا بالمسار المسطح') > -1,
+    'ومكتوب صراحة إننا بنكمّل (مش catch فاضي بيبلع الخطأ بصمت)');
+  // 🔴 نيجاتيف: لو الـtry الجوانية اتشالت، TRYON3D مش معرّف (سكريبت
+  //    ماتحملش) = TypeError = الصفحة كلها شاشة خطأ والكاميرا شغالة
+
+  // ٢) المرحلة بتتسجل قبل كل خطوة — عشان نعرف وقع فين
+  ['S.stage = \'model\'', 'S.stage = \'camera\'', 'S.stage = \'renderer\'', 'S.stage = \'live\'']
+    .forEach((m) => assert(bootFn.indexOf(m) > -1, 'مرحلة متسجلة: ' + m));
+
+  // ٣) شاشة الخطأ بتقول النسخة والمرحلة ونص الخطأ
+  const errFn = extractFn(code, 'function errLine(e)');
+  assert(errFn.indexOf('TRYON_VER') > -1 && errFn.indexOf('S.stage') > -1
+      && errFn.indexOf('e.name') > -1 && errFn.indexOf('e.message') > -1,
+    '🔴 السطر التقني فيه النسخة + المرحلة + نوع الخطأ + نصه');
+  // v19: صندوق الرسالة اتوحّد (msgBox) واختيار النص اتنقل للكور
+  //      (TRYON.failureAdvice) — الفحوصات بتتبع مكانها الجديد
+  const boxFn = extractFn(code, 'function msgBox(');
+  assert(boxFn.indexOf('p2.textContent = errLine(e);') > -1
+      && boxFn.indexOf('box.appendChild(p2)') > -1,
+    'وشاشة الخطأ بتعرضه فعلًا (مش بس بتحسبه)');
+  const fatalFn = extractFn(code, 'function showFatal(e)');
+  assert(fatalFn.indexOf('T.failureAdvice(S.stage, e && e.name)') > -1,
+    'ورسالة الخطأ بتتقرر من الكور بالمرحلة ونوع الخطأ');
+  // نسخ للمشاركة في الشات
+  assert(boxFn.indexOf('clipboard.writeText') > -1, 'واللمس بينسخ التفاصيل');
+  // ⚠️ بناء العناصر بـcreateElement مش innerHTML — نص الخطأ ممكن
+  //    يجي من مصدر خارجي (رسالة CDN)
+  assert(boxFn.indexOf('innerHTML') === -1 && boxFn.indexOf('createElement') > -1,
+    '🔴 مفيش innerHTML في شاشة الخطأ (نص الخطأ مش موثوق)');
+  assert(boxFn.indexOf('location.reload()') > -1,
+    'وفيه زرار "جرّبي تاني" — الحل الأول لأي فشل عابر');
+
+  // ٤) التشخيص من الكونسول بيقول نفس الحكاية
+  const diag = extractFn(code, 'window.tryonDiag =');
+  assert(diag.indexOf('stage') > -1 && diag.indexOf('err') > -1
+      && diag.indexOf('r3d') > -1 && diag.indexOf('mesh') > -1,
+    'tryonDiag() فيه المرحلة والخطأ وحالة الطبقتين');
+})();
+
+// ============================================================
+// ٢٠) 🌐 المتصفح اللي مبيدّيش كاميرا (WebView) — v19
+// ============================================================
+(function(){
+  /* ١) فحص دعم الكاميرا قبل أي لمس */
+  const good = { mediaDevices: { getUserMedia(){} } };
+  assertEq(T.cameraSupport(good, true).ok, true, 'متصفح عادي = مدعوم');
+  assertEq(T.cameraSupport({}, true).reason, 'no-api',
+    'WebView من غير mediaDevices = no-api مش كراش');
+  assertEq(T.cameraSupport({ mediaDevices: {} }, true).reason, 'no-api',
+    'وmediaDevices موجودة من غير getUserMedia برضه no-api');
+  assertEq(T.cameraSupport(null, true).reason, 'no-api', 'ومن غير navigator خالص');
+  assertEq(T.cameraSupport(good, false).reason, 'insecure',
+    'وhttp (مش https) = insecure — الكاميرا ممنوعة أصلًا');
+  // 🔴 نيجاتيف: من غير الفحص ده، `navigator.mediaDevices.getUserMedia`
+  //    بترمي TypeError غامض والصفحة كلها بتقع بشاشة سودا
+
+  /* ٢) الرسالة الصح حسب مكان الفشل */
+  const denied = T.failureAdvice('camera', 'NotAllowedError');
+  assertEq(denied.kind, 'denied', 'رفض الإذن ليه رسالته');
+  assertEq(denied.canPhoto, true, 'ووضع الصورة لسه شغّال');
+  const nocam = T.failureAdvice('camera', 'NoCameraAPI');
+  assertEq(nocam.kind, 'nocam', 'ومتصفح مش بيدعم الكاميرا ليه رسالة تانية');
+  assertEq(nocam.canPhoto, true, 'وبرضه الصورة شغّالة');
+  assert(nocam.text !== denied.text, 'والرسالتين مختلفتين فعلًا');
+  assertEq(T.failureAdvice('camera', 'NotReadableError').kind, 'nocam',
+    'وكاميرا مشغولة بتطبيق تاني = نفس المعاملة');
+  const model = T.failureAdvice('model', 'TypeError');
+  assertEq(model.kind, 'model', 'وفشل تحميل الموديل ليه رسالة نت/حاجب إعلانات');
+  assertEq(model.canPhoto, false, '🔴 وده مفيش معاه وضع صورة — الموديل نفسه ناقص');
+  assertEq(T.failureAdvice('renderer', 'Error').kind, 'generic', 'وأي حاجة تانية = عامة');
+  assert(model.text.length > 20 && nocam.text.length > 20,
+    'وكل الرسايل مكتوبة للعميلة مش أكواد');
+
+  /* ٣) التوصيلات */
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  // الفحص **قبل** الاستدعاء — الترتيب هو الميزة كلها
+  const cam = extractFn(code, 'async function startCamera()');
+  assert(cam.length > 40, 'دالة startCamera اتلقت');
+  const iChk = cam.indexOf('T.cameraSupport(navigator');
+  const iUse = cam.indexOf('navigator.mediaDevices.getUserMedia(');
+  assert(iChk > -1 && iUse > -1 && iChk < iUse,
+    '🔴 فحص الدعم بيسبق أول لمس لـmediaDevices');
+  assert(cam.indexOf("err.name = 'NoCameraAPI'") > -1,
+    'والخطأ متسمّى — عشان الرسالة تتوجّه صح');
+
+  // فشل الكاميرا مبيقفلش الصفحة
+  const boot = extractFn(code, 'async function boot()');
+  assert(boot.indexOf('photoOnly(e)') > -1,
+    '🔴 فشل الكاميرا = وضع الصورة، مش شاشة خطأ ميتة');
+  assert(boot.indexOf('showFatal(e)') > -1, 'والفشل الحقيقي لسه ليه شاشته');
+  const iCam = boot.indexOf('await startCamera()');
+  const iFatal = boot.indexOf('showFatal(e)');
+  assert(iCam < iFatal, 'وترتيب المراحل زي ما هو');
+
+  // الرجوع للايف من وضع الصورة لو الكاميرا لسه مش متاحة
+  const back = extractFn(code, 'async function backToLive()');
+  assert(back.indexOf('photoOnly(e)') > -1 && back.indexOf('return;') > -1,
+    '🔴 زرار لايف مبيرجعش على كانفاس مقاسه undefined');
+  assert(back.indexOf("S.mode = 'live';") > -1
+      && back.indexOf("S.mode = 'live';") > back.indexOf('await startCamera()'),
+    'والوضع مبيتغيّرش غير بعد ما الكاميرا تفتح فعلًا');
+
+  // زرار الصورة جوه الرسالة نفسها
+  const po = extractFn(code, 'function photoOnly(e)');
+  assert(po.indexOf("$('photoInput').click()") > -1,
+    'ورسالة الكاميرا فيها زرار بيفتح الصور على طول');
+  assert(po.indexOf("S.running = false") > -1,
+    'واللوب بيقف (مفيش رسم على فيديو مقفول)');
+
+  // الصورة لما تتفتح بتشيل الرسالة
+  const tp = extractFn(code, 'async function tryOnPhoto(file)');
+  assert(tp.indexOf("$('fatal').style.display = 'none'") > -1,
+    'واختيار صورة بيشيل الرسالة');
+  assert(tp.indexOf('S.fatalShown') > -1,
+    'إلا لو كان فشل حقيقي — ساعتها الرسالة بتفضل');
 })();
