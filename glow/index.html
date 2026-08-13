@@ -473,10 +473,18 @@
       </div>
     </div>
     <div id="chMsgs"></div>
+    <div id="chImgPrev" style="display:none; gap:10px; align-items:center; padding:8px 12px; background:#fff; border-top:1px solid var(--line);">
+      <img id="chImgTag" alt="" style="height:54px; border-radius:8px;">
+      <span style="flex:1; font-size:12px; color:var(--muted);">هتتبعت مع رسالتك</span>
+      <button onclick="chatImgClear()" style="border:none; background:none; font-size:17px; cursor:pointer;">✖</button>
+    </div>
     <div class="ch-inputbar">
+      <button class="ch-send" style="background:#fff; color:var(--ink); border:1.5px solid var(--line);"
+              onclick="document.getElementById('chFile').click()" title="ابعتي صورة">🖼️</button>
       <textarea id="chInput" rows="1" placeholder="اكتبي رسالتك…" maxlength="500"></textarea>
       <button class="ch-send" id="chSend" onclick="chatSend()">➤</button>
     </div>
+    <input type="file" id="chFile" accept="image/*" style="display:none;">
   </div>
 
   <!-- تبويبات -->
@@ -1837,6 +1845,39 @@ var chatConv = null, chatConvUnsub = null, chatMsgsUnsub = null;
 var chatImgs = {};          // msgId → dataURL (لزرار جربيها)
 var chatSending = false;
 
+// 🖼️ صورة من العميلة — "عندكم زي دي؟" بصورة أوضح من أي وصف
+var chatImgData = null;
+function chatPickImg(e){
+  var f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!f) return;
+  var img = new Image();
+  img.onload = function(){
+    // 📏 تصغير + سقف تحت 1MB بتاع مستند Firestore (نفس حسبة الموظفين)
+    var sc = Math.min(1, 900 / Math.max(img.width, img.height));
+    var c = document.createElement('canvas');
+    c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    var data = c.toDataURL('image/jpeg', 0.8);
+    if(data.length > 650000){
+      data = c.toDataURL('image/jpeg', 0.55);
+      if(data.length > 650000){ showToast('الصورة كبيرة قوي', true); return; }
+    }
+    chatImgData = data;
+    $('chImgTag').src = data;
+    $('chImgPrev').style.display = 'flex';
+  };
+  img.onerror = function(){ showToast('الصورة مش مقروءة', true); };
+  img.src = URL.createObjectURL(f);
+}
+function chatImgClear(){
+  chatImgData = null;
+  $('chImgPrev').style.display = 'none';
+}
+
+
+document.getElementById('chFile').addEventListener('change', chatPickImg);
+
 function watchChatConv(phone){
   if(chatConvUnsub){ chatConvUnsub(); chatConvUnsub = null; }
   chatConvUnsub = db.collection(COL_CHAT).doc(CHAT_DOC_PREFIX + phone).onSnapshot(function(doc){
@@ -1945,7 +1986,15 @@ function chatResolveBranch(phone){
 
 function chatSend(){
   if(chatSending || !currentCustomer) return;
-  var v = chatValidate($('chInput').value, chatConv);
+  var raw = String($('chInput').value || '').trim();
+  var v;
+  if(!raw && chatImgData){
+    // صورة من غير كلام — ماشي، بس 🚫 الحظر لسه بيتفحص (نفس محرك الفحص)
+    v = chatValidate('📷', chatConv);
+    if(v.ok) v.text = '';
+  } else {
+    v = chatValidate(raw, chatConv);
+  }
   if(!v.ok){ showToast(v.msg, true); return; }
   chatSending = true;
   $('chSend').disabled = true;
@@ -1954,14 +2003,17 @@ function chatSend(){
   var convRef = db.collection(COL_CHAT).doc(CHAT_DOC_PREFIX + phone);
   chatResolveBranch(phone).then(function(branch){
     var batch = db.batch();
-    batch.set(convRef.collection('messages').doc(), {
-      from: 'cust', text: v.text, atMs: ts,
+    var custMsg = {
+      from: 'cust', atMs: ts,
       at: firebase.firestore.FieldValue.serverTimestamp(),
       expireAt: chatExpireAt(ts)
-    });
+    };
+    if(v.text) custMsg.text = v.text;
+    if(chatImgData) custMsg.img = chatImgData;
+    batch.set(convRef.collection('messages').doc(), custMsg);
     batch.set(convRef, {
       phone: phone, name: currentCustomer.name || '', branch: branch, brand: 'glow',
-      lastAt: ts, lastText: v.text.slice(0, 80), lastFrom: 'cust',
+      lastAt: ts, lastText: (v.text || '📷 صورة').slice(0, 80), lastFrom: 'cust',
       unreadStaff: firebase.firestore.FieldValue.increment(1),
       unreadCust: 0, expireAt: chatExpireAt(ts)
     }, { merge: true });
@@ -1978,6 +2030,7 @@ function chatSend(){
     return batch.commit();
   }).then(function(){
     $('chInput').value = '';
+    chatImgClear();
   }).catch(function(err){
     console.warn('chat send', err);
     showToast('الرسالة موصلتش — جرّبي تاني', true);
