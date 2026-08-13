@@ -91,24 +91,42 @@ RECOLOR.buildMask = function(pixels, seeds, tol){
 };
 
 /* ---------- ٣) إعادة التلوين ---------- */
-// L محفوظة · H من اللون الهدف · S = sat الهدف مطعّمة بنسبة sat
-// الأصلية (عشان الحتت الباهتة في القماش متبقاش مشبعة فجأة).
-RECOLOR.recolorPixel = function(rgb, targetHsl){
+// ⭐ اتصلحت على صورة قالب حقيقية: الحفاظ الحرفي على L كان بيخلي
+//    قالب فاتح (بيج) مستحيل يطلع منه كحلي — بيطلع "بيبي بلو".
+//    الحل: **نقل الإضاءة**: مركز إضاءة القماش بيتنقل لإضاءة اللون
+//    الهدف، وتباين الطيّات حواليه بيتحفظ (×0.8).
+RECOLOR.recolorPixel = function(rgb, targetHsl, fabricL){
   const [, s0, l0] = RECOLOR.rgbToHsl(rgb[0], rgb[1], rgb[2]);
+  const mid = (fabricL == null) ? l0 : fabricL;   // من غير مركز = سلوك قديم
+  const l = Math.max(0.04, Math.min(0.96, targetHsl[2] + (l0 - mid) * 0.8));
   const s = targetHsl[1] * (0.55 + 0.45 * Math.min(1, s0 * 2.2));
-  return RECOLOR.hslToRgb(targetHsl[0], s, l0);
+  return RECOLOR.hslToRgb(targetHsl[0], s, l);
+};
+
+// وسيط إضاءة البكسلات الماسكة — مركز القماش
+RECOLOR.fabricMedianL = function(pixels, mask){
+  const ls = [];
+  const n = pixels.length / 4;
+  for(let i = 0; i < n; i++){
+    if(mask[i] <= 0.3) continue;
+    ls.push(RECOLOR.rgbToHsl(pixels[i*4], pixels[i*4+1], pixels[i*4+2])[2]);
+  }
+  if(!ls.length) return null;
+  ls.sort((a, b) => a - b);
+  return ls[Math.floor(ls.length / 2)];
 };
 
 // بيعدّل pixels في مكانها حسب الماسك (وزن 0 = مفيش لمس)
 RECOLOR.applyRecolor = function(pixels, mask, targetHex){
   const t = RECOLOR.hexToRgb(targetHex);
   const targetHsl = RECOLOR.rgbToHsl(t[0], t[1], t[2]);
+  const medL = RECOLOR.fabricMedianL(pixels, mask);
   const n = pixels.length / 4;
   for(let i = 0; i < n; i++){
     const w = mask[i];
     if(w <= 0.02) continue;
     const r = pixels[i*4], g = pixels[i*4+1], b = pixels[i*4+2];
-    const nc = RECOLOR.recolorPixel([r,g,b], targetHsl);
+    const nc = RECOLOR.recolorPixel([r,g,b], targetHsl, medL);
     pixels[i*4]   = Math.round(r + (nc[0] - r) * w);
     pixels[i*4+1] = Math.round(g + (nc[1] - g) * w);
     pixels[i*4+2] = Math.round(b + (nc[2] - b) * w);
