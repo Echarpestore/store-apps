@@ -144,17 +144,24 @@
 
     const dark = shade(hex, -28), light = shade(hex, 22);
 
-    // جسم الطرحة حوالين الراس
-    g.beginPath();
-    g.ellipse(500, 560, 470, 545, 0, 0, Math.PI*2);
+    // جسم الطرحة: قبة فوق + جناب نازلة لآخر الصورة (مش دايرة/خاتم —
+    // الشكل ده بيقرا "حجاب" حتى وهو مرسوم)
     const grad = g.createLinearGradient(0, 0, W, H);
     grad.addColorStop(0, light); grad.addColorStop(0.5, hex); grad.addColorStop(1, dark);
-    g.fillStyle = grad; g.fill();
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(60, H);
+    g.lineTo(60, 620);
+    g.bezierCurveTo(60, 220, 250, 60, 500, 60);
+    g.bezierCurveTo(750, 60, 940, 220, 940, 620);
+    g.lineTo(940, H);
+    g.closePath();
+    g.fill();
 
     // 🕳️ فتحة الوش — شفافة
     g.globalCompositeOperation = 'destination-out';
     g.beginPath();
-    g.ellipse(500, 620, 268, 356, 0, 0, Math.PI*2);
+    g.ellipse(500, 660, 262, 350, 0, 0, Math.PI*2);
     g.fill();
     g.globalCompositeOperation = 'source-over';
 
@@ -386,37 +393,12 @@
   }
 
   function buildUI(){
-    // الألوان
-    const row = $('colors');
-    window.TRYON_COLORS.forEach((c, i) => {
-      const b = document.createElement('button');
-      b.className = 'sw' + (i === 0 ? ' on' : '');
-      b.style.background = c.hex;
-      b.title = c.name;
-      b.onclick = () => {
-        row.querySelectorAll('.sw').forEach(x => x.classList.remove('on'));
-        b.classList.add('on');
-        S.color = c;
-        $('colorName').textContent = c.name;
-        if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
-      };
-      row.appendChild(b);
-    });
-    // 🔗 ديب لينك من الشات: tryon/?scarf=chiffon-01&color=rose
-    //    مش لاقي المطلوب = بيفتح عادي بأول اختيار (مفيش شاشة خطأ للعميلة)
-    const qs = new URLSearchParams(location.search);
-    const pick = T.pickByQuery(window.TRYON_CATALOG, window.TRYON_COLORS,
-                               (k) => qs.get(k));
-    S.scarf = pick.scarf;
-    S.color = pick.color;
-    const ci = window.TRYON_COLORS.indexOf(S.color);
-    row.querySelectorAll('.sw').forEach((x, i) =>
-      x.classList.toggle('on', i === ci));
-    $('colorName').textContent = S.color.name;
+    // 🎨 قرار المالك: مفيش لوحة ألوان — اللون بييجي من **صورة المنتج**
+    //    اللي الشات بيسلّمها. من غير صورة = بيج محايد (مجرد معاينة).
+    S.color = { id:'default', name:'', hex:'#c9ac86' };
+    S.scarf = window.TRYON_CATALOG[0];
 
-    // 🖼️ صورة المنتج — تسليم مباشر من الشات (imgkey) أو لينك (img):
-    //    الشات بيحط الصورة مصغّرة في sessionStorage قبل ما يفتحنا —
-    //    نفس الدومين = مفيش CORS ومفيش رفع تاني. أي فشل = افتراضي في صمت.
+    const qs = new URLSearchParams(location.search);
     const src = T.imageSourceFromQuery(
       (k) => qs.get(k),
       (k) => { try{ return sessionStorage.getItem(k); }catch(e){ return null; } }
@@ -446,22 +428,10 @@
     g.drawImage(img, 0, 0, 64, 64);
     const px = g.getImageData(0, 0, 64, 64).data;   // canvas ملوث = بيرمي هنا
     const dom = T.dominantColor(px);
-    if(!dom.hex || dom.confidence < 0.08) return;    // كلها خلفية = سيبك
-    const col = { id:'from-img', name:'لون الصورة', hex:dom.hex };
-    const row = $('colors');
-    const b = document.createElement('button');
-    b.className = 'sw';
-    b.style.background = col.hex;
-    b.title = col.name;
-    b.onclick = () => {
-      row.querySelectorAll('.sw').forEach((x) => x.classList.remove('on'));
-      b.classList.add('on');
-      S.color = col;
-      $('colorName').textContent = col.name;
-      if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
-    };
-    row.prepend(b);
-    b.click();                                        // مختار من أول لحظة
+    if(!dom.hex || dom.confidence < 0.08) return;    // كلها خلفية = البيج المحايد
+    S.color = { id:'from-img', name:'لون المنتج', hex:dom.hex };
+    S.assetCache = {};                               // اللون اتغير = الرسمة تتبني تاني
+    if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
   }
 
   /* ============================================================
