@@ -3523,6 +3523,48 @@ async function _doConfirmPayment(){
   const staffPointValue = calcStaffPoint(itemCount, total, _spMinItems, _spMinInvoice,
                                          _spCfg.enabled !== false, isRefundInvoice);
   const earnsStaffPoint = staffPointValue > 0;
+/* ============================================================
+   ↩️🎁 خصم نقط المرتجع — إصلاح "مولّد النقط"
+   ------------------------------------------------------------
+   🔴 الباج القديم: النقط كانت بتتخصم بـfloor على قيمة كل مرتجع
+      لوحده. floor بيرمي الكسر **كل مرة**، فتقسيم المرتجع بيقلّل
+      الخصم — ولو التقسيم صغير كفاية الخصم بيبقى صفر خالص:
+
+        اشترت بـ٩٩٠  → كسبت ٩ نقط
+        رجّعتها ١٠ مرات × ٩٩ → floor(99/100) = صفر كل مرة
+        النتيجة: البضاعة رجعت كلها وفضل معاها ٩ نقط من العدم.
+
+      وده مش خطأ حسابي بسيط — ده باب مفتوح: أي حد يعرف الحيلة
+      يقدر يطلّع نقط بلا حدود ويحوّلها كاش من خصم الاستبدال.
+
+   ✅ الإصلاح: مبنحسبش الخصم من قيمة المرتجع. بنحسبه من **نصيب
+      المرتجع في نقط الفاتورة الأصلية**، وبنطرح اللي اتخصم قبل كده:
+
+        الواجب كليًا = نقط الفاتورة × (المرجّع كله ÷ إجمالي الفاتورة)
+        اللي يتخصم دلوقتي = الواجب كليًا − اللي اتخصم قبل كده
+
+      كده التقسيم مبيغيّرش النتيجة النهائية أبدًا، والمرتجع الكامل
+      بيرجّع كل النقط بالظبط. الكسور بتتجمّع بدل ما تترمى.
+
+   ⚠️ `refundedSoFar` بيتقرا من الفاتورة الأصلية (مصدر الحقيقة)
+      مش من السلة — عشان يشتغل صح عبر الجلسات والأجهزة.
+   ============================================================ */
+function returnPointsDeduction(origEarned, origTotal, refundedBefore, thisRefund, pointsRefundedSoFar){
+  const earned = Number(origEarned) || 0;
+  const total  = Math.abs(Number(origTotal) || 0);
+  if(earned <= 0 || total <= 0) return 0;          // فاتورة مكسبتش نقط = مفيش خصم
+  const before = Math.max(0, Number(refundedBefore) || 0);
+  const now    = Math.max(0, Number(thisRefund) || 0);
+  const already = Math.max(0, Number(pointsRefundedSoFar) || 0);
+  // المرجّع عمره ما يزيد عن قيمة الفاتورة (حارس ضد بيانات بايظة)
+  const returnedAll = Math.min(total, before + now);
+  const dueAll = Math.round(earned * (returnedAll / total));
+  const due = dueAll - already;
+  // مبنرجّعش نقط أكتر من اللي اتكسبت، ومبنضيفش نقط من مرتجع
+  return Math.max(0, Math.min(due, earned - already));
+}
+window.returnPointsDeduction = returnPointsDeduction;
+
   const _rate = loyaltyRedemptionConfig.pointsPerEGP || 100;
   const _rawPts = Math.floor(Math.abs(total) / _rate);
   const loyaltyPointsEarned = phone ? (total < 0 ? -_rawPts : _rawPts) : 0;   // المرتجع بيخصم نقط بالسالب
@@ -3645,6 +3687,10 @@ async function _doConfirmPayment(){
 
     // ↩️🔒 منع تكرار المرتجع عبر الجلسات: نسجّل الكميات المرجّعة على الفاتورة الأصلية
     // + سجل مراقَب لكل مرتجع (مين، إمتى، أنهي فاتورة، كام)
+    // ↩️🎁 لازم يعيش بره الـtry: بيتحسب هنا وبيتخصم تحت في كتلة النقط.
+    //    لو جوه، أي استثناء بيضيّعه والنقط مبتتخصمش.
+    let _retPointsDeduct = 0;
+    const _retInvoiceUpdates = [];
     try{
       const retLines = cart.filter(c=> c.isReturn && c.fromInvoice);
       if(retLines.length){
@@ -3665,10 +3711,30 @@ async function _doConfirmPayment(){
                 const key = (c.barcode||'') + '|' + c.name;
                 returnedMap[key] = (returnedMap[key] || 0) + (c.qty||0);
               });
+              // ↩️🎁 نصيب المرتجع ده من نقط الفاتورة الأصلية
+              const _thisRefund = byInvoice[invCode]
+                .reduce((n,c)=> n + Math.abs(c.price||0) * (c.qty||0), 0);
+              const _ptsDeduct = returnPointsDeduction(
+                orig.loyaltyPointsEarned, orig.total,
+                orig.refundedValue, _thisRefund, orig.pointsRefunded);
+              _retPointsDeduct += _ptsDeduct;
+              _retInvoiceUpdates.push({
+                ref: origRef,
+                refundedValue: (Number(orig.refundedValue)||0) + _thisRefund,
+                pointsRefunded: (Number(orig.pointsRefunded)||0) + _ptsDeduct
+              });
               // ⏱️ مهلة: نفس سبب نقط البياعة — كتابة من غير آك سيرفر بتفضل
               //    معلّقة ومبترميش خطأ. ودي **قبل** الطباعة، فتعليقها كان
               //    بيوقف المرتجع كله قبل ما الورقة تطلع أصلًا.
-              const _rqW = await _waitWrite(origRef.update({ returnedQty: returnedMap }));
+              // 🔒 المرجّع والنقط المخصومة بيتحفظوا على الفاتورة الأصلية —
+              //    دي مصدر الحقيقة اللي بيمنع التقسيم من إنه يقلّل الخصم.
+              const _upd = { returnedQty: returnedMap };
+              const _last = _retInvoiceUpdates[_retInvoiceUpdates.length - 1];
+              if(_last && _last.ref === origRef){
+                _upd.refundedValue = _last.refundedValue;
+                _upd.pointsRefunded = _last.pointsRefunded;
+              }
+              const _rqW = await _waitWrite(origRef.update(_upd));
               if(_rqW.error) console.warn('update returnedQty', invCode, _rqW.error);
             }
           }catch(e){ console.warn('update returnedQty', invCode, e); }
@@ -3767,7 +3833,14 @@ async function _doConfirmPayment(){
     // 4) نقاط ولاء العميل (تجريبي) — بتضيف المكتسب وتخصم أي نقط اتستبدلت في نفس الفاتورة دي
     if(phone){
       const custRef = db.collection(TEST_CUSTOMERS).doc(phone);
-      const netPointsChange = loyaltyPointsEarned - (pendingRedemption ? pendingRedemption.points : 0);
+      // ↩️🎁 نقط المرتجع: بتتخصم بنصيبها من الفاتورة الأصلية (مش floor على
+      //    قيمة المرتجع) — الإصلاح اللي بيقفل باب تقسيم المرتجع.
+      //    ⚠️ `loyaltyPointsEarned` على فاتورة فيها مرتجع بس بتبقى سالبة
+      //       بالحساب القديم، فبناخد الموجب منها بس عشان مايتخصمش مرتين.
+      const _earnedPart = Math.max(0, loyaltyPointsEarned);
+      const netPointsChange = _earnedPart
+        - (pendingRedemption ? pendingRedemption.points : 0)
+        - _retPointsDeduct;
       const pf = pointsFieldFor(currentBranch);
       const custUpdate = {
         phone, branch: currentBranch,

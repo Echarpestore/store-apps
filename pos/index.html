@@ -1780,5 +1780,14 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="transfers.js"></script>
 <script src="ui-editor.js"></script>
 <script src="chat.js"></script>
+<!-- 🖼️ نظام الإطارات والتارجت.
+     🔴 الملف ده كان **موجود في الريبو ومش متحمّل من هنا خالص** — يعني
+        الميزة كانت ميتة على كل الأجهزة، و`test-frames.js` كان بيعدّي
+        أخضر لأنه بيقرا الملف مباشرة مش بيتأكد إنه محمّل.
+        وتطبيق الحضور كان مستني `shift_status_<branch>` اللي الملف ده
+        هو كاتبها الوحيد — فشاشة الشيفت عمرها ما اتحوّلت.
+     ⚠️ بيشتغل لوحده أول ما `db` و`currentBranch` يجهزوا، فلازم يفضل
+        آخر واحد بعد pos-core.js. -->
+<script src="frames.js"></script>
 </body>
 </html>
