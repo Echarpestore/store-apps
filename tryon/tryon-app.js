@@ -414,12 +414,14 @@
       x.classList.toggle('on', i === ci));
     $('colorName').textContent = S.color.name;
 
-    // 🖼️ ?img=<لينك صورة المنتج> — استخراج اللون تلقائي (نفس الخطوة):
-    //    الشات بيبعت لينك صورة الطرحة نفسها ← بنطلّع لونها الغالب
-    //    ← لون جديد "لون الصورة" بيتضاف مختار. أي فشل (CORS/لينك بايظ/
-    //    صورة كلها خلفية) = بنفضل على الافتراضي في صمت، مفيش خطأ للعميلة.
-    const imgUrl = qs.get('img');
-    if(imgUrl) colorFromProductImage(imgUrl).catch(() => {});
+    // 🖼️ صورة المنتج — تسليم مباشر من الشات (imgkey) أو لينك (img):
+    //    الشات بيحط الصورة مصغّرة في sessionStorage قبل ما يفتحنا —
+    //    نفس الدومين = مفيش CORS ومفيش رفع تاني. أي فشل = افتراضي في صمت.
+    const src = T.imageSourceFromQuery(
+      (k) => qs.get(k),
+      (k) => { try{ return sessionStorage.getItem(k); }catch(e){ return null; } }
+    );
+    if(src.kind !== 'none') colorFromProductImage(src.value).catch(() => {});
 
     $('btnShot').onclick = () => capture().catch(console.warn);
     $('btnLive').onclick = () => backToLive().catch(console.warn);

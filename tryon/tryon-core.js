@@ -203,6 +203,21 @@ TRYON.dominantColor = function(pixels){
   };
 };
 
+/* ---------- ١٢) مصدر صورة المنتج — تسليم مباشر ولا لينك ---------- */
+// الشات (نفس الدومين) بيسلّم الصورة مباشرة في sessionStorage —
+// صفر CORS وصفر رفع إضافي. اللينك (?img=) فولباك للحالات التانية.
+// getParam = قراءة باراميتر · getStore = قراءة من المخزن
+TRYON.imageSourceFromQuery = function(getParam, getStore){
+  if(getParam && getParam('imgkey')){
+    const data = getStore && getStore('echarpe_tryon_img');
+    if(data) return { kind:'handoff', value:data };
+    // المفتاح موجود والصورة لأ (تاب جديد/انتهت الجلسة) → نكمل عادي
+  }
+  const url = getParam && getParam('img');
+  if(url) return { kind:'url', value:url };
+  return { kind:'none', value:null };
+};
+
 /* ---------- التصدير (القاعدة الذهبية §18) ---------- */
 if(typeof module !== 'undefined' && module.exports){ module.exports = TRYON; }
 if(typeof window !== 'undefined'){
