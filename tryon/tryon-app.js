@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v19';
+  const TRYON_VER = 'v20';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -29,6 +29,7 @@
     scarf: null, color: null,
     smTop: T.Smoother2D(), smL: T.Smoother2D(), smR: T.Smoother2D(),
     smChin: T.Smoother2D(), smYaw: T.Smoother(), smBright: T.Smoother({minAlpha:0.05, maxAlpha:0.2}),
+    smDr: T.Smoother({minAlpha:0.04, maxAlpha:0.15}), smDb: T.Smoother({minAlpha:0.04, maxAlpha:0.15}),
     gov: T.FrameGovernor(),
     assetCache: {},               // (scarfId|colorId) → {head, drape, anchors}
     lastHint: '', lostFrames: 0, r3d: false, mesh: false, lastFrameT: 0,
@@ -242,12 +243,38 @@
              anchors:{ l:[150,560], r:[850,560], top:[500,120] } };
   }
 
+  /* 🕳️ v20: تدرّج حافة فتحة الوش — مرة واحدة وقت التحميل. الفتحة
+     في الأصل شفافة أصلًا؛ اللي كان بيبان "لوحة بيضا" هو خلفية
+     صورة العميلة من فتحة أوسع من الوش (اتصلحت بالـfit في الكتالوج).
+     هنا بنعمل الجزء التاني: حافة القماش تدوب في الجلد بدل قطع حاد. */
+  function processHeadImage(img, scarf){
+    try{
+      const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0);
+      const im = g.getImageData(0, 0, w, h);
+      const A = scarf.head.anchors;
+      const seed = [ Math.round((A.l[0] + A.r[0]) / 2),
+                     Math.round(A.l[1] + (A.r[0] - A.l[0]) * 0.5) ];
+      const res = T.featherHoleEdge(im.data, w, h, seed, { feather: 7 });
+      if(!res.holePx) return img;              // مفيش فتحة تحت البذرة = سيبها
+      g.putImageData(im, 0, 0);
+      return c;
+    }catch(e){ console.warn('faceHole', e); return img; }
+  }
+
   function loadPhotoScarf(scarf, color){
     const asset = { ready:false, failed:false, head:null, drape:null,
                     headTinted:null, tintHex:null, _mask:null,
+                    headTemp:null, tempKey:null,
                     anchors: scarf.head.anchors };
     const hi = new Image();
-    hi.onload = () => { asset.head = hi; asset.ready = !!(!scarf.drape || asset.drape); };
+    hi.onload = () => {
+      asset.head = processHeadImage(hi, scarf);
+      asset.ready = !!(!scarf.drape || asset.drape);
+    };
     // 🛟 الصورة ماتحملتش (لسه ماترفعتش؟) = الرسمة بدل شاشة فاضية
     hi.onerror = () => { asset.failed = true; };
     hi.src = scarf.head.url;
@@ -264,11 +291,13 @@
      المشغولة بتفضل زي ما هي. من غير لون منتج = الصورة الأصلية. */
   function ensureTint(asset, scarf, color){
     if(!asset.ready || !scarf.recolor) return;
-    if(color.id !== 'from-img'){ asset.headTinted = null; asset.tintHex = null; return; }
+    if(color.id !== 'from-img'){ asset.headTinted = null; asset.tintHex = null; asset.headTemp = null; asset.tempKey = null; return; }
     if(asset.tintHex === color.hex) return;
     try{
       const c = document.createElement('canvas');
-      c.width = asset.head.naturalWidth; c.height = asset.head.naturalHeight;
+      // الأصل ممكن يبقى كانفاس (بعد تنضيف الفتحة) — مالوش naturalWidth
+      c.width = asset.head.naturalWidth || asset.head.width;
+      c.height = asset.head.naturalHeight || asset.head.height;
       const g = c.getContext('2d');
       g.drawImage(asset.head, 0, 0);
       const im = g.getImageData(0, 0, c.width, c.height);
@@ -278,6 +307,7 @@
       g.putImageData(im, 0, 0);
       asset.headTinted = c;
       asset.tintHex = color.hex;
+      asset.headTemp = null; asset.tempKey = null;   // اللون اتغير = الحرارة تتخبز تاني
     }catch(e){ console.warn('tint', e); asset.headTinted = null; }
   }
 
@@ -295,6 +325,50 @@
     if(!img) return null;
     return { img: img, anchors: asset.anchors,
              key: scarf.id + '|' + (asset.tintHex || 'raw') };
+  }
+
+  /* 🌡️ v20: خبز حرارة اللون على نسخة كاش — مش كل فريم. المفتاح
+     متكمّي (tempBucket) فرعشة الإضاءة مش بتعيد البناء، والتغيير
+     الحقيقي (دخلت أوضة لمبتها صفرا) بيتلحق في ثانية. */
+  function ensureTemp(asset, dr, db){
+    if(!asset.ready) return;
+    const tint = T.tempTintColor(dr, db);
+    const key = (asset.tintHex || 'raw') + '|' + (tint ? T.tempBucket(dr, db) : 'neutral');
+    if(asset.tempKey === key) return;
+    if(!tint){ asset.headTemp = null; asset.tempKey = key; return; }
+    try{
+      const base = asset.headTinted || asset.head;
+      const c = document.createElement('canvas');
+      c.width = base.naturalWidth || base.width;
+      c.height = base.naturalHeight || base.height;
+      const g = c.getContext('2d');
+      g.drawImage(base, 0, 0);
+      g.globalCompositeOperation = 'source-atop';    // اللون على القماش بس مش الشفاف
+      g.fillStyle = 'rgba(' + tint.r + ',' + tint.g + ',' + tint.b + ',' + tint.alpha + ')';
+      g.fillRect(0, 0, c.width, c.height);
+      asset.headTemp = c;
+      asset.tempKey = key;
+    }catch(e){ console.warn('temp', e); asset.headTemp = null; asset.tempKey = key; }
+  }
+
+  // سلسلة الشكل النهائي: حرارة ← لون منتج ← أصل
+  function lookImg(asset){
+    return asset.headTemp || asset.headTinted || asset.head;
+  }
+
+  // عيّنة لون الجلد من الخدود — إضاءة + انحراف الحرارة (v20)
+  function sampleSkin(ctx, an){
+    try{
+      const px = (p) => ctx.getImageData(Math.max(0,p[0]-2), Math.max(0,p[1]-2), 4, 4).data;
+      const acc = (d) => {
+        let r=0, g=0, b=0;
+        for(let i=0; i<d.length; i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; }
+        const n = d.length/4; return { r:r/n, g:g/n, b:b/n };
+      };
+      const a = acc(px(an.cheekL)), c = acc(px(an.cheekR));
+      const r=(a.r+c.r)/2, g=(a.g+c.g)/2, b=(a.b+c.b)/2;
+      return { r:r, g:g, b:b, luma: 0.299*r + 0.587*g + 0.114*b };
+    }catch(e){ return { r:128, g:128, b:128, luma:128 }; }
   }
 
   function shade(hex, amt){
@@ -353,7 +427,10 @@
              l: S.smL.push(an.l), r: S.smR.push(an.r),
              cheekL: an.cheekL, cheekR: an.cheekR };
     }
-    const ex = T.expandAnchors(an);
+    // 📐 v20: توسيع النقط بمقاس الأصل نفسه — أصل نقطه على حافة
+    //    الفتحة (fit في الكتالوج) بياخد توسيع أقل فالفتحة تحضن
+    //    الوش، والطرحة المرسومة بتفضل على الافتراضي
+    const ex = T.expandAnchors(an, S.scarf.fit);
 
     let asset = getAsset(S.scarf, S.color);
     if(asset.failed){
@@ -363,10 +440,33 @@
     }
     if(!asset.ready) return;
     ensureTint(asset, S.scarf, S.color);
-    const headImg = asset.headTinted || asset.head;
 
-    // 💡 مطابقة الإضاءة — عيّنة من الخدود
-    const bright = S.smBright.push(sampleLuma(ctx, an));
+    // 💡🌡️ عيّنة الجلد: إضاءة + حرارة لون (v20) — كله متنعّم
+    const sk = sampleSkin(ctx, an);
+    const bright = S.smBright.push(sk.luma);
+    const drS = S.smDr.push(sk.r - sk.luma);
+    const dbS = S.smDb.push(sk.b - sk.luma);
+    ensureTemp(asset, drS, dbS);
+    const headImg = lookImg(asset);
+
+    // 🌗 ظل التلامس (v20): على الوش نفسه **قبل** ما القماش يترسم
+    //    فوقه، وقبل فلتر السطوع (الضل مش بياخد سطوع الطرحة).
+    //    multiply = تغميق حقيقي مش طبقة رمادية.
+    if(S.scarf.type === 'photo'){
+      const sh = T.contactShadowSpec(an, ex);
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.translate(sh.x, sh.y);
+      ctx.rotate(sh.rot);
+      const gr = ctx.createLinearGradient(0, 0, 0, sh.h);
+      gr.addColorStop(0, 'rgba(72,52,42,' + sh.alpha + ')');
+      gr.addColorStop(1, 'rgba(72,52,42,0)');
+      ctx.fillStyle = gr;
+      ctx.fillRect(-sh.w / 2, 0, sh.w, sh.h);
+      ctx.restore();
+    }
+
+    // 💡 مطابقة الإضاءة — من نفس العيّنة
     ctx.filter = 'brightness(' + T.lumaToBrightness(bright).toFixed(3) + ')';
 
     // (أ) الانسدال تحت الدقن
@@ -410,13 +510,9 @@
     ctx.filter = 'none';
   }
 
-  // متوسط إضاءة الخدود — عيّنة صغيرة مش الصورة كلها (أداء)
+  // متوسط إضاءة الخدود — دلوقتي غلاف على sampleSkin (مسار عيّنة واحد)
   function sampleLuma(ctx, an){
-    try{
-      const px = (p) => ctx.getImageData(Math.max(0,p[0]-2), Math.max(0,p[1]-2), 4, 4).data;
-      const avg = (d) => { let s=0; for(let i=0;i<d.length;i+=4) s += 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; return s/(d.length/4); };
-      return (avg(px(an.cheekL)) + avg(px(an.cheekR))) / 2;
-    }catch(e){ return 128; }
+    return sampleSkin(ctx, an).luma;
   }
 
   /* ============================================================
@@ -485,6 +581,9 @@
 
   function resetSmooth(){
     S.smTop.reset(); S.smChin.reset(); S.smL.reset(); S.smR.reset();
+    // v20: إضاءة الصورة الثابتة غير إضاءة اللايف — من غير reset
+    // الحرارة القديمة بتتنقل للوضع الجديد وتاخد ثواني تصحّح
+    S.smDr.reset(); S.smDb.reset();
   }
 
   /* ============================================================

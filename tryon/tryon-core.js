@@ -253,6 +253,133 @@ TRYON.failureAdvice = function(stage, name){
     text:'حصلت مشكلة في التحميل — جرّبي تاني، ولو اتكررت كلّمينا من التطبيق 💬' };
 };
 
+/* ---------- ١٥) 🕳️ حافة فتحة الوش (v20) ---------- */
+// اكتشاف من الفحص على الصورة الحقيقية: الفتحة **شفافة أصلًا** —
+// الأبيض اللي بيبان حوالين الوش هو خلفية صورة العميلة نفسها، لأن
+// الفتحة أوسع من الوش (توسيع 1.28 معمول للطرحة المرسومة، مش لأصل
+// نقطه على حافة الفتحة). الحل جزئين: (أ) fit خاص بكل أصل بيضيّق
+// الفتحة على الوش (في الكتالوج) · (ب) تدرّج شفاف على حافة الفتحة
+// عشان القماش يدوب في الجلد بدل قطع حاد.
+// ⚠️ الطريقة الأولانية (flood على الأبيض) كانت **بتاكل القماش
+// البيج نفسه** (فرقه عن الأبيض ٢٤ درجة) — اتشالت.
+
+// بلور قناة واحدة (مفصول أفقي/رأسي) — للتدرّج على حافة الفتحة
+TRYON.blurChannel = function(src, w, h, r){
+  if(!(r > 0)) return src;
+  const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+  const win = r * 2 + 1;
+  for(let y = 0; y < h; y++){
+    let sum = 0;
+    for(let x = -r; x <= r; x++) sum += src[y*w + Math.max(0, Math.min(w-1, x))];
+    for(let x = 0; x < w; x++){
+      tmp[y*w + x] = sum / win;
+      const xo = Math.max(0, Math.min(w-1, x - r));
+      const xi = Math.max(0, Math.min(w-1, x + r + 1));
+      sum += src[y*w + xi] - src[y*w + xo];
+    }
+  }
+  for(let x = 0; x < w; x++){
+    let sum = 0;
+    for(let y = -r; y <= r; y++) sum += tmp[Math.max(0, Math.min(h-1, y))*w + x];
+    for(let y = 0; y < h; y++){
+      out[y*w + x] = sum / win;
+      const yo = Math.max(0, Math.min(h-1, y - r));
+      const yi = Math.max(0, Math.min(h-1, y + r + 1));
+      sum += tmp[yi*w + x] - tmp[yo*w + x];
+    }
+  }
+  return out;
+};
+
+// data = RGBA في مكانه · seed = مركز الفتحة تقريبًا (من نقط التثبيت)
+// flood على **الشفاف** (alpha < 40) من البذرة = منطقة الفتحة بس —
+// الخلفية الشفافة برّه الطرحة مش متوصلة بيها فمش بتتلمس.
+// بعدها بلور للماسك وتخفيض ألفا القماش الملاصق بالتدريج.
+// بيرجع {holePx} — صفر لو البذرة مش على شفاف (أصل مقصوص غريب =
+// مفيش لمس خالص، أأمن قرار).
+TRYON.featherHoleEdge = function(data, w, h, seed, opts){
+  opts = opts || {};
+  const feather = opts.feather != null ? opts.feather : 7;
+  const sx = Math.max(0, Math.min(w - 1, Math.round(seed[0])));
+  const sy = Math.max(0, Math.min(h - 1, Math.round(seed[1])));
+  if(data[(sy * w + sx) * 4 + 3] >= 40) return { holePx: 0 };
+
+  const mask = new Float32Array(w * h);
+  const stack = [sy * w + sx];
+  mask[sy * w + sx] = 1;
+  let holePx = 0;
+  // 🛟 حارس: لو الفتحة "مفتوحة" على الخلفية الخارجية الـflood هيكبر
+  //    جدًا — نلغي بدل ما نتدرّج على حواف الطرحة الخارجية كلها
+  const cap = Math.floor(w * h * 0.35);
+  while(stack.length){
+    const p = stack.pop();
+    if(++holePx > cap) return { holePx: 0 };
+    const x = p % w, y = (p - x) / w;
+    const nbs = [];
+    if(x > 0) nbs.push(p - 1);
+    if(x < w - 1) nbs.push(p + 1);
+    if(y > 0) nbs.push(p - w);
+    if(y < h - 1) nbs.push(p + w);
+    for(let k = 0; k < nbs.length; k++){
+      const q = nbs[k];
+      if(mask[q]) continue;
+      if(data[q * 4 + 3] < 40){ mask[q] = 1; stack.push(q); }
+    }
+  }
+
+  // التدرّج: بلور الماسك مرتين → القماش الملاصق للفتحة ألفته بتنزل
+  // بالتدريج ناحية الحافة. 🔴 من غيره حافة الفتحة قطع حاد والوش
+  // يبان "ملزوق في شباك" — نفس الشكوى.
+  let m = mask;
+  for(let pass = 0; pass < 2; pass++) m = TRYON.blurChannel(m, w, h, feather);
+  for(let p = 0; p < w * h; p++){
+    if(mask[p]) continue;                    // جوه الفتحة أصلًا شفاف
+    const cut = Math.min(1, m[p] * 1.3);
+    if(cut > 0.01){
+      const i = p * 4 + 3;
+      data[i] = Math.round(data[i] * (1 - cut));
+    }
+  }
+  return { holePx: holePx };
+};
+
+/* ---------- ١٦) 🌗 ظل التلامس (v20) ---------- */
+// الطرحة الحقيقية بترمي ضل ناعم على الجبهة تحت حافتها — من غيره
+// اللفة "عايمة" فوق الوش. بنرسم شريط تدرّج مايل بميل الراس، من
+// حافة الطرحة العلوية ونازل، بمزج multiply (ضل مش لون).
+TRYON.contactShadowSpec = function(an, ex){
+  return {
+    x: ex.top[0], y: ex.top[1],           // مركز الشريط عند حافة الطرحة
+    w: ex.faceW * 1.30,
+    h: ex.faceH * 0.30,
+    rot: Math.atan2(an.r[1] - an.l[1], an.r[0] - an.l[0]),
+    alpha: 0.16                            // ناعم — ضل مش حرق
+  };
+};
+
+/* ---------- ١٧) 🌡️ حرارة اللون (v20) ---------- */
+// مطابقة السطوع لوحدها مش كفاية: صورة دافية (لمبة تنجستن) والقماش
+// جاي من استوديو محايد = القماش يبان "لزقة". بنقيس انحراف لون
+// الجلد عن الرمادي (dr = أحمر−إضاءة · db = أزرق−إضاءة) ونلوّن
+// القماش بنفس الاتجاه — بس خفيف، القماش مش مراية.
+TRYON.tempTintColor = function(dr, db){
+  const mag = Math.max(Math.abs(dr || 0), Math.abs(db || 0));
+  if(mag < 7) return null;                 // إضاءة محايدة = سيبه زي ما هو
+  const k = Math.min(1, (mag - 7) / 30);
+  const clip = (v) => Math.round(Math.max(-60, Math.min(60, v * 1.2)));
+  return {
+    r: 128 + clip(dr), g: 128, b: 128 + clip(db),
+    alpha: Math.round((0.05 + 0.08 * k) * 100) / 100   // 0.05 .. 0.13
+  };
+};
+
+// مفتاح كاش متكمّي — عشان الكانفاس الملوّن ميتبنيش كل فريم على
+// رعشة عُشر درجة، بس يتبني لما الإضاءة تتغير فعلًا
+TRYON.tempBucket = function(dr, db){
+  const q = (v) => Math.round((v || 0) / 6) * 6;
+  return q(dr) + '_' + q(db);
+};
+
 /* ---------- التصدير (القاعدة الذهبية §18) ---------- */
 if(typeof module !== 'undefined' && module.exports){ module.exports = TRYON; }
 if(typeof window !== 'undefined'){
