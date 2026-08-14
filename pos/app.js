@@ -619,6 +619,12 @@ function buildReceiptHTML(data){
           `<tr><td style="padding:3px 0; border-bottom:1px solid #000; font-weight:600; word-break:break-word; max-width:0; width:100%;">${it.name}${it.barcode ? `<div dir="ltr" style="font-size:${Math.max(7, (parseInt(fs)||11) - 3)}px; font-weight:500; letter-spacing:.4px; text-align:${dir==='rtl'?'right':'left'};">${it.barcode}</div>` : ''}</td><td style="padding:3px 4px; border-bottom:1px solid #000; white-space:nowrap; font-weight:600;">${it.qty} × ${it.unit||''}</td><td style="padding:3px 0; border-bottom:1px solid #000; white-space:nowrap; font-weight:700; text-align:${dir==='rtl'?'left':'right'};">${it.line}</td></tr>`).join('')}</table>`); break;
       case 'totals':
         parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:5px 0 2px;">${L.total}: ${d.totalStr||''} ${currencyLabel()}${d.payStr?' ('+d.payStr+')':''}</div>`);
+        // 💳↩️ v295: زيادة الفيزا — بارزة ومكتوبة "يُرد" عشان الورقة
+        //    اللي في إيد العميلة تبقى مستند حقها، مش بس قوس جنب الإجمالي
+        if(Number(d.cardOverStr) > 0){
+          parts.push(`<div style="text-align:center; font-weight:900; font-size:${fs}; margin:2px 0 3px; border:2px solid #000; border-radius:6px; padding:3px 5px;">`
+            + `⚠️ مسحوب فيزا زيادة — يُرد للعميلة: ${Number(d.cardOverStr).toFixed(2)} ${currencyLabel()}</div>`);
+        }
         // 💵 الباقي — بيظهر بس لما يكون فيه فكة فعلًا
         if(Number(d.changeStr) > 0){
           parts.push(`<div style="text-align:center; font-weight:800; font-size:${fs}; margin:1px 0 3px;">`
@@ -1167,6 +1173,16 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
     items: cart.map(it=> ({name:it.name, qty:it.qty, barcode:it.barcode||'',
       unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2)})),
     totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: invoiceCode||invoiceNo||'',
+    // 💳↩️ v295 (فاتورة 1444): اتسحب من الكارت أكتر من الفاتورة —
+    //    بيتطبع صراحةً إنه بيترد — الورقة هي إثبات العميلة إنها تاخد حقها
+    cardOverStr: (function(){
+      try{
+        const v = Number((payments||{}).visa) || 0;
+        const t = Math.abs(Number(total) || 0);
+        const d2 = +(Math.abs(v) - t).toFixed(2);
+        return (v > 0 && Number(total) > 0 && d2 > 0.005) ? d2.toFixed(2) : '';
+      }catch(e){ return ''; }
+    })(),
     // 💳 بيانات الكارت بتتطبع بشرطين مع بعض:
     //   (١) الفاتورة دي فيها دفع فيزا فعلًا  (٢) وفيه بيانات كارت متأكدة
     // الشرط الأول ضروري: البيانات متخزنة على window، ولو مااتصفرتش لأي سبب

@@ -1783,6 +1783,35 @@ async function loadStaffPointsConfig(){
 // 🕵️ العلبة السودا: تسجيل صامت لأحداث السلة (لتبويب نشاط غريب لاحقًا) — صفر تأثير على الشغل
 let _cartFirstItemAt = null;   // وقت أول قطعة في السلة الحالية
 let _saleJustSaved = false;    // عشان نفرّق مسح-بعد-حفظ (طبيعي) عن مسح-وهروب
+/* 💳↩️ v295: فاتورة 1444 (فيزا 1610 على 1260) — التحذير كان موجود
+   والكاشير أكّد والدنيا مشيت. الفرق بيتسجل دلوقتي في مجموعة متابعة
+   ظاهرة في Office لحد ما يترد فعلًا — مش سطر في لوج محدش بيفتحه. */
+function cardRefundDuePayload(legs, total, ctx){
+  const charged = Math.abs(cardApprovedSum(legs));
+  const t = Math.abs(Number(total) || 0);
+  const diff = +(charged - t).toFixed(2);
+  if(diff <= 0.005) return null;
+  ctx = ctx || {};
+  return {
+    status: 'due',
+    branch: ctx.branch || '',
+    invoiceCode: ctx.invoiceCode || '',
+    customerPhone: ctx.phone || '',
+    customerName: ctx.name || '',
+    charged: charged, invoiceTotal: t, diff: diff,
+    // كل عملية Paymob بمبلغها — الرد بيتم على العملية نفسها من الداشبورد
+    txns: (legs || []).filter(function(l){ return l.status === 'approved'; })
+      .map(function(l){
+        const t2 = l.txn || {};
+        return { seq: l.seq, amount: Math.abs(l.amount || 0),
+                 txnId: t2.txnId || t2.id || null, last4: t2.last4 || null };
+      }),
+    employeeId: ctx.employeeId || '', employeeName: ctx.employeeName || '',
+    ts: Date.now()
+  };
+}
+window.cardRefundDuePayload = cardRefundDuePayload;
+
 function _logActivity(type, data){
   try{
     db.collection('pos_activity_log').add({
@@ -3711,6 +3740,19 @@ window.returnPointsDeduction = returnPointsDeduction;
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }));
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
+
+    // 💳↩️ v295: اتسحب من الكروت أكتر من الفاتورة (اتأكد صراحةً فوق) —
+    //    مستند متابعة ظاهر في Office لحد ما الفرق يترد لصاحبته من Paymob.
+    //    الكتابة best-effort: فشلها ميوقفش الفاتورة (اللوج القديم شغال برضه).
+    try{
+      const _due = cardRefundDuePayload(cardLegs, total, {
+        branch: currentBranch, invoiceCode: invoiceCode,
+        phone: phone, name: custName,
+        employeeId: (currentEmployee && currentEmployee.id) || '',
+        employeeName: (currentEmployee && currentEmployee.name) || ''
+      });
+      if(_due) db.collection('pos_card_refunds_due').add(_due).catch(function(){});
+    }catch(e){ console.warn('refund due', e); }
 
     // ============================================================
     // 🖨️ الورقة الأول — قبل باقي الكتابات
