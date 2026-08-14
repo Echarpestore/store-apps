@@ -327,6 +327,30 @@ TRYON.featherHoleEdge = function(data, w, h, seed, opts){
     }
   }
 
+  // v22: استخراج محيط الفتحة (اختياري) — مركزها + نصف القطر عند
+  // K زاوية. ده اللي الفتحة العضوية بتتشد منه على محيط الوش.
+  let centroid = null, radii = null;
+  if(opts.contourK){
+    let sx2 = 0, sy2 = 0, cnt = 0;
+    for(let p = 0; p < w * h; p++)
+      if(mask[p]){ sx2 += p % w; sy2 += Math.floor(p / w); cnt++; }
+    centroid = [sx2 / cnt, sy2 / cnt];
+    const K = opts.contourK;
+    radii = new Float32Array(K);
+    const maxR = Math.hypot(w, h);
+    for(let k = 0; k < K; k++){
+      const th = k / K * 2 * Math.PI;
+      const dx = Math.cos(th), dy = Math.sin(th);
+      let r = 0;
+      for(; r < maxR; r += 1){
+        const x = Math.round(centroid[0] + dx * r), y = Math.round(centroid[1] + dy * r);
+        if(x < 0 || y < 0 || x >= w || y >= h) break;
+        if(!mask[y * w + x]) break;
+      }
+      radii[k] = r;
+    }
+  }
+
   // التدرّج: بلور الماسك مرتين → القماش الملاصق للفتحة ألفته بتنزل
   // بالتدريج ناحية الحافة. 🔴 من غيره حافة الفتحة قطع حاد والوش
   // يبان "ملزوق في شباك" — نفس الشكوى.
@@ -340,7 +364,7 @@ TRYON.featherHoleEdge = function(data, w, h, seed, opts){
       data[i] = Math.round(data[i] * (1 - cut));
     }
   }
-  return { holePx: holePx };
+  return { holePx: holePx, centroid: centroid, radii: radii };
 };
 
 /* ---------- ١٦) 🌗 ظل التلامس (v20) ---------- */
@@ -378,6 +402,37 @@ TRYON.tempTintColor = function(dr, db){
 TRYON.tempBucket = function(dr, db){
   const q = (v) => Math.round((v || 0) / 6) * 6;
   return q(dr) + '_' + q(db);
+};
+
+/* ---------- ١٨) 🫥 محيط الوش الحقيقي (v22) ---------- */
+// الفتحة العضوية: بدل ٣ نقط، ٩ معالم على محيط الوش نفسه (جبهة/
+// صدغ/خد/فك/دقن ×٢) — الفتحة بتتشد عليهم فبتاخد **شكل وش
+// العميلة** مش شكل فتحة المانيكان.
+TRYON.FACE_CONTOUR = [103, 127, 132, 172, 152, 397, 361, 356, 332];
+
+TRYON.faceContourFromLandmarks = function(lm, w, h){
+  return TRYON.FACE_CONTOUR.map((i) => [ lm[i].x * w, lm[i].y * h ]);
+};
+
+// عكس الأفيني — محتاجينه عشان نرجّع من الشاشة لفضاء القالب
+TRYON.invertAffine = function(A){
+  if(!A) return null;
+  const det = A.a * A.e - A.b * A.d;
+  if(Math.abs(det) < 1e-12) return null;
+  return {
+    a:  A.e / det, b: -A.b / det, c: (A.b * A.f - A.e * A.c) / det,
+    d: -A.d / det, e:  A.a / det, f: (A.d * A.c - A.a * A.f) / det
+  };
+};
+
+// نصف قطر الفتحة عند زاوية معيّنة — استيفاء دائري بين العيّنات
+TRYON.holeRadiusAt = function(contour, theta){
+  const K = contour.radii.length;
+  let t = theta % (2 * Math.PI);
+  if(t < 0) t += 2 * Math.PI;
+  const f = t / (2 * Math.PI) * K;
+  const i0 = Math.floor(f) % K, i1 = (i0 + 1) % K, k = f - Math.floor(f);
+  return contour.radii[i0] * (1 - k) + contour.radii[i1] * k;
 };
 
 /* ---------- التصدير (القاعدة الذهبية §18) ---------- */

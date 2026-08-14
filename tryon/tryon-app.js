@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v21';
+  const TRYON_VER = 'v22';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -30,6 +30,7 @@
     smTop: T.Smoother2D(), smL: T.Smoother2D(), smR: T.Smoother2D(),
     smChin: T.Smoother2D(), smYaw: T.Smoother(), smBright: T.Smoother({minAlpha:0.05, maxAlpha:0.2}),
     smDr: T.Smoother({minAlpha:0.04, maxAlpha:0.15}), smDb: T.Smoother({minAlpha:0.04, maxAlpha:0.15}),
+    smContour: T.FACE_CONTOUR.map(() => T.Smoother2D()),
     gov: T.FrameGovernor(),
     assetCache: {},               // (scarfId|colorId) → {head, drape, anchors}
     lastHint: '', lostFrames: 0, r3d: false, mesh: false, lastFrameT: 0,
@@ -247,7 +248,7 @@
      في الأصل شفافة أصلًا؛ اللي كان بيبان "لوحة بيضا" هو خلفية
      صورة العميلة من فتحة أوسع من الوش (اتصلحت بالـfit في الكتالوج).
      هنا بنعمل الجزء التاني: حافة القماش تدوب في الجلد بدل قطع حاد. */
-  function processHeadImage(img, scarf){
+  function processHeadImage(img, scarf, asset){
     try{
       const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
       const c = document.createElement('canvas');
@@ -258,8 +259,10 @@
       const A = scarf.head.anchors;
       const seed = [ Math.round((A.l[0] + A.r[0]) / 2),
                      Math.round(A.l[1] + (A.r[0] - A.l[0]) * 0.5) ];
-      const res = T.featherHoleEdge(im.data, w, h, seed, { feather: 7 });
+      // v22: contourK = محيط الفتحة — الفتحة العضوية بتتشد منه
+      const res = T.featherHoleEdge(im.data, w, h, seed, { feather: 7, contourK: 32 });
       if(!res.holePx) return img;              // مفيش فتحة تحت البذرة = سيبها
+      if(asset) asset.holeContour = { c: res.centroid, radii: res.radii };
       g.putImageData(im, 0, 0);
       return c;
     }catch(e){ console.warn('faceHole', e); return img; }
@@ -272,7 +275,7 @@
                     anchors: scarf.head.anchors };
     const hi = new Image();
     hi.onload = () => {
-      asset.head = processHeadImage(hi, scarf);
+      asset.head = processHeadImage(hi, scarf, asset);
       asset.ready = !!(!scarf.drape || asset.drape);
     };
     // 🛟 الصورة ماتحملتش (لسه ماترفعتش؟) = الرسمة بدل شاشة فاضية
@@ -369,6 +372,53 @@
       const r=(a.r+c.r)/2, g=(a.g+c.g)/2, b=(a.b+c.b)/2;
       return { r:r, g:g, b:b, luma: 0.299*r + 0.587*g + 0.114*b };
     }catch(e){ return { r:128, g:128, b:128, luma:128 }; }
+  }
+
+  /* 🫥 v22: أزواج شد الفتحة العضوية.
+     لكل معلم من الـ٩ على محيط الوش: بنرجّع بالعكس (عكس الأفيني)
+     لفضاء القالب، بنقيس زاوية النقطة حوالين مركز الفتحة، بنجيب
+     حافة الفتحة عند نفس الزاوية، بنرجّعها للشاشة = "from"، والمعلم
+     نفسه (موسّع شوية للبرّه عشان القماش يركب على حرف الوش مش
+     يقف عنده بالظبط) = "to". */
+  function contourPairs(lm, w, h, asset, Tr, ex){
+    const hc = asset.holeContour;
+    if(!hc || !lm) return null;
+    const inv = T.invertAffine(Tr);
+    if(!inv) return null;
+    const raw = T.faceContourFromLandmarks(lm, w, h);
+    const fcx = (ex.l[0] + ex.r[0]) / 2, fcy = (ex.top[1] + ex.chin[1]) / 2;
+    const OUT = 1.05;                       // القماش يركب على حرف الوش
+    const pairs = [];
+    for(let i = 0; i < raw.length; i++){
+      const sm = S.smContour[i].push(raw[i]);
+      const to = { x: fcx + (sm[0] - fcx) * OUT, y: fcy + (sm[1] - fcy) * OUT };
+      const tx = inv.a * to.x + inv.b * to.y + inv.c;
+      const ty = inv.d * to.x + inv.e * to.y + inv.f;
+      const th = Math.atan2(ty - hc.c[1], tx - hc.c[0]);
+      const rad = T.holeRadiusAt(hc, th);
+      const hx = hc.c[0] + Math.cos(th) * rad;
+      const hy = hc.c[1] + Math.sin(th) * rad;
+      pairs.push({
+        from: { x: Tr.a * hx + Tr.b * hy + Tr.c, y: Tr.d * hx + Tr.e * hy + Tr.f },
+        to: to
+      });
+    }
+    return { pairs: pairs, radius: ex.faceW * 0.9 };
+  }
+
+  // §ديبج: window.TRYON_DEBUG = true من الكونسول — بيرسم الشد نفسه
+  function debugContour(warp){
+    ctx.save();
+    ctx.filter = 'none';
+    warp.pairs.forEach((p) => {
+      ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(p.from.x, p.from.y); ctx.lineTo(p.to.x, p.to.y); ctx.stroke();
+      ctx.fillStyle = '#ff3d7f';
+      ctx.beginPath(); ctx.arc(p.to.x, p.to.y, 4, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffd54f';
+      ctx.beginPath(); ctx.arc(p.from.x, p.from.y, 3, 0, 7); ctx.fill();
+    });
+    ctx.restore();
   }
 
   function shade(hex, amt){
@@ -490,7 +540,9 @@
       [A.l, A.r, A.top],
       [squash(dstL), squash(dstR), dstT]
     );
-    if(Tr && S.mesh && S.scarf.type === 'photo' && S.mode === 'live'){
+    // v22: الشبكة في **الوضعين** — الصورة الثابتة كانت واخدة الأفيني
+    //    المسطح، وهي أصلًا الأولوية (§ الشكل النهائي قبل اللايف)
+    if(Tr && S.mesh && S.scarf.type === 'photo'){
       // 🧵 الراس ثابت على الوش والانسدال بيتمايل ويهدى — قماش
       const now2 = performance.now();
       const dt = S.lastFrameT ? now2 - S.lastFrameT : 16.7;
@@ -498,8 +550,11 @@
       const hw = headImg.naturalWidth || headImg.width;
       const hh = headImg.naturalHeight || headImg.height;
       const chinY = A.l[1] + (A.r[0] - A.l[0]) * 1.15;   // خط الدقن في الأصل
+      const warp = contourPairs(lm, w, h, asset, Tr, ex);
       TRYON_MESH.update(headImg, hw, hh, chinY, Tr, pose.yaw,
-                        (ex.l[0] + ex.r[0]) / 2, dt);
+                        (ex.l[0] + ex.r[0]) / 2, dt,
+                        warp && warp.pairs, warp && warp.radius);
+      if(window.TRYON_DEBUG && warp) debugContour(warp);
     } else if(Tr){
       if(S.mesh) TRYON_MESH.clear();
       ctx.save();
@@ -584,6 +639,7 @@
     // v20: إضاءة الصورة الثابتة غير إضاءة اللايف — من غير reset
     // الحرارة القديمة بتتنقل للوضع الجديد وتاخد ثواني تصحّح
     S.smDr.reset(); S.smDb.reset();
+    S.smContour.forEach((sm) => sm.reset());
   }
 
   /* ============================================================
