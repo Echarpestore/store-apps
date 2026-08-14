@@ -1137,7 +1137,7 @@ const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], ex
             employees:[], advances:[], sales:[], inventory:[], customers:[], ratings:[],
             recurring:[], openShifts:[], salaryPays:[], rewards:[], cashBase:null, settlements:[],
             cashDays:{}, cashCfg:{},
-            creditRequests:[], giftCards:[], creditLedger:[] };
+            creditRequests:[], giftCards:[], creditLedger:[], refundsDue:[] };
 let started = false;
 let firstLoadDone = false;
 const seenIds = {};   // عشان الإشعار يطلع للجديد بس
@@ -1328,8 +1328,66 @@ if(typeof Notification !== 'undefined' && Notification.permission === 'granted')
   setTimeout(function(){ ofRegisterPush().catch(function(){}); }, 5000);
 }
 
+/* 💳↩️ v43→v44: قائمة فروق الفيزا المستحقة — البانل بيظهر بس لو فيه
+   حاجة (مستحق أو اترد قريب)، وزرار «اترد» بيسجل مين ومتى. */
+function renderRefundsDue(){
+  const panel = document.getElementById('refundsDuePanel');
+  const body = document.getElementById('refundsDueBody');
+  if(!panel || !body) return;
+  const due = (D.refundsDue || []).filter(function(x){ return x.status === 'due'; })
+    .sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+  const done = (D.refundsDue || []).filter(function(x){ return x.status === 'refunded'; })
+    .sort(function(a,b){ return (b.refundedAt||0) - (a.refundedAt||0); }).slice(0, 5);
+  if(!due.length && !done.length){ panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const rows = [];
+  due.forEach(function(x){
+    const txn = (x.txns && x.txns[0]) || {};
+    rows.push('<div style="border:1.5px solid #dc2626; border-radius:12px; padding:10px; margin-bottom:8px; background:rgba(220,38,38,.06);">'
+      + '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">'
+      + '<div><b style="font-size:15px;">' + ofMoney(x.diff || 0) + '</b>'
+      + ' <span class="muted">مسحوب ' + ofMoney(x.charged || 0) + ' على فاتورة ' + ofMoney(x.invoiceTotal || 0) + '</span></div>'
+      + '<button class="btn gold" onclick="ofMarkRefunded(\'' + esc(x.id) + '\')">✅ اترد</button></div>'
+      + '<div class="muted" style="font-size:12px; margin-top:4px;">'
+      + '🏬 ' + esc(x.branch || '—') + ' · 🧾 ' + esc(x.invoiceCode || '—')
+      + ' · 👤 ' + esc(x.customerName || '') + ' ' + (x.customerPhone ? '<span dir="ltr">' + esc(x.customerPhone) + '</span>' : '<b style="color:#dc2626;">من غير رقم!</b>')
+      + (txn.txnId ? ' · 💳 <span dir="ltr">TXN ' + esc(String(txn.txnId)) + '</span>' : '')
+      + ' · 🧑‍💼 ' + esc(x.employeeName || '') 
+      + ' · ' + new Date(x.ts || 0).toLocaleString('ar-EG') + '</div></div>');
+  });
+  if(done.length){
+    rows.push('<div class="muted" style="font-size:12px; margin:8px 0 4px;">✅ اترد مؤخرًا:</div>');
+    done.forEach(function(x){
+      rows.push('<div class="muted" style="font-size:12px; padding:4px 2px; border-bottom:1px dashed var(--line);">'
+        + ofMoney(x.diff || 0) + ' · ' + esc(x.branch || '') + ' · ' + esc(x.customerPhone || '')
+        + ' · رده ' + esc(x.refundedBy || '') + ' ' + new Date(x.refundedAt || 0).toLocaleDateString('ar-EG') + '</div>');
+    });
+  }
+  body.innerHTML = rows.join('');
+}
+window.ofMarkRefunded = function(id){
+  if(!confirm('اترد فعلًا من داشبورد Paymob على نفس العملية؟\n\nالزرار ده تسجيل — مش هو اللي بيرد الفلوس.')) return;
+  db.collection('pos_card_refunds_due').doc(id).update({
+    status: 'refunded', refundedAt: Date.now(),
+    refundedBy: 'Office'   // الجهاز ده بتاع المالك — مفيش تعدد مستخدمين هنا
+  }).catch(function(e){ alert('فشل التسجيل: ' + (e && e.message || e)); });
+};
+
 function startData(){
   if(started) return; started = true;
+
+  // 💳↩️ فروق فيزا مستحقة الرد (فاتورة 1444) — نافذة ٦٠ يوم:
+  //    المستحق بيتقفل بالرد، واللي أقدم من كده اترد خلاص أو بقى قضية
+  db.collection('pos_card_refunds_due')
+    .where('ts', '>=', Date.now() - 60 * 24 * 60 * 60 * 1000)
+    .onSnapshot(function(s){
+      D.refundsDue = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+      maybeNotifyNew('crd', D.refundsDue.filter(function(x){ return x.status === 'due'; }),
+        '💳 اتسحب فيزا زيادة — مستحقة الرد',
+        function(x){ return (x.branch||'') + ' — ' + (x.diff||0) + ' ج.م — ' + (x.customerPhone||'من غير رقم'); });
+      try{ renderRefundsDue(); }catch(e){ console.warn('refunds due', e); }
+      try{ ofSyncCreditBadge(); }catch(e){}
+    }, function(){ /* الكولكشن ممكن ميكونش موجود لسه */ });
 
   db.collection('sales_leave_requests').onSnapshot(function(s){
     D.leaves = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -4404,8 +4462,10 @@ function ofWireOpenings(){
       فتأخيرها مش تفصيلة. */
 function ofSyncCreditBadge(){
   const el = document.getElementById('nbMoney'); if(!el) return;
+  // 💳↩️ v44: فروق الفيزا المستحقة بتنوّر البادج برضه — فلوس عميلات مش مستنية
   const n = (D.creditRequests || []).filter(function(r){
-    return r && r.status === 'pending'; }).length;
+    return r && r.status === 'pending'; }).length
+    + (D.refundsDue || []).filter(function(r){ return r && r.status === 'due'; }).length;
   el.textContent = n;
   el.style.display = n ? '' : 'none';
 }
