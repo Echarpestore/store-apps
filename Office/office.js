@@ -1394,7 +1394,9 @@ window.ofMarkRefunded = function(id){
 const OF_ACT_LIMIT = 400;
 // وصف بالمصري لكل نوع + تصنيفه + هل هو مقلق (بيتلوّن أحمر)
 const OF_ACT_KINDS = {
-  card_overcharge_saved: { t:'💳 سحب فيزا زيادة اتأكد', g:'money', hot:true },
+  card_overcharge_saved: { t:'💳 سحب فيزا زيادة — الفاتورة اتحفظت', g:'money', hot:true },
+  card_overcharge_ok:    { t:'💳 الكاشير أكّد السحب الزيادة', g:'money', hot:true },
+  sale_saved:            { t:'🧾 فاتورة اتحفظت', g:'cart', quiet:true },
   manual_discount:       { t:'🏷️ خصم يدوي', g:'money', hot:true },
   manual_drawer_open:    { t:'💵 الدرج اتفتح بالإيد', g:'money', hot:true },
   customer_points_edit:  { t:'🎁 تعديل نقط عميلة', g:'money', hot:true },
@@ -1412,7 +1414,7 @@ const OF_ACT_KINDS = {
   item_removed:          { t:'🛒 صنف اتشال من السلة', g:'cart' },
   cart_item_edited:      { t:'🛒 سطر اتعدّل في السلة', g:'cart' },
   cart_abandoned:        { t:'🛒 سلة اتسابت', g:'cart' },
-  print_latency:         { t:'🖨️ الطباعة اتأخرت', g:'cart' },
+  print_latency:         { t:'🖨️ زمن الطباعة', g:'cart', quiet:true },
   rate_request_manual:   { t:'⭐ طلب تقييم يدوي', g:'cart' },
   customer_name_edit:    { t:'👤 تعديل اسم عميلة', g:'cart' },
   inventory_wiped:       { t:'📦 المخزون اتمسح', g:'stock', hot:true },
@@ -1440,8 +1442,30 @@ function ofActDetail(a){
   if(a.reason) p.push(esc(a.reason));
   if(a.count != null) p.push(a.count + ' صنف');
   if(a.ms != null) p.push(Math.round(a.ms / 1000) + ' ث');
+  if(a.totalMs != null) p.push('استغرقت ' + (a.totalMs / 1000).toFixed(1) + ' ث');
+  else if(a.saveMs != null) p.push((a.saveMs / 1000).toFixed(1) + ' ث');
+  if(a.customerPhone) p.push('<span dir="ltr">' + esc(a.customerPhone) + '</span>');
+  if(a.txnId) p.push('<span dir="ltr">TXN ' + esc(String(a.txnId)) + '</span>');
   return p.join(' · ');
 }
+
+/* 🧾 رقم الفاتورة: وقت وقوع الحدث الفاتورة لسه مالهاش رقم — فبنربط
+   بمعرّف السلة (sid). حدث `sale_saved` هو اللي شايل الرقم، وبنوزّعه
+   على كل أحداث نفس السلة. الحل ده من نفس البيانات المحمّلة — صفر
+   قراءات زيادة. أحداث ما قبل v296 مالهاش sid وهتفضل من غير رقم. */
+function ofActLinkInvoices(list){
+  const byId = {};
+  (list || []).forEach(function(a){
+    if(a && a.type === 'sale_saved' && a.sid && a.invoiceCode)
+      byId[a.sid] = { code: a.invoiceCode, total: a.total };
+  });
+  (list || []).forEach(function(a){
+    if(a && !a.invoiceCode && a.sid && byId[a.sid])
+      a._linkedInvoice = byId[a.sid].code;
+  });
+  return list;
+}
+window.ofActLinkInvoices = ofActLinkInvoices;
 // فلترة نقية — قابلة للاختبار من غير DOM ولا Firestore
 function ofActFilter(list, opts){
   opts = opts || {};
@@ -1455,6 +1479,7 @@ function ofActFilter(list, opts){
     }
     if(q){
       const hay = [a.employeeName, a.branch, a.name, a.invoiceCode,
+                   a._linkedInvoice, a.customerPhone,
                    ofActLabel(a.type)].join(' ').toLowerCase();
       if(hay.indexOf(q) < 0) return false;
     }
@@ -1473,7 +1498,8 @@ async function ofLoadActivity(){
     const snap = await db.collection('pos_activity_log')
       .where('ts', '>=', Date.now() - days * 24 * 60 * 60 * 1000)
       .orderBy('ts', 'desc').limit(OF_ACT_LIMIT).get();
-    _ofActRaw = snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    _ofActRaw = ofActLinkInvoices(
+      snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); }));
     ofRenderActivity();
   }catch(e){
     console.warn('activity', e);
@@ -1505,12 +1531,17 @@ function ofRenderActivity(){
     const k = OF_ACT_KINDS[a.type];
     const hot = !!(k && k.hot);
     const det = ofActDetail(a);
-    return '<div style="border-right:4px solid ' + (hot ? '#dc2626' : 'var(--line)')
+    const inv = a.invoiceCode || a._linkedInvoice || '';
+    return '<div onclick="ofActOpen(' + "'" + esc(a.id) + "'" + ')" '
+      + 'style="cursor:pointer; border-right:4px solid ' + (hot ? '#dc2626' : 'var(--line)')
       + '; background:' + (hot ? 'rgba(220,38,38,.05)' : 'transparent')
       + '; border-radius:8px; padding:7px 9px; margin-bottom:6px;">'
+      + '<div style="display:flex; justify-content:space-between; gap:6px;">'
       + '<div style="font-weight:800; font-size:13px;">' + esc(ofActLabel(a.type)) + '</div>'
+      + '<div class="muted" style="font-size:15px; line-height:1;">›</div></div>'
       + (det ? '<div style="font-size:12.5px; margin-top:2px;">' + det + '</div>' : '')
       + '<div class="muted" style="font-size:11px; margin-top:3px;">'
+      + (inv ? '🧾 ' + esc(inv) + ' · ' : '')
       + '🏬 ' + esc(a.branch || '—') + ' · 🧑‍💼 ' + esc(a.employeeName || '—')
       + ' · ' + new Date(a.ts || 0).toLocaleString('ar-EG') + '</div></div>';
   }).join('');
@@ -1527,6 +1558,69 @@ window.ofRenderActivity = ofRenderActivity;
   const d = document.getElementById('actDays');
   if(d) d.addEventListener('change', function(){ ofLoadActivity(); });
 })();
+
+
+/* 🕵️ الضغط على حدث: القصة كاملة — كل أحداث نفس السلة بالترتيب
+   الزمني + كل حقول الحدث الخام (عشان أي نوع جديد يبان من غير ما
+   نستنى تحديث). ده اللي كان ناقص: الصف كان بيعرض عنوان ومحدش
+   يعرف يوصل للتفاصيل ولا يعرف الفاتورة. */
+const OF_ACT_FIELD_AR = {
+  charged:'المسحوب', total:'الإجمالي', diff:'الفرق', amount:'المبلغ',
+  name:'الصنف', qty:'الكمية', price:'السعر', invoiceCode:'كود الفاتورة',
+  invoiceNo:'رقم الفاتورة', customerPhone:'تليفون العميلة', txnId:'رقم العملية',
+  reason:'السبب', count:'العدد', itemCount:'عدد القطع', cartCountAfter:'باقي في السلة',
+  saveMs:'من التأكيد للطباعة (ms)', paymobMs:'عند Paymob (ms)',
+  deliverMs:'وصول للجهاز (ms)', totalMs:'الإجمالي (ms)', ref:'مرجع الطلب',
+  sid:'معرّف السلة', employeeName:'الموظفة', branch:'الفرع'
+};
+const OF_ACT_SKIP = { id:1, type:1, ts:1, employeeId:1, _linkedInvoice:1 };
+window.ofActOpen = function(id){
+  const a = (_ofActRaw || []).filter(function(x){ return x.id === id; })[0];
+  if(!a) return;
+  const story = (_ofActRaw || []).filter(function(x){
+    return a.sid && x.sid === a.sid; })
+    .sort(function(x, y){ return (x.ts || 0) - (y.ts || 0); });
+  const rows = [];
+  Object.keys(a).forEach(function(key){
+    if(OF_ACT_SKIP[key]) return;
+    let v = a[key];
+    if(v == null || v === '') return;
+    if(typeof v === 'object') v = JSON.stringify(v);
+    rows.push('<div style="display:flex; justify-content:space-between; gap:8px;'
+      + ' padding:5px 0; border-bottom:1px dashed var(--line); font-size:12.5px;">'
+      + '<span class="muted">' + esc(OF_ACT_FIELD_AR[key] || key) + '</span>'
+      + '<span style="font-weight:700; text-align:left;" dir="auto">' + esc(String(v)) + '</span></div>');
+  });
+  const inv = a.invoiceCode || a._linkedInvoice || '';
+  let html = '<div style="font-weight:900; font-size:16px;">' + esc(ofActLabel(a.type)) + '</div>'
+    + '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">'
+    + new Date(a.ts || 0).toLocaleString('ar-EG') + ' · ' + esc(a.branch || '') + '</div>'
+    + (inv ? '<div style="background:var(--panel2); border-radius:8px; padding:7px 9px; margin-bottom:8px; font-weight:800; font-size:13px;">🧾 ' + esc(inv) + '</div>'
+           : '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">🧾 مفيش فاتورة مربوطة — إما السلة اتسابت من غير بيع، أو الحدث قديم (قبل تحديث الربط)</div>')
+    + rows.join('');
+  if(story.length > 1){
+    html += '<div style="font-weight:900; font-size:13.5px; margin:12px 0 6px;">📖 قصة السلة دي بالترتيب</div>';
+    story.forEach(function(x){
+      const me = x.id === a.id;
+      html += '<div style="padding:5px 8px; margin-bottom:4px; border-radius:7px; font-size:12px;'
+        + (me ? ' background:rgba(199,154,56,.18); font-weight:800;' : ' background:var(--panel2);') + '">'
+        + new Date(x.ts || 0).toLocaleTimeString('ar-EG') + ' — ' + esc(ofActLabel(x.type))
+        + (ofActDetail(x) ? '<div class="muted" style="font-size:11px;">' + ofActDetail(x) + '</div>' : '')
+        + '</div>';
+    });
+  }
+  const ov = document.createElement('div');
+  ov.id = 'ofActOv';
+  ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:90;'
+    + ' display:flex; align-items:flex-end; justify-content:center;';
+  ov.innerHTML = '<div style="background:var(--panel); width:100%; max-width:520px;'
+    + ' border-radius:18px 18px 0 0; padding:14px; max-height:85vh; overflow:auto;">'
+    + '<div style="display:flex; justify-content:flex-end;">'
+    + '<button onclick="document.getElementById(\'ofActOv\').remove()" style="background:none; border:none; color:var(--sub); font-size:20px; cursor:pointer;">✖</button></div>'
+    + html + '</div>';
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+};
 
 function startData(){
   if(started) return; started = true;
