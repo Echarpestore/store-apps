@@ -167,8 +167,8 @@ const extractFn = (src, sig) => {
 {
   const posSw = fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8');
   const ofSw = fs.readFileSync(path.join(ROOT, 'Office', 'sw.js'), 'utf8');
-  assert(posSw.indexOf('store-apps-shell-v295') > -1, 'POS → v295');
-  assert(ofSw.indexOf('echarpe-office-v45') > -1, 'Office → v45');
+  assert(posSw.indexOf('store-apps-shell-v296') > -1, 'POS → v296');
+  assert(ofSw.indexOf('echarpe-office-v46') > -1, 'Office → v46');
 }
 
 // ============================================================
@@ -254,4 +254,102 @@ const extractFn = (src, sig) => {
   // 🔴 نيجاتيف: الفلتر والبحث مع بعض لازم يتطبقوا الاتنين
   assert(api(sample, { group:'money', q:'مدينتي' }).length === 0,
     '🔴 الفلتر والبحث بيتجمعوا (AND) — مش واحد بيلغي التاني');
+}
+
+// ============================================================
+// ٨) 🧾 v296 — رقم الفاتورة على الحدث + الضغط على الصف
+// ------------------------------------------------------------
+// لقطة المالك: "سحب فيزا زيادة اتأكد · فرق 350" — من غير رقم
+// فاتورة ومن غير أي طريقة توصل للتفاصيل. السبب: وقت وقوع الحدث
+// الفاتورة لسه مالهاش رقم أصلًا (بيتولّد جوه مسار الحفظ).
+// الحل: معرّف سلة على كل حدث + حدث ربط بعد الحفظ.
+// ============================================================
+{
+  const code = strip(posSale);
+
+  /* ١) معرّف السلة بيتولد مع أول قطعة وبيتصفّر مع السلة الجديدة */
+  const atc = extractFn(code, 'function addToCart(item)');
+  assert(atc.indexOf('_cartSid = _newCartSid()') > -1,
+    'أول قطعة في السلة = معرّف جديد');
+  const cs = extractFn(code, 'function clearSaleState()');
+  assert(cs.indexOf('_cartSid = null') > -1,
+    '🔴 سلة جديدة = معرّف جديد — من غير التصفير أحداث فاتورتين بتتلخبط مع بعض');
+  const rs = extractFn(code, 'function restoreSaleState(s)');
+  assert(rs.indexOf('_cartSid = s.cartSid') > -1,
+    'والهولد بيرجّع نفس المعرّف — قصة واحدة قبل وبعد التعليق');
+
+  /* ٢) كل حدث بياخده تلقائي */
+  const la = extractFn(code, 'function _logActivity(type, data)');
+  assert(la.indexOf('sid: _cartSid || null') > -1,
+    '🔴 المعرّف بيتحط في _logActivity نفسها — مش على كل نداء لوحده (٢٨ نوع)');
+
+  /* ٣) حدث الربط بعد الحفظ */
+  const dc = extractFn(code, 'async function _doConfirmPayment()');
+  assert(dc.indexOf("_logActivity('sale_saved'") > -1
+      && dc.indexOf('invoiceCode: invoiceCode, invoiceNo: invoiceNo') > -1,
+    'حدث sale_saved بيحمل رقم الفاتورة');
+  const iSaved = dc.indexOf("_logActivity('sale_saved'");
+  const iErr = dc.indexOf('_saleW.error');
+  assert(iErr > -1 && iSaved > iErr,
+    '🔴 بعد نجاح الحفظ — قبله الفاتورة مالهاش رقم من الأساس');
+  assert(dc.indexOf('cartSid: _cartSid || null') > -1,
+    'والفاتورة نفسها بتحفظ المعرّف (ربط من الناحيتين)');
+
+  /* ٤) حدث الفيزا الزيادة بقى بيتسجل مرتين بمعنيين مختلفين */
+  assert(code.indexOf("_logActivity('card_overcharge_ok'") > -1,
+    'وقت التأكيد (قبل الحفظ) = نية الكاشير');
+  const iOver = dc.indexOf("_logActivity('card_overcharge_saved'");
+  assert(iOver > iErr && dc.indexOf('invoiceCode: invoiceCode,\n          customerPhone') > -1,
+    '🔴 وبعد الحفظ = النتيجة، وفيها رقم الفاتورة والتليفون ورقم العملية');
+}
+
+// ============================================================
+// ٩) 🕵️ Office v46 — الربط والضغط
+// ============================================================
+{
+  const code = strip(office);
+
+  /* ١) الربط: دالة نقية بنشغّلها فعلًا */
+  const lk = extractFn(code, 'function ofActLinkInvoices(list)');
+  assert(lk.length > 50, 'دالة ofActLinkInvoices اتلقت');
+  const api = new Function(lk + '\nreturn ofActLinkInvoices;')();
+  const evts = [
+    { id:'1', type:'item_removed', sid:'AAA', ts:100, name:'حرير سادة' },
+    { id:'2', type:'card_overcharge_saved', sid:'AAA', ts:200, diff:350 },
+    { id:'3', type:'sale_saved', sid:'AAA', ts:300, invoiceCode:'FTGL1444-X', total:1260 },
+    { id:'4', type:'item_removed', sid:'BBB', ts:150, name:'صنف تاني' },
+    { id:'5', type:'cart_abandoned', ts:50 }        // حدث قديم من غير sid
+  ];
+  api(evts);
+  assert(evts[0]._linkedInvoice === 'FTGL1444-X',
+    '🔴 الصنف اللي اتشال واخد رقم فاتورة سلته — ده اللي كان ناقص في اللقطة');
+  assert(evts[1]._linkedInvoice === 'FTGL1444-X', 'وسحب الفيزا الزيادة كذلك');
+  assert(!evts[3]._linkedInvoice,
+    '🔴 سلة تانية (sid مختلف) مبتاخدش رقم فاتورة السلة الأولى');
+  assert(!evts[4]._linkedInvoice,
+    'وحدث قديم من غير معرّف بيفضل من غير رقم — مش بيتخمّنله واحد غلط');
+
+  /* ٢) الصف قابل للضغط وبيوري الرقم */
+  const rr = extractFn(code, 'function ofRenderActivity()');
+  assert(rr.indexOf('onclick="ofActOpen(') > -1,
+    '🔴 الصف قابل للضغط — كان عنوان جامد من غير أي طريقة للتفاصيل');
+  assert(rr.indexOf("a.invoiceCode || a._linkedInvoice") > -1,
+    'ورقم الفاتورة بيظهر على الصف نفسه');
+
+  /* ٣) شاشة التفاصيل: كل الحقول + قصة السلة */
+  const op = code.slice(code.indexOf('window.ofActOpen'), code.indexOf('function startData()'));
+  assert(op.indexOf('OF_ACT_FIELD_AR') > -1 && op.indexOf('Object.keys(a).forEach') > -1,
+    '🔴 بتعرض **كل** حقول الحدث الخام — نوع جديد بيبان من غير ما نستنى تحديث');
+  assert(op.indexOf('x.sid === a.sid') > -1 && op.indexOf('قصة السلة') > -1,
+    'وقصة السلة كاملة بالترتيب الزمني (الصنف اتشال ← السحب الزيادة ← الفاتورة)');
+  assert(op.indexOf('a.sid && x.sid') > -1,
+    '🔴 وحدث من غير sid مبيجمّعش كل الأحداث اليتيمة مع بعض');
+  assert(op.indexOf('مفيش فاتورة مربوطة') > -1,
+    'ولو مفيش ربط، بتقول ليه بدل ما تسيب المالك يخمّن');
+
+  /* ٤) الوصف المضلّل اتصلح */
+  assert(code.indexOf("print_latency:         { t:'🖨️ زمن الطباعة'") > -1,
+    "🔴 print_latency بيتسجل لكل طباعة مش للمتأخرة بس — 'اتأخرت' كان بيخوّف من غير سبب");
+  assert(/print_latency[^\n]*quiet:\s*true/.test(code),
+    'ومتعلّم هادي (مش حدث محتاج نظرة)');
 }
