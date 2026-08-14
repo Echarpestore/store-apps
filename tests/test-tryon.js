@@ -740,7 +740,7 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
       && html.indexOf('tryon-core.js') < html.indexOf('tryon-3d-core.js'),
     'ترتيب التحميل: الكور قبل كور الـ3D (بيستعمل أفيني ٣ نقط بتاعه)');
 
-  assert(sw.indexOf("echarpe-tryon-v19") > -1 && appC.indexOf("'v19'") > -1,
+  assert(sw.indexOf("echarpe-tryon-v21") > -1 && appC.indexOf("'v21'") > -1,
     'النسخة اتحدّثت في sw والكونسول (من غيرها الجهاز يفضل على القديم)');
 })();
 
@@ -904,4 +904,304 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
     'واختيار صورة بيشيل الرسالة');
   assert(tp.indexOf('S.fatalShown') > -1,
     'إلا لو كان فشل حقيقي — ساعتها الرسالة بتفضل');
+})();
+
+// ============================================================
+// ٢١) 🕳️🌗🌡️ v20 — واقعية الفلتر المجانية (حافة الفتحة/الظل/الحرارة)
+// ============================================================
+(function(){
+  /* ١) البلور المفصول */
+  (function(){
+    const w = 9, h = 9;
+    const flat = new Float32Array(w * h).fill(0.5);
+    const bf = T.blurChannel(flat, w, h, 2);
+    assert(near(bf[4*w+4], 0.5, 1e-6), 'سطح ثابت يفضل ثابت');
+    const spike = new Float32Array(w * h); spike[4*w+4] = 1;
+    const bs = T.blurChannel(spike, w, h, 2);
+    assert(bs[4*w+4] < 1 && bs[4*w+5] > 0 && bs[4*w+6] > 0,
+      'النبضة بتتوزع على الجيران (تدرّج)');
+    assert(bs[0] < bs[4*w+5], 'وبتضعف بالبعد');
+  })();
+
+  /* ٢) تدرّج حافة الفتحة — على صورة صناعية */
+  const mk = (w, h) => {
+    const d = new Uint8ClampedArray(w * h * 4);
+    for(let i = 3; i < d.length; i += 4) d[i] = 255;   // كله قماش معتم
+    return d;
+  };
+  const hole = (d, w, cx, cy, r) => {
+    for(let y = 0; y < Math.floor(d.length/4/w); y++)
+      for(let x = 0; x < w; x++)
+        if(Math.hypot(x-cx, y-cy) <= r) d[(y*w+x)*4+3] = 0;
+  };
+  (function(){
+    const w = 60, h = 60;
+    const d = mk(w, h);
+    hole(d, w, 30, 30, 10);
+    const res = T.featherHoleEdge(d, w, h, [30, 30], { feather: 3 });
+    assert(res.holePx > 250 && res.holePx < 400, 'الفتحة اتلقت بحجمها الصح');
+    assertEq(d[(30*w+30)*4+3], 0, 'مركز الفتحة زي ما هو');
+    assertEq(d[(5*w+5)*4+3], 255, '🔴 القماش البعيد ماتلمسش (درس الـflood الأبيض)');
+    // التدرّج: بكسلات وسيطة على خط من المركز للقماش
+    let mids = 0;
+    for(let x = 30; x < 55; x++){
+      const a = d[(30*w+x)*4+3];
+      if(a > 15 && a < 240) mids++;
+    }
+    assert(mids >= 3, '🔴 الحافة متدرّجة مش قطع حاد — دي الميزة كلها');
+  })();
+  (function(){
+    // بذرة على قماش معتم = مفيش لمس خالص
+    const w = 40, h = 40;
+    const d = mk(w, h);
+    const before = d.slice();
+    assertEq(T.featherHoleEdge(d, w, h, [20, 20]).holePx, 0,
+      'بذرة مش على فتحة = صفر');
+    assert(d.every((v, i) => v === before[i]), 'والصورة ماتغيرتش بكسل واحد');
+  })();
+  (function(){
+    // 🛟 فتحة "مفتوحة" على الخلفية الخارجية = flood هياكل الدنيا — الحارس بيلغي
+    const w = 50, h = 50;
+    const d = new Uint8ClampedArray(w * h * 4);   // كله شفاف (خلفية)
+    for(let x = 0; x < w; x++) d[(25*w+x)*4+3] = 255;  // خط قماش واحد بس
+    const before = d.slice();
+    assertEq(T.featherHoleEdge(d, w, h, [10, 10]).holePx, 0,
+      '🔴 flood أكبر من الحارس = إلغاء (مش تدرّج على حواف الطرحة الخارجية)');
+    assert(d.every((v, i) => v === before[i]), 'ومفيش لمس');
+  })();
+
+  /* ٣) ظل التلامس */
+  (function(){
+    const an = { l:[100,200], r:[220,200], top:[160,120], chin:[160,320],
+                 cheekL:[120,240], cheekR:[200,240] };
+    const ex = T.expandAnchors(an);
+    const sh = T.contactShadowSpec(an, ex);
+    assertEq([sh.x, sh.y], [ex.top[0], ex.top[1]],
+      'الشريط بيبدأ من حافة الطرحة العلوية (المرفوعة) مش من معلم الوش');
+    assert(sh.w > ex.faceW, 'وأعرض من الوش (يغطي الجناب)');
+    assert(sh.h > 0 && sh.h < ex.faceH * 0.5, 'ونازل على الجبهة مش الوش كله');
+    assert(sh.alpha >= 0.05 && sh.alpha <= 0.3, 'وناعم — ضل مش حرق');
+    assertEq(sh.rot, 0, 'راس مظبوطة = مفيش ميل');
+    const anT = { l:[100,190], r:[220,210], top:[160,120], chin:[160,320],
+                  cheekL:[120,240], cheekR:[200,240] };
+    const shT = T.contactShadowSpec(anT, T.expandAnchors(anT));
+    assert(Math.abs(shT.rot) > 0.05, 'وراس مايلة = الظل بيميل معاها');
+  })();
+
+  /* ٤) حرارة اللون */
+  assertEq(T.tempTintColor(3, -2), null, 'إضاءة محايدة = مفيش تلوين (القماش زي ما هو)');
+  const warm = T.tempTintColor(22, -12);
+  assert(!!warm && warm.r > 128 && warm.b < 128, 'إضاءة دافية = تلوين دافي بنفس الاتجاه');
+  assert(warm.alpha >= 0.05 && warm.alpha <= 0.13, 'والشدة مسقوفة — القماش مش مراية');
+  const cool = T.tempTintColor(-15, 20);
+  assert(!!cool && cool.r < 128 && cool.b > 128, 'وإضاءة باردة = بارد');
+  const extreme = T.tempTintColor(300, -300);
+  assert(extreme.alpha <= 0.13 && extreme.r <= 188 && extreme.b >= 68,
+    '🔴 قيمة مجنونة (وش قدام لمبة حمرا) متطلعش تلوين مجنون');
+  assertEq(T.tempBucket(2, 3), T.tempBucket(1, 4), 'رعشة صغيرة = نفس مفتاح الكاش');
+  assert(T.tempBucket(2, 3) !== T.tempBucket(20, 3), 'وتغيير حقيقي = مفتاح جديد');
+
+  /* ٥) التوصيلات */
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const cat = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'assets', 'catalog.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  // 📐 الفتحة بتحضن الوش: fit في الكتالوج + استخدامه في الرسم
+  const mFit = cat.match(/fit:\s*\{\s*widen:\s*([\d.]+)/);
+  assert(!!mFit && parseFloat(mFit[1]) < 1.2,
+    '🔴 fit القالب أضيق من الافتراضي 1.28 — من غيره خلفية صورة العميلة بتبان إطار حوالين وشها');
+  assert(code.indexOf('T.expandAnchors(an, S.scarf.fit)') > -1,
+    'والرسم بيستخدم fit بتاع الأصل نفسه');
+
+  // 🕳️ معالجة الفتحة وقت التحميل
+  const ph = extractFn(code, 'function processHeadImage(');
+  assert(ph.indexOf('T.featherHoleEdge(') > -1, 'التدرّج من الكور');
+  assert(ph.indexOf('clearFaceHole') === -1,
+    '🔴 والطريقة الخطرة (flood على الأبيض بياكل القماش البيج) مش موجودة');
+  assert(ph.indexOf('if(!res.holePx) return img;') > -1,
+    'مفيش فتحة تحت البذرة = الأصل يرجع زي ما هو');
+  assert(code.indexOf('asset.head = processHeadImage(hi, scarf);') > -1,
+    'والمعالجة على مسار التحميل فعلًا');
+  // الأصل بقى ممكن يبقى كانفاس — naturalWidth مش موجودة فيه
+  const et = extractFn(code, 'function ensureTint(');
+  assert(et.indexOf('asset.head.naturalWidth || asset.head.width') > -1,
+    '🔴 ensureTint بيتعامل مع الكانفاس (naturalWidth||width) — من غيرها التلوين بيقع بصمت');
+
+  // 🌡️ الحرارة: مخبوزة بكاش متكمّي مش كل فريم
+  const etp = extractFn(code, 'function ensureTemp(');
+  assert(etp.indexOf('T.tempTintColor(') > -1 && etp.indexOf('T.tempBucket(') > -1,
+    'الحرارة من الكور والمفتاح متكمّي');
+  assert(etp.indexOf('if(asset.tempKey === key) return;') > -1,
+    '🔴 نفس المفتاح = مفيش إعادة خبز (كانفاس كل فريم = سخونة موبايل)');
+  assert(etp.indexOf("'source-atop'") > -1, 'والتلوين على القماش بس مش الشفاف');
+  assert(code.indexOf('asset.headTemp = null; asset.tempKey = null;   ') > -1
+      || code.indexOf('asset.headTemp = null; asset.tempKey = null;') > -1,
+    'وتغيير لون المنتج بيبطّل الحرارة المخبوزة القديمة');
+  assert(code.indexOf('return asset.headTemp || asset.headTinted || asset.head;') > -1,
+    'وسلسلة الشكل: حرارة ← لون ← أصل');
+
+  // 🌗 الظل: قبل القماش وقبل فلتر السطوع وبمزج multiply
+  const dr = extractFn(code, 'function draw(result, srcEl)');
+  const iShadow = dr.indexOf('T.contactShadowSpec(');
+  const iFilter = dr.indexOf("ctx.filter = 'brightness(");
+  const iHead = dr.indexOf('ctx.drawImage(headImg');
+  assert(iShadow > -1 && iFilter > -1 && iHead > -1, 'العناصر التلاتة موجودة في الرسم');
+  assert(iShadow < iFilter,
+    '🔴 الظل قبل فلتر السطوع — الضل مش بياخد سطوع الطرحة');
+  assert(iShadow < iHead, '🔴 والظل تحت القماش مش فوقه');
+  assert(dr.indexOf("globalCompositeOperation = 'multiply'") > -1,
+    'وبمزج multiply (تغميق حقيقي مش طبقة رمادية)');
+
+  // إضاءة الوضعين مفصولة + مسار عيّنة واحد
+  const rs = extractFn(code, 'function resetSmooth()');
+  assert(rs.indexOf('S.smDr.reset(); S.smDb.reset();') > -1,
+    'تبديل الوضع بيصفّر الحرارة (إضاءة الصورة غير اللايف)');
+  const sl = extractFn(code, 'function sampleLuma(');
+  assert(sl.indexOf('sampleSkin(ctx, an).luma') > -1,
+    'sampleLuma غلاف على sampleSkin — مسار عيّنة واحد مش اتنين بيفرقوا');
+})();
+
+// ============================================================
+// ٢٢) 🧰 v21 — أداة تجهيز الأصول (prep-core)
+// ============================================================
+const PR = require(path.resolve(__dirname, '..', 'tryon', 'prep-core.js'));
+(function(){
+  const mkImg = (w, h, fill) => {
+    const d = new Uint8ClampedArray(w * h * 4);
+    for(let p = 0; p < w * h; p++){
+      d[p*4] = fill[0]; d[p*4+1] = fill[1]; d[p*4+2] = fill[2]; d[p*4+3] = 255;
+    }
+    return d;
+  };
+  const paint = (d, w, x0, y0, x1, y1, c) => {
+    for(let y = y0; y <= y1; y++)
+      for(let x = x0; x <= x1; x++){
+        const i = (y*w+x)*4;
+        d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=255;
+      }
+  };
+  const BG = [236, 232, 226];        // خلفية استوديو كريمي (مش أبيض نقي — درس dominantColor)
+  const FABRIC = [200, 186, 176];    // القماش البيج — فرقه عن الخلفية ~٣٦
+
+  /* ١) لون الخلفية من الأركان */
+  (function(){
+    const w = 40, h = 40, d = mkImg(w, h, BG);
+    paint(d, w, 10, 10, 29, 29, FABRIC);
+    const bg = PR.cornerBg(d, w, h);
+    assert(Math.abs(bg.r - BG[0]) < 3 && Math.abs(bg.b - BG[2]) < 3,
+      'لون الخلفية من الأركان مش من نص الصورة');
+  })();
+
+  /* ٢) إزالة الخلفية — flood من الحواف بس */
+  (function(){
+    const w = 60, h = 60, d = mkImg(w, h, BG);
+    paint(d, w, 15, 15, 44, 44, FABRIC);            // الطرحة
+    paint(d, w, 27, 25, 33, 33, BG);                // "فتحة" بلون الخلفية جوه الطرحة
+    const res = PR.removeStudioBg(d, w, h, { tol: 20, feather: 2 });
+    assert(res.removed > 1000, 'الخلفية الخارجية اتشالت');
+    assertEq(d[(3*w+3)*4+3], 0, 'ركن الصورة بقى شفاف');
+    assertEq(d[(30*w+30)*4+3], 255,
+      '🔴 المنطقة اللي بنفس لون الخلفية **جوه** الطرحة ماتلمستش (مش متوصلة بالحواف)');
+    assertEq(d[(29*w+29)*4+3], 255, 'والقماش نفسه سليم — درس v20: البيج مش أبيض');
+    // تدرّج على الحافة الخارجية
+    let mids = 0;
+    for(let x = 5; x < 30; x++){ const a = d[(30*w+x)*4+3]; if(a > 15 && a < 240) mids++; }
+    assert(mids >= 2, 'وحافة القص متدرّجة مش حادة');
+  })();
+
+  /* ٣) تفريغ الفتحة من نقرة */
+  (function(){
+    const w = 60, h = 60, d = mkImg(w, h, BG);
+    paint(d, w, 10, 10, 49, 49, FABRIC);
+    paint(d, w, 24, 22, 36, 34, BG);                // فتحة المانيكان
+    PR.removeStudioBg(d, w, h, { tol: 20, feather: 1 });
+    const res = PR.clearHoleAt(d, w, h, [30, 28], { tol: 20 });
+    assert(res.holePx > 100, 'الفتحة اتفرّغت من النقرة');
+    assertEq(d[(28*w+30)*4+3], 0, 'ومركزها شفاف');
+    assertEq(d[(12*w+12)*4+3], 255, 'والقماش سليم');
+    // نقرة على قماش = صفر لمس
+    const before = d.slice();
+    assertEq(PR.clearHoleAt(d, w, h, [12, 12], { tol: 20 }).holePx, 0,
+      '🔴 نقرة على قماش = مفيش تفريغ (فرقه عن الخلفية أكبر من التسامح)');
+    assert(d.every((v, i) => v === before[i]), 'ولا بكسل اتغير');
+  })();
+
+  /* ٤) القص التلقائي */
+  (function(){
+    const w = 50, h = 50;
+    const d = new Uint8ClampedArray(w * h * 4);     // شفاف
+    paint(d, w, 20, 10, 34, 40, FABRIC);
+    const box = PR.autoCrop(d, w, h, 3);
+    assertEq([box.x, box.y], [17, 7], 'القص على الحدود + الهامش');
+    assertEq([box.w, box.h], [21, 37], 'وبالمقاس الصح');
+    const empty = new Uint8ClampedArray(w * h * 4);
+    assertEq(PR.autoCrop(empty, w, h), null, 'صورة شفافة = null مش قص وهمي');
+  })();
+
+  /* ٥) فحص النقط */
+  const V = (an) => PR.validateAnchors(an, 600, 800);
+  assert(V({ l:[150,300], r:[450,300], top:[300,180] }).ok, 'نقط سليمة بتعدي');
+  assert(!V({ l:[450,300], r:[150,300], top:[300,180] }).ok, 'الشمال يمين اليمين = رفض');
+  assert(!V({ l:[150,300], r:[190,300], top:[170,180] }).ok, 'مسافة صغيرة أوي = رفض');
+  assert(!V({ l:[150,300], r:[450,300], top:[300,500] }).ok, 'الجبهة تحت الصدغين = رفض');
+  assert(!V({ l:[150,300], r:[450,300], top:[550,180] }).ok, 'الجبهة برّه ما بينهم = رفض');
+  assert(!V({ l:[150,300], r:[450,300] }).ok, 'نقطة ناقصة = رفض');
+  assert(!V({ l:[-5,300], r:[450,300], top:[300,180] }).ok, 'نقطة برّه الصورة = رفض');
+
+  /* ٦) المعرّف */
+  assertEq(PR.slugId('Chiffon 02'), 'chiffon-02', 'مسافات وحروف كبيرة بتتظبط');
+  assertEq(PR.slugId('طرحة!!'), PR.slugId('طرحة!!').match(/^scarf-/) ? PR.slugId('طرحة!!') : 'x',
+    PR.slugId('طرحة!!'), 'عربي بس = معرّف تلقائي (مش فاضي)');
+  assert(PR.slugId('') !== '', 'وفاضي برضه مش بيرجع فاضي');
+
+  /* ٧) سطر الكتالوج — لازم يبقى JS صالح فعلًا */
+  (function(){
+    const an = { l:[150,300], r:[450,300], top:[300,180] };
+    const sn = PR.catalogSnippet("chiffon-02", "شيفون مطرّزة 'جديدة'", an,
+      [[200,186,176],[150,138,124]]);
+    let obj = null;
+    try{ obj = eval('(' + sn + ')'); }catch(e){}
+    assert(!!obj, '🔴 السطر بيتبلع كـJS — الاقتباسة في الاسم متهربة صح');
+    assertEq(obj.id, 'chiffon-02', 'والمعرّف صح');
+    assertEq(obj.head.anchors.l, [150,300], 'والنقط زي ما اتنقرت');
+    assertEq(obj.head.url, 'assets/chiffon-02-head.png',
+      'واسم الملف من المعرّف — نفس اللي زرار التنزيل بيسميه');
+    assert(obj.fit && obj.fit.widen < 1.2,
+      '🔴 الأصل الجديد بياخد fit الضيق تلقائي — درس القالب (1.28 بيبين الخلفية)');
+    assertEq(obj.recolor.seeds.length, 2, 'وعيّنات التلوين موجودة');
+    const noSeeds = eval('(' + PR.catalogSnippet('x', 'y', an, null) + ')');
+    assert(!noSeeds.recolor, 'ومن غير عيّنات = مفيش recolor (مش seeds فاضية تكسر التلوين)');
+  })();
+
+  /* ٨) نقرة الشاشة → إحداثي صورة */
+  const rect = { left: 20, top: 40, width: 360, height: 480 };
+  assertEq(PR.tapToImage(200, 280, rect, 720, 960), [360, 480],
+    'النص على الشاشة = النص في الصورة (مقاس العرض ≠ مقاس الصورة)');
+  assertEq(PR.tapToImage(10, 30, rect, 720, 960), [0, 0], 'برّه الحدود بيتقصقص جوه');
+
+  /* ٩) التوصيلات */
+  const fs = require('fs');
+  const html = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'prep.html'), 'utf8');
+  const sw = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'sw.js'), 'utf8');
+  assert(html.indexOf('<script src="tryon-core.js"></script>') > -1
+      && html.indexOf('tryon-core.js') < html.indexOf('prep-core.js'),
+    'الكور قبل prep-core (بيستعمل بلوره وأفينيه)');
+  assert(html.indexOf('T.expandAnchors(an, fit)') > -1
+      && html.indexOf('T.affineFrom3(') > -1,
+    '🔴 المعاينة بنفس محرك التطبيق بالظبط — مش رسمة تانية بتكدّب');
+  assert(html.indexOf('P.tapToImage(') > -1, 'واللمس بيتحوّل بإحداثيات الكور');
+  assert(html.indexOf('أداة داخلية') > -1, 'ومكتوب عليها إنها مش للعميلات');
+  assert(sw.indexOf("'./prep.html', './prep-core.js'") > -1,
+    'والأداة في كاش الـsw (تشتغل أوفلاين في المخزن)');
 })();
