@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v30';
+  const TRYON_VER = 'v32';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -28,7 +28,21 @@
     (new URLSearchParams(location.search).get('off') || '')
       .split(',').filter(Boolean).forEach((k) => { TRYON_OFF[k.trim()] = true; });
   }catch(e){}
-  const layerOn = (k) => !TRYON_OFF[k];
+  // 🧪 v32: `all` بيطفّي كل طبقات الرسم — الصورة/الفيديو بس.
+  //    لو حاجة فضلت ظاهرة بعد `?off=all` يبقى **مش من كانفاس
+  //    الرسم أصلًا** — يبقى من كانفاس الشبكة (WebGL) اللي فوقه،
+  //    وده بيقسم مساحة البحث نص في ثانية بدل تخمين تاني.
+  const layerOn = (k) => !(TRYON_OFF[k] || TRYON_OFF.all);
+
+  /* 🩺 v31: شريحة النسخة — بتتكتب **فورًا**، قبل أي تحميل أو كاميرا.
+     السبب: تلات إصلاحات ورا بعض والمالك بيقول "زي ما هي" — لازم
+     نحسم الأول إن الملف الجديد واصل للجهاز أصلًا (سيرفس ووركر/كاش).
+     لو الشريحة بتقول نسخة قديمة، المشكلة في الرفع مش في الكود. */
+  function chip(extra){
+    const el = document.getElementById('verChip');
+    if(el) el.textContent = TRYON_VER + (extra ? ' · ' + extra : '');
+  }
+  chip();
 
   // ---------- الحالة ----------
   const S = {
@@ -611,6 +625,7 @@
     const faces = result && result.faceLandmarks;
     if(!faces || !faces.length){
       S.lostFrames++;
+      chip('no-face');
       if(S.r3d) TRYON3D.clear();
       if(S.mesh) TRYON_MESH.clear();
       if(S.lostFrames > 20) hint('قرّبي وشّك للكاميرا 📷');
@@ -686,6 +701,7 @@
     if(!asset.ready){
       // بيحمّل لسه — رسالة بدل صمت (العميلة بتفتكر إن الشاشة بايظة)
       if(!asset.failed) hint('⏳ بنجهّز الطرحة…');
+      chip('asset:' + (asset.failed ? 'failed' : 'loading'));
       return;
     }
     ensureTint(asset, S.scarf, S.color);
@@ -799,6 +815,7 @@
     const squash = (p) => [ cx2 + (p[0]-cx2)*(0.75 + 0.25*yawSquash), p[1] ];
     // v22: الشبكة في **الوضعين** — الصورة الثابتة كانت واخدة الأفيني
     //    المسطح، وهي أصلًا الأولوية (§ الشكل النهائي قبل اللايف)
+    if(!layerOn('mesh') && S.mesh) TRYON_MESH.clear();   // 🧪 v32
     if(Tr && S.mesh && S.scarf.type === 'photo'){
       // 🧵 الراس ثابت على الوش والانسدال بيتمايل ويهدى — قماش
       const now2 = performance.now();
@@ -811,7 +828,7 @@
       // 🔴 v29: قيمة update كانت مرمية — الشبكة تفشل والتطبيق مكمّل
       //    كأن كله تمام، والنتيجة مستطيل مصمت مكان الطرحة. دلوقتي
       //    الفشل بيرجّعنا للمسار المسطح في نفس الفريم.
-      const meshOK = TRYON_MESH.update(headImg, hw, hh, chinY, Tr, pose.yaw,
+      const meshOK = layerOn('mesh') && TRYON_MESH.update(headImg, hw, hh, chinY, Tr, pose.yaw,
                         (ex.l[0] + ex.r[0]) / 2, dt,
                         warp && warp.pairs, warp && warp.radius);
       if(!meshOK){
@@ -824,13 +841,15 @@
         ctx.drawImage(headImg, 0, 0);
         ctx.restore();
       }
+      chip(meshOK ? 'mesh' : 'flat(mesh✖)');
       if(window.TRYON_DEBUG && warp) debugContour(warp);
-    } else if(Tr){
+    } else if(Tr && layerOn('scarf')){
       if(S.mesh) TRYON_MESH.clear();
       ctx.save();
       ctx.setTransform(Tr.a, Tr.d, Tr.b, Tr.e, Tr.c, Tr.f);
       ctx.drawImage(headImg, 0, 0);
       ctx.restore();
+      chip('flat');
     }
     ctx.filter = 'none';
 
