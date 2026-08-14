@@ -456,11 +456,13 @@ TRYON.BANDANA_COLORS = [
 // شكل البندانة: قبة فوق الراس + حافة سفلية قوس على الجبهة بين
 // الصدغين. الحافة بتقع بين منابت الشعر (top) وبين الحاجبين (brow)
 // — drop = قد إيه نازلة على الجبهة (0 = عند المنابت، 1 = عند الحواجب).
+// ⚠️ v27: كان 0.42 وطلع على وش حقيقي واصل لحد العين — البندانة
+//    الحقيقية بتقعد **أول الجبهة** عند المنابت وبتنزل حبة بس.
 // بيرجع مضلّع نقط جاهز للرسم — كله متبني بمتجهات الوش نفسه
 // (up/side) فبيميل مع الراس تلقائي.
 TRYON.bandanaSpec = function(an, ex, opts){
   opts = opts || {};
-  const drop = opts.drop != null ? opts.drop : 0.42;
+  const drop = opts.drop != null ? opts.drop : 0.16;
   const segs = opts.segs != null ? opts.segs : 14;
   const upX = ex.up[0], upY = ex.up[1];
   const sdX = -upY, sdY = upX;                     // متجه جانبي (عمودي على up)

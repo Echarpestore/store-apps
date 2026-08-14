@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v26';
+  const TRYON_VER = 'v27';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -766,6 +766,9 @@
     S.canvas.classList.remove('mirror');
     S.canvas.width = img.naturalWidth; S.canvas.height = img.naturalHeight;
     const c3p = $('stage3d'); c3p.width = S.canvas.width; c3p.height = S.canvas.height;
+    // 🔴 stage3d (اللي الطرحة نفسها عليه) كان بيفضل مقلوب مراية في
+    //    وضع الصورة — وش مش في النص بالظبط = الطرحة في الناحية المعكوسة
+    c3p.classList.remove('mirror');
     if(S.r3d) TRYON3D.resize(S.canvas.width, S.canvas.height);
     if(S.mesh){ TRYON_MESH.resize(S.canvas.width, S.canvas.height); TRYON_MESH.clear(); }
     await S.setImageMode();
@@ -799,6 +802,7 @@
     S.canvas.classList.add('mirror');
     S.canvas.width = S.video.videoWidth; S.canvas.height = S.video.videoHeight;
     const c3l = $('stage3d'); c3l.width = S.canvas.width; c3l.height = S.canvas.height;
+    c3l.classList.add('mirror');           // اللايف مراية — الاتنين مع بعض دايمًا
     if(S.r3d) TRYON3D.resize(S.canvas.width, S.canvas.height);
     if(S.mesh) TRYON_MESH.resize(S.canvas.width, S.canvas.height);
     await S.setVideoMode();
@@ -823,7 +827,9 @@
     const g = out.getContext('2d');
     if(S.mode === 'live'){ g.translate(out.width, 0); g.scale(-1, 1); }  // زي ما هي شايفة نفسها
     g.drawImage(S.canvas, 0, 0);
-    if(S.r3d){
+    // 🔴 كان `if(S.r3d)` بس — والشبكة (الافتراضي!) بترسم **الطرحة
+    //    نفسها** على stage3d برضه. النتيجة: كل لقطة من غير طرحة خالص.
+    if(S.r3d || S.mesh){
       try{ g.drawImage($('stage3d'), 0, 0, out.width, out.height); }catch(e){}
     }
     // ختم البراند خفيف
@@ -1011,6 +1017,7 @@
     $('btnPhoto').classList.add('on');
     $('btnLive').classList.remove('on');
     S.canvas.classList.remove('mirror');
+    $('stage3d').classList.remove('mirror');
     msgBox(adv.text, e, false, '📷 اختاري صورة', () => $('photoInput').click());
   }
 
