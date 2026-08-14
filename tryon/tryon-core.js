@@ -581,6 +581,37 @@ TRYON.hairCoverZone = function(hair, w, h, an, ex, opts){
   return { mask: out, count: count, frac: Math.round(hairPx / total * 100) / 100 };
 };
 
+
+/* ---------- ٢١) 📏 مقياس الثبات (v28) ---------- */
+// برومبت Hybrid Pipeline بند ١٢: movementScore من فرق المعالم.
+// بيغذي: تغطية الشعر في اللايف (مش كل فريم) + أي refinement جاي.
+TRYON.movementScore = function(prev, cur){
+  if(!prev || !cur || !prev.length || prev.length !== cur.length) return Infinity;
+  let s = 0;
+  for(let i = 0; i < prev.length; i++)
+    s += Math.hypot(cur[i][0] - prev[i][0], cur[i][1] - prev[i][1]);
+  return s / prev.length;
+};
+
+// عدّاد الثبات: N فريم ورا بعض تحت العتبة = مستقر. أي نطّة بترجّع
+// العد من الأول — نص ثانية سكون مش "مجموع سكون" متقطع.
+TRYON.StabilityMeter = function(opts){
+  opts = opts || {};
+  const thr = opts.threshold != null ? opts.threshold : 2.2;   // بكسل/فريم @720p
+  const need = opts.frames != null ? opts.frames : 8;
+  let prev = null, run = 0, score = Infinity;
+  return {
+    push(pts){
+      score = TRYON.movementScore(prev, pts);
+      prev = pts.map((p) => [p[0], p[1]]);
+      if(score <= thr) run++; else run = 0;
+      return { stable: run >= need, score: score, run: run };
+    },
+    reset(){ prev = null; run = 0; score = Infinity; },
+    state(){ return { stable: run >= need, score: score }; }
+  };
+};
+
 /* ---------- التصدير (القاعدة الذهبية §18) ---------- */
 if(typeof module !== 'undefined' && module.exports){ module.exports = TRYON; }
 if(typeof window !== 'undefined'){

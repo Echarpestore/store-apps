@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v27';
+  const TRYON_VER = 'v28';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -38,9 +38,12 @@
     bandana: null,                 // v23: null = من غير بندانة (الافتراضي)
     bandanaHinted: false,
     plain: false,                   // v26: سادة — تلقائي بس من صورة المنتج
-    seg: null, segFailed: false,    // v25: مقطّع الشعر — lazy في وضع الصورة
-    hairZone: null,                 // v25: {mask,w,h} — أنهي شعر يتغطى (للصورة الحالية)
+    seg: null, segFailed: false,    // v25: مقطّع الشعر — lazy
+    hairZone: null,                 // v25: {mask,w,h} — أنهي شعر يتغطى
     hairCoverCanvas: null, hairCoverKey: null,
+    hairT: 0, segBusy: false, lastSegT: 0,   // v28: عمر الماسك + خنق اللايف
+    stab: T.StabilityMeter(),       // v28: مقياس الثبات (بند ١٢)
+    stabState: { stable: false, score: Infinity },
     stage: 'boot', lastErr: null      // 🩺 تشخيص: فين وقفنا وإيه الخطأ
   };
 
@@ -170,33 +173,62 @@
   /* حساب منطقة التغطية للصورة الحالية — مرة واحدة لكل صورة.
      التقطيع على نسخة مصغّرة (≤512 عرض): الماسك بيتدرّج أصلًا
      فالتكبير مش بيبان، والتقطيع بيبقى أسرع بكتير على الموبايل. */
+  /* المشترك: مصدر (صورة/فريم) + معالم → منطقة تغطية. بيستعمله وضع
+     الصورة واللايف المستقر واللقطة عالية الجودة — مسار واحد للتلاتة. */
+  async function hairZoneFor(srcEl, lm){
+    if(!lm) return null;
+    const seg = await loadSegmenter();
+    if(!seg) return null;
+    try{
+      const iw = srcEl.naturalWidth || srcEl.videoWidth || srcEl.width;
+      const ih = srcEl.naturalHeight || srcEl.videoHeight || srcEl.height;
+      const sc = Math.min(1, 512 / iw);
+      const w = Math.max(1, Math.round(iw * sc)), h = Math.max(1, Math.round(ih * sc));
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(srcEl, 0, 0, w, h);
+      const res = seg.segment(c);
+      const cm = res.categoryMask;
+      if(!cm) return null;
+      const hm = T.hairMaskFromCategories(cm.getAsUint8Array(), w, h);
+      try{ cm.close(); }catch(e){}
+      // المعالم منسّبة (0..1) — نفس النقط بمقاس الماسك مباشرة
+      const an = T.anchorsFromLandmarks(lm, w, h);
+      const ex = T.expandAnchors(an, S.scarf && S.scarf.fit);
+      const zone = T.hairCoverZone(hm.mask, w, h, an, ex);
+      if(!zone) return null;
+      return { mask: zone.mask, w: w, h: h };
+    }catch(e){ console.warn('hairZone', e); return null; }
+  }
+
   async function computeHairCover(img){
     if(!S.stillResult || !S.stillResult.faceLandmarks
        || !S.stillResult.faceLandmarks.length) return;
     const myImg = img;                        // العميلة ممكن تغيّر الصورة والتقطيع شغال
-    const seg = await loadSegmenter();
-    if(!seg || S.stillImg !== myImg) return;
+    const z = await hairZoneFor(img, S.stillResult.faceLandmarks[0]);
+    if(!z || S.stillImg !== myImg) return;    // اتغيّرت = النتيجة القديمة تترمي
+    S.hairZone = z;
+    S.hairT = performance.now();
+    S.hairCoverCanvas = null; S.hairCoverKey = null;
+    if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
+  }
+
+  /* 💇 v28: اللايف — الماسك بيتحسب **بس** لما الراس ثابتة (بند ١٢)
+     وبخنق زمني، مش كل فريم: segmentation كل فريم بيقتل الموبايل،
+     وأثناء الحركة الماسك القديم بيبقى في المكان الغلط أصلًا. */
+  async function liveHairPass(){
+    if(S.segBusy || S.mode !== 'live' || !S.stabState.stable) return;
+    if(!S.lastLm || S.segFailed) return;
+    const now = performance.now();
+    if(now - S.lastSegT < 700) return;         // خنق: مرة كل ~٠٫٧ ثانية وهي ثابتة
+    S.segBusy = true; S.lastSegT = now;
     try{
-      const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-      const sc = Math.min(1, 512 / iw);
-      const w = Math.max(1, Math.round(iw * sc)), h = Math.max(1, Math.round(ih * sc));
-      const c = document.createElement('canvas'); c.width = w; c.height = h;
-      c.getContext('2d').drawImage(img, 0, 0, w, h);
-      const res = seg.segment(c);
-      const cm = res.categoryMask;
-      if(!cm) return;
-      const hm = T.hairMaskFromCategories(cm.getAsUint8Array(), w, h);
-      try{ cm.close(); }catch(e){}
-      // المعالم منسّبة (0..1) — نفس النقط بمقاس الماسك مباشرة
-      const lm = S.stillResult.faceLandmarks[0];
-      const an = T.anchorsFromLandmarks(lm, w, h);
-      const ex = T.expandAnchors(an, S.scarf && S.scarf.fit);
-      const zone = T.hairCoverZone(hm.mask, w, h, an, ex);
-      if(!zone || S.stillImg !== myImg) return;
-      S.hairZone = { mask: zone.mask, w: w, h: h };
-      S.hairCoverCanvas = null; S.hairCoverKey = null;
-      if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
-    }catch(e){ console.warn('hairCover', e); }
+      const z = await hairZoneFor(S.video, S.lastLm);
+      if(z && S.mode === 'live'){
+        S.hairZone = z;
+        S.hairT = performance.now();
+        S.hairCoverCanvas = null; S.hairCoverKey = null;
+      }
+    }finally{ S.segBusy = false; }
   }
 
   /* كانفاس التغطية بلون القماش الحالي — بيتبني بس لما اللون يتغيّر
@@ -567,6 +599,9 @@
     S.lostFrames = 0;
 
     const lm = faces[0];
+    S.lastLm = lm;                            // v28: للماسك في اللايف واللقطة
+    if(S.mode === 'live')
+      S.stabState = S.stab.push(T.faceContourFromLandmarks(lm, w, h));
     const mat = result.facialTransformationMatrixes
              && result.facialTransformationMatrixes[0];
     const pose = T.poseFromMatrix(mat && mat.data);
@@ -629,7 +664,13 @@
     //    الصورة وتحت كل حاجة (بندانة/ضل/قماش). الماسك محسوب مرة
     //    واحدة للصورة، واللون بيتبع لون المنتج. اللايف من غيرها
     //    عمدًا: التقطيع كل فريم بيقتل الفريمات على الموبايل.
-    if(S.mode === 'photo' && S.scarf.type === 'photo' && S.hairZone){
+    //    v28: في اللايف بتتطبق **بس** والراس ثابتة والماسك لسه طازة —
+    //    أول حركة = الحارس بيقع فورًا والتغطية بتختفي (رجوع فوري
+    //    للـAR الخام، بند ١١) بدل ما ماسك قديم يتلزق في المكان الغلط.
+    const hairOK = S.scarf.type === 'photo' && S.hairZone &&
+      (S.mode === 'photo'
+        || (S.stabState.stable && performance.now() - S.hairT < 2000));
+    if(hairOK){
       const hc = hairCoverCanvas(S.color.hex);
       if(hc){
         ctx.save();
@@ -728,6 +769,31 @@
       ctx.restore();
     }
     ctx.filter = 'none';
+
+    // 🧪 v28: Debug Overlay (بند ٢٣) — TRYON_DEBUG=true من الكونسول.
+    //    الكانفاس مراية في اللايف — بنعكس الكتابة عشان تتقري صح.
+    if(window.TRYON_DEBUG){
+      const fps = Math.round(1000 / Math.max(1, S.gov.avg()));
+      const lines = [
+        'fps ' + fps + ' (' + Math.round(S.gov.avg()) + 'ms)',
+        'yaw ' + pose.yaw.toFixed(0) + '° pitch ' + pose.pitch.toFixed(0)
+          + '° roll ' + pose.roll.toFixed(0) + '°',
+        'stab ' + (S.stabState.stable ? 'STABLE' : 'moving') + ' '
+          + (S.stabState.score === Infinity ? '—' : S.stabState.score.toFixed(1)),
+        'seg ' + (S.seg ? 'ready' : (S.segFailed ? 'failed' : 'idle'))
+          + ' hair ' + (S.hairZone ? 'on' : '—')
+          + ' mesh ' + (S.mesh ? 'on' : 'off')
+      ];
+      ctx.save();
+      if(S.mode === 'live'){ ctx.translate(w, 0); ctx.scale(-1, 1); }
+      ctx.font = '600 13px monospace';
+      ctx.textAlign = 'left'; ctx.direction = 'ltr';
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(6, 6, 232, lines.length * 18 + 10);
+      ctx.fillStyle = '#7CFC9A';
+      lines.forEach((t, i) => ctx.fillText(t, 12, 24 + i * 18));
+      ctx.restore();
+    }
   }
 
   // متوسط إضاءة الخدود — دلوقتي غلاف على sampleSkin (مسار عيّنة واحد)
@@ -745,6 +811,7 @@
       try{
         const res = S.landmarker.detectForVideo(S.video, t0);
         draw(res, S.video);
+        liveHairPass().catch(() => {});     // v28: ثابتة + مخنوق — مش كل فريم
       }catch(e){ console.warn(e); }
     }
     S.gov.report(performance.now() - t0);
@@ -816,12 +883,48 @@
     // الحرارة القديمة بتتنقل للوضع الجديد وتاخد ثواني تصحّح
     S.smDr.reset(); S.smDb.reset();
     S.smContour.forEach((sm) => sm.reset());
+    S.stab.reset();
+    S.stabState = { stable: false, score: Infinity };
   }
 
   /* ============================================================
      ٧) التقاط ومشاركة — المشاركة إعلان مجاني
      ============================================================ */
+  /* 📸 v28 (بند ١٨): اللقطة في اللايف بتاخد مسار الصورة الكامل —
+     فريم كامل من الفيديو + كشف IMAGE (أدق من فريم فيديو عابر) +
+     ماسك شعر متزامن — وبعد الحفظ اللايف بيرجع لوحده. اللقطة ممكن
+     تاخد نص ثانية زيادة، ومقبول: الصورة النهائية أهم من اللاتنسي. */
+  async function captureStillPass(){
+    if(S.mode !== 'live' || !S.video || S.video.readyState < 2) return;
+    const frame = document.createElement('canvas');
+    frame.width = S.video.videoWidth; frame.height = S.video.videoHeight;
+    frame.getContext('2d').drawImage(S.video, 0, 0);
+    S.running = false;                        // اللوب واقف مؤقتًا — مش مقفول
+    try{
+      await S.setImageMode();
+      const res = S.landmarker.detect(frame);
+      const lm = res.faceLandmarks && res.faceLandmarks[0];
+      if(lm){
+        const z = await hairZoneFor(frame, lm);
+        if(z){
+          S.hairZone = z; S.hairT = performance.now();
+          S.hairCoverCanvas = null; S.hairCoverKey = null;
+        }
+        S.stabState = { stable: true, score: 0 };   // اللقطة ثابتة بحكم التعريف
+        draw(res, frame);
+      }
+    }catch(e){ console.warn('hq', e); }
+  }
+
+  async function resumeLive(){
+    if(S.mode !== 'live') return;
+    try{ await S.setVideoMode(); }catch(e){}
+    S.running = true; loop();
+  }
+
   async function capture(){
+    // في اللايف: باص جودة عالية الأول — وفشله مش بيمنع اللقطة العادية
+    if(S.mode === 'live') await captureStillPass().catch(() => {});
     const out = document.createElement('canvas');
     out.width = S.canvas.width; out.height = S.canvas.height;
     const g = out.getContext('2d');
@@ -847,6 +950,11 @@
     }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'echarpe-tryon.jpg'; a.click();
+  }
+
+  async function captureAndResume(){
+    try{ await capture(); }
+    finally{ if(S.mode === 'live') resumeLive(); }   // اللايف بيرجع مهما حصل
   }
 
   /* ============================================================
@@ -880,7 +988,7 @@
 
     buildBandanaRow();
 
-    $('btnShot').onclick = () => capture().catch(console.warn);
+    $('btnShot').onclick = () => captureAndResume().catch(console.warn);
     $('btnLive').onclick = () => backToLive().catch(console.warn);
     $('btnPhoto').onclick = () => $('photoInput').click();
     $('photoInput').onchange = (e) => {
@@ -1067,6 +1175,8 @@
     stage: S.stage, r3d: S.r3d, mesh: S.mesh,
     seg: S.seg ? 'ready' : (S.segFailed ? 'failed' : 'idle'),
     hairZone: !!S.hairZone,
+    stable: S.stabState.stable, stabScore: S.stabState.score,
+    fps: Math.round(1000 / Math.max(1, S.gov.avg())),
     err: S.lastErr ? errLine(S.lastErr) : null,
     frameMs: Math.round(S.gov.avg()), scarf:S.scarf && S.scarf.id,
     color:S.color && S.color.id });
