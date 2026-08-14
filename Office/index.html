@@ -404,12 +404,28 @@
     </div>
   </section>
 
-  <!-- 🕵️ نشاط غريب -->
+  <!-- 🕵️ سجل النشاط -->
   <section class="tabPage" id="page-odd">
     <div class="panel">
-      <h3>🕵️ نشاط غريب</h3>
-      <div class="hint">التبويب ده هيتفعّل بعد فترة التشغيل — هيجمع السلات المتسابة، تكرار العكس، التقييمات اليتيمة، وفروقات التحويلات.</div>
-      <div class="empty">🔒 قريبًا — بعد ما نجمع بيانات حقيقية كفاية</div>
+      <h3>🕵️ سجل النشاط</h3>
+      <div class="hint">كل حاجة غير عادية بتحصل على الأجهزة بتتسجل هنا: صنف اتشال من السلة، خصم يدوي، درج اتفتح بالإيد، سحب فيزا زيادة، سلة اتسابت، مخزون اتمسح. بيتحمّل بدوسة (مش مع كل فتحة).</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+        <select class="f" id="actDays" style="flex:1; min-width:110px;">
+          <option value="1">النهاردة</option>
+          <option value="7" selected>آخر ٧ أيام</option>
+          <option value="30">آخر ٣٠ يوم</option>
+        </select>
+        <select class="f" id="actKind" style="flex:1; min-width:130px;">
+          <option value="">كل الأنواع</option>
+          <option value="money">💰 فلوس بس</option>
+          <option value="cart">🛒 السلة بس</option>
+          <option value="stock">📦 المخزون بس</option>
+        </select>
+        <button class="btn gold" id="actLoad" style="margin-bottom:0;">تحميل</button>
+      </div>
+      <input class="f" id="actSearch" placeholder="بحث: اسم موظف / فرع / صنف / رقم فاتورة" style="margin-bottom:8px;">
+      <div id="actSummary"></div>
+      <div id="actBody"><div class="empty">دوس «تحميل» عشان تجيب السجل</div></div>
     </div>
   </section>
   <section class="tabPage" id="page-cash">

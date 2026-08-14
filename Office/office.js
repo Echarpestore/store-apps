@@ -1110,6 +1110,10 @@ try{ firebase.auth().onAuthStateChanged(ofSessionCheck); }catch(e){}
 /* ============================================================
    🗂️ التبويبات
    ============================================================ */
+// 🕵️ حالة سجل النشاط — التعريف **قبل** هاندلر التبويب اللي بيقراه:
+//    `let` مبتترفعش (TDZ)، ونفس الباج ده حصل قبل كده مع OF_RECUR_COL.
+let _ofActRaw = [];
+
 document.querySelectorAll('#tabsNav button').forEach(function(b){
   b.addEventListener('click', function(){
     document.querySelectorAll('#tabsNav button').forEach(function(x){ x.classList.remove('on'); });
@@ -1120,6 +1124,10 @@ document.querySelectorAll('#tabsNav button').forEach(function(b){
     if(b.dataset.page === 'cash'){ try{ renderCashHand(); }catch(e){ console.warn('cash', e); } }
     if(b.dataset.page === 'reports'){
       try{ loadCustomers(); loadRatings(); }catch(e){ console.warn('reports load', e); }
+    }
+    // 🕵️ سجل النشاط: تحميل أول فتحة بس — بعدها الزرار هو اللي بيحدّث
+    if(b.dataset.page === 'odd' && !_ofActRaw.length){
+      try{ ofLoadActivity(); }catch(e){ console.warn('activity load', e); }
     }
   });
 });
@@ -1372,6 +1380,153 @@ window.ofMarkRefunded = function(id){
     refundedBy: 'Office'   // الجهاز ده بتاع المالك — مفيش تعدد مستخدمين هنا
   }).catch(function(e){ alert('فشل التسجيل: ' + (e && e.message || e)); });
 };
+
+
+/* ============================================================
+   🕵️ سجل النشاط (Office v45) — التبويب اللي كان "قريبًا"
+   ------------------------------------------------------------
+   ٢٨ نوع حدث بيتكتبوا في pos_activity_log من زمان ومحدش بيقراهم.
+   قصة فاتورة 1444 (فيزا 1610 على 1260) كانت متسجلة بالكامل —
+   الصنف اللي اتشال والتحذير اللي اتأكد — بس مفيش شاشة بتعرضها.
+   ⚠️ **بيتحمّل بدوسة** بنافذة زمنية وحد أقصى: القراءات فلوس،
+      والسجل ده بيكبر أسرع من أي مجموعة تانية.
+   ============================================================ */
+const OF_ACT_LIMIT = 400;
+// وصف بالمصري لكل نوع + تصنيفه + هل هو مقلق (بيتلوّن أحمر)
+const OF_ACT_KINDS = {
+  card_overcharge_saved: { t:'💳 سحب فيزا زيادة اتأكد', g:'money', hot:true },
+  manual_discount:       { t:'🏷️ خصم يدوي', g:'money', hot:true },
+  manual_drawer_open:    { t:'💵 الدرج اتفتح بالإيد', g:'money', hot:true },
+  customer_points_edit:  { t:'🎁 تعديل نقط عميلة', g:'money', hot:true },
+  redeem_value_mismatch: { t:'🎁 فرق في قيمة الاستبدال', g:'money', hot:true },
+  card_saved_manual:     { t:'💳 كارت اتسجل يدوي', g:'money', hot:true },
+  card_payments_cleared: { t:'💳 مدفوعات كارت اتلغت', g:'money' },
+  card_leg_recovered:    { t:'💳 شريحة كارت استرجعت', g:'money' },
+  paymob_terminal_saved: { t:'📟 الماكينة أكّدت', g:'money' },
+  paymob_cancelled:      { t:'📟 طلب ماكينة اتلغى', g:'money' },
+  paymob_stuck:          { t:'📟 الماكينة علّقت', g:'money', hot:true },
+  paymob_stuck_rescue:   { t:'📟 إنقاذ طلب معلّق', g:'money' },
+  paymob_orphan_detected:{ t:'📟 دفعة يتيمة', g:'money', hot:true },
+  same_day_reversal:     { t:'↩️ عكس فاتورة نفس اليوم', g:'money', hot:true },
+  same_day_return:       { t:'↩️ مرتجع نفس اليوم', g:'money' },
+  item_removed:          { t:'🛒 صنف اتشال من السلة', g:'cart' },
+  cart_item_edited:      { t:'🛒 سطر اتعدّل في السلة', g:'cart' },
+  cart_abandoned:        { t:'🛒 سلة اتسابت', g:'cart' },
+  print_latency:         { t:'🖨️ الطباعة اتأخرت', g:'cart' },
+  rate_request_manual:   { t:'⭐ طلب تقييم يدوي', g:'cart' },
+  customer_name_edit:    { t:'👤 تعديل اسم عميلة', g:'cart' },
+  inventory_wiped:       { t:'📦 المخزون اتمسح', g:'stock', hot:true },
+  inventory_merge:       { t:'📦 دمج صنف', g:'stock' },
+  inventory_merge_bulk:  { t:'📦 دمج جماعي', g:'stock', hot:true },
+  inventory_claimed:     { t:'📦 صنف اتنسب لفرع', g:'stock' },
+  import_qty_adjusted:   { t:'📥 كمية اتعدّلت في الاستيراد', g:'stock' },
+  import_qty_moved:      { t:'📥 كمية اتنقلت', g:'stock' },
+  import_excluded_missing:{ t:'📥 صنف اتستبعد', g:'stock' }
+};
+function ofActLabel(type){
+  const k = OF_ACT_KINDS[type];
+  return k ? k.t : ('• ' + String(type || '—'));
+}
+// تفاصيل الحدث بالعربي — الحقول بتختلف من نوع لنوع
+function ofActDetail(a){
+  const p = [];
+  if(a.name) p.push(esc(a.name) + (a.qty ? ' ×' + a.qty : ''));
+  if(a.price != null) p.push(ofMoney(a.price));
+  if(a.diff != null) p.push('فرق ' + ofMoney(a.diff));
+  if(a.charged != null && a.total != null)
+    p.push('مسحوب ' + ofMoney(a.charged) + ' على ' + ofMoney(a.total));
+  if(a.amount != null) p.push(ofMoney(a.amount));
+  if(a.invoiceCode) p.push('🧾 ' + esc(a.invoiceCode));
+  if(a.reason) p.push(esc(a.reason));
+  if(a.count != null) p.push(a.count + ' صنف');
+  if(a.ms != null) p.push(Math.round(a.ms / 1000) + ' ث');
+  return p.join(' · ');
+}
+// فلترة نقية — قابلة للاختبار من غير DOM ولا Firestore
+function ofActFilter(list, opts){
+  opts = opts || {};
+  const q = String(opts.q || '').trim().toLowerCase();
+  const grp = opts.group || '';
+  return (list || []).filter(function(a){
+    if(!a) return false;
+    if(grp){
+      const k = OF_ACT_KINDS[a.type];
+      if(!k || k.g !== grp) return false;
+    }
+    if(q){
+      const hay = [a.employeeName, a.branch, a.name, a.invoiceCode,
+                   ofActLabel(a.type)].join(' ').toLowerCase();
+      if(hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  }).sort(function(x, y){ return (y.ts || 0) - (x.ts || 0); });
+}
+window.ofActFilter = ofActFilter;
+window.ofActLabel = ofActLabel;
+
+async function ofLoadActivity(){
+  const body = document.getElementById('actBody');
+  const days = +(document.getElementById('actDays') || {}).value || 7;
+  if(body) body.innerHTML = '<div class="empty">⏳ بيحمّل...</div>';
+  try{
+    // ⚠️ نافذة زمنية + limit: من غيرهم السجل ده لوحده بياكل القراءات
+    const snap = await db.collection('pos_activity_log')
+      .where('ts', '>=', Date.now() - days * 24 * 60 * 60 * 1000)
+      .orderBy('ts', 'desc').limit(OF_ACT_LIMIT).get();
+    _ofActRaw = snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    ofRenderActivity();
+  }catch(e){
+    console.warn('activity', e);
+    if(body) body.innerHTML = '<div class="empty">⚠️ مش قادر يحمّل: ' + esc(e && e.message || e)
+      + '<br><span style="font-size:11px;">لو الرسالة فيها index — افتح اللينك اللي في الكونسول مرة واحدة.</span></div>';
+  }
+}
+window.ofLoadActivity = ofLoadActivity;
+
+function ofRenderActivity(){
+  const body = document.getElementById('actBody');
+  const sum = document.getElementById('actSummary');
+  if(!body) return;
+  const list = ofActFilter(_ofActRaw, {
+    q: (document.getElementById('actSearch') || {}).value,
+    group: (document.getElementById('actKind') || {}).value
+  });
+  if(sum){
+    const hot = list.filter(function(a){
+      const k = OF_ACT_KINDS[a.type]; return k && k.hot; }).length;
+    sum.innerHTML = '<div class="muted" style="font-size:12px; margin-bottom:6px;">'
+      + list.length + ' حدث'
+      + (hot ? ' · <b style="color:#dc2626;">' + hot + ' محتاجين نظرة</b>' : '')
+      + (_ofActRaw.length >= OF_ACT_LIMIT ? ' · <b>(وصلنا حد الـ' + OF_ACT_LIMIT + ' — ضيّق المدة)</b>' : '')
+      + '</div>';
+  }
+  if(!list.length){ body.innerHTML = '<div class="empty">مفيش حاجة في المدة دي 👌</div>'; return; }
+  body.innerHTML = list.map(function(a){
+    const k = OF_ACT_KINDS[a.type];
+    const hot = !!(k && k.hot);
+    const det = ofActDetail(a);
+    return '<div style="border-right:4px solid ' + (hot ? '#dc2626' : 'var(--line)')
+      + '; background:' + (hot ? 'rgba(220,38,38,.05)' : 'transparent')
+      + '; border-radius:8px; padding:7px 9px; margin-bottom:6px;">'
+      + '<div style="font-weight:800; font-size:13px;">' + esc(ofActLabel(a.type)) + '</div>'
+      + (det ? '<div style="font-size:12.5px; margin-top:2px;">' + det + '</div>' : '')
+      + '<div class="muted" style="font-size:11px; margin-top:3px;">'
+      + '🏬 ' + esc(a.branch || '—') + ' · 🧑‍💼 ' + esc(a.employeeName || '—')
+      + ' · ' + new Date(a.ts || 0).toLocaleString('ar-EG') + '</div></div>';
+  }).join('');
+}
+window.ofRenderActivity = ofRenderActivity;
+
+(function(){
+  const load = document.getElementById('actLoad');
+  if(load) load.addEventListener('click', function(){ ofLoadActivity(); });
+  const s = document.getElementById('actSearch');
+  if(s) s.addEventListener('input', function(){ ofRenderActivity(); });
+  const k = document.getElementById('actKind');
+  if(k) k.addEventListener('change', function(){ ofRenderActivity(); });
+  const d = document.getElementById('actDays');
+  if(d) d.addEventListener('change', function(){ ofLoadActivity(); });
+})();
 
 function startData(){
   if(started) return; started = true;
