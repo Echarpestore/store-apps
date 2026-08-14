@@ -380,7 +380,11 @@ searchBar.addEventListener('keydown', (e)=>{
 });
 
 function addToCart(item){
-  if(!cart.length) _cartFirstItemAt = Date.now();   // 🕵️ بداية السلة
+  // 🕵️ v296: مع أول قطعة بيتولد **معرّف سلة** بيتحط على كل حدث بيحصل
+  //    فيها. لما الفاتورة تتحفظ بيتسجل حدث ربط (sid ← رقم الفاتورة)،
+  //    فسجل النشاط في Office بيقدر يقول لكل حدث الفاتورة بتاعته —
+  //    وقت الحدث نفسه الفاتورة لسه مالهاش رقم أصلًا.
+  if(!cart.length){ _cartFirstItemAt = Date.now(); _cartSid = _newCartSid(); }
   // البيع مسموح دايمًا حتى لو المخزون مايكفيش (الكمية تنزل بالسالب)
   // 🔑 `noSplit` مش موجودة على السطور العادية — بس السطر اللي الكاشير فصلته
   //    بإيدها (عشان تخصم على قطعة واحدة) بيتعلّم `noMerge` وبيتستثنى من الدمج،
@@ -561,12 +565,14 @@ function captureSaleState(){
     total: cart.reduce((s,c)=> s + c.price*c.qty, 0),
     // سياق الفاتورة دي يتحفظ معاها عشان ما يختلطش مع فاتورة/هولد تاني
     firstItemAt: _cartFirstItemAt,
+    cartSid: _cartSid,
     pendingRedemption: (typeof pendingRedemption !== 'undefined') ? pendingRedemption : null,
     appliedReward:     (typeof appliedReward     !== 'undefined') ? appliedReward     : null
   };
 }
 function clearSaleState(){
   _cartFirstItemAt = null;
+  _cartSid = null;               // 🕵️ سلة جديدة = معرّف جديد (مش بيتوارث)
   // 🔒 أي متابعة دفع بالكارت من العملية اللي فاتت لازم تتقفل مع السلة الجديدة
   try{ paymobReset(); }catch(e){}
   cart = [];
@@ -580,6 +586,7 @@ function clearSaleState(){
 }
 function restoreSaleState(s){
   _cartFirstItemAt = s.firstItemAt || Date.now();
+  _cartSid = s.cartSid || _newCartSid();   // 🕵️ نفس القصة قبل وبعد التعليق
   cart = s.items || [];
   selectedCartIdx = null;
   // نصفّر أي بقايا من الفاتورة اللي كانت مفتوحة قبلها، وبعدين نرجّع سياق الفاتورة دي بالظبط
@@ -1782,6 +1789,11 @@ async function loadStaffPointsConfig(){
 }
 // 🕵️ العلبة السودا: تسجيل صامت لأحداث السلة (لتبويب نشاط غريب لاحقًا) — صفر تأثير على الشغل
 let _cartFirstItemAt = null;   // وقت أول قطعة في السلة الحالية
+let _cartSid = null;           // 🕵️ معرّف السلة الحالية (بيربط أحداثها بالفاتورة)
+function _newCartSid(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+window._newCartSid = _newCartSid;
 let _saleJustSaved = false;    // عشان نفرّق مسح-بعد-حفظ (طبيعي) عن مسح-وهروب
 /* 💳↩️ v295: فاتورة 1444 (فيزا 1610 على 1260) — التحذير كان موجود
    والكاشير أكّد والدنيا مشيت. الفرق بيتسجل دلوقتي في مجموعة متابعة
@@ -1818,6 +1830,9 @@ function _logActivity(type, data){
       type, branch: currentBranch,
       employeeId: (currentEmployee&&currentEmployee.id)||'',
       employeeName: (currentEmployee&&currentEmployee.name)||'',
+      // 🕵️ معرّف السلة على كل حدث — من غيره الأحداث أيتام مش معروف
+      //    تخص أنهي فاتورة (وقت وقوعها الفاتورة لسه مالهاش رقم)
+      sid: _cartSid || null,
       ts: Date.now(), ...data
     }).catch(()=>{});
   }catch(e){}
@@ -2120,6 +2135,7 @@ async function reverseReceipt(saleId){
       items: sale.items,
       itemCount: -(sale.itemCount||0),
       total: -(sale.total||0),
+      cartSid: _cartSid || null,             // 🕵️ رابط أحداث السلة دي بالفاتورة
       createdAtMs: Date.now(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }));
@@ -3559,7 +3575,9 @@ async function confirmPayment(){
         + 'زيادة ' + _over.toFixed(2) + ' ج.م لازم تترد بمرتجع من Paymob — مش من الدرج.\n\n'
         + 'تحفظ الفاتورة بالمبلغ ده؟');
       if(!ok) return;
-      if(typeof _logActivity === 'function') _logActivity('card_overcharge_saved', {
+      // ⚠️ ده وقت **التأكيد** (قبل الحفظ) — الفاتورة لسه مالهاش رقم.
+      //    الحدث اللي فيه الرقم بيتسجل بعد الحفظ باسم card_overcharge_saved.
+      if(typeof _logActivity === 'function') _logActivity('card_overcharge_ok', {
         charged: Math.abs(cardApprovedSum(cardLegs)), total: Math.abs(cartTotal()), diff: _over
       });
     }
@@ -3736,10 +3754,20 @@ window.returnPointsDeduction = returnPointsDeduction;
       cardTxns: (paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : null,
       // 📴 طابع وقت محلي: serverTimestamp بيفضل null لحد ما فاتورة الأوفلاين تترفع،
       // فكانت بتختفي من التقفيل والتقارير وهي كاشها في الدرج. ده البديل الفوري.
+      cartSid: _cartSid || null,             // 🕵️ رابط أحداث السلة دي بالفاتورة
       createdAtMs: Date.now(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }));
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
+
+    // 🕵️ v296: حدث الربط — بيدي لكل أحداث السلة دي رقم فاتورتها.
+    //    لازم **بعد** الحفظ: قبل كده الفاتورة مالهاش رقم من الأساس.
+    try{
+      _logActivity('sale_saved', {
+        invoiceCode: invoiceCode, invoiceNo: invoiceNo,
+        total: total, itemCount: itemCount
+      });
+    }catch(e){}
 
     // 💳↩️ v295: اتسحب من الكروت أكتر من الفاتورة (اتأكد صراحةً فوق) —
     //    مستند متابعة ظاهر في Office لحد ما الفرق يترد لصاحبته من Paymob.
@@ -3751,7 +3779,17 @@ window.returnPointsDeduction = returnPointsDeduction;
         employeeId: (currentEmployee && currentEmployee.id) || '',
         employeeName: (currentEmployee && currentEmployee.name) || ''
       });
-      if(_due) db.collection('pos_card_refunds_due').add(_due).catch(function(){});
+      if(_due){
+        db.collection('pos_card_refunds_due').add(_due).catch(function(){});
+        // ونفس المعلومة في سجل النشاط بالرقم — الحدث القديم كان بيتسجل
+        //    قبل الحفظ فطلع من غير رقم فاتورة (اتشاف في Office فعلًا)
+        _logActivity('card_overcharge_saved', {
+          charged: _due.charged, total: _due.invoiceTotal, diff: _due.diff,
+          invoiceCode: invoiceCode,
+          customerPhone: _due.customerPhone || '',
+          txnId: (_due.txns[0] && _due.txns[0].txnId) || null
+        });
+      }
     }catch(e){ console.warn('refund due', e); }
 
     // ============================================================
