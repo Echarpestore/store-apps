@@ -176,6 +176,8 @@ const OPS = [
     '⭐⭐ التطبيق مايكتبش في الدفتر — الدوال بس'],
   ['POS', 'pos_card_refunds_due', 'create', STAFF, true,
     'pos-sale.js — فرق فيزا مسحوب زيادة بيتسجل للمتابعة (فاتورة 1444)'],
+  ['Office', 'pos_activity_log', 'list', STAFF, true,
+    'office.js — تبويب سجل النشاط بيقرا الأحداث'],
   ['Office', 'pos_card_refunds_due', 'list', STAFF, true,
     'office.js — قايمة المستحق في تبويب الفلوس'],
   ['POS',    'credit_ledger', 'create', STAFF, false,

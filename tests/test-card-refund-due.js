@@ -168,5 +168,90 @@ const extractFn = (src, sig) => {
   const posSw = fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8');
   const ofSw = fs.readFileSync(path.join(ROOT, 'Office', 'sw.js'), 'utf8');
   assert(posSw.indexOf('store-apps-shell-v295') > -1, 'POS → v295');
-  assert(ofSw.indexOf('echarpe-office-v44') > -1, 'Office → v44');
+  assert(ofSw.indexOf('echarpe-office-v45') > -1, 'Office → v45');
+}
+
+// ============================================================
+// ٧) 🕵️ سجل النشاط في Office (v45) — التبويب اللي كان "قريبًا"
+// ------------------------------------------------------------
+// قصة 1444 كانت متسجلة بالكامل (الصنف اللي اتشال + التحذير اللي
+// اتأكد) — بس مفيش شاشة بتعرضها. ٢٨ نوع حدث بيتكتبوا من زمان.
+// ============================================================
+{
+  const code = strip(office);
+
+  /* ١) كل نوع بيتكتب من POS ليه وصف في الجدول — وإلا يظهر كود إنجليزي */
+  const logged = {};
+  [posSale, posApp,
+   fs.readFileSync(path.join(ROOT, 'pos', 'products.js'), 'utf8')]
+    .forEach(function(f){
+      (f.match(/_logActivity\(\s*'([a-z_]+)'/g) || []).forEach(function(m){
+        logged[m.replace(/.*'([a-z_]+)'.*/, '$1')] = 1;
+      });
+    });
+  const known = Object.keys(logged).filter(function(t){
+    return code.indexOf(t + ':') > -1 || code.indexOf(t + ' ') > -1;
+  });
+  assert(Object.keys(logged).length > 15, 'لقينا أنواع الأحداث في POS');
+  Object.keys(logged).forEach(function(t){
+    assert(code.indexOf(t) > -1,
+      '🔎 نوع الحدث `' + t + '` ليه وصف بالعربي في جدول Office — نوع جديد من غير وصف بيظهر كود إنجليزي للمالك');
+  });
+  assert(known.length > 0, 'الجدول متقروء');
+
+  /* ٢) الحدث بتاع 1444 تحديدًا موصوف ومتعلّم كمقلق */
+  const kinds = code.slice(code.indexOf('const OF_ACT_KINDS'),
+                           code.indexOf('function ofActLabel'));
+  assert(kinds.indexOf('card_overcharge_saved') > -1 && /card_overcharge_saved[^\n]*hot:\s*true/.test(kinds),
+    '🔴 سحب الفيزا الزيادة متعلّم "محتاج نظرة" — مش سطر عادي وسط ٤٠٠ حدث');
+  ['manual_drawer_open', 'inventory_wiped', 'manual_discount', 'customer_points_edit']
+    .forEach(function(t){
+      assert(new RegExp(t + '[^\\n]*hot:\\s*true').test(kinds),
+        'و`' + t + '` كذلك (حدث حساس)');
+    });
+  assert(/item_removed[^\n]*g:\s*'cart'/.test(kinds),
+    'وشيل الصنف من السلة (اللي حصل في 1444) مصنّف تحت السلة');
+
+  /* ٣) القراءة محدودة — السجل ده أسرع مجموعة في النمو */
+  const ld = extractFn(code, 'async function ofLoadActivity()');
+  assert(ld.indexOf("where('ts', '>=',") > -1 && ld.indexOf('days * 24 * 60 * 60 * 1000') > -1,
+    '🔴 نافذة زمنية من المستخدم — مش السجل كله');
+  assert(ld.indexOf('.limit(OF_ACT_LIMIT)') > -1 && code.indexOf('OF_ACT_LIMIT = 400') > -1,
+    '🔴 وسقف ٤٠٠ مستند — نافذة من غير سقف لسه ممكن تجيب عشرات الآلاف');
+  assert(code.indexOf("b.dataset.page === 'odd' && !_ofActRaw.length") > -1,
+    'والتحميل بفتح التبويب مرة واحدة — مش مستمع شغال طول الوقت');
+
+  /* ٤) 🔴 TDZ — الدرس الموثّق: `let` مبتترفعش */
+  const decl = code.indexOf('let _ofActRaw');
+  const use = code.indexOf("'odd' && !_ofActRaw.length");
+  assert(decl > -1 && use > -1 && decl < use,
+    '🔴 `_ofActRaw` متعرّف **قبل** هاندلر التبويب اللي بيقراه — نفس باج OF_RECUR_COL');
+
+  /* ٥) الفلترة: دالة نقية بنشغّلها فعلًا */
+  const fl = extractFn(code, 'function ofActFilter(list, opts)');
+  const lb = extractFn(code, 'function ofActLabel(type)');
+  const kindsObj = code.slice(code.indexOf('const OF_ACT_KINDS'),
+                              code.indexOf('function ofActLabel'));
+  const api = new Function('esc',
+    kindsObj + lb + fl + '\nreturn ofActFilter;')(function(x){ return x; });
+  const sample = [
+    { type:'card_overcharge_saved', ts:300, branch:'الرحاب', employeeName:'Rawan', diff:350 },
+    { type:'item_removed', ts:200, branch:'الرحاب', employeeName:'Rawan', name:'قطن تايلاندي' },
+    { type:'inventory_wiped', ts:100, branch:'مدينتي', employeeName:'سارة' }
+  ];
+  assert(api(sample, {}).map(function(a){ return a.ts; }).join() === '300,200,100',
+    'الأحدث فوق (ترتيب تنازلي بالوقت)');
+  assert(api(sample, { group:'money' }).length === 1,
+    'فلتر «فلوس بس» بيجيب حدث الفيزا لوحده');
+  assert(api(sample, { group:'stock' })[0].type === 'inventory_wiped',
+    'وفلتر المخزون بيجيب مسح المخزون');
+  assert(api(sample, { q:'قطن' }).length === 1,
+    'والبحث بيلاقي الصنف اللي اتشال بالاسم');
+  assert(api(sample, { q:'رawan'.replace('ر','R') }).length === 2,
+    'والبحث باسم الموظفة بيجيب أحداثها');
+  assert(api(sample, { q:'مدينتي' })[0].branch === 'مدينتي', 'وبالفرع كذلك');
+  assert(api(sample, { q:'حاجة_مش_موجودة' }).length === 0, 'وبحث فاضي = صفر');
+  // 🔴 نيجاتيف: الفلتر والبحث مع بعض لازم يتطبقوا الاتنين
+  assert(api(sample, { group:'money', q:'مدينتي' }).length === 0,
+    '🔴 الفلتر والبحث بيتجمعوا (AND) — مش واحد بيلغي التاني');
 }
