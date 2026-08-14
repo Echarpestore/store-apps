@@ -500,8 +500,11 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
     'سكريبتات الشبكة متحملة');
   assert(app.indexOf('TRYON_MESH.init') > -1 && app.indexOf('TRYON_MESH.update(') > -1,
     'واللايف بيرندر بيها');
-  assert(app.indexOf("S.mesh && S.scarf.type === 'photo' && S.mode === 'live'") > -1,
-    'الشبكة للايف على أصل الصورة بس — الصورة الثابتة والفولباك بالمسطح');
+  // v22: الشبكة بقت في الوضعين (الصورة الثابتة هي الأولوية) —
+  //      القيد الباقي إنها لأصل مصوّر بس (الطرحة المرسومة بالمسطح)
+  assert(app.indexOf("Tr && S.mesh && S.scarf.type === 'photo'") > -1
+      && app.indexOf("S.scarf.type === 'photo' && S.mode === 'live'") === -1,
+    'الشبكة للوضعين على أصل الصورة بس — والطرحة المرسومة بالمسطح');
   assert(app.indexOf('if(S.mesh) TRYON_MESH.clear();') > -1,
     'مفيش وش = الشبكة بتتمسح');
 })();
@@ -740,7 +743,7 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
       && html.indexOf('tryon-core.js') < html.indexOf('tryon-3d-core.js'),
     'ترتيب التحميل: الكور قبل كور الـ3D (بيستعمل أفيني ٣ نقط بتاعه)');
 
-  assert(sw.indexOf("echarpe-tryon-v21") > -1 && appC.indexOf("'v21'") > -1,
+  assert(sw.indexOf("echarpe-tryon-v22") > -1 && appC.indexOf("'v22'") > -1,
     'النسخة اتحدّثت في sw والكونسول (من غيرها الجهاز يفضل على القديم)');
 })();
 
@@ -1031,7 +1034,7 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
     '🔴 والطريقة الخطرة (flood على الأبيض بياكل القماش البيج) مش موجودة');
   assert(ph.indexOf('if(!res.holePx) return img;') > -1,
     'مفيش فتحة تحت البذرة = الأصل يرجع زي ما هو');
-  assert(code.indexOf('asset.head = processHeadImage(hi, scarf);') > -1,
+  assert(code.indexOf('asset.head = processHeadImage(hi, scarf, asset);') > -1,
     'والمعالجة على مسار التحميل فعلًا');
   // الأصل بقى ممكن يبقى كانفاس — naturalWidth مش موجودة فيه
   const et = extractFn(code, 'function ensureTint(');
@@ -1204,4 +1207,121 @@ const PR = require(path.resolve(__dirname, '..', 'tryon', 'prep-core.js'));
   assert(html.indexOf('أداة داخلية') > -1, 'ومكتوب عليها إنها مش للعميلات');
   assert(sw.indexOf("'./prep.html', './prep-core.js'") > -1,
     'والأداة في كاش الـsw (تشتغل أوفلاين في المخزن)');
+})();
+
+// ============================================================
+// ٢٣) 🫥 v22 — الفتحة العضوية (الفتحة بتاخد شكل وش العميلة)
+// ============================================================
+const TMC = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'));
+(function(){
+  /* ١) محيط الوش من المعالم */
+  const lm = new Array(478).fill(0).map((_, i) => ({ x: (i % 100) / 100, y: (i % 77) / 77 }));
+  const fc = T.faceContourFromLandmarks(lm, 200, 100);
+  assertEq(fc.length, 9, '٩ نقط على محيط الوش (جبهة/صدغ/خد/فك/دقن ×٢)');
+  assertEq(fc[0], [ lm[103].x * 200, lm[103].y * 100 ], 'وبمعالم MediaPipe الصح');
+  assert(T.FACE_CONTOUR.indexOf(152) > -1 && T.FACE_CONTOUR.indexOf(172) > -1
+      && T.FACE_CONTOUR.indexOf(397) > -1,
+    'الدقن والفكين جوه المحيط — منطقة تحت الدقن (أهم مشكلة) متغطية');
+
+  /* ٢) عكس الأفيني في الكور */
+  const A2 = { a: 1.4, b: -0.3, c: 20, d: 0.2, e: 1.7, f: -8 };
+  const I2 = T.invertAffine(A2);
+  const fx = A2.a * 5 + A2.b * 9 + A2.c, fy = A2.d * 5 + A2.e * 9 + A2.f;
+  assert(near(I2.a * fx + I2.b * fy + I2.c, 5, 1e-9)
+      && near(I2.d * fx + I2.e * fy + I2.f, 9, 1e-9), 'ذهاب ورجوع = نفس النقطة');
+  assertEq(T.invertAffine({ a:2, b:4, c:0, d:1, e:2, f:0 }), null, 'منهار = null');
+
+  /* ٣) محيط الفتحة من featherHoleEdge */
+  (function(){
+    const w = 80, h = 80;
+    const d = new Uint8ClampedArray(w * h * 4);
+    for(let i = 3; i < d.length; i += 4) d[i] = 255;
+    for(let y = 0; y < h; y++)
+      for(let x = 0; x < w; x++)
+        if(Math.hypot(x - 40, y - 40) <= 14) d[(y*w+x)*4+3] = 0;   // فتحة دايرة
+    const res = T.featherHoleEdge(d, w, h, [40, 40], { feather: 2, contourK: 16 });
+    assert(res.holePx > 500, 'الفتحة اتلقت');
+    assert(near(res.centroid[0], 40, 1.5) && near(res.centroid[1], 40, 1.5),
+      'المركز في مكانه');
+    assertEq(res.radii.length, 16, 'ونصف قطر لكل زاوية');
+    for(let k = 0; k < 16; k++)
+      assert(near(res.radii[k], 14, 2.5), 'فتحة دايرة = أنصاف أقطار متساوية تقريبًا');
+    // من غير contourK = مفيش شغل زيادة
+    const d2 = new Uint8ClampedArray(w * h * 4);
+    for(let i = 3; i < d2.length; i += 4) d2[i] = 255;
+    for(let y = 30; y < 50; y++) for(let x = 30; x < 50; x++) d2[(y*w+x)*4+3] = 0;
+    const r2 = T.featherHoleEdge(d2, w, h, [40, 40], { feather: 2 });
+    assert(r2.holePx > 0 && !r2.radii, 'من غير الطلب = مفيش محيط (مفيش حساب ببلاش)');
+  })();
+
+  /* ٤) الاستيفاء الدائري */
+  const cont = { radii: new Float32Array([10, 20, 10, 20]) };
+  assert(near(T.holeRadiusAt(cont, 0), 10, 1e-6), 'على العيّنة نفسها');
+  assert(near(T.holeRadiusAt(cont, Math.PI / 4), 15, 1e-6), 'وبين عيّنتين = النص');
+  assert(near(T.holeRadiusAt(cont, 2 * Math.PI - Math.PI / 4), 15, 1e-6),
+    '🔴 واللفة بتقفل — آخر عيّنة بتستوفي مع الأولى مش بتقف');
+  assert(near(T.holeRadiusAt(cont, -Math.PI / 4), 15, 1e-6), 'وزاوية سالبة شغالة');
+
+  /* ٥) شد الشبكة (contourWarp) */
+  (function(){
+    const grid = TMC.buildGrid(100, 100, 4, 4, 50);
+    const mk = () => grid.pts.map((p) => ({ x: p.ax, y: p.ay }));
+    const t1 = mk();
+    // شد نقطة (50,50) عشرين بكسل يمين
+    TMC.contourWarp(t1, grid, [{ from: { x: 50, y: 50 }, to: { x: 70, y: 50 } }], 60);
+    const iMid = grid.pts.findIndex((p) => p.ax === 50 && p.ay === 50);
+    const iFar = grid.pts.findIndex((p) => p.ax === 0 && p.ay === 0);
+    assert(near(t1[iMid].x, 70, 0.5), 'الرأس على نقطة الشد بيوصل للهدف بالظبط');
+    assert(near(t1[iFar].x, 0, 3), 'والبعيد (برّه نصف قطر التأثير تقريبًا) ولا هو حاسس');
+    const iNear = grid.pts.findIndex((p) => p.ax === 50 && p.ay === 25);
+    assert(t1[iNear].x > 52 && t1[iNear].x < 69, 'وبينهم انتقال متدرّج');
+    // من غير أزواج = مفيش لمس
+    const t2 = mk();
+    TMC.contourWarp(t2, grid, [], 60);
+    assert(t2.every((p, i) => p.x === grid.pts[i].ax), 'أزواج فاضية = no-op');
+    TMC.contourWarp(t2, grid, null, 60);
+    assert(t2.every((p, i) => p.x === grid.pts[i].ax), 'وnull برضه');
+  })();
+
+  /* ٦) التوصيلات */
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const mesh = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh.js'), 'utf8');
+  const strip = (x) => x.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = strip(app), meshC = strip(mesh);
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  // الشبكة بقت في الوضعين — ده جوهر "الصورة الأول"
+  assert(code.indexOf("S.scarf.type === 'photo' && S.mode === 'live'") === -1,
+    "🔴 قيد اللايف اتشال — وضع الصورة كان واخد الأفيني المسطح وهو الأولوية");
+  const iw = meshC.indexOf('TM.contourWarp(targets, M.grid, pairs, warpR);');
+  assert(iw > -1, 'الرندرر بيطبّق الشد');
+  assert(iw < meshC.indexOf('TM.yawWarp(') && iw < meshC.indexOf('TM.step('),
+    '🔴 الشد قبل اللفة والفيزياء — جزء من المكان الطبيعي مش تأثير فوقه');
+
+  const cp = extractFn(code, 'function contourPairs(');
+  assert(cp.indexOf('T.invertAffine(Tr)') > -1 && cp.indexOf('T.holeRadiusAt(') > -1,
+    'الأزواج: عكس الأفيني + حافة الفتحة عند نفس الزاوية');
+  assert(cp.indexOf('S.smContour[i].push(raw[i])') > -1,
+    '🔴 محيط الوش متنعّم — من غيره الفتحة ترعش مع كل فريم في اللايف');
+  const mOut = cp.match(/const OUT = ([\d.]+)/);
+  assert(!!mOut && parseFloat(mOut[1]) > 1.0 && parseFloat(mOut[1]) <= 1.12,
+    '🔴 الهدف موسّع فعلًا للبرّه (>1) — القماش يركب على حرف الوش مش يقف عنده بالظبط');
+  assert(code.indexOf('asset.holeContour = { c: res.centroid, radii: res.radii }') > -1
+      && code.indexOf('contourK: 32') > -1,
+    'ومحيط الفتحة بيتخزن على الأصل وقت التحميل');
+  assert(code.indexOf('S.smContour.forEach((sm) => sm.reset());') > -1,
+    'وتبديل الوضع بيصفّر تنعيم المحيط');
+  assert(code.indexOf('window.TRYON_DEBUG') > -1
+      && extractFn(code, 'function debugContour(').indexOf('p.from.x') > -1,
+    '§ديبج: TRYON_DEBUG بيرسم أزواج الشد للمعايرة');
 })();
