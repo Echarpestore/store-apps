@@ -573,6 +573,8 @@ function captureSaleState(){
 function clearSaleState(){
   _cartFirstItemAt = null;
   _cartSid = null;               // 🕵️ سلة جديدة = معرّف جديد (مش بيتوارث)
+  _cardFirstApprovedAt = null;   // 🕵️ وسحب الكارت القديم مالوش علاقة بالسلة الجديدة
+  _cartEditsAfterCard = [];
   // 🔒 أي متابعة دفع بالكارت من العملية اللي فاتت لازم تتقفل مع السلة الجديدة
   try{ paymobReset(); }catch(e){}
   cart = [];
@@ -664,6 +666,10 @@ function cartRemove(idx){
   if(idx < 0 || idx >= cart.length) return;
   const _rm = cart[idx];
   _logActivity('item_removed', { name:_rm.name||'', qty:_rm.qty||1, price:_rm.price||0, cartCountAfter: cart.length-1 });
+  // 🕵️ v297: اتشال **بعد** ما الكارت اتسحب؟ يبقى ده سبب الفرق —
+  //    بيتحفظ عشان حدث السحب الزيادة يقول ليه بدل ما المالك يدوّر
+  _trackEditAfterCard('شيل', _rm.name || '', _rm.qty || 1,
+    (Number(_rm.price) || 0) * (Number(_rm.qty) || 1));
   cart.splice(idx, 1);
   if(selectedCartIdx === idx) selectedCartIdx = null;
   else if(selectedCartIdx !== null && selectedCartIdx > idx) selectedCartIdx--;
@@ -1133,6 +1139,12 @@ function qbxEditSel(){
         from: base, to: out.unit, qty: v.qty, pct: v.pct || 0
       });
     }
+    // 🕵️ v297: تعديل سعر/كمية بعد سحب الكارت بيقلّل الفاتورة كمان —
+    //    القيمة = النقص الفعلي (لو زاد مش سبب لفرق)
+    try{
+      const _drop = +((base * (line.qty || 1)) - (out.unit * (v.qty || 1))).toFixed(2);
+      if(_drop > 0) _trackEditAfterCard('تعديل', line.name || '', v.qty || 1, _drop);
+    }catch(e){}
     close();
     renderCart();
     showToast('✏️ اتعدّل: ' + line.name + ' → ' + out.unit.toFixed(2) + ' × ' + v.qty
@@ -1790,6 +1802,34 @@ async function loadStaffPointsConfig(){
 // 🕵️ العلبة السودا: تسجيل صامت لأحداث السلة (لتبويب نشاط غريب لاحقًا) — صفر تأثير على الشغل
 let _cartFirstItemAt = null;   // وقت أول قطعة في السلة الحالية
 let _cartSid = null;           // 🕵️ معرّف السلة الحالية (بيربط أحداثها بالفاتورة)
+let _cardFirstApprovedAt = null;  // 🕵️ لحظة أول موافقة كارت في السلة دي
+let _cartEditsAfterCard = [];     // 🕵️ التعديلات اللي حصلت **بعد** السحب = سبب الفرق
+// 🕵️ v297: تعديل بعد سحب الكارت = سبب محتمل لفرق مسحوب زيادة.
+//    الفلترة بالوقت: تعديل قبل السحب مالوش علاقة بالفرق.
+function _trackEditAfterCard(kind, name, qty, value){
+  if(!_cardFirstApprovedAt) return;              // لسه مفيش فلوس اتسحبت
+  _cartEditsAfterCard.push({ kind: kind, name: String(name || ''),
+    qty: Number(qty) || 0, value: +(Number(value) || 0).toFixed(2), ts: Date.now() });
+}
+window._trackEditAfterCard = _trackEditAfterCard;
+
+// وصف السبب بالمصري: "حرير سادة سواريه ×1 (350)" — والمجموع بيتقارن
+// بالفرق: لو مطابق يبقى ده السبب الكامل، لو مش مطابق فيه حاجة تانية.
+function cardOverCause(edits, diff){
+  const list = (edits || []).filter(function(e){ return e && e.value > 0; });
+  if(!list.length) return null;
+  const sum = +list.reduce(function(n, e){ return n + e.value; }, 0).toFixed(2);
+  return {
+    text: list.map(function(e){
+      return e.kind + ' ' + e.name + (e.qty > 1 ? ' ×' + e.qty : '') + ' (' + e.value + ')';
+    }).join(' · '),
+    sum: sum,
+    exact: Math.abs(sum - (Number(diff) || 0)) <= 0.005,
+    items: list
+  };
+}
+window.cardOverCause = cardOverCause;
+
 function _newCartSid(){
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
@@ -3084,6 +3124,11 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
         });
       }
       _leg.status = 'approved'; _leg.txn = _txn; _leg.ref = orderRef;
+      _leg.approvedAt = Date.now();
+      // 🕵️ v297: من اللحظة دي الفلوس اتسحبت فعلًا — أي تعديل في السلة
+      //    بعدها هو **سبب** أي فرق. بنسجّل اللحظة عشان نعرف نفرّق بين
+      //    تعديل قبل السحب (عادي) وتعديل بعده (بيخلي العميلة دافعة زيادة).
+      if(!_cardFirstApprovedAt) _cardFirstApprovedAt = _leg.approvedAt;
       paymobCardTxns = (cardLegs || []).filter(function(l){ return l.status === 'approved' && l.txn; })
                                        .map(function(l){ return l.txn; });
       window.paymobCardTxns = paymobCardTxns;
@@ -3780,14 +3825,21 @@ window.returnPointsDeduction = returnPointsDeduction;
         employeeName: (currentEmployee && currentEmployee.name) || ''
       });
       if(_due){
+        const _c0 = cardOverCause(_cartEditsAfterCard, _due.diff);
+        if(_c0){ _due.cause = _c0.text; _due.causeExact = _c0.exact; }
         db.collection('pos_card_refunds_due').add(_due).catch(function(){});
         // ونفس المعلومة في سجل النشاط بالرقم — الحدث القديم كان بيتسجل
         //    قبل الحفظ فطلع من غير رقم فاتورة (اتشاف في Office فعلًا)
+        const _cause = cardOverCause(_cartEditsAfterCard, _due.diff);
         _logActivity('card_overcharge_saved', {
           charged: _due.charged, total: _due.invoiceTotal, diff: _due.diff,
           invoiceCode: invoiceCode,
           customerPhone: _due.customerPhone || '',
-          txnId: (_due.txns[0] && _due.txns[0].txnId) || null
+          txnId: (_due.txns[0] && _due.txns[0].txnId) || null,
+          // 🕵️ v297: **ليه** حصل الفرق — التعديلات اللي بعد السحب
+          cause: _cause ? _cause.text : null,
+          causeSum: _cause ? _cause.sum : null,
+          causeExact: _cause ? _cause.exact : null
         });
       }
     }catch(e){ console.warn('refund due', e); }
