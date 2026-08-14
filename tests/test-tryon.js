@@ -743,7 +743,7 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
       && html.indexOf('tryon-core.js') < html.indexOf('tryon-3d-core.js'),
     'ترتيب التحميل: الكور قبل كور الـ3D (بيستعمل أفيني ٣ نقط بتاعه)');
 
-  assert(sw.indexOf("echarpe-tryon-v29") > -1 && appC.indexOf("'v29'") > -1,
+  assert(sw.indexOf("echarpe-tryon-v30") > -1 && appC.indexOf("'v30'") > -1,
     'النسخة اتحدّثت في sw والكونسول (من غيرها الجهاز يفضل على القديم)');
 })();
 
@@ -1971,4 +1971,60 @@ const RC2 = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
   /* ٤) التشخيص */
   const diag = extractFn(app, 'window.tryonDiag =');
   assert(diag.indexOf('meshFails:') > -1, 'tryonDiag بيقول عدد مرات فشل الشبكة');
+})();
+
+// ============================================================
+// ٣٣) ⬜ v30 — المستطيل الرمادي = **ظل التلامس** لوحده
+// ------------------------------------------------------------
+// الشكوى تكررت بعد v29، فاتفحصت كل عملية رسم في draw واحدة واحدة.
+// الجاني: `ctx.fillRect` بتاع ظل التلامس — مستطيل بـmultiply عند
+// الجبهة (بني-رمادي: باين على الحيطة، مش باين على الشعر — بالظبط
+// زي لقطة المالك). وكان بيترسم **قبل** ما نعرف إن الطرحة هتترسم
+// أصلًا، فلما الطرحة وقعت فضل هو لوحده = ظل حاجة مش موجودة.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+  const dr = extractFn(code, 'function draw(result, srcEl)');
+
+  /* ١) الترتيب: Tr **قبل** الظل — وده أصل الباج */
+  const iTr = dr.indexOf('const Tr = T.affineFrom3(');
+  const iShadow = dr.indexOf('contactShadowSpec');
+  assert(iTr > -1 && iShadow > -1 && iTr < iShadow,
+    '🔴 التحويل بيتحسب قبل الظل — من غير كده مستحيل نعرف إن الطرحة هتترسم');
+
+  /* ٢) الحارس */
+  assert(dr.indexOf('const willPaintScarf = !!(headImg && Tr);') > -1,
+    'حارس: هل الطرحة هتترسم فعلًا؟');
+  assert(dr.indexOf("S.scarf.type === 'photo' && willPaintScarf") > -1,
+    '🔴 الظل مربوط بالحارس — ظل من غير طرحة = مستطيل رمادي على وش العميلة');
+
+  /* ٣) الحواف: قطع ناقص مش أركان حادة */
+  const sh = dr.slice(iShadow, iShadow + 900);
+  assert(sh.indexOf('ctx.ellipse(') > -1 && sh.indexOf('ctx.clip()') > -1,
+    '🔴 الظل متقصوص بقطع ناقص — الأركان الحادة كانت بتبان برّه حافة الطرحة');
+  const iClip = sh.indexOf('ctx.clip()'), iFill = sh.indexOf('ctx.fillRect(-sh.w / 2');
+  assert(iClip > -1 && iFill > iClip,
+    'والقص **قبل** التعبئة (بعدها مبيعملش حاجة)');
+
+  /* ٤) مفاتيح الطبقات — تشخيص من غير تخمين */
+  assert(code.indexOf('window.TRYON_OFF') > -1 && code.indexOf("get('off')") > -1,
+    'مفاتيح إطفاء الطبقات من الكونسول ومن الرابط');
+  ['shadow', 'hair', 'bandana'].forEach((k) => {
+    assert(dr.indexOf("layerOn('" + k + "')") > -1,
+      'طبقة `' + k + '` ليها مفتاح — أي طبقة تتشال لوحدها');
+  });
+  const diag = extractFn(code, 'window.tryonDiag =');
+  assert(diag.indexOf('off:') > -1, 'وtryonDiag بيقول أنهي طبقات مقفولة');
 })();
