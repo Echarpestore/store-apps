@@ -1356,6 +1356,7 @@ function renderRefundsDue(){
       + '<div><b style="font-size:15px;">' + ofMoney(x.diff || 0) + '</b>'
       + ' <span class="muted">مسحوب ' + ofMoney(x.charged || 0) + ' على فاتورة ' + ofMoney(x.invoiceTotal || 0) + '</span></div>'
       + '<button class="btn gold" onclick="ofMarkRefunded(\'' + esc(x.id) + '\')">✅ اترد</button></div>'
+      + (x.cause ? '<div style="font-size:12.5px; margin-top:4px;"><b>السبب:</b> ' + esc(x.cause) + '</div>' : '')
       + '<div class="muted" style="font-size:12px; margin-top:4px;">'
       + '🏬 ' + esc(x.branch || '—') + ' · 🧾 ' + esc(x.invoiceCode || '—')
       + ' · 👤 ' + esc(x.customerName || '') + ' ' + (x.customerPhone ? '<span dir="ltr">' + esc(x.customerPhone) + '</span>' : '<b style="color:#dc2626;">من غير رقم!</b>')
@@ -1444,6 +1445,8 @@ function ofActDetail(a){
   if(a.ms != null) p.push(Math.round(a.ms / 1000) + ' ث');
   if(a.totalMs != null) p.push('استغرقت ' + (a.totalMs / 1000).toFixed(1) + ' ث');
   else if(a.saveMs != null) p.push((a.saveMs / 1000).toFixed(1) + ' ث');
+  if(a.cause) p.push('<b>السبب: ' + esc(a.cause) + '</b>'
+    + (a.causeExact === false ? ' <span style="color:#b45309;">(مش مغطي الفرق كله)</span>' : ''));
   if(a.customerPhone) p.push('<span dir="ltr">' + esc(a.customerPhone) + '</span>');
   if(a.txnId) p.push('<span dir="ltr">TXN ' + esc(String(a.txnId)) + '</span>');
   return p.join(' · ');
@@ -1568,7 +1571,7 @@ const OF_ACT_FIELD_AR = {
   charged:'المسحوب', total:'الإجمالي', diff:'الفرق', amount:'المبلغ',
   name:'الصنف', qty:'الكمية', price:'السعر', invoiceCode:'كود الفاتورة',
   invoiceNo:'رقم الفاتورة', customerPhone:'تليفون العميلة', txnId:'رقم العملية',
-  reason:'السبب', count:'العدد', itemCount:'عدد القطع', cartCountAfter:'باقي في السلة',
+  reason:'السبب', cause:'سبب الفرق', causeSum:'مجموع السبب', causeExact:'السبب مطابق للفرق', count:'العدد', itemCount:'عدد القطع', cartCountAfter:'باقي في السلة',
   saveMs:'من التأكيد للطباعة (ms)', paymobMs:'عند Paymob (ms)',
   deliverMs:'وصول للجهاز (ms)', totalMs:'الإجمالي (ms)', ref:'مرجع الطلب',
   sid:'معرّف السلة', employeeName:'الموظفة', branch:'الفرع'
