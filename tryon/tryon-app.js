@@ -13,11 +13,22 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v29';
+  const TRYON_VER = 'v30';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
   const T = window.TRYON;
+
+  /* 🧪 v30: مفاتيح الطبقات — تشخيص من غير تخمين.
+     من الكونسول:  TRYON_OFF.shadow = true
+     أو من الرابط: ?off=shadow,hair,bandana,drape,scarf
+     أي طبقة بتتشال لوحدها فنعرف مين اللي رسم إيه في ثانية. */
+  const TRYON_OFF = window.TRYON_OFF = window.TRYON_OFF || {};
+  try{
+    (new URLSearchParams(location.search).get('off') || '')
+      .split(',').filter(Boolean).forEach((k) => { TRYON_OFF[k.trim()] = true; });
+  }catch(e){}
+  const layerOn = (k) => !TRYON_OFF[k];
 
   // ---------- الحالة ----------
   const S = {
@@ -697,7 +708,7 @@
     const hairOK = S.scarf.type === 'photo' && S.hairZone &&
       (S.mode === 'photo'
         || (S.stabState.stable && performance.now() - S.hairT < 2000));
-    if(hairOK){
+    if(hairOK && layerOn('hair')){
       const hc = hairCoverCanvas(S.color.hex);
       if(hc){
         ctx.save();
@@ -711,7 +722,7 @@
     //    الشعر والجبهة فمفيش شعر ولا خلفية باينة بين الوش والطرحة
     //    (سر واقعية الفلاتر الاحترافية). قماشها له ظل خفيف عند
     //    حافتها على الجلد + لمعة بسيطة — مش لون مصمت.
-    if(S.bandana && S.bandana.hex && S.scarf.type === 'photo'){
+    if(S.bandana && S.bandana.hex && S.scarf.type === 'photo' && layerOn('bandana')){
       const bd = T.bandanaSpec(an, ex);
       ctx.save();
       ctx.beginPath();
@@ -732,10 +743,21 @@
       ctx.restore();
     }
 
+    const Tr = T.affineFrom3(
+      [A.l, A.r, A.top],
+      [squash(dstL), squash(dstR), dstT]
+    );
+
+    // 🔴 v30: **الظل مش بيترسم إلا لو الطرحة نفسها هتترسم.**
+    //    الباج اللي شافه المالك: الطرحة وقعت والظل فضل — و`fillRect`
+    //    بتاعه مستطيل بـmultiply، فبان **مستطيل رمادي** عند الجبهة
+    //    (باين على الحيطة، مش باين على الشعر). ظل حاجة مش موجودة.
+    const willPaintScarf = !!(headImg && Tr);
+
     // 🌗 ظل التلامس (v20): على الوش نفسه **قبل** ما القماش يترسم
     //    فوقه، وقبل فلتر السطوع (الضل مش بياخد سطوع الطرحة).
     //    multiply = تغميق حقيقي مش طبقة رمادية.
-    if(S.scarf.type === 'photo'){
+    if(S.scarf.type === 'photo' && willPaintScarf && layerOn('shadow')){
       const sh = T.contactShadowSpec(an, ex);
       ctx.save();
       ctx.globalCompositeOperation = 'multiply';
@@ -745,6 +767,12 @@
       gr.addColorStop(0, 'rgba(72,52,42,' + sh.alpha + ')');
       gr.addColorStop(1, 'rgba(72,52,42,0)');
       ctx.fillStyle = gr;
+      // 🔴 v30: كان `fillRect` — أركان حادة ممكن تبان برّه حافة
+      //    الطرحة (وبانت فعلًا لما الطرحة وقعت). الظل الحقيقي
+      //    مالوش أركان: بنقصّه بقطع ناقص فحوافه بتدوب.
+      ctx.beginPath();
+      ctx.ellipse(0, sh.h * 0.5, sh.w / 2, sh.h * 0.62, 0, 0, Math.PI * 2);
+      ctx.clip();
       ctx.fillRect(-sh.w / 2, 0, sh.w, sh.h);
       ctx.restore();
     }
@@ -769,10 +797,6 @@
     // لفّة جانبية: نضيّق الجانب البعيد شوية (تقريب لطيف مش محاكاة)
     const cx2 = (dstL[0]+dstR[0])/2;
     const squash = (p) => [ cx2 + (p[0]-cx2)*(0.75 + 0.25*yawSquash), p[1] ];
-    const Tr = T.affineFrom3(
-      [A.l, A.r, A.top],
-      [squash(dstL), squash(dstR), dstT]
-    );
     // v22: الشبكة في **الوضعين** — الصورة الثابتة كانت واخدة الأفيني
     //    المسطح، وهي أصلًا الأولوية (§ الشكل النهائي قبل اللايف)
     if(Tr && S.mesh && S.scarf.type === 'photo'){
@@ -1215,6 +1239,7 @@
   // للقاعدة الذهبية §18 + التشخيص من الكونسول
   window.tryonDiag = () => ({ ver: TRYON_VER, mode:S.mode, running:S.running,
     stage: S.stage, r3d: S.r3d, mesh: S.mesh, meshFails: S.meshFails || 0,
+    off: Object.keys(TRYON_OFF).filter((k) => TRYON_OFF[k]),
     scarf: S.scarf && S.scarf.id, scarfType: S.scarf && S.scarf.type,
     asset: (function(){
       try{
