@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v24';
+  const TRYON_VER = 'v25';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -38,6 +38,9 @@
     bandana: null,                 // v23: null = من غير بندانة (الافتراضي)
     bandanaHinted: false,
     plain: false, plainUser: false, // v24: سادة (يدوي أو تلقائي من صورة المنتج)
+    seg: null, segFailed: false,    // v25: مقطّع الشعر — lazy في وضع الصورة
+    hairZone: null,                 // v25: {mask,w,h} — أنهي شعر يتغطى (للصورة الحالية)
+    hairCoverCanvas: null, hairCoverKey: null,
     stage: 'boot', lastErr: null      // 🩺 تشخيص: فين وقفنا وإيه الخطأ
   };
 
@@ -111,6 +114,116 @@
       if(pct !== lastPct && onPct){ onPct(pct); lastPct = pct; }
     }
     return out;
+  }
+
+  /* ============================================================
+     ١ب) 💇 v25: مقطّع الشعر — lazy، وضع الصورة بس
+     ------------------------------------------------------------
+     خطة Hybrid Pipeline بند (أ): ماسك شعر → تغطية الشعر الشارد
+     حوالين الفتحة وتحت الجناب. **مش بيتحمّل مع الإقلاع** — أول
+     صورة بتحمّله، وفشله = التجربة تكمل عادي من غيره (صفر شاشات
+     خطأ — دي طبقة تجميل مش أساس).
+     ============================================================ */
+  const SEG_LOCAL = 'assets/selfie_multiclass.tflite';
+  const SEG_REMOTE = 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite';
+  const SEG_CACHE = 'echarpe-tryon-seg-v1';
+
+  async function loadSegmenter(){
+    if(S.seg || S.segFailed) return S.seg;
+    try{
+      const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+      const vision = await import(CDN + '/+esm');
+      const files = await vision.FilesetResolver.forVisionTasks(CDN + '/wasm');
+      // نفس فلسفة موديل الوش: كاش دايم = تحميل واحد في العمر،
+      // ومحلي الأول لو المالك رفعه على echarpe.store
+      let buffer = null;
+      try{
+        const cache = await caches.open(SEG_CACHE);
+        const hit = await cache.match('model');
+        if(hit) buffer = new Uint8Array(await hit.arrayBuffer());
+      }catch(e){}
+      if(!buffer){
+        buffer = await fetchWithProgress(SEG_LOCAL, null).catch(() => null);
+        if(!buffer) buffer = await fetchWithProgress(SEG_REMOTE, null);
+        try{
+          const cache = await caches.open(SEG_CACHE);
+          await cache.put('model', new Response(buffer.slice(0)));
+        }catch(e){}
+      }
+      const mk = (delegate) => vision.ImageSegmenter.createFromOptions(files, {
+        baseOptions: { modelAssetBuffer: buffer, delegate },
+        runningMode: 'IMAGE',
+        outputCategoryMask: true,
+        outputConfidenceMasks: false
+      });
+      try{ S.seg = await mk('GPU'); }
+      catch(e){ console.warn('seg GPU فشل — CPU:', e); S.seg = await mk('CPU'); }
+    }catch(e){
+      // 🛟 صامت عمدًا: مفيش showFatal ولا photoOnly — الطرحة شغالة
+      //    من غير الماسك، والعميلة مش لازم تعرف أصلًا
+      console.warn('seg', e);
+      S.segFailed = true;
+    }
+    return S.seg;
+  }
+
+  /* حساب منطقة التغطية للصورة الحالية — مرة واحدة لكل صورة.
+     التقطيع على نسخة مصغّرة (≤512 عرض): الماسك بيتدرّج أصلًا
+     فالتكبير مش بيبان، والتقطيع بيبقى أسرع بكتير على الموبايل. */
+  async function computeHairCover(img){
+    if(!S.stillResult || !S.stillResult.faceLandmarks
+       || !S.stillResult.faceLandmarks.length) return;
+    const myImg = img;                        // العميلة ممكن تغيّر الصورة والتقطيع شغال
+    const seg = await loadSegmenter();
+    if(!seg || S.stillImg !== myImg) return;
+    try{
+      const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+      const sc = Math.min(1, 512 / iw);
+      const w = Math.max(1, Math.round(iw * sc)), h = Math.max(1, Math.round(ih * sc));
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      const res = seg.segment(c);
+      const cm = res.categoryMask;
+      if(!cm) return;
+      const hm = T.hairMaskFromCategories(cm.getAsUint8Array(), w, h);
+      try{ cm.close(); }catch(e){}
+      // المعالم منسّبة (0..1) — نفس النقط بمقاس الماسك مباشرة
+      const lm = S.stillResult.faceLandmarks[0];
+      const an = T.anchorsFromLandmarks(lm, w, h);
+      const ex = T.expandAnchors(an, S.scarf && S.scarf.fit);
+      const zone = T.hairCoverZone(hm.mask, w, h, an, ex);
+      if(!zone || S.stillImg !== myImg) return;
+      S.hairZone = { mask: zone.mask, w: w, h: h };
+      S.hairCoverCanvas = null; S.hairCoverKey = null;
+      if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
+    }catch(e){ console.warn('hairCover', e); }
+  }
+
+  /* كانفاس التغطية بلون القماش الحالي — بيتبني بس لما اللون يتغيّر
+     (المفتاح)، مش كل رسمة. لون التغطية = لون المنتج مغمّق شوية:
+     الشعر المتغطي واقع في **ضل** الطرحة فوقه، مش على وشّها. */
+  function hairCoverCanvas(hex){
+    const z = S.hairZone;
+    if(!z) return null;
+    const key = hex + '|' + z.w + 'x' + z.h;
+    if(S.hairCoverCanvas && S.hairCoverKey === key) return S.hairCoverCanvas;
+    try{
+      const n = parseInt(hex.slice(1), 16);
+      const dim = (v) => Math.max(0, v - 24);
+      const r = dim(n >> 16), g = dim((n >> 8) & 255), b = dim(n & 255);
+      const c = document.createElement('canvas'); c.width = z.w; c.height = z.h;
+      const gc = c.getContext('2d');
+      const im = gc.createImageData(z.w, z.h);
+      for(let p = 0; p < z.w * z.h; p++){
+        const a = Math.round(Math.min(1, z.mask[p]) * 255);
+        if(!a) continue;
+        const i = p * 4;
+        im.data[i] = r; im.data[i+1] = g; im.data[i+2] = b; im.data[i+3] = a;
+      }
+      gc.putImageData(im, 0, 0);
+      S.hairCoverCanvas = c; S.hairCoverKey = key;
+      return c;
+    }catch(e){ console.warn('hairCanvas', e); return null; }
   }
 
   /* ============================================================
@@ -507,6 +620,20 @@
     ensureTemp(asset, drS, dbS);
     const headImg = lookImg(asset);
 
+    // 💇 v25 (وضع الصورة بس): تغطية الشعر الشارد — **أول** طبقة فوق
+    //    الصورة وتحت كل حاجة (بندانة/ضل/قماش). الماسك محسوب مرة
+    //    واحدة للصورة، واللون بيتبع لون المنتج. اللايف من غيرها
+    //    عمدًا: التقطيع كل فريم بيقتل الفريمات على الموبايل.
+    if(S.mode === 'photo' && S.scarf.type === 'photo' && S.hairZone){
+      const hc = hairCoverCanvas(S.color.hex);
+      if(hc){
+        ctx.save();
+        if(window.TRYON_DEBUG) ctx.globalAlpha = 0.55;   // شفافة للمعايرة
+        ctx.drawImage(hc, 0, 0, w, h);
+        ctx.restore();
+      }
+    }
+
     // 🧕 v23: البندانة — **تحت** القماش وفوق الوش: بتغطي منابت
     //    الشعر والجبهة فمفيش شعر ولا خلفية باينة بين الوش والطرحة
     //    (سر واقعية الفلاتر الاحترافية). قماشها له ظل خفيف عند
@@ -639,12 +766,17 @@
     await S.setImageMode();
     S.stillResult = S.landmarker.detect(img);
     S.stillImg = img;
+    // 💇 v25: ماسك الصورة اللي فاتت ميتلبسش على الجديدة —
+    //    التصفير **قبل** أول رسمة، والحساب الجديد بيكمل في الخلفية
+    S.hairZone = null; S.hairCoverCanvas = null; S.hairCoverKey = null;
     resetSmooth();
     draw(S.stillResult, img);
     if(!S.stillResult.faceLandmarks || !S.stillResult.faceLandmarks.length)
       hint('مش لاقيين وش واضح في الصورة دي');
-    else
+    else{
       maybeBandanaHint();               // v23: اقتراح البندانة — مرة واحدة بس
+      computeHairCover(img).catch(() => {});   // 💇 مش بنستنّاه — بيرسم لما يخلص
+    }
   }
 
   async function backToLive(){
@@ -945,6 +1077,8 @@
   // للقاعدة الذهبية §18 + التشخيص من الكونسول
   window.tryonDiag = () => ({ ver: TRYON_VER, mode:S.mode, running:S.running,
     stage: S.stage, r3d: S.r3d, mesh: S.mesh,
+    seg: S.seg ? 'ready' : (S.segFailed ? 'failed' : 'idle'),
+    hairZone: !!S.hairZone,
     err: S.lastErr ? errLine(S.lastErr) : null,
     frameMs: Math.round(S.gov.avg()), scarf:S.scarf && S.scarf.id,
     color:S.color && S.color.id });

@@ -494,6 +494,91 @@ TRYON.bandanaSpec = function(an, ex, opts){
   return { poly: poly, bottomMid: bm, top: topC };
 };
 
+/* ---------- ٢٠) 💇 ماسك الشعر (v25) ---------- */
+// المرجع: خطة Hybrid Pipeline — بند القبول "مفيش شعر يظهر بشكل
+// غير منطقي". MediaPipe ImageSegmenter (selfie multiclass) بيدي
+// فئة لكل بكسل، وفئة الشعر = 1. التحميل والتقطيع في التطبيق —
+// هنا الرياضة بس: تحويل الفئات لماسك، وتحديد **أنهي** شعر يتغطى.
+TRYON.SEG_HAIR = 1;      // 0 خلفية · 1 شعر · 2 جسم · 3 وش · 4 هدوم · 5 تانية
+
+// cats = Uint8Array فئة/بكسل من categoryMask → ماسك ثنائي للشعر
+// ⚠️ طول cats ممكن يقل عن w*h لو الموديل رجّع مقاس مختلف — بنقف
+//    عند الأقصر بدل قراءة برّه المصفوفة.
+TRYON.hairMaskFromCategories = function(cats, w, h){
+  const total = w * h;
+  const mask = new Uint8Array(total);
+  let count = 0;
+  const N = Math.min(cats ? cats.length : 0, total);
+  for(let p = 0; p < N; p++)
+    if(cats[p] === TRYON.SEG_HAIR){ mask[p] = 1; count++; }
+  return { mask: mask, count: count };
+};
+
+// أنهي شعر يتغطى؟ **مش كل الشعر** — بس اللي المفروض الطرحة مغطياه:
+//   (أ) حلقة حوالين الوش (اللي بيبان من حافة الفتحة المتدرّجة)
+//   (ب) شرايط جانبية نازلة جنب الرقبة (تحت جناب الانسدال)
+// وحماية صريحة: **جوه الوش نفسه ممنوع** — خصلة على الخد طبيعية،
+// تلوينها "قماش" بيبوّظ الصورة أكتر ما بيصلّحها.
+// an/ex بنفس مقاس الماسك (المعالم منسّبة فبتتحسب على w,h بتوع الماسك).
+// 🛟 حارسين (درس flood §١٥): شعر > maxFrac من الصورة = segmentation
+//    غلط (نلغي كله)، وصفر بكسلات متغطية = مفيش داعي لطبقة فاضية.
+TRYON.hairCoverZone = function(hair, w, h, an, ex, opts){
+  opts = opts || {};
+  const feather = opts.feather != null ? opts.feather : 5;
+  const maxFrac = opts.maxFrac != null ? opts.maxFrac : 0.6;
+
+  const total = w * h;
+  let hairPx = 0;
+  for(let p = 0; p < total; p++) if(hair[p]) hairPx++;
+  if(!hairPx) return null;
+  if(hairPx > total * maxFrac) return null;        // 🛟 الموديل سرح
+
+  const upX = ex.up[0], upY = ex.up[1];
+  const sdX = -upY, sdY = upX;                     // متجه جانبي
+  const fcx = (an.l[0] + an.r[0]) / 2;
+  const fcy = (an.l[1] + an.r[1]) / 2;
+  const fw = ex.faceW || 1, fh = ex.faceH || 1;
+
+  // نطاقات بوحدات الوش (متجهات up/side = بتلف مع ميل الراس تلقائي):
+  // ⚠️ نص ارتفاع الوش من مركزه ≈ 0.5×faceH — حماية أطول من كده
+  //    بتاكل منابت الشعر نفسها (اتمسكت بالاختبار: شعر الجبهة اترفض)
+  const inW = fw * 0.52, inH = fh * 0.48;          // حماية الوش
+  const rgW = fw * 0.98, rgH = fh * 1.10;          // حلقة الراس
+  const rgLift = fh * 0.08;                        // الحلقة مرفوعة شوية (شعر الجبهة)
+  const stMinV = fw * 0.30, stMaxV = fw * 0.95;    // الشرايط: برّه الوش وجوه الانسدال
+  const stMinU = -fh * 1.30, stMaxU = fh * 0.15;   // من فوق الكتف لحد الصدغ
+
+  const zone = new Float32Array(total);
+  let count = 0;
+  for(let p = 0; p < total; p++){
+    if(!hair[p]) continue;
+    const x = p % w, y = (p - x) / w;
+    const dx = x - fcx, dy = y - fcy;
+    const u = dx * upX + dy * upY;                 // + = ناحية فوق
+    const v = dx * sdX + dy * sdY;
+    // (١) 🔒 جوه الوش = ممنوع اللمس
+    const iu = u / inH, iv = v / inW;
+    if(iu * iu + iv * iv <= 1) continue;
+    // (٢) الحلقة حوالين الراس
+    const ru = (u - rgLift) / rgH, rv = v / rgW;
+    const inRing = ru * ru + rv * rv <= 1;
+    // (٣) الشرايط الجانبية تحت الجناب
+    const av = Math.abs(v);
+    const inStrip = av >= stMinV && av <= stMaxV && u >= stMinU && u <= stMaxU;
+    if(!inRing && !inStrip) continue;
+    zone[p] = 1; count++;
+  }
+  if(!count) return null;
+
+  // تدرّج الحافة — نفس فلسفة حافة الفتحة: قماش بيدوب مش قطع حاد
+  let m = zone;
+  if(feather > 0) m = TRYON.blurChannel(zone, w, h, feather);
+  const out = new Float32Array(total);
+  for(let p = 0; p < total; p++)
+    out[p] = Math.min(1, m[p] * 1.25);
+  return { mask: out, count: count, frac: Math.round(hairPx / total * 100) / 100 };
+};
+
 /* ---------- التصدير (القاعدة الذهبية §18) ---------- */
 if(typeof module !== 'undefined' && module.exports){ module.exports = TRYON; }
 if(typeof window !== 'undefined'){
