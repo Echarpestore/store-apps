@@ -743,7 +743,7 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
       && html.indexOf('tryon-core.js') < html.indexOf('tryon-3d-core.js'),
     'ترتيب التحميل: الكور قبل كور الـ3D (بيستعمل أفيني ٣ نقط بتاعه)');
 
-  assert(sw.indexOf("echarpe-tryon-v22") > -1 && appC.indexOf("'v22'") > -1,
+  assert(sw.indexOf("echarpe-tryon-v26") > -1 && appC.indexOf("'v26'") > -1,
     'النسخة اتحدّثت في sw والكونسول (من غيرها الجهاز يفضل على القديم)');
 })();
 
@@ -1164,8 +1164,9 @@ const PR = require(path.resolve(__dirname, '..', 'tryon', 'prep-core.js'));
 
   /* ٦) المعرّف */
   assertEq(PR.slugId('Chiffon 02'), 'chiffon-02', 'مسافات وحروف كبيرة بتتظبط');
-  assertEq(PR.slugId('طرحة!!'), PR.slugId('طرحة!!').match(/^scarf-/) ? PR.slugId('طرحة!!') : 'x',
-    PR.slugId('طرحة!!'), 'عربي بس = معرّف تلقائي (مش فاضي)');
+  // ⚠️ المعرّف التلقائي من الوقت — مقارنة نداءين ببعض flaky (وقعت مرة)
+  assert(/^scarf-[a-z0-9]+$/.test(PR.slugId('طرحة!!')),
+    'عربي بس = معرّف تلقائي (مش فاضي)');
   assert(PR.slugId('') !== '', 'وفاضي برضه مش بيرجع فاضي');
 
   /* ٧) سطر الكتالوج — لازم يبقى JS صالح فعلًا */
@@ -1324,4 +1325,368 @@ const TMC = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js')
   assert(code.indexOf('window.TRYON_DEBUG') > -1
       && extractFn(code, 'function debugContour(').indexOf('p.from.x') > -1,
     '§ديبج: TRYON_DEBUG بيرسم أزواج الشد للمعايرة');
+})();
+
+// ============================================================
+// ٢٤) 🧕 v23 — البندانة (بندانة تحت الطرحة + اختيار "من غير")
+// ============================================================
+(function(){
+  /* ١) الألوان — بالظبط اللي المالك طلبهم + "من غير" */
+  const C = T.BANDANA_COLORS;
+  assertEq(C[0].id, 'none', '🔴 أول اختيار = من غير بندانة');
+  assertEq(C[0].hex, null, 'ومالوش لون (مش أسود مستخبي)');
+  const ids = C.map((c) => c.id);
+  ['black','navy','brown','beige','white','offwhite'].forEach((id) =>
+    assert(ids.indexOf(id) > -1, 'لون ' + id + ' موجود'));
+  assertEq(C.length, 7, 'سبعة بالظبط — مفيش زيادة تلخبط');
+  C.slice(1).forEach((c) => assert(/^#[0-9a-f]{6}$/i.test(c.hex), c.id + ' لونه hex سليم'));
+
+  /* ٢) معلم بين الحاجبين دخل النقط */
+  assertEq(T.LM.BROW, 9, 'معلم الجبهة (بين الحاجبين)');
+  const lm = new Array(478).fill(0).map((_, i) => ({ x: (i % 50) / 50, y: (i % 31) / 31 }));
+  assert('brow' in T.anchorsFromLandmarks(lm, 100, 100), 'وبيطلع مع النقط');
+
+  /* ٣) شكل البندانة */
+  const an = { l:[100,200], r:[220,200], top:[160,120], chin:[160,320],
+               cheekL:[120,240], cheekR:[200,240], brow:[160,190] };
+  const ex = T.expandAnchors(an);
+  const bd = T.bandanaSpec(an, ex);
+  assert(bd.poly.length > 20, 'مضلّع كامل مش مثلث');
+  // الحافة السفلية على الجبهة: بين منابت الشعر وبين الحاجبين
+  assert(bd.bottomMid[1] > an.top[1] && bd.bottomMid[1] < an.brow[1],
+    '🔴 الحافة على الجبهة — بين منابت الشعر والحواجب (مش مغطية العيون ولا مختفية)');
+  // القبة فوق منابت الشعر (تغطي الجمجمة اللي الطرحة بتلفها)
+  assert(bd.top[1] < an.top[1], 'والقبة فوق الراس');
+  // متماثلة حوالين المركز لوش مظبوط
+  const xs = bd.poly.map((p) => p[0]);
+  assert(near(Math.min(...xs) + Math.max(...xs), 2 * 160, 6), 'متماثلة حوالين مركز الوش');
+  // أوسع من الوش (تغطي السوالف)
+  assert(Math.max(...xs) - Math.min(...xs) > ex.faceW, 'وأعرض من الوش');
+  // بتميل مع الراس: نفس النقط بس up مايل
+  const anT = { l:[100,190], r:[220,210], top:[162,121], chin:[158,320],
+                cheekL:[120,240], cheekR:[200,240], brow:[160,191] };
+  const exT = T.expandAnchors(anT);
+  const bdT = T.bandanaSpec(anT, exT);
+  assert(Math.abs(bdT.top[0] - bd.top[0]) > 1.5,
+    'راس مايلة = القبة بتميل معاها (مش قبة أفقية ثابتة)');
+
+  /* ٤) التوصيلات */
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const html = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'index.html'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  const dr = extractFn(code, 'function draw(result, srcEl)');
+  const iBnd = dr.indexOf('T.bandanaSpec(an, ex)');
+  const iShadow = dr.indexOf('T.contactShadowSpec(');
+  const iHead = dr.indexOf('ctx.drawImage(headImg');
+  assert(iBnd > -1, 'البندانة بترسم في مسار الرسم');
+  assert(iBnd < iShadow && iBnd < iHead,
+    '🔴 البندانة تحت القماش وتحت ظل التلامس — مش فوق الطرحة');
+  assert(dr.indexOf('S.bandana && S.bandana.hex') > -1,
+    '🔴 null = مفيش رسم خالص — اختيار "من غير بندانة" حقيقي');
+  assert(dr.indexOf('createLinearGradient(bd.bottomMid[0]') > -1
+      && dr.indexOf("shade(S.bandana.hex, -18)") > -1,
+    'وقماشها متظلل (أغمق عند الجلد، لمعة فوق) مش لون مصمت');
+
+  assert(code.indexOf('bandana: null,') > -1, 'الافتراضي: من غير بندانة');
+  const br = extractFn(code, 'function buildBandanaRow()');
+  assert(br.indexOf('T.BANDANA_COLORS.forEach') > -1
+      && br.indexOf('S.bandana = c.hex ? c : null;') > -1,
+    'الصف من قايمة الكور وزرار ✕ بيرجّع null');
+  assert(br.indexOf("draw(S.stillResult, S.stillImg)") > -1,
+    'والاختيار بيحدّث الصورة الثابتة فورًا');
+  const mh = extractFn(code, 'function maybeBandanaHint()');
+  assert(mh.indexOf('if(S.bandanaHinted || S.bandana) return;') > -1,
+    '🔴 الاقتراح مرة واحدة بس — ولو مختارة بندانة أصلًا مفيش اقتراح');
+  assert(code.indexOf('maybeBandanaHint();') > -1, 'وبيتنده بعد نجاح تجربة الصورة');
+  assert(html.indexOf('id="bandanaRow"') > -1, 'والصف في الصفحة');
+})();
+
+// ============================================================
+// ٢٥) 🧵 v24 — وضع "سادة" (الكنار بيختفي، الطيات بتفضل)
+// ============================================================
+const RC2 = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
+(function(){
+  /* ١) plainify على صورة صناعية: قماش بطيّة + كنار كاروهات */
+  const w = 60, h = 40, n = w * h;
+  const px = new Uint8ClampedArray(n * 4);
+  const mask = new Float32Array(n);
+  for(let y = 0; y < h; y++)
+    for(let x = 0; x < w; x++){
+      const i = y * w + x;
+      if(x < 4){ continue; }                        // عمود شفاف (خلفية)
+      px[i*4+3] = 255;
+      if(x >= w - 12){                              // كنار كاروهات أبيض/أسود
+        const v2 = ((x + y) % 4 < 2) ? 245 : 25;
+        px[i*4] = v2; px[i*4+1] = v2; px[i*4+2] = v2;
+        mask[i] = 0.05;                             // مش قماش
+      } else {                                      // قماش بيج بطيّة رأسية
+        const l = 150 + Math.round(50 * Math.sin(y / h * Math.PI));
+        px[i*4] = l; px[i*4+1] = l - 12; px[i*4+2] = l - 26;
+        mask[i] = 1;
+      }
+    }
+  const before = px.slice();
+  const out = RC2.plainify(px, mask, w, h, T.blurChannel);
+
+  // الشفاف: مفيش لمس ووزنه صفر
+  assertEq(out[10 * w + 1], 0, 'الشفاف برّه الماسك الجديد');
+  assertEq(px[(10*w+1)*4+3], 0, 'ولا اتلمس');
+  // القماش الأصلي: RGB زي ما هو
+  const iF = 20 * w + 20;
+  assert(px[iF*4] === before[iF*4] && px[iF*4+2] === before[iF*4+2],
+    'القماش الأصلي ولا بكسل فيه اتغير');
+  assertEq(out[iF], 1, 'ووزنه كامل');
+  // الكنار: الكاروهات راحت — التباين المحلي انهار
+  let varB = 0, varA = 0, cnt = 0;
+  for(let y = 10; y < 30; y++)
+    for(let x = w - 10; x < w - 2; x++){
+      const i = y * w + x, j = i + 1;
+      varB += Math.abs(before[i*4] - before[j*4]);
+      varA += Math.abs(px[i*4] - px[j*4]);
+      cnt++;
+    }
+  assert(varB / cnt > 60, 'الكاروهات كانت متباينة فعلًا قبلها');
+  assert(varA / cnt < 12, '🔴 وبعد السادة اختفت — سطح ناعم');
+  assertEq(out[15 * w + (w - 6)], 1, 'ومنطقة الكنار بقت "قماش" تتلون مع الباقي');
+  // الإضاءة المليانة جاية من القماش المجاور (مش رمادي ثابت)
+  const topL = px[(6*w + (w-6))*4], midL = px[(20*w + (w-6))*4];
+  assert(Math.abs(midL - topL) > 8,
+    '🔴 الملو بيتبع طيّة القماش المجاورة — مش لون مسطح واحد');
+
+  /* ٢) التوصيلات */
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const html = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'index.html'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  const et = extractFn(code, 'function ensureTint(');
+  assert(et.indexOf('asset.tintPlain === S.plain') > -1,
+    '🔴 "سادة" جوه مفتاح كاش التلوين — من غيرها التبديل مش بيعيد البناء');
+  assert(et.indexOf('RECOLOR.plainify(im.data, asset._mask') > -1
+      && et.indexOf('T.blurChannel') > -1,
+    'والسادة من المحرك ببلور الكور');
+  assert(et.indexOf('asset.tintPlain = S.plain;') > -1, 'والمفتاح بيتسجل بعد البناء');
+
+  const ci = extractFn(code, 'async function colorFromProductImage(');
+  assert(ci.indexOf('S.plain = dom.confidence >= 0.4;') > -1,
+    'تلقائي: لون غالب جدًا = ساده — من صورة المنتج نفسها');
+
+  /* 🧵 v26 (قرار المالك): زراير بالكنار/سادة **اتشالت** من واجهة
+     العميلة — كانت بتكشف عيب داخلي (قالب واحد بنلوّنه). الستايل
+     تلقائي بس، والتنوّع الحقيقي جاي من أصول مصوّرة لكل موديل. */
+  assert(code.indexOf('buildStyleRow') === -1 && code.indexOf('plainUser') === -1,
+    '🔴 مفيش زراير ستايل ولا اختيار يدوي — تلقائي بالكامل');
+  assert(html.indexOf('styleRow') === -1, 'والصف اتشال من الصفحة (مش مستخبي — مش موجود)');
+  assert(code.indexOf('plain: false,') > -1,
+    'الافتراضي: بالكنار (القالب زي ما هو) لحد ما صورة المنتج تقول ساده');
+})();
+
+// ============================================================
+// ٢٥) 💇 v25 — ماسك الشعر (Segmentation): تغطية الشعر الشارد
+// ------------------------------------------------------------
+// بند القبول من خطة Hybrid Pipeline: "مفيش شعر يظهر بشكل غير
+// منطقي". التغطية **انتقائية**: حلقة حوالين الوش + شرايط تحت
+// الجناب — وجوه الوش نفسه محمي صراحةً.
+// ============================================================
+(function(){
+  /* ١) تحويل الفئات لماسك شعر */
+  const cats = new Uint8Array([0, 1, 3, 1, 4, 1, 0, 2, 5]);
+  const hm = T.hairMaskFromCategories(cats, 3, 3);
+  assertEq(Array.from(hm.mask), [0,1,0,1,0,1,0,0,0], 'فئة 1 بس = شعر');
+  assert(hm.count === 3, 'والعدّاد صح');
+  // 🔴 نيجاتيف: cats أقصر من w*h (الموديل رجّع مقاس مختلف) —
+  //    قراءة برّه المصفوفة كانت هتحط undefined===1 أو ترمي
+  const hs = T.hairMaskFromCategories(new Uint8Array([1]), 3, 3);
+  assert(hs.mask.length === 9 && hs.count === 1, 'مصفوفة قصيرة = مش انهيار');
+  const hn = T.hairMaskFromCategories(null, 2, 2);
+  assert(hn.count === 0, 'null = صفر مش crash');
+
+  /* ٢) هندسة المنطقة — وش رأسي في نص صورة 200×260 */
+  const W = 200, H = 260;
+  const an = { top:[100,70], chin:[100,190], l:[60,130], r:[140,130],
+               cheekL:[80,150], cheekR:[120,150], brow:[100,100] };
+  const ex = T.expandAnchors(an);
+  const idx = (x, y) => y * W + x;
+
+  const hair = new Uint8Array(W * H);
+  const pForehead = idx(100, 52);    // فوق الجبهة — حلقة الراس
+  const pTemple   = idx(38, 110);    // جنب الصدغ برّه الوش — حلقة
+  const pSide     = idx(168, 210);   // جنب الرقبة تحت — شريط الجناب
+  const pFace     = idx(100, 140);   // 🔒 على الوش نفسه
+  const pCorner   = idx(4, 4);       // ركن الصورة — برّه كل حاجة
+  [pForehead, pTemple, pSide, pFace, pCorner].forEach((p) => { hair[p] = 1; });
+
+  const z = T.hairCoverZone(hair, W, H, an, ex, { feather: 0 });
+  assert(!!z, 'فيه منطقة تغطية');
+  assert(z.mask[pForehead] > 0.5, 'شعر الجبهة (حوالين الفتحة) بيتغطى');
+  assert(z.mask[pTemple] > 0.5, 'وشعر الصدغ برّه الوش بيتغطى');
+  assert(z.mask[pSide] > 0.5, 'وشعر جنب الرقبة (تحت الجناب) بيتغطى');
+  // 🔴 نيجاتيف الحماية: لو حد شال شرط "جوه الوش ممنوع"، الخصلة
+  //    اللي على الخد هتتلون قماش — بقعة لون على وش العميلة.
+  assert(z.mask[pFace] === 0, '🔒 الشعر اللي على الوش نفسه ممنوع اللمس');
+  assert(z.mask[pCorner] === 0, 'وركن الصورة برّه المنطقة خالص');
+  assert(z.count === 3, 'العدّاد = المتغطي بس (٣ من ٥)');
+
+  /* ٣) التدرّج — قماش بيدوب مش قطع حاد */
+  const zf = T.hairCoverZone(hair, W, H, an, ex, { feather: 4 });
+  assert(zf.mask[pForehead] > 0 && zf.mask[pForehead] <= 1, 'القيم 0..1');
+  const nb = zf.mask[idx(100, 55)];
+  assert(nb > 0 && nb < 1, 'البكسل المجاور واخد قيمة وسطية = حافة دايبة');
+
+  /* ٤) 🛟 الحراس (درس flood §١٥) */
+  const all = new Uint8Array(W * H).fill(1);
+  assert(T.hairCoverZone(all, W, H, an, ex) === null,
+    '🔴 شعر على كل الصورة = segmentation سرح — نلغي بدل ما نلطّخ');
+  const none = new Uint8Array(W * H);
+  none[idx(100, 140)] = 1;                       // شعرة واحدة وعلى الوش (محمية)
+  assert(T.hairCoverZone(none, W, H, an, ex) === null,
+    'صفر بكسلات متغطية = مفيش طبقة فاضية');
+  assert(T.hairCoverZone(new Uint8Array(W * H), W, H, an, ex) === null,
+    'مفيش شعر أصلًا = null');
+
+  /* ٥) الميل — المنطقة بتلف مع الراس (متجهات up/side مش محاور الصورة) */
+  // نفس الوش متلفوف ٩٠°: فوق بقى "شمال" — شعر "فوق الجبهة" دلوقتي
+  // على شمال الوش في إحداثيات الصورة
+  const anR = { top:[40,130], chin:[160,130], l:[100,90], r:[100,170],
+                cheekL:[120,110], cheekR:[120,150], brow:[70,130] };
+  const exR = T.expandAnchors(anR);
+  const hairR = new Uint8Array(W * H);
+  const pRotFore = idx(22, 130);                 // "فوق الجبهة" بعد اللفة
+  hairR[pRotFore] = 1;
+  const zr = T.hairCoverZone(hairR, W, H, anR, exR, { feather: 0 });
+  assert(!!zr && zr.mask[pRotFore] > 0.5,
+    '🔴 راس مايلة: المنطقة بمتجهات الوش — بمحاور الصورة كانت هتفوّت شعر اللفّة');
+})();
+
+// ============================================================
+// ٢٦) 💇 v25 — توصيل التطبيق: lazy + صامت + وضع الصورة بس
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  /* ١) التحميل: lazy وفشله صامت */
+  const ls = extractFn(code, 'async function loadSegmenter()');
+  assert(ls.length > 100, 'دالة loadSegmenter اتلقت (البلوك اتقرا صح)');
+  assert(ls.indexOf('S.segFailed') > -1 && ls.indexOf('showFatal') === -1
+      && ls.indexOf('photoOnly') === -1,
+    '🔴 فشل المقطّع صامت — طبقة تجميل متوقّعش الصفحة ولا تطلّع رسالة');
+  assert(ls.indexOf("mk('GPU')") > -1 && ls.indexOf("mk('CPU')") > -1,
+    'GPU والفولباك CPU — نفس فلسفة موديل الوش');
+  assert(ls.indexOf('SEG_CACHE') > -1 && code.indexOf("SEG_CACHE = 'echarpe-tryon-seg-v1'") > -1,
+    'الموديل بيتكيّش مرة واحدة في العمر (Cache Storage)');
+  assert(ls.indexOf('outputCategoryMask: true') > -1,
+    'وطالبين ماسك الفئات (الشعر منه)');
+  const bootFn = extractFn(code, 'async function boot()');
+  assert(bootFn.indexOf('loadSegmenter') === -1,
+    '🔴 مش بيتحمّل مع الإقلاع — أول صورة هي اللي بتحمّله (خطة lazy)');
+
+  /* ٢) الحساب: للصورة الحالية بس + الكور هو اللي بيقرر */
+  const ch = extractFn(code, 'async function computeHairCover(img)');
+  assert(ch.length > 100, 'دالة computeHairCover اتلقت');
+  assert(ch.indexOf('T.hairCoverZone(') > -1 && ch.indexOf('T.hairMaskFromCategories(') > -1,
+    'الرياضة من الكور (قابلة للاختبار) مش مكررة في التطبيق');
+  assert(ch.indexOf('S.stillImg !== myImg') > -1,
+    '🔴 العميلة غيّرت الصورة والتقطيع لسه شغال = النتيجة القديمة تترمي مش تتلبس على الجديدة');
+  assert(ch.indexOf('anchorsFromLandmarks(lm, w, h)') > -1,
+    'النقط بمقاس الماسك المصغّر (المعالم منسّبة) — مش مقاس الكانفاس');
+  assert(ch.indexOf('cm.close()') > -1, 'وماسك MediaPipe بيتقفل (تسريب GPU)');
+
+  /* ٣) الرسم: وضع الصورة بس وتحت كل الطبقات */
+  const dr = extractFn(code, 'function draw(result, srcEl)');
+  assert(dr.indexOf("S.mode === 'photo' && S.scarf.type === 'photo' && S.hairZone") > -1,
+    "🔴 اللايف من غير تغطية عمدًا — segmentation كل فريم بيقتل الموبايل");
+  assert(dr.indexOf('hairCoverCanvas(S.color.hex)') > -1,
+    'ولون التغطية بيتبع لون المنتج');
+  const iHair = dr.indexOf('S.hairZone');
+  const iBand = dr.indexOf('bandanaSpec');
+  const iShadow = dr.indexOf('contactShadowSpec');
+  assert(iHair > -1 && iBand > -1 && iHair < iBand && iHair < iShadow,
+    '🔴 التغطية **تحت** البندانة والضل والقماش — فوقهم = بقع على الطرحة نفسها');
+
+  /* ٤) صورة جديدة = ماسك جديد */
+  const tp = extractFn(code, 'async function tryOnPhoto(file)');
+  assert(tp.indexOf('S.hairZone = null') > -1
+      && tp.indexOf('S.hairZone = null') < tp.indexOf('draw(S.stillResult, img)'),
+    '🔴 التصفير **قبل** أول رسمة — من غيره ماسك الصورة اللي فاتت بيتلبس على الجديدة');
+  assert(tp.indexOf('computeHairCover(img)') > -1
+      && tp.indexOf('computeHairCover(img)') > tp.indexOf('draw(S.stillResult, img)'),
+    'والحساب بعد أول رسمة (مش بنستنّاه) — الطرحة بتظهر فورًا والتغطية بتلحق');
+
+  /* ٥) كانفاس التغطية بمفتاح — مش بيتبني كل رسمة */
+  const hc = extractFn(code, 'function hairCoverCanvas(hex)');
+  assert(hc.indexOf('S.hairCoverKey === key') > -1,
+    'مفتاح كاش (لون+مقاس) — إعادة البناء بس لما اللون يتغيّر');
+
+  /* ٦) التشخيص */
+  const diag = extractFn(code, 'window.tryonDiag =');
+  assert(diag.indexOf('seg:') > -1 && diag.indexOf('hairZone:') > -1,
+    'tryonDiag بيقول حالة المقطّع والماسك — تشخيص موبايل من غير كونسول');
+})();
+
+// ============================================================
+// ٢٧) 🖼️ v26 — صورة بوضع صعب ≠ شاشة فاضية
+// ------------------------------------------------------------
+// حصلت فعلًا: صورة متصورة بالراحة على المخدة (ميل جامد) → بوابة
+// الجودة خبّت الطرحة → "مافيش حاجة" من غير أي تفسير. الإخفاء
+// منطقي في اللايف (بتعدّلي وضعك في ثانية) — في الصورة الثابتة
+// لازم نرسم بأفضل تقدير ونقول إن الوضع صعب.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+  const dr = extractFn(code, 'function draw(result, srcEl)');
+  assert(dr.length > 100, 'دالة draw اتلقت');
+  // 🔴 نيجاتيف: `if(q.fade) return;` من غير شرط الوضع كانت هي الباج —
+  //    لازم الخروج يبقى مشروط باللايف تحديدًا
+  assert(dr.indexOf("if(q.fade && S.mode === 'live') return;") > -1,
+    "🔴 الإخفاء على الوضع الصعب **للايف بس** — الصورة الثابتة بترسم بأفضل تقدير");
+  assert(!/if\(q\.fade\)\s*return;/.test(dr),
+    'ومفيش خروج غير مشروط على fade');
+  assert(dr.indexOf('صعب') > -1,
+    'والعميلة بتاخد رسالة بتقول إن وضع الصورة صعب والنتيجة تقريبية');
 })();
