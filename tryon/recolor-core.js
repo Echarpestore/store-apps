@@ -134,6 +134,37 @@ RECOLOR.applyRecolor = function(pixels, mask, targetHex){
   return pixels;
 };
 
+/* ---------- ٥) 🧵 وضع "سادة" (v24) ---------- */
+// المشكلة: قالب واحد مكنّر — أي منتج ساده بياخد لونه ومعاه كنار
+// مش بتاعه. الحل: بكسلات الكنار/التطريز (وزنها في الماسك واطي)
+// بتتملي بإضاءة القماش المجاور (ملو ناعم بالبلور) — فالكنار
+// بيختفي والطيات والضل بيكملوا طبيعي، وبعدها الكل بيتلون كقماش.
+// blur = دالة بلور القناة (بتتحقن من برّه — نفس بتاعة المحرك).
+RECOLOR.plainify = function(pixels, mask, w, h, blur){
+  const n = w * h;
+  const L = new Float32Array(n), M = new Float32Array(n);
+  for(let i = 0; i < n; i++){
+    if(pixels[i*4 + 3] < 40) continue;              // الشفاف برّه اللعبة
+    L[i] = RECOLOR.rgbToHsl(pixels[i*4], pixels[i*4+1], pixels[i*4+2])[2];
+    M[i] = mask[i] > 0.6 ? 1 : 0;
+  }
+  // ملو الإضاءة: blur(L×M)/blur(M) — بيمدّد إضاءة القماش على الفجوات
+  const r = Math.max(6, Math.round(Math.min(w, h) * 0.03));
+  let LM = new Float32Array(n), MM = new Float32Array(n);
+  for(let i = 0; i < n; i++){ LM[i] = L[i] * M[i]; MM[i] = M[i]; }
+  for(let pass = 0; pass < 2; pass++){ LM = blur(LM, w, h, r); MM = blur(MM, w, h, r); }
+  const out = new Float32Array(n);                  // الماسك الجديد: كله قماش
+  for(let i = 0; i < n; i++){
+    if(pixels[i*4 + 3] < 40){ out[i] = 0; continue; }
+    out[i] = 1;
+    if(mask[i] > 0.6) continue;                     // قماش أصلي = زي ما هو
+    const lf = MM[i] > 0.02 ? LM[i] / MM[i] : 0.5;  // إضاءة القماش المجاور
+    const v = Math.round(Math.max(0.04, Math.min(0.96, lf)) * 255);
+    pixels[i*4] = v; pixels[i*4+1] = v; pixels[i*4+2] = v;
+  }
+  return out;
+};
+
 /* ---------- التصدير (القاعدة الذهبية §18) ---------- */
 if(typeof module !== 'undefined' && module.exports){ module.exports = RECOLOR; }
 if(typeof window !== 'undefined'){ window.RECOLOR = RECOLOR; }

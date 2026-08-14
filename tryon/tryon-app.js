@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v23';
+  const TRYON_VER = 'v24';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -37,6 +37,7 @@
     camErr: null, fatalShown: false,
     bandana: null,                 // v23: null = من غير بندانة (الافتراضي)
     bandanaHinted: false,
+    plain: false, plainUser: false, // v24: سادة (يدوي أو تلقائي من صورة المنتج)
     stage: 'boot', lastErr: null      // 🩺 تشخيص: فين وقفنا وإيه الخطأ
   };
 
@@ -297,7 +298,7 @@
   function ensureTint(asset, scarf, color){
     if(!asset.ready || !scarf.recolor) return;
     if(color.id !== 'from-img'){ asset.headTinted = null; asset.tintHex = null; asset.headTemp = null; asset.tempKey = null; return; }
-    if(asset.tintHex === color.hex) return;
+    if(asset.tintHex === color.hex && asset.tintPlain === S.plain) return;
     try{
       const c = document.createElement('canvas');
       // الأصل ممكن يبقى كانفاس (بعد تنضيف الفتحة) — مالوش naturalWidth
@@ -308,10 +309,15 @@
       const im = g.getImageData(0, 0, c.width, c.height);
       if(!asset._mask)
         asset._mask = RECOLOR.buildMask(im.data, scarf.recolor.seeds, scarf.recolor.tol);
-      RECOLOR.applyRecolor(im.data, asset._mask, color.hex);
+      // 🧵 v24: سادة = الكنار بيتملى بإضاءة القماش المجاور وبيتلون معاه
+      const mask = S.plain
+        ? RECOLOR.plainify(im.data, asset._mask, c.width, c.height, T.blurChannel)
+        : asset._mask;
+      RECOLOR.applyRecolor(im.data, mask, color.hex);
       g.putImageData(im, 0, 0);
       asset.headTinted = c;
       asset.tintHex = color.hex;
+      asset.tintPlain = S.plain;
       asset.headTemp = null; asset.tempKey = null;   // اللون اتغير = الحرارة تتخبز تاني
     }catch(e){ console.warn('tint', e); asset.headTinted = null; }
   }
@@ -730,6 +736,7 @@
     if(src.kind !== 'none') colorFromProductImage(src.value).catch(() => {});
 
     buildBandanaRow();
+    buildStyleRow();
 
     $('btnShot').onclick = () => capture().catch(console.warn);
     $('btnLive').onclick = () => backToLive().catch(console.warn);
@@ -739,6 +746,32 @@
         tryOnPhoto(e.target.files[0]).catch(console.warn);
       e.target.value = '';
     };
+  }
+
+  /* 🧵 v24: بالكنار / سادة — عشان المنتج الساده مياخدش كنار القالب */
+  function buildStyleRow(){
+    const row = $('styleRow');
+    if(!row) return;
+    [ { plain: false, label: '✨ بالكنار' },
+      { plain: true,  label: '🧵 سادة' } ].forEach((o) => {
+      const b = document.createElement('button');
+      b.className = 'stl' + (o.plain === S.plain ? ' on' : '');
+      b.dataset.plain = o.plain ? '1' : '0';
+      b.textContent = o.label;
+      b.onclick = () => {
+        S.plain = o.plain;
+        S.plainUser = true;                  // اختيار يدوي = التلقائي يسكت
+        syncStyleRow();
+        if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
+      };
+      row.appendChild(b);
+    });
+  }
+  function syncStyleRow(){
+    const row = $('styleRow');
+    if(!row) return;
+    row.querySelectorAll('.stl').forEach((b) =>
+      b.classList.toggle('on', (b.dataset.plain === '1') === S.plain));
   }
 
   /* 🧕 v23: صف اختيار البندانة — أول زرار "من غير بندانة" (الافتراضي)
@@ -786,6 +819,12 @@
     const dom = T.dominantColor(px);
     if(!dom.hex || dom.confidence < 0.08) return;    // كلها خلفية = البيج المحايد
     S.color = { id:'from-img', name:'لون المنتج', hex:dom.hex };
+    // 🧵 v24: منتج لونه غالب جدًا = غالبًا ساده — بس اختيار العميلة
+    //    اليدوي (S.plainUser) عمره ما يتداس عليه
+    if(!S.plainUser){
+      S.plain = dom.confidence >= 0.4;
+      syncStyleRow();
+    }
     S.assetCache = {};                               // اللون اتغير = الرسمة تتبني تاني
     if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
   }

@@ -52,6 +52,12 @@
   @keyframes sp{to{transform:rotate(360deg);}}
   #loader p{font-size:14px; font-weight:500;}
 
+  #styleRow{display:flex; gap:8px; justify-content:center; padding:8px 0 0;}
+  #styleRow .stl{font-family:inherit; font-weight:800; font-size:12.5px;
+                 padding:7px 14px; border-radius:99px; border:1.5px solid #e7d9e2;
+                 background:#fff; color:#3A2233; cursor:pointer;}
+  #styleRow .stl.on{background:var(--gold-deep,#C79A38); color:#fff;
+                    border-color:var(--gold-deep,#C79A38);}
   #bandanaRow{display:flex; gap:9px; justify-content:center; align-items:center;
               padding:10px 0 2px;}
   #bandanaRow .bnd{width:32px; height:32px; border-radius:50%; border:2.5px solid #fff;
@@ -103,6 +109,8 @@
 
   <div id="fatal"></div>
 
+  <!-- 🧵 v24: بالكنار / سادة -->
+  <div id="styleRow"></div>
   <!-- 🧕 v23: البندانة — أول زرار ✕ = من غير بندانة (الافتراضي) -->
   <div id="bandanaRow"></div>
 
