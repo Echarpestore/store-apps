@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v32';
+  const TRYON_VER = 'v33';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -441,6 +441,20 @@
     }catch(e){ console.warn('faceHole', e); return img; }
   }
 
+  /* 🔴 v33: **الباج الأصلي.** الأصل بيتحمّل غير متزامن، وفي وضع
+     الصورة الرسم بيحصل **مرة واحدة** — فلو الصورة ماكانتش جاهزة
+     في اللحظة دي، مفيش حاجة تعيد الرسم لما تخلص. النتيجة: وش من
+     غير طرحة و`asset:loading` للأبد (الشريحة أكدتها على جهاز المالك).
+     ⚠️ وحارس المهلة اللي في draw مكانش بيشتغل لنفس السبب: draw
+        نفسها مش بتتنادى تاني في وضع الصورة. فالحارس اتنقل هنا
+        كـsetTimeout مستقل عن دورة الرسم. */
+  function repaintStill(){
+    try{
+      if(S.mode === 'photo' && S.stillResult && S.stillImg)
+        draw(S.stillResult, S.stillImg);
+    }catch(e){ console.warn('repaint', e); }
+  }
+
   function loadPhotoScarf(scarf, color){
     const asset = { ready:false, failed:false, head:null, drape:null,
                     headTinted:null, tintHex:null, _mask:null,
@@ -454,6 +468,7 @@
         if(!asset.head){ asset.failed = true; asset.why = 'معالجة الصورة رجّعت فاضي'; return; }
         asset.ready = !!(!scarf.drape || asset.drape);
         if(!asset.ready) asset.why = 'مستني الانسدال';
+        if(asset.ready) repaintStill();       // 🔴 v33: جاهز؟ ارسم تاني
       }catch(e){
         // 🔴 v29: كان أي خطأ في المعالجة بيسيب ready=false للأبد =
         //    شاشة من غير طرحة ومن غير أي تفسير
@@ -461,10 +476,25 @@
       }
     };
     // 🛟 الصورة ماتحملتش (لسه ماترفعتش؟) = الرسمة بدل شاشة فاضية
-    hi.onerror = () => { asset.failed = true; asset.why = 'ملف الصورة مش موجود أو مرفوض'; };
+    hi.onerror = () => {
+      asset.failed = true; asset.why = 'ملف الصورة مش موجود أو مرفوض';
+      repaintStill();
+    };
+    // ⏱️ حارس مستقل عن دورة الرسم: تحميل معلّق (لا load ولا error)
+    //    بيتحوّل لفشل معلن بعد ٦ ثواني، والشاشة بتتحدّث لوحدها.
+    setTimeout(() => {
+      if(!asset.ready && !asset.failed){
+        asset.failed = true;
+        asset.why = 'التحميل اتأخر أكتر من ٦ ثواني';
+        repaintStill();
+      }
+    }, 6000);
     hi.src = scarf.head.url;
     if(scarf.drape && scarf.drape.url){
-      const di = new Image(); di.onload = () => { asset.drape = di; asset.ready = !!asset.head; };
+      const di = new Image();
+      di.onload = () => { asset.drape = di; asset.ready = !!asset.head;
+                          if(asset.ready) repaintStill(); };
+      di.onerror = () => { asset.failed = true; asset.why = 'الانسدال مش موجود'; repaintStill(); };
       di.onerror = () => {};
       di.src = scarf.drape.url;
     }
