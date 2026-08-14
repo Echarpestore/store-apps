@@ -574,6 +574,7 @@ function clearSaleState(){
   _cartFirstItemAt = null;
   _cartSid = null;               // 🕵️ سلة جديدة = معرّف جديد (مش بيتوارث)
   _cardFirstApprovedAt = null;   // 🕵️ وسحب الكارت القديم مالوش علاقة بالسلة الجديدة
+  _cardMoneyAtRiskAt = null;
   _cartEditsAfterCard = [];
   // 🔒 أي متابعة دفع بالكارت من العملية اللي فاتت لازم تتقفل مع السلة الجديدة
   try{ paymobReset(); }catch(e){}
@@ -1802,14 +1803,22 @@ async function loadStaffPointsConfig(){
 // 🕵️ العلبة السودا: تسجيل صامت لأحداث السلة (لتبويب نشاط غريب لاحقًا) — صفر تأثير على الشغل
 let _cartFirstItemAt = null;   // وقت أول قطعة في السلة الحالية
 let _cartSid = null;           // 🕵️ معرّف السلة الحالية (بيربط أحداثها بالفاتورة)
+let _cardMoneyAtRiskAt = null;    // 🕵️ لحظة أول رنين ماكينة (الفلوس بقت معرّضة)
 let _cardFirstApprovedAt = null;  // 🕵️ لحظة أول موافقة كارت في السلة دي
 let _cartEditsAfterCard = [];     // 🕵️ التعديلات اللي حصلت **بعد** السحب = سبب الفرق
 // 🕵️ v297: تعديل بعد سحب الكارت = سبب محتمل لفرق مسحوب زيادة.
 //    الفلترة بالوقت: تعديل قبل السحب مالوش علاقة بالفرق.
 function _trackEditAfterCard(kind, name, qty, value){
-  if(!_cardFirstApprovedAt) return;              // لسه مفيش فلوس اتسحبت
+  // 🔑 المرجع هو **رنين الماكينة** مش الموافقة: بين الاتنين ثواني
+  //    والعميلة ممكن تكون حاطة الكارت خلاص. تعديل قبل الرنين =
+  //    بيع عادي ومالوش علاقة بأي فرق.
+  if(!_cardMoneyAtRiskAt) return;
+  const now = Date.now();
   _cartEditsAfterCard.push({ kind: kind, name: String(name || ''),
-    qty: Number(qty) || 0, value: +(Number(value) || 0).toFixed(2), ts: Date.now() });
+    qty: Number(qty) || 0, value: +(Number(value) || 0).toFixed(2), ts: now,
+    // بعد الموافقة = مؤكد إن الفلوس اتسحبت. بين الرنين والموافقة =
+    // الأغلب اتسحبت برضه بس مش مؤكد — بيتعرض بصيغة أهدى.
+    afterApproval: !!(_cardFirstApprovedAt && now >= _cardFirstApprovedAt) });
 }
 window._trackEditAfterCard = _trackEditAfterCard;
 
@@ -1819,10 +1828,13 @@ function cardOverCause(edits, diff){
   const list = (edits || []).filter(function(e){ return e && e.value > 0; });
   if(!list.length) return null;
   const sum = +list.reduce(function(n, e){ return n + e.value; }, 0).toFixed(2);
+  const anyBefore = list.some(function(e){ return e.afterApproval === false; });
   return {
     text: list.map(function(e){
-      return e.kind + ' ' + e.name + (e.qty > 1 ? ' ×' + e.qty : '') + ' (' + e.value + ')';
+      return e.kind + ' ' + e.name + (e.qty > 1 ? ' ×' + e.qty : '') + ' (' + e.value + ')'
+        + (e.afterApproval === false ? ' — أثناء ما الماكينة شغالة' : '');
     }).join(' · '),
+    beforeApproval: anyBefore,
     sum: sum,
     exact: Math.abs(sum - (Number(diff) || 0)) <= 0.005,
     items: list
@@ -2950,6 +2962,12 @@ async function sendToPaymobTerminal(amountEGP, seq){
   // في الشبكة بس الطلب وصل الماكينة فعلًا، العميل يدفع والماكينة تطبع والتأكيد
   // يتكتب في مستند محدش بيراقبه. دلوقتي الأذن مفتوحة قبل ما الطلب يخرج أصلًا.
   paymobWatch(orderRef, amountEGP, 0, seq);
+  // 🕵️ v298: **من هنا** الفلوس معرّضة — المبلغ راح للماكينة والعميلة
+  //    ممكن تحط الكارت في أي ثانية. أي تعديل في السلة بعد اللحظة دي
+  //    ممكن يخلّي المسحوب أكبر من الفاتورة.
+  //    ⚠️ كان مربوط بالموافقة (approvedAt) — والفجوة بين الرنين
+  //       والموافقة (ثواني إلى دقيقة) كانت هتفوّت السبب الحقيقي.
+  if(!_cardMoneyAtRiskAt) _cardMoneyAtRiskAt = Date.now();
   try{
     const res = await fetch(PAYMOB_FN_URL, {
       method: 'POST',
@@ -3129,6 +3147,8 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
       //    بعدها هو **سبب** أي فرق. بنسجّل اللحظة عشان نعرف نفرّق بين
       //    تعديل قبل السحب (عادي) وتعديل بعده (بيخلي العميلة دافعة زيادة).
       if(!_cardFirstApprovedAt) _cardFirstApprovedAt = _leg.approvedAt;
+      // فولباك: كارت اتسجل يدوي من غير ما يعدّي على الرنين
+      if(!_cardMoneyAtRiskAt) _cardMoneyAtRiskAt = _leg.approvedAt;
       paymobCardTxns = (cardLegs || []).filter(function(l){ return l.status === 'approved' && l.txn; })
                                        .map(function(l){ return l.txn; });
       window.paymobCardTxns = paymobCardTxns;
