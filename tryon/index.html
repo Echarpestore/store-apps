@@ -52,6 +52,13 @@
   @keyframes sp{to{transform:rotate(360deg);}}
   #loader p{font-size:14px; font-weight:500;}
 
+  #bandanaRow{display:flex; gap:9px; justify-content:center; align-items:center;
+              padding:10px 0 2px;}
+  #bandanaRow .bnd{width:32px; height:32px; border-radius:50%; border:2.5px solid #fff;
+                   box-shadow:0 0 0 1.5px #e7d9e2; cursor:pointer; padding:0;
+                   font-family:inherit; font-weight:800; font-size:13px;}
+  #bandanaRow .bnd.none{background:#fff; color:#9E8792;}
+  #bandanaRow .bnd.on{box-shadow:0 0 0 2.5px var(--gold-deep,#C79A38);}
   #fatal{display:none; margin:10px 16px; padding:14px 16px; border-radius:14px;
          background:#FCE9EC; color:#8A3B4C; font-size:14px; line-height:1.8;}
 
@@ -96,6 +103,9 @@
 
   <div id="fatal"></div>
 
+  <!-- 🧕 v23: البندانة — أول زرار ✕ = من غير بندانة (الافتراضي) -->
+  <div id="bandanaRow"></div>
+
   <div class="actions">
     <button id="btnPhoto">📷 على صورة</button>
     <button id="btnShot" title="التقاط">✦</button>
@@ -107,8 +117,10 @@
 <script src="assets/catalog.js"></script>
 <script src="tryon-core.js"></script>
 <script src="recolor-core.js"></script>
+<script src="tryon-mesh-core.js"></script>
 <script src="tryon-3d-core.js"></script>
 <script src="tryon-3d.js"></script>
+<script src="tryon-mesh.js"></script>
 <script src="tryon-app.js"></script>
 <script>
   if('serviceWorker' in navigator)

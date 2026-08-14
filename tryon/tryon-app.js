@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v22';
+  const TRYON_VER = 'v23';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -35,6 +35,8 @@
     assetCache: {},               // (scarfId|colorId) → {head, drape, anchors}
     lastHint: '', lostFrames: 0, r3d: false, mesh: false, lastFrameT: 0,
     camErr: null, fatalShown: false,
+    bandana: null,                 // v23: null = من غير بندانة (الافتراضي)
+    bandanaHinted: false,
     stage: 'boot', lastErr: null      // 🩺 تشخيص: فين وقفنا وإيه الخطأ
   };
 
@@ -499,6 +501,31 @@
     ensureTemp(asset, drS, dbS);
     const headImg = lookImg(asset);
 
+    // 🧕 v23: البندانة — **تحت** القماش وفوق الوش: بتغطي منابت
+    //    الشعر والجبهة فمفيش شعر ولا خلفية باينة بين الوش والطرحة
+    //    (سر واقعية الفلاتر الاحترافية). قماشها له ظل خفيف عند
+    //    حافتها على الجلد + لمعة بسيطة — مش لون مصمت.
+    if(S.bandana && S.bandana.hex && S.scarf.type === 'photo'){
+      const bd = T.bandanaSpec(an, ex);
+      ctx.save();
+      ctx.beginPath();
+      bd.poly.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+      ctx.closePath();
+      const gb = ctx.createLinearGradient(bd.bottomMid[0], bd.bottomMid[1],
+                                          bd.top[0], bd.top[1]);
+      gb.addColorStop(0, shade(S.bandana.hex, -18));   // أغمق عند الجلد
+      gb.addColorStop(0.35, S.bandana.hex);
+      gb.addColorStop(1, shade(S.bandana.hex, 10));    // لمعة خفيفة فوق
+      ctx.fillStyle = gb;
+      ctx.fill();
+      // ضل تلامس رفيع عند الحافة على الجبهة
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.strokeStyle = 'rgba(60,45,38,0.22)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // 🌗 ظل التلامس (v20): على الوش نفسه **قبل** ما القماش يترسم
     //    فوقه، وقبل فلتر السطوع (الضل مش بياخد سطوع الطرحة).
     //    multiply = تغميق حقيقي مش طبقة رمادية.
@@ -610,6 +637,8 @@
     draw(S.stillResult, img);
     if(!S.stillResult.faceLandmarks || !S.stillResult.faceLandmarks.length)
       hint('مش لاقيين وش واضح في الصورة دي');
+    else
+      maybeBandanaHint();               // v23: اقتراح البندانة — مرة واحدة بس
   }
 
   async function backToLive(){
@@ -700,6 +729,8 @@
     );
     if(src.kind !== 'none') colorFromProductImage(src.value).catch(() => {});
 
+    buildBandanaRow();
+
     $('btnShot').onclick = () => capture().catch(console.warn);
     $('btnLive').onclick = () => backToLive().catch(console.warn);
     $('btnPhoto').onclick = () => $('photoInput').click();
@@ -708,6 +739,36 @@
         tryOnPhoto(e.target.files[0]).catch(console.warn);
       e.target.value = '';
     };
+  }
+
+  /* 🧕 v23: صف اختيار البندانة — أول زرار "من غير بندانة" (الافتراضي)
+     وبعده الألوان. الرسم بيتحدث فورًا في وضع الصورة. */
+  function buildBandanaRow(){
+    const row = $('bandanaRow');
+    if(!row) return;
+    T.BANDANA_COLORS.forEach((c) => {
+      const b = document.createElement('button');
+      b.className = 'bnd' + (c.hex ? '' : ' none') + (S.bandana === null && !c.hex ? ' on' : '');
+      b.title = c.name;
+      b.setAttribute('aria-label', c.name);
+      if(c.hex) b.style.background = c.hex;
+      else b.textContent = '✕';
+      b.onclick = () => {
+        S.bandana = c.hex ? c : null;
+        row.querySelectorAll('.bnd').forEach((x) => x.classList.remove('on'));
+        b.classList.add('on');
+        if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
+      };
+      row.appendChild(b);
+    });
+  }
+
+  // اقتراح لطيف مرة واحدة: أول ما الطرحة تلبس صح والعميلة من غير
+  // بندانة — مش إجبار، مجرد لفت نظر إن دي اللي بتكمّل الشكل
+  function maybeBandanaHint(){
+    if(S.bandanaHinted || S.bandana) return;
+    S.bandanaHinted = true;
+    hint('جرّبي بندانة تحتها من الألوان اللي فوق 🧕 — بتغطي الشعر وبتكمّل اللبسة');
   }
 
   /* ============================================================

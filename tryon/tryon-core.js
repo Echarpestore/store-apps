@@ -90,7 +90,8 @@ TRYON.anchorsFromLandmarks = function(lm, w, h){
   const px = (i) => [ lm[i].x * w, lm[i].y * h ];
   return { top: px(TRYON.LM.TOP), chin: px(TRYON.LM.CHIN),
            l: px(TRYON.LM.L), r: px(TRYON.LM.R),
-           cheekL: px(TRYON.LM.CHEEK_L), cheekR: px(TRYON.LM.CHEEK_R) };
+           cheekL: px(TRYON.LM.CHEEK_L), cheekR: px(TRYON.LM.CHEEK_R),
+           brow: px(TRYON.LM.BROW) };        // v23: للبندانة
 };
 
 /* ---------- ٥) توسيع النقط عشان الطرحة تغطي الشعر ---------- */
@@ -433,6 +434,64 @@ TRYON.holeRadiusAt = function(contour, theta){
   const f = t / (2 * Math.PI) * K;
   const i0 = Math.floor(f) % K, i1 = (i0 + 1) % K, k = f - Math.floor(f);
   return contour.radii[i0] * (1 - k) + contour.radii[i1] * k;
+};
+
+/* ---------- ١٩) 🧕 البندانة (v23) ---------- */
+// المرجع: لبس الطرحة الحقيقي بيبقى فيه بندانة تحتها بتغطي منابت
+// الشعر والجبهة — دي اللي بتخلي الفلاتر الاحترافية واقعية: مفيش
+// شعر ولا خلفية باينة بين الوش والقماش. بترسم بالكود على معالم
+// الجبهة نفسها — مش محتاجة صورة أصل ولا تصوير.
+TRYON.LM.BROW = 9;                    // بين الحاجبين — حافة البندانة بتتحسب منه
+
+TRYON.BANDANA_COLORS = [
+  { id: 'none',     name: 'من غير بندانة', hex: null },
+  { id: 'black',    name: 'أسود',      hex: '#1c1c1e' },
+  { id: 'navy',     name: 'كحلي',      hex: '#1f2a44' },
+  { id: 'brown',    name: 'بني',       hex: '#5b4632' },
+  { id: 'beige',    name: 'بيج',       hex: '#cbb59a' },
+  { id: 'white',    name: 'أبيض',      hex: '#f5f2ec' },
+  { id: 'offwhite', name: 'أوف وايت',  hex: '#e9e0cf' }
+];
+
+// شكل البندانة: قبة فوق الراس + حافة سفلية قوس على الجبهة بين
+// الصدغين. الحافة بتقع بين منابت الشعر (top) وبين الحاجبين (brow)
+// — drop = قد إيه نازلة على الجبهة (0 = عند المنابت، 1 = عند الحواجب).
+// بيرجع مضلّع نقط جاهز للرسم — كله متبني بمتجهات الوش نفسه
+// (up/side) فبيميل مع الراس تلقائي.
+TRYON.bandanaSpec = function(an, ex, opts){
+  opts = opts || {};
+  const drop = opts.drop != null ? opts.drop : 0.42;
+  const segs = opts.segs != null ? opts.segs : 14;
+  const upX = ex.up[0], upY = ex.up[1];
+  const sdX = -upY, sdY = upX;                     // متجه جانبي (عمودي على up)
+  const cx = (ex.l[0] + ex.r[0]) / 2, cy = (ex.l[1] + ex.r[1]) / 2;
+  // نقطة منتصف الحافة السفلية: بين منابت الشعر وبين الحاجبين
+  const bm = [ an.top[0] + (an.brow[0] - an.top[0]) * drop,
+               an.top[1] + (an.brow[1] - an.top[1]) * drop ];
+  // طرفا الحافة: عند الصدغين الموسّعين، منزّلين شوية (يغطوا السوالف)
+  const down = ex.faceH * 0.10;
+  const bl = [ ex.l[0] - upX * down, ex.l[1] - upY * down ];
+  const br = [ ex.r[0] - upX * down, ex.r[1] - upY * down ];
+  // ارتفاع القبة فوق منابت الشعر — تغطي الجمجمة اللي الطرحة هتلفها
+  const domeTop = ex.faceH * 0.34;
+  const rx = Math.hypot(br[0] - bl[0], br[1] - bl[1]) / 2 * 1.06;
+
+  const poly = [];
+  // الحافة السفلية: قوس تربيعي bl → bm → br
+  for(let i = 0; i <= segs; i++){
+    const t = i / segs, mt = 1 - t;
+    poly.push([ mt*mt*bl[0] + 2*mt*t*bm[0] + t*t*br[0],
+                mt*mt*bl[1] + 2*mt*t*bm[1] + t*t*br[1] ]);
+  }
+  // القبة: نص قطع ناقص من br راجع لـ bl فوق الراس
+  const topC = [ an.top[0] + upX * domeTop, an.top[1] + upY * domeTop ];
+  const ry = Math.hypot(topC[0] - cx, topC[1] - cy);
+  for(let i = 1; i < segs; i++){
+    const th = i / segs * Math.PI;                  // 0..π: من جنب r للجنب l
+    const off = Math.cos(th) * rx, lift = Math.sin(th) * ry;
+    poly.push([ cx + sdX * off + upX * lift, cy + sdY * off + upY * lift ]);
+  }
+  return { poly: poly, bottomMid: bm, top: topC };
 };
 
 /* ---------- التصدير (القاعدة الذهبية §18) ---------- */
