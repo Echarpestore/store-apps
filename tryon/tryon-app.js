@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v25';
+  const TRYON_VER = 'v26';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -37,7 +37,7 @@
     camErr: null, fatalShown: false,
     bandana: null,                 // v23: null = من غير بندانة (الافتراضي)
     bandanaHinted: false,
-    plain: false, plainUser: false, // v24: سادة (يدوي أو تلقائي من صورة المنتج)
+    plain: false,                   // v26: سادة — تلقائي بس من صورة المنتج
     seg: null, segFailed: false,    // v25: مقطّع الشعر — lazy في وضع الصورة
     hairZone: null,                 // v25: {mask,w,h} — أنهي شعر يتغطى (للصورة الحالية)
     hairCoverCanvas: null, hairCoverKey: null,
@@ -589,7 +589,12 @@
 
     const q = T.fitQuality(pose);
     hint(q.hint);
-    if(q.fade) return;                       // لفّة جامدة = نخفي بدل ما نشوّه
+    // 🖼️ v26: الإخفاء **للايف بس** — في اللايف العميلة بتعدّل وضعها
+    //    في ثانية، إنما صورة ثابتة بوضع صعب = شاشة فاضية من غير أي
+    //    تفسير (حصلت فعلًا: صورة بالراحة على المخدة → "مافيش حاجة").
+    //    في الصورة بنرسم بأفضل تقدير + الرسالة بتقول إن الوضع صعب.
+    if(q.fade && S.mode === 'live') return;  // لفّة جامدة في اللايف = نخفي بدل ما نشوّه
+    if(q.fade) hint('الوضع في الصورة دي صعب — النتيجة تقريبية، جرّبي صورة وشّك فيها قدام 📷');
 
     // نقط التثبيت + تنعيم (في وضع الصورة الثابتة مفيش تنعيم)
     let an = T.anchorsFromLandmarks(lm, w, h);
@@ -868,7 +873,6 @@
     if(src.kind !== 'none') colorFromProductImage(src.value).catch(() => {});
 
     buildBandanaRow();
-    buildStyleRow();
 
     $('btnShot').onclick = () => capture().catch(console.warn);
     $('btnLive').onclick = () => backToLive().catch(console.warn);
@@ -880,31 +884,11 @@
     };
   }
 
-  /* 🧵 v24: بالكنار / سادة — عشان المنتج الساده مياخدش كنار القالب */
-  function buildStyleRow(){
-    const row = $('styleRow');
-    if(!row) return;
-    [ { plain: false, label: '✨ بالكنار' },
-      { plain: true,  label: '🧵 سادة' } ].forEach((o) => {
-      const b = document.createElement('button');
-      b.className = 'stl' + (o.plain === S.plain ? ' on' : '');
-      b.dataset.plain = o.plain ? '1' : '0';
-      b.textContent = o.label;
-      b.onclick = () => {
-        S.plain = o.plain;
-        S.plainUser = true;                  // اختيار يدوي = التلقائي يسكت
-        syncStyleRow();
-        if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
-      };
-      row.appendChild(b);
-    });
-  }
-  function syncStyleRow(){
-    const row = $('styleRow');
-    if(!row) return;
-    row.querySelectorAll('.stl').forEach((b) =>
-      b.classList.toggle('on', (b.dataset.plain === '1') === S.plain));
-  }
+  /* 🧵 v26: زراير "بالكنار/سادة" اتشالت من واجهة العميلة (قرار
+     المالك): دي كانت بتكشف عيب داخلي — إن عندنا قالب واحد بنلوّنه.
+     الستايل بقى **تلقائي بس** من صورة المنتج (لون غالب جدًا = ساده).
+     والحل الحقيقي لتنوّع الطرح (مسجر/ساده/كنار/مطرزة) هو أصل مصوّر
+     لكل موديل — prep.html جاهزة ليه، والكتالوج بياخد أي عدد أصول. */
 
   /* 🧕 v23: صف اختيار البندانة — أول زرار "من غير بندانة" (الافتراضي)
      وبعده الألوان. الرسم بيتحدث فورًا في وضع الصورة. */
@@ -951,12 +935,9 @@
     const dom = T.dominantColor(px);
     if(!dom.hex || dom.confidence < 0.08) return;    // كلها خلفية = البيج المحايد
     S.color = { id:'from-img', name:'لون المنتج', hex:dom.hex };
-    // 🧵 v24: منتج لونه غالب جدًا = غالبًا ساده — بس اختيار العميلة
-    //    اليدوي (S.plainUser) عمره ما يتداس عليه
-    if(!S.plainUser){
-      S.plain = dom.confidence >= 0.4;
-      syncStyleRow();
-    }
+    // 🧵 v26: منتج لونه غالب جدًا = غالبًا ساده — تلقائي بالكامل،
+    //    مفيش زراير قدام العميلة (الستايل من صورة المنتج نفسها)
+    S.plain = dom.confidence >= 0.4;
     S.assetCache = {};                               // اللون اتغير = الرسمة تتبني تاني
     if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
   }
