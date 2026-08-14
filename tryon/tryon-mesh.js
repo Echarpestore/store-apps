@@ -76,6 +76,10 @@
             '#include <dithering_fragment>\ngl_FragColor.a *= fA;');
       };
       M.mesh = new THREE.Mesh(M.geo, mat);
+      // 🔴 v29: MeshBasicMaterial من غير map لونه **أبيض** — يعني
+      //    الشبكة كلها بترسم مستطيل مصمت مكان الطرحة (المالك شافه).
+      //    فبنخبّيها لحد ما الخامة تتربط فعلًا.
+      M.mesh.visible = false;
       M.scene.add(M.mesh);
     }
     if(M.texSrc !== imgEl){
@@ -88,13 +92,20 @@
     } else if(M.tex && imgEl.getContext){
       M.tex.needsUpdate = true;   // كانفاس اتلون من جديد
     }
+    // الخامة موجودة؟ يبقى نرسم. مش موجودة؟ نفضل مخفيين والتطبيق
+    // بيرجع للمسار المسطح — أي حاجة أحسن من مستطيل أبيض على الوش.
+    M.mesh.visible = !!(M.mesh.material && M.mesh.material.map);
+    return M.mesh.visible;
   }
 
   // T = الأفيني أصل→شاشة (نفس اللي بيرسم المسطح) · yaw بالدرجات
   // v22: pairs/warpR = شد حافة الفتحة على محيط الوش الحقيقي (اختياري)
   function update(imgEl, assetW, assetH, chinY, T, yawDeg, faceCx, dtMs, pairs, warpR){
     if(!M.ready || !T) return false;
-    ensureMesh(imgEl, assetW, assetH, chinY);
+    if(!imgEl) return false;                    // 🛟 من غير صورة مفيش شبكة
+    // 🔴 v29: الخامة ماتربطتش = مستطيل أبيض. بنقول للتطبيق "أنا مش
+    //    قادر" بدل ما نرسم حاجة غلط، وهو بيرجع للمسار المسطح.
+    if(!ensureMesh(imgEl, assetW, assetH, chinY)) return false;
 
     const n = M.grid.pts.length;
     const targets = new Array(n);

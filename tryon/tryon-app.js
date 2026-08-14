@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v28';
+  const TRYON_VER = 'v29';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -420,14 +420,23 @@
     const asset = { ready:false, failed:false, head:null, drape:null,
                     headTinted:null, tintHex:null, _mask:null,
                     headTemp:null, tempKey:null,
+                    startedAt: performance.now(), why: '',   // 🩺 v29: تشخيص
                     anchors: scarf.head.anchors };
     const hi = new Image();
     hi.onload = () => {
-      asset.head = processHeadImage(hi, scarf, asset);
-      asset.ready = !!(!scarf.drape || asset.drape);
+      try{
+        asset.head = processHeadImage(hi, scarf, asset);
+        if(!asset.head){ asset.failed = true; asset.why = 'معالجة الصورة رجّعت فاضي'; return; }
+        asset.ready = !!(!scarf.drape || asset.drape);
+        if(!asset.ready) asset.why = 'مستني الانسدال';
+      }catch(e){
+        // 🔴 v29: كان أي خطأ في المعالجة بيسيب ready=false للأبد =
+        //    شاشة من غير طرحة ومن غير أي تفسير
+        asset.failed = true; asset.why = 'خطأ في المعالجة: ' + (e && e.message || e);
+      }
     };
     // 🛟 الصورة ماتحملتش (لسه ماترفعتش؟) = الرسمة بدل شاشة فاضية
-    hi.onerror = () => { asset.failed = true; };
+    hi.onerror = () => { asset.failed = true; asset.why = 'ملف الصورة مش موجود أو مرفوض'; };
     hi.src = scarf.head.url;
     if(scarf.drape && scarf.drape.url){
       const di = new Image(); di.onload = () => { asset.drape = di; asset.ready = !!asset.head; };
@@ -644,12 +653,30 @@
     const ex = T.expandAnchors(an, S.scarf.fit);
 
     let asset = getAsset(S.scarf, S.color);
+    // ⏳ v29: أصل عالق (مش ready ومش failed) — كان بيفضل كده للأبد
+    //    والشاشة من غير طرحة من غير أي تفسير. دلوقتي مهلة ٦ ثواني.
+    if(!asset.ready && !asset.failed && asset.startedAt
+       && performance.now() - asset.startedAt > 6000){
+      asset.failed = true;
+      asset.why = asset.why || 'التحميل اتأخر أكتر من ٦ ثواني';
+    }
     if(asset.failed){
       // 🛟 الأصل الحقيقي مش متاح — نرجع للرسمة بدل ما الشاشة تفضى
       const fb = window.TRYON_CATALOG.find((x) => x.type === 'procedural');
-      if(fb){ S.scarf = fb; asset = getAsset(S.scarf, S.color); }
+      if(fb && S.scarf.id !== fb.id){
+        console.warn('أصل الطرحة فشل:', S.scarf.id, asset.why);
+        S.lastErr = 'أصل «' + (S.scarf.name || S.scarf.id) + '»: ' + asset.why;
+        hint('⚠️ صورة الطرحة مش متاحة — بنعرض شكل مبدئي');
+        S.scarf = fb; asset = getAsset(S.scarf, S.color);
+        // ⚠️ مفيش صف اختيار طرح في الواجهة (أصل واحد بس لحد التصوير) —
+        //    فمفيش حاجة تتزامن هنا. أول ما الصف يتضاف يتنادى من هنا.
+      }
     }
-    if(!asset.ready) return;
+    if(!asset.ready){
+      // بيحمّل لسه — رسالة بدل صمت (العميلة بتفتكر إن الشاشة بايظة)
+      if(!asset.failed) hint('⏳ بنجهّز الطرحة…');
+      return;
+    }
     ensureTint(asset, S.scarf, S.color);
 
     // 💡🌡️ عيّنة الجلد: إضاءة + حرارة لون (v20) — كله متنعّم
@@ -757,9 +784,22 @@
       const hh = headImg.naturalHeight || headImg.height;
       const chinY = A.l[1] + (A.r[0] - A.l[0]) * 1.15;   // خط الدقن في الأصل
       const warp = contourPairs(lm, w, h, asset, Tr, ex);
-      TRYON_MESH.update(headImg, hw, hh, chinY, Tr, pose.yaw,
+      // 🔴 v29: قيمة update كانت مرمية — الشبكة تفشل والتطبيق مكمّل
+      //    كأن كله تمام، والنتيجة مستطيل مصمت مكان الطرحة. دلوقتي
+      //    الفشل بيرجّعنا للمسار المسطح في نفس الفريم.
+      const meshOK = TRYON_MESH.update(headImg, hw, hh, chinY, Tr, pose.yaw,
                         (ex.l[0] + ex.r[0]) / 2, dt,
                         warp && warp.pairs, warp && warp.radius);
+      if(!meshOK){
+        TRYON_MESH.clear();
+        S.meshFails = (S.meshFails || 0) + 1;
+        // فشل متكرر = الشبكة مش هتشتغل على الجهاز ده — نقفلها خالص
+        if(S.meshFails > 30){ S.mesh = false; console.warn('الشبكة اتقفلت — المسار المسطح'); }
+        ctx.save();
+        ctx.setTransform(Tr.a, Tr.d, Tr.b, Tr.e, Tr.c, Tr.f);
+        ctx.drawImage(headImg, 0, 0);
+        ctx.restore();
+      }
       if(window.TRYON_DEBUG && warp) debugContour(warp);
     } else if(Tr){
       if(S.mesh) TRYON_MESH.clear();
@@ -780,6 +820,8 @@
           + '° roll ' + pose.roll.toFixed(0) + '°',
         'stab ' + (S.stabState.stable ? 'STABLE' : 'moving') + ' '
           + (S.stabState.score === Infinity ? '—' : S.stabState.score.toFixed(1)),
+        'scarf ' + (S.scarf && S.scarf.id) + ' · ' + (window.tryonDiag ? tryonDiag().asset : '?'),
+        'mesh ' + (S.mesh ? 'on' : 'off') + ' fails ' + (S.meshFails || 0),
         'seg ' + (S.seg ? 'ready' : (S.segFailed ? 'failed' : 'idle'))
           + ' hair ' + (S.hairZone ? 'on' : '—')
           + ' mesh ' + (S.mesh ? 'on' : 'off')
@@ -1172,7 +1214,15 @@
 
   // للقاعدة الذهبية §18 + التشخيص من الكونسول
   window.tryonDiag = () => ({ ver: TRYON_VER, mode:S.mode, running:S.running,
-    stage: S.stage, r3d: S.r3d, mesh: S.mesh,
+    stage: S.stage, r3d: S.r3d, mesh: S.mesh, meshFails: S.meshFails || 0,
+    scarf: S.scarf && S.scarf.id, scarfType: S.scarf && S.scarf.type,
+    asset: (function(){
+      try{
+        const a = S.assetCache[S.scarf.id + '|' + (S.scarf.tintable ? S.color.id : '-')];
+        if(!a) return 'none';
+        return a.failed ? ('failed: ' + a.why) : (a.ready ? 'ready' : 'loading');
+      }catch(e){ return 'err'; }
+    })(),
     seg: S.seg ? 'ready' : (S.segFailed ? 'failed' : 'idle'),
     hairZone: !!S.hairZone,
     stable: S.stabState.stable, stabScore: S.stabState.score,
