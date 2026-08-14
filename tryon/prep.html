@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>echarpe 🧰 تجهيز أصول الطرح</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --gold-deep:#C79A38; --bg:#FFF6FA; --ink:#3A2233;
+         --muted:#9E8792; --line:#F3DEE9; }
+  *{margin:0; padding:0; box-sizing:border-box;}
+  body{font-family:'Tajawal',sans-serif; background:var(--bg); color:var(--ink);}
+  .app{max-width:520px; margin:0 auto; padding:16px;}
+  h1{font-size:19px; margin-bottom:2px;} h1 span{color:var(--gold-deep);}
+  .sub{font-size:12.5px; color:var(--muted); line-height:1.7; margin-bottom:12px;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:16px;
+        padding:14px; margin-bottom:12px;}
+  .card h2{font-size:14px; margin-bottom:8px;}
+  #stageWrap{position:relative; border-radius:12px; overflow:hidden;
+             background:
+               repeating-conic-gradient(#e9e2e6 0 25%, #f8f3f6 0 50%) 0 0/18px 18px;
+             min-height:120px;}
+  #stage{width:100%; display:block; cursor:crosshair;}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;}
+  button{font-family:inherit; border:none; border-radius:10px; padding:10px 14px;
+         font-weight:700; font-size:13.5px; background:var(--ink); color:#fff;
+         cursor:pointer;}
+  button.lite{background:#fff; color:var(--ink); border:1.5px solid var(--line);}
+  button.gold{background:var(--gold-deep);}
+  button:disabled{opacity:.4; cursor:default;}
+  input[type=range]{flex:1;}
+  input[type=file]{display:none;}
+  input[type=text]{font-family:inherit; padding:9px 12px; border:1.5px solid var(--line);
+                   border-radius:10px; font-size:13.5px; flex:1; min-width:0;}
+  .lbl{font-size:12.5px; color:var(--muted);}
+  .hintline{font-size:12.5px; color:var(--muted); line-height:1.7; margin-top:8px;}
+  .mode{font-size:12.5px; font-weight:800; color:var(--gold-deep); margin-top:8px;}
+  #snippet{width:100%; direction:ltr; text-align:left; font-family:monospace;
+           font-size:11.5px; line-height:1.55; border:1.5px solid var(--line);
+           border-radius:10px; padding:10px; min-height:150px; margin-top:8px;
+           white-space:pre; overflow:auto;}
+  #previewC{width:100%; border-radius:12px; background:#f2ecef; display:block;}
+  .ok{color:#2c7a3f; font-weight:700;} .bad{color:#b3403a; font-weight:700;}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>echarpe <span>🧰</span> تجهيز أصول الطرح</h1>
+  <div class="sub">
+    أداة داخلية — مش للعميلات. صوّر الطرحة على المانيكان (قدامي، خلفية بيضا،
+    إضاءة ثابتة) وارفع الصورة هنا: الأداة بتشيل الخلفية وبتطلّعلك ملف الأصل
+    وسطر الكتالوج جاهزين.
+  </div>
+
+  <div class="card">
+    <h2>١) الصورة</h2>
+    <div class="row">
+      <button id="btnUpload">📷 اختار صورة الطرحة</button>
+      <span class="lbl" id="imgInfo"></span>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <div class="card" id="stageCard" style="display:none;">
+    <div id="stageWrap"><canvas id="stage"></canvas></div>
+    <div class="mode" id="modeLine"></div>
+    <div class="row">
+      <span class="lbl">حساسية الخلفية</span>
+      <input type="range" id="tolRange" min="10" max="70" value="34">
+      <button class="lite" id="btnRedoBg">↺ إعادة إزالة الخلفية</button>
+    </div>
+    <div class="row">
+      <button class="lite" id="btnHole">🕳️ انقر جوه فتحة الوش لتفريغها</button>
+      <button class="lite" id="btnAnchors">📍 نقط التثبيت (٣ نقرات)</button>
+      <button class="lite" id="btnSeeds">🎨 عيّنات القماش (نقرتين)</button>
+    </div>
+    <div class="row">
+      <button class="lite" id="btnCrop">✂️ قص على حدود الطرحة</button>
+      <button class="lite" id="btnReset">🔄 من الأول</button>
+    </div>
+    <div class="hintline">
+      📍 ترتيب النقط: <b>الصدغ الشمال</b> (حافة الفتحة يمينك وأنت باصص للصورة)
+      ← <b>الصدغ اليمين</b> ← <b>منتصف الجبهة</b> عند حافة القماش.<br>
+      🎨 العيّنات: نقرة على قماش <b>فاتح</b> + نقرة على قماش <b>في الضل</b> —
+      دول اللي بيخلّوا إعادة التلوين بلون المنتج تشتغل.
+    </div>
+  </div>
+
+  <div class="card" id="previewCard" style="display:none;">
+    <h2>٢) معاينة على وش تجريبي</h2>
+    <canvas id="previewC" width="360" height="430"></canvas>
+    <div class="hintline">نفس محرك التطبيق بالظبط (توسيع + أفيني ٣ نقط) —
+      لو الفتحة قاعدة على الوش هنا، هتقعد على وش العميلة.</div>
+  </div>
+
+  <div class="card" id="exportCard" style="display:none;">
+    <h2>٣) التصدير</h2>
+    <div class="row">
+      <input type="text" id="assetId" placeholder="المعرّف بالإنجليزي — مثلًا chiffon-02">
+      <input type="text" id="assetName" placeholder="الاسم اللي هيظهر للعميلة">
+    </div>
+    <div class="row">
+      <button class="gold" id="btnPng">⬇️ تنزيل PNG الأصل</button>
+      <button id="btnSnippet">📋 نسخ سطر الكتالوج</button>
+      <span class="lbl" id="expStatus"></span>
+    </div>
+    <textarea id="snippet" readonly spellcheck="false"></textarea>
+    <div class="hintline">
+      ✅ خطوات الرفع: حط الـPNG في <b>tryon/assets/</b> بنفس الاسم اللي في
+      السطر · ضيف السطر جوه <b>TRYON_CATALOG</b> في catalog.js ·
+      ارفع CACHE_NAME في sw.js · ارفع على GitHub وافتح/اقفل مرتين.
+    </div>
+  </div>
+</div>
+
+<script src="tryon-core.js"></script>
+<script src="prep-core.js"></script>
+<script>
+'use strict';
+(function(){
+  const T = window.TRYON, P = window.TRYON_PREP;
+  const $ = (id) => document.getElementById(id);
+  const S = {
+    img: null, w: 0, h: 0,
+    ctx: null, orig: null,          // ImageData الأصلية (للـ"من الأول"/إعادة الإزالة)
+    mode: '',                       // '' | 'hole' | 'anchors' | 'seeds'
+    anchors: { l: null, r: null, top: null },
+    tapStep: 0,
+    seeds: [],
+    bg: null
+  };
+  const ANCHOR_ORDER = ['l', 'r', 'top'];
+  const ANCHOR_NAME = { l: 'الصدغ الشمال', r: 'الصدغ اليمين', top: 'منتصف الجبهة' };
+
+  /* ---------- تحميل الصورة ---------- */
+  $('btnUpload').onclick = () => $('fileInput').click();
+  $('fileInput').onchange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!file) return;
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    await img.decode();
+    // سقف المقاس — صور الموبايل 4000px بتخلي الـflood تقيل ببلاش
+    const MAX = 1400;
+    const k = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+    S.w = Math.round(img.naturalWidth * k);
+    S.h = Math.round(img.naturalHeight * k);
+    const cv = $('stage');
+    cv.width = S.w; cv.height = S.h;
+    S.ctx = cv.getContext('2d', { willReadFrequently: true });
+    S.ctx.drawImage(img, 0, 0, S.w, S.h);
+    S.orig = S.ctx.getImageData(0, 0, S.w, S.h);
+    S.anchors = { l: null, r: null, top: null };
+    S.tapStep = 0; S.seeds = []; S.mode = '';
+    $('imgInfo').textContent = S.w + '×' + S.h;
+    $('stageCard').style.display = 'block';
+    removeBg();
+  };
+
+  function removeBg(){
+    const im = new ImageData(new Uint8ClampedArray(S.orig.data), S.w, S.h);
+    const res = P.removeStudioBg(im.data, S.w, S.h,
+      { tol: Number($('tolRange').value) });
+    S.bg = res.bg;
+    S.ctx.putImageData(im, 0, 0);
+    setMode('');
+    refresh();
+    $('modeLine').textContent = res.removed
+      ? '✅ الخلفية اتشالت (' + res.removed + ' بكسل) — لو باقي حتت منها زوّد الحساسية'
+      : '⚠️ ملقتش خلفية موحّدة عند الأركان — الصورة متصورة على خلفية بيضا؟';
+  }
+  $('btnRedoBg').onclick = removeBg;
+  $('tolRange').onchange = removeBg;
+  $('btnReset').onclick = () => { S.ctx.putImageData(S.orig, 0, 0); removeBg(); };
+
+  /* ---------- الأوضاع واللمس ---------- */
+  function setMode(m){
+    S.mode = m;
+    if(m === 'anchors'){ S.anchors = { l: null, r: null, top: null }; S.tapStep = 0; }
+    if(m === 'seeds') S.seeds = [];
+    const line = m === 'hole' ? '🕳️ انقر جوه فتحة الوش'
+      : m === 'anchors' ? '📍 انقر: ' + ANCHOR_NAME[ANCHOR_ORDER[0]]
+      : m === 'seeds' ? '🎨 انقر على قماش فاتح'
+      : '';
+    if(line) $('modeLine').textContent = line;
+  }
+  $('btnHole').onclick = () => setMode('hole');
+  $('btnAnchors').onclick = () => setMode('anchors');
+  $('btnSeeds').onclick = () => setMode('seeds');
+
+  $('stage').addEventListener('click', (ev) => {
+    if(!S.mode) return;
+    const p = P.tapToImage(ev.clientX, ev.clientY,
+      $('stage').getBoundingClientRect(), S.w, S.h);
+    if(S.mode === 'hole'){
+      const im = S.ctx.getImageData(0, 0, S.w, S.h);
+      const res = P.clearHoleAt(im.data, S.w, S.h, p,
+        { tol: Number($('tolRange').value), bg: S.bg });
+      if(res.holePx){
+        S.ctx.putImageData(im, 0, 0);
+        $('modeLine').textContent = '✅ الفتحة اتفرّغت (' + res.holePx + ' بكسل)';
+        setModeDone();
+      } else {
+        $('modeLine').textContent = '⚠️ النقرة دي على قماش مش على الفتحة — جرّب في النص';
+      }
+    } else if(S.mode === 'anchors'){
+      S.anchors[ANCHOR_ORDER[S.tapStep]] = p;
+      S.tapStep++;
+      if(S.tapStep >= 3){
+        const v = P.validateAnchors(S.anchors, S.w, S.h);
+        $('modeLine').innerHTML = v.ok
+          ? '<span class="ok">✅ النقط تمام</span>'
+          : '<span class="bad">⚠️ ' + v.msg + ' — دوس 📍 وعيدها</span>';
+        setModeDone();
+      } else {
+        $('modeLine').textContent = '📍 انقر: ' + ANCHOR_NAME[ANCHOR_ORDER[S.tapStep]];
+      }
+    } else if(S.mode === 'seeds'){
+      const i = (p[1] * S.w + p[0]) * 4;
+      const d = S.ctx.getImageData(0, 0, S.w, S.h).data;
+      S.seeds.push([d[i], d[i + 1], d[i + 2]]);
+      if(S.seeds.length >= 2){
+        $('modeLine').textContent = '✅ العيّنتين اتاخدوا';
+        setModeDone();
+      } else {
+        $('modeLine').textContent = '🎨 دلوقتي انقر على قماش في الضل';
+      }
+    }
+    refresh();
+  });
+
+  function setModeDone(){ S.mode = ''; }
+
+  /* ---------- القص ---------- */
+  $('btnCrop').onclick = () => {
+    const im = S.ctx.getImageData(0, 0, S.w, S.h);
+    const box = P.autoCrop(im.data, S.w, S.h, 12);
+    if(!box){ $('modeLine').textContent = '⚠️ مفيش حاجة معتمة تتقص عليها'; return; }
+    const c = document.createElement('canvas');
+    c.width = box.w; c.height = box.h;
+    c.getContext('2d').putImageData(im, -box.x, -box.y);
+    // النقط والبذور بتتزحزح مع القص
+    ANCHOR_ORDER.forEach((k) => {
+      if(S.anchors[k]) S.anchors[k] = [S.anchors[k][0] - box.x, S.anchors[k][1] - box.y];
+    });
+    S.w = box.w; S.h = box.h;
+    $('stage').width = S.w; $('stage').height = S.h;
+    S.ctx = $('stage').getContext('2d', { willReadFrequently: true });
+    S.ctx.drawImage(c, 0, 0);
+    S.orig = S.ctx.getImageData(0, 0, S.w, S.h);   // القص نهائي — الأصل الجديد
+    $('imgInfo').textContent = S.w + '×' + S.h;
+    refresh();
+  };
+
+  /* ---------- التحديث العام ---------- */
+  function refresh(){
+    drawMarkers();
+    const v = P.validateAnchors(S.anchors, S.w, S.h);
+    $('previewCard').style.display = v.ok ? 'block' : 'none';
+    $('exportCard').style.display = v.ok ? 'block' : 'none';
+    if(v.ok){ drawPreview(); buildSnippet(); }
+  }
+
+  function drawMarkers(){
+    // العلامات بتترسم كطبقة مؤقتة فوق نسخة — مش على البيانات نفسها
+    const base = S.ctx.getImageData(0, 0, S.w, S.h);
+    S._clean = base;                          // آخر نسخة نضيفة (للتصدير)
+    const g = S.ctx;
+    const dot = (p, color, label) => {
+      if(!p) return;
+      g.save();
+      g.fillStyle = color; g.strokeStyle = '#fff'; g.lineWidth = 2.5;
+      g.beginPath(); g.arc(p[0], p[1], 9, 0, 7); g.fill(); g.stroke();
+      g.font = '700 13px Tajawal'; g.fillStyle = '#fff';
+      g.textAlign = 'center'; g.fillText(label, p[0], p[1] + 4.5);
+      g.restore();
+    };
+    dot(S.anchors.l, '#C79A38', 'L');
+    dot(S.anchors.r, '#C79A38', 'R');
+    dot(S.anchors.top, '#3A2233', 'T');
+  }
+
+  // للنقر الجاي: البيانات النضيفة ترجع الأول (العلامات مش جزء من الأصل)
+  $('stage').addEventListener('pointerdown', () => {
+    if(S._clean) S.ctx.putImageData(S._clean, 0, 0);
+  }, true);
+
+  /* ---------- المعاينة — نفس محرك التطبيق ---------- */
+  function drawPreview(){
+    const pc = $('previewC'), g = pc.getContext('2d');
+    g.clearRect(0, 0, pc.width, pc.height);
+    // وش تجريبي بسيط
+    g.fillStyle = '#e8c39e';
+    g.beginPath(); g.ellipse(180, 215, 62, 84, 0, 0, 7); g.fill();
+    g.fillStyle = '#caa27f';
+    g.beginPath(); g.ellipse(180, 300, 26, 18, 0, 0, 7); g.fill(); // رقبة
+    g.fillStyle = '#3A2233';
+    g.beginPath(); g.arc(157, 205, 5, 0, 7); g.arc(203, 205, 5, 0, 7); g.fill();
+    g.beginPath(); g.strokeStyle = '#b3403a'; g.lineWidth = 3;
+    g.arc(180, 245, 12, 0.3, Math.PI - 0.3); g.stroke();
+    // نفس مسار التطبيق: معالم → توسيع بالـfit → أفيني
+    const an = { l: [118, 215], r: [242, 215], top: [180, 131], chin: [180, 299],
+                 cheekL: [140, 245], cheekR: [220, 245] };
+    const fit = { widen: 1.08, lift: 0.05, liftTop: 0.14 };
+    const ex = T.expandAnchors(an, fit);
+    const A = S.anchors;
+    const Tr = T.affineFrom3([A.l, A.r, A.top], [ex.l, ex.r, ex.top]);
+    if(!Tr) return;
+    const src = document.createElement('canvas');
+    src.width = S.w; src.height = S.h;
+    src.getContext('2d').putImageData(S._clean || S.ctx.getImageData(0,0,S.w,S.h), 0, 0);
+    g.save();
+    g.setTransform(Tr.a, Tr.d, Tr.b, Tr.e, Tr.c, Tr.f);
+    g.drawImage(src, 0, 0);
+    g.restore();
+  }
+
+  /* ---------- التصدير ---------- */
+  function buildSnippet(){
+    $('snippet').value = '  ' + P.catalogSnippet(
+      $('assetId').value, $('assetName').value,
+      S.anchors, S.seeds.length >= 2 ? S.seeds : null) + ',';
+  }
+  $('assetId').oninput = buildSnippet;
+  $('assetName').oninput = buildSnippet;
+
+  $('btnPng').onclick = () => {
+    const c = document.createElement('canvas');
+    c.width = S.w; c.height = S.h;
+    c.getContext('2d').putImageData(S._clean || S.ctx.getImageData(0,0,S.w,S.h), 0, 0);
+    const a = document.createElement('a');
+    a.download = P.slugId($('assetId').value) + '-head.png';
+    a.href = c.toDataURL('image/png');
+    a.click();
+    $('expStatus').textContent = '⬇️ اتنزّل';
+  };
+  $('btnSnippet').onclick = () => {
+    buildSnippet();
+    try{ navigator.clipboard.writeText($('snippet').value); }catch(e){}
+    $('expStatus').textContent = '📋 اتنسخ';
+  };
+
+  window.prepDiag = () => ({ w: S.w, h: S.h, mode: S.mode,
+    anchors: S.anchors, seeds: S.seeds.length, bg: S.bg });
+})();
+</script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'echarpe-tryon-v20';
+const CACHE_NAME = 'echarpe-tryon-v21';
 
 /* ============================================================
    sw بسيط: شبكة الأول وفولباك للكاش — نفس فلسفة باقي التطبيقات.
@@ -7,7 +7,7 @@ const CACHE_NAME = 'echarpe-tryon-v20';
    ⚠️ أي تعديل في أي ملف = ارفع CACHE_NAME (القاعدة العامة).
    ============================================================ */
 const SHELL = ['./', './index.html', './tryon-core.js', './tryon-app.js',
-               './assets/catalog.js', './recolor.html', './recolor-core.js', './assets/template-01-head.png', './tryon-3d-core.js', './tryon-3d.js', './tryon-mesh-core.js', './tryon-mesh.js'];
+               './assets/catalog.js', './recolor.html', './recolor-core.js', './prep.html', './prep-core.js', './assets/template-01-head.png', './tryon-3d-core.js', './tryon-3d.js', './tryon-mesh-core.js', './tryon-mesh.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
