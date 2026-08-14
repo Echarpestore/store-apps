@@ -743,7 +743,7 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
       && html.indexOf('tryon-core.js') < html.indexOf('tryon-3d-core.js'),
     'ترتيب التحميل: الكور قبل كور الـ3D (بيستعمل أفيني ٣ نقط بتاعه)');
 
-  assert(sw.indexOf("echarpe-tryon-v26") > -1 && appC.indexOf("'v26'") > -1,
+  assert(sw.indexOf("echarpe-tryon-v29") > -1 && appC.indexOf("'v29'") > -1,
     'النسخة اتحدّثت في sw والكونسول (من غيرها الجهاز يفضل على القديم)');
 })();
 
@@ -1614,21 +1614,23 @@ const RC2 = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
   assert(bootFn.indexOf('loadSegmenter') === -1,
     '🔴 مش بيتحمّل مع الإقلاع — أول صورة هي اللي بتحمّله (خطة lazy)');
 
-  /* ٢) الحساب: للصورة الحالية بس + الكور هو اللي بيقرر */
-  const ch = extractFn(code, 'async function computeHairCover(img)');
-  assert(ch.length > 100, 'دالة computeHairCover اتلقت');
-  assert(ch.indexOf('T.hairCoverZone(') > -1 && ch.indexOf('T.hairMaskFromCategories(') > -1,
+  /* ٢) الحساب: مسار واحد مشترك (hairZoneFor) + حارس تبديل الصورة */
+  const hz = extractFn(code, 'async function hairZoneFor(srcEl, lm)');
+  assert(hz.length > 100, 'دالة hairZoneFor اتلقت');
+  assert(hz.indexOf('T.hairCoverZone(') > -1 && hz.indexOf('T.hairMaskFromCategories(') > -1,
     'الرياضة من الكور (قابلة للاختبار) مش مكررة في التطبيق');
+  assert(hz.indexOf('anchorsFromLandmarks(lm, w, h)') > -1,
+    'النقط بمقاس الماسك المصغّر (المعالم منسّبة) — مش مقاس الكانفاس');
+  assert(hz.indexOf('cm.close()') > -1, 'وماسك MediaPipe بيتقفل (تسريب GPU)');
+  const ch = extractFn(code, 'async function computeHairCover(img)');
+  assert(ch.indexOf('hairZoneFor(img') > -1, 'وضع الصورة بيستعمل المسار المشترك');
   assert(ch.indexOf('S.stillImg !== myImg') > -1,
     '🔴 العميلة غيّرت الصورة والتقطيع لسه شغال = النتيجة القديمة تترمي مش تتلبس على الجديدة');
-  assert(ch.indexOf('anchorsFromLandmarks(lm, w, h)') > -1,
-    'النقط بمقاس الماسك المصغّر (المعالم منسّبة) — مش مقاس الكانفاس');
-  assert(ch.indexOf('cm.close()') > -1, 'وماسك MediaPipe بيتقفل (تسريب GPU)');
 
-  /* ٣) الرسم: وضع الصورة بس وتحت كل الطبقات */
+  /* ٣) الرسم: الصورة دايمًا — واللايف بحكم الثبات والطزاجة (v28) */
   const dr = extractFn(code, 'function draw(result, srcEl)');
-  assert(dr.indexOf("S.mode === 'photo' && S.scarf.type === 'photo' && S.hairZone") > -1,
-    "🔴 اللايف من غير تغطية عمدًا — segmentation كل فريم بيقتل الموبايل");
+  assert(dr.indexOf('S.stabState.stable && performance.now() - S.hairT < 2000') > -1,
+    "🔴 اللايف: التغطية **بس** والراس ثابتة والماسك طازة — أول حركة بتشيلها فورًا");
   assert(dr.indexOf('hairCoverCanvas(S.color.hex)') > -1,
     'ولون التغطية بيتبع لون المنتج');
   const iHair = dr.indexOf('S.hairZone');
@@ -1689,4 +1691,284 @@ const RC2 = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
     'ومفيش خروج غير مشروط على fade');
   assert(dr.indexOf('صعب') > -1,
     'والعميلة بتاخد رسالة بتقول إن وضع الصورة صعب والنتيجة تقريبية');
+})();
+
+// ============================================================
+// ٢٨) 📸 v27 — "الطرحة مش بتظهر": الالتقاط والمراية والبندانة
+// ------------------------------------------------------------
+// شكوى حقيقية من المالك ومعاها لقطات: (أ) كل لقطة من غير طرحة —
+// الالتقاط كان بيضم stage3d بس لو المسار 3D التجريبي شغال، والشبكة
+// (الافتراضي) بترسم الطرحة على stage3d برضه. (ب) stage3d بيفضل
+// مراية في وضع الصورة فالطرحة بتقع في الناحية المعكوسة من الوش.
+// (ج) البندانة نازلة لحد العين.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  /* (أ) الالتقاط بيضم كانفاس الشبكة */
+  const cap = extractFn(code, 'async function capture()');
+  assert(cap.indexOf('if(S.r3d || S.mesh){') > -1,
+    '🔴 اللقطة بتضم stage3d في وضع الشبكة (الافتراضي) — مش الـ3D التجريبي بس');
+  assert(!/if\(S\.r3d\)\{/.test(cap),
+    'ومفيش شرط قديم ناسي الشبكة');
+
+  /* (ب) المراية: الكانفاسين مع بعض دايمًا */
+  const tp = extractFn(code, 'async function tryOnPhoto(file)');
+  assert(tp.indexOf("c3p.classList.remove('mirror')") > -1,
+    '🔴 وضع الصورة بيشيل المراية من stage3d كمان — من غيرها الطرحة في الناحية المعكوسة');
+  const bl = extractFn(code, 'async function backToLive()');
+  assert(bl.indexOf("c3l.classList.add('mirror')") > -1,
+    'والرجوع للايف بيرجّع المراية للاتنين');
+  const po = extractFn(code, 'function photoOnly(e)');
+  assert(po.indexOf("$('stage3d').classList.remove('mirror')") > -1,
+    'وسقوط الكاميرا (وضع صورة إجباري) بيشيلها برضه');
+
+  /* (ج) البندانة أول الجبهة */
+  const an28 = { top:[160,150], chin:[160,330], l:[100,200], r:[220,200],
+                 cheekL:[130,250], cheekR:[190,250], brow:[160,230] };
+  const ex28 = T.expandAnchors(an28);
+  const bd28 = T.bandanaSpec(an28, ex28);
+  // المسافة منابت→حواجب = 80px. الحافة لازم تبقى في **التلت الأعلاني**
+  // من الجبهة (يعني ≤ منابت + 26px تقريبًا) — 0.42 القديمة كانت 33.6px
+  const dropPx = bd28.bottomMid[1] - an28.top[1];
+  assert(dropPx > 4, 'الحافة نازلة عن المنابت فعلًا (مش مختفية تحت الطرحة)');
+  assert(dropPx <= (an28.brow[1] - an28.top[1]) * 0.25,
+    '🔴 وواقفة أول الجبهة (التلت الأعلاني) — 0.42 القديمة كانت بتوصل قرب العين');
+})();
+
+// ============================================================
+// ٢٩) 📏 v28 — مقياس الثبات (برومبت Hybrid بند ١٢)
+// ============================================================
+(function(){
+  /* ١) movementScore */
+  const a = [[0,0],[10,10],[20,0]];
+  const b = [[3,4],[13,14],[23,4]];            // كل نقطة اتحركت 5
+  assert(T.movementScore(a, a) === 0, 'نفس النقط = صفر حركة');
+  assert(near(T.movementScore(a, b), 5, 1e-9), 'إزاحة 3-4-5 = متوسط 5');
+  assert(T.movementScore(null, a) === Infinity
+      && T.movementScore(a, [[0,0]]) === Infinity,
+    'أول فريم أو عدد نقط مختلف = ∞ (مش صفر — صفر معناه "ثابت" غلط)');
+
+  /* ٢) العدّاد: N فريم ورا بعض */
+  const m = T.StabilityMeter({ threshold: 2, frames: 3 });
+  const still = [[100,100],[200,100]];
+  m.push(still);                                // أول push: ∞
+  m.push(still); m.push(still);
+  const s3 = m.push(still);
+  assert(s3.stable === true, '٣ فريمات سكون ورا بعض = مستقر');
+
+  /* ٣) 🔴 نيجاتيف: النطّة بترجّع العد من الصفر */
+  const jump = [[160,100],[260,100]];           // نطة 60px
+  const sj = m.push(jump);
+  assert(sj.stable === false && sj.run === 0,
+    '🔴 حركة واحدة = مش مستقر فورًا والعد بيبدأ من الأول (مش "مجموع سكون" متقطع)');
+  m.push(jump); m.push(jump);
+  assert(m.push(jump).stable === true, 'والسكون في المكان الجديد بيرجّع الاستقرار');
+
+  /* ٤) reset */
+  m.reset();
+  const sr = m.push(jump);
+  assert(sr.score === Infinity && sr.stable === false,
+    'reset = أول فريم من جديد (تبديل وضع/صورة مش بيورّث ثبات قديم)');
+})();
+
+// ============================================================
+// ٣٠) 💇📸 v28 — اللايف المستقر واللقطة عالية الجودة
+// ------------------------------------------------------------
+// بند ٤ بشكل يعيش على موبايل: segmentation في اللايف **بحكم
+// الثبات ومخنوق زمنيًا** مش كل فريم. وبند ١٨: اللقطة بتاخد مسار
+// الصورة الكامل (كشف IMAGE + ماسك) قبل الحفظ واللايف بيرجع لوحده.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  /* ١) اللايف: ثبات + خنق + قفل تزامن */
+  const lp = extractFn(code, 'async function liveHairPass()');
+  assert(lp.length > 100, 'دالة liveHairPass اتلقت');
+  assert(lp.indexOf('!S.stabState.stable') > -1,
+    '🔴 التقطيع في اللايف **بس** والراس ثابتة — بند ١٢ هو البوابة');
+  assert(lp.indexOf('now - S.lastSegT < 700') > -1,
+    'ومخنوق زمنيًا (~٠٫٧ث) حتى وهي ثابتة');
+  assert(lp.indexOf('S.segBusy') > -1,
+    'وقفل تزامن — نداء جديد ميركبش على اللي شغال');
+  const lo = extractFn(code, 'function loop()');
+  assert(lo.indexOf('liveHairPass()') > -1, 'واللوب بيناديه بعد الرسم');
+  assert(lo.indexOf('.segment(') === -1,
+    '🔴 مفيش segmentation مباشر جوه اللوب — ده اللي بيقتل الفريمات');
+
+  /* ٢) الثبات بيتغذى في draw وبيتصفر مع تبديل الوضع */
+  const dr = extractFn(code, 'function draw(result, srcEl)');
+  assert(dr.indexOf('S.stab.push(T.faceContourFromLandmarks(lm, w, h))') > -1,
+    'المقياس بيتغذى من معالم المحيط كل فريم لايف');
+  const rs = extractFn(code, 'function resetSmooth()');
+  assert(rs.indexOf('S.stab.reset()') > -1,
+    '🔴 تبديل الوضع بيصفّر الثبات — ثبات اللايف ميتورّثش للصورة والعكس');
+
+  /* ٣) اللقطة عالية الجودة */
+  const cs = extractFn(code, 'async function captureStillPass()');
+  assert(cs.length > 100, 'دالة captureStillPass اتلقت');
+  assert(cs.indexOf('S.landmarker.detect(frame)') > -1,
+    'اللقطة بكشف IMAGE على فريم كامل — أدق من آخر فريم فيديو عابر');
+  assert(cs.indexOf('hairZoneFor(frame, lm)') > -1,
+    'وماسك شعر متزامن للفريم نفسه');
+  const cp = extractFn(code, 'async function capture()');
+  assert(cp.indexOf('await captureStillPass().catch(') > -1,
+    '🔴 وفشل الباص مش بيمنع اللقطة العادية (فولباك — بند ١٤)');
+  const cr = extractFn(code, 'async function captureAndResume()');
+  assert(cr.indexOf('finally{') > -1 && cr.indexOf('resumeLive()') > -1,
+    '🔴 اللايف بيرجع مهما حصل — finally مش سطر عادي ممكن يتنطّط');
+  assert(code.indexOf("captureAndResume().catch(console.warn)") > -1,
+    'والزرار متوصل بالمسار الجديد');
+
+  /* ٤) Debug Overlay (بند ٢٣) */
+  assert(dr.indexOf('window.TRYON_DEBUG') > -1 && dr.indexOf('fps ') > -1
+      && dr.indexOf('stab ') > -1 && dr.indexOf('seg ') > -1,
+    'أوفرلاي التشخيص: fps وزوايا وثبات وحالة المقطّع — على الكانفاس نفسه');
+  assert(dr.indexOf("if(S.mode === 'live'){ ctx.translate(w, 0); ctx.scale(-1, 1); }") > -1,
+    '🔴 والكتابة معكوسة قبل مراية CSS — من غيرها الأرقام تتقري بالمقلوب');
+
+  /* ٥) التشخيص */
+  const diag = extractFn(code, 'window.tryonDiag =');
+  assert(diag.indexOf('stable:') > -1 && diag.indexOf('fps:') > -1,
+    'tryonDiag بيقول الثبات والـfps');
+})();
+
+// ============================================================
+// ٣١) 🩺 v29 — "الطرحة مش بتظهر": الفشل الصامت ممنوع
+// ------------------------------------------------------------
+// شكوى المالك: الصورة مش بتظهر — من غير رسالة ولا أي دليل.
+// السبب المعماري: لو الأصل مش `ready`، draw كان بيعمل return
+// من غير أي رسم ولا رسالة، **للأبد** لو حصل خطأ في المعالجة
+// (كان برّه try/catch) أو لو التحميل علّق من غير onerror.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  /* ١) المعالجة جوه try/catch — خطأ فيها = فشل معلن مش صمت */
+  const lp = extractFn(code, 'function loadPhotoScarf(scarf, color)');
+  assert(lp.indexOf('try{') > -1 && lp.indexOf('asset.failed = true') > -1,
+    '🔴 خطأ في معالجة الصورة = failed (فولباك)، مش ready=false للأبد');
+  assert(lp.indexOf('if(!asset.head){ asset.failed = true;') > -1,
+    'ومعالجة رجّعت فاضي = فشل كمان');
+  assert(lp.indexOf('asset.why') > -1 && lp.indexOf('startedAt') > -1,
+    'وكل فشل بيسجّل **سبب** ووقت بداية — تشخيص من غير كونسول');
+
+  /* ٢) مهلة قصوى: أصل عالق مش بيفضل عالق */
+  const dr = extractFn(code, 'function draw(result, srcEl)');
+  assert(dr.indexOf('performance.now() - asset.startedAt > 6000') > -1,
+    '🔴 مهلة ٦ ثواني — التحميل المعلّق (من غير load ولا error) كان بيفضل صامت للأبد');
+
+  /* ٣) الفولباك بيتنادى مرة واحدة مش كل فريم */
+  assert(dr.indexOf('S.scarf.id !== fb.id') > -1,
+    '🔴 مش بنرجع للرسمة وإحنا عليها أصلًا — لوب لا نهائي كل فريم');
+
+  /* ٤) رسالة للعميلة في الحالتين */
+  assert(dr.indexOf('صورة الطرحة مش متاحة') > -1,
+    'فشل = رسالة صريحة + شكل مبدئي');
+  assert(dr.indexOf("hint('⏳ بنجهّز الطرحة…')") > -1,
+    '🔴 وأثناء التحميل رسالة كمان — الصمت بيخلي العميلة تفتكر الشاشة بايظة');
+
+  /* ٥) مفيش نداء لدالة مش موجودة جوه الرسم */
+  ['syncScarfRow', 'buildScarfRow'].forEach((f) => {
+    assert(dr.indexOf(f + '(') === -1,
+      '🔴 مفيش نداء لـ' + f + ' (مش موجودة) — استدعاء ناقص جوه draw بيوقّع كل فريم');
+  });
+
+  /* ٦) التشخيص بيقول حالة الأصل */
+  const diag = extractFn(code, 'window.tryonDiag =');
+  assert(diag.indexOf('asset:') > -1 && diag.indexOf('scarf:') > -1,
+    'tryonDiag بيقول الطرحة وحالة أصلها والسبب');
+  assert(diag.indexOf("a.failed ? ('failed: ' + a.why)") > -1,
+    'وبيرجّع السبب نفسه — مش مجرد failed');
+})();
+
+// ============================================================
+// ٣٢) ⬜ v29 — المستطيل الرمادي: شبكة من غير خامة
+// ------------------------------------------------------------
+// لقطة المالك: مستطيل رمادي مصمت مكان الطرحة. السبب:
+// MeshBasicMaterial من غير `map` لونه **أبيض** — فالشبكة كلها
+// بترسم مستطيل. والأسوأ: قيمة TRYON_MESH.update كانت مرمية،
+// فالتطبيق مكمّل كأن كله تمام بدل ما يرجع للمسار المسطح.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const P = (f) => fs.readFileSync(path.resolve(__dirname, '..', 'tryon', f), 'utf8');
+  const clean = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const mesh = clean(P('tryon-mesh.js'));
+  const app = clean(P('tryon-app.js'));
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  /* ١) الشبكة بتتولد مخفية */
+  assert(mesh.indexOf('M.mesh.visible = false;') > -1,
+    '🔴 الشبكة بتتولد **مخفية** — MeshBasicMaterial من غير map أبيض = مستطيل مصمت');
+  assert(mesh.indexOf('M.mesh.visible = !!(M.mesh.material && M.mesh.material.map);') > -1,
+    '🔴 وبتبان **بس** لما الخامة تتربط فعلًا');
+
+  /* ٢) update بيرجّع فشل بدل ما يرسم غلط */
+  const up = extractFn(mesh, 'function update(imgEl, assetW, assetH, chinY, T, yawDeg, faceCx, dtMs, pairs, warpR)');
+  assert(up.indexOf('if(!imgEl) return false;') > -1,
+    'من غير صورة = false (مش رسم بخامة فاضية)');
+  assert(up.indexOf('if(!ensureMesh(imgEl, assetW, assetH, chinY)) return false;') > -1,
+    '🔴 الخامة ماتربطتش = false — التطبيق يقرر بدل ما الشبكة ترسم مستطيل');
+
+  /* ٣) التطبيق بيقرا القيمة ويرجع للمسطح */
+  const dr = extractFn(app, 'function draw(result, srcEl)');
+  assert(dr.indexOf('const meshOK = TRYON_MESH.update(') > -1,
+    '🔴 القيمة مش مرمية — دي كانت جوهر الباج');
+  assert(dr.indexOf('if(!meshOK){') > -1 && dr.indexOf('TRYON_MESH.clear();') > -1,
+    'وفشل الشبكة بينضّف كانفاسها');
+  const fb = dr.slice(dr.indexOf('if(!meshOK){'), dr.indexOf('if(!meshOK){') + 700);
+  assert(fb.indexOf('ctx.drawImage(headImg, 0, 0)') > -1,
+    '🔴 والطرحة بترسم مسطحة في **نفس الفريم** — مش فريم ضايع');
+  assert(fb.indexOf('S.meshFails') > -1 && fb.indexOf('S.mesh = false') > -1,
+    'وفشل متكرر بيقفل الشبكة خالص على الجهاز ده');
+
+  /* ٤) التشخيص */
+  const diag = extractFn(app, 'window.tryonDiag =');
+  assert(diag.indexOf('meshFails:') > -1, 'tryonDiag بيقول عدد مرات فشل الشبكة');
 })();
