@@ -231,5 +231,5 @@ const MODEL = B.basketBuildModel(sampleSales());
 (function(){
   const sw = fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8');
   const m = sw.match(/store-apps-shell-v(\d+)/);
-  assert(m && Number(m[1]) >= 310, '⭐ CACHE_NAME اترفع لـv310+');
+  assert(m && Number(m[1]) >= 311, '⭐ CACHE_NAME اترفع لـv311+');
 })();
