@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v34';
+  const TRYON_VER = 'v35';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -70,7 +70,8 @@
     hairT: 0, segBusy: false, lastSegT: 0,   // v28: عمر الماسك + خنق اللايف
     stab: T.StabilityMeter(),       // v28: مقياس الثبات (بند ١٢)
     stabState: { stable: false, score: Infinity },
-    stage: 'boot', lastErr: null      // 🩺 تشخيص: فين وقفنا وإيه الخطأ
+    stage: 'boot', lastErr: null,     // 🩺 تشخيص: فين وقفنا وإيه الخطأ
+    delegate: null, switching: false  // 🩺 v35: GPU ولا CPU
   };
 
   /* ============================================================
@@ -93,11 +94,22 @@
       numFaces: 1,
       outputFacialTransformationMatrixes: true
     });
+    /* 🩺 v35: الفولباك القديم كان بيشتغل **لو الإنشاء رمى خطأ** بس.
+       والمشكلة اللي ظهرت على جهاز المالك مختلفة تمامًا: الإنشاء
+       بينجح على GPU، والكشف بيرجّع **صفر وشوش** على وش واضح وقريب
+       ومضوّي. ده عيب معروف في بعض كروت أندرويد: MediaPipe بتشتغل
+       من غير أي خطأ وبترجّع نتيجة فاضية.
+       عشان كده احتفظنا بأدوات إعادة البناء — الفولباك بقى ممكن
+       **بعد التشغيل** مش وقت الإنشاء بس. */
+    S._rebuild = (delegate) => vision.FaceLandmarker.createFromOptions(files, opts(delegate));
+    const forced = /[?&]cpu=1/.test(location.search) ? 'CPU' : null;
     try {
-      S.landmarker = await vision.FaceLandmarker.createFromOptions(files, opts('GPU'));
+      S.delegate = forced || 'GPU';
+      S.landmarker = await S._rebuild(S.delegate);
     } catch(e) {
       console.warn('GPU فشل — CPU:', e);
-      S.landmarker = await vision.FaceLandmarker.createFromOptions(files, opts('CPU'));
+      S.delegate = 'CPU';
+      S.landmarker = await S._rebuild('CPU');
     }
     S.setImageMode = async () => { try{ await S.landmarker.setOptions({ runningMode:'IMAGE' }); }catch(e){} };
     S.setVideoMode = async () => { try{ await S.landmarker.setOptions({ runningMode:'VIDEO' }); }catch(e){} };
@@ -671,7 +683,23 @@
     const faces = result && result.faceLandmarks;
     if(!faces || !faces.length){
       S.lostFrames++;
-      chip('no-face');
+      chip('no-face·' + (S.delegate || '?').toLowerCase());
+      /* 🔁 v35: مفيش وش لمدة ٤٥ فريم ولسه على GPU؟ الأرجح إن الكارت
+         بيرجّع نتيجة فاضية بصمت. بنعيد البناء على CPU **مرة واحدة**.
+         ⚠️ مرة واحدة بالظبط: إعادة البناء تقيلة، ولو اتكررت مع كل
+            فريم التطبيق بيقف خالص — وده أوحش من مفيش طرحة. */
+      if(S.lostFrames === 45 && S.delegate === 'GPU' && !S.switching && S._rebuild){
+        S.switching = true;
+        hint('بنجرّب طريقة تانية… 🔄');
+        (async () => {
+          try{
+            const cpu = await S._rebuild('CPU');
+            S.landmarker = cpu; S.delegate = 'CPU'; S.lostFrames = 0;
+            console.warn('اتحوّلنا لـCPU — GPU كان بيرجّع صفر وشوش');
+          }catch(e){ console.warn('CPU rebuild failed', e); S.lastErr = String(e); }
+          S.switching = false;
+        })();
+      }
       if(S.r3d) TRYON3D.clear();
       if(S.mesh) TRYON_MESH.clear();
       if(S.lostFrames > 20) hint('قرّبي وشّك للكاميرا 📷');
@@ -1312,7 +1340,8 @@
   else boot();
 
   // للقاعدة الذهبية §18 + التشخيص من الكونسول
-  window.tryonDiag = () => ({ ver: TRYON_VER, mode:S.mode, running:S.running,
+  window.tryonDiag = () => ({ ver: TRYON_VER, delegate: S.delegate, lostFrames: S.lostFrames,
+    mode:S.mode, running:S.running,
     stage: S.stage, r3d: S.r3d, mesh: S.mesh, meshFails: S.meshFails || 0,
     off: Object.keys(TRYON_OFF).filter((k) => TRYON_OFF[k]),
     scarf: S.scarf && S.scarf.id, scarfType: S.scarf && S.scarf.type,
