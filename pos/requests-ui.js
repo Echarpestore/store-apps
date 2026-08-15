@@ -193,10 +193,24 @@ function showRequestMatches(groups){
 
 /* 💬 واتساب برسالة جاهزة — المالك بيبص ويبعت
    ⚠️ مش إرسال آلي: ده قرار المالك ("يفكرني وأنا أكلمها")، وكمان
-      الإرسال الآلي محتاج WhatsApp Business API وقوالب معتمدة. */
+      الإرسال الآلي محتاج WhatsApp Business API وقوالب معتمدة.
+   ⭐ بيفتح المؤلّف (wa-compose) لو متاح — عشان يقدر يضيف الصنف
+      بسعره الحي قبل ما يبعت. ولو مش متاح، بيرجع للرابط المباشر
+      زي ما كان (الميزة متشتغلش على نص الطلب لوحده). */
 function reqWhatsApp(reqId){
   const r = _reqCache.filter(function(x){ return x.id === reqId; })[0];
   if(!r) return;
+  if(typeof openWaCompose === 'function'){
+    openWaCompose(r.phone, r.name || '');
+    // 🔍 نحط وصف الطلب في البحث — الأغلب إنه هو الصنف اللي وصل
+    setTimeout(function(){
+      try{
+        const s = document.getElementById('waSearch');
+        if(s && r.text){ s.value = r.text; waSearchItems(r.text); }
+      }catch(e){ console.warn('wa prefill', e); }
+    }, 120);
+    return;
+  }
   const first = String(r.name || '').trim().split(/\s+/)[0] || '';
   const msg = (first ? ('أهلًا ' + first + ' 👋\n') : 'أهلًا 👋\n')
     + 'الحاجة اللي كنتي بتدوّري عليها ("' + (r.text || '') + '") وصلت عندنا في '

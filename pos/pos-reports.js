@@ -1433,6 +1433,9 @@ function shToggle(id){
       + '<button onclick="reprintSale(\'' + id + '\')" style="flex:2; padding:10px; border:none; border-radius:10px;'
       + " background:linear-gradient(135deg,#3B82F6,#1D4ED8); color:#fff; font-family:'Cairo'; font-weight:800;"
       + ' font-size:13px; cursor:pointer;">🖨️ اطبع نسخة تانية</button>'
+      + '<button onclick="printGiftReceipt(\'' + id + '\')" title="من غير أسعار — للهدايا" style="flex:2; padding:10px; border:none; border-radius:10px;'
+      + " background:linear-gradient(135deg,#C79A38,#9A7420); color:#fff; font-family:'Cairo'; font-weight:800;"
+      + ' font-size:13px; cursor:pointer;">🎁 إيصال هدية</button>'
       + '<button onclick="openInvoice(\'' + id + '\')" style="flex:1; padding:10px; border:1px solid #d1d5db;'
       + " border-radius:10px; background:#fff; color:#374151; font-family:'Cairo'; font-weight:700;"
       + ' font-size:12.5px; cursor:pointer;">تفاصيل أكتر</button>'
@@ -1479,6 +1482,46 @@ function reprintSale(id){
     showToast('🖨️ بتتطبع نسخة من فاتورة ' + (s.invoiceNo || ''));
   }catch(e){ showToast('تعذر الطباعة: ' + e.message, 'err'); }
 }
+
+/* ============================================================
+   🎁 إيصال هدية — من سجل المبيعات
+   ------------------------------------------------------------
+   ⚠️ **مش بيفتح الدرج ولا بيسجّل حاجة**: دي ورقة تانية لنفس
+      الفاتورة، مفيش أي حركة فلوس. `_printBuiltReceipt(data, {})`.
+   ⚠️ **مش `isCopy`**: علامة "نسخة تانية — مش الفاتورة الأصلية"
+      معناها إن دي إعادة طباعة لمستند مالي. إيصال الهدية مستند
+      **مختلف** أصلًا (مالوش أسعار)، فالعلامة دي هتلخبط اللي بيقراه.
+   ============================================================ */
+function giftReceiptData(s){
+  const c = (typeof receiptDesignConfig!=='undefined' && receiptDesignConfig)
+    || (typeof defaultReceiptConfig==='function' ? defaultReceiptConfig() : {lang:'ar'});
+  const d = s.createdAt && s.createdAt.toDate ? s.createdAt.toDate() : new Date();
+  return {
+    giftMode: true,                     // 🎁 الفلاج اللي بيشيل كل الفلوس
+    dateStr: d.toLocaleString(c.lang==='en' ? 'en-GB' : 'ar-EG'),
+    empName: s.employeeName || '',
+    // ↩️ سطور المرتجع مبتتحطش في إيصال هدية — الهدية هي اللي اتباعت
+    items: (s.items||[]).filter(function(it){ return !it.isReturn && (it.qty||0) > 0; })
+      .map(function(it){ return { name: it.name, qty: it.qty, barcode: it.barcode || '' }; }),
+    invoiceNo: s.invoiceNo || '',
+    scanCode: s.invoiceCode || s.invoiceNo || '',   // 🔑 من غيره مفيش استبدال
+    custPoints: { show:false },
+    showAppQR: false
+  };
+}
+if(typeof window !== 'undefined') window.giftReceiptData = giftReceiptData;
+
+function printGiftReceipt(id){
+  const s = (window._shSalesById||{})[id];
+  if(!s){ showToast('مش لاقي بيانات الفاتورة — اعمل تحديث للسجل', 'err'); return; }
+  try{
+    const data = giftReceiptData(s);
+    if(!data.items.length){ showToast('الفاتورة دي مفيهاش أصناف مباعة', 'err'); return; }
+    _printBuiltReceipt(data, {});   // {} = مفيش كاش → الدرج مايفتحش
+    showToast('🎁 بيتطبع إيصال هدية لفاتورة ' + (s.invoiceNo || ''));
+  }catch(e){ showToast('تعذر الطباعة: ' + e.message, 'err'); }
+}
+if(typeof window !== 'undefined') window.printGiftReceipt = printGiftReceipt;
 
 // المبيعات المستوردة من QuickBooks — للرجوع والاطلاع بس، مش بتدخل في التقارير الحية
 async function renderLegacySalesHistory(){
@@ -1633,6 +1676,8 @@ function renderCustList(){
           <div style="color:var(--muted); font-size:9.5px;">⭐${pts} · 🧾${c._count||0} · ${last}</div>
         </div>
       </div>
+      <button onclick="event.stopPropagation(); openWaCompose('${c.phone}', ${JSON.stringify(String(c.name||'')).replace(/"/g,'&quot;')})" title="ابعت واتساب"
+        style="flex-shrink:0; padding:8px 10px; border-radius:9px; border:none; background:#25d366; color:#fff; font-size:14px; cursor:pointer;">💬</button>
     </div>`;
   }).join('') + (list.length > custListShown ? `<button onclick="custListShown+=40; renderCustList();" style="width:100%; margin-top:6px; padding:11px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); cursor:pointer; font-size:12.5px; font-weight:700;">عرض كمان (فاضل ${list.length - custListShown} عميل)</button>` : '');
 }

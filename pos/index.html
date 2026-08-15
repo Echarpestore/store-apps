@@ -1609,6 +1609,8 @@ body.on-dashboard .badge-test{ display:block; }
         <button data-uid="sa_discount" onclick="openGiveDiscount()">خصم</button>
         <button data-uid="sa_addcust" onclick="focusAddCustomer()">إضافة عميل</button>
         <button data-uid="sa_redeem" onclick="openRedeemPoints()">🎁 استبدال نقاط</button>
+        <!-- 🎁 بيبان بس بعد فاتورة قريبة (١٥ دقيقة) — شوف printGiftReceiptForLast -->
+        <button data-uid="sa_gift" id="giftReceiptBtn" onclick="printGiftReceiptForLast()" style="display:none;">🎁 إيصال هدية</button>
         <button data-uid="sa_cashier" onclick="showCashierInfo()">الكاشير</button>
         <button data-uid="sa_logout" onclick="logout()">خروج</button>
         <button data-uid="sa_receive" onclick="goToReceiveGoods()">📥 استلام المنتجات</button>
@@ -1857,6 +1859,8 @@ body.on-dashboard .badge-test{ display:block; }
 <!-- 🔖 طلبات الزباين -->
 <script src="requests-core.js"></script>
 <script src="requests-ui.js"></script>
+<!-- 💬 مؤلّف رسايل واتساب (أسعار/خصم/وصل جديد) — بيستخدم reqEsc فلازم بعد requests-ui -->
+<script src="wa-compose.js"></script>
 <!-- 💬 شات العميلة (معزول عن مسار البيع) -->
 <script src="chat-core.js"></script>
 <!-- 💬 شاشة شات العملاء (مشتركة مع Office) — بتحقن نفسها -->

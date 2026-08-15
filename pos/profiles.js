@@ -257,7 +257,8 @@ function renderCustProfile(){
 
   const regTs = c.createdAt ? (c.createdAt.toMillis ? c.createdAt.toMillis() : Number(c.createdAt)) : null;
   const dstr = (t)=> t ? new Date(t).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
-  const waPhone = String(d.phone||'').replace(/[^0-9]/g,'').replace(/^0/, '20');
+  // 📞 تحويل الرقم لصيغة دولية اتنقل لـ`waPhoneIntl` في wa-compose.js —
+  //    كان متكرر في 4 ملفات بأربع صيغ مختلفة.
 
   const gone = d.daysSince == null ? '' :
     (d.daysSince <= 0 ? 'النهاردة'
@@ -278,7 +279,7 @@ function renderCustProfile(){
       </div>
 
       <div style="display:flex; gap:6px; margin-top:9px;">
-        <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener" style="flex:1; text-align:center; text-decoration:none; padding:8px; border-radius:9px; background:var(--panel2); border:1px solid var(--border); color:var(--text); font-size:11.5px; font-weight:800;">💬 واتساب</a>
+        <button onclick="openWaCompose('${d.phone}', ${JSON.stringify(String(c.name||'')).replace(/"/g,'&quot;')})" style="flex:1; text-align:center; padding:8px; border-radius:9px; background:#25d366; border:none; color:#fff; font-size:11.5px; font-weight:800; cursor:pointer; font-family:Cairo, sans-serif;">💬 ابعت واتساب</button>
         <a href="tel:${d.phone}" style="flex:1; text-align:center; text-decoration:none; padding:8px; border-radius:9px; background:var(--panel2); border:1px solid var(--border); color:var(--text); font-size:11.5px; font-weight:800;">📞 اتصال</a>
       </div>
 
