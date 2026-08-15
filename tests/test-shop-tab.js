@@ -160,7 +160,7 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
 (function(){
   const sw = fs.readFileSync(path.join(ROOT, 'loyalty', 'sw.js'), 'utf8');
   const m = sw.match(/echarpe-loyalty-v(\d+)/);
-  assert(m && Number(m[1]) >= 53, '⭐ CACHE_NAME اترفع لـv53+');
+  assert(m && Number(m[1]) >= 54, '⭐ CACHE_NAME اترفع لـv54+');
 })();
 
 /* ============================================================
@@ -182,7 +182,7 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
   assert(/💳 هدفع في الفرع بـ/.test(GLOW), '⭐ Glow: «في الفرع» صريحة');
   const gsw = fs.readFileSync(path.join(ROOT, 'glow', 'sw.js'), 'utf8');
   const gm = gsw.match(/glow-loyalty-v(\d+)/);
-  assert(gm && Number(gm[1]) >= 45, '⭐ Glow: CACHE_NAME اترفع لـv45+');
+  assert(gm && Number(gm[1]) >= 46, '⭐ Glow: CACHE_NAME اترفع لـv46+');
 })();
 
 /* ============================================================
@@ -251,4 +251,107 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
   const gi = GLOW.indexOf('data-tab="shop"');
   assert(/<span class="ti">🛍️<\/span>/.test(GLOW.slice(gi, gi + 200)),
     '⭐ Glow: إيموچي — لأن كل تبويباته إيموچي (الاتساق مش التوحيد)');
+})();
+
+/* ============================================================
+   ١٢) 🚚 الشحن والاستلام + بيانات العميلة
+   ------------------------------------------------------------
+   اللي البلوك ده بيقفله:
+     ١) مصاريف شحن على أوردر «استلام من الفرع» — العميلة جاية بنفسها.
+     ٢) اختيار «فيزا» مع الشحن — ماكينة الفيزا في الفرع مش مع المندوب،
+        فالوعد ده مش موجود أصلًا.
+     ٣) عنوان ناقص → مندوب واقف في الشارع والأوردر بيرجع.
+     ٤) الشحن بيتاخد من الشاشة بدل الإعدادات → أي تعديل في الكونسول
+        بيغيّر المصاريف.
+   ============================================================ */
+(function(){
+  const SHOP = fs.readFileSync(path.join(ROOT, 'pos', 'shop-admin.js'), 'utf8');
+  const OUI = fs.readFileSync(path.join(ROOT, 'pos', 'orders-ui.js'), 'utf8');
+  const RULES = fs.readFileSync(path.join(ROOT, 'security', 'firestore-phase2.rules'), 'utf8');
+
+  // ⭐⭐ المحرك
+  const pick = CORE.orderBuild({ phone:'01000000000', items:[{barcode:'x',name:'a',qty:1,price:100}],
+    fulfillment:'pickup', shipping:60, payMethod:'visa' });
+  assertEq(pick.shipping, 0, '⭐⭐ الاستلام من الفرع = صفر شحن مهما اتبعت');
+  assertEq(pick.grandTotal, 100, 'وإجماليه قيمة البضاعة');
+  assertEq(pick.payMethod, 'visa', 'والفيزا مسموحة في الفرع');
+
+  const del = CORE.orderBuild({ phone:'01000000000', items:[{barcode:'x',name:'a',qty:2,price:100}],
+    fulfillment:'delivery', shipping:60, payMethod:'visa', governorate:'أسوان', address:'ش النيل' });
+  assertEq(del.payMethod, 'cash', '⭐⭐ الشحن كاش إجباري — الماكينة مش مع المندوب');
+  assertEq(del.grandTotal, 260, 'الإجمالي = بضاعة + شحن');
+  assertEq(del.total, 200, '⭐ `total` فضل قيمة البضاعة (المرتجع بيتحسب بيه)');
+
+  // 💸 حساب الشحن
+  const cfg = { deliveryEnabled:true, shippingFee:60, freeOver:1500,
+                governorates:[{name:'أسوان', fee:110}] };
+  assertEq(CORE.orderShippingFee(cfg, 500), 60, 'الرسم الموحّد');
+  assertEq(CORE.orderShippingFee(cfg, 500, 'أسوان'), 110, 'رسم المحافظة بيغلب');
+  assertEq(CORE.orderShippingFee(cfg, 1600, 'أسوان'), 0, '⭐ المجاني فوق المبلغ بيغلب المحافظة');
+  assertEq(CORE.orderShippingFee({ deliveryEnabled:false, shippingFee:60 }, 500), 0,
+    '⭐ الشحن مقفول = صفر مصاريف');
+
+  // 👤 فحص البيانات
+  assertEq(CORE.orderValidateContact({ name:'نور', phone:'01000000000' }, 'pickup').ok, true,
+    'الاستلام: الاسم والرقم بس كفاية');
+  const bad = CORE.orderValidateContact({ name:'نور', phone:'01000000000' }, 'delivery');
+  assertEq(bad.ok, false, '⭐⭐ الشحن من غير عنوان بيترفض');
+  assert(bad.errors.length === 2, 'وبيقول الناقص كله مش أول واحد بس');
+  assertEq(CORE.orderValidateContact({ name:'نور', phone:'01000000000',
+    governorate:'القاهرة', address:'ش النيل ٥ الدور ٣' }, 'delivery').ok, true, 'وبيعدّي لما يكمل');
+
+  // 📦 المتاح = أقل رقم بين المخصّص والمخزون
+  const prod = { barcode:'x', qtyByBranch:{ 'الرحاب':3 } };
+  assertEq(CORE.orderAvailable({ active:true, onlineQty:10 }, prod, 'الرحاب'), 3,
+    '⭐⭐ المخزون بيغلب المخصّص (وعد بـ١٠ وعندك ٣)');
+  assertEq(CORE.orderAvailable({ active:true, onlineQty:1 }, prod, 'الرحاب'), 1,
+    '⭐ والمخصّص بيغلب المخزون (مش كل المحل يتباع أونلاين)');
+  assertEq(CORE.orderAvailable({ active:false, onlineQty:10 }, prod, 'الرحاب'), 0,
+    '⭐ الموقوف = صفر');
+
+  // 🖥️ التطبيقين
+  [['loyalty', LOY], ['glow', GLOW]].forEach(function(pair){
+    const app = pair[0], src = pair[1];
+    assert(/orderValidateContact\(info, _shopFulfill\)/.test(src),
+      '⭐⭐ ' + app + ': البيانات بتتفحص قبل الإرسال');
+    assert(/orderShippingFee\(shopCfg, orderTotal\(chk\.items\), _shopGov\)/.test(src),
+      '⭐⭐ ' + app + ': الشحن من الإعدادات مش من الشاشة');
+    assert(/_shopInfo\.name \|\| currentCustomer\.name/.test(src),
+      '⭐ ' + app + ': الاسم والرقم من الحساب، وهي بتكمّل الباقي');
+    assert(/function shopInfoSet\(k, v\)\{ _shopInfo\[k\] = v; \}/.test(src),
+      '⭐⭐ ' + app + ': الكتابة مش بتعيد الرسم (الكيبورد كان بيقفل مع كل حرف)');
+    assert(/if\(!canDeliver && _shopFulfill === 'delivery'\) _shopFulfill = 'pickup'/.test(src),
+      '⭐ ' + app + ': الشحن المقفول مبيتعرضش أصلًا بدل ما يتعرض ويترفض');
+    assert(/الدفع <b>كاش عند الاستلام<\/b>/.test(src),
+      '⭐⭐ ' + app + ': الشحن كاش — مكتوبة صراحةً للعميلة');
+    assert(/orderNextHint\(st, o\.fulfillment\)/.test(src),
+      '⭐ ' + app + ': نص الحالة بيتغيّر مع الشحن («يتشحن» مش «تعالي استلمي»)');
+    assert(/EG_GOVS/.test(src), app + ': فولباك محافظات لو الإعداد ناقص');
+  });
+
+  // 🖥️ POS
+  assert(/var del = orderIsDelivery\(o\)/.test(OUI), 'POS بيفرّق بين الشحن والاستلام');
+  assert(/📍 ' \+ ordEsc\(o\.address \|\| '— مفيش عنوان!'\)/.test(OUI),
+    '⭐⭐ POS: العنوان بارز — ومكتوب صراحةً لو ناقص');
+  assert(/o\.contactPhone \|\| o\.phone/.test(OUI),
+    '⭐ POS: رقم التوصيل (ممكن يكون غير رقم الحساب)');
+  assert(/🚚 اشحن — حمّل السلة/.test(OUI), '⭐ POS: نص الزرار بيتغيّر مع الشحن');
+
+  // ⚙️ إعدادات POS
+  assert(/id="cfgDelivery"/.test(SHOP) && /id="cfgFee"/.test(SHOP), 'لوحة إعدادات الشحن');
+  assert(/if\(!pickup && !delivery\)/.test(SHOP),
+    '⭐⭐ ممنوع تقفل الاتنين — تبويب موجود ومفيش طريقة تكمّلي بيه');
+  assert(/_cfg'/.test(SHOP), '⭐ الإعدادات مستند منفصل عن المنتجات (فيهم صور تقيلة)');
+
+  // 🔐 القواعد
+  const i = RULES.indexOf('match /online_orders/{id}');
+  const block = RULES.slice(i, RULES.indexOf('allow delete: if false;', i));
+  assert(/fulfillment == 'pickup'/.test(block) && /fulfillment == 'delivery'/.test(block),
+    '⭐ القاعدة بتحصر طريقة التسليم');
+  assert(/request\.resource\.data\.shipping >= 0/.test(block),
+    "⭐⭐ شحن سالب ممنوع (كان بيقلّل الإجمالي)");
+  assert(/grandTotal >= request\.resource\.data\.total/.test(block),
+    '⭐⭐ الإجمالي مايقلّش عن قيمة البضاعة');
+  assert(/request\.resource\.data\.shipping == resource\.data\.shipping/.test(RULES.slice(i, i + 2600)),
+    '⭐ والشحن متجمّد بعد الإنشاء');
 })();
