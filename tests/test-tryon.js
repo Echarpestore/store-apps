@@ -743,8 +743,14 @@ const TM = require(path.resolve(__dirname, '..', 'tryon', 'tryon-mesh-core.js'))
       && html.indexOf('tryon-core.js') < html.indexOf('tryon-3d-core.js'),
     'ترتيب التحميل: الكور قبل كور الـ3D (بيستعمل أفيني ٣ نقط بتاعه)');
 
-  assert(sw.indexOf("echarpe-tryon-v30") > -1 && appC.indexOf("'v30'") > -1,
-    'النسخة اتحدّثت في sw والكونسول (من غيرها الجهاز يفضل على القديم)');
+  /* ⚠️ الفحص بقى **بالرقم مش بالنص الثابت**: كل نسخة جديدة كانت
+     بتكسر السطر ده ويتعدّل بالإيد، وده اللي بيخلي الفحص يتحوّل
+     لطقس بدل ما يمسك حاجة. المهم: الاتنين متساويين ومش أقدم من v35. */
+  const swV = (sw.match(/echarpe-tryon-v(\d+)/) || [])[1];
+  const appV = (appC.match(/TRYON_VER = 'v(\d+)'/) || [])[1];
+  assert(!!swV && !!appV, 'رقم النسخة موجود في sw وفي التطبيق');
+  assertEq(swV, appV, '⭐⭐ نسخة sw = نسخة التطبيق (اختلافهم = الجهاز يفضل على القديم)');
+  assert(Number(appV) >= 35, 'النسخة v35 أو أحدث');
 })();
 
 // ============================================================
@@ -1958,7 +1964,7 @@ const RC2 = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
 
   /* ٣) التطبيق بيقرا القيمة ويرجع للمسطح */
   const dr = extractFn(app, 'function draw(result, srcEl)');
-  assert(dr.indexOf('const meshOK = TRYON_MESH.update(') > -1,
+  assert(/const meshOK = [^\n]*TRYON_MESH\.update\(/.test(dr),
     '🔴 القيمة مش مرمية — دي كانت جوهر الباج');
   assert(dr.indexOf('if(!meshOK){') > -1 && dr.indexOf('TRYON_MESH.clear();') > -1,
     'وفشل الشبكة بينضّف كانفاسها');
@@ -2027,4 +2033,238 @@ const RC2 = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
   });
   const diag = extractFn(code, 'window.tryonDiag =');
   assert(diag.indexOf('off:') > -1, 'وtryonDiag بيقول أنهي طبقات مقفولة');
+})();
+
+// ============================================================
+// ٣٤) 🩺 v31 — "زي ما هي" ٣ مرات: هل الملف الجديد واصل أصلًا؟
+// ------------------------------------------------------------
+// بعد ٣ إصلاحات من غير أي فرق، الاحتمال الأكبر بقى إن الجهاز
+// شغال على نسخة قديمة. سببان حقيقيان في sw:
+//   (١) addAll وقت التثبيت بياخد من كاش المتصفح (GitHub Pages
+//       بيحط max-age) → بنكيّش القديم في كاش جديد ونفضل عليه
+//   (٢) fetch العادي بيرد من كاش الـHTTP والـsw يفتكر إنه جاب جديد
+// وعشان نحسمها من غير كونسول: النسخة مكتوبة على الشاشة نفسها.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const P = (f) => fs.readFileSync(path.resolve(__dirname, '..', 'tryon', f), 'utf8');
+  const sw = P('sw.js'), html = P('index.html');
+  const app = P('tryon-app.js');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  /* ١) التثبيت بينزّل من السيرفر */
+  assert(sw.indexOf("cache: 'reload'") > -1,
+    "🔴 التثبيت بـcache:'reload' — addAll العادي بيكيّش القديم من كاش المتصفح");
+  assert(sw.indexOf('c.addAll(SHELL)') === -1,
+    'وaddAll العادي اتشال خالص');
+  assert(sw.indexOf('r.ok ? c.put(u, r) : null') > -1,
+    'وملف رد بخطأ مبيتكيّشش (صفحة 404 متكيّشة أسوأ من مفيش كاش)');
+
+  /* ٢) الجلب بيراجع السيرفر للملفات اللي بتتغير */
+  assert(sw.indexOf("cache: 'no-cache'") > -1
+      && sw.indexOf("/\\.(js|html|css|json)$/.test(url.pathname)") > -1,
+    '🔴 طلب مشروط للسيرفر على js/html — من غيره الرفع مالوش أثر');
+  assert(sw.indexOf("e.request.mode === 'navigate'") > -1,
+    'والصفحة نفسها كذلك');
+  // 🔴 نيجاتيف مهم: الصور والموديلات **مش** لازم تتراجع كل مرة
+  assert(sw.indexOf('? new Request(e.request') > -1 && sw.indexOf(': e.request') > -1,
+    'وباقي الملفات (صور/موديلات) من الكاش عادي — مش بنبطّئ كل حاجة');
+
+  /* ٣) النسخة على الشاشة */
+  assert(html.indexOf('id="verChip"') > -1, 'شريحة النسخة في الصفحة');
+  assert(code.indexOf('function chip(extra)') > -1 && /chip\(\);/.test(code),
+    '🔴 بتتكتب فورًا مع الإقلاع — قبل الكاميرا وقبل أي تحميل');
+  ['no-face', "'flat'", "'mesh'"].forEach((s) => {
+    assert(code.indexOf(s) > -1, 'والشريحة بتقول حالة الرسم: ' + s);
+  });
+  assert(code.indexOf("chip('asset:'") > -1,
+    'وحالة الأصل لما يفشل أو يعلّق');
+})();
+
+// ============================================================
+// ٣٥) 🧪 v32 — مفتاح `all`: نقسم مساحة البحث نص
+// ------------------------------------------------------------
+// المالك على v30 والمستطيل لسه موجود — يعني الظل مكانش السبب.
+// بدل تخمين رابع: `?off=all` بيطفّي **كل** طبقات كانفاس الرسم.
+// لو حاجة فضلت ظاهرة، يبقى مصدرها كانفاس الشبكة (WebGL) اللي
+// فوقه مش كانفاس الرسم — وده بيحدد نص الكود اللي نفتش فيه.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+  const dr = extractFn(code, 'function draw(result, srcEl)');
+
+  /* ١) all بيغطي كل الطبقات */
+  assert(code.indexOf('!(TRYON_OFF[k] || TRYON_OFF.all)') > -1,
+    '🔴 `all` بيطفّي أي طبقة من غير ما نفتكر نضيفها للقايمة');
+
+  /* ٢) الطبقات كلها ورا مفاتيح — مفيش طبقة بترسم من غير مفتاح */
+  ['shadow', 'hair', 'bandana', 'mesh', 'scarf'].forEach((k) => {
+    assert(dr.indexOf("layerOn('" + k + "')") > -1,
+      'طبقة `' + k + '` ورا مفتاح');
+  });
+
+  /* ٣) 🔴 إطفاء الشبكة لازم ينضّف كانفاسها كمان */
+  assert(dr.indexOf("if(!layerOn('mesh') && S.mesh) TRYON_MESH.clear();") > -1,
+    '🔴 إطفاء الشبكة بينضّف كانفاس WebGL — من غير كده آخر فريم بيفضل متجمّد على الشاشة والمفتاح يبان إنه مش شغال');
+})();
+
+// ============================================================
+// ٣٦) 🔴 v33 — الباج الأصلي: `asset:loading` للأبد
+// ------------------------------------------------------------
+// شريحة النسخة على جهاز المالك قالت: `v32 · asset:loading`.
+// يعني الأصل لسه بيتحمّل **وقت الرسم**. وفي وضع الصورة الرسم
+// بيحصل مرة واحدة بس — فلما الصورة تخلص تحميل، مفيش حاجة تعيد
+// الرسم. النتيجة: وش من غير طرحة للأبد.
+// ودي كمان السبب إن حارس المهلة (v29) مكانش بيشتغل: كان جوه
+// draw، وdraw نفسها مش بتتنادى تاني.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+
+  /* ١) دالة إعادة الرسم موجودة ومحمية */
+  const rp = extractFn(code, 'function repaintStill()');
+  assert(rp.length > 30, 'دالة repaintStill اتلقت');
+  assert(rp.indexOf("S.mode === 'photo' && S.stillResult && S.stillImg") > -1,
+    'بترسم في وضع الصورة بس ولما يكون فيه نتيجة فعلًا');
+  assert(rp.indexOf('catch') > -1,
+    'ومحمية — رمية جوه onload بتضيع في العدم من غير أثر');
+
+  /* ٢) 🔴 كل مسار غير متزامن بينهي بإعادة رسم */
+  const lp = extractFn(code, 'function loadPhotoScarf(scarf, color)');
+  const onload = lp.slice(lp.indexOf('hi.onload'), lp.indexOf('hi.onerror'));
+  assert(onload.indexOf('repaintStill()') > -1,
+    '🔴 نجاح التحميل بيعيد الرسم — ده بالظبط الباج اللي شافه المالك');
+  const onerr = lp.slice(lp.indexOf('hi.onerror'), lp.indexOf('setTimeout'));
+  assert(onerr.indexOf('repaintStill()') > -1,
+    'وفشل التحميل كذلك (عشان الفولباك يبان)');
+  assert(lp.indexOf('di.onerror') > -1 && lp.indexOf("'الانسدال مش موجود'") > -1,
+    '🔴 والانسدال كان مالوش onerror خالص — ملف ناقص = ready تفضل false للأبد');
+
+  /* ٣) 🔴 الحارس **بره** دورة الرسم */
+  assert(lp.indexOf('setTimeout(') > -1 && lp.indexOf('}, 6000);') > -1,
+    '🔴 حارس المهلة setTimeout مستقل — الحارس القديم كان جوه draw واللي مش بتتنادى تاني');
+  const wd = lp.slice(lp.indexOf('setTimeout('), lp.indexOf('}, 6000);'));
+  assert(wd.indexOf('!asset.ready && !asset.failed') > -1,
+    'وبيشتغل بس لو لسه عالق (نجح بعد ٥ ثواني = مفيش فشل وهمي)');
+  assert(wd.indexOf('repaintStill()') > -1, 'وبيعيد الرسم عشان الفولباك يبان');
+})();
+
+// ============================================================
+// ٣٧) 🔄 v34 — تغيير استراتيجية: الشاشة مش بتعتمد على ملف
+// ------------------------------------------------------------
+// تسع نسخ (v25→v33) كلها كانت بتصلّح في **تحميل** الأصل المصوّر،
+// والعميلة شايفة شاشة فاضية طول الوقت ده. الاستراتيجية الصح:
+// الطرحة المرسومة بالكود (صفر تحميل) هي الافتراضي فبيبان شكل
+// **فورًا ومضمون**، والأصل المصوّر بيترقّى في الخلفية لما يجهز.
+// فشل التحميل بقى مالوش أي أثر على العميلة.
+// ============================================================
+(function(){
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+  const code = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const extractFn = (src, sig) => {
+    const i = src.indexOf(sig);
+    if(i < 0) return '';
+    let j = src.indexOf('{', i), depth = 0;
+    for(let k = j; k < src.length; k++){
+      if(src[k] === '{') depth++;
+      else if(src[k] === '}' && --depth === 0) return src.slice(i, k + 1);
+    }
+    return '';
+  };
+  const bu = extractFn(code, 'function buildUI()');
+
+  /* ١) الافتراضي = المرسومة (مفيش انتظار ملف) */
+  assert(bu.indexOf("_drawn = window.TRYON_CATALOG.find((x) => x.type === 'procedural')") > -1
+      && bu.indexOf('S.scarf = _drawn') > -1,
+    '🔴 الافتراضي هو الطرحة المرسومة — بترسم فورًا من غير أي ملف');
+  assert(bu.indexOf('S.scarf = window.TRYON_CATALOG[0];') === -1,
+    '🔴 مش أول عنصر في الكتالوج أعمى — ده كان بيختار المصوّرة ويستنى تحميلها');
+  assert(bu.indexOf('S.pendingPhoto = _photoFirst') > -1,
+    'والمصوّرة متسجّلة للترقية مش متنسية');
+
+  /* ٢) الترقية في الخلفية */
+  const up = extractFn(code, 'function tryUpgradeToPhoto()');
+  assert(up.length > 60, 'دالة tryUpgradeToPhoto اتلقت');
+  assert(up.indexOf('if(a.failed){ S.pendingPhoto = null;') > -1,
+    '🔴 فشل الأصل = بنبطّل محاولة وخلاص — العميلة فاضلة على المرسومة، صفر أثر');
+  assert(up.indexOf('if(!a.ready){ setTimeout(tryUpgradeToPhoto, 400); return; }') > -1,
+    'ولسه بيحمّل = نجرب تاني بعد شوية (مش لوب محموم)');
+  assert(up.indexOf('S.scarf = target;') > -1 && up.indexOf('repaintStill()') > -1,
+    'وجاهز = بنبدّل ونعيد الرسم');
+  const bt = extractFn(code, 'async function boot()');
+  assert(bt.indexOf('tryUpgradeToPhoto()') > -1,
+    'والترقية بتبدأ بعد الإقلاع');
+
+  /* ٣) الشريحة بتقول السبب مش بس "فشل" */
+  assert(code.indexOf("'failed·' + (asset.why || '')") > -1,
+    'الشريحة بتعرض سبب الفشل — تشخيص من غير كونسول على الموبايل');
+
+  /* ٤) الحالة متعرّفة (مش undefined قبل buildUI) */
+  assert(code.indexOf('pendingPhoto: null,') > -1,
+    '🔴 متعرّفة في الحالة — قراءة undefined كانت هترمي في الإقلاع');
+})();
+
+/* ============================================================
+   🩺 v35 — الفولباك بعد التشغيل مش وقت الإنشاء بس
+   ------------------------------------------------------------
+   🔴 الدليل من جهاز المالك (أول دليل حقيقي بعد ٩ نسخ تخمين):
+      الشريحة قالت `v34 · no-face` على وش واضح وقريب ومضوّي.
+      يعني: الموديل حمّل · الكاميرا شغالة · `draw()` بتتنادى فعلًا —
+      والكشف نفسه بيرجّع **صفر وشوش**. ده بيلغي كل فرضيات v25→v33
+      (كلها كانت عن تحميل الأصل، ولو المشكلة هناك كانت الشريحة
+      هتقول `asset:loading` أو `asset:failed`).
+
+   السبب الأرجح: بعض كروت أندرويد بترجّع نتيجة فاضية من GPU **من
+   غير أي خطأ**. والفولباك القديم كان بيشتغل لو الإنشاء رمى خطأ بس.
+   ============================================================ */
+(function(){
+  const fs2 = require('fs'), path2 = require('path');
+  const APP = fs2.readFileSync(path2.join(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+
+  assert(/const TRYON_VER = 'v35'/.test(APP), 'النسخة اتحدّثت لـv35');
+  assert(/S\._rebuild = \(delegate\) =>/.test(APP),
+    '⭐⭐ أدوات إعادة البناء محفوظة — الفولباك بقى ممكن بعد التشغيل');
+  assert(/S\.lostFrames === 45 && S\.delegate === 'GPU'/.test(APP),
+    '⭐⭐ التحويل لـCPU بيحصل بعد فشل متواصل، ولسه على GPU بس');
+  assert(/!S\.switching/.test(APP),
+    '⭐⭐ التحويل **مرة واحدة** — إعادة البناء مع كل فريم بتوقف التطبيق خالص');
+  assert(/S\.switching = false;/.test(APP), 'والقفل بيتفتح بعد المحاولة');
+  assert(/=== 45/.test(APP) && !/>= 45/.test(APP),
+    '⭐ الشرط `===` مش `>=` — مع `>=` بيتنفذ كل فريم بعد الـ٤٥');
+
+  // 🩺 الشريحة بتقول المندوب — الدليل الجاي بيوصل من غير كونسول
+  assert(/chip\('no-face·' \+ \(S\.delegate \|\| '\?'\)\.toLowerCase\(\)\)/.test(APP),
+    '⭐⭐ الشريحة بتقول GPU ولا CPU — نظرة واحدة تحسم');
+  assert(/delegate: S\.delegate, lostFrames: S\.lostFrames/.test(APP),
+    '⭐ والتشخيص فيه المندوب وعدد الفريمات الضايعة');
+  assert(/\[\?&\]cpu=1/.test(APP),
+    '⭐ و`?cpu=1` للتجربة الفورية من غير انتظار الفولباك');
+
+  const sw = fs2.readFileSync(path2.join(__dirname, '..', 'tryon', 'sw.js'), 'utf8');
+  assert(/echarpe-tryon-v35/.test(sw), '⭐ CACHE_NAME اترفع');
 })();
