@@ -4056,6 +4056,11 @@ window.returnPointsDeduction = returnPointsDeduction;
             const _cards = await activatePendingGiftCards(invoiceCode);
             if(_cards && _cards.length && typeof printGiftCardSlips === 'function')
               await printGiftCardSlips(_cards);
+            /* 📤 عرض المشاركة — **دلوقتي بس**. الكود مش متخزّن عندنا
+               (بصمته بس)، فبعد ما الشاشة تتقفل مفيش طريقة نولّد
+               الكارت تاني. لو اتأجّل، بيضيع. */
+            if(_cards && _cards.length && typeof offerGiftShare === 'function')
+              offerGiftShare(_cards);
           }
         }catch(e){ console.error('credit post-sale', e); }
       })();

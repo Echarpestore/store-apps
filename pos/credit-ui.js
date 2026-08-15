@@ -59,9 +59,18 @@ async function sellGiftCard(){
   const value = Math.round((Number(v) || 0) * 100) / 100;
   if(!(value > 0)){ showToast('المبلغ غلط', 'err'); return; }
 
+  /* 👤 ربط الكارت برقم العميلة (لو موجود على الفاتورة).
+     ⚠️ الربط **مش ملكية**: الكارت بيتصرف بالكود، وأي حد معاه
+        يقدر يستخدمه. الرقم هنا عشان الكارت يظهر في «كروتي» عندها
+        بقيمته وحالته — تعرف إنها اشترته ولحد فين اتصرف.
+     ⚠️ والكود **مش بيتخزّن ولا بيظهر في التطبيق**: إحنا مخزّنين
+        بصمته بس. عرضه في تطبيق دخوله مجهول معناه إن أي حد يعرف
+        رقم موبايل يسحب كودات كروته. */
+  const _buyer = ((document.getElementById('customerPhone') || {}).value || '').trim();
   const idem = creditIdem('issue', [currentBranch, value, Date.now()]);
   const r = await callCredit('giftCardIssue', {
-    value: value, branch: currentBranch, idem: idem
+    value: value, branch: currentBranch, idem: idem,
+    buyerPhone: _buyer || null
   });
   if(!r) return;
 
@@ -239,7 +248,22 @@ window.keepChangeAsCredit = keepChangeAsCredit;
    ⚠️ الكود بيتعرض **مرة واحدة بس** — إحنا مخزّنين بصمته مش هو،
       فمفيش طريقة نطبعه تاني. لازم الكاشير تاخد بالها.
    ============================================================ */
+/* 🔡 الكود الخام للباركود — من غير شرط ولا مسافات.
+   ⚠️ الشكل المعروض (`GC-XXXX-XXXX`) للعين بس. الماسح بيبعت اللي
+      **جوه** الباركود بالظبط، ولو فيه شرط الكاشير هتلاقي كود
+      مش متطابق ومفيش سبب واضح. */
+function giftBarcodeValue(g){
+  return String((g && g.code) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+window.giftBarcodeValue = giftBarcodeValue;
+
 function giftCardSlipHtml(g){
+  /* 🏷️ الباركود — الكاشير تمسحه بدل ما تكتب ١٦ حرف بإيدها.
+     ⚠️ لو المكتبة مش متحمّلة بيرجع فاضي، والكود المكتوب فوق بيفضل
+        هو المسار — الكارت **مايطلعش من غير طريقة استعمال**. */
+  var _bc = '';
+  try{ if(typeof receiptBarcodeImg === 'function') _bc = receiptBarcodeImg(giftBarcodeValue(g)); }catch(e){}
+
   return '<div style="font-family:Arial; text-align:center; padding:10px 6px; width:100%;">'
     + '<div style="font-size:15px; font-weight:900;">🎁 كارت هدية</div>'
     + '<div style="font-size:12px; margin-top:2px;">' + (currentBranch || '') + '</div>'
@@ -248,6 +272,7 @@ function giftCardSlipHtml(g){
     +   '<div style="font-size:10px;">الكود</div>'
     +   '<div dir="ltr" style="font-size:17px; font-weight:900; letter-spacing:1.5px;'
     +     ' font-family:monospace; margin-top:3px;">' + g.display + '</div>'
+    +   (_bc ? '<img src="' + _bc + '" alt="" style="width:92%; margin-top:6px; image-rendering:pixelated;">' : '')
     + '</div>'
     + '<div style="font-size:10.5px; line-height:1.7; margin-top:6px;">'
     +   'اكتبي الكود في تطبيقنا عشان يتحوّل رصيد في حسابك،<br>'
@@ -274,3 +299,125 @@ async function printGiftCardSlips(cards){
   }
 }
 window.printGiftCardSlips = printGiftCardSlips;
+
+/* ============================================================
+   📤 كارت الهدية للمشاركة — صورة شيك تتبعت واتساب
+   ------------------------------------------------------------
+   العميلة بتشتري الكارت **لحد تاني**، والقسيمة الحرارية وحشة
+   وبتتقطع. الكارت ده صورة ملوّنة فيها اسم البراند والقيمة
+   والباركود — تتبعت زي ما هي.
+   ⚠️ بتتولّد **على الجهاز** — الكود عمره ما بيتبعت لأي سيرفر
+      (نفس قاعدة صورة التجربة في tryon).
+   ⚠️ ومتاحة **مرة واحدة وقت البيع بس**: الكود مش متخزّن عندنا
+      (بصمته بس)، فمفيش طريقة نولّدها تاني بعد ما الشاشة تتقفل.
+      التنبيه ده مكتوب للكاشير صراحةً.
+   ============================================================ */
+function giftShareCardHtml(g, brand){
+  var _bc = '';
+  try{ if(typeof receiptBarcodeImg === 'function') _bc = receiptBarcodeImg(giftBarcodeValue(g)); }catch(e){}
+  var isGlow = String(brand || '').toLowerCase() === 'glow';
+  var bg = isGlow ? '#1a1414' : '#FFF6FA';
+  var ink = isGlow ? '#F4E7C3' : '#3A2233';
+  var accent = isGlow ? '#E6B450' : '#EC4899';
+  var name = isGlow ? 'Glow' : 'echarpe';
+
+  return '<div style="width:600px; box-sizing:border-box; background:' + bg + '; color:' + ink + ';'
+    + ' font-family:Tajawal,Arial,sans-serif; text-align:center; padding:34px 28px; border-radius:26px;">'
+    + '<div style="font-size:30px; font-weight:900; letter-spacing:1px; color:' + accent + ';">' + name + '</div>'
+    + '<div style="font-size:15px; opacity:.75; margin-top:4px;">كارت هدية 🎁</div>'
+    + '<div style="font-size:64px; font-weight:900; margin:20px 0 4px;">' + g.value + '</div>'
+    + '<div style="font-size:17px; opacity:.8;">جنيه</div>'
+    + '<div style="background:#fff; border-radius:16px; padding:14px 10px; margin:22px 0 10px;">'
+    +   (_bc ? '<img src="' + _bc + '" alt="" style="width:94%; display:block; margin:0 auto;">'
+           : '<div dir="ltr" style="font-family:monospace; font-size:22px; font-weight:900; color:#000;">' + g.display + '</div>')
+    + '</div>'
+    + '<div dir="ltr" style="font-family:monospace; font-size:16px; font-weight:800; letter-spacing:2px;">' + g.display + '</div>'
+    + '<div style="font-size:13px; line-height:1.9; margin-top:18px; opacity:.85;">'
+    +   'ورّي الباركود ده للكاشير في أي فرع،<br>أو اكتبي الكود في التطبيق يتحوّل رصيد.'
+    + '</div></div>';
+}
+window.giftShareCardHtml = giftShareCardHtml;
+
+/* 🖼️ التحويل لصورة — بـSVG داخل canvas (مفيش مكتبة خارجية).
+   ⚠️ الصور جوه الـSVG لازم تكون base64 وهي كده أصلًا (الباركود
+      بيترسم canvas)، وإلا الرسم بيطلع فاضي بصمت. */
+async function giftShareCardPng(g, brand){
+  const html = giftShareCardHtml(g, brand);
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="760">'
+    + '<foreignObject width="100%" height="100%">'
+    + '<div xmlns="http://www.w3.org/1999/xhtml">' + html + '</div>'
+    + '</foreignObject></svg>';
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  return await new Promise(function(resolve){
+    const img = new Image();
+    img.onload = function(){
+      const cv = document.createElement('canvas');
+      cv.width = 600; cv.height = 760;
+      const cx = cv.getContext('2d');
+      cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, cv.width, cv.height);
+      cx.drawImage(img, 0, 0);
+      cv.toBlob(function(b){ resolve(b); }, 'image/png');
+    };
+    img.onerror = function(){ resolve(null); };
+    img.src = url;
+  });
+}
+window.giftShareCardPng = giftShareCardPng;
+
+/* 📲 المشاركة — Web Share لو متاح، وإلا تنزيل الصورة.
+   ⚠️ الفولباك مش رفاهية: Electron والويندوز مفيهمش Web Share،
+      ومن غيره الزرار بيدوس ومفيش حاجة بتحصل. */
+async function shareGiftCard(cardId){
+  const g = (pendingGiftCards || []).find(function(x){ return x.cardId === cardId; })
+         || (pendingGiftCards || [])[0];
+  if(!g){ showToast('الكارت مش متاح للمشاركة دلوقتي', 'err'); return; }
+  const brand = (typeof catalogBrand === 'function') ? catalogBrand() : 'echarpe';
+  const blob = await giftShareCardPng(g, brand);
+  if(!blob){ showToast('تعذر تجهيز الصورة', 'err'); return; }
+  const file = new File([blob], 'gift-card-' + g.value + '.png', { type:'image/png' });
+  try{
+    if(navigator.canShare && navigator.canShare({ files:[file] })){
+      await navigator.share({ files:[file], title:'كارت هدية' });
+      return;
+    }
+  }catch(e){ /* المستخدم قفل الشير — منكملش للتنزيل */ return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = file.name; a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+  showToast('الصورة اتحفظت — ابعتيها واتساب 📲');
+}
+window.shareGiftCard = shareGiftCard;
+
+/* ============================================================
+   📤 عرض المشاركة بعد البيع
+   ⚠️ **مرة واحدة وقت البيع**: الكود مش متخزّن عندنا، فبعد ما
+      الشاشة تتقفل مفيش طريقة نولّد الكارت تاني — والتنبيه ده
+      مكتوب للكاشير في الشاشة نفسها مش في التوثيق.
+   ============================================================ */
+function offerGiftShare(cards){
+  const list = (cards || []).filter(Boolean);
+  if(!list.length) return;
+  const host = document.createElement('div');
+  host.id = 'giftShareBox';
+  host.style.cssText = 'position:fixed; inset-inline-end:18px; bottom:18px; z-index:9999;'
+    + ' background:var(--panel,#fff); border:1.5px solid var(--accent,#c9a227); border-radius:14px;'
+    + ' padding:14px 16px; box-shadow:0 8px 28px rgba(0,0,0,.25); max-width:320px; font-family:inherit;';
+  host.innerHTML = '<div style="font-weight:800; font-size:14px; margin-bottom:4px;">🎁 كارت الهدية جاهز</div>'
+    + '<div style="font-size:12px; opacity:.8; line-height:1.7; margin-bottom:10px;">'
+    +   'ابعتي كارت شيك للعميلة على واتساب.<br><b>⚠️ دلوقتي بس — بعد ما تقفلي مش هيرجع.</b></div>'
+    + list.map(function(g){
+        return '<button onclick="shareGiftCard(\'' + g.cardId + '\')" '
+          + 'style="width:100%; margin-bottom:6px; padding:10px; border:none; border-radius:9px;'
+          + ' background:var(--accent,#c9a227); color:#fff; font-weight:800; cursor:pointer;">'
+          + '📤 ابعتي كارت ' + g.value + ' ج.م</button>';
+      }).join('')
+    + '<button onclick="document.getElementById(\'giftShareBox\').remove()" '
+    + 'style="width:100%; padding:8px; border:1px solid var(--border,#ccc); border-radius:9px;'
+    + ' background:transparent; color:var(--muted,#777); font-size:12px; cursor:pointer;">تمام، قفل</button>';
+  const old = document.getElementById('giftShareBox'); if(old) old.remove();
+  document.body.appendChild(host);
+}
+window.offerGiftShare = offerGiftShare;
+
+
