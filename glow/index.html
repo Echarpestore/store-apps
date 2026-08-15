@@ -505,6 +505,13 @@
     <div class="inv-sheet" id="invSheet"></div>
   </div>
 
+  <!-- 📄 شيت عام (طلباتي · كارت هدية · كشف الرصيد)
+       ⚠️ ده كان **ناقص خالص** في Glow: الستايلات موجودة بس العنصر لأ،
+          فأي `showSheet` كانت هتخرج بصمت من غير ما تعرض حاجة. -->
+  <div class="overlay" id="crOverlay" onclick="if(event.target===this) closeSheet()">
+    <div class="inv-sheet" id="crSheet"></div>
+  </div>
+
   <!-- بانر تثبيت التطبيق (بيظهر تلقائي في المتصفح) -->
   <div id="installBanner">
     <div class="ib-ico"><img id="ibLogo" alt=""></div>
@@ -1033,6 +1040,14 @@ function enterApp(phone){
   switchTab('card');
   loadBadgeSources();   // تحميل مصادر الشارات (عروض/تشكيلة) مرة واحدة للجلسة
   initPushForCustomer();   // إشعارات Push (لو المفتاح متظبط)
+
+  /* 💳🔖 مستمعي الرصيد والطلبات — **لازم يتشغّلوا هنا**.
+     ⚠️ نسيان السطور دي = الميزة مبنية بالكامل والشاشة بتفضل فاضية
+        للأبد، من غير أي رسالة خطأ. */
+  if(creditUnsub){ creditUnsub(); }
+  creditUnsub = watchCredit(phone);
+  if(reqUnsub){ reqUnsub(); }
+  reqUnsub = watchMyRequests(phone);
 
   // 💬 مستمع المحادثة (مستند واحد) — للشارة الحمرا لايف
   if(window.watchChatConv) watchChatConv(phone);
@@ -1566,7 +1581,19 @@ function renderAccount(){
       '<div class="acct-row"><span class="k">رصيد النقاط</span><span class="v">'+fmt(currentCustomer[POINTS_FIELD]||0)+' نقطة</span></div>'+
       /* (اتشال عرض إجمالي المشتريات — ملوش قيمة للعميلة) */
       '<div class="acct-row"><span class="k">عضو من</span><span class="v">'+esc(sinceFull)+'</span></div>'+
+      /* 💰 رصيد الفلوس — منفصل عن النقط عن قصد.
+         النقط بتتكسب بقاعدة، والرصيد فلوس اتدفعت. خلطهم بيلخبط.
+         ⚠️ الرصيد **مشترك بين البراندين** (حقل `credit` واحد على مستند
+            العميلة) — كارت اتشُري من echarpe بيتصرف في Glow والعكس. */
+      ((Number(currentCustomer.credit)||0) > 0
+        ? '<div class="acct-row"><span class="k">💰 رصيدي</span><span class="v" style="font-weight:900;">'
+          + fmt(currentCustomer.credit) + ' ج.م</span></div>' : '')+
     '</div>'+
+    '<button class="btn-outline" onclick="openMyRequests()">🔖 طلباتي'
+      + (_myRequests.length ? ' (' + _myRequests.length + ')' : '') + '</button>'+
+    '<button class="btn-outline" onclick="openClaimGift()">🎁 عندي كود كارت هدية</button>'+
+    ((Number(currentCustomer.credit)||0) > 0 || _creditRows.length
+      ? '<button class="btn-outline" onclick="openCreditStatement()">📒 كشف حساب الرصيد</button>' : '')+
     (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
     '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
     '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
@@ -1578,10 +1605,191 @@ function renderAccount(){
   if(isIOS() && !isStandalone()){ $('iosTip').style.display='block'; }
 }
 
+/* ============================================================
+   💳🔖 الرصيد وكروت الهدايا وطلباتي — جانب العميلة
+   ------------------------------------------------------------
+   ⚠️ منقول **من تطبيق الولاء** بنفس المنطق بالظبط. الفرق الوحيد:
+      الدوال بتتنادى على التطبيق المسمّى **'glow'** مش 'loyalty'.
+   ⚠️ التطبيق **مبيكتبش رصيد خالص**. قواعد الأمان بتمنعه، والاستلام
+      بيتم عن طريق Cloud Function. لو أي كتابة رصيد ظهرت هنا، يبقى
+      فيه باب خلفي.
+   ⚠️ الرصيد وكروت الهدايا **مشتركين بين البراندين** — حقل `credit`
+      واحد على مستند العميلة، ومجموعة `gift_cards` واحدة. كارت
+      اتشُري من echarpe بيتصرف في Glow والعكس. ده مقصود.
+   ============================================================ */
+var _creditRows = [];
+var _myRequests = [];        // 🔖 طلبات العميلة المفتوحة
+var reqUnsub = null;
+var creditUnsub = null;
+
+/* 🔖 مستمع الطلبات
+   ⚠️ المفتوحة بس — المقفولة بتتراكم ومالهاش لازمة تتعرض. */
+function watchMyRequests(phone){
+  try{
+    return db.collection('customer_requests')
+      .where('phone','==', String(phone))
+      .where('status','==','open')
+      .limit(30)
+      .onSnapshot(function(snap){
+        _myRequests = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+        if($('tab-account') && $('tab-account').style.display !== 'none') renderAccount();
+      }, function(e){ console.warn('my requests', e && e.code); });
+  }catch(e){ console.warn('watchMyRequests', e); return null; }
+}
+window.watchMyRequests = watchMyRequests;
+
+/* 🔖 شاشة طلباتي
+   ⚠️⚠️ النص هنا **وعد بمحاولة مش وعد بنتيجة**:
+      "هنكلّمك لو وصل" مش "هنجيبهولك". لو وعدنا بالنتيجة والقطعة
+      ماوصلتش، العميلة بتحس إن المحل كدب عليها — والوعد اللي
+      مااتحققش أوحش من إننا ماوعدناش أصلًا.
+   ⚠️ ومفيش ميعاد ولا "قريبًا" — إحنا مش عارفين. */
+function openMyRequests(){
+  var rows = _myRequests.map(function(r){
+    var days = r.createdAt ? Math.floor((Date.now() - r.createdAt) / 86400000) : 0;
+    return '<div class="acct-row">'
+      + '<span class="k">' + esc(r.text || '') + '<br>'
+      +   '<span style="font-size:11px; opacity:.7;">'
+      +     (days === 0 ? 'اتسجّل النهاردة' : 'من ' + days + ' يوم')
+      +     (r.branch ? ' · ' + esc(r.branch) : '') + '</span></span>'
+      + '<span class="v" style="font-size:11.5px; opacity:.8;">بندوّرلك</span></div>';
+  }).join('');
+
+  showSheet('🔖 طلباتي',
+    (rows
+      ? '<div class="acct-card">' + rows + '</div>'
+        + '<div style="font-size:12px; line-height:1.9; opacity:.8; padding:4px 2px;">'
+        +   'الحاجات دي مسجّلة عندنا. أول ما توصل، هنكلّمك على رقمك 🌸</div>'
+      : '<div style="text-align:center; padding:18px 10px; font-size:13px; line-height:1.9;">'
+        + '<div style="font-size:34px;">🔖</div>'
+        + '<div style="font-weight:800; margin-top:6px;">لسه مفيش طلبات</div>'
+        + '<div style="opacity:.75; margin-top:4px;">لو دوّرتي على حاجة ومالقيتيهاش في الفرع,'
+        + ' قولي للبياعة تسجّلها — ونكلّمك أول ما توصل.</div></div>'));
+}
+window.openMyRequests = openMyRequests;
+
+/* 📄 شيت بسيط — بيستخدم `crSheet`/`crOverlay`.
+   ⚠️ العنصرين دول كانوا **ناقصين خالص** في Glow (الستايلات موجودة
+      والعنصر لأ) — فالشيت كان هيخرج بصمت من غير ما يعرض حاجة.
+      الدرس: أي دالة بننديها لازم نتأكد إن **عناصرها** موجودة كمان. */
+function showSheet(title, bodyHtml){
+  var sh = document.getElementById('crSheet');
+  var ov = document.getElementById('crOverlay');
+  if(!sh || !ov) return;
+  sh.innerHTML = '<div class="ish-h"><div class="ish-title">' + title + '</div>'
+    + '<button class="ish-x" onclick="closeSheet()">✕</button></div>' + bodyHtml;
+  ov.classList.add('on');
+}
+function closeSheet(){
+  var ov = document.getElementById('crOverlay');
+  if(ov) ov.classList.remove('on');
+}
+window.showSheet = showSheet; window.closeSheet = closeSheet;
+
+/* 📒 كشف الحساب — كل حركة بسطر.
+   ⚠️ مش رفاهية: لما العميلة تلاقي رقم مش فاهماه، هتيجي تخانق
+      الكاشير. الكشف بيرد عنها. */
+function watchCredit(phone){
+  try{
+    return db.collection('credit_ledger')
+      .where('phone','==', String(phone))
+      .orderBy('at','desc').limit(50)
+      .onSnapshot(function(snap){
+        _creditRows = snap.docs.map(function(d){ return d.data(); });
+      }, function(e){ console.warn('credit ledger', e && e.code); });
+  }catch(e){ console.warn('watchCredit', e); return null; }
+}
+window.watchCredit = watchCredit;
+
+function creditRowLabel(r){
+  var t = r && r.type;
+  if(t === 'gift_card')   return '🎁 كارت هدية';
+  if(t === 'change_kept') return '💵 باقي محفوظ' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
+  if(t === 'spend')       return '🛍️ فاتورة' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
+  if(t === 'manual')      return '✏️ ' + (r.reason || 'تعديل');
+  return 'حركة';
+}
+
+function openCreditStatement(){
+  var rows = _creditRows.map(function(r){
+    var amt = Number(r.amount) || 0;
+    var d = r.at ? new Date(r.at).toLocaleDateString('ar-EG',
+      { day:'numeric', month:'short', year:'numeric' }) : '';
+    return '<div class="acct-row">'
+      + '<span class="k">' + esc(creditRowLabel(r)) + '<br>'
+      +   '<span style="font-size:11px; opacity:.7;">' + esc(d) + '</span></span>'
+      + '<span class="v" style="font-weight:900; color:' + (amt < 0 ? '#c0392b' : '#1e8449') + ';">'
+      +   (amt < 0 ? '−' : '+') + fmt(Math.abs(amt)) + ' ج.م</span></div>';
+  }).join('');
+  showSheet('📒 كشف حساب الرصيد',
+    '<div class="acct-card">'
+    + '<div class="acct-row"><span class="k">رصيدك دلوقتي</span>'
+    +   '<span class="v" style="font-weight:900;">' + fmt(currentCustomer.credit || 0) + ' ج.م</span></div>'
+    + '</div>'
+    + (rows ? '<div class="acct-card">' + rows + '</div>'
+            : '<div class="muted" style="text-align:center; padding:14px;">لسه مفيش حركات</div>'));
+}
+window.openCreditStatement = openCreditStatement;
+
+/* 🎁 استلام كارت هدية — الكود بيتحوّل رصيد والكود يموت */
+function openClaimGift(){
+  showSheet('🎁 كارت هدية',
+    '<div style="padding:4px 2px;">'
+    + '<div style="font-size:13px; line-height:1.9; margin-bottom:10px;">'
+    +   'اكتبي كود الكارت اللي وصلك. هيتحوّل رصيد في حسابك على طول,'
+    +   ' وتقدري تصرفيه في أي فرع.</div>'
+    + '<input id="gcInput" type="text" dir="ltr" placeholder="GC-XXXX-XXXX-XXXX-XXXX" '
+    +   'autocomplete="off" autocapitalize="characters" '
+    +   'style="width:100%; padding:14px; border-radius:12px; border:1.5px solid #ddd;'
+    +   ' font-size:16px; font-family:monospace; letter-spacing:1px; text-align:center;">'
+    + '<div id="gcMsg" style="font-size:12.5px; margin-top:8px; min-height:18px;"></div>'
+    + '<button class="btn-outline" style="width:100%; margin-top:8px;" onclick="claimGift()">استلمي الرصيد</button>'
+    + '</div>');
+  setTimeout(function(){ var el = document.getElementById('gcInput'); if(el) el.focus(); }, 200);
+}
+window.openClaimGift = openClaimGift;
+
+var _gcBusy = false;
+async function claimGift(){
+  if(_gcBusy) return;
+  var el = document.getElementById('gcInput');
+  var msg = document.getElementById('gcMsg');
+  var code = (el && el.value || '').trim();
+  if(!code){ if(msg){ msg.style.color='#c0392b'; msg.textContent='اكتبي الكود'; } return; }
+  if(!navigator.onLine){
+    if(msg){ msg.style.color='#c0392b'; msg.textContent='محتاجة نت عشان تستلمي'; } return;
+  }
+  _gcBusy = true;
+  if(msg){ msg.style.color='#666'; msg.textContent='ثانية واحدة...'; }
+  try{
+    /* ⚠️ على التطبيق المسمّى **'glow'** — مش الافتراضي ولا 'loyalty'.
+       ده أهم فرق عن نسخة الولاء: لو ندهناها على الافتراضي، بتشتغل
+       بجلسة تانية أو تفشل (درس عزل الجلسات). */
+    var fn = firebase.app('glow').functions('us-central1').httpsCallable('giftCardClaim');
+    var res = await fn({ code: code, phone: currentCustomer.phone });
+    var d = res.data || {};
+    if(msg){
+      msg.style.color = '#1e8449';
+      msg.textContent = '🎉 اتضاف ' + fmt(d.amount) + ' ج.م — رصيدك دلوقتي ' + fmt(d.balance) + ' ج.م';
+    }
+    if(el) el.value = '';
+    // الرصيد بيتحدّث لوحده من مستمع العميلة
+  }catch(e){
+    if(msg){ msg.style.color = '#c0392b'; msg.textContent = (e && e.message) || 'الكود مش صحيح'; }
+  }finally{ _gcBusy = false; }
+}
+window.claimGift = claimGift;
+
 function logout(silent){
   if(!silent && !confirm('تسجيل الخروج من حسابك؟')) return;
   if(custUnsub){ custUnsub(); custUnsub=null; }
+  /* ⚠️ لازم يتقفلوا: لو فضلوا شغّالين، عميلة تانية على نفس الجهاز
+     هتشوف حركات فلوس وطلبات مش بتاعتها. */
+  if(creditUnsub){ creditUnsub(); creditUnsub=null; }
+  if(reqUnsub){ reqUnsub(); reqUnsub=null; }
   if(window.chatCleanup) chatCleanup();
+  _creditRows = [];
+  _myRequests = [];
   currentCustomer = null;
   localStorage.removeItem(LS_PHONE);
   $('phoneInput').value=''; $('nameInput').value='';
