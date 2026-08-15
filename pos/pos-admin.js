@@ -45,6 +45,8 @@ function loadInventory(){
   /* 🧺 موديل «اللي بيتاخد مع» — **مستند واحد** بيتقري مرة واحدة مع
      المخزون. الاقتراح بعد كده حساب في الذاكرة: صفر قراءة لكل فاتورة. */
   try{ if(typeof basketLoadModel === 'function') basketLoadModel(); }catch(e){}
+  /* ⭐ حملات نقط الموظفين — مستند واحد، بيتقري مرة مع المخزون. */
+  try{ if(typeof loadStaffBoosts === 'function') loadStaffBoosts(); }catch(e){}
   setTimeout(function(){ if(_invFirstResolve){ _invFirstResolve(); _invFirstResolve = null; } }, 6000); // أمان لو النت بطيء
   return p;
 }

@@ -190,3 +190,164 @@ async function basketRebuild(){
   }
 }
 window.basketRebuild = basketRebuild;
+
+/* ============================================================
+   ⭐ حملات نقط الموظفين — الشاشة
+   ------------------------------------------------------------
+   «المنتج ده بنقطة للموظفة» — عشان نحرّك صنف بعينه.
+   الحساب في `calcStaffBonus` (pos-sale) والاختبارات عليه.
+   ============================================================ */
+function boostDocId(){
+  return 'staff_point_boosts_' + (typeof catalogBrand === 'function' ? catalogBrand() : 'echarpe');
+}
+
+async function goToStaffBoosts(){
+  if(typeof hasPerm === 'function' && !hasPerm('canEditInventory')){
+    showToast('مفيش صلاحية', 'err'); return;
+  }
+  showScreen('boostScreen');
+  document.getElementById('boostWrap').innerHTML = '<div class="empty-cart">بيتحمّل...</div>';
+  try{
+    const d = await db.collection(TEST_SETTINGS).doc(boostDocId()).get();
+    staffBoosts = d.exists ? Object.assign({ items:[] }, d.data()) : { items:[] };
+    if(!Array.isArray(staffBoosts.items)) staffBoosts.items = [];
+    window.staffBoosts = staffBoosts;
+  }catch(e){ staffBoosts = { items:[] }; }
+  renderBoostScreen();
+}
+window.goToStaffBoosts = goToStaffBoosts;
+
+async function saveBoostDoc(){
+  await db.collection(TEST_SETTINGS).doc(boostDocId()).set(staffBoosts, { merge:true });
+}
+
+function boostInvSuggest(q){
+  const box = document.getElementById('bstInvSuggest');
+  q = (q || '').trim().toLowerCase();
+  if(!q){ box.innerHTML = ''; return; }
+  const ms = (allInventory || []).filter(function(p){
+    return String(p.name || '').toLowerCase().includes(q)
+        || String(p.barcode || '').toLowerCase().includes(q);
+  }).slice(0, 8);
+  box.innerHTML = ms.map(function(p){
+    return '<div onclick="boostPickInv(\'' + p.id + '\')" style="padding:9px 10px; border-bottom:1px solid var(--border); cursor:pointer; font-size:13px;">'
+      + (p.name || '') + ' <span style="color:var(--muted); font-size:11px;">' + (p.barcode || '') + '</span></div>';
+  }).join('');
+}
+window.boostInvSuggest = boostInvSuggest;
+
+function boostPickInv(id){
+  const p = (allInventory || []).find(function(x){ return x.id === id; });
+  if(!p) return;
+  document.getElementById('bstBarcode').value = p.barcode || '';
+  document.getElementById('bstName').value = p.name || '';
+  document.getElementById('bstInvSuggest').innerHTML = '';
+  document.getElementById('bstSearch').value = '';
+}
+window.boostPickInv = boostPickInv;
+
+async function boostAdd(){
+  if(_busyOps.has('boost')) return;
+  const barcode = (document.getElementById('bstBarcode').value || '').trim();
+  const name = (document.getElementById('bstName').value || '').trim();
+  const points = Number(document.getElementById('bstPoints').value) || 0;
+  const days = parseInt(document.getElementById('bstDays').value) || 0;
+
+  if(!barcode){ showToast('اختار الصنف من المخزون الأول', 'err'); return; }
+  if(points <= 0){ showToast('اكتب نقط القطعة (مثلاً 1)', 'err'); return; }
+  /* ⚠️ المدة **إجبارية**: حملة من غير نهاية بتفضل شغالة نسيان،
+     والموظفة تاخد نقط على منتج بطّلت تهتم بيه من شهور. */
+  if(days <= 0){ showToast('حدّد الحملة بتقف بعد كام يوم', 'err'); return; }
+
+  _busyOps.add('boost');
+  const before = JSON.stringify(staffBoosts.items);
+  const until = Date.now() + days * 86400000;
+  const ex = staffBoosts.items.find(function(x){ return String(x.barcode) === barcode; });
+  if(ex){ ex.name = name; ex.points = points; ex.until = until; ex.active = true; }
+  else staffBoosts.items.push({
+    id: 'b' + Date.now().toString(36), barcode: barcode, name: name,
+    points: points, until: until, active: true, addedAt: Date.now()
+  });
+  try{
+    await saveBoostDoc();
+    ['bstBarcode','bstName','bstPoints','bstDays','bstSearch'].forEach(function(id){
+      const el = document.getElementById(id); if(el) el.value = '';
+    });
+    showToast('الحملة بدأت ⭐');
+    renderBoostScreen();
+  }catch(e){
+    staffBoosts.items = JSON.parse(before);
+    showToast('خطأ: ' + e.message, 'err');
+  }finally{ _busyOps.delete('boost'); }
+}
+window.boostAdd = boostAdd;
+
+async function boostStop(id){
+  const it = staffBoosts.items.find(function(x){ return x.id === id; });
+  if(!it) return;
+  if(!confirm('توقف حملة «' + (it.name || '') + '»؟')) return;
+  const before = staffBoosts.items.slice();
+  staffBoosts.items = staffBoosts.items.filter(function(x){ return x.id !== id; });
+  try{ await saveBoostDoc(); renderBoostScreen(); showToast('اتوقفت'); }
+  catch(e){ staffBoosts.items = before; showToast('خطأ: ' + e.message, 'err'); }
+}
+window.boostStop = boostStop;
+
+function renderBoostScreen(){
+  const w = document.getElementById('boostWrap');
+  if(!w) return;
+  const inp = 'width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:8px;';
+  const now = Date.now();
+  const items = (staffBoosts && staffBoosts.items) || [];
+  const live = activeBoosts(staffBoosts, now).length;
+
+  w.innerHTML =
+    '<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:10px 12px; margin-bottom:14px; font-size:12.5px; color:var(--muted); line-height:1.9;">'
+      + 'النقط دي <b style="color:var(--text);">بتتزاد فوق</b> نظام «كل ' + MIN_ITEMS_FOR_STAFF_POINT + ' قطع = نقطة» مش بدله — '
+      + 'يعني الموظفة اللي بتبيع منتج الحملة مبتخسرش نقط القطع التانية. '
+      + '<b style="color:var(--text);">' + live + '</b> حملة شغالة دلوقتي.'
+    + '</div>'
+
+    + '<div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:16px;">'
+      + '<div style="font-weight:800; margin-bottom:10px;">⭐ ابدأ حملة على منتج</div>'
+      + '<input id="bstSearch" placeholder="🔍 اختار من المخزون (اسم أو باركود)" oninput="boostInvSuggest(this.value)" style="' + inp + '">'
+      + '<div id="bstInvSuggest" style="background:var(--panel2); border-radius:8px; margin-top:-4px; margin-bottom:8px; overflow:hidden;"></div>'
+      + '<input id="bstBarcode" placeholder="الباركود (بيتملأ لوحده)" style="' + inp + '">'
+      + '<input id="bstName" placeholder="اسم المنتج" style="' + inp + '">'
+      + '<div style="display:flex; gap:8px;">'
+        + '<input id="bstPoints" type="number" step="0.25" placeholder="نقط القطعة (مثلاً 1)" style="' + inp + ' flex:1;">'
+        + '<input id="bstDays" type="number" placeholder="تقف بعد كام يوم" style="' + inp + ' flex:1;">'
+      + '</div>'
+      + '<button onclick="boostAdd()" style="width:100%; padding:11px; border-radius:9px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">⭐ ابدأ الحملة</button>'
+    + '</div>'
+
+    + '<div style="font-weight:800; margin-bottom:10px;">الحملات (' + items.length + ')</div>'
+    + (items.map(function(b){
+        const over = !(Number(b.until) > now);
+        const left = over ? 0 : Math.ceil((Number(b.until) - now) / 86400000);
+        return '<div style="background:var(--panel); border:1px solid ' + (over ? 'var(--warn)' : 'var(--border)') + '; border-radius:10px; padding:11px 13px; margin-bottom:8px; display:flex; align-items:center; gap:10px; opacity:' + (over ? '.6' : '1') + ';">'
+          + '<div style="flex:1; min-width:0;">'
+            + '<div style="font-weight:800; font-size:13.5px;">' + (b.name || b.barcode) + '</div>'
+            + '<div style="font-size:11.5px; color:' + (over ? 'var(--warn)' : 'var(--muted)') + '; font-weight:700;">'
+              + '⭐ ' + b.points + ' نقطة للقطعة · '
+              + (over ? 'انتهت' : 'باقي ' + left + ' يوم') + '</div>'
+          + '</div>'
+          + '<button onclick="boostStop(\'' + b.id + '\')" style="flex:0 0 auto; padding:7px 12px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-size:11.5px; font-weight:800; cursor:pointer;">' + (over ? 'امسح' : '⏹️ وقف') + '</button>'
+        + '</div>';
+      }).join('') || '<div style="color:var(--muted); font-size:13px;">مفيش حملات.</div>');
+}
+window.renderBoostScreen = renderBoostScreen;
+
+/* 👀 الكاشير لازم تشوف الحافز **وهي بتبيع** — الشاشة اللي المالك
+   بيظبط منها مبتوصلش لحد. الشريط بيبان فوق السلة لما يكون في
+   السلة منتج حملة. */
+function boostRenderStrip(){
+  const el = document.getElementById('boostStrip');
+  if(!el) return;
+  const bonus = (typeof calcStaffBonus === 'function')
+    ? calcStaffBonus(cart, staffBoosts, Date.now(), false) : 0;
+  if(!bonus){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = '⭐ نقط إضافية ليكي من الفاتورة دي: <b>' + bonus + '</b>';
+}
+window.boostRenderStrip = boostRenderStrip;

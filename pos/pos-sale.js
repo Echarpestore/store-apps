@@ -531,6 +531,7 @@ function renderCart(){
   /* 🧺 اقتراح «اللي بيتاخد مع» — حساب في الذاكرة، صفر قراءات.
      ⚠️ جوه try: ميزة إضافية ممنوع سقوطها يعطّل رسم السلة. */
   try{ if(typeof basketRenderStrip === 'function') basketRenderStrip(); }catch(e){}
+  try{ if(typeof boostRenderStrip === 'function') boostRenderStrip(); }catch(e){}
 }
 
 // يرجّع أي منتج اتطبّق عليه عرض العميل لسعره وشكله الأصلي (لما نشيل/نغيّر العميل)
@@ -2316,6 +2317,72 @@ function calcStaffPoint(itemCount, total, minItems, minInvoice, enabled, isRefun
 }
 if(typeof window !== 'undefined') window.calcStaffPoint = calcStaffPoint;
 
+/* ============================================================
+   ⭐ نقط إضافية على منتج بعينه — «حملة»
+   ------------------------------------------------------------
+   نظام النقط العادي بيكافئ **عدد القطع**: كل (الحد) قطع = نقطة.
+   ده كويس للمجهود العام، بس مش بيحرّك منتج معيّن. الحملة بتقول
+   للموظفة: «القطعة دي لوحدها بنقطة» — فبتعرضها فعلًا.
+
+   ⚠️ **بتتزاد فوق** النقطة العادية مش بديلها. لو بديل، الموظفة
+      اللي بتبيع منتج الحملة بتخسر نقط القطع التانية، فتبقى الحملة
+      عقاب مش حافز.
+   ⚠️ **تاريخ انتهاء إجباري.** حملة من غير نهاية بتفضل شغالة نسيان،
+      والموظفة تاخد نقط على منتج المالك بطّل يهتم بيه من شهور.
+   ⚠️ المرتجع = صفر. ولو مفيش تاريخ (بيانات قديمة) بتتعامل كمنتهية —
+      **الافتراضي الآمن هو مفيش نقط**، مش نقط للأبد.
+   ============================================================ */
+function calcStaffBonus(cart, boosts, nowMs, isRefund){
+  if(isRefund) return 0;
+  const list = (boosts && boosts.items) || [];
+  if(!list.length) return 0;
+  const now = Number(nowMs) || Date.now();
+
+  const active = {};
+  list.forEach(function(b){
+    if(!b || b.active === false) return;
+    const until = Number(b.until) || 0;
+    if(!until || until < now) return;            // منتهية أو من غير تاريخ
+    const pts = Number(b.points) || 0;
+    if(pts <= 0) return;
+    active[String(b.barcode)] = pts;
+  });
+
+  let sum = 0;
+  (cart || []).forEach(function(c){
+    if(!c || c.isReturn || c.isRedemption || c.isRewardDiscount) return;
+    const pts = active[String(c.barcode)];
+    if(!pts) return;
+    const q = Math.max(0, Math.floor(Number(c.qty) || 0));
+    sum += pts * q;
+  });
+  return +sum.toFixed(3);
+}
+if(typeof window !== 'undefined') window.calcStaffBonus = calcStaffBonus;
+
+/* 🔎 الحملات الشغالة دلوقتي — للعرض على الكاشير. */
+function activeBoosts(boosts, nowMs){
+  const now = Number(nowMs) || Date.now();
+  return (((boosts && boosts.items) || [])).filter(function(b){
+    return b && b.active !== false && Number(b.points) > 0
+        && Number(b.until) > now;
+  });
+}
+if(typeof window !== 'undefined') window.activeBoosts = activeBoosts;
+
+/* ⭐ حملات نقط الموظفين — مستند واحد بيتقري مع إعدادات النقط. */
+let staffBoosts = null;
+async function loadStaffBoosts(){
+  try{
+    const id = 'staff_point_boosts_' + (typeof catalogBrand === 'function' ? catalogBrand() : 'echarpe');
+    const d = await db.collection(TEST_SETTINGS).doc(id).get();
+    staffBoosts = d.exists ? d.data() : { items: [] };
+  }catch(e){ staffBoosts = { items: [] }; }
+  if(typeof window !== 'undefined') window.staffBoosts = staffBoosts;
+  return staffBoosts;
+}
+if(typeof window !== 'undefined') window.loadStaffBoosts = loadStaffBoosts;
+
 async function capAskCustomer(){
   if(!currentBranch){ showToast('سجّل دخول الأول', 'err'); return; }
   _capAskId = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
@@ -3721,8 +3788,11 @@ async function _doConfirmPayment(){
   //   • وكل قطعة زيادة = كسر من نقطة (1 ÷ الحد)
   // كان قبل كده: نقطة واحدة مهما زادت القطع — فالموظفة اللي بتبيع 20 قطعة
   // بتاخد زي اللي بتبيع 5، والزيادة كلها بتضيع.
-  const staffPointValue = calcStaffPoint(itemCount, total, _spMinItems, _spMinInvoice,
+  const staffBaseValue = calcStaffPoint(itemCount, total, _spMinItems, _spMinInvoice,
                                          _spCfg.enabled !== false, isRefundInvoice);
+  /* ⭐ نقط الحملة — **فوق** النقطة العادية مش بدلها (شوف calcStaffBonus). */
+  const staffBonusValue = calcStaffBonus(cart, staffBoosts, Date.now(), isRefundInvoice);
+  const staffPointValue = +(staffBaseValue + staffBonusValue).toFixed(3);
   const earnsStaffPoint = staffPointValue > 0;
 /* ============================================================
    ↩️🎁 خصم نقط المرتجع — إصلاح "مولّد النقط"
@@ -3814,6 +3884,8 @@ window.returnPointsDeduction = returnPointsDeduction;
       pointsRedeemed: (pendingRedemption ? pendingRedemption.points : 0),
       staffPointEarned: earnsStaffPoint,
       staffPointValue,                       // ⭐ القيمة بالكسور (1 = الحد الأدنى بالظبط)
+      staffBaseValue,                        // ⭐ نقط القطع العادية
+      staffBonusValue,                       // ⭐ نقط الحملة (منتج بعينه) — متفصّلة عشان تتراجع
       firstItemAt: _cartFirstItemAt || null,   // 🕵️ متى بدأت السلة (لكشف التأخير غير الطبيعي)
       staffPurchase: staffPurchase ? { empId: staffPurchase.empId, name: staffPurchase.name, pct: staffPurchase.pct, discountAmount: staffDiscountAmount() } : null,
       cardTxn: paymobCardInfo || null,   // 💳 بيانات أول كارت (توافق مع الفواتير القديمة)
@@ -4085,7 +4157,8 @@ window.returnPointsDeduction = returnPointsDeduction;
         employeeId: sellerEmployeeId, employeeName: sellerEmployeeName,
         invoiceNumber: String(invoiceNo), branch: currentBranch,
         itemCount, invoiceTotal: total, auto: true, ts: Date.now(),
-        value: staffPointValue             // ⭐ الوزن الحقيقي للنقطة (كسور للقطع الزيادة)
+        value: staffPointValue,            // ⭐ الوزن الحقيقي للنقطة (كسور للقطع الزيادة)
+        base: staffBaseValue, bonus: staffBonusValue   // ⭐ التفصيل — الحملة متميّزة
       }));
       if(_spW.error) console.warn('auto point', _spW.error);
       const ptRef = db.collection(TEST_EMPLOYEE_POINTS).doc(sellerEmployeeId);

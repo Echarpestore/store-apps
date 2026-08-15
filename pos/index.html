@@ -1139,6 +1139,7 @@ body.on-dashboard .badge-test{ display:block; }
             <div class="qb-nav-item" id="navImport" onclick="goToImport()" style="display:none;"><div class="qb-icon">📥</div><div class="qb-label">استيراد بيانات</div></div>
             <div class="qb-nav-item" id="navReceiptDesign" onclick="goToReceiptDesign()" style="display:none;"><div class="qb-icon">🖨️</div><div class="qb-label">تصميم الفاتورة</div></div>
             <div class="qb-nav-item" id="navLoyalty" onclick="goToLoyaltyScreen()" style="display:none;"><div class="qb-icon">🎁</div><div class="qb-label">برنامج الولاء</div></div>
+            <div class="qb-nav-item" id="navBoosts" onclick="goToStaffBoosts()"><div class="qb-icon">⭐</div><div class="qb-label">حملة نقط منتج</div></div>
             <div class="qb-nav-item" id="navStaffCards" onclick="goToStaffCards()" style="display:none;"><div class="qb-icon">🎫</div><div class="qb-label">بطاقات الموظفين</div></div>
           </div>
         </div>
@@ -1213,6 +1214,16 @@ body.on-dashboard .badge-test{ display:block; }
         التزام بكمية وسعر لعميلة هتيجي تستلم.
      ============================================================ -->
 <!-- 🧺 اللي بيتباع مع بعضه — الأنماط اللي البيع اتعلّمها -->
+<!-- ⭐ حملة نقط على منتج — «القطعة دي بنقطة للموظفة» -->
+<div class="screen mgmt-light" id="boostScreen">
+  <div class="dash-header">
+    <div><h1>⭐ حملة نقط منتج</h1></div>
+    <button class="logout-btn" onclick="goToBasketInsights()">🧺 بيتباع مع بعضه</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div id="boostWrap" style="padding:0 20px 24px;"></div>
+</div>
+
 <div class="screen mgmt-light" id="basketScreen">
   <div class="dash-header">
     <div><h1>🧺 بيتباع مع بعضه</h1></div>
@@ -1712,6 +1723,8 @@ body.on-dashboard .badge-test{ display:block; }
           <!-- 🧺 اقتراح «اللي بيتاخد مع» — اقتراح **واحد** بس، وبيختفي
      لو مفيش حاجة مؤكدة. شريط دايمًا مليان = الكاشير تبطّل تبص عليه. -->
 <div id="basketStrip" style="display:none; align-items:center; gap:10px; padding:9px 12px; margin-bottom:8px; border:1.5px dashed var(--accent); border-radius:11px; background:var(--panel2);"></div>
+<!-- ⭐ نقط الحملة — الكاشير لازم تشوف الحافز وهي بتبيع مش في شاشة إدارة -->
+<div id="boostStrip" style="display:none; padding:8px 12px; margin-bottom:8px; border-radius:11px; background:#FFF7DB; border:1.5px solid #E6B450; color:#7A5A16; font-size:13px; font-weight:800;"></div>
 <table class="cart-table">
             <thead>
               <tr>
