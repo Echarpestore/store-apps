@@ -1110,6 +1110,20 @@ try{ firebase.auth().onAuthStateChanged(ofSessionCheck); }catch(e){}
 /* ============================================================
    🗂️ التبويبات
    ============================================================ */
+// 🕒 عرض الوقت **بتوقيت القاهرة دايمًا** — الأجهزة في مصر والمالك
+//    بيفتح من بره أحيانًا. توقيت الجهاز خلّى فاتورة ٧:٢٦ مساءً تظهر
+//    ١:٢٦ ظهرًا في سجل النشاط، والفرق ده بيخلي قراءة القصة مستحيلة.
+//    ⚠️ القاعدة دي مثبتة في كل حسابات الوقت — والعرض لازم يتبعها.
+const OF_CAIRO_TZ = 'Africa/Cairo';
+function ofWhen(ts, withDate){
+  if(!ts) return '—';
+  const o = { timeZone: OF_CAIRO_TZ, hour:'2-digit', minute:'2-digit', second:'2-digit' };
+  if(withDate){ o.year = 'numeric'; o.month = '2-digit'; o.day = '2-digit'; }
+  try{ return new Date(ts).toLocaleString('ar-EG', o); }
+  catch(e){ return new Date(ts).toLocaleString('ar-EG'); }
+}
+window.ofWhen = ofWhen;
+
 // 🕵️ حالة سجل النشاط — التعريف **قبل** هاندلر التبويب اللي بيقراه:
 //    `let` مبتترفعش (TDZ)، ونفس الباج ده حصل قبل كده مع OF_RECUR_COL.
 let _ofActRaw = [];
@@ -1362,14 +1376,14 @@ function renderRefundsDue(){
       + ' · 👤 ' + esc(x.customerName || '') + ' ' + (x.customerPhone ? '<span dir="ltr">' + esc(x.customerPhone) + '</span>' : '<b style="color:#dc2626;">من غير رقم!</b>')
       + (txn.txnId ? ' · 💳 <span dir="ltr">TXN ' + esc(String(txn.txnId)) + '</span>' : '')
       + ' · 🧑‍💼 ' + esc(x.employeeName || '') 
-      + ' · ' + new Date(x.ts || 0).toLocaleString('ar-EG') + '</div></div>');
+      + ' · ' + ofWhen(x.ts, true) + '</div></div>');
   });
   if(done.length){
     rows.push('<div class="muted" style="font-size:12px; margin:8px 0 4px;">✅ اترد مؤخرًا:</div>');
     done.forEach(function(x){
       rows.push('<div class="muted" style="font-size:12px; padding:4px 2px; border-bottom:1px dashed var(--line);">'
         + ofMoney(x.diff || 0) + ' · ' + esc(x.branch || '') + ' · ' + esc(x.customerPhone || '')
-        + ' · رده ' + esc(x.refundedBy || '') + ' ' + new Date(x.refundedAt || 0).toLocaleDateString('ar-EG') + '</div>');
+        + ' · رده ' + esc(x.refundedBy || '') + ' ' + ofWhen(x.refundedAt, true) + '</div>');
     });
   }
   body.innerHTML = rows.join('');
@@ -1546,7 +1560,7 @@ function ofRenderActivity(){
       + '<div class="muted" style="font-size:11px; margin-top:3px;">'
       + (inv ? '🧾 ' + esc(inv) + ' · ' : '')
       + '🏬 ' + esc(a.branch || '—') + ' · 🧑‍💼 ' + esc(a.employeeName || '—')
-      + ' · ' + new Date(a.ts || 0).toLocaleString('ar-EG') + '</div></div>';
+      + ' · ' + ofWhen(a.ts, true) + '</div></div>';
   }).join('');
 }
 window.ofRenderActivity = ofRenderActivity;
@@ -1597,7 +1611,7 @@ window.ofActOpen = function(id){
   const inv = a.invoiceCode || a._linkedInvoice || '';
   let html = '<div style="font-weight:900; font-size:16px;">' + esc(ofActLabel(a.type)) + '</div>'
     + '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">'
-    + new Date(a.ts || 0).toLocaleString('ar-EG') + ' · ' + esc(a.branch || '') + '</div>'
+    + ofWhen(a.ts, true) + ' · ' + esc(a.branch || '') + '</div>'
     + (inv ? '<div style="background:var(--panel2); border-radius:8px; padding:7px 9px; margin-bottom:8px; font-weight:800; font-size:13px;">🧾 ' + esc(inv) + '</div>'
            : '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">🧾 مفيش فاتورة مربوطة — إما السلة اتسابت من غير بيع، أو الحدث قديم (قبل تحديث الربط)</div>')
     + rows.join('');
@@ -1607,7 +1621,7 @@ window.ofActOpen = function(id){
       const me = x.id === a.id;
       html += '<div style="padding:5px 8px; margin-bottom:4px; border-radius:7px; font-size:12px;'
         + (me ? ' background:rgba(199,154,56,.18); font-weight:800;' : ' background:var(--panel2);') + '">'
-        + new Date(x.ts || 0).toLocaleTimeString('ar-EG') + ' — ' + esc(ofActLabel(x.type))
+        + ofWhen(x.ts) + ' — ' + esc(ofActLabel(x.type))
         + (ofActDetail(x) ? '<div class="muted" style="font-size:11px;">' + ofActDetail(x) + '</div>' : '')
         + '</div>';
     });
@@ -3135,6 +3149,105 @@ function ofCountRequiredInRange(emp, start, end){
   }
   return count;
 }
+
+/* ============================================================
+   🗓️ محرك الإجازات الأسبوعي — **نسخة طبق الأصل من sales-app.js**
+   ------------------------------------------------------------
+   ⚠️⚠️ القاعدة: `ofComputeSalary` لازم تدّي **نفس الرقم** اللي بتدّيه
+      `computeSalary` في تطبيق الحضور — رقمين مختلفين لنفس الموظفة
+      معناه إن المالك مش عارف يصدّق مين. `test-office-money.js` بيقارن
+      الاتنين رقم برقم وبيقع لو اختلفوا.
+   🔴 أي تعديل هنا لازم يتعمل في `sales/sales-app.js` كمان، والعكس.
+
+   القاعدة (قرار المالك): يوم إجازة لكل أسبوع، الأسبوع سبت→جمعة،
+   وكل أسبوع بيتحاسب لوحده. الأسبوع بيتحاسب في الشهر اللي بيخلص فيه.
+   ============================================================ */
+function ofWeekStartKey(d, startDow){
+  const dow = d.getDay();
+  const back = (dow - (Number(startDow) || 0) + 7) % 7;
+  const s = new Date(d.getTime());
+  s.setDate(s.getDate() - back);
+  return s.getFullYear() + '-' + String(s.getMonth() + 1).padStart(2, '0')
+    + '-' + String(s.getDate()).padStart(2, '0');
+}
+function ofShiftCountsAsDay(sh, minHours, graceMin){
+  if(!sh) return false;
+  const min = Number(minHours);
+  if(!(min > 0)) return true;
+  if(!sh.clockOutTs) return true;
+  const mins = Math.round((Number(sh.clockOutTs) - Number(sh.clockInTs)) / 60000);
+  const g = (graceMin == null) ? 15 : Number(graceMin);
+  return mins >= Math.round(min * 60) - g;
+}
+function ofWeeklyOffBalance(emp, start, end, shifts, cfg, opts){
+  cfg = cfg || {};
+  const perWeek = Number(cfg.weekOffDays);
+  const offPerWeek = isNaN(perWeek) ? 1 : perWeek;
+  const startDow = (cfg.weekStartDow == null) ? 6 : Number(cfg.weekStartDow);
+  const minHours = Number(cfg.minShiftHours) || 0;
+  const graceMin = (cfg.minShiftGraceMin == null) ? 15 : Number(cfg.minShiftGraceMin);
+  const live = !!(opts && opts.live);
+
+  const realStart = new Date(start);
+  const backDays = (realStart.getDay() - startDow + 7) % 7;
+  const scanStart = new Date(realStart.getTime());
+  scanStart.setDate(scanStart.getDate() - backDays);
+  if(opts && opts.hardStart){
+    const hs = new Date(opts.hardStart);
+    if(scanStart < hs) scanStart.setTime(hs.getTime());
+  }
+  const dk = function(d){ return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+    + '-' + String(d.getDate()).padStart(2, '0'); };
+
+  const scanFrom = new Date(scanStart.getFullYear(), scanStart.getMonth(), scanStart.getDate()).getTime();
+  const attended = {}, full = {};
+  (shifts || []).forEach(function(sh){
+    if(!sh || sh.employeeId !== emp.id) return;
+    if(sh.clockInTs < scanFrom || sh.clockInTs > end.getTime()) return;
+    const k = dk(new Date(sh.clockInTs));
+    attended[k] = 1;
+    if(ofShiftCountsAsDay(sh, minHours, graceMin)) full[k] = 1;
+  });
+
+  const weeks = {};
+  const cur = new Date(scanStart.getTime()), endC = new Date(end);
+  while(cur <= endC){
+    const wk = ofWeekStartKey(cur, startDow);
+    if(!weeks[wk]) weeks[wk] = { days: 0, attended: 0, full: 0 };
+    weeks[wk].days++;
+    const k = dk(cur);
+    if(attended[k]) weeks[wk].attended++;
+    if(full[k]) weeks[wk].full++;
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  let requiredDays = 0, attendedDays = 0, shortfallDays = 0, surplusDays = 0;
+  const weekRows = [];
+  const keys = Object.keys(weeks).sort();
+  keys.forEach(function(k, i){
+    const w = weeks[k];
+    const complete = w.days >= 7;
+    const deferred = (i === keys.length - 1) && !complete && !live;
+    if(deferred){
+      weekRows.push({ week: k, days: w.days, entitled: 0, required: 0,
+                      attended: w.attended, full: w.full, complete: false,
+                      deferred: true, shortfall: 0, surplus: 0 });
+      return;
+    }
+    const entitled = Math.min(offPerWeek, w.days);
+    const req = Math.max(0, w.days - entitled);
+    const short = Math.max(0, req - w.attended);
+    const extra = complete ? Math.max(0, w.full - req) : 0;
+    requiredDays += req; attendedDays += w.attended;
+    shortfallDays += short; surplusDays += extra;
+    weekRows.push({ week: k, days: w.days, entitled: entitled, required: req,
+                    attended: w.attended, full: w.full, complete: complete,
+                    deferred: false, shortfall: short, surplus: extra });
+  });
+  return { requiredDays: requiredDays, attendedDays: attendedDays,
+           shortfallDays: shortfallDays, surplusDays: surplusDays, weeks: weekRows };
+}
+
 function ofCountAttendedInRange(shifts, empId, start, end){
   const daySet = {};
   (shifts || []).filter(function(sh){ return sh.employeeId === empId && sh.clockInTs >= start.getTime() && sh.clockInTs <= end.getTime(); })
@@ -3213,25 +3326,32 @@ function ofComputeSalary(emp, periodStart, end, data){
   const attendedDays = elapsedEnd < absenceRangeStart ? 0 : ofCountAttendedInRange(allShifts, emp.id, absenceRangeStart, elapsedEnd);
   const absenceDays = Math.max(0, elapsedWorkDays - attendedDays);
   const dayOffOccurrences = elapsedEnd < absenceRangeStart ? 0 : ofCountDayOffInRange(emp, absenceRangeStart, elapsedEnd);
-  const extraOffDays = Math.max(0, absenceDays - dayOffOccurrences);
-  const deductionAmount = Math.round(extraOffDays * dailyRate * 100) / 100;
 
-  // مكافأة الاشتغال يوم الإجازة الأسبوعية
-  let dayOffBonusDays = 0;
-  if(emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== ''){
-    const cur = new Date(start);
-    while(cur <= end){
-      if(cur.getDay() === Number(emp.dayOff)){
-        const dayKey = cur.getFullYear() + '-' + cur.getMonth() + '-' + cur.getDate();
-        const workedThatDay = rangeShifts.some(function(sh){
-          const d = new Date(sh.clockInTs);
-          return (d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate()) === dayKey;
-        });
-        if(workedThatDay) dayOffBonusDays++;
-      }
-      cur.setDate(cur.getDate() + 1);
-    }
+  /* 🗓️ الخصم والمكافأة من المحرك الأسبوعي — **نفس منطق sales بالظبط**
+     كان: extraOffDays = max(0, absenceDays − dayOffOccurrences)
+     ودي كانت بتدي ٤ أيام غياب مجانية فوق الإجازات. */
+  /* ⚙️ الإعدادات جاية مع `data.timeCfg` من `sales_settings/<الفرع>` —
+     **نفس المستند** اللي sales بيقرا منه، فالحارس (`weeklyStartFloor`)
+     اللي sales بيحطه تلقائي بيوصل هنا لوحده والرقمين بيفضلوا متطابقين. */
+  const _ofCfg = (data && data.timeCfg) || {};
+  let ofHardStart = null;
+  if(emp.attendanceTrackingStart) ofHardStart = new Date(emp.attendanceTrackingStart + 'T00:00:00');
+  if(emp.hireDate){
+    const _h = new Date(emp.hireDate + 'T00:00:00');
+    if(!ofHardStart || _h > ofHardStart) ofHardStart = _h;
   }
+  if(_ofCfg.weeklyStartFloor){
+    const _f = new Date(_ofCfg.weeklyStartFloor + 'T00:00:00');
+    if(_f > absenceRangeStart) absenceRangeStart = _f;
+    if(!ofHardStart || _f > ofHardStart) ofHardStart = _f;
+  }
+  const _ofWk = (elapsedEnd < absenceRangeStart)
+    ? { requiredDays:0, attendedDays:0, shortfallDays:0, surplusDays:0, weeks:[] }
+    : ofWeeklyOffBalance(emp, absenceRangeStart, elapsedEnd, allShifts, _ofCfg,
+                         { live: elapsedEnd < end, hardStart: ofHardStart });
+  const extraOffDays = _ofWk.shortfallDays;
+  const deductionAmount = Math.round(extraOffDays * dailyRate * 100) / 100;
+  const dayOffBonusDays = _ofWk.surplusDays;
   const dayOffBonusAmount = Math.round(dayOffBonusDays * dailyRate * 100) / 100;
 
   // ⏳ رصيد الوقت: كل hoursPerDay (7) ساعات غير معذورة = يوم × قيمة اليوم
