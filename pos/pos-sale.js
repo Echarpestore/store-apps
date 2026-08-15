@@ -3834,6 +3834,12 @@ window.returnPointsDeduction = returnPointsDeduction;
       });
     }catch(e){}
 
+    /* 🛍️ أوردر أونلاين اتسلّم؟ الحالة بتتقفل **بعد** نجاح الحفظ بس.
+       ⚠️ لو اتقفلت وقت تحميل السلة، وكاشير لغت البيع → أوردر
+          «اتسلّم» والبضاعة لسه في المحل.
+       ⚠️ best-effort: فشلها ميوقفش الفاتورة. */
+    try{ if(typeof ordMarkCollected === 'function') ordMarkCollected(invoiceCode); }catch(e){}
+
     // 💳↩️ v295: اتسحب من الكروت أكتر من الفاتورة (اتأكد صراحةً فوق) —
     //    مستند متابعة ظاهر في Office لحد ما الفرق يترد لصاحبته من Paymob.
     //    الكتابة best-effort: فشلها ميوقفش الفاتورة (اللوج القديم شغال برضه).
