@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v33';
+  const TRYON_VER = 'v34';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -63,6 +63,7 @@
     bandana: null,                 // v23: null = من غير بندانة (الافتراضي)
     bandanaHinted: false,
     plain: false,                   // v26: سادة — تلقائي بس من صورة المنتج
+    pendingPhoto: null,             // v34: الأصل المصوّر اللي بيترقّى في الخلفية
     seg: null, segFailed: false,    // v25: مقطّع الشعر — lazy
     hairZone: null,                 // v25: {mask,w,h} — أنهي شعر يتغطى
     hairCoverCanvas: null, hairCoverKey: null,
@@ -448,6 +449,21 @@
      ⚠️ وحارس المهلة اللي في draw مكانش بيشتغل لنفس السبب: draw
         نفسها مش بتتنادى تاني في وضع الصورة. فالحارس اتنقل هنا
         كـsetTimeout مستقل عن دورة الرسم. */
+  /* 🔼 v34: الترقية — بنجهّز الأصل المصوّر في الخلفية، وأول ما
+     يبقى جاهز بنبدّل عليه ونعيد الرسم. فشله = مفيش أي أثر على
+     العميلة (فاضلة على المرسومة). */
+  function tryUpgradeToPhoto(){
+    if(!S.pendingPhoto) return;
+    const target = S.pendingPhoto;
+    const a = getAsset(target, S.color);
+    if(a.failed){ S.pendingPhoto = null; console.warn('الأصل المصوّر فشل:', a.why); return; }
+    if(!a.ready){ setTimeout(tryUpgradeToPhoto, 400); return; }
+    S.pendingPhoto = null;
+    S.scarf = target;
+    console.log('✅ اترقّى للأصل المصوّر');
+    repaintStill();
+  }
+
   function repaintStill(){
     try{
       if(S.mode === 'photo' && S.stillResult && S.stillImg)
@@ -731,7 +747,7 @@
     if(!asset.ready){
       // بيحمّل لسه — رسالة بدل صمت (العميلة بتفتكر إن الشاشة بايظة)
       if(!asset.failed) hint('⏳ بنجهّز الطرحة…');
-      chip('asset:' + (asset.failed ? 'failed' : 'loading'));
+      chip('asset:' + (asset.failed ? ('failed·' + (asset.why || '')) : 'loading'));
       return;
     }
     ensureTint(asset, S.scarf, S.color);
@@ -1092,7 +1108,16 @@
     // 🎨 قرار المالك: مفيش لوحة ألوان — اللون بييجي من **صورة المنتج**
     //    اللي الشات بيسلّمها. من غير صورة = بيج محايد (مجرد معاينة).
     S.color = { id:'default', name:'', hex:'#c9ac86' };
-    S.scarf = window.TRYON_CATALOG[0];
+    // 🔴 v34 (تغيير استراتيجية): الشاشة **مش بتعتمد على ملف** خالص.
+    //    الطرحة المرسومة بالكود بترسم فورًا (صفر تحميل، صفر انتظار)،
+    //    والأصل المصوّر بيتحمّل في الخلفية وبيحلّ محلها لما يجهز.
+    //    السبب: تسع نسخ كانت بتصلّح في *تحميل* الملف، والعميلة كانت
+    //    بتشوف شاشة فاضية طول الوقت ده. مفيش شاشة فاضية تاني — أسوأ
+    //    حالة شكل مبدئي.
+    const _photoFirst = window.TRYON_CATALOG.find((x) => x.type === 'photo');
+    const _drawn = window.TRYON_CATALOG.find((x) => x.type === 'procedural');
+    S.scarf = _drawn || window.TRYON_CATALOG[0];
+    S.pendingPhoto = _photoFirst || null;
 
     const qs = new URLSearchParams(location.search);
     const src = T.imageSourceFromQuery(
@@ -1212,6 +1237,7 @@
       }
       S.stage = 'live';
       setLoad('');
+      tryUpgradeToPhoto();       // 🔼 v34: الأصل المصوّر في الخلفية
       S.running = true;
       loop();
     }catch(e){
