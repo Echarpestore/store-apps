@@ -208,3 +208,36 @@ const rules = R('security', 'firestore-phase2.rules');
   assert(!/reqUnsub = watchMyRequests\(phone\)/.test(noWatch),
     L + '⭐⭐ والفحص بيقع لو المستمع مااشتغلش (الشاشة كانت هتفضل فاضية)');
 }
+
+/* ============================================================
+   🎨 ألوان Glow — متغيّراته مش زي إيشارب
+   ------------------------------------------------------------
+   🔴 اللي حصل: نسخت CSS من إيشارب واستعملت `var(--gold)` كخلفية
+      مع `color:#1a1414`. بس `--gold` في Glow **أسود** (#1A1315)
+      و`--card` **مش معرّف خالص** — فالزراير طلعت سودا من غير كلام
+      والعميلة شايفة أقراص سودا مش عارفة تدوس على إيه.
+   ⚠️ الدرس: التطبيقين شكلهم واحد بس متغيّراتهم مختلفة — أي CSS
+      منقول لازم يتأكد إن كل متغيّر فيه **موجود** وقيمته متوقعة.
+   ============================================================ */
+(function(){
+  const fsg = require('fs'), pg = require('path');
+  const G = fsg.readFileSync(pg.join(__dirname, '..', 'glow', 'index.html'), 'utf8');
+
+  assert(!/var\(--card\)/.test(G),
+    '⭐⭐ مفيش `--card` — المتغيّر ده مش معرّف في Glow (بيطلّع خلفية باظت)');
+  /* ⚠️ الفحص على الكود **من غير كومنتات**: الجملة اللي بنمنعها
+     مكتوبة في الكومنت اللي بيشرح المنع. (فخ الفحص الفضفاض
+     بالمقلوب — كان بيفشّل إصلاح سليم.) */
+  const Gcode = G.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  assert(!/color:#1a1414/.test(Gcode),
+    '⭐⭐ مفيش نص أسود فوق خلفية `--gold` (وهي أسود في Glow)');
+
+  // كل متغيّر مستعمل لازم يكون معرّف في :root
+  const root = G.slice(G.indexOf(':root{'), G.indexOf('}', G.indexOf(':root{')));
+  const defined = new Set((root.match(/--[a-z-]+/g) || []));
+  const used = new Set((G.match(/var\((--[a-z-]+)\)/g) || [])
+    .map(function(x){ return x.replace(/var\(|\)/g, ''); }));
+  const missing = [...used].filter(function(v){ return !defined.has(v); });
+  assert(missing.length === 0,
+    '⭐⭐ كل متغيّر مستعمل معرّف في :root — الناقص: ' + missing.join(', '));
+})();
