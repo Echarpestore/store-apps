@@ -1722,8 +1722,31 @@ $('#adminBranchSelect').addEventListener('change', (e)=>{
   renderAdvancesLog();
 });
 
+/* 🏬 كل الفروع المعروفة — من الموظفين والشيفتات (نفس مصدر شاشة
+   التسجيل، فمفيش قايمة تانية تتنسى تتحدّث). */
+function allBranchNames(){
+  const set = new Set();
+  (allEmployees||[]).forEach(e=> e.branch && set.add(String(e.branch).trim()));
+  (allShifts||[]).forEach(x=> x.branch && set.add(String(x.branch).trim()));
+  return [...set].filter(Boolean).sort();
+}
+window.allBranchNames = allBranchNames;
+
 function applyBranchFilter(){
-  window.employees = allEmployees.filter(e => e.branch === window.currentBranch && e.active !== false);
+  /* 🔁 الموظفة اللي بتساعد في فرع تاني.
+     ⚠️ `branch` بيفضل **فرعها الأساسي** زي ما هو — الرواتب وعدد
+        الموظفين وإحصاءات الفرع كلها بتعتمد عليه، وتغييره كان هينقلها
+        من فرع لفرع في كل تقرير.
+     `alsoBranches` بيضيف **ظهورها على كشك** الفرع التاني بس، عشان
+     تقدر تسجّل حضور وهي هناك.
+     ✅ والنقط والساعات بيتجمعوا في الفرعين **من غير أي تعديل**:
+        `computeSalary` بيفلتر الشيفتات بـ`employeeId` بس، وحساب
+        النقط كمان. اللي كان ناقص هو الظهور على الكشك مش الحساب. */
+  window.employees = allEmployees.filter(e =>
+    e.active !== false && (
+      e.branch === window.currentBranch
+      || (Array.isArray(e.alsoBranches) && e.alsoBranches.indexOf(window.currentBranch) >= 0)
+    ));
   shifts = allShifts.filter(s => s.branch === window.currentBranch);
   tasks = allTasks.filter(t => t.branch === window.currentBranch);
   submissions = allSubmissions.filter(s => s.branch === window.currentBranch);
@@ -1904,6 +1927,10 @@ onSnapshot(_scoped(submissionsCol,'submittedAt'), (snap)=>{
 
 onSnapshot(_scoped(rewardsCol,'earnedAt'), (snap)=>{
   allRewards = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  /* 🚩 علامة إن اللقطة وصلت فعلًا. من غيرها `checkAndAwardRewards`
+     ممكن تشتغل والقايمة لسه فاضية → تفتكر إن المكافأة مااتصرفتش
+     وتكتبها من الأول بطابع النهاردة. */
+  window.rewardsLoaded = true;
   applyBranchFilter();
 }, (err)=> console.error('rewards sync error', err));
 
@@ -2432,6 +2459,9 @@ function renderAttendanceLists(){
   renderBreakBanner();
   const notIn = window.employees.filter(e=> !isClockedIn(e.id));
   const clockedIn = window.employees.filter(e=> isClockedIn(e.id));
+  /* 🔁 مين زائرة دلوقتي — عشان مسؤول الفرع يعرف إن دي مش من فريقه
+     الأساسي (وإلا هيحسبها ناقصة من فرعها أو زيادة عنده). */
+  window.isVisitingEmp = (e)=> !!(e && e.branch !== window.currentBranch);
 
   const notInWrap = $('#notInGrid');
   notInWrap.innerHTML = notIn.length ? notIn.map(e=>{
@@ -3627,6 +3657,9 @@ function getPeriodProgressLabel(empId, periodType){
 
 async function checkAndAwardRewards(){
   if(!window.currentBranch || window.employees.length === 0) return;
+  /* ⏳ استنى لقطة المكافآت. تشغيلها قبلها = القايمة فاضية = «مفيش
+     مكافأة اتصرفت» = إعادة كتابة الفوز بطابع النهاردة كل يوم. */
+  if(!window.rewardsLoaded) return;
   const now = new Date();
   const thisWeek = getWeekRange(now);
   const thisMonth = getMonthRange(now);
@@ -3922,16 +3955,53 @@ async function awardPeriod(range, type, label){
   const key = rewardPeriodKey(type, range);
   for(const e of winners){
     try{
-      // 🔒 معرّف ثابت: لو جهازين حسبوا نفس الفترة، هيكتبوا نفس المستند
-      //    مش مستندين — وده اللي بيمنع صرف المكافأة مرتين.
-      await setDoc(doc(db,'sales_rewards', key + '_' + e.id), {
+      const id = key + '_' + e.id;
+      /* 🔴 الباج اللي كان هنا: الكتابة كانت بتحط `earnedAt: Date.now()`
+         و`seen: false` **في كل مرة**. والحارس `done` فوق بيعدّي لو
+         **أي** موظفة جديدة أهّلت في نص الأسبوع — وساعتها اللوب بيلف
+         على **كل** الفايزين ويرجّع طوابعهم لليوم الحالي.
+         النتيجة اللي شافها المالك: الفوز بيظهر **كل يوم** لنفس
+         الموظفة، والاحتفال بيتعاد من الأول، والفريق بيتعوّد يتجاهله.
+         ⚠️ والأخطر: `seen: false` معناها إن دوسة الموظفة على
+            الاحتفال بتتلغي كل يوم — يعني «اتشاف» عمره ما بيثبت.
+
+         الإصلاح: `earnedAt` و`seen` بيتكتبوا **مرة واحدة عند الإنشاء**.
+         أما المبلغ فبيتحدّث عن قصد: لو موظفة جديدة أهّلت، القسمة
+         بتتغيّر للكل — الفلوس لازم تفضل صح، والاحتفال لازم يفضل مرة. */
+      /* 🔴 الباج اللي المالك شافه: «الفوز بيظهر كل يوم لنفس الموظفة».
+         السبب: الفحص كان على **الكاش المحلي** (`allRewards`). أي
+         لحظة تشتغل فيها الدالة والقايمة لسه ماوصلتش (أول فتح ·
+         جهاز جديد · نت بطيء) بتلاقي `existing` مش موجود، فتكتب
+         `earnedAt: Date.now()` و`seen: false` من الأول.
+         والنتيجة: احتفال بيتعاد كل يوم، و«اتشاف» عمره ما بيثبت،
+         والفريق بيتعوّد يتجاهل الفوز.
+         ✅ الفحص بقى **من السيرفر** — مستند واحد، والحقيقة واحدة
+            مهما كانت حالة الكاش. */
+      let existing = (allRewards || []).find(r=> r && r.id === id);
+      if(!existing){
+        try{
+          const snapDoc = await getDoc(doc(db,'sales_rewards', id));
+          if(snapDoc.exists()) existing = Object.assign({ id }, snapDoc.data());
+        }catch(err){
+          /* ⚠️ فشلت القراءة؟ **مانكتبش**. الكتابة على الشك بترجّع
+             الطابع لليوم — وده بالظبط الباج. تأجيل الصرف ليوم
+             أخف بكتير من احتفال بيتعاد كل يوم. */
+          console.warn('تعذر التأكد من المكافأة — اتأجلت', err);
+          continue;
+        }
+      }
+      const money = {
         employeeId: e.id, employeeName: e.name, branch: e.branch || window.currentBranch,
         type, periodLabel: label, amount: share.amount,
-        earnedAt: Date.now(), seen: false,
         winners: share.count, budget: share.budget,
         // 🚧 فوق الميزانية → مستنية موافقة، ومتظهرش للموظفين قبلها
         status: share.overBudget ? 'pending' : 'approved'
-      }, { merge: true });
+      };
+      // 🔒 معرّف ثابت: لو جهازين حسبوا نفس الفترة، هيكتبوا نفس المستند
+      //    مش مستندين — وده اللي بيمنع صرف المكافأة مرتين.
+      await setDoc(doc(db,'sales_rewards', id),
+        existing ? money : Object.assign({}, money, { earnedAt: Date.now(), seen: false }),
+        { merge: true });
     }catch(err){ console.error('تعذر إنشاء المكافأة', err); }
   }
 }
@@ -4454,6 +4524,13 @@ function renderAdminList(){
         <option value="morning" ${e.shift==='morning' ? 'selected' : ''}>🌅 صباحي</option>
         <option value="evening" ${e.shift==='evening' ? 'selected' : ''}>🌆 مسائي</option>
       </select>
+      <select data-also-id="${e.id}" multiple size="1"
+        title="فروع تانية تقدر تسجّل فيها حضور — فرعها الأساسي مش بيتغيّر"
+        style="min-width:130px; padding:8px; border-radius:8px; border:1px solid ${(e.alsoBranches||[]).length ? 'var(--gold)' : 'var(--line)'}; background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:12px;">
+        ${allBranchNames().filter(b=> b !== e.branch).map(b=>
+          `<option value="${b.replace(/"/g,'&quot;')}" ${(e.alsoBranches||[]).indexOf(b)>=0 ? 'selected' : ''}>🔁 ${b}</option>`
+        ).join('')}
+      </select>
       <input type="text" inputmode="numeric" maxlength="4" placeholder="كود PIN" data-pin-id="${e.id}" value="${e.pin || ''}"
         style="width:80px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; text-align:center;">
       <button data-act="savePin" data-id="${e.id}" style="border:none; background:var(--good); color:#fff; padding:8px 12px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">حفظ الكود</button>
@@ -4483,6 +4560,24 @@ function renderAdminList(){
       }
       try{ await deleteDoc(doc(db,'sales_employees', btn.dataset.id)); }
       catch(err){ console.error('تعذر الحذف', err); }
+    });
+  });
+  /* 🔁 فروع المساعدة — حفظ فوري زي الشيفت.
+     ⚠️ فرعها الأساسي مستبعد من القايمة أصلًا: اختياره معناه إنها
+        «زائرة عند نفسها»، وده بيلخبط شارة الزائرة والإحصاءات. */
+  wrap.querySelectorAll('[data-also-id]').forEach(sel=>{
+    sel.addEventListener('change', async ()=>{
+      const id = sel.dataset.alsoId;
+      const vals = Array.from(sel.selectedOptions).map(o=> o.value).filter(Boolean);
+      sel.style.borderColor = 'var(--gold)';
+      try{
+        await updateDoc(doc(db,'sales_employees', id), { alsoBranches: vals });
+        sel.style.borderColor = vals.length ? 'var(--good)' : 'var(--line)';
+      }catch(err){
+        console.error('تعذر حفظ فروع المساعدة', err);
+        sel.style.borderColor = 'var(--bad)';
+        alert('تعذر الحفظ: ' + (err && err.code ? err.code : 'خطأ'));
+      }
     });
   });
   // 🌅🌆 حفظ الشيفت فورًا عند الاختيار (زي يوم الإجازة — مفيش زرار حفظ)
