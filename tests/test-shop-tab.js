@@ -160,7 +160,7 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
 (function(){
   const sw = fs.readFileSync(path.join(ROOT, 'loyalty', 'sw.js'), 'utf8');
   const m = sw.match(/echarpe-loyalty-v(\d+)/);
-  assert(m && Number(m[1]) >= 51, '⭐ CACHE_NAME اترفع لـv51+');
+  assert(m && Number(m[1]) >= 53, '⭐ CACHE_NAME اترفع لـv53+');
 })();
 
 /* ============================================================
@@ -182,5 +182,73 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
   assert(/💳 هدفع في الفرع بـ/.test(GLOW), '⭐ Glow: «في الفرع» صريحة');
   const gsw = fs.readFileSync(path.join(ROOT, 'glow', 'sw.js'), 'utf8');
   const gm = gsw.match(/glow-loyalty-v(\d+)/);
-  assert(gm && Number(gm[1]) >= 43, '⭐ Glow: CACHE_NAME اترفع لـv43+');
+  assert(gm && Number(gm[1]) >= 45, '⭐ Glow: CACHE_NAME اترفع لـv45+');
+})();
+
+/* ============================================================
+   ١٠) 🛒 مصدر الحقيقة: مستند البيع أونلاين المستقل
+   ------------------------------------------------------------
+   ⚠️ كانت فيه خانة `online` على الكتالوج — اتشالت. مصدرين للحقيقة
+      معناه حاجة متفعّلة هنا ومتشالة هناك ومحدش عارف مين الصح.
+   ⚠️ والكتالوج عرض وبانرات: تعديل بانر مالوش حق يلمس كمية بيع.
+   ============================================================ */
+(function(){
+  const ADMIN = fs.readFileSync(path.join(ROOT, 'pos', 'pos-admin.js'), 'utf8');
+  const SHOP = fs.readFileSync(path.join(ROOT, 'pos', 'shop-admin.js'), 'utf8');
+  const HTML = fs.readFileSync(path.join(ROOT, 'pos', 'index.html'), 'utf8');
+
+  assert(!/catOnline/.test(ADMIN), '⭐⭐ خانة `online` اتشالت من الكتالوج (مصدر واحد للحقيقة)');
+  assert(!/catalogToggleOnline/.test(ADMIN), 'وزرارها كمان');
+
+  [['loyalty', LOY], ['glow', GLOW]].forEach(function(pair){
+    const app = pair[0], src = pair[1];
+    const i = src.indexOf('function shopItems()');
+    const body = src.slice(i, i + 400);
+    assert(/shopCatalog \|\| \[\]/.test(body),
+      '⭐⭐ ' + app + ': «اطلبي» بيقرا مستند البيع أونلاين مش الكتالوج');
+    assert(/p\.active === true/.test(body), '⭐ ' + app + ': الموقوف مايتعرضش');
+    assert(/Number\(p\.onlineQty\) > 0/.test(body), '⭐⭐ ' + app + ': اللي خلص عدده مايتعرضش');
+    assert(/p\.barcode/.test(body), '⭐ ' + app + ': ومن غير باركود مايتعرضش');
+    assert(/online_shop_/.test(src), app + ': بيقرا المستند الصح');
+    const lo = src.slice(src.indexOf('function logout('), src.indexOf('function logout(') + 1600);
+    assert(/shopCatalog = null/.test(lo), '⭐ ' + app + ': المنتجات بتتصفّر مع الخروج');
+  });
+
+  assert(/id="onlineShopScreen"/.test(HTML), 'شاشة «منتجات البيع أونلاين» موجودة');
+  assert(/id="navOnlineShop"/.test(HTML), 'وأيقونتها في مجموعة «التطبيق»');
+  assert(HTML.indexOf('pos-admin.js') < HTML.indexOf('shop-admin.js'),
+    '⭐ shop-admin بعد pos-admin (بيستعمل resizeImageFile وcatalogBrand)');
+
+  ['goToOnlineShopAdmin','shopSaveItem','shopEditItem','shopToggleActive','shopDelItem',
+   'shopPickInv','shopInvSuggest','shopPickImage','renderShopAdmin','shopClearForm'
+  ].forEach(function(fn){
+    assert(new RegExp('window\\.' + fn + '\\s*=\\s*' + fn).test(SHOP),
+      'القاعدة الذهبية — على window: ' + fn);
+  });
+
+  assert(/if\(!barcode\)\{ showToast\('اختار الصنف من المخزون الأول/.test(SHOP),
+    '⭐⭐ من غير باركود مايتحفظش — فحص الكمية مستحيل من غيره');
+  assert(/if\(price <= 0\)/.test(SHOP), '⭐ سعر بصفر مايتحفظش (الأوردر كان هيتحسب بصفر)');
+  assert(/if\(qty <= 0\)/.test(SHOP), '⭐ عدد بصفر مايتحفظش');
+  assert(/const over = \(total !== null && Number\(it\.onlineQty\) > total\)/.test(SHOP),
+    '⭐⭐ تحذير لو العدد أونلاين أكبر من المخزون الحقيقي (وعد مش هنقدر نوفيه)');
+  assert(/shopData\.items = JSON\.parse\(before\)/.test(SHOP),
+    '⭐ فشل الحفظ بيرجّع الحالة — الشاشة ماتقولش «اتحفظ» وهو ماتحفظش');
+  assert(/it\.active = !it\.active; showToast\('خطأ/.test(SHOP), '⭐ ونفس الرجوع للإيقاف');
+  assert(/function shopRenderStockHint/.test(SHOP), '⭐ المتاح في الفروع بيبان جنب خانة العدد');
+})();
+
+/* ============================================================
+   ١١) 🎨 أيقونة التبويب بنفس ستايل الباقي
+   ============================================================ */
+(function(){
+  const i = LOY.indexOf('data-tab="shop"');
+  const btn = LOY.slice(i, i + 500);
+  assert(/class="ti-svg"/.test(btn),
+    '⭐ إيشارب: أيقونة «اطلبي» SVG زي باقي التبويبات (الإيموچي كان شكله غريب وسطهم)');
+  assert(!/<span class="ti">🛍️<\/span>/.test(btn), 'ومفيش إيموچي مكانها');
+  // Glow تبويباته إيموچي أصلًا — فالإيموچي هو المتسق عنده
+  const gi = GLOW.indexOf('data-tab="shop"');
+  assert(/<span class="ti">🛍️<\/span>/.test(GLOW.slice(gi, gi + 200)),
+    '⭐ Glow: إيموچي — لأن كل تبويباته إيموچي (الاتساق مش التوحيد)');
 })();
