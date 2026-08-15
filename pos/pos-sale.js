@@ -528,6 +528,9 @@ function renderCart(){
   refreshCustomerActionUI();
   updatePaySummary();
   renderHoldButtons();
+  /* 🧺 اقتراح «اللي بيتاخد مع» — حساب في الذاكرة، صفر قراءات.
+     ⚠️ جوه try: ميزة إضافية ممنوع سقوطها يعطّل رسم السلة. */
+  try{ if(typeof basketRenderStrip === 'function') basketRenderStrip(); }catch(e){}
 }
 
 // يرجّع أي منتج اتطبّق عليه عرض العميل لسعره وشكله الأصلي (لما نشيل/نغيّر العميل)

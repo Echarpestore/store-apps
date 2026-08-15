@@ -42,6 +42,9 @@ function loadInventory(){
   startInventoryListener();
   // 🔖 مستمع الطلبات المفتوحة — بيشتغل مع المخزون لأنه بيطابق عليه
   try{ if(typeof startRequestsListener === 'function') startRequestsListener(); }catch(e){}
+  /* 🧺 موديل «اللي بيتاخد مع» — **مستند واحد** بيتقري مرة واحدة مع
+     المخزون. الاقتراح بعد كده حساب في الذاكرة: صفر قراءة لكل فاتورة. */
+  try{ if(typeof basketLoadModel === 'function') basketLoadModel(); }catch(e){}
   setTimeout(function(){ if(_invFirstResolve){ _invFirstResolve(); _invFirstResolve = null; } }, 6000); // أمان لو النت بطيء
   return p;
 }

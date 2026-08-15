@@ -1127,6 +1127,7 @@ body.on-dashboard .badge-test{ display:block; }
           <div class="qb-section-body">
             <div class="qb-nav-item" id="navReports" onclick="goToReports()"><div class="qb-icon">📈</div><div class="qb-label">تقارير المبيعات</div></div>
             <div class="qb-nav-item" id="navBranchSummary" onclick="goToBranchSummary()"><div class="qb-icon">🏬</div><div class="qb-label">ملخّص الفروع</div></div>
+            <div class="qb-nav-item" id="navBasket" onclick="goToBasketInsights()"><div class="qb-icon">🧺</div><div class="qb-label">بيتباع مع بعضه</div></div>
           </div>
         </div>
 
@@ -1211,6 +1212,17 @@ body.on-dashboard .badge-test{ display:block; }
      ⚠️ منفصلة عن «كتالوج العرض» عن قصد: الكتالوج عرض وعروض، ودي
         التزام بكمية وسعر لعميلة هتيجي تستلم.
      ============================================================ -->
+<!-- 🧺 اللي بيتباع مع بعضه — الأنماط اللي البيع اتعلّمها -->
+<div class="screen mgmt-light" id="basketScreen">
+  <div class="dash-header">
+    <div><h1>🧺 بيتباع مع بعضه</h1></div>
+    <button class="btn-newsale" id="basketBuildBtn" onclick="basketRebuild()"><span class="ns-ico">🔨</span> إعادة البناء</button>
+    <button class="logout-btn" onclick="goToReports()">📈 التقارير</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div id="basketWrap" style="padding:0 20px 24px;"></div>
+</div>
+
 <div class="screen mgmt-light" id="onlineShopScreen">
   <div class="dash-header">
     <div><h1>🛒 منتجات البيع أونلاين</h1></div>
@@ -1697,7 +1709,10 @@ body.on-dashboard .badge-test{ display:block; }
           </div>
         </div>
         <div class="cart-area" id="cartArea">
-          <table class="cart-table">
+          <!-- 🧺 اقتراح «اللي بيتاخد مع» — اقتراح **واحد** بس، وبيختفي
+     لو مفيش حاجة مؤكدة. شريط دايمًا مليان = الكاشير تبطّل تبص عليه. -->
+<div id="basketStrip" style="display:none; align-items:center; gap:10px; padding:9px 12px; margin-bottom:8px; border:1.5px dashed var(--accent); border-radius:11px; background:var(--panel2);"></div>
+<table class="cart-table">
             <thead>
               <tr>
                 <th>#</th><th>الصنف</th><th>السعر</th><th>الكمية</th><th>الإجمالي</th><th></th>
@@ -1937,6 +1952,9 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="orders-core.js"></script>
 <script src="orders-ui.js"></script>
 <script src="shop-admin.js"></script>
+<!-- 🧺 محرك «اللي بيتاخد مع» ثم واجهته -->
+<script src="basket-core.js"></script>
+<script src="basket-ui.js"></script>
 <!-- 💬 مؤلّف رسايل واتساب (أسعار/خصم/وصل جديد) — بيستخدم reqEsc فلازم بعد requests-ui -->
 <script src="wa-compose.js"></script>
 <!-- 💬 شات العميلة (معزول عن مسار البيع) -->
