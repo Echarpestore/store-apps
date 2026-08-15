@@ -231,5 +231,78 @@ const MODEL = B.basketBuildModel(sampleSales());
 (function(){
   const sw = fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8');
   const m = sw.match(/store-apps-shell-v(\d+)/);
-  assert(m && Number(m[1]) >= 311, '⭐ CACHE_NAME اترفع لـv311+');
+  assert(m && Number(m[1]) >= 312, '⭐ CACHE_NAME اترفع لـv312+');
+})();
+
+/* ============================================================
+   ١٢) 📊 معلومات المالك — من نفس المسحة
+   ------------------------------------------------------------
+   اللي البلوك ده بيقفله:
+     ١) حساب الأوقات بساعة **الجهاز** — المالك بيفتح من بره مصر،
+        فالذروة الساعة ٨ مساءً كانت هتظهر ٢ ظهرًا. (درس سجل النشاط.)
+     ٢) تقرير بقراءة تانية لنفس الفواتير = ضِعف الفاتورة مقابل صفر
+        معلومة جديدة.
+     ٣) جدول «الأصناف الراكدة» لوحده — معلومة محبطة من غير تصرّف.
+        المفيد هو راكد **مربوط** بماشي.
+   ============================================================ */
+(function(){
+  const base = Date.UTC(2026, 0, 5, 12, 0, 0);   // ١٢ ظهرًا UTC = ٢ ظهرًا بالقاهرة
+  const sales = [];
+  for(let i = 0; i < 12; i++) sales.push({ total:500, createdAtMs: base,
+    items:[{barcode:'FAST',qty:2,price:200},{barcode:'SLOW',qty:1,price:100}] });
+  for(let i = 0; i < 25; i++) sales.push({ total:300, createdAtMs: base,
+    items:[{barcode:'FAST',qty:2,price:300}] });
+  for(let i = 0; i < 40; i++) sales.push({ total:200, createdAtMs: base,
+    items:[{barcode:'OTHER',qty:3,price:70}] });
+
+  const m = B.basketBuildModel(sales);
+  const ins = B.basketInsights(sales, m);
+
+  assertEq(ins.invoices, 77, 'كل الفواتير اتحسبت');
+  assertEq(ins.singlePct, 84, '⭐ نسبة الفواتير بصنف واحد (كل واحدة فرصة ضايعة)');
+  assert(ins.avgBasket > 2 && ins.avgBasket < 3, 'متوسط القطع معقول');
+  assertEq(ins.avgTicket, Math.round(ins.money / ins.invoices), 'متوسط الفاتورة متسق');
+
+  // 🕒 ⭐⭐ التوقيت — القاهرة صراحةً
+  const peak = B.basketPeak(ins.byHour);
+  assertEq(peak.idx, 14,
+    '⭐⭐ الذروة بتوقيت القاهرة (٢ ظهرًا) — مش ساعة جهاز المالك اللي بره مصر');
+  assertEq(B.cairoParts(base).hour, 14, 'والدالة نفسها بترجّع ساعة القاهرة');
+  assertEq(ins.byHour.length, 24, '٢٤ ساعة');
+  assertEq(ins.byDow.length, 7, 'و٧ أيام');
+
+  // 🎯 فرصة العرض
+  assert(ins.opportunities.length > 0, '⭐⭐ فرص العرض بتطلع (راكد مربوط بماشي)');
+  assertEq(ins.opportunities[0].slow, 'SLOW', 'البطيء هو المقترح');
+  assertEq(ins.opportunities[0].fast, 'FAST', 'والماشي هو المرساة');
+  assert(ins.opportunities[0].lift > 1.5, 'وبعلاقة قوية');
+  assert(!ins.opportunities.some(function(r){ return r.slow === r.fast; }),
+    '⭐ الصنف مايتقترحش مع نفسه');
+
+  // ⏱️ وقت الفاتورة من أي شكل
+  assertEq(B.saleTimeMs({ createdAtMs: 123 }), 123, 'الطابع المحلي');
+  assertEq(B.saleTimeMs({ createdAt: { seconds: 5 } }), 5000, 'وطابع Firestore');
+  assertEq(B.saleTimeMs({ createdAt: { toMillis: function(){ return 77; } } }), 77, 'وTimestamp');
+  assertEq(B.saleTimeMs({}), 0, '⭐ فاتورة من غير وقت مبتكسرش الحساب');
+
+  // 🔁 المرتجعات مستبعدة من الإحصاء كمان
+  const withRev = sales.concat([{ isReverse:true, total:-500, createdAtMs: base,
+    items:[{barcode:'FAST',qty:2,price:200}] }]);
+  assertEq(B.basketInsights(withRev, m).invoices, ins.invoices,
+    '⭐⭐ فاتورة العكس مبتتحسبش في الإحصاء');
+})();
+
+/* ============================================================
+   ١٣) الربط — قراءة واحدة وعدّاد القبول
+   ============================================================ */
+(function(){
+  assert(/m\.insights = basketInsights\(sales, m, \{ now: Date\.now\(\) \}\)/.test(UI),
+    '⭐⭐ المعلومات بتتحسب من **نفس** مسحة بناء الموديل — مفيش قراءة تانية');
+  assert(/function basketInsightsHTML/.test(UI), 'ولوحة العرض موجودة');
+  assert(/basketStat\('accepted'\)/.test(UI) && /basketStat\('dismissed'\)/.test(UI),
+    '⭐⭐ قبول ورفض الاقتراح بيتعدّوا — من غيرهم مفيش طريقة نعرف الميزة شغالة ولا لأ');
+  assert(/FieldValue\.increment\(1\)/.test(UI),
+    '⭐ العدّاد بالزيادة الذرّية (مش قراءة ثم كتابة)');
+  assert(/بتوقيت القاهرة|القاهرة/.test(UI), '⭐ والعرض بيقول للمالك إن التوقيت قاهرة');
+  assert(/فرص عرض/.test(UI), 'وجدول الفرص');
 })();
