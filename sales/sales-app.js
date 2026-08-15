@@ -1,7 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, query, where, Timestamp, runTransaction
+  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, query, where, Timestamp, runTransaction,
+  // 💬 للشات: chat-staff-ui.js مكتوب compat، فبنعرّضله العمليات دي
+  orderBy, limit, writeBatch, increment, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -1468,6 +1470,57 @@ window.pairSwaps = pairSwaps;
 window.complianceCfg = complianceCfg;
 window.timeCfgDefaults = timeCfgDefaults;
 window.timeCfg = timeCfgDefaults;   // ⏳ إعدادات رصيد الوقت (الأدمن بيعدّلها)
+
+/* ============================================================
+   💬 fsChatApi — الجسر بين الشات (compat) وتطبيق الحضور (modular)
+   ------------------------------------------------------------
+   `chat-staff-ui.js` ملف **واحد مشترك** بين POS وOffice وsales —
+   مصدر واحد، مفيش نسخة تتنسى. بس هو مكتوب بـcompat
+   (`db.collection(...)`) وsales شغّال modular.
+
+   🔴 ليه ماحمّلناش compat جنب modular هنا: هيبقى **Firebase app
+      تاني مستقل**، وجلسة الدخول بتتخزن باسم التطبيق — فالتطبيق
+      التاني بيبقى **مش مسجّل دخول**. وقواعد `customer_chat` بتطلب
+      `isStaff()`، يعني الشات كان هيرجع permission-denied على طول.
+      (نفس درس عزل الجلسات: تطبيقات منفصلة = جلسات منفصلة.)
+
+   ✅ فبدل ما ننسخ الشات، بنعرّض **٤ عمليات** والملف المشترك
+      بيكتشف البيئة وينادي اللي يناسبها.
+   ⚠️ بيتعرض على `window` (§18) — الملف المشترك بيدوّر عليه هناك.
+   ============================================================ */
+window.fsChatApi = {
+  watchConvs: function(col, sinceMs, onData, onErr){
+    const q = query(collection(db, col),
+      where('lastAt', '>', sinceMs), orderBy('lastAt', 'desc'), limit(60));
+    return onSnapshot(q, function(snap){
+      onData(snap.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); }));
+    }, onErr);
+  },
+  watchMsgs: function(col, convId, onData, onErr){
+    // ⚠️ تنازلي + سقف ٨٠ — نفس استعلام compat بالظبط. أي اختلاف هنا
+    //    معناه إن الشات بيوري رسايل مختلفة حسب التطبيق.
+    const q = query(collection(db, col, convId, 'messages'),
+      orderBy('atMs', 'desc'), limit(80));
+    return onSnapshot(q, function(snap){
+      const arr = [];
+      snap.forEach(function(d){ arr.push(Object.assign({ id: d.id }, d.data())); });
+      onData(arr);
+    }, onErr);
+  },
+  patchConv: function(col, convId, patch){
+    return setDoc(doc(db, col, convId), patch, { merge: true });
+  },
+  sendMessage: function(col, convId, msg, convPatch){
+    // 📤 عملية واحدة: الرسالة + تحديث المحادثة. لو اتفصلوا، الشارة
+    //    والقايمة بيبقوا غلط والعميلة تفضل شايفة "مفيش رد".
+    const b = writeBatch(db);
+    const ref = doc(db, col, convId);
+    b.set(doc(collection(db, col, convId, 'messages')),
+          Object.assign({}, msg, { at: serverTimestamp() }));
+    b.set(ref, Object.assign({}, convPatch, { unreadCust: increment(1) }), { merge: true });
+    return b.commit();
+  }
+};
 window.checkLeaveRequest = checkLeaveRequest;
 window.coverageOnDate = coverageOnDate;
 window.todayStr = todayStr;

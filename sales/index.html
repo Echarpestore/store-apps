@@ -1185,5 +1185,13 @@
 
 <script type="module" src="sales-app.js"></script>
 <script src="sales-ui.js"></script>
+<!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
+     ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
+     ⚠️ `chat-staff-ui.js` مكتوب compat، وبيكتشف إنه في بيئة modular
+        وينادي `window.fsChatApi` اللي `sales-app.js` بيعرّضه.
+     ⚠️ الترتيب مهم: بعد الموديول، والملف بيستنى الجسر لوحده لو لسه
+        ماوصلش (الموديول بيحمّل بشكل غير متزامن). -->
+<script src="../pos/chat-core.js"></script>
+<script src="../pos/chat-staff-ui.js"></script>
 </body>
 </html>
