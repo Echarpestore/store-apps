@@ -441,7 +441,6 @@
     <div class="tabview">
       <div id="tab-card"></div>
       <div id="tab-offers" style="display:none;"></div>
-      <div id="tab-products" style="display:none;"></div>
       <div id="tab-invoices" style="display:none;"></div>
       <div id="tab-account" style="display:none;"></div>
       <div id="tab-contact" style="display:none;"></div>
@@ -475,8 +474,7 @@
   <!-- تبويبات -->
   <nav class="tabbar" id="tabbar" style="display:none;">
     <button class="tab active" data-tab="card"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6 14.5h4"/></svg></span><span class="tl">بطاقتي</span></button>
-    <button class="tab" data-tab="offers"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 3.5H19a1.5 1.5 0 0 1 1.5 1.5v6.4a1.5 1.5 0 0 1-.44 1.06l-7.1 7.1a1.5 1.5 0 0 1-2.12 0l-5.9-5.9a1.5 1.5 0 0 1 0-2.12l7.1-7.1A1.5 1.5 0 0 1 12.6 3.5z"/><circle cx="16" cy="8" r="1.25"/></svg></span><span class="tl">المكافآت</span><span class="tab-badge" id="badge-offers"></span></button>
-    <button class="tab" data-tab="products"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8.5h13l-1 11.2a1 1 0 0 1-1 .9H7.5a1 1 0 0 1-1-.9z"/><path d="M8.8 8.5V7a3.2 3.2 0 0 1 6.4 0v1.5"/></svg></span><span class="tl">آخر العروض</span><span class="tab-badge" id="badge-products"></span></button>
+    <button class="tab" data-tab="offers"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 3.5H19a1.5 1.5 0 0 1 1.5 1.5v6.4a1.5 1.5 0 0 1-.44 1.06l-7.1 7.1a1.5 1.5 0 0 1-2.12 0l-5.9-5.9a1.5 1.5 0 0 1 0-2.12l7.1-7.1A1.5 1.5 0 0 1 12.6 3.5z"/><circle cx="16" cy="8" r="1.25"/></svg></span><span class="tl">عروضي</span><span class="tab-badge" id="badge-offers"></span></button>
     <button class="tab" data-tab="invoices"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12v17l-2.2-1.3-2.2 1.3-2.2-1.3-2.2 1.3-2.2-1.3L6 20.5z"/><path d="M9 8.5h6"/><path d="M9 12h6"/></svg></span><span class="tl">فواتيري</span></button>
     <button class="tab" data-tab="account"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.3" r="3.3"/><path d="M5.2 20c0-3.4 3-6 6.8-6s6.8 2.6 6.8 6"/></svg></span><span class="tl">حسابي</span></button>
     <button class="tab" data-tab="contact"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.7a7.3 7.3 0 0 1-10.6 6.5L4.8 19.5l1.25-4.3A7.3 7.3 0 1 1 20 11.7z"/></svg></span><span class="tl">تواصل</span><span class="tab-badge" id="badge-contact"></span></button>
@@ -1095,7 +1093,7 @@ function tabAssign(tab, s){
 }
 function tabRender(tab){
   if(currentTab !== tab) return;
-  if(tab==='offers') renderOffers(); else if(tab==='products') renderProducts(); else if(tab==='invoices') renderInvoices();
+  if(tab==='offers') renderOffers(); else if(tab==='invoices') renderInvoices();
 }
 // مؤشّر تحميل لايق مع الثيم (بيظهر جوه التبويب لحد ما البيانات توصل)
 function loaderHTML(text){
@@ -1110,16 +1108,22 @@ function showTopLoad(on){
 // تحميل كسول: أول ما تفتح التبويب بس — كاش فوري + تحديث محدود من السيرفر في الخلفية
 function lazyLoadTab(tab){
   if(tabStarted[tab]) return;
-  if(tab==='products'){
+  /* 🛍️ الكتالوج بقى جوّه تبويب «عروضي» — فبيتحمّل معاه.
+     ⚠️ كان مربوط بـ`products`، واللي فضل مربوط بيه بعد الدمج كان
+        هيفضل مستني تبويب **مش موجود** — يعني الكتالوج ميتحملش أبدًا
+        والقسم يفضل فاضي من غير أي رسالة خطأ. */
+  if(tab==='offers'){
     tabStarted[tab] = true; showTopLoad(true);
     db.collection(COL_SETTINGS).doc('catalog_'+CATALOG_BRAND).get().then(function(d){
       var data = d.exists ? d.data() : {};
       dataProducts = Array.isArray(data.items) ? data.items : [];
       catalogBanners = Array.isArray(data.banners) ? data.banners : [];
-      if(currentTab==='products') renderProducts();
-    }).catch(function(){ dataProducts=[]; if(currentTab==='products') renderProducts(); })
+      if(currentTab==='offers') renderOffers();
+    }).catch(function(){ dataProducts=[]; if(currentTab==='offers') renderOffers(); })
       .then(function(){ showTopLoad(false); });
-    return;
+    // ⚠️ **مفيش `return`** هنا عن قصد: تبويب العروض محتاج كمان
+    //    الخصومات من `tabRef('offers')`. الـreturn القديم كان بيوقف
+    //    التحميل التاني، فالعروض كانت هتختفي بعد الدمج.
   }
   var ref = tabRef(tab); if(!ref) return;
   tabStarted[tab] = true;
@@ -1132,18 +1136,17 @@ function lazyLoadTab(tab){
 function switchTab(tab){
   currentTab = tab;
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
-  ['card','offers','products','invoices','account','contact'].forEach(function(t){
+  ['card','offers','invoices','account','contact'].forEach(function(t){
     $('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
   });
   // نبدأ تحميل بيانات التبويب أول مرة بس (كسول)، والعرض من الذاكرة فورًا في المرات الجاية
-  if(tab==='offers' || tab==='products' || tab==='invoices') lazyLoadTab(tab);
+  if(tab==='offers' || tab==='invoices') lazyLoadTab(tab);
   if(tab==='offers') renderOffers();
-  else if(tab==='products') renderProducts();
   else if(tab==='invoices') renderInvoices();
   else if(tab==='account') renderAccount();
   else if(tab==='contact') renderContact();
   // البطاقة بتتحدّث لايف من onSnapshot
-  if(tab==='offers' || tab==='products') markTabSeen(tab);
+  if(tab==='offers') markTabSeen(tab);
   refreshBadges();
   window.scrollTo(0,0);
 }
@@ -1171,16 +1174,22 @@ function setTabBadge(tab, count){
 }
 function refreshBadges(){
   if(!currentCustomer) return;
+  /* 🔔 شارة واحدة لتبويب «عروضي» — بتجمع **التلاتة**:
+     المكافآت + العروض + الكتالوج، لأنهم بقوا في تبويب واحد.
+     ⚠️ أول ما دمجت التبويبين شيلت شارة الكتالوج بالغلط — يعني
+        منتج جديد كان هيوصل **من غير أي إشعار** والعميلة متعرفش.
+        الدمج بيلمّ الشاشات، مش بيلغي التنبيهات. */
   var offerDomain = _rewardIds().concat(_badgeOfferIds||[]);
   var seenOff = _getSeen('offers');
-  setTabBadge('offers', currentTab==='offers' ? 0 : offerDomain.filter(function(id){ return seenOff.indexOf(id)<0; }).length);
-  var seenPr = _getSeen('products');
-  setTabBadge('products', currentTab==='products' ? 0 : (_badgeProductIds||[]).filter(function(id){ return seenPr.indexOf(id)<0; }).length);
+  var seenPr  = _getSeen('products');
+  var nOff = offerDomain.filter(function(id){ return seenOff.indexOf(id)<0; }).length;
+  var nPr  = (_badgeProductIds||[]).filter(function(id){ return seenPr.indexOf(id)<0; }).length;
+  setTabBadge('offers', currentTab==='offers' ? 0 : (nOff + nPr));
 }
 function markTabSeen(tab){
   if(!currentCustomer) return;
   if(tab==='offers') _saveSeen('offers', _rewardIds().concat(_badgeOfferIds||[]));
-  else if(tab==='products') _saveSeen('products', (_badgeProductIds||[]));
+  if(tab==='offers') _saveSeen('products', (_badgeProductIds||[]));
   setTabBadge(tab, 0);
 }
 // تحميل معرّفات العروض والمنتجات مرة واحدة للشارات (خفيف) — echarpe يستثني فرع Glow
@@ -1437,7 +1446,7 @@ function renderOffers(){
     if(!seen[key]){ seen[key]=1; uniq.push(dc); }
   });
   if(uniq.length === 0){
-    box.innerHTML = rewardsHtml + head + '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>';
+    box.innerHTML = rewardsHtml + head + '<div class="empty"><span class="big">🎀</span>مفيش عروض دلوقتي.<br>تابعينا — قريب هيبقى فيه حاجات حلوة!</div>' + catalogHTML();
     return;
   }
   var rows = uniq.map(function(dc){
@@ -1456,7 +1465,7 @@ function renderOffers(){
       '</div>'+
     '</div>';
   }).join('');
-  box.innerHTML = rewardsHtml + head + rows;
+  box.innerHTML = rewardsHtml + head + rows + catalogHTML();
 }
 
 /* ============================================================
@@ -1468,21 +1477,30 @@ function activateOffer(barcode, type, value, maxUses, validDays){
   var offers = currentCustomer.activatedOffers || {};
   offers[barcode] = { type:type, value:value, brand:CATALOG_BRAND, maxUses:(maxUses||1), uses:0, activatedAt:Date.now(), expiry:(validDays? (Date.now()+validDays*86400000):0) };
   db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set({ activatedOffers: offers }, { merge:true }).then(function(){
-    currentCustomer.activatedOffers = offers; renderProducts();
+    currentCustomer.activatedOffers = offers; renderOffers();
     try{ var u={}; u[barcode]={ activated: firebase.firestore.FieldValue.increment(1) }; db.collection(COL_SETTINGS).doc('offer_stats_'+CATALOG_BRAND).set(u,{merge:true}); }catch(e){}
     showToast('تم تفعيل العرض! 🎉 هيتطبق تلقائي عند الدفع في المحل');
   }).catch(function(){ showToast('حصل خطأ، حاولي تاني', true); });
 }
-function renderProducts(){
-  var box = $('tab-products');
+/* ============================================================
+   🛍️ كتالوج المنتجات — بقى **جزء من تبويب العروض**
+   ------------------------------------------------------------
+   ⚠️ كان تبويب مستقل اسمه «آخر العروض»، والمالك شايف إنه ملوش
+      لازمة لوحده: المكافآت والعروض والكتالوج كلهم "حاجات حلوة
+      دلوقتي" — تلات تبويبات لنفس الفكرة بتفرّق الانتباه.
+   ✅ اندمج في تبويب واحد اسمه «عروضي»، والخانة اللي فضيت هتبقى
+      **شراء أونلاين**.
+   ⚠️ الدالة بقت **بترجّع HTML** بدل ما تكتب في العنصر — عشان
+      `renderOffers` تقدر تركّبها جوّه صفحتها.
+   ============================================================ */
+function catalogHTML(){
   var head = '<div class="sec-h">آخر عروض <span class="em">إيشارب</span></div>';
-  if(dataProducts === null){ box.innerHTML = head + loaderHTML('بنجيب أحدث العروض...'); return; }
+  if(dataProducts === null){ return head + loaderHTML('بنجيب أحدث العروض...'); return; }
   var banners = (catalogBanners||[]).map(function(b){
     return '<img src="'+esc(b.img||'')+'" style="width:100%; border-radius:16px; margin-bottom:12px; display:block;">';
   }).join('');
   if(dataProducts.length === 0){
-    box.innerHTML = head + banners + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
-    return;
+    return head + banners + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
   }
   var cards = dataProducts.map(function(p){
     var hasOffer = p.discountType && p.discountType!=='none' && Number(p.discountValue)>0 && p.barcode;
@@ -1507,7 +1525,7 @@ function renderProducts(){
       '</div>'+
     '</div>';
   }).join('');
-  box.innerHTML = head + banners + '<div class="prod-grid">'+cards+'</div>';
+  return head + banners + '<div class="prod-grid">'+cards+'</div>';
 }
 
 /* ============================================================
