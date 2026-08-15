@@ -302,6 +302,33 @@ var I18N_DICT = {
     'الإشعارات مرفوضة من إعدادات المتصفح': 'Notifications are blocked in the browser settings',
     'مسمحتش بالإشعارات': 'Notifications were not allowed',
 
+    /* ---------- 🚚 الشحن والتسليم ---------- */
+    '🚚 عايزاها إزاي؟': '🚚 How would you like it?',
+    'استلام من الفرع': 'Pick up in store',
+    'تعالي خديها بنفسك': 'Collect it yourself',
+    'شحن للبيت': 'Home delivery',
+    'توصلك لحد باب البيت': 'Delivered to your door',
+    '📍 يتشحن منين': '📍 Ships from',
+    '👤 بياناتك للتوصيل': '👤 Your delivery details',
+    'اختاري المحافظة': 'Choose your governorate',
+    'العنوان بالتفصيل — الشارع والعمارة والدور والشقة':
+      'Full address — street, building, floor, apartment',
+    'علامة مميزة أو ملاحظة (اختياري)': 'Landmark or note (optional)',
+    'البضاعة': 'Items',
+    'الشحن': 'Shipping',
+    'مجاني 🎉': 'Free 🎉',
+    'هنكلّمك على رقمك نأكّد الأوردر قبل ما يتشحن.':
+      'We will call you to confirm your order before it ships.',
+    '💵 كاش عند الاستلام': '💵 Cash on delivery',
+    'اختاري الفرع اللي هيتشحن منه': 'Choose the branch it ships from',
+    'اكتبي العنوان بالتفصيل (الشارع والعمارة والدور)':
+      'Enter your full address (street, building, floor)',
+    'وصلنا طلبك — بنراجعه ونجهّزه': 'We got your order — reviewing and preparing it',
+    'بنجهّز طلبك — وهيتشحن أول ما يخلص': 'Preparing your order — it ships as soon as it is ready',
+    'طلبك جاهز ومستني الشحن — هنكلّمك قبل ما يوصل':
+      'Your order is ready and awaiting shipping — we will call before it arrives',
+    'اتشحن ووصل — اتمنى يعجبك 🌸': 'Shipped and delivered — hope you love it 🌸',
+
     /* ---------- 🛍️ «اطلبي» + «أوردراتي» (التطبيقين والموقع) ---------- */
     'اطلبي': 'Shop',
     'أونلاين': 'online',

@@ -162,14 +162,27 @@ function renderOrdersScreen(){
        متسألهاش تاني. ⚠️ «فيزا» هنا معناها هتدفع بالفيزا **في الفرع**،
        مش إن الفلوس اتدفعت أونلاين. اللبس ده بيخلي الكاشير تسلّم من
        غير ما تاخد فلوس. */
-    var payTxt = (o.payMethod === 'visa')
-      ? '💳 هتدفع فيزا في الفرع'
-      : '💵 هتدفع كاش في الفرع';
+    var del = orderIsDelivery(o);
+    var payTxt = del
+      ? '💵 كاش عند الاستلام'
+      : ((o.payMethod === 'visa') ? '💳 هتدفع فيزا في الفرع' : '💵 هتدفع كاش في الفرع');
+
+    /* 🚚 بيانات الشحن — **بارزة**: مندوب من غير عنوان كامل بيرجّع
+       الأوردر. والرقم ده ممكن يكون غير رقم الحساب (طلبت لحد تاني). */
+    var addrBox = del
+      ? '<div style="border:1.5px dashed var(--accent); border-radius:10px; padding:9px 11px; margin:6px 0; font-size:13px; line-height:1.9;">'
+        + '<b>🚚 شحن — ' + ordEsc(o.governorate || '؟') + '</b><br>'
+        + '📍 ' + ordEsc(o.address || '— مفيش عنوان!') + '<br>'
+        + '📞 <span style="direction:ltr; unicode-bidi:embed;">' + ordEsc(o.contactPhone || o.phone || '') + '</span>'
+        + (o.notes ? '<br>📝 ' + ordEsc(o.notes) : '')
+        + '</div>'
+      : '';
 
     var btns = '';
     if(st === 'placed')    btns += '<button class="btn-newsale" onclick="ordMove(\'' + o.id + '\',\'preparing\')">🎁 بدأنا التجهيز</button>';
     if(st === 'preparing') btns += '<button class="btn-newsale" onclick="ordMove(\'' + o.id + '\',\'ready\')">✅ جاهز</button>';
-    if(st === 'ready')     btns += '<button class="btn-newsale" onclick="ordDeliver(\'' + o.id + '\')">🛍️ تسليم — حمّل السلة</button>';
+    if(st === 'ready')     btns += '<button class="btn-newsale" onclick="ordDeliver(\'' + o.id + '\')">'
+      + (del ? '🚚 اشحن — حمّل السلة' : '🛍️ تسليم — حمّل السلة') + '</button>';
     if(st !== 'expired')   btns += '<button class="logout-btn" onclick="ordCancel(\'' + o.id + '\')">✖️ إلغاء</button>';
 
     return '<div style="border:1.5px solid ' + (soon ? 'var(--warn)' : 'var(--border)') + '; border-radius:12px;'
@@ -178,16 +191,22 @@ function renderOrdersScreen(){
         + '<b style="font-size:16px;">#' + ordEsc(o.code || '—') + '</b>'
         + '<span style="background:' + src.c + '; color:#fff; border-radius:99px; padding:3px 10px; font-size:11.5px; font-weight:800;">' + src.t + '</span>'
         + '<span style="border:1.5px solid var(--border); border-radius:99px; padding:3px 10px; font-size:11.5px; font-weight:800;">' + lab.icon + ' ' + lab.t + '</span>'
+        + '<span style="border:1.5px solid ' + (del ? 'var(--accent)' : 'var(--border)') + '; color:' + (del ? 'var(--accent)' : 'inherit') + '; border-radius:99px; padding:3px 10px; font-size:11.5px; font-weight:800;">'
+          + ORDER_FULFILL_LABEL[del ? 'delivery' : 'pickup'].icon + ' ' + ORDER_FULFILL_LABEL[del ? 'delivery' : 'pickup'].t + '</span>'
         + '<span style="margin-inline-start:auto; font-size:12px; color:' + (soon ? 'var(--warn)' : 'var(--muted)') + '; font-weight:800;">'
           + ordEsc(orderTimeLeft(o, now)) + '</span>'
       + '</div>'
       + '<div style="font-size:13.5px; margin-bottom:6px;">👤 <b>' + ordEsc(o.name || 'عميلة') + '</b>'
         + ' — <span style="direction:ltr; unicode-bidi:embed;">' + ordEsc(o.phone || '') + '</span>'
         + ' · 🏬 ' + ordEsc(o.branch || '') + '</div>'
+      + addrBox
       + '<div style="border-top:1px dashed var(--border); padding:6px 0; margin:6px 0;">' + items + '</div>'
+      + (Number(o.shipping) > 0
+        ? '<div style="display:flex; justify-content:space-between; font-size:12.5px; color:var(--muted); font-weight:700;">'
+          + '<span>شحن</span><span>' + Number(o.shipping).toFixed(2) + '</span></div>' : '')
       + '<div style="display:flex; justify-content:space-between; font-size:14px; font-weight:900; margin-bottom:10px;">'
         + '<span>' + ordEsc(payTxt) + '</span>'
-        + '<span>' + orderTotal(o.items).toFixed(2) + ' ج.م</span>'
+        + '<span>' + (Number(o.grandTotal) || orderGrandTotal(o.items, o.shipping)).toFixed(2) + ' ج.م</span>'
       + '</div>'
       + '<div style="display:flex; gap:8px; flex-wrap:wrap;">' + btns + '</div>'
       + '</div>';

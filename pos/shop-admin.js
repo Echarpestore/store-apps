@@ -23,12 +23,18 @@
 const SHOP_DOC_PREFIX = 'online_shop_';   // pos_test_settings/online_shop_<brand>
 
 let shopData = { items: [] };
+/* ⚙️ إعدادات التسليم والشحن — مستند منفصل عن المنتجات.
+   ⚠️ منفصل عن قصد: التطبيق بيقرا الإعدادات **مع كل فتحة للتبويب**،
+      والمنتجات فيها صور base64 تقيلة. دمجهم = تحميل صور عشان نعرف
+      سعر الشحن. */
+let shopCfg = { pickupEnabled:true, deliveryEnabled:false, shippingFee:0, freeOver:0, governorates:[] };
 let shopPendingImg = '';
 let shopEditId = null;
 
 function shopDocId(){
   return SHOP_DOC_PREFIX + (typeof catalogBrand === 'function' ? catalogBrand() : 'echarpe');
 }
+function shopCfgDocId(){ return shopDocId() + '_cfg'; }
 
 async function goToOnlineShopAdmin(){
   if(typeof hasPerm === 'function' && !hasPerm('canEditInventory')){
@@ -40,6 +46,9 @@ async function goToOnlineShopAdmin(){
     const doc = await db.collection(TEST_SETTINGS).doc(shopDocId()).get();
     shopData = doc.exists ? Object.assign({ items:[] }, doc.data()) : { items:[] };
     if(!Array.isArray(shopData.items)) shopData.items = [];
+    const c = await db.collection(TEST_SETTINGS).doc(shopCfgDocId()).get();
+    if(c.exists) shopCfg = Object.assign(shopCfg, c.data());
+    if(!Array.isArray(shopCfg.governorates)) shopCfg.governorates = [];
   }catch(e){ shopData = { items:[] }; }
   renderShopAdmin();
 }
@@ -48,6 +57,41 @@ window.goToOnlineShopAdmin = goToOnlineShopAdmin;
 async function saveShopDoc(){
   await db.collection(TEST_SETTINGS).doc(shopDocId()).set(shopData, { merge:true });
 }
+async function saveShopCfg(){
+  await db.collection(TEST_SETTINGS).doc(shopCfgDocId()).set(shopCfg, { merge:true });
+}
+
+/* ⚙️ حفظ إعدادات التسليم.
+   ⚠️ قفل الاتنين مع بعض = تبويب «اطلبي» يبقى موجود ومفيش طريقة
+      تكمّلي بيه — أوحش من إنه مقفول. فبنمنعه صراحةً. */
+async function shopSaveCfg(){
+  const pickup = document.getElementById('cfgPickup').checked;
+  const delivery = document.getElementById('cfgDelivery').checked;
+  if(!pickup && !delivery){
+    showToast('لازم تسيب طريقة واحدة على الأقل — استلام أو شحن', 'err');
+    document.getElementById('cfgPickup').checked = true;
+    return;
+  }
+  const before = JSON.stringify(shopCfg);
+  shopCfg.pickupEnabled = pickup;
+  shopCfg.deliveryEnabled = delivery;
+  shopCfg.shippingFee = Math.max(0, parseFloat(document.getElementById('cfgFee').value) || 0);
+  shopCfg.freeOver = Math.max(0, parseFloat(document.getElementById('cfgFreeOver').value) || 0);
+  /* 🗺️ سطر لكل محافظة: «الاسم = الرسم». اللي مش مكتوب بياخد الرسم
+     الموحّد — مش بيتمنع من الطلب. */
+  shopCfg.governorates = String(document.getElementById('cfgGovs').value || '')
+    .split('\n').map(function(line){
+      const parts = line.split('=');
+      if(parts.length < 2) return null;
+      const name = parts[0].trim();
+      const fee = parseFloat(parts[1]);
+      if(!name || isNaN(fee)) return null;
+      return { name: name, fee: Math.max(0, fee) };
+    }).filter(Boolean);
+  try{ await saveShopCfg(); showToast('الإعدادات اتحفظت ✅'); renderShopAdmin(); }
+  catch(e){ shopCfg = JSON.parse(before); showToast('خطأ: ' + e.message, 'err'); }
+}
+window.shopSaveCfg = shopSaveCfg;
 
 /* 🔍 اختيار الصنف من المخزون — الباركود والاسم والسعر بيتملوا لوحدهم.
    ⚠️ الاختيار من المخزون **مش اختياري**: الباركود هو الرابط اللي
@@ -216,12 +260,32 @@ function renderShopAdmin(){
   const brand = (typeof catalogBrand === 'function' && catalogBrand() === 'glow') ? 'Glow' : 'echarpe';
   const live = shopData.items.filter(function(x){ return x.active && Number(x.onlineQty) > 0; }).length;
 
+  const cfgPanel =
+    '<div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:16px;">'
+      + '<div style="font-weight:800; margin-bottom:10px;">🚚 التسليم والشحن</div>'
+      + '<label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; margin-bottom:8px; cursor:pointer;">'
+        + '<input type="checkbox" id="cfgPickup" ' + (shopCfg.pickupEnabled ? 'checked' : '') + ' style="width:17px; height:17px;"> 🏬 استلام من الفرع</label>'
+      + '<label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; margin-bottom:10px; cursor:pointer;">'
+        + '<input type="checkbox" id="cfgDelivery" ' + (shopCfg.deliveryEnabled ? 'checked' : '') + ' style="width:17px; height:17px;"> 🚚 شحن للبيت</label>'
+      + '<div style="display:flex; gap:8px;">'
+        + '<input id="cfgFee" type="number" placeholder="مصاريف الشحن الموحّدة" value="' + (shopCfg.shippingFee || '') + '" style="' + inp + ' flex:1;">'
+        + '<input id="cfgFreeOver" type="number" placeholder="شحن مجاني فوق (فاضي=لأ)" value="' + (shopCfg.freeOver || '') + '" style="' + inp + ' flex:1;">'
+      + '</div>'
+      + '<label style="display:block; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:4px;">🗺️ رسم مختلف لمحافظات معيّنة — سطر لكل واحدة: <b>الاسم = الرسم</b></label>'
+      + '<textarea id="cfgGovs" placeholder="القاهرة = 60&#10;الجيزة = 60&#10;أسوان = 110" style="' + inp + ' min-height:70px; direction:rtl;">'
+        + (shopCfg.governorates || []).map(function(g){ return g.name + ' = ' + g.fee; }).join('\n') + '</textarea>'
+      + '<div style="font-size:11px; color:var(--muted); margin-bottom:8px;">⚠️ المحافظة اللي مش مكتوبة بتاخد الرسم الموحّد — مش بتتمنع من الطلب.</div>'
+      + '<button onclick="shopSaveCfg()" style="width:100%; padding:11px; border-radius:9px; border:none; background:var(--accent); color:#fff; font-weight:800; cursor:pointer;">💾 احفظ إعدادات التسليم</button>'
+    + '</div>';
+
   w.innerHTML =
     '<div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:8px 12px; margin-bottom:14px; font-size:12px; color:var(--muted);">'
       + 'بتعدّل منتجات البيع أونلاين لـ<b style="color:var(--text);">' + brand + '</b> — '
       + 'دي اللي العميلة بتشوفها في تبويب «اطلبي» في التطبيق وعلى الموقع. '
       + '<b style="color:var(--text);">' + live + '</b> منتج معروض دلوقتي.'
     + '</div>'
+
+    + cfgPanel
 
     + '<div style="background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:16px;">'
       + '<div style="font-weight:800; margin-bottom:10px;">🛒 ضيف منتج للبيع أونلاين</div>'

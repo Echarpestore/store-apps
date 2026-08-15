@@ -160,6 +160,88 @@ function orderValidateCart(cart, products, branch, nowMs){
   return { ok: errors.length === 0 && items.length > 0, errors: errors, items: items };
 }
 
+
+/* ============================================================
+   🚚 التسليم — استلام من الفرع ولا شحن للبيت
+   ------------------------------------------------------------
+   ⚠️ الاتنين مسارين مختلفين تمامًا في كل حاجة بعد الطلب:
+      · الاستلام: العميلة بتيجي، بتدفع في الفرع، والحجز ٢٤ ساعة.
+      · الشحن: البيانات لازم تبقى كاملة (عنوان ومحافظة)، والحجز
+        بيفضل لحد ما يتشحن، والدفع كاش عند الاستلام.
+   ⚠️ الفرع مطلوب في **الحالتين**: الشحن بيطلع من فرع، ولازم نعرف
+      مين هيجهّز الأوردر — من غيره الأوردر بيقع بين الفروع.
+   ============================================================ */
+var ORDER_FULFILL = ['pickup', 'delivery'];
+
+var ORDER_FULFILL_LABEL = {
+  pickup:   { t:'استلام من الفرع', icon:'🏬' },
+  delivery: { t:'شحن للبيت',       icon:'🚚' }
+};
+
+function orderIsDelivery(o){ return String(o && o.fulfillment) === 'delivery'; }
+
+/* 💸 مصاريف الشحن — من الإعدادات مش من الكود.
+   ⚠️ صفر مصاريف **حالة مشروعة** (شحن مجاني)، فلازم نفرّق بين
+      «مفيش رقم» و«الرقم صفر». `Number(x) || 0` بيخلط بينهم في حالات
+      تانية، فبنقرا صراحةً. */
+function orderShippingFee(cfg, subtotal, governorate){
+  cfg = cfg || {};
+  if(!cfg.deliveryEnabled) return 0;
+  var sub = Number(subtotal) || 0;
+
+  // 🎁 مجاني فوق مبلغ معيّن — بيتحسب **قبل** رسوم المحافظة
+  var freeOver = Number(cfg.freeOver);
+  if(freeOver > 0 && sub >= freeOver) return 0;
+
+  // 🗺️ رسوم المحافظة لو متظبطة، وإلا الرسم الموحّد
+  var list = Array.isArray(cfg.governorates) ? cfg.governorates : [];
+  for(var i = 0; i < list.length; i++){
+    if(list[i] && String(list[i].name) === String(governorate)){
+      return Math.max(0, Number(list[i].fee) || 0);
+    }
+  }
+  return Math.max(0, Number(cfg.shippingFee) || 0);
+}
+
+/* 🧾 الإجمالي النهائي — البضاعة + الشحن.
+   ⚠️ منفصل عن `orderTotal` عن قصد: `orderTotal` هو قيمة **البضاعة**،
+      واللي بيتقارن بيه المرتجع والمخزون. لو الشحن اتحط جواه، أي
+      مرتجع هيرجّع مصاريف شحن اتصرفت فعلًا. */
+function orderGrandTotal(items, shipping){
+  return Math.round((orderTotal(items) + (Number(shipping) || 0)) * 100) / 100;
+}
+
+/* ✅ بيانات العميلة — الفحص بيختلف حسب طريقة التسليم.
+   ⚠️ العنوان الناقص مش مشكلة شكلية: مندوب هيقف في الشارع ويتصل،
+      والعميلة مش بترد، والأوردر يرجع. الفحص هنا أرخص من ده بكتير. */
+function orderValidateContact(info, fulfillment){
+  info = info || {};
+  var errors = [];
+  var name = String(info.name || '').trim();
+  var phone = String(info.phone || '').replace(/\D/g, '');
+
+  if(name.length < 2) errors.push('اكتبي اسمك');
+  if(phone.length < 10) errors.push('اكتبي رقم موبايل صح');
+
+  if(fulfillment === 'delivery'){
+    if(!String(info.governorate || '').trim()) errors.push('اختاري المحافظة');
+    if(String(info.address || '').trim().length < 10)
+      errors.push('اكتبي العنوان بالتفصيل (الشارع والعمارة والدور)');
+  }
+  return { ok: errors.length === 0, errors: errors };
+}
+
+/* 📦 المتاح للطلب أونلاين — أقل رقم بين اللي المالك خصّصه واللي
+   موجود فعلًا في الفرع.
+   ⚠️ الاتنين ضروريين: `onlineQty` لوحده بيوعد بحاجة مش موجودة،
+      ومخزون الفرع لوحده بيبيع كل المحل أونلاين. */
+function orderAvailable(shopItem, product, branch){
+  var alloc = Math.max(0, Math.floor(Number(shopItem && shopItem.onlineQty) || 0));
+  if(!shopItem || shopItem.active !== true) return 0;
+  if(!product) return 0;
+  return Math.min(alloc, orderBranchQty(product, branch));
+}
+
 /* 🧾 بناء مستند الأوردر — **مصدر واحد** للشكل.
    ⚠️ الأسعار بتتاخد من الكتالوج جوه `orderValidateCart` مش من
       المدخلات، والإجمالي بيتحسب هنا. لو سبنا العميلة تبعت
@@ -168,6 +250,18 @@ function orderBuild(o){
   o = o || {};
   var now = Number(o.nowMs) || Date.now();
   var items = o.items || [];
+  var fulfillment = (o.fulfillment === 'delivery') ? 'delivery' : 'pickup';
+  var shipping = Math.max(0, Number(o.shipping) || 0);
+  /* ⚠️ الشحن على الاستلام من الفرع = صفر **مهما اتبعت**: العميلة
+     بتيجي بنفسها. من غير القفلة دي، خطأ في الواجهة بيحصّل مصاريف
+     شحن على حد جاي يستلم بإيده. */
+  if(fulfillment !== 'delivery') shipping = 0;
+
+  /* 💳 الشحن بيتدفع **كاش عند الاستلام**: ماكينة الفيزا في الفرع
+     مش مع المندوب. اختيار «فيزا» مع الشحن كان هيوعد بحاجة مش موجودة. */
+  var payMethod = (o.payMethod === 'visa') ? 'visa' : 'cash';
+  if(fulfillment === 'delivery') payMethod = 'cash';
+
   return {
     phone: String(o.phone || ''),
     name: String(o.name || ''),
@@ -176,7 +270,13 @@ function orderBuild(o){
     items: items,
     count: orderCount(items),
     total: orderTotal(items),
-    payMethod: (o.payMethod === 'visa') ? 'visa' : 'cash',
+    fulfillment: fulfillment,
+    shipping: shipping,
+    grandTotal: orderGrandTotal(items, shipping),
+    governorate: String(o.governorate || ''),
+    address: String(o.address || ''),
+    notes: String(o.notes || ''),
+    payMethod: payMethod,
     status: 'placed',
     createdAt: now,
     reservedUntil: now + ORDER_HOLD_MS,
@@ -203,7 +303,17 @@ function orderStepIndex(status){
   var i = ORDER_STEPS.indexOf(status);
   return i < 0 ? 0 : i;
 }
-function orderNextHint(status){
+function orderNextHint(status, fulfillment){
+  if(fulfillment === 'delivery'){
+    if(status === 'placed')    return 'وصلنا طلبك — بنراجعه ونجهّزه';
+    if(status === 'preparing') return 'بنجهّز طلبك — وهيتشحن أول ما يخلص';
+    if(status === 'ready')     return 'طلبك جاهز ومستني الشحن — هنكلّمك قبل ما يوصل';
+    if(status === 'collected') return 'اتشحن ووصل — اتمنى يعجبك 🌸';
+    if(status === 'expired')   return 'عدّت المدة والحجز رجع — تقدري تطلبي تاني';
+  }
+  return _orderNextHintPickup(status);
+}
+function _orderNextHintPickup(status){
   if(status === 'placed')    return 'بنراجع طلبك — هنبدأ نجهّزه حالًا';
   if(status === 'preparing') return 'لسه بنجهّز — هنقولك أول ما يخلص';
   if(status === 'ready')     return 'روحي الفرع واستلمي — قولي رقم الأوردر أو امسحي كارتك';
@@ -230,12 +340,21 @@ if(typeof window !== 'undefined'){
   window.orderCode = orderCode;
   window.orderStepIndex = orderStepIndex;
   window.orderNextHint = orderNextHint;
+  window.ORDER_FULFILL = ORDER_FULFILL;
+  window.ORDER_FULFILL_LABEL = ORDER_FULFILL_LABEL;
+  window.orderIsDelivery = orderIsDelivery;
+  window.orderShippingFee = orderShippingFee;
+  window.orderGrandTotal = orderGrandTotal;
+  window.orderValidateContact = orderValidateContact;
+  window.orderAvailable = orderAvailable;
 }
 if(typeof module !== 'undefined' && module.exports){
   module.exports = {
     ORDER_FLOW, ORDER_LABEL, ORDER_STEPS, ORDER_HOLD_MS, ORDER_WARN_MS,
     orderCanMove, orderTotal, orderCount, orderIsExpired, orderEffectiveStatus,
     orderTimeLeft, orderNearExpiry, orderBranchQty, orderValidateCart,
-    orderBuild, orderCode, orderStepIndex, orderNextHint
+    orderBuild, orderCode, orderStepIndex, orderNextHint,
+    ORDER_FULFILL, ORDER_FULFILL_LABEL, orderIsDelivery, orderShippingFee,
+    orderGrandTotal, orderValidateContact, orderAvailable
   };
 }
