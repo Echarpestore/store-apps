@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v35';
+  const TRYON_VER = 'v36';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -683,7 +683,14 @@
     const faces = result && result.faceLandmarks;
     if(!faces || !faces.length){
       S.lostFrames++;
-      chip('no-face·' + (S.delegate || '?').toLowerCase());
+      /* 🩺 v36: الأرقام على الشاشة مباشرة — مفيش كونسول على الموبايل،
+         والتخمين اتجرب عشر مرات. المقاس والحالة وعدد الفريمات
+         بيقولوا إذا كانت الكاميرا بتدي صورة أصلًا ولا لأ. */
+      chip('no-face·' + (S.delegate || '?').toLowerCase()
+        + '·' + (S.video.videoWidth || 0) + 'x' + (S.video.videoHeight || 0)
+        + '·rs' + (S.video.readyState || 0)
+        + '·f' + (S.frames || 0)
+        + (S.detectErr ? ('·⚠️' + S.detectErr) : ''));
       /* 🔁 v35: مفيش وش لمدة ٤٥ فريم ولسه على GPU؟ الأرجح إن الكارت
          بيرجّع نتيجة فاضية بصمت. بنعيد البناء على CPU **مرة واحدة**.
          ⚠️ مرة واحدة بالظبط: إعادة البناء تقيلة، ولو اتكررت مع كل
@@ -702,7 +709,9 @@
       }
       if(S.r3d) TRYON3D.clear();
       if(S.mesh) TRYON_MESH.clear();
-      if(S.lostFrames > 20) hint('قرّبي وشّك للكاميرا 📷');
+      /* ⚠️ كانت «قرّبي وشّك» — نصيحة بالعكس: الوش المالي الكادر
+         بحدود مقصوصة هو أكتر سبب لعدم الكشف. */
+      if(S.lostFrames > 20) hint('خلّي الوش والكتافين باينين في الكادر 🙂');
       return;
     }
     S.lostFrames = 0;
@@ -963,15 +972,40 @@
   /* ============================================================
      ٥) اللوب
      ============================================================ */
+  /* 🩺 v36: الكاشف بياخد **كانفاس مصغّر** بدل الفيديو الخام.
+     السبب: v35 أثبت إن GPU وCPU الاتنين بيرجّعوا صفر وشوش على وش
+     واضح — يعني المشكلة مش في المندوب، وأقرب تفسير باقي هو **حجم
+     الفريم**: كاميرات أندرويد الحديثة بتدي 1080×1920 وأكتر، وبعض
+     الأجهزة بتفشل في تحويل الفريم الكبير ده لتنسور من غير أي خطأ.
+     ⚠️ المعالم بترجع **نسبية (0–1)** فالتصغير مبيأثرش على الرسم
+        خالص — الحسابات كلها بتتضرب في مقاس كانفاس العرض زي ما هي. */
+  function detectSrc(){
+    const vw = S.video.videoWidth || 0, vh = S.video.videoHeight || 0;
+    if(!vw || !vh) return S.video;
+    if(!S._inCv){ S._inCv = document.createElement('canvas'); S._inCtx = S._inCv.getContext('2d', { willReadFrequently:true }); }
+    const target = 480;                       // عرض ثابت — أسرع وأأمن
+    const sc = Math.min(1, target / Math.max(vw, vh));
+    const w = Math.max(2, Math.round(vw * sc)), h = Math.max(2, Math.round(vh * sc));
+    if(S._inCv.width !== w || S._inCv.height !== h){ S._inCv.width = w; S._inCv.height = h; }
+    S._inCtx.drawImage(S.video, 0, 0, w, h);
+    return S._inCv;
+  }
+
   function loop(){
     if(!S.running || S.mode !== 'live') return;
     const t0 = performance.now();
     if(S.gov.shouldProcess() && S.video.readyState >= 2){
       try{
-        const res = S.landmarker.detectForVideo(S.video, t0);
+        S.frames = (S.frames || 0) + 1;
+        const res = S.landmarker.detectForVideo(detectSrc(), t0);
         draw(res, S.video);
         liveHairPass().catch(() => {});     // v28: ثابتة + مخنوق — مش كل فريم
-      }catch(e){ console.warn(e); }
+      }catch(e){
+        /* ⚠️ الخطأ ده كان بيتبلع في console.warn — والمالك على موبايل
+           مفيهوش كونسول، فكان بيشوف «مفيش طرحة» من غير أي سبب. */
+        S.detectErr = String((e && e.message) || e).slice(0, 60);
+        console.warn(e);
+      }
     }
     S.gov.report(performance.now() - t0);
     requestAnimationFrame(loop);
@@ -1341,6 +1375,8 @@
 
   // للقاعدة الذهبية §18 + التشخيص من الكونسول
   window.tryonDiag = () => ({ ver: TRYON_VER, delegate: S.delegate, lostFrames: S.lostFrames,
+    vw: S.video && S.video.videoWidth, vh: S.video && S.video.videoHeight,
+    frames: S.frames, detectErr: S.detectErr,
     mode:S.mode, running:S.running,
     stage: S.stage, r3d: S.r3d, mesh: S.mesh, meshFails: S.meshFails || 0,
     off: Object.keys(TRYON_OFF).filter((k) => TRYON_OFF[k]),
