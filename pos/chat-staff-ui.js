@@ -24,15 +24,133 @@
     sending: false
   };
 
+  /* ============================================================
+     🔌 طبقة البيانات — الملف بيشتغل على compat **و** modular
+     ------------------------------------------------------------
+     السبب: الملف ده كان مكتوب compat (`db.collection(...)` ·
+     `firebase.firestore.FieldValue` · `db.batch()`) وده شغّال في
+     POS وOffice. لكن تطبيق الحضور (sales) شغّال **modular**
+     (`import { collection, onSnapshot } from 'firebase-firestore.js'`).
+
+     🔴 ليه ماينفعش نحمّل compat جنب modular في sales: هيبقى
+        **Firebase app تاني مستقل**، ومفتاح جلسة الدخول بيتخزن باسم
+        التطبيق — فالتطبيق التاني بيبقى **مش مسجّل دخول**. وقواعد
+        `customer_chat` بتطلب `isStaff()`، يعني الشات كان هيرجع
+        permission-denied على طول. (نفس درس عزل الجلسات في §5.)
+
+     ✅ الحل: ٦ عمليات بس، والملف بينادي `CDB` بدل Firestore مباشرة.
+        · compat  → `db.collection(...)` زي ما هو
+        · modular → دوال متعرّضة على window من `sales-app.js`
+     ⚠️ الاكتشاف **وقت النداء** مش وقت التحميل: في sales الدوال
+        بتتعرض بعد ما الموديول يشتغل، والملف ده بيتحمّل قبله.
+     ============================================================ */
+  var CDB = {
+    mode: function(){
+      // compat: `db` فيه .collection · modular: window.fsQuery متعرّضة
+      try{ if(typeof db !== 'undefined' && db && typeof db.collection === 'function') return 'compat'; }catch(e){}
+      try{ if(typeof window !== 'undefined' && typeof window.fsChatApi === 'object' && window.fsChatApi) return 'modular'; }catch(e){}
+      return null;
+    },
+    ready: function(){ return CDB.mode() !== null; },
+
+    /* 👂 مستمع المحادثات — نافذة ٣٠ يوم × ٦٠ محادثة */
+    watchConvs: function(sinceMs, onData, onErr){
+      var m = CDB.mode();
+      if(m === 'compat'){
+        return db.collection(CCOL)
+          .where('lastAt', '>', sinceMs)
+          .orderBy('lastAt', 'desc').limit(60)
+          .onSnapshot(function(s){
+            onData(s.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); }));
+          }, onErr);
+      }
+      if(m === 'modular') return window.fsChatApi.watchConvs(CCOL, sinceMs, onData, onErr);
+      return null;
+    },
+
+    /* 👂 مستمع الرسايل — آخر ٨٠ رسالة */
+    watchMsgs: function(convId, onData, onErr){
+      var m = CDB.mode();
+      if(m === 'compat'){
+        return db.collection(CCOL).doc(convId).collection('messages')
+          .orderBy('atMs', 'desc').limit(80)
+          .onSnapshot(function(s){
+            var arr = [];
+            s.forEach(function(d){ arr.push(Object.assign({ id: d.id }, d.data())); });
+            onData(arr);
+          }, onErr);
+      }
+      if(m === 'modular') return window.fsChatApi.watchMsgs(CCOL, convId, onData, onErr);
+      return null;
+    },
+
+    /* ✏️ تعديل مستند المحادثة (دمج) */
+    patchConv: function(convId, patch){
+      var m = CDB.mode();
+      if(m === 'compat') return db.collection(CCOL).doc(convId).set(patch, { merge: true });
+      if(m === 'modular') return window.fsChatApi.patchConv(CCOL, convId, patch);
+      return Promise.reject(new Error('no firestore'));
+    },
+
+    /* 📤 إرسال — الرسالة وتحديث المحادثة في **عملية واحدة**
+       ⚠️ لازم batch: لو الرسالة اتكتبت والمحادثة ماتحدّثتش، الشارة
+          والقايمة بيبقوا غلط والعميلة تفضل شايفة "مفيش رد". */
+    sendMessage: function(convId, msg, convPatch){
+      var m = CDB.mode();
+      if(m === 'compat'){
+        var ref = db.collection(CCOL).doc(convId);
+        var batch = db.batch();
+        batch.set(ref.collection('messages').doc(),
+          Object.assign({}, msg, { at: firebase.firestore.FieldValue.serverTimestamp() }));
+        batch.set(ref, Object.assign({}, convPatch, {
+          unreadCust: firebase.firestore.FieldValue.increment(1)
+        }), { merge: true });
+        return batch.commit();
+      }
+      if(m === 'modular') return window.fsChatApi.sendMessage(CCOL, convId, msg, convPatch);
+      return Promise.reject(new Error('no firestore'));
+    }
+  };
+
   function isPOS(){ return typeof currentBranch !== 'undefined' && currentBranch; }
   function myBranch(){ return isPOS() ? currentBranch : ''; }
   function myName(){
     if(!isPOS()) return 'الإدارة';
-    try{ return (currentEmployee && currentEmployee.name) || 'الفرع'; }catch(e){ return 'الفرع'; }
+    // 🖥️ POS: الكاشير الداخلة بالـPIN — اسمها بالظبط.
+    try{ if(currentEmployee && currentEmployee.name) return currentEmployee.name; }catch(e){}
+    /* 🕒 تطبيق الحضور: مفيش `currentEmployee` أصلًا — الدخول بحساب
+       الفرع مش بموظفة. فبنوقّع باسم الفرع بدل "الفرع" الجافة، عشان
+       العميلة تعرف مين بيكلمها. */
+    try{ if(currentBranch) return String(currentBranch); }catch(e){}
+    return 'الفرع';
   }
+  /* 🔔 توست الشات — **مستقل بذاته**
+     🔴 الباج اللي اتمسك قبل التسليم: الملف كان بينادي `showToast`
+        بتاعت المضيف. في POS/Office توقيعها `(msg, type)` — تمام.
+        لكن في تطبيق الحضور فيه دالة **بنفس الاسم وتوقيع مختلف
+        تمامًا**: `showToast(empName)` بتكتب "🎉 +1 نقطة يا <اسم>".
+        يعني رسالة خطأ زي "الرد موصلش" كانت هتظهر للموظفة كـ
+        «🎉 +1 نقطة يا الرد موصلش».
+     ⚠️ الدرس: ملف مشترك ميعتمدش على دالة عامة بالاسم — الاسم ممكن
+        يكون محجوز لحاجة تانية خالص في المضيف التاني. */
   function toast(msg, err){
-    try{ showToast(msg, err ? 'err' : 'ok'); }
-    catch(e){ try{ showToast(msg, !!err); }catch(e2){ console.warn(msg); } }
+    try{
+      var t = document.getElementById('ccToast');
+      if(!t){
+        t = document.createElement('div');
+        t.id = 'ccToast';
+        t.style.cssText = 'position:fixed; bottom:22px; left:50%; transform:translateX(-50%);'
+          + 'z-index:12900; padding:11px 18px; border-radius:11px; font-family:inherit;'
+          + 'font-size:13px; font-weight:700; color:#fff; box-shadow:0 6px 22px rgba(0,0,0,.4);'
+          + 'opacity:0; transition:opacity .18s; pointer-events:none; max-width:86vw; text-align:center;';
+        document.body.appendChild(t);
+      }
+      t.textContent = msg;
+      t.style.background = err ? '#b4232a' : '#15803d';
+      t.style.opacity = '1';
+      clearTimeout(t._h);
+      t._h = setTimeout(function(){ t.style.opacity = '0'; }, 2600);
+    }catch(e){ console.warn('cc toast', msg); }
   }
   function esc2(s){ return String(s == null ? '' : s).replace(/[&<>"]/g,
     function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -162,11 +280,9 @@
   function startConvListener(){
     if(CST.convUnsub) return;
     try{
-      CST.convUnsub = db.collection(CCOL)
-        .where('lastAt', '>', Date.now() - 30 * 86400000)
-        .orderBy('lastAt', 'desc').limit(60)
-        .onSnapshot(function(s){
-          CST.convs = s.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); });
+      CST.convUnsub = CDB.watchConvs(Date.now() - 30 * 86400000,
+        function(rows){
+          CST.convs = rows;
           renderBadge();
           if(CST.open && !CST.activeId) renderList();
           if(CST.open && CST.activeId) renderThreadHead();
@@ -248,16 +364,13 @@
     document.getElementById('ccBar').style.display = 'flex';
     renderThreadHead();
     if(CST.msgsUnsub) CST.msgsUnsub();
-    CST.msgsUnsub = db.collection(CCOL).doc(id).collection('messages')
-      .orderBy('atMs', 'desc').limit(80)
-      .onSnapshot(function(s){
-        var arr = [];
-        s.forEach(function(d){ arr.push(Object.assign({ id: d.id }, d.data())); });
-        arr.reverse();
+    CST.msgsUnsub = CDB.watchMsgs(id, function(rows){
+        // ⚠️ الاستعلام تنازلي (أحدث ٨٠) والعرض تصاعدي — العكس هنا
+        var arr = rows.slice().reverse();
         renderThread(arr);
         var c = conv();
         if(c && Number(c.unreadStaff) > 0)
-          db.collection(CCOL).doc(id).set({ unreadStaff: 0 }, { merge: true }).catch(function(){});
+          CDB.patchConv(id, { unreadStaff: 0 }).catch(function(){});
       }, function(e){ console.warn('cc msgs', e && e.code); });
   }
 
@@ -336,10 +449,8 @@
     if(text.length > 500){ toast('الرد طويل قوي', true); return; }
     CST.sending = true;
     var ts = Date.now();
-    var ref = db.collection(CCOL).doc(c.id);
     var msg = {
       from: 'staff', by: myName(), atMs: ts,
-      at: firebase.firestore.FieldValue.serverTimestamp(),
       expireAt: chatExpireAt(ts)
     };
     if(text) msg.text = text;
@@ -347,16 +458,14 @@
       msg.img = CST.imgData;
       msg.tryon = !!document.getElementById('ccTryFlag').checked;
     }
-    var batch = db.batch();
-    batch.set(ref.collection('messages').doc(), msg);
-    batch.set(ref, {
+    // ⚠️ `at` (طابع السيرفر) و`unreadCust` (increment) بيتحطوا **جوه**
+    //    الطبقة — شكلهم مختلف بين compat وmodular.
+    CDB.sendMessage(c.id, msg, {
       lastAt: ts, lastText: text || '📷 صورة', lastFrom: 'staff',
-      unreadCust: firebase.firestore.FieldValue.increment(1),
       unreadStaff: 0, expireAt: chatExpireAt(ts),
       // 🏢 محادثة من غير فرع بيتبناها أول فرع يرد (Office مبيغيرش)
       branch: c.branch || myBranch() || ''
-    }, { merge: true });
-    batch.commit().then(function(){
+    }).then(function(){
       textEl.value = '';
       ccImgClear();
     }).catch(function(e){
@@ -375,8 +484,7 @@
       setTimeout(function(){ if(conv()) renderThreadHead(); }, 4000);
       return;
     }
-    db.collection(CCOL).doc(c.id)
-      .set({ blocked: c.blocked !== true }, { merge: true })
+    CDB.patchConv(c.id, { blocked: c.blocked !== true })
       .then(function(){ toast(c.blocked !== true ? 'اتحظرت ⛔' : 'اتفك الحظر ✅'); })
       .catch(function(){ toast('العملية فشلت — الحظر للموظفين بس', true); });
     CST.blockArm = 0;
@@ -426,11 +534,26 @@
   }
 
   /* ============================================================
-     ٧) الإقلاع — مستني db يجهز (نفس أسلوب frames.js)
+     ٧) الإقلاع — مستني طبقة البيانات تجهز (نفس أسلوب frames.js)
+     ------------------------------------------------------------
+     ⚠️ في sales الجسر (`window.fsChatApi`) بيتعرض من **موديول**،
+        والموديولات بتتحمّل غير متزامنة — يعني الملف ده بيشتغل
+        **قبله**. فالانتظار على `CDB.ready()` مش على `db` لوحده.
+     ⚠️ والمحاولات **محدودة**: لو الجسر مش موجود خالص (تطبيق مش
+        مظبوط)، حلقة لا نهائية كل ٨٠٠مللي بتفضل شغالة للأبد في
+        الخلفية. ٢٥ محاولة (٢٠ ثانية) كفاية جدًا، وبعدها بنسيبها
+        بسطر واضح في الكونسول بدل الصمت.
      ============================================================ */
+  var _bootTries = 0;
   function boot(){
     try{
-      if(typeof db === 'undefined' || !db){ setTimeout(boot, 800); return; }
+      if(!CDB.ready()){
+        if(++_bootTries > 25){
+          console.warn('cc: مفيش طبقة بيانات (لا compat ولا window.fsChatApi) — الشات مقفول');
+          return;
+        }
+        setTimeout(boot, 800); return;
+      }
       inject();
       startConvListener();
     }catch(e){ console.warn('cc boot', e); }
