@@ -209,6 +209,132 @@ function basketTopPairs(model, limit){
   return out.slice(0, Math.max(1, Number(limit) || 20));
 }
 
+
+/* ============================================================
+   📊 معلومات المالك — من **نفس** مسحة الفواتير
+   ------------------------------------------------------------
+   ⚠️ بتتحسب مع بناء الموديل بالظبط، ومن نفس القراءة. تقرير منفصل
+      معناه مسحة تانية لنفس الفواتير — ضِعف الفاتورة مقابل صفر
+      معلومة جديدة.
+   ⚠️ كل الأوقات **بتوقيت القاهرة صراحةً**: المالك بيفتح من بره
+      مصر، وساعة الجهاز كانت هتقول إن الذروة الساعة ٤ العصر بينما
+      هي ١٠ بالليل. (نفس درس سجل النشاط.)
+   ============================================================ */
+var CAIRO_TZ = 'Africa/Cairo';
+
+function saleTimeMs(sale){
+  if(!sale) return 0;
+  if(Number(sale.createdAtMs)) return Number(sale.createdAtMs);
+  var c = sale.createdAt;
+  if(c && typeof c.toMillis === 'function'){ try{ return c.toMillis(); }catch(e){} }
+  if(c && Number(c.seconds)) return Number(c.seconds) * 1000;
+  if(Number(c)) return Number(c);
+  return 0;
+}
+
+/* 🕒 الساعة واليوم بتوقيت القاهرة.
+   ⚠️ `getHours()` بيرجّع ساعة **الجهاز** — القراءة دي هي الفرق بين
+      «الذروة ٨ مساءً» و«الذروة ٢ ظهرًا» للمالك اللي بره مصر. */
+function cairoParts(ms){
+  try{
+    var f = new Intl.DateTimeFormat('en-GB', {
+      timeZone: CAIRO_TZ, hour:'2-digit', hour12:false, weekday:'short'
+    }).formatToParts(new Date(ms));
+    var h = 0, wd = '';
+    f.forEach(function(p){
+      if(p.type === 'hour') h = parseInt(p.value, 10) || 0;
+      if(p.type === 'weekday') wd = p.value;
+    });
+    var map = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+    return { hour: h, dow: (map[wd] != null ? map[wd] : 0) };
+  }catch(e){
+    var d = new Date(ms);
+    return { hour: d.getHours(), dow: d.getDay() };
+  }
+}
+
+var BASKET_DOW_AR = ['الحد', 'الاتنين', 'التلات', 'الأربع', 'الخميس', 'الجمعة', 'السبت'];
+
+function basketInsights(sales, model, opts){
+  var o = opts || {};
+  var byHour = [], byDow = [], hourMoney = [], dowMoney = [];
+  var i;
+  for(i = 0; i < 24; i++){ byHour.push(0); hourMoney.push(0); }
+  for(i = 0; i < 7; i++){ byDow.push(0); dowMoney.push(0); }
+
+  var single = 0, counted = 0, pieces = 0, money = 0;
+  var itemSold = {}, itemMoney = {};
+
+  (sales || []).forEach(function(sale){
+    if(sale && (sale.isReverse || sale.reverseOf)) return;
+    var items = basketInvoiceItems(sale);
+    if(!items.length) return;
+    counted++;
+    if(items.length === 1) single++;
+
+    var t = saleTimeMs(sale);
+    if(t){
+      var p = cairoParts(t);
+      byHour[p.hour]++; byDow[p.dow]++;
+      var tot = Math.abs(Number(sale.total) || 0);
+      hourMoney[p.hour] += tot; dowMoney[p.dow] += tot;
+      money += tot;
+    }
+
+    (sale.items || []).forEach(function(it){
+      if(!it || it.isReturn || it.isRedemption || it.isRewardDiscount) return;
+      var bc = String(it.barcode || ''); if(!bc) return;
+      var q = Math.max(0, Math.floor(Number(it.qty) || 0));
+      itemSold[bc] = (itemSold[bc] || 0) + q;
+      itemMoney[bc] = (itemMoney[bc] || 0) + q * (Number(it.price) || 0);
+      pieces += q;
+    });
+  });
+
+  /* 🎯 «فرصة عرض» — صنف **بطيء** بس ليه ارتباط قوي بصنف **ماشي**.
+     ⚠️ دي أنفع معلومة في الشاشة كلها: الراكد لوحده معلومة محبطة،
+        والماشي لوحده معلومة معروفة. الاتنين مع بعض = تصرّف واضح
+        (حطه جنبه / قوليلها تعرضه معاه). */
+  var opportunities = [];
+  if(model && model.pairs){
+    var sold = Object.keys(itemSold).map(function(k){ return itemSold[k]; }).sort(function(a,b){ return a-b; });
+    var median = sold.length ? sold[Math.floor(sold.length / 2)] : 0;
+    Object.keys(model.pairs).forEach(function(a){
+      var aSold = itemSold[a] || 0;
+      if(aSold < median) return;                  // المرساة لازم تكون ماشية
+      model.pairs[a].forEach(function(r){
+        var bSold = itemSold[r.b] || 0;
+        if(bSold >= median) return;               // والمقترح لازم يكون بطيء
+        opportunities.push({ fast: a, slow: r.b, lift: r.l, conf: r.c,
+                             fastSold: aSold, slowSold: bSold });
+      });
+    });
+    opportunities.sort(function(x, y){ return y.lift - x.lift; });
+    opportunities = opportunities.slice(0, 12);
+  }
+
+  return {
+    invoices: counted,
+    pieces: pieces,
+    money: Math.round(money),
+    avgBasket: counted ? Math.round((pieces / counted) * 100) / 100 : 0,
+    avgTicket: counted ? Math.round(money / counted) : 0,
+    singlePct: counted ? Math.round((single / counted) * 100) : 0,
+    byHour: byHour, byDow: byDow,
+    hourMoney: hourMoney.map(function(x){ return Math.round(x); }),
+    dowMoney: dowMoney.map(function(x){ return Math.round(x); }),
+    opportunities: opportunities,
+    at: o.now || Date.now()
+  };
+}
+
+/* 🏆 أعلى قيمة في مصفوفة — للرسم النسبي. */
+function basketPeak(arr){
+  var best = 0, idx = 0;
+  (arr || []).forEach(function(v, i){ if(v > best){ best = v; idx = i; } });
+  return { idx: idx, value: best };
+}
+
 /* 🕐 الموديل قديم؟ — الموسم بيتغيّر والاقتراحات معاه.
    ⚠️ «قديم» مش «غلط»: بنقول للمالك يحدّثه، ومبنوقفش الاقتراحات. */
 function basketIsStale(model, nowMs, maxDays){
@@ -230,10 +356,16 @@ if(typeof window !== 'undefined'){
   window.basketTopPairs = basketTopPairs;
   window.basketIsStale = basketIsStale;
   window.basketModelSize = basketModelSize;
+  window.basketInsights = basketInsights;
+  window.basketPeak = basketPeak;
+  window.BASKET_DOW_AR = BASKET_DOW_AR;
+  window.saleTimeMs = saleTimeMs;
+  window.cairoParts = cairoParts;
 }
 if(typeof module !== 'undefined' && module.exports){
   module.exports = {
     BASKET_DEFAULTS, basketInvoiceItems, basketBuildModel, basketSuggest,
-    basketReason, basketTopPairs, basketIsStale, basketModelSize
+    basketReason, basketTopPairs, basketIsStale, basketModelSize,
+    basketInsights, basketPeak, BASKET_DOW_AR, saleTimeMs, cairoParts, CAIRO_TZ
   };
 }
