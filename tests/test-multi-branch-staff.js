@@ -87,3 +87,38 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', 'sales', 'sales-app.js'),
   assert(/allEmployees/.test(ab) && /allShifts/.test(ab),
     '⭐ الفروع من نفس مصدر شاشة التسجيل — مفيش قايمة تانية تتنسى تتحدّث');
 })();
+
+/* ============================================================
+   ٥) 🔁 البياعة الزائرة لازم تبان في POS كمان
+   ------------------------------------------------------------
+   🔴 الباج اللي المالك سأل عنه بنفسه: الموظفة بتسجّل حضور في الفرع
+      التاني عادي، بس قايمة «مين اللي باعت؟» في POS كانت بتتفلتر
+      بـ`branch` بس — و`branch` بتاعها **لسه فرعها الأساسي** (وده
+      مقصود عشان الرواتب). النتيجة: بتحضر ومتبانش في القايمة، فكل
+      بيعاتها هناك تروح «من غير بياعة» ومتتحسبش لحد.
+      يعني نص الميزة كان شغال ونصها لأ: بتحضر ومبتكسبش.
+   ============================================================ */
+(function(){
+  const fs2 = require('fs'), p2 = require('path');
+  const APP = fs2.readFileSync(p2.join(__dirname, '..', 'pos', 'app.js'), 'utf8');
+  const i = APP.indexOf('async function loadClockedInStaff');
+  assert(i > 0, 'mustExtract: بناء قايمة البياعات اتلقى');
+  const body = APP.slice(i, APP.indexOf('function focusSearchBar'));
+
+  assert(/where\('alsoBranches','array-contains', currentBranch\)/.test(body),
+    '⭐⭐ القايمة بتشمل الموظفات المحوّلات للفرع ده');
+  assert(/where\('branch','==', currentBranch\)/.test(body),
+    '⭐ وموظفات الفرع الأصليين طبعًا');
+  assert(/_seenEmp\.has\(d\.id\)/.test(body),
+    '⭐ ومفيش تكرار لو الموظفة طلعت في الاستعلامين');
+  assert(/\.catch\(function\(\)\{ return \{ docs: \[\] \}; \}\)/.test(body),
+    '⭐⭐ فشل استعلام المحوّلات مبيكسرش القايمة كلها — الفرع يفضل شغّال');
+  assert(/d\.data\(\)\.active !== false/.test(body),
+    '⭐ والموقوفة متبانش في أي فرع (الشرط زي ما هو)');
+  assert(/_visiting \? '🔁 ' : ''/.test(body),
+    '⭐⭐ الزائرة عليها علامة — الكاشير لازم تعرف إنها مش من فريق الفرع');
+
+  // ⚠️ والحل **مش** بتغيير الفرع
+  assert(!/branch:\s*currentBranch/.test(body),
+    '⭐⭐ `branch` مبيتغيّرش — تغييره بينقلها من فرع لفرع في كل تقرير');
+})();

@@ -15,7 +15,32 @@ async function loadClockedInStaff(){
   try{
     // نجيب قايمة الموظفين الحاليين الحقيقية للفرع ده الأول (عشان نستبعد أي حد
     // اتمسح أو بقى غير نشط، حتى لو لسه ليه سجل شيفت قديم "مفتوح" بالغلط)
-    const empSnap = await db.collection(EMPLOYEES_COLLECTION).where('branch','==', currentBranch).get();
+    /* 🔁 الموظفة اللي بتساعد في فرع تاني.
+       🔴 الباج اللي كان هنا: القايمة بتتفلتر بـ`branch` بس، و`branch`
+          بتاع الموظفة المحوّلة **لسه فرعها الأساسي** (وده مقصود —
+          الرواتب والتقارير بتعتمد عليه). النتيجة: بتسجّل حضور في
+          الفرع التاني عادي و**متبانش في «مين اللي باعت؟»**، فكل
+          بيعاتها هناك بتروح على «من غير بياعة» ومتتحسبش لحد.
+          يعني بتحضر ومبتكسبش.
+       ⚠️ استعلامين منفصلين مش استعلام واحد: Firestore مفيهوش «أو»
+          بين حقلين، و`array-contains` مع `==` على حقل تاني محتاج
+          فهرس مركّب. الاتنين خفاف (مستندات موظفين فرع واحد). */
+    const [_ownSnap, _alsoSnap] = await Promise.all([
+      db.collection(EMPLOYEES_COLLECTION).where('branch','==', currentBranch).get(),
+      db.collection(EMPLOYEES_COLLECTION)
+        .where('alsoBranches','array-contains', currentBranch).get()
+        .catch(function(){ return { docs: [] }; })   // مفيش موظفين محوّلين لسه
+    ]);
+    const _seenEmp = new Set();
+    const _empDocs = [];
+    [_ownSnap, _alsoSnap].forEach(function(sn){
+      (sn.docs || []).forEach(function(d){
+        if(_seenEmp.has(d.id)) return;               // نفس الموظفة في الاتنين؟ مرة واحدة
+        _seenEmp.add(d.id); _empDocs.push(d);
+      });
+    });
+    const empSnap = { docs: _empDocs };
+    /* ⚠️ شرط `active` زي ما هو — الموقوفة متبانش في أي فرع. */
     const activeEmpIds = new Set(empSnap.docs.filter(d=> d.data().active !== false).map(d=> d.id));
 
     // مفيش فلترة بـ"النهاردة بس" هنا عمدًا — لو شيفت لسه فعليًا "مفتوح" (محضّرش انصراف)،
@@ -36,7 +61,11 @@ async function loadClockedInStaff(){
       const code = eData.sellerCode || '';
       const opt = document.createElement('option');
       opt.value = s.employeeId;
-      opt.textContent = (code ? (code + ' · ') : '') + (s.employeeName || s.employeeId);
+      /* 🔁 علامة الزائرة — الكاشير لازم تعرف إنها مش من فريق الفرع
+         (وإلا تفتكرها اتسجّلت غلط وتسيبها من غير اختيار). */
+      const _visiting = eData.branch && eData.branch !== currentBranch;
+      opt.textContent = (_visiting ? '🔁 ' : '')
+        + (code ? (code + ' · ') : '') + (s.employeeName || s.employeeId);
       opt.dataset.name = s.employeeName || '';
       if(code) opt.dataset.code = String(code);
       sel.appendChild(opt);
@@ -580,9 +609,30 @@ function buildReceiptHTML(data){
   const L = RECEIPT_LABELS[c.lang] || RECEIPT_LABELS.ar;
   const dir = c.lang==='en' ? 'ltr' : 'rtl';
   const d = data || {};
+  /* ============================================================
+     🎁 إيصال الهدية — نفس الفاتورة **من غير أي فلوس**
+     ------------------------------------------------------------
+     الفكرة: العميلة تحط الورقة مع الهدية، واللي واخدة الهدية تقدر
+     تستبدل أو ترجّع **من غير ما تعرف السعر**.
+
+     ⚠️ **الفلوس بتتشال من مكان واحد بس** — الفلاج ده — مش بتعليمات
+        متفرقة في كل بلوك. لو اتضاف بلوك فلوس جديد بكرة (زي بلوك
+        فروق الفيزا اللي اتضاف من شهر)، لازم يتحط اسمه هنا وإلا
+        هيطبع سعر على إيصال هدية. الاختبار بيمسك ده صراحةً.
+
+     ⚠️ الباركود ورقم الفاتورة **بيفضلوا** — من غيرهم الاستبدال
+        مستحيل والورقة مالهاش لازمة أصلًا.
+     ⚠️ ونقط العميلة بتتشال كمان: النقط بتتحسب من قيمة الفاتورة،
+        فـ"كسبتي ٥٥ نقطة" بيقول السعر بطريقة تانية.
+     ============================================================ */
+  const gift = d.giftMode === true;
+  const GIFT_HIDDEN = ['totals','cardTxn','custPoints','appQR'];
+  let headerEnd = 0;                     // مكان دخول بانر الهدية
   const parts = [];
   for(const el of c.elements){
     if(!el.on) continue;
+    const base = el.base || el.id;
+    if(gift && GIFT_HIDDEN.indexOf(base) >= 0) continue;   // 🎁 كل ما هو فلوس
     const fs = (el.size||12) + 'px';
     if(el.id.indexOf('spacer')===0){ parts.push(`<div style="height:${el.size||10}px;"></div>`); continue; }
     if(el.id.indexOf('divider')===0){ parts.push(`<div style="border-top:2px dashed #000; margin:4px 2px;"></div>`); continue; }
@@ -590,11 +640,11 @@ function buildReceiptHTML(data){
       case 'spacer': parts.push(`<div style="height:${el.size||8}px;"></div>`); break;
       case 'divider': parts.push(`<div style="border-top:1.5px dashed #000; margin:${el.size||4}px 0;"></div>`); break;
       case 'logo':
-        if(c.logo) parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto 6px; max-width:${c.logoWidth||60}%; max-height:120px; object-fit:contain;">`);
+        if(c.logo){ parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto 6px; max-width:${c.logoWidth||60}%; max-height:120px; object-fit:contain;">`); headerEnd = parts.length; }
         break;
-      case 'shopName': if(el.text) parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:2px 0;">${el.text}</div>`); break;
+      case 'shopName': if(el.text){ parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:2px 0;">${el.text}</div>`); headerEnd = parts.length; } break;
       case 'branchName': case 'address': case 'phone': case 'footer':
-        if(el.text) parts.push(`<div style="text-align:center; font-size:${fs}; margin:2px 0;">${el.text}</div>`); break;
+        if(el.text){ parts.push(`<div style="text-align:center; font-size:${fs}; margin:2px 0;">${el.text}</div>`); if(base !== 'footer') headerEnd = parts.length; } break;
       case 'meta':
         parts.push(`<div style="text-align:center; font-size:${fs}; margin:3px 0;">${d.dateStr||''}${d.empName?' · '+L.emp+': '+d.empName:''}</div>`); break;
       case 'copyMark': {
@@ -608,6 +658,19 @@ function buildReceiptHTML(data){
           + '</div>');
         break; }
       case 'items':
+        // 🎁 إيصال هدية: عمود الصنف والكمية بس — من غير سعر ولا إجمالي.
+        //    ⚠️ الكمية بتفضل عن قصد: من غيرها لو الهدية قطعتين، اللي
+        //       واخداها ترجّع واحدة وتفتكر إن الورقة اتستهلكت.
+        if(gift){
+          parts.push(`<table style="width:100%; border-collapse:collapse; font-size:${fs}; margin:4px 0;">`
+            + `<tr>`
+            + `<th style="padding:2px 0 4px; border-bottom:2px solid #000; text-align:${dir==='rtl'?'right':'left'}; font-size:${Math.max(8, (parseInt(fs)||11) - 1)}px; font-weight:800;">Item</th>`
+            + `<th style="padding:2px 0 4px; border-bottom:2px solid #000; white-space:nowrap; text-align:${dir==='rtl'?'left':'right'}; font-size:${Math.max(8, (parseInt(fs)||11) - 1)}px; font-weight:800;">Qty</th>`
+            + `</tr>`
+            + `${(d.items||[]).map(it=>
+            `<tr><td style="padding:3px 0; border-bottom:1px solid #000; font-weight:600; word-break:break-word; max-width:0; width:100%;">${it.name}${it.barcode ? `<div dir="ltr" style="font-size:${Math.max(7, (parseInt(fs)||11) - 3)}px; font-weight:500; letter-spacing:.4px; text-align:${dir==='rtl'?'right':'left'};">${it.barcode}</div>` : ''}</td><td style="padding:3px 0; border-bottom:1px solid #000; white-space:nowrap; font-weight:700; text-align:${dir==='rtl'?'left':'right'};">${it.qty}</td></tr>`).join('')}</table>`);
+          break;
+        }
         // عناوين الأعمدة إنجليزي، والبيانات تحتها في نفس الأعمدة بالظبط
         parts.push(`<table style="width:100%; border-collapse:collapse; font-size:${fs}; margin:4px 0;">`
           + `<tr>`
@@ -698,9 +761,45 @@ function buildReceiptHTML(data){
         break;
     }
   }
+  /* 🎁 بانر الهدية — بعد ترويسة المحل على طول، عشان يبان قبل الأصناف */
+  if(gift){
+    const gs = Math.max(11, (parseInt((c.elements.find(function(e){ return (e.base||e.id)==='shopName'; })||{}).size) || 13) - 1);
+    parts.splice(headerEnd, 0,
+      '<div style="border:2px solid #000; border-radius:6px; margin:5px 0 4px;'
+      + ' padding:5px 6px; text-align:center; font-weight:900; font-size:' + gs + 'px;">'
+      + '🎁 إيصال هدية'
+      + '<div style="font-weight:600; font-size:' + Math.max(8, gs - 3) + 'px; margin-top:2px;">'
+      + 'للاستبدال أو الإرجاع — من غير أسعار</div>'
+      + '</div>');
+  }
   const _gap = (c.lineGap!=null? c.lineGap : 2);
   const _feed = (c.endFeed!=null? c.endFeed : 16);
-  return `<div dir="${dir}" style="font-family:Arial, sans-serif; color:#000; font-weight:500; -webkit-font-smoothing:none; display:flex; flex-direction:column; gap:${_gap}px;">${parts.join('')}<div style="height:${_feed}px;"></div></div>`;
+  const _html = `<div dir="${dir}" style="font-family:Arial, sans-serif; color:#000; font-weight:500; -webkit-font-smoothing:none; display:flex; flex-direction:column; gap:${_gap}px;">${parts.join('')}<div style="height:${_feed}px;"></div></div>`;
+  /* ============================================================
+     🎁🔒 الحارس الأخير — ورقة الهدية ممنوع يطلع فيها رقم فلوس
+     ------------------------------------------------------------
+     ⚠️ ليه حارس زيادة على شيل البلوكات: العناصر بتتقري من إعداد
+        محفوظ في Firestore، والمالك يقدر يضيف عنصر نص حر فيه سعر،
+        أو بلوك فلوس جديد يتضاف بكرة وينسى يتحط في GIFT_HIDDEN.
+        وقتها الورقة بتطبع السعر و**محدش هيلاحظ** غير لما تبقى
+        العميلة كاشفة هديتها قدام اللي جابتها.
+     الحارس بيدوّر على اسم العملة أو نمط سعر (رقم بكسور) في الناتج
+     النهائي، ولو لقى بيرمي — والمنادي بيقول للكاشير بدل ما يطبع.
+     ============================================================ */
+  if(gift){
+    const _cur = (function(){ try{ return currencyLabel(); }catch(e){ return 'ج.م'; } })();
+    const _txt = _html.replace(/<[^>]*>/g, ' ');
+    if(_cur && _txt.indexOf(_cur) >= 0)
+      throw new Error('إيصال الهدية فيه عملة (' + _cur + ') — راجع عناصر تصميم الفاتورة');
+    // ⚠️ جدول الأصناف بيتشال قبل فحص نمط السعر: اسم الصنف بيانات المالك
+    //    وممكن يكون فيه رقم بكسور بشكل مشروع («شيفون 1.50 متر»). لو
+    //    فحصناه، إيصال الهدية كان هيرفض يطبع على منتج اسمه سليم — والكاشير
+    //    قدام العميلة. الجدول أصلًا اتبنى فوق **من غير** أعمدة الفلوس.
+    const _noItems = _html.replace(/<table[\s\S]*?<\/table>/g, ' ').replace(/<[^>]*>/g, ' ');
+    if(/\d+\.\d{2}(?!\d)/.test(_noItems))
+      throw new Error('إيصال الهدية فيه رقم بشكل سعر — راجع عناصر تصميم الفاتورة');
+  }
+  return _html;
 }
 // 📱 QR الفاتورة: بنجيب صورته مرة واحدة ونخزّنها محليًا — عشان الطباعة تبقى فورية وأوفلاين
 function receiptQrKey(){
@@ -1229,7 +1328,76 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
   data.appQrImg = localStorage.getItem(receiptQrKey().key)||'';
   data.appQrTitle = (!_ph || !custExists) ? 'سجّلي في نادينا! 📱' : 'حمّلي تطبيقنا! 📱';
   data.appQrMsg = welcomeRewardText();
+  /* 🎁 نخزّن بيانات آخر فاتورة عشان زرار «إيصال هدية» على شاشة البيع.
+     ⚠️ **محليًا بس** — صفر قراءات/كتابات. والوقت متسجّل عشان الزرار
+        يختفي بعد شوية: زرار فاضل على الشاشة بيطبع إيصال لفاتورة
+        الزبونة اللي فاتت هو باج مستني يحصل. */
+  try{
+    window.lastSaleForGift = {
+      at: Date.now(),
+      invoiceNo: invoiceNo || '',
+      invoiceCode: invoiceCode || invoiceNo || '',
+      empName: data.empName,
+      // ↩️ سطور المرتجع بره — الهدية هي اللي اتباعت
+      items: (cart||[]).filter(function(it){
+          return !it.isReturn && !it.isRedemption && !it.isRewardDiscount && (it.qty||0) > 0;
+        }).map(function(it){ return { name: it.name, qty: it.qty, barcode: it.barcode||'' }; })
+    };
+  }catch(e){ window.lastSaleForGift = null; }
   _printBuiltReceipt(data, payments);
+}
+
+/* ============================================================
+   🎁 إيصال هدية لآخر فاتورة — من شاشة البيع على طول
+   ------------------------------------------------------------
+   ده المسار الحقيقي: العميلة بتقول "دي هدية" **بعد** ما دفعت.
+   المسار التاني (سجل المبيعات) للي بترجع تاني يوم.
+   ⚠️ نافذة ١٥ دقيقة: بعد كده الاحتمال الأكبر إن دي زبونة تانية
+      خالص، وطباعة إيصال بأصناف حد تاني أوحش من إن الزرار مش موجود.
+   ============================================================ */
+const GIFT_LAST_WINDOW_MS = 15 * 60 * 1000;
+function lastSaleGiftAvailable(now){
+  const s = window.lastSaleForGift;
+  if(!s || !s.items || !s.items.length) return false;
+  return ((now || Date.now()) - (s.at || 0)) <= GIFT_LAST_WINDOW_MS;
+}
+function printGiftReceiptForLast(){
+  if(!lastSaleGiftAvailable()){
+    showToast('مفيش فاتورة قريبة — اطبع إيصال الهدية من سجل المبيعات', 'err');
+    return;
+  }
+  const s = window.lastSaleForGift;
+  try{
+    const c = receiptDesignConfig || defaultReceiptConfig();
+    _printBuiltReceipt({
+      giftMode: true,
+      dateStr: new Date(s.at).toLocaleString(c.lang==='en'?'en-GB':'ar-EG'),
+      empName: s.empName || '',
+      items: s.items,
+      invoiceNo: s.invoiceNo,
+      scanCode: s.invoiceCode,
+      custPoints: { show:false },
+      showAppQR: false
+    }, {});     // {} = مفيش كاش → الدرج مايفتحش
+    showToast('🎁 بيتطبع إيصال هدية لفاتورة ' + (s.invoiceNo || ''));
+  }catch(e){ showToast('تعذر الطباعة: ' + e.message, 'err'); }
+}
+if(typeof window !== 'undefined'){
+  window.printGiftReceiptForLast = printGiftReceiptForLast;
+  window.lastSaleGiftAvailable = lastSaleGiftAvailable;
+  window.refreshGiftBtn = refreshGiftBtn;
+}
+/* 👁️ ظهور/اختفاء الزرار. بيتنادى مع كل دخول لشاشة البيع + مؤقت خفيف،
+   عشان يختفي لوحده لما النافذة تخلص والكاشير واقفة على نفس الشاشة. */
+function refreshGiftBtn(){
+  try{
+    const b = document.getElementById('giftReceiptBtn');
+    if(!b) return;
+    b.style.display = lastSaleGiftAvailable() ? '' : 'none';
+  }catch(e){}
+}
+if(typeof window !== 'undefined' && typeof document !== 'undefined'){
+  setInterval(function(){ try{ refreshGiftBtn(); }catch(e){} }, 30000);
 }
 function _printBuiltReceipt(data, payments){
   const c = receiptDesignConfig || defaultReceiptConfig();
