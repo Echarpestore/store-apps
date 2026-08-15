@@ -975,7 +975,22 @@ const timeCfgDefaults = {
   autoCloseBreakMult: 2,   // البريك بيتقفل تلقائي بعد كام ضعف من مدته
   breakAlertBeeps: 4,      // 🔔 بعد ما مدة البريك تخلص: بيرن كام مرة (مرة كل دقيقة) جوه فترة السماح
   maxShiftHours: 14,       // 🚨 أطول شيفت معقول — فوق كده يبقى "نسيت الانصراف" مش شغل
-  overtimeNeedsApproval: true   // ⏱️ الأوفرتايم مبيتدفعش غير بموافقة المالك (قرار المالك)
+  overtimeNeedsApproval: true,  // ⏱️ الأوفرتايم مبيتدفعش غير بموافقة المالك (قرار المالك)
+  // 🗓️ رصيد الإجازات — **أسبوعي** (قرار المالك): يوم إجازة لكل أسبوع،
+  //    والأسبوع من **السبت للجمعة**. أي يوم زيادة في نفس الأسبوع بيتخصم
+  //    حتى لو المالك اعتمده. والأسبوع الناقص آخر الشهر ليه يومه برضه.
+  weekOffDays: 1,          // كام يوم إجازة لكل أسبوع
+  weekStartDow: 6,         // بداية الأسبوع (6 = السبت — getDay بتاعت القاهرة)
+  // ⏱️ أقل عدد ساعات عشان اليوم يتعدّ **يوم حضور** (قرار المالك: 8).
+  //    من غير ده، دخول ٥ دقايق كان بيتعدّ يوم كامل — وده مهم أوي مع
+  //    قاعدة "اشتغلت يوم إجازتك = يوم فلوس زيادة".
+  minShiftHours: 8,
+  minShiftGraceMin: 15,  // سماح على الحد الأدنى (وقت تسجيل الانصراف)
+  // 🛡️ تاريخ تشغيل المحرك الأسبوعي — أي يوم قبله مبيتحكمش عليه غياب.
+  //    ⚠️ **لازم يتحط قبل أول صرف**: المحرك بيقرا آخر أيام الشهر اللي
+  //    فات (الأسبوع بيتحاسب حيث يخلص)، وأول شهر مفيش بيانات فالموظفة
+  //    الملتزمة بتظهر عليها أيام غياب وخصم حقيقي. فاضي = مفيش حارس.
+  weeklyStartFloor: ''
 };
 
 // 🎯 درجة الالتزام من رصيد الساعات (بديل العد بالمخالفات)
@@ -1864,6 +1879,26 @@ onSnapshot(settingsCol, (snap)=>{
   if(data.timeCfg){
     window.timeCfg = { ...timeCfgDefaults, ...data.timeCfg };
   }
+  /* 🛡️ حارس أول شهر — بيتحط **مرة واحدة تلقائي** أول ما المحرك الأسبوعي
+     يشتغل على الفرع ده.
+     ⚠️ ليه تلقائي مش يدوي: المحرك بيحاسب الأسبوع في الشهر اللي بيخلص
+        فيه، يعني بيمدّ لورا ويقرا آخر أيام الشهر اللي فات. أول شهر
+        تشغيل مفيش بيانات هناك — فموظفة حضورها كامل بتظهر عليها أيام
+        غياب و**خصم حقيقي من مرتبها**. لو استنينا المالك يحطه بإيده،
+        أول مرتب هيتصرف غلط.
+     ⚠️ وبيتحط **مرة واحدة بس**: لو اتحط تاني الشهر الجاي، كل شهر
+        هيلغي محاسبة أول أسبوع فيه. الشرط `!('weeklyStartFloor' in ...)`
+        بيفرّق بين "مش متحط" و"متحط فاضي عن قصد". */
+  try{
+    if(!data.timeCfg || !('weeklyStartFloor' in data.timeCfg)){
+      const _today = _fmtKey(caiNow());
+      window.timeCfg = { ...(window.timeCfg || timeCfgDefaults), weeklyStartFloor: _today };
+      setDoc(doc(db, 'sales_settings', window.currentBranch),
+             { timeCfg: { weeklyStartFloor: _today } }, { merge: true })
+        .catch(function(e){ console.warn('weeklyStartFloor', e && e.code); });
+      console.log('🛡️ اتحط حارس بداية المحاسبة الأسبوعية:', _today);
+    }
+  }catch(e){ console.warn('weeklyStartFloor init', e); }
   renderAnnouncementBanner();
   renderDailyTargetCard();
   if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); try{ window.renderTimeSettings(); }catch(e){} }
@@ -2195,7 +2230,7 @@ window.openDaySummary = function(empId){
 
   body.innerHTML = `
     <div style="text-align:center; margin-bottom:16px;">
-      <div class="dhAvatar" style="margin:0 auto 8px;">${initials(emp.name)}</div>
+      <div class="dhAvatar" style="margin:0 auto 8px;">${avatarOf(emp)}</div>
       <h3 style="margin:0;">${emp.name}</h3>
       <p class="sub" style="margin:3px 0 0; font-size:12px;">ملخّص يومك</p>
     </div>
@@ -2349,7 +2384,27 @@ function renderAttendanceLists(){
   notInWrap.innerHTML = notIn.length ? notIn.map(e=>{
     let subText = e.scheduledStartTime ? 'ميعادك '+e.scheduledStartTime : 'دوس للحضور';
     let reminderBadge = '';
+    /* 📩 الإجازة المعتمدة **لازم تبان هنا**
+       ------------------------------------------------------------
+       🔴 الفجوة اللي دي بتقفلها (المالك اشتكى منها): الكارت كان بيعرض
+          يوم الإجازة الأسبوعي بس. الموظفة اللي معتمدلها إجازة النهاردة
+          كانت بتبان **زي أي حد لسه ماجاش** — "ميعادك 10:00" —
+          فالمالك يبص على الشاشة ويفتكرها متأخرة أو غايبة، ويكتشف
+          بعدين إنها إجازة معتمدة. الشاشة كانت بتقول نص الحقيقة.
+       ⚠️ والتبديل كمان: اللي بدّلت شيفتها ميعادها **مش** ميعادها
+          المسجّل — عرض الميعاد القديم بيخلي المالك يفتكرها متأخرة. */
+    const _todayKey = _fmtKey(cai(Date.now()));
+    const _lv = approvedLeaveFor(e.id, _todayKey);
     if(isDayOffToday(e)){ subText = '🏖️ النهاردة إجازتك'; }
+    else if(_lv && (_lv.type === 'dayoff' || _lv.type === 'changeDayoff')){
+      subText = '📩 إجازة معتمدة النهاردة';
+      reminderBadge = '<div class="dayOffReminder">📩 معتمدة</div>';
+    }
+    else if(_lv && _lv.type === 'shiftSwap'){
+      const _st = effectiveStartHM(e, complianceCfg, _todayKey);
+      subText = '🔄 شيفت مبدّل' + (_st ? ' — ميعادك ' + _st : '');
+      reminderBadge = '<div class="dayOffReminder">🔄 تبديل</div>';
+    }
     else if(isDayOffTomorrow(e)){ reminderBadge = '<div class="dayOffReminder">🔔 بكرة إجازتك</div>'; }
     return `
     <div class="attCard" data-act="in" data-id="${e.id}">
@@ -3969,7 +4024,7 @@ function renderEmpGrid(){
       ${taskIcon ? `<div class="taskBadge${sub && sub.rejected ? ' rejected' : ''}">${taskIcon}</div>` : ''}
       ${hasUnseenReward ? `<div class="giftBadge">🎁</div>` : ''}
       ${win ? `<div class="winShine"></div>` : ''}
-      <div class="emp-avatar${win?' winAvatar':''}">${win ? '🎁' : initials(e.name)}</div>
+      <div class="emp-avatar${win?' winAvatar':''}">${win ? '🎁' : avatarOf(e)}</div>
       ${win
         ? `<div class="winNameWrap"><span class="emp-name">${e.name}</span></div>
            <div class="winPrize">${Number(win.amount)||0} <span>ج.م</span></div>`
@@ -4168,7 +4223,7 @@ function buildRows(list, key){
   return list.map((e,i)=>`
     <div class="lb-row ${i===0?'rank1':''}">
       <div class="lb-rank">${medalOrRank(i)}</div>
-      <div class="lb-avatar">${initials(e.name)}</div>
+      <div class="lb-avatar">${avatarOf(e)}</div>
       <div class="lb-name">${e.name} ${i===0 && key==='w' ? '<span class="crown">👑</span>' : ''}</div>
       <div class="lb-points">${fmtPts(e.count)} نقطة</div>
     </div>
@@ -5372,11 +5427,43 @@ window.openAttendanceDaysDialog = function(empId, periodKey){
       + (calc && calc.absenceDays > 0 ? '<div style="background:rgba(239,68,68,.15); padding:7px 11px; border-radius:9px;">غياب ' + calc.absenceDays + '</div>' : '')
       + (offWorked > 0 ? '<div style="background:rgba(250,204,21,.15); padding:7px 11px; border-radius:9px;">🎁 اشتغل ' + offWorked + ' يوم إجازة</div>' : '')
     + '</div>'
+    /* 🗓️ تفصيل الأسابيع — ده اللي بيشرح الخصم. من غيره الرقم بيبان
+       عشوائي والمالك مش قادر يراجعه قدام الموظفة. */
+    + (calc && calc.weekRows && calc.weekRows.length
+        ? '<div style="margin:4px 0 10px;">'
+          + '<div style="font-weight:800; font-size:12.5px; margin-bottom:5px;">🗓️ الأسابيع (السبت→الجمعة) — يوم إجازة لكل أسبوع</div>'
+          + '<table style="width:100%; font-size:12px; border-collapse:collapse;">'
+          + '<tr style="color:var(--sub,#9aa);"><th style="text-align:right;">الأسبوع</th><th>مطلوب</th><th>حضر</th><th>الفرق</th></tr>'
+          + calc.weekRows.map(function(w){
+              const diff = w.shortfall > 0
+                ? '<span style="color:#ef4444; font-weight:800;">−' + w.shortfall + '</span>'
+                : (w.surplus > 0 ? '<span style="color:#22c55e; font-weight:800;">+' + w.surplus + '</span>' : '—');
+              const wd = w.week.split('-');
+              return '<tr><td style="text-align:right;">' + wd[2] + '/' + wd[1]
+                + (w.complete ? '' : ' <span style="color:var(--sub,#9aa); font-size:10.5px;">(ناقص)</span>')
+                + '</td><td style="text-align:center;">' + w.required + '</td>'
+                + '<td style="text-align:center;">' + w.attended + '</td>'
+                + '<td style="text-align:center;">' + diff + '</td></tr>';
+            }).join('')
+          + '</table></div>'
+        : '')
+    /* 📊 القديم جنب الجديد — عشان المالك يشوف الفرق بعينه قبل ما يصرف.
+       الحساب القديم كان بيدي ٤ أيام غياب مجانية فوق الإجازات. */
+    + (calc && calc.legacyExtraOffDays !== calc.extraOffDays
+        ? '<div style="background:rgba(250,204,21,.12); border:1px solid rgba(250,204,21,.4);'
+          + ' border-radius:10px; padding:9px 11px; margin-bottom:10px; font-size:11.5px; line-height:1.7;">'
+          + '⚠️ <b>الحساب اتغيّر</b><br>'
+          + 'بالنظام القديم: خصم <b>' + calc.legacyExtraOffDays + '</b> يوم ('
+          + calc.legacyDeduction.toFixed(0) + ' ج.م)<br>'
+          + 'بالقاعدة الجديدة: خصم <b>' + calc.extraOffDays + '</b> يوم ('
+          + calc.deductionAmount.toFixed(0) + ' ج.م)<br>'
+          + '<span style="opacity:.85;">القديم كان بيدي ٤ أيام غياب مجانية فوق الإجازات.</span></div>'
+        : '')
     + '<table style="width:100%; font-size:12.5px; border-collapse:collapse;">'
       + '<tr style="color:var(--sub,#9aa);"><th style="text-align:right;">اليوم</th><th>دخول</th><th>خروج</th></tr>'
       + body
     + '</table>'
-    + '<div style="color:var(--sub,#9aa); font-size:11px; margin-top:10px; line-height:1.6;">أي يوم فيه تسجيل حضور واحد على الأقل بيتحسب يوم شغل — حتى لو كان يوم إجازته الأسبوعي (وساعتها بياخد عليه يوم زيادة في المرتب).</div>'
+    + '<div style="color:var(--sub,#9aa); font-size:11px; margin-top:10px; line-height:1.6;">القاعدة: <b>يوم إجازة لكل أسبوع</b> (السبت→الجمعة). أي يوم زيادة في نفس الأسبوع بيتخصم — حتى لو الإجازة معتمدة. واشتغال يوم الإجازة بياخد عليه يوم زيادة في المرتب بشرط الشيفت ≥ 8 ساعات.</div>'
     + '<button onclick="document.getElementById(\'attDaysOv\').remove()" class="backBtn" style="width:100%; margin-top:12px; padding:11px; border-radius:10px;">إغلاق</button>'
   + '</div>';
   document.body.appendChild(ov);
@@ -5775,6 +5862,233 @@ function countAttendedDaysInRange(empId, start, end){
   return daySet.size;
 }
 
+/* 🚫 الغياب بيتعدّ **يوم بيوم** مش بالطرح
+   ------------------------------------------------------------
+   🔴 الباج اللي ده بيقفله (المالك شافه في الواقع):
+     كان `absenceDays = elapsedWorkDays − attendedDays`.
+     · `elapsedWorkDays` بيستبعد الإجازة المعتمدة ويوم الإجازة الأسبوعي
+     · `attendedDays` بيعدّ **أي** يوم فيه حضور — حتى الإجازة نفسها
+     يعني موظفة معتمدلها إجازة الاتنين وجت فيه برضه (اتأخرت أو غيّرت
+     رأيها): الاتنين اتشال من المطلوب، وفي نفس الوقت اتعدّ حضور.
+     النتيجة: **بيطرح غياب حقيقي في يوم تاني**. الرقم يطلع ظابط
+     والقصة غلط — غياب التلات بيختفي بحضور الاتنين.
+
+   القاعدة دلوقتي: بنلف على الأيام المطلوبة واحد واحد، واليوم اللي
+   مفيهوش أي حضور هو الغياب. الحضور في يوم إجازة **مبيعوّضش** حاجة.
+
+   ⚠️ `attendedDays` فضل زي ما هو عن قصد: مكافأة الشغل في يوم الإجازة
+      مبنية عليه (`attendedDays − elapsedWorkDays`)، ودي محتاجة تعدّ
+      أيام الإجازة اللي اتشتغلت فعلًا. الحاجتين منفصلين دلوقتي. */
+function countAbsenceDaysInRange(emp, start, end){
+  const attended = new Set();
+  allShifts.filter(s=> s.employeeId===emp.id
+      && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime())
+    .forEach(s=>{ attended.add(caiDayKey(s.clockInTs)); });   // 🕒 يوم القاهرة
+  let count = 0;
+  const cur = cai(start), _endC = cai(end);                   // 🕒 أيام القاهرة
+  while(cur <= _endC){
+    const isDayOff = (emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== '')
+      && cur.getDay() === Number(emp.dayOff);
+    const key = _fmtKey(cur);                                 // من غير تحويل تاني
+    const lv = approvedLeaveFor(emp.id, key);
+    const excused = !!(lv && (lv.type === 'dayoff' || lv.type === 'changeDayoff'));
+    // يوم مطلوب + مفيش أي حضور فيه = غياب
+    if(!isDayOff && !excused && !attended.has(key)) count++;
+    cur.setDate(cur.getDate()+1);
+  }
+  return count;
+}
+if(typeof window !== 'undefined') window.countAbsenceDaysInRange = countAbsenceDaysInRange;
+
+/* ============================================================
+   🗓️ رصيد الإجازات الأسبوعي — المحرك الجديد (قرار المالك)
+   ------------------------------------------------------------
+   القاعدة بالنص: «يوم إجازة في الأسبوع. خد يوم زيادة يتخصم.»
+   والأسبوع **من السبت للجمعة**، وكل أسبوع بيتحاسب **لوحده** —
+   مفيش تجميع ولا تعويض بين الأسابيع.
+
+   🔴 اللي كان بيحصل قبل كده (٣ باجات في سطر واحد):
+       extraOffDays = max(0, absenceDays − dayOffOccurrences)
+     · `absenceDays` **أصلًا** بيستبعد يوم الإجازة والإجازات المعتمدة،
+       يعني هو الغياب بدون إذن وبس. وبعدين بيتطرح منه عدد الجمعات (٤)
+       **تاني** → كل موظفة ليها **٤ أيام غياب مجانية مستخبية** كل شهر
+       فوق إجازاتها. غياب ٣ أيام كان خصمه **صفر**.
+     · و`changeDayoff` كان بيشيل يومين (اليوم الجديد + الجمعة اللي
+       لسه `emp.dayOff`) — نقل الإجازة كان بيدّي يوم زيادة ببلاش.
+     · والإجازة المعتمدة كانت **بلا حد**: أي عدد أيام، صفر خصم.
+
+   ✅ المحرك ده بيلغي التلاتة مرة واحدة، لأنه **مبيبصّش على نوع اليوم
+      خالص** — لا يوم إجازة ولا إجازة معتمدة. بيعدّ بس:
+        المطلوب في الأسبوع = أيام الأسبوع − يوم الإجازة المستحق
+        الفرق = المطلوب − اللي حضرته فعلًا
+      موجب = خصم · سالب = مكافأة شغل يوم الإجازة.
+      نقل الإجازة بقى صفر تلقائي (العدد ثابت مهما نقلت اليوم).
+
+   ⚠️ الأسبوع الناقص آخر الشهر **ليه يوم إجازة برضه** — الموظفة مش
+      ذنبها إن الشهر خلص في نص الأسبوع. (وبيتسقّف بعدد أيام الأسبوع
+      الموجودة فعلًا: أسبوع فيه يوم واحد مبياخدش يوم إجازة + يوم شغل.)
+   ⚠️ دالة **نقية** — بتاخد الشيفتات كوسيط عشان تتختبر بالـharness.
+   ============================================================ */
+/* ⚙️ إعدادات الوقت السارية — الإعداد الحي لو موجود وإلا الافتراضي.
+   ⚠️ دالة مش ثابت: `window.timeCfg` بتتحمّل من Firestore **بعد** ما
+      الملف يتقري، فثابت وقت التعريف كان هيمسك الافتراضي للأبد. */
+function _timeCfgNow(){
+  return (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
+}
+if(typeof window !== 'undefined') window._timeCfgNow = _timeCfgNow;
+
+function weekStartKeyOf(d, startDow){
+  // بيرجّع مفتاح أول يوم في الأسبوع (السبت افتراضيًا) لتاريخ عرض بالقاهرة
+  const dow = d.getDay();
+  const back = (dow - (Number(startDow) || 0) + 7) % 7;
+  const s = new Date(d.getTime());
+  s.setDate(s.getDate() - back);
+  return _fmtKey(s);
+}
+
+/* ⏱️ اليوم بيتعدّ حضور؟ لازم شيفت طوله ≥ الحد الأدنى.
+   ⚠️ الشيفت **المفتوح** (لسه ماتقفلش) بيتعدّ حضور: مدته لسه مش معروفة،
+      وحسابه غياب معناه إن اللي واقفة بتشتغل دلوقتي تظهر غايبة.
+   ⚠️ الحساب **بالدقايق الصحيحة** مش بالساعات الكسرية: شيفت ٧:٥٥ بالظبط
+      كان بيقع على حافة المقارنة العشرية بالضبط (7.916666… ≥ 7.916666…)
+      والنتيجة كانت بتتقلب مع أصغر فرق في الفاصلة العائمة — يعني نفس
+      الشيفت ياخد مكافأة أو ماياخدش حسب الحظ. الاختبار مسك ده.
+   ⚠️ والسماح ١٥ دقيقة: الشيفت الحقيقي بيقفل ٧:٥٥ أو ٧:٥٠ عادي — وقت
+      تسجيل الانصراف مش تحايل. الغرض من الحد الأدنى يقفل باب "٥ دقايق
+      يوم إجازتي وأقبض يوم"، مش يعاقب على ربع ساعة. */
+function shiftCountsAsDay(s, minHours, graceMin){
+  if(!s) return false;
+  const min = Number(minHours);
+  if(!(min > 0)) return true;
+  if(!s.clockOutTs) return true;                    // لسه شغالة
+  const mins = Math.round((Number(s.clockOutTs) - Number(s.clockInTs)) / 60000);
+  const g = (graceMin == null) ? 15 : Number(graceMin);
+  return mins >= Math.round(min * 60) - g;
+}
+
+function weeklyOffBalance(emp, start, end, shifts, cfg, opts){
+  cfg = cfg || (typeof timeCfgDefaults !== 'undefined' ? timeCfgDefaults : {});
+  const perWeek = Number(cfg.weekOffDays);
+  const offPerWeek = isNaN(perWeek) ? 1 : perWeek;
+  const startDow = (cfg.weekStartDow == null) ? 6 : Number(cfg.weekStartDow);
+  const minHours = Number(cfg.minShiftHours) || 0;
+  const graceMin = (cfg.minShiftGraceMin == null) ? 15 : Number(cfg.minShiftGraceMin);
+  // ⏳ `live` = المدى لسه شغال (معاينة في نص الشهر) — ساعتها بنعرض
+  //    الأسبوع اللي لسه ماخلصش عشان الغياب يبان أول بأول.
+  const live = !!(opts && opts.live);
+
+  /* 🗓️🔴 الأسبوع اللي بيقع على حدّ الشهر — أصعب حتة في المحرك
+     ------------------------------------------------------------
+     فترة المرتب شهر (1→30) لكن الأسبوع سبت→جمعة، فأول وآخر أسبوع
+     في الشهر بيبقوا **مقطوعين**. أول ما جربت طلع الآتي:
+       · آخر الشهر: الموظفة الملتزمة بتاخد **يوم مكافأة ببلاش** —
+         الأسبوع ٣ أيام، المطلوب ٢، وهي اشتغلت ٣. وهي أصلًا
+         مااشتغلتش يوم إجازتها؛ إجازتها لسه جاية الشهر اللي بعده.
+       · أول الشهر: العكس — اشتغلت يوم إجازتها يوم ٣ يوليو
+         (والأسبوع بدأ ٢٧ يونيو) فالأسبوع بان "ناقص" و**ضاعت
+         مكافأتها**. الاختبار القديم مسك دي.
+
+     ✅ القاعدة: **الأسبوع بيتحاسب في الشهر اللي بيخلص فيه.**
+       · بنمدّ البداية لورا لحد سبت الأسبوع اللي فيه `start` —
+         فأسبوع ٢٧ يونيو→٣ يوليو بيتحاسب كامل في **يوليو**.
+       · والأسبوع اللي هيخلص بعد `end` بيتأجّل للشهر اللي بعده.
+     كده كل أسبوع بيتحاسب **مرة واحدة** وكامل، وكل بياناته موجودة
+     وقت صرف المرتب.
+     ⚠️ الاستثناء الوحيد: الأسبوع اللي **لسه شغال** دلوقتي (معاينة
+       المرتب في نص الشهر) — بيتحاسب بإجازته عشان الغياب يبان أول
+       بأول، بس **من غير مكافأة** لأنه لسه ماخلصش. */
+  const realStart = cai(start);
+  const backDays = (realStart.getDay() - startDow + 7) % 7;
+  const scanStart = new Date(realStart.getTime());
+  scanStart.setDate(scanStart.getDate() - backDays);
+  /* 🛡️ الحاجز الصلب: المدّ لورا ممنوع يعدّي تاريخ بداية المحاسبة
+     (تشغيل المحرك / تاريخ التعيين / بداية تتبع الموظفة).
+     ⚠️ من غيره الحارس بيبقى **وهمي**: بيرفع بداية الفترة بس المحرك
+        بيفضل بيمدّ لورا ويعدّ أيام مالهاش بيانات كغياب. */
+  if(opts && opts.hardStart){
+    const hs = cai(opts.hardStart);
+    if(scanStart < hs){ scanStart.setTime(hs.getTime()); }
+  }
+
+  // 📅 مجموعتين مختلفتين عن قصد — وده أهم قرار في الدالة:
+  //   `attended` = **أي** حضور مهما كان قصير → بيمنع الغياب.
+  //   `full`     = الأيام اللي طولها ≥ الحد الأدنى → دي اللي تستاهل
+  //                **مكافأة** شغل يوم الإجازة.
+  // ⚠️ ليه مش مجموعة واحدة: لو اليوم القصير اتحسب غياب كامل، الموظفة
+  //    اللي مشيت بدري بإذن كانت هتتخصم **يوم كامل** — وهي أصلًا
+  //    بيتخصم منها رصيد وقت على الانصراف البدري. عقوبتين على نفس
+  //    الحاجة، والتانية أقسى ٧ مرات. الحد الأدنى غرضه يقفل باب
+  //    "أدخل ٥ دقايق يوم إجازتي وأقبض يوم" — وده بيتقفل من ناحية
+  //    المكافأة لوحدها.
+  const scanFromTs = new Date(scanStart.getFullYear(), scanStart.getMonth(), scanStart.getDate()).getTime();
+  const attended = new Set();
+  const full = new Set();
+  (shifts || []).forEach(function(s){
+    if(!s || s.employeeId !== emp.id) return;
+    if(s.clockInTs < scanFromTs || s.clockInTs > end.getTime()) return;
+    const k = caiDayKey(s.clockInTs);
+    attended.add(k);
+    if(shiftCountsAsDay(s, minHours, graceMin)) full.add(k);
+  });
+
+  // 🗓️ نقسّم لأسابيع (السبت→الجمعة) ونحاسب كل أسبوع لوحده
+  const weeks = {};
+  const cur = new Date(scanStart.getTime()), endC = cai(end);
+  while(cur <= endC){
+    const wk = weekStartKeyOf(cur, startDow);
+    if(!weeks[wk]) weeks[wk] = { days: 0, attended: 0, full: 0, key: wk };
+    weeks[wk].days++;
+    const k = _fmtKey(cur);
+    if(attended.has(k)) weeks[wk].attended++;
+    if(full.has(k)) weeks[wk].full++;
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  let requiredDays = 0, attendedDays = 0, shortfallDays = 0, surplusDays = 0;
+  const weekRows = [];
+  const keys = Object.keys(weeks).sort();
+  keys.forEach(function(k, i){
+    const w = weeks[k];
+    const complete = w.days >= 7;
+    /* ⏭️ الأسبوع الأخير لو **ناقص**: بيتأجّل للشهر اللي بعده (هو
+       بيخلص هناك، وهناك هيتحاسب كامل). كده كل أسبوع بيتحاسب **مرة
+       واحدة** ومفيش يوم بيضيع ولا بيتحسب مرتين.
+       ⚠️ إلا في المعاينة الحية (`live`) — ساعتها بنعرضه عشان الغياب
+          يبان أول بأول، وهو أصلًا هيتحاسب صح آخر الشهر. */
+    const isLast = (i === keys.length - 1);
+    const deferred = isLast && !complete && !live;
+    if(deferred){
+      weekRows.push({ week: k, days: w.days, entitled: 0, required: 0,
+                      attended: w.attended, full: w.full, complete: false,
+                      deferred: true, shortfall: 0, surplus: 0 });
+      return;
+    }
+    // ⚠️ الإجازة مسقوفة بأيام الأسبوع الموجودة فعلًا — أسبوع فيه يوم
+    //    واحد مبياخدش يوم إجازة **و** يوم شغل.
+    const entitled = Math.min(offPerWeek, w.days);
+    const req = Math.max(0, w.days - entitled);
+    const short = Math.max(0, req - w.attended);
+    // 🎁 المكافأة في الأسبوع الكامل بس — الأسبوع اللي لسه شغال إجازته
+    //    ممكن تكون لسه جاية.
+    const extra = complete ? Math.max(0, w.full - req) : 0;
+    requiredDays += req;
+    attendedDays += w.attended;
+    shortfallDays += short;
+    surplusDays += extra;
+    weekRows.push({ week: k, days: w.days, entitled: entitled,
+                    required: req, attended: w.attended, full: w.full,
+                    complete: complete, deferred: false,
+                    shortfall: short, surplus: extra });
+  });
+
+  return { requiredDays, attendedDays, shortfallDays, surplusDays, weeks: weekRows };
+}
+if(typeof window !== 'undefined'){
+  window.weeklyOffBalance = weeklyOffBalance;
+  window.weekStartKeyOf = weekStartKeyOf;
+  window.shiftCountsAsDay = shiftCountsAsDay;
+}
+
 // Computes pay for any date range within a salary cycle — used both for the
 // regular full-month calculation and for a prorated final settlement.
 function computeSalary(emp, periodStart, end){
@@ -5842,6 +6156,29 @@ function computeSalary(emp, periodStart, end){
     const trackStart = new Date(emp.attendanceTrackingStart + 'T00:00:00');
     if(trackStart > absenceRangeStart) absenceRangeStart = trackStart;
   }
+  /* 🛡️ حارس أول شهر — الفخ اللي المحرك الأسبوعي بيفتحه
+     ------------------------------------------------------------
+     الأسبوع بيتحاسب في الشهر اللي بيخلص فيه، يعني مرتب الشهر بيمدّ
+     لورا ويقرا آخر أيام الشهر اللي فاته. أول شهر تشغّل فيه النظام،
+     الأيام دي **مفيهاش بيانات** — فموظفة حضورها كامل بتظهر عليها
+     أيام غياب وخصم حقيقي من مرتبها.
+     ⚠️ ده مش نظري: الاختبار طلّع خصم ٤٠٠ ج.م على موظفة ملتزمة.
+     الحل: `weeklyStartFloor` في الإعدادات = تاريخ تشغيل المحرك.
+     أي يوم قبله مبيتحكمش عليه خالص. بيتحط مرة واحدة وبيفضل. */
+  const _cfgNow = _timeCfgNow();
+  // 🛡️ الحاجز الصلب = أي تاريخ **صريح** قال "متحكمش قبل كده".
+  //    بداية الفترة العادية **مش** حاجز — عشان المدّ لورا يشتغل طبيعي.
+  let hardStart = null;
+  if(emp.attendanceTrackingStart) hardStart = new Date(emp.attendanceTrackingStart + 'T00:00:00');
+  if(emp.hireDate){
+    const _h = new Date(emp.hireDate + 'T00:00:00');
+    if(!hardStart || _h > hardStart) hardStart = _h;
+  }
+  if(_cfgNow && _cfgNow.weeklyStartFloor){
+    const floor = new Date(_cfgNow.weeklyStartFloor + 'T00:00:00');
+    if(floor > absenceRangeStart) absenceRangeStart = floor;
+    if(!hardStart || floor > hardStart) hardStart = floor;
+  }
 
   const now = new Date();
   let elapsedEnd = now < end ? now : end;
@@ -5850,7 +6187,8 @@ function computeSalary(emp, periodStart, end){
   if(_judge < elapsedEnd) elapsedEnd = _judge;
   const elapsedWorkDays = elapsedEnd < absenceRangeStart ? 0 : countRequiredWorkDaysInRange(emp, absenceRangeStart, elapsedEnd);
   const attendedDays = elapsedEnd < absenceRangeStart ? 0 : countAttendedDaysInRange(emp.id, absenceRangeStart, elapsedEnd);
-  const absenceDays = Math.max(0, elapsedWorkDays - attendedDays);
+  // 🚫 عدّ مباشر يوم بيوم — مش `المطلوب − الحضور` (شوف countAbsenceDaysInRange)
+  const absenceDays = elapsedEnd < absenceRangeStart ? 0 : countAbsenceDaysInRange(emp, absenceRangeStart, elapsedEnd);
 
   // Free/excused absence days are now PROPORTIONAL to the actual number of
   // times the employee's weekly day off falls within the tracked period —
@@ -5858,17 +6196,37 @@ function computeSalary(emp, periodStart, end){
   // handled correctly and consistently (someone tracked for half a month
   // gets roughly half the allowance; a month with 5 Fridays gives 5, not 4).
   const dayOffOccurrences = elapsedEnd < absenceRangeStart ? 0 : countDayOffOccurrencesInRange(emp, absenceRangeStart, elapsedEnd);
-  const extraOffDays = Math.max(0, absenceDays - dayOffOccurrences);
+
+  /* 🗓️ الخصم والمكافأة بقوا من المحرك الأسبوعي (قرار المالك)
+     ------------------------------------------------------------
+     كان: extraOffDays = max(0, absenceDays − dayOffOccurrences)
+     ودي كانت بتدّي **٤ أيام غياب مجانية** فوق الإجازات (شوف
+     weeklyOffBalance). دلوقتي كل أسبوع (سبت→جمعة) بيتحاسب لوحده:
+     يوم إجازة مستحق، وأي يوم زيادة بيتخصم — حتى لو معتمد.
+     ⚠️ الأرقام القديمة بتتحسب برضه وبترجع في `legacy` عشان المالك
+        يقارن أول شهر قبل ما يصرف. مش داخلة الحساب خالص. */
+  const _wk = (elapsedEnd < absenceRangeStart)
+    ? { requiredDays:0, attendedDays:0, shortfallDays:0, surplusDays:0, weeks:[] }
+    : weeklyOffBalance(emp, absenceRangeStart, elapsedEnd, allShifts, _timeCfgNow(),
+                       { live: elapsedEnd < end, hardStart: hardStart });
+  const extraOffDays = _wk.shortfallDays;
   const deductionAmount = Math.round(extraOffDays * dailyRate * 100)/100;
+  const weekRows = _wk.weeks;
+
+  // 📊 الأرقام القديمة — للمقارنة بس، مش بتأثر على المرتب
+  const legacyExtraOffDays = Math.max(0, absenceDays - dayOffOccurrences);
+  const legacyDeduction = Math.round(legacyExtraOffDays * dailyRate * 100)/100;
 
   /* 🎁 مكافأة اشتغال يوم الإجازة = **الصافي** مش كل مرة
      ------------------------------------------------------------
      الباج: كل مرة تشتغل في يوم إجازتها كانت بتاخد يوم زيادة فورًا —
-     حتى لو بدّلت وارتاحت يوم تاني بدله. يعني التبديل كان بيتدفع كأنه
-     شغل إضافي. القاعدة دلوقتي: بنعدّ آخر الشهر — أيام الحضور الفعلية
-     ناقص أيام الشغل المطلوبة. بدّلت (اشتغلت الجمعة وارتاحت التلات)؟
-     العدد متساوي → مفيش زيادة. اشتغلت فوق المطلوب فعلًا؟ الفرق بيتدفع. */
-  const dayOffBonusDays = Math.max(0, attendedDays - elapsedWorkDays);
+     حتى لو بدّلت وارتاحت يوم تاني بدله. القاعدة دلوقتي: الزيادة
+     بتتحسب **جوه الأسبوع نفسه** — اشتغلت الجمعة وارتاحت التلات في
+     نفس الأسبوع؟ العدد متساوي → مفيش زيادة. اشتغلت فوق المطلوب
+     فعلًا؟ الفرق بيتدفع.
+     ⚠️ والتعويض **مش بيعدّي بين الأسابيع** (قرار المالك): يوم زيادة
+        في أسبوع مبيغطّيش يوم ناقص في أسبوع تاني. */
+  const dayOffBonusDays = _wk.surplusDays;
   const dayOffBonusAmount = Math.round(dayOffBonusDays * dailyRate * 100)/100;
 
   // ⏳ خصم رصيد الوقت — الوصلة اللي كانت ناقصة في المحرك كله:
@@ -5936,7 +6294,11 @@ function computeSalary(emp, periodStart, end){
   return { proratedBase, overtimeMinutes, overtimePay, overtimePendingMin, dayOffOccurrences, extraOffDays, deductionAmount,
            timeCreditHours, timeCreditDays, timeCreditDeduction, adminDeductions,
            dayOffBonusDays, dayOffBonusAmount, advancesTotal, advCash, advOrders, advPrevCycle, netSalary, daysInCalc,
-           attendedDays, elapsedWorkDays, absenceDays, notYetHired:false };
+           attendedDays, elapsedWorkDays, absenceDays,
+           // 🗓️ تفصيل الأسابيع + الأرقام القديمة للمقارنة (مش داخلة الحساب)
+           weekRows, weeklyRequiredDays: _wk.requiredDays, weeklyAttendedDays: _wk.attendedDays,
+           legacyExtraOffDays, legacyDeduction,
+           notYetHired:false };
 }
 
 function renderSalaryPanel(){
@@ -6592,7 +6954,7 @@ $('#openAdvance')?.addEventListener('click', ()=>{
   else{
     wrap.innerHTML = window.employees.map(e=> `
       <div class="attCard" data-id="${e.id}">
-        <div class="av">${initials(e.name)}</div>
+        <div class="av">${avatarOf(e)}</div>
         <div class="n">${e.name}</div>
       </div>
     `).join('');
