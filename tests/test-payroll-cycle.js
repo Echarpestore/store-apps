@@ -46,7 +46,11 @@ const WANTED = [
   'function advPayCycleOf(', 'function payPeriodRange(', 'function defaultPayPeriodKey(',
   'function payPeriodOptions(', 'function _nextMonthKey(', 'function attendedDaysDetail(',
   'function getMonthDateRange(', 'function getMonthLabel(', 'function countDayOffOccurrencesInRange(',
-  'function countAttendedDaysInRange(', 'function countRequiredWorkDaysInRange(', 'function computeSalary(',
+  'function countAttendedDaysInRange(', 'function countRequiredWorkDaysInRange(',
+  // 🗓️ محرك الإجازات الأسبوعي — computeSalary بقت بتناديه، فمن غيره بتقع
+  'function countAbsenceDaysInRange(', 'function _timeCfgNow(',
+  'function weekStartKeyOf(', 'function shiftCountsAsDay(', 'function weeklyOffBalance(',
+  'function computeSalary(',
 ];
 const parts = [];
 let missing = null;

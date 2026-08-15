@@ -33,6 +33,8 @@ ctx.globalThis = ctx;
 vm.createContext(ctx);
 ['ofMonthDateRange', 'ofMonthRange', 'ofMonthLabel', 'ofCountDayOffInRange', 'ofCountRequiredInRange',
  'ofCountAttendedInRange', 'ofTcAmnestied', 'ofTcCounts', 'ofMonthlyTimeSummary', 'ofIsSetupShift',
+ // 🗓️ المحرك الأسبوعي — لازم يتحمّل وإلا ofComputeSalary بتقع
+ 'ofWeekStartKey', 'ofShiftCountsAsDay', 'ofWeeklyOffBalance',
  'ofComputeSalary', 'ofCommissionCalc'].forEach(function(n){
   const f = extractFn(src, n);
   assert(f.length > 30, 'استخرجنا ' + n + ' من office.js');
