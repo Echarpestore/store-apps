@@ -739,19 +739,67 @@ function pushSupported(){
   return 'Notification' in window && 'serviceWorker' in navigator && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported();
 }
 // بنطلب الإذن بعد الدخول بـ 4 ثواني (مش أول لحظة) عشان ميبقاش مزعج
+
+/* ============================================================
+   🔔🩺 تشخيص الإشعارات — `pushDiag()` من الكونسول
+   ------------------------------------------------------------
+   ⚠️ ليه ده موجود: تسجيل التوكن كان بيفشل و**بيتبلع في console.warn**،
+      فالإشعارات ماتت شهور والتطبيق شكله سليم تمامًا. أي فشل في السلسلة
+      دلوقتي بيتسجّل بسببه، وبيتعرض بسطر واحد.
+   🔴 السبب اللي كان فعلًا: قاعدة `pos_test_customers` كانت مسموح فيها
+      `fcmTokens` القديم بس، والتطبيق بقى بيكتب `fcmTokens_<براند>`
+      و`fcmTokenAt` → permission-denied في كل مرة.
+   ============================================================ */
+var _PUSH_DIAG = { step:'—', why:'لسه مابدأناش', at:0, token:null };
+function _pushSay(step, why){
+  _PUSH_DIAG.step = step; _PUSH_DIAG.why = why; _PUSH_DIAG.at = Date.now();
+  try{ console.log('[push]', step, '·', why); }catch(e){}
+}
+function _pushWhy(code){
+  var c = String(code || '');
+  if(/permission-denied/i.test(c))
+    return '⛔ قواعد الأمان رفضت حفظ التوكن — لازم الرول يسمح بـfcmTokens_<براند> وfcmTokenAt';
+  if(/third-party-auth|authentication/i.test(c))
+    return '🔑 مفتاح VAPID مش متطابق مع مفتاح المشروع';
+  if(/messaging\/unsupported|unsupported-browser/i.test(c))
+    return '📵 المتصفح مش بيدعم Push (سفاري القديم/وضع التصفح الخفي)';
+  if(/registration-token|not-registered/i.test(c))
+    return '📵 توكن الجهاز باطل — امسح بيانات الموقع وافتح تاني';
+  if(/unavailable|internal|quota/i.test(c))
+    return '⏳ خدمة FCM مش متاحة دلوقتي — جرّب بعد شوية';
+  return 'كود مش معروف — ابعته زي ما هو';
+}
+window.pushDiag = function(){
+  var o = {
+    brand: (typeof CATALOG_BRAND !== 'undefined' ? CATALOG_BRAND : '?'),
+    perm: (typeof Notification !== 'undefined' ? Notification.permission : 'n/a'),
+    supported: (function(){ try{ return !!pushSupported(); }catch(e){ return false; } })(),
+    step: _PUSH_DIAG.step, why: _PUSH_DIAG.why,
+    token: _PUSH_DIAG.token,
+    phone: (typeof currentCustomer !== 'undefined' && currentCustomer) ? currentCustomer.phone : null
+  };
+  try{ console.log(JSON.stringify(o, null, 2)); }catch(e){}
+  try{ showToast(o.step + ' — ' + o.why, o.step.indexOf('ok') !== 0); }catch(e){}
+  return o;
+};
+
 function initPushForCustomer(){
-  if(!VAPID_KEY || !pushSupported()) return;
-  if(Notification.permission === 'denied') return;
+  _pushSay('start', 'بدأنا');
+  if(!VAPID_KEY){ _pushSay('no-vapid', 'مفتاح VAPID فاضي'); return; }
+  if(!pushSupported()){ _pushSay('unsupported', 'المتصفح/الجهاز مش بيدعم الإشعارات'); return; }
+  if(Notification.permission === 'denied'){ _pushSay('denied', 'الإشعارات مرفوضة من إعدادات المتصفح'); return; }
   setTimeout(function(){
     // فحص العميل هنا (بعد 4 ثواني) — وقت الاستدعاء بيانات العميل بتكون لسه في الطريق
-    if(!currentCustomer) return;
+    if(!currentCustomer){ _pushSay('no-customer', 'مفيش عميلة مسجّلة دخول'); return; }
     Notification.requestPermission().then(function(perm){
-      if(perm !== 'granted') return;
+      if(perm !== 'granted'){ _pushSay('perm-' + perm, 'مسمحتش بالإشعارات'); return; }
       navigator.serviceWorker.ready.then(function(reg){
         firebase.messaging().getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg }).then(function(token){
-          if(!token || !currentCustomer) return;
+          if(!token){ _pushSay('no-token', 'FCM مارجّعش توكن'); return; }
+          if(!currentCustomer){ _pushSay('no-customer', 'العميلة خرجت قبل الحفظ'); return; }
+          _PUSH_DIAG.token = String(token).slice(-12);
           var saved = localStorage.getItem('echarpe_fcm_' + currentCustomer.phone);
-          if(saved === token) return;   // متسجّل خلاص
+          if(saved === token){ _pushSay('ok-cached', 'التوكن متسجّل خلاص'); return; }
           db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set(
             (function(){
               // 🔑 التوكن بيتخزن **عنصر في مصفوفة** مش مفتاح حقل.
@@ -768,12 +816,20 @@ function initPushForCustomer(){
             })(), { merge: true }
           ).then(function(){
             localStorage.setItem('echarpe_fcm_' + currentCustomer.phone, token);
-          }).catch(function(e){ console.warn('fcm token save', e); });
-        }).catch(function(e){ console.warn('fcm token', e); });
-      });
-    });
+            _pushSay('ok', 'التوكن اتسجّل ✅');
+          }).catch(function(e){
+            var code = (e && (e.code || e.message)) || 'unknown';
+            _pushSay('save-failed:' + code, _pushWhy(code));
+          });
+        }).catch(function(e){
+          var code = (e && (e.code || e.message)) || 'unknown';
+          _pushSay('token-failed:' + code, _pushWhy(code));
+        });
+      }).catch(function(e){ _pushSay('sw-failed', 'السيرفس ووركر مش جاهز'); });
+    }).catch(function(e){ _pushSay('perm-failed', 'طلب الإذن وقع'); });
   }, 4000);
 }
+window.initPushForCustomer = initPushForCustomer;
 
 // توست أنيق جوّه التطبيق — بديل نوافذ alert() القبيحة اللي بتعرض اسم الموقع
 var _toastTimer = null;
