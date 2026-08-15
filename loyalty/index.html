@@ -435,6 +435,8 @@
   html[dir="ltr"] .tab-badge{left:auto; right:calc(50% + 4px);}
 
   /* 🛍️ «اطلبي» + «أوردراتي» */
+  .prod .pd{font-size:11.5px; color:var(--muted); line-height:1.6; margin-top:3px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
   .prod .padd{width:100%; margin-top:8px; border:none; border-radius:99px; background:var(--pink);
     color:#fff; font-family:inherit; font-weight:800; font-size:12.5px; padding:8px; cursor:pointer;}
   .prod .qbar{display:flex; align-items:center; justify-content:space-between; margin-top:8px;
@@ -562,7 +564,9 @@
   <nav class="tabbar" id="tabbar" style="display:none;">
     <button class="tab active" data-tab="card"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6 14.5h4"/></svg></span><span class="tl">بطاقتي</span></button>
     <button class="tab" data-tab="offers"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 3.5H19a1.5 1.5 0 0 1 1.5 1.5v6.4a1.5 1.5 0 0 1-.44 1.06l-7.1 7.1a1.5 1.5 0 0 1-2.12 0l-5.9-5.9a1.5 1.5 0 0 1 0-2.12l7.1-7.1A1.5 1.5 0 0 1 12.6 3.5z"/><circle cx="16" cy="8" r="1.25"/></svg></span><span class="tl">عروضي</span><span class="tab-badge" id="badge-offers"></span></button>
-    <button class="tab" data-tab="shop"><span class="ti">🛍️</span><span class="tl">اطلبي</span><span class="tab-badge" id="badge-shop"></span></button>
+    <!-- 🛍️ الأيقونة SVG بنفس ستايل باقي التبويبات — الإيموچي كان
+     بيبان ملوّن وسط أيقونات خطّية، فالتبويب شكله غريب. -->
+    <button class="tab" data-tab="shop"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 8.5h15l-1.1 11a1.5 1.5 0 0 1-1.5 1.35H7.1a1.5 1.5 0 0 1-1.5-1.35z"/><path d="M8.8 8.5V6.9a3.2 3.2 0 0 1 6.4 0v1.6"/></svg></span><span class="tl">اطلبي</span><span class="tab-badge" id="badge-shop"></span></button>
     <button class="tab" data-tab="invoices"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12v17l-2.2-1.3-2.2 1.3-2.2-1.3-2.2 1.3-2.2-1.3L6 20.5z"/><path d="M9 8.5h6"/><path d="M9 12h6"/></svg></span><span class="tl">فواتيري</span></button>
     <button class="tab" data-tab="account"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.3" r="3.3"/><path d="M5.2 20c0-3.4 3-6 6.8-6s6.8 2.6 6.8 6"/></svg></span><span class="tl">حسابي</span></button>
     <button class="tab" data-tab="contact"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.7a7.3 7.3 0 0 1-10.6 6.5L4.8 19.5l1.25-4.3A7.3 7.3 0 1 1 20 11.7z"/></svg></span><span class="tl">تواصل</span><span class="tab-badge" id="badge-contact"></span></button>
@@ -1212,7 +1216,12 @@ function firstName(n){ n=(n||'').trim(); return n ? n.split(/\s+/)[0] : 'يا ف
    التبويبات
    ============================================================ */
 var currentTab = 'card';
-var dataOffers = null, dataProducts = null, dataInvoices = null;   // null = لسه ما اتحمّلش
+var dataOffers = null, dataProducts = null, dataInvoices = null;
+/* 🛍️ منتجات البيع أونلاين — مستند مستقل عن الكتالوج.
+   ⚠️ التعريف هنا مع باقي متغيرات البيانات عن قصد: `var` بيترفع جوه
+      نفس البلوك، بس تعريفه بعيد عن أول استعمال بـ٦٠٠ سطر بيخلي أي
+      نقل مستقبلي لبلوك تاني يكسره بصمت (درس TDZ). */
+var shopCatalog = null;   // null = لسه ما اتحمّلش   // null = لسه ما اتحمّلش
 var tabStarted = {};   // التبويب بدأ تحميله قبل كده؟
 
 // بيبني الاستعلام لكل تبويب — بحد أقصى للعدد عشان ما نحمّلش آلاف الصفوف على الموبايل
@@ -1260,7 +1269,18 @@ function lazyLoadTab(tab){
   /* 🛍️ «اطلبي» بيقرا **نفس** مستند الكتالوج بتاع «عروضي».
      ⚠️ لو اتعمله استعلام لوحده، ده قراءة زيادة على كل عميلة مقابل
         صفر معلومة جديدة. */
-  if(tab==='shop' && dataProducts !== null){ tabStarted[tab] = true; return; }
+  /* 🛍️ «اطلبي» بيقرا مستنده الخاص — قراءة واحدة لكل جلسة. */
+  if(tab==='shop'){
+    if(shopCatalog === null && !tabStarted['shopDoc']){
+      tabStarted['shopDoc'] = true; showTopLoad(true);
+      db.collection(COL_SETTINGS).doc('online_shop_echarpe').get().then(function(d){
+        var data = d.exists ? d.data() : {};
+        shopCatalog = Array.isArray(data.items) ? data.items : [];
+      }).catch(function(){ shopCatalog = []; })
+        .then(function(){ showTopLoad(false); if(currentTab==='shop') renderShop(); });
+    }
+    tabStarted[tab] = true; return;
+  }
   if(tab==='offers' || tab==='shop'){
     tabStarted[tab] = true; showTopLoad(true);
     db.collection(COL_SETTINGS).doc('catalog_'+CATALOG_BRAND).get().then(function(d){
@@ -1895,8 +1915,19 @@ function shopBranches(){
     .filter(function(n){ return n && n !== GLOW_BRANCH; });
 }
 
+/* 🛍️ منتجات البيع أونلاين — مستند **مستقل** عن الكتالوج
+   (`pos_test_settings/online_shop_<brand>`) بيتظبط من شاشة
+   «🛒 منتجات البيع أونلاين» في POS.
+   ⚠️ ليه مستند تاني ومش الكتالوج: الكتالوج عرض وعروض وبانرات،
+      ودي التزام بكمية وسعر. خلطهم معناه إن تعديل بانر يلمس كمية بيع.
+   ⚠️ الشرط التلاتي مقصود: `active` (المالك وقفه؟) · `onlineQty > 0`
+      (خلص؟) · `barcode` (من غيره فحص الكمية مستحيل والأوردر بيترفض
+      قدام العميلة). */
 function shopItems(){
-  return (dataProducts || []).filter(function(p){ return p && p.barcode && Number(p.price) > 0; });
+  return (shopCatalog || []).filter(function(p){
+    return p && p.active === true && Number(p.onlineQty) > 0
+        && p.barcode && Number(p.price) > 0;
+  });
 }
 
 function shopQty(bc){ return Math.max(0, Math.floor(Number(_shopCart[bc]) || 0)); }
@@ -1926,7 +1957,7 @@ function shopCartLines(){
 
 function renderShop(){
   var box = $('tab-shop'); if(!box) return;
-  if(dataProducts === null){ box.innerHTML = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>' + loaderHTML(); return; }
+  if(shopCatalog === null){ box.innerHTML = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>' + loaderHTML(); return; }
 
   var items = shopItems();
   var lines = shopCartLines();
@@ -1948,6 +1979,7 @@ function renderShop(){
     return '<div class="prod">'
       + (p.img ? '<img src="' + esc(p.img) + '" alt="">' : '<div class="ph">🧕</div>')
       + '<div class="pn">' + esc(p.name || 'منتج') + '</div>'
+      + (p.desc ? '<div class="pd">' + esc(p.desc) + '</div>' : '')
       + '<div class="pp">' + fmt(p.price) + ' ج.م</div>'
       + (q
         ? '<div class="qbar"><button onclick="shopAdd(\'' + esc(bc) + '\',-1)">−</button>'
@@ -2234,7 +2266,7 @@ function logout(silent){
   /* 🛍️ ونفس القاعدة للأوردرات: أوردر فيه اسمها وفرعها وحاجاتها —
      عميلة تانية على نفس الجهاز ممنوع تشوفه. */
   if(ordUnsub){ ordUnsub(); ordUnsub=null; }
-  _myOrders = []; _shopCart = {}; _shopBranch = '';
+  _myOrders = []; _shopCart = {}; _shopBranch = ''; shopCatalog = null;
   // 💬 نفس القاعدة: عميلة تانية على نفس الجهاز ممنوع تشوف شات غيرها
   if(window.chatCleanup) chatCleanup();
   _creditRows = [];
