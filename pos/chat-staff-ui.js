@@ -50,9 +50,23 @@
       + '#ccFabBadge{position:absolute; top:-4px; right:-4px; background:#E5484D; color:#fff;'
       + 'border-radius:99px; min-width:20px; height:20px; font-size:11.5px; font-weight:800;'
       + 'display:none; align-items:center; justify-content:center; padding:0 5px;}'
-      + '#ccWrap{position:fixed; inset:0; z-index:80; background:#14161c; color:#eceef2;'
-      + 'display:none; flex-direction:column; font-family:inherit;}'
+      // 📐 لوحة جانبية بنص الشاشة — مش أوفرلاي كامل.
+      //    ⚠️ السبب: الشات كان `inset:0` فبيغطي الفاتورة والسلة، والكاشير
+      //       بيقفله عشان يشوف اللي قدامه، فالرد بيتأخر. دلوقتي مرصوص على
+      //       الشمال (ناحية الزرار العايم) والبيع فاضل باين على اليمين.
+      //    ⚠️ ومفيش طبقة سودة فوق باقي الشاشة — الطبقة دي كانت بتبلع
+      //       الضغط على السلة حتى وهي شفافة.
+      + '#ccWrap{position:fixed; top:0; bottom:0; inset-inline-start:0; width:50vw;'
+      + 'min-width:340px; max-width:620px; z-index:80; background:#14161c; color:#eceef2;'
+      + 'display:none; flex-direction:column; font-family:inherit;'
+      + 'border-inline-end:1px solid #2a2e39; box-shadow:0 0 34px rgba(0,0,0,.5);}'
       + '#ccWrap.on{display:flex;}'
+      // 📱 الشاشات الصغيرة: نص الشاشة مبيبقاش كفاية للكتابة — بيرجع كامل.
+      + '@media (max-width:760px){#ccWrap{width:100vw; min-width:0; max-width:none;}}'
+      // ↔️ زرار تكبير/تصغير — بعض الشغل (لصق رد طويل) عايز مساحة
+      + '#ccWrap.wide{width:100vw; max-width:none;}'
+      + '.ccWide{border:none; background:none; color:#9aa1af; font-size:16px;'
+      + 'cursor:pointer; padding:4px 6px;}'
       + '.ccHead{display:flex; align-items:center; gap:10px; padding:11px 14px; background:#1b1e26;'
       + 'border-bottom:1px solid #2a2e39; flex-wrap:wrap;}'
       + '.ccHead b{font-size:15px;}'
@@ -120,6 +134,7 @@
       + '<button id="ccFMine" class="on" onclick="ccFilter(true)">فرعي</button>'
       + '<button id="ccFAll" onclick="ccFilter(false)">الكل</button></div>'
       + '<button id="ccBlock" style="display:none;" onclick="ccBlockToggle()">⛔ حظر</button>'
+      + '<button class="ccWide" id="ccWideBtn" onclick="ccWideToggle()" title="كبّر/صغّر">⛶</button>'
       + '</div>'
       + '<div id="ccList"></div>'
       + '<div id="ccThread"></div>'
@@ -374,6 +389,7 @@
     CST.open = true;
     CST.activeId = null;
     document.getElementById('ccWrap').classList.add('on');
+    ccApplyWidth();
     renderList();
   }
   function ccBack(){
@@ -386,6 +402,20 @@
     }
     CST.open = false;
     document.getElementById('ccWrap').classList.remove('on');
+  }
+  /* ↔️ تكبير/تصغير اللوحة — الاختيار بيتحفظ للجهاز */
+  function ccWideToggle(){
+    var w = document.getElementById('ccWrap');
+    if(!w) return;
+    var on = !w.classList.contains('wide');
+    w.classList.toggle('wide', on);
+    try{ localStorage.setItem('cc_wide', on ? '1' : '0'); }catch(e){}
+  }
+  function ccApplyWidth(){
+    var on = false;
+    try{ on = localStorage.getItem('cc_wide') === '1'; }catch(e){}
+    var w = document.getElementById('ccWrap');
+    if(w) w.classList.toggle('wide', on);
   }
   function ccFilter(mine){
     CST.filterMine = mine;
@@ -416,4 +446,5 @@
   window.ccSend = ccSend;
   window.ccImgClear = ccImgClear;
   window.ccBlockToggle = ccBlockToggle;
+  window.ccWideToggle = ccWideToggle;
 })();

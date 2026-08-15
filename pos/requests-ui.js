@@ -24,6 +24,9 @@ function startRequestsListener(){
         _reqCache = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
         window.custRequestsOpen = _reqCache;
         try{ renderRequestsTab(); }catch(e){}
+        // 🔖 الشاشة المستقلة والبادچ بيتحدّثوا من نفس اللقطة — صفر قراءات زيادة
+        try{ renderRequestsBadge(); }catch(e){}
+        try{ renderRequestsScreen(); }catch(e){}
       }, function(e){ console.warn('requests sync', e && e.code); });
   }catch(e){ console.warn('requests listen', e); }
 }
@@ -272,6 +275,125 @@ function renderRequestsTab(){
   }).join('');
 }
 window.renderRequestsTab = renderRequestsTab;
+
+/* ============================================================
+   🔖 الشاشة المستقلة — أيقونة لوحدها جنب «قائمة العملاء»
+   ------------------------------------------------------------
+   ⚠️ ليه شاشة تانية أصلًا: اللوحة القديمة كانت **جوّه شاشة استلام
+      البضاعة بس**. يعني الطلب المفتوح مبيتشافش غير لما حد يفتح
+      الاستلام — والمتابعة اليومية (مين طالب إيه ومن إمتى) مكانتش
+      موجودة أصلًا. اللوحة القديمة فاضلة زي ما هي: دي لحظة الوصول،
+      ودي المتابعة.
+   ⚠️ **صفر قراءات جديدة** — الشاشة بتقرا من `_reqCache` اللي المستمع
+      محمّله أصلًا. مفيش استعلام جديد ولا مستمع تاني.
+   ============================================================ */
+function goToCustomerRequests(){
+  showScreen('customerRequestsScreen');
+  renderRequestsScreen();
+}
+window.goToCustomerRequests = goToCustomerRequests;
+
+/* 🔴 البادچ — بيتحدّث مع كل لقطة من المستمع.
+   ⚠️ بيعدّ **الفرع الحالي** بس. البادچ اللي بيعدّ كل الفروع بيخلّي
+      الكاشير تفتح الشاشة وتلاقي مفيش حاجة ليها — وبعد مرتين تبطّل
+      تفتحها خالص. */
+function renderRequestsBadge(){
+  try{
+    const n = _reqCache.filter(function(r){
+      return !r.branch || r.branch === currentBranch;
+    }).length;
+    ['navReqBadge', 'sideReqBadge'].forEach(function(id){
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.textContent = n > 99 ? '99+' : String(n);
+      el.style.display = n ? 'inline-flex' : 'none';
+    });
+  }catch(e){ console.warn('req badge', e); }
+}
+window.renderRequestsBadge = renderRequestsBadge;
+
+function renderRequestsScreen(){
+  const wrap = document.getElementById('requestsScreenWrap');
+  if(!wrap) return;
+  const stale = (typeof reqIsStale === 'function') ? reqIsStale : function(){ return false; };
+  const q = ((document.getElementById('reqSearch') || {}).value || '').trim().toLowerCase();
+  const scope = (document.getElementById('reqScope') || {}).value || 'mine';
+  const sort = (document.getElementById('reqSort') || {}).value || 'old';
+  const now = Date.now();
+
+  let rows = _reqCache.slice();
+  if(scope === 'mine') rows = rows.filter(function(r){ return !r.branch || r.branch === currentBranch; });
+  if(q) rows = rows.filter(function(r){
+    return String(r.text || '').toLowerCase().indexOf(q) >= 0
+        || String(r.name || '').toLowerCase().indexOf(q) >= 0
+        || String(r.phone || '').indexOf(q) >= 0
+        || String(r.barcode || '').toLowerCase().indexOf(q) >= 0;
+  });
+  rows.sort(function(a, b){
+    // الأقدم الأول = الافتراضي: العميلة اللي مستنية من أسبوعين
+    // أولى من اللي طلبت امبارح.
+    return sort === 'new' ? (b.createdAt || 0) - (a.createdAt || 0)
+                          : (a.createdAt || 0) - (b.createdAt || 0);
+  });
+
+  const sum = document.getElementById('reqSummary');
+  if(sum){
+    const oldCount = rows.filter(function(r){ return stale(r, now); }).length;
+    sum.innerHTML = reqChip('🔖 مفتوح', rows.length, 'var(--accent)')
+      + reqChip('⏳ قديم', oldCount, oldCount ? 'var(--warn)' : 'var(--border)')
+      + reqChip('🏷️ بكود', rows.filter(function(r){ return !!r.barcode; }).length, 'var(--border)');
+  }
+
+  if(!rows.length){
+    wrap.innerHTML = '<div class="empty" style="padding:30px; text-align:center; color:var(--muted);">'
+      + (q ? 'مفيش نتيجة للبحث ده' : 'مفيش طلبات مفتوحة 🌸') + '</div>';
+    return;
+  }
+
+  wrap.innerHTML = rows.map(function(r){
+    const old = stale(r, now);
+    const days = r.createdAt ? Math.floor((now - r.createdAt) / 86400000) : 0;
+    // 🟢 الطلب ده متوفر في مخزون الفرع دلوقتي؟ حساب محلي، صفر قراءات.
+    let ready = false;
+    try{
+      if(typeof reqMatch === 'function'){
+        for(const p of (allInventory || [])){
+          if(reqMatch(r, p).level === 'exact' && (p.qtyByBranch || {})[currentBranch] > 0){ ready = true; break; }
+        }
+      }
+    }catch(e){}
+    return '<div style="border:1.5px solid ' + (ready ? 'var(--plus)' : 'var(--border)') + ';'
+      + ' border-radius:12px; padding:11px 12px; margin-bottom:9px; background:var(--panel);">'
+      + '<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">'
+      +   '<div style="min-width:0;">'
+      +     '<div style="font-weight:800; font-size:14px;">'
+      +       (ready ? '🟢 ' : '') + esc(r.text || '') + '</div>'
+      +     '<div style="font-size:11.5px; opacity:.72; margin-top:3px;">'
+      +       esc(r.name || r.phone) + ' · ' + esc(r.phone || '') + ' · ' + esc(r.branch || '')
+      +       ' · من ' + days + ' يوم'
+      +       (r.barcode ? ' · 🏷️ ' + esc(r.barcode) : '')
+      +       (r.byName ? ' · سجّلتها ' + esc(r.byName) : '')
+      +       (old ? ' · <span style="color:var(--warn);">⏳ قديم</span>' : '')
+      +     '</div>'
+      +     (ready ? '<div style="font-size:11.5px; color:var(--plus); font-weight:800; margin-top:3px;">'
+      +               'متوفر في الفرع دلوقتي — كلّمها</div>' : '')
+      +   '</div>'
+      +   '<div style="display:flex; gap:5px; flex-shrink:0;">'
+      +     '<button class="btn" onclick="reqWhatsApp(\'' + r.id + '\')" title="واتساب" style="font-size:13px;">💬</button>'
+      +     '<button class="btn" onclick="reqSold(\'' + r.id + '\')" title="اتباعت لها" style="font-size:13px;">💰</button>'
+      +     '<button class="btn" onclick="reqClose(\'' + r.id + '\')" title="اقفل الطلب" style="font-size:13px;">✓</button>'
+      +   '</div>'
+      + '</div></div>';
+  }).join('');
+}
+window.renderRequestsScreen = renderRequestsScreen;
+
+function reqChip(label, n, color){
+  return '<div style="border:1.5px solid ' + color + '; border-radius:10px; padding:7px 12px;'
+    + ' background:var(--panel); font-size:12.5px; font-weight:800;">'
+    + label + ': ' + n + '</div>';
+}
+window.reqChip = reqChip;
 
 /* 🧠 تغذية شريط الفرصة: العميلة اللي واقفة دلوقتي طلبها وصل؟
    ⚠️ بيتحسب **محليًا** من الطلبات المحمّلة — صفر قراءات جديدة. */
