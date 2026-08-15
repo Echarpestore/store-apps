@@ -167,6 +167,39 @@ async function commitCreditSpend(invoiceCode, invoiceTotal){
 }
 window.commitCreditSpend = commitCreditSpend;
 
+
+/* ============================================================
+   🎁 استلام كارت هدية **من الكاشير**
+   ------------------------------------------------------------
+   🔴 الفجوة اللي المالك وقع فيها: الكارت بيتباع من POS، والاستلام
+      كان في **تطبيق العميلة بس**. الكاشير تمسح الكود في شريط
+      البحث فتلاقي «لا يوجد صنف بهذا الكود» — والكارت اللي إحنا
+      بايعينه مالوش أي مسار في نفس البرنامج اللي باعه.
+   ⚠️ الرصيد بيروح **لحساب العميلة** مش للفاتورة: الكارت رصيد
+      مش خصم. لو اتحسب خصم على الفاتورة، الباقي بيضيع.
+   ⚠️ والدالة السحابية هي اللي بتتحقق وبتخصم — العميل ما بيكتبش
+      رصيد أبدًا (نفس قاعدة `credit`).
+   ============================================================ */
+async function claimGiftForCustomer(code){
+  if(!navigator.onLine){ showToast('استلام الكارت محتاج نت', 'err'); return; }
+  const phone = ((document.getElementById('customerPhone') || {}).value || '').trim();
+  if(!phone){ showToast('اكتبي رقم العميلة الأول', 'err'); return; }
+  const clean = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if(clean.length < 8){ showToast('الكود ناقص', 'err'); return; }
+
+  const r = await callCredit('giftCardClaim', {
+    code: clean, phone: phone,
+    idem: creditIdem('claim', [clean, phone])
+  });
+  if(!r) return;
+  const val = Number(r.value || r.amount || 0);
+  showToast('🎉 اتضاف ' + val.toFixed(2) + ' ج.م لرصيد العميلة', 'ok');
+  /* 🔄 تحديث بيانات العميلة على الشاشة — الكاشير لازم تشوف الرصيد
+     الجديد فورًا عشان تقدر تصرف منه في نفس الفاتورة. */
+  try{ if(typeof refreshCustomerInfo === 'function') refreshCustomerInfo(); }catch(e){}
+}
+window.claimGiftForCustomer = claimGiftForCustomer;
+
 /* ============================================================
    💵 "سيبي الباقي في الحساب"
    ------------------------------------------------------------

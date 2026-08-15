@@ -79,3 +79,48 @@ const UI = fs.readFileSync(path.join(__dirname, '..', 'pos', 'credit-ui.js'), 'u
   const m = gsw.match(/glow-loyalty-v(\d+)/);
   assert(m && Number(m[1]) >= 47, '⭐ Glow: CACHE_NAME اترفع لـv47+');
 })();
+
+/* ============================================================
+   🎁 استلام الكارت من الكاشير + عدم قص اللوحة
+   ------------------------------------------------------------
+   🔴 فجوتين المالك وقع فيهم بنفسه:
+     ١) مسح كود الكارت في شريط البحث → «لا يوجد صنف بهذا الكود».
+        الكارت بيتباع من POS والاستلام كان في التطبيق بس — يعني
+        البرنامج بيبيع حاجة مالهاش مسار فيه.
+     ٢) محاولة تصغير اللوحة حطّت `overflow:hidden` + سقف ارتفاع،
+        فقصّت مجموعة «الإدارة» — والقص أوحش من السكرول: السكرول
+        بيوصلك، والقص بيخفي من غير أي طريقة توصل.
+   ============================================================ */
+(function(){
+  const fsy = require('fs'), py = require('path');
+  const R = py.join(__dirname, '..');
+  const SALE = fsy.readFileSync(py.join(R, 'pos', 'pos-sale.js'), 'utf8');
+  const CU = fsy.readFileSync(py.join(R, 'pos', 'credit-ui.js'), 'utf8');
+  const HTML = fsy.readFileSync(py.join(R, 'pos', 'index.html'), 'utf8');
+
+  // 🎁 المسار من شريط البحث
+  assert(/\}else if\(\/\^GC\/i\.test\(code\)\)\{/.test(SALE),
+    '⭐⭐ كود الكارت له مسار في شريط البحث (كان بيقول «مفيش منتج»)');
+  assert(/اكتبي رقم العميلة الأول عشان الرصيد يروح لحسابها/.test(SALE),
+    '⭐⭐ ومن غير رقم عميلة بيقول السبب — الرصيد بيروح لحساب مش لفاتورة');
+  assert(SALE.indexOf("/^GC/i") < SALE.indexOf("/^FT/i"),
+    '⭐ الفحص قبل فرع «لا يوجد صنف» (وإلا مايوصلوش أصلًا)');
+
+  assert(/async function claimGiftForCustomer\(code\)/.test(CU), 'دالة الاستلام موجودة');
+  assert(/window\.claimGiftForCustomer = claimGiftForCustomer/.test(CU),
+    '⭐ القاعدة الذهبية: على window (بتتنادى من pos-sale)');
+  assert(/callCredit\('giftCardClaim'/.test(CU),
+    '⭐⭐ الاستلام عن طريق الدالة السحابية — POS عمره ما بيكتب رصيد');
+  assert(/creditIdem\('claim', \[clean, phone\]\)/.test(CU),
+    '⭐⭐ مفتاح تكرار — دوستين على الماسح مايضفوش الرصيد مرتين');
+  assert(/refreshCustomerInfo/.test(CU),
+    '⭐ الرصيد بيتحدّث فورًا عشان تقدر تصرف منه في نفس الفاتورة');
+
+  // 🖥️ اللوحة: تصغير من غير قص
+  assert(!/\.qb-main\{[^}]*overflow:hidden/.test(HTML),
+    '⭐⭐ مفيش `overflow:hidden` على اللوحة — كان بيقص «الإدارة»');
+  assert(!/\.qb-main\{[^}]*max-height/.test(HTML),
+    '⭐⭐ ولا سقف ارتفاع — القص بيخفي من غير طريقة توصل');
+  assert(/\.qb-icon\{ font-size:clamp/.test(HTML),
+    '⭐ التصغير بالنسبة للشاشة (clamp) — الشاشة الكبيرة متستحملش تصغير ثابت');
+})();

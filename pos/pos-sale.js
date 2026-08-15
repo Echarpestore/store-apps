@@ -369,6 +369,22 @@ searchBar.addEventListener('keydown', (e)=>{
         if(found){ searchBar.value=''; document.getElementById('suggestBox').innerHTML=''; }
         else showToast('كود العضوية مش موجود', 'err');
       });
+    }else if(/^GC/i.test(code)){
+      /* 🎁 كود كارت هدية — الكاشير كانت بتكتبه في البحث وتلاقي
+         «لا يوجد صنف بهذا الكود»، لأن الكارت **مش منتج**: هو رصيد
+         بيتحوّل لحساب العميلة. المسار كان موجود في زرار جوّه
+         شاشة العميلة بس، ومحدش يعرفه.
+         ⚠️ لازم يكون فيه عميلة متحددة الأول: الكارت بيتحوّل رصيد
+            **على حساب**، ومن غير رقم مفيش مكان يروح له. */
+      const _ph = (document.getElementById('customerPhone') || {}).value || '';
+      if(!_ph.trim()){
+        showToast('🎁 كارت هدية — اكتبي رقم العميلة الأول عشان الرصيد يروح لحسابها', 'err');
+      }else if(typeof claimGiftForCustomer === 'function'){
+        claimGiftForCustomer(code.toUpperCase().replace(/\s/g, ''));
+      }else{
+        showToast('استلام الكارت من شاشة العميلة', 'err');
+      }
+      searchBar.value=''; document.getElementById('suggestBox').innerHTML='';
     }else if(/^FT/i.test(code)){
       // كود فاتورة → نفتحها للمرتجع
       openInvoiceForReturn(code.toUpperCase());
