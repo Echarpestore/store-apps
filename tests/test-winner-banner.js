@@ -209,3 +209,49 @@ const R = (o)=> Object.assign({ id:'r1', employeeName:'سارة', amount:200, ty
   const m = sw.match(/store-apps-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 109, 'sales/sw.js: v109+ (لقينا ' + (m ? m[1] : '—') + ')');
 })();
+
+/* ============================================================
+   🔁 الفوز بيتكرر كل يوم — الإصلاح
+   ------------------------------------------------------------
+   🔴 اللي المالك شافه: نفس الموظفة بتكسب مكافأة الأسبوع، والاحتفال
+      بيتعاد **كل يوم** والكارت بيفضل ظاهر كل يوم.
+   السبب: `awardPeriod` كانت بتتأكد إن المكافأة اتصرفت من **الكاش
+   المحلي** (`allRewards`). أي لحظة تشتغل فيها والقايمة لسه ماوصلتش
+   (أول فتح · جهاز جديد · نت بطيء) بتفتكر إنها مااتصرفتش وتكتب
+   `earnedAt: Date.now()` و`seen:false` من الأول.
+   الأثر: الاحتفال يتعاد · «اتشاف» عمره ما يثبت · الفريق يتعوّد
+   يتجاهل الفوز — والمكافأة بتفقد معناها كله.
+   ============================================================ */
+(function(){
+  const fs2 = require('fs'), p2 = require('path');
+  const SRC = fs2.readFileSync(p2.join(__dirname, '..', 'sales', 'sales-app.js'), 'utf8');
+
+  // ⏳ الحارس: مفيش صرف قبل ما اللقطة توصل
+  assert(/window\.rewardsLoaded = true;/.test(SRC), 'علامة وصول لقطة المكافآت');
+  const chk = SRC.slice(SRC.indexOf('async function checkAndAwardRewards'),
+                        SRC.indexOf('async function checkAndAwardRewards') + 700);
+  assert(/if\(!window\.rewardsLoaded\) return;/.test(chk),
+    '⭐⭐ مفيش صرف قبل ما المكافآت تتحمّل (وإلا القايمة الفاضية = «مااتصرفتش»)');
+
+  // 🌐 الحقيقة من السيرفر
+  const ap = SRC.slice(SRC.indexOf('async function awardPeriod'),
+                       SRC.indexOf('window.awardPeriod'));
+  assert(/getDoc\(doc\(db,'sales_rewards', id\)\)/.test(ap),
+    '⭐⭐ التأكد من السيرفر مش من الكاش المحلي');
+  assert(/if\(snapDoc\.exists\(\)\) existing = /.test(ap),
+    '⭐ والمستند الموجود بيمنع إعادة الطابع');
+
+  // 🛑 فشل القراءة = مانكتبش
+  assert(/console\.warn\('تعذر التأكد من المكافأة — اتأجلت', err\);\s*continue;/.test(ap),
+    '⭐⭐ فشل القراءة بيأجّل الصرف — الكتابة على الشك بترجّع الطابع لليوم');
+
+  // 🔒 الطابع بيتكتب مرة واحدة بس
+  assert(/existing \? money : Object\.assign\(\{\}, money, \{ earnedAt: Date\.now\(\), seen: false \}\)/.test(ap),
+    '⭐⭐ `earnedAt` و`seen` عند الإنشاء بس — والمبلغ لسه بيتحدّث (القسمة بتتغيّر لو حد جديد أهّل)');
+  assert(/setDoc\(doc\(db,'sales_rewards', id\)/.test(ap),
+    '⭐ معرّف ثابت — جهازين بيكتبوا نفس المستند مش اتنين');
+
+  // 📅 والعرض ليوم واحد بس
+  assert(/caiDayKey\(r\.earnedAt\) === today/.test(SRC),
+    '⭐ الكارت بيظهر يوم الفوز بس — بتوقيت القاهرة');
+})();
