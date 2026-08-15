@@ -29,6 +29,17 @@ let shopData = { items: [] };
       سعر الشحن. */
 let shopCfg = { pickupEnabled:true, deliveryEnabled:false, shippingFee:0, freeOver:0, governorates:[] };
 let shopPendingImg = '';
+/* 🖼️ الصور الإضافية — **مستند منفصل لكل منتج**.
+   🔴 السبب مش تنظيم: حد مستند Firestore **١ ميجا**، والصور base64
+      جوه المستند الرئيسي. صورة واحدة ≈ ٦٠–١٠٠ كيلو، يعني السقف
+      ١٠–١٥ منتج. لو حطينا ٤ صور للمنتج في نفس المستند، الحفظ
+      بيفشل عند التالت — **وبيفشل بعد ما المالك يكون رفع الصور**.
+   ✅ الرئيسي فيه صورة الغلاف الصغيرة بس (٤٢٠ بكسل — بتتحمّل مع كل
+      المنتجات فلازم تفضل خفيفة)، والباقي في
+      `online_shop_<brand>_img_<itemId>` بمقاس أكبر (٧٢٠)، بيتحمّل
+      لما العميلة تفتح المنتج بس — مش مع الكتالوج كله. */
+let shopPendingGallery = [];
+let shopGalleryOf = null;
 let shopEditId = null;
 
 function shopDocId(){
@@ -143,10 +154,14 @@ function shopRenderStockHint(){
 }
 window.shopRenderStockHint = shopRenderStockHint;
 
+/* 🖼️ صورة الغلاف — **٤٢٠ بكسل وصورة واحدة بس**.
+   ⚠️ دي بتتحمّل مع كل المنتجات في شبكة «اطلبي»، فحجمها بيتضرب في
+      عدد المنتجات. لو الكاشير عايزة أكتر من صورة، ده دور «صور
+      إضافية» تحت — بتتحمّل بالطلب لما العميلة تفتح المنتج بس. */
 function shopPickImage(input){
   const f = input.files && input.files[0];
   if(!f) return;
-  resizeImageFile(f, 620, function(dataUrl){
+  resizeImageFile(f, 420, function(dataUrl){
     shopPendingImg = dataUrl;
     document.getElementById('shImgPreview').innerHTML =
       '<img src="' + dataUrl + '" style="width:100%; border-radius:10px; margin-bottom:8px;">';
@@ -154,11 +169,81 @@ function shopPickImage(input){
 }
 window.shopPickImage = shopPickImage;
 
+
+/* ============================================================
+   🖼️ صور المنتج الإضافية
+   ============================================================ */
+function shopImgDocId(itemId){ return shopDocId() + '_img_' + itemId; }
+
+function shopPickGallery(input){
+  const files = Array.prototype.slice.call((input && input.files) || []);
+  if(!files.length) return;
+  /* ⚠️ سقف ٥ صور: المستند المنفصل حدّه ١ ميجا برضه، و٥ صور بمقاس
+     ٧٢٠ ≈ ٥٠٠ كيلو — مساحة أمان معقولة. */
+  const room = Math.max(0, 5 - shopPendingGallery.length);
+  if(!room){ showToast('أقصى ٥ صور للمنتج', 'err'); return; }
+  files.slice(0, room).forEach(function(f){
+    resizeImageFile(f, 720, function(dataUrl){
+      shopPendingGallery.push(dataUrl);
+      shopRenderGallery();
+    });
+  });
+}
+window.shopPickGallery = shopPickGallery;
+
+function shopRenderGallery(){
+  const box = document.getElementById('shGallery');
+  if(!box) return;
+  box.innerHTML = shopPendingGallery.map(function(src, i){
+    return '<div style="position:relative; display:inline-block; margin:0 6px 6px 0;">'
+      + '<img src="' + src + '" style="width:74px; height:74px; object-fit:cover; border-radius:8px; border:1px solid var(--border);">'
+      + '<button onclick="shopDelGalleryImg(' + i + ')" style="position:absolute; top:2px; inset-inline-end:2px; border:none; background:rgba(0,0,0,.65); color:#fff; border-radius:50%; width:20px; height:20px; font-size:12px; cursor:pointer; line-height:1;">✖</button>'
+      + '</div>';
+  }).join('') + (shopPendingGallery.length ? '' : '<span style="font-size:11.5px; color:var(--muted);">مفيش صور إضافية</span>');
+}
+window.shopRenderGallery = shopRenderGallery;
+
+function shopDelGalleryImg(i){
+  shopPendingGallery.splice(i, 1);
+  shopRenderGallery();
+}
+window.shopDelGalleryImg = shopDelGalleryImg;
+
+/* 💾 حفظ صور المنتج — **بعد** ما المنتج نفسه يتحفظ.
+   ⚠️ الترتيب مقصود: لو الصور اتحفظت الأول والمنتج فشل، يبقى عندنا
+      مستند صور ليتيم بيستهلك مساحة ومحدش بيقراه. */
+async function shopSaveGallery(itemId){
+  try{
+    await db.collection(TEST_SETTINGS).doc(shopImgDocId(itemId))
+      .set({ images: shopPendingGallery.slice(0, 5), at: Date.now() });
+    return true;
+  }catch(e){
+    /* ⚠️ الفشل بيتقال بصوت: المنتج اتحفظ والصور لأ، والمالك لازم
+       يعرف عشان يعيد — مش يفتكر إن كله تمام. */
+    showToast('⚠️ المنتج اتحفظ بس الصور الإضافية لأ (يمكن كبيرة) — جرّب صور أقل', 'err');
+    return false;
+  }
+}
+
+async function shopLoadGallery(itemId){
+  shopPendingGallery = []; shopGalleryOf = itemId || null;
+  if(!itemId){ shopRenderGallery(); return; }
+  try{
+    const d = await db.collection(TEST_SETTINGS).doc(shopImgDocId(itemId)).get();
+    const arr = d.exists ? d.data().images : null;
+    shopPendingGallery = Array.isArray(arr) ? arr.slice(0, 5) : [];
+  }catch(e){ shopPendingGallery = []; }
+  shopRenderGallery();
+}
+window.shopLoadGallery = shopLoadGallery;
+
 function shopClearForm(){
   ['shBarcode','shName','shPrice','shDesc','shQty','shSearch'].forEach(function(id){
     const el = document.getElementById(id); if(el) el.value = '';
   });
   shopPendingImg = ''; shopEditId = null;
+  shopPendingGallery = []; shopGalleryOf = null;
+  try{ shopRenderGallery(); }catch(e){}
   const pv = document.getElementById('shImgPreview'); if(pv) pv.innerHTML = '';
   const hint = document.getElementById('shStockHint'); if(hint) hint.textContent = '';
   const btn = document.getElementById('shSaveBtn'); if(btn) btn.textContent = '➕ ضيفه للبيع أونلاين';
@@ -202,6 +287,11 @@ async function shopSaveItem(){
   }
   try{
     await saveShopDoc();
+    /* 🖼️ الصور الإضافية بعد المنتج — **مستند منفصل**، وبيتكتب بعد
+       نجاح حفظ المنتج: لو اتكتب الأول والمنتج فشل، يبقى عندنا
+       مستند صور يتيم محدش بيقراه. */
+    const _savedId = existing ? existing.id : shopData.items[shopData.items.length - 1].id;
+    if(shopPendingGallery.length || shopGalleryOf === _savedId) await shopSaveGallery(_savedId);
     shopClearForm();
     showToast(existing ? 'اتحدّث ✅' : 'اتضاف للبيع أونلاين ✅');
     renderShopAdmin();
@@ -226,6 +316,7 @@ function shopEditItem(id){
     ? '<img src="' + it.img + '" style="width:100%; border-radius:10px; margin-bottom:8px;">' : '';
   document.getElementById('shSaveBtn').textContent = '💾 احفظ التعديل';
   shopRenderStockHint();
+  shopLoadGallery(id);
   window.scrollTo(0, 0);
 }
 window.shopEditItem = shopEditItem;
@@ -248,7 +339,11 @@ async function shopDelItem(id){
   if(!confirm('تشيل «' + (it.name || '') + '» من البيع أونلاين خالص؟')) return;
   const before = shopData.items.slice();
   shopData.items = shopData.items.filter(function(x){ return x.id !== id; });
-  try{ await saveShopDoc(); renderShopAdmin(); }
+  try{
+    await saveShopDoc(); renderShopAdmin();
+    /* 🧹 صور المنتج بتتمسح معاه — وإلا بتفضل مستندات يتيمة بتاكل مساحة */
+    db.collection(TEST_SETTINGS).doc(shopImgDocId(id)).delete().catch(function(){});
+  }
   catch(e){ shopData.items = before; showToast('خطأ: ' + e.message, 'err'); }
 }
 window.shopDelItem = shopDelItem;
@@ -299,9 +394,12 @@ function renderShopAdmin(){
       + '</div>'
       + '<div id="shStockHint" style="font-size:11.5px; color:var(--muted); font-weight:700; margin:-2px 0 10px;"></div>'
       + '<textarea id="shDesc" placeholder="الوصف — الخامة، المقاس، التفصيلة اللي بتفرق" style="' + inp + ' min-height:70px;"></textarea>'
-      + '<label style="display:block; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:4px;">📷 صورة المنتج</label>'
+      + '<label style="display:block; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:4px;">📷 صورة الغلاف (اللي بتبان في الشبكة)</label>'
       + '<input type="file" id="shImgFile" accept="image/*" onchange="shopPickImage(this)" style="' + inp + '">'
       + '<div id="shImgPreview"></div>'
+      + '<label style="display:block; font-size:12px; font-weight:700; color:var(--muted); margin:6px 0 4px;">🖼️ صور إضافية (لحد ٥) — العميلة بتقلّب فيها لما تفتح المنتج</label>'
+      + '<input type="file" id="shGalleryFile" accept="image/*" multiple onchange="shopPickGallery(this)" style="' + inp + '">'
+      + '<div id="shGallery" style="margin-bottom:8px;"></div>'
       + '<div style="display:flex; gap:8px;">'
         + '<button id="shSaveBtn" onclick="shopSaveItem()" style="flex:2; padding:11px; border-radius:9px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">➕ ضيفه للبيع أونلاين</button>'
         + '<button onclick="shopClearForm()" style="flex:1; padding:11px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); font-weight:800; cursor:pointer;">تفريغ</button>'
