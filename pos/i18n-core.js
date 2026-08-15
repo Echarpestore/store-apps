@@ -302,6 +302,44 @@ var I18N_DICT = {
     'الإشعارات مرفوضة من إعدادات المتصفح': 'Notifications are blocked in the browser settings',
     'مسمحتش بالإشعارات': 'Notifications were not allowed',
 
+    /* ---------- 🛍️ «اطلبي» + «أوردراتي» (التطبيقين والموقع) ---------- */
+    'اطلبي': 'Shop',
+    'أونلاين': 'online',
+    'اطلبي دلوقتي': 'Place order',
+    'اختاري اللي عايزاه، وحدّدي الفرع اللي هتستلمي منه. بنحجزلك ٢٤ ساعة.':
+      'Pick what you like and choose the branch you will collect from. We hold it for 24 hours.',
+    '🧺 سلتك': '🧺 Your basket',
+    '➕ ضيفي': '➕ Add',
+    '🏬 هستلم من فرع': '🏬 Collect from',
+    '💳 هدفع في الفرع بـ': '💳 I will pay in store with',
+    '💵 كاش': '💵 Cash',
+    '💳 فيزا': '💳 Card',
+    'بنحجزلك الحاجات ٢٤ ساعة — بعدها بترجع للبيع.':
+      'We hold your items for 24 hours — after that they go back on sale.',
+    '🛍️ أوردراتي': '🛍️ My orders',
+    'لسه مفيش أوردرات': 'No orders yet',
+    'اختاري من «اطلبي» واستلمي من أقرب فرع.': 'Pick from Shop and collect at your nearest branch.',
+    'سجّلي دخولك الأول': 'Please sign in first',
+    'السلة فاضية': 'Your basket is empty',
+    'اختاري الفرع اللي هتستلمي منه': 'Choose the branch you will collect from',
+    'معرفناش نبعت الأوردر — حاولي تاني': 'We could not send the order — please try again',
+    '💵 هتدفعي كاش في الفرع': '💵 You will pay cash in store',
+    '💳 هتدفعي فيزا في الفرع': '💳 You will pay by card in store',
+    /* حالات الأوردر — نفس نصوص `orders-core` بالحرف */
+    'اتسجّل': 'Placed',
+    'بيتجهّز': 'Preparing',
+    'جاهز': 'Ready',
+    'اتسلّم': 'Collected',
+    'اتلغى': 'Cancelled',
+    'انتهى': 'Expired',
+    'بنراجع طلبك — هنبدأ نجهّزه حالًا': 'We are reviewing your order — we will start preparing it shortly',
+    'لسه بنجهّز — هنقولك أول ما يخلص': 'Still preparing — we will tell you the moment it is done',
+    'روحي الفرع واستلمي — قولي رقم الأوردر أو امسحي كارتك':
+      'Come to the branch and collect — give your order number or scan your card',
+    'اتسلّم — اتمنى يعجبك 🌸': 'Collected — hope you love it 🌸',
+    'عدّت المدة والحجز رجع — تقدري تطلبي تاني':
+      'The hold expired and the items went back on sale — you can order again',
+
     /* ---------- 🖤 Glow — نصوص خاصة بالتطبيق التاني ----------
        ⚠️ القاموس مشترك عن قصد: نفس الجملة في التطبيقين ليها ترجمة
           واحدة، والاختلاف بس في اللي فعلًا مختلف (البراند والتبويبات
