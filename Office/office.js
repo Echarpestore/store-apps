@@ -1488,8 +1488,26 @@ function ofActFilter(list, opts){
   opts = opts || {};
   const q = String(opts.q || '').trim().toLowerCase();
   const grp = opts.group || '';
+  /* 🤫 الأحداث الهادية (`quiet`) مخفية **افتراضيًا**.
+     ------------------------------------------------------------
+     🔴 الباج: العلامة `quiet` كانت متعرّفة على `sale_saved` و
+        `print_latency` — يعني اللي كتبها كان **قاصد** يخفيهم —
+        لكنها **ماتستخدمتش في أي مكان**. الفلتر مكانش بيبصّ عليها
+        خالص، فالتبويب كان بيعرض كل فاتورة بتتباع.
+     ⚠️ النتيجة العملية: كل بيعة بتولّد حدثين، فتبويب اسمه "نشاط
+        غريب" بيمتلي مبيعات عادية. والمالك بيفتح ويلاقي مفيش حاجة
+        غريبة — وبعد مرتين تلاتة **بيبطّل يفتحه خالص**، وساعتها
+        التنبيهات الحقيقية (سحب فيزا زيادة، خصم يدوي، مسح مخزون)
+        بتضيع وسط الضوضاء. التبويب اللي بيصيح على كل حاجة = تبويب
+        محدش بيسمعه.
+     ⚠️ **مش بيتشالوا من التسجيل** — بيتسجلوا زي ما هما (مهمين
+        لربط رقم الفاتورة وقياس الأداء)، بس مبيظهروش إلا لما
+        المالك يطلبهم صراحةً. */
+  const showQuiet = !!opts.showQuiet;
   return (list || []).filter(function(a){
     if(!a) return false;
+    const kind = OF_ACT_KINDS[a.type];
+    if(!showQuiet && kind && kind.quiet) return false;
     if(grp){
       const k = OF_ACT_KINDS[a.type];
       if(!k || k.g !== grp) return false;
@@ -1532,14 +1550,21 @@ function ofRenderActivity(){
   if(!body) return;
   const list = ofActFilter(_ofActRaw, {
     q: (document.getElementById('actSearch') || {}).value,
-    group: (document.getElementById('actKind') || {}).value
+    group: (document.getElementById('actKind') || {}).value,
+    showQuiet: !!(document.getElementById('actQuiet') || {}).checked
   });
   if(sum){
     const hot = list.filter(function(a){
       const k = OF_ACT_KINDS[a.type]; return k && k.hot; }).length;
+    // 🤫 عدد المخفي — عشان المالك يعرف إن فيه حاجة اتخفت مش ضاعت
+    const quietN = _ofActRaw.filter(function(a){
+      const k = OF_ACT_KINDS[a && a.type]; return k && k.quiet; }).length;
+    const showingQuiet = !!(document.getElementById('actQuiet') || {}).checked;
     sum.innerHTML = '<div class="muted" style="font-size:12px; margin-bottom:6px;">'
       + list.length + ' حدث'
       + (hot ? ' · <b style="color:#dc2626;">' + hot + ' محتاجين نظرة</b>' : '')
+      + (!showingQuiet && quietN ? ' · <span style="opacity:.75;">' + quietN
+          + ' حدث عادي متخفي (مبيعات وقياسات)</span>' : '')
       + (_ofActRaw.length >= OF_ACT_LIMIT ? ' · <b>(وصلنا حد الـ' + OF_ACT_LIMIT + ' — ضيّق المدة)</b>' : '')
       + '</div>';
   }
@@ -1574,6 +1599,11 @@ window.ofRenderActivity = ofRenderActivity;
   if(k) k.addEventListener('change', function(){ ofRenderActivity(); });
   const d = document.getElementById('actDays');
   if(d) d.addEventListener('change', function(){ ofLoadActivity(); });
+  /* 🤫 التبديل بيعيد العرض بس — **مش** بيعيد التحميل: البيانات
+     محمّلة أصلًا والفلترة محلية. إعادة تحميل هنا = قراءات Firestore
+     من غير أي داعي مع كل ضغطة. */
+  const qz = document.getElementById('actQuiet');
+  if(qz) qz.addEventListener('change', function(){ ofRenderActivity(); });
 })();
 
 

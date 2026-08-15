@@ -423,6 +423,14 @@
         </select>
         <button class="btn gold" id="actLoad" style="margin-bottom:0;">تحميل</button>
       </div>
+      <!-- 🤫 الأحداث العادية (بيع/قياس طباعة) مخفية افتراضيًا — تبويب
+           بيصيح على كل حاجة محدش بيسمعه. الشيك بوكس بيرجّعها للي عايز
+           يتتبع فاتورة بعينها. -->
+      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px;
+                    margin-bottom:8px; cursor:pointer; user-select:none;">
+        <input type="checkbox" id="actQuiet" style="width:16px; height:16px; cursor:pointer;">
+        <span>ورّيني كمان المبيعات العادية وقياسات الطباعة</span>
+      </label>
       <input class="f" id="actSearch" placeholder="بحث: اسم موظف / فرع / صنف / رقم فاتورة" style="margin-bottom:8px;">
       <div id="actSummary"></div>
       <div id="actBody"><div class="empty">دوس «تحميل» عشان تجيب السجل</div></div>
