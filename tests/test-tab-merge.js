@@ -63,8 +63,11 @@ APPS.forEach(function(pair){
   // لو فضل على `products`، بيستنى تبويب مش موجود = قسم فاضي للأبد.
   // ============================================================
   const lz = c.slice(c.indexOf('function lazyLoadTab('), c.indexOf('function switchTab('));
-  assert(/if\(tab==='offers'\)\{/.test(lz),
-    L + "⭐⭐ الكتالوج بيتحمّل مع تبويب `offers`");
+  /* 🛍️ «اطلبي» بيقرا نفس مستند الكتالوج — فالفرع بقى بيخدم
+     التبويبين. ⚠️ الشرط لازم يفضل مربوط بـ`offers` كمان: لو اتغيّر
+     لـ`shop` بس، قسم الكتالوج في «عروضي» يفضل فاضي للأبد. */
+  assert(/if\(tab==='offers' \|\| tab==='shop'\)\{/.test(lz),
+    L + "⭐⭐ الكتالوج بيتحمّل مع تبويب `offers` (و«اطلبي» بيشاركه)");
   assert(!/if\(tab==='products'\)/.test(lz),
     L + '⭐ ومش مربوط بالتبويب المشيل');
   assert(/catalog_/.test(lz), L + 'وبيقرا مستند الكتالوج');
@@ -72,7 +75,7 @@ APPS.forEach(function(pair){
   /* ⚠️ لازم **مفيش return** بعد تحميل الكتالوج: تبويب العروض محتاج
      كمان الخصومات من `tabRef('offers')`. الـreturn القديم كان
      هيوقف التحميل التاني والعروض تختفي خالص بعد الدمج. */
-  const branch = lz.slice(lz.indexOf("if(tab==='offers'){"), lz.indexOf('var ref = tabRef(tab)'));
+  const branch = lz.slice(lz.indexOf("if(tab==='offers' || tab==='shop'){"), lz.indexOf('var ref = tabRef(tab)'));
   assert(!/\breturn;/.test(branch),
     L + '⭐⭐ ومفيش `return` بيوقف تحميل الخصومات');
   assert(/var ref = tabRef\(tab\)/.test(lz), L + 'والخصومات لسه بتتحمّل');
@@ -102,9 +105,36 @@ APPS.forEach(function(pair){
   // ============================================================
   // ٥) قايمة التبويبات نضيفة
   // ============================================================
-  assert(/\['card','offers','invoices','account','contact'\]/.test(c),
-    L + '⭐ قايمة التبويبات من غير `products`');
+  assert(/\['card','offers','shop','invoices','account','contact'\]/.test(c),
+    L + '⭐ قايمة التبويبات من غير `products` وفيها «اطلبي»');
   assert(!/'card','offers','products'/.test(c), L + 'والقديمة اتشالت');
+
+  // ============================================================
+  // ٦) 📱 شريط التبويبات بيتزحلق على الموبايل
+  // ------------------------------------------------------------
+  // ⚠️ `flex:1` على كل تبويب معناه إن التبويبات بتتضغط على بعض كل ما
+  //    واحد يتضاف. على موبايل ضيق الأسماء بتتقص — وده هيحصل فعلًا
+  //    أول ما تبويب «شراء أونلاين» يتضاف.
+  // ============================================================
+  assert(/\.tabbar\{[\s\S]{0,400}overflow-x:auto/.test(src),
+    L + '⭐⭐ الشريط بيتزحلق أفقيًا');
+  assert(/-webkit-overflow-scrolling:touch/.test(src),
+    L + '⭐ وسلس على سفاري القديم');
+  assert(/\.tabbar::-webkit-scrollbar\{ display:none; \}/.test(src),
+    L + '⭐ وشريط السحب مخفي (بياخد من مساحة أمان الآيفون)');
+  assert(/overscroll-behavior-x:contain/.test(src),
+    L + '⭐⭐ والسحب الأفقي مبيسحبش الصفحة كلها');
+  assert(/\.tab\{flex:1 0 auto; min-width:64px/.test(src),
+    L + '⭐⭐ والتبويب **مبيتضغطش** تحت الحد الأدنى (`flex:1 0 auto`)');
+  assert(!/\.tab\{flex:1;/.test(src), L + 'و`flex:1` القديم اتشال');
+  assert(/\.tab \.tl\{[^}]*white-space:nowrap/.test(src),
+    L + '⭐ والاسم مبيتلفّش على سطرين');
+  // التبويب النشط بيتزحلق لحد ما يبان
+  assert(/scrollIntoView\(\{ inline:'nearest'/.test(src),
+    L + '⭐⭐ والتبويب النشط بيتزحلق لحد ما يبان (مش نصه بره الشاشة)');
+  // المسافة تحت بتحسب شريط الآيفون
+  assert(/padding-bottom:calc\(82px \+ env\(safe-area-inset-bottom\)\)/.test(src),
+    L + '⭐⭐ وآخر سطر في الصفحة مبيتخبّاش ورا الشريط');
 });
 
 // ============================================================
@@ -129,7 +159,7 @@ APPS.forEach(function(pair){
   const b3 = code(src).replace(/\.then\(function\(\)\{ showTopLoad\(false\); \}\);/,
                                '.then(function(){ showTopLoad(false); });\n    return;');
   const lz3 = b3.slice(b3.indexOf('function lazyLoadTab('), b3.indexOf('function switchTab('));
-  const br3 = lz3.slice(lz3.indexOf("if(tab==='offers'){"), lz3.indexOf('var ref = tabRef(tab)'));
+  const br3 = lz3.slice(lz3.indexOf("if(tab==='offers' || tab==='shop'){"), lz3.indexOf('var ref = tabRef(tab)'));
   assert(/\breturn;/.test(br3),
     L + '⭐⭐ والفحص بيقع لو الـreturn رجع (العروض كانت هتختفي)');
 }
