@@ -2292,6 +2292,98 @@ function renderPL(){
 /* ============================================================
    🔔 الوارد
    ============================================================ */
+
+/* ============================================================
+   🗓️ صورة اليوم قبل الموافقة على إذن / تغيير شيفت
+   ------------------------------------------------------------
+   🔴 شكوى المالك حرفيًا: «بوافق وأنا مش فاهم ولا شايف حاجة».
+      الكارت كان بيقول **مين طلب** بس. والقرار الحقيقي مش عن
+      الطالبة — هو عن **الفرع في اليوم ده**: مين صباحي، مين مسائي،
+      مين مأذون خلاص، وهيفضل كام لو وافقت.
+   ⚠️ **صفر قراءات جديدة**: الموظفين والأذونات محمّلين أصلًا
+      (`D.employees` · `D.leaves`)، والحساب كله في الذاكرة.
+   ⚠️ الأذونات المحسوبة هي **الموافَق عليها بس** — المعلّقة لسه
+      احتمال، وعدّها كغياب بيخوّف المالك من موافقة مش لازمة.
+   ============================================================ */
+function ofLeaveContext(req){
+  const branch = (req && req.branch) || '';
+  const dateKey = (req && req.dateKey) || '';
+  const emps = (D.employees || []).filter(function(e){
+    return e && e.active !== false && e.branch === branch;
+  });
+
+  /* 🛌 مأذونين نفس اليوم — الموافَق عليهم، من غير الطلب اللي بين إيدك */
+  const offIds = {};
+  (D.leaves || []).forEach(function(l){
+    if(!l || l.status !== 'approved') return;
+    if(l.branch !== branch || l.dateKey !== dateKey) return;
+    if(req && l.id === req.id) return;
+    offIds[l.employeeId || l.empId] = l.empName || '';
+  });
+
+  /* 🗓️ إجازة الأسبوع الثابتة كمان — دي مش «إذن» بس هي غياب فعلي.
+     ⚠️ من غيرها المالك يوافق ويلاقي الفرع فاضي، وهو شايف رقم
+        يقول إن فيه ٣ موجودين. */
+  let dow = -1;
+  try{
+    const d = dateKey ? new Date(dateKey + 'T12:00:00') : null;
+    if(d && !isNaN(d)) dow = d.getDay();
+  }catch(e){}
+
+  const rows = emps.map(function(e){
+    const id = e.id;
+    const onLeave = Object.prototype.hasOwnProperty.call(offIds, id);
+    const weeklyOff = (dow >= 0 && e.dayOff !== undefined && e.dayOff !== null
+                       && e.dayOff !== '' && Number(e.dayOff) === dow);
+    return {
+      id: id, name: e.name || id,
+      shift: e.shift || '',
+      isRequester: !!(req && (req.employeeId === id || req.empId === id)),
+      off: onLeave || weeklyOff,
+      why: onLeave ? 'مأذونة' : (weeklyOff ? 'إجازتها الأسبوعية' : '')
+    };
+  });
+
+  const avail = function(sh){
+    return rows.filter(function(r){ return r.shift === sh && !r.off && !r.isRequester; });
+  };
+  return {
+    branch: branch, dateKey: dateKey, rows: rows,
+    morning: rows.filter(function(r){ return r.shift === 'morning'; }),
+    evening: rows.filter(function(r){ return r.shift === 'evening'; }),
+    offRows: rows.filter(function(r){ return r.off; }),
+    afterMorning: avail('morning').length,
+    afterEvening: avail('evening').length,
+    requester: rows.filter(function(r){ return r.isRequester; })[0] || null
+  };
+}
+window.ofLeaveContext = ofLeaveContext;
+
+/* 🖼️ العرض — سطرين مقروءين مش جدول.
+   ⚠️ الرقم اللي بيهم هو **اللي هيفضل بعد الموافقة**، مش العدد
+      الحالي. العدد الحالي بيطمّن غلط. */
+function ofLeaveContextHtml(req){
+  const c = ofLeaveContext(req);
+  if(!c.rows.length) return '';
+  const nm = function(list){
+    return list.map(function(r){
+      return esc(r.name) + (r.off ? ' <span style="opacity:.6;">(' + esc(r.why) + ')</span>'
+                                  : (r.isRequester ? ' <b>(الطالبة)</b>' : ''));
+    }).join(' · ') || '—';
+  };
+  const warn = (c.requester && c.requester.shift === 'morning' ? c.afterMorning : c.afterEvening) <= 0;
+  return '<div style="margin-top:8px; padding:9px 11px; border-radius:10px;'
+    + ' background:var(--panel2,#f7f7f9); border:1px solid ' + (warn ? 'var(--minus,#c33)' : 'var(--border,#e5e5e5)') + '; font-size:12px; line-height:1.9;">'
+    + '<div>🌅 <b>صباحي:</b> ' + nm(c.morning) + '</div>'
+    + '<div>🌆 <b>مسائي:</b> ' + nm(c.evening) + '</div>'
+    + (c.offRows.length ? '<div>🛌 <b>مش موجودين:</b> ' + nm(c.offRows) + '</div>' : '')
+    + '<div style="margin-top:4px; font-weight:800; color:' + (warn ? 'var(--minus,#c33)' : 'inherit') + ';">'
+    +   (warn ? '⚠️ لو وافقت، الشيفت ده هيفضل **من غير حد**'
+             : '👉 لو وافقت: صباحي ' + c.afterMorning + ' · مسائي ' + c.afterEvening)
+    + '</div></div>';
+}
+window.ofLeaveContextHtml = ofLeaveContextHtml;
+
 function renderInbox(){
   const wrap = $('#inboxList'); if(!wrap) return;
   const items = buildInbox(D);
@@ -2306,6 +2398,11 @@ function renderInbox(){
   wrap.innerHTML = items.map(function(i){
     let actions = '';
     if(i.kind === 'leave') actions =
+      /* 🗓️ صورة اليوم قبل الأزرار — القرار عن **الفرع** مش عن الطالبة */
+      (function(){ try{
+        const _r = (D.leaves || []).filter(function(x){ return x.id === i.id; })[0];
+        return _r ? ofLeaveContextHtml(_r) : '';
+      }catch(e){ return ''; } })() +
       '<div style="display:flex; gap:7px; margin-top:9px;">' +
       '<button class="btn ok" style="flex:1;" onclick="officeDecideLeave(\''+i.id+'\',\'approved\')">✅ موافقة</button>' +
       '<button class="btn no" onclick="officeDecideLeave(\''+i.id+'\',\'rejected\')">رفض</button></div>';
@@ -2325,7 +2422,22 @@ window.officeDecideLeave = function(id, decision){
   const who = (r.empName || 'الموظفة') + (r.branch ? (' — ' + r.branch) : '');
   const when = r.dateKey ? ('\nيوم: ' + r.dateKey) : '';
   const word = (decision === 'approved') ? '✅ توافق على' : '❌ ترفض';
-  if(!confirm(word + ' طلب إذن\n\n' + who + when + '\n\nمتأكد؟')) return;
+  /* ⚠️ نفس الأرقام في التأكيد كمان: الكارت ممكن يكون اتعمله سكرول
+     والمالك بيدوس من غير ما يبصّ. الرقم لازم يبقى قدام عينه لحظة
+     القرار مش فوق بشوية. */
+  let _ctxTxt = '';
+  try{
+    if(decision === 'approved'){
+      const c = ofLeaveContext(r);
+      if(c.rows.length){
+        _ctxTxt = '\n\nبعد الموافقة في ' + (r.branch || '') + ':'
+          + '\n🌅 صباحي: ' + c.afterMorning + '  ·  🌆 مسائي: ' + c.afterEvening
+          + (c.offRows.length ? ('\n🛌 مش موجودين: '
+              + c.offRows.map(function(x){ return x.name; }).join('، ')) : '');
+      }
+    }
+  }catch(e){}
+  if(!confirm(word + ' طلب إذن\n\n' + who + when + _ctxTxt + '\n\nمتأكد؟')) return;
   db.collection('sales_leave_requests').doc(id).update({ status:decision, decidedAt:Date.now(), decidedFrom:'office' })
     .catch(function(e){ alert('تعذر الحفظ: '+e.message); });
 };
