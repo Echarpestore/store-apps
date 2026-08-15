@@ -1,4 +1,4 @@
-const CACHE_NAME = 'echarpe-office-v47';
+const CACHE_NAME = 'echarpe-office-v49';
 self.addEventListener('install', (e)=> self.skipWaiting());
 self.addEventListener('activate', (e)=>{
   e.waitUntil(
@@ -18,14 +18,10 @@ self.addEventListener('fetch', (e)=>{
     }).catch(()=> caches.match(e.request))
   );
 });
-// فتح التطبيق من الإشعار
-self.addEventListener('notificationclick', (e)=>{
-  e.notification.close();
-  e.waitUntil(clients.matchAll({ type:'window', includeUncontrolled:true }).then((list)=>{
-    for(const c of list){ if('focus' in c) return c.focus(); }
-    return clients.openWindow('./');
-  }));
-});
+// ⚠️ كان فيه **مستمعين `notificationclick`** في الملف ده: القديم ده
+//    (بيرمي `data.url` ويفتح './' دايمًا) والجديد تحت. المتصفح بينادي
+//    **الاتنين**، والقديم كان بيسبق فبيبلع اللينك. اتشال — المستمع
+//    الوحيد دلوقتي هو اللي تحت اللي بيحترم `data.url`.
 
 // ============ 🔔 استقبال إشعارات Push (حتى والتطبيق مقفول) ============
 // نفس نمط تطبيق العميلة بالظبط — الحدث 'push' الخام، مش firebase-messaging-sw.
