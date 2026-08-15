@@ -184,7 +184,15 @@ const rules = R('security', 'firestore-phase2.rules');
 {
   const L = '🧪 سلبي: ';
   // (أ) لو الكود اتنسخ من الولاء من غير تغيير اسم التطبيق
-  const wrongApp = glow.replace(/firebase\.app\('glow'\)\.functions/, "firebase.app('loyalty').functions");
+  /* ⚠️ الكسر لازم يبقى **جوه `claimGift` بالذات**: بقى فيه أكتر من
+     نداء لـ`firebase.app('glow').functions` في الملف (الأوردرات
+     كمان)، والاستبدال العام كان بيضرب أول واحد ويسيب الهدية سليمة —
+     فالاختبار السلبي يعدّي وهو مش بيختبر حاجة. */
+  const ci = glow.indexOf('async function claimGift'), ce = glow.indexOf('window.claimGift');
+  assert(ci > 0 && ce > ci, 'mustExtract: بلوك claimGift اتقص صح');
+  const broken = glow.slice(ci, ce).replace(/firebase\.app\('glow'\)\.functions/,
+                                            "firebase.app('loyalty').functions");
+  const wrongApp = glow.slice(0, ci) + broken + glow.slice(ce);
   assert(wrongApp !== glow, L + 'نجحنا نرجّع فخ النسخ');
   const c = wrongApp.slice(wrongApp.indexOf('async function claimGift'), wrongApp.indexOf('window.claimGift'));
   assert(!/firebase\.app\('glow'\)/.test(c),

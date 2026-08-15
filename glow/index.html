@@ -23,6 +23,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<!-- 💳🔴 لازم لاستلام كروت الهدية **وللأوردرات**.
+     الباج اللي كان: Glow بينادي `firebase.app('glow').functions(...)`
+     والـSDK ده **مش متحمّل خالص** → «functions is not a function»
+     قدام العميلة وهي شايلة كارت مدفوع. تطبيق الولاء كان بيحمّله
+     من زمان — النسخة اتعملت بنسخ ولصق والسطر ده وقع. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <!-- 💬 محرك الشات المشترك — مصدر واحد مع POS وecharpe -->
 <script src="../pos/chat-core.js"></script>
 <!-- 🌐 محرك اللغتين — نفس ملف تطبيق إيشارب بالظبط. لازم **قبل** أي
@@ -2155,7 +2161,41 @@ function shopSubmit(){
     });
     doc.contactPhone = info.phone;   // 📞 رقم التوصيل لو مختلف عن رقم الحساب
     doc.source = 'glow';       // 🖤 Glow · التطبيق بيبعت 'app' · الموقع 'web'
-    return db.collection(ORD_COL).add(doc).then(function(){ return doc; });
+    /* ☁️ الأولوية للدالة السحابية: هي اللي بتعمل الفحص والخصم
+       والإنشاء في transaction واحدة — فمستحيل اتنين ياخدوا آخر
+       قطعة. ⚠️ الفولباك للكتابة المباشرة موجود عشان الطلب ميقفش
+       لو الدالة لسه ماتنشرتش؛ القاعدة لسه بتحمي الفلوس في الحالتين.
+       ⚠️ أول ما تتنشر، الفولباك ده لازم يتشال والقاعدة تمنع الإنشاء
+          من العميلة خالص. */
+    var payload = {
+      brand: CATALOG_BRAND, source: 'glow', branch: _shopBranch,
+      phone: currentCustomer.phone, name: info.name,
+      items: chk.items.map(function(it){ return { barcode: it.barcode, qty: it.qty }; }),
+      payMethod: _shopPay, fulfillment: _shopFulfill,
+      governorate: info.governorate, address: info.address,
+      notes: info.notes, contactPhone: info.phone
+    };
+    try{
+      var fn = firebase.app('glow')
+        .functions('us-central1').httpsCallable('onlineOrderPlace');
+      return fn(payload).then(function(res){
+        var r = (res && res.data) || {};
+        return Object.assign({}, doc, { code: r.code || doc.code });
+      }).catch(function(e){
+        var code = (e && e.code) || '';
+        /* ⚠️ الفولباك للأعطال بس: «الصنف خلص» رفض **مقصود** ولازم
+           يوصل للعميلة زي ما هو، مش يتخطى بكتابة مباشرة. */
+        if(code === 'functions/failed-precondition' || code === 'failed-precondition'
+           || code === 'functions/invalid-argument' || code === 'invalid-argument'){
+          showToast((e && e.message) || 'مش متاح دلوقتي', true);
+          throw new Error('validate');
+        }
+        console.warn('order fn', code, e && e.message);
+        return db.collection(ORD_COL).add(doc).then(function(){ return doc; });
+      });
+    }catch(e){
+      return db.collection(ORD_COL).add(doc).then(function(){ return doc; });
+    }
   }).then(function(doc){
     _shopCart = {};
     _shopInfo.address = ''; _shopInfo.notes = '';

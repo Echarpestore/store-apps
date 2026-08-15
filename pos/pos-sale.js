@@ -942,6 +942,28 @@ function returnItemFromInvoice(itemIdx){
   // اللي اترجّع في جلسات سابقة من الصنف ده
   const _key = (it.barcode||'') + '|' + it.name;
   const prevReturned = (returnInvoiceData.returnedQty || {})[_key] || 0;
+  /* ============================================================
+     🎁🔴 كارت الهدية **ممنوع** يترجّع من مسار المرتجع العادي
+     ------------------------------------------------------------
+     الباج اللي المالك شافه: مرتجع سطر الكارت كان بيرجّع الفلوس
+     كاش **والكارت القديم يفضل شغّال بقيمته** — يعني نفس الفلوس
+     طلعت مرتين: مرة كاش للعميلة، ومرة رصيد في إيد أي حد معاه
+     الكود. ولو الكود اتصرف خلاص، الخسارة مضاعفة.
+     ⚠️ الكارت مش بضاعة: قيمته **دين علينا** لحد ما يتصرف، وإلغاؤه
+        لازم يحصل على السيرفر (الدوال بس بتكتب في `gift_cards`).
+        لحد ما دالة الإلغاء تتنشر، المسار ده مقفول صراحةً — والمنع
+        أرخص بكتير من فلوس بتطلع مرتين.
+     ============================================================ */
+  if(it && (it.isGiftCard || it.giftCardId || /كارت هدية/.test(String(it.name || '')))){
+    showToast('⛔ كارت الهدية مايترجعش من هنا — لازم يتلغي من سجل الكروت الأول', 'err');
+    if(typeof _logActivity === 'function'){
+      try{ _logActivity('gift_card_return_blocked', {
+        invoiceNo: invoiceNo, cardId: it.giftCardId || '', value: Math.abs(Number(it.price) || 0)
+      }); }catch(e){}
+    }
+    return;
+  }
+
   const availableToReturn = Math.max(0, soldQty - prevReturned);
   // ↩️ السقف: (اللي في السلة دلوقتي + اللي اترجّع قبل كده) لازم ميعدّيش المتباع
   const line = _retFindLine(cart, invoiceNo, it);

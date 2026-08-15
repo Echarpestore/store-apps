@@ -1409,6 +1409,10 @@ window.ofMarkRefunded = function(id){
 const OF_ACT_LIMIT = 400;
 // وصف بالمصري لكل نوع + تصنيفه + هل هو مقلق (بيتلوّن أحمر)
 const OF_ACT_KINDS = {
+  /* 🎁 محاولة مرتجع كارت هدية — **حدث ساخن**: معناها إن حد حاول
+     يرجّع فلوس كارت لسه شغّال. المنع اشتغل، بس المحاولة نفسها
+     لازم تتشاف (يمكن تكون سوء فهم من الكاشير، ويمكن تكون محاولة). */
+  gift_card_return_blocked: { t:'🎁 محاولة مرتجع كارت هدية (اتمنعت)', g:'money', hot:true },
   card_overcharge_saved: { t:'💳 سحب فيزا زيادة — الفاتورة اتحفظت', g:'money', hot:true },
   card_overcharge_ok:    { t:'💳 الكاشير أكّد السحب الزيادة', g:'money', hot:true },
   sale_saved:            { t:'🧾 فاتورة اتحفظت', g:'cart', quiet:true },
