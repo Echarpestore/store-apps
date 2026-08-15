@@ -30,6 +30,8 @@
 <!-- 🌐 محرك اللغتين — مشترك مع Glow. لازم **قبل** أي رسم عشان
      الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
+<!-- 🛍️ محرك الأوردرات — **نفس الملف** اللي POS والموقع بيقروه -->
+<script src="../pos/orders-core.js"></script>
 <script>try{ if(window.i18nInit) i18nInit(); }catch(e){}</script>
 
 <style>
@@ -431,6 +433,31 @@
   html[dir="ltr"] .offer::before{right:auto; left:0;}
   html[dir="ltr"] .prod .oos{left:auto; right:12px;}
   html[dir="ltr"] .tab-badge{left:auto; right:calc(50% + 4px);}
+
+  /* 🛍️ «اطلبي» + «أوردراتي» */
+  .prod .padd{width:100%; margin-top:8px; border:none; border-radius:99px; background:var(--pink);
+    color:#fff; font-family:inherit; font-weight:800; font-size:12.5px; padding:8px; cursor:pointer;}
+  .prod .qbar{display:flex; align-items:center; justify-content:space-between; margin-top:8px;
+    background:var(--pink-soft); border-radius:99px; padding:4px 6px;}
+  .prod .qbar button{border:none; background:var(--pink); color:#fff; width:28px; height:28px;
+    border-radius:50%; font-size:16px; font-weight:800; cursor:pointer; line-height:1;}
+  .shop-cart{background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:16px; margin-top:16px;}
+  .fld-lbl{font-size:12.5px; font-weight:800; color:var(--muted); margin:14px 0 7px;}
+  .chips{display:flex; gap:8px; flex-wrap:wrap;}
+  .chips .chip{border:1.5px solid var(--line); background:#fff; color:var(--ink); border-radius:99px;
+    padding:9px 15px; font-family:inherit; font-size:13px; font-weight:800; cursor:pointer;}
+  .chips .chip.on{background:var(--pink); border-color:var(--pink); color:#fff;}
+  .ord-card{background:#fff; border:1.5px solid var(--line); border-radius:18px; padding:14px; margin-bottom:12px;}
+  .ord-h{display:flex; align-items:center; justify-content:space-between; font-size:15px;}
+  .ord-badge{font-size:11.5px; font-weight:800; border:1.5px solid var(--line); border-radius:99px; padding:3px 10px;}
+  .ord-sub{font-size:12px; color:var(--muted); font-weight:700; margin-top:3px;}
+  .ord-steps{display:flex; gap:4px; margin:12px 0 8px;}
+  .ord-step{flex:1; text-align:center; opacity:.35;}
+  .ord-step.on{opacity:1;}
+  .ord-step .oi{display:block; font-size:18px;}
+  .ord-step .ot{font-size:10.5px; font-weight:800;}
+  .ord-hint{font-size:12.5px; line-height:1.8; background:var(--pink-soft); border-radius:12px; padding:8px 11px;}
+  .ord-time{font-size:12px; font-weight:800; color:var(--gold-deep); margin-top:7px;}
 </style>
 </head>
 <body>
@@ -500,6 +527,7 @@
     <div class="tabview">
       <div id="tab-card"></div>
       <div id="tab-offers" style="display:none;"></div>
+      <div id="tab-shop" style="display:none;"></div>
       <div id="tab-invoices" style="display:none;"></div>
       <div id="tab-account" style="display:none;"></div>
       <div id="tab-contact" style="display:none;"></div>
@@ -534,6 +562,7 @@
   <nav class="tabbar" id="tabbar" style="display:none;">
     <button class="tab active" data-tab="card"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6 14.5h4"/></svg></span><span class="tl">بطاقتي</span></button>
     <button class="tab" data-tab="offers"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 3.5H19a1.5 1.5 0 0 1 1.5 1.5v6.4a1.5 1.5 0 0 1-.44 1.06l-7.1 7.1a1.5 1.5 0 0 1-2.12 0l-5.9-5.9a1.5 1.5 0 0 1 0-2.12l7.1-7.1A1.5 1.5 0 0 1 12.6 3.5z"/><circle cx="16" cy="8" r="1.25"/></svg></span><span class="tl">عروضي</span><span class="tab-badge" id="badge-offers"></span></button>
+    <button class="tab" data-tab="shop"><span class="ti">🛍️</span><span class="tl">اطلبي</span><span class="tab-badge" id="badge-shop"></span></button>
     <button class="tab" data-tab="invoices"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12v17l-2.2-1.3-2.2 1.3-2.2-1.3-2.2 1.3-2.2-1.3L6 20.5z"/><path d="M9 8.5h6"/><path d="M9 12h6"/></svg></span><span class="tl">فواتيري</span></button>
     <button class="tab" data-tab="account"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.3" r="3.3"/><path d="M5.2 20c0-3.4 3-6 6.8-6s6.8 2.6 6.8 6"/></svg></span><span class="tl">حسابي</span></button>
     <button class="tab" data-tab="contact"><span class="ti"><svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.7a7.3 7.3 0 0 1-10.6 6.5L4.8 19.5l1.25-4.3A7.3 7.3 0 1 1 20 11.7z"/></svg></span><span class="tl">تواصل</span><span class="tab-badge" id="badge-contact"></span></button>
@@ -1139,6 +1168,10 @@ function enterApp(phone){
   creditUnsub = watchCredit(phone);
   if(reqUnsub){ reqUnsub(); }
   reqUnsub = watchMyRequests(phone);
+  /* 🛍️ مستمع الأوردرات — لازم يشتغل مع الدخول مش مع فتح الشيت:
+     العميلة لازم تشوف «جاهز» من غير ما تفتح حاجة. */
+  if(ordUnsub){ ordUnsub(); }
+  ordUnsub = watchMyOrders(phone);
 
   // 💬 مستمع المحادثة (مستند واحد) — للشارة الحمرا لايف. رسايل
   //    الشات نفسها مبتتحملش غير لما الشاشة تتفتح (توفير قراءات).
@@ -1224,14 +1257,19 @@ function lazyLoadTab(tab){
      ⚠️ كان مربوط بـ`products`، واللي فضل مربوط بيه بعد الدمج كان
         هيفضل مستني تبويب **مش موجود** — يعني الكتالوج ميتحملش أبدًا
         والقسم يفضل فاضي من غير أي رسالة خطأ. */
-  if(tab==='offers'){
+  /* 🛍️ «اطلبي» بيقرا **نفس** مستند الكتالوج بتاع «عروضي».
+     ⚠️ لو اتعمله استعلام لوحده، ده قراءة زيادة على كل عميلة مقابل
+        صفر معلومة جديدة. */
+  if(tab==='shop' && dataProducts !== null){ tabStarted[tab] = true; return; }
+  if(tab==='offers' || tab==='shop'){
     tabStarted[tab] = true; showTopLoad(true);
     db.collection(COL_SETTINGS).doc('catalog_'+CATALOG_BRAND).get().then(function(d){
       var data = d.exists ? d.data() : {};
       dataProducts = Array.isArray(data.items) ? data.items : [];
       catalogBanners = Array.isArray(data.banners) ? data.banners : [];
       if(currentTab==='offers') renderOffers();
-    }).catch(function(){ dataProducts=[]; if(currentTab==='offers') renderOffers(); })
+      if(currentTab==='shop') renderShop();
+    }).catch(function(){ dataProducts=[]; if(currentTab==='offers') renderOffers(); if(currentTab==='shop') renderShop(); })
       .then(function(){ showTopLoad(false); });
     // ⚠️ **مفيش `return`** هنا عن قصد: تبويب العروض محتاج كمان
     //    الخصومات من `tabRef('offers')`. الـreturn القديم كان بيوقف
@@ -1248,12 +1286,13 @@ function lazyLoadTab(tab){
 function switchTab(tab){
   currentTab = tab;
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
-  ['card','offers','invoices','account','contact'].forEach(function(t){
+  ['card','offers','shop','invoices','account','contact'].forEach(function(t){
     $('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
   });
   // نبدأ تحميل بيانات التبويب أول مرة بس (كسول)، والعرض من الذاكرة فورًا في المرات الجاية
-  if(tab==='offers' || tab==='invoices') lazyLoadTab(tab);
-  if(tab==='offers') renderOffers();
+  if(tab==='offers' || tab==='invoices' || tab==='shop') lazyLoadTab(tab);
+  if(tab==='shop') renderShop();
+  else if(tab==='offers') renderOffers();
   else if(tab==='invoices') renderInvoices();
   else if(tab==='account') renderAccount();
   else if(tab==='contact') renderContact();
@@ -1744,6 +1783,8 @@ function renderAccount(){
     /* 🌐 اللغة — صف مستقل فوق الأزرار عشان يبان من غير سكرول */
     '<div class="lang-row"><span class="lr-k">لغة التطبيق</span>'
       + (window.i18nSwitchHTML ? i18nSwitchHTML() : '') + '</div>'+
+    '<button class="btn-outline" onclick="openMyOrders()">🛍️ أوردراتي'
+      + (_myOrders.length ? ' (' + _myOrders.length + ')' : '') + '</button>'+
     '<button class="btn-outline" onclick="openMyRequests()">🔖 طلباتي'
       + (_myRequests.length ? ' (' + _myRequests.length + ')' : '') + '</button>'+
     '<button class="btn-outline" onclick="openClaimGift()">🎁 عندي كود كارت هدية</button>'+
@@ -1818,6 +1859,259 @@ function openMyRequests(){
         + ' قولي للبياعة تسجّلها — ونكلّمك أول ما توصل.</div></div>'));
 }
 window.openMyRequests = openMyRequests;
+
+
+/* ============================================================
+   🛍️ «اطلبي» — الشراء أونلاين من التطبيق
+   ------------------------------------------------------------
+   المنطق كله في `../pos/orders-core.js` — **نفس الملف** اللي POS
+   والموقع (echarpe.store) بيقروه. مصدر واحد للقواعد، وإلا الموقع
+   يسمح بحاجة التطبيق بيمنعها والعكس.
+
+   📌 قرارات مثبتة:
+     · «فيزا» = هتدفعي بالفيزا **في الفرع** — مش دفع أونلاين. الدفع
+       الأونلاين محتاج بوابة غير الـMPOS ومرتجعات وتسويات مختلفة.
+     · الحجز **٢٤ ساعة** وبعدها الكمية ترجع للبيع تلقائي.
+     · السعر بيتاخد من الكتالوج **مش من الجهاز** — والقاعدة بتمنع
+       العميلة تكتب `total` أصلًا.
+
+   ⚠️ الكمية بتتفحص من **المخزون الحقيقي** لحظة الإرسال (قراءة
+      مستند لكل صنف في السلة بالباركود). الكتالوج مالوش كميات —
+      من غير الفحص ده العميلة تطلب حاجة مش موجودة في الفرع، وتيجي
+      تلاقي محدش عارف حاجة. و POS بيفحص تاني وقت التسليم.
+   ============================================================ */
+var ORD_COL = 'online_orders';
+var _shopCart = {};            // { barcode: qty }
+var _shopBranch = '';
+var _shopPay = 'cash';
+var _shopSending = false;
+var _myOrders = [];
+var ordUnsub = null;
+
+function shopBranches(){
+  /* كل الفروع — مش اللي عندها واتساب بس. الاستلام مالوش علاقة
+     برقم الواتساب. */
+  return (CONTACT.branches || []).map(function(b){ return b.name; })
+    .filter(function(n){ return n && n !== GLOW_BRANCH; });
+}
+
+function shopItems(){
+  return (dataProducts || []).filter(function(p){ return p && p.barcode && Number(p.price) > 0; });
+}
+
+function shopQty(bc){ return Math.max(0, Math.floor(Number(_shopCart[bc]) || 0)); }
+function shopAdd(bc, d){
+  bc = String(bc);
+  var n = shopQty(bc) + (Number(d) || 0);
+  if(n <= 0) delete _shopCart[bc]; else _shopCart[bc] = n;
+  renderShop();
+}
+window.shopAdd = shopAdd;
+
+function shopSetBranch(v){ _shopBranch = v; renderShop(); }
+function shopSetPay(v){ _shopPay = (v === 'visa') ? 'visa' : 'cash'; renderShop(); }
+window.shopSetBranch = shopSetBranch;
+window.shopSetPay = shopSetPay;
+
+function shopCartLines(){
+  var byBc = {};
+  shopItems().forEach(function(p){ byBc[String(p.barcode)] = p; });
+  var out = [];
+  Object.keys(_shopCart).forEach(function(bc){
+    var p = byBc[bc]; if(!p) return;
+    out.push({ barcode: bc, name: p.name || 'منتج', price: Number(p.price) || 0, qty: shopQty(bc) });
+  });
+  return out;
+}
+
+function renderShop(){
+  var box = $('tab-shop'); if(!box) return;
+  if(dataProducts === null){ box.innerHTML = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>' + loaderHTML(); return; }
+
+  var items = shopItems();
+  var lines = shopCartLines();
+  var total = orderTotal(lines);
+  var branches = shopBranches();
+  if(!_shopBranch && branches.length === 1) _shopBranch = branches[0];
+
+  var head = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>'
+    + '<div style="font-size:12.5px; line-height:1.9; opacity:.85; margin-bottom:12px;">'
+    + 'اختاري اللي عايزاه، وحدّدي الفرع اللي هتستلمي منه. بنحجزلك ٢٤ ساعة.</div>';
+
+  if(!items.length){
+    box.innerHTML = head + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
+    return;
+  }
+
+  var grid = '<div class="prod-grid">' + items.map(function(p){
+    var bc = String(p.barcode), q = shopQty(bc);
+    return '<div class="prod">'
+      + (p.img ? '<img src="' + esc(p.img) + '" alt="">' : '<div class="ph">🧕</div>')
+      + '<div class="pn">' + esc(p.name || 'منتج') + '</div>'
+      + '<div class="pp">' + fmt(p.price) + ' ج.م</div>'
+      + (q
+        ? '<div class="qbar"><button onclick="shopAdd(\'' + esc(bc) + '\',-1)">−</button>'
+          + '<b>' + q + '</b>'
+          + '<button onclick="shopAdd(\'' + esc(bc) + '\',1)">+</button></div>'
+        : '<button class="padd" onclick="shopAdd(\'' + esc(bc) + '\',1)">➕ ضيفي</button>')
+      + '</div>';
+  }).join('') + '</div>';
+
+  var cart = '';
+  if(lines.length){
+    cart = '<div class="shop-cart">'
+      + '<div style="font-weight:900; margin-bottom:8px;">🧺 سلتك</div>'
+      + lines.map(function(l){
+          return '<div class="ish-item"><span>' + esc(l.name) + ' <span class="q">× ' + l.qty + '</span></span>'
+            + '<span>' + fmt(l.price * l.qty) + ' ج.م</span></div>';
+        }).join('')
+      + '<div class="ish-row big"><span>الإجمالي</span><span>' + fmt(total) + ' ج.م</span></div>'
+
+      + '<div class="fld-lbl">🏬 هستلم من فرع</div>'
+      + '<div class="chips">' + branches.map(function(b){
+          return '<button class="chip' + (b === _shopBranch ? ' on' : '') + '" onclick="shopSetBranch(\'' + esc(b) + '\')">' + esc(b) + '</button>';
+        }).join('') + '</div>'
+
+      /* ⚠️ النص هنا **حرفي عن قصد**: «هدفع في الفرع». لو اتكتب
+         «ادفع بالفيزا» العميلة تفتكر إنها دفعت خلاص أونلاين، وتيجي
+         الفرع تلاقي نفسها لسه هتدفع — وعد اتكسر من غير سبب. */
+      + '<div class="fld-lbl">💳 هدفع في الفرع بـ</div>'
+      + '<div class="chips">'
+        + '<button class="chip' + (_shopPay === 'cash' ? ' on' : '') + '" onclick="shopSetPay(\'cash\')">💵 كاش</button>'
+        + '<button class="chip' + (_shopPay === 'visa' ? ' on' : '') + '" onclick="shopSetPay(\'visa\')">💳 فيزا</button>'
+      + '</div>'
+
+      + '<button class="btn-primary" style="margin-top:14px;" id="shopSendBtn" onclick="shopSubmit()">'
+        + 'اطلبي دلوقتي</button>'
+      + '<div class="redeem-hint">بنحجزلك الحاجات ٢٤ ساعة — بعدها بترجع للبيع.</div>'
+      + '</div>';
+  }
+
+  box.innerHTML = head + grid + cart;
+}
+window.renderShop = renderShop;
+
+/* 🚀 الإرسال.
+   ⚠️ الترتيب مهم: الفحص **قبل** الكتابة. وأي فشل في الفحص بيتقال
+      للعميلة بالنص — «حصل خطأ» لوحدها بتخليها تعيد المحاولة على
+      حاجة مش هتنجح أبدًا. */
+function shopSubmit(){
+  if(_shopSending) return;
+  if(!currentCustomer){ showToast('سجّلي دخولك الأول', true); return; }
+  var lines = shopCartLines();
+  if(!lines.length){ showToast('السلة فاضية', true); return; }
+  if(!_shopBranch){ showToast('اختاري الفرع اللي هتستلمي منه', true); return; }
+
+  _shopSending = true;
+  var btn = $('shopSendBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'بيتبعت…'; }
+
+  /* 📦 الكميات الحقيقية — مستند لكل باركود (الباركود = مفتاح المستند).
+     ⚠️ مش استعلام على المخزون كله: ده آلاف المستندات على موبايل. */
+  Promise.all(lines.map(function(l){
+    return db.collection(COL_INVENTORY).doc(String(l.barcode)).get()
+      .then(function(d){ return d.exists ? Object.assign({ barcode:String(l.barcode) }, d.data()) : null; })
+      .catch(function(){ return null; });
+  })).then(function(prods){
+    var chk = orderValidateCart(
+      lines.map(function(l){ return { barcode:l.barcode, qty:l.qty }; }),
+      prods.filter(Boolean), _shopBranch, Date.now()
+    );
+    if(!chk.ok){
+      showToast(chk.errors[0], true);
+      throw new Error('validate');
+    }
+    var doc = orderBuild({
+      phone: currentCustomer.phone,
+      name: currentCustomer.name || '',
+      brand: CATALOG_BRAND,
+      branch: _shopBranch,
+      items: chk.items,
+      payMethod: _shopPay
+    });
+    doc.source = 'app';        // 📱 التطبيق · Glow بيبعت 'glow' · الموقع 'web'
+    return db.collection(ORD_COL).add(doc).then(function(){ return doc; });
+  }).then(function(doc){
+    _shopCart = {};
+    renderShop();
+    showToast('تمام ✅ أوردر رقم ' + doc.code);
+    openMyOrders();
+  }).catch(function(e){
+    if(e && e.message !== 'validate'){
+      console.warn('order send', e);
+      showToast('معرفناش نبعت الأوردر — حاولي تاني', true);
+    }
+  }).then(function(){
+    _shopSending = false;
+    var b = $('shopSendBtn');
+    if(b){ b.disabled = false; b.textContent = 'اطلبي دلوقتي'; }
+  });
+}
+window.shopSubmit = shopSubmit;
+
+/* 📡 مستمع أوردراتي — بيشتغل مع الدخول ويتقفل مع الخروج.
+   ⚠️ من غير سقف، العميلة القديمة بتجرّ كل أوردراتها كل فتحة. */
+function watchMyOrders(phone){
+  try{
+    return db.collection(ORD_COL).where('phone','==', String(phone)).limit(20)
+      .onSnapshot(function(s){
+        _myOrders = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); })
+          .sort(function(a,b){ return (b.createdAt||0) - (a.createdAt||0); });
+        try{ refreshBadges(); }catch(e){}
+        // الشيت مفتوح؟ يتحدّث لايف — العميلة واقفة في الفرع بتتفرج عليه
+        if(document.getElementById('crSheet') && document.getElementById('crSheet').classList.contains('on')
+           && _ordSheetOpen){ openMyOrders(true); }
+      }, function(e){ console.warn('orders sync', e && e.code); });
+  }catch(e){ return null; }
+}
+window.watchMyOrders = watchMyOrders;
+
+var _ordSheetOpen = false;
+
+/* 🧾 «أوردراتي» — الخطوات بالترتيب.
+   ⚠️ النص بيوعد **بحالة مش بميعاد**: «بنجهّزلك» مش «هيبقى جاهز خلال
+      ساعة». الوعد بميعاد مااتحققش أوحش من إننا ماوعدناش. */
+function openMyOrders(silent){
+  _ordSheetOpen = true;
+  var now = Date.now();
+  var body;
+  if(!_myOrders.length){
+    body = '<div style="text-align:center; padding:18px 10px; font-size:13px; line-height:1.9;">'
+      + '<div style="font-size:34px;">🛍️</div>'
+      + '<div style="font-weight:800; margin-top:6px;">لسه مفيش أوردرات</div>'
+      + '<div style="opacity:.75; margin-top:4px;">اختاري من «اطلبي» واستلمي من أقرب فرع.</div></div>';
+  }else{
+    body = _myOrders.map(function(o){
+      var st = orderEffectiveStatus(o, now);
+      var idx = orderStepIndex(st);
+      var lab = ORDER_LABEL[st] || ORDER_LABEL.placed;
+      var dead = (st === 'cancelled' || st === 'expired');
+      var steps = dead ? '' : '<div class="ord-steps">' + ORDER_STEPS.map(function(k, i){
+        var l = ORDER_LABEL[k];
+        return '<div class="ord-step' + (i <= idx ? ' on' : '') + '">'
+          + '<span class="oi">' + l.icon + '</span><span class="ot">' + l.t + '</span></div>';
+      }).join('') + '</div>';
+
+      return '<div class="ord-card">'
+        + '<div class="ord-h"><b>#' + esc(o.code || '') + '</b>'
+          + '<span class="ord-badge">' + lab.icon + ' ' + lab.t + '</span></div>'
+        + '<div class="ord-sub">🏬 ' + esc(o.branch || '') + ' · '
+          + (o.payMethod === 'visa' ? '💳 هتدفعي فيزا في الفرع' : '💵 هتدفعي كاش في الفرع') + '</div>'
+        + steps
+        + '<div class="ord-hint">' + esc(orderNextHint(st)) + '</div>'
+        + (!dead && st !== 'collected'
+            ? '<div class="ord-time">⏳ ' + esc(orderTimeLeft(o, now)) + '</div>' : '')
+        + (o.items || []).map(function(it){
+            return '<div class="ish-item"><span>' + esc(it.name || 'صنف') + ' <span class="q">× ' + (Number(it.qty)||0) + '</span></span>'
+              + '<span>' + fmt((Number(it.price)||0) * (Number(it.qty)||0)) + ' ج.م</span></div>';
+          }).join('')
+        + '<div class="ish-row big"><span>الإجمالي</span><span>' + fmt(orderTotal(o.items)) + ' ج.م</span></div>'
+        + '</div>';
+    }).join('');
+  }
+  showSheet('🛍️ أوردراتي', body);
+}
+window.openMyOrders = openMyOrders;
 
 /* 📄 شيت بسيط — بيستخدم نفس آلية شيت الفاتورة الموجودة.
    ⚠️ أول نسخة من الكود ده كانت بتنادي `showSheet` وهي **مش
@@ -1937,6 +2231,10 @@ function logout(silent){
   //    هتشوف حركات فلوس مش بتاعتها.
   if(creditUnsub){ creditUnsub(); creditUnsub=null; }
   if(reqUnsub){ reqUnsub(); reqUnsub=null; }
+  /* 🛍️ ونفس القاعدة للأوردرات: أوردر فيه اسمها وفرعها وحاجاتها —
+     عميلة تانية على نفس الجهاز ممنوع تشوفه. */
+  if(ordUnsub){ ordUnsub(); ordUnsub=null; }
+  _myOrders = []; _shopCart = {}; _shopBranch = '';
   // 💬 نفس القاعدة: عميلة تانية على نفس الجهاز ممنوع تشوف شات غيرها
   if(window.chatCleanup) chatCleanup();
   _creditRows = [];
