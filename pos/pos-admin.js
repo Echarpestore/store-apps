@@ -516,6 +516,9 @@ function renderCatalogEditor(){
         <input id="catUses" type="number" placeholder="يستخدمه كام مرة (لكل عميل)" value="1" style="${inp} flex:1;">
         <input id="catValidDays" type="number" placeholder="صالح كام يوم (فاضي=مفتوح)" style="${inp} flex:1;">
       </div>
+      <!-- ⚠️ البيع أونلاين **مش من هنا**: ليه شاشته الخاصة
+           («🛒 منتجات البيع أونلاين») عشان يتحدد فيها عدد وصورة
+           ووصف. مصدر واحد للحقيقة — الخانة اللي كانت هنا اتشالت. -->
       <label style="display:block; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:4px;">📷 صورة المنتج (من موبايلك)</label>
       <input type="file" id="catImgFile" accept="image/*" onchange="catalogPickImage(this)" style="${inp}">
       <div id="catImgPreview"></div>

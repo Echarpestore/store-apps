@@ -1101,6 +1101,9 @@ body.on-dashboard .badge-test{ display:block; }
             <!-- 🛍️ أوردرات أونلاين — التطبيقين **والموقع** (echarpe.store).
                  ⚠️ الاسم مش «أوردرات التطبيق»: الموقع بيكتب على نفس
                     المجموعة، والشاشة دي هي المستقبِل الوحيد لكلهم. -->
+            <div class="qb-nav-item" id="navOnlineShop" onclick="goToOnlineShopAdmin()">
+              <div class="qb-icon">🛒</div><div class="qb-label">منتجات البيع أونلاين</div>
+            </div>
             <div class="qb-nav-item" id="navOnlineOrders" onclick="goToOnlineOrders()" style="position:relative;">
               <div class="qb-icon">🛍️</div><div class="qb-label">أوردرات أونلاين</div>
               <span id="navOrdBadge" style="display:none; position:absolute; top:6px; inset-inline-end:8px; background:#E5484D; color:#fff; border-radius:99px; min-width:20px; height:20px; font-size:11.5px; font-weight:800; align-items:center; justify-content:center; padding:0 5px;"></span>
@@ -1203,6 +1206,21 @@ body.on-dashboard .badge-test{ display:block; }
      ⚠️ الشاشة دي شرط قبل أي واجهة عميلة: من غيرها الطلب بيروح في
         الفراغ والعميلة تروح الفرع تلاقي محدش عارف حاجة.
      ============================================================ -->
+<!-- ============================================================
+     🛒 منتجات البيع أونلاين — مصدر الحقيقة الوحيد لتبويب «اطلبي»
+     ⚠️ منفصلة عن «كتالوج العرض» عن قصد: الكتالوج عرض وعروض، ودي
+        التزام بكمية وسعر لعميلة هتيجي تستلم.
+     ============================================================ -->
+<div class="screen mgmt-light" id="onlineShopScreen">
+  <div class="dash-header">
+    <div><h1>🛒 منتجات البيع أونلاين</h1></div>
+    <button class="logout-btn" onclick="goToOnlineOrders()">🛍️ الأوردرات</button>
+    <button class="logout-btn" onclick="goToCatalogEditor()">🖼️ كتالوج العرض</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div id="shopAdminWrap" style="padding:0 20px 24px;"></div>
+</div>
+
 <div class="screen mgmt-light" id="onlineOrdersScreen">
   <div class="dash-header">
     <div><h1>🛍️ أوردرات أونلاين</h1></div>
@@ -1918,6 +1936,7 @@ body.on-dashboard .badge-test{ display:block; }
 <!-- 🛍️ أوردرات أونلاين — المحرك المشترك (التطبيقين والموقع بيقروا نفس الملف) ثم الواجهة -->
 <script src="orders-core.js"></script>
 <script src="orders-ui.js"></script>
+<script src="shop-admin.js"></script>
 <!-- 💬 مؤلّف رسايل واتساب (أسعار/خصم/وصل جديد) — بيستخدم reqEsc فلازم بعد requests-ui -->
 <script src="wa-compose.js"></script>
 <!-- 💬 شات العميلة (معزول عن مسار البيع) -->
