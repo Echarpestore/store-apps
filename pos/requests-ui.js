@@ -10,6 +10,29 @@
    ============================================================ */
 
 const REQ_COL = 'customer_requests';
+
+/* ============================================================
+   🛡️ reqEsc — تهريب HTML
+   ------------------------------------------------------------
+   🔴 الباج اللي كان هنا: الملف كان بينادي `esc()` في **١٠ مواضع**،
+      و`esc()` **مش معرّفة في POS خالص** — لا في ملف ولا في بلوك
+      سكريبت. يعني:
+        · لوحة الطلبات في «استلام بضاعة» كانت بترمي ReferenceError
+          جوّه `try{}` وتفضل **فاضية** من غير أي رسالة.
+        · وشاشة «فيه ناس كانوا طالبين ده» كانت بتقع بنفس الطريقة.
+      الميزة كانت شكلها مبنية وهي عمرها ما اشتغلت.
+   ⚠️ اللي كشفها: شاشة الطلبات الجديدة بتتنادى **من غير try**، فالخطأ
+      طلع على الشاشة بدل ما يتبلع. الدرس: `try{}` حوالين كود عرض
+      بيخفي الباجات مش بيمنعها.
+   ⚠️ والاسم `reqEsc` مش `esc` عن قصد: اسم عام في ملف مشترك ممكن
+      يتصادم مع تعريف تاني في ملف تاني.
+   ============================================================ */
+function reqEsc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+window.reqEsc = reqEsc;
 let _reqCache = [];          // الطلبات المفتوحة (للمطابقة السريعة)
 let _reqUnsub = null;
 
@@ -23,10 +46,12 @@ function startRequestsListener(){
       .onSnapshot(function(s){
         _reqCache = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
         window.custRequestsOpen = _reqCache;
-        try{ renderRequestsTab(); }catch(e){}
+        // ⚠️ الـcatch بيطبع السبب — مبيبلعوش. `catch(e){}` الفاضي هنا
+        //    بالظبط هو اللي خفى غياب `esc()` لشهور (شوف pos-core.js).
+        try{ renderRequestsTab(); }catch(e){ console.warn('req tab', e); }
         // 🔖 الشاشة المستقلة والبادچ بيتحدّثوا من نفس اللقطة — صفر قراءات زيادة
-        try{ renderRequestsBadge(); }catch(e){}
-        try{ renderRequestsScreen(); }catch(e){}
+        try{ renderRequestsBadge(); }catch(e){ console.warn('req badge', e); }
+        try{ renderRequestsScreen(); }catch(e){ console.warn('req screen', e); }
       }, function(e){ console.warn('requests sync', e && e.code); });
   }catch(e){ console.warn('requests listen', e); }
 }
@@ -118,7 +143,7 @@ function showRequestMatches(groups){
     return '<div style="border:2px solid ' + (sure ? '#22c55e' : '#f59e0b') + ';'
       + ' border-radius:12px; padding:12px; margin-bottom:10px; text-align:right;">'
       + '<div style="font-weight:900; font-size:14px;">'
-      +   (sure ? '🟢 ' : '🟡 ') + esc(g.product.name || '')
+      +   (sure ? '🟢 ' : '🟡 ') + reqEsc(g.product.name || '')
       +   (sure ? '' : ' <span style="font-size:11px; font-weight:700;">(اقتراح — اتأكد)</span>')
       + '</div>'
       + '<div style="font-size:11.5px; opacity:.75; margin:3px 0 8px;">'
@@ -131,8 +156,8 @@ function showRequestMatches(groups){
             + ' gap:8px; padding:7px 0; border-top:1px solid rgba(255,255,255,.12);">'
             + '<div style="min-width:0;">'
             +   '<div style="font-size:12.5px; font-weight:700;">'
-            +     (i + 1) + '. ' + esc(q.name || q.phone) + '</div>'
-            +   '<div style="font-size:11px; opacity:.7;">' + esc(q.text || '')
+            +     (i + 1) + '. ' + reqEsc(q.name || q.phone) + '</div>'
+            +   '<div style="font-size:11px; opacity:.7;">' + reqEsc(q.text || '')
             +     ' · من ' + days + ' يوم</div>'
             + '</div>'
             + '<div style="display:flex; gap:5px; flex-shrink:0;">'
@@ -260,10 +285,10 @@ function renderRequestsTab(){
     return '<div style="border-bottom:1px solid var(--border); padding:10px 4px;">'
       + '<div style="display:flex; justify-content:space-between; gap:8px;">'
       +   '<div style="min-width:0;">'
-      +     '<div style="font-weight:800; font-size:13px;">' + esc(r.text || '') + '</div>'
+      +     '<div style="font-weight:800; font-size:13px;">' + reqEsc(r.text || '') + '</div>'
       +     '<div style="font-size:11.5px; opacity:.72; margin-top:2px;">'
-      +       esc(r.name || r.phone) + ' · ' + esc(r.branch || '') + ' · من ' + days + ' يوم'
-      +       (r.barcode ? ' · 🏷️ ' + esc(r.barcode) : '')
+      +       reqEsc(r.name || r.phone) + ' · ' + reqEsc(r.branch || '') + ' · من ' + days + ' يوم'
+      +       (r.barcode ? ' · 🏷️ ' + reqEsc(r.barcode) : '')
       +       (old ? ' · <span style="color:var(--warn);">⏳ قديم</span>' : '')
       +     '</div>'
       +   '</div>'
@@ -361,18 +386,18 @@ function renderRequestsScreen(){
           if(reqMatch(r, p).level === 'exact' && (p.qtyByBranch || {})[currentBranch] > 0){ ready = true; break; }
         }
       }
-    }catch(e){}
+    }catch(e){ console.warn('req ready', e); }
     return '<div style="border:1.5px solid ' + (ready ? 'var(--plus)' : 'var(--border)') + ';'
       + ' border-radius:12px; padding:11px 12px; margin-bottom:9px; background:var(--panel);">'
       + '<div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">'
       +   '<div style="min-width:0;">'
       +     '<div style="font-weight:800; font-size:14px;">'
-      +       (ready ? '🟢 ' : '') + esc(r.text || '') + '</div>'
+      +       (ready ? '🟢 ' : '') + reqEsc(r.text || '') + '</div>'
       +     '<div style="font-size:11.5px; opacity:.72; margin-top:3px;">'
-      +       esc(r.name || r.phone) + ' · ' + esc(r.phone || '') + ' · ' + esc(r.branch || '')
+      +       reqEsc(r.name || r.phone) + ' · ' + reqEsc(r.phone || '') + ' · ' + reqEsc(r.branch || '')
       +       ' · من ' + days + ' يوم'
-      +       (r.barcode ? ' · 🏷️ ' + esc(r.barcode) : '')
-      +       (r.byName ? ' · سجّلتها ' + esc(r.byName) : '')
+      +       (r.barcode ? ' · 🏷️ ' + reqEsc(r.barcode) : '')
+      +       (r.byName ? ' · سجّلتها ' + reqEsc(r.byName) : '')
       +       (old ? ' · <span style="color:var(--warn);">⏳ قديم</span>' : '')
       +     '</div>'
       +     (ready ? '<div style="font-size:11.5px; color:var(--plus); font-weight:800; margin-top:3px;">'
