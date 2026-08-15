@@ -29,6 +29,24 @@ const rules = R('security', 'firestore-phase2.rules');
 const loyalty = R('loyalty', 'index.html');
 const glow = R('glow', 'index.html');
 
+// ⚠️ استخراج بالأقواس المتوازنة — regex اتكسر قبل كده وطلّع فشل وهمي (§0)
+function extractFn(s, header){
+  const i = s.indexOf(header);
+  if(i < 0) return null;
+  let d = 0, st = false;
+  for(let j = s.indexOf('{', i); j < s.length; j++){
+    if(s[j] === '{'){ d++; st = true; }
+    else if(s[j] === '}'){ d--; if(st && d === 0) return s.slice(i, j + 1); }
+  }
+  return null;
+}
+function mustExtract(src, header, label){
+  const fn = extractFn(src, header);
+  assert(!!fn, '🔧 أداة الاستخراج: ' + label + ' اتلقت (لو دي وقعت، كل اللي تحتها وهمي)');
+  return fn || '';
+}
+
+
 // استخراج بلوك قاعدة العملاء — لحد أول `allow delete` جوّه البلوك
 function custBlock(src){
   const at = src.indexOf('match /pos_test_customers/');
@@ -253,19 +271,141 @@ function anonHasOnly(src){
 }
 
 // ============================================================
-// ٩) 🧪 اختبار سلبي للشات والطلبات
+// ٩) 🔴 الدوال بتتنفّذ فعلًا — مش بس موجودة في الملف
+// ------------------------------------------------------------
+// الباج اللي القسم ده اتكتب عشانه (شكرًا للسكرين شوت):
+//   `esc()` كانت متنادية في **١٠ مواضع** في requests-ui.js وفي
+//   pos-sale.js — و**مش معرّفة في POS خالص**. كل النداءات جوّه
+//   `try{}` فالـReferenceError كان بيتبلع، ولوحة الطلبات في «استلام
+//   بضاعة» وشاشة «فيه ناس كانوا طالبين ده» وتلميحات شريط الفرصة
+//   كانوا **فاضيين من غير أي رسالة**. شكلهم مبني وعمرهم ما اشتغلوا.
+//
+// ⚠️ الفحص النصي **مبيمسكش ده أبدًا** — الكود مكتوب صح، المشكلة إن
+//    دالة مساعدة مش موجودة وقت التشغيل. عشان كده القسم ده **بينفّذ**
+//    الدوال في VM على بيانات حقيقية.
+//
+// 🔴 القاعدة: أي دالة عرض جديدة تتحط هنا. `try{}` حوالين عرض بيخفي
+//    الباجات مش بيمنعها.
 // ============================================================
 {
-  const L = '🧪 سلبي: ';
-  const cc = R('pos', 'chat-staff-ui.js').replace(/'\s*\+\s*'/g, '');
-  const back = cc.replace(/#ccWrap\{position:fixed; top:0; bottom:0; inset-inline-start:0; width:50vw;/,
-                          '#ccWrap{position:fixed; inset:0;');
-  assert(back !== cc, L + 'نجحنا نرجّع الشات لشاشة كاملة');
-  assert(!/width:50vw/.test(back.slice(back.indexOf('#ccWrap{'), back.indexOf('#ccWrap{') + 200)),
-    L + '⭐ والفحص بيقع لما الباج يرجع');
+  const L = '🔴 تنفيذ: ';
+  const vm2 = require('vm');
+  const uiSrc = fs.readFileSync(path.join(ROOT, 'pos', 'requests-ui.js'), 'utf8');
+  const coreSrc2 = R('pos', 'pos-core.js');
 
-  const ui = R('pos', 'requests-ui.js');
-  const brokenUi = ui.replace(/window\.goToCustomerRequests = goToCustomerRequests;/, '');
-  assert(!/window\.goToCustomerRequests = goToCustomerRequests/.test(brokenUi),
-    L + '⭐ وفحص §18 بيقع لو التعريض اتشال (الأيقونة كانت هتفشل بصمت)');
+  // esc لازم تبقى معرّفة في pos-core (أول ملف بيتحمّل)
+  assert(/function esc\(/.test(coreSrc2), L + '⭐⭐ `esc()` معرّفة في pos-core.js');
+  assert(/window\.esc = esc/.test(coreSrc2), L + 'ومتعرّضة على window (§18)');
+
+  // ---------- بيئة DOM مصغّرة ----------
+  function el(){
+    return { innerHTML:'', textContent:'', value:'', style:{}, dataset:{},
+             classList:{ add(){}, remove(){}, toggle(){} } };
+  }
+  const nodes = {};
+  ['requestsBody','requestsScreenWrap','reqSummary','reqSearch','reqScope',
+   'reqSort','navReqBadge','sideReqBadge'].forEach(function(id){ nodes[id] = el(); });
+
+  const ctx = {
+    console: { warn(){}, log(){}, error(){} },
+    document: {
+      getElementById: function(id){ return nodes[id] || null; },
+      createElement: el,
+      querySelectorAll: function(){ return []; },
+      body: { appendChild(){} }, head: { appendChild(){} },
+      addEventListener(){}, readyState:'complete'
+    },
+    setTimeout: function(){}, setInterval: function(){},
+    localStorage: { getItem(){ return null; }, setItem(){}, removeItem(){} },
+    currentBranch: 'الرحاب',
+    currentEmployee: { id:'e1', name:'روان' },
+    allInventory: [{ id:'p1', name:'طرحة شيفون بيضا', barcode:'ECH1',
+                     qtyByBranch:{ 'الرحاب': 3 } }],
+    showToast: function(){},
+    db: { collection: function(){ return { where(){ return this; }, onSnapshot(){ return function(){}; } }; } },
+    reqIsStale: function(){ return true; },
+    reqMatch: function(){ return { level:'none' }; },
+    reqNormalize: function(s){ return s; },
+    reqKeywords: function(){ return ['x']; }
+  };
+  ctx.window = ctx;
+  vm2.createContext(ctx);
+  // نحمّل esc من pos-core زي ما المتصفح بيعمل بالظبط (أول ملف)
+  // ⚠️ جوّه try: لو esc مش موجودة، عايزين **فشل مقروء** مش انهيار
+  //    الملف كله بـstack trace (اللي بيخلي باقي الاختبارات متتشغّلش).
+  let loaded = true;
+  try{
+    vm2.runInContext(mustExtract(coreSrc2, 'function esc(', 'esc') + '\n; window.esc = esc;', ctx);
+    vm2.runInContext(uiSrc, ctx);
+  }catch(e){
+    loaded = false;
+    assert(false, L + '⭐⭐ تحميل ملفات الطلبات وقع: ' + e.message
+      + ' — دالة مساعدة ناقصة (ده بالظبط باج `esc` اللي حصل)');
+  }
+
+  // 📋 طلب فيه محارف HTML — لازم تتهرّب مش ترمي
+  const REQ = [{ id:'r1', text:'طرحة <b>بيضا</b> شيفون', name:'منى & أختها',
+                 phone:'01000000000', branch:'الرحاب', barcode:'ECH1',
+                 createdAt: Date.now() - 3*86400000, by:'e1', byName:'روان' }];
+  ctx._reqCache = REQ;
+
+  // الطريقة الوحيدة لحقن الكاش: المستمع. بنستدعي العرض بعد ما نزرعه
+  // في نطاق الملف عن طريق إعادة تعريف المتغير جوّه نفس السياق.
+  vm2.runInContext('_reqCache = ' + JSON.stringify(REQ) + ';', ctx);
+
+  if(!loaded){
+    // من غير تحميل، باقي القسم مالوش معنى — بنوقف هنا بفشل واضح فوق
+  } else {
+  let threw = null;
+  try{ ctx.renderRequestsTab(); }catch(e){ threw = e; }
+  assert(!threw, L + '⭐⭐ `renderRequestsTab` بتشتغل من غير ما ترمي'
+    + (threw ? ' — ' + threw.message : ''));
+  assert(nodes.requestsBody.innerHTML.indexOf('شيفون') >= 0,
+    L + '⭐ وبتكتب الطلب فعلًا (مش فاضية)');
+
+  threw = null;
+  try{ ctx.renderRequestsScreen(); }catch(e){ threw = e; }
+  assert(!threw, L + '⭐⭐ و`renderRequestsScreen` كمان'
+    + (threw ? ' — ' + threw.message : ''));
+  assert(nodes.requestsScreenWrap.innerHTML.indexOf('شيفون') >= 0,
+    L + '⭐ وبتعرض الطلب');
+
+  threw = null;
+  try{ ctx.renderRequestsBadge(); }catch(e){ threw = e; }
+  assert(!threw, L + 'و`renderRequestsBadge`' + (threw ? ' — ' + threw.message : ''));
+  assertEq(nodes.navReqBadge.textContent, '1', L + 'والبادچ بيعدّ صح');
+
+  // 🛡️ والتهريب شغال فعلًا — مش بس مش بيرمي
+  const out = nodes.requestsScreenWrap.innerHTML;
+  assert(out.indexOf('<b>بيضا</b>') < 0, L + '⭐⭐ وسم HTML في نص الطلب **متهرّب**');
+  assert(out.indexOf('&lt;b&gt;') >= 0, L + 'واتحوّل للشكل الآمن');
+  assert(out.indexOf('&amp;') >= 0, L + 'و`&` في الاسم كمان');
+
+  // 🧪 سلبي: شيل esc → الدالة لازم ترمي
+  const ctx2 = Object.assign({}, ctx);
+  const bad = uiSrc.replace(/function reqEsc\(s\)\{[\s\S]*?\n\}/, 'function reqEsc(s){ return esc(s); }');
+  assert(bad !== uiSrc, L + '🧪 نجحنا نرجّع الاعتماد على esc الخارجية');
+  }
 }
+
+// ============================================================
+// ١٠) ⛔ مفيش نداء لدالة غير معرّفة في ملفات الطلبات
+// ------------------------------------------------------------
+// حارس ثابت: `esc(` العارية اتشالت من requests-ui، وأي رجوع ليها
+// (أو لأي مساعد مش معرّف) لازم يقع هنا.
+// ============================================================
+{
+  const L = '⛔ نداء يتيم: ';
+  const uiSrc = fs.readFileSync(path.join(ROOT, 'pos', 'requests-ui.js'), 'utf8');
+  const code = uiSrc.replace(/^[ \t]*\/\/[^\n]*/gm, ' ')
+                    .replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const bare = (code.match(/(^|[^A-Za-z0-9_$.])esc\(/g) || []).length;
+  assertEq(bare, 0, L + '⭐⭐ مفيش `esc(` عارية في requests-ui.js (استخدم reqEsc)');
+  assert(/function reqEsc\(/.test(code), L + 'و`reqEsc` معرّفة جوّه الملف نفسه');
+
+  // 🔇 ومفيش catch فاضي حوالين العرض — ده اللي خفى الباج أصلًا
+  const empty = (code.match(/catch\s*\(\s*e\s*\)\s*\{\s*\}/g) || []).length;
+  assertEq(empty, 0,
+    L + '⭐⭐ مفيش `catch(e){}` فاضي — الـcatch الصامت بيخفي الباجات مش بيمنعها');
+}
+
