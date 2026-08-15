@@ -167,8 +167,13 @@ const extractFn = (src, sig) => {
 {
   const posSw = fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8');
   const ofSw = fs.readFileSync(path.join(ROOT, 'Office', 'sw.js'), 'utf8');
-  assert(posSw.indexOf('store-apps-shell-v296') > -1, 'POS → v296');
-  assert(ofSw.indexOf('echarpe-office-v46') > -1, 'Office → v46');
+  // ⚠️ كان فحص **مساواة** على v298/v48 بالنص — يعني أي ترقية كاش بعد كده
+  //    بتوقّع الاختبار وشكلها باج حقيقي. الفحص الصح هو **الحد الأدنى**:
+  //    اللي يهمنا إن الكاش مانزلش عن النسخة اللي فيها الإصلاح.
+  const posV = (posSw.match(/store-apps-shell-v(\d+)/) || [])[1];
+  const ofV = (ofSw.match(/echarpe-office-v(\d+)/) || [])[1];
+  assert(!!posV && Number(posV) >= 298, 'POS → v298+ (لقينا v' + (posV || '?') + ')');
+  assert(!!ofV && Number(ofV) >= 48, 'Office → v48+ (لقينا v' + (ofV || '?') + ')');
 }
 
 // ============================================================
@@ -352,4 +357,168 @@ const extractFn = (src, sig) => {
     "🔴 print_latency بيتسجل لكل طباعة مش للمتأخرة بس — 'اتأخرت' كان بيخوّف من غير سبب");
   assert(/print_latency[^\n]*quiet:\s*true/.test(code),
     'ومتعلّم هادي (مش حدث محتاج نظرة)');
+}
+
+// ============================================================
+// ١٠) 🔍 v297 — الحدث بيقول **ليه**: التعديل اللي بعد سحب الكارت
+// ------------------------------------------------------------
+// سؤال المالك على اللقطة: "سحب فيزا زيادة ليه مش موضح إن فيه قطعة
+// اتشالت اللي هي الـ350؟". السبب كان في السجل (حدث تاني قبله بساعة)
+// بس مش مربوط. الربط الصح **بالوقت**: تعديل قبل السحب مالوش علاقة،
+// وتعديل بعده هو بالظبط اللي خلّى العميلة دافعة زيادة.
+// ============================================================
+{
+  const code = strip(posSale);
+
+  /* ١) الدالة النقية — بنشغّلها على سيناريو 1444 */
+  const fn = extractFn(code, 'function cardOverCause(edits, diff)');
+  assert(fn.length > 80, 'دالة cardOverCause اتلقت');
+  const cause = new Function(fn + '\nreturn cardOverCause;')();
+
+  const c = cause([{ kind:'شيل', name:'حرير سادة سواريه', qty:1, value:350 }], 350);
+  assert(!!c && c.text.indexOf('حرير سادة سواريه') > -1 && c.text.indexOf('350') > -1,
+    '🔴 السبب بيتكتب صريح: "شيل حرير سادة سواريه (350)"');
+  assert(c.exact === true,
+    '🔴 ومطابق للفرق بالظبط = ده السبب الكامل (350 = 350)');
+
+  // قطعتين اتشالوا = المجموع
+  const c2 = cause([{ kind:'شيل', name:'أ', qty:1, value:200 },
+                    { kind:'تعديل', name:'ب', qty:2, value:150 }], 350);
+  assert(c2.sum === 350 && c2.exact === true && c2.items.length === 2,
+    'تعديلين مجموعهم الفرق = الاتنين سبب');
+
+  // 🔴 نيجاتيف: السبب مش مغطي الفرق = علامة استفهام مش تطمين كاذب
+  const c3 = cause([{ kind:'شيل', name:'أ', qty:1, value:100 }], 350);
+  assert(c3.exact === false,
+    '🔴 سبب أقل من الفرق = exact:false — فيه حاجة تانية لسه مش مفهومة');
+
+  assert(cause([], 350) === null && cause(null, 350) === null,
+    'مفيش تعديلات = مفيش سبب (مش نص فاضي مضلّل)');
+  assert(cause([{ kind:'شيل', name:'أ', qty:1, value:0 }], 350) === null,
+    'وتعديل بقيمة صفر مش سبب');
+
+  /* ٢) التتبع بالوقت — قبل السحب مالوش علاقة */
+  const tr = extractFn(code, 'function _trackEditAfterCard(kind, name, qty, value)');
+  assert(tr.indexOf('if(!_cardMoneyAtRiskAt) return;') > -1,
+    '🔴 تعديل **قبل رنين الماكينة** مش بيتسجل كسبب — ده بيع عادي، وتسجيله كان هيتهم الكاشير غلط');
+  assert(code.indexOf('if(!_cardMoneyAtRiskAt) _cardMoneyAtRiskAt = Date.now();') > -1,
+    '🔴 والمرجع هو **الرنين** مش الموافقة — الفجوة بينهم ثواني والعميلة ممكن تكون حاطة الكارت');
+  assert(code.indexOf('if(!_cardFirstApprovedAt) _cardFirstApprovedAt = _leg.approvedAt;') > -1,
+    'ولحظة الموافقة بتتمسك برضه (للتفرقة بين الحالتين)');
+  assert(tr.indexOf('afterApproval:') > -1,
+    'وكل تعديل بيتعلّم: بعد الموافقة (مؤكد) ولا أثناء ما الماكينة شغالة');
+
+  /* ٣) موصّل بشيل الصنف وبتعديل السعر/الكمية */
+  const cr = extractFn(code, 'function cartRemove(idx)');
+  assert(cr.indexOf("_trackEditAfterCard('شيل'") > -1,
+    'شيل صنف بيتسجل بقيمته (سعر × كمية)');
+  assert(code.indexOf("_trackEditAfterCard('تعديل'") > -1
+      && code.indexOf('if(_drop > 0)') > -1,
+    '🔴 وتعديل السعر/الكمية كذلك — بس لو **نقّص** الفاتورة (الزيادة مش سبب لفرق)');
+
+  /* ٤) بيتصفّر مع السلة الجديدة */
+  const cs = extractFn(code, 'function clearSaleState()');
+  assert(cs.indexOf('_cardFirstApprovedAt = null') > -1
+      && cs.indexOf('_cardMoneyAtRiskAt = null') > -1
+      && cs.indexOf('_cartEditsAfterCard = []') > -1,
+    '🔴 سلة جديدة = تتبّع جديد — من غير كده تعديلات فاتورة قديمة بتظهر سبب لفاتورة تانية');
+
+  /* ٥) الحدث والمستند الاتنين بياخدوا السبب */
+  const dc = extractFn(code, 'async function _doConfirmPayment()');
+  assert(dc.indexOf('cause: _cause ? _cause.text : null') > -1
+      && dc.indexOf('causeExact: _cause ? _cause.exact : null') > -1,
+    'حدث السجل بياخد السبب ومطابقته');
+  assert(dc.indexOf('_due.cause = _c0.text') > -1,
+    'ومستند المستحق كذلك — الرد بيتم منه');
+}
+
+// ============================================================
+// ١١) 🕵️ Office v47 — عرض السبب
+// ============================================================
+{
+  const code = strip(office);
+  const det = extractFn(code, 'function ofActDetail(a)');
+  assert(det.indexOf("'<b>السبب: '") > -1,
+    '🔴 السبب بيظهر على الصف نفسه — مش مستخبي جوه التفاصيل');
+  assert(det.indexOf("a.causeExact === false") > -1,
+    '🔴 وسبب مش مغطي الفرق بيتعلّم صراحةً — تطمين كاذب أخطر من مفيش سبب');
+  assert(code.indexOf("cause:'سبب الفرق'") > -1, 'وباسم عربي في شاشة التفاصيل');
+  const rr = extractFn(code, 'function renderRefundsDue()');
+  assert(rr.indexOf('<b>السبب:</b>') > -1,
+    'وفي قايمة المستحقات كمان — دي الشاشة اللي بترد منها');
+}
+
+// ============================================================
+// ١٢) ⏱️ v298 — اعتراض المالك: "أكيد هي مسحت قبل التأكيد"
+// ------------------------------------------------------------
+// اعتراض في محله. تسلسل الأحداث الحقيقي:
+//   الماكينة بترن بمبلغ السلة الكاملة → العميلة بتحط الكارت →
+//   الموافقة → **بعدين** الكاشير بتدوس حفظ.
+// يعني هي فعلًا مسحت قبل **التأكيد** (زرار الحفظ) — بس المبلغ
+// كان راح للماكينة قبل كده، وده اللي خلّى الفرق. فالمرجع الصح
+// هو **رنين الماكينة** مش الموافقة ومش الحفظ.
+// ============================================================
+{
+  const code = strip(posSale);
+  const fn = extractFn(code, 'function cardOverCause(edits, diff)');
+  const cause = new Function(fn + '\nreturn cardOverCause;')();
+
+  /* ١) مسحت بعد الموافقة = مؤكد */
+  const after = cause([{ kind:'شيل', name:'حرير سادة سواريه', qty:1, value:350,
+                         afterApproval:true }], 350);
+  assert(after.beforeApproval === false && after.text.indexOf('أثناء ما الماكينة') < 0,
+    'تعديل بعد الموافقة = سبب مؤكد، من غير تحفّظات');
+
+  /* ٢) مسحت **أثناء ما الماكينة شغالة** (بعد الرنين وقبل الموافقة) */
+  const during = cause([{ kind:'شيل', name:'حرير سادة سواريه', qty:1, value:350,
+                          afterApproval:false }], 350);
+  assert(during.beforeApproval === true,
+    '🔴 التعديل ده اتعلّم إنه في الفترة الرمادية');
+  assert(during.text.indexOf('أثناء ما الماكينة شغالة') > -1,
+    '🔴 والنص بيقولها صراحةً — الكاشير مش بالضرورة غلطانة، الماكينة كانت شايلة المبلغ خلاص');
+
+  /* ٣) 🔴 نيجاتيف: قبل الرنين خالص = مش سبب */
+  const tr = extractFn(code, 'function _trackEditAfterCard(kind, name, qty, value)');
+  assert(tr.indexOf('if(!_cardMoneyAtRiskAt) return;') > -1
+      && tr.indexOf('if(!_cardFirstApprovedAt) return;') < 0,
+    '🔴 الحارس على الرنين مش على الموافقة — دي كانت هتفوّت الفترة الرمادية كلها');
+
+  /* ٤) الفولباك: كارت يدوي من غير رنين */
+  assert(code.indexOf('if(!_cardMoneyAtRiskAt) _cardMoneyAtRiskAt = _leg.approvedAt;') > -1,
+    'كارت اتسجل يدوي من غير رنين = الموافقة هي المرجع (مش بنفقد التتبع)');
+}
+
+// ============================================================
+// ١٣) 🕒 v48 — الوقت بتوقيت القاهرة (قاعدة مثبتة اتكسرت)
+// ------------------------------------------------------------
+// لقطة المالك: سجل النشاط بيقول ١:٢٦ ظهرًا وفاتورة نفس العملية
+// بتقول ٧:٢٦ مساءً — ٦ ساعات فرق. السبب: العرض بتوقيت **الجهاز**
+// والمالك بيفتح من بره مصر. كل حسابات الوقت في النظام مثبتة على
+// القاهرة، والعرض لازم يتبع نفس القاعدة وإلا قراءة القصة مستحيلة.
+// ============================================================
+{
+  const code = strip(office);
+  const fn = extractFn(code, 'function ofWhen(ts, withDate)');
+  assert(fn.length > 50, 'دالة ofWhen اتلقت');
+  assert(fn.indexOf("timeZone: OF_CAIRO_TZ") > -1
+      && code.indexOf("OF_CAIRO_TZ = 'Africa/Cairo'") > -1,
+    '🔴 العرض بتوقيت القاهرة صراحةً — مش توقيت الجهاز');
+
+  // 🔴 نيجاتيف حقيقي: شغّل الدالة على وقت معروف تحت توقيت جهاز مختلف
+  const ofWhen = new Function("OF_CAIRO_TZ", fn + '\nreturn ofWhen;')('Africa/Cairo');
+  const ts = Date.parse('2026-08-13T16:26:54Z');   // = ٧:٢٦:٥٤ م بتوقيت القاهرة
+  const out = ofWhen(ts);
+  assert(/[٧7]/.test(out) && /[٢2][٦6]/.test(out),
+    '🔴 ٧:٢٦ مساءً بتوقيت القاهرة — مهما كان توقيت الجهاز (ده الفرق اللي شافه المالك)');
+
+  /* الشاشات الجديدة كلها بتستعملها */
+  const rr = extractFn(code, 'function ofRenderActivity()');
+  assert(rr.indexOf('ofWhen(a.ts') > -1 && rr.indexOf("toLocaleString('ar-EG')") < 0,
+    'سجل النشاط');
+  const rd = extractFn(code, 'function renderRefundsDue()');
+  assert(rd.indexOf('ofWhen(x.ts') > -1 && rd.indexOf("new Date(x.ts || 0).toLocaleString") < 0,
+    'وقايمة المستحقات');
+  const op = code.slice(code.indexOf('window.ofActOpen'), code.indexOf('function startData()'));
+  assert(op.indexOf('ofWhen(') > -1 && op.indexOf("toLocaleTimeString('ar-EG')") < 0,
+    'وشاشة التفاصيل وقصة السلة');
 }
