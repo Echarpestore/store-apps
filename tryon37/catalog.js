@@ -30,6 +30,13 @@ window.TRYON_COLORS = [
 
 window.TRYON_CATALOG = [
   {
+    id:'ai-generated-test',
+    name:'AI Generated Test',
+    type:'photo',
+    head:{ url:'assets/ai-generated-hijab-head.png', anchors:{ l:[195,300], r:[495,300], top:[345,45] } },
+    tintable:false
+  },
+  {
     // 🧕 أول أصل حقيقي — من صورة القالب القدامية (قصّ آلي + فتحة وش
     //    + نقط تثبيت محسوبة من فتحة المانيكان نفسها)
     id: 'template-01',
