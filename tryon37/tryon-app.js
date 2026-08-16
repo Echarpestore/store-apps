@@ -1,7 +1,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v40-BOOTFIX';
+  const TRYON_VER = 'v41-TDZFIX';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -813,6 +813,14 @@
       ctx.restore();
     }
 
+    // v41: لازم تعريف anchors/pose mapping قبل حساب Tr.
+    // v40 كان بيستخدم A/dstL/squash قبل const initialization -> TDZ crash.
+    const A = asset.anchors;
+    const yawSquash = Math.cos(Math.min(0.9, Math.abs(pose.yaw) * Math.PI/180));
+    const dstL = ex.l, dstR = ex.r, dstT = ex.top;
+    const cx2 = (dstL[0] + dstR[0]) / 2;
+    const squash = (p) => [cx2 + (p[0] - cx2) * (0.75 + 0.25 * yawSquash), p[1]];
+
     const Tr = T.affineFrom3(
       [A.l, A.r, A.top],
       [squash(dstL), squash(dstR), dstT]
@@ -861,12 +869,6 @@
     }
 
     // (ب) الجزء اللي على الراس — أفيني من ٣ نقط الصورة → ٣ نقط الوش
-    const A = asset.anchors;
-    const yawSquash = Math.cos(Math.min(0.9, Math.abs(pose.yaw) * Math.PI/180));
-    const dstL = ex.l, dstR = ex.r, dstT = ex.top;
-    // لفّة جانبية: نضيّق الجانب البعيد شوية (تقريب لطيف مش محاكاة)
-    const cx2 = (dstL[0]+dstR[0])/2;
-    const squash = (p) => [ cx2 + (p[0]-cx2)*(0.75 + 0.25*yawSquash), p[1] ];
     // v22: الشبكة في **الوضعين** — الصورة الثابتة كانت واخدة الأفيني
     //    المسطح، وهي أصلًا الأولوية (§ الشكل النهائي قبل اللايف)
     if(!layerOn('mesh') && S.mesh) TRYON_MESH.clear();   // 🧪 v32
