@@ -1,0 +1,1 @@
+v40: MediaPipe boot fix; direct modelAssetPath; real boot-stage diagnostics; GPU→CPU fallback.

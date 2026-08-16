@@ -1,67 +1,7 @@
-
-async function __createFaceLandmarkerV39(FaceLandmarker, vision, options){
-  const base = JSON.parse(JSON.stringify(options || {}));
-  const delegates = ['GPU','CPU'];
-  let lastErr;
-  for(const delegate of delegates){
-    try{
-      const o = structuredClone ? structuredClone(options) : {...options, baseOptions:{...(options?.baseOptions||{})}};
-      o.baseOptions = {...(o.baseOptions||{}), delegate};
-      const lm = await FaceLandmarker.createFromOptions(vision,o);
-      window.TRYON_FACE_DIAG.modelLoaded=true;
-      window.TRYON_FACE_DIAG.delegate=delegate;
-      window.TRYON_FACE_DIAG.lastError='';
-      return lm;
-    }catch(e){
-      lastErr=e;
-      window.TRYON_FACE_DIAG.lastError=`${delegate}:${e?.message||e}`;
-      window.TRYON_FACE_DIAG.failures++;
-    }
-  }
-  throw lastErr;
-}
-
-
-// ===== v39 FACEFIX diagnostics / recovery =====
-window.TRYON_FACE_DIAG = window.TRYON_FACE_DIAG || {
-  modelLoaded:false, delegate:null, running:false, faceCount:0,
-  lastDetectMs:0, lastError:"", frames:0, failures:0, lastVideoTime:-1
-};
-
-function __faceDiagOverlay(){
-  let el=document.getElementById('faceDiagV39');
-  if(!el){
-    el=document.createElement('div');
-    el.id='faceDiagV39';
-    el.style.cssText='position:fixed;z-index:99999;left:8px;top:8px;background:#000c;color:#0f0;padding:6px 8px;border-radius:8px;font:12px/1.35 monospace;direction:ltr;pointer-events:none;white-space:pre-wrap';
-    document.body.appendChild(el);
-  }
-  const d=window.TRYON_FACE_DIAG;
-  el.textContent=`v39 facefix
-model:${d.modelLoaded?'ok':'...'} delegate:${d.delegate||'-'}
-running:${d.running?'yes':'no'} faces:${d.faceCount}
-detect:${Math.round(d.lastDetectMs||0)}ms failures:${d.failures}
-videoTime:${(d.lastVideoTime??-1).toFixed?d.lastVideoTime.toFixed(2):d.lastVideoTime}
-${d.lastError?('err:'+d.lastError.slice(0,110)):''}`;
-}
-setInterval(__faceDiagOverlay,500);
-
-/* ============================================================
-   🧕 tryon-app.js — الكاميرا والرسم والواجهة
-   ------------------------------------------------------------
-   الرياضة كلها في tryon-core.js. هنا: MediaPipe + canvas + UI.
-
-   🔒 الخصوصية: **كل المعالجة على الجهاز.** مفيش فريم واحد بيترفع
-      لأي سيرفر. الحاجة الوحيدة اللي بتتحمّل من النت هي موديل
-      MediaPipe نفسه (تنزيل، مش رفع).
-
-   ⚠️ قاعدة pos/chat.js نفسها: لو التجربة وقعت، الصفحة بتقول
-      رسالة مؤدبة — مش شاشة بيضا.
-   ============================================================ */
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v39-FACEFIX';
+  const TRYON_VER = 'v40-BOOTFIX';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -118,7 +58,7 @@ setInterval(__faceDiagOverlay,500);
     hairT: 0, segBusy: false, lastSegT: 0,   // v28: عمر الماسك + خنق اللايف
     stab: T.StabilityMeter(),       // v28: مقياس الثبات (بند ١٢)
     stabState: { stable: false, score: Infinity },
-    stage: 'boot', lastErr: null,     // 🩺 تشخيص: فين وقفنا وإيه الخطأ
+    stage: 'boot', lastErr: null, modelLoaded:false, detectorRunning:false, faceCount:0, detectMs:0,     // 🩺 تشخيص: فين وقفنا وإيه الخطأ
     delegate: null, switching: false  // 🩺 v35: GPU ولا CPU
   };
 
@@ -126,41 +66,24 @@ setInterval(__faceDiagOverlay,500);
      ١) تحميل MediaPipe — GPU والفولباك CPU
      ============================================================ */
   async function loadLandmarker(){
-    setLoad('بنجهّز… ٠٪');
-    const CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
-    const vision = await import(CDN + '/+esm');
-    const files = await vision.FilesetResolver.forVisionTasks(CDN + '/wasm');
-
-    // 📦 الموديل: من echarpe.store لو مرفوع، وإلا من جوجل — ومرة
-    //    واحدة في العمر: بيتخزن في Cache Storage والفتحات الجاية فورية.
-    const buffer = await fetchModelBuffer((pct) =>
-      setLoad('بنحمّل موديل الوش… ' + pct + '٪ (أول مرة بس)'));
-
-    const opts = (delegate) => ({
-      baseOptions: { modelAssetBuffer: buffer, delegate },
-      runningMode: 'VIDEO',
-      numFaces: 1,
-      outputFacialTransformationMatrixes: true
-    });
-    /* 🩺 v35: الفولباك القديم كان بيشتغل **لو الإنشاء رمى خطأ** بس.
-       والمشكلة اللي ظهرت على جهاز المالك مختلفة تمامًا: الإنشاء
-       بينجح على GPU، والكشف بيرجّع **صفر وشوش** على وش واضح وقريب
-       ومضوّي. ده عيب معروف في بعض كروت أندرويد: MediaPipe بتشتغل
-       من غير أي خطأ وبترجّع نتيجة فاضية.
-       عشان كده احتفظنا بأدوات إعادة البناء — الفولباك بقى ممكن
-       **بعد التشغيل** مش وقت الإنشاء بس. */
-    S._rebuild = (delegate) => vision.FaceLandmarker.createFromOptions(files, opts(delegate));
-    const forced = /[?&]cpu=1/.test(location.search) ? 'CPU' : null;
-    try {
-      S.delegate = forced || 'GPU';
-      S.landmarker = await S._rebuild(S.delegate);
-    } catch(e) {
-      console.warn('GPU فشل — CPU:', e);
-      S.delegate = 'CPU';
-      S.landmarker = await S._rebuild('CPU');
-    }
-    S.setImageMode = async () => { try{ await S.landmarker.setOptions({ runningMode:'IMAGE' }); }catch(e){} };
-    S.setVideoMode = async () => { try{ await S.landmarker.setOptions({ runningMode:'VIDEO' }); }catch(e){} };
+    setLoad('بنجهّز موديل الوش…');
+    const CDN='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+    S.stage='mp-import';
+    const vision=await import(CDN + '/+esm');
+    S.stage='mp-wasm';
+    const files=await vision.FilesetResolver.forVisionTasks(CDN + '/wasm');
+    const opts=(delegate)=>({baseOptions:{modelAssetPath:MODEL_REMOTE,delegate},
+      runningMode:'VIDEO',numFaces:1,minFaceDetectionConfidence:.35,
+      minFacePresenceConfidence:.35,minTrackingConfidence:.35,
+      outputFacialTransformationMatrixes:true});
+    S._rebuild=(delegate)=>vision.FaceLandmarker.createFromOptions(files,opts(delegate));
+    const cpu=/[?&]cpu=1/.test(location.search);
+    S.stage=cpu?'mp-create-cpu':'mp-create-gpu';
+    try{ S.delegate=cpu?'CPU':'GPU'; S.landmarker=await S._rebuild(S.delegate); }
+    catch(e){ if(cpu) throw e; S.stage='mp-create-cpu'; S.delegate='CPU'; S.landmarker=await S._rebuild('CPU'); }
+    S.modelLoaded=true;
+    S.setImageMode=async()=>{try{await S.landmarker.setOptions({runningMode:'IMAGE'});}catch(e){}};
+    S.setVideoMode=async()=>{try{await S.landmarker.setOptions({runningMode:'VIDEO'});}catch(e){}};
   }
 
   const MODEL_LOCAL = 'assets/face_landmarker.task';
@@ -1045,13 +968,16 @@ setInterval(__faceDiagOverlay,500);
     if(S.gov.shouldProcess() && S.video.readyState >= 2){
       try{
         S.frames = (S.frames || 0) + 1;
-        const res = S.landmarker.detectForVideo(detectSrc(), t0);
-        draw(res, S.video);
+        const __d0=performance.now();
+        const res=S.landmarker.detectForVideo(detectSrc(),t0);
+        S.detectorRunning=true; S.detectMs=performance.now()-__d0;
+        S.faceCount=res?.faceLandmarks?.length||0;
+        draw(res,S.video);
         liveHairPass().catch(() => {});     // v28: ثابتة + مخنوق — مش كل فريم
       }catch(e){
         /* ⚠️ الخطأ ده كان بيتبلع في console.warn — والمالك على موبايل
            مفيهوش كونسول، فكان بيشوف «مفيش طرحة» من غير أي سبب. */
-        S.detectErr = String((e && e.message) || e).slice(0, 60);
+        S.detectErr = String((e && e.message) || e).slice(0, 60); S.lastErr=e; S.detectorRunning=false;
         console.warn(e);
       }
     }
@@ -1309,8 +1235,18 @@ setInterval(__faceDiagOverlay,500);
   /* ============================================================
      ٩) الإقلاع
      ============================================================ */
+  function startBootDiag(){
+    let el=document.getElementById('faceDiagV40');
+    if(!el){el=document.createElement('div');el.id='faceDiagV40';
+      el.style.cssText='position:fixed;z-index:99999;left:8px;top:8px;background:#000c;color:#5cff74;padding:7px 9px;border-radius:9px;font:12px/1.35 monospace;direction:ltr;pointer-events:none;white-space:pre-wrap';
+      document.body.appendChild(el);}
+    setInterval(()=>{const vt=S.video&&Number.isFinite(S.video.currentTime)?S.video.currentTime:-1;
+      el.textContent=`v40 bootfix\nstage:${S.stage}\nmodel:${S.modelLoaded?'ok':'...'} delegate:${S.delegate||'-'}\nrunning:${S.detectorRunning?'yes':'no'} faces:${S.faceCount||0}\ndetect:${Math.round(S.detectMs||0)}ms video:${vt.toFixed(2)}\n${S.lastErr?('err:'+String(S.lastErr.message||S.lastErr).slice(0,90)):''}`;},350);
+  }
+
   async function boot(){
     S.video = $('cam'); S.canvas = $('stage');
+    startBootDiag();
     S.ctx = S.canvas.getContext('2d', { willReadFrequently:true });
     buildUI();
     try{
