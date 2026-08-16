@@ -2685,6 +2685,21 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 
+<script>
+// 🛍️ فولباك «أضيفيها للسلة»: لو window.opener مش متاح (اتقفل التاب
+// الأصلي أو المتصفح منعه)، صفحة التجربة بترجع هنا بـ?addcart=<باركود>.
+window.addEventListener('load', function(){
+  try{
+    var m = /[?&]addcart=([^&]+)/.exec(location.search);
+    if(m && m[1]){
+      var bc = decodeURIComponent(m[1]);
+      if(bc && typeof tryonAddToCart === 'function') tryonAddToCart(bc);
+      try{ history.replaceState(null, '', location.pathname); }catch(e2){}
+    }
+  }catch(e){}
+});
+</script>
+
 <style>
 /* ============================================================
    ⭐ شاشة تقييم الزيارة — بتتفتح من إشعار بعد نص ساعة من الشراء
@@ -2915,6 +2930,7 @@ var COL_CHAT = 'customer_chat';
 var CHAT_DOC_PREFIX = 'g';   // 🖤 محادثات Glow منفصلة عن echarpe لنفس الرقم
 var chatConv = null, chatConvUnsub = null, chatMsgsUnsub = null;
 var chatImgs = {};          // msgId → dataURL (لزرار جربيها)
+var chatBarcodes = {};      // msgId → باركود المنتج (لو الموظفة حطته) — لزرار «أضيفيها للسلة»
 var chatSending = false;
 
 // 🖼️ صورة من العميلة — "عندكم زي دي؟" بصورة أوضح من أي وصف
@@ -3000,6 +3016,7 @@ function closeChat(){
   $('chatWrap').classList.remove('on');
   if(chatMsgsUnsub){ chatMsgsUnsub(); chatMsgsUnsub = null; }
   chatImgs = {};
+  chatBarcodes = {};
   chatUpdateBadge();
 }
 
@@ -3014,6 +3031,7 @@ function chatCleanup(){
 function chatRenderMsgs(arr){
   var box = $('chMsgs');
   chatImgs = {};
+  chatBarcodes = {};
   if(!arr.length){
     box.innerHTML = '<div class="ch-note">ابدأي الكلام — اسألي عن أي حاجة 🌸</div>';
     return;
@@ -3026,6 +3044,7 @@ function chatRenderMsgs(arr){
     //    مش مضمون ١٠٠٪ بحكم قواعد signedIn المعروفة)
     if(m.img && String(m.img).indexOf('data:image/') === 0){
       chatImgs[m.id] = m.img;
+      if(m.barcode) chatBarcodes[m.id] = String(m.barcode);
       body += '<img src="' + m.img.replace(/"/g, '') + '" alt="">';
     }
     if(m.text) body += esc(m.text);
@@ -3049,8 +3068,35 @@ function chatTryOn(id){
   try{
     sessionStorage.setItem('echarpe_tryon_img', img);
     sessionStorage.setItem('echarpe_tryon_phone', (currentCustomer && currentCustomer.phone) || '');
+    // 🛍️ باركود المنتج (لو الموظفة حطّته) — بيخلّي زر «أضيفيها للسلة» يشتغل.
+    //    لازم نمسحه لو مفيش، وإلا باركود قديم من رسالة سابقة يفضل عالق.
+    var bc = chatBarcodes[id];
+    if(bc) sessionStorage.setItem('echarpe_tryon_pid', bc);
+    else sessionStorage.removeItem('echarpe_tryon_pid');
   }catch(e){}
   window.open('../tryon/photo.html?brand=glow', '_blank');   // Photo AI؛ الوضع الحي متاح جواها كـBeta
+}
+
+/* 🛍️ الجسر بين تجربة الطرحة والسلة الحقيقية — بينادَى من صفحة
+   tryon/photo.html عن طريق window.opener (نفس الأصل). فولباك للنداء
+   المباشر: ?addcart=<باركود> بيترقرأ عند التحميل (تحت). */
+function tryonAddToCart(barcode){
+  var bc = String(barcode || '').trim();
+  if(!bc) return;
+  shopAdd(bc, 1);       // زي زرار ➕ بالظبط — فوري، مش محتاج الكتالوج يكون محمّل
+  switchTab('shop');    // بيحمّل كتالوج المتجر تلقائي لو أول مرة (نفس التحميل الكسول العادي)
+  tryonVerifyCartItem(bc, 0);
+}
+window.tryonAddToCart = tryonAddToCart;
+
+function tryonVerifyCartItem(bc, tries){
+  if(shopCatalog !== null){
+    if(orderFindByBarcode(shopItems(), bc)) showToast('اتضافت للسلة 🛍️');
+    else showToast('المنتج ده مش متاح للطلب أونلاين دلوقتي', true);
+    return;
+  }
+  if((tries || 0) > 20) return; // ~٤ ثواني ومفيش استجابة — السلة اتحطّت أصلًا، مسيبهاش تعلّق
+  setTimeout(function(){ tryonVerifyCartItem(bc, (tries || 0) + 1); }, 200);
 }
 
 // 🏢 الفرع الافتراضي — آخر فرع اشترت منه (قرار المالك)، مرة واحدة بس

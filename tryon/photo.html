@@ -241,10 +241,21 @@
   });
   // الوضع الحي (Beta) — الصورة لسه في sessionStorage
   $("liveBtn").addEventListener("click", function(){ location.href = "./?imgkey=1"; });
-  // أضيفيها للسلة — بتظهر بس لو فيه productId (مش موجود في سكيمة الشات الحالية)
+  // أضيفيها للسلة — بتظهر بس لو فيه باركود منتج جاي من الشات
   $("cartBtn").addEventListener("click", function(){
     if(!productId) return;
-    try{ window.sessionStorage.setItem("echarpe_addcart_pid", productId); }catch(e){}
+    // المسار الأساسي: نفس الأصل، التاب الأصلي لسه مفتوح — إضافة فورية
+    // ورجوع ليه، من غير ما العميلة تحس بأي تنقّل.
+    try{
+      if(window.opener && !window.opener.closed && typeof window.opener.tryonAddToCart === "function"){
+        window.opener.tryonAddToCart(productId);
+        window.opener.focus();
+        window.close();
+        return;
+      }
+    }catch(e){}
+    // فولباك: مفيش opener (اتقفل التاب الأصلي أو المتصفح منعه) — نرجع
+    // بنفس الصفحة، والتطبيق بيلقط ?addcart= عند التحميل.
     location.href = "../" + PC.appName(params.brand) + "/?addcart=" + encodeURIComponent(productId);
   });
 })();

@@ -242,6 +242,19 @@ function orderAvailable(shopItem, product, branch){
   return Math.min(alloc, orderBranchQty(product, branch));
 }
 
+/* 🔍 لقاء صنف بالباركود في قائمة أصناف المتجر أونلاين — بيتستخدم
+   لتأكيد إن المنتج اللي جاي من زرار "أضيفيها للسلة" في تجربة الطرحة
+   متاح فعلاً للطلب أونلاين قبل ما نطمّن العميلة إنه اتضاف. */
+function orderFindByBarcode(items, barcode){
+  var bc = String(barcode || '');
+  if(!bc) return null;
+  var arr = items || [];
+  for(var i = 0; i < arr.length; i++){
+    if(arr[i] && String(arr[i].barcode) === bc) return arr[i];
+  }
+  return null;
+}
+
 /* 🧾 بناء مستند الأوردر — **مصدر واحد** للشكل.
    ⚠️ الأسعار بتتاخد من الكتالوج جوه `orderValidateCart` مش من
       المدخلات، والإجمالي بيتحسب هنا. لو سبنا العميلة تبعت
@@ -347,6 +360,7 @@ if(typeof window !== 'undefined'){
   window.orderGrandTotal = orderGrandTotal;
   window.orderValidateContact = orderValidateContact;
   window.orderAvailable = orderAvailable;
+  window.orderFindByBarcode = orderFindByBarcode;
 }
 if(typeof module !== 'undefined' && module.exports){
   module.exports = {
@@ -355,6 +369,6 @@ if(typeof module !== 'undefined' && module.exports){
     orderTimeLeft, orderNearExpiry, orderBranchQty, orderValidateCart,
     orderBuild, orderCode, orderStepIndex, orderNextHint,
     ORDER_FULFILL, ORDER_FULFILL_LABEL, orderIsDelivery, orderShippingFee,
-    orderGrandTotal, orderValidateContact, orderAvailable
+    orderGrandTotal, orderValidateContact, orderAvailable, orderFindByBarcode
   };
 }
