@@ -119,7 +119,7 @@
   /* 💬 زرار الشات العائم — صغير وشيك فوق يسار الشاشة، ظاهر مهما كان
      التبويب المفتوح (بره تدفّق الصفحة، مش جوه .tabview). */
   .chat-fab{
-    position:fixed; top:14px; left:14px; z-index:500; width:46px; height:46px;
+    position:fixed; top:96px; left:14px; z-index:500; width:46px; height:46px;
     border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
     background:var(--card-grad); box-shadow:0 8px 20px -6px rgba(236,72,152,.55);
     animation:cfFloat 3.4s ease-in-out infinite;
@@ -138,10 +138,10 @@
      فوق أي شاشة تانية بدل تبديل تبويب. صفر تكرار HTML/منطق. */
   #tab-shop.shop-overlay{
     position:fixed; inset:0; z-index:800; background:var(--bg);
-    overflow-y:auto; padding-top:calc(64px + env(safe-area-inset-top));
+    overflow-y:auto; padding-top:calc(150px + env(safe-area-inset-top));
   }
   .qc-close{
-    display:none; position:fixed; top:14px; left:70px; z-index:801; width:42px; height:42px;
+    display:none; position:fixed; top:96px; left:70px; z-index:801; width:42px; height:42px;
     border:none; border-radius:50%; background:var(--panel,#fff); border:1.5px solid var(--line);
     box-shadow:0 8px 18px -6px rgba(0,0,0,.25); font-size:17px; cursor:pointer; color:var(--ink);
   }
@@ -151,7 +151,7 @@
      دهبي مختلف عمدًا عن الشات (البراند التاني بتاعنا) عشان تبقى
      هوية بصرية مستقلة، مش نفس الزرار بلون تاني. */
   .cart-fab{
-    position:fixed; top:14px; right:14px; z-index:500; width:46px; height:46px;
+    position:fixed; top:96px; right:14px; z-index:500; width:46px; height:46px;
     border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
     background:linear-gradient(135deg, var(--gold), var(--gold-deep));
     box-shadow:0 8px 20px -6px rgba(199,154,56,.55);
@@ -176,6 +176,16 @@
   .cart-hero b{display:block; color:#fff; font-size:17px; font-weight:900;}
   .cart-hero span{display:block; color:var(--pink); font-size:12.5px; font-weight:700; margin-top:2px;}
   .cart-empty{margin:0 16px;}
+
+  /* 🧾 سطر سلة تفاعلي — كمية + حذف حقيقيين، مش نص ثابت بس */
+  .cart-line{display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--line);}
+  .cart-line .cl-rm{flex-shrink:0; width:32px; height:32px; border-radius:9px; border:none;
+    background:var(--bg,#F6F6F6); color:#C0355C; font-size:14px; cursor:pointer;}
+  .cart-line .cl-info{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
+  .cart-line .cl-name{font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .cart-line .cl-price{font-size:11px; color:var(--muted);}
+  .cart-line .cl-qty{flex-shrink:0;}
+  .cart-line .cl-total{flex-shrink:0; font-size:13px; font-weight:900; min-width:64px; text-align:left;}
 
   /* 🖼️ تكبير صورة الشات بضغطة */
   .img-zoom-wrap{
@@ -2065,12 +2075,12 @@ var _shopSending = false;
 var _myOrders = [];
 var ordUnsub = null;
 
+/* 🔴 نفس باج echarpe: الفروع كانت بتيجي من CONTACT.branches (أرقام
+   واتساب بس) — فرع من غير رقم واتساب كان بيختفي من الاستلام. Glow
+   فرع واحد دلوقتي، فقائمة مستقلة بدل ما تتبع أرقام تواصل. */
+var ECHARPE_GLOW_BRANCHES = ['Glow'];
 function shopBranches(){
-  /* كل الفروع — مش اللي عندها واتساب بس. الاستلام مالوش علاقة
-     برقم الواتساب. */
-  /* ⚠️ Glow فرع واحد دلوقتي — والقايمة بتيجي من نفس إعدادات
-     التواصل، فأي فرع جديد بيبان لوحده من غير تعديل كود. */
-  return (CONTACT.branches || []).map(function(b){ return b.name; }).filter(Boolean);
+  return ECHARPE_GLOW_BRANCHES.slice();
 }
 
 /* 🛍️ منتجات البيع أونلاين — مستند **مستقل** عن الكتالوج
@@ -2359,8 +2369,15 @@ function renderShop(){
     cart = '<div class="shop-cart">'
       + '<div class="sc-h">🧺 سلتك</div>'
       + lines.map(function(l){
-          return '<div class="ish-item"><span>' + esc(l.name) + ' <span class="q">× ' + l.qty + '</span></span>'
-            + '<span>' + fmt(l.price * l.qty) + ' ج.م</span></div>';
+          var lbc = esc(String(l.barcode));
+          return '<div class="cart-line">'
+            + '<button class="cl-rm" onclick="shopAdd(\'' + lbc + '\', -999)" title="شيلي من السلة">🗑️</button>'
+            + '<div class="cl-info"><span class="cl-name">' + esc(l.name) + '</span>'
+              + '<span class="cl-price">' + fmt(l.price) + ' ج.م / قطعة</span></div>'
+            + '<div class="qbar cl-qty"><button onclick="shopAdd(\'' + lbc + '\',-1)">−</button>'
+              + '<b>' + l.qty + '</b><button onclick="shopAdd(\'' + lbc + '\',1)">+</button></div>'
+            + '<span class="cl-total">' + fmt(l.price * l.qty) + ' ج.م</span>'
+            + '</div>';
         }).join('')
 
       /* 🚚 طريقة التسليم — أول قرار، لأنه بيغيّر كل اللي بعده */
@@ -2464,87 +2481,6 @@ function renderShop(){
         : '<button class="padd" onclick="event.stopPropagation(); shopAdd(\'' + esc(bc) + '\',1)">➕ ضيفي</button>')
       + '</div>';
   }).join('') + '</div>';
-
-  var cart = '';
-  if(lines.length){
-    var subtotal = total;
-    var canPickup = shopCfg.pickupEnabled !== false;
-    var canDeliver = shopCfg.deliveryEnabled === true;
-    /* ⚠️ لو الشحن متقفل، الاختيار **مبيتعرضش أصلًا** بدل ما يتعرض
-       ويترفض. عرض اختيار مقفول بيخلي العميلة تحاول وتفشل وتزهق. */
-    if(!canDeliver && _shopFulfill === 'delivery') _shopFulfill = 'pickup';
-    if(!canPickup && canDeliver) _shopFulfill = 'delivery';
-    var isDel = _shopFulfill === 'delivery';
-    var ship = isDel ? orderShippingFee(shopCfg, subtotal, _shopGov) : 0;
-    var grand = orderGrandTotal(lines, ship);
-
-    var govList = (shopCfg.governorates || []).map(function(g){ return g.name; });
-    if(!govList.length) govList = EG_GOVS;
-
-    cart = '<div class="shop-cart">'
-      + '<div class="sc-h">🧺 سلتك</div>'
-      + lines.map(function(l){
-          return '<div class="ish-item"><span>' + esc(l.name) + ' <span class="q">× ' + l.qty + '</span></span>'
-            + '<span>' + fmt(l.price * l.qty) + ' ج.م</span></div>';
-        }).join('')
-
-      /* 🚚 طريقة التسليم — أول قرار، لأنه بيغيّر كل اللي بعده */
-      + ((canPickup && canDeliver) ? (
-          '<div class="fld-lbl">🚚 عايزاها إزاي؟</div>'
-          + '<div class="ful-pick">'
-            + '<button class="ful' + (!isDel ? ' on' : '') + '" onclick="shopSetFulfill(\'pickup\')">'
-              + '<span class="fi">🏬</span><b>استلام من الفرع</b><span class="fs">تعالي خديها بنفسك</span></button>'
-            + '<button class="ful' + (isDel ? ' on' : '') + '" onclick="shopSetFulfill(\'delivery\')">'
-              + '<span class="fi">🚚</span><b>شحن للبيت</b><span class="fs">توصلك لحد باب البيت</span></button>'
-          + '</div>') : '')
-
-      + (!isDel
-        ? ('<div class="fld-lbl">🏬 هستلم من فرع</div>'
-           + '<div class="chips">' + branches.map(function(b){
-               return '<button class="chip' + (b === _shopBranch ? ' on' : '') + '" onclick="shopSetBranch(\'' + esc(b) + '\')">' + esc(b) + '</button>';
-             }).join('') + '</div>'
-           /* ⚠️ «فيزا» = هتدفعي في الفرع. لو اتكتبت «ادفعي بالفيزا»
-              لوحدها، العميلة تفتكر إنها دفعت أونلاين. */
-           + '<div class="fld-lbl">💳 هدفع في الفرع بـ</div>'
-           + '<div class="chips">'
-             + '<button class="chip' + (_shopPay === 'cash' ? ' on' : '') + '" onclick="shopSetPay(\'cash\')">💵 كاش</button>'
-             + '<button class="chip' + (_shopPay === 'visa' ? ' on' : '') + '" onclick="shopSetPay(\'visa\')">💳 فيزا</button>'
-           + '</div>')
-        : ('<div class="fld-lbl">📍 يتشحن منين</div>'
-           + '<div class="chips">' + branches.map(function(b){
-               return '<button class="chip' + (b === _shopBranch ? ' on' : '') + '" onclick="shopSetBranch(\'' + esc(b) + '\')">' + esc(b) + '</button>';
-             }).join('') + '</div>'
-           + '<div class="fld-lbl">👤 بياناتك للتوصيل</div>'
-           + '<input class="txt2" id="shName" placeholder="الاسم" value="' + esc(_shopInfo.name || '') + '" oninput="shopInfoSet(\'name\', this.value)">'
-           + '<input class="txt2 ltr" id="shPhone" type="tel" inputmode="numeric" placeholder="رقم الموبايل" value="' + esc(_shopInfo.phone || '') + '" oninput="shopInfoSet(\'phone\', this.value)">'
-           + '<select class="txt2" id="shGov" onchange="shopSetGov(this.value)">'
-             + '<option value="">اختاري المحافظة</option>'
-             + govList.map(function(g){
-                 return '<option value="' + esc(g) + '"' + (g === _shopGov ? ' selected' : '') + '>' + esc(g) + '</option>';
-               }).join('')
-           + '</select>'
-           + '<textarea class="txt2" id="shAddr" placeholder="العنوان بالتفصيل — الشارع والعمارة والدور والشقة" oninput="shopInfoSet(\'address\', this.value)">' + esc(_shopInfo.address || '') + '</textarea>'
-           + '<input class="txt2" id="shNote" placeholder="علامة مميزة أو ملاحظة (اختياري)" value="' + esc(_shopInfo.notes || '') + '" oninput="shopInfoSet(\'notes\', this.value)">'
-           + '<div class="pay-note">💵 الدفع <b>كاش عند الاستلام</b> — ماكينة الفيزا في الفرع مش مع المندوب.</div>')
-      )
-
-      + '<div class="sc-sum">'
-        + '<div class="ish-row"><span>البضاعة</span><span>' + fmt(subtotal) + ' ج.م</span></div>'
-        + (isDel
-          ? '<div class="ish-row"><span>الشحن' + (_shopGov ? ' — ' + esc(_shopGov) : '') + '</span><span>'
-            + (ship > 0 ? (fmt(ship) + ' ج.م') : '<b style="color:#16a34a;">مجاني 🎉</b>') + '</span></div>'
-          : '')
-        + '<div class="ish-row big"><span>الإجمالي</span><span>' + fmt(grand) + ' ج.م</span></div>'
-      + '</div>'
-
-      + '<button class="btn-primary" style="margin-top:14px;" id="shopSendBtn" onclick="shopSubmit()">'
-        + 'اطلبي دلوقتي</button>'
-      + '<div class="redeem-hint">'
-        + (isDel ? 'هنكلّمك على رقمك نأكّد الأوردر قبل ما يتشحن.'
-                 : 'بنحجزلك الحاجات ٢٤ ساعة — بعدها بترجع للبيع.')
-      + '</div>'
-      + '</div>';
-  }
 
   box.innerHTML = head + grid + cart;
 }
