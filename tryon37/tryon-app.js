@@ -1,7 +1,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v42-BROWFIX';
+  const TRYON_VER = 'v43-3DDEFAULT';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -978,7 +978,7 @@
         const res=S.landmarker.detectForVideo(detectSrc(),t0);
         S.detectorRunning=true; S.detectMs=performance.now()-__d0;
         S.faceCount=res?.faceLandmarks?.length||0;
-        S.lastErr = null;
+        if(!S.rendererErr) S.lastErr = null;
         draw(res,S.video);
         liveHairPass().catch(() => {});     // v28: ثابتة + مخنوق — مش كل فريم
       }catch(e){
@@ -1248,7 +1248,7 @@
       el.style.cssText='position:fixed;z-index:99999;left:8px;top:8px;background:#000c;color:#5cff74;padding:7px 9px;border-radius:9px;font:12px/1.35 monospace;direction:ltr;pointer-events:none;white-space:pre-wrap';
       document.body.appendChild(el);}
     setInterval(()=>{const vt=S.video&&Number.isFinite(S.video.currentTime)?S.video.currentTime:-1;
-      el.textContent=`v42 browfix\nstage:${S.stage}\nmodel:${S.modelLoaded?'ok':'...'} delegate:${S.delegate||'-'}\nrunning:${S.detectorRunning?'yes':'no'} faces:${S.faceCount||0}\ndetect:${Math.round(S.detectMs||0)}ms video:${vt.toFixed(2)}\n${S.lastErr?('err:'+String(S.lastErr.message||S.lastErr).slice(0,90)):''}`;},350);
+      el.textContent=`v43 3Ddefault\nstage:${S.stage}\nmodel:${S.modelLoaded?'ok':'...'} delegate:${S.delegate||'-'}\nrunning:${S.detectorRunning?'yes':'no'} faces:${S.faceCount||0}\ndetect:${Math.round(S.detectMs||0)}ms video:${vt.toFixed(2)}\n${S.lastErr?('err:'+String(S.lastErr.message||S.lastErr).slice(0,90)):''}`;},350);
   }
 
   async function boot(){
@@ -1276,16 +1276,22 @@
       // 🛟 فشل الرندرر (3D أو الشبكة) عمره ما ياخد الصفحة معاه —
       //    الكاميرا شغالة خلاص، فبنكمّل بالمسار المسطح بدل شاشة خطأ.
       try{
-        // 🧊 وضع الـAR التجريبي خلف ?ar=1 — قرار: العميلة تشوف القالب
-        //    المصوّر (شكل طرحة حقيقية) لحد ما الـ3D ياخد شكله النهائي
+        // v43: الـ3D الحقيقي هو الافتراضي. في النسخ السابقة كان محتاج
+        // ?ar=1، لذلك فتح الرابط العادي كان يدخل flat/mesh مهما كان OBJ موجود.
+        // ?flat=1 فقط للتشخيص/الرجوع للمسار القديم.
         const qsb = new URLSearchParams(location.search);
-        if(qsb.get('ar'))
-          S.r3d = await TRYON3D.init(S.canvas.width, S.canvas.height);
-        else if(!qsb.get('flat'))
-          // 🧵 الشبكة القماشية: نفس صورة القالب + فيزياء تمايل — الافتراضي
-          S.mesh = await TRYON_MESH.init(S.canvas.width, S.canvas.height);
+        if(!qsb.get('flat')){
+          try{
+            S.r3d = await TRYON3D.init(S.canvas.width, S.canvas.height);
+          }catch(e3d){
+            console.warn('3D init failed — trying cloth mesh fallback', e3d);
+            S.lastErr = e3d;
+            S.r3d = false;
+            S.mesh = await TRYON_MESH.init(S.canvas.width, S.canvas.height);
+          }
+        }
       }catch(e){
-        S.lastErr = e;
+        S.lastErr = e; S.rendererErr = e;
         console.warn('الرندرر فشل — كمّلنا بالمسار المسطح:', e);
       }
       S.stage = 'live';

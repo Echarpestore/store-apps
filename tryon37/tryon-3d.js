@@ -202,7 +202,7 @@
       syncGeometryMode();
       // لو صورة منتج اتحملت قبل ما الـOBJ يخلص تحميل، طبّق projection الآن.
       if(R.projector) reproject();
-      console.log('v38 OBJ hijab جاهز', { meshes: R.objMeshes.length, size });
+      console.log('v43 OBJ hijab جاهز', { meshes: R.objMeshes.length, size });
     }catch(e){
       R.objFailed = true;
       console.warn('OBJ hijab فشل — استمرار بالهندسة القديمة:', e);
