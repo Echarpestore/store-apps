@@ -45,7 +45,7 @@
     autoFit: 1,         // فصّل طول الانسدال على مقاس الصورة
 
     // 🧕 v38 — موديل الـOBJ الحقيقي. 1 = استخدمه، 0 = ارجع للهندسة الإجرائية القديمة.
-    obj: 1,
+    obj: 0,
     objScale: 1.08,
     objX: 0.0,
     objY: 1.2,
@@ -151,13 +151,9 @@
       // 🧕 v38: حمّل الموديل الحقيقي في الخلفية. لو فشل، الهندسة القديمة
       // تفضل شغالة تلقائيًا. الموديل بياخد نفس material/shader ونفس
       // مصفوفة MediaPipe، فصورة المنتج والإضاءة والـocclusion يفضلوا موحدين.
-      // v50: Meshy GLB is now the production garment.
-      // ?procedural=1 keeps the old generated mesh only for comparison.
-      if(!/[?&]procedural=1(?:&|$)/.test(location.search)){
+      if(/[?&]obj=1(?:&|$)/.test(location.search)){
         window.T3D_TUNE.obj = 1;
-        loadMeshyHijab(THREE);
-      }else{
-        window.T3D_TUNE.obj = 0;
+        loadObjHijab(THREE);
       }
 
       R.sp = new THREE.Vector3();
@@ -187,71 +183,6 @@
        T3D_TUNE من غير deploy.
      - ?obj=0 يرجّع فورًا للهندسة القديمة للتشخيص.
      ============================================================ */
-  async function loadMeshyHijab(THREE){
-    if(R.objReady || R.objFailed) return;
-    try{
-      const mod = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js');
-      const loader = new mod.GLTFLoader();
-      const gltf = await new Promise((resolve,reject)=>
-        loader.load('assets/hijab-meshy.glb', resolve, undefined, reject));
-      const obj = gltf.scene;
-
-      const wrap = new THREE.Group();
-      R.objRoot = obj;
-      R.objWrap = wrap;
-      R.objMeshes = [];
-
-      obj.traverse((ch)=>{
-        if(!ch.isMesh) return;
-        ch.frustumCulled = false;
-        if(ch.geometry && !ch.geometry.getAttribute('normal')) ch.geometry.computeVertexNormals();
-        // Keep Meshy's embedded PBR textures/materials.
-        const mats = Array.isArray(ch.material) ? ch.material : [ch.material];
-        mats.forEach(m=>{
-          if(!m) return;
-          m.side = THREE.DoubleSide;
-          if('roughness' in m) m.roughness = Math.max(0.72, m.roughness ?? 0.85);
-          if('metalness' in m) m.metalness = 0;
-          m.needsUpdate = true;
-        });
-        R.objMeshes.push(ch);
-      });
-
-      // Normalize the generated garment around its own bbox.
-      const box = new THREE.Box3().setFromObject(obj);
-      const size = new THREE.Vector3(), center = new THREE.Vector3();
-      box.getSize(size); box.getCenter(center);
-      obj.position.sub(center);
-      const maxDim = Math.max(size.x,size.y,size.z)||1;
-      obj.scale.setScalar(46/maxDim);
-
-      wrap.add(obj);
-      R.rig.add(wrap);
-      R.objReady = true;
-
-      // Meshy image-to-3D usually faces +Z; start neutral and calibrate from phone.
-      window.T3D_TUNE.objScale = 1.0;
-      window.T3D_TUNE.objX = 0;
-      window.T3D_TUNE.objY = 0;
-      window.T3D_TUNE.objZ = 0;
-      window.T3D_TUNE.objRx = 0;
-      window.T3D_TUNE.objRy = 0;
-      window.T3D_TUNE.objRz = 0;
-      window.T3D_TUNE.objSX = 1;
-      window.T3D_TUNE.objSY = 1;
-      window.T3D_TUNE.objSZ = 1;
-
-      applyObjTune();
-      syncGeometryMode();
-      console.log('v50 Meshy GLB ready', {meshes:R.objMeshes.length,size});
-    }catch(e){
-      R.objFailed=true;
-      console.warn('Meshy GLB failed; falling back to AR mesh',e);
-      window.T3D_TUNE.obj=0;
-      syncGeometryMode();
-    }
-  }
-
   async function loadObjHijab(THREE){
     if(R.objReady || R.objFailed) return;
     if(/[?&]obj=0(?:&|$)/.test(location.search)){

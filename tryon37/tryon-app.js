@@ -1,7 +1,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v50-MESHYGLB';
+  const TRYON_VER = 'v51-PHOTOAI';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -50,7 +50,8 @@
     camErr: null, fatalShown: false,
     bandana: null,                 // v23: null = من غير بندانة (الافتراضي)
     bandanaHinted: false,
-    plain: false,                   // v26: سادة — تلقائي بس من صورة المنتج
+    plain: false,
+    productSource: null, productFile: null, aiCustomerFile: null,                   // v26: سادة — تلقائي بس من صورة المنتج
     pendingPhoto: null,             // v34: الأصل المصوّر اللي بيترقّى في الخلفية
     seg: null, segFailed: false,    // v25: مقطّع الشعر — lazy
     hairZone: null,                 // v25: {mask,w,h} — أنهي شعر يتغطى
@@ -1147,6 +1148,93 @@
     el.style.display = msg ? 'flex' : 'none';
   }
 
+
+  /* ============================================================
+     v51 — AI PHOTO TRY-ON
+     Customer photo + exact product reference -> photorealistic edit.
+     API key never lives in the browser; /api/photo-tryon.php calls the model.
+     ============================================================ */
+  async function sourceToBlob(src){
+    if(!src) return null;
+    if(src.startsWith('data:')){
+      const r = await fetch(src); return await r.blob();
+    }
+    try{
+      const r = await fetch(src, {mode:'cors', credentials:'omit'});
+      if(!r.ok) throw new Error('product fetch '+r.status);
+      return await r.blob();
+    }catch(e){
+      return null; // backend can receive the URL instead when CORS blocks browser fetch
+    }
+  }
+
+  async function runAIPhotoTryOn(customerFile){
+    if(!customerFile) return;
+
+    // If chat did not pass a product image, ask once for the product photo.
+    if(!S.productSource && !S.productFile){
+      hint('اختاري صورة الطرحة الأول');
+      $('productInput').click();
+      return;
+    }
+
+    const prog = $('aiProgress');
+    const resultEl = $('aiResult');
+    const panel = $('aiPanel');
+    prog.classList.add('show');
+    panel.classList.remove('show');
+
+    const fd = new FormData();
+    fd.append('customer', customerFile, customerFile.name || 'customer.jpg');
+
+    if(S.productFile){
+      fd.append('product', S.productFile, S.productFile.name || 'product.jpg');
+    }else if(S.productSource){
+      const blob = await sourceToBlob(S.productSource);
+      if(blob){
+        fd.append('product', blob, 'product.jpg');
+      }else{
+        fd.append('product_url', S.productSource);
+      }
+    }
+
+    // Portrait output works best for head + shoulders try-on.
+    fd.append('quality', 'medium');
+
+    const rsp = await fetch('api/photo-tryon.php', {method:'POST', body:fd});
+    let body = null;
+    try{ body = await rsp.json(); }catch(e){}
+    if(!rsp.ok || !body || !body.ok){
+      throw new Error((body && body.error) || ('AI request failed ('+rsp.status+')'));
+    }
+
+    resultEl.onload = () => {
+      prog.classList.remove('show');
+      // AI result must not be mirrored.
+      resultEl.style.transform = 'none';
+      resultEl.style.display = 'block';
+      panel.classList.add('show');
+      hint('');
+    };
+    resultEl.src = 'data:'+(body.mime || 'image/png')+';base64,'+body.image;
+  }
+
+  function hideAIResult(){
+    const r=$('aiResult'), p=$('aiPanel'), prog=$('aiProgress');
+    r.style.display='none'; r.removeAttribute('src');
+    p.classList.remove('show'); prog.classList.remove('show');
+  }
+
+  function showAIError(err){
+    $('aiProgress').classList.remove('show');
+    const msg = String(err && err.message || err);
+    if(msg.includes('OPENAI_API_KEY')){
+      hint('مفتاح الـAI لسه مش متضاف على السيرفر');
+    }else{
+      hint('مقدرتش نعمل التجربة دلوقتي — جرّبي تاني');
+    }
+  }
+
   function buildUI(){
     // 🎨 قرار المالك: مفيش لوحة ألوان — اللون بييجي من **صورة المنتج**
     //    اللي الشات بيسلّمها. من غير صورة = بيج محايد (مجرد معاينة).
@@ -1167,18 +1255,40 @@
       (k) => qs.get(k),
       (k) => { try{ return sessionStorage.getItem(k); }catch(e){ return null; } }
     );
-    if(src.kind !== 'none') colorFromProductImage(src.value).catch(() => {});
+    if(src.kind !== 'none'){
+      S.productSource = src.value;
+      colorFromProductImage(src.value).catch(() => {});
+    }
 
     buildBandanaRow();
 
     $('btnShot').onclick = () => captureAndResume().catch(console.warn);
     $('btnLive').onclick = () => backToLive().catch(console.warn);
     $('btnPhoto').onclick = () => $('photoInput').click();
-    $('photoInput').onchange = (e) => {
-      if(e.target.files && e.target.files[0])
-        tryOnPhoto(e.target.files[0]).catch(console.warn);
+    $('photoInput').onchange = async (e) => {
+      const f = e.target.files && e.target.files[0];
       e.target.value = '';
+      if(!f) return;
+      S.aiCustomerFile = f;
+      try{
+        await runAIPhotoTryOn(f);
+      }catch(err){
+        console.error(err);
+        showAIError(err);
+      }
     };
+    $('productInput').onchange = async (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if(!f) return;
+      S.productFile = f;
+      if(S.aiCustomerFile){
+        try{ await runAIPhotoTryOn(S.aiCustomerFile); }
+        catch(err){ console.error(err); showAIError(err); }
+      }
+    };
+    $('aiAgain').onclick = () => { hideAIResult(); $('photoInput').click(); };
+    $('aiBack').onclick = () => hideAIResult();
   }
 
   /* 🧵 v26: زراير "بالكنار/سادة" اتشالت من واجهة العميلة (قرار
@@ -1248,7 +1358,7 @@
       el.style.cssText='position:fixed;z-index:99999;left:8px;top:8px;background:#000c;color:#5cff74;padding:7px 9px;border-radius:9px;font:12px/1.35 monospace;direction:ltr;pointer-events:none;white-space:pre-wrap';
       document.body.appendChild(el);}
     setInterval(()=>{const vt=S.video&&Number.isFinite(S.video.currentTime)?S.video.currentTime:-1;
-      el.textContent=`v50 MeshyGLB\nstage:${S.stage}\nmodel:${S.modelLoaded?'ok':'...'} delegate:${S.delegate||'-'}\nrunning:${S.detectorRunning?'yes':'no'} faces:${S.faceCount||0}\ndetect:${Math.round(S.detectMs||0)}ms video:${vt.toFixed(2)}\n${S.lastErr?('err:'+String(S.lastErr.message||S.lastErr).slice(0,90)):''}`;},350);
+      el.textContent=`v51 photoAI\nstage:${S.stage}\nmodel:${S.modelLoaded?'ok':'...'} delegate:${S.delegate||'-'}\nrunning:${S.detectorRunning?'yes':'no'} faces:${S.faceCount||0}\ndetect:${Math.round(S.detectMs||0)}ms video:${vt.toFixed(2)}\n${S.lastErr?('err:'+String(S.lastErr.message||S.lastErr).slice(0,90)):''}`;},350);
   }
 
   async function boot(){
