@@ -30,7 +30,8 @@
     projKey: null, projTex: null, fitted: null,
     // v38: موديل OBJ الحقيقي المرفوع من المالك
     objRoot: null, objWrap: null, objMeshes: [], objReady: false, objFailed: false,
-    objMat: null, objTex: null
+    objMat: null, objTex: null,
+    arHood: null, arNeck: null, arDrape: null
   };
 
   // 🎛️ لو اللفة محتاجة تظبيطة على وش حقيقي — أرقام من غير deploy
@@ -44,7 +45,7 @@
     autoFit: 1,         // فصّل طول الانسدال على مقاس الصورة
 
     // 🧕 v38 — موديل الـOBJ الحقيقي. 1 = استخدمه، 0 = ارجع للهندسة الإجرائية القديمة.
-    obj: 1,
+    obj: 0,
     objScale: 1.08,
     objX: 0.0,
     objY: 1.2,
@@ -122,16 +123,34 @@
         side: THREE.DoubleSide
       });
       R.fabricMat.onBeforeCompile = injectProjection;
+      // legacy procedural geometry kept only as emergency fallback
       R.hood = new THREE.Mesh(buildHood(THREE), R.fabricMat);
       R.skirt = new THREE.Mesh(buildSkirt(THREE), R.fabricMat);
+      R.hood.visible = false;
+      R.skirt.visible = false;
       R.rig.add(R.hood);
       R.rig.add(R.skirt);
+
+      // v46: purpose-built AR hijab geometry.
+      // Three overlapping cloth pieces are used intentionally: the overlaps
+      // hide seams while allowing the head portion and chest drape to have
+      // different silhouettes. All follow the same MediaPipe head matrix.
+      R.arHood = new THREE.Mesh(buildARHood(THREE), R.fabricMat);
+      R.arNeck = new THREE.Mesh(buildARNeckWrap(THREE), R.fabricMat);
+      R.arDrape = new THREE.Mesh(buildARDrape(THREE), R.fabricMat);
+      R.rig.add(R.arHood);
+      R.rig.add(R.arNeck);
+      R.rig.add(R.arDrape);
+
       loadFabricTexture(THREE);   // 🧵 ملمس القماش الحقيقي من صورة القالب
 
       // 🧕 v38: حمّل الموديل الحقيقي في الخلفية. لو فشل، الهندسة القديمة
       // تفضل شغالة تلقائيًا. الموديل بياخد نفس material/shader ونفس
       // مصفوفة MediaPipe، فصورة المنتج والإضاءة والـocclusion يفضلوا موحدين.
-      loadObjHijab(THREE);
+      if(/[?&]obj=1(?:&|$)/.test(location.search)){
+        window.T3D_TUNE.obj = 1;
+        loadObjHijab(THREE);
+      }
 
       R.sp = new THREE.Vector3();
       R.sq = new THREE.Quaternion();
@@ -252,9 +271,11 @@
   function syncGeometryMode(){
     const useObj = !!(window.T3D_TUNE.obj && R.objReady && !R.objFailed);
     if(R.objWrap) R.objWrap.visible = useObj;
-    // procedural = fallback، أو تقدر تقفله/تشغله حيًا من T3D_TUNE.obj
-    if(R.hood) R.hood.visible = !useObj;
-    if(R.skirt) R.skirt.visible = !useObj;
+    if(R.arHood) R.arHood.visible = !useObj;
+    if(R.arNeck) R.arNeck.visible = !useObj;
+    if(R.arDrape) R.arDrape.visible = !useObj;
+    if(R.hood) R.hood.visible = false;
+    if(R.skirt) R.skirt.visible = false;
     return useObj;
   }
 
@@ -310,6 +331,9 @@
     try{
       if(R.hood) applyProjTo(R.hood.geometry);
       if(R.skirt) applyProjTo(R.skirt.geometry);
+      if(R.arHood) applyProjTo(R.arHood.geometry);
+      if(R.arNeck) applyProjTo(R.arNeck.geometry);
+      if(R.arDrape) applyProjTo(R.arDrape.geometry);
       // v45: OBJ uses its native UVs, so product projection stays on the
       // legacy procedural meshes only.
       R.uni.uHasProj.value = (R.projector && R.projTex && window.T3D_TUNE.proj) ? 1 : 0;
@@ -411,6 +435,118 @@
     img.src = 'assets/template-01-head.png';
   }
 
+
+  /* ============================================================
+     v46 — Purpose-built AR hijab geometry
+     ============================================================ */
+
+  // Hood: ellipsoid around skull, with a smooth oval face opening.
+  function buildARHood(THREE){
+    const SEG=80, RINGS=56, pos=[], uv=[], idx=[], keep=[];
+    const rx=8.8, ry=10.8, rz=9.2, cy=0.8, cz=-1.7;
+    const at=(i,j)=>i*(SEG+1)+j;
+
+    for(let i=0;i<=RINGS;i++){
+      const th=Math.PI*0.95*i/RINGS; // crown to below jaw
+      for(let j=0;j<=SEG;j++){
+        const ph=j/SEG*Math.PI*2-Math.PI;
+        const st=Math.sin(th), ct=Math.cos(th);
+        let x=rx*st*Math.sin(ph);
+        let y=cy+ry*ct;
+        let z=cz+rz*st*Math.cos(ph);
+
+        // fabric folds: subtle radial displacement, stronger at sides/back.
+        const side=Math.min(1,Math.abs(Math.sin(ph))*1.25);
+        const fold=(0.16*Math.sin(4*ph+1.3)+0.10*Math.sin(9*ph+th*2.0))*side;
+        const len=Math.hypot(x,(y-cy),(z-cz))||1;
+        x += x/len*fold; y += (y-cy)/len*fold; z += (z-cz)/len*fold;
+
+        pos.push(x,y,z); uv.push(j/SEG,1-i/RINGS);
+
+        // smooth oval opening in front (+Z), slightly narrower at chin.
+        const xn=x/5.65, yn=(y-0.2)/7.55;
+        const oval=xn*xn+yn*yn;
+        const front=z>3.6;
+        const opening=front && oval<1.0 && y>-6.0 && y<7.7;
+        keep.push(!opening);
+      }
+    }
+    for(let i=0;i<RINGS;i++) for(let j=0;j<SEG;j++){
+      const a=at(i,j),b=at(i+1,j),c=at(i+1,j+1),d=at(i,j+1);
+      // Keep only cells whose center isn't in the face window.
+      if(!(keep[a]&&keep[b]&&keep[c]&&keep[d])) continue;
+      idx.push(a,b,d,b,c,d);
+    }
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+    g.setIndex(idx); g.computeVertexNormals(); applyProjTo(g); return g;
+  }
+
+  // Neck wrap: short elliptical tube overlapping hood and drape, avoiding
+  // the hard horizontal cut seen in the imported OBJ.
+  function buildARNeckWrap(THREE){
+    const SEG=80, ROWS=18, pos=[],uv=[],idx=[];
+    const at=(i,j)=>i*(SEG+1)+j;
+    for(let i=0;i<=ROWS;i++){
+      const v=i/ROWS;
+      for(let j=0;j<=SEG;j++){
+        const ph=j/SEG*Math.PI*2-Math.PI;
+        const r=6.25+1.15*v;
+        const x=Math.sin(ph)*r;
+        const y=-5.2-5.6*v + 0.28*Math.sin(ph*3+v*2);
+        let z=Math.cos(ph)*r*0.58-1.55;
+        // push the front wrap slightly forward and make side folds.
+        const front=Math.max(0,Math.cos(ph));
+        z += front*(1.55-0.55*v);
+        z += 0.18*Math.sin(6*ph+v*5);
+        pos.push(x,y,z); uv.push(j/SEG,1-v);
+      }
+    }
+    for(let i=0;i<ROWS;i++) for(let j=0;j<SEG;j++)
+      idx.push(at(i,j),at(i+1,j),at(i,j+1),at(i+1,j),at(i+1,j+1),at(i,j+1));
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+    g.setIndex(idx); g.computeVertexNormals(); applyProjTo(g); return g;
+  }
+
+  // Front/shoulder drape: a cloth panel, not a cylinder. It widens across
+  // shoulders, curves around sides, and has vertical folds. This gives a
+  // hijab-like silhouette instead of a hanging rectangle.
+  function buildARDrape(THREE){
+    const COLS=64, ROWS=38, pos=[],uv=[],idx=[];
+    const at=(i,j)=>i*(COLS+1)+j;
+    for(let i=0;i<=ROWS;i++){
+      const v=i/ROWS;
+      const halfW=7.0 + 7.6*Math.pow(v,0.72);
+      const baseY=-9.2 - 20.5*v;
+      for(let j=0;j<=COLS;j++){
+        const u=j/COLS*2-1;
+        const au=Math.abs(u);
+        let x=u*halfW;
+
+        // shoulder line drops slightly at sides and lower edge waves gently.
+        let y=baseY - 1.25*Math.pow(au,1.7)*(0.35+0.65*v);
+        y += 0.35*Math.sin((u+1)*Math.PI*3.2)*(0.25+0.75*v);
+
+        // central cloth sits in front; side edges wrap backward around shoulders.
+        let z=4.2 - 2.2*v - 5.0*Math.pow(au,2.35);
+        // vertical fabric folds.
+        z += (0.48*Math.sin(u*18+0.7)+0.22*Math.sin(u*31+v*3.0))*(0.35+0.65*v);
+
+        pos.push(x,y,z); uv.push((u+1)/2,1-v);
+      }
+    }
+    for(let i=0;i<ROWS;i++) for(let j=0;j<COLS;j++)
+      idx.push(at(i,j),at(i+1,j),at(i,j+1),at(i+1,j),at(i+1,j+1),at(i,j+1));
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+    g.setIndex(idx); g.computeVertexNormals(); applyProjTo(g); return g;
+  }
+
+
   /* ---------- بناء القشرة (بفتحة الوش) ---------- */
   function buildHood(THREE){
     const SEG = 72, RINGS = 52, TH1 = C.SHAPE.thetaEnd;
@@ -496,7 +632,7 @@
     }
     R.lastFaceAt = performance.now();
     R.group.visible = true;
-    applyObjTune();
+    if(window.T3D_TUNE.obj) applyObjTune();
     syncGeometryMode();
 
     const t = R.tmp;
