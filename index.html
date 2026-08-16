@@ -88,6 +88,49 @@
   .social svg{width:20px; height:20px; fill:var(--accent-deep);}
   footer{margin-top:18px; text-align:center; color:var(--muted); font-size:12px; font-weight:500;}
   footer b{color:var(--accent-deep);}
+
+  /* ============================================================
+     🛍️ اطلبي أونلاين — نفس توكنز الموقع بالظبط (مفيش ألوان/خطوط جديدة)
+     ============================================================ */
+  .shop-sec{margin-top:0;}
+  .ws-loading, .ws-empty{background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:22px; text-align:center; color:var(--muted); font-size:13px; font-weight:600;}
+  .ws-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:11px;}
+  .ws-card{background:var(--panel); border:1px solid var(--line); border-radius:17px; overflow:hidden; position:relative;}
+  .ws-card .ph{width:100%; aspect-ratio:1; background:var(--soft) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:30px;}
+  .ws-card .inf{padding:10px 11px 12px;}
+  .ws-card .nm{font-size:13px; font-weight:800; line-height:1.35; min-height:2.6em; overflow:hidden;}
+  .ws-card .pr{margin-top:4px; font-size:14px; font-weight:900; color:var(--accent-deep);}
+  .ws-card .padd{width:100%; margin-top:8px; padding:9px; border:none; border-radius:10px; background:var(--accent); color:#fff; font-weight:800; font-size:12.5px; cursor:pointer;}
+  .ws-card .qbar{display:flex; align-items:center; justify-content:space-between; margin-top:8px; background:var(--bg); border-radius:10px; padding:5px 6px;}
+  .ws-card .qbar button{width:26px; height:26px; border-radius:8px; border:none; background:var(--panel); border:1px solid var(--line); font-weight:900; font-size:15px; cursor:pointer; color:var(--ink);}
+  .ws-card .qbar b{font-size:13px;}
+  .ws-oos{position:absolute; top:8px; right:8px; background:rgba(58,37,48,.75); color:#fff; font-size:10.5px; font-weight:800; padding:4px 9px; border-radius:99px;}
+
+  .ws-cart{margin-top:16px; background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:18px 16px;}
+  .ws-cart .ch{font-size:15px; font-weight:900; margin-bottom:10px; display:flex; align-items:center; gap:8px;}
+  .ws-line{display:flex; justify-content:space-between; align-items:center; font-size:13px; padding:7px 0; border-bottom:1px solid var(--line);}
+  .ws-line:last-of-type{border-bottom:none;}
+  .ws-line .q{color:var(--muted); font-weight:600;}
+  .ws-lbl{font-size:12.5px; font-weight:800; color:var(--muted); margin:14px 0 7px;}
+  .ws-chips{display:flex; flex-wrap:wrap; gap:7px;}
+  .ws-chip{border:1.5px solid var(--line); background:var(--bg); color:var(--ink); font-weight:800; font-size:12.5px; padding:8px 14px; border-radius:99px; cursor:pointer;}
+  .ws-chip.on{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .ws-field{width:100%; margin-top:8px; padding:13px 14px; border-radius:13px; border:1.5px solid var(--line); background:var(--bg); font-family:inherit; font-size:14px; color:var(--ink);}
+  .ws-field:focus{outline:none; border-color:var(--accent);}
+  .ws-total{display:flex; justify-content:space-between; align-items:center; font-size:15px; font-weight:900; margin-top:14px; padding-top:12px; border-top:1.5px dashed var(--line);}
+  .ws-total b{color:var(--accent-deep); font-size:18px;}
+  .ws-submit{width:100%; margin-top:14px; padding:16px; border:none; border-radius:14px; background:var(--accent); color:#fff; font-weight:900; font-size:15.5px; cursor:pointer; box-shadow:0 9px 20px rgba(214,93,139,.28);}
+  .ws-submit:disabled{opacity:.6;}
+  .ws-err{color:#C0355C; font-size:12px; font-weight:700; margin-top:6px; display:none;}
+  .ws-err.on{display:block;}
+
+  #wsToast{position:fixed; right:0; left:0; bottom:18px; z-index:9999; display:flex; justify-content:center; pointer-events:none; padding:0 20px;}
+  #wsToast .box{max-width:420px; background:var(--panel); border:1.5px solid var(--accent); border-radius:16px; padding:13px 18px;
+    font-size:13.5px; font-weight:700; color:var(--ink); box-shadow:0 12px 32px -10px rgba(58,34,51,.45);
+    opacity:0; transform:translateY(14px); transition:opacity .25s ease, transform .25s ease; text-align:center;}
+  #wsToast .box.on{opacity:1; transform:translateY(0);}
+  #wsToast .box.err{border-color:#C0355C;}
 </style>
 </head>
 <body>
@@ -132,6 +175,11 @@
     <div class="col-card" style="background-image:url('col-grays.jpg')">
       <span class="tag">درجات الرمادي 🤍</span>
     </div>
+  </section>
+  <h2 class="sec-title">🛍️ اطلبي أونلاين</h2>
+  <section class="shop-sec" id="wsShop">
+    <div id="wsGrid" class="ws-loading">بنجيب أحدث الطرح...</div>
+    <div id="wsCartWrap"></div>
   </section>
   <h2 class="sec-title">🤍 تطبيق echarpe</h2>
   <section class="app-sec" style="margin-top:0;">
@@ -183,6 +231,9 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+<!-- 🛍️ محرك الأوردرات — نفس الملف اللي POS وتطبيقي العميلة بيقروه -->
+<script src="pos/orders-core.js"></script>
 <script>
 (function(){
   try{
@@ -243,6 +294,269 @@
       document.getElementById('offersSec').style.display = 'block';
     }).catch(function(){});
   }catch(e){}
+})();
+</script>
+
+<div id="wsToast"><div class="box" id="wsToastBox"></div></div>
+
+<script>
+/* ============================================================
+   🛍️ اطلبي أونلاين — نسخة الموقع (ضيف/زائر، من غير تسجيل دخول).
+   ------------------------------------------------------------
+   ⚠️ القرار: تتصفّح وتضيفي للسلة من غير تسجيل، والاسم والتليفون
+      بيتاخدوا **عند إتمام الطلب بس** (مش زي التطبيق اللي بيطلب
+      تسجيل دخول بكود سري من البداية — هنا زوّار الموقع، مش أعضاء).
+   ⚠️ نفس بيانات الكتالوج بالظبط اللي التطبيق بيقراها
+      (pos_test_settings/online_shop_echarpe[_cfg]) — صفر مستندات
+      جديدة. ونفس دالة onlineOrderPlace السحابية (source:'web' —
+      كانت متجهزة في الدالة من الأول، مستنية بس الواجهة دي).
+   ⚠️ **من غير فولباك كتابة مباشرة** (عكس التطبيق): الزائر هنا
+      anon-auth من غير مستند عميلة، فالكتابة المباشرة هترفضها
+      القاعدة على الأغلب وهتبان كخطأ غامض. الاعتماد الكامل على
+      الدالة السحابية (وفيها الحجز الذرّي) أسلم من كتابة جزئية
+      من سياق مجهول.
+   ============================================================ */
+(function(){
+  'use strict';
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+  var COL_SETTINGS = 'pos_test_settings';
+  var COL_INVENTORY = 'pos_test_inventory';
+  var SHOP_DOC = 'online_shop_echarpe';
+  var SHOP_CFG_DOC = 'online_shop_echarpe_cfg';
+  var CATALOG_BRAND = 'echarpe';
+  // 🏬 نفس فروع الموقع الثابتة المعروضة تحت في قسم «فروعنا»
+  var BRANCHES = ['الرحاب', 'مدينتي', 'سيتي سنتر'];
+  var EG_GOVS = ['القاهرة','الجيزة','القليوبية','الإسكندرية','الدقهلية','الشرقية',
+    'الغربية','المنوفية','البحيرة','كفر الشيخ','دمياط','بورسعيد','الإسماعيلية','السويس',
+    'الفيوم','بني سويف','المنيا','أسيوط','سوهاج','قنا','الأقصر','أسوان','البحر الأحمر',
+    'مطروح','شمال سيناء','جنوب سيناء','الوادي الجديد'];
+
+  var wsCatalog = null;   // null = لسه بيتحمّل
+  var wsCfg = { pickupEnabled:true, deliveryEnabled:false, shippingFee:0, freeOver:0, governorates:[] };
+  var wsCart = {};        // { باركود: كمية }
+  var wsFulfill = 'pickup';
+  var wsBranch = '';
+  var wsGov = '';
+  var wsPay = 'cash';
+  var wsInfo = { name:'', phone:'', address:'', notes:'' };
+  var wsSending = false;
+
+  function wsItems(){
+    return (wsCatalog || []).filter(function(p){
+      return p && p.active === true && Number(p.onlineQty) > 0 && p.barcode && Number(p.price) > 0;
+    });
+  }
+  function wsQty(bc){ return Math.max(0, Math.floor(Number(wsCart[bc]) || 0)); }
+  function wsCartLines(){
+    var byBc = {}; wsItems().forEach(function(p){ byBc[String(p.barcode)] = p; });
+    var out = [];
+    Object.keys(wsCart).forEach(function(bc){
+      var p = byBc[bc]; if(!p) return;
+      out.push({ barcode: bc, name: p.name || 'منتج', price: Number(p.price) || 0, qty: wsQty(bc) });
+    });
+    return out;
+  }
+
+  function wsToast(msg, isErr){
+    var box = $('wsToastBox'); if(!box) return;
+    box.textContent = msg;
+    box.className = 'box on' + (isErr ? ' err' : '');
+    clearTimeout(wsToast._t);
+    wsToast._t = setTimeout(function(){ box.classList.remove('on'); }, 3200);
+  }
+  function wsShowErr(msg){
+    var el = $('wsErr'); if(!el) return;
+    el.textContent = msg || '';
+    el.className = 'ws-err' + (msg ? ' on' : '');
+  }
+
+  // ---------- الأزرار (نفس أسلوب loyalty: onclick inline + window) ----------
+  function wsAdd(bc, d){
+    bc = String(bc);
+    var n = wsQty(bc) + (Number(d) || 0);
+    if(n <= 0) delete wsCart[bc]; else wsCart[bc] = n;
+    renderShopGrid(); renderCart();
+  }
+  function wsSetFulfill(v){ wsFulfill = (v === 'delivery') ? 'delivery' : 'pickup'; renderCart(); }
+  function wsSetBranch(v){ wsBranch = v || ''; renderCart(); }
+  function wsSetPay(v){ wsPay = (v === 'visa') ? 'visa' : 'cash'; renderCart(); }
+  function wsSetGov(v){ wsGov = v || ''; renderCart(); }
+  /* ⚠️ من غير renderCart هنا عن قصد — إعادة الرسم مع كل حرف بتضيّع
+     فوكس الكيبورد على الموبايل (نفس درس shopInfoSet في التطبيق). */
+  function wsInfoSet(k, v){ wsInfo[k] = v; }
+  window.wsAdd = wsAdd; window.wsSetFulfill = wsSetFulfill; window.wsSetBranch = wsSetBranch;
+  window.wsSetPay = wsSetPay; window.wsSetGov = wsSetGov; window.wsInfoSet = wsInfoSet;
+
+  // ---------- تحميل الكتالوج ----------
+  function loadCatalog(){
+    Promise.resolve(window.ensureAnonAuth ? window.ensureAnonAuth() : null).then(function(){
+      var db = firebase.firestore(firebase.app('site'));
+      return db.collection(COL_SETTINGS).doc(SHOP_DOC).get().then(function(d){
+        var data = d.exists ? d.data() : {};
+        wsCatalog = Array.isArray(data.items) ? data.items : [];
+      }).catch(function(){ wsCatalog = []; })
+        .then(function(){ return db.collection(COL_SETTINGS).doc(SHOP_CFG_DOC).get(); })
+        .then(function(c){ if(c && c.exists) wsCfg = Object.assign(wsCfg, c.data()); })
+        .catch(function(){})
+        .then(function(){ renderShopGrid(); renderCart(); });
+    }).catch(function(){ wsCatalog = []; renderShopGrid(); });
+  }
+
+  // ---------- رسم الشبكة ----------
+  function renderShopGrid(){
+    var box = $('wsGrid'); if(!box) return;
+    if(wsCatalog === null){ box.className = 'ws-loading'; box.textContent = 'بنجيب أحدث الطرح...'; return; }
+    var items = wsItems();
+    if(!items.length){
+      box.className = 'ws-empty';
+      box.textContent = 'لسه مفيش منتجات معروضة أونلاين — تابعينا على واتساب في الأثناء 🌸';
+      return;
+    }
+    box.className = 'ws-grid';
+    box.innerHTML = items.map(function(p){
+      var bc = String(p.barcode), q = wsQty(bc);
+      return '<div class="ws-card">'
+        + (p.img ? '<div class="ph" style="background-image:url(\'' + esc(p.img) + '\')"></div>' : '<div class="ph">🧕</div>')
+        + '<div class="inf"><div class="nm">' + esc(p.name || 'منتج') + '</div>'
+        + '<div class="pr">' + esc(p.price) + ' ج.م</div>'
+        + (q
+          ? '<div class="qbar"><button onclick="wsAdd(\'' + esc(bc) + '\',-1)">−</button><b>' + q + '</b>'
+            + '<button onclick="wsAdd(\'' + esc(bc) + '\',1)">+</button></div>'
+          : '<button class="padd" onclick="wsAdd(\'' + esc(bc) + '\',1)">➕ ضيفي للسلة</button>')
+        + '</div></div>';
+    }).join('');
+  }
+
+  // ---------- رسم السلة + الشيك أوت ----------
+  function renderCart(){
+    var wrap = $('wsCartWrap'); if(!wrap) return;
+    var lines = wsCartLines();
+    if(!lines.length){ wrap.innerHTML = ''; return; }
+
+    var subtotal = window.orderTotal(lines);
+    var canPickup = wsCfg.pickupEnabled !== false;
+    var canDeliver = wsCfg.deliveryEnabled === true;
+    if(!canDeliver && wsFulfill === 'delivery') wsFulfill = 'pickup';
+    if(!canPickup && canDeliver) wsFulfill = 'delivery';
+    var isDel = wsFulfill === 'delivery';
+    var ship = isDel ? window.orderShippingFee(wsCfg, subtotal, wsGov) : 0;
+    var grand = window.orderGrandTotal(lines, ship);
+    var govList = (wsCfg.governorates || []).map(function(g){ return g.name; });
+    if(!govList.length) govList = EG_GOVS;
+
+    var html = '<div class="ws-cart"><div class="ch">🧺 سلتك</div>'
+      + lines.map(function(l){
+          return '<div class="ws-line"><span>' + esc(l.name) + ' <span class="q">× ' + l.qty + '</span></span>'
+            + '<span>' + Math.round(l.price * l.qty) + ' ج.م</span></div>';
+        }).join('');
+
+    if(canPickup && canDeliver){
+      html += '<div class="ws-lbl">🚚 عايزاها إزاي؟</div><div class="ws-chips">'
+        + '<button class="ws-chip' + (!isDel ? ' on' : '') + '" onclick="wsSetFulfill(\'pickup\')">🏬 استلام من الفرع</button>'
+        + '<button class="ws-chip' + (isDel ? ' on' : '') + '" onclick="wsSetFulfill(\'delivery\')">🚚 شحن للبيت</button></div>';
+    }
+
+    if(!isDel){
+      html += '<div class="ws-lbl">🏬 هستلم من فرع</div><div class="ws-chips">'
+        + BRANCHES.map(function(b){
+            return '<button class="ws-chip' + (b === wsBranch ? ' on' : '') + '" onclick="wsSetBranch(\'' + esc(b) + '\')">' + esc(b) + '</button>';
+          }).join('')
+        + '</div>'
+        + '<div class="ws-lbl">💳 هدفع في الفرع بـ</div><div class="ws-chips">'
+        + '<button class="ws-chip' + (wsPay === 'cash' ? ' on' : '') + '" onclick="wsSetPay(\'cash\')">💵 كاش</button>'
+        + '<button class="ws-chip' + (wsPay === 'visa' ? ' on' : '') + '" onclick="wsSetPay(\'visa\')">💳 فيزا</button></div>';
+    } else {
+      wsPay = 'cash'; // شحن = كاش عند الاستلام دايمًا (نفس قاعدة التطبيق)
+      html += '<div class="ws-lbl">📍 المحافظة</div>'
+        + '<select class="ws-field" onchange="wsSetGov(this.value)">'
+        + '<option value="">اختاري المحافظة</option>'
+        + govList.map(function(g){ return '<option value="' + esc(g) + '"' + (g === wsGov ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('')
+        + '</select>'
+        + '<div class="ws-lbl">🏠 العنوان بالتفصيل</div>'
+        + '<textarea class="ws-field" placeholder="اسم الشارع، رقم العمارة، علامة مميزة..." oninput="wsInfoSet(\'address\', this.value)">' + esc(wsInfo.address) + '</textarea>'
+        + '<div class="ws-lbl">💵 الدفع</div><div class="ws-chips"><button class="ws-chip on">💵 كاش عند الاستلام</button></div>';
+    }
+
+    html += '<div class="ws-lbl">👤 الاسم</div>'
+      + '<input class="ws-field" type="text" placeholder="اسمك" value="' + esc(wsInfo.name) + '" oninput="wsInfoSet(\'name\', this.value)">'
+      + '<div class="ws-lbl">📱 رقم الموبايل</div>'
+      + '<input class="ws-field" type="tel" inputmode="numeric" placeholder="01xxxxxxxxx" value="' + esc(wsInfo.phone) + '" oninput="wsInfoSet(\'phone\', this.value)">'
+      + '<div class="ws-lbl">📝 ملاحظات (اختياري)</div>'
+      + '<textarea class="ws-field" placeholder="أي تفاصيل عايزة تقوليهالنا" oninput="wsInfoSet(\'notes\', this.value)">' + esc(wsInfo.notes) + '</textarea>'
+      + '<div class="ws-total"><span>الإجمالي' + (isDel ? ' (شامل الشحن ' + Math.round(ship) + ' ج.م)' : '') + '</span><b>' + Math.round(grand) + ' ج.م</b></div>'
+      + '<div class="ws-err" id="wsErr"></div>'
+      + '<button class="ws-submit" id="wsSubmitBtn" onclick="wsSubmit()">اطلبي دلوقتي</button>'
+      + '</div>';
+
+    wrap.innerHTML = html;
+  }
+
+  // ---------- الإرسال ----------
+  function wsSubmit(){
+    if(wsSending) return;
+    var lines = wsCartLines();
+    if(!lines.length){ wsToast('السلة فاضية', true); return; }
+    if(wsFulfill === 'pickup' && !wsBranch){ wsToast('اختاري الفرع اللي هتستلمي منه', true); return; }
+    if(wsFulfill === 'delivery' && !wsGov){ wsToast('اختاري المحافظة', true); return; }
+
+    var info = {
+      name: (wsInfo.name || '').trim(),
+      phone: (wsInfo.phone || '').trim(),
+      governorate: wsGov,
+      address: (wsInfo.address || '').trim(),
+      notes: (wsInfo.notes || '').trim()
+    };
+    var vc = window.orderValidateContact(info, wsFulfill);
+    if(!vc.ok){ wsShowErr(vc.errors[0]); wsToast(vc.errors[0], true); return; }
+    wsShowErr('');
+
+    wsSending = true;
+    var btn = $('wsSubmitBtn');
+    if(btn){ btn.disabled = true; btn.textContent = 'بيتبعت…'; }
+
+    var db = firebase.firestore(firebase.app('site'));
+    Promise.all(lines.map(function(l){
+      return db.collection(COL_INVENTORY).doc(String(l.barcode)).get()
+        .then(function(d){ return d.exists ? Object.assign({ barcode: String(l.barcode) }, d.data()) : null; })
+        .catch(function(){ return null; });
+    })).then(function(prods){
+      var chk = window.orderValidateCart(
+        lines.map(function(l){ return { barcode: l.barcode, qty: l.qty }; }),
+        prods.filter(Boolean), wsBranch || BRANCHES[0], Date.now()
+      );
+      if(!chk.ok){ var err = new Error(chk.errors[0]); err._friendly = true; throw err; }
+
+      var payload = {
+        brand: CATALOG_BRAND, source: 'web', branch: wsBranch || '',
+        phone: info.phone, name: info.name,
+        items: chk.items.map(function(it){ return { barcode: it.barcode, qty: it.qty }; }),
+        payMethod: wsPay, fulfillment: wsFulfill,
+        governorate: info.governorate, address: info.address,
+        notes: info.notes, contactPhone: info.phone
+      };
+      // ☁️ الدالة السحابية بس — من غير فولباك كتابة مباشرة (شرح فوق).
+      var fn = firebase.app('site').functions('us-central1').httpsCallable('onlineOrderPlace');
+      return fn(payload);
+    }).then(function(res){
+      var r = (res && res.data) || {};
+      wsCart = {};
+      wsInfo = { name:'', phone:'', address:'', notes:'' };
+      renderShopGrid(); renderCart();
+      wsToast('تمام ✅ أوردر رقم ' + (r.code || '') + ' — هنتواصل معاكي على الرقم اللي كتبتيه');
+    }).catch(function(e){
+      var msg = (e && e.message) || 'معرفناش نبعت الأوردر — حاولي تاني';
+      wsToast(msg, true);
+    }).then(function(){
+      wsSending = false;
+      var b = $('wsSubmitBtn');
+      if(b){ b.disabled = false; b.textContent = 'اطلبي دلوقتي'; }
+    });
+  }
+  window.wsSubmit = wsSubmit;
+
+  loadCatalog();
 })();
 </script>
 </body>
