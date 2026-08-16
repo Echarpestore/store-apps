@@ -436,7 +436,7 @@
       }catch(e){ console.warn('fabric tex', e); }
     };
     img.onerror = () => {};
-    img.src = 'assets/template-01-head.png';
+    img.src = 'assets/ai-hijab-live.png';
   }
 
 

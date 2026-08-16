@@ -1246,9 +1246,8 @@
     //    بتشوف شاشة فاضية طول الوقت ده. مفيش شاشة فاضية تاني — أسوأ
     //    حالة شكل مبدئي.
     const _photoFirst = window.TRYON_CATALOG.find((x) => x.type === 'photo');
-    const _drawn = window.TRYON_CATALOG.find((x) => x.type === 'procedural');
-    S.scarf = _drawn || window.TRYON_CATALOG[0];
-    S.pendingPhoto = _photoFirst || null;
+    S.scarf = _photoFirst || window.TRYON_CATALOG[0];
+    S.pendingPhoto = null;
 
     const qs = new URLSearchParams(location.search);
     const src = T.imageSourceFromQuery(

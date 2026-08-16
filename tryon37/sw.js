@@ -7,7 +7,7 @@ const CACHE_NAME = 'echarpe-tryon-v36-v38obj';
    ⚠️ أي تعديل في أي ملف = ارفع CACHE_NAME (القاعدة العامة).
    ============================================================ */
 const SHELL = ['./', './index.html', './tryon-core.js', './tryon-app.js',
-               './assets/catalog.js', './recolor.html', './recolor-core.js', './prep.html', './prep-core.js', './assets/template-01-head.png', './tryon-3d-core.js', './tryon-3d.js', './tryon-mesh-core.js', './tryon-mesh.js'];
+               './assets/catalog.js', './recolor.html', './recolor-core.js', './prep.html', './prep-core.js', './assets/ai-hijab-live.png', './tryon-3d-core.js', './tryon-3d.js', './tryon-mesh-core.js', './tryon-mesh.js'];
 
 self.addEventListener('install', (e) => {
   // 🔴 v31: `addAll` العادي بياخد من كاش المتصفح (GitHub Pages بيحط
