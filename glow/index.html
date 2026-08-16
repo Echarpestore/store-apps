@@ -455,6 +455,39 @@
   html[dir="ltr"] .prod .oos{left:auto; right:12px;}
   html[dir="ltr"] .tab-badge{left:auto; right:calc(50% + 4px);}
 
+  /* 🖼️ صفحة المنتج */
+  .pv-gal{display:flex; gap:8px; overflow-x:auto; scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch; margin:-4px -4px 8px;}
+  .pv-gal::-webkit-scrollbar{ display:none; }
+  .pv-gal img{flex:0 0 86%; scroll-snap-align:center; width:86%; border-radius:16px; display:block;}
+  .pv-dots{display:flex; gap:5px; justify-content:center; margin-bottom:10px;}
+  .pv-dots span{width:6px; height:6px; border-radius:50%; background:var(--line);}
+  .pv-name{font-size:17px; font-weight:900;}
+  .pv-price{font-size:20px; font-weight:900; margin-top:2px;}
+  .pv-desc{font-size:13px; line-height:1.9; opacity:.85; margin-top:8px; white-space:pre-wrap;}
+
+  /* 🖼️ صفحة المنتج */
+  #shopDetail{position:fixed; inset:0; z-index:70; background:var(--bg); display:none;
+    flex-direction:column; max-width:480px; margin:0 auto; overflow-y:auto;}
+  #shopDetail.on{display:flex;}
+  .sd-head{display:flex; align-items:center; gap:10px; padding:12px 14px; background:#fff;
+    border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2;}
+  .sd-x{border:none; background:none; font-size:20px; cursor:pointer; color:inherit; padding:2px 6px;}
+  .sd-imgwrap{position:relative; width:100%; aspect-ratio:1/1; background:#fff; display:flex;
+    align-items:center; justify-content:center; overflow:hidden;}
+  .sd-img{width:100%; height:100%; object-fit:cover;}
+  .sd-ph{font-size:64px; opacity:.35;}
+  .sd-nav{position:absolute; top:50%; transform:translateY(-50%); border:none; width:38px; height:38px;
+    border-radius:50%; background:rgba(0,0,0,.42); color:#fff; font-size:22px; cursor:pointer; line-height:1;}
+  .sd-nav.prev{inset-inline-start:8px;} .sd-nav.next{inset-inline-end:8px;}
+  .sd-dots{display:flex; gap:6px; justify-content:center; padding:9px 0;}
+  .sd-dots span{width:7px; height:7px; border-radius:50%; background:var(--line);}
+  .sd-dots span.on{background:var(--pink, var(--gold));}
+  .sd-dots span.ld{width:auto; height:auto; background:none; font-size:12px; color:var(--muted);}
+  .sd-body{padding:4px 16px 26px;}
+  .sd-price{font-size:22px; font-weight:900; margin-bottom:8px;}
+  .sd-desc{font-size:13.5px; line-height:1.9; opacity:.85; margin-bottom:16px; white-space:pre-wrap;}
+  .sd-q{max-width:170px; margin-top:6px;}
   /* 🛍️ «اطلبي» + «أوردراتي» */
   .sc-h{font-weight:900; margin-bottom:8px; font-size:15px;}
   .sc-sum{border-top:1px dashed var(--line); margin-top:12px; padding-top:6px;}
@@ -572,6 +605,9 @@
       <div id="tab-contact" style="display:none;"></div>
     </div>
   </section>
+
+  <!-- 🖼️ صفحة المنتج (فوق التبويبات) -->
+  <div id="shopDetail"></div>
 
   <!-- 💬 شاشة الشات (فوق كل حاجة) -->
   <div id="chatWrap">
@@ -1297,7 +1333,7 @@ function lazyLoadTab(tab){
   if(tab==='shop'){
     if(shopCatalog === null && !tabStarted['shopDoc']){
       tabStarted['shopDoc'] = true; showTopLoad(true);
-      db.collection(COL_SETTINGS).doc('online_shop_glow').get().then(function(d){
+      db.collection(COL_SETTINGS).doc(SHOP_DOC).get().then(function(d){
         var data = d.exists ? d.data() : {};
         shopCatalog = Array.isArray(data.items) ? data.items : [];
       }).catch(function(){ shopCatalog = []; })
@@ -1941,6 +1977,7 @@ function shopAdd(bc, d){
   var n = shopQty(bc) + (Number(d) || 0);
   if(n <= 0) delete _shopCart[bc]; else _shopCart[bc] = n;
   renderShop();
+  if(_shopOpenItem) renderShopDetail();   // الصفحة مفتوحة؟ العدّاد يتحدّث فيها كمان
 }
 window.shopAdd = shopAdd;
 
@@ -1960,6 +1997,7 @@ function shopCartLines(){
   return out;
 }
 
+var SHOP_DOC = 'online_shop_glow';
 var _shopFulfill = 'pickup';
 var _shopGov = '';
 var _shopInfo = { name:'', phone:'', address:'', notes:'' };
@@ -1983,6 +2021,146 @@ window.shopSetFulfill = shopSetFulfill;
 window.shopSetGov = shopSetGov;
 window.shopInfoSet = shopInfoSet;
 
+
+/* ============================================================
+   🖼️ صفحة المنتج — الصور والوصف
+   ------------------------------------------------------------
+   ⚠️ الصور الإضافية في **مستند منفصل** وبتتحمّل عند الفتح بس.
+      حطّها في مستند الكتالوج معناه إن كل عميلة بتحمّل صور كل
+      المنتجات عشان تشوف الشبكة — وحد المستند ١ ميجا بيتكسر بعد
+      ٣ منتجات.
+   ⚠️ والتحميل **مرة واحدة لكل منتج في الجلسة** (`_shopImgCache`):
+      من غير الكاش، كل فتحة للمنتج = قراءة جديدة.
+   ============================================================ */
+var _shopImgCache = {};
+var _shopOpenItem = null;
+
+function shopOpenItem(bc){
+  var p = shopItems().filter(function(x){ return String(x.barcode) === String(bc); })[0];
+  if(!p) return;
+  _shopOpenItem = p;
+  shopRenderItemSheet([p.img].filter(Boolean));      // الصورة المصغّرة فورًا
+  var key = String(p.id || p.barcode);
+  if(_shopImgCache[key]){ shopRenderItemSheet(_shopImgCache[key]); return; }
+  db.collection(COL_SETTINGS).doc(SHOP_DOC + '_img_' + key).get()
+    .then(function(d){
+      var imgs = (d.exists && Array.isArray(d.data().images)) ? d.data().images : [];
+      if(!imgs.length) imgs = [p.img].filter(Boolean);
+      _shopImgCache[key] = imgs;
+      if(_shopOpenItem && String(_shopOpenItem.barcode) === String(bc)) shopRenderItemSheet(imgs);
+    })
+    .catch(function(){ /* مفيش صور زيادة — المصغّرة كفاية */ });
+}
+window.shopOpenItem = shopOpenItem;
+
+function shopRenderItemSheet(imgs){
+  var p = _shopOpenItem; if(!p) return;
+  var bc = String(p.barcode), q = shopQty(bc);
+  var body = '<div class="pv-gal">'
+    + (imgs || []).map(function(u){ return '<img src="' + esc(u) + '" alt="">'; }).join('')
+    + '</div>'
+    + ((imgs || []).length > 1
+        ? '<div class="pv-dots">' + imgs.map(function(){ return '<span></span>'; }).join('') + '</div>'
+        : '')
+    + '<div class="pv-name">' + esc(p.name || 'منتج') + '</div>'
+    + '<div class="pv-price">' + fmt(p.price) + ' ج.م</div>'
+    + (p.desc ? '<div class="pv-desc">' + esc(p.desc) + '</div>' : '')
+    + (q
+      ? '<div class="qbar" style="margin-top:14px;">'
+        + '<button onclick="shopAdd(\'' + esc(bc) + '\',-1)">−</button><b>' + q + '</b>'
+        + '<button onclick="shopAdd(\'' + esc(bc) + '\',1)">+</button></div>'
+      : '<button class="btn-primary" style="margin-top:14px;" onclick="shopAdd(\'' + esc(bc) + '\',1)">➕ ضيفيه للسلة</button>');
+  showSheet('', body);
+}
+window.shopRenderItemSheet = shopRenderItemSheet;
+
+
+/* ============================================================
+   🖼️ صفحة المنتج — الصور والوصف
+   ------------------------------------------------------------
+   ⚠️ الصور الإضافية في **مستند منفصل** بتتحمّل بس لما العميلة
+      تفتح المنتج. لو كانت في مستند الكتالوج، كل عميلة بتفتح
+      «اطلبي» كانت هتنزّل صور كل المنتجات — بيانات موبايل بتتحرق
+      على حاجات محدش بصّ عليها.
+   ⚠️ والتحميل **مرة واحدة لكل منتج في الجلسة** (`_shopImgCache`).
+   ============================================================ */
+var _shopImgCache = {};
+var _shopOpenItem = null;
+var _shopImgIdx = 0;
+
+function shopOpenItem(bc){
+  var p = shopItems().filter(function(x){ return String(x.barcode) === String(bc); })[0];
+  if(!p) return;
+  _shopOpenItem = p; _shopImgIdx = 0;
+  renderShopDetail();
+  var key = String(p.id || p.barcode);
+  if(_shopImgCache[key]){ renderShopDetail(); return; }
+  db.collection(COL_SETTINGS).doc('online_shop_' + CATALOG_BRAND + '_img_' + (p.id || ''))
+    .get().then(function(d){
+      var arr = (d.exists && Array.isArray(d.data().images)) ? d.data().images : [];
+      _shopImgCache[key] = arr;
+      if(_shopOpenItem && String(_shopOpenItem.barcode) === String(bc)) renderShopDetail();
+    }).catch(function(){ _shopImgCache[key] = []; });
+}
+window.shopOpenItem = shopOpenItem;
+
+function shopCloseItem(){
+  _shopOpenItem = null;
+  var el = $('shopDetail'); if(el){ el.classList.remove('on'); el.innerHTML = ''; }
+}
+window.shopCloseItem = shopCloseItem;
+
+function shopImgGo(d){
+  var imgs = shopDetailImages();
+  if(!imgs.length) return;
+  _shopImgIdx = (_shopImgIdx + d + imgs.length) % imgs.length;
+  renderShopDetail();
+}
+window.shopImgGo = shopImgGo;
+
+function shopDetailImages(){
+  var p = _shopOpenItem; if(!p) return [];
+  var extra = _shopImgCache[String(p.id || p.barcode)] || [];
+  /* 🖼️ الغلاف الأول دايمًا — العميلة دوست عليه، فلازم تلاقيه. */
+  return (p.img ? [p.img] : []).concat(extra);
+}
+
+function renderShopDetail(){
+  var el = $('shopDetail'); if(!el) return;
+  var p = _shopOpenItem;
+  if(!p){ el.classList.remove('on'); el.innerHTML = ''; return; }
+  var imgs = shopDetailImages();
+  var q = shopQty(String(p.barcode));
+  var loading = !_shopImgCache[String(p.id || p.barcode)];
+
+  el.innerHTML =
+    '<div class="sd-head"><button class="sd-x" onclick="shopCloseItem()">✕</button>'
+      + '<b>' + esc(p.name || 'منتج') + '</b></div>'
+    + '<div class="sd-imgwrap">'
+      + (imgs.length
+          ? '<img class="sd-img" src="' + esc(imgs[_shopImgIdx]) + '" alt="">'
+          : '<div class="sd-ph">🧕</div>')
+      + (imgs.length > 1
+          ? '<button class="sd-nav prev" onclick="shopImgGo(-1)">‹</button>'
+            + '<button class="sd-nav next" onclick="shopImgGo(1)">›</button>' : '')
+    + '</div>'
+    + (imgs.length > 1
+        ? '<div class="sd-dots">' + imgs.map(function(_, i){
+            return '<span class="' + (i === _shopImgIdx ? 'on' : '') + '"></span>';
+          }).join('') + '</div>'
+        : (loading ? '<div class="sd-dots"><span class="ld">…</span></div>' : ''))
+    + '<div class="sd-body">'
+      + '<div class="sd-price">' + fmt(p.price) + ' ج.م</div>'
+      + (p.desc ? '<div class="sd-desc">' + esc(p.desc) + '</div>' : '')
+      + (q
+        ? '<div class="qbar sd-q"><button onclick="shopAdd(\'' + esc(String(p.barcode)) + '\',-1)">−</button>'
+          + '<b>' + q + '</b><button onclick="shopAdd(\'' + esc(String(p.barcode)) + '\',1)">+</button></div>'
+        : '<button class="btn-primary" onclick="shopAdd(\'' + esc(String(p.barcode)) + '\',1)">➕ ضيفيه للسلة</button>')
+    + '</div>';
+  el.classList.add('on');
+}
+window.renderShopDetail = renderShopDetail;
+
 function renderShop(){
   var box = $('tab-shop'); if(!box) return;
   if(shopCatalog === null){ box.innerHTML = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>' + loaderHTML(); return; }
@@ -2004,16 +2182,19 @@ function renderShop(){
 
   var grid = '<div class="prod-grid">' + items.map(function(p){
     var bc = String(p.barcode), q = shopQty(bc);
-    return '<div class="prod">'
+    /* 👆 الكارت كله بيفتح صفحة المنتج — الصور والوصف.
+       ⚠️ زراير الكمية جوّه بتوقف الانتشار، وإلا كل زيادة كمية
+          بتفتح الصفحة كمان. */
+    return '<div class="prod" onclick="shopOpenItem(\'' + esc(bc) + '\')" style="cursor:pointer;">'
       + (p.img ? '<img src="' + esc(p.img) + '" alt="">' : '<div class="ph">🧕</div>')
       + '<div class="pn">' + esc(p.name || 'منتج') + '</div>'
       + (p.desc ? '<div class="pd">' + esc(p.desc) + '</div>' : '')
       + '<div class="pp">' + fmt(p.price) + ' ج.م</div>'
       + (q
-        ? '<div class="qbar"><button onclick="shopAdd(\'' + esc(bc) + '\',-1)">−</button>'
+        ? '<div class="qbar" onclick="event.stopPropagation()"><button onclick="shopAdd(\'' + esc(bc) + '\',-1)">−</button>'
           + '<b>' + q + '</b>'
           + '<button onclick="shopAdd(\'' + esc(bc) + '\',1)">+</button></div>'
-        : '<button class="padd" onclick="shopAdd(\'' + esc(bc) + '\',1)">➕ ضيفي</button>')
+        : '<button class="padd" onclick="event.stopPropagation(); shopAdd(\'' + esc(bc) + '\',1)">➕ ضيفي</button>')
       + '</div>';
   }).join('') + '</div>';
 
@@ -2413,6 +2594,7 @@ function logout(silent){
      ممنوع تشوف أوردر فيه اسمها وفرعها وحاجاتها. */
   if(ordUnsub){ ordUnsub(); ordUnsub=null; }
   _myOrders = []; _shopCart = {}; _shopBranch = ''; shopCatalog = null;
+  _shopImgCache = {}; _shopOpenItem = null;
   if(window.chatCleanup) chatCleanup();
   _creditRows = [];
   _myRequests = [];
