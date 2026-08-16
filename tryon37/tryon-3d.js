@@ -31,7 +31,7 @@
     // v38: موديل OBJ الحقيقي المرفوع من المالك
     objRoot: null, objWrap: null, objMeshes: [], objReady: false, objFailed: false,
     objMat: null, objTex: null,
-    arHood: null, arNeck: null, arDrape: null
+    arHood: null, arNeck: null, arDrape: null, bodyRig: null, headRig: null
   };
 
   // 🎛️ لو اللفة محتاجة تظبيطة على وش حقيقي — أرقام من غير deploy
@@ -135,12 +135,16 @@
       // Three overlapping cloth pieces are used intentionally: the overlaps
       // hide seams while allowing the head portion and chest drape to have
       // different silhouettes. All follow the same MediaPipe head matrix.
+      R.headRig = new THREE.Group();
+      R.bodyRig = new THREE.Group();
       R.arHood = new THREE.Mesh(buildARHood(THREE), R.fabricMat);
       R.arNeck = new THREE.Mesh(buildARNeckWrap(THREE), R.fabricMat);
       R.arDrape = new THREE.Mesh(buildARDrape(THREE), R.fabricMat);
-      R.rig.add(R.arHood);
-      R.rig.add(R.arNeck);
-      R.rig.add(R.arDrape);
+      R.headRig.add(R.arHood);
+      R.headRig.add(R.arNeck);
+      R.bodyRig.add(R.arDrape);
+      R.rig.add(R.headRig);
+      R.rig.add(R.bodyRig);
 
       loadFabricTexture(THREE);   // 🧵 ملمس القماش الحقيقي من صورة القالب
 
@@ -211,7 +215,7 @@
       R.objMat = new THREE.MeshStandardMaterial({
         map: nativeTex || null,
         color: nativeTex ? 0xffffff : 0xb7aa95,
-        roughness: 0.92,
+        roughness: 0.98,
         metalness: 0.0,
         side: THREE.DoubleSide,
         transparent: false
@@ -443,7 +447,7 @@
   // Hood: ellipsoid around skull, with a smooth oval face opening.
   function buildARHood(THREE){
     const SEG=80, RINGS=56, pos=[], uv=[], idx=[], keep=[];
-    const rx=8.8, ry=10.8, rz=9.2, cy=0.8, cz=-1.7;
+    const rx=9.3, ry=12.4, rz=8.6, cy=1.6, cz=-2.3;
     const at=(i,j)=>i*(SEG+1)+j;
 
     for(let i=0;i<=RINGS;i++){
@@ -464,10 +468,10 @@
         pos.push(x,y,z); uv.push(j/SEG,1-i/RINGS);
 
         // smooth oval opening in front (+Z), slightly narrower at chin.
-        const xn=x/5.65, yn=(y-0.2)/7.55;
+        const xn=x/5.25, yn=(y-0.45)/7.9;
         const oval=xn*xn+yn*yn;
         const front=z>3.6;
-        const opening=front && oval<1.0 && y>-6.0 && y<7.7;
+        const opening=front && oval<1.0 && y>-5.3 && y<8.35;
         keep.push(!opening);
       }
     }
@@ -492,13 +496,13 @@
       const v=i/ROWS;
       for(let j=0;j<=SEG;j++){
         const ph=j/SEG*Math.PI*2-Math.PI;
-        const r=6.25+1.15*v;
+        const r=6.8+1.65*v;
         const x=Math.sin(ph)*r;
-        const y=-5.2-5.6*v + 0.28*Math.sin(ph*3+v*2);
+        const y=-6.1-5.0*v + 0.28*Math.sin(ph*3+v*2);
         let z=Math.cos(ph)*r*0.58-1.55;
         // push the front wrap slightly forward and make side folds.
         const front=Math.max(0,Math.cos(ph));
-        z += front*(1.55-0.55*v);
+        z += front*(1.1-0.35*v);
         z += 0.18*Math.sin(6*ph+v*5);
         pos.push(x,y,z); uv.push(j/SEG,1-v);
       }
@@ -519,8 +523,8 @@
     const at=(i,j)=>i*(COLS+1)+j;
     for(let i=0;i<=ROWS;i++){
       const v=i/ROWS;
-      const halfW=7.0 + 7.6*Math.pow(v,0.72);
-      const baseY=-9.2 - 20.5*v;
+      const halfW=8.4 + 10.2*Math.pow(v,0.74);
+      const baseY=-10.0 - 18.0*v;
       for(let j=0;j<=COLS;j++){
         const u=j/COLS*2-1;
         const au=Math.abs(u);
@@ -531,7 +535,7 @@
         y += 0.35*Math.sin((u+1)*Math.PI*3.2)*(0.25+0.75*v);
 
         // central cloth sits in front; side edges wrap backward around shoulders.
-        let z=4.2 - 2.2*v - 5.0*Math.pow(au,2.35);
+        let z=3.2 - 1.5*v - 5.6*Math.pow(au,2.2);
         // vertical fabric folds.
         z += (0.48*Math.sin(u*18+0.7)+0.22*Math.sin(u*31+v*3.0))*(0.35+0.65*v);
 
@@ -634,6 +638,19 @@
     R.group.visible = true;
     if(window.T3D_TUNE.obj) applyObjTune();
     syncGeometryMode();
+
+    // v47: body drape should not rotate 1:1 with the head.
+    // Keep the hood/neck fully attached to face pose, but damp chest yaw/roll.
+    if(R.bodyRig){
+      const q = R.rig.quaternion;
+      const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+      R.bodyRig.rotation.set(-e.x*0.25, -e.y*0.35, -e.z*0.2);
+      R.bodyRig.position.y = -0.8;
+    }
+    if(R.headRig){
+      R.headRig.rotation.set(0,0,0);
+      R.headRig.position.set(0,0,0);
+    }
 
     const t = R.tmp;
     t.m.fromArray(matData);
