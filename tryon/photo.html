@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#E5484D">
+<title>جرّبيها ✨</title>
+<style>
+  :root{
+    --ink:#2A2320; --muted:#8A7F79; --line:#EFE7DD;
+    --brand:#E5484D; --brand2:#C4963B; --cream:#FBF3DF; --bg:#FFF9F2;
+  }
+  html.glow{ --brand:#C4963B; --brand2:#E5484D; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; }
+  body{
+    font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic",Tahoma,sans-serif;
+    background:var(--bg); color:var(--ink); display:flex; flex-direction:column;
+    min-height:100dvh;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px; background:linear-gradient(135deg,var(--brand),var(--brand2));
+    color:#fff; font-weight:700; font-size:17px;
+  }
+  header .x{ font-size:22px; line-height:1; background:none; border:0; color:#fff; opacity:.9; }
+  main{ flex:1; display:flex; flex-direction:column; padding:18px 16px 24px; }
+
+  .card{ background:#fff; border:1px solid var(--line); border-radius:20px; padding:16px; }
+  .prod{ display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center; }
+  .prod img{ width:100%; max-width:280px; border-radius:16px; display:block; }
+  .prod .cap{ font-size:14px; color:var(--muted); }
+
+  .privacy{
+    display:flex; gap:8px; align-items:flex-start; font-size:12.5px; color:var(--muted);
+    background:var(--cream); border-radius:14px; padding:10px 12px; margin:14px 0;
+    line-height:1.55;
+  }
+  .btns{ display:flex; flex-direction:column; gap:12px; margin-top:6px; }
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    border:0; border-radius:16px; padding:16px; font-size:16px; font-weight:700;
+    cursor:pointer; width:100%;
+  }
+  .btn.primary{ background:var(--brand); color:#fff; }
+  .btn.soft{ background:#fff; color:var(--ink); border:1.5px solid var(--line); }
+  .btn.ghost{ background:none; color:var(--muted); font-weight:600; font-size:14px; padding:10px; }
+  input[type=file]{ display:none; }
+
+  .center{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; gap:14px; padding:20px; }
+  .spinner{ width:52px; height:52px; border-radius:50%;
+    border:5px solid var(--cream); border-top-color:var(--brand); animation:spin 1s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .big{ font-size:20px; font-weight:800; }
+  .sub{ font-size:14px; color:var(--muted); }
+
+  .result img{ width:100%; border-radius:20px; display:block; box-shadow:0 8px 28px rgba(0,0,0,.12); }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <span id="hTitle">جرّبيها ✨</span>
+  <button class="x" id="closeBtn" aria-label="قفل">✕</button>
+</header>
+
+<main>
+  <!-- (١) اختيار الصورة -->
+  <section id="stPick">
+    <div class="card prod">
+      <img id="prodImg" alt="الطرحة">
+      <div class="cap">دي الطرحة اللي هنجرّبهالك — اختاري صورتك وهنركّبهالك ✨</div>
+    </div>
+    <div class="privacy">
+      <span>🔒</span>
+      <span>صورتك بتُستخدم بس علشان نعمل تجربة الطرحة، ومتتخزّنش عندنا في أي مكان.</span>
+    </div>
+    <div class="btns">
+      <label class="btn primary" for="camIn">📷 التقاط صورة</label>
+      <input type="file" id="camIn" accept="image/*" capture="user">
+      <label class="btn soft" for="galIn">🖼️ اختاري من الهاتف</label>
+      <input type="file" id="galIn" accept="image/*">
+      <button class="btn ghost" id="liveBtn">جرّبي الوضع الحي (تجريبي)</button>
+    </div>
+  </section>
+
+  <!-- (٢) تحميل -->
+  <section id="stLoad" class="center hidden">
+    <div class="spinner"></div>
+    <div class="big">✨ بنجهّزلك التجربة…</div>
+    <div class="sub">ثواني وهتشوفي الطرحة عليكي</div>
+  </section>
+
+  <!-- (٣) النتيجة -->
+  <section id="stResult" class="hidden">
+    <div class="result"><img id="resultImg" alt="التجربة"></div>
+    <div class="btns" style="margin-top:16px;">
+      <button class="btn primary hidden" id="cartBtn">🛍️ أضيفيها للسلة</button>
+      <button class="btn soft" id="againBtn">🧕 جرّبي طرحة تانية</button>
+      <button class="btn soft" id="retryBtn">🔁 إعادة التجربة</button>
+      <button class="btn ghost" id="backBtn">رجوع للشات</button>
+    </div>
+  </section>
+
+  <!-- (٤) خطأ -->
+  <section id="stError" class="center hidden">
+    <div style="font-size:40px;">💔</div>
+    <div class="big" id="errText"></div>
+    <div class="btns" style="width:100%;max-width:340px;">
+      <button class="btn primary" id="errRetry">إعادة المحاولة</button>
+      <button class="btn ghost" id="errBack">رجوع للشات</button>
+    </div>
+  </section>
+</main>
+
+<!-- Firebase (compat) — نفس نسخة تطبيق العميلة -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+<script src="./photo-core.js"></script>
+<script>
+"use strict";
+(function(){
+  var PC = window.PhotoCore;
+  var params = PC.parseParams(location.search);
+  if(params.brand === "glow"){ document.documentElement.classList.add("glow"); }
+
+  // ---- عناصر ----
+  function $(id){ return document.getElementById(id); }
+  function show(sec){
+    ["stPick","stLoad","stResult","stError"].forEach(function(s){
+      $(s).classList.toggle("hidden", s !== sec);
+    });
+  }
+
+  // ---- صورة المنتج + التليفون من الشات ----
+  var productImg = PC.readProductImage(window.sessionStorage);
+  var phone = "";
+  try{ phone = window.sessionStorage.getItem(PC.SS_KEYS.phone) || ""; }catch(e){}
+  var productId = params.productId ||
+    (function(){ try{ return window.sessionStorage.getItem(PC.SS_KEYS.pid) || null; }catch(e){ return null; } })();
+
+  if(!productImg){
+    // مفيش صورة منتج — الصفحة اتفتحت غلط
+    show("stError");
+    $("errText").textContent = "مفيش طرحة محددة. ارجعي للشات ودوسي «جرّبيها» تحت صورة الطرحة.";
+  } else {
+    $("prodImg").src = productImg; // data:image موثوق (من الشات) — src بس مش innerHTML
+  }
+
+  // ---- Firebase ----
+  var firebaseConfig = {
+    apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
+    authDomain: "customer-feedback-8ac1d.firebaseapp.com",
+    projectId: "customer-feedback-8ac1d",
+    storageBucket: "customer-feedback-8ac1d.appspot.com",
+    messagingSenderId: "408860081491",
+    appId: "1:408860081491:web:c5fa8b8e757c13196375a6"
+  };
+  try{ if(!firebase.apps.length) firebase.initializeApp(firebaseConfig); }catch(e){}
+  try{ firebase.auth().signInAnonymously().catch(function(){}); }catch(e){}
+
+  // ---- ضغط صورة العميلة قبل الإرسال (canvas) ----
+  function fileToCompressedDataUrl(file){
+    return new Promise(function(resolve, reject){
+      if(!file || String(file.type||"").indexOf("image/") !== 0){ reject(new Error("not-image")); return; }
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        try{
+          var d = PC.computeResize(img.naturalWidth, img.naturalHeight, PC.TARGET_MAX_DIM);
+          var c = document.createElement("canvas");
+          c.width = d.w; c.height = d.h;
+          c.getContext("2d").drawImage(img, 0, 0, d.w, d.h);
+          var out = c.toDataURL("image/jpeg", PC.JPEG_QUALITY);
+          URL.revokeObjectURL(url);
+          resolve(out);
+        }catch(err){ URL.revokeObjectURL(url); reject(err); }
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("decode")); };
+      img.src = url;
+    });
+  }
+
+  // ---- النداء ----
+  var lastCustomer = null;
+  function generate(customerDataUrl){
+    lastCustomer = customerDataUrl;
+    show("stLoad");
+    var callable;
+    try{ callable = firebase.app().functions("us-central1").httpsCallable("hijabTryOn"); }
+    catch(e){ return fail(); }
+    callable({
+      customerImage: customerDataUrl,
+      productImage: productImg,
+      productId: productId,
+      phone: phone
+    }).then(function(res){
+      var data = res && res.data;
+      if(data && data.image){ succeed(data.image); }
+      else { fail(); }
+    }).catch(function(err){
+      // الخطأ الخام مبيتعرضش — رسالة ودّية بس (message من HttpsError جاي من دالتنا)
+      var msg = (err && err.message) ? err.message : PC.FRIENDLY_ERR;
+      fail(msg);
+    });
+  }
+
+  function succeed(imageDataUrl){
+    $("resultImg").src = imageDataUrl;          // src بس — مفيش innerHTML لبيانات جاية من بره
+    var acts = PC.resultActions(productId);
+    $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+    show("stResult");
+  }
+  function fail(msg){
+    // لو الرسالة جاية من دالتنا (HttpsError) بتبقى ودّية أصلاً؛ غير كده الافتراضي
+    var t = (typeof msg === "string" && msg && /[ء-ي]/.test(msg)) ? msg : PC.FRIENDLY_ERR;
+    $("errText").textContent = t;               // textContent — مش innerHTML
+    show("stError");
+  }
+
+  // ---- أحداث ----
+  function onPick(inp){ inp.addEventListener("change", function(){
+    var f = inp.files && inp.files[0];
+    inp.value = ""; // نظافة عشان اختيار نفس الصورة تاني يشتغل
+    if(!f) return;
+    show("stLoad");
+    fileToCompressedDataUrl(f).then(generate).catch(function(){ fail(); });
+  }); }
+  onPick($("camIn")); onPick($("galIn"));
+
+  function closeOrBack(){ try{ window.close(); }catch(e){} history.length > 1 ? history.back() : (location.href = "../" + PC.appName(params.brand) + "/"); }
+  $("closeBtn").addEventListener("click", closeOrBack);
+  $("backBtn").addEventListener("click", closeOrBack);
+  $("errBack").addEventListener("click", closeOrBack);
+  $("againBtn").addEventListener("click", closeOrBack); // ترجع للشات تختار طرحة تانية
+  $("retryBtn").addEventListener("click", function(){ show("stPick"); });
+  $("errRetry").addEventListener("click", function(){
+    if(lastCustomer) generate(lastCustomer); else show("stPick");
+  });
+  // الوضع الحي (Beta) — الصورة لسه في sessionStorage
+  $("liveBtn").addEventListener("click", function(){ location.href = "./?imgkey=1"; });
+  // أضيفيها للسلة — بتظهر بس لو فيه productId (مش موجود في سكيمة الشات الحالية)
+  $("cartBtn").addEventListener("click", function(){
+    if(!productId) return;
+    try{ window.sessionStorage.setItem("echarpe_addcart_pid", productId); }catch(e){}
+    location.href = "../" + PC.appName(params.brand) + "/?addcart=" + encodeURIComponent(productId);
+  });
+})();
+</script>
+</body>
+</html>
