@@ -44,13 +44,17 @@
 
     // 🧕 v38 — موديل الـOBJ الحقيقي. 1 = استخدمه، 0 = ارجع للهندسة الإجرائية القديمة.
     obj: 1,
-    objScale: 1.0,
+    objScale: 1.28,
     objX: 0.0,
-    objY: -2.0,
-    objZ: -0.5,
+    objY: 3.5,
+    objZ: 0.0,
     objRx: 0.0,
     objRy: Math.PI,
-    objRz: 0.0
+    objRz: 0.0,
+    // v44: compensate model scale relative to MediaPipe head scale
+    objSX: 1.18,
+    objSY: 0.92,
+    objSZ: 1.08
   };
 
   // خد أرقام المعايرة الحية لو المالك غيّرها، وإلا سيب الكور يقرر
@@ -216,7 +220,11 @@
     R.objWrap.position.set(t.objX || 0, t.objY || 0, t.objZ || 0);
     R.objWrap.rotation.set(t.objRx || 0, t.objRy || 0, t.objRz || 0);
     const s = (t.objScale == null ? 1 : t.objScale);
-    R.objWrap.scale.setScalar(s);
+    R.objWrap.scale.set(
+      s * (t.objSX == null ? 1 : t.objSX),
+      s * (t.objSY == null ? 1 : t.objSY),
+      s * (t.objSZ == null ? 1 : t.objSZ)
+    );
   }
 
   function syncGeometryMode(){
@@ -457,10 +465,14 @@
         R.projKey = opts.assetKey;
     }
     if(!matData || opts.fade){
-      R.group.visible = false;
+      // v44: brief detector misses should not make the hijab flash/disappear.
+      // Keep the last valid pose for a short grace period.
+      const now = performance.now();
+      if(!R.lastFaceAt || now - R.lastFaceAt > 350) R.group.visible = false;
       R.renderer.render(R.scene, R.camera);
       return true;
     }
+    R.lastFaceAt = performance.now();
     R.group.visible = true;
     applyObjTune();
     syncGeometryMode();

@@ -1,7 +1,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v43-3DDEFAULT';
+  const TRYON_VER = 'v44-CALIBRATION';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -1248,7 +1248,7 @@
       el.style.cssText='position:fixed;z-index:99999;left:8px;top:8px;background:#000c;color:#5cff74;padding:7px 9px;border-radius:9px;font:12px/1.35 monospace;direction:ltr;pointer-events:none;white-space:pre-wrap';
       document.body.appendChild(el);}
     setInterval(()=>{const vt=S.video&&Number.isFinite(S.video.currentTime)?S.video.currentTime:-1;
-      el.textContent=`v43 3Ddefault\nstage:${S.stage}\nmodel:${S.modelLoaded?'ok':'...'} delegate:${S.delegate||'-'}\nrunning:${S.detectorRunning?'yes':'no'} faces:${S.faceCount||0}\ndetect:${Math.round(S.detectMs||0)}ms video:${vt.toFixed(2)}\n${S.lastErr?('err:'+String(S.lastErr.message||S.lastErr).slice(0,90)):''}`;},350);
+      el.textContent=`v44 calibration\nstage:${S.stage}\nmodel:${S.modelLoaded?'ok':'...'} delegate:${S.delegate||'-'}\nrunning:${S.detectorRunning?'yes':'no'} faces:${S.faceCount||0}\ndetect:${Math.round(S.detectMs||0)}ms video:${vt.toFixed(2)}\n${S.lastErr?('err:'+String(S.lastErr.message||S.lastErr).slice(0,90)):''}`;},350);
   }
 
   async function boot(){
