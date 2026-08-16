@@ -60,17 +60,16 @@ if (!fs.existsSync(OC_PATH)) {
 
   // tryonAddToCart: بيضيف فعليًا للسلة الحقيقية + يفتح تبويب المتجر
   const bridgeFn = (H.match(/function tryonAddToCart\(barcode\)\{[\s\S]*?\n\}/) || [''])[0];
-  assert(bridgeFn.indexOf('shopAdd(bc, 1)') >= 0, brand + ': tryonAddToCart بينادي shopAdd (نفس زرار ➕)');
-  assert(bridgeFn.indexOf("switchTab('shop')") >= 0, brand + ': tryonAddToCart بيفتح تبويب المتجر');
+  // ⚠️ من v61: بيفتح إتمام الطلب السريع (overlay) بدل تبديل تبويب —
+  //    التفاصيل الكاملة في test-cart-quickcheckout.js
+  assert(bridgeFn.indexOf('openQuickCheckout(bc)') >= 0, brand + ': tryonAddToCart بيفتح إتمام الطلب السريع');
   assert(H.indexOf('window.tryonAddToCart = tryonAddToCart;') >= 0, brand + ': tryonAddToCart متعرّضة على window (القاعدة الذهبية)');
 
-  // 🔴 التحقق: مبيضيفش بصمت — لازم يفرّق بين متاح وغير متاح
-  const verifyFn = (H.match(/function tryonVerifyCartItem\(bc, tries\)\{[\s\S]*?\n\}/) || [''])[0];
-  assert(/orderFindByBarcode\(shopItems\(\), bc\)/.test(verifyFn), brand + ': التحقق بيستخدم orderFindByBarcode');
-  assert(/showToast\('اتضافت للسلة/.test(verifyFn), brand + ': رسالة نجاح لو متاح');
-  assert(/showToast\('المنتج ده مش متاح/.test(verifyFn), brand + ': رسالة واضحة لو مش متاح (مش سكوت)');
-  // مفيش حلقة لا نهائية لو الكتالوج فشل يتحمّل
-  assert(/tries.*20|20.*tries/.test(verifyFn) || /> 20\)/.test(verifyFn), brand + ': فيه سقف محاولات (مفيش تعليق للأبد)');
+  // tryonVerifyCartItem: بيقرا المخزون الحقيقي (نسخة v2 — راجع
+  // test-tryon-cart-anyitem.js للتفاصيل الكاملة؛ هنا فحص وجودها بس)
+  const verifyFn = (H.match(/function tryonVerifyCartItem\(bc\)\{[\s\S]*?\n\}/) || [''])[0];
+  assert(verifyFn.length > 0, brand + ': تحقق الإضافة موجود');
+  assert(/showToast\('اتضافت للسلة/.test(verifyFn), brand + ': رسالة نجاح لو الصنف موجود');
 
   // فولباك ?addcart= — بيتقرا عند load وبينضّف الرابط
   assert(/addcart=/.test(H), brand + ': فيه قارئ addcart');

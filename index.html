@@ -231,6 +231,18 @@
   .cw-imgprev img{width:44px; height:44px; border-radius:10px; object-fit:cover;}
   .cw-imgprev span{font-size:12px; color:var(--muted); font-weight:700; flex:1;}
   .cw-imgprev button{background:none; border:none; color:var(--muted); font-size:16px; cursor:pointer;}
+
+  /* 🖼️ تكبير صورة الشات بضغطة */
+  .img-zoom-wrap{
+    position:fixed; inset:0; z-index:9999; background:rgba(20,10,15,.94);
+    display:none; align-items:center; justify-content:center;
+  }
+  .img-zoom-wrap.on{display:flex;}
+  .img-zoom-wrap img{max-width:92vw; max-height:88vh; border-radius:14px; object-fit:contain;}
+  .img-zoom-x{
+    position:fixed; top:18px; left:18px; width:40px; height:40px; border-radius:50%;
+    border:none; background:rgba(255,255,255,.15); color:#fff; font-size:19px; cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -521,10 +533,27 @@
   }
 
   // ---------- الأزرار (نفس أسلوب loyalty: onclick inline + window) ----------
+  var CART_LS_KEY = 'echarpe_site_cart_v1';
+  function wsCartSave(){
+    try{ localStorage.setItem(CART_LS_KEY, JSON.stringify({ cart: wsCart, extra: wsExtraProducts })); }
+    catch(e){}
+  }
+  function wsCartRestore(){
+    try{
+      var raw = localStorage.getItem(CART_LS_KEY);
+      if(!raw) return;
+      var obj = JSON.parse(raw);
+      if(obj && typeof obj === 'object'){
+        wsCart = (obj.cart && typeof obj.cart === 'object') ? obj.cart : {};
+        wsExtraProducts = (obj.extra && typeof obj.extra === 'object') ? obj.extra : {};
+      }
+    }catch(e){}
+  }
   function wsAdd(bc, d){
     bc = String(bc);
     var n = wsQty(bc) + (Number(d) || 0);
     if(n <= 0) delete wsCart[bc]; else wsCart[bc] = n;
+    wsCartSave();
     renderShopGrid(); renderCart();
   }
 
@@ -541,12 +570,13 @@
     var db = firebase.firestore(firebase.app('site'));
     db.collection(COL_INVENTORY).doc(bc).get().then(function(d){
       if(!d.exists){
-        delete wsCart[bc]; renderShopGrid(); renderCart();
+        delete wsCart[bc]; wsCartSave(); renderShopGrid(); renderCart();
         wsToast('مش لاقيين منتج بالباركود ده — اتأكدي منه مع الموظفة', true);
         return;
       }
       var p = d.data() || {};
       wsExtraProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0 };
+      wsCartSave();
       renderShopGrid(); renderCart();
       wsToast('اتضافت للسلة 🛍️');
     }).catch(function(){
@@ -571,6 +601,7 @@
 
   // ---------- تحميل الكتالوج ----------
   function loadCatalog(){
+    wsCartRestore();   // 💾 سلة محفوظة من زيارة سابقة على نفس الجهاز
     Promise.resolve(window.ensureAnonAuth ? window.ensureAnonAuth() : null).then(function(){
       var db = firebase.firestore(firebase.app('site'));
       return db.collection(COL_SETTINGS).doc(SHOP_DOC).get().then(function(d){
@@ -723,6 +754,7 @@
       var r = (res && res.data) || {};
       wsCart = {};
       wsInfo = { name:'', phone:'', address:'', notes:'' };
+      wsCartSave();
       renderShopGrid(); renderCart();
       wsToast('تمام ✅ أوردر رقم ' + (r.code || '') + ' — هنتواصل معاكي على الرقم اللي كتبتيه');
     }).catch(function(e){
@@ -863,7 +895,7 @@
         cwMsgOutfits[m.id] = prods;
         html += '<div class="cw-outfit-wrap">' + prods.map(function(p, idx){
           return '<div class="cw-outfit-card">'
-            + '<img src="' + esc(p.img) + '" alt="">'
+            + '<img src="' + esc(p.img) + '" alt="" onclick="cwImgZoom(this.src)" style="cursor:zoom-in;">'
             + '<div class="oc-name">' + esc(p.name || 'طرحة') + '</div>'
             + '<div class="oc-price">' + (Number(p.price) || 0) + ' ج.م</div>'
             + '<div class="oc-btns">'
@@ -874,7 +906,7 @@
       }
       if(m.text) html += esc(m.text);
       if(m.img){
-        html += '<img src="' + esc(m.img) + '" alt="صورة">';
+        html += '<img src="' + esc(m.img) + '" alt="صورة" onclick="cwImgZoom(this.src)" style="cursor:zoom-in;">';
         if(m.tryon) html += '<br><button class="cw-try" onclick="cwTryOn(\'' + esc(m.id) + '\')">🧕 جرّبيها ✨</button>';
       }
       html += '</div>';
@@ -1007,6 +1039,28 @@
   $('cwText').addEventListener('keydown', function(e){ if(e.key === 'Enter') cwSend(); });
   $('cwFile').addEventListener('change', cwPickImg);
   $('cwImgClear').addEventListener('click', cwImgClear);
+
+  /* 🖼️ تكبير صورة الشات بضغطة */
+  function cwImgZoom(src){
+    var ov = document.getElementById('imgZoomWrap');
+    if(!ov){
+      ov = document.createElement('div');
+      ov.id = 'imgZoomWrap';
+      ov.className = 'img-zoom-wrap';
+      ov.innerHTML = '<img id="imgZoomTag" alt="">'
+        + '<button class="img-zoom-x" onclick="cwImgZoomClose()">✕</button>';
+      document.body.appendChild(ov);
+      ov.addEventListener('click', function(e){ if(e.target === ov) cwImgZoomClose(); });
+    }
+    document.getElementById('imgZoomTag').src = src;
+    ov.classList.add('on');
+  }
+  window.cwImgZoom = cwImgZoom;
+  function cwImgZoomClose(){
+    var ov = document.getElementById('imgZoomWrap');
+    if(ov) ov.classList.remove('on');
+  }
+  window.cwImgZoomClose = cwImgZoomClose;
 
   cwShowTeaser();
 })();

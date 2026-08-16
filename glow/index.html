@@ -133,6 +133,31 @@
   .chat-fab .cf-dot.show{display:flex;}
   @keyframes cfFloat{0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);}}
   @media (prefers-reduced-motion:reduce){.chat-fab{animation:none;}}
+
+  /* 🧾 شاشة إتمام الطلب السريعة — نفس #tab-shop بالظبط، بس كـoverlay
+     فوق أي شاشة تانية بدل تبديل تبويب. صفر تكرار HTML/منطق. */
+  #tab-shop.shop-overlay{
+    position:fixed; inset:0; z-index:800; background:var(--bg);
+    overflow-y:auto; padding-top:calc(64px + env(safe-area-inset-top));
+  }
+  .qc-close{
+    display:none; position:fixed; top:14px; left:70px; z-index:801; width:42px; height:42px;
+    border:none; border-radius:50%; background:var(--panel,#fff); border:1.5px solid var(--line);
+    box-shadow:0 8px 18px -6px rgba(0,0,0,.25); font-size:17px; cursor:pointer; color:var(--ink);
+  }
+  .qc-close.show{display:flex; align-items:center; justify-content:center;}
+
+  /* 🖼️ تكبير صورة الشات بضغطة */
+  .img-zoom-wrap{
+    position:fixed; inset:0; z-index:9999; background:rgba(20,10,15,.94);
+    display:none; align-items:center; justify-content:center;
+  }
+  .img-zoom-wrap.on{display:flex;}
+  .img-zoom-wrap img{max-width:92vw; max-height:88vh; border-radius:14px; object-fit:contain;}
+  .img-zoom-x{
+    position:fixed; top:18px; left:18px; width:40px; height:40px; border-radius:50%;
+    border:none; background:rgba(255,255,255,.15); color:#fff; font-size:19px; cursor:pointer;
+  }
   .wa-btn{flex-shrink:0; width:44px; height:44px; border-radius:13px; border:none; background:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px -6px rgba(37,211,102,.7);}
   .wa-btn:active{transform:translateY(1px);}
   .btn-outline.wa{border-color:#25D366; color:#128C4B; background:#eafaf0;}
@@ -626,6 +651,7 @@
       <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 5.94 2 10.8c0 2.76 1.44 5.22 3.7 6.82-.12 1.06-.5 2.4-1.5 3.68a.5.5 0 0 0 .5.8c2.02-.4 3.6-1.28 4.6-1.98.87.22 1.78.34 2.7.34 5.52 0 10-3.94 10-8.8S17.52 2 12 2z"/></svg>
       <span class="cf-dot" id="chatFabDot">0</span>
     </button>
+    <button class="qc-close" id="qcCloseBtn" onclick="closeQuickCheckout()" aria-label="قفل">✕</button>
     <div class="topbar">
       <div class="badge"><img id="topLogo" alt=""></div>
       <div class="topbar-mid">
@@ -1263,6 +1289,7 @@ function createCustomer(phone, name, pin){
 function enterApp(phone){
   showScreen('screen-app');
   invoicesData = [];
+  cartRestore(phone);   // 💾 السلة المحفوظة لنفس الرقم — من غير كده كانت بترجع فاضية مع أي إعادة تحميل
   $('topLogo').src = logoSrc;
   $('greet').textContent = greetWord();
   $('waTop').style.display = hasSupport() ? 'flex' : 'none';
@@ -1410,6 +1437,15 @@ function lazyLoadTab(tab){
 
 function switchTab(tab){
   currentTab = tab;
+  // 🔴 لو overlay إتمام الطلب السريع فاضل شغّال من قبل كده (رجوع
+  //    متصفح بدل زرار ✕ مثلًا)، أي تنقّل تبويب عادي بيقفله — وإلا
+  //    كلاس shop-overlay يفضل عالق و"اطلبي" العادي يطلع full-screen غلط.
+  var _ts = $('tab-shop');
+  if(_ts && _ts.classList.contains('shop-overlay')){
+    _ts.classList.remove('shop-overlay');
+    document.body.style.overflow = '';
+    var _x = $('qcCloseBtn'); if(_x) _x.classList.remove('show');
+  }
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
   ['card','offers','shop','invoices','account','contact'].forEach(function(t){
     $('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
@@ -2023,8 +2059,34 @@ function shopAdd(bc, d){
   bc = String(bc);
   var n = shopQty(bc) + (Number(d) || 0);
   if(n <= 0) delete _shopCart[bc]; else _shopCart[bc] = n;
+  cartSave();
   renderShop();
   if(_shopOpenItem) renderShopDetail();   // الصفحة مفتوحة؟ العدّاد يتحدّث فيها كمان
+}
+
+/* 💾 ثبات السلة — كانت في متغيّر ذاكرة بس، فأي إعادة تحميل (أو
+   المتصفح بيقفل تاب في الخلفية على الموبايل، شائع جدًا) كانت بتمسحها
+   وتفضل السلة "فاضية" من غير أي سبب واضح للعميلة. دلوقتي بتتحفظ لكل
+   رقم تليفون لوحده (مش رقمين يشوفوا سلة بعض على نفس الجهاز). */
+var CART_LS_PREFIX = 'glow_cart_v1_';
+function cartSave(){
+  try{
+    if(!currentCustomer || !currentCustomer.phone) return;
+    localStorage.setItem(CART_LS_PREFIX + currentCustomer.phone,
+      JSON.stringify({ cart: _shopCart, extra: _extraCartProducts }));
+  }catch(e){ /* التخزين ممنوع (خاص/سعة) — السلة تفضل شغّالة لحد آخر الجلسة وخلاص */ }
+}
+function cartRestore(phone){
+  _shopCart = {}; _extraCartProducts = {};
+  try{
+    var raw = localStorage.getItem(CART_LS_PREFIX + String(phone || ''));
+    if(!raw) return;
+    var obj = JSON.parse(raw);
+    if(obj && typeof obj === 'object'){
+      _shopCart = (obj.cart && typeof obj.cart === 'object') ? obj.cart : {};
+      _extraCartProducts = (obj.extra && typeof obj.extra === 'object') ? obj.extra : {};
+    }
+  }catch(e){ _shopCart = {}; _extraCartProducts = {}; }
 }
 window.shopAdd = shopAdd;
 
@@ -2440,6 +2502,8 @@ function shopSubmit(){
   }).then(function(doc){
     _shopCart = {};
     _shopInfo.address = ''; _shopInfo.notes = '';
+    cartSave();              // 💾 السلة المحفوظة اتفضّت هي كمان — مش هترجع بعد أوردر ناجح
+    closeQuickCheckout();    // لو الطلب اتفتح كـoverlay فوق الشات، نقفله بعد النجاح
     renderShop();
     showToast('تمام ✅ أوردر رقم ' + doc.code);
     openMyOrders();
@@ -3126,7 +3190,7 @@ function chatRenderMsgs(arr){
       chatOutfits[m.id] = prods;
       body += '<div class="outfit-wrap">' + prods.map(function(p, idx){
         return '<div class="outfit-card">'
-          + '<img src="' + String(p.img).replace(/"/g, '') + '" alt="">'
+          + '<img src="' + String(p.img).replace(/"/g, '') + '" alt="" onclick="chatImgZoom(this.src)" style="cursor:zoom-in;">'
           + '<div class="oc-name">' + esc(p.name || 'طرحة') + '</div>'
           + '<div class="oc-price">' + (Number(p.price) || 0) + ' ج.م</div>'
           + '<div class="oc-btns">'
@@ -3140,7 +3204,7 @@ function chatRenderMsgs(arr){
     if(m.img && String(m.img).indexOf('data:image/') === 0){
       chatImgs[m.id] = m.img;
       if(m.barcode) chatBarcodes[m.id] = String(m.barcode);
-      body += '<img src="' + m.img.replace(/"/g, '') + '" alt="">';
+      body += '<img src="' + m.img.replace(/"/g, '') + '" alt="" onclick="chatImgZoom(this.src)" style="cursor:zoom-in;">';
     }
     if(m.text) body += esc(m.text);
     if(m.tryon && chatImgs[m.id]){
@@ -3219,11 +3283,59 @@ function chatTryOn(id){
 function tryonAddToCart(barcode){
   var bc = String(barcode || '').trim();
   if(!bc) return;
-  shopAdd(bc, 1);       // زي زرار ➕ بالظبط — فوري، مش محتاج الكتالوج يكون محمّل
-  switchTab('shop');    // بيحمّل كتالوج المتجر تلقائي لو أول مرة (نفس التحميل الكسول العادي)
+  openQuickCheckout(bc);
   tryonVerifyCartItem(bc);
 }
 window.tryonAddToCart = tryonAddToCart;
+
+/* 🖼️ تكبير صورة الشات بضغطة — نفس عنصر واحد بيتعاد استخدامه، مش
+   بيتبني من الصفر كل مرة. */
+function chatImgZoom(src){
+  var ov = document.getElementById('imgZoomWrap');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'imgZoomWrap';
+    ov.className = 'img-zoom-wrap';
+    ov.innerHTML = '<img id="imgZoomTag" alt="">'
+      + '<button class="img-zoom-x" onclick="chatImgZoomClose()">✕</button>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(e){ if(e.target === ov) chatImgZoomClose(); });
+  }
+  document.getElementById('imgZoomTag').src = src;
+  ov.classList.add('on');
+}
+window.chatImgZoom = chatImgZoom;
+function chatImgZoomClose(){
+  var ov = document.getElementById('imgZoomWrap');
+  if(ov) ov.classList.remove('on');
+}
+window.chatImgZoomClose = chatImgZoomClose;
+
+/* 🧾 شاشة إتمام الطلب السريعة — **نفس** renderShop()/tab-shop
+   بالظبط (صفر تكرار منطق تشيك أوت)، بس بتظهر كـoverlay فوق أي شاشة
+   العميلة فاتحاها (شات مثلًا) بدل ما تضطر تسيب الشات وتفتح تبويب
+   تاني. القفل بيرجّعها لنفس الشاشة اللي كانت فيها، والصنف يفضل
+   في سلتها لحد ما تكمّل — مفيش حاجة بتضيع. */
+function openQuickCheckout(barcode){
+  if(barcode) shopAdd(barcode, 1);
+  var box = $('tab-shop'); if(!box) return;
+  box.style.display = 'block';
+  box.classList.add('shop-overlay');
+  document.body.style.overflow = 'hidden';
+  lazyLoadTab('shop');   // لو أول مرة العميلة تفتح "اطلبي" أصلًا — نفس التحميل الكسول العادي
+  renderShop();
+  var x = $('qcCloseBtn'); if(x) x.classList.add('show');
+}
+window.openQuickCheckout = openQuickCheckout;
+
+function closeQuickCheckout(){
+  var box = $('tab-shop'); if(!box) return;
+  box.classList.remove('shop-overlay');
+  document.body.style.overflow = '';
+  box.style.display = (currentTab === 'shop') ? 'block' : 'none';
+  var x = $('qcCloseBtn'); if(x) x.classList.remove('show');
+}
+window.closeQuickCheckout = closeQuickCheckout;
 
 /* 🔴 مقصود: بنقرا **المخزون الحقيقي** مباشرة (pos_test_inventory)،
    مش كتالوج البيع أونلاين المنسّق. الموظفة في الشات بتقدر تبيع أي
@@ -3236,12 +3348,14 @@ function tryonVerifyCartItem(bc){
   db.collection(COL_INVENTORY).doc(bc).get().then(function(d){
     if(!d.exists){
       delete _shopCart[bc];   // مفيش صنف بالكود ده أصلًا — منسيبهاش عالقة في السلة
+      cartSave();
       renderShop();
       showToast('مش لاقيين منتج بالباركود ده — اتأكدي منه مع الموظفة', true);
       return;
     }
     var p = d.data() || {};
     _extraCartProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0 };
+    cartSave();
     renderShop();
     showToast('اتضافت للسلة 🛍️');
   }).catch(function(){
