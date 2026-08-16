@@ -131,6 +131,93 @@
     opacity:0; transform:translateY(14px); transition:opacity .25s ease, transform .25s ease; text-align:center;}
   #wsToast .box.on{opacity:1; transform:translateY(0);}
   #wsToast .box.err{border-color:#C0355C;}
+
+  /* ============================================================
+     💬 شات echarpe — إيقونة عائمة فوق يسار + شيت كامل الشاشة
+     نفس توكنز الموقع بالظبط (مفيش نظام تصميم جديد)
+     ============================================================ */
+  .cw-launcher{
+    position:fixed; top:18px; left:18px; z-index:9500; width:58px; height:58px;
+    border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--accent), var(--accent-deep));
+    box-shadow:0 10px 26px -6px rgba(179,69,113,.55);
+    animation:cwFloat 3.4s ease-in-out infinite;
+  }
+  .cw-launcher::before{
+    content:''; position:absolute; inset:-7px; border-radius:50%;
+    border:1.5px solid var(--accent); opacity:.55; animation:cwPulse 2.6s ease-out infinite;
+  }
+  .cw-launcher svg{width:25px; height:25px; fill:#fff; position:relative; z-index:1;}
+  .cw-launcher .cw-dot{
+    position:absolute; top:-2px; right:-2px; min-width:19px; height:19px; padding:0 4px; border-radius:99px;
+    background:#fff; color:var(--accent-deep); font-size:11px; font-weight:900;
+    display:none; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(0,0,0,.18);
+  }
+  .cw-launcher .cw-dot.on{display:flex;}
+  @keyframes cwFloat{0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);}}
+  @keyframes cwPulse{0%{transform:scale(1); opacity:.55;} 100%{transform:scale(1.55); opacity:0;}}
+  @media (prefers-reduced-motion:reduce){.cw-launcher{animation:none;} .cw-launcher::before{animation:none;}}
+
+  .cw-teaser{
+    position:fixed; top:26px; left:86px; z-index:9499; max-width:200px;
+    background:var(--panel); border:1.5px solid var(--line); border-radius:16px 16px 16px 4px;
+    padding:10px 14px; font-size:12.5px; font-weight:700; color:var(--ink);
+    box-shadow:0 10px 26px -8px rgba(58,34,51,.35);
+    opacity:0; transform:translateX(-8px) scale(.96); pointer-events:none;
+    transition:opacity .35s ease, transform .35s ease;
+  }
+  .cw-teaser.on{opacity:1; transform:translateX(0) scale(1); pointer-events:auto;}
+
+  .cw-panel{
+    position:fixed; inset:0; z-index:9600; background:var(--bg);
+    display:flex; flex-direction:column; transform:translateY(100%); transition:transform .32s cubic-bezier(.2,.8,.2,1);
+  }
+  .cw-panel.on{transform:translateY(0);}
+  .cw-head{
+    background:linear-gradient(135deg, var(--accent), var(--accent-deep)); color:#fff;
+    padding:16px 18px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
+  }
+  .cw-head .cw-t{font-size:16px; font-weight:900;}
+  .cw-head .cw-s{font-size:12px; opacity:.92; margin-top:2px; font-weight:600;}
+  .cw-head button{background:rgba(255,255,255,.18); border:none; width:32px; height:32px; border-radius:50%;
+    color:#fff; font-size:16px; cursor:pointer; flex-shrink:0;}
+  .cw-body{flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px;}
+  .cw-msg{max-width:78%; padding:11px 14px; border-radius:18px; font-size:13.5px; line-height:1.55; word-break:break-word;}
+  .cw-msg.cust{align-self:flex-end; background:linear-gradient(135deg, var(--accent), var(--accent-deep)); color:#fff; border-bottom-left-radius:5px;}
+  .cw-msg.staff{align-self:flex-start; background:var(--panel); border:1px solid var(--line); color:var(--ink); border-bottom-right-radius:5px;}
+  .cw-msg.auto{align-self:center; background:var(--soft); color:var(--accent-deep); font-size:12px; font-weight:700; border-radius:99px; padding:7px 16px;}
+  .cw-msg img{max-width:100%; border-radius:12px; display:block; margin-top:4px;}
+  .cw-try{display:inline-flex; align-items:center; gap:6px; margin-top:9px; background:#fff; color:var(--accent-deep);
+    text-decoration:none; font-weight:900; font-size:12.5px; padding:9px 14px; border-radius:99px; cursor:pointer; border:none;}
+  .cw-welcome{align-self:center; text-align:center; color:var(--muted); font-size:12.5px; font-weight:600; max-width:88%; margin:10px 0;}
+  .cw-welcome b{display:block; font-size:15px; color:var(--ink); font-weight:900; margin-bottom:4px;}
+
+  .cw-gate{padding:20px; text-align:center;}
+  .cw-gate h3{font-size:16px; font-weight:900; margin-bottom:6px;}
+  .cw-gate p{font-size:12.5px; color:var(--muted); margin-bottom:16px; font-weight:600;}
+  .cw-gate input{width:100%; margin-top:9px; padding:13px 14px; border-radius:13px; border:1.5px solid var(--line);
+    background:var(--panel); font-family:inherit; font-size:14px; color:var(--ink);}
+  .cw-gate input:focus{outline:none; border-color:var(--accent);}
+  .cw-gate button{width:100%; margin-top:14px; padding:15px; border:none; border-radius:14px;
+    background:var(--accent); color:#fff; font-weight:900; font-size:15px; cursor:pointer;
+    box-shadow:0 9px 20px rgba(214,93,139,.28);}
+
+  .cw-inputbar{flex-shrink:0; display:flex; align-items:center; gap:8px; padding:12px 14px;
+    background:var(--panel); border-top:1px solid var(--line);}
+  .cw-inputbar input[type=text]{flex:1; border:1.5px solid var(--line); background:var(--bg); border-radius:99px;
+    padding:12px 16px; font-family:inherit; font-size:13.5px; color:var(--ink);}
+  .cw-inputbar input[type=text]:focus{outline:none; border-color:var(--accent);}
+  .cw-inputbar button{flex-shrink:0; width:42px; height:42px; border-radius:50%; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;}
+  .cw-inputbar .cw-att{background:var(--bg); border:1.5px solid var(--line);}
+  .cw-inputbar .cw-att svg{width:18px; height:18px; fill:var(--muted);}
+  .cw-inputbar .cw-send{background:var(--accent); box-shadow:0 6px 16px rgba(214,93,139,.35);}
+  .cw-inputbar .cw-send svg{width:17px; height:17px; fill:#fff;}
+  .cw-imgprev{display:none; align-items:center; gap:8px; padding:8px 14px; background:var(--panel); border-top:1px solid var(--line);}
+  .cw-imgprev.on{display:flex;}
+  .cw-imgprev img{width:44px; height:44px; border-radius:10px; object-fit:cover;}
+  .cw-imgprev span{font-size:12px; color:var(--muted); font-weight:700; flex:1;}
+  .cw-imgprev button{background:none; border:none; color:var(--muted); font-size:16px; cursor:pointer;}
 </style>
 </head>
 <body>
@@ -234,6 +321,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 <!-- 🛍️ محرك الأوردرات — نفس الملف اللي POS وتطبيقي العميلة بيقروه -->
 <script src="pos/orders-core.js"></script>
+<!-- 💬 محرك الشات المشترك (ساعات العمل/الرد الآلي/التحقق/انتهاء الصلاحية) -->
+<script src="pos/chat-core.js"></script>
 <script>
 (function(){
   try{
@@ -299,6 +388,48 @@
 
 <div id="wsToast"><div class="box" id="wsToastBox"></div></div>
 
+<!-- 💬 شات echarpe -->
+<div class="cw-teaser" id="cwTeaser">تحتاجي مساعدة تختاري طرحتك؟ 🌸</div>
+<button class="cw-launcher" id="cwLauncher" aria-label="الدردشة مع echarpe">
+  <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 5.94 2 10.8c0 2.76 1.44 5.22 3.7 6.82-.12 1.06-.5 2.4-1.5 3.68a.5.5 0 0 0 .5.8c2.02-.4 3.6-1.28 4.6-1.98.87.22 1.78.34 2.7.34 5.52 0 10-3.94 10-8.8S17.52 2 12 2z"/></svg>
+  <span class="cw-dot" id="cwDot">0</span>
+</button>
+
+<div class="cw-panel" id="cwPanel">
+  <div class="cw-head">
+    <div><div class="cw-t">الدردشة مع echarpe 🌸</div><div class="cw-s" id="cwStatus">بنرد بسرعة</div></div>
+    <button id="cwClose" aria-label="قفل">✕</button>
+  </div>
+  <div class="cw-body" id="cwBody">
+    <div class="cw-welcome">
+      <b>أهلاً بيكي 👋</b>
+      اسألينا عن أي حاجة، أو ابعتيلنا صورة طقمك وهنساعدك تختاري طرحتك المناسبة 🧕✨
+    </div>
+  </div>
+  <div id="cwGate" class="cw-gate">
+    <h3>قبل ما نبدأ 🌸</h3>
+    <p>محتاجين اسمك ورقمك عشان نقدر نرد عليكي</p>
+    <input type="text" id="cwGateName" placeholder="اسمك">
+    <input type="tel" inputmode="numeric" id="cwGatePhone" placeholder="رقم موبايلك">
+    <button id="cwGateBtn">ابدئي المحادثة</button>
+  </div>
+  <div class="cw-imgprev" id="cwImgPrev">
+    <img id="cwImgPrevImg" alt="">
+    <span>صورة جاهزة للإرسال</span>
+    <button id="cwImgClear">✖</button>
+  </div>
+  <div class="cw-inputbar" id="cwInputbar" style="display:none;">
+    <label class="cw-att" for="cwFile">
+      <svg viewBox="0 0 24 24"><path d="M4 5h3l1.5-2h7L17 5h3a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6z"/></svg>
+    </label>
+    <input type="file" id="cwFile" accept="image/*" style="display:none;">
+    <input type="text" id="cwText" placeholder="اكتبي رسالتك…">
+    <button class="cw-send" id="cwSend" aria-label="إرسال">
+      <svg viewBox="0 0 24 24"><path d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg>
+    </button>
+  </div>
+</div>
+
 <script>
 /* ============================================================
    🛍️ اطلبي أونلاين — نسخة الموقع (ضيف/زائر، من غير تسجيل دخول).
@@ -336,6 +467,9 @@
   var wsCatalog = null;   // null = لسه بيتحمّل
   var wsCfg = { pickupEnabled:true, deliveryEnabled:false, shippingFee:0, freeOver:0, governorates:[] };
   var wsCart = {};        // { باركود: كمية }
+  /* 🛍️ منتجات جاية من الشات مش لازم تكون في كتالوج البيع أونلاين
+     المنسّق — نفس مبدأ POS: تقدري تشتري أي صنف في المحل. */
+  var wsExtraProducts = {};
   var wsFulfill = 'pickup';
   var wsBranch = '';
   var wsGov = '';
@@ -353,7 +487,7 @@
     var byBc = {}; wsItems().forEach(function(p){ byBc[String(p.barcode)] = p; });
     var out = [];
     Object.keys(wsCart).forEach(function(bc){
-      var p = byBc[bc]; if(!p) return;
+      var p = byBc[bc] || wsExtraProducts[bc]; if(!p) return;
       out.push({ barcode: bc, name: p.name || 'منتج', price: Number(p.price) || 0, qty: wsQty(bc) });
     });
     return out;
@@ -379,6 +513,37 @@
     if(n <= 0) delete wsCart[bc]; else wsCart[bc] = n;
     renderShopGrid(); renderCart();
   }
+
+  /* 🛍️ الجسر بين الشات وسلة الموقع — بينادَى من tryon/photo.html عن
+     طريق window.opener (نفس الأصل). زي loyalty/glow بالظبط: بيقرا
+     **المخزون الحقيقي** (pos_test_inventory) مش الكتالوج المنسّق —
+     الموظفة في الشات بتقدر تبيع أي صنف من آلاف أصناف المحل. */
+  function tryonAddToCart(barcode){
+    var bc = String(barcode || '').trim();
+    if(!bc) return;
+    wsAdd(bc, 1);
+    var already = wsItems().filter(function(p){ return String(p.barcode) === bc; })[0];
+    if(already){ wsToast('اتضافت للسلة 🛍️'); wsScrollToShop(); return; }
+    var db = firebase.firestore(firebase.app('site'));
+    db.collection(COL_INVENTORY).doc(bc).get().then(function(d){
+      if(!d.exists){
+        delete wsCart[bc]; renderShopGrid(); renderCart();
+        wsToast('مش لاقيين منتج بالباركود ده — اتأكدي منه مع الموظفة', true);
+        return;
+      }
+      var p = d.data() || {};
+      wsExtraProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0 };
+      renderShopGrid(); renderCart();
+      wsToast('اتضافت للسلة 🛍️');
+    }).catch(function(){
+      wsToast('اتضافت للسلة — هنتأكد من التفاصيل عند الطلب', false);
+    });
+    wsScrollToShop();
+  }
+  function wsScrollToShop(){
+    var el = $('wsShop'); if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  window.tryonAddToCart = tryonAddToCart;
   function wsSetFulfill(v){ wsFulfill = (v === 'delivery') ? 'delivery' : 'pickup'; renderCart(); }
   function wsSetBranch(v){ wsBranch = v || ''; renderCart(); }
   function wsSetPay(v){ wsPay = (v === 'visa') ? 'visa' : 'cash'; renderCart(); }
@@ -388,6 +553,7 @@
   function wsInfoSet(k, v){ wsInfo[k] = v; }
   window.wsAdd = wsAdd; window.wsSetFulfill = wsSetFulfill; window.wsSetBranch = wsSetBranch;
   window.wsSetPay = wsSetPay; window.wsSetGov = wsSetGov; window.wsInfoSet = wsInfoSet;
+  window.wsToast = wsToast;
 
   // ---------- تحميل الكتالوج ----------
   function loadCatalog(){
@@ -557,6 +723,224 @@
   window.wsSubmit = wsSubmit;
 
   loadCatalog();
+})();
+</script>
+
+<script>
+/* ============================================================
+   💬 شات echarpe — الموقع الرئيسي (ضيف/زائر)
+   ------------------------------------------------------------
+   ⚠️ بنستخدم **نفس** كوليكشن الشات اللي الموظفة شايفاه في POS
+      (customer_chat/<phone>/messages) — مفيش سكيمة جديدة، فالمحادثة
+      بتظهر في شاشة الموظفة على طول من غير أي تغيير في POS.
+   ⚠️ الاسم والتليفون بيتاخدوا مرة واحدة (بوابة صغيرة) قبل أول رسالة،
+      وبيتخزنوا في localStorage عشان الزيارة اللي بعدها متسألش تاني.
+   ============================================================ */
+(function(){
+  'use strict';
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+  var COL_CHAT = 'customer_chat';
+  var LS_NAME = 'ws_chat_name', LS_PHONE = 'ws_chat_phone';
+  var CHAT_MAX_IMG_DIM = 1024;
+
+  var cwPhone = '';
+  var cwName = '';
+  var cwConv = null;
+  var cwMsgsUnsub = null, cwConvUnsub = null;
+  var cwImgData = null;
+  var cwSending = false;
+
+  function cwDb(){ return firebase.firestore(firebase.app('site')); }
+
+  // ---------- الإيقونة العائمة + التيزر ----------
+  function cwShowTeaser(){
+    try{ if(sessionStorage.getItem('ws_chat_teaser_shown')) return; }catch(e){}
+    setTimeout(function(){
+      var t = $('cwTeaser'); if(!t) return;
+      t.classList.add('on');
+      setTimeout(function(){ t.classList.remove('on'); }, 5000);
+      try{ sessionStorage.setItem('ws_chat_teaser_shown', '1'); }catch(e){}
+    }, 2600);
+  }
+
+  function cwOpen(){
+    $('cwPanel').classList.add('on');
+    $('cwTeaser').classList.remove('on');
+    cwUpdateBadge(true);
+    try{
+      cwName = localStorage.getItem(LS_NAME) || '';
+      cwPhone = localStorage.getItem(LS_PHONE) || '';
+    }catch(e){}
+    if(cwPhone){ $('cwGate').style.display = 'none'; $('cwInputbar').style.display = 'flex'; cwConnect(); }
+    else { $('cwGate').style.display = 'block'; $('cwInputbar').style.display = 'none'; }
+  }
+  function cwClose(){
+    $('cwPanel').classList.remove('on');
+    if(cwMsgsUnsub){ cwMsgsUnsub(); cwMsgsUnsub = null; }
+    if(cwConvUnsub){ cwConvUnsub(); cwConvUnsub = null; }
+  }
+  function cwUpdateBadge(clear){
+    var n = clear ? 0 : ((cwConv && Number(cwConv.unreadCust)) || 0);
+    var d = $('cwDot');
+    if(!d) return;
+    d.textContent = n; d.classList.toggle('on', n > 0);
+  }
+  function cwStatusText(){
+    if(cwConv && cwConv.blocked === true) return 'مش متاح';
+    return (window.chatIsOpen && window.chatIsOpen(Date.now()))
+      ? 'متواجدين دلوقتي — بنرد في دقايق 🌸' : 'مقفولين دلوقتي — سيبي رسالتك وهنرد أول ما نفتح';
+  }
+
+  // ---------- بوابة الاسم/التليفون ----------
+  function cwGateSubmit(){
+    var n = ($('cwGateName').value || '').trim();
+    var p = ($('cwGatePhone').value || '').trim();
+    if(n.length < 2){ wsToastSafe('اكتبي اسمك'); return; }
+    if(!/^01[0-9]{9}$/.test(p.replace(/\s|-/g, ''))){ wsToastSafe('رقم الموبايل غلط'); return; }
+    cwName = n; cwPhone = p.replace(/\s|-/g, '');
+    try{ localStorage.setItem(LS_NAME, cwName); localStorage.setItem(LS_PHONE, cwPhone); }catch(e){}
+    $('cwGate').style.display = 'none';
+    $('cwInputbar').style.display = 'flex';
+    cwConnect();
+  }
+  function wsToastSafe(msg){ if(typeof window.wsToast === 'function') window.wsToast(msg, true); else alert(msg); }
+
+  // ---------- الاتصال اللحظي ----------
+  function cwConnect(){
+    if(cwConvUnsub) cwConvUnsub();
+    cwConvUnsub = cwDb().collection(COL_CHAT).doc(cwPhone).onSnapshot(function(doc){
+      cwConv = doc.exists ? doc.data() : null;
+      cwUpdateBadge($('cwPanel').classList.contains('on'));
+      $('cwStatus').textContent = cwStatusText();
+    }, function(){});
+    if(cwMsgsUnsub) cwMsgsUnsub();
+    // ⚠️ نافذة محدودة مش مستمع مفتوح — limit(80) بالأحدث (نفس التطبيق)
+    cwMsgsUnsub = cwDb().collection(COL_CHAT).doc(cwPhone).collection('messages')
+      .orderBy('atMs', 'desc').limit(80)
+      .onSnapshot(function(snap){
+        var arr = [];
+        snap.forEach(function(d){ arr.push(Object.assign({ id: d.id }, d.data())); });
+        arr.reverse();
+        cwRenderMsgs(arr);
+        if(cwConv && Number(cwConv.unreadCust) > 0){
+          cwDb().collection(COL_CHAT).doc(cwPhone).set({ unreadCust: 0 }, { merge: true }).catch(function(){});
+        }
+      }, function(){});
+  }
+
+  // ---------- الرسم ----------
+  function cwRenderMsgs(arr){
+    var body = $('cwBody'); if(!body) return;
+    if(!arr.length){
+      body.innerHTML = '<div class="cw-welcome"><b>أهلاً بيكي 👋</b>اسألينا عن أي حاجة، أو ابعتيلنا صورة طقمك وهنساعدك تختاري طرحتك المناسبة 🧕✨</div>';
+      return;
+    }
+    body.innerHTML = arr.map(function(m){
+      var cls = m.from === 'cust' ? 'cust' : (m.from === 'auto' ? 'auto' : 'staff');
+      var html = '<div class="cw-msg ' + cls + '">';
+      if(m.text) html += esc(m.text);
+      if(m.img){
+        html += '<img src="' + esc(m.img) + '" alt="صورة">';
+        if(m.tryon) html += '<br><button class="cw-try" onclick="cwTryOn(\'' + esc(m.id) + '\')">🧕 جرّبيها ✨</button>';
+      }
+      html += '</div>';
+      return html;
+    }).join('');
+    body.scrollTop = body.scrollHeight;
+    // نخزّن الصور/الباركود للرسايل اللي فيها تجربة — لزرار جرّبيها
+    arr.forEach(function(m){
+      if(m.img) cwMsgImgs[m.id] = m.img;
+      if(m.barcode) cwMsgBarcodes[m.id] = String(m.barcode);
+    });
+  }
+  var cwMsgImgs = {}, cwMsgBarcodes = {};
+  function cwTryOn(id){
+    var img = cwMsgImgs[id]; if(!img) return;
+    try{
+      sessionStorage.setItem('echarpe_tryon_img', img);
+      sessionStorage.setItem('echarpe_tryon_phone', cwPhone || '');
+      var bc = cwMsgBarcodes[id];
+      if(bc) sessionStorage.setItem('echarpe_tryon_pid', bc);
+      else sessionStorage.removeItem('echarpe_tryon_pid');
+    }catch(e){}
+    window.open('tryon/photo.html?brand=site', '_blank');
+  }
+  window.cwTryOn = cwTryOn;
+
+  // ---------- إرسال صورة ----------
+  function cwPickImg(){
+    var f = $('cwFile').files && $('cwFile').files[0];
+    $('cwFile').value = '';
+    if(!f || String(f.type||'').indexOf('image/') !== 0) return;
+    var url = URL.createObjectURL(f);
+    var img = new Image();
+    img.onload = function(){
+      var m = Math.max(img.naturalWidth, img.naturalHeight);
+      var scale = m > CHAT_MAX_IMG_DIM ? (CHAT_MAX_IMG_DIM / m) : 1;
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * scale);
+      c.height = Math.round(img.naturalHeight * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      cwImgData = c.toDataURL('image/jpeg', .82);
+      URL.revokeObjectURL(url);
+      $('cwImgPrevImg').src = cwImgData;
+      $('cwImgPrev').classList.add('on');
+    };
+    img.src = url;
+  }
+  function cwImgClear(){ cwImgData = null; $('cwImgPrev').classList.remove('on'); }
+
+  // ---------- الإرسال ----------
+  function cwSend(){
+    if(cwSending || !cwPhone) return;
+    var raw = ($('cwText').value || '').trim();
+    var v;
+    if(!raw && cwImgData){ v = window.chatValidate ? window.chatValidate('📷', cwConv) : { ok:true, text:'' }; if(v.ok) v.text = ''; }
+    else { v = window.chatValidate ? window.chatValidate(raw, cwConv) : { ok: !!raw, text: raw, msg:'اكتبي رسالة' }; }
+    if(!v.ok){ wsToastSafe(v.msg); return; }
+    cwSending = true;
+    $('cwSend').disabled = true;
+    var ts = Date.now();
+    var db = cwDb();
+    var convRef = db.collection(COL_CHAT).doc(cwPhone);
+    var batch = db.batch();
+    var expireAt = window.chatExpireAt ? window.chatExpireAt(ts) : (ts + 60 * 86400000);
+    var custMsg = { from: 'cust', atMs: ts, at: firebase.firestore.FieldValue.serverTimestamp(), expireAt: expireAt };
+    if(v.text) custMsg.text = v.text;
+    if(cwImgData) custMsg.img = cwImgData;
+    batch.set(convRef.collection('messages').doc(), custMsg);
+    batch.set(convRef, {
+      phone: cwPhone, name: cwName || '', branch: '', source: 'web',
+      lastAt: ts, lastText: (v.text || '📷 صورة').slice(0, 80), lastFrom: 'cust',
+      unreadStaff: firebase.firestore.FieldValue.increment(1),
+      unreadCust: 0, expireAt: expireAt
+    }, { merge: true });
+    var auto = window.chatAutoReply ? window.chatAutoReply(cwConv, ts) : null;
+    if(auto){
+      batch.set(convRef.collection('messages').doc(), { from: 'auto', text: auto, atMs: ts + 1, at: firebase.firestore.FieldValue.serverTimestamp(), expireAt: expireAt });
+      batch.set(convRef, { autoReplyAt: ts }, { merge: true });
+    }
+    batch.commit().then(function(){
+      $('cwText').value = ''; cwImgClear();
+    }).catch(function(){
+      wsToastSafe('الرسالة موصلتش — جرّبي تاني');
+    }).then(function(){
+      cwSending = false; $('cwSend').disabled = false;
+    });
+  }
+
+  // ---------- الأحداث ----------
+  $('cwLauncher').addEventListener('click', cwOpen);
+  $('cwClose').addEventListener('click', cwClose);
+  $('cwGateBtn').addEventListener('click', cwGateSubmit);
+  $('cwSend').addEventListener('click', cwSend);
+  $('cwText').addEventListener('keydown', function(e){ if(e.key === 'Enter') cwSend(); });
+  $('cwFile').addEventListener('change', cwPickImg);
+  $('cwImgClear').addEventListener('click', cwImgClear);
+
+  cwShowTeaser();
 })();
 </script>
 </body>
