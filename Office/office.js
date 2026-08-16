@@ -85,6 +85,31 @@ function ofPaintEyeBtn(){
 }
 window.ofToggleMoney = ofToggleMoney;
 function dstr(ts){ try{ return new Date(ts).toLocaleDateString('ar-EG', { day:'numeric', month:'short' }); }catch(e){ return ''; } }
+/* ⏳ «بقاله كام» — التاريخ المطلق (١٥ أغسطس) محتاج حساب في الدماغ
+   عشان تعرف قد إيه ده قديم. المتقدّم اللي بقاله أسبوعين من غير رد
+   ممكن يكون لقى شغل تاني، والمالك محتاج يعرف ده **من نظرة واحدة**
+   مش يطرح تاريخين. */
+function agoStr(ts){
+  const ms = Date.now() - (Number(ts) || 0);
+  if(!ts || ms < 0) return '';
+  const mins = Math.floor(ms / 60000);
+  if(mins < 60)   return mins <= 1 ? 'دلوقتي' : ('من ' + mins + ' دقيقة');
+  const hrs = Math.floor(mins / 60);
+  if(hrs < 24)    return 'من ' + hrs + (hrs === 1 ? ' ساعة' : ' ساعات');
+  const days = Math.floor(hrs / 24);
+  if(days === 1)  return 'من يوم';
+  if(days < 14)   return 'من ' + days + ' أيام';
+  const weeks = Math.floor(days / 7);
+  if(weeks < 8)   return 'من ' + weeks + (weeks === 1 ? ' أسبوع' : ' أسابيع');
+  const months = Math.floor(days / 30);
+  return 'من ' + months + (months === 1 ? ' شهر' : ' شهور');
+}
+/* ⚠️ العتبة **بالأيام** لا الساعات: طلب اتقدّم إمبارح لسه طازة،
+   والمالك مايتخوّفش منه. أسبوع من غير رد هو اللي فعلًا بيبان. */
+function agoStale(ts, days){
+  const ms = Date.now() - (Number(ts) || 0);
+  return ts > 0 && ms > (Number(days) || 7) * 86400000;
+}
 function monthKey(d){ const x=d||new Date(); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0'); }
 
 // رصيد التاجر من حركاته: order بيزوّد اللي عليك، payment بيخصم
@@ -4827,6 +4852,12 @@ function ofSyncHireBadge(){
   el.style.display = n ? '' : 'none';
 }
 
+let _apSortOldest = false;   // ⏳ الترتيب الافتراضي: الأحدث فوق (زي ما كان)
+window.apToggleSort = function(){
+  _apSortOldest = !_apSortOldest;
+  ofRenderApplicants();
+};
+
 function ofRenderApplicants(){
   ofSyncHireBadge();
   const w = $('#apList'); if(!w) return;
@@ -4838,11 +4869,23 @@ function ofRenderApplicants(){
     if(br && (!Array.isArray(a.branches) || a.branches.indexOf(br) < 0)) return false;
     if(sh && a.shift !== sh && a.shift !== 'any') return false;
     return true;
-  }).sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+  }).sort(function(a,b){
+    return _apSortOldest ? (a.ts||0) - (b.ts||0) : (b.ts||0) - (a.ts||0);
+  });
 
   if(!rows.length){ w.innerHTML = '<div class="hint" style="margin-top:11px;">مفيش متقدّمين بالفلتر ده</div>'; return; }
-  w.innerHTML = '<div style="margin:11px 0 4px; font-size:12px; color:var(--sub);">'
-    + rows.length + ' متقدّم</div>' + rows.slice(0, 60).map(function(a){
+  /* ⏳ عدد اللي مستنيين من غير رد من فوق أسبوع — رقم واحد بيقول
+     للمالك «فيه ناس بتستنى» من غير ما يقلّب واحد واحد. */
+  const staleCount = rows.filter(function(a){
+    return agoStale(a.ts, 7) && (a.status || 'new') === 'new';
+  }).length;
+  w.innerHTML = '<div style="display:flex; align-items:center; justify-content:space-between; gap:9px; margin:11px 0 4px; flex-wrap:wrap;">'
+    + '<span style="font-size:12px; color:var(--sub);">' + rows.length + ' متقدّم'
+    +   (staleCount ? (' · <b style="color:var(--bad);">⏳ ' + staleCount + ' من غير رد من فوق أسبوع</b>') : '')
+    + '</span>'
+    + '<button onclick="apToggleSort()" style="font-size:11px; padding:6px 11px; background:var(--panel2); color:var(--sub); border:1px solid var(--line); border-radius:8px;">'
+    +   (_apSortOldest ? '↓ الأقدم فوق' : '↑ الأحدث فوق') + '</button>'
+  + '</div>' + rows.slice(0, 60).map(function(a){
     const roles = (a.roles || []).map(function(r){ return AP_ROLES[r] || r; }).join(' · ');
     return '<div class="card" style="padding:12px; margin-top:9px;">'
       + '<div style="display:flex; justify-content:space-between; gap:9px; align-items:center;">'
@@ -4860,7 +4903,14 @@ function ofRenderApplicants(){
       +   (a.studying ? ('🎓 ' + esc(a.college || '') + (a.classes ? (' · ' + esc(a.classes)) : '') + '<br>') : '')
       +   (a.portfolio ? ('🔗 <a href="' + esc(a.portfolio) + '" target="_blank" rel="noopener" style="color:var(--gold);">شغله</a><br>') : '')
       +   (a.notes ? ('📝 ' + esc(a.notes) + '<br>') : '')
+      /* ⏳ التاريخ المطلق زي ما هو، و«بقاله» جنبه — ولو الطلب لسه
+         `new` (محدش ردّ عليه) وعدّى أسبوع، سطر تحذير منفصل بلون
+         مختلف عشان يلفت النظر وهو بيقلّب سريع. */
       +   '📣 عرف عننا من: ' + esc(a.source || '—') + ' · ' + esc(dstr(a.ts || 0))
+      +     ' · <span style="color:var(--sub);">' + esc(agoStr(a.ts || 0)) + '</span>'
+      + ((agoStale(a.ts, 7) && (a.status || 'new') === 'new')
+          ? ('<br><span style="color:var(--bad); font-weight:800;">⏳ لسه من غير رد ' + esc(agoStr(a.ts || 0)) + ' — يستاهل قرار</span>')
+          : '')
       + '</div>'
       + '<div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;">'
       +   '<a href="https://wa.me/2' + esc(a.whatsapp || a.phone) + '" target="_blank" rel="noopener"'
