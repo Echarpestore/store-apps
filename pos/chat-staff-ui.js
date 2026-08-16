@@ -258,8 +258,9 @@
       + '<div id="ccThread"></div>'
       + '<div id="ccImgPrev"><img id="ccImgTag" alt="">'
       + '<label><input type="checkbox" id="ccTryFlag" checked style="width:15px;height:15px;"> زرار 🧕 جرّبيها</label>'
-      + '<input id="ccTryBc" type="text" inputmode="latin" placeholder="باركود المنتج (للسلة)" style="flex:1; min-width:120px; font-size:12px; padding:6px 8px; border:1px solid #ddd; border-radius:8px;">'
+      + '<input id="ccTryBc" type="text" inputmode="latin" placeholder="باركود المنتج (للسلة)" oninput="ccTryBcPreview()" style="flex:1; min-width:120px; font-size:12px; padding:6px 8px; border:1px solid #ddd; border-radius:8px;">'
       + '<button class="ccIco" onclick="ccImgClear()" title="شيل الصورة">✖</button></div>'
+      + '<div id="ccTryBcInfo" style="font-size:11.5px; padding:0 2px; color:#888;"></div>'
       + '<div id="ccBar">'
       + '<button class="ccIco" onclick="document.getElementById(\'ccFile\').click()" title="صورة منتج">🖼️</button>'
       + '<textarea id="ccText" rows="1" placeholder="اكتب الرد…" maxlength="500"></textarea>'
@@ -440,8 +441,26 @@
   function ccImgClear(){
     CST.imgData = null;
     var _bc = document.getElementById('ccTryBc'); if(_bc) _bc.value = '';
+    var _bi = document.getElementById('ccTryBcInfo'); if(_bi) _bi.textContent = '';
     document.getElementById('ccImgPrev').style.display = 'none';
   }
+
+  /* 💰 معاينة فورية للسعر/الاسم وإحنا بنكتب الباركود — من الكاش المحلي
+     (allInventory عن طريق findByBarcode)، من غير أي نداء شبكة. بيبيع
+     أي صنف في المحل (سياسة §مبدأ POS نفسه) — مش بس اللي في كتالوج
+     البيع أونلاين، فمفيش رفض هنا لصنف حقيقي موجود. */
+  function ccTryBcPreview(){
+    var el = document.getElementById('ccTryBc');
+    var info = document.getElementById('ccTryBcInfo');
+    if(!el || !info) return;
+    var code = String(el.value || '').trim();
+    if(!code){ info.textContent = ''; return; }
+    var p = (typeof window.findByBarcode === 'function') ? window.findByBarcode(code, { includeOut: true }) : null;
+    if(!p){ info.textContent = '❓ مفيش صنف بالكود ده'; info.style.color = '#C0355C'; return; }
+    info.style.color = '#2E7D32';
+    info.textContent = '✅ ' + (p.name || 'صنف') + ' — ' + (Number(p.price) || 0) + ' ج.م';
+  }
+  window.ccTryBcPreview = ccTryBcPreview;
 
   function ccSend(){
     if(CST.sending) return;
