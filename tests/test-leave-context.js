@@ -149,3 +149,37 @@ function setup(){
   assert(/window\.ofLeaveContext = ofLeaveContext/.test(SRC),
     '⭐ القاعدة الذهبية: على window');
 })();
+
+/* ============================================================
+   🔐 عزل جلسة Office — نفس حكاية loyalty/glow/feedback
+   ------------------------------------------------------------
+   🔴 الباج الحقيقي اللي حصل: Office وPOS كانوا الاتنين على
+      التطبيق الافتراضي (بدون اسم)، فأي تصادم بينهم في نفس المتصفح
+      كان بيرجّع جلسة Office لمجهول → `office_gate` ترفض القراءة
+      → شاشة "لحظة..." تقف للأبد لأن `refreshGate` عمرها ما بتوصل.
+   ============================================================ */
+(function(){
+  const fsx = require('fs'), px = require('path');
+  const SRC2 = fsx.readFileSync(px.join(__dirname, '..', 'Office', 'office.js'), 'utf8');
+
+  assert(/var ofApp = firebase\.initializeApp\(firebaseConfig, 'office'\)/.test(SRC2),
+    "⭐⭐ Office بقى على تطبيق مستقل باسمه — مش الافتراضي المشترك مع POS");
+  assert(/var ofAuth = firebase\.auth\(ofApp\)/.test(SRC2), 'ودخوله من نفس التطبيق المسمّى');
+  assert(/const db = firebase\.firestore\(ofApp\)/.test(SRC2), 'وقراءاته وكتابته كمان');
+
+  // ⭐⭐ صفر استخدام لـ firebase.auth() الافتراضي في كل الملف
+  assert(!/firebase\.auth\(\)/.test(SRC2),
+    '⭐⭐ مفيش أي نداء لـ`firebase.auth()` الافتراضي — كله عدّى على ofAuth');
+  assert(!/firebase\.app\(\)\.functions/.test(SRC2),
+    '⭐⭐ ونداءات الدوال (creditAdjust) كمان على التطبيق المسمّى مش الافتراضي');
+
+  // ⚠️ الافتراضي لسه موجود بس للإشعارات بس — مطابق لنمط loyalty/glow
+  assert(/firebase\.initializeApp\(firebaseConfig\);\s*\/\/ FCM بس/.test(SRC2),
+    '⭐ التطبيق الافتراضي لسه بيتهيّأ للإشعارات (توكن الأجهزة القديمة يفضل شغّال)');
+  assert(/firebase\.messaging\(\)/.test(SRC2),
+    'والإشعارات لسه بتشتغل من الافتراضي زي ما كانت');
+
+  // ⭐ ofAuth واحد بس — مفيش تعريف مكرر يلخبط
+  const defs = (SRC2.match(/var ofAuth = firebase\.auth\(ofApp\)/g) || []).length;
+  assertEq(defs, 1, '⭐ ofAuth معرّفة مرة واحدة بس');
+})();

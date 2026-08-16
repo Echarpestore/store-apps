@@ -22,10 +22,29 @@ const firebaseConfig = {
   messagingSenderId: "408860081491",
   appId: "1:408860081491:web:c5fa8b8e757c13196375a6"
 };
-firebase.initializeApp(firebaseConfig);
-firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
+/* ============================================================
+   🔐 عزل جلسة Office — نفس حكاية loyalty/glow/feedback بالظبط
+   ------------------------------------------------------------
+   🔴 الباج اللي حصل: Office وPOS **كانوا الاتنين على التطبيق
+      الافتراضي** (بدون اسم). لو POS مفتوح في تبويب Chrome على نفس
+      اللابتوب في نفس الوقت، الاتنين بيتشاركوا نفس مساحة تخزين
+      الدخول — وأي تصادم بينهم بيرجّع جلسة Office لمجهول، فقاعدة
+      `office_gate` (بصمة كود المالك) ترفض القراءة، والشاشة تقف
+      عند "لحظة..." للأبد لأن `refreshGate` عمرها ما بتتنفذ.
+      إيشارب وGlow وشاشة التقييم اتحصّنوا من نفس الباج قبل كده
+      باسم منفصل لكل واحد — Office وPOS كانوا الوحيدين المكشوفين.
+   ✅ الحل: تطبيق باسم `'office'` = مساحة تخزين مستقلة تمامًا.
+      مبيلمسش جلسة POS ولا loyalty ولا glow لا من قريب ولا بعيد.
+   ⚠️ التطبيق الافتراضي لسه بيتهيّأ **للإشعارات (FCM) بس** — عشان
+      توكن الإشعارات الموجود يفضل هو هو ومحدش يفقد إشعاراته.
+      وإحنا عمرنا ما بنطلب auth على الافتراضي، فجلسة Office مأمّنة.
+   ============================================================ */
+firebase.initializeApp(firebaseConfig);                              // FCM بس
+var ofApp = firebase.initializeApp(firebaseConfig, 'office');        // auth + firestore + functions
+var ofAuth = firebase.auth(ofApp);
+ofAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){});
-const db = firebase.firestore();
+const db = firebase.firestore(ofApp);
 db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED, merge:true });
 db.enablePersistence({ synchronizeTabs:true }).catch(function(){});
 
@@ -742,7 +761,7 @@ const _OF_KEY = 'office_login';
 //    التوكن ده **ينفع يتلغي من الكونسول** والباسورد لأ.
 // ============================================================
 try{
-  firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+  ofAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 }catch(e){ console.warn('persistence', e); }
 
 // 🧹 تنضيف لمرة واحدة: أي بيانات دخول قديمة متخزنة على الجهاز بتتمسح
@@ -763,7 +782,7 @@ async function ofHash(code){
 
 // Firebase بيرجّع الجلسة لوحده مع setPersistence — مفيش أي باسورد بيتخزّن
 async function tryAutoOfficeLogin(){
-  return !!firebase.auth().currentUser;
+  return !!ofAuth.currentUser;
 }
 
 // ============================================================
@@ -811,7 +830,7 @@ $('#gLogin').addEventListener('click', async function(){
   $('#gateErr').textContent = '';
   if(!em || !pw){ $('#gateErr').textContent = 'اكتب الإيميل والباسورد'; return; }
   try{
-    await firebase.auth().signInWithEmailAndPassword(em, pw);
+    await ofAuth.signInWithEmailAndPassword(em, pw);
     localStorage.setItem('office_email', em);   // الإيميل بس — مفيش باسورد
     $('#gPass').value = '';
   }catch(e){ $('#gateErr').textContent = 'دخول غلط: ' + (e.code||''); }
@@ -912,7 +931,7 @@ async function ofBioUnlock(){
     if(!asr) return false;
     ownerOk = true;
     _sessWrite(_gateHash || rec.h || 'bio');
-    refreshGate(firebase.auth().currentUser);
+    refreshGate(ofAuth.currentUser);
     return true;
   }catch(e){ console.warn('bio unlock', e); return false; }
 }
@@ -946,7 +965,7 @@ $('#gCodeBtn').addEventListener('click', async function(){
       _gateHash = h;
       ownerOk = true; _sessWrite(h);
       $('#gCode').value = '';
-      refreshGate(firebase.auth().currentUser);
+      refreshGate(ofAuth.currentUser);
       return;
     }
 
@@ -960,7 +979,7 @@ $('#gCodeBtn').addEventListener('click', async function(){
         const okBio = await ofBioEnroll();
         if(okBio) alert('اتربطت ✅ — المرة الجاية بصمة واحدة وخلاص');
       }
-      refreshGate(firebase.auth().currentUser);
+      refreshGate(ofAuth.currentUser);
     } else {
       _gateTries++;
       $('#gateErr').textContent = 'كود غلط' + (_gateTries >= 3 ? (' (' + (5 - _gateTries) + ' محاولات فاضلة)') : '');
@@ -1002,7 +1021,7 @@ window.officeLogout = async function(){
   try{ sessionStorage.removeItem(OF_SESS_KEY); }catch(e){}
   try{ localStorage.removeItem('office_owner_ok'); }catch(e){}
   ownerOk = false;
-  try{ await firebase.auth().signOut(); }catch(e){}
+  try{ await ofAuth.signOut(); }catch(e){}
   location.reload();
 };
 
@@ -1049,12 +1068,12 @@ function refreshGate(user){
 //    يرجّع الجلسة المحفوظة. من غير الحارس ده، شاشة الإيميل بتومض كل مرة
 //    وبعدين تختفي وتظهر البصمة — وده اللي كان شكله "لاج".
 let _authSettled = false;
-firebase.auth().onAuthStateChanged(async function(user){
+ofAuth.onAuthStateChanged(async function(user){
   if(!user && !_authSettled){
     // مستنيين لحظة: يا إما الجلسة ترجع، يا إما نتأكد إنه مفيش دخول فعلًا
     setTimeout(function(){
       _authSettled = true;
-      if(!firebase.auth().currentUser){ ownerOk = false; refreshGate(null); }
+      if(!ofAuth.currentUser){ ownerOk = false; refreshGate(null); }
     }, 1200);
     return;
   }
@@ -1084,7 +1103,7 @@ firebase.auth().onAuthStateChanged(async function(user){
 let _sessWarned = false;
 function ofSessionCheck(){
   try{
-    const u = firebase.auth().currentUser;
+    const u = ofAuth.currentUser;
     const anon = u && (u.isAnonymous ||
       ((u.providerData || []).length === 0));
     const bar = document.getElementById('sessWarn');
@@ -1097,7 +1116,7 @@ function ofSessionCheck(){
           + 'cursor:pointer; line-height:1.6;';
         d.innerHTML = '⚠️ الجلسة اتبدلت لحساب مجهول — أي حفظ هيترفض.<br>'
           + '<u>دوس هنا: اخرج وادخل بالإيميل</u>';
-        d.onclick = function(){ try{ firebase.auth().signOut(); }catch(e){} location.reload(); };
+        d.onclick = function(){ try{ ofAuth.signOut(); }catch(e){} location.reload(); };
         document.body.appendChild(d);
       }
       if(!_sessWarned){ _sessWarned = true; console.warn('office session became anonymous'); }
@@ -1105,7 +1124,7 @@ function ofSessionCheck(){
   }catch(e){}
 }
 setInterval(ofSessionCheck, 4000);
-try{ firebase.auth().onAuthStateChanged(ofSessionCheck); }catch(e){}
+try{ ofAuth.onAuthStateChanged(ofSessionCheck); }catch(e){}
 
 /* ============================================================
    🗂️ التبويبات
@@ -4485,7 +4504,7 @@ function ofWireHire(){
     //    كل التطبيقات على نفس الدومين وبتشارك نفس جلسة المتصفح — فلو
     //    اتفتح تطبيق الولاء أو شاشة التقييم على نفس المتصفح، الجلسة
     //    ممكن تكون اتبدلت لحساب **مجهول** والرول يرفض وهو سليم.
-    const _u = firebase.auth().currentUser;
+    const _u = ofAuth.currentUser;
     const _prov = _u ? ((_u.providerData && _u.providerData[0] && _u.providerData[0].providerId) || (_u.isAnonymous ? 'anonymous' : '?')) : 'مفيش';
     if(!_u || _u.isAnonymous || _prov === 'anonymous'){
       alert('⛔ الجلسة الحالية مش بإيميل\n\n'
@@ -4512,7 +4531,7 @@ function ofWireHire(){
       alert('ماتعملش: ' + (e.code || e.message) + '\n\n'
         + '— الدخول: ' + _prov + '\n'
         + '— الإيميل: ' + ((_u && _u.email) || 'مفيش') + '\n'
-        + '— المشروع: ' + (firebase.app().options.projectId || '?') + '\n\n'
+        + '— المشروع: ' + (ofApp.options.projectId || '?') + '\n\n'
         + (String(e.code||'').indexOf('permission') >= 0
             ? 'الدخول بإيميل تمام، يبقى الرول اللي فيه staff_invites لسه مانشرش.'
             : 'دي مش مشكلة صلاحيات — ابعت الرسالة دي كلها.'));
@@ -5095,7 +5114,7 @@ async function approveCreditReq(id){
     + 'طالبها: ' + (r.byName || '—') + '\n\n'
     + '⚠️ دي فلوس بتتضاف من العدم.')) return;
   try{
-    const fn = firebase.app().functions('us-central1').httpsCallable('creditAdjust');
+    const fn = ofApp.functions('us-central1').httpsCallable('creditAdjust');
     // 🔁 مفتاح التكرار من الطلب نفسه — الموافقة مرتين بالغلط
     //    مبتضيفش الفلوس مرتين.
     await fn({ phone: r.phone, amount: r.amount, reason: r.reason,
