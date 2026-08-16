@@ -1,3 +1,51 @@
+
+async function __createFaceLandmarkerV39(FaceLandmarker, vision, options){
+  const base = JSON.parse(JSON.stringify(options || {}));
+  const delegates = ['GPU','CPU'];
+  let lastErr;
+  for(const delegate of delegates){
+    try{
+      const o = structuredClone ? structuredClone(options) : {...options, baseOptions:{...(options?.baseOptions||{})}};
+      o.baseOptions = {...(o.baseOptions||{}), delegate};
+      const lm = await FaceLandmarker.createFromOptions(vision,o);
+      window.TRYON_FACE_DIAG.modelLoaded=true;
+      window.TRYON_FACE_DIAG.delegate=delegate;
+      window.TRYON_FACE_DIAG.lastError='';
+      return lm;
+    }catch(e){
+      lastErr=e;
+      window.TRYON_FACE_DIAG.lastError=`${delegate}:${e?.message||e}`;
+      window.TRYON_FACE_DIAG.failures++;
+    }
+  }
+  throw lastErr;
+}
+
+
+// ===== v39 FACEFIX diagnostics / recovery =====
+window.TRYON_FACE_DIAG = window.TRYON_FACE_DIAG || {
+  modelLoaded:false, delegate:null, running:false, faceCount:0,
+  lastDetectMs:0, lastError:"", frames:0, failures:0, lastVideoTime:-1
+};
+
+function __faceDiagOverlay(){
+  let el=document.getElementById('faceDiagV39');
+  if(!el){
+    el=document.createElement('div');
+    el.id='faceDiagV39';
+    el.style.cssText='position:fixed;z-index:99999;left:8px;top:8px;background:#000c;color:#0f0;padding:6px 8px;border-radius:8px;font:12px/1.35 monospace;direction:ltr;pointer-events:none;white-space:pre-wrap';
+    document.body.appendChild(el);
+  }
+  const d=window.TRYON_FACE_DIAG;
+  el.textContent=`v39 facefix
+model:${d.modelLoaded?'ok':'...'} delegate:${d.delegate||'-'}
+running:${d.running?'yes':'no'} faces:${d.faceCount}
+detect:${Math.round(d.lastDetectMs||0)}ms failures:${d.failures}
+videoTime:${(d.lastVideoTime??-1).toFixed?d.lastVideoTime.toFixed(2):d.lastVideoTime}
+${d.lastError?('err:'+d.lastError.slice(0,110)):''}`;
+}
+setInterval(__faceDiagOverlay,500);
+
 /* ============================================================
    🧕 tryon-app.js — الكاميرا والرسم والواجهة
    ------------------------------------------------------------
@@ -13,7 +61,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v38-OBJ3D';
+  const TRYON_VER = 'v39-FACEFIX';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
