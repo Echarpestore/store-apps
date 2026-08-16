@@ -258,6 +258,7 @@
       + '<div id="ccThread"></div>'
       + '<div id="ccImgPrev"><img id="ccImgTag" alt="">'
       + '<label><input type="checkbox" id="ccTryFlag" checked style="width:15px;height:15px;"> زرار 🧕 جرّبيها</label>'
+      + '<input id="ccTryBc" type="text" inputmode="latin" placeholder="باركود المنتج (للسلة)" style="flex:1; min-width:120px; font-size:12px; padding:6px 8px; border:1px solid #ddd; border-radius:8px;">'
       + '<button class="ccIco" onclick="ccImgClear()" title="شيل الصورة">✖</button></div>'
       + '<div id="ccBar">'
       + '<button class="ccIco" onclick="document.getElementById(\'ccFile\').click()" title="صورة منتج">🖼️</button>'
@@ -315,6 +316,7 @@
     document.getElementById('ccBlock').style.display = 'none';
     document.getElementById('ccThread').style.display = 'none';
     document.getElementById('ccBar').style.display = 'none';
+    var _bc = document.getElementById('ccTryBc'); if(_bc) _bc.value = '';
     document.getElementById('ccImgPrev').style.display = 'none';
     list.style.display = 'block';
     if(!arr.length){
@@ -437,6 +439,7 @@
 
   function ccImgClear(){
     CST.imgData = null;
+    var _bc = document.getElementById('ccTryBc'); if(_bc) _bc.value = '';
     document.getElementById('ccImgPrev').style.display = 'none';
   }
 
@@ -457,6 +460,11 @@
     if(CST.imgData){
       msg.img = CST.imgData;
       msg.tryon = !!document.getElementById('ccTryFlag').checked;
+      // 🛍️ باركود المنتج (اختياري) — بيخلّي زر "أضيفيها للسلة" في التجربة يشتغل
+      if(msg.tryon){
+        var _bc = String((document.getElementById('ccTryBc') || {}).value || '').trim();
+        if(_bc) msg.barcode = _bc;
+      }
     }
     // ⚠️ `at` (طابع السيرفر) و`unreadCust` (increment) بيتحطوا **جوه**
     //    الطبقة — شكلهم مختلف بين compat وmodular.
