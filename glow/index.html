@@ -1942,6 +1942,11 @@ window.openMyRequests = openMyRequests;
    ============================================================ */
 var ORD_COL = 'online_orders';
 var _shopCart = {};            // { barcode: qty }
+/* 🛍️ منتجات من الشات مش لازم تكون في كتالوج البيع أونلاين المنسّق —
+   الموظفة ممكن تبيع أي صنف في المحل (نفس مبدأ POS نفسه). بيتملى وقت
+   الإضافة من تجربة الطرحة (tryonVerifyCartItem) بعد قراءة حقيقية من
+   المخزون. { باركود: {name, price} } */
+var _extraCartProducts = {};
 var _shopBranch = '';
 var _shopPay = 'cash';
 var _shopSending = false;
@@ -1991,7 +1996,12 @@ function shopCartLines(){
   shopItems().forEach(function(p){ byBc[String(p.barcode)] = p; });
   var out = [];
   Object.keys(_shopCart).forEach(function(bc){
-    var p = byBc[bc]; if(!p) return;
+    // 🔴 مش بس كتالوج البيع أونلاين — لو الصنف جاي من الشات (مش في
+    //    الكتالوج المنسّق) بنستخدم بيانات المخزون الحقيقية اللي
+    //    اتقرت وقت الإضافة. من غيرها الصنف كان بيختفي من السلة بصمت
+    //    من غير ما العميلة تحس إنه اتشال.
+    var p = byBc[bc] || _extraCartProducts[bc];
+    if(!p) return;
     out.push({ barcode: bc, name: p.name || 'منتج', price: Number(p.price) || 0, qty: shopQty(bc) });
   });
   return out;
@@ -3085,18 +3095,34 @@ function tryonAddToCart(barcode){
   if(!bc) return;
   shopAdd(bc, 1);       // زي زرار ➕ بالظبط — فوري، مش محتاج الكتالوج يكون محمّل
   switchTab('shop');    // بيحمّل كتالوج المتجر تلقائي لو أول مرة (نفس التحميل الكسول العادي)
-  tryonVerifyCartItem(bc, 0);
+  tryonVerifyCartItem(bc);
 }
 window.tryonAddToCart = tryonAddToCart;
 
-function tryonVerifyCartItem(bc, tries){
-  if(shopCatalog !== null){
-    if(orderFindByBarcode(shopItems(), bc)) showToast('اتضافت للسلة 🛍️');
-    else showToast('المنتج ده مش متاح للطلب أونلاين دلوقتي', true);
-    return;
-  }
-  if((tries || 0) > 20) return; // ~٤ ثواني ومفيش استجابة — السلة اتحطّت أصلًا، مسيبهاش تعلّق
-  setTimeout(function(){ tryonVerifyCartItem(bc, (tries || 0) + 1); }, 200);
+/* 🔴 مقصود: بنقرا **المخزون الحقيقي** مباشرة (pos_test_inventory)،
+   مش كتالوج البيع أونلاين المنسّق. الموظفة في الشات بتقدر تبيع أي
+   صنف من آلاف أصناف المحل، مش بس اللي معروض أونلاين — نفس مبدأ POS
+   بالظبط. لو الصنف أصلاً في الكتالوج المنسّق (byBc)، منستخدمش قراءة
+   شبكة زيادة عن الحاجة. */
+function tryonVerifyCartItem(bc){
+  var already = shopItems().filter(function(p){ return String(p.barcode) === bc; })[0];
+  if(already){ showToast('اتضافت للسلة 🛍️'); return; }
+  db.collection(COL_INVENTORY).doc(bc).get().then(function(d){
+    if(!d.exists){
+      delete _shopCart[bc];   // مفيش صنف بالكود ده أصلًا — منسيبهاش عالقة في السلة
+      renderShop();
+      showToast('مش لاقيين منتج بالباركود ده — اتأكدي منه مع الموظفة', true);
+      return;
+    }
+    var p = d.data() || {};
+    _extraCartProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0 };
+    renderShop();
+    showToast('اتضافت للسلة 🛍️');
+  }).catch(function(){
+    // 🔴 فشل الشبكة ≠ الصنف مش موجود — السلة فيها الكمية أصلاً
+    // (shopAdd اتنفذت فورًا)، بنسيبها ونبلّغ من غير ما نمسحها.
+    showToast('اتضافت للسلة — هنتأكد من التفاصيل عند الطلب', false);
+  });
 }
 
 // 🏢 الفرع الافتراضي — آخر فرع اشترت منه (قرار المالك)، مرة واحدة بس
