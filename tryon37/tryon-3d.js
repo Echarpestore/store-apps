@@ -29,7 +29,8 @@
     uni: null, hood: null, skirt: null, projector: null,
     projKey: null, projTex: null, fitted: null,
     // v38: موديل OBJ الحقيقي المرفوع من المالك
-    objRoot: null, objWrap: null, objMeshes: [], objReady: false, objFailed: false
+    objRoot: null, objWrap: null, objMeshes: [], objReady: false, objFailed: false,
+    objMat: null, objTex: null
   };
 
   // 🎛️ لو اللفة محتاجة تظبيطة على وش حقيقي — أرقام من غير deploy
@@ -44,17 +45,17 @@
 
     // 🧕 v38 — موديل الـOBJ الحقيقي. 1 = استخدمه، 0 = ارجع للهندسة الإجرائية القديمة.
     obj: 1,
-    objScale: 1.28,
+    objScale: 1.08,
     objX: 0.0,
-    objY: 3.5,
+    objY: 1.2,
     objZ: 0.0,
     objRx: 0.0,
     objRy: Math.PI,
     objRz: 0.0,
     // v44: compensate model scale relative to MediaPipe head scale
-    objSX: 1.18,
-    objSY: 0.92,
-    objSZ: 1.08
+    objSX: 1.08,
+    objSY: 1.0,
+    objSZ: 1.0
   };
 
   // خد أرقام المعايرة الحية لو المالك غيّرها، وإلا سيب الكور يقرر
@@ -176,16 +177,37 @@
       R.objWrap = wrap;
       R.objMeshes = [];
 
-      // أولًا: material واحد للمشروع كله + attributes بتاعة الإسقاط.
+      // v45: استخدم UV الحقيقي للموديل. الـprojection shader القديم كان
+      // معمول للهندسة المسطحة وبيعمل قص/مستطيل واضح تحت الدقن على الـOBJ.
+      const texLoader = new THREE.TextureLoader();
+      const nativeTex = await new Promise((resolve) => {
+        texLoader.load('assets/tudung.png', resolve, undefined, () => resolve(null));
+      });
+      if(nativeTex){
+        nativeTex.colorSpace = THREE.SRGBColorSpace;
+        nativeTex.wrapS = nativeTex.wrapT = THREE.ClampToEdgeWrapping;
+        nativeTex.flipY = true;
+        R.objTex = nativeTex;
+      }
+      R.objMat = new THREE.MeshStandardMaterial({
+        map: nativeTex || null,
+        color: nativeTex ? 0xffffff : 0xb7aa95,
+        roughness: 0.92,
+        metalness: 0.0,
+        side: THREE.DoubleSide,
+        transparent: false
+      });
+
       obj.traverse((ch) => {
         if(!ch.isMesh) return;
         let g = ch.geometry;
         // OBJLoader أحيانًا يشارك geometry؛ clone عشان attributes تبقى آمنة.
         g = g.clone();
         if(!g.getAttribute('normal')) g.computeVertexNormals();
-        applyProjTo(g);
+        // لا نضيف projection attributes للموديل الحقيقي؛ الـUV الأصلي
+        // يحافظ على شكل الطيات والخامة حول الرأس والكتف.
         ch.geometry = g;
-        ch.material = R.fabricMat;
+        ch.material = R.objMat;
         ch.frustumCulled = false;
         R.objMeshes.push(ch);
       });
@@ -206,7 +228,7 @@
       syncGeometryMode();
       // لو صورة منتج اتحملت قبل ما الـOBJ يخلص تحميل، طبّق projection الآن.
       if(R.projector) reproject();
-      console.log('v43 OBJ hijab جاهز', { meshes: R.objMeshes.length, size });
+      console.log('v45 native-UV OBJ hijab جاهز', { meshes: R.objMeshes.length, size });
     }catch(e){
       R.objFailed = true;
       console.warn('OBJ hijab فشل — استمرار بالهندسة القديمة:', e);
@@ -288,8 +310,8 @@
     try{
       if(R.hood) applyProjTo(R.hood.geometry);
       if(R.skirt) applyProjTo(R.skirt.geometry);
-      if(R.objMeshes && R.objMeshes.length)
-        R.objMeshes.forEach((m) => { if(m && m.geometry) applyProjTo(m.geometry); });
+      // v45: OBJ uses its native UVs, so product projection stays on the
+      // legacy procedural meshes only.
       R.uni.uHasProj.value = (R.projector && R.projTex && window.T3D_TUNE.proj) ? 1 : 0;
       return true;
     }catch(e){ console.warn('reproject', e); return false; }
