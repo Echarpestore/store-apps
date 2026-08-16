@@ -1,7 +1,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v41-TDZFIX';
+  const TRYON_VER = 'v42-BROWFIX';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -723,9 +723,13 @@
     // نقط التثبيت + تنعيم (في وضع الصورة الثابتة مفيش تنعيم)
     let an = T.anchorsFromLandmarks(lm, w, h);
     if(S.mode === 'live'){
+      // v42: احتفظ بكل landmarks الإضافية بعد التنعيم.
+      // v41 كان بيحذف `brow` هنا، وبعدها bandanaSpec يحاول يقرأ
+      // an.brow[1] فينهار الفريم بـ "Cannot read properties of undefined (reading '1')".
       an = { top: S.smTop.push(an.top), chin: S.smChin.push(an.chin),
              l: S.smL.push(an.l), r: S.smR.push(an.r),
-             cheekL: an.cheekL, cheekR: an.cheekR };
+             cheekL: an.cheekL, cheekR: an.cheekR,
+             brow: an.brow };
     }
     // 📐 v20: توسيع النقط بمقاس الأصل نفسه — أصل نقطه على حافة
     //    الفتحة (fit في الكتالوج) بياخد توسيع أقل فالفتحة تحضن
@@ -974,6 +978,7 @@
         const res=S.landmarker.detectForVideo(detectSrc(),t0);
         S.detectorRunning=true; S.detectMs=performance.now()-__d0;
         S.faceCount=res?.faceLandmarks?.length||0;
+        S.lastErr = null;
         draw(res,S.video);
         liveHairPass().catch(() => {});     // v28: ثابتة + مخنوق — مش كل فريم
       }catch(e){
@@ -1243,7 +1248,7 @@
       el.style.cssText='position:fixed;z-index:99999;left:8px;top:8px;background:#000c;color:#5cff74;padding:7px 9px;border-radius:9px;font:12px/1.35 monospace;direction:ltr;pointer-events:none;white-space:pre-wrap';
       document.body.appendChild(el);}
     setInterval(()=>{const vt=S.video&&Number.isFinite(S.video.currentTime)?S.video.currentTime:-1;
-      el.textContent=`v40 bootfix\nstage:${S.stage}\nmodel:${S.modelLoaded?'ok':'...'} delegate:${S.delegate||'-'}\nrunning:${S.detectorRunning?'yes':'no'} faces:${S.faceCount||0}\ndetect:${Math.round(S.detectMs||0)}ms video:${vt.toFixed(2)}\n${S.lastErr?('err:'+String(S.lastErr.message||S.lastErr).slice(0,90)):''}`;},350);
+      el.textContent=`v42 browfix\nstage:${S.stage}\nmodel:${S.modelLoaded?'ok':'...'} delegate:${S.delegate||'-'}\nrunning:${S.detectorRunning?'yes':'no'} faces:${S.faceCount||0}\ndetect:${Math.round(S.detectMs||0)}ms video:${vt.toFixed(2)}\n${S.lastErr?('err:'+String(S.lastErr.message||S.lastErr).slice(0,90)):''}`;},350);
   }
 
   async function boot(){
