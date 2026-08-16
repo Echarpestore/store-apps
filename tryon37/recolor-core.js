@@ -134,36 +134,6 @@ RECOLOR.applyRecolor = function(pixels, mask, targetHex){
   return pixels;
 };
 
-
-/* ---------- ٤) 🧵 نقل ملمس صورة المنتج إلى القالب (v37) ---------- */
-// surface = رقعة القماش المستخرجة من صورة المنتج. بننقل *تفاصيل الإضاءة*
-// الصغيرة إلى القالب، لا هندسة الطية الكبيرة؛ لذلك طيات القالب تفضل صحيحة.
-RECOLOR.applyProductSurface = function(pixels, mask, w, h, surface, sw, sh, opts){
-  opts=opts||{}; const strength=opts.strength==null?.7:opts.strength;
-  const sl=[];
-  for(let i=0;i<sw*sh;i++){
-    if(surface[i*4+3]<64)continue;
-    sl.push(RECOLOR.rgbToHsl(surface[i*4],surface[i*4+1],surface[i*4+2])[2]);
-  }
-  if(!sl.length)return pixels; sl.sort((a,b)=>a-b); const sm=sl[Math.floor(sl.length/2)];
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
-    const i=y*w+x, mw=mask[i]; if(mw<.08 || pixels[i*4+3]<40)continue;
-    const sx=x%sw, sy=y%sh, si=(sy*sw+sx)*4;
-    const shsl=RECOLOR.rgbToHsl(surface[si],surface[si+1],surface[si+2]);
-    const th=RECOLOR.rgbToHsl(pixels[i*4],pixels[i*4+1],pixels[i*4+2]);
-    // high-pass luminance تقريبية: فروق صغيرة حوالين وسيط الرقعة
-    const detail=Math.max(-.16,Math.min(.16,shsl[2]-sm));
-    const nl=Math.max(.02,Math.min(.98,th[2]+detail*strength));
-    // نسبة صغيرة من تشبع المنتج تحفظ weave/print الخفيف من غير ما تغيّر اللون الأساسي
-    const ns=Math.max(0,Math.min(1,th[1]*(1-.18*strength)+shsl[1]*.18*strength));
-    const rgb=RECOLOR.hslToRgb(th[0],ns,nl), a=mw*strength;
-    pixels[i*4]=Math.round(pixels[i*4]*(1-a)+rgb[0]*a);
-    pixels[i*4+1]=Math.round(pixels[i*4+1]*(1-a)+rgb[1]*a);
-    pixels[i*4+2]=Math.round(pixels[i*4+2]*(1-a)+rgb[2]*a);
-  }
-  return pixels;
-};
-
 /* ---------- ٥) 🧵 وضع "سادة" (v24) ---------- */
 // المشكلة: قالب واحد مكنّر — أي منتج ساده بياخد لونه ومعاه كنار
 // مش بتاعه. الحل: بكسلات الكنار/التطريز (وزنها في الماسك واطي)

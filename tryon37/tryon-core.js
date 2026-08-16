@@ -209,66 +209,6 @@ TRYON.dominantColor = function(pixels){
   };
 };
 
-
-/* ---------- ١١ب) 🧵 استخراج ملمس المنتج من صورة موبايل (v37) ---------- */
-// لون الخلفية التقريبي من شريط الحواف. الوسيط مقاوم للظل/الضوضاء.
-TRYON.estimateBorderColor = function(pixels, w, h){
-  const rs=[], gs=[], bs=[];
-  const step=Math.max(1, Math.floor(Math.min(w,h)/32));
-  const add=(x,y)=>{ const i=(y*w+x)*4; if(pixels[i+3]<64)return; rs.push(pixels[i]);gs.push(pixels[i+1]);bs.push(pixels[i+2]); };
-  for(let x=0;x<w;x+=step){ add(x,0); add(x,h-1); }
-  for(let y=0;y<h;y+=step){ add(0,y); add(w-1,y); }
-  const med=a=>{ if(!a.length)return 255; a.sort((x,y)=>x-y); return a[Math.floor(a.length/2)]; };
-  return [med(rs),med(gs),med(bs)];
-};
-
-// ماسك خفيف للمنتج: مسافة من لون الخلفية + حماية للألوان القريبة منها.
-TRYON.foregroundMask = function(pixels,w,h,bg){
-  bg=bg||[255,255,255]; const out=new Uint8Array(w*h);
-  for(let i=0;i<w*h;i++){
-    if(pixels[i*4+3]<64) continue;
-    const dr=pixels[i*4]-bg[0], dg=pixels[i*4+1]-bg[1], db=pixels[i*4+2]-bg[2];
-    const dist=Math.sqrt(dr*dr+dg*dg+db*db);
-    if(dist>24) out[i]=1;
-  }
-  return out;
-};
-
-// أفضل مربع قماش: أكبر نسبة foreground مع عقوبة للحواف/التباين الكبير
-// (الطية الكبيرة أو الكنار أقل مناسبة كـrepeat texture من سطح قماش هادئ).
-TRYON.bestFabricPatch = function(pixels,mask,w,h,size){
-  size=Math.min(size||96,w,h); let best={x:Math.floor((w-size)/2),y:Math.floor((h-size)/2),w:size,h:size,score:-1};
-  const step=Math.max(8,Math.floor(size/4));
-  for(let y=0;y<=h-size;y+=step) for(let x=0;x<=w-size;x+=step){
-    let fg=0,n=0,sum=0,sum2=0;
-    for(let yy=y;yy<y+size;yy+=4) for(let xx=x;xx<x+size;xx+=4){
-      const k=yy*w+xx; if(!mask[k]) continue; fg++;
-      const i=k*4, l=.299*pixels[i]+.587*pixels[i+1]+.114*pixels[i+2]; sum+=l;sum2+=l*l;n++;
-    }
-    const total=Math.ceil(size/4)*Math.ceil(size/4), ratio=fg/Math.max(1,total);
-    if(ratio<.58) continue;
-    const mean=sum/Math.max(1,n), variance=Math.max(0,sum2/Math.max(1,n)-mean*mean);
-    const score=ratio-Math.min(.35,Math.sqrt(variance)/180);
-    if(score>best.score) best={x,y,w:size,h:size,score};
-  }
-  return best;
-};
-
-// نخلي الرقعة مناسبة للتكرار: نحافظ على التفاصيل الدقيقة لكن نشيل
-// فرق الإضاءة العام الناتج من تصوير المنتج/الطية.
-TRYON.normalizeFabricSurface = function(pixels){
-  const ls=[];
-  for(let i=0;i<pixels.length;i+=4){ if(pixels[i+3]<64)continue; ls.push(.299*pixels[i]+.587*pixels[i+1]+.114*pixels[i+2]); }
-  if(!ls.length)return pixels; ls.sort((a,b)=>a-b); const med=ls[Math.floor(ls.length/2)]||128;
-  const k=190/Math.max(20,med);
-  for(let i=0;i<pixels.length;i+=4){
-    pixels[i]=Math.max(0,Math.min(255,pixels[i]*k));
-    pixels[i+1]=Math.max(0,Math.min(255,pixels[i+1]*k));
-    pixels[i+2]=Math.max(0,Math.min(255,pixels[i+2]*k));
-  }
-  return pixels;
-};
-
 /* ---------- ١٢) مصدر صورة المنتج — تسليم مباشر ولا لينك ---------- */
 // الشات (نفس الدومين) بيسلّم الصورة مباشرة في sessionStorage —
 // صفر CORS وصفر رفع إضافي. اللينك (?img=) فولباك للحالات التانية.

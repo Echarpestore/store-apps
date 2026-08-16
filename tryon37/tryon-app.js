@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v37';
+  const TRYON_VER = 'v38-OBJ3D';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -63,7 +63,6 @@
     bandana: null,                 // v23: null = من غير بندانة (الافتراضي)
     bandanaHinted: false,
     plain: false,                   // v26: سادة — تلقائي بس من صورة المنتج
-    productSurface: null, productSurfaceKey: null, // v37: ملمس حقيقي مستخرج من صورة المنتج
     pendingPhoto: null,             // v34: الأصل المصوّر اللي بيترقّى في الخلفية
     seg: null, segFailed: false,    // v25: مقطّع الشعر — lazy
     hairZone: null,                 // v25: {mask,w,h} — أنهي شعر يتغطى
@@ -552,16 +551,6 @@
         ? RECOLOR.plainify(im.data, asset._mask, c.width, c.height, T.blurChannel)
         : asset._mask;
       RECOLOR.applyRecolor(im.data, mask, color.hex);
-      // 🧵 v37: ننقل النسيج الحقيقي من صورة المنتج (weave/ملمس دقيق)
-      // فوق إضاءة وطيات القالب بدل ما المنتج يتحول لمجرد لون مسطح.
-      if(S.productSurface){
-        try{
-          const sg = S.productSurface.getContext('2d', { willReadFrequently:true });
-          const si = sg.getImageData(0, 0, S.productSurface.width, S.productSurface.height);
-          RECOLOR.applyProductSurface(im.data, mask, c.width, c.height,
-            si.data, S.productSurface.width, S.productSurface.height, { strength:0.72 });
-        }catch(e){ console.warn('product surface', e); }
-      }
       g.putImageData(im, 0, 0);
       asset.headTinted = c;
       asset.tintHex = color.hex;
@@ -745,8 +734,7 @@
         hex: S.color.hex,
         bright: T.lumaToBrightness(br3),
         fade: Math.abs(pose.yaw) > 62 || Math.abs(pose.pitch) > 45,
-        asset: p3 && p3.img, anchors: p3 && p3.anchors, assetKey: p3 && p3.key,
-        fabric: S.productSurface, fabricKey: S.productSurfaceKey
+        asset: p3 && p3.img, anchors: p3 && p3.anchors, assetKey: p3 && p3.key
       });
       hint('');
       return;
@@ -1251,33 +1239,6 @@
   /* ============================================================
      ٨ب) لون من صورة المنتج — ?img=
      ============================================================ */
-  /* 🧵 v37: نطلع رقعة قماش من صورة المنتج نفسها. مش بنستخدم الصورة
-     كلها كـtexture لأن الخلفية/الطيات الكبيرة بتبان كأنها مطبوعة على
-     الرأس. بنختار تلقائيًا رقعة داخل جسم المنتج بعيدة قدر الإمكان عن
-     الخلفية، وبعدها بنسيب محرك recolor يحافظ على لون المنتج. */
-  function productSurfaceFromImage(img){
-    try{
-      const W = 256, H = 256, P = 96;
-      const tmp = document.createElement('canvas'); tmp.width=W; tmp.height=H;
-      const tg = tmp.getContext('2d', { willReadFrequently:true });
-      // cover بدل stretch عشان النسيج مايتشوّهش
-      const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
-      const sc=Math.max(W/iw,H/ih), dw=iw*sc, dh=ih*sc;
-      tg.drawImage(img,(W-dw)/2,(H-dh)/2,dw,dh);
-      const im=tg.getImageData(0,0,W,H), d=im.data;
-      const bg=T.estimateBorderColor(d,W,H);
-      const fg=T.foregroundMask(d,W,H,bg);
-      const r=T.bestFabricPatch(d,fg,W,H,P);
-      const out=document.createElement('canvas'); out.width=128; out.height=128;
-      const og=out.getContext('2d',{willReadFrequently:true});
-      og.drawImage(tmp,r.x,r.y,r.w,r.h,0,0,128,128);
-      const oi=og.getImageData(0,0,128,128);
-      T.normalizeFabricSurface(oi.data);
-      og.putImageData(oi,0,0);
-      return out;
-    }catch(e){ console.warn('surface extract',e); return null; }
-  }
-
   async function colorFromProductImage(url){
     const img = new Image();
     img.crossOrigin = 'anonymous';           // لازم للينكات برا echarpe.store
@@ -1290,12 +1251,10 @@
     const dom = T.dominantColor(px);
     if(!dom.hex || dom.confidence < 0.08) return;    // كلها خلفية = البيج المحايد
     S.color = { id:'from-img', name:'لون المنتج', hex:dom.hex };
-    // 🧵 v26: منتج لونه غالب جدًا = غالبًا ساده — تلقائي بالكامل
+    // 🧵 v26: منتج لونه غالب جدًا = غالبًا ساده — تلقائي بالكامل،
+    //    مفيش زراير قدام العميلة (الستايل من صورة المنتج نفسها)
     S.plain = dom.confidence >= 0.4;
-    // 🧵 v37: هوية القماش نفسها — مش اللون بس
-    S.productSurface = productSurfaceFromImage(img);
-    S.productSurfaceKey = S.productSurface ? ('product|' + dom.hex + '|' + (url.length||0)) : null;
-    S.assetCache = {};                               // اللون/الملمس اتغير = الرسمة تتبني تاني
+    S.assetCache = {};                               // اللون اتغير = الرسمة تتبني تاني
     if(S.mode === 'photo' && S.stillImg) draw(S.stillResult, S.stillImg);
   }
 

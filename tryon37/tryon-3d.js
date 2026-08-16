@@ -27,7 +27,9 @@
     sp: null, sq: null, tmp: null,
     // AR-2
     uni: null, hood: null, skirt: null, projector: null,
-    projKey: null, projTex: null, fitted: null
+    projKey: null, projTex: null, fitted: null,
+    // v38: موديل OBJ الحقيقي المرفوع من المالك
+    objRoot: null, objWrap: null, objMeshes: [], objReady: false, objFailed: false
   };
 
   // 🎛️ لو اللفة محتاجة تظبيطة على وش حقيقي — أرقام من غير deploy
@@ -38,7 +40,17 @@
     frontFull: null, frontNone: null, edge: null,   // null = قيمة الكور
     flipU: null,        // اقلبها لو الصورة طالعة معكوسة على الجسم
     templeDirY: null,   // ارتفاع نقطة الصدغ — أهم رقم لو الفتحة مش مظبوطة
-    autoFit: 1          // فصّل طول الانسدال على مقاس الصورة
+    autoFit: 1,         // فصّل طول الانسدال على مقاس الصورة
+
+    // 🧕 v38 — موديل الـOBJ الحقيقي. 1 = استخدمه، 0 = ارجع للهندسة الإجرائية القديمة.
+    obj: 1,
+    objScale: 1.0,
+    objX: 0.0,
+    objY: -2.0,
+    objZ: -0.5,
+    objRx: 0.0,
+    objRy: Math.PI,
+    objRz: 0.0
   };
 
   // خد أرقام المعايرة الحية لو المالك غيّرها، وإلا سيب الكور يقرر
@@ -111,6 +123,11 @@
       R.rig.add(R.skirt);
       loadFabricTexture(THREE);   // 🧵 ملمس القماش الحقيقي من صورة القالب
 
+      // 🧕 v38: حمّل الموديل الحقيقي في الخلفية. لو فشل، الهندسة القديمة
+      // تفضل شغالة تلقائيًا. الموديل بياخد نفس material/shader ونفس
+      // مصفوفة MediaPipe، فصورة المنتج والإضاءة والـocclusion يفضلوا موحدين.
+      loadObjHijab(THREE);
+
       R.sp = new THREE.Vector3();
       R.sq = new THREE.Quaternion();
       R.tmp = {
@@ -127,6 +144,90 @@
     }
     return R.ready;
   }
+
+
+  /* ============================================================
+     🧕 v38 — الموديل الحقيقي OBJ
+     ------------------------------------------------------------
+     - بيستخدم نفس rig ومصفوفة MediaPipe الموجودة أصلًا.
+     - كل Mesh بياخد نفس fabricMat وبالتالي نفس إضاءة/تلوين/Projection.
+     - بنعمل normalize آلي لحجم تقريبي بالسم ثم بنسيب fine tuning من
+       T3D_TUNE من غير deploy.
+     - ?obj=0 يرجّع فورًا للهندسة القديمة للتشخيص.
+     ============================================================ */
+  async function loadObjHijab(THREE){
+    if(R.objReady || R.objFailed) return;
+    if(/[?&]obj=0(?:&|$)/.test(location.search)){
+      window.T3D_TUNE.obj = 0;
+      return;
+    }
+    try{
+      const mod = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/OBJLoader.js');
+      const loader = new mod.OBJLoader();
+      const obj = await new Promise((resolve, reject) =>
+        loader.load('assets/hijab-out.obj', resolve, undefined, reject));
+
+      const wrap = new THREE.Group();
+      R.objRoot = obj;
+      R.objWrap = wrap;
+      R.objMeshes = [];
+
+      // أولًا: material واحد للمشروع كله + attributes بتاعة الإسقاط.
+      obj.traverse((ch) => {
+        if(!ch.isMesh) return;
+        let g = ch.geometry;
+        // OBJLoader أحيانًا يشارك geometry؛ clone عشان attributes تبقى آمنة.
+        g = g.clone();
+        if(!g.getAttribute('normal')) g.computeVertexNormals();
+        applyProjTo(g);
+        ch.geometry = g;
+        ch.material = R.fabricMat;
+        ch.frustumCulled = false;
+        R.objMeshes.push(ch);
+      });
+
+      // Normalize حول مركز الـbbox. الارتفاع المستهدف ~44 سم كلفة كاملة.
+      const box = new THREE.Box3().setFromObject(obj);
+      const size = new THREE.Vector3(), center = new THREE.Vector3();
+      box.getSize(size); box.getCenter(center);
+      obj.position.sub(center);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const targetCm = 44;
+      obj.scale.setScalar(targetCm / maxDim);
+
+      wrap.add(obj);
+      R.rig.add(wrap);
+      R.objReady = true;
+      applyObjTune();
+      syncGeometryMode();
+      // لو صورة منتج اتحملت قبل ما الـOBJ يخلص تحميل، طبّق projection الآن.
+      if(R.projector) reproject();
+      console.log('v38 OBJ hijab جاهز', { meshes: R.objMeshes.length, size });
+    }catch(e){
+      R.objFailed = true;
+      console.warn('OBJ hijab فشل — استمرار بالهندسة القديمة:', e);
+      syncGeometryMode();
+    }
+  }
+
+  function applyObjTune(){
+    if(!R.objWrap) return;
+    const t = window.T3D_TUNE;
+    R.objWrap.position.set(t.objX || 0, t.objY || 0, t.objZ || 0);
+    R.objWrap.rotation.set(t.objRx || 0, t.objRy || 0, t.objRz || 0);
+    const s = (t.objScale == null ? 1 : t.objScale);
+    R.objWrap.scale.setScalar(s);
+  }
+
+  function syncGeometryMode(){
+    const useObj = !!(window.T3D_TUNE.obj && R.objReady && !R.objFailed);
+    if(R.objWrap) R.objWrap.visible = useObj;
+    // procedural = fallback، أو تقدر تقفله/تشغله حيًا من T3D_TUNE.obj
+    if(R.hood) R.hood.visible = !useObj;
+    if(R.skirt) R.skirt.visible = !useObj;
+    return useObj;
+  }
+
 
   /* ============================================================
      🖼️ AR-2 — الإسقاط الأمامي
@@ -179,6 +280,8 @@
     try{
       if(R.hood) applyProjTo(R.hood.geometry);
       if(R.skirt) applyProjTo(R.skirt.geometry);
+      if(R.objMeshes && R.objMeshes.length)
+        R.objMeshes.forEach((m) => { if(m && m.geometry) applyProjTo(m.geometry); });
       R.uni.uHasProj.value = (R.projector && R.projTex && window.T3D_TUNE.proj) ? 1 : 0;
       return true;
     }catch(e){ console.warn('reproject', e); return false; }
@@ -225,7 +328,7 @@
       const THREE = R.THREE;
       R.projector = C.buildProjector(anchors, w, h, tuneOpts());
       if(!R.projector) return false;
-      fitSkirt(src, w, h);
+      if(!syncGeometryMode()) fitSkirt(src, w, h);
       const tex = (typeof HTMLCanvasElement !== 'undefined' && src instanceof HTMLCanvasElement)
         ? new THREE.CanvasTexture(src) : new THREE.Texture(src);
       tex.needsUpdate = true;
@@ -276,21 +379,6 @@
     };
     img.onerror = () => {};
     img.src = 'assets/template-01-head.png';
-  }
-
-  // 🧵 v37: نفس رقعة القماش المستخرجة من صورة المنتج تتكرر على
-  // أجزاء الـ3D اللي الإسقاط الأمامي مش واصل لها (الجنب/الخلف).
-  function setFabricTexture(src, key){
-    if(!R.ready || !src || key===R.fabricKey) return false;
-    try{
-      const THREE=R.THREE, tex=new THREE.CanvasTexture(src);
-      tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(5,7);
-      if(THREE.SRGBColorSpace) tex.colorSpace=THREE.SRGBColorSpace;
-      if(R.fabricTex) R.fabricTex.dispose();
-      R.fabricTex=tex; R.fabricKey=key;
-      R.fabricMat.map=tex; R.fabricMat.needsUpdate=true;
-      return true;
-    }catch(e){ console.warn('product fabric tex',e); return false; }
   }
 
   /* ---------- بناء القشرة (بفتحة الوش) ---------- */
@@ -362,9 +450,6 @@
 
     // 🖼️ صورة القالب (الملوّنة) وصلت أو اتغيّرت → نعيد بناء الإسقاط.
     //    المفتاح بيمنع إعادة البناء كل فريم (بناء = قراءة بكسلات).
-    if(opts.fabric && opts.fabricKey && opts.fabricKey !== R.fabricKey)
-      setFabricTexture(opts.fabric, opts.fabricKey);
-
     if(opts.asset && opts.anchors && opts.assetKey !== R.projKey){
       if(setProjection(opts.asset, opts.anchors,
                        opts.assetW || opts.asset.naturalWidth || opts.asset.width,
@@ -377,6 +462,8 @@
       return true;
     }
     R.group.visible = true;
+    applyObjTune();
+    syncGeometryMode();
 
     const t = R.tmp;
     t.m.fromArray(matData);
@@ -425,9 +512,12 @@
     R.renderer.render(R.scene, R.camera);
   }
 
-  window.TRYON3D = { init, update, resize, clear, reproject, setFabricTexture,
+  window.TRYON3D = { init, update, resize, clear, reproject,
     isReady: () => R.ready,
     diag: () => ({ ready: R.ready, failed: R.failed, zFlip: R.zFlip,
-      proj: !!(R.projector && R.projTex), projKey: R.projKey, fabricKey: R.fabricKey,
-      fitted: R.fitted, tune: window.T3D_TUNE }) };
+      proj: !!(R.projector && R.projTex), projKey: R.projKey,
+      fitted: R.fitted,
+      obj: { ready:R.objReady, failed:R.objFailed, meshes:R.objMeshes.length,
+             active:!!(window.T3D_TUNE.obj && R.objReady && !R.objFailed) },
+      tune: window.T3D_TUNE }) };
 })();
