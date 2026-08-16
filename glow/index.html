@@ -3030,7 +3030,7 @@ function chatRenderMsgs(arr){
     }
     if(m.text) body += esc(m.text);
     if(m.tryon && chatImgs[m.id])
-      body += '<br><button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">🧕 جرّبيها بنفسك</button>';
+      body += '<br><button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">🧕 جرّبيها ✨</button>';
     var t = m.atMs ? new Date(Number(m.atMs)).toLocaleTimeString(i18nLocale(),
               { hour: '2-digit', minute: '2-digit' }) : '';
     if(m.from === 'auto')
@@ -3046,8 +3046,11 @@ function chatRenderMsgs(arr){
 function chatTryOn(id){
   var img = chatImgs[id];
   if(!img) return;
-  try{ sessionStorage.setItem('echarpe_tryon_img', img); }catch(e){}
-  window.open('../tryon/?imgkey=1', '_blank');   // القالب echarpe — الزرار بيظهر بس لو الموظفة فعّلته
+  try{
+    sessionStorage.setItem('echarpe_tryon_img', img);
+    sessionStorage.setItem('echarpe_tryon_phone', (currentCustomer && currentCustomer.phone) || '');
+  }catch(e){}
+  window.open('../tryon/photo.html?brand=glow', '_blank');   // Photo AI؛ الوضع الحي متاح جواها كـBeta
 }
 
 // 🏢 الفرع الافتراضي — آخر فرع اشترت منه (قرار المالك)، مرة واحدة بس
