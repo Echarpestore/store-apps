@@ -147,6 +147,36 @@
   }
   .qc-close.show{display:flex; align-items:center; justify-content:center;}
 
+  /* 🛍️ زرار السلة العائم — فوق يمين، يقابل الشات فوق يسار. تدرّج
+     دهبي مختلف عمدًا عن الشات (البراند التاني بتاعنا) عشان تبقى
+     هوية بصرية مستقلة، مش نفس الزرار بلون تاني. */
+  .cart-fab{
+    position:fixed; top:14px; right:14px; z-index:500; width:46px; height:46px;
+    border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--gold), var(--gold-deep));
+    box-shadow:0 8px 20px -6px rgba(199,154,56,.55);
+    animation:cfFloat 3.4s ease-in-out infinite .3s;
+  }
+  .cart-fab svg{width:20px; height:20px; fill:#fff;}
+  .cart-fab-dot{
+    position:absolute; top:-2px; right:-2px; min-width:17px; height:17px; padding:0 4px; border-radius:99px;
+    background:#fff; color:var(--gold-deep); font-size:10px; font-weight:900;
+    display:none; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(0,0,0,.18);
+  }
+  .cart-fab-dot.show{display:flex;}
+  @media (prefers-reduced-motion:reduce){.cart-fab{animation:none;}}
+
+  /* 🧺 هيدر سلة مميز — منفصل بصريًا عن شاشة تصفّح "اطلبي" تمامًا */
+  .cart-hero{
+    display:flex; align-items:center; gap:14px; margin:20px 16px 16px;
+    background:linear-gradient(135deg, #1B1420, #3A2233); border-radius:20px; padding:18px 20px;
+    box-shadow:0 14px 30px -12px rgba(58,34,51,.5);
+  }
+  .cart-hero .ch-ic{font-size:30px;}
+  .cart-hero b{display:block; color:#fff; font-size:17px; font-weight:900;}
+  .cart-hero span{display:block; color:var(--pink); font-size:12.5px; font-weight:700; margin-top:2px;}
+  .cart-empty{margin:0 16px;}
+
   /* 🖼️ تكبير صورة الشات بضغطة */
   .img-zoom-wrap{
     position:fixed; inset:0; z-index:9999; background:rgba(20,10,15,.94);
@@ -652,6 +682,10 @@
       <span class="cf-dot" id="chatFabDot">0</span>
     </button>
     <button class="qc-close" id="qcCloseBtn" onclick="closeQuickCheckout()" aria-label="قفل">✕</button>
+    <button class="cart-fab" id="cartFab" onclick="openQuickCheckout()" aria-label="سلتك">
+      <svg viewBox="0 0 24 24"><path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 16H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v12z"/></svg>
+      <span class="cart-fab-dot" id="cartFabDot">0</span>
+    </button>
     <div class="topbar">
       <div class="badge"><img id="topLogo" alt=""></div>
       <div class="topbar-mid">
@@ -2281,20 +2315,135 @@ function renderShop(){
   //    متوصّلة بحاجة (badge-shop ميت). دلوقتي بتعكس عدد القطع فعليًا،
   //    وده بالظبط اللي بيوضّح للعميلة "السلة فين" بعد الإضافة من الشات.
   setTabBadge('shop', Object.keys(_shopCart).reduce(function(s, bc){ return s + shopQty(bc); }, 0));
-  if(shopCatalog === null){ box.innerHTML = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>' + loaderHTML(); return; }
+  var _cfd = $('cartFabDot');
+  if(_cfd){
+    var _cn = Object.keys(_shopCart).reduce(function(s, bc){ return s + shopQty(bc); }, 0);
+    _cfd.textContent = _cn > 9 ? '9+' : String(_cn);
+    _cfd.classList.toggle('show', _cn > 0);
+  }
+  /* 🛍️ وضع "السلة فقط" — لمّا الشاشة دي بتفتح كـoverlay (زرار السلة
+     العائم، أو "أضيفيها للسلة" من الشات/التجربة) بدل تبويب عادي.
+     مصدر الحقيقة الوحيد: الكلاس نفسه على العنصر — صفر متغيّر منفصل
+     يمكن يخرج عن التزامن معاه. */
+  var cartOnly = box.classList.contains('shop-overlay');
 
-  var items = shopItems();
+  if(shopCatalog === null && !cartOnly){
+    box.innerHTML = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>' + loaderHTML();
+    return;
+  }
+
   var lines = shopCartLines();
   var total = orderTotal(lines);
   var branches = shopBranches();
   if(!_shopBranch && branches.length === 1) _shopBranch = branches[0];
 
+  /* 🔴 السلة بتتبني **قبل** أي احتمال رجوع مبكّر — عشان صنف جاي من
+     الشات (مش في الكتالوج المنسّق) ميختفيش لو الكتالوج المنسّق فاضي.
+     ده كان الباج: كتالوج فاضي = "لسه مفيش منتجات معروضة" وترجع
+     فورًا، حتى لو السلة فيها أصناف حقيقية. */
+  var cart = '';
+  if(lines.length){
+    var subtotal = total;
+    var canPickup = shopCfg.pickupEnabled !== false;
+    var canDeliver = shopCfg.deliveryEnabled === true;
+    /* ⚠️ لو الشحن متقفل، الاختيار **مبيتعرضش أصلًا** بدل ما يتعرض
+       ويترفض. عرض اختيار مقفول بيخلي العميلة تحاول وتفشل وتزهق. */
+    if(!canDeliver && _shopFulfill === 'delivery') _shopFulfill = 'pickup';
+    if(!canPickup && canDeliver) _shopFulfill = 'delivery';    var isDel = _shopFulfill === 'delivery';
+    var ship = isDel ? orderShippingFee(shopCfg, subtotal, _shopGov) : 0;
+    var grand = orderGrandTotal(lines, ship);
+
+    var govList = (shopCfg.governorates || []).map(function(g){ return g.name; });
+    if(!govList.length) govList = EG_GOVS;
+
+    cart = '<div class="shop-cart">'
+      + '<div class="sc-h">🧺 سلتك</div>'
+      + lines.map(function(l){
+          return '<div class="ish-item"><span>' + esc(l.name) + ' <span class="q">× ' + l.qty + '</span></span>'
+            + '<span>' + fmt(l.price * l.qty) + ' ج.م</span></div>';
+        }).join('')
+
+      /* 🚚 طريقة التسليم — أول قرار، لأنه بيغيّر كل اللي بعده */
+      + ((canPickup && canDeliver) ? (
+          '<div class="fld-lbl">🚚 عايزاها إزاي؟</div>'
+          + '<div class="ful-pick">'
+            + '<button class="ful' + (!isDel ? ' on' : '') + '" onclick="shopSetFulfill(\'pickup\')">'
+              + '<span class="fi">🏬</span><b>استلام من الفرع</b><span class="fs">تعالي خديها بنفسك</span></button>'
+            + '<button class="ful' + (isDel ? ' on' : '') + '" onclick="shopSetFulfill(\'delivery\')">'
+              + '<span class="fi">🚚</span><b>شحن للبيت</b><span class="fs">توصلك لحد باب البيت</span></button>'
+          + '</div>') : '')
+
+      + (!isDel
+        ? ('<div class="fld-lbl">🏬 هستلم من فرع</div>'
+           + '<div class="chips">' + branches.map(function(b){
+               return '<button class="chip' + (b === _shopBranch ? ' on' : '') + '" onclick="shopSetBranch(\'' + esc(b) + '\')">' + esc(b) + '</button>';
+             }).join('') + '</div>'
+           /* ⚠️ «فيزا» = هتدفعي في الفرع. لو اتكتبت «ادفعي بالفيزا»
+              لوحدها، العميلة تفتكر إنها دفعت أونلاين. */
+           + '<div class="fld-lbl">💳 هدفع في الفرع بـ</div>'
+           + '<div class="chips">'
+             + '<button class="chip' + (_shopPay === 'cash' ? ' on' : '') + '" onclick="shopSetPay(\'cash\')">💵 كاش</button>'
+             + '<button class="chip' + (_shopPay === 'visa' ? ' on' : '') + '" onclick="shopSetPay(\'visa\')">💳 فيزا</button>'
+           + '</div>')
+        : ('<div class="fld-lbl">📍 يتشحن منين</div>'
+           + '<div class="chips">' + branches.map(function(b){
+               return '<button class="chip' + (b === _shopBranch ? ' on' : '') + '" onclick="shopSetBranch(\'' + esc(b) + '\')">' + esc(b) + '</button>';
+             }).join('') + '</div>'
+           + '<div class="fld-lbl">👤 بياناتك للتوصيل</div>'
+           + '<input class="txt2" id="shName" placeholder="الاسم" value="' + esc(_shopInfo.name || '') + '" oninput="shopInfoSet(\'name\', this.value)">'
+           + '<input class="txt2 ltr" id="shPhone" type="tel" inputmode="numeric" placeholder="رقم الموبايل" value="' + esc(_shopInfo.phone || '') + '" oninput="shopInfoSet(\'phone\', this.value)">'
+           + '<select class="txt2" id="shGov" onchange="shopSetGov(this.value)">'
+             + '<option value="">اختاري المحافظة</option>'
+             + govList.map(function(g){
+                 return '<option value="' + esc(g) + '"' + (g === _shopGov ? ' selected' : '') + '>' + esc(g) + '</option>';
+               }).join('')
+           + '</select>'
+           + '<textarea class="txt2" id="shAddr" placeholder="العنوان بالتفصيل — الشارع والعمارة والدور والشقة" oninput="shopInfoSet(\'address\', this.value)">' + esc(_shopInfo.address || '') + '</textarea>'
+           + '<input class="txt2" id="shNote" placeholder="علامة مميزة أو ملاحظة (اختياري)" value="' + esc(_shopInfo.notes || '') + '" oninput="shopInfoSet(\'notes\', this.value)">'
+           + '<div class="pay-note">💵 الدفع <b>كاش عند الاستلام</b> — ماكينة الفيزا في الفرع مش مع المندوب.</div>')
+      )
+
+      + '<div class="sc-sum">'
+        + '<div class="ish-row"><span>البضاعة</span><span>' + fmt(subtotal) + ' ج.م</span></div>'
+        + (isDel
+          ? '<div class="ish-row"><span>الشحن' + (_shopGov ? ' — ' + esc(_shopGov) : '') + '</span><span>'
+            + (ship > 0 ? (fmt(ship) + ' ج.م') : '<b style="color:#16a34a;">مجاني 🎉</b>') + '</span></div>'
+          : '')
+        + '<div class="ish-row big"><span>الإجمالي</span><span>' + fmt(grand) + ' ج.م</span></div>'
+      + '</div>'
+
+      + '<button class="btn-primary" style="margin-top:14px;" id="shopSendBtn" onclick="shopSubmit()">'
+        + 'اطلبي دلوقتي</button>'
+      + '<div class="redeem-hint">'
+        + (isDel ? 'هنكلّمك على رقمك نأكّد الأوردر قبل ما يتشحن.'
+                 : 'بنحجزلك الحاجات ٢٤ ساعة — بعدها بترجع للبيع.')
+      + '</div>'
+      + '</div>';
+  }
+
+  /* ============================================================
+     🛍️ وضع "السلة فقط" — شكل مميز وفريد، منفصل تمامًا عن شاشة
+     التصفّح. مفيش "مفيش منتجات معروضة" هنا خالص — ده رسالة عن
+     الكتالوج المنسّق، مالهاش لازمة في سلة فيها أو من غير أصناف
+     حقيقية من الشات.
+     ============================================================ */
+  if(cartOnly){
+    var cartHero = '<div class="cart-hero"><span class="ch-ic">🛍️</span>'
+      + '<div><b>سلتك</b><span>' + (lines.length ? (lines.reduce(function(s,l){return s+l.qty;},0) + ' قطعة') : 'لسه فاضية') + '</span></div></div>';
+    box.innerHTML = cartHero + (lines.length ? cart
+      : '<div class="empty cart-empty"><span class="big">🌸</span>سلتك لسه فاضية — جرّبي طرحة من الشات وهتلاقيها هنا فورًا.</div>');
+    return;
+  }
+
+  var items = shopItems();
   var head = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>'
     + '<div style="font-size:12.5px; line-height:1.9; opacity:.85; margin-bottom:12px;">'
     + 'اختاري اللي عايزاه، وحدّدي الفرع اللي هتستلمي منه. بنحجزلك ٢٤ ساعة.</div>';
 
   if(!items.length){
-    box.innerHTML = head + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة.</div>';
+    // 🔴 السلة بتتعرض هنا كمان — كتالوج التصفّح فاضي مايعنيش إن
+    //    السلة فاضية (ممكن يكون فيها أصناف من الشات).
+    box.innerHTML = head + cart + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة للتصفّح.</div>';
     return;
   }
 
