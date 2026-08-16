@@ -20,7 +20,6 @@
 (function(){
 
   const C = window.TRYON3D_CORE;
-  let THREE_NS = null;
   const R = {
     THREE: null, renderer: null, scene: null, camera: null,
     group: null, fabricMat: null, hemi: null, dirLight: null,
@@ -644,7 +643,7 @@
     // Keep the hood/neck fully attached to face pose, but damp chest yaw/roll.
     if(R.bodyRig){
       const q = R.rig.quaternion;
-      const e = R.tmpEuler || (R.tmpEuler = new THREE_NS.Euler());
+      const e = R.tmpEuler || (R.tmpEuler = new R.THREE.Euler());
       e.setFromQuaternion(q, 'YXZ');
       R.bodyRig.rotation.set(-e.x*0.25, -e.y*0.35, -e.z*0.2);
       R.bodyRig.position.y = -0.8;
