@@ -115,6 +115,24 @@
   .topbar .hi{font-size:13px; color:var(--muted); font-weight:600; line-height:1.3;}
   .topbar .who{font-size:17px; font-weight:800; line-height:1.3;}
   .topbar-mid{flex:1; min-width:0;}
+
+  /* 💬 زرار الشات العائم — صغير وشيك فوق يسار الشاشة، ظاهر مهما كان
+     التبويب المفتوح (بره تدفّق الصفحة، مش جوه .tabview). */
+  .chat-fab{
+    position:fixed; top:14px; left:14px; z-index:500; width:46px; height:46px;
+    border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    background:var(--card-grad); box-shadow:0 8px 20px -6px rgba(236,72,152,.55);
+    animation:cfFloat 3.4s ease-in-out infinite;
+  }
+  .chat-fab svg{width:20px; height:20px; fill:#fff;}
+  .chat-fab .cf-dot{
+    position:absolute; top:-2px; left:-2px; min-width:17px; height:17px; padding:0 4px; border-radius:99px;
+    background:#fff; color:var(--pink-deep); font-size:10px; font-weight:900;
+    display:none; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(0,0,0,.18);
+  }
+  .chat-fab .cf-dot.show{display:flex;}
+  @keyframes cfFloat{0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);}}
+  @media (prefers-reduced-motion:reduce){.chat-fab{animation:none;}}
   .wa-btn{flex-shrink:0; width:44px; height:44px; border-radius:13px; border:none; background:#25D366; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px -6px rgba(37,211,102,.7);}
   .wa-btn:active{transform:translateY(1px);}
   .btn-outline.wa{border-color:#25D366; color:#128C4B; background:#eafaf0;}
@@ -415,6 +433,13 @@
   .msg .m-try{display:inline-flex; align-items:center; gap:6px; margin-top:8px; background:var(--ink);
     color:#fff; border:none; border-radius:99px; padding:9px 16px; font-weight:700; font-size:13.5px;
     font-family:inherit; cursor:pointer;}
+  .msg .m-prod{margin-top:6px; font-size:12.5px;}
+  .msg .m-prod b{font-weight:800;}
+  .msg .m-actions{display:flex; flex-wrap:wrap; gap:7px; margin-top:8px;}
+  .msg .m-actions .m-try, .msg .m-actions .m-buy{margin-top:0;}
+  .msg .m-buy{display:inline-flex; align-items:center; gap:6px; background:var(--pink);
+    color:#fff; border:none; border-radius:99px; padding:9px 16px; font-weight:700; font-size:13.5px;
+    font-family:inherit; cursor:pointer;}
   .outfit-cta{display:flex; align-items:center; justify-content:center; gap:8px; margin:10px 12px 0;
     background:var(--card-grad); color:#fff; border:none; border-radius:16px; padding:14px; font-weight:900;
     font-size:14px; cursor:pointer; box-shadow:0 9px 20px -6px rgba(201,50,126,.4); font-family:inherit;}
@@ -597,6 +622,10 @@
 
   <!-- ===================== شاشة التطبيق ===================== -->
   <section id="screen-app" class="screen">
+    <button class="chat-fab" id="chatFab" onclick="openChat()" aria-label="الدردشة">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 5.94 2 10.8c0 2.76 1.44 5.22 3.7 6.82-.12 1.06-.5 2.4-1.5 3.68a.5.5 0 0 0 .5.8c2.02-.4 3.6-1.28 4.6-1.98.87.22 1.78.34 2.7.34 5.52 0 10-3.94 10-8.8S17.52 2 12 2z"/></svg>
+      <span class="cf-dot" id="chatFabDot">0</span>
+    </button>
     <div class="topbar">
       <div class="badge"><img id="topLogo" alt=""></div>
       <div class="topbar-mid">
@@ -2186,6 +2215,10 @@ window.renderShopDetail = renderShopDetail;
 
 function renderShop(){
   var box = $('tab-shop'); if(!box) return;
+  // 🛍️ شارة السلة على تبويب "اطلبي" — كانت موجودة في الـHTML بس
+  //    متوصّلة بحاجة (badge-shop ميت). دلوقتي بتعكس عدد القطع فعليًا،
+  //    وده بالظبط اللي بيوضّح للعميلة "السلة فين" بعد الإضافة من الشات.
+  setTabBadge('shop', Object.keys(_shopCart).reduce(function(s, bc){ return s + shopQty(bc); }, 0));
   if(shopCatalog === null){ box.innerHTML = '<div class="sec-h">اطلبي <span class="em">أونلاين</span></div>' + loaderHTML(); return; }
 
   var items = shopItems();
@@ -3021,6 +3054,8 @@ function chatUpdateBadge(){
   setTabBadge('contact', n);
   var b = $('chatEntryBadge');
   if(b){ b.style.display = n ? 'inline-flex' : 'none'; b.textContent = n; }
+  var fd = $('chatFabDot');
+  if(fd){ fd.textContent = n > 9 ? '9+' : String(n); fd.classList.toggle('show', n > 0); }
 }
 
 function chatRenderStatus(){
@@ -3108,8 +3143,20 @@ function chatRenderMsgs(arr){
       body += '<img src="' + m.img.replace(/"/g, '') + '" alt="">';
     }
     if(m.text) body += esc(m.text);
-    if(m.tryon && chatImgs[m.id])
-      body += '<br><button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">🧕 جرّبيها ✨</button>';
+    if(m.tryon && chatImgs[m.id]){
+      // 💰 الاسم/السعر بيظهروا لو الموظفة حطّت باركود صح وقت الإرسال —
+      //    مفيش حاجة اتحسبت هنا، كله جاي جاهز من الرسالة نفسها.
+      if(m.productName){
+        body += '<div class="m-prod"><b>' + esc(m.productName) + '</b>'
+          + (m.productPrice ? ' — ' + Number(m.productPrice) + ' ج.م' : '') + '</div>';
+      }
+      body += '<div class="m-actions">'
+        + '<button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">🧕 جرّبيها ✨</button>';
+      if(m.barcode){
+        body += '<button class="m-buy" onclick="chatQuickBuy(\'' + esc(m.id) + '\')">🛍️ أضيفيها للسلة</button>';
+      }
+      body += '</div>';
+    }
     var t = m.atMs ? new Date(Number(m.atMs)).toLocaleTimeString(i18nLocale(),
               { hour: '2-digit', minute: '2-digit' }) : '';
     if(m.from === 'auto')
@@ -3142,6 +3189,14 @@ function chatOutfitBuy(msgId, idx){
   tryonAddToCart(it.barcode);
 }
 window.chatOutfitBuy = chatOutfitBuy;
+
+/* 🛍️ نفس فكرة chatOutfitBuy بس لرسالة الصورة الواحدة العادية —
+   إضافة مباشرة من غير ما تفتح التجربة خالص. */
+function chatQuickBuy(msgId){
+  var bc = chatBarcodes[msgId]; if(!bc) return;
+  tryonAddToCart(bc);
+}
+window.chatQuickBuy = chatQuickBuy;
 
 function chatTryOn(id){
   var img = chatImgs[id];

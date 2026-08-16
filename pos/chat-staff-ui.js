@@ -608,10 +608,17 @@
     if(CST.imgData){
       msg.img = CST.imgData;
       msg.tryon = !!document.getElementById('ccTryFlag').checked;
-      // 🛍️ باركود المنتج (اختياري) — بيخلّي زر "أضيفيها للسلة" في التجربة يشتغل
+      // 🛍️ باركود المنتج (اختياري) — بيخلّي زر "أضيفيها للسلة" في التجربة يشتغل.
+      //    الاسم/السعر بيتحطوا هنا كمان (من الكاش المحلي اللي عاينّاه) —
+      //    عشان تظهر عند العميلة جنب "جرّبيها" من غير ما تفتح التجربة الأول.
       if(msg.tryon){
         var _bc = String((document.getElementById('ccTryBc') || {}).value || '').trim();
-        if(_bc) msg.barcode = _bc;
+        if(_bc){
+          msg.barcode = _bc;
+          var _p = (typeof window.findByBarcode === 'function')
+            ? window.findByBarcode(_bc, { includeOut: true }) : null;
+          if(_p){ msg.productName = _p.name || 'صنف'; msg.productPrice = Number(_p.price) || 0; }
+        }
       }
     }
     // ⚠️ `at` (طابع السيرفر) و`unreadCust` (increment) بيتحطوا **جوه**
