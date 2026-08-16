@@ -394,6 +394,18 @@
   .msg .m-try{display:inline-flex; align-items:center; gap:6px; margin-top:8px; background:var(--ink);
     color:#fff; border:none; border-radius:99px; padding:9px 16px; font-weight:700; font-size:13.5px;
     font-family:inherit; cursor:pointer;}
+  .outfit-cta{display:flex; align-items:center; justify-content:center; gap:8px; margin:10px 12px 0;
+    background:var(--card-grad); color:#fff; border:none; border-radius:16px; padding:14px; font-weight:900;
+    font-size:14px; cursor:pointer; box-shadow:0 9px 20px -6px rgba(201,50,126,.4); font-family:inherit;}
+  .outfit-wrap{display:flex; gap:8px; overflow-x:auto; margin-top:8px; padding-bottom:2px; max-width:78vw;}
+  .outfit-card{flex:0 0 128px; background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; text-align:center;}
+  .outfit-card img{width:100%; height:104px; object-fit:cover; display:block; background:var(--pink-soft); margin:0;}
+  .outfit-card .oc-name{font-size:10.5px; font-weight:800; padding:6px 6px 0; line-height:1.3; min-height:2.1em; overflow:hidden; color:var(--ink);}
+  .outfit-card .oc-price{font-size:12px; font-weight:900; color:var(--pink-deep); padding:2px 6px;}
+  .outfit-card .oc-btns{display:flex; flex-direction:column; gap:4px; padding:6px;}
+  .outfit-card button{border:none; border-radius:8px; padding:7px; font-size:10.5px; font-weight:800; cursor:pointer; font-family:inherit;}
+  .outfit-card .oc-try{background:var(--ink); color:#fff;}
+  .outfit-card .oc-buy{background:var(--pink); color:#fff;}
   .ch-note{align-self:center; background:#FBF3DF; color:#7A5A16; font-size:12px; border-radius:99px;
     padding:5px 14px; text-align:center;}
   .ch-inputbar{display:flex; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom));
@@ -597,6 +609,7 @@
         <span id="chStatus">بنرد من ١٠ الصبح لـ١٠ بالليل</span>
       </div>
     </div>
+    <button class="outfit-cta" onclick="chatOutfitCta()">🧥 اختاري طرحة لطقمك ✨</button>
     <div id="chMsgs"></div>
     <div id="chImgPrev" style="display:none; gap:10px; align-items:center; padding:8px 12px; background:#fff; border-top:1px solid var(--line);">
       <img id="chImgTag" alt="" style="height:54px; border-radius:8px;">
@@ -2953,10 +2966,21 @@ var COL_CHAT = 'customer_chat';
 var chatConv = null, chatConvUnsub = null, chatMsgsUnsub = null;
 var chatImgs = {};          // msgId → dataURL (لزرار جربيها)
 var chatBarcodes = {};      // msgId → باركود المنتج (لو الموظفة حطته) — لزرار «أضيفيها للسلة»
+var chatOutfits = {};       // msgId → [{img,barcode,name,price}, ...] لرسايل اقتراح الطقم
 var chatSending = false;
 
 // 🖼️ صورة من العميلة — "عندكم زي دي؟" بصورة أوضح من أي وصف
 var chatImgData = null;
+var _chatOutfitIntent = false;
+/* 🧥 زرار «اختاري طرحة لطقمك» — بيفتح اختيار الصورة على طول، وبمجرد
+   ما تختارها بنملّي رسالة ودّية بدل ما نبعت تلقائي من غير ما تشوف. */
+function chatOutfitCta(){
+  if(!currentCustomer){ showToast('سجّلي دخولك الأول', true); return; }
+  _chatOutfitIntent = true;
+  $('chFile').click();
+}
+window.chatOutfitCta = chatOutfitCta;
+
 function chatPickImg(e){
   var f = e.target.files && e.target.files[0];
   e.target.value = '';
@@ -2976,6 +3000,12 @@ function chatPickImg(e){
     chatImgData = data;
     $('chImgTag').src = data;
     $('chImgPrev').style.display = 'flex';
+    // 🧥 جاية من زرار «اختاري طرحة لطقمك» — نملّي رسالة ودّية توضّح
+    //    للموظفة السياق، والعميلة تقدر تعدّلها أو تمسحها قبل الإرسال.
+    if(_chatOutfitIntent){
+      _chatOutfitIntent = false;
+      if(!$('chInput').value.trim()) $('chInput').value = 'عايزة تقترحولي طرحة تناسب طقمي 🧥✨';
+    }
   };
   img.onerror = function(){ showToast('الصورة مش مقروءة', true); };
   img.src = URL.createObjectURL(f);
@@ -3039,6 +3069,7 @@ function closeChat(){
   if(chatMsgsUnsub){ chatMsgsUnsub(); chatMsgsUnsub = null; }
   chatImgs = {};
   chatBarcodes = {};
+  chatOutfits = {};
   chatUpdateBadge();
 }
 
@@ -3054,6 +3085,7 @@ function chatRenderMsgs(arr){
   var box = $('chMsgs');
   chatImgs = {};
   chatBarcodes = {};
+  chatOutfits = {};
   if(!arr.length){
     box.innerHTML = '<div class="ch-note">ابدأي الكلام — اسألي عن أي حاجة 🌸</div>';
     return;
@@ -3062,6 +3094,24 @@ function chatRenderMsgs(arr){
   arr.forEach(function(m){
     var me = m.from === 'cust';
     var body = '';
+    // 🎨 رسالة اقتراح طقم (لغاية ٣ منتجات مع بعض) — مسار عرض منفصل
+    //    تمامًا عن الصورة الواحدة العادية تحت.
+    if(m.outfit === true && Array.isArray(m.products) && m.products.length){
+      var prods = m.products.filter(function(p){
+        return p && p.img && String(p.img).indexOf('data:image/') === 0;
+      }).slice(0, 3);
+      chatOutfits[m.id] = prods;
+      body += '<div class="outfit-wrap">' + prods.map(function(p, idx){
+        return '<div class="outfit-card">'
+          + '<img src="' + String(p.img).replace(/"/g, '') + '" alt="">'
+          + '<div class="oc-name">' + esc(p.name || 'طرحة') + '</div>'
+          + '<div class="oc-price">' + (Number(p.price) || 0) + ' ج.م</div>'
+          + '<div class="oc-btns">'
+          + '<button class="oc-try" onclick="chatOutfitTry(\'' + esc(m.id) + '\',' + idx + ')">🧕 جربيها عليكي</button>'
+          + '<button class="oc-buy" onclick="chatOutfitBuy(\'' + esc(m.id) + '\',' + idx + ')">🛍️ اطلبيها</button>'
+          + '</div></div>';
+      }).join('') + '</div>';
+    }
     // 🔒 الصور data:image بس — أي حاجة تانية بتتتجاهل (مصدر الرسايل
     //    مش مضمون ١٠٠٪ بحكم قواعد signedIn المعروفة)
     if(m.img && String(m.img).indexOf('data:image/') === 0){
@@ -3083,6 +3133,27 @@ function chatRenderMsgs(arr){
   box.innerHTML = html;
   box.scrollTop = box.scrollHeight;
 }
+
+/* 🧕 نفس chatTryOn بالظبط بس لمنتج واحد جوه رسالة طقم */
+function chatOutfitTry(msgId, idx){
+  var arr = chatOutfits[msgId]; var it = arr && arr[idx]; if(!it) return;
+  try{
+    sessionStorage.setItem('echarpe_tryon_img', it.img);
+    sessionStorage.setItem('echarpe_tryon_phone', (currentCustomer && currentCustomer.phone) || '');
+    if(it.barcode) sessionStorage.setItem('echarpe_tryon_pid', it.barcode);
+    else sessionStorage.removeItem('echarpe_tryon_pid');
+  }catch(e){}
+  window.open('../tryon/photo.html?brand=loyalty', '_blank');
+}
+window.chatOutfitTry = chatOutfitTry;
+
+/* 🛍️ إضافة مباشرة للسلة من غير ما تفتح التجربة خالص — نفس جسر
+   tryonAddToCart (بيتحقق من المخزون الحقيقي ويطلع توست واضح). */
+function chatOutfitBuy(msgId, idx){
+  var arr = chatOutfits[msgId]; var it = arr && arr[idx]; if(!it || !it.barcode) return;
+  tryonAddToCart(it.barcode);
+}
+window.chatOutfitBuy = chatOutfitBuy;
 
 function chatTryOn(id){
   var img = chatImgs[id];

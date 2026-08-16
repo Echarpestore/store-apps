@@ -189,6 +189,19 @@
   .cw-msg img{max-width:100%; border-radius:12px; display:block; margin-top:4px;}
   .cw-try{display:inline-flex; align-items:center; gap:6px; margin-top:9px; background:#fff; color:var(--accent-deep);
     text-decoration:none; font-weight:900; font-size:12.5px; padding:9px 14px; border-radius:99px; cursor:pointer; border:none;}
+  .cw-outfit-cta{align-self:center; display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:6px;
+    background:linear-gradient(135deg, var(--accent), var(--accent-deep)); color:#fff; border:none; border-radius:16px;
+    padding:14px; font-weight:900; font-size:13.5px; cursor:pointer; width:100%; font-family:inherit;
+    box-shadow:0 9px 20px -6px rgba(179,69,113,.4);}
+  .cw-outfit-wrap{display:flex; gap:8px; overflow-x:auto; max-width:100%; padding-bottom:2px;}
+  .cw-outfit-card{flex:0 0 128px; background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden; text-align:center;}
+  .cw-outfit-card img{width:100%; height:104px; object-fit:cover; display:block; background:var(--soft); margin:0;}
+  .cw-outfit-card .oc-name{font-size:10.5px; font-weight:800; padding:6px 6px 0; line-height:1.3; min-height:2.1em; overflow:hidden; color:var(--ink);}
+  .cw-outfit-card .oc-price{font-size:12px; font-weight:900; color:var(--accent-deep); padding:2px 6px;}
+  .cw-outfit-card .oc-btns{display:flex; flex-direction:column; gap:4px; padding:6px;}
+  .cw-outfit-card button{border:none; border-radius:8px; padding:7px; font-size:10.5px; font-weight:800; cursor:pointer; font-family:inherit;}
+  .cw-outfit-card .oc-try{background:var(--ink); color:#fff;}
+  .cw-outfit-card .oc-buy{background:var(--accent); color:#fff;}
   .cw-welcome{align-self:center; text-align:center; color:var(--muted); font-size:12.5px; font-weight:600; max-width:88%; margin:10px 0;}
   .cw-welcome b{display:block; font-size:15px; color:var(--ink); font-weight:900; margin-bottom:4px;}
 
@@ -400,6 +413,7 @@
     <div><div class="cw-t">الدردشة مع echarpe 🌸</div><div class="cw-s" id="cwStatus">بنرد بسرعة</div></div>
     <button id="cwClose" aria-label="قفل">✕</button>
   </div>
+  <button class="cw-outfit-cta" id="cwOutfitCta" style="margin:12px 14px 0;">🧥 اختاري طرحة لطقمك ✨</button>
   <div class="cw-body" id="cwBody">
     <div class="cw-welcome">
       <b>أهلاً بيكي 👋</b>
@@ -837,9 +851,27 @@
       body.innerHTML = '<div class="cw-welcome"><b>أهلاً بيكي 👋</b>اسألينا عن أي حاجة، أو ابعتيلنا صورة طقمك وهنساعدك تختاري طرحتك المناسبة 🧕✨</div>';
       return;
     }
+    cwMsgOutfits = {};
     body.innerHTML = arr.map(function(m){
       var cls = m.from === 'cust' ? 'cust' : (m.from === 'auto' ? 'auto' : 'staff');
       var html = '<div class="cw-msg ' + cls + '">';
+      // 🎨 رسالة اقتراح طقم (لغاية ٣ منتجات) — مسار عرض منفصل عن الصورة الواحدة
+      if(m.outfit === true && Array.isArray(m.products) && m.products.length){
+        var prods = m.products.filter(function(p){
+          return p && p.img && String(p.img).indexOf('data:image/') === 0;
+        }).slice(0, 3);
+        cwMsgOutfits[m.id] = prods;
+        html += '<div class="cw-outfit-wrap">' + prods.map(function(p, idx){
+          return '<div class="cw-outfit-card">'
+            + '<img src="' + esc(p.img) + '" alt="">'
+            + '<div class="oc-name">' + esc(p.name || 'طرحة') + '</div>'
+            + '<div class="oc-price">' + (Number(p.price) || 0) + ' ج.م</div>'
+            + '<div class="oc-btns">'
+            + '<button class="oc-try" onclick="cwOutfitTry(\'' + esc(m.id) + '\',' + idx + ')">🧕 جربيها عليكي</button>'
+            + '<button class="oc-buy" onclick="cwOutfitBuy(\'' + esc(m.id) + '\',' + idx + ')">🛍️ اطلبيها</button>'
+            + '</div></div>';
+        }).join('') + '</div>';
+      }
       if(m.text) html += esc(m.text);
       if(m.img){
         html += '<img src="' + esc(m.img) + '" alt="صورة">';
@@ -855,7 +887,7 @@
       if(m.barcode) cwMsgBarcodes[m.id] = String(m.barcode);
     });
   }
-  var cwMsgImgs = {}, cwMsgBarcodes = {};
+  var cwMsgImgs = {}, cwMsgBarcodes = {}, cwMsgOutfits = {};
   function cwTryOn(id){
     var img = cwMsgImgs[id]; if(!img) return;
     try{
@@ -868,6 +900,35 @@
     window.open('tryon/photo.html?brand=site', '_blank');
   }
   window.cwTryOn = cwTryOn;
+
+  /* 🧕 نفس cwTryOn بالظبط بس لمنتج واحد جوه رسالة طقم */
+  function cwOutfitTry(msgId, idx){
+    var arr = cwMsgOutfits[msgId]; var it = arr && arr[idx]; if(!it) return;
+    try{
+      sessionStorage.setItem('echarpe_tryon_img', it.img);
+      sessionStorage.setItem('echarpe_tryon_phone', cwPhone || '');
+      if(it.barcode) sessionStorage.setItem('echarpe_tryon_pid', it.barcode);
+      else sessionStorage.removeItem('echarpe_tryon_pid');
+    }catch(e){}
+    window.open('tryon/photo.html?brand=site', '_blank');
+  }
+  window.cwOutfitTry = cwOutfitTry;
+
+  /* 🛍️ إضافة مباشرة لسلة الموقع من غير ما تفتح التجربة خالص — نفس
+     جسر tryonAddToCart (بيتحقق من المخزون الحقيقي). */
+  function cwOutfitBuy(msgId, idx){
+    var arr = cwMsgOutfits[msgId]; var it = arr && arr[idx]; if(!it || !it.barcode) return;
+    if(typeof window.tryonAddToCart === 'function') window.tryonAddToCart(it.barcode);
+  }
+  window.cwOutfitBuy = cwOutfitBuy;
+
+  // ---------- زرار «اختاري طرحة لطقمك» ----------
+  var _cwOutfitIntent = false;
+  function cwOutfitCta(){
+    if(!cwPhone){ wsToastSafe('اكتبي اسمك ورقمك الأول في الشات'); return; }
+    _cwOutfitIntent = true;
+    $('cwFile').click();
+  }
 
   // ---------- إرسال صورة ----------
   function cwPickImg(){
@@ -887,6 +948,12 @@
       URL.revokeObjectURL(url);
       $('cwImgPrevImg').src = cwImgData;
       $('cwImgPrev').classList.add('on');
+      // 🧥 جاية من زرار «اختاري طرحة لطقمك» — نملّي رسالة ودّية بدل
+      //    ما نبعت تلقائي من غير ما تشوفها العميلة.
+      if(_cwOutfitIntent){
+        _cwOutfitIntent = false;
+        if(!$('cwText').value.trim()) $('cwText').value = 'عايزة تقترحولي طرحة تناسب طقمي 🧥✨';
+      }
     };
     img.src = url;
   }
@@ -933,6 +1000,7 @@
 
   // ---------- الأحداث ----------
   $('cwLauncher').addEventListener('click', cwOpen);
+  $('cwOutfitCta').addEventListener('click', cwOutfitCta);
   $('cwClose').addEventListener('click', cwClose);
   $('cwGateBtn').addEventListener('click', cwGateSubmit);
   $('cwSend').addEventListener('click', cwSend);

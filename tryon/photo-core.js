@@ -11,6 +11,13 @@
   "use strict";
 
   // مفاتيح sessionStorage المشتركة مع تطبيق العميلة (chatTryOn بيكتبها)
+  // مفتاح صورة الوش المحفوظة — localStorage عمدًا مش sessionStorage:
+  // كل "جرّبيها" بيفتح تاب/نداء window.open جديد، وsessionStorage مش
+  // مضمون يتوارث بين نداءات window.open منفصلة. localStorage بيتشارك
+  // بين كل تابات نفس الأصل بثبات. برضه ١٠٠٪ على جهاز العميلة —
+  // مبيتبعتش لحد غير سيرفرنا وقت التوليد (زي ما كان دايمًا).
+  var FACE_KEY = "echarpe_tryon_face";
+
   var SS_KEYS = {
     img:   "echarpe_tryon_img",    // صورة المنتج (data:image) — الموظفة بعتتها في الشات
     phone: "echarpe_tryon_phone",  // تليفون العميلة (لسقف التكلفة)
@@ -97,6 +104,21 @@
     return brand === "site" ? "../" : ("../" + appName(brand) + "/");
   }
 
+  /* قراءة صورة الوش المحفوظة من زيارة سابقة — data:image سليمة بس */
+  function readFace(store) {
+    try {
+      var v = store && store.getItem ? store.getItem(FACE_KEY) : null;
+      return isImageDataUrl(v) ? v : "";
+    } catch (e) { return ""; }
+  }
+  function saveFace(store, dataUrl) {
+    try { if (store && store.setItem && isImageDataUrl(dataUrl)) store.setItem(FACE_KEY, dataUrl); }
+    catch (e) { /* التخزين ممنوع (خاص/سعة) — مش قاتل، هتتسأل تاني وخلاص */ }
+  }
+  function clearFace(store) {
+    try { if (store && store.removeItem) store.removeItem(FACE_KEY); } catch (e) { }
+  }
+
   var API = {
     SS_KEYS: SS_KEYS,
     BRANDS: BRANDS,
@@ -111,7 +133,11 @@
     computeResize: computeResize,
     dataUrlBytes: dataUrlBytes,
     resultActions: resultActions,
-    backPath: backPath
+    backPath: backPath,
+    FACE_KEY: FACE_KEY,
+    readFace: readFace,
+    saveFace: saveFace,
+    clearFace: clearFace
   };
 
   root.PhotoCore = API;

@@ -261,14 +261,19 @@
       + '<input id="ccTryBc" type="text" inputmode="latin" placeholder="باركود المنتج (للسلة)" oninput="ccTryBcPreview()" style="flex:1; min-width:120px; font-size:12px; padding:6px 8px; border:1px solid #ddd; border-radius:8px;">'
       + '<button class="ccIco" onclick="ccImgClear()" title="شيل الصورة">✖</button></div>'
       + '<div id="ccTryBcInfo" style="font-size:11.5px; padding:0 2px; color:#888;"></div>'
+      + ccOutfitPrevHtml()
       + '<div id="ccBar">'
       + '<button class="ccIco" onclick="document.getElementById(\'ccFile\').click()" title="صورة منتج">🖼️</button>'
+      + '<button class="ccIco" onclick="ccOutfitToggle()" title="اقتراح طقم (٣ طرح)">🎨</button>'
       + '<textarea id="ccText" rows="1" placeholder="اكتب الرد…" maxlength="500"></textarea>'
       + '<button class="ccIco send" onclick="ccSend()">➤</button>'
       + '</div>'
       + '<input type="file" id="ccFile" accept="image/*" style="display:none;">';
     document.body.appendChild(wrap);
     document.getElementById('ccFile').onchange = onPickImage;
+    [0, 1, 2].forEach(function(i){
+      document.getElementById('ccOutFile' + i).onchange = function(e){ ccOutfitPick(i, e); };
+    });
     if(!isPOS()){
       // Office: مفيش "فرعي" — كل الفروع على طول
       CST.filterMine = false;
@@ -414,28 +419,41 @@
   /* ============================================================
      ٥) الرد + الصورة + جربيها
      ============================================================ */
-  function onPickImage(e){
-    var f = e.target.files && e.target.files[0];
-    e.target.value = '';
-    if(!f) return;
+  /* 📏 ضغط صورة مشترك — بيتستخدم للصورة الواحدة (900px/650KB) ولخانات
+     الطقم التلاتة (700px/280KB لكل واحدة عشان تلات صور ميعدّوش سقف
+     مستند Firestore ١ ميجا). */
+  function ccCompressImage(file, maxDim, maxBytes, cb){
     var img = new Image();
     img.onload = function(){
-      // 📏 تصغير لـ٩٠٠px وسقف حجم — مستند Firestore ماكسيمم 1MB
-      var sc = Math.min(1, 900 / Math.max(img.width, img.height));
+      var sc = Math.min(1, maxDim / Math.max(img.width, img.height));
       var c = document.createElement('canvas');
       c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       var data = c.toDataURL('image/jpeg', 0.8);
-      if(data.length > 650000){
+      if(data.length > maxBytes){
         data = c.toDataURL('image/jpeg', 0.55);
-        if(data.length > 650000){ toast('الصورة كبيرة قوي حتى بعد الضغط', true); return; }
+        if(data.length > maxBytes){
+          data = c.toDataURL('image/jpeg', 0.35);
+          if(data.length > maxBytes){ cb(null, 'الصورة كبيرة قوي حتى بعد الضغط'); return; }
+        }
       }
+      cb(data, null);
+    };
+    img.onerror = function(){ cb(null, 'الصورة مش مقروءة'); };
+    img.src = URL.createObjectURL(file);
+  }
+
+  function onPickImage(e){
+    var f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!f) return;
+    // 📏 تصغير لـ٩٠٠px وسقف حجم — مستند Firestore ماكسيمم 1MB
+    ccCompressImage(f, 900, 650000, function(data, err){
+      if(err){ toast(err, true); return; }
       CST.imgData = data;
       document.getElementById('ccImgTag').src = data;
       document.getElementById('ccImgPrev').style.display = 'flex';
-    };
-    img.onerror = function(){ toast('الصورة مش مقروءة', true); };
-    img.src = URL.createObjectURL(f);
+    });
   }
 
   function ccImgClear(){
@@ -461,6 +479,117 @@
     info.textContent = '✅ ' + (p.name || 'صنف') + ' — ' + (Number(p.price) || 0) + ' ج.م';
   }
   window.ccTryBcPreview = ccTryBcPreview;
+
+  /* ============================================================
+     🎨 اقتراح طقم — لغاية ٣ طرح في رسالة واحدة (image+barcode لكل واحدة)
+     مسار منفصل تمامًا عن ccSend/CST.imgData — صفر تداخل مع الإرسال العادي.
+     ============================================================ */
+  var CST_OUTFIT = { items: [null, null, null] }; // كل عنصر: {img, barcode, name, price} أو null
+
+  function ccOutfitPrevHtml(){
+    var rows = [0, 1, 2].map(function(i){
+      return '<div style="display:flex; gap:8px; align-items:center;">'
+        + '<img id="ccOutImg' + i + '" style="width:38px;height:38px;border-radius:8px;object-fit:cover;display:none;" alt="">'
+        + '<button class="ccIco" onclick="document.getElementById(\'ccOutFile' + i + '\').click()" title="صورة">🖼️</button>'
+        + '<input type="file" id="ccOutFile' + i + '" accept="image/*" style="display:none;">'
+        + '<input id="ccOutBc' + i + '" type="text" inputmode="latin" placeholder="باركود طرحة ' + (i + 1) + '" '
+        + 'oninput="ccOutfitBcPreview(' + i + ')" style="flex:1; min-width:100px; font-size:12px; padding:6px 8px; border:1px solid #ddd; border-radius:8px;">'
+        + '</div>'
+        + '<div id="ccOutInfo' + i + '" style="font-size:11px; color:#888; padding:0 2px 4px;"></div>';
+    }).join('');
+    return '<div id="ccOutfitPrev" style="display:none; flex-direction:column; gap:6px; padding:10px 12px; background:#1b1e26;">'
+      + '<div style="font-size:12px; color:#9aa1af; display:flex; justify-content:space-between; align-items:center;">'
+      + '<span>🎨 اقتراح طقم — لغاية ٣ طرح</span>'
+      + '<button class="ccIco" onclick="ccOutfitToggle()" title="إلغاء" style="width:24px;height:24px;">✖</button></div>'
+      + rows
+      + '<button class="ccIco send" onclick="ccOutfitSend()">➤ ابعتي الاقتراح</button>'
+      + '</div>';
+  }
+  window.ccOutfitPrevHtml = ccOutfitPrevHtml;
+
+  function ccOutfitClearSlot(i){
+    CST_OUTFIT.items[i] = null;
+    var im = document.getElementById('ccOutImg' + i); if(im){ im.style.display = 'none'; im.src = ''; }
+    var bc = document.getElementById('ccOutBc' + i); if(bc) bc.value = '';
+    var info = document.getElementById('ccOutInfo' + i); if(info) info.textContent = '';
+  }
+
+  function ccOutfitToggle(){
+    var box = document.getElementById('ccOutfitPrev'); if(!box) return;
+    var willOpen = box.style.display !== 'flex';
+    box.style.display = willOpen ? 'flex' : 'none';
+    if(!willOpen){ [0, 1, 2].forEach(ccOutfitClearSlot); } // إلغاء = تصفير الخانات، مش تسريب لرسالة تانية
+  }
+  window.ccOutfitToggle = ccOutfitToggle;
+
+  function ccOutfitPick(i, e){
+    var f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!f) return;
+    // 📏 700px/280KB — تلات صور لازم يفضلوا تحت سقف مستند Firestore (١ ميجا)
+    ccCompressImage(f, 700, 280000, function(data, err){
+      if(err){ toast(err, true); return; }
+      if(!CST_OUTFIT.items[i]) CST_OUTFIT.items[i] = {};
+      CST_OUTFIT.items[i].img = data;
+      var im = document.getElementById('ccOutImg' + i);
+      im.src = data; im.style.display = 'block';
+    });
+  }
+  window.ccOutfitPick = ccOutfitPick;
+
+  /* 💰 نفس معاينة السعر اللحظية — بيبيع أي صنف حقيقي في المحل، مفيش
+     تقييد على كتالوج البيع أونلاين المنسّق. */
+  function ccOutfitBcPreview(i){
+    var el = document.getElementById('ccOutBc' + i);
+    var info = document.getElementById('ccOutInfo' + i);
+    if(!el || !info) return;
+    if(!CST_OUTFIT.items[i]) CST_OUTFIT.items[i] = {};
+    var code = String(el.value || '').trim();
+    if(!code){ info.textContent = ''; CST_OUTFIT.items[i].barcode = null; return; }
+    var p = (typeof window.findByBarcode === 'function') ? window.findByBarcode(code, { includeOut: true }) : null;
+    if(!p){
+      info.textContent = '❓ مفيش صنف بالكود ده'; info.style.color = '#C0355C';
+      CST_OUTFIT.items[i].barcode = null;
+      return;
+    }
+    info.style.color = '#2E7D32';
+    info.textContent = '✅ ' + (p.name || 'صنف') + ' — ' + (Number(p.price) || 0) + ' ج.م';
+    CST_OUTFIT.items[i].barcode = code;
+    CST_OUTFIT.items[i].name = p.name || 'صنف';
+    CST_OUTFIT.items[i].price = Number(p.price) || 0;
+  }
+  window.ccOutfitBcPreview = ccOutfitBcPreview;
+
+  function ccOutfitSend(){
+    if(CST.sending) return;
+    var c = conv(); if(!c) return;
+    var products = [];
+    for(var i = 0; i < 3; i++){
+      var it = CST_OUTFIT.items[i];
+      if(!it || !it.img) continue;                 // خانة فاضية — تتخطاها
+      if(!it.barcode){ toast('طرحة ' + (i + 1) + ' محتاجة باركود صح', true); return; }
+      products.push({ img: it.img, barcode: it.barcode, name: it.name, price: it.price });
+    }
+    if(!products.length){ toast('اختاري طرحة واحدة على الأقل', true); return; }
+    CST.sending = true;
+    var ts = Date.now();
+    var msg = {
+      from: 'staff', by: myName(), atMs: ts, expireAt: chatExpireAt(ts),
+      outfit: true, products: products
+    };
+    var c2 = c;
+    CDB.sendMessage(c2.id, msg, {
+      lastAt: ts, lastText: '🎨 اقتراح طقم (' + products.length + ' طرح)', lastFrom: 'staff',
+      unreadStaff: 0, expireAt: chatExpireAt(ts),
+      branch: c2.branch || myBranch() || ''
+    }).then(function(){
+      ccOutfitToggle();
+    }).catch(function(e){
+      console.warn('cc outfit send', e);
+      toast('الاقتراح ماتبعتش — جرّب تاني', true);
+    }).then(function(){ CST.sending = false; });
+  }
+  window.ccOutfitSend = ccOutfitSend;
 
   function ccSend(){
     if(CST.sending) return;

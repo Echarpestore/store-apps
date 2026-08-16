@@ -100,6 +100,7 @@
       <button class="btn primary hidden" id="cartBtn">🛍️ أضيفيها للسلة</button>
       <button class="btn soft" id="againBtn">🧕 جرّبي طرحة تانية</button>
       <button class="btn soft" id="retryBtn">🔁 إعادة التجربة</button>
+      <button class="btn ghost" id="changeFaceBtn">📷 غيّري صورتك</button>
       <button class="btn ghost" id="backBtn">رجوع للشات</button>
     </div>
   </section>
@@ -149,6 +150,10 @@
   } else {
     $("prodImg").src = productImg; // data:image موثوق (من الشات) — src بس مش innerHTML
   }
+
+  // 🔁 لو صورة وشها محفوظة من مرة قبل كده، نبدأ التوليد على طول —
+  //    "بضغطة واحدة" للطرحة التانية، من غير ما تصوّر نفسها تاني.
+  var rememberedFace = PC.readFace(window.localStorage);
 
   // ---- Firebase ----
   var firebaseConfig = {
@@ -213,6 +218,9 @@
     $("dlBtn").href = imageDataUrl;              // نفس الصورة، تحميل مباشر من غير رفع لأي سيرفر
     var acts = PC.resultActions(productId);
     $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+    // 🔁 نتذكّر صورة العميلة اللي نجحت — الطرحة الجاية بضغطة واحدة
+    //    من غير ما تتصور تاني. مبتتبعتش لحد، بس على جهازها.
+    if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
     show("stResult");
   }
   function fail(msg){
@@ -260,6 +268,22 @@
     // بنفس الصفحة، والتطبيق بيلقط ?addcart= عند التحميل.
     location.href = PC.backPath(params.brand) + "?addcart=" + encodeURIComponent(productId);
   });
+  // 📷 غيّري صورتك — بتمسح الصورة المحفوظة بس (النتيجة الحالية زي ما هي)؛
+  //    الطلب الجاي هيرجع يطلب صورة من جديد بدل ما يبدأ تلقائي.
+  $("changeFaceBtn").addEventListener("click", function(){
+    PC.clearFace(window.localStorage);
+    rememberedFace = "";
+    var b = $("changeFaceBtn");
+    var orig = b.textContent;
+    b.textContent = "تم ✅";
+    setTimeout(function(){ b.textContent = orig; }, 1400);
+  });
+
+  // 🔁 لو فيه صورة وش محفوظة، نبدأ التوليد على طول — "بضغطة واحدة"
+  //    للطرحة التانية. لازم يحصل بعد ما كل الدوال فوق اتعرّفت.
+  if(productImg && rememberedFace){
+    generate(rememberedFace);
+  }
 })();
 </script>
 </body>
