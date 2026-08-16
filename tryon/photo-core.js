@@ -17,7 +17,7 @@
     pid:   "echarpe_tryon_pid"     // productId لو اتبعت (مش موجود في سكيمة الشات الحالية)
   };
 
-  var BRANDS = ["loyalty", "glow"];
+  var BRANDS = ["loyalty", "glow", "site"];
 
   // حدود ضغط صورة العميلة قبل الإرسال — أرخص وأسرع + تحت سقف الدالة (٨ ميجا)
   var TARGET_MAX_DIM = 1024;       // أطول ضلع
@@ -91,6 +91,12 @@
     };
   }
 
+  /* 🔙 مسار الرجوع — الموقع الرئيسي مفهوش فولدر فرعي (tryon/ جنب
+     loyalty/ وglow/ بالظبط تحت الجذر)، فـ'site' بيرجع لـ'../' مباشرة. */
+  function backPath(brand) {
+    return brand === "site" ? "../" : ("../" + appName(brand) + "/");
+  }
+
   var API = {
     SS_KEYS: SS_KEYS,
     BRANDS: BRANDS,
@@ -104,7 +110,8 @@
     readProductImage: readProductImage,
     computeResize: computeResize,
     dataUrlBytes: dataUrlBytes,
-    resultActions: resultActions
+    resultActions: resultActions,
+    backPath: backPath
   };
 
   root.PhotoCore = API;

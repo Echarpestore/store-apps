@@ -95,6 +95,7 @@
   <!-- (٣) النتيجة -->
   <section id="stResult" class="hidden">
     <div class="result"><img id="resultImg" alt="التجربة"></div>
+    <a class="btn ghost" id="dlBtn" download="tryon-echarpe.jpg" style="display:flex; justify-content:center; margin-top:10px;">⬇️ نزّلي الصورة</a>
     <div class="btns" style="margin-top:16px;">
       <button class="btn primary hidden" id="cartBtn">🛍️ أضيفيها للسلة</button>
       <button class="btn soft" id="againBtn">🧕 جرّبي طرحة تانية</button>
@@ -209,6 +210,7 @@
 
   function succeed(imageDataUrl){
     $("resultImg").src = imageDataUrl;          // src بس — مفيش innerHTML لبيانات جاية من بره
+    $("dlBtn").href = imageDataUrl;              // نفس الصورة، تحميل مباشر من غير رفع لأي سيرفر
     var acts = PC.resultActions(productId);
     $("cartBtn").classList.toggle("hidden", !acts.addToCart);
     show("stResult");
@@ -230,7 +232,7 @@
   }); }
   onPick($("camIn")); onPick($("galIn"));
 
-  function closeOrBack(){ try{ window.close(); }catch(e){} history.length > 1 ? history.back() : (location.href = "../" + PC.appName(params.brand) + "/"); }
+  function closeOrBack(){ try{ window.close(); }catch(e){} history.length > 1 ? history.back() : (location.href = PC.backPath(params.brand)); }
   $("closeBtn").addEventListener("click", closeOrBack);
   $("backBtn").addEventListener("click", closeOrBack);
   $("errBack").addEventListener("click", closeOrBack);
@@ -256,7 +258,7 @@
     }catch(e){}
     // فولباك: مفيش opener (اتقفل التاب الأصلي أو المتصفح منعه) — نرجع
     // بنفس الصفحة، والتطبيق بيلقط ?addcart= عند التحميل.
-    location.href = "../" + PC.appName(params.brand) + "/?addcart=" + encodeURIComponent(productId);
+    location.href = PC.backPath(params.brand) + "?addcart=" + encodeURIComponent(productId);
   });
 })();
 </script>
