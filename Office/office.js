@@ -1976,6 +1976,7 @@ function loadSales(){
       D.sales.forEach(function(x){ const t = _saleMs(x); if(t > _salesTo) _salesTo = t; });
       renderTop();
       try{ renderCashHand(); }catch(e){}
+      try{ renderGrowth(); }catch(e){}
     }).catch(function(e){ console.warn('sales load', e); });
 }
 
@@ -2776,6 +2777,7 @@ function fillBranchSel(){
   if(cur && set[cur]) sel.value = cur;
   sel.onchange = renderTop;
   renderTop();
+  try{ renderGrowth(); }catch(e){}    // 📈 فرص الزيادة — نفس مصدر الفروع
 }
 function renderTop(){
   const wrap = $('#topSellers'); if(!wrap) return;
@@ -2794,6 +2796,377 @@ function renderTop(){
       '</div></span></div>';
   }).join('');
 }
+// ============================================================
+// 📈 فرص الزيادة — تحليل بيقول "المبيعات ممكن تزيد منين"
+// ------------------------------------------------------------
+// ⚡ صفر قراءات زيادة: بيشتغل على D.sales اللي متحمّلة أصلًا (٣٠ يوم).
+//    ممنوع أي استعلام Firestore هنا — ده كان السبب الأساسي إن الشاشة
+//    دي معقولة أصلًا مع تحقيق القراءات المفتوح.
+//
+// ⚠️ الأرقام لازم تطابق التقفيل: بنمشي على ofDayKeyOf (يوم المحل +
+//    الساعة الفاصلة) مش اليوم التقويمي، وبنستبعد الملغي والمرتجع زي
+//    ما بتعمل باقي التقارير.
+//
+// 🧠 فلسفة الشاشة: مش بتعرض أرقام وخلاص — بتقول "ده اللي شايفينه،
+//    وده اللي ممكن يتعمل". الرقم من غير تصرّف مالوش لازمة للمالك.
+// ============================================================
+
+// فواتير فرع صالحة للتحليل (بدون ملغي/عكس)
+function _gxSales(branch){
+  return (D.sales || []).filter(function(s){
+    return s && s.branch === branch && !s.reversed && !s.isReversal;
+  });
+}
+// صافي الفاتورة بعد استبعاد بنود الاستبدال (redemption) والمرتجع
+function _gxNet(s){
+  var n = 0;
+  (s.items || []).forEach(function(it){
+    if(!it || it.isRedemption) return;
+    var sign = it.isReturn ? -1 : 1;
+    n += sign * (Number(it.qty) || 0) * (Number(it.price) || 0);
+  });
+  return n;
+}
+function _gxPieces(s){
+  var q = 0;
+  (s.items || []).forEach(function(it){
+    if(!it || it.isRedemption) return;
+    q += (it.isReturn ? -1 : 1) * (Number(it.qty) || 0);
+  });
+  return q;
+}
+
+/* 📊 التجميعة الأساسية — يوم بيوم، ساعة بساعة، وبايعة بايعة.
+   بترجع كل اللي الشاشة محتاجاه من مرور واحد على الفواتير. */
+function growthAggregate(branch){
+  var sales = _gxSales(branch);
+  var byDay = {}, byDow = {}, byHour = {}, bySeller = {};
+  var totalRev = 0, totalInv = 0, totalPieces = 0;
+
+  sales.forEach(function(s){
+    var ms = _saleMs(s) || Number(s.createdAtMs) || 0;
+    if(!ms) return;
+    var net = _gxNet(s);
+    if(net <= 0) return;                       // مرتجع صافي أو فاتورة فاضية
+    var dk = ofDayKeyOf(ms);
+    var p  = _ofShopParts(ms);
+    // يوم الأسبوع بيوم المحل — فاتورة ٢ الفجر بتتحسب على يوم إمبارح
+    var dp = String(dk).split('-').map(Number);
+    var dow = new Date(Date.UTC(dp[0], dp[1]-1, dp[2])).getUTCDay();
+
+    if(!byDay[dk]) byDay[dk] = { rev:0, inv:0, pieces:0 };
+    byDay[dk].rev += net; byDay[dk].inv++; byDay[dk].pieces += _gxPieces(s);
+
+    if(!byDow[dow]) byDow[dow] = { rev:0, inv:0, days:{} };
+    byDow[dow].rev += net; byDow[dow].inv++; byDow[dow].days[dk] = 1;
+
+    if(!byHour[p.hh]) byHour[p.hh] = { rev:0, inv:0 };
+    byHour[p.hh].rev += net; byHour[p.hh].inv++;
+
+    var sid = s.sellerEmployeeId || '';
+    if(sid){
+      if(!bySeller[sid]) bySeller[sid] = { name: s.sellerEmployeeName || '—', rev:0, inv:0, pieces:0 };
+      bySeller[sid].rev += net; bySeller[sid].inv++; bySeller[sid].pieces += _gxPieces(s);
+    }
+    totalRev += net; totalInv++; totalPieces += _gxPieces(s);
+  });
+
+  var dayKeys = Object.keys(byDay).sort();
+  return { branch:branch, byDay:byDay, byDow:byDow, byHour:byHour, bySeller:bySeller,
+           dayKeys:dayKeys, totalRev:totalRev, totalInv:totalInv, totalPieces:totalPieces,
+           avgTicket: totalInv ? totalRev/totalInv : 0,
+           avgPerInv: totalInv ? totalPieces/totalInv : 0,
+           daysCount: dayKeys.length };
+}
+
+/* 🎯 وزن كل يوم في الأسبوع — أساس التارجت اليومي.
+   ⚠️ مش قسمة الشهري ÷ ٣٠. لو الخميس تاريخيًا ضعف التلات، لازم
+      التارجت يتوزّع بنفس النسبة، وإلا التارجت اليومي هيبقى ظالم
+      يوم وسهل يوم من غير سبب. */
+function growthDowWeights(agg){
+  var w = {}, sum = 0;
+  for(var d=0; d<7; d++){
+    var e = agg.byDow[d];
+    var days = e ? Object.keys(e.days).length : 0;
+    var avg = (e && days) ? e.rev/days : 0;      // متوسط اليوم ده لما بيشتغل
+    w[d] = avg; sum += avg;
+  }
+  for(var k in w) w[k] = sum > 0 ? w[k]/sum : 1/7;
+  return w;                                      // مجموعهم = ١
+}
+
+/* 🔍 الرافعتين: عدد الفواتير × متوسط الفاتورة.
+   بنقارن آخر أسبوع بالمتوسط عشان نعرف أي رافعة هي اللي بتتحرك —
+   ده اللي بيحدد التصرّف: مشكلة زيارات ولا مشكلة upselling. */
+function growthLevers(agg){
+  var keys = agg.dayKeys;
+  if(keys.length < 8) return null;
+  var last7 = keys.slice(-7), prev = keys.slice(0, -7);
+  function roll(list){
+    var r=0, i=0;
+    list.forEach(function(k){ r += agg.byDay[k].rev; i += agg.byDay[k].inv; });
+    return { rev:r, inv:i, days:list.length,
+             perDay: list.length ? r/list.length : 0,
+             invPerDay: list.length ? i/list.length : 0,
+             ticket: i ? r/i : 0 };
+  }
+  var a = roll(last7), b = roll(prev);
+  var dTicket = b.ticket ? (a.ticket-b.ticket)/b.ticket*100 : 0;
+  var dInv    = b.invPerDay ? (a.invPerDay-b.invPerDay)/b.invPerDay*100 : 0;
+  return { last7:a, before:b, dTicketPct:dTicket, dInvPct:dInv };
+}
+
+/* 🕐 الساعات الضعيفة — الساعات اللي المحل فاتح فيها والبيع فيها ضعيف.
+   بنحسب متوسط الساعة في اليوم الواحد، ونرجّع أضعف ساعات الشغل. */
+function growthWeakHours(agg){
+  var rows = [];
+  for(var h in agg.byHour){
+    var e = agg.byHour[h];
+    rows.push({ hour:+h, rev:e.rev, inv:e.inv,
+                revPerDay: agg.daysCount ? e.rev/agg.daysCount : 0 });
+  }
+  // بنستبعد الساعات اللي مفيهاش شغل أصلًا (أقل من فاتورة كل ٣ أيام)
+  rows = rows.filter(function(r){ return r.inv >= Math.max(2, agg.daysCount/3); });
+  rows.sort(function(a,b){ return a.revPerDay - b.revPerDay; });
+  return rows;
+}
+
+/* 👗 أصناف بتتباع مع بعض — أساس اقتراح "ضيفي معاها".
+   بنعد كل زوج في نفس الفاتورة. ده أقوى أداة upselling عملية:
+   بيقول للبايعة "اللي بيشتري ده بياخد معاه ده" من واقع بياناتك
+   إنت، مش من كلام عام. */
+function growthPairs(branch, limit){
+  var sales = _gxSales(branch);
+  var pair = {}, nameOf = {};
+  sales.forEach(function(s){
+    var bcs = [];
+    (s.items || []).forEach(function(it){
+      if(!it || it.isRedemption || it.isReturn) return;
+      var bc = String(it.barcode || it.name || ''); if(!bc) return;
+      if(bcs.indexOf(bc) < 0) bcs.push(bc);
+      nameOf[bc] = it.name || bc;
+    });
+    if(bcs.length < 2) return;
+    bcs.sort();
+    for(var i=0;i<bcs.length;i++) for(var j=i+1;j<bcs.length;j++){
+      var k = bcs[i] + '|' + bcs[j];
+      pair[k] = (pair[k] || 0) + 1;
+    }
+  });
+  return Object.keys(pair).map(function(k){
+    var p = k.split('|');
+    return { a:nameOf[p[0]]||p[0], b:nameOf[p[1]]||p[1], n:pair[k] };
+  }).filter(function(x){ return x.n >= 3; })     // أقل من ٣ = صدفة مش نمط
+   .sort(function(a,b){ return b.n - a.n; })
+   .slice(0, limit || 6);
+}
+
+/* 🏆 البايعات — مرتّبين بمتوسط الفاتورة مش بالإجمالي.
+   ⚠️ الإجمالي بيكافئ اللي اشتغلت شيفتات أكتر، مش اللي بتبيع أحسن.
+      متوسط الفاتورة هو المهارة الحقيقية — واللي منها بتتعلم البقية. */
+function growthSellers(agg){
+  return Object.keys(agg.bySeller).map(function(id){
+    var e = agg.bySeller[id];
+    return { id:id, name:e.name, rev:e.rev, inv:e.inv,
+             ticket: e.inv ? e.rev/e.inv : 0,
+             perInv: e.inv ? e.pieces/e.inv : 0 };
+  }).filter(function(x){ return x.inv >= 5; })   // أقل من ٥ فواتير = مش دلالة
+   .sort(function(a,b){ return b.ticket - a.ticket; });
+}
+
+/* 💡 الفرصة بالفلوس — "لو متوسط الفاتورة زاد ١٠٪ يبقى كام في الشهر".
+   ده اللي بيحوّل التحليل لقرار: بيقول للمالك الرقم يستاهل ولا لأ. */
+function growthUpside(agg){
+  var perDay = agg.daysCount ? agg.totalRev/agg.daysCount : 0;
+  var monthly = perDay * 30;
+  return {
+    perDay: perDay, monthly: monthly,
+    ticketUp10: monthly * 0.10,                  // +١٠٪ متوسط فاتورة
+    oneMoreInvPerDay: agg.avgTicket * 30,        // فاتورة زيادة كل يوم
+    // لو كل بايعة وصلت لمتوسط أحسن بايعة — سقف واقعي مش نظري
+    bestSellerLift: (function(){
+      var ss = growthSellers(agg);
+      if(ss.length < 2) return 0;
+      var best = ss[0].ticket;
+      var gain = 0;
+      ss.slice(1).forEach(function(s){ gain += Math.max(0, best - s.ticket) * s.inv; });
+      return agg.daysCount ? gain / agg.daysCount * 30 : 0;
+    })()
+  };
+}
+
+/* ============================================================
+   🖥️ الشاشة
+   ============================================================ */
+var _gxBranch = '';
+function _gxHours(h){ return (h % 12 === 0 ? 12 : h % 12) + (h < 12 ? ' ص' : ' م'); }
+var GX_DOW = ['الأحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
+
+function renderGrowth(){
+  var wrap = $('#growthBox'); if(!wrap) return;
+  var sel = $('#gxBranchSel');
+  if(sel && !sel.dataset.built){
+    var set = {};
+    D.employees.forEach(function(e){ if(e.branch) set[e.branch]=1; });
+    var brs = Object.keys(set).sort();
+    if(!brs.length) return;
+    sel.innerHTML = brs.map(function(b){ return '<option value="'+esc(b)+'">'+esc(b)+'</option>'; }).join('');
+    sel.dataset.built = '1';
+    sel.onchange = function(){ _gxBranch = sel.value; renderGrowth(); };
+    _gxBranch = _gxBranch || brs[0];
+    sel.value = _gxBranch;
+  }
+  var br = _gxBranch || (sel ? sel.value : '');
+  if(!br){ wrap.innerHTML = '<div class="empty">اختار فرع</div>'; return; }
+
+  var agg = growthAggregate(br);
+  if(!agg.totalInv){
+    wrap.innerHTML = '<div class="empty">مفيش مبيعات متسجلة للفرع ده آخر ٣٠ يوم</div>';
+    return;
+  }
+
+  var up = growthUpside(agg);
+  var lev = growthLevers(agg);
+  var weak = growthWeakHours(agg);
+  var sellers = growthSellers(agg);
+  var pairs = growthPairs(br, 6);
+
+  var H = '';
+
+  // ---------- ١) الصورة الحالية ----------
+  H += '<div class="panel"><h3>📊 الصورة دلوقتي — آخر ' + agg.daysCount + ' يوم</h3>'
+    + '<div class="row"><span class="muted">متوسط اليوم</span><span class="amount">' + egp(up.perDay) + '</span></div>'
+    + '<div class="row"><span class="muted">متوسط الفاتورة</span><span class="amount">' + egp(agg.avgTicket) + '</span></div>'
+    + '<div class="row"><span class="muted">فواتير في اليوم</span><span class="amount">'
+      + (agg.totalInv/Math.max(1,agg.daysCount)).toFixed(1) + '</span></div>'
+    + '<div class="row"><span class="muted">قطع في الفاتورة</span><span class="amount">'
+      + agg.avgPerInv.toFixed(2) + '</span></div>'
+    + '</div>';
+
+  // ---------- ٢) الرافعتين — أهم قسم ----------
+  if(lev){
+    var tSign = lev.dTicketPct >= 0 ? '▲' : '▼';
+    var iSign = lev.dInvPct >= 0 ? '▲' : '▼';
+    var tCol = lev.dTicketPct >= 0 ? 'var(--good)' : 'var(--bad)';
+    var iCol = lev.dInvPct >= 0 ? 'var(--good)' : 'var(--bad)';
+    /* 🧠 التشخيص — ده اللي بيفرق الشاشة دي عن أي تقرير أرقام.
+       الفكرة: المبيعات = عدد فواتير × متوسط فاتورة. أي تغيّر لازم
+       يترد لواحدة من الاتنين، وكل واحدة علاجها مختلف تمامًا. */
+    var diag, act;
+    if(lev.dInvPct < -8 && lev.dTicketPct > -3){
+      diag = 'الزباين قلّت، والفاتورة زي ما هي.';
+      act  = 'المشكلة في الزيارات مش في البيع — دوري على السبب بره المحل (موسم، إعلان واقف، منافس فتح جنبك).';
+    }else if(lev.dTicketPct < -8 && lev.dInvPct > -3){
+      diag = 'الزباين زي ما هم، بس بيشتروا أقل.';
+      act  = 'دي مشكلة عرض وupselling جوّه المحل — شوفي قسم "بيتباعوا مع بعض" تحت واشتغلي عليه مع البايعات.';
+    }else if(lev.dInvPct > 5 && lev.dTicketPct > 5){
+      diag = 'الاتنين بيزيدوا — الشهر ماشي كويس.';
+      act  = 'ثبّتي اللي بيحصل دلوقتي وشوفي إيه اتغيّر عشان تكرّريه.';
+    }else if(lev.dInvPct < -5 && lev.dTicketPct < -5){
+      diag = 'الاتنين نازلين مع بعض.';
+      act  = 'ده مؤشر يستاهل وقفة — راجعي المخزون (حاجات ناقصة؟) وجدول الشيفتات في الساعات القوية.';
+    }else{
+      diag = 'الوضع مستقر — مفيش تغيّر كبير في أي رافعة.';
+      act  = 'الزيادة هتيجي من شغل مقصود مش من الانتظار — ابدئي بأكبر فرصة تحت.';
+    }
+    H += '<div class="panel"><h3>🎚️ الرافعتين — آخر ٧ أيام مقارنة باللي قبلهم</h3>'
+      + '<div class="row"><span class="muted">متوسط الفاتورة</span>'
+        + '<span class="amount" style="color:' + tCol + ';">' + tSign + ' ' + Math.abs(lev.dTicketPct).toFixed(1) + '٪</span></div>'
+      + '<div class="row"><span class="muted">عدد الفواتير في اليوم</span>'
+        + '<span class="amount" style="color:' + iCol + ';">' + iSign + ' ' + Math.abs(lev.dInvPct).toFixed(1) + '٪</span></div>'
+      + '<div class="card" style="margin-top:8px; background:var(--panel2);">'
+        + '<b>' + esc(diag) + '</b><div class="muted" style="margin-top:5px; line-height:1.8;">' + esc(act) + '</div></div>'
+      + '</div>';
+  }
+
+  // ---------- ٣) الفرصة بالفلوس ----------
+  H += '<div class="panel"><h3>💰 الفرصة — لو اتحرّكت، تجيب كام في الشهر؟</h3>'
+    + '<div class="hint">أرقام محسوبة من مبيعاتك إنت، مش تقديرات عامة.</div>'
+    + '<div class="row"><span>متوسط الفاتورة يزيد ١٠٪<div class="muted">قطعة صغيرة زيادة مع كل فاتورة تقريبًا</div></span>'
+      + '<span class="amount" style="color:var(--good);">+' + egp(up.ticketUp10) + '</span></div>'
+    + '<div class="row"><span>فاتورة واحدة زيادة كل يوم<div class="muted">عميلة واحدة إضافية يوميًا</div></span>'
+      + '<span class="amount" style="color:var(--good);">+' + egp(up.oneMoreInvPerDay) + '</span></div>';
+  if(up.bestSellerLift > 0){
+    H += '<div class="row"><span>لو كل البايعات وصلت لمتوسط أحسن واحدة<div class="muted">سقف واقعي — حد منكم بيحققه فعلًا دلوقتي</div></span>'
+      + '<span class="amount" style="color:var(--good);">+' + egp(up.bestSellerLift) + '</span></div>';
+  }
+  H += '</div>';
+
+  // ---------- ٤) الساعات ----------
+  if(weak.length >= 3){
+    var worst = weak.slice(0, 3), best = weak.slice(-3).reverse();
+    H += '<div class="panel"><h3>🕐 الساعات — فين القوة وفين الضعف</h3>'
+      + '<div class="hint">متوسط مبيعات الساعة في اليوم الواحد.</div>'
+      + '<div class="muted" style="margin:8px 2px 4px; font-weight:800;">💪 أقوى ساعات</div>'
+      + best.map(function(r){ return '<div class="row"><span>' + _gxHours(r.hour) + '</span>'
+          + '<span class="amount">' + egp(r.revPerDay) + '</span></div>'; }).join('')
+      + '<div class="muted" style="margin:10px 2px 4px; font-weight:800;">🥱 أضعف ساعات</div>'
+      + worst.map(function(r){ return '<div class="row"><span>' + _gxHours(r.hour) + '</span>'
+          + '<span class="amount" style="color:var(--sub);">' + egp(r.revPerDay) + '</span></div>'; }).join('')
+      + '<div class="card" style="margin-top:8px; background:var(--panel2);"><div class="muted" style="line-height:1.8;">'
+      + 'الساعات القوية = حطي فيها أكتر عدد بايعات وأحسنهم. الساعات الضعيفة = وقت الترتيب والجرد والبريكات، '
+      + 'أو جرّبي فيها عرض محدود بوقت تشوفي بيحرّك حاجة ولا لأ.'
+      + '</div></div></div>';
+  }
+
+  // ---------- ٥) أيام الأسبوع ----------
+  var wts = growthDowWeights(agg);
+  var dowRows = [];
+  for(var d=0; d<7; d++){
+    var e = agg.byDow[d];
+    var days = e ? Object.keys(e.days).length : 0;
+    dowRows.push({ d:d, avg: (e&&days) ? e.rev/days : 0, w: wts[d], days:days });
+  }
+  var maxAvg = Math.max.apply(null, dowRows.map(function(r){ return r.avg; })) || 1;
+  H += '<div class="panel"><h3>📅 أيام الأسبوع</h3>'
+    + '<div class="hint">متوسط اليوم — وده أساس التارجت اليومي العادل.</div>'
+    + dowRows.sort(function(a,b){ return b.avg - a.avg; }).map(function(r){
+        var pct = Math.round(r.avg/maxAvg*100);
+        return '<div style="margin-bottom:7px;">'
+          + '<div class="row" style="margin-bottom:3px;"><span>' + GX_DOW[r.d]
+            + (r.days ? '' : ' <span class="muted">(مفيش شغل)</span>') + '</span>'
+          + '<span class="amount">' + egp(r.avg) + '</span></div>'
+          + '<div style="height:6px; background:var(--panel2); border-radius:4px; overflow:hidden;">'
+          + '<div style="height:100%; width:' + pct + '%; background:linear-gradient(90deg,var(--gold),#d9a838);"></div>'
+          + '</div></div>';
+      }).join('')
+    + '</div>';
+
+  // ---------- ٦) البايعات ----------
+  if(sellers.length >= 2){
+    H += '<div class="panel"><h3>👗 البايعات — بمتوسط الفاتورة</h3>'
+      + '<div class="hint">⚠️ الترتيب بمتوسط الفاتورة مش بالإجمالي — الإجمالي بيكافئ اللي اشتغلت شيفتات أكتر، '
+      + 'والمتوسط هو المهارة الحقيقية.</div>'
+      + sellers.map(function(s, i){
+          var tag = i === 0 ? ' 🏆' : '';
+          return '<div class="card row"><span>' + esc(s.name) + tag
+            + '<div class="muted">' + s.inv + ' فاتورة · ' + s.perInv.toFixed(2) + ' قطعة/فاتورة</div></span>'
+            + '<span class="amount">' + egp(s.ticket) + '</span></div>';
+        }).join('')
+      + '<div class="card" style="margin-top:8px; background:var(--panel2);"><div class="muted" style="line-height:1.8;">'
+      + 'الفرق بين الأولى والأخيرة مش موهبة — غالبًا عادات بسيطة (بتعرض حاجة تانية، بتسأل سؤال، بتوصل للكاشير مع العميلة). '
+      + 'اقعدي مع الأولى واعرفي بتعمل إيه بالظبط، ودي تبقى أرخص زيادة مبيعات هتعمليها.'
+      + '</div></div></div>';
+  }
+
+  // ---------- ٧) بيتباعوا مع بعض ----------
+  if(pairs.length){
+    H += '<div class="panel"><h3>🔗 بيتباعوا مع بعض</h3>'
+      + '<div class="hint">من فواتيرك إنت — دي أقوى جمل upselling لأنها حقيقية مش تخمين.</div>'
+      + pairs.map(function(p){
+          return '<div class="card row"><span>' + esc(p.a) + ' <span class="muted">+</span> ' + esc(p.b)
+            + '<div class="muted">اتباعوا مع بعض ' + p.n + ' مرة</div></span></div>';
+        }).join('')
+      + '<div class="card" style="margin-top:8px; background:var(--panel2);"><div class="muted" style="line-height:1.8;">'
+      + 'اعملي منهم ورقة صغيرة عند الكاشير: "اللي بياخد ده، اعرضي عليه ده". '
+      + 'ده أسهل بكتير على البايعة من "حاولي تبيعي أكتر".'
+      + '</div></div></div>';
+  }
+
+  wrap.innerHTML = H;
+}
+window.renderGrowth = renderGrowth;
+
 function renderSalaries(){
   const wrap = $('#salariesList'); if(!wrap) return;
   const rows = salarySummary(D.employees, D.advances, monthKey());
