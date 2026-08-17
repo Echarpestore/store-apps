@@ -189,6 +189,16 @@
     margin-top:6px; padding-top:12px;}
   .shop-cart .ish-row > span:last-child{white-space:nowrap;}
 
+  /* ⭐ تقييم بعد الاستلام */
+  .ord-rate{margin-top:12px; padding-top:12px; border-top:1px dashed var(--line); text-align:center;}
+  .ord-rate .orr-t{font-size:12.5px; font-weight:800; margin-bottom:6px;}
+  .ord-rate .orr-stars{display:flex; justify-content:center; gap:4px;}
+  .ord-rate .orr-stars button{border:none; background:none; cursor:pointer; font-size:26px;
+    line-height:1; padding:2px 4px; color:var(--gold); transition:transform .12s;}
+  .ord-rate .orr-stars button:active{transform:scale(1.25);}
+  .ord-rated{margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);
+    text-align:center; font-size:12.5px; font-weight:800; color:var(--pink-deep);}
+
   /* 🖼️ تكبير صورة الشات بضغطة */
   .img-zoom-wrap{
     position:fixed; inset:0; z-index:9999; background:rgba(20,10,15,.94);
@@ -466,16 +476,22 @@
   #chatWrap{position:fixed; inset:0; z-index:60; background:var(--bg); display:none; flex-direction:column;
     max-width:480px; margin:0 auto;}
   #chatWrap.on{display:flex;}
-  .ch-head{display:flex; align-items:center; gap:10px; padding:12px 14px; background:#fff;
-    border-bottom:1px solid var(--line);}
+  .ch-head{display:flex; align-items:center; gap:12px; padding:14px 16px; background:#fff;
+    border-bottom:1px solid var(--line); box-shadow:0 2px 12px -6px rgba(58,34,51,.15);}
   .ch-head .ch-back{border:none; background:none; font-size:22px; cursor:pointer; color:var(--ink); padding:4px;}
-  .ch-head .ch-t b{display:block; font-size:15px;}
-  .ch-head .ch-t span{font-size:11.5px; color:var(--muted);}
-  #chMsgs{flex:1; overflow-y:auto; padding:14px 12px; display:flex; flex-direction:column; gap:8px;}
-  .msg{max-width:82%; border-radius:14px; padding:9px 12px; font-size:14px; line-height:1.6;
-    word-break:break-word; white-space:pre-wrap;}
-  .msg.me{align-self:flex-start; background:#F7D6E4; color:var(--ink); border-bottom-right-radius:4px;}
-  .msg.them{align-self:flex-end; background:#fff; border:1px solid var(--line); border-bottom-left-radius:4px;}
+  .ch-head .ch-logo{width:38px; height:38px; border-radius:50%; background:var(--card-grad);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    box-shadow:0 4px 12px -4px rgba(236,72,152,.5);}
+  .ch-head .ch-logo img{width:26px; filter:brightness(0) invert(1);}
+  .ch-head .ch-t{flex:1; min-width:0;}
+  .ch-head .ch-t b{display:block; font-size:15.5px; font-weight:900;}
+  .ch-head .ch-t span{font-size:11.5px; color:var(--muted); line-height:1.4; display:block;}
+  #chMsgs{flex:1; overflow-y:auto; padding:16px 12px; display:flex; flex-direction:column; gap:9px;
+    background:linear-gradient(180deg, #FFF9FB, var(--bg));}
+  .msg{max-width:80%; border-radius:18px; padding:11px 14px; font-size:14px; line-height:1.65;
+    word-break:break-word; white-space:pre-wrap; box-shadow:0 2px 8px -4px rgba(58,34,51,.18);}
+  .msg.me{align-self:flex-start; background:#F7D6E4; color:var(--ink); border-bottom-right-radius:5px;}
+  .msg.them{align-self:flex-end; background:#fff; border:1px solid var(--line); border-bottom-left-radius:5px;}
   .msg .m-time{display:block; font-size:10.5px; color:var(--muted); margin-top:4px; text-align:left;}
   .msg img{max-width:100%; border-radius:10px; display:block; margin-bottom:6px;}
   .msg .m-try{display:inline-flex; align-items:center; gap:6px; margin-top:8px; background:var(--ink);
@@ -703,6 +719,7 @@
   <div id="chatWrap">
     <div class="ch-head">
       <button class="ch-back" onclick="closeChat()">→</button>
+      <div class="ch-logo"><img id="chatLogo" alt=""></div>
       <div class="ch-t">
         <b>echarpe ✿</b>
         <span id="chStatus">بنرد من ١٠ الصبح لـ١٠ بالليل</span>
@@ -1325,6 +1342,7 @@ function enterApp(phone){
   invoicesData = [];
   cartRestore(phone);   // 💾 السلة المحفوظة لنفس الرقم — من غير كده كانت بترجع فاضية مع أي إعادة تحميل
   $('topLogo').src = logoSrc;
+  try{ var _cl = $('chatLogo'); if(_cl) _cl.src = logoSrc; }catch(e){}   // 🖼️ لوجو الشات
   $('greet').textContent = greetWord();
   $('waTop').style.display = hasSupport() ? 'flex' : 'none';
   dataOffers = null; dataProducts = null; dataInvoices = null; tabStarted = {};   // تبويبات جديدة لكل جلسة، تتحمّل كسول عند فتحها
@@ -2692,12 +2710,49 @@ function openMyOrders(silent){
             ? '<div class="ish-row"><span>الشحن</span><span>' + fmt(o.shipping) + ' ج.م</span></div>' : '')
         + '<div class="ish-row big"><span>الإجمالي</span><span>'
           + fmt(Number(o.grandTotal) || orderGrandTotal(o.items, o.shipping)) + ' ج.م</span></div>'
+        + orderRatingHtml(o)
         + '</div>';
     }).join('');
   }
   showSheet('🛍️ أوردراتي', body);
 }
 window.openMyOrders = openMyOrders;
+
+/* ⭐ تقييم بعد الاستلام — بيظهر بس على الأوردرات اللي **اتسلّمت
+   فعلًا** (مش المعلّقة ولا الملغية)، ومرة واحدة لكل أوردر. */
+function orderRatingHtml(o){
+  var st = orderEffectiveStatus(o, Date.now());
+  if(st !== 'collected') return '';
+  if(o.rating){
+    return '<div class="ord-rated">تقييمك: ' + '⭐'.repeat(Math.max(1, Math.min(5, Number(o.rating)))) + ' — شكراً ليكي 🤍</div>';
+  }
+  var oid = esc(String(o.id || o.code || ''));
+  if(!oid) return '';
+  return '<div class="ord-rate" id="rate-' + oid + '">'
+    + '<div class="orr-t">عجبك طلبك؟ قيّمي تجربتك 🤍</div>'
+    + '<div class="orr-stars">'
+    + [1,2,3,4,5].map(function(n){
+        return '<button onclick="orderRate(\'' + oid + '\',' + n + ')" aria-label="' + n + '">☆</button>';
+      }).join('')
+    + '</div></div>';
+}
+
+/* بيتسجّل على نفس مستند الأوردر — صفر مجموعات جديدة. */
+function orderRate(orderId, stars){
+  var n = Math.max(1, Math.min(5, Number(stars) || 0));
+  var box = document.getElementById('rate-' + orderId);
+  if(box) box.innerHTML = '<div class="ord-rated">تقييمك: ' + '⭐'.repeat(n) + ' — شكراً ليكي 🤍</div>';
+  // تحديث محلي فوري عشان لو الشيت اترسم تاني ميرجعش يطلب التقييم
+  for(var i = 0; i < _myOrders.length; i++){
+    if(String(_myOrders[i].id) === String(orderId) || String(_myOrders[i].code) === String(orderId)){
+      _myOrders[i].rating = n; break;
+    }
+  }
+  db.collection(ORD_COL).doc(String(orderId))
+    .set({ rating: n, ratedAt: Date.now() }, { merge: true })
+    .catch(function(){ /* فشل الشبكة: التقييم ظاهر محليًا، مش هنقلق العميلة */ });
+}
+window.orderRate = orderRate;
 
 /* 📄 شيت بسيط — بيستخدم نفس آلية شيت الفاتورة الموجودة.
    ⚠️ أول نسخة من الكود ده كانت بتنادي `showSheet` وهي **مش
@@ -3232,12 +3287,17 @@ function chatRenderStatus(){
   if(chatConv && chatConv.blocked === true){ el.textContent = 'مش متاح'; return; }
   el.textContent = chatIsOpen(Date.now())
     ? 'متواجدين دلوقتي — بنرد في دقايق 🌸'
-    : 'مقفولين دلوقتي — سيبي رسالتك وهنرد أول ما نفتح';
+    : 'بنرد من ١٠ الصبح لـ١٠ بالليل 🌸 سيبي رسالتك وأول ما نفتح نرد عليكي فورًا';
 }
 
 function openChat(){
   if(!currentCustomer) return;
   $('chatWrap').classList.add('on');
+  /* 🔙 زرار الرجوع بتاع الأندرويد: الشات بيفتح كطبقة فوق الصفحة من
+     غير أي تغيير في تاريخ المتصفح — فزرار الرجوع كان **بيقفل التطبيق
+     كله** بدل ما يقفل الشات. بنسجّل خطوة وهمية هنا، ونستهلكها في
+     closeChat، والمستمع تحت بيقفل الشات لو المستخدمة رجعت. */
+  try{ history.pushState({ chat: 1 }, ''); }catch(e){}
   chatRenderStatus();
   chatUpdateBadge();
   var phone = currentCustomer.phone;
@@ -3256,14 +3316,22 @@ function openChat(){
     }, function(err){ console.warn('chat msgs', err); });
 }
 
-function closeChat(){
+function closeChat(fromPop){
+  var wasOn = $('chatWrap').classList.contains('on');
   $('chatWrap').classList.remove('on');
   if(chatMsgsUnsub){ chatMsgsUnsub(); chatMsgsUnsub = null; }
   chatImgs = {};
   chatBarcodes = {};
   chatOutfits = {};
   chatUpdateBadge();
+  /* لو القفل جه من زرار ✕ (مش من زرار الرجوع)، نستهلك الخطوة الوهمية
+     اللي سجّلناها — وإلا هتفضل في التاريخ وتحتاج ضغطتين رجوع بعدين. */
+  if(!fromPop && wasOn){ try{ if(history.state && history.state.chat) history.back(); }catch(e){} }
 }
+/* 🔙 المستمع: رجوع والشات مفتوح = اقفل الشات بس، مش التطبيق. */
+window.addEventListener('popstate', function(){
+  try{ if($('chatWrap') && $('chatWrap').classList.contains('on')) closeChat(true); }catch(e){}
+});
 
 function chatCleanup(){
   closeChat();
