@@ -114,27 +114,6 @@
   .topbar .who{font-size:17px; font-weight:800; line-height:1.3;}
   .topbar-mid{flex:1; min-width:0;}
 
-  /* 💬 زرار الشات العائم — صغير وشيك، ظاهر مهما كان التبويب المفتوح
-     (بره تدفّق الصفحة، مش جوه .tabview).
-     ⚠️ top:82px مش 14px عمدًا — الشريط العلوي (.topbar) ارتفاعه
-     تقريبًا 70px (لوجو + بادينج)، وكان زرار السلة بيتراكب فوق
-     اللوجو/اسم العميلة بالظبط. تحت الشريط العلوي بمسافة واضحة. */
-  .chat-fab{
-    position:fixed; top:82px; left:14px; z-index:500; width:46px; height:46px;
-    border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
-    background:var(--card-grad); box-shadow:0 8px 20px -6px rgba(236,72,152,.55);
-    animation:cfFloat 3.4s ease-in-out infinite;
-  }
-  .chat-fab svg{width:20px; height:20px; fill:#fff;}
-  .chat-fab .cf-dot{
-    position:absolute; top:-2px; left:-2px; min-width:17px; height:17px; padding:0 4px; border-radius:99px;
-    background:#fff; color:var(--pink-deep); font-size:10px; font-weight:900;
-    display:none; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(0,0,0,.18);
-  }
-  .chat-fab .cf-dot.show{display:flex;}
-  @keyframes cfFloat{0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);}}
-  @media (prefers-reduced-motion:reduce){.chat-fab{animation:none;}}
-
   /* 🧾 شاشة إتمام الطلب السريعة — نفس #tab-shop بالظبط، بس كـoverlay
      فوق أي شاشة تانية بدل تبديل تبويب. صفر تكرار HTML/منطق. */
   #tab-shop.shop-overlay{
@@ -148,11 +127,12 @@
   }
   .qc-close.show{display:flex; align-items:center; justify-content:center;}
 
-  /* 🛍️ زرار السلة العائم — يقابل الشات، بس تحت الشريط العلوي بنفس
-     المسافة (نفس سبب top:82px فوق). تدرّج دهبي مختلف عمدًا عن الشات
-     (البراند التاني بتاعنا) عشان تبقى هوية بصرية مستقلة. */
+  /* 🛍️ زرار السلة العائم — دلوقتي هو الوحيد (زرار الشات العائم
+     اتشال؛ الشات لسه موجود من تبويب "تواصل" تحت). مكانه فوق يسار
+     الشاشة (نفس مكان الشات القديم بالظبط) — يمين كان بيتراكب مع
+     نص عنوان "اطلبي أونلاين" (RTL، العنوان بيبدأ من اليمين). */
   .cart-fab{
-    position:fixed; top:82px; right:14px; z-index:500; width:46px; height:46px;
+    position:fixed; top:82px; left:14px; z-index:500; width:46px; height:46px;
     border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
     background:linear-gradient(135deg, var(--gold), var(--gold-deep));
     box-shadow:0 8px 20px -6px rgba(199,154,56,.55);
@@ -160,11 +140,12 @@
   }
   .cart-fab svg{width:20px; height:20px; fill:#fff;}
   .cart-fab-dot{
-    position:absolute; top:-2px; right:-2px; min-width:17px; height:17px; padding:0 4px; border-radius:99px;
+    position:absolute; top:-2px; left:-2px; min-width:17px; height:17px; padding:0 4px; border-radius:99px;
     background:#fff; color:var(--gold-deep); font-size:10px; font-weight:900;
     display:none; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(0,0,0,.18);
   }
   .cart-fab-dot.show{display:flex;}
+  @keyframes cfFloat{0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);}}
   @media (prefers-reduced-motion:reduce){.cart-fab{animation:none;}}
 
   /* 🧺 هيدر سلة مميز — منفصل بصريًا عن شاشة تصفّح "اطلبي" تمامًا */
@@ -182,6 +163,8 @@
   .cart-line{display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--line);}
   .cart-line .cl-rm{flex-shrink:0; width:32px; height:32px; border-radius:9px; border:none;
     background:var(--bg,#F6F6F6); color:#C0355C; font-size:14px; cursor:pointer;}
+  .cart-line .cl-img{flex-shrink:0; width:44px; height:44px; border-radius:10px; object-fit:cover; background:var(--pink-soft);}
+  .cart-line .cl-img-ph{display:flex; align-items:center; justify-content:center; font-size:18px;}
   .cart-line .cl-info{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
   .cart-line .cl-name{font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .cart-line .cl-price{font-size:11px; color:var(--muted);}
@@ -669,10 +652,6 @@
 
   <!-- ===================== شاشة التطبيق ===================== -->
   <section id="screen-app" class="screen">
-    <button class="chat-fab" id="chatFab" onclick="openChat()" aria-label="الدردشة">
-      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 5.94 2 10.8c0 2.76 1.44 5.22 3.7 6.82-.12 1.06-.5 2.4-1.5 3.68a.5.5 0 0 0 .5.8c2.02-.4 3.6-1.28 4.6-1.98.87.22 1.78.34 2.7.34 5.52 0 10-3.94 10-8.8S17.52 2 12 2z"/></svg>
-      <span class="cf-dot" id="chatFabDot">0</span>
-    </button>
     <button class="qc-close" id="qcCloseBtn" onclick="closeQuickCheckout()" aria-label="قفل">✕</button>
     <button class="cart-fab" id="cartFab" onclick="openQuickCheckout()" aria-label="سلتك">
       <svg viewBox="0 0 24 24"><path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 16H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v12z"/></svg>
@@ -2170,7 +2149,7 @@ function shopCartLines(){
     //    من غير ما العميلة تحس إنه اتشال.
     var p = byBc[bc] || _extraCartProducts[bc];
     if(!p) return;
-    out.push({ barcode: bc, name: p.name || 'منتج', price: Number(p.price) || 0, qty: shopQty(bc) });
+    out.push({ barcode: bc, name: p.name || 'منتج', price: Number(p.price) || 0, qty: shopQty(bc), img: p.img || '' });
   });
   return out;
 }
@@ -2179,7 +2158,10 @@ var SHOP_DOC = 'online_shop_echarpe';
 var _shopFulfill = 'pickup';
 var _shopGov = '';
 var _shopInfo = { name:'', phone:'', address:'', notes:'' };
-var shopCfg = { pickupEnabled:true, deliveryEnabled:false, shippingFee:0, freeOver:0, governorates:[] };
+/* ⚠️ التوصيل مفعّل افتراضيًا (كان متقفل) + سعر شحن مبدئي 40ج —
+   لو محدّد في pos_test_settings/online_shop_echarpe_cfg هياخد
+   القيمة المحفوظة هناك بدل الافتراضي ده. */
+var shopCfg = { pickupEnabled:true, deliveryEnabled:true, shippingFee:40, freeOver:0, governorates:[] };
 /* 🗺️ فولباك لو المالك ماكتبش محافظات — الطلب مايتوقفش على إعداد ناقص. */
 var EG_GOVS = ['القاهرة','الجيزة','القليوبية','الإسكندرية','الدقهلية','الشرقية',
   'الغربية','المنوفية','البحيرة','كفر الشيخ','دمياط','بورسعيد','الإسماعيلية','السويس',
@@ -2393,6 +2375,7 @@ function renderShop(){
           var lbc = esc(String(l.barcode));
           return '<div class="cart-line">'
             + '<button class="cl-rm" onclick="shopAdd(\'' + lbc + '\', -999)" title="شيلي من السلة">🗑️</button>'
+            + (l.img ? '<img class="cl-img" src="' + esc(l.img) + '" alt="">' : '<div class="cl-img cl-img-ph">🧕</div>')
             + '<div class="cl-info"><span class="cl-name">' + esc(l.name) + '</span>'
               + '<span class="cl-price">' + fmt(l.price) + ' ج.م / قطعة</span></div>'
             + '<div class="qbar cl-qty"><button onclick="shopAdd(\'' + lbc + '\',-1)">−</button>'
@@ -3222,8 +3205,6 @@ function chatUpdateBadge(){
   setTabBadge('contact', n);
   var b = $('chatEntryBadge');
   if(b){ b.style.display = n ? 'inline-flex' : 'none'; b.textContent = n; }
-  var fd = $('chatFabDot');
-  if(fd){ fd.textContent = n > 9 ? '9+' : String(n); fd.classList.toggle('show', n > 0); }
 }
 
 function chatRenderStatus(){
@@ -3460,7 +3441,7 @@ function tryonVerifyCartItem(bc){
       return;
     }
     var p = d.data() || {};
-    _extraCartProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0 };
+    _extraCartProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0, img: p.img || '' };
     cartSave();
     renderShop();
     showToast('اتضافت للسلة 🛍️');
