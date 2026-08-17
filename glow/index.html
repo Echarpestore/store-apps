@@ -2481,9 +2481,10 @@ function renderShop(){
     + 'اختاري اللي عايزاه، وحدّدي الفرع اللي هتستلمي منه. بنحجزلك ٢٤ ساعة.</div>';
 
   if(!items.length){
-    // 🔴 السلة بتتعرض هنا كمان — كتالوج التصفّح فاضي مايعنيش إن
-    //    السلة فاضية (ممكن يكون فيها أصناف من الشات).
-    box.innerHTML = head + cart + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة للتصفّح.</div>';
+    // 🛍️ السلة **مش** بتتعرض في شاشة التصفّح — مكانها الوحيد أيقونة
+    //    السلة فوق (وضع cartOnly). أي أصناف في السلة بتبان في الشارة
+    //    على الأيقونة، والعميلة بتفتحها من هناك تكمّل الطلب.
+    box.innerHTML = head + '<div class="empty"><span class="big">🛍️</span>لسه مفيش منتجات معروضة للتصفّح.</div>';
     return;
   }
 
@@ -2505,7 +2506,8 @@ function renderShop(){
       + '</div>';
   }).join('') + '</div>';
 
-  box.innerHTML = head + grid + cart;
+  // 🛍️ التصفّح بس — السلة مكانها أيقونة السلة فوق (وضع cartOnly).
+  box.innerHTML = head + grid;
 }
 window.renderShop = renderShop;
 
