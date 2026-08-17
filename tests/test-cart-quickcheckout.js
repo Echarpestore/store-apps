@@ -54,7 +54,7 @@ function checkApp(brand, filePath) {
   assert(enterFn.length > 0, brand + ': enterApp بيسترجع سلة نفس الرقم عند الدخول');
 
   // ---------- ٢+٣) إتمام الطلب السريع ----------
-  const bridgeFn = (H.match(/function tryonAddToCart\(barcode\)\{[\s\S]*?\n\}/) || [''])[0];
+  const bridgeFn = (H.match(/function tryonAddToCart\(barcode, imgFallback\)\{[\s\S]*?\n\}/) || [''])[0];
   assert(bridgeFn.indexOf('openQuickCheckout(bc)') >= 0,
     brand + ': 🔴 tryonAddToCart بيفتح إتمام الطلب على طول (مش تبويب)');
   assert(bridgeFn.indexOf('switchTab') === -1, brand + ': مفيش تبديل تبويب — overlay بس');

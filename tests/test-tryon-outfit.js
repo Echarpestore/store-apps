@@ -84,7 +84,7 @@ function checkCustomerApp(brand, filePath, tryonOpenPattern) {
     || H.match(/function chatOutfitBuy\(msgId, idx\)\{[\s\S]*?\n\}/);
   assert(buyFnMatch, brand + ': دالة الطلب المباشر موجودة');
   if (buyFnMatch) {
-    assert(/tryonAddToCart\(it\.barcode\)/.test(buyFnMatch[0]), brand + ': اطلبيها بتنادي tryonAddToCart مباشرة');
+    assert(/tryonAddToCart\(it\.barcode, it\.productImg \|\| it\.img\)/.test(buyFnMatch[0]), brand + ': اطلبيها بتنادي tryonAddToCart ومعاها صورة المنتج');
     assert(buyFnMatch[0].indexOf('photo.html') === -1, brand + ': اطلبيها ما بتفتحش صفحة التجربة خالص');
   }
 

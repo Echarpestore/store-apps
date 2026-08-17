@@ -59,7 +59,7 @@ if (!fs.existsSync(OC_PATH)) {
   assert(ctFn.indexOf("photo.html?brand=" + brand) >= 0, brand + ': chatTryOn بيفتح البراند الصح');
 
   // tryonAddToCart: بيضيف فعليًا للسلة الحقيقية + يفتح تبويب المتجر
-  const bridgeFn = (H.match(/function tryonAddToCart\(barcode\)\{[\s\S]*?\n\}/) || [''])[0];
+  const bridgeFn = (H.match(/function tryonAddToCart\(barcode, imgFallback\)\{[\s\S]*?\n\}/) || [''])[0];
   // ⚠️ من v61: بيفتح إتمام الطلب السريع (overlay) بدل تبديل تبويب —
   //    التفاصيل الكاملة في test-cart-quickcheckout.js
   assert(bridgeFn.indexOf('openQuickCheckout(bc)') >= 0, brand + ': tryonAddToCart بيفتح إتمام الطلب السريع');

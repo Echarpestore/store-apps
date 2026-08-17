@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>echarpe — إيشارب</title>
-<meta name="description" content="echarpe — اطلبي طرحتك من خلال الشات، جرّبيها قبل الشراء، واستلمي من فروعنا أو في نفس اليوم بالمناطق المتاحة.">
+<meta name="description" content="echarpe — جرّبي طرحتك بالذكاء الاصطناعي قبل ما تطلبيها، ودردشي مع فريقنا مباشرة. حمّلي التطبيق واكسبي نقاط وهدية ترحيب. فروعنا: الرحاب، مدينتي، سيتي سنتر.">
 <meta property="og:title" content="echarpe — إيشارب">
-<meta property="og:description" content="اطلبي طرحتك من الشات 💬 وجرّبيها قبل ما تشتريها ✨">
+<meta property="og:description" content="جرّبي طرحتك بالذكاء الاصطناعي 🧕✨ ودردشي مع فريقنا مباشرة">
 <meta property="og:image" content="https://www.echarpe.store/logo.png">
 <link rel="icon" href="loyalty/icon-192.png">
 <link rel="apple-touch-icon" href="loyalty/icon-192.png">
@@ -263,19 +263,19 @@
     <img class="logo" src="logo.png" alt="echarpe">
   </header>
   <section class="tarha">
-    <span class="new-badge">✨ خدمة جديدة من echarpe</span>
-    <h2>اطلبي طرحتك <b>بسهولة من الشات</b></h2>
-    <p class="sub">وكمان تقدري تجربي الطرحة قبل ما تشتريها ✨</p>
+    <span class="new-badge">✨ تجربة بالذكاء الاصطناعي</span>
+    <h2>شوفي نفسك <b>لابساها</b> قبل ما تطلبيها</h2>
+    <p class="sub">صورة واحدة بسيطة، وهنوريكي شكل الطرحة عليكي بالظبط — من غير ما تنزلي المحل</p>
     <div class="steps">
-      <div class="step"><span class="n">1</span><div><b>اختاري من خلال الشات</b><small>فريقنا يساعدك في اختيار الطرحة المناسبة</small></div></div>
-      <div class="step"><span class="n">2</span><div><b>جرّبي الطرحة قبل الشراء</b><small>وشوفي شكلها قبل ما تقرري</small></div></div>
-      <div class="step"><span class="n">3</span><div><b>استلام بالطريقة اللي تناسبك</b><small>من أي فرع، أو استلام في نفس اليوم في الرحاب ومدينتي ومدينة نصر</small></div></div>
-      <div class="step"><span class="n">4</span><div><b>ادفعي وقت الاستلام</b><small>في الفرع أو عند استلام الطلب</small></div></div>
+      <div class="step"><span class="n">1</span><div><b>افتحي الشات معانا</b><small>فريقنا هيساعدك تختاري الطرحة المناسبة لطقمك</small></div></div>
+      <div class="step"><span class="n">2</span><div><b>ابعتي صورة واحدة لوشك</b><small>مرة واحدة بس — المرات الجايّة هتبقى بضغطة</small></div></div>
+      <div class="step"><span class="n">3</span><div><b>شوفيها عليكي فورًا</b><small>وأضيفيها للسلة على طول لو عجبتك</small></div></div>
     </div>
     <button class="chat-cta" onclick="cwOpen()">
       <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 5.94 2 10.8c0 2.76 1.44 5.22 3.7 6.82-.12 1.06-.5 2.4-1.5 3.68a.5.5 0 0 0 .5.8c2.02-.4 3.6-1.28 4.6-1.98.87.22 1.78.34 2.7.34 5.52 0 10-3.94 10-8.8S17.52 2 12 2z"/></svg>
-      ابدئي الشات
+      ابدئي المحادثة
     </button>
+    <p class="note">🔒 صورتك متتخزنش عندنا خالص · <b>ردّ سريع من فريقنا</b> · تجربة حقيقية قبل ما تشتري</p>
   </section>
   <h2 class="sec-title">🤍 من تشكيلاتنا</h2>
   <section class="collection">
@@ -567,9 +567,15 @@
      طريق window.opener (نفس الأصل). زي loyalty/glow بالظبط: بيقرا
      **المخزون الحقيقي** (pos_test_inventory) مش الكتالوج المنسّق —
      الموظفة في الشات بتقدر تبيع أي صنف من آلاف أصناف المحل. */
-  function tryonAddToCart(barcode){
+  function tryonAddToCart(barcode, imgFallback){
     var bc = String(barcode || '').trim();
     if(!bc) return;
+    /* 🖼️ مستندات المخزون مفيهاش حقل صورة — فبنستخدم صورة الطرحة
+       اللي الموظفة بعتتها في الشات. */
+    if(imgFallback && String(imgFallback).indexOf('data:image/') === 0){
+      if(!wsExtraProducts[bc]) wsExtraProducts[bc] = {};
+      wsExtraProducts[bc].img = imgFallback;
+    }
     wsAdd(bc, 1);
     var already = wsItems().filter(function(p){ return String(p.barcode) === bc; })[0];
     if(already){ wsToast('اتضافت للسلة 🛍️'); wsScrollToShop(); return; }
@@ -581,7 +587,9 @@
         return;
       }
       var p = d.data() || {};
-      wsExtraProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0 };
+      var _prev = wsExtraProducts[bc] || {};
+      wsExtraProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0,
+        img: p.img || _prev.img || '' };
       wsCartSave();
       renderShopGrid(); renderCart();
       wsToast('اتضافت للسلة 🛍️');
@@ -957,7 +965,7 @@
      جسر tryonAddToCart (بيتحقق من المخزون الحقيقي). */
   function cwOutfitBuy(msgId, idx){
     var arr = cwMsgOutfits[msgId]; var it = arr && arr[idx]; if(!it || !it.barcode) return;
-    if(typeof window.tryonAddToCart === 'function') window.tryonAddToCart(it.barcode);
+    if(typeof window.tryonAddToCart === 'function') window.tryonAddToCart(it.barcode, it.productImg || it.img);
   }
   window.cwOutfitBuy = cwOutfitBuy;
 

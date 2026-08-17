@@ -173,7 +173,23 @@
   .cart-line .cl-name{font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .cart-line .cl-price{font-size:11px; color:var(--muted);}
   .cart-line .cl-qty{flex-shrink:0;}
+  /* 🔴 كانت أزرار الكمية مزنوقة والرقم ملزوق بينها — الأصل معمول
+     لكارت المنتج العريض، مش لسطر سلة ضيق. */
+  .cart-line .cl-qty{display:flex; align-items:center; gap:9px; background:var(--pink-soft);
+    border-radius:99px; padding:4px 6px;}
+  .cart-line .cl-qty button{width:26px; height:26px; border-radius:50%; border:none; cursor:pointer;
+    background:#fff; color:var(--ink); font-size:16px; font-weight:900; line-height:1;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  .cart-line .cl-qty b{min-width:16px; text-align:center; font-size:13.5px; font-weight:900;}
   .cart-line .cl-total{flex-shrink:0; font-size:13px; font-weight:900; min-width:64px; text-align:left;}
+
+  /* 🔴 .ish-row كانت معرّفة تحت .inv-sheet بس — فجوّه السلة كانت
+     بتطلع من غير أي تنسيق، والأرقام تلزق في الكلام من غير مسافة. */
+  .shop-cart .ish-row{display:flex; justify-content:space-between; align-items:center;
+    gap:12px; padding:7px 0; font-size:14px;}
+  .shop-cart .ish-row.big{font-weight:900; font-size:17px; border-top:2px solid var(--line);
+    margin-top:6px; padding-top:12px;}
+  .shop-cart .ish-row > span:last-child{white-space:nowrap;}
 
   /* 🖼️ تكبير صورة الشات بضغطة */
   .img-zoom-wrap{
@@ -2409,12 +2425,14 @@ function renderShop(){
       )
 
       + '<div class="sc-sum">'
-        + '<div class="ish-row"><span>البضاعة</span><span>' + fmt(subtotal) + ' ج.م</span></div>'
+        // 🔴 من غير شحن، سطر "البضاعة" بيكرر نفس رقم الإجمالي بالظبط —
+        //    سطر زيادة بيلخبط من غير أي فايدة. يظهر بس لما فيه شحن.
         + (isDel
-          ? '<div class="ish-row"><span>الشحن' + (_shopGov ? ' — ' + esc(_shopGov) : '') + '</span><span>'
+          ? '<div class="ish-row"><span>سعر القطع</span><span>' + fmt(subtotal) + ' ج.م</span></div>'
+            + '<div class="ish-row"><span>الشحن' + (_shopGov ? ' — ' + esc(_shopGov) : '') + '</span><span>'
             + (ship > 0 ? (fmt(ship) + ' ج.م') : '<b style="color:#16a34a;">مجاني 🎉</b>') + '</span></div>'
           : '')
-        + '<div class="ish-row big"><span>الإجمالي</span><span>' + fmt(grand) + ' ج.م</span></div>'
+        + '<div class="ish-row big"><span>' + (isDel ? 'الإجمالي شامل الشحن' : 'الإجمالي') + '</span><span>' + fmt(grand) + ' ج.م</span></div>'
       + '</div>'
 
       + '<button class="btn-primary" style="margin-top:14px;" id="shopSendBtn" onclick="shopSubmit()">'
@@ -3321,7 +3339,7 @@ window.chatOutfitTry = chatOutfitTry;
    tryonAddToCart (بيتحقق من المخزون الحقيقي ويطلع توست واضح). */
 function chatOutfitBuy(msgId, idx){
   var arr = chatOutfits[msgId]; var it = arr && arr[idx]; if(!it || !it.barcode) return;
-  tryonAddToCart(it.barcode);
+  tryonAddToCart(it.barcode, it.productImg || it.img);
 }
 window.chatOutfitBuy = chatOutfitBuy;
 
@@ -3329,7 +3347,7 @@ window.chatOutfitBuy = chatOutfitBuy;
    إضافة مباشرة من غير ما تفتح التجربة خالص. */
 function chatQuickBuy(msgId){
   var bc = chatBarcodes[msgId]; if(!bc) return;
-  tryonAddToCart(bc);
+  tryonAddToCart(bc, chatImgs[msgId]);
 }
 window.chatQuickBuy = chatQuickBuy;
 
@@ -3351,9 +3369,16 @@ function chatTryOn(id){
 /* 🛍️ الجسر بين تجربة الطرحة والسلة الحقيقية — بينادَى من صفحة
    tryon/photo.html عن طريق window.opener (نفس الأصل). فولباك للنداء
    المباشر: ?addcart=<باركود> بيترقرأ عند التحميل (تحت). */
-function tryonAddToCart(barcode){
+function tryonAddToCart(barcode, imgFallback){
   var bc = String(barcode || '').trim();
   if(!bc) return;
+  /* 🖼️ صورة المنتج: مستندات المخزون (pos_test_inventory) **مفيهاش**
+     حقل صورة أصلًا — فالسلة كانت بتعرض أيقونة افتراضية دايمًا. الحل:
+     نستخدم صورة الطرحة اللي الموظفة بعتتها في الشات نفسها. */
+  if(imgFallback && String(imgFallback).indexOf('data:image/') === 0){
+    if(!_extraCartProducts[bc]) _extraCartProducts[bc] = {};
+    _extraCartProducts[bc].img = imgFallback;
+  }
   openQuickCheckout(bc);
   tryonVerifyCartItem(bc);
 }
@@ -3425,7 +3450,9 @@ function tryonVerifyCartItem(bc){
       return;
     }
     var p = d.data() || {};
-    _extraCartProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0, img: p.img || '' };
+    var _prev = _extraCartProducts[bc] || {};
+    _extraCartProducts[bc] = { name: p.name || 'منتج', price: Number(p.price) || 0,
+      img: p.img || _prev.img || '' };   // 🖼️ منمسحش صورة الشات لو المخزون مفيهوش صورة
     cartSave();
     renderShop();
     showToast('اتضافت للسلة 🛍️');

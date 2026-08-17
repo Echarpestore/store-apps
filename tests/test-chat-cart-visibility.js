@@ -67,7 +67,7 @@ function checkApp(brand, filePath) {
   // chatQuickBuy تنادي tryonAddToCart مباشرة (زي outfit)
   const buyFn = (H.match(/function chatQuickBuy\(msgId\)\{[\s\S]*?\n\}/) || [''])[0];
   assert(buyFn.length > 0, brand + ': chatQuickBuy موجودة');
-  assert(/tryonAddToCart\(bc\)/.test(buyFn), brand + ': chatQuickBuy بتنادي tryonAddToCart مباشرة');
+  assert(/tryonAddToCart\(bc, chatImgs\[msgId\]\)/.test(buyFn), brand + ': chatQuickBuy بتنادي tryonAddToCart ومعاها صورة الشات للسلة');
   assert(buyFn.indexOf('photo.html') === -1, brand + ': مبتفتحش صفحة التجربة');
 
   // ٤) شارة السلة متوصّلة
@@ -76,17 +76,9 @@ function checkApp(brand, filePath) {
   assert(/_shopCart/.test(renderShopFn) && /shopQty\(bc\)/.test(renderShopFn),
     brand + ': العدّاد فعلي من _shopCart مش رقم ثابت');
 
-  // ٥) زرار الشات العائم
-  assert(H.indexOf('id="chatFab"') >= 0, brand + ': زرار الشات العائم موجود');
-  assert(/\.chat-fab\{[\s\S]*?position:fixed;\s*top:14px;\s*left:14px;/.test(H),
-    brand + ': 🔴 فوق يسار الشاشة بالظبط زي ما اتطلب');
-  assert(/onclick="openChat\(\)"/.test(H), brand + ': بينادي openChat الموجودة (مش دالة جديدة مكررة)');
-  assert(/prefers-reduced-motion:reduce\)\{\.chat-fab/.test(H), brand + ': الأنيميشن بتحترم تقليل الحركة');
-  const badgeFn = (H.match(/function chatUpdateBadge\(\)\{[\s\S]*?\n\}/) || [''])[0];
-  assert(badgeFn.indexOf('chatFabDot') >= 0, brand + ': شارة العدد على الزرار العائم متوصّلة بنفس منطق التحديث');
-  // الزرار جوه screen-app (يظهر بس بعد تسجيل الدخول)
-  assert(/<section id="screen-app" class="screen">\s*<button class="chat-fab"/.test(H),
-    brand + ': الزرار جوه screen-app (يختفي قبل تسجيل الدخول تلقائيًا)');
+  // ⚠️ زرار الشات العائم اتشال بالكامل في دفعة لاحقة (تفضيل المالك:
+  //    أيقونة عائمة واحدة بس — السلة). التفاصيل في
+  //    test-cart-final-polish.js. الشات لسه شغّال من تبويب "تواصل".
 }
 
 checkApp('loyalty', path.join(ROOT, 'loyalty', 'index.html'));

@@ -92,6 +92,25 @@
       return Promise.reject(new Error('no firestore'));
     },
 
+    /* 🔍 قراءة صنف من المخزون بالباركود.
+       🔴 السبب: `findByBarcode` عايشة في `pos-sale.js` اللي بيتحمّل في
+          **POS بس** — فمعاينة السعر في الشات كانت شغّالة من الكاشير
+          وبتقول "مفيش صنف بالكود ده" من sales/office على طول، حتى
+          للأكواد الصح. القراءة المباشرة دي بتشتغل في التلاتة. */
+    getProduct: function(barcode){
+      var m = CDB.mode();
+      var bc = String(barcode || '').trim();
+      if(!bc) return Promise.resolve(null);
+      if(m === 'compat'){
+        return db.collection('pos_test_inventory').doc(bc).get()
+          .then(function(d){ return d.exists ? Object.assign({ barcode: bc }, d.data()) : null; });
+      }
+      if(m === 'modular' && window.fsChatApi && typeof window.fsChatApi.getProduct === 'function'){
+        return window.fsChatApi.getProduct('pos_test_inventory', bc);
+      }
+      return Promise.resolve(null);
+    },
+
     /* 📤 إرسال — الرسالة وتحديث المحادثة في **عملية واحدة**
        ⚠️ لازم batch: لو الرسالة اتكتبت والمحادثة ماتحدّثتش، الشارة
           والقايمة بيبقوا غلط والعميلة تفضل شايفة "مفيش رد". */
@@ -460,6 +479,7 @@
     CST.imgData = null;
     var _bc = document.getElementById('ccTryBc'); if(_bc) _bc.value = '';
     var _bi = document.getElementById('ccTryBcInfo'); if(_bi) _bi.textContent = '';
+    CST.bcInfo = null;
     document.getElementById('ccImgPrev').style.display = 'none';
   }
 
@@ -472,9 +492,25 @@
     var info = document.getElementById('ccTryBcInfo');
     if(!el || !info) return;
     var code = String(el.value || '').trim();
-    if(!code){ info.textContent = ''; return; }
+    if(!code){ info.textContent = ''; CST.bcInfo = null; return; }
+    // ١) الكاش المحلي (POS بس) — فوري من غير شبكة
     var p = (typeof window.findByBarcode === 'function') ? window.findByBarcode(code, { includeOut: true }) : null;
-    if(!p){ info.textContent = '❓ مفيش صنف بالكود ده'; info.style.color = '#C0355C'; return; }
+    if(p){ ccBcInfoShow(info, p); CST.bcInfo = Object.assign({ barcode: code }, p); return; }
+    // ٢) مفيش كاش (sales/office) → قراءة مباشرة. بنتأكد إن الكود
+    //    ماتغيّرش وإحنا بنستنى الرد، وإلا نتيجة قديمة تظهر لكود جديد.
+    info.style.color = '#888'; info.textContent = '…';
+    CST.bcInfo = null;
+    CDB.getProduct(code).then(function(prod){
+      if(String((document.getElementById('ccTryBc') || {}).value || '').trim() !== code) return;
+      if(!prod){ info.textContent = '❓ مفيش صنف بالكود ده'; info.style.color = '#C0355C'; return; }
+      ccBcInfoShow(info, prod);
+      CST.bcInfo = Object.assign({ barcode: code }, prod);
+    }).catch(function(){
+      if(String((document.getElementById('ccTryBc') || {}).value || '').trim() !== code) return;
+      info.textContent = ''; // فشل شبكة ≠ كود غلط — منقولش حاجة مضللة
+    });
+  }
+  function ccBcInfoShow(info, p){
     info.style.color = '#2E7D32';
     info.textContent = '✅ ' + (p.name || 'صنف') + ' — ' + (Number(p.price) || 0) + ' ج.م';
   }
@@ -547,16 +583,27 @@
     var code = String(el.value || '').trim();
     if(!code){ info.textContent = ''; CST_OUTFIT.items[i].barcode = null; return; }
     var p = (typeof window.findByBarcode === 'function') ? window.findByBarcode(code, { includeOut: true }) : null;
-    if(!p){
-      info.textContent = '❓ مفيش صنف بالكود ده'; info.style.color = '#C0355C';
-      CST_OUTFIT.items[i].barcode = null;
-      return;
-    }
+    if(p){ ccOutfitApply(i, info, code, p); return; }
+    // مفيش كاش محلي (sales/office) → قراءة مباشرة (نفس سبب ccTryBcPreview)
+    info.style.color = '#888'; info.textContent = '…';
+    CST_OUTFIT.items[i].barcode = null;
+    CDB.getProduct(code).then(function(prod){
+      var cur = String((document.getElementById('ccOutBc' + i) || {}).value || '').trim();
+      if(cur !== code) return;   // الكود اتغيّر وإحنا مستنيين
+      if(!prod){ info.textContent = '❓ مفيش صنف بالكود ده'; info.style.color = '#C0355C'; return; }
+      ccOutfitApply(i, info, code, prod);
+    }).catch(function(){
+      var cur = String((document.getElementById('ccOutBc' + i) || {}).value || '').trim();
+      if(cur === code) info.textContent = '';
+    });
+  }
+  function ccOutfitApply(i, info, code, p){
     info.style.color = '#2E7D32';
     info.textContent = '✅ ' + (p.name || 'صنف') + ' — ' + (Number(p.price) || 0) + ' ج.م';
     CST_OUTFIT.items[i].barcode = code;
     CST_OUTFIT.items[i].name = p.name || 'صنف';
     CST_OUTFIT.items[i].price = Number(p.price) || 0;
+    if(p.img) CST_OUTFIT.items[i].prodImg = p.img;   // 🖼️ صورة المنتج للسلة
   }
   window.ccOutfitBcPreview = ccOutfitBcPreview;
 
@@ -568,7 +615,7 @@
       var it = CST_OUTFIT.items[i];
       if(!it || !it.img) continue;                 // خانة فاضية — تتخطاها
       if(!it.barcode){ toast('طرحة ' + (i + 1) + ' محتاجة باركود صح', true); return; }
-      products.push({ img: it.img, barcode: it.barcode, name: it.name, price: it.price });
+      products.push({ img: it.img, barcode: it.barcode, name: it.name, price: it.price, productImg: it.prodImg || '' });
     }
     if(!products.length){ toast('اختاري طرحة واحدة على الأقل', true); return; }
     CST.sending = true;
@@ -609,15 +656,21 @@
       msg.img = CST.imgData;
       msg.tryon = !!document.getElementById('ccTryFlag').checked;
       // 🛍️ باركود المنتج (اختياري) — بيخلّي زر "أضيفيها للسلة" في التجربة يشتغل.
-      //    الاسم/السعر بيتحطوا هنا كمان (من الكاش المحلي اللي عاينّاه) —
-      //    عشان تظهر عند العميلة جنب "جرّبيها" من غير ما تفتح التجربة الأول.
+      //    الاسم/السعر بيتاخدوا من **نتيجة المعاينة** (CST.bcInfo) مش من
+      //    الكاش المحلي — الكاش موجود في POS بس، فمن sales/office كانت
+      //    الرسالة بتتبعت من غير اسم ولا سعر (ولا صورة في السلة).
       if(msg.tryon){
         var _bc = String((document.getElementById('ccTryBc') || {}).value || '').trim();
         if(_bc){
           msg.barcode = _bc;
-          var _p = (typeof window.findByBarcode === 'function')
-            ? window.findByBarcode(_bc, { includeOut: true }) : null;
-          if(_p){ msg.productName = _p.name || 'صنف'; msg.productPrice = Number(_p.price) || 0; }
+          var _p = (CST.bcInfo && CST.bcInfo.barcode === _bc) ? CST.bcInfo
+                 : ((typeof window.findByBarcode === 'function')
+                    ? window.findByBarcode(_bc, { includeOut: true }) : null);
+          if(_p){
+            msg.productName = _p.name || 'صنف';
+            msg.productPrice = Number(_p.price) || 0;
+            if(_p.img) msg.productImg = _p.img;   // 🖼️ صورة المنتج للسلة
+          }
         }
       }
     }
