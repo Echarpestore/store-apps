@@ -558,7 +558,11 @@ window.saveTimeSettings = async function(){
   try{
     const b = window.currentBranch;
     if(!b){ alert('اختار فرع الجهاز الأول'); return; }
-    await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', b), { timeCfg: payload }, { merge:true });
+    // 🔴 باج: Firestore merge:true بيستبدل كائن timeCfg **كامل** مش بيدمج
+    // جواه — لو بعتنا payload بس، أي حقل زي weeklyStartFloor مش موجود فيه
+    // بيتمسح. الحل: ندمج مع القيم الحالية (window.timeCfg) *قبل* الكتابة.
+    const _fullTimeCfg = { ...(window.timeCfg || window.timeCfgDefaults), ...payload };
+    await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', b), { timeCfg: _fullTimeCfg }, { merge:true });
     window.timeCfg = { ...window.timeCfgDefaults, ...payload };
     const f = document.querySelector('#timeSettingsForm'); if(f) f.dataset.editing='0';
     alert('اتحفظت إعدادات رصيد الوقت ✅');
@@ -828,8 +832,9 @@ window.renderGraceDay = function(){
     ab.disabled = true; ab.textContent = 'بيتسجّل…';
     try{
       // التاريخ في الإعدادات هو الحاسم — بيغطي حتى البنود اللي هتتسجّل بعدين
+      // 🔴 نفس باج الاستبدال الكامل لـtimeCfg — ندمج مع القيم الحالية قبل الكتابة.
       await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', br),
-        { timeCfg: { timeAmnestyUntil: d } }, { merge:true });
+        { timeCfg: { ...(window.timeCfg || window.timeCfgDefaults), timeAmnestyUntil: d } }, { merge:true });
       // وبنعلّم البنود الموجودة كمان — عشان السجل واللوحات تبان متسقة
       let ok = 0;
       for(const x of allPast){
@@ -854,8 +859,9 @@ window.renderGraceDay = function(){
     if(!confirm('هترجّع حساب رصيد الوقت من أول الأيام تاني؟\n\n'
       + 'البنود اللي اتعلّمت «معذورة» بالسماح هتفضل معذورة — دي محتاجة رفع يدوي.')) return;
     try{
+      // 🔴 نفس باج الاستبدال الكامل لـtimeCfg — ندمج مع القيم الحالية قبل الكتابة.
       await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', br),
-        { timeCfg: { timeAmnestyUntil: '' } }, { merge:true });
+        { timeCfg: { ...(window.timeCfg || window.timeCfgDefaults), timeAmnestyUntil: '' } }, { merge:true });
     }catch(e){ alert('ماتغيّرش: ' + (e.code || e.message)); }
     window.renderGraceDay();
   };

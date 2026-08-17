@@ -1972,9 +1972,14 @@ onSnapshot(settingsCol, (snap)=>{
   try{
     if(!data.timeCfg || !('weeklyStartFloor' in data.timeCfg)){
       const _today = _fmtKey(caiNow());
-      window.timeCfg = { ...(window.timeCfg || timeCfgDefaults), weeklyStartFloor: _today };
+      // 🔴 باج: كتابة { timeCfg: { weeklyStartFloor: _today } } بس كانت
+      // بتمسح باقي حقول timeCfg (lateMinPerHour, breakMin, ...) لأن
+      // Firestore merge:true بيستبدل الكائن المتداخل كامل مش بيدمج جواه.
+      // الحل: ندمج مع القيم الحالية قبل الكتابة، زي أي كتابة تانية لـtimeCfg.
+      const _mergedTimeCfg = { ...(window.timeCfg || timeCfgDefaults), weeklyStartFloor: _today };
+      window.timeCfg = _mergedTimeCfg;
       setDoc(doc(db, 'sales_settings', window.currentBranch),
-             { timeCfg: { weeklyStartFloor: _today } }, { merge: true })
+             { timeCfg: _mergedTimeCfg }, { merge: true })
         .catch(function(e){ console.warn('weeklyStartFloor', e && e.code); });
       console.log('🛡️ اتحط حارس بداية المحاسبة الأسبوعية:', _today);
     }
