@@ -37,6 +37,21 @@ function divById(src, id){
   return '';
 }
 
+/* استخراج دالة بالأقواس المتوازنة — بتمتد لآخرها مهما اتغيّر جواها
+   (الشريحة برقم حروف تقريبي بتلقط كومنتات والدالة اللي بعدها — §14.3). */
+function extractFn(src, name){
+  const at = src.indexOf('function ' + name + '(');
+  if(at < 0) return '';
+  const open = src.indexOf('{', at);
+  if(open < 0) return '';
+  let depth = 0;
+  for(let i = open; i < src.length; i++){
+    if(src[i] === '{') depth++;
+    else if(src[i] === '}'){ depth--; if(depth === 0) return src.slice(at, i + 1); }
+  }
+  return '';
+}
+
 /* ── ١. القسم موجود وفيه شريط تبويبات ── */
 assert(html.indexOf('id="page-hire"') > -1, 'تبويب التوظيف موجود');
 assert(html.indexOf('id="hireSubNav"') > -1, 'وفيه شريط تبويبات فرعية');
@@ -104,7 +119,36 @@ assert(handler.indexOf('renderApplicants') < 0 && handler.indexOf('loadApplic') 
     assert(html.indexOf(k) > -1, 'ماضاعش في النقل: ' + k);
   });
 
-/* ── ٩. الكاش اتزوّد — من غيره الجهاز يفضل على النسخة القديمة ── */
+/* ── ٩. 🔢 عدّادات التبويبات الفرعية ── */
+assert(/data-h="apps"[^>]*>[^<]*<span class="hsN" id="hsnApps"/.test(html),
+  'عدّاد على زرار المقدّمين');
+assert(/data-h="docs"[^>]*>[^<]*<span class="hsN" id="hsnDocs"/.test(html),
+  'وعدّاد على زرار الورق');
+assert(/\.hsN\s*\{[^}]*display:none/.test(html),
+  'العدّاد مخفي وهو صفر (مش دايرة فاضية على طول)');
+
+const badgeFn = extractFn(js, 'ofSyncHireBadge');
+assert(badgeFn.length > 0, 'دالة الشارة موجودة');
+assert(badgeFn.indexOf("'hsnApps'") > -1 && badgeFn.indexOf("'hsnDocs'") > -1,
+  'والعدّادين بيتملوا من جوّاها');
+/* 🚫 سلبي: لو الأرقام اتحسبت في مكان تاني، أول تعديل على تعريف «جديد»
+   هيخلّي الشارة الكبيرة والتبويب يقولوا رقمين مختلفين. */
+assert((badgeFn.match(/status \|\| 'new'\) === 'new'/g) || []).length === 1,
+  '🚫 حساب «متقدّم جديد» مكتوب مرة واحدة بس جوه الدالة');
+assert((badgeFn.match(/status === 'pending'/g) || []).length === 1,
+  '🚫 وحساب «طلب مستني» كمان مرة واحدة');
+/* 🔴 كان `if(!el) return` على nbHire في أول الدالة — يعني لو الشارة
+   الكبيرة اتشالت، العدّادات كانت هتموت معاها. */
+assert(badgeFn.indexOf("put('hsnApps'") < badgeFn.indexOf("getElementById('nbHire')"),
+  'العدّادات بتتملى **قبل** الخروج المبكّر بتاع الشارة الكبيرة');
+
+/* ── ١٠. 📅 تبويبات اليوم الفرعية — المفتوح لازم يبان هو كمان ── */
+assert(/\.daySub\.on\s*\{[^}]*background:/.test(html),
+  'تبويب اليوم المفتوح ليه شكل مختلف (.daySub.on)');
+assert(/\.daySub\s*\{[^}]*color:var\(--sub\)/.test(html),
+  'والمقفول رمادي مش أزرق زي المفتوح');
+
+/* ── ١١. الكاش اتزوّد — من غيره الجهاز يفضل على النسخة القديمة ── */
 const sw = fs.readFileSync(path.join(OFFICE, 'sw.js'), 'utf8');
 const ver = (sw.match(/echarpe-office-v(\d+)/) || [])[1];
-assert(Number(ver) >= 57, 'CACHE_NAME في Office اتزوّد لـv57 على الأقل (لقينا v' + ver + ')');
+assert(Number(ver) >= 59, 'CACHE_NAME في Office اتزوّد لـv59 على الأقل (لقينا v' + ver + ')');
