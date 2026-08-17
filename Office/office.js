@@ -383,30 +383,44 @@ function ofCollectDays(data, fromKey, toKey){
       وبعدين اتسجّل التحويل الحقيقي، الفلوس تتعدّ مرتين والمالك
       يفتكر معاه أكتر من الحقيقة.
 
-   طبقتين حماية:
+   🔴🔴 إصلاح: «المستحق» كان بيتحسب **كل الفيزا − التحويلات المسجّلة
+      يدويًا**. الرقم ده كان بيفترض إن كل تحويل نزل لازم المالك يسجّله
+      بإيده من داشبورد Paymob. المالك **مش بيفتح الداشبورد أصلًا**، فالمطروح
+      كان صفر على طول والرقم بقى «كل فيزا الشهر» — عشرات الآلاف بدل بيع
+      يوم أو يومين. رقم خرافي مالوش علاقة بالواقع، والمالك بيصرف على أساسه.
+
+   دلوقتي المستحق = **اللي لسه ماوصلش حسب جدول التحويل نفسه**
+      (تاني يوم عمل — `ofSettleDayFor`). ده رقم بيتحسب لوحده من غير
+      أي إدخال من المالك، وبيصفّر نفسه لوحده أول ما اليوم يعدّي.
+      تسجيل التحويل بقى **تحسين اختياري** مش شرط لصحّة الرقم.
+
+   طبقتين حماية لسه زي ما هما:
    ١. مبنتوقّعش لأي يوم بيع اتقفل تحويله — بنبدأ من بعد آخر تحويل مسجّل.
-   ٢. **سقف صلب**: مجموع المتوقّع عمره ما يزيد عن الرصيد المستحق فعلًا
-      (كل الفيزا − اللي اتحصّل). حتى لو الطبقة الأولى غلطت، السقف بيمسك. */
-function ofPredictSettlements(days, data, cfg, lastSettledKey){
+   ٢. **سقف صلب**: مجموع المتوقّع عمره ما يزيد عن المستحق الفعلي. */
+function ofPredictSettlements(days, data, cfg, lastSettledKey, todayKey){
   const pct = paymobEffectivePct(data.settlements, PAYMOB_FEE_PCT);
   const keys = Object.keys(days).sort();
+  const tKey = String(todayKey || '');
 
-  // الرصيد المستحق الحقيقي — ده السقف
-  let allVisa = 0, allCleared = 0;
-  (data.sales || []).forEach(function(s){
-    allVisa += Number((s.payments || {}).visa) || 0;
+  /* الرصيد المستحق الحقيقي — ده السقف.
+     يوم بيع بيدخل هنا بشرطين: تحويله ماتسجّلش، **و**يوم نزوله لسه
+     ماجاش. لو يوم النزول عدّى، الفلوس نزلت البنك خلاص — مش مستحقة. */
+  let room = 0;
+  keys.forEach(function(k){
+    const v = Number(days[k].visaSales) || 0;
+    if(v <= 0) return;
+    if(lastSettledKey && k <= lastSettledKey) return;
+    if(tKey && ofSettleDayFor(k, cfg) <= tKey) return;
+    room += v;
   });
-  (data.settlements || []).forEach(function(x){
-    const net = Number(x.net) || 0;
-    allCleared += Number(x.gross) || paymobGrossFromNet(net, x.feePct);
-  });
-  let room = Math.max(0, allVisa - allCleared);
+  const outstanding = Math.round(room * 100) / 100;
 
   const out = {};
   keys.forEach(function(k){
     const v = days[k].visaSales;
     if(v <= 0) return;
     if(lastSettledKey && k <= lastSettledKey) return;   // طبقة ١
+    if(tKey && ofSettleDayFor(k, cfg) <= tKey) return;  // نزل خلاص
     const gross = Math.min(v, room);                    // طبقة ٢ — السقف
     if(gross <= 0) return;
     room -= gross;
@@ -420,7 +434,9 @@ function ofPredictSettlements(days, data, cfg, lastSettledKey){
     out[k].net   = Math.round(out[k].net * 100) / 100;
     out[k].gross = Math.round(out[k].gross * 100) / 100;
   });
-  return { byDay: out, pct: pct, outstanding: Math.round((allVisa - allCleared) * 100) / 100 };
+  const fromDays = [];
+  Object.keys(out).sort().forEach(function(k){ out[k].from.forEach(function(d){ fromDays.push(d); }); });
+  return { byDay: out, pct: pct, outstanding: outstanding, fromDays: fromDays.sort() };
 }
 
 const OF_LEDGER_FIELDS = ['cashSales','visaSales','pmIn','expenses','salaries',
@@ -457,7 +473,7 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
   //    فـ"فلوسك عند Paymob" كانت بتبان صفر وهي مش صفر، وإجمالي الثروة
   //    بيقلّ بقيمة كل الفيزا اللي لسه مانزلتش. المستحق حقيقة قايمة
   //    مالهاش دعوة بإن إحنا بنتوقّع ولا لأ.
-  const pred = ofPredictSettlements(days, data, cfg, lastSettledKey);
+  const pred = ofPredictSettlements(days, data, cfg, lastSettledKey, todayKey);
   if(cfg.predict === false) pred.byDay = {};
 
   const ovAll = overrides || {};
@@ -558,11 +574,20 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
   });
 
   const lastRow = rows.length ? rows[rows.length - 1] : null;
+  /* 🏦 رصيد البداية اللي المالك كتبه وقت «ابدأ من الصفر»
+     ⚠️ ده كان بيتضاف على المستحق **للأبد**. لكن معناه «فيزا مباعة ولسه
+        مانزلتش **يوم ما بدأت**» — بعد ما يوم نزولها يعدّي، الفلوس دي
+        نزلت خلاص وبقى إضافتها كذب متراكم. بنسقّطه بنفس قاعدة الجدول. */
+  const openDayKey = ofDayKeyOf(openAt);
+  const openLanded = ofSettleDayFor(openDayKey, cfg) <= todayKey;
+  const pmOpenRaw  = Number(base && base.paymobOpening) || 0;
   return { rows: rows, opening: opening, openKey: fromKey, todayKey: todayKey,
            giftLiability: lastRow ? lastRow.giftLiability : 0,
            giftLiabilityRaw: lastRow ? lastRow.giftLiabilityRaw : 0,
            effPct: pred.pct, outstanding: pred.outstanding,
-           paymobOpening: Number(base && base.paymobOpening) || 0,
+           paymobOpening: openLanded ? 0 : pmOpenRaw,
+           pmPendingDays: pred.fromDays || [],
+           paymobOpeningLanded: openLanded && pmOpenRaw > 0,
            now: rows.length ? rows[rows.length - 1].balance : opening };
 }
 
@@ -639,6 +664,11 @@ function ofWealth(ledger, cfg, nowTs){
     cash: cash, paymobGross: Math.round(pm * 100) / 100, paymobNet: pmNet,
     gold: gold.value, goldInfo: gold,
     giftLiability: giftLiab,
+    /* 🗓️ أيام البيع اللي فلوسها لسه في الطريق — عشان الرقم يبقى
+       قابل للمراجعة: «فيزا الخميس والجمعة» رقم تقدر تتأكد منه،
+       الرقم لوحده لأ. */
+    pmDayKeys: (ledger && ledger.pmPendingDays) || [],
+    pmOpeningLanded: !!(ledger && ledger.paymobOpeningLanded),
     // 💵 اللي في إيدك فعلًا (قبل خصم الدين) — للمطابقة مع الدرج
     gross: Math.round((cash + pmNet + gold.value) * 100) / 100,
     total: owned
@@ -4861,9 +4891,22 @@ let _apList = [];
 // 🔴 شارة تبويب التوظيف — المتقدّمين الجداد وطلبات التسجيل المستنية.
 //    من غيرها الحاجات دي بتفضل في تبويب مقفول ومحدش واخد باله.
 function ofSyncHireBadge(){
-  const el = document.getElementById('nbHire'); if(!el) return;
   const a = (_apList || []).filter(function(x){ return (x.status || 'new') === 'new'; }).length;
   const r = (D.regs || []).filter(function(x){ return x && x.source === 'join' && x.status === 'pending'; }).length;
+
+  /* 🔢 عدّادات التبويبات الفرعية — نفس الرقمين بالظبط، متفصولين.
+     مقصود إنهم من **نفس** الحساب بتاع الشارة الكبيرة: لو اتحسبوا
+     في مكانين، أول تعديل على تعريف «جديد» هيخلّي الشارة تقول رقم
+     والتبويب يقول رقم تاني. */
+  const put = function(id, n){
+    const el = document.getElementById(id); if(!el) return;
+    el.textContent = n;
+    el.style.display = n ? 'inline-block' : 'none';
+  };
+  put('hsnApps', a);
+  put('hsnDocs', r);
+
+  const el = document.getElementById('nbHire'); if(!el) return;
   const n = a + r;
   el.textContent = n;
   el.style.display = n ? '' : 'none';
@@ -5264,8 +5307,21 @@ function renderCashHand(){
     + '<div style="font-size:33px; font-weight:900; text-align:center; margin:3px 0 12px;'
     +   ' color:' + (L.now < 0 ? 'var(--bad)' : 'var(--good)') + ';">' + egp(L.now) + '</div>'
     + '<div style="display:flex; gap:7px;">'
-    +   ofMiniCard('🏦 عند Paymob', W.paymobNet, 'متوقّع يوصلك')
+    +   ofMiniCard('🏦 عند Paymob', W.paymobNet, 'لسه ماوصلش')
     +   ofMiniCard('🥇 دهب', W.gold, gold.grams ? (gold.grams + ' جرام') : 'مش متسجّل')
+    + '</div>'
+    /* 🏦 السطر ده هو اللي بيمنع رجوع الباج الأصلي:
+       الرقم فوق **بس** اللي لسه ماوصلش حسب جدول التحويل (بيع يوم أو يومين).
+       اللي نزل حسابك البنكي خلاص إحنا **مش عارفينه** — مفيش أي ربط بالبنك.
+       قبل كده كنا بنجمّعه ونعرضه كأنه مستحق، فالرقم كان بيوصل لعشرات
+       الآلاف. الرقم المش معروف بيتقال إنه مش معروف — مبيتخترعش. */
+    + '<div class="hint" style="margin-top:9px; line-height:1.9;">'
+    +   '🏦 رقم Paymob فوق = <b>فيزا اتباعت ولسه فلوسها ماوصلتش</b>'
+    +   (W.pmDayKeys && W.pmDayKeys.length ? ' (فيزا ' + W.pmDayKeys.map(ofDayName).join(' و') + ')' : '')
+    +   '<br>اللي نزل حسابك البنكي خلاص <b>مش محسوب هنا</b> — الشاشة دي عن اللي في إيدك.'
+    +   (W.pmOpeningLanded
+        ? '<br>🗓️ رصيد البداية اللي كتبته وقت التصفير عدّى ميعاد نزوله، فاتشال من الرقم.'
+        : '')
     + '</div>'
     // 🎁 دين الكروت — بيبان **قبل** الإجمالي عشان الطرح يبقى مفهوم
     + (W.giftLiability > 0

@@ -129,6 +129,29 @@
     color:#fff !important; border-color:transparent !important;
   }
 
+  /* 📅 تبويبات اليوم الفرعية — نفس مشكلة التوظيف بالظبط:
+     التلاتة كانوا بياخدوا تدرّج الزرار العام فشكلهم واحد،
+     ومفيش أي علامة على المفتوح. */
+  .daySub{
+    background:#fff !important; color:var(--sub) !important;
+    border:1px solid var(--line) !important; font-size:12.5px !important;
+    padding:9px 6px !important;
+  }
+  .daySub.on{
+    background:linear-gradient(135deg,#3B82F6,#1D4ED8) !important;
+    color:#fff !important; border-color:transparent !important;
+  }
+
+  /* 🔢 عدّاد جوه الزرار الفرعي — بيقول «فيه كام مستني» من غير ما تفتح.
+     أحمر وهو مقفول عشان يشدّ العين، وأبيض شفاف وهو مفتوح عشان
+     ما يتصارعش مع خلفية الزرار الزرقا. */
+  .hsN{
+    display:none; min-width:17px; padding:0 5px; margin-inline-start:4px;
+    border-radius:99px; background:#e5484d; color:#fff;
+    font-size:10.5px; font-weight:900; line-height:17px; vertical-align:middle;
+  }
+  .hireSub.on .hsN{ background:rgba(255,255,255,.28); }
+
   .panel{ background:var(--panel); border:1px solid var(--line); border-radius:15px; padding:15px; margin-bottom:12px; }
   .panel h3{ font-size:14.5px; margin-bottom:4px; }
   .panel .hint{ color:var(--sub); font-size:11.5px; margin-bottom:12px; }
@@ -266,8 +289,8 @@
   <section class="tabPage" id="page-hire">
     <div class="card" style="position:sticky; top:0; z-index:5;">
       <div id="hireSubNav" style="display:flex; gap:4px;">
-        <button class="hireSub on" data-h="apps"  style="flex:1;">📋 مقدّمين</button>
-        <button class="hireSub" data-h="docs"     style="flex:1;">📄 ورق</button>
+        <button class="hireSub on" data-h="apps"  style="flex:1;">📋 مقدّمين<span class="hsN" id="hsnApps">0</span></button>
+        <button class="hireSub" data-h="docs"     style="flex:1;">📄 ورق<span class="hsN" id="hsnDocs">0</span></button>
         <button class="hireSub" data-h="vac"      style="flex:1;">📌 شواغر</button>
         <button class="hireSub" data-h="files"    style="flex:1;">🗂️ ملفات</button>
       </div>
