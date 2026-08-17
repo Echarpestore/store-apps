@@ -138,12 +138,14 @@
      المقابل للوجو تلقائيًا، **وبيتقلب مع اللغة لوحده** من غير أي
      قاعدة dir إضافية. */
   .cart-fab{
-    position:relative; flex-shrink:0; width:44px; height:44px;
-    border:none; border-radius:13px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    position:relative; flex-shrink:0; width:46px; height:46px;
+    border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
     background:linear-gradient(135deg, var(--gold), var(--gold-deep));
-    box-shadow:0 6px 16px -6px rgba(199,154,56,.7);
+    box-shadow:0 8px 20px -6px rgba(199,154,56,.55);
+    animation:cfFloat 3.4s ease-in-out infinite .3s;
   }
-  .cart-fab:active{transform:translateY(1px);}
+  @keyframes cfFloat{0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);}}
+  @media (prefers-reduced-motion:reduce){.cart-fab{animation:none;}}
   .cart-fab svg{width:20px; height:20px; fill:#fff;}
   .cart-fab-dot{
     position:absolute; top:-5px; inset-inline-end:-5px; min-width:18px; height:18px; padding:0 4px;
