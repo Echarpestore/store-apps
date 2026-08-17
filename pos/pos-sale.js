@@ -694,6 +694,11 @@ function cartRemove(idx){
   cart.splice(idx, 1);
   if(selectedCartIdx === idx) selectedCartIdx = null;
   else if(selectedCartIdx !== null && selectedCartIdx > idx) selectedCartIdx--;
+  // 🔴 باج التركيز (AI_HANDOFF §0، مسار ١): زرار 🗑️ بيبقى activeElement، و
+  // renderCart بتمسح tbody.innerHTML كله فيتشال ويقع الفوكس على body. لازم
+  // ننقل الفوكس لـsearchBar *قبل* ما renderCart تمسح الزرار، مش بعدها —
+  // عشان لو Electron محتفظ بفوكس النظام (نوع أ)، ما يقعش أصلًا.
+  if(searchBar) searchBar.focus();
   renderCart();
 }
 
@@ -1269,6 +1274,9 @@ function changeQty(idx, delta){
 }
 function removeFromCart(idx){
   if(cart[idx] && cart[idx].isRedemption) pendingRedemption = null;
+  // 🔴 باج التركيز (AI_HANDOFF §0، مسار ١) — نفس منطق cartRemove بالظبط:
+  // فوكس searchBar قبل ما renderCart تمسح الزرار المفوكس.
+  if(searchBar) searchBar.focus();
   cart.splice(idx,1);
   // 🛡️ لو حذف المنتج ساب سطر الاستبدال أكبر من باقي الفاتورة (إجمالي سالب)
   // بنشيل الاستبدال تلقائي — وإلا السلة بتتحول "مرتجع" بيطلّع كاش مقابل نقط
