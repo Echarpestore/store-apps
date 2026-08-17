@@ -120,21 +120,21 @@
      فوق أي شاشة تانية بدل تبديل تبويب. صفر تكرار HTML/منطق. */
   #tab-shop.shop-overlay{
     position:fixed; inset:0; z-index:800; background:var(--bg);
-    overflow-y:auto; padding-top:calc(150px + env(safe-area-inset-top));
+    overflow-y:auto; padding-top:calc(66px + env(safe-area-inset-top));
   }
   .qc-close{
-    display:none; position:fixed; top:96px; left:70px; z-index:801; width:42px; height:42px;
+    display:none; position:fixed; top:14px; left:70px; z-index:801; width:42px; height:42px;
     border:none; border-radius:50%; background:var(--panel,#fff); border:1.5px solid var(--line);
     box-shadow:0 8px 18px -6px rgba(0,0,0,.25); font-size:17px; cursor:pointer; color:var(--ink);
   }
   .qc-close.show{display:flex; align-items:center; justify-content:center;}
 
   /* 🛍️ زرار السلة العائم — دلوقتي هو الوحيد (زرار الشات العائم
-     اتشال؛ الشات لسه موجود من تبويب "تواصل" تحت). مكانه فوق يسار
-     الشاشة (نفس مكان الشات القديم بالظبط) — يمين كان بيتراكب مع
-     نص عنوان "اطلبي أونلاين" (RTL، العنوان بيبدأ من اليمين). */
+     اتشال؛ الشات لسه موجود من تبويب "تواصل" تحت). top:14px بالظبط —
+     مفيش حسابات إزاحة تانية، ده قرار المالك الصريح بعد تجربتين
+     فاشلتين (كانت بتتراكب مع محتوى مختلف في كل تبويب). */ */
   .cart-fab{
-    position:fixed; top:96px; left:14px; z-index:500; width:46px; height:46px;
+    position:fixed; top:14px; left:14px; z-index:500; width:46px; height:46px;
     border:none; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center;
     background:linear-gradient(135deg, var(--gold), var(--gold-deep));
     box-shadow:0 8px 20px -6px rgba(199,154,56,.55);
@@ -542,6 +542,11 @@
   html[dir="ltr"] .offer::before{right:auto; left:0;}
   html[dir="ltr"] .prod .oos{left:auto; right:12px;}
   html[dir="ltr"] .tab-badge{left:auto; right:calc(50% + 4px);}
+  /* 🛍️ السلة دايمًا **عكس اللوجو**: في العربي اللوجو يمين فالسلة
+     يسار، وفي الإنجليزي اللوجو يسار فالسلة تروح يمين. */
+  html[dir="ltr"] .cart-fab{left:auto; right:14px;}
+  html[dir="ltr"] .cart-fab-dot{left:auto; right:-2px;}
+  html[dir="ltr"] .qc-close{left:auto; right:70px;}
 
   /* 🖼️ صفحة المنتج */
   .pv-gal{display:flex; gap:8px; overflow-x:auto; scroll-snap-type:x mandatory;
