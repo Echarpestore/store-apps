@@ -92,6 +92,19 @@
       return Promise.reject(new Error('no firestore'));
     },
 
+    /* ⚙️ قراءة مستند إعدادات (نصوص الردود السريعة مثلًا) */
+    getSetting: function(docId){
+      var m = CDB.mode();
+      if(m === 'compat'){
+        return db.collection('pos_test_settings').doc(String(docId)).get()
+          .then(function(d){ return d.exists ? d.data() : null; });
+      }
+      if(m === 'modular' && window.fsChatApi && typeof window.fsChatApi.getSetting === 'function'){
+        return window.fsChatApi.getSetting('pos_test_settings', String(docId));
+      }
+      return Promise.resolve(null);
+    },
+
     /* 🔍 قراءة صنف من المخزون بالباركود.
        🔴 السبب: `findByBarcode` عايشة في `pos-sale.js` اللي بيتحمّل في
           **POS بس** — فمعاينة السعر في الشات كانت شغّالة من الكاشير
@@ -239,6 +252,12 @@
       + '.ccMsg .mt{display:block; font-size:10px; opacity:.65; margin-top:3px; text-align:left;}'
       + '.ccAuto{align-self:center; background:#20242e; color:#9aa1af; font-size:11.5px;'
       + 'border-radius:99px; padding:4px 13px;}'
+      + '#ccQuick{display:flex; gap:7px; overflow-x:auto; padding:8px 12px 0; background:#1b1e26;}'
+      + '#ccQuick:empty{display:none;}'
+      + '.ccQuickChip{flex:0 0 auto; background:#2a2f3a; color:#dfe4ee; border:1px solid #3a4152;'
+      + ' border-radius:99px; padding:7px 13px; font-size:12px; font-family:inherit; cursor:pointer;'
+      + ' white-space:nowrap; max-width:230px; overflow:hidden; text-overflow:ellipsis;}'
+      + '.ccQuickChip:hover{background:#343b49;}'
       + '#ccBar{display:none; gap:8px; padding:9px 12px; background:#1b1e26;'
       + 'border-top:1px solid #2a2e39; align-items:flex-end;}'
       + '#ccText{flex:1; border:1px solid #2a2e39; border-radius:12px; padding:9px 12px;'
@@ -281,6 +300,7 @@
       + '<button class="ccIco" onclick="ccImgClear()" title="شيل الصورة">✖</button></div>'
       + '<div id="ccTryBcInfo" style="font-size:11.5px; padding:0 2px; color:#888;"></div>'
       + ccOutfitPrevHtml()
+      + ccQuickHtml()
       + '<div id="ccBar">'
       + '<button class="ccIco" onclick="document.getElementById(\'ccFile\').click()" title="صورة منتج">🖼️</button>'
       + '<button class="ccIco" onclick="ccOutfitToggle()" title="اقتراح طقم (٣ طرح)">🎨</button>'
@@ -394,7 +414,9 @@
     CST.msgsUnsub = CDB.watchMsgs(id, function(rows){
         // ⚠️ الاستعلام تنازلي (أحدث ٨٠) والعرض تصاعدي — العكس هنا
         var arr = rows.slice().reverse();
+        CST.msgs = arr;          // ⚡ الردود السريعة بتقرا منها المرحلة
         renderThread(arr);
+        ccQuickRender();
         var c = conv();
         if(c && Number(c.unreadStaff) > 0)
           CDB.patchConv(id, { unreadStaff: 0 }).catch(function(){});
@@ -515,6 +537,100 @@
     info.textContent = '✅ ' + (p.name || 'صنف') + ' — ' + (Number(p.price) || 0) + ' ج.م';
   }
   window.ccTryBcPreview = ccTryBcPreview;
+
+  /* ============================================================
+     ⚡ الردود السريعة — بتظهر فوق شريط الكتابة، وبتتغيّر حسب
+     **مرحلة المحادثة** (ذكية مش قايمة ثابتة):
+       · بداية  → مفيش رد من الموظفة لسه
+       · وسط    → المحادثة شغّالة
+       · نهاية  → العميلة عندها أوردر/طلب في المحادثة
+     النصوص كلها قابلة للتعديل من إعدادات POS:
+       pos_test_settings/chat_quick { start:[], mid:[], end:[] }
+     ⚠️ [اسم] بيتبدل تلقائي باسم الموظفة اللي شغّالة.
+     ============================================================ */
+  var CC_QUICK_DEFAULT = {
+    start: [
+      'أهلاً بيكي في echarpe 🤍\nمعاكي [اسم]، أقدر أساعدك إزاي؟'
+    ],
+    mid: [
+      'شايفة إن الاختيار ده هيكون مناسب جداً، وخصوصاً مع الألوان اللي اختارتيها 🤍\nولو حابة أقدر أوريكي اختيارات تانية قريبة منه.',
+      'تحبي أبعتلك صور تانية من نفس النوع؟ 🌸',
+      'الطرحة دي متوفرة دلوقتي — تحبي أحجزهالك؟'
+    ],
+    end: [
+      'تمام 🤍 طلبك اتأكد.\nشكراً لاختيارك echarpe، ونتمنى يعجبك جداً لما تستلميه.\nولو احتجتي أي حاجة إحنا موجودين.'
+    ]
+  };
+  var CC_QUICK = CC_QUICK_DEFAULT;
+
+  /* الإعدادات من Firestore (اختياري) — لو مش موجودة نفضل على الافتراضي.
+     ⚠️ عن طريق CDB — `db.collection` المباشر بيكسر sales (modular SDK). */
+  function ccQuickLoad(){
+    if(!CDB.ready()) return;
+    var p = CDB.getSetting('chat_quick');
+    if(!p || !p.then) return;
+    p.then(function(cfg){
+      if(!cfg) return;
+      ['start','mid','end'].forEach(function(k){
+        if(Array.isArray(cfg[k]) && cfg[k].length) CC_QUICK[k] = cfg[k];
+      });
+      ccQuickRender();
+    }).catch(function(){});
+  }
+
+  /* 🧠 تحديد المرحلة من الرسايل المعروضة فعلاً */
+  function ccQuickStage(){
+    var rows = CST.msgs || [];
+    if(!rows.length) return 'start';
+    var staffReplied = rows.some(function(m){ return m && m.from === 'staff'; });
+    if(!staffReplied) return 'start';
+    // العميلة ضافت للسلة/طلبت؟ → مرحلة الإنهاء
+    var hasOrder = rows.some(function(m){
+      return m && (m.barcode || m.outfit === true ||
+        (m.text && /طلب|أوردر|هاخد|عايزة اطلب|تمام هاخد/.test(String(m.text))));
+    });
+    return hasOrder ? 'end' : 'mid';
+  }
+
+  function ccQuickHtml(){
+    return '<div id="ccQuick"></div>';
+  }
+  window.ccQuickHtml = ccQuickHtml;
+
+  function ccQuickRender(){
+    var box = document.getElementById('ccQuick');
+    if(!box) return;
+    if(!conv()){ box.innerHTML = ''; return; }
+    var list = CC_QUICK[ccQuickStage()] || [];
+    if(!list.length){ box.innerHTML = ''; return; }
+    box.innerHTML = list.map(function(t, i){
+      // أول سطر بس في الشريحة — النص الكامل بيتحط في الكتابة
+      var label = String(t).split('\n')[0];
+      if(label.length > 42) label = label.slice(0, 42) + '…';
+      return '<button class="ccQuickChip" onclick="ccQuickUse(' + i + ')" title="اضغط للاستخدام">'
+        + ccEsc(label) + '</button>';
+    }).join('');
+  }
+  window.ccQuickRender = ccQuickRender;
+
+  /* بيحط النص في خانة الكتابة (مش بيبعت على طول) — الموظفة تعدّل
+     وتتأكد قبل الإرسال. */
+  function ccQuickUse(i){
+    var list = CC_QUICK[ccQuickStage()] || [];
+    var t = list[i]; if(!t) return;
+    var el = document.getElementById('ccText'); if(!el) return;
+    el.value = String(t).replace(/\[اسم\]/g, myName() || '');
+    el.focus();
+    try{ el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }catch(e){}
+  }
+  window.ccQuickUse = ccQuickUse;
+  try{ setTimeout(ccQuickLoad, 1200); }catch(e){}
+
+  function ccEsc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
 
   /* ============================================================
      🎨 اقتراح طقم — لغاية ٣ طرح في رسالة واحدة (image+barcode لكل واحدة)

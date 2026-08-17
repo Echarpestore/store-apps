@@ -42,9 +42,9 @@ function chatAutoReply(conv, ts, cfg){
      && (Number(ts) - last) < 12 * 3600000) return null;
   const c = cfg || {};
   const o = Number(c.open != null ? c.open : CHAT_HOURS.open);
-  return 'أهلًا 🌸 إحنا مقفولين دلوقتي — بنرد من الساعة '
+  return 'أهلاً بيكي في echarpe 🤍 بنرد من الساعة '
     + o + ' الصبح لـ' + (Number(c.close != null ? c.close : CHAT_HOURS.close) - 12)
-    + ' بالليل. سيبي رسالتك وهنرد عليكي أول ما نفتح.';
+    + ' بالليل. سيبي رسالتك وأول ما نفتح نرد عليكي فورًا 🌸';
 }
 
 /* ⏰ الرسالة مستنية بقالها كتير؟
