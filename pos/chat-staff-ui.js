@@ -92,6 +92,29 @@
       return Promise.reject(new Error('no firestore'));
     },
 
+    /* 👥 موظفات الفرع — لاختيار "مين بيرد" في sales/office.
+       نفس مجموعة `sales_employees` اللي التلات تطبيقات بيقروها. */
+    getEmployees: function(branch){
+      var m = CDB.mode();
+      var b = String(branch || '').trim();
+      if(!b) return Promise.resolve([]);
+      if(m === 'compat'){
+        return db.collection('sales_employees').where('branch', '==', b).get()
+          .then(function(s){
+            var out = [];
+            s.forEach(function(d){
+              var n = (d.data() || {}).name;
+              if(n) out.push(String(n));
+            });
+            return out;
+          });
+      }
+      if(m === 'modular' && window.fsChatApi && typeof window.fsChatApi.getEmployees === 'function'){
+        return window.fsChatApi.getEmployees('sales_employees', b);
+      }
+      return Promise.resolve([]);
+    },
+
     /* ⚙️ قراءة مستند إعدادات (نصوص الردود السريعة مثلًا) */
     getSetting: function(docId){
       var m = CDB.mode();
@@ -146,11 +169,78 @@
 
   function isPOS(){ return typeof currentBranch !== 'undefined' && currentBranch; }
   function myBranch(){ return isPOS() ? currentBranch : ''; }
+  /* 👤 مين بيرد دلوقتي — بيتحفظ محليًا لكل جهاز/فرع.
+     🔴 السبب: في sales الدخول بحساب **الفرع** مش بموظفة، وفي office
+        بحساب الإدارة — فالتوقيع كان بيطلع "معاكي الرحاب" أو "معاكي
+        الإدارة"، وشكله آلي وغريب للعميلة. الاختيار السريع بيخلّي
+        التوقيع باسم حقيقي، **وبيجهّز لنقاط البيع** (نعرف مين رد على
+        مين لما نحسب النقاط بعدين). */
+  var CC_SIGNER_KEY = 'cc_signer_v1';
+  function ccSigner(){
+    try{ return localStorage.getItem(CC_SIGNER_KEY) || ''; }catch(e){ return ''; }
+  }
+  function ccSignerSet(name){
+    try{
+      if(name) localStorage.setItem(CC_SIGNER_KEY, String(name));
+      else localStorage.removeItem(CC_SIGNER_KEY);
+    }catch(e){}
+    ccSignerRender();
+    ccQuickRender();   // الردود الجاهزة فيها [اسم] — تتحدّث فورًا
+  }
+  window.ccSignerSet = ccSignerSet;
+
+  var CC_EMPS = null;   // كاش موظفات الفرع (بيتحمّل مرة)
+
+  function ccSignerRender(){
+    var box = document.getElementById('ccSigner');
+    if(!box) return;
+    if(!conv()){ box.innerHTML = ''; return; }
+    var cur = myName();
+    var picked = !!ccSigner();
+    box.innerHTML = '<span class="ccSgLbl">بترد باسم:</span>'
+      + '<button class="ccSgName' + (picked ? ' on' : '') + '" onclick="ccSignerOpen()">'
+      + ccEsc(cur) + ' ▾</button>';
+  }
+  window.ccSignerRender = ccSignerRender;
+
+  /* بيفتح قايمة الأسماء — بيحمّل موظفات الفرع أول مرة بس */
+  function ccSignerOpen(){
+    var box = document.getElementById('ccSigner');
+    if(!box) return;
+    if(CC_EMPS){ ccSignerList(box); return; }
+    box.innerHTML = '<span class="ccSgLbl">بنجيب الأسامي…</span>';
+    var b = '';
+    try{ b = (conv() && conv().branch) || (typeof currentBranch !== 'undefined' ? currentBranch : ''); }catch(e){}
+    CDB.getEmployees(b).then(function(list){
+      CC_EMPS = Array.isArray(list) ? list : [];
+      ccSignerList(box);
+    }).catch(function(){ CC_EMPS = []; ccSignerList(box); });
+  }
+  window.ccSignerOpen = ccSignerOpen;
+
+  function ccSignerList(box){
+    if(!CC_EMPS.length){
+      // مفيش موظفات مسجّلة للفرع — منسيبهاش عالقة
+      box.innerHTML = '<span class="ccSgLbl">مفيش أسامي مسجّلة للفرع</span>'
+        + '<button class="ccSgName" onclick="ccSignerRender()">رجوع</button>';
+      return;
+    }
+    box.innerHTML = '<span class="ccSgLbl">مين بيرد؟</span>'
+      + CC_EMPS.map(function(n){
+          return '<button class="ccSgPick" onclick="ccSignerSet(\'' + ccEsc(n).replace(/'/g, "\\'") + '\')">'
+            + ccEsc(n) + '</button>';
+        }).join('')
+      + (ccSigner() ? '<button class="ccSgPick clr" onclick="ccSignerSet(\'\')">إلغاء الاختيار</button>' : '');
+  }
+
   function myName(){
+    // ١) اختيار صريح من الموظفة (كل التطبيقات) — بيكسب على أي حاجة
+    var picked = ccSigner();
+    if(picked) return picked;
     if(!isPOS()) return 'الإدارة';
-    // 🖥️ POS: الكاشير الداخلة بالـPIN — اسمها بالظبط.
+    // ٢) 🖥️ POS: الكاشير الداخلة بالـPIN — اسمها بالظبط.
     try{ if(currentEmployee && currentEmployee.name) return currentEmployee.name; }catch(e){}
-    /* 🕒 تطبيق الحضور: مفيش `currentEmployee` أصلًا — الدخول بحساب
+    /* ٣) 🕒 تطبيق الحضور: مفيش `currentEmployee` أصلًا — الدخول بحساب
        الفرع مش بموظفة. فبنوقّع باسم الفرع بدل "الفرع" الجافة، عشان
        العميلة تعرف مين بيكلمها. */
     try{ if(currentBranch) return String(currentBranch); }catch(e){}
@@ -252,6 +342,17 @@
       + '.ccMsg .mt{display:block; font-size:10px; opacity:.65; margin-top:3px; text-align:left;}'
       + '.ccAuto{align-self:center; background:#20242e; color:#9aa1af; font-size:11.5px;'
       + 'border-radius:99px; padding:4px 13px;}'
+      + '#ccSigner{display:flex; align-items:center; gap:7px; overflow-x:auto;'
+      + ' padding:8px 12px 0; background:#1b1e26; font-size:12px;}'
+      + '#ccSigner:empty{display:none;}'
+      + '.ccSgLbl{color:#8b93a7; flex:0 0 auto;}'
+      + '.ccSgName{background:#2a2f3a; color:#dfe4ee; border:1px solid #3a4152; border-radius:99px;'
+      + ' padding:5px 12px; font-size:12px; font-family:inherit; cursor:pointer; flex:0 0 auto;}'
+      + '.ccSgName.on{border-color:#c79a38; color:#f0d79a;}'
+      + '.ccSgPick{background:#2a2f3a; color:#dfe4ee; border:1px solid #3a4152; border-radius:99px;'
+      + ' padding:5px 12px; font-size:12px; font-family:inherit; cursor:pointer; flex:0 0 auto;}'
+      + '.ccSgPick:hover{background:#343b49;}'
+      + '.ccSgPick.clr{color:#e88; border-color:#5a3a3a;}'
       + '#ccQuick{display:flex; gap:7px; overflow-x:auto; padding:8px 12px 0; background:#1b1e26;}'
       + '#ccQuick:empty{display:none;}'
       + '.ccQuickChip{flex:0 0 auto; background:#2a2f3a; color:#dfe4ee; border:1px solid #3a4152;'
@@ -300,6 +401,7 @@
       + '<button class="ccIco" onclick="ccImgClear()" title="شيل الصورة">✖</button></div>'
       + '<div id="ccTryBcInfo" style="font-size:11.5px; padding:0 2px; color:#888;"></div>'
       + ccOutfitPrevHtml()
+      + '<div id="ccSigner"></div>'
       + ccQuickHtml()
       + '<div id="ccBar">'
       + '<button class="ccIco" onclick="document.getElementById(\'ccFile\').click()" title="صورة منتج">🖼️</button>'
@@ -417,6 +519,7 @@
         CST.msgs = arr;          // ⚡ الردود السريعة بتقرا منها المرحلة
         renderThread(arr);
         ccQuickRender();
+        ccSignerRender();
         var c = conv();
         if(c && Number(c.unreadStaff) > 0)
           CDB.patchConv(id, { unreadStaff: 0 }).catch(function(){});
