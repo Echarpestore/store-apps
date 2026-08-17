@@ -116,6 +116,19 @@
   .tabPage.on{ display:block; animation:fadeIn .18s ease; }
   @keyframes fadeIn{ from{ opacity:0; transform:translateY(4px);} to{ opacity:1; transform:none;} }
 
+  /* 💼 تبويبات التوظيف الفرعية — المختار **لازم** يبان.
+     من غير الحالة دي الأربع أزرار بيبقوا شكل واحد بالظبط
+     (كلهم بياخدوا تدرّج الزرار العام) والمالك مش هيعرف هو فين. */
+  .hireSub{
+    background:#fff !important; color:var(--sub) !important;
+    border:1px solid var(--line) !important; font-size:12.5px !important;
+    padding:9px 6px !important;
+  }
+  .hireSub.on{
+    background:linear-gradient(135deg,#3B82F6,#1D4ED8) !important;
+    color:#fff !important; border-color:transparent !important;
+  }
+
   .panel{ background:var(--panel); border:1px solid var(--line); border-radius:15px; padding:15px; margin-bottom:12px; }
   .panel h3{ font-size:14.5px; margin-bottom:4px; }
   .panel .hint{ color:var(--sub); font-size:11.5px; margin-bottom:12px; }
@@ -246,49 +259,22 @@
   </section>
 
   <!-- 💼 التوظيف: الحلقة كاملة — شواغر ← متقدّمين ← دعوة ← طلبات ← ملف -->
+  <!-- 💼 التوظيف — أربع شاشات منفصلة، واحدة تبان في المرة.
+       🔴 قبل كده: خمس لوحات مرصوصة في سكرول واحد بنفس الشكل، فالمتقدّمين
+          على الإعلان (job_applications) كانوا تايهين وسط اللي قدّم الورق
+          بعد الدعوة (staff_docs) — مجموعتين مختلفتين تمامًا. -->
   <section class="tabPage" id="page-hire">
-    <!-- 🧑‍💼 التوظيف: دعوة برابط لمرة واحدة + مراجعة الطلبات ومستنداتها -->
-    <div class="panel">
-      <h3>🧑‍💼 دعوة موظف جديد</h3>
-      <div class="hint">بيتولّد رابط بكود لمرة واحدة — الفرع والوظيفة محدّدين فيه،
-        فالموظفة مش بتختارهم ومفيش فرصة غلط.</div>
-      <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;">
-        <select id="hvBrand" style="flex:1 1 120px;">
-          <option value="echarpe">echarpe</option>
-          <option value="glow">Glow</option>
-        </select>
-        <select id="hvBranch" style="flex:1 1 130px;"></select>
-        <select id="hvRole" style="flex:1 1 190px;">
-          <option value="sales_social">مبيعات ومساعدة تسويق رقمي</option>
-          <option value="cashier">كاشير ومبيعات</option>
-        </select>
-        <select id="hvDays" style="flex:1 1 110px;">
-          <option value="3">تنتهي بعد 3 أيام</option>
-          <option value="1">تنتهي بعد يوم</option>
-          <option value="7">تنتهي بعد 7 أيام</option>
-        </select>
+    <div class="card" style="position:sticky; top:0; z-index:5;">
+      <div id="hireSubNav" style="display:flex; gap:4px;">
+        <button class="hireSub on" data-h="apps"  style="flex:1;">📋 مقدّمين</button>
+        <button class="hireSub" data-h="docs"     style="flex:1;">📄 ورق</button>
+        <button class="hireSub" data-h="vac"      style="flex:1;">📌 شواغر</button>
+        <button class="hireSub" data-h="files"    style="flex:1;">🗂️ ملفات</button>
       </div>
-      <button id="hvMake" style="width:100%; margin-top:10px;">🔗 اعمل رابط دعوة</button>
-      <div id="hvOut"></div>
-      <div id="hvList"></div>
     </div>
 
-    <div class="panel">
-      <h3>📥 طلبات التوظيف</h3>
-      <div class="hint">الطلبات الجاية من رابط الدعوة — بمستنداتها.</div>
-      <div id="hrList"></div>
-    </div>
-
-    <!-- 📌 الشواغر: إنت اللي بتحدد أي فرع محتاج أي وظيفة -->
-    <div class="panel">
-      <h3>📌 الوظائف المتاحة</h3>
-      <div class="hint">علّم الفرع والوظيفة اللي محتاج فيها حد — استمارة التقديم
-        بتعرض المتاح بس. لو مفيش أي علامة، الاستمارة بتقول «لا توجد شواغر».</div>
-      <div id="opGrid"></div>
-      <button id="opSave" style="width:100%; margin-top:11px;">💾 احفظ الشواغر</button>
-    </div>
-
-    <!-- 💼 المتقدّمين للوظائف — الفرز قبل المقابلة -->
+    <!-- 📋 مقدّمين — اللي جه من رابط الإعلان، قبل أي مقابلة -->
+    <div id="hireApps" class="hireSec">
     <div class="panel">
       <h3>💼 المتقدّمين للوظائف</h3>
       <div class="hint">الطلبات الجاية من رابط الإعلان. افرز، وابعت دعوة تسجيل
@@ -315,6 +301,58 @@
 
     <!-- 🗂️ ملف الموظفة: بحث بالاسم أو الرقم في **كل** التاريخ، والمستندات
          بتتجاب على الطلب مش على نافذة زمنية -->
+    </div>
+
+    <!-- 📄 ورق — الدعوة بتتبعت هنا، وطلباتها بمستنداتها بتنزل تحتيها -->
+    <div id="hireDocs" class="hireSec" style="display:none;">
+    <div class="panel">
+      <h3>🧑‍💼 دعوة موظف جديد</h3>
+      <div class="hint">بيتولّد رابط بكود لمرة واحدة — الفرع والوظيفة محدّدين فيه،
+        فالموظفة مش بتختارهم ومفيش فرصة غلط.</div>
+      <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;">
+        <select id="hvBrand" style="flex:1 1 120px;">
+          <option value="echarpe">echarpe</option>
+          <option value="glow">Glow</option>
+        </select>
+        <select id="hvBranch" style="flex:1 1 130px;"></select>
+        <select id="hvRole" style="flex:1 1 190px;">
+          <option value="sales_social">مبيعات ومساعدة تسويق رقمي</option>
+          <option value="cashier">كاشير ومبيعات</option>
+        </select>
+        <select id="hvDays" style="flex:1 1 110px;">
+          <option value="3">تنتهي بعد 3 أيام</option>
+          <option value="1">تنتهي بعد يوم</option>
+          <option value="7">تنتهي بعد 7 أيام</option>
+        </select>
+      </div>
+      <button id="hvMake" style="width:100%; margin-top:10px;">🔗 اعمل رابط دعوة</button>
+      <div id="hvOut"></div>
+      <div id="hvList"></div>
+    </div>
+    <div class="panel">
+      <h3>📥 طلبات التوظيف</h3>
+      <div class="hint">الطلبات الجاية من رابط الدعوة — بمستنداتها.</div>
+      <div id="hrList"></div>
+    </div>
+
+    <!-- 📌 الشواغر: إنت اللي بتحدد أي فرع محتاج أي وظيفة -->
+    </div>
+
+    <!-- 📌 شواغر — إنت اللي بتحدد أي فرع محتاج أي وظيفة -->
+    <div id="hireVac" class="hireSec" style="display:none;">
+    <div class="panel">
+      <h3>📌 الوظائف المتاحة</h3>
+      <div class="hint">علّم الفرع والوظيفة اللي محتاج فيها حد — استمارة التقديم
+        بتعرض المتاح بس. لو مفيش أي علامة، الاستمارة بتقول «لا توجد شواغر».</div>
+      <div id="opGrid"></div>
+      <button id="opSave" style="width:100%; margin-top:11px;">💾 احفظ الشواغر</button>
+    </div>
+
+    <!-- 💼 المتقدّمين للوظائف — الفرز قبل المقابلة -->
+    </div>
+
+    <!-- 🗂️ ملفات — بحث في كل التاريخ بلا حد زمني -->
+    <div id="hireFiles" class="hireSec" style="display:none;">
     <div class="panel">
       <h3>🗂️ ملف الموظفة</h3>
       <div class="hint">اكتب اسم أو رقم موبايل — بيدوّر في كل التسجيلات
@@ -322,6 +360,7 @@
       <input id="efQ" placeholder="اسم أو رقم موبايل" style="width:100%; margin-top:9px;">
       <div id="efList"></div>
       <div id="efCard"></div>
+    </div>
     </div>
   </section>
 

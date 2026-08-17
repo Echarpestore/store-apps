@@ -1189,6 +1189,23 @@ document.querySelectorAll('#tabsNav button').forEach(function(b){
     }
   });
 });
+/* 💼 تبويبات التوظيف الفرعية
+   ------------------------------------------------------------
+   نفس نمط `.daySub` بالظبط — إخفاء/إظهار بس، **مفيش إعادة رسم**.
+   اللوحات الأربعة بتترسم أصلًا من الاشتراكات الحية (`apList` · `hrList` ·
+   `opGrid` · `efList`)، فالمحتوى موجود جوّه حتى وهو مخفي. لو ربطنا الرسم
+   بالضغط هنا، اللوحة اللي مش مفتوحة هتبقى بايتة لحد ما يدوس عليها. */
+document.querySelectorAll('.hireSub').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('.hireSub').forEach(function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    document.querySelectorAll('.hireSec').forEach(function(x){ x.style.display = 'none'; });
+    const sec = document.getElementById('hire' + b.dataset.h.charAt(0).toUpperCase() + b.dataset.h.slice(1));
+    if(sec) sec.style.display = '';
+    window.scrollTo(0, 0);
+  });
+});
+
 document.getElementById('page-inbox').classList.add('on');
 
 /* ============================================================
