@@ -132,6 +132,25 @@
     return COLOR_HEX[k] || COLOR_HEX[k.replace(/-/g, "")] || "#b7aca3";
   }
 
+  /* 🏷️ اسم عربي للعرض تحت الدايرة — نفس قايمة CC_BAND_COLORS في
+     pos/chat-staff-ui.js حرفيًا (القيمة v هي اللي بترجع من الباك
+     إند). لون مش موجود هنا بيتعرض بالاسم الخام اللي جاي (فولباك آمن،
+     مش بيتخفي). ⚠️ زي COLOR_HEX بالظبط: أي لون يتضاف في القايمتين
+     التانيين لازم يتضاف هنا كمان. */
+  var COLOR_LABEL_AR = {
+    "off-white": "أوف وايت", "offwhite": "أوف وايت", "white": "أبيض",
+    "black": "أسود", "navy": "كحلي", "beige": "بيج",
+    "grey": "رمادي", "gray": "رمادي", "brown": "بني",
+    "rose": "وردي", "red": "أحمر",
+    "olive": "زيتوني", "green": "أخضر", "blue": "أزرق",
+    "mocha": "موكا", "cream": "كريمي", "burgundy": "عنابي",
+    "mustard": "خردلي", "camel": "جملي"
+  };
+  function colorSwatchLabel(name) {
+    var k = String(name || "").toLowerCase().trim().replace(/\s+/g, "-");
+    return COLOR_LABEL_AR[k] || COLOR_LABEL_AR[k.replace(/-/g, "")] || name;
+  }
+
   /* مقاس بعد التصغير — بيصغّر بس (مفيش تكبير)، ويحافظ على النسبة */
   function computeResize(w, h, maxDim) {
     var W = Math.max(1, Math.round(w || 0));
@@ -327,6 +346,7 @@
     readBandanaPid: readBandanaPid,
     isGridMode: isGridMode,
     colorSwatchHex: colorSwatchHex,
+    colorSwatchLabel: colorSwatchLabel,
     computeGridLayout: computeGridLayout,
     sliceGridProportional: sliceGridProportional,
     computeResize: computeResize,
