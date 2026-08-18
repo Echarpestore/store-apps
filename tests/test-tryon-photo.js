@@ -120,6 +120,47 @@ assert(verAtLeast(TSW, /echarpe-tryon-v(\d+)/, 38), 'كاش tryon ≥ v38');
 assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 'photo في precache بتاع tryon');
 
 /* ============================================================
+   🔴🔴🔴🔴⭐ بصمة صورة العميلة (faceSig) — لازم تفرّق صورتين
+   مختلفتين حتى لو ليهم نفس الطول ونفس البداية
+   ------------------------------------------------------------
+   الباج الحقيقي اللي ظهر في الاستخدام: "على صورة جديدة بيجيب
+   الصورة اللي اتولدت قبلها". السبب: البصمة القديمة كانت بتاخد
+   ٤ عيّنات × ١٢ حرف من أماكن نسبية ثابتة + الطول — وصورتين من نفس
+   الموبايل في نفس الإضاءة بيطلعوا بنفس الطول تقريبًا ونفس المقاطع
+   دي، فالبصمة تتطابق والكاش يرجّع نتيجة صورة قديمة لصورة جديدة.
+   ============================================================ */
+(function(){
+  const path = require('path');
+  const PC = require(path.join(__dirname, '..', 'tryon', 'photo-core.js'));
+  const base = 'data:image/jpeg;base64,';
+
+  // 🔴🔴🔴🔴⭐ الحالة اللي كانت بتفشل بالظبط: نفس الطول، نفس البداية،
+  // نفس المقاطع عند ٢٠٪/٤٠٪/٦٠٪/٨٠٪ تقريبًا — بس محتوى مختلف
+  const a = base + '/9j/4AAQSkZJRg' + 'A'.repeat(500) + 'XYZ' + 'B'.repeat(500);
+  const b = base + '/9j/4AAQSkZJRg' + 'A'.repeat(500) + 'QRS' + 'B'.repeat(500);
+  assert(a.length === b.length, '(تمهيد) الصورتين بنفس الطول بالظبط');
+  assert(PC.faceSig(a) !== PC.faceSig(b),
+    '🔴🔴🔴🔴⭐ صورتين مختلفتين بنفس الطول والبداية → بصمتين مختلفتين (كان الباج: نفس البصمة)');
+
+  // اختلاف بحرف واحد جوه الصورة لازم يتمسك
+  const c = a.slice(0, 700) + 'Z' + a.slice(701);
+  assert(PC.faceSig(a) !== PC.faceSig(c),
+    '⭐ اختلاف بحرف واحد في النص بيغيّر البصمة');
+
+  // ثبات: نفس الصورة بالظبط لازم تدي نفس البصمة دايمًا (وإلا الكاش ميشتغلش خالص)
+  assert(PC.faceSig(a) === PC.faceSig(a), 'نفس الصورة بتدي نفس البصمة (ثبات)');
+  assert(PC.faceSig('') === '', 'صورة فاضية → بصمة فاضية');
+
+  // 🔒 وعلى مستوى الكاش نفسه: صورة جديدة مالهاش نتيجة محفوظة
+  const d = {};
+  const st = { getItem:(k)=> d[k]===undefined?null:d[k], setItem:(k,v)=>{d[k]=v;}, removeItem:(k)=>{delete d[k];} };
+  PC.saveResult(st, 'prod1', a, base + 'RESULT_FOR_A');
+  assert(PC.readResult(st, 'prod1', a) !== '', 'نفس الصورة بترجّع نتيجتها المحفوظة');
+  assert(PC.readResult(st, 'prod1', b) === '',
+    '🔴🔴🔴🔴⭐ صورة جديدة (نفس الطول) **مالهاش** نتيجة — بتتولّد من جديد زي ما المفروض');
+})();
+
+/* ============================================================
    💾 كاش النتايج — نفس التركيبة متتولّدش مرتين
    ------------------------------------------------------------
    السبب: العميلة بتلف وترجع وهي بتقارن، وكل رجعة كانت توليد
@@ -207,24 +248,23 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
 })();
 
 /* 💾 الربط في photo.html — الكاش لازم يتفحص **قبل** النداء
-   (المسار العادي من غير بندانة) */
+   (المسار العادي من غير بندانة، والمسار مع البندانة نفس المنطق) */
 (function(){
   const fs = require('fs'), path = require('path');
   const H = fs.readFileSync(path.join(__dirname, '..', 'tryon', 'photo.html'), 'utf8');
-  const fn = (H.match(/function generate\(customerDataUrl\)\{[\s\S]*?\n  \}/) || [''])[0];
+  const fn = H.slice(H.indexOf('function generate('), H.indexOf('function fail('));
 
   const iHit  = fn.indexOf('PC.readResult');
-  const iCall = fn.indexOf('callHijabTryOn');
-  assert(iHit > -1, '💾 photo.html بيفحص الكاش (المسار العادي)');
+  const iCall = fn.indexOf('httpsCallable');
+  assert(iHit > -1, '💾 photo.html بيفحص الكاش');
   assert(iHit < iCall,
     '⭐ والفحص **قبل** النداء — بعده مالوش أي لازمة، التكلفة بتكون اتدفعت');
-  assert(/if\(hit\)\{\s*succeedPlain\(hit,\s*true\);\s*return;\s*\}/.test(fn),
+  assert(/if\(hit\)\{\s*succeed\(hit,\s*true\);\s*return;\s*\}/.test(fn),
     'وعند الإصابة بيعرض ويرجع من غير ما ينادي');
-
-  const succeedFn = (H.match(/function succeedPlain\(imageDataUrl, fromCache\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(succeedFn.indexOf('PC.saveResult') > -1, 'والنتيجة الجديدة بتتحفظ');
+  assert(fn.indexOf('PC.saveResult') > -1, 'والنتيجة الجديدة بتتحفظ');
   // 🔴 مايتحفظش اللي جاي من الكاش — ده كان هيقلّب الترتيب كل عرض
-  assert(/if\(!fromCache && lastCustomer\)/.test(succeedFn),
+  assert(/if\(!fromCache && lastCustomer\)/.test(fn) ||
+         H.indexOf('if(!fromCache && lastCustomer)') > -1,
     '🔴 واللي جاي من الكاش **مش** بيتعاد حفظه (وإلا الترتيب بيتقلب)');
 })();
 
@@ -237,15 +277,16 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
 (function () {
   const PC = require(CORE);
 
-  // نفس تنضيف السيرفر بالظبط — نصوص، بحد أقصى ٦، بحروف بس
-  assertEq(PC.parseBandanaColors(['off-white', 'black', 'navy', 'beige']),
-    ['off-white', 'black', 'navy', 'beige'], 'تنضيف قايمة سليمة بيسيبها زي ما هي');
+  // نفس تنضيف السيرفر بالظبط — نصوص، بحد أقصى ٣ (قرار معماري)، بحروف بس
+  assertEq(PC.MAX_BANDANA_COLORS, 3, '🔴🔴🔴🔴⭐ الحد الأقصى ٣ ألوان (قرار معماري نهائي)');
+  assertEq(PC.parseBandanaColors(['off-white', 'black', 'navy']),
+    ['off-white', 'black', 'navy'], 'تنضيف قايمة سليمة (٣ بالظبط) بيسيبها زي ما هي');
   assertEq(PC.parseBandanaColors(['a', 'ok!!', '  navy blue  ']),
     ['ok', 'navy blue'], '🔴 حرف واحد بيترفض + المحارف الغريبة بتتشال');
   assertEq(PC.parseBandanaColors(['1', '2', '3']), [],
     'أرقام بس (مفيهاش حروف) بترجع فاضية بعد التنضيف');
-  assertEq(PC.parseBandanaColors('["red","blue","green","navy","beige","black","white"]').length, 6,
-    '🔴 سقف ٦ ألوان حتى لو الأصل أكتر');
+  assertEq(PC.parseBandanaColors('["red","blue","green","navy","beige","black","white"]').length, 3,
+    '🔴🔴🔴🔴⭐ سقف ٣ ألوان حتى لو الأصل أكتر (كان ٦، اتقلل لقرار معماري)');
   assertEq(PC.parseBandanaColors('not json'), [], 'JSON بايظ → فاضي مش استثناء');
   assertEq(PC.parseBandanaColors(null), [], 'قيمة فاضية → فاضي');
 
@@ -372,59 +413,39 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
 })();
 
 /* ============================================================
-   🔴🔴🔴⭐ إعادة تصميم كاملة: كل لون بندانة طلب مستقل (مش شبكة NxM)
+   🔴🔴🔴🔴⭐ قرار معماري نهائي: نداء واحد، حد أقصى ٣ ألوان (٤ خانات
+   كحد أقصى مع "بدون بندانة") — مش طلب مستقل لكل لون
    ------------------------------------------------------------
-   تجربة حقيقية كشفت إن أي شبكة أكتر من خانتين (بدون بندانة + لون)
-   كانت بتتلخبط: زوم مبالغ فيه (تقسيم ٢×٢ = ربع الصورة للخانة)،
-   ولون غلط بيظهر (فهرسة شبكات مربّعة/فردية مش مضمونة). الحل:
-   generateForColor بتطلب **لون واحد بس** في كل نداء — دايمًا
-   خانتين (بدون بندانة + اللون ده)، أبسط هندسة ممكنة ومختبرة.
+   جرّبنا "كل لون طلبه مستقل" وكان مكلّف قوي (نداء منفصل لكل لون
+   تختاره العميلة). القرار النهائي: نداء واحد يغطي "بدون بندانة" +
+   لحد ٣ ألوان، مع تصحيح الاتجاه المعكوس (resolveGridOrientation)
+   لو الموديل قلب الصفوف بالأعمدة. الحد الأقصى ٣ (مش أكتر) هو اللي
+   بيخلي الهندسة بسيطة بما يكفي للتصحيح.
    ============================================================ */
 (function () {
   const H = fs.readFileSync(PAGE, 'utf8');
-  const genColorFn = (H.match(/function generateForColor\(customerDataUrl, color\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(genColorFn.length > 0, 'generateForColor موجودة');
+  assert(H.indexOf('PC.readBandanaColors') >= 0, 'بيقرا ألوان البندانة من sessionStorage');
+  assert(H.indexOf('withBandana') >= 0 && H.indexOf('bandanaColors') >= 0,
+    'بيبعت withBandana + bandanaColors للدالة');
+  assert(H.indexOf('bandanaColors: gridMode ? bandanaColorsRequested : undefined') >= 0,
+    '🔴🔴🔴🔴⭐ نداء واحد بيبعت كل الألوان المختارة مع بعض (لحد ٣) — مش لون واحد منفصل');
+  assert(H.indexOf('generateForColor') === -1 && H.indexOf('onSwatchTap') === -1,
+    '🔴 مفيش أثر للتصميم القديم (طلب مستقل لكل لون) — اتلغى بقرار المالك');
 
-  // 🔴🔴🔴⭐ كل نداء بيطلب [color] واحد بس — مش الليستة كلها
-  assert(genColorFn.indexOf('bandanaColors: [color]') >= 0,
-    '🔴🔴🔴⭐ الطلب للسيرفر بيبعت لون واحد بس ([color]) — مش array الألوان كلها');
-  assert(genColorFn.indexOf('bandanaColorsRequested') === -1,
-    '🔴🔴🔴⭐ مفيش استخدام لقايمة الألوان الكاملة جوه الطلب — لون واحد مستقل بس');
+  // ✂️ القص: التقسيم الرياضي + تصحيح الاتجاه، على الصورة كلها مرة واحدة
+  const trySplitFn = (H.match(/function trySplitGrid\(imageDataUrl, colors\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(trySplitFn.length > 0, 'trySplitGrid موجودة');
+  assert(trySplitFn.indexOf('PC.computeGridLayout') >= 0 && trySplitFn.indexOf('PC.sliceGridProportional') >= 0,
+    'بتستخدم نفس أبعاد الشبكة اللي في البرومبت + التقسيم المضمون');
+  assert(H.indexOf('id="bandRow"') >= 0, 'عنصر صف الألوان موجود في الصفحة');
+  assert(H.indexOf('id="bandCartBtn"') >= 0, 'زرار سلة البندانة موجود');
+  assert(H.indexOf('hideBandRow') >= 0, 'فيه مسار واضح لإخفاء صف الألوان (فشل تحميل أو منتج عادي)');
+  assert(!/\.innerHTML\s*=/.test(H), '🔒 الكود الجديد برضه ملتزم: مفيش innerHTML في الصفحة كلها');
 
-  // 🔴🔴⭐ الكاش: نفس [color] بالظبط للقراءة والحفظ — نفس المفتاح، مفتاح واحد
-  const iHit = genColorFn.indexOf('PC.readResult');
-  const iSave = genColorFn.indexOf('PC.saveResult');
-  assert(iHit > -1 && iHit < genColorFn.indexOf('callHijabTryOn'),
-    'بيفحص الكاش (بمفتاح [color]) قبل أي نداء شبكة');
-  assert(/PC\.readResult\([^)]*\[color\]\)/.test(genColorFn),
-    'قراءة الكاش بمفتاح [color]');
-  assert(/PC\.saveResult\([^)]*\[color\]\)/.test(genColorFn),
-    '🔴🔴⭐ حفظ الكاش بنفس [color] بالظبط — مفتاح واحد للقراءة والحفظ (كان الباج: مصدرين مختلفين)');
-
-  // عند إصابة الكاش: قص محلي (crop) مش نداء شبكة تاني
-  assert(genColorFn.indexOf('loadGridImage(hit,') >= 0,
-    'عند إصابة الكاش: تحميل محلي وقص — مفيش نداء شبكة تاني');
-
-  // ✂️ الهندسة الوحيدة: computeGridLayout(2) — نفس الحالة المختبرة
-  assert(H.indexOf('cropFromGrid') >= 0, 'دالة القص الموحّدة موجودة');
-  const cropFn = (H.match(/function cropFromGrid\(imgEl, whichIndex\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(cropFn.indexOf('computeGridLayout(2)') >= 0,
-    '🔴🔴🔴⭐ القص دايمًا بهندسة الخانتين (٢) — مفيش شبكة أكبر أبدًا لأي عدد ألوان');
-})();
-
-/* 🖱️ صف الألوان: كل لون تاب عليه بيتصرف صح — "بدون بندانة" مجاني
-   دايمًا، نفس اللون الظاهر مفيش داعي يتولّد تاني، ولون جديد بيطلب
-   مستقل. */
-(function () {
-  const H = fs.readFileSync(PAGE, 'utf8');
-  const tapFn = (H.match(/function onSwatchTap\(label, imgFromEvent\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(tapFn.length > 0, 'onSwatchTap موجودة');
-  assert(tapFn.indexOf('label === "none"') >= 0 && tapFn.indexOf('cropFromGrid') >= 0,
-    '⭐ "بدون بندانة" بيتقص محليًا من أي صورة سابقة — مجاني دايمًا');
-  assert(tapFn.indexOf('label === lastGridGenColor') >= 0,
-    '⭐ نفس اللون الظاهر حاليًا — قص بس، مفيش توليد جديد زيادة عن اللازمة');
-  assert(tapFn.indexOf('generateForColor(lastCustomer, label)') >= 0,
-    'لون تاني غير الظاهر — طلب مستقل (كاش أو توليد طازة)');
+  // 🔴 الافتراضي المعروض أول ما النتيجة تظهر: أول لون حقيقي، مش "بدون بندانة"
+  const renderFn = (H.match(/function renderBandRow\(labeled, imgEl\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(renderFn.indexOf("e.label !== \"none\"") >= 0,
+    '🔴 الافتراضي أول لون حقيقي (المنتج المعروض) مش غيابه');
 })();
 
 // ---------- ٨) الربط في الشات (loyalty/glow): إرسال ألوان البندانة ----------
@@ -435,9 +456,9 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
   assert(H.indexOf('chatBandanaPid') >= 0, brand + ': متغيّر باركود البندانة موجود');
   assert(H.indexOf('echarpe_tryon_bandana_colors') >= 0, brand + ': chatTryOn بيبعت الألوان لصفحة التجربة');
   assert(H.indexOf('echarpe_tryon_bandana_pid') >= 0, brand + ': chatTryOn بيبعت باركود البندانة');
-  // 🔴 تنضيف الألوان في الشات لازم يطابق حدود السيرفر (نفس الحد الأقصى ٦)
-  assert(/slice\(0,\s*6\)/.test(H.slice(H.indexOf('chatBandanaColors[m.id]') - 400, H.indexOf('chatBandanaColors[m.id]') + 100)),
-    brand + ': تنضيف الألوان في رسالة الشات بسقف ٦');
+  // 🔴🔴🔴🔴⭐ تنضيف الألوان في الشات لازم يطابق حدود السيرفر (الحد الأقصى ٣ — قرار معماري نهائي)
+  assert(/slice\(0,\s*3\)/.test(H.slice(H.indexOf('chatBandanaColors[m.id]') - 400, H.indexOf('chatBandanaColors[m.id]') + 100)),
+    brand + ': تنضيف الألوان في رسالة الشات بسقف ٣');
   // tryonAddToCart بقى بياخد note ويضيفه للملاحظات
   const fnStart = H.indexOf('function tryonAddToCart(');
   const fnBody = H.slice(fnStart, H.indexOf('window.tryonAddToCart = tryonAddToCart;'));
