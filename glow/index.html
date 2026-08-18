@@ -2960,7 +2960,9 @@ window.addEventListener('load', function(){
     var m = /[?&]addcart=([^&]+)/.exec(location.search);
     if(m && m[1]){
       var bc = decodeURIComponent(m[1]);
-      if(bc && typeof tryonAddToCart === 'function') tryonAddToCart(bc);
+      var nm = /[?&]note=([^&]+)/.exec(location.search);
+      var note = nm && nm[1] ? decodeURIComponent(nm[1]) : '';
+      if(bc && typeof tryonAddToCart === 'function') tryonAddToCart(bc, null, note);
       try{ history.replaceState(null, '', location.pathname); }catch(e2){}
     }
   }catch(e){}
@@ -3199,6 +3201,10 @@ var chatConv = null, chatConvUnsub = null, chatMsgsUnsub = null;
 var chatImgs = {};          // msgId → dataURL (لزرار جربيها)
 var chatBarcodes = {};      // msgId → باركود المنتج (لو الموظفة حطته) — لزرار «أضيفيها للسلة»
 var chatOutfits = {};       // msgId → [{img,barcode,name,price}, ...] لرسايل اقتراح الطقم
+// 🧢 وضع شبكة البندانة — الموظفة بتحدد الألوان المتاحة + باركود البندانة
+// نفسها (منتج منفصل عن الطرحة) مع رسالة الصورة.
+var chatBandanaColors = {}; // msgId → [ألوان] (٢ فأكتر يفعّل وضع الشبكة)
+var chatBandanaPid = {};    // msgId → باركود البندانة
 var chatSending = false;
 
 // 🖼️ صورة من العميلة — "عندكم زي دي؟" بصورة أوضح من أي وصف
@@ -3362,6 +3368,15 @@ function chatRenderMsgs(arr){
     if(m.img && String(m.img).indexOf('data:image/') === 0){
       chatImgs[m.id] = m.img;
       if(m.barcode) chatBarcodes[m.id] = String(m.barcode);
+      // 🧢 ألوان البندانة — بنفس تنضيف حدود hijabTryOn.js بالظبط
+      // (نصوص، بحد أقصى ٦) عشان القص بعدين ميلخبطش لون بخانة.
+      if(Array.isArray(m.bandanaColors)){
+        var _bc = m.bandanaColors.filter(function(c){ return typeof c === 'string'; })
+          .map(function(c){ return c.replace(/[^a-zA-Z \-]/g, '').trim().slice(0, 24); })
+          .filter(function(c){ return c.length >= 2; }).slice(0, 6);
+        if(_bc.length >= 2) chatBandanaColors[m.id] = _bc;
+      }
+      if(m.bandanaPid) chatBandanaPid[m.id] = String(m.bandanaPid);
       body += '<img src="' + m.img.replace(/"/g, '') + '" alt="" onclick="chatImgZoom(this.src)" style="cursor:zoom-in;">';
     }
     if(m.text) body += esc(m.text);
@@ -3431,6 +3446,14 @@ function chatTryOn(id){
     var bc = chatBarcodes[id];
     if(bc) sessionStorage.setItem('echarpe_tryon_pid', bc);
     else sessionStorage.removeItem('echarpe_tryon_pid');
+    // 🧢 ألوان البندانة + باركودها — بيحوّلوا صفحة التجربة لوضع الشبكة.
+    //    نفس منطق الباركود: نمسح القديم لو الرسالة دي مفيهاش بندانة.
+    var bcolors = chatBandanaColors[id];
+    if(bcolors && bcolors.length >= 2) sessionStorage.setItem('echarpe_tryon_bandana_colors', JSON.stringify(bcolors));
+    else sessionStorage.removeItem('echarpe_tryon_bandana_colors');
+    var bpid = chatBandanaPid[id];
+    if(bpid) sessionStorage.setItem('echarpe_tryon_bandana_pid', bpid);
+    else sessionStorage.removeItem('echarpe_tryon_bandana_pid');
   }catch(e){}
   window.open('../tryon/photo.html?brand=glow', '_blank');   // Photo AI؛ الوضع الحي متاح جواها كـBeta
 }
@@ -3438,7 +3461,7 @@ function chatTryOn(id){
 /* 🛍️ الجسر بين تجربة الطرحة والسلة الحقيقية — بينادَى من صفحة
    tryon/photo.html عن طريق window.opener (نفس الأصل). فولباك للنداء
    المباشر: ?addcart=<باركود> بيترقرأ عند التحميل (تحت). */
-function tryonAddToCart(barcode, imgFallback){
+function tryonAddToCart(barcode, imgFallback, note){
   var bc = String(barcode || '').trim();
   if(!bc) return;
   /* 🖼️ صورة المنتج: مستندات المخزون (pos_test_inventory) **مفيهاش**
@@ -3447,6 +3470,15 @@ function tryonAddToCart(barcode, imgFallback){
   if(imgFallback && String(imgFallback).indexOf('data:image/') === 0){
     if(!_extraCartProducts[bc]) _extraCartProducts[bc] = {};
     _extraCartProducts[bc].img = imgFallback;
+  }
+  /* 🎨 لون البندانة (لو موجود) — بيتضاف لملاحظات الأوردر عشان
+     البايعة تجهّز اللون الصح. مفيش تغيير في سكيمة الصنف نفسه —
+     أبسط وأأمن من غير لمس onlineOrderPlace أو قواعد الأمان. */
+  if(note){
+    var n = String(note).trim();
+    if(n && _shopInfo.notes.indexOf(n) === -1){
+      _shopInfo.notes = (_shopInfo.notes ? _shopInfo.notes + ' · ' : '') + n;
+    }
   }
   openQuickCheckout(bc);
   tryonVerifyCartItem(bc);
