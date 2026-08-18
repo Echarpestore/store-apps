@@ -175,14 +175,21 @@ PREP.slugId = function(s){
 /* ---------- ٧) سطر الكتالوج الجاهز ---------- */
 // fit الافتراضي بتاع القالب المتظبط (v20) — النقط على حافة الفتحة.
 // seeds = عيّنات القماش لإعادة التلوين (نقرتين: فاتح + ضل) أو null.
-PREP.catalogSnippet = function(id, name, anchors, seeds, fit){
+// 🛒 v42: opts = { barcode, brand, kind } — الباركود هو اللي بيخلّي
+//    "ضيفيها للسلة" تشتغل. من غيره الأصل بيتعرض بس من غير شراء.
+PREP.catalogSnippet = function(id, name, anchors, seeds, fit, opts){
   const f = fit || { widen: 1.08, lift: 0.05, liftTop: 0.14 };
+  const o = opts || {};
   const esc = (v) => String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const pt = (p) => '[' + Math.round(p[0]) + ', ' + Math.round(p[1]) + ']';
   let out = "{\n"
     + "    id: '" + esc(PREP.slugId(id)) + "',\n"
-    + "    name: '" + esc(name || 'طرحة جديدة') + "',\n"
-    + "    type: 'photo',\n"
+    + "    name: '" + esc(name || 'طرحة جديدة') + "',\n";
+  // الباركود قبل النوع — أهم حقل، يبان أول حاجة لما تراجع السطر
+  if(o.barcode) out += "    barcode: '" + esc(String(o.barcode).trim()) + "',\n";
+  if(o.brand)   out += "    brand: '" + esc(String(o.brand).trim()) + "',\n";
+  if(o.kind === 'bandana') out += "    kind: 'bandana',\n";
+  out += "    type: 'photo',\n"
     + "    head: { url: 'assets/" + esc(PREP.slugId(id)) + "-head.png',\n"
     + "            anchors: { l: " + pt(anchors.l) + ", r: " + pt(anchors.r)
     + ", top: " + pt(anchors.top) + " } },\n"

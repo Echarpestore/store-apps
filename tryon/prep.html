@@ -99,6 +99,18 @@
       <input type="text" id="assetId" placeholder="المعرّف بالإنجليزي — مثلًا chiffon-02">
       <input type="text" id="assetName" placeholder="الاسم اللي هيظهر للعميلة">
     </div>
+    <!-- 🛒 v42: الباركود والماركة والنوع — من غير الباركود مفيش
+         "ضيفيها للسلة"، والأصل بيبقى للعرض بس. -->
+    <div class="row">
+      <input type="text" id="assetBarcode" placeholder="باركود المنتج من المخزون (مهم للسلة)">
+      <input type="text" id="assetBrand" placeholder="الماركة — مثلًا breathe">
+    </div>
+    <div class="row">
+      <label class="lbl" style="display:flex; align-items:center; gap:7px;">
+        <input type="checkbox" id="assetIsBandana" style="width:auto;">
+        🧢 دي بندانة (مش طرحة) — من غير انسدال على الصدر
+      </label>
+    </div>
     <div class="row">
       <button class="gold" id="btnPng">⬇️ تنزيل PNG الأصل</button>
       <button id="btnSnippet">📋 نسخ سطر الكتالوج</button>
@@ -320,10 +332,16 @@
   function buildSnippet(){
     $('snippet').value = '  ' + P.catalogSnippet(
       $('assetId').value, $('assetName').value,
-      S.anchors, S.seeds.length >= 2 ? S.seeds : null) + ',';
+      S.anchors, S.seeds.length >= 2 ? S.seeds : null, null,
+      { barcode: $('assetBarcode').value,
+        brand:   $('assetBrand').value,
+        kind:    $('assetIsBandana').checked ? 'bandana' : '' }) + ',';
   }
   $('assetId').oninput = buildSnippet;
   $('assetName').oninput = buildSnippet;
+  $('assetBarcode').oninput = buildSnippet;
+  $('assetBrand').oninput = buildSnippet;
+  $('assetIsBandana').onchange = buildSnippet;
 
   $('btnPng').onclick = () => {
     const c = document.createElement('canvas');
