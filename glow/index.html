@@ -536,9 +536,11 @@
   .outfit-card .oc-name{font-size:10.5px; font-weight:800; padding:6px 6px 0; line-height:1.3; min-height:2.1em; overflow:hidden; color:var(--ink);}
   .outfit-card .oc-price{font-size:12px; font-weight:900; color:var(--pink-deep); padding:2px 6px;}
   .outfit-card .oc-btns{display:flex; flex-direction:column; gap:4px; padding:6px;}
-  .outfit-card button{border:none; border-radius:8px; padding:7px; font-size:10.5px; font-weight:800; cursor:pointer; font-family:inherit;}
+  .outfit-card button{border:1.5px solid transparent; border-radius:8px; padding:7px; font-size:10.5px;
+    font-weight:800; cursor:pointer; font-family:inherit; transition:transform .15s ease, opacity .15s ease;}
+  .outfit-card button:active{ transform:scale(.95); opacity:.85; }
   .outfit-card .oc-try{background:var(--ink); color:#fff;}
-  .outfit-card .oc-buy{background:var(--pink); color:#fff;}
+  .outfit-card .oc-buy{background:none; border-color:var(--pink); color:var(--pink-deep);}
   .ch-note{align-self:center; background:var(--pink-soft); color:var(--pink-deep); font-size:12px; border-radius:99px;
     padding:5px 14px; text-align:center;}
   .ch-inputbar{display:flex; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom));
@@ -547,8 +549,14 @@
     font-family:inherit; font-size:14px; resize:none; max-height:96px; outline:none; background:var(--bg);}
   .ch-inputbar textarea:focus{border-color:var(--pink);}
   .ch-send{border:none; background:var(--pink-deep); color:#fff; border-radius:50%; width:44px; height:44px;
-    font-size:18px; cursor:pointer; align-self:flex-end; flex:0 0 auto;}
+    display:flex; align-items:center; justify-content:center; cursor:pointer; align-self:flex-end; flex:0 0 auto;
+    transition:transform .15s ease, opacity .15s ease;}
+  .ch-send:active{ transform:scale(.93); }
   .ch-send:disabled{opacity:.4;}
+  .ch-upload{border:1.5px solid var(--line); background:#fff; color:var(--ink); border-radius:50%;
+    width:44px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+    align-self:flex-end; flex:0 0 auto; transition:transform .15s ease, background .15s ease;}
+  .ch-upload:active{ transform:scale(.93); background:var(--bg); }
 
   /* ============================================================
      🌐 زرار اللغة + تصحيحات الاتجاه
@@ -764,10 +772,13 @@
       <button onclick="chatImgClear()" style="border:none; background:none; font-size:17px; cursor:pointer;">✖</button>
     </div>
     <div class="ch-inputbar">
-      <button class="ch-send" style="background:#fff; color:var(--ink); border:1.5px solid var(--line);"
-              onclick="document.getElementById('chFile').click()" title="ابعتي صورة">🖼️</button>
+      <button class="ch-upload" onclick="document.getElementById('chFile').click()" title="ابعتي صورة">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13.5" r="3.3"/></svg>
+      </button>
       <textarea id="chInput" rows="1" placeholder="اكتبي رسالتك…" maxlength="500"></textarea>
-      <button class="ch-send" id="chSend" onclick="chatSend()">➤</button>
+      <button class="ch-send" id="chSend" onclick="chatSend()">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+      </button>
     </div>
     <input type="file" id="chFile" accept="image/*" style="display:none;">
   </div>
@@ -3369,8 +3380,8 @@ function chatRenderMsgs(arr){
           + '<div class="oc-name">' + esc(p.name || 'طرحة') + '</div>'
           + '<div class="oc-price">' + (Number(p.price) || 0) + ' ج.م</div>'
           + '<div class="oc-btns">'
-          + '<button class="oc-try" onclick="chatOutfitTry(\'' + esc(m.id) + '\',' + idx + ')">🧕 جربيها عليكي</button>'
-          + '<button class="oc-buy" onclick="chatOutfitBuy(\'' + esc(m.id) + '\',' + idx + ')">🛍️ اطلبيها</button>'
+          + '<button class="oc-try" onclick="chatOutfitTry(\'' + esc(m.id) + '\',' + idx + ')">جربيها عليكي</button>'
+          + '<button class="oc-buy" onclick="chatOutfitBuy(\'' + esc(m.id) + '\',' + idx + ')">اطلبيها</button>'
           + '</div></div>';
       }).join('') + '</div>';
     }

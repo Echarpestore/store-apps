@@ -519,3 +519,28 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
   assert(/\.msg \.m-try\{[^}]*background:var\(--ink\);/.test(H),
     brand + ': زرار جرّبيها لسه أساسي مصمت (أوضح فعل)');
 });
+
+/* ============================================================
+   💅 زرار رفع الصورة "العجيب" + أزرار كارت الطقم — نفس التنضيف
+   ------------------------------------------------------------
+   🔴 الشكوى: "زر upload الصوره العجيب" — كان بيستخدم كلاس .ch-send
+   بتاع زرار الإرسال نفسه مع override بـstyle inline وإيموجي 🖼️
+   جواه، حاجة هجينة مش نضيفة. بقى كلاس مخصوص (.ch-upload) + SVG.
+   ============================================================ */
+[['loyalty', LOY], ['glow', GLW]].forEach(function (t) {
+  const brand = t[0], H = fs.readFileSync(t[1], 'utf8');
+  // 🔴 بنفحص منطقة الزرار نفسها بس (مش الملف كله — 🖼️ بتتستخدم في تعليقات تانية كتير)
+  const uploadBtn = (H.match(/<button class="ch-upload"[\s\S]*?<\/button>/) || [''])[0];
+  assert(uploadBtn.length > 0, brand + ': زرار رفع الصورة موجود');
+  assert(uploadBtn.indexOf('🖼️') === -1, brand + ': 🔴 إيموجي زرار رفع الصورة اتشال من الزرار نفسه');
+  assert(uploadBtn.indexOf('<svg') >= 0, brand + ': زرار رفع الصورة بقى SVG');
+  assert(H.indexOf('style=') === -1 || !/class="ch-upload"[^>]*style=/.test(H),
+    brand + ': 🔴 مفيش style inline هجين على زرار رفع الصورة بقى');
+  const sendBtn = (H.match(/<button class="ch-send" id="chSend"[\s\S]*?<\/button>/) || [''])[0];
+  assert(sendBtn.indexOf('<svg') >= 0, brand + ': زرار الإرسال بقى SVG بدل السهم النصي');
+  // أزرار كارت الطقم — نفس تدرّج أساسي/تانوي، وإيموجي اتشالت
+  assert(H.indexOf('🧕 جربيها عليكي') === -1 && H.indexOf('🛍️ اطلبيها') === -1,
+    brand + ': إيموجي أزرار كارت الطقم اتشالت');
+  assert(/\.outfit-card \.oc-buy\{background:none; border-color:var\(--pink\);/.test(H),
+    brand + ': 🔴 زرار "اطلبيها" في كارت الطقم بقى بإطار (تانوي) زي باقي التصميم');
+});
