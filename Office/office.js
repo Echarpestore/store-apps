@@ -1688,6 +1688,9 @@ window.ofRenderActivity = ofRenderActivity;
 (function(){
   const load = document.getElementById('actLoad');
   if(load) load.addEventListener('click', function(){ ofLoadActivity(); });
+  // 🐞 بلاغات المشاكل — نفس السياسة: بدوسة بس
+  const inc = document.getElementById('incLoad');
+  if(inc) inc.addEventListener('click', function(){ loadIncidents(); });
   const s = document.getElementById('actSearch');
   if(s) s.addEventListener('input', function(){ ofRenderActivity(); });
   const k = document.getElementById('actKind');
@@ -3166,6 +3169,90 @@ function renderGrowth(){
   wrap.innerHTML = H;
 }
 window.renderGrowth = renderGrowth;
+
+
+// ============================================================
+// 🐞 بلاغات المشاكل من الفروع
+// ------------------------------------------------------------
+// الموظفة بتدوس الزرار في الكاشير → البلاغ بيتكتب في pos_incidents
+// بكل السجل التقني → المالك بيشوفه هنا.
+//
+// ⚡ بيتحمّل **بدوسة بس** مش تلقائي — نفس سياسة سجل النشاط، عشان
+//    مايزوّدش قراءات على الفتحة العادية.
+// ============================================================
+var _incRows = [];
+function loadIncidents(){
+  var btn = document.getElementById('incLoad');
+  var box = document.getElementById('incBox');
+  if(!box) return;
+  if(btn){ btn.disabled = true; btn.textContent = 'بيحمّل…'; }
+  var cut = Date.now() - 30*86400000;
+  db.collection('pos_incidents').where('ts','>=', cut).get().then(function(s){
+    _incRows = s.docs.map(function(d){ return Object.assign({ _id:d.id }, d.data()); })
+      .sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+    renderIncidents();
+  }).catch(function(e){
+    box.innerHTML = '<div class="empty">تعذر التحميل: ' + esc(e.code || e.message) + '</div>';
+  }).then(function(){
+    if(btn){ btn.disabled = false; btn.textContent = 'تحديث البلاغات'; }
+  });
+}
+function _incAuto(r){
+  /* 🧠 تشخيص تلقائي — بيوفر عليك قراية السجل كله.
+     الفكرة إن كل نمط ليه بصمة في البيانات: النوع (ب) بصمته
+     hasFocus=false، والأخطاء بصمتها سطور ❌. */
+  var ev = r.events || [];
+  var st = r.state || {};
+  var hints = [];
+  var lostSys = ev.some(function(e){ return e.hasFocus === false; })
+    || String(st['النافذة نشطة'] || '').indexOf('لأ') >= 0;
+  var errs = ev.filter(function(e){ return String(e.kind||'').indexOf('❌') >= 0; });
+  var netOff = ev.some(function(e){ return String(e.msg||'').indexOf('النت قطع') >= 0; });
+  if(lostSys) hints.push('🎯 تركيز النظام ضايع — النوع (ب)، الإصلاح في main.js مش في الويب');
+  if(errs.length) hints.push('❌ ' + errs.length + ' خطأ برمجي — أولهم: ' + esc(errs[0].msg || ''));
+  if(netOff) hints.push('🌐 النت اتقطع أثناء الجلسة');
+  if(!hints.length) hints.push('لا توجد بصمة واضحة — محتاج قراية السجل');
+  return hints;
+}
+function renderIncidents(){
+  var box = document.getElementById('incBox'); if(!box) return;
+  if(!_incRows.length){ box.innerHTML = '<div class="empty">مفيش بلاغات آخر ٣٠ يوم ✅</div>'; return; }
+  box.innerHTML = _incRows.map(function(r, i){
+    var d = new Date(r.ts || 0);
+    var when = d.toLocaleString('ar-EG', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    var hints = _incAuto(r);
+    return '<div class="card" style="margin-bottom:8px;">'
+      + '<div class="row"><span><b>' + esc(r.note || '—') + '</b>'
+      +   '<div class="muted">🏬 ' + esc(r.branch || '—') + ' · 👤 ' + esc(r.employeeName || '—')
+      +   ' · ' + when + '</div></span></div>'
+      + '<div style="margin-top:7px; padding:9px; background:var(--panel2); border-radius:9px;">'
+      +   hints.map(function(h){ return '<div class="muted" style="line-height:1.9;">' + h + '</div>'; }).join('')
+      + '</div>'
+      + '<button class="btn" style="width:100%; margin-top:7px; padding:9px; font-size:12.5px;"'
+      +   ' onclick="toggleIncDetail(' + i + ')">📋 السجل الكامل</button>'
+      + '<pre id="incD' + i + '" style="display:none; margin-top:7px; padding:9px; font-size:10.5px;'
+      +   ' background:var(--panel2); border-radius:9px; max-height:300px; overflow:auto;'
+      +   ' white-space:pre-wrap; direction:ltr; text-align:left;"></pre>'
+      + '</div>';
+  }).join('');
+}
+window.toggleIncDetail = function(i){
+  var el = document.getElementById('incD' + i);
+  var r = _incRows[i];
+  if(!el || !r) return;
+  if(el.style.display === 'block'){ el.style.display = 'none'; return; }
+  var txt = '';
+  var st = r.state || {};
+  Object.keys(st).forEach(function(k){ txt += k + ': ' + st[k] + '\n'; });
+  txt += '\n──── الأحداث (الأحدث تحت) ────\n';
+  (r.events || []).forEach(function(e){
+    txt += e.t + ' [' + e.kind + '] ' + e.msg
+      + (e.hasFocus === false ? '  ⚠️(النافذة مش نشطة)' : '')
+      + (e.active ? '  {' + e.active + '}' : '') + '\n';
+  });
+  el.textContent = txt;
+  el.style.display = 'block';
+};
 
 function renderSalaries(){
   const wrap = $('#salariesList'); if(!wrap) return;
