@@ -111,11 +111,13 @@
   .iconAct{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
     padding:12px 4px; background:none; border:0; border-inline-start:1px solid var(--cardline);
-    cursor:pointer; color:var(--ink); font-family:inherit;
+    cursor:pointer; color:var(--ink); font-family:inherit; width:100%;
   }
   .iconAct:first-child{ border-inline-start:0; }
   .iconAct .ic{ font-size:18px; line-height:1; }
   .iconAct .lb{ font-size:10.5px; font-weight:700; color:var(--muted); white-space:nowrap; }
+
+  .iconActWrap{ position:relative; flex:1; display:flex; }
 
   .moreMenu{
     position:absolute; bottom:calc(100% + 8px); left:0; background:#fff;
@@ -190,11 +192,12 @@
       <button class="iconAct" id="changeFaceBtn"><span class="ic">📷</span><span class="lb">غيّري صورتك</span></button>
       <button class="iconAct" id="retryBtn"><span class="ic">🔄</span><span class="lb">إعادة التجربة</span></button>
       <button class="iconAct" id="shareBtn"><span class="ic">📤</span><span class="lb">مشاركة</span></button>
-      <button class="iconAct" id="moreBtn"><span class="ic">⋯</span><span class="lb">المزيد</span>
+      <div class="iconActWrap">
+        <button class="iconAct" id="moreBtn"><span class="ic">⋯</span><span class="lb">المزيد</span></button>
         <div class="moreMenu hidden" id="moreMenu">
           <button type="button" id="backBtn">رجوع للشات</button>
         </div>
-      </button>
+      </div>
     </div>
 
     <div class="btns" style="margin-top:16px;">
@@ -372,20 +375,38 @@
   }
 
   /* ⚠️ اللينك ده بيتحمّل تاني من data:url — مفيش نداء شبكة تاني،
-     مجرد فك تشفير base64 محلي. القص والتلوين كلهم بعد كده مجانيين. */
+     مجرد فك تشفير base64 محلي. القص والتلوين كلهم بعد كده مجانيين.
+
+     🔴⭐ درس من تجربة حقيقية: كشف الفواصل بالتباين (GridSplit.splitGrid)
+     مش مضمون — الموديل مش دايمًا بيرسم فواصل واضحة كفاية للكشف
+     يلقطها، وكان بيفشل ويرجّع الصورة كاملة من غير قص (العميلة تشوف
+     ٤ وشوش صغيرة بدل صورة واحدة). الحل: **نجرب الكشف الدقيق الأول**
+     (لو نجح، أدق)، **ولو فشل نقسم رياضيًا** بنفس أبعاد الشبكة اللي
+     اتطلبت في البرومبت (computeGridLayout) — مضمون ١٠٠٪، مش محتاج
+     يلاقي حاجة في الصورة. النتيجة: العميلة **دايمًا** تشوف قص واحد
+     واضح قابل لتبديل اللون، مش الشبكة الخام أبدًا. */
   function trySplitGrid(imageDataUrl, colors){
     var img = new Image();
     img.onload = function(){
       try{
         var w = img.naturalWidth, h = img.naturalHeight;
-        var c = document.createElement("canvas");
-        c.width = w; c.height = h;
-        var ctx = c.getContext("2d");
-        ctx.drawImage(img, 0, 0);
-        var data = ctx.getImageData(0, 0, w, h).data;
-        var res = window.GridSplit ? window.GridSplit.splitGrid(data, w, h, { expect: colors.length }) : { ok: false };
-        if(!res.ok){ hideBandRow(); return; } // فشل واضح أحسن من خانة مقطوعة غلط
-        var labeled = window.GridSplit.labelCells(res.cells, colors);
+        var layout = PC.computeGridLayout(colors.length);
+        var cells = null;
+        try{
+          var c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          var ctx = c.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          var data = ctx.getImageData(0, 0, w, h).data;
+          var res = window.GridSplit ? window.GridSplit.splitGrid(data, w, h, { expect: colors.length }) : { ok: false };
+          if(res.ok){
+            cells = window.GridSplit.labelCells(res.cells, colors).map(function(e){ return e.cell; });
+          }
+        }catch(e){ /* الكشف فشل — نكمل على الفولباك الرياضي تحت */ }
+        if(!cells){
+          cells = PC.sliceGridProportional(w, h, layout.cols, layout.rows, colors.length);
+        }
+        var labeled = colors.map(function(label, i){ return { label: label, cell: cells[i] }; });
         renderBandRow(labeled, img);
       }catch(e){ hideBandRow(); }
     };

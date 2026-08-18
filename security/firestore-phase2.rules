@@ -1,0 +1,529 @@
+rules_version = '2';
+
+// ============================================================
+// 🔐 Echarpe / Glow — قواعد Firestore
+// نسخة محصّنة · 1 أغسطس 2026 · + منظومة الرصيد وكروت الهدايا
+//
+// ⚠️ اقرا ده الأول:
+//   · signedIn() = **أي حد** داخل، بما فيهم تطبيقات العملاء (دخول مجهول).
+//     يعني أي حاجة مكتوب عليها signedIn هي عمليًا **متاحة لأي عميل**
+//     عنده التطبيق ويعرف يفتح الكونسول.
+//   · isStaff() = دخول بإيميل وباسورد = POS · sales · Office. دي الحسابات
+//     بتاعتك إنت بس.
+//   · Cloud Functions بتشتغل بـAdmin SDK — **القواعد دي مبتتطبّقش عليها**.
+//   · التعديلات الجديدة معلّمة 🔒 · واللي محتاج تأكيد منك معلّم ⚠️.
+//
+// 🆕 إضافات الرصيد وكروت الهدايا (أغسطس ٢٠٢٦) معلّمة 💳.
+//
+// ⚠️⚠️ **درس مهم عن Firestore**: القواعد بتتجمع بـ"أو" مش بـ"و".
+//    لو مسار اتغطّى بقاعدتين، الوصول بيتسمح لو **أي واحدة** سمحت.
+//    يعني إضافة قاعدة مشددة لمستند بعينه جوّه pos_test_settings
+//    **مبتقفلش حاجة** — القاعدة العامة بتفضل بتسمح.
+//    ⚠️ ولاحظ إن التعليق ده **مبيذكرش المسار بالشكل الكامل** عن قصد:
+//       اختبار الرول بيدوّر على أول ظهور لـ"match /<اسم>/" وكان
+//       بيلقى التعليق قبل القاعدة الحقيقية ويقرا الكلام ده كأنه رول.
+//    عشان كده التشديد لازم يتعمل **جوّه** القاعدة العامة نفسها،
+//    عن طريق settingsSecret() و settingsLocked() تحت.
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isStaff() {
+      return signedIn() && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+
+    // 🔐 دعوة التوظيف: الكود لازم يكون موجود ومش مستعمل ومش منتهي.
+    //    (بتتنادى من قواعد sales_registrations و staff_docs تحت.)
+    function invite(code) {
+      return get(/databases/$(database)/documents/staff_invites/$(code)).data;
+    }
+    function inviteOpen(code) {
+      return exists(/databases/$(database)/documents/staff_invites/$(code))
+        && invite(code).usedAt == null
+        && invite(code).expiresAt > request.time.toMillis();
+    }
+
+    // 🔒 مستندات pos_test_settings اللي **ممنوع** حد غير الموظفين يشوفها.
+    // المجموعة دي مش إعدادات وبس — جواها أسرار حقيقية:
+    //   office_gate   → بصمة كود المالك بتاع Office
+    //   owner_admin   → بيانات أدمن المالك (فيها PIN)
+    //   sales_roles   → كود المدير بتاع تطبيق الحضور
+    //   seller_codes  → أكواد البياعات
+    //   staff_uids / staff_cards → ربط الموظفين وكروتهم
+    //   paymob        → إعدادات الماكينة وأرقام الترمينال
+    //   dayclose_*    → **سجل التقفيل بفلوسه** لكل فرع وكل يوم
+    //   💳 staff_access  → قايمة الموظفين المسموح لهم بعمليات الفلوس
+    //   💳 gift_cards    → سقف الكارت ومدته
+    //   💳 office_cash   → نقطة بداية دفتر اليومية (فيها أرقام فلوسك)
+    //   💳 office_cash_cfg → إعدادات الدفتر والدهب
+    // قبل كده كانت كلها مقروءة لأي حد داخل بحساب مجهول من تطبيق الولاء.
+    function settingsSecret(id) {
+      return id in ['office_gate', 'owner_admin', 'sales_roles', 'seller_codes',
+                    'staff_uids', 'staff_cards', 'paymob',
+                    'staff_access', 'gift_cards', 'office_cash', 'office_cash_cfg']
+          || id.matches('dayclose_.*')
+          || id.matches('printers_.*')
+          || id.matches('invoice_counter_.*');
+    }
+
+    // 💳🔒 مستندات **الدوال بس** اللي بتكتبها — ولا حتى الموظفين.
+    //    `staff_access` هي قايمة مين له حق يلمس فلوس. لو موظف قدر
+    //    يكتب فيها، بيضيف نفسه ويصرف رصيد ويصدر كروت.
+    //    ⚠️ لازم تتشال من القاعدة العامة تحت — مش تتقفل بقاعدة تانية
+    //       (شوف درس "أو مش و" فوق).
+    function settingsLocked(id) {
+      return id == 'staff_access';
+    }
+
+    // ---------- Office (محاسبة المكتب) ----------
+    match /office_recurring/{id}      { allow read, write: if isStaff(); }
+    match /office_expenses/{id}       { allow read, write: if isStaff(); }
+    match /office_merchants/{id}      { allow read, write: if isStaff(); }
+    match /office_merchant_txns/{id}  { allow read, write: if isStaff(); }
+
+    // 💳📒 دفتر اليومية — تعديلات المالك اليدوية والعدّ الفعلي والتجميد
+    match /office_cash_days/{dayKey} {
+      allow read, create, update: if isStaff();
+      allow delete: if false;          // 🔒 يوم اتسجّل عمره ما بيتمسح
+    }
+    // 💳🧾 أرشيف نقاط التصفير — بيتكتب مرة وخلاص
+    match /office_cash_epochs/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+
+    // ---------- العملاء والولاء ----------
+    match /pos_test_customers/{phone} {
+      // 🔒 get = مستند واحد برقمه (تطبيق الولاء بيفتح كده).
+      //    list = استعلام على المجموعة — ده اللي ينزّل قاعدة العملاء كلها.
+      // ✅ اتفحص فعليًا: الولاء وGlow بيدوّروا بكود العضوية بـlimit(1) بس
+      //    (loyalty/index.html:1044 · glow/index.html:1064). فالقايمة
+      //    مسموحة بحد **≤5** — البحث بيعدّي، والتنزيل الجماعي بيترفض.
+      // ⚠️ ده تقليل مخاطر مش قفل كامل: الدخول مجهول ومفيش هوية تربط
+      //    العميل بمستنده، فمستحيل نقول "اقرا بتاعك بس". القفل الكامل
+      //    محتاج ربط uid بالمستند — تعديل في تطبيق الولاء نفسه.
+      allow get:  if signedIn();
+      allow list: if isStaff() || (signedIn() && request.query.limit <= 5);
+
+      allow create: if isStaff()
+        || (signedIn()
+            && (!('points' in request.resource.data)      || request.resource.data.points == 0)
+            && (!('points_glow' in request.resource.data) || request.resource.data.points_glow == 0)
+            && (!('totalSpent' in request.resource.data)  || request.resource.data.totalSpent == 0)
+            // 🔒 وكمان ميقدرش يخلق نفسه ومعاه مكافآت جاهزة
+            && !('rewards' in request.resource.data)
+            // 💳🔒 ولا رصيد فلوس. ده أخطر حقل في المستند كله:
+            //    النقط بتتكسب بقاعدة، الرصيد فلوس بتتحط بإيد بشر.
+            && !('credit' in request.resource.data));
+
+      // 💳⭐⭐ التعديل: نفس الحقول المسموحة زي ما هي، و`credit` **مش
+      //    فيها** — يعني العميل مايقدرش يلمسها أصلًا.
+      //    والموظف كمان **ممنوع** يلمسها: الرصيد من Cloud Functions بس.
+      //    من غير الشرط ده، أي كاشير يفتح الكونسول ويزوّد رصيد نفسه.
+      allow update: if (isStaff()
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                 .hasAny(['credit', 'creditAt']))
+        || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+              ['name','loyaltyPin','loyaltyCode','loyaltyCode_glow',
+               'pendingRedeem','activatedOffers',
+               // 🔔🔴 دول التلاتة هما سبب إن إشعارات العملاء **ميتة تمامًا**.
+               //    الولاء/Glow غيّروا شكل التوكن من خريطة `fcmTokens` لمصفوفة
+               //    لكل براند (`fcmTokens_echarpe` / `fcmTokens_glow`) + `fcmTokenAt`،
+               //    والرول فضل مسموح فيه `fcmTokens` القديم بس. يعني كل محاولة
+               //    تسجيل توكن من ساعتها بترجع permission-denied، والتطبيق
+               //    بيبلعها في `console.warn`. صفر توكن جديد اتخزّن = صفر إشعار.
+               //    ⚠️ اللي خلّاها تعيش طويل: الاختبارات كانت بتتأكد إن **التطبيق**
+               //    بيكتب الشكل الجديد، ومحدش تأكد إن **الرول** بيسمح بيه،
+               //    ورولز سيميوليتر بيتجاهل hasOnly أصلًا (§6).
+               'fcmTokens','fcmTokens_echarpe','fcmTokens_glow','fcmTokenAt']));
+      allow delete: if false;
+      // ⚠️ باقي مفتوح عن قصد: عميل يقدر يعدّل الحقول دي على **أي** رقم مش
+      //    رقمه هو، لأن الدخول مجهول ومفيش هوية تربطه بمستنده. القفلة
+      //    الحقيقية موجودة في POS (سقف الاستبدال بالرصيد وبقيمة الفاتورة).
+      //    الحل النهائي = ربط uid بالمستند، وده تغيير في تطبيق الولاء نفسه.
+    }
+
+    // ---------- المبيعات ----------
+    match /pos_test_sales/{id} {
+      // ⚠️ اتفحص: تبويب «فواتيري» في الولاء وGlow بيعمل
+      //    where('customerPhone').limit(100) — فالقايمة **لازم** تفضل
+      //    مفتوحة، وتضييقها بيكسر التطبيقين
+      //    (loyalty/index.html:891 · glow/index.html:907).
+      //    والكتابة للموظفين بس زي ما هي.
+      allow read: if signedIn();
+      allow create, update: if isStaff();
+      allow delete: if false;
+    }
+
+    // ---------- الإعدادات (وجواها أسرار) ----------
+    match /pos_test_settings/{id} {
+      // 🔒 قراءة عامة لكل حاجة **ماعدا** المستندات السرية فوق
+      allow read: if isStaff() || (signedIn() && !settingsSecret(id));
+      // 💳🔒 والكتابة ممنوعة على المستندات المقفولة **حتى على الموظفين**
+      // ⚠️ `!settingsLocked(id)` لازم يتكرر على **كل** فرع من الشرط.
+      //    حطّيته على فرع الموظفين بس في الأول، والاختبار مسك إن الفرع
+      //    التاني (signedIn) لسه بيسمح — يعني القفل كان وهمي.
+      //    القاعدة: القفل بيتحط مرة على برّه، مش مرة جوّه فرع واحد.
+      allow create, update: if !settingsLocked(id) && (
+           isStaff()
+        || (signedIn() && (id == 'offer_stats_echarpe' || id == 'offer_stats_glow')));
+      allow delete: if false;
+    }
+
+    // ---------- المخزون والخصومات ----------
+    match /pos_test_inventory/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+    match /pos_test_discounts/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // ---------- 💳 كروت الهدايا ----------
+    // 🔒 مقفولة **تمامًا** — حتى على الموظفين والمالك.
+    //    فيها `codeHash`، والكود هو الفلوس. مفيش سبب مشروع إن تطبيق
+    //    يقرا كارت؛ الدوال بس هي اللي محتاجة ده.
+    //    العرض بيتم من `gift_cards_public` تحت (من غير البصمة).
+    match /gift_cards/{cardId} {
+      allow read, write: if false;
+    }
+
+    // 👁️ نسخة للعرض من غير البصمة — لتقرير Office
+    // ⚠️ القراءة للموظفين بس. العميلة بتشوف رصيدها من مستندها،
+    //    ومش محتاجة تشوف الكروت أصلًا.
+    match /gift_cards_public/{cardId} {
+      allow read: if isStaff();
+      allow write: if false;              // 🔒 الدوال بتكتبها
+    }
+
+    // ---------- 💳📒 دفتر الرصيد ----------
+    // ⚠️ append-only: مفيش تعديل ولا مسح **ولا حتى للمالك**.
+    //    دفتر فلوس بيتعدّل مش دفتر — ده بيلغي كل قيمة المراجعة.
+    //    الغلط بيتصحّح بحركة عكسية جديدة، مش بمسح القديمة.
+    // ⚠️⚠️ القراءة مفتوحة للداخلين زي `pos_test_sales` بالظبط — ولنفس
+    //    السبب: تطبيق العميلة بيعرض كشف حسابها بـwhere('phone'),
+    //    والدخول مجهول فمفيش هوية تربطها بمستندها. يعني نظريًا عميلة
+    //    تقدر تقرا كشف عميلة تانية لو عرفت رقمها.
+    //    ده **نفس القصور المعروف والموثّق** في فواتير `pos_test_sales`،
+    //    وحلّه واحد: ربط uid بالمستند في تطبيق الولاء.
+    //    ⚠️ الكتابة مقفولة تمامًا — فمفيش خطر على الفلوس نفسها.
+    match /credit_ledger/{entryId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;   // 🔒 الدوال بس
+    }
+
+    // 📝 طابور طلبات الكاشير — المالك بيوافق من Office
+    match /credit_requests/{reqId} {
+      allow read: if isStaff();
+      allow create, update, delete: if false;   // 🔒 الدوال بس
+    }
+
+    // 🔁 مفاتيح التكرار وحارس المحاولات
+    // ⚠️ مقفولين تمامًا: لو تطبيق قدر يمسح مفتاح تكرار، يقدر يعيد
+    //    نفس العملية تاني — وده بالظبط اللي المفتاح موجود يمنعه.
+    //    ولو قدر يصفّر حارس المحاولات، تخمين أكواد الكروت يبقى بلا حدود.
+    match /credit_idem/{key}  { allow read, write: if false; }
+    match /credit_guard/{key} { allow read, write: if false; }
+
+    // ---------- 🔖 طلبات الزباين ----------
+    // ⚠️ القراءة مفتوحة للداخلين عشان العميلة تشوف طلباتها في
+    //    التطبيق — نفس قصور `pos_test_sales` المعروف (الدخول مجهول
+    //    فمفيش هوية تربطها بمستندها).
+    // 🔒 الكتابة للموظفين بس: الطلب بيتسجّل من الكاشير وهي واقفة
+    //    مع العميلة. لو العميلة قدرت تكتب، تقدر تسجّل باسم أي رقم.
+    match /customer_requests/{id} {
+      allow read: if signedIn();
+      allow create, update: if isStaff();
+      allow delete: if false;          // 🔒 الطلب بيتقفل مش بيتمسح
+    }
+
+    // ---------- 💬 شات العميلة ↔ الفرع ----------
+    // ⚠️ المحادثة مستند برقم العميلة. القراءة والكتابة للداخلين
+    //    (العميلة مجهولة) — نفس قصور `pos_test_customers` المعروف.
+    // 🔒 اللي اتقفل: **المسح**، و**حقل الحظر**. لو العميلة قدرت
+    //    تشيل الحظر عن نفسها، الحظر مالوش لازمة أصلًا.
+    match /customer_chat/{phone} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && !('blocked' in request.resource.data);
+      allow update: if isStaff()
+        || (signedIn() && !request.resource.data.diff(resource.data)
+              .affectedKeys().hasAny(['blocked']));
+      allow delete: if false;
+
+      match /messages/{msgId} {
+        allow read, create: if signedIn();
+        allow update, delete: if false;   // 🔒 الرسالة مبتتعدّلش
+      }
+    }
+
+    // ---------- 💰 نسبة الموظفة على الطلبات ----------
+    // 🔒 سجل مراقَب: بيتكتب مرة وخلاص. ده مدخل لمكافآت، فتعديله
+    //    بعد الواقعة معناه إن الرقم مش موثوق.
+    match /request_attributions/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+
+    // ---------- POS الداخلي (مالوش أي علاقة بالعملاء) ----------
+    match /pos_test_held_invoices/{id}    { allow read, write: if isStaff(); }
+    match /pos_test_roles/{id}            { allow read, write: if isStaff(); }
+    match /pos_test_stock_log/{id}        { allow read, write: if isStaff(); }
+    match /pos_test_employee_points/{id}  { allow read, write: if isStaff(); }
+    match /pos_test_transfers/{id}        { allow read, write: if isStaff(); }
+    match /pos_print_jobs/{id}            { allow read, write: if isStaff(); }
+
+    match /pos_paymob_txns/{id} {
+      allow read: if isStaff();
+      allow write: if false;              // الويب هوك بس (Admin SDK)
+    }
+    match /pos_paymob_rejected/{id} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // سجلات مبتتعدّلش ومبتتمسحش — دي حماية ضد التلاعب بعد الواقعة
+    match /pos_activity_log/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+    // 🐞 بلاغات المشاكل من الفروع — الموظفة بتدوس زرار المشكلة في
+    //    الكاشير، والبلاغ بيوصل هنا بسجل الجهاز وقت المشكلة.
+    // 🔒 نفس مبدأ pos_activity_log: بيتكتب مرة وميتمسحش — البلاغ دليل
+    //    على حالة الجهاز، وأي تلاعب فيه بعد الواقعة بيفقده قيمته.
+    // ⚠️ التعديل مسموح **بس** لعلامة «اتشاف» الإدارية: كل الحقول
+    //    الجوهرية (النص، الوقت، الفرع، الأحداث) لازم تفضل زي ما هي —
+    //    نفس أسلوب pos_card_refunds_due تحت.
+    match /pos_incidents/{id} {
+      allow read, create: if isStaff();
+      allow update: if isStaff()
+        && request.resource.data.note   == resource.data.note
+        && request.resource.data.ts     == resource.data.ts
+        && request.resource.data.branch == resource.data.branch
+        && request.resource.data.events == resource.data.events;
+      allow delete: if false;
+    }
+    // 💳↩️ فروق فيزا مستحقة الرد (فاتورة 1444): POS بيكتب، Office بيقفل.
+    // التعديل مقصور على قفلة الحالة بس — المبالغ والعملية مش بيتلمسوا،
+    // والمسح ممنوع: السجل ده حق عميلة، مش بيختفي.
+    // ⚠️ البلوك ده كان في رول المالك ومكانش في نسختي — لو اتلصقت
+    //    نسختي زي ما هي كان هيتمسح ونظام رد الفروق يتكسر. الدرس:
+    //    **اطلب الرول الحالي قبل أي تسليم، مش نسخة قديمة.**
+    match /pos_card_refunds_due/{id} {
+      allow read, create: if isStaff();
+      allow update: if isStaff()
+        && request.resource.data.diff == resource.data.diff
+        && request.resource.data.charged == resource.data.charged
+        && request.resource.data.invoiceCode == resource.data.invoiceCode
+        && request.resource.data.status == 'refunded';
+      allow delete: if false;
+    }
+    match /pos_return_log/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+
+    /* ============================================================
+       🛍️ أوردرات أونلاين — التطبيقين **والموقع** (echarpe.store)
+       ------------------------------------------------------------
+       ⚠️ الدخول من التطبيق والموقع **مجهول** (`signedIn()` بس) —
+          مفيش `request.auth.token.phone`. يعني القاعدة مش قادرة
+          تتأكد إن الرقم ده رقمها فعلًا. اللي القاعدة بتقفله هو
+          اللي بيفرق ماديًا:
+            · الفلوس: `total` و`price` **ممنوع** ييجوا من العميلة —
+              بيتحسبوا من الكتالوج في `orders-core`. من غير القفل ده
+              تقدر تطلب بـ٠ جنيه.
+            · الحالة: العميلة **متقدرش تعدّل** خالص. لو قدرت، تكتب
+              `collected` بنفسها وتمشي بالبضاعة.
+            · المسح ممنوع للطرفين — الأوردر سجل بيع.
+       ⚠️ القفل **برّه** كل الفروع (`allow update: if isStaff()`)
+          مش جوّه فرع واحد — درس: القواعد بتتجمع بـ«أو» مش «و».
+       ============================================================ */
+    match /online_orders/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.status == 'placed'
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.phone is string
+        && request.resource.data.branch is string
+        && (request.resource.data.payMethod == 'cash'
+            || request.resource.data.payMethod == 'visa')
+        && (request.resource.data.source == 'app'
+            || request.resource.data.source == 'glow'
+            || request.resource.data.source == 'web')
+        // 🚚 طريقة التسليم — والشحن رقم موجب.
+        // ⚠️ من غير القفلة دي تقدر تبعت `shipping: -500` وتخلي
+        //    الإجمالي أقل من قيمة البضاعة.
+        && (request.resource.data.fulfillment == 'pickup'
+            || request.resource.data.fulfillment == 'delivery')
+        && request.resource.data.shipping is number
+        && request.resource.data.shipping >= 0
+        && request.resource.data.grandTotal is number
+        && request.resource.data.grandTotal >= request.resource.data.total;
+      // التعديل للموظفين بس — الحالة بتتحرك للأمام من POS
+      allow update: if isStaff()
+        && request.resource.data.total == resource.data.total
+        && request.resource.data.items == resource.data.items
+        && request.resource.data.phone == resource.data.phone
+        // 🚚 الشحن والعنوان متجمّدين كمان — التعديل حالة بس
+        && request.resource.data.shipping == resource.data.shipping
+        && request.resource.data.fulfillment == resource.data.fulfillment;
+      allow delete: if false;
+    }
+
+    match /pos_chat/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+
+    // شاشة التقييم بتكتب رقم العميل هنا عشان POS يقراه — مستند واحد لكل فرع
+    match /pos_capture/{branch} {
+      allow read, write: if signedIn();
+    }
+
+    // ---------- الحضور والموظفين ----------
+    match /sales_employees/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+    match /sales_settings/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+    match /sales_branch_list/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+    match /sales_registrations/{id} {
+      allow read: if signedIn();
+      // 🔐 التسجيل من داخل الفرع (تطبيق الحضور) بحساب موظفين،
+      //    أو من الرابط الخارجي **بدعوة مفتوحة** — مفيش طريق تالت.
+      allow create: if isStaff()
+        || (signedIn() && request.resource.data.source == 'join'
+            && inviteOpen(request.resource.data.inviteCode));
+      allow update, delete: if isStaff();
+    }
+
+    match /sales_shifts/{id}              { allow read, write: if isStaff(); }
+    match /sales_advances/{id}            { allow read, write: if isStaff(); }
+    match /sales_deductions/{id}          { allow read, write: if isStaff(); }
+    match /sales_att_decisions/{id}       { allow read, write: if isStaff(); }
+    match /sales_violation_reviews/{id}   { allow read, write: if isStaff(); }
+    match /sales_breaks/{id}              { allow read, write: if isStaff(); }
+    match /sales_time_credit/{id}         { allow read, write: if isStaff(); }
+    match /sales_leave_requests/{id}      { allow read, write: if isStaff(); }
+    match /sales_shortages/{id}           { allow read, write: if isStaff(); }
+    match /sales_points/{id}              { allow read, write: if isStaff(); }
+    match /sales_rewards/{id}             { allow read, write: if isStaff(); }
+    match /sales_staff_orders/{id}        { allow read, write: if isStaff(); }
+
+    // التاسك الأسبوعي — تطبيق الحضور بيسلّم، وOffice بيقبل/يرفض
+    match /sales_tasks/{id}               { allow read, write: if isStaff(); }
+    match /sales_task_submissions/{id}    { allow read, write: if isStaff(); }
+    match /sales_task_weeks/{id}          { allow read, write: if isStaff(); }
+
+    // سجلات فلوس/إنهاء خدمة — تتكتب مرة وخلاص
+    match /sales_deleted_log/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+    match /sales_commission_payments/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+    match /sales_salary_payments/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+    match /sales_terminations/{id} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
+    }
+    match /sales_app_referrals/{id} {
+      allow read: if isStaff();
+      allow write: if false;              // Cloud Function بس
+    }
+
+    // ---------- 🧑‍💼 التوظيف من الرابط الخارجي ----------
+    // 🔐 الرابط **مش مفتوح**: الدعوة مستند بكود، والتسجيل مرفوض من
+    //    السيرفر نفسه لو الكود مش موجود أو مستعمل أو منتهي.
+    //    القاعدة دي هي الحماية الحقيقية — الصفحة بتفحص للعرض بس.
+    match /staff_invites/{code} {
+      // المتقدِّمة بتقرا **مستند واحد بكوده** — ومفيش استعلام على المجموعة
+      // (وإلا أي حد ينزّل كل الأكواد المفتوحة).
+      allow get:  if signedIn();
+      allow list: if isStaff();
+      allow create, delete: if isStaff();
+      // المتقدِّمة بتقفل الدعوة بعد ما ترسل — **إقفال بس**، ومرة واحدة،
+      // ومش بتقدر تلمس الفرع ولا الوظيفة ولا تاريخ الانتهاء.
+      allow update: if isStaff()
+        || (signedIn()
+            && resource.data.usedAt == null
+            && resource.data.expiresAt > request.time.toMillis()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['usedAt','regId','usedBy'])
+            && request.resource.data.usedAt is int);
+    }
+
+    // 💼 التقديم على وظيفة — رابط مفتوح للعامة عن قصد (إعلان).
+    // 🔑 رقم الموبايل = مفتاح المستند: الرقم الواحد = طلب واحد، فمفيش
+    //    حد يغرق القايمة بألف طلب. والقراءة للموظفين بس — دي بيانات ناس.
+    match /job_applications/{phone} {
+      allow get:  if signedIn();          // المتقدّم بيقرا طلبه هو (بمفتاحه)
+      allow list: if isStaff();
+      allow create, update: if isStaff()
+        || (signedIn()
+            && phone.matches('01[0125][0-9]{8}')          // رقم مصري سليم
+            && request.resource.data.phone == phone        // مايكتبش برقم غير مفتاحه
+            && request.resource.data.name is string
+            && request.resource.data.name.size() > 4
+            && request.resource.data.status == 'new'       // مايعيّنش نفسه
+            && request.resource.data.ts is int);
+      allow delete: if isStaff();
+    }
+
+    match /staff_docs/{id} {
+      // 📎 صور بطاقات ومؤهلات = بيانات شخصية حساسة.
+      //    الإنشاء بس للمتقدِّمة وبدعوة مفتوحة · والقراءة للموظفين فقط.
+      allow create: if signedIn()
+        && request.resource.data.regId is string
+        && inviteOpen(request.resource.data.inviteCode);
+      allow read: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isStaff();
+    }
+
+    // ---------- التقييمات ----------
+    match /entries/{id} {
+      // ⚠️ اتفحص: شاشة التقييم بتسمع لايف على where('ts','>=') —
+      //    (feedback/index.html:657) فالقراءة لازم تفضل مفتوحة.
+      // 🔒 اللي اتقفل فعلًا: **التعديل**. قبل كده أي حد داخل كان يقدر
+      //    يعدّل تقييم أي حد.
+      allow read:   if signedIn();
+      allow create: if signedIn();
+      allow update: if isStaff();          // POS بيربط رقم العميل بالتقييم
+      allow delete: if false;
+      // ملحوظة: شاشة التقييم فيها مسح تقييمات (feedback/index.html:876)
+      //    وهو مرفوض من زمان بالقاعدة دي — مش تغيير جديد.
+    }
+    match /feedback_alerts/{id} {
+      allow read, create, update: if signedIn();
+      allow delete: if false;
+    }
+    match /feedback_branches/{id} {
+      allow read, create, update: if signedIn();
+      allow delete: if false;
+    }
+
+    // ---------- أي حاجة تانية: ممنوعة ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

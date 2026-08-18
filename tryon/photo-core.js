@@ -276,6 +276,40 @@
     try { if (store && store.removeItem) store.removeItem(CACHE_KEY); } catch (e) { }
   }
 
+  /* 📐 أبعاد الشبكة — **نفس الحسبة بالظبط** اللي في hijabTryOn.js
+     (buildTryOnPrompt) عشان اللي بنقصّه يطابق اللي اتطلب في البرومبت. */
+  function computeGridLayout(n) {
+    var gw = n <= 2 ? 2 : (n <= 4 ? 2 : 3);
+    var gh = Math.ceil(n / gw);
+    return { cols: gw, rows: gh };
+  }
+
+  /* 📐 تقسيم رياضي متساوي — بديل **مضمون** لكشف الفواصل (splitGrid).
+     ⚠️ الدرس اللي طلعناه من تجربة حقيقية: الموديل مش دايمًا بيرسم
+     فواصل واضحة كفاية عشان الكشف بالتباين يلقطها، فكان بيفشل
+     ويرجع الصورة الشبكة كاملة من غير قص — العميلة تشوف ٤ وشوش
+     صغيرة بدل صورة واحدة واضحة قابلة لتبديل اللون. التقسيم
+     الرياضي مش محتاج يلاقي حاجة في الصورة أصلًا: بيفترض إن
+     الموديل التزم بترتيب "N by M" اللي اتطلب في البرومبت (نفس
+     أبعاد computeGridLayout) ويقسم بالحساب. inset صغير بياخد
+     مسافة أمان من حواف الخانة (فاصل تقيل أو محاذاة مش مظبوطة ١٠٠٪). */
+  function sliceGridProportional(w, h, cols, rows, n, insetFrac) {
+    var inset = insetFrac != null ? insetFrac : 0.035;
+    var cellW = w / cols, cellH = h / rows;
+    var cells = [];
+    for (var i = 0; i < n; i++) {
+      var col = i % cols, row = Math.floor(i / cols);
+      var x0 = col * cellW, y0 = row * cellH;
+      var ix = cellW * inset, iy = cellH * inset;
+      cells.push({
+        x: Math.round(x0 + ix), y: Math.round(y0 + iy),
+        w: Math.round(cellW - ix * 2), h: Math.round(cellH - iy * 2),
+        row: row, col: col
+      });
+    }
+    return cells;
+  }
+
   var API = {
     SS_KEYS: SS_KEYS,
     BRANDS: BRANDS,
@@ -293,6 +327,8 @@
     readBandanaPid: readBandanaPid,
     isGridMode: isGridMode,
     colorSwatchHex: colorSwatchHex,
+    computeGridLayout: computeGridLayout,
+    sliceGridProportional: sliceGridProportional,
     computeResize: computeResize,
     dataUrlBytes: dataUrlBytes,
     resultActions: resultActions,
