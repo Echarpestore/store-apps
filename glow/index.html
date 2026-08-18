@@ -3391,11 +3391,12 @@ function chatRenderMsgs(arr){
       chatImgs[m.id] = m.img;
       if(m.barcode) chatBarcodes[m.id] = String(m.barcode);
       // 🧢 ألوان البندانة — بنفس تنضيف حدود hijabTryOn.js بالظبط
-      // (نصوص، بحد أقصى ٦) عشان القص بعدين ميلخبطش لون بخانة.
+      // (نصوص، بحد أقصى ٣ — قرار معماري: نداء واحد بس، هندسة بسيطة)
+      // عشان القص بعدين ميلخبطش لون بخانة.
       if(Array.isArray(m.bandanaColors)){
         var _bc = m.bandanaColors.filter(function(c){ return typeof c === 'string'; })
           .map(function(c){ return c.replace(/[^a-zA-Z \-]/g, '').trim().slice(0, 24); })
-          .filter(function(c){ return c.length >= 2; }).slice(0, 6);
+          .filter(function(c){ return c.length >= 2; }).slice(0, 3);
         if(_bc.length >= 1) chatBandanaColors[m.id] = _bc;
       }
       if(m.bandanaPid) chatBandanaPid[m.id] = String(m.bandanaPid);
