@@ -991,15 +991,17 @@
     if(!text && !CST.imgData){ toast('اكتب رد أو حط صورة', true); return; }
     if(text.length > 500){ toast('الرد طويل قوي', true); return; }
     /* 🧢 بندانة — نتحقق **قبل** ما نبدأ الإرسال:
-       - لازم ٢ لون على الأقل (من الأزرار، مش كتابة يدوي)
+       - لازم لون واحد على الأقل (من الأزرار، مش كتابة يدوي) —
+         الباك إند (computeGridCells) بيضيف خانة "بدون بندانة"
+         تلقائي فوق أي لون تختاره، فمبقاش محتاج ٢ لون زي الأول.
        - ولازم باركود، **ولازم الباركود ده يطابق صنف حقيقي في
          المخزون** — من غيره "أضيفيها للسلة" هتفشل عند العميلة
          وهي مش هتعرف ليه. أحسن نوقف الموظفة دلوقتي بدل الشكوى بعدين. */
     var _bandOn = !!CST.imgData && !!(document.getElementById('ccBandFlag') || {}).checked;
     var _bandColors = null, _bandBc = '';
     if(_bandOn){
-      if(CST.bandSelected.length < 2){
-        toast('اختاري ٢ لون على الأقل للبندانة', true);
+      if(CST.bandSelected.length < 1){
+        toast('اختاري لون واحد على الأقل للبندانة', true);
         return;
       }
       _bandColors = CST.bandSelected.slice();
@@ -1045,7 +1047,7 @@
         }
         // 🧢 بندانة — بتحوّل صفحة التجربة لوضع الشبكة (توليد واحد،
         //    تبديل ألوان مجاني بعد كده). باركودها منتج منفصل عن الطرحة.
-        if(_bandColors && _bandColors.length >= 2){
+        if(_bandColors && _bandColors.length >= 1){
           msg.bandanaColors = _bandColors;
           if(_bandBc) msg.bandanaPid = _bandBc;
         }

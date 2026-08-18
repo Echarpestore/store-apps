@@ -106,7 +106,7 @@
     display:flex; align-items:center; justify-content:center; background:#fff;
   }
   .band-swatch.on{ border-color:var(--ink); box-shadow:0 0 0 3px rgba(33,27,23,.14); }
-  .band-swatch.none{ font-size:14px; color:var(--muted); opacity:.5; cursor:not-allowed; }
+  .band-swatch.none{ font-size:14px; color:var(--muted); }
   .band-label{ font-size:10.5px; font-weight:700; color:var(--muted); white-space:nowrap; }
 
   /* ============ صف الأيقونات (غيّري صورتك / إعادة / مشاركة / المزيد) ============ */
@@ -271,7 +271,10 @@
 
   // ---- 🧢 وضع شبكة البندانة — الموظفة بعتت ٢ لون فأكتر مع المنتج ----
   var bandanaColorsRequested = PC.readBandanaColors(window.sessionStorage);
-  var gridMode = PC.isGridMode(bandanaColorsRequested);
+  // 🚫 دلوقتي أي طلب بندانة (لون واحد يكفي) = وضع شبكة — الباك إند
+  //    (computeGridCells) بيضيف خانة "بدون بندانة" تلقائي، فمينفعش
+  //    نستنى ٢ لون زي الأول.
+  var gridMode = Array.isArray(bandanaColorsRequested) && bandanaColorsRequested.length >= 1;
   var bandanaPid = PC.readBandanaPid(window.sessionStorage);
 
   if(!productImg){
@@ -324,6 +327,7 @@
   // نفس فلسفة grid-split.js: لو الشكل مش زي المتوقع، منعرضش خانات
   // مقطوعة غلط — بنسيب الصورة الكاملة زي ما هي (فولباك آمن).
   var selectedBandColor = null;
+  var bandCartAllowed = false; // من resultActions — ثابت لكل نتيجة، selectColor بيقفل بيه لو "بدون بندانة"
   var lastResultImageForCart = null;
 
   function hideBandRow(){
@@ -345,7 +349,8 @@
   // 🏷️ شارة اللون + عدّاد الصفحة فوق الصورة — بتتحدّث مع كل اختيار
   function updateColorBadge(label, idx, total){
     $("colorBadgeDot").style.background = PC.colorSwatchHex(label);
-    $("colorBadgeText").textContent = "لون البندانة: " + label;
+    $("colorBadgeText").textContent = (label === "none")
+      ? "بدون بندانة" : ("لون البندانة: " + PC.colorSwatchLabel(label));
     $("colorBadge").classList.remove("hidden");
     $("pageInd").textContent = (idx + 1) + "/" + total;
     $("pageInd").classList.remove("hidden");
@@ -358,40 +363,24 @@
     $("resultImg").src = cropped;
     $("dlBtn").href = cropped;
     updateColorBadge(entry.label, idx, total);
+    // 🚫 مفيش بندانة في الصورة المعروضة دلوقتي — زرار إضافتها للسلة
+    //    يختفي مؤقتًا لحد ما تختار لون فعلي.
+    $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed || entry.label === "none");
   }
 
   function renderBandRow(labeled, imgEl){
     var row = $("bandRow");
     while(row.firstChild) row.removeChild(row.firstChild);
-
-    // 🚫 "بدون بندانة" — واجهة بس دلوقتي: لسه محتاجة الباك إند
-    //    (functions/hijabTryOn.js) يرجّع خانة فعلية بدون بندانة عشان
-    //    تشتغل. لحد ما يتظبط، بتتعرض معطّلة (مش قابلة للدوس).
-    var noneItem = document.createElement("div");
-    noneItem.className = "band-item";
-    var noneBtn = document.createElement("button");
-    noneBtn.type = "button";
-    noneBtn.className = "band-swatch none";
-    noneBtn.textContent = "🚫";
-    noneBtn.disabled = true;
-    noneBtn.title = "بدون بندانة — قريبًا";
-    noneBtn.setAttribute("aria-label", "بدون بندانة");
-    var noneLabel = document.createElement("span");
-    noneLabel.className = "band-label";
-    noneLabel.textContent = "بدون بندانة";
-    noneItem.appendChild(noneBtn);
-    noneItem.appendChild(noneLabel);
-    row.appendChild(noneItem);
-
     labeled.forEach(function(entry, idx){
+      var isNone = entry.label === "none";
       var item = document.createElement("div");
       item.className = "band-item";
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "band-swatch" + (idx === 0 ? " on" : "");
-      b.style.background = PC.colorSwatchHex(entry.label);
-      b.title = entry.label;
-      b.setAttribute("aria-label", entry.label);
+      b.className = "band-swatch" + (idx === 0 ? " on" : "") + (isNone ? " none" : "");
+      if(isNone) b.textContent = "🚫"; else b.style.background = PC.colorSwatchHex(entry.label);
+      b.title = PC.colorSwatchLabel(entry.label);
+      b.setAttribute("aria-label", PC.colorSwatchLabel(entry.label));
       b.addEventListener("click", function(){
         Array.prototype.forEach.call(row.querySelectorAll(".band-swatch"), function(el){ el.classList.remove("on"); });
         b.classList.add("on");
@@ -405,7 +394,7 @@
       row.appendChild(item);
     });
     row.classList.remove("hidden");
-    selectColor(labeled[0], imgEl, 0, labeled.length); // أول لون افتراضيًا
+    selectColor(labeled[0], imgEl, 0, labeled.length); // أول خانة افتراضيًا ("بدون بندانة" لو موجودة)
   }
 
   /* ⚠️ اللينك ده بيتحمّل تاني من data:url — مفيش نداء شبكة تاني،
@@ -461,8 +450,10 @@
        🧢 الألوان داخلة في مفتاح الكاش لو وضع الشبكة شغّال. */
     var hit = PC.readResult(window.localStorage, productId, customerDataUrl,
       gridMode ? bandanaColorsRequested : undefined);
-    // 🧢 مقدّم فوق الفحص عشان لو الكاش أصاب يبقى جاهز على طول للقص
-    activeBandColors = gridMode ? bandanaColorsRequested : null;
+    // 🧢 مقدّم فوق الفحص عشان لو الكاش أصاب يبقى جاهز على طول للقص.
+    //    "none" مقدّمة دايمًا — نفس ترتيب computeGridCells في الباك
+    //    إند اللي فعليًا ولّد بيه الصورة المخزّنة.
+    activeBandColors = gridMode ? ["none"].concat(bandanaColorsRequested) : null;
     if(hit){ succeed(hit, true); return; }
     show("stLoad");
     var callable;
@@ -495,7 +486,8 @@
     $("dlBtn").href = imageDataUrl;              // نفس الصورة، تحميل مباشر من غير رفع لأي سيرفر
     var acts = PC.resultActions(productId, bandanaPid);
     $("cartBtn").classList.toggle("hidden", !acts.addToCart);
-    $("bandCartBtn").classList.toggle("hidden", !acts.addBandanaToCart);
+    bandCartAllowed = acts.addBandanaToCart;
+    $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed);
     // 🔁 نتذكّر صورة العميلة اللي نجحت — الطرحة الجاية بضغطة واحدة
     //    من غير ما تتصور تاني. مبتتبعتش لحد، بس على جهازها.
     if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
@@ -595,7 +587,8 @@
   // لازم يوصل مع الطلب وإلا الموظفة هتسأل تاني وقت التجهيز.
   $("bandCartBtn").addEventListener("click", function(){
     if(!bandanaPid) return;
-    var note = selectedBandColor ? ("🎨 لون البندانة: " + selectedBandColor) : "";
+    var note = (selectedBandColor && selectedBandColor !== "none")
+      ? ("🎨 لون البندانة: " + PC.colorSwatchLabel(selectedBandColor)) : "";
     var img = lastResultImageForCart || "";
     try{
       if(window.opener && !window.opener.closed && typeof window.opener.tryonAddToCart === "function"){

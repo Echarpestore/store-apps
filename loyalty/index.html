@@ -3391,7 +3391,7 @@ function chatRenderMsgs(arr){
         var _bc = m.bandanaColors.filter(function(c){ return typeof c === 'string'; })
           .map(function(c){ return c.replace(/[^a-zA-Z \-]/g, '').trim().slice(0, 24); })
           .filter(function(c){ return c.length >= 2; }).slice(0, 6);
-        if(_bc.length >= 2) chatBandanaColors[m.id] = _bc;
+        if(_bc.length >= 1) chatBandanaColors[m.id] = _bc;
       }
       if(m.bandanaPid) chatBandanaPid[m.id] = String(m.bandanaPid);
       body += '<img src="' + m.img.replace(/"/g, '') + '" alt="" onclick="chatImgZoom(this.src)" style="cursor:zoom-in;">';
@@ -3470,7 +3470,7 @@ function chatTryOn(id){
     // 🧢 ألوان البندانة + باركودها — بيحوّلوا صفحة التجربة لوضع الشبكة.
     //    نفس منطق الباركود: نمسح القديم لو الرسالة دي مفيهاش بندانة.
     var bcolors = chatBandanaColors[id];
-    if(bcolors && bcolors.length >= 2) sessionStorage.setItem('echarpe_tryon_bandana_colors', JSON.stringify(bcolors));
+    if(bcolors && bcolors.length >= 1) sessionStorage.setItem('echarpe_tryon_bandana_colors', JSON.stringify(bcolors));
     else sessionStorage.removeItem('echarpe_tryon_bandana_colors');
     var bpid = chatBandanaPid[id];
     if(bpid) sessionStorage.setItem('echarpe_tryon_bandana_pid', bpid);
