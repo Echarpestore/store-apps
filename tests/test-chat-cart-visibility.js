@@ -96,3 +96,56 @@ assert(verAtLeast(read('glow/sw.js'), /glow-loyalty-v(\d+)/, 54), 'كاش glow �
 
 syntaxCheckAll(read('loyalty/index.html'), 'loyalty');
 syntaxCheckAll(read('glow/index.html'), 'glow');
+
+/* ============================================================
+   🧢 تجربة البندانة — إرسال الألوان + باركود البندانة من شات الموظف
+   ------------------------------------------------------------
+   كل فحص سلبي: لو رجّعت الإصلاح لازم يقع.
+   ============================================================ */
+(function () {
+  const P = fs.readFileSync(POS_PATH, 'utf8');
+  const sendFn = (P.match(/function ccSend\(\)\{[\s\S]*?\n  \}/) || [''])[0];
+
+  // ١) عناصر الواجهة موجودة
+  assert(P.indexOf('id="ccBandFlag"') >= 0, 'شيك بوكس البندانة موجود');
+  assert(P.indexOf('id="ccBandColors"') >= 0, 'حقل ألوان البندانة موجود');
+  assert(P.indexOf('id="ccBandBc"') >= 0, 'حقل باركود البندانة موجود');
+  assert(P.indexOf('id="ccBandRow"') >= 0, 'صف البندانة موجود');
+
+  // ٢) 🔴 التحقق قبل الإرسال — لازم يحصل **قبل** CST.sending = true
+  //    (وإلا رسالة ناقصة بترفض بعد ما القفل اتحط، والزرار يفضل معطّل)
+  const iValidate = sendFn.indexOf("toast('البندانة محتاجة");
+  const iSendingLock = sendFn.indexOf('CST.sending = true;');
+  assert(iValidate > -1, 'فيه رسالة تحقق واضحة للبندانة الناقصة');
+  assert(iValidate < iSendingLock,
+    '⭐ التحقق من ألوان البندانة قبل قفل الإرسال (وإلا القفل يفضل معلّق)');
+
+  // ٣) تنضيف الألوان بنفس حدود hijabTryOn.js بالظبط (حروف بس، سقف ٦)
+  assert(/slice\(0,\s*6\)/.test(sendFn), 'سقف ٦ ألوان زي السيرفر بالظبط');
+  assert(/filter\(function\(c\)\{\s*return c\.length >= 2;\s*\}\)/.test(sendFn),
+    'رفض الألوان القصيرة (حرف واحد) زي السيرفر بالظبط');
+
+  // ٤) 🔴 البندانة بترفق **جوه** حارس msg.tryon بس — مش لأي صورة عادية
+  const tryonGuard = (sendFn.match(/if\(msg\.tryon\)\{[\s\S]*?\n      \}/) || [''])[0];
+  assert(tryonGuard.indexOf('msg.bandanaColors') >= 0,
+    '🔴 msg.bandanaColors بيتحط جوه حارس msg.tryon بس');
+
+  // ٥) ccImgClear بينضّف بيانات البندانة كمان (منع تسرّب لصورة تانية)
+  const clearFn = (P.match(/function ccImgClear\(\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(clearFn.indexOf('ccBandFlag') >= 0 && clearFn.indexOf('ccBandColors') >= 0
+    && clearFn.indexOf('ccBandBc') >= 0,
+    '🔴 مسح الصورة بيمسح بيانات البندانة (منع تسرّب باركود/ألوان لمنتج تاني)');
+
+  // ٦) ccBandToggle موجودة ومتعرّضة على window (القاعدة الذهبية)
+  assert(P.indexOf('function ccBandToggle()') >= 0, 'ccBandToggle موجودة');
+  assert(P.indexOf('window.ccBandToggle = ccBandToggle;') >= 0,
+    'ccBandToggle متعرّضة على window (القاعدة الذهبية)');
+})();
+
+/* 🧢 الربط في الشات (loyalty/glow) — قراءة الألوان/الباركود من الرسالة
+   اتغطّى في test-tryon-photo.js بالتفصيل؛ هنا فحص وجود المؤشر البصري بس. */
+[['loyalty', path.join(ROOT, 'loyalty', 'index.html')],
+ ['glow', path.join(ROOT, 'glow', 'index.html')]].forEach(function (t) {
+  const H = fs.readFileSync(t[1], 'utf8');
+  assert(H.indexOf('chatBandanaColors') >= 0, t[0] + ': متغيّر ألوان البندانة موجود');
+});

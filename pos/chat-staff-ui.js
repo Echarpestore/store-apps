@@ -370,6 +370,8 @@
       + '#ccImgPrev{display:none; padding:8px 12px; background:#1b1e26; gap:10px; align-items:center;}'
       + '#ccImgPrev img{height:54px; border-radius:8px;}'
       + '#ccImgPrev label{font-size:12px; color:#9aa1af; display:flex; gap:5px; align-items:center;}'
+      + '#ccBandRow{display:none; gap:8px; padding:6px 12px; background:#1b1e26; align-items:center; flex-wrap:wrap;}'
+      + '#ccBandRow input{font-size:12px; padding:6px 8px; border:1px solid #2a2e39; border-radius:8px; background:#14161c; color:#eceef2;}'
       + '#ccBlock{border:1px solid #E5484D; background:none; color:#E5484D; border-radius:99px;'
       + 'padding:4px 11px; font-size:11.5px; font-weight:800; cursor:pointer; font-family:inherit;}';
     document.head.appendChild(css);
@@ -398,8 +400,13 @@
       + '<div id="ccImgPrev"><img id="ccImgTag" alt="">'
       + '<label><input type="checkbox" id="ccTryFlag" checked style="width:15px;height:15px;"> زرار 🧕 جرّبيها</label>'
       + '<input id="ccTryBc" type="text" inputmode="latin" placeholder="باركود المنتج (للسلة)" oninput="ccTryBcPreview()" style="flex:1; min-width:120px; font-size:12px; padding:6px 8px; border:1px solid #ddd; border-radius:8px;">'
+      + '<label><input type="checkbox" id="ccBandFlag" onchange="ccBandToggle()" style="width:15px;height:15px;"> 🧢 بندانة</label>'
       + '<button class="ccIco" onclick="ccImgClear()" title="شيل الصورة">✖</button></div>'
       + '<div id="ccTryBcInfo" style="font-size:11.5px; padding:0 2px; color:#888;"></div>'
+      + '<div id="ccBandRow">'
+      + '<input id="ccBandColors" type="text" placeholder="ألوان البندانة (٢ لحد ٦، مفصولة بفاصلة: off-white, black, navy)" style="flex:2; min-width:180px;">'
+      + '<input id="ccBandBc" type="text" inputmode="latin" placeholder="باركود البندانة" style="flex:1; min-width:100px;">'
+      + '</div>'
       + ccOutfitPrevHtml()
       + '<div id="ccSigner"></div>'
       + ccQuickHtml()
@@ -551,6 +558,7 @@
         body += '<img src="' + m.img.replace(/"/g, '') + '" alt="">';
       if(m.text) body += esc2(m.text);
       if(m.tryon) body += ' <span style="font-size:10.5px;opacity:.7;">🧕</span>';
+      if(m.bandanaColors && m.bandanaColors.length) body += ' <span style="font-size:10.5px;opacity:.7;">🧢</span>';
       var t = m.atMs ? new Date(Number(m.atMs)).toLocaleTimeString('ar-EG',
                 { hour: '2-digit', minute: '2-digit' }) : '';
       html += '<div class="ccMsg ' + (st ? 'st' : 'cu') + '">' + body
@@ -605,8 +613,27 @@
     var _bc = document.getElementById('ccTryBc'); if(_bc) _bc.value = '';
     var _bi = document.getElementById('ccTryBcInfo'); if(_bi) _bi.textContent = '';
     CST.bcInfo = null;
+    // 🧢 بندانة مربوطة بنفس صورة المنتج — تتشال معاها عشان مايفضلش
+    // باركود/ألوان قديمين عالقين على صورة تانية.
+    var _bf = document.getElementById('ccBandFlag'); if(_bf) _bf.checked = false;
+    var _br = document.getElementById('ccBandRow'); if(_br) _br.style.display = 'none';
+    var _bcc = document.getElementById('ccBandColors'); if(_bcc) _bcc.value = '';
+    var _bcb = document.getElementById('ccBandBc'); if(_bcb) _bcb.value = '';
     document.getElementById('ccImgPrev').style.display = 'none';
   }
+
+  /* 🧢 إظهار/إخفاء صف ألوان وباركود البندانة — بيتمسحوا لو اتقفل
+     عشان مايبقاش فيه بيانات مخفية بتتبعت من غير ما الموظفة تشوفها. */
+  function ccBandToggle(){
+    var on = !!(document.getElementById('ccBandFlag') || {}).checked;
+    var row = document.getElementById('ccBandRow');
+    if(row) row.style.display = on ? 'flex' : 'none';
+    if(!on){
+      var ci = document.getElementById('ccBandColors'); if(ci) ci.value = '';
+      var bi = document.getElementById('ccBandBc'); if(bi) bi.value = '';
+    }
+  }
+  window.ccBandToggle = ccBandToggle;
 
   /* 💰 معاينة فورية للسعر/الاسم وإحنا بنكتب الباركود — من الكاش المحلي
      (allInventory عن طريق findByBarcode)، من غير أي نداء شبكة. بيبيع
@@ -864,6 +891,22 @@
     var text = String(textEl.value || '').trim();
     if(!text && !CST.imgData){ toast('اكتب رد أو حط صورة', true); return; }
     if(text.length > 500){ toast('الرد طويل قوي', true); return; }
+    /* 🧢 بندانة — نتحقق **قبل** ما نبدأ الإرسال. لون واحد أو باركود
+       من غير ألوان كافية = بيانات ناقصة، أحسن نوقف ونطلب توضيح
+       بدل ما نبعت رسالة ناقصة أو نتجاهل الإدخال صامت. */
+    var _bandOn = !!CST.imgData && !!(document.getElementById('ccBandFlag') || {}).checked;
+    var _bandColors = null, _bandBc = '';
+    if(_bandOn){
+      var _rawColors = String((document.getElementById('ccBandColors') || {}).value || '');
+      _bandColors = _rawColors.split(',')
+        .map(function(c){ return c.replace(/[^a-zA-Z \-]/g, '').trim().slice(0, 24); })
+        .filter(function(c){ return c.length >= 2; }).slice(0, 6);
+      _bandBc = String((document.getElementById('ccBandBc') || {}).value || '').trim();
+      if(_bandColors.length < 2){
+        toast('البندانة محتاجة ٢ لون على الأقل (مفصولين بفاصلة)', true);
+        return;
+      }
+    }
     CST.sending = true;
     var ts = Date.now();
     var msg = {
@@ -890,6 +933,12 @@
             msg.productPrice = Number(_p.price) || 0;
             if(_p.img) msg.productImg = _p.img;   // 🖼️ صورة المنتج للسلة
           }
+        }
+        // 🧢 بندانة — بتحوّل صفحة التجربة لوضع الشبكة (توليد واحد،
+        //    تبديل ألوان مجاني بعد كده). باركودها منتج منفصل عن الطرحة.
+        if(_bandColors && _bandColors.length >= 2){
+          msg.bandanaColors = _bandColors;
+          if(_bandBc) msg.bandanaPid = _bandBc;
         }
       }
     }
