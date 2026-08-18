@@ -93,13 +93,6 @@
   .result{ width:100%; height:100%; }
   .result img{ width:100%; height:100%; object-fit:contain; display:block; }
 
-  .imgBadge{
-    position:absolute; top:12px; right:12px; display:flex; align-items:center; gap:6px;
-    background:rgba(255,255,255,.94); border-radius:99px; padding:7px 12px;
-    font-size:12px; font-weight:700; color:var(--ink); box-shadow:0 2px 8px rgba(0,0,0,.12);
-  }
-  .imgBadge .dot{ width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
-
   .dlPill{
     position:absolute; left:12px; bottom:12px; display:flex; align-items:center; gap:6px;
     background:rgba(255,255,255,.94); border-radius:99px; padding:8px 13px;
@@ -197,11 +190,10 @@
   <section id="stResult" class="hidden">
     <div class="resultCard">
       <div class="result"><img id="resultImg" alt="التجربة"></div>
-      <div class="imgBadge hidden" id="colorBadge"><span class="dot" id="colorBadgeDot"></span><span id="colorBadgeText"></span></div>
       <a class="dlPill" id="dlBtn" download="tryon-echarpe.jpg"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> تنزيل</a>
     </div>
 
-    <!-- 🧢 صف ألوان البندانة — بيتملى ديناميكيًا لو الشبكة اتقصت بنجاح -->
+    <!-- 🧢 صف ألوان البندانة — كل لون طلبه مستقل (لا شبكة NxM) -->
     <div class="band-row hidden" id="bandRow"></div>
 
     <!-- صف الإجراءات السريعة -->
@@ -345,19 +337,28 @@
     });
   }
 
-  // ---- 🧢 شبكة البندانة: قص محلي + تبديل ألوان مجاني ----
-  // نفس فلسفة grid-split.js: لو الشكل مش زي المتوقع، منعرضش خانات
-  // مقطوعة غلط — بنسيب الصورة الكاملة زي ما هي (فولباك آمن).
+  // ---- 🧢 البندانة: طلب مستقل لكل لون — مش شبكة NxM مشتركة ----
+  // 🔴🔴🔴⭐ إعادة تصميم كاملة بعد تجربة حقيقية: أي شبكة أكتر من
+  // خانتين (يعني أكتر من "بدون بندانة" + لون واحد) كانت بتتلخبط —
+  // زوم مبالغ فيه (تقسيم ٢×٢ يبقى ربع الصورة بس لكل خانة)، ولون
+  // غلط بيظهر (فهرسة الخانات مش مضمونة مع شبكات مربّعة/فردية)،
+  // وكل ما الألوان زادت الاحتمالات زادت. الحل: **كل لون طلبه مستقل**
+  // بالظبط زي طلب "بدون بندانة + لون واحد" (خانتين بس، جنب بعض) —
+  // ده الشكل الوحيد اللي اختباره مضمون ١٠٠٪. "بدون بندانة" مجاني
+  // دايمًا (بيتقص من أي طلب سابق)، وأي لون تاني غير اللي ظاهر
+  // بيبعت طلب جديد (من الكاش لو اتجرّب قبل كده، أو توليد طازة).
   var selectedBandColor = null;
   var bandCartAllowed = false; // من resultActions — ثابت لكل نتيجة، selectColor بيقفل بيه لو "بدون بندانة"
   var lastResultImageForCart = null;
+  var lastGridImage = null;    // آخر صورة خانتين (بدون بندانة + لون) اتولّدت
+  var lastGridGenColor = null; // أنهي لون بالظبط ولّد الصورة دي
 
   function hideBandRow(){
     var row = $("bandRow");
     while(row.firstChild) row.removeChild(row.firstChild);
     row.classList.add("hidden");
     selectedBandColor = null;
-    $("colorBadge").classList.add("hidden");
+    lastGridImage = null; lastGridGenColor = null;
   }
 
   function cropCell(imgEl, cell){
@@ -367,38 +368,59 @@
     return c.toDataURL("image/jpeg", 0.92);
   }
 
-  // 🏷️ شارة اللون فوق الصورة — بتتحدّث مع كل اختيار.
-  // 🔴 مفيش رقم صفحة (كان "١/٢" بيلخبط، مفيش سياق ليه) — صف الدواير
-  //    تحت أصلًا بيوضّح العدد والمكان بصريًا (دايرة "on" واضحة).
-  function updateColorBadge(label){
-    $("colorBadgeDot").style.background = PC.colorSwatchHex(label);
-    $("colorBadgeText").textContent = (label === "none")
-      ? "بدون بندانة" : ("لون البندانة: " + PC.colorSwatchLabel(label));
-    $("colorBadge").classList.remove("hidden");
+  /* 📐 من صورة "خانتين" (بدون بندانة + لون واحد)، بنرجّع كروب أي
+     خانة منها محليًا (مجاني، مفيش نداء شبكة). دايمًا نفس الهندسة
+     البسيطة (computeGridLayout(2) = ٢×١، مع تصحيح الاتجاه لو
+     الموديل رصّهم فوق بعض) — صفر تخمين إضافي. */
+  function cropFromGrid(imgEl, whichIndex){
+    var layout = PC.computeGridLayout(2);
+    var cells = PC.sliceGridProportional(imgEl.naturalWidth, imgEl.naturalHeight, layout.cols, layout.rows, 2);
+    return cropCell(imgEl, cells[whichIndex]);
   }
 
-  function selectColor(entry, imgEl){
-    selectedBandColor = entry.label;
-    var cropped = cropCell(imgEl, entry.cell);
-    lastResultImageForCart = cropped;
-    $("resultImg").src = cropped;
-    $("dlBtn").href = cropped;
-    updateColorBadge(entry.label);
+  function showBandResult(label, dataUrl){
+    selectedBandColor = label;
+    lastResultImageForCart = dataUrl;
+    $("resultImg").src = dataUrl;
+    $("dlBtn").href = dataUrl;
     // 🚫 مفيش بندانة في الصورة المعروضة دلوقتي — زرار إضافتها للسلة
     //    يختفي مؤقتًا لحد ما تختار لون فعلي.
-    $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed || entry.label === "none");
+    $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed || label === "none");
+    var row = $("bandRow");
+    Array.prototype.forEach.call(row.querySelectorAll(".band-swatch"), function(el){
+      el.classList.toggle("on", el.getAttribute("data-color") === label);
+    });
   }
 
-  function renderBandRow(labeled, imgEl){
+  /* 🖱️ دوسة على لون في صف السواتش:
+     - "بدون بندانة": مجانية دايمًا (كروب من أي صورة سابقة عندنا)
+     - نفس اللون الظاهر حاليًا: مفيش داعي نولّد تاني، كروب بس
+     - لون تاني: طلب مستقل (كاش أو توليد طازة) */
+  function onSwatchTap(label, imgFromEvent){
+    if(label === "none"){
+      if(lastGridImage){ var img0 = imgFromEvent || _lastLoadedGridImg;
+        showBandResult("none", cropFromGrid(img0, 0)); }
+      return;
+    }
+    if(label === lastGridGenColor && lastGridImage){
+      showBandResult(label, cropFromGrid(_lastLoadedGridImg, 1));
+      return;
+    }
+    generateForColor(lastCustomer, label);
+  }
+
+  function renderBandRow(){
     var row = $("bandRow");
     while(row.firstChild) row.removeChild(row.firstChild);
-    labeled.forEach(function(entry, idx){
-      var isNone = entry.label === "none";
+    var all = ["none"].concat(bandanaColorsRequested);
+    all.forEach(function(label){
+      var isNone = label === "none";
       var item = document.createElement("div");
       item.className = "band-item";
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "band-swatch" + (idx === 0 ? " on" : "") + (isNone ? " none" : "");
+      b.className = "band-swatch" + (isNone ? " none" : "");
+      b.setAttribute("data-color", label);
       if(isNone){
         // 🚫 آيقونة "ممنوع" (دايرة + خط مايل) بدل الإيموجي — DOM آمن، مفيش innerHTML
         var ns = "http://www.w3.org/2000/svg";
@@ -414,136 +436,122 @@
         svg.appendChild(circ); svg.appendChild(line);
         b.appendChild(svg);
       }
-      else b.style.background = PC.colorSwatchHex(entry.label);
-      b.title = PC.colorSwatchLabel(entry.label);
-      b.setAttribute("aria-label", PC.colorSwatchLabel(entry.label));
-      b.addEventListener("click", function(){
-        Array.prototype.forEach.call(row.querySelectorAll(".band-swatch"), function(el){ el.classList.remove("on"); });
-        b.classList.add("on");
-        selectColor(entry, imgEl);
-      });
-      var label = document.createElement("span");
-      label.className = "band-label";
-      label.textContent = PC.colorSwatchLabel(entry.label);
+      else b.style.background = PC.colorSwatchHex(label);
+      b.title = PC.colorSwatchLabel(label);
+      b.setAttribute("aria-label", PC.colorSwatchLabel(label));
+      b.addEventListener("click", function(){ onSwatchTap(label); });
+      var lbl = document.createElement("span");
+      lbl.className = "band-label";
+      lbl.textContent = PC.colorSwatchLabel(label);
       item.appendChild(b);
-      item.appendChild(label);
+      item.appendChild(lbl);
       row.appendChild(item);
     });
     row.classList.remove("hidden");
-    selectColor(labeled[0], imgEl); // أول خانة افتراضيًا ("بدون بندانة" لو موجودة)
   }
 
-  /* ⚠️ اللينك ده بيتحمّل تاني من data:url — مفيش نداء شبكة تاني،
-     مجرد فك تشفير base64 محلي. القص والتلوين كلهم بعد كده مجانيين.
-
-     🔴🔴⭐ درس تالت من تجربة حقيقية — كشف الفواصل بالتباين
-     (GridSplit.splitGrid) اتشال **خالص**. كان بيرجّع أحيانًا "نجاح"
-     بحدود خانات مش متساوية (فرق بسيط في حجم كل خانة)، وده كان بيسبب:
-     ١) "الصورة بتتحرك يمين وشمال وفوق وتحت" — كل لون كروبه مقاس
-        مختلف شوية عن التاني، فالعرض (object-fit:contain) كان بيبان
-        بمقاس/مكان مختلف مع كل تبديل لون.
-     ٢) أحيانًا خانة بتاخد بيكسلات من الخانة الجنبية غلط (لون يظهر
-        غير اللي اتاختار) — كشف غير دقيق بيمسك حدود غلط.
-     التقسيم الرياضي (sliceGridProportional) وحده هو المصدر دلوقتي:
-     كل الخانات **بالظبط نفس المقاس** دايمًا (w/cols × h/rows) —
-     صفر حركة بصرية عند التبديل، ونفس المنطق المتوقّع كل مرة (مفيش
-     "أحيانًا كويس أحيانًا لأ"). resolveGridOrientation جواها بيصحّح
-     الاتجاه المعكوس لو الموديل رصّ الخانات فوق بعض بدل جنب بعض. */
-  function trySplitGrid(imageDataUrl, colors){
+  /* 🖼️ نحمّل صورة الخانتين مرة واحدة في <img> ونخزّنها — القص بعد
+     كده محلي بالكامل (مفيش نداء شبكة تاني) لأي كروب تاني منها. */
+  var _lastLoadedGridImg = null;
+  function loadGridImage(dataUrl, cb){
     var img = new Image();
-    img.onload = function(){
-      try{
-        var w = img.naturalWidth, h = img.naturalHeight;
-        var layout = PC.computeGridLayout(colors.length);
-        var cells = PC.sliceGridProportional(w, h, layout.cols, layout.rows, colors.length);
-        var labeled = colors.map(function(label, i){ return { label: label, cell: cells[i] }; });
-        renderBandRow(labeled, img);
-      }catch(e){ hideBandRow(); }
-    };
-    img.onerror = function(){ hideBandRow(); };
-    img.src = imageDataUrl;
+    img.onload = function(){ _lastLoadedGridImg = img; cb(true); };
+    img.onerror = function(){ _lastLoadedGridImg = null; cb(false); };
+    img.src = dataUrl;
+  }
+
+  function callHijabTryOn(extra){
+    return new Promise(function(resolve, reject){
+      var callable;
+      try{ callable = firebase.app().functions("us-central1").httpsCallable("hijabTryOn"); }
+      catch(e){ reject(); return; }
+      var payload = { customerImage: lastCustomer, productImage: productImg, productId: productId, phone: phone };
+      for(var k in extra){ payload[k] = extra[k]; }
+      callable(payload).then(function(res){
+        var data = res && res.data;
+        if(data && data.image) resolve(data.image); else reject();
+      }).catch(function(err){
+        var msg = (err && err.message) ? err.message : PC.FRIENDLY_ERR;
+        reject(msg);
+      });
+    });
   }
 
   // ---- النداء ----
   var lastCustomer = null;
-  var activeBandColors = null; // الألوان الفعلية بتاعت آخر نتيجة (من الرد أو من الكاش)
   function generate(customerDataUrl){
     lastCustomer = customerDataUrl;
     hideBandRow();
+    /* 🧢 وضع البندانة: صف الألوان بيتبني فورًا (مش محتاج نتيجة
+       عشانه)، وبعدين أول لون في القايمة بيتولّد/يتعرض — كل لون
+       بعد كده طلب مستقل (onSwatchTap). */
+    if(gridMode){
+      renderBandRow();
+      generateForColor(customerDataUrl, bandanaColorsRequested[0]);
+      return;
+    }
     /* 💾 الكاش الأول — لو جرّبت نفس المنتج بنفس صورتها قبل كده،
        النتيجة بتتعرض **فورًا** من جهازها: مفيش نداء، مفيش تكلفة،
-       ومش بتتحسب على سقف الـ١٥ اليومي (لأن مفيش توليد أصلًا).
-       ده اللي بيخلي المقارنة بين المنتجات مجانية مهما لفّت ورجعت.
-       🧢 الألوان داخلة في مفتاح الكاش لو وضع الشبكة شغّال. */
-    var hit = PC.readResult(window.localStorage, productId, customerDataUrl,
-      gridMode ? bandanaColorsRequested : undefined);
-    // 🧢 مقدّم فوق الفحص عشان لو الكاش أصاب يبقى جاهز على طول للقص.
-    //    "none" مقدّمة دايمًا — نفس ترتيب computeGridCells في الباك
-    //    إند اللي فعليًا ولّد بيه الصورة المخزّنة.
-    activeBandColors = gridMode ? ["none"].concat(bandanaColorsRequested) : null;
-    if(hit){ succeed(hit, true); return; }
+       ومش بتتحسب على سقف الـ١٥ اليومي (لأن مفيش توليد أصلًا). */
+    var hit = PC.readResult(window.localStorage, productId, customerDataUrl);
+    if(hit){ succeedPlain(hit, true); return; }
     show("stLoad");
-    var callable;
-    try{ callable = firebase.app().functions("us-central1").httpsCallable("hijabTryOn"); }
-    catch(e){ return fail(); }
-    callable({
-      customerImage: customerDataUrl,
-      productImage: productImg,
-      productId: productId,
-      phone: phone,
-      withBandana: gridMode,
-      bandanaColors: gridMode ? bandanaColorsRequested : undefined
-    }).then(function(res){
-      var data = res && res.data;
-      if(data && data.image){
-        // 🔴⭐ لازم نفس اشتقاق مسار الكاش فوق بالظبط (["none"].concat(...))
-        //    مش نعتمد على data.bandanaColors تاني — كانت بتفشل لما
-        //    الموظفة تختار لون واحد بس (data.bandanaColors.length كان
-        //    ١ مش ٢، فالشرط القديم كان بيرفض ويعرض الشبكة الخام
-        //    كاملة من غير قص = "هبل" تاني. مصدر واحد للحقيقة الآن.
-        activeBandColors = gridMode ? ["none"].concat(bandanaColorsRequested) : null;
-        succeed(data.image);
-      }
-      else { fail(); }
-    }).catch(function(err){
-      // الخطأ الخام مبيتعرضش — رسالة ودّية بس (message من HttpsError جاي من دالتنا)
-      var msg = (err && err.message) ? err.message : PC.FRIENDLY_ERR;
-      fail(msg);
-    });
+    callHijabTryOn({ withBandana: false }).then(function(imageDataUrl){
+      succeedPlain(imageDataUrl, false);
+    }).catch(function(msg){ fail(msg); });
   }
 
-  function succeed(imageDataUrl, fromCache){
+  /* 🧢🔴🔴🔴⭐ توليد/عرض لون بندانة واحد بس — دايمًا خانتين
+     (بدون بندانة + اللون ده)، أبسط هندسة ممكنة (computeGridLayout(2)
+     = ٢×١) واللي فحصناها فعليًا ونجحت (resolveGridOrientation بيصحّح
+     الاتجاه لو اتقلب). مفيش شبكة NxM لأي عدد ألوان — كل لون طلبه
+     مستقل خالص، فمفيش "كل ما الألوان زادت الاحتمالات زادت". */
+  function generateForColor(customerDataUrl, color){
+    var hit = PC.readResult(window.localStorage, productId, customerDataUrl, [color]);
+    if(hit){
+      loadGridImage(hit, function(ok){
+        if(!ok){ fail(); return; }
+        lastGridImage = hit; lastGridGenColor = color;
+        var acts = PC.resultActions(productId, bandanaPid);
+        $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+        bandCartAllowed = acts.addBandanaToCart;
+        showBandResult(color, cropFromGrid(_lastLoadedGridImg, 1));
+        show("stResult");
+      });
+      return;
+    }
+    show("stLoad");
+    callHijabTryOn({ withBandana: true, bandanaColors: [color] }).then(function(imageDataUrl){
+      if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
+      // 🔴🔴⭐ نفس [color] بالظبط المستخدم في PC.readResult فوق —
+      // مفتاح واحد للحفظ والقراءة، وإلا الكاش ما يطابقش (نفس باج
+      // "بيولّد من جديد" القديم لو اختلفوا).
+      PC.saveResult(window.localStorage, productId, lastCustomer, imageDataUrl, [color]);
+      loadGridImage(imageDataUrl, function(ok){
+        if(!ok){ fail(); return; }
+        lastGridImage = imageDataUrl; lastGridGenColor = color;
+        var acts = PC.resultActions(productId, bandanaPid);
+        $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+        bandCartAllowed = acts.addBandanaToCart;
+        showBandResult(color, cropFromGrid(_lastLoadedGridImg, 1));
+        show("stResult");
+      });
+    }).catch(function(msg){ fail(msg); });
+  }
+
+  function succeedPlain(imageDataUrl, fromCache){
     lastResultImageForCart = imageDataUrl;
     $("resultImg").src = imageDataUrl;          // src بس — مفيش innerHTML لبيانات جاية من بره
     $("dlBtn").href = imageDataUrl;              // نفس الصورة، تحميل مباشر من غير رفع لأي سيرفر
     var acts = PC.resultActions(productId, bandanaPid);
     $("cartBtn").classList.toggle("hidden", !acts.addToCart);
-    bandCartAllowed = acts.addBandanaToCart;
-    $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed);
+    $("bandCartBtn").classList.add("hidden");
     // 🔁 نتذكّر صورة العميلة اللي نجحت — الطرحة الجاية بضغطة واحدة
     //    من غير ما تتصور تاني. مبتتبعتش لحد، بس على جهازها.
     if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
-    /* 💾 ونخزّن النتيجة نفسها عشان الرجعة الجاية تبقى فورية.
-       ⚠️ **مش** بنعيد الحفظ لو النتيجة جاية من الكاش أصلًا — ده
-          كان هيقلّب ترتيب "الأقدم" مع كل عرض ويطفّش نتايج
-          العميلة الحقيقية من التخزين المحدود.
-       🔴🔴⭐ لازم نفس الألوان بالظبط اللي استُخدمت في PC.readResult
-          فوق (bandanaColorsRequested من غير "none") — مش
-          activeBandColors (اللي فيها "none" مضافة للعرض/القص بس).
-          استخدام مصدرين مختلفين للمفتاح كان معناه إن كل حفظ بيتحط
-          بمفتاح، وكل قراءة بتدوّر بمفتاح تاني — الكاش ما كانش بيطابق
-          **أبدًا** لأي طلب بندانة، وده اللي كان بيسبب "بيولّد من جديد"
-          كل مرة حتى لو نفس المنتج بالظبط. */
     if(!fromCache && lastCustomer)
-      PC.saveResult(window.localStorage, productId, lastCustomer, imageDataUrl,
-        gridMode ? bandanaColorsRequested : undefined);
-    // 🧢 وضع الشبكة: نحاول نقص الخانات ونبني صف الألوان. فشل القص
-    //    = بنسيب الصورة الكاملة زي ما هي (مفيش خانات مقطوعة غلط).
-    if(activeBandColors && activeBandColors.length >= 2){
-      trySplitGrid(imageDataUrl, activeBandColors);
-    } else {
-      hideBandRow();
-    }
+      PC.saveResult(window.localStorage, productId, lastCustomer, imageDataUrl);
+    hideBandRow();
     show("stResult");
   }
   function fail(msg){
