@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#E5484D">
+<meta name="theme-color" content="#FBF3DF">
 <title>جرّبيها ✨</title>
 <style>
   :root{
-    --ink:#2A2320; --muted:#8A7F79; --line:#EFE7DD;
-    --brand:#E5484D; --brand2:#C4963B; --cream:#FBF3DF; --bg:#FFF9F2;
+    --ink:#211B17; --muted:#8A7F79; --line:#EAE0D3;
+    --brand:#E5484D; --brand2:#C4963B; --cream:#FBF3DF; --bg:#FBF6ED;
+    --cardline:#EFE6D6;
   }
   html.glow{ --brand:#C4963B; --brand2:#E5484D; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -18,15 +19,28 @@
     background:var(--bg); color:var(--ink); display:flex; flex-direction:column;
     min-height:100dvh;
   }
-  header{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:14px 16px; background:linear-gradient(135deg,var(--brand),var(--brand2));
-    color:#fff; font-weight:700; font-size:17px;
-  }
-  header .x{ font-size:22px; line-height:1; background:none; border:0; color:#fff; opacity:.9; }
-  main{ flex:1; display:flex; flex-direction:column; padding:18px 16px 24px; }
+  .serif{ font-family:Georgia,"Times New Roman",serif; }
 
-  .card{ background:#fff; border:1px solid var(--line); border-radius:20px; padding:16px; }
+  /* ============ الهيدر — شعار + عنوان + رجوع (زي المرجع) ============ */
+  header{
+    display:flex; align-items:center; gap:10px;
+    padding:14px 16px; background:var(--bg); border-bottom:1px solid var(--line);
+  }
+  header .logo{ font-family:Georgia,"Times New Roman",serif; font-weight:700; font-size:15px;
+    letter-spacing:2.5px; color:var(--ink); flex:0 0 auto; }
+  header .hMid{ flex:1; min-width:0; text-align:center; }
+  header .hTitle{ font-family:Georgia,"Times New Roman",serif; font-weight:700; font-size:16.5px;
+    color:var(--ink); line-height:1.3; }
+  header .hSub{ font-size:11.5px; color:var(--muted); margin-top:1px; }
+  header .back{
+    flex:0 0 auto; width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
+    background:#fff; color:var(--ink); font-size:16px; display:flex; align-items:center;
+    justify-content:center; cursor:pointer; padding:0;
+  }
+
+  main{ flex:1; display:flex; flex-direction:column; padding:16px 16px 24px; }
+
+  .card{ background:#fff; border:1px solid var(--cardline); border-radius:20px; padding:16px; }
   .prod{ display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center; }
   .prod img{ width:100%; max-width:280px; border-radius:16px; display:block; }
   .prod .cap{ font-size:14px; color:var(--muted); }
@@ -42,7 +56,8 @@
     border:0; border-radius:16px; padding:16px; font-size:16px; font-weight:700;
     cursor:pointer; width:100%;
   }
-  .btn.primary{ background:var(--brand); color:#fff; }
+  .btn.primary{ background:var(--ink); color:#fff; }
+  .btn.outline{ background:none; color:var(--brand2); border:1.5px solid var(--brand2); }
   .btn.soft{ background:#fff; color:var(--ink); border:1.5px solid var(--line); }
   .btn.ghost{ background:none; color:var(--muted); font-weight:600; font-size:14px; padding:10px; }
   input[type=file]{ display:none; }
@@ -55,22 +70,80 @@
   .big{ font-size:20px; font-weight:800; }
   .sub{ font-size:14px; color:var(--muted); }
 
-  .result img{ width:100%; border-radius:20px; display:block; box-shadow:0 8px 28px rgba(0,0,0,.12); }
   .hidden{ display:none !important; }
 
-  /* 🧢 صف ألوان البندانة — بيظهر بس لما الشبكة تتقص بنجاح */
+  /* ============ كارت النتيجة — الصورة + الشارات فوقيها ============ */
+  .resultCard{ position:relative; border-radius:22px; overflow:hidden;
+    box-shadow:0 10px 30px rgba(33,27,23,.14); background:#eee; }
+  .result img{ width:100%; display:block; }
+
+  .imgBadge{
+    position:absolute; top:12px; right:12px; display:flex; align-items:center; gap:6px;
+    background:rgba(255,255,255,.94); border-radius:99px; padding:7px 12px;
+    font-size:12px; font-weight:700; color:var(--ink); box-shadow:0 2px 8px rgba(0,0,0,.12);
+  }
+  .imgBadge .dot{ width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
+
+  .dlPill{
+    position:absolute; left:12px; bottom:12px; display:flex; align-items:center; gap:6px;
+    background:rgba(255,255,255,.94); border-radius:99px; padding:8px 13px;
+    font-size:12.5px; font-weight:700; color:var(--ink); text-decoration:none;
+    box-shadow:0 2px 8px rgba(0,0,0,.12);
+  }
+  .pageInd{
+    position:absolute; right:12px; bottom:12px; background:rgba(33,27,23,.62); color:#fff;
+    border-radius:99px; padding:5px 11px; font-size:11.5px; font-weight:700;
+  }
+
+  /* ============ صف ألوان البندانة — دواير صغيرة تحت الكارت ============ */
   .band-row{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:14px; }
   .band-swatch{
-    width:36px; height:36px; border-radius:50%; border:2px solid var(--line);
+    width:34px; height:34px; border-radius:50%; border:2px solid var(--line);
     cursor:pointer; padding:0; box-shadow:0 1px 3px rgba(0,0,0,.15);
   }
-  .band-swatch.on{ border-color:var(--brand); box-shadow:0 0 0 3px rgba(229,72,77,.18); }
+  .band-swatch.on{ border-color:var(--ink); box-shadow:0 0 0 3px rgba(33,27,23,.14); }
+
+  /* ============ صف الأيقونات (غيّري صورتك / إعادة / مشاركة / المزيد) ============ */
+  .iconRow{
+    display:flex; margin-top:16px; border:1px solid var(--cardline); border-radius:18px;
+    background:#fff; overflow:hidden; position:relative;
+  }
+  .iconAct{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding:12px 4px; background:none; border:0; border-inline-start:1px solid var(--cardline);
+    cursor:pointer; color:var(--ink); font-family:inherit;
+  }
+  .iconAct:first-child{ border-inline-start:0; }
+  .iconAct .ic{ font-size:18px; line-height:1; }
+  .iconAct .lb{ font-size:10.5px; font-weight:700; color:var(--muted); white-space:nowrap; }
+
+  .moreMenu{
+    position:absolute; bottom:calc(100% + 8px); left:0; background:#fff;
+    border:1px solid var(--cardline); border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,.15);
+    padding:6px; min-width:150px; z-index:5;
+  }
+  .moreMenu button{
+    display:block; width:100%; text-align:right; background:none; border:0; padding:10px 12px;
+    font-size:13px; font-weight:700; color:var(--ink); border-radius:9px; cursor:pointer;
+    font-family:inherit;
+  }
+  .moreMenu button:active{ background:var(--cream); }
+
+  .trustLine{
+    display:flex; align-items:center; gap:10px; justify-content:center; margin-top:18px;
+    font-size:11.5px; color:var(--muted);
+  }
+  .trustLine::before, .trustLine::after{ content:""; flex:1; height:1px; background:var(--line); max-width:60px; }
 </style>
 </head>
 <body>
 <header>
-  <span id="hTitle">جرّبيها ✨</span>
-  <button class="x" id="closeBtn" aria-label="قفل">✕</button>
+  <span class="logo" id="hLogo">ECHARPE</span>
+  <div class="hMid">
+    <div class="hTitle" id="hTitle">جرّبيها ✨</div>
+    <div class="hSub hidden" id="hSub"></div>
+  </div>
+  <button class="back" id="closeBtn" aria-label="رجوع">→</button>
 </header>
 
 <main>
@@ -87,7 +160,7 @@
     <div class="btns">
       <label class="btn primary" for="camIn">📷 التقاط صورة</label>
       <input type="file" id="camIn" accept="image/*" capture="user">
-      <label class="btn soft" for="galIn">🖼️ اختاري من الهاتف</label>
+      <label class="btn outline" for="galIn">🖼️ اختاري من الهاتف</label>
       <input type="file" id="galIn" accept="image/*">
       <button class="btn ghost" id="liveBtn">جرّبي الوضع الحي (تجريبي)</button>
     </div>
@@ -102,18 +175,35 @@
 
   <!-- (٣) النتيجة -->
   <section id="stResult" class="hidden">
-    <div class="result"><img id="resultImg" alt="التجربة"></div>
+    <div class="resultCard">
+      <div class="result"><img id="resultImg" alt="التجربة"></div>
+      <div class="imgBadge hidden" id="colorBadge"><span class="dot" id="colorBadgeDot"></span><span id="colorBadgeText"></span></div>
+      <a class="dlPill" id="dlBtn" download="tryon-echarpe.jpg">⬇️ تنزيل</a>
+      <div class="pageInd hidden" id="pageInd"></div>
+    </div>
+
     <!-- 🧢 صف ألوان البندانة — بيتملى ديناميكيًا لو الشبكة اتقصت بنجاح -->
     <div class="band-row hidden" id="bandRow"></div>
-    <a class="btn ghost" id="dlBtn" download="tryon-echarpe.jpg" style="display:flex; justify-content:center; margin-top:10px;">⬇️ نزّلي الصورة</a>
+
+    <!-- صف الإجراءات السريعة -->
+    <div class="iconRow">
+      <button class="iconAct" id="changeFaceBtn"><span class="ic">📷</span><span class="lb">غيّري صورتك</span></button>
+      <button class="iconAct" id="retryBtn"><span class="ic">🔄</span><span class="lb">إعادة التجربة</span></button>
+      <button class="iconAct" id="shareBtn"><span class="ic">📤</span><span class="lb">مشاركة</span></button>
+      <button class="iconAct" id="moreBtn"><span class="ic">⋯</span><span class="lb">المزيد</span>
+        <div class="moreMenu hidden" id="moreMenu">
+          <button type="button" id="backBtn">رجوع للشات</button>
+        </div>
+      </button>
+    </div>
+
     <div class="btns" style="margin-top:16px;">
       <button class="btn primary hidden" id="cartBtn">🛍️ أضيفيها للسلة</button>
       <button class="btn primary hidden" id="bandCartBtn">🧢 ضيفي البندانة للسلة</button>
-      <button class="btn soft" id="againBtn">🧕 جرّبي طرحة تانية</button>
-      <button class="btn soft" id="retryBtn">🔁 إعادة التجربة</button>
-      <button class="btn ghost" id="changeFaceBtn">📷 غيّري صورتك</button>
-      <button class="btn ghost" id="backBtn">رجوع للشات</button>
+      <button class="btn outline" id="againBtn">👳 جرّبي طرحة تانية</button>
     </div>
+
+    <div class="trustLine">تسوقي بثقة مع ضمان الإرجاع</div>
   </section>
 
   <!-- (٤) خطأ -->
@@ -142,10 +232,24 @@
 
   // ---- عناصر ----
   function $(id){ return document.getElementById(id); }
+
+  // 🏷️ نص الهيدر بيتغيّر حسب الشاشة — عنوان/عنوان فرعي، ولوجو البراند
+  $("hLogo").textContent = (params.brand === "glow") ? "GLOW" : "ECHARPE";
+  var HEADER_TEXT = {
+    stPick:   { title: "جرّبيها ✨",      sub: "" },
+    stLoad:   { title: "بنجهّز التجربة…", sub: "" },
+    stResult: { title: "نتيجة التجربة",  sub: "دي الطرحة عليكي" },
+    stError:  { title: "حصلت مشكلة",     sub: "" }
+  };
   function show(sec){
     ["stPick","stLoad","stResult","stError"].forEach(function(s){
       $(s).classList.toggle("hidden", s !== sec);
     });
+    var h = HEADER_TEXT[sec] || HEADER_TEXT.stPick;
+    $("hTitle").textContent = h.title;
+    $("hSub").textContent = h.sub;
+    $("hSub").classList.toggle("hidden", !h.sub);
+    closeMoreMenu();
   }
 
   // ---- صورة المنتج + التليفون من الشات ----
@@ -217,6 +321,8 @@
     while(row.firstChild) row.removeChild(row.firstChild);
     row.classList.add("hidden");
     selectedBandColor = null;
+    $("colorBadge").classList.add("hidden");
+    $("pageInd").classList.add("hidden");
   }
 
   function cropCell(imgEl, cell){
@@ -226,12 +332,22 @@
     return c.toDataURL("image/jpeg", 0.92);
   }
 
-  function selectColor(entry, imgEl){
+  // 🏷️ شارة اللون + عدّاد الصفحة فوق الصورة — بتتحدّث مع كل اختيار
+  function updateColorBadge(label, idx, total){
+    $("colorBadgeDot").style.background = PC.colorSwatchHex(label);
+    $("colorBadgeText").textContent = "لون البندانة: " + label;
+    $("colorBadge").classList.remove("hidden");
+    $("pageInd").textContent = (idx + 1) + "/" + total;
+    $("pageInd").classList.remove("hidden");
+  }
+
+  function selectColor(entry, imgEl, idx, total){
     selectedBandColor = entry.label;
     var cropped = cropCell(imgEl, entry.cell);
     lastResultImageForCart = cropped;
     $("resultImg").src = cropped;
     $("dlBtn").href = cropped;
+    updateColorBadge(entry.label, idx, total);
   }
 
   function renderBandRow(labeled, imgEl){
@@ -247,12 +363,12 @@
       b.addEventListener("click", function(){
         Array.prototype.forEach.call(row.children, function(el){ el.classList.remove("on"); });
         b.classList.add("on");
-        selectColor(entry, imgEl);
+        selectColor(entry, imgEl, idx, labeled.length);
       });
       row.appendChild(b);
     });
     row.classList.remove("hidden");
-    selectColor(labeled[0], imgEl); // أول لون افتراضيًا
+    selectColor(labeled[0], imgEl, 0, labeled.length); // أول لون افتراضيًا
   }
 
   /* ⚠️ اللينك ده بيتحمّل تاني من data:url — مفيش نداء شبكة تاني،
@@ -371,6 +487,38 @@
   });
   // الوضع الحي (Beta) — الصورة لسه في sessionStorage
   $("liveBtn").addEventListener("click", function(){ location.href = "./?imgkey=1"; });
+
+  // ⋯ المزيد — قايمة صغيرة (رجوع للشات دلوقتي، مكان يتوسّع بعدين)
+  function closeMoreMenu(){ $("moreMenu").classList.add("hidden"); }
+  $("moreBtn").addEventListener("click", function(e){
+    e.stopPropagation();
+    $("moreMenu").classList.toggle("hidden");
+  });
+  document.addEventListener("click", function(e){
+    if(!$("moreMenu").classList.contains("hidden") && !$("moreBtn").contains(e.target)) closeMoreMenu();
+  });
+
+  // 📤 مشاركة — بتحاول تشارك الصورة نفسها (Web Share)، وفولباك للتنزيل
+  //    لو المتصفح مش داعم. الصورة data:url محلية بس (مفيش رفع لسيرفر).
+  $("shareBtn").addEventListener("click", function(){
+    var src = $("resultImg").src;
+    if(!src){ return; }
+    try{
+      fetch(src).then(function(r){ return r.blob(); }).then(function(blob){
+        var file = new File([blob], "tryon-echarpe.jpg", { type: blob.type || "image/jpeg" });
+        if(navigator.canShare && navigator.canShare({ files:[file] })){
+          return navigator.share({ files:[file], title:"جرّبتها في echarpe ✨" });
+        }
+        throw new Error("no-share");
+      }).catch(function(){
+        // فولباك: مفيش دعم مشاركة ملفات — ننزّل الصورة بدالها
+        var a = document.createElement("a");
+        a.href = src; a.download = "tryon-echarpe.jpg";
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      });
+    }catch(e){}
+  });
+
   // أضيفيها للسلة — بتظهر بس لو فيه باركود منتج جاي من الشات
   $("cartBtn").addEventListener("click", function(){
     if(!productId) return;
@@ -410,7 +558,7 @@
   $("changeFaceBtn").addEventListener("click", function(){
     PC.clearFace(window.localStorage);
     rememberedFace = "";
-    var b = $("changeFaceBtn");
+    var b = $("changeFaceBtn").querySelector(".lb");
     var orig = b.textContent;
     b.textContent = "تم ✅";
     setTimeout(function(){ b.textContent = orig; }, 1400);
