@@ -206,23 +206,25 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
   assert(PC.readResult(s, 'p', '') === '', 'ومن غير صورة عميلة مفيش قراءة');
 })();
 
-/* 💾 الربط في photo.html — الكاش لازم يتفحص **قبل** النداء */
+/* 💾 الربط في photo.html — الكاش لازم يتفحص **قبل** النداء
+   (المسار العادي من غير بندانة) */
 (function(){
   const fs = require('fs'), path = require('path');
   const H = fs.readFileSync(path.join(__dirname, '..', 'tryon', 'photo.html'), 'utf8');
-  const fn = H.slice(H.indexOf('function generate('), H.indexOf('function fail('));
+  const fn = (H.match(/function generate\(customerDataUrl\)\{[\s\S]*?\n  \}/) || [''])[0];
 
   const iHit  = fn.indexOf('PC.readResult');
-  const iCall = fn.indexOf('httpsCallable');
-  assert(iHit > -1, '💾 photo.html بيفحص الكاش');
+  const iCall = fn.indexOf('callHijabTryOn');
+  assert(iHit > -1, '💾 photo.html بيفحص الكاش (المسار العادي)');
   assert(iHit < iCall,
     '⭐ والفحص **قبل** النداء — بعده مالوش أي لازمة، التكلفة بتكون اتدفعت');
-  assert(/if\(hit\)\{\s*succeed\(hit,\s*true\);\s*return;\s*\}/.test(fn),
+  assert(/if\(hit\)\{\s*succeedPlain\(hit,\s*true\);\s*return;\s*\}/.test(fn),
     'وعند الإصابة بيعرض ويرجع من غير ما ينادي');
-  assert(fn.indexOf('PC.saveResult') > -1, 'والنتيجة الجديدة بتتحفظ');
+
+  const succeedFn = (H.match(/function succeedPlain\(imageDataUrl, fromCache\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(succeedFn.indexOf('PC.saveResult') > -1, 'والنتيجة الجديدة بتتحفظ');
   // 🔴 مايتحفظش اللي جاي من الكاش — ده كان هيقلّب الترتيب كل عرض
-  assert(/if\(!fromCache && lastCustomer\)/.test(fn) ||
-         H.indexOf('if(!fromCache && lastCustomer)') > -1,
+  assert(/if\(!fromCache && lastCustomer\)/.test(succeedFn),
     '🔴 واللي جاي من الكاش **مش** بيتعاد حفظه (وإلا الترتيب بيتقلب)');
 })();
 
@@ -370,28 +372,59 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
 })();
 
 /* ============================================================
-   🔴🔴⭐ باج الكاش الحقيقي — مفتاح الحفظ ≠ مفتاح القراءة (لطلبات
-   البندانة كلها، دايمًا، بلا استثناء) — ده سبب "بيولّد من جديد"
+   🔴🔴🔴⭐ إعادة تصميم كاملة: كل لون بندانة طلب مستقل (مش شبكة NxM)
    ------------------------------------------------------------
-   PC.readResult كان بيتنادى بـbandanaColorsRequested (من غير "none")،
-   لكن PC.saveResult كان بيتنادى بـactiveBandColors (فيها "none"
-   مضافة). مفتاحين مختلفين لنفس النتيجة = الكاش ما كانش بيطابق
-   **أبدًا** لأي طلب بندانة، مهما حاولت.
+   تجربة حقيقية كشفت إن أي شبكة أكتر من خانتين (بدون بندانة + لون)
+   كانت بتتلخبط: زوم مبالغ فيه (تقسيم ٢×٢ = ربع الصورة للخانة)،
+   ولون غلط بيظهر (فهرسة شبكات مربّعة/فردية مش مضمونة). الحل:
+   generateForColor بتطلب **لون واحد بس** في كل نداء — دايمًا
+   خانتين (بدون بندانة + اللون ده)، أبسط هندسة ممكنة ومختبرة.
    ============================================================ */
 (function () {
   const H = fs.readFileSync(PAGE, 'utf8');
-  const succeedFn = (H.match(/function succeed\(imageDataUrl, fromCache\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(succeedFn.length > 0, 'succeed() موجودة');
-  // 🔴🔴⭐ نفس المصدر بالظبط اللي في PC.readResult (bandanaColorsRequested،
-  // مش activeBandColors) — أي فرق هنا يرجّع الباج تاني.
-  assert(/PC\.saveResult\([^)]*gridMode \? bandanaColorsRequested : undefined\)/.test(succeedFn),
-    '🔴🔴⭐ PC.saveResult بيستخدم bandanaColorsRequested بالظبط — نفس مفتاح readResult');
-  assert(succeedFn.indexOf('PC.saveResult(window.localStorage, productId, lastCustomer, imageDataUrl, activeBandColors)') === -1,
-    '🔴 مفيش رجوع لاستخدام activeBandColors في الحفظ (كان هو الباج)');
+  const genColorFn = (H.match(/function generateForColor\(customerDataUrl, color\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(genColorFn.length > 0, 'generateForColor موجودة');
 
-  const generateFn = (H.match(/function generate\(customerDataUrl\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(/PC\.readResult\([^)]*gridMode \? bandanaColorsRequested : undefined\)/.test(generateFn),
-    'PC.readResult بيستخدم bandanaColorsRequested (نفس مصدر الحفظ دلوقتي)');
+  // 🔴🔴🔴⭐ كل نداء بيطلب [color] واحد بس — مش الليستة كلها
+  assert(genColorFn.indexOf('bandanaColors: [color]') >= 0,
+    '🔴🔴🔴⭐ الطلب للسيرفر بيبعت لون واحد بس ([color]) — مش array الألوان كلها');
+  assert(genColorFn.indexOf('bandanaColorsRequested') === -1,
+    '🔴🔴🔴⭐ مفيش استخدام لقايمة الألوان الكاملة جوه الطلب — لون واحد مستقل بس');
+
+  // 🔴🔴⭐ الكاش: نفس [color] بالظبط للقراءة والحفظ — نفس المفتاح، مفتاح واحد
+  const iHit = genColorFn.indexOf('PC.readResult');
+  const iSave = genColorFn.indexOf('PC.saveResult');
+  assert(iHit > -1 && iHit < genColorFn.indexOf('callHijabTryOn'),
+    'بيفحص الكاش (بمفتاح [color]) قبل أي نداء شبكة');
+  assert(/PC\.readResult\([^)]*\[color\]\)/.test(genColorFn),
+    'قراءة الكاش بمفتاح [color]');
+  assert(/PC\.saveResult\([^)]*\[color\]\)/.test(genColorFn),
+    '🔴🔴⭐ حفظ الكاش بنفس [color] بالظبط — مفتاح واحد للقراءة والحفظ (كان الباج: مصدرين مختلفين)');
+
+  // عند إصابة الكاش: قص محلي (crop) مش نداء شبكة تاني
+  assert(genColorFn.indexOf('loadGridImage(hit,') >= 0,
+    'عند إصابة الكاش: تحميل محلي وقص — مفيش نداء شبكة تاني');
+
+  // ✂️ الهندسة الوحيدة: computeGridLayout(2) — نفس الحالة المختبرة
+  assert(H.indexOf('cropFromGrid') >= 0, 'دالة القص الموحّدة موجودة');
+  const cropFn = (H.match(/function cropFromGrid\(imgEl, whichIndex\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(cropFn.indexOf('computeGridLayout(2)') >= 0,
+    '🔴🔴🔴⭐ القص دايمًا بهندسة الخانتين (٢) — مفيش شبكة أكبر أبدًا لأي عدد ألوان');
+})();
+
+/* 🖱️ صف الألوان: كل لون تاب عليه بيتصرف صح — "بدون بندانة" مجاني
+   دايمًا، نفس اللون الظاهر مفيش داعي يتولّد تاني، ولون جديد بيطلب
+   مستقل. */
+(function () {
+  const H = fs.readFileSync(PAGE, 'utf8');
+  const tapFn = (H.match(/function onSwatchTap\(label, imgFromEvent\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(tapFn.length > 0, 'onSwatchTap موجودة');
+  assert(tapFn.indexOf('label === "none"') >= 0 && tapFn.indexOf('cropFromGrid') >= 0,
+    '⭐ "بدون بندانة" بيتقص محليًا من أي صورة سابقة — مجاني دايمًا');
+  assert(tapFn.indexOf('label === lastGridGenColor') >= 0,
+    '⭐ نفس اللون الظاهر حاليًا — قص بس، مفيش توليد جديد زيادة عن اللازمة');
+  assert(tapFn.indexOf('generateForColor(lastCustomer, label)') >= 0,
+    'لون تاني غير الظاهر — طلب مستقل (كاش أو توليد طازة)');
 })();
 
 // ---------- ٨) الربط في الشات (loyalty/glow): إرسال ألوان البندانة ----------
@@ -421,7 +454,11 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
 (function () {
   const H = fs.readFileSync(PAGE, 'utf8');
   assert(H.indexOf('class="resultCard"') >= 0, 'كارت النتيجة الجديد موجود');
-  assert(H.indexOf('id="colorBadge"') >= 0, 'شارة اللون فوق الصورة موجودة');
+  // 🔴🔴⭐ شارة اللون العائمة فوق الصورة اتشالت خالص — شكوى حقيقية:
+  // "لون البندانه فوق مزعج ع الصورة". صف الدواير تحت بيوضّح اللون
+  // المختار (حالة "on") من غير ما يتراكب على الصورة نفسها.
+  assert(H.indexOf('id="colorBadge"') === -1, '🔴🔴⭐ شارة اللون العائمة اتشالت خالص');
+  assert(H.indexOf('class="imgBadge"') === -1, '🔴 مفيش أثر لكلاس الشارة القديم برضه');
   // 🔴 عدّاد "١/٢" اتشال عمدًا — كان بيلخبط من غير سياق (شكوى حقيقية).
   //    صف الدواير تحت بيوضّح العدد/المكان بصريًا وكفاية.
   assert(H.indexOf('id="pageInd"') === -1, '🔴 عدّاد الصفحة المربك اتشال خالص');
@@ -429,10 +466,6 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
   assert(H.indexOf('id="shareBtn"') >= 0, 'زرار المشاركة موجود');
   assert(H.indexOf('id="moreMenu"') >= 0, 'قايمة "المزيد" موجودة');
   assert(H.indexOf('class="trustLine"') >= 0, 'سطر الثقة تحت الأزرار موجود');
-  // 🔴 الشارة لازم تتخفي مع hideBandRow (منتج عادي من غير بندانة)
-  const hideFn = (H.match(/function hideBandRow\(\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(hideFn.indexOf('colorBadge') >= 0,
-    '🔴 hideBandRow بيخفي الشارة (منتج عادي مالوش بندانة)');
   // زرار السلة الأساسي لسه بنفس الشكل الحرفي اللي بتفحصه test-tryon-cart-customer.js
   assert(/cartBtn"\)\.addEventListener\("click", function\(\)\{[\s\S]*?\n\s*\}\);/.test(H),
     'زرار السلة لسه بنفس الشكل المتوقع (window.opener أولًا)');
