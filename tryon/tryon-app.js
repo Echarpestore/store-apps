@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v40';
+  const TRYON_VER = 'v41';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);
@@ -472,6 +472,7 @@
     if(!a.ready){ setTimeout(tryUpgradeToPhoto, 400); return; }
     S.pendingPhoto = null;
     S.scarf = target;
+    syncBandanaRow();
     console.log('✅ اترقّى للأصل المصوّر');
     repaintStill();
   }
@@ -821,7 +822,11 @@
     //    الشعر والجبهة فمفيش شعر ولا خلفية باينة بين الوش والطرحة
     //    (سر واقعية الفلاتر الاحترافية). قماشها له ظل خفيف عند
     //    حافتها على الجلد + لمعة بسيطة — مش لون مصمت.
-    if(S.bandana && S.bandana.hex && S.scarf.type === 'photo' && layerOn('bandana')){
+    // ⚠️ v25: الشريط ده **تحت الطرحة** — يعني مالوش معنى لو الأصل
+    //    نفسه بندانة منتج (kind:'bandana'). من غير الشرط ده كنا
+    //    هنرسم شريط لون فوق بندانة بريذ = بندانة على بندانة.
+    if(S.bandana && S.bandana.hex && S.scarf.type === 'photo'
+       && S.scarf.kind !== 'bandana' && layerOn('bandana')){
       const bd = T.bandanaSpec(an, ex);
       ctx.save();
       ctx.beginPath();
@@ -1189,6 +1194,7 @@
     if(src.kind !== 'none') colorFromProductImage(src.value).catch(() => {});
 
     buildBandanaRow();
+    syncBandanaRow();
 
     $('btnShot').onclick = () => captureAndResume().catch(console.warn);
     $('btnLive').onclick = () => backToLive().catch(console.warn);
@@ -1205,6 +1211,16 @@
      الستايل بقى **تلقائي بس** من صورة المنتج (لون غالب جدًا = ساده).
      والحل الحقيقي لتنوّع الطرح (مسجر/ساده/كنار/مطرزة) هو أصل مصوّر
      لكل موديل — prep.html جاهزة ليه، والكتالوج بياخد أي عدد أصول. */
+
+  /* 🧢 v25: إخفاء صف البندانة لما الأصل نفسه بندانة منتج.
+     العميلة بتجرّب بندانة بريذ — مالهاش معنى تختار "بندانة تحتها". */
+  function syncBandanaRow(){
+    const row = $('bandanaRow');
+    if(!row) return;
+    const isBnd = !!(S.scarf && S.scarf.kind === 'bandana');
+    row.style.display = isBnd ? 'none' : '';
+    if(isBnd) S.bandana = null;         // نلغي أي اختيار سابق
+  }
 
   /* 🧕 v23: صف اختيار البندانة — أول زرار "من غير بندانة" (الافتراضي)
      وبعده الألوان. الرسم بيتحدث فورًا في وضع الصورة. */
