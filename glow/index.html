@@ -661,6 +661,14 @@
   </div>
 </div>
 
+<!-- 🖼️⭐ overlay تجربة الطرحة — iframe داخلي بدل تاب/تنقّل جديد.
+     كانت أكبر شكوى: فتح تاب/الخروج من الصفحة كان بيحس العميلة إنها
+     "طلعت برة الشات". الـiframe بيفضل نفس الصفحة، نفس الـsessionStorage،
+     وبيتقفل فورًا بـpostMessage من غير أي تنقّل خالص. -->
+<div id="tryonOverlay" style="display:none; position:fixed; inset:0; z-index:99999; background:#FBF6ED;">
+  <iframe id="tryonFrame" title="جرّبيها" style="width:100%; height:100%; border:0; display:block;"></iframe>
+</div>
+
 <div class="app">
 
   <!-- ===================== شاشة الدخول ===================== -->
@@ -3459,11 +3467,40 @@ function chatTryOn(id){
     if(bpid) sessionStorage.setItem('echarpe_tryon_bandana_pid', bpid);
     else sessionStorage.removeItem('echarpe_tryon_bandana_pid');
   }catch(e){}
-  // 🔗 نفس التاب مش تاب جديد — من غير كده أندرويد بيفتحها في Custom
-  //    Tab وبيظهر شريط بروزر فوق (echarpe.store) حتى واحنا في تطبيق
-  //    standalone مُثبّت. فولباك ?addcart= شغّال بالظبط زي ما كان.
-  location.href = '../tryon/photo.html?brand=glow';   // Photo AI؛ الوضع الحي متاح جواها كـBeta
+  // 🖼️⭐ overlay جوه الصفحة بدل تاب/تنقّل جديد — العميلة تحس إنها
+  //    لسه في الشات بالظبط. Photo AI؛ الوضع الحي متاح جواها كـBeta.
+  tryonOverlayOpen('glow');
 }
+
+/* 🖼️⭐ فتح/قفل overlay تجربة الطرحة (iframe) — نفس مبدأ chatTryOn،
+   بس من غير أي تنقّل. src بيتحط فاضي عند القفل عشان نوقف أي شغل
+   شغّال جوه الـiframe (توليد قايم، اتصال Firebase، إلخ). */
+function tryonOverlayOpen(brand){
+  var frame = document.getElementById('tryonFrame');
+  var wrap = document.getElementById('tryonOverlay');
+  if(!frame || !wrap) return;
+  frame.src = '../tryon/photo.html?brand=' + brand + '&embed=1';
+  wrap.style.display = 'block';
+}
+function tryonOverlayClose(){
+  var frame = document.getElementById('tryonFrame');
+  var wrap = document.getElementById('tryonOverlay');
+  if(wrap) wrap.style.display = 'none';
+  if(frame) frame.src = 'about:blank';
+}
+window.addEventListener('message', function(e){
+  try{
+    if(e.origin !== location.origin) return;
+    var d = e.data;
+    if(!d || d.ns !== 'echarpeTryon') return;
+    if(d.type === 'tryon-close'){ tryonOverlayClose(); return; }
+    if(d.type === 'tryon-addcart'){
+      tryonAddToCart(d.barcode, d.img || null, d.note || '');
+      tryonOverlayClose();
+      return;
+    }
+  }catch(err){}
+});
 
 /* 🛍️ الجسر بين تجربة الطرحة والسلة الحقيقية — بينادَى من صفحة
    tryon/photo.html عن طريق window.opener (نفس الأصل). فولباك للنداء
