@@ -2246,7 +2246,9 @@ const RC2 = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
   const fs2 = require('fs'), path2 = require('path');
   const APP = fs2.readFileSync(path2.join(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
 
-  assert(/const TRYON_VER = 'v35'/.test(APP), 'النسخة اتحدّثت لـv35');
+  /* ⚠️ بالرقم مش بالنص الثابت — كل نسخة كانت بتكسر السطر ده. */
+  const v = Number((APP.match(/TRYON_VER = 'v(\d+)'/) || [])[1]);
+  assert(v >= 35, 'النسخة v35 أو أحدث');
   assert(/S\._rebuild = \(delegate\) =>/.test(APP),
     '⭐⭐ أدوات إعادة البناء محفوظة — الفولباك بقى ممكن بعد التشغيل');
   assert(/S\.lostFrames === 45 && S\.delegate === 'GPU'/.test(APP),
@@ -2258,7 +2260,7 @@ const RC2 = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
     '⭐ الشرط `===` مش `>=` — مع `>=` بيتنفذ كل فريم بعد الـ٤٥');
 
   // 🩺 الشريحة بتقول المندوب — الدليل الجاي بيوصل من غير كونسول
-  assert(/chip\('no-face·' \+ \(S\.delegate \|\| '\?'\)\.toLowerCase\(\)\)/.test(APP),
+  assert(/chip\('no-face·' \+ \(S\.delegate \|\| '\?'\)\.toLowerCase\(\)/.test(APP),
     '⭐⭐ الشريحة بتقول GPU ولا CPU — نظرة واحدة تحسم');
   assert(/delegate: S\.delegate, lostFrames: S\.lostFrames/.test(APP),
     '⭐ والتشخيص فيه المندوب وعدد الفريمات الضايعة');
@@ -2266,5 +2268,87 @@ const RC2 = require(path.resolve(__dirname, '..', 'tryon', 'recolor-core.js'));
     '⭐ و`?cpu=1` للتجربة الفورية من غير انتظار الفولباك');
 
   const sw = fs2.readFileSync(path2.join(__dirname, '..', 'tryon', 'sw.js'), 'utf8');
-  assert(/echarpe-tryon-v35/.test(sw), '⭐ CACHE_NAME اترفع');
+  const swv = Number((sw.match(/echarpe-tryon-v(\d+)/) || [])[1]);
+  assertEq(swv, v, '⭐⭐ نسخة sw = نسخة التطبيق');
+})();
+
+/* ============================================================
+   🩺 v36 — الكاشف بياخد كانفاس مصغّر + الأرقام على الشاشة
+   ------------------------------------------------------------
+   🔴 الدليل: v35 أثبت `no-face` على **GPU وCPU** الاتنين، وعلى وش
+      قريب وبعيد. يعني المندوب مش السبب والمسافة مش السبب.
+      الباقي: الفريم نفسه. كاميرات أندرويد بتدي 1080×1920+، وبعض
+      الأجهزة بتفشل في تحويله من غير أي خطأ.
+   ============================================================ */
+(function(){
+  const fs3 = require('fs'), p3 = require('path');
+  const APP = fs3.readFileSync(p3.join(__dirname, '..', 'tryon', 'tryon-app.js'), 'utf8');
+
+  assert(/function detectSrc\(\)/.test(APP), 'فيه مصدر إدخال مستقل للكاشف');
+  assert(/detectForVideo\(detectSrc\(\), t0\)/.test(APP),
+    '⭐⭐ الكاشف بياخد الكانفاس المصغّر مش الفيديو الخام');
+  assert(/draw\(res, S\.video\)/.test(APP),
+    '⭐⭐ والرسم لسه من الفيديو الأصلي — الصورة المعروضة مبتتصغّرش');
+  assert(/S\._inCv\.width !== w \|\| S\._inCv\.height !== h/.test(APP),
+    '⭐ الكانفاس بيتعمل مرة واحدة (إنشاؤه كل فريم بيوقف الجهاز)');
+
+  // 🩺 الأرقام على الشاشة — مفيش كونسول على الموبايل
+  assert(/videoWidth \|\| 0\) \+ 'x'/.test(APP), '⭐⭐ مقاس الكاميرا في الشريحة');
+  assert(/'·rs' \+ \(S\.video\.readyState/.test(APP), '⭐ وحالة الفيديو');
+  assert(/'·f' \+ \(S\.frames/.test(APP), '⭐ وعدد الفريمات المعالَجة');
+  assert(/S\.detectErr = String/.test(APP),
+    '⭐⭐ خطأ الكشف بيتعرض بدل ما يتبلع في console.warn');
+
+  assert(!/قرّبي وشّك للكاميرا/.test(APP),
+    '⭐⭐ النصيحة الغلط اتشالت — «قرّبي» كانت بتزوّد المشكلة');
+  assert(/الوش والكتافين باينين/.test(APP), 'والنصيحة الصح مكانها');
+})();
+
+/* ============================================================
+   🧢 v41 — بندانة كمنتج (kind:'bandana')
+   ------------------------------------------------------------
+   الفرق الجوهري: "البندانة" في v23 كانت **شريط لون مرسوم** بيتحط
+   تحت الطرحة. بندانة بريذ منتج مصوّر بيتلبس لوحده. لازم الاتنين
+   ميتلغبطوش — شريط لون فوق بندانة = بندانة على بندانة.
+   ============================================================ */
+(function(){
+  const fs = require('fs'), path = require('path');
+  const R = path.join(__dirname, '..');
+  const cat  = fs.readFileSync(path.join(R, 'tryon/assets/catalog.js'), 'utf8');
+  const code = fs.readFileSync(path.join(R, 'tryon/tryon-app.js'), 'utf8');
+  const sw   = fs.readFileSync(path.join(R, 'tryon/sw.js'), 'utf8');
+
+  // ---------- الأصل موجود ومكتمل ----------
+  assert(cat.indexOf("id: 'bandana-breathe'") > -1, '🧢 بندانة بريذ في الكتالوج');
+  assert(cat.indexOf("kind: 'bandana'") > -1, 'ومعلّمة kind:bandana');
+  assert(cat.indexOf("brand: 'breathe'") > -1, 'وليها ماركة');
+  assert(/bandana-breathe-head\.png/.test(cat), 'وصورتها مربوطة');
+  assert(fs.existsSync(path.join(R, 'tryon/assets/bandana-breathe-head.png')),
+    '🖼️ وملف الصورة نفسه موجود فعلًا');
+  // البندانة **مالهاش** انسدال — لو اتضاف drape يبقى غلط مفاهيمي
+  const bnd = cat.slice(cat.indexOf("id: 'bandana-breathe'"),
+                        cat.indexOf("id: 'template-01'"));
+  assert(bnd.indexOf('drape') === -1,
+    '🧢 البندانة من غير drape — مفيش انسدال على الصدر');
+  assert(/anchors:\s*\{\s*l:\s*\[\d+,\s*\d+\]/.test(bnd), 'ونقط التثبيت متحطوطة');
+
+  // ---------- شريط البندانة القديم مقفول عليها ----------
+  assert(code.indexOf("S.scarf.kind !== 'bandana'") > -1,
+    "🔴 شريط اللون (v23) **مش** بيترسم فوق أصل kind:'bandana'");
+  assert(code.indexOf('function syncBandanaRow()') > -1
+      && code.indexOf("row.style.display = isBnd ? 'none' : ''") > -1,
+    '🧢 وصف اختيار البندانة بيتخفي لما المنتج نفسه بندانة');
+  assert(code.indexOf('if(isBnd) S.bandana = null;') > -1,
+    'وأي اختيار سابق بيتلغي — مش بيفضل شغال ورا الكواليس');
+  // لازم تتنادى من مكانين: التهيئة + الترقية للأصل المصوّر
+  assert((code.match(/syncBandanaRow\(\);/g) || []).length >= 2,
+    'وبتتنادى عند التهيئة **وعند تبديل الأصل** — مش مرة واحدة');
+
+  // ---------- الكاش ----------
+  assert(sw.indexOf('./assets/bandana-breathe-head.png') > -1,
+    '📦 الصورة في قايمة الكاش — من غيرها مش هتشتغل أوفلاين');
+
+  // ---------- اللون الأبيض ----------
+  assert(/id:'white'/.test(cat) || /id: 'white'/.test(cat),
+    '🎨 الأبيض اتضاف لقايمة الألوان');
 })();
