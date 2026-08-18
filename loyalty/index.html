@@ -3432,7 +3432,11 @@ function chatOutfitTry(msgId, idx){
     if(it.barcode) sessionStorage.setItem('echarpe_tryon_pid', it.barcode);
     else sessionStorage.removeItem('echarpe_tryon_pid');
   }catch(e){}
-  window.open('../tryon/photo.html?brand=loyalty', '_blank');
+  // 🔗 نفس التاب مش تاب جديد — لو فتحناها بـwindow.open من تطبيق
+  //    مُثبّت (standalone)، أندرويد بيفتحها في Custom Tab ببرورز شريط
+  //    (echarpe.store) فوق. location.href بتفضل جوه التطبيق نفسه
+  //    من غير أي شريط. فولباك ?addcart= شغّال بالظبط زي ما كان.
+  location.href = '../tryon/photo.html?brand=loyalty';
 }
 window.chatOutfitTry = chatOutfitTry;
 
@@ -3472,7 +3476,10 @@ function chatTryOn(id){
     if(bpid) sessionStorage.setItem('echarpe_tryon_bandana_pid', bpid);
     else sessionStorage.removeItem('echarpe_tryon_bandana_pid');
   }catch(e){}
-  window.open('../tryon/photo.html?brand=loyalty', '_blank');   // Photo AI؛ الوضع الحي متاح جواها كـBeta
+  // 🔗 نفس التاب مش تاب جديد — من غير كده أندرويد بيفتحها في Custom
+  //    Tab وبيظهر شريط بروزر فوق (echarpe.store) حتى واحنا في تطبيق
+  //    standalone مُثبّت. فولباك ?addcart= شغّال بالظبط زي ما كان.
+  location.href = '../tryon/photo.html?brand=loyalty';   // Photo AI؛ الوضع الحي متاح جواها كـBeta
 }
 
 /* 🛍️ الجسر بين تجربة الطرحة/الشات والسلة الحقيقية — بينادَى من صفحة
