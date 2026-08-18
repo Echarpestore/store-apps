@@ -98,7 +98,8 @@ syntaxCheckAll(read('loyalty/index.html'), 'loyalty');
 syntaxCheckAll(read('glow/index.html'), 'glow');
 
 /* ============================================================
-   🧢 تجربة البندانة — إرسال الألوان + باركود البندانة من شات الموظف
+   🧢 تجربة البندانة — اختيار الألوان بالأزرار + التحقق من باركود
+   البندانة فعليًا (مش كتابة يدوي) من شات الموظف
    ------------------------------------------------------------
    كل فحص سلبي: لو رجّعت الإصلاح لازم يقع.
    ============================================================ */
@@ -106,40 +107,67 @@ syntaxCheckAll(read('glow/index.html'), 'glow');
   const P = fs.readFileSync(POS_PATH, 'utf8');
   const sendFn = (P.match(/function ccSend\(\)\{[\s\S]*?\n  \}/) || [''])[0];
 
-  // ١) عناصر الواجهة موجودة
+  // ١) عناصر الواجهة موجودة — لوحة أزرار مش حقل كتابة
   assert(P.indexOf('id="ccBandFlag"') >= 0, 'شيك بوكس البندانة موجود');
-  assert(P.indexOf('id="ccBandColors"') >= 0, 'حقل ألوان البندانة موجود');
+  assert(P.indexOf('id="ccBandChips"') >= 0, '🔴 لوحة أزرار الألوان موجودة (مش حقل نص)');
+  assert(P.indexOf('id="ccBandColors"') === -1, '🔴 حقل الكتابة اليدوي القديم اتشال خالص');
   assert(P.indexOf('id="ccBandBc"') >= 0, 'حقل باركود البندانة موجود');
+  assert(P.indexOf('id="ccBandBcInfo"') >= 0, 'معاينة باركود البندانة موجودة');
   assert(P.indexOf('id="ccBandRow"') >= 0, 'صف البندانة موجود');
 
-  // ٢) 🔴 التحقق قبل الإرسال — لازم يحصل **قبل** CST.sending = true
-  //    (وإلا رسالة ناقصة بترفض بعد ما القفل اتحط، والزرار يفضل معطّل)
-  const iValidate = sendFn.indexOf("toast('البندانة محتاجة");
+  // ٢) لوحة الألوان: قيم إنجليزي (زي ما hijabTryOn.js بيتوقع) + لابل عربي للموظفة
+  assert(P.indexOf('CC_BAND_COLORS') >= 0, 'لوحة الألوان الثابتة معرّفة');
+  assert(/\{ v: 'off-white', l: 'أوف وايت'/.test(P), 'كل لون فيه قيمة إنجليزي (v) ولابل عربي (l)');
+  assert(P.indexOf('function ccBandChipToggle(') >= 0, 'زرار اللون بيتبدّل (اختيار/إلغاء)');
+  assert(P.indexOf('window.ccBandChipToggle = ccBandChipToggle;') >= 0,
+    'ccBandChipToggle متعرّضة على window (القاعدة الذهبية)');
+  assert(P.indexOf('function renderBandChips(') >= 0, 'رسم لوحة الألوان موجود');
+  // 🔴 سقف الألوان بيتفحص وقت الاختيار بالزرار نفسه
+  assert(/CST\.bandSelected\.length >= CC_BAND_MAX/.test(P), '🔴 سقف الألوان بيتفحص عند الضغط على الزرار');
+
+  // ٣) 🔴 التحقق قبل الإرسال — لازم يحصل **قبل** CST.sending = true
+  const iValidateColors = sendFn.indexOf("toast('اختاري ٢ لون على الأقل للبندانة'");
+  const iValidateBc = sendFn.indexOf("toast('حطي باركود البندانة");
+  const iValidateBcReal = sendFn.indexOf("toast('باركود البندانة مش لاقياه في المخزون");
   const iSendingLock = sendFn.indexOf('CST.sending = true;');
-  assert(iValidate > -1, 'فيه رسالة تحقق واضحة للبندانة الناقصة');
-  assert(iValidate < iSendingLock,
-    '⭐ التحقق من ألوان البندانة قبل قفل الإرسال (وإلا القفل يفضل معلّق)');
+  assert(iValidateColors > -1, 'فيه رسالة تحقق للألوان الناقصة');
+  assert(iValidateBc > -1, 'فيه رسالة تحقق لو الباركود فاضي');
+  assert(iValidateBcReal > -1, '🔴⭐ فيه رسالة تحقق لو الباركود مش موجود في المخزون فعليًا');
+  assert(iValidateColors < iSendingLock && iValidateBc < iSendingLock && iValidateBcReal < iSendingLock,
+    '⭐ كل تحققات البندانة قبل قفل الإرسال (وإلا القفل يفضل معلّق)');
 
-  // ٣) تنضيف الألوان بنفس حدود hijabTryOn.js بالظبط (حروف بس، سقف ٦)
-  assert(/slice\(0,\s*6\)/.test(sendFn), 'سقف ٦ ألوان زي السيرفر بالظبط');
-  assert(/filter\(function\(c\)\{\s*return c\.length >= 2;\s*\}\)/.test(sendFn),
-    'رفض الألوان القصيرة (حرف واحد) زي السيرفر بالظبط');
+  // ٤) 🔴⭐ الباركود لازم يتأكد إنه صنف حقيقي — مش بس "مكتوب حاجة"
+  assert(/findByBarcode\(_bandBc, \{ includeOut: true \}\)/.test(sendFn),
+    'التحقق بيدوّر في المخزون الحقيقي بنفس منطق باركود المنتج');
+  assert(/if\(!_bandProd\)\{/.test(sendFn),
+    '🔴⭐ لو الباركود مش لاقي صنف، الإرسال بيتوقف (مش بيتبعت باركود ميتيجيش)');
 
-  // ٤) 🔴 البندانة بترفق **جوه** حارس msg.tryon بس — مش لأي صورة عادية
+  // ٥) 🔴 البندانة بترفق **جوه** حارس msg.tryon بس — مش لأي صورة عادية
   const tryonGuard = (sendFn.match(/if\(msg\.tryon\)\{[\s\S]*?\n      \}/) || [''])[0];
   assert(tryonGuard.indexOf('msg.bandanaColors') >= 0,
     '🔴 msg.bandanaColors بيتحط جوه حارس msg.tryon بس');
 
-  // ٥) ccImgClear بينضّف بيانات البندانة كمان (منع تسرّب لصورة تانية)
+  // ٦) ccImgClear بينضّف بيانات البندانة كمان (منع تسرّب لصورة تانية)
   const clearFn = (P.match(/function ccImgClear\(\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(clearFn.indexOf('ccBandFlag') >= 0 && clearFn.indexOf('ccBandColors') >= 0
+  assert(clearFn.indexOf('ccBandFlag') >= 0 && clearFn.indexOf('CST.bandSelected = []') >= 0
     && clearFn.indexOf('ccBandBc') >= 0,
     '🔴 مسح الصورة بيمسح بيانات البندانة (منع تسرّب باركود/ألوان لمنتج تاني)');
 
-  // ٦) ccBandToggle موجودة ومتعرّضة على window (القاعدة الذهبية)
+  // ٧) ccBandToggle موجودة ومتعرّضة على window (القاعدة الذهبية)
   assert(P.indexOf('function ccBandToggle()') >= 0, 'ccBandToggle موجودة');
   assert(P.indexOf('window.ccBandToggle = ccBandToggle;') >= 0,
     'ccBandToggle متعرّضة على window (القاعدة الذهبية)');
+  assert(P.indexOf('window.ccBandBcPreview = ccBandBcPreview;') >= 0,
+    'ccBandBcPreview متعرّضة على window (القاعدة الذهبية)');
+})();
+
+/* 🧢 الملفات المشتركة (sales/Office) بتاخد نفس التحديث تلقائيًا —
+   الاتنين بيحمّلوا ../pos/chat-staff-ui.js نفسه، مفيش نسخة تانية. */
+(function () {
+  const sales = fs.readFileSync(path.join(ROOT, 'sales', 'index.html'), 'utf8');
+  const office = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+  assert(sales.indexOf('../pos/chat-staff-ui.js') >= 0, 'sales بيحمّل نفس ملف الشات (مفيش نسخة تانية)');
+  assert(office.indexOf('../pos/chat-staff-ui.js') >= 0, 'Office بيحمّل نفس ملف الشات (مفيش نسخة تانية)');
 })();
 
 /* 🧢 الربط في الشات (loyalty/glow) — قراءة الألوان/الباركود من الرسالة

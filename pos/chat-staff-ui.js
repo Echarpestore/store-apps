@@ -21,8 +21,37 @@
     open: false, activeId: null,
     convs: [], convUnsub: null, msgsUnsub: null,
     filterMine: true, imgData: null, blockArm: 0,
-    sending: false
+    sending: false,
+    // 🧢 بندانة — ألوان مختارة بالترتيب (الترتيب = ترتيب الخانات في
+    // الشبكة بعدين، فلازم نحافظ عليه) + نتيجة معاينة باركودها.
+    bandSelected: [], bandBcInfo: null
   };
+
+  /* 🎨 لوحة ألوان البندانة — القيمة (v) بالإنجليزي بالظبط زي ما
+     hijabTryOn.js بيتوقعها ويستخدمها في البرومبت (نفس قايمة
+     COLOR_HEX في photo-core.js حرفيًا — أي إضافة هنا لازم تتضاف
+     هناك كمان وإلا الدائرة هتظهر رمادي افتراضي في صفحة العميلة).
+     اللابل بالعربي للموظفة بس — مبيتبعتش، القيمة الإنجليزي هي اللي بتتبعت. */
+  var CC_BAND_COLORS = [
+    { v: 'off-white', l: 'أوف وايت', hex: '#f3ece0' },
+    { v: 'white',     l: 'أبيض',     hex: '#f7f5f2' },
+    { v: 'black',     l: 'أسود',     hex: '#23211f' },
+    { v: 'navy',      l: 'كحلي',     hex: '#1f2a44' },
+    { v: 'beige',     l: 'بيج',      hex: '#c9ac86' },
+    { v: 'grey',      l: 'رمادي',    hex: '#8c8a86' },
+    { v: 'brown',     l: 'بني',      hex: '#6b4a34' },
+    { v: 'rose',      l: 'وردي',     hex: '#d8a0a8' },
+    { v: 'red',       l: 'أحمر',     hex: '#b83b3b' },
+    { v: 'olive',     l: 'زيتوني',   hex: '#6b6f4a' },
+    { v: 'green',     l: 'أخضر',     hex: '#4a6b52' },
+    { v: 'blue',      l: 'أزرق',     hex: '#3a5a8c' },
+    { v: 'mocha',     l: 'موكا',     hex: '#7d5a44' },
+    { v: 'cream',     l: 'كريمي',    hex: '#fbf3df' },
+    { v: 'burgundy',  l: 'عنابي',    hex: '#6e2436' },
+    { v: 'mustard',   l: 'خردلي',    hex: '#c9a233' },
+    { v: 'camel',     l: 'جملي',     hex: '#b08a5f' }
+  ];
+  var CC_BAND_MAX = 6;
 
   /* ============================================================
      🔌 طبقة البيانات — الملف بيشتغل على compat **و** modular
@@ -372,6 +401,11 @@
       + '#ccImgPrev label{font-size:12px; color:#9aa1af; display:flex; gap:5px; align-items:center;}'
       + '#ccBandRow{display:none; gap:8px; padding:6px 12px; background:#1b1e26; align-items:center; flex-wrap:wrap;}'
       + '#ccBandRow input{font-size:12px; padding:6px 8px; border:1px solid #2a2e39; border-radius:8px; background:#14161c; color:#eceef2;}'
+      + '.ccBandChip{display:inline-flex; align-items:center; gap:6px; border:1.5px solid #2a2e39;'
+      + 'background:#14161c; color:#c7cbd4; border-radius:99px; padding:5px 10px 5px 6px; font-size:11.5px;'
+      + 'font-weight:700; cursor:pointer; font-family:inherit;}'
+      + '.ccBandChip .dot{width:14px; height:14px; border-radius:50%; flex:0 0 auto; border:1px solid rgba(255,255,255,.25);}'
+      + '.ccBandChip.on{border-color:#C79A38; background:rgba(199,154,56,.15); color:#eceef2;}'
       + '#ccBlock{border:1px solid #E5484D; background:none; color:#E5484D; border-radius:99px;'
       + 'padding:4px 11px; font-size:11.5px; font-weight:800; cursor:pointer; font-family:inherit;}';
     document.head.appendChild(css);
@@ -404,9 +438,10 @@
       + '<button class="ccIco" onclick="ccImgClear()" title="شيل الصورة">✖</button></div>'
       + '<div id="ccTryBcInfo" style="font-size:11.5px; padding:0 2px; color:#888;"></div>'
       + '<div id="ccBandRow">'
-      + '<input id="ccBandColors" type="text" placeholder="ألوان البندانة (٢ لحد ٦، مفصولة بفاصلة: off-white, black, navy)" style="flex:2; min-width:180px;">'
-      + '<input id="ccBandBc" type="text" inputmode="latin" placeholder="باركود البندانة" style="flex:1; min-width:100px;">'
+      + '<div id="ccBandChips" style="display:flex; flex-wrap:wrap; gap:6px; flex:1 1 100%;"></div>'
+      + '<input id="ccBandBc" type="text" inputmode="latin" placeholder="باركود البندانة" oninput="ccBandBcPreview()" style="flex:1; min-width:100px;">'
       + '</div>'
+      + '<div id="ccBandBcInfo" style="font-size:11.5px; padding:0 12px; color:#888;"></div>'
       + ccOutfitPrevHtml()
       + '<div id="ccSigner"></div>'
       + ccQuickHtml()
@@ -419,6 +454,7 @@
       + '<input type="file" id="ccFile" accept="image/*" style="display:none;">';
     document.body.appendChild(wrap);
     document.getElementById('ccFile').onchange = onPickImage;
+    renderBandChips();   // 🧢 لوحة الألوان جاهزة أول ما الواجهة تتبني
     [0, 1, 2].forEach(function(i){
       document.getElementById('ccOutFile' + i).onchange = function(e){ ccOutfitPick(i, e); };
     });
@@ -617,8 +653,10 @@
     // باركود/ألوان قديمين عالقين على صورة تانية.
     var _bf = document.getElementById('ccBandFlag'); if(_bf) _bf.checked = false;
     var _br = document.getElementById('ccBandRow'); if(_br) _br.style.display = 'none';
-    var _bcc = document.getElementById('ccBandColors'); if(_bcc) _bcc.value = '';
+    CST.bandSelected = []; renderBandChips();
     var _bcb = document.getElementById('ccBandBc'); if(_bcb) _bcb.value = '';
+    var _bbi = document.getElementById('ccBandBcInfo'); if(_bbi) _bbi.textContent = '';
+    CST.bandBcInfo = null;
     document.getElementById('ccImgPrev').style.display = 'none';
   }
 
@@ -629,11 +667,72 @@
     var row = document.getElementById('ccBandRow');
     if(row) row.style.display = on ? 'flex' : 'none';
     if(!on){
-      var ci = document.getElementById('ccBandColors'); if(ci) ci.value = '';
+      CST.bandSelected = []; renderBandChips();
       var bi = document.getElementById('ccBandBc'); if(bi) bi.value = '';
+      var bbi = document.getElementById('ccBandBcInfo'); if(bbi) bbi.textContent = '';
+      CST.bandBcInfo = null;
     }
   }
   window.ccBandToggle = ccBandToggle;
+
+  /* 🎨 لوحة ألوان البندانة — زراير بدل الكتابة. الترتيب اللي بتتضغط
+     بيه الألوان هو **نفسه** ترتيب الخانات في الشبكة بعدين (نفس درس
+     hijabTryOn.js: الترتيب هو الرابط الوحيد بين الخانة واللون) —
+     فبنورّي رقم الترتيب على كل لون متاختار عشان يبقى واضح. */
+  function ccBandChipToggle(v){
+    var i = CST.bandSelected.indexOf(v);
+    if(i >= 0){ CST.bandSelected.splice(i, 1); }
+    else{
+      if(CST.bandSelected.length >= CC_BAND_MAX){ toast('لحد ' + CC_BAND_MAX + ' ألوان بس', true); return; }
+      CST.bandSelected.push(v);
+    }
+    renderBandChips();
+  }
+  window.ccBandChipToggle = ccBandChipToggle;
+
+  function renderBandChips(){
+    var box = document.getElementById('ccBandChips');
+    if(!box) return;
+    while(box.firstChild) box.removeChild(box.firstChild);
+    CC_BAND_COLORS.forEach(function(c){
+      var idx = CST.bandSelected.indexOf(c.v);
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ccBandChip' + (idx >= 0 ? ' on' : '');
+      b.onclick = function(){ ccBandChipToggle(c.v); };
+      var dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = c.hex;
+      b.appendChild(dot);
+      b.appendChild(document.createTextNode(c.l + (idx >= 0 ? ' (' + (idx + 1) + ')' : '')));
+      box.appendChild(b);
+    });
+  }
+
+  /* 🔍 معاينة باركود البندانة — نفس منطق ccTryBcPreview بالظبط،
+     بس لمنتج البندانة نفسه. بدونها الموظفة ممكن تبعت باركود غلط
+     وميتأكدش إلا العميلة تشتكي. */
+  function ccBandBcPreview(){
+    var el = document.getElementById('ccBandBc');
+    var info = document.getElementById('ccBandBcInfo');
+    if(!el || !info) return;
+    var code = String(el.value || '').trim();
+    if(!code){ info.textContent = ''; CST.bandBcInfo = null; return; }
+    var p = (typeof window.findByBarcode === 'function') ? window.findByBarcode(code, { includeOut: true }) : null;
+    if(p){ ccBcInfoShow(info, p); CST.bandBcInfo = Object.assign({ barcode: code }, p); return; }
+    info.style.color = '#888'; info.textContent = '…';
+    CST.bandBcInfo = null;
+    CDB.getProduct(code).then(function(prod){
+      if(String((document.getElementById('ccBandBc') || {}).value || '').trim() !== code) return;
+      if(!prod){ info.textContent = '❓ مفيش صنف بالكود ده'; info.style.color = '#C0355C'; return; }
+      ccBcInfoShow(info, prod);
+      CST.bandBcInfo = Object.assign({ barcode: code }, prod);
+    }).catch(function(){
+      if(String((document.getElementById('ccBandBc') || {}).value || '').trim() !== code) return;
+      info.textContent = '';
+    });
+  }
+  window.ccBandBcPreview = ccBandBcPreview;
 
   /* 💰 معاينة فورية للسعر/الاسم وإحنا بنكتب الباركود — من الكاش المحلي
      (allInventory عن طريق findByBarcode)، من غير أي نداء شبكة. بيبيع
@@ -891,19 +990,29 @@
     var text = String(textEl.value || '').trim();
     if(!text && !CST.imgData){ toast('اكتب رد أو حط صورة', true); return; }
     if(text.length > 500){ toast('الرد طويل قوي', true); return; }
-    /* 🧢 بندانة — نتحقق **قبل** ما نبدأ الإرسال. لون واحد أو باركود
-       من غير ألوان كافية = بيانات ناقصة، أحسن نوقف ونطلب توضيح
-       بدل ما نبعت رسالة ناقصة أو نتجاهل الإدخال صامت. */
+    /* 🧢 بندانة — نتحقق **قبل** ما نبدأ الإرسال:
+       - لازم ٢ لون على الأقل (من الأزرار، مش كتابة يدوي)
+       - ولازم باركود، **ولازم الباركود ده يطابق صنف حقيقي في
+         المخزون** — من غيره "أضيفيها للسلة" هتفشل عند العميلة
+         وهي مش هتعرف ليه. أحسن نوقف الموظفة دلوقتي بدل الشكوى بعدين. */
     var _bandOn = !!CST.imgData && !!(document.getElementById('ccBandFlag') || {}).checked;
     var _bandColors = null, _bandBc = '';
     if(_bandOn){
-      var _rawColors = String((document.getElementById('ccBandColors') || {}).value || '');
-      _bandColors = _rawColors.split(',')
-        .map(function(c){ return c.replace(/[^a-zA-Z \-]/g, '').trim().slice(0, 24); })
-        .filter(function(c){ return c.length >= 2; }).slice(0, 6);
+      if(CST.bandSelected.length < 2){
+        toast('اختاري ٢ لون على الأقل للبندانة', true);
+        return;
+      }
+      _bandColors = CST.bandSelected.slice();
       _bandBc = String((document.getElementById('ccBandBc') || {}).value || '').trim();
-      if(_bandColors.length < 2){
-        toast('البندانة محتاجة ٢ لون على الأقل (مفصولين بفاصلة)', true);
+      if(!_bandBc){
+        toast('حطي باركود البندانة عشان تتضاف للسلة صح', true);
+        return;
+      }
+      var _bandProd = (CST.bandBcInfo && CST.bandBcInfo.barcode === _bandBc) ? CST.bandBcInfo
+                     : ((typeof window.findByBarcode === 'function')
+                        ? window.findByBarcode(_bandBc, { includeOut: true }) : null);
+      if(!_bandProd){
+        toast('باركود البندانة مش لاقياه في المخزون — تأكدي منه', true);
         return;
       }
     }
