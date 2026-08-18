@@ -348,9 +348,31 @@
      الرياضي مش محتاج يلاقي حاجة في الصورة أصلًا: بيفترض إن
      الموديل التزم بترتيب "N by M" اللي اتطلب في البرومبت (نفس
      أبعاد computeGridLayout) ويقسم بالحساب. inset صغير بياخد
-     مسافة أمان من حواف الخانة (فاصل تقيل أو محاذاة مش مظبوطة ١٠٠٪). */
+     مسافة أمان من حواف الخانة (فاصل تقيل أو محاذاة مش مظبوطة ١٠٠٪).
+
+     🔴🔴⭐ درس تاني من تجربة حقيقية (أوحش من الأول): الموديل أحيانًا
+     مش بيلتزم **باتجاه** الشبكة المطلوبة — طلبنا ٢ عمود × ١ صف (جنب
+     بعض)، ورجّع ١ عمود × ٢ صف (فوق بعض). القص بافتراض عمياني كان
+     بيقطع خانة نص-نص غلط: نص صورة فوقانية + نص صورة تحتانية في
+     نفس الكروب — "شكل بشع" فعلًا. الحل: نقارن نسبة الصورة الفعلية
+     (عرض/ارتفاع) بنسبة الشكل المتوقع، ولو معكوسين تمامًا (متوقع
+     عريض والصورة طولية أو العكس) نبدّل الصفوف بالأعمدة قبل القص. */
+  function resolveGridOrientation(w, h, cols, rows) {
+    if (cols === rows) return { cols: cols, rows: rows }; // مربّع — مفيش اتجاه يتلخبط
+    var expectedRatio = cols / rows;      // > 1 = المتوقع عريض (جنب بعض)
+    var actualRatio = (w || 1) / (h || 1); // > 1 = الصورة الفعلية عريضة
+    var expectedWide = expectedRatio > 1.15, expectedTall = expectedRatio < 0.87;
+    var actualWide = actualRatio > 1.15, actualTall = actualRatio < 0.87;
+    if ((expectedWide && actualTall) || (expectedTall && actualWide)) {
+      return { cols: rows, rows: cols }; // معكوسين — نبدّل
+    }
+    return { cols: cols, rows: rows };
+  }
+
   function sliceGridProportional(w, h, cols, rows, n, insetFrac) {
     var inset = insetFrac != null ? insetFrac : 0.035;
+    var resolved = resolveGridOrientation(w, h, cols, rows);
+    cols = resolved.cols; rows = resolved.rows;
     var cellW = w / cols, cellH = h / rows;
     var cells = [];
     for (var i = 0; i < n; i++) {
@@ -388,6 +410,7 @@
     colorSwatchLabel: colorSwatchLabel,
     computeGridLayout: computeGridLayout,
     sliceGridProportional: sliceGridProportional,
+    resolveGridOrientation: resolveGridOrientation,
     computeResize: computeResize,
     dataUrlBytes: dataUrlBytes,
     resultActions: resultActions,

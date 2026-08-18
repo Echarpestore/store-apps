@@ -68,14 +68,16 @@ if (!fs.existsSync(CORE)) {
   const brand = pair[0], p = pair[1];
   if (!fs.existsSync(p)) { assert(false, p + ' لازم يكون موجود'); return; }
   const H = fs.readFileSync(p, 'utf8');
-  // 🔴 الزر بيفتح Photo AI للبراند الصح
-  assert(H.indexOf('../tryon/photo.html?brand=' + brand) >= 0, brand + ': chatTryOn بيفتح photo.html للبراند الصح');
+  // 🖼️⭐ chatTryOn بيفتح الـoverlay (iframe) بدل تنقّل مباشر
+  assert(H.indexOf("tryonOverlayOpen('" + brand + "')") >= 0, brand + ': chatTryOn بيفتح الـoverlay للبراند الصح');
+  assert(H.indexOf("photo.html?brand=' + brand + '&embed=1'") >= 0,
+    brand + ': tryonOverlayOpen بيبني رابط الـiframe الصح');
   // 🔴 مبقاش بيفتح الوضع الحي مباشرة من الشات
   assert(H.indexOf("'../tryon/?imgkey=1'") === -1, brand + ': الشات مبقاش بيفتح الوضع الحي مباشرة');
   // التليفون بيتبعت لسقف التكلفة
   assert(H.indexOf('echarpe_tryon_phone') >= 0, brand + ': التليفون بيتحفظ للتجربة');
-  // اللابل الجديد
-  assert(H.indexOf('جرّبيها ✨') >= 0, brand + ': لابل الزر الجديد');
+  // اللابل الجديد — 🔴 بقى SVG + نص (مفيش إيموجي، مفيش "بنفسك")
+  assert(H.indexOf('class="m-try"') >= 0, brand + ': زرار "جرّبيها" موجود');
   assert(H.indexOf('جرّبيها بنفسك') === -1, brand + ': اللابل القديم اتشال');
 });
 
@@ -158,6 +160,27 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
     '📦 عدد المحفوظ مش بيعدّي الحد (' + PC.CACHE_MAX + ')');
   assert(PC.readResult(s, 'x0', face) === '', 'والأقدم بيترمي');
   assert(PC.readResult(s, 'x' + (PC.CACHE_MAX + 2), face) !== '', 'والأحدث بيفضل');
+
+  // ---------- 🔴⭐ ميزانية البايت — صور كبيرة (شبكة ألوان) بترمي أبكر من عدّها ----------
+  // ده الإصلاح اللي كان بيحل مشكلة "بيولّد من جديد" لما العميلة تلف
+  // بين منتجات كتير — الحد القديم كان عدد ثابت (٦) مش حجم فعلي.
+  s = store();
+  const bigImg = img(400000); // ~٤٠٠ ألف بايت للصورة الواحدة (زي صورة شبكة حقيقية)
+  for(let i = 0; i < 15; i++) PC.saveResult(s, 'big'+i, face, bigImg);
+  const bigArr = JSON.parse(s.getItem(PC.CACHE_KEY));
+  let totalBytes = 0;
+  bigArr.forEach(e => { totalBytes += Math.floor(String(e.v).length * 3/4); });
+  assert(bigArr.length < 15,
+    '🔴⭐ صور كبيرة بترمي أبكر من ١٥ (مش بتستنى العدد يوصل للحد)');
+  assert(totalBytes <= PC.CACHE_BYTES_BUDGET * 1.05,
+    '⭐ إجمالي البايت متلزّمش بالميزانية تقريبًا (' + PC.CACHE_BYTES_BUDGET + ')');
+  // صور صغيرة (زي القديم) لسه بتاخد أكتر — الميزانية مش بتضيّق من غير داعي
+  s = store();
+  const smallImg = img(200);
+  for(let i = 0; i < 15; i++) PC.saveResult(s, 'sm'+i, face, smallImg);
+  const smallArr = JSON.parse(s.getItem(PC.CACHE_KEY));
+  assert(smallArr.length > bigArr.length,
+    '⭐ صور صغيرة بتفضل عدد أكبر جوه نفس الميزانية (مش سقف ثابت للعدد)');
 
   // ---------- التخزين اتملى ----------
   // 🔴 الحالة دي كانت هتخلي الحفظ يفشل بصمت للأبد بعد ٣-٤ صور
@@ -274,6 +297,50 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
   assert(PC.readResult(s, 'p1', face) !== '', 'والنسخة من غير ألوان لسه موجودة (مستقلة عن نسخة الألوان)');
 })();
 
+/* ============================================================
+   📐 التقسيم الرياضي للشبكة + تصحيح الاتجاه المعكوس
+   ------------------------------------------------------------
+   🔴🔴⭐ درس من تجربة حقيقية (شكل بشع فعليًا): الموديل طلبنا منه
+   ٢ عمود × ١ صف (جنب بعض) ورجّع ١ عمود × ٢ صف (فوق بعض) — القص
+   بافتراض عمياني كان بيقطع خانة نص فوقاني + نص تحتاني في كروب واحد.
+   ============================================================ */
+(function () {
+  const PC = require(CORE);
+
+  // computeGridLayout — لازم يطابق حسبة hijabTryOn.js بالظبط
+  assertEq(PC.computeGridLayout(2), { cols: 2, rows: 1 }, '٢ لون → ٢×١');
+  assertEq(PC.computeGridLayout(4), { cols: 2, rows: 2 }, '٤ ألوان → ٢×٢');
+  assertEq(PC.computeGridLayout(6), { cols: 3, rows: 2 }, '٦ ألوان → ٣×٢');
+
+  // 🔴🔴⭐ resolveGridOrientation — نفس حالة السكرين شوت بالظبط
+  assertEq(PC.resolveGridOrientation(600, 1400, 2, 1), { cols: 1, rows: 2 },
+    '🔴🔴⭐ متوقع ٢×١ (عريض) لكن الصورة طولية فعليًا → بيبدّل لـ١×٢');
+  assertEq(PC.resolveGridOrientation(1400, 600, 2, 1), { cols: 2, rows: 1 },
+    '⭐ متوقع ٢×١ والصورة فعلًا عريضة → يسيبها زي ما هي (صح أصلًا)');
+  assertEq(PC.resolveGridOrientation(700, 1000, 2, 2), { cols: 2, rows: 2 },
+    'شبكة مربّعة (٢×٢) — مفيش اتجاه يتلخبط، مفيش تبديل أبدًا');
+  assertEq(PC.resolveGridOrientation(750, 1000, 3, 2), { cols: 2, rows: 3 },
+    '⭐ نفس المبدأ بيشتغل لأي شبكة مش مربّعة (٣×٢ ↔ ٢×٣)');
+
+  // sliceGridProportional — القص الفعلي لازم يستخدم الاتجاه المصحّح
+  const cellsFixed = PC.sliceGridProportional(600, 1400, 2, 1, 2);
+  assertEq(cellsFixed.length, 2, 'خانتين لـ٢ لون زي المتوقع');
+  assert(cellsFixed[0].row === 0 && cellsFixed[1].row === 1,
+    '🔴🔴⭐ بعد التصحيح: الخانتين فوق بعض (row 0/1) مش جنب بعض (نفس الصورة الطولية الفعلية)');
+  assert(cellsFixed[0].h < 1400 * 0.6,
+    '🔴⭐ ارتفاع الخانة نص الصورة تقريبًا (مش الصورة كاملة كأنها خانة واحدة)');
+
+  // عدد الخانات = عدد الألوان بالظبط، وكل خانة جوه حدود الصورة
+  const cells4 = PC.sliceGridProportional(1000, 1000, 2, 2, 4);
+  assertEq(cells4.length, 4, '٤ خانات لـ٤ ألوان');
+  cells4.forEach(function (c) {
+    assert(c.x >= 0 && c.y >= 0 && c.x + c.w <= 1000 && c.y + c.h <= 1000,
+      'كل خانة جوه حدود الصورة (مفيش خروج برة)');
+  });
+  const cells5 = PC.sliceGridProportional(900, 600, 3, 2, 5);
+  assertEq(cells5.length, 5, '٥ خانات بس لـ٥ ألوان (مش ٦ حتى لو الشبكة ٣×٢)');
+})();
+
 // ---------- ٧) الربط في photo.html: وضع الشبكة + صف الألوان ----------
 (function () {
   const H = fs.readFileSync(PAGE, 'utf8');
@@ -321,18 +388,134 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
   const H = fs.readFileSync(PAGE, 'utf8');
   assert(H.indexOf('class="resultCard"') >= 0, 'كارت النتيجة الجديد موجود');
   assert(H.indexOf('id="colorBadge"') >= 0, 'شارة اللون فوق الصورة موجودة');
-  assert(H.indexOf('id="pageInd"') >= 0, 'عدّاد الألوان فوق الصورة موجود');
+  // 🔴 عدّاد "١/٢" اتشال عمدًا — كان بيلخبط من غير سياق (شكوى حقيقية).
+  //    صف الدواير تحت بيوضّح العدد/المكان بصريًا وكفاية.
+  assert(H.indexOf('id="pageInd"') === -1, '🔴 عدّاد الصفحة المربك اتشال خالص');
   assert(H.indexOf('class="iconRow"') >= 0, 'صف الأيقونات (غيّري صورتك/إعادة/مشاركة/المزيد) موجود');
   assert(H.indexOf('id="shareBtn"') >= 0, 'زرار المشاركة موجود');
   assert(H.indexOf('id="moreMenu"') >= 0, 'قايمة "المزيد" موجودة');
   assert(H.indexOf('class="trustLine"') >= 0, 'سطر الثقة تحت الأزرار موجود');
-  // 🔴 الشارة والعدّاد لازم يتخفوا مع hideBandRow (منتج عادي من غير بندانة)
+  // 🔴 الشارة لازم تتخفي مع hideBandRow (منتج عادي من غير بندانة)
   const hideFn = (H.match(/function hideBandRow\(\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(hideFn.indexOf('colorBadge') >= 0 && hideFn.indexOf('pageInd') >= 0,
-    '🔴 hideBandRow بيخفي الشارة والعدّاد كمان (مش بس صف الألوان)');
+  assert(hideFn.indexOf('colorBadge') >= 0,
+    '🔴 hideBandRow بيخفي الشارة (منتج عادي مالوش بندانة)');
   // زرار السلة الأساسي لسه بنفس الشكل الحرفي اللي بتفحصه test-tryon-cart-customer.js
   assert(/cartBtn"\)\.addEventListener\("click", function\(\)\{[\s\S]*?\n\s*\}\);/.test(H),
     'زرار السلة لسه بنفس الشكل المتوقع (window.opener أولًا)');
   // مفيش innerHTML برضه في التصميم الجديد (نفس القاعدة العامة)
   assert(!/\.innerHTML\s*=/.test(H), '🔒 التصميم الجديد كمان ملتزم: مفيش innerHTML');
 })();
+
+/* ============================================================
+   📐 مقاس ثابت لكارت النتيجة — منع السكرول، من غير ما نقص الصورة
+   ------------------------------------------------------------
+   🔴⭐ أول محاولة استخدمت object-fit:cover — ده كان بيقص أجزاء من
+   الصورة (الشكوى: "بقى يطير جزء من الصورة") لأي نسبة عرض/ارتفاع
+   مختلفة عن الكارت (خصوصًا خانات البندانة). الإصلاح: object-fit:
+   contain (الصورة كاملة دايمًا) + مساحة أكبر (44vh → 62vh، كانت
+   "صغيرة أوي") + خلفية كريمي تملأ أي فراغ بدل رمادي فاجئ.
+   ============================================================ */
+(function () {
+  const H = fs.readFileSync(PAGE, 'utf8');
+  assert(/\.resultCard\{[^}]*aspect-ratio\s*:\s*4\s*\/\s*5/.test(H),
+    '🔴⭐ كارت النتيجة بنسبة ثابتة (aspect-ratio) مش متغيّرة مع كل توليد');
+  assert(/\.result img\{[^}]*object-fit\s*:\s*contain/.test(H),
+    '🔴⭐ object-fit:contain — الصورة كاملة دايمًا، مفيش أي جزء بيتقص/"يطير"');
+  assert(!/\.result img\{[^}]*object-fit\s*:\s*cover/.test(H),
+    '🔴 مفيش رجوع لـcover (كانت هي سبب قص الصورة)');
+  assert(/\.resultCard\{[^}]*max-height\s*:\s*62vh/.test(H),
+    '⭐ سقف ارتفاع أكبر من المحاولة الأولى (44vh كانت صغيرة أوي)');
+})();
+
+/* ============================================================
+   🎨🖼️⭐ الألوان واللوجو الحقيقيين — مش بالتة/خط مخترع منفصل
+   ------------------------------------------------------------
+   🔴⭐ الشكوى: "شكل البيج ده مش لايق ع البرنامج" + "حط نفس اللوجو
+   مش خطوط مختلفة كده مزعجة". الحل: نفس متغيرات الألوان الحرفية من
+   loyalty/index.html وglow/index.html + نفس LOGO_B64 (PNG حقيقي)
+   بدل نص متخيّل بخط مختلف.
+   ============================================================ */
+(function () {
+  const H = fs.readFileSync(PAGE, 'utf8');
+  const LOY_H = fs.readFileSync(LOY, 'utf8');
+  const GLW_H = fs.readFileSync(GLW, 'utf8');
+
+  assert(H.indexOf('--ink:#3A2233;') >= 0, '🔴⭐ --ink نفس قيمة loyalty الحقيقية بالحرف');
+  assert(H.indexOf('--bg:#FFF6FA;') >= 0, '⭐ --bg نفس قيمة loyalty الحقيقية بالحرف');
+  assert(H.indexOf('html.glow{') >= 0 && H.indexOf('--ink:#1A1315;') >= 0,
+    '🔴⭐ html.glow بياخد ألوان glow الحقيقية بالحرف (مش نفس ألوان loyalty)');
+
+  assert(H.indexOf('id="hLogoImg"') >= 0, '🔴⭐ اللوجو بقى <img> حقيقي مش نص بخط مخترع');
+  assert(H.indexOf('logoMain') === -1 && H.indexOf('logoSub') === -1,
+    '🔴 مفيش أي أثر للنص/الخط القديم المخترع');
+  assert(H.indexOf('PC.LOGO_B64_LOYALTY') >= 0 && H.indexOf('PC.LOGO_B64_GLOW') >= 0,
+    'بيستخدم نفس ثابت اللوجو بتاع الاتنين حسب البراند');
+
+  // 🔴⭐ الحرفين لازم يتطابقوا حرف بحرف مع الأصل — أي فرق يعني لوجو غلط
+  const PC = require(CORE);
+  const mLoy = LOY_H.match(/var LOGO_B64\s*=\s*'([^']*)'/);
+  const mGlw = GLW_H.match(/var LOGO_B64\s*=\s*'([^']*)'/);
+  assert(mLoy && PC.LOGO_B64_LOYALTY === mLoy[1],
+    '🔴⭐ لوجو loyalty مطابق حرفيًا لأصل loyalty/index.html');
+  assert(mGlw && PC.LOGO_B64_GLOW === mGlw[1],
+    '🔴⭐ لوجو glow مطابق حرفيًا لأصل glow/index.html');
+})();
+
+/* ============================================================
+   🔴⭐ saveFace بيقاوم زحمة التخزين — مش بيستسلم على أول فشل
+   ------------------------------------------------------------
+   الشكوى: "لما بخرج وأدخل بعد ساعات بيخليني أولّد من جديد". لو
+   كاش النتايج ملا التخزين، حفظ صورة الوش (اللي بتخلي "تجربة تانية"
+   بضغطة واحدة) كان بيفشل بصمت من غير أي محاولة تفضية.
+   ============================================================ */
+(function () {
+  const PC = require(CORE);
+  function tightStore(quota) {
+    const d = {};
+    return {
+      getItem: (k) => d[k] === undefined ? null : d[k],
+      setItem: (k, v) => {
+        const total = Object.keys(d).reduce((s, kk) => s + (kk === k ? 0 : d[kk].length), 0) + v.length;
+        if (total > quota) { const e = new Error('q'); e.name = 'QuotaExceededError'; throw e; }
+        d[k] = v;
+      },
+      removeItem: (k) => { delete d[k]; },
+      _raw: d
+    };
+  }
+  const face = 'data:image/png;base64,' + 'A'.repeat(400);
+
+  // تخزين مزنوق بنتيجة قديمة تاخد كل المساحة تقريبًا
+  const s = tightStore(600);
+  s._raw[PC.CACHE_KEY] = JSON.stringify([{ k: 'x', v: 'data:image/png;base64,' + 'Z'.repeat(400), t: 1 }]);
+  const ok = PC.saveFace(s, face);
+  assert(ok === true, '🔴⭐ saveFace بينجح حتى لو التخزين مزنوق (بيفضّي نتايج قديمة)');
+  assert(PC.readFace(s) === face, 'والوش فعليًا اتحفظ ومتقروش فاضي');
+  const remaining = JSON.parse(s.getItem(PC.CACHE_KEY) || '[]');
+  assert(remaining.length === 0, 'النتيجة القديمة اتفضّت عشان تدّي مكان للوش (الوش أهم)');
+
+  // تخزين فاضي عادي — لسه بيشتغل زي ما كان (مفيش ريجريشن)
+  const s2 = tightStore(999999);
+  assert(PC.saveFace(s2, face) === true, 'الحالة العادية (تخزين فاضي) لسه بتنجح زي ما كانت');
+})();
+
+/* ============================================================
+   💅 أزرار "جرّبيها"/"أضيفيها للسلة" في رسايل الشات — SVG بدل إيموجي
+   ------------------------------------------------------------
+   🔴 الشكوى: "شكل الزراير وحش آوي و زحمة" — زرارين مصمتين (أسود +
+   وردي) جنب بعض حسّوا "زحمة". الحل: زرار أساسي مصمت (جرّبيها) +
+   زرار تانوي بإطار بس (أضيفيها للسلة) — نفس منطق التدرّج البصري
+   المستخدم في tryon/photo.html (primary/outline).
+   ============================================================ */
+[['loyalty', LOY], ['glow', GLW]].forEach(function (t) {
+  const brand = t[0], H = fs.readFileSync(t[1], 'utf8');
+  assert(H.indexOf('🧕 جرّبيها ✨') === -1 && H.indexOf('🛍️ أضيفيها للسلة') === -1,
+    brand + ': 🔴 إيموجي الأزرار القديمة اتشالت خالص');
+  assert(/class="m-try"[\s\S]{0,220}<svg/.test(H), brand + ': زرار "جرّبيها" بقى SVG');
+  assert(/class="m-buy"[\s\S]{0,220}<svg/.test(H), brand + ': زرار "أضيفيها للسلة" بقى SVG');
+  // 🔴 التدرّج البصري: جرّبيها أساسي مصمت، أضيفيها للسلة تانوي بإطار
+  assert(/\.msg \.m-buy\{[^}]*background:none;[^}]*border:1\.5px solid var\(--pink\);/.test(H),
+    brand + ': 🔴 زرار السلة بقى بإطار بس (تانوي) مش مصمت (تقليل الزحمة البصرية)');
+  assert(/\.msg \.m-try\{[^}]*background:var\(--ink\);/.test(H),
+    brand + ': زرار جرّبيها لسه أساسي مصمت (أوضح فعل)');
+});

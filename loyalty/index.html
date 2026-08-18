@@ -496,14 +496,17 @@
   .msg img{max-width:100%; border-radius:10px; display:block; margin-bottom:6px;}
   .msg .m-try{display:inline-flex; align-items:center; gap:6px; margin-top:8px; background:var(--ink);
     color:#fff; border:none; border-radius:99px; padding:9px 16px; font-weight:700; font-size:13.5px;
-    font-family:inherit; cursor:pointer;}
+    font-family:inherit; cursor:pointer; transition:transform .15s ease, opacity .15s ease;}
+  .msg .m-try:active{ transform:scale(.96); opacity:.85; }
   .msg .m-prod{margin-top:6px; font-size:12.5px;}
   .msg .m-prod b{font-weight:800;}
-  .msg .m-actions{display:flex; flex-wrap:wrap; gap:7px; margin-top:8px;}
+  .msg .m-actions{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;}
   .msg .m-actions .m-try, .msg .m-actions .m-buy{margin-top:0;}
-  .msg .m-buy{display:inline-flex; align-items:center; gap:6px; background:var(--pink);
-    color:#fff; border:none; border-radius:99px; padding:9px 16px; font-weight:700; font-size:13.5px;
-    font-family:inherit; cursor:pointer;}
+  .msg .m-buy{display:inline-flex; align-items:center; gap:6px; background:none;
+    color:var(--pink-deep); border:1.5px solid var(--pink); border-radius:99px; padding:8px 15px;
+    font-weight:700; font-size:13.5px; font-family:inherit; cursor:pointer;
+    transition:transform .15s ease, opacity .15s ease;}
+  .msg .m-buy:active{ transform:scale(.96); opacity:.85; }
   .outfit-cta{display:flex; align-items:center; justify-content:center; gap:8px; margin:10px 12px 0;
     background:var(--card-grad); color:#fff; border:none; border-radius:16px; padding:14px; font-weight:900;
     font-size:14px; cursor:pointer; box-shadow:0 9px 20px -6px rgba(201,50,126,.4); font-family:inherit;}
@@ -3413,9 +3416,13 @@ function chatRenderMsgs(arr){
           + (m.productPrice ? ' — ' + Number(m.productPrice) + ' ج.م' : '') + '</div>';
       }
       body += '<div class="m-actions">'
-        + '<button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">🧕 جرّبيها ✨</button>';
+        + '<button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">'
+        + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.9L19 9l-4.1 3.2L16 17l-4-2.6L8 17l1.1-4.8L5 9l5.1-1.1L12 3z"/></svg>'
+        + ' جرّبيها</button>';
       if(m.barcode){
-        body += '<button class="m-buy" onclick="chatQuickBuy(\'' + esc(m.id) + '\')">🛍️ أضيفيها للسلة</button>';
+        body += '<button class="m-buy" onclick="chatQuickBuy(\'' + esc(m.id) + '\')">'
+          + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l1 12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>'
+          + ' أضيفيها للسلة</button>';
       }
       body += '</div>';
     }
@@ -3439,12 +3446,13 @@ function chatOutfitTry(msgId, idx){
     sessionStorage.setItem('echarpe_tryon_phone', (currentCustomer && currentCustomer.phone) || '');
     if(it.barcode) sessionStorage.setItem('echarpe_tryon_pid', it.barcode);
     else sessionStorage.removeItem('echarpe_tryon_pid');
+    // 🧢 رسايل الطقم من غير بندانة أصلًا — لازم نمسح أي بيانات بندانة
+    // قديمة عالقة من منتج تاني كان فيها، وإلا هتفتح بوضع شبكة غلط.
+    sessionStorage.removeItem('echarpe_tryon_bandana_colors');
+    sessionStorage.removeItem('echarpe_tryon_bandana_pid');
   }catch(e){}
-  // 🔗 نفس التاب مش تاب جديد — لو فتحناها بـwindow.open من تطبيق
-  //    مُثبّت (standalone)، أندرويد بيفتحها في Custom Tab ببرورز شريط
-  //    (echarpe.store) فوق. location.href بتفضل جوه التطبيق نفسه
-  //    من غير أي شريط. فولباك ?addcart= شغّال بالظبط زي ما كان.
-  location.href = '../tryon/photo.html?brand=loyalty';
+  // 🖼️⭐ overlay جوه الصفحة بدل تاب/تنقّل جديد — نفس chatTryOn بالظبط.
+  tryonOverlayOpen('loyalty');
 }
 window.chatOutfitTry = chatOutfitTry;
 
