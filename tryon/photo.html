@@ -81,16 +81,17 @@
 
   /* ============ كارت النتيجة — الصورة + الشارات فوقيها ============
      🔴⭐ مقاس ثابت دايمًا بغض النظر عن أبعاد الصورة المولّدة الفعلية —
-     ده اللي كان بيسبب سكرول: كل توليد كان بيرجّع نسبة عرض/ارتفاع
-     مختلفة (خصوصًا خانات البندانة المقصوصة)، فطول الصفحة كان بيتغيّر
-     مع كل نتيجة. aspect-ratio ثابت + object-fit:cover = نفس الحجم
-     بالظبط كل مرة، والصورة بتتقص لتملأ الإطار مش تتمطط. */
+     ده اللي كان بيمنع السكرول. لكن object-fit:cover كان بيقص أجزاء
+     من الصورة (خصوصًا خانات البندانة اللي نسبتها مختلفة عن ٣:٤) —
+     "بيطير جزء من الصورة". الحل: object-fit:contain (الصورة كاملة
+     دايمًا، من غير قص) + خلفية كريمي تملأ أي فراغ جانبي بدل رمادي
+     فاجئ. وكبّرت المساحة (44vh → 62vh) لأن الكارت كان صغير أوي. */
   .resultCard{ position:relative; border-radius:22px; overflow:hidden;
-    box-shadow:0 10px 30px rgba(33,27,23,.14); background:#eee;
-    aspect-ratio: 3 / 4; max-height:44vh; max-width:calc(44vh * 3 / 4);
+    box-shadow:0 10px 30px rgba(33,27,23,.14); background:var(--cream);
+    aspect-ratio: 4 / 5; max-height:62vh; max-width:calc(62vh * 4 / 5);
     width:100%; margin:0 auto; }
   .result{ width:100%; height:100%; }
-  .result img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .result img{ width:100%; height:100%; object-fit:contain; display:block; }
 
   .imgBadge{
     position:absolute; top:12px; right:12px; display:flex; align-items:center; gap:6px;
@@ -104,10 +105,6 @@
     background:rgba(255,255,255,.94); border-radius:99px; padding:8px 13px;
     font-size:12.5px; font-weight:700; color:var(--ink); text-decoration:none;
     box-shadow:0 2px 8px rgba(0,0,0,.12);
-  }
-  .pageInd{
-    position:absolute; right:12px; bottom:12px; background:rgba(33,27,23,.62); color:#fff;
-    border-radius:99px; padding:5px 11px; font-size:11.5px; font-weight:700;
   }
 
   /* ============ صف ألوان البندانة — دايرة + اسم تحتها (زي المرجع) ============ */
@@ -202,7 +199,6 @@
       <div class="result"><img id="resultImg" alt="التجربة"></div>
       <div class="imgBadge hidden" id="colorBadge"><span class="dot" id="colorBadgeDot"></span><span id="colorBadgeText"></span></div>
       <a class="dlPill" id="dlBtn" download="tryon-echarpe.jpg"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> تنزيل</a>
-      <div class="pageInd hidden" id="pageInd"></div>
     </div>
 
     <!-- 🧢 صف ألوان البندانة — بيتملى ديناميكيًا لو الشبكة اتقصت بنجاح -->
@@ -363,7 +359,6 @@
     row.classList.add("hidden");
     selectedBandColor = null;
     $("colorBadge").classList.add("hidden");
-    $("pageInd").classList.add("hidden");
   }
 
   function cropCell(imgEl, cell){
@@ -373,23 +368,23 @@
     return c.toDataURL("image/jpeg", 0.92);
   }
 
-  // 🏷️ شارة اللون + عدّاد الصفحة فوق الصورة — بتتحدّث مع كل اختيار
-  function updateColorBadge(label, idx, total){
+  // 🏷️ شارة اللون فوق الصورة — بتتحدّث مع كل اختيار.
+  // 🔴 مفيش رقم صفحة (كان "١/٢" بيلخبط، مفيش سياق ليه) — صف الدواير
+  //    تحت أصلًا بيوضّح العدد والمكان بصريًا (دايرة "on" واضحة).
+  function updateColorBadge(label){
     $("colorBadgeDot").style.background = PC.colorSwatchHex(label);
     $("colorBadgeText").textContent = (label === "none")
       ? "بدون بندانة" : ("لون البندانة: " + PC.colorSwatchLabel(label));
     $("colorBadge").classList.remove("hidden");
-    $("pageInd").textContent = (idx + 1) + "/" + total;
-    $("pageInd").classList.remove("hidden");
   }
 
-  function selectColor(entry, imgEl, idx, total){
+  function selectColor(entry, imgEl){
     selectedBandColor = entry.label;
     var cropped = cropCell(imgEl, entry.cell);
     lastResultImageForCart = cropped;
     $("resultImg").src = cropped;
     $("dlBtn").href = cropped;
-    updateColorBadge(entry.label, idx, total);
+    updateColorBadge(entry.label);
     // 🚫 مفيش بندانة في الصورة المعروضة دلوقتي — زرار إضافتها للسلة
     //    يختفي مؤقتًا لحد ما تختار لون فعلي.
     $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed || entry.label === "none");
@@ -426,7 +421,7 @@
       b.addEventListener("click", function(){
         Array.prototype.forEach.call(row.querySelectorAll(".band-swatch"), function(el){ el.classList.remove("on"); });
         b.classList.add("on");
-        selectColor(entry, imgEl, idx, labeled.length);
+        selectColor(entry, imgEl);
       });
       var label = document.createElement("span");
       label.className = "band-label";
@@ -436,7 +431,7 @@
       row.appendChild(item);
     });
     row.classList.remove("hidden");
-    selectColor(labeled[0], imgEl, 0, labeled.length); // أول خانة افتراضيًا ("بدون بندانة" لو موجودة)
+    selectColor(labeled[0], imgEl); // أول خانة افتراضيًا ("بدون بندانة" لو موجودة)
   }
 
   /* ⚠️ اللينك ده بيتحمّل تاني من data:url — مفيش نداء شبكة تاني،
