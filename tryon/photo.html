@@ -244,7 +244,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <script src="./photo-core.js"></script>
-<script src="./grid-split.js"></script>
 <script>
 "use strict";
 (function(){
@@ -437,35 +436,26 @@
   /* ⚠️ اللينك ده بيتحمّل تاني من data:url — مفيش نداء شبكة تاني،
      مجرد فك تشفير base64 محلي. القص والتلوين كلهم بعد كده مجانيين.
 
-     🔴⭐ درس من تجربة حقيقية: كشف الفواصل بالتباين (GridSplit.splitGrid)
-     مش مضمون — الموديل مش دايمًا بيرسم فواصل واضحة كفاية للكشف
-     يلقطها، وكان بيفشل ويرجّع الصورة كاملة من غير قص (العميلة تشوف
-     ٤ وشوش صغيرة بدل صورة واحدة). الحل: **نجرب الكشف الدقيق الأول**
-     (لو نجح، أدق)، **ولو فشل نقسم رياضيًا** بنفس أبعاد الشبكة اللي
-     اتطلبت في البرومبت (computeGridLayout) — مضمون ١٠٠٪، مش محتاج
-     يلاقي حاجة في الصورة. النتيجة: العميلة **دايمًا** تشوف قص واحد
-     واضح قابل لتبديل اللون، مش الشبكة الخام أبدًا. */
+     🔴🔴⭐ درس تالت من تجربة حقيقية — كشف الفواصل بالتباين
+     (GridSplit.splitGrid) اتشال **خالص**. كان بيرجّع أحيانًا "نجاح"
+     بحدود خانات مش متساوية (فرق بسيط في حجم كل خانة)، وده كان بيسبب:
+     ١) "الصورة بتتحرك يمين وشمال وفوق وتحت" — كل لون كروبه مقاس
+        مختلف شوية عن التاني، فالعرض (object-fit:contain) كان بيبان
+        بمقاس/مكان مختلف مع كل تبديل لون.
+     ٢) أحيانًا خانة بتاخد بيكسلات من الخانة الجنبية غلط (لون يظهر
+        غير اللي اتاختار) — كشف غير دقيق بيمسك حدود غلط.
+     التقسيم الرياضي (sliceGridProportional) وحده هو المصدر دلوقتي:
+     كل الخانات **بالظبط نفس المقاس** دايمًا (w/cols × h/rows) —
+     صفر حركة بصرية عند التبديل، ونفس المنطق المتوقّع كل مرة (مفيش
+     "أحيانًا كويس أحيانًا لأ"). resolveGridOrientation جواها بيصحّح
+     الاتجاه المعكوس لو الموديل رصّ الخانات فوق بعض بدل جنب بعض. */
   function trySplitGrid(imageDataUrl, colors){
     var img = new Image();
     img.onload = function(){
       try{
         var w = img.naturalWidth, h = img.naturalHeight;
         var layout = PC.computeGridLayout(colors.length);
-        var cells = null;
-        try{
-          var c = document.createElement("canvas");
-          c.width = w; c.height = h;
-          var ctx = c.getContext("2d");
-          ctx.drawImage(img, 0, 0);
-          var data = ctx.getImageData(0, 0, w, h).data;
-          var res = window.GridSplit ? window.GridSplit.splitGrid(data, w, h, { expect: colors.length }) : { ok: false };
-          if(res.ok){
-            cells = window.GridSplit.labelCells(res.cells, colors).map(function(e){ return e.cell; });
-          }
-        }catch(e){ /* الكشف فشل — نكمل على الفولباك الرياضي تحت */ }
-        if(!cells){
-          cells = PC.sliceGridProportional(w, h, layout.cols, layout.rows, colors.length);
-        }
+        var cells = PC.sliceGridProportional(w, h, layout.cols, layout.rows, colors.length);
         var labeled = colors.map(function(label, i){ return { label: label, cell: cells[i] }; });
         renderBandRow(labeled, img);
       }catch(e){ hideBandRow(); }
@@ -536,9 +526,17 @@
     /* 💾 ونخزّن النتيجة نفسها عشان الرجعة الجاية تبقى فورية.
        ⚠️ **مش** بنعيد الحفظ لو النتيجة جاية من الكاش أصلًا — ده
           كان هيقلّب ترتيب "الأقدم" مع كل عرض ويطفّش نتايج
-          العميلة الحقيقية من التخزين المحدود. */
+          العميلة الحقيقية من التخزين المحدود.
+       🔴🔴⭐ لازم نفس الألوان بالظبط اللي استُخدمت في PC.readResult
+          فوق (bandanaColorsRequested من غير "none") — مش
+          activeBandColors (اللي فيها "none" مضافة للعرض/القص بس).
+          استخدام مصدرين مختلفين للمفتاح كان معناه إن كل حفظ بيتحط
+          بمفتاح، وكل قراءة بتدوّر بمفتاح تاني — الكاش ما كانش بيطابق
+          **أبدًا** لأي طلب بندانة، وده اللي كان بيسبب "بيولّد من جديد"
+          كل مرة حتى لو نفس المنتج بالظبط. */
     if(!fromCache && lastCustomer)
-      PC.saveResult(window.localStorage, productId, lastCustomer, imageDataUrl, activeBandColors);
+      PC.saveResult(window.localStorage, productId, lastCustomer, imageDataUrl,
+        gridMode ? bandanaColorsRequested : undefined);
     // 🧢 وضع الشبكة: نحاول نقص الخانات ونبني صف الألوان. فشل القص
     //    = بنسيب الصورة الكاملة زي ما هي (مفيش خانات مقطوعة غلط).
     if(activeBandColors && activeBandColors.length >= 2){

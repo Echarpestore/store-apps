@@ -13,7 +13,7 @@
 'use strict';
 (function(){
 
-  const TRYON_VER = 'v53';
+  const TRYON_VER = 'v54';
   console.log('echarpe tryon', TRYON_VER);
 
   const $ = (id) => document.getElementById(id);

@@ -345,19 +345,53 @@ assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 
 (function () {
   const H = fs.readFileSync(PAGE, 'utf8');
 
-  assert(H.indexOf('grid-split.js') >= 0, '🧢 photo.html بيحمّل grid-split.js');
   assert(H.indexOf('PC.readBandanaColors') >= 0, 'بيقرا ألوان البندانة من sessionStorage');
   assert(H.indexOf('PC.readBandanaPid') >= 0, 'بيقرا باركود البندانة من sessionStorage');
   assert(H.indexOf('withBandana') >= 0 && H.indexOf('bandanaColors') >= 0,
     'بيبعت withBandana + bandanaColors للدالة');
-  assert(H.indexOf('GridSplit.splitGrid') >= 0, 'بيستخدم GridSplit.splitGrid على النتيجة');
-  assert(H.indexOf('GridSplit.labelCells') >= 0, 'وبيلبّل الخانات بالألوان بترتيبها');
+  // 🔴🔴⭐ درس تالت من تجربة حقيقية: كشف الفواصل بالتباين (GridSplit) اتشال
+  // خالص — كان بيرجّع خانات مقاسات مش متساوية أحيانًا، وده سبب "الصورة
+  // بتتحرك" (كل لون كروب مقاس مختلف) و"لون غلط بيظهر" (حدود كشف مش دقيقة).
+  // التقسيم الرياضي وحده (PC.sliceGridProportional) هو مصدر القص الوحيد
+  // دلوقتي — كل الخانات نفس المقاس بالظبط، صفر حركة بصرية، ونتيجة واحدة
+  // متوقعة كل مرة (مش "أحيانًا كويس أحيانًا لأ").
+  assert(H.indexOf('<script src="./grid-split.js">') === -1,
+    '🔴🔴⭐ سكريبت grid-split.js (كشف غير مضمون) اتشال خالص من الصفحة');
+  assert(H.indexOf('GridSplit.splitGrid(') === -1 && H.indexOf('GridSplit.labelCells(') === -1,
+    '🔴🔴⭐ مفيش أي نداء فعلي لـGridSplit تاني — القص رياضي مضمون بس');
+  assert(H.indexOf('PC.sliceGridProportional') >= 0 && H.indexOf('PC.computeGridLayout') >= 0,
+    '⭐ القص بيعتمد على التقسيم الرياضي المضمون بس');
   assert(H.indexOf('id="bandRow"') >= 0, 'عنصر صف الألوان موجود في الصفحة');
   assert(H.indexOf('id="bandCartBtn"') >= 0, 'زرار سلة البندانة موجود');
-  // 🔴 فشل القص لازم يسيب الصورة كاملة (فولباك آمن) مش يفضل عالق فاضي
-  assert(H.indexOf('hideBandRow') >= 0, 'فيه مسار واضح لإخفاء صف الألوان (فشل القص أو منتج عادي)');
+  // 🔴 فشل تحميل الصورة (نادر جدًا) لازم يسيب مسار واضح لإخفاء الصف
+  assert(H.indexOf('hideBandRow') >= 0, 'فيه مسار واضح لإخفاء صف الألوان (فشل تحميل أو منتج عادي)');
   // مفيش innerHTML — نفس القاعدة العامة، الكود الجديد لازم يلتزم بيها برضه
   assert(!/\.innerHTML\s*=/.test(H), '🔒 الكود الجديد برضه ملتزم: مفيش innerHTML في الصفحة كلها');
+})();
+
+/* ============================================================
+   🔴🔴⭐ باج الكاش الحقيقي — مفتاح الحفظ ≠ مفتاح القراءة (لطلبات
+   البندانة كلها، دايمًا، بلا استثناء) — ده سبب "بيولّد من جديد"
+   ------------------------------------------------------------
+   PC.readResult كان بيتنادى بـbandanaColorsRequested (من غير "none")،
+   لكن PC.saveResult كان بيتنادى بـactiveBandColors (فيها "none"
+   مضافة). مفتاحين مختلفين لنفس النتيجة = الكاش ما كانش بيطابق
+   **أبدًا** لأي طلب بندانة، مهما حاولت.
+   ============================================================ */
+(function () {
+  const H = fs.readFileSync(PAGE, 'utf8');
+  const succeedFn = (H.match(/function succeed\(imageDataUrl, fromCache\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(succeedFn.length > 0, 'succeed() موجودة');
+  // 🔴🔴⭐ نفس المصدر بالظبط اللي في PC.readResult (bandanaColorsRequested،
+  // مش activeBandColors) — أي فرق هنا يرجّع الباج تاني.
+  assert(/PC\.saveResult\([^)]*gridMode \? bandanaColorsRequested : undefined\)/.test(succeedFn),
+    '🔴🔴⭐ PC.saveResult بيستخدم bandanaColorsRequested بالظبط — نفس مفتاح readResult');
+  assert(succeedFn.indexOf('PC.saveResult(window.localStorage, productId, lastCustomer, imageDataUrl, activeBandColors)') === -1,
+    '🔴 مفيش رجوع لاستخدام activeBandColors في الحفظ (كان هو الباج)');
+
+  const generateFn = (H.match(/function generate\(customerDataUrl\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(/PC\.readResult\([^)]*gridMode \? bandanaColorsRequested : undefined\)/.test(generateFn),
+    'PC.readResult بيستخدم bandanaColorsRequested (نفس مصدر الحفظ دلوقتي)');
 })();
 
 // ---------- ٨) الربط في الشات (loyalty/glow): إرسال ألوان البندانة ----------
