@@ -358,6 +358,85 @@
     try { if (store && store.removeItem) store.removeItem(CACHE_KEY); } catch (e) { }
   }
 
+
+  /* ============================================================
+     💾⭐ كاش كبير في IndexedDB — يحتفظ بالتصاميم القديمة بدل ما
+     localStorage المحدود (~5MB) يرميها. يظل 100% على جهاز العميلة.
+     localStorage يفضل fallback للمتصفحات القديمة.
+     ============================================================ */
+  var IDB_DB = "echarpe_tryon_cache_v1";
+  var IDB_STORE = "results";
+  var IDB_MAX = 80;
+
+  function _openIdb() {
+    return new Promise(function(resolve, reject) {
+      if (typeof indexedDB === "undefined") { reject(new Error("no-indexeddb")); return; }
+      var req = indexedDB.open(IDB_DB, 1);
+      req.onupgradeneeded = function() {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          var st = db.createObjectStore(IDB_STORE, { keyPath: "k" });
+          st.createIndex("t", "t", { unique: false });
+        }
+      };
+      req.onsuccess = function(){ resolve(req.result); };
+      req.onerror = function(){ reject(req.error || new Error("idb-open")); };
+    });
+  }
+
+  function readResultAsync(store, productId, faceDataUrl, colors, productDataUrl) {
+    var fallback = function(){ return readResult(store, productId, faceDataUrl, colors, productDataUrl); };
+    if ((!productId && !productDataUrl) || !faceDataUrl) return Promise.resolve("");
+    var k = cacheKey(productId, faceDataUrl, colors, productDataUrl);
+    return _openIdb().then(function(db){
+      return new Promise(function(resolve){
+        var tx = db.transaction(IDB_STORE, "readonly");
+        var req = tx.objectStore(IDB_STORE).get(k);
+        req.onsuccess = function(){
+          var e = req.result;
+          resolve(e && isImageDataUrl(e.v) ? e.v : fallback());
+        };
+        req.onerror = function(){ resolve(fallback()); };
+      });
+    }).catch(function(){ return fallback(); });
+  }
+
+  function saveResultAsync(store, productId, faceDataUrl, imageDataUrl, colors, productDataUrl) {
+    // fallback صغير كمان — مفيد لو IndexedDB اتمسح/اتقفل.
+    saveResult(store, productId, faceDataUrl, imageDataUrl, colors, productDataUrl);
+    if ((!productId && !productDataUrl) || !faceDataUrl || !isImageDataUrl(imageDataUrl)) return Promise.resolve(false);
+    var k = cacheKey(productId, faceDataUrl, colors, productDataUrl);
+    return _openIdb().then(function(db){
+      return new Promise(function(resolve){
+        var tx = db.transaction(IDB_STORE, "readwrite");
+        tx.objectStore(IDB_STORE).put({ k:k, v:imageDataUrl, t:Date.now() });
+        tx.oncomplete = function(){ resolve(true); };
+        tx.onerror = function(){ resolve(false); };
+      });
+    }).then(function(ok){
+      if (!ok) return false;
+      // سقف أمان 80 تصميم: امسح الأقدم فقط عند تجاوزه.
+      return _openIdb().then(function(db){
+        return new Promise(function(resolve){
+          var tx = db.transaction(IDB_STORE, "readwrite"), st = tx.objectStore(IDB_STORE);
+          var countReq = st.count();
+          countReq.onsuccess = function(){
+            var extra = countReq.result - IDB_MAX;
+            if (extra <= 0) { resolve(true); return; }
+            var idx = st.index("t"), cur = idx.openCursor();
+            cur.onsuccess = function(){
+              var c = cur.result;
+              if (c && extra > 0) { st.delete(c.primaryKey); extra--; c.continue(); }
+              else resolve(true);
+            };
+            cur.onerror = function(){ resolve(true); };
+          };
+          countReq.onerror = function(){ resolve(true); };
+        });
+      }).catch(function(){ return true; });
+    }).catch(function(){ return false; });
+  }
+
   /* 📐 أبعاد الشبكة — **نفس الحسبة بالظبط** اللي في hijabTryOn.js
      (buildTryOnPrompt) عشان اللي بنقصّه يطابق اللي اتطلب في البرومبت. */
   function computeGridLayout(n) {
@@ -457,6 +536,8 @@
     cacheKey: cacheKey,
     readResult: readResult,
     saveResult: saveResult,
+    readResultAsync: readResultAsync,
+    saveResultAsync: saveResultAsync,
     clearResults: clearResults
   };
 

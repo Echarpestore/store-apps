@@ -492,29 +492,26 @@
       renderBandRow();
       /* نفس الوجه + نفس صورة المنتج + نفس مجموعة الألوان = cache hit فوري.
          صورة المنتج داخلة في المفتاح عشان رسالة/باركود قديم ما يرجعش طرحة قبلها. */
-      var gridHit = PC.readResult(window.localStorage, productId, customerDataUrl,
-                                  bandanaColorsRequested, productImg);
-      if(gridHit){
-        show("stLoad");
-        loadGridImage(gridHit, function(ok){
-          if(!ok){ fail(); return; }
-          lastGridImage = gridHit;
-          var acts = PC.resultActions(productId, bandanaPid);
-          $("cartBtn").classList.toggle("hidden", !acts.addToCart);
-          bandCartAllowed = acts.addBandanaToCart;
-          // أول لون فعلي يظهر أولًا؛ "بدون" متاح فورًا من أول زر.
-          showBandResult(bandanaColorsRequested[0], cropFromGrid(_lastLoadedGridImg, 1));
-          show("stResult");
-        });
-        return;
-      }
-
       show("stLoad");
-      callHijabTryOn({ withBandana: true, bandanaColors: bandanaColorsRequested }).then(function(imageDataUrl){
+      PC.readResultAsync(window.localStorage, productId, customerDataUrl,
+                         bandanaColorsRequested, productImg).then(function(gridHit){
+        if(gridHit){
+          loadGridImage(gridHit, function(ok){
+            if(!ok){ fail(); return; }
+            lastGridImage = gridHit;
+            var acts = PC.resultActions(productId, bandanaPid);
+            $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+            bandCartAllowed = acts.addBandanaToCart;
+            showBandResult(bandanaColorsRequested[0], cropFromGrid(_lastLoadedGridImg, 1));
+            show("stResult");
+          });
+          return;
+        }
+        callHijabTryOn({ withBandana: true, bandanaColors: bandanaColorsRequested }).then(function(imageDataUrl){
         if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
         cacheFriendlyImage(imageDataUrl, function(cacheUrl){
-          PC.saveResult(window.localStorage, productId, lastCustomer, cacheUrl,
-                        bandanaColorsRequested, productImg);
+          PC.saveResultAsync(window.localStorage, productId, lastCustomer, cacheUrl,
+                             bandanaColorsRequested, productImg);
         });
         loadGridImage(imageDataUrl, function(ok){
           if(!ok){ fail(); return; }
@@ -525,16 +522,18 @@
           showBandResult(bandanaColorsRequested[0], cropFromGrid(_lastLoadedGridImg, 1));
           show("stResult");
         });
-      }).catch(function(msg){ fail(msg); });
+        }).catch(function(msg){ fail(msg); });
+      }).catch(function(){ fail(); });
       return;
     }
 
-    var hit = PC.readResult(window.localStorage, productId, customerDataUrl, null, productImg);
-    if(hit){ succeedPlain(hit, true); return; }
     show("stLoad");
-    callHijabTryOn({ withBandana: false }).then(function(imageDataUrl){
-      succeedPlain(imageDataUrl, false);
-    }).catch(function(msg){ fail(msg); });
+    PC.readResultAsync(window.localStorage, productId, customerDataUrl, null, productImg).then(function(hit){
+      if(hit){ succeedPlain(hit, true); return; }
+      callHijabTryOn({ withBandana: false }).then(function(imageDataUrl){
+        succeedPlain(imageDataUrl, false);
+      }).catch(function(msg){ fail(msg); });
+    }).catch(function(){ fail(); });
   }
 
   function succeedPlain(imageDataUrl, fromCache){
@@ -549,7 +548,7 @@
     if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
     if(!fromCache && lastCustomer)
       cacheFriendlyImage(imageDataUrl, function(cacheUrl){
-        PC.saveResult(window.localStorage, productId, lastCustomer, cacheUrl, null, productImg);
+        PC.saveResultAsync(window.localStorage, productId, lastCustomer, cacheUrl, null, productImg);
       });
     hideBandRow();
     show("stResult");
