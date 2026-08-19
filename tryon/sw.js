@@ -1,4 +1,4 @@
-const CACHE_NAME = 'echarpe-tryon-v58';
+const CACHE_NAME = 'echarpe-tryon-v60';
 
 /* ============================================================
    sw بسيط: شبكة الأول وفولباك للكاش — نفس فلسفة باقي التطبيقات.
@@ -25,7 +25,7 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((names) =>
       Promise.all(
-        names.filter((n) => n !== CACHE_NAME && n.startsWith('echarpe-tryon-'))
+        names.filter((n) => n !== CACHE_NAME && n.startsWith('echarpe-tryon-') && !n.startsWith('echarpe-tryon-results-'))
              .map((n) => caches.delete(n))
       )
     ).then(() => self.clients.claim())
