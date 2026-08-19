@@ -337,54 +337,53 @@
     });
   }
 
-  // ---- 🧢 البندانة: طلب مستقل لكل لون — مش شبكة NxM مشتركة ----
-  // 🔴🔴🔴⭐ إعادة تصميم كاملة بعد تجربة حقيقية: أي شبكة أكتر من
-  // خانتين (يعني أكتر من "بدون بندانة" + لون واحد) كانت بتتلخبط —
-  // زوم مبالغ فيه (تقسيم ٢×٢ يبقى ربع الصورة بس لكل خانة)، ولون
-  // غلط بيظهر (فهرسة الخانات مش مضمونة مع شبكات مربّعة/فردية)،
-  // وكل ما الألوان زادت الاحتمالات زادت. الحل: **كل لون طلبه مستقل**
-  // بالظبط زي طلب "بدون بندانة + لون واحد" (خانتين بس، جنب بعض) —
-  // ده الشكل الوحيد اللي اختباره مضمون ١٠٠٪. "بدون بندانة" مجاني
-  // دايمًا (بيتقص من أي طلب سابق)، وأي لون تاني غير اللي ظاهر
-  // بيبعت طلب جديد (من الكاش لو اتجرّب قبل كده، أو توليد طازة).
+  // ---- 🧢 البندانة: توليد واحد فقط لكل الطرحة + مجموعة الألوان ----
+  // 0 لون: صورة عادية. 1 لون: none+1. 2 لون: none+2. 3 لون: none+3.
+  // تغيير الزر بعد التوليد = crop محلي فقط، بدون أي نداء AI جديد.
   var selectedBandColor = null;
-  var bandCartAllowed = false; // من resultActions — ثابت لكل نتيجة، selectColor بيقفل بيه لو "بدون بندانة"
+  var bandCartAllowed = false;
   var lastResultImageForCart = null;
-  var lastGridImage = null;    // آخر صورة خانتين (بدون بندانة + لون) اتولّدت
-  var lastGridGenColor = null; // أنهي لون بالظبط ولّد الصورة دي
+  var lastGridImage = null;
+  var _lastLoadedGridImg = null;
+  var gridCells = ["none"].concat(bandanaColorsRequested);
 
   function hideBandRow(){
     var row = $("bandRow");
     while(row.firstChild) row.removeChild(row.firstChild);
     row.classList.add("hidden");
     selectedBandColor = null;
-    lastGridImage = null; lastGridGenColor = null;
+    lastGridImage = null;
+    _lastLoadedGridImg = null;
   }
 
+  /* Lossless crop: ما نعيدش ضغط ربع الصورة JPEG، عشان نحافظ على دقة
+     خرج 2K قدر الإمكان. الكاش يحتفظ بصورة الـgrid الأصلية فقط. */
   function cropCell(imgEl, cell){
     var c = document.createElement("canvas");
     c.width = cell.w; c.height = cell.h;
-    c.getContext("2d").drawImage(imgEl, cell.x, cell.y, cell.w, cell.h, 0, 0, cell.w, cell.h);
-    return c.toDataURL("image/jpeg", 0.92);
+    var ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(imgEl, cell.x, cell.y, cell.w, cell.h, 0, 0, cell.w, cell.h);
+    return c.toDataURL("image/png");
   }
 
-  /* 📐 من صورة "خانتين" (بدون بندانة + لون واحد)، بنرجّع كروب أي
-     خانة منها محليًا (مجاني، مفيش نداء شبكة). دايمًا نفس الهندسة
-     البسيطة (computeGridLayout(2) = ٢×١، مع تصحيح الاتجاه لو
-     الموديل رصّهم فوق بعض) — صفر تخمين إضافي. */
   function cropFromGrid(imgEl, whichIndex){
-    var layout = PC.computeGridLayout(2);
-    var cells = PC.sliceGridProportional(imgEl.naturalWidth, imgEl.naturalHeight, layout.cols, layout.rows, 2);
-    return cropCell(imgEl, cells[whichIndex]);
+    var n = gridCells.length;
+    var layout = PC.computeGridLayout(n);
+    var cells = PC.sliceGridProportional(
+      imgEl.naturalWidth, imgEl.naturalHeight,
+      layout.cols, layout.rows, n, 0.015
+    );
+    return cells[whichIndex] ? cropCell(imgEl, cells[whichIndex]) : "";
   }
 
   function showBandResult(label, dataUrl){
+    if(!dataUrl) return;
     selectedBandColor = label;
     lastResultImageForCart = dataUrl;
     $("resultImg").src = dataUrl;
     $("dlBtn").href = dataUrl;
-    // 🚫 مفيش بندانة في الصورة المعروضة دلوقتي — زرار إضافتها للسلة
-    //    يختفي مؤقتًا لحد ما تختار لون فعلي.
     $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed || label === "none");
     var row = $("bandRow");
     Array.prototype.forEach.call(row.querySelectorAll(".band-swatch"), function(el){
@@ -392,28 +391,17 @@
     });
   }
 
-  /* 🖱️ دوسة على لون في صف السواتش:
-     - "بدون بندانة": مجانية دايمًا (كروب من أي صورة سابقة عندنا)
-     - نفس اللون الظاهر حاليًا: مفيش داعي نولّد تاني، كروب بس
-     - لون تاني: طلب مستقل (كاش أو توليد طازة) */
-  function onSwatchTap(label, imgFromEvent){
-    if(label === "none"){
-      if(lastGridImage){ var img0 = imgFromEvent || _lastLoadedGridImg;
-        showBandResult("none", cropFromGrid(img0, 0)); }
-      return;
-    }
-    if(label === lastGridGenColor && lastGridImage){
-      showBandResult(label, cropFromGrid(_lastLoadedGridImg, 1));
-      return;
-    }
-    generateForColor(lastCustomer, label);
+  function onSwatchTap(label){
+    if(!_lastLoadedGridImg) return;
+    var idx = gridCells.indexOf(label);
+    if(idx < 0) return;
+    showBandResult(label, cropFromGrid(_lastLoadedGridImg, idx));
   }
 
   function renderBandRow(){
     var row = $("bandRow");
     while(row.firstChild) row.removeChild(row.firstChild);
-    var all = ["none"].concat(bandanaColorsRequested);
-    all.forEach(function(label){
+    gridCells.forEach(function(label){
       var isNone = label === "none";
       var item = document.createElement("div");
       item.className = "band-item";
@@ -422,7 +410,6 @@
       b.className = "band-swatch" + (isNone ? " none" : "");
       b.setAttribute("data-color", label);
       if(isNone){
-        // 🚫 آيقونة "ممنوع" (دايرة + خط مايل) بدل الإيموجي — DOM آمن، مفيش innerHTML
         var ns = "http://www.w3.org/2000/svg";
         var svg = document.createElementNS(ns, "svg");
         svg.setAttribute("width", "16"); svg.setAttribute("height", "16");
@@ -433,26 +420,21 @@
         circ.setAttribute("cx", "12"); circ.setAttribute("cy", "12"); circ.setAttribute("r", "9");
         var line = document.createElementNS(ns, "path");
         line.setAttribute("d", "M5.5 5.5l13 13");
-        svg.appendChild(circ); svg.appendChild(line);
-        b.appendChild(svg);
+        svg.appendChild(circ); svg.appendChild(line); b.appendChild(svg);
+      } else {
+        b.style.background = PC.colorSwatchHex(label);
       }
-      else b.style.background = PC.colorSwatchHex(label);
       b.title = PC.colorSwatchLabel(label);
       b.setAttribute("aria-label", PC.colorSwatchLabel(label));
       b.addEventListener("click", function(){ onSwatchTap(label); });
       var lbl = document.createElement("span");
       lbl.className = "band-label";
       lbl.textContent = PC.colorSwatchLabel(label);
-      item.appendChild(b);
-      item.appendChild(lbl);
-      row.appendChild(item);
+      item.appendChild(b); item.appendChild(lbl); row.appendChild(item);
     });
     row.classList.remove("hidden");
   }
 
-  /* 🖼️ نحمّل صورة الخانتين مرة واحدة في <img> ونخزّنها — القص بعد
-     كده محلي بالكامل (مفيش نداء شبكة تاني) لأي كروب تاني منها. */
-  var _lastLoadedGridImg = null;
   function loadGridImage(dataUrl, cb){
     var img = new Image();
     img.onload = function(){ _lastLoadedGridImg = img; cb(true); };
@@ -477,65 +459,81 @@
     });
   }
 
+  /* 2K من Gemini ممكن ترجع PNG أكبر من localStorage. نحفظ نسخة JPEG
+     عالية جدًا بنفس الأبعاد (من غير downscale) عشان الكاش يفضل شغال
+     بدل ما يفشل بصمت بسبب quota. العرض الحالي يفضل من الأصل. */
+  function cacheFriendlyImage(dataUrl, cb){
+    if(PC.dataUrlBytes(dataUrl) <= 3 * 1024 * 1024){ cb(dataUrl); return; }
+    var im = new Image();
+    im.onload = function(){
+      try{
+        var c = document.createElement("canvas");
+        c.width = im.naturalWidth; c.height = im.naturalHeight;
+        var ctx = c.getContext("2d");
+        ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(im, 0, 0);
+        var out = c.toDataURL("image/jpeg", 0.96);
+        if(PC.dataUrlBytes(out) > 3.6 * 1024 * 1024) out = c.toDataURL("image/jpeg", 0.92);
+        cb(out);
+      }catch(e){ cb(dataUrl); }
+    };
+    im.onerror = function(){ cb(dataUrl); };
+    im.src = dataUrl;
+  }
+
   // ---- النداء ----
   var lastCustomer = null;
   function generate(customerDataUrl){
     lastCustomer = customerDataUrl;
     hideBandRow();
-    /* 🧢 وضع البندانة: صف الألوان بيتبني فورًا (مش محتاج نتيجة
-       عشانه)، وبعدين أول لون في القايمة بيتولّد/يتعرض — كل لون
-       بعد كده طلب مستقل (onSwatchTap). */
+
     if(gridMode){
+      gridCells = ["none"].concat(bandanaColorsRequested);
       renderBandRow();
-      generateForColor(customerDataUrl, bandanaColorsRequested[0]);
+      /* نفس الوجه + نفس صورة المنتج + نفس مجموعة الألوان = cache hit فوري.
+         صورة المنتج داخلة في المفتاح عشان رسالة/باركود قديم ما يرجعش طرحة قبلها. */
+      var gridHit = PC.readResult(window.localStorage, productId, customerDataUrl,
+                                  bandanaColorsRequested, productImg);
+      if(gridHit){
+        show("stLoad");
+        loadGridImage(gridHit, function(ok){
+          if(!ok){ fail(); return; }
+          lastGridImage = gridHit;
+          var acts = PC.resultActions(productId, bandanaPid);
+          $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+          bandCartAllowed = acts.addBandanaToCart;
+          // أول لون فعلي يظهر أولًا؛ "بدون" متاح فورًا من أول زر.
+          showBandResult(bandanaColorsRequested[0], cropFromGrid(_lastLoadedGridImg, 1));
+          show("stResult");
+        });
+        return;
+      }
+
+      show("stLoad");
+      callHijabTryOn({ withBandana: true, bandanaColors: bandanaColorsRequested }).then(function(imageDataUrl){
+        if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
+        cacheFriendlyImage(imageDataUrl, function(cacheUrl){
+          PC.saveResult(window.localStorage, productId, lastCustomer, cacheUrl,
+                        bandanaColorsRequested, productImg);
+        });
+        loadGridImage(imageDataUrl, function(ok){
+          if(!ok){ fail(); return; }
+          lastGridImage = imageDataUrl;
+          var acts = PC.resultActions(productId, bandanaPid);
+          $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+          bandCartAllowed = acts.addBandanaToCart;
+          showBandResult(bandanaColorsRequested[0], cropFromGrid(_lastLoadedGridImg, 1));
+          show("stResult");
+        });
+      }).catch(function(msg){ fail(msg); });
       return;
     }
-    /* 💾 الكاش الأول — لو جرّبت نفس المنتج بنفس صورتها قبل كده،
-       النتيجة بتتعرض **فورًا** من جهازها: مفيش نداء، مفيش تكلفة،
-       ومش بتتحسب على سقف الـ١٥ اليومي (لأن مفيش توليد أصلًا). */
-    var hit = PC.readResult(window.localStorage, productId, customerDataUrl);
+
+    var hit = PC.readResult(window.localStorage, productId, customerDataUrl, null, productImg);
     if(hit){ succeedPlain(hit, true); return; }
     show("stLoad");
     callHijabTryOn({ withBandana: false }).then(function(imageDataUrl){
       succeedPlain(imageDataUrl, false);
-    }).catch(function(msg){ fail(msg); });
-  }
-
-  /* 🧢🔴🔴🔴⭐ توليد/عرض لون بندانة واحد بس — دايمًا خانتين
-     (بدون بندانة + اللون ده)، أبسط هندسة ممكنة (computeGridLayout(2)
-     = ٢×١) واللي فحصناها فعليًا ونجحت (resolveGridOrientation بيصحّح
-     الاتجاه لو اتقلب). مفيش شبكة NxM لأي عدد ألوان — كل لون طلبه
-     مستقل خالص، فمفيش "كل ما الألوان زادت الاحتمالات زادت". */
-  function generateForColor(customerDataUrl, color){
-    var hit = PC.readResult(window.localStorage, productId, customerDataUrl, [color]);
-    if(hit){
-      loadGridImage(hit, function(ok){
-        if(!ok){ fail(); return; }
-        lastGridImage = hit; lastGridGenColor = color;
-        var acts = PC.resultActions(productId, bandanaPid);
-        $("cartBtn").classList.toggle("hidden", !acts.addToCart);
-        bandCartAllowed = acts.addBandanaToCart;
-        showBandResult(color, cropFromGrid(_lastLoadedGridImg, 1));
-        show("stResult");
-      });
-      return;
-    }
-    show("stLoad");
-    callHijabTryOn({ withBandana: true, bandanaColors: [color] }).then(function(imageDataUrl){
-      if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
-      // 🔴🔴⭐ نفس [color] بالظبط المستخدم في PC.readResult فوق —
-      // مفتاح واحد للحفظ والقراءة، وإلا الكاش ما يطابقش (نفس باج
-      // "بيولّد من جديد" القديم لو اختلفوا).
-      PC.saveResult(window.localStorage, productId, lastCustomer, imageDataUrl, [color]);
-      loadGridImage(imageDataUrl, function(ok){
-        if(!ok){ fail(); return; }
-        lastGridImage = imageDataUrl; lastGridGenColor = color;
-        var acts = PC.resultActions(productId, bandanaPid);
-        $("cartBtn").classList.toggle("hidden", !acts.addToCart);
-        bandCartAllowed = acts.addBandanaToCart;
-        showBandResult(color, cropFromGrid(_lastLoadedGridImg, 1));
-        show("stResult");
-      });
     }).catch(function(msg){ fail(msg); });
   }
 
@@ -550,7 +548,9 @@
     //    من غير ما تتصور تاني. مبتتبعتش لحد، بس على جهازها.
     if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
     if(!fromCache && lastCustomer)
-      PC.saveResult(window.localStorage, productId, lastCustomer, imageDataUrl);
+      cacheFriendlyImage(imageDataUrl, function(cacheUrl){
+        PC.saveResult(window.localStorage, productId, lastCustomer, cacheUrl, null, productImg);
+      });
     hideBandRow();
     show("stResult");
   }

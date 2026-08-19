@@ -38,8 +38,8 @@
   var BRANDS = ["loyalty", "glow", "site"];
 
   // حدود ضغط صورة العميلة قبل الإرسال — أرخص وأسرع + تحت سقف الدالة (٨ ميجا)
-  var TARGET_MAX_DIM = 1024;       // أطول ضلع
-  var JPEG_QUALITY = 0.85;
+  var TARGET_MAX_DIM = 1536;       // أطول ضلع
+  var JPEG_QUALITY = 0.92;
   var MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
   // نفس الرسالة الودّية بتاعت الدالة — الخطأ الخام عمره ما بيظهر
@@ -126,9 +126,9 @@
     } catch (e) { return ""; }
   }
 
-  /* وضع الشبكة = ٢ لون فأكتر. لون واحد أو صفر = صورة عادية */
+  /* أي لون بندانة = صورة شبكة واحدة: none + من 1 إلى 3 ألوان. */
   function isGridMode(colors) {
-    return Array.isArray(colors) && colors.length >= 2;
+    return Array.isArray(colors) && colors.length >= 1;
   }
 
   /* 🎨 خريطة اسم→hex لعرض دوائر لون تقريبية في صف الاختيار.
@@ -299,8 +299,15 @@
   function colorsSig(colors) {
     return (Array.isArray(colors) && colors.length) ? colors.join(",") : "";
   }
-  function cacheKey(productId, faceDataUrl, colors) {
-    return String(productId || "") + "|" + faceSig(faceDataUrl) + "|" + colorsSig(colors);
+  /* صورة المنتج نفسها تدخل في المفتاح. ده يمنع باركود/رسالة قديمة من
+     إرجاع نتيجة طرحة سابقة، وفي نفس الوقت نفس الطرحة + نفس الوجه +
+     نفس الألوان تفضل فورية ومجانية من الكاش. */
+  function productSig(productDataUrl) {
+    return faceSig(productDataUrl);
+  }
+  function cacheKey(productId, faceDataUrl, colors, productDataUrl) {
+    return String(productId || "") + "|" + productSig(productDataUrl) + "|" +
+      faceSig(faceDataUrl) + "|" + colorsSig(colors);
   }
 
   function _readCache(store) {
@@ -312,9 +319,9 @@
   }
 
   /* نتيجة محفوظة لنفس التركيبة — أو "" لو مفيش */
-  function readResult(store, productId, faceDataUrl, colors) {
-    if (!productId || !faceDataUrl) return "";
-    var k = cacheKey(productId, faceDataUrl, colors);
+  function readResult(store, productId, faceDataUrl, colors, productDataUrl) {
+    if ((!productId && !productDataUrl) || !faceDataUrl) return "";
+    var k = cacheKey(productId, faceDataUrl, colors, productDataUrl);
     var arr = _readCache(store);
     for (var i = 0; i < arr.length; i++) {
       if (arr[i] && arr[i].k === k && isImageDataUrl(arr[i].v)) return arr[i].v;
@@ -322,11 +329,11 @@
     return "";
   }
 
-  function saveResult(store, productId, faceDataUrl, imageDataUrl, colors) {
+  function saveResult(store, productId, faceDataUrl, imageDataUrl, colors, productDataUrl) {
     try {
       if (!store || !store.setItem) return false;
-      if (!productId || !faceDataUrl || !isImageDataUrl(imageDataUrl)) return false;
-      var k = cacheKey(productId, faceDataUrl, colors);
+      if ((!productId && !productDataUrl) || !faceDataUrl || !isImageDataUrl(imageDataUrl)) return false;
+      var k = cacheKey(productId, faceDataUrl, colors, productDataUrl);
       var arr = _readCache(store).filter(function (e) { return e && e.k !== k; });
       arr.push({ k: k, v: imageDataUrl, t: Date.now() });
       // الأحدث يفضل — بنرمي الأقدم لما نعدّي حد العدد **أو** ميزانية البايت
@@ -354,9 +361,11 @@
   /* 📐 أبعاد الشبكة — **نفس الحسبة بالظبط** اللي في hijabTryOn.js
      (buildTryOnPrompt) عشان اللي بنقصّه يطابق اللي اتطلب في البرومبت. */
   function computeGridLayout(n) {
-    var gw = n <= 2 ? 2 : (n <= 4 ? 2 : 3);
-    var gh = Math.ceil(n / gw);
-    return { cols: gw, rows: gh };
+    n = Math.max(1, Number(n) || 1);
+    if (n === 1) return { cols: 1, rows: 1 };
+    if (n === 2) return { cols: 2, rows: 1 };
+    if (n === 3) return { cols: 3, rows: 1 };
+    return { cols: 2, rows: 2 };
   }
 
   /* 📐 تقسيم رياضي متساوي — بديل **مضمون** لكشف الفواصل (splitGrid).
@@ -444,6 +453,7 @@
     CACHE_BYTES_BUDGET: CACHE_BYTES_BUDGET,
     faceSig: faceSig,
     colorsSig: colorsSig,
+    productSig: productSig,
     cacheKey: cacheKey,
     readResult: readResult,
     saveResult: saveResult,
