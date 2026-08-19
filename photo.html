@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#FBF3DF">
+<title>جرّبيها ✨</title>
+<style>
+  :root{
+    /* 🎨⭐ نفس الألوان الحقيقية بتاعة loyalty/index.html بالحرف
+       (--ink/--muted/--line/--bg من هناك) — مش بالتة مستقلة مخترعة.
+       html.glow تحتها بتاخد ألوان glow/index.html الحقيقية. */
+    --ink:#3A2233; --muted:#9E8792; --line:#F3DEE9;
+    --brand:#EC4899; --brand2:#C79A38; --cream:#FBF3DF; --bg:#FFF6FA;
+    --cardline:#F3DEE9;
+  }
+  html.glow{
+    --ink:#1A1315; --muted:#A17E8A; --line:#F3D5DE;
+    --brand:#E27A97; --brand2:#1A1315; --cream:#FCE7EC; --bg:#FCEAEF;
+    --cardline:#F3D5DE;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; }
+  body{
+    font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans Arabic",Tahoma,sans-serif;
+    background:var(--bg); color:var(--ink); display:flex; flex-direction:column;
+    min-height:100dvh;
+  }
+  .serif{ font-family:Georgia,"Times New Roman",serif; }
+
+  /* ============ الهيدر — شعار + عنوان + رجوع (زي المرجع) ============ */
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px; background:var(--bg); border-bottom:1px solid var(--line);
+  }
+  header .logo{ display:flex; align-items:center; flex:0 0 auto; }
+  header .back{
+    flex:0 0 auto; width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
+    background:#fff; color:var(--ink); font-size:16px; display:flex; align-items:center;
+    justify-content:center; cursor:pointer; padding:0;
+  }
+
+  main{ flex:1; display:flex; flex-direction:column; padding:16px 16px 24px; }
+
+  .card{ background:#fff; border:1px solid var(--cardline); border-radius:20px; padding:16px; }
+  .prod{ display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center; }
+  .prod img{ width:100%; max-width:280px; border-radius:16px; display:block; }
+  .prod .cap{ font-size:14px; color:var(--muted); }
+
+  .privacy{
+    display:flex; gap:8px; align-items:flex-start; font-size:12.5px; color:var(--muted);
+    background:var(--cream); border-radius:14px; padding:10px 12px; margin:14px 0;
+    line-height:1.55;
+  }
+  .btns{ display:flex; flex-direction:column; gap:12px; margin-top:6px; }
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    border:0; border-radius:16px; padding:16px; font-size:16px; font-weight:700;
+    cursor:pointer; width:100%;
+    transition:transform .15s ease, opacity .15s ease, box-shadow .15s ease;
+  }
+  .btn:active{ transform:scale(.97); opacity:.88; }
+  .btn.primary{ background:var(--ink); color:#fff; }
+  .btn.outline{ background:none; color:var(--brand2); border:1.5px solid var(--brand2); }
+  .btn.soft{ background:#fff; color:var(--ink); border:1.5px solid var(--line); }
+  .btn.cream{ background:var(--cream); color:var(--ink); border:1.5px solid var(--line); }
+  .btn.ghost{ background:none; color:var(--muted); font-weight:600; font-size:14px; padding:10px; }
+  .btnRow{ display:flex; gap:10px; }
+  .btnRow .btn{ flex:1; }
+  input[type=file]{ display:none; }
+
+  .center{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; gap:14px; padding:20px; }
+  .spinner{ width:52px; height:52px; border-radius:50%;
+    border:5px solid var(--cream); border-top-color:var(--brand); animation:spin 1s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .big{ font-size:20px; font-weight:800; }
+  .sub{ font-size:14px; color:var(--muted); }
+
+  .hidden{ display:none !important; }
+
+  /* ============ كارت النتيجة — الصورة + الشارات فوقيها ============
+     🔴⭐ مقاس ثابت دايمًا بغض النظر عن أبعاد الصورة المولّدة الفعلية —
+     ده اللي كان بيمنع السكرول. لكن object-fit:cover كان بيقص أجزاء
+     من الصورة (خصوصًا خانات البندانة اللي نسبتها مختلفة عن ٣:٤) —
+     "بيطير جزء من الصورة". الحل: object-fit:contain (الصورة كاملة
+     دايمًا، من غير قص) + خلفية كريمي تملأ أي فراغ جانبي بدل رمادي
+     فاجئ. وكبّرت المساحة (44vh → 62vh) لأن الكارت كان صغير أوي. */
+  .resultCard{ position:relative; border-radius:22px; overflow:hidden;
+    box-shadow:0 10px 30px rgba(33,27,23,.14); background:var(--cream);
+    aspect-ratio: 4 / 5; max-height:62vh; max-width:calc(62vh * 4 / 5);
+    width:100%; margin:0 auto; }
+  .result{ width:100%; height:100%; }
+  .result img{ width:100%; height:100%; object-fit:contain; display:block; }
+
+  .dlPill{
+    position:absolute; left:12px; bottom:12px; display:flex; align-items:center; gap:6px;
+    background:rgba(255,255,255,.94); border-radius:99px; padding:8px 13px;
+    font-size:12.5px; font-weight:700; color:var(--ink); text-decoration:none;
+    box-shadow:0 2px 8px rgba(0,0,0,.12);
+  }
+
+  /* ============ صف ألوان البندانة — دايرة + اسم تحتها (زي المرجع) ============ */
+  .band-row{ display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-top:16px; }
+  .band-item{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .band-swatch{
+    width:36px; height:36px; border-radius:50%; border:2px solid var(--line);
+    cursor:pointer; padding:0; box-shadow:0 1px 3px rgba(0,0,0,.15);
+    display:flex; align-items:center; justify-content:center; background:#fff;
+    transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+  .band-swatch:active{ transform:scale(.9); }
+  .band-swatch.on{ border-color:var(--ink); box-shadow:0 0 0 3px rgba(33,27,23,.14); transform:scale(1.06); }
+  .band-swatch.none{ color:var(--muted); }
+  .band-label{ font-size:10.5px; font-weight:700; color:var(--muted); white-space:nowrap; }
+
+  /* ============ صف الأيقونات (غيّري صورتك / إعادة / مشاركة / المزيد) ============ */
+  .iconRow{
+    display:flex; margin-top:16px; border:1px solid var(--cardline); border-radius:18px;
+    background:#fff; overflow:hidden; position:relative;
+  }
+  .iconAct{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding:12px 4px; background:none; border:0; border-inline-start:1px solid var(--cardline);
+    cursor:pointer; color:var(--ink); font-family:inherit; width:100%;
+    transition:background .15s ease, transform .15s ease;
+  }
+  .iconAct:active{ background:var(--cream); transform:scale(.96); }
+  .iconAct:first-child{ border-inline-start:0; }
+  .iconAct .ic{ line-height:1; display:flex; align-items:center; justify-content:center; }
+  .iconAct .lb{ font-size:10.5px; font-weight:700; color:var(--muted); white-space:nowrap; }
+
+  .iconActWrap{ position:relative; flex:1; display:flex; }
+
+  .moreMenu{
+    position:absolute; bottom:calc(100% + 8px); left:0; background:#fff;
+    border:1px solid var(--cardline); border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,.15);
+    padding:6px; min-width:150px; z-index:5;
+  }
+  .moreMenu button{
+    display:block; width:100%; text-align:right; background:none; border:0; padding:10px 12px;
+    font-size:13px; font-weight:700; color:var(--ink); border-radius:9px; cursor:pointer;
+    font-family:inherit;
+  }
+  .moreMenu button:active{ background:var(--cream); }
+
+  .trustLine{
+    display:flex; align-items:center; gap:10px; justify-content:center; margin-top:18px;
+    font-size:11.5px; color:var(--muted);
+  }
+  .trustLine::before, .trustLine::after{ content:""; flex:1; height:1px; background:var(--line); max-width:60px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" id="hLogo">
+    <img id="hLogoImg" alt="" style="height:34px; border-radius:8px; display:block;">
+  </div>
+  <button class="back" id="closeBtn" aria-label="رجوع">→</button>
+</header>
+
+<main>
+  <!-- (١) اختيار الصورة -->
+  <section id="stPick">
+    <div class="card prod">
+      <img id="prodImg" alt="الطرحة">
+      <div class="cap">دي الطرحة اللي هنجرّبهالك — اختاري صورتك وهنركّبهالك ✨</div>
+    </div>
+    <div class="privacy">
+      <span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto; margin-top:1px;"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+      <span>صورتك بتُستخدم بس علشان نعمل تجربة الطرحة، ومتتخزّنش عندنا في أي مكان.</span>
+    </div>
+    <div class="btns">
+      <label class="btn primary" for="camIn"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13.5" r="3.3"/></svg> التقاط صورة</label>
+      <input type="file" id="camIn" accept="image/*" capture="user">
+      <label class="btn outline" for="galIn">🖼️ اختاري من الهاتف</label>
+      <input type="file" id="galIn" accept="image/*">
+      <button class="btn ghost" id="liveBtn">جرّبي الوضع الحي (تجريبي)</button>
+    </div>
+  </section>
+
+  <!-- (٢) تحميل -->
+  <section id="stLoad" class="center hidden">
+    <div class="spinner"></div>
+    <div class="big">✨ بنجهّزلك التجربة…</div>
+    <div class="sub">ثواني وهتشوفي الطرحة عليكي</div>
+  </section>
+
+  <!-- (٣) النتيجة -->
+  <section id="stResult" class="hidden">
+    <div class="resultCard">
+      <div class="result"><img id="resultImg" alt="التجربة"></div>
+      <a class="dlPill" id="dlBtn" download="tryon-echarpe.jpg"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> تنزيل</a>
+    </div>
+
+    <!-- 🧢 صف ألوان البندانة — كل لون طلبه مستقل (لا شبكة NxM) -->
+    <div class="band-row hidden" id="bandRow"></div>
+
+    <!-- صف الإجراءات السريعة -->
+    <div class="iconRow">
+      <button class="iconAct" id="changeFaceBtn"><span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13.5" r="3.3"/></svg></span><span class="lb">غيّري صورتك</span></button>
+      <button class="iconAct" id="retryBtn"><span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.6"/><path d="M20 5v6h-6"/></svg></span><span class="lb">إعادة التجربة</span></button>
+      <button class="iconAct" id="shareBtn"><span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg></span><span class="lb">مشاركة</span></button>
+      <div class="iconActWrap">
+        <button class="iconAct" id="moreBtn"><span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span><span class="lb">المزيد</span></button>
+        <div class="moreMenu hidden" id="moreMenu">
+          <button type="button" id="backBtn">رجوع للشات</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="btnRow" style="margin-top:16px;">
+      <button class="btn primary hidden" id="cartBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l1 12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg> أضيفي الطرحة</button>
+      <button class="btn cream hidden" id="bandCartBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l1 12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg> أضيفي البندانة</button>
+    </div>
+    <div class="btns" style="margin-top:10px;">
+      <button class="btn outline" id="againBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3l4 4-4 4"/><path d="M20 7H8a4 4 0 0 0-4 4v1"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h12a4 4 0 0 0 4-4v-1"/></svg> جرّبي طرحة تانية</button>
+    </div>
+
+    <div class="trustLine">تسوقي بثقة مع ضمان الإرجاع</div>
+  </section>
+
+  <!-- (٤) خطأ -->
+  <section id="stError" class="center hidden">
+    <div style="color:var(--brand);"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16.3" r="0.2" fill="currentColor" stroke-width="2.4"/></svg></div>
+    <div class="big" id="errText"></div>
+    <div class="btns" style="width:100%;max-width:340px;">
+      <button class="btn primary" id="errRetry">إعادة المحاولة</button>
+      <button class="btn ghost" id="errBack">رجوع للشات</button>
+    </div>
+  </section>
+</main>
+
+<!-- Firebase (compat) — نفس نسخة تطبيق العميلة -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+<script src="./photo-core.js"></script>
+<script>
+"use strict";
+(function(){
+  var PC = window.PhotoCore;
+  var params = PC.parseParams(location.search);
+  if(params.brand === "glow"){ document.documentElement.classList.add("glow"); }
+  // 🖼️⭐ وضع الاحتواء (iframe جوه loyalty/glow) — بيتفعّل بـ?embed=1
+  //    أو باكتشاف إن الصفحة فعلًا جوه iframe. في الوضع ده، "أضيفيها
+  //    للسلة" و"رجوع للشات" بيتواصلوا بـpostMessage مع الأب بدل
+  //    تنقّل/تاب جديد — **مفيش خروج من الشات خالص** (كانت الشكوى
+  //    الأكبر: فتح تاب/تنقّل كان بيحس العميلة إنها "طلعت برة").
+  var embedded = params.embed === "1" || (function(){ try{ return window.self !== window.top; }catch(e){ return true; } })();
+  function postToParent(msg){
+    try{ window.parent.postMessage(Object.assign({ ns: "echarpeTryon" }, msg), location.origin); }catch(e){}
+  }
+
+  // ---- عناصر ----
+  function $(id){ return document.getElementById(id); }
+
+  // 🏷️ لوجو البراند فوق (زي المرجع: اسم البراند + "studio" تحته)
+  // 🖼️⭐ نفس لوجو PNG الحقيقي بتاع loyalty/glow — مش خط مخترع
+  $("hLogoImg").src = "data:image/png;base64," +
+    (params.brand === "glow" ? PC.LOGO_B64_GLOW : PC.LOGO_B64_LOYALTY);
+  // 🏷️ عنوان الشاشة بيتغيّر في تاب المتصفح بس — الهيدر نفسه في
+  //    المرجع فاضي غير اللوجو والرجوع، والشاشات كلها أصلاً بتوضّح
+  //    حالتها جوه المتن (سبينر التحميل، رسالة الخطأ، إلخ).
+  var HEADER_TEXT = {
+    stPick:   "جرّبيها ✨",
+    stLoad:   "بنجهّز التجربة…",
+    stResult: "نتيجة التجربة",
+    stError:  "حصلت مشكلة"
+  };
+  function show(sec){
+    ["stPick","stLoad","stResult","stError"].forEach(function(s){
+      $(s).classList.toggle("hidden", s !== sec);
+    });
+    document.title = HEADER_TEXT[sec] || HEADER_TEXT.stPick;
+    closeMoreMenu();
+  }
+
+  // ---- صورة المنتج + التليفون من الشات ----
+  var productImg = PC.readProductImage(window.sessionStorage);
+  var phone = "";
+  try{ phone = window.sessionStorage.getItem(PC.SS_KEYS.phone) || ""; }catch(e){}
+  var productId = params.productId ||
+    (function(){ try{ return window.sessionStorage.getItem(PC.SS_KEYS.pid) || null; }catch(e){ return null; } })();
+
+  // ---- 🧢 وضع شبكة البندانة — الموظفة بعتت ٢ لون فأكتر مع المنتج ----
+  var bandanaColorsRequested = PC.readBandanaColors(window.sessionStorage);
+  // 🚫 دلوقتي أي طلب بندانة (لون واحد يكفي) = وضع شبكة — الباك إند
+  //    (computeGridCells) بيضيف خانة "بدون بندانة" تلقائي، فمينفعش
+  //    نستنى ٢ لون زي الأول.
+  var gridMode = Array.isArray(bandanaColorsRequested) && bandanaColorsRequested.length >= 1;
+  var bandanaPid = PC.readBandanaPid(window.sessionStorage);
+
+  if(!productImg){
+    // مفيش صورة منتج — الصفحة اتفتحت غلط
+    show("stError");
+    $("errText").textContent = "مفيش طرحة محددة. ارجعي للشات ودوسي «جرّبيها» تحت صورة الطرحة.";
+  } else {
+    $("prodImg").src = productImg; // data:image موثوق (من الشات) — src بس مش innerHTML
+  }
+
+  // 🔁 لو صورة وشها محفوظة من مرة قبل كده، نبدأ التوليد على طول —
+  //    "بضغطة واحدة" للطرحة التانية، من غير ما تصوّر نفسها تاني.
+  var rememberedFace = PC.readFace(window.localStorage);
+
+  // ---- Firebase ----
+  var firebaseConfig = {
+    apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs",
+    authDomain: "customer-feedback-8ac1d.firebaseapp.com",
+    projectId: "customer-feedback-8ac1d",
+    storageBucket: "customer-feedback-8ac1d.appspot.com",
+    messagingSenderId: "408860081491",
+    appId: "1:408860081491:web:c5fa8b8e757c13196375a6"
+  };
+  try{ if(!firebase.apps.length) firebase.initializeApp(firebaseConfig); }catch(e){}
+  try{ firebase.auth().signInAnonymously().catch(function(){}); }catch(e){}
+
+  // ---- ضغط صورة العميلة قبل الإرسال (canvas) ----
+  function fileToCompressedDataUrl(file){
+    return new Promise(function(resolve, reject){
+      if(!file || String(file.type||"").indexOf("image/") !== 0){ reject(new Error("not-image")); return; }
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        try{
+          var d = PC.computeResize(img.naturalWidth, img.naturalHeight, PC.TARGET_MAX_DIM);
+          var c = document.createElement("canvas");
+          c.width = d.w; c.height = d.h;
+          c.getContext("2d").drawImage(img, 0, 0, d.w, d.h);
+          var out = c.toDataURL("image/jpeg", PC.JPEG_QUALITY);
+          URL.revokeObjectURL(url);
+          resolve(out);
+        }catch(err){ URL.revokeObjectURL(url); reject(err); }
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("decode")); };
+      img.src = url;
+    });
+  }
+
+  // ---- 🧢 البندانة: توليد واحد فقط لكل الطرحة + مجموعة الألوان ----
+  // 0 لون: صورة عادية. 1 لون: none+1. 2 لون: none+2. 3 لون: none+3.
+  // تغيير الزر بعد التوليد = crop محلي فقط، بدون أي نداء AI جديد.
+  var selectedBandColor = null;
+  var bandCartAllowed = false;
+  var lastResultImageForCart = null;
+  var lastGridImage = null;
+  var _lastLoadedGridImg = null;
+  var gridCells = ["none"].concat(bandanaColorsRequested);
+
+  function hideBandRow(){
+    var row = $("bandRow");
+    while(row.firstChild) row.removeChild(row.firstChild);
+    row.classList.add("hidden");
+    selectedBandColor = null;
+    lastGridImage = null;
+    _lastLoadedGridImg = null;
+  }
+
+  /* Lossless crop: ما نعيدش ضغط ربع الصورة JPEG، عشان نحافظ على دقة
+     خرج 2K قدر الإمكان. الكاش يحتفظ بصورة الـgrid الأصلية فقط. */
+  function cropCell(imgEl, cell){
+    var c = document.createElement("canvas");
+    c.width = cell.w; c.height = cell.h;
+    var ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(imgEl, cell.x, cell.y, cell.w, cell.h, 0, 0, cell.w, cell.h);
+    return c.toDataURL("image/png");
+  }
+
+  function cropFromGrid(imgEl, whichIndex){
+    var n = gridCells.length;
+    var layout = PC.computeGridLayout(n);
+    var cells = PC.sliceGridProportional(
+      imgEl.naturalWidth, imgEl.naturalHeight,
+      layout.cols, layout.rows, n, 0.015
+    );
+    return cells[whichIndex] ? cropCell(imgEl, cells[whichIndex]) : "";
+  }
+
+  function showBandResult(label, dataUrl){
+    if(!dataUrl) return;
+    selectedBandColor = label;
+    lastResultImageForCart = dataUrl;
+    $("resultImg").src = dataUrl;
+    $("dlBtn").href = dataUrl;
+    $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed || label === "none");
+    var row = $("bandRow");
+    Array.prototype.forEach.call(row.querySelectorAll(".band-swatch"), function(el){
+      el.classList.toggle("on", el.getAttribute("data-color") === label);
+    });
+  }
+
+  function onSwatchTap(label){
+    if(!_lastLoadedGridImg) return;
+    var idx = gridCells.indexOf(label);
+    if(idx < 0) return;
+    showBandResult(label, cropFromGrid(_lastLoadedGridImg, idx));
+  }
+
+  function renderBandRow(){
+    var row = $("bandRow");
+    while(row.firstChild) row.removeChild(row.firstChild);
+    gridCells.forEach(function(label){
+      var isNone = label === "none";
+      var item = document.createElement("div");
+      item.className = "band-item";
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "band-swatch" + (isNone ? " none" : "");
+      b.setAttribute("data-color", label);
+      if(isNone){
+        var ns = "http://www.w3.org/2000/svg";
+        var svg = document.createElementNS(ns, "svg");
+        svg.setAttribute("width", "16"); svg.setAttribute("height", "16");
+        svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("fill", "none");
+        svg.setAttribute("stroke", "currentColor"); svg.setAttribute("stroke-width", "2");
+        svg.setAttribute("stroke-linecap", "round");
+        var circ = document.createElementNS(ns, "circle");
+        circ.setAttribute("cx", "12"); circ.setAttribute("cy", "12"); circ.setAttribute("r", "9");
+        var line = document.createElementNS(ns, "path");
+        line.setAttribute("d", "M5.5 5.5l13 13");
+        svg.appendChild(circ); svg.appendChild(line); b.appendChild(svg);
+      } else {
+        b.style.background = PC.colorSwatchHex(label);
+      }
+      b.title = PC.colorSwatchLabel(label);
+      b.setAttribute("aria-label", PC.colorSwatchLabel(label));
+      b.addEventListener("click", function(){ onSwatchTap(label); });
+      var lbl = document.createElement("span");
+      lbl.className = "band-label";
+      lbl.textContent = PC.colorSwatchLabel(label);
+      item.appendChild(b); item.appendChild(lbl); row.appendChild(item);
+    });
+    row.classList.remove("hidden");
+  }
+
+  function loadGridImage(dataUrl, cb){
+    var img = new Image();
+    img.onload = function(){ _lastLoadedGridImg = img; cb(true); };
+    img.onerror = function(){ _lastLoadedGridImg = null; cb(false); };
+    img.src = dataUrl;
+  }
+
+  function callHijabTryOn(extra){
+    return new Promise(function(resolve, reject){
+      var callable;
+      try{ callable = firebase.app().functions("us-central1").httpsCallable("hijabTryOn"); }
+      catch(e){ reject(); return; }
+      var payload = { customerImage: lastCustomer, productImage: productImg, productId: productId, phone: phone };
+      for(var k in extra){ payload[k] = extra[k]; }
+      callable(payload).then(function(res){
+        var data = res && res.data;
+        if(data && data.image) resolve(data.image); else reject();
+      }).catch(function(err){
+        var msg = (err && err.message) ? err.message : PC.FRIENDLY_ERR;
+        reject(msg);
+      });
+    });
+  }
+
+  /* 2K من Gemini ممكن ترجع PNG أكبر من localStorage. نحفظ نسخة JPEG
+     عالية جدًا بنفس الأبعاد (من غير downscale) عشان الكاش يفضل شغال
+     بدل ما يفشل بصمت بسبب quota. العرض الحالي يفضل من الأصل. */
+  function cacheFriendlyImage(dataUrl, cb){
+    if(PC.dataUrlBytes(dataUrl) <= 3 * 1024 * 1024){ cb(dataUrl); return; }
+    var im = new Image();
+    im.onload = function(){
+      try{
+        var c = document.createElement("canvas");
+        c.width = im.naturalWidth; c.height = im.naturalHeight;
+        var ctx = c.getContext("2d");
+        ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(im, 0, 0);
+        var out = c.toDataURL("image/jpeg", 0.96);
+        if(PC.dataUrlBytes(out) > 3.6 * 1024 * 1024) out = c.toDataURL("image/jpeg", 0.92);
+        cb(out);
+      }catch(e){ cb(dataUrl); }
+    };
+    im.onerror = function(){ cb(dataUrl); };
+    im.src = dataUrl;
+  }
+
+  // ---- النداء ----
+  var lastCustomer = null;
+  function generate(customerDataUrl){
+    lastCustomer = customerDataUrl;
+    hideBandRow();
+
+    if(gridMode){
+      gridCells = ["none"].concat(bandanaColorsRequested);
+      renderBandRow();
+      show("stLoad");
+      PC.readResultPersistent(productId, customerDataUrl, bandanaColorsRequested, productImg).then(function(gridHit){
+        if(gridHit){
+          loadGridImage(gridHit, function(ok){
+            if(!ok){ fail(); return; }
+            lastGridImage = gridHit;
+            var acts = PC.resultActions(productId, bandanaPid);
+            $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+            bandCartAllowed = acts.addBandanaToCart;
+            showBandResult(bandanaColorsRequested[0], cropFromGrid(_lastLoadedGridImg, 1));
+            show("stResult");
+          });
+          return;
+        }
+        callHijabTryOn({ withBandana: true, bandanaColors: bandanaColorsRequested }).then(function(imageDataUrl){
+          if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
+          PC.saveResultPersistent(productId, lastCustomer, imageDataUrl, bandanaColorsRequested, productImg);
+          loadGridImage(imageDataUrl, function(ok){
+            if(!ok){ fail(); return; }
+            lastGridImage = imageDataUrl;
+            var acts = PC.resultActions(productId, bandanaPid);
+            $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+            bandCartAllowed = acts.addBandanaToCart;
+            showBandResult(bandanaColorsRequested[0], cropFromGrid(_lastLoadedGridImg, 1));
+            show("stResult");
+          });
+        }).catch(function(msg){ fail(msg); });
+      });
+      return;
+    }
+
+    show("stLoad");
+    PC.readResultPersistent(productId, customerDataUrl, null, productImg).then(function(hit){
+      if(hit){ succeedPlain(hit, true); return; }
+      callHijabTryOn({ withBandana: false }).then(function(imageDataUrl){
+        succeedPlain(imageDataUrl, false);
+      }).catch(function(msg){ fail(msg); });
+    });
+  }
+
+  function succeedPlain(imageDataUrl, fromCache){
+    lastResultImageForCart = imageDataUrl;
+    $("resultImg").src = imageDataUrl;          // src بس — مفيش innerHTML لبيانات جاية من بره
+    $("dlBtn").href = imageDataUrl;              // نفس الصورة، تحميل مباشر من غير رفع لأي سيرفر
+    var acts = PC.resultActions(productId, bandanaPid);
+    $("cartBtn").classList.toggle("hidden", !acts.addToCart);
+    $("bandCartBtn").classList.add("hidden");
+    // 🔁 نتذكّر صورة العميلة اللي نجحت — الطرحة الجاية بضغطة واحدة
+    //    من غير ما تتصور تاني. مبتتبعتش لحد، بس على جهازها.
+    if(lastCustomer) PC.saveFace(window.localStorage, lastCustomer);
+    if(!fromCache && lastCustomer)
+      PC.saveResultPersistent(productId, lastCustomer, imageDataUrl, null, productImg);
+    hideBandRow();
+    show("stResult");
+  }
+  function fail(msg){
+    // لو الرسالة جاية من دالتنا (HttpsError) بتبقى ودّية أصلاً؛ غير كده الافتراضي
+    var t = (typeof msg === "string" && msg && /[ء-ي]/.test(msg)) ? msg : PC.FRIENDLY_ERR;
+    $("errText").textContent = t;               // textContent — مش innerHTML
+    show("stError");
+  }
+
+  // ---- أحداث ----
+  function onPick(inp){ inp.addEventListener("change", function(){
+    var f = inp.files && inp.files[0];
+    inp.value = ""; // نظافة عشان اختيار نفس الصورة تاني يشتغل
+    if(!f) return;
+    show("stLoad");
+    fileToCompressedDataUrl(f).then(generate).catch(function(){ fail(); });
+  }); }
+  onPick($("camIn")); onPick($("galIn"));
+
+  function closeOrBack(){
+    // 🖼️⭐ جوه iframe: نبعت رسالة للأب يقفل الـoverlay، بلاش أي تنقّل
+    if(embedded){ postToParent({ type: "tryon-close" }); return; }
+    try{ window.close(); }catch(e){} history.length > 1 ? history.back() : (location.href = PC.backPath(params.brand));
+  }
+  $("closeBtn").addEventListener("click", closeOrBack);
+  $("backBtn").addEventListener("click", closeOrBack);
+  $("errBack").addEventListener("click", closeOrBack);
+  $("againBtn").addEventListener("click", closeOrBack); // ترجع للشات تختار طرحة تانية
+  $("retryBtn").addEventListener("click", function(){ show("stPick"); });
+  $("errRetry").addEventListener("click", function(){
+    if(lastCustomer) generate(lastCustomer); else show("stPick");
+  });
+  // الوضع الحي (Beta) — الصورة لسه في sessionStorage
+  $("liveBtn").addEventListener("click", function(){ location.href = "./?imgkey=1"; });
+
+  // ⋯ المزيد — قايمة صغيرة (رجوع للشات دلوقتي، مكان يتوسّع بعدين)
+  function closeMoreMenu(){ $("moreMenu").classList.add("hidden"); }
+  $("moreBtn").addEventListener("click", function(e){
+    e.stopPropagation();
+    $("moreMenu").classList.toggle("hidden");
+  });
+  document.addEventListener("click", function(e){
+    if(!$("moreMenu").classList.contains("hidden") && !$("moreBtn").contains(e.target)) closeMoreMenu();
+  });
+
+  // 📤 مشاركة — بتحاول تشارك الصورة نفسها (Web Share)، وفولباك للتنزيل
+  //    لو المتصفح مش داعم. الصورة data:url محلية بس (مفيش رفع لسيرفر).
+  $("shareBtn").addEventListener("click", function(){
+    var src = $("resultImg").src;
+    if(!src){ return; }
+    try{
+      fetch(src).then(function(r){ return r.blob(); }).then(function(blob){
+        var file = new File([blob], "tryon-echarpe.jpg", { type: blob.type || "image/jpeg" });
+        if(navigator.canShare && navigator.canShare({ files:[file] })){
+          return navigator.share({ files:[file], title:"جرّبتها في echarpe ✨" });
+        }
+        throw new Error("no-share");
+      }).catch(function(){
+        // فولباك: مفيش دعم مشاركة ملفات — ننزّل الصورة بدالها
+        var a = document.createElement("a");
+        a.href = src; a.download = "tryon-echarpe.jpg";
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      });
+    }catch(e){}
+  });
+
+  // أضيفيها للسلة — بتظهر بس لو فيه باركود منتج جاي من الشات
+  $("cartBtn").addEventListener("click", function(){
+    if(!productId) return;
+    // 🖼️⭐ جوه iframe: postMessage للأب بيضيف للسلة فورًا ويقفل الـoverlay
+    //    — صفر تنقّل، صفر تاب جديد، العميلة تحس إنها لسه في الشات.
+    if(embedded){ postToParent({ type: "tryon-addcart", barcode: productId }); return; }
+    // المسار الأساسي: نفس الأصل، التاب الأصلي لسه مفتوح — إضافة فورية
+    // ورجوع ليه، من غير ما العميلة تحس بأي تنقّل.
+    try{
+      if(window.opener && !window.opener.closed && typeof window.opener.tryonAddToCart === "function"){
+        window.opener.tryonAddToCart(productId);
+        window.opener.focus();
+        window.close();
+        return;
+      }
+    }catch(e){}
+    // فولباك: مفيش opener (اتقفل التاب الأصلي أو المتصفح منعه) — نرجع
+    // بنفس الصفحة، والتطبيق بيلقط ?addcart= عند التحميل.
+    location.href = PC.backPath(params.brand) + "?addcart=" + encodeURIComponent(productId);
+  });
+  // 🧢 ضيفي البندانة للسلة — منتج منفصل عن الطرحة، واللون المختار
+  // لازم يوصل مع الطلب وإلا الموظفة هتسأل تاني وقت التجهيز.
+  $("bandCartBtn").addEventListener("click", function(){
+    if(!bandanaPid) return;
+    var note = (selectedBandColor && selectedBandColor !== "none")
+      ? ("🎨 لون البندانة: " + PC.colorSwatchLabel(selectedBandColor)) : "";
+    var img = lastResultImageForCart || "";
+    if(embedded){ postToParent({ type: "tryon-addcart", barcode: bandanaPid, img: img, note: note }); return; }
+    try{
+      if(window.opener && !window.opener.closed && typeof window.opener.tryonAddToCart === "function"){
+        window.opener.tryonAddToCart(bandanaPid, img, note);
+        window.opener.focus();
+        window.close();
+        return;
+      }
+    }catch(e){}
+    location.href = PC.backPath(params.brand) + "?addcart=" + encodeURIComponent(bandanaPid)
+      + (note ? "&note=" + encodeURIComponent(note) : "");
+  });
+  // 📷 غيّري صورتك — بتمسح الصورة المحفوظة بس (النتيجة الحالية زي ما هي)؛
+  //    الطلب الجاي هيرجع يطلب صورة من جديد بدل ما يبدأ تلقائي.
+  $("changeFaceBtn").addEventListener("click", function(){
+    PC.clearFace(window.localStorage);
+    rememberedFace = "";
+    var b = $("changeFaceBtn").querySelector(".lb");
+    var orig = b.textContent;
+    b.textContent = "تم ✅";
+    setTimeout(function(){ b.textContent = orig; }, 1400);
+  });
+
+  // 🔁 لو فيه صورة وش محفوظة، نبدأ التوليد على طول — "بضغطة واحدة"
+  //    للطرحة التانية. لازم يحصل بعد ما كل الدوال فوق اتعرّفت.
+  if(productImg && rememberedFace){
+    generate(rememberedFace);
+  }
+})();
+</script>
+</body>
+</html>
