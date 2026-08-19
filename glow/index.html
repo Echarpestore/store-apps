@@ -3499,7 +3499,7 @@ function tryonOverlayOpen(brand){
   var frame = document.getElementById('tryonFrame');
   var wrap = document.getElementById('tryonOverlay');
   if(!frame || !wrap) return;
-  frame.src = '../tryon/photo.html?brand=' + brand + '&embed=1';
+  frame.src = '../tryon/photo.html?brand=' + brand + '&embed=1&run=' + Date.now();
   wrap.style.display = 'block';
 }
 function tryonOverlayClose(){
