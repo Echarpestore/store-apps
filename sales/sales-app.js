@@ -320,7 +320,10 @@ window.approveReg = async function(id){
       gender: r.gender || '', avatar: (r.gender === 'male' ? 'boy' : 'girl'), shift: r.shift, dayOff: r.dayOff,
       scheduledStartTime: r.scheduledStartTime || (complianceCfg.shifts[r.shift]||{}).start || null,
       scheduledEndTime: r.scheduledEndTime || (complianceCfg.shifts[r.shift]||{}).end || null,
-      branch: r.branch, active: true, createdAt: Date.now(), pin: (r.pin || '0000')
+      branch: r.branch, active: true, createdAt: Date.now(), pin: (r.pin || '0000'),
+      // تاريخ البداية المحاسبي الواضح — يمنع مكافآت الفترات الجزئية للموظف الجديد.
+      hireDate: _fmtKey(cai(Date.now())),
+      attendanceTrackingStart: _fmtKey(cai(Date.now()))
     });
     alert('تم اعتماد ' + shortName(r.name) + ' — الحساب اتفعّل بالرقم السري اللي اختاره الموظف ✅\n\n'
       + 'الاسم المعروض: ' + shortName(r.name) + '\nالاسم الرسمي محفوظ: ' + (r.name||'').trim());
@@ -915,9 +918,14 @@ function detectAttendanceIssues(emps, shifts, fromTs, toTs, decided, todayTs){
       }
       const k = e.id + '|' + dateKey;
       if(decided[k]) return;                                                        // اتقرر فيها قبل كده
-      const isOff = Number(e.dayOff) === dow;
+      const isOff = (typeof effectiveDayOffKey === 'function')
+        ? effectiveDayOffKey(e, dateKey) === dateKey
+        : Number(e.dayOff) === dow;
       const came  = !!present[k];
-      if(!isOff && !came)      out.push({ empId:e.id, empName:e.name, dateKey, type:'absent', dow });
+      const leave = approvedLeaveFor(e.id, dateKey);
+      // إجازة يوم approved: المرتب يخصم اليوم تلقائيًا، لكن مفيش مخالفة/جزاء إضافي.
+      const approvedAbsence = !!(leave && leave.type === 'dayoff');
+      if(!isOff && !came && !approvedAbsence) out.push({ empId:e.id, empName:e.name, dateKey, type:'absent', dow });
       else if(isOff && came)   out.push({ empId:e.id, empName:e.name, dateKey, type:'workedDayOff', dow });
     });
   }
@@ -957,7 +965,7 @@ const timeCfgDefaults = {
   breakMinPerHour: 10,     // كل كام دقيقة زيادة في البريك تساوي ساعة (زي التأخير)
   swapFreePerMonth: 1,     // كام تبديل مجاني في الشهر
   swapHours: 4,            // ساعات التبديل بعد المجاني
-  hoursPerDay: 7,          // كل كام ساعة = يوم خصم
+  hoursPerDay: 8,          // يوم العمل المالي = 8 ساعات
   maxDaysPerMonth: 0,      // سقف أيام الخصم الشهري (0 = مفتوح)
   minStaffPerDay: 2,       // أقل عدد موظفين لازم يفضلوا في الفرع (لكل فرع يتظبط)
   breakPerDay: 1,          // كام بريك مسموح في اليوم
@@ -967,13 +975,13 @@ const timeCfgDefaults = {
   outMonthlyHours: 14,     // ساعات الشهر اللي بتطلّعه من السباق الشهري
   commitGate: 90,          // 🚪 أقل نسبة التزام لدخول المكافأة (أقل منها = خارج تمامًا)
   allowedHoursWeek: 2,     // الرصيد المسموح في الأسبوع
-  allowedHoursMonth: 7,    // الرصيد المسموح في الشهر (= يوم خصم: أول ما توصله تخرج من المكافأة)
+  allowedHoursMonth: 8,    // الرصيد المسموح في الشهر (= يوم عمل مالي)
   maxLateHoursPerDay: 0,   // 🧢 سقف عقوبة التأخير في اليوم الواحد (0 = مفيش سقف — الأدمن يحدده)
   timeAmnestyUntil: '',    // 🩹 عفو شامل: أي رصيد بتاريخه ≤ ده مبيتحسبش خالص
   earlyMinPerHour: 10,     // 🚪 الانصراف بدري: كل كام دقيقة = ساعة (زي التأخير)
   earlyGraceMin: 5,        // 🚪 سماح النقص عن مدة الشيفت قبل أي خصم
-  maxEarlyHoursPerDay: 7,  // 🧢 سقف عقوبة الانصراف بدري في اليوم (7 = يوم واحد بحد أقصى)
-  absenceHours: 7,         // 🚫 غياب بدون عذر = كام ساعة رصيد (7 = خروج فوري من المكافأة)
+  maxEarlyHoursPerDay: 8,  // 🧢 سقف عقوبة الانصراف بدري في اليوم (8 = يوم واحد بحد أقصى)
+  absenceHours: 8,         // 🚫 غياب بدون عذر = كام ساعة رصيد (8 = يوم مالي)
   autoCloseBreakMult: 2,   // البريك بيتقفل تلقائي بعد كام ضعف من مدته
   breakAlertBeeps: 4,      // 🔔 بعد ما مدة البريك تخلص: بيرن كام مرة (مرة كل دقيقة) جوه فترة السماح
   maxShiftHours: 14,       // 🚨 أطول شيفت معقول — فوق كده يبقى "نسيت الانصراف" مش شغل
@@ -1274,7 +1282,7 @@ function swapHoursFrom(swapCount, cfg){
 function monthlyTimeSummary(entries, cfg){
   cfg = cfg || timeCfgDefaults;
   const totalHours = (entries||[]).reduce((x,e)=> x + (Number(e.hours)||0), 0);
-  const perDay = Number(cfg.hoursPerDay) || 7;
+  const perDay = Number(cfg.hoursPerDay) || 8;
   let days = Math.floor(totalHours / perDay);
   const cap = Number(cfg.maxDaysPerMonth) || 0;
   const capped = cap > 0 && days > cap;
@@ -3624,16 +3632,37 @@ function countConfirmedDaysInRange(empId, start, end){
 }
 // Counts calendar days in the range EXCLUDING the employee's weekly day off,
 // since they're not expected to work (or submit a task) on that day.
+/* يوم الإجازة الفعلي داخل الأسبوع.
+   changeDayoff المعتمد ينقل الإجازة لذلك التاريخ فقط؛ اليوم الأصلي يرجع يوم شغل.
+   أسبوعنا السبت→الجمعة مثل باقي نظام الحضور. */
+function effectiveDayOffKey(emp, anyDateKey, reqs){
+  if(!emp || !anyDateKey) return '';
+  const p = String(anyDateKey).slice(0,10).split('-').map(Number);
+  if(p.length !== 3 || p.some(n=>!Number.isFinite(n))) return '';
+  const d = cai(caiStamp(p[0],p[1],p[2],12,0,0,0));
+  const back = (d.getDay() - 6 + 7) % 7;
+  const ws = new Date(d.getTime()); ws.setDate(ws.getDate() - back);
+  const we = new Date(ws.getTime()); we.setDate(we.getDate() + 6);
+  const wkStart = _fmtKey(ws), wkEnd = _fmtKey(we);
+  const list = reqs || (typeof window !== 'undefined' && window.allLeaveReqs) || [];
+  const changes = list.filter(l=> l && l.empId===emp.id && l.status==='approved' && l.type==='changeDayoff'
+    && String(l.dateKey||'') >= wkStart && String(l.dateKey||'') <= wkEnd)
+    .sort((a,b)=> (Number(a.decidedAt||a.approvedAt||a.ts)||0) - (Number(b.decidedAt||b.approvedAt||b.ts)||0));
+  if(changes.length) return String(changes[changes.length-1].dateKey||'').slice(0,10);
+  if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return '';
+  const off = new Date(ws.getTime());
+  off.setDate(off.getDate() + ((Number(emp.dayOff) - 6 + 7) % 7));
+  return _fmtKey(off);
+}
+if(typeof window !== 'undefined') window.effectiveDayOffKey = effectiveDayOffKey;
+
 function countRequiredWorkDaysInRange(emp, start, end){
   let count = 0;
-  const cur = cai(start), _endC = cai(end);            // 🕒 أيام القاهرة
+  const cur = cai(start), _endC = cai(end);
   while(cur <= _endC){
-    const isDayOff = (emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== '') && cur.getDay() === Number(emp.dayOff);
-    // 📩 إجازة أو تغيير يوم إجازة **معتمد** = اليوم ده مش مطلوب فيه شغل
-    //    (الأدمن وافق بنفسه، فمينفعش يتحسب غياب عليها)
-    const lv = approvedLeaveFor(emp.id, _fmtKey(cur));   // cur تاريخ عرض — من غير تحويل تاني
-    const excused = !!(lv && (lv.type === 'dayoff' || lv.type === 'changeDayoff'));
-    if(!isDayOff && !excused) count++;
+    const key = _fmtKey(cur);
+    // الإجازة الأسبوعية فقط هي غير مدفوعة الخصم. إجازة يوم approved = غياب مصرح به لكنه غير مدفوع.
+    if(effectiveDayOffKey(emp, key) !== key) count++;
     cur.setDate(cur.getDate()+1);
   }
   return count;
@@ -3808,6 +3837,31 @@ async function setTaskGateWaiver(key, on){
 }
 window.setTaskGateWaiver = setTaskGateWaiver;
 
+/* 🎁 أهلية فترة المكافأة للموظف الجديد.
+   الموظف اللي بدأ وسط أسبوع/شهر لا ياخد مكافأة الفترة كاملة؛ يبدأ من أول فترة كاملة بعد تاريخ بدايته. */
+function rewardEmploymentStartMs(emp){
+  if(!emp) return null;
+  const key = emp.hireDate || emp.attendanceTrackingStart || '';
+  if(key){
+    const p = String(key).slice(0,10).split('-').map(Number);
+    if(p.length===3 && p.every(Number.isFinite)) return caiDayStart(p[0],p[1],p[2]);
+  }
+  let raw = emp.createdAt;
+  if(raw && typeof raw.toMillis === 'function') raw = raw.toMillis();
+  else if(raw && Number.isFinite(raw.seconds)) raw = raw.seconds*1000 + Math.floor((raw.nanoseconds||0)/1e6);
+  const ms = Number(raw);
+  if(Number.isFinite(ms) && ms > 0){
+    const c = cai(ms); return caiDayStart(c.getFullYear(),c.getMonth()+1,c.getDate());
+  }
+  return null;
+}
+function rewardFullPeriodEligible(emp, range){
+  const st = rewardEmploymentStartMs(emp);
+  return st == null || st <= range.start.getTime();
+}
+window.rewardEmploymentStartMs = rewardEmploymentStartMs;
+window.rewardFullPeriodEligible = rewardFullPeriodEligible;
+
 /* 🔍 ليه الموظفة مخدتش المكافأة؟ — نفس شروط qualifiesForReward بالظبط،
    بس بترجّع البوابات واحدة واحدة بأرقامها بدل نعم/لأ. */
 function rewardGateReport(emp, range, type){
@@ -3825,6 +3879,9 @@ function rewardGateReport(emp, range, type){
   const avgRating = computeAvgRatingInRange(emp.id, range.start.getTime(), range.end.getTime());
 
   const gates = [];
+  const fullPeriod = rewardFullPeriodEligible(emp, range);
+  gates.push({ key:'employment', label:'فترة كاملة بعد التعيين', ok: fullPeriod,
+               txt: fullPeriod ? 'فترة كاملة' : 'بدأ العمل أثناء الفترة' });
   gates.push({ key:'days', label:'أيام شغل مطلوبة', ok: requiredDays > 0,
                txt: requiredDays + ' يوم' });
   gates.push({ key:'tasks', label:'مهام معتمدة', waived,
@@ -3849,6 +3906,7 @@ window.rewardGateReport = rewardGateReport;
 
 function qualifiesForReward(emp, range, type){
   if(!emp || emp.active === false) return false;
+  if(!rewardFullPeriodEligible(emp, range)) return false;
 
   if(type === 'monthly'){
     // الشهرية: الشهر بيتقسم ~4 أسابيع ومتوسط درجاتها لازم يعدّي 80%
@@ -4717,7 +4775,17 @@ function renderScheduleList(){
   wrap.querySelectorAll('input[data-act="salary"]').forEach(inp=>{
     inp.addEventListener('change', async ()=>{
       const val = inp.value.trim() === '' ? null : parseFloat(inp.value.trim());
-      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { baseSalary: val }); }
+      const emp = allEmployees.find(e=> e.id === inp.dataset.id);
+      const oldVal = emp ? (Number(emp.baseSalary)||0) : 0;
+      const newVal = Number(val)||0;
+      if(newVal === oldVal) return;
+      const hist = (emp && Array.isArray(emp.salaryHistory) ? emp.salaryHistory.slice(-49) : []);
+      hist.push({ from: oldVal, to: newVal, at: Date.now(), by: (_auth.currentUser && _auth.currentUser.email) || 'admin' });
+      try{
+        await updateDoc(doc(db,'sales_employees', inp.dataset.id), {
+          baseSalary: val, salaryHistory: hist, salaryUpdatedAt: Date.now()
+        });
+      }
       catch(err){ console.error('تعذر حفظ المرتب', err); }
     });
   });
@@ -5889,11 +5957,12 @@ document.querySelector('#saveDailyTargetBtn')?.addEventListener('click', async (
 const FREE_DAYOFF_PER_MONTH = 4;
 
 function getMonthDateRange(d){
-  // Salary period is always day 1 to day 30 of the calendar month, per the
-  // simplified pay-cycle rule (day 31, if any, isn't counted separately).
-  const c = cai(d != null ? d : Date.now());           // 🕒 بتوقيت القاهرة
+  // فترة الحضور = الشهر التقويمي الحقيقي كله (28/29/30/31).
+  // قيمة اليوم في المرتب تفضل ÷30 داخل computeSalary — دي قاعدة مستقلة.
+  const c = cai(d != null ? d : Date.now());
   const y = c.getFullYear(), m = c.getMonth()+1;
-  return { start: new Date(caiDayStart(y, m, 1)), end: new Date(caiDayEnd(y, m, 30)) };
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { start: new Date(caiDayStart(y, m, 1)), end: new Date(caiDayEnd(y, m, lastDay)) };
 }
 
 /* ============================================================
@@ -5932,19 +6001,21 @@ function advPayCycleOf(a, payDay){
   }
   return a.ts ? payCycleKeyOfDate(new Date(a.ts), payDay) : '';
 }
-// فترة المرتب من مفتاح شهر (نفس قاعدة 1→30 بتاعة getMonthDateRange)
+// فترة المرتب من أول الشهر لآخر يوم تقويمي حقيقي.
 function payPeriodRange(key){
   const p = String(key || '').split('-').map(Number);
   const y = p[0], m = (p[1] || 1);
-  return { start: new Date(caiDayStart(y, m, 1)), end: new Date(caiDayEnd(y, m, 30)) };
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { start: new Date(caiDayStart(y, m, 1)), end: new Date(caiDayEnd(y, m, lastDay)) };
 }
 /* الفترة المعروضة افتراضيًا = **اللي بتتقبض**، مش اللي إحنا عايشين فيها.
    يوم 6 أغسطس المالك بيصرف شهر 7 — والشاشة كانت بتفتح على أغسطس (6 أيام)
    وزرار الصرف مقفول \"لحد ما الشهر يخلص\"، يعني شهر 7 مكانش ليه طريق أصلًا. */
 function defaultPayPeriodKey(now){
-  const d = cai(now != null ? now : Date.now());       // 🕒 بتوقيت القاهرة
-  let y = d.getFullYear(), m = d.getMonth();
-  if(d.getDate() < 30){ m -= 1; if(m < 0){ m = 11; y -= 1; } }
+  // الشاشة تفتح على آخر شهر تقويمي مكتمل. الشهر الجاري يفضل متاح للمعاينة من القائمة.
+  const d = cai(now != null ? now : Date.now());
+  let y = d.getFullYear(), m = d.getMonth() - 1;
+  if(m < 0){ m = 11; y -= 1; }
   return _mkKey(y, m);
 }
 function payPeriodOptions(now, count){
@@ -6036,22 +6107,91 @@ function countAbsenceDaysInRange(emp, start, end){
   const attended = new Set();
   allShifts.filter(s=> s.employeeId===emp.id
       && s.clockInTs >= start.getTime() && s.clockInTs <= end.getTime())
-    .forEach(s=>{ attended.add(caiDayKey(s.clockInTs)); });   // 🕒 يوم القاهرة
+    .forEach(s=>{ attended.add(caiDayKey(s.clockInTs)); });
   let count = 0;
-  const cur = cai(start), _endC = cai(end);                   // 🕒 أيام القاهرة
+  const cur = cai(start), _endC = cai(end);
   while(cur <= _endC){
-    const isDayOff = (emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== '')
-      && cur.getDay() === Number(emp.dayOff);
-    const key = _fmtKey(cur);                                 // من غير تحويل تاني
-    const lv = approvedLeaveFor(emp.id, key);
-    const excused = !!(lv && (lv.type === 'dayoff' || lv.type === 'changeDayoff'));
-    // يوم مطلوب + مفيش أي حضور فيه = غياب
-    if(!isDayOff && !excused && !attended.has(key)) count++;
+    const key = _fmtKey(cur);
+    const isDayOff = effectiveDayOffKey(emp, key) === key;
+    // approved dayoff = غياب مصرح به وغير مدفوع، فيتخصم يوم لكن بلا جزاء إضافي.
+    if(!isDayOff && !attended.has(key)) count++;
     cur.setDate(cur.getDate()+1);
   }
   return count;
 }
 if(typeof window !== 'undefined') window.countAbsenceDaysInRange = countAbsenceDaysInRange;
+
+/* ============================================================
+   💵 حضور المرتب — مصدر واحد للحساب ولتفاصيل الشاشة
+   ------------------------------------------------------------
+   · الإجازة الأسبوعية: يوم واحد محدد، ويمكن نقله بـ changeDayoff معتمد.
+   · غياب يوم عمل: يتخصم يوم سواء approved أو لا؛ approved يمنع الجزاء الإضافي فقط.
+   · Clock-in قصير يمنع خصم يوم كامل، والوقت الناقص يتحاسب من رصيد الوقت.
+   · شيفت مفتوح يظهر كمشكلة ويمنع الصرف لحد ما يتراجع.
+   · الشغل في يوم الإجازة يتدفع **بالساعات** حتى 8 ساعات في اليوم.
+   ============================================================ */
+function payrollAttendanceBalance(emp, start, end, shifts, reqs){
+  const byDay = new Map();
+  (shifts || []).forEach(sh=>{
+    if(!sh || sh.employeeId !== emp.id || !sh.clockInTs) return;
+    if(sh.clockInTs < start.getTime() || sh.clockInTs > end.getTime()) return;
+    const k = caiDayKey(sh.clockInTs);
+    const arr = byDay.get(k) || [];
+    arr.push(sh); byDay.set(k, arr);
+  });
+  const rows = [], absenceDates = [], dayOffDates = [], workedDayOffDates = [], incompleteShifts = [];
+  let requiredDays = 0, attendedDays = 0, attendedWorkDays = 0, workedDayOffMinutes = 0;
+  const cur = cai(start), last = cai(end);
+  while(cur <= last){
+    const key = _fmtKey(cur);
+    const dayShifts = byDay.get(key) || [];
+    const hasAttendance = dayShifts.length > 0;
+    if(hasAttendance) attendedDays++;
+    let closedMinutes = 0;
+    dayShifts.forEach(sh=>{
+      if(sh.clockInTs && !sh.clockOutTs){
+        incompleteShifts.push({ date:key, shiftId:sh.id||'', clockInTs:sh.clockInTs });
+        return;
+      }
+      if(Number(sh.clockOutTs) > Number(sh.clockInTs)){
+        closedMinutes += Math.max(0, Math.round((Number(sh.clockOutTs)-Number(sh.clockInTs))/60000));
+      }
+    });
+    closedMinutes = Math.min(8*60, closedMinutes);
+    const offKey = effectiveDayOffKey(emp, key, reqs);
+    const isDayOff = offKey === key;
+    const leave = approvedLeaveFor(emp.id, key, reqs);
+    let status = 'work';
+    if(isDayOff){
+      dayOffDates.push(key);
+      status = hasAttendance ? 'worked_dayoff' : 'dayoff';
+      if(hasAttendance && closedMinutes > 0){
+        workedDayOffMinutes += closedMinutes;
+        workedDayOffDates.push({ date:key, minutes:closedMinutes });
+      }
+    }else{
+      requiredDays++;
+      if(hasAttendance){ attendedWorkDays++; status = 'present'; }
+      else{
+        const approved = !!(leave && leave.type === 'dayoff');
+        absenceDates.push({ date:key, approved:approved });
+        status = approved ? 'approved_absence' : 'absence';
+      }
+    }
+    rows.push({ date:key, status, isDayOff, workedMinutes:closedMinutes,
+                hasAttendance, leaveType:leave&&leave.type||'' });
+    cur.setDate(cur.getDate()+1);
+  }
+  return {
+    requiredDays, attendedDays, attendedWorkDays,
+    absenceDays:absenceDates.length, absenceDates,
+    dayOffDays:dayOffDates.length, dayOffDates,
+    workedDayOffHours:Math.round((workedDayOffMinutes/60)*100)/100,
+    workedDayOffDates, incompleteShifts, rows
+  };
+}
+if(typeof window !== 'undefined') window.payrollAttendanceBalance = payrollAttendanceBalance;
+
 
 /* ============================================================
    🗓️ رصيد الإجازات الأسبوعي — المحرك الجديد (قرار المالك)
@@ -6242,6 +6382,22 @@ if(typeof window !== 'undefined'){
   window.shiftCountsAsDay = shiftCountsAsDay;
 }
 
+// 📅 أدوات فترة المرتب — أيام تقويمية بتوقيت القاهرة، من غير أخطاء round/DST.
+function payrollDateFromKey(key){
+  const p = String(key||'').slice(0,10).split('-').map(Number);
+  if(p.length!==3 || p.some(n=>!Number.isFinite(n))) return null;
+  return new Date(caiDayStart(p[0],p[1],p[2]));
+}
+function payrollCalendarDaysInRange(start,end){
+  const a=caiParts(start.getTime()), b=caiParts(end.getTime());
+  const au=Date.UTC(a.y,a.m-1,a.d), bu=Date.UTC(b.y,b.m-1,b.d);
+  return Math.max(1, Math.floor((bu-au)/86400000)+1);
+}
+if(typeof window!=='undefined'){
+  window.payrollDateFromKey=payrollDateFromKey;
+  window.payrollCalendarDaysInRange=payrollCalendarDaysInRange;
+}
+
 // Computes pay for any date range within a salary cycle — used both for the
 // regular full-month calculation and for a prorated final settlement.
 function computeSalary(emp, periodStart, end){
@@ -6263,18 +6419,18 @@ function computeSalary(emp, periodStart, end){
   // affect absence detection (see attendanceTrackingStart below for that).
   let start = periodStart;
   let notYetHired = false;
-  let isPartialPeriod = end < naturalMonthEnd;
+  let isPartialPeriod = caiDayKey(end) < caiDayKey(naturalMonthEnd);
   if(emp.hireDate){
-    const hireDate = new Date(emp.hireDate + 'T00:00:00');
+    const hireDate = payrollDateFromKey(emp.hireDate);
     if(hireDate > end){ notYetHired = true; }
     else if(hireDate > start){ start = hireDate; isPartialPeriod = true; }
   }
 
   if(notYetHired){
-    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, overtimePendingMin:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, timeCreditHours:0, timeCreditDays:0, timeCreditDeduction:0, adminDeductions:0, dayOffBonusDays:0, extraOffDaysBonus:0, dayOffBonusAmount:0, advancesTotal:0, advCash:0, advOrders:0, advPrevCycle:0, netSalary:0, daysInCalc:0, attendedDays:0, elapsedWorkDays:0, absenceDays:0, notYetHired:true };
+    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, overtimePendingMin:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, timeCreditHours:0, timeCreditDays:0, timeCreditDeduction:0, adminDeductions:0, dayOffBonusDays:0, dayOffBonusHours:0, extraOffDaysBonus:0, dayOffBonusAmount:0, advancesTotal:0, advCash:0, advOrders:0, advPrevCycle:0, netSalary:0, daysInCalc:0, attendedDays:0, elapsedWorkDays:0, absenceDays:0, absenceDates:[], dayOffDates:[], workedDayOffDates:[], incompleteShifts:[], attendanceRows:[], notYetHired:true };
   }
 
-  const daysInCalc = Math.max(1, Math.round((end - start)/(24*60*60*1000)) + 1);
+  const daysInCalc = payrollCalendarDaysInRange(start, end);
   // A full month worked (no mid-month hire, not a truncated/early settlement)
   // always pays the exact base salary, regardless of whether the calendar
   // month has 28, 30, or 31 days. Any partial period gets prorated by daily rate.
@@ -6295,96 +6451,57 @@ function computeSalary(emp, periodStart, end){
     sum + ((s.otRequiresApproval && s.overtimeDecision === 'pending') ? (Number(s.overtimeMinutes)||0) : 0), 0);
   const overtimePay = Math.round((overtimeMinutes/60) * hourlyRate * 100)/100;
 
-  // Real unauthorized-absence detection: compare how many work days (excluding
-  // the employee's scheduled day off) have actually ELAPSED so far in the
-  // period against how many distinct days they genuinely clocked in. Any gap
-  // is an unexcused absence.
-  //
-  // absenceRangeStart is a SEPARATE, admin-controlled floor (attendanceTrackingStart)
-  // — distinct from hireDate. This lets the admin set an old hireDate (for full
-  // salary continuity) while telling the system "don't judge absence before
-  // this date", e.g. when first rolling the system out for existing staff.
+  // 🗓️ الحضور والغياب: شهر تقويمي حقيقي، ومصدر واحد للحسبة وللواجهة.
   let absenceRangeStart = start;
   if(emp.attendanceTrackingStart){
-    const trackStart = new Date(emp.attendanceTrackingStart + 'T00:00:00');
-    if(trackStart > absenceRangeStart) absenceRangeStart = trackStart;
+    const ap = String(emp.attendanceTrackingStart).slice(0,10).split('-').map(Number);
+    if(ap.length===3 && ap.every(Number.isFinite)){
+      const trackStart = new Date(caiDayStart(ap[0],ap[1],ap[2]));
+      if(trackStart > absenceRangeStart) absenceRangeStart = trackStart;
+    }
   }
-  /* 🛡️ حارس أول شهر — الفخ اللي المحرك الأسبوعي بيفتحه
-     ------------------------------------------------------------
-     الأسبوع بيتحاسب في الشهر اللي بيخلص فيه، يعني مرتب الشهر بيمدّ
-     لورا ويقرا آخر أيام الشهر اللي فاته. أول شهر تشغّل فيه النظام،
-     الأيام دي **مفيهاش بيانات** — فموظفة حضورها كامل بتظهر عليها
-     أيام غياب وخصم حقيقي من مرتبها.
-     ⚠️ ده مش نظري: الاختبار طلّع خصم ٤٠٠ ج.م على موظفة ملتزمة.
-     الحل: `weeklyStartFloor` في الإعدادات = تاريخ تشغيل المحرك.
-     أي يوم قبله مبيتحكمش عليه خالص. بيتحط مرة واحدة وبيفضل. */
   const _cfgNow = _timeCfgNow();
-  // 🛡️ الحاجز الصلب = أي تاريخ **صريح** قال "متحكمش قبل كده".
-  //    بداية الفترة العادية **مش** حاجز — عشان المدّ لورا يشتغل طبيعي.
-  let hardStart = null;
-  if(emp.attendanceTrackingStart) hardStart = new Date(emp.attendanceTrackingStart + 'T00:00:00');
-  if(emp.hireDate){
-    const _h = new Date(emp.hireDate + 'T00:00:00');
-    if(!hardStart || _h > hardStart) hardStart = _h;
-  }
   if(_cfgNow && _cfgNow.weeklyStartFloor){
-    const floor = new Date(_cfgNow.weeklyStartFloor + 'T00:00:00');
-    if(floor > absenceRangeStart) absenceRangeStart = floor;
-    if(!hardStart || floor > hardStart) hardStart = floor;
+    const fp = String(_cfgNow.weeklyStartFloor).slice(0,10).split('-').map(Number);
+    if(fp.length===3 && fp.every(Number.isFinite)){
+      const floor = new Date(caiDayStart(fp[0],fp[1],fp[2]));
+      if(floor > absenceRangeStart) absenceRangeStart = floor;
+    }
   }
 
   const now = new Date();
   let elapsedEnd = now < end ? now : end;
-  // 🚫 اليوم مبيتحسبش غياب قبل ما شيفتها يخلص (ولا حتى في معاينة المرتب)
+  // اليوم الجاري لا يتحكم عليه غياب قبل نهاية الشيفت.
   const _judge = lastAbsenceJudgeDay(emp, now.getTime(), (typeof complianceCfg !== 'undefined' ? complianceCfg : null));
   if(_judge < elapsedEnd) elapsedEnd = _judge;
-  const elapsedWorkDays = elapsedEnd < absenceRangeStart ? 0 : countRequiredWorkDaysInRange(emp, absenceRangeStart, elapsedEnd);
-  const attendedDays = elapsedEnd < absenceRangeStart ? 0 : countAttendedDaysInRange(emp.id, absenceRangeStart, elapsedEnd);
-  // 🚫 عدّ مباشر يوم بيوم — مش `المطلوب − الحضور` (شوف countAbsenceDaysInRange)
-  const absenceDays = elapsedEnd < absenceRangeStart ? 0 : countAbsenceDaysInRange(emp, absenceRangeStart, elapsedEnd);
 
-  // Free/excused absence days are now PROPORTIONAL to the actual number of
-  // times the employee's weekly day off falls within the tracked period —
-  // not a fixed number — so a partial month or a 5-week month are both
-  // handled correctly and consistently (someone tracked for half a month
-  // gets roughly half the allowance; a month with 5 Fridays gives 5, not 4).
-  const dayOffOccurrences = elapsedEnd < absenceRangeStart ? 0 : countDayOffOccurrencesInRange(emp, absenceRangeStart, elapsedEnd);
+  const attendance = elapsedEnd < absenceRangeStart
+    ? { requiredDays:0, attendedDays:0, attendedWorkDays:0, absenceDays:0, absenceDates:[],
+        dayOffDays:0, dayOffDates:[], workedDayOffHours:0, workedDayOffDates:[], incompleteShifts:[], rows:[] }
+    : payrollAttendanceBalance(emp, absenceRangeStart, elapsedEnd, allShifts,
+        (typeof window !== 'undefined' && window.allLeaveReqs) || []);
 
-  /* 🗓️ الخصم والمكافأة بقوا من المحرك الأسبوعي (قرار المالك)
-     ------------------------------------------------------------
-     كان: extraOffDays = max(0, absenceDays − dayOffOccurrences)
-     ودي كانت بتدّي **٤ أيام غياب مجانية** فوق الإجازات (شوف
-     weeklyOffBalance). دلوقتي كل أسبوع (سبت→جمعة) بيتحاسب لوحده:
-     يوم إجازة مستحق، وأي يوم زيادة بيتخصم — حتى لو معتمد.
-     ⚠️ الأرقام القديمة بتتحسب برضه وبترجع في `legacy` عشان المالك
-        يقارن أول شهر قبل ما يصرف. مش داخلة الحساب خالص. */
-  const _wk = (elapsedEnd < absenceRangeStart)
-    ? { requiredDays:0, attendedDays:0, shortfallDays:0, surplusDays:0, weeks:[] }
-    : weeklyOffBalance(emp, absenceRangeStart, elapsedEnd, allShifts, _timeCfgNow(),
-                       { live: elapsedEnd < end, hardStart: hardStart });
-  const extraOffDays = _wk.shortfallDays;
+  const elapsedWorkDays = attendance.requiredDays;
+  const attendedDays = attendance.attendedDays;
+  const absenceDays = attendance.absenceDays;
+  const dayOffOccurrences = attendance.dayOffDays;
+  // أي غياب في يوم عمل = يوم واحد خصم. approved = مصرح به فقط، مش إجازة مدفوعة.
+  const extraOffDays = absenceDays;
   const deductionAmount = Math.round(extraOffDays * dailyRate * 100)/100;
-  const weekRows = _wk.weeks;
 
-  // 📊 الأرقام القديمة — للمقارنة بس، مش بتأثر على المرتب
+  // 🎁 اشتغل يوم إجازته: يتحاسب بالساعات الفعلية المقفولة، حتى 8 ساعات لليوم.
+  const dayOffBonusHours = attendance.workedDayOffHours;
+  const dayOffBonusDays = Math.round((dayOffBonusHours / 8) * 1000) / 1000;
+  const dayOffBonusAmount = Math.round(dayOffBonusHours * hourlyRate * 100)/100;
+
+  // حقول توافق للعرض/التشخيص القديم فقط — الحساب الجديد لا يعتمد على المحرك الأسبوعي القديم.
+  const weekRows = [];
   const legacyExtraOffDays = Math.max(0, absenceDays - dayOffOccurrences);
   const legacyDeduction = Math.round(legacyExtraOffDays * dailyRate * 100)/100;
 
-  /* 🎁 مكافأة اشتغال يوم الإجازة = **الصافي** مش كل مرة
-     ------------------------------------------------------------
-     الباج: كل مرة تشتغل في يوم إجازتها كانت بتاخد يوم زيادة فورًا —
-     حتى لو بدّلت وارتاحت يوم تاني بدله. القاعدة دلوقتي: الزيادة
-     بتتحسب **جوه الأسبوع نفسه** — اشتغلت الجمعة وارتاحت التلات في
-     نفس الأسبوع؟ العدد متساوي → مفيش زيادة. اشتغلت فوق المطلوب
-     فعلًا؟ الفرق بيتدفع.
-     ⚠️ والتعويض **مش بيعدّي بين الأسابيع** (قرار المالك): يوم زيادة
-        في أسبوع مبيغطّيش يوم ناقص في أسبوع تاني. */
-  const dayOffBonusDays = _wk.surplusDays;
-  const dayOffBonusAmount = Math.round(dayOffBonusDays * dailyRate * 100)/100;
-
   // ⏳ خصم رصيد الوقت — الوصلة اللي كانت ناقصة في المحرك كله:
   // اللوحات كانت بتعرض "💰 X يوم خصم" لكن المرتب الصافي ماكانش بيخصمهم.
-  // كل hoursPerDay (7) ساعات غير معذورة في الفترة = يوم × قيمة اليوم (بسقف اختياري).
+  // كل 8 ساعات رصيد غير معذورة = يوم خصم × قيمة اليوم (بسقف اختياري).
   const _tcfg = (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
   const tcEntries = ((typeof window !== 'undefined' && window.allTimeCredit) || []).filter(x=>{
     if(isSetupShift(emp)) return false;      // ✨ التجهيز خارج رصيد الوقت
@@ -6446,10 +6563,13 @@ function computeSalary(emp, periodStart, end){
   const netSalary = Math.round((proratedBase - deductionAmount - timeCreditDeduction - adminDeductions + overtimePay + dayOffBonusAmount - advancesTotal) * 100)/100;
   return { proratedBase, overtimeMinutes, overtimePay, overtimePendingMin, dayOffOccurrences, extraOffDays, deductionAmount,
            timeCreditHours, timeCreditDays, timeCreditDeduction, adminDeductions,
-           dayOffBonusDays, dayOffBonusAmount, advancesTotal, advCash, advOrders, advPrevCycle, netSalary, daysInCalc,
+           dayOffBonusDays, dayOffBonusHours, dayOffBonusAmount, advancesTotal, advCash, advOrders, advPrevCycle, netSalary, daysInCalc,
            attendedDays, elapsedWorkDays, absenceDays,
-           // 🗓️ تفصيل الأسابيع + الأرقام القديمة للمقارنة (مش داخلة الحساب)
-           weekRows, weeklyRequiredDays: _wk.requiredDays, weeklyAttendedDays: _wk.attendedDays,
+           absenceDates: attendance.absenceDates, dayOffDates: attendance.dayOffDates,
+           workedDayOffDates: attendance.workedDayOffDates, incompleteShifts: attendance.incompleteShifts,
+           attendanceRows: attendance.rows,
+           // حقول توافق للتشخيص القديم — مش داخلة الحساب الجديد.
+           weekRows, weeklyRequiredDays: elapsedWorkDays, weeklyAttendedDays: attendance.attendedWorkDays,
            legacyExtraOffDays, legacyDeduction,
            notYetHired:false };
 }
@@ -6457,63 +6577,85 @@ function computeSalary(emp, periodStart, end){
 function renderSalaryPanel(){
   const wrap = $('#salaryList');
   if(!wrap) return;
-  // 📅 الفترة المستحقة مش الشهر الجاري (شوف defaultPayPeriodKey) — القائمة
-  //    بتترسم قبل أي خروج بدري عشان متختفيش لو الفرع لسه فاضي
   const periodLabel = window.salaryPeriodKey || defaultPayPeriodKey(new Date());
   _renderPeriodPicker('salaryPeriodSelect', periodLabel);
-  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  const emps = reviewEmployeesFor(viewBranch);
+  if(!emps.length){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const range = payPeriodRange(periodLabel);
-  const monthEnded = new Date() > range.end;
-
-  wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=>{
+  wrap.innerHTML = emps.map(e=>{
     if(!e.baseSalary){
-      return `<div class="emp-row"><div class="n">${e.name}</div><div class="meta" style="color:var(--sub);">لسه مفيش مرتب أساسي متحدد (حطه في بانل المواعيد)</div></div>`;
+      return `<div class="emp-row" style="padding:13px;"><div class="n">${e.name}</div><div class="meta">لسه مفيش مرتب أساسي</div></div>`;
     }
-    const calc = computeSalary(e, range.start, range.end);
-    if(calc.notYetHired){
-      return `<div class="emp-row"><div class="n">${e.name}</div><div class="meta" style="color:var(--sub);">لسه معينش في الفترة دي (تاريخ التعيين ${e.hireDate})</div></div>`;
+    const c = computeSalary(e, range.start, range.end);
+    if(c.notYetHired){
+      return `<div class="emp-row" style="padding:13px;"><div class="n">${e.name}</div><div class="meta">لسه معينش في الفترة دي</div></div>`;
     }
-    const proratedNote = calc.daysInCalc < 30 ? `<div class="meta" style="color:var(--sub); font-size:10px;">(${calc.daysInCalc} يوم بس — من تاريخ التعيين ${e.hireDate})</div>` : '';
-    // ⭐ النقط بتتصرف **مع المرتب** يوم القبض (قرار المالك) — فالصف بيوري
-    //    الإجمالي اللي هيتسلّم في إيده مش المرتب لوحده.
     const due = commissionDueFor(e, periodLabel);
-    const payoutTotal = Math.round((calc.netSalary + due.totalDue) * 100)/100;
-    const paidRecord = allSalaryPayments.find(p=> p.employeeId===e.id && p.periodLabel===periodLabel);
-    let actionHtml;
-    if(paidRecord){
-      actionHtml = `<span style="color:var(--good); font-size:11px;">✅ مدفوع (${new Date(paidRecord.paidAt).toLocaleDateString('ar-EG')})</span>`;
-    } else if(!monthEnded){
-      actionHtml = `<span style="color:var(--sub); font-size:10px;">🔒 الفترة دي لسه ماخلصتش (بتقفل يوم 30) — اختار شهر خلص من فوق</span>`;
-    } else {
-      actionHtml = `<button class="confirmBtnSmall" onclick="openSalaryPayoutDialog('${e.id}', '${periodLabel}')">✅ اصرف ${payoutTotal} ج.م</button>`;
-    }
-    return `
-    <div class="emp-row" style="flex-wrap:wrap;">
-      <div class="n">${e.name}</div>
-      <div class="meta">أساسي ${calc.proratedBase}</div>
-      ${proratedNote}
-      <div class="meta">🗓️ اشتغل <b style="color:var(--good);">${calc.attendedDays}</b> يوم · المطلوب ${calc.elapsedWorkDays}${calc.dayOffOccurrences>0?` · إجازات أسبوعية ${calc.dayOffOccurrences}`:''}</div>
-      <div class="meta" style="color:var(--gold);">إضافي +${calc.overtimePay}</div>
-      <div class="meta" style="color:${calc.dayOffBonusAmount>0?'var(--good)':'var(--sub)'}">مكافأة اشتغال إجازة +${calc.dayOffBonusAmount} (${calc.dayOffBonusDays} يوم)</div>
-      <div class="meta" style="color:${calc.deductionAmount>0?'var(--bad)':'var(--sub)'}">خصم غياب -${calc.deductionAmount} (${calc.extraOffDays} يوم غياب غير مبرر، من أصل ${calc.dayOffOccurrences} إجازة مسموحة)</div>
-      <div class="meta" style="color:${calc.timeCreditDeduction>0?'var(--bad)':'var(--sub)'}">⏳ خصم رصيد الوقت -${calc.timeCreditDeduction} (${calc.timeCreditHours} ساعة = ${calc.timeCreditDays} يوم)</div>
-      ${calc.adminDeductions>0?`<div class="meta" style="color:var(--bad);">💰 خصومات إدارية -${calc.adminDeductions}</div>`:''}
-      <div class="meta" style="color:${calc.advancesTotal>0?'var(--bad)':'var(--sub)'}">سلف -${calc.advancesTotal}${calc.advOrders>0?` <span style="font-size:9.5px; color:var(--sub);">(💰 كاش ${calc.advCash} · 🛒 أوردرات ${calc.advOrders})</span>`:''} <span style="font-size:9.5px; color:var(--sub);">(لحد ${payDayOfMonth()} ${payPeriodLabelAr(_nextMonthKey(periodLabel))})</span></div>
-      ${calc.advPrevCycle>0?`<div class="meta" style="color:var(--gold);">⚠️ سلف ${calc.advPrevCycle} ج.م اتاخدت في أول ${payDayOfMonth()} أيام من الشهر — دي على دورة الشهر اللي قبله ومش داخلة هنا</div>`:''}
-      <div class="meta" style="color:var(--good); font-weight:800;">صافي الراتب ${calc.netSalary} ج.م</div>
-      ${due.ptsDue>0?`<div class="meta" style="color:var(--gold);">⭐ عمولة نقط +${due.ptsDueAmt} (${fmtPts(due.ptsDue)} نقطة)</div>`:''}
-      ${due.refDueAmt>0?`<div class="meta" style="color:var(--gold);">📱 تنزيلات +${due.refDueAmt} (${due.refDueCount})</div>`:''}
-      ${due.tgtDueAmt>0?`<div class="meta" style="color:var(--gold);">🎯 عمولة تارجت +${due.tgtDueAmt}</div>`:''}
-      ${due.totalDue>0?`<div class="meta" style="color:var(--good); font-weight:900; font-size:13px;">💵 الإجمالي المستلم ${payoutTotal} ج.م</div>`:''}
-      ${due.totalPaid>0?`<div class="meta" style="color:var(--sub); font-size:10px;">عمولات اتصرفت قبل كده: ${due.totalPaid} ج.م</div>`:''}
-      ${actionHtml}
-      <button class="confirmBtnSmall" style="background:#3b3b52;" onclick="openAttendanceDaysDialog('${e.id}', '${periodLabel}')">🗓️ سجل الأيام</button>
-      <button class="confirmBtnSmall" style="background:#3b3b52;" onclick="openSalaryPrintDialog('${e.id}', '${periodLabel}')">🖨️ إيصال</button>
+    const deductions = Math.round((c.deductionAmount + c.timeCreditDeduction + c.adminDeductions + c.advancesTotal) * 100)/100;
+    const additions = Math.round((c.overtimePay + c.dayOffBonusAmount + due.totalDue) * 100)/100;
+    const grand = Math.round((c.netSalary + due.totalDue) * 100)/100;
+    const paid = allSalaryPayments.find(p=> p.employeeId===e.id && p.periodLabel===periodLabel);
+    const warn = c.incompleteShifts.length ? `<span style="color:#f59e0b;">⚠️ ${c.incompleteShifts.length} شيفت مفتوح</span>` : '';
+    return `<div class="emp-row" style="cursor:pointer;padding:13px;display:block;" onclick="openPayrollEmployee('${e.id}','${periodLabel}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div><div class="n" style="font-size:15px;">${e.name}</div><div class="meta">${e.branch||''} ${warn}</div></div>
+        <div style="text-align:left;color:var(--good);font-weight:900;font-size:15px;">${grand} ج.م<div style="font-size:9px;color:var(--sub);font-weight:600;">الصافي</div></div>
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;font-size:10.5px;">
+        <span class="meta">أساسي <b>${Number(e.baseSalary).toFixed(0)}</b></span>
+        <span class="meta">حضور <b>${c.attendedDays}</b></span>
+        <span class="meta">غياب <b>${c.extraOffDays}</b></span>
+        <span class="meta" style="color:${deductions?'var(--bad)':'var(--sub)'}">خصم <b>-${deductions}</b></span>
+        <span class="meta" style="color:${additions?'var(--good)':'var(--sub)'}">إضافة <b>+${additions}</b></span>
+      </div>
+      <div style="margin-top:7px;text-align:left;font-size:10px;color:var(--sub);">${paid?'✅ مدفوع':'اضغط للتفاصيل ←'}</div>
     </div>`;
   }).join('');
-
-  // (تسجيل الصرف اتنقل جوه openSalaryPayoutDialog — بقى صرف واحد للمرتب والعمولات)
 }
+
+window.openPayrollEmployee = function(empId, periodKey){
+  const emp = allEmployees.find(e=> e.id===empId); if(!emp) return;
+  const pk = periodKey || window.salaryPeriodKey || defaultPayPeriodKey(new Date());
+  const range = payPeriodRange(pk);
+  const c = computeSalary(emp, range.start, range.end);
+  const due = commissionDueFor(emp, pk);
+  const row = (l,v,color)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:12px;"><span style="color:var(--sub)">${l}</span><b style="${color?'color:'+color:''}">${v}</b></div>`;
+  const hist = (emp.salaryHistory||[]).slice().reverse().slice(0,20);
+  const old = document.getElementById('payrollEmpOv'); if(old) old.remove();
+  const ov = document.createElement('div'); ov.id='payrollEmpOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;overflow:auto;padding:14px;';
+  const deductions = Math.round((c.deductionAmount+c.timeCreditDeduction+c.adminDeductions+c.advancesTotal)*100)/100;
+  const additions = Math.round((c.overtimePay+c.dayOffBonusAmount+due.totalDue)*100)/100;
+  const grand = Math.round((c.netSalary+due.totalDue)*100)/100;
+  const actualDays = new Date(Date.UTC(Number(pk.slice(0,4)), Number(pk.slice(5,7)), 0)).getUTCDate();
+  const paid = allSalaryPayments.find(p=>p.employeeId===emp.id && p.periodLabel===pk);
+  ov.innerHTML=`<div style="max-width:560px;margin:auto;background:var(--card,#1d1d27);border-radius:16px;padding:16px;border:1px solid rgba(255,255,255,.12);">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><div><div style="font-size:18px;font-weight:900;">${emp.name}</div><div style="color:var(--sub);font-size:11px;">${payPeriodLabelAr(pk)} · ${emp.branch||''}</div></div><button class="backBtn" onclick="document.getElementById('payrollEmpOv').remove()">✕</button></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:12px 0;"><div class="card" style="padding:9px;text-align:center;">الأساسي<br><b>${Number(emp.baseSalary).toFixed(0)}</b></div><div class="card" style="padding:9px;text-align:center;color:var(--bad);">الخصومات<br><b>-${deductions}</b></div><div class="card" style="padding:9px;text-align:center;color:var(--good);">الصافي<br><b>${grand}</b></div></div>
+    ${c.proratedBase!==Number(emp.baseSalary)?row('استحقاق الأساسي للفترة','+'+c.proratedBase,'#22c55e'):''}
+    <div style="font-weight:900;margin-top:12px;">🗓️ الحضور</div>
+    ${row('أيام الشهر',actualDays+' يوم')}
+    ${row('أيام العمل المطلوبة',c.elapsedWorkDays+' يوم')}
+    ${row('أيام الحضور المسجلة',c.attendedDays+' يوم')}
+    ${row('الإجازة الأسبوعية داخل الفترة',c.dayOffDates.length+' يوم')}
+    ${row('غياب مخصوم',c.extraOffDays+' يوم = -'+c.deductionAmount,'#ef4444')}
+    ${c.absenceDates.length?row('تواريخ الغياب',c.absenceDates.map(x=>x.date+(x.approved?' (مصرح)':'')).join('، '),'#ef4444'):''}
+    ${c.dayOffDates.length?row('تواريخ الإجازة الأسبوعية',c.dayOffDates.join('، ')):''}
+    ${c.incompleteShifts.length?row('⚠️ شيفتات غير مقفولة',c.incompleteShifts.map(x=>x.date).join('، '),'#f59e0b'):''}
+    <div style="font-weight:900;margin-top:14px;">➕ الإضافات</div>
+    ${row('أوفرتايم',Math.round(c.overtimeMinutes/6)/10+' س = +'+c.overtimePay,'#22c55e')}
+    ${row('شغل يوم الإجازة',c.dayOffBonusHours+' س = +'+c.dayOffBonusAmount,'#22c55e')}
+    ${row('عمولات ونقط وتارجت','+'+due.totalDue,'#22c55e')}
+    <div style="font-weight:900;margin-top:14px;">➖ الخصومات</div>
+    ${row('رصيد وقت',c.timeCreditHours+' س = -'+c.timeCreditDeduction,'#ef4444')}
+    ${row('خصومات إدارية','-'+c.adminDeductions,'#ef4444')}
+    ${row('سلف ومشتريات','-'+c.advancesTotal,'#ef4444')}
+    <div style="font-weight:900;margin-top:14px;">💰 سجل تعديل الراتب</div>
+    ${hist.length?hist.map(h=>row(new Date(h.at).toLocaleString('ar-EG')+(h.by?' · '+h.by:''),(h.from||0)+' ← '+(h.to||0))).join(''):'<div style="color:var(--sub);font-size:11px;padding:8px 0;">مفيش تعديلات مسجلة.</div>'}
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;"><button class="confirmBtnSmall" onclick="openAttendanceDaysDialog('${emp.id}','${pk}')">🗓️ سجل الأيام</button><button class="confirmBtnSmall" onclick="openSalaryPrintDialog('${emp.id}','${pk}')">🖨️ إيصال</button>${paid?'<span style="color:var(--good);font-size:11px;align-self:center;">✅ مدفوع</span>':(c.incompleteShifts.length?'<span style="color:#f59e0b;font-size:11px;align-self:center;">⛔ راجع الشيفت المفتوح قبل الصرف</span>':(new Date()>range.end?`<button class="confirmBtnSmall" onclick="openSalaryPayoutDialog('${emp.id}','${pk}')">💵 صرف</button>`:'<span style="color:var(--sub);font-size:11px;align-self:center;">الفترة لسه مفتوحة</span>'))}</div>
+  </div>`;
+  document.body.appendChild(ov);
+};
 
 // ---------- 🧾 إيصال الراتب (80mm) — بيتطبع من برنتر الفرع عبر الكاشير ----------
 function _nextMonthKey(key){
@@ -6538,11 +6680,12 @@ function buildSalaryReceiptPayload(emp, calc, periodLabel){
   const grand = Math.round((calc.netSalary + commTotal) * 100)/100;
 
   const lines = [
-    ['الراتب الأساسي (' + calc.daysInCalc + ' يوم)', '+' + calc.proratedBase],
+    ['الراتب الأساسي المتفق عليه', '+' + (Number(emp.baseSalary)||0)],
     ['🗓️ أيام الشغل', (calc.attendedDays || 0) + ' من ' + (calc.elapsedWorkDays || 0)],
   ];
+  if(calc.proratedBase !== Number(emp.baseSalary||0)) lines.splice(1,0,['استحقاق الأساسي للفترة','+' + calc.proratedBase]);
   if(calc.overtimePay > 0) lines.push(['أوفرتايم (' + Math.round(calc.overtimeMinutes/60*10)/10 + ' ساعة)', '+' + calc.overtimePay]);
-  if(calc.dayOffBonusAmount > 0) lines.push(['🎁 اشتغل ' + calc.dayOffBonusDays + ' يوم إجازة', '+' + calc.dayOffBonusAmount]);
+  if(calc.dayOffBonusAmount > 0) lines.push(['🎁 شغل يوم الإجازة (' + calc.dayOffBonusHours + ' ساعة)', '+' + calc.dayOffBonusAmount]);
   if(calc.deductionAmount > 0) lines.push(['خصم غياب (' + calc.extraOffDays + ' يوم)', '-' + calc.deductionAmount]);
   if(calc.timeCreditDeduction > 0) lines.push(['⏳ رصيد الوقت (' + calc.timeCreditHours + ' ساعة = ' + calc.timeCreditDays + ' يوم)', '-' + calc.timeCreditDeduction]);
   if(calc.adminDeductions > 0) lines.push(['خصومات إدارية', '-' + calc.adminDeductions]);
@@ -6556,7 +6699,7 @@ function buildSalaryReceiptPayload(emp, calc, periodLabel){
   return {
     title: 'إيصال راتب 🧾',
     empName: emp.name || '', branch: emp.branch || '',
-    period: payPeriodLabelAr(_pk) + ' (1 → 30)',
+    period: payPeriodLabelAr(_pk) + ' (الشهر كامل)',
     lines,
     net: { label: 'الإجمالي المستلم', value: grand + ' ج.م' },
     extra: [],
@@ -6605,10 +6748,11 @@ window.openSalaryPayoutDialog = function(empId, periodKey){
     + '<span style="color:var(--sub,#9aa);">' + label + '</span>'
     + '<span style="font-weight:700;' + (color ? 'color:' + color + ';' : '') + '">' + val + '</span></div>';
 
-  let body = row('الراتب الأساسي (' + calc.daysInCalc + ' يوم)', '+' + calc.proratedBase);
+  let body = row('الراتب الأساسي المتفق عليه', '+' + (Number(emp.baseSalary)||0));
+  if(calc.proratedBase !== Number(emp.baseSalary||0)) body += row('استحقاق الأساسي للفترة', '+' + calc.proratedBase, '#22c55e');
   body += row('🗓️ أيام الشغل', calc.attendedDays + ' من ' + calc.elapsedWorkDays + ' مطلوب');
   if(calc.overtimePay > 0) body += row('أوفرتايم (' + Math.round(calc.overtimeMinutes/60*10)/10 + ' ساعة)', '+' + calc.overtimePay, '#22c55e');
-  if(calc.dayOffBonusAmount > 0) body += row('🎁 اشتغل ' + calc.dayOffBonusDays + ' يوم إجازة', '+' + calc.dayOffBonusAmount, '#22c55e');
+  if(calc.dayOffBonusAmount > 0) body += row('🎁 شغل يوم الإجازة (' + calc.dayOffBonusHours + ' ساعة)', '+' + calc.dayOffBonusAmount, '#22c55e');
   if(calc.deductionAmount > 0) body += row('غياب (' + calc.extraOffDays + ' يوم)', '-' + calc.deductionAmount, '#ef4444');
   if(calc.timeCreditDeduction > 0) body += row('⏳ رصيد وقت (' + calc.timeCreditHours + ' ساعة)', '-' + calc.timeCreditDeduction, '#ef4444');
   if(calc.adminDeductions > 0) body += row('خصومات إدارية', '-' + calc.adminDeductions, '#ef4444');
@@ -6673,48 +6817,51 @@ window.openSalaryPayoutDialog = function(empId, periodKey){
     const btn = ov.querySelector('#poGo');
     if(btn.dataset.busy) return;                 // 🛡️ ضغطة تانية = صرفتين
     const s = refresh();
-    // 🛡️ صرف متسجل بالفعل لنفس الفترة؟ تحذير صريح
-    const prev = (allSalaryPayments || []).filter(p=> p.employeeId === emp.id && p.periodLabel === pk);
-    if(prev.length){
-      const sum = prev.reduce((n,p)=> n + (Number(p.amount)||0), 0);
-      if(!confirm('⚠️ فيه صرف متسجل بالفعل لـ ' + emp.name + ' عن ' + payPeriodLabelAr(pk) + ' بمبلغ ' + sum.toFixed(0) + ' ج.م.\nمتأكد إنك عايز تسجل صرف تاني لنفس الفترة؟')) return;
+    // 🛡️ الشيفت المفتوح لازم يتراجع قبل قفل المرتب.
+    if(calc.incompleteShifts && calc.incompleteShifts.length){
+      alert('⚠️ فيه شيفت غير مقفول. راجعه قبل صرف المرتب.'); return;
     }
+    // 🛡️ صرف واحد فقط لكل موظف/فترة. أي فرق لاحق يتسجل كتسوية منفصلة.
+    const prev = (allSalaryPayments || []).filter(p=> p.employeeId === emp.id && p.periodLabel === pk);
+    if(prev.length){ alert('المرتب متسجل صرفه بالفعل للفترة دي. أي فرق يتسجل كتسوية منفصلة.'); return; }
     if(!confirm('تأكيد صرف ' + s.total + ' ج.م لـ ' + emp.name + ' عن ' + payPeriodLabelAr(pk) + '؟')) return;
     btn.dataset.busy = '1'; btn.disabled = true; btn.textContent = 'بيتسجل…';
     try{
-      await addDoc(salaryPaymentsCol, {
-        employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
-        periodLabel: pk, amount: calc.netSalary,
-        commissionAmount: Math.round((s.ptsAmt + s.refAmt + s.tgtAmt) * 100)/100,
-        payoutTotal: s.total, paidAt: Date.now()
-      });
-      if(s.pts > 0){
-        await addDoc(commissionPaymentsCol, {
+      const safeEmp = String(emp.id).replace(/[^a-zA-Z0-9_-]/g,'_');
+      const salaryRef = doc(db,'sales_salary_payments', safeEmp + '_' + pk);
+      const paidAt = Date.now();
+      await runTransaction(db, async (tx)=>{
+        const exists = await tx.get(salaryRef);
+        if(exists.exists()) throw new Error('__SALARY_ALREADY_PAID__');
+        tx.set(salaryRef, {
+          employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
+          periodLabel: pk, amount: calc.netSalary,
+          commissionAmount: Math.round((s.ptsAmt + s.refAmt + s.tgtAmt) * 100)/100,
+          payoutTotal: s.total, paidAt
+        });
+        if(s.pts > 0) tx.set(doc(db,'sales_commission_payments','salary_'+safeEmp+'_'+pk+'_points'), {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
           monthLabel: pk, pointsCount: s.pts, commissionAmount: s.ptsAmt,
-          withSalary: true, partial: s.pts < due.ptsDue, paidAt: Date.now()
+          withSalary: true, partial: s.pts < due.ptsDue, paidAt
         });
-      }
-      if(s.refAmt > 0){
-        await addDoc(commissionPaymentsCol, {
+        if(s.refAmt > 0) tx.set(doc(db,'sales_commission_payments','salary_'+safeEmp+'_'+pk+'_referrals'), {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch, type: 'referrals',
           monthLabel: pk, pointsCount: due.refDueCount, commissionAmount: s.refAmt,
-          withSalary: true, paidAt: Date.now()
+          withSalary: true, paidAt
         });
-      }
-      if(s.tgtAmt > 0){
-        await addDoc(commissionPaymentsCol, {
+        if(s.tgtAmt > 0) tx.set(doc(db,'sales_commission_payments','salary_'+safeEmp+'_'+pk+'_target'), {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch, type: 'target',
           monthLabel: pk, commissionAmount: s.tgtAmt,
           salesBase: (due.tgt && due.tgt.empSales) ? Math.round(due.tgt.empSales) : 0,
-          withSalary: true, paidAt: Date.now()
+          withSalary: true, paidAt
         });
-      }
+      });
       ov.remove();
       openSalaryPrintDialog(emp.id, pk);
     }catch(err){
       console.error('تعذر تسجيل الصرف', err);
-      const e2 = ov.querySelector('#poErr'); if(e2) e2.textContent = 'حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف');
+      const e2 = ov.querySelector('#poErr');
+      if(e2) e2.textContent = (err && err.message==='__SALARY_ALREADY_PAID__') ? 'المرتب اتصرف بالفعل — مفيش صرف مكرر.' : ('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف'));
       btn.disabled = false; btn.textContent = '✅ سجّل الصرف واطبع'; delete btn.dataset.busy;
     }
   });
