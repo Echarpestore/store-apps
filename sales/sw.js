@@ -1,4 +1,4 @@
-const CACHE_NAME = 'store-apps-shell-v117';
+const CACHE_NAME = 'store-apps-shell-v115';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -7,7 +7,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((names) =>
-      Promise.all(names.filter((n) => n !== CACHE_NAME && n.startsWith('store-apps-shell-')).map((n) => caches.delete(n)))
+      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
     ).then(() => self.clients.claim())
   );
 });
