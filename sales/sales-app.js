@@ -1874,6 +1874,7 @@ window.avatarOf = avatarOf;
 onSnapshot(empCol, (snap)=>{
   allEmployees = snap.docs.map(d=>({id:d.id, ...d.data()})).filter(e=> !e.isAdminAccount);
   window.allEmployeesAll = allEmployees;   // 👑 حساب الأدمن العام مش موظف HR
+  window.allEmployees = allEmployees;      // 🗓️ dialogs/buttons need the live employee list too
   applyBranchFilter();
   if($('#branchSetup').classList.contains('show')) populateBranchSetupSelect();   // الشاشة مفتوحة؟ حدّث القايمة
 }, (err)=> console.error('window.employees sync error', err));
@@ -5641,7 +5642,7 @@ window.openAttendanceDaysDialog = function(empId, periodKey){
   ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:9999; display:flex; align-items:flex-start; justify-content:center; padding:18px 10px; overflow-y:auto;';
   ov.innerHTML = '<div style="background:var(--card,#1d1d27); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:16px; max-width:420px; width:100%;">'
     + '<div style="font-weight:800; font-size:15px; text-align:center;">🗓️ أيام شغل ' + emp.name + '</div>'
-    + '<div style="color:var(--sub,#9aa); font-size:12px; text-align:center; margin:4px 0 10px;">' + payPeriodLabelAr(pk) + ' (من 1 لـ 30)</div>'
+    + '<div style="color:var(--sub,#9aa); font-size:12px; text-align:center; margin:4px 0 10px;">' + payPeriodLabelAr(pk) + ' · الحساب ' + (calc ? (calc.attendanceStartKey + ' ← ' + calc.attendanceEndKey) : '') + '</div>'
     + '<div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:10px;">'
       + '<div style="background:rgba(34,197,94,.15); padding:7px 11px; border-radius:9px; font-weight:800;">اشتغل ' + rows.length + ' يوم</div>'
       + (calc ? '<div style="background:rgba(255,255,255,.07); padding:7px 11px; border-radius:9px;">المطلوب ' + calc.elapsedWorkDays + '</div>' : '')
@@ -6012,11 +6013,10 @@ function payPeriodRange(key){
    يوم 6 أغسطس المالك بيصرف شهر 7 — والشاشة كانت بتفتح على أغسطس (6 أيام)
    وزرار الصرف مقفول \"لحد ما الشهر يخلص\"، يعني شهر 7 مكانش ليه طريق أصلًا. */
 function defaultPayPeriodKey(now){
-  // الشاشة تفتح على آخر شهر تقويمي مكتمل. الشهر الجاري يفضل متاح للمعاينة من القائمة.
+  // قرار المالك: شاشة الرواتب تفتح على الشهر الجاري نفسه.
+  // الشهر السابق يفضل متاحًا من القائمة للمراجعة/إعادة الطباعة.
   const d = cai(now != null ? now : Date.now());
-  let y = d.getFullYear(), m = d.getMonth() - 1;
-  if(m < 0){ m = 11; y -= 1; }
-  return _mkKey(y, m);
+  return _mkKey(d.getFullYear(), d.getMonth());
 }
 function payPeriodOptions(now, count){
   const d = cai(now != null ? now : Date.now());       // 🕒 بتوقيت القاهرة
@@ -6465,7 +6465,13 @@ function computeSalary(emp, periodStart, end){
     const fp = String(_cfgNow.weeklyStartFloor).slice(0,10).split('-').map(Number);
     if(fp.length===3 && fp.every(Number.isFinite)){
       const floor = new Date(caiDayStart(fp[0],fp[1],fp[2]));
-      if(floor > absenceRangeStart) absenceRangeStart = floor;
+      if(floor > absenceRangeStart){
+        // حارس أول تشغيل فقط: لو عند الموظف حضور حقيقي قبل الـfloor في نفس
+        // الفترة، يبقى عندنا بيانات فعلية وممنوع نقص الشهر ونطلع "مطلوب 4 أيام".
+        const hasEarlierAttendance = allShifts.some(s=> s.employeeId===emp.id && s.clockInTs
+          && s.clockInTs >= absenceRangeStart.getTime() && s.clockInTs < floor.getTime());
+        if(!hasEarlierAttendance) absenceRangeStart = floor;
+      }
     }
   }
 
@@ -6571,6 +6577,8 @@ function computeSalary(emp, periodStart, end){
            // حقول توافق للتشخيص القديم — مش داخلة الحساب الجديد.
            weekRows, weeklyRequiredDays: elapsedWorkDays, weeklyAttendedDays: attendance.attendedWorkDays,
            legacyExtraOffDays, legacyDeduction,
+           attendanceStartKey: _fmtKey(cai(absenceRangeStart.getTime())),
+           attendanceEndKey: _fmtKey(cai(elapsedEnd.getTime())),
            notYetHired:false };
 }
 
@@ -6634,6 +6642,7 @@ window.openPayrollEmployee = function(empId, periodKey){
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:12px 0;"><div class="card" style="padding:9px;text-align:center;">الأساسي<br><b>${Number(emp.baseSalary).toFixed(0)}</b></div><div class="card" style="padding:9px;text-align:center;color:var(--bad);">الخصومات<br><b>-${deductions}</b></div><div class="card" style="padding:9px;text-align:center;color:var(--good);">الصافي<br><b>${grand}</b></div></div>
     ${c.proratedBase!==Number(emp.baseSalary)?row('استحقاق الأساسي للفترة','+'+c.proratedBase,'#22c55e'):''}
     <div style="font-weight:900;margin-top:12px;">🗓️ الحضور</div>
+    ${row('فترة حساب الحضور',(c.attendanceStartKey||'—')+' ← '+(c.attendanceEndKey||'—'))}
     ${row('أيام الشهر',actualDays+' يوم')}
     ${row('أيام العمل المطلوبة',c.elapsedWorkDays+' يوم')}
     ${row('أيام الحضور المسجلة',c.attendedDays+' يوم')}
