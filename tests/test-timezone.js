@@ -190,13 +190,13 @@ assert(EG.earlyMin === 0 && EG.earlyHours === 0,
   const prev = process.env.TZ; process.env.TZ = 'America/Sao_Paulo';
   try{
     const c = build([]);
-    [['2026-01', 1], ['2026-05', 5], ['2026-07', 7], ['2026-11', 11]].forEach(([key, mo])=>{
+    [['2026-01', 1, 31], ['2026-05', 5, 31], ['2026-07', 7, 31], ['2026-11', 11, 30]].forEach(([key, mo, lastDay])=>{
       const r = c.payPeriodRange(key);
       const ps = c.caiParts(r.start.getTime()), pe = c.caiParts(r.end.getTime());
       assert(ps.m === mo && ps.d === 1 && ps.hh === 0 && ps.mi === 0,
         key + ': البداية 00:00 يوم 1 بالقاهرة (شتاء وصيف)');
-      assert(pe.m === mo && pe.d === 30 && pe.hh === 23,
-        key + ': والنهاية آخر يوم 30 بالقاهرة');
+      assert(pe.m === mo && pe.d === lastDay && pe.hh === 23,
+        key + ': والنهاية آخر يوم فعلي في الشهر بالقاهرة');
     });
   } finally { if(prev === undefined) delete process.env.TZ; else process.env.TZ = prev; }
 })();

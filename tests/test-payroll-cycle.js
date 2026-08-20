@@ -49,8 +49,9 @@ const WANTED = [
   'function countAttendedDaysInRange(', 'function countRequiredWorkDaysInRange(',
   // 🗓️ محرك الإجازات الأسبوعي — computeSalary بقت بتناديه، فمن غيره بتقع
   'function countAbsenceDaysInRange(', 'function _timeCfgNow(',
+  'function effectiveDayOffKey(', 'function payrollAttendanceBalance(',
   'function weekStartKeyOf(', 'function shiftCountsAsDay(', 'function weeklyOffBalance(',
-  'function computeSalary(',
+  'function payrollDateFromKey(', 'function payrollCalendarDaysInRange(', 'function computeSalary(',
 ];
 const parts = [];
 let missing = null;
@@ -71,7 +72,7 @@ const STUBS = `
 const CAI_TZ = '${_tzc ? _tzc[1] : 'Africa/Cairo'}';
 const _caiFmt = new Intl.DateTimeFormat('en-GB', { timeZone: CAI_TZ, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
 const PAYDAY_FALLBACK = ${_pf ? Number(_pf[1]) : 6};
-var timeCfgDefaults = { hoursPerDay: 7 };
+var timeCfgDefaults = { hoursPerDay: 8 };
 var complianceCfg = null;
 function isSetupShift(){ return false; }
 function tcCounts(){ return false; }
@@ -82,7 +83,7 @@ function _dayKeyOf(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).pad
 `;
 
 function makeCtx(opts){
-  const win = { advCfg: { maxPerMonth: 0, openDay: 12, closeDay: (opts.closeDay === undefined ? 6 : opts.closeDay) }, deductions: [], allTimeCredit: [] };
+  const win = { advCfg: { maxPerMonth: 0, openDay: 12, closeDay: (opts.closeDay === undefined ? 6 : opts.closeDay) }, deductions: [], allTimeCredit: [], allLeaveReqs: [] };
   const ctx = {
     window: win, console: { warn(){}, log(){} },
     allShifts: opts.shifts || [], allAdvances: opts.advances || [],
@@ -123,14 +124,14 @@ const adv = (id, dateStr, amount, src_) => ({
   assert(c.defaultPayPeriodKey(new Date(2026,7,6)) === '2026-07',
     '⭐⭐ يوم 6 أغسطس الشاشة بتفتح على شهر 7 (ده اللي بيتصرف)');
   assert(c.defaultPayPeriodKey(new Date(2026,7,20)) === '2026-07', 'وسط أغسطس لسه شهر 7 هو المستحق');
-  assert(c.defaultPayPeriodKey(new Date(2026,7,30)) === '2026-08', 'يوم 30 أغسطس خلص → أغسطس');
+  assert(c.defaultPayPeriodKey(new Date(2026,7,30)) === '2026-07', 'الشاشة الافتراضية = آخر شهر مكتمل حتى لو إحنا يوم 30 أغسطس');
   assert(c.defaultPayPeriodKey(new Date(2026,0,5)) === '2025-12', 'عبور السنة');
   const r = c.payPeriodRange('2026-07');
   // ⚠️ الحدود دلوقتي **طوابع زمنية بتوقيت القاهرة** — قراءتها بساعة الجهاز
   //    هتدي يوم تاني، وده بالظبط الباج اللي اتقفل. فبنقراها بالقاهرة.
   const ps = c.caiParts(r.start.getTime()), pe = c.caiParts(r.end.getTime());
   assert(ps.m === 7 && ps.d === 1 && ps.hh === 0, 'الفترة بتبدأ 1 يوليو 00:00 بتوقيت القاهرة');
-  assert(pe.m === 7 && pe.d === 30 && pe.hh === 23, 'وبتنتهي 30 يوليو آخر اليوم بتوقيت القاهرة');
+  assert(pe.m === 7 && pe.d === 31 && pe.hh === 23, 'وبتنتهي 31 يوليو آخر اليوم بتوقيت القاهرة');
   assert(c._nextMonthKey('2026-07') === '2026-08' && c._nextMonthKey('2026-12') === '2027-01',
     'الشهر اللي بعده (بيعدّي السنة صح)');
   assert(c.payPeriodOptions(new Date(2026,7,6), 3).join(',') === '2026-08,2026-07,2026-06',
@@ -288,7 +289,7 @@ const adv = (id, dateStr, amount, src_) => ({
   const bare = stripComments(src);
   assert(/_renderPeriodPicker\('salaryPeriodSelect'/.test(bare) && /_renderPeriodPicker\('commPeriodSelect'/.test(bare),
     'والاتنين متوصّلين');
-  assert(/openAttendanceDaysDialog\('\$\{e\.id\}'/.test(bare), 'زرار سجل الأيام في صف الموظف');
+  assert(/openAttendanceDaysDialog\(/.test(bare) && /openPayrollEmployee/.test(bare), 'سجل الأيام موجود داخل تفاصيل الموظف المنظمة');
   ['payDayOfMonth','payCycleKeyOfDate','advPayCycleOf','payPeriodRange','defaultPayPeriodKey','attendedDaysDetail','_nextMonthKey']
     .forEach(n=> assert(new RegExp('window\\.' + n + ' *= *' + n).test(bare), '§18 ' + n + ' معروضة على window'));
   assert(/window\.openAttendanceDaysDialog = function/.test(bare), '§18 openAttendanceDaysDialog على window');

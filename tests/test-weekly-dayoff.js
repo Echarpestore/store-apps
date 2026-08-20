@@ -335,10 +335,10 @@ const run = (sh)=> ctx.weeklyOffBalance(EMP, MS, ME, sh, CFG);
 // ============================================================
 {
   const L = '🔗 المرتب: ';
-  assert(/const extraOffDays = _wk\.shortfallDays;/.test(src),
-    L + '⭐⭐ الخصم من المحرك الجديد');
-  assert(/const dayOffBonusDays = _wk\.surplusDays;/.test(src),
-    L + '⭐⭐ والمكافأة كمان');
+  assert(/const extraOffDays = absenceDays;/.test(src),
+    L + '⭐⭐ الخصم من محرك الحضور الموحد (كل غياب يوم عمل = يوم)');
+  assert(/const dayOffBonusHours = attendance\.workedDayOffHours;/.test(src),
+    L + '⭐⭐ مكافأة يوم الإجازة من الساعات الفعلية');
   assert(!/const extraOffDays = Math\.max\(0, absenceDays - dayOffOccurrences\)/.test(src),
     L + '⭐⭐ والسطر القديم (٤ أيام مجانية) **اتشال** من الحساب');
   // القديم لسه بيتحسب — للمقارنة بس

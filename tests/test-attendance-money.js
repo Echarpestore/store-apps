@@ -69,16 +69,17 @@ const Y = 2026, M = 6;   // يوليو 2026
 // ============================================================
 // ٢) الحساب الكامل: غياب ومكافأة إجازة
 // ============================================================
-const periodStart = new Date(Y, M, 1, 0,0,0,0);
-const periodEnd   = new Date(Y, M, 30, 23,59,59,999);
+const _period = S.payPeriodRange('2026-07');
+const periodStart = _period.start;
+const periodEnd   = _period.end;
 // 1 يوليو 2026 = الأربع · يوم الإجازة = الجمعة (5)
 const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000, dayOff:5,
               scheduledStartTime:'14:00', scheduledEndTime:'22:00' };
 
-function calc(shifts, empOverride){
+function calc(shifts, empOverride, leaves){
   vm.runInContext('allShifts = ' + JSON.stringify(shifts||[]) + ';', S);
   vm.runInContext('allAdvances = [];', S);
-  S.window.allTimeCredit = []; S.window.deductions = [];
+  S.window.allTimeCredit = []; S.window.deductions = []; S.window.allLeaveReqs = leaves || [];
 /* 🛡️ حارس أول شهر — بنجرّبه هنا بالظبط.
    المحرك الأسبوعي بيمدّ لورا ويحاسب أسبوع ٢٧ يونيو→٣ يوليو في مرتب
    يوليو. السيناريو ده مفيهوش بيانات يونيو خالص (زي أول شهر تشغيل)،
@@ -90,8 +91,8 @@ S.window.timeCfg = Object.assign({}, S.window.timeCfgDefaults, { weeklyStartFloo
     + ', new Date(' + periodStart.getTime() + '), new Date(' + periodEnd.getTime() + '))', S);
 }
 // شيفت في يوم معيّن
-function sh(day){ return { employeeId:'e1', clockInTs: new Date(Y,M,day,14,10).getTime(),
-                           clockOutTs: new Date(Y,M,day,22,5).getTime(), overtimeMinutes:0 }; }
+function sh(day){ return { employeeId:'e1', clockInTs: new Date(Y,M,day,14,0).getTime(),
+                           clockOutTs: new Date(Y,M,day,22,0).getTime(), overtimeMinutes:0 }; }
 // 🗓️ شيفت في يوم من يونيو (الشهر اللي قبله)
 // ⚠️ لازم: المحرك الأسبوعي بيحاسب الأسبوع في الشهر اللي **بيخلص** فيه،
 //    فمرتب يوليو بيقرا آخر أيام يونيو (أسبوع ٢٧ يونيو → ٣ يوليو).
@@ -104,7 +105,7 @@ function allWorkDays(){
   for(let d = 27; d <= 30; d++){          // ٢٧→٣٠ يونيو (مفيهمش جمعة)
     if(new Date(Y,M-1,d).getDay() !== 5) out.push(shJun(d));
   }
-  for(let d = 1; d <= 30; d++){
+  for(let d = 1; d <= 31; d++){
     if(new Date(Y,M,d).getDay() !== 5) out.push(sh(d));
   }
   return out;
@@ -125,8 +126,9 @@ function allWorkDays(){
     const d = new Date(s.clockInTs);
     return !(d.getMonth() === M && d.getDate() === 6);
   });
-  shifts.push(sh(10));   // الجمعة 10 يوليو
-  const c = calc(shifts);
+  shifts.push(sh(10));   // الجمعة 10 يوليو — يوم عمل بعد نقل الإجازة للاتنين 6
+  const leaves = [{ empId:'e1', status:'approved', type:'changeDayoff', dateKey:'2026-07-06', decidedAt:1 }];
+  const c = calc(shifts, null, leaves);
   assertEq(c.dayOffBonusDays, 0,
     '⭐⭐ تبديل جوه نفس الأسبوع = صفر أيام زيادة (كان بياخد يوم مدفوع بالغلط)');
   assertEq(c.dayOffBonusAmount, 0, 'وصفر جنيه زيادة');
@@ -168,15 +170,13 @@ function allWorkDays(){
 })();
 
 (function(){
-  /* 🗓️ المحرك الأسبوعي **مبيقراش `emp.dayOff` خالص** — بيعدّ أيام وبس.
-     وده مقصود: هو اللي بيلغي باج "تغيير يوم الإجازة" (اللي كان بيشيل
-     يومين: اليوم الجديد + الجمعة اللي لسه مسجّلة). فالنتيجة واحدة
-     سواء يوم إجازتها مسجّل ولا لأ. */
-  const withDay = calc(allWorkDays());
-  const noDay   = calc(allWorkDays(), { dayOff:'' });
-  assertEq(noDay.extraOffDays, withDay.extraOffDays,
-    '⭐⭐ النتيجة مستقلة عن يوم الإجازة المسجّل (ده اللي بيقفل باج التغيير)');
-  assertEq(noDay.dayOffBonusDays, withDay.dayOffBonusDays, 'والمكافأة كمان');
+  // يوم الإجازة المحدد هو مصدر الحقيقة: الجمعة off، والأحد off لموظفة مختلفة.
+  const fri = calc(allWorkDays(), { dayOff:5 });
+  const sun = calc(allWorkDays(), { dayOff:0 });
+  assert(fri.dayOffDates.some(function(d){ return d === '2026-07-10'; }),
+    '⭐ يوم الإجازة المحدد للموظفة ظاهر صراحة في كشف المرتب');
+  assert(sun.dayOffDates.some(function(d){ return d === '2026-07-12'; }),
+    '⭐ تغيير يوم الإجازة يغيّر اليوم المعفى فعليًا — مش إجازة عامة عشوائية');
 })();
 
 // ============================================================
@@ -200,7 +200,7 @@ const { sandbox: S } = loadSalesApp();
 S.Date = FakeDate;
 vm.runInContext('allShifts = ' + shiftsJson + ';', S);
 vm.runInContext('allAdvances = [];', S);
-S.window.allTimeCredit = []; S.window.deductions = [];
+S.window.allTimeCredit = []; S.window.deductions = []; S.window.allLeaveReqs = [];
 /* 🛡️ حارس أول شهر — بنجرّبه هنا بالظبط.
    المحرك الأسبوعي بيمدّ لورا ويحاسب أسبوع ٢٧ يونيو→٣ يوليو في مرتب
    يوليو. السيناريو ده مفيهوش بيانات يونيو خالص (زي أول شهر تشغيل)،
@@ -241,22 +241,21 @@ function calcAtNow(nowIso, shifts, emp){
   for(let d = 1; d <= 14; d++){ if(new Date(Y,M,d).getDay() !== 5) shifts.push(sh(d)); }
   const before = calcAtNow('2026-07-28T11:00:00', shifts);   // شيفتها لسه مابدأش
   const after  = calcAtNow('2026-07-28T23:00:00', shifts);   // بعد ما خلص وماجتش
-  assertEq(before.deduction, 1000, '⭐ الساعة 11 الصبح: النهاردة لسه مش محسوب عليها');
-  assertEq(after.deduction, 1100,  '⭐ بعد نهاية الشيفت وماجتش: اليوم اتحسب غياب');
+  assertEq(before.deduction, 1100, '⭐ الساعة 11 الصبح: النهاردة لسه مش محسوب عليها');
+  assertEq(after.deduction, 1200,  '⭐ بعد نهاية الشيفت وماجتش: اليوم اتحسب غياب');
   assertEq(after.deduction - before.deduction, 100,
     '⭐⭐ الفرق يوم واحد بالظبط — الحكم بيتأجل لنهاية الشيفت مش بيتلغي');
 })();
 
 (function(){
-  /* 🗓️ أول يوم في الأسبوع = إجازتها المستحقة، فغيابه **مش** خصم.
-     ٢٥ يوليو ٢٠٢٦ سبت. حضرت لحد ١٤ يوليو، ودلوقتي بعد نهاية شيفت ٢٥.
-     الأسبوع الجديد يوم واحد لحد دلوقتي، ومستحق إجازة → المطلوب صفر. */
+  /* 🗓️ الإجازة الأسبوعية هي اليوم المحدد للموظفة (الجمعة)، مش أول يوم في الأسبوع.
+     ٢٥ يوليو ٢٠٢٦ سبت = يوم عمل، فغيابه لازم يزوّد الخصم يومًا. */
   const shifts = [];
   for(let d = 1; d <= 14; d++){ if(new Date(Y,M,d).getDay() !== 5) shifts.push(sh(d)); }
   const sat = calcAtNow('2026-07-25T23:00:00', shifts);
   const fri = calcAtNow('2026-07-24T23:00:00', shifts);
-  assertEq(sat.deduction, fri.deduction,
-    '⭐⭐ السبت (أول الأسبوع) مبيزوّدش خصم — ده يوم إجازتها المستحق');
+  assertEq(sat.deduction - fri.deduction, 100,
+    '⭐⭐ السبت يوم عمل لأن إجازتها الجمعة — غيابه يزوّد خصم يوم واحد');
 })();
 
 try{ fs.unlinkSync(runnerPath); }catch(e){}
@@ -267,8 +266,8 @@ try{ fs.unlinkSync(runnerPath); }catch(e){}
 (function(){
   assert(!/if\(workedThatDay\) dayOffBonusDays\+\+/.test(appSrc),
     '⛔ العدّ القديم (كل مرة = يوم) اتشال');
-  assert(/const dayOffBonusDays = _wk\.surplusDays;/.test(appSrc),
-    '⭐ المكافأة بقت من المحرك الأسبوعي (زيادة كل أسبوع لوحده)');
+  assert(/const dayOffBonusHours = attendance\.workedDayOffHours;/.test(appSrc),
+    '⭐ مكافأة يوم الإجازة من ساعات الحضور الفعلية في محرك المرتب الواحد');
   assert(!/const extraOffDays = Math\.max\(0, absenceDays - dayOffOccurrences\)/.test(appSrc),
     '⭐⭐ والسطر اللي كان بيدي ٤ أيام غياب مجانية اتشال');
   assert(/lastAbsenceJudgeDay\(emp/.test(appSrc), 'والغياب مربوط بنهاية الشيفت');

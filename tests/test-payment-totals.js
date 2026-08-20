@@ -357,8 +357,8 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
     'الحراس بيتفكوا بعد انتهاء الكتابة');
   // المرتب: تحذير الصرف المكرر لنفس الشهر
   // 🔀 اتنقل جوه شاشة الصرف الموحّدة (المرتب + النقط في عملية واحدة)
-  assert(/فيه صرف متسجل بالفعل/.test(salesAppSrc) && /periodLabel === pk/.test(salesAppSrc),
-    'صرف مرتب تاني لنفس الشهر = تحذير صريح');
+  assert(/if\(prev\.length\)/.test(salesAppSrc) && /تسوية منفصلة/.test(salesAppSrc) && /runTransaction/.test(salesAppSrc),
+    'صرف مرتب تاني لنفس الشهر = ممنوع صراحة + transaction ضد السباق');
 }
 
 // ============================================================

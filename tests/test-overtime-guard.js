@@ -88,8 +88,9 @@ const CFG = S.window.timeCfgDefaults;
 // ٣) 💰 الأهم: الأوفرتايم مبيتدفعش من غير موافقة
 // ============================================================
 const Y = 2026, M = 6;
-const periodStart = new Date(Y, M, 1, 0,0,0,0);
-const periodEnd   = new Date(Y, M, 30, 23,59,59,999);
+const _period = S.payPeriodRange('2026-07');
+const periodStart = _period.start;
+const periodEnd   = _period.end;
 const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
               attendanceTrackingStart:'2026-08-01' };
 function calc(shifts){

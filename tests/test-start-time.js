@@ -184,8 +184,9 @@ const LV = [
   // 6→13 يوليو 2026: الاتنين → الاتنين. الجمعة 10 إجازته الأسبوعية
   const req = S.window.countRequiredWorkDaysInRange(emp,
     new Date(2026,6,6), new Date(2026,6,13));
-  // 8 أيام − جمعة واحدة (10) − إجازتين معتمدتين (12 و13) = 5
-  assertEq(req, 5, '⭐⭐ الأيام اللي فيها إذن معتمد مش أيام شغل مطلوبة');
+  // 8 أيام: جمعة 10 إجازة أسبوعية، وتبديل الإجازة في الأسبوع التالي إلى 13 = يومان off.
+  // غياب 12 المعتمد يظل يوم عمل غير مدفوع، فلا يُستبعد من المطلوب.
+  assertEq(req, 6, '⭐⭐ الغياب المعتمد يظل يوم عمل مطلوب؛ changeDayoff فقط ينقل يوم الإجازة');
 
   S.window.allLeaveReqs = [];
   assertEq(S.window.countRequiredWorkDaysInRange(emp, new Date(2026,6,6), new Date(2026,6,13)), 7,

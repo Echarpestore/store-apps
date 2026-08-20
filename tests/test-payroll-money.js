@@ -22,8 +22,9 @@ const uiSrc  = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-ui.js'
 
 // شهر فيه 31 يوم عشان نختبر ثغرة يوم 31 (يوليو 2026)
 const Y = 2026, M = 6; // يوليو (0-based)
-const periodStart = new Date(Y, M, 1, 0,0,0,0);
-const periodEnd   = new Date(Y, M, 30, 23,59,59,999);
+const _period = S.payPeriodRange('2026-07');
+const periodStart = _period.start;
+const periodEnd   = _period.end;
 const ts = (day, hour)=> new Date(Y, M, day, hour||12).getTime();
 
 function calc(emp, opts){
@@ -56,16 +57,16 @@ const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
 // ٢) رصيد الوقت بيتخصم فعلًا من المرتب (الوصلة اللي كانت ناقصة)
 // ============================================================
 {
-  // 15 ساعة غير معذورة = يومين خصم (7+7 والباقي ساعة) = 200 ج
+  // 15 ساعة غير معذورة = يوم خصم واحد (8 ساعات) والباقي 7 ساعات رصيد
   const c = calc(EMP, { timeCredit: [
     { employeeId:'e1', type:'late',  hours:8, date:'2026-07-05' },
     { employeeId:'e1', type:'break', hours:4, date:'2026-07-10' },
     { employeeId:'e1', type:'early', hours:3, date:'2026-07-20' },
   ]});
   assertEq(c.timeCreditHours, 15, '15 ساعة رصيد اتجمعوا');
-  assertEq(c.timeCreditDays, 2, 'كل 7 ساعات = يوم → يومين');
-  assertEq(c.timeCreditDeduction, 200, 'يومين × 100 = 200 ج');
-  assertEq(c.netSalary, 2800, 'الصافي بعد خصم رصيد الوقت');
+  assertEq(c.timeCreditDays, 1, 'كل 8 ساعات = يوم → يوم واحد والباقي رصيد');
+  assertEq(c.timeCreditDeduction, 100, 'يوم × 100 = 100 ج');
+  assertEq(c.netSalary, 2900, 'الصافي بعد خصم رصيد الوقت');
 
   // البند المعذور مش بيتحسب
   const c2 = calc(EMP, { timeCredit: [
@@ -82,9 +83,9 @@ const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
   // سقف أيام الخصم الشهري بيتحترم
   const c4 = calc(EMP, {
     timeCfg: Object.assign({}, S.timeCfgDefaults, { maxDaysPerMonth: 1 }),
-    timeCredit: [ { employeeId:'e1', type:'late', hours:21, date:'2026-07-05' } ]
+    timeCredit: [ { employeeId:'e1', type:'late', hours:24, date:'2026-07-05' } ]
   });
-  assertEq(c4.timeCreditDays, 1, '21 ساعة = 3 أيام بس السقف يوم واحد');
+  assertEq(c4.timeCreditDays, 1, '24 ساعة = 3 أيام بس السقف يوم واحد');
   assertEq(c4.timeCreditDeduction, 100, 'الخصم بالسقف = 100');
 }
 
@@ -122,7 +123,7 @@ const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
 {
   const c = calc(EMP, {
     shifts: [ { employeeId:'e1', clockInTs: ts(3,10), overtimeMinutes: 120 } ],  // ساعتين أوفرتايم
-    timeCredit: [ { employeeId:'e1', type:'late', hours:7, date:'2026-07-05' } ], // يوم خصم
+    timeCredit: [ { employeeId:'e1', type:'late', hours:8, date:'2026-07-05' } ], // يوم خصم
     deductions: [ { employeeId:'e1', type:'absence', amount:50, date:'2026-07-08', ts: ts(8) } ],
     advances: [ { employeeId:'e1', amount:400, ts: ts(20) } ],
   });

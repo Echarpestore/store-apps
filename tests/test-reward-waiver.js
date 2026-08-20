@@ -40,9 +40,10 @@ const WANTED = [
   'function caiParts(', 'function caiOffsetMs(', 'function cai(', 'function caiStamp(',
   'function caiDayStart(', 'function caiDayEnd(', 'function _fmtKey(', 'function caiDayKey(',
   'function pointWeight(', 'function sumPoints(', 'function fmtPts(',
-  'function approvedLeaveFor(', 'function countRequiredWorkDaysInRange(',
+  'function approvedLeaveFor(', 'function effectiveDayOffKey(', 'function countRequiredWorkDaysInRange(',
   'function countConfirmedDaysInRange(', 'function totalCalendarDaysInRange(',
   'function rewardEligibility(', 'function rewardPeriodKey(', 'function taskGateWaived(',
+  'function rewardEmploymentStartMs(', 'function rewardFullPeriodEligible(',
   'function rewardGateReport(', 'function qualifiesForReward(', 'function computeWeekComposite(',
   'function countElapsedWorkDaysInRange(', 'function _fbOwner(', 'function _fbIsFor(', 'function computeAvgRatingInRange(',
 ];
@@ -93,6 +94,24 @@ const EMP = { id:'e1', name:'سارة', active:true, dayOff:5 };   // إجازت
 const sub = (dateStr, confirmed)=> ({ employeeId:'e1', date: dateStr, confirmed: !!confirmed });
 const ALL_DAYS = ['2026-07-27','2026-07-28','2026-07-29','2026-07-30','2026-08-01','2026-08-02'];
 const fullSubs = ALL_DAYS.map(d=> sub(d, true));
+
+
+// ============================================================
+// ٠) 🆕 الموظف الجديد لا يأخذ مكافأة أسبوع كامل بدأ في منتصفه
+// ============================================================
+(function(){
+  const c = build({ subs: fullSubs });
+  const r = weekRange(c);
+  const newbie = Object.assign({}, EMP, { hireDate:'2026-07-30', attendanceTrackingStart:'2026-07-30' });
+  c.window.allEmployees = [newbie];
+  assert(c.rewardFullPeriodEligible(newbie, r) === false,
+    '🆕 بداية العمل داخل الأسبوع = الفترة غير كاملة للموظف');
+  assert(c.qualifiesForReward(newbie, r, 'weekly') === false,
+    '⛔ الموظف الجديد اللي اشتغل يومين لا يأخذ مكافأة الأسبوع الكامل');
+  const next = { start:new Date(c.caiDayStart(2026,8,3)), end:new Date(c.caiDayEnd(2026,8,9)) };
+  assert(c.rewardFullPeriodEligible(newbie, next) === true,
+    '✅ يبدأ استحقاق المكافأة من أول فترة كاملة بعد التعيين');
+})();
 
 // ============================================================
 // ١) 🔴 الوضع اللي كان: مهمة واحدة ناقصة = الأسبوع ضاع

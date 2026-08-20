@@ -179,8 +179,8 @@ const pt = (w)=> ({ employeeId: 'e1', ts: JUL, value: w });
   const label = (t)=> p.lines.some(l=> l[0].indexOf(t) >= 0);
 
   assert(p.empName === 'سارة' && p.branch === 'الرحاب', 'الاسم والفرع');
-  assert(p.period.indexOf('1 → 30') >= 0, 'وفترة الشغل مكتوبة');
-  ['الراتب الأساسي','أيام الشغل','أوفرتايم','يوم إجازة','خصم غياب','رصيد الوقت',
+  assert(p.period.indexOf('الشهر كامل') >= 0, 'وفترة الشغل مكتوبة كشهر كامل فعلي');
+  ['الراتب الأساسي','أيام الشغل','أوفرتايم','شغل يوم الإجازة','خصم غياب','رصيد الوقت',
    'خصومات إدارية','سلف كاش','مشتريات','صافي الراتب','عمولة نقط'].forEach(t=>{
     assert(label(t), '⭐ الإيصال فيه سطر: ' + t);
   });
@@ -207,15 +207,16 @@ const pt = (w)=> ({ employeeId: 'e1', ts: JUL, value: w });
 // ============================================================
 (function(){
   const bare = stripComments(src);
-  assert(/openSalaryPayoutDialog\('\$\{e\.id\}'/.test(bare), 'زرار الصرف بيفتح شاشة الصرف');
+  assert(/openSalaryPayoutDialog\(/.test(bare), 'زرار الصرف بيفتح شاشة الصرف');
   assert(!/data-act="paysalary"/.test(bare), '⛔ الزرار القديم (صرف المرتب لوحده) اتشال');
   const dlg = extractFn(src, 'window.openSalaryPayoutDialog = function(');
   assert(!!dlg, 'اتلقت شاشة الصرف');
   if(dlg){
     assert(/btn\.dataset\.busy/.test(dlg), '🛡️ حارس الضغطة المزدوجة');
-    assert(/periodLabel === pk/.test(dlg), '🛡️ تحذير لو الفترة دي اتصرفت قبل كده');
-    assert(/salaryPaymentsCol/.test(dlg) && /commissionPaymentsCol/.test(dlg),
-      '⭐⭐ بيكتب صرف المرتب **ومستند العمولة** — من غير التاني النقط تتصرف تاني من شاشة العمولات');
+    assert(/if\(prev\.length\)/.test(dlg) && /تسوية منفصلة/.test(dlg), '🛡️ صرف سابق يمنع التكرار نهائيًا');
+    assert(/sales_salary_payments/.test(dlg) && /sales_commission_payments/.test(dlg) && /runTransaction/.test(dlg),
+      '⭐⭐ المرتب والعمولات بيتكتبوا معًا داخل transaction واحدة');
+    assert(/safeEmp \+ '_' \+ pk/.test(dlg), '⭐⭐ مستند المرتب بمعرّف ثابت employee+period يمنع سباق جهازين');
     assert(/monthLabel: pk/.test(dlg), 'ومستند العمولة بنفس مفتاح الفترة');
     assert(/if\(s\.pts > 0\)/.test(dlg), 'مبيكتبش مستند عمولة من غير نقط');
     assert(/openSalaryPrintDialog\(emp\.id, pk\)/.test(dlg), 'وبيفتح الطباعة بعد التسجيل');

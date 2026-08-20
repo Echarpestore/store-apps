@@ -1,8 +1,8 @@
 // ============================================================
 // اختبارات محرك رصيد الوقت (time-credit engine) — sales
 // القواعد المرجعية (قرارات مالك النظام):
-//   10 دقايق تأخير = ساعة · 7 ساعات = يوم خصم · بوابة 90% صلبة
-//   رصيد الشهر المسموح 7 ساعات = أول ما توصله تخرج من المكافأة
+//   10 دقايق تأخير = ساعة · 8 ساعات = يوم خصم · بوابة 90% صلبة
+//   رصيد الشهر المسموح 8 ساعات = أول ما توصله تخرج من المكافأة
 // ============================================================
 'use strict';
 const { loadSalesApp } = require('./helpers/load-sales');
@@ -39,16 +39,16 @@ assertEq(S.swapHoursFrom(3, cfg), 8, 'التالت = 8 ساعات تراكمي')
 // ---- rewardEligibility: البوابة الصلبة 90% ----
 let r = S.rewardEligibility(0, 'month', cfg);
 assert(r.eligible === true && r.commitPct === 100, 'صفر ساعات = مؤهل 100%');
-r = S.rewardEligibility(7, 'month', cfg);
-assert(r.eligible === true, 'عند الرصيد المسموح بالظبط (7) = لسه مؤهل');
-assertEq(r.commitPct, 90, 'عند 7 ساعات النسبة = العتبة 90 بالظبط');
-r = S.rewardEligibility(7.5, 'month', cfg);
-assert(r.eligible === false, 'أكتر من 7 ساعات = خارج المكافأة (بوابة صلبة)');
+r = S.rewardEligibility(8, 'month', cfg);
+assert(r.eligible === true, 'عند الرصيد المسموح بالظبط (8) = لسه مؤهل');
+assertEq(r.commitPct, 90, 'عند 8 ساعات النسبة = العتبة 90 بالظبط');
+r = S.rewardEligibility(8.5, 'month', cfg);
+assert(r.eligible === false, 'أكتر من 8 ساعات = خارج المكافأة (بوابة صلبة)');
 r = S.rewardEligibility(2, 'week', cfg);
 assert(r.eligible === true && r.gate === 90, 'أسبوعي: عند الرصيد (2) مؤهل والبوابة 90');
 r = S.rewardEligibility(2.1, 'week', cfg);
 assert(r.eligible === false, 'أسبوعي: فوق الرصيد = خارج');
-assertEq(S.rewardEligibility(3, 'month', cfg).hoursLeft, 4, 'hoursLeft بيتحسب صح');
+assertEq(S.rewardEligibility(3, 'month', cfg).hoursLeft, 5, 'hoursLeft بيتحسب صح');
 
 // ---- commitmentFromHours ----
 assertEq(S.commitmentFromHours(0, cfg), 100, 'صفر ساعات = 100%');
@@ -91,8 +91,8 @@ assert(Array.isArray(cov.available ?? cov) ? true : true, 'coverageOnDate بير
 // ---- monthlyTimeSummary: تجميع الشهر → أيام خصم ----
 let ms = S.monthlyTimeSummary([{type:'late',hours:3},{type:'break',hours:2},{type:'swap',hours:4}], undefined);
 assertEq(ms.totalHours, 9, 'إجمالي 9 ساعات');
-assertEq(ms.days, 1, '9 ساعات = يوم خصم واحد (7 ساعات)');
-assertEq(ms.remainderHours, 2, 'الباقي ساعتين للشهر الجاي... لأ — باقي الشهر نفسه');
+assertEq(ms.days, 1, '9 ساعات = يوم خصم واحد (8 ساعات)');
+assertEq(ms.remainderHours, 1, 'الباقي ساعة داخل رصيد الشهر بعد يوم 8 ساعات');
 assertEq(ms.byType, { late:3, break:2, swap:4 }, 'التفصيلة حسب النوع مظبوطة');
 ms = S.monthlyTimeSummary([], undefined);
 assertEq(ms.days, 0, 'قايمة فاضية = صفر أيام');
