@@ -121,11 +121,11 @@ const adv = (id, dateStr, amount, src_) => ({
 // ============================================================
 (function(){
   const c = makeCtx({});
-  assert(c.defaultPayPeriodKey(new Date(2026,7,6)) === '2026-07',
-    '⭐⭐ يوم 6 أغسطس الشاشة بتفتح على شهر 7 (ده اللي بيتصرف)');
-  assert(c.defaultPayPeriodKey(new Date(2026,7,20)) === '2026-07', 'وسط أغسطس لسه شهر 7 هو المستحق');
-  assert(c.defaultPayPeriodKey(new Date(2026,7,30)) === '2026-07', 'الشاشة الافتراضية = آخر شهر مكتمل حتى لو إحنا يوم 30 أغسطس');
-  assert(c.defaultPayPeriodKey(new Date(2026,0,5)) === '2025-12', 'عبور السنة');
+  assert(c.defaultPayPeriodKey(new Date(2026,7,6)) === '2026-08',
+    '⭐ شاشة الرواتب تفتح على الشهر الجاري أغسطس');
+  assert(c.defaultPayPeriodKey(new Date(2026,7,20)) === '2026-08', 'وسط أغسطس الشاشة الافتراضية = أغسطس');
+  assert(c.defaultPayPeriodKey(new Date(2026,7,30)) === '2026-08', 'آخر أغسطس الشاشة الافتراضية = أغسطس');
+  assert(c.defaultPayPeriodKey(new Date(2026,0,5)) === '2026-01', 'يناير يفتح يناير');
   const r = c.payPeriodRange('2026-07');
   // ⚠️ الحدود دلوقتي **طوابع زمنية بتوقيت القاهرة** — قراءتها بساعة الجهاز
   //    هتدي يوم تاني، وده بالظبط الباج اللي اتقفل. فبنقراها بالقاهرة.
