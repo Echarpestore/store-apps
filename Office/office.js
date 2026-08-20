@@ -3564,19 +3564,14 @@ let _ofCfgBy = {};   // { branch: { shifts, timeCfg, at } }
 async function _ofBranchCfg(branch){
   const c = _ofCfgBy[branch];
   if(c && (Date.now() - c.at) < 10 * 60 * 1000) return c;
-  let shifts = {}, timeCfg = Object.assign({}, OF_TIME_DEFAULTS), payDay = 6;
+  let shifts = {}, timeCfg = Object.assign({}, OF_TIME_DEFAULTS);
   try{
-    const rs = await Promise.all([
-      db.collection('sales_settings').doc(branch).get(),
-      db.collection('pos_test_settings').doc('advances_cfg').get()
-    ]);
-    const x = rs[0].exists ? (rs[0].data() || {}) : {};
-    const a = rs[1].exists ? (rs[1].data() || {}) : {};
+    const d = await db.collection('sales_settings').doc(branch).get();
+    const x = d.exists ? (d.data() || {}) : {};
     if(x.compliance && x.compliance.shifts) shifts = x.compliance.shifts;
     if(x.timeCfg) timeCfg = Object.assign(timeCfg, x.timeCfg);
-    if(Number(a.closeDay) > 0) payDay = Number(a.closeDay);
   }catch(e){ console.warn('branch cfg', e && e.code); }
-  return (_ofCfgBy[branch] = { shifts: shifts, timeCfg: timeCfg, payDay: payDay, at: Date.now() });
+  return (_ofCfgBy[branch] = { shifts: shifts, timeCfg: timeCfg, at: Date.now() });
 }
 
 // 🚪 وقت القفل الإداري — **نسخة طبق الأصل من graceCloseTsFor في sales**:
@@ -3816,11 +3811,10 @@ window.ofHubSheet = async function(empId){
 //    بتتبعت صريحة في data — عشان الدالة نقية وقابلة للاختبار.
 // ============================================================
 function ofMonthDateRange(d){
-  // فترة الحضور = الشهر التقويمي الحقيقي كله (28/29/30/31).
-  // قيمة اليوم في المرتب تفضل ÷30 داخل ofComputeSalary.
+  // فترة المرتب دايمًا 1 → 30 (قرار المالك — يوم 31 مش بيتحسب لوحده)
   const dt = d || new Date();
   return { start: new Date(dt.getFullYear(), dt.getMonth(), 1, 0, 0, 0, 0),
-           end: new Date(dt.getFullYear(), dt.getMonth() + 1, 0, 23, 59, 59, 999) };
+           end: new Date(dt.getFullYear(), dt.getMonth(), 30, 23, 59, 59, 999) };
 }
 function ofMonthRange(d){
   // شهر العمولة = الشهر التقويمي كامل (زي sales بالظبط — مختلف عن فترة المرتب)
@@ -3972,7 +3966,7 @@ function ofTcCounts(x, cfg){
 function ofMonthlyTimeSummary(entries, cfg){
   cfg = cfg || {};
   const totalHours = (entries || []).reduce(function(x, e){ return x + (Number(e.hours) || 0); }, 0);
-  const perDay = Number(cfg.hoursPerDay) || 8;
+  const perDay = Number(cfg.hoursPerDay) || 7;
   let days = Math.floor(totalHours / perDay);
   const cap = Number(cfg.maxDaysPerMonth) || 0;
   if(cap > 0 && days > cap) days = cap;
@@ -3984,136 +3978,114 @@ function ofIsSetupShift(emp, shiftDefs){
   return !!(sh && sh.noBonus) || emp.shift === 'setup';
 }
 
-function ofDateKey(d){
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-function ofEffectiveDayOffKey(emp, dateKey, reqs){
-  if(!emp || !dateKey) return '';
-  const p = String(dateKey).slice(0,10).split('-').map(Number);
-  if(p.length!==3 || p.some(function(n){ return !Number.isFinite(n); })) return '';
-  const d = new Date(p[0],p[1]-1,p[2],12,0,0,0);
-  const back = (d.getDay()-6+7)%7;
-  const ws = new Date(d); ws.setDate(ws.getDate()-back);
-  const we = new Date(ws); we.setDate(we.getDate()+6);
-  const a=ofDateKey(ws), b=ofDateKey(we);
-  const changes=(reqs||[]).filter(function(l){ return l && l.empId===emp.id && l.status==='approved' && l.type==='changeDayoff' && String(l.dateKey||'')>=a && String(l.dateKey||'')<=b; })
-    .sort(function(x,y){ return (Number(x.decidedAt||x.approvedAt||x.ts)||0)-(Number(y.decidedAt||y.approvedAt||y.ts)||0); });
-  if(changes.length) return String(changes[changes.length-1].dateKey||'').slice(0,10);
-  if(emp.dayOff===undefined || emp.dayOff===null || emp.dayOff==='') return '';
-  const off=new Date(ws); off.setDate(off.getDate()+((Number(emp.dayOff)-6+7)%7));
-  return ofDateKey(off);
-}
-function ofApprovedLeaveFor(empId,dateKey,reqs){
-  return (reqs||[]).find(function(l){ return l && l.empId===empId && l.status==='approved' && l.dateKey===dateKey; }) || null;
-}
-function ofPayrollAttendanceBalance(emp,start,end,shifts,reqs){
-  const byDay={};
-  (shifts||[]).forEach(function(sh){
-    if(!sh || sh.employeeId!==emp.id || !sh.clockInTs || sh.clockInTs<start.getTime() || sh.clockInTs>end.getTime()) return;
-    const k=ofDateKey(new Date(sh.clockInTs)); (byDay[k]=byDay[k]||[]).push(sh);
-  });
-  const absenceDates=[], dayOffDates=[], workedDayOffDates=[], incompleteShifts=[];
-  let requiredDays=0, attendedDays=0, attendedWorkDays=0, workedDayOffMinutes=0;
-  const cur=new Date(start.getFullYear(),start.getMonth(),start.getDate(),12), last=new Date(end.getFullYear(),end.getMonth(),end.getDate(),12);
-  while(cur<=last){
-    const key=ofDateKey(cur), arr=byDay[key]||[], came=arr.length>0;
-    if(came) attendedDays++;
-    let mins=0;
-    arr.forEach(function(sh){
-      if(sh.clockInTs && !sh.clockOutTs){ incompleteShifts.push({date:key,shiftId:sh.id||'',clockInTs:sh.clockInTs}); return; }
-      if(Number(sh.clockOutTs)>Number(sh.clockInTs)) mins += Math.max(0,Math.round((Number(sh.clockOutTs)-Number(sh.clockInTs))/60000));
-    });
-    mins=Math.min(480,mins);
-    const isOff=ofEffectiveDayOffKey(emp,key,reqs)===key;
-    const leave=ofApprovedLeaveFor(emp.id,key,reqs);
-    if(isOff){
-      dayOffDates.push(key);
-      if(came && mins>0){ workedDayOffMinutes+=mins; workedDayOffDates.push({date:key,minutes:mins}); }
-    } else {
-      requiredDays++;
-      if(came) attendedWorkDays++;
-      else absenceDates.push({date:key,approved:!!(leave&&leave.type==='dayoff')});
-    }
-    cur.setDate(cur.getDate()+1);
-  }
-  return { requiredDays:requiredDays, attendedDays:attendedDays, attendedWorkDays:attendedWorkDays,
-    absenceDays:absenceDates.length, absenceDates:absenceDates, dayOffDays:dayOffDates.length, dayOffDates:dayOffDates,
-    workedDayOffHours:Math.round(workedDayOffMinutes/60*100)/100, workedDayOffDates:workedDayOffDates,
-    incompleteShifts:incompleteShifts };
-}
-function ofPayCycleKeyOfAdvance(a,payDay){
-  if(!a) return '';
-  let d=null;
-  const ds=String(a.date||'');
-  if(ds.length>=10){ const p=ds.slice(0,10).split('-').map(Number); if(p.length===3&&p.every(Number.isFinite)) d=new Date(p[0],p[1]-1,p[2],12); }
-  if(!d && a.ts) d=new Date(a.ts);
-  if(!d) return '';
-  let y=d.getFullYear(), m=d.getMonth();
-  if(Number(payDay)>0 && d.getDate()<=Number(payDay)){ m--; if(m<0){m=11;y--;} }
-  return y+'-'+String(m+1).padStart(2,'0');
-}
-
 // المحرك — نفس computeSalary في sales سطر بسطر، والبيانات في data:
 // data = { shifts, timeCredit, deductions, advances, timeCfg, shiftDefs }
 function ofComputeSalary(emp, periodStart, end, data){
   data = data || {};
   const baseSalary = emp.baseSalary || 0;
+  // قيمة اليوم بقاسم 30 ثابت مهما كان الشهر 28/30/31 — الشهر الكامل بياخد
+  // الأساسي زي ما هو، والقاسم بيلعب في الفترات الجزئية والخصومات بس
   const dailyRate = baseSalary / 30;
   const hourlyRate = dailyRate / 8;
   const naturalMonthEnd = ofMonthDateRange(periodStart).end;
-  let start = periodStart, notYetHired = false, isPartialPeriod = end < naturalMonthEnd;
+
+  let start = periodStart;
+  let notYetHired = false;
+  let isPartialPeriod = end < naturalMonthEnd;
   if(emp.hireDate){
-    const h=new Date(emp.hireDate+'T00:00:00');
-    if(h>end) notYetHired=true; else if(h>start){ start=h; isPartialPeriod=true; }
+    const hireDate = new Date(emp.hireDate + 'T00:00:00');
+    if(hireDate > end){ notYetHired = true; }
+    else if(hireDate > start){ start = hireDate; isPartialPeriod = true; }
   }
-  if(notYetHired) return { proratedBase:0,overtimeMinutes:0,overtimePay:0,dayOffOccurrences:0,extraOffDays:0,deductionAmount:0,timeCreditHours:0,timeCreditDays:0,timeCreditDeduction:0,adminDeductions:0,dayOffBonusDays:0,dayOffBonusHours:0,dayOffBonusAmount:0,advancesTotal:0,advCash:0,advOrders:0,netSalary:0,daysInCalc:0,attendedDays:0,elapsedWorkDays:0,absenceDays:0,absenceDates:[],dayOffDates:[],workedDayOffDates:[],incompleteShifts:[],notYetHired:true };
-  let daysInCalc=0; for(let d=new Date(start.getFullYear(),start.getMonth(),start.getDate(),12),e=new Date(end.getFullYear(),end.getMonth(),end.getDate(),12);d<=e;d.setDate(d.getDate()+1)) daysInCalc++;
-  daysInCalc=Math.max(1,daysInCalc);
-  const proratedBase=isPartialPeriod?Math.round(dailyRate*daysInCalc*100)/100:baseSalary;
-  const allShifts=data.shifts||[];
-  const rangeShifts=allShifts.filter(function(sh){ return sh.employeeId===emp.id&&sh.clockInTs>=start.getTime()&&sh.clockInTs<=end.getTime(); });
-  const overtimeMinutes=rangeShifts.reduce(function(sum,sh){ return sum+(sh.otRequiresApproval?(Number(sh.overtimeApprovedMin)||0):(Number(sh.overtimeMinutes)||0)); },0);
-  const overtimePay=Math.round((overtimeMinutes/60)*hourlyRate*100)/100;
-  let absenceRangeStart=start;
-  if(emp.attendanceTrackingStart){ const t=new Date(emp.attendanceTrackingStart+'T00:00:00'); if(t>absenceRangeStart) absenceRangeStart=t; }
-  const cfg=data.timeCfg||{};
-  if(cfg.weeklyStartFloor){ const f=new Date(cfg.weeklyStartFloor+'T00:00:00'); if(f>absenceRangeStart) absenceRangeStart=f; }
-  let elapsedEnd=new Date()<end?new Date():end;
-  // Office للمتابعة فقط: اليوم الجاري لا يتحكم عليه غياب قبل ما يخلص.
-  if(elapsedEnd<end){ const today=new Date(); elapsedEnd=new Date(today.getFullYear(),today.getMonth(),today.getDate()-1,23,59,59,999); }
-  const att=elapsedEnd<absenceRangeStart?{requiredDays:0,attendedDays:0,attendedWorkDays:0,absenceDays:0,absenceDates:[],dayOffDays:0,dayOffDates:[],workedDayOffHours:0,workedDayOffDates:[],incompleteShifts:[]}:ofPayrollAttendanceBalance(emp,absenceRangeStart,elapsedEnd,allShifts,data.leaves||[]);
-  const elapsedWorkDays=att.requiredDays, attendedDays=att.attendedDays, absenceDays=att.absenceDays;
-  const dayOffOccurrences=att.dayOffDays, extraOffDays=absenceDays;
-  const deductionAmount=Math.round(extraOffDays*dailyRate*100)/100;
-  const dayOffBonusHours=att.workedDayOffHours;
-  const dayOffBonusDays=Math.round(dayOffBonusHours/8*1000)/1000;
-  const dayOffBonusAmount=Math.round(dayOffBonusHours*hourlyRate*100)/100;
-  const tcEntries=(data.timeCredit||[]).filter(function(x){
-    if(ofIsSetupShift(emp,data.shiftDefs)) return false;
-    if(x.employeeId!==emp.id||!ofTcCounts(x,cfg)) return false;
-    const t=new Date((x.date||'')+'T00:00:00').getTime(); return t>=start.getTime()&&t<=end.getTime();
+  if(notYetHired){
+    return { proratedBase: 0, overtimeMinutes: 0, overtimePay: 0, dayOffOccurrences: 0, extraOffDays: 0, deductionAmount: 0, timeCreditHours: 0, timeCreditDays: 0, timeCreditDeduction: 0, adminDeductions: 0, dayOffBonusDays: 0, dayOffBonusAmount: 0, advancesTotal: 0, advCash: 0, advOrders: 0, netSalary: 0, daysInCalc: 0, notYetHired: true };
+  }
+
+  const daysInCalc = Math.max(1, Math.round((end - start) / (24 * 60 * 60 * 1000)) + 1);
+  const proratedBase = isPartialPeriod
+    ? Math.round(dailyRate * daysInCalc * 100) / 100
+    : baseSalary;
+
+  const allShifts = data.shifts || [];
+  const rangeShifts = allShifts.filter(function(sh){ return sh.employeeId === emp.id && sh.clockInTs >= start.getTime() && sh.clockInTs <= end.getTime(); });
+  const overtimeMinutes = rangeShifts.reduce(function(sum, sh){ return sum + (sh.overtimeMinutes || 0); }, 0);
+  const overtimePay = Math.round((overtimeMinutes / 60) * hourlyRate * 100) / 100;
+
+  // كشف الغياب الحقيقي: أيام الشغل اللي عدّت مقابل الأيام اللي حضر فيها فعلًا
+  let absenceRangeStart = start;
+  if(emp.attendanceTrackingStart){
+    const trackStart = new Date(emp.attendanceTrackingStart + 'T00:00:00');
+    if(trackStart > absenceRangeStart) absenceRangeStart = trackStart;
+  }
+  const now = new Date();
+  const elapsedEnd = now < end ? now : end;
+  const elapsedWorkDays = elapsedEnd < absenceRangeStart ? 0 : ofCountRequiredInRange(emp, absenceRangeStart, elapsedEnd);
+  const attendedDays = elapsedEnd < absenceRangeStart ? 0 : ofCountAttendedInRange(allShifts, emp.id, absenceRangeStart, elapsedEnd);
+  const absenceDays = Math.max(0, elapsedWorkDays - attendedDays);
+  const dayOffOccurrences = elapsedEnd < absenceRangeStart ? 0 : ofCountDayOffInRange(emp, absenceRangeStart, elapsedEnd);
+
+  /* 🗓️ الخصم والمكافأة من المحرك الأسبوعي — **نفس منطق sales بالظبط**
+     كان: extraOffDays = max(0, absenceDays − dayOffOccurrences)
+     ودي كانت بتدي ٤ أيام غياب مجانية فوق الإجازات. */
+  /* ⚙️ الإعدادات جاية مع `data.timeCfg` من `sales_settings/<الفرع>` —
+     **نفس المستند** اللي sales بيقرا منه، فالحارس (`weeklyStartFloor`)
+     اللي sales بيحطه تلقائي بيوصل هنا لوحده والرقمين بيفضلوا متطابقين. */
+  const _ofCfg = (data && data.timeCfg) || {};
+  let ofHardStart = null;
+  if(emp.attendanceTrackingStart) ofHardStart = new Date(emp.attendanceTrackingStart + 'T00:00:00');
+  if(emp.hireDate){
+    const _h = new Date(emp.hireDate + 'T00:00:00');
+    if(!ofHardStart || _h > ofHardStart) ofHardStart = _h;
+  }
+  if(_ofCfg.weeklyStartFloor){
+    const _f = new Date(_ofCfg.weeklyStartFloor + 'T00:00:00');
+    if(_f > absenceRangeStart) absenceRangeStart = _f;
+    if(!ofHardStart || _f > ofHardStart) ofHardStart = _f;
+  }
+  const _ofWk = (elapsedEnd < absenceRangeStart)
+    ? { requiredDays:0, attendedDays:0, shortfallDays:0, surplusDays:0, weeks:[] }
+    : ofWeeklyOffBalance(emp, absenceRangeStart, elapsedEnd, allShifts, _ofCfg,
+                         { live: elapsedEnd < end, hardStart: ofHardStart });
+  const extraOffDays = _ofWk.shortfallDays;
+  const deductionAmount = Math.round(extraOffDays * dailyRate * 100) / 100;
+  const dayOffBonusDays = _ofWk.surplusDays;
+  const dayOffBonusAmount = Math.round(dayOffBonusDays * dailyRate * 100) / 100;
+
+  // ⏳ رصيد الوقت: كل hoursPerDay (7) ساعات غير معذورة = يوم × قيمة اليوم
+  const _tcfg = data.timeCfg || {};
+  const tcEntries = (data.timeCredit || []).filter(function(x){
+    if(ofIsSetupShift(emp, data.shiftDefs)) return false;   // ✨ التجهيز خارج الرصيد
+    if(x.employeeId !== emp.id || !ofTcCounts(x, _tcfg)) return false;
+    const t = new Date((x.date || '') + 'T00:00:00').getTime();
+    return t >= start.getTime() && t <= end.getTime();
   });
-  const tcSummary=ofMonthlyTimeSummary(tcEntries,cfg);
-  const timeCreditHours=tcSummary.totalHours,timeCreditDays=tcSummary.days;
-  const timeCreditDeduction=Math.round(timeCreditDays*dailyRate*100)/100;
-  const adminDeductions=(data.deductions||[]).filter(function(d){ const t=d.ts||new Date((d.date||'')+'T00:00:00').getTime(); return d.employeeId===emp.id&&t>=start.getTime()&&t<=end.getTime(); }).reduce(function(x,d){return x+(Number(d.amount)||0);},0);
-  const full=end>=naturalMonthEnd;
-  const payDay=Number(data.payDay)||6;
-  const periodKey=ofMonthLabel(periodStart);
-  const periodAdvances=(data.advances||[]).filter(function(a){
-    if(a.employeeId!==emp.id) return false;
-    if(full&&payDay>0) return ofPayCycleKeyOfAdvance(a,payDay)===periodKey;
-    return a.ts>=start.getTime()&&a.ts<=end.getTime();
-  });
-  const advancesTotal=periodAdvances.reduce(function(sum,a){return sum+(Number(a.amount)||0);},0);
-  const advCash=periodAdvances.filter(function(a){return String(a.source||'').indexOf('staff_order')!==0;}).reduce(function(x,a){return x+(Number(a.amount)||0);},0);
-  const advOrders=Math.round((advancesTotal-advCash)*100)/100;
-  const netSalary=Math.round((proratedBase-deductionAmount-timeCreditDeduction-adminDeductions+overtimePay+dayOffBonusAmount-advancesTotal)*100)/100;
-  return { proratedBase:proratedBase,overtimeMinutes:overtimeMinutes,overtimePay:overtimePay,dayOffOccurrences:dayOffOccurrences,extraOffDays:extraOffDays,deductionAmount:deductionAmount,
-    timeCreditHours:timeCreditHours,timeCreditDays:timeCreditDays,timeCreditDeduction:timeCreditDeduction,adminDeductions:adminDeductions,
-    dayOffBonusDays:dayOffBonusDays,dayOffBonusHours:dayOffBonusHours,dayOffBonusAmount:dayOffBonusAmount,advancesTotal:advancesTotal,advCash:advCash,advOrders:advOrders,
-    netSalary:netSalary,daysInCalc:daysInCalc,attendedDays:attendedDays,elapsedWorkDays:elapsedWorkDays,absenceDays:absenceDays,
-    absenceDates:att.absenceDates,dayOffDates:att.dayOffDates,workedDayOffDates:att.workedDayOffDates,incompleteShifts:att.incompleteShifts,notYetHired:false };
+  const tcSummary = ofMonthlyTimeSummary(tcEntries, _tcfg);
+  const timeCreditHours = tcSummary.totalHours;
+  const timeCreditDays = tcSummary.days;
+  const timeCreditDeduction = Math.round(timeCreditDays * dailyRate * 100) / 100;
+
+  // 💰 الخصومات الإدارية بالجنيه
+  const adminDeductions = (data.deductions || []).filter(function(d){
+    if(d.employeeId !== emp.id) return false;
+    const t = d.ts || new Date((d.date || '') + 'T00:00:00').getTime();
+    return t >= start.getTime() && t <= end.getTime();
+  }).reduce(function(x, d){ return x + (Number(d.amount) || 0); }, 0);
+
+  // 💵 السلف دين: نافذتها بتمتد لآخر اليوم التقويمي (ثغرة يوم 31)
+  const _calMonthEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0, 23, 59, 59, 999);
+  const advEnd = end >= naturalMonthEnd ? _calMonthEnd : end;
+  const periodAdvances = (data.advances || []).filter(function(a){ return a.employeeId === emp.id && a.ts >= start.getTime() && a.ts <= advEnd.getTime(); });
+  const advancesTotal = periodAdvances.reduce(function(sum, a){ return sum + a.amount; }, 0);
+  const advCash = periodAdvances.filter(function(a){ return String(a.source || '').indexOf('staff_order') !== 0; }).reduce(function(x, a){ return x + a.amount; }, 0);
+  const advOrders = Math.round((advancesTotal - advCash) * 100) / 100;
+
+  const netSalary = Math.round((proratedBase - deductionAmount - timeCreditDeduction - adminDeductions + overtimePay + dayOffBonusAmount - advancesTotal) * 100) / 100;
+  return { proratedBase: proratedBase, overtimeMinutes: overtimeMinutes, overtimePay: overtimePay,
+           dayOffOccurrences: dayOffOccurrences, extraOffDays: extraOffDays, deductionAmount: deductionAmount,
+           timeCreditHours: timeCreditHours, timeCreditDays: timeCreditDays, timeCreditDeduction: timeCreditDeduction,
+           adminDeductions: adminDeductions, dayOffBonusDays: dayOffBonusDays, dayOffBonusAmount: dayOffBonusAmount,
+           advancesTotal: advancesTotal, advCash: advCash, advOrders: advOrders,
+           netSalary: netSalary, daysInCalc: daysInCalc, notYetHired: false };
 }
 
 // ⭐ عمولة النقط — نفس حساب لوحة sales: وزن الشهر − المدفوع (تنزيلات التطبيق
@@ -4237,11 +4209,10 @@ async function _ofMoneyLoad(emp){
       .then(function(r){ return r.docs.map(function(x){ return Object.assign({ id: x.id }, x.data()); }); }); };
     jobs.push(Promise.all([
       q('sales_time_credit'), q('sales_deductions'), q('sales_advances'),
-      q('sales_salary_payments'), q('sales_commission_payments'),
-      q('sales_leave_requests')
+      q('sales_salary_payments'), q('sales_commission_payments')
     ]).then(function(rs){
       _ofMoneyEmp[emp.id] = { at: Date.now(), credits: rs[0], deductions: rs[1],
-                              advances: rs[2], salPays: rs[3], commPays: rs[4], leaves: rs[5] };
+                              advances: rs[2], salPays: rs[3], commPays: rs[4] };
     }));
   }
   await Promise.all(jobs);
@@ -4289,8 +4260,7 @@ window.ofHubMoney = async function(empId){
   // 💵 المرتب — نفس محرك sales على بيانات حقيقية
   const calc = ofComputeSalary(emp, salR.start, salR.end, {
     shifts: _ofMoney.monthShifts, timeCredit: ec.credits, deductions: ec.deductions,
-    advances: ec.advances, leaves: ec.leaves, timeCfg: cfg.timeCfg, shiftDefs: cfg.shifts,
-    payDay: cfg.payDay
+    advances: ec.advances, timeCfg: cfg.timeCfg, shiftDefs: cfg.shifts
   });
   const row = function(l, v, color){ return '<div style="display:flex; justify-content:space-between; font-size:12px; padding:3px 0;' + (color ? ' color:' + color + ';' : '') + '"><span>' + l + '</span><b>' + v + '</b></div>'; };
   let sh = '<div style="font-weight:800; font-size:13px; margin-top:12px; padding-top:8px; border-top:1px solid var(--line);">💵 المرتب (فترة ' + label + ')</div>';
@@ -4298,10 +4268,9 @@ window.ofHubMoney = async function(empId){
     sh += '<div style="font-size:12px; color:var(--sub); margin-top:4px;">اتعين بعد الفترة دي</div>';
   } else {
     sh += '<div style="margin-top:4px;">'
-      + row('الراتب الأساسي المتفق عليه', egp(calc.baseSalary))
-      + (calc.proratedBase !== calc.baseSalary ? row('استحقاق الأساسي للفترة (' + calc.daysInCalc + ' يوم)', egp(calc.proratedBase)) : '')
+      + row('الأساسي' + (calc.daysInCalc < 28 ? ' (' + calc.daysInCalc + ' يوم)' : ''), egp(calc.proratedBase))
       + (calc.overtimePay > 0 ? row('إضافي (' + calc.overtimeMinutes + 'د)', '+' + egp(calc.overtimePay), '#4ade80') : '')
-      + (calc.dayOffBonusAmount > 0 ? row('شغل يوم الإجازة (' + (calc.dayOffBonusHours || 0) + ' ساعة)', '+' + egp(calc.dayOffBonusAmount), '#4ade80') : '')
+      + (calc.dayOffBonusAmount > 0 ? row('مكافأة اشتغال إجازة (' + calc.dayOffBonusDays + ' يوم)', '+' + egp(calc.dayOffBonusAmount), '#4ade80') : '')
       + (calc.deductionAmount > 0 ? row('خصم غياب (' + calc.extraOffDays + ' يوم)', '−' + egp(calc.deductionAmount), '#f87171') : '')
       + (calc.timeCreditDeduction > 0 ? row('⏳ رصيد الوقت (' + calc.timeCreditHours + ' ساعة = ' + calc.timeCreditDays + ' يوم)', '−' + egp(calc.timeCreditDeduction), '#f87171') : '')
       + (calc.adminDeductions > 0 ? row('خصومات إدارية', '−' + egp(calc.adminDeductions), '#f87171') : '')
@@ -4312,11 +4281,7 @@ window.ofHubMoney = async function(empId){
       const pSum = prev.reduce(function(n, pm){ return n + (pm.amount || 0); }, 0);
       sh += '<div style="font-size:11.5px; color:#fbbf24; margin-top:2px;">⚠️ متسجل صرف للشهر ده قبل كده: ' + egp(pSum) + '</div>';
     }
-    if(calc.incompleteShifts && calc.incompleteShifts.length){
-      sh += '<div style="font-size:11.5px; color:#f87171; margin-top:5px;">⛔ يوجد شيفت مفتوح/ناقص Clock-out — راجعه قبل صرف المرتب.</div>';
-    } else if(!prev.length){
-      sh += '<button onclick="ofHubPaySalary(\'' + esc(empId) + '\',' + calc.netSalary + ',\'' + label + '\')" style="margin-top:6px; background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:8px 12px; font-size:12.5px; font-weight:700; cursor:pointer;">✅ تسجيل صرف المرتب</button>';
-    }
+    sh += '<button onclick="ofHubPaySalary(\'' + esc(empId) + '\',' + calc.netSalary + ',\'' + label + '\')" style="margin-top:6px; background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:8px 12px; font-size:12.5px; font-weight:700; cursor:pointer;">✅ تسجيل صرف المرتب</button>';
   }
 
   // 🗂️ سجل المدفوعات (آخر 8)
@@ -4359,52 +4324,22 @@ window.ofHubPaySalary = async function(empId, amount, label){
   const emp = (D.employees || []).find(function(e){ return e && e.id === empId; });
   if(!emp) return;
   const ec = _ofMoneyEmp[empId] || {};
-
-  // ⛔ لا صرف مرتين لنفس الموظف/الشهر — مفيش confirm يسمح بتجاوز الحارس.
+  // 🛡️ صرف متسجل لنفس الشهر؟ تحذير صريح قبل الازدواج — نفس حارس sales
   const prev = (ec.salPays || []).filter(function(pm){ return pm.employeeId === empId && pm.periodLabel === label; });
   if(prev.length){
-    alert('المرتب ده متسجل صرفه بالفعل عن شهر ' + label + '. أي فرق لاحق يتسجل كتسوية منفصلة.');
-    return;
+    const pSum = prev.reduce(function(n, pm){ return n + (pm.amount || 0); }, 0);
+    if(!confirm('⚠️ فيه صرف متسجل بالفعل لـ ' + (emp.name || '') + ' عن شهر ' + label + ' بمبلغ ' + pSum.toFixed(0) + ' ج.م.\nمتأكد إنك عايز تسجل صرف تاني لنفس الشهر؟')) return;
   }
-
-  // ⛔ الشيفت المفتوح يمنع إقفال المرتب من Office برضه — نفس سياسة sales.
-  try{
-    const cfg = await _ofBranchCfg(emp.branch || '');
-    const salR = ofMonthDateRange(new Date());
-    const calc = ofComputeSalary(emp, salR.start, salR.end, {
-      shifts: _ofMoney.monthShifts || [], timeCredit: ec.credits || [], deductions: ec.deductions || [],
-      advances: ec.advances || [], leaves: ec.leaves || [], timeCfg: cfg.timeCfg, shiftDefs: cfg.shifts,
-      payDay: cfg.payDay
-    });
-    if(calc.incompleteShifts && calc.incompleteShifts.length){
-      alert('لا يمكن صرف المرتب: يوجد شيفت مفتوح/ناقص Clock-out. راجعه الأول.');
-      return;
-    }
-  }catch(e){
-    alert('تعذر مراجعة الشيفتات قبل الصرف. جرّب تاني.');
-    return;
-  }
-
   if(!confirm('تأكيد صرف ' + amount + ' ج.م لـ ' + (emp.name || '') + ' عن شهر ' + label + '؟')) return;
   _ofPayBusy = true;
   try{
-    const safeEmp = String(emp.id || '').replace(/[^A-Za-z0-9_-]/g, '_');
-    const safePeriod = String(label || '').replace(/[^A-Za-z0-9_-]/g, '_');
-    const payRef = db.collection('sales_salary_payments').doc(safeEmp + '_' + safePeriod);
-    await db.runTransaction(async function(tx){
-      const snap = await tx.get(payRef);
-      if(snap.exists) throw new Error('__SALARY_ALREADY_PAID__');
-      tx.set(payRef, {
-        employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
-        periodLabel: label, amount: amount, paidAt: Date.now(), paidFrom: 'office'
-      });
+    await db.collection('sales_salary_payments').add({
+      employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
+      periodLabel: label, amount: amount, paidAt: Date.now(), paidFrom: 'office'
     });
     delete _ofMoneyEmp[empId];
     window.ofHubMoney(empId);
-  }catch(e){
-    if(e && e.message === '__SALARY_ALREADY_PAID__') alert('المرتب ده اتصرف بالفعل — مش هيتسجل مرتين.');
-    else alert('حصل خطأ: ' + (e && e.code ? e.code : e));
-  }
+  }catch(e){ alert('حصل خطأ: ' + (e && e.code ? e.code : e)); }
   _ofPayBusy = false;
 };
 
