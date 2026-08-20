@@ -1,9 +1,9 @@
-const CACHE_NAME = 'echarpe-office-v63';
+const CACHE_NAME = 'echarpe-office-v61';
 self.addEventListener('install', (e)=> self.skipWaiting());
 self.addEventListener('activate', (e)=>{
   e.waitUntil(
     caches.keys().then((names)=>
-      Promise.all(names.filter((n)=> n !== CACHE_NAME && n.startsWith('echarpe-office-')).map((n)=> caches.delete(n)))
+      Promise.all(names.filter((n)=> n !== CACHE_NAME).map((n)=> caches.delete(n)))
     ).then(()=> self.clients.claim())
   );
 });
