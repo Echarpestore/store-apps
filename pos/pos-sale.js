@@ -4202,29 +4202,14 @@ window.returnPointsDeduction = returnPointsDeduction;
         salesCount: firebase.firestore.FieldValue.increment(1)
       }, { merge: true });
     }
-    // 🖨️ الورقة هنا بالظبط — بعد ما خصم المخزون (ونقطة الموظف دلوقتي) **اتقيّدوا**
-    //    وقبل ما نستنى تأكيد السيرفر.
-    // ⚠️ الترتيب ده مقصود ومهم للمخزون والنقطة مع بعض دلوقتي:
-    //   • commit() بمجرد ما تتنادى، الاتنين بيتقيّدوا محليًا وFirestore بترفعهم
-    //     لوحدها حتى لو النت قطع — فالورقة عمرها ما تطلع والمخزون/النقطة لسه
-    //     ما اتخصمش/اتسجلش.
-    //   • وفي نفس الوقت مش بنستنى تأكيد السيرفر (4 ثواني) قبل الطباعة، ولا
-    //     كتابات العميل وربط التقييم اللي بعدها (12 ثانية كمان) —
-    //     دي كانت بتخلي الورقة تتأخر لحد 16 ثانية في النت التقيل.
-    const _stockP = batch.commit();
-    _printNow();
-    const _stockW = await _waitWrite(_stockP);
-    if(_stockW.error) console.error('خصم المخزون + نقطة الموظف', _stockW.error);
-    // سجل الحركة: من غير انتظار (جواه catch بتاعه) — أوفلاين بيتقيد محليًا ويترفع بعدين
-    stockLines.forEach(c=>{ logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع'); });
-
-    // 3) نقطة الموظف — اتنقلت فوق (خطوة 2) جوه نفس الـbatch بتاع خصم
-    //    المخزون، عشان تتقيّد أوفلاين معاه في نفس اللحظة بالظبط ومتفقدش
-    //    لو حصلت مقاطعة بين الطباعة ونداء منفصل زي ما كان بيحصل قبل كده.
-
-    // 4) نقاط ولاء العميل (تجريبي) — بتضيف المكتسب وتخصم أي نقط اتستبدلت في نفس الفاتورة دي
+    /* 🔴🔴🔴⭐ نفس الحماية لنقط ولاء العميل — نفس فئة "فلوس حقيقية"
+       بالظبط زي نقطة البياعة (نقط قابلة للاستبدال فعليًا)، وكانت في
+       نداء منفصل بعد الطباعة بنفس الثغرة القديمة. بقت جوه نفس الـbatch،
+       وتحديثات العروض المفعّلة (activatedOffers) بقت حقول جوه نفس
+       التحديث الواحد بدل ٣ نداءات منفصلة على نفس المستند. */
+    let custRef = null, custUpdate = null;
     if(phone){
-      const custRef = db.collection(TEST_CUSTOMERS).doc(phone);
+      custRef = db.collection(TEST_CUSTOMERS).doc(phone);
       // ↩️🎁 نقط المرتجع: بتتخصم بنصيبها من الفاتورة الأصلية (مش floor على
       //    قيمة المرتجع) — الإصلاح اللي بيقفل باب تقسيم المرتجع.
       //    ⚠️ `loyaltyPointsEarned` على فاتورة فيها مرتجع بس بتبقى سالبة
@@ -4234,7 +4219,7 @@ window.returnPointsDeduction = returnPointsDeduction;
         - (pendingRedemption ? pendingRedemption.points : 0)
         - _retPointsDeduct;
       const pf = pointsFieldFor(currentBranch);
-      const custUpdate = {
+      custUpdate = {
         phone, branch: currentBranch,
         totalSpent: firebase.firestore.FieldValue.increment(total),
         lastVisit: firebase.firestore.FieldValue.serverTimestamp()
@@ -4246,15 +4231,39 @@ window.returnPointsDeduction = returnPointsDeduction;
         if(l.offerApplied && l.barcode){
           const _off = custActivatedOffers[l.barcode] || {};
           if(((_off.uses||0) + 1) >= (_off.maxUses||1)){
-            db.collection(TEST_CUSTOMERS).doc(phone).update({ ['activatedOffers.'+l.barcode]: firebase.firestore.FieldValue.delete() }).catch(()=>{});   // خلصت مرّاته → يتشال
+            custUpdate['activatedOffers.'+l.barcode] = firebase.firestore.FieldValue.delete();   // خلصت مرّاته → يتشال
           }else{
-            db.collection(TEST_CUSTOMERS).doc(phone).update({ ['activatedOffers.'+l.barcode+'.uses']: firebase.firestore.FieldValue.increment(1) }).catch(()=>{});   // لسه ليه مرّات → نزوّد العدّاد
+            custUpdate['activatedOffers.'+l.barcode+'.uses'] = firebase.firestore.FieldValue.increment(1);   // لسه ليه مرّات → نزوّد العدّاد
           }
         }
       });
       if(custName) custUpdate.name = custName;
-      await _waitWrite(custRef.set(custUpdate, { merge: true }));
+      batch.set(custRef, custUpdate, { merge: true });
     }
+    // 🖨️ الورقة هنا بالظبط — بعد ما خصم المخزون (ونقطة الموظف ونقط العميلة
+    //    دلوقتي) **اتقيّدوا** وقبل ما نستنى تأكيد السيرفر.
+    // ⚠️ الترتيب ده مقصود ومهم للكل مع بعض دلوقتي:
+    //   • commit() بمجرد ما تتنادى، الكل بيتقيّد محليًا وFirestore بترفعه
+    //     لوحده حتى لو النت قطع — فالورقة عمرها ما تطلع والباقي لسه
+    //     ما اتخصمش/اتسجلش.
+    //   • وفي نفس الوقت مش بنستنى تأكيد السيرفر (4 ثواني) قبل الطباعة، ولا
+    //     ربط التقييم اللي بعدها (12 ثانية كمان) —
+    //     دي كانت بتخلي الورقة تتأخر لحد 16 ثانية في النت التقيل.
+    const _stockP = batch.commit();
+    _printNow();
+    const _stockW = await _waitWrite(_stockP);
+    if(_stockW.error) console.error('خصم المخزون + نقطة الموظف + نقط العميلة', _stockW.error);
+    // سجل الحركة: من غير انتظار (جواه catch بتاعه) — أوفلاين بيتقيد محليًا ويترفع بعدين
+    stockLines.forEach(c=>{ logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع'); });
+
+    // 3) نقطة الموظف — اتنقلت فوق (خطوة 2) جوه نفس الـbatch بتاع خصم
+    //    المخزون، عشان تتقيّد أوفلاين معاه في نفس اللحظة بالظبط ومتفقدش
+    //    لو حصلت مقاطعة بين الطباعة ونداء منفصل زي ما كان بيحصل قبل كده.
+
+    // 4) نقاط ولاء العميل — اتنقلت فوق كمان (خطوة 2) لنفس السبب بالظبط.
+    //    ⚠️ تصفير pendingRedemption/appliedReward **مش هنا** — بره القاعدة
+    //    تحت (السطر اللي فيه إحصائيات العروض) لسه محتاجة تقرا appliedReward
+    //    قبل ما يتصفّر.
     // إحصائيات الاستعمال: عروض اتطبّقت + مكافأة اتستعملت
     try{
       const _brandS = pointsFieldFor(currentBranch)==='points_glow' ? 'glow' : 'echarpe';
