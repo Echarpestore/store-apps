@@ -4175,50 +4175,52 @@ window.returnPointsDeduction = returnPointsDeduction;
       const ref = db.collection(TEST_INVENTORY).doc(c.id);
       batch.update(ref, { ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(c.isReturn ? c.qty : -c.qty) });
     });
-    // 🖨️ الورقة هنا بالظبط — بعد ما خصم المخزون **اتقيّد** وقبل ما نستنى تأكيد السيرفر.
-    // ⚠️ الترتيب ده مقصود ومهم للمخزون:
-    //   • commit() بمجرد ما تتنادى، الخصم بيتقيّد محليًا وFirestore بترفعه لوحدها
-    //     حتى لو النت قطع — فالورقة عمرها ما تطلع والمخزون لسه ما اتخصمش.
-    //   • وفي نفس الوقت مش بنستنى تأكيد السيرفر (4 ثواني) قبل الطباعة، ولا
-    //     كتابات النقط والعميل وربط التقييم اللي بعدها (12 ثانية كمان) —
-    //     دي كانت بتخلي الورقة تتأخر لحد 16 ثانية في النت التقيل.
-    const _stockP = batch.commit();
-    _printNow();
-    const _stockW = await _waitWrite(_stockP);
-    if(_stockW.error) console.error('خصم المخزون', _stockW.error);
-    // سجل الحركة: من غير انتظار (جواه catch بتاعه) — أوفلاين بيتقيد محليًا ويترفع بعدين
-    stockLines.forEach(c=>{ logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع'); });
-
-    // 3) نقطة الموظف (تجريبي - منفصل عن رصيد الـ HR الحقيقي) — بتتحسب للبائع الفعلي
-    // 🔒 من غير بياعة = مفيش نقط لحد. (من غير الشرط ده، الكتابة بمعرّف فاضي
-    //    كانت هتفشل أو تعمل مستند غلط.)
+    /* ⭐🔴🔴🔴 نقطة الموظف بقت **جوه نفس الـbatch** بتاع خصم المخزون —
+       مش نداء منفصل بعد الطباعة زي ما كانت. السبب: كانت بتتسجل في
+       نداء لوحده بعد الطباعة (شوف التعليق التاريخي تحت)، وأي مقاطعة
+       (قفل التاب، طفي الجهاز، تحديث الصفحة) في اللحظة دي بين الطباعة
+       ونداء النقطة كانت بتضيّعها بصمت — الفاتورة والمخزون يفضلوا
+       سليمين لأن خصم المخزون في batch منفصل بيتقيّد أوفلاين فورًا
+       (شوف الشرح تحت)، لكن النقطة كانت بره الحماية دي. دلوقتي النقطة
+       بتتقيّد **في نفس لحظة** المخزون بالظبط (نفس الـbatch الواحد) —
+       نفس مستوى الموثوقية، صفر نافذة مقاطعة بينهم. */
+    let pointsRef = null;
     if(earnsStaffPoint && sellerEmployeeId){
-      // ⭐ النقطة بتتسجل أوتوماتيك في برنامج الحضور (sales_points) — البياعة مش محتاجة تعمل سكان للفاتورة تاني
-      // 🔴 الكتابة دي كانت `await` عارية — الوحيدة في السلسلة كلها من غير
-      //    `_waitWrite`. ووعد كتابة Firestore **مبيتحلّش أصلًا** لما السيرفر
-      //    مايبقاش واصل (الـ offline persistence بتقيّد محليًا وتستنى الآك) —
-      //    مبيرميش خطأ عشان الـcatch يمسكه، بيفضل معلّق وبس.
-      //    ولأنها بعد الطباعة، النتيجة كانت: الورقة تطلع، الفاتورة تتحفظ،
-      //    المخزون يتخصم — وبعدين **كل اللي بعدها مايشتغلش**: نقط العميلة
-      //    والمكافأة وربط التقييم وتصفير الكارت و`goToSale()`. الشاشة تفضل
-      //    على صفحة الدفع بسلة مليانة وزرار «⏳ بيحفظ...» للأبد، و`_confirmSaving`
-      //    تفضل true فأي محاولة تانية ترد «الفاتورة بتتحفظ... استنى ثانية».
-      //    مهلة 4 ثواني وبعدها بنكمّل — Firestore بترفعها لوحدها لما النت يرجع.
-      const _spW = await _waitWrite(db.collection('sales_points').add({
+      // 🔒 من غير بياعة = مفيش نقط لحد (الشرط فوق بيحميها)
+      pointsRef = db.collection('sales_points').doc();
+      batch.set(pointsRef, {
         employeeId: sellerEmployeeId, employeeName: sellerEmployeeName,
         invoiceNumber: String(invoiceNo), branch: currentBranch,
         itemCount, invoiceTotal: total, auto: true, ts: Date.now(),
         value: staffPointValue,            // ⭐ الوزن الحقيقي للنقطة (كسور للقطع الزيادة)
         base: staffBaseValue, bonus: staffBonusValue   // ⭐ التفصيل — الحملة متميّزة
-      }));
-      if(_spW.error) console.warn('auto point', _spW.error);
+      });
       const ptRef = db.collection(TEST_EMPLOYEE_POINTS).doc(sellerEmployeeId);
-      await _waitWrite(ptRef.set({
+      batch.set(ptRef, {
         employeeName: sellerEmployeeName,
         points: firebase.firestore.FieldValue.increment(1),
         salesCount: firebase.firestore.FieldValue.increment(1)
-      }, { merge: true }));
+      }, { merge: true });
     }
+    // 🖨️ الورقة هنا بالظبط — بعد ما خصم المخزون (ونقطة الموظف دلوقتي) **اتقيّدوا**
+    //    وقبل ما نستنى تأكيد السيرفر.
+    // ⚠️ الترتيب ده مقصود ومهم للمخزون والنقطة مع بعض دلوقتي:
+    //   • commit() بمجرد ما تتنادى، الاتنين بيتقيّدوا محليًا وFirestore بترفعهم
+    //     لوحدها حتى لو النت قطع — فالورقة عمرها ما تطلع والمخزون/النقطة لسه
+    //     ما اتخصمش/اتسجلش.
+    //   • وفي نفس الوقت مش بنستنى تأكيد السيرفر (4 ثواني) قبل الطباعة، ولا
+    //     كتابات العميل وربط التقييم اللي بعدها (12 ثانية كمان) —
+    //     دي كانت بتخلي الورقة تتأخر لحد 16 ثانية في النت التقيل.
+    const _stockP = batch.commit();
+    _printNow();
+    const _stockW = await _waitWrite(_stockP);
+    if(_stockW.error) console.error('خصم المخزون + نقطة الموظف', _stockW.error);
+    // سجل الحركة: من غير انتظار (جواه catch بتاعه) — أوفلاين بيتقيد محليًا ويترفع بعدين
+    stockLines.forEach(c=>{ logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع'); });
+
+    // 3) نقطة الموظف — اتنقلت فوق (خطوة 2) جوه نفس الـbatch بتاع خصم
+    //    المخزون، عشان تتقيّد أوفلاين معاه في نفس اللحظة بالظبط ومتفقدش
+    //    لو حصلت مقاطعة بين الطباعة ونداء منفصل زي ما كان بيحصل قبل كده.
 
     // 4) نقاط ولاء العميل (تجريبي) — بتضيف المكتسب وتخصم أي نقط اتستبدلت في نفس الفاتورة دي
     if(phone){
