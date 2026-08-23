@@ -42,6 +42,7 @@ enableIndexedDbPersistence(db, { synchronizeTabs: true })
   .catch((err)=> console.warn('Offline persistence not enabled:', err && err.code));
 
 const empCol = collection(db, 'sales_employees');
+const employeeAuditCol = collection(db, 'sales_employee_audit');
 
 // ===== 🧭 معالج تسجيل الموظف =====
 const regCol = collection(db, 'sales_registrations');
@@ -1876,6 +1877,7 @@ onSnapshot(empCol, (snap)=>{
   window.allEmployeesAll = allEmployees;   // 👑 حساب الأدمن العام مش موظف HR
   window.allEmployees = allEmployees;      // 🗓️ dialogs/buttons need the live employee list too
   applyBranchFilter();
+  try{ if(document.getElementById('admin')?.classList.contains('show')) renderAdminList(); }catch(e){}
   if($('#branchSetup').classList.contains('show')) populateBranchSetupSelect();   // الشاشة مفتوحة؟ حدّث القايمة
 }, (err)=> console.error('window.employees sync error', err));
 
@@ -4572,125 +4574,104 @@ window.lockAdmin = lockAdmin;
 $('#backFromAdmin').addEventListener('click', lockAdmin);
 $('#adminLogout').addEventListener('click', lockAdmin);
 
-function renderAdminList(){
-  const wrap = $('#empList');
-  const listed = reviewEmployeesFor(viewBranch);
-  if(listed.length === 0){
-    wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>';
-    return;
-  }
-  wrap.innerHTML = listed.map(e=>`
-    <div class="emp-row" style="flex-wrap:wrap;">
-      <div class="n">${e.name}${e.cardCode ? ' <span title="ليه كارت مطبوع — كود ' + e.cardCode + '" style="font-size:12px; background:var(--gold-dim); color:#0b0c0f; padding:1px 7px; border-radius:8px; font-weight:800;">🪪 كارت</span>' : ''}${viewBranch==='__ALL__' ? ' <span style="color:var(--sub); font-weight:400; font-size:12px;">— '+(e.branch||'—')+'</span>' : ''}</div>
-      <select data-shift-id="${e.id}" title="الشيفت — لازم يتحدد عشان إطارات تارجت الشيفت تشتغل"
-        style="padding:8px; border-radius:8px; border:1px solid ${e.shift ? 'var(--line)' : 'var(--bad)'}; background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:12px;">
-        <option value=""        ${!e.shift ? 'selected' : ''}>⚠️ بدون شيفت</option>
-        <option value="morning" ${e.shift==='morning' ? 'selected' : ''}>🌅 صباحي</option>
-        <option value="evening" ${e.shift==='evening' ? 'selected' : ''}>🌆 مسائي</option>
-      </select>
-      <select data-also-id="${e.id}" multiple size="1"
-        title="فروع تانية تقدر تسجّل فيها حضور — فرعها الأساسي مش بيتغيّر"
-        style="min-width:130px; padding:8px; border-radius:8px; border:1px solid ${(e.alsoBranches||[]).length ? 'var(--gold)' : 'var(--line)'}; background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-size:12px;">
-        ${allBranchNames().filter(b=> b !== e.branch).map(b=>
-          `<option value="${b.replace(/"/g,'&quot;')}" ${(e.alsoBranches||[]).indexOf(b)>=0 ? 'selected' : ''}>🔁 ${b}</option>`
-        ).join('')}
-      </select>
-      <input type="text" inputmode="numeric" maxlength="4" placeholder="كود PIN" data-pin-id="${e.id}" value="${e.pin || ''}"
-        style="width:80px; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; text-align:center;">
-      <button data-act="savePin" data-id="${e.id}" style="border:none; background:var(--good); color:#fff; padding:8px 12px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">حفظ الكود</button>
-      <button data-act="resetPin" data-id="${e.id}" style="border:none; background:var(--gold-dim); color:#0b0c0f; padding:8px 12px; border-radius:8px; font-family:'Cairo'; font-weight:700; font-size:11px; cursor:pointer;">🔄 إعادة تعيين</button>
-      <button data-act="del" data-id="${e.id}">حذف</button>
+function _empEsc(v){ return String(v == null ? '' : v).replace(/[&<>\"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c])); }
+function _employeeCurrentList(){
+  return reviewEmployeesFor(viewBranch).filter(e=> !e.deletedAt && e.active !== false);
+}
+function _employeeDeletedList(){
+  const norm=x=>String(x||'').trim(); const rows=(allEmployees||[]).filter(e=>!!e.deletedAt); return (viewBranch==='__ALL__'?rows:rows.filter(e=>norm(e.branch)===norm(viewBranch))).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0));
+}
+async function _employeeAudit(emp, action, extra={}){
+  try{
+    await addDoc(employeeAuditCol, {
+      employeeId: emp.id, employeeName: emp.name || '', branch: emp.branch || '',
+      action, ts: Date.now(), byRole: adminRole || 'owner', ...extra
+    });
+  }catch(err){ console.warn('employee audit failed', err); }
+}
+function _employeeSummary(emp){
+  const sh=(allShifts||[]).filter(x=>x.employeeId===emp.id);
+  const pts=(window.points||[]).filter(x=>x.employeeId===emp.id);
+  return { shifts:sh.length, points:pts.length };
+}
+window.openEmployeeRecord = function(empId){
+  const emp=(allEmployees||[]).find(e=>e.id===empId); if(!emp) return;
+  const sum=_employeeSummary(emp);
+  document.getElementById('employeeRecordOv')?.remove();
+  const ov=document.createElement('div'); ov.id='employeeRecordOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10020;overflow:auto;padding:18px 10px;';
+  ov.innerHTML=`<div style="max-width:620px;margin:auto;background:var(--panel,#181820);border:1px solid var(--line);border-radius:20px;padding:18px;">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:14px;"><div><div style="font-size:20px;font-weight:900">${_empEsc(emp.name)}</div><div style="color:var(--sub);font-size:12px">ملف الموظف · ${_empEsc(emp.branch||'بدون فرع')}</div></div><button id="erClose" class="backBtn">✕</button></div>
+    <div class="employee-kpis"><div><b>${sum.shifts}</b><span>سجل حضور</span></div><div><b>${sum.points}</b><span>نقطة مسجلة</span></div><div><b>${Number(emp.baseSalary||0)}</b><span>الراتب الأساسي</span></div></div>
+    <div class="employee-form-grid">
+      <label>الاسم<input id="erName" value="${_empEsc(emp.name||'')}"></label>
+      <label>الفرع<input id="erBranch" value="${_empEsc(emp.branch||'')}"></label>
+      <label>الراتب الأساسي<input id="erSalary" type="number" min="0" value="${Number(emp.baseSalary||0)}"></label>
+      <label>يوم الإجازة<select id="erDayOff">${DAY_NAMES.map((d,i)=>`<option value="${i}" ${String(emp.dayOff)===String(i)?'selected':''}>${d}</option>`).join('')}</select></label>
+      <label>تاريخ التعيين<input id="erHire" type="date" value="${_empEsc(emp.hireDate||'')}"></label>
+      <label>تتبع الحضور من<input id="erTrack" type="date" value="${_empEsc(emp.attendanceTrackingStart||'')}"></label>
     </div>
-  `).join('');
-  wrap.querySelectorAll('[data-act="del"]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      // 🪪 لو الموظف ده ليه كارت مطبوع (cardCode) — تحذير أقوى قبل الحذف:
-      // الحذف بيبطّل الكارت الورقي فورًا (دخول POS + شراء الموظفين + QR الإحالة)
-      const emp = (window.allEmployeesAll||[]).find(x=> x.id === btn.dataset.id);
-      if(emp && emp.cardCode){
-        const ok = confirm(
-          '⚠️ الموظف ده ليه كارت مطبوع!\n\n' +
-          'كود الكارت: ' + emp.cardCode + '\n' +
-          (emp.cardIssuedAt ? 'اتطبع بتاريخ: ' + new Date(emp.cardIssuedAt).toLocaleDateString('ar-EG') + '\n' : '') +
-          '\nلو حذفته، الكارت الورقي اللي معاه هيبطل يشتغل نهائيًا:\n' +
-          '• سكان الدخول على الكاشير\n' +
-          '• خصم شراء الموظفين\n' +
-          '• QR الإحالة اللي على ضهر الكارت\n\n' +
-          'لو ده تكرار — اتأكد إنك بتحذف النسخة اللي *من غير* كارت.\n\n' +
-          'متأكد إنك عايز تحذف الموظف اللي ليه الكارت؟');
-        if(!ok) return;
-      } else {
-        if(!confirm('متأكد إنك عايز تحذف الموظف ده؟')) return;
-      }
-      try{ await deleteDoc(doc(db,'sales_employees', btn.dataset.id)); }
-      catch(err){ console.error('تعذر الحذف', err); }
-    });
-  });
-  /* 🔁 فروع المساعدة — حفظ فوري زي الشيفت.
-     ⚠️ فرعها الأساسي مستبعد من القايمة أصلًا: اختياره معناه إنها
-        «زائرة عند نفسها»، وده بيلخبط شارة الزائرة والإحصاءات. */
-  wrap.querySelectorAll('[data-also-id]').forEach(sel=>{
-    sel.addEventListener('change', async ()=>{
-      const id = sel.dataset.alsoId;
-      const vals = Array.from(sel.selectedOptions).map(o=> o.value).filter(Boolean);
-      sel.style.borderColor = 'var(--gold)';
-      try{
-        await updateDoc(doc(db,'sales_employees', id), { alsoBranches: vals });
-        sel.style.borderColor = vals.length ? 'var(--good)' : 'var(--line)';
-      }catch(err){
-        console.error('تعذر حفظ فروع المساعدة', err);
-        sel.style.borderColor = 'var(--bad)';
-        alert('تعذر الحفظ: ' + (err && err.code ? err.code : 'خطأ'));
-      }
-    });
-  });
-  // 🌅🌆 حفظ الشيفت فورًا عند الاختيار (زي يوم الإجازة — مفيش زرار حفظ)
-  wrap.querySelectorAll('[data-shift-id]').forEach(sel=>{
-    sel.addEventListener('change', async ()=>{
-      const id = sel.dataset.shiftId, val = sel.value || '';
-      const prev = sel.style.borderColor;
-      sel.style.borderColor = 'var(--gold)';
-      const patch = { shift: val };
-      // نضبط ميعاد الحضور من إعدادات الشيفت لو متسجّلة (زي ما بيحصل في wizard التسجيل)
-      const sh = (window.complianceCfg && window.complianceCfg.shifts && window.complianceCfg.shifts[val]) || null;
-      if(sh && sh.start) patch.scheduledStartTime = sh.start;
-      if(sh && sh.end)   patch.scheduledEndTime   = sh.end;
-      try{
-        await updateDoc(doc(db,'sales_employees', id), patch);
-        sel.style.borderColor = val ? 'var(--good)' : 'var(--bad)';
-      }catch(err){
-        console.error('تعذر حفظ الشيفت', err);
-        sel.style.borderColor = 'var(--bad)';
-        alert('تعذر حفظ الشيفت: ' + (err && err.code ? err.code : 'خطأ غير معروف'));
-      }
-      setTimeout(()=>{ sel.style.borderColor = val ? 'var(--line)' : 'var(--bad)'; }, 1500);
-    });
-  });
-  wrap.querySelectorAll('[data-act="resetPin"]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const emp = allEmployees.find(e=> e.id === btn.dataset.id);
-      if(!confirm(`متأكد إنك عايز تصفّر كود ${emp?emp.name:''}؟ هيحتاج يختار كود جديد لنفسه أول ما يسجل حضور تاني.`)) return;
-      try{
-        await updateDoc(doc(db,'sales_employees', btn.dataset.id), { pin: '' });
-        btn.textContent = 'اتصفّر ✅';
-        setTimeout(()=> btn.textContent = '🔄 إعادة تعيين', 1500);
-      }catch(err){ console.error('تعذر تصفير الكود', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
-    });
-  });
-  wrap.querySelectorAll('[data-act="savePin"]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const input = wrap.querySelector(`input[data-pin-id="${btn.dataset.id}"]`);
-      const pin = input.value.trim();
-      if(!/^\d{4}$/.test(pin)){ alert('الكود لازم يكون 4 أرقام'); return; }
-      try{
-        await updateDoc(doc(db,'sales_employees', btn.dataset.id), { pin });
-        btn.textContent = 'اتحفظ ✅';
-        setTimeout(()=> btn.textContent = 'حفظ الكود', 1500);
-      }catch(err){ console.error('تعذر حفظ الكود', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
-    });
-  });
+    <div style="margin:14px 0 6px;font-weight:900">سجل تعديل الراتب</div>
+    <div>${(Array.isArray(emp.salaryHistory)&&emp.salaryHistory.length)?emp.salaryHistory.slice().reverse().slice(0,8).map(x=>`<div class="er-info" style="margin-bottom:6px"><span>${x.at?new Date(x.at).toLocaleString('ar-EG'):'—'}</span><b>${Number(x.from||0).toLocaleString('ar-EG')} ← ${Number(x.to||0).toLocaleString('ar-EG')} ج.م</b></div>`).join(''):'<div class="empty">مفيش تعديلات راتب مسجلة</div>'}</div>
+    <div style="font-size:11px;color:var(--sub);margin:10px 0;word-break:break-all">Employee ID: ${_empEsc(emp.id)}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="erSave" class="confirmBtn" style="flex:2">حفظ التعديلات</button><button id="erDays" class="backBtn" style="flex:1">📅 سجل الأيام</button></div>
+    <div id="erMsg" class="field-err" style="margin-top:8px"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#erClose').onclick=()=>ov.remove();
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  ov.querySelector('#erDays').onclick=()=>{ try{ window.openAttendanceDaysDialog?.(emp.id, window.salaryPeriodKey || defaultPayPeriodKey(new Date())); }catch(e){ console.error(e); } };
+  ov.querySelector('#erSave').onclick=async()=>{
+    const btn=ov.querySelector('#erSave'), msg=ov.querySelector('#erMsg'); msg.textContent='';
+    const patch={
+      name:ov.querySelector('#erName').value.trim(), branch:ov.querySelector('#erBranch').value.trim(),
+      baseSalary:Number(ov.querySelector('#erSalary').value)||0, dayOff:ov.querySelector('#erDayOff').value,
+      hireDate:ov.querySelector('#erHire').value||'', attendanceTrackingStart:ov.querySelector('#erTrack').value||'', updatedAt:Date.now()
+    };
+    if(!patch.name){msg.textContent='الاسم مطلوب';return;}
+    btn.disabled=true; btn.textContent='بيتحفظ…';
+    try{ await updateDoc(doc(db,'sales_employees',emp.id),patch); await _employeeAudit(emp,'update',{changes:patch}); msg.style.color='var(--good)';msg.textContent='اتحفظ ✅'; }
+    catch(err){msg.style.color='var(--bad)';msg.textContent='تعذر الحفظ';console.error(err);} finally{btn.disabled=false;btn.textContent='حفظ التعديلات';}
+  };
+};
+
+async function softDeleteEmployee(emp){
+  if(!emp || emp.deletedAt) return;
+  const reason=prompt('سبب حذف الموظف؟ (مثال: اتضاف بالخطأ / تكرار)') || '';
+  if(!confirm('هيتنقل الموظف لسجل المحذوفين ويمكن استرجاعه في أي وقت. تأكيد؟')) return;
+  const ts=Date.now();
+  await updateDoc(doc(db,'sales_employees',emp.id), { active:false, deletedAt:ts, deletedReason:reason, deletedByRole:adminRole||'owner' });
+  await _employeeAudit(emp,'delete',{reason});
+}
+async function restoreDeletedEmployee(emp){
+  if(!emp || !emp.deletedAt) return;
+  if(!confirm('استرجاع '+emp.name+' بنفس الـID وكل بياناته القديمة؟')) return;
+  await updateDoc(doc(db,'sales_employees',emp.id), { active:true, deletedAt:null, deletedReason:'', restoredAt:Date.now(), restoredByRole:adminRole||'owner' });
+  await _employeeAudit(emp,'restore');
 }
 
+function renderDeletedEmployees(){
+  const wrap=$('#deletedEmpList'); if(!wrap) return;
+  const list=_employeeDeletedList();
+  if(!list.length){wrap.innerHTML='<div class="empty">مفيش موظفين محذوفين</div>';return;}
+  wrap.innerHTML=list.map(e=>`<div class="employee-card deleted"><div class="employee-main"><button class="employee-name-btn" data-open="${e.id}">${_empEsc(e.name)}</button><div class="employee-meta">${_empEsc(e.branch||'—')} · اتحذف ${new Date(e.deletedAt).toLocaleString('ar-EG')}</div>${e.deletedReason?`<div class="employee-meta">السبب: ${_empEsc(e.deletedReason)}</div>`:''}</div><button class="confirmBtnSmall" data-restore="${e.id}">↩ استرجاع</button></div>`).join('');
+  wrap.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>window.openEmployeeRecord(b.dataset.open));
+  wrap.querySelectorAll('[data-restore]').forEach(b=>b.onclick=async()=>{const e=allEmployees.find(x=>x.id===b.dataset.restore);try{await restoreDeletedEmployee(e);}catch(err){alert('تعذر الاسترجاع');console.error(err);}});
+}
+
+function renderAdminList(){
+  const wrap=$('#empList'); if(!wrap) return;
+  const current=_employeeCurrentList(), deleted=_employeeDeletedList();
+  const q=String($('#empSearch')?.value||'').trim().toLowerCase(), filter=$('#empFilter')?.value||'all';
+  const listed=current.filter(e=>{const hay=(String(e.name||'')+' '+String(e.branch||'')).toLowerCase();if(q&&!hay.includes(q))return false;if(filter==='withSalary'&&!(Number(e.baseSalary)>0))return false;if(filter==='noSalary'&&Number(e.baseSalary)>0)return false;return true;});
+  if($('#empCountCurrent'))$('#empCountCurrent').textContent=current.length;if($('#empCountDeleted'))$('#empCountDeleted').textContent=deleted.length;if($('#empCountShown'))$('#empCountShown').textContent=listed.length;if($('#deletedEmpToggleMeta'))$('#deletedEmpToggleMeta').textContent=deleted.length?deleted.length+' موظف':'فارغ';
+  if(!listed.length){wrap.innerHTML='<div class="empty">'+(q?'مفيش نتيجة مطابقة للبحث':'لسه مفيش موظفين حاليين')+'</div>';renderDeletedEmployees();return;}
+  wrap.innerHTML=listed.map(e=>{const last=(allShifts||[]).filter(x=>x.employeeId===e.id&&x.clockInTs).sort((a,b)=>b.clockInTs-a.clockInTs)[0];return `<div class="employee-card"><div class="employee-main"><button class="employee-name-btn" data-open="${e.id}">${_empEsc(e.name)}</button><div class="employee-meta-line"><span class="emp-chip">${_empEsc(e.branch||'بدون فرع')}</span><span class="emp-chip ${Number(e.baseSalary)>0?'ok':'warn'}">${Number(e.baseSalary)>0?Number(e.baseSalary).toLocaleString('ar-EG')+' ج.م':'المرتب غير مسجل'}</span><span class="emp-chip">آخر حضور: ${last?new Date(last.clockInTs).toLocaleDateString('ar-EG'):'—'}</span></div></div><div class="employee-actions"><button class="backBtn" data-open="${e.id}">فتح الملف</button><button class="danger-soft" data-del="${e.id}">حذف</button></div></div>`;}).join('');
+  wrap.querySelectorAll('[data-open]').forEach(btn=>btn.addEventListener('click',()=>window.openEmployeeRecord(btn.dataset.open)));wrap.querySelectorAll('[data-del]').forEach(btn=>btn.addEventListener('click',async()=>{const emp=allEmployees.find(e=>e.id===btn.dataset.del);try{await softDeleteEmployee(emp);}catch(err){alert('تعذر نقل الموظف للمحذوفين');console.error(err);}}));renderDeletedEmployees();
+}
+document.addEventListener('input',e=>{if(e.target&&e.target.id==='empSearch')renderAdminList();});
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='empFilter')renderAdminList();});
+document.addEventListener('click',e=>{if(e.target&&e.target.closest&&e.target.closest('#deletedEmpToggle')){const a=$('#deletedEmpArea');if(a)a.style.display=a.style.display==='none'?'block':'none';}});
 $('#addEmpBtn').addEventListener('click', async ()=>{
   const name = $('#newEmpName').value.trim();
   const errEl = $('#addEmpErr');
@@ -4701,7 +4682,8 @@ $('#addEmpBtn').addEventListener('click', async ()=>{
     // put a floor on absence detection), completely separate from hireDate
     // (which the admin sets manually and only affects salary proration).
     const trackingStart = todayStr();
-    await addDoc(empCol, { name, branch: (viewBranch==='__ALL__' ? window.currentBranch : viewBranch), attendanceTrackingStart: trackingStart, createdAt: Date.now() });
+    const ref = await addDoc(empCol, { name, branch: (viewBranch==='__ALL__' ? window.currentBranch : viewBranch), attendanceTrackingStart: trackingStart, active:true, createdAt: Date.now() });
+    await _employeeAudit({id:ref.id,name,branch:(viewBranch==='__ALL__'?window.currentBranch:viewBranch)}, 'create');
     $('#newEmpName').value = '';
   }catch(err){ errEl.textContent = 'حصل خطأ، حاول تاني'; console.error(err); }
 });

@@ -459,6 +459,13 @@
   .rw-back{background:var(--panel2); color:var(--sub); flex:0 0 90px;}
   .rw-done{font-size:60px; animation:rwPop .5s cubic-bezier(.2,1.4,.4,1);}
   @keyframes rwPop{from{transform:scale(0);}to{transform:scale(1);}}
+
+  .employee-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;margin:8px 0;border:1px solid var(--line);border-radius:14px;background:var(--panel2);}
+  .employee-card.deleted{opacity:.88;border-style:dashed}.employee-main{min-width:0;flex:1}.employee-name-btn{border:0;background:none;color:var(--ink);font-family:Cairo;font-size:15px;font-weight:900;padding:0;cursor:pointer;text-align:right}.employee-meta{font-size:11.5px;color:var(--sub);margin-top:3px}.employee-actions{display:flex;gap:7px;flex-wrap:wrap}.danger-soft{border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.09);color:#ef4444;border-radius:9px;padding:8px 11px;font-family:Cairo;font-weight:800;cursor:pointer}.employee-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.employee-kpis>div{padding:10px;border:1px solid var(--line);border-radius:12px;text-align:center;background:var(--panel2)}.employee-kpis b{display:block;font-size:18px}.employee-kpis span{font-size:10.5px;color:var(--sub)}.employee-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.employee-form-grid label{font-size:11px;color:var(--sub)}.employee-form-grid input,.employee-form-grid select{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--ink);font-family:Cairo}@media(max-width:600px){.employee-card{align-items:flex-start}.employee-actions{justify-content:flex-end}.employee-form-grid{grid-template-columns:1fr}.employee-kpis{grid-template-columns:1fr 1fr 1fr}}
+
+/* Employee Hub v2 */
+.emp-hub-head{display:flex;justify-content:space-between;gap:14px;margin-bottom:14px}.emp-hub-title{font-size:19px;font-weight:900}.emp-hub-sub{font-size:11.5px;color:var(--sub)}.emp-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 14px}.emp-summary-card{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:11px;text-align:center}.emp-summary-card b{display:block;font-size:20px}.emp-summary-card span{font-size:10.5px;color:var(--sub)}.emp-tools{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:8px;margin-bottom:12px}.emp-tools input,.emp-tools select{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;background:var(--panel2);color:var(--ink);padding:11px 12px;font-family:Cairo}.employee-card{transition:.16s ease}.employee-card:hover{transform:translateY(-1px);border-color:var(--gold-dim)}.employee-meta-line{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}.emp-chip{font-size:10.5px;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--sub)}.emp-chip.ok{color:var(--good)}.emp-chip.warn{color:var(--gold)}.deleted-box{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}.deleted-toggle{width:100%;display:flex;justify-content:space-between;border:0;background:none;color:var(--ink);font-family:Cairo;font-weight:900;padding:4px 0;cursor:pointer}.employee-record-shell{max-width:720px;margin:auto;background:var(--panel,#181820);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.35)}.employee-record-body{padding:18px}.er-info{border:1px solid var(--line);background:var(--panel2);border-radius:12px;padding:10px}.er-info span{display:block;color:var(--sub);font-size:10.5px}.er-info b{display:block;margin-top:3px;font-size:13px}@media(max-width:600px){.emp-tools{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -824,8 +831,11 @@
       <div class="field-err" id="addEmpErr"></div>
     </div>
     <div class="panel">
-      <h3>الموظفين الحاليين</h3>
+      <div class="emp-hub-head"><div><div class="emp-hub-title">فريق العمل</div><div class="emp-hub-sub">ابحث وافتح ملف أي موظف للتفاصيل والتعديل وسجل الأيام.</div></div></div>
+      <div class="emp-summary"><div class="emp-summary-card"><b id="empCountCurrent">0</b><span>موظف حالي</span></div><div class="emp-summary-card"><b id="empCountDeleted">0</b><span>محذوف قابل للاسترجاع</span></div><div class="emp-summary-card"><b id="empCountShown">0</b><span>ظاهر في القائمة</span></div></div>
+      <div class="emp-tools"><input id="empSearch" type="search" placeholder="ابحث بالاسم أو الفرع…"><select id="empFilter"><option value="all">كل الموظفين</option><option value="withSalary">مرتب مسجل</option><option value="noSalary">بدون مرتب</option></select></div>
       <div id="empList"></div>
+      <div class="deleted-box"><button id="deletedEmpToggle" class="deleted-toggle" type="button"><span>🗑️ الموظفين المحذوفين</span><span id="deletedEmpToggleMeta">عرض</span></button><div id="deletedEmpArea" style="display:none"><p style="color:var(--sub);font-size:12px;margin:4px 0 12px;">البيانات لا تتمسح، وتقدر ترجع الموظف بنفس الـID وسجلاته القديمة.</p><div id="deletedEmpList"></div></div></div>
     </div>
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
