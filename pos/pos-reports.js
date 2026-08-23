@@ -380,6 +380,35 @@ function repAggregate(sales){
 }
 window.repAggregate = repAggregate;
 
+async function loadReportSales(from, to){
+  const byId = new Map();
+  const addSnap = (snap)=>{ (snap && snap.docs || []).forEach(d=>{ const o=d.data(); if(o && o.branch===currentBranch) byId.set(d.id,{id:d.id,...o}); }); };
+
+  // IMPORTANT: don't make the correctness of daily reports depend on a
+  // branch+createdAt composite index.  If that index is missing, the old
+  // fallback fetched an arbitrary 1500 documents from the branch and could
+  // silently drop today's invoices.  Time-range queries on a single field
+  // are index-safe; branch is filtered client-side afterwards.
+  if(from || to){
+    const lo = from ? from.getTime() : 0;
+    const hi = to ? to.getTime() : Date.now()+86400000;
+    try{
+      let q=db.collection(TEST_SALES).where('createdAt','>=',new Date(lo)).where('createdAt','<=',new Date(hi));
+      addSnap(await q.get());
+    }catch(e){ console.warn('report server-time query failed',e); }
+    try{
+      let q=db.collection(TEST_SALES).where('createdAtMs','>=',lo).where('createdAtMs','<=',hi);
+      addSnap(await q.get());
+    }catch(e){ console.warn('report local-time query failed',e); }
+  }else{
+    // "all" can be large; keep the existing bounded branch query only here.
+    try{ addSnap(await db.collection(TEST_SALES).where('branch','==',currentBranch).orderBy('createdAt','desc').limit(5000).get()); }
+    catch(e){ addSnap(await db.collection(TEST_SALES).where('branch','==',currentBranch).limit(5000).get()); }
+  }
+  return Array.from(byId.values());
+}
+window.loadReportSales=loadReportSales;
+
 async function renderReportsScreen(){
   const wrap = document.getElementById('reportsWrap');
   wrap.innerHTML = '<div style="padding:30px; text-align:center; color:var(--muted);">بيتحمّل...</div>';
@@ -388,32 +417,8 @@ async function renderReportsScreen(){
 
   let sales = [];
   const { from, to } = getReportDateBounds();
-  try{
-    // استعلام بنطاق الفترة بدل limit(1500) — الحد الثابت كان بيغطي ~10 أيام بس
-    // في الفروع النشطة، فتقرير "آخر 30 يوم" كان ناقص من غير ما يقول
-    let snap;
-    if(from){
-      snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
-        .where('createdAt','>=', from).orderBy('createdAt','desc').get()
-        .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch)
-          .orderBy('createdAt','desc').limit(1500).get())
-        .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(1500).get());
-    }else{
-      snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
-        .orderBy('createdAt','desc').limit(1500).get()
-        .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(1500).get());
-    }
-    const _byId = new Map();
-    snap.docs.forEach(d=>{ const o = d.data(); _byId.set(d.id, o); });
-    // 📴 فواتير الأوفلاين (createdAt لسه null) — بالطابع المحلي
-    if(from){
-      try{
-        const q2 = await db.collection(TEST_SALES).where('createdAtMs','>=', from.getTime()).get();
-        q2.docs.forEach(d=>{ const o = d.data(); if(o.branch === currentBranch && !_byId.has(d.id)) _byId.set(d.id, o); });
-      }catch(e2){}
-    }
-    sales = Array.from(_byId.values());
-  }catch(e){ console.warn(e); }
+  try{ sales = await loadReportSales(from,to); }
+  catch(e){ console.warn(e); }
 
   if(from || to){
     sales = sales.filter(s=>{
@@ -434,6 +439,8 @@ async function renderReportsScreen(){
   const invoiceCount = _agg.invoiceCount;
   const methodLabels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستاباي'};
 
+  const avgInvoice = invoiceCount ? netTotal/invoiceCount : 0;
+  const _kpis = `<div class="rep-kpis"><div class="rep-kpi primary"><span>صافي المبيعات</span><b>${netTotal.toFixed(2)}</b><small>ج.م</small></div><div class="rep-kpi"><span>الفواتير</span><b>${invoiceCount}</b><small>فاتورة</small></div><div class="rep-kpi"><span>القطع</span><b>${itemsSold}</b><small>قطعة</small></div><div class="rep-kpi"><span>متوسط الفاتورة</span><b>${avgInvoice.toFixed(0)}</b><small>ج.م</small></div></div>`;
   let html = '';
 
   if(currentReportType === 'receipt'){
@@ -496,12 +503,17 @@ async function renderReportsScreen(){
     <div style="text-align:center; margin-top:6px;"><button class="rep-print-btn" onclick="printReportArea()">🖨️ طباعة</button></div>`;
   }
 
+  else if(currentReportType === 'invoices'){
+    const rows=[...sales].sort((a,b)=>(saleTs(b)||0)-(saleTs(a)||0));
+    html=`<div class="rep-card rep-invoices"><div class="rep-section-title"><div><h2>🧾 الفواتير</h2><p>${currentBranch||''} · ${reportRangeLabel()} · ${rows.length} فاتورة ظاهرة</p></div></div>${rows.length?rows.map(s=>{const t=saleTs(s),d=t?new Date(t):null;const qty=(s.items||[]).reduce((n,it)=>n+(Number(it.qty)||0),0);const pay=Object.keys(s.payments||{}).map(x=>methodLabels[x]||x).join(' + ')||'—';return `<div class="rep-invoice-row"><div class="rep-invoice-main"><b>#${s.invoiceNo||String(s.id||'').slice(-6)}</b><span>${d?d.toLocaleString('ar-EG'):'—'}</span><span>👤 ${s.employeeName||'—'}</span></div><div class="rep-invoice-side"><b>${Number(s.total||0).toFixed(2)} ج.م</b><span>${qty} قطعة · ${pay}</span></div></div>`}).join(''):'<div class="rep-empty">لا توجد فواتير في الفترة دي</div>'}</div>`;
+  }
+
   else if(currentReportType === 'customers'){ html = await buildCustomersReport(); }
   else if(currentReportType === 'ratings'){   html = await buildRatingsReport(from, to); }
   else if(currentReportType === 'staff'){     html = await buildStaffReport(from, to, sales); }
   else if(currentReportType === 'qtydisc'){  html = await buildQtyDiscountReport(sales); }
 
-  wrap.innerHTML = html;
+  wrap.innerHTML = _kpis + html;
 }
 
 /* ============================================================

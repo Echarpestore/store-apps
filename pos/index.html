@@ -922,6 +922,11 @@ body.on-dashboard .badge-test{ display:block; }
 .dc-res-break{text-align:right; background:rgba(255,255,255,.55); border-radius:12px; padding:10px 14px; font-size:13px;}
 .dc-res-break>div{display:flex; justify-content:space-between; padding:3px 0; color:#333;}
 .dc-res-break .dc-res-sep{border-top:1.5px solid #bbb; margin-top:4px; padding-top:6px; font-weight:900;}
+
+/* ===== Reports Hub 2026 ===== */
+#reportsScreen{background:#f6f7fb}.rep-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:2px 0 14px}.rep-kpi{background:#fff;border:1px solid #e7e9ef;border-radius:16px;padding:14px;box-shadow:0 3px 14px rgba(20,25,40,.04)}.rep-kpi span{display:block;color:#6b7280;font-size:11px;font-weight:700}.rep-kpi b{display:inline-block;font-size:22px;line-height:1.25;margin-top:4px;color:#111827}.rep-kpi small{font-size:10px;color:#9ca3af;margin-right:4px}.rep-kpi.primary{background:#111827;border-color:#111827}.rep-kpi.primary span,.rep-kpi.primary b,.rep-kpi.primary small{color:#fff}.rep-section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.rep-section-title h2{margin:0;font-size:17px}.rep-section-title p{margin:3px 0 0;color:#6b7280;font-size:11px}.rep-invoice-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid #eceef2}.rep-invoice-row:last-child{border-bottom:0}.rep-invoice-main,.rep-invoice-side{display:flex;flex-direction:column;gap:2px}.rep-invoice-main b{font-size:14px}.rep-invoice-main span,.rep-invoice-side span{font-size:10.5px;color:#6b7280}.rep-invoice-side{text-align:left;flex-shrink:0}.rep-invoice-side b{font-size:14px;color:#059669}.rep-empty{text-align:center;color:#9ca3af;padding:28px}.rep-range-btn,.rep-type-btn{transition:.15s ease}.rep-type-btn{border-radius:999px!important;padding:9px 13px!important;font-size:12px!important}.rep-range-btn{border-radius:999px!important}.rep-card{border-radius:18px!important;box-shadow:0 4px 18px rgba(20,25,40,.04)}
+@media(max-width:650px){.rep-kpis{grid-template-columns:1fr 1fr}.rep-kpi{padding:12px}.rep-kpi b{font-size:19px}#reportsScreen .dash-header{gap:7px;flex-wrap:wrap}#reportsScreen .dash-header .logout-btn{font-size:11px;padding:8px 10px}.rep-invoice-row{align-items:flex-start}}
+
 </style>
 <script src="jsbarcode.min.js" onerror="(function(){var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js'; document.head.appendChild(s);})()"></script>
 <style>
@@ -1691,7 +1696,8 @@ body.on-dashboard .badge-test{ display:block; }
       <button class="rep-range-btn" onclick="setReportRange('custom')">تطبيق</button>
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
-      <button class="rep-type-btn active" data-rtype="receipt" onclick="setReportType('receipt')">🧾 إيصال اليوم</button>
+      <button class="rep-type-btn active" data-rtype="receipt" onclick="setReportType('receipt')">📊 نظرة عامة</button>
+      <button class="rep-type-btn" data-rtype="invoices" onclick="setReportType('invoices')">🧾 الفواتير</button>
       <button class="rep-type-btn" data-rtype="items" onclick="setReportType('items')">📦 ملخص الأصناف</button>
       <button class="rep-type-btn" data-rtype="payments" onclick="setReportType('payments')">💳 ملخص المدفوعات</button>
       <button class="rep-type-btn" data-rtype="customers" onclick="setReportType('customers')">👥 العملاء والتطبيق</button>
