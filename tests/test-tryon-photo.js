@@ -118,6 +118,11 @@ assert(verAtLeast(sw('glow/sw.js'), /glow-loyalty-v(\d+)/, 51), 'كاش glow ≥
 const TSW = sw('tryon/sw.js');
 assert(verAtLeast(TSW, /echarpe-tryon-v(\d+)/, 38), 'كاش tryon ≥ v38');
 assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 'photo في precache بتاع tryon');
+assert(/photo-core\.js\?v=61/.test(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8')),
+  '🔴 photo-core عليه cache-bust v61 عشان إصلاح قص البندانة يوصل فورًا');
+assert(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8').indexOf('dataUrl === lastGridImage') >= 0,
+  '🔴 ممنوع عرض صورة الـgrid الأصلية لو crop البندانة فشل');
+
 
 /* ============================================================
    🔴🔴🔴🔴⭐ بصمة صورة العميلة (faceSig) — لازم تفرّق صورتين

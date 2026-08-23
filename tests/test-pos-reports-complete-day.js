@@ -1,0 +1,12 @@
+const fs=require('fs'),assert=require('assert');
+const js=fs.readFileSync('pos/pos-reports.js','utf8');
+const html=fs.readFileSync('pos/index.html','utf8');
+assert(js.includes('async function loadReportSales(from, to)'), 'dedicated report loader missing');
+assert(js.includes("where('createdAtMs','>=',lo).where('createdAtMs','<=',hi)"), 'local sale-time bounded query missing');
+assert(js.includes("where('createdAt','>=',new Date(lo)).where('createdAt','<=',new Date(hi))"), 'server sale-time bounded query missing');
+assert(!/if\(from\)[\s\S]{0,900}where\('branch','==', currentBranch\)[\s\S]{0,300}limit\(1500\)/.test(js), 'daily report still has arbitrary 1500 fallback');
+assert(html.includes('data-rtype="invoices"'), 'invoice report tab missing');
+assert(html.includes('rep-kpis'), 'report KPI layout missing');
+console.log('PASS complete-day report loader');
+console.log('PASS invoice drilldown tab');
+console.log('PASS reports UI KPI hub');
