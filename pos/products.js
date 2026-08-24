@@ -452,36 +452,67 @@ async function confirmReceiveCart(){
   finally{ if(btn){ btn.disabled = false; renderReceiveCart(); } }
 }
 
-function renderReceiveGoodsLog(){
+async function renderReceiveGoodsLog(){
   const wrap = document.getElementById('receiveGoodsLog');
   if(!wrap) return;
-  if(!receiveGoodsTodayLog.length) _recvLogLoad();     // بعد فتح التطبيق من جديد
-  const dayStart = (typeof bizDayStartMs === 'function')
-    ? bizDayStartMs(Date.now())                        // ⏰ يوم الشغل مش نص الليل
-    : (function(){ const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
-  const todays = receiveGoodsTodayLog.filter(l=> l && l.ts >= dayStart);
-  if(!todays.length){
-    wrap.innerHTML = '<div style="color:#999; font-size:12px; text-align:center; padding:10px 0;">لسه مفيش عمليات استلام النهاردة</div>';
-    return;
+
+  // أول حاجة: نعرض الكاش المحلي فورًا عشان الشاشة متبقاش فاضية/بطيئة.
+  if(!receiveGoodsTodayLog.length) _recvLogLoad();
+  const renderRows = function(rows, note){
+    rows = Array.isArray(rows) ? rows.slice(0, 20) : [];
+    if(!rows.length){
+      wrap.innerHTML = '<div style="color:#999;font-size:12px;text-align:center;padding:10px 0;">مفيش عمليات استلام مسجلة لسه</div>';
+      return;
+    }
+    const dayStart = (typeof bizDayStartMs === 'function') ? bizDayStartMs(Date.now()) : (function(){ const d=new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+    wrap.innerHTML = rows.map(function(l){
+      const ts = Number(l.ts || 0);
+      const d = ts ? new Date(ts) : null;
+      const when = d ? (ts >= dayStart ? d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : d.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})) : '—';
+      const qty = Number(l.qtyChange || l.delta || 0);
+      const emp = l.employeeName ? (' · ' + l.employeeName) : '';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee;font-size:12px;">'
+        + '<span style="min-width:0;"><b>' + String(l.name || l.productName || 'صنف') + '</b><span style="color:#999;font-size:10.5px;margin-right:5px;">' + when + emp + '</span></span>'
+        + '<span style="font-weight:900;white-space:nowrap;color:' + (qty >= 0 ? 'var(--plus)' : 'var(--minus)') + ';">' + (qty > 0 ? '+' : '') + qty + '</span>'
+        + '</div>';
+    }).join('') + (note ? '<div style="color:#999;font-size:10.5px;padding-top:7px;text-align:center;">' + note + '</div>' : '');
+  };
+  renderRows(receiveGoodsTodayLog, 'آخر بيانات محفوظة على الجهاز');
+
+  // المصدر الحقيقي: سجل حركة المخزون في Firestore. آخر 20 عملية للفرع،
+  // مش بس "النهاردة" ومش مربوط بنفس الجهاز اللي استلم البضاعة.
+  try{
+    let snap;
+    try{
+      snap = await db.collection(TEST_STOCK_LOG)
+        .where('branch','==',currentBranch)
+        .where('type','==','receipt')
+        .orderBy('createdAt','desc')
+        .limit(20).get();
+    }catch(indexErr){
+      // من غير اعتماد على index مركب: نجيب آخر سجل الفرع ونفلتر receipt محليًا.
+      snap = await db.collection(TEST_STOCK_LOG)
+        .where('branch','==',currentBranch)
+        .orderBy('createdAt','desc')
+        .limit(120).get();
+    }
+    const rows = [];
+    (snap && snap.docs || []).forEach(function(d){
+      const x=d.data()||{};
+      if(x.branch !== currentBranch || x.type !== 'receipt') return;
+      const ts = x.createdAt && x.createdAt.toMillis ? x.createdAt.toMillis() : (x.createdAtMs || 0);
+      rows.push({ name:x.productName||'صنف', qtyChange:Number(x.delta||0), ts:ts, employeeName:x.employeeName||'' });
+    });
+    rows.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+    if(rows.length){
+      receiveGoodsTodayLog = rows.slice(0,20);
+      _recvLogSave();
+      renderRows(receiveGoodsTodayLog, 'آخر 20 عملية استلام من سجل المخزون');
+    }
+  }catch(e){
+    console.warn('receive log firestore', e);
+    // الكاش المحلي اللي اتعرض فوق يفضل ظاهر بدل شاشة فاضية.
   }
-  const totalIn = todays.reduce(function(n,l){ return n + (l.qtyChange > 0 ? l.qtyChange : 0); }, 0);
-  const totalOut = todays.reduce(function(n,l){ return n + (l.qtyChange < 0 ? -l.qtyChange : 0); }, 0);
-  wrap.innerHTML = todays.map(function(l){
-    const t = new Date(l.ts).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
-    return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;'
-      + ' padding:6px 0; border-bottom:1px solid #eee; font-size:12px;">'
-      + '<span style="min-width:0;">' + l.name
-      +   '<span style="color:#999; font-size:10.5px; margin-right:5px;">' + t + '</span></span>'
-      + '<span style="font-weight:800; white-space:nowrap; color:'
-      +   (l.qtyChange > 0 ? 'var(--plus)' : 'var(--minus)') + ';">'
-      +   (l.qtyChange > 0 ? '+' : '') + l.qtyChange + '</span>'
-      + '</div>';
-  }).join('')
-  + '<div style="display:flex; justify-content:space-between; padding:8px 0 2px; font-size:12px; font-weight:900;">'
-  +   '<span>الإجمالي</span>'
-  +   '<span><span style="color:var(--plus);">+' + totalIn + '</span>'
-  +   (totalOut ? (' <span style="color:var(--minus);">-' + totalOut + '</span>') : '') + '</span>'
-  + '</div>';
 }
 
 
