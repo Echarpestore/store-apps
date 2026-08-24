@@ -1,6 +1,6 @@
 // ============================================================
-// ♻️ Branch catalog replace — الملف هو الكتالوج، السيستم هو الكمية
-// سياسة 24 أغسطس 2026
+// ⬆️ Branch catalog upsert — الملف يحدّث/يضيف فقط، السيستم هو الكمية
+// السياسة النهائية 24 أغسطس 2026
 // ============================================================
 'use strict';
 const fs = require('fs');
@@ -62,14 +62,15 @@ const BR=['الرحاب','مدينتي','مدينة نصر'];
   eq(p.keeperWrites[0].data.qtyByBranch['الرحاب'],0,'الصنف الجديد يبدأ صفر');
 })();
 
-// 3) صنف مش في الملف: يختفي من الفرع الحالي.
+// 3) صنف مش في الملف: يفضل كما هو تمامًا.
 (function(){
-  const items=[{id:'x',barcode:'300',branches:['الرحاب'],qtyByBranch:{'الرحاب':8}}];
-  const p=ctx.planBranchCatalogReplace(items, [row('غيره','301',100,1)], M, 'الرحاب', BR);
-  const c=p.cleanupWrites.find(x=>x.id==='x');
-  ok(!!c,'الصنف غير الموجود في الملف له cleanup');
-  eq(c.data.qtyByBranch['الرحاب'],0,'كمية الفرع الحالي اتصفرت');
-  eq(c.data.branches,['(مستبعد)'],'اختفى من الفرع');
+  const item={id:'x',barcode:'300',name:'قديم',price:55,branches:['الرحاب'],qtyByBranch:{'الرحاب':8}};
+  const p=ctx.planBranchCatalogReplace([item], [row('غيره','301',100,1)], M, 'الرحاب', BR);
+  ok(!p.cleanupWrites.some(x=>x.id==='x'),'الصنف غير الموجود في الملف لا يدخل cleanup');
+  eq(item.qtyByBranch['الرحاب'],8,'كمية الصنف الغائب عن الملف تفضل كما هي');
+  eq(item.name,'قديم','اسم الصنف الغائب عن الملف لا يتغير');
+  eq(item.price,55,'سعر الصنف الغائب عن الملف لا يتغير');
+  eq(p.stats.untouchedExisting,1,'الخطة تعدّه كموجود تم تركه كما هو');
 })();
 
 // 4) صنف مشترك مع فرع تاني: لا الاسم ولا السعر ولا كمية الفرع التاني تتغير.
@@ -94,23 +95,22 @@ const BR=['الرحاب','مدينتي','مدينة نصر'];
   eq(other.qtyByBranch['مدينتي'],6,'كمية مدينتي لم تتغير');
 })();
 
-// 6) صنف متعدد الفروع ومش في الملف: يتشال من الرحاب فقط ويظل في مدينتي.
+// 6) صنف متعدد الفروع ومش في الملف: لا يتغير في أي فرع.
 (function(){
   const item={id:'m',barcode:'600',branches:['الرحاب','مدينتي'],qtyByBranch:{'الرحاب':9,'مدينتي':11}};
   const p=ctx.planBranchCatalogReplace([item],[],M,'الرحاب',BR);
-  const c=p.cleanupWrites[0];
-  eq(c.data.branches,['مدينتي'],'غير الموجود في الملف اتشال من الرحاب فقط');
-  eq(c.data.qtyByBranch['مدينتي'],11,'كمية مدينتي كما هي');
-  eq(c.data.qtyByBranch['الرحاب'],0,'كمية الرحاب فقط اتصفرت');
+  eq(p.cleanupWrites.length,0,'غير الموجود في الملف لا يدخل cleanup حتى لو متعدد الفروع');
+  eq(item.qtyByBranch['مدينتي'],11,'كمية مدينتي كما هي');
+  eq(item.qtyByBranch['الرحاب'],9,'كمية الرحاب كما هي');
 })();
 
-// 7) صنف مشترك من غير branches: يتحول لباقي الفروع المعروفة — مش يختفي عليهم.
+// 7) صنف مشترك من غير branches ومش في الملف: يفضل كما هو.
 (function(){
   const item={id:'global',barcode:'700',qtyByBranch:{'الرحاب':2,'مدينتي':5}};
   const p=ctx.planBranchCatalogReplace([item],[],M,'الرحاب',BR);
-  const c=p.cleanupWrites[0];
-  ok(c.data.branches.includes('مدينتي') && c.data.branches.includes('مدينة نصر'),'المشترك فضل ظاهر لباقي الفروع المعروفة');
-  eq(c.data.qtyByBranch['مدينتي'],5,'كمية الفرع الآخر محفوظة');
+  eq(p.cleanupWrites.length,0,'المشترك الغائب عن الملف لا يتغير');
+  eq(item.qtyByBranch['الرحاب'],2,'كمية الفرع الحالي محفوظة');
+  eq(item.qtyByBranch['مدينتي'],5,'كمية الفرع الآخر محفوظة');
 })();
 
 // 8) الملف نفسه فيه نفس الباركود مرتين: نقف بدل ما نخمن.
@@ -120,18 +120,19 @@ const BR=['الرحاب','مدينتي','مدينة نصر'];
   eq(p.duplicateFileCodes,['800'],'بيحدد الكود المكرر');
 })();
 
-// 9) الباركود إلزامي في Full Replace.
+// 9) الباركود إلزامي في التحديث الآمن للفرع.
 (function(){
   const m=Object.assign({},M,{barcode:''});
   const p=ctx.planBranchCatalogReplace([], [row('أ','900',1,1)], m, 'الرحاب', BR);
-  ok(!p.ok,'الاستبدال الكامل يرفض من غير عمود باركود');
+  ok(!p.ok,'التحديث الآمن يرفض من غير عمود باركود');
 })();
 
-// 10) عنصر بلا باركود في السيستم وغير موجود في الملف يتشال من الفرع فقط.
+// 10) عنصر بلا باركود في السيستم وغير موجود في الملف يفضل كما هو.
 (function(){
   const item={id:'nocode',name:'قديم بلا كود',branches:['الرحاب'],qtyByBranch:{'الرحاب':3}};
   const p=ctx.planBranchCatalogReplace([item], [row('موجود','901',10,1)], M, 'الرحاب', BR);
-  ok(p.cleanupWrites.some(x=>x.id==='nocode'),'العنصر بلا كود القديم بيتشال لأنه مش في الملف');
+  ok(!p.cleanupWrites.some(x=>x.id==='nocode'),'العنصر بلا كود القديم لا يتلمس');
+  eq(item.qtyByBranch['الرحاب'],3,'كمية العنصر بلا كود تفضل كما هي');
 })();
 
 // 11) العنصر المستبعد سابقًا يرجع لنفس الـID بدل ما نعمل duplicate جديد.
@@ -153,8 +154,8 @@ const BR=['الرحاب','مدينتي','مدينة نصر'];
 (function(){
   const bad={Name:'بدون كود',Code:'',Price:10,Qty:1};
   const p=ctx.planBranchCatalogReplace([], [bad], M, 'الرحاب', BR);
-  ok(!p.ok,'الصف الناقص يوقف الاستبدال الكامل');
+  ok(!p.ok,'الصف الناقص يوقف التحديث الآمن');
   ok(p.errors.some(x=>String(x).includes('ناقص اسم أو باركود')),'رسالة الخطأ واضحة');
 })();
 
-console.log('  ✅ test-branch-catalog-replace كامل');
+console.log('  ✅ test-branch-catalog-replace upsert كامل');
