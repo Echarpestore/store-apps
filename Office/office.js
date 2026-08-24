@@ -2053,6 +2053,7 @@ function startData(){
   db.collection('pos_test_settings').doc('office_cash_cfg').onSnapshot(function(d){
     D.cashCfg = d.exists ? (d.data() || {}) : {};
     try{ renderCashHand(); }catch(e){}
+    try{ setTimeout(function(){ ofAutoUpdateGoldPrice(false); },250); }catch(e){}
   }, function(e){ console.warn('cash cfg sync', e && e.code); });
   db.collection('pos_test_settings').doc('office_cash').onSnapshot(function(d){
     D.cashBase = d.exists ? (d.data() || null) : null;
@@ -6039,6 +6040,7 @@ function renderCashHand(){
   const base = D.cashBase;
   const now = Date.now();
   const cfg = ofLedgerCfg();
+  try{ setTimeout(function(){ ofAutoUpdateGoldPrice(false); },0); }catch(e){}
 
   if(!base || !base.atMs){
     host.innerHTML =
@@ -6104,7 +6106,10 @@ function renderCashHand(){
     + '<div class="of-money-card"><div class="k">🎁 التزامات كروت</div><div class="v" style="color:' + (giftDue ? 'var(--bad)' : 'var(--good)') + ';">'
     + (giftDue ? ('− ' + egp(W.giftLiability)) : egp(0)) + '</div><div class="s">فلوس في إيدك مش بتاعتك لحد ما الكارت يتصرف</div></div>'
     + '<div class="of-money-card"><div class="k">🥇 دهب</div><div class="v">' + egp(W.gold) + '</div>'
-    + '<div class="s">' + (gold.grams ? (gold.grams + ' جرام') : 'مش متسجل') + (gold.stale && gold.grams ? ' · السعر قديم' : '') + '</div></div>'
+    + '<div class="s">' + (gold.grams ? (gold.grams + ' جرام · 24K') : 'مش متسجل')
+    + (gold.price ? (' · '+egp(gold.price)+'/جم') : '')
+    + (gold.stale && gold.grams ? ' · السعر قديم' : '')
+    + (gold.source ? (' · '+esc(gold.source)) : '') + '</div></div>'
     + '<div class="of-money-card"><div class="k">🧮 اللي ليك فعلًا</div><div class="v">' + egp(W.total) + '</div>'
     + '<div class="s">المؤكد + Paymob المنتظر + الدهب − الالتزامات</div></div>'
     + '</div>';
@@ -6134,8 +6139,9 @@ function renderCashHand(){
     + '</div>'
     + '<div class="of-quick">'
     + '<button class="btn" onclick="ofAddSettlement()">🏦 تحويل استثنائي/تصحيح</button>'
-    + '<button class="btn" onclick="ofSetGoldPrice()">🥇 حدّث سعر الدهب</button>'
+    + '<button class="btn" onclick="ofGoldRefreshNow()">🥇 تحديث الدهب الآن</button>'
     + '</div>'
+    + '<div style="text-align:center;margin-top:6px;"><button class="ghost" onclick="ofSetGoldPrice()" style="padding:5px 9px;font-size:10px;">✍️ تعديل سعر الدهب يدويًا 24 ساعة</button></div>'
     + '</div>';
 
   let details = '';
@@ -6359,15 +6365,113 @@ async function ofSetGoldGrams(){
   if(!isFinite(n) || n < 0){ alert('رقم مش صح'); return; }
   await ofSaveCashCfg({ goldGrams: n });
 }
+const OF_GOLD_AUTO_REFRESH_MS = 6 * 3600 * 1000;
+const OF_GOLD_MANUAL_LOCK_MS = 24 * 3600 * 1000;
+const OF_TROY_OZ_GRAMS = 31.1034768;
+let _ofGoldAutoBusy = false;
+let _ofGoldAutoTriedAt = 0;
+
+function ofFetchJson(url, timeoutMs){
+  const ms = Number(timeoutMs) || 8000;
+  let timer;
+  return Promise.race([
+    fetch(url, { cache:'no-store' }).then(function(r){
+      if(!r || !r.ok) throw new Error('HTTP '+(r && r.status));
+      return r.json();
+    }),
+    new Promise(function(_,reject){
+      timer=setTimeout(function(){ reject(new Error('timeout')); },ms);
+    })
+  ]).finally(function(){ if(timer) clearTimeout(timer); });
+}
+
+/* 🥇 السعر الآلي:
+   1) Gold API: XAU/USD spot per troy ounce — بدون API key وCORS.
+   2) Currency API CDN: USD/EGP — ملف يومي ثابت بدون API key.
+   3) نحسب 24K spot EGP/gram = XAU_USD * USD_EGP / 31.1034768.
+   ⚠️ ده سعر سوق 24K تقديري، مش وعد بسعر محل صاغة بعينه. */
+async function ofFetchGold24kEgp(){
+  const pair = await Promise.all([
+    ofFetchJson('https://api.gold-api.com/price/XAU', 8000),
+    ofFetchJson('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json', 8000)
+  ]);
+  const gold = pair[0] || {}, fx = pair[1] || {};
+  const xauUsd = Number(gold.price);
+  const usdEgp = Number(fx && fx.usd && fx.usd.egp);
+  if(!(xauUsd > 500 && xauUsd < 10000)) throw new Error('gold_price_invalid');
+  if(!(usdEgp > 10 && usdEgp < 200)) throw new Error('usd_egp_invalid');
+  const perGram = Math.round((xauUsd * usdEgp / OF_TROY_OZ_GRAMS) * 100) / 100;
+  if(!(perGram > 500 && perGram < 50000)) throw new Error('gold_gram_invalid');
+  return {
+    price:perGram, xauUsd:xauUsd, usdEgp:usdEgp,
+    goldUpdatedAt: gold.updatedAt || '',
+    fxDate: fx.date || ''
+  };
+}
+window.ofFetchGold24kEgp = ofFetchGold24kEgp;
+
+async function ofAutoUpdateGoldPrice(force){
+  const cfg=ofLedgerCfg();
+  const now=Date.now();
+  const manualUntil=Number(cfg.goldManualUntil)||0;
+  if(!force && manualUntil > now) return {skipped:'manual'};
+  const at=Number(cfg.goldPriceAt)||0;
+  if(!force && at && (now-at)<OF_GOLD_AUTO_REFRESH_MS) return {skipped:'fresh'};
+  if(_ofGoldAutoBusy) return {skipped:'busy'};
+  if(!force && _ofGoldAutoTriedAt && (now-_ofGoldAutoTriedAt)<60*1000) return {skipped:'recent_try'};
+  _ofGoldAutoBusy=true; _ofGoldAutoTriedAt=now;
+  try{
+    const q=await ofFetchGold24kEgp();
+    await ofSaveCashCfg({
+      goldBuyPrice:q.price,
+      goldPriceAt:Date.now(),
+      goldSource:'تلقائي · Gold API + USD/EGP',
+      goldAuto:true,
+      goldManualUntil:0,
+      goldXauUsd:q.xauUsd,
+      goldUsdEgp:q.usdEgp,
+      goldMarketUpdatedAt:q.goldUpdatedAt||'',
+      goldFxDate:q.fxDate||'',
+      goldLastAutoOkAt:Date.now()
+    });
+    return {ok:true,price:q.price};
+  }catch(e){
+    try{
+      await ofSaveCashCfg({ goldLastAutoFailAt:Date.now(), goldLastAutoError:String(e&&e.message||e).slice(0,120) });
+    }catch(_){}
+    return {ok:false,error:e};
+  }finally{
+    _ofGoldAutoBusy=false;
+  }
+}
+window.ofAutoUpdateGoldPrice=ofAutoUpdateGoldPrice;
+if(typeof document!=='undefined' && document.addEventListener){
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden) setTimeout(function(){ ofAutoUpdateGoldPrice(false); },500);
+  });
+}
+
+async function ofGoldRefreshNow(){
+  const r=await ofAutoUpdateGoldPrice(true);
+  if(r && r.ok) alert('✅ سعر الدهب اتحدث تلقائيًا: '+egp(r.price)+' / جرام 24K');
+  else if(r && r.error) alert('تعذر تحديث السعر الآن. هيفضل آخر سعر محفوظ شغال، وجرب تاني تلقائيًا بعدين.');
+}
+window.ofGoldRefreshNow=ofGoldRefreshNow;
+
 async function ofSetGoldPrice(){
   const cur = Number(ofLedgerCfg().goldBuyPrice) || 0;
-  const v = prompt('💱 سعر جرام الدهب عيار ٢٤ — سعر **الشراء**\n'
-    + '(اللي الصايغ بيشتري بيه منك، مش اللي بيبيع بيه)\n\nاكتب السعر بالجنيه:',
+  const v = prompt('✍️ تعديل يدوي مؤقت لسعر جرام 24K\n'
+    + 'التحديث التلقائي هيتوقف 24 ساعة، وبعدها يرجع لوحده.\n\nاكتب السعر بالجنيه:',
     cur ? String(cur) : '');
   if(v === null) return;
   const n = Math.round((Number(v) || 0) * 100) / 100;
   if(!isFinite(n) || n <= 0){ alert('رقم مش صح'); return; }
-  await ofSaveCashCfg({ goldBuyPrice: n, goldPriceAt: Date.now(), goldSource: 'يدوي' });
+  await ofSaveCashCfg({
+    goldBuyPrice:n, goldPriceAt:Date.now(),
+    goldSource:'يدوي · override 24h',
+    goldAuto:false,
+    goldManualUntil:Date.now()+OF_GOLD_MANUAL_LOCK_MS
+  });
 }
 window.ofSetGoldGrams = ofSetGoldGrams; window.ofSetGoldPrice = ofSetGoldPrice;
 
