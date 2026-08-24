@@ -196,7 +196,21 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(!/s\.createdAt && s\.createdAt\.toMillis && s\.createdAt\.toMillis\(\) >= dayMs/.test(dcBody),
     'الفلتر القديم اللي بيرمي فواتير الأوفلاين اتشال');
   const repBody = extractFn(repSrc, 'renderReportsScreen');
-  assert(/where\('createdAt','>=', from\)/.test(repBody), 'التقارير بتستعلم بنطاق الفترة');
+  // 🔴🔴🔴🔴⭐ الاستعلام اتنقل لدالة منفصلة loadReportSales — عشان
+  // مايعتمدش على composite index (branch+createdAt) خالص. لو الـindex
+  // ده مش متعمول في Firestore، كان بيقع لحد limit(1500) اللي ممكن
+  // يطفّش فواتير النهاردة في فرع نشط. الحل: استعلام بحقل واحد
+  // (createdAt بس) — ده مضمون Firestore يعمله تلقائي، والفرع بيتفلتر
+  // على جهاز العميل بعد كده.
+  assert(/sales = await loadReportSales\(from,\s*to\)/.test(repBody),
+    '🔴🔴🔴🔴⭐ التقارير بتنادي loadReportSales (مش استعلام composite index مباشر)');
+  const loadBody = extractFn(repSrc, 'loadReportSales');
+  assert(loadBody.length > 0, 'دالة loadReportSales موجودة');
+  assert(/where\('createdAt','>=',/.test(loadBody), 'بتستعلم بنطاق الفترة (حقل واحد، مضمون الفهرسة)');
+  assert(/where\('createdAtMs','>=',/.test(loadBody), 'وبتكمّل فواتير الأوفلاين بالطابع المحلي');
+  assert(!/\.limit\(1500\)/.test(loadBody) || /from \|\| to/.test(loadBody),
+    '🔴 حد الـ1500 (لو موجود) مقصور على مسار "كل الفترات" بس، مش الفترات المحددة');
+  assert(/o\.branch===currentBranch/.test(loadBody), 'الفرع بيتفلتر بعد الجلب، مش شرط جوه composite index');
   assert(/saleTs\(s\)/.test(repBody), 'فلتر الفترة في التقارير بيستخدم saleTs');
   // التقفيل مش بيتسجل والنت قاطع من غير تأكيد صريح
   const finBody = extractFn(repSrc, 'dcFinish');
@@ -382,7 +396,7 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assertEq(match('أي حاجة', ''), false, 'بحث فاضي = مفيش نتايج');
   // ومستخدم في المواضع الثلاثة
   assert(/_sm\(it\.name, q\)/.test(fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8')), 'بحث البيع بالتطبيع');
-  assert(/_sm\(it\.name, q\)/.test(prodSrc) && /_sm\(it\.name, code\)/.test(prodSrc), 'بحث الاستلام بالتطبيع (اقتراحات + إنتر)');
+  assert(/function receiveSearchItems\(/.test(prodSrc) && /_sm\(it\.name, q\)/.test(prodSrc) && /receiveSearchItems\(candidates, currentBranch, code\)/.test(prodSrc), 'بحث الاستلام بالتطبيع (اقتراحات + إنتر)');
   assert(/_sm\(p\.name, q\)/.test(gsSrc) && /_sm\(c\.name, q\)/.test(gsSrc), 'البحث الشامل بالتطبيع');
   // 🧷 حزام أمان النسخ المتلخبطة وقت التحديث: البحث ميموتش لو التطبيع مش متحمّل
   ['pos-sale.js','products.js','search.js'].forEach(f=>{

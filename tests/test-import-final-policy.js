@@ -19,5 +19,5 @@ ok(!src.includes('id="impZeroMissing"'),'اختيار حذف/تصفير غير �
 ok(!src.includes('const wantZero ='),'مسار تنفيذ حذف/تصفير غير الموجود اتشال من runImport');
 ok(src.includes('أي صنف موجود في الفرع ومش موجود في الملف يفضل زي ما هو'),'الواجهة تشرح السياسة الجديدة بوضوح');
 ok(src.includes("untouchedExisting:0"),'الخطة تتبع الأصناف الموجودة التي تُترك كما هي');
-ok(/store-apps-shell-v336/.test(fs.readFileSync(path.resolve(__dirname,'..','pos','sw.js'),'utf8')),'POS cache v336');
+ok(/store-apps-shell-v337/.test(fs.readFileSync(path.resolve(__dirname,'..','pos','sw.js'),'utf8')),'POS cache v337');
 console.log('  ✅ test-import-final-policy كامل');
