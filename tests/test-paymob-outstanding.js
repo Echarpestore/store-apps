@@ -7,8 +7,8 @@
 //    والرقم بقى «كل فيزا الشهر» — عشرات الآلاف بدل بيع يوم أو يومين،
 //    وبيتحط في «اللي ليك فعلًا» فيصرف على أساسه.
 //
-// ✅ الصح: المستحق = اللي **لسه ماوصلش حسب جدول التحويل** (تاني يوم عمل).
-//    رقم بيتحسب لوحده من غير أي إدخال، وبيصفّر نفسه أول ما اليوم يعدّي.
+// ✅ الصح: المستحق = اللي **لسه ماوصلش/ماتأكدش** حسب تحويل الثلاثاء الأسبوعي.
+//    الرقم يفضل مستحق لحد ما المالك يأكد تحويل الثلاثاء الفعلي — الميعاد وحده مش إثبات إن الفلوس وصلت.
 //
 // ⚠️ الاختبار ده **سلوكي بأرقام**، مش نصّي — الفحص النصّي هنا كان
 //    هيعدّي على كومنت (§14.2).
@@ -79,21 +79,18 @@ const THU='2026-08-06', FRI='2026-08-07', SAT='2026-08-08',
 
   const base = { amount: 0, atMs: at(2026,7,20,7) };
   const now  = at(2026,8,11,20);                       // التلات بليل
-  const L = ofCashLedger(base, { sales: sales, settlements: [] }, {}, {}, now, 5);
+  // تأكيد الثلاثاء يقفل كل المبيعات لحد نهاية الاثنين 10 أغسطس.
+  const logged = [{ ts:at(2026,8,11,13), gross:22000, net:21573.2,
+                    forDay:MON, weeklyCycleEnd:MON }];
+  const L = ofCashLedger(base, { sales: sales, settlements: logged }, {}, {}, now, 5);
 
-  // ٢٣ يوم × ١٠٠٠ = ٢٣ ألف — ده الرقم الخرافي اللي كان بيتعرض
-  assert(L.outstanding < 23000,
-    '⭐⭐ المستحق مش كل فيزا الشهر (كان بيقول ٢٣٠٠٠)');
-
-  /* الصح: التلات (يوم البيع الجاري) فلوسه بتنزل الأربع — لسه.
-     الإتنين فلوسه نزلت التلات خلاص. فالمستحق = بيع التلات بس. */
+  // بيع الثلاثاء 11 فقط يدخل دورة الثلاثاء القادم.
   assertEq(L.outstanding, 1000,
-    '⭐⭐ المستحق = فيزا اليوم اللي لسه ماوصلش بس (١٠٠٠)');
+    '⭐⭐ بعد تأكيد الأسبوع السابق، المستحق = مبيعات الدورة الجديدة فقط');
   assertEq(L.pmPendingDays, [TUE], 'ومعروف هو فيزا أنهي يوم بالظبط');
 
-  // 🧮 وإجمالي الثروة مبقاش متضخّم
   const W = ofWealth(L, {}, now);
-  assert(W.paymobNet < 1000, 'الصافي بعد العمولة أقل من الإجمالي');
+  assert(W.paymobNet < 1000, 'الصافي المتوقع بعد العمولة أقل من الإجمالي');
   assert(W.paymobNet > 900,  'وقريب منه — العمولة ~٢٪ مش أكتر');
 })();
 
@@ -111,11 +108,16 @@ const THU='2026-08-06', FRI='2026-08-07', SAT='2026-08-08',
   assertEq(Lsat.outstanding, 6000, '⭐ بليل السبت: التلات أيام لسه في الطريق');
   assertEq(Lsat.pmPendingDays, [THU, FRI, SAT], 'والتلاتة باينين بالاسم');
 
-  // بليل الأحد: نزلوا كلهم — المستحق يرجع صفر **لوحده**
+  // الأحد والاثنين: لسه مستحقين؛ الميعاد الحقيقي للتأكيد الثلاثاء.
   const Lsun = ofCashLedger(base, { sales: sales, settlements: [] }, {}, {}, at(2026,8,9,20), 5);
-  assertEq(Lsun.outstanding, 0,
-    '⭐⭐ بليل الأحد: صفر — من غير ما المالك يسجّل أي حاجة');
-  assertEq(Lsun.pmPendingDays, [], 'ومفيش أي يوم معلّق');
+  assertEq(Lsun.outstanding, 6000, '⭐⭐ بليل الأحد: لسه عند Paymob');
+  const LtueBefore = ofCashLedger(base, { sales: sales, settlements: [] }, {}, {}, at(2026,8,11,10), 5);
+  assertEq(LtueBefore.outstanding, 6000, 'الثلاثاء قبل التأكيد: لسه مستحق');
+  const LtueAfter = ofCashLedger(base, { sales:sales, settlements:[
+    {ts:at(2026,8,11,13),gross:6000,net:5883.6,forDay:MON,weeklyCycleEnd:MON}
+  ]}, {}, {}, at(2026,8,11,20), 5);
+  assertEq(LtueAfter.outstanding, 0, 'بعد تأكيد الثلاثاء: الأسبوع اتقفل');
+  assertEq(LtueAfter.pmPendingDays, [], 'ومفيش يوم معلّق من الأسبوع القديم');
 })();
 
 // ============================================================
@@ -124,32 +126,31 @@ const THU='2026-08-06', FRI='2026-08-07', SAT='2026-08-08',
 (function(){
   const base = { amount: 0, atMs: at(2026,8,6,7) };
   const data = { sales: [ sale(at(2026,8,6,15), 0, 10000) ],
-                 settlements: [ { ts: at(2026,8,9,13), net: 9800, gross: 10000, forDay: THU } ] };
-  const L = ofCashLedger(base, data, {}, {}, at(2026,8,9,20), 5);
-  const sun = L.rows.filter(r => r.key === SUN)[0];
-  assertEq(sun.val.pmIn, 9800, 'التحويل الحقيقي اتسجّل');
-  assertEq(sun.pmExpected, 0, '🔒 والمتوقّع اتلغى — مفيش عدّ مرتين');
+                 settlements: [ { ts: at(2026,8,11,13), net: 9800, gross: 10000,
+                                  forDay: MON, weeklyCycleEnd:MON } ] };
+  const L = ofCashLedger(base, data, {}, {}, at(2026,8,11,20), 5);
+  const tue = L.rows.filter(r => r.key === TUE)[0];
+  assertEq(tue.val.pmIn, 9800, 'التحويل الحقيقي اتسجّل الثلاثاء');
+  assertEq(tue.pmExpected, 0, '🔒 والمتوقّع اتلغى — مفيش عدّ مرتين');
   assertEq(L.outstanding, 0, 'والمستحق صفر');
 })();
 
 // ============================================================
-// ٤) 🚫 اختبار سلبي: التحويلات المسجّلة **مش** شرط لصحّة الرقم
-//    نفس البيانات مرتين — مرة بتحويل مسجّل ومرة من غيره — ونفس النتيجة
-//    لليوم اللي نزل. لو الرقم رجع يعتمد على التسجيل اليدوي، الاتنين
-//    هيختلفوا وده الاختبار ده هيقع.
+// ٤) ✅ التأكيد اليدوي الأسبوعي مقصود: بدون تأكيد يفضل مستحق
 // ============================================================
 (function(){
   const base  = { amount: 0, atMs: at(2026,8,6,7) };
-  const sales = [ sale(at(2026,8,6,15), 0, 5000) ];   // خميس، بينزل الأحد
-  const now   = at(2026,8,10,20);                      // الإتنين — نزل خلاص
+  const sales = [ sale(at(2026,8,6,15), 0, 5000) ];
+  const now   = at(2026,8,11,20);
 
-  const withLog    = ofCashLedger(base, { sales: sales,
-    settlements: [ { ts: at(2026,8,9,13), net: 4900, gross: 5000, forDay: THU } ] }, {}, {}, now, 5);
-  const withoutLog = ofCashLedger(base, { sales: sales, settlements: [] }, {}, {}, now, 5);
+  const withLog = ofCashLedger(base, { sales:sales, settlements:[
+    {ts:at(2026,8,11,13),net:4900,gross:5000,forDay:MON,weeklyCycleEnd:MON}
+  ]}, {}, {}, now, 5);
+  const withoutLog = ofCashLedger(base, { sales:sales, settlements:[] }, {}, {}, now, 5);
 
-  assertEq(withLog.outstanding, 0, 'بتسجيل التحويل: المستحق صفر');
-  assertEq(withoutLog.outstanding, 0,
-    '🚫⭐⭐ ومن غير تسجيل: صفر برضه — الرقم مبقاش معتمد على المالك');
+  assertEq(withLog.outstanding, 0, 'بتأكيد التحويل: المستحق صفر');
+  assertEq(withoutLog.outstanding, 5000,
+    '🚫 من غير تأكيد: الفلوس تفضل مستحقة — الميعاد لوحده مش كفاية');
 })();
 
 // ============================================================
@@ -164,33 +165,33 @@ const THU='2026-08-06', FRI='2026-08-07', SAT='2026-08-08',
   assertEq(Lthu.paymobOpening, 7000, 'يوم البداية: رصيد البداية لسه محسوب');
   assert(!Lthu.paymobOpeningLanded, 'ولسه ماوصلش');
 
-  // بعد أسبوعين — الفلوس دي نزلت البنك من زمان
-  const Llater = ofCashLedger({ amount: 0, atMs: at(2026,8,6,7), paymobOpening: 7000 },
+  // حتى بعد أسبوعين يفضل لحد أول تحويل أسبوعي مؤكد يغطي نقطة البداية.
+  const Lbefore = ofCashLedger({ amount:0, atMs:at(2026,8,6,7), paymobOpening:7000 },
     data, {}, {}, at(2026,8,20,20), 5);
-  assertEq(Llater.paymobOpening, 0,
-    '⭐⭐ بعد أسبوعين: اتشال — كان بيتضاف للأبد وبيضخّم الرقم');
-  assert(Llater.paymobOpeningLanded, 'وفيه علم بيقول للشاشة تشرح السبب');
+  assertEq(Lbefore.paymobOpening,7000,'من غير تأكيد: رصيد البداية مايتبخرش بالوقت');
 
-  const W = ofWealth(Llater, {}, at(2026,8,20,20));
-  assertEq(W.paymobNet, 0, 'وإجمالي الثروة مفيهوش الرقم القديم');
-  assert(W.pmOpeningLanded, 'والشاشة عندها العلم');
+  const confirmed={sales:[],settlements:[
+    {ts:at(2026,8,11,13),gross:7000,net:6864.2,forDay:MON,weeklyCycleEnd:MON}
+  ]};
+  const Llater=ofCashLedger({amount:0,atMs:at(2026,8,6,7),paymobOpening:7000},
+    confirmed,{}, {},at(2026,8,20,20),5);
+  assertEq(Llater.paymobOpening,0,'بعد أول أسبوع مؤكد يغطي البداية: يتشال');
+  assert(Llater.paymobOpeningLanded,'وفيه علم بيقول للشاشة تشرح السبب');
+
+  const W=ofWealth(Llater,{},at(2026,8,20,20));
+  assertEq(W.paymobNet,0,'وإجمالي الثروة مفيهوش الرقم القديم');
+  assert(W.pmOpeningLanded,'والشاشة عندها العلم');
 })();
 
 // ============================================================
-// ٦) 🖥️ الشاشة بتقول الحقيقة — مش رقم مجرّد
+// ٦) 🖥️ الشاشة بتقول الحقيقة — أسبوعي + مؤكد/متوقع منفصل
 // ============================================================
 (function(){
-  const i = src.indexOf('🏦 عند Paymob — لسه ماوصلش');
-  assert(i > -1, 'كارت Paymob موجود في الشاشة');
-  const fn = extractFn(src, 'function renderCashHand(') || '';
-  assert(fn.indexOf('لسه ماوصلش') > -1,
-    'الوصف بيقول إنه اللي لسه ماوصلش');
-  assert(fn.indexOf('النظام مش متصل بحساب البنك نفسه') > -1,
-    '⭐ والشاشة بتقول صراحةً إن البنك مش مربوط — مش بتدّعي رقم مش معروف');
-  assert(fn.indexOf('W.pmDayKeys') > -1,
-    'وبتعرض فيزا أنهي يوم بالظبط — رقم تقدر تراجعه');
-  assert(fn.indexOf('W.paymobOpeningLanded') > -1,
-    'وبتشرح سبب اختفاء رصيد البداية بدل ما يختفي بالسكوت');
+  assert(src.indexOf('🏦 تحويل Paymob الأسبوعي') > -1, 'كارت التحويل الأسبوعي موجود');
+  assert(src.indexOf('المتوقع ينزل') > -1, 'الصافي المتوقع ظاهر');
+  assert(src.indexOf('عمولة متوقعة') > -1, 'العمولة المتوقعة ظاهرة');
+  assert(src.indexOf('✅ أكد المبلغ') > -1, 'زر التأكيد موجود');
+  assert(src.indexOf('عند Paymob — لسه ماوصلش') > -1, 'المستحق منفصل عن السيولة المؤكدة');
 })();
 
 // ============================================================
