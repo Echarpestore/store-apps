@@ -522,9 +522,9 @@ function pendingActions(){
       (window.allBreaks||[]).filter(b=> b.branch===br && b.dateKey===todayStr())).length);
     push('day','time','☕','بريكات منسية', window.forgottenBreaks(
       (window.allBreaks||[]).filter(b=> b.branch===br && b.dateKey===todayStr())).length);
-    // ⏱️ أوفرتايم مستني موافقتك — من غير الموافقة مبيتدفعش
+    // ⏱️ أوفرتايم غير طبيعي فقط — الطبيعي بيتعتمد تلقائيًا
     // نفس نطاق اللوحة بالظبط (كل الفروع) — وإلا العدد يقول حاجة واللوحة تقول تانية
-    push('money','money','⏱️','أوفرتايم مستني موافقتك', window.pendingOvertimeShifts(window.allShifts||[]).length);
+    push('money','money','⏱️','أوفرتايم غريب محتاج مراجعة', window.pendingOvertimeShifts(window.allShifts||[]).length);
     // 🎁 مكافآت عدّت الميزانية ومستنية قرارك
     push('money','money','🎁','مكافآت فوق الميزانية', window.pendingBudgetRewards(window.allRewards||[]).length);
   }catch(e){}
@@ -986,7 +986,9 @@ const timeCfgDefaults = {
   autoCloseBreakMult: 2,   // البريك بيتقفل تلقائي بعد كام ضعف من مدته
   breakAlertBeeps: 4,      // 🔔 بعد ما مدة البريك تخلص: بيرن كام مرة (مرة كل دقيقة) جوه فترة السماح
   maxShiftHours: 14,       // 🚨 أطول شيفت معقول — فوق كده يبقى "نسيت الانصراف" مش شغل
-  overtimeNeedsApproval: true,  // ⏱️ الأوفرتايم مبيتدفعش غير بموافقة المالك (قرار المالك)
+  overtimeNeedsApproval: true,  // ⏱️ الحارس شغال، لكن الطبيعي بيتعتمد تلقائي — الغريب بس يروح للمالك
+  overtimeAutoApproveMaxMin: 180, // ✅ لحد 3 ساعات إضافي محسوب صح = طبيعي ويتعتمد تلقائيًا
+  overtimeCalcToleranceMin: 3,   // 🔎 سماح فرق حساب بسيط بين المدة والأوفرتايم المسجّل
   // 🗓️ رصيد الإجازات — **أسبوعي** (قرار المالك): يوم إجازة لكل أسبوع،
   //    والأسبوع من **السبت للجمعة**. أي يوم زيادة في نفس الأسبوع بيتخصم
   //    حتى لو المالك اعتمده. والأسبوع الناقص آخر الشهر ليه يومه برضه.
@@ -1225,11 +1227,69 @@ function forgottenShifts(shifts, cfg, nowTs){
   });
 }
 
-/* ⏱️ الشيفتات اللي ليها أوفرتايم مستني موافقة المالك */
-function pendingOvertimeShifts(shifts){
-  return (shifts || []).filter(s=>
-    s && s.otRequiresApproval && (Number(s.overtimeMinutes)||0) > 0 && s.overtimeDecision === 'pending');
+/* ⏱️ سياسة الأوفرتايم: الطبيعي يتدفع تلقائي — الغريب بس يروح للمالك
+   -----------------------------------------------------------------
+   الطبيعي = شيفت مقفول، مدته منطقية، رقم الأوفرتايم مطابق لمدة الشيفت،
+   والزيادة ≤ الحد التلقائي (3 ساعات افتراضيًا).
+   أي نسيان انصراف / مدة غير معقولة / رقم متناقض / زيادة ضخمة = مراجعة يدوية. */
+function overtimeReviewInfo(s, cfg){
+  cfg = cfg || (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
+  const ot = Math.max(0, Number(s && s.overtimeMinutes) || 0);
+  if(!s || ot <= 0) return { needsReview:false, reason:'none', overtimeMinutes:ot, durationMin:0, expectedMin:0 };
+  if(!Number(s.clockInTs) || !Number(s.clockOutTs)){
+    return { needsReview:true, reason:'open_shift', overtimeMinutes:ot, durationMin:0, expectedMin:0 };
+  }
+  const durationMin = Number(s.shiftMinutes) > 0
+    ? Number(s.shiftMinutes)
+    : Math.round((Number(s.clockOutTs) - Number(s.clockInTs)) / 60000);
+  if(durationMin <= 0){
+    return { needsReview:true, reason:'bad_duration', overtimeMinutes:ot, durationMin, expectedMin:0 };
+  }
+  const maxShiftMin = (Number(cfg.maxShiftHours) || 14) * 60;
+  if(s.forgotClockOut || durationMin > maxShiftMin){
+    return { needsReview:true, reason:'forgot_clockout', overtimeMinutes:ot, durationMin, expectedMin:Math.max(0,durationMin-495) };
+  }
+  const expectedMin = Math.max(0, durationMin - 495);
+  const tol = Math.max(0, Number(cfg.overtimeCalcToleranceMin) || 3);
+  if(Math.abs(ot - expectedMin) > tol){
+    return { needsReview:true, reason:'calc_mismatch', overtimeMinutes:ot, durationMin, expectedMin };
+  }
+  const maxAuto = Math.max(0, Number(cfg.overtimeAutoApproveMaxMin) || 180);
+  if(ot > maxAuto){
+    return { needsReview:true, reason:'too_much_overtime', overtimeMinutes:ot, durationMin, expectedMin };
+  }
+  return { needsReview:false, reason:'normal', overtimeMinutes:ot, durationMin, expectedMin };
 }
+window.overtimeReviewInfo = overtimeReviewInfo;
+
+function overtimeReviewReasonLabel(info){
+  const r = info && info.reason;
+  if(r === 'open_shift') return 'الشيفت لسه مفتوح';
+  if(r === 'bad_duration') return 'مدة الشيفت غير منطقية';
+  if(r === 'forgot_clockout') return 'غالبًا نسيان انصراف';
+  if(r === 'calc_mismatch') return 'رقم الأوفرتايم مش مطابق لمدة الشيفت';
+  if(r === 'too_much_overtime') return 'أوفرتايم كبير عن الطبيعي';
+  return 'محتاج مراجعة';
+}
+window.overtimeReviewReasonLabel = overtimeReviewReasonLabel;
+
+function pendingOvertimeShifts(shifts, cfg){
+  return (shifts || []).filter(s=>
+    s && s.otRequiresApproval && (Number(s.overtimeMinutes)||0) > 0 && s.overtimeDecision === 'pending'
+      && overtimeReviewInfo(s, cfg).needsReview);
+}
+window.pendingOvertimeShifts = pendingOvertimeShifts;
+
+function autoApprovedOvertimeMinutes(s, cfg){
+  if(!s) return 0;
+  const asked = Math.max(0, Number(s.overtimeMinutes)||0);
+  if(!s.otRequiresApproval) return asked;
+  if(s.overtimeDecision === 'approved') return Math.max(0, Math.min(asked, Number(s.overtimeApprovedMin)||0));
+  if(s.overtimeDecision === 'rejected') return 0;
+  if(s.overtimeDecision === 'pending' && !overtimeReviewInfo(s, cfg).needsReview) return asked;
+  return 0;
+}
+window.autoApprovedOvertimeMinutes = autoApprovedOvertimeMinutes;
 
 /* 🚫 الغياب مبيتحسبش غير بعد ما الشيفت يخلص
    ------------------------------------------------------------
@@ -2755,6 +2815,11 @@ async function clockOut(empId, photoDataUri){
   const maxShiftMin = (Number(cfg.maxShiftHours) || 14) * 60;
   // 🚨 شيفت أطول من المعقول = نسيان انصراف، مش شغل
   const forgotten = totalMin > maxShiftMin;
+  const otReview = overtimeReviewInfo({
+    clockInTs: shift.clockInTs, clockOutTs: now, shiftMinutes: totalMin,
+    overtimeMinutes, forgotClockOut: forgotten
+  }, cfg);
+  const otNeedsManual = overtimeMinutes > 0 && otReview.needsReview;
 
   // 🚪 انصراف بدري: بالطابع الزمني لنهاية الشيفت (مش بساعة اليوم)
   let earlyInfo = { earlyMin: 0, hours: 0 };
@@ -2773,9 +2838,12 @@ async function clockOut(empId, photoDataUri){
       // ⏱️ العلامة دي هي اللي بتخلي المرتب يستنى الموافقة. الشيفتات القديمة
       //    (اللي اتقفلت قبل التحديث) مفيهاش العلامة، فبتفضل شغالة بالقديم —
       //    مفيش تغيير بأثر رجعي (قرار المالك).
-      otRequiresApproval: true,
-      overtimeApprovedMin: 0,
-      overtimeDecision: overtimeMinutes > 0 ? 'pending' : 'none',
+      otRequiresApproval: overtimeMinutes > 0,
+      overtimeApprovedMin: overtimeMinutes > 0 && !otNeedsManual ? overtimeMinutes : 0,
+      overtimeDecision: overtimeMinutes <= 0 ? 'none' : (otNeedsManual ? 'pending' : 'approved'),
+      overtimeAutoApproved: overtimeMinutes > 0 && !otNeedsManual,
+      overtimeAutoApprovedAt: overtimeMinutes > 0 && !otNeedsManual ? now : null,
+      overtimeReviewReason: otNeedsManual ? otReview.reason : null,
       shiftMinutes: totalMin,
       forgotClockOut: forgotten || false
     });
@@ -2792,7 +2860,11 @@ async function clockOut(empId, photoDataUri){
     const h = Math.floor(totalMin/60), m = totalMin%60;
     let msg = `تم تسجيل الانصراف ✅\nمدة الشيفت: ${h} س ${m} د`;
     if(earlyInfo.hours > 0) msg += `\n🚪 ناقص ${earlyInfo.earlyMin} دقيقة عن مدة شيفتك → ${earlyInfo.hours} ساعة رصيد`;
-    if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة (مستني موافقة الإدارة)`;
+    if(overtimeMinutes > 0){
+      msg += otNeedsManual
+        ? `\n🚨 وقت إضافي: ${overtimeMinutes} دقيقة — ${overtimeReviewReasonLabel(otReview)}، محتاج مراجعة الإدارة`
+        : `\n✅ وقت إضافي: ${overtimeMinutes} دقيقة — اتعتمد تلقائيًا`;
+    }
     alert(msg);
   }catch(err){
     console.error('تعذر تسجيل الانصراف', err);
@@ -6427,10 +6499,12 @@ function computeSalary(emp, periodStart, end){
      العلامة فبتتحسب زي الأول بالظبط (مفيش تغيير بأثر رجعي — قرار المالك).
      ⚠️ من غير الفصل ده، شيفت منسي واحد (24 ساعة) كان بيدفع ~15.75 ساعة. */
   const overtimeMinutes = rangeShifts.reduce((sum,s)=>
-    sum + (s.otRequiresApproval ? (Number(s.overtimeApprovedMin)||0) : (Number(s.overtimeMinutes)||0)), 0);
-  // المستني موافقة (معروض بس — مش داخل الحساب)
+    sum + autoApprovedOvertimeMinutes(s, window.timeCfg || timeCfgDefaults), 0);
+  // اللي يفضل pending في المرتب = الغريب بس. الطبيعي pending القديم بيتدفع تلقائيًا.
   const overtimePendingMin = rangeShifts.reduce((sum,s)=>
-    sum + ((s.otRequiresApproval && s.overtimeDecision === 'pending') ? (Number(s.overtimeMinutes)||0) : 0), 0);
+    sum + ((s.otRequiresApproval && s.overtimeDecision === 'pending'
+      && overtimeReviewInfo(s, window.timeCfg || timeCfgDefaults).needsReview)
+      ? (Number(s.overtimeMinutes)||0) : 0), 0);
   const overtimePay = Math.round((overtimeMinutes/60) * hourlyRate * 100)/100;
 
   // 🗓️ الحضور والغياب: شهر تقويمي حقيقي، ومصدر واحد للحسبة وللواجهة.
@@ -7898,7 +7972,7 @@ function renderOvertimeApprovals(){
   /* 🌍 كل الفروع مش فرع الجهاز بس — المالك بيعتمد صرف على الشبكة كلها،
      ومكانش منطقي إنه يمشي على كل جهاز فرع عشان يعتمد أوفرتايمه.
      (وكمان ده كان بيخلي اللوحة تطلع فاضية والبانر بيقول إن فيه بنود.) */
-  /* اللوحة بقت مكان واحد للاتنين: أوفرتايم مستني موافقة، **و**الشيفتات
+  /* اللوحة بقت للاستثناءات فقط: أوفرتايم غريب محتاج مراجعة، **و**الشيفتات
      اللي فضلت مفتوحة أو اتقفلت على إنها نسيان — دي محتاجة قرار المالك
      على ساعة المشي أصلًا قبل ما يتكلم عن أوفرتايم. */
   const cfg0 = window.timeCfg || timeCfgDefaults;
@@ -7915,7 +7989,7 @@ function renderOvertimeApprovals(){
     .filter(sh=> !pend.some(p=> p.id === sh.id));
   const list = needTime.concat(pend).sort((a,b)=> (b.clockInTs||0) - (a.clockInTs||0));
   if(!list.length){
-    host.innerHTML = '<p style="color:var(--sub); font-size:12.5px; margin:0;">مفيش أوفرتايم مستني موافقة ✅</p>';
+    host.innerHTML = '<p style="color:var(--sub); font-size:12.5px; margin:0;">مفيش أوفرتايم غريب محتاج مراجعة ✅</p>';
     return;
   }
   const cfg = cfg0;
@@ -7928,7 +8002,9 @@ function renderOvertimeApprovals(){
     const dur  = open
       ? Math.round((Date.now() - (Number(s.clockInTs)||Date.now()))/60000)
       : (Number(s.shiftMinutes) || Math.round((Number(s.clockOutTs) - (Number(s.clockInTs)||0))/60000));
-    const susp = s.forgotClockOut || dur > maxMin;
+    const review = overtimeReviewInfo(s, cfg);
+    const susp = review.needsReview || s.forgotClockOut || dur > maxMin;
+    const reason = overtimeReviewReasonLabel(review);
     return `<div style="border:1px solid ${susp?'#7f1d1d':'var(--line)'}; background:${susp?'#2a1111':'var(--panel2)'};
                 border-radius:12px; padding:11px 13px; margin-bottom:9px;">
       <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:center;">
@@ -7939,7 +8015,7 @@ function renderOvertimeApprovals(){
         ${open ? 'مفتوح من' : 'مدة الشيفت'} <b>${Math.max(0,Math.floor(dur/60))} س ${Math.max(0,dur%60)} د</b>${open ? ' — لسه ماسجّلتش انصراف' : ''} ·
         أوفرتايم مطلوب <b style="color:var(--gold);">${mins} دقيقة</b>
       </div>
-      ${susp ? '<div style="font-size:12px; color:#ff9a9d; font-weight:800; margin-top:5px;">🚨 شكله نسيان انصراف مش شغل فعلي — راجعه كويس</div>' : ''}
+      ${susp ? `<div style="font-size:12px; color:#ff9a9d; font-weight:800; margin-top:5px;">🚨 ${reason} — ده اللي محتاج قرارك</div>` : ''}
       <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:9px;">
         ${(!s.clockOutTs || susp) ? `<button data-ot-time="${s.id}" style="flex:1 1 100%; padding:9px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--gold); font-family:'Cairo'; font-weight:800; cursor:pointer;">🕐 حدّد ساعة المشي واقفل الشيفت</button>` : ''}
         <button data-ot-full="${s.id}" style="flex:1; min-width:96px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--gold-dim); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">✅ اعتمد كامل</button>

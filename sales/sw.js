@@ -1,4 +1,4 @@
-const CACHE_NAME = 'store-apps-shell-v117-sales';
+const CACHE_NAME = 'store-apps-shell-v118-sales';
 const SALES_CACHE_SUFFIX = '-sales';
 
 self.addEventListener('install', (event) => {
