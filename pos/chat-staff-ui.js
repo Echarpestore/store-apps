@@ -484,6 +484,12 @@
 
   var CC_FUNNEL_RANK={view:1,chat:2,tryon:3,cart:4,checkout:5,order:6,collected:7};
   function ccFunnelHot(c){var r=CC_FUNNEL_RANK[String((c&&c.funnelStage)||'')]||0;return r>=3&&r<6;}
+  function ccFunnelOwnerPatch(c){
+    var r=CC_FUNNEL_RANK[String((c&&c.funnelStage)||'')]||0;
+    // بعد الأوردر منغيرش صاحب الفرصة، عشان تقييم الموظفة مايتبدلش برد لاحق.
+    if(r>=6) return {};
+    return {funnelOwnerName:myName(),funnelOwnerBranch:myBranch()||'',funnelOwnerAt:Date.now()};
+  }
   function visibleConvs(){
     var now=Date.now();
     var out=CST.convs.filter(function(c){
@@ -987,11 +993,11 @@
       outfit: true, products: products
     };
     var c2 = c;
-    CDB.sendMessage(c2.id, msg, {
+    CDB.sendMessage(c2.id, msg, Object.assign({
       lastAt: ts, lastText: '🎨 اقتراح طقم (' + products.length + ' طرح)', lastFrom: 'staff',
       unreadStaff: 0, expireAt: chatExpireAt(ts),
       branch: c2.branch || myBranch() || ''
-    }).then(function(){
+    }, ccFunnelOwnerPatch(c2))).then(function(){
       ccOutfitToggle();
     }).catch(function(e){
       console.warn('cc outfit send', e);
@@ -1072,12 +1078,12 @@
     }
     // ⚠️ `at` (طابع السيرفر) و`unreadCust` (increment) بيتحطوا **جوه**
     //    الطبقة — شكلهم مختلف بين compat وmodular.
-    CDB.sendMessage(c.id, msg, {
+    CDB.sendMessage(c.id, msg, Object.assign({
       lastAt: ts, lastText: text || '📷 صورة', lastFrom: 'staff',
       unreadStaff: 0, expireAt: chatExpireAt(ts),
       // 🏢 محادثة من غير فرع بيتبناها أول فرع يرد (Office مبيغيرش)
       branch: c.branch || myBranch() || ''
-    }).then(function(){
+    }, ccFunnelOwnerPatch(c))).then(function(){
       textEl.value = '';
       ccImgClear();
     }).catch(function(e){
@@ -1181,6 +1187,7 @@
     if(CST.open&&!CST.activeId)renderList();
   }
   window.ccFunnelFilter=ccFunnelFilter;
+  window.ccOpenPanel = openPanel;
   window.ccOpenConv = ccOpenConv;
   window.ccBack = ccBack;
   window.ccFilter = ccFilter;
