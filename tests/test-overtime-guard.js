@@ -9,7 +9,7 @@
 //     = 66 ساعة رصيد = 9 أيام خصم. نفس النسيان يدفع أو يمسح المرتب.
 //
 // القرارات (المالك):
-//   ١) الأوفرتايم مبيتدفعش غير بموافقته — والقديم زي ما هو (مفيش أثر رجعي)
+//   ١) الطبيعي بيتعتمد تلقائيًا؛ الغريب/غير المنطقي بس محتاج موافقة — والقديم زي ما هو
 //   ٢) الشيفت المنسي مبيتقفلش تلقائي — تنبيه بس
 // ============================================================
 'use strict';
@@ -85,7 +85,7 @@ const CFG = S.window.timeCfgDefaults;
 })();
 
 // ============================================================
-// ٣) 💰 الأهم: الأوفرتايم مبيتدفعش من غير موافقة
+// ٣) 💰 الغريب مبيتدفعش من غير موافقة، والطبيعي بيتدفع تلقائيًا
 // ============================================================
 const Y = 2026, M = 6;
 const _period = S.payPeriodRange('2026-07');
@@ -173,13 +173,20 @@ function calc(shifts){
 // ٥) قايمة الأوفرتايم المستني
 // ============================================================
 (function(){
+  const baseTs = new Date(2026,6,10,10,0).getTime();
   const list = S.window.pendingOvertimeShifts([
-    { id:'a', otRequiresApproval:true, overtimeMinutes:100, overtimeDecision:'pending' },
-    { id:'b', otRequiresApproval:true, overtimeMinutes:100, overtimeDecision:'approved' },
-    { id:'c', otRequiresApproval:true, overtimeMinutes:0,   overtimeDecision:'pending' },
-    { id:'d', overtimeMinutes:300 }   // قديم — مالوش علاقة بالموافقات
+    // طبيعي: 9س15د = 60د أوفرتايم — مايزعجش المالك
+    { id:'normal', clockInTs:baseTs, clockOutTs:baseTs+555*MIN, shiftMinutes:555,
+      otRequiresApproval:true, overtimeMinutes:60, overtimeDecision:'pending' },
+    // غريب: 4 ساعات أوفرتايم — فوق حد الاعتماد التلقائي
+    { id:'a', clockInTs:baseTs, clockOutTs:baseTs+735*MIN, shiftMinutes:735,
+      otRequiresApproval:true, overtimeMinutes:240, overtimeDecision:'pending' },
+    { id:'b', clockInTs:baseTs, clockOutTs:baseTs+555*MIN, shiftMinutes:555,
+      otRequiresApproval:true, overtimeMinutes:60, overtimeDecision:'approved' },
+    { id:'c', otRequiresApproval:true, overtimeMinutes:0, overtimeDecision:'pending' },
+    { id:'d', overtimeMinutes:300 }
   ]).map(s=> s.id);
-  assertEq(list, ['a'], 'المستني بس (مش المعتمد ولا الصفر ولا القديم)');
+  assertEq(list, ['a'], '⭐ اللوحة فيها الغريب pending بس — الطبيعي بيتعتمد تلقائيًا');
 })();
 
 // ============================================================
@@ -220,7 +227,8 @@ vm.runInContext(
     'function caiDayStart(', 'function caiDayEnd(', 'function _fmtKey(', 'function caiDayKey(',
     'function approvedLeaveFor(', 'function effectiveStartHM(', 'function effectiveEndHM(',
     'function scheduledShiftMinutes(', 'function earlyLeaveFromWorked(',
-    'function expectedShiftEndTs(', 'function earlyLeaveHours(' ]
+    'function expectedShiftEndTs(', 'function earlyLeaveHours(',
+    'function overtimeReviewInfo(', 'function overtimeReviewReasonLabel(' ]
     .map(function(h){ return extractFn(src, h); }).join('\\n'), box0);
 
 const written = {};
@@ -240,6 +248,8 @@ const box = {
   approvedLeaveFor: box0.approvedLeaveFor, allLeaveReqs: [],
   scheduledShiftMinutes: box0.scheduledShiftMinutes,
   earlyLeaveFromWorked: box0.earlyLeaveFromWorked,
+  overtimeReviewInfo: box0.overtimeReviewInfo,
+  overtimeReviewReasonLabel: box0.overtimeReviewReasonLabel,
   Intl: Intl,
   todayStr: function(){ return '2026-07-11'; },
   doc: function(){ return {}; }, db: {}, alert: function(){}, console: console,
@@ -289,15 +299,24 @@ function clockOutWritten(inTs, nowTs){
   assertEq(w.overtimeDecision, 'none', 'ومفيش حاجة مستنية موافقة');
 })();
 
+(function(){
+  // طبيعي: 9س15د = ساعة أوفرتايم محسوبة صح → اعتماد تلقائي
+  const w = clockOutWritten(new Date(2026,6,10,12,45).getTime(), new Date(2026,6,10,22,0).getTime());
+  assertEq(w.overtimeMinutes, 60, 'ساعة أوفرتايم طبيعية متسجلة');
+  assertEq(w.overtimeApprovedMin, 60, '⭐ الطبيعي اتعتمد تلقائي بالكامل');
+  assertEq(w.overtimeDecision, 'approved', '⭐ ومفيش pending يدوي');
+  assertEq(w.overtimeAutoApproved, true, 'ومتعلّم إنه اعتماد تلقائي');
+})();
+
 try{ fs.unlinkSync(runnerPath); }catch(e){}
 
 // ============================================================
-// ٧) الموظفة بتعرف إن الأوفرتايم مستني موافقة (مش بتفتكره مضمون)
+// ٧) الموظفة بتعرف هل الأوفرتايم اتعتمد تلقائي ولا محتاج مراجعة
 // ============================================================
 (function(){
   const fn = extractFn(appSrc, 'async function clockOut(');
-  assert(!!fn && /مستني موافقة/.test(fn),
-    'رسالة الانصراف بتقول إن الوقت الإضافي مستني موافقة');
+  assert(!!fn && /اتعتمد تلقائيًا/.test(fn) && /محتاج مراجعة الإدارة/.test(fn),
+    'رسالة الانصراف بتفرّق بين الطبيعي المعتمد تلقائيًا والغريب المحتاج مراجعة');
 })();
 
 // ============================================================
@@ -305,7 +324,7 @@ try{ fs.unlinkSync(runnerPath); }catch(e){}
 // ============================================================
 (function(){
   assert(/id="overtimeApprovals"/.test(htmlSrc), 'لوحة الاعتماد موجودة في الشاشة');
-  assert(/أوفرتايم مستني موافقتك/.test(htmlSrc), 'وبعنوان واضح');
+  assert(/أوفرتايم غريب محتاج مراجعة/.test(htmlSrc), 'وبعنوان واضح للاستثناءات بس');
   // 🔐 لوحة فلوس → المدير محجوب عنها (زي باقي لوحات الفلوس)
   assertEq(S.window.permOfPanelTitle('⏱️ أوفرتايم مستني موافقتك'), 'money',
     '⭐ اللوحة تحت صلاحية الفلوس — المدير مبيشوفهاش');

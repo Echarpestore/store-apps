@@ -51,6 +51,7 @@ const WANTED = [
   'function countAbsenceDaysInRange(', 'function _timeCfgNow(',
   'function effectiveDayOffKey(', 'function payrollAttendanceBalance(',
   'function weekStartKeyOf(', 'function shiftCountsAsDay(', 'function weeklyOffBalance(',
+  'function overtimeReviewInfo(', 'function autoApprovedOvertimeMinutes(',
   'function payrollDateFromKey(', 'function payrollCalendarDaysInRange(', 'function computeSalary(',
 ];
 const parts = [];
