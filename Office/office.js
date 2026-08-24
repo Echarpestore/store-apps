@@ -1202,7 +1202,8 @@ window.ofWhen = ofWhen;
 //    `let` مبتترفعش (TDZ)، ونفس الباج ده حصل قبل كده مع OF_RECUR_COL.
 let _ofActRaw = [];
 
-function ofGoPage(page){
+function ofGoPage(page, opts){
+  opts = opts || {};
   const target = document.getElementById('page-' + page);
   if(!target) return false;
   document.querySelectorAll('#tabsNav button').forEach(function(x){
@@ -1221,13 +1222,23 @@ function ofGoPage(page){
   if(page === 'odd' && !_ofActRaw.length){
     try{ ofLoadActivity(); }catch(e){ console.warn('activity load', e); }
   }
+  if(!opts.fromHistory){
+    try{
+      const st = Object.assign({}, history.state || {}, { officeNavV64:'page', page:page });
+      if(opts.replace) history.replaceState(st,'',location.href);
+      else if(!history.state || history.state.officeNavV64 !== 'page' || history.state.page !== page) history.pushState(st,'',location.href);
+    }catch(e){}
+  }
   return true;
 }
 window.ofGoPage = ofGoPage;
 
-function ofOpenMore(){
+function ofOpenMore(fromHistory){
   const x = document.getElementById('officeMoreSheet');
   if(x){ x.classList.add('on'); x.setAttribute('aria-hidden','false'); }
+  if(!fromHistory){
+    try{ history.pushState(Object.assign({},history.state||{},{officeNavV64:'more'}),'',location.href); }catch(e){}
+  }
 }
 function ofCloseMore(){
   const x = document.getElementById('officeMoreSheet');
@@ -1262,7 +1273,27 @@ document.querySelectorAll('.hireSub').forEach(function(b){
   });
 });
 
-ofGoPage('day'); // ⭐ صفحة واحدة بس عند البداية — كان اليوم والوارد ظاهرين مع بعض
+ofGoPage('day', {replace:true}); // ⭐ stable Office home anchor
+
+// 🔙 Office Back UX v64: Back = previous in-app step; final destination = الرئيسية.
+if(window.addEventListener) window.addEventListener('popstate', function(e){
+  try{
+    const more=document.getElementById('officeMoreSheet');
+    if(more && more.classList.contains('on')){ ofCloseMore(); return; }
+
+    const st=(e && e.state)||{};
+    if(st.officeNavV64==='more'){ ofOpenMore(true); return; }
+    if(st.officeNavV64==='page' && st.page){
+      ofGoPage(st.page,{fromHistory:true});
+      return;
+    }
+
+    // No useful history left: keep owner inside Office on الرئيسية.
+    ofGoPage('day',{fromHistory:true});
+    history.replaceState(Object.assign({},history.state||{},{officeNavV64:'page',page:'day'}),'',location.href);
+  }catch(err){ console.warn('office back',err); }
+});
+
 
 /* ============================================================
    📡 البيانات الحية + الإشعارات
