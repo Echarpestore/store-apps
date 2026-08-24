@@ -2985,6 +2985,116 @@ setTimeout(function(){
 </script>
 
 <script>
+
+/* ============================================================
+   🔙 Customer Back UX v41
+   Back = previous in-app step. When the stack is exhausted,
+   stay inside the app and return to "بطاقتي" (points/home).
+   ============================================================ */
+(function(){
+  var CKEY='echarpeNavV41', suppress=false;
+
+  function isOn(id, cls){
+    var e=document.getElementById(id); if(!e) return false;
+    if(cls) return e.classList.contains(cls);
+    return e.style.display!=='none' && (!window.getComputedStyle || getComputedStyle(e).display!=='none');
+  }
+  function topLayer(){
+    if(isOn('tryonOverlay')) return 'tryon';
+    if(isOn('invOverlay','on')) return 'invoice';
+    if(isOn('crOverlay','on')) return 'sheet';
+    var shop=document.getElementById('tab-shop');
+    if(shop && shop.classList.contains('shop-overlay')) return 'checkout';
+    if(isOn('chatWrap','on')) return 'chat';
+    return '';
+  }
+  function closeTop(kind){
+    if(kind==='tryon' && typeof tryonOverlayClose==='function') return tryonOverlayClose();
+    if(kind==='invoice' && typeof closeInvoiceDetail==='function') return closeInvoiceDetail();
+    if(kind==='sheet' && typeof closeSheet==='function') return closeSheet();
+    if(kind==='checkout' && typeof closeQuickCheckout==='function') return closeQuickCheckout();
+    if(kind==='chat' && typeof closeChat==='function') return closeChat(true);
+  }
+  function state(kind, extra){
+    return Object.assign({},history.state||{}, {[CKEY]:kind}, extra||{});
+  }
+  function push(kind, extra){
+    if(suppress) return;
+    var st=history.state||{};
+    if(st[CKEY]===kind && (!extra || st.tab===extra.tab)) return;
+    try{ history.pushState(state(kind,extra),'',location.href); }catch(e){}
+  }
+  function home(){
+    try{
+      if(typeof switchTab==='function') switchTab('card');
+      window.scrollTo(0,0);
+      history.replaceState(state('home',{tab:'card'}),'',location.href);
+    }catch(e){}
+  }
+
+  // Wrap existing navigation without changing its business behavior.
+  var oldSwitch=window.switchTab;
+  if(typeof oldSwitch==='function'){
+    window.switchTab=function(tab,fromBack){
+      oldSwitch(tab);
+      if(!fromBack) push('tab',{tab:tab});
+    };
+    // inline/tab click handlers resolve global switchTab at call time.
+  }
+
+  function wrapOpen(name,kind){
+    var old=window[name];
+    if(typeof old!=='function') return;
+    window[name]=function(){
+      var r=old.apply(this,arguments);
+      push(kind);
+      return r;
+    };
+  }
+  wrapOpen('openInvoiceDetail','invoice');
+  wrapOpen('showSheet','sheet');
+  wrapOpen('openQuickCheckout','checkout');
+  wrapOpen('tryonOverlayOpen','tryon');
+
+  // openChat already had its own history hack. Replace only its push behavior
+  // by temporarily suppressing history.pushState inside that legacy function.
+  var oldChat=window.openChat;
+  if(typeof oldChat==='function'){
+    window.openChat=function(){
+      var orig=history.pushState;
+      try{ history.pushState=function(){}; var r=oldChat.apply(this,arguments); }
+      finally{ history.pushState=orig; }
+      push('chat'); return r;
+    };
+  }
+
+  // Existing legacy chat popstate listener may also run; our handler is added
+  // after it and therefore sees the layer already closed, so state drives the step.
+  window.addEventListener('popstate',function(e){
+    suppress=true;
+    try{
+      var layer=topLayer();
+      if(layer){ if(layer==='chat' && typeof closeChat==='function') closeChat(true); else closeTop(layer); return; }
+
+      var st=(e && e.state)||{};
+      if(st[CKEY]==='tab' && st.tab && st.tab!=='card'){
+        if(typeof switchTab==='function') switchTab(st.tab,true);
+        return;
+      }
+      // No more meaningful internal history: never dump the customer out.
+      home();
+    }finally{
+      setTimeout(function(){ suppress=false; },0);
+    }
+  });
+
+  // Stable home anchor. Customer can always finish Back on the points card.
+  try{ history.replaceState(state('home',{tab:'card'}),'',location.href); }catch(e){}
+})();
+
+</script>
+
+<script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function(){
     navigator.serviceWorker.register('sw.js').catch(function(){});
