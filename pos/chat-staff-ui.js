@@ -844,15 +844,30 @@
     return hasOrder ? 'end' : 'mid';
   }
 
+  function ccFollowupSuggestion(c){
+    c=c||conv(); if(!c)return'';
+    var brand=c.brand==='glow'?'Glow':'echarpe', product=String(c.funnelProductName||'المنتج').trim();
+    if(c.funnelStage==='checkout') return 'أهلاً بيكي 🤍 لو واجهتك أي مشكلة في إتمام طلب '+product+'، أنا معاكي وأقدر أساعدك نكمّله.';
+    if(c.funnelStage==='cart') return 'أهلاً بيكي 🤍 لو حابة تكمّلي طلب '+product+'، أنا معاكي وأقدر أساعدك في الاستلام أو التوصيل.';
+    if(c.funnelStage==='tryon') return 'إيه رأيك في '+product+' بعد التجربة؟ 🤍 لو حابة أقدر أساعدك في اختيار اللون أو أجهزلك الطلب.';
+    return '';
+  }
+  function ccFollowupUse(){
+    var t=ccFollowupSuggestion(conv()),el=document.getElementById('ccText');if(!t||!el)return;
+    el.value=t;el.focus();try{el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}catch(e){}
+  }
+  window.ccFollowupUse=ccFollowupUse;
   function ccQuickHtml(){
-    return '<div id="ccQuick"></div>';
+    return '<div id="ccFollowup"></div><div id="ccQuick"></div>';
   }
   window.ccQuickHtml = ccQuickHtml;
 
   function ccQuickRender(){
     var box = document.getElementById('ccQuick');
     if(!box) return;
-    if(!conv()){ box.innerHTML = ''; return; }
+    var fc=conv(),fb=document.getElementById('ccFollowup');
+    if(fb){var ft=ccFollowupSuggestion(fc);fb.innerHTML=ft?'<button class="ccQuickChip" onclick="ccFollowupUse()">🔥 متابعة ذكية حسب المرحلة</button>':'';}
+    if(!fc){ box.innerHTML = ''; return; }
     var list = CC_QUICK[ccQuickStage()] || [];
     if(!list.length){ box.innerHTML = ''; return; }
     box.innerHTML = list.map(function(t, i){
