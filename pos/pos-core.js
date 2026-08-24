@@ -147,6 +147,67 @@ window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
 
+// ============================================================
+// 🔐 Sync Guard — الفاتورة الأوفلاين تفضل في IndexedDB لحد تأكيد السيرفر.
+// قبل Logout أو تقفيل اليوم بنستنى Firestore نفسه يقول إن كل الكتابات
+// الصادرة قبل اللحظة دي وصلت للباك إند. لا بنمسح cache ولا queue محلية.
+// ============================================================
+const POS_SYNC_WAIT_MS = 15000;
+window.__posPendingWritesKnown = false;
+
+function _posPromiseTimeout(p, ms){
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise(function(_r, reject){ setTimeout(function(){ reject(new Error('sync-timeout')); }, ms || POS_SYNC_WAIT_MS); })
+  ]);
+}
+
+async function posFlushPendingWrites(opts){
+  opts = opts || {};
+  const ms = Number(opts.timeoutMs) || POS_SYNC_WAIT_MS;
+  try{
+    // waitForPendingWrites يشمل الفاتورة + batch المخزون/النقط + أي كتابة سبق إصدارها.
+    await _posPromiseTimeout(db.waitForPendingWrites(), ms);
+    window.__posPendingWritesKnown = false;
+    return { ok:true, pending:false };
+  }catch(e){
+    window.__posPendingWritesKnown = true;
+    return {
+      ok:false,
+      pending:true,
+      offline: (typeof navigator !== 'undefined' && navigator.onLine === false),
+      timeout: !!(e && e.message === 'sync-timeout'),
+      error:e
+    };
+  }
+}
+window.posFlushPendingWrites = posFlushPendingWrites;
+
+async function posRequireSynced(actionLabel, opts){
+  actionLabel = actionLabel || 'العملية';
+  const r = await posFlushPendingWrites(opts);
+  if(r.ok) return r;
+  const msg = r.offline
+    ? ('📴 فيه بيانات محفوظة على الجهاز ولسه مستنية النت. مش هنكمل ' + actionLabel + ' قبل ما تترفع للسيرفر.')
+    : ('⏳ لسه فيه بيانات بتترفع للسيرفر. استنى لحظة وجرب ' + actionLabel + ' تاني.');
+  try{ showToast(msg, 'err'); }catch(e){}
+  return r;
+}
+window.posRequireSynced = posRequireSynced;
+
+// لما النت يرجع، نطلب تأكيد الخلفية ونطفي علامة الـpending بمجرد وصول كل الكتابات.
+window.addEventListener('online', function(){
+  setTimeout(function(){ posFlushPendingWrites({ timeoutMs:30000 }).catch(function(){}); }, 500);
+});
+
+// المتصفح مش بيسمح بانتظار async وقت قفل التاب، لكن نقدر نحذر المستخدم
+// لو إحنا عارفين إن فيه كتابة مؤجلة. Firestore persistence نفسها تحتفظ بها.
+window.addEventListener('beforeunload', function(e){
+  if(!window.__posPendingWritesKnown) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
 // بيحمّل أسماء الفروع المعتمدة (من الموظفين المسجّلين) لقايمة اختيار الفرع —
 // عشان نمنع أخطاء الكتابة اليدوية اللي بتعمل "فرع جديد" بالغلط
 async function loadBranchSetupOptions(){
@@ -1131,7 +1192,11 @@ async function cardLogin(code){
   }
 }
 
-function logout(){
+async function logout(){
+  // خروج الموظف لا يمسح أي queue، لكن بنرفض الخروج لو فيه كتابة لسه
+  // ما وصلتش للسيرفر عشان الشاشة ما تديش إحساس كاذب إن كل حاجة اترفعت.
+  const sync = await posRequireSynced('الخروج', { timeoutMs:12000 });
+  if(!sync.ok) return;
   currentEmployee = null;
   cart = [];
   currentBranch = localStorage.getItem('pos_branch') || currentBranch;   // الجهاز يرجع لفرعه الأصلي بعد خروج الأدمن

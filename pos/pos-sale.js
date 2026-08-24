@@ -3578,7 +3578,11 @@ let _offlineQueued = false;   // بتتعلّم لو أي كتابة اتأجل�
 function _waitWrite(p, ms){
   return new Promise(function(res){
     var done = false;
-    var t = setTimeout(function(){ if(!done){ done = true; _offlineQueued = true; res({ queued:true }); } }, ms || _WRITE_WAIT_MS);
+    var t = setTimeout(function(){ if(!done){
+      done = true; _offlineQueued = true;
+      window.__posPendingWritesKnown = true;
+      res({ queued:true });
+    } }, ms || _WRITE_WAIT_MS);
     Promise.resolve(p).then(function(v){
       if(!done){ done = true; clearTimeout(t); res({ ok:true, value:v }); }
     }).catch(function(e){
@@ -3594,13 +3598,27 @@ function _raceTimeout(p, ms){
 }
 // <<< OFFLINE_SAVE_END
 
-// رقم فاتورة متسلسل ومميز (زي INV-000123) — بيتولّد بمعاملة Firestore آمنة
-// عشان لو جهازين بيبيعوا في نفس اللحظة، كل واحد ياخد رقم مختلف من غير تعارض.
-// 📴 المعاملات محتاجة نت: لو أوفلاين أو اتأخرت عن 2.5 ثانية → رقم بديل فورًا
-// (كود الفاتورة نفسه فيه لاحقة وقت + رمز الفرع فمفيش خوف من تعارض الأرقام).
-async function generateInvoiceNumber(){
+// رقم الفاتورة: أونلاين = counter متسلسل من Firestore.
+// أوفلاين = مشتق من **Document ID عشوائي مولَّد محليًا قبل الحفظ**.
+// كده جهازين أوفلاين في نفس الفرع مستحيل يعتمدوا على Date.now فقط، ونفس
+// هوية الفاتورة بتفضل ثابتة في المستند والكود والطباعة وإعادة المحاولة.
+function offlineInvoiceNumberFromSaleId(saleId){
+  const clean = String(saleId || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return 'O' + (clean.slice(-10) || 'LOCAL');
+}
+window.offlineInvoiceNumberFromSaleId = offlineInvoiceNumberFromSaleId;
+
+function buildInvoiceCode(branch, invoiceNo, saleId){
+  const token = String(saleId || '').replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || 'LOCAL';
+  return 'FT' + branchCode(branch) + String(invoiceNo || '') + '-' + token;
+}
+window.buildInvoiceCode = buildInvoiceCode;
+
+async function generateInvoiceNumber(fallbackSaleId){
   const counterRef = db.collection(TEST_SETTINGS).doc('invoice_counter_' + currentBranch);
-  if(typeof navigator !== 'undefined' && navigator.onLine === false) return Date.now().toString().slice(-8);
+  if(typeof navigator !== 'undefined' && navigator.onLine === false){
+    return offlineInvoiceNumberFromSaleId(fallbackSaleId);
+  }
   try{
     const newNumber = await _raceTimeout(db.runTransaction(async (tx)=>{
       const doc = await tx.get(counterRef);
@@ -3611,8 +3629,8 @@ async function generateInvoiceNumber(){
     }), 2500);
     return String(newNumber);
   }catch(e){
-    console.warn('تعذر توليد رقم فاتورة متسلسل، هيتستخدم رقم بديل', e);
-    return Date.now().toString().slice(-8);
+    console.warn('تعذر توليد رقم فاتورة متسلسل، هيتستخدم رقم أوفلاين مميز', e);
+    return offlineInvoiceNumberFromSaleId(fallbackSaleId);
   }
 }
 
@@ -3885,9 +3903,12 @@ window.returnPointsDeduction = returnPointsDeduction;
   const _rate = loyaltyRedemptionConfig.pointsPerEGP || 100;
   const _rawPts = Math.floor(Math.abs(total) / _rate);
   const loyaltyPointsEarned = phone ? (total < 0 ? -_rawPts : _rawPts) : 0;   // المرتجع بيخصم نقط بالسالب
-  const invoiceNo = await generateInvoiceNumber();
-  // بادئة الفرع في كود الفاتورة (FT + رمز الفرع) — عشان الكود يقول الفرع فورًا ويمنع تعارض الأوفلاين
-  const invoiceCode = 'FT' + branchCode(currentBranch) + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
+  // 🔐 هوية الفاتورة بتتولد محليًا **قبل أي كتابة**. Firestore doc() لا يحتاج نت
+  // وبيطلع ID عشوائي قوي؛ بنستخدم نفس الـID في رقم/كود الأوفلاين وفي الحفظ نفسه.
+  // النتيجة: retry أو استكمال مزامنة نفس العملية لا ينشئ فاتورة ثانية.
+  const saleRef = db.collection(TEST_SALES).doc();
+  const invoiceNo = await generateInvoiceNumber(saleRef.id);
+  const invoiceCode = buildInvoiceCode(currentBranch, invoiceNo, saleRef.id);
   // 💵 شاشة الباقي بتظهر بعد ما الدالة دي تخلص، ومحتاجة رقم الفاتورة
   //    عشان "سيبي الباقي في الحساب" تربط الحركة بفاتورة حقيقية.
   window._lastInvoiceCode = invoiceCode;
@@ -3913,9 +3934,11 @@ window.returnPointsDeduction = returnPointsDeduction;
     if(payments.salary && !staffPurchase){ showToast('خصم الراتب متاح في وضع شراء الموظف بس', 'err'); return; }
 
     // 1) سجل البيع (📴 مش بنستنى السيرفر أكتر من ثواني — أوفلاين بتتسجل محليًا وبتترفع بعدين)
-    const _saleW = await _waitWrite(db.collection(TEST_SALES).add({
+    // set() على الـref الثابت بدل add(): نفس هوية الفاتورة لو الكتابة اتعادت/اتأخرت.
+    const _saleW = await _waitWrite(saleRef.set({
       invoiceNo,
       invoiceCode,
+      clientSaleId: saleRef.id,
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.name || '',
       sellerEmployeeId, sellerEmployeeName,

@@ -212,10 +212,12 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
     '🔴 حد الـ1500 (لو موجود) مقصور على مسار "كل الفترات" بس، مش الفترات المحددة');
   assert(/o\.branch===currentBranch/.test(loadBody), 'الفرع بيتفلتر بعد الجلب، مش شرط جوه composite index');
   assert(/saleTs\(s\)/.test(repBody), 'فلتر الفترة في التقارير بيستخدم saleTs');
-  // التقفيل مش بيتسجل والنت قاطع من غير تأكيد صريح
+  // 🔐 التقفيل بقى أشد: لازم pending writes تتأكد من السيرفر، ومفيش override أوفلاين.
   const finBody = extractFn(repSrc, 'dcFinish');
-  assert(/fromCache/.test(finBody) && /confirm\(/.test(finBody),
-    'تقفيل والنت قاطع = تأكيد إجباري');
+  assert(/posRequireSynced\('تقفيل اليوم'/.test(finBody) && /if\(!sync\.ok\) return;/.test(finBody),
+    'تقفيل اليوم يستنى تأكيد كل الكتابات من السيرفر');
+  assert(/fromCache/.test(finBody) && !/confirm\(/.test(finBody),
+    'تقفيل والنت قاطع = مرفوض، مش مجرد تأكيد قابل للتجاوز');
 }
 
 // ============================================================
@@ -228,10 +230,10 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   // البحث الشامل: مفيش قراءة كاملة للفواتير خالص
   assert(!/TEST_SALES\)\.where\('branch','==', currentBranch\)\.get\(\)/.test(gsSrc2),
     'المسح الكامل لفواتير الفرع اتشال من البحث');
-  assert(/where\('invoiceNo','==', qU\)\.limit\(5\)/.test(gsSrc2),
-    'الفواتير باستعلام مستهدف برقم الفاتورة (حد 5)');
-  assert(/where\('customerPhone','==', q\)/.test(gsSrc2) && /limit\(5\)/.test(gsSrc2),
-    'وبالتليفون بالظبط (حد 5)');
+  assert(/where\('invoiceNo','==', qU\)[\s\S]{0,120}limit\(GLOBAL_SEARCH_MAX\)/.test(gsSrc2),
+    'الفواتير باستعلام مستهدف برقم الفاتورة بحد موسع');
+  assert(/where\('customerPhone','==', v\)/.test(gsSrc2) && /_phoneSearchVariants/.test(gsSrc2),
+    'وبالتليفون بأكثر من صيغة شائعة');
   assert(/_customersCached/.test(gsSrc2) && /10\*60000/.test(gsSrc2),
     'العملاء من كاش الجلسة (10 دقايق) مش قراءة كاملة كل بحثة');
   assert(/q\.length >= 3/.test(gsSrc2), 'مفيش استعلامات لحروف أقل من 3');
@@ -397,7 +399,7 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   // ومستخدم في المواضع الثلاثة
   assert(/_sm\(it\.name, q\)/.test(fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8')), 'بحث البيع بالتطبيع');
   assert(/function receiveSearchItems\(/.test(prodSrc) && /_sm\(it\.name, q\)/.test(prodSrc) && /receiveSearchItems\(candidates, currentBranch, code\)/.test(prodSrc), 'بحث الاستلام بالتطبيع (اقتراحات + إنتر)');
-  assert(/_sm\(p\.name, q\)/.test(gsSrc) && /_sm\(c\.name, q\)/.test(gsSrc), 'البحث الشامل بالتطبيع');
+  assert(/_sm\(p\.name, q\)/.test(gsSrc) && /_searchCustomersByName\(q, _sm\)/.test(gsSrc), 'البحث الشامل بالتطبيع');
   // 🧷 حزام أمان النسخ المتلخبطة وقت التحديث: البحث ميموتش لو التطبيع مش متحمّل
   ['pos-sale.js','products.js','search.js'].forEach(f=>{
     const src = fs.readFileSync(path.join(POS, f),'utf8');

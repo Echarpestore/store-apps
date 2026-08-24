@@ -24,5 +24,5 @@ ok(!can.some(x=>x.id==='old0'),'المستند merged لا يظهر في است�
 ok(!can.some(x=>x.id==='other'),'مستند فرع آخر لا يظهر');
 ok(can.some(x=>x.id==='x'),'الصنف النافد يظل قابلًا للاستلام وإعادة التنشيط');
 ok(src.includes('const candidates = receiveCanonicalItems(allInventory, currentBranch);'),'Enter يستخدم نفس القائمة canonical ولا يرجع لأول duplicate عشوائي');
-const sw=fs.readFileSync(path.resolve(__dirname,'..','pos','sw.js'),'utf8'); ok(sw.includes('store-apps-shell-v337'),'POS cache v337');
+const sw=fs.readFileSync(path.resolve(__dirname,'..','pos','sw.js'),'utf8'); ok(sw.includes('store-apps-shell-v339'),'POS cache v339');
 console.log('  ✅ test-receive-dedupe كامل');

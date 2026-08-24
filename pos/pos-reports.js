@@ -1903,10 +1903,18 @@ function dcRecalc(){
 }
 
 // لما يدوس OK: يحسب الأوفر/العجز ويحفظ سجل التقفيل
-function dcFinish(){
-  // 📴 تقفيل والنت قاطع = أرقام ناقصة محتملة (فواتير أجهزة تانية مش واصلة) — تأكيد إجباري
+async function dcFinish(){
+  // 🔐 قبل التقفيل لازم كل كتابة صدرت من الجهاز توصل للسيرفر فعلًا.
+  // لو النت قاطع أو فيه pending writes بنوقف التقفيل — مفيش override يخبي فاتورة معلقة.
+  const sync = await posRequireSynced('تقفيل اليوم', { timeoutMs:15000 });
+  if(!sync.ok) return;
   if(dcData && dcData.fromCache){
-    if(!confirm('📴 النت قاطع والأرقام من الكاش المحلي — فواتير الأجهزة التانية ممكن تكون ناقصة.\nالأفضل تستنى النت يرجع. متأكد إنك عايز تقفل دلوقتي؟')) return;
+    showToast('📴 بيانات التقفيل لسه من الكاش. حدّث الشاشة بعد رجوع النت وبعدين اقفل اليوم.', 'err');
+    return;
+  }
+  if(dcData && Number(dcData.pendingCount||0) > 0){
+    showToast('⏳ فيه فواتير معلقة في بيانات التقفيل. حدّث التقفيل بعد اكتمال المزامنة.', 'err');
+    return;
   }
   const denoms = [200,100,50,20,10,5];
   let counted = 0; denoms.forEach(d=> counted += dcNum('dc_den_'+d) * d);
