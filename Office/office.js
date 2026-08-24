@@ -295,18 +295,27 @@ function ofNextBizDay(key, cfg){
   return k;
 }
 
-/* 💳 اليوم اللي فلوس فيزا يوم معيّن بتنزل فيه
-   ------------------------------------------------------------
-   قاعدة Paymob عند المالك: الفلوس بتنزل **تاني يوم عمل**.
-   يعني مبيعات الخميس بتنزل الأحد، لأن الجمعة والسبت إجازة.
-   عدد أيام العمل قابل للتغيير (`settleLagBizDays`) لو النظام اتغيّر. */
+/* 💳 دورة Paymob الأسبوعية — الأسبوع ينتهي الاثنين والتحويل الثلاثاء
+   ----------------------------------------------------------------
+   🔒 دورة غير متداخلة عشان مفيش يوم يتحسب مرتين:
+      الثلاثاء → الاثنين = مبيعات أسبوع كامل
+      الثلاثاء اللي بعده = يوم التحويل/التأكيد.
+   مثال: بيع الاثنين → تحويل الثلاثاء التالي.
+          بيع الثلاثاء → تحويل الثلاثاء اللي بعده بأسبوع.
+   كلمة "الأسبوع من الاثنين للاثنين" في التشغيل معناها عمليًا:
+   من بعد تحويل الثلاثاء السابق لحد نهاية الاثنين — وده يمنع تكرار الاثنين. */
 function ofSettleDayFor(saleDayKey, cfg){
-  const lag = Math.max(0, Number(cfg && cfg.settleLagBizDays != null
-    ? cfg.settleLagBizDays : 1));
-  let k = String(saleDayKey);
-  for(let i = 0; i < lag; i++) k = ofNextBizDay(k, cfg);
-  // لو التأخير صفر بس اليوم نفسه إجازة، الفلوس بتستنى أول يوم عمل
-  if(lag === 0){ let g = 0; while(ofIsWeekend(k, cfg) && g++ < 14) k = ofDayShift(k, 1); }
+  let k = ofDayShift(String(saleDayKey), 1), guard = 0;
+  while(ofDowOf(k) !== 2 && guard++ < 8) k = ofDayShift(k, 1); // 2 = الثلاثاء
+  return k;
+}
+function ofPaymobCycleForPayout(payoutKey){
+  const payout = String(payoutKey);
+  return { payout:payout, start:ofDayShift(payout,-7), end:ofDayShift(payout,-1) };
+}
+function ofLatestTuesdayKey(todayKey){
+  let k=String(todayKey), guard=0;
+  while(ofDowOf(k)!==2 && guard++<8) k=ofDayShift(k,-1);
   return k;
 }
 
@@ -316,7 +325,7 @@ function ofCollectDays(data, fromKey, toKey){
   const touch = function(k){
     if(!k || k < fromKey || k > toKey) return null;
     if(!days[k]) days[k] = { key:k, cashSales:0, visaSales:0, expenses:0,
-      salaries:0, advances:0, rewards:0, pmActual:0, pmGross:0,
+      supplierPayments:0, salaries:0, advances:0, rewards:0, pmActual:0, pmGross:0,
       // 🎁 كروت الهدايا — بتتجمّع منفصلة عن المبيعات
       gcSold:0, gcSpent:0 };
     return days[k];
@@ -358,6 +367,12 @@ function ofCollectDays(data, fromKey, toKey){
     });
   };
   bucket(data.expenses,   'expenses');
+  // 📦 من v65: دفعة التاجر الجديدة تقلّل السيولة تلقائيًا.
+  // cashTracked=true متعمد: القديم مايتحسبش بأثر رجعي عشان ناس كانت
+  // بتسجّل نفس الدفعة كمصروف يدوي، وإلا هنخصم التاريخ مرتين.
+  bucket(data.mtxns, 'supplierPayments', function(t){
+    return !!t && t.type !== 'order' && t.cashTracked === true;
+  });
   bucket(data.salaryPays, 'salaries');
   bucket(data.advances,   'advances');
   // المكافآت المعتمدة بس — اللي مستنية موافقة ماخرجتش من الدرج
@@ -410,7 +425,8 @@ function ofPredictSettlements(days, data, cfg, lastSettledKey, todayKey){
     const v = Number(days[k].visaSales) || 0;
     if(v <= 0) return;
     if(lastSettledKey && k <= lastSettledKey) return;
-    if(tKey && ofSettleDayFor(k, cfg) <= tKey) return;
+    // ⭐ أسبوعي: ميعاد الثلاثاء «توقّع» فقط. الفلوس تفضل عند Paymob
+    // لحد ما المالك يأكد التحويل الفعلي.
     room += v;
   });
   const outstanding = Math.round(room * 100) / 100;
@@ -420,7 +436,6 @@ function ofPredictSettlements(days, data, cfg, lastSettledKey, todayKey){
     const v = days[k].visaSales;
     if(v <= 0) return;
     if(lastSettledKey && k <= lastSettledKey) return;   // طبقة ١
-    if(tKey && ofSettleDayFor(k, cfg) <= tKey) return;  // نزل خلاص
     const gross = Math.min(v, room);                    // طبقة ٢ — السقف
     if(gross <= 0) return;
     room -= gross;
@@ -439,14 +454,14 @@ function ofPredictSettlements(days, data, cfg, lastSettledKey, todayKey){
   return { byDay: out, pct: pct, outstanding: outstanding, fromDays: fromDays.sort() };
 }
 
-const OF_LEDGER_FIELDS = ['cashSales','visaSales','pmIn','expenses','salaries',
+const OF_LEDGER_FIELDS = ['cashSales','visaSales','pmIn','expenses','supplierPayments','salaries',
                           'advances','rewards','otherIn','otherOut'];
 
 /* 📒 الدفتر الكامل — ده اللي الشاشة بتتبني منه
    base      : { amount, atMs, paymobOpening }  نقطة البداية
    data      : D (المبيعات والمصاريف… إلخ)
    overrides : { '2026-08-11': { ov:{field:val}, counted:n, note:'' } }
-   cfg       : { weekendDays, settleLagBizDays, predict, carryCount }
+   cfg       : { predict, carryCount } — Paymob settlement weekly Tuesday
    ⚠️ بيرجع أيام **من الأقدم للأحدث** عشان الرصيد يتراكم صح. */
 function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
   cfg = cfg || {};
@@ -494,13 +509,14 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
     const raw = fz ? {
       cashSales: Number(fz.cashSales) || 0, visaSales: Number(fz.visaSales) || 0,
       pmIn: Number(fz.pmIn) || 0,
-      expenses: Number(fz.expenses) || 0, salaries: Number(fz.salaries) || 0,
+      expenses: Number(fz.expenses) || 0, supplierPayments:Number(fz.supplierPayments)||0,
+      salaries: Number(fz.salaries) || 0,
       advances: Number(fz.advances) || 0, rewards: Number(fz.rewards) || 0,
       otherIn: 0, otherOut: 0
     } : {
       cashSales: d.cashSales, visaSales: d.visaSales,
       pmIn: d.pmActual,
-      expenses: d.expenses, salaries: d.salaries,
+      expenses: d.expenses, supplierPayments:d.supplierPayments, salaries: d.salaries,
       advances: d.advances, rewards: d.rewards,
       otherIn: 0, otherOut: 0
     };
@@ -517,7 +533,7 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
     const pmExp = showPred ? p.net : 0;
 
     const inConf  = val.cashSales + val.pmIn + val.otherIn;
-    const outAll  = val.expenses + val.salaries + val.advances + val.rewards + val.otherOut;
+    const outAll  = val.expenses + val.supplierPayments + val.salaries + val.advances + val.rewards + val.otherOut;
     const counted = (o.counted === 0 || o.counted) ? Number(o.counted) : null;
 
     return {
@@ -579,7 +595,7 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
         مانزلتش **يوم ما بدأت**» — بعد ما يوم نزولها يعدّي، الفلوس دي
         نزلت خلاص وبقى إضافتها كذب متراكم. بنسقّطه بنفس قاعدة الجدول. */
   const openDayKey = ofDayKeyOf(openAt);
-  const openLanded = ofSettleDayFor(openDayKey, cfg) <= todayKey;
+  const openLanded = !!lastSettledKey && lastSettledKey >= openDayKey;
   const pmOpenRaw  = Number(base && base.paymobOpening) || 0;
   return { rows: rows, opening: opening, openKey: fromKey, todayKey: todayKey,
            giftLiability: lastRow ? lastRow.giftLiability : 0,
@@ -619,8 +635,8 @@ function ofFreezeDue(ledger, overrides, nowTs){
   }).map(function(r){
     return { key: r.key, frozen: {
       cashSales: r.raw.cashSales, visaSales: r.raw.visaSales, pmIn: r.raw.pmIn,
-      expenses: r.raw.expenses, salaries: r.raw.salaries,
-      advances: r.raw.advances, rewards: r.raw.rewards, at: now } };
+      expenses: r.raw.expenses, supplierPayments:r.raw.supplierPayments,
+      salaries: r.raw.salaries, advances: r.raw.advances, rewards: r.raw.rewards, at: now } };
   });
 }
 
@@ -719,9 +735,64 @@ function salarySummary(employees, advances, mk){
     .sort(function(a,b){ return (a.branch+a.name) < (b.branch+b.name) ? -1 : 1; });
 }
 
+
+/* ============================================================
+   🏦 Paymob أسبوعي — توقّع الثلاثاء + تأكيد المالك
+   ============================================================ */
+function ofPaymobWeeklyCycles(data, todayKey){
+  const pct=paymobEffectivePct((data&&data.settlements)||[],PAYMOB_FEE_PCT);
+  const map={};
+  (data&&data.sales||[]).forEach(function(x){
+    if(!x || x.reversed || x.isReversal) return;
+    const visa=Number(x.payments&&x.payments.visa)||0;
+    if(visa<=0) return;
+    const saleKey=ofDayKeyOf(_saleMs(x));
+    const payout=ofSettleDayFor(saleKey,{});
+    const c=ofPaymobCycleForPayout(payout);
+    if(!map[payout]) map[payout]={ payout:payout,start:c.start,end:c.end,gross:0,pct:pct };
+    map[payout].gross += visa;
+  });
+  const confirmed={};
+  (data&&data.settlements||[]).forEach(function(x){
+    const end=String(x.weeklyCycleEnd||x.forDay||'');
+    if(end) confirmed[end]=x;
+  });
+  return Object.keys(map).sort().map(function(k){
+    const c=map[k];
+    c.gross=Math.round(c.gross*100)/100;
+    c.expectedFee=paymobFeeOn(c.gross,pct);
+    c.expectedNet=Math.round((c.gross-c.expectedFee)*100)/100;
+    c.confirmed=confirmed[c.end]||null;
+    c.due=!!todayKey && c.payout<=todayKey && !c.confirmed;
+    c.future=!!todayKey && c.payout>todayKey;
+    return c;
+  });
+}
+function ofPaymobWeeklyDue(data,todayKey){
+  return ofPaymobWeeklyCycles(data,todayKey).filter(function(c){return c.due&&c.gross>0;});
+}
+function ofPaymobNextCycle(data,todayKey){
+  const all=ofPaymobWeeklyCycles(data,todayKey).filter(function(c){return !c.confirmed&&c.gross>0;});
+  if(!all.length) return null;
+  const due=all.filter(function(c){return c.due;});
+  if(due.length) return due[0];
+  return all[0];
+}
+
 // بناء الوارد الموحّد من المصادر الأربعة
 function buildInbox(data){
   const out = [];
+  // 🏦 الثلاثاء: بس التحويلات الأسبوعية اللي لسه محتاجة تأكيد.
+  try{
+    const tk=ofDayKeyOf(Date.now());
+    ofPaymobWeeklyDue(data,tk).forEach(function(c){
+      out.push({kind:'paymobWeekly',id:c.end,ts:ofBizDayRange(c.payout).start,branch:'كل الفروع',who:'Paymob',
+        title:'🏦 أكد تحويل Paymob الأسبوعي',
+        sub:'الأسبوع المنتهي '+ofDayName(c.end)+' · إجمالي '+egp(c.gross)
+          +' · عمولة متوقعة '+egp(c.expectedFee)+' · المتوقع ينزل '+egp(c.expectedNet),
+        actionable:true, cycle:c});
+    });
+  }catch(e){}
   (data.leaves||[]).forEach(function(l){
     if(l.status !== 'pending') return;
     const sh = function(k){ return k==='morning' ? '🌅 صباحي' : (k==='evening' ? '🌆 مسائي' : ''); };
@@ -797,7 +868,8 @@ if (typeof window !== 'undefined'){
     ofGoldValue:ofGoldValue, ofWealth:ofWealth, ofPredictSettlements:ofPredictSettlements,
     ofFreezeDue:ofFreezeDue,
     paymobFeeOn:paymobFeeOn, paymobGrossFromNet:paymobGrossFromNet,
-    paymobEffectivePct:paymobEffectivePct,
+    paymobEffectivePct:paymobEffectivePct, ofPaymobCycleForPayout:ofPaymobCycleForPayout,
+    ofPaymobWeeklyCycles:ofPaymobWeeklyCycles, ofPaymobWeeklyDue:ofPaymobWeeklyDue,
     topSellers:topSellers, branchQtyOf:branchQtyOf, salarySummary:salarySummary, buildInbox:buildInbox, profitReport:profitReport };
 }
 
@@ -1897,7 +1969,7 @@ function startData(){
   });
   db.collection('office_merchants').onSnapshot(function(s){
     D.merchants = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
-    renderMerchants();
+    renderMerchants(); try{ ofRenderQuickGoodsMerchants(); ofWireQuickGoods(); }catch(e){}
   });
   db.collection('office_merchant_txns').onSnapshot(function(s){
     D.mtxns = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -1945,7 +2017,7 @@ function startData(){
   }, function(e){ console.warn('rewards sync', e && e.code); });
   db.collection('office_paymob_settlements').onSnapshot(function(s){
     D.settlements = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
-    try{ renderCashHand(); }catch(e){}
+    try{ renderCashHand(); renderInbox(); ofMaybeWeeklyPaymobReminder(); }catch(e){}
   }, function(e){ console.warn('settlements sync', e && e.code); });
   // 💳 طلبات الرصيد المستنية موافقة
   db.collection('credit_requests').where('status','==','pending')
@@ -2002,7 +2074,7 @@ function startData(){
     renderTop();
   });
 
-  setTimeout(function(){ firstLoadDone = true; }, 8000);
+  setTimeout(function(){ firstLoadDone = true; try{renderInbox();ofMaybeWeeklyPaymobReminder();}catch(e){} }, 8000);
 }
 // 💸 كانت بتسحب **٣٠ يوم فواتير كاملة كل ٢٠ دقيقة** طول ما التطبيق
 //    مفتوح — يعني ٧٢ سحبة كاملة في اليوم لنفس البيانات. دلوقتي أول مرة
@@ -2036,7 +2108,7 @@ function loadSales(){
       }
       D.sales.forEach(function(x){ const t = _saleMs(x); if(t > _salesTo) _salesTo = t; });
       renderTop();
-      try{ renderCashHand(); }catch(e){}
+      try{ renderCashHand(); renderInbox(); ofMaybeWeeklyPaymobReminder(); }catch(e){}
       try{ renderGrowth(); }catch(e){}
     }).catch(function(e){ console.warn('sales load', e); });
 }
@@ -2609,6 +2681,8 @@ function renderInbox(){
       '<button class="btn no" onclick="officeDecideLeave(\''+i.id+'\',\'rejected\')">رفض</button></div>';
     if(i.kind === 'short') actions =
       '<div style="margin-top:9px;"><button class="btn ok" style="width:100%;" onclick="officeCloseShort(\''+i.id+'\')">✅ اتجاب</button></div>';
+    if(i.kind === 'paymobWeekly') actions =
+      '<div style="margin-top:9px;"><button class="btn gold" style="width:100%;" onclick="ofConfirmWeeklyPaymob(\''+i.id+'\')">✅ راجع وأكد المبلغ</button></div>';
     return '<div class="card">' +
       '<div class="row"><b style="font-size:13px;">'+esc(i.title)+'</b><span class="pill g">'+esc(i.branch)+'</span></div>' +
       '<div class="muted" style="margin-top:3px;">'+esc(i.who)+(i.sub ? ' · '+esc(i.sub) : '')+' · '+dstr(i.ts)+'</div>' +
@@ -2813,6 +2887,7 @@ function officeAsk(opts){
       + '</div></div>';
     document.body.appendChild(ov);
     const a = ov.querySelector('#ofAskA'), b = ov.querySelector('#ofAskB'), er = ov.querySelector('#ofAskErr');
+    if(o.value !== undefined && o.value !== null) a.value = String(o.value);
     const done = function(v){ ov.remove(); resolve(v); };
     const ok = function(){
       const n = parseFloat(a.value);
@@ -2845,9 +2920,53 @@ window.officeMtxn = async function(mid, type){
     + '\n\nالمبلغ: ' + egp(amount)
     + '\n' + (type === 'order' ? 'هيزوّد اللي عليك للتاجر' : 'هيخصم من اللي عليك')
     + '\n\nمتأكد؟')) return;
-  db.collection('office_merchant_txns').add({ merchantId:mid, type:type, amount:amount, note:note, ts:Date.now() })
+  db.collection('office_merchant_txns').add({ merchantId:mid, type:type, amount:amount, note:note, ts:Date.now(),
+      cashTracked: type !== 'order', cashTrackedFrom:'office_v65' })
     .catch(function(e){ alert('تعذر التسجيل: '+e.message); });
 };
+
+
+// 📦 تسجيل بضاعة سريع — نفس office_merchant_txns، من غير تسجيل مزدوج كمصروف.
+function ofRenderQuickGoodsMerchants(){
+  const sel=$('#qgMerchant'); if(!sel) return;
+  let last=''; try{last=localStorage.getItem('ofLastMerchant')||'';}catch(e){}
+  const cur=sel.value||last;
+  sel.innerHTML='<option value="">اختار التاجر</option>'+(D.merchants||[])
+    .slice().sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''),'ar');})
+    .map(function(m){return '<option value="'+esc(m.id)+'">'+esc(m.name||'تاجر')+'</option>';}).join('');
+  if(cur && (D.merchants||[]).some(function(m){return m.id===cur;})) sel.value=cur;
+}
+window.ofUndoQuickGoods=async function(id){
+  if(!id) return;
+  try{
+    await db.collection('office_merchant_txns').doc(id).delete();
+    const st=$('#qgStatus'); if(st) st.innerHTML='↩️ اتلغى التسجيل.';
+  }catch(e){alert('تعذر التراجع: '+e.message);}
+};
+function ofWireQuickGoods(){
+  const btn=$('#qgAdd'); if(!btn || btn.dataset.ready==='1') return;
+  btn.dataset.ready='1'; ofRenderQuickGoodsMerchants();
+  btn.addEventListener('click',async function(){
+    const mid=$('#qgMerchant').value;
+    const amount=Math.round((Number($('#qgAmount').value)||0)*100)/100;
+    const note=($('#qgNote').value||'').trim();
+    if(!mid){alert('اختار التاجر');return;}
+    if(!(amount>0)){alert('اكتب مبلغ صحيح');return;}
+    const m=(D.merchants||[]).filter(function(x){return x.id===mid;})[0]||{};
+    btn.disabled=true; btn.textContent='بيتسجل…';
+    try{
+      const ref=db.collection('office_merchant_txns').doc();
+      await ref.set({merchantId:mid,type:'order',amount:amount,note:note,ts:Date.now(),
+        source:'office_quick_goods'});
+      try{localStorage.setItem('ofLastMerchant',mid);}catch(e){}
+      $('#qgAmount').value=''; $('#qgNote').value='';
+      const st=$('#qgStatus');
+      if(st) st.innerHTML='✅ اتسجل '+egp(amount)+' على '+esc(m.name||'التاجر')
+        +" كتكلفة بضاعة. <button class='ghost' style='padding:3px 8px;' onclick=\"ofUndoQuickGoods('"+ref.id+"')\">تراجع</button>";
+    }catch(e){alert('تعذر التسجيل: '+e.message);}
+    btn.disabled=false; btn.textContent='+ بضاعة';
+  });
+}
 
 /* ============================================================
    💸 المصاريف
@@ -5898,7 +6017,8 @@ const OF_CELL_META = {
   visaSales: { ic:'💳', name:'فيزا اتباعت', dir:0  },
   pmIn:      { ic:'🏦', name:'نزل من Paymob', dir:1 },
   otherIn:   { ic:'➕', name:'وارد تاني',    dir:1  },
-  expenses:  { ic:'🧾', name:'مصاريف',      dir:-1 },
+  expenses:  { ic:'🧾', name:'مصاريف تشغيل', dir:-1 },
+  supplierPayments:{ic:'📦',name:'دفعات تجار', dir:-1},
   salaries:  { ic:'💼', name:'رواتب',       dir:-1 },
   advances:  { ic:'🤝', name:'سلف',         dir:-1 },
   rewards:   { ic:'🎁', name:'مكافآت',      dir:-1 },
@@ -5989,18 +6109,31 @@ function renderCashHand(){
     + '<div class="s">المؤكد + Paymob المنتظر + الدهب − الالتزامات</div></div>'
     + '</div>';
 
+  const weeklyCycle = ofPaymobNextCycle(D,L.todayKey);
+  const weeklyBox = weeklyCycle
+    ? ('<div class="of-verdict" style="border-color:'+(weeklyCycle.due?'var(--warn)':'var(--line)')+';">'
+      + '<div class="of-verdict-row"><div><b>🏦 تحويل Paymob الأسبوعي</b>'
+      + '<div class="muted">'+(weeklyCycle.due?'مستني تأكيدك':'التحويل الجاي')
+      +' · الثلاثاء '+ofDayName(weeklyCycle.payout)+'</div></div>'
+      + (weeklyCycle.due?"<button class='btn gold' onclick=\"ofConfirmWeeklyPaymob('"+weeklyCycle.end+"')\">✅ أكد المبلغ</button>":'')
+      + '</div><div class="of-cash-grid" style="margin-top:8px;">'
+      + '<div class="of-money-card"><div class="k">إجمالي الفيزا</div><div class="v">'+egp(weeklyCycle.gross)+'</div><div class="s">'+ofDayName(weeklyCycle.start)+' → '+ofDayName(weeklyCycle.end)+'</div></div>'
+      + '<div class="of-money-card"><div class="k">المتوقع ينزل</div><div class="v">'+egp(weeklyCycle.expectedNet)+'</div><div class="s">عمولة متوقعة '+egp(weeklyCycle.expectedFee)+' ('+weeklyCycle.pct+'%)</div></div>'
+      + '</div></div>')
+    : '';
+
   const verdict =
     '<div class="of-verdict">'
     + '<div class="of-verdict-row"><div><b>الحكم السريع</b><div class="muted">لو هتصرف دلوقتي، اعتمد على «السيولة المؤكدة» فوق.</div></div>'
     + '<button class="btn gold" onclick="ofCountDay(\'' + L.todayKey + '\')" style="white-space:nowrap;">🔍 راجع الرقم</button></div>'
     + (W.paymobOpeningLanded
-        ? '<div style="margin-top:8px;color:var(--warn);font-size:11px;font-weight:800;">⚠️ رصيد Paymob الافتتاحي عدّى ميعاد نزوله. لو وصل فعلًا وماتسجلش كتحويل، سجله عشان السيولة المؤكدة تتحدث.</div>'
+        ? '<div style="margin-top:8px;color:var(--warn);font-size:11px;font-weight:800;">⚠️ رصيد Paymob الافتتاحي لسه غير مؤكد. أول تحويل أسبوعي تأكده هيقفل الجزء القديم تلقائيًا.</div>'
         : '')
     + '<div class="hint" style="margin-top:8px;line-height:1.8;">'
     + '⚠️ النظام مش متصل بحساب البنك نفسه. أي حركة بنكية خارج المبيعات/المصاريف المسجلة لازم تدخلها أو تعمل مراجعة للسيولة، وإلا «معايا كام» مش هيقدر يعرفها لوحده.'
     + '</div>'
     + '<div class="of-quick">'
-    + '<button class="btn" onclick="ofAddSettlement()">🏦 سجل تحويل Paymob</button>'
+    + '<button class="btn" onclick="ofAddSettlement()">🏦 تحويل استثنائي/تصحيح</button>'
     + '<button class="btn" onclick="ofSetGoldPrice()">🥇 حدّث سعر الدهب</button>'
     + '</div>'
     + '</div>';
@@ -6027,7 +6160,7 @@ function renderCashHand(){
 
   // 📜 نحافظ على العبارة القديمة في الشرح عشان أي حد متعود عليها يفهم الانتقال:
   // «معاك في إيدك» = دلوقتي اسمها الأدق «السيولة المؤكدة».
-  host.innerHTML = hero + cards + verdict + details;
+  host.innerHTML = hero + cards + weeklyBox + verdict + details;
   try{ renderOfficeHomeSummary(); }catch(e){}
 }
 window.renderCashHand = renderCashHand;
@@ -6299,6 +6432,51 @@ window.ofStartFresh = ofStartFresh;
 
 
 
+
+
+/* 🏦 تأكيد التحويل الأسبوعي — المتوقّع جاهز، المالك يراجع الصافي ويأكد */
+async function ofConfirmWeeklyPaymob(cycleEnd){
+  const today=ofDayKeyOf(Date.now());
+  const c=ofPaymobWeeklyCycles(D,today).filter(function(x){return x.end===cycleEnd;})[0];
+  if(!c){alert('مش لاقي الأسبوع ده في المبيعات المحمّلة');return;}
+  if(c.confirmed){alert('الأسبوع ده متأكد بالفعل: '+egp(c.confirmed.net||0));return;}
+  const res=await officeAsk({
+    title:'🏦 تحويل Paymob — الأسبوع المنتهي '+ofDayName(c.end),
+    note:'إجمالي مبيعات الفيزا: '+egp(c.gross)
+      +'\\nالعمولة المتوقعة ('+c.pct+'%): '+egp(c.expectedFee)
+      +'\\nالمتوقع ينزل: '+egp(c.expectedNet)
+      +'\\n\\nراجع حساب البنك. لو الرقم مختلف عدّله واكتب الصافي اللي وصل فعلًا.',
+    ph:'الصافي اللي وصل فعلًا', value:c.expectedNet
+  });
+  if(!res) return;
+  const net=Math.round((Number(res.amount)||0)*100)/100;
+  if(!(net>0)){alert('اكتب مبلغ صحيح');return;}
+  if(net>c.gross){alert('الصافي أكبر من إجمالي مبيعات الفيزا — راجع الرقم');return;}
+  const ded=Math.round((c.gross-net)*100)/100;
+  const pct=c.gross>0?Math.round((ded/c.gross)*10000)/100:0;
+  try{
+    await db.collection('office_paymob_settlements').doc('weekly_'+c.end).set({
+      weekly:true, weeklyCycleStart:c.start, weeklyCycleEnd:c.end,
+      payoutDay:c.payout, forDay:c.end,
+      gross:c.gross, net:net, deductions:ded, feePct:pct,
+      expectedNet:c.expectedNet, expectedFee:c.expectedFee, expectedPct:c.pct,
+      note:res.note||'', ts:Date.now(), by:'office_weekly_v65'
+    },{merge:true});
+  }catch(e){alert('تعذر الحفظ: '+(e&&e.message?e.message:e));}
+}
+window.ofConfirmWeeklyPaymob=ofConfirmWeeklyPaymob;
+
+function ofMaybeWeeklyPaymobReminder(){
+  try{
+    const due=ofPaymobWeeklyDue(D,ofDayKeyOf(Date.now()));
+    if(!due.length) return;
+    const c=due[0], key='office_paymob_weekly_reminded_'+c.end;
+    if(localStorage.getItem(key)) return;
+    localStorage.setItem(key,String(Date.now()));
+    notify('🏦 راجع تحويل Paymob الأسبوعي',
+      'المتوقع '+egp(c.expectedNet)+' بعد عمولة تقريبية '+egp(c.expectedFee)+' — افتح «فلوسي» وأكد اللي وصل فعلًا.');
+  }catch(e){}
+}
 
 /* 💰 تسجيل تحويل وصل من Paymob */
 async function ofAddSettlement(){

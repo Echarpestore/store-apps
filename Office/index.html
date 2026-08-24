@@ -479,6 +479,18 @@
       <div id="plBody"></div>
       <div id="plResult" style="text-align:center; border-radius:13px; padding:14px; margin-top:10px; font-size:15px; font-weight:900;"></div>
     </div>
+    <div class="panel" id="quickGoodsPanel">
+      <h3>📦 تسجيل بضاعة بسرعة</h3>
+      <div class="hint">بدل ما تسجل نفس الحاجة مرتين: الأوردر هنا يتحسب «تكلفة بضاعة». ولما تسجل دفعة للتاجر من حسابه، الدفعة الجديدة تتخصم تلقائيًا من «فلوسي» — ما تسجلهاش تاني كمصروف.</div>
+      <div style="display:grid;grid-template-columns:1.3fr .8fr 1.4fr auto;gap:7px;align-items:center;">
+        <select class="f" id="qgMerchant"><option value="">اختار التاجر</option></select>
+        <input class="f" id="qgAmount" type="number" inputmode="decimal" placeholder="المبلغ">
+        <input class="f" id="qgNote" placeholder="ملاحظة / رقم فاتورة (اختياري)">
+        <button class="btn gold" id="qgAdd" style="margin:0;">+ بضاعة</button>
+      </div>
+      <div id="qgStatus" class="muted" style="font-size:11px;margin-top:7px;"></div>
+    </div>
+
     <div class="panel">
       <h3>🧾 حسابات التجار</h3>
       <div class="hint">أوردر جديد بيزوّد اللي عليك، والدفعة بتخصم. الرصيد بيتحسب لوحده.</div>
@@ -615,6 +627,6 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js"></script>
-<script src="office.js?v=64"></script>
+<script src="office.js?v=65"></script>
 </body>
 </html>
