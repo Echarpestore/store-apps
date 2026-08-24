@@ -274,7 +274,18 @@ function renderImportMapping(){
         </div>
       </span>
     </label>
-    <button onclick="runImport()" style="width:100%; padding:13px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">استورد ${importParsedRows.length} صف الآن</button>
+    ${importTab === 'inventory' ? `
+    <button onclick="runBranchCatalogReplaceFlow()" style="width:100%; padding:14px; border-radius:10px; border:2px solid var(--accent); background:var(--accent); color:#111; font-weight:900; cursor:pointer;">♻️ طبّق الملف على فرع ${'' + (typeof currentBranch !== 'undefined' ? currentBranch : '')}</button>
+    <div style="font-size:11px; color:var(--muted); margin-top:5px; padding:0 2px; line-height:1.7;">
+      الملف هو الكتالوج النهائي للفرع: غير الموجود فيه يختفي، والمكرر يتوحّد.
+      <b>كمية الملف لا تُستخدم نهائيًا</b> — نحافظ فقط على الكمية الحالية في السيستم، والجديد يبدأ صفر.
+      <b>ولا أي فرع تاني بيتغير.</b>
+    </div>
+    <details style="margin-top:8px; color:var(--muted); font-size:11px;"><summary style="cursor:pointer;">أدوات استيراد قديمة/متقدمة</summary>
+      <button onclick="runImport()" style="width:100%; padding:10px; border-radius:9px; border:1px solid var(--border); background:transparent; color:var(--muted); font-weight:700; cursor:pointer; margin-top:7px;">تحديث الأصناف فقط بدون استبدال كامل</button>
+      <button onclick="runFullReconcileFlow()" style="width:100%; padding:10px; border-radius:9px; border:1px solid var(--border); background:transparent; color:var(--muted); font-weight:700; cursor:pointer; margin-top:7px;">🧹 الدمج الآمن القديم</button>
+    </details>` : `
+    <button onclick="runImport()" style="width:100%; padding:13px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">استورد ${importParsedRows.length} صف الآن</button>`}
     <div id="importResult" style="margin-top:10px; font-size:12px;"></div>`;
 
   // تعبئة التخمين المبدئي بعد ما الـselect يترسم
@@ -520,11 +531,11 @@ function planInventoryWrites(rows, mapping, branch, idx, FV){
     if(!name){ stats.failed++; return; }
     const barcode = mapping.barcode ? String(row[mapping.barcode]||'').trim() : '';
     const qtyNum = mapping.quantity ? Math.max(0, parseInt(row[mapping.quantity]) || 0) : 0;   // السالب يبقى صفر
+    const isExisting = !!(barcode && idx[barcode]);   // ⭐ هل الصنف ده موجود أصلًا؟
     const data = {
       name: name, barcode: barcode,
       price: mapping.price ? (parseFloat(row[mapping.price]) || 0) : 0,
       cost: mapping.cost ? (parseFloat(row[mapping.cost]) || 0) : 0,
-      qtyByBranch: { [branch]: qtyNum },   // كمية الفرع الحالي بس (مخزون منفصل لكل فرع)
       supplier: mapping.supplier ? (row[mapping.supplier]||'') : '',
       minStock: mapping.minStock ? (Math.max(0, parseInt(row[mapping.minStock])||0)) : 0,
       department: mapping.department ? (row[mapping.department]||'') : '',
@@ -533,8 +544,18 @@ function planInventoryWrites(rows, mapping, branch, idx, FV){
       branches: FV ? FV.arrayUnion(branch) : [branch],
       updatedAt: FV ? FV.serverTimestamp() : new Date()
     };
+    /* 🔴🔴🔴🔴⭐ قرار المالك الصريح: "خلي بس الأعداد اللي ع السيستم
+       الحالي واتجاهلي الأعداد اللي جايه في ملف الاستيراد". يعني
+       الاسم والسعر بييجوا من الملف ويستبدلوا القديم، **لكن الكمية
+       لأ** — لو الصنف موجود أصلًا، مش بنحط qtyByBranch في الكتابة
+       خالص (merge:true بيسيب القديم زي ما هو تلقائيًا). الكمية من
+       الملف بتتقرا بس لصنف **جديد فعلًا** (مفيش نسخة قديمة نحافظ
+       عليها أصلًا). */
+    if(!isExisting){
+      data.qtyByBranch = { [branch]: qtyNum };   // صنف جديد — مفيش كمية قديمة نحميها
+    }
     let id;
-    if(barcode && idx[barcode]){
+    if(isExisting){
       id = idx[barcode].id;                       // ✅ تحديث الموجود — ده الإصلاح
       stats.updated++;
     } else if(barcode){
@@ -638,6 +659,491 @@ async function writeInventoryRows(rows, mapping, branch, onProgress){
 window.indexInventoryByCode = indexInventoryByCode;
 window.planInventoryWrites = planInventoryWrites;
 window.writeInventoryRows  = writeInventoryRows;
+
+
+/* ============================================================
+   ♻️ استبدال كتالوج فرع من الملف — Branch-scoped Full Replace
+   ------------------------------------------------------------
+   سياسة المالك (24 أغسطس 2026):
+   • الملف هو مصدر الكتالوج للفرع الحالي فقط: الأصناف + الاسم + السعر + البيانات.
+   • كمية الملف تُتجاهل 100%. الكمية الوحيدة المعتمدة هي الكمية الحالية في السيستم.
+   • نفس الكود لو متكرر داخل الفرع: نجمع كمية الفرع الحالية كلها في نسخة واحدة.
+   • كود جديد في الملف: يبدأ بكمية صفر.
+   • صنف غير موجود في الملف: يختفي من الفرع الحالي فقط.
+   • أي بيانات/كميات تخص فرع تاني لا تتغير.
+
+   ملاحظة أمان: "المسح" هنا Soft removal من الفرع، مش deleteDoc، عشان
+   التاريخ والمراجع القديمة تفضل قابلة للمراجعة والاسترجاع.
+   ============================================================ */
+function _branchReplaceVisible(it, branch){
+  if(!it || it.status === 'merged') return false;
+  const br = it.branches;
+  return !Array.isArray(br) || !br.length || br.indexOf(branch) >= 0;
+}
+
+function _branchReplaceKnownBranches(items, supplied, branch){
+  const seen = {};
+  (supplied || []).forEach(function(b){ if(b) seen[String(b)] = 1; });
+  (items || []).forEach(function(it){
+    (Array.isArray(it && it.branches) ? it.branches : []).forEach(function(b){
+      if(b && b !== IMPORT_EXCLUDED_TAG && b !== '(مدموج)') seen[String(b)] = 1;
+    });
+    Object.keys((it && it.qtyByBranch) || {}).forEach(function(b){ if(b) seen[String(b)] = 1; });
+  });
+  if(branch) seen[String(branch)] = 1;
+  return Object.keys(seen);
+}
+
+function _branchReplaceSafeTarget(it, branch){
+  if(!it || it.status === 'merged') return false;
+  const br = it.branches;
+  // مستند خاص بالفرع، أو مستند اتشال من نفس الفرع باستيراد سابق ويمكن إحياؤه بأمان.
+  if(Array.isArray(br) && br.length === 1 && br[0] === branch) return true;
+  if(it.status === 'import_excluded' && it.excludedByImportBranch === branch
+      && Array.isArray(br) && br.length === 1 && br[0] === IMPORT_EXCLUDED_TAG) return true;
+  return false;
+}
+
+function _branchReplaceDocId(code, branch, allItems, preferredExisting){
+  if(preferredExisting) return preferredExisting.id;
+  const used = {};
+  (allItems || []).forEach(function(it){ if(it && it.id) used[it.id] = 1; });
+  const base = code + '__' + branch;
+  if(!used[base]) return base;
+  const alt = base + '__catalog';
+  if(!used[alt]) return alt;
+  let n = 2;
+  while(used[alt + n]) n++;
+  return alt + n;
+}
+
+function _branchReplaceCleanup(it, branch, keeperId, knownBranches){
+  const q = Object.assign({}, (it && it.qtyByBranch) || {});
+  q[branch] = 0;
+  const listed = Array.isArray(it && it.branches) ? it.branches.slice() : null;
+  const qtyOther = Object.keys(q).filter(function(b){ return b !== branch && (Number(q[b]) || 0) !== 0; });
+  let rest = [];
+  if(listed && listed.length){
+    rest = listed.filter(function(b){ return b !== branch && b !== IMPORT_EXCLUDED_TAG && b !== '(مدموج)'; });
+  } else {
+    // الصنف المشترك: نحوله لصنف لباقي الفروع المعروفة بدل ما نخفيه عليهم.
+    rest = (knownBranches || []).filter(function(b){ return b && b !== branch; });
+  }
+  qtyOther.forEach(function(b){ if(rest.indexOf(b) < 0) rest.push(b); });
+
+  if(rest.length){
+    return {
+      id: it.id,
+      data: {
+        branches: rest,
+        qtyByBranch: q,
+        excludedByImportAt: Date.now(),
+        excludedByImportBranch: branch
+      },
+      kind: 'detach'
+    };
+  }
+  const isDuplicate = !!keeperId;
+  return {
+    id: it.id,
+    data: {
+      status: isDuplicate ? 'merged' : 'import_excluded',
+      mergedInto: isDuplicate ? keeperId : '',
+      mergedAt: isDuplicate ? Date.now() : null,
+      qtyByBranch: q,
+      branches: [IMPORT_EXCLUDED_TAG],
+      excludedByImportAt: Date.now(),
+      excludedByImportBranch: branch
+    },
+    kind: isDuplicate ? 'duplicate-hide' : 'missing-hide'
+  };
+}
+
+function planBranchCatalogReplace(items, rows, mapping, branch, allBranchList){
+  items = items || []; rows = rows || []; mapping = mapping || {};
+  const errors = [];
+  if(!mapping.name) errors.push('لازم تحدد عمود اسم الصنف');
+  if(!mapping.barcode) errors.push('لازم تحدد عمود الباركود/SKU للاستبدال الكامل');
+  if(!mapping.price) errors.push('لازم تحدد عمود سعر البيع');
+
+  const fileByCode = {};
+  const duplicateFileCodes = [];
+  let invalidRows = 0;
+  rows.forEach(function(row){
+    const name = mapping.name ? String(row[mapping.name] || '').trim() : '';
+    const code = mapping.barcode ? String(row[mapping.barcode] || '').trim() : '';
+    if(!name || !code){ invalidRows++; return; }
+    if(fileByCode[code]){ if(duplicateFileCodes.indexOf(code) < 0) duplicateFileCodes.push(code); return; }
+    fileByCode[code] = row;
+  });
+  if(invalidRows){
+    errors.push('فيه ' + invalidRows + ' صف ناقص اسم أو باركود — لازم يتصلح قبل الاستبدال الكامل');
+  }
+  if(duplicateFileCodes.length){
+    errors.push('الملف نفسه فيه باركود مكرر: ' + duplicateFileCodes.slice(0,10).join('، '));
+  }
+
+  const knownBranches = _branchReplaceKnownBranches(items, allBranchList, branch);
+  const visible = items.filter(function(it){ return _branchReplaceVisible(it, branch); });
+  const byCode = {};
+  const allByCode = {};
+  visible.forEach(function(it){
+    const code = String(it.barcode || '').trim();
+    if(code) (byCode[code] = byCode[code] || []).push(it);
+  });
+  items.forEach(function(it){
+    if(!it) return;
+    const code = String(it.barcode || '').trim();
+    if(code) (allByCode[code] = allByCode[code] || []).push(it);
+  });
+
+  const keeperWrites = [];
+  const cleanupWrites = [];
+  const keptIds = {};
+  const fileCodes = Object.keys(fileByCode);
+  const stats = {
+    fileItems:fileCodes.length, invalidRows:invalidRows, keptQty:0, newItems:0,
+    updatedItems:0, duplicatesClosed:0, removedMissing:0, detachedOtherBranches:0
+  };
+
+  fileCodes.forEach(function(code){
+    const group = byCode[code] || [];
+    const branchQty = group.reduce(function(n,it){
+      return n + (Number(((it || {}).qtyByBranch || {})[branch]) || 0);
+    }, 0);
+    stats.keptQty += branchQty;
+
+    // ممنوع نختار مستند مشترك كـkeeper لأن تغيير الاسم/السعر عليه هيغيّر فرع تاني.
+    const candidates = allByCode[code] || [];
+    const exact = candidates.filter(function(it){ return it.id === code + '__' + branch && _branchReplaceSafeTarget(it, branch); })[0];
+    const oldCatalog = candidates.filter(function(it){ return it.id === code + '__' + branch + '__catalog' && _branchReplaceSafeTarget(it, branch); })[0];
+    const exclusive = candidates.filter(function(it){ return _branchReplaceSafeTarget(it, branch); })[0];
+    const safeExisting = exact || oldCatalog || exclusive || null;
+    const keeperId = _branchReplaceDocId(code, branch, items, safeExisting);
+    keptIds[keeperId] = 1;
+
+    const oldQtyMap = safeExisting ? Object.assign({}, safeExisting.qtyByBranch || {}) : {};
+    oldQtyMap[branch] = branchQty; // ⭐ الكمية من السيستم الحالي فقط — لا قراءة لكمية الملف.
+    const row = fileByCode[code];
+    const data = {
+      name: String(row[mapping.name] || '').trim(),
+      barcode: code,
+      price: mapping.price ? (parseFloat(row[mapping.price]) || 0) : 0,
+      cost: mapping.cost ? (parseFloat(row[mapping.cost]) || 0) : 0,
+      supplier: mapping.supplier ? (row[mapping.supplier] || '') : '',
+      minStock: mapping.minStock ? Math.max(0, parseInt(row[mapping.minStock]) || 0) : 0,
+      department: mapping.department ? (row[mapping.department] || '') : '',
+      status: 'active', importedFrom: 'quickbooks',
+      branches: [branch], qtyByBranch: oldQtyMap,
+      updatedAt: new Date()
+    };
+    keeperWrites.push({ id:keeperId, data:data, code:code, existing:!!safeExisting });
+    if(safeExisting) stats.updatedItems++; else stats.newItems++;
+
+    group.forEach(function(it){
+      if(it.id === keeperId) return;
+      const cw = _branchReplaceCleanup(it, branch, keeperId, knownBranches);
+      cleanupWrites.push(cw);
+      if(cw.kind === 'detach') stats.detachedOtherBranches++; else stats.duplicatesClosed++;
+    });
+  });
+
+  // أي حاجة ظاهرة في الفرع ومش موجودة في الملف تختفي من الفرع فقط.
+  visible.forEach(function(it){
+    if(keptIds[it.id]) return;
+    const code = String(it.barcode || '').trim();
+    if(code && fileByCode[code]) return; // اتعاملنا معاها فوق كنسخة مكررة
+    cleanupWrites.push(_branchReplaceCleanup(it, branch, '', knownBranches));
+    stats.removedMissing++;
+  });
+
+  // dedupe نفس المستند لو دخل cleanup من مسارين (حماية إضافية)
+  const cleanSeen = {};
+  const clean = cleanupWrites.filter(function(w){
+    if(!w || !w.id || cleanSeen[w.id] || keptIds[w.id]) return false;
+    cleanSeen[w.id] = 1; return true;
+  });
+
+  return {
+    ok: errors.length === 0,
+    errors: errors,
+    duplicateFileCodes: duplicateFileCodes,
+    keeperWrites: keeperWrites,
+    cleanupWrites: clean,
+    stats: stats
+  };
+}
+if(typeof window !== 'undefined') window.planBranchCatalogReplace = planBranchCatalogReplace;
+
+async function runBranchCatalogReplace(rows, mapping, branch, allBranchList, onProgress){
+  // نقرأ Firestore مباشرة لحظة التنفيذ — مش allInventory الكاش — عشان نحافظ على أحدث كمية فعلية.
+  const snap = await db.collection(TEST_INVENTORY).get();
+  const items = snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data() || {}); });
+  const plan = planBranchCatalogReplace(items, rows, mapping, branch, allBranchList);
+  if(!plan.ok) throw new Error(plan.errors.join('\n'));
+
+  const FV = firebase.firestore.FieldValue;
+  const writes = [];
+  plan.keeperWrites.forEach(function(w){
+    const d = Object.assign({}, w.data, { updatedAt: FV.serverTimestamp() });
+    writes.push({ id:w.id, data:d });
+  });
+  plan.cleanupWrites.forEach(function(w){
+    const d = Object.assign({}, w.data, { updatedAt: FV.serverTimestamp() });
+    writes.push({ id:w.id, data:d });
+  });
+
+  const CHUNK = 350;
+  for(let i=0; i<writes.length; i+=CHUNK){
+    const batch = db.batch();
+    writes.slice(i,i+CHUNK).forEach(function(w){
+      batch.set(db.collection(TEST_INVENTORY).doc(w.id), w.data, { merge:true });
+    });
+    await batch.commit();
+    if(typeof onProgress === 'function') onProgress(Math.min(i+CHUNK,writes.length), writes.length);
+  }
+  if(typeof _logActivity === 'function') _logActivity('inventory_branch_catalog_replace', {
+    branch:branch, fileItems:plan.stats.fileItems, newItems:plan.stats.newItems,
+    updatedItems:plan.stats.updatedItems, duplicatesClosed:plan.stats.duplicatesClosed,
+    removedMissing:plan.stats.removedMissing, detachedOtherBranches:plan.stats.detachedOtherBranches
+  });
+  return plan.stats;
+}
+if(typeof window !== 'undefined') window.runBranchCatalogReplace = runBranchCatalogReplace;
+
+async function runBranchCatalogReplaceFlow(){
+  if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
+  if(importTab !== 'inventory'){ showToast('الاستبدال الكامل للمخزون فقط', 'err'); return; }
+  const mapping = {};
+  for(const t of IMPORT_TARGETS.inventory){
+    const el = document.getElementById('map_'+t.key);
+    mapping[t.key] = el ? el.value : '';
+  }
+  if(!mapping.name || !mapping.barcode || !mapping.price){
+    showToast('لازم تحدد الاسم + الباركود/SKU + سعر البيع', 'err'); return;
+  }
+  let branchList = [];
+  try{ branchList = JSON.parse(localStorage.getItem('pos_branch_list') || '[]'); }catch(e){}
+
+  // Dry-run من الكاش للمعاينة فقط. التنفيذ نفسه يعيد القراءة من Firestore.
+  const preview = planBranchCatalogReplace(allInventory || [], importParsedRows, mapping, currentBranch, branchList);
+  if(!preview.ok){
+    await askConfirm({ waitSec:0, okText:'تمام', cancelText:'إغلاق', title:'الملف محتاج يتظبط', message:preview.errors.join('\n') });
+    return;
+  }
+  const ok = await askConfirm({
+    icon:'♻️', danger:true, waitSec:7, okText:'استبدل كتالوج الفرع',
+    title:'استبدال كتالوج ' + currentBranch + ' من الملف',
+    message:
+      'الملف هيبقى المصدر الوحيد لأصناف ' + currentBranch + '.\n\n'
+      + '📄 أصناف الملف: ' + preview.stats.fileItems + '\n'
+      + '🔁 أصناف موجودة هيتحدث اسمها/سعرها: ' + preview.stats.updatedItems + '\n'
+      + '➕ أصناف جديدة: ' + preview.stats.newItems + ' (هتبدأ بكمية 0)\n'
+      + '🧹 نسخ مكررة هتختفي من الفرع: ' + preview.stats.duplicatesClosed + '\n'
+      + '🚫 أصناف مش في الملف هتختفي من الفرع: ' + preview.stats.removedMissing + '\n\n'
+      + '⭐ مهم: عمود الكمية في الملف بيتجاهل بالكامل. هنحافظ على إجمالي الكمية الحالية في السيستم لنفس الكود.\n'
+      + '🏬 الفروع التانية: الاسم/السعر/الكمية عندهم مش هيتغيروا.\n'
+      + '🛡️ مفيش delete نهائي للمستندات القديمة — بنشيلها من الفرع فقط عشان التاريخ يفضل محفوظ.'
+  });
+  if(!ok){ showToast('اتلغى'); return; }
+
+  const resultBox = document.getElementById('importResult');
+  resultBox.textContent = 'جارٍ استبدال كتالوج الفرع...';
+  try{
+    const stats = await runBranchCatalogReplace(importParsedRows, mapping, currentBranch, branchList, function(n,total){
+      resultBox.textContent = 'جارٍ الاستبدال... ' + n + '/' + total;
+    });
+    resultBox.innerHTML = '✅ كتالوج ' + currentBranch + ' بقى مطابق للملف'
+      + '<div style="font-size:12px;color:var(--muted);margin-top:5px;">'
+      + '🔁 ' + stats.updatedItems + ' تحديث · ➕ ' + stats.newItems + ' جديد بكمية صفر'
+      + ' · 🧹 ' + stats.duplicatesClosed + ' نسخة مكررة اتقفلت'
+      + ' · 🚫 ' + stats.removedMissing + ' صنف مش في الملف اتشال من الفرع'
+      + '</div>';
+    showToast('تم استبدال كتالوج الفرع ✅');
+    if(typeof loadInventory === 'function') await loadInventory();
+  }catch(e){
+    console.error('branch catalog replace', e);
+    resultBox.textContent = '⚠️ فشل الاستبدال: ' + (e && e.message ? e.message : e);
+    showToast('فشل استبدال الكتالوج', 'err');
+  }
+}
+if(typeof window !== 'undefined') window.runBranchCatalogReplaceFlow = runBranchCatalogReplaceFlow;
+
+/* ============================================================
+   🧹🔴🔴🔴🔴⭐ التنضيف الشامل — دمج الأكواد المكررة + الاستيراد
+   في خطوة واحدة، مش خطوتين منفصلتين.
+   ------------------------------------------------------------
+   قرار المالك: "ابني جديد يقفل الموضوع بشكل كامل" — بعد ما براندات
+   دخلت على بعض وكل كود اتكرر ٤-٥ مرات، مش عايز يدوّر بين شاشتين
+   (استيراد، وبعدين أكواد متكررة) كل مرة. الدالة دي بتعمل الاتنين
+   مع بعض، بترتيب واحد صحيح:
+
+   ١) دمج أي تكرار **موجود أصلًا** في الفرع ده (زي "أكواد متكررة" —
+      نفس القاعدة الآمنة بالظبط: نسخة واحدة بس فيها كمية = دمج تلقائي،
+      أكتر من نسخة فيها كمية = يتساب لمراجعة يدوية، الحسابات ما بتخاطرش).
+   ٢) بعد الدمج، الصنف اللي "نجا" (keeper) هو اللي بياخد اسم/سعر
+      ملف QuickBooks — نفس قاعدة الاستيراد العادي بالظبط (الكمية
+      **متتلمسش**، عمود الكمية في الملف يتجاهل تمامًا).
+   ٣) أكواد في الملف مالهاش أي نسخة في الفرع أصلًا = صنف جديد،
+      كمية الملف بتتقرا له عادي (مفيش حاجة قديمة نحميها).
+
+   🔒 نفس فلسفة "أكواد متكررة" تمامًا: الدمج بيقفل النسخ الزيادة
+   (status:'merged')، مفيش حذف خالص، كل حاجة قابلة للمراجعة بعدها. */
+function planFullReconcile(items, rows, mapping, branch, salesById){
+  // ١) خطة الدمج الجماعي — نفس دالة "أكواد متكررة" بالظبط، بلا تكرار منطق
+  const bulk = planBulkMerge(items || [], branch, salesById);
+
+  // نبني خريطة "بعد الدمج": أي كود اندمج تلقائي، الـkeeper بتاعه هو
+  // اللي هيستقبل اسم/سعر الملف. أكواد المراجعة اليدوية (manual) ما
+  // بتتلمسش هنا خالص — تحتاج قرار بشري الأول.
+  const mergedKeeperByCode = {};
+  bulk.auto.forEach(function(a){ mergedKeeperByCode[a.code] = a.plan.keeper.id; });
+  const manualCodes = {};
+  bulk.manual.forEach(function(m){ manualCodes[m.code] = true; });
+
+  // نبني فهرس الأكواد "بعد الدمج" — بديل indexInventoryByCode العادي،
+  // بس بيوجّه لصنف الـkeeper الجديد لو الكود ده كان متكرر واندمج تلقائي
+  const baseIdx = indexInventoryByCode(items || [], branch);
+  const idx = {};
+  Object.keys(baseIdx).forEach(function(c){
+    idx[c] = mergedKeeperByCode[c]
+      ? { id: mergedKeeperByCode[c], count: 1 }   // بعد الدمج، نسخة واحدة بس
+      : baseIdx[c];
+  });
+
+  // ٢) خطة الاستيراد فوق الفهرس "بعد الدمج" — نفس دالة الاستيراد العادي بالظبط
+  const FV = (typeof firebase !== 'undefined' && firebase.firestore && firebase.firestore.FieldValue)
+    ? firebase.firestore.FieldValue : null;
+  const importPlan = planInventoryWrites(rows, mapping, branch, idx, FV);
+
+  // 🚫 أكواد لسه محتاجة مراجعة يدوية (تكرار بكميات ملتبسة) — بنستبعدهم
+  // من كتابة الاستيراد التلقائي عشان مانكتبش فوق حاجة لسه مش واضحة مين
+  // النسخة الصح فيها، حتى لو عارفين اسمها/سعرها الصح من الملف.
+  const skippedManual = [];
+  const safeWrites = importPlan.writes.filter(function(w){
+    const bc = w.data && w.data.barcode;
+    if(bc && manualCodes[bc]){ skippedManual.push(bc); return false; }
+    return true;
+  });
+
+  return {
+    mergeWrites: bulk.auto,              // كتابات الدمج (keeper + losers لكل مجموعة)
+    importWrites: safeWrites,            // كتابات الاستيراد (بعد استبعاد المراجعة اليدوية)
+    manualGroups: bulk.manual,           // محتاجة قرار بشري — زي "أكواد متكررة" بالظبط
+    skippedManual: skippedManual,
+    stats: {
+      mergedGroups: bulk.stats.autoGroups,
+      mergedClosed: bulk.stats.closing,
+      manualGroups: bulk.stats.manualGroups,
+      imported: safeWrites.length,
+      updated: importPlan.stats.updated,
+      created: importPlan.stats.created,
+      failed: importPlan.stats.failed,
+      skippedForManualReview: skippedManual.length
+    }
+  };
+}
+window.planFullReconcile = planFullReconcile;
+
+async function runFullReconcile(rows, mapping, branch, onProgress){
+  const salesById = (typeof invSales === 'object' && invSales) ? invSales : null;
+  const plan = planFullReconcile(allInventory || [], rows, mapping, branch, salesById);
+
+  const CHUNK = 400;
+  let done = 0;
+  const total = plan.mergeWrites.reduce(function(n,a){ return n + a.plan.losers.length + 1; }, 0)
+    + plan.importWrites.length;
+
+  // ١) الدمج الأول — لازم يخلص قبل الاستيراد عشان الـkeeper يبقى جاهز
+  for(let i=0; i<plan.mergeWrites.length; i+=CHUNK){
+    const slice = plan.mergeWrites.slice(i, i+CHUNK);
+    const batch = db.batch();
+    slice.forEach(function(a){
+      batch.set(db.collection(TEST_INVENTORY).doc(a.plan.keeper.id), a.plan.keeper.update, { merge:true });
+      a.plan.losers.forEach(function(l){
+        batch.set(db.collection(TEST_INVENTORY).doc(l.id), l.update, { merge:true });
+        done++;
+      });
+      done++;
+    });
+    await batch.commit();
+    if(typeof onProgress === 'function') onProgress(done, total, 'دمج');
+  }
+
+  // ٢) الاستيراد بعد كده — فوق الأكواد اللي خلصت اندماجها
+  for(let i=0; i<plan.importWrites.length; i+=CHUNK){
+    const slice = plan.importWrites.slice(i, i+CHUNK);
+    const batch = db.batch();
+    slice.forEach(function(w){
+      const ref = (w.id == null) ? db.collection(TEST_INVENTORY).doc() : db.collection(TEST_INVENTORY).doc(w.id);
+      batch.set(ref, w.data, { merge:true });
+      done++;
+    });
+    await batch.commit();
+    if(typeof onProgress === 'function') onProgress(done, total, 'استيراد');
+  }
+
+  if(typeof _logActivity === 'function')
+    _logActivity('inventory_full_reconcile', {
+      branch: branch, merged: plan.stats.mergedGroups, closed: plan.stats.mergedClosed,
+      imported: plan.stats.imported, manualLeft: plan.stats.manualGroups
+    });
+
+  return plan.stats;
+}
+window.runFullReconcile = runFullReconcile;
+
+/* 🧹🔴🔴🔴🔴⭐ التدفّق الكامل للتنضيف الشامل: معاينة (Dry Run) واضحة،
+   تأكيد صريح بالكتابة (زي مسح المخزون — إجراء بيلمس أكواد كتير مرة
+   واحدة، محتاج وعي كامل قبل التنفيذ)، وبعدين تنفيذ فعلي. */
+async function runFullReconcileFlow(){
+  if(!hasPerm('canEditInventory')){ showToast('مفيش صلاحية', 'err'); return; }
+  const targets = IMPORT_TARGETS[importTab];
+  const mapping = {};
+  for(const t of targets){
+    const val = document.getElementById('map_'+t.key).value;
+    if(t.required && !val){ showToast(`لازم تحدد عمود "${t.label}"`, 'err'); return; }
+    mapping[t.key] = val;
+  }
+
+  const resultBox = document.getElementById('importResult');
+  const salesById = (typeof invSales === 'object' && invSales) ? invSales : null;
+  const plan = planFullReconcile(allInventory || [], importParsedRows, mapping, currentBranch, salesById);
+
+  const manualList = plan.manualGroups.length
+    ? ('\n\n⚠️ ' + plan.manualGroups.length + ' كود هيتساب زي ما هو (محتاج مراجعتك بإيدك من "🔍 أكواد متكررة" —'
+       + ' فيهم أكتر من نسخة بكمية، مش واضح مين النسخة الصح): '
+       + plan.manualGroups.slice(0,8).map(function(m){ return m.code; }).join('، ')
+       + (plan.manualGroups.length > 8 ? '…' : ''))
+    : '';
+
+  const ok = await askConfirm({
+    icon: '🧹', danger: true, okText: 'نضّف الكل الآن', waitSec: 6,
+    title: 'تنضيف شامل — ' + currentBranch,
+    message: '١) دمج: ' + plan.stats.mergedGroups + ' كود مكرر هيتدمج (' + plan.stats.mergedClosed + ' نسخة هتتقفل، الكميات بتتجمع)\n'
+      + '٢) استيراد: ' + plan.stats.updated + ' صنف هيتحدّث اسمه/سعره من الملف، ' + plan.stats.created + ' صنف جديد هيتضاف\n'
+      + '⭐ الكمية الحالية في النظام متتلمسش خالص — عمود الكمية في الملف بيتجاهل\n'
+      + 'مفيش أي حذف — كل حاجة قابلة للمراجعة بعدها.'
+      + manualList
+  });
+  if(!ok){ showToast('اتلغى'); return; }
+
+  resultBox.textContent = 'جارٍ التنضيف... 0%';
+  try{
+    const stats = await runFullReconcile(importParsedRows, mapping, currentBranch, function(done, total, stage){
+      resultBox.textContent = 'جارٍ التنضيف (' + stage + ')... ' + done + '/' + total;
+    });
+    resultBox.innerHTML = '✅ خلص — دُمج ' + stats.mergedGroups + ' كود (' + stats.mergedClosed + ' نسخة اتقفلت)'
+      + '، اتحدّث ' + stats.updated + ' صنف، اتضاف ' + stats.created + ' صنف جديد'
+      + (stats.manualGroups ? ('<br>⚠️ ' + stats.manualGroups + ' كود لسه محتاج مراجعتك اليدوية') : '');
+    showToast('التنضيف الشامل خلص ✅');
+    if(typeof loadInventory === 'function') loadInventory();
+  }catch(e){
+    resultBox.innerHTML = '⚠️ حصل خطأ أثناء التنضيف: ' + (e && e.message ? e.message : e);
+    showToast('فشل التنضيف', 'err');
+  }
+}
+window.runFullReconcileFlow = runFullReconcileFlow;
 
 async function runImport(){
   const targets = IMPORT_TARGETS[importTab];
