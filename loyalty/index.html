@@ -2156,10 +2156,50 @@ function shopItems(){
 }
 
 function shopQty(bc){ return Math.max(0, Math.floor(Number(_shopCart[bc]) || 0)); }
+
+/* 📈 Online sales funnel v42 — مبني فوق «منتجات البيع أونلاين» الحالية. */
+var SHOP_FUNNEL_RANK={view:1,chat:2,tryon:3,cart:4,checkout:5,order:6,collected:7};
+var _shopFunnelLast={};
+function shopFunnelSource(){
+  try{var q=new URLSearchParams(location.search);return(q.get('utm_source')||q.get('source')||q.get('src')||'app').slice(0,40);}
+  catch(e){return'app';}
+}
+function shopFunnelProduct(bc){
+  return shopItems().filter(function(x){return String(x.barcode)===String(bc);})[0]||{barcode:String(bc||'')};
+}
+function shopFunnelTrack(stage,product,extra){
+  try{
+    if(!currentCustomer||!currentCustomer.phone)return Promise.resolve(false);
+    stage=String(stage||'');if(!SHOP_FUNNEL_RANK[stage])return Promise.resolve(false);
+    var now=Date.now(),bc=String((product&&product.barcode)||''),dk=stage+'|'+bc;
+    if(_shopFunnelLast[dk]&&now-_shopFunnelLast[dk]<15000)return Promise.resolve(false);
+    _shopFunnelLast[dk]=now;
+    var ref=db.collection(COL_CHAT).doc(String(currentCustomer.phone));
+    return db.runTransaction(function(tx){return tx.get(ref).then(function(d){
+      var old=d.exists?(d.data()||{}):{}, oldStage=String(old.funnelStage||'');
+      var nr=SHOP_FUNNEL_RANK[stage]||0,or=SHOP_FUNNEL_RANK[oldStage]||0;
+      var patch={phone:String(currentCustomer.phone),name:currentCustomer.name||old.name||'',
+        funnelAt:now,funnelSource:shopFunnelSource(),funnelLastAction:stage};
+      if(product){patch.funnelBarcode=bc;patch.funnelProductName=String(product.name||'').slice(0,80);patch.funnelProductPrice=Number(product.price)||0;}
+      if(nr>=or)patch.funnelStage=stage;
+      if(extra)Object.keys(extra).forEach(function(k){patch[k]=extra[k];});
+      /* مجرد مشاهدة منتج لا تزحم Inbox؛ intent الحقيقي يبدأ من Try-On. */
+      if(nr>=SHOP_FUNNEL_RANK.tryon){
+        patch.lastAt=Math.max(Number(old.lastAt)||0,now);
+        if(!old.lastText||old.lastFrom!=='cust')patch.lastText=stage==='tryon'?'🧕 جرّبت منتج':stage==='cart'?'🛒 أضافت للسلة':stage==='checkout'?'💳 وصلت لإتمام الطلب':stage==='order'?'✅ عملت أوردر':'🛍️ مهتمة بالشراء';
+        if(!old.lastFrom)patch.lastFrom='funnel';
+        patch.followUpDueAt=stage==='order'?0:now+(stage==='checkout'?30:stage==='cart'?60:120)*60000;
+      }
+      tx.set(ref,patch,{merge:true});return true;
+    });}).catch(function(e){console.warn('funnel track',stage,e&&e.code);return false;});
+  }catch(e){return Promise.resolve(false);}
+}
+window.shopFunnelTrack=shopFunnelTrack;
 function shopAdd(bc, d){
   bc = String(bc);
   var n = shopQty(bc) + (Number(d) || 0);
   if(n <= 0) delete _shopCart[bc]; else _shopCart[bc] = n;
+  if(Number(d)>0) shopFunnelTrack('cart',shopFunnelProduct(bc),{funnelCartQty:n});
   cartSave();
   renderShop();
   if(_shopOpenItem) renderShopDetail();   // الصفحة مفتوحة؟ العدّاد يتحدّث فيها كمان
@@ -2309,6 +2349,7 @@ var _shopImgIdx = 0;
 function shopOpenItem(bc){
   var p = shopItems().filter(function(x){ return String(x.barcode) === String(bc); })[0];
   if(!p) return;
+  shopFunnelTrack('view',p);
   _shopOpenItem = p; _shopImgIdx = 0;
   renderShopDetail();
   var key = String(p.id || p.barcode);
@@ -2549,7 +2590,18 @@ function renderShop(){
 
   // 🛍️ التصفّح بس — السلة مكانها أيقونة السلة فوق (وضع cartOnly).
   box.innerHTML = head + grid;
+  /* 🔗 Deep-link لمنتج واحد فقط — بعد رسم الكتالوج، مش أثناء تحميله.
+     كده مفيش تحميل صور جماعي ولا shopOpenItem لكل المنتجات. */
+  if(!_shopDeepOpened){
+    try{
+      var _qp=new URLSearchParams(location.search),_deep=_qp.get('product')||_qp.get('p');
+      if(_deep && shopItems().some(function(x){return String(x.barcode)===String(_deep);})){
+        _shopDeepOpened=true; setTimeout(function(){shopOpenItem(_deep);},60);
+      }
+    }catch(e){}
+  }
 }
+var _shopDeepOpened=false;
 window.renderShop = renderShop;
 
 /* 🚀 الإرسال.
@@ -2576,6 +2628,7 @@ function shopSubmit(){
   var vc = orderValidateContact(info, _shopFulfill);
   if(!vc.ok){ showToast(vc.errors[0], true); return; }
 
+  shopFunnelTrack('checkout',lines[0]||null,{funnelCartValue:orderTotal(lines),funnelCartItems:lines.reduce(function(a,x){return a+(Number(x.qty)||0);},0)});
   _shopSending = true;
   var btn = $('shopSendBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'بيتبعت…'; }
@@ -2614,6 +2667,8 @@ function shopSubmit(){
       notes: info.notes
     });
     doc.contactPhone = info.phone;   // 📞 رقم التوصيل لو مختلف عن رقم الحساب
+    doc.funnelSource=shopFunnelSource();
+    doc.funnelEntryBarcode=(lines[0]&&lines[0].barcode)||'';
     doc.source = 'app';        // 📱 التطبيق · Glow بيبعت 'glow' · الموقع 'web'
     /* ☁️ الأولوية للدالة السحابية: هي اللي بتعمل الفحص والخصم
        والإنشاء في transaction واحدة — فمستحيل اتنين ياخدوا آخر
@@ -2627,7 +2682,8 @@ function shopSubmit(){
       items: chk.items.map(function(it){ return { barcode: it.barcode, qty: it.qty }; }),
       payMethod: _shopPay, fulfillment: _shopFulfill,
       governorate: info.governorate, address: info.address,
-      notes: info.notes, contactPhone: info.phone
+      notes: info.notes, contactPhone: info.phone,
+      funnelSource:shopFunnelSource(), funnelEntryBarcode:(lines[0]&&lines[0].barcode)||''
     };
     try{
       var fn = firebase.app('loyalty')
@@ -2651,6 +2707,7 @@ function shopSubmit(){
       return db.collection(ORD_COL).add(doc).then(function(){ return doc; });
     }
   }).then(function(doc){
+    shopFunnelTrack('order',lines[0]||null,{funnelOrderCode:doc.code||'',funnelOrderAt:Date.now(),followUpDueAt:0});
     _shopCart = {};
     _shopInfo.address = ''; _shopInfo.notes = '';
     cartSave();              // 💾 السلة المحفوظة اتفضّت هي كمان — مش هترجع بعد أوردر ناجح
@@ -3597,6 +3654,7 @@ window.chatQuickBuy = chatQuickBuy;
 function chatTryOn(id){
   var img = chatImgs[id];
   if(!img) return;
+  shopFunnelTrack('tryon',shopFunnelProduct(chatBarcodes[id]||''),{funnelFromChat:true});
   try{
     sessionStorage.setItem('echarpe_tryon_img', img);
     sessionStorage.setItem('echarpe_tryon_phone', (currentCustomer && currentCustomer.phone) || '');
@@ -3657,6 +3715,7 @@ window.addEventListener('message', function(e){
 function tryonAddToCart(barcode, imgFallback, note){
   var bc = String(barcode || '').trim();
   if(!bc) return;
+  shopFunnelTrack('cart',shopFunnelProduct(bc),{funnelFromTryon:true});
   /* 🖼️ صورة المنتج: مستندات المخزون (pos_test_inventory) **مفيهاش**
      حقل صورة أصلًا — فالسلة كانت بتعرض أيقونة افتراضية دايمًا. الحل:
      نستخدم صورة الطرحة اللي الموظفة بعتتها في الشات نفسها. */
@@ -3784,6 +3843,7 @@ function chatSend(){
   $('chSend').disabled = true;
   var phone = currentCustomer.phone;
   var ts = Date.now();
+  shopFunnelTrack('chat',null,{funnelChatAt:ts});
   var convRef = db.collection(COL_CHAT).doc(phone);
   chatResolveBranch(phone).then(function(branch){
     var batch = db.batch();
