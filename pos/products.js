@@ -230,6 +230,50 @@ function goToReceiveGoods(){
   renderReceiveGoodsLog();
 }
 
+// 🔎 مصدر واحد لبحث «استلام بضاعة».
+// allInventory فيها كل مستندات Firestore بما فيها النسخ المدموجة/المستبعدة
+// وفروع تانية، بينما شاشة الأصناف نفسها بتفلترهم. لو بحث الاستلام استخدم
+// allInventory مباشرة يظهر نفس الباركود 2-3 مرات (وأحيانًا بكميات قديمة).
+// هنا بنطبّق نفس نطاق الفرع ونرجّع نسخة واحدة canonical لكل باركود، من غير
+// أي جمع كميات أو كتابة في المخزون — مجرد اختيار المستند الصحيح للعرض/الاستلام.
+function receiveInventoryVisible(it, branch){
+  if(!it || it.status === 'merged') return false;
+  const br = it.branches;
+  if(Array.isArray(br) && br.length && br.indexOf(branch) < 0) return false;
+  return true;
+}
+function receiveCanonicalItems(items, branch){
+  const byCode = Object.create(null), noCode = [];
+  (items || []).forEach(function(it){
+    if(!receiveInventoryVisible(it, branch)) return;
+    const code = String(it.barcode || '').trim();
+    if(!code){ noCode.push(it); return; }
+    const old = byCode[code];
+    if(!old){ byCode[code] = it; return; }
+    // الأفضلية للمستند المربوط صراحة بالفرع الحالي، ثم للحالة غير المخفية،
+    // ثم للأحدث/الأعلى رصيدًا كحزام أمان لبيانات قديمة لم تُنضّف بعد.
+    const score = function(x){
+      const explicit = Array.isArray(x.branches) && x.branches.indexOf(branch) >= 0 ? 1000 : 0;
+      const active = (x.status !== 'hidden' && x.status !== 'import_excluded') ? 100 : 0;
+      const qty = (typeof branchQty === 'function') ? Number(branchQty(x)||0) : Number((x.qtyByBranch||{})[branch]||0);
+      const updated = Number(x.updatedAtMs || x.importedAtMs || 0) / 1e13;
+      return explicit + active + Math.min(Math.max(qty, -9999), 9999)/10000 + updated;
+    };
+    if(score(it) > score(old)) byCode[code] = it;
+  });
+  return Object.keys(byCode).map(function(k){ return byCode[k]; }).concat(noCode);
+}
+function receiveSearchItems(items, branch, query){
+  const q = String(query || '').trim().toLowerCase();
+  const _sm = (typeof searchMatch === 'function') ? searchMatch
+            : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
+  const _bp = (typeof barcodePrefix === 'function') ? barcodePrefix
+            : (bc, qq)=> String(bc||'').toLowerCase().startsWith(String(qq||'').toLowerCase());
+  return receiveCanonicalItems(items, branch).filter(function(it){
+    return _sm(it.name, q) || _bp(it.barcode, q);
+  });
+}
+
 // بحث حي وأنت بتكتب (زي صفحة البيع): يوري اقتراحات تدوس عليها
 document.getElementById('receiveGoodsBarcode').addEventListener('input', (e)=>{
   const q = e.target.value.trim().toLowerCase();
@@ -243,9 +287,7 @@ document.getElementById('receiveGoodsBarcode').addEventListener('input', (e)=>{
             : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
   const _bp = (typeof barcodePrefix === 'function') ? barcodePrefix
             : (bc, qq)=> String(bc||'').toLowerCase().startsWith(String(qq||'').toLowerCase());
-  const matches = allInventory.filter(it=>
-    _sm(it.name, q) || _bp(it.barcode, q)   // 🔎 تطبيع عربي + كود بالبداية
-  ).slice(0, 12);
+  const matches = receiveSearchItems(allInventory, currentBranch, q).slice(0, 12);
   // 🥇 المطابقة التامة الأول، وبعدها الأقصر (33 ← 330 ← 331...) — مش بترتيب المخزون العشوائي
   matches.sort((a,b)=>{
     const qa = String(a.barcode||''), qb = String(b.barcode||'');
@@ -270,17 +312,11 @@ document.getElementById('receiveGoodsBarcode').addEventListener('keydown', (e)=>
   const code = e.target.value.trim();
   if(!code) return;
   const box = document.getElementById('receiveSuggestBox');
-  let product = allInventory.find(p=> p.barcode === code || p.name === code);
+  const candidates = receiveCanonicalItems(allInventory, currentBranch);
+  let product = candidates.find(p=> String(p.barcode||'') === code || String(p.name||'') === code);
   if(!product){
     // مفيش تطابق تام؟ لو فيه نتيجة واحدة بس في البحث خدها
-    const q = code.toLowerCase();
-  // 🧷 حزام أمان نسخ الملفات: وقت التحديث ممكن ملف يتحمّل جديد وملف قديم للحظة —
-  // لو دالة التطبيع لسه موصلتش، بنرجع للبحث الحرفي بدل ما البحث يموت خالص
-  const _sm = (typeof searchMatch === 'function') ? searchMatch
-            : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
-  const _bp = (typeof barcodePrefix === 'function') ? barcodePrefix
-            : (bc, qq)=> String(bc||'').toLowerCase().startsWith(String(qq||'').toLowerCase());
-    const ms = allInventory.filter(it=> _sm(it.name, code) || _bp(it.barcode, q));
+    const ms = receiveSearchItems(candidates, currentBranch, code);
     if(ms.length === 1) product = ms[0];
   }
   if(!product){
