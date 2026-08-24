@@ -889,3 +889,231 @@ window.renderGraceDay = function(){
     window.renderGraceDay();
   };
 };
+
+
+
+// ==================== SALES ADMIN CONTROL CENTER v17 ====================
+// UI-only organization layer: existing panels, IDs and business handlers stay intact.
+(function(){
+  const sectionMeta = {
+    overview:   {label:'الرئيسية', icon:'⌂', desc:'الحاجات اللي محتاجة انتباهك'},
+    team:       {label:'الفريق', icon:'👥', desc:'الموظفين والجداول والمهام'},
+    approvals:  {label:'الموافقات', icon:'✅', desc:'طلبات وقرارات محتاجة مراجعتك'},
+    payroll:    {label:'الرواتب', icon:'💵', desc:'مرتب وعمولات وسلف وخصومات'},
+    performance:{label:'الأداء', icon:'📈', desc:'نتائج وتقارير وتقييمات'},
+    settings:   {label:'الإعدادات', icon:'⚙️', desc:'الفروع والقواعد والإعدادات'},
+  };
+  let activeSection = 'overview';
+
+  function panelSection(panel){
+    const has = (sel)=> !!panel.querySelector(sel);
+    // Team / people
+    if(has('#newEmpName') || has('#empList') || has('#pendingRegsList') ||
+       has('#staffOverviewList') || has('#scheduleList') || has('#taskAssignList')) return 'team';
+    // Approvals / inbox-like work
+    if(has('#leaveRequestsList') || has('#attIssuesList') || has('#graceDayPanel') ||
+       has('#rewardBudgetPanel') || has('#overtimeApprovals') || has('#pendingSubmissionsList') ||
+       has('#shortagesList') || has('#staffOrdersPending')) return 'approvals';
+    // Payroll / money
+    if(has('#timeCreditLog') || has('#commissionList') || has('#commissionPaymentLogList') ||
+       has('#salaryList') || has('#salaryPaymentLogList') || has('#terminateEmpList') ||
+       has('#terminationLogList') || has('#advancesLogList')) return 'payroll';
+    // Performance / reports
+    if(has('#perfList') || has('#confirmedSubmissionsList') || has('#rewardsList') ||
+       has('#attendanceHistoryList') || has('#weeklyAggregateList') || has('#perfHistoryList') ||
+       has('#fullReportList')) return 'performance';
+    // Settings
+    if(has('#managerCodeInput') || has('#advMaxInput') || has('#branchManageList') ||
+       has('#complianceSettingsForm') || has('#shiftTargetMorning') || has('#framesSaleMode') ||
+       has('#commissionPerPointInput') || has('#referralList')) return 'settings';
+    return 'settings';
+  }
+
+  function directPanels(){
+    const admin = document.getElementById('admin');
+    if(!admin) return [];
+    return Array.from(admin.children || []).filter(x=>x.classList && x.classList.contains('panel'));
+  }
+
+  function tagPanels(){
+    directPanels().forEach((p, i)=>{
+      if(!p.dataset.salesSection) p.dataset.salesSection = panelSection(p);
+      p.dataset.salesPanelIndex = String(i);
+      const h = p.querySelector('h3,h4');
+      if(h && !p.dataset.salesTitle) p.dataset.salesTitle = (h.textContent || '').replace(/\s+/g,' ').trim();
+    });
+  }
+
+  function badgeNum(id){
+    const el = document.getElementById(id);
+    if(!el) return 0;
+    const n = Number(String(el.textContent || '').replace(/[^\d.-]/g,''));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function pendingOvertime(){
+    const el = document.getElementById('overtimeApprovals');
+    if(!el) return 0;
+    // buttons are only rendered for rows waiting for approval
+    return el.querySelectorAll('button').length ? Math.ceil(el.querySelectorAll('button').length / 2) : 0;
+  }
+
+  function currentPeriod(){
+    const s = document.getElementById('salaryPeriodSelect');
+    return s && s.options && s.selectedIndex >= 0 ? (s.options[s.selectedIndex].textContent || '') : '—';
+  }
+
+  function renderSummary(){
+    const host = document.getElementById('salesAdminSummary');
+    if(!host) return;
+    const team = Number((document.getElementById('empCountCurrent')||{}).textContent || 0) || 0;
+    const approvals = badgeNum('leaveBadge') + badgeNum('issuesBadge') + badgeNum('regPendBadge') + pendingOvertime();
+    const tasks = badgeNum('pendingBadge') + badgeNum('staffOrdersBadge');
+    const period = currentPeriod();
+    host.innerHTML = `
+      <div class="sales-admin-hero">
+        <div class="sales-admin-hero-head">
+          <div><div class="sales-admin-hero-title">إدارة الفريق من مكان واحد</div>
+          <div class="sales-admin-hero-sub">بدل السكرول الطويل: اختار القسم، وشوف اللي محتاج قرارك الأول.</div></div>
+          <div style="font-size:10.5px;color:var(--sub);text-align:left;">فترة المرتب<br><b style="color:var(--ink);font-size:12px;">${period || '—'}</b></div>
+        </div>
+        <div class="sales-admin-kpis">
+          <div class="sales-admin-kpi" data-go-sales-section="team"><b>${team}</b><span>موظف حالي</span></div>
+          <div class="sales-admin-kpi ${approvals?'hot':''}" data-go-sales-section="approvals"><b>${approvals}</b><span>قرار/طلب مستنيك</span></div>
+          <div class="sales-admin-kpi ${tasks?'hot':''}" data-go-sales-section="approvals"><b>${tasks}</b><span>مهام/أوردرات معلقة</span></div>
+          <div class="sales-admin-kpi" data-go-sales-section="payroll"><b>${period || '—'}</b><span>فترة الرواتب</span></div>
+        </div>
+        <div class="sales-admin-actions">
+          <button data-go-sales-section="team">👥 الموظفين</button>
+          <button data-go-sales-section="approvals">✅ محتاج موافقتي</button>
+          <button data-go-sales-section="payroll">💵 الرواتب والسلف</button>
+          <button data-go-sales-section="performance">📈 الأداء</button>
+        </div>
+      </div>`;
+    host.querySelectorAll('[data-go-sales-section]').forEach(b=>{
+      b.onclick=()=>showSection(b.dataset.goSalesSection);
+    });
+  }
+
+  function renderNav(){
+    const host = document.getElementById('salesAdminUx');
+    if(!host) return;
+    host.innerHTML = `
+      <div class="sales-admin-shell">
+        <div class="sales-admin-nav">
+          ${Object.entries(sectionMeta).map(([k,v])=>`<button type="button" data-sales-section-btn="${k}">${v.icon} ${v.label}</button>`).join('')}
+        </div>
+        <div class="sales-admin-tools">
+          <input id="salesAdminSearch" type="search" placeholder="ابحث: راتب، سلفة، حضور، موظف، تارجت…">
+          <select id="salesAdminJump">
+            <option value="">اذهب مباشرة إلى…</option>
+          </select>
+        </div>
+      </div>`;
+    host.querySelectorAll('[data-sales-section-btn]').forEach(b=>{
+      b.onclick=()=>showSection(b.dataset.salesSectionBtn);
+    });
+    const q = host.querySelector('#salesAdminSearch');
+    if(q) q.oninput=()=>applySearch(q.value);
+    const jump = host.querySelector('#salesAdminJump');
+    if(jump){
+      const opts = directPanels().map(p=>({i:p.dataset.salesPanelIndex,title:p.dataset.salesTitle||'قسم'}));
+      jump.innerHTML = '<option value="">اذهب مباشرة إلى…</option>' +
+        opts.map(x=>`<option value="${x.i}">${x.title}</option>`).join('');
+      jump.onchange=()=>{
+        const p = directPanels().find(x=>x.dataset.salesPanelIndex===jump.value);
+        if(!p) return;
+        activeSection = p.dataset.salesSection || 'settings';
+        setNavState();
+        directPanels().forEach(x=>x.classList.toggle('sales-panel-hidden', x!==p));
+        document.getElementById('salesAdminSummary').style.display='none';
+        document.getElementById('salesAdminSectionLabel').textContent='فتح مباشر: '+(p.dataset.salesTitle||'');
+        p.scrollIntoView({behavior:'smooth',block:'start'});
+      };
+    }
+  }
+
+  function setNavState(){
+    document.querySelectorAll('[data-sales-section-btn]').forEach(b=>{
+      b.classList.toggle('on', b.dataset.salesSectionBtn===activeSection);
+    });
+  }
+
+  function showSection(section){
+    if(!sectionMeta[section]) section='overview';
+    activeSection=section;
+    const search = document.getElementById('salesAdminSearch');
+    if(search) search.value='';
+    const jump = document.getElementById('salesAdminJump');
+    if(jump) jump.value='';
+    setNavState();
+    const panels=directPanels();
+    const summary=document.getElementById('salesAdminSummary');
+    const label=document.getElementById('salesAdminSectionLabel');
+    const empty=document.getElementById('salesAdminEmpty');
+    panels.forEach(p=>{
+      p.classList.remove('sales-search-match');
+      const show = section!=='overview' && p.dataset.salesSection===section;
+      p.classList.toggle('sales-panel-hidden', !show);
+    });
+    if(summary) summary.style.display = section==='overview' ? 'block' : 'none';
+    if(label) label.textContent = section==='overview' ? '' : `${sectionMeta[section].icon} ${sectionMeta[section].label} — ${sectionMeta[section].desc}`;
+    const shown = panels.filter(p=>!p.classList.contains('sales-panel-hidden')).length;
+    if(empty) empty.style.display = (section!=='overview' && !shown) ? 'block' : 'none';
+    try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(e){ try{window.scrollTo(0,0);}catch(_){} }
+  }
+  window.showSalesAdminSection = showSection;
+
+  function norm(s){return String(s||'').toLowerCase().replace(/\s+/g,' ').trim();}
+  function applySearch(raw){
+    const q=norm(raw);
+    const panels=directPanels();
+    const summary=document.getElementById('salesAdminSummary');
+    const label=document.getElementById('salesAdminSectionLabel');
+    const empty=document.getElementById('salesAdminEmpty');
+    if(!q){ showSection(activeSection); return; }
+    if(summary) summary.style.display='none';
+    let found=0;
+    panels.forEach(p=>{
+      const hay=norm((p.dataset.salesTitle||'')+' '+(p.textContent||'').slice(0,1200));
+      const ok=hay.includes(q);
+      p.classList.toggle('sales-panel-hidden',!ok);
+      p.classList.toggle('sales-search-match',ok);
+      if(ok) found++;
+    });
+    if(label) label.textContent=`🔎 نتائج البحث عن «${raw}» — ${found}`;
+    if(empty){ empty.style.display=found?'none':'block'; empty.textContent='مفيش نتيجة. جرّب كلمة أبسط زي: راتب، حضور، سلفة، تقييم.'; }
+  }
+
+  function observeCounters(){
+    if(typeof MutationObserver !== 'function') return;
+    const ids=['empCountCurrent','leaveBadge','issuesBadge','regPendBadge','pendingBadge','staffOrdersBadge','salaryPeriodSelect','overtimeApprovals'];
+    const mo=new MutationObserver(()=>renderSummary());
+    ids.forEach(id=>{ const el=document.getElementById(id); if(el) mo.observe(el,{childList:true,subtree:true,characterData:true,attributes:true}); });
+    const sal=document.getElementById('salaryPeriodSelect');
+    if(sal) sal.addEventListener('change',renderSummary);
+  }
+
+  function init(){
+    const admin=document.getElementById('admin');
+    if(!admin || document.getElementById('salesAdminUx')?.dataset.ready==='1') return;
+    tagPanels();
+    renderNav();
+    const host=document.getElementById('salesAdminUx'); if(host) host.dataset.ready='1';
+    renderSummary();
+    observeCounters();
+    showSection('overview');
+
+    // كل مرة الأدمن يفتح: ارجعه للرئيسية بدل ما يلاقي نفسه وسط آخر سكرول.
+    if(typeof MutationObserver !== 'function') return;
+    const mo=new MutationObserver(()=>{
+      if(admin.classList.contains('show')){
+        renderSummary();
+        if(!document.activeElement || document.activeElement.tagName!=='INPUT') showSection('overview');
+      }
+    });
+    mo.observe(admin,{attributes:true,attributeFilter:['class']});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();

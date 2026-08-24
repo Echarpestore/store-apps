@@ -1,13 +1,20 @@
-const CACHE_NAME = 'store-apps-shell-v116';
+const CACHE_NAME = 'store-apps-shell-v117-sales';
+const SALES_CACHE_SUFFIX = '-sales';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+  // IMPORTANT: CacheStorage is shared across the whole origin.
+  // Never delete POS / Office / Glow caches from the Sales service worker.
   event.waitUntil(
     caches.keys().then((names) =>
-      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+      Promise.all(
+        names
+          .filter((n) => n.endsWith(SALES_CACHE_SUFFIX) && n !== CACHE_NAME)
+          .map((n) => caches.delete(n))
+      )
     ).then(() => self.clients.claim())
   );
 });
@@ -17,9 +24,6 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  // Only handle our own site's files (HTML, manifest, icons).
-  // Everything else (Firebase/Firestore calls, Google Fonts, etc.)
-  // is left completely alone.
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(

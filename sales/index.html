@@ -466,6 +466,45 @@
 /* Employee Hub v2 */
 .emp-hub-head{display:flex;justify-content:space-between;gap:14px;margin-bottom:14px}.emp-hub-title{font-size:19px;font-weight:900}.emp-hub-sub{font-size:11.5px;color:var(--sub)}.emp-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 14px}.emp-summary-card{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:11px;text-align:center}.emp-summary-card b{display:block;font-size:20px}.emp-summary-card span{font-size:10.5px;color:var(--sub)}.emp-tools{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:8px;margin-bottom:12px}.emp-tools input,.emp-tools select{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:12px;background:var(--panel2);color:var(--ink);padding:11px 12px;font-family:Cairo}.employee-card{transition:.16s ease}.employee-card:hover{transform:translateY(-1px);border-color:var(--gold-dim)}.employee-meta-line{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}.emp-chip{font-size:10.5px;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--sub)}.emp-chip.ok{color:var(--good)}.emp-chip.warn{color:var(--gold)}.deleted-box{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}.deleted-toggle{width:100%;display:flex;justify-content:space-between;border:0;background:none;color:var(--ink);font-family:Cairo;font-weight:900;padding:4px 0;cursor:pointer}.employee-record-shell{max-width:720px;margin:auto;background:var(--panel,#181820);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.35)}.employee-record-body{padding:18px}.er-info{border:1px solid var(--line);background:var(--panel2);border-radius:12px;padding:10px}.er-info span{display:block;color:var(--sub);font-size:10.5px}.er-info b{display:block;margin-top:3px;font-size:13px}@media(max-width:600px){.emp-tools{grid-template-columns:1fr}}
 
+
+  /* ===== Sales Admin v17 — organized control center ===== */
+  #admin{padding:18px 22px 72px;}
+  #admin .admin-top{
+    position:sticky;top:0;z-index:24;margin:-18px -22px 12px;padding:14px 22px 12px;
+    background:linear-gradient(180deg,rgba(11,12,15,.98),rgba(11,12,15,.93));
+    backdrop-filter:blur(14px);border-bottom:1px solid var(--line);
+  }
+  #salesAdminUx{position:sticky;top:67px;z-index:23;margin:0 0 12px;}
+  .sales-admin-shell{background:rgba(20,21,26,.94);border:1px solid var(--line);border-radius:18px;padding:10px;box-shadow:0 12px 35px rgba(0,0,0,.22);backdrop-filter:blur(14px)}
+  .sales-admin-nav{display:flex;gap:6px;overflow:auto;scrollbar-width:none;padding-bottom:1px}
+  .sales-admin-nav::-webkit-scrollbar{display:none}
+  .sales-admin-nav button{white-space:nowrap;border:1px solid transparent;background:var(--panel2);color:var(--sub);border-radius:12px;padding:9px 12px;font-family:Cairo;font-weight:800;font-size:11.5px;cursor:pointer}
+  .sales-admin-nav button.on{background:linear-gradient(180deg,var(--gold),#d8a839);color:#18130a;border-color:#e7c55d}
+  .sales-admin-tools{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:7px;margin-top:8px}
+  .sales-admin-tools input,.sales-admin-tools select{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid var(--line);border-radius:11px;background:#111217;color:var(--ink);font-family:Cairo;font-size:12px}
+  #salesAdminSummary{margin-bottom:11px}
+  .sales-admin-hero{background:linear-gradient(135deg,#181a21,#101116 62%,#201b0d);border:1px solid #37301c;border-radius:18px;padding:15px;box-shadow:0 14px 40px rgba(0,0,0,.22)}
+  .sales-admin-hero-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .sales-admin-hero-title{font-size:18px;font-weight:900}.sales-admin-hero-sub{font-size:11px;color:var(--sub);margin-top:2px}
+  .sales-admin-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}
+  .sales-admin-kpi{border:1px solid rgba(255,255,255,.08);border-radius:13px;background:rgba(255,255,255,.045);padding:10px;cursor:pointer;min-width:0}
+  .sales-admin-kpi.hot{border-color:rgba(224,121,107,.40);background:rgba(224,121,107,.08)}
+  .sales-admin-kpi b{display:block;font-size:20px;line-height:1.15;overflow:hidden;text-overflow:ellipsis}.sales-admin-kpi span{display:block;font-size:10px;color:var(--sub);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sales-admin-actions{display:flex;gap:7px;overflow:auto;margin-top:10px}
+  .sales-admin-actions button{white-space:nowrap;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--ink);padding:8px 11px;font-family:Cairo;font-weight:800;font-size:11px;cursor:pointer}
+  #admin > .panel{margin:0 0 10px;border-radius:16px;box-shadow:0 6px 18px rgba(0,0,0,.10)}
+  #admin > .panel.sales-panel-hidden{display:none!important}
+  #admin > .panel.sales-search-match{display:block!important;outline:1px solid rgba(227,187,73,.24)}
+  .sales-section-empty{border:1px dashed var(--line);border-radius:16px;padding:22px;text-align:center;color:var(--sub);background:var(--panel)}
+  .sales-section-title{font-size:12px;color:var(--sub);font-weight:800;margin:0 2px 8px}
+  @media(max-width:720px){
+    #admin{padding:12px 10px 70px}
+    #admin .admin-top{position:relative;top:auto;margin:-12px -10px 10px;padding:12px 10px}
+    #salesAdminUx{top:0;margin:0 0 10px}
+    .sales-admin-tools{grid-template-columns:1fr}
+    .sales-admin-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+
 </style>
 </head>
 <body>
@@ -822,6 +861,10 @@
         <button class="backBtn" id="backFromAdmin">◀ رجوع للشاشة</button>
       </div>
     </div>
+    <div id="salesAdminUx"></div>
+    <div id="salesAdminSummary"></div>
+    <div id="salesAdminSectionLabel" class="sales-section-title"></div>
+    <div id="salesAdminEmpty" class="sales-section-empty" style="display:none;">مفيش عناصر في القسم ده.</div>
     <div class="panel">
       <h3>إضافة موظف جديد</h3>
       <div class="add-form">
@@ -1193,8 +1236,8 @@
 
 </div>
 
-<script type="module" src="sales-app.js"></script>
-<script src="sales-ui.js"></script>
+<script type="module" src="sales-app.js?v=17"></script>
+<script src="sales-ui.js?v=17"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
      ⚠️ `chat-staff-ui.js` مكتوب compat، وبيكتشف إنه في بيئة modular
