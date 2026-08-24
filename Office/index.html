@@ -489,6 +489,11 @@
         <button class="btn gold" id="qgAdd" style="margin:0;">+ بضاعة</button>
       </div>
       <div id="qgStatus" class="muted" style="font-size:11px;margin-top:7px;"></div>
+      <div style="display:flex;gap:7px;margin-top:9px;align-items:center;flex-wrap:wrap;">
+        <button class="btn" id="qgVoiceBtn" type="button" style="margin:0;">🎙️ تسجيل بالصوت</button>
+        <span class="muted" style="font-size:10.5px;">قول: «بضاعة أحمد المبلغ ٣ ٢ ٥ ٠» أو «دفعت أحمد المبلغ ١ ٠ ٠ ٠»</span>
+      </div>
+      <div id="qgVoiceStatus" class="muted" style="font-size:11px;margin-top:7px;"></div>
     </div>
 
     <div class="panel">
@@ -594,6 +599,21 @@
   </section>
 </main>
 
+<div id="ofVoiceOverlay" aria-hidden="true" style="display:none;position:fixed;inset:0;z-index:95;background:rgba(15,23,42,.58);align-items:flex-end;justify-content:center;">
+  <div style="width:100%;max-width:560px;background:#fff;color:#111827;border-radius:22px 22px 0 0;padding:16px 14px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -20px 55px rgba(15,23,42,.22);">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <div><b style="font-size:16px;">🎙️ راجع التسجيل الصوتي</b><div id="ofVoiceHeard" style="font-size:10.5px;color:#64748b;margin-top:2px;"></div></div>
+      <button class="ghost ico" type="button" onclick="ofVoiceCancel()">✕</button>
+    </div>
+    <div id="ofVoiceSummary" style="margin-top:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px;line-height:1.9;font-size:13px;"></div>
+    <div id="ofVoiceWarn" style="display:none;margin-top:8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:9px;font-size:11px;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px;">
+      <button class="btn gold" id="ofVoiceConfirmBtn" type="button">✅ تأكيد</button>
+      <button class="btn" type="button" onclick="ofVoiceRetry()">🎙️ أقولها تاني</button>
+    </div>
+  </div>
+</div>
+
 <div id="officeMoreSheet" aria-hidden="true">
   <div class="sheet">
     <div class="of-more-head">
@@ -627,6 +647,6 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js"></script>
-<script src="office.js?v=66"></script>
+<script src="office.js?v=67"></script>
 </body>
 </html>

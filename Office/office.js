@@ -862,7 +862,7 @@ function profitReport(data, mk){
 
 // للاختبارات
 if (typeof window !== 'undefined'){
-  window.officeCalc = { merchantBalance:merchantBalance, expensesMonthTotal:expensesMonthTotal,
+  window.officeCalc = { merchantBalance:merchantBalance, ofArNorm:ofArNorm, ofArabicDigitsOnly:ofArabicDigitsOnly, ofLevenshtein:ofLevenshtein, expensesMonthTotal:expensesMonthTotal,
     ofCashLedger:ofCashLedger, ofSettleDayFor:ofSettleDayFor, ofNextBizDay:ofNextBizDay,
     ofIsWeekend:ofIsWeekend, ofDayKeyOf:ofDayKeyOf, ofDayShift:ofDayShift,
     ofGoldValue:ofGoldValue, ofWealth:ofWealth, ofPredictSettlements:ofPredictSettlements,
@@ -1969,7 +1969,7 @@ function startData(){
   });
   db.collection('office_merchants').onSnapshot(function(s){
     D.merchants = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
-    renderMerchants(); try{ ofRenderQuickGoodsMerchants(); ofWireQuickGoods(); }catch(e){}
+    renderMerchants(); try{ ofRenderQuickGoodsMerchants(); ofWireQuickGoods(); ofWireVoiceGoods(); }catch(e){}
   });
   db.collection('office_merchant_txns').onSnapshot(function(s){
     D.mtxns = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
@@ -2967,6 +2967,259 @@ function ofWireQuickGoods(){
     }catch(e){alert('تعذر التسجيل: '+e.message);}
     btn.disabled=false; btn.textContent='+ بضاعة';
   });
+}
+
+
+/* ============================================================
+   🎙️ تسجيل التاجر بالصوت v67
+   ------------------------------------------------------------
+   أوامر مقفولة للدقة:
+   - "بضاعة <اسم التاجر> المبلغ <أرقام رقم رقم>"
+   - "دفعت <اسم التاجر> المبلغ <أرقام رقم رقم>"
+   - أو في أمر واحد: "بضاعة <الاسم> المبلغ X دفعت Y"
+   مفيش Firestore write قبل تأكيد صوتي/زر صريح.
+   ============================================================ */
+let _ofVoiceRec=null, _ofVoiceDraft=null, _ofVoiceBusy=false, _ofVoiceConfirmListening=false;
+
+function ofArNorm(v){
+  return String(v||'')
+    .replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي')
+    .replace(/[ؤ]/g,'و').replace(/[ئ]/g,'ي')
+    .replace(/[\u064B-\u065F\u0670]/g,'')
+    .replace(/[^\u0600-\u06FFa-zA-Z0-9\s]/g,' ')
+    .replace(/\s+/g,' ').trim().toLowerCase();
+}
+const OF_AR_DIGIT_WORDS={
+  'صفر':'0','زيرو':'0',
+  'واحد':'1','واحده':'1','احد':'1',
+  'اتنين':'2','اثنين':'2','اثنان':'2','تنين':'2',
+  'تلاته':'3','ثلاثه':'3','ثلاث':'3','تلات':'3',
+  'اربعه':'4','اربعة':'4','اربع':'4',
+  'خمسه':'5','خمسة':'5','خمس':'5',
+  'سته':'6','ستة':'6','ست':'6',
+  'سبعه':'7','سبعة':'7','سبع':'7',
+  'تمانيه':'8','ثمانيه':'8','ثمانية':'8','تمنيه':'8',
+  'تسعه':'9','تسعة':'9','تسع':'9'
+};
+function ofArabicDigitsOnly(text){
+  const raw=String(text||'').replace(/[٠-٩]/g,function(c){return String('٠١٢٣٤٥٦٧٨٩'.indexOf(c));});
+  const toks=ofArNorm(raw).split(' ').filter(Boolean);
+  let digits='';
+  for(const t of toks){
+    if(/^\d+$/.test(t)){ digits += t; continue; }
+    if(Object.prototype.hasOwnProperty.call(OF_AR_DIGIT_WORDS,t)){ digits += OF_AR_DIGIT_WORDS[t]; continue; }
+    return null; // grammar is deliberately strict: no guessing inside the money field
+  }
+  if(!digits || digits.length>9) return null;
+  const n=Number(digits);
+  return Number.isSafeInteger(n) && n>0 ? n : null;
+}
+function ofMerchantBalanceById(id){
+  return merchantBalance((D.mtxns||[]).filter(function(x){return x&&x.merchantId===id;}));
+}
+function ofLevenshtein(a,b){
+  a=ofArNorm(a); b=ofArNorm(b);
+  const m=a.length,n=b.length,dp=Array.from({length:m+1},function(){return Array(n+1).fill(0);});
+  for(let i=0;i<=m;i++)dp[i][0]=i; for(let j=0;j<=n;j++)dp[0][j]=j;
+  for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return dp[m][n];
+}
+function ofMerchantMatch(spoken){
+  const q=ofArNorm(spoken);
+  if(!q) return {ok:false,reason:'missing'};
+  const list=(D.merchants||[]).map(function(m){
+    const n=ofArNorm(m.name||'');
+    const exact=n===q;
+    const contains=n.includes(q)||q.includes(n);
+    const dist=ofLevenshtein(n,q), den=Math.max(n.length,q.length,1);
+    const score=exact?1:(contains?0.94:Math.max(0,1-dist/den));
+    return {merchant:m,score:score};
+  }).sort(function(a,b){return b.score-a.score;});
+  if(!list.length) return {ok:false,reason:'none'};
+  if(list[0].score<0.78) return {ok:false,reason:'none',candidates:list.slice(0,3)};
+  // High precision: fuzzy acceptance requires clear separation from runner-up.
+  if(!list[0].merchant || (list[1] && list[0].score<0.999 && (list[0].score-list[1].score)<0.12))
+    return {ok:false,reason:'ambiguous',candidates:list.slice(0,3)};
+  return {ok:true,merchant:list[0].merchant,score:list[0].score,exact:list[0].score===1};
+}
+function ofVoiceExtract(text){
+  const n=ofArNorm(text);
+  let kind='', after='';
+  if(n.indexOf('بضاعه ')===0){kind='order';after=n.slice('بضاعه '.length);}
+  else if(n.indexOf('فاتوره ')===0){kind='order';after=n.slice('فاتوره '.length);}
+  else if(n.indexOf('دفعت ')===0){kind='payment';after=n.slice('دفعت '.length);}
+  else if(n.indexOf('دفعه ')===0){kind='payment';after=n.slice('دفعه '.length);}
+  else return {ok:false,reason:'start'};
+
+  const mi=after.indexOf(' المبلغ ');
+  if(mi<1) return {ok:false,reason:'amount_word'};
+  const merchantSpoken=after.slice(0,mi).trim();
+  let moneyPart=after.slice(mi+' المبلغ '.length).trim();
+
+  // Optional combined command: order + payment in one confirmation.
+  let payPart='', cut=-1;
+  [' دفعت ',' دفعه '].some(function(k){
+    const i=moneyPart.indexOf(k);
+    if(i>0){cut=i;payPart=moneyPart.slice(i+k.length).trim();return true;} return false;
+  });
+  if(cut>0) moneyPart=moneyPart.slice(0,cut).trim();
+
+  const amount=ofArabicDigitsOnly(moneyPart);
+  if(!amount) return {ok:false,reason:'amount'};
+  const pay=payPart?ofArabicDigitsOnly(payPart):0;
+  if(payPart && !pay) return {ok:false,reason:'payment_amount'};
+  if(kind==='payment' && pay) return {ok:false,reason:'double_payment'};
+
+  const mm=ofMerchantMatch(merchantSpoken);
+  if(!mm.ok) return {ok:false,reason:'merchant_'+mm.reason,merchantSpoken:merchantSpoken,candidates:mm.candidates||[]};
+  return {ok:true,kind:kind,merchant:mm.merchant,merchantSpoken:merchantSpoken,amount:amount,payment:pay||0,
+    transcript:String(text||'')};
+}
+function ofVoiceDraftMath(d){
+  const before=ofMerchantBalanceById(d.merchant.id);
+  let order=0,pay=0;
+  if(d.kind==='order'){order=d.amount;pay=d.payment||0;} else pay=d.amount;
+  const after=Math.round((before+order-pay)*100)/100;
+  return {before:before,order:order,payment:pay,after:after};
+}
+function ofSpeak(text, after){
+  try{
+    if(!('speechSynthesis' in window)){ if(after)after(); return; }
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(String(text||''));
+    u.lang='ar-EG'; u.rate=0.92;
+    u.onend=function(){if(after)after();}; u.onerror=function(){if(after)after();};
+    speechSynthesis.speak(u);
+  }catch(e){if(after)after();}
+}
+function ofVoiceMoneySpeak(n){
+  // TTS reads normal Arabic amount; visual confirmation always shows digits too.
+  return Number(n||0).toLocaleString('ar-EG')+' جنيه';
+}
+function ofVoiceSetStatus(msg){const x=$('#qgVoiceStatus');if(x)x.textContent=msg||'';}
+function ofVoiceOverlay(show){
+  const x=$('#ofVoiceOverlay'); if(!x)return;
+  x.style.display=show?'flex':'none'; x.setAttribute('aria-hidden',show?'false':'true');
+}
+function ofVoiceRenderDraft(d){
+  const m=ofVoiceDraftMath(d), name=d.merchant.name||'التاجر';
+  _ofVoiceDraft=d;
+  $('#ofVoiceHeard').textContent='سمعت: '+d.transcript;
+  let body='<b>'+esc(name)+'</b><br>';
+  if(m.order) body+='📦 فاتورة بضاعة: <b>'+egp(m.order)+'</b><br>';
+  if(m.payment) body+='💵 دفعة: <b>'+egp(m.payment)+'</b><br>';
+  body+='الحساب قبل الحركة: <b>'+egp(m.before)+'</b><br>'
+    +'الحساب بعد الحركة: <b style="color:'+(m.after>0?'#b42318':'#067647')+';">'+egp(m.after)+'</b>';
+  $('#ofVoiceSummary').innerHTML=body;
+  const warn=$('#ofVoiceWarn');
+  let warning='';
+  if(!d.exactMerchant) warning='اسم التاجر اتطابق تقريبيًا. اسمع الاسم كويس قبل التأكيد.';
+  if(m.after<0) warning+=(warning?' ':'')+'⚠️ الدفعة أكبر من الحساب الحالي؛ بعد التسجيل هيبقى للتاجر رصيد دائن '+egp(Math.abs(m.after))+'.';
+  warn.textContent=warning; warn.style.display=warning?'block':'none';
+  ofVoiceOverlay(true);
+  const sentence=(m.order?'فاتورة بضاعة '+ofVoiceMoneySpeak(m.order)+'. ':'')
+    +(m.payment?'دفعة '+ofVoiceMoneySpeak(m.payment)+'. ':'')
+    +'التاجر '+name+'. الحساب قبل الحركة '+ofVoiceMoneySpeak(m.before)+'. '
+    +(m.after>=0?'المتبقي للتاجر ':'الرصيد بعد الحركة ')+ofVoiceMoneySpeak(Math.abs(m.after))+'. هل أؤكد؟ قل تأكيد أو إلغاء.';
+  ofSpeak(sentence,function(){ofVoiceListenConfirm();});
+}
+function ofVoiceRecognition(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR) return null;
+  const r=new SR(); r.lang='ar-EG';r.interimResults=false;r.maxAlternatives=3;r.continuous=false;
+  return r;
+}
+function ofVoiceListenConfirm(){
+  if(_ofVoiceConfirmListening||!_ofVoiceDraft)return;
+  const r=ofVoiceRecognition(); if(!r)return;
+  _ofVoiceConfirmListening=true;
+  r.onresult=function(e){
+    let heard='';
+    for(let i=0;i<e.results[0].length;i++){
+      const t=ofArNorm(e.results[0][i].transcript||'');
+      if(/^(تاكيد|اكد|ايوه|نعم)$/.test(t)){heard='confirm';break;}
+      if(/^(الغاء|الغي|لا)$/.test(t)){heard='cancel';break;}
+      if(/^(تاني|اعاده|قولها تاني|اعد)$/.test(t)){heard='retry';break;}
+    }
+    if(heard==='confirm') ofVoiceCommit();
+    else if(heard==='cancel') ofVoiceCancel();
+    else if(heard==='retry') ofVoiceRetry();
+    else ofSpeak('ما فهمتش. قل تأكيد أو إلغاء.',function(){_ofVoiceConfirmListening=false;ofVoiceListenConfirm();});
+  };
+  r.onerror=function(){_ofVoiceConfirmListening=false;};
+  r.onend=function(){_ofVoiceConfirmListening=false;};
+  try{r.start();}catch(e){_ofVoiceConfirmListening=false;}
+}
+async function ofVoiceCommit(){
+  if(_ofVoiceBusy||!_ofVoiceDraft)return;
+  _ofVoiceBusy=true;
+  const d=_ofVoiceDraft,m=ofVoiceDraftMath(d);
+  const btn=$('#ofVoiceConfirmBtn'); if(btn){btn.disabled=true;btn.textContent='بيتحفظ…';}
+  try{
+    const batch=db.batch(), group=db.collection('office_merchant_txns').doc().id;
+    if(m.order){
+      const ref=db.collection('office_merchant_txns').doc(group+'_o');
+      batch.set(ref,{merchantId:d.merchant.id,type:'order',amount:m.order,note:'تسجيل صوتي',ts:Date.now(),
+        source:'office_voice_v67',voiceGroupId:group});
+    }
+    if(m.payment){
+      const ref2=db.collection('office_merchant_txns').doc(group+'_p');
+      batch.set(ref2,{merchantId:d.merchant.id,type:'payment',amount:m.payment,note:'دفعة صوتية',ts:Date.now()+1,
+        source:'office_voice_v67',voiceGroupId:group,cashTracked:true,cashTrackedFrom:'office_v67'});
+    }
+    await batch.commit();
+    const msg='تم. '+(m.after>=0?'المتبقي للتاجر ':'الرصيد الدائن للتاجر ')+ofVoiceMoneySpeak(Math.abs(m.after))+'.';
+    ofVoiceOverlay(false); ofVoiceSetStatus('✅ '+msg); _ofVoiceDraft=null;
+    ofSpeak(msg);
+  }catch(e){
+    ofVoiceSetStatus('❌ تعذر الحفظ: '+(e&&e.message||e));
+    ofSpeak('الحفظ فشل. لم أسجل الحركة.');
+  }finally{
+    _ofVoiceBusy=false; if(btn){btn.disabled=false;btn.textContent='✅ تأكيد';}
+  }
+}
+window.ofVoiceCommit=ofVoiceCommit;
+window.ofVoiceCancel=function(){_ofVoiceDraft=null;ofVoiceOverlay(false);ofVoiceSetStatus('اتلغى — مفيش حاجة اتسجلت.');try{speechSynthesis.cancel();}catch(e){}};
+window.ofVoiceRetry=function(){window.ofVoiceCancel();setTimeout(ofVoiceStart,150);};
+
+function ofVoiceExplainError(r){
+  if(!r) return 'ما فهمتش.';
+  if(r.reason==='start') return 'ابدأ بكلمة بضاعة أو دفعت.';
+  if(r.reason==='amount_word') return 'قول كلمة المبلغ قبل الرقم.';
+  if(r.reason==='amount'||r.reason==='payment_amount') return 'قول المبلغ رقم رقم، مثال: ثلاثة اثنين خمسة صفر.';
+  if(r.reason.indexOf('merchant_ambiguous')===0){
+    const names=(r.candidates||[]).map(function(x){return x.merchant&&x.merchant.name;}).filter(Boolean);
+    return 'اسم التاجر مش واضح. الأقرب: '+names.join('، ')+'. قول الاسم كامل زي ما هو مسجل.';
+  }
+  if(r.reason.indexOf('merchant_')===0) return 'مش لاقي التاجر بالاسم ده. قول الاسم زي ما هو مسجل في Office.';
+  return 'الأمر مش واضح. قوله تاني بالصّيغة الثابتة.';
+}
+function ofVoiceStart(){
+  if(_ofVoiceBusy)return;
+  const r=ofVoiceRecognition();
+  if(!r){alert('التسجيل الصوتي مش مدعوم في المتصفح ده. استخدم Chrome/Android أو التسجيل اليدوي.');return;}
+  ofVoiceSetStatus('🎧 سامعك… قول الأمر كامل.');
+  r.onresult=function(e){
+    let best=null;
+    for(let i=0;i<e.results[0].length;i++){
+      const parsed=ofVoiceExtract(e.results[0][i].transcript||'');
+      if(parsed.ok){best=parsed;best.exactMerchant=ofArNorm(best.merchant.name)===ofArNorm(best.merchantSpoken);break;}
+      if(!best)best=parsed;
+    }
+    if(best&&best.ok){ofVoiceRenderDraft(best);}
+    else{
+      const msg=ofVoiceExplainError(best); ofVoiceSetStatus('⚠️ '+msg); ofSpeak(msg);
+    }
+  };
+  r.onerror=function(e){ofVoiceSetStatus('⚠️ التسجيل وقف. جرّب تاني.');};
+  try{r.start();}catch(e){ofVoiceSetStatus('⚠️ الميكروفون مش متاح دلوقتي.');}
+}
+window.ofVoiceStart=ofVoiceStart;
+
+function ofWireVoiceGoods(){
+  const b=$('#qgVoiceBtn'); if(!b||b.dataset.ready==='1')return;
+  b.dataset.ready='1';b.addEventListener('click',ofVoiceStart);
+  const c=$('#ofVoiceConfirmBtn'); if(c)c.addEventListener('click',ofVoiceCommit);
 }
 
 /* ============================================================
