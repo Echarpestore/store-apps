@@ -1039,7 +1039,7 @@ window.renderGraceDay = function(){
     });
   }
 
-  function showSection(section){
+  function showSection(section, fromHistory){
     if(!sectionMeta[section]) section='overview';
     activeSection=section;
     const search = document.getElementById('salesAdminSearch');
@@ -1060,6 +1060,12 @@ window.renderGraceDay = function(){
     if(label) label.textContent = section==='overview' ? '' : `${sectionMeta[section].icon} ${sectionMeta[section].label} — ${sectionMeta[section].desc}`;
     const shown = panels.filter(p=>!p.classList.contains('sales-panel-hidden')).length;
     if(empty) empty.style.display = (section!=='overview' && !shown) ? 'block' : 'none';
+    if(!fromHistory && document.getElementById('admin') && document.getElementById('admin').classList.contains('show')){
+      try{
+        if(!history.state || history.state.salesNavV19!=='admin-section' || history.state.section!==section)
+          history.pushState(Object.assign({},history.state||{},{salesNavV19:'admin-section',section:section}),'',location.href);
+      }catch(e){}
+    }
     try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(e){ try{window.scrollTo(0,0);}catch(_){} }
   }
   window.showSalesAdminSection = showSection;
@@ -1113,6 +1119,118 @@ window.renderGraceDay = function(){
       }
     });
     mo.observe(admin,{attributes:true,attributeFilter:['class']});
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
+
+
+
+// ==================== SALES BACK UX v19 ====================
+// Android/browser Back closes the current Sales layer first, then admin sections,
+// then Admin itself, then stays on the normal Sales home screen.
+(function(){
+  const KEY='salesNavV19';
+  let suppress=false;
+  const ids=['terminateConfirmOverlay','advanceOverlay','attPhotoOverlay','attPinOverlay',
+    'photoLightbox','leaveReqOverlay','dayHubOverlay','daySummaryOverlay','scannerOverlay',
+    'invoiceOverlay','attendance','leaderboard','branchSetup','regWizard','adminLoginGate','admin'];
+  const prev={};
+
+  function shown(id){
+    const e=document.getElementById(id); if(!e) return false;
+    if(id==='admin' || id==='attendance' || id==='leaderboard' || id==='branchSetup' || id==='regWizard')
+      return e.classList.contains('show');
+    return e.classList.contains('show');
+  }
+  function push(kind,id){
+    if(suppress) return;
+    try{
+      const st=Object.assign({},history.state||{},{[KEY]:kind,id:id||''});
+      if(!history.state || history.state[KEY]!==kind || history.state.id!==st.id) history.pushState(st,'',location.href);
+    }catch(e){}
+  }
+  function closeVisible(id){
+    const click=(x)=>{ const b=document.getElementById(x); if(b){b.click();return true;} return false; };
+    if(id==='terminateConfirmOverlay') return click('terminateConfirmCancel');
+    if(id==='advanceOverlay') return click('advStep1Cancel') || click('advStep3Cancel');
+    if(id==='attPhotoOverlay') return typeof window.closeAttPhoto==='function' ? (window.closeAttPhoto(),true) : click('attPhotoCancel');
+    if(id==='attPinOverlay') return typeof window.closeAttPin==='function' ? (window.closeAttPin(),true) : click('attPinCancel');
+    if(id==='photoLightbox') return click('lightboxCloseBtn');
+    if(id==='leaveReqOverlay') return typeof window.closeLeaveReq==='function' ? (window.closeLeaveReq(),true) : false;
+    if(id==='dayHubOverlay') return typeof window.closeDayHub==='function' ? (window.closeDayHub(),true) : false;
+    if(id==='scannerOverlay') return typeof window.closeScanner==='function' ? (window.closeScanner(),true) : click('scannerCancelBtn');
+    if(id==='invoiceOverlay') return click('invoiceCancelBtn');
+    if(id==='attendance') return click('closeAttendance');
+    if(id==='leaderboard') return click('closeLeaderboard');
+    if(id==='regWizard') return typeof window.rwClose==='function' ? (window.rwClose(),true) : false;
+    if(id==='adminLoginGate') return click('adminLoginCancel');
+    const e=document.getElementById(id);
+    if(e){ e.classList.remove('show'); return true; }
+    return false;
+  }
+  function top(){
+    for(const id of ids){ if(id!=='admin' && shown(id)) return id; }
+    return shown('admin') ? 'admin' : '';
+  }
+  function homeAnchor(){
+    try{ history.replaceState(Object.assign({},history.state||{},{[KEY]:'home'}),'',location.href); }catch(e){}
+  }
+
+  function init(){
+    homeAnchor();
+    const mo = (typeof MutationObserver==='function') ? new MutationObserver(function(){
+      ids.forEach(function(id){
+        const now=shown(id), was=!!prev[id];
+        if(now && !was){
+          if(id==='admin') push('admin','admin'); else push('layer',id);
+        }
+        prev[id]=now;
+      });
+    }) : null;
+    ids.forEach(function(id){
+      const e=document.getElementById(id);
+      prev[id]=shown(id);
+      if(e && mo) mo.observe(e,{attributes:true,attributeFilter:['class']});
+    });
+
+    if(window.addEventListener) window.addEventListener('popstate',function(e){
+      suppress=true;
+      try{
+        const t=top();
+        if(t && t!=='admin'){ closeVisible(t); return; }
+
+        const admin=document.getElementById('admin');
+        if(admin && admin.classList.contains('show')){
+          const on=document.querySelector('[data-sales-section-btn].on');
+          const sec=on && on.dataset.salesSectionBtn;
+          if(sec && sec!=='overview' && typeof window.showSalesAdminSection==='function'){
+            window.showSalesAdminSection('overview',true);
+            return;
+          }
+          if(typeof window.lockAdmin==='function'){ window.lockAdmin(); return; }
+          admin.classList.remove('show'); return;
+        }
+
+        const st=(e&&e.state)||{};
+        if(st[KEY]==='admin-section' && st.section && typeof window.showSalesAdminSection==='function'){
+          const a=document.getElementById('admin');
+          if(a) a.classList.add('show');
+          window.showSalesAdminSection(st.section,true);
+          return;
+        }
+        if(st[KEY]==='admin'){
+          const a=document.getElementById('admin');
+          if(a) a.classList.add('show');
+          if(typeof window.showSalesAdminSection==='function') window.showSalesAdminSection('overview',true);
+          return;
+        }
+
+        // Stack exhausted: stay on normal Sales home instead of exiting unexpectedly.
+        homeAnchor();
+        try{ window.scrollTo(0,0); }catch(_){}
+      }finally{ setTimeout(function(){suppress=false;},0); }
+    });
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
   else init();
