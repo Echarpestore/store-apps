@@ -1128,14 +1128,15 @@ window.renderGraceDay = function(){
 (function(){
   var FR={view:1,chat:2,tryon:3,cart:4,checkout:5,order:6,collected:7};
   var FLABEL={view:'شاهدت',chat:'شات',tryon:'Try-On',cart:'السلة',checkout:'Checkout',order:'أوردر',collected:'تم البيع'};
-  var _rows=[],_loadedAt=0,_days=30,_busy=false;
+  var _rows=[],_loadedAt=0,_days=30,_brand='all',_busy=false;
 
   function escF(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
   function pct(a,b){return b>0?Math.round((a/b)*100):0;}
   function nfmt(n){return Number(n||0).toLocaleString('en-US');}
   function money(n){return Math.round(Number(n)||0).toLocaleString('en-US')+' ج';}
+  function rowsNow(){return _brand==='all'?_rows:_rows.filter(function(x){return String(x.brand||'echarpe')===_brand;});}
   function rank(x){return FR[String((x&&x.funnelStage)||'')]||0;}
-  function stageCount(stage){var r=FR[stage];return _rows.filter(function(x){return rank(x)>=r;}).length;}
+  function stageCount(stage){var r=FR[stage];return rowsNow().filter(function(x){return rank(x)>=r;}).length;}
   function hot(x){var r=rank(x);return r>=3&&r<6;}
   function overdue(x){return hot(x)&&Number(x.followUpDueAt)>0&&Number(x.followUpDueAt)<=Date.now();}
   function age(ms){
@@ -1174,17 +1175,19 @@ window.renderGraceDay = function(){
     p=document.createElement('div');p.className='panel';p.id='salesFunnelDash';
     p.innerHTML='<div class="fd-head"><div><h3 style="margin:0;">🛍️ Funnel البيع الأونلاين</h3>'
       +'<div class="muted" style="font-size:10.5px;">من مشاهدة المنتج لحد الأوردر — مبني على منتجات البيع أونلاين</div></div>'
-      +'<div class="fd-actions"><select id="fdDays" class="f" style="min-width:110px;"><option value="7">7 أيام</option><option value="30" selected>30 يوم</option><option value="90">90 يوم</option></select>'
+      +'<div class="fd-actions"><select id="fdBrand" class="f" style="min-width:120px;"><option value="all">كل البراندات</option><option value="echarpe">echarpe</option><option value="glow">Glow</option></select>'
+      +'<select id="fdDays" class="f" style="min-width:110px;"><option value="7">7 أيام</option><option value="30" selected>30 يوم</option><option value="90">90 يوم</option></select>'
       +'<button class="btn" id="fdRefresh" style="margin:0;">↻ تحديث</button></div></div>'
       +'<div id="fdBody"><div class="fd-empty">افتح قسم الأداء لتحميل Funnel.</div></div>';
     admin.appendChild(p);
+    var br=p.querySelector('#fdBrand');if(br)br.onchange=function(){_brand=br.value||'all';render();};
     var d=p.querySelector('#fdDays');if(d)d.onchange=function(){_days=Number(d.value)||30;load(true);};
     var b=p.querySelector('#fdRefresh');if(b)b.onclick=function(){load(true);};
     return p;
   }
   function productStats(){
     var map={};
-    _rows.forEach(function(x){
+    rowsNow().forEach(function(x){
       var bc=String(x.funnelBarcode||'');if(!bc)return;
       var k=bc,n=map[k]||(map[k]={barcode:bc,name:x.funnelProductName||bc,leads:0,orders:0,checkout:0,hot:0});
       if(rank(x)>=3)n.leads++;if(rank(x)>=5)n.checkout++;if(rank(x)>=6)n.orders++;if(hot(x))n.hot++;
@@ -1193,7 +1196,7 @@ window.renderGraceDay = function(){
   }
   function ownerStats(){
     var map={};
-    _rows.forEach(function(x){
+    rowsNow().forEach(function(x){
       var name=String(x.funnelOwnerName||'').trim();if(!name||rank(x)<3)return;
       var o=map[name]||(map[name]={name:name,branch:x.funnelOwnerBranch||'',leads:0,orders:0,checkout:0});
       o.leads++;if(rank(x)>=5)o.checkout++;if(rank(x)>=6)o.orders++;
@@ -1213,8 +1216,8 @@ window.renderGraceDay = function(){
     var stages=['view','tryon','cart','checkout','order'];
     var counts={};stages.forEach(function(k){counts[k]=stageCount(k);});
     var max=Math.max(1,counts.view);
-    var lost=_rows.filter(overdue).sort(function(a,b){return Number(a.followUpDueAt)-Number(b.followUpDueAt);});
-    var active=_rows.filter(hot);
+    var lost=rowsNow().filter(overdue).sort(function(a,b){return Number(a.followUpDueAt)-Number(b.followUpDueAt);});
+    var active=rowsNow().filter(hot);
     var products=productStats(),owners=ownerStats();
     var kpis=stages.map(function(k){
       var prev=k==='view'?counts.view:counts[stages[stages.indexOf(k)-1]];
@@ -1226,7 +1229,7 @@ window.renderGraceDay = function(){
       +'<div style="font-size:9px;color:var(--sub);margin-top:2px;">'+nfmt(active.length)+' فرصة نشطة</div></div>';
 
     var lostHtml=lost.slice(0,10).map(function(x){
-      return '<div class="fd-lead"><div style="min-width:0;"><b>'+escF(x.name||x.phone||'عميلة')+'</b> <span class="fd-stage">'+escF(FLABEL[x.funnelStage]||x.funnelStage)+'</span>'
+      return '<div class="fd-lead"><div style="min-width:0;"><b>'+escF(x.name||x.phone||'عميلة')+'</b> <span class="fd-stage">'+(x.brand==='glow'?'Glow · ':'echarpe · ')+escF(FLABEL[x.funnelStage]||x.funnelStage)+'</span>'
         +'<div class="muted" style="font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escF(x.funnelProductName||'')+' · متأخرة '+age(x.followUpDueAt)+'</div></div>'
         +'<button class="btn" style="margin:0;padding:6px 9px;font-size:10px;" data-fd-lead="'+escF(x.id)+'">افتح الشات</button></div>';
     }).join('')||'<div class="fd-empty">مفيش Follow-up متأخر 👌</div>';
