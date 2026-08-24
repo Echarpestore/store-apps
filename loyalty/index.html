@@ -2178,7 +2178,7 @@ function shopFunnelTrack(stage,product,extra){
     return db.runTransaction(function(tx){return tx.get(ref).then(function(d){
       var old=d.exists?(d.data()||{}):{}, oldStage=String(old.funnelStage||'');
       var nr=SHOP_FUNNEL_RANK[stage]||0,or=SHOP_FUNNEL_RANK[oldStage]||0;
-      var patch={phone:String(currentCustomer.phone),name:currentCustomer.name||old.name||'',
+      var patch={phone:String(currentCustomer.phone),name:currentCustomer.name||old.name||'',brand:'echarpe',
         funnelAt:now,funnelSource:shopFunnelSource(),funnelLastAction:stage};
       if(product){patch.funnelBarcode=bc;patch.funnelProductName=String(product.name||'').slice(0,80);patch.funnelProductPrice=Number(product.price)||0;}
       if(nr>=or)patch.funnelStage=stage;
