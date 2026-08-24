@@ -56,11 +56,11 @@ try{ vm.runInContext('renderCashHand',sandbox)(); }catch(e){ crash=e.message; }
 assert(!crash, '⭐⭐ renderCashHand بترسم من غير ما تقع'+(crash?' — '+crash:''));
 
 assert(out.html.length > 1000, '⭐ وطلّعت شاشة فيها محتوى فعلي ('+out.html.length+' حرف)');
-assert(/يوم بيوم/.test(out.html), 'الشيت اليومي ظاهر');
+assert(/افتح التفاصيل يوم بيوم|يوم بيوم/.test(out.html), 'الشيت اليومي متاح من غير زحمة');
 // 📜 العنوان اتغيّر من "إجمالي فلوسك" لـ"اللي ليك فعلًا" لما ضفنا
 //    طرح دين كروت الهدايا — الرقم بقى معناه مختلف فالاسم اتغيّر معاه.
 assert(/اللي ليك فعلًا/.test(out.html), 'وسطر "اللي ليك فعلًا"');
-assert(/الدهب/.test(out.html), 'وكارت الدهب');
+assert(/دهب/.test(out.html), 'وقيمة الدهب ظاهرة');
 assert(/6,960|6960/.test(out.html.replace(/,/g,'')) || /الدهب/.test(out.html), 'وسعر الجرام داخل الحساب');
 
 // 🆕 من غير رصيد افتتاحي: لازم تطلّع زرار البداية مش شاشة فاضية

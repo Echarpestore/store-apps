@@ -136,7 +136,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
 
   ['page-tasks','tkBranch','tkRange','tkList'].forEach(id=>
     assert(html2.indexOf('id="' + id + '"') >= 0, 'الواجهة: ' + id));
-  assert(/data-page="tasks"/.test(html2), 'زرار التاسكات موجود');
+  assert(/data-office-go="tasks"/.test(html2), 'زرار التاسكات موجود في «المزيد»');
 
   // ---- 🔑 تطبيق الحضور مايتكسرش ----
   const save = src.slice(src.indexOf("btn.onclick = async function()"), src.indexOf('function ofWireTasks'));

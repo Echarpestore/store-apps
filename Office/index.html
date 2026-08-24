@@ -186,6 +186,65 @@
     nav button{ font-size:9px; padding:6px 0; }
     nav button .ic{ font-size:18px; }
   }
+
+  /* ===== Office v63 — Owner Control Center ===== */
+  .of-home-hero{
+    background:linear-gradient(135deg,#111827,#1f2937 58%,#0f172a);
+    color:#fff;border:0!important;border-radius:20px!important;padding:16px!important;
+    box-shadow:0 14px 35px rgba(15,23,42,.18)!important;margin-bottom:10px;
+  }
+  .of-home-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .of-home-kicker{font-size:11px;color:#cbd5e1;font-weight:800}
+  .of-home-title{font-size:18px;font-weight:900;margin-top:2px}
+  .of-home-date{font-size:10.5px;color:#94a3b8;white-space:nowrap}
+  .of-home-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}
+  .of-home-stat{background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.09);
+    border-radius:13px;padding:9px;min-width:0;cursor:pointer}
+  .of-home-stat b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .of-home-stat span{display:block;color:#cbd5e1;font-size:9.8px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .of-home-stat.hot{background:rgba(217,119,6,.16);border-color:rgba(245,158,11,.30)}
+  .of-home-actions{display:flex;gap:7px;margin-top:10px;overflow:auto;padding-bottom:1px}
+  .of-home-actions button{white-space:nowrap;background:rgba(255,255,255,.10)!important;color:#fff!important;
+    border:1px solid rgba(255,255,255,.12)!important;padding:8px 11px!important;font-size:11px!important}
+  .of-cash-hero{background:linear-gradient(135deg,#0f172a,#111827);color:#fff;border-radius:20px;
+    padding:18px 16px;box-shadow:0 16px 38px rgba(15,23,42,.16)}
+  .of-cash-caption{font-size:11px;color:#cbd5e1;font-weight:800;text-align:center}
+  .of-cash-big{font-size:36px;font-weight:900;text-align:center;margin:3px 0 3px;letter-spacing:-.5px}
+  .of-cash-sub{text-align:center;color:#94a3b8;font-size:10.8px;line-height:1.7}
+  .of-confidence{display:flex;justify-content:center;margin-top:8px}
+  .of-confidence span{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:5px 9px;
+    font-size:10.5px;font-weight:900;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.10)}
+  .of-cash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+  .of-money-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px}
+  .of-money-card .k{font-size:10.5px;color:var(--sub);font-weight:700}
+  .of-money-card .v{font-size:17px;font-weight:900;margin-top:2px}
+  .of-money-card .s{font-size:9.8px;color:var(--sub);margin-top:2px;line-height:1.5}
+  .of-verdict{background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px;margin-top:9px}
+  .of-verdict-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .of-verdict .num{font-size:21px;font-weight:900}
+  .of-quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:9px}
+  .of-quick .btn{margin:0!important}
+  .of-details-toggle{width:100%;margin-top:9px;background:#fff!important;color:var(--ink)!important;border:1px solid var(--line)!important}
+  #officeMoreSheet{position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.46);display:none;align-items:flex-end;justify-content:center}
+  #officeMoreSheet.on{display:flex}
+  #officeMoreSheet .sheet{width:100%;max-width:560px;background:#fff;border-radius:22px 22px 0 0;padding:13px 13px calc(16px + env(safe-area-inset-bottom));
+    box-shadow:0 -20px 55px rgba(15,23,42,.18)}
+  .of-more-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .of-more-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .of-more-item{background:#f8fafc!important;color:#111827!important;border:1px solid var(--line)!important;
+    min-height:62px;text-align:right!important;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .of-more-item .mi{font-size:20px}
+  .of-more-item .mt{flex:1;min-width:0}
+  .of-more-item .mt b{display:block;font-size:12.5px}
+  .of-more-item .mt small{display:block;color:var(--sub);font-size:9.8px;margin-top:1px}
+  #tabsNav{justify-content:space-around}
+  #tabsNav button{max-width:110px}
+  @media(max-width:620px){
+    .of-home-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .of-cash-big{font-size:32px}
+    .of-home-stat b{font-size:14px}
+  }
+
 </style>
 </head>
 <body>
@@ -230,6 +289,7 @@
 <main>
   <!-- 🔔 الوارد -->
   <section class="tabPage on" id="page-day">
+    <div id="officeHomeSummary"></div>
     <div class="card" style="position:sticky; top:0; z-index:5;">
       <div style="display:flex; gap:6px;">
         <select id="dayBranch" style="flex:1;"></select>
@@ -514,21 +574,36 @@
     </div>
   </section>
   <section class="tabPage" id="page-cash">
-    <h2>💵 معاك في إيدك</h2>
+    <div style="margin:2px 2px 10px;">
+      <h2 style="font-size:19px;">💰 فلوسي</h2>
+      <div class="muted">رقم واحد واضح للسيولة المؤكدة، وبعده اللي لسه جاي والتزاماتك.</div>
+    </div>
     <div id="cashHandBody"></div>
   </section>
 </main>
 
+<div id="officeMoreSheet" aria-hidden="true">
+  <div class="sheet">
+    <div class="of-more-head">
+      <div><b style="font-size:15px;">المزيد</b><div class="muted">الحاجات اللي مش محتاجها كل دقيقة</div></div>
+      <button class="ghost ico" type="button" onclick="ofCloseMore()">✕</button>
+    </div>
+    <div class="of-more-grid">
+      <button class="of-more-item" type="button" data-office-go="tasks"><span class="mi">✅</span><span class="mt"><b>التاسكات</b><small>تشغيل الأسبوع</small></span></button>
+      <button class="of-more-item" type="button" data-office-go="short"><span class="mi">📦</span><span class="mt"><b>النواقص</b><small>طلبات الفروع</small></span><span class="badge" id="nbShort" style="display:none;">0</span></button>
+      <button class="of-more-item" type="button" data-office-go="money"><span class="mi">🧾</span><span class="mt"><b>الحسابات</b><small>ربح وخسارة · تجار · مصاريف</small></span><span class="badge" id="nbMoney" style="display:none;">0</span></button>
+      <button class="of-more-item" type="button" data-office-go="hire"><span class="mi">💼</span><span class="mt"><b>التوظيف</b><small>متقدمين وملفات</small></span><span class="badge" id="nbHire" style="display:none;">0</span></button>
+      <button class="of-more-item" type="button" data-office-go="odd"><span class="mi">🕵️</span><span class="mt"><b>النشاط والمشاكل</b><small>بلاغات وسجل غير عادي</small></span></button>
+    </div>
+  </div>
+</div>
+
 <nav id="tabsNav">
-  <button data-page="day" class="on"><span class="ic">📅</span>اليوم</button>
-  <button data-page="tasks"><span class="ic">✅</span>تاسكات</button>
+  <button data-page="day" class="on"><span class="ic">⌂</span>الرئيسية</button>
   <button data-page="inbox"><span class="ic">🔔</span>الوارد<span class="nb badge" id="nbInbox" style="display:none;">0</span></button>
-  <button data-page="short"><span class="ic">📦</span>النواقص<span class="nb badge" id="nbShort" style="display:none;">0</span></button>
-  <button data-page="money"><span class="ic">💰</span>الفلوس<span class="nb badge" id="nbMoney" style="display:none;">0</span></button>
-  <button data-page="cash"><span class="ic">💵</span>إيدك</button>
+  <button data-page="cash"><span class="ic">💰</span>فلوسي</button>
   <button data-page="reports"><span class="ic">📊</span>تقارير</button>
-  <button data-page="hire"><span class="ic">💼</span>توظيف<span class="nb badge" id="nbHire" style="display:none;">0</span></button>
-  <button data-page="odd"><span class="ic">🕵️</span>نشاط</button>
+  <button id="officeMoreBtn" type="button"><span class="ic">•••</span>المزيد</button>
 </nav>
 
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
@@ -540,6 +615,6 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js"></script>
-<script src="office.js"></script>
+<script src="office.js?v=63"></script>
 </body>
 </html>

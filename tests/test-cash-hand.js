@@ -163,7 +163,7 @@ const bare = stripComments(src);
   const row = extractFn(src, 'function ofLedgerRow(');
   assert(!!fn && !!row, 'لقينا الشاشة والسطر');
   if(!fn || !row) return;
-  assert(/معاك في إيدك/.test(fn), 'العنوان بيقول الكاش اللي في إيدك');
+  assert(/معايا كام دلوقتي/.test(fn) && /السيولة المؤكدة/.test(fn), 'العنوان بيقول بوضوح الرقم المؤكد اللي يعتمد عليه');
   assert(/L\.now/.test(fn),
     '⭐⭐ الرقم الكبير = الرصيد المؤكد (مش balanceExp)');
   assert(!/balanceExp/.test(fn),

@@ -180,16 +180,16 @@ const THU='2026-08-06', FRI='2026-08-07', SAT='2026-08-08',
 // ٦) 🖥️ الشاشة بتقول الحقيقة — مش رقم مجرّد
 // ============================================================
 (function(){
-  const i = src.indexOf("ofMiniCard('🏦 عند Paymob'");
+  const i = src.indexOf('🏦 عند Paymob — لسه ماوصلش');
   assert(i > -1, 'كارت Paymob موجود في الشاشة');
-  const card = src.slice(i, i + 1400);
-  assert(card.indexOf('لسه ماوصلش') > -1,
+  const fn = extractFn(src, 'function renderCashHand(') || '';
+  assert(fn.indexOf('لسه ماوصلش') > -1,
     'الوصف بيقول إنه اللي لسه ماوصلش');
-  assert(card.indexOf('مش محسوب هنا') > -1,
-    '⭐ والشاشة بتقول صراحةً إن فلوس البنك مش محسوبة — مش بتسكت عنها');
-  assert(card.indexOf('W.pmDayKeys') > -1,
+  assert(fn.indexOf('النظام مش متصل بحساب البنك نفسه') > -1,
+    '⭐ والشاشة بتقول صراحةً إن البنك مش مربوط — مش بتدّعي رقم مش معروف');
+  assert(fn.indexOf('W.pmDayKeys') > -1,
     'وبتعرض فيزا أنهي يوم بالظبط — رقم تقدر تراجعه');
-  assert(card.indexOf('W.pmOpeningLanded') > -1,
+  assert(fn.indexOf('W.paymobOpeningLanded') > -1,
     'وبتشرح سبب اختفاء رصيد البداية بدل ما يختفي بالسكوت');
 })();
 

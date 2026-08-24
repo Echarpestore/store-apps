@@ -223,8 +223,8 @@ const extractFn = (src, sig) => {
     '🔴 نافذة زمنية من المستخدم — مش السجل كله');
   assert(ld.indexOf('.limit(OF_ACT_LIMIT)') > -1 && code.indexOf('OF_ACT_LIMIT = 400') > -1,
     '🔴 وسقف ٤٠٠ مستند — نافذة من غير سقف لسه ممكن تجيب عشرات الآلاف');
-  assert(code.indexOf("b.dataset.page === 'odd' && !_ofActRaw.length") > -1,
-    'والتحميل بفتح التبويب مرة واحدة — مش مستمع شغال طول الوقت');
+  assert(code.indexOf("page === 'odd' && !_ofActRaw.length") > -1,
+    'والتحميل بفتح التبويب مرة واحدة من الراوتر المركزي — مش مستمع شغال طول الوقت');
 
   /* ٤) 🔴 TDZ — الدرس الموثّق: `let` مبتترفعش */
   const decl = code.indexOf('let _ofActRaw');

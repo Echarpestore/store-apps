@@ -452,7 +452,7 @@ function ofCashLedger(base, data, overrides, cfg, nowTs, aheadDays){
   cfg = cfg || {};
   const now = Number(nowTs) || Date.now();
   const openAt = Number(base && base.atMs) || 0;
-  const opening = Number(base && base.amount) || 0;
+  const opening = Number(base && base.amount) || 0; // ⭐ amount = السيولة المؤكدة عند نقطة البداية (كاش + بنك تشغيلي), مش درج الكاش وحده
   const fromKey = ofDayKeyOf(openAt);
   const todayKey = ofDayKeyOf(now);
   // بنمد قدام كام يوم عشان التوقّعات تبان قبل ما توصل
@@ -1202,23 +1202,49 @@ window.ofWhen = ofWhen;
 //    `let` مبتترفعش (TDZ)، ونفس الباج ده حصل قبل كده مع OF_RECUR_COL.
 let _ofActRaw = [];
 
-document.querySelectorAll('#tabsNav button').forEach(function(b){
-  b.addEventListener('click', function(){
-    document.querySelectorAll('#tabsNav button').forEach(function(x){ x.classList.remove('on'); });
-    document.querySelectorAll('.tabPage').forEach(function(x){ x.classList.remove('on'); });
-    b.classList.add('on');
-    document.getElementById('page-' + b.dataset.page).classList.add('on');
-    // ⚡ بيانات التقارير بتتحمّل أول ما تفتح التبويب — مش في الخلفية طول الوقت
-    if(b.dataset.page === 'cash'){ try{ renderCashHand(); }catch(e){ console.warn('cash', e); } }
-    if(b.dataset.page === 'reports'){
-      try{ loadCustomers(); loadRatings(); }catch(e){ console.warn('reports load', e); }
-    }
-    // 🕵️ سجل النشاط: تحميل أول فتحة بس — بعدها الزرار هو اللي بيحدّث
-    if(b.dataset.page === 'odd' && !_ofActRaw.length){
-      try{ ofLoadActivity(); }catch(e){ console.warn('activity load', e); }
-    }
+function ofGoPage(page){
+  const target = document.getElementById('page-' + page);
+  if(!target) return false;
+  document.querySelectorAll('#tabsNav button').forEach(function(x){
+    x.classList.toggle('on', x.dataset.page === page);
   });
+  document.querySelectorAll('.tabPage').forEach(function(x){ x.classList.remove('on'); });
+  target.classList.add('on');
+  ofCloseMore();
+  try{ window.scrollTo(0, 0); }catch(e){}
+  // ⚡ بيانات التقارير بتتحمّل أول ما تفتح التبويب — مش في الخلفية طول الوقت
+  if(page === 'cash'){ try{ renderCashHand(); }catch(e){ console.warn('cash', e); } }
+  if(page === 'reports'){
+    try{ loadCustomers(); loadRatings(); }catch(e){ console.warn('reports load', e); }
+  }
+  // 🕵️ سجل النشاط: تحميل أول فتحة بس — بعدها الزرار هو اللي بيحدّث
+  if(page === 'odd' && !_ofActRaw.length){
+    try{ ofLoadActivity(); }catch(e){ console.warn('activity load', e); }
+  }
+  return true;
+}
+window.ofGoPage = ofGoPage;
+
+function ofOpenMore(){
+  const x = document.getElementById('officeMoreSheet');
+  if(x){ x.classList.add('on'); x.setAttribute('aria-hidden','false'); }
+}
+function ofCloseMore(){
+  const x = document.getElementById('officeMoreSheet');
+  if(x){ x.classList.remove('on'); x.setAttribute('aria-hidden','true'); }
+}
+window.ofOpenMore = ofOpenMore; window.ofCloseMore = ofCloseMore;
+
+document.querySelectorAll('#tabsNav button[data-page]').forEach(function(b){
+  b.addEventListener('click', function(){ ofGoPage(b.dataset.page); });
 });
+const _ofMoreBtn = document.getElementById('officeMoreBtn');
+if(_ofMoreBtn) _ofMoreBtn.addEventListener('click', ofOpenMore);
+document.querySelectorAll('[data-office-go]').forEach(function(b){
+  b.addEventListener('click', function(){ ofGoPage(b.dataset.officeGo); });
+});
+const _ofMoreSheet = document.getElementById('officeMoreSheet');
+if(_ofMoreSheet) _ofMoreSheet.addEventListener('click', function(e){ if(e.target === _ofMoreSheet) ofCloseMore(); });
 /* 💼 تبويبات التوظيف الفرعية
    ------------------------------------------------------------
    نفس نمط `.daySub` بالظبط — إخفاء/إظهار بس، **مفيش إعادة رسم**.
@@ -1232,11 +1258,11 @@ document.querySelectorAll('.hireSub').forEach(function(b){
     document.querySelectorAll('.hireSec').forEach(function(x){ x.style.display = 'none'; });
     const sec = document.getElementById('hire' + b.dataset.h.charAt(0).toUpperCase() + b.dataset.h.slice(1));
     if(sec) sec.style.display = '';
-    window.scrollTo(0, 0);
+    try{ window.scrollTo(0, 0); }catch(e){}
   });
 });
 
-document.getElementById('page-inbox').classList.add('on');
+ofGoPage('day'); // ⭐ صفحة واحدة بس عند البداية — كان اليوم والوارد ظاهرين مع بعض
 
 /* ============================================================
    📡 البيانات الحية + الإشعارات
@@ -1874,6 +1900,7 @@ function startData(){
   db.collection('sales_shifts').where('clockOutTs','==', null).onSnapshot(function(s){
     D.openShifts = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     try{ ofRenderPresent(); }catch(e){ console.warn('present', e); }
+    try{ renderOfficeHomeSummary(); }catch(e){}
   }, function(e){ console.warn('present sync', e && e.code); });
 
   // 💵 المصروف الفعلي للرواتب والمكافآت — للكاش اللي في الإيد
@@ -2479,7 +2506,55 @@ function ofLeaveContextHtml(req){
 }
 window.ofLeaveContextHtml = ofLeaveContextHtml;
 
+
+/* ============================================================
+   🏠 الرئيسية — صاحب البيزنس يشوف اللي محتاجه في 10 ثواني
+   ============================================================ */
+function renderOfficeHomeSummary(){
+  const host = document.getElementById('officeHomeSummary');
+  if(!host || typeof D === 'undefined') return;
+
+  let pending = 0;
+  try{ pending = buildInbox(D).length; }catch(e){}
+  pending += (D.creditRequests || []).filter(function(x){ return x && x.status === 'pending'; }).length;
+  pending += (D.refundsDue || []).filter(function(x){ return x && x.status === 'due'; }).length;
+
+  let liquid = null, pm = 0;
+  try{
+    if(D.cashBase && D.cashBase.atMs){
+      const L = ofCashLedger(D.cashBase, D, D.cashDays || {}, ofLedgerCfg(), Date.now(), 0);
+      const W = ofWealth(L, ofLedgerCfg(), Date.now());
+      liquid = L.now;
+      pm = W.paymobNet;
+    }
+  }catch(e){}
+
+  const daySales = (_ofDaySales || []).reduce(function(n,s){ return n + (Number(s && s.total) || 0); }, 0);
+  const present = (D.openShifts || []).filter(function(x){ return x && !x.clockOutTs; }).length;
+  const dateLabel = ($('#dayDate') || {}).value || '';
+
+  host.innerHTML =
+    '<div class="of-home-hero">'
+    + '<div class="of-home-top"><div><div class="of-home-kicker">OWNER CONTROL CENTER</div><div class="of-home-title">إيه اللي محتاج اهتمامك دلوقتي؟</div></div>'
+    + '<div class="of-home-date">' + esc(dateLabel) + '</div></div>'
+    + '<div class="of-home-grid">'
+    + '<div class="of-home-stat ' + (pending ? 'hot' : '') + '" onclick="ofGoPage(\'inbox\')"><b>' + pending + '</b><span>محتاج قرارك</span></div>'
+    + '<div class="of-home-stat" onclick="ofGoPage(\'cash\')"><b>' + (liquid === null ? 'ابدأ' : egp(liquid)) + '</b><span>السيولة المؤكدة</span></div>'
+    + '<div class="of-home-stat"><b>' + ofMoney(daySales) + '</b><span>مبيعات اليوم المختار</span></div>'
+    + '<div class="of-home-stat"><b>' + present + '</b><span>حاضرين دلوقتي</span></div>'
+    + '</div>'
+    + '<div class="of-home-actions">'
+    + '<button onclick="ofGoPage(\'cash\')">💰 اعرف معايا كام</button>'
+    + '<button onclick="ofGoPage(\'inbox\')">🔔 القرارات</button>'
+    + '<button onclick="ofGoPage(\'reports\')">📊 التقارير</button>'
+    + (pm > 0 ? '<button onclick="ofGoPage(\'cash\')">🏦 Paymob: ' + egp(pm) + '</button>' : '')
+    + '</div>'
+    + '</div>';
+}
+window.renderOfficeHomeSummary = renderOfficeHomeSummary;
+
 function renderInbox(){
+  try{ renderOfficeHomeSummary(); }catch(e){}
   const wrap = $('#inboxList'); if(!wrap) return;
   const items = buildInbox(D);
   const nb = $('#nbInbox');
@@ -3395,6 +3470,7 @@ async function ofLoadDay(){
 
 function ofRenderDay(){
   ofRenderPay(); ofRenderSales(); ofRenderItems(); ofRenderPresent();
+  try{ renderOfficeHomeSummary(); }catch(e){}
 }
 
 // ============================================================
@@ -5779,6 +5855,7 @@ window.rejectCreditReq = rejectCreditReq;
 
 let _ofLedgerDays = 14;        // كام يوم بيبان
 let _ofLedgerOpen = '';        // اليوم المفتوح بالتفصيل
+let _ofCashDetailsOpen = false; // v63: التفاصيل مقفولة افتراضيًا عشان الصفحة تبقى حكم سريع مش شيت طويل
 
 function ofLedgerCfg(){
   return (D.cashCfg || {});
@@ -5814,8 +5891,13 @@ function renderCashHand(){
 
   if(!base || !base.atMs){
     host.innerHTML =
-      '<div class="empty">💵 قول للنظام معاك كام دلوقتي، وابدأ الحساب من نقطة نضيفة</div>'
-      + '<button class="btn" onclick="ofStartFresh()" style="width:100%; margin-top:10px;">🆕 ابدأ من الصفر</button>';
+      '<div class="of-cash-hero">'
+      + '<div class="of-cash-caption">أول مرة؟ خلّي «معايا كام» رقم حقيقي من البداية</div>'
+      + '<div style="font-size:21px;font-weight:900;text-align:center;margin:8px 0 4px;">حدد نقطة البداية</div>'
+      + '<div class="of-cash-sub">اكتب السيولة المؤكدة (كاش + حساب بنكي تشغيلي)، وبعدها اللي لسه عند Paymob.</div>'
+      + '</div>'
+      + '<button class="btn" onclick="ofStartFresh()" style="width:100%;margin-top:9px;">🆕 ابدأ من الصفر — نقطة واضحة</button>';
+    try{ renderOfficeHomeSummary(); }catch(e){}
     return;
   }
 
@@ -5824,94 +5906,106 @@ function renderCashHand(){
   const W = ofWealth(L, cfg, now);
   const gold = W.goldInfo;
 
-  /* ── الكارت الكبير: تلات طبقات متفصولة عن بعض عن قصد ────────
-     خلطهم في رقم واحد بيخلي المالك يصرف فلوس لسه ماوصلتش. */
-  const head =
-    '<div style="background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 13px;">'
-    + '<div class="muted" style="font-size:12px; text-align:center;">💵 معاك في إيدك دلوقتي</div>'
-    + '<div style="font-size:33px; font-weight:900; text-align:center; margin:3px 0 12px;'
-    +   ' color:' + (L.now < 0 ? 'var(--bad)' : 'var(--good)') + ';">' + egp(L.now) + '</div>'
-    + '<div style="display:flex; gap:7px;">'
-    +   ofMiniCard('🏦 عند Paymob', W.paymobNet, 'لسه ماوصلش')
-    +   ofMiniCard('🥇 دهب', W.gold, gold.grams ? (gold.grams + ' جرام') : 'مش متسجّل')
-    + '</div>'
-    /* 🏦 السطر ده هو اللي بيمنع رجوع الباج الأصلي:
-       الرقم فوق **بس** اللي لسه ماوصلش حسب جدول التحويل (بيع يوم أو يومين).
-       اللي نزل حسابك البنكي خلاص إحنا **مش عارفينه** — مفيش أي ربط بالبنك.
-       قبل كده كنا بنجمّعه ونعرضه كأنه مستحق، فالرقم كان بيوصل لعشرات
-       الآلاف. الرقم المش معروف بيتقال إنه مش معروف — مبيتخترعش. */
-    + '<div class="hint" style="margin-top:9px; line-height:1.9;">'
-    +   '🏦 رقم Paymob فوق = <b>فيزا اتباعت ولسه فلوسها ماوصلتش</b>'
-    +   (W.pmDayKeys && W.pmDayKeys.length ? ' (فيزا ' + W.pmDayKeys.map(ofDayName).join(' و') + ')' : '')
-    +   '<br>اللي نزل حسابك البنكي خلاص <b>مش محسوب هنا</b> — الشاشة دي عن اللي في إيدك.'
-    +   (W.pmOpeningLanded
-        ? '<br>🗓️ رصيد البداية اللي كتبته وقت التصفير عدّى ميعاد نزوله، فاتشال من الرقم.'
-        : '')
-    + '</div>'
-    // 🎁 دين الكروت — بيبان **قبل** الإجمالي عشان الطرح يبقى مفهوم
-    + (W.giftLiability > 0
-        ? '<div style="display:flex; justify-content:space-between; align-items:center;'
-          + ' margin-top:11px; padding:8px 10px; border-radius:10px;'
-          + ' background:rgba(245,158,11,.1); border:1px solid var(--warn);">'
-          + '<span style="font-size:12.5px;">🎁 كروت هدايا مباعة'
-          +   '<div class="muted" style="font-size:10.5px;">فلوس في إيدك مش بتاعتك</div></span>'
-          + '<b style="font-size:15px; color:var(--warn);">− ' + egp(W.giftLiability) + '</b></div>'
-        : '')
-    + '<div style="display:flex; justify-content:space-between; align-items:center;'
-    +   ' margin-top:12px; padding-top:11px; border-top:2px solid var(--line);">'
-    +   '<span style="font-weight:800; font-size:13.5px;">🧮 اللي ليك فعلًا</span>'
-    +   '<b style="font-size:21px;">' + egp(W.total) + '</b></div>'
-    + '<div class="hint" style="margin-top:5px;">الكاش + المتوقّع من Paymob + الدهب'
-    +   (W.giftLiability > 0 ? ' − دين الكروت' : '') + '</div>'
+  // 🔍 جودة الرقم: آخر مراجعة فعلية + أي يوم قديم غير موثوق.
+  const realRows = (L.rows || []).filter(function(r){ return !r.future && r.key <= L.todayKey; });
+  const countedRows = realRows.filter(function(r){ return r.counted !== null; });
+  const lastCount = countedRows.length ? countedRows[countedRows.length - 1] : null;
+  const hasUntrusted = realRows.some(function(r){ return r.untrusted; });
+  let confidence = 'محتاج مراجعة فعلية';
+  let confidenceIcon = '🟠';
+  if(hasUntrusted){
+    confidence = 'في أيام قديمة بياناتها ناقصة';
+    confidenceIcon = '🔴';
+  }else if(lastCount && lastCount.key === L.todayKey){
+    confidence = 'مراجع النهارده';
+    confidenceIcon = '🟢';
+  }else if(lastCount){
+    const a = Date.UTC.apply(Date, lastCount.key.split('-').map(function(x,i){ return Number(x) - (i===1?1:0); }));
+    const b = Date.UTC.apply(Date, L.todayKey.split('-').map(function(x,i){ return Number(x) - (i===1?1:0); }));
+    const age = Math.max(0, Math.round((b-a)/86400000));
+    confidence = age <= 3 ? ('آخر مراجعة من ' + age + ' يوم') : ('المراجعة قديمة — ' + age + ' يوم');
+    confidenceIcon = age <= 3 ? '🟡' : '🟠';
+  }
+
+  const pendingLabel = W.pmDayKeys && W.pmDayKeys.length
+    ? ('فيزا ' + W.pmDayKeys.map(ofDayName).join(' و'))
+    : 'حسب دورة التحويل';
+
+  /* الرقم الرئيسي = المؤكد فقط.
+     ⭐ ده جواب «معايا كام؟» داخل النظام، ومقصود إنه لا يضم Paymob اللي لسه
+        ماوصلش ولا الدهب. اسم «معاك في إيدك» القديم كان مضلل لأن الدفتر
+        بيجمع كاش + تحويلات بنك مسجلة؛ المعنى الصحيح هو «السيولة المؤكدة». */
+  const hero =
+    '<div class="of-cash-hero">'
+    + '<div class="of-cash-caption">💰 معايا كام دلوقتي؟</div>'
+    + '<div class="of-cash-big">' + egp(L.now) + '</div>'
+    + '<div class="of-cash-sub">السيولة المؤكدة بالنظام: كاش + بنك تشغيلي مسجل − المصاريف والمدفوعات.<br>'
+    + 'ده الرقم اللي تعتمد عليه للصرف الآن، مش المتوقع.</div>'
+    + '<div class="of-confidence"><span>' + confidenceIcon + ' ' + confidence + '</span></div>'
     + '</div>';
 
-  /* ── كارت الدهب ───────────────────────────────────────── */
-  const goldCard =
-    '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
-    + '<div style="display:flex; justify-content:space-between; align-items:center;">'
-    +   '<b style="font-size:13px;">🥇 الدهب</b>'
-    +   '<b style="font-size:17px;">' + egp(W.gold) + '</b></div>'
-    + '<div class="muted" style="font-size:11.5px; margin-top:4px;">'
-    +   (gold.grams
-        ? gold.grams + ' جرام عيار ٢٤ × ' + egp(gold.price) + ' للجرام'
-        : 'لسه ماحددتش عندك كام جرام')
-    + '</div>'
-    + (gold.stale && gold.grams
-        ? '<div style="background:rgba(245,158,11,.12); border:1px solid var(--warn); border-radius:9px;'
-          + ' padding:7px 9px; margin-top:7px; font-size:11.5px;">⚠️ السعر قديم'
-          + (gold.at ? ' (آخر تحديث ' + dstr(gold.at) + ')' : '')
-          + ' — حدّثه عشان الرقم يبقى حقيقي</div>'
-        : '')
-    + '<div style="display:flex; gap:7px; margin-top:9px;">'
-    +   '<button class="btn" onclick="ofSetGoldGrams()" style="flex:1;">⚖️ الجرامات</button>'
-    +   '<button class="btn" onclick="ofSetGoldPrice()" style="flex:1;">💱 سعر الجرام</button>'
-    + '</div>'
-    + '<div class="hint" style="margin-top:6px;">بنقيّم بسعر <b>الشراء</b> (اللي الصايغ بيشتري بيه منك) '
-    + 'مش سعر البيع — عشان الرقم يبقى اللي هتقبضه فعلًا.</div>'
+  const giftDue = W.giftLiability > 0;
+
+  const cards =
+    '<div class="of-cash-grid">'
+    + '<div class="of-money-card"><div class="k">🏦 عند Paymob — لسه ماوصلش</div><div class="v">' + egp(W.paymobNet) + '</div>'
+    + '<div class="s">' + pendingLabel + ' · مش متاح للصرف لسه</div></div>'
+    + '<div class="of-money-card"><div class="k">🎁 التزامات كروت</div><div class="v" style="color:' + (giftDue ? 'var(--bad)' : 'var(--good)') + ';">'
+    + (giftDue ? ('− ' + egp(W.giftLiability)) : egp(0)) + '</div><div class="s">فلوس في إيدك مش بتاعتك لحد ما الكارت يتصرف</div></div>'
+    + '<div class="of-money-card"><div class="k">🥇 دهب</div><div class="v">' + egp(W.gold) + '</div>'
+    + '<div class="s">' + (gold.grams ? (gold.grams + ' جرام') : 'مش متسجل') + (gold.stale && gold.grams ? ' · السعر قديم' : '') + '</div></div>'
+    + '<div class="of-money-card"><div class="k">🧮 اللي ليك فعلًا</div><div class="v">' + egp(W.total) + '</div>'
+    + '<div class="s">المؤكد + Paymob المنتظر + الدهب − الالتزامات</div></div>'
     + '</div>';
 
-  /* ── الشيت ────────────────────────────────────────────── */
-  const rows = L.rows.slice(-_ofLedgerDays).reverse();   // الأحدث فوق
-  const sheet = rows.map(function(r){ return ofLedgerRow(r, L); }).join('');
+  const verdict =
+    '<div class="of-verdict">'
+    + '<div class="of-verdict-row"><div><b>الحكم السريع</b><div class="muted">لو هتصرف دلوقتي، اعتمد على «السيولة المؤكدة» فوق.</div></div>'
+    + '<button class="btn gold" onclick="ofCountDay(\'' + L.todayKey + '\')" style="white-space:nowrap;">🔍 راجع الرقم</button></div>'
+    + (W.paymobOpeningLanded
+        ? '<div style="margin-top:8px;color:var(--warn);font-size:11px;font-weight:800;">⚠️ رصيد Paymob الافتتاحي عدّى ميعاد نزوله. لو وصل فعلًا وماتسجلش كتحويل، سجله عشان السيولة المؤكدة تتحدث.</div>'
+        : '')
+    + '<div class="hint" style="margin-top:8px;line-height:1.8;">'
+    + '⚠️ النظام مش متصل بحساب البنك نفسه. أي حركة بنكية خارج المبيعات/المصاريف المسجلة لازم تدخلها أو تعمل مراجعة للسيولة، وإلا «معايا كام» مش هيقدر يعرفها لوحده.'
+    + '</div>'
+    + '<div class="of-quick">'
+    + '<button class="btn" onclick="ofAddSettlement()">🏦 سجل تحويل Paymob</button>'
+    + '<button class="btn" onclick="ofSetGoldPrice()">🥇 حدّث سعر الدهب</button>'
+    + '</div>'
+    + '</div>';
 
-  host.innerHTML = head + goldCard
-    + '<div style="background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px; margin-top:10px;">'
-    + '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:9px;">'
-    +   '<b style="font-size:13px;">📒 يوم بيوم</b>'
-    +   '<span class="muted" style="font-size:11px;">دوس على أي يوم تعدّله</span>'
-    + '</div>'
-    + (sheet || '<div class="muted" style="font-size:12px;">لسه مفيش حركة</div>')
-    + (L.rows.length > _ofLedgerDays
-        ? '<button class="btn" onclick="ofMoreDays()" style="width:100%; margin-top:9px;">📆 أيام أكتر</button>' : '')
-    + '</div>'
-    + '<div style="display:flex; gap:7px; margin-top:10px;">'
-    +   '<button class="btn" onclick="ofAddSettlement()" style="flex:1;">🏦 وصلني تحويل</button>'
-    +   '<button class="btn" onclick="ofStartFresh()" style="flex:1;">🆕 صفّر وابدأ</button>'
-    + '</div>'
-    + '<div class="hint" style="margin-top:8px;">التوقّع بالخط المتقطّع لسه ماوصلش. '
-    + 'أول ما التحويل ينزل سجّله — التوقّع بيتلغى لوحده ومفيش عدّ مرتين.</div>';
+  let details = '';
+  if(_ofCashDetailsOpen){
+    const rows = L.rows.slice(-_ofLedgerDays).reverse();
+    const sheet = rows.map(function(r){ return ofLedgerRow(r, L); }).join('');
+    details =
+      '<div class="of-verdict" style="margin-top:9px;">'
+      + '<div class="of-verdict-row"><div><b>📒 يوم بيوم</b><div class="muted">دوس على أي يوم عشان تفهم أو تعدّل الحركة</div></div>'
+      + '<button class="ghost" onclick="ofToggleCashDetails()" style="padding:7px 10px;">إخفاء</button></div>'
+      + '<div style="margin-top:7px;">' + (sheet || '<div class="muted">لسه مفيش حركة</div>') + '</div>'
+      + (L.rows.length > _ofLedgerDays
+          ? '<button class="btn" onclick="ofMoreDays()" style="width:100%;margin-top:9px;">📆 أيام أكتر</button>' : '')
+      + '<div style="display:flex;gap:7px;margin-top:10px;">'
+      + '<button class="btn" onclick="ofSetGoldGrams()" style="flex:1;">⚖️ جرامات الدهب</button>'
+      + '<button class="btn" onclick="ofStartFresh()" style="flex:1;background:#fff;color:var(--bad);border:1px solid var(--line);">🆕 نقطة بداية جديدة</button>'
+      + '</div>'
+      + '</div>';
+  }else{
+    details = '<button class="of-details-toggle" onclick="ofToggleCashDetails()">📒 افتح التفاصيل يوم بيوم</button>';
+  }
+
+  // 📜 نحافظ على العبارة القديمة في الشرح عشان أي حد متعود عليها يفهم الانتقال:
+  // «معاك في إيدك» = دلوقتي اسمها الأدق «السيولة المؤكدة».
+  host.innerHTML = hero + cards + verdict + details;
+  try{ renderOfficeHomeSummary(); }catch(e){}
 }
 window.renderCashHand = renderCashHand;
+function ofToggleCashDetails(){
+  _ofCashDetailsOpen = !_ofCashDetailsOpen;
+  renderCashHand();
+}
+window.ofToggleCashDetails = ofToggleCashDetails;
+
 
 /* 🧊 التثبيت التلقائي — مرة واحدة في الجلسة لكل يوم
    بيكتب أرقام اليوم في مستنده قبل ما فواتيره تخرج من نافذة الـ٣٠ يوم. */
@@ -6058,9 +6152,10 @@ async function ofCountDay(key){
   const L = ofCashLedger(D.cashBase, D, D.cashDays || {}, ofLedgerCfg(), Date.now(), 5);
   const r = L.rows.filter(function(x){ return x.key === key; })[0];
   if(!r) return;
-  const v = prompt('🔍 عدّ الفلوس الفعلي — ' + ofDayName(key)
+  const v = prompt('🔍 راجع السيولة الفعلية — ' + ofDayName(key)
     + '\n\nالنظام حاسب: ' + egp(r.balance)
-    + '\nاكتب اللي عدّيته بإيدك (فاضي = امسح العدّ):',
+    + '\nاكتب إجمالي السيولة المؤكدة عندك الآن (كاش + رصيد الحساب التشغيلي).'
+    + '\nفاضي = امسح المراجعة:',
     r.counted !== null ? String(r.counted) : '');
   if(v === null) return;
   try{
@@ -6126,7 +6221,9 @@ async function ofSaveCashCfg(patch){
    لو أخدنا الكاش بس، فلوس الفيزا اللي في السكة هتنزل بعد التصفير
    وتبان كأنها فلوس من العدم — ومن غير رصيد افتتاحي يقابلها الرقم بيكدب. */
 async function ofStartFresh(){
-  const c = prompt('💵 عدّ الكاش اللي معاك دلوقتي بالظبط واكتبه.\n\n'
+  const c = prompt('💰 اكتب إجمالي السيولة المؤكدة عندك دلوقتي.\n\n'
+    + 'يعني: الكاش + رصيد الحساب البنكي المخصص للشغل.\n'
+    + 'ما تدخلش فلوس Paymob اللي لسه مانزلتش — هنسألك عنها في الخطوة الجاية.\n\n'
     + 'كل حاجة قبل كده هتتنسى، والحساب هيبدأ من الرقم ده.');
   if(c === null) return;
   const cash = Math.round((Number(c) || 0) * 100) / 100;
@@ -6149,8 +6246,8 @@ async function ofStartFresh(){
   const giftOpen = Math.round((Number(gl) || 0) * 100) / 100;
   if(!isFinite(giftOpen) || giftOpen < 0){ alert('رقم مش صح'); return; }
 
-  if(!confirm('💵 كاش في إيدك: ' + egp(cash)
-    + '\n🏦 عند Paymob: ' + egp(pmOpen)
+  if(!confirm('💰 السيولة المؤكدة: ' + egp(cash)
+    + '\n🏦 عند Paymob ولسه ماوصلش: ' + egp(pmOpen)
     + '\n🎁 دين كروت: ' + egp(giftOpen)
     + '\n\nالحساب هيبدأ من دلوقتي. الأيام اللي فاتت هتختفي من الشيت '
     + '(البيانات نفسها مش بتتمسح). تكمّل؟')) return;

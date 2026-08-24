@@ -1,0 +1,22 @@
+'use strict';
+const fs=require('fs'),assert=require('assert'),path=require('path');
+const ROOT=path.resolve(__dirname,'..');
+const h=fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8');
+const j=fs.readFileSync(path.join(ROOT,'Office','office.js'),'utf8');
+
+assert(h.includes('id="officeHomeSummary"'),'home control center موجود');
+assert(h.includes('data-page="cash"') && /فلوسي/.test(h),'تبويب فلوسي واضح');
+assert(h.includes('id="officeMoreBtn"'),'nav مبسط وفيه المزيد');
+assert(h.includes('data-office-go="tasks"') && h.includes('data-office-go="hire"'),'الأقسام الثانوية في المزيد');
+assert(!/data-page="tasks"[^>]*>/.test(h.match(/<nav id="tabsNav">[\s\S]*?<\/nav>/)?.[0]||''),'التاسكات مش مزاحمة الشريط الأساسي');
+assert(j.includes("ofGoPage('day'); // ⭐ صفحة واحدة بس عند البداية"),'باج صفحتين ظاهرين عند البداية اتقفل');
+assert(j.includes('function renderOfficeHomeSummary('),'ملخص الرئيسية موجود');
+assert(j.includes('السيولة المؤكدة'),'معنى الرقم الرئيسي واضح');
+assert(j.includes("const opening = Number(base && base.amount) || 0; // ⭐ amount = السيولة المؤكدة"),'معنى opening موثق كسيولة مش درج فقط');
+assert(j.includes('إجمالي السيولة المؤكدة عندك الآن (كاش + رصيد الحساب التشغيلي)'),'المراجعة الفعلية متسقة مع المحرك');
+assert(j.includes('الكاش + رصيد الحساب البنكي المخصص للشغل'),'نقطة البداية متسقة مع المحرك');
+assert(j.includes('النظام مش متصل بحساب البنك نفسه'),'مفيش ادعاء كاذب بمعرفة رصيد البنك');
+assert(j.includes('ofToggleCashDetails'),'التفاصيل اليومية قابلة للفتح بدل الزحمة');
+assert(j.includes('L.now'),'الرقم الرئيسي مازال المؤكد من المحرك');
+assert(j.includes('W.paymobNet') && j.includes('W.giftLiability') && j.includes('W.total'),'Paymob والالتزامات والصافي ظاهرين منفصلين');
+console.log('office owner center v63: PASS');
