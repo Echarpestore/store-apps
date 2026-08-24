@@ -2138,10 +2138,34 @@ function shopItems(){
 }
 
 function shopQty(bc){ return Math.max(0, Math.floor(Number(_shopCart[bc]) || 0)); }
+/* 📈 Online sales funnel Glow v44 — منفصل عن echarpe بنفس prefix المحادثة g. */
+var SHOP_FUNNEL_RANK={view:1,chat:2,tryon:3,cart:4,checkout:5,order:6,collected:7};
+var _shopFunnelLast={};
+function shopFunnelSource(){try{var q=new URLSearchParams(location.search);return(q.get('utm_source')||q.get('source')||q.get('src')||'glow').slice(0,40);}catch(e){return'glow';}}
+function shopFunnelProduct(bc){return shopItems().filter(function(x){return String(x.barcode)===String(bc);})[0]||{barcode:String(bc||'')};}
+function shopFunnelTrack(stage,product,extra){
+  try{
+    if(!currentCustomer||!currentCustomer.phone)return Promise.resolve(false);
+    stage=String(stage||'');if(!SHOP_FUNNEL_RANK[stage])return Promise.resolve(false);
+    var now=Date.now(),bc=String((product&&product.barcode)||''),dk=stage+'|'+bc;
+    if(_shopFunnelLast[dk]&&now-_shopFunnelLast[dk]<15000)return Promise.resolve(false);_shopFunnelLast[dk]=now;
+    var ref=db.collection(COL_CHAT).doc(CHAT_DOC_PREFIX+String(currentCustomer.phone));
+    return db.runTransaction(function(tx){return tx.get(ref).then(function(d){
+      var old=d.exists?(d.data()||{}):{},nr=SHOP_FUNNEL_RANK[stage]||0,or=SHOP_FUNNEL_RANK[String(old.funnelStage||'')]||0;
+      var patch={phone:String(currentCustomer.phone),name:currentCustomer.name||old.name||'',brand:'glow',funnelAt:now,funnelSource:shopFunnelSource(),funnelLastAction:stage};
+      if(product){patch.funnelBarcode=bc;patch.funnelProductName=String(product.name||'').slice(0,80);patch.funnelProductPrice=Number(product.price)||0;}
+      if(nr>=or)patch.funnelStage=stage;if(extra)Object.keys(extra).forEach(function(k){patch[k]=extra[k];});
+      if(nr>=SHOP_FUNNEL_RANK.tryon){patch.lastAt=Math.max(Number(old.lastAt)||0,now);if(!old.lastText||old.lastFrom!=='cust')patch.lastText=stage==='tryon'?'✨ جرّبت منتج':stage==='cart'?'🛒 أضافت للسلة':stage==='checkout'?'💳 وصلت لإتمام الطلب':stage==='order'?'✅ عملت أوردر':'🛍️ مهتمة بالشراء';if(!old.lastFrom)patch.lastFrom='funnel';patch.followUpDueAt=stage==='order'?0:now+(stage==='checkout'?30:stage==='cart'?60:120)*60000;}
+      tx.set(ref,patch,{merge:true});return true;
+    });}).catch(function(e){console.warn('glow funnel',stage,e&&e.code);return false;});
+  }catch(e){return Promise.resolve(false);}
+}
+window.shopFunnelTrack=shopFunnelTrack;
 function shopAdd(bc, d){
   bc = String(bc);
   var n = shopQty(bc) + (Number(d) || 0);
   if(n <= 0) delete _shopCart[bc]; else _shopCart[bc] = n;
+  if(Number(d)>0) shopFunnelTrack('cart',shopFunnelProduct(bc),{funnelCartQty:n});
   cartSave();
   renderShop();
   if(_shopOpenItem) renderShopDetail();   // الصفحة مفتوحة؟ العدّاد يتحدّث فيها كمان
@@ -2291,6 +2315,7 @@ var _shopImgIdx = 0;
 function shopOpenItem(bc){
   var p = shopItems().filter(function(x){ return String(x.barcode) === String(bc); })[0];
   if(!p) return;
+  shopFunnelTrack('view',p);
   _shopOpenItem = p; _shopImgIdx = 0;
   renderShopDetail();
   var key = String(p.id || p.barcode);
@@ -2530,7 +2555,9 @@ function renderShop(){
 
   // 🛍️ التصفّح بس — السلة مكانها أيقونة السلة فوق (وضع cartOnly).
   box.innerHTML = head + grid;
+  if(!_shopDeepOpened){try{var _qp=new URLSearchParams(location.search),_deep=_qp.get('product')||_qp.get('p');if(_deep&&shopItems().some(function(x){return String(x.barcode)===String(_deep);})) {_shopDeepOpened=true;setTimeout(function(){shopOpenItem(_deep);},60);}}catch(e){}}
 }
+var _shopDeepOpened=false;
 window.renderShop = renderShop;
 
 /* 🚀 الإرسال.
@@ -2557,6 +2584,7 @@ function shopSubmit(){
   var vc = orderValidateContact(info, _shopFulfill);
   if(!vc.ok){ showToast(vc.errors[0], true); return; }
 
+  shopFunnelTrack('checkout',lines[0]||null,{funnelCartValue:orderTotal(lines),funnelCartItems:lines.reduce(function(a,x){return a+(Number(x.qty)||0);},0)});
   _shopSending = true;
   var btn = $('shopSendBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'بيتبعت…'; }
@@ -2595,6 +2623,7 @@ function shopSubmit(){
       notes: info.notes
     });
     doc.contactPhone = info.phone;   // 📞 رقم التوصيل لو مختلف عن رقم الحساب
+    doc.funnelSource=shopFunnelSource(); doc.funnelEntryBarcode=(lines[0]&&lines[0].barcode)||'';
     doc.source = 'glow';       // 🖤 Glow · التطبيق بيبعت 'app' · الموقع 'web'
     /* ☁️ الأولوية للدالة السحابية: هي اللي بتعمل الفحص والخصم
        والإنشاء في transaction واحدة — فمستحيل اتنين ياخدوا آخر
@@ -2608,7 +2637,8 @@ function shopSubmit(){
       items: chk.items.map(function(it){ return { barcode: it.barcode, qty: it.qty }; }),
       payMethod: _shopPay, fulfillment: _shopFulfill,
       governorate: info.governorate, address: info.address,
-      notes: info.notes, contactPhone: info.phone
+      notes: info.notes, contactPhone: info.phone,
+      funnelSource:shopFunnelSource(), funnelEntryBarcode:(lines[0]&&lines[0].barcode)||''
     };
     try{
       var fn = firebase.app('glow')
@@ -2632,6 +2662,7 @@ function shopSubmit(){
       return db.collection(ORD_COL).add(doc).then(function(){ return doc; });
     }
   }).then(function(doc){
+    shopFunnelTrack('order',lines[0]||null,{funnelOrderCode:doc.code||'',funnelOrderAt:Date.now(),followUpDueAt:0});
     _shopCart = {};
     _shopInfo.address = ''; _shopInfo.notes = '';
     cartSave();              // 💾 السلة المحفوظة اتفضّت هي كمان — مش هترجع بعد أوردر ناجح
@@ -2964,116 +2995,6 @@ window.__scriptFullyLoaded = true;
 setTimeout(function(){
   if(!window.__scriptFullyLoaded){ $('loadFail').style.display='flex'; }
 }, 8000);
-</script>
-
-<script>
-
-/* ============================================================
-   🔙 Customer Back UX v41
-   Back = previous in-app step. When the stack is exhausted,
-   stay inside the app and return to "بطاقتي" (points/home).
-   ============================================================ */
-(function(){
-  var CKEY='echarpeNavV41', suppress=false;
-
-  function isOn(id, cls){
-    var e=document.getElementById(id); if(!e) return false;
-    if(cls) return e.classList.contains(cls);
-    return e.style.display!=='none' && (!window.getComputedStyle || getComputedStyle(e).display!=='none');
-  }
-  function topLayer(){
-    if(isOn('tryonOverlay')) return 'tryon';
-    if(isOn('invOverlay','on')) return 'invoice';
-    if(isOn('crOverlay','on')) return 'sheet';
-    var shop=document.getElementById('tab-shop');
-    if(shop && shop.classList.contains('shop-overlay')) return 'checkout';
-    if(isOn('chatWrap','on')) return 'chat';
-    return '';
-  }
-  function closeTop(kind){
-    if(kind==='tryon' && typeof tryonOverlayClose==='function') return tryonOverlayClose();
-    if(kind==='invoice' && typeof closeInvoiceDetail==='function') return closeInvoiceDetail();
-    if(kind==='sheet' && typeof closeSheet==='function') return closeSheet();
-    if(kind==='checkout' && typeof closeQuickCheckout==='function') return closeQuickCheckout();
-    if(kind==='chat' && typeof closeChat==='function') return closeChat(true);
-  }
-  function state(kind, extra){
-    return Object.assign({},history.state||{}, {[CKEY]:kind}, extra||{});
-  }
-  function push(kind, extra){
-    if(suppress) return;
-    var st=history.state||{};
-    if(st[CKEY]===kind && (!extra || st.tab===extra.tab)) return;
-    try{ history.pushState(state(kind,extra),'',location.href); }catch(e){}
-  }
-  function home(){
-    try{
-      if(typeof switchTab==='function') switchTab('card');
-      window.scrollTo(0,0);
-      history.replaceState(state('home',{tab:'card'}),'',location.href);
-    }catch(e){}
-  }
-
-  // Wrap existing navigation without changing its business behavior.
-  var oldSwitch=window.switchTab;
-  if(typeof oldSwitch==='function'){
-    window.switchTab=function(tab,fromBack){
-      oldSwitch(tab);
-      if(!fromBack) push('tab',{tab:tab});
-    };
-    // inline/tab click handlers resolve global switchTab at call time.
-  }
-
-  function wrapOpen(name,kind){
-    var old=window[name];
-    if(typeof old!=='function') return;
-    window[name]=function(){
-      var r=old.apply(this,arguments);
-      push(kind);
-      return r;
-    };
-  }
-  wrapOpen('openInvoiceDetail','invoice');
-  wrapOpen('showSheet','sheet');
-  wrapOpen('openQuickCheckout','checkout');
-  wrapOpen('tryonOverlayOpen','tryon');
-
-  // openChat already had its own history hack. Replace only its push behavior
-  // by temporarily suppressing history.pushState inside that legacy function.
-  var oldChat=window.openChat;
-  if(typeof oldChat==='function'){
-    window.openChat=function(){
-      var orig=history.pushState;
-      try{ history.pushState=function(){}; var r=oldChat.apply(this,arguments); }
-      finally{ history.pushState=orig; }
-      push('chat'); return r;
-    };
-  }
-
-  // Existing legacy chat popstate listener may also run; our handler is added
-  // after it and therefore sees the layer already closed, so state drives the step.
-  window.addEventListener('popstate',function(e){
-    suppress=true;
-    try{
-      var layer=topLayer();
-      if(layer){ if(layer==='chat' && typeof closeChat==='function') closeChat(true); else closeTop(layer); return; }
-
-      var st=(e && e.state)||{};
-      if(st[CKEY]==='tab' && st.tab && st.tab!=='card'){
-        if(typeof switchTab==='function') switchTab(st.tab,true);
-        return;
-      }
-      // No more meaningful internal history: never dump the customer out.
-      home();
-    }finally{
-      setTimeout(function(){ suppress=false; },0);
-    }
-  });
-
-  // Stable home anchor. Customer can always finish Back on the points card.
-  try{ history.replaceState(state('home',{tab:'card'}),'',location.href); }catch(e){}
-})();
-
 </script>
 
 <script>
@@ -3580,6 +3501,7 @@ window.chatQuickBuy = chatQuickBuy;
 function chatTryOn(id){
   var img = chatImgs[id];
   if(!img) return;
+  shopFunnelTrack('tryon',shopFunnelProduct(chatBarcodes[id]||''),{funnelFromChat:true});
   try{
     sessionStorage.setItem('echarpe_tryon_img', img);
     sessionStorage.setItem('echarpe_tryon_phone', (currentCustomer && currentCustomer.phone) || '');
@@ -3609,7 +3531,7 @@ function tryonOverlayOpen(brand){
   var frame = document.getElementById('tryonFrame');
   var wrap = document.getElementById('tryonOverlay');
   if(!frame || !wrap) return;
-  frame.src = '../tryon/photo.html?brand=' + brand + '&embed=1';
+  frame.src = '../tryon/photo.html?brand=' + brand + '&embed=1&run=' + Date.now();
   wrap.style.display = 'block';
 }
 function tryonOverlayClose(){
@@ -3760,6 +3682,7 @@ function chatSend(){
   $('chSend').disabled = true;
   var phone = currentCustomer.phone;
   var ts = Date.now();
+  shopFunnelTrack('chat',null,{funnelChatAt:ts});
   var convRef = db.collection(COL_CHAT).doc(CHAT_DOC_PREFIX + phone);
   chatResolveBranch(phone).then(function(branch){
     var batch = db.batch();
