@@ -227,16 +227,16 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   const gsSrc2 = fs.readFileSync(path.join(POS,'search.js'),'utf8');
   const salesSrc3 = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-app.js'),'utf8');
 
-  // البحث الشامل: مفيش قراءة كاملة للفواتير خالص
-  assert(!/TEST_SALES\)\.where\('branch','==', currentBranch\)\.get\(\)/.test(gsSrc2),
-    'المسح الكامل لفواتير الفرع اتشال من البحث');
-  assert(/where\('invoiceNo','==', qU\)[\s\S]{0,120}limit\(GLOBAL_SEARCH_MAX\)/.test(gsSrc2),
-    'الفواتير باستعلام مستهدف برقم الفاتورة بحد موسع');
-  assert(/where\('customerPhone','==', v\)/.test(gsSrc2) && /_phoneSearchVariants/.test(gsSrc2),
-    'وبالتليفون بأكثر من صيغة شائعة');
-  assert(/_customersCached/.test(gsSrc2) && /10\*60000/.test(gsSrc2),
-    'العملاء من كاش الجلسة (10 دقايق) مش قراءة كاملة كل بحثة');
-  assert(/q\.length >= 3/.test(gsSrc2), 'مفيش استعلامات لحروف أقل من 3');
+  // البحث الشامل Local-first: الكتابة نفسها لا تعمل أي Firestore query.
+  const localSearchSrc = fs.readFileSync(path.join(POS,'local-search-cache.js'),'utf8');
+  assert(!/db\.collection\(/.test(gsSrc2) && /allowRemoteFallback:false/.test(gsSrc2),
+    'الكتابة في شريط البحث = صفر Firestore queries');
+  assert(/searchCustomers\(q, GLOBAL_SEARCH_MAX\)/.test(gsSrc2) && /searchInvoices\(q, GLOBAL_SEARCH_MAX\)/.test(gsSrc2),
+    'العملاء والفواتير بيتقروا من local search index');
+  assert(/e\.key !== 'Enter'/.test(gsSrc2) && /allowRemoteFallback:true/.test(gsSrc2),
+    'Fallback للسيرفر اختياري عند Enter فقط');
+  assert(/indexedDB\.open/.test(localSearchSrc) && /SYNC_EVERY_MS = 10 \* 60 \* 1000/.test(localSearchSrc),
+    'IndexedDB + delta sync بدل query لكل ضغطة');
 
   // sales: الاشتراكات الزمنية الكبيرة متحددة بنافذة 190 يوم
   assert(/READ_WINDOW_MS = 190/.test(salesSrc3) && /_scoped = \(col, field\)=> query\(col, where\(field, '>=', _winStart\)\)/.test(salesSrc3),
@@ -399,7 +399,7 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   // ومستخدم في المواضع الثلاثة
   assert(/_sm\(it\.name, q\)/.test(fs.readFileSync(path.join(POS,'pos-sale.js'),'utf8')), 'بحث البيع بالتطبيع');
   assert(/function receiveSearchItems\(/.test(prodSrc) && /_sm\(it\.name, q\)/.test(prodSrc) && /receiveSearchItems\(candidates, currentBranch, code\)/.test(prodSrc), 'بحث الاستلام بالتطبيع (اقتراحات + إنتر)');
-  assert(/_sm\(p\.name, q\)/.test(gsSrc) && /_searchCustomersByName\(q, _sm\)/.test(gsSrc), 'البحث الشامل بالتطبيع');
+  assert(/_sm\(p\.name, q\)/.test(gsSrc) && /searchCustomers\(q, GLOBAL_SEARCH_MAX\)/.test(gsSrc), 'البحث الشامل: المنتجات بالتطبيع والعملاء من local index المطبع');
   // 🧷 حزام أمان النسخ المتلخبطة وقت التحديث: البحث ميموتش لو التطبيع مش متحمّل
   ['pos-sale.js','products.js','search.js'].forEach(f=>{
     const src = fs.readFileSync(path.join(POS, f),'utf8');

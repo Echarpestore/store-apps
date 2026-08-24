@@ -19,7 +19,7 @@ const checks=[
  ['receive log reads Firestore stock log', recv.includes('db.collection(TEST_STOCK_LOG)') && recv.includes("x.type !== 'receipt'")],
  ['receive log shows last 20 not only today', recv.includes('limit(20)') && recv.includes('آخر 20 عملية استلام')],
  ['receive log has local-cache fallback', recv.includes('renderRows(receiveGoodsTodayLog') && recv.includes("console.warn('receive log firestore'")],
- ['POS cache bumped v339', posSw.includes("store-apps-shell-v339")],
+ ['POS cache bumped v340', posSw.includes("store-apps-shell-v340")],
  ['Glow tryon URL canonical', glow.includes("frame.src = '../tryon/photo.html?brand=' + brand + '&embed=1';") && !glow.includes("&embed=1&run=" )],
  ['Glow cache bumped v73', glowSw.includes('glow-loyalty-v73')]
 ];

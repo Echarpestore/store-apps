@@ -442,7 +442,8 @@ async function editCustomerName(phone){
   if(!clean){ showToast('الاسم ماينفعش يبقى فاضي', 'err'); return; }
   if(clean === cur) return;
   try{
-    await db.collection(TEST_CUSTOMERS).doc(phone).set({ name: clean }, { merge:true });
+    await db.collection(TEST_CUSTOMERS).doc(phone).set({ name: clean, updatedAtMs: Date.now(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
+    try{ window.POSLocalSearchCache?.upsertCustomer({ id:phone, name:clean, phone, branch:currentBranch, updatedAtMs:Date.now() }, currentBranch).catch(()=>{}); }catch(e){}
     _cp.c.name = clean;
     document.getElementById('custProfTitle').textContent = '👤 ' + clean;
     renderCustProfile();

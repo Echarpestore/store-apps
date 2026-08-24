@@ -1293,6 +1293,7 @@ async function runImport(){
             points: mapping.points ? (parseFloat(row[mapping.points]) || 0) : 0,
             loyaltyCode: codeFromPhone(phone),
             branch: currentBranch, importedFrom: 'quickbooks',
+            updatedAtMs: Date.now(), updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           };
           if(hasNotes && (row['Notes']||'').trim()) data.notes = row['Notes'].trim();

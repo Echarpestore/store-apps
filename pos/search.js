@@ -1,106 +1,85 @@
 // ============================================================
-// search.js — البحث الشامل في الشاشة الرئيسية
-// بيدوّر في نفس الوقت في: الفواتير، العملاء، والمنتجات، وبيوري
-// النتائج مع بعض في قايمة واحدة، كل نتيجة بتودّيك لصفحتها.
-// بيعتمد على العام من app.js/profiles.js: db, currentBranch, allInventory,
-// TEST_SALES, TEST_CUSTOMERS, openInvoice, openCustomerProfile, openProductDetails
+// search.js — البحث الشامل Local-first
+// ------------------------------------------------------------
+// البحث أثناء الكتابة = Local only (0 Firestore queries).
+// Enter فقط، ولو مفيش نتيجة محلية، يسمح fallback مستهدف للسيرفر.
 // ============================================================
 
 let globalSearchTimer = null;
+const GLOBAL_SEARCH_MAX = 15;
+let _globalSearchSeq = 0;
 
-document.getElementById('globalSearchInput').addEventListener('input', (e)=>{
+const _globalInput = document.getElementById('globalSearchInput');
+_globalInput.addEventListener('input', (e)=>{
   const q = e.target.value.trim();
   clearTimeout(globalSearchTimer);
   const box = document.getElementById('globalSearchResults');
   if(!q){ box.style.display = 'none'; box.innerHTML = ''; return; }
-  // Debounce بسيط عشان مانعملش قراءات كتير من قاعدة البيانات وانت لسه بتكتب
-  globalSearchTimer = setTimeout(()=> runGlobalSearch(q), 300);
+  globalSearchTimer = setTimeout(()=> runGlobalSearch(q, { allowRemoteFallback:false }), 180);
+});
+_globalInput.addEventListener('keydown', (e)=>{
+  if(e.key !== 'Enter') return;
+  const q = e.target.value.trim();
+  if(!q) return;
+  e.preventDefault();
+  clearTimeout(globalSearchTimer);
+  runGlobalSearch(q, { allowRemoteFallback:true });
 });
 
-async function runGlobalSearch(q){
+async function runGlobalSearch(q, opts){
+  opts = opts || {};
+  const seq = ++_globalSearchSeq;
   const box = document.getElementById('globalSearchResults');
   box.style.display = 'block';
-  box.innerHTML = '<div style="padding:12px; color:#888; font-size:12px;">بيدوّر...</div>';
+  box.innerHTML = '<div style="padding:12px; color:#888; font-size:12px;">بيدوّر محليًا...</div>';
 
   const results = { invoices: [], customers: [], products: [] };
-  // 🧷 حزام أمان نسخ الملفات: وقت التحديث ممكن ملف يتحمّل جديد وملف قديم للحظة —
-  // لو دالة التطبيع لسه موصلتش، بنرجع للبحث الحرفي بدل ما البحث يموت خالص
   const _sm = (typeof searchMatch === 'function') ? searchMatch
             : (h, qq)=> String(h||'').toLowerCase().includes(String(qq||'').toLowerCase());
   const _bp = (typeof barcodePrefix === 'function') ? barcodePrefix
             : (bc, qq)=> String(bc||'').toLowerCase().startsWith(String(qq||'').toLowerCase());
 
-  // 1) المنتجات (من الكاش المحلي، سريع وبدون قراءة إضافية)
-  // 🔢 الكود بالبداية مش بالاحتواء — الاحتواء كان بيطلّع 533 و833 مع البحث بـ33.
-  // البحث الشامل كان آخر مكان فاضل على السلوك القديم بعد إصلاح البيع والاستلام.
-  // ⚠️ الترتيب قبل القص: لو قصينا الأول ممكن المطابقة التامة نفسها تتقص.
+  // المنتجات موجودة في الذاكرة أصلًا — صفر reads.
   results.products = allInventory.filter(p=>
-    _sm(p.name, q) || _bp(p.barcode, q)   // 🔎 تطبيع عربي للاسم، بداية للكود
-  ).sort((a,b)=>{                          // 🥇 التامة الأول ثم الأقصر (33 ← 330 ← 331)
+    _sm(p.name, q) || _bp(p.barcode, q)
+  ).sort((a,b)=>{
     const qa = String(a.barcode||''), qb = String(b.barcode||'');
     return ((qb===q)-(qa===q)) || (qa.length - qb.length);
-  }).slice(0, 5);
+  }).slice(0, GLOBAL_SEARCH_MAX);
 
-  // 📉 كارثة القراءات القديمة: كل بحثة كانت بتقرا **كل** فواتير وعملاء الفرع
-  // من أول يوم (آلاف المستندات × كل ضغطة بحث) — ده كان المصدر الأول
-  // لفاتورة القراءات (254 ألف/يوم). دلوقتي:
-  // - العملاء: بيتقروا مرة كل 10 دقايق ويتفلتروا محلي
-  // - الفواتير: استعلامات مستهدفة (رقم فاتورة/تليفون بالظبط) بحد 5 مستندات
-  if(q.length >= 3){
-    // 2) العملاء (بالاسم أو رقم التليفون) — من كاش الجلسة
-    try{
-      const custs = await _customersCached();
-      results.customers = custs.filter(c=>
-        (c.phone||'').includes(q) || _sm(c.name, q)
-      ).slice(0, 5);
-    }catch(e){}
+  // العملاء والفواتير من IndexedDB/local memory فقط أثناء الكتابة.
+  try{
+    if(window.POSLocalSearchCache){
+      await window.POSLocalSearchCache.ensureBranch(currentBranch);
+      results.customers = window.POSLocalSearchCache.searchCustomers(q, GLOBAL_SEARCH_MAX);
+      results.invoices = window.POSLocalSearchCache.searchInvoices(q, GLOBAL_SEARCH_MAX);
+    }
+  }catch(e){ console.warn('local search', e); }
 
-    // 3) الفواتير: مطابقة تامة لرقم الفاتورة أو تليفون العميل — مش مسح شامل.
-    // (البحث الجزئي في أرقام الفواتير القديمة اتشال عمدًا — كان بيكلف قراءة
-    // المجموعة كلها. رقم الفاتورة بيتكتب كامل من الإيصال.)
+  // لو المستخدم ضغط Enter ومفيش عميل/فاتورة محليًا، نعمل fallback مستهدف فقط.
+  // ده يحافظ على إمكانية إيجاد فاتورة قديمة جدًا خارج bootstrap المحلي بدون
+  // ما كل حرف مكتوب يعمل قراءة من Firestore.
+  if(opts.allowRemoteFallback && !results.customers.length && !results.invoices.length
+     && q.length >= 3 && navigator.onLine !== false && window.POSLocalSearchCache){
+    box.innerHTML = '<div style="padding:12px; color:#888; font-size:12px;">مش موجود محليًا — بدوّر على السيرفر مرة واحدة...</div>';
     try{
-      const qU = q.toUpperCase();
-      const [byNo, byPhone] = await Promise.all([
-        db.collection(TEST_SALES).where('branch','==', currentBranch)
-          .where('invoiceNo','==', qU).limit(5).get().catch(()=> null),
-        /^\d{6,}$/.test(q)
-          ? db.collection(TEST_SALES).where('branch','==', currentBranch)
-              .where('customerPhone','==', q).limit(5).get().catch(()=> null)
-          : Promise.resolve(null)
-      ]);
-      const seen = new Set();
-      [byNo, byPhone].forEach(snap=>{
-        if(!snap) return;
-        snap.docs.forEach(d=>{
-          if(seen.has(d.id)) return; seen.add(d.id);
-          results.invoices.push({id:d.id, ...d.data()});
-        });
-      });
-      results.invoices = results.invoices.slice(0, 5);
-    }catch(e){}
+      const remote = await window.POSLocalSearchCache.remoteFallback(q, GLOBAL_SEARCH_MAX);
+      if(remote){ results.customers = remote.customers || []; results.invoices = remote.invoices || []; }
+    }catch(e){ console.warn('remote search fallback', e); }
   }
 
-  renderGlobalSearchResults(q, results);
+  if(seq !== _globalSearchSeq) return; // نتيجة بحث قديم وصلت بعد كتابة جديدة
+  renderGlobalSearchResults(q, results, opts);
 }
 
-// 👥 كاش عملاء الجلسة — قراءة واحدة كل 10 دقايق بدل قراءة كاملة مع كل بحثة
-let _custCache = null, _custCacheAt = 0, _custCacheBranch = null;
-async function _customersCached(){
-  const fresh = _custCache && _custCacheBranch === currentBranch
-             && (Date.now() - _custCacheAt) < 10*60000;
-  if(fresh) return _custCache;
-  const snap = await db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get();
-  _custCache = snap.docs.map(d=>d.data());
-  _custCacheAt = Date.now();
-  _custCacheBranch = currentBranch;
-  return _custCache;
-}
-
-function renderGlobalSearchResults(q, results){
+function renderGlobalSearchResults(q, results, opts){
   const box = document.getElementById('globalSearchResults');
   const totalFound = results.invoices.length + results.customers.length + results.products.length;
   if(totalFound === 0){
-    box.innerHTML = '<div style="padding:14px; color:#888; font-size:12px; text-align:center;">مفيش نتائج لـ "' + q + '"</div>';
+    const hint = (opts && opts.allowRemoteFallback)
+      ? ''
+      : '<div style="margin-top:6px;font-size:10px;color:#aaa;">لو بتدور على فاتورة قديمة جدًا اضغط Enter للبحث على السيرفر مرة واحدة.</div>';
+    box.innerHTML = '<div style="padding:14px; color:#888; font-size:12px; text-align:center;">مفيش نتائج لـ "' + q + '"' + hint + '</div>';
     return;
   }
 
@@ -138,11 +117,8 @@ function closeGlobalSearchAnd(action){
   action();
 }
 
-// إغلاق نتائج البحث لو ضغطت في أي حتة تانية بره المربع
 document.addEventListener('click', (e)=>{
   const box = document.getElementById('globalSearchResults');
   const input = document.getElementById('globalSearchInput');
-  if(box && !box.contains(e.target) && e.target !== input){
-    box.style.display = 'none';
-  }
+  if(box && !box.contains(e.target) && e.target !== input){ box.style.display = 'none'; }
 });

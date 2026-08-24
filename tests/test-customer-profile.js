@@ -37,10 +37,10 @@ function extractFn(s, header){
   if(!fn) return;
   assert(/askText\(/.test(fn), '⭐ بيستخدم askText مش prompt (prompt بتفشل بصمت في Electron)');
   assert(!/prompt\(/.test(fn), '⛔ مفيش prompt خالص');
-  assert(/set\(\{ name: clean \}, \{ merge:true \}\)/.test(fn),
-    '⭐⭐ بيكتب الاسم بس — merge، فمفيش أي حقل تاني بيتمسح');
-  assert(!/doc\(clean\)|delete\(\)|phone:/.test(fn),
-    '⛔ ومبيلمسش الرقم (هو معرّف المستند — تغييره نقل مش تعديل)');
+  assert(/set\(\{ name: clean, updatedAtMs: Date\.now\(\), updatedAt: firebase\.firestore\.FieldValue\.serverTimestamp\(\) \}, \{ merge:true \}\)/.test(fn),
+    '⭐⭐ بيكتب الاسم + طوابع المزامنة بس — merge، فمفيش أي بيانات عميل بتتمسح');
+  assert(!/doc\(clean\)|delete\(\)|\.set\(\{\s*phone:/.test(fn),
+    '⛔ ومبيلمسش رقم العميل في Firestore (هو معرّف المستند — تغييره نقل مش تعديل)');
   assert(/if\(!clean\)/.test(fn), '⭐ اسم فاضي مرفوض');
   assert(/if\(clean === cur\) return/.test(fn), 'ونفس الاسم = مفيش كتابة زيادة');
   assert(/_logActivity\('customer_name_edit'/.test(fn) && /from: cur, to: clean/.test(fn),

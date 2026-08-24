@@ -56,6 +56,6 @@ assert(/dcData\.fromCache/.test(close) && /return;/.test(close), 'تقفيل ا�
 // 5) Browser-close warning + pending marker from queued writes.
 assert(core.includes("window.addEventListener('beforeunload'"), 'فيه تحذير قبل قفل التاب لو pending معروف');
 assert(sale.includes('window.__posPendingWritesKnown = true;'), 'أي كتابة queued تعلّم pending state');
-assert(/store-apps-shell-v339/.test(sw), 'POS service worker v339');
+assert(/store-apps-shell-v340/.test(sw), 'POS service worker v340');
 
 console.log('Offline sale safety v339: all checks passed');

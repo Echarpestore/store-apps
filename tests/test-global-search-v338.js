@@ -1,10 +1,11 @@
 const fs=require('fs'), assert=require('assert');
 const s=fs.readFileSync('pos/search.js','utf8');
+const c=fs.readFileSync('pos/local-search-cache.js','utf8');
 [
-  ['reads more results', s.includes('const GLOBAL_SEARCH_MAX = 15') && s.includes('.slice(0, GLOBAL_SEARCH_MAX)')],
-  ['numeric search skips full customer cache', s.includes('_searchCustomersByPhone(phoneVariants)')],
-  ['phone normalization variants', s.includes("add('20'+d.slice(1))") && s.includes("add('+20'+d.slice(1))")],
-  ['customers and invoices parallel', s.includes('Promise.all([customersPromise, invoicesPromise])')],
-  ['invoice phone variants queried', s.includes(".where('customerPhone','==', v)")],
-  ['search sw v339', fs.readFileSync('pos/sw.js','utf8').includes('store-apps-shell-v339')]
+  ['reads more results', s.includes('const GLOBAL_SEARCH_MAX = 15')],
+  ['typing is local-only', s.includes('allowRemoteFallback:false') && !s.includes('db.collection(')],
+  ['phone normalization lives in local cache', c.includes('function _phoneVariants')],
+  ['Enter-only remote fallback', s.includes("e.key !== 'Enter'") && s.includes('allowRemoteFallback:true')],
+  ['invoice/customer local search', s.includes('searchCustomers(q, GLOBAL_SEARCH_MAX)') && s.includes('searchInvoices(q, GLOBAL_SEARCH_MAX)')],
+  ['search sw v340', fs.readFileSync('pos/sw.js','utf8').includes('store-apps-shell-v340')]
 ].forEach(([name,ok])=>{assert.ok(ok,name); console.log('PASS',name)});

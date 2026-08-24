@@ -1731,7 +1731,8 @@ async function registerNewCustomer(){
     document.getElementById('customerPhone').value = phone;
   }
   try{
-    await db.collection(TEST_CUSTOMERS).doc(phone).set({ name, phone, points:0, branch: currentBranch, createdAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
+    await db.collection(TEST_CUSTOMERS).doc(phone).set({ name, phone, points:0, branch: currentBranch, updatedAtMs: Date.now(), updatedAt: firebase.firestore.FieldValue.serverTimestamp(), createdAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
+    try{ window.POSLocalSearchCache?.upsertCustomer({ id:phone, name, phone, branch:currentBranch, updatedAtMs:Date.now() }, currentBranch).catch(()=>{}); }catch(e){}
     document.getElementById('customerInfo').textContent = `اتسجل عميل جديد: ${name}`;
     document.getElementById('newCustomerRow').style.display = 'none';
     showToast('اتسجل العميل ✅');
@@ -3969,6 +3970,18 @@ window.returnPointsDeduction = returnPointsDeduction;
     }));
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
 
+    // 🔎 Local search index: الفاتورة تظهر في البحث فورًا حتى لو البيع أوفلاين.
+    // Best-effort فقط؛ فشل IndexedDB عمره ما يوقف أو يغيّر مسار البيع.
+    try{
+      window.POSLocalSearchCache?.upsertInvoice({
+        id:saleRef.id, invoiceNo, invoiceCode, customerPhone:phone||'', customerName:custName||'',
+        total, createdAtMs:Date.now(), branch:currentBranch
+      }, currentBranch).catch(()=>{});
+      if(phone && custName){
+        window.POSLocalSearchCache?.upsertCustomer({ id:phone, name:custName, phone, branch:currentBranch, updatedAtMs:Date.now() }, currentBranch).catch(()=>{});
+      }
+    }catch(e){}
+
     // 🕵️ v296: حدث الربط — بيدي لكل أحداث السلة دي رقم فاتورتها.
     //    لازم **بعد** الحفظ: قبل كده الفاتورة مالهاش رقم من الأساس.
     try{
@@ -4245,7 +4258,9 @@ window.returnPointsDeduction = returnPointsDeduction;
       custUpdate = {
         phone, branch: currentBranch,
         totalSpent: firebase.firestore.FieldValue.increment(total),
-        lastVisit: firebase.firestore.FieldValue.serverTimestamp()
+        lastVisit: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAtMs: Date.now()
       };
       custUpdate[pf] = firebase.firestore.FieldValue.increment(netPointsChange);   // نقاط الفرع الصح
       if(pendingRedemption) custUpdate.pendingRedeem = firebase.firestore.FieldValue.delete();   // نمسح الطلب بعد ما اتنفّذ
