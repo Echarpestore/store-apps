@@ -194,7 +194,7 @@ async function _openPanel(){
     ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:9990; display:flex; justify-content:flex-end;';   // 🔄 بتفتح من الشمال (كانت يمين)
     ov.onclick = (e)=>{ if(e.target === ov) _closePanel(); };
     ov.innerHTML = `
-      <div style="width:min(94vw,430px); height:100%; background:var(--bg); border-right:1px solid var(--border); display:flex; flex-direction:column;">
+      <div style="width:min(96vw,460px); height:100%; background:var(--bg); border-right:1px solid var(--border); display:flex; flex-direction:column;">
         <div style="display:flex; align-items:center; gap:8px; padding:11px 13px; border-bottom:1px solid var(--border);">
           <span style="font-size:17px;">💬</span><b style="flex:1;">شات الفروع <span style="color:var(--muted); font-size:10.5px; font-weight:400;">(اليوم بس — بيتنضف تلقائي)</span></b>
           <button onclick="if(typeof chatNudge==='function')chatNudge()" title="نداء بصوت أعلى" style="border:1px solid var(--warn); background:rgba(245,158,11,.12); color:var(--warn); border-radius:9px; padding:7px 11px; font-weight:800; cursor:pointer;">👋 تنبيه</button>
@@ -207,9 +207,9 @@ async function _openPanel(){
         <div id="chBody" style="flex:1; overflow-y:auto; padding:12px;"></div>
         <div style="padding:10px 13px; border-top:1px solid var(--border);">
           <div id="chPreview" style="margin-bottom:4px;"></div>
-          <div style="display:flex; gap:8px;">
-            <input id="chInput" placeholder="اكتب... (اكتب الكود والمنتج هيتعرف لوحده)" autocomplete="off" style="flex:1; padding:12px; border-radius:11px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:13.5px;">
-            <button onclick="if(typeof chatSend==='function')chatSend()" style="border:none; background:var(--accent); color:#fff; border-radius:11px; padding:0 18px; font-weight:900; font-size:14px; cursor:pointer;">إرسال</button>
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) 92px; gap:8px; align-items:stretch;">
+            <input id="chInput" placeholder="اكتب... (اكتب الكود والمنتج هيتعرف لوحده)" autocomplete="off" style="flex:1; padding:12px; border-radius:11px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; min-width:0; height:48px; box-sizing:border-box;">
+            <button onclick="if(typeof chatSend==='function')chatSend()" style="border:none; background:var(--accent); color:#fff; border-radius:11px; min-width:92px; height:48px; padding:0 14px; font-weight:900; font-size:14px; cursor:pointer;">إرسال</button>
           </div>
         </div>
       </div>`;

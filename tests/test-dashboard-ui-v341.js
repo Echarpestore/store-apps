@@ -1,0 +1,11 @@
+const fs=require('fs'),assert=require('assert');
+const html=fs.readFileSync('pos/index.html','utf8'),bb=fs.readFileSync('pos/blackbox.js','utf8'),chat=fs.readFileSync('pos/chat.js','utf8'),sw=fs.readFileSync('pos/sw.js','utf8');
+assert(html.includes('v341 Premium POS dashboard'));
+assert(html.includes('body.on-dashboard #dashboardScreen{overflow:hidden!important}'));
+assert(html.includes('height:58px') && html.includes('id="globalSearchInput"'));
+assert(html.includes('grid-template-columns:repeat(3,minmax(0,1fr))'));
+assert(bb.includes('top:54px; left:12px') && !bb.includes('bottom:14px; left:14px'));
+assert(chat.includes('grid-template-columns:minmax(0,1fr) 92px'));
+assert(chat.includes('height:48px'));
+assert(sw.includes('v341'));
+console.log('dashboard UI v341: PASS');

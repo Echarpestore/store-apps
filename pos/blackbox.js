@@ -315,9 +315,9 @@
     b.textContent = '🐞';
     /* 👁️ ظاهر مش خافت: الموظفة لازم تلاقيه وقت المشكلة من غير ما
        حد يفكّرها بيه. الخفوت كان مناسب لو المالك هو اللي بيستخدمه. */
-    b.style.cssText = 'position:fixed; bottom:14px; left:14px; z-index:9998; width:46px; height:46px;'
+    b.style.cssText = 'position:fixed; top:54px; left:12px; z-index:9988; width:38px; height:38px;'
       + 'border-radius:50%; border:1px solid rgba(232,185,35,.35); background:rgba(20,21,27,.92);'
-      + 'color:#E8B923; font-size:20px; cursor:pointer; opacity:.85; transition:opacity .2s;'
+      + 'color:#E8B923; font-size:16px; cursor:pointer; opacity:.72; transition:opacity .2s; box-shadow:0 5px 14px rgba(0,0,0,.18);'
       + 'display:flex; align-items:center; justify-content:center; padding:0;';
     b.onmouseenter = function(){ b.style.opacity = '1'; };
     b.onmouseleave = function(){ b.style.opacity = '.85'; };

@@ -462,6 +462,31 @@ body.on-dashboard .badge-test{ display:block; }
 .emp-pick-tile .av{width:44px; height:44px; border-radius:50%; background:var(--panel3); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--accent);}
 .emp-pick-tile .n{font-size:12px; font-weight:700; text-align:center;}
 
+/* ===== v341 Premium POS dashboard ===== */
+@media (min-width:900px){
+ body.on-dashboard{overflow:hidden}
+ body.on-dashboard #dashboardScreen{overflow:hidden!important}
+ body.on-dashboard .qb-layout{height:100dvh;min-height:0;overflow:hidden;background:#f7f7f5}
+ body.on-dashboard .qb-sidebar{width:176px;padding:12px 10px;gap:6px;overflow-y:auto;scrollbar-width:thin;background:#111318;border-left:1px solid #252932}
+ body.on-dashboard .qb-sidebar button{padding:10px 8px;min-height:40px;border-radius:11px;font-size:12px}
+ body.on-dashboard .qb-sidebar button.secondary{background:#191c22;border-color:#2a2f39;color:#f5f7fa}
+ body.on-dashboard .qb-main{min-width:0;min-height:0;overflow:hidden;padding:14px 18px 12px;background:#f7f7f5}
+ body.on-dashboard .qb-global-search{margin:0 0 12px!important;flex:0 0 auto}
+ body.on-dashboard #globalSearchInput{height:58px;box-sizing:border-box;padding:0 22px!important;border:1px solid #d7d9dd!important;border-radius:16px!important;background:#fff!important;font-size:16px!important;font-weight:700;box-shadow:0 6px 22px rgba(17,24,39,.06);outline:none;transition:.16s ease}
+ body.on-dashboard #globalSearchInput:focus{border-color:#111827!important;box-shadow:0 0 0 3px rgba(17,24,39,.08),0 8px 24px rgba(17,24,39,.08)}
+ body.on-dashboard #globalSearchResults{top:64px!important;border:1px solid #e2e4e8!important;border-radius:16px!important;box-shadow:0 18px 45px rgba(15,23,42,.16)}
+ body.on-dashboard .qb-section-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:10px;align-content:stretch;overflow:hidden}
+ body.on-dashboard .qb-section{min-width:0;min-height:0;border:1px solid #e1e3e6;border-radius:16px;box-shadow:0 3px 14px rgba(15,23,42,.045);display:flex;flex-direction:column;overflow:hidden}
+ body.on-dashboard .qb-section-head{flex:0 0 auto;margin:0!important;padding:8px 11px!important;font-size:12.5px!important;background:#f4f5f6!important;color:#20242b!important;border-bottom:1px solid #e5e7eb!important}
+ body.on-dashboard .qb-section.gold .qb-section-head{background:#fbf7e8!important}
+ body.on-dashboard .qb-section-body{flex:1;min-height:0;display:grid!important;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));align-items:center;align-content:center;gap:5px!important;padding:8px!important;box-shadow:none!important;border:0!important;border-radius:0!important}
+ body.on-dashboard .qb-nav-item{min-width:0;padding:5px 3px;gap:3px;border-radius:12px}
+ body.on-dashboard .qb-nav-item:hover{background:#f7f7f8;transform:translateY(-1px)}
+ body.on-dashboard .qb-icon{width:42px!important;height:42px!important;border-radius:13px!important;font-size:20px!important;box-shadow:0 3px 9px rgba(20,25,40,.12)}
+ body.on-dashboard .qb-nav-item .qb-label{font-size:10.5px!important;line-height:1.25;margin-top:3px!important}
+}
+@media(max-width:899px){#dashboardScreen{overflow-y:auto!important}.qb-layout{height:auto;min-height:100vh}.qb-main{overflow:visible}#globalSearchInput{min-height:54px;font-size:15px!important}}
+
 /* ---------- Dashboard ---------- */
 #dashboardScreen{padding:0;}
 .dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:8px;}
@@ -1077,7 +1102,7 @@ body.on-dashboard .badge-test{ display:block; }
       <button class="secondary" style="border-color:var(--minus); color:var(--minus);" onclick="logout()">خروج 🔒</button>
     </div>
     <div class="qb-main">
-      <div style="position:relative; margin-bottom:14px;">
+      <div class="qb-global-search" style="position:relative; margin-bottom:14px;">
         <input type="text" id="globalSearchInput" placeholder="🔍 دوّر على أي حاجة: رقم فاتورة، رقم تليفون عميل، اسم منتج..." style="width:100%; padding:14px 16px; border-radius:10px; border:1px solid #b9c9a0; background:#fff; color:#1a1a1a; font-size:14px;">
         <div id="globalSearchResults" style="position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid #b9c9a0; border-radius:10px; max-height:340px; overflow-y:auto; z-index:50; display:none;"></div>
       </div>
