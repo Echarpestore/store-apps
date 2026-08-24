@@ -1039,7 +1039,7 @@ window.renderGraceDay = function(){
     });
   }
 
-  function showSection(section, fromHistory){
+  function showSection(section){
     if(!sectionMeta[section]) section='overview';
     activeSection=section;
     const search = document.getElementById('salesAdminSearch');
@@ -1060,12 +1060,6 @@ window.renderGraceDay = function(){
     if(label) label.textContent = section==='overview' ? '' : `${sectionMeta[section].icon} ${sectionMeta[section].label} — ${sectionMeta[section].desc}`;
     const shown = panels.filter(p=>!p.classList.contains('sales-panel-hidden')).length;
     if(empty) empty.style.display = (section!=='overview' && !shown) ? 'block' : 'none';
-    if(!fromHistory && document.getElementById('admin') && document.getElementById('admin').classList.contains('show')){
-      try{
-        if(!history.state || history.state.salesNavV19!=='admin-section' || history.state.section!==section)
-          history.pushState(Object.assign({},history.state||{},{salesNavV19:'admin-section',section:section}),'',location.href);
-      }catch(e){}
-    }
     try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(e){ try{window.scrollTo(0,0);}catch(_){} }
   }
   window.showSalesAdminSection = showSection;
@@ -1126,112 +1120,176 @@ window.renderGraceDay = function(){
 
 
 
-// ==================== SALES BACK UX v19 ====================
-// Android/browser Back closes the current Sales layer first, then admin sections,
-// then Admin itself, then stays on the normal Sales home screen.
+/* ============================================================
+   📊 Online Sales Funnel Dashboard v20
+   Data source = customer_chat funnel metadata from customer app v42.
+   No extra listener: manual/on-open read, capped by fsChatApi.getFunnelConvs.
+   ============================================================ */
 (function(){
-  const KEY='salesNavV19';
-  let suppress=false;
-  const ids=['terminateConfirmOverlay','advanceOverlay','attPhotoOverlay','attPinOverlay',
-    'photoLightbox','leaveReqOverlay','dayHubOverlay','daySummaryOverlay','scannerOverlay',
-    'invoiceOverlay','attendance','leaderboard','branchSetup','regWizard','adminLoginGate','admin'];
-  const prev={};
+  var FR={view:1,chat:2,tryon:3,cart:4,checkout:5,order:6,collected:7};
+  var FLABEL={view:'شاهدت',chat:'شات',tryon:'Try-On',cart:'السلة',checkout:'Checkout',order:'أوردر',collected:'تم البيع'};
+  var _rows=[],_loadedAt=0,_days=30,_busy=false;
 
-  function shown(id){
-    const e=document.getElementById(id); if(!e) return false;
-    if(id==='admin' || id==='attendance' || id==='leaderboard' || id==='branchSetup' || id==='regWizard')
-      return e.classList.contains('show');
-    return e.classList.contains('show');
+  function escF(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
+  function pct(a,b){return b>0?Math.round((a/b)*100):0;}
+  function nfmt(n){return Number(n||0).toLocaleString('en-US');}
+  function money(n){return Math.round(Number(n)||0).toLocaleString('en-US')+' ج';}
+  function rank(x){return FR[String((x&&x.funnelStage)||'')]||0;}
+  function stageCount(stage){var r=FR[stage];return _rows.filter(function(x){return rank(x)>=r;}).length;}
+  function hot(x){var r=rank(x);return r>=3&&r<6;}
+  function overdue(x){return hot(x)&&Number(x.followUpDueAt)>0&&Number(x.followUpDueAt)<=Date.now();}
+  function age(ms){
+    var d=Math.max(0,Date.now()-Number(ms||0)),m=Math.floor(d/60000);
+    if(m<60)return m+' د';var h=Math.floor(m/60);if(h<24)return h+' س';return Math.floor(h/24)+' يوم';
   }
-  function push(kind,id){
-    if(suppress) return;
+  function ensureStyle(){
+    if(document.getElementById('salesFunnelStyle'))return;
+    var st=document.createElement('style');st.id='salesFunnelStyle';st.textContent=`
+      #salesFunnelDash .fd-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+      #salesFunnelDash .fd-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+      #salesFunnelDash .fd-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;margin-top:11px}
+      #salesFunnelDash .fd-kpi{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;min-width:0}
+      #salesFunnelDash .fd-kpi b{display:block;font-size:20px}#salesFunnelDash .fd-kpi span{font-size:9.8px;color:var(--sub)}
+      #salesFunnelDash .fd-bar{height:5px;background:#282a31;border-radius:99px;margin-top:6px;overflow:hidden}
+      #salesFunnelDash .fd-bar i{display:block;height:100%;background:var(--gold);border-radius:inherit}
+      #salesFunnelDash .fd-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:9px;margin-top:10px}
+      #salesFunnelDash .fd-card{background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:11px;min-width:0}
+      #salesFunnelDash .fd-title{font-weight:900;font-size:12.5px;margin-bottom:7px}
+      #salesFunnelDash table{width:100%;border-collapse:collapse;font-size:10.5px}
+      #salesFunnelDash th,#salesFunnelDash td{padding:7px 5px;border-bottom:1px solid var(--line);text-align:right}
+      #salesFunnelDash th{color:var(--sub);font-size:9.5px}
+      #salesFunnelDash .fd-lead{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+      #salesFunnelDash .fd-stage{display:inline-block;padding:3px 7px;border-radius:99px;background:#362d16;color:#f2cf69;font-size:9px;font-weight:900}
+      #salesFunnelDash .fd-danger{color:#ff9b8d;font-weight:900}
+      #salesFunnelDash .fd-good{color:#7de0a7;font-weight:900}
+      #salesFunnelDash .fd-empty{color:var(--sub);padding:14px;text-align:center}
+      @media(max-width:850px){#salesFunnelDash .fd-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#salesFunnelDash .fd-grid{grid-template-columns:1fr}}
+    `;
+    document.head.appendChild(st);
+  }
+  function ensurePanel(){
+    var admin=document.getElementById('admin');if(!admin)return null;
+    var p=document.getElementById('salesFunnelDash');
+    if(p)return p;
+    p=document.createElement('div');p.className='panel';p.id='salesFunnelDash';
+    p.innerHTML='<div class="fd-head"><div><h3 style="margin:0;">🛍️ Funnel البيع الأونلاين</h3>'
+      +'<div class="muted" style="font-size:10.5px;">من مشاهدة المنتج لحد الأوردر — مبني على منتجات البيع أونلاين</div></div>'
+      +'<div class="fd-actions"><select id="fdDays" class="f" style="min-width:110px;"><option value="7">7 أيام</option><option value="30" selected>30 يوم</option><option value="90">90 يوم</option></select>'
+      +'<button class="btn" id="fdRefresh" style="margin:0;">↻ تحديث</button></div></div>'
+      +'<div id="fdBody"><div class="fd-empty">افتح قسم الأداء لتحميل Funnel.</div></div>';
+    admin.appendChild(p);
+    var d=p.querySelector('#fdDays');if(d)d.onchange=function(){_days=Number(d.value)||30;load(true);};
+    var b=p.querySelector('#fdRefresh');if(b)b.onclick=function(){load(true);};
+    return p;
+  }
+  function productStats(){
+    var map={};
+    _rows.forEach(function(x){
+      var bc=String(x.funnelBarcode||'');if(!bc)return;
+      var k=bc,n=map[k]||(map[k]={barcode:bc,name:x.funnelProductName||bc,leads:0,orders:0,checkout:0,hot:0});
+      if(rank(x)>=3)n.leads++;if(rank(x)>=5)n.checkout++;if(rank(x)>=6)n.orders++;if(hot(x))n.hot++;
+    });
+    return Object.values(map).sort(function(a,b){return b.orders-a.orders||b.checkout-a.checkout||b.leads-a.leads;}).slice(0,8);
+  }
+  function ownerStats(){
+    var map={};
+    _rows.forEach(function(x){
+      var name=String(x.funnelOwnerName||'').trim();if(!name||rank(x)<3)return;
+      var o=map[name]||(map[name]={name:name,branch:x.funnelOwnerBranch||'',leads:0,orders:0,checkout:0});
+      o.leads++;if(rank(x)>=5)o.checkout++;if(rank(x)>=6)o.orders++;
+    });
+    return Object.values(map).sort(function(a,b){return pct(b.orders,b.leads)-pct(a.orders,a.leads)||b.orders-a.orders;});
+  }
+  function openLead(id){
     try{
-      const st=Object.assign({},history.state||{},{[KEY]:kind,id:id||''});
-      if(!history.state || history.state[KEY]!==kind || history.state.id!==st.id) history.pushState(st,'',location.href);
+      if(typeof window.ccOpenPanel==='function')window.ccOpenPanel();
+      setTimeout(function(){if(typeof window.ccOpenConv==='function')window.ccOpenConv(id);},80);
     }catch(e){}
   }
-  function closeVisible(id){
-    const click=(x)=>{ const b=document.getElementById(x); if(b){b.click();return true;} return false; };
-    if(id==='terminateConfirmOverlay') return click('terminateConfirmCancel');
-    if(id==='advanceOverlay') return click('advStep1Cancel') || click('advStep3Cancel');
-    if(id==='attPhotoOverlay') return typeof window.closeAttPhoto==='function' ? (window.closeAttPhoto(),true) : click('attPhotoCancel');
-    if(id==='attPinOverlay') return typeof window.closeAttPin==='function' ? (window.closeAttPin(),true) : click('attPinCancel');
-    if(id==='photoLightbox') return click('lightboxCloseBtn');
-    if(id==='leaveReqOverlay') return typeof window.closeLeaveReq==='function' ? (window.closeLeaveReq(),true) : false;
-    if(id==='dayHubOverlay') return typeof window.closeDayHub==='function' ? (window.closeDayHub(),true) : false;
-    if(id==='scannerOverlay') return typeof window.closeScanner==='function' ? (window.closeScanner(),true) : click('scannerCancelBtn');
-    if(id==='invoiceOverlay') return click('invoiceCancelBtn');
-    if(id==='attendance') return click('closeAttendance');
-    if(id==='leaderboard') return click('closeLeaderboard');
-    if(id==='regWizard') return typeof window.rwClose==='function' ? (window.rwClose(),true) : false;
-    if(id==='adminLoginGate') return click('adminLoginCancel');
-    const e=document.getElementById(id);
-    if(e){ e.classList.remove('show'); return true; }
-    return false;
-  }
-  function top(){
-    for(const id of ids){ if(id!=='admin' && shown(id)) return id; }
-    return shown('admin') ? 'admin' : '';
-  }
-  function homeAnchor(){
-    try{ history.replaceState(Object.assign({},history.state||{},{[KEY]:'home'}),'',location.href); }catch(e){}
-  }
+  window.salesFunnelOpenLead=openLead;
 
-  function init(){
-    homeAnchor();
-    const mo = (typeof MutationObserver==='function') ? new MutationObserver(function(){
-      ids.forEach(function(id){
-        const now=shown(id), was=!!prev[id];
-        if(now && !was){
-          if(id==='admin') push('admin','admin'); else push('layer',id);
-        }
-        prev[id]=now;
-      });
-    }) : null;
-    ids.forEach(function(id){
-      const e=document.getElementById(id);
-      prev[id]=shown(id);
-      if(e && mo) mo.observe(e,{attributes:true,attributeFilter:['class']});
-    });
+  function render(){
+    var host=document.getElementById('fdBody');if(!host)return;
+    var stages=['view','tryon','cart','checkout','order'];
+    var counts={};stages.forEach(function(k){counts[k]=stageCount(k);});
+    var max=Math.max(1,counts.view);
+    var lost=_rows.filter(overdue).sort(function(a,b){return Number(a.followUpDueAt)-Number(b.followUpDueAt);});
+    var active=_rows.filter(hot);
+    var products=productStats(),owners=ownerStats();
+    var kpis=stages.map(function(k){
+      var prev=k==='view'?counts.view:counts[stages[stages.indexOf(k)-1]];
+      return '<div class="fd-kpi"><b>'+nfmt(counts[k])+'</b><span>'+FLABEL[k]+'</span>'
+        +(k!=='view'?'<div style="font-size:9px;color:var(--sub);margin-top:2px;">'+pct(counts[k],prev)+'% من السابق</div>':'')
+        +'<div class="fd-bar"><i style="width:'+Math.max(3,Math.round(counts[k]/max*100))+'%"></i></div></div>';
+    }).join('');
+    kpis+='<div class="fd-kpi"><b class="'+(lost.length?'fd-danger':'fd-good')+'">'+nfmt(lost.length)+'</b><span>متابعة متأخرة</span>'
+      +'<div style="font-size:9px;color:var(--sub);margin-top:2px;">'+nfmt(active.length)+' فرصة نشطة</div></div>';
 
-    if(window.addEventListener) window.addEventListener('popstate',function(e){
-      suppress=true;
-      try{
-        const t=top();
-        if(t && t!=='admin'){ closeVisible(t); return; }
+    var lostHtml=lost.slice(0,10).map(function(x){
+      return '<div class="fd-lead"><div style="min-width:0;"><b>'+escF(x.name||x.phone||'عميلة')+'</b> <span class="fd-stage">'+escF(FLABEL[x.funnelStage]||x.funnelStage)+'</span>'
+        +'<div class="muted" style="font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escF(x.funnelProductName||'')+' · متأخرة '+age(x.followUpDueAt)+'</div></div>'
+        +'<button class="btn" style="margin:0;padding:6px 9px;font-size:10px;" data-fd-lead="'+escF(x.id)+'">افتح الشات</button></div>';
+    }).join('')||'<div class="fd-empty">مفيش Follow-up متأخر 👌</div>';
 
-        const admin=document.getElementById('admin');
-        if(admin && admin.classList.contains('show')){
-          const on=document.querySelector('[data-sales-section-btn].on');
-          const sec=on && on.dataset.salesSectionBtn;
-          if(sec && sec!=='overview' && typeof window.showSalesAdminSection==='function'){
-            window.showSalesAdminSection('overview',true);
-            return;
-          }
-          if(typeof window.lockAdmin==='function'){ window.lockAdmin(); return; }
-          admin.classList.remove('show'); return;
-        }
+    var prodHtml=products.map(function(x){
+      return '<tr><td>'+escF(x.name)+'</td><td>'+x.leads+'</td><td>'+x.checkout+'</td><td>'+x.orders+'</td><td>'+pct(x.orders,x.leads)+'%</td></tr>';
+    }).join('')||'<tr><td colspan="5" class="fd-empty">لسه مفيش بيانات منتجات كفاية</td></tr>';
 
-        const st=(e&&e.state)||{};
-        if(st[KEY]==='admin-section' && st.section && typeof window.showSalesAdminSection==='function'){
-          const a=document.getElementById('admin');
-          if(a) a.classList.add('show');
-          window.showSalesAdminSection(st.section,true);
-          return;
-        }
-        if(st[KEY]==='admin'){
-          const a=document.getElementById('admin');
-          if(a) a.classList.add('show');
-          if(typeof window.showSalesAdminSection==='function') window.showSalesAdminSection('overview',true);
-          return;
-        }
+    var ownerHtml=owners.map(function(x){
+      return '<tr><td>'+escF(x.name)+(x.branch?'<div class="muted" style="font-size:8.5px;">'+escF(x.branch)+'</div>':'')+'</td><td>'+x.leads+'</td><td>'+x.orders+'</td><td>'+pct(x.orders,x.leads)+'%</td></tr>';
+    }).join('')||'<tr><td colspan="4" class="fd-empty">التحويلات الجديدة هتبدأ تتنسب للموظفة اللي بتتعامل مع الـLead.</td></tr>';
 
-        // Stack exhausted: stay on normal Sales home instead of exiting unexpectedly.
-        homeAnchor();
-        try{ window.scrollTo(0,0); }catch(_){}
-      }finally{ setTimeout(function(){suppress=false;},0); }
+    host.innerHTML='<div class="fd-kpis">'+kpis+'</div>'
+      +'<div style="margin-top:8px;font-size:10px;color:var(--sub);">Conversion مشاهدة → أوردر: <b style="color:var(--ink);">'+pct(counts.order,counts.view)+'%</b>'
+      +' · Try-On → أوردر: <b style="color:var(--ink);">'+pct(counts.order,counts.tryon)+'%</b>'
+      +' · آخر تحديث: '+new Date(_loadedAt).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</div>'
+      +'<div class="fd-grid"><div class="fd-card"><div class="fd-title">🔥 محتاج متابعة دلوقتي</div>'+lostHtml+'</div>'
+      +'<div class="fd-card"><div class="fd-title">🏆 منتجات بتحوّل لبيع</div><table><thead><tr><th>المنتج</th><th>Leads</th><th>Checkout</th><th>Orders</th><th>Conv.</th></tr></thead><tbody>'+prodHtml+'</tbody></table></div></div>'
+      +'<div class="fd-card" style="margin-top:9px;"><div class="fd-title">👩‍💼 تحويل الشات لطلب حسب آخر موظفة تعاملت مع الفرصة</div>'
+      +'<table><thead><tr><th>الموظفة</th><th>Leads تعاملت معها</th><th>Orders</th><th>Conversion</th></tr></thead><tbody>'+ownerHtml+'</tbody></table></div>';
+    host.querySelectorAll('[data-fd-lead]').forEach(function(b){
+      b.addEventListener('click',function(){openLead(b.getAttribute('data-fd-lead'));});
     });
   }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
-  else init();
+  function load(force){
+    var p=ensurePanel();if(!p||_busy)return Promise.resolve(false);
+    if(!force&&_loadedAt&&Date.now()-_loadedAt<120000){render();return Promise.resolve(true);}
+    var host=document.getElementById('fdBody');if(host)host.innerHTML='<div class="fd-empty">بيحمّل Funnel…</div>';
+    if(!window.fsChatApi||typeof window.fsChatApi.getFunnelConvs!=='function'){
+      if(host)host.innerHTML='<div class="fd-empty">الشات لسه ماجهزش — جرّب تحديث بعد ثواني.</div>';
+      return Promise.resolve(false);
+    }
+    _busy=true;
+    return window.fsChatApi.getFunnelConvs('customer_chat',Date.now()-_days*86400000).then(function(rows){
+      _rows=Array.isArray(rows)?rows:[];_loadedAt=Date.now();render();return true;
+    }).catch(function(e){
+      if(host)host.innerHTML='<div class="fd-empty">تعذر تحميل Funnel. '+escF(e&&e.code||'')+'</div>';return false;
+    }).then(function(x){_busy=false;return x;});
+  }
+  window.salesFunnelLoad=load;
+
+  function boot(){
+    ensureStyle();var p=ensurePanel();if(!p)return;
+    p.dataset.salesSection='performance';p.dataset.salesTitle='Funnel البيع الأونلاين';
+    // Control Center الأساسي يكون خلص init قبل البلوك ده، فابدأ مخفي على الرئيسية.
+    p.classList.add('sales-panel-hidden');
+    document.addEventListener('click',function(e){
+      var b=e.target&&e.target.closest&&e.target.closest('[data-sales-section-btn="performance"],[data-go-sales-section="performance"]');
+      if(b)setTimeout(function(){load(false);},80);
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+
+  // Hook section navigation without replacing its current behavior.
+  var tries=0,t=setInterval(function(){
+    tries++;if(typeof window.showSalesAdminSection==='function'){
+      clearInterval(t);
+      var old=window.showSalesAdminSection;
+      window.showSalesAdminSection=function(section,fromHistory){
+        var r=old(section,fromHistory);
+        if(section==='performance')setTimeout(function(){load(false);},50);
+        return r;
+      };
+    }else if(tries>40)clearInterval(t);
+  },100);
 })();
