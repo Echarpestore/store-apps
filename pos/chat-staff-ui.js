@@ -20,7 +20,7 @@
   var CST = {
     open: false, activeId: null,
     convs: [], convUnsub: null, msgsUnsub: null,
-    filterMine: true, imgData: null, blockArm: 0,
+    filterMine: true, funnelOnly: false, imgData: null, blockArm: 0,
     sending: false,
     // 🧢 بندانة — ألوان مختارة بالترتيب (الترتيب = ترتيب الخانات في
     // الشبكة بعدين، فلازم نحافظ عليه) + نتيجة معاينة باركودها.
@@ -425,7 +425,8 @@
       + '<div id="ccSub" style="font-size:11px; color:#9aa1af;"></div></div>'
       + '<div class="ccFilter" id="ccFilterBox">'
       + '<button id="ccFMine" class="on" onclick="ccFilter(true)">فرعي</button>'
-      + '<button id="ccFAll" onclick="ccFilter(false)">الكل</button></div>'
+      + '<button id="ccFAll" onclick="ccFilter(false)">الكل</button>'
+      + '<button id="ccFLead" onclick="ccFunnelFilter()">🔥 فرص البيع</button></div>'
       + '<button id="ccBlock" style="display:none;" onclick="ccBlockToggle()">⛔ حظر</button>'
       + '<button class="ccWide" id="ccWideBtn" onclick="ccWideToggle()" title="كبّر/صغّر">⛶</button>'
       + '</div>'
@@ -481,11 +482,22 @@
     }catch(e){ console.warn('cc listen', e); }
   }
 
+  var CC_FUNNEL_RANK={view:1,chat:2,tryon:3,cart:4,checkout:5,order:6,collected:7};
+  function ccFunnelHot(c){var r=CC_FUNNEL_RANK[String((c&&c.funnelStage)||'')]||0;return r>=3&&r<6;}
   function visibleConvs(){
-    return CST.convs.filter(function(c){
-      if(!CST.filterMine) return true;
-      return !c.branch || c.branch === myBranch();
+    var now=Date.now();
+    var out=CST.convs.filter(function(c){
+      if(CST.filterMine&&c.branch&&c.branch!==myBranch())return false;
+      if(CST.funnelOnly&&!ccFunnelHot(c))return false;
+      return true;
     });
+    out.sort(function(a,b){
+      var ah=ccFunnelHot(a),bh=ccFunnelHot(b),ad=Number(a.followUpDueAt)||0,bd=Number(b.followUpDueAt)||0;
+      var ao=ah&&ad&&ad<=now,bo=bh&&bd&&bd<=now;
+      if(ao!==bo)return ao?-1:1;if(ah!==bh)return ah?-1:1;
+      return(Number(b.lastAt)||0)-(Number(a.lastAt)||0);
+    });
+    return out;
   }
 
   function renderBadge(){
@@ -530,6 +542,10 @@
         + '<div class="ci"><div class="cn">' + esc2(c.name || c.phone || c.id) + ' ' + brand
         + (c.blocked === true ? ' <span class="ccChip" style="background:#3a2222;color:#E5484D;">محظورة</span>' : '')
         + (c.branch ? ' <span style="font-size:10.5px;color:#6f7683;">📍' + esc2(c.branch) + '</span>' : '')
+        + (c.funnelStage==='tryon'?' <span class="ccChip">🧕 جرّبت</span>':'')
+        + (c.funnelStage==='cart'?' <span class="ccChip">🛒 سلة</span>':'')
+        + (c.funnelStage==='checkout'?' <span class="ccChip">🔥 إتمام الطلب</span>':'')
+        + (c.funnelStage==='order'?' <span class="ccChip">✅ أوردر</span>':'')
         + '</div>'
         + '<div class="cl">' + esc2(c.lastText || '') + ' ' + waitTxt + '</div></div>'
         + '<div class="ct">' + t
@@ -573,8 +589,9 @@
     var c = conv(); if(!c) return;
     document.getElementById('ccTitle').textContent =
       (c.name || c.phone || c.id) + (c.brand === 'glow' ? ' · Glow' : '');
-    document.getElementById('ccSub').textContent =
-      (c.phone || '') + (c.branch ? ' · 📍' + c.branch : '');
+    var _fs={tryon:'🧕 جرّبت منتج',cart:'🛒 أضافت للسلة',checkout:'🔥 وصلت لإتمام الطلب',order:'✅ عملت أوردر'};
+    document.getElementById('ccSub').textContent=(c.phone||'')+(c.branch?' · 📍'+c.branch:'')
+      +(_fs[c.funnelStage]?' · '+_fs[c.funnelStage]:'')+(c.funnelProductName?' · '+c.funnelProductName:'');
     var bb = document.getElementById('ccBlock');
     bb.style.display = 'inline-block';
     bb.textContent = c.blocked === true ? '✅ فك الحظر' : '⛔ حظر';
@@ -1158,6 +1175,12 @@
   else setTimeout(boot, 400);
 
   // §18
+  function ccFunnelFilter(){
+    CST.funnelOnly=!CST.funnelOnly;
+    var b=document.getElementById('ccFLead');if(b)b.classList.toggle('on',CST.funnelOnly);
+    if(CST.open&&!CST.activeId)renderList();
+  }
+  window.ccFunnelFilter=ccFunnelFilter;
   window.ccOpenConv = ccOpenConv;
   window.ccBack = ccBack;
   window.ccFilter = ccFilter;

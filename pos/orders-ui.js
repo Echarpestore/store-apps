@@ -292,7 +292,7 @@ function ordDeliver(id){
   if(ci){ ci.textContent = '🛍️ أوردر أونلاين #' + (o.code || '') + ' — ' + (o.name || ''); }
   try{ if(o.phone && typeof refreshCustomerInfo === 'function') refreshCustomerInfo(); }catch(e){}
 
-  _ordDelivering = { id: o.id, code: o.code || '' };
+  _ordDelivering = {id:o.id,code:o.code||'',funnelSource:o.funnelSource||o.source||'',funnelEntryBarcode:o.funnelEntryBarcode||'',phone:o.phone||''};
   window._ordDelivering = _ordDelivering;
 
   try{ renderCart(); }catch(e){}
