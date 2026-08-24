@@ -1,0 +1,24 @@
+'use strict';
+const fs=require('fs'),assert=require('assert');
+const h=fs.readFileSync('sales/index.html','utf8');
+const u=fs.readFileSync('sales/sales-ui.js','utf8');
+const sw=fs.readFileSync('sales/sw.js','utf8');
+
+assert(h.includes('id="salesAdminUx"'),'admin UX host موجود');
+assert(h.includes('id="salesAdminSummary"'),'admin summary موجود');
+assert(h.includes('Sales Admin v17'),'premium admin CSS موجود');
+assert(u.includes("overview:   {label:'الرئيسية'"),'الرئيسية موجودة');
+assert(u.includes("team:       {label:'الفريق'"),'قسم الفريق موجود');
+assert(u.includes("approvals:  {label:'الموافقات'"),'قسم الموافقات موجود');
+assert(u.includes("payroll:    {label:'الرواتب'"),'قسم الرواتب موجود');
+assert(u.includes("performance:{label:'الأداء'"),'قسم الأداء موجود');
+assert(u.includes("settings:   {label:'الإعدادات'"),'قسم الإعدادات موجود');
+assert(u.includes('salesAdminSearch'),'بحث إداري موجود');
+assert(u.includes('salesAdminJump'),'انتقال مباشر موجود');
+assert(u.includes("showSection('overview')"),'الأدمن بيفتح على الرئيسية');
+assert(u.includes("data-go-sales-section=\"approvals\""),'quick actions للموافقات');
+assert(h.includes('sales-app.js?v=17') && h.includes('sales-ui.js?v=17'),'cache bust للملفات المعدلة');
+assert(sw.includes("const CACHE_NAME = 'store-apps-shell-v117-sales'"),'Sales cache له namespace مستقل');
+assert(sw.includes("n.endsWith(SALES_CACHE_SUFFIX)"),'SW يمسح كاش Sales فقط');
+assert(!sw.includes("names.filter((n) => n !== CACHE_NAME)"),'مفيش حذف عام لكاشات باقي البرامج');
+console.log('sales admin UX v17: PASS');
