@@ -305,8 +305,9 @@
   function productSig(productDataUrl) {
     return faceSig(productDataUrl);
   }
+  var RESULT_CACHE_SCHEMA = "v62-grid4";
   function cacheKey(productId, faceDataUrl, colors, productDataUrl) {
-    return String(productId || "") + "|" + productSig(productDataUrl) + "|" +
+    return RESULT_CACHE_SCHEMA + "|" + String(productId || "") + "|" + productSig(productDataUrl) + "|" +
       faceSig(faceDataUrl) + "|" + colorsSig(colors);
   }
 

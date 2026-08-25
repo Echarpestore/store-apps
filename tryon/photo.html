@@ -235,7 +235,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="./photo-core.js?v=61"></script>
+<script src="./photo-core.js?v=62"></script>
 <script>
 "use strict";
 (function(){
@@ -369,11 +369,18 @@
   }
 
   function cropFromGrid(imgEl, whichIndex){
-    var n = gridCells.length;
-    var layout = PC.computeGridLayout(n);
+    /* v62 — Cloud Function hijabTryOn بتولّد شبكة ثابتة 2x2 = 4 خانات
+       دايمًا عند وجود بندانة: none + 3 ألوان. لو الموظفة اختارت لون
+       أو لونين فقط، السيرفر يكمّل الخانات بألوان fallback.
+       الباج القديم كان بيقص حسب عدد الأزرار الظاهرة (2 أو 3 خانات)،
+       فيتعامل مع صورة 2x2 كأنها 2x1/3x1 ويعرض أجزاء من كذا خانة جنب
+       بعض — بالضبط شكل السكرين شوت. الأزرار تفضل للألوان المطلوبة فقط،
+       لكن هندسة القص لازم تطابق خرج السيرفر الحقيقي: 4 خانات ثابتة. */
+    var SERVER_GRID_CELLS = 4;
+    var layout = PC.computeGridLayout(SERVER_GRID_CELLS);
     var cells = PC.sliceGridProportional(
       imgEl.naturalWidth, imgEl.naturalHeight,
-      layout.cols, layout.rows, n, 0.015
+      layout.cols, layout.rows, SERVER_GRID_CELLS, 0.015
     );
     return cells[whichIndex] ? cropCell(imgEl, cells[whichIndex]) : "";
   }
