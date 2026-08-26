@@ -1221,17 +1221,29 @@ function shLinkRatings(sales, entries, branch){
 }
 if(typeof window !== 'undefined') window.shLinkRatings = shLinkRatings;
 
+// 🗂️ v359: سجل المبيعات لازم يكون **سجل كامل**، مش snapshot محدود.
+// التقارير كانت بالفعل بتدعم createdAtMs عشان فواتير الأوفلاين/serverTimestamp،
+// لكن السجل كان عامل orderBy(createdAt)+limit(500). أي فاتورة createdAt بتاعها
+// لسه null/غير متاح كانت تقع من السجل بينما التقرير يشوفها — فالأرقام تختلف.
+// هنا نقرأ كل فواتير الفرع (query واحد بسيط، من غير composite index ولا limit)،
+// وبعدها نرتب محليًا بـ saleTs = createdAt أو createdAtMs.
+async function loadLiveSalesHistorySales(){
+  const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
+  return snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=> (_shTsOf(b)||0) - (_shTsOf(a)||0));
+}
+if(typeof window !== 'undefined') window.loadLiveSalesHistorySales = loadLiveSalesHistorySales;
+
 async function renderLiveSalesHistory(){
   const wrap = document.getElementById('salesHistoryWrap');
   wrap.innerHTML = 'بيتحمّل...';
-  const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch)
-    .orderBy('createdAt','desc').limit(500).get()
-    .catch(async ()=> db.collection(TEST_SALES).where('branch','==', currentBranch).limit(500).get());
-  const sales = snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>{
-    const at = a.createdAt && a.createdAt.toMillis ? a.createdAt.toMillis() : 0;
-    const bt = b.createdAt && b.createdAt.toMillis ? b.createdAt.toMillis() : 0;
-    return bt - at;
-  });
+  let sales = [];
+  try{
+    sales = await loadLiveSalesHistorySales();
+  }catch(e){
+    console.warn('sales history load failed', e);
+    wrap.innerHTML = '<div class="empty-cart">تعذر تحميل سجل المبيعات — جرّب تحديث الصفحة. مفيش بيانات اتشالت.</div>';
+    return;
+  }
   if(sales.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش مبيعات مسجلة</div>'; return; }
   window._shSalesById = {}; sales.forEach(x=>{ window._shSalesById[x.id] = x; });
 
@@ -1903,18 +1915,10 @@ function dcRecalc(){
 }
 
 // لما يدوس OK: يحسب الأوفر/العجز ويحفظ سجل التقفيل
-async function dcFinish(){
-  // 🔐 قبل التقفيل لازم كل كتابة صدرت من الجهاز توصل للسيرفر فعلًا.
-  // لو النت قاطع أو فيه pending writes بنوقف التقفيل — مفيش override يخبي فاتورة معلقة.
-  const sync = await posRequireSynced('تقفيل اليوم', { timeoutMs:15000 });
-  if(!sync.ok) return;
+function dcFinish(){
+  // 📴 تقفيل والنت قاطع = أرقام ناقصة محتملة (فواتير أجهزة تانية مش واصلة) — تأكيد إجباري
   if(dcData && dcData.fromCache){
-    showToast('📴 بيانات التقفيل لسه من الكاش. حدّث الشاشة بعد رجوع النت وبعدين اقفل اليوم.', 'err');
-    return;
-  }
-  if(dcData && Number(dcData.pendingCount||0) > 0){
-    showToast('⏳ فيه فواتير معلقة في بيانات التقفيل. حدّث التقفيل بعد اكتمال المزامنة.', 'err');
-    return;
+    if(!confirm('📴 النت قاطع والأرقام من الكاش المحلي — فواتير الأجهزة التانية ممكن تكون ناقصة.\nالأفضل تستنى النت يرجع. متأكد إنك عايز تقفل دلوقتي؟')) return;
   }
   const denoms = [200,100,50,20,10,5];
   let counted = 0; denoms.forEach(d=> counted += dcNum('dc_den_'+d) * d);

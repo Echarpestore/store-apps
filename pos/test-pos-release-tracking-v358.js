@@ -1,0 +1,14 @@
+const fs=require('fs'),assert=require('assert');
+const sw=fs.readFileSync(__dirname+'/../pos/sw.js','utf8');
+const core=fs.readFileSync(__dirname+'/../pos/pos-core.js','utf8');
+const html=fs.readFileSync(__dirname+'/../pos/index.html','utf8');
+const m=sw.match(/const CACHE_NAME = 'store-apps-shell-v(\d+)'/);
+assert(m && Number(m[1])>=358,'SW release tracking version must never move backwards');
+assert(sw.includes("event.data.type === 'GET_VERSION'") && sw.includes("type: 'POS_VERSION'"),'SW must report its active version');
+assert(html.includes('id="versionBadge"'),'visible version badge must exist');
+assert(core.includes("document.getElementById('versionBadge')"),'device tracking must read the real badge id');
+assert(!core.includes("document.getElementById('verBadge')"),'stale/wrong verBadge id must be gone');
+assert(core.includes("function posVersionNumber(v)") && core.includes("posVersionNumber(a)-posVersionNumber(b)"),'version comparison must be numeric');
+assert(core.includes("if(!v){ requestActivePosVersion(); return; }"),'must not upload blank version');
+assert(core.includes("type:'GET_VERSION'") && core.includes("type==='POS_VERSION'"),'page must query active SW version');
+console.log('PASS test-pos-release-tracking-v358+');
