@@ -490,10 +490,27 @@
       </div>
       <div id="qgStatus" class="muted" style="font-size:11px;margin-top:7px;"></div>
       <div style="display:flex;gap:7px;margin-top:9px;align-items:center;flex-wrap:wrap;">
-        <button class="btn" id="qgVoiceBtn" type="button" style="margin:0;">🎙️ تسجيل بالصوت</button>
-        <span class="muted" style="font-size:10.5px;">اتكلم بطبيعتك: «اشتريت من أحمد بضاعة بـ٢٣ ألف ودفعت ١٠ آلاف» — مش بيتسجل أي شيء قبل التأكيد</span>
+        <button class="btn gold" id="qgVoiceBtn" type="button" style="margin:0;min-width:155px;">🎙️ ابدأ تسجيل</button>
+        <span class="muted" style="font-size:10.5px;flex:1;min-width:190px;">قولها بطبيعتك: «اشتريت من أحمد بـ٢٣ ألف ودفعت ١٠ آلاف». لو أحمد مش متسجل، النظام يقدر يقترح إضافته كتاجر جديد بعد مراجعتك.</span>
       </div>
-      <div id="qgVoiceStatus" class="muted" style="font-size:11px;margin-top:7px;"></div>
+      <div id="qgVoiceLive" style="margin-top:9px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:10px 11px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span id="qgMicDot" style="width:10px;height:10px;border-radius:50%;background:#94a3b8;display:inline-block;"></span>
+            <b id="qgVoiceStateTitle" style="font-size:12px;">المايك جاهز</b>
+          </div>
+          <span id="qgMicPermission" class="muted" style="font-size:10.5px;">صلاحية المايك: بنفحص…</span>
+        </div>
+        <div id="qgVoiceStatus" style="font-size:11.5px;margin-top:6px;line-height:1.7;">اضغط «ابدأ تسجيل» واتكلم. مش هيتحفظ أي مبلغ قبل المراجعة والتأكيد.</div>
+        <div id="qgVoiceLiveText" style="display:none;margin-top:7px;background:#fff;border-radius:10px;padding:8px;font-size:12px;font-weight:700;word-break:break-word;"></div>
+        <div style="display:flex;gap:7px;margin-top:8px;">
+          <button class="ghost danger" id="qgVoiceCancelBtn" type="button" style="display:none;margin:0;padding:7px 12px;">✕ إلغاء التسجيل</button>
+          <button class="ghost" id="qgVoiceAgainBtn" type="button" style="display:none;margin:0;padding:7px 12px;">↻ أقولها تاني</button>
+        </div>
+      </div>
+      <div id="qgAiHint" style="margin-top:8px;background:#fffbeb;border:1px solid #fde68a;border-radius:11px;padding:8px 10px;font-size:11px;line-height:1.7;">
+        <b>🧠 سريع وآمن:</b> الكلام الواضح بيتفهم محليًا فورًا، والـAI بيتدخل بس لو محتاجين نفهم الاسم أو الجملة. هتشوف <b>التاجر + الفاتورة + المدفوع + الحساب قبل وبعد</b> قبل الحفظ.
+      </div>
     </div>
 
     <div class="panel">
@@ -653,6 +670,6 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js"></script>
-<script src="office.js?v=71"></script>
+<script src="office.js?v=73"></script>
 </body>
 </html>
