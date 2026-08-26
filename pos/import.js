@@ -267,8 +267,8 @@ function renderImportMapping(){
     <button onclick="runBranchCatalogReplaceFlow()" style="width:100%; padding:14px; border-radius:10px; border:2px solid var(--accent); background:var(--accent); color:#111; font-weight:900; cursor:pointer;">⬆️ حدّث/أضف الملف على فرع ${'' + (typeof currentBranch !== 'undefined' ? currentBranch : '')}</button>
     <div style="font-size:11px; color:var(--muted); margin-top:5px; padding:0 2px; line-height:1.7;">
       الملف يحدّث الأصناف الموجودة ويضيف الجديدة فقط. <b>أي صنف موجود في الفرع ومش موجود في الملف يفضل زي ما هو.</b>
-      <b>كمية الملف لا تُستخدم نهائيًا</b> — الموجود يحتفظ بكمية السيستم الحالية، والجديد يبدأ صفر.
-      <b>ولا أي فرع تاني بيتغير.</b>
+      <b>لو الفرع جديد ولسه مفيش عليه بيع/استلام/رصيد افتتاحي</b>، أول استيراد يستخدم كمية الملف كرصد افتتاحي تلقائيًا.
+      بعد أول تشغيل فعلي، كمية الملف تتجاهل ويحتفظ السيستم بكمياته الحالية. <b>ولا أي فرع تاني بيتغير.</b>
     </div>
     <details style="margin-top:8px; color:var(--muted); font-size:11px;"><summary style="cursor:pointer;">أدوات استيراد قديمة/متقدمة</summary>
       <button onclick="runImport()" style="width:100%; padding:10px; border-radius:9px; border:1px solid var(--border); background:transparent; color:var(--muted); font-weight:700; cursor:pointer; margin-top:7px;">تحديث الأصناف فقط بدون استبدال كامل</button>
@@ -748,7 +748,9 @@ function _branchReplaceCleanup(it, branch, keeperId, knownBranches){
   };
 }
 
-function planBranchCatalogReplace(items, rows, mapping, branch, allBranchList){
+function planBranchCatalogReplace(items, rows, mapping, branch, allBranchList, options){
+  options = options || {};
+  const useFileQty = !!options.useFileQty;
   items = items || []; rows = rows || []; mapping = mapping || {};
   const errors = [];
   if(!mapping.name) errors.push('لازم تحدد عمود اسم الصنف');
@@ -792,15 +794,20 @@ function planBranchCatalogReplace(items, rows, mapping, branch, allBranchList){
   const fileCodes = Object.keys(fileByCode);
   const stats = {
     fileItems:fileCodes.length, invalidRows:invalidRows, keptQty:0, newItems:0,
-    updatedItems:0, duplicatesClosed:0, removedMissing:0, untouchedExisting:0, detachedOtherBranches:0
+    updatedItems:0, duplicatesClosed:0, removedMissing:0, untouchedExisting:0, detachedOtherBranches:0,
+    usedFileQty:useFileQty, openingQtyTotal:0
   };
 
   fileCodes.forEach(function(code){
     const group = byCode[code] || [];
-    const branchQty = group.reduce(function(n,it){
+    const systemBranchQty = group.reduce(function(n,it){
       return n + (Number(((it || {}).qtyByBranch || {})[branch]) || 0);
     }, 0);
+    const row = fileByCode[code];
+    const fileQty = mapping.quantity ? Math.max(0, parseInt(row[mapping.quantity]) || 0) : 0;
+    const branchQty = useFileQty ? fileQty : systemBranchQty;
     stats.keptQty += branchQty;
+    if(useFileQty) stats.openingQtyTotal += branchQty;
 
     // ممنوع نختار مستند مشترك كـkeeper لأن تغيير الاسم/السعر عليه هيغيّر فرع تاني.
     const candidates = allByCode[code] || [];
@@ -813,7 +820,6 @@ function planBranchCatalogReplace(items, rows, mapping, branch, allBranchList){
 
     const oldQtyMap = safeExisting ? Object.assign({}, safeExisting.qtyByBranch || {}) : {};
     oldQtyMap[branch] = branchQty; // ⭐ الكمية من السيستم الحالي فقط — لا قراءة لكمية الملف.
-    const row = fileByCode[code];
     const data = {
       name: String(row[mapping.name] || '').trim(),
       barcode: code,
@@ -824,6 +830,8 @@ function planBranchCatalogReplace(items, rows, mapping, branch, allBranchList){
       department: mapping.department ? (row[mapping.department] || '') : '',
       status: 'active', importedFrom: 'quickbooks',
       branches: [branch], qtyByBranch: oldQtyMap,
+      openingStockImportedBranch: useFileQty ? branch : (safeExisting && safeExisting.openingStockImportedBranch || ''),
+      openingStockImportedAtMs: useFileQty ? Date.now() : (safeExisting && safeExisting.openingStockImportedAtMs || 0),
       updatedAt: new Date()
     };
     keeperWrites.push({ id:keeperId, data:data, code:code, existing:!!safeExisting });
@@ -864,11 +872,35 @@ function planBranchCatalogReplace(items, rows, mapping, branch, allBranchList){
 }
 if(typeof window !== 'undefined') window.planBranchCatalogReplace = planBranchCatalogReplace;
 
-async function runBranchCatalogReplace(rows, mapping, branch, allBranchList, onProgress){
+async function detectInitialBranchSetup(branch){
+  const result = { pristine:false, hasSales:false, hasStockMoves:false, hasQty:false, alreadyInitialized:false };
+  const invSnap = await db.collection(TEST_INVENTORY).get();
+  const items = invSnap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()||{}); });
+  result.hasQty = items.some(function(it){ return Number(((it||{}).qtyByBranch||{})[branch]) !== 0; });
+  result.alreadyInitialized = items.some(function(it){ return it && it.openingStockImportedBranch === branch; });
+  try{
+    const s = await db.collection(TEST_SALES).where('branch','==',branch).limit(1).get();
+    result.hasSales = !!(s && !s.empty);
+  }catch(e){ result.hasSales = true; }
+  try{
+    const l = await db.collection(TEST_STOCK_LOG).where('branch','==',branch).limit(1).get();
+    result.hasStockMoves = !!(l && !l.empty);
+  }catch(e){ result.hasStockMoves = true; }
+  result.pristine = !result.hasSales && !result.hasStockMoves && !result.hasQty && !result.alreadyInitialized;
+  return result;
+}
+if(typeof window !== 'undefined') window.detectInitialBranchSetup = detectInitialBranchSetup;
+
+async function runBranchCatalogReplace(rows, mapping, branch, allBranchList, onProgress, options){
   // نقرأ Firestore مباشرة لحظة التنفيذ — مش allInventory الكاش — عشان نحافظ على أحدث كمية فعلية.
+  options = options || {};
+  if(options.useFileQty){
+    const freshState = await detectInitialBranchSetup(branch);
+    if(!freshState.pristine) throw new Error('الفرع بدأ عليه حركة فعلية بالفعل — مش آمن ناخد كمية الملف كرصد افتتاحي.');
+  }
   const snap = await db.collection(TEST_INVENTORY).get();
   const items = snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data() || {}); });
-  const plan = planBranchCatalogReplace(items, rows, mapping, branch, allBranchList);
+  const plan = planBranchCatalogReplace(items, rows, mapping, branch, allBranchList, options);
   if(!plan.ok) throw new Error(plan.errors.join('\n'));
 
   const FV = firebase.firestore.FieldValue;
@@ -894,7 +926,11 @@ async function runBranchCatalogReplace(rows, mapping, branch, allBranchList, onP
   if(typeof _logActivity === 'function') _logActivity('inventory_branch_catalog_replace', {
     branch:branch, fileItems:plan.stats.fileItems, newItems:plan.stats.newItems,
     updatedItems:plan.stats.updatedItems, duplicatesClosed:plan.stats.duplicatesClosed,
-    removedMissing:plan.stats.removedMissing, detachedOtherBranches:plan.stats.detachedOtherBranches
+    removedMissing:plan.stats.removedMissing, detachedOtherBranches:plan.stats.detachedOtherBranches,
+    usedFileQty:plan.stats.usedFileQty, openingQtyTotal:plan.stats.openingQtyTotal
+  });
+  if(plan.stats.usedFileQty && typeof _logActivity === 'function') _logActivity('inventory_opening_stock_import', {
+    branch:branch, items:plan.stats.fileItems, openingQtyTotal:plan.stats.openingQtyTotal
   });
   return plan.stats;
 }
@@ -914,8 +950,16 @@ async function runBranchCatalogReplaceFlow(){
   let branchList = [];
   try{ branchList = JSON.parse(localStorage.getItem('pos_branch_list') || '[]'); }catch(e){}
 
+  let setupState;
+  try{ setupState = await detectInitialBranchSetup(currentBranch); }
+  catch(e){ setupState = {pristine:false}; }
+  const useFileQty = !!(setupState.pristine && mapping.quantity);
+  if(setupState.pristine && !mapping.quantity){
+    showToast('الفرع جديد — حدد عمود الكمية عشان نعمل الرصيد الافتتاحي', 'err'); return;
+  }
+
   // Dry-run من الكاش للمعاينة فقط. التنفيذ نفسه يعيد القراءة من Firestore.
-  const preview = planBranchCatalogReplace(allInventory || [], importParsedRows, mapping, currentBranch, branchList);
+  const preview = planBranchCatalogReplace(allInventory || [], importParsedRows, mapping, currentBranch, branchList, {useFileQty:useFileQty});
   if(!preview.ok){
     await askConfirm({ waitSec:0, okText:'تمام', cancelText:'إغلاق', title:'الملف محتاج يتظبط', message:preview.errors.join('\n') });
     return;
@@ -927,10 +971,12 @@ async function runBranchCatalogReplaceFlow(){
       'هنحدّث ونضيف الأصناف الموجودة في الملف داخل ' + currentBranch + ' فقط.\n\n'
       + '📄 أصناف الملف: ' + preview.stats.fileItems + '\n'
       + '🔁 أصناف موجودة هيتحدث اسمها/سعرها: ' + preview.stats.updatedItems + '\n'
-      + '➕ أصناف جديدة: ' + preview.stats.newItems + ' (هتبدأ بكمية 0)\n'
+      + '➕ أصناف جديدة: ' + preview.stats.newItems + (useFileQty ? ' (هتاخد كمية الملف)' : ' (هتبدأ بكمية 0)') + '\n'
       + '🧹 نسخ مكررة لنفس أكواد الملف هتتوحد: ' + preview.stats.duplicatesClosed + '\n'
       + '✅ أصناف موجودة في الفرع ومش في الملف هتفضل زي ما هي: ' + preview.stats.untouchedExisting + '\n\n'
-      + '⭐ عمود الكمية في الملف بيتجاهل بالكامل. الموجود يحتفظ بكمية السيستم الحالية، والجديد يبدأ صفر.\n'
+      + (useFileQty
+          ? '🆕 الفرع جديد: كمية الملف هتتسجل كرصد افتتاحي بإجمالي ' + preview.stats.openingQtyTotal + ' قطعة.\n'
+          : '⭐ الفرع مستخدم بالفعل: عمود الكمية في الملف بيتجاهل، والسيستم يحتفظ بكمياته الحالية.\n')
       + '🏬 أي فرع تاني لا الاسم ولا السعر ولا الكمية عنده هيتغيروا.\n'
       + '🛡️ مفيش حذف للأصناف اللي مش موجودة في الملف.'
   });
@@ -941,10 +987,11 @@ async function runBranchCatalogReplaceFlow(){
   try{
     const stats = await runBranchCatalogReplace(importParsedRows, mapping, currentBranch, branchList, function(n,total){
       resultBox.textContent = 'جارٍ التحديث... ' + n + '/' + total;
-    });
+    }, {useFileQty:useFileQty});
     resultBox.innerHTML = '✅ تم تحديث/إضافة أصناف ' + currentBranch
       + '<div style="font-size:12px;color:var(--muted);margin-top:5px;">'
-      + '🔁 ' + stats.updatedItems + ' تحديث · ➕ ' + stats.newItems + ' جديد بكمية صفر'
+      + '🔁 ' + stats.updatedItems + ' تحديث · ➕ ' + stats.newItems + ' جديد'
+      + (stats.usedFileQty ? ' · 🆕 الرصيد الافتتاحي: ' + stats.openingQtyTotal + ' قطعة من الملف' : ' · الكميات الحالية محفوظة')
       + ' · 🧹 ' + stats.duplicatesClosed + ' نسخة مكررة اتقفلت'
       + ' · ✅ ' + stats.untouchedExisting + ' صنف مش في الملف فضل زي ما هو'
       + '</div>';
@@ -1293,7 +1340,6 @@ async function runImport(){
             points: mapping.points ? (parseFloat(row[mapping.points]) || 0) : 0,
             loyaltyCode: codeFromPhone(phone),
             branch: currentBranch, importedFrom: 'quickbooks',
-            updatedAtMs: Date.now(), updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           };
           if(hasNotes && (row['Notes']||'').trim()) data.notes = row['Notes'].trim();
