@@ -421,7 +421,11 @@ function blockCartEditAfterCard(){
   const why = cardCartEditBlockReason();
   if(!why) return false;
   if(why === 'pending') {
-    showToast('⏳ طلب الفيزا على الماكينة ولسه نتيجته مش مؤكدة — استنى قبول/رفض العملية الأول عشان مايتسحبش مبلغ قديم', 'err');
+    if(typeof paymobPending !== 'undefined' && paymobPending && paymobPending.timedOut){
+      showToast('⚠️ محاولة فيزا قديمة من غير نتيجة مؤكدة — راجع الماكينة: APPROVED = حفظ وطباعة، مفيش طلب حي = مسح المدفوعات. مش محتاج تقفل السيستم.', 'err');
+    } else {
+      showToast('⏳ طلب الفيزا لسه نتيجته مش مؤكدة — استنى قبول/رفض العملية الأول عشان مايتسحبش مبلغ قديم', 'err');
+    }
     return true;
   }
   const approved = Math.abs(cardApprovedSum(cardLegs || []));
@@ -2689,15 +2693,15 @@ function showCancelTerminalConfirm(amount, onConfirm){
                 padding:26px 22px; max-width:460px; width:100%; text-align:center;">
       <div style="font-size:40px; line-height:1; margin-bottom:10px;">🛑</div>
       <div style="font-size:17px; font-weight:900; color:#ff9a9d; margin-bottom:8px;">
-        الغي الطلب من الماكينة الأول
+        راجع طلب الفيزا على الماكينة
       </div>
       <div style="color:var(--muted); font-size:13.5px; line-height:1.8; margin-bottom:6px;">
-        فيه طلب بمبلغ <b style="color:var(--text);">${Number(amount).toFixed(2)} ج.م</b> لسه على الماكينة.
-        لو سيبته، أي عميل جاي ممكن يدفعه بالغلط وتدخل فلوس من غير فاتورة.
+        فيه محاولة بمبلغ <b style="color:var(--text);">${Number(amount).toFixed(2)} ج.م</b> نتيجتها مش مؤكدة عند السيستم.
+        لو الطلب ظاهر على الماكينة الغيه. لو مش ظاهر أصلًا، تأكد إن مفيش عملية شغالة قبل ما تنظف المحاولة.
       </div>
       <div style="background:#2a1416; border:1px solid #e5484d55; border-radius:10px;
                   padding:10px 12px; margin:12px 0; color:#ffd9da; font-size:12.5px; font-weight:700;">
-        روح للماكينة دلوقتي والغي الطلب، وبعدين ارجع دوس تحت
+        راجع شاشة الماكينة دلوقتي: مفيش طلب حي / أو ألغيت الطلب، وبعدين دوس تحت
       </div>
       <button id="cancelTermOk" disabled style="width:100%; padding:15px; border:none; border-radius:12px;
               background:#4b1c1e; color:#ffffff66; font-family:'Cairo'; font-weight:900; font-size:15px;
@@ -2720,7 +2724,7 @@ function showCancelTerminalConfirm(amount, onConfirm){
     ok.style.cssText = 'width:100%; padding:15px; border:none; border-radius:12px;'
       + 'background:linear-gradient(#dc2626,#b91c1c); color:#fff; font-family:\'Cairo\';'
       + 'font-weight:900; font-size:15px; cursor:pointer;';
-    ok.textContent = 'الغيته من الماكينة ✅ — كمّل';
+    ok.textContent = 'راجعت الماكينة — مفيش طلب حي ✅';
   }, 1000);
   const close = ()=>{ clearInterval(tick); const el = document.getElementById('cancelTerminalOverlay'); if(el) el.remove(); };
   ok.addEventListener('click', function(){ if(ok.disabled) return; close(); onConfirm(); });
@@ -3083,6 +3087,18 @@ function paymobReset(){
 }
 window.paymobReset = paymobReset;
 
+// ✅ v353 — نهاية فاتورة ناجحة = مفيش أي حالة كارت من الفاتورة القديمة
+// ينفع نمسح الـrisk هنا فقط لأن الفاتورة اتحفظت بالفعل. أثناء الفاتورة الحالية
+// paymobReset() يفضل محافظ على القفل لو فيه كارت Approved لحماية فرق المبلغ.
+function clearCardSaleCompleteState(){
+  _cardFirstApprovedAt = null;
+  _cardMoneyAtRiskAt = null;
+  _cartEditsAfterCard = [];
+  _cardAdjustmentMode = false;
+  _cardAdjustmentApprovedAmount = 0;
+}
+window.clearCardSaleCompleteState = clearCardSaleCompleteState;
+
 // ⏳ شريط متحرك أثناء انتظار رد Paymob
 // التأخير نفسه من عندهم ومش في إيدنا — بس الشاشة الواقفة بتحسّس بضعف البطء الحقيقي.
 function paymobWaitBar(on){
@@ -3142,9 +3158,13 @@ async function sendToPaymobTerminal(amountEGP, seq){
   // 🔌 بنقفل متابعة الشريحة اللي فاتت بس — الكارت الأول المؤكد بيفضل محفوظ
   paymobResetActive();
   paymobShow('📟 ' + legTag + 'بنبعت المبلغ للماكينة…', 'wait');
-  // 👂 المتابعة بتبدأ **قبل** الإرسال — 🔴 كانت فجوة حقيقية: لو رد الخدمة ضاع
-  // في الشبكة بس الطلب وصل الماكينة فعلًا، العميل يدفع والماكينة تطبع والتأكيد
-  // يتكتب في مستند محدش بيراقبه. دلوقتي الأذن مفتوحة قبل ما الطلب يخرج أصلًا.
+  // 👂 المتابعة بتبدأ **قبل** الإرسال — لو رد HTTP ضاع لكن الطلب وصل فعلًا
+  // لازم نفضل قادرين نلتقط نتيجة Paymob ونسمح بمسار التأكيد اليدوي الآمن.
+  // 🔴 v352: الشريحة لازم تبقى pending **قبل fetch**، مش بعد نجاح رد HTTP.
+  // نجاح/فشل رد الشبكة مش دليل إن الماكينة استلمت أو ما استلمتش الطلب.
+  // لو سيبناها entered وقت timeout، manual confirmation مش هيشوفها أصلًا.
+  const _sendingLeg = cardLegBySeq(cardLegs, seq);
+  if(_sendingLeg){ _sendingLeg.ref = orderRef; _sendingLeg.status = 'pending'; }
   paymobWatch(orderRef, amountEGP, 0, seq);
   // 🕵️ v298: **من هنا** الفلوس معرّضة — المبلغ راح للماكينة والعميلة
   //    ممكن تحط الكارت في أي ثانية. أي تعديل في السلة بعد اللحظة دي
@@ -3165,6 +3185,7 @@ async function sendToPaymobTerminal(amountEGP, seq){
     });
     const out = await res.json().catch(function(){ return {}; });
     if(res.ok && out.ok){
+      // الشريحة already pending من قبل الإرسال؛ الرد هنا يثبت بس إن خدمة الطلب ردّت نجاح.
       const leg = cardLegBySeq(cardLegs, seq);
       if(leg){ leg.ref = orderRef; leg.status = 'pending'; }
       paymobShow('📟 ' + legTag + 'المبلغ على الماكينة (' + amountEGP.toFixed(2) + ' ج.م) — العميل يحط الكارت…', 'wait');
@@ -3505,8 +3526,13 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
   const _giveUpT = setTimeout(function(){
     if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
       stopAll();
-      paymobPending = null;
-      paymobShow('⏹️ ' + legTag + 'مفيش رد بعد 10 دقايق — لو إيصال الموافقة طلع من الماكينة دوس «حفظ وطباعة» وأكّد، ولو مطبعتش دوس «مسح المدفوعات»', 'err');
+      // 🔴 v352: ما نمسحش paymobPending هنا. ده كان سبب القفل الوهمي الدائم:
+      // _cardMoneyAtRiskAt يفضل موجود، لكن مرجع المحاولة يضيع، فمفيش recovery
+      // غير قفل وفتح التطبيق. نخلي المحاولة unresolved/timedOut لحد قرار الموظف:
+      // إيصال Approved → حفظ وطباعة (manual confirmation)، أو مفيش طلب حي → مسح المدفوعات.
+      paymobPending.timedOut = true;
+      paymobPending.stoppedAt = Date.now();
+      paymobShow('⏹️ ' + legTag + 'مفيش رد بعد 10 دقايق — راجع الماكينة: لو إيصال APPROVED طلع دوس «حفظ وطباعة» وأكّد. لو مفيش طلب ظاهر/الطلب اتلغى دوس «مسح المدفوعات» ونظّف المحاولة من غير ما تقفل السيستم.', 'err');
       if(typeof updatePaySummary === 'function') updatePaySummary();
     }
   }, 600000);
@@ -3851,7 +3877,12 @@ async function confirmPayment(){
     }
     // 📟 تنضيف حالة Paymob بعد أي حفظ ناجح — بيانات كارت فاتورة اتحفظت يدوي
     // كانت بتفضل معلّقة وتلوث الفاتورة اللي بعدها (cardTxn قديم على فاتورة كاش)
-    if(_saved && typeof paymobReset === 'function'){ try{ paymobReset(); }catch(e){} }
+    if(_saved && typeof paymobReset === 'function'){
+      try{
+        if(typeof clearCardSaleCompleteState === 'function') clearCardSaleCompleteState();
+        paymobReset();
+      }catch(e){}
+    }
     _confirmSaving = false;
     if(_btn){ _btn.textContent = _btn.dataset.lbl || 'حفظ وطباعة'; }
     if(typeof updatePaySummary === 'function') updatePaySummary();   // بيظبط تفعيل/تعطيل الزر حسب السلة
@@ -4370,7 +4401,7 @@ window.returnPointsDeduction = returnPointsDeduction;
     _saleJustSaved = true;   // 🕵️ المسح الجاي طبيعي (بعد حفظ)
     // 💳 الفاتورة اتحفظت واتطبعت وبيانات الكروت اتسجلت جواها — الشرائح بتتصفّر هنا
     // (قبل goToSale) عشان شاشة الفاتورة الجديدة ما تسألش عن كارت اتسحب خلاص
-    try{ paymobReset(); }catch(e){}
+    try{ clearCardSaleCompleteState(); paymobReset(); }catch(e){}
     goToSale();
   }catch(e){
     showToast('فشل حفظ الفاتورة: ' + e.message, 'err');
