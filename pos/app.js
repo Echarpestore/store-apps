@@ -358,6 +358,40 @@ function defaultReceiptConfig(){
     elements: RECEIPT_ELEMENTS.filter(e=> e.kind!=='multi').map(e=> ({ id:e.id, on: !(e.id==='branchName'||e.id==='address'||e.id==='phone'), text: e.def||'', size: e.size||12 }))
   };
 }
+// 🖼️ Glow: بعض اللوجوه القديمة اتحفظت وفي الصورة نفسها مساحة بيضا كبيرة فوق/تحت.
+// بنقصّ الحواف البيضاء/الشفافة في الذاكرة وقت التحميل فقط — من غير ما نغيّر الملف المحفوظ.
+async function trimReceiptLogoWhitespace(dataUrl){
+  if(!dataUrl || typeof document==='undefined') return dataUrl||'';
+  try{
+    const img = await new Promise(function(ok,bad){
+      const x=new Image(); x.onload=function(){ok(x);}; x.onerror=bad; x.src=dataUrl;
+    });
+    const maxSide=420, scale=Math.min(1,maxSide/Math.max(img.naturalWidth||img.width||1,img.naturalHeight||img.height||1));
+    const w=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
+    const h=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    const cx=cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(img,0,0,w,h);
+    const im=cx.getImageData(0,0,w,h), d=im.data;
+    let minX=w,minY=h,maxX=-1,maxY=-1;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+      const i=(y*w+x)*4, a=d[i+3], r=d[i], g=d[i+1], b=d[i+2];
+      // أبيض شبه كامل أو transparent = هامش؛ أي لون/رمادي فعلي جزء من اللوجو.
+      if(a>18 && !(r>246 && g>246 && b>246)){
+        if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+      }
+    }
+    if(maxX<minX || maxY<minY) return dataUrl;
+    const pad=Math.max(2,Math.round(Math.min(w,h)*0.015));
+    minX=Math.max(0,minX-pad);minY=Math.max(0,minY-pad);maxX=Math.min(w-1,maxX+pad);maxY=Math.min(h-1,maxY+pad);
+    const cw=maxX-minX+1,ch=maxY-minY+1;
+    // لو مفيش هامش معتبر، مانعيدش ترميز الصورة.
+    if(cw>=w*0.96 && ch>=h*0.96) return dataUrl;
+    const out=document.createElement('canvas'); out.width=cw; out.height=ch;
+    out.getContext('2d').drawImage(cv,minX,minY,cw,ch,0,0,cw,ch);
+    return out.toDataURL('image/png');
+  }catch(e){ return dataUrl; }
+}
+
 async function loadReceiptDesignConfig(brand){
   brand = brand || _deviceBrand();
   receiptDesignConfig = defaultReceiptConfig();
@@ -394,6 +428,10 @@ async function loadReceiptDesignConfig(brand){
       }
     }
   }catch(e){ console.warn('receipt design load', e); }
+  // Glow فقط: شيل whitespace الموجود جوه صورة اللوجو نفسها قبل الطباعة.
+  if(brand==='glow' && receiptDesignConfig && receiptDesignConfig.logo){
+    receiptDesignConfig.logo = await trimReceiptLogoWhitespace(receiptDesignConfig.logo);
+  }
   // 💾 لو السيرفر فشل أو مرجّعش تصميم محفوظ، نقرا النسخة المحلية من الجهاز
   try{
     const localRaw = localStorage.getItem('rcpt_design_'+brand);
@@ -592,16 +630,17 @@ function receiptBarcodeImg(code){
     if(!code) return '';
     if(typeof JsBarcode==='undefined'){ console.warn('JsBarcode مش متحمّلة — الباركود مش هيترسم'); return ''; }
     const c = receiptDesignConfig||defaultReceiptConfig();
-    const cv = document.createElement('canvas');
-    JsBarcode(cv, code, {
-      format:'CODE128',
-      width:3, height:(c.bcHeight||34)*2,
-      fontSize:(c.bcFont||11)*2, textMargin:1,
-      margin:30,                                  // منطقة الهدوء
-      background:'#ffffff', lineColor:'#000000',
-      displayValue:true
+    // SVG بدل Canvas: الطابعة الحرارية تستلم خطوط Vector حادة حتى لو التصميم صغّر/كبّر الباركود.
+    // width=1 يحافظ على وحدات CODE128 الأصلية، والـquiet zone 10 وحدات على كل جنب.
+    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    JsBarcode(svg, String(code), {
+      format:'CODE128', width:1, height:(c.bcHeight||34),
+      margin:10, background:'#ffffff', lineColor:'#000000',
+      displayValue:false
     });
-    return cv.toDataURL('image/png');
+    svg.setAttribute('shape-rendering','crispEdges');
+    svg.style.background='#fff';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.outerHTML);
   }catch(e){ return ''; }
 }
 function buildReceiptHTML(data){
@@ -629,7 +668,18 @@ function buildReceiptHTML(data){
   const GIFT_HIDDEN = ['totals','cardTxn','custPoints','appQR'];
   let headerEnd = 0;                     // مكان دخول بانر الهدية
   const parts = [];
-  for(const el of c.elements){
+  // Glow كان عنده spacer محفوظ قبل أول عنصر فكان بيطلع ورق أبيض كبير فوق اللوجو.
+  // نشيل المسافات *الابتدائية فقط* في Glow؛ باقي ترتيب التصميم يفضل زي ما المالك حافظه.
+  let _els = (c.elements||[]).slice();
+  if((typeof _deviceBrand==='function' && _deviceBrand()==='glow')){
+    while(_els.length){
+      const e=_els[0], b=(e&&(e.base||e.id))||'';
+      if(!e || !e.on){ _els.shift(); continue; }
+      if(b==='spacer' || String(e.id||'').indexOf('spacer')===0){ _els.shift(); continue; }
+      break;
+    }
+  }
+  for(const el of _els){
     if(!el.on) continue;
     const base = el.base || el.id;
     if(gift && GIFT_HIDDEN.indexOf(base) >= 0) continue;   // 🎁 كل ما هو فلوس
@@ -747,8 +797,10 @@ function buildReceiptHTML(data){
         if(d.invoiceNo) parts.push(`<div style="text-align:center; font-size:${fs};">${L.invoice} ${d.invoiceNo}</div>`); break;
       case 'barcode': {
         const bimg = receiptBarcodeImg(d.scanCode);
-        if(bimg) parts.push(`<img src="${bimg}" style="width:${c.bcWidthPct||90}%; display:block; margin:4px auto 0; image-rendering:crisp-edges; image-rendering:pixelated;">`);
+        if(bimg) parts.push(`<img src="${bimg}" style="width:${c.bcWidthPct||90}%; display:block; margin:5px auto 1px;">`);
         else if(d.scanCode && typeof JsBarcode==='undefined') parts.push(`<div style="text-align:center; font-size:10px; border:1px dashed #999; padding:6px; margin:4px 0;">⚠️ مكتبة الباركود مش متحمّلة — اعمل ريفريش وانت متوصل بالنت مرة واحدة</div>`);
+        // الكود لازم يبقى مقروء حتى لو قارئ الباركود/الطابعة ضعّف الرسم — مستقل عن الصورة.
+        if(d.scanCode) parts.push(`<div dir="ltr" style="text-align:center; font-family:Consolas,'Courier New',monospace; font-size:${c.bcFont||11}px; font-weight:900; letter-spacing:.8px; line-height:1.2; color:#000;">${String(d.scanCode).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`);
         break; }
       case 'appQR':
         if(d.showAppQR && d.appQrImg){
