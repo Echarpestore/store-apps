@@ -14,5 +14,5 @@ assert(s.includes("goldSource:'تلقائي · Gold API + USD/EGP'"),'auto sourc
 assert(s.includes("goldManualUntil:Date.now()+OF_GOLD_MANUAL_LOCK_MS"),'manual lock stored');
 assert(s.includes("تعذر تحديث السعر الآن. هيفضل آخر سعر محفوظ شغال"),'failure keeps last saved value');
 assert(s.includes("document.addEventListener('visibilitychange'"),'refresh on app resume');
-assert(h.includes('office.js?v=70'),'cache bust v70');
+assert(h.includes('office.js?v=71'),'cache bust v71');
 console.log('Office gold auto v66: PASS');
