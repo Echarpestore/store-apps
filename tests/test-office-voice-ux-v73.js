@@ -1,0 +1,17 @@
+'use strict';
+const fs=require('fs'),assert=require('assert');
+const js=fs.readFileSync('Office/office.js','utf8');
+const html=fs.readFileSync('Office/index.html','utf8');
+assert(html.includes('id="qgVoiceCancelBtn"'),'visible cancel control missing');
+assert(html.includes('id="qgMicPermission"'),'mic permission status missing');
+assert(html.includes('id="qgMicDot"'),'mic live indicator missing');
+assert(html.includes('id="qgVoiceLiveText"'),'live transcript missing');
+assert(html.includes('office.js?v=73'),'cache bust v73 missing');
+assert(js.includes("navigator.mediaDevices.getUserMedia({audio:true})"),'explicit mic permission probe missing');
+assert(js.includes("_ofVoiceRec.abort()"),'active recognition cancel missing');
+assert(js.includes("_ofVoiceAiAbort.abort()"),'AI request cancel missing');
+assert(js.includes("ofVoiceUi('listening'"),'listening state missing');
+assert(js.includes("ofVoiceUi('processing'"),'processing state missing');
+assert(js.includes("code==='not-allowed'"),'permission-denied explanation missing');
+assert(js.includes("document.addEventListener('DOMContentLoaded',ofWireVoiceGoods"),'voice wiring must not depend on merchant snapshot');
+console.log('PASS test-office-voice-ux-v73');

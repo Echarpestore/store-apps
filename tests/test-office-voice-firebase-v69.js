@@ -8,8 +8,8 @@ assert(o.includes("cloudfunctions.net/officeVoiceParse"),"Office calls existing 
 assert(o.includes("user.getIdToken(false)"),"Firebase ID token sent");
 assert(o.includes("'Authorization':'Bearer '+token"),"Bearer auth header");
 assert(o.includes("conf<0.90"),"client refuses low-confidence AI");
-assert(o.includes("parser:'firebase_ai_v69'"),"v69 parser marker");
-assert(h.includes("office.js?v=71"),"cache bust v71");
+assert(o.includes("parser:'firebase_ai_v73'"),"v69 parser marker");
+assert(h.includes("office.js?v=73"),"cache bust v73");
 assert(f.includes('exports.officeVoiceParse = onRequest'),"function added in existing index.js");
 assert(f.includes('defineSecret("OPENAI_API_KEY")'),"OpenAI key is Firebase secret");
 assert(f.includes('verifyIdToken'),"server verifies Firebase login");

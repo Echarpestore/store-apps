@@ -9,7 +9,7 @@ assert(o.includes('Office Back UX v64'),'Office back manager');
 assert(o.includes("officeNavV64:'page'"),'Office page history');
 assert(o.includes("officeNavV64:'more'"),'Office More history');
 assert(o.includes("ofGoPage('day',{fromHistory:true})"),'Office falls back to الرئيسية');
-assert(oh.includes('office.js?v=71'),'Office cache bust v71');
+assert(oh.includes('office.js?v=73'),'Office cache bust v73');
 
 assert(s.includes('SALES BACK UX v19'),'Sales back manager');
 assert(s.includes("'invoiceOverlay'"),'Sales invoice layer covered');

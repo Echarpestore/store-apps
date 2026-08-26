@@ -1,0 +1,13 @@
+'use strict';
+const fs=require('fs'),assert=require('assert'),vm=require('vm');
+const js=fs.readFileSync('Office/office.js','utf8');
+const fn=fs.readFileSync('echarpe-push/index.js','utf8');
+assert(js.includes('needsMerchantCreate=true'),'local new-merchant draft missing');
+assert(js.includes('🆕 تاجر جديد'),'new merchant review warning missing');
+assert(js.includes("db.collection('office_merchants').doc()"),'merchant creation ref missing');
+assert(js.includes("source:'office_ai_purchase_v73'"),'v73 merchant txn audit source missing');
+assert(fn.includes('isNewMerchant=true'),'AI prompt does not allow reviewed new merchant');
+assert(fn.includes('validNew=!validExisting'),'server-side new merchant validation missing');
+assert(fn.includes('confidence>=0.95'),'new merchant confidence gate missing');
+assert(fn.includes('لا يوجد تجار مسجلون بعد'),'empty merchant list must be accepted');
+console.log('PASS test-office-new-merchant-ai-v73');
