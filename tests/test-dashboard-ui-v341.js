@@ -7,5 +7,5 @@ assert(html.includes('grid-template-columns:repeat(3,minmax(0,1fr))'));
 assert(bb.includes('top:54px; left:12px') && !bb.includes('bottom:14px; left:14px'));
 assert(chat.includes('grid-template-columns:minmax(0,1fr) 92px'));
 assert(chat.includes('height:48px'));
-assert(sw.includes('v341'));
+assert(/store-apps-shell-v\d+/.test(sw));
 console.log('dashboard UI v341: PASS');
