@@ -1916,7 +1916,47 @@ function ofActSmartSummary(list){
   return { total:rows.length, action:action, watch:watch, money:+money.toFixed(2),
            topBranch:topBranch, topBranchCount:topBranch?branchHot[topBranch]:0, repeats:repeats };
 }
+
 window.ofActSmartSummary = ofActSmartSummary;
+
+/* 📈 Behavior Intelligence — Office v71 */
+function ofActBehaviorInsights(list, now){
+  const rows=(list||[]).filter(function(a){ return a && a.ts; });
+  now=Number(now)||Date.now();
+  const DAY=86400000, curFrom=now-DAY;
+  const old=rows.filter(function(a){ return Number(a.ts)<curFrom; });
+  const cur=rows.filter(function(a){ return Number(a.ts)>=curFrom && Number(a.ts)<=now; });
+  if(!old.length) return [];
+  const oldest=Math.min.apply(null, old.map(function(a){return Number(a.ts)||now;}));
+  const baselineDays=Math.max(1, Math.min(29, (curFrom-oldest)/DAY));
+  const riskTypes={manual_discount:1,manual_drawer_open:1,customer_points_edit:1,
+    card_overcharge_saved:1,paymob_stuck:1,paymob_orphan_detected:1,same_day_reversal:1,
+    inventory_wiped:1,inventory_merge_bulk:1,inventory_branch_catalog_replace:1,inventory_full_reconcile:1};
+  function key(a,dim){ return String(dim==='employee'?(a.employeeName||''):(a.branch||'')); }
+  function counts(arr,dim,type){ const m={}; arr.forEach(function(a){
+    if(a.type!==type)return; const k=key(a,dim); if(k)m[k]=(m[k]||0)+1; }); return m; }
+  const out=[];
+  ['employee','branch'].forEach(function(dim){
+    Object.keys(riskTypes).forEach(function(type){
+      const c=counts(cur,dim,type), b=counts(old,dim,type);
+      Object.keys(c).forEach(function(name){
+        const today=c[name]||0, prev=b[name]||0, avg=prev/baselineDays;
+        const newPattern=prev===0 && today>=3, ratio=avg>0?today/avg:0;
+        const elevated=prev>=2 && today>=2 && ratio>=2;
+        if(!newPattern&&!elevated)return;
+        const strong=today>=4&&(newPattern||ratio>=3);
+        out.push({level:strong?'action':'watch',dimension:dim,name:name,type:type,today:today,
+          previous:prev,baselineDays:+baselineDays.toFixed(1),dailyAvg:+avg.toFixed(2),
+          ratio:avg>0?+ratio.toFixed(1):null,label:ofActLabel(type),
+          explain:newPattern?('ظهر '+today+' مرات خلال آخر 24 ساعة، ومكانش ظاهر في الفترة السابقة.')
+            :('حصل '+today+' مرات خلال آخر 24 ساعة مقابل متوسط '+avg.toFixed(1)+' مرة يوميًا قبل كده ('+ratio.toFixed(1)+'×).')});
+      });
+    });
+  });
+  return out.sort(function(a,b){if(a.level!==b.level)return a.level==='action'?-1:1;
+    return (b.ratio||99)-(a.ratio||99)||b.today-a.today;}).slice(0,8);
+}
+window.ofActBehaviorInsights=ofActBehaviorInsights;
 
 /* 🧾 رقم الفاتورة: وقت وقوع الحدث الفاتورة لسه مالهاش رقم — فبنربط
    بمعرّف السلة (sid). حدث `sale_saved` هو اللي شايل الرقم، وبنوزّعه
@@ -2017,6 +2057,14 @@ function ofRenderActivity(){
       ? '<div style="margin-top:8px; padding:8px 10px; border-radius:10px; background:rgba(245,158,11,.10); font-size:11.5px; line-height:1.8;">'
         + '<b>🧠 أنماط متكررة:</b> ' + sm.repeats.map(function(x){ return esc(x.label) + ' ×' + x.count; }).join(' · ') + '</div>'
       : '';
+    const behavior = ofActBehaviorInsights(list);
+    const behaviorHtml = behavior.length
+      ? '<div style="margin-top:8px;border:1px solid var(--line);border-radius:11px;padding:9px 10px;background:var(--panel2);">'
+        + '<div style="font-weight:900;font-size:12px;margin-bottom:5px;">📈 تغيّر عن الطبيعي</div>'
+        + behavior.slice(0,5).map(function(x){const c=x.level==='action'?'#dc2626':'#b45309';const who=x.dimension==='employee'?'👤 ':'🏬 ';
+          return '<div style="font-size:11.5px;line-height:1.75;padding:4px 0;border-top:1px dashed var(--line);"><b style="color:'+c+';">'
+            +(x.level==='action'?'🚨':'⚠️')+' '+who+esc(x.name)+'</b> · '+esc(x.label)+'<br><span class="muted">'+esc(x.explain)+'</span></div>';}).join('')
+        + '<div class="muted" style="font-size:10.5px;margin-top:5px;">المقارنة: آخر 24 ساعة مقابل المتوسط اليومي للفترة السابقة. الإشارة لا تعني خطأ أو سوء تصرف؛ معناها إن السلوك اتغيّر ويستحق المراجعة.</div></div>' : '';
     sum.innerHTML = '<div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-bottom:8px;">'
       + '<div style="background:rgba(220,38,38,.09); border:1px solid rgba(220,38,38,.22); border-radius:11px; padding:9px;">'
         + '<div class="muted" style="font-size:10.5px;">🚨 محتاج إجراء</div><b style="font-size:20px; color:#dc2626;">' + sm.action + '</b></div>'
@@ -2031,7 +2079,7 @@ function ofRenderActivity(){
       + sm.total + ' حدث ظاهر'
       + (!showingQuiet && quietN ? ' · ' + quietN + ' حدث روتيني متخفي' : '')
       + (_ofActRaw.length >= OF_ACT_LIMIT ? ' · <b>وصلنا حد الـ' + OF_ACT_LIMIT + ' — ضيّق المدة لو عايز القصة كاملة</b>' : '')
-      + '</div>' + repeatHtml;
+      + '</div>' + repeatHtml + behaviorHtml;
   }
   if(!list.length){ body.innerHTML = '<div class="empty">مفيش أحداث مطابقة للفلاتر 👌</div>'; return; }
   body.innerHTML = list.map(function(a){
