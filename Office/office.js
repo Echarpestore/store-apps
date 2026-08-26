@@ -1682,11 +1682,15 @@ const OF_ACT_KINDS = {
   cart_abandoned:        { t:'🛒 سلة اتسابت', g:'cart' },
   print_latency:         { t:'🖨️ زمن الطباعة', g:'cart', quiet:true },
   rate_request_manual:   { t:'⭐ طلب تقييم يدوي', g:'cart' },
+  basket_suggest_added:  { t:'✨ اقتراح ذكي اتضاف للسلة', g:'cart', quiet:true },
+  wa_message:            { t:'💬 رسالة واتساب اتجهزت', g:'cart', quiet:true },
   customer_name_edit:    { t:'👤 تعديل اسم عميلة', g:'cart' },
   inventory_wiped:       { t:'📦 المخزون اتمسح', g:'stock', hot:true },
   inventory_merge:       { t:'📦 دمج صنف', g:'stock' },
   inventory_merge_bulk:  { t:'📦 دمج جماعي', g:'stock', hot:true },
   inventory_claimed:     { t:'📦 صنف اتنسب لفرع', g:'stock' },
+  inventory_branch_catalog_replace:{ t:'📦 تحديث كتالوج فرع', g:'stock', hot:true },
+  inventory_full_reconcile:{ t:'🧮 تسوية مخزون كاملة', g:'stock', hot:true },
   import_qty_adjusted:   { t:'📥 كمية اتعدّلت في الاستيراد', g:'stock' },
   import_qty_moved:      { t:'📥 كمية اتنقلت', g:'stock' },
   import_excluded_missing:{ t:'📥 صنف اتستبعد', g:'stock' }
@@ -1717,6 +1721,203 @@ function ofActDetail(a){
   return p.join(' · ');
 }
 
+
+/* ============================================================
+   🧠 تفسير سجل النشاط (Office v70)
+   ------------------------------------------------------------
+   العنوان لوحده مش قرار. كل حدث بيتحوّل هنا إلى ٤ أسئلة عملية:
+   إيه اللي حصل؟ ليه يهمني؟ أثره إيه؟ أعمل إيه دلوقتي؟
+   الدالة pure عشان أي نوع جديد نقدر نختبره من غير DOM.
+   ============================================================ */
+function ofActIntelligence(a){
+  a = a || {};
+  const type = String(a.type || '');
+  const info = {
+    level:'normal', levelLabel:'معلومة', icon:'✅',
+    explain:'حدث تشغيلي اتسجل عشان يبقى عندك أثر واضح بدل الاعتماد على الذاكرة.',
+    impact:'مفيش أثر مالي مباشر ظاهر من البيانات المسجلة.',
+    action:'مفيش إجراء مطلوب إلا لو الحدث متكرر أو مرتبط بشكوى.',
+    money:0
+  };
+  const action = function(explain, impact, next, money){
+    info.level='action'; info.levelLabel='محتاج إجراء'; info.icon='🚨';
+    info.explain=explain; info.impact=impact; info.action=next;
+    info.money=Math.max(0, Number(money)||0); return info;
+  };
+  const watch = function(explain, impact, next){
+    info.level='watch'; info.levelLabel='متابعة'; info.icon='⚠️';
+    info.explain=explain; info.impact=impact; info.action=next; return info;
+  };
+  const normal = function(explain, impact, next){
+    info.explain=explain; info.impact=impact; info.action=next || 'لا إجراء مطلوب.'; return info;
+  };
+
+  if(type === 'card_overcharge_saved'){
+    const d = Math.abs(Number(a.diff)||0);
+    const why = a.cause
+      ? ('الفيزا اتسحبت بأكتر من قيمة الفاتورة. السبب المسجل: ' + a.cause + (a.causeExact===false ? '، لكنه لا يفسّر كامل الفرق.' : '.'))
+      : 'الفيزا اتسحبت بأكتر من قيمة الفاتورة، لكن سبب الفرق مش مسجل بشكل كافٍ.';
+    return action(why,
+      'فيه ' + d.toFixed(2) + ' ج.م للعميلة لازم يتتابع رده، وإلا التقفيل هيبان أوفر والعميلة تكون دفعت زيادة.',
+      'راجع حالة «مستحق الرد»، نفّذ الرد من Paymob، وسجّل مرجع الرد في Office.', d);
+  }
+  if(type === 'card_adjustment_started') return watch(
+    'الموظفة بدأت تغيّر السلة بعد ما الكارت اتقبل بالفعل.',
+    'أي تقليل في الإجمالي من اللحظة دي ممكن ينتج عنه مبلغ واجب رده للعميلة.',
+    'تابع نفس قصة السلة لحد الفاتورة النهائية وتأكد إن أي فرق اتسجل كمستحق رد.');
+  if(type === 'card_overcharge_ok') return watch(
+    'الكاشير شاف تحذير إن المسحوب أعلى من الفاتورة ووافق يكمل الحفظ.',
+    'التحذير اتشاف؛ ده مش معناه إن الفلوس اترجعت.',
+    'دور على حدث «الفاتورة اتحفظت» لنفس السلة وتأكد من متابعة الرد.');
+  if(type === 'paymob_orphan_detected') return action(
+    'السيستم لقى معاملة Paymob ناجحة بنفس السياق لكن برقم طلب مختلف عن المتوقع.',
+    'ممكن تكون فلوس اتسحبت ومش مربوطة بفاتورة صحيحة؛ قيمتها ' + ofMoney(a.amount||0) + '.',
+    'طابق رقم العملية/آخر 4 أرقام مع Paymob والفاتورة قبل أي إعادة دفع.', Math.abs(Number(a.amount)||0));
+  if(type === 'paymob_stuck') return action(
+    'Paymob وافق على الدفع لكن مسار حفظ الفاتورة ماكملش في الوقت الطبيعي. السبب التشخيصي: ' + esc(a.reason || 'غير محدد') + '.',
+    'الخطر إن الموظفة تعيد السحب رغم إن الفلوس اتسحبت بالفعل.',
+    'ممنوع إعادة الدفع. افتح قصة السلة وتأكد إن الفاتورة اتحفظت أو استخدم مسار الإنقاذ.', 0);
+  if(type === 'paymob_stuck_rescue') return watch(
+    'الموظفة استخدمت مسار إنقاذ فاتورة بعد قبول Paymob.',
+    'ده غالبًا إكمال صحيح لمعاملة علقت، لكنه حدث حساس لازم يبقى له فاتورة بعدها.',
+    'تأكد إن نفس السلة فيها «فاتورة اتحفظت» بعد حدث الإنقاذ.');
+  if(type === 'card_saved_manual') return watch(
+    'دفعة كارت كانت غير محسومة في الواجهة واتسجلت يدويًا كمدفوعة.',
+    'التسجيل اليدوي مفيد للإنقاذ لكنه أعلى مخاطرة من التأكيد الآلي.',
+    'طابق المبلغ ومرجع/مراجع Paymob مع الفاتورة، خصوصًا لو الحدث بيتكرر عند نفس الفرع.');
+  if(type === 'card_payments_cleared') return watch(
+    'مدفوعات كارت مؤكدة اتمسحت من شاشة الدفع بعد سحبها فعليًا.',
+    'مسحها من الشاشة لا يرجع الفلوس، وممكن يعمل فرق في الفاتورة أو التقفيل.',
+    'راجع قصة السلة وتأكد هل اتعمل مرتجع/فاتورة بديلة ولا لأ.');
+  if(type === 'paymob_cancelled') return watch(
+    'واجهة الكاشير اعتبرت طلب الفيزا ملغي بعد تأكيد الموظفة.',
+    'Paymob لا يضمن سحب الطلب من الماكينة بعد وصوله؛ لذلك لازم التأكد إن مفيش دفع تم عليه لاحقًا.',
+    'لو فيه أي شك، راجع معاملات Paymob بنفس المبلغ والوقت قبل إعادة المحاولة.');
+  if(type === 'gift_card_return_blocked') return watch(
+    'حد حاول يعمل مرتجع لعملية مرتبطة بكارت هدية والسيستم منعها.',
+    'المنع حمى رصيد/فلوس الكارت من رجوع غير صحيح، لكن المحاولة نفسها محتاجة فهم.',
+    'راجع هل الموظفة كانت تقصد استبدال/إلغاء مختلف، ولو تكرر الحدث وضّح الإجراء للفريق.');
+  if(type === 'redeem_value_mismatch') return action(
+    'قيمة أو نقط طلب الاستبدال اللي وصلت للكاشير مش مطابقة للقواعد والرصيد الفعلي.',
+    'السيستم أعاد الحساب وحمى العميلة والمحل من قيمة استبدال غير صحيحة.',
+    'لو الحدث متكرر لنفس المصدر، راجع إصدار التطبيق/الطلب اللي بيولد القيم القديمة.', 0);
+  if(type === 'manual_discount') return watch(
+    'الموظفة طبقت خصم يدوي ' + (a.pct!=null ? a.pct + '%' : '') + ' بدل سعر/عرض تلقائي.',
+    'الخصم يقلل هامش البيع، وتكراره ممكن يكشف تدريب ناقص أو استخدام غير طبيعي للصلاحية.',
+    'لو الخصومات متكررة لنفس موظفة أو فرع، راجع الفواتير والسبب التجاري.');
+  if(type === 'manual_drawer_open') return watch(
+    'درج الكاش اتفتح يدويًا من غير حركة بيع هي اللي فتحته.',
+    'مش خطأ لوحده، لكن التكرار وقت فروق الكاش مهم جدًا للمراجعة.',
+    'قارن الوقت مع التقفيل وأي فرق كاش، وراقب التكرار لنفس الموظفة.');
+  if(type === 'customer_points_edit') return watch(
+    'رصيد نقط عميلة اتعدل يدويًا بدل ما يتغير من بيع/استبدال طبيعي.',
+    'التعديل يغيّر التزام الولاء على المحل وقد يؤثر ماليًا على استبدال لاحق.',
+    'راجع من → إلى والسبب المسجل، خصوصًا لو الفرق كبير أو متكرر.');
+  if(type === 'same_day_reversal') return watch(
+    'فاتورة اتعمل لها عكس كامل في نفس اليوم.',
+    'العكس يؤثر على المبيعات والمخزون ووسيلة الدفع، فلازم يبقى متسق مع السبب.',
+    'راجع الفاتورة الأصلية وطريقة رد الدفع لو كانت كارت.');
+  if(type === 'same_day_return') return normal(
+    'اتعمل مرتجع لصنف من فاتورة في نفس اليوم.',
+    'المبيعات والمخزون اتعدلوا بقيمة الصنف المرتجع.',
+    'لا إجراء إلا لو المرتجعات متكررة بشكل غير طبيعي.');
+  if(type === 'item_removed') return normal(
+    'صنف اتشال من السلة قبل إتمام البيع.',
+    'لو حصل قبل الدفع فده تعديل عادي. لو بعد قبول الكارت، قصة السلة هتوضح إنه ممكن يكون سبب فرق مالي.',
+    'راجع التوقيت داخل قصة السلة فقط لو الحدث مرتبط بدفع كارت أو بيتكرر بشكل مبالغ فيه.');
+  if(type === 'cart_item_edited') return watch(
+    'سعر أو كمية سطر في السلة اتعدل يدويًا.',
+    'التعديل ممكن يغير إجمالي الفاتورة بعيدًا عن السعر الأصلي.',
+    'راجع من/إلى ونسبة التغيير، خصوصًا لو تكرر لنفس الموظفة أو بعد دفع كارت.');
+  if(type === 'cart_abandoned') return normal(
+    'سلة بدأت وبعدها اتسابِت من غير بيع.',
+    'ممكن تكون عميلة غيرت رأيها أو مشكلة تشغيل. التكرار العالي قد يشير لفقد مبيعات.',
+    'راقب المعدل حسب الفرع والموظفة؛ ما يحتاجش تحقيق فردي عادة.');
+  if(type === 'inventory_wiped') return action(
+    'تم تنفيذ مسح/تصفير واسع للمخزون في الفرع.',
+    'ده تغيير كبير في أصل المخزون وقد يخفي كميات صحيحة لو اتعمل بالخطأ.',
+    'راجع فورًا عدد الأصناف والفرع وسبب العملية، وقارن بآخر استيراد/جرد.', 0);
+  if(type === 'inventory_merge_bulk') return watch(
+    'تم دمج مجموعات أصناف بشكل جماعي.',
+    'الدمج ينقل الكميات لهوية صنف واحدة؛ أي اختيار غلط يؤثر على المخزون والباركود.',
+    'راجع عدد المجموعات والفشل إن وجد، خصوصًا لو العملية كبيرة.');
+  if(type === 'inventory_merge') return normal(
+    'اتدمج صنف مكرر مع صنف أساسي.',
+    'الكميات والهوية اتجمعت لتقليل التكرار في الكتالوج.',
+    'لا إجراء إلا لو الاسم/الباركود الأساسي المختار غلط.');
+  if(type === 'inventory_branch_catalog_replace') return watch(
+    'اتنفذ تحديث واسع لكتالوج فرع من ملف/مصدر جديد.',
+    'ممكن يضيف أو يحدّث عدد كبير من الأصناف مرة واحدة.',
+    'راجع أرقام الإضافة/التحديث/الاستبعاد في التفاصيل بعد العملية.');
+  if(type === 'inventory_full_reconcile') return watch(
+    'اتعملت تسوية كاملة بين المخزون الحالي والبيانات المستوردة.',
+    'التسوية قد تغيّر كميات وهويات كثيرة مرة واحدة.',
+    'راجع ملخص التغييرات وأي عناصر مستبعدة قبل اعتبار الجرد نهائي.');
+  if(type === 'import_qty_adjusted' || type === 'import_qty_moved') return normal(
+    type === 'import_qty_moved' ? 'الاستيراد نقل كميات بين سجلات عشان يطابق الهوية الصحيحة.' : 'الاستيراد عدّل كميات لتطابق البيانات الجديدة.',
+    'أثره مباشر على رصيد المخزون لكن العملية جزء من المزامنة المقصودة.',
+    'راجع العدد فقط لو أكبر من المتوقع.');
+  if(type === 'import_excluded_missing') return watch(
+    'صنف موجود في السيستم لم يظهر في ملف الاستيراد وتم استبعاده حسب سياسة الاستيراد.',
+    'ممكن يكون صنف اتوقف فعلًا أو سقط من الملف بالخطأ.',
+    'راجع الأصناف المستبعدة لو العدد غير معتاد.');
+  if(type === 'customer_name_edit') return normal(
+    'اسم عميلة اتعدل في ملفها.', 'لا أثر مالي مباشر.', 'لا إجراء إلا لو التعديل غير متوقع.');
+  if(type === 'rate_request_manual') return normal(
+    'الموظفة طلبت من عميلة تقييم الخدمة يدويًا.', 'يساعد على زيادة التقييمات وربطها بالخدمة.', 'لا إجراء مطلوب.');
+  if(type === 'sale_saved') return normal(
+    'الفاتورة اتحفظت بنجاح واتربطت بقصة السلة.', 'ده الحدث الطبيعي اللي بيأكد نهاية البيع.', 'لا إجراء مطلوب.');
+  if(type === 'print_latency') return normal(
+    'السيستم قاس زمن الحفظ/الطباعة.', 'بيستخدم لتشخيص البطء فقط.', 'راجع فقط لو الزمن عالي ومتكرر.');
+  if(type === 'paymob_terminal_saved') return normal(
+    'تم حفظ/تأكيد إعداد ماكينة Paymob للفرع.', 'يحدد أي ماكينة تستقبل طلبات الدفع.', 'لا إجراء إلا لو الماكينة اتغيرت من غير قصد.');
+  if(type === 'card_leg_recovered') return watch(
+    'تأكيد Paymob وصل من غير شريحة دفع موجودة في الواجهة، فالسيستم أعاد بناءها تلقائيًا.',
+    'شبكة الأمان منعت دفعة ناجحة من الضياع من الفاتورة.',
+    'لو بيتكرر، راجع استقرار الاتصال/الواجهة عند نفس الجهاز.');
+  if(type === 'inventory_claimed') return normal(
+    'أصناف اتربطت بفرع محدد بدل ما تفضل بلا ملكية فرع.', 'ده ينظف توزيع المخزون بين الفروع.', 'راجع العدد لو غير متوقع.');
+  if(type === 'basket_suggest_added') return normal(
+    'اقتراح بيع ذكي اتضاف للسلة من واجهة الكاشير.', 'ده مؤشر استخدام لأداة زيادة السلة، مش مشكلة.', 'لا إجراء مطلوب.');
+  if(type === 'wa_message') return normal(
+    'تم تجهيز/إرسال مسار رسالة واتساب من الكاشير.', 'حدث تواصل تشغيلي فقط.', 'لا إجراء إلا عند تتبع تواصل معين.');
+  return info;
+}
+window.ofActIntelligence = ofActIntelligence;
+
+function ofActAttentionMatch(a, mode){
+  if(!mode) return true;
+  const lvl = ofActIntelligence(a).level;
+  if(mode === 'action') return lvl === 'action';
+  if(mode === 'watch') return lvl === 'watch';
+  if(mode === 'normal') return lvl === 'normal';
+  return true;
+}
+window.ofActAttentionMatch = ofActAttentionMatch;
+
+function ofActSmartSummary(list){
+  const rows = list || [];
+  let action=0, watch=0, money=0;
+  const branchHot={}, typeHot={};
+  rows.forEach(function(a){
+    const x=ofActIntelligence(a);
+    if(x.level==='action') action++;
+    if(x.level==='watch') watch++;
+    money += Math.max(0, Number(x.money)||0);
+    if(x.level!=='normal'){
+      const b=a.branch||'غير محدد'; branchHot[b]=(branchHot[b]||0)+1;
+      const t=a.type||'unknown'; typeHot[t]=(typeHot[t]||0)+1;
+    }
+  });
+  const topBranch=Object.keys(branchHot).sort(function(a,b){return branchHot[b]-branchHot[a];})[0]||'';
+  const repeats=Object.keys(typeHot).filter(function(t){return typeHot[t]>=3;})
+    .sort(function(a,b){return typeHot[b]-typeHot[a];}).slice(0,3)
+    .map(function(t){return {type:t,count:typeHot[t],label:ofActLabel(t)};});
+  return { total:rows.length, action:action, watch:watch, money:+money.toFixed(2),
+           topBranch:topBranch, topBranchCount:topBranch?branchHot[topBranch]:0, repeats:repeats };
+}
+window.ofActSmartSummary = ofActSmartSummary;
+
 /* 🧾 رقم الفاتورة: وقت وقوع الحدث الفاتورة لسه مالهاش رقم — فبنربط
    بمعرّف السلة (sid). حدث `sale_saved` هو اللي شايل الرقم، وبنوزّعه
    على كل أحداث نفس السلة. الحل ده من نفس البيانات المحمّلة — صفر
@@ -1739,6 +1940,7 @@ function ofActFilter(list, opts){
   opts = opts || {};
   const q = String(opts.q || '').trim().toLowerCase();
   const grp = opts.group || '';
+  const attention = opts.attention || '';
   /* 🤫 الأحداث الهادية (`quiet`) مخفية **افتراضيًا**.
      ------------------------------------------------------------
      🔴 الباج: العلامة `quiet` كانت متعرّفة على `sale_saved` و
@@ -1763,6 +1965,7 @@ function ofActFilter(list, opts){
       const k = OF_ACT_KINDS[a.type];
       if(!k || k.g !== grp) return false;
     }
+    if(attention && !ofActAttentionMatch(a, attention)) return false;
     if(q){
       const hay = [a.employeeName, a.branch, a.name, a.invoiceCode,
                    a._linkedInvoice, a.customerPhone,
@@ -1802,38 +2005,54 @@ function ofRenderActivity(){
   const list = ofActFilter(_ofActRaw, {
     q: (document.getElementById('actSearch') || {}).value,
     group: (document.getElementById('actKind') || {}).value,
+    attention: (document.getElementById('actAttention') || {}).value,
     showQuiet: !!(document.getElementById('actQuiet') || {}).checked
   });
   if(sum){
-    const hot = list.filter(function(a){
-      const k = OF_ACT_KINDS[a.type]; return k && k.hot; }).length;
-    // 🤫 عدد المخفي — عشان المالك يعرف إن فيه حاجة اتخفت مش ضاعت
+    const sm = ofActSmartSummary(list);
     const quietN = _ofActRaw.filter(function(a){
       const k = OF_ACT_KINDS[a && a.type]; return k && k.quiet; }).length;
     const showingQuiet = !!(document.getElementById('actQuiet') || {}).checked;
-    sum.innerHTML = '<div class="muted" style="font-size:12px; margin-bottom:6px;">'
-      + list.length + ' حدث'
-      + (hot ? ' · <b style="color:#dc2626;">' + hot + ' محتاجين نظرة</b>' : '')
-      + (!showingQuiet && quietN ? ' · <span style="opacity:.75;">' + quietN
-          + ' حدث عادي متخفي (مبيعات وقياسات)</span>' : '')
-      + (_ofActRaw.length >= OF_ACT_LIMIT ? ' · <b>(وصلنا حد الـ' + OF_ACT_LIMIT + ' — ضيّق المدة)</b>' : '')
-      + '</div>';
+    const repeatHtml = sm.repeats.length
+      ? '<div style="margin-top:8px; padding:8px 10px; border-radius:10px; background:rgba(245,158,11,.10); font-size:11.5px; line-height:1.8;">'
+        + '<b>🧠 أنماط متكررة:</b> ' + sm.repeats.map(function(x){ return esc(x.label) + ' ×' + x.count; }).join(' · ') + '</div>'
+      : '';
+    sum.innerHTML = '<div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-bottom:8px;">'
+      + '<div style="background:rgba(220,38,38,.09); border:1px solid rgba(220,38,38,.22); border-radius:11px; padding:9px;">'
+        + '<div class="muted" style="font-size:10.5px;">🚨 محتاج إجراء</div><b style="font-size:20px; color:#dc2626;">' + sm.action + '</b></div>'
+      + '<div style="background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.20); border-radius:11px; padding:9px;">'
+        + '<div class="muted" style="font-size:10.5px;">⚠️ محتاج متابعة</div><b style="font-size:20px; color:#b45309;">' + sm.watch + '</b></div>'
+      + '<div style="background:var(--panel2); border-radius:11px; padding:9px;">'
+        + '<div class="muted" style="font-size:10.5px;">💰 مبلغ تحت المراجعة</div><b style="font-size:17px;">' + ofMoney(sm.money) + '</b></div>'
+      + '<div style="background:var(--panel2); border-radius:11px; padding:9px;">'
+        + '<div class="muted" style="font-size:10.5px;">🏬 أكتر فرع فيه إشارات</div><b style="font-size:13px;">' + (sm.topBranch ? esc(sm.topBranch) + ' · ' + sm.topBranchCount : '—') + '</b></div>'
+      + '</div>'
+      + '<div class="muted" style="font-size:11.5px; line-height:1.7; margin-bottom:6px;">'
+      + sm.total + ' حدث ظاهر'
+      + (!showingQuiet && quietN ? ' · ' + quietN + ' حدث روتيني متخفي' : '')
+      + (_ofActRaw.length >= OF_ACT_LIMIT ? ' · <b>وصلنا حد الـ' + OF_ACT_LIMIT + ' — ضيّق المدة لو عايز القصة كاملة</b>' : '')
+      + '</div>' + repeatHtml;
   }
-  if(!list.length){ body.innerHTML = '<div class="empty">مفيش حاجة في المدة دي 👌</div>'; return; }
+  if(!list.length){ body.innerHTML = '<div class="empty">مفيش أحداث مطابقة للفلاتر 👌</div>'; return; }
   body.innerHTML = list.map(function(a){
-    const k = OF_ACT_KINDS[a.type];
-    const hot = !!(k && k.hot);
+    const intel = ofActIntelligence(a);
     const det = ofActDetail(a);
     const inv = a.invoiceCode || a._linkedInvoice || '';
+    const col = intel.level === 'action' ? '#dc2626' : (intel.level === 'watch' ? '#d97706' : 'var(--line)');
+    const bg = intel.level === 'action' ? 'rgba(220,38,38,.05)' : (intel.level === 'watch' ? 'rgba(245,158,11,.045)' : 'transparent');
+    const badgeBg = intel.level === 'action' ? 'rgba(220,38,38,.13)' : (intel.level === 'watch' ? 'rgba(245,158,11,.14)' : 'var(--panel2)');
+    const badgeCol = intel.level === 'action' ? '#dc2626' : (intel.level === 'watch' ? '#b45309' : 'var(--sub)');
     return '<div onclick="ofActOpen(' + "'" + esc(a.id) + "'" + ')" '
-      + 'style="cursor:pointer; border-right:4px solid ' + (hot ? '#dc2626' : 'var(--line)')
-      + '; background:' + (hot ? 'rgba(220,38,38,.05)' : 'transparent')
-      + '; border-radius:8px; padding:7px 9px; margin-bottom:6px;">'
-      + '<div style="display:flex; justify-content:space-between; gap:6px;">'
-      + '<div style="font-weight:800; font-size:13px;">' + esc(ofActLabel(a.type)) + '</div>'
-      + '<div class="muted" style="font-size:15px; line-height:1;">›</div></div>'
-      + (det ? '<div style="font-size:12.5px; margin-top:2px;">' + det + '</div>' : '')
-      + '<div class="muted" style="font-size:11px; margin-top:3px;">'
+      + 'style="cursor:pointer; border-right:4px solid ' + col + '; background:' + bg
+      + '; border-radius:11px; padding:9px 10px; margin-bottom:7px;">'
+      + '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:7px;">'
+        + '<div style="font-weight:900; font-size:13px; line-height:1.55; flex:1;">' + esc(ofActLabel(a.type)) + '</div>'
+        + '<span style="font-size:10.5px; font-weight:900; white-space:nowrap; padding:3px 7px; border-radius:99px; background:' + badgeBg + '; color:' + badgeCol + ';">'
+          + intel.icon + ' ' + esc(intel.levelLabel) + '</span></div>'
+      + (det ? '<div style="font-size:12px; margin-top:3px; font-weight:700;">' + det + '</div>' : '')
+      + '<div style="font-size:11.8px; line-height:1.7; margin-top:5px;"><b>يعني إيه؟</b> ' + esc(intel.explain) + '</div>'
+      + (intel.level !== 'normal' ? '<div style="font-size:11.5px; line-height:1.7; margin-top:2px; color:' + badgeCol + ';"><b>الإجراء:</b> ' + esc(intel.action) + '</div>' : '')
+      + '<div class="muted" style="font-size:10.8px; margin-top:5px;">'
       + (inv ? '🧾 ' + esc(inv) + ' · ' : '')
       + '🏬 ' + esc(a.branch || '—') + ' · 🧑‍💼 ' + esc(a.employeeName || '—')
       + ' · ' + ofWhen(a.ts, true) + '</div></div>';
@@ -1851,6 +2070,8 @@ window.ofRenderActivity = ofRenderActivity;
   if(s) s.addEventListener('input', function(){ ofRenderActivity(); });
   const k = document.getElementById('actKind');
   if(k) k.addEventListener('change', function(){ ofRenderActivity(); });
+  const at = document.getElementById('actAttention');
+  if(at) at.addEventListener('change', function(){ ofRenderActivity(); });
   const d = document.getElementById('actDays');
   if(d) d.addEventListener('change', function(){ ofLoadActivity(); });
   /* 🤫 التبديل بيعيد العرض بس — **مش** بيعيد التحميل: البيانات
@@ -1872,7 +2093,12 @@ const OF_ACT_FIELD_AR = {
   reason:'السبب', cause:'سبب الفرق', causeSum:'مجموع السبب', causeExact:'السبب مطابق للفرق', count:'العدد', itemCount:'عدد القطع', cartCountAfter:'باقي في السلة',
   saveMs:'من التأكيد للطباعة (ms)', paymobMs:'عند Paymob (ms)',
   deliverMs:'وصول للجهاز (ms)', totalMs:'الإجمالي (ms)', ref:'مرجع الطلب',
-  sid:'معرّف السلة', employeeName:'الموظفة', branch:'الفرع'
+  sid:'معرّف السلة', employeeName:'الموظفة', branch:'الفرع',
+  from:'من', to:'إلى', pct:'نسبة الخصم', barcode:'الباركود', legs:'عدد دفعات الكارت',
+  refs:'مراجع الدفع', waitedMs:'مدة الانتظار (ms)', skip:'سبب تخطي الحفظ', online:'الإنترنت',
+  expected:'المرجع المتوقع', matched:'المرجع المطابق', last4:'آخر 4 أرقام',
+  groups:'مجموعات الدمج', closed:'المغلقة', failed:'فشل', reqPoints:'النقط المطلوبة',
+  reqValue:'القيمة المطلوبة', sanePoints:'النقط الصحيحة', saneValue:'القيمة الصحيحة', balance:'الرصيد'
 };
 const OF_ACT_SKIP = { id:1, type:1, ts:1, employeeId:1, _linkedInvoice:1 };
 window.ofActOpen = function(id){
@@ -1893,11 +2119,20 @@ window.ofActOpen = function(id){
       + '<span style="font-weight:700; text-align:left;" dir="auto">' + esc(String(v)) + '</span></div>');
   });
   const inv = a.invoiceCode || a._linkedInvoice || '';
+  const intel = ofActIntelligence(a);
+  const _icol = intel.level === 'action' ? '#dc2626' : (intel.level === 'watch' ? '#b45309' : '#166534');
   let html = '<div style="font-weight:900; font-size:16px;">' + esc(ofActLabel(a.type)) + '</div>'
     + '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">'
     + ofWhen(a.ts, true) + ' · ' + esc(a.branch || '') + '</div>'
     + (inv ? '<div style="background:var(--panel2); border-radius:8px; padding:7px 9px; margin-bottom:8px; font-weight:800; font-size:13px;">🧾 ' + esc(inv) + '</div>'
            : '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">🧾 مفيش فاتورة مربوطة — إما السلة اتسابت من غير بيع، أو الحدث قديم (قبل تحديث الربط)</div>')
+    + '<div style="border:1px solid var(--line); border-right:4px solid ' + _icol + '; border-radius:11px; padding:10px; margin-bottom:10px; background:var(--panel2);">'
+      + '<div style="font-weight:900; color:' + _icol + '; margin-bottom:5px;">' + intel.icon + ' ' + esc(intel.levelLabel) + '</div>'
+      + '<div style="font-size:12.5px; line-height:1.8;"><b>التفسير:</b> ' + esc(intel.explain) + '</div>'
+      + '<div style="font-size:12.5px; line-height:1.8; margin-top:3px;"><b>الأثر:</b> ' + esc(intel.impact) + '</div>'
+      + '<div style="font-size:12.5px; line-height:1.8; margin-top:3px;"><b>الخطوة الصح:</b> ' + esc(intel.action) + '</div>'
+    + '</div>'
+    + '<div style="font-weight:900; font-size:13px; margin:8px 0 4px;">🔎 البيانات المسجلة</div>'
     + rows.join('');
   if(story.length > 1){
     html += '<div style="font-weight:900; font-size:13.5px; margin:12px 0 6px;">📖 قصة السلة دي بالترتيب</div>';
