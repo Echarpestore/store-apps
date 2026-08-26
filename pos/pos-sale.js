@@ -395,7 +395,55 @@ searchBar.addEventListener('keydown', (e)=>{
   }
 });
 
+// 💳🧠 Smart Payment Lock v346
+// قبل نتيجة الماكينة: ممنوع تعديل السلة لأننا لا نملك Cancel مؤكّد للطلب على الـterminal.
+// بعد الموافقة: التعديل مسموح **بقرار صريح من الموظف** ويدخل Adjustment Mode؛
+// الفرق لا يختفي: يظهر فورًا ويتسجل كمستحق رد مرتبط بنفس عملية الكارت.
+let _cardAdjustmentMode = false;
+let _cardAdjustmentApprovedAmount = 0;
+function cardCartEditBlockReason(){
+  if(!_cardMoneyAtRiskAt || _cardAdjustmentMode) return null;
+  const approved = Math.abs(cardApprovedSum(cardLegs || []));
+  if(approved > 0.005){
+    return 'approved';
+  }
+  return 'pending';
+}
+function cardAdjustmentMessage(){
+  const approved = Math.abs(cardApprovedSum(cardLegs || []));
+  const totalNow = Math.abs(cartTotal());
+  const diff = +(approved - totalNow).toFixed(2);
+  if(diff > 0.005) return 'اتسحب ' + approved.toFixed(2) + ' ج.م · الإجمالي الجديد ' + totalNow.toFixed(2) + ' ج.م · لازم نرجّع ' + diff.toFixed(2) + ' ج.م';
+  if(diff < -0.005) return 'اتسحب ' + approved.toFixed(2) + ' ج.م · الإجمالي الجديد ' + totalNow.toFixed(2) + ' ج.م · باقي تحصيل ' + Math.abs(diff).toFixed(2) + ' ج.م';
+  return 'التعديل بنفس القيمة — مفيش فرق مالي';
+}
+function blockCartEditAfterCard(){
+  const why = cardCartEditBlockReason();
+  if(!why) return false;
+  if(why === 'pending') {
+    showToast('⏳ طلب الفيزا على الماكينة ولسه نتيجته مش مؤكدة — استنى قبول/رفض العملية الأول عشان مايتسحبش مبلغ قديم', 'err');
+    return true;
+  }
+  const approved = Math.abs(cardApprovedSum(cardLegs || []));
+  const ok = (typeof confirm === 'function') ? confirm(
+    '✅ تم سحب ' + approved.toFixed(2) + ' ج.م من العميلة بالفعل.\n\n'
+    + 'لو هتعدلي السلة دلوقتي، السيستم هيحسب الفرق تلقائيًا ويسجله كمستحق رد/تحصيل.\n'
+    + 'تكملي تعديل السلة؟'
+  ) : false;
+  if(!ok) return true;
+  _cardAdjustmentMode = true;
+  _cardAdjustmentApprovedAmount = approved;
+  showToast('✏️ وضع تعديل بعد الدفع شغال — أي فرق هيظهر ويتسجل تلقائيًا', 'warn');
+  try{ if(typeof _logActivity === 'function') _logActivity('card_adjustment_started', { charged: approved, totalBeforeEdit: Math.abs(cartTotal()) }); }catch(e){}
+  return false;
+}
+if(typeof window !== 'undefined'){
+  window.cardCartEditBlockReason = cardCartEditBlockReason;
+  window.blockCartEditAfterCard = blockCartEditAfterCard;
+}
+
 function addToCart(item){
+  if(blockCartEditAfterCard()) return;
   // 🕵️ v296: مع أول قطعة بيتولد **معرّف سلة** بيتحط على كل حدث بيحصل
   //    فيها. لما الفاتورة تتحفظ بيتسجل حدث ربط (sid ← رقم الفاتورة)،
   //    فسجل النشاط في Office بيقدر يقول لكل حدث الفاتورة بتاعته —
@@ -444,6 +492,7 @@ function _isLastAdded(c){ return !!(lastAddedId && c.id===lastAddedId && !c.isRe
 // عروض الكتالوج اللي العميل فعّلها من التطبيق (بتتطبّق تلقائي على المنتج المطابق في السلة)
 let custActivatedOffers = {};
 function applyCustomerOffers(){
+  if(cardCartEditBlockReason()) return;
   if(!custActivatedOffers || !cart.length) return;
   cart.forEach(line=>{
     if(line.isReturn || line.isRedemption || line.offerApplied || !line.barcode) return;
@@ -596,6 +645,8 @@ function clearSaleState(){
   _cardFirstApprovedAt = null;   // 🕵️ وسحب الكارت القديم مالوش علاقة بالسلة الجديدة
   _cardMoneyAtRiskAt = null;
   _cartEditsAfterCard = [];
+  _cardAdjustmentMode = false;
+  _cardAdjustmentApprovedAmount = 0;
   // 🔒 أي متابعة دفع بالكارت من العملية اللي فاتت لازم تتقفل مع السلة الجديدة
   try{ paymobReset(); }catch(e){}
   cart = [];
@@ -667,6 +718,7 @@ function renderHoldButtons(){
 
 // كتابة الكمية بأي رقم مباشرة
 function cartSetQty(idx, val){
+  if(blockCartEditAfterCard()) return;
   const c = cart[idx]; if(!c) return;
   let nq = parseInt(val);
   if(isNaN(nq) || nq < 1){ if(nq === 0){ cartRemove(idx); return; } nq = 1; }
@@ -676,6 +728,7 @@ function cartSetQty(idx, val){
 
 // + / − للكمية في سطر السلة
 function cartQty(idx, delta){
+  if(blockCartEditAfterCard()) return;
   const c = cart[idx]; if(!c) return;
   let nq = (c.qty||1) + delta;
   if(nq < 1){ cartRemove(idx); return; }
@@ -684,6 +737,7 @@ function cartQty(idx, delta){
 }
 // مسح صنف من السلة
 function cartRemove(idx){
+  if(blockCartEditAfterCard()) return;
   if(idx < 0 || idx >= cart.length) return;
   const _rm = cart[idx];
   _logActivity('item_removed', { name:_rm.name||'', qty:_rm.qty||1, price:_rm.price||0, cartCountAfter: cart.length-1 });
@@ -954,6 +1008,7 @@ function _isSameLocalDay(ms, now){
 
 // يضيف صنف من الفاتورة الممسوحة كمرتجع (بالسالب) في السلة الحالية
 function returnItemFromInvoice(itemIdx){
+  if(blockCartEditAfterCard()) return;
   if(!returnInvoiceData) return;
   const items = returnInvoiceData.items || [];
   const it = items[itemIdx];
@@ -1175,6 +1230,7 @@ function qbxEditSel(){
   function save(){
     const out = refresh();
     if(!out) return;
+    if(blockCartEditAfterCard()) return;
     const v = out.v;
     if(line.origPrice == null) line.origPrice = base;   // الأصلي بيتحفظ مرة واحدة
     line.price   = line.isReturn ? -out.unit : out.unit;
@@ -1212,6 +1268,7 @@ function qbxDeleteSel(){
 
 // تحويل الفاتورة كلها لمرتجع بتأكيد واحد بس — بدل ما تدوس مرتجع على كل صنف لوحده
 function qbxReturnWholeInvoice(){
+  if(blockCartEditAfterCard()) return;
   if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس — مش مسموح للكاشير', 'err'); return; }
   if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
   if(!confirm(`متأكد إنك عايز تحوّل كل الفاتورة (${cart.length} صنف) لمرتجع كامل؟`)) return;
@@ -1227,6 +1284,7 @@ function qbxReturnWholeInvoice(){
 // إرجاع صنف داخل نفس الفاتورة الحالية (مثلاً عملية تبديل) — بيضيف سطر بالسالب
 // بلون أحمر يقلل من إجمالي الفاتورة، أو يرجع الفرق للعميل لو الإجمالي بقى بالسالب.
 function returnCartItem(idx){
+  if(blockCartEditAfterCard()) return;
   const item = cart[idx];
   if(item.isReturn){
     // دوس تاني على نفس الصنف يرجّعه لبيع عادي (تراجع)
@@ -1253,6 +1311,7 @@ function returnCartItem(idx){
 //    شغالة بـ**رقم السطر** مش بكود المنتج، وخصم المخزون بيجمع الكميات،
 //    فسطرين بنفس الكود بيخصموا صح.
 function splitCartLine(idx){
+  if(blockCartEditAfterCard()) return;
   const line = cart[idx];
   if(!line) return;
   if(line.isRedemption || line.isRewardDiscount){ showToast('السطر ده مينفعش يتفصل', 'err'); return; }
@@ -1267,12 +1326,14 @@ function splitCartLine(idx){
 if(typeof window !== 'undefined') window.splitCartLine = splitCartLine;
 
 function changeQty(idx, delta){
+  if(blockCartEditAfterCard()) return;
   const line = cart[idx];
   line.qty += delta;   // مسموح بأي كمية حتى لو أكبر من المخزون
   if(line.qty <= 0){ cart.splice(idx,1); selectedCartIdx = null; }
   renderCart();
 }
 function removeFromCart(idx){
+  if(blockCartEditAfterCard()) return;
   if(cart[idx] && cart[idx].isRedemption) pendingRedemption = null;
   // 🔴 باج التركيز (AI_HANDOFF §0، مسار ١) — نفس منطق cartRemove بالظبط:
   // فوكس searchBar قبل ما renderCart تمسح الزرار المفوكس.
@@ -1740,6 +1801,7 @@ async function registerNewCustomer(){
 
 // ---------------- Sidebar actions (Give Discount / Accept Return / Cashier / Ship) ----------------
 async function openGiveDiscount(){
+  if(blockCartEditAfterCard()) return;
   if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
   if(!hasPerm('canDiscount')){ showToast('الخصم للمشرف/المدير بس — مش مسموح للكاشير', 'err'); return; }
   const maxPct = Number(myPerms().maxDiscountPct);
@@ -1785,6 +1847,7 @@ function showCashierInfo(){
 let pendingRedemption = null; // {points, value} — بيتثبّت فعليًا (خصم النقط) بس لما الفاتورة تتحفظ
 
 async function openRedeemPoints(){
+  if(blockCartEditAfterCard()) return;
   // 🔐 الاستبدال اليدوي (من غير طلب من التطبيق) بقى بصلاحية —
   //    الطريق الطبيعي إن العميل يطلب من التطبيق والكاشير تأكّد بس.
   if(typeof hasPerm === 'function' && !hasPerm('canRedeemManual')){
@@ -2088,6 +2151,7 @@ function refreshCustomerActionUI(){
 }
 
 function applyCustomerReward(){
+  if(blockCartEditAfterCard()) return;
   if(!custReward) return;
   const cartTot = cart.reduce((s,c)=> s + c.price*c.qty, 0);
   if(cartTot < (custReward.minInvoice||0)){ showToast('الفاتورة لسه أقل من الحد المطلوب', 'err'); return; }
@@ -2102,6 +2166,7 @@ function applyCustomerReward(){
 
 // بيطبّق طلب الاستبدال اللي العميل عمله من التطبيق (بيظهر أول ما نكتب رقمه)
 function applyPendingRedeem(){
+  if(blockCartEditAfterCard()) return;
   if(pendingRedemption){ showToast('في استبدال مطبّق بالفعل على الفاتورة', 'err'); return; }
   // 🛡️ فاز 3أ: بنحسب من إعدادات المحل والرصيد الفعلي — مش من أرقام الطلب
   const _rr = loyaltyRedemptionConfig || {};
@@ -3006,6 +3071,9 @@ window.paymobResetActive = paymobResetActive;
 function paymobReset(){
   _paymobAutoFired = false;
   paymobResetActive();
+  // لو مفيش موافقة حصلت فعلًا، إلغاء طلب الفيزا يرجّع السلة قابلة للتعديل.
+  // لو فيه موافقة، تفضل مقفولة لحد حفظ/إنهاء الفاتورة عشان الفلوس اتسحبت بالفعل.
+  if(!_cardFirstApprovedAt){ _cardMoneyAtRiskAt = null; _cartEditsAfterCard = []; _cardAdjustmentMode = false; _cardAdjustmentApprovedAmount = 0; }
   paymobCardInfo = null; window.paymobCardInfo = null;
   paymobCardTxns = []; window.paymobCardTxns = paymobCardTxns;
   cardLegs = []; window.cardLegs = cardLegs;
@@ -3516,9 +3584,10 @@ function updatePaySummary(){
         + 'border-radius:8px; padding:7px 9px; margin:6px 0; font-size:11.5px; font-weight:800; line-height:1.6;';
       if(holder && holder.parentNode) holder.parentNode.insertBefore(box, holder);
     }
-    box.innerHTML = '⚠️ اتسحب من الكروت ' + Math.abs(cardApprovedSum(cardLegs)).toFixed(2)
-      + ' ج.م والفاتورة بقت ' + requiredAbs.toFixed(2)
-      + ' ج.م — زيادة ' + over.toFixed(2) + ' ج.م.<br>الفرق ده لازم يترد للعميل بمرتجع من Paymob، مش من الدرج.';
+    box.innerHTML = '💳 <b>تعديل بعد الدفع:</b> اتسحب ' + Math.abs(cardApprovedSum(cardLegs)).toFixed(2)
+      + ' ج.م · الإجمالي الجديد ' + requiredAbs.toFixed(2)
+      + ' ج.م · <b>لازم نرجّع ' + over.toFixed(2) + ' ج.م</b>.<br>'
+      + 'هيتسجل تلقائيًا في Office: مستحق الرد ← جارٍ الرد ← تم الرد. الرد يكون على نفس عملية Paymob، مش من الدرج.';
   })();
 
   const dueLabel = document.getElementById('qbxDueLabel')
@@ -3973,6 +4042,10 @@ window.returnPointsDeduction = returnPointsDeduction;
         employeeName: (currentEmployee && currentEmployee.name) || ''
       });
       if(_due){
+        _due.adjustmentMode = !!_cardAdjustmentMode;
+        _due.adjustmentStartedCharged = _cardAdjustmentApprovedAmount || _due.charged;
+        _due.status = 'due';
+        _due.statusLabel = 'مستحق الرد';
         const _c0 = cardOverCause(_cartEditsAfterCard, _due.diff);
         if(_c0){ _due.cause = _c0.text; _due.causeExact = _c0.exact; }
         db.collection('pos_card_refunds_due').add(_due).catch(function(){});
