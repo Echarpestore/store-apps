@@ -147,67 +147,6 @@ window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
 
-// ============================================================
-// 🔐 Sync Guard — الفاتورة الأوفلاين تفضل في IndexedDB لحد تأكيد السيرفر.
-// قبل Logout أو تقفيل اليوم بنستنى Firestore نفسه يقول إن كل الكتابات
-// الصادرة قبل اللحظة دي وصلت للباك إند. لا بنمسح cache ولا queue محلية.
-// ============================================================
-const POS_SYNC_WAIT_MS = 15000;
-window.__posPendingWritesKnown = false;
-
-function _posPromiseTimeout(p, ms){
-  return Promise.race([
-    Promise.resolve(p),
-    new Promise(function(_r, reject){ setTimeout(function(){ reject(new Error('sync-timeout')); }, ms || POS_SYNC_WAIT_MS); })
-  ]);
-}
-
-async function posFlushPendingWrites(opts){
-  opts = opts || {};
-  const ms = Number(opts.timeoutMs) || POS_SYNC_WAIT_MS;
-  try{
-    // waitForPendingWrites يشمل الفاتورة + batch المخزون/النقط + أي كتابة سبق إصدارها.
-    await _posPromiseTimeout(db.waitForPendingWrites(), ms);
-    window.__posPendingWritesKnown = false;
-    return { ok:true, pending:false };
-  }catch(e){
-    window.__posPendingWritesKnown = true;
-    return {
-      ok:false,
-      pending:true,
-      offline: (typeof navigator !== 'undefined' && navigator.onLine === false),
-      timeout: !!(e && e.message === 'sync-timeout'),
-      error:e
-    };
-  }
-}
-window.posFlushPendingWrites = posFlushPendingWrites;
-
-async function posRequireSynced(actionLabel, opts){
-  actionLabel = actionLabel || 'العملية';
-  const r = await posFlushPendingWrites(opts);
-  if(r.ok) return r;
-  const msg = r.offline
-    ? ('📴 فيه بيانات محفوظة على الجهاز ولسه مستنية النت. مش هنكمل ' + actionLabel + ' قبل ما تترفع للسيرفر.')
-    : ('⏳ لسه فيه بيانات بتترفع للسيرفر. استنى لحظة وجرب ' + actionLabel + ' تاني.');
-  try{ showToast(msg, 'err'); }catch(e){}
-  return r;
-}
-window.posRequireSynced = posRequireSynced;
-
-// لما النت يرجع، نطلب تأكيد الخلفية ونطفي علامة الـpending بمجرد وصول كل الكتابات.
-window.addEventListener('online', function(){
-  setTimeout(function(){ posFlushPendingWrites({ timeoutMs:30000 }).catch(function(){}); }, 500);
-});
-
-// المتصفح مش بيسمح بانتظار async وقت قفل التاب، لكن نقدر نحذر المستخدم
-// لو إحنا عارفين إن فيه كتابة مؤجلة. Firestore persistence نفسها تحتفظ بها.
-window.addEventListener('beforeunload', function(e){
-  if(!window.__posPendingWritesKnown) return;
-  e.preventDefault();
-  e.returnValue = '';
-});
-
 // بيحمّل أسماء الفروع المعتمدة (من الموظفين المسجّلين) لقايمة اختيار الفرع —
 // عشان نمنع أخطاء الكتابة اليدوية اللي بتعمل "فرع جديد" بالغلط
 async function loadBranchSetupOptions(){
@@ -733,16 +672,36 @@ window.showUpdateBar = showUpdateBar;
 // "أبلغ الأجهزة" → الرقم بيتغيّر في Firestore → كل جهاز سامع بيسأل فورًا.
 // وكل جهاز بيسجّل نسخته عشان تعرف مين اتحدّث ومين لأ.
 // ============================================================
-const APP_VERSION = (typeof CACHE_NAME_HINT !== 'undefined') ? CACHE_NAME_HINT : null;
 let _updSignalSeen = null;
+let _activePosVersion = '';
+
+function posVersionNumber(v){
+  const m=String(v||'').match(/v(\d+)/i);
+  return m ? Number(m[1]) : 0;
+}
+function applyActivePosVersion(v){
+  v=String(v||'').trim(); if(!/^v\d+$/.test(v)) return;
+  _activePosVersion=v;
+  const el=document.getElementById('versionBadge');
+  if(el) el.textContent='echarpe POS · '+v;
+}
+function requestActivePosVersion(){
+  try{
+    const c=navigator.serviceWorker&&navigator.serviceWorker.controller;
+    if(c) c.postMessage({type:'GET_VERSION'});
+  }catch(e){}
+}
 
 function reportMyVersion(){
   try{
     if(!currentBranch || !db) return;
-    const v = (document.getElementById('verBadge') || {}).textContent || '';
+    const badge=(document.getElementById('versionBadge')||{}).textContent||'';
+    const v=_activePosVersion || ((String(badge).match(/v\d+/i)||[])[0]||'');
+    // لو النسخة لسه ماوصلتش من الـSW، ما نسجلش قيمة فاضية/مضللة.
+    if(!v){ requestActivePosVersion(); return; }
     db.collection(TEST_SETTINGS).doc('device_versions').set({
       [currentBranch + '|' + (navigator.userAgent.slice(-24) || 'dev')]: {
-        branch: currentBranch, version: v.trim(), at: Date.now()
+        branch: currentBranch, version:v, at:Date.now()
       }
     }, { merge:true }).catch(function(){});
   }catch(e){}
@@ -778,7 +737,8 @@ async function showDeviceVersions(){
     const data = snap.exists ? snap.data() : {};
     const rows = Object.values(data).sort(function(a,b){ return (b.at||0) - (a.at||0); });
     if(!rows.length){ showToast('لسه مفيش أجهزة سجّلت نسختها', 'err'); return; }
-    const newest = rows.map(function(r){ return r.version || ''; }).sort().pop();
+    const newest = rows.map(function(r){ return r.version || ''; })
+      .sort(function(a,b){ return posVersionNumber(a)-posVersionNumber(b); }).pop();
     const html = rows.map(function(r){
       const old = (r.version || '') !== newest;
       const mins = Math.round((Date.now() - (r.at||0)) / 60000);
@@ -810,6 +770,13 @@ window.showDeviceVersions = showDeviceVersions;
 
 function initAutoUpdate(){
   if(!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.addEventListener('message', function(e){
+    if(e.data && e.data.type==='POS_VERSION'){
+      applyActivePosVersion(e.data.version);
+      setTimeout(reportMyVersion, 50);
+    }
+  });
+  requestActivePosVersion();
   navigator.serviceWorker.register('sw.js').then(function(reg){
     _swReg = reg;
     // نسخة مستنية موجودة خلاص
@@ -828,8 +795,8 @@ function initAutoUpdate(){
     // 📡 إشارة فورية من المالك (الأساس) + سؤال كل 10 دقايق كشبكة أمان
     watchUpdateSignal(reg);
     setInterval(function(){ try{ reg.update(); }catch(e){} }, 10*60*1000);
-    setTimeout(reportMyVersion, 4000);
-    setInterval(reportMyVersion, 30*60*1000);
+    setTimeout(function(){ requestActivePosVersion(); reportMyVersion(); }, 4000);
+    setInterval(function(){ requestActivePosVersion(); reportMyVersion(); }, 30*60*1000);
   }).catch(function(e){ console.warn('sw register', e); });
 
   // أول ما النسخة الجديدة تشتغل، الصفحة بتتحدث مرة واحدة بس
@@ -1192,11 +1159,7 @@ async function cardLogin(code){
   }
 }
 
-async function logout(){
-  // خروج الموظف لا يمسح أي queue، لكن بنرفض الخروج لو فيه كتابة لسه
-  // ما وصلتش للسيرفر عشان الشاشة ما تديش إحساس كاذب إن كل حاجة اترفعت.
-  const sync = await posRequireSynced('الخروج', { timeoutMs:12000 });
-  if(!sync.ok) return;
+function logout(){
   currentEmployee = null;
   cart = [];
   currentBranch = localStorage.getItem('pos_branch') || currentBranch;   // الجهاز يرجع لفرعه الأصلي بعد خروج الأدمن

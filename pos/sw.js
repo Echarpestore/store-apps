@@ -1,4 +1,4 @@
-const CACHE_NAME = 'store-apps-shell-v341';
+const CACHE_NAME = 'store-apps-shell-v358';
 
 // ⚠️ مفيش skipWaiting تلقائي.
 // النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر
@@ -9,7 +9,19 @@ self.addEventListener('install', (event) => {
 
 // الصفحة بتبعت 'SKIP_WAITING' لما الكاشير يوافق
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (!event.data) return;
+  if (event.data.type === 'SKIP_WAITING') { self.skipWaiting(); return; }
+  // v358: الصفحة تسأل الـSW الفعّال نفسه عن نسخته بدل التخمين من أسماء الكاش.
+  if (event.data.type === 'GET_VERSION') {
+    try {
+      const target = event.source;
+      if (target && target.postMessage) target.postMessage({
+        type: 'POS_VERSION',
+        version: CACHE_NAME.replace('store-apps-shell-', ''),
+        cacheName: CACHE_NAME
+      });
+    } catch (_) {}
+  }
 });
 
 // ⚠️ الباج اللي عمل شاشة سودا:
