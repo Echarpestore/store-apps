@@ -2849,7 +2849,7 @@ function cardAmountReject(val, remainingAbs){
   }
   return null;
 }
-// 🔢 أنهي شريحة كارت المفروض تتفتح لما الكاشير يدوس «فيزا» أو F3
+// 🔢 أنهي شريحة كارت المفروض تتفتح من زر «فيزا» العام
 function nextCardSeq(legs, maxLegs){
   const max = maxLegs || 2;
   for(let s = 1; s <= max; s++){
@@ -2888,11 +2888,11 @@ let pendingCardSeq = 0;   // 💳 شريحة الكارت المفتوحة في 
 function togglePayMethod(method){
   const total = cartTotal();
   const isRefund = total < 0;
-  const isCard = (method === 'visa' || method === 'visa2');
-  // 💳 «فيزا» (والاختصار F3) بيروح لأول كارت متاح: لو الأول اتأكد يفتح التاني على طول
+  const isCard = (method === 'visa' || method === 'visa1' || method === 'visa2');
+  // 💳 زر «فيزا» العام يروح لأول كارت متاح، لكن visa1 (F3) ثابت على كارت 1.
   let seq = 0;
   if(isCard){
-    seq = (method === 'visa2') ? 2 : nextCardSeq(cardLegs, MAX_CARD_LEGS);
+    seq = (method === 'visa2') ? 2 : (method === 'visa1' ? 1 : nextCardSeq(cardLegs, MAX_CARD_LEGS));
     if(!seq){ showToast('⛔ الكارتين اتسحبوا خلاص', 'err'); return; }
     const block = cardLegBlockReason(cardLegs, seq, isRefund, MAX_CARD_LEGS);
     if(block){ showToast('⛔ ' + block, 'err'); return; }

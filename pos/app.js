@@ -1586,7 +1586,7 @@ function injectUnifiedToolbars(){
 
 // ---------------- ⌨️ اختصارات الكيبورد (شاشة البيع) ----------------
 // F1 أو Tab (بره الخانات): شاشة البيع من أي مكان
-// F2/F3/F4: كاش/فيزا/انستا (نفس ضغطة الأيقونة بالظبط) · F8: مسح المدفوعات · Shift+Enter: حفظ وطباعة
+// F2/F3/F4: كاش/كارت 1 فيزا/انستا · F8: مسح المدفوعات · Shift+Enter: حفظ وطباعة
 function _onSaleScreen(){
   const el = document.getElementById('saleScreen');
   return !!(el && el.offsetParent !== null);
@@ -1631,8 +1631,9 @@ document.addEventListener('keydown', function(e){
   if(!_onSaleScreen()) return;
 
   if(e.key === 'F2'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('cash'); return; }
-  // 💳 F3 بيروح لأول كارت متاح لوحده (لو الأول اتأكد بيفتح التاني) · Shift+F3 = كارت 2 مباشرة
-  if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod(e.shiftKey ? 'visa2' : 'visa'); return; }
+  // 💳 v363: F3 = كارت 1 فيزا دائمًا. مايتنقلش تلقائيًا لكارت 2.
+  // كارت 2 يفضل اختياره من زر «فيزا 2» عشان الاختصار يبقى ثابت ومايفاجئش الكاشير.
+  if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('visa1'); return; }
   if(e.key === 'F4'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('instapay'); return; }
   if(e.key === 'F8'){
     e.preventDefault();
