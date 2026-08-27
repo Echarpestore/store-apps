@@ -215,9 +215,53 @@ function _recvLogLoad(){
   }catch(e){ console.warn('recv log load', e && e.message); }
 }
 
+// 💾 v365 — مسودة «استلام المنتجات» حسب الفرع، وتعيش بعد Logout/قفل التطبيق.
+const RECV_DRAFT_KEY_PREFIX = 'pos_receive_draft_v1_';
+let _recvDraftBranch = '';
+function _recvDraftKey(branch){
+  return RECV_DRAFT_KEY_PREFIX + encodeURIComponent(String(branch || '').trim() || 'default');
+}
+function saveReceiveDraft(branch){
+  try{
+    const br = String(branch || _recvDraftBranch || (typeof currentBranch!=='undefined' ? currentBranch : '') || '').trim();
+    if(!br) return;
+    const key = _recvDraftKey(br);
+    if(!Array.isArray(receiveCart) || !receiveCart.length){ localStorage.removeItem(key); return; }
+    localStorage.setItem(key, JSON.stringify({v:1,branch:br,savedAt:Date.now(),items:receiveCart}));
+  }catch(e){ console.warn('receive draft save', e && e.message); }
+}
+function _recvDraftClear(branch){
+  try{ localStorage.removeItem(_recvDraftKey(branch || _recvDraftBranch || currentBranch)); }
+  catch(e){ console.warn('receive draft clear', e && e.message); }
+}
+function _recvDraftLoadForCurrentBranch(){
+  try{
+    const br = String((typeof currentBranch!=='undefined' ? currentBranch : '') || '').trim();
+    if(!br) return false;
+    // لو الأدمن بدّل الفرع، نحفظ مسودة الفرع القديم قبل ما نحمل الجديد.
+    if(_recvDraftBranch && _recvDraftBranch !== br) saveReceiveDraft(_recvDraftBranch);
+    if(_recvDraftBranch !== br){ receiveCart = []; _recvDraftBranch = br; }
+    if(receiveCart.length) return true;
+    const raw = localStorage.getItem(_recvDraftKey(br));
+    if(!raw) return false;
+    const d = JSON.parse(raw);
+    if(!d || !Array.isArray(d.items)){ _recvDraftClear(br); return false; }
+    receiveCart = d.items.filter(function(x){
+      return x && x.id && Number.isFinite(Number(x.qty));
+    });
+    if(!receiveCart.length){ _recvDraftClear(br); return false; }
+    return true;
+  }catch(e){ console.warn('receive draft load', e && e.message); return false; }
+}
+if(typeof window !== 'undefined'){
+  window.saveReceiveDraft = saveReceiveDraft;
+  window.restoreReceiveDraft = _recvDraftLoadForCurrentBranch;
+}
+
 function goToReceiveGoods(){
   if(!hasPerm('canReceiveGoods') && !hasPerm('canEditInventory')){ showToast('محتاج صلاحية استلام البضاعة', 'err'); return; }
   showScreen('receiveGoodsScreen');
+  try{ _recvDraftLoadForCurrentBranch(); }catch(e){}
   renderReceiveCart();   // القايمة بتفضل زي ما هي (مبتتمسحش إلا بعد التأكيد)
   // 🔖 الطلبات المفتوحة بتبان مع فتح الشاشة — قبل ما يبدأ يستلم
   try{ if(typeof renderRequestsTab === 'function') renderRequestsTab(); }catch(e){}
@@ -360,6 +404,7 @@ function receiveTogglePick(idx, checked){
 if(typeof window !== 'undefined') window.receiveTogglePick = receiveTogglePick;
 
 function renderReceiveCart(){
+  try{ if(!_recvDraftBranch) _recvDraftBranch = String(currentBranch||''); saveReceiveDraft(); }catch(e){}
   const wrap = document.getElementById('receiveCartWrap');
   const btn = document.getElementById('receiveConfirmBtn');
   if(!wrap) return;
@@ -481,6 +526,7 @@ async function confirmReceiveCart(){
       if(typeof checkRequestsAfterReceive === 'function') checkRequestsAfterReceive(rows);
     }catch(e){ console.warn('requests after receive', e); }
     receiveCart = [];
+    try{ _recvDraftClear(); }catch(e){}
     renderReceiveCart();
     renderReceiveGoodsLog();
     document.getElementById('receiveGoodsBarcode').focus();

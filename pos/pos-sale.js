@@ -597,6 +597,7 @@ function renderCart(){
   refreshCustomerActionUI();
   updatePaySummary();
   renderHoldButtons();
+  try{ _saleDraftSave(); }catch(e){}
   try{ if(typeof boostRenderStrip === 'function') boostRenderStrip(); }catch(e){}
 }
 
@@ -609,6 +610,69 @@ function revertCustomerOffers(){
       delete line.origPrice;
     }
   });
+}
+
+// ============================================================
+// 💾 v365 — مسودة البيع تعيش بعد Logout / Refresh / قفل البرنامج
+// ------------------------------------------------------------
+// بنحفظ الأصناف فقط حسب الفرع. حالة الدفع/Paymob لا تُحفظ نهائيًا، عشان
+// فاتورة قديمة ما تورّثش Pending أو كارت Approved للعميل اللي بعدها.
+// ============================================================
+const SALE_DRAFT_KEY_PREFIX = 'pos_sale_draft_v1_';
+function _saleDraftKey(branch){
+  return SALE_DRAFT_KEY_PREFIX + encodeURIComponent(String(branch || '').trim() || 'default');
+}
+function _saleDraftSave(){
+  try{
+    if(typeof currentBranch === 'undefined' || !currentBranch) return;
+    const key = _saleDraftKey(currentBranch);
+    if(!Array.isArray(cart) || !cart.length){ localStorage.removeItem(key); return; }
+    localStorage.setItem(key, JSON.stringify({
+      v:1, branch:String(currentBranch), savedAt:Date.now(),
+      firstItemAt:(typeof _cartFirstItemAt !== 'undefined' ? _cartFirstItemAt : null),
+      items:cart
+    }));
+  }catch(e){ console.warn('sale draft save', e && e.message); }
+}
+function _saleDraftClear(branch){
+  try{ localStorage.removeItem(_saleDraftKey(branch || currentBranch)); }
+  catch(e){ console.warn('sale draft clear', e && e.message); }
+}
+function _saleDraftRestore(){
+  try{
+    if(typeof currentBranch === 'undefined' || !currentBranch || (Array.isArray(cart) && cart.length)) return false;
+    const raw = localStorage.getItem(_saleDraftKey(currentBranch));
+    if(!raw) return false;
+    const d = JSON.parse(raw);
+    if(!d || !Array.isArray(d.items) || !d.items.length){ _saleDraftClear(); return false; }
+    const items = d.items.filter(function(x){
+      return x && typeof x === 'object' && Number(x.qty) > 0 && isFinite(Number(x.price));
+    });
+    if(!items.length){ _saleDraftClear(); return false; }
+    cart = items;
+    selectedCartIdx = null;
+    if(typeof _cartFirstItemAt !== 'undefined') _cartFirstItemAt = Number(d.firstItemAt) || Date.now();
+    if(typeof _cartSid !== 'undefined') _cartSid = (typeof _newCartSid === 'function') ? _newCartSid() : null;
+    // مهم: نرجّع الأصناف فقط — ولا أي حالة دفع قديمة.
+    try{ if(typeof clearCardSaleCompleteState === 'function') clearCardSaleCompleteState(); }catch(e){}
+    try{ if(typeof paymobReset === 'function') paymobReset(); }catch(e){}
+    try{ if(typeof resetPaymentUI === 'function') resetPaymentUI(); }catch(e){}
+    try{ clearCustomerContext(); }catch(e){}
+    return true;
+  }catch(e){ console.warn('sale draft restore', e && e.message); return false; }
+}
+function _saleDraftBeforeLogout(){
+  _saleDraftSave();
+  // لا نحمل حالة دفع للموظف التالي. الأصناف محفوظة في localStorage وترجع بعد الدخول.
+  try{ if(typeof clearCardSaleCompleteState === 'function') clearCardSaleCompleteState(); }catch(e){}
+  try{ if(typeof paymobReset === 'function') paymobReset(); }catch(e){}
+  try{ if(typeof resetPaymentUI === 'function') resetPaymentUI(); }catch(e){}
+}
+if(typeof window !== 'undefined'){
+  window.saveSaleDraft = _saleDraftSave;
+  window.restoreSaleDraft = _saleDraftRestore;
+  window.clearSaleDraft = _saleDraftClear;
+  window.prepareSaleDraftForLogout = _saleDraftBeforeLogout;
 }
 
 // ============ هولد سريع بمكانين (محلي، من غير خروج من الشاشة) ============
@@ -641,6 +705,7 @@ function captureSaleState(){
   };
 }
 function clearSaleState(){
+  try{ _saleDraftClear(); }catch(e){}
   _cartFirstItemAt = null;
   _cartSid = null;               // 🕵️ سلة جديدة = معرّف جديد (مش بيتوارث)
   _cardFirstApprovedAt = null;   // 🕵️ وسحب الكارت القديم مالوش علاقة بالسلة الجديدة
@@ -4396,6 +4461,7 @@ window.returnPointsDeduction = returnPointsDeduction;
       showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
     }
     _saleJustSaved = true;   // 🕵️ المسح الجاي طبيعي (بعد حفظ)
+    try{ _saleDraftClear(); }catch(e){}   // ✅ الفاتورة اتحفظت؛ ممنوع ترجع كمسودة بعد restart
     // 💳 الفاتورة اتحفظت واتطبعت وبيانات الكروت اتسجلت جواها — الشرائح بتتصفّر هنا
     // (قبل goToSale) عشان شاشة الفاتورة الجديدة ما تسألش عن كارت اتسحب خلاص
     try{ clearCardSaleCompleteState(); paymobReset(); }catch(e){}

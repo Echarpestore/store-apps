@@ -1603,8 +1603,8 @@ document.addEventListener('keydown', function(e){
   if(!_onSaleScreen()) return;
 
   if(e.key === 'F2'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('cash'); return; }
-  // 💳 F3 بيروح لأول كارت متاح لوحده (لو الأول اتأكد بيفتح التاني) · Shift+F3 = كارت 2 مباشرة
-  if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod(e.shiftKey ? 'visa2' : 'visa'); return; }
+  // 💳 F3 = كارت 1 فيزا ثابت — كارت 2 يفضل من زر فيزا 2.
+  if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('visa1'); return; }
   if(e.key === 'F4'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('instapay'); return; }
   if(e.key === 'F8'){
     e.preventDefault();

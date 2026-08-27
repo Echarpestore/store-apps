@@ -1160,7 +1160,16 @@ async function cardLogin(code){
   }
 }
 
+// 💾 آخر حزام أمان لو البرنامج/التبويب اتقفل فجأة.
+window.addEventListener('beforeunload', function(){
+  try{ if(typeof saveSaleDraft === 'function') saveSaleDraft(); }catch(e){}
+  try{ if(typeof saveReceiveDraft === 'function') saveReceiveDraft(); }catch(e){}
+});
+
 function logout(){
+  // 💾 v365: قبل الخروج احفظ مسودات الشغل، لكن لا تورّث حالة دفع قديمة.
+  try{ if(typeof prepareSaleDraftForLogout === 'function') prepareSaleDraftForLogout(); }catch(e){}
+  try{ if(typeof saveReceiveDraft === 'function') saveReceiveDraft(); }catch(e){}
   currentEmployee = null;
   cart = [];
   currentBranch = localStorage.getItem('pos_branch') || currentBranch;   // الجهاز يرجع لفرعه الأصلي بعد خروج الأدمن
@@ -1212,6 +1221,8 @@ let noRoleAssignmentsYet = false; // bootstrap flag: true if the system has neve
 
 function enterDashboard(){
   const roleLabel = myPerms().label || 'كاشير';
+  // 💾 لو البرنامج اتقفل أو حصل Logout وفيه فاتورة غير مكتملة، رجّع أصنافها للفرع نفسه.
+  try{ if(typeof restoreSaleDraft === 'function') restoreSaleDraft(); }catch(e){}
   document.getElementById('dashWho').textContent = (currentEmployee.name || currentEmployee.id) + ' — ' + roleLabel + ' · 🏬 ' + currentBranch;
   refreshHeldCount();
 
