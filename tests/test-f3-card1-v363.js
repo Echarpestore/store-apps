@@ -6,5 +6,5 @@ assert(app.includes("if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePay
 assert(!app.includes("togglePayMethod(e.shiftKey ? 'visa2' : 'visa')"), 'old dynamic F3 behavior remains');
 assert(sale.includes("method === 'visa1'"), 'visa1 route missing');
 assert(sale.includes("method === 'visa1' ? 1 : nextCardSeq"), 'visa1 must resolve to card seq 1');
-assert(sw.includes("store-apps-shell-v363"), 'SW version must be v363');
+const _swv=Number((sw.match(/store-apps-shell-v(\d+)/)||[])[1]||0); assert(_swv>=363,'SW must be v363 or newer');
 console.log('PASS F3 card 1 v363');

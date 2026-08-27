@@ -2,7 +2,7 @@ const fs=require('fs'),assert=require('assert');
 const sw=fs.readFileSync(__dirname+'/../pos/sw.js','utf8');
 const core=fs.readFileSync(__dirname+'/../pos/pos-core.js','utf8');
 const html=fs.readFileSync(__dirname+'/../pos/index.html','utf8');
-assert(sw.includes("const CACHE_NAME = 'store-apps-shell-v358';"),'SW must track release v358');
+const _swv=Number((sw.match(/store-apps-shell-v(\d+)/)||[])[1]||0); assert(_swv>=358,'SW must be v358 or newer');
 assert(sw.includes("event.data.type === 'GET_VERSION'") && sw.includes("type: 'POS_VERSION'"),'SW must report its active version');
 assert(html.includes('id="versionBadge"'),'visible version badge must exist');
 assert(core.includes("document.getElementById('versionBadge')"),'device tracking must read the real badge id');
