@@ -203,13 +203,13 @@ const MODEL = B.basketBuildModel(sampleSales());
    ١٠) الربط في POS
    ============================================================ */
 (function(){
-  assert(/id="basketStrip"/.test(HTML), 'شريط الاقتراح فوق السلة');
+  assert(!/id="basketStrip"/.test(HTML), 'v362: شريط اقتراحات الكاشير اتلغى من شاشة البيع');
   assert(HTML.indexOf('basket-core.js') < HTML.indexOf('basket-ui.js'),
     '⭐ المحرك قبل الواجهة');
   assert(/id="basketScreen"/.test(HTML), 'شاشة المالك موجودة');
   assert(/id="navBasket"/.test(HTML), 'وأيقونتها في التقارير');
-  assert(/try\{ if\(typeof basketRenderStrip === 'function'\) basketRenderStrip\(\); \}catch\(e\)\{\}/.test(SALE),
-    '⭐⭐ الشريط بيترسم من renderCart **جوه try** — سقوطه ممنوع يعطّل السلة');
+  assert(!/basketRenderStrip\(\)/.test(SALE),
+    'v362: renderCart مايرسمش اقتراحات على شاشة البيع');
   assert(/addToCart\(p\)/.test(UI),
     '⭐⭐ الإضافة بتعدّي على `addToCart` (فيها الخصومات وsid وتحديد الصف)');
   assert(!/cart\.push\(/.test(UI), '⭐ ومش بتلمس مصفوفة السلة بإيدها');

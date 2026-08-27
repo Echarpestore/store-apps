@@ -1,0 +1,12 @@
+const fs=require('fs'), assert=require('assert');
+const app=fs.readFileSync('pos/app.js','utf8');
+const core=fs.readFileSync('pos/pos-core.js','utf8');
+const sw=fs.readFileSync('pos/sw.js','utf8');
+assert(app.includes('v361 — تطبيع ضربة السكانر داخل أي خانة'));
+assert(app.includes('el.value = raw;'));
+assert(app.includes('const ch = _scanChar(e);'));
+assert(app.includes('}, true);'));
+assert(core.includes("const _rescuedChar = (typeof _scanChar === 'function') ? _scanChar(e)"));
+assert(!core.includes("t.value = (t.value || '') + e.key;"));
+const m=sw.match(/store-apps-shell-v(\d+)/); assert(m && Number(m[1]) >= 361);
+console.log('PASS arabic keyboard scanner v361');
