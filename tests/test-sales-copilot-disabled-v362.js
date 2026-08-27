@@ -7,5 +7,5 @@ assert(!html.includes('id="basketStrip"'),'sale suggestion strip must be removed
 assert(!/basketRenderStrip\(\)/.test(sale),'sale render must not invoke suggestions');
 assert(html.includes('id="boostStrip"'),'staff boost strip must stay untouched');
 assert(html.includes('id="basketScreen"'),'owner basket insights must stay available');
-const _swv=Number((sw.match(/store-apps-shell-v(\d+)/)||[])[1]||0); assert(_swv>=362,'SW must be v362 or newer');
+assert(sw.includes('store-apps-shell-v362'),'SW must track v362');
 console.log('PASS sales copilot disabled v362');
