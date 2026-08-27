@@ -597,9 +597,6 @@ function renderCart(){
   refreshCustomerActionUI();
   updatePaySummary();
   renderHoldButtons();
-  /* 🧺 اقتراح «اللي بيتاخد مع» — حساب في الذاكرة، صفر قراءات.
-     ⚠️ جوه try: ميزة إضافية ممنوع سقوطها يعطّل رسم السلة. */
-  try{ if(typeof basketRenderStrip === 'function') basketRenderStrip(); }catch(e){}
   try{ if(typeof boostRenderStrip === 'function') boostRenderStrip(); }catch(e){}
 }
 
