@@ -205,34 +205,6 @@ function _scanChar(e){
   const k = e.key || '';
   return (k.length === 1 && /[\x20-\x7E]/.test(k)) ? k : '';
 }
-
-// 🌍 v361 — تطبيع ضربة السكانر داخل أي خانة قبل Enter الخاص بالشاشة.
-// نعتمد على مكان الزر الفيزيائي، لذلك Windows عربي/إنجليزي يعطي نفس الباركود.
-let _fieldScan = { el:null, buf:'', first:0, last:0 };
-document.addEventListener('keydown', function(e){
-  const el = e.target;
-  const isField = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && !el.readOnly && !el.disabled;
-  if(!isField){ _fieldScan.el=null; _fieldScan.buf=''; return; }
-  if(e.ctrlKey || e.altKey || e.metaKey) return;
-  const now = Date.now();
-  if(_fieldScan.el !== el || now - _fieldScan.last > 90){
-    _fieldScan.el = el; _fieldScan.buf = ''; _fieldScan.first = now;
-  }
-  _fieldScan.last = now;
-  if(e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter'){
-    const raw = _fieldScan.buf;
-    const fast = raw.length >= 4 && ((now - _fieldScan.first) / raw.length) <= 70;
-    _fieldScan.buf = '';
-    if(fast){
-      el.value = raw;
-      try{ el.dispatchEvent(new Event('input', { bubbles:true })); }catch(_e){}
-    }
-    return;
-  }
-  if(e.key === 'Backspace' || e.key === 'Delete'){ _fieldScan.buf=''; return; }
-  const ch = _scanChar(e);
-  if(ch){ _fieldScan.buf += ch; if(_fieldScan.buf.length > 80) _fieldScan.buf = _fieldScan.buf.slice(-80); }
-}, true);
 // <<< GSCAN_END
 let _gsBuf = '', _gsLast = 0, _gsFirst = 0;
 document.addEventListener('keydown', function(e){
@@ -1586,7 +1558,7 @@ function injectUnifiedToolbars(){
 
 // ---------------- ⌨️ اختصارات الكيبورد (شاشة البيع) ----------------
 // F1 أو Tab (بره الخانات): شاشة البيع من أي مكان
-// F2/F3/F4: كاش/كارت 1 فيزا/انستا · F8: مسح المدفوعات · Shift+Enter: حفظ وطباعة
+// F2/F3/F4: كاش/فيزا/انستا (نفس ضغطة الأيقونة بالظبط) · F8: مسح المدفوعات · Shift+Enter: حفظ وطباعة
 function _onSaleScreen(){
   const el = document.getElementById('saleScreen');
   return !!(el && el.offsetParent !== null);
@@ -1631,13 +1603,18 @@ document.addEventListener('keydown', function(e){
   if(!_onSaleScreen()) return;
 
   if(e.key === 'F2'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('cash'); return; }
-  // 💳 v363: F3 = كارت 1 فيزا دائمًا. مايتنقلش تلقائيًا لكارت 2.
-  // كارت 2 يفضل اختياره من زر «فيزا 2» عشان الاختصار يبقى ثابت ومايفاجئش الكاشير.
-  if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('visa1'); return; }
+  // 💳 F3 بيروح لأول كارت متاح لوحده (لو الأول اتأكد بيفتح التاني) · Shift+F3 = كارت 2 مباشرة
+  if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod(e.shiftKey ? 'visa2' : 'visa'); return; }
   if(e.key === 'F4'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('instapay'); return; }
   if(e.key === 'F8'){
     e.preventDefault();
     if(typeof resetPaymentUI==='function'){ resetPaymentUI(); showToast('اتمسحت المدفوعات 🧹'); }
+    return;
+  }
+  // 💰 v364: F9 = نفس زر فتح درج الكاش، بنفس الصلاحيات والتسجيل الحالي.
+  if(e.key === 'F9'){
+    e.preventDefault();
+    if(typeof openCashDrawer === 'function') openCashDrawer();
     return;
   }
   if(e.key === 'Enter' && e.shiftKey){
