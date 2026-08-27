@@ -205,6 +205,34 @@ function _scanChar(e){
   const k = e.key || '';
   return (k.length === 1 && /[\x20-\x7E]/.test(k)) ? k : '';
 }
+
+// 🌍 v361 — تطبيع ضربة السكانر داخل أي خانة قبل Enter الخاص بالشاشة.
+// نعتمد على مكان الزر الفيزيائي، لذلك Windows عربي/إنجليزي يعطي نفس الباركود.
+let _fieldScan = { el:null, buf:'', first:0, last:0 };
+document.addEventListener('keydown', function(e){
+  const el = e.target;
+  const isField = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && !el.readOnly && !el.disabled;
+  if(!isField){ _fieldScan.el=null; _fieldScan.buf=''; return; }
+  if(e.ctrlKey || e.altKey || e.metaKey) return;
+  const now = Date.now();
+  if(_fieldScan.el !== el || now - _fieldScan.last > 90){
+    _fieldScan.el = el; _fieldScan.buf = ''; _fieldScan.first = now;
+  }
+  _fieldScan.last = now;
+  if(e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter'){
+    const raw = _fieldScan.buf;
+    const fast = raw.length >= 4 && ((now - _fieldScan.first) / raw.length) <= 70;
+    _fieldScan.buf = '';
+    if(fast){
+      el.value = raw;
+      try{ el.dispatchEvent(new Event('input', { bubbles:true })); }catch(_e){}
+    }
+    return;
+  }
+  if(e.key === 'Backspace' || e.key === 'Delete'){ _fieldScan.buf=''; return; }
+  const ch = _scanChar(e);
+  if(ch){ _fieldScan.buf += ch; if(_fieldScan.buf.length > 80) _fieldScan.buf = _fieldScan.buf.slice(-80); }
+}, true);
 // <<< GSCAN_END
 let _gsBuf = '', _gsLast = 0, _gsFirst = 0;
 document.addEventListener('keydown', function(e){

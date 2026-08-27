@@ -938,10 +938,11 @@ document.addEventListener('keydown', function(e){
   if(e.ctrlKey || e.altKey || e.metaKey) return;
   const t = _focusTarget();
   if(!t) return;
-  if(e.key && e.key.length === 1){
+  const _rescuedChar = (typeof _scanChar === 'function') ? _scanChar(e) : ((e.key && e.key.length === 1) ? e.key : '');
+  if(_rescuedChar){
     e.preventDefault();
     t.focus();
-    t.value = (t.value || '') + e.key;
+    t.value = (t.value || '') + _rescuedChar;
     try{ t.dispatchEvent(new Event('input', { bubbles:true })); }catch(_e){}
   }else if(e.key === 'Enter' || e.key === 'Backspace'){
     t.focus();                                          // من غير منع — يكمّل عادي
