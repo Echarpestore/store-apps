@@ -1,0 +1,10 @@
+const fs=require('fs'),assert=require('assert');
+const app=fs.readFileSync('pos/app.js','utf8');
+const sale=fs.readFileSync('pos/pos-sale.js','utf8');
+const sw=fs.readFileSync('pos/sw.js','utf8');
+assert(app.includes("if(e.key === 'F3'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('visa1'); return; }"), 'F3 must always choose visa card 1');
+assert(!app.includes("togglePayMethod(e.shiftKey ? 'visa2' : 'visa')"), 'old dynamic F3 behavior remains');
+assert(sale.includes("method === 'visa1'"), 'visa1 route missing');
+assert(sale.includes("method === 'visa1' ? 1 : nextCardSeq"), 'visa1 must resolve to card seq 1');
+assert(sw.includes("store-apps-shell-v363"), 'SW version must be v363');
+console.log('PASS F3 card 1 v363');
