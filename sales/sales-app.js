@@ -6594,11 +6594,25 @@ function buildSalaryReceiptPayload(emp, calc, periodLabel){
   };
 }
 
+function _firestoreSafeReceiptPayload(payload){
+  const p = payload || {};
+  const row = (r)=> ({
+    label: String(Array.isArray(r) ? (r[0] ?? '') : ((r && r.label) ?? '')),
+    value: String(Array.isArray(r) ? (r[1] ?? '') : ((r && r.value) ?? ''))
+  });
+  return {
+    ...p,
+    lines: (Array.isArray(p.lines) ? p.lines : []).map(row),
+    extra: (Array.isArray(p.extra) ? p.extra : []).map(row)
+  };
+}
+window._firestoreSafeReceiptPayload = _firestoreSafeReceiptPayload;
+
 async function queueSalaryPrint(emp, calc, periodLabel, targetBranch){
   await addDoc(printJobsCol, {
     type: 'salary_receipt',
     branch: targetBranch,
-    payload: buildSalaryReceiptPayload(emp, calc, periodLabel),
+    payload: _firestoreSafeReceiptPayload(buildSalaryReceiptPayload(emp, calc, periodLabel)),
     status: 'pending', ts: Date.now(),
     requestedBy: 'admin'
   });
