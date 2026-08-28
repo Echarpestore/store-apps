@@ -896,14 +896,13 @@ window.renderGraceDay = function(){
 // UI-only organization layer: existing panels, IDs and business handlers stay intact.
 (function(){
   const sectionMeta = {
-    overview:   {label:'الرئيسية', icon:'⌂', desc:'الحاجات اللي محتاجة انتباهك'},
-    team:       {label:'الفريق', icon:'👥', desc:'الموظفين والجداول والمهام'},
+    team:       {label:'الموظفين', icon:'👥', desc:'الموظفين والجداول والمهام'},
     approvals:  {label:'الموافقات', icon:'✅', desc:'طلبات وقرارات محتاجة مراجعتك'},
-    payroll:    {label:'الرواتب', icon:'💵', desc:'مرتب وعمولات وسلف وخصومات'},
-    performance:{label:'الأداء', icon:'📈', desc:'نتائج وتقارير وتقييمات'},
-    settings:   {label:'الإعدادات', icon:'⚙️', desc:'الفروع والقواعد والإعدادات'},
+    payroll:    {label:'الفلوس', icon:'💵', desc:'رواتب وعمولات وسلف وخصومات'},
+    performance:{label:'التقارير', icon:'📊', desc:'نتائج وأداء وتقييمات'},
+    settings:   {label:'المزيد', icon:'⚙️', desc:'الفروع والقواعد والإعدادات'},
   };
-  let activeSection = 'overview';
+  let activeSection = 'team';
 
   function panelSection(panel){
     const has = (sel)=> !!panel.querySelector(sel);
@@ -963,36 +962,27 @@ window.renderGraceDay = function(){
     return s && s.options && s.selectedIndex >= 0 ? (s.options[s.selectedIndex].textContent || '') : '—';
   }
 
-  function renderSummary(){
-    const host = document.getElementById('salesAdminSummary');
-    if(!host) return;
-    const team = Number((document.getElementById('empCountCurrent')||{}).textContent || 0) || 0;
+  function _pendingCounts(){
     const approvals = badgeNum('leaveBadge') + badgeNum('issuesBadge') + badgeNum('regPendBadge') + pendingOvertime();
     const tasks = badgeNum('pendingBadge') + badgeNum('staffOrdersBadge');
-    const period = currentPeriod();
-    host.innerHTML = `
-      <div class="sales-admin-hero">
-        <div class="sales-admin-hero-head">
-          <div><div class="sales-admin-hero-title">إدارة الفريق من مكان واحد</div>
-          <div class="sales-admin-hero-sub">بدل السكرول الطويل: اختار القسم، وشوف اللي محتاج قرارك الأول.</div></div>
-          <div style="font-size:10.5px;color:var(--sub);text-align:left;">فترة المرتب<br><b style="color:var(--ink);font-size:12px;">${period || '—'}</b></div>
-        </div>
-        <div class="sales-admin-kpis">
-          <div class="sales-admin-kpi" data-go-sales-section="team"><b>${team}</b><span>موظف حالي</span></div>
-          <div class="sales-admin-kpi ${approvals?'hot':''}" data-go-sales-section="approvals"><b>${approvals}</b><span>قرار/طلب مستنيك</span></div>
-          <div class="sales-admin-kpi ${tasks?'hot':''}" data-go-sales-section="approvals"><b>${tasks}</b><span>مهام/أوردرات معلقة</span></div>
-          <div class="sales-admin-kpi" data-go-sales-section="payroll"><b>${period || '—'}</b><span>فترة الرواتب</span></div>
-        </div>
-        <div class="sales-admin-actions">
-          <button data-go-sales-section="team">👥 الموظفين</button>
-          <button data-go-sales-section="approvals">✅ محتاج موافقتي</button>
-          <button data-go-sales-section="payroll">💵 الرواتب والسلف</button>
-          <button data-go-sales-section="performance">📈 الأداء</button>
-        </div>
-      </div>`;
-    host.querySelectorAll('[data-go-sales-section]').forEach(b=>{
-      b.onclick=()=>showSection(b.dataset.goSalesSection);
+    return { approvals, tasks, total: approvals + tasks };
+  }
+
+  function refreshNavBadges(){
+    const c = _pendingCounts();
+    document.querySelectorAll('[data-sales-nav-count]').forEach(el=>{
+      const key = el.dataset.salesNavCount;
+      const n = key === 'approvals' ? c.total : 0;
+      el.textContent = n > 99 ? '99+' : String(n);
+      el.style.display = n > 0 ? 'inline-flex' : 'none';
     });
+  }
+  window.refreshSalesAdminNavBadges = refreshNavBadges;
+
+  function renderSummary(){
+    const host = document.getElementById('salesAdminSummary');
+    if(host){ host.innerHTML=''; host.style.display='none'; }
+    refreshNavBadges();
   }
 
   function renderNav(){
@@ -1001,7 +991,7 @@ window.renderGraceDay = function(){
     host.innerHTML = `
       <div class="sales-admin-shell">
         <div class="sales-admin-nav">
-          ${Object.entries(sectionMeta).map(([k,v])=>`<button type="button" data-sales-section-btn="${k}">${v.icon} ${v.label}</button>`).join('')}
+          ${Object.entries(sectionMeta).map(([k,v])=>`<button type="button" data-sales-section-btn="${k}">${v.icon} ${v.label}${k==='approvals'?'<span class="sales-nav-badge" data-sales-nav-count="approvals" style="display:none;"></span>':''}</button>`).join('')}
         </div>
         <div class="sales-admin-tools">
           <input id="salesAdminSearch" type="search" placeholder="ابحث: راتب، سلفة، حضور، موظف، تارجت…">
@@ -1039,8 +1029,24 @@ window.renderGraceDay = function(){
     });
   }
 
+  function syncRoleNav(){
+    const panels=directPanels();
+    document.querySelectorAll('[data-sales-section-btn]').forEach(b=>{
+      const sec=b.dataset.salesSectionBtn;
+      const hasAllowed=panels.some(p=>p.dataset.salesSection===sec && p.dataset.roleHidden!=='1');
+      b.style.display = hasAllowed ? '' : 'none';
+    });
+    const activeBtn=document.querySelector('[data-sales-section-btn="'+activeSection+'"]');
+    if(!activeBtn || activeBtn.style.display==='none'){
+      const first=[...document.querySelectorAll('[data-sales-section-btn]')].find(b=>b.style.display!=='none');
+      if(first) activeSection=first.dataset.salesSectionBtn;
+    }
+    setNavState(); refreshNavBadges();
+  }
+  window.syncSalesAdminRoleNav = syncRoleNav;
+
   function showSection(section){
-    if(!sectionMeta[section]) section='overview';
+    if(!sectionMeta[section]) section='team';
     activeSection=section;
     const search = document.getElementById('salesAdminSearch');
     if(search) search.value='';
@@ -1053,13 +1059,14 @@ window.renderGraceDay = function(){
     const empty=document.getElementById('salesAdminEmpty');
     panels.forEach(p=>{
       p.classList.remove('sales-search-match');
-      const show = section!=='overview' && p.dataset.salesSection===section;
+      const allowed = p.dataset.roleHidden !== '1';
+      const show = allowed && p.dataset.salesSection===section;
       p.classList.toggle('sales-panel-hidden', !show);
     });
-    if(summary) summary.style.display = section==='overview' ? 'block' : 'none';
-    if(label) label.textContent = section==='overview' ? '' : `${sectionMeta[section].icon} ${sectionMeta[section].label} — ${sectionMeta[section].desc}`;
-    const shown = panels.filter(p=>!p.classList.contains('sales-panel-hidden')).length;
-    if(empty) empty.style.display = (section!=='overview' && !shown) ? 'block' : 'none';
+    if(summary) summary.style.display = 'none';
+    if(label) label.textContent = `${sectionMeta[section].icon} ${sectionMeta[section].label} — ${sectionMeta[section].desc}`;
+    const shown = panels.filter(p=>p.dataset.roleHidden!=='1' && !p.classList.contains('sales-panel-hidden')).length;
+    if(empty) empty.style.display = shown ? 'none' : 'block';
     try{ window.scrollTo({top:0,behavior:'smooth'}); }catch(e){ try{window.scrollTo(0,0);}catch(_){} }
   }
   window.showSalesAdminSection = showSection;
@@ -1102,14 +1109,19 @@ window.renderGraceDay = function(){
     const host=document.getElementById('salesAdminUx'); if(host) host.dataset.ready='1';
     renderSummary();
     observeCounters();
-    showSection('overview');
+    syncRoleNav();
+    const firstSection = _pendingCounts().total > 0 ? 'approvals' : 'team';
+    showSection(firstSection);
 
-    // كل مرة الأدمن يفتح: ارجعه للرئيسية بدل ما يلاقي نفسه وسط آخر سكرول.
+    // كل مرة الأدمن يفتح: افتح المطلوب مباشرة، من غير شاشة رئيسية أو طبقة تنقل ثانية.
     if(typeof MutationObserver !== 'function') return;
     const mo=new MutationObserver(()=>{
       if(admin.classList.contains('show')){
         renderSummary();
-        if(!document.activeElement || document.activeElement.tagName!=='INPUT') showSection('overview');
+        syncRoleNav();
+        if(!document.activeElement || document.activeElement.tagName!=='INPUT'){
+          showSection(_pendingCounts().total > 0 ? 'approvals' : 'team');
+        }
       }
     });
     mo.observe(admin,{attributes:true,attributeFilter:['class']});

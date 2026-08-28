@@ -476,13 +476,13 @@
   }
   #salesAdminUx{position:sticky;top:67px;z-index:23;margin:0 0 12px;}
   .sales-admin-shell{background:rgba(20,21,26,.94);border:1px solid var(--line);border-radius:18px;padding:10px;box-shadow:0 12px 35px rgba(0,0,0,.22);backdrop-filter:blur(14px)}
-  .sales-admin-nav{display:flex;gap:6px;overflow:auto;scrollbar-width:none;padding-bottom:1px}
+  .sales-admin-nav{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;scrollbar-width:none;padding-bottom:1px}
   .sales-admin-nav::-webkit-scrollbar{display:none}
-  .sales-admin-nav button{white-space:nowrap;border:1px solid transparent;background:var(--panel2);color:var(--sub);border-radius:12px;padding:9px 12px;font-family:Cairo;font-weight:800;font-size:11.5px;cursor:pointer}
+  .sales-admin-nav button{white-space:nowrap;position:relative;flex:0 0 auto;border:1px solid transparent;background:var(--panel2);color:var(--sub);border-radius:12px;padding:9px 12px;font-family:Cairo;font-weight:800;font-size:11.5px;cursor:pointer}.sales-nav-badge{position:absolute;top:-5px;left:-5px;min-width:19px;height:19px;padding:0 5px;border-radius:99px;background:#e5484d;color:#fff;align-items:center;justify-content:center;font-size:10px;font-weight:900;border:2px solid #15161b}
   .sales-admin-nav button.on{background:linear-gradient(180deg,var(--gold),#d8a839);color:#18130a;border-color:#e7c55d}
   .sales-admin-tools{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:7px;margin-top:8px}
   .sales-admin-tools input,.sales-admin-tools select{width:100%;box-sizing:border-box;padding:10px 11px;border:1px solid var(--line);border-radius:11px;background:#111217;color:var(--ink);font-family:Cairo;font-size:12px}
-  #salesAdminSummary{margin-bottom:11px}
+  #salesAdminSummary{display:none!important;margin:0}
   .sales-admin-hero{background:linear-gradient(135deg,#181a21,#101116 62%,#201b0d);border:1px solid #37301c;border-radius:18px;padding:15px;box-shadow:0 14px 40px rgba(0,0,0,.22)}
   .sales-admin-hero-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
   .sales-admin-hero-title{font-size:18px;font-weight:900}.sales-admin-hero-sub{font-size:11px;color:var(--sub);margin-top:2px}
@@ -1236,8 +1236,8 @@
 
 </div>
 
-<script type="module" src="sales-app.js?v=17"></script>
-<script src="sales-ui.js?v=20"></script>
+<script type="module" src="sales-app.js?v=18"></script>
+<script src="sales-ui.js?v=21"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
      ⚠️ `chat-staff-ui.js` مكتوب compat، وبيكتشف إنه في بيئة modular

@@ -433,32 +433,20 @@ function applyRoleVisibility(){
   finally{ _roleApplying = false; }
 }
 function _applyRoleVisibilityInner(admin){
-  const allowedTabs = {};
   const panels = admin.querySelectorAll(':scope > .panel');
-  // الخطوة ١: نحدد المسموح والممنوع
+  // v366: الصلاحيات بس هي اللي تقرر هل البانل مسموح. التنقل بقى له شريط واحد
+  // في sales-ui.js، فممنوع الطبقة القديمة تخفي البانلات حسب admin_tab.
   panels.forEach(p=>{
     const t = (p.querySelector('h3')||{}).textContent || '';
     const perm = permOfPanelTitle(t);
     p.dataset.perm = perm;
     const ok = roleCan(perm);
     p.dataset.roleHidden = ok ? '' : '1';
-    if(ok && p.dataset.tabGroup) allowedTabs[p.dataset.tabGroup] = true;
+    p.style.display = ok ? '' : 'none';
   });
-  // الخطوة ٢: نحدد التبويب المعروض (لازم يكون من المسموح)
-  let cur = localStorage.getItem('admin_tab') || 'emps';
-  if(!allowedTabs[cur]) cur = Object.keys(allowedTabs)[0] || null;
-  if(cur) localStorage.setItem('admin_tab', cur);
-  // الخطوة ٣: العرض — الممنوع مخفي، والمسموح بيرجع حسب تبويبه
-  // (لازم نرجّع العرض بنفسنا: القفل بيخفي الكل، ومن غير الرجوع دي الشاشة بتفضل فاضية)
-  panels.forEach(p=>{
-    if(p.dataset.roleHidden === '1'){ p.style.display = 'none'; return; }
-    p.style.display = (!p.dataset.tabGroup || p.dataset.tabGroup === cur) ? '' : 'none';
-  });
-  const bar = document.getElementById('adminTabBar');
-  if(bar) bar.querySelectorAll('button[data-tab]').forEach(b=>{
-    b.style.display = allowedTabs[b.dataset.tab] ? '' : 'none';
-    b.classList.toggle('active', b.dataset.tab === cur);
-  });
+  const legacyBar = document.getElementById('adminTabBar');
+  if(legacyBar) legacyBar.remove();
+  try{ if(typeof window.syncSalesAdminRoleNav === 'function') window.syncSalesAdminRoleNav(); }catch(e){}
   // شارة الدور في رأس الشاشة
   let badge = document.getElementById('roleBadge');
   if(!badge){
@@ -533,49 +521,10 @@ function pendingActions(){
 window.pendingActions = pendingActions;
 
 function renderActionBar(){
-  const admin = document.getElementById('admin');
-  if(!admin || !adminUnlocked) return;
-  let bar = document.getElementById('actionBar');
-  if(!bar){
-    bar = document.createElement('div');
-    bar.id = 'actionBar';
-    const st = document.createElement('style');
-    st.textContent = `
-      #actionBar{ display:none; margin:0 0 12px; padding:12px 14px; border-radius:14px;
-        background:linear-gradient(180deg, #3a1416, #2a0f11); border:1px solid #e5484d88;
-        box-shadow:0 0 0 1px #e5484d33, 0 6px 22px #00000055; animation:abPulse 2.2s ease-in-out infinite; }
-      #actionBar.show{ display:block; }
-      @keyframes abPulse{ 0%,100%{ box-shadow:0 0 0 1px #e5484d33, 0 6px 22px #00000055; }
-                          50%{ box-shadow:0 0 0 3px #e5484d55, 0 6px 26px #e5484d33; } }
-      #actionBar .abTitle{ font-size:13px; font-weight:900; color:#ff9a9d; margin-bottom:9px; }
-      #actionBar .abItem{ display:flex; align-items:center; justify-content:space-between; gap:10px;
-        background:#ffffff0a; border:1px solid #ffffff14; border-radius:10px;
-        padding:9px 11px; margin-bottom:6px; cursor:pointer; }
-      #actionBar .abItem:last-child{ margin-bottom:0; }
-      #actionBar .abItem:hover{ background:#ffffff14; }
-      #actionBar .abN{ min-width:24px; height:24px; padding:0 7px; border-radius:99px;
-        background:#e5484d; color:#fff; font-weight:900; font-size:12.5px;
-        display:inline-flex; align-items:center; justify-content:center; }
-      #actionBar .abTxt{ font-size:12.5px; font-weight:700; color:#ffd9da; }`;
-    document.head.appendChild(st);
-    const top = admin.querySelector('.admin-top');
-    if(top) top.insertAdjacentElement('afterend', bar); else admin.insertBefore(bar, admin.firstChild);
-  }
-  const items = pendingActions();
-  if(!items.length){ bar.className = ''; bar.innerHTML = ''; return; }
-  const total = items.reduce((n,i)=> n + i.count, 0);
-  bar.className = 'show';
-  bar.innerHTML = `<div class="abTitle">🔴 محتاج منك (${total})</div>` + items.map(i=>
-    `<div class="abItem" data-goto="${i.tab}">
-       <span class="abTxt">${i.icon} ${i.label}</span><span class="abN">${i.count}</span>
-     </div>`).join('');
-  bar.querySelectorAll('[data-goto]').forEach(el=>{
-    el.addEventListener('click', ()=>{
-      try{ showAdminTab(el.dataset.goto); }catch(e){}
-      const admin2 = document.getElementById('admin');
-      if(admin2 && admin2.scrollTo) admin2.scrollTo({ top:0, behavior:'smooth' });
-    });
-  });
+  // v366: مفيش بانر أحمر ضخم. العدادات بتظهر كـ badge على «الموافقات» في التنقل الوحيد.
+  const bar = document.getElementById('actionBar');
+  if(bar) bar.remove();
+  try{ if(typeof window.refreshSalesAdminNavBadges === 'function') window.refreshSalesAdminNavBadges(); }catch(e){}
 }
 window.renderActionBar = renderActionBar;
 setInterval(()=>{ try{ renderActionBar(); }catch(e){} }, 5000);
@@ -5391,85 +5340,23 @@ window.staffOrderDecide = async function(id, act){
   finally{ _soDeciding.delete(id); }
 };
 
-// ---------- 🗂️ تبويبات لوحة الإدارة (بدل السكرول اللانهائي) ----------
-// ⚠️ أي بانل مالوش مفتاح هنا بيقع في `emps` (الافتراضي تحت) — فلو ضفت
-//    بانل جديد، ضيف مفتاح ليه هنا وإلا هيتلخبط مع الموظفين.
-const ADMIN_TAB_GROUPS = [
-  { id:'emps',  label:'👥 الموظفين', keys:[
-      'إضافة موظف','الموظفين الحاليين','طلبات تسجيل','إدارة الفروع',
-      'نظرة عامة','مواعيد الحضور','إنهاء خدمة','سجل المغادرين'] },
-  { id:'time',  label:'⏰ الالتزام', keys:[
-      'طلبات الإذن','مخالفات محتاجة','يوم سماح','رصيد الوقت والخصومات',
-      'إعدادات رصيد الوقت','كشف الخصومات','إعدادات الالتزام'] },
-  { id:'tasks', label:'📋 المهام', keys:[
-      'المهام الأسبوعية','مراجعة تنفيذ','المهام المؤكدة','سجل المكافآت'] },
-  { id:'money', label:'💵 الفلوس', keys:[
-      'عمولة النقط','سجل دفع العمولات','الرواتب الشهرية','سجل صرف الرواتب',
-      'سجل السلف','إعدادات السلف','أوفرتايم مستني','ميزانية المكافآت'] },
-  { id:'orders',label:'🛒 الطلبات', keys:[
-      'طلبات النواقص','أوردرات الموظفين','أكواد دعوة'] },
-  { id:'reports',label:'📊 تقارير', keys:[
-      'سجل الحضور الكامل','التقييم الأسبوعي','سجل الأداء الشهري','التقرير الشامل',
-      'سجل العمليات','أداء الموظف'] },
-  { id:'settings',label:'⚙️ إعدادات', keys:[
-      'كود المدير','رسالة للموظفين','تارجت مبيعات الشيفت'] }
-];
+// ---------- 🧭 v366: تنقل موحّد ----------
+// الطبقة القديمة كانت بتعمل شريط تبويبات ثاني فوق Control Center الجديد.
+// نخلي الدوال موجودة للتوافق مع أي كود قديم، لكن من غير إنشاء UI ثاني.
 let _adminTabsInited = false;
 function initAdminTabs(){
-  if(_adminTabsInited){ _refreshAdminTabDots(); return; }
-  const admin = $('#admin'); if(!admin) return;
-  const panels = [...admin.querySelectorAll(':scope > .panel')];
-  panels.forEach(p=>{
-    const t = (p.querySelector('h3')||{}).textContent || '';
-    const g = ADMIN_TAB_GROUPS.find(gr=> gr.keys.some(k=> t.includes(k)));
-    p.dataset.tabGroup = g ? g.id : 'emps';
-  });
-  const bar = document.createElement('div');
-  bar.id = 'adminTabBar';
-  bar.style.cssText = 'position:sticky; top:0; z-index:60; display:flex; gap:6px; flex-wrap:wrap; background:var(--bg,#12121a); padding:10px 0 12px; margin-bottom:6px; border-bottom:1px solid var(--line,#2a2a38);';
-  bar.innerHTML = ADMIN_TAB_GROUPS.map(g=>
-    `<button data-tab="${g.id}" style="position:relative; padding:10px 16px; border-radius:12px; border:1px solid var(--line,#2a2a38); background:var(--panel2,#1b1b26); color:var(--ink,#eee); font-family:'Cairo'; font-weight:800; font-size:12.5px; cursor:pointer;">${g.label}<span class="tabDot" style="display:none; position:absolute; top:-3px; left:-3px; width:10px; height:10px; border-radius:50%; background:var(--bad,#e5484d);"></span></button>`
-  ).join('');
-  const top = admin.querySelector('.admin-top');
-  top.insertAdjacentElement('afterend', bar);
-  bar.querySelectorAll('button[data-tab]').forEach(b=> b.addEventListener('click', ()=> showAdminTab(b.dataset.tab)));
   _adminTabsInited = true;
-  showAdminTab(localStorage.getItem('admin_tab') || 'emps');
-  setInterval(_refreshAdminTabDots, 3000);
+  const old = document.getElementById('adminTabBar');
+  if(old) old.remove();
+  try{ if(typeof window.syncSalesAdminRoleNav === 'function') window.syncSalesAdminRoleNav(); }catch(e){}
 }
 function showAdminTab(id){
-  // 💵 لوحات الفلوس بتترسم من تاني مع فتح التبويب — مش مرة واحدة عند التحميل
-  if(id === 'money'){
-    setTimeout(function(){
-      try{ renderOvertimeApprovals(); }catch(e){ console.warn('overtime panel', e); }
-      try{ renderRewardBudget(); }catch(e){ console.warn('reward budget panel', e); }
-    }, 0);
-  }
-  localStorage.setItem('admin_tab', id);
-  try{ if(typeof applyRoleVisibility === 'function' && !_roleApplying) applyRoleVisibility(); }catch(e){}
-  $('#admin').querySelectorAll(':scope > .panel').forEach(p=>{
-    // 🔐 اللوحات الممنوعة على الدور بتفضل مخفية مهما اتنقل بين التبويبات
-    if(p.dataset.roleHidden === '1'){ p.style.display = 'none'; return; }
-    p.style.display = (p.dataset.tabGroup === id) ? '' : 'none';
-  });
-  const bar = $('#adminTabBar');
-  if(bar) bar.querySelectorAll('button[data-tab]').forEach(b=>{
-    const on = b.dataset.tab === id;
-    b.style.background = on ? 'var(--gold,#d4af37)' : 'var(--panel2,#1b1b26)';
-    b.style.color = on ? '#1a1200' : 'var(--ink,#eee)';
-  });
-  _refreshAdminTabDots();
+  const map = { emps:'team', time:'approvals', tasks:'approvals', money:'payroll', orders:'approvals', reports:'performance', settings:'settings' };
+  const next = map[id] || id || 'team';
+  if(typeof window.showSalesAdminSection === 'function') window.showSalesAdminSection(next);
 }
 function _refreshAdminTabDots(){
-  const bar = $('#adminTabBar'); if(!bar) return;
-  const dotFor = (tab, on)=>{ const b = bar.querySelector('button[data-tab="'+tab+'"] .tabDot'); if(b) b.style.display = on ? '' : 'none'; };
-  const pend = $('#pendingBadge'); dotFor('tasks', pend && pend.style.display !== 'none' && +pend.textContent > 0);
-  const so = $('#staffOrdersBadge'); dotFor('orders', so && so.style.display !== 'none' && +so.textContent > 0);
-  // ⏰ الالتزام: طلبات الإذن والمخالفات — من غير النقط دي بتفضل مستنية
-  //    في تبويب مقفول ومحدش واخد باله.
-  const _vis = function(el){ return el && el.style.display !== 'none' && +(el.textContent||0) > 0; };
-  dotFor('time', _vis($('#leaveBadge')) || _vis($('#issuesBadge')));
-  dotFor('emps', _vis($('#regPendBadge')));
+  try{ if(typeof window.refreshSalesAdminNavBadges === 'function') window.refreshSalesAdminNavBadges(); }catch(e){}
 }
 
 function _refAppFor(branch){
