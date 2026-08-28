@@ -183,8 +183,9 @@ function extractFn(src, name){
   assert(/window\.focus\(\)/.test(fn), '🪟 بترجّع تركيز النافذة الرئيسية');
   assert(/document\.contains\(el\)/.test(fn),
     'وبتتأكد إن الخانة القديمة لسه في الصفحة قبل ما تفوكسها');
-  assert((fn.match(/setTimeout\(back/g) || []).length === 2,
-    '🔁 محاولتين — الطباعة بتتأخر أحيانًا');
+  assert(/steps\.forEach[\s\S]*setTimeout\(back/.test(fn),
+    '🔁 فيه محاولات متكررة — الطباعة/ويندوز ممكن يتأخروا');
+  assert(/6000/.test(fn), '🪟 الاسترجاع الممتد يغطي فقدان Windows focus بعد الطباعة البطيئة');
   assert(/window\.reclaimWindowFocus = reclaimWindowFocus;/.test(core),
     'متعرّضة على window (القاعدة الذهبية — الملفات التانية بتناديها)');
 

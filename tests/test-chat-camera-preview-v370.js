@@ -16,4 +16,5 @@ const pickBlock=(ui.match(/function onPickImage\(e\)[\s\S]*?\n  function ccImgCl
 assert(!/ccSend\s*\(/.test(pickBlock), 'v370: الصورة لا تُرسل تلقائيًا بعد التصوير أو الاختيار');
 assert(sales.includes('../pos/chat-staff-ui.js?v=370'), 'v370: Sales يجبر تحميل واجهة الشات الجديدة');
 assert(ssw.includes('store-apps-shell-v370'), 'v370: Sales service worker مرفوع لـ v370');
-assert(psw.includes('store-apps-shell-v370'), 'v370: POS service worker مرفوع لـ v370 لأن ملف الشات مشترك');
+const pver = Number((psw.match(/store-apps-shell-v(\d+)/) || [])[1] || 0);
+assert(pver >= 370, 'v370: POS service worker v370 أو أحدث لأن ملف الشات مشترك');
