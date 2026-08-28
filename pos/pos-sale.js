@@ -3450,7 +3450,16 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
         };
         window._pmPrintMark = _pmPrintMark;
         // من غير أي تأخير — كل جزء من الثانية بيفرق قدام العميل
-        try{ confirmPayment(); }catch(e){ console.warn('auto print', e); }
+        // 🎯 Visa auto-finish بيبدأ من callback مش من ضغطة كاشير، وده بالذات
+        // المسار اللي ويندوز كان ساعات يسيب بعده نافذة الـPOS من غير focus.
+        // نعلّم فترة الخطر قبل الحفظ، وبعد اكتمال دورة الحفظ/الطباعة نعمل
+        // استرجاع إضافي. لا بنغيّر قرار الدفع ولا auto-print نفسه.
+        try{
+          if(typeof markWindowFocusRisk === 'function') markWindowFocusRisk('paymob-auto-finish', 10000);
+          Promise.resolve(confirmPayment())
+            .then(function(){ if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(250); })
+            .catch(function(e){ console.warn('auto print', e); });
+        }catch(e){ console.warn('auto print', e); }
       } else if(!_skip){
         const why = window._paymobLastSkip;
         paymobShow('✅ ' + legTag + 'الدفع اتقبل' + last4 + ' — دوس حفظ وطباعة'

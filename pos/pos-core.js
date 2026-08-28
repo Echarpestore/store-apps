@@ -861,13 +861,54 @@ function showScreen(id){
 // الدالة دي بتتنادى بعد فتح أي نافذة طباعة: بترجّع التركيز للنافذة الرئيسية
 // وللخانة اللي كان الكاشير واقف فيها، وبتحاول مرتين (الطباعة بتتأخر أحيانًا).
 // ============================================================
+// آخر فترة متوقّع فيها إن عملية خارجية (طباعة/Paymob) ممكن تسرق Focus ويندوز.
+// بنستخدمها عشان ما نحاولش نخطف التركيز في أي وقت عشوائي؛ الإنقاذ المكثف
+// يشتغل فقط حوالين العملية اللي إحنا عارفين إنها بتعمل المشكلة.
+let _windowFocusRiskUntil = 0;
+let _windowFocusRiskReason = '';
+function markWindowFocusRisk(reason, ms){
+  const span = Math.max(2500, Number(ms) || 9000);
+  _windowFocusRiskUntil = Math.max(_windowFocusRiskUntil, Date.now() + span);
+  _windowFocusRiskReason = String(reason || 'external-action');
+  window._windowFocusRiskUntil = _windowFocusRiskUntil;
+  window._windowFocusRiskReason = _windowFocusRiskReason;
+}
+window.markWindowFocusRisk = markWindowFocusRisk;
+
+function _shellBringToFront(){
+  // بعض نسخ برنامج الويندوز بتكشف أمر صريح لإرجاع النافذة. بنستعمله لو موجود
+  // من غير ما نفترض اسم واحد بعينه، وباقي النسخ تكمل بـ window.focus عادي.
+  try{
+    const sh = window.posShell;
+    if(!sh) return;
+    const names = ['focusWindow','focusApp','bringToFront','activateWindow'];
+    for(let i=0;i<names.length;i++){
+      const fn = sh[names[i]];
+      if(typeof fn === 'function'){
+        try{ fn.call(sh); }catch(_e){}
+        break;
+      }
+    }
+  }catch(e){}
+}
+
 function reclaimWindowFocus(afterMs){
   const el = document.activeElement;
+  const inShell = (typeof window.posShell !== 'undefined');
+  // الطباعة الصامتة/Paymob ممكن يسرقوا تركيز **ويندوز** بعد ما Promise الطباعة
+  // نفسها تكون خلصت؛ لذلك في الـexe بنعمل burst قصير بدل محاولتين فقط.
+  if(inShell) markWindowFocusRisk('print-or-payment', 9000);
+
   const back = function(){
+    try{
+      // لو المستخدم خرج فعلًا من البرنامج/صغّره، مانرجعوش غصب عنه.
+      if(document.hidden) return;
+    }catch(e){}
+    if(inShell) _shellBringToFront();
     try{ window.focus(); }catch(e){}
     try{
       if(el && typeof el.focus === 'function' && document.contains(el)
-         && el !== document.body){ el.focus(); return; }
+         && el !== document.body && el.offsetParent !== null){ el.focus(); return; }
     }catch(e){}
     // مفيش خانة نرجعله؟ خانة البحث لو شاشة البيع مفتوحة
     try{
@@ -876,11 +917,35 @@ function reclaimWindowFocus(afterMs){
       if(sc && sc.offsetParent !== null && sb && sb.offsetParent !== null) sb.focus();
     }catch(e){}
   };
-  const t = Math.max(300, Number(afterMs) || 500);
-  setTimeout(back, t + 400);
-  setTimeout(back, t + 1800);   // محاولة تانية لو نافذة الطباعة اتأخرت
+  const t = Math.max(120, Number(afterMs) || 500);
+  const steps = inShell
+    ? [0, 220, 650, 1300, 2300, 3800, 6000]
+    : [400, 1800];
+  steps.forEach(function(extra){ setTimeout(back, t + extra); });
 }
 window.reclaimWindowFocus = reclaimWindowFocus;
+
+// لو ويندوز فقد التركيز **أثناء** فترة طباعة/Paymob، نبدأ إنقاذ جديد. ده هو
+// السيناريو اللي كان بيخلي الشاشة شكلها مفتوح لكن لا كتابة ولا ضغط لحد ما
+// الكاشير تدوس أيقونة البرنامج من الـtaskbar.
+window.addEventListener('blur', function(){
+  try{
+    if(typeof window.posShell === 'undefined') return;
+    if(Date.now() > _windowFocusRiskUntil) return;
+    setTimeout(function(){ reclaimWindowFocus(120); }, 120);
+  }catch(e){}
+});
+
+// أول ضغطة جوه نافذة الـPOS لازم تكون كفاية للرجوع، بدل ما الكاشير تضطر
+// تروح للـdesktop/taskbar. ما بنمنعش الضغطة ولا بنغير هدفها.
+document.addEventListener('pointerdown', function(){
+  try{
+    if(typeof window.posShell === 'undefined') return;
+    if(typeof document.hasFocus === 'function' && document.hasFocus()) return;
+    _shellBringToFront();
+    window.focus();
+  }catch(e){}
+}, true);
 
 // ============================================================
 // 🎯 حارس التركيز — مسح شامل لكل الطرق اللي بيضيع بيها
