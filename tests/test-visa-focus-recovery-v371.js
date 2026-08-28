@@ -50,6 +50,7 @@ assert(sale.includes('paymobPending.timedOut = true;'), 'timeout يفضل له r
 assert(sale.includes('clearCardSaleCompleteState(); paymobReset();'), 'بعد نجاح البيع حالة الكارت تتنضف قبل المعاملة الجديدة');
 assert(sale.includes('goToSale();'), 'بعد الحفظ يبدأ بيع جديد طبيعي');
 
-assert(/store-apps-shell-v371/.test(sw), 'Service Worker اتزوّد لـv371');
+const swVer = +(sw.match(/store-apps-shell-v(\d+)/)||[])[1] || 0;
+assert(swVer >= 371, 'Service Worker لازم يفضل v371 أو أحدث');
 
 console.log('PASS test-visa-focus-recovery-v371');

@@ -407,10 +407,12 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
       'حزام أمان البحث موجود في ' + f);
   });
 
-  // 💰 الدرج بيفتح فورًا بالتوازي مش بعد الطباعة
+  // 💰 v372: الدرج بيفتح قبل انتظار حفظ Firestore نفسه، مش بس قبل الطباعة.
   const pbSrc = extractFn(appSrc2, '_printBuiltReceipt');
-  assert(/openDrawer === 'function'[\s\S]{0,120}window\.posShell\.printReceipt\(/.test(pbSrc),
-    'أمر الدرج المستقل بيطلع قبل أمر الطباعة');
+  assert(/preOpenCashDrawerForSale\(invoiceCode, payments\)[\s\S]{0,250}db\.collection\(TEST_SALES\)\.add/.test(saleSrc),
+    'أمر الدرج المبكر بيطلع قبل انتظار حفظ الفاتورة');
+  assert(/_drawerViaPrint = drawerTarget && !_hasDrawerApi/.test(pbSrc),
+    'أمر الدرج داخل الطباعة fallback فقط للشِل القديم');
   assert(!/\.then\(\(\)=>\{[\s\S]{0,200}openDrawer/.test(pbSrc),
     'أمر الدرج المتأخر (بعد اكتمال الطباعة) اتشال');
   // 📷 باركود الفاتورة: منطقة هدوء صحيحة + رسم حاد
