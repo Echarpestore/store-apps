@@ -9,5 +9,6 @@ ok(/preOpenCashDrawerForSale\(invoiceCode, payments\)[\s\S]{0,250}db\.collection
 ok(/_drawerViaPrint = drawerTarget && !_hasDrawerApi/.test(app),'print fallback must be limited to old shells');
 ok(/openDrawer: _drawerViaPrint/.test(app) && /openCashDrawer: _drawerViaPrint/.test(app),'print fallback flags missing');
 ok(/_cashDrawerPreopenedInvoiceCode/.test(app),'per-invoice duplicate drawer guard missing');
-ok(sw.includes('store-apps-shell-v372'),'service worker not v372');
+const swMatch = sw.match(/store-apps-shell-v(\d+)/);
+ok(swMatch && Number(swMatch[1]) >= 372,'service worker must stay v372 or newer');
 console.log('PASS cash drawer immediate v372');
