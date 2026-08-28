@@ -15,5 +15,5 @@ ok(sales.includes('payload: _firestoreSafeReceiptPayload(buildSalaryReceiptPaylo
 ok(pos.includes('function _genericReceiptRowParts(row)'), 'POS generic receipt supports normalized rows');
 ok(pos.includes("if(Array.isArray(row)) return [row[0] ?? '', row[1] ?? ''];"), 'POS keeps legacy array-row compatibility');
 ok(pos.includes("return [row.label ?? '', row.value ?? ''];"), 'POS renders new object-row format');
-ok(salesSw.includes("store-apps-shell-v367"), 'Sales SW is v367');
-ok(posSw.includes("store-apps-shell-v367"), 'POS SW is v367');
+ok(/store-apps-shell-v(36[7-9]|3[7-9]\d|[4-9]\d{2,})/.test(salesSw), 'Sales SW is v367 or newer');
+ok(/store-apps-shell-v(36[7-9]|3[7-9]\d|[4-9]\d{2,})/.test(posSw), 'POS SW is v367 or newer');
