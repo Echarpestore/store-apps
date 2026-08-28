@@ -22,6 +22,7 @@
     convs: [], convUnsub: null, msgsUnsub: null,
     filterMine: true, funnelOnly: false, imgData: null, blockArm: 0,
     sending: false,
+    unreadSeen: {}, unreadReady: false, reminderTimer: null,
     // 🧢 بندانة — ألوان مختارة بالترتيب (الترتيب = ترتيب الخانات في
     // الشبكة بعدين، فلازم نحافظ عليه) + نتيجة معاينة باركودها.
     bandSelected: [], bandBcInfo: null
@@ -319,6 +320,11 @@
       + '#ccFabBadge{position:absolute; top:-4px; right:-4px; background:#E5484D; color:#fff;'
       + 'border-radius:99px; min-width:20px; height:20px; font-size:11.5px; font-weight:800;'
       + 'display:none; align-items:center; justify-content:center; padding:0 5px;}'
+      + '@keyframes ccUnreadPulse{0%,100%{transform:scale(1);box-shadow:0 4px 16px rgba(0,0,0,.3)}50%{transform:scale(1.09);box-shadow:0 0 0 8px rgba(229,72,77,.18),0 4px 18px rgba(0,0,0,.38)}}'
+      + '#ccFab.ccUnread{animation:ccUnreadPulse 1.15s ease-in-out infinite;background:#E5484D;}'
+      + '#ccUnreadHint{position:fixed;bottom:91px;left:78px;z-index:69;display:none;align-items:center;gap:7px;'
+      + 'background:#2b2025;color:#fff;border:1px solid #E5484D;border-radius:99px;padding:8px 12px;'
+      + 'font:700 12px/1.2 inherit;box-shadow:0 4px 16px rgba(0,0,0,.28);cursor:pointer;max-width:230px;}'
       // 📐 لوحة جانبية بنص الشاشة — مش أوفرلاي كامل.
       //    ⚠️ السبب: الشات كان `inset:0` فبيغطي الفاتورة والسلة، والكاشير
       //       بيقفله عشان يشوف اللي قدامه، فالرد بيتأخر. دلوقتي مرصوص على
@@ -396,8 +402,12 @@
       + '.ccIco{border:none; background:#232733; color:#eceef2; border-radius:50%; width:40px;'
       + 'height:40px; font-size:17px; cursor:pointer; flex:0 0 auto;}'
       + '.ccIco.send{background:#C79A38; color:#14161c;}'
-      + '#ccImgPrev{display:none; padding:8px 12px; background:#1b1e26; gap:10px; align-items:center;}'
-      + '#ccImgPrev img{height:54px; border-radius:8px;}'
+      + '#ccImgPrev{display:none; padding:10px 12px; background:#1b1e26; gap:9px; flex-direction:column; align-items:stretch;}'
+      + '.ccImgPreviewBox{display:flex; flex-direction:column; gap:8px; align-items:center; background:#14161c; border:1px solid #2a2e39; border-radius:13px; padding:9px;}'
+      + '#ccImgPrev img{max-width:100%; max-height:260px; width:auto; height:auto; object-fit:contain; border-radius:10px;}'
+      + '.ccImgPreviewActions{display:flex; gap:8px; justify-content:center; width:100%;}'
+      + '.ccImgPreviewActions button{border:1px solid #3a4152; background:#232733; color:#eceef2; border-radius:9px; padding:7px 12px; font-size:12px; font-family:inherit; cursor:pointer;}'
+      + '.ccImgMeta{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}'
       + '#ccImgPrev label{font-size:12px; color:#9aa1af; display:flex; gap:5px; align-items:center;}'
       + '#ccBandRow{display:none; gap:8px; padding:6px 12px; background:#1b1e26; align-items:center; flex-wrap:wrap;}'
       + '#ccBandRow input{font-size:12px; padding:6px 8px; border:1px solid #2a2e39; border-radius:8px; background:#14161c; color:#eceef2;}'
@@ -416,6 +426,12 @@
     fab.onclick = openPanel;
     document.body.appendChild(fab);
 
+    var unreadHint = document.createElement('button');
+    unreadHint.id = 'ccUnreadHint';
+    unreadHint.type = 'button';
+    unreadHint.onclick = openPanel;
+    document.body.appendChild(unreadHint);
+
     var wrap = document.createElement('div');
     wrap.id = 'ccWrap';
     wrap.innerHTML =
@@ -432,11 +448,13 @@
       + '</div>'
       + '<div id="ccList"></div>'
       + '<div id="ccThread"></div>'
-      + '<div id="ccImgPrev"><img id="ccImgTag" alt="">'
+      + '<div id="ccImgPrev">'
+      + '<div class="ccImgPreviewBox"><img id="ccImgTag" alt="معاينة الصورة قبل الإرسال">'
+      + '<div class="ccImgPreviewActions"><button onclick="ccPickImage(\'gallery\')">🖼️ تغيير الصورة</button><button onclick="ccImgClear()">✖ إلغاء</button></div></div>'
+      + '<div class="ccImgMeta">'
       + '<label><input type="checkbox" id="ccTryFlag" checked style="width:15px;height:15px;"> زرار 🧕 جرّبيها</label>'
       + '<input id="ccTryBc" type="text" inputmode="latin" placeholder="باركود المنتج (للسلة)" oninput="ccTryBcPreview()" style="flex:1; min-width:120px; font-size:12px; padding:6px 8px; border:1px solid #ddd; border-radius:8px;">'
-      + '<label><input type="checkbox" id="ccBandFlag" onchange="ccBandToggle()" style="width:15px;height:15px;"> 🧢 بندانة</label>'
-      + '<button class="ccIco" onclick="ccImgClear()" title="شيل الصورة">✖</button></div>'
+      + '<label><input type="checkbox" id="ccBandFlag" onchange="ccBandToggle()" style="width:15px;height:15px;"> 🧢 بندانة</label></div></div>'
       + '<div id="ccTryBcInfo" style="font-size:11.5px; padding:0 2px; color:#888;"></div>'
       + '<div id="ccBandRow">'
       + '<div id="ccBandChips" style="display:flex; flex-wrap:wrap; gap:6px; flex:1 1 100%;"></div>'
@@ -447,14 +465,17 @@
       + '<div id="ccSigner"></div>'
       + ccQuickHtml()
       + '<div id="ccBar">'
-      + '<button class="ccIco" onclick="document.getElementById(\'ccFile\').click()" title="صورة منتج">🖼️</button>'
+      + '<button class="ccIco" onclick="ccPickImage(\'camera\')" title="تصوير بالكاميرا">📷</button>'
+      + '<button class="ccIco" onclick="ccPickImage(\'gallery\')" title="اختيار صورة من الجهاز">🖼️</button>'
       + '<button class="ccIco" onclick="ccOutfitToggle()" title="اقتراح طقم (٣ طرح)">🎨</button>'
       + '<textarea id="ccText" rows="1" placeholder="اكتب الرد…" maxlength="500"></textarea>'
       + '<button class="ccIco send" onclick="ccSend()">➤</button>'
       + '</div>'
-      + '<input type="file" id="ccFile" accept="image/*" style="display:none;">';
+      + '<input type="file" id="ccFile" accept="image/*" style="display:none;">'
+      + '<input type="file" id="ccCamera" accept="image/*" capture="environment" style="display:none;">';
     document.body.appendChild(wrap);
     document.getElementById('ccFile').onchange = onPickImage;
+    document.getElementById('ccCamera').onchange = onPickImage;
     renderBandChips();   // 🧢 لوحة الألوان جاهزة أول ما الواجهة تتبني
     [0, 1, 2].forEach(function(i){
       document.getElementById('ccOutFile' + i).onchange = function(e){ ccOutfitPick(i, e); };
@@ -476,6 +497,7 @@
         function(rows){
           CST.convs = rows;
           renderBadge();
+          ccAlertUnread(rows);
           if(CST.open && !CST.activeId) renderList();
           if(CST.open && CST.activeId) renderThreadHead();
         }, function(e){ console.warn('cc convs', e && e.code); });
@@ -506,11 +528,94 @@
     return out;
   }
 
-  function renderBadge(){
+  function ccUnreadTotal(){
     var n = 0;
     visibleConvs().forEach(function(c){ n += Number(c.unreadStaff) || 0; });
+    return n;
+  }
+  function renderBadge(){
+    var n = ccUnreadTotal();
     var b = document.getElementById('ccFabBadge');
     if(b){ b.style.display = n ? 'inline-flex' : 'none'; b.textContent = n > 99 ? '99+' : n; }
+    var fab = document.getElementById('ccFab');
+    if(fab) fab.classList.toggle('ccUnread', n > 0);
+    var hint = document.getElementById('ccUnreadHint');
+    if(hint){
+      hint.style.display = n ? 'inline-flex' : 'none';
+      hint.textContent = n ? ('🔔 ' + n + (n === 1 ? ' رسالة جديدة' : ' رسائل جديدة')) : '';
+    }
+  }
+
+  /* 🔔 تنبيهات الرسائل — فوري + تذكير دوري لحد ما تتقري.
+     التنبيه المرئي والصوت شغالين من غير أي Permission. ولو المتصفح
+     واخد إذن Notifications بنطلع إشعار نظام كمان لما الصفحة مش ظاهرة. */
+  function ccBeep(){
+    try{ if(navigator && typeof navigator.vibrate === 'function') navigator.vibrate([120,70,120]); }catch(e){}
+    try{
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return;
+      var ac = new AC(), o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.055;
+      o.connect(g); g.connect(ac.destination); o.start();
+      g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.22);
+      o.stop(ac.currentTime + 0.23);
+      setTimeout(function(){ try{ ac.close(); }catch(e){} }, 350);
+    }catch(e){}
+  }
+  function ccSystemNotify(title, body){
+    try{
+      if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      if(!document.hidden) return;
+      var n = new Notification(title, { body: body || '', tag: 'echarpe-customer-chat', renotify: true });
+      n.onclick = function(){ try{ window.focus(); openPanel(); n.close(); }catch(e){} };
+    }catch(e){}
+  }
+  function ccMaybeAskNotifications(){
+    try{
+      if(typeof Notification !== 'undefined' && Notification.permission === 'default')
+        Notification.requestPermission().catch(function(){});
+    }catch(e){}
+  }
+  function ccAlertUnread(rows){
+    var nowSeen = {}, newest = null, increased = false;
+    (rows || []).forEach(function(c){
+      var n = Number(c.unreadStaff) || 0;
+      nowSeen[c.id] = n;
+      var prev = Number(CST.unreadSeen[c.id]) || 0;
+      if(CST.unreadReady && n > prev && c.lastFrom === 'cust' && !(CST.open && CST.activeId === c.id)){
+        increased = true;
+        if(!newest || (Number(c.lastAt)||0) > (Number(newest.lastAt)||0)) newest = c;
+      }
+    });
+    CST.unreadSeen = nowSeen;
+    var total = ccUnreadTotal();
+    if(!CST.unreadReady){
+      CST.unreadReady = true;
+      if(total > 0){
+        toast('🔔 عندك ' + total + (total === 1 ? ' رسالة لسه محتاجة رد' : ' رسائل لسه محتاجة رد'));
+        ccBeep();
+        ccSystemNotify('رسائل عملاء منتظرة', total + ' رسالة محتاجة رد');
+      }
+      return;
+    }
+    if(increased && newest){
+      var who = newest.name || newest.phone || 'عميلة';
+      var txt = String(newest.lastText || 'رسالة جديدة');
+      toast('🔔 رسالة جديدة من ' + who + ': ' + txt.slice(0, 90));
+      ccBeep();
+      ccSystemNotify('رسالة جديدة من ' + who, txt.slice(0, 120));
+    }
+  }
+  function ccStartReminder(){
+    if(CST.reminderTimer) return;
+    CST.reminderTimer = setInterval(function(){
+      var n = ccUnreadTotal();
+      if(!n) return;
+      if(CST.open && CST.activeId) return;
+      toast('🔔 تذكير: ' + n + (n === 1 ? ' رسالة لسه محتاجة رد' : ' رسائل لسه محتاجة رد'));
+      ccBeep();
+      ccSystemNotify('لسه في رسائل منتظرة', n + ' رسالة محتاجة رد');
+    }, 120000);
   }
 
   /* ============================================================
@@ -618,8 +723,13 @@
       if(m.text) body += esc2(m.text);
       if(m.tryon) body += ' <span style="font-size:10.5px;opacity:.7;">🧕</span>';
       if(m.bandanaColors && m.bandanaColors.length) body += ' <span style="font-size:10.5px;opacity:.7;">🧢</span>';
-      var t = m.atMs ? new Date(Number(m.atMs)).toLocaleTimeString('ar-EG',
-                { hour: '2-digit', minute: '2-digit' }) : '';
+      var t = '';
+      if(m.atMs){
+        try{ t = new Date(Number(m.atMs)).toLocaleString('ar-EG', {
+          weekday:'long', year:'numeric', month:'2-digit', day:'2-digit',
+          hour:'2-digit', minute:'2-digit'
+        }); }catch(e){ t = new Date(Number(m.atMs)).toLocaleString('ar-EG'); }
+      }
       html += '<div class="ccMsg ' + (st ? 'st' : 'cu') + '">' + body
         + '<span class="mt">' + (st ? esc2(m.by || '') + ' · ' : '') + t + '</span></div>';
     });
@@ -653,6 +763,14 @@
     img.onerror = function(){ cb(null, 'الصورة مش مقروءة'); };
     img.src = URL.createObjectURL(file);
   }
+
+
+  function ccPickImage(source){
+    var id = source === 'camera' ? 'ccCamera' : 'ccFile';
+    var input = document.getElementById(id);
+    if(input) input.click();
+  }
+  window.ccPickImage = ccPickImage;
 
   function onPickImage(e){
     var f = e.target.files && e.target.files[0];
@@ -1127,6 +1245,7 @@
      ٦) فتح/قفل/فلتر
      ============================================================ */
   function openPanel(){
+    ccMaybeAskNotifications();
     CST.open = true;
     CST.activeId = null;
     document.getElementById('ccWrap').classList.add('on');
@@ -1189,6 +1308,7 @@
       }
       inject();
       startConvListener();
+      ccStartReminder();
     }catch(e){ console.warn('cc boot', e); }
   }
   if(document.readyState === 'loading')
