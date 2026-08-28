@@ -1,45 +1,14 @@
-const CACHE_NAME = 'store-apps-shell-v365';
+const CACHE_NAME = 'store-apps-shell-v366';
 
-// ⚠️ مفيش skipWaiting تلقائي.
-// النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر
-// إمتى تفعّلها — عشان التحديث ميحصلش والكاشير في نص فاتورة.
 self.addEventListener('install', (event) => {
-  // بنستنى إشارة من الصفحة
+  self.skipWaiting();
 });
 
-// الصفحة بتبعت 'SKIP_WAITING' لما الكاشير يوافق
-self.addEventListener('message', (event) => {
-  if (!event.data) return;
-  if (event.data.type === 'SKIP_WAITING') { self.skipWaiting(); return; }
-  // الصفحة تسأل الـSW الفعّال نفسه عن نسخته بدل التخمين من أسماء الكاش.
-  if (event.data.type === 'GET_VERSION') {
-    try {
-      const target = event.source;
-      if (target && target.postMessage) target.postMessage({
-        type: 'POS_VERSION',
-        version: CACHE_NAME.replace('store-apps-shell-', ''),
-        cacheName: CACHE_NAME
-      });
-    } catch (_) {}
-  }
-});
-
-// ⚠️ الباج اللي عمل شاشة سودا:
-// كان بيمسح كل الكاشات القديمة **قبل** ما الجديد يتملّي، وبعدها الصفحة
-// بتعمل reload فورًا. لو النت اتأخر لحظة → مفيش نت ومفيش كاش → صفحة فاضية.
-// الحل: نمسك التحكم الأول، والكاش القديم يفضل شبكة أمان لحد ما الجديد يتملّي.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    self.clients.claim().then(() => {
-      // تنضيف مؤجل — بعد دقيقة كاملة، والجديد يكون اتملّى
-      setTimeout(() => {
-        caches.keys().then((names) =>
-          Promise.all(names
-            .filter((n) => n !== CACHE_NAME && n.startsWith('store-apps-shell-'))
-            .map((n) => caches.delete(n)))
-        ).catch(() => {});
-      }, 60000);
-    })
+    caches.keys().then((names) =>
+      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+    ).then(() => self.clients.claim())
   );
 });
 
@@ -53,26 +22,13 @@ self.addEventListener('fetch', (event) => {
   // is left completely alone.
   if (url.origin !== self.location.origin) return;
 
-  // 🔒 سلسلة احتياطية كاملة: النت ← الكاش الحالي ← أي كاش قديم ← رد واضح.
-  // من غيرها، فشل الشبكة كان بيرجّع undefined والصفحة بتطلع سودا.
   event.respondWith(
     fetch(req, { cache: 'no-store' })
       .then((res) => {
-        if (res && res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(req, clone)).catch(() => {});
-        }
+        const resClone = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
         return res;
       })
-      .catch(() =>
-        caches.match(req, { ignoreSearch: true })          // أي كاش (قديم أو جديد)
-          .then((hit) => hit || new Response(
-            '<!doctype html><meta charset="utf-8">'
-            + '<div style="font-family:sans-serif;padding:40px;text-align:center">'
-            + '<h2>مفيش اتصال</h2><p>افتح النت وحدّث الصفحة</p>'
-            + '<button onclick="location.reload()" style="padding:12px 24px;font-size:16px">إعادة المحاولة</button></div>',
-            { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-          ))
-      )
+      .catch(() => caches.match(req))
   );
 });
