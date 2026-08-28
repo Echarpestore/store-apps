@@ -26,6 +26,12 @@ if (!src_path) {
   console.log('  ⏭️  functions/index.js مش موجود — الاختبار اتخطى (شغّله بـ FUNCTIONS_INDEX=المسار)');
 } else {
   const src = fs.readFileSync(src_path, 'utf8');
+  // الإنتاج الحالي حذف paymobRefundProbe التجريبية عمدًا. وجود ملف functions
+  // من غير الدالة دي مش فشل: الاختبار خاص بالبروب القديم فقط.
+  if (src.indexOf('function refundProbeReject(') < 0) {
+    console.log('  ⏭️  paymobRefundProbe محذوفة من الإنتاج — اختبار البروب القديم اتخطى');
+    return;
+  }
 
   function extractFn(s, name) {
     const start = s.indexOf('function ' + name + '(');

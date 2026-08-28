@@ -3379,6 +3379,15 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
     if(!d) return false;
     if(d.status === 'success'){
       if(paymobApproved) return true;   // اتعالجت خلاص — منع التكرار
+      // v374 — متقفّليش المتابعة على success ناقص تفاصيل المبلغ. في تدفقات
+      // PIN/auth+capture ممكن المستند يتحدّث على مراحل؛ إيقاف المستمع هنا كان
+      // يحوّل موافقة حقيقية إلى "احفظ يدوي" للأبد. المبلغ لازم يفضل مؤكد
+      // من مستند Paymob نفسه قبل أي auto-save/print.
+      const _paidCentsReady = Number(d.amountCents);
+      if(!Number.isFinite(_paidCentsReady) || _paidCentsReady <= 0){
+        paymobShow('⏳ ' + legTag + 'الدفع اتقبل — بنستنى تفاصيل التأكيد عشان نحفظ ونطبع بأمان…', 'wait');
+        return false;
+      }
       paymobApproved = true; window.paymobApproved = true;
       paymobWaitBar(false);
       // 🛟 من لحظة القبول: لو الفاتورة ماتحفظتش خلال 20 ثانية، الكاشير هتعرف ليه
