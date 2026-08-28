@@ -10,6 +10,6 @@ assert(ui.includes("label:'الموافقات'"),'single nav approvals missing')
 assert(ui.includes('data-sales-nav-count="approvals"'),'approvals badge missing');
 assert(!ui.includes("label:'الرئيسية'"),'overview nav should be removed');
 assert(html.includes('flex-wrap:nowrap'),'single nav must not wrap into second row');
-assert(html.includes('sales-app.js?v=18')&&html.includes('sales-ui.js?v=21'),'sales cache bust missing');
-assert(sw.includes('store-apps-shell-v366'),'sales SW v366 missing');
+assert(/sales-app\.js\?v=(1[89]|[2-9]\d+)/.test(html)&&/sales-ui\.js\?v=(2[1-9]|[3-9]\d+)/.test(html),'sales cache bust missing');
+assert(/store-apps-shell-v(36[6-9]|3[7-9]\d|[4-9]\d{2,})/.test(sw),'sales SW must be v366 or newer');
 console.log('PASS sales single nav v366');

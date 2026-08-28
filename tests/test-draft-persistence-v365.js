@@ -22,5 +22,5 @@ assert(prod.includes("_recvDraftBranch !== br"),'receive drafts must be isolated
 
 assert(app.includes("togglePayMethod('visa1')"),'F3 card 1 behavior regressed');
 assert(app.includes("if(e.key === 'F9')"),'F9 drawer shortcut regressed');
-assert(sw.includes('store-apps-shell-v365'),'SW must track v365');
+assert(/store-apps-shell-v(36[5-9]|3[7-9]\d|[4-9]\d{2,})/.test(sw),'SW must track v365 or newer');
 console.log('PASS draft persistence v365');
