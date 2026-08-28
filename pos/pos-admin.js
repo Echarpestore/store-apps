@@ -161,6 +161,24 @@ function printSelectedLabels(){
   openLabelQtyModal(picked.map(it=> ({ name:it.name, price:it.price, barcode:it.barcode, suggestedQty: 1,
     stockQty: (typeof branchQty==='function') ? (branchQty(it)||0) : null })));
 }
+function inventoryItemInBranch(it, branch){
+  if(!it) return false;
+  branch = branch || currentBranch;
+  const brs = it.branches;
+  if(!Array.isArray(brs) || !brs.length) return true;   // legacy / غير مربوط صراحة
+  if(brs.includes(branch)) return true;
+
+  // إصلاح بيانات قديمة: أحيانًا qtyByBranch اتحدث للفرع لكن branches فضلت قديمة.
+  // نعتبره تابع للفرع فقط لو له رصيد فعلي هنا، ومافيش علامة استبعاد صريحة
+  // من استيراد سابق. كده منظهرش صنف فرع تاني بالغلط.
+  const by = it.qtyByBranch || {};
+  const hasOwnQty = Object.prototype.hasOwnProperty.call(by, branch);
+  const explicitlyDetached = it.status === 'merged' || it.status === 'import_excluded'
+    || it.excludedByImportBranch === branch;
+  return !explicitlyDetached && hasOwnQty && (Number(by[branch]) || 0) !== 0;
+}
+if(typeof window !== 'undefined') window.inventoryItemInBranch = inventoryItemInBranch;
+
 function renderInventoryList(){
   const listWrap = document.getElementById('inventoryListWrap');
   if(!listWrap) return;
@@ -179,7 +197,7 @@ function renderInventoryList(){
             : (bc, qq)=> String(bc||'').toLowerCase().startsWith(String(qq||'').toLowerCase());
 
   let items = allInventory.filter(it=>{
-    if(it.branches && !it.branches.includes(currentBranch)) return false;
+    if(!inventoryItemInBranch(it, currentBranch)) return false;
     if(q && !(_sm(it.name, q) || _bp(it.barcode, q))) return false;
     const isLow = (it.minStock??0) > 0 && branchQty(it) <= it.minStock;
     const isOut = it.status==='outofstock' || branchQty(it) <= 0;
@@ -210,7 +228,21 @@ function renderInventoryList(){
   const th = (col, label, extra)=> `<th onclick="invSort('${col}')" style="cursor:pointer; user-select:none; padding:10px 8px; text-align:${extra||'right'}; white-space:nowrap; ${invSortCol===col?'color:var(--accent);':'color:var(--muted);'}">${label}${arrow(col)}</th>`;
 
   if(items.length === 0){
-    listWrap.innerHTML = '<div class="empty-cart">'+(q||filter!=='all'?'مفيش أصناف بالفلتر ده':'لسه مفيش أصناف')+'</div>';
+    // لو الكود موجود فعلًا لكن في فرع تاني/metadata الفرع مش متطابقة، نقول السبب
+    // بدل الرسالة المضللة «مفيش أصناف».
+    const outsideMatches = q ? allInventory.filter(function(it){
+      return (_sm(it.name, q) || _bp(it.barcode, q)) && !inventoryItemInBranch(it, currentBranch);
+    }) : [];
+    if(outsideMatches.length){
+      const exact = outsideMatches.find(function(it){ return String(it.barcode||'').trim().toLowerCase() === q; }) || outsideMatches[0];
+      const otherBranches = (Array.isArray(exact.branches) ? exact.branches : []).filter(function(b){
+        return b && b !== '(مستبعد)' && b !== '(مدموج)';
+      }).join('، ');
+      listWrap.innerHTML = '<div class="empty-cart">الكود موجود في المخزون، لكنه مش مربوط بفرع <b>'
+        + currentBranch + '</b>' + (otherBranches ? '<div style="margin-top:6px;font-size:11px;color:var(--muted)">مربوط بـ: '+otherBranches+'</div>' : '') + '</div>';
+    }else{
+      listWrap.innerHTML = '<div class="empty-cart">'+(q||filter!=='all'?'مفيش أصناف بالفلتر ده':'لسه مفيش أصناف')+'</div>';
+    }
     return;
   }
 
