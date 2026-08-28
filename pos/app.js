@@ -1659,6 +1659,11 @@ document.addEventListener('keydown', function(e){
 // ---------------- 🖨️ طابور الطباعة السحابي (إيصالات من برنامج الحضور وغيره) ----------------
 // برنامج الحضور بيبعت "أمر طباعة" لفرع معيّن → الكاشير المفتوح هناك بيطبعه صامت ويعلّمه
 const _printJobsDone = new Set();
+function _genericReceiptRowParts(row){
+  if(Array.isArray(row)) return [row[0] ?? '', row[1] ?? ''];
+  if(row && typeof row === 'object') return [row.label ?? '', row.value ?? ''];
+  return ['', ''];
+}
 function buildGenericReceiptHTML(p){
   const c = receiptDesignConfig || defaultReceiptConfig();
   const w = (c.paperWidth === '58') ? '54mm' : '72mm';
@@ -1669,12 +1674,12 @@ function buildGenericReceiptHTML(p){
     <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:6px;"><b>${p.empName||''}</b><span>📍 ${p.branch||''}</span></div>
     <div style="font-size:11px; color:#333; margin-bottom:6px;">عن شهر: ${p.period||''} · ${new Date().toLocaleDateString('ar-EG',{day:'2-digit',month:'long',year:'numeric'})}</div>
     <div style="border-top:1px dashed #999; padding-top:5px;">
-      ${(p.lines||[]).map(l=>`<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:2.5px 0;"><span>${l[0]}</span><b>${l[1]}</b></div>`).join('')}
+      ${(p.lines||[]).map(l=>{ const r=_genericReceiptRowParts(l); return `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:2.5px 0;"><span>${r[0]}</span><b>${r[1]}</b></div>`; }).join('')}
     </div>
     ${p.net?`<div style="display:flex; justify-content:space-between; font-size:15px; font-weight:900; border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:5px 0; margin:5px 0;"><span>${p.net.label}</span><span>${p.net.value}</span></div>`:''}
     ${(p.extra&&p.extra.length)?`
       <div style="font-size:11px; font-weight:800; margin-top:5px;">— مستحقات بتتصرف منفصلة —</div>
-      ${p.extra.map(l=>`<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:2px 0; color:#222;"><span>${l[0]}</span><b>${l[1]}</b></div>`).join('')}
+      ${p.extra.map(l=>{ const r=_genericReceiptRowParts(l); return `<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:2px 0; color:#222;"><span>${r[0]}</span><b>${r[1]}</b></div>`; }).join('')}
       ${p.extraNote?`<div style="font-size:9px; color:#555;">${p.extraNote}</div>`:''}`:''}
     <div style="font-size:11px; margin-top:12px; padding-top:8px; border-top:1px dashed #999;">${p.footer||''}</div>
   </div>`;
