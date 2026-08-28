@@ -6304,7 +6304,7 @@ function computeSalary(emp, periodStart, end){
   }
 
   if(notYetHired){
-    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, overtimePendingMin:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, timeCreditHours:0, timeCreditDays:0, timeCreditDeduction:0, adminDeductions:0, dayOffBonusDays:0, dayOffBonusHours:0, extraOffDaysBonus:0, dayOffBonusAmount:0, advancesTotal:0, advCash:0, advOrders:0, advPrevCycle:0, netSalary:0, daysInCalc:0, attendedDays:0, elapsedWorkDays:0, absenceDays:0, absenceDates:[], dayOffDates:[], workedDayOffDates:[], incompleteShifts:[], attendanceRows:[], notYetHired:true };
+    return { proratedBase:0, overtimeMinutes:0, overtimePay:0, overtimePendingMin:0, dayOffOccurrences:0, extraOffDays:0, deductionAmount:0, timeCreditHours:0, timeCreditDays:0, timeCreditDeduction:0, adminDeductions:0, dayOffBonusDays:0, dayOffBonusHours:0, extraOffDaysBonus:0, dayOffBonusAmount:0, advancesTotal:0, advCash:0, advOrders:0, advPrevCycle:0, advanceItems:[], netSalary:0, daysInCalc:0, attendedDays:0, elapsedWorkDays:0, absenceDays:0, absenceDates:[], dayOffDates:[], workedDayOffDates:[], incompleteShifts:[], attendanceRows:[], notYetHired:true };
   }
 
   const daysInCalc = payrollCalendarDaysInRange(start, end);
@@ -6446,7 +6446,7 @@ function computeSalary(emp, periodStart, end){
   const netSalary = Math.round((proratedBase - deductionAmount - timeCreditDeduction - adminDeductions + overtimePay + dayOffBonusAmount - advancesTotal) * 100)/100;
   return { proratedBase, overtimeMinutes, overtimePay, overtimePendingMin, dayOffOccurrences, extraOffDays, deductionAmount,
            timeCreditHours, timeCreditDays, timeCreditDeduction, adminDeductions,
-           dayOffBonusDays, dayOffBonusHours, dayOffBonusAmount, advancesTotal, advCash, advOrders, advPrevCycle, netSalary, daysInCalc,
+           dayOffBonusDays, dayOffBonusHours, dayOffBonusAmount, advancesTotal, advCash, advOrders, advPrevCycle, advanceItems: periodAdvances.slice().sort((a,b)=>(Number(b.ts)||0)-(Number(a.ts)||0)), netSalary, daysInCalc,
            attendedDays, elapsedWorkDays, absenceDays,
            absenceDates: attendance.absenceDates, dayOffDates: attendance.dayOffDates,
            workedDayOffDates: attendance.workedDayOffDates, incompleteShifts: attendance.incompleteShifts,
@@ -6531,15 +6531,47 @@ window.openPayrollEmployee = function(empId, periodKey){
     <div style="font-weight:900;margin-top:14px;">➕ الإضافات</div>
     ${row('أوفرتايم',Math.round(c.overtimeMinutes/6)/10+' س = +'+c.overtimePay,'#22c55e')}
     ${row('شغل يوم الإجازة',c.dayOffBonusHours+' س = +'+c.dayOffBonusAmount,'#22c55e')}
-    ${row('عمولات ونقط وتارجت','+'+due.totalDue,'#22c55e')}
+    ${row('⭐ نقاط الشهر',fmtPts(due.ptsTotal)+' نقطة')}${row('قيمة النقاط المستحقة','+'+due.ptsDueAmt+' ج.م'+(commissionPerPoint>0?' ('+fmtPts(due.ptsDue)+' × '+commissionPerPoint+')':''),'#22c55e')}${(due.refDueAmt+due.tgtDueAmt)>0?row('عمولات أخرى','+'+Math.round((due.refDueAmt+due.tgtDueAmt)*100)/100+' ج.م','#22c55e'):''}
     <div style="font-weight:900;margin-top:14px;">➖ الخصومات</div>
     ${row('رصيد وقت',c.timeCreditHours+' س = -'+c.timeCreditDeduction,'#ef4444')}
     ${row('خصومات إدارية','-'+c.adminDeductions,'#ef4444')}
-    ${row('سلف ومشتريات','-'+c.advancesTotal,'#ef4444')}
+    <button type="button" onclick="openPayrollAdvanceDetails('${emp.id}','${pk}')" style="width:100%;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:inherit;cursor:pointer;">${row('سلف ومشتريات  ›','-'+c.advancesTotal,'#ef4444')}</button>
     <div style="font-weight:900;margin-top:14px;">💰 سجل تعديل الراتب</div>
     ${hist.length?hist.map(h=>row(new Date(h.at).toLocaleString('ar-EG')+(h.by?' · '+h.by:''),(h.from||0)+' ← '+(h.to||0))).join(''):'<div style="color:var(--sub);font-size:11px;padding:8px 0;">مفيش تعديلات مسجلة.</div>'}
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;"><button class="confirmBtnSmall" onclick="openAttendanceDaysDialog('${emp.id}','${pk}')">🗓️ سجل الأيام</button><button class="confirmBtnSmall" onclick="openSalaryPrintDialog('${emp.id}','${pk}')">🖨️ إيصال</button>${paid?'<span style="color:var(--good);font-size:11px;align-self:center;">✅ مدفوع</span>':(c.incompleteShifts.length?'<span style="color:#f59e0b;font-size:11px;align-self:center;">⛔ راجع الشيفت المفتوح قبل الصرف</span>':(new Date()>range.end?`<button class="confirmBtnSmall" onclick="openSalaryPayoutDialog('${emp.id}','${pk}')">💵 صرف</button>`:'<span style="color:var(--sub);font-size:11px;align-self:center;">الفترة لسه مفتوحة</span>'))}</div>
   </div>`;
+  document.body.appendChild(ov);
+};
+
+
+// 💰 تفاصيل السلف والمشتريات داخل نفس دورة الراتب — الضغط على السطر يفتح
+// كل حركة بالتاريخ والقيمة ونوعها، بدل رقم إجمالي من غير تفسير.
+window.openPayrollAdvanceDetails = function(empId, periodKey){
+  const emp = allEmployees.find(e=> e.id===empId); if(!emp) return;
+  const pk = periodKey || window.salaryPeriodKey || defaultPayPeriodKey(new Date());
+  const range = payPeriodRange(pk);
+  const calc = computeSalary(emp, range.start, range.end);
+  const items = (calc.advanceItems || []).slice().sort((a,b)=>(Number(b.ts)||0)-(Number(a.ts)||0));
+  const old = document.getElementById('payrollAdvOv'); if(old) old.remove();
+  const ov = document.createElement('div'); ov.id='payrollAdvOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.84);z-index:10001;overflow:auto;padding:14px;';
+  const esc = (v)=> String(v==null?'':v).replace(/[&<>\"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const dateOf = (a)=> {
+    if(a.date) return String(a.date).slice(0,10);
+    return a.ts ? new Date(a.ts).toLocaleDateString('ar-EG') : '—';
+  };
+  const typeOf = (a)=> String(a.source||'').indexOf('staff_order')===0 ? '🛒 مشتريات' : '💰 سلفة';
+  const body = items.length ? items.map(a=>{
+    const inv = a.invoiceNo ? '<div style="color:var(--sub);font-size:10px;margin-top:2px;">فاتورة '+esc(a.invoiceNo)+'</div>' : '';
+    return '<div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.07);">'
+      +'<div><b style="font-size:12px;">'+typeOf(a)+'</b><div style="color:var(--sub);font-size:10.5px;margin-top:2px;">'+esc(dateOf(a))+'</div>'+inv+'</div>'
+      +'<b style="color:#ef4444;white-space:nowrap;">-'+(Number(a.amount)||0)+' ج.م</b></div>';
+  }).join('') : '<div style="color:var(--sub);padding:18px 0;text-align:center;">مفيش سلف أو مشتريات داخلة في الفترة دي.</div>';
+  ov.innerHTML='<div style="max-width:480px;margin:auto;background:var(--card,#1d1d27);border-radius:16px;padding:16px;border:1px solid rgba(255,255,255,.12);">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><div><div style="font-size:17px;font-weight:900;">سلف ومشتريات · '+esc(emp.name)+'</div><div style="color:var(--sub);font-size:11px;">'+esc(payPeriodLabelAr(pk))+'</div></div><button class="backBtn" onclick="document.getElementById(\'payrollAdvOv\').remove()">✕</button></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:12px 0;"><div class="card" style="padding:9px;text-align:center;">💰 السلف<br><b>'+calc.advCash+' ج.م</b></div><div class="card" style="padding:9px;text-align:center;">🛒 المشتريات<br><b>'+calc.advOrders+' ج.م</b></div></div>'
+    +body+'<div style="display:flex;justify-content:space-between;padding-top:12px;font-weight:900;"><span>الإجمالي المخصوم</span><span style="color:#ef4444;">-'+calc.advancesTotal+' ج.م</span></div>'
+    +'<button onclick="document.getElementById(\'payrollAdvOv\').remove()" class="backBtn" style="width:100%;margin-top:14px;">إغلاق</button></div>';
   document.body.appendChild(ov);
 };
 
