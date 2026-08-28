@@ -1,0 +1,15 @@
+const fs=require('fs'),assert=require('assert');
+const app=fs.readFileSync('sales/sales-app.js','utf8');
+const ui=fs.readFileSync('sales/sales-ui.js','utf8');
+const html=fs.readFileSync('sales/index.html','utf8');
+const sw=fs.readFileSync('sales/sw.js','utf8');
+assert(app.includes('v366: تنقل موحّد'),'legacy nav shim missing');
+assert(!app.includes("bar.id = 'adminTabBar'"),'legacy admin tab bar still rendered');
+assert(app.includes("if(bar) bar.remove();"),'large action bar must be removed');
+assert(ui.includes("label:'الموافقات'"),'single nav approvals missing');
+assert(ui.includes('data-sales-nav-count="approvals"'),'approvals badge missing');
+assert(!ui.includes("label:'الرئيسية'"),'overview nav should be removed');
+assert(html.includes('flex-wrap:nowrap'),'single nav must not wrap into second row');
+assert(html.includes('sales-app.js?v=18')&&html.includes('sales-ui.js?v=21'),'sales cache bust missing');
+assert(sw.includes('store-apps-shell-v366'),'sales SW v366 missing');
+console.log('PASS sales single nav v366');
