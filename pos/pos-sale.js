@@ -4083,6 +4083,10 @@ window.returnPointsDeduction = returnPointsDeduction;
     }
     if(payments.salary && !staffPurchase){ showToast('خصم الراتب متاح في وضع شراء الموظف بس', 'err'); return; }
 
+    // 💰 v372: بعد اكتمال كل التحقق، افتح الدرج فورًا قبل أي انتظار شبكة/Firestore.
+    // لو الشِل قديم ومفيهوش openDrawer مستقل، printReceipt يحتفظ بالفولباك المعتاد.
+    try{ if(typeof preOpenCashDrawerForSale === 'function') preOpenCashDrawerForSale(invoiceCode, payments); }catch(e){}
+
     // 1) سجل البيع (📴 مش بنستنى السيرفر أكتر من ثواني — أوفلاين بتتسجل محليًا وبتترفع بعدين)
     const _saleW = await _waitWrite(db.collection(TEST_SALES).add({
       invoiceNo,

@@ -1451,6 +1451,25 @@ function refreshGiftBtn(){
 if(typeof window !== 'undefined' && typeof document !== 'undefined'){
   setInterval(function(){ try{ refreshGiftBtn(); }catch(e){} }, 30000);
 }
+// 💰 v372: افتح درج الكاش عند تأكيد البيع، قبل انتظار حفظ Firestore والطباعة.
+// يرجع true فقط لو برنامج الويندوز عنده أمر درج مستقل واتبعث فعلًا.
+function preOpenCashDrawerForSale(invoiceCode, payments){
+  try{
+    const hasCash = payments && Math.abs(Number(payments.cash) || 0) > 0.005;
+    if(!hasCash || typeof window.posShell === 'undefined' || typeof window.posShell.openDrawer !== 'function') return false;
+    const cfg = getPrinterCfg();
+    const drawerTarget = cfg && (cfg.drawerPrinter || cfg.invoicePrinter);
+    if(!drawerTarget) return false;
+    window.posShell.openDrawer({ printer: drawerTarget });
+    window._cashDrawerPreopenedInvoiceCode = String(invoiceCode || '');
+    return true;
+  }catch(e){
+    console.warn('early drawer open failed', e);
+    return false;
+  }
+}
+if(typeof window !== 'undefined') window.preOpenCashDrawerForSale = preOpenCashDrawerForSale;
+
 function _printBuiltReceipt(data, payments){
   const c = receiptDesignConfig || defaultReceiptConfig();
   const holder = document.getElementById('receiptPrint');
@@ -1472,26 +1491,31 @@ function _printBuiltReceipt(data, payments){
       return;
     }
     const drawerTarget = hasCash ? (shellCfg.drawerPrinter || shellCfg.invoicePrinter) : null;
-    // 💰 الدرج يفتح **فورًا وبالتوازي** — كان الأمر راكب مع الطباعة فبيستنى
-    // الفاتورة كلها تتصف وتتطبع، وأمر الضمان كان بيتبعت بعد ما الطباعة تخلص
-    // (أبطأ وأبطأ). دلوقتي: أمر مستقل بيطلع في نفس اللحظة، والفلاجات جوه أمر
-    // الطباعة فاضلة كاحتياطي للأجهزة اللي مفيهاش openDrawer مستقل.
-    if(drawerTarget && typeof window.posShell.openDrawer === 'function'){
+    const _preopened = !!(drawerTarget && data && data.invoiceCode &&
+      String(window._cashDrawerPreopenedInvoiceCode || '') === String(data.invoiceCode));
+    const _hasDrawerApi = typeof window.posShell.openDrawer === 'function';
+    // لو البيع دخل هنا من مسار قديم/إعادة طباعة ولم يفتح الدرج مبكرًا، افتحه الآن.
+    // أما البيع الطبيعي v372 فبيكون فتحه بالفعل قبل انتظار حفظ الفاتورة.
+    if(drawerTarget && _hasDrawerApi && !_preopened){
       try{ window.posShell.openDrawer({ printer: drawerTarget }); }catch(e){}
     }
+    // فلاجات printReceipt مجرد fallback للأجهزة القديمة التي لا تملك openDrawer مستقل؛
+    // عدم إرسالها مع API الحديث يمنع نبضة ثانية متأخرة بعد الطباعة.
+    const _drawerViaPrint = drawerTarget && !_hasDrawerApi ? drawerTarget : null;
     window.posShell.printReceipt({
       printer: shellCfg.invoicePrinter,
       paperWidth: c.paperWidth || '80',
       html: holder.outerHTML,
-      openDrawer: drawerTarget,
-      openCashDrawer: drawerTarget,   // اسم بديل لو الشِل بيستخدمه
-      cashDrawer: !!drawerTarget
+      openDrawer: _drawerViaPrint,
+      openCashDrawer: _drawerViaPrint,
+      cashDrawer: !!_drawerViaPrint
     }).catch(e=> { console.warn('silent print failed', e); showToast('تعذر الطباعة الصامتة: '+e.message, 'err'); })
       // 🔴 الطباعة الصامتة بتشغّل عملية طباعة/درج بره المتصفح، وويندوز
       //    ساعات مبيرجّعش التركيز للبرنامج بعدها. كل مسارات الطباعة التانية
       //    في النظام بتنادي reclaimWindowFocus — **إيصال البيع كان الوحيد
       //    اللي مش بيناديها**. وده بالظبط «بيحصل بعد عملية البيع، مش دايمًا».
       .then(function(){ if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(700); });
+    if(_preopened) window._cashDrawerPreopenedInvoiceCode = '';
     return;
   }
 
@@ -1659,11 +1683,6 @@ document.addEventListener('keydown', function(e){
 // ---------------- 🖨️ طابور الطباعة السحابي (إيصالات من برنامج الحضور وغيره) ----------------
 // برنامج الحضور بيبعت "أمر طباعة" لفرع معيّن → الكاشير المفتوح هناك بيطبعه صامت ويعلّمه
 const _printJobsDone = new Set();
-function _genericReceiptRowParts(row){
-  if(Array.isArray(row)) return [row[0] ?? '', row[1] ?? ''];
-  if(row && typeof row === 'object') return [row.label ?? '', row.value ?? ''];
-  return ['', ''];
-}
 function buildGenericReceiptHTML(p){
   const c = receiptDesignConfig || defaultReceiptConfig();
   const w = (c.paperWidth === '58') ? '54mm' : '72mm';
@@ -1674,12 +1693,12 @@ function buildGenericReceiptHTML(p){
     <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:6px;"><b>${p.empName||''}</b><span>📍 ${p.branch||''}</span></div>
     <div style="font-size:11px; color:#333; margin-bottom:6px;">عن شهر: ${p.period||''} · ${new Date().toLocaleDateString('ar-EG',{day:'2-digit',month:'long',year:'numeric'})}</div>
     <div style="border-top:1px dashed #999; padding-top:5px;">
-      ${(p.lines||[]).map(l=>{ const r=_genericReceiptRowParts(l); return `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:2.5px 0;"><span>${r[0]}</span><b>${r[1]}</b></div>`; }).join('')}
+      ${(p.lines||[]).map(l=>`<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:2.5px 0;"><span>${l[0]}</span><b>${l[1]}</b></div>`).join('')}
     </div>
     ${p.net?`<div style="display:flex; justify-content:space-between; font-size:15px; font-weight:900; border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:5px 0; margin:5px 0;"><span>${p.net.label}</span><span>${p.net.value}</span></div>`:''}
     ${(p.extra&&p.extra.length)?`
       <div style="font-size:11px; font-weight:800; margin-top:5px;">— مستحقات بتتصرف منفصلة —</div>
-      ${p.extra.map(l=>{ const r=_genericReceiptRowParts(l); return `<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:2px 0; color:#222;"><span>${r[0]}</span><b>${r[1]}</b></div>`; }).join('')}
+      ${p.extra.map(l=>`<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:2px 0; color:#222;"><span>${l[0]}</span><b>${l[1]}</b></div>`).join('')}
       ${p.extraNote?`<div style="font-size:9px; color:#555;">${p.extraNote}</div>`:''}`:''}
     <div style="font-size:11px; margin-top:12px; padding-top:8px; border-top:1px dashed #999;">${p.footer||''}</div>
   </div>`;
