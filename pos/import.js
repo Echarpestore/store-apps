@@ -105,9 +105,34 @@ function ensureXlsxLib(){
       sc.onerror = ()=> next ? next() : reject(new Error('مش قادر أحمّل مكتبة Excel — اتأكد من النت'));
       document.head.appendChild(sc);
     };
-    // نسخة محلية الأول (لو اترفعت)، وبعدين CDN كبديل
-    tryLoad('xlsx.full.min.js', ()=>
-      tryLoad('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', null));
+    // نسخة محلية الأول، وبعدها أكتر من مصدر موثوق. بعض أجهزة الفروع/الشبكات
+    // بتحجب CDN معيّن؛ قبل كده اختيار ملف Excel كان يبان كأنه "ماعملش حاجة".
+    const sources = [
+      'xlsx.full.min.js',
+      'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+      'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+    ];
+    let i = 0;
+    const next = ()=>{
+      if(i >= sources.length){ reject(new Error('مش قادر أحمّل قارئ Excel')); return; }
+      const src = sources[i++];
+      const sc = document.createElement('script');
+      let done = false;
+      const finish = (ok)=>{
+        if(done) return; done = true;
+        clearTimeout(timer);
+        if(ok && window.XLSX){ resolve(window.XLSX); return; }
+        try{ sc.remove(); }catch(_){}
+        next();
+      };
+      const timer = setTimeout(()=>finish(false), 6000);
+      sc.src = src;
+      sc.onload = ()=>finish(true);
+      sc.onerror = ()=>finish(false);
+      document.head.appendChild(sc);
+    };
+    next();
   });
   return _xlsxLoading;
 }
@@ -121,7 +146,7 @@ function handleImportFile(e){
   if(note) note.textContent = '⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري القراءة…';
   const isExcel = /\.(xlsx?|xlsm)$/i.test(file.name || '');
   if(isExcel){
-    if(note) note.textContent = '⏳ بيحمّل مكتبة Excel…';
+    if(note) note.textContent = '⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري تجهيز قارئ Excel…';
     ensureXlsxLib().then((XLSX)=>{
       if(note) note.textContent = '⏳ بيقرا الملف…';
       const reader = new FileReader();
