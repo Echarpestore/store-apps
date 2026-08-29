@@ -214,12 +214,13 @@ const AR_KEYS = {
   'ض':'q','ص':'w','ث':'e','ق':'r','ف':'t','غ':'y','ع':'u','ه':'i','خ':'o','ح':'p','ج':'[','د':']',
   // الصف التاني
   'ش':'a','س':'s','ي':'d','ب':'f','ل':'g','ا':'h','ت':'j','ن':'k','م':'l','ك':';','ط':"'",
-  // الصف التالت
-  'ئ':'z','ء':'x','ؤ':'c','ر':'v','لا':'b','ى':'n','ة':'m','و':',','ز':'.','ظ':'/',
-  // مع Shift
-  'َ':'Q','ً':'W','ُ':'E','ٌ':'R','لإ':'T','إ':'Y','÷':'I','×':'O','؛':'P',
-  'ِ':'A','ٍ':'S','لأ':'G','أ':'H','ـ':'J','،':'K',
-  'ْ':'X','لآ':'B','آ':'N','ذ':'`'
+  // الصف التالت — ندعم الحروف المركبة سواء المتصفح رجّعها حرفين أو ligature واحدة
+  'ئ':'z','ء':'x','ؤ':'c','ر':'v','لا':'b','ﻻ':'b','ى':'n','ة':'m','و':',','ز':'.','ظ':'/',
+  // مع Shift — مهم جدًا للسكانر لأن أغلب الأكواد الإنجليزية مطبوعة Uppercase.
+  // Windows Arabic 101 يطلع رموز/تشكيل بدل الحروف الكبيرة (مثال Shift+F => '[').
+  'َ':'Q','ً':'W','ُ':'E','ٌ':'R','لإ':'T','ﻹ':'T','إ':'Y','`':'U','÷':'I','×':'O','؛':'P',
+  'ِ':'A','ٍ':'S',']':'D','[':'F','لأ':'G','ﻷ':'G','أ':'H','ـ':'J','،':'K','/':'L',
+  '~':'Z','ْ':'X','}':'C','{':'V','لآ':'B','ﻵ':'B','آ':'N',"'":'M','ذ':'`'
 };
 function fixArabicKeyboard(text){
   const t = String(text == null ? '' : text);
@@ -247,7 +248,7 @@ window.fixArabicKeyboard = fixArabicKeyboard;
 // بيرجّع الكود بعد الترجمة لو الأصلي فيه عربي والمترجم بيطابق شكل معروف
 function normalizeScan(code){
   const raw = String(code || '').trim();
-  if(!/[\u0600-\u06FF]/.test(raw)) return raw;      // مفيش عربي = زي ما هو
+  if(!/[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(raw)) return raw;      // مفيش عربي/Arabic presentation forms = زي ما هو
   const fixed = fixArabicKeyboard(raw).toUpperCase();
   // بنقبل الترجمة بس لو طلعت شكل كود معروف — عشان منخربش بحث بالاسم العربي
   if(/^FT[A-Z0-9-]+$/.test(fixed)) return fixed;      // كود فاتورة
@@ -3112,12 +3113,14 @@ function paymobTerminalId(){
 // 🔒 حالة الدفع بالكارت للعملية الحالية — بتتصفّر مع كل سلة جديدة
 let paymobPending = null;     // { ref, unsub, amount }
 let paymobApproved = false;   // بيبقى true بس لما Paymob يأكد النجاح
+const PM_PENDING_RECOVERY_MS = 8000; // لو الماكينة طبعت قبل وصول الويبهوك، نظهر مخرج واضح بسرعة
 window.paymobApproved = false;
 
 // 🔌 بيقفل المتابعة الحالية بس (شريحة كارت خلصت أو اتلغت) —
 // الشرائح المؤكدة وبياناتها بتفضل زي ما هي عشان الكارت التاني يكمّل عليها
 function paymobResetActive(){
   try{ paymobStuckClear(); }catch(e){}
+  try{ paymobPendingRecoveryClear(); }catch(e){}
   // 🔴 باج: الكود القديم كان بينادي paymobReset() كامل مع كل إرسال للماكينة،
   // وهي كانت بتصفّر _paymobAutoFired. لما اتقسمت الدالة عشان الكارتين، التصفير
   // ده ضاع — فأول ما الحارس يعلق على true (لو حصل خطأ بعد الطباعة)، كل الفواتير
@@ -3184,6 +3187,37 @@ function paymobWaitBar(on){
     + 'animation:pmSlide 1.1s linear infinite;"></div>';
   box.parentNode.insertBefore(bar, box.nextSibling);
 }
+
+function paymobPendingRecoveryClear(){
+  const box = document.getElementById('paymobStuckBox');
+  if(box && box.dataset && box.dataset.mode === 'pending-recovery'){
+    box.style.display = 'none'; box.innerHTML = ''; delete box.dataset.mode;
+  }
+}
+window.paymobPendingRecoveryClear = paymobPendingRecoveryClear;
+
+function paymobPendingRecoveryRender(orderRef, amountEGP, seq){
+  const box = document.getElementById('paymobStuckBox');
+  if(!box || paymobApproved || !paymobPending || paymobPending.ref !== orderRef) return;
+  const leg = findCardLeg(cardLegs, seq || 1, orderRef);
+  if(!leg || leg.status !== 'pending') return;
+  box.dataset.mode = 'pending-recovery';
+  box.style.display = 'block';
+  box.innerHTML = '<div style="background:#3a2c0e;color:#fff;border-radius:12px;padding:13px 15px;text-align:center;">'
+    + '<div style="font-weight:900;font-size:16px;">📟 الماكينة لسه سابقه السيستم</div>'
+    + '<div style="font-size:13px;font-weight:700;margin-top:5px;line-height:1.7;">لو إيصال الماكينة طلع ومكتوب عليه APPROVED، متستناش الويبهوك.</div>'
+    + '<button id="pmPendingApprovedBtn" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:10px;background:#fff;color:#7c2d12;font-family:Cairo;font-weight:900;font-size:15px;cursor:pointer;">✅ الإيصال APPROVED — احفظ واطبع</button>'
+    + '<button id="pmPendingWaitBtn" style="margin-top:7px;width:100%;padding:9px;border:1px solid rgba(255,255,255,.35);border-radius:10px;background:transparent;color:#fff;font-family:Cairo;font-weight:800;cursor:pointer;">⏳ لسه مستني</button>'
+    + '</div>';
+  const saveBtn = document.getElementById('pmPendingApprovedBtn');
+  if(saveBtn) saveBtn.addEventListener('click', function(){
+    try{ if(typeof _logActivity === 'function') _logActivity('paymob_stuck_rescue', { ref:orderRef, amount:Number(amountEGP)||0, seq:seq||1 }); }catch(e){}
+    try{ confirmPayment(); }catch(e){ console.warn('pending rescue', e); }
+  });
+  const waitBtn = document.getElementById('pmPendingWaitBtn');
+  if(waitBtn) waitBtn.addEventListener('click', function(){ paymobPendingRecoveryClear(); });
+}
+window.paymobPendingRecoveryRender = paymobPendingRecoveryRender;
 
 function paymobShow(text, kind){
   let box = document.getElementById('paymobStatus');
@@ -3379,6 +3413,7 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
     if(!d) return false;
     if(d.status === 'success'){
       if(paymobApproved) return true;   // اتعالجت خلاص — منع التكرار
+      try{ paymobPendingRecoveryClear(); }catch(e){}
       // v374 — متقفّليش المتابعة على success ناقص تفاصيل المبلغ. في تدفقات
       // PIN/auth+capture ممكن المستند يتحدّث على مراحل؛ إيقاف المستمع هنا كان
       // يحوّل موافقة حقيقية إلى "احفظ يدوي" للأبد. المبلغ لازم يفضل مؤكد
@@ -3476,6 +3511,7 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
       }
       return true;
     } else if(d.status === 'failed' || d.status === 'voided' || d.status === 'refunded'){
+      try{ paymobPendingRecoveryClear(); }catch(e){}
       paymobApproved = false; window.paymobApproved = false;
       paymobWaitBar(false);
       // ❌ الشريحة دي اترفضت: بتتشال من المدفوعات عشان الكاشير يعيد المحاولة على طول
@@ -3516,6 +3552,7 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
     try{ if(unsub) unsub(); }catch(e){}
     try{ clearInterval(poll); }catch(e){}
     try{ clearInterval(rescue); }catch(e){}
+    try{ clearTimeout(_manualRecoveryT); }catch(e){}
     try{ clearTimeout(_warnT); }catch(e){}
     try{ clearTimeout(_giveUpT); }catch(e){}
   }
@@ -3595,6 +3632,13 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
     }
   }, 4000);
   paymobPending = { ref: orderRef, unsub: unsub, poll: poll, rescue: rescue, amount: amountEGP, seq: seq };
+  // 🛟 الماكينة ممكن تطبع APPROVED قبل وصول الويبهوك بثواني. بدل ما الكاشير تفضل
+  // معلّقة أو تطبع من برّه، نظهر مسار استرداد واضح من نفس شاشة الـPOS.
+  const _manualRecoveryT = setTimeout(function(){
+    if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
+      paymobPendingRecoveryRender(orderRef, amountEGP, seq);
+    }
+  }, PM_PENDING_RECOVERY_MS);
   // ⏳ 3 دقايق = تحذير بس — 🔴 كانت بتقتل المتابعة نهائيًا: عميل اتلكّع وأكّد
   // في الدقيقة الرابعة كان تأكيده بيضيع رغم إن الماكينة طبعت. دلوقتي المتابعة
   // مستمرة لحد 10 دقايق، وبعدها بس بتقف بمسح كامل.
