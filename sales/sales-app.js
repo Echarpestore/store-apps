@@ -1484,6 +1484,22 @@ window.fsChatApi = {
     if(!id) return Promise.resolve(null);
     return getDoc(doc(db, col, id)).then(function(d){ return d.exists() ? d.data() : null; });
   },
+  getEmployees: function(col, branch){
+    const nb = String(branch || '').trim().toLowerCase();
+    if(!nb) return Promise.resolve([]);
+    // نقرأ القائمة ونطبّع اسم الفرع محليًا عشان السجلات القديمة ذات
+    // المسافات/case المختلف ما تختفيش من اختيار «مين بيرد؟».
+    return getDocs(collection(db, col)).then(function(snap){
+      const out=[];
+      snap.forEach(function(d){
+        const x=d.data()||{};
+        if(x.active === false || x.deletedAt) return;
+        if(String(x.branch||'').trim().toLowerCase() !== nb) return;
+        const n=String(x.name||'').trim(); if(n && !out.includes(n)) out.push(n);
+      });
+      return out;
+    });
+  },
   sendMessage: function(col, convId, msg, convPatch){
     // 📤 عملية واحدة: الرسالة + تحديث المحادثة. لو اتفصلوا، الشارة
     //    والقايمة بيبقوا غلط والعميلة تفضل شايفة "مفيش رد".

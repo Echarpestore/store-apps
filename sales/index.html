@@ -1236,15 +1236,15 @@
 
 </div>
 
-<script type="module" src="sales-app.js?v=20"></script>
+<script type="module" src="sales-app.js?v=383"></script>
 <script src="sales-ui.js?v=21"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
-     ⚠️ `chat-staff-ui.js` مكتوب compat، وبيكتشف إنه في بيئة modular
+     ⚠️ `chat-staff-ui.js?v=383` مكتوب compat، وبيكتشف إنه في بيئة modular
         وينادي `window.fsChatApi` اللي `sales-app.js` بيعرّضه.
      ⚠️ الترتيب مهم: بعد الموديول، والملف بيستنى الجسر لوحده لو لسه
         ماوصلش (الموديول بيحمّل بشكل غير متزامن). -->
 <script src="../pos/chat-core.js"></script>
-<script src="../pos/chat-staff-ui.js?v=370"></script>
+<script src="../pos/chat-staff-ui.js?v=383"></script>
 </body>
 </html>
