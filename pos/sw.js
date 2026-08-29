@@ -1,34 +1,10 @@
-const CACHE_NAME = 'store-apps-shell-v378';
+const CACHE_NAME = 'store-apps-shell-v381';
 
 // ⚠️ مفيش skipWaiting تلقائي.
 // النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر
 // إمتى تفعّلها — عشان التحديث ميحصلش والكاشير في نص فاتورة.
-const OFFLINE_SHELL = [
-  './', './index.html', './jsbarcode.min.js',
-  './blackbox.js', './pos-core.js', './pos-admin.js', './pos-reports.js',
-  './pos-sale.js', './app.js', './products.js', './profiles.js',
-  './discounts.js', './import.js', './local-search-cache.js', './search.js',
-  './loyalty.js', './staff.js', './transfers.js', './ui-editor.js',
-  './chat.js', './frames.js', './credit-core.js', './credit-ui.js',
-  './opportunity-core.js', './requests-core.js', './requests-ui.js',
-  './orders-core.js', './orders-ui.js', './shop-admin.js', './basket-core.js',
-  './insights-core.js', './basket-ui.js', './wa-compose.js',
-  './chat-core.js', './chat-staff-ui.js'
-];
-
-// v375: جهّز نسخة طوارئ كاملة من شاشة الـPOS قبل ما الـSW الجديد يبقى جاهز.
-// Promise.allSettled مقصودة: ملف اختياري ناقص ما يمنعش تثبيت النسخة كلها.
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      Promise.allSettled(OFFLINE_SHELL.map((url) =>
-        fetch(url, { cache: 'no-store' }).then((res) => {
-          if(!res || !res.ok) throw new Error('offline shell ' + url);
-          return cache.put(url, res.clone());
-        })
-      ))
-    )
-  );
+  // بنستنى إشارة من الصفحة
 });
 
 // الصفحة بتبعت 'SKIP_WAITING' لما الكاشير يوافق
@@ -72,10 +48,10 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-  // ملفات التطبيق نفسها + مكتبات التشغيل الثابتة فقط.
-  // Firestore/API requests تفضل خارج الـSW تمامًا؛ Firestore persistence هي المسؤولة عنها.
-  const staticExternal = /^(www\.gstatic\.com|cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)$/.test(url.hostname);
-  if (url.origin !== self.location.origin && !staticExternal) return;
+  // Only handle our own site's files (HTML, manifest, icons).
+  // Everything else (Firebase/Firestore calls, Google Fonts, etc.)
+  // is left completely alone.
+  if (url.origin !== self.location.origin) return;
 
   // 🔒 سلسلة احتياطية كاملة: النت ← الكاش الحالي ← أي كاش قديم ← رد واضح.
   // من غيرها، فشل الشبكة كان بيرجّع undefined والصفحة بتطلع سودا.
