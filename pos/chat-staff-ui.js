@@ -128,14 +128,19 @@
       var b = String(branch || '').trim();
       if(!b) return Promise.resolve([]);
       if(m === 'compat'){
-        return db.collection('sales_employees').where('branch', '==', b).get()
+        // لا نعتمد على تطابق نص الفرع حرفيًا: بعض السجلات القديمة فيها
+        // مسافات/اختلاف case. نقرأ القائمة الصغيرة ونطبع الفرع محليًا.
+        var nb = b.toLowerCase();
+        return db.collection('sales_employees').get()
           .then(function(s){
             var out = [];
             s.forEach(function(d){
-              var n = (d.data() || {}).name;
-              if(n) out.push(String(n));
+              var x = d.data() || {};
+              if(x.active === false || x.deletedAt) return;
+              if(String(x.branch || '').trim().toLowerCase() !== nb) return;
+              if(x.name) out.push(String(x.name).trim());
             });
-            return out;
+            return out.filter(Boolean).filter(function(n, i, a){ return a.indexOf(n) === i; });
           });
       }
       if(m === 'modular' && window.fsChatApi && typeof window.fsChatApi.getEmployees === 'function'){
@@ -222,7 +227,8 @@
   }
   window.ccSignerSet = ccSignerSet;
 
-  var CC_EMPS = null;   // كاش موظفات الفرع (بيتحمّل مرة)
+  var CC_EMPS = null;   // كاش موظفات الفرع الحالي
+  var CC_EMPS_BRANCH = ''; // يمنع تسريب كاش فرع لفرع تاني
 
   function ccSignerRender(){
     var box = document.getElementById('ccSigner');
@@ -240,14 +246,16 @@
   function ccSignerOpen(){
     var box = document.getElementById('ccSigner');
     if(!box) return;
-    if(CC_EMPS){ ccSignerList(box); return; }
-    box.innerHTML = '<span class="ccSgLbl">بنجيب الأسامي…</span>';
     var b = '';
     try{ b = (conv() && conv().branch) || (typeof currentBranch !== 'undefined' ? currentBranch : ''); }catch(e){}
+    var bn = String(b || '').trim().toLowerCase();
+    if(CC_EMPS && CC_EMPS.length && CC_EMPS_BRANCH === bn){ ccSignerList(box); return; }
+    box.innerHTML = '<span class="ccSgLbl">بنجيب الأسامي…</span>';
     CDB.getEmployees(b).then(function(list){
       CC_EMPS = Array.isArray(list) ? list : [];
+      CC_EMPS_BRANCH = bn;
       ccSignerList(box);
-    }).catch(function(){ CC_EMPS = []; ccSignerList(box); });
+    }).catch(function(){ CC_EMPS = []; CC_EMPS_BRANCH = ''; ccSignerList(box); });
   }
   window.ccSignerOpen = ccSignerOpen;
 
@@ -364,7 +372,7 @@
       + '.ccChip.g{background:#333; color:#e8c8ff;} .ccChip.e{background:#3a2b33; color:#f7c8dc;}'
       + '.ccWaitW{color:#f0a020;} .ccWaitL{color:#E5484D;}'
       + '.ccEmpty{padding:40px 20px; text-align:center; color:#6f7683; font-size:13.5px;}'
-      + '#ccThread{flex:1; overflow-y:auto; padding:14px 12px; display:none;'
+      + '#ccThread{flex:1 1 auto; min-height:0; overflow-y:auto; padding:14px 12px; display:none;'
       + 'flex-direction:column; gap:8px;}'
       + '.ccMsg{max-width:82%; border-radius:13px; padding:8px 12px; font-size:13.5px;'
       + 'line-height:1.6; word-break:break-word; white-space:pre-wrap;}'
@@ -392,7 +400,8 @@
       + ' border-radius:99px; padding:7px 13px; font-size:12px; font-family:inherit; cursor:pointer;'
       + ' white-space:nowrap; max-width:230px; overflow:hidden; text-overflow:ellipsis;}'
       + '.ccQuickChip:hover{background:#343b49;}'
-      + '#ccBar{display:none; gap:8px; padding:9px 12px; background:#1b1e26;'
+      + '#ccCompose{flex:0 1 auto; min-height:0; max-height:52vh; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; background:#1b1e26;}'
+      + '#ccBar{display:none; flex:0 0 auto; gap:8px; padding:9px 12px; background:#1b1e26;'
       + 'border-top:1px solid #2a2e39; align-items:flex-end;}'
       + '#ccText{flex:1; border:1px solid #2a2e39; border-radius:12px; padding:9px 12px;'
       + 'font-family:inherit; font-size:13.5px; resize:none; max-height:90px; outline:none;'
@@ -437,11 +446,12 @@
       + '</div>'
       + '<div id="ccList"></div>'
       + '<div id="ccThread"></div>'
-      + '<div id="ccImgPrev"><img id="ccImgTag" alt="">'
+      + '<div id="ccCompose">'
+      + '<div id="ccImgPrev"><span id="ccImgPreviewBox" style="display:none">معاينة الصورة قبل الإرسال</span><img id="ccImgTag" alt="">'
       + '<label><input type="checkbox" id="ccTryFlag" checked style="width:15px;height:15px;"> زرار 🧕 جرّبيها</label>'
       + '<input id="ccTryBc" type="text" inputmode="latin" placeholder="باركود المنتج (للسلة)" oninput="ccTryBcPreview()" style="flex:1; min-width:120px; font-size:12px; padding:6px 8px; border:1px solid #ddd; border-radius:8px;">'
       + '<label><input type="checkbox" id="ccBandFlag" onchange="ccBandToggle()" style="width:15px;height:15px;"> 🧢 بندانة</label>'
-      + '<button class="ccIco" onclick="ccImgClear()" title="شيل الصورة">✖</button></div>'
+      + '<button class="ccSgName" onclick="ccPickImage(\'gallery\')">🖼️ تغيير الصورة</button><button class="ccSgName" onclick="ccImgClear()">✖ إلغاء</button></div>'
       + '<div id="ccTryBcInfo" style="font-size:11.5px; padding:0 2px; color:#888;"></div>'
       + '<div id="ccBandRow">'
       + '<div id="ccBandChips" style="display:flex; flex-wrap:wrap; gap:6px; flex:1 1 100%;"></div>'
@@ -451,14 +461,18 @@
       + ccOutfitPrevHtml()
       + '<div id="ccSigner"></div>'
       + ccQuickHtml()
+      + '</div>'
       + '<div id="ccBar">'
-      + '<button class="ccIco" onclick="document.getElementById(\'ccFile\').click()" title="صورة منتج">🖼️</button>'
+      + '<button class="ccIco" onclick="ccPickImage(\'camera\')" title="افتح الكاميرا">📷</button>'
+      + '<button class="ccIco" onclick="ccPickImage(\'gallery\')" title="اختار صورة من الجهاز">🖼️</button>'
       + '<button class="ccIco" onclick="ccOutfitToggle()" title="اقتراح طقم (٣ طرح)">🎨</button>'
       + '<textarea id="ccText" rows="1" placeholder="اكتب الرد…" maxlength="500"></textarea>'
       + '<button class="ccIco send" onclick="ccSend()">➤</button>'
       + '</div>'
+      + '<input type="file" id="ccCamera" accept="image/*" capture="environment" style="display:none;">'
       + '<input type="file" id="ccFile" accept="image/*" style="display:none;">';
     document.body.appendChild(wrap);
+    document.getElementById('ccCamera').onchange = onPickImage;
     document.getElementById('ccFile').onchange = onPickImage;
     renderBandChips();   // 🧢 لوحة الألوان جاهزة أول ما الواجهة تتبني
     [0, 1, 2].forEach(function(i){
@@ -658,6 +672,13 @@
     img.onerror = function(){ cb(null, 'الصورة مش مقروءة'); };
     img.src = URL.createObjectURL(file);
   }
+
+  function ccPickImage(which){
+    var id = which === 'camera' ? 'ccCamera' : 'ccFile';
+    var el = document.getElementById(id);
+    if(el) el.click();
+  }
+  window.ccPickImage = ccPickImage;
 
   function onPickImage(e){
     var f = e.target.files && e.target.files[0];
