@@ -58,7 +58,7 @@ function renderImportPanel(){
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
-      <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" style="margin-bottom:10px;">
+      <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" data-qb-import-file="1" style="margin-bottom:10px;">
       <div id="adjRow" style="display:none; background:#0f2438; border:1.5px solid #3b82f680;
            border-radius:10px; padding:10px 12px; margin-bottom:10px; color:#dbeafe; font-size:12.5px;">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:700;">
@@ -89,8 +89,21 @@ function renderImportPanel(){
       <div id="importLoadNote" style="color:var(--muted); font-size:12px; margin-bottom:8px;"></div>
       <div id="importPreviewWrap"></div>
     </div>`;
-  document.getElementById('importFileInput').addEventListener('change', handleImportFile);
 }
+
+// v392 — listener واحد ثابت على document بدل ربط listener بعنصر بيتعمل من جديد
+// renderImportPanel بيتنادى مرتين عند فتح شاشة الاستيراد (goToImport ثم switchImportTab).
+// في بعض المتصفحات/الكاش القديم كان input يتبدّل بعد ربط الـlistener، فيظهر اسم الملف
+// لكن handleImportFile مايتنفذش. الـdelegation هنا يمسك أي input جديد دائمًا.
+(function bindImportFileDelegation(){
+  if(typeof document === 'undefined' || window.__qbImportDelegatedV392) return;
+  window.__qbImportDelegatedV392 = true;
+  document.addEventListener('change', function(ev){
+    const t = ev && ev.target;
+    if(!t || t.id !== 'importFileInput') return;
+    handleImportFile(ev);
+  }, true);
+})();
 
 // 📊 مكتبة Excel — بتتحمّل عند أول استخدام بس (مش مع كل فتح للتطبيق)
 let _xlsxLoading = null;
