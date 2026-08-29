@@ -6,7 +6,7 @@
 // بيعتمد على العام من app.js: db, showToast, hasPerm, currentBranch
 // ============================================================
 
-const QB_IMPORT_BUILD = 'v397';
+const QB_IMPORT_BUILD = 'v398';
 
 const TEST_LEGACY_SALES = "pos_test_legacy_sales"; // مبيعات قديمة للرجوع بس، منفصلة عن مبيعات النظام الجديد
 
@@ -57,15 +57,15 @@ function renderImportPanel(){
   const wrap = document.getElementById('importPanelWrap');
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
-      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v397 • جاهز</div>
+      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v398 • جاهز</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
       <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" data-qb-import-file="1" onchange="handleImportFile(event)" style="margin-bottom:8px;">
-      <button type="button" id="importStartBtn" onclick="startSelectedImport()"
+      <button type="button" id="importStartBtn" onclick="return window.qbImportStartV398 ? window.qbImportStartV398(event) : false;" onpointerup="return window.qbImportStartV398 ? window.qbImportStartV398(event) : false;"
         style="width:100%; padding:12px 14px; margin:0 0 10px; border:0; border-radius:10px;
                background:linear-gradient(135deg,#16a34a,#15803d); color:#fff; font-family:'Cairo',sans-serif;
-               font-size:14px; font-weight:900; cursor:pointer;">
+               font-size:14px; font-weight:900; cursor:pointer; position:relative; z-index:2147483647; pointer-events:auto; touch-action:manipulation;">
         📥 ابدأ استيراد الملف المختار
       </button>
       <div id="adjRow" style="display:none; background:#0f2438; border:1.5px solid #3b82f680;
@@ -112,15 +112,14 @@ function renderImportPanel(){
       }
     };
   }
-  // v397 — bind the visible start button directly after every render.
-  // Do not depend on inline onclick/CSP or on the file input change event.
+  // v398 — keep native inline fallback and bind pointer/click directly.
+  // Some branch Android/Chrome builds rendered the button but swallowed click; pointerup
+  // gives us a second native path without relying on the dynamic panel lifecycle.
   const startBtn = document.getElementById('importStartBtn');
   if(startBtn){
-    startBtn.onclick = null;
-    startBtn.addEventListener('click', function(ev){
-      ev.preventDefault(); ev.stopPropagation();
-      startSelectedImport();
-    });
+    const fire = function(ev){ return window.qbImportStartV398 ? window.qbImportStartV398(ev) : false; };
+    startBtn.addEventListener('pointerup', fire, true);
+    startBtn.addEventListener('click', fire, true);
   }
 }
 
@@ -138,18 +137,19 @@ function renderImportPanel(){
   }, true);
 })();
 
-// v397 — final delegated click fallback. This works even when the panel is re-rendered
-// and even when inline event handlers are blocked by browser/CSP.
-(function bindImportStartDelegation(){
-  if(typeof document === 'undefined' || window.__qbImportStartDelegatedV397) return;
-  window.__qbImportStartDelegatedV397 = true;
-  document.addEventListener('click', function(ev){
-    const t = ev && ev.target && ev.target.closest ? ev.target.closest('#importStartBtn') : null;
+// v398 — page-level capture fallbacks for pointer/touch/click.
+(function bindImportStartDelegationV398(){
+  if(typeof window === 'undefined' || typeof document === 'undefined' || window.__qbImportStartDelegatedV398) return;
+  window.__qbImportStartDelegatedV398 = true;
+  const catchStart = function(ev){
+    const raw = ev && ev.target;
+    const t = raw && raw.closest ? raw.closest('#importStartBtn') : null;
     if(!t) return;
-    // Direct listener normally handles it and stops propagation. This is fallback only.
-    ev.preventDefault();
-    startSelectedImport();
-  }, true);
+    window.qbImportStartV398(ev);
+  };
+  window.addEventListener('pointerup', catchStart, true);
+  window.addEventListener('touchend', catchStart, true);
+  window.addEventListener('click', catchStart, true);
 })();
 
 // 📊 مكتبة Excel — بتتحمّل عند أول استخدام بس (مش مع كل فتح للتطبيق)
@@ -197,21 +197,46 @@ function ensureXlsxLib(){
   return _xlsxLoading;
 }
 
+let _qbImportStartAt = 0;
 function startSelectedImport(){
   const clickNote = document.getElementById('importLoadNote');
-  if(clickNote) clickNote.textContent = '🟢 الزر اشتغل — جاري فحص الملف…';
-  // v397 — مسار يدوي صريح لا يعتمد إطلاقًا على change event.
-  // بعض أجهزة الفروع أظهرت اسم الملف داخل input لكن لم يصل حدث change للكود.
+  const btn = document.getElementById('importStartBtn');
+  if(btn){ btn.textContent = '⏳ تم الضغط — جاري فحص الملف…'; btn.disabled = true; }
+  if(clickNote) clickNote.textContent = '🟢 تم الضغط — جاري فحص الملف…';
   const input = document.getElementById('importFileInput');
   const file = input && input.files ? input.files[0] : null;
   const note = document.getElementById('importLoadNote');
   if(!file){
     if(note) note.textContent = '⚠️ اختار ملف العملاء الأول';
+    if(btn){ btn.disabled = false; btn.textContent = '📥 ابدأ استيراد الملف المختار'; }
     try{ showToast('اختار الملف الأول', 'err'); }catch(_){}
-    return;
+    return false;
   }
-  processImportFile(file);
+  try{
+    processImportFile(file);
+  }catch(err){
+    const msg = err && err.message ? err.message : String(err);
+    if(note) note.textContent = '❌ فشل بدء القراءة: ' + msg;
+    if(btn){ btn.disabled = false; btn.textContent = '📥 حاول الاستيراد مرة تانية'; }
+    try{ showToast('فشل بدء الاستيراد: ' + msg, 'err'); }catch(_){}
+  }
+  return false;
 }
+
+// Explicit window export: do not rely on classic-script global name resolution.
+window.qbImportStartV398 = function(ev){
+  try{
+    if(ev){ try{ ev.preventDefault(); }catch(_){} try{ ev.stopPropagation(); }catch(_){} }
+    const now = Date.now();
+    if(now - _qbImportStartAt < 700) return false;
+    _qbImportStartAt = now;
+    return startSelectedImport();
+  }catch(err){
+    const note = document.getElementById('importLoadNote');
+    if(note) note.textContent = '❌ خطأ في زر الاستيراد: ' + (err && err.message ? err.message : err);
+    return false;
+  }
+};
 
 function handleImportFile(e){
   // v395 — الاستيراد التلقائي يفضل موجود، لكن الزر اليدوي فوق يضمن إننا مش
@@ -237,7 +262,7 @@ function processImportFile(file){
       reader.onload = (ev)=>{
         try{
           parseExcel(XLSX, ev.target.result);
-          if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
+          if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف'; const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
           renderImportMapping();
         }catch(err){
           if(note) note.textContent = '❌ تعذر قراءة الملف: ' + err.message;
@@ -256,7 +281,7 @@ function processImportFile(file){
   reader.onload = (ev)=>{
     try{
       parseCSV(ev.target.result);
-      if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
+      if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف'; const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
       renderImportMapping();
     }catch(err){
       if(note) note.textContent = '❌ تعذر قراءة الملف: ' + err.message;
