@@ -1683,23 +1683,58 @@ document.addEventListener('keydown', function(e){
 // ---------------- 🖨️ طابور الطباعة السحابي (إيصالات من برنامج الحضور وغيره) ----------------
 // برنامج الحضور بيبعت "أمر طباعة" لفرع معيّن → الكاشير المفتوح هناك بيطبعه صامت ويعلّمه
 const _printJobsDone = new Set();
+function _genericReceiptRowParts(row){
+  if(Array.isArray(row)) return [row[0] ?? '', row[1] ?? ''];
+  return [row.label ?? '', row.value ?? ''];
+}
 function buildGenericReceiptHTML(p){
   const c = receiptDesignConfig || defaultReceiptConfig();
+  // نفس عرض رول الطابعة الحالي بالظبط؛ v393 بيستخدم الطول فقط للتفاصيل الإضافية.
   const w = (c.paperWidth === '58') ? '54mm' : '72mm';
-  const logo = c.logo ? `<img src="${c.logo}" style="display:block; margin:0 auto 4px; max-width:${c.logoWidth||60}%;">` : '';
+  const logo = c.logo ? `<img src="${c.logo}" style="display:block;margin:0 auto 3px;max-width:${c.logoWidth||58}%;max-height:17mm;object-fit:contain;">` : '';
+  const safe=(v)=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  if(p && p.receiptKind==='salary_v393'){
+    const grouped=[]; const by={};
+    (p.lines||[]).forEach(raw=>{
+      const parts=_genericReceiptRowParts(raw); const l=Array.isArray(raw)?{section:'',label:parts[0],value:parts[1]}:(raw||{});
+      const sec=l.section||'';
+      if(!by[sec]){ by[sec]=[]; grouped.push([sec,by[sec]]); }
+      by[sec].push(l);
+    });
+    const tone=(t)=>t==='good'?'font-weight:900':t==='bad'?'font-weight:900':t==='strong'?'font-weight:950;font-size:13px':t==='warn'?'font-weight:900':'';
+    const sections=grouped.map(([name,rows])=>`<div style="margin-top:6px;border-top:1px solid #111;padding-top:4px;">
+      ${name?`<div style="font-size:11px;font-weight:950;text-align:right;margin-bottom:2px;">${safe(name)}</div>`:''}
+      ${rows.map(l=>`<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:5px;align-items:start;font-size:10.8px;line-height:1.45;padding:1.7px 0;border-bottom:0.4px dotted #bbb;"><span style="overflow-wrap:anywhere;">${safe(l.label)}</span><b style="white-space:nowrap;direction:rtl;${tone(l.tone)}">${safe(l.value)}</b></div>`).join('')}
+    </div>`).join('');
+    const dt=new Date(Number(p.paidAt)||Date.now());
+    const dateTxt=dt.toLocaleDateString('en-CA')+' '+dt.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+    return `<div style="width:${w};box-sizing:border-box;font-family:Tahoma,Arial,sans-serif;color:#000;direction:rtl;padding:2.2mm 2mm 3mm;background:#fff;">
+      ${logo}
+      <div style="text-align:center;font-size:16px;font-weight:950;line-height:1.2;">echarpe</div>
+      <div style="text-align:center;font-size:10px;margin-top:2px;">${safe(p.branch||'')}</div>
+      <div style="border-top:1.5px dashed #111;margin:5px 0 4px;"></div>
+      <div style="text-align:center;font-size:13px;font-weight:950;">${safe(p.title||'إيصال راتب')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 5px;font-size:9.5px;margin-top:5px;direction:rtl;">
+        <div>رقم: <b>${safe(p.receiptNo||'—')}</b></div><div style="text-align:left;">${safe(dateTxt)}</div>
+        <div style="grid-column:1/-1;">الفترة: <b>${safe(p.period||'')}</b></div>
+      </div>
+      ${sections}
+      ${p.net?`<div style="display:flex;justify-content:space-between;gap:8px;font-size:15px;font-weight:950;border:1.5px solid #000;border-radius:4px;padding:5px 4px;margin:7px 0 4px;"><span>${safe(p.net.label)}</span><span style="direction:rtl;white-space:nowrap;">${safe(p.net.value)}</span></div>`:''}
+      ${p.extraNote?`<div style="font-size:8.8px;line-height:1.5;border:1px dashed #555;padding:4px;margin-top:5px;">${safe(p.extraNote)}</div>`:''}
+      <div style="white-space:pre-line;font-size:9.5px;line-height:1.8;margin-top:10px;padding-top:6px;border-top:1px dashed #777;">${safe(p.footer||'')}</div>
+      <div style="text-align:center;font-size:8px;margin-top:8px;border-top:1px dotted #aaa;padding-top:4px;">تم الإصدار بواسطة النظام</div>
+    </div>`;
+  }
   return `<div style="width:${w}; font-family:Tahoma,Arial; color:#000; direction:rtl; padding:2mm;">
     ${logo}
     <div style="text-align:center; font-weight:900; font-size:15px; border-bottom:1.5px dashed #000; padding-bottom:5px;">${p.title||''}</div>
     <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:6px;"><b>${p.empName||''}</b><span>📍 ${p.branch||''}</span></div>
     <div style="font-size:11px; color:#333; margin-bottom:6px;">عن شهر: ${p.period||''} · ${new Date().toLocaleDateString('ar-EG',{day:'2-digit',month:'long',year:'numeric'})}</div>
     <div style="border-top:1px dashed #999; padding-top:5px;">
-      ${(p.lines||[]).map(l=>{ const a=Array.isArray(l)?l:[l&&l.label,l&&l.value]; return `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:2.5px 0;"><span>${a[0]||''}</span><b>${a[1]||''}</b></div>`; }).join('')}
+      ${(p.lines||[]).map(l=>{ const a=_genericReceiptRowParts(l); return `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:2.5px 0;"><span>${a[0]||''}</span><b>${a[1]||''}</b></div>`; }).join('')}
     </div>
     ${p.net?`<div style="display:flex; justify-content:space-between; font-size:15px; font-weight:900; border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:5px 0; margin:5px 0;"><span>${p.net.label}</span><span>${p.net.value}</span></div>`:''}
-    ${(p.extra&&p.extra.length)?`
-      <div style="font-size:11px; font-weight:800; margin-top:5px;">— مستحقات بتتصرف منفصلة —</div>
-      ${p.extra.map(l=>{ const a=Array.isArray(l)?l:[l&&l.label,l&&l.value]; return `<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:2px 0; color:#222;"><span>${a[0]||''}</span><b>${a[1]||''}</b></div>`; }).join('')}
-      ${p.extraNote?`<div style="font-size:9px; color:#555;">${p.extraNote}</div>`:''}`:''}
+    ${(p.extra&&p.extra.length)?`<div style="font-size:11px; font-weight:800; margin-top:5px;">— مستحقات بتتصرف منفصلة —</div>${p.extra.map(l=>{ const a=_genericReceiptRowParts(l); return `<div style="display:flex; justify-content:space-between; font-size:11.5px; padding:2px 0; color:#222;"><span>${a[0]||''}</span><b>${a[1]||''}</b></div>`; }).join('')}${p.extraNote?`<div style="font-size:9px; color:#555;">${p.extraNote}</div>`:''}`:''}
     <div style="font-size:11px; margin-top:12px; padding-top:8px; border-top:1px dashed #999;">${p.footer||''}</div>
   </div>`;
 }
