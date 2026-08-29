@@ -6,7 +6,7 @@
 // بيعتمد على العام من app.js: db, showToast, hasPerm, currentBranch
 // ============================================================
 
-const QB_IMPORT_BUILD = 'v399';
+const QB_IMPORT_BUILD = 'v400';
 
 const TEST_LEGACY_SALES = "pos_test_legacy_sales"; // مبيعات قديمة للرجوع بس، منفصلة عن مبيعات النظام الجديد
 
@@ -57,7 +57,7 @@ function renderImportPanel(){
   const wrap = document.getElementById('importPanelWrap');
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
-      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v399 • جاهز</div>
+      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v400 • جاهز</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
@@ -263,10 +263,20 @@ function qbColIndex(ref){
   return n-1;
 }
 async function qbInflateRaw(bytes){
-  if(typeof DecompressionStream === 'undefined') throw new Error('المتصفح لا يدعم فك ضغط Excel');
-  const ds = new DecompressionStream('deflate-raw');
-  const ab = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
-  return new Uint8Array(ab);
+  // v400 — don't depend on one browser compression API. Some branch phones render
+  // the importer fine but don't support deflate-raw, which made v399 fall through
+  // to remote SheetJS/CDNs and look frozen. Prefer native, then bundled pako.
+  if(typeof DecompressionStream !== 'undefined'){
+    try{
+      const ds = new DecompressionStream('deflate-raw');
+      const ab = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+      return new Uint8Array(ab);
+    }catch(_nativeInflateErr){}
+  }
+  if(typeof window !== 'undefined' && window.pako && typeof window.pako.inflateRaw === 'function'){
+    return new Uint8Array(window.pako.inflateRaw(bytes));
+  }
+  throw new Error('قارئ ضغط Excel المحلي غير متاح');
 }
 async function qbZipEntries(buf){
   const u8 = new Uint8Array(buf), dv = new DataView(buf);
@@ -361,7 +371,18 @@ function processImportFile(file){
         const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
         renderImportMapping();
       }catch(nativeErr){
-        // Real legacy binary XLS still uses SheetJS as a fallback.
+        // v400 — if the file is ZIP/XLSX (the supplied QuickBooks .xls is), never
+        // wait on an internet CDN. Surface the local parser error immediately.
+        const u8 = new Uint8Array(buf || new ArrayBuffer(0));
+        const isZipXlsx = u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4b;
+        if(isZipXlsx){
+          const msg = nativeErr && nativeErr.message ? nativeErr.message : String(nativeErr);
+          if(note) note.textContent = '❌ تعذر قراءة QuickBooks محليًا: ' + msg;
+          const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
+          try{ showToast('تعذر قراءة QuickBooks: ' + msg, 'err'); }catch(_){}
+          return;
+        }
+        // Only a genuinely old binary XLS is allowed to use SheetJS fallback.
         if(note) note.textContent = '⏳ ملف Excel قديم — جاري تشغيل القارئ الاحتياطي…';
         try{
           const XLSX = await ensureXlsxLib();
