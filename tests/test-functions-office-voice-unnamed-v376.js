@@ -1,0 +1,10 @@
+'use strict';
+const fs=require('fs'),assert=require('assert');
+const s=fs.readFileSync('functions/index.js','utf8');
+const a=s.indexOf('exports.officeVoiceParse = onRequest'); assert(a>=0,'officeVoiceParse missing');
+const x=s.slice(a,a+9000);
+assert(x.includes('isUnnamedMerchant=true'),'AI prompt must explicitly support unnamed merchant');
+assert(x.includes('(!isUnnamedMerchant && !merchant)'),'validation must allow explicit unnamed merchant only');
+assert(x.includes('merchantId:isUnnamedMerchant?"":merchant.id'),'unnamed response must not invent merchant id');
+assert(x.includes('merchantName:isUnnamedMerchant?"بدون اسم تاجر":merchant.name'),'unnamed response label');
+console.log('PASS test-functions-office-voice-unnamed-v376');

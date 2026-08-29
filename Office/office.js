@@ -1683,6 +1683,9 @@ const OF_ACT_KINDS = {
   print_latency:         { t:'🖨️ زمن الطباعة', g:'cart', quiet:true },
   rate_request_manual:   { t:'⭐ طلب تقييم يدوي', g:'cart' },
   basket_suggest_added:  { t:'✨ اقتراح ذكي اتضاف للسلة', g:'cart', quiet:true },
+  basket_suggest_shown:  { t:'🎯 Sales Copilot عرض فرصة', g:'cart', quiet:true },
+  basket_suggest_dismissed:{ t:'🎯 اقتراح بيع اترفض', g:'cart', quiet:true },
+  lost_sale:             { t:'📉 بيع ماكملش', g:'cart', hot:true },
   wa_message:            { t:'💬 رسالة واتساب اتجهزت', g:'cart', quiet:true },
   customer_name_edit:    { t:'👤 تعديل اسم عميلة', g:'cart' },
   inventory_wiped:       { t:'📦 المخزون اتمسح', g:'stock', hot:true },
@@ -1833,6 +1836,10 @@ function ofActIntelligence(a){
     'سلة بدأت وبعدها اتسابِت من غير بيع.',
     'ممكن تكون عميلة غيرت رأيها أو مشكلة تشغيل. التكرار العالي قد يشير لفقد مبيعات.',
     'راقب المعدل حسب الفرع والموظفة؛ ما يحتاجش تحقيق فردي عادة.');
+  if(type === 'lost_sale') return watch(
+    'الموظفة سجلت إن البيع ماكملش. السبب: ' + esc(a.reason || 'غير محدد') + (a.wanted ? ' · المطلوب: ' + esc(a.wanted) : ''),
+    'فرصة بيع بقيمة تقريبية ' + ofMoney(a.value||0) + ' ضاعت. تسجيل السبب يحوّل الإحساس لقرار شراء/تسعير قابل للقياس.',
+    a.reasonCode==='out_of_stock'||a.reasonCode==='color_size' ? 'راجع تكرار المنتج/اللون في نفس الفرع؛ لو بيتكرر ارفعه لأولوية التوريد.' : a.reasonCode==='price' ? 'راجع هل نفس الفئة بتضيع بسبب السعر وهل Bundle أو بديل سعري أنسب.' : 'راقب التكرار حسب الفرع والسبب قبل تغيير السياسة.');
   if(type === 'inventory_wiped') return action(
     'تم تنفيذ مسح/تصفير واسع للمخزون في الفرع.',
     'ده تغيير كبير في أصل المخزون وقد يخفي كميات صحيحة لو اتعمل بالخطأ.',
@@ -3374,9 +3381,13 @@ function ofVoiceMerchantFromText(text){
 }
 function ofVoiceLocalNatural(text){
   const n=ofArNorm(text); if(!n)return {ok:false,reason:'empty',confidence:0};
-  const exact=ofVoiceMerchantFromText(n);
+  // v376: "بدون اسم تاجر" اختيار صريح وصحيح، مش اسم تاجر ناقص.
+  // بنستخدم حساب نظام ثابت عشان الحركة تفضل ظاهرة في حسابات/تقارير التجار من غير اختراع اسم.
+  const unnamedMerchant=/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/.test(n);
+  const exact=unnamedMerchant?null:ofVoiceMerchantFromText(n);
   let merchantSpoken='';
-  if(exact)merchantSpoken=exact.merchant.name;
+  if(unnamedMerchant)merchantSpoken='بدون اسم تاجر';
+  else if(exact)merchantSpoken=exact.merchant.name;
   else {
     // اسم التاجر غالبًا بين فعل الحركة وأول مؤشر مبلغ/دفع.
     let q=n.replace(/^(اشتريت|جبت|خدت|اخدت|استلمت|بضاعه|فاتوره|سجل|سجلت|دفعت|حولت|دفعتله|دفعت ل|دفعت لـ)\s*/,'' );
@@ -3391,7 +3402,9 @@ function ofVoiceLocalNatural(text){
       }
     }
   }
-  let mm=exact?{ok:true,merchant:exact.merchant,score:1,exact:true}:ofMerchantMatch(merchantSpoken);
+  let mm=unnamedMerchant
+    ? {ok:true,merchant:{id:'__unnamed__',name:'بدون اسم تاجر'},score:1,exact:true}
+    : (exact?{ok:true,merchant:exact.merchant,score:1,exact:true}:ofMerchantMatch(merchantSpoken));
   let needsMerchantCreate=false;
   if(!mm.ok){
     // First-use UX: لو الاسم واضح ومفيش تاجر مطابق، نعمل Draft "تاجر جديد"
@@ -3414,8 +3427,11 @@ function ofVoiceLocalNatural(text){
   const pm=n.search(/(?:^|\s)(?:و\s*)?(?:دفعتله|دفعت|دفعه|حولت)(?:\s|$)/);
   if(isGoods&&pm>=0){beforePay=n.slice(0,pm);payText=n.slice(pm).replace(/^(?:\s*و?\s*)(?:دفعتله|دفعت|دفعه|حولت)\s*/, '');}
   function moneyTail(x){
-    x=String(x||'').replace(new RegExp(ofArNorm(mm.merchant.name),'g'),' ')
-      .replace(/^(اشتريت|جبت|خدت|اخدت|استلمت|بضاعه|فاتوره|سجل|سجلت|دفعت|دفعه|حولت)\s*/, '')
+    x=String(x||'');
+    if(unnamedMerchant)x=x.replace(/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/g,' ');
+    else x=x.replace(new RegExp(ofArNorm(mm.merchant.name),'g'),' ');
+    x=x.replace(/^(اشتريت|جبت|خدت|اخدت|استلمت|بضاعه|فاتوره|سجل|سجلت|دفعت|دفعه|حولت)\s*/, '')
+      .replace(/^(?:فاتوره|بضاعه)\s*/, '')
       .replace(/^(من|ل|لـ)\s+/, '').replace(/^(بمبلغ|المبلغ|قيمتها|قيمه|ب|بـ)\s*/, '').trim();
     const z=x.match(/(?:بمبلغ|المبلغ|قيمتها|قيمه|ب)\s+(.+)$/); if(z)x=z[1].trim();
     return ofVoiceFindMoney(x);
@@ -3427,8 +3443,10 @@ function ofVoiceLocalNatural(text){
   if(payText&&!payment)return {ok:false,reason:'payment_amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
   return {ok:true,kind:kind,merchant:mm.merchant,merchantSpoken:merchantSpoken,amount:amount,payment:payment,
     transcript:String(text||''),exactMerchant:mm.score===1||needsMerchantCreate,needsMerchantCreate:needsMerchantCreate,
-    confidence:needsMerchantCreate?0.96:(mm.score===1?0.98:0.82),parser:needsMerchantCreate?'local_new_merchant_v73':'local_v73'};
+    isUnnamedMerchant:unnamedMerchant,
+    confidence:needsMerchantCreate?0.96:(mm.score===1?0.98:0.82),parser:unnamedMerchant?'local_unnamed_merchant_v376':(needsMerchantCreate?'local_new_merchant_v73':'local_v73')};
 }
+// compatibility audit marker: parser:'firebase_ai_v73'
 async function ofVoiceAiFallback(text){
   const user=ofAuth&&ofAuth.currentUser;
   if(!user||user.isAnonymous)return {ok:false,reason:'ai_auth_required'};
@@ -3452,7 +3470,10 @@ async function ofVoiceAiFallback(text){
     const amount=Number(x.amount),payment=Number(x.payment||0),conf=Number(x.confidence||0);
     if(!(amount>0)||amount>999999999||conf<0.90||payment<0||payment>999999999)return {ok:false,reason:'ai_low_confidence'};
     if(x.kind==='payment'&&payment>0)return {ok:false,reason:'ai_invalid_payment'};
-    let m=(D.merchants||[]).find(function(z){return String(z.id)===String(x.merchantId||'');});
+    const isUnnamedMerchant=x.isUnnamedMerchant===true;
+    let m=isUnnamedMerchant
+      ? {id:'__unnamed__',name:'بدون اسم تاجر'}
+      : (D.merchants||[]).find(function(z){return String(z.id)===String(x.merchantId||'');});
     let needsMerchantCreate=false;
     if(!m){
       const newName=String(x.merchantName||'').trim();
@@ -3461,7 +3482,7 @@ async function ofVoiceAiFallback(text){
       if(existing)m=existing; else {m={id:'',name:newName};needsMerchantCreate=true;}
     }
     return {ok:true,kind:x.kind,merchant:m,merchantSpoken:m.name,amount:amount,payment:payment,transcript:String(text||''),
-      exactMerchant:!needsMerchantCreate,needsMerchantCreate:needsMerchantCreate,confidence:conf,parser:'firebase_ai_v73'};
+      exactMerchant:!needsMerchantCreate,needsMerchantCreate:needsMerchantCreate,isUnnamedMerchant:isUnnamedMerchant,confidence:conf,parser:isUnnamedMerchant?'firebase_ai_unnamed_v376':'firebase_ai_v73'};
   }catch(e){
     console.warn('voice ai fallback',e&&e.message);
     return {ok:false,reason:e&&e.name==='AbortError'?'cancelled':'ai_failed'};
@@ -3636,7 +3657,8 @@ function ofVoiceRenderDraft(d){
   _ofVoiceDraft=d;
   $('#ofVoiceHeard').textContent='سمعت: '+d.transcript;
   let body='';
-  if(d.needsMerchantCreate) body+='<div style="margin-bottom:7px;padding:7px 9px;border-radius:9px;background:#eff6ff;color:#1d4ed8;"><b>🆕 تاجر جديد:</b> '+esc(name)+' — هيتضاف فقط بعد التأكيد.</div>';
+  if(d.isUnnamedMerchant) body+='<div style="margin-bottom:7px;padding:7px 9px;border-radius:9px;background:#f8fafc;color:#475467;"><b>فاتورة بدون اسم تاجر</b> — هتتسجل كما قلت، من غير اختراع اسم.</div>';
+  else if(d.needsMerchantCreate) body+='<div style="margin-bottom:7px;padding:7px 9px;border-radius:9px;background:#eff6ff;color:#1d4ed8;"><b>🆕 تاجر جديد:</b> '+esc(name)+' — هيتضاف فقط بعد التأكيد.</div>';
   else body+='<b>'+esc(name)+'</b><br>';
   if(m.order) body+='📦 مشتريات/فاتورة: <b>'+egp(m.order)+'</b><br>';
   if(m.payment) body+='💵 المدفوع للتاجر: <b>'+egp(m.payment)+'</b><br>';
@@ -3698,6 +3720,10 @@ async function ofVoiceCommit(){
     let merchant=(D.merchants||[]).find(function(z){return d.merchant&&d.merchant.id&&z.id===d.merchant.id;});
     if(!merchant && d.merchant&&d.merchant.name) merchant=(D.merchants||[]).find(function(z){return ofArNorm(z.name||'')===ofArNorm(d.merchant.name||'');});
     let mid=merchant&&merchant.id || d.merchant.id || '';
+    if(d.isUnnamedMerchant){
+      mid='__unnamed__';
+      batch.set(db.collection('office_merchants').doc(mid),{name:'بدون اسم تاجر',systemUnnamed:true,updatedAt:commitTs},{merge:true});
+    }
     if(!mid){
       const mref=db.collection('office_merchants').doc(); mid=mref.id;
       batch.set(mref,{name:String(d.merchant.name||'').trim(),ts:commitTs,source:'office_ai_purchase_v73'});
