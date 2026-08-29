@@ -6608,22 +6608,24 @@ function buildSalaryReceiptPayload(emp, calc, periodLabel){
   const commTotal = Math.round((ptsAmt + refAmt + tgtAmt) * 100)/100;
   const grand = Math.round((calc.netSalary + commTotal) * 100)/100;
 
+  // Firestore بيرفض nested arrays (array داخل array) بـ invalid-argument.
+  // نخزن سطور الإيصال كـ objects بسيطة، والـPOS يدعم الشكلين للتوافق.
   const lines = [
-    ['الراتب الأساسي المتفق عليه', '+' + (Number(emp.baseSalary)||0)],
-    ['🗓️ أيام الشغل', (calc.attendedDays || 0) + ' من ' + (calc.elapsedWorkDays || 0)],
+    { label:'الراتب الأساسي المتفق عليه', value:'+' + (Number(emp.baseSalary)||0) },
+    { label:'🗓️ أيام الشغل', value:(calc.attendedDays || 0) + ' من ' + (calc.elapsedWorkDays || 0) },
   ];
-  if(calc.proratedBase !== Number(emp.baseSalary||0)) lines.splice(1,0,['استحقاق الأساسي للفترة','+' + calc.proratedBase]);
-  if(calc.overtimePay > 0) lines.push(['أوفرتايم (' + Math.round(calc.overtimeMinutes/60*10)/10 + ' ساعة)', '+' + calc.overtimePay]);
-  if(calc.dayOffBonusAmount > 0) lines.push(['🎁 شغل يوم الإجازة (' + calc.dayOffBonusHours + ' ساعة)', '+' + calc.dayOffBonusAmount]);
-  if(calc.deductionAmount > 0) lines.push(['خصم غياب (' + calc.extraOffDays + ' يوم)', '-' + calc.deductionAmount]);
-  if(calc.timeCreditDeduction > 0) lines.push(['⏳ رصيد الوقت (' + calc.timeCreditHours + ' ساعة = ' + calc.timeCreditDays + ' يوم)', '-' + calc.timeCreditDeduction]);
-  if(calc.adminDeductions > 0) lines.push(['خصومات إدارية', '-' + calc.adminDeductions]);
-  if(calc.advCash > 0) lines.push(['💰 سلف كاش', '-' + calc.advCash]);
-  if(calc.advOrders > 0) lines.push(['🛒 مشتريات (أوردرات)', '-' + calc.advOrders]);
-  lines.push(['— صافي الراتب —', calc.netSalary + ' ج.م']);
-  if(ptsCnt > 0) lines.push(['⭐ عمولة نقط (' + fmtPts(ptsCnt) + ' نقطة)', '+' + ptsAmt]);
-  if(refCnt > 0) lines.push(['📱 بونص تنزيلات (' + refCnt + ')', '+' + refAmt]);
-  if(tgtAmt > 0) lines.push(['🎯 عمولة تارجت', '+' + tgtAmt]);
+  if(calc.proratedBase !== Number(emp.baseSalary||0)) lines.splice(1,0,{label:'استحقاق الأساسي للفترة',value:'+' + calc.proratedBase});
+  if(calc.overtimePay > 0) lines.push({label:'أوفرتايم (' + Math.round(calc.overtimeMinutes/60*10)/10 + ' ساعة)',value:'+' + calc.overtimePay});
+  if(calc.dayOffBonusAmount > 0) lines.push({label:'🎁 شغل يوم الإجازة (' + calc.dayOffBonusHours + ' ساعة)',value:'+' + calc.dayOffBonusAmount});
+  if(calc.deductionAmount > 0) lines.push({label:'خصم غياب (' + calc.extraOffDays + ' يوم)',value:'-' + calc.deductionAmount});
+  if(calc.timeCreditDeduction > 0) lines.push({label:'⏳ رصيد الوقت (' + calc.timeCreditHours + ' ساعة = ' + calc.timeCreditDays + ' يوم)',value:'-' + calc.timeCreditDeduction});
+  if(calc.adminDeductions > 0) lines.push({label:'خصومات إدارية',value:'-' + calc.adminDeductions});
+  if(calc.advCash > 0) lines.push({label:'💰 سلف كاش',value:'-' + calc.advCash});
+  if(calc.advOrders > 0) lines.push({label:'🛒 مشتريات (أوردرات)',value:'-' + calc.advOrders});
+  lines.push({label:'— صافي الراتب —',value:calc.netSalary + ' ج.م'});
+  if(ptsCnt > 0) lines.push({label:'⭐ عمولة نقط (' + fmtPts(ptsCnt) + ' نقطة)',value:'+' + ptsAmt});
+  if(refCnt > 0) lines.push({label:'📱 بونص تنزيلات (' + refCnt + ')',value:'+' + refAmt});
+  if(tgtAmt > 0) lines.push({label:'🎯 عمولة تارجت',value:'+' + tgtAmt});
 
   return {
     title: 'إيصال راتب 🧾',
