@@ -2034,13 +2034,13 @@ onSnapshot(_scoped(deductionsCol,'ts'), (snap)=>{
 onSnapshot(_scoped(commissionPaymentsCol,'paidAt'), (snap)=>{
   allCommissionPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
   commissionPayments = allCommissionPayments.filter(p=> p.branch === window.currentBranch);
-  if(adminUnlocked) renderCommissionPanel();
+  if(adminUnlocked){ renderCommissionPanel(); refreshOpenPayrollEmployee(); }
 }, (err)=> console.error('commission payments sync error', err));
 
 onSnapshot(_scoped(salaryPaymentsCol,'paidAt'), (snap)=>{
   allSalaryPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
   salaryPayments = allSalaryPayments.filter(p=> p.branch === window.currentBranch);
-  if(adminUnlocked){ renderSalaryPanel(); renderSalaryPaymentLog(); }
+  if(adminUnlocked){ renderSalaryPanel(); renderSalaryPaymentLog(); refreshOpenPayrollEmployee(); }
 }, (err)=> console.error('salary payments sync error', err));
 
 onSnapshot(terminationsCol, (snap)=>{
@@ -6542,52 +6542,151 @@ function renderSalaryPanel(){
   }).join('');
 }
 
+function _payMoney(v){
+  const n = Math.round((Number(v)||0)*100)/100;
+  return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ج.م';
+}
+function _payPts(v){ return fmtPts(Math.round((Number(v)||0)*100)/100); }
+function _payEsc(v){ return esc(String(v==null?'':v)); }
+function refreshOpenPayrollEmployee(){
+  const old = document.getElementById('payrollEmpOv');
+  if(!old || old.dataset.refreshing==='1') return;
+  const empId = old.dataset.empId, pk = old.dataset.periodKey;
+  if(!empId || !pk) return;
+  old.dataset.refreshing='1';
+  setTimeout(()=>{ try{ if(document.getElementById('payrollEmpOv')) window.openPayrollEmployee(empId,pk); }catch(e){ console.warn('payroll refresh',e); } }, 0);
+}
+window.refreshOpenPayrollEmployee = refreshOpenPayrollEmployee;
+
+// ⭐ دفع النقط المتبقية من نفس صفحة تفاصيل المرتب بعد ما يكون الراتب اتصرف بالفعل.
+// الراتب نفسه لا يُلمس هنا؛ بنسجل عمولة النقط فقط، وبعد Snapshot الصفحة تتحدث وتظهر صفر مستحق.
+window.payPayrollPointsNow = async function(empId, periodKey, btn){
+  const emp = allEmployees.find(e=>e.id===empId); if(!emp) return;
+  const pk = periodKey || window.salaryPeriodKey || defaultPayPeriodKey(new Date());
+  const due = commissionDueFor(emp, pk);
+  if(!(due.ptsDue>0)){ refreshOpenPayrollEmployee(); return; }
+  const rate = Number(commissionPerPoint)||0;
+  if(!(rate>0)){ alert('حدد قيمة النقطة الأول من إعدادات العمولات.'); return; }
+  const amount = Math.round(due.ptsDue*rate*100)/100;
+  if(!confirm('تأكيد دفع '+_payPts(due.ptsDue)+' نقطة = '+_payMoney(amount)+' لـ '+emp.name+'؟')) return;
+  if(btn && btn.dataset.busy) return;
+  if(btn){ btn.dataset.busy='1'; btn.disabled=true; btn.textContent='بيتسجل…'; }
+  try{
+    const safeEmp=String(emp.id).replace(/[^a-zA-Z0-9_-]/g,'_');
+    const paidState=Math.round((Number(due.ptsPaid)||0)*100);
+    const pointRef=doc(db,'sales_commission_payments','payroll_detail_'+safeEmp+'_'+pk+'_points_'+paidState);
+    await runTransaction(db, async(tx)=>{
+      const exists=await tx.get(pointRef);
+      if(exists.exists()) throw new Error('__POINTS_ALREADY_PAID__');
+      tx.set(pointRef, {
+        employeeId:emp.id, employeeName:emp.name, branch:emp.branch,
+        monthLabel:pk, pointsCount:due.ptsDue, commissionAmount:amount,
+        source:'payroll_details', paidAt:Date.now()
+      });
+    });
+    // تحديث فوري بصري؛ الـonSnapshot بعده يعيد الحساب من المصدر الحقيقي.
+    if(btn) btn.textContent='✅ تم دفع النقط';
+  }catch(err){
+    console.error('تعذر دفع نقاط المرتب',err);
+    if(err && err.message==='__POINTS_ALREADY_PAID__') refreshOpenPayrollEmployee();
+    else alert('حصل خطأ: '+(err&&err.code?err.code:'غير معروف'));
+    if(btn){ btn.disabled=false; btn.textContent='⭐ ادفع النقط المتبقية'; delete btn.dataset.busy; }
+  }
+};
+
 window.openPayrollEmployee = function(empId, periodKey){
   const emp = allEmployees.find(e=> e.id===empId); if(!emp) return;
   const pk = periodKey || window.salaryPeriodKey || defaultPayPeriodKey(new Date());
   const range = payPeriodRange(pk);
   const c = computeSalary(emp, range.start, range.end);
   const due = commissionDueFor(emp, pk);
-  const row = (l,v,color)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:12px;"><span style="color:var(--sub)">${l}</span><b style="${color?'color:'+color:''}">${v}</b></div>`;
+  const rate = Number(commissionPerPoint)||0;
   const hist = (emp.salaryHistory||[]).slice().reverse().slice(0,20);
   const old = document.getElementById('payrollEmpOv'); if(old) old.remove();
   const ov = document.createElement('div'); ov.id='payrollEmpOv';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;overflow:auto;padding:14px;';
+  ov.dataset.empId=emp.id; ov.dataset.periodKey=pk;
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.86);z-index:9999;overflow:auto;padding:12px 8px 28px;';
   const deductions = Math.round((c.deductionAmount+c.timeCreditDeduction+c.adminDeductions+c.advancesTotal)*100)/100;
-  const additions = Math.round((c.overtimePay+c.dayOffBonusAmount+due.totalDue)*100)/100;
-  const grand = Math.round((c.netSalary+due.totalDue)*100)/100;
+  const salaryAdditions = Math.round((c.overtimePay+c.dayOffBonusAmount)*100)/100;
+  const grandDue = Math.round((c.netSalary+due.totalDue)*100)/100;
   const actualDays = new Date(Date.UTC(Number(pk.slice(0,4)), Number(pk.slice(5,7)), 0)).getUTCDate();
   const paid = allSalaryPayments.find(p=>p.employeeId===emp.id && p.periodLabel===pk);
-  ov.innerHTML=`<div style="max-width:560px;margin:auto;background:var(--card,#1d1d27);border-radius:16px;padding:16px;border:1px solid rgba(255,255,255,.12);">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><div><div style="font-size:18px;font-weight:900;">${emp.name}</div><div style="color:var(--sub);font-size:11px;">${payPeriodLabelAr(pk)} · ${emp.branch||''}</div></div><button class="backBtn" onclick="document.getElementById('payrollEmpOv').remove()">✕</button></div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin:12px 0;"><div class="card" style="padding:9px;text-align:center;">الأساسي<br><b>${Number(emp.baseSalary).toFixed(0)}</b></div><div class="card" style="padding:9px;text-align:center;color:var(--bad);">الخصومات<br><b>-${deductions}</b></div><div class="card" style="padding:9px;text-align:center;color:var(--good);">الصافي<br><b>${grand}</b></div></div>
-    ${c.proratedBase!==Number(emp.baseSalary)?row('استحقاق الأساسي للفترة','+'+c.proratedBase,'#22c55e'):''}
-    <div style="font-weight:900;margin-top:12px;">🗓️ الحضور</div>
-    ${row('فترة حساب الحضور',(c.attendanceStartKey||'—')+' ← '+(c.attendanceEndKey||'—'))}
-    ${row('أيام الشهر',actualDays+' يوم')}
-    ${row('أيام العمل المطلوبة',c.elapsedWorkDays+' يوم')}
-    ${row('أيام الحضور المسجلة',c.attendedDays+' يوم')}
-    ${row('الإجازة الأسبوعية داخل الفترة',c.dayOffDates.length+' يوم')}
-    ${row('غياب مخصوم',c.extraOffDays+' يوم = -'+c.deductionAmount,'#ef4444')}
-    ${c.absenceDates.length?row('تواريخ الغياب',c.absenceDates.map(x=>x.date+(x.approved?' (مصرح)':'')).join('، '),'#ef4444'):''}
-    ${c.dayOffDates.length?row('تواريخ الإجازة الأسبوعية',c.dayOffDates.join('، ')):''}
-    ${c.incompleteShifts.length?row('⚠️ شيفتات غير مقفولة',c.incompleteShifts.map(x=>x.date).join('، '),'#f59e0b'):''}
-    <div style="font-weight:900;margin-top:14px;">➕ الإضافات</div>
-    ${row('أوفرتايم',Math.round(c.overtimeMinutes/6)/10+' س = +'+c.overtimePay,'#22c55e')}
-    ${row('شغل يوم الإجازة',c.dayOffBonusHours+' س = +'+c.dayOffBonusAmount,'#22c55e')}
-    ${row('عمولات ونقط وتارجت','+'+due.totalDue,'#22c55e')}
-    <div style="font-weight:900;margin-top:14px;">➖ الخصومات</div>
-    ${row('رصيد وقت',c.timeCreditHours+' س = -'+c.timeCreditDeduction,'#ef4444')}
-    ${row('خصومات إدارية','-'+c.adminDeductions,'#ef4444')}
-    ${row('سلف ومشتريات',`<span style="color:#ef4444">-${c.advancesTotal}</span>${c.advancesTotal>0?` <button type="button" onclick="openPayrollAdvanceDetails('${emp.id}','${pk}')" style="margin-inline-start:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;border-radius:8px;padding:4px 8px;font-family:inherit;font-size:10px;cursor:pointer">التفاصيل والتواريخ</button>`:''}`)}
-    ${c.advancesTotal>0?`<div style="font-size:10.5px;color:var(--sub);padding:5px 0 2px;">💰 سلف: <b>${c.advCash}</b> ج.م · 🛒 مشتريات: <b>${c.advOrders}</b> ج.م</div>`:''}
-    <div style="font-weight:900;margin-top:14px;">💰 سجل تعديل الراتب</div>
-    ${hist.length?hist.map(h=>row(new Date(h.at).toLocaleString('ar-EG')+(h.by?' · '+h.by:''),(h.from||0)+' ← '+(h.to||0))).join(''):'<div style="color:var(--sub);font-size:11px;padding:8px 0;">مفيش تعديلات مسجلة.</div>'}
-    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px;"><button class="confirmBtnSmall" onclick="openAttendanceDaysDialog('${emp.id}','${pk}')">🗓️ سجل الأيام</button><button class="confirmBtnSmall" onclick="openSalaryPrintDialog('${emp.id}','${pk}')">🖨️ إيصال</button>${paid?'<span style="color:var(--good);font-size:11px;align-self:center;">✅ مدفوع</span>':(c.incompleteShifts.length?'<span style="color:#f59e0b;font-size:11px;align-self:center;">⛔ راجع الشيفت المفتوح قبل الصرف</span>':(new Date()>range.end?`<button class="confirmBtnSmall" onclick="openSalaryPayoutDialog('${emp.id}','${pk}')">💵 صرف</button>`:'<span style="color:var(--sub);font-size:11px;align-self:center;">الفترة لسه مفتوحة</span>'))}</div>
+  const paidTotal = paid ? Number(paid.payoutTotal||paid.amount||0) : 0;
+  const pointState = due.ptsDue>0
+    ? `<div style="color:#fbbf24;font-weight:900;font-size:24px;direction:ltr">${_payPts(due.ptsDue)}</div><div style="font-size:10px;color:var(--sub)">نقطة متبقية للصرف</div>`
+    : `<div style="color:#22c55e;font-weight:900;font-size:15px">✅ تم صرف كل النقط</div>`;
+  const detailRow=(label,val,tone='')=>`<div class="pay-v393-row"><span>${label}</span><b class="${tone}">${val}</b></div>`;
+  const section=(title,cls,body)=>`<section class="pay-v393-sec ${cls||''}"><div class="pay-v393-sec-title">${title}</div>${body}</section>`;
+  const absenceText = c.absenceDates.length ? c.absenceDates.map(x=>x.date+(x.approved?' (مصرح)':'')).join('، ') : '—';
+  const offText = c.dayOffDates.length ? c.dayOffDates.join('، ') : '—';
+  const actions = paid
+    ? `<div class="pay-v393-paid">✅ المرتب اتسجل صرفه${paidTotal?' · '+_payMoney(paidTotal):''}</div>
+       ${due.ptsDue>0?`<button class="pay-v393-primary" onclick="payPayrollPointsNow('${emp.id}','${pk}',this)">⭐ ادفع النقط المتبقية — ${_payMoney(due.ptsDueAmt)}</button>`:''}`
+    : (c.incompleteShifts.length
+        ? `<div class="pay-v393-warn">⛔ فيه ${c.incompleteShifts.length} شيفت مفتوح — راجعه قبل الصرف</div>`
+        : (new Date()>range.end
+            ? `<button class="pay-v393-primary" onclick="openSalaryPayoutDialog('${emp.id}','${pk}')">💵 صرف المرتب + النقط — ${_payMoney(grandDue)}</button>`
+            : `<div class="pay-v393-muted">الفترة لسه مفتوحة — الحساب ظاهر للمراجعة فقط</div>`));
+  ov.innerHTML=`<style>
+    #payrollEmpOv .pay-v393-card{max-width:540px;margin:auto;background:#171820;border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:15px;color:#f5f5f7;box-shadow:0 22px 70px rgba(0,0,0,.4)}
+    #payrollEmpOv .pay-v393-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:4px 2px 12px;border-bottom:1px solid rgba(255,255,255,.08)}
+    #payrollEmpOv .pay-v393-title{font-size:20px;font-weight:950}.pay-v393-sub{font-size:11px;color:var(--sub);margin-top:3px}
+    #payrollEmpOv .pay-v393-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+    #payrollEmpOv .pay-v393-kpi{background:#20212a;border:1px solid rgba(255,255,255,.07);border-radius:13px;padding:10px;text-align:center;font-size:10px;color:var(--sub)}
+    #payrollEmpOv .pay-v393-kpi b{display:block;margin-top:4px;font-size:16px;color:#fff;direction:ltr}
+    #payrollEmpOv .pay-v393-sec{background:#1d1e27;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:10px 12px;margin-top:10px}
+    #payrollEmpOv .pay-v393-sec.add{border-color:rgba(34,197,94,.22)} #payrollEmpOv .pay-v393-sec.ded{border-color:rgba(239,68,68,.22)} #payrollEmpOv .pay-v393-sec.pts{border-color:rgba(245,158,11,.38);background:linear-gradient(180deg,rgba(245,158,11,.08),#1d1e27)}
+    #payrollEmpOv .pay-v393-sec-title{font-size:16px;font-weight:950;margin:1px 0 5px} #payrollEmpOv .add .pay-v393-sec-title{color:#35d26f} #payrollEmpOv .ded .pay-v393-sec-title{color:#ff5b63}
+    #payrollEmpOv .pay-v393-row{display:flex;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.055);font-size:12px;align-items:flex-start}
+    #payrollEmpOv .pay-v393-row:last-child{border-bottom:0} #payrollEmpOv .pay-v393-row span{color:#aaaab4;flex:1} #payrollEmpOv .pay-v393-row b{text-align:left;direction:ltr;max-width:64%;overflow-wrap:anywhere}
+    #payrollEmpOv .good{color:#35d26f!important} #payrollEmpOv .bad{color:#ff5b63!important} #payrollEmpOv .gold{color:#fbbf24!important}
+    #payrollEmpOv .pay-v393-points-top{display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:center;margin:8px 0 5px}.pay-v393-points-box{background:rgba(0,0,0,.16);border-radius:12px;padding:10px}
+    #payrollEmpOv .pay-v393-primary{width:100%;border:0;border-radius:13px;background:#16a866;color:#fff;font-family:inherit;font-weight:950;font-size:14px;padding:13px 10px;margin-top:10px;cursor:pointer}.pay-v393-primary:disabled{opacity:.6}
+    #payrollEmpOv .pay-v393-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.pay-v393-actions button{min-height:43px}
+    #payrollEmpOv .pay-v393-paid{background:rgba(34,197,94,.12);color:#49db7e;border:1px solid rgba(34,197,94,.25);padding:10px;border-radius:12px;text-align:center;font-size:12px;font-weight:800;margin-top:10px}
+    #payrollEmpOv .pay-v393-warn{color:#fbbf24;text-align:center;padding:9px}.pay-v393-muted{color:var(--sub);font-size:11px;text-align:center;padding:9px}
+    @media(max-width:430px){#payrollEmpOv{padding:0!important}#payrollEmpOv .pay-v393-card{border-radius:0;min-height:100dvh;border-left:0;border-right:0;padding:14px 12px}#payrollEmpOv .pay-v393-kpi{padding:8px 5px}#payrollEmpOv .pay-v393-kpi b{font-size:14px}}
+  </style><div class="pay-v393-card">
+    <div class="pay-v393-head"><div><div class="pay-v393-title">تفاصيل المرتب</div><div class="pay-v393-sub">${_payEsc(emp.name)} · ${_payEsc(emp.branch||'')} · ${_payEsc(payPeriodLabelAr(pk))}</div></div><button class="backBtn" onclick="document.getElementById('payrollEmpOv').remove()">✕</button></div>
+    <div class="pay-v393-kpis"><div class="pay-v393-kpi">الأساسي<b>${_payMoney(emp.baseSalary)}</b></div><div class="pay-v393-kpi">الخصومات<b class="bad">-${_payMoney(deductions)}</b></div><div class="pay-v393-kpi">المستحق الآن<b class="good">${_payMoney(paid?Math.max(0,due.totalDue):grandDue)}</b></div></div>
+    ${section('🗓️ الحضور','',
+      detailRow('فترة حساب الحضور',(c.attendanceStartKey||'—')+' ← '+(c.attendanceEndKey||'—'))+
+      detailRow('أيام الشهر',actualDays+' يوم')+
+      detailRow('أيام العمل المطلوبة',c.elapsedWorkDays+' يوم')+
+      detailRow('أيام الحضور المسجلة',c.attendedDays+' يوم')+
+      detailRow('الإجازة الأسبوعية داخل الفترة',c.dayOffDates.length+' يوم')+
+      detailRow('تواريخ الإجازة الأسبوعية',offText)+
+      detailRow('غياب مخصوم',c.extraOffDays+' يوم = -'+_payMoney(c.deductionAmount),'bad')+
+      (c.absenceDates.length?detailRow('تواريخ الغياب',absenceText,'bad'):'')+
+      (c.incompleteShifts.length?detailRow('⚠️ شيفتات غير مقفولة',c.incompleteShifts.map(x=>x.date).join('، '),'gold'):''))}
+    ${section('＋ الإضافات','add',
+      (c.proratedBase!==Number(emp.baseSalary)?detailRow('استحقاق الأساسي للفترة','+'+_payMoney(c.proratedBase),'good'):'')+
+      detailRow('أوفرتايم',Math.round(c.overtimeMinutes/6)/10+' س = +'+_payMoney(c.overtimePay),'good')+
+      detailRow('شغل يوم الإجازة',c.dayOffBonusHours+' س = +'+_payMoney(c.dayOffBonusAmount),'good')+
+      detailRow('إجمالي إضافات الراتب','+'+_payMoney(salaryAdditions),'good'))}
+    ${section('− الخصومات','ded',
+      detailRow('رصيد وقت',c.timeCreditHours+' س = -'+_payMoney(c.timeCreditDeduction),'bad')+
+      detailRow('خصومات إدارية','-'+_payMoney(c.adminDeductions),'bad')+
+      detailRow('سلف','-'+_payMoney(c.advCash),'bad')+
+      detailRow('مشتريات','-'+_payMoney(c.advOrders),'bad')+
+      (c.advancesTotal>0?`<div style="text-align:left;padding-top:8px"><button type="button" onclick="openPayrollAdvanceDetails('${emp.id}','${pk}')" style="border:1px solid rgba(255,255,255,.16);background:#2b2c36;color:#fff;border-radius:9px;padding:7px 10px;font-family:inherit;font-size:11px;cursor:pointer">التفاصيل والتواريخ</button></div>`:''))}
+    ${section('⭐ النقط والعمولات','pts',
+      `<div class="pay-v393-points-top"><div class="pay-v393-points-box"><div style="font-size:10px;color:var(--sub)">إجمالي نقاط الفترة</div><div style="font-size:20px;font-weight:950;margin-top:3px">${_payPts(due.ptsTotal)}</div></div><div class="pay-v393-points-box">${pointState}</div></div>`+
+      detailRow('قيمة النقطة',_payMoney(rate),'gold')+
+      detailRow('نقط مدفوعة قبل كده',_payPts(due.ptsPaid)+' نقطة')+
+      detailRow('قيمة النقط المتبقية',_payMoney(due.ptsDueAmt),'gold')+
+      detailRow('عمولة تنزيلات متبقية',_payMoney(due.refDueAmt),'good')+
+      detailRow('عمولة تارجت متبقية',_payMoney(due.tgtDueAmt),'good')+
+      detailRow('إجمالي العمولات المتبقية',_payMoney(due.totalDue),'good'))}
+    ${section('💰 صافي الحساب','',
+      detailRow('صافي الراتب قبل النقط والعمولات',_payMoney(c.netSalary),'good')+
+      detailRow(paid?'المتبقي من عمولات بعد صرف الراتب':'الإجمالي المستلم عند الصرف',_payMoney(paid?due.totalDue:grandDue),'good'))}
+    ${actions}
+    <div class="pay-v393-actions"><button class="confirmBtnSmall" onclick="openAttendanceDaysDialog('${emp.id}','${pk}')">🗓️ سجل الأيام</button><button class="confirmBtnSmall" onclick="openSalaryPrintDialog('${emp.id}','${pk}')">🖨️ إيصال مفصل</button></div>
+    ${hist.length?section('💵 سجل تعديل الراتب','',hist.slice(0,6).map(h=>detailRow(new Date(h.at).toLocaleString('ar-EG')+(h.by?' · '+h.by:''),_payMoney(h.from||0)+' ← '+_payMoney(h.to||0))).join('')):''}
   </div>`;
   document.body.appendChild(ov);
 };
-
 
 // 💰🛒 تفاصيل السلف ومشتريات الموظف داخل دورة القبض — تجميعي + كل حركة بتاريخها.
 // بنعرض نفس العناصر اللي دخلت computeSalary حرفياً، عشان الإجمالي والتفاصيل ما يختلفوش أبداً.
@@ -6642,45 +6741,84 @@ window._nextMonthKey = _nextMonthKey;
 
 function buildSalaryReceiptPayload(emp, calc, periodLabel){
   const _pk = periodLabel || defaultPayPeriodKey(new Date());
+  const money=(v)=>{ const n=Math.round((Number(v)||0)*100)/100; return (Number.isInteger(n)?String(n):n.toFixed(2).replace(/\.00$/,'').replace(/(\.\d)0$/,'$1'))+' ج.م'; };
+  const pts=(v)=>fmtPts(Math.round((Number(v)||0)*100)/100);
   const due = commissionDueFor(emp, _pk);
-  // لو الصرف اتسجل خلاص، الإيصال بيطبع **اللي اتصرف فعلًا**؛ ولو لسه، بيطبع المستحق.
-  const already = (allSalaryPayments || []).some(p=> p.employeeId === emp.id && p.periodLabel === _pk);
-  const ptsCnt  = already ? due.ptsPaid    : due.ptsDue;
-  const ptsAmt  = already ? due.ptsPaidAmt : due.ptsDueAmt;
-  const refCnt  = already ? due.refPaidCount : due.refDueCount;
-  const refAmt  = already ? due.refPaidAmt   : due.refDueAmt;
-  const tgtAmt  = already ? due.tgtPaidAmt   : due.tgtDueAmt;
+  const payment = (allSalaryPayments || []).find(p=> p.employeeId === emp.id && p.periodLabel === _pk);
+  const already = !!payment;
+  const ptsCnt  = already ? due.ptsPaid       : due.ptsDue;
+  const ptsAmt  = already ? due.ptsPaidAmt    : due.ptsDueAmt;
+  const refCnt  = already ? due.refPaidCount  : due.refDueCount;
+  const refAmt  = already ? due.refPaidAmt    : due.refDueAmt;
+  const tgtAmt  = already ? due.tgtPaidAmt    : due.tgtDueAmt;
   const commTotal = Math.round((ptsAmt + refAmt + tgtAmt) * 100)/100;
-  const grand = Math.round((calc.netSalary + commTotal) * 100)/100;
-
-  // Firestore بيرفض nested arrays (array داخل array) بـ invalid-argument.
-  // نخزن سطور الإيصال كـ objects بسيطة، والـPOS يدعم الشكلين للتوافق.
-  const lines = [
-    { label:'الراتب الأساسي المتفق عليه', value:'+' + (Number(emp.baseSalary)||0) },
-    { label:'🗓️ أيام الشغل', value:(calc.attendedDays || 0) + ' من ' + (calc.elapsedWorkDays || 0) },
-  ];
-  if(calc.proratedBase !== Number(emp.baseSalary||0)) lines.splice(1,0,{label:'استحقاق الأساسي للفترة',value:'+' + calc.proratedBase});
-  if(calc.overtimePay > 0) lines.push({label:'أوفرتايم (' + Math.round(calc.overtimeMinutes/60*10)/10 + ' ساعة)',value:'+' + calc.overtimePay});
-  if(calc.dayOffBonusAmount > 0) lines.push({label:'🎁 شغل يوم الإجازة (' + calc.dayOffBonusHours + ' ساعة)',value:'+' + calc.dayOffBonusAmount});
-  if(calc.deductionAmount > 0) lines.push({label:'خصم غياب (' + calc.extraOffDays + ' يوم)',value:'-' + calc.deductionAmount});
-  if(calc.timeCreditDeduction > 0) lines.push({label:'⏳ رصيد الوقت (' + calc.timeCreditHours + ' ساعة = ' + calc.timeCreditDays + ' يوم)',value:'-' + calc.timeCreditDeduction});
-  if(calc.adminDeductions > 0) lines.push({label:'خصومات إدارية',value:'-' + calc.adminDeductions});
-  if(calc.advCash > 0) lines.push({label:'💰 سلف كاش',value:'-' + calc.advCash});
-  if(calc.advOrders > 0) lines.push({label:'🛒 مشتريات (أوردرات)',value:'-' + calc.advOrders});
-  lines.push({label:'— صافي الراتب —',value:calc.netSalary + ' ج.م'});
-  if(ptsCnt > 0) lines.push({label:'⭐ عمولة نقط (' + fmtPts(ptsCnt) + ' نقطة)',value:'+' + ptsAmt});
-  if(refCnt > 0) lines.push({label:'📱 بونص تنزيلات (' + refCnt + ')',value:'+' + refAmt});
-  if(tgtAmt > 0) lines.push({label:'🎯 عمولة تارجت',value:'+' + tgtAmt});
-
+  // الإيصال بعد الصرف يعرض الإجمالي التراكمي الحقيقي: الراتب + كل العمولات
+  // المدفوعة للفترة، بما فيها أي نقط اتدفعت لاحقاً من نفس صفحة المرتب.
+  const grand = already
+    ? Math.round((calc.netSalary + due.totalPaid) * 100)/100
+    : Math.round((calc.netSalary + commTotal) * 100)/100;
+  const paidAt = payment && payment.paidAt ? Number(payment.paidAt) : Date.now();
+  const rcptNo = 'SAL-' + String(_pk).replace('-','') + '-' + String(emp.id||'').replace(/[^a-zA-Z0-9]/g,'').slice(-5).toUpperCase();
+  const lines=[];
+  const add=(section,label,value,tone='')=>lines.push({'0':label,'1':value,section,label,value,tone});
+  add('البيانات','الموظف',emp.name||'');
+  add('البيانات','القسم / الفرع',emp.branch||'');
+  add('البيانات','فترة المرتب',payPeriodLabelAr(_pk));
+  add('الحضور','فترة حساب الحضور',(calc.attendanceStartKey||'—')+' ← '+(calc.attendanceEndKey||'—'));
+  add('الحضور','أيام الشغل',(calc.attendedDays||0)+' من '+(calc.elapsedWorkDays||0)+' مطلوب');
+  add('الحضور','أيام العمل المطلوبة',(calc.elapsedWorkDays||0)+' يوم');
+  add('الحضور','أيام الحضور',(calc.attendedDays||0)+' يوم');
+  add('الحضور','الإجازة الأسبوعية',(calc.dayOffDates||[]).length+' يوم');
+  if((calc.dayOffDates||[]).length) add('الحضور','تواريخ الإجازة',(calc.dayOffDates||[]).join('، '));
+  if((calc.absenceDates||[]).length) add('الحضور','تواريخ الغياب',(calc.absenceDates||[]).map(x=>x.date+(x.approved?' (مصرح)':'')).join('، '),'bad');
+  add('الإضافات','الراتب الأساسي','+'+money(Number(emp.baseSalary)||0),'good');
+  if(calc.proratedBase !== Number(emp.baseSalary||0)) add('الإضافات','استحقاق الأساسي للفترة','+'+money(calc.proratedBase),'good');
+  if(calc.overtimePay>0) add('الإضافات','أوفرتايم '+Math.round(calc.overtimeMinutes/60*10)/10+' ساعة','+'+money(calc.overtimePay),'good');
+  if(calc.dayOffBonusAmount>0) add('الإضافات','شغل يوم الإجازة '+calc.dayOffBonusHours+' ساعة','+'+money(calc.dayOffBonusAmount),'good');
+  if(calc.deductionAmount>0) add('الخصومات','خصم غياب '+calc.extraOffDays+' يوم','-'+money(calc.deductionAmount),'bad');
+  if(calc.timeCreditDeduction>0) add('الخصومات','رصيد الوقت '+calc.timeCreditHours+' ساعة','-'+money(calc.timeCreditDeduction),'bad');
+  if(calc.adminDeductions>0) add('الخصومات','خصومات إدارية','-'+money(calc.adminDeductions),'bad');
+  if(calc.advCash>0) add('الخصومات','سلف كاش','-'+money(calc.advCash),'bad');
+  if(calc.advOrders>0) add('الخصومات','مشتريات','-'+money(calc.advOrders),'bad');
+  // كل سلفة/مشتريات بتاريخها — نخلي الإيصال أطول بدل ما نزود عرضه.
+  (calc.advanceItems||[]).slice().reverse().forEach(a=>{
+    const isOrder=String(a.source||'').indexOf('staff_order')===0;
+    const dt=a.ts?new Date(Number(a.ts)).toLocaleDateString('en-CA'):'—';
+    const inv=a.invoiceNo||a.orderNo||a.ref||'';
+    add('تفاصيل السلف والمشتريات',dt+' · '+(isOrder?'مشتريات':'سلفة')+(inv?' · #'+inv:''),'-'+money(a.amount),'bad');
+  });
+  add('الصافي','صافي الراتب',money(calc.netSalary),'strong');
+  add('النقط والعمولات','إجمالي نقاط الفترة',pts(due.ptsTotal)+' نقطة');
+  add('النقط والعمولات',already?'نقط تم صرفها':'نقط مستحقة',pts(ptsCnt)+' نقطة');
+  if(ptsCnt>0) add('النقط والعمولات','عمولة نقط ('+pts(ptsCnt)+' نقطة)','+'+money(ptsAmt),'good');
+  if(refCnt>0) add('النقط والعمولات','عمولة تنزيلات ('+refCnt+')','+'+money(refAmt),'good');
+  if(tgtAmt>0) add('النقط والعمولات','عمولة تارجت','+'+money(tgtAmt),'good');
+  if(due.ptsDue>0 && already) add('النقط والعمولات','نقط متبقية بعد الصرف',pts(due.ptsDue)+' نقطة','warn');
   return {
-    title: 'إيصال راتب 🧾',
-    empName: emp.name || '', branch: emp.branch || '',
-    period: payPeriodLabelAr(_pk) + ' (الشهر كامل)',
+    receiptKind:'salary_v393', title:'إيصال راتب', receiptNo:rcptNo,
+    empName:emp.name||'', branch:emp.branch||'', period:payPeriodLabelAr(_pk)+' (الشهر كامل)', paidAt,
     lines,
-    net: { label: 'الإجمالي المستلم', value: grand + ' ج.م' },
-    extra: [],
-    extraNote: calc.advPrevCycle > 0 ? '⚠️ سلف ' + calc.advPrevCycle + ' ج.م من دورة سابقة مش داخلة في الحساب ده' : '',
-    footer: 'استلمت المبلغ المذكور — التوقيع: ______________'
+    net:{label:'الإجمالي المستلم',value:money(grand)},
+    extraNote:calc.advPrevCycle>0?'تنبيه: سلف '+money(calc.advPrevCycle)+' من دورة سابقة غير داخلة في الحساب ده':'',
+    footer:'استلمت المبلغ المذكور أعلاه\nاسم المستلم: ____________________\nالتوقيع: ____________________'
+  };
+}
+
+function _firestoreSafeReceiptPayload(payload){
+  const p=payload||{};
+  const row=(r)=>{
+    if(Array.isArray(r)) return {label:r[0] ?? '',value:r[1] ?? ''};
+    if(!r || typeof r!=='object') return {label:String(r??''),value:''};
+    const out={};
+    ['0','1','section','label','value','tone'].forEach(k=>{ if(r[k]!==undefined && !Array.isArray(r[k])) out[k]=r[k]; });
+    if(out.label===undefined) out.label='';
+    if(out.value===undefined) out.value='';
+    return out;
+  };
+  return {
+    ...p,
+    lines: (Array.isArray(p.lines) ? p.lines : []).map(row),
+    extra: (Array.isArray(p.extra) ? p.extra : []).map(row)
   };
 }
 
@@ -6688,7 +6826,7 @@ async function queueSalaryPrint(emp, calc, periodLabel, targetBranch){
   await addDoc(printJobsCol, {
     type: 'salary_receipt',
     branch: targetBranch,
-    payload: buildSalaryReceiptPayload(emp, calc, periodLabel),
+    payload: _firestoreSafeReceiptPayload(buildSalaryReceiptPayload(emp, calc, periodLabel)),
     status: 'pending', ts: Date.now(),
     requestedBy: 'admin'
   });
