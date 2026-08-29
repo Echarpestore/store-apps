@@ -1474,8 +1474,9 @@ window.fsChatApi = {
   getProduct: function(col, barcode){
     const bc = String(barcode || '').trim();
     if(!bc) return Promise.resolve(null);
-    return getDoc(doc(db, col, bc)).then(function(d){
-      return d.exists() ? Object.assign({ barcode: bc }, d.data()) : null;
+    return getDocs(query(collection(db,col), where('barcode','==',bc), limit(1))).then(function(s){
+      if(s.empty) return null; const h=s.docs[0];
+      return Object.assign({ barcode:bc, id:h.id }, h.data());
     });
   },
   getSetting: function(col, docId){
