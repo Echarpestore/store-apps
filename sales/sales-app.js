@@ -1485,17 +1485,18 @@ window.fsChatApi = {
     return getDoc(doc(db, col, id)).then(function(d){ return d.exists() ? d.data() : null; });
   },
   getEmployees: function(col, branch){
-    const nb = String(branch || '').trim().toLowerCase();
-    if(!nb) return Promise.resolve([]);
-    // نقرأ القائمة ونطبّع اسم الفرع محليًا عشان السجلات القديمة ذات
-    // المسافات/case المختلف ما تختفيش من اختيار «مين بيرد؟».
+    const wanted = String(branch || '').trim();
+    if(!wanted) return Promise.resolve([]);
+    // اقرأ القائمة ثم طابق اسم الفرع بعد trim/case normalization؛
+    // ده يمنع اختلاف كتابة الفرع البسيط من إخفاء كل الأسماء في Sales.
     return getDocs(collection(db, col)).then(function(snap){
-      const out=[];
+      const key = wanted.toLocaleLowerCase('ar');
+      const out = [];
       snap.forEach(function(d){
-        const x=d.data()||{};
-        if(x.active === false || x.deletedAt) return;
-        if(String(x.branch||'').trim().toLowerCase() !== nb) return;
-        const n=String(x.name||'').trim(); if(n && !out.includes(n)) out.push(n);
+        const x = d.data() || {};
+        const b = String(x.branch || '').trim().toLocaleLowerCase('ar');
+        const n = String(x.name || '').trim();
+        if(b === key && n) out.push(n);
       });
       return out;
     });
