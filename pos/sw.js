@@ -1,4 +1,4 @@
-const CACHE_NAME = 'store-apps-shell-v395';
+const CACHE_NAME = 'store-apps-shell-v396';
 
 // ⚠️ مفيش skipWaiting تلقائي.
 // النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر
@@ -52,6 +52,24 @@ self.addEventListener('fetch', (event) => {
   // Everything else (Firebase/Firestore calls, Google Fonts, etc.)
   // is left completely alone.
   if (url.origin !== self.location.origin) return;
+
+  // v396 — import.js must never silently fall back to an older query/version.
+  // This was masking deployments: the screen updated while an old importer kept running.
+  if (url.pathname.endsWith('/pos/import.js')) {
+    event.respondWith(
+      fetch(req, { cache: 'no-store' }).then((res) => {
+        if (res && res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(req, clone)).catch(() => {});
+        }
+        return res;
+      }).catch(() => caches.match(req, { ignoreSearch: false }).then((hit) => hit || new Response(
+        "console.error('IMPORT v396 unavailable: reconnect and reload');",
+        { status: 503, headers: { 'Content-Type': 'application/javascript; charset=utf-8' } }
+      )))
+    );
+    return;
+  }
 
   // 🔒 سلسلة احتياطية كاملة: النت ← الكاش الحالي ← أي كاش قديم ← رد واضح.
   // من غيرها، فشل الشبكة كان بيرجّع undefined والصفحة بتطلع سودا.

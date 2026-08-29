@@ -6,6 +6,8 @@
 // بيعتمد على العام من app.js: db, showToast, hasPerm, currentBranch
 // ============================================================
 
+const QB_IMPORT_BUILD = 'v396';
+
 const TEST_LEGACY_SALES = "pos_test_legacy_sales"; // مبيعات قديمة للرجوع بس، منفصلة عن مبيعات النظام الجديد
 
 let importTab = 'inventory';
@@ -55,6 +57,7 @@ function renderImportPanel(){
   const wrap = document.getElementById('importPanelWrap');
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
+      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v396 • جاهز</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
@@ -211,14 +214,14 @@ function processImportFile(file){
           if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
           renderImportMapping();
         }catch(err){
-          if(note) note.textContent = '';
+          if(note) note.textContent = '❌ تعذر قراءة الملف: ' + err.message;
           showToast('تعذر قراءة الملف: ' + err.message, 'err');
         }
       };
-      reader.onerror = ()=>{ if(note) note.textContent=''; showToast('تعذر فتح الملف', 'err'); };
+      reader.onerror = ()=>{ if(note) note.textContent='❌ تعذر فتح الملف'; showToast('تعذر فتح الملف', 'err'); };
       reader.readAsArrayBuffer(file);
     }).catch((err)=>{
-      if(note) note.textContent = '';
+      if(note) note.textContent = '❌ ' + err.message + ' — قارئ Excel لم يبدأ';
       showToast(err.message + ' — أو احفظ الملف كـ CSV UTF-8 وارفعه', 'err');
     });
     return;
@@ -230,7 +233,7 @@ function processImportFile(file){
       if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
       renderImportMapping();
     }catch(err){
-      if(note) note.textContent = '';
+      if(note) note.textContent = '❌ تعذر قراءة الملف: ' + err.message;
       showToast('تعذر قراءة الملف: ' + err.message, 'err');
     }
   };
