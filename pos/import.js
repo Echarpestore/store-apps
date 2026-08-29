@@ -6,7 +6,7 @@
 // بيعتمد على العام من app.js: db, showToast, hasPerm, currentBranch
 // ============================================================
 
-const QB_IMPORT_BUILD = 'v396';
+const QB_IMPORT_BUILD = 'v397';
 
 const TEST_LEGACY_SALES = "pos_test_legacy_sales"; // مبيعات قديمة للرجوع بس، منفصلة عن مبيعات النظام الجديد
 
@@ -57,7 +57,7 @@ function renderImportPanel(){
   const wrap = document.getElementById('importPanelWrap');
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
-      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v396 • جاهز</div>
+      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v397 • جاهز</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
@@ -112,6 +112,16 @@ function renderImportPanel(){
       }
     };
   }
+  // v397 — bind the visible start button directly after every render.
+  // Do not depend on inline onclick/CSP or on the file input change event.
+  const startBtn = document.getElementById('importStartBtn');
+  if(startBtn){
+    startBtn.onclick = null;
+    startBtn.addEventListener('click', function(ev){
+      ev.preventDefault(); ev.stopPropagation();
+      startSelectedImport();
+    });
+  }
 }
 
 // v392 — listener واحد ثابت على document بدل ربط listener بعنصر بيتعمل من جديد
@@ -125,6 +135,20 @@ function renderImportPanel(){
     const t = ev && ev.target;
     if(!t || t.id !== 'importFileInput') return;
     handleImportFile(ev);
+  }, true);
+})();
+
+// v397 — final delegated click fallback. This works even when the panel is re-rendered
+// and even when inline event handlers are blocked by browser/CSP.
+(function bindImportStartDelegation(){
+  if(typeof document === 'undefined' || window.__qbImportStartDelegatedV397) return;
+  window.__qbImportStartDelegatedV397 = true;
+  document.addEventListener('click', function(ev){
+    const t = ev && ev.target && ev.target.closest ? ev.target.closest('#importStartBtn') : null;
+    if(!t) return;
+    // Direct listener normally handles it and stops propagation. This is fallback only.
+    ev.preventDefault();
+    startSelectedImport();
   }, true);
 })();
 
@@ -174,7 +198,9 @@ function ensureXlsxLib(){
 }
 
 function startSelectedImport(){
-  // v395 — مسار يدوي صريح لا يعتمد إطلاقًا على change event.
+  const clickNote = document.getElementById('importLoadNote');
+  if(clickNote) clickNote.textContent = '🟢 الزر اشتغل — جاري فحص الملف…';
+  // v397 — مسار يدوي صريح لا يعتمد إطلاقًا على change event.
   // بعض أجهزة الفروع أظهرت اسم الملف داخل input لكن لم يصل حدث change للكود.
   const input = document.getElementById('importFileInput');
   const file = input && input.files ? input.files[0] : null;

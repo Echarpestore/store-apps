@@ -1,4 +1,4 @@
-const CACHE_NAME = 'store-apps-shell-v396';
+const CACHE_NAME = 'store-apps-shell-v397';
 
 // ⚠️ مفيش skipWaiting تلقائي.
 // النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر
@@ -53,7 +53,7 @@ self.addEventListener('fetch', (event) => {
   // is left completely alone.
   if (url.origin !== self.location.origin) return;
 
-  // v396 — import.js must never silently fall back to an older query/version.
+  // v397 — import.js must never silently fall back to an older query/version.
   // This was masking deployments: the screen updated while an old importer kept running.
   if (url.pathname.endsWith('/pos/import.js')) {
     event.respondWith(
@@ -64,7 +64,7 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       }).catch(() => caches.match(req, { ignoreSearch: false }).then((hit) => hit || new Response(
-        "console.error('IMPORT v396 unavailable: reconnect and reload');",
+        "console.error('IMPORT v397 unavailable: reconnect and reload');",
         { status: 503, headers: { 'Content-Type': 'application/javascript; charset=utf-8' } }
       )))
     );
