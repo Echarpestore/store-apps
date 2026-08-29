@@ -58,7 +58,7 @@ function renderImportPanel(){
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
-      <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" data-qb-import-file="1" style="margin-bottom:10px;">
+      <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" data-qb-import-file="1" onchange="handleImportFile(event)" style="margin-bottom:10px;">
       <div id="adjRow" style="display:none; background:#0f2438; border:1.5px solid #3b82f680;
            border-radius:10px; padding:10px 12px; margin-bottom:10px; color:#dbeafe; font-size:12.5px;">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:700;">
@@ -89,6 +89,20 @@ function renderImportPanel(){
       <div id="importLoadNote" style="color:var(--muted); font-size:12px; margin-bottom:8px;"></div>
       <div id="importPreviewWrap"></div>
     </div>`;
+
+  // v394 — ربط مباشر بالعنصر بعد كل render كطبقة أمان إضافية.
+  // الملف input بيتعاد إنشاؤه كل مرة، لذلك بنربطه هنا فورًا بالإضافة للـ inline onchange.
+  const fileInput = document.getElementById('importFileInput');
+  if(fileInput){
+    fileInput.onchange = function(ev){
+      try{ handleImportFile(ev); }
+      catch(err){
+        const note = document.getElementById('importLoadNote');
+        if(note) note.textContent = '❌ خطأ قبل قراءة الملف: ' + (err && err.message ? err.message : err);
+        try{ showToast('تعذر بدء الاستيراد: ' + (err && err.message ? err.message : err), 'err'); }catch(_){ }
+      }
+    };
+  }
 }
 
 // v392 — listener واحد ثابت على document بدل ربط listener بعنصر بيتعمل من جديد
@@ -151,7 +165,10 @@ function ensureXlsxLib(){
 }
 
 function handleImportFile(e){
-  const file = e.target.files[0];
+  // v394 — منع تنفيذ نفس اختيار الملف مرتين لأن عندنا ربط مباشر + delegation احتياطي.
+  if(e && e.__qbImportHandledV394) return;
+  if(e) e.__qbImportHandledV394 = true;
+  const file = e && e.target && e.target.files ? e.target.files[0] : null;
   if(!file) return;
   const note = document.getElementById('importLoadNote');
   // مهم: العميل لازم يشوف إن اختيار الملف اتلقط فورًا. قبل كده لو الملف نفسه
