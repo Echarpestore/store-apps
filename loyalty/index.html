@@ -1092,7 +1092,14 @@ function initPushForCustomer(){
           if(!currentCustomer){ _pushSay('no-customer', 'العميلة خرجت قبل الحفظ'); return; }
           _PUSH_DIAG.token = String(token).slice(-12);
           var saved = localStorage.getItem('echarpe_fcm_' + currentCustomer.phone);
-          if(saved === token){ _pushSay('ok-cached', 'التوكن متسجّل خلاص'); return; }
+          if(saved === token){
+            // v377: لو التوكن محفوظ محليًا لكن هدية الترحيب ما اتعلمتش على العميلة،
+            // نلمس fcmTokenAt عشان Cloud Function تعمل reconciliation بدل ما الحالة تفضل عالقة.
+            var welcomeField = 'welcomeGranted_' + CATALOG_BRAND;
+            if(currentCustomer && currentCustomer[welcomeField]){
+              _pushSay('ok-cached', 'التوكن متسجّل خلاص'); return;
+            }
+          }
           db.collection(COL_CUSTOMERS).doc(currentCustomer.phone).set(
             (function(){
               // 🔑 التوكن بيتخزن **عنصر في مصفوفة** مش مفتاح حقل.
