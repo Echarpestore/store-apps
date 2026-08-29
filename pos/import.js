@@ -1388,34 +1388,48 @@ async function runImport(){
       while(usedCodes[code]){ n = (n+1) % 100000000; code = 'ECH' + String(n).padStart(8,'0'); }
       usedCodes[code] = 1; return code;
     }
+    // v391: QuickBooks exports may contain the same phone more than once.
+    // Build one deterministic write per normalized phone before creating Firestore batches.
+    const customerByPhone = new Map();
+    rows.forEach(row=>{
+      let phone = (row[mapping.phone]||'').replace(/\D/g,'');
+      if(phone.length === 12 && phone.slice(0,2) === '20') phone = '0' + phone.slice(2);
+      if(phone.length === 10 && phone[0] === '1') phone = '0' + phone;
+      if(!phone || phone.length < 8){ failed++; return; }
+      const name = mapping.name ? (row[mapping.name]||'').trim() : '';
+      const incoming = {
+        phone, name,
+        points: mapping.points ? (parseFloat(row[mapping.points]) || 0) : 0,
+        branch: currentBranch, importedFrom: 'quickbooks'
+      };
+      if(hasNotes && (row['Notes']||'').trim()) incoming.notes = row['Notes'].trim();
+      if(hasEmail && (row['EMail']||'').trim()) incoming.email = row['EMail'].trim();
+      const prev = customerByPhone.get(phone);
+      if(prev){
+        // Keep useful values from either duplicate row; do not double-count points.
+        if(!prev.name && incoming.name) prev.name = incoming.name;
+        if(!prev.notes && incoming.notes) prev.notes = incoming.notes;
+        if(!prev.email && incoming.email) prev.email = incoming.email;
+        if(!prev.points && incoming.points) prev.points = incoming.points;
+      }else customerByPhone.set(phone, incoming);
+    });
+    const customerWrites = Array.from(customerByPhone.values());
+    const duplicateRows = rows.length - failed - customerWrites.length;
     try{
-      for(let i=0; i<rows.length; i+=CHUNK){
+      for(let i=0; i<customerWrites.length; i+=CHUNK){
         const batch = db.batch();
-        const slice = rows.slice(i, i+CHUNK);
-        slice.forEach(row=>{
-          let phone = (row[mapping.phone]||'').replace(/\D/g,'');
-          // تنضيف الأرقام المصرية عشان تطابق اللي العميلة بتكتبه في تطبيق الولاء
-          if(phone.length === 12 && phone.slice(0,2) === '20') phone = '0' + phone.slice(2);  // كود الدولة 20
-          if(phone.length === 10 && phone[0] === '1') phone = '0' + phone;                     // فقد الصفر البادئ
-          if(!phone || phone.length < 8){ failed++; return; }   // أرقام فاضية/غلط تتخطّى
-          const name = mapping.name ? (row[mapping.name]||'').trim() : '';
-          const data = {
-            phone, name,
-            points: mapping.points ? (parseFloat(row[mapping.points]) || 0) : 0,
-            loyaltyCode: codeFromPhone(phone),
-            branch: currentBranch, importedFrom: 'quickbooks',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          };
-          if(hasNotes && (row['Notes']||'').trim()) data.notes = row['Notes'].trim();
-          if(hasEmail && (row['EMail']||'').trim()) data.email = row['EMail'].trim();
-          batch.set(db.collection(TEST_CUSTOMERS).doc(phone), data, { merge:true });
+        const slice = customerWrites.slice(i, i+CHUNK);
+        slice.forEach(data=>{
+          data.loyaltyCode = codeFromPhone(data.phone);
+          data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+          batch.set(db.collection(TEST_CUSTOMERS).doc(data.phone), data, { merge:true });
           done++;
         });
         await batch.commit();
-        resultBox.textContent = `جارٍ الاستيراد... ${Math.min(i+CHUNK, rows.length)}/${rows.length}`;
+        resultBox.textContent = `جارٍ الاستيراد... ${Math.min(i+CHUNK, customerWrites.length)}/${customerWrites.length}`;
       }
     }catch(e){ resultBox.innerHTML = '⚠️ حصل خطأ أثناء الاستيراد: '+e.message; showToast('فشل الاستيراد', 'err'); return; }
-    resultBox.innerHTML = `✅ اتستورد ${done} عميل — كل واحد اتعمله كود ولاء${failed ? ` · ${failed} صف اتخطّى (رقم فاضي أو غلط)` : ''}`;
+    resultBox.innerHTML = `✅ اتستورد ${done} عميل — كل رقم مرة واحدة${duplicateRows ? ` · ${duplicateRows} صف مكرر اتدمج` : ''}${failed ? ` · ${failed} صف اتخطّى (رقم فاضي أو غلط)` : ''}`;
     showToast('خلص استيراد العملاء ✅');
     return;
   }
