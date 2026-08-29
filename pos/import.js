@@ -58,7 +58,13 @@ function renderImportPanel(){
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
-      <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" data-qb-import-file="1" onchange="handleImportFile(event)" style="margin-bottom:10px;">
+      <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" data-qb-import-file="1" onchange="handleImportFile(event)" style="margin-bottom:8px;">
+      <button type="button" id="importStartBtn" onclick="startSelectedImport()"
+        style="width:100%; padding:12px 14px; margin:0 0 10px; border:0; border-radius:10px;
+               background:linear-gradient(135deg,#16a34a,#15803d); color:#fff; font-family:'Cairo',sans-serif;
+               font-size:14px; font-weight:900; cursor:pointer;">
+        📥 ابدأ استيراد الملف المختار
+      </button>
       <div id="adjRow" style="display:none; background:#0f2438; border:1.5px solid #3b82f680;
            border-radius:10px; padding:10px 12px; margin-bottom:10px; color:#dbeafe; font-size:12.5px;">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:700;">
@@ -164,12 +170,31 @@ function ensureXlsxLib(){
   return _xlsxLoading;
 }
 
+function startSelectedImport(){
+  // v395 — مسار يدوي صريح لا يعتمد إطلاقًا على change event.
+  // بعض أجهزة الفروع أظهرت اسم الملف داخل input لكن لم يصل حدث change للكود.
+  const input = document.getElementById('importFileInput');
+  const file = input && input.files ? input.files[0] : null;
+  const note = document.getElementById('importLoadNote');
+  if(!file){
+    if(note) note.textContent = '⚠️ اختار ملف العملاء الأول';
+    try{ showToast('اختار الملف الأول', 'err'); }catch(_){}
+    return;
+  }
+  processImportFile(file);
+}
+
 function handleImportFile(e){
-  // v394 — منع تنفيذ نفس اختيار الملف مرتين لأن عندنا ربط مباشر + delegation احتياطي.
-  if(e && e.__qbImportHandledV394) return;
-  if(e) e.__qbImportHandledV394 = true;
+  // v395 — الاستيراد التلقائي يفضل موجود، لكن الزر اليدوي فوق يضمن إننا مش
+  // معتمدين عليه. منع التكرار خاص بنفس event فقط.
+  if(e && e.__qbImportHandledV395) return;
+  if(e) e.__qbImportHandledV395 = true;
   const file = e && e.target && e.target.files ? e.target.files[0] : null;
   if(!file) return;
+  processImportFile(file);
+}
+
+function processImportFile(file){
   const note = document.getElementById('importLoadNote');
   // مهم: العميل لازم يشوف إن اختيار الملف اتلقط فورًا. قبل كده لو الملف نفسه
   // فيه تنسيق QuickBooks غريب كان المسار ممكن ينتهي من غير أي feedback واضح.
