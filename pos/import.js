@@ -6,7 +6,7 @@
 // بيعتمد على العام من app.js: db, showToast, hasPerm, currentBranch
 // ============================================================
 
-const QB_IMPORT_BUILD = 'v398';
+const QB_IMPORT_BUILD = 'v399';
 
 const TEST_LEGACY_SALES = "pos_test_legacy_sales"; // مبيعات قديمة للرجوع بس، منفصلة عن مبيعات النظام الجديد
 
@@ -57,7 +57,7 @@ function renderImportPanel(){
   const wrap = document.getElementById('importPanelWrap');
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
-      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v398 • جاهز</div>
+      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v399 • جاهز</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
@@ -248,6 +248,99 @@ function handleImportFile(e){
   processImportFile(file);
 }
 
+
+// v399 — QuickBooks exports can be real XLSX files with a misleading .xls name.
+// Parse XLSX ZIP natively in modern browsers so import does not depend on any CDN.
+function qbXmlDecode(s){
+  return String(s == null ? '' : s)
+    .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"')
+    .replace(/&apos;/g,"'").replace(/&amp;/g,'&');
+}
+function qbColIndex(ref){
+  const m = String(ref||'').match(/^([A-Z]+)/i);
+  if(!m) return 0;
+  let n=0; for(const ch of m[1].toUpperCase()) n=n*26+(ch.charCodeAt(0)-64);
+  return n-1;
+}
+async function qbInflateRaw(bytes){
+  if(typeof DecompressionStream === 'undefined') throw new Error('المتصفح لا يدعم فك ضغط Excel');
+  const ds = new DecompressionStream('deflate-raw');
+  const ab = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+  return new Uint8Array(ab);
+}
+async function qbZipEntries(buf){
+  const u8 = new Uint8Array(buf), dv = new DataView(buf);
+  let eocd=-1;
+  for(let i=u8.length-22;i>=Math.max(0,u8.length-65557);i--){
+    if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; }
+  }
+  if(eocd<0) throw new Error('ملف Excel المضغوط غير صالح');
+  const count=dv.getUint16(eocd+10,true), cdOff=dv.getUint32(eocd+16,true);
+  let p=cdOff; const out={};
+  for(let k=0;k<count;k++){
+    if(dv.getUint32(p,true)!==0x02014b50) throw new Error('فهرس Excel غير صالح');
+    const method=dv.getUint16(p+10,true), compSize=dv.getUint32(p+20,true), nameLen=dv.getUint16(p+28,true), extraLen=dv.getUint16(p+30,true), commentLen=dv.getUint16(p+32,true), localOff=dv.getUint32(p+42,true);
+    const name=new TextDecoder().decode(u8.slice(p+46,p+46+nameLen));
+    if(dv.getUint32(localOff,true)!==0x04034b50) throw new Error('بيانات Excel غير صالحة');
+    const ln=dv.getUint16(localOff+26,true), le=dv.getUint16(localOff+28,true), start=localOff+30+ln+le;
+    const comp=u8.slice(start,start+compSize);
+    let data;
+    if(method===0) data=comp;
+    else if(method===8) data=await qbInflateRaw(comp);
+    else { p += 46+nameLen+extraLen+commentLen; continue; }
+    out[name]=data;
+    p += 46+nameLen+extraLen+commentLen;
+  }
+  return out;
+}
+async function parseQuickBooksXlsxNative(buf){
+  const u8=new Uint8Array(buf);
+  if(u8.length<4 || u8[0]!==0x50 || u8[1]!==0x4b) throw new Error('ليس ملف XLSX مضغوط');
+  const entries=await qbZipEntries(buf);
+  const dec=new TextDecoder('utf-8');
+  const sharedXml=entries['xl/sharedStrings.xml'] ? dec.decode(entries['xl/sharedStrings.xml']) : '';
+  const sheetBytes=entries['xl/worksheets/sheet1.xml'];
+  if(!sheetBytes) throw new Error('ملف Excel مفيهوش Sheet1');
+  const shared=[];
+  if(sharedXml){
+    const siRe=/<si\b[^>]*>([\s\S]*?)<\/si>/g; let sm;
+    while((sm=siRe.exec(sharedXml))){
+      let txt='', tm; const tr=/<t\b[^>]*>([\s\S]*?)<\/t>/g;
+      while((tm=tr.exec(sm[1]))) txt += qbXmlDecode(tm[1]);
+      shared.push(txt);
+    }
+  }
+  const xml=dec.decode(sheetBytes), rows=[];
+  const rr=/<row\b[^>]*>([\s\S]*?)<\/row>/g; let rm;
+  while((rm=rr.exec(xml))){
+    const arr=[]; const cr=/<c\b([^>]*)>([\s\S]*?)<\/c>/g; let cm;
+    while((cm=cr.exec(rm[1]))){
+      const attrs=cm[1], body=cm[2];
+      const refm=attrs.match(/\br="([A-Z]+\d+)"/i), tm=attrs.match(/\bt="([^"]+)"/i);
+      const idx=qbColIndex(refm?refm[1]:'A1'), typ=tm?tm[1]:'';
+      let val='';
+      if(typ==='inlineStr'){
+        const mt=body.match(/<t\b[^>]*>([\s\S]*?)<\/t>/); val=mt?qbXmlDecode(mt[1]):'';
+      }else{
+        const mv=body.match(/<v>([\s\S]*?)<\/v>/); const raw=mv?qbXmlDecode(mv[1]):'';
+        val=typ==='s' ? (shared[Number(raw)] ?? '') : raw;
+      }
+      arr[idx]=val;
+    }
+    rows.push(arr);
+  }
+  if(!rows.length) throw new Error('الشيت فاضي');
+  let hIdx=pickImportHeaderRow(rows, importTab);
+  if(hIdx<0) throw new Error('مفيش عناوين أعمدة');
+  const rawHeaders=(rows[hIdx]||[]).map(h=>String(h==null?'':h).trim());
+  const keep=[], seen={};
+  rawHeaders.forEach((h,i)=>{ if(!h)return; let name=h; if(seen[name]){seen[name]++;name=h+' ('+seen[name]+')';}else seen[name]=1; keep.push({i,name}); });
+  if(!keep.length) throw new Error('مفيش أعمدة ليها أسماء');
+  importHeaders=keep.map(k=>k.name);
+  importParsedRows=rows.slice(hIdx+1).map(r=>{ const row={}; keep.forEach(k=>row[k.name]=String((r||[])[k.i]??'').trim()); return row; }).filter(row=>Object.values(row).some(v=>v!==''));
+  if(!importParsedRows.length) throw new Error('مفيش صفوف بيانات تحت العناوين');
+  return importParsedRows.length;
+}
 function processImportFile(file){
   const note = document.getElementById('importLoadNote');
   // مهم: العميل لازم يشوف إن اختيار الملف اتلقط فورًا. قبل كده لو الملف نفسه
@@ -255,26 +348,37 @@ function processImportFile(file){
   if(note) note.textContent = '⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري القراءة…';
   const isExcel = /\.(xlsx?|xlsm)$/i.test(file.name || '');
   if(isExcel){
-    if(note) note.textContent = '⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري تجهيز قارئ Excel…';
-    ensureXlsxLib().then((XLSX)=>{
-      if(note) note.textContent = '⏳ بيقرا الملف…';
-      const reader = new FileReader();
-      reader.onload = (ev)=>{
+    if(note) note.textContent = '⏳ جاري فتح ملف Excel محليًا…';
+    const reader = new FileReader();
+    reader.onload = async (ev)=>{
+      const buf = ev.target.result;
+      try{
+        // QuickBooks file supplied by the user is XLSX/ZIP even though its extension is .xls.
+        // Native path is immediate and does not wait for any CDN.
+        if(note) note.textContent = '⏳ جاري قراءة بيانات QuickBooks…';
+        await parseQuickBooksXlsxNative(buf);
+        if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
+        const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
+        renderImportMapping();
+      }catch(nativeErr){
+        // Real legacy binary XLS still uses SheetJS as a fallback.
+        if(note) note.textContent = '⏳ ملف Excel قديم — جاري تشغيل القارئ الاحتياطي…';
         try{
-          parseExcel(XLSX, ev.target.result);
-          if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف'; const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
+          const XLSX = await ensureXlsxLib();
+          parseExcel(XLSX, buf);
+          if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
+          const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
           renderImportMapping();
         }catch(err){
-          if(note) note.textContent = '❌ تعذر قراءة الملف: ' + err.message;
-          showToast('تعذر قراءة الملف: ' + err.message, 'err');
+          const msg = (nativeErr && nativeErr.message ? nativeErr.message + ' / ' : '') + (err && err.message ? err.message : err);
+          if(note) note.textContent = '❌ تعذر قراءة الملف: ' + msg;
+          const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
+          try{ showToast('تعذر قراءة الملف: ' + msg, 'err'); }catch(_){}
         }
-      };
-      reader.onerror = ()=>{ if(note) note.textContent='❌ تعذر فتح الملف'; showToast('تعذر فتح الملف', 'err'); };
-      reader.readAsArrayBuffer(file);
-    }).catch((err)=>{
-      if(note) note.textContent = '❌ ' + err.message + ' — قارئ Excel لم يبدأ';
-      showToast(err.message + ' — أو احفظ الملف كـ CSV UTF-8 وارفعه', 'err');
-    });
+      }
+    };
+    reader.onerror = ()=>{ if(note) note.textContent='❌ تعذر فتح الملف'; const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';} try{showToast('تعذر فتح الملف','err');}catch(_){} };
+    reader.readAsArrayBuffer(file);
     return;
   }
   const reader = new FileReader();
