@@ -116,6 +116,9 @@ function handleImportFile(e){
   const file = e.target.files[0];
   if(!file) return;
   const note = document.getElementById('importLoadNote');
+  // مهم: العميل لازم يشوف إن اختيار الملف اتلقط فورًا. قبل كده لو الملف نفسه
+  // فيه تنسيق QuickBooks غريب كان المسار ممكن ينتهي من غير أي feedback واضح.
+  if(note) note.textContent = '⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري القراءة…';
   const isExcel = /\.(xlsx?|xlsm)$/i.test(file.name || '');
   if(isExcel){
     if(note) note.textContent = '⏳ بيحمّل مكتبة Excel…';
@@ -154,6 +157,43 @@ function handleImportFile(e){
   reader.readAsText(file, 'UTF-8');
 }
 
+// QuickBooks Customer Export ساعات بيحط عنوان تقرير/اسم شركة قبل صف الأعمدة.
+// اختيار أول صف غير فاضي كان مناسب لملف المنتجات، لكنه ممكن يعتبر عنوان التقرير
+// هو الـheader في ملف العملاء. بنختار أقرب صف فعلي لعناوين العملاء فقط، ونسيب
+// مسار المنتجات القديم كما هو.
+function pickImportHeaderRow(rows, tab){
+  if(!Array.isArray(rows) || !rows.length) return -1;
+  const firstNonEmpty = rows.findIndex(r=> Array.isArray(r) && r.some(c=> String(c == null ? '' : c).trim() !== ''));
+  if(tab !== 'customers') return firstNonEmpty;
+
+  const exact = new Set([
+    'customer name','name','first name','last name','company name',
+    'phone 1','phone','phone number','telephone','mobile','mobile phone','cell','cell phone',
+    'points','email','e-mail','email address','notes','customer #','customer number'
+  ]);
+  let best = { idx:firstNonEmpty, score:-1 };
+  const max = Math.min(rows.length, 30);
+  for(let i=0;i<max;i++){
+    const r = Array.isArray(rows[i]) ? rows[i] : [];
+    let score = 0, nonEmpty = 0;
+    r.forEach(function(c){
+      const v = String(c == null ? '' : c).trim().toLowerCase();
+      if(!v) return;
+      nonEmpty++;
+      if(exact.has(v)) score += 4;
+      else if(/phone|mobile|telephone|cell/.test(v)) score += 3;
+      else if(/customer|first name|last name|full name|company/.test(v)) score += 2;
+      else if(/email|note|point/.test(v)) score += 1;
+    });
+    // صف الأعمدة الحقيقي عادة فيه أكتر من خلية؛ عنوان التقرير غالبًا خلية واحدة.
+    if(nonEmpty >= 2) score += 1;
+    if(score > best.score) best = { idx:i, score:score };
+  }
+  // ما نغيّرش السلوك إلا لما نكون لقينا صف عملاء مقنع فعلًا.
+  return best.score >= 5 ? best.idx : firstNonEmpty;
+}
+if(typeof window !== 'undefined') window.pickImportHeaderRow = pickImportHeaderRow;
+
 // بيقرا أول شيت ويحوّله لنفس شكل الـ CSV (أعمدة + صفوف)
 function parseExcel(XLSX, buf){
   const wb = XLSX.read(new Uint8Array(buf), { type:'array' });
@@ -163,8 +203,7 @@ function parseExcel(XLSX, buf){
   // header:1 → صفوف خام، عشان نتحكم في أسماء الأعمدة بنفسنا
   const rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });
   if(!rows.length) throw new Error('الشيت فاضي');
-  // أول صف فيه عناوين = صف العناوين (QuickBooks أحيانًا بيحط سطور فاضية فوق)
-  let hIdx = rows.findIndex(r=> r.some(c=> String(c).trim() !== ''));
+  let hIdx = pickImportHeaderRow(rows, importTab);
   if(hIdx < 0) throw new Error('مفيش عناوين أعمدة');
   const rawHeaders = rows[hIdx].map(h=> String(h == null ? '' : h).trim());
   // بنستبعد الأعمدة اللي من غير اسم (الملف ممكن يبقى فيه عشرات الأعمدة الفاضية)
@@ -229,10 +268,10 @@ function renderImportMapping(){
 
   // مطابقة تلقائية لأعمدة كويك بوكس بالظبط (بالاسم الرسمي للعمود)
   const QB_MAP = {
-    name:['Item Name','Last Name'], barcode:['Item Number'], price:['Regular Price'],
+    name:['Item Name','Customer Name','Full Name','Name','Last Name','First Name'], barcode:['Item Number'], price:['Regular Price'],
     cost:['Average Unit Cost','Order Cost'], quantity:['Qty 1'],
     supplier:['Vendor Name'], minStock:['Reorder Point 1'], department:['Department Name'],
-    phone:['Phone 1','Phone','Phone Number','Telephone'], points:['Points'], customerName:['Customer Name','Name'],
+    phone:['Phone 1','Phone','Phone Number','Telephone','Mobile','Mobile Phone','Cell','Cell Phone'], points:['Points'], customerName:['Customer Name','Name'],
     date:['Date','Receipt Date'], invoiceNo:['Receipt Number','Invoice Number'], total:['Total'], itemName:['Item Name'], qty:['Qty','Quantity'],
   };
   // محاولة تخمين مبدئي للأعمدة (كويك بوكس الأول بالاسم الرسمي، وبعدين بالتشابه)
