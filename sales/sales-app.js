@@ -1468,6 +1468,21 @@ window.fsChatApi = {
   patchConv: function(col, convId, patch){
     return setDoc(doc(db, col, convId), patch, { merge: true });
   },
+  // 💬 الشات المشترك يعمل compat في POS وmodular هنا. لازم نوفر نفس
+  //    القراءات التي يعتمد عليها للمنتجات والإعدادات، وإلا Sales يفسّر
+  //    كل باركود صحيح كأنه غير موجود بينما POS ينجح من الكاش المحلي.
+  getProduct: function(col, barcode){
+    const bc = String(barcode || '').trim();
+    if(!bc) return Promise.resolve(null);
+    return getDoc(doc(db, col, bc)).then(function(d){
+      return d.exists() ? Object.assign({ barcode: bc }, d.data()) : null;
+    });
+  },
+  getSetting: function(col, docId){
+    const id = String(docId || '').trim();
+    if(!id) return Promise.resolve(null);
+    return getDoc(doc(db, col, id)).then(function(d){ return d.exists() ? d.data() : null; });
+  },
   sendMessage: function(col, convId, msg, convPatch){
     // 📤 عملية واحدة: الرسالة + تحديث المحادثة. لو اتفصلوا، الشارة
     //    والقايمة بيبقوا غلط والعميلة تفضل شايفة "مفيش رد".
