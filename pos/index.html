@@ -1019,6 +1019,83 @@ body.on-dashboard .badge-test{ display:block; }
 .qb-icon{ font-size:clamp(17px, 2.1vh, 28px); }
 .qb-label{ font-size:clamp(9.5px, 1.05vh, 13px); line-height:1.25; }
 @media (max-height: 800px){ .qb-section-body{ gap:4px; } }
+
+
+/* ============================================================
+   v388 — Mobile POS layout only
+   IMPORTANT: every rule is scoped to <= 899px. Desktop >= 900px
+   remains byte-for-byte governed by the existing desktop rules.
+   ============================================================ */
+@media (max-width:899px){
+  body.on-sale{overflow:auto!important;background:#eef1f6!important;}
+  body.on-sale #saleScreen{height:100dvh!important;min-height:100dvh!important;overflow:hidden!important;}
+  body.on-sale .qbx-wrap{height:100dvh!important;min-height:0!important;overflow:hidden!important;}
+  body.on-sale .qbx-top{padding:6px 8px 3px!important;align-items:center!important;flex:0 0 auto!important;}
+  body.on-sale .qbx-title{font-size:14px!important;}
+  body.on-sale .qbx-meta{font-size:10px!important;max-width:58vw!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;}
+
+  body.on-sale .qbx-body{
+    flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;
+    display:grid!important;grid-template-columns:1fr!important;gap:7px!important;padding:0 8px 7px!important;
+    -webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;
+  }
+  body.on-sale .qbx-actions{
+    width:100%!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    gap:5px!important;padding:2px 0!important;order:1!important;
+  }
+  body.on-sale .qbx-actions button{
+    min-width:0!important;min-height:44px!important;padding:7px 3px!important;border-radius:10px!important;
+    font-size:10.5px!important;line-height:1.25!important;touch-action:manipulation!important;
+  }
+  body.on-sale .qbx-center{order:2!important;overflow:visible!important;min-width:0!important;}
+  body.on-sale .sale-top{margin-bottom:6px!important;}
+  body.on-sale #searchBar{min-height:48px!important;font-size:16px!important;padding:10px 12px!important;}
+  body.on-sale .cart-area{min-height:210px!important;max-height:42dvh!important;overflow:auto!important;-webkit-overflow-scrolling:touch!important;}
+  body.on-sale .cart-table{min-width:620px!important;font-size:12px!important;}
+  body.on-sale .cart-table thead th,body.on-sale .cart-table tbody td{padding:8px 5px!important;}
+
+  body.on-sale #sellerRow{display:grid!important;grid-template-columns:minmax(0,1fr) 70px!important;gap:6px!important;}
+  body.on-sale #sellerRow select{width:100%!important;max-width:none!important;min-width:0!important;}
+  body.on-sale #sellerRow #sellerName{grid-column:1/-1!important;white-space:normal!important;}
+  body.on-sale .cust-line{flex-wrap:wrap!important;gap:5px!important;}
+  body.on-sale #custBox{min-width:0!important;flex:1 1 100%!important;}
+  body.on-sale #customerPhone{font-size:16px!important;}
+
+  body.on-sale .qbx-itemops{
+    order:3!important;width:100%!important;display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:5px!important;padding:0!important;
+  }
+  body.on-sale .qbx-itemops button{
+    min-width:0!important;min-height:46px!important;margin:0!important;padding:7px 3px!important;
+    font-size:10.5px!important;line-height:1.2!important;touch-action:manipulation!important;
+  }
+  body.on-sale .qbx-itemops button.qbx-return-all{grid-column:span 2!important;margin:0!important;}
+
+  body.on-sale .qbx-bottom{
+    flex:0 0 auto!important;display:grid!important;grid-template-columns:1fr!important;gap:6px!important;
+    padding:6px 8px max(7px,env(safe-area-inset-bottom))!important;max-height:42dvh!important;overflow-y:auto!important;
+    align-items:stretch!important;border-radius:14px 14px 0 0!important;-webkit-overflow-scrolling:touch!important;
+  }
+  body.on-sale .qbx-pay{width:100%!important;min-width:0!important;}
+  body.on-sale #qbxPayList{min-height:0!important;max-height:64px!important;overflow:auto!important;}
+  body.on-sale .qbx-pay-btns{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important;}
+  body.on-sale .qbx-pay-btns button{min-width:0!important;min-height:48px!important;padding:6px 3px!important;font-size:10.5px!important;}
+  body.on-sale .qbx-pay-btns button.qbx-clear-pay{grid-column:span 2!important;justify-content:center!important;}
+  body.on-sale #chatMini{grid-column:1/-1!important;min-width:0!important;max-width:none!important;width:100%!important;}
+  body.on-sale .qbx-totals{width:100%!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:4px 8px!important;}
+  body.on-sale .qbx-totals .t-row{min-width:0!important;}
+  body.on-sale .qbx-totals .t-val{min-width:74px!important;font-size:16px!important;padding:3px 6px!important;}
+  body.on-sale #cartTotal,body.on-sale #qbxChange{font-size:18px!important;}
+  body.on-sale #confirmPayBtn{grid-column:1/-1!important;min-height:48px!important;font-size:15px!important;}
+
+  body.on-sale .modal-sheet{width:min(96vw,560px)!important;max-height:88dvh!important;overflow:auto!important;}
+}
+@media (max-width:480px){
+  body.on-sale .qbx-actions{grid-template-columns:repeat(4,minmax(0,1fr))!important;}
+  body.on-sale .qbx-itemops{grid-template-columns:repeat(3,minmax(0,1fr))!important;}
+  body.on-sale .qbx-pay-btns{grid-template-columns:repeat(3,minmax(0,1fr))!important;}
+  body.on-sale .cart-area{min-height:190px!important;}
+}
 </style>
 </head>
 <body>
