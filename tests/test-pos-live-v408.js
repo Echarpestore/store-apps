@@ -10,7 +10,7 @@ assert(live.includes("collection('office_pos_live')"),'POS publishes live collec
 assert(!/customerPhone|customerName/.test(live),'live payload must not expose customer identity');
 assert(!/command|remoteControl|eval\(/i.test(live),'no remote control channel');
 assert(sale.includes("typeof posLivePublish === 'function'"),'cart render publishes state');
-assert(pi.includes('pos-live.js?v=408'),'POS loads live module');
+assert(/pos-live\.js\?v=\d+/.test(pi),'POS loads live module');
 assert(oi.includes('data-office-go="live"') && oi.includes('id="page-live"'),'Office has POS Live page');
 assert(oj.includes("db.collection('office_pos_live').onSnapshot"),'Office uses realtime listener');
 assert(oj.includes("if(page === 'live') ofLiveStart(); else ofLiveStop();"),'listener lives only while page is open');

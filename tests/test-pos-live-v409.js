@@ -1,0 +1,15 @@
+const fs=require('fs'), path=require('path'), assert=require('assert');
+const root=path.join(__dirname,'..');
+const live=fs.readFileSync(path.join(root,'pos','pos-live.js'),'utf8');
+const pi=fs.readFileSync(path.join(root,'pos','index.html'),'utf8');
+const oj=fs.readFileSync(path.join(root,'Office','office.js'),'utf8');
+assert(live.includes("collection('office_pos_live')"),'POS publishes live collection');
+assert(!/customerPhone|customerName/.test(live),'live payload must not expose customer identity');
+assert(live.includes('HEARTBEAT_MS=5*60*1000'),'heartbeat reduced to five minutes');
+assert(!live.includes('},30000)'),'30-second heartbeat removed');
+assert(live.includes('if(!force && json===lastJson) return'),'unchanged state is deduped');
+assert(live.includes("visibilitychange") && live.includes('publish(false)'),'foreground resume does not force duplicate write');
+const vm=pi.match(/pos-live\.js\?v=(\d+)/); assert(vm && Number(vm[1])>=409,'POS loads v409+ live module');
+assert(oj.includes("if(page === 'live') ofLiveStart(); else ofLiveStop();"),'Office listener stops outside live page');
+assert(oj.includes('online=age<7*60*1000'),'online threshold matches sparse heartbeat');
+console.log('PASS POS Live v409 low-cost');

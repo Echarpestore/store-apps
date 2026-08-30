@@ -28,4 +28,4 @@ assert(/const _branchRaw = d\.branch/.test(app) && /receiptBranchDisplayName\(_b
 assert(/branch:\s*\(typeof currentBranch/.test(app),'الفاتورة الأصلية تحفظ فرع الجهاز وقت البيع في بيانات الطباعة');
 assert((reports.match(/branch:\s*s\.branch\s*\|\|\s*''/g)||[]).length>=2,'إعادة الطباعة وإيصال الهدية التاريخي يستخدمان branch الفاتورة الأصلية');
 const sw=fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8');
-assert(/store-apps-shell-v408/.test(sw),'POS cache مرفوع إلى v408');
+const pv=(sw.match(/store-apps-shell-v(\d+)/)||[])[1]; assert(Number(pv)>=409,'POS cache مرفوع إلى v409+');

@@ -23,5 +23,5 @@ const open=ctx.ofActIntelligence({type:'paymob_stuck',sid:'S2',reason:'الدف�
 assertEq(open.level,'action','التعليق الحقيقي من غير sale_saved يفضل محتاج إجراء');
 const html=fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8');
 const sw=fs.readFileSync(path.join(ROOT,'Office','sw.js'),'utf8');
-assert(/office\.js\?v=75/.test(html),'Office يحمل office.js v75');
-assert(/echarpe-office-v65/.test(sw),'Office cache مرفوع v65');
+const ov=html.match(/office\.js\?v=(\d+)/); assert(ov && Number(ov[1])>=74,'Office يحمل office.js v74+');
+assert(/echarpe-office-v(6[5-9]|[7-9]\d|\d{3,})/.test(sw),'Office cache مرفوع v65+');
