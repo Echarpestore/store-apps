@@ -1284,7 +1284,7 @@ function ofLiveRender(){
   if(!_ofLiveDocs.length){ box.innerHTML='<div class="empty">مفيش POS بعت حالة Live لسه</div>'; return; }
   var now=Date.now();
   box.innerHTML=_ofLiveDocs.slice().sort(function(a,b){return (b.updatedAtMs||0)-(a.updatedAtMs||0);}).map(function(x){
-    var age=Math.max(0,now-(Number(x.updatedAtMs)||0)), online=age<70000;
+    var age=Math.max(0,now-(Number(x.updatedAtMs)||0)), online=age<7*60*1000;
     var rows=(x.cart||[]).map(function(c){return '<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)"><span>'+ofLiveEsc(c.name)+(c.isReturn?' ↩️':'')+' <small class="muted">× '+Number(c.qty||0)+'</small></span><b>'+Number((c.price||0)*(c.qty||0)).toFixed(2)+'</b></div>';}).join('');
     var pays=(x.payments||[]).map(function(q){var nm=q.method==='visa'?'💳 كارت '+(q.seq||''):q.method==='cash'?'💵 كاش':q.method==='instapay'?'📱 انستا باي':ofLiveEsc(q.method); var st=q.status==='approved'?' ✅':q.status==='pending'?' ⏳':''; return '<span style="display:inline-block;margin:3px;padding:5px 8px;border-radius:9px;background:#f3f4f6">'+nm+st+' · '+Number(q.amount||0).toFixed(2)+'</span>';}).join('');
     return '<div class="panel" style="margin-bottom:10px;border-right:4px solid '+(online?'#059669':'#9ca3af')+' !important">'
