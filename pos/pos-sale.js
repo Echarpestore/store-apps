@@ -600,6 +600,7 @@ function renderCart(){
   renderHoldButtons();
   try{ _saleDraftSave(); }catch(e){}
   try{ if(typeof boostRenderStrip === 'function') boostRenderStrip(); }catch(e){}
+  try{ if(typeof posLivePublish === 'function') posLivePublish(); }catch(e){}
 }
 
 // يرجّع أي منتج اتطبّق عليه عرض العميل لسعره وشكله الأصلي (لما نشيل/نغيّر العميل)
