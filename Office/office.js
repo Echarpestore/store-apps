@@ -1275,24 +1275,83 @@ window.ofWhen = ofWhen;
 let _ofActRaw = [];
 
 // ============================================================
-// 🔴 POS Live v408 — read-only Firestore listener
+// 🔴 POS Live v411 — operational dashboard, read-only
+// نفس listener الواحد؛ لا query إضافية ولا قراءة سجل المبيعات.
 // ============================================================
 var _ofLiveUnsub=null, _ofLiveDocs=[];
 function ofLiveEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function ofLiveDayKey(ms){
+  try{
+    var parts=new Intl.DateTimeFormat('en-CA',{timeZone:OF_CAIRO_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(ms||Date.now()));
+    var o={}; parts.forEach(function(p){if(p.type!=='literal')o[p.type]=p.value;});
+    return String(o.year||'')+String(o.month||'')+String(o.day||'');
+  }catch(e){ var d=new Date(ms||Date.now()); return ''+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'); }
+}
+function ofLiveMoney(v){ return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م'; }
+function ofLivePayName(k){
+  return k==='visa'?'💳 كارت':k==='cash'?'💵 كاش':k==='instapay'?'📱 Instapay':k==='credit'?'💰 رصيد':k==='salary'?'👩‍💼 راتب':k==='gift'?'🎁 Gift Card':ofLiveEsc(k);
+}
+function ofLivePayChips(obj, compact){
+  return Object.keys(obj||{}).filter(function(k){return Math.abs(Number(obj[k]||0))>.001;}).map(function(k){
+    return '<span style="display:inline-flex;align-items:center;gap:4px;margin:2px;padding:'+(compact?'4px 7px':'5px 8px')+';border-radius:999px;background:#f3f4f6;font-size:'+(compact?'11px':'12px')+'">'+ofLivePayName(k)+' <b>'+ofLiveMoney(obj[k])+'</b></span>';
+  }).join('');
+}
+function ofLiveKpi(label,value,sub){
+  return '<div style="flex:1;min-width:88px;background:#f8fafc;border:1px solid var(--line);border-radius:13px;padding:9px 8px;text-align:center">'
+    +'<div class="muted" style="font-size:10px;margin-bottom:3px">'+label+'</div><b style="font-size:17px">'+value+'</b>'+(sub?'<div class="muted" style="font-size:9px;margin-top:2px">'+sub+'</div>':'')+'</div>';
+}
 function ofLiveRender(){
   var box=document.getElementById('posLiveBody'); if(!box) return;
   if(!_ofLiveDocs.length){ box.innerHTML='<div class="empty">مفيش POS بعت حالة Live لسه</div>'; return; }
-  var now=Date.now();
-  box.innerHTML=_ofLiveDocs.slice().sort(function(a,b){return (b.updatedAtMs||0)-(a.updatedAtMs||0);}).map(function(x){
+  var now=Date.now(), today=ofLiveDayKey(now);
+  var docs=_ofLiveDocs.slice().sort(function(a,b){return (b.updatedAtMs||0)-(a.updatedAtMs||0);});
+  var liveCount=0,totalNet=0,totalInvoices=0,totalGross=0,totalSalesCount=0,latest=null;
+  docs.forEach(function(x){
+    if(Math.max(0,now-(Number(x.updatedAtMs)||0))<7*60*1000) liveCount++;
+    if(x.statsDayKey===today){
+      var st=x.stats||{}; totalNet+=Number(st.netSales||0); totalInvoices+=Number(st.salesCount||0); totalGross+=Number(st.grossSales||0); totalSalesCount+=Number(st.salesCount||0);
+    }
+    if(x.lastSale && ofLiveDayKey(x.lastSale.atMs)===today && (!latest || Number(x.lastSale.atMs||0)>Number(latest.sale.atMs||0))) latest={branch:x.branch||x.id||'',sale:x.lastSale};
+  });
+  var avgAll=totalSalesCount?totalGross/totalSalesCount:0;
+  var head='<div class="panel" style="margin-bottom:12px;background:linear-gradient(135deg,#fff,#f7faf9);border:1px solid #dbe7e2">'
+    +'<div class="row" style="margin-bottom:9px"><b>📊 ملخص الفروع اليوم</b><span class="muted" style="font-size:11px">'+liveCount+' فرع LIVE</span></div>'
+    +'<div style="display:flex;gap:7px;flex-wrap:wrap">'+ofLiveKpi('صافي المبيعات',ofLiveMoney(totalNet),'كل الفروع')+ofLiveKpi('فواتير البيع',String(totalInvoices),'اليوم')+ofLiveKpi('متوسط الفاتورة',ofLiveMoney(avgAll),'مبيعات فقط')+'</div>';
+  if(latest){
+    var lp=latest.sale.payments||{};
+    head+='<div style="margin-top:10px;padding:9px 10px;border-radius:12px;background:#ecfdf5;border:1px solid #a7f3d0">'
+      +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>✅ آخر عملية بيع</b><small class="muted">'+ofLiveEsc(latest.branch)+' · '+ofWhen(latest.sale.atMs,false)+'</small></div>'
+      +'<div style="margin-top:5px"><b style="font-size:16px">'+ofLiveMoney(latest.sale.total)+'</b> '+ofLivePayChips(lp,true)+'</div></div>';
+  }
+  head+='</div>';
+
+  var cards=docs.map(function(x){
     var age=Math.max(0,now-(Number(x.updatedAtMs)||0)), online=age<7*60*1000;
-    var rows=(x.cart||[]).map(function(c){return '<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)"><span>'+ofLiveEsc(c.name)+(c.isReturn?' ↩️':'')+' <small class="muted">× '+Number(c.qty||0)+'</small></span><b>'+Number((c.price||0)*(c.qty||0)).toFixed(2)+'</b></div>';}).join('');
-    var pays=(x.payments||[]).map(function(q){var nm=q.method==='visa'?'💳 كارت '+(q.seq||''):q.method==='cash'?'💵 كاش':q.method==='instapay'?'📱 انستا باي':ofLiveEsc(q.method); var st=q.status==='approved'?' ✅':q.status==='pending'?' ⏳':''; return '<span style="display:inline-block;margin:3px;padding:5px 8px;border-radius:9px;background:#f3f4f6">'+nm+st+' · '+Number(q.amount||0).toFixed(2)+'</span>';}).join('');
-    return '<div class="panel" style="margin-bottom:10px;border-right:4px solid '+(online?'#059669':'#9ca3af')+' !important">'
-      +'<div class="row"><div><b>'+ofLiveEsc(x.branch||'فرع')+'</b><div class="muted" style="font-size:11px">'+ofLiveEsc(x.employee||'بدون موظف')+'</div></div><b style="color:'+(online?'#059669':'#6b7280')+'">'+(online?'● LIVE':'● غير متصل')+'</b></div>'
-      +'<div style="margin-top:9px">'+(rows||'<div class="muted" style="padding:8px 0">السلة فاضية</div>')+'</div>'
-      +'<div class="row" style="margin-top:9px"><b>الإجمالي</b><b>'+Number(x.total||0).toFixed(2)+' ج.م</b></div>'
-      +(pays?'<div style="margin-top:7px">'+pays+'</div>':'')+'</div>';
+    var st=(x.statsDayKey===today && x.stats)?x.stats:{};
+    var saleCount=Number(st.salesCount||0), gross=Number(st.grossSales||0), net=Number(st.netSales||0), avg=saleCount?gross/saleCount:0;
+    var rows=(x.cart||[]).map(function(c){return '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><span>'+ofLiveEsc(c.name)+(c.isReturn?' ↩️':'')+' <small class="muted">× '+Number(c.qty||0)+'</small></span><b>'+ofLiveMoney(Number(c.price||0)*Number(c.qty||0))+'</b></div>';}).join('');
+    var livePays=(x.payments||[]).map(function(q){var nm=q.method==='visa'?'💳 كارت '+(q.seq||''):q.method==='cash'?'💵 كاش':q.method==='instapay'?'📱 Instapay':ofLiveEsc(q.method); var pst=q.status==='approved'?' ✅':q.status==='pending'?' ⏳':''; return '<span style="display:inline-block;margin:2px;padding:4px 7px;border-radius:999px;background:#fff7ed;border:1px solid #fed7aa;font-size:11px">'+nm+pst+' · '+ofLiveMoney(q.amount)+'</span>';}).join('');
+    var last=x.lastSale||null, lastHtml='';
+    if(last){
+      var lastToday=ofLiveDayKey(last.atMs)===today;
+      lastHtml='<div style="margin-top:10px;padding:9px;border-radius:12px;background:'+(Number(last.total||0)>=0?'#ecfdf5':'#fff7ed')+';border:1px solid '+(Number(last.total||0)>=0?'#a7f3d0':'#fed7aa')+'">'
+        +'<div style="display:flex;justify-content:space-between;gap:8px"><b>'+(Number(last.total||0)>=0?'✅ آخر بيع':'↩️ آخر مرتجع')+'</b><small class="muted">'+ofWhen(last.atMs,!lastToday)+(last.invoiceNo?' · #'+ofLiveEsc(last.invoiceNo):'')+'</small></div>'
+        +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:5px"><b style="font-size:16px">'+ofLiveMoney(last.total)+'</b><small class="muted">'+ofLiveEsc(last.seller||last.employee||'')+'</small></div>'
+        +'<div style="margin-top:4px">'+ofLivePayChips(last.payments||{},true)+'</div></div>';
+    }
+    var payDay=ofLivePayChips(st.paymentTotals||{},true);
+    return '<div class="panel" style="margin-bottom:12px;border-right:4px solid '+(online?'#059669':'#9ca3af')+' !important">'
+      +'<div class="row"><div><b style="font-size:18px">'+ofLiveEsc(x.branch||'فرع')+'</b><div class="muted" style="font-size:11px">'+ofLiveEsc(x.employee||'بدون موظف')+'</div></div><b style="color:'+(online?'#059669':'#6b7280')+'">'+(online?'● LIVE':'● غير متصل')+'</b></div>'
+      +'<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">'+ofLiveKpi('صافي اليوم',ofLiveMoney(net),'')+ofLiveKpi('فواتير',String(saleCount),'')+ofLiveKpi('المتوسط',ofLiveMoney(avg),'')+'</div>'
+      +(payDay?'<div style="margin-top:7px"><small class="muted">طرق الدفع اليوم</small><div>'+payDay+'</div></div>':'')
+      +lastHtml
+      +'<details style="margin-top:10px" '+((x.cart||[]).length?'open':'')+'><summary style="cursor:pointer;font-weight:800">🛒 السلة الآن '+((x.cart||[]).length?'('+x.cart.length+')':'— فاضية')+'</summary>'
+      +'<div style="margin-top:5px">'+(rows||'<div class="muted" style="padding:7px 0">السلة فاضية</div>')+'</div>'
+      +'<div class="row" style="margin-top:7px"><b>إجمالي السلة</b><b>'+ofLiveMoney(x.total)+'</b></div>'+(livePays?'<div style="margin-top:5px">'+livePays+'</div>':'')+'</details>'
+      +(Number(st.returnCount||0)>0?'<div class="muted" style="font-size:10px;margin-top:7px">↩️ مرتجعات اليوم: '+Number(st.returnCount||0)+' · '+ofLiveMoney(st.returnTotal||0)+'</div>':'')
+      +'</div>';
   }).join('');
+  box.innerHTML=head+cards;
 }
 function ofLiveStart(){
   if(_ofLiveUnsub || typeof db==='undefined') return;
@@ -2314,13 +2373,13 @@ function startData(){
       console.warn('docs sync', e);
       try{ ofRenderHireRegs(); }catch(_e){}
     });
-  db.collection('sales_staff_orders').onSnapshot(function(s){
+  db.collection('sales_staff_orders').where('status','==','pending').onSnapshot(function(s){
     D.orders = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     maybeNotifyNew('so', D.orders.filter(function(x){ return x.status==='pending'; }),
       '🛒 أوردر موظف جديد', function(x){ return (x.employeeName||'') + ' — ' + egp(x.total||0); });
     renderInbox();
   });
-  db.collection('sales_shortages').onSnapshot(function(s){
+  db.collection('sales_shortages').where('status','==','open').onSnapshot(function(s){
     D.shorts = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     maybeNotifyNew('sh', D.shorts.filter(function(x){ return x.status==='open'; }),
       '📦 طلب نواقص', function(x){ return (x.productName||x.barcode) + ' × ' + (x.qty||1) + ' — ' + (x.branch||''); });
