@@ -36,6 +36,6 @@ eq(ctx.importHeaders, ['Customer Name','Phone 1','EMail'], 'parseExcel uses real
 eq(ctx.importParsedRows.length, 2, 'parseExcel keeps customer data rows');
 eq(ctx.importParsedRows[0]['Phone 1'], '01012345678', 'phone preserved');
 
-if(!src.includes("if(note) note.textContent = '⏳ تم اختيار '")) throw new Error('immediate selected-file feedback missing');
+if(!src.includes("setNote('⏳ تم اختيار '")) throw new Error('immediate selected-file feedback missing');
 if(!src.includes("'Mobile Phone','Cell','Cell Phone'")) throw new Error('customer phone aliases missing');
 console.log('PASS customer import QB header v378');
