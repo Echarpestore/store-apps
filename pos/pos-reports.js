@@ -1481,6 +1481,7 @@ function reprintSale(id){
     const data = {
       dateStr: d.toLocaleString(c.lang==='en' ? 'en-GB' : 'ar-EG'),
       empName: s.employeeName || '',
+      branch: s.branch || '',
       // 🧾 نفس تصميم الفاتورة الأصلية بالظبط — بسعر الوحدة وبيانات الكارت
       items: (s.items||[]).map(it=> ({
         name: it.name, qty: it.qty, barcode: it.barcode || '',
@@ -1524,6 +1525,7 @@ function giftReceiptData(s){
     giftMode: true,                     // 🎁 الفلاج اللي بيشيل كل الفلوس
     dateStr: d.toLocaleString(c.lang==='en' ? 'en-GB' : 'ar-EG'),
     empName: s.employeeName || '',
+    branch: s.branch || '',
     // ↩️ سطور المرتجع مبتتحطش في إيصال هدية — الهدية هي اللي اتباعت
     items: (s.items||[]).filter(function(it){ return !it.isReturn && (it.qty||0) > 0; })
       .map(function(it){ return { name: it.name, qty: it.qty, barcode: it.barcode || '' }; }),

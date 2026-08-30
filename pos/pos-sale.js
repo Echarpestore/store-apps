@@ -4739,6 +4739,9 @@ function paymobStuckReason(st){
   if(!st) return null;
   if(!st.approved) return null;              // الدفع لسه ماتقبلش — ده مسار تاني
   if(!st.cartCount) return null;             // السلة اتفضّت = الفاتورة اتحفظت
+  // 💳 Split payment: قبول أول كارت والباقي لسه مطلوب حالة طبيعية، مش فاتورة معلّقة.
+  // الحارس يبدأ فقط بعد اكتمال إجمالي المدفوعات؛ قبل كده الكاشير ببساطة بتكمل الكارت/الطريقة التالية.
+  if(st.paymentsComplete === false) return null;
   // ⏳ الحفظ شغال دلوقتي؟ يبقى مفيش تعليق — ده انتظار عادي، مش عطل
   if(st.saving){
     if(st.elapsedMs < PM_SAVING_GRACE_MS) return null;
@@ -4759,7 +4762,16 @@ function paymobStuckTick(){
     elapsedMs: Date.now() - _pmStuck.at,
     saving: !!_confirmSaving,
     autoFired: !!_paymobAutoFired,
-    skipReason: window._paymobLastSkip || null
+    skipReason: window._paymobLastSkip || null,
+    paymentsComplete: (function(){
+      try{
+        var paid = Object.keys(paymentAmounts || {}).reduce(function(sum, method){
+          return sum + Math.abs(Number(paymentAmounts[method]) || 0);
+        }, 0);
+        var need = Math.abs(Number(cartTotal()) || 0);
+        return paid + 0.005 >= need;
+      }catch(e){ return true; } // لو التشخيص نفسه فشل، ما نخفيش إنذار حقيقي محتمل
+    })()
   };
   // ✅ الفاتورة خلصت (السلة اتفضّت) → الحارس بيقفل نفسه
   if(!st.cartCount || !st.approved){ paymobStuckClear(); return; }

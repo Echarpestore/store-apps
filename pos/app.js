@@ -312,7 +312,7 @@ const RECEIPT_LABELS = {
 const RECEIPT_ELEMENTS = [
   { id:'logo',      label:'🖼️ اللوجو',              kind:'logo' },
   { id:'shopName',  label:'🏪 اسم المحل',            kind:'text', def:'إيشارب ستور', size:16 },
-  { id:'branchName',label:'📍 اسم الفرع',            kind:'text', def:'', size:12 },
+  { id:'branchName',label:'📍 اسم الفرع',            kind:'auto', size:12 },
   { id:'address',   label:'🗺️ العنوان',              kind:'text', def:'', size:11 },
   { id:'phone',     label:'📞 رقم الموبايل',          kind:'text', def:'', size:11 },
   { id:'meta',      label:'🕐 التاريخ والموظف',       kind:'auto', size:10 },
@@ -351,6 +351,21 @@ let _designEditBrand = null;   // البراند اللي المحرر فاتح 
 function _brandOfBranch(br){ return (typeof GLOW_BRANCHES !== 'undefined' && GLOW_BRANCHES.includes(br)) ? 'glow' : 'echarpe'; }
 function _deviceBrand(){ return _brandOfBranch(typeof currentBranch !== 'undefined' ? currentBranch : ''); }
 function _designDocIdFor(brand){ return brand === 'glow' ? 'receipt_design_glow' : 'receipt_design'; }
+
+// اسم الفرع جزء من بيانات التشغيل، مش من تصميم البراند.
+// التصميم واحد لكل براند، لكن الفاتورة لازم تحمل الفرع الحقيقي وقت البيع/إعادة الطباعة.
+function receiptBranchDisplayName(branch, brandOverride){
+  var raw = String(branch || '').trim().replace(/\s+/g, ' ');
+  var brand = brandOverride || _brandOfBranch(raw);
+  var prefix = brand === 'glow' ? 'Glow' : 'echarpe';
+  if(!raw) return prefix;
+  raw = raw.replace(/^e\s*charpe(?:\s+|$)/i, '').replace(/^echarpe(?:\s+|$)/i, '').replace(/^إيشارب(?:\s+|$)/i, '').replace(/^glow(?:\s+|$)/i, '').trim();
+  if(/الرحاب|\bel\s*rehab\b|\brehab\b/i.test(raw)) raw = 'El Rehab';
+  else if(/مدينتي|\bmadinaty\b/i.test(raw)) raw = 'Madinaty';
+  else if(/city\s*center|citycenter|مكرم|makram/i.test(raw)) raw = 'City Center';
+  return raw ? (prefix + ' ' + raw) : prefix;
+}
+if(typeof window !== 'undefined') window.receiptBranchDisplayName = receiptBranchDisplayName;
 
 function defaultReceiptConfig(){
   return {
@@ -693,7 +708,12 @@ function buildReceiptHTML(data){
         if(c.logo){ parts.push(`<img src="${c.logo}" style="display:block; margin:0 auto 6px; max-width:${c.logoWidth||60}%; max-height:120px; object-fit:contain;">`); headerEnd = parts.length; }
         break;
       case 'shopName': if(el.text){ parts.push(`<div style="text-align:center; font-weight:bold; font-size:${fs}; margin:2px 0;">${el.text}</div>`); headerEnd = parts.length; } break;
-      case 'branchName': case 'address': case 'phone': case 'footer':
+      case 'branchName': {
+        const _branchRaw = d.branch || (typeof currentBranch!=='undefined' ? currentBranch : '');
+        const branchText = (typeof receiptBranchDisplayName==='function') ? receiptBranchDisplayName(_branchRaw, d.brand || null) : String(_branchRaw || el.text || '');
+        if(branchText){ parts.push(`<div style="text-align:center; font-size:${fs}; margin:2px 0;">${branchText}</div>`); headerEnd = parts.length; }
+        break; }
+      case 'address': case 'phone': case 'footer':
         if(el.text){ parts.push(`<div style="text-align:center; font-size:${fs}; margin:2px 0;">${el.text}</div>`); if(base !== 'footer') headerEnd = parts.length; } break;
       case 'meta':
         parts.push(`<div style="text-align:center; font-size:${fs}; margin:3px 0;">${d.dateStr||''}${d.empName?' · '+L.emp+': '+d.empName:''}</div>`); break;
@@ -883,6 +903,8 @@ function receiptSampleData(){
   return {
     dateStr: new Date().toLocaleString(receiptDesignConfig&&receiptDesignConfig.lang==='en'?'en-GB':'ar-EG'),
     empName: (currentEmployee&&currentEmployee.name)||'أحمد',
+    branch: (_designEditBrand==='glow') ? 'Glow' : ((typeof currentBranch!=='undefined' && _brandOfBranch(currentBranch)==='echarpe') ? currentBranch : 'echarpe El Rehab'),
+    brand: _designEditBrand || _deviceBrand(),
     items: [ {name:'إيشارب حرير', qty:1, line:'250.00'}, {name:'طرحة شيفون', qty:2, line:'300.00'} ],
     totalStr:'550.00', payStr:L.cash+': 550.00', invoiceNo:'INV-000123', scanCode:'FTRH123-DEMO',
     cardTxn:{ scheme:'MasterCard', last4:'4321', approvalCode:'012345', transactionId:504208925 },
@@ -1321,6 +1343,8 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
   const data = {
     dateStr: new Date().toLocaleString(c.lang==='en'?'en-GB':'ar-EG'),
     empName: (currentEmployee&&currentEmployee.name)||'',
+    branch: (typeof currentBranch!=='undefined' ? currentBranch : ''),
+    brand: _deviceBrand(),
     items: cart.map(it=> ({name:it.name, qty:it.qty, barcode:it.barcode||'',
       unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2)})),
     totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: invoiceCode||invoiceNo||'',
@@ -1390,6 +1414,7 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
       invoiceNo: invoiceNo || '',
       invoiceCode: invoiceCode || invoiceNo || '',
       empName: data.empName,
+      branch: data.branch || (typeof currentBranch!=='undefined' ? currentBranch : ''),
       // ↩️ سطور المرتجع بره — الهدية هي اللي اتباعت
       items: (cart||[]).filter(function(it){
           return !it.isReturn && !it.isRedemption && !it.isRewardDiscount && (it.qty||0) > 0;
@@ -1425,6 +1450,7 @@ function printGiftReceiptForLast(){
       giftMode: true,
       dateStr: new Date(s.at).toLocaleString(c.lang==='en'?'en-GB':'ar-EG'),
       empName: s.empName || '',
+      branch: s.branch || (typeof currentBranch!=='undefined' ? currentBranch : ''),
       items: s.items,
       invoiceNo: s.invoiceNo,
       scanCode: s.invoiceCode,
