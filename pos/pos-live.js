@@ -1,9 +1,11 @@
-/* 🔴 POS Live v408 — read-only live state for Office.
+/* 🔴 POS Live v409 — low-cost read-only live state for Office.
    No screenshots, no customer phone/name, no remote-control channel.
-   Writes only when visible state changes + a slow heartbeat. */
+   Publishes immediately only when visible state changes.
+   Presence heartbeat is intentionally sparse to avoid Firestore read/write amplification. */
 (function(){
   'use strict';
   var timer=null, lastJson='', stopped=false;
+  var HEARTBEAT_MS=5*60*1000;
   function safeEmployee(){ try{return (currentEmployee&&currentEmployee.name)||'';}catch(e){return '';} }
   function safeBranch(){ try{return currentBranch||'';}catch(e){return '';} }
   function snapshot(){
@@ -30,7 +32,7 @@
   window.posLivePublish=function(){ clearTimeout(timer); timer=setTimeout(function(){publish(false);},350); };
   window.posLiveHeartbeat=function(){ publish(true); };
   window.addEventListener('pagehide',function(){ stopped=true; });
-  setInterval(function(){ if(!document.hidden) publish(true); },30000);
-  document.addEventListener('visibilitychange',function(){ if(!document.hidden){stopped=false;publish(true);} });
+  setInterval(function(){ if(!document.hidden) publish(true); },HEARTBEAT_MS);
+  document.addEventListener('visibilitychange',function(){ if(!document.hidden){stopped=false;publish(false);} });
   setTimeout(function(){publish(true);},1500);
 })();
