@@ -57,15 +57,15 @@ function renderImportPanel(){
   const wrap = document.getElementById('importPanelWrap');
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
-      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v402 • جاهز</div>
+      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v403 • جاهز</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
-      <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" data-qb-import-file="1" onchange="handleImportFile(event)" style="margin-bottom:8px;">
-      <button type="button" id="importStartBtn" onclick="return window.qbImportStartV398 ? window.qbImportStartV398(event) : false;" onpointerup="return window.qbImportStartV398 ? window.qbImportStartV398(event) : false;"
+      <input type="file" id="importFileInput" accept=".csv,.xls,.xlsx" onchange="handleImportFile(event)" style="margin-bottom:8px;">
+      <button type="button" id="importStartBtn" onclick="startSelectedImport()"
         style="width:100%; padding:12px 14px; margin:0 0 10px; border:0; border-radius:10px;
                background:linear-gradient(135deg,#16a34a,#15803d); color:#fff; font-family:'Cairo',sans-serif;
-               font-size:14px; font-weight:900; cursor:pointer; position:relative; z-index:2147483647; pointer-events:auto; touch-action:manipulation;">
+               font-size:14px; font-weight:900; cursor:pointer;">
         📥 ابدأ استيراد الملف المختار
       </button>
       <div id="adjRow" style="display:none; background:#0f2438; border:1.5px solid #3b82f680;
@@ -98,105 +98,106 @@ function renderImportPanel(){
       <div id="importLoadNote" style="color:var(--muted); font-size:12px; margin-bottom:8px;"></div>
       <div id="importPreviewWrap"></div>
     </div>`;
-
-  // v394 — ربط مباشر بالعنصر بعد كل render كطبقة أمان إضافية.
-  // الملف input بيتعاد إنشاؤه كل مرة، لذلك بنربطه هنا فورًا بالإضافة للـ inline onchange.
-  const fileInput = document.getElementById('importFileInput');
-  if(fileInput){
-    fileInput.onchange = function(ev){
-      try{ handleImportFile(ev); }
-      catch(err){
-        const note = document.getElementById('importLoadNote');
-        if(note) note.textContent = '❌ خطأ قبل قراءة الملف: ' + (err && err.message ? err.message : err);
-        try{ showToast('تعذر بدء الاستيراد: ' + (err && err.message ? err.message : err), 'err'); }catch(_){ }
-      }
-    };
-  }
-  // v398 — keep native inline fallback and bind pointer/click directly.
-  // Some branch Android/Chrome builds rendered the button but swallowed click; pointerup
-  // gives us a second native path without relying on the dynamic panel lifecycle.
-  const startBtn = document.getElementById('importStartBtn');
-  if(startBtn){
-    const fire = function(ev){ return window.qbImportStartV398 ? window.qbImportStartV398(ev) : false; };
-    startBtn.addEventListener('pointerup', fire, true);
-    startBtn.addEventListener('click', fire, true);
-  }
-  // v401 — لو فيه علامة استيراد متروكة من محاولة اتقطعت، وريها هنا فورًا
+  // v403 — لو فيه علامة استيراد متروكة من محاولة اتقطعت، وريها هنا فورًا
   try{ qbImportShowLeftoverMarker(); }catch(_){}
 }
 
-// v392 — listener واحد ثابت على document بدل ربط listener بعنصر بيتعمل من جديد
-// renderImportPanel بيتنادى مرتين عند فتح شاشة الاستيراد (goToImport ثم switchImportTab).
-// في بعض المتصفحات/الكاش القديم كان input يتبدّل بعد ربط الـlistener، فيظهر اسم الملف
-// لكن handleImportFile مايتنفذش. الـdelegation هنا يمسك أي input جديد دائمًا.
-(function bindImportFileDelegation(){
-  if(typeof document === 'undefined' || window.__qbImportDelegatedV392) return;
-  window.__qbImportDelegatedV392 = true;
-  document.addEventListener('change', function(ev){
-    const t = ev && ev.target;
-    if(!t || t.id !== 'importFileInput') return;
-    handleImportFile(ev);
-  }, true);
-})();
+let _qbImportStartAt = 0;
+function startSelectedImport(){
+  // حارس بسيط ضد ضغط مزدوج سريع (مثلاً لمسة على الموبايل بتسجل نقرتين)
+  const now = Date.now();
+  if(now - _qbImportStartAt < 700) return false;
+  _qbImportStartAt = now;
 
-// v398 — page-level capture fallbacks for pointer/touch/click.
-(function bindImportStartDelegationV398(){
-  if(typeof window === 'undefined' || typeof document === 'undefined' || window.__qbImportStartDelegatedV398) return;
-  window.__qbImportStartDelegatedV398 = true;
-  const catchStart = function(ev){
-    const raw = ev && ev.target;
-    const t = raw && raw.closest ? raw.closest('#importStartBtn') : null;
-    if(!t) return;
-    window.qbImportStartV398(ev);
+  const btn = document.getElementById('importStartBtn');
+  const note = document.getElementById('importLoadNote');
+  if(btn){ btn.textContent = '⏳ تم الضغط — جاري فحص الملف…'; btn.disabled = true; }
+  const input = document.getElementById('importFileInput');
+  const file = input && input.files ? input.files[0] : null;
+  if(!file){
+    if(note) note.textContent = '⚠️ اختار ملف العملاء الأول';
+    if(btn){ btn.disabled = false; btn.textContent = '📥 ابدأ استيراد الملف المختار'; }
+    try{ showToast('اختار الملف الأول', 'err'); }catch(_){}
+    return false;
+  }
+  qbImportMarkerSet(file);
+  try{
+    processImportFile(file);
+  }catch(err){
+    qbImportMarkerClear();
+    const msg = err && err.message ? err.message : String(err);
+    if(note) note.textContent = '❌ فشل بدء القراءة: ' + msg;
+    if(btn){ btn.disabled = false; btn.textContent = '📥 حاول الاستيراد مرة تانية'; }
+    try{ showToast('فشل بدء الاستيراد: ' + msg, 'err'); }catch(_){}
+  }
+  return false;
+}
+if(typeof window !== 'undefined') window.startSelectedImport = startSelectedImport;
+
+function handleImportFile(e){
+  // الاستيراد التلقائي (لما تختار ملف) بيقرا لوحده، والزرار اليدوي فوق
+  // بيقرا بردو لو دوس عليه — منع تكرار خاص بنفس الـevent بس.
+  if(e && e.__qbImportHandledV395) return;
+  if(e) e.__qbImportHandledV395 = true;
+  const file = e && e.target && e.target.files ? e.target.files[0] : null;
+  if(!file) return;
+  processImportFile(file);
+}
+
+// ============================================================
+// 📥 v403 — قراءة الملف: SheetJS محفوظة محليًا جوه pos/xlsx.full.min.js
+// (مش من إنترنت خالص، ومحمّلة في index.html *قبل* هذا الملف بشكل
+// متزامن — يعني window.XLSX موجودة أكيد وقت أي ضغطة زرار).
+// شيلنا القارئ اليدوي للـZIP/XML اللي كان هنا قبل كده (v399/v400):
+// كان معقّد وصعب تصحيحه، ومكتبة SheetJS الرسمية بتقرا نفس الملف
+// (حتى لو .xls اسمه بس هو xlsx فعليًا) من غير أي مشكلة أصلًا.
+// ============================================================
+function processImportFile(file){
+  const note = document.getElementById('importLoadNote');
+  if(note) note.textContent = '⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري القراءة…';
+  const isExcel = /\.(xlsx?|xlsm)$/i.test(file.name || '');
+  const reader = new FileReader();
+  reader.onerror = ()=>{
+    qbImportMarkerClear();
+    if(note) note.textContent = '❌ تعذر فتح الملف';
+    const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
+    try{ showToast('تعذر فتح الملف', 'err'); }catch(_){}
   };
-  window.addEventListener('pointerup', catchStart, true);
-  window.addEventListener('touchend', catchStart, true);
-  window.addEventListener('click', catchStart, true);
-})();
-
-// 📊 مكتبة Excel — بتتحمّل عند أول استخدام بس (مش مع كل فتح للتطبيق)
-let _xlsxLoading = null;
-function ensureXlsxLib(){
-  if(window.XLSX) return Promise.resolve(window.XLSX);
-  if(_xlsxLoading) return _xlsxLoading;
-  _xlsxLoading = new Promise((resolve, reject)=>{
-    const tryLoad = (src, next)=>{
-      const sc = document.createElement('script');
-      sc.src = src;
-      sc.onload = ()=> window.XLSX ? resolve(window.XLSX) : (next ? next() : reject(new Error('المكتبة اتحمّلت ناقصة')));
-      sc.onerror = ()=> next ? next() : reject(new Error('مش قادر أحمّل مكتبة Excel — اتأكد من النت'));
-      document.head.appendChild(sc);
+  if(isExcel){
+    reader.onload = (ev)=>{
+      try{
+        if(!window.XLSX) throw new Error('مكتبة قراءة Excel مش محمّلة — حدّث الصفحة وجرب تاني');
+        parseExcel(window.XLSX, ev.target.result);
+        qbImportMarkerClear();
+        if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
+        const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
+        renderImportMapping();
+      }catch(err){
+        qbImportMarkerClear();
+        const msg = err && err.message ? err.message : String(err);
+        if(note) note.textContent = '❌ تعذر قراءة الملف: ' + msg;
+        const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
+        try{ showToast('تعذر قراءة الملف: ' + msg, 'err'); }catch(_){}
+      }
     };
-    // نسخة محلية الأول، وبعدها أكتر من مصدر موثوق. بعض أجهزة الفروع/الشبكات
-    // بتحجب CDN معيّن؛ قبل كده اختيار ملف Excel كان يبان كأنه "ماعملش حاجة".
-    const sources = [
-      'xlsx.full.min.js',
-      'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-      'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
-    ];
-    let i = 0;
-    const next = ()=>{
-      if(i >= sources.length){ reject(new Error('مش قادر أحمّل قارئ Excel')); return; }
-      const src = sources[i++];
-      const sc = document.createElement('script');
-      let done = false;
-      const finish = (ok)=>{
-        if(done) return; done = true;
-        clearTimeout(timer);
-        if(ok && window.XLSX){ resolve(window.XLSX); return; }
-        try{ sc.remove(); }catch(_){}
-        next();
-      };
-      const timer = setTimeout(()=>finish(false), 6000);
-      sc.src = src;
-      sc.onload = ()=>finish(true);
-      sc.onerror = ()=>finish(false);
-      document.head.appendChild(sc);
-    };
-    next();
-  });
-  return _xlsxLoading;
+    reader.readAsArrayBuffer(file);
+    return;
+  }
+  reader.onload = (ev)=>{
+    try{
+      parseCSV(ev.target.result);
+      qbImportMarkerClear();
+      if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
+      const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
+      renderImportMapping();
+    }catch(err){
+      qbImportMarkerClear();
+      if(note) note.textContent = '❌ تعذر قراءة الملف: ' + err.message;
+      const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
+      try{ showToast('تعذر قراءة الملف: ' + err.message, 'err'); }catch(_){}
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
 }
 
 // ============================================================
@@ -281,233 +282,6 @@ function qbImportShowLeftoverMarker(){
         : 'مفيش سبب اتسجّل — يبقى الصفحة اتقفلت/اتحدّثت فجأة (مش استثناء الكود نفسه).')
     + '<div style="margin-top:6px; opacity:.85;">ابعت الرسالة دي لكلود عشان يقفل السبب نهائي.</div>';
   wrap.insertBefore(box, wrap.firstChild);
-}
-
-let _qbImportStartAt = 0;
-function startSelectedImport(){
-  const clickNote = document.getElementById('importLoadNote');
-  const btn = document.getElementById('importStartBtn');
-  if(btn){ btn.textContent = '⏳ تم الضغط — جاري فحص الملف…'; btn.disabled = true; }
-  if(clickNote) clickNote.textContent = '🟢 تم الضغط — جاري فحص الملف…';
-  const input = document.getElementById('importFileInput');
-  const file = input && input.files ? input.files[0] : null;
-  const note = document.getElementById('importLoadNote');
-  if(!file){
-    if(note) note.textContent = '⚠️ اختار ملف العملاء الأول';
-    if(btn){ btn.disabled = false; btn.textContent = '📥 ابدأ استيراد الملف المختار'; }
-    try{ showToast('اختار الملف الأول', 'err'); }catch(_){}
-    return false;
-  }
-  qbImportMarkerSet(file);
-  try{
-    processImportFile(file);
-  }catch(err){
-    qbImportMarkerClear();
-    const msg = err && err.message ? err.message : String(err);
-    if(note) note.textContent = '❌ فشل بدء القراءة: ' + msg;
-    if(btn){ btn.disabled = false; btn.textContent = '📥 حاول الاستيراد مرة تانية'; }
-    try{ showToast('فشل بدء الاستيراد: ' + msg, 'err'); }catch(_){}
-  }
-  return false;
-}
-
-// Explicit window export: do not rely on classic-script global name resolution.
-window.qbImportStartV398 = function(ev){
-  try{
-    if(ev){ try{ ev.preventDefault(); }catch(_){} try{ ev.stopPropagation(); }catch(_){} }
-    const now = Date.now();
-    if(now - _qbImportStartAt < 700) return false;
-    _qbImportStartAt = now;
-    return startSelectedImport();
-  }catch(err){
-    const note = document.getElementById('importLoadNote');
-    if(note) note.textContent = '❌ خطأ في زر الاستيراد: ' + (err && err.message ? err.message : err);
-    return false;
-  }
-};
-
-function handleImportFile(e){
-  // v395 — الاستيراد التلقائي يفضل موجود، لكن الزر اليدوي فوق يضمن إننا مش
-  // معتمدين عليه. منع التكرار خاص بنفس event فقط.
-  if(e && e.__qbImportHandledV395) return;
-  if(e) e.__qbImportHandledV395 = true;
-  const file = e && e.target && e.target.files ? e.target.files[0] : null;
-  if(!file) return;
-  processImportFile(file);
-}
-
-
-// v399 — QuickBooks exports can be real XLSX files with a misleading .xls name.
-// Parse XLSX ZIP natively in modern browsers so import does not depend on any CDN.
-function qbXmlDecode(s){
-  return String(s == null ? '' : s)
-    .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"')
-    .replace(/&apos;/g,"'").replace(/&amp;/g,'&');
-}
-function qbColIndex(ref){
-  const m = String(ref||'').match(/^([A-Z]+)/i);
-  if(!m) return 0;
-  let n=0; for(const ch of m[1].toUpperCase()) n=n*26+(ch.charCodeAt(0)-64);
-  return n-1;
-}
-async function qbInflateRaw(bytes){
-  // v400 — don't depend on one browser compression API. Some branch phones render
-  // the importer fine but don't support deflate-raw, which made v399 fall through
-  // to remote SheetJS/CDNs and look frozen. Prefer native, then bundled pako.
-  if(typeof DecompressionStream !== 'undefined'){
-    try{
-      const ds = new DecompressionStream('deflate-raw');
-      const ab = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
-      return new Uint8Array(ab);
-    }catch(_nativeInflateErr){}
-  }
-  if(typeof window !== 'undefined' && window.pako && typeof window.pako.inflateRaw === 'function'){
-    return new Uint8Array(window.pako.inflateRaw(bytes));
-  }
-  throw new Error('قارئ ضغط Excel المحلي غير متاح');
-}
-async function qbZipEntries(buf){
-  const u8 = new Uint8Array(buf), dv = new DataView(buf);
-  let eocd=-1;
-  for(let i=u8.length-22;i>=Math.max(0,u8.length-65557);i--){
-    if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; }
-  }
-  if(eocd<0) throw new Error('ملف Excel المضغوط غير صالح');
-  const count=dv.getUint16(eocd+10,true), cdOff=dv.getUint32(eocd+16,true);
-  let p=cdOff; const out={};
-  for(let k=0;k<count;k++){
-    if(dv.getUint32(p,true)!==0x02014b50) throw new Error('فهرس Excel غير صالح');
-    const method=dv.getUint16(p+10,true), compSize=dv.getUint32(p+20,true), nameLen=dv.getUint16(p+28,true), extraLen=dv.getUint16(p+30,true), commentLen=dv.getUint16(p+32,true), localOff=dv.getUint32(p+42,true);
-    const name=new TextDecoder().decode(u8.slice(p+46,p+46+nameLen));
-    if(dv.getUint32(localOff,true)!==0x04034b50) throw new Error('بيانات Excel غير صالحة');
-    const ln=dv.getUint16(localOff+26,true), le=dv.getUint16(localOff+28,true), start=localOff+30+ln+le;
-    const comp=u8.slice(start,start+compSize);
-    let data;
-    if(method===0) data=comp;
-    else if(method===8) data=await qbInflateRaw(comp);
-    else { p += 46+nameLen+extraLen+commentLen; continue; }
-    out[name]=data;
-    p += 46+nameLen+extraLen+commentLen;
-  }
-  return out;
-}
-async function parseQuickBooksXlsxNative(buf){
-  const u8=new Uint8Array(buf);
-  if(u8.length<4 || u8[0]!==0x50 || u8[1]!==0x4b) throw new Error('ليس ملف XLSX مضغوط');
-  const entries=await qbZipEntries(buf);
-  const dec=new TextDecoder('utf-8');
-  const sharedXml=entries['xl/sharedStrings.xml'] ? dec.decode(entries['xl/sharedStrings.xml']) : '';
-  const sheetBytes=entries['xl/worksheets/sheet1.xml'];
-  if(!sheetBytes) throw new Error('ملف Excel مفيهوش Sheet1');
-  const shared=[];
-  if(sharedXml){
-    const siRe=/<si\b[^>]*>([\s\S]*?)<\/si>/g; let sm;
-    while((sm=siRe.exec(sharedXml))){
-      let txt='', tm; const tr=/<t\b[^>]*>([\s\S]*?)<\/t>/g;
-      while((tm=tr.exec(sm[1]))) txt += qbXmlDecode(tm[1]);
-      shared.push(txt);
-    }
-  }
-  const xml=dec.decode(sheetBytes), rows=[];
-  const rr=/<row\b[^>]*>([\s\S]*?)<\/row>/g; let rm;
-  while((rm=rr.exec(xml))){
-    const arr=[]; const cr=/<c\b([^>]*)>([\s\S]*?)<\/c>/g; let cm;
-    while((cm=cr.exec(rm[1]))){
-      const attrs=cm[1], body=cm[2];
-      const refm=attrs.match(/\br="([A-Z]+\d+)"/i), tm=attrs.match(/\bt="([^"]+)"/i);
-      const idx=qbColIndex(refm?refm[1]:'A1'), typ=tm?tm[1]:'';
-      let val='';
-      if(typ==='inlineStr'){
-        const mt=body.match(/<t\b[^>]*>([\s\S]*?)<\/t>/); val=mt?qbXmlDecode(mt[1]):'';
-      }else{
-        const mv=body.match(/<v>([\s\S]*?)<\/v>/); const raw=mv?qbXmlDecode(mv[1]):'';
-        val=typ==='s' ? (shared[Number(raw)] ?? '') : raw;
-      }
-      arr[idx]=val;
-    }
-    rows.push(arr);
-  }
-  if(!rows.length) throw new Error('الشيت فاضي');
-  let hIdx=pickImportHeaderRow(rows, importTab);
-  if(hIdx<0) throw new Error('مفيش عناوين أعمدة');
-  const rawHeaders=(rows[hIdx]||[]).map(h=>String(h==null?'':h).trim());
-  const keep=[], seen={};
-  rawHeaders.forEach((h,i)=>{ if(!h)return; let name=h; if(seen[name]){seen[name]++;name=h+' ('+seen[name]+')';}else seen[name]=1; keep.push({i,name}); });
-  if(!keep.length) throw new Error('مفيش أعمدة ليها أسماء');
-  importHeaders=keep.map(k=>k.name);
-  importParsedRows=rows.slice(hIdx+1).map(r=>{ const row={}; keep.forEach(k=>row[k.name]=String((r||[])[k.i]??'').trim()); return row; }).filter(row=>Object.values(row).some(v=>v!==''));
-  if(!importParsedRows.length) throw new Error('مفيش صفوف بيانات تحت العناوين');
-  return importParsedRows.length;
-}
-function processImportFile(file){
-  const note = document.getElementById('importLoadNote');
-  // مهم: العميل لازم يشوف إن اختيار الملف اتلقط فورًا. قبل كده لو الملف نفسه
-  // فيه تنسيق QuickBooks غريب كان المسار ممكن ينتهي من غير أي feedback واضح.
-  if(note) note.textContent = '⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري القراءة…';
-  const isExcel = /\.(xlsx?|xlsm)$/i.test(file.name || '');
-  if(isExcel){
-    if(note) note.textContent = '⏳ جاري فتح ملف Excel محليًا…';
-    const reader = new FileReader();
-    reader.onload = async (ev)=>{
-      const buf = ev.target.result;
-      try{
-        // QuickBooks file supplied by the user is XLSX/ZIP even though its extension is .xls.
-        // Native path is immediate and does not wait for any CDN.
-        if(note) note.textContent = '⏳ جاري قراءة بيانات QuickBooks…';
-        await parseQuickBooksXlsxNative(buf);
-        qbImportMarkerClear();
-        if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
-        const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
-        renderImportMapping();
-      }catch(nativeErr){
-        // v400 — if the file is ZIP/XLSX (the supplied QuickBooks .xls is), never
-        // wait on an internet CDN. Surface the local parser error immediately.
-        const u8 = new Uint8Array(buf || new ArrayBuffer(0));
-        const isZipXlsx = u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4b;
-        if(isZipXlsx){
-          qbImportMarkerClear();
-          const msg = nativeErr && nativeErr.message ? nativeErr.message : String(nativeErr);
-          if(note) note.textContent = '❌ تعذر قراءة QuickBooks محليًا: ' + msg;
-          const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
-          try{ showToast('تعذر قراءة QuickBooks: ' + msg, 'err'); }catch(_){}
-          return;
-        }
-        // Only a genuinely old binary XLS is allowed to use SheetJS fallback.
-        if(note) note.textContent = '⏳ ملف Excel قديم — جاري تشغيل القارئ الاحتياطي…';
-        try{
-          const XLSX = await ensureXlsxLib();
-          parseExcel(XLSX, buf);
-          qbImportMarkerClear();
-          if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
-          const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
-          renderImportMapping();
-        }catch(err){
-          qbImportMarkerClear();
-          const msg = (nativeErr && nativeErr.message ? nativeErr.message + ' / ' : '') + (err && err.message ? err.message : err);
-          if(note) note.textContent = '❌ تعذر قراءة الملف: ' + msg;
-          const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
-          try{ showToast('تعذر قراءة الملف: ' + msg, 'err'); }catch(_){}
-        }
-      }
-    };
-    reader.onerror = ()=>{ qbImportMarkerClear(); if(note) note.textContent='❌ تعذر فتح الملف'; const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';} try{showToast('تعذر فتح الملف','err');}catch(_){} };
-    reader.readAsArrayBuffer(file);
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = (ev)=>{
-    try{
-      parseCSV(ev.target.result);
-      qbImportMarkerClear();
-      if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف'; const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
-      renderImportMapping();
-    }catch(err){
-      qbImportMarkerClear();
-      if(note) note.textContent = '❌ تعذر قراءة الملف: ' + err.message;
-      showToast('تعذر قراءة الملف: ' + err.message, 'err');
-    }
-  };
-  reader.readAsText(file, 'UTF-8');
 }
 
 // QuickBooks Customer Export ساعات بيحط عنوان تقرير/اسم شركة قبل صف الأعمدة.
