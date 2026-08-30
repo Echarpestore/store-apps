@@ -60,4 +60,4 @@ ok(/paymobCanAutoFinish\(amountEGP, d, orderRef\)/.test(watch), 'normal complete
 ok(sw.includes("store-apps-shell-v374"), 'POS service worker bumped to v374');
 
 console.log(`v374 Paymob PIN auto-print: ${pass} passed, ${fail} failed`);
-if(fail) process.exit(1);
+if(fail) throw new Error(`test-paymob-pin-autoprint-v374: ${fail} فحص فشل`);

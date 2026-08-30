@@ -19,4 +19,5 @@ ok(/cardLegToManual/.test(s) && /manual:\s*true/.test(s),'manual confirmation re
 ok(/if\(_confirmSaving\)/.test(s),'duplicate save guard still present');
 ok(/if\(_saved && typeof paymobReset === 'function'\)/.test(s),'successful save still resets Paymob state for next sale');
 ok(sw.includes('store-apps-shell-v386'),'POS SW bumped to v386');
-console.log(`v386 delayed-webhook recovery: ${pass} passed, ${fail} failed`); if(fail) process.exit(1);
+console.log(`v386 delayed-webhook recovery: ${pass} passed, ${fail} failed`);
+if(fail) throw new Error(`test-paymob-delayed-webhook-recovery-v386: ${fail} فحص فشل`);

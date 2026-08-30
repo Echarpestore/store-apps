@@ -15,4 +15,9 @@ must(sales.includes('getEmployees: function(col, branch)'), 'Sales bridge expose
 must(sales.includes("where('barcode','==',bc)"), 'new barcode lookup remains field-based');
 must(psw.includes('store-apps-shell-v385'), 'POS SW is v385 (camera/chat stability preserved)');
 must(ssw.includes('store-apps-shell-v384'), 'Sales SW is v384');
-if(process.exitCode) process.exit(process.exitCode); else console.log('v384 camera stability regression checks passed');
+// ⚠️ إصلاح: process.exit() هنا كان بيقفل عملية run.js كلها عند أول فشل،
+// فيوقف تنفيذ كل ملفات الاختبار اللي بعده أبجديًا. الحل: throw عادي.
+if(process.exitCode){
+  throw new Error('test-chat-camera-stability-v384: فيه فحص فشل فوق');
+}
+console.log('v384 camera stability regression checks passed');

@@ -49,5 +49,5 @@ assert(ctx.normalizeScan('طرحة سوداء') === 'طرحة سوداء', 'norm
 
 assert(sw.includes('store-apps-shell-v385'), 'POS service worker bumped to v385 so clients receive the fix');
 
-if(process.exitCode) process.exit(process.exitCode);
+if(process.exitCode) throw new Error('test-scanner-arabic-layout-v385: فيه فحص فشل فوق');
 console.log('v385 Arabic keyboard scanner regression checks passed');

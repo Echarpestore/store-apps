@@ -10,4 +10,4 @@ const checks=[
  ['SW v379', /store-apps-shell-v379/.test(sw)]
 ];
 let fail=0; for(const [n,ok] of checks){console.log((ok?'PASS ':'FAIL ')+n); if(!ok)fail++;}
-if(fail) process.exit(1);
+if(fail) throw new Error(`test-sales-employee-pin-v379: ${fail} فحص فشل`);
