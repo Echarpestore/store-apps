@@ -20,7 +20,7 @@ assert(src.includes("المتبقي للتاجر"),'reads remaining balance');
 assert(src.includes("قل تأكيد أو إلغاء"),'voice confirmation');
 assert(src.includes("if(_ofVoiceBusy||!_ofVoiceDraft)return"),'double confirm guard');
 assert(src.includes("const amount=ofArabicDigitsOnly(moneyPart)"),'strict digit-by-digit amount parser');
-assert(html.includes('office.js?v=74'),'v74 cache bust');
+assert(html.includes('office.js?v=75'),'v75 cache bust');
 
 // Static parse helpers: extract exact functions.
 function fn(name){
