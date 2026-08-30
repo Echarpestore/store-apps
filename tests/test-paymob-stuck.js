@@ -43,7 +43,7 @@ vm.createContext(box);
 })();
 const reason = (st)=> vm.runInContext('paymobStuckReason', box)(st);
 
-const OK = { approved:true, cartCount:3, elapsedMs: PM_MS + 1000, saving:false, autoFired:false, skipReason:null };
+const OK = { approved:true, cartCount:3, elapsedMs: PM_MS + 1000, saving:false, autoFired:false, skipReason:null, paymentsComplete:true };
 const st = (o)=> Object.assign({}, OK, o||{});
 
 // ============================================================
@@ -54,6 +54,8 @@ const st = (o)=> Object.assign({}, OK, o||{});
     '⛔ الدفع لسه ماتقبلش = مفيش بانر (ده مسار انتظار عادي)');
   assertEq(reason(st({ cartCount:0 })), null,
     '⭐ السلة اتفضّت = الفاتورة اتحفظت = مفيش بانر');
+  assertEq(reason(st({ paymentsComplete:false, skipReason:'المدفوعات ناقصة — مسجّل 515.00 من 1385.00' })), null,
+    '⭐⭐ Split payment: أول كارت اتقبل والباقي لسه مطلوب = حالة طبيعية، مفيش paymob_stuck ولا إنذار Office');
   assertEq(reason(st({ elapsedMs: PM_MS - 1 })), null,
     '⛔ قبل المهلة بجزء من الثانية: لسه ساكت');
   assert(!!reason(st({ elapsedMs: PM_MS })), '⭐ وعند المهلة بالظبط: البانر بيظهر');
@@ -108,6 +110,8 @@ const st = (o)=> Object.assign({}, OK, o||{});
     '⭐ الحالة بتتسجل **مرة واحدة** مش كل تيك (وإلا سجل النشاط يتملّي)');
   assert(!!tick && /paymob_stuck/.test(tick),
     'وبتتسجل في سجل النشاط — ده الدليل اللي هيحدد السبب الجذري');
+  assert(!!tick && /paymentsComplete/.test(tick) && /paymentAmounts/.test(tick) && /cartTotal\(\)/.test(tick),
+    '⭐ الحارس يقارن إجمالي المدفوعات بإجمالي الفاتورة قبل ما يسجل تعليق');
   // الحارس بيتصفّر مع أي محاولة دفع جديدة
   const reset = extractFn(posSrc, 'function paymobResetActive(');
   assert(!!reset && /paymobStuckClear\(\)/.test(reset),
