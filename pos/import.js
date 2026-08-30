@@ -6,7 +6,7 @@
 // بيعتمد على العام من app.js: db, showToast, hasPerm, currentBranch
 // ============================================================
 
-const QB_IMPORT_BUILD = 'v402';
+const QB_IMPORT_BUILD = 'v404';
 
 const TEST_LEGACY_SALES = "pos_test_legacy_sales"; // مبيعات قديمة للرجوع بس، منفصلة عن مبيعات النظام الجديد
 
@@ -57,7 +57,7 @@ function renderImportPanel(){
   const wrap = document.getElementById('importPanelWrap');
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
-      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v403 • جاهز</div>
+      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v404 • جاهز</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
@@ -153,14 +153,24 @@ function handleImportFile(e){
 // (حتى لو .xls اسمه بس هو xlsx فعليًا) من غير أي مشكلة أصلًا.
 // ============================================================
 function processImportFile(file){
-  const note = document.getElementById('importLoadNote');
-  if(note) note.textContent = '⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري القراءة…';
+  // v404 — 🔴 السبب الحقيقي اللي كان بيخلي الاستيراد يبان "بيرجع تاني من
+  // غير رسالة": العنصر بتاع سطر الرسالة (note) كان بيتسحب مرة واحدة بس
+  // فوق الدالة دي. لو المستخدم لمس أي حاجة تانية في الشاشة وهو مستني
+  // (زي تبويب "العملاء"/"المخزون") — الشاشة بتترسم من جديد، والعنصر
+  // القديم يبقى "ميت" (اتشال من الصفحة) بس الكود يفضل يكتب عليه بصمت.
+  // الاستيراد فعليًا كان بينجح 100% — بس رسالة النجاح كانت بتتكتب على
+  // عنصر محدش شايفه، فالمستخدم يدوس تاني ظنًا إن حاجة ماحصلتش.
+  // الحل: نسحب العنصر طازة (getElementById) كل مرة نكتب فيها، مش نحفظه.
+  const setNote = (txt)=>{ const n = document.getElementById('importLoadNote'); if(n) n.textContent = txt; };
+  const setBtn = (txt, disabled)=>{ const b = document.getElementById('importStartBtn'); if(b){ b.textContent = txt; b.disabled = !!disabled; } };
+
+  setNote('⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري القراءة…');
   const isExcel = /\.(xlsx?|xlsm)$/i.test(file.name || '');
   const reader = new FileReader();
   reader.onerror = ()=>{
     qbImportMarkerClear();
-    if(note) note.textContent = '❌ تعذر فتح الملف';
-    const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
+    setNote('❌ تعذر فتح الملف');
+    setBtn('📥 حاول الاستيراد مرة تانية', false);
     try{ showToast('تعذر فتح الملف', 'err'); }catch(_){}
   };
   if(isExcel){
@@ -169,14 +179,14 @@ function processImportFile(file){
         if(!window.XLSX) throw new Error('مكتبة قراءة Excel مش محمّلة — حدّث الصفحة وجرب تاني');
         parseExcel(window.XLSX, ev.target.result);
         qbImportMarkerClear();
-        if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
-        const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
+        setNote('✅ اتقرا ' + importParsedRows.length + ' صف');
+        setBtn('📥 إعادة قراءة الملف المختار', false);
         renderImportMapping();
       }catch(err){
         qbImportMarkerClear();
         const msg = err && err.message ? err.message : String(err);
-        if(note) note.textContent = '❌ تعذر قراءة الملف: ' + msg;
-        const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
+        setNote('❌ تعذر قراءة الملف: ' + msg);
+        setBtn('📥 حاول الاستيراد مرة تانية', false);
         try{ showToast('تعذر قراءة الملف: ' + msg, 'err'); }catch(_){}
       }
     };
@@ -187,13 +197,13 @@ function processImportFile(file){
     try{
       parseCSV(ev.target.result);
       qbImportMarkerClear();
-      if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
-      const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
+      setNote('✅ اتقرا ' + importParsedRows.length + ' صف');
+      setBtn('📥 إعادة قراءة الملف المختار', false);
       renderImportMapping();
     }catch(err){
       qbImportMarkerClear();
-      if(note) note.textContent = '❌ تعذر قراءة الملف: ' + err.message;
-      const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
+      setNote('❌ تعذر قراءة الملف: ' + err.message);
+      setBtn('📥 حاول الاستيراد مرة تانية', false);
       try{ showToast('تعذر قراءة الملف: ' + err.message, 'err'); }catch(_){}
     }
   };
@@ -388,6 +398,7 @@ function renderImportMapping(){
   const ar = document.getElementById('adjRow');
   if(ar) ar.style.display = show ? 'block' : 'none';
   const wrap = document.getElementById('importPreviewWrap');
+  if(!wrap) return; // v404 — الشاشة اتغيّرت من تحتينا؛ منعرضش على عنصر مالوش وجود
   const targets = IMPORT_TARGETS[importTab];
   const headerOptions = ['<option value="">— تجاهل —</option>'].concat(
     importHeaders.map(h=> `<option value="${h}">${h}</option>`)
@@ -448,6 +459,9 @@ function renderImportMapping(){
     const guess = guessMap(t.key);
     if(guess) document.getElementById('map_'+t.key).value = guess;
   });
+  // v404 — النجاح كان بيبان "مفيش رد فعل" لأن الجدول بيترسم تحت الزرار
+  // ومحدش واخد باله ينزل يشوفه. بنمرّر الشاشة له تلقائيًا أول ما يظهر.
+  try{ wrap.scrollIntoView({ behavior:'smooth', block:'start' }); }catch(_){}
 }
 
 // ============================================================
