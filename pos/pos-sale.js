@@ -4176,6 +4176,18 @@ window.returnPointsDeduction = returnPointsDeduction;
     }));
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
 
+    // 🔴 v411 POS Live: حدّث Dashboard الفرع بعد **نجاح حفظ الفاتورة فقط**.
+    // Fire-and-forget عشان الطباعة لا تنتظر Firestore ثانية. pos-live.js نفسه
+    // بيعمل queue + transaction idempotent، فـretry/refresh لا يعدّ نفس الفاتورة مرتين.
+    try{
+      if(typeof posLiveRecordSale === 'function') posLiveRecordSale({
+        branch: currentBranch, invoiceCode: invoiceCode, invoiceNo: invoiceNo,
+        total: total, itemCount: itemCount, payments: payments,
+        seller: sellerEmployeeName || '', employee: (currentEmployee&&currentEmployee.name)||'',
+        atMs: Date.now()
+      });
+    }catch(e){}
+
     // 🕵️ v296: حدث الربط — بيدي لكل أحداث السلة دي رقم فاتورتها.
     //    لازم **بعد** الحفظ: قبل كده الفاتورة مالهاش رقم من الأساس.
     try{
