@@ -6,13 +6,14 @@
 // بيعتمد على العام من app.js: db, showToast, hasPerm, currentBranch
 // ============================================================
 
-const QB_IMPORT_BUILD = 'v404';
+const QB_IMPORT_BUILD = 'v405';
 
 const TEST_LEGACY_SALES = "pos_test_legacy_sales"; // مبيعات قديمة للرجوع بس، منفصلة عن مبيعات النظام الجديد
 
 let importTab = 'inventory';
 let importParsedRows = []; // [{col1: val, col2: val, ...}, ...]
 let importHeaders = [];
+let importUiState = { status:'idle', note:'', button:'📥 ابدأ استيراد الملف المختار' };
 
 const IMPORT_TARGETS = {
   inventory: [
@@ -44,6 +45,7 @@ function switchImportTab(tab){
   importTab = tab;
   document.querySelectorAll('#importScreen .rep-range-btn').forEach(b=> b.classList.toggle('active', b.dataset.tab === tab));
   importParsedRows = []; importHeaders = [];
+  importUiState = { status:'idle', note:'', button:'📥 ابدأ استيراد الملف المختار' };
   renderImportPanel();
 }
 
@@ -57,7 +59,7 @@ function renderImportPanel(){
   const wrap = document.getElementById('importPanelWrap');
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
-      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v404 • جاهز</div>
+      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v405 • جاهز</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
@@ -98,9 +100,24 @@ function renderImportPanel(){
       <div id="importLoadNote" style="color:var(--muted); font-size:12px; margin-bottom:8px;"></div>
       <div id="importPreviewWrap"></div>
     </div>`;
+  // v405 — إعادة الرسم لازم ما تمسحش نتيجة قراءة نجحت بالفعل.
+  // بنرجّع حالة الرسالة/الزرار والـmapping من الذاكرة بعد إنشاء الـDOM من جديد.
+  try{ restoreImportUi(); }catch(_){}
   // v403 — لو فيه علامة استيراد متروكة من محاولة اتقطعت، وريها هنا فورًا
   try{ qbImportShowLeftoverMarker(); }catch(_){}
 }
+
+function restoreImportUi(){
+  const note = document.getElementById('importLoadNote');
+  const btn = document.getElementById('importStartBtn');
+  if(note && importUiState.note) note.textContent = importUiState.note;
+  if(btn && importUiState.button){
+    btn.textContent = importUiState.button;
+    btn.disabled = importUiState.status === 'reading';
+  }
+  if(importParsedRows.length && importHeaders.length) renderImportMapping();
+}
+
 
 let _qbImportStartAt = 0;
 function startSelectedImport(){
@@ -111,12 +128,14 @@ function startSelectedImport(){
 
   const btn = document.getElementById('importStartBtn');
   const note = document.getElementById('importLoadNote');
-  if(btn){ btn.textContent = '⏳ تم الضغط — جاري فحص الملف…'; btn.disabled = true; }
+  importUiState = { status:'reading', note:'', button:'⏳ تم الضغط — جاري فحص الملف…' };
+  if(btn){ btn.textContent = importUiState.button; btn.disabled = true; }
   const input = document.getElementById('importFileInput');
   const file = input && input.files ? input.files[0] : null;
   if(!file){
-    if(note) note.textContent = '⚠️ اختار ملف العملاء الأول';
-    if(btn){ btn.disabled = false; btn.textContent = '📥 ابدأ استيراد الملف المختار'; }
+    importUiState = { status:'error', note:'⚠️ اختار ملف العملاء الأول', button:'📥 ابدأ استيراد الملف المختار' };
+    if(note) note.textContent = importUiState.note;
+    if(btn){ btn.disabled = false; btn.textContent = importUiState.button; }
     try{ showToast('اختار الملف الأول', 'err'); }catch(_){}
     return false;
   }
@@ -126,8 +145,9 @@ function startSelectedImport(){
   }catch(err){
     qbImportMarkerClear();
     const msg = err && err.message ? err.message : String(err);
-    if(note) note.textContent = '❌ فشل بدء القراءة: ' + msg;
-    if(btn){ btn.disabled = false; btn.textContent = '📥 حاول الاستيراد مرة تانية'; }
+    importUiState = { status:'error', note:'❌ فشل بدء القراءة: ' + msg, button:'📥 حاول الاستيراد مرة تانية' };
+    if(note) note.textContent = importUiState.note;
+    if(btn){ btn.disabled = false; btn.textContent = importUiState.button; }
     try{ showToast('فشل بدء الاستيراد: ' + msg, 'err'); }catch(_){}
   }
   return false;
@@ -164,13 +184,16 @@ function processImportFile(file){
   const setNote = (txt)=>{ const n = document.getElementById('importLoadNote'); if(n) n.textContent = txt; };
   const setBtn = (txt, disabled)=>{ const b = document.getElementById('importStartBtn'); if(b){ b.textContent = txt; b.disabled = !!disabled; } };
 
-  setNote('⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري القراءة…');
+  importUiState = { status:'reading', note:'⏳ تم اختيار ' + (file.name || 'الملف') + ' — جاري القراءة…', button:'⏳ جاري قراءة الملف…' };
+  setNote(importUiState.note);
+  setBtn(importUiState.button, true);
   const isExcel = /\.(xlsx?|xlsm)$/i.test(file.name || '');
   const reader = new FileReader();
   reader.onerror = ()=>{
     qbImportMarkerClear();
-    setNote('❌ تعذر فتح الملف');
-    setBtn('📥 حاول الاستيراد مرة تانية', false);
+    importUiState = { status:'error', note:'❌ تعذر فتح الملف', button:'📥 حاول الاستيراد مرة تانية' };
+    setNote(importUiState.note);
+    setBtn(importUiState.button, false);
     try{ showToast('تعذر فتح الملف', 'err'); }catch(_){}
   };
   if(isExcel){
@@ -179,14 +202,16 @@ function processImportFile(file){
         if(!window.XLSX) throw new Error('مكتبة قراءة Excel مش محمّلة — حدّث الصفحة وجرب تاني');
         parseExcel(window.XLSX, ev.target.result);
         qbImportMarkerClear();
-        setNote('✅ اتقرا ' + importParsedRows.length + ' صف');
-        setBtn('📥 إعادة قراءة الملف المختار', false);
+        importUiState = { status:'success', note:'✅ اتقرا ' + importParsedRows.length + ' صف', button:'📥 إعادة قراءة الملف المختار' };
+        setNote(importUiState.note);
+        setBtn(importUiState.button, false);
         renderImportMapping();
       }catch(err){
         qbImportMarkerClear();
         const msg = err && err.message ? err.message : String(err);
-        setNote('❌ تعذر قراءة الملف: ' + msg);
-        setBtn('📥 حاول الاستيراد مرة تانية', false);
+        importUiState = { status:'error', note:'❌ تعذر قراءة الملف: ' + msg, button:'📥 حاول الاستيراد مرة تانية' };
+        setNote(importUiState.note);
+        setBtn(importUiState.button, false);
         try{ showToast('تعذر قراءة الملف: ' + msg, 'err'); }catch(_){}
       }
     };
@@ -197,13 +222,15 @@ function processImportFile(file){
     try{
       parseCSV(ev.target.result);
       qbImportMarkerClear();
-      setNote('✅ اتقرا ' + importParsedRows.length + ' صف');
-      setBtn('📥 إعادة قراءة الملف المختار', false);
+      importUiState = { status:'success', note:'✅ اتقرا ' + importParsedRows.length + ' صف', button:'📥 إعادة قراءة الملف المختار' };
+      setNote(importUiState.note);
+      setBtn(importUiState.button, false);
       renderImportMapping();
     }catch(err){
       qbImportMarkerClear();
-      setNote('❌ تعذر قراءة الملف: ' + err.message);
-      setBtn('📥 حاول الاستيراد مرة تانية', false);
+      importUiState = { status:'error', note:'❌ تعذر قراءة الملف: ' + err.message, button:'📥 حاول الاستيراد مرة تانية' };
+      setNote(importUiState.note);
+      setBtn(importUiState.button, false);
       try{ showToast('تعذر قراءة الملف: ' + err.message, 'err'); }catch(_){}
     }
   };
