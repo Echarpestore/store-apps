@@ -1,4 +1,4 @@
-const CACHE_NAME = 'store-apps-shell-v405';
+const CACHE_NAME = 'store-apps-shell-v406';
 
 // ⚠️ مفيش skipWaiting تلقائي.
 // النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر
@@ -64,7 +64,7 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       }).catch(() => caches.match(req, { ignoreSearch: false }).then((hit) => hit || new Response(
-        "console.error('IMPORT v405 unavailable: reconnect and reload');",
+        "console.error('IMPORT v400 unavailable: reconnect and reload');",
         { status: 503, headers: { 'Content-Type': 'application/javascript; charset=utf-8' } }
       )))
     );
