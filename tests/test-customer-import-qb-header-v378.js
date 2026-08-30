@@ -39,3 +39,18 @@ eq(ctx.importParsedRows[0]['Phone 1'], '01012345678', 'phone preserved');
 if(!src.includes("setNote('⏳ تم اختيار '")) throw new Error('immediate selected-file feedback missing');
 if(!src.includes("'Mobile Phone','Cell','Cell Phone'")) throw new Error('customer phone aliases missing');
 console.log('PASS customer import QB header v378');
+
+// v406 regression: customer results must not be nested inside the inventory-only #adjRow.
+// The old malformed </label> left the explanatory <div> open, so browsers kept
+// importLoadNote/importPreviewWrap inside #adjRow; customers hide #adjRow => invisible success UI.
+const adjStart = src.indexOf('<div id="adjRow"');
+const notePos = src.indexOf('<div id="importLoadNote"');
+if(adjStart < 0 || notePos < 0) throw new Error('import panel landmarks missing');
+const between = src.slice(adjStart, notePos);
+if(between.includes('يخصم اللي اتباع · ويضيف اللي اتسجل في «استلام بضاعة» · ويخصم التالف/المرتجع للمورد\n        </label>')) {
+  throw new Error('customer import regression: malformed adjRow closing tag returned');
+}
+if(!between.includes('يخصم اللي اتباع · ويضيف اللي اتسجل في «استلام بضاعة» · ويخصم التالف/المرتجع للمورد\n        </div>')) {
+  throw new Error('adjRow explanatory div is not closed correctly');
+}
+console.log('PASS customer import layout visibility v406');
