@@ -6,7 +6,7 @@
 // بيعتمد على العام من app.js: db, showToast, hasPerm, currentBranch
 // ============================================================
 
-const QB_IMPORT_BUILD = 'v400';
+const QB_IMPORT_BUILD = 'v402';
 
 const TEST_LEGACY_SALES = "pos_test_legacy_sales"; // مبيعات قديمة للرجوع بس، منفصلة عن مبيعات النظام الجديد
 
@@ -57,7 +57,7 @@ function renderImportPanel(){
   const wrap = document.getElementById('importPanelWrap');
   wrap.innerHTML = `
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px;">
-      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v400 • جاهز</div>
+      <div id="importBuildBadge" style="display:inline-block;margin-bottom:9px;padding:4px 9px;border-radius:999px;background:#17324d;color:#93c5fd;font-size:11px;font-weight:900;">IMPORT v402 • جاهز</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">
         صدّر الملف من QuickBooks وارفعه هنا مباشرة — بيقبل <b>Excel (.xls / .xlsx)</b> و<b>CSV</b>.
       </p>
@@ -121,6 +121,8 @@ function renderImportPanel(){
     startBtn.addEventListener('pointerup', fire, true);
     startBtn.addEventListener('click', fire, true);
   }
+  // v401 — لو فيه علامة استيراد متروكة من محاولة اتقطعت، وريها هنا فورًا
+  try{ qbImportShowLeftoverMarker(); }catch(_){}
 }
 
 // v392 — listener واحد ثابت على document بدل ربط listener بعنصر بيتعمل من جديد
@@ -197,6 +199,90 @@ function ensureXlsxLib(){
   return _xlsxLoading;
 }
 
+// ============================================================
+// 🕵️ v401 — صندوق أسود للاستيراد الصامت
+// ------------------------------------------------------------
+// المشكلة اللي بنحقق فيها: الزرار بيضغط، النص بيقول "جاري فحص
+// الملف"، وبعد ثانية واحدة الشاشة بترجع تمام زي الأول من غير أي
+// نجاح ولا خطأ ولا سطر في الكونسول. ده معناه غالبًا إن حاجة **برة
+// كود الاستيراد نفسه** بتعمل إعادة تحميل/إعادة رسم كاملة للصفحة —
+// مش استثناء عادي كان الكود هيمسكه أصلًا.
+//
+// الحل: بنسجّل "أنا بقرا ملف دلوقتي" في localStorage قبل ما نبدأ،
+// ونمسحها بس لما نوصل لنجاح أو خطأ واضح. لو الصفحة اتقفلت لوحدها
+// في النص (reload/crash)، العلامة هتفضل موجودة، وأول ما شاشة
+// الاستيراد تترسم تاني هنلاقيها ونوريها كبانر واضح — بدل ما الموضوع
+// يتكرر من غير أي أثر.
+// ============================================================
+const QB_IMPORT_MARKER_KEY = 'qb_import_inflight_v401';
+function qbImportMarkerSet(file){
+  try{
+    localStorage.setItem(QB_IMPORT_MARKER_KEY, JSON.stringify({
+      startedAt: Date.now(), startedAtStr: new Date().toString(),
+      file: file && file.name || '', tab: importTab
+    }));
+  }catch(_){}
+}
+function qbImportMarkerClear(){
+  try{ localStorage.removeItem(QB_IMPORT_MARKER_KEY); }catch(_){}
+}
+function qbImportMarkerCheck(){
+  try{
+    const raw = localStorage.getItem(QB_IMPORT_MARKER_KEY);
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(_){ return null; }
+}
+// لو الصفحة بتتقفل/بتتحدّث والعلامة لسه موجودة، سجّل وقت الانقطاع
+// نفسه — لو ده اللي بيحصل هيبان بوضوح في المرة الجاية.
+if(typeof window !== 'undefined'){
+  window.addEventListener('pagehide', function(){
+    const m = qbImportMarkerCheck();
+    if(m && !m.interruptedAt){
+      m.interruptedAt = Date.now();
+      m.interruptedBy = 'pagehide (الصفحة اتقفلت/اتنقلت وهي لسه بتقرا)';
+      try{ localStorage.setItem(QB_IMPORT_MARKER_KEY, JSON.stringify(m)); }catch(_){}
+    }
+  });
+  // أي خطأ جافاسكريبت أو Promise مرفوض من غير ما حد يمسكه، وقت ما
+  // فيه استيراد شغال — يتسجل في العلامة نفسها بدل ما يختفي بصمت.
+  window.addEventListener('error', function(ev){
+    const m = qbImportMarkerCheck();
+    if(!m || m.interruptedAt) return;
+    m.interruptedAt = Date.now();
+    m.interruptedBy = 'خطأ JS غير ممسوك: ' + (ev && ev.message ? ev.message : 'غير معروف')
+      + (ev && ev.filename ? (' — ' + ev.filename + ':' + ev.lineno) : '');
+    try{ localStorage.setItem(QB_IMPORT_MARKER_KEY, JSON.stringify(m)); }catch(_){}
+  });
+  window.addEventListener('unhandledrejection', function(ev){
+    const m = qbImportMarkerCheck();
+    if(!m || m.interruptedAt) return;
+    const reason = ev && ev.reason;
+    m.interruptedAt = Date.now();
+    m.interruptedBy = 'Promise مرفوض من غير معالجة: ' + (reason && reason.message ? reason.message : String(reason));
+    try{ localStorage.setItem(QB_IMPORT_MARKER_KEY, JSON.stringify(m)); }catch(_){}
+  });
+}
+// بيتعرض فوق زرار الاستيراد أول ما الشاشة تترسم، لو لقى علامة قديمة متروكة
+function qbImportShowLeftoverMarker(){
+  const m = qbImportMarkerCheck();
+  if(!m) return;
+  qbImportMarkerClear();
+  const wrap = document.getElementById('importPanelWrap');
+  if(!wrap) return;
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#3a1416; border:1.5px solid #e5484d66; border-radius:10px;'
+    + 'padding:10px 12px; margin-bottom:10px; color:#ffd9da; font-size:12px; line-height:1.8;';
+  const startedStr = m.startedAtStr || new Date(m.startedAt || 0).toString();
+  box.innerHTML = '⚠️ <b>آخر محاولة استيراد اتقطعت من غير ما تخلص</b><br>'
+    + 'الملف: ' + (m.file || '—') + ' · الوقت: ' + startedStr + '<br>'
+    + (m.interruptedBy
+        ? ('السبب المسجّل: <b>' + m.interruptedBy + '</b>')
+        : 'مفيش سبب اتسجّل — يبقى الصفحة اتقفلت/اتحدّثت فجأة (مش استثناء الكود نفسه).')
+    + '<div style="margin-top:6px; opacity:.85;">ابعت الرسالة دي لكلود عشان يقفل السبب نهائي.</div>';
+  wrap.insertBefore(box, wrap.firstChild);
+}
+
 let _qbImportStartAt = 0;
 function startSelectedImport(){
   const clickNote = document.getElementById('importLoadNote');
@@ -212,9 +298,11 @@ function startSelectedImport(){
     try{ showToast('اختار الملف الأول', 'err'); }catch(_){}
     return false;
   }
+  qbImportMarkerSet(file);
   try{
     processImportFile(file);
   }catch(err){
+    qbImportMarkerClear();
     const msg = err && err.message ? err.message : String(err);
     if(note) note.textContent = '❌ فشل بدء القراءة: ' + msg;
     if(btn){ btn.disabled = false; btn.textContent = '📥 حاول الاستيراد مرة تانية'; }
@@ -367,6 +455,7 @@ function processImportFile(file){
         // Native path is immediate and does not wait for any CDN.
         if(note) note.textContent = '⏳ جاري قراءة بيانات QuickBooks…';
         await parseQuickBooksXlsxNative(buf);
+        qbImportMarkerClear();
         if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
         const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
         renderImportMapping();
@@ -376,6 +465,7 @@ function processImportFile(file){
         const u8 = new Uint8Array(buf || new ArrayBuffer(0));
         const isZipXlsx = u8.length >= 4 && u8[0] === 0x50 && u8[1] === 0x4b;
         if(isZipXlsx){
+          qbImportMarkerClear();
           const msg = nativeErr && nativeErr.message ? nativeErr.message : String(nativeErr);
           if(note) note.textContent = '❌ تعذر قراءة QuickBooks محليًا: ' + msg;
           const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
@@ -387,10 +477,12 @@ function processImportFile(file){
         try{
           const XLSX = await ensureXlsxLib();
           parseExcel(XLSX, buf);
+          qbImportMarkerClear();
           if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف';
           const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
           renderImportMapping();
         }catch(err){
+          qbImportMarkerClear();
           const msg = (nativeErr && nativeErr.message ? nativeErr.message + ' / ' : '') + (err && err.message ? err.message : err);
           if(note) note.textContent = '❌ تعذر قراءة الملف: ' + msg;
           const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';}
@@ -398,7 +490,7 @@ function processImportFile(file){
         }
       }
     };
-    reader.onerror = ()=>{ if(note) note.textContent='❌ تعذر فتح الملف'; const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';} try{showToast('تعذر فتح الملف','err');}catch(_){} };
+    reader.onerror = ()=>{ qbImportMarkerClear(); if(note) note.textContent='❌ تعذر فتح الملف'; const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 حاول الاستيراد مرة تانية';} try{showToast('تعذر فتح الملف','err');}catch(_){} };
     reader.readAsArrayBuffer(file);
     return;
   }
@@ -406,9 +498,11 @@ function processImportFile(file){
   reader.onload = (ev)=>{
     try{
       parseCSV(ev.target.result);
+      qbImportMarkerClear();
       if(note) note.textContent = '✅ اتقرا ' + importParsedRows.length + ' صف'; const b=document.getElementById('importStartBtn'); if(b){b.disabled=false;b.textContent='📥 إعادة قراءة الملف المختار';}
       renderImportMapping();
     }catch(err){
+      qbImportMarkerClear();
       if(note) note.textContent = '❌ تعذر قراءة الملف: ' + err.message;
       showToast('تعذر قراءة الملف: ' + err.message, 'err');
     }
