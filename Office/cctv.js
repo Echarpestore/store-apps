@@ -1,12 +1,12 @@
-/* ECHARPE Office CCTV v420
+/* ECHARPE Office CCTV v422
    - No cloud database reads/writes.
    - No NVR credentials in Office.
    - Streams are created only while the CCTV page is visible.
    - Current tested branch gateway exposes stable camera4/5/7/8 names. */
 (function(){
   'use strict';
-  var KEY='echarpe.office.cctv.v420';
-  var DEFAULT_GATEWAY='http://127.0.0.1:1984';
+  var KEY='echarpe.office.cctv.v422';
+  var DEFAULT_GATEWAY='https://cctv-madinaty.echarpe.store';
   var CAMERAS=[
     {id:'4',name:'D04',stream:'camera4'},
     {id:'5',name:'D05',stream:'camera5'},
@@ -96,7 +96,7 @@
   window.ofCctvStop=stop;
 })();
 
-/* v421 invoice snapshot viewer — reads only when user asks for a specific invoice. */
+/* v422 invoice snapshot viewer — reads only when user asks for a specific invoice. */
 window.ofCctvInvoiceShot = async function(invoiceCode){
   try{
     if(!invoiceCode || typeof db==='undefined') return;

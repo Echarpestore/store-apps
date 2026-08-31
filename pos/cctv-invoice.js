@@ -1,4 +1,4 @@
-/* ECHARPE POS CCTV invoice snapshot v421
+/* ECHARPE POS CCTV invoice snapshot v422
    One compressed cashier-camera frame per successful invoice.
    Best-effort only: camera failure never blocks sale/print/payment lifecycle. */
 (function(){
@@ -33,7 +33,7 @@ async function capture(meta){
     await db.collection(COL).doc(String(meta.invoiceCode)).set({
       invoiceCode:String(meta.invoiceCode), invoiceNo:meta.invoiceNo||'', saleId:meta.saleId||'',
       branch:meta.branch||'', camera:'D04', stream:STREAM, capturedAtMs:Number(meta.atMs)||Date.now(),
-      width:out.width,height:out.height,jpegData:out.data,version:421
+      width:out.width,height:out.height,jpegData:out.data,version:422
     },{merge:true});
     return true;
   }catch(e){ try{console.warn('CCTV invoice snapshot skipped',e&&e.message||e);}catch(_){} return false; }

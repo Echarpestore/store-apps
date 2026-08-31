@@ -1,0 +1,18 @@
+const fs=require('fs'), assert=require('assert');
+const cctv=fs.readFileSync('Office/cctv.js','utf8');
+const idx=fs.readFileSync('Office/index.html','utf8');
+const sw=fs.readFileSync('Office/sw.js','utf8');
+const posidx=fs.readFileSync('pos/index.html','utf8');
+const cap=fs.readFileSync('pos/cctv-invoice.js','utf8');
+const install=fs.readFileSync('cctv-gateway/INSTALL-AUTOSTART.ps1','utf8');
+const runner=fs.readFileSync('cctv-gateway/RUN-GATEWAY-AUTO.ps1','utf8');
+assert(cctv.includes("DEFAULT_GATEWAY='https://cctv-madinaty.echarpe.store'"),'Office uses permanent Madinaty URL');
+assert(idx.includes('value="https://cctv-madinaty.echarpe.store"'),'Office visible gateway default updated');
+assert(idx.includes('cctv.js?v=422') && posidx.includes('cctv-invoice.js?v=422'),'cache-busting bumped');
+assert(sw.includes("echarpe-office-v69"),'Office SW cache bumped');
+assert(cap.includes('version:422') && cap.includes("LOCAL='http://127.0.0.1:1984'"),'POS snapshot stays local and non-tunnel dependent');
+assert(install.includes("New-ScheduledTaskTrigger -AtLogOn") && install.includes("Register-ScheduledTask"),'gateway auto-start task installed');
+assert(install.includes('ConvertFrom-SecureString') && runner.includes('ConvertTo-SecureString'),'NVR password stored with Windows DPAPI');
+assert(runner.includes('Get-NetTCPConnection -State Listen -LocalPort 1984'),'duplicate gateway prevented');
+assert(runner.includes('camera4:') && runner.includes('camera5:') && runner.includes('camera7:') && runner.includes('camera8:'),'all four streams configured');
+console.log('CCTV v422: 9/9 PASS');
