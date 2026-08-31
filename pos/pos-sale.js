@@ -4197,6 +4197,13 @@ window.returnPointsDeduction = returnPointsDeduction;
       });
     }catch(e){}
 
+    // 📸 v421: لقطة الكاشير تُؤخذ بعد نجاح حفظ الفاتورة فقط.
+    // Fire-and-forget: فشل الكاميرا/الـGateway لا يوقف البيع أو الطباعة.
+    try{ if(typeof cctvCaptureInvoiceSnapshot === 'function') cctvCaptureInvoiceSnapshot({
+      invoiceCode: invoiceCode, invoiceNo: invoiceNo, branch: currentBranch,
+      saleId: (_saleW && _saleW.value && _saleW.value.id) || '', atMs: Date.now()
+    }); }catch(e){}
+
     /* 🛍️ أوردر أونلاين اتسلّم؟ الحالة بتتقفل **بعد** نجاح الحفظ بس.
        ⚠️ لو اتقفلت وقت تحميل السلة، وكاشير لغت البيع → أوردر
           «اتسلّم» والبضاعة لسه في المحل.

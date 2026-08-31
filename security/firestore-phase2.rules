@@ -145,6 +145,20 @@ service cloud.firestore {
       //    الحل النهائي = ربط uid بالمستند، وده تغيير في تطبيق الولاء نفسه.
     }
 
+    // ---------- POS Live (Office read-only viewer) ----------
+    // نفس staff auth فقط. مفيش أي قناة أو حقل تحكم راجع للـPOS.
+    match /office_pos_live/{branch} {
+      allow read, create, update: if isStaff();
+      allow delete: if false;
+    }
+
+    // ---------- CCTV invoice snapshots ----------
+    // لقطة واحدة مضغوطة مرتبطة بالفاتورة. موظفين فقط؛ لا حذف من العميل.
+    match /pos_cctv_invoice_snapshots/{invoiceCode} {
+      allow read, create, update: if isStaff();
+      allow delete: if false;
+    }
+
     // ---------- المبيعات ----------
     match /pos_test_sales/{id} {
       // ⚠️ اتفحص: تبويب «فواتيري» في الولاء وGlow بيعمل
@@ -289,6 +303,13 @@ service cloud.firestore {
     match /pos_activity_log/{id} {
       allow read, create: if isStaff();
       allow update, delete: if false;
+    }
+
+    // Archive read-cache لسجل النشاط: نسخة مجمعة للشهور المقفولة لتقليل reads
+    // المصدر القانوني يفضل pos_activity_log؛ الـarchive قابل لإعادة البناء ولا يُحذف من العميل.
+    match /pos_activity_archive/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if false;
     }
     // 🐞 بلاغات المشاكل من الفروع — الموظفة بتدوس زرار المشكلة في
     //    الكاشير، والبلاغ بيوصل هنا بسجل الجهاز وقت المشكلة.

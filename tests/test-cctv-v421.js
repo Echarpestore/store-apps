@@ -1,0 +1,17 @@
+const fs=require('fs'), assert=require('assert');
+const sale=fs.readFileSync('pos/pos-sale.js','utf8');
+const cap=fs.readFileSync('pos/cctv-invoice.js','utf8');
+const idx=fs.readFileSync('pos/index.html','utf8');
+const office=fs.readFileSync('Office/office.js','utf8');
+const cctv=fs.readFileSync('Office/cctv.js','utf8');
+const rules=fs.readFileSync('security/firestore-phase2.rules','utf8');
+assert(idx.indexOf('cctv-invoice.js?v=421')<idx.indexOf('pos-sale.js'),'capture hook loads before sale');
+assert(sale.includes("_logActivity('sale_saved'") && sale.includes('cctvCaptureInvoiceSnapshot'),'snapshot hook after sale save area');
+assert(cap.includes("STREAM='camera4'") && cap.includes("pos_cctv_invoice_snapshots"),'D04 snapshot collection');
+assert(cap.includes("toDataURL('image/jpeg',0.62)"),'snapshot compressed');
+assert(cap.includes('return false') && cap.includes('console.warn'),'camera failure is best effort');
+assert(office.includes('ofCctvInvoiceShot'),'invoice detail has snapshot button');
+assert(cctv.includes("collection('pos_cctv_invoice_snapshots')"),'Office reads snapshot on demand');
+assert(rules.includes('match /pos_cctv_invoice_snapshots/{invoiceCode}'),'snapshot rules exist');
+assert(rules.includes('allow read, create, update: if isStaff();'),'staff-only snapshot access');
+console.log('CCTV v421: 9/9 PASS');

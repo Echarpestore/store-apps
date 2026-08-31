@@ -2619,7 +2619,8 @@ window.ofActOpen = function(id){
   let html = '<div style="font-weight:900; font-size:16px;">' + esc(ofActLabel(a.type)) + '</div>'
     + '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">'
     + ofWhen(a.ts, true) + ' · ' + esc(a.branch || '') + '</div>'
-    + (inv ? '<div style="background:var(--panel2); border-radius:8px; padding:7px 9px; margin-bottom:8px; font-weight:800; font-size:13px;">🧾 ' + esc(inv) + '</div>'
+    + (inv ? '<div style="background:var(--panel2); border-radius:8px; padding:7px 9px; margin-bottom:8px; font-weight:800; font-size:13px;">🧾 ' + esc(inv)
+      + '<button type="button" onclick="ofCctvInvoiceShot(\'' + String(inv).replace(/'/g,"\\'") + '\')" style="float:left;border:0;border-radius:8px;padding:5px 8px;cursor:pointer;">📸 لقطة الفاتورة</button><div style="clear:both"></div></div>'
            : '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">🧾 مفيش فاتورة مربوطة — إما السلة اتسابت من غير بيع، أو الحدث قديم (قبل تحديث الربط)</div>')
     + '<div style="border:1px solid var(--line); border-right:4px solid ' + _icol + '; border-radius:11px; padding:10px; margin-bottom:10px; background:var(--panel2);">'
       + '<div style="font-weight:900; color:' + _icol + '; margin-bottom:5px;">' + intel.icon + ' ' + esc(intel.levelLabel) + '</div>'

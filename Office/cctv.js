@@ -95,3 +95,23 @@
   window.ofCctvStart=start;
   window.ofCctvStop=stop;
 })();
+
+/* v421 invoice snapshot viewer — reads only when user asks for a specific invoice. */
+window.ofCctvInvoiceShot = async function(invoiceCode){
+  try{
+    if(!invoiceCode || typeof db==='undefined') return;
+    var snap=await db.collection('pos_cctv_invoice_snapshots').doc(String(invoiceCode)).get();
+    if(!snap.exists){ alert('مفيش لقطة محفوظة للفاتورة دي. اللقطات تبدأ من v421 والفواتير الجديدة فقط.'); return; }
+    var d=snap.data()||{};
+    if(!/^data:image\/jpeg;base64,/.test(String(d.jpegData||''))) throw new Error('bad_snapshot');
+    var ov=document.createElement('div'); ov.id='ofCctvShotOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:18px;';
+    ov.innerHTML='<div style="max-width:980px;width:100%;background:#111827;border-radius:16px;padding:12px;color:white;">'
+      +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:9px"><b>📸 '+String(invoiceCode).replace(/[<>&]/g,'')+' · '+String(d.camera||'D04').replace(/[<>&]/g,'')+'</b><button id="ofCctvShotClose" style="padding:7px 12px;border:0;border-radius:9px;cursor:pointer">إغلاق</button></div>'
+      +'<img alt="Invoice CCTV snapshot" src="'+d.jpegData+'" style="display:block;width:100%;max-height:76vh;object-fit:contain;background:#000;border-radius:10px">'
+      +'<div style="font-size:11px;color:#9ca3af;margin-top:7px">وقت الالتقاط: '+new Date(Number(d.capturedAtMs)||Date.now()).toLocaleString('ar-EG')+'</div></div>';
+    document.body.appendChild(ov);
+    ov.onclick=function(e){if(e.target===ov)ov.remove();};
+    document.getElementById('ofCctvShotClose').onclick=function(){ov.remove();};
+  }catch(e){ alert('تعذر فتح لقطة الفاتورة'); }
+};
