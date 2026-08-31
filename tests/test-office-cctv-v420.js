@@ -1,0 +1,23 @@
+const fs=require('fs');
+const assert=require('assert');
+const html=fs.readFileSync('Office/index.html','utf8');
+const office=fs.readFileSync('Office/office.js','utf8');
+const cctv=fs.readFileSync('Office/cctv.js','utf8');
+const sw=fs.readFileSync('Office/sw.js','utf8');
+const gw=fs.readFileSync('cctv-gateway/START-GATEWAY.ps1','utf8');
+
+assert(html.includes('id="page-cctv"'),'CCTV page missing');
+assert(html.includes('data-office-go="cctv"'),'CCTV More nav missing');
+assert(html.includes('cctv.js?v=420'),'CCTV script missing');
+assert(office.includes("page === 'cctv'"),'CCTV lifecycle hook missing');
+assert(office.includes('ofCctvStop'),'CCTV stop hook missing');
+assert(cctv.includes('http://127.0.0.1:1984'),'local gateway default missing');
+assert(cctv.includes("window.ofCctvStart=start"),'start export missing');
+assert(cctv.includes("window.ofCctvStop=stop"),'stop export missing');
+assert(cctv.includes("f.src='about:blank'"),'stream cleanup missing');
+assert(!/firebase|firestore/i.test(cctv),'CCTV client must not use Firebase/Firestore');
+assert(!/2418Mm/.test(cctv+html+office+gw),'exposed password leaked into v420');
+assert(sw.includes("echarpe-office-v68"),'Office SW cache not bumped');
+for(const cam of ['camera4','camera5','camera7','camera8']) assert(gw.includes(cam+':'),cam+' gateway stream missing');
+assert(gw.includes('127.0.0.1:1984'),'gateway must stay localhost-only');
+console.log('PASS test-office-cctv-v420');

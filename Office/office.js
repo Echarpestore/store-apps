@@ -1374,6 +1374,9 @@ function ofGoPage(page, opts){
   try{ window.scrollTo(0, 0); }catch(e){}
   // ⚡ بيانات التقارير بتتحمّل أول ما تفتح التبويب — مش في الخلفية طول الوقت
   if(page === 'live') ofLiveStart(); else ofLiveStop();
+  // 📹 CCTV v420: البث يشتغل فقط أثناء فتح التبويب، ويتوقف فور مغادرته.
+  if(page === 'cctv'){ try{ window.ofCctvStart && window.ofCctvStart(); }catch(e){ console.warn('cctv start',e); } }
+  else { try{ window.ofCctvStop && window.ofCctvStop(); }catch(e){ console.warn('cctv stop',e); } }
   if(page === 'cash'){ try{ renderCashHand(); }catch(e){ console.warn('cash', e); } }
   if(page === 'reports'){
     try{ loadCustomers(); loadRatings(); }catch(e){ console.warn('reports load', e); }

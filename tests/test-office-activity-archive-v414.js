@@ -19,5 +19,5 @@ ok(office.includes('OF_ACT_SYNC_OVERLAP_MS = 2 * 60 * 60 * 1000'),'incremental o
 ok(office.includes('ofActPublishClosedArchives().catch'),'archive publishing is fire-and-forget and does not block activity UI');
 ok(rules.includes('match /pos_activity_archive/{id}'),'full Firestore rules include activity archive collection');
 ok(rules.includes('allow read, create, update: if isStaff();'),'activity archive is staff-only');
-ok(sw.includes("echarpe-office-v67"),'Office service worker cache bumped to v67');
+ok(sw.includes("echarpe-office-v68"),'Office service worker cache is v68 after CCTV release');
 console.log('v414 activity archive tests passed');

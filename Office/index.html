@@ -245,6 +245,20 @@
     .of-home-stat b{font-size:14px}
   }
 
+
+  /* 📹 CCTV v420 — loaded only while the page is open */
+  .of-cctv-toolbar{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end}
+  .of-cctv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .of-cctv-card{background:#0b0c0f;border-radius:16px;overflow:hidden;border:1px solid #202530;box-shadow:0 8px 24px rgba(15,23,42,.10)}
+  .of-cctv-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;color:#fff;background:#111827}
+  .of-cctv-head small{color:#9ca3af}
+  .of-cctv-video{aspect-ratio:16/9;background:#050608;position:relative}
+  .of-cctv-video iframe{width:100%;height:100%;border:0;background:#050608;display:block}
+  .of-cctv-actions{display:flex;gap:6px;padding:8px;background:#111827}
+  .of-cctv-actions button{flex:1;padding:8px 7px!important;font-size:11px!important}
+  .of-cctv-warning{display:none;margin:8px 0 12px;padding:10px 12px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:11.5px;line-height:1.7}
+  @media(max-width:720px){.of-cctv-grid{grid-template-columns:1fr}.of-cctv-toolbar{grid-template-columns:1fr 1fr}.of-cctv-toolbar .wide{grid-column:1/-1}}
+
 </style>
 </head>
 <body>
@@ -577,6 +591,29 @@
     <div id="posLiveBody"><div class="empty">افتح التبويب لبدء المتابعة</div></div>
   </section>
 
+  <!-- 📹 كاميرات الفروع — لا تبدأ أي بث إلا عند فتح الصفحة -->
+  <section class="tabPage" id="page-cctv">
+    <div style="margin:2px 2px 10px;">
+      <h2 style="font-size:19px;">📹 كاميرات الفرع</h2>
+      <div class="muted">Live فقط من الـGateway المحلي. الفيديو لا يمر على Firestore ولا يبدأ إلا وإنت فاتح الصفحة.</div>
+    </div>
+    <div class="panel">
+      <div class="of-cctv-toolbar">
+        <div class="wide">
+          <label class="muted" for="ofCctvGateway">Gateway URL</label>
+          <input class="f" id="ofCctvGateway" inputmode="url" value="http://127.0.0.1:1984" placeholder="https://camera-gateway.example.com">
+        </div>
+        <button class="btn gold" id="ofCctvSave" type="button">حفظ وتشغيل</button>
+        <button class="btn no" id="ofCctvReload" type="button">تحديث</button>
+      </div>
+      <div id="ofCctvWarn" class="of-cctv-warning"></div>
+      <div class="hint" style="margin:0;">🔒 لا تضع اسم مستخدم أو Password داخل الرابط. بيانات الـNVR تظل على جهاز الفرع فقط.</div>
+    </div>
+    <div class="of-cctv-grid" id="ofCctvGrid">
+      <div class="empty" style="grid-column:1/-1;">افتح التبويب لبدء البث</div>
+    </div>
+  </section>
+
   <!-- 🕵️ سجل النشاط -->
   <section class="tabPage" id="page-odd">
     <!-- 🐞 بلاغات الفروع -->
@@ -588,12 +625,13 @@
     </div>
     <div class="panel">
       <h3>🕵️ سجل النشاط</h3>
-      <div class="hint">كل حاجة غير عادية بتحصل على الأجهزة بتتسجل هنا: صنف اتشال من السلة، خصم يدوي، درج اتفتح بالإيد، سحب فيزا زيادة، سلة اتسابت، مخزون اتمسح. بيتحمّل بدوسة (مش مع كل فتحة).</div>
+      <div class="hint">كل حاجة غير عادية بتحصل على الأجهزة بتتسجل هنا. السجل بيتحفظ محليًا على الجهاز ويتزامن مع Firestore؛ مفيش حد أقصى لعدد الأحداث المعروضة، وبعد أول تحميل بنقرأ الجديد فقط قدر الإمكان.</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
         <select class="f" id="actDays" style="flex:1; min-width:110px;">
           <option value="1">النهاردة</option>
           <option value="7" selected>آخر ٧ أيام</option>
           <option value="30">آخر ٣٠ يوم</option>
+          <option value="0">كل السجل</option>
         </select>
         <select class="f" id="actKind" style="flex:1; min-width:130px;">
           <option value="">كل الأنواع</option>
@@ -658,6 +696,7 @@
       <button class="of-more-item" type="button" data-office-go="money"><span class="mi">🧾</span><span class="mt"><b>الحسابات</b><small>ربح وخسارة · تجار · مصاريف</small></span><span class="badge" id="nbMoney" style="display:none;">0</span></button>
       <button class="of-more-item" type="button" data-office-go="hire"><span class="mi">💼</span><span class="mt"><b>التوظيف</b><small>متقدمين وملفات</small></span><span class="badge" id="nbHire" style="display:none;">0</span></button>
       <button class="of-more-item" type="button" data-office-go="live"><span class="mi">🔴</span><span class="mt"><b>POS Live</b><small>السلة والحركة الآن</small></span></button>
+      <button class="of-more-item" type="button" data-office-go="cctv"><span class="mi">📹</span><span class="mt"><b>الكاميرات</b><small>Live من الفروع</small></span></button>
       <button class="of-more-item" type="button" data-office-go="odd"><span class="mi">🕵️</span><span class="mt"><b>النشاط والمشاكل</b><small>بلاغات وسجل غير عادي</small></span></button>
     </div>
   </div>
@@ -680,6 +719,7 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
-<script src="office.js?v=75"></script>
+<script src="cctv.js?v=420"></script>
+<script src="office.js?v=76"></script>
 </body>
 </html>

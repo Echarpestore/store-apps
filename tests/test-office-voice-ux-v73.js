@@ -6,7 +6,7 @@ assert(html.includes('id="qgVoiceCancelBtn"'),'visible cancel control missing');
 assert(html.includes('id="qgMicPermission"'),'mic permission status missing');
 assert(html.includes('id="qgMicDot"'),'mic live indicator missing');
 assert(html.includes('id="qgVoiceLiveText"'),'live transcript missing');
-assert(html.includes('office.js?v=75'),'cache bust v75 missing');
+assert(html.includes('office.js?v=76'),'cache bust v76 missing');
 assert(js.includes("navigator.mediaDevices.getUserMedia({audio:true})"),'explicit mic permission probe missing');
 assert(js.includes("_ofVoiceRec.abort()"),'active recognition cancel missing');
 assert(js.includes("_ofVoiceAiAbort.abort()"),'AI request cancel missing');
