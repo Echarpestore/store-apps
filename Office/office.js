@@ -1740,7 +1740,271 @@ window.ofMarkRefunded = function(id){
    ⚠️ **بيتحمّل بدوسة** بنافذة زمنية وحد أقصى: القراءات فلوس،
       والسجل ده بيكبر أسرع من أي مجموعة تانية.
    ============================================================ */
-const OF_ACT_LIMIT = 400;
+const OF_ACT_PAGE_SIZE = 500; // حجم صفحة Firestore فقط — مفيش حد أقصى للسجل الظاهر
+const OF_ACT_CACHE_DB = 'echarpe_office_activity_v1';
+const OF_ACT_CACHE_VERSION = 1;
+const OF_ACT_CACHE_EVENTS = 'events';
+const OF_ACT_CACHE_META = 'meta';
+const OF_ACT_SYNC_OVERLAP_MS = 2 * 60 * 60 * 1000; // overlap ساعتين فقط: حماية للكتابة المتأخرة بدون إعادة قراءة يوم كامل
+const OF_ACT_ARCHIVE_COLLECTION = 'pos_activity_archive';
+const OF_ACT_ARCHIVE_CATALOG_ID = 'catalog';
+const OF_ACT_ARCHIVE_CATALOG_TTL_MS = 24 * 60 * 60 * 1000; // قراءة catalog واحدة كحد أقصى يوميًا لكل جهاز
+const OF_ACT_ARCHIVE_TARGET_BYTES = 650 * 1024; // هامش آمن تحت حد Firestore 1 MiB
+const OF_ACT_ARCHIVE_VERSION = 1;
+let _ofActCacheStatus = { source:'', cached:0, synced:0, loading:false };
+
+function ofActOpenCache(){
+  return new Promise(function(resolve, reject){
+    if(!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+    const req = indexedDB.open(OF_ACT_CACHE_DB, OF_ACT_CACHE_VERSION);
+    req.onupgradeneeded = function(){
+      const idb = req.result;
+      if(!idb.objectStoreNames.contains(OF_ACT_CACHE_EVENTS)){
+        const st = idb.createObjectStore(OF_ACT_CACHE_EVENTS, { keyPath:'id' });
+        st.createIndex('ts', 'ts', { unique:false });
+      }
+      if(!idb.objectStoreNames.contains(OF_ACT_CACHE_META))
+        idb.createObjectStore(OF_ACT_CACHE_META, { keyPath:'key' });
+    };
+    req.onsuccess = function(){ resolve(req.result); };
+    req.onerror = function(){ reject(req.error || new Error('IndexedDB open failed')); };
+  });
+}
+function ofActIdbReq(req){
+  return new Promise(function(resolve, reject){
+    req.onsuccess = function(){ resolve(req.result); };
+    req.onerror = function(){ reject(req.error || new Error('IndexedDB request failed')); };
+  });
+}
+async function ofActCacheGetMeta(){
+  const idb = await ofActOpenCache();
+  try{
+    const tx = idb.transaction(OF_ACT_CACHE_META, 'readonly');
+    return await ofActIdbReq(tx.objectStore(OF_ACT_CACHE_META).get('coverage')) || {};
+  }finally{ idb.close(); }
+}
+async function ofActCacheSetMeta(patch){
+  const idb = await ofActOpenCache();
+  try{
+    const tx = idb.transaction(OF_ACT_CACHE_META, 'readwrite');
+    const st = tx.objectStore(OF_ACT_CACHE_META);
+    const cur = await ofActIdbReq(st.get('coverage')) || { key:'coverage' };
+    await ofActIdbReq(st.put(Object.assign(cur, patch, { key:'coverage' })));
+  }finally{ idb.close(); }
+}
+async function ofActCachePutMany(rows){
+  if(!rows || !rows.length) return;
+  const idb = await ofActOpenCache();
+  try{
+    await new Promise(function(resolve, reject){
+      const tx = idb.transaction(OF_ACT_CACHE_EVENTS, 'readwrite');
+      const st = tx.objectStore(OF_ACT_CACHE_EVENTS);
+      rows.forEach(function(x){ if(x && x.id) st.put(x); });
+      tx.oncomplete = function(){ resolve(); };
+      tx.onerror = function(){ reject(tx.error || new Error('IndexedDB write failed')); };
+      tx.onabort = function(){ reject(tx.error || new Error('IndexedDB write aborted')); };
+    });
+  }finally{ idb.close(); }
+}
+async function ofActCacheReadSince(sinceTs){
+  const idb = await ofActOpenCache();
+  try{
+    return await new Promise(function(resolve, reject){
+      const tx = idb.transaction(OF_ACT_CACHE_EVENTS, 'readonly');
+      const idx = tx.objectStore(OF_ACT_CACHE_EVENTS).index('ts');
+      const range = sinceTs > 0 ? IDBKeyRange.lowerBound(sinceTs) : null;
+      const req = idx.openCursor(range, 'prev');
+      const out = [];
+      req.onsuccess = function(){
+        const c = req.result;
+        if(!c) return resolve(out);
+        out.push(c.value); c.continue();
+      };
+      req.onerror = function(){ reject(req.error || new Error('IndexedDB read failed')); };
+    });
+  }finally{ idb.close(); }
+}
+function ofActCairoParts(ts){
+  try{
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone:'Africa/Cairo', year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'
+    }).formatToParts(new Date(ts));
+    const o = {};
+    parts.forEach(function(x){ if(x.type !== 'literal') o[x.type] = x.value; });
+    return o;
+  }catch(_){
+    const d = new Date(ts);
+    return { year:String(d.getFullYear()), month:String(d.getMonth()+1).padStart(2,'0'), day:String(d.getDate()).padStart(2,'0'), hour:String(d.getHours()).padStart(2,'0'), minute:String(d.getMinutes()).padStart(2,'0'), second:String(d.getSeconds()).padStart(2,'0') };
+  }
+}
+function ofActMonthKey(ts){
+  const p = ofActCairoParts(ts);
+  return String(p.year) + '-' + String(p.month).padStart(2,'0');
+}
+function ofActMonthStartMs(key){
+  const m = /^(\d{4})-(\d{2})$/.exec(String(key||''));
+  if(!m) return 0;
+  const y=+m[1], mo=+m[2];
+  let guess = Date.UTC(y, mo-1, 1, 0, 0, 0);
+  for(let i=0;i<3;i++){
+    const p = ofActCairoParts(guess);
+    const shownAsUtc = Date.UTC(+p.year, +p.month-1, +p.day, +p.hour, +p.minute, +p.second);
+    const delta = shownAsUtc - Date.UTC(y, mo-1, 1, 0, 0, 0);
+    guess -= delta;
+    if(Math.abs(delta) < 1000) break;
+  }
+  return guess;
+}
+function ofActMonthCompare(a,b){ return String(a).localeCompare(String(b)); }
+function ofActArchiveByteLen(v){
+  const text = JSON.stringify(v);
+  try{ return new TextEncoder().encode(text).length; }catch(_){ return text.length * 2; }
+}
+function ofActArchiveParts(rows){
+  const out=[]; let cur=[]; let bytes=0;
+  (rows||[]).forEach(function(row){
+    const n = ofActArchiveByteLen(row) + 32;
+    if(cur.length && bytes + n > OF_ACT_ARCHIVE_TARGET_BYTES){ out.push(cur); cur=[]; bytes=0; }
+    cur.push(row); bytes += n;
+  });
+  if(cur.length) out.push(cur);
+  return out;
+}
+async function ofActGetArchiveCatalog(force){
+  const now = Date.now();
+  let meta={};
+  try{ meta = await ofActCacheGetMeta(); }catch(_){}
+  if(!force && meta.archiveCatalog && Number(meta.archiveCatalogAt) > now - OF_ACT_ARCHIVE_CATALOG_TTL_MS)
+    return meta.archiveCatalog;
+  const ref = db.collection(OF_ACT_ARCHIVE_COLLECTION).doc(OF_ACT_ARCHIVE_CATALOG_ID);
+  const snap = await ref.get(); // 1 read فقط، مرة/يوم لكل جهاز
+  const cat = snap.exists ? (snap.data() || {}) : { version:OF_ACT_ARCHIVE_VERSION, months:{} };
+  try{ await ofActCacheSetMeta({ archiveCatalog:cat, archiveCatalogAt:now }); }catch(_){}
+  return cat;
+}
+async function ofActHydrateArchives(sinceTs){
+  const now=Date.now(), currentMonth=ofActMonthKey(now);
+  let cat;
+  try{ cat = await ofActGetArchiveCatalog(false); }catch(e){ return { covered:false, loaded:0, currentMonthStartTs:ofActMonthStartMs(currentMonth) }; }
+  const months = cat && cat.months || {};
+  let meta={}; try{ meta=await ofActCacheGetMeta(); }catch(_){}
+  const loadedMap = Object.assign({}, meta.archiveMonthsLoaded || {});
+  let loaded=0;
+  const keys = Object.keys(months).filter(function(k){
+    const info=months[k]||{};
+    return ofActMonthCompare(k,currentMonth)<0 && (sinceTs<=0 || Number(info.maxTs||0)>=sinceTs || Number(info.count||0)===0);
+  }).sort();
+  for(const month of keys){
+    const info=months[month]||{};
+    const sig=[info.parts||0, info.count||0, info.maxTs||0, info.version||OF_ACT_ARCHIVE_VERSION].join(':');
+    if(loadedMap[month]===sig) continue;
+    const rows=[];
+    for(let i=0;i<Number(info.parts||0);i++){
+      const id = month + '_p' + String(i).padStart(3,'0');
+      const snap = await db.collection(OF_ACT_ARCHIVE_COLLECTION).doc(id).get();
+      if(snap.exists){
+        const d=snap.data()||{};
+        if(Array.isArray(d.events)) rows.push.apply(rows,d.events);
+      }
+    }
+    if(rows.length){ await ofActCachePutMany(rows); loaded += rows.length; }
+    loadedMap[month]=sig;
+  }
+  if(keys.length) await ofActCacheSetMeta({ archiveMonthsLoaded:loadedMap });
+
+  // لما catalog معلّم إن الأرشيف اتبنى من كاش "كل السجل"، نقدر نثق
+  // إن التاريخ المقفول كامل من غير الرجوع لكل document قديم.
+  const completeFrom = Number(cat && cat.completeFromTs);
+  const covered = Number.isFinite(completeFrom) && completeFrom <= sinceTs;
+  return { covered:covered, loaded:loaded, currentMonthStartTs:ofActMonthStartMs(currentMonth) };
+}
+async function ofActPublishClosedArchives(){
+  let meta; try{ meta=await ofActCacheGetMeta(); }catch(_){ return 0; }
+  const coverageStartTs = Number(meta.coverageStartTs);
+  if(!Number.isFinite(coverageStartTs)) return 0;
+  const all = await ofActCacheReadSince(0);
+  if(!all.length) return 0;
+  const currentMonth=ofActMonthKey(Date.now());
+  const byMonth={};
+  all.forEach(function(x){
+    const k=ofActMonthKey(Number(x.ts)||0);
+    if(ofActMonthCompare(k,currentMonth)>=0) return;
+    (byMonth[k]||(byMonth[k]=[])).push(x);
+  });
+  let written=0;
+  const published=Object.assign({}, meta.archivePublished || {});
+  const eligibleMonths=Object.keys(byMonth).sort().filter(function(month){
+    const monthStart=ofActMonthStartMs(month);
+    return !(coverageStartTs>0 && coverageStartTs>monthStart);
+  });
+  const candidates=eligibleMonths.filter(function(month){ return !published[month]; });
+  // بعد أول نشر/فحص، مفيش Firestore read إضافية عند كل فتح للسجل.
+  if(!candidates.length){
+    if(coverageStartTs===0 && meta.archiveCatalog && Number(meta.archiveCatalog.completeFromTs)!==0){
+      await db.collection(OF_ACT_ARCHIVE_COLLECTION).doc(OF_ACT_ARCHIVE_CATALOG_ID).set({
+        version:OF_ACT_ARCHIVE_VERSION, completeFromTs:0, updatedAt:Date.now()
+      }, {merge:true});
+    }
+    return 0;
+  }
+  let cat; try{ cat=await ofActGetArchiveCatalog(true); }catch(_){ cat={version:OF_ACT_ARCHIVE_VERSION,months:{}}; }
+  cat.months=cat.months||{};
+  for(const month of eligibleMonths){
+    const monthStart=ofActMonthStartMs(month);
+    if(coverageStartTs>0 && coverageStartTs>monthStart) continue; // أول شهر جزئي لا يتحول لأرشيف ناقص
+    if(cat.months[month] || published[month]){ published[month]=true; continue; }
+    const rows=byMonth[month].slice().sort(function(a,b){ return (Number(b.ts)||0)-(Number(a.ts)||0); });
+    const parts=ofActArchiveParts(rows);
+    const batch=db.batch();
+    parts.forEach(function(events,i){
+      batch.set(db.collection(OF_ACT_ARCHIVE_COLLECTION).doc(month+'_p'+String(i).padStart(3,'0')), {
+        version:OF_ACT_ARCHIVE_VERSION, month:month, part:i, count:events.length,
+        minTs:Math.min.apply(null,events.map(function(x){return Number(x.ts)||0;})),
+        maxTs:Math.max.apply(null,events.map(function(x){return Number(x.ts)||0;})),
+        events:events, createdAt:Date.now()
+      });
+    });
+    const info={ version:OF_ACT_ARCHIVE_VERSION, parts:parts.length, count:rows.length,
+      minTs:Math.min.apply(null,rows.map(function(x){return Number(x.ts)||0;})),
+      maxTs:Math.max.apply(null,rows.map(function(x){return Number(x.ts)||0;})) };
+    const patch={ version:OF_ACT_ARCHIVE_VERSION, updatedAt:Date.now(), months:{} };
+    patch.months[month]=info;
+    batch.set(db.collection(OF_ACT_ARCHIVE_COLLECTION).doc(OF_ACT_ARCHIVE_CATALOG_ID), patch, {merge:true});
+    await batch.commit();
+    cat.months[month]=info; published[month]=true; written += parts.length+1;
+  }
+  // completeFromTs يتكتب بعد نجاح كل الشهور فقط؛ ما نعلنش archive كامل لو batch في النص فشل.
+  if(coverageStartTs===0){
+    await db.collection(OF_ACT_ARCHIVE_COLLECTION).doc(OF_ACT_ARCHIVE_CATALOG_ID).set({
+      version:OF_ACT_ARCHIVE_VERSION, completeFromTs:0, updatedAt:Date.now()
+    }, {merge:true});
+    cat.completeFromTs=0; written += 1;
+  }
+  await ofActCacheSetMeta({ archivePublished:published, archiveCatalog:cat, archiveCatalogAt:Date.now() });
+  return written;
+}
+
+async function ofActFetchRange(sinceTs, untilTs, onProgress){
+  const out = [];
+  let lastDoc = null;
+  while(true){
+    let q = db.collection('pos_activity_log').where('ts', '>=', sinceTs).orderBy('ts', 'desc');
+    if(untilTs != null) q = q.where('ts', '<', untilTs);
+    if(lastDoc) q = q.startAfter(lastDoc);
+    q = q.limit(OF_ACT_PAGE_SIZE);
+    const snap = await q.get();
+    if(snap.empty) break;
+    const rows = snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
+    out.push.apply(out, rows);
+    await ofActCachePutMany(rows);
+    lastDoc = snap.docs[snap.docs.length - 1];
+    if(onProgress) onProgress(out.length);
+    if(snap.size < OF_ACT_PAGE_SIZE) break;
+  }
+  return out;
+}
+
 // وصف بالمصري لكل نوع + تصنيفه + هل هو مقلق (بيتلوّن أحمر)
 const OF_ACT_KINDS = {
   /* 🎁 محاولة مرتجع كارت هدية — **حدث ساخن**: معناها إن حد حاول
@@ -2128,18 +2392,89 @@ window.ofActLabel = ofActLabel;
 
 async function ofLoadActivity(){
   const body = document.getElementById('actBody');
-  const days = +(document.getElementById('actDays') || {}).value || 7;
-  if(body) body.innerHTML = '<div class="empty">⏳ بيحمّل...</div>';
+  const rawDays = String((document.getElementById('actDays') || {}).value || '7');
+  const days = Number(rawDays);
+  const now = Date.now();
+  const sinceTs = days > 0 ? now - days * 24 * 60 * 60 * 1000 : 0;
+  _ofActCacheStatus = { source:'cache', cached:0, synced:0, loading:true };
+  if(body) body.innerHTML = '<div class="empty">⏳ بيفتح السجل المحلي...</div>';
+
+  // 1) اعرض الكاش فورًا. لو IndexedDB مش متاح، نكمّل من Firestore عادي.
+  let meta = {};
   try{
-    // ⚠️ نافذة زمنية + limit: من غيرهم السجل ده لوحده بياكل القراءات
-    const snap = await db.collection('pos_activity_log')
-      .where('ts', '>=', Date.now() - days * 24 * 60 * 60 * 1000)
-      .orderBy('ts', 'desc').limit(OF_ACT_LIMIT).get();
-    _ofActRaw = ofActLinkInvoices(
-      snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); }));
+    const cached = await ofActCacheReadSince(sinceTs);
+    meta = await ofActCacheGetMeta();
+    _ofActRaw = ofActLinkInvoices(cached);
+    _ofActCacheStatus.cached = cached.length;
+    if(cached.length) ofRenderActivity();
+  }catch(cacheErr){
+    console.warn('activity cache', cacheErr);
+  }
+
+  try{
+    // 2) قبل أي history query: جرّب الأرشيف المركزي المضغوط منطقيًا.
+    // جهاز جديد يقرأ catalog واحدة ثم document لكل chunk بدل document لكل حدث.
+    const archive = await ofActHydrateArchives(sinceTs);
+    if(archive.loaded){
+      _ofActRaw = ofActLinkInvoices(await ofActCacheReadSince(sinceTs));
+      _ofActCacheStatus.cached = _ofActRaw.length;
+      ofRenderActivity();
+    }
+
+    // 3) وسّع التغطية للخلف فقط لو الفترة المطلوبة مش متخزنة محليًا أو في archive مكتمل.
+    // مفيش حد أقصى للعدد: الـ500 مجرد page size ونكمّل لحد نهاية الفترة.
+    let coverageStartTs = Number(meta.coverageStartTs);
+    if(!Number.isFinite(coverageStartTs)) coverageStartTs = null;
+    if(archive.covered && (coverageStartTs===null || coverageStartTs>sinceTs)){
+      coverageStartTs=sinceTs;
+      await ofActCacheSetMeta({ coverageStartTs:sinceTs });
+    }
+    let added = archive.loaded || 0;
+    const progress = function(n){
+      if(body && !_ofActRaw.length) body.innerHTML = '<div class="empty">⏳ بيحمّل السجل... ' + n + ' حدث</div>';
+    };
+    let backfillReachedNow = false;
+    if(coverageStartTs === null || coverageStartTs > sinceTs){
+      const until = coverageStartTs === null ? null : coverageStartTs;
+      const older = await ofActFetchRange(sinceTs, until, progress);
+      added += older.length;
+      backfillReachedNow = until === null;
+      await ofActCacheSetMeta({ coverageStartTs: sinceTs, lastSyncAt: now });
+      coverageStartTs = sinceTs;
+    }
+
+    // 3) مزامنة الجديد فقط، مع overlap يوم واحد لالتقاط الكتابات المتأخرة.
+    // أول تحميل كامل وصل للحظة الحالية بالفعل، فلا نقرأ آخر يوم مرتين.
+    const latestCachedTs = _ofActRaw.length ? Math.max.apply(null, _ofActRaw.map(function(x){ return Number(x.ts)||0; })) : 0;
+    let syncFrom = Math.max(sinceTs, latestCachedTs ? latestCachedTs - OF_ACT_SYNC_OVERLAP_MS : sinceTs);
+    if(archive.covered && latestCachedTs < archive.currentMonthStartTs) syncFrom = Math.max(sinceTs, archive.currentMonthStartTs);
+    const fresh = backfillReachedNow ? [] : await ofActFetchRange(syncFrom, null);
+    added += fresh.length;
+    await ofActCacheSetMeta({ coverageStartTs: coverageStartTs == null ? sinceTs : Math.min(coverageStartTs, sinceTs), lastSyncAt: Date.now() });
+
+    // 4) اقرأ النتيجة النهائية من IndexedDB: dedupe طبيعي بالـdocument id.
+    try{
+      _ofActRaw = ofActLinkInvoices(await ofActCacheReadSince(sinceTs));
+    }catch(cacheReadErr){
+      // fallback لو IndexedDB اتعطل أثناء الجلسة
+      const byId = {};
+      (_ofActRaw || []).concat(fresh || []).forEach(function(x){ if(x && x.id) byId[x.id] = x; });
+      _ofActRaw = ofActLinkInvoices(Object.keys(byId).map(function(k){ return byId[k]; }));
+    }
+    _ofActCacheStatus = { source:'synced', cached:_ofActRaw.length, synced:added, loading:false };
     ofRenderActivity();
+    // بناء archive للشهور المقفولة في الخلفية فقط؛ لا يعطّل فتح السجل.
+    // الشهر الحالي يفضل incremental حتى لا نعيد كتابة archive مع كل بيع.
+    setTimeout(function(){ ofActPublishClosedArchives().catch(function(e){ console.warn('activity archive publish',e); }); }, 0);
   }catch(e){
     console.warn('activity', e);
+    _ofActCacheStatus.loading = false;
+    // لو عندنا cache، ما نخسرش السجل لمجرد إن النت وقع.
+    if(_ofActRaw.length){
+      _ofActCacheStatus.source = 'offline-cache';
+      ofRenderActivity();
+      return;
+    }
     if(body) body.innerHTML = '<div class="empty">⚠️ مش قادر يحمّل: ' + esc(e && e.message || e)
       + '<br><span style="font-size:11px;">لو الرسالة فيها index — افتح اللينك اللي في الكونسول مرة واحدة.</span></div>';
   }
@@ -2186,7 +2521,8 @@ function ofRenderActivity(){
       + '<div class="muted" style="font-size:11.5px; line-height:1.7; margin-bottom:6px;">'
       + sm.total + ' حدث ظاهر'
       + (!showingQuiet && quietN ? ' · ' + quietN + ' حدث روتيني متخفي' : '')
-      + (_ofActRaw.length >= OF_ACT_LIMIT ? ' · <b>وصلنا حد الـ' + OF_ACT_LIMIT + ' — ضيّق المدة لو عايز القصة كاملة</b>' : '')
+      + (_ofActCacheStatus.source === 'offline-cache' ? ' · <b>أوفلاين — المعروض من الذاكرة المحلية</b>' : '')
+      + (_ofActCacheStatus.source === 'synced' ? ' · محفوظ محليًا ومحدّث' : '')
       + '</div>' + repeatHtml + behaviorHtml;
   }
   if(!list.length){ body.innerHTML = '<div class="empty">مفيش أحداث مطابقة للفلاتر 👌</div>'; return; }
