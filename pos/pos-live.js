@@ -1,4 +1,4 @@
-/* 🔴 POS Live v436 — low-cost operational live state for Office.
+/* 🔴 POS Live v439 — low-cost operational live state for Office.
    - Current cart/payment state is merged into one document per branch.
    - Daily branch KPIs are updated only after a sale is actually saved.
    - KPI update is idempotent per invoiceCode (transaction + countedSaleIds).
@@ -9,7 +9,7 @@
 
   var timer=null, lastJson='', stopped=false, flushing=false;
   var HEARTBEAT_MS=5*60*1000;
-  var PENDING_KEY='pos_live_pending_sales_v411';
+  var PENDING_KEY='pos_live_pending_sales_v439';
 
   function safeEmployee(){ try{return (currentEmployee&&currentEmployee.name)||'';}catch(e){return '';} }
   function safeBranch(){ try{return currentBranch||'';}catch(e){return '';} }
@@ -62,8 +62,11 @@
     return {
       branch:String(raw.branch||safeBranch()||''), invoiceCode:String(raw.invoiceCode||''), invoiceNo:String(raw.invoiceNo==null?'':raw.invoiceNo),
       total:round2(raw.total), itemCount:Number(raw.itemCount||0), payments:p,
-      items:(Array.isArray(raw.items)?raw.items:[]).slice(0,40).map(function(x){return {name:String(x.name||x.code||'صنف'),code:String(x.code||x.barcode||''),qty:Number(x.qty||0),price:round2(x.price),isReturn:!!x.isReturn};}),
-      seller:String(raw.seller||''), employee:String(raw.employee||safeEmployee()||''), atMs:Number(raw.atMs||Date.now())
+      seller:String(raw.seller||''), employee:String(raw.employee||safeEmployee()||''),
+      customerName:String(raw.customerName||''), customerPhone:String(raw.customerPhone||''),
+      items:Array.isArray(raw.items)?raw.items.slice(0,80).map(function(x){return {name:String(x.name||''),code:String(x.code||x.barcode||''),qty:Number(x.qty||0),price:Number(x.price||0),isReturn:!!x.isReturn};}):[],
+      cardTxns:Array.isArray(raw.cardTxns)?raw.cardTxns.slice(0,4).map(function(x){return {transactionId:String(x.transactionId||x.txnId||x.id||''),rrn:String(x.rrn||''),approvalCode:String(x.approvalCode||x.authCode||''),amount:round2(x.amount)};}):[],
+      atMs:Number(raw.atMs||Date.now()), confirmedAtMs:Number(raw.confirmedAtMs||raw.atMs||Date.now())
     };
   }
 
@@ -76,7 +79,7 @@
         var d=(snap&&snap.exists?snap.data():{})||{};
         var sameDay=d.statsDayKey===day;
         var counted=sameDay && d.countedSaleIds && d.countedSaleIds[ev.invoiceCode];
-        var lastSale={invoiceCode:ev.invoiceCode,invoiceNo:ev.invoiceNo,total:ev.total,itemCount:ev.itemCount,payments:ev.payments,items:ev.items,seller:ev.seller,employee:ev.employee,atMs:ev.atMs};
+        var lastSale={invoiceCode:ev.invoiceCode,invoiceNo:ev.invoiceNo,total:ev.total,itemCount:ev.itemCount,payments:ev.payments,seller:ev.seller,employee:ev.employee,customerName:ev.customerName,customerPhone:ev.customerPhone,items:ev.items,cardTxns:ev.cardTxns,atMs:ev.atMs,confirmedAtMs:ev.confirmedAtMs};
         if(counted) return false;
         if(d.lastSale && Number(d.lastSale.atMs||0) > Number(lastSale.atMs||0)) lastSale=d.lastSale;
         var old=sameDay?(d.stats||{}):{};

@@ -4326,12 +4326,10 @@ window.returnPointsDeduction = returnPointsDeduction;
       if(typeof posLiveRecordSale === 'function') posLiveRecordSale({
         branch: currentBranch, invoiceCode: invoiceCode, invoiceNo: invoiceNo,
         total: total, itemCount: itemCount, payments: payments,
-        items: (cart||[]).filter(function(x){return !x.isRedemption;}).map(function(x){return {
-          name:String(x.name||x.code||'صنف'), code:String(x.code||x.barcode||''),
-          qty:Number(x.qty||0), price:Number(x.price||0), isReturn:!!x.isReturn
-        };}),
         seller: sellerEmployeeName || '', employee: (currentEmployee&&currentEmployee.name)||'',
-        atMs: Date.now()
+        customerName: custName || '', customerPhone: phone || '',
+        items: cart, cardTxns: (paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : [],
+        atMs: Date.now(), confirmedAtMs: Date.now()
       });
     }catch(e){}
 
