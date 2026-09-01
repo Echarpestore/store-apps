@@ -4195,6 +4195,9 @@ window.returnPointsDeduction = returnPointsDeduction;
       // 💳💳 كل الكروت المستخدمة في الفاتورة بمبالغها وأرقام عملياتها —
       // ضروري للمرتجع: كل عملية بترجع لوحدها من Paymob
       cardTxns: (paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : null,
+      // 💳🔎 v432: index صغير للبحث المباشر برقم عملية البنك/Paymob بدون قراءة تاريخ المبيعات.
+      bankTransactionIds: Array.from(new Set(((paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : (paymobCardInfo ? [paymobCardInfo] : []))
+        .map(function(ct){ return String((ct && ct.transactionId) == null ? '' : ct.transactionId).trim(); }).filter(Boolean))),
       // 📴 طابع وقت محلي: serverTimestamp بيفضل null لحد ما فاتورة الأوفلاين تترفع،
       // فكانت بتختفي من التقفيل والتقارير وهي كاشها في الدرج. ده البديل الفوري.
       cartSid: _cartSid || null,             // 🕵️ رابط أحداث السلة دي بالفاتورة

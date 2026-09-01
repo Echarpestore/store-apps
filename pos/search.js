@@ -105,7 +105,7 @@ function renderGlobalSearchResults(q, results, opts){
     html += results.invoices.map(s=> `
       <div onclick="closeGlobalSearchAnd(()=>openInvoice('${s.id}'))" style="padding:10px 12px; border-bottom:1px solid #eee; cursor:pointer; display:flex; justify-content:space-between;">
         <span style="font-weight:700; font-size:13px;">🧾 ${s.invoiceNo || s.id.slice(-6).toUpperCase()}</span>
-        <span style="color:#888; font-size:12px;">${(s.total||0).toFixed(2)} ج.م${s.customerPhone ? ' · 📞 '+s.customerPhone : ''}</span>
+        <span style="color:#888; font-size:12px;">${(s.total||0).toFixed(2)} ج.م${s.transactionIds && s.transactionIds.length ? ' · 💳 TXN '+s.transactionIds.join(' / ') : ''}${s.customerPhone ? ' · 📞 '+s.customerPhone : ''}</span>
       </div>`).join('');
   }
   box.innerHTML = html;

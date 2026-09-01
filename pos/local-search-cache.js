@@ -137,11 +137,18 @@
       invoiceNo:String(data.invoiceNo||''), invoiceCode:String(data.invoiceCode||''),
       customerPhone:String(data.customerPhone||''), customerName:String(data.customerName||''),
       phoneDigits:_digits(data.customerPhone||''), total:Number(data.total||0),
+      transactionIds:(function(){
+        var list=(data.cardTxns&&data.cardTxns.length)?data.cardTxns:(data.cardTxn?[data.cardTxn]:[]), out=[];
+        (data.bankTransactionIds||[]).concat(list.map(function(x){return x&&x.transactionId;})).forEach(function(v){
+          var x=String(v==null?'':v).trim(); if(x && out.indexOf(x)<0) out.push(x);
+        });
+        return out;
+      })(),
       createdAtMs:Number(_tsMs(data.createdAt)||data.createdAtMs||0), reversed:!!data.reversed
     };
   }
   function _toPublicCustomer(r){ return {id:r.id,name:r.name,phone:r.phone,branch:r.branch}; }
-  function _toPublicInvoice(r){ return {id:r.id,invoiceNo:r.invoiceNo,invoiceCode:r.invoiceCode,customerPhone:r.customerPhone,customerName:r.customerName,total:r.total,createdAtMs:r.createdAtMs,reversed:r.reversed,branch:r.branch}; }
+  function _toPublicInvoice(r){ return {id:r.id,invoiceNo:r.invoiceNo,invoiceCode:r.invoiceCode,customerPhone:r.customerPhone,customerName:r.customerName,total:r.total,transactionIds:r.transactionIds||[],createdAtMs:r.createdAtMs,reversed:r.reversed,branch:r.branch}; }
 
   async function ensureBranch(branch){
     branch=_safeBranch(branch); if(!branch) return;
@@ -175,7 +182,8 @@
       if(out.length>=max) return;
       var exactNo=String(r.invoiceNo||'').toUpperCase()===qu || String(r.invoiceCode||'').toUpperCase()===qu;
       var phone=d.length>=6 && pvs.some(function(p){return r.phoneDigits===_digits(p);});
-      if(exactNo||phone) out.push(_toPublicInvoice(r));
+      var txn=(r.transactionIds||[]).some(function(x){return String(x).toUpperCase()===qu;});
+      if(exactNo||phone||txn) out.push(_toPublicInvoice(r));
     });
     out.sort(function(a,b){return Number(b.createdAtMs||0)-Number(a.createdAtMs||0);});
     return out.slice(0,max);
@@ -274,6 +282,17 @@
       });
     }
     invJobs.push(db.collection(TEST_SALES).where('branch','==',branch).where('invoiceNo','==',String(q||'').toUpperCase()).limit(max).get().catch(function(){return null;}));
+    // 💳 v432: بحث مستهدف برقم عملية البنك/Paymob. الفواتير الجديدة لها index بسيط
+    // bankTransactionIds؛ والفواتير القديمة ندعم أول cardTxn بدون مسح تاريخ المبيعات كله.
+    var txnQ=String(q||'').trim();
+    if(txnQ.length>=4){
+      invJobs.push(db.collection(TEST_SALES).where('branch','==',branch).where('bankTransactionIds','array-contains',txnQ).limit(max).get().catch(function(){return null;}));
+      invJobs.push(db.collection(TEST_SALES).where('branch','==',branch).where('cardTxn.transactionId','==',txnQ).limit(max).get().catch(function(){return null;}));
+      if(/^\d+$/.test(txnQ)){
+        var txnN=Number(txnQ);
+        if(isFinite(txnN)) invJobs.push(db.collection(TEST_SALES).where('branch','==',branch).where('cardTxn.transactionId','==',txnN).limit(max).get().catch(function(){return null;}));
+      }
+    }
     var pair=await Promise.all([Promise.all(custJobs),Promise.all(invJobs)]), customers=[],invoices=[],seenC=new Set(),seenI=new Set();
     pair[0].forEach(function(s){if(!s)return;s.docs.forEach(function(d){if(seenC.has(d.id))return;seenC.add(d.id);var x=d.data();customers.push({id:d.id,...x});upsertCustomer({id:d.id,...x},branch).catch(function(){});});});
     pair[1].forEach(function(s){if(!s)return;s.docs.forEach(function(d){if(seenI.has(d.id))return;seenI.add(d.id);var x=d.data();invoices.push({id:d.id,...x});upsertInvoice({id:d.id,...x},branch).catch(function(){});});});
