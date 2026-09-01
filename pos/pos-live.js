@@ -1,4 +1,4 @@
-/* 🔴 POS Live v411 — low-cost operational live state for Office.
+/* 🔴 POS Live v436 — low-cost operational live state for Office.
    - Current cart/payment state is merged into one document per branch.
    - Daily branch KPIs are updated only after a sale is actually saved.
    - KPI update is idempotent per invoiceCode (transaction + countedSaleIds).
@@ -62,6 +62,7 @@
     return {
       branch:String(raw.branch||safeBranch()||''), invoiceCode:String(raw.invoiceCode||''), invoiceNo:String(raw.invoiceNo==null?'':raw.invoiceNo),
       total:round2(raw.total), itemCount:Number(raw.itemCount||0), payments:p,
+      items:(Array.isArray(raw.items)?raw.items:[]).slice(0,40).map(function(x){return {name:String(x.name||x.code||'صنف'),code:String(x.code||x.barcode||''),qty:Number(x.qty||0),price:round2(x.price),isReturn:!!x.isReturn};}),
       seller:String(raw.seller||''), employee:String(raw.employee||safeEmployee()||''), atMs:Number(raw.atMs||Date.now())
     };
   }
@@ -75,7 +76,7 @@
         var d=(snap&&snap.exists?snap.data():{})||{};
         var sameDay=d.statsDayKey===day;
         var counted=sameDay && d.countedSaleIds && d.countedSaleIds[ev.invoiceCode];
-        var lastSale={invoiceCode:ev.invoiceCode,invoiceNo:ev.invoiceNo,total:ev.total,itemCount:ev.itemCount,payments:ev.payments,seller:ev.seller,employee:ev.employee,atMs:ev.atMs};
+        var lastSale={invoiceCode:ev.invoiceCode,invoiceNo:ev.invoiceNo,total:ev.total,itemCount:ev.itemCount,payments:ev.payments,items:ev.items,seller:ev.seller,employee:ev.employee,atMs:ev.atMs};
         if(counted) return false;
         if(d.lastSale && Number(d.lastSale.atMs||0) > Number(lastSale.atMs||0)) lastSale=d.lastSale;
         var old=sameDay?(d.stats||{}):{};
