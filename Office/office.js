@@ -1356,10 +1356,10 @@ function ofLiveRender(){
 function ofLiveStart(){
   if(_ofLiveUnsub || typeof db==='undefined') return;
   var box=document.getElementById('posLiveBody'); if(box) box.innerHTML='<div class="empty">جاري الاتصال بالفروع…</div>';
-  _ofLiveUnsub=db.collection('office_pos_live').onSnapshot(function(snap){ _ofLiveDocs=[]; snap.forEach(function(d){_ofLiveDocs.push(Object.assign({id:d.id},d.data()||{}));}); ofLiveRender(); },function(err){ if(box) box.innerHTML='<div class="empty">تعذر تشغيل POS Live: '+ofLiveEsc(err&&err.message||err)+'</div>'; });
+  _ofLiveUnsub=db.collection('office_pos_live').onSnapshot(function(snap){ _ofLiveDocs=[]; snap.forEach(function(d){_ofLiveDocs.push(Object.assign({id:d.id},d.data()||{}));}); ofLiveRender(); try{window.dispatchEvent(new CustomEvent('office-pos-live-update',{detail:{count:_ofLiveDocs.length}}));}catch(e){} },function(err){ if(box) box.innerHTML='<div class="empty">تعذر تشغيل POS Live: '+ofLiveEsc(err&&err.message||err)+'</div>'; });
 }
 function ofLiveStop(){ if(_ofLiveUnsub){try{_ofLiveUnsub();}catch(e){}_ofLiveUnsub=null;} }
-window.ofLiveStart=ofLiveStart; window.ofLiveStop=ofLiveStop;
+window.ofLiveStart=ofLiveStart; window.ofLiveStop=ofLiveStop; window.ofLiveGetDocs=function(){return _ofLiveDocs.slice();};
 
 function ofGoPage(page, opts){
   opts = opts || {};
@@ -1373,7 +1373,7 @@ function ofGoPage(page, opts){
   ofCloseMore();
   try{ window.scrollTo(0, 0); }catch(e){}
   // ⚡ بيانات التقارير بتتحمّل أول ما تفتح التبويب — مش في الخلفية طول الوقت
-  if(page === 'live') ofLiveStart(); else ofLiveStop();
+  if(page === 'live' || page === 'cctv') ofLiveStart(); else ofLiveStop();
   // 📹 CCTV v420: البث يشتغل فقط أثناء فتح التبويب، ويتوقف فور مغادرته.
   if(page === 'cctv'){ try{ window.ofCctvStart && window.ofCctvStart(); }catch(e){ console.warn('cctv start',e); } }
   else { try{ window.ofCctvStop && window.ofCctvStop(); }catch(e){ console.warn('cctv stop',e); } }

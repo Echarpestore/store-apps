@@ -257,7 +257,19 @@
   .of-cctv-overlay{position:absolute;z-index:2;top:10px;right:10px;left:10px;display:flex;justify-content:space-between;pointer-events:none}.of-cctv-badge{background:rgba(3,7,18,.76);backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.12);padding:7px 10px;border-radius:10px;font-size:11px}.of-cctv-live{color:#4ade80}
   .of-cctv-actions{display:flex;gap:8px;margin-top:10px}.of-cctv-actions button{flex:1;border:1px solid #334155;background:#172033;color:#fff;border-radius:12px;padding:10px;cursor:pointer;font:inherit;font-weight:700}
   .of-cctv-warning{display:none;margin:8px 0 12px;padding:10px 12px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:11.5px;line-height:1.7}
-  @media(max-width:720px){.of-cctv-shell{margin:0 -2px;padding:10px;border-radius:18px}.of-cctv-stage{aspect-ratio:16/10}.of-cctv-actions button{padding:9px 5px;font-size:11px}.of-cctv-title b{font-size:14px}}
+  .of-cctv-controlroom{min-height:62vh}
+  .of-cctv-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .of-cctv-toolbar .of-cctv-branches{padding-bottom:4px;flex:1}
+  .of-cctv-layouts{display:flex;gap:6px;background:#0b1220;border:1px solid #263246;border-radius:12px;padding:4px}
+  .of-cctv-layout-btn{border:0;background:transparent;color:#94a3b8;border-radius:9px;padding:7px 10px;cursor:pointer;font:inherit;font-weight:800}.of-cctv-layout-btn.active{background:#fff;color:#111827}
+  .of-cctv-grid{display:grid;gap:10px;margin-top:10px}.of-cctv-grid-1{grid-template-columns:minmax(0,1fr)}.of-cctv-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}.of-cctv-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .of-cctv-panel{min-width:0;background:#030712;border:1px solid #334155;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-height:230px;box-shadow:0 8px 22px rgba(0,0,0,.18)}
+  .of-cctv-panel-head{display:flex;align-items:center;gap:8px;padding:8px;background:#111827;border-bottom:1px solid #263246}.of-cctv-source{min-width:0;flex:1;background:#172033;color:#e5e7eb;border:1px solid #334155;border-radius:10px;padding:7px 9px;font:inherit;font-size:11px}.of-cctv-panel-full{border:1px solid #334155;background:#172033;color:#fff;border-radius:9px;padding:7px 9px;cursor:pointer}
+  .of-cctv-panel-body{position:relative;flex:1;min-height:0}.of-cctv-panel-body iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}.of-cctv-video{aspect-ratio:16/9;min-height:0}
+  .of-cctv-pos{height:100%;overflow:auto;background:#f8fafc;color:#111827;padding:10px}.of-cctv-pos .muted{color:#64748b}.of-cctv-pos-row{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #e5e7eb;font-size:12px}.of-cctv-pos-total{display:flex;justify-content:space-between;gap:8px;margin-top:9px;padding:9px;border-radius:10px;background:#ecfdf5;border:1px solid #a7f3d0}.of-cctv-pos-chip{display:inline-block;margin:3px 2px 0;padding:4px 7px;border-radius:999px;background:#fff7ed;border:1px solid #fed7aa;font-size:10px}.of-cctv-pos-live{font-size:10px;color:#059669;font-weight:800}.of-cctv-empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:#94a3b8}
+  .of-cctv-footnote{font-size:10px;color:#94a3b8;margin-top:9px;text-align:center}
+  .of-cctv-panel.maximized{position:fixed;inset:10px;z-index:9998;border-radius:18px;min-height:0}.of-cctv-panel.maximized .of-cctv-panel-body{height:calc(100vh - 70px)}
+  @media(max-width:720px){.of-cctv-shell{margin:0 -2px;padding:10px;border-radius:18px}.of-cctv-stage{aspect-ratio:16/10}.of-cctv-actions button{padding:9px 5px;font-size:11px}.of-cctv-title b{font-size:14px}.of-cctv-grid-2,.of-cctv-grid-4{grid-template-columns:1fr}.of-cctv-panel{min-height:250px}.of-cctv-grid-1 .of-cctv-panel{min-height:330px}}
 
 </style>
 </head>
@@ -591,25 +603,26 @@
     <div id="posLiveBody"><div class="empty">افتح التبويب لبدء المتابعة</div></div>
   </section>
 
-  <!-- 📹 CCTV v423 — بث كاميرا واحدة فقط حسب اختيار المستخدم -->
+  <!-- 📹 CCTV v428 — Control Room: camera + POS Live in selectable 1/2/4 panels -->
   <section class="tabPage" id="page-cctv">
-    <div class="of-cctv-shell">
+    <div class="of-cctv-shell of-cctv-controlroom">
       <div class="of-cctv-top">
-        <div class="of-cctv-title"><span style="font-size:22px">📹</span><div><b>كاميرات الفروع</b><small>يتم تشغيل الكاميرا التي تختارها فقط</small></div></div>
-        <span class="of-cctv-status" id="ofCctvStatus">● متصل</span>
+        <div class="of-cctv-title"><span style="font-size:22px">📹</span><div><b>غرفة المراقبة</b><small>كاميرات + سلة POS Live في نفس الشاشة</small></div></div>
+        <span class="of-cctv-status" id="ofCctvStatus">● LIVE</span>
       </div>
-      <div class="of-cctv-branches" id="ofCctvBranches"></div>
-      <div class="of-cctv-cams" id="ofCctvCams"></div>
+      <div class="of-cctv-toolbar">
+        <div class="of-cctv-branches" id="ofCctvBranches"></div>
+        <div class="of-cctv-layouts" aria-label="تقسيم الشاشة">
+          <button type="button" class="of-cctv-layout-btn" data-layout="1">▣ 1</button>
+          <button type="button" class="of-cctv-layout-btn" data-layout="2">▥ 2</button>
+          <button type="button" class="of-cctv-layout-btn" data-layout="4">▦ 4</button>
+        </div>
+      </div>
       <div id="ofCctvWarn" class="of-cctv-warning"></div>
-      <div class="of-cctv-stage" id="ofCctvStage"><div class="empty" style="color:#94a3b8;padding-top:20%">اختر كاميرا لبدء البث</div></div>
-      <div class="of-cctv-actions">
-        <button type="button" id="ofCctvReload">↻ تحديث البث</button>
-        <button type="button" id="ofCctvShot">📸 لقطة الآن</button>
-        <button type="button" id="ofCctvOpen">⛶ فتح كامل</button>
-      </div>
+      <div class="of-cctv-grid of-cctv-grid-2" id="ofCctvGrid"></div>
+      <div class="of-cctv-footnote">يتم تشغيل المصادر الموجودة في المربعات فقط. تغيير المصدر أو مغادرة الصفحة يوقف البث السابق فورًا.</div>
     </div>
   </section>
-
   <!-- 🕵️ سجل النشاط -->
   <section class="tabPage" id="page-odd">
     <!-- 🐞 بلاغات الفروع -->
@@ -715,7 +728,7 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
-<script src="cctv.js?v=427"></script>
-<script src="office.js?v=77"></script>
+<script src="cctv.js?v=428"></script>
+<script src="office.js?v=78"></script>
 </body>
 </html>
