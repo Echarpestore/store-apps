@@ -453,7 +453,13 @@ function addToCart(item){
   //    فيها. لما الفاتورة تتحفظ بيتسجل حدث ربط (sid ← رقم الفاتورة)،
   //    فسجل النشاط في Office بيقدر يقول لكل حدث الفاتورة بتاعته —
   //    وقت الحدث نفسه الفاتورة لسه مالهاش رقم أصلًا.
-  if(!cart.length){ _cartFirstItemAt = Date.now(); _cartSid = _newCartSid(); }
+  if(!cart.length){
+    _cartFirstItemAt = Date.now(); _cartSid = _newCartSid();
+    // 📸 v426: أول كود في الفاتورة — لقطة واحدة فقط للسلة دي.
+    try{ if(typeof cctvCaptureInvoiceStage === 'function') cctvCaptureInvoiceStage('first_item', {
+      sid:_cartSid, branch:currentBranch, atMs:_cartFirstItemAt
+    }); }catch(e){}
+  }
   // البيع مسموح دايمًا حتى لو المخزون مايكفيش (الكمية تنزل بالسالب)
   // 🔑 `noSplit` مش موجودة على السطور العادية — بس السطر اللي الكاشير فصلته
   //    بإيدها (عشان تخصم على قطعة واحدة) بيتعلّم `noMerge` وبيتستثنى من الدمج،
@@ -2059,15 +2065,27 @@ window.cardRefundDuePayload = cardRefundDuePayload;
 
 function _logActivity(type, data){
   try{
-    db.collection('pos_activity_log').add({
+    const _actTs = Date.now();
+    const _actSid = _cartSid || null;
+    const _cctvEventId = (typeof cctvActivityEventId === 'function')
+      ? cctvActivityEventId(type, _actTs, _actSid) : '';
+    const _payload = {
       type, branch: currentBranch,
       employeeId: (currentEmployee&&currentEmployee.id)||'',
       employeeName: (currentEmployee&&currentEmployee.name)||'',
       // 🕵️ معرّف السلة على كل حدث — من غيره الأحداث أيتام مش معروف
       //    تخص أنهي فاتورة (وقت وقوعها الفاتورة لسه مالهاش رقم)
-      sid: _cartSid || null,
-      ts: Date.now(), ...data
-    }).catch(()=>{});
+      sid: _actSid,
+      ts: _actTs, ...data
+    };
+    if(_cctvEventId) _payload.cctvEventId = _cctvEventId;
+    db.collection('pos_activity_log').add(_payload).catch(()=>{});
+    // 🎥 v424+: الأحداث المقلقة فقط تحفظ نافذة فيديو محلية 30ث قبل/بعد.
+    try{ if(_cctvEventId && typeof cctvCaptureActivityEvent === 'function') cctvCaptureActivityEvent({
+      eventId:_cctvEventId, type:type, branch:currentBranch, atMs:_actTs, sid:_actSid,
+      invoiceCode:(data&&data.invoiceCode)||'', employeeId:(currentEmployee&&currentEmployee.id)||'',
+      employeeName:(currentEmployee&&currentEmployee.name)||''
+    }); }catch(e){}
   }catch(e){}
 }   // لعرض QR التطبيق في الفاتورة للغير مسجّل/غير مثبّت
 let custPendingRedeem = null, custBaseText = '';
@@ -2954,6 +2972,10 @@ let pendingCardSeq = 0;   // 💳 شريحة الكارت المفتوحة في 
 
 function togglePayMethod(method){
   const total = cartTotal();
+  // 📸 v426: أول دخول فعلي لمرحلة الدفع — مرة واحدة لكل سلة.
+  try{ if(cart && cart.length && _cartSid && typeof cctvCaptureInvoiceStage === 'function') cctvCaptureInvoiceStage('payment', {
+    sid:_cartSid, branch:currentBranch, atMs:Date.now()
+  }); }catch(e){}
   const isRefund = total < 0;
   const isCard = (method === 'visa' || method === 'visa1' || method === 'visa2');
   // 💳 زر «فيزا» العام يروح لأول كارت متاح، لكن visa1 (F3) ثابت على كارت 1.
@@ -3912,6 +3934,7 @@ window.showChangeAfterPrint = showChangeAfterPrint;
 
 let _confirmSaving = false;
 async function confirmPayment(){
+  if(typeof confirmForeignBranchAction === 'function' && !confirmForeignBranchAction('حفظ الفاتورة والبيع')) return;
   if(_confirmSaving){ showToast('الفاتورة بتتحفظ... استنى ثانية', 'err'); return; }   // منع التكرار
   // 💵 بنحسب الباقي دلوقتي قبل ما السلة تتفضّى — وبنعرضه بعد الطباعة
   let _pendingChange = 0;
@@ -4110,6 +4133,10 @@ window.returnPointsDeduction = returnPointsDeduction;
   const _rate = loyaltyRedemptionConfig.pointsPerEGP || 100;
   const _rawPts = Math.floor(Math.abs(total) / _rate);
   const loyaltyPointsEarned = phone ? (total < 0 ? -_rawPts : _rawPts) : 0;   // المرتجع بيخصم نقط بالسالب
+  // 📸 v426: لقطة لحظة بدء حفظ الفاتورة، قبل أي انتظار لإنشاء الرقم/Firestore.
+  try{ if(_cartSid && typeof cctvCaptureInvoiceStage === 'function') cctvCaptureInvoiceStage('saving', {
+    sid:_cartSid, branch:currentBranch, atMs:Date.now()
+  }); }catch(e){}
   const invoiceNo = await generateInvoiceNumber();
   // بادئة الفرع في كود الفاتورة (FT + رمز الفرع) — عشان الكود يقول الفرع فورًا ويمنع تعارض الأوفلاين
   const invoiceCode = 'FT' + branchCode(currentBranch) + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
@@ -4190,19 +4217,30 @@ window.returnPointsDeduction = returnPointsDeduction;
 
     // 🕵️ v296: حدث الربط — بيدي لكل أحداث السلة دي رقم فاتورتها.
     //    لازم **بعد** الحفظ: قبل كده الفاتورة مالهاش رقم من الأساس.
+    const _cctvInvoiceId = (typeof cctvInvoiceEventId === 'function') ? cctvInvoiceEventId(invoiceCode) : '';
     try{
       _logActivity('sale_saved', {
         invoiceCode: invoiceCode, invoiceNo: invoiceNo,
-        total: total, itemCount: itemCount
+        total: total, itemCount: itemCount,
+        cctvEventId: _cctvInvoiceId || undefined
       });
     }catch(e){}
 
-    // 📸 v421: لقطة الكاشير تُؤخذ بعد نجاح حفظ الفاتورة فقط.
-    // Fire-and-forget: فشل الكاميرا/الـGateway لا يوقف البيع أو الطباعة.
-    try{ if(typeof cctvCaptureInvoiceSnapshot === 'function') cctvCaptureInvoiceSnapshot({
-      invoiceCode: invoiceCode, invoiceNo: invoiceNo, branch: currentBranch,
-      saleId: (_saleW && _saleW.value && _saleW.value.id) || '', atMs: Date.now()
-    }); }catch(e){}
+    // 📸🎥 v426: اربط لقطات مراحل الفاتورة + فيديو الحدث بعد نجاح الحفظ فقط.
+    // Fire-and-forget بالكامل: الكاميرا لا تعطل البيع/الدفع/الطباعة مهما حصل.
+    try{
+      const _cctvMeta = {
+        invoiceCode: invoiceCode, invoiceNo: invoiceNo, branch: currentBranch,
+        saleId: (_saleW && _saleW.value && _saleW.value.id) || '',
+        sid: _cartSid || '', cartSid: _cartSid || '', atMs: Date.now(),
+        employeeId: (currentEmployee && currentEmployee.id) || '',
+        employeeName: (currentEmployee && currentEmployee.name) || ''
+      };
+      if(_cctvInvoiceId) _cctvMeta.eventId = _cctvInvoiceId;
+      if(typeof cctvCaptureInvoiceEvidence === 'function') cctvCaptureInvoiceEvidence(_cctvMeta);
+      else if(typeof cctvFinalizeInvoiceSnapshots === 'function') cctvFinalizeInvoiceSnapshots(_cctvMeta);
+      else if(typeof cctvCaptureInvoiceSnapshot === 'function') cctvCaptureInvoiceSnapshot(_cctvMeta);
+    }catch(e){}
 
     /* 🛍️ أوردر أونلاين اتسلّم؟ الحالة بتتقفل **بعد** نجاح الحفظ بس.
        ⚠️ لو اتقفلت وقت تحميل السلة، وكاشير لغت البيع → أوردر
