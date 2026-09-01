@@ -612,6 +612,26 @@ function fmtPts(n){
   return (v % 1 === 0) ? String(v) : v.toFixed(1);
 }
 window.fmtPts = fmtPts;
+
+// ⭐ v440 — عدادات نقاط دورية للموظف. لا نحذف أي نقطة قديمة؛
+// التصفير للعرض فقط عن طريق تغيير بداية النطاق الزمني.
+function employeePointPeriodTotals(empId, now){
+  const d = now instanceof Date ? now : new Date(now || Date.now());
+  const dayStart = new Date(d); dayStart.setHours(0,0,0,0);
+  const week = getWeekRange(d);
+  const month = getMonthRange(d);
+  const rows = (window.points||[]).filter(p=>p.employeeId===empId);
+  const sumRange=(start,end)=>sumPoints(rows.filter(p=>{
+    const t=Number(p.ts)||0; return t>=start && t<=end;
+  }));
+  const end=d.getTime();
+  return {
+    today: sumRange(dayStart.getTime(), end),
+    week: sumRange(week.start.getTime(), Math.min(end, week.end.getTime())),
+    month: sumRange(month.start.getTime(), Math.min(end, month.end.getTime()))
+  };
+}
+window.employeePointPeriodTotals = employeePointPeriodTotals;
 // ⚠️ متعرّفة هنا (جنب sumPoints) مش تحت — بتتستخدم في مواضع أعلى في
 //    الملف، وأي نقل للكود تحت كان هيكسرها بصمت.
 window.pointWeight = pointWeight;
@@ -2959,9 +2979,12 @@ function renderDayHub(empId){
     $('#dh_fileBtnLabel').style.display = 'none';
   }
 
-  // Points today
-  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
-  $('#dh_pointsToday').textContent = fmtPts(countsFor(empId, dayStart.getTime()));
+  // ⭐ v440 — نقاط الموظفة تتعرض كعدادات فترة، من غير مسح التاريخ من Firestore.
+  // اليوم/الأسبوع/الشهر كل واحد يبدأ من صفر تلقائيًا مع بداية فترته.
+  const pointTotals = employeePointPeriodTotals(empId, new Date());
+  $('#dh_pointsToday').textContent = fmtPts(pointTotals.today);
+  const _pw = $('#dh_pointsWeek'); if(_pw) _pw.textContent = fmtPts(pointTotals.week);
+  const _pm = $('#dh_pointsMonth'); if(_pm) _pm.textContent = fmtPts(pointTotals.month);
 
   // Average customer rating linked to this employee (reusing the same
   // approximate time-based matching used in the performance-link report).

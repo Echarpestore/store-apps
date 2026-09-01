@@ -697,7 +697,9 @@
       </div>
 
       <div class="dhSectionLabel">📈 أداء النهاردة</div>
-      <div class="dayHubRow"><div class="lbl">نقاط البيع</div><div id="dh_pointsToday">0</div></div>
+      <div class="dayHubRow"><div class="lbl">نقاط اليوم</div><div id="dh_pointsToday">0</div></div>
+      <div class="dayHubRow"><div class="lbl">نقاط الأسبوع</div><div><b id="dh_pointsWeek">0</b> <span style="font-size:9.5px;color:var(--sub)">تبدأ من 0 كل أسبوع</span></div></div>
+      <div class="dayHubRow"><div class="lbl">نقاط الشهر</div><div><b id="dh_pointsMonth">0</b> <span style="font-size:9.5px;color:var(--sub)">تبدأ من 0 كل شهر</span></div></div>
       <div class="dayHubRow"><div class="lbl">متوسط تقييم العميل</div><div id="dh_avgRating">—</div></div>
       <div class="dayHubRow"><div class="lbl">مدة الشيفت لحد دلوقتي</div><div id="dh_shiftDuration">—</div></div>
 
@@ -1236,7 +1238,7 @@
 
 </div>
 
-<script type="module" src="sales-app.js?v=24"></script>
+<script type="module" src="sales-app.js?v=25"></script>
 <script src="sales-ui.js?v=21"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
