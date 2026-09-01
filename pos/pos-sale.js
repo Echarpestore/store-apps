@@ -2908,6 +2908,109 @@ window.cardPendingLegs = cardPendingLegs;
 window.cardPendingSum = cardPendingSum;
 window.cardLegToManual = cardLegToManual;
 
+
+// 💳 v435 — حارس سلامة سريع قبل حفظ الفاتورة.
+// المسار الطبيعي (Paymob success كامل وصل للـwatcher) = صفر قراءات وزيادة زمن شبه صفر.
+// بنرجع للسيرفر فقط لو الشريحة مشكوك فيها: manual أو ناقصها transactionId/amountCents.
+// الهدف: محاولة Failed/Reversal قديمة مستحيل تتسجل كأنها العملية الناجحة التالية،
+// وفي نفس الوقت منضيفش انتظار شبكة لكل فاتورة Visa سليمة.
+function paymobCardLegNeedsServerCheck(leg){
+  if(!leg || !leg.ref) return false;
+  const t = leg.txn || {};
+  return leg.status === 'manual' || !t.transactionId || !(Number(t.amountCents) > 0);
+}
+function paymobCardLegIntegrity(leg){
+  if(!leg) return { ok:false, reason:'missing-leg' };
+  if(leg.status === 'failed') return { ok:false, reason:'failed' };
+  if(leg.status === 'approved'){
+    const t = leg.txn || {};
+    const want = Math.round(Math.abs(Number(leg.amount) || 0) * 100);
+    const got = Number(t.amountCents) || 0;
+    if(got && want && got !== want) return { ok:false, reason:'amount-mismatch' };
+    return { ok:true };
+  }
+  if(leg.status === 'manual') return { ok:true, manual:true };
+  return { ok:false, reason:String(leg.status || 'unknown') };
+}
+async function paymobReconcileCardTxnsBeforeSale(timeoutMs){
+  timeoutMs = Math.max(400, Number(timeoutMs) || 1200);
+  const live = (cardLegs || []).filter(function(l){ return l && l.status !== 'failed'; });
+  const badLocal = live.filter(function(l){ return !paymobCardLegIntegrity(l).ok; });
+  if(badLocal.length) return { checked:0, refreshed:0, mismatches:0, invalid:badLocal.length };
+
+  // ⚡ Fast path: العملية وصلت Success كاملة بالفعل — لا Firestore read ولا انتظار.
+  const legs = live.filter(paymobCardLegNeedsServerCheck);
+  if(!legs.length) return { checked:0, refreshed:0, mismatches:0, invalid:0, fastPath:true };
+
+  let refreshed = 0, mismatches = 0, invalid = 0;
+  await Promise.all(legs.map(async function(leg){
+    try{
+      const read = db.collection('pos_paymob_txns').doc(String(leg.ref)).get({ source:'server' });
+      const snap = await Promise.race([
+        read,
+        new Promise(function(_, reject){ setTimeout(function(){ reject(new Error('paymob-reconcile-timeout')); }, timeoutMs); })
+      ]);
+      if(!snap || !snap.exists) return; // manual/offline recovery stays available; never freeze sale
+      const d = snap.data() || {};
+      // 🔒 لو نفس orderRef عند Paymob بيقول Failed/Reversal/Refunded، ممنوع نحتفظ
+      // ببيانات نجاح قديمة عليه. نمسح txn ونوقف الحفظ برسالة واضحة بدل فاتورة غلط.
+      if(d.status === 'failed' || d.status === 'voided' || d.status === 'refunded'){
+        leg.status = 'failed'; leg.txn = null; invalid++;
+        if(typeof _logActivity === 'function') _logActivity('paymob_presave_rejected_attempt', {
+          orderRef:String(leg.ref), status:String(d.status), amount:Number(leg.amount)||0
+        });
+        return;
+      }
+      if(d.status !== 'success') return;
+      const want = Math.round(Math.abs(Number(leg.amount) || 0) * 100);
+      const got = Number(d.amountCents) || 0;
+      if(!want || got !== want){
+        mismatches++; invalid++;
+        if(typeof _logActivity === 'function') _logActivity('paymob_presave_amount_mismatch', {
+          orderRef:String(leg.ref), expectedCents:want, gotCents:got
+        });
+        return;
+      }
+      const oldTxn = leg.txn || {};
+      if(d.transactionId && oldTxn.transactionId && String(d.transactionId) !== String(oldTxn.transactionId)){
+        if(typeof _logActivity === 'function') _logActivity('paymob_txn_id_reconciled', {
+          orderRef:String(leg.ref), from:String(oldTxn.transactionId), to:String(d.transactionId)
+        });
+      }
+      leg.txn = Object.assign({}, oldTxn, {
+        seq:leg.seq, amount:+Math.abs(Number(leg.amount)||0).toFixed(2),
+        last4:d.cardLast4 ? String(d.cardLast4).slice(-4) : (oldTxn.last4||null),
+        scheme:d.cardScheme || oldTxn.scheme || null,
+        transactionId:d.transactionId || oldTxn.transactionId || null,
+        approvalCode:d.approvalCode || oldTxn.approvalCode || null,
+        rrn:d.rrn || oldTxn.rrn || null,
+        terminalId:d.terminalId || oldTxn.terminalId || paymobTerminalId() || null,
+        orderRef:String(leg.ref), amountCents:got, manual:false
+      });
+      leg.status = 'approved'; refreshed++;
+    }catch(e){
+      // الشبكة لا تحبس الكاشير. لو كانت manual يفضل مسار المراجعة اليدوية كما هو.
+      console.warn('paymob pre-save reconcile', e && e.message);
+    }
+  }));
+
+  // أي محاولة ثبت فشلها تتشال فورًا من المدفوعات؛ Retry يبدأ بمرجع جديد.
+  if(invalid){
+    cardLegs = (cardLegs || []).filter(function(l){ return l && l.status !== 'failed'; });
+    window.cardLegs = cardLegs;
+    try{ syncCardPayment(); }catch(e){}
+  }
+  paymobCardTxns = (cardLegs || []).filter(function(l){ return l && l.txn && (l.status === 'approved' || l.status === 'manual'); })
+    .map(function(l){ return l.txn; });
+  window.paymobCardTxns = paymobCardTxns;
+  paymobCardInfo = paymobCardTxns[0] || null;
+  window.paymobCardInfo = paymobCardInfo;
+  return { checked:legs.length, refreshed:refreshed, mismatches:mismatches, invalid:invalid };
+}
+window.paymobCardLegNeedsServerCheck = paymobCardLegNeedsServerCheck;
+window.paymobCardLegIntegrity = paymobCardLegIntegrity;
+window.paymobReconcileCardTxnsBeforeSale = paymobReconcileCardTxnsBeforeSale;
+
 // 🚧 هل مسموح أفتح شريحة الكارت رقم seq دلوقتي؟ (بترجّع سبب المنع أو null)
 function cardLegBlockReason(legs, seq, isRefund, maxLegs){
   const max = maxLegs || 2;
@@ -4168,6 +4271,19 @@ window.returnPointsDeduction = returnPointsDeduction;
     // لو الشِل قديم ومفيهوش openDrawer مستقل، printReceipt يحتفظ بالفولباك المعتاد.
     try{ if(typeof preOpenCashDrawerForSale === 'function') preOpenCashDrawerForSale(invoiceCode, payments); }catch(e){}
 
+    // 💳 v434: قبل تثبيت فاتورة Visa، هات آخر نسخة من مستند Paymob نفسه.
+    // ده يمنع طباعة Transaction ID قديم لو webhook حدّث نفس العملية على مراحل.
+    // Best-effort بمهلة قصيرة؛ الأوفلاين/التأخير لا يحبّس الكاشير.
+    if(Number(payments.visa || 0) > 0){
+      try{
+        const _pmSafe = await paymobReconcileCardTxnsBeforeSale(1200);
+        if(_pmSafe && _pmSafe.invalid){
+          showToast('⛔ محاولة الفيزا دي فاشلة/ملغاة عند Paymob — جرّب الفيزا من جديد. مش هنحفظ مرجع دفع غلط.', 'err');
+          return;
+        }
+      }catch(e){ console.warn('paymob pre-save guard', e); }
+    }
+
     // 1) سجل البيع (📴 مش بنستنى السيرفر أكتر من ثواني — أوفلاين بتتسجل محليًا وبتترفع بعدين)
     const _saleW = await _waitWrite(db.collection(TEST_SALES).add({
       invoiceNo,
@@ -4195,9 +4311,6 @@ window.returnPointsDeduction = returnPointsDeduction;
       // 💳💳 كل الكروت المستخدمة في الفاتورة بمبالغها وأرقام عملياتها —
       // ضروري للمرتجع: كل عملية بترجع لوحدها من Paymob
       cardTxns: (paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : null,
-      // 💳🔎 v432: index صغير للبحث المباشر برقم عملية البنك/Paymob بدون قراءة تاريخ المبيعات.
-      bankTransactionIds: Array.from(new Set(((paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : (paymobCardInfo ? [paymobCardInfo] : []))
-        .map(function(ct){ return String((ct && ct.transactionId) == null ? '' : ct.transactionId).trim(); }).filter(Boolean))),
       // 📴 طابع وقت محلي: serverTimestamp بيفضل null لحد ما فاتورة الأوفلاين تترفع،
       // فكانت بتختفي من التقفيل والتقارير وهي كاشها في الدرج. ده البديل الفوري.
       cartSid: _cartSid || null,             // 🕵️ رابط أحداث السلة دي بالفاتورة
