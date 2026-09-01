@@ -1,11 +1,11 @@
-/* ECHARPE Office CCTV v429
+/* ECHARPE Office CCTV v430
    Premium Control Room: selectable 1/2/4 panels. Each panel can be a live camera
    or the unified POS Live card (basket + payment + last transaction).
    Reuses Office's existing office_pos_live listener — no duplicate Firestore listener. */
 (function(){
   'use strict';
-  var KEY='echarpe.office.cctv.v429';
-  var OLD_KEY='echarpe.office.cctv.v428';
+  var KEY='echarpe.office.cctv.v430';
+  var OLD_KEY='echarpe.office.cctv.v429';
   var BRANCHES=[{
     id:'madinaty', name:'مدينتي', gateway:'https://cctv-madinaty.echarpe.store',
     liveAliases:['madinaty','مدينتي'],
@@ -71,11 +71,40 @@
     else {body.className='of-cctv-panel-body of-cctv-pos-body';body.innerHTML=posLiveHtml(liveDoc());}
   }
   function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;save();render();};});}
-  function requestFs(el){
-    if(!el)return;
-    var fn=el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen;
-    if(fn){try{var r=fn.call(el);if(r&&r.catch)r.catch(function(){el.classList.toggle('maximized');});return;}catch(e){}}
-    el.classList.toggle('maximized');
+  function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement||null;}
+  function enterNativeFs(el){
+    var fn=el&&(el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen);
+    if(!fn)return;
+    try{var r=fn.call(el);if(r&&r.catch)r.catch(function(){});}catch(e){}
+  }
+  function exitNativeFs(){
+    var fn=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;
+    if(!fn||!fsEl())return;
+    try{var r=fn.call(document);if(r&&r.catch)r.catch(function(){});}catch(e){}
+  }
+  function clearFocusClasses(){
+    document.body.classList.remove('of-cctv-lock');
+    var room=document.querySelector('.of-cctv-controlroom');if(room)room.classList.remove('of-cctv-room-focus');
+    document.querySelectorAll('.of-cctv-panel-focus').forEach(function(p){p.classList.remove('of-cctv-panel-focus');});
+    var roomBtn=document.getElementById('ofCctvRoomFullscreen');if(roomBtn)roomBtn.textContent='⛶ ملء الشاشة';
+    document.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.textContent='⛶';btn.title='ملء الشاشة';});
+  }
+  function toggleRoomFocus(){
+    var room=document.querySelector('.of-cctv-controlroom');if(!room)return;
+    var on=room.classList.contains('of-cctv-room-focus');
+    clearFocusClasses();
+    if(on){exitNativeFs();return;}
+    room.classList.add('of-cctv-room-focus');document.body.classList.add('of-cctv-lock');
+    var btn=document.getElementById('ofCctvRoomFullscreen');if(btn)btn.textContent='✕ خروج';
+    enterNativeFs(room);
+  }
+  function togglePanelFocus(panel,btn){
+    if(!panel)return;var on=panel.classList.contains('of-cctv-panel-focus');
+    clearFocusClasses();
+    if(on){exitNativeFs();return;}
+    panel.classList.add('of-cctv-panel-focus');document.body.classList.add('of-cctv-lock');
+    if(btn){btn.textContent='✕';btn.title='خروج من ملء الشاشة';}
+    enterNativeFs(panel);
   }
   function render(){
     if(!state.active)return;renderBranches();document.querySelectorAll('[data-layout]').forEach(function(x){x.classList.toggle('active',Number(x.dataset.layout)===state.layout);});
@@ -83,16 +112,18 @@
     var count=state.layout, html='';for(var i=0;i<count;i++)html+='<article class="of-cctv-panel" data-panel="'+i+'"><div class="of-cctv-panel-head"><select class="of-cctv-source" aria-label="مصدر الشاشة" data-cctv-source="'+i+'">'+sourceOptions(state.sources[i])+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة">⛶</button></div><div class="of-cctv-panel-body"></div></article>';
     grid.innerHTML=html;
     grid.querySelectorAll('[data-cctv-source]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSource);state.sources[i]=normalizeSource(sel.value);save();renderPanel(i);};});
-    grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){requestFs(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'));};});
+    grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
     for(var j=0;j<count;j++)renderPanel(j);
   }
   function refreshPosOnly(){if(!state.active)return;for(var i=0;i<state.layout;i++)if(normalizeSource(state.sources[i])==='pos:live')renderPanel(i);}
-  function stop(){state.active=false;var grid=document.getElementById('ofCctvGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
+  function stop(){state.active=false;clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
   function start(){state.active=true;render();}
   function init(){
     load();
     document.querySelectorAll('[data-layout]').forEach(function(btn){btn.onclick=function(){state.layout=Number(btn.dataset.layout)||4;save();render();};});
-    var roomFs=document.getElementById('ofCctvRoomFullscreen');if(roomFs)roomFs.onclick=function(){requestFs(document.querySelector('.of-cctv-controlroom'));};
+    var roomFs=document.getElementById('ofCctvRoomFullscreen');if(roomFs)roomFs.onclick=toggleRoomFocus;
+    ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(function(ev){document.addEventListener(ev,function(){if(!fsEl()&&!document.querySelector('.of-cctv-room-focus')&&!document.querySelector('.of-cctv-panel-focus'))clearFocusClasses();});});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'&&(document.querySelector('.of-cctv-room-focus')||document.querySelector('.of-cctv-panel-focus'))){clearFocusClasses();exitNativeFs();}});
     window.addEventListener('office-pos-live-update',refreshPosOnly);window.addEventListener('beforeunload',stop);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
