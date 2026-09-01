@@ -1,11 +1,11 @@
-/* ECHARPE Office CCTV v430
+/* ECHARPE Office CCTV v436
    Premium Control Room: selectable 1/2/4 panels. Each panel can be a live camera
    or the unified POS Live card (basket + payment + last transaction).
    Reuses Office's existing office_pos_live listener — no duplicate Firestore listener. */
 (function(){
   'use strict';
-  var KEY='echarpe.office.cctv.v430';
-  var OLD_KEY='echarpe.office.cctv.v429';
+  var KEY='echarpe.office.cctv.v436';
+  var OLD_KEY='echarpe.office.cctv.v430';
   var BRANCHES=[{
     id:'madinaty', name:'مدينتي', gateway:'https://cctv-madinaty.echarpe.store',
     liveAliases:['madinaty','مدينتي'],
@@ -49,18 +49,38 @@
     var st=q.status==='approved'?' ✅':q.status==='pending'?' ⏳':q.status==='failed'?' ❌':'';
     return '<span class="of-cctv-pos-chip">'+nm+st+' <b>'+money(q.amount)+'</b></span>';
   }
+  function saleItemsHtml(items){
+    return (items||[]).map(function(x){
+      var q=Math.abs(Number(x.qty||0)), line=Math.abs(Number(x.price||0)*q);
+      return '<div class="of-cctv-pos-row"><span><b>'+esc(x.name||x.code||'صنف')+'</b>'+(x.isReturn?' <em>↩ مرتجع</em>':'')+'<small>'+q+' × '+money(x.price)+(x.code?' · '+esc(x.code):'')+'</small></span><strong>'+money(line)+'</strong></div>';
+    }).join('');
+  }
+  function salePaymentHtml(p){
+    return Object.keys(p||{}).filter(function(k){return Math.abs(Number(p[k]||0))>.001;}).map(function(k){
+      var nm=k==='visa'?'💳 Visa':k==='cash'?'💵 كاش':k==='instapay'?'📱 Instapay':esc(k);
+      return '<span class="of-cctv-pos-chip">'+nm+' <b>'+money(p[k])+'</b></span>';
+    }).join('');
+  }
   function posLiveHtml(d){
     if(!d)return '<div class="of-cctv-empty"><div><b>POS Live غير متصل</b><small>مفيش حالة Live وصلت من جهاز الفرع حتى الآن</small></div></div>';
-    var rows=(d.cart||[]).map(function(x){return '<div class="of-cctv-pos-row"><span><b>'+esc(x.name||x.code||'صنف')+'</b>'+(x.isReturn?' <em>↩ مرتجع</em>':'')+'<small>× '+Number(x.qty||0)+(x.code?' · '+esc(x.code):'')+'</small></span><strong>'+money(Number(x.price||0)*Number(x.qty||0))+'</strong></div>';}).join('');
+    var currentRows=(d.cart||[]), hasCurrent=currentRows.length>0 || (d.payments||[]).length>0;
+    var last=d.lastSale||null, age=Math.max(0,Date.now()-Number(d.updatedAtMs||0));
+    if(!hasCurrent && last && Array.isArray(last.items) && last.items.length){
+      var frozenRows=saleItemsHtml(last.items), frozenPays=salePaymentHtml(last.payments||{});
+      return '<div class="of-cctv-pos of-cctv-pos-complete">'+
+        '<div class="of-cctv-pos-top"><div><b>✅ تم حفظ الفاتورة</b><small>'+esc(last.employee||d.employee||'')+' · '+esc(d.branch||'')+'</small></div><span class="of-cctv-pos-live done">محفوظة</span></div>'+
+        '<div class="of-cctv-complete-head"><div><small>آخر فاتورة</small><b>'+(last.invoiceNo?'#'+esc(last.invoiceNo):esc(last.invoiceCode||''))+'</b></div><strong>'+money(last.total)+'</strong></div>'+
+        '<div class="of-cctv-pos-scroll of-cctv-frozen">'+frozenRows+'</div>'+
+        '<div class="of-cctv-pay"><div class="of-cctv-pay-head"><span>الدفع</span><small>العملية المكتملة</small></div><div class="of-cctv-pay-chips">'+(frozenPays||'<span class="muted">—</span>')+'</div></div>'+
+        '<div class="of-cctv-complete-note">تفضل ظاهرة هنا لحد ما تبدأ فاتورة جديدة</div></div>';
+    }
+    var rows=currentRows.map(function(x){return '<div class="of-cctv-pos-row"><span><b>'+esc(x.name||x.code||'صنف')+'</b>'+(x.isReturn?' <em>↩ مرتجع</em>':'')+'<small>× '+Number(x.qty||0)+(x.barcode?' · '+esc(x.barcode):'')+'</small></span><strong>'+money(Number(x.price||0)*Number(x.qty||0))+'</strong></div>';}).join('');
     var pays=(d.payments||[]).map(payLabel).join('');
-    var last=d.lastSale||null;
-    var age=Math.max(0,Date.now()-Number(d.updatedAtMs||0));
-    var lastHtml=last?'<div class="of-cctv-last"><span>✅ آخر عملية</span><b>'+money(last.total)+'</b><small>'+esc(last.invoiceNo?'#'+last.invoiceNo:'')+(window.ofWhen?' · '+esc(window.ofWhen(last.atMs,false)):'')+'</small></div>':'';
     return '<div class="of-cctv-pos">'+
-      '<div class="of-cctv-pos-top"><div><b>🛒 POS Live</b><small>'+esc(d.employee||'بدون موظف')+' · '+esc(d.branch||'')+'</small></div><span class="of-cctv-pos-live '+(isOnline(d)?'online':'offline')+'">● '+(isOnline(d)?'LIVE':'OFFLINE')+'</span></div>'+
-      '<div class="of-cctv-pos-scroll">'+(rows||'<div class="of-cctv-cart-empty">السلة فاضية</div>')+'</div>'+
-      '<div class="of-cctv-pay"><div class="of-cctv-pay-head"><span>الدفع</span><small>'+(pays?'الحالي':'مفيش دفع جاري')+'</small></div><div class="of-cctv-pay-chips">'+(pays||'<span class="muted">—</span>')+'</div></div>'+
-      '<div class="of-cctv-pos-total"><b>الإجمالي</b><strong>'+money(d.total)+'</strong></div>'+lastHtml+
+      '<div class="of-cctv-pos-top"><div><b>🛒 الفاتورة الحالية</b><small>'+esc(d.employee||'بدون موظف')+' · '+esc(d.branch||'')+'</small></div><span class="of-cctv-pos-live '+(isOnline(d)?'online':'offline')+'">● '+(isOnline(d)?'LIVE':'OFFLINE')+'</span></div>'+
+      '<div class="of-cctv-pos-scroll">'+(rows||'<div class="of-cctv-cart-empty">في انتظار أول صنف…</div>')+'</div>'+
+      '<div class="of-cctv-pay"><div class="of-cctv-pay-head"><span>الدفع</span><small>'+(pays?'جاري':'لسه مبدأش')+'</small></div><div class="of-cctv-pay-chips">'+(pays||'<span class="muted">—</span>')+'</div></div>'+
+      '<div class="of-cctv-pos-total"><b>الإجمالي</b><strong>'+money(d.total)+'</strong></div>'+
       '<div class="of-cctv-age">آخر تحديث منذ '+Math.round(age/1000)+' ثانية</div></div>';
   }
   function stopPanel(panel){panel.querySelectorAll('iframe').forEach(function(f){try{f.src='about:blank';f.remove();}catch(e){}});}
@@ -109,7 +129,7 @@
   function render(){
     if(!state.active)return;renderBranches();document.querySelectorAll('[data-layout]').forEach(function(x){x.classList.toggle('active',Number(x.dataset.layout)===state.layout);});
     var grid=document.getElementById('ofCctvGrid');if(!grid)return;grid.className='of-cctv-grid of-cctv-grid-'+state.layout;
-    var count=state.layout, html='';for(var i=0;i<count;i++)html+='<article class="of-cctv-panel" data-panel="'+i+'"><div class="of-cctv-panel-head"><select class="of-cctv-source" aria-label="مصدر الشاشة" data-cctv-source="'+i+'">'+sourceOptions(state.sources[i])+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة">⛶</button></div><div class="of-cctv-panel-body"></div></article>';
+    var count=state.layout, html='';for(var i=0;i<count;i++){var _srcClass=normalizeSource(state.sources[i])==='pos:live'?' of-cctv-panel-pos':'';html+='<article class="of-cctv-panel'+_srcClass+'" data-panel="'+i+'"><div class="of-cctv-panel-head"><select class="of-cctv-source" aria-label="مصدر الشاشة" data-cctv-source="'+i+'">'+sourceOptions(state.sources[i])+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة">⛶</button></div><div class="of-cctv-panel-body"></div></article>';}
     grid.innerHTML=html;
     grid.querySelectorAll('[data-cctv-source]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSource);state.sources[i]=normalizeSource(sel.value);save();renderPanel(i);};});
     grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
