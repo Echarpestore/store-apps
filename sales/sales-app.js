@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, query, where, Timestamp, runTransaction,
+  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, getDocsFromCache, getDocsFromServer, query, where, Timestamp, runTransaction,
   // 💬 للشات: chat-staff-ui.js مكتوب compat، فبنعرّضله العمليات دي
   orderBy, limit, writeBatch, increment, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -30,6 +30,40 @@ window.fbAddDoc = addDoc;
 window.fbUpdateDoc = updateDoc;
 window.fbDeleteDoc = deleteDoc;
 window.fbCollection = collection;
+
+
+/* ============================================================
+   💾 v431 Local‑First for Sales
+   - render historical datasets from Firestore IndexedDB cache first
+   - refresh the long window from server at most once/day/device
+   - keep realtime only on a tiny recent window where staff actions matter now
+   This cuts the repeated 190-day listener re-reads without losing local history.
+   ============================================================ */
+const LF431_PREFIX='sales_lf_v431_';
+function lf431Last(k){try{return Number(localStorage.getItem(LF431_PREFIX+k)||0)||0;}catch(e){return 0;}}
+function lf431Mark(k){try{localStorage.setItem(LF431_PREFIX+k,String(Date.now()));}catch(e){}}
+function lf431Docs(snap){return (snap&&snap.docs?snap.docs:[]).map(d=>({id:d.id,...d.data()}));}
+function lf431Merge(base,fresh){
+  const m=new Map(); (base||[]).forEach(x=>m.set(String(x.id),x)); (fresh||[]).forEach(x=>m.set(String(x.id),x)); return Array.from(m.values());
+}
+function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*1000){
+  // production uses explicit cache/server APIs; the getDocs fallback only keeps the legacy node harness compatible.
+  const _cacheGet=(typeof getDocsFromCache==='function')?getDocsFromCache:getDocs;
+  const _serverGet=(typeof getDocsFromServer==='function')?getDocsFromServer:getDocs;
+  // zero-server-read startup from persistent IndexedDB cache
+  _cacheGet(fullQ).then(s=>{if(!s.empty)apply(lf431Docs(s),'cache');}).catch(()=>{});
+  // full history refresh only when stale, not every application start/reconnect
+  if((Date.now()-lf431Last(name))>=ttlMs){
+    _serverGet(fullQ).then(s=>{apply(lf431Docs(s),'server');lf431Mark(name);}).catch(e=>console.warn('lf431 '+name,e&&e.code));
+  }
+  // live only for recent records; merge into cached long history
+  if(recentQ){
+    return onSnapshot(recentQ,s=>apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'recent'),e=>console.warn('lf431 recent '+name,e&&e.code));
+  }
+  return ()=>{};
+}
+const LF431_RECENT_MS=2*24*3600000;
+const _recent=(col,field)=>query(col,where(field,'>=',Date.now()-LF431_RECENT_MS));
 // 🔍 نعرّض دوال الكشف عشان لوحة المراجعة (في بلوك تاني) تستخدمها
 // (التعريض اتنقل لبعد تعريف الدوال والمتغيرات — تحت مباشرة بعد COMPLIANCE_END)
 // 🔴 كان من غير synchronizeTabs — والـPOS بيستخدمها. تبويبين من نفس
@@ -1896,44 +1930,31 @@ onSnapshot(referralsCol, (snap)=>{
   if(typeof renderCommissionPanel==='function') renderCommissionPanel();
   if(typeof renderReferralPanel==='function') renderReferralPanel();
 });
-onSnapshot(_scoped(pointsCol,'ts'), (snap)=>{
-  window.points = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  renderEmpGrid();
-  renderDailyTargetCard();
+lf431History('points190', _scoped(pointsCol,'ts'), _recent(pointsCol,'ts'), ()=>window.points, (rows)=>{
+  window.points=rows; renderEmpGrid(); renderDailyTargetCard();
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
-  if(adminUnlocked){ renderLog(); renderPerformanceLink(); }
-}, (err)=> console.error('points sync error', err));
+  if(adminUnlocked){renderLog();renderPerformanceLink();}
+});
 
 // 📉 تقييمات العملاء بتكبر مع كل تقييم للأبد — دي أكبر مصدر قراءات في التطبيق
-onSnapshot(_scopedDays(entriesCol,'ts', 65), (snap)=>{
-  allFeedback = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  if(adminUnlocked) renderPerformanceLink();
-}, (err)=> console.error('feedback sync error', err));
+lf431History('feedback65', _scopedDays(entriesCol,'ts',65), _recent(entriesCol,'ts'), ()=>allFeedback, (rows)=>{
+  allFeedback=rows; if(adminUnlocked)renderPerformanceLink();
+});
 
-onSnapshot(_scoped(shiftsCol,'clockInTs'), (snap)=>{
-  allShifts = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  window.allShifts = allShifts;
-  applyBranchFilter();
-}, (err)=> console.error('shifts sync error', err));
+lf431History('shifts190', _scoped(shiftsCol,'clockInTs'), _recent(shiftsCol,'clockInTs'), ()=>allShifts, (rows)=>{
+  allShifts=rows; window.allShifts=allShifts; applyBranchFilter();
+});
 
 onSnapshot(tasksCol, (snap)=>{
   allTasks = snap.docs.map(d=>({id:d.id, ...d.data()}));
   applyBranchFilter();
 }, (err)=> console.error('tasks sync error', err));
 
-onSnapshot(_scoped(submissionsCol,'submittedAt'), (snap)=>{
-  allSubmissions = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  applyBranchFilter();
-}, (err)=> console.error('submissions sync error', err));
+lf431History('submissions190', _scoped(submissionsCol,'submittedAt'), _recent(submissionsCol,'submittedAt'), ()=>allSubmissions, (rows)=>{allSubmissions=rows;applyBranchFilter();});
 
-onSnapshot(_scoped(rewardsCol,'earnedAt'), (snap)=>{
-  allRewards = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  /* 🚩 علامة إن اللقطة وصلت فعلًا. من غيرها `checkAndAwardRewards`
-     ممكن تشتغل والقايمة لسه فاضية → تفتكر إن المكافأة مااتصرفتش
-     وتكتبها من الأول بطابع النهاردة. */
-  window.rewardsLoaded = true;
-  applyBranchFilter();
-}, (err)=> console.error('rewards sync error', err));
+lf431History('rewards190', _scoped(rewardsCol,'earnedAt'), _recent(rewardsCol,'earnedAt'), ()=>allRewards, (rows)=>{
+  allRewards=rows; window.rewardsLoaded=true; applyBranchFilter();
+});
 
 onSnapshot(settingsCol, (snap)=>{
   allSettingsDocs = snap.docs.map(d=> d.id);   // 🏬 كل مستند إعدادات = فرع موجود
@@ -1990,25 +2011,13 @@ onSnapshot(settingsCol, (snap)=>{
   if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); try{ window.renderTimeSettings(); }catch(e){} }
 }, (err)=> console.error('settings sync error', err));
 
-onSnapshot(_scoped(vioReviewCol,'ts'), (snap)=>{
-  allVioReviews = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  if(adminUnlocked && typeof renderViolationsReview==='function') renderViolationsReview();
-}, (e)=> console.warn('vio reviews sync', e && e.code));
+lf431History('vio190', _scoped(vioReviewCol,'ts'), _recent(vioReviewCol,'ts'), ()=>allVioReviews, (rows)=>{allVioReviews=rows;if(adminUnlocked&&typeof renderViolationsReview==='function')renderViolationsReview();});
 
-onSnapshot(_scoped(attDecisionsCol,'ts'), (snap)=>{
-  allAttDecisions = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  window.allAttDecisions = allAttDecisions;
-  if(adminUnlocked && typeof renderAttIssues==='function') window.renderAttIssues();
-}, (e)=> console.warn('att decisions sync', e && e.code));
+lf431History('attdec190', _scoped(attDecisionsCol,'ts'), _recent(attDecisionsCol,'ts'), ()=>allAttDecisions, (rows)=>{allAttDecisions=rows;window.allAttDecisions=allAttDecisions;if(adminUnlocked&&typeof renderAttIssues==='function')window.renderAttIssues();});
 
-onSnapshot(_scoped(breaksCol,'startTs'), (snap)=>{
-  allBreaks = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  window.allBreaks = allBreaks;
-  autoCloseStaleBreaks();
-  renderAttendanceLists();
-  // 🔔 التنبيه يختفي فورًا أول ما تسجّل رجوعها — مستنيش الـ10 ثواني
-  try{ renderBreakAlert(); }catch(e){}
-}, (e)=> console.warn('breaks sync', e && e.code));
+lf431History('breaks190', _scoped(breaksCol,'startTs'), _recent(breaksCol,'startTs'), ()=>allBreaks, (rows)=>{
+  allBreaks=rows;window.allBreaks=allBreaks;autoCloseStaleBreaks();renderAttendanceLists();try{renderBreakAlert();}catch(e){}
+});
 
 onSnapshot(leaveReqCol, (snap)=>{
   allLeaveReqs = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -2017,31 +2026,13 @@ onSnapshot(leaveReqCol, (snap)=>{
   if(typeof updateLeaveBadge==='function'){ try{ updateLeaveBadge(); }catch(e){} }
 }, (e)=> console.warn('leave sync', e && e.code));
 
-onSnapshot(_scoped(timeCreditCol,'ts'), (snap)=>{
-  allTimeCredit = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  window.allTimeCredit = allTimeCredit;
-  if(adminUnlocked && typeof window.renderTimeCreditLog==='function'){ try{ window.renderTimeCreditLog(); }catch(e){} }
-  if(adminUnlocked && typeof window.renderGraceDay==='function'){ try{ window.renderGraceDay(); }catch(e){} }
-}, (e)=> console.warn('time credit sync', e && e.code));
+lf431History('timecredit190', _scoped(timeCreditCol,'ts'), _recent(timeCreditCol,'ts'), ()=>allTimeCredit, (rows)=>{allTimeCredit=rows;window.allTimeCredit=allTimeCredit;if(adminUnlocked&&typeof window.renderTimeCreditLog==='function'){try{window.renderTimeCreditLog();}catch(e){}}if(adminUnlocked&&typeof window.renderGraceDay==='function'){try{window.renderGraceDay();}catch(e){}}});
 
-onSnapshot(_scoped(deductionsCol,'ts'), (snap)=>{
-  allDeductions = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  deductions = allDeductions.filter(x=> x.branch === window.currentBranch);
-  window.deductions = deductions;
-  if(adminUnlocked && typeof renderDeductionsLog==='function') window.renderDeductionsLog();
-}, (e)=> console.warn('deductions sync', e && e.code));
+lf431History('deductions190', _scoped(deductionsCol,'ts'), _recent(deductionsCol,'ts'), ()=>allDeductions, (rows)=>{allDeductions=rows;deductions=allDeductions.filter(x=>x.branch===window.currentBranch);window.deductions=deductions;if(adminUnlocked&&typeof renderDeductionsLog==='function')window.renderDeductionsLog();});
 
-onSnapshot(_scoped(commissionPaymentsCol,'paidAt'), (snap)=>{
-  allCommissionPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  commissionPayments = allCommissionPayments.filter(p=> p.branch === window.currentBranch);
-  if(adminUnlocked){ renderCommissionPanel(); refreshOpenPayrollEmployee(); }
-}, (err)=> console.error('commission payments sync error', err));
+lf431History('commission190', _scoped(commissionPaymentsCol,'paidAt'), _recent(commissionPaymentsCol,'paidAt'), ()=>allCommissionPayments, (rows)=>{allCommissionPayments=rows;commissionPayments=allCommissionPayments.filter(p=>p.branch===window.currentBranch);if(adminUnlocked){renderCommissionPanel();refreshOpenPayrollEmployee();}});
 
-onSnapshot(_scoped(salaryPaymentsCol,'paidAt'), (snap)=>{
-  allSalaryPayments = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  salaryPayments = allSalaryPayments.filter(p=> p.branch === window.currentBranch);
-  if(adminUnlocked){ renderSalaryPanel(); renderSalaryPaymentLog(); refreshOpenPayrollEmployee(); }
-}, (err)=> console.error('salary payments sync error', err));
+lf431History('salary190', _scoped(salaryPaymentsCol,'paidAt'), _recent(salaryPaymentsCol,'paidAt'), ()=>allSalaryPayments, (rows)=>{allSalaryPayments=rows;salaryPayments=allSalaryPayments.filter(p=>p.branch===window.currentBranch);if(adminUnlocked){renderSalaryPanel();renderSalaryPaymentLog();refreshOpenPayrollEmployee();}});
 
 onSnapshot(terminationsCol, (snap)=>{
   allTerminations = snap.docs.map(d=>({id:d.id, ...d.data()}));
@@ -2049,13 +2040,7 @@ onSnapshot(terminationsCol, (snap)=>{
   if(adminUnlocked){ renderTerminationPanel(); renderTerminationLog(); }
 }, (err)=> console.error('terminations sync error', err));
 
-onSnapshot(_scoped(advancesCol,'ts'), (snap)=>{
-  allAdvances = snap.docs.map(d=>({id:d.id, ...d.data()}));
-  window.allAdvancesAll = allAdvances;
-  advances = allAdvances.filter(a=> a.branch === window.currentBranch);
-  renderTodayAdvancesSummary();
-  if(adminUnlocked){ renderSalaryPanel(); renderAdvancesLog(); }
-}, (err)=> console.error('advances sync error', err));
+lf431History('advances190', _scoped(advancesCol,'ts'), _recent(advancesCol,'ts'), ()=>allAdvances, (rows)=>{allAdvances=rows;window.allAdvancesAll=allAdvances;advances=allAdvances.filter(a=>a.branch===window.currentBranch);renderTodayAdvancesSummary();if(adminUnlocked){renderSalaryPanel();renderAdvancesLog();}});
 
 function renderLog(){
   const wrap = $('#logList');
