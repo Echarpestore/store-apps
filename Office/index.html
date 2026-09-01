@@ -295,6 +295,21 @@
  .of-cctv-grid-4 .of-cctv-panel:not(.of-cctv-panel-pos){min-height:190px}
  .of-cctv-pos{padding:48px 10px 10px}.of-cctv-pos-scroll{max-height:120px}.of-cctv-pos-row{font-size:10px}.of-cctv-last{display:grid}
 }
+
+<style id="ofCctvV437Style">
+/* v437 — pinned POS Live + fixed four-camera wall */
+.of-cctv-controlroom{display:flex;flex-direction:column;gap:8px}
+.of-cctv-toolbar{display:flex;align-items:center;justify-content:space-between}
+.of-cctv-pinned-live{position:relative;background:#080e18;border:1px solid #253247;border-radius:16px;overflow:hidden;min-height:250px}
+.of-cctv-fixed-label{position:absolute;z-index:7;top:8px;left:8px;display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:999px;background:rgba(7,12,22,.86);border:1px solid rgba(255,255,255,.12);color:#eef2ff;backdrop-filter:blur(10px);font-size:9px}
+.of-cctv-fixed-label small{color:#89a1bd;font-size:8px}.of-cctv-pinned-live-body{height:100%}.of-cctv-pinned-live .of-cctv-pos{min-height:250px;padding-top:48px}
+.of-cctv-camera-section-title{display:flex;align-items:center;justify-content:space-between;color:#dbe7f7;padding:2px 4px}.of-cctv-camera-section-title b{font-size:11px}.of-cctv-camera-section-title small{font-size:8px;color:#7f91a8}
+.of-cctv-camera-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-height:0}
+.of-cctv-camera-panel{min-height:220px;aspect-ratio:16/10}.of-cctv-camera-title{pointer-events:none;margin-inline-end:auto;max-width:calc(100% - 40px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:7px 10px;border-radius:999px;background:rgba(7,12,22,.82);color:#eef2ff;border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(10px);font-size:9px}
+.of-cctv-room-focus .of-cctv-pinned-live{flex:0 0 39%;min-height:0}.of-cctv-room-focus .of-cctv-pinned-live .of-cctv-pos{height:100%;min-height:0;overflow:auto}.of-cctv-room-focus .of-cctv-camera-section-title{flex:0 0 auto}.of-cctv-room-focus .of-cctv-camera-grid{flex:1;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));min-height:0}.of-cctv-room-focus .of-cctv-camera-panel{height:100%;min-height:0;aspect-ratio:auto}.of-cctv-room-focus .of-cctv-toolbar{flex:0 0 auto}.of-cctv-room-focus .of-cctv-fixed-label{top:5px;left:5px}
+@media(max-width:720px){.of-cctv-pinned-live{min-height:300px}.of-cctv-pinned-live .of-cctv-pos{min-height:300px}.of-cctv-camera-grid{gap:7px}.of-cctv-camera-panel{min-height:185px;aspect-ratio:10/11}.of-cctv-camera-title{font-size:8px;padding:6px 8px}.of-cctv-camera-section-title{padding-top:4px}}
+@media(orientation:landscape){.of-cctv-room-focus .of-cctv-pinned-live{flex-basis:42%}.of-cctv-room-focus .of-cctv-camera-grid{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:minmax(0,1fr)}.of-cctv-room-focus .of-cctv-camera-section-title{display:none}.of-cctv-room-focus .of-cctv-camera-panel{min-height:0}.of-cctv-room-focus .of-cctv-pinned-live .of-cctv-pos-scroll{max-height:calc(42vh - 150px)}}
+</style>
 </style>
 </head>
 <body>
@@ -636,15 +651,15 @@
       </div>
       <div class="of-cctv-toolbar">
         <div class="of-cctv-branches" id="ofCctvBranches"></div>
-        <div class="of-cctv-layouts" aria-label="تقسيم الشاشة">
-          <button type="button" class="of-cctv-layout-btn" data-layout="1">▣ 1</button>
-          <button type="button" class="of-cctv-layout-btn" data-layout="2">▥ 2</button>
-          <button type="button" class="of-cctv-layout-btn" data-layout="4">▦ 4</button>
-        </div>
       </div>
       <div id="ofCctvWarn" class="of-cctv-warning"></div>
-      <div class="of-cctv-grid of-cctv-grid-4" id="ofCctvGrid"></div>
-      <div class="of-cctv-footnote">اعرض 1 أو 2 أو 4 شاشات معًا، وكل مربع تقدر تختار له كاميرا أو POS Live. تغيير المصدر يوقف البث السابق فورًا.</div>
+      <section class="of-cctv-pinned-live" id="ofCctvPinnedLive">
+        <div class="of-cctv-fixed-label"><span>🛒 POS LIVE</span><small>ثابت — لا يتغير</small></div>
+        <div class="of-cctv-pinned-live-body" id="ofCctvPinnedLiveBody"></div>
+      </section>
+      <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><small>الأربع كاميرات مباشرة</small></div>
+      <div class="of-cctv-camera-grid" id="ofCctvCameraGrid"></div>
+      <div class="of-cctv-footnote">الفاتورة Live ثابتة دائمًا بالأعلى، والأربع كاميرات ثابتة تحتها. ملء الشاشة يحافظ على نفس الترتيب.</div>
     </div>
   </section>
   <!-- 🕵️ سجل النشاط -->
@@ -752,7 +767,7 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
-<script src="cctv.js?v=436"></script>
+<script src="cctv.js?v=437"></script>
 <script src="office.js?v=79"></script>
 </body>
 </html>

@@ -1,11 +1,10 @@
-/* ECHARPE Office CCTV v436
-   Premium Control Room: selectable 1/2/4 panels. Each panel can be a live camera
-   or the unified POS Live card (basket + payment + last transaction).
-   Reuses Office's existing office_pos_live listener — no duplicate Firestore listener. */
+/* ECHARPE Office CCTV v437
+   Fixed branch monitor: POS Live is always pinned at the top; all four branch cameras
+   stay below it in a stable grid. Reuses Office's existing office_pos_live listener. */
 (function(){
   'use strict';
-  var KEY='echarpe.office.cctv.v436';
-  var OLD_KEY='echarpe.office.cctv.v430';
+  var KEY='echarpe.office.cctv.v437';
+  var OLD_KEY='echarpe.office.cctv.v436';
   var BRANCHES=[{
     id:'madinaty', name:'مدينتي', gateway:'https://cctv-madinaty.echarpe.store',
     liveAliases:['madinaty','مدينتي'],
@@ -16,27 +15,19 @@
       {id:'8',name:'D08',label:'كاميرا 8',stream:'camera8'}
     ]
   }];
-  var state={active:false,branch:'madinaty',layout:4,sources:['cam:4','cam:5','cam:7','pos:live']};
+  var state={active:false,branch:'madinaty'};
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});}
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
   function cam(id){var x=b();return x.cameras.find(function(c){return c.id===String(id);})||x.cameras[0];}
   function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(c.stream);}
-  function normalizeSource(v){v=String(v||'');return (v==='pos:cart'||v==='pos:status')?'pos:live':v;}
   function load(){
     try{
       var raw=localStorage.getItem(KEY)||localStorage.getItem(OLD_KEY)||'{}', x=JSON.parse(raw);
       if(BRANCHES.some(function(y){return y.id===x.branch;}))state.branch=x.branch;
-      if([1,2,4].indexOf(Number(x.layout))>=0)state.layout=Number(x.layout);
-      if(Array.isArray(x.sources))for(var i=0;i<4;i++)if(typeof x.sources[i]==='string')state.sources[i]=normalizeSource(x.sources[i]);
     }catch(e){}
   }
-  function save(){try{localStorage.setItem(KEY,JSON.stringify({branch:state.branch,layout:state.layout,sources:state.sources}));}catch(e){}}
-  function sourceOptions(selected){
-    selected=normalizeSource(selected);var x=b(), out=x.cameras.map(function(c){return '<option value="cam:'+esc(c.id)+'" '+(selected==='cam:'+c.id?'selected':'')+'>📹 '+esc(c.name)+' · '+esc(c.label)+'</option>';});
-    out.push('<option value="pos:live" '+(selected==='pos:live'?'selected':'')+'>🛒 POS Live · السلة والدفع</option>');
-    return out.join('');
-  }
+  function save(){try{localStorage.setItem(KEY,JSON.stringify({branch:state.branch}));}catch(e){}}
   function liveDoc(){
     var docs=(window.ofLiveGetDocs&&window.ofLiveGetDocs())||[], x=b(), aliases=x.liveAliases||[];
     function norm(v){return String(v||'').trim().toLowerCase();}
@@ -84,24 +75,19 @@
       '<div class="of-cctv-age">آخر تحديث منذ '+Math.round(age/1000)+' ثانية</div></div>';
   }
   function stopPanel(panel){panel.querySelectorAll('iframe').forEach(function(f){try{f.src='about:blank';f.remove();}catch(e){}});}
-  function renderPanel(i){
-    var panel=document.querySelector('.of-cctv-panel[data-panel="'+i+'"]');if(!panel)return;stopPanel(panel);
-    var src=normalizeSource(state.sources[i]||'cam:4'), body=panel.querySelector('.of-cctv-panel-body');if(!body)return;
-    if(src.indexOf('cam:')===0){var c=cam(src.split(':')[1]);body.className='of-cctv-panel-body of-cctv-video';body.innerHTML='<iframe title="'+esc(c.name)+'" allow="autoplay; fullscreen" referrerpolicy="no-referrer" src="'+esc(streamUrl(c))+'"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div>';}
-    else {body.className='of-cctv-panel-body of-cctv-pos-body';body.innerHTML=posLiveHtml(liveDoc());}
+  function renderLive(){
+    var body=document.getElementById('ofCctvPinnedLiveBody');
+    if(body)body.innerHTML=posLiveHtml(liveDoc());
+  }
+  function cameraCard(c,i){
+    return '<article class="of-cctv-panel of-cctv-camera-panel" data-camera="'+esc(c.id)+'" data-panel="'+i+'">'+
+      '<div class="of-cctv-panel-head"><div class="of-cctv-camera-title">📹 '+esc(c.name)+' · '+esc(c.label)+'</div><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة">⛶</button></div>'+
+      '<div class="of-cctv-panel-body of-cctv-video"><iframe title="'+esc(c.name)+'" allow="autoplay; fullscreen" referrerpolicy="no-referrer" src="'+esc(streamUrl(c))+'"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div></article>';
   }
   function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;save();render();};});}
   function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement||null;}
-  function enterNativeFs(el){
-    var fn=el&&(el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen);
-    if(!fn)return;
-    try{var r=fn.call(el);if(r&&r.catch)r.catch(function(){});}catch(e){}
-  }
-  function exitNativeFs(){
-    var fn=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;
-    if(!fn||!fsEl())return;
-    try{var r=fn.call(document);if(r&&r.catch)r.catch(function(){});}catch(e){}
-  }
+  function enterNativeFs(el){var fn=el&&(el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen);if(!fn)return;try{var r=fn.call(el);if(r&&r.catch)r.catch(function(){});}catch(e){}}
+  function exitNativeFs(){var fn=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;if(!fn||!fsEl())return;try{var r=fn.call(document);if(r&&r.catch)r.catch(function(){});}catch(e){}}
   function clearFocusClasses(){
     document.body.classList.remove('of-cctv-lock');
     var room=document.querySelector('.of-cctv-controlroom');if(room)room.classList.remove('of-cctv-room-focus');
@@ -111,36 +97,32 @@
   }
   function toggleRoomFocus(){
     var room=document.querySelector('.of-cctv-controlroom');if(!room)return;
-    var on=room.classList.contains('of-cctv-room-focus');
-    clearFocusClasses();
+    var on=room.classList.contains('of-cctv-room-focus');clearFocusClasses();
     if(on){exitNativeFs();return;}
     room.classList.add('of-cctv-room-focus');document.body.classList.add('of-cctv-lock');
     var btn=document.getElementById('ofCctvRoomFullscreen');if(btn)btn.textContent='✕ خروج';
     enterNativeFs(room);
   }
   function togglePanelFocus(panel,btn){
-    if(!panel)return;var on=panel.classList.contains('of-cctv-panel-focus');
-    clearFocusClasses();
+    if(!panel)return;var on=panel.classList.contains('of-cctv-panel-focus');clearFocusClasses();
     if(on){exitNativeFs();return;}
     panel.classList.add('of-cctv-panel-focus');document.body.classList.add('of-cctv-lock');
-    if(btn){btn.textContent='✕';btn.title='خروج من ملء الشاشة';}
-    enterNativeFs(panel);
+    if(btn){btn.textContent='✕';btn.title='خروج من ملء الشاشة';}enterNativeFs(panel);
   }
   function render(){
-    if(!state.active)return;renderBranches();document.querySelectorAll('[data-layout]').forEach(function(x){x.classList.toggle('active',Number(x.dataset.layout)===state.layout);});
-    var grid=document.getElementById('ofCctvGrid');if(!grid)return;grid.className='of-cctv-grid of-cctv-grid-'+state.layout;
-    var count=state.layout, html='';for(var i=0;i<count;i++){var _srcClass=normalizeSource(state.sources[i])==='pos:live'?' of-cctv-panel-pos':'';html+='<article class="of-cctv-panel'+_srcClass+'" data-panel="'+i+'"><div class="of-cctv-panel-head"><select class="of-cctv-source" aria-label="مصدر الشاشة" data-cctv-source="'+i+'">'+sourceOptions(state.sources[i])+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة">⛶</button></div><div class="of-cctv-panel-body"></div></article>';}
-    grid.innerHTML=html;
-    grid.querySelectorAll('[data-cctv-source]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSource);state.sources[i]=normalizeSource(sel.value);save();renderPanel(i);};});
+    if(!state.active)return;renderBranches();
+    var live=document.getElementById('ofCctvPinnedLive');if(live)live.setAttribute('data-branch',state.branch);
+    renderLive();
+    var grid=document.getElementById('ofCctvCameraGrid');if(!grid)return;
+    grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);
+    grid.innerHTML=b().cameras.map(cameraCard).join('');
     grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
-    for(var j=0;j<count;j++)renderPanel(j);
   }
-  function refreshPosOnly(){if(!state.active)return;for(var i=0;i<state.layout;i++)if(normalizeSource(state.sources[i])==='pos:live')renderPanel(i);}
-  function stop(){state.active=false;clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
+  function refreshPosOnly(){if(state.active)renderLive();}
+  function stop(){state.active=false;clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvCameraGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
   function start(){state.active=true;render();}
   function init(){
     load();
-    document.querySelectorAll('[data-layout]').forEach(function(btn){btn.onclick=function(){state.layout=Number(btn.dataset.layout)||4;save();render();};});
     var roomFs=document.getElementById('ofCctvRoomFullscreen');if(roomFs)roomFs.onclick=toggleRoomFocus;
     ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(function(ev){document.addEventListener(ev,function(){if(!fsEl()&&!document.querySelector('.of-cctv-room-focus')&&!document.querySelector('.of-cctv-panel-focus'))clearFocusClasses();});});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'&&(document.querySelector('.of-cctv-room-focus')||document.querySelector('.of-cctv-panel-focus'))){clearFocusClasses();exitNativeFs();}});
