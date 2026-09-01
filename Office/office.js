@@ -4839,7 +4839,7 @@ let _ofDaySales = [];
 let _ofRatingBySale = {};
 const OF_RATING_ICON = {1:'😠', 2:'🙁', 3:'🙂', 4:'😍'};
 const OF_RATING_HUE  = {1:'var(--minus)', 2:'#F59E0B', 3:'#65A30D', 4:'var(--plus)'};
-let _ofDaySub = 'pay';
+let _ofDaySub = 'sales';
 
 async function ofLoadDayCut(){
   try{
@@ -6027,38 +6027,61 @@ function ofSaleRating(s){
         : '</div>');
 }
 
-// ---- 🧾 سجل المبيعات ----
-function ofRenderSales(){
-  const el = $('#daySales'); if(!el) return;
-  const S = _ofDaySales;
-  if(!S.length){ el.innerHTML = '<div class="card" style="text-align:center; color:var(--sub);">مفيش فواتير</div>'; return; }
-  const PAY = { cash:'كاش', visa:'فيزا', instapay:'انستا', salary:'راتب' };
-  const rows = S.map(function(s){
-    const t = ofSaleTs(s);
-    const p = s.payments || {};
-    const ways = Object.keys(PAY).filter(function(k){ return Math.abs(p[k]||0) > 0.005; })
-      .map(function(k){ return PAY[k]; }).join(' + ') || '—';
-    const isRet = (s.total||0) < 0;
-    const tag = s.reversed ? '<span style="color:var(--minus); font-size:10px;"> · معكوسة</span>'
-              : (isRet ? '<span style="color:var(--minus); font-size:10px;"> · مرتجع</span>' : '');
-    const items = (s.items||[]).length;
-    return '<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--line);">'
-      + '<div style="min-width:0;">'
-      +   '<div style="font-weight:800;">' + ofTime(t) + tag + '</div>'
-      +   '<div style="font-size:11px; color:var(--sub);">'
-      +     esc(s.employeeName || s.cashierName || '—')
-      +     ' · ' + ways + ' · ' + items + ' صنف'
-      +     (s.invoiceCode ? (' · ' + esc(s.invoiceCode)) : '')
-      +   '</div>'
-      +   ofSaleRating(s)
-      + '</div>'
-      + '<b style="white-space:nowrap; color:' + (isRet ? 'var(--minus)' : 'var(--txt)') + ';">'
-      +   ofMoney(s.total) + ' ج.م</b>'
-      + '</div>';
-  }).join('');
-  el.innerHTML = '<div class="card"><div style="font-weight:900; margin-bottom:4px;">🧾 سجل المبيعات ('
-    + S.length + ')</div>' + rows + '</div>';
+// ---- 🧾 سجل المبيعات v427 — الفاتورة نفسها هي نقطة المراجعة ----
+function _ofSaleCode(s){ return String((s && (s.invoiceCode || s.invoiceNo)) || ''); }
+function _ofPayWays(s){
+  const PAY={cash:'كاش',visa:'فيزا',instapay:'انستا باي',salary:'راتب'}, p=(s&&s.payments)||{};
+  return Object.keys(PAY).filter(function(k){return Math.abs(Number(p[k])||0)>.005;}).map(function(k){return PAY[k];}).join(' + ')||'—';
 }
+function _ofSaleThumbSlot(s){
+  const code=_ofSaleCode(s); if(!code) return '';
+  return '<button type="button" class="of-sale-shot" data-sale-shot="'+esc(code)+'" title="عرض لقطات الفاتورة" style="width:64px;height:54px;flex:0 0 64px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);cursor:pointer;font-size:20px;overflow:hidden">📸</button>';
+}
+function ofRenderSales(){
+  const el=$('#daySales'); if(!el)return; const S=_ofDaySales;
+  if(!S.length){el.innerHTML='<div class="card" style="text-align:center;color:var(--sub);">مفيش فواتير</div>';return;}
+  const rows=S.slice().reverse().map(function(s){
+    const t=ofSaleTs(s), isRet=(Number(s.total)||0)<0, code=_ofSaleCode(s), items=(s.items||[]).length;
+    const tag=s.reversed?'<span style="color:var(--minus);font-size:10px"> · معكوسة</span>':(isRet?'<span style="color:var(--minus);font-size:10px"> · فاتورة مرتجع</span>':'');
+    return '<div class="card of-sale-row" data-sale-id="'+esc(s.id||'')+'" style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:7px;cursor:pointer">'
+      +_ofSaleThumbSlot(s)+'<div style="min-width:0;flex:1"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+esc(code||('فاتورة '+(s.invoiceNo||'')))+tag+'</b><b style="white-space:nowrap;color:'+(isRet?'var(--minus)':'var(--txt)')+'">'+ofMoney(s.total)+' ج.م</b></div>'
+      +'<div style="font-size:11px;color:var(--sub);margin-top:3px">'+ofTime(t)+' · '+esc(s.employeeName||s.cashierName||'—')+' · '+esc(_ofPayWays(s))+' · '+items+' صنف</div>'+ofSaleRating(s)+'</div><span style="color:var(--sub)">‹</span></div>';
+  }).join('');
+  el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin:3px 2px 9px"><b>🧾 سجل المبيعات</b><small class="muted">'+S.length+' فاتورة · اضغط لفتح التفاصيل والـTimeline</small></div>'+rows;
+  el.querySelectorAll('.of-sale-row').forEach(function(row){row.onclick=function(e){if(e.target.closest('.of-sale-shot'))return;ofOpenSaleDetails(row.dataset.saleId);};});
+  el.querySelectorAll('.of-sale-shot').forEach(function(btn){btn.onclick=function(e){e.stopPropagation();if(window.ofCctvInvoiceShot)window.ofCctvInvoiceShot(btn.dataset.saleShot);};});
+}
+function _ofDetailItems(s){
+  const a=(s.items||[]); if(!a.length)return '<div class="muted">لا توجد أصناف محفوظة</div>';
+  return a.map(function(x){const q=Number(x.qty)||0,p=Number(x.price)||0;return '<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)"><div><b>'+esc(x.name||x.barcode||'صنف')+'</b><div class="muted" style="font-size:10px">'+esc(x.barcode||'')+(x.fromInvoice?' · من '+esc(x.fromInvoice):'')+'</div></div><span>'+ofNum(q)+' × '+ofMoney(Math.abs(p))+'</span><b>'+ofMoney(q*p)+' ج.م</b></div>';}).join('');
+}
+function _ofTimelineCard(icon,title,ts,body,shotKey,shotDoc){
+  let shot=''; const x=shotDoc&&shotDoc.shots&&shotDoc.shots[shotKey];
+  if(x&&/^data:image\/jpeg;base64,/.test(String(x.jpegData||''))) shot='<img src="'+x.jpegData+'" style="width:112px;height:74px;object-fit:cover;border-radius:10px;background:#000;cursor:pointer" onclick="ofCctvInvoiceShot(\''+esc(shotDoc.invoiceCode||'')+'\')">';
+  return '<div style="display:flex;gap:10px;position:relative;padding:0 0 14px"><div style="width:34px;height:34px;border-radius:50%;background:var(--panel2);display:grid;place-items:center;flex:0 0 34px">'+icon+'</div><div style="flex:1;border-bottom:1px solid var(--line);padding-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+title+'</b><small class="muted">'+(ts?ofTime(ts):'—')+'</small></div>'+(body?'<div class="muted" style="font-size:11px;margin-top:3px">'+body+'</div>':'')+(shot?'<div style="margin-top:7px">'+shot+'</div>':'')+'</div></div>';
+}
+window.ofOpenSaleDetails=async function(id){
+  const s=(_ofDaySales||[]).find(function(x){return x.id===id;}); if(!s)return; const code=_ofSaleCode(s), baseTs=ofSaleTs(s)||Date.now();
+  let shotDoc=null, acts=[];
+  try{if(code){const q=await db.collection('pos_cctv_invoice_snapshots').doc(code).get();if(q.exists)shotDoc=Object.assign({invoiceCode:code},q.data()||{});}}catch(e){console.warn('sale shots detail',e);}
+  try{if(code){const q=await db.collection('pos_activity_log').where('invoiceCode','==',code).limit(80).get();acts=q.docs.map(function(d){return Object.assign({id:d.id},d.data()||{});}).sort(function(a,b){return (a.ts||0)-(b.ts||0);});}}catch(e){console.warn('sale timeline',e);}
+  const isRet=(Number(s.total)||0)<0, p=s.payments||{}, payTxt=Object.keys(p).filter(function(k){return Math.abs(Number(p[k])||0)>.005;}).map(function(k){return esc(k)+' '+ofMoney(p[k])+' ج.م';}).join(' · ')||'—';
+  const stages=(shotDoc&&shotDoc.shots)||{};
+  let timeline='';
+  timeline+=_ofTimelineCard('🛒','بداية الفاتورة',stages.first_item&&stages.first_item.capturedAtMs,'أول صنف دخل السلة','first_item',shotDoc);
+  timeline+=_ofTimelineCard('💳','بدء الدفع',stages.payment&&stages.payment.capturedAtMs,payTxt,'payment',shotDoc);
+  acts.filter(function(a){return a.type!=='sale_saved';}).forEach(function(a){const meta=(typeof ACT_META!=='undefined'&&ACT_META[a.type])||{};timeline+=_ofTimelineCard(meta.hot?'⚠️':'•',esc(meta.t||a.type||'حدث'),a.ts,esc(a.note||a.item||a.reason||''),'',null);});
+  timeline+=_ofTimelineCard('💾','حفظ الفاتورة',stages.saving&&stages.saving.capturedAtMs,'إجمالي '+ofMoney(s.total)+' ج.م','saving',shotDoc);
+  timeline+=_ofTimelineCard('✅','اكتملت العملية',stages.after_save&&stages.after_save.capturedAtMs||baseTs,isRet?'تم حفظ فاتورة المرتجع':'تم حفظ البيع','after_save',shotDoc);
+  const linked=(_ofDaySales||[]).filter(function(r){return r.id!==s.id&&(r.items||[]).some(function(it){return String(it.fromInvoice||'')===code;});});
+  const returns=linked.length?'<div class="card"><b>↩️ المرتجعات المرتبطة</b>'+linked.map(function(r){return '<button class="ghost" style="width:100%;margin-top:7px;text-align:right" onclick="ofOpenSaleDetails(\''+esc(r.id)+'\')">'+esc(_ofSaleCode(r))+' · '+ofMoney(r.total)+' ج.م</button>';}).join('')+'</div>':'';
+  const ov=document.createElement('div');ov.id='ofSaleDetailOv';ov.style.cssText='position:fixed;inset:0;z-index:9998;background:rgba(15,23,42,.62);display:flex;align-items:flex-end;justify-content:center;padding-top:30px';
+  ov.innerHTML='<div style="background:var(--bg);color:var(--txt);width:100%;max-width:760px;max-height:94vh;overflow:auto;border-radius:22px 22px 0 0;padding:14px"><div style="display:flex;justify-content:space-between;gap:8px;position:sticky;top:-14px;background:var(--bg);padding:10px 0;z-index:2"><div><b style="font-size:17px">'+(isRet?'↩️ فاتورة مرتجع ':'🧾 فاتورة ')+esc(code)+'</b><div class="muted" style="font-size:11px">'+esc(s.branch||'')+' · '+esc(s.employeeName||s.cashierName||'—')+' · '+new Date(baseTs).toLocaleString('ar-EG')+'</div></div><button class="ghost" id="ofSaleDetailClose">✕</button></div>'
+    +'<div class="card"><div style="display:flex;justify-content:space-between"><span>الإجمالي</span><b>'+ofMoney(s.total)+' ج.م</b></div><div class="muted" style="font-size:11px;margin-top:5px">الدفع: '+payTxt+(s.customerName?' · العميل: '+esc(s.customerName):'')+(s.customerPhone?' · '+esc(s.customerPhone):'')+'</div></div>'
+    +'<div class="card"><b>📦 تفاصيل الأصناف</b><div style="margin-top:6px">'+_ofDetailItems(s)+'</div></div>'+returns
+    +'<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><b>🕒 Timeline الفاتورة</b>'+(shotDoc?'<button class="ghost" onclick="ofCctvInvoiceShot(\''+esc(code)+'\')">📸 كل اللقطات</button>':'<small class="muted">لا توجد لقطات</small>')+'</div><div style="margin-top:12px">'+timeline+'</div></div></div>';
+  document.body.appendChild(ov);ov.querySelector('#ofSaleDetailClose').onclick=function(){ov.remove();};ov.onclick=function(e){if(e.target===ov)ov.remove();};
+};
 
 // ---- 📦 ملخص الأصناف ----
 function ofRenderItems(){
