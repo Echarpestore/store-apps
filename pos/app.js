@@ -1730,7 +1730,12 @@ function buildGenericReceiptHTML(p){
     const tone=(t)=>t==='good'?'font-weight:900':t==='bad'?'font-weight:900':t==='strong'?'font-weight:950;font-size:13px':t==='warn'?'font-weight:900':'';
     const sections=grouped.map(([name,rows])=>`<div style="margin-top:6px;border-top:1px solid #111;padding-top:4px;">
       ${name?`<div style="font-size:11px;font-weight:950;text-align:right;margin-bottom:2px;">${safe(name)}</div>`:''}
-      ${rows.map(l=>`<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:5px;align-items:start;font-size:10.8px;line-height:1.45;padding:1.7px 0;border-bottom:0.4px dotted #bbb;"><span style="overflow-wrap:anywhere;">${safe(l.label)}</span><b style="white-space:nowrap;direction:rtl;${tone(l.tone)}">${safe(l.value)}</b></div>`).join('')}
+      ${rows.map(l=>{
+        const rawValue=String(l.value==null?'':l.value);
+        const isLong=rawValue.length>22 || /[،,\n]/.test(rawValue);
+        if(isLong) return `<div style="font-size:10.8px;line-height:1.55;padding:2.5px 0;border-bottom:0.4px dotted #bbb;"><div style="font-weight:800;margin-bottom:1px;">${safe(l.label)}</div><b style="display:block;white-space:normal;overflow-wrap:anywhere;word-break:normal;direction:rtl;text-align:right;${tone(l.tone)}">${safe(rawValue)}</b></div>`;
+        return `<div style="display:grid;grid-template-columns:minmax(0,1fr) max-content;column-gap:5px;align-items:start;font-size:10.8px;line-height:1.45;padding:1.7px 0;border-bottom:0.4px dotted #bbb;"><span style="overflow-wrap:anywhere;">${safe(l.label)}</span><b style="white-space:nowrap;direction:rtl;${tone(l.tone)}">${safe(rawValue)}</b></div>`;
+      }).join('')}
     </div>`).join('');
     const dt=new Date(Number(p.paidAt)||Date.now());
     const dateTxt=dt.toLocaleDateString('en-CA')+' '+dt.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
