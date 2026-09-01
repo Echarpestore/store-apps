@@ -247,17 +247,17 @@
 
 
   /* 📹 CCTV v420 — loaded only while the page is open */
-  .of-cctv-toolbar{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end}
-  .of-cctv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-  .of-cctv-card{background:#0b0c0f;border-radius:16px;overflow:hidden;border:1px solid #202530;box-shadow:0 8px 24px rgba(15,23,42,.10)}
-  .of-cctv-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;color:#fff;background:#111827}
-  .of-cctv-head small{color:#9ca3af}
-  .of-cctv-video{aspect-ratio:16/9;background:#050608;position:relative}
-  .of-cctv-video iframe{width:100%;height:100%;border:0;background:#050608;display:block}
-  .of-cctv-actions{display:flex;gap:6px;padding:8px;background:#111827}
-  .of-cctv-actions button{flex:1;padding:8px 7px!important;font-size:11px!important}
+  .of-cctv-shell{background:linear-gradient(180deg,#0f172a,#111827);border:1px solid #263246;border-radius:22px;padding:14px;box-shadow:0 14px 38px rgba(15,23,42,.16);color:#fff}
+  .of-cctv-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .of-cctv-title{display:flex;align-items:center;gap:9px}.of-cctv-title b{font-size:16px}.of-cctv-title small{display:block;color:#94a3b8;margin-top:2px}
+  .of-cctv-status{font-size:11px;color:#86efac;background:#052e20;border:1px solid #166534;border-radius:999px;padding:6px 10px}
+  .of-cctv-branches,.of-cctv-cams{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding:2px 0 10px}.of-cctv-branches::-webkit-scrollbar,.of-cctv-cams::-webkit-scrollbar{display:none}
+  .of-cctv-chip{white-space:nowrap;border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:12px;padding:9px 13px;cursor:pointer;font:inherit}.of-cctv-chip.active{background:#fff;color:#111827;border-color:#fff;font-weight:800}
+  .of-cctv-stage{position:relative;aspect-ratio:16/9;max-height:68vh;background:#030712;border-radius:18px;overflow:hidden;border:1px solid #334155}.of-cctv-stage iframe{width:100%;height:100%;border:0;display:block;background:#030712}
+  .of-cctv-overlay{position:absolute;z-index:2;top:10px;right:10px;left:10px;display:flex;justify-content:space-between;pointer-events:none}.of-cctv-badge{background:rgba(3,7,18,.76);backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.12);padding:7px 10px;border-radius:10px;font-size:11px}.of-cctv-live{color:#4ade80}
+  .of-cctv-actions{display:flex;gap:8px;margin-top:10px}.of-cctv-actions button{flex:1;border:1px solid #334155;background:#172033;color:#fff;border-radius:12px;padding:10px;cursor:pointer;font:inherit;font-weight:700}
   .of-cctv-warning{display:none;margin:8px 0 12px;padding:10px 12px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:11.5px;line-height:1.7}
-  @media(max-width:720px){.of-cctv-grid{grid-template-columns:1fr}.of-cctv-toolbar{grid-template-columns:1fr 1fr}.of-cctv-toolbar .wide{grid-column:1/-1}}
+  @media(max-width:720px){.of-cctv-shell{margin:0 -2px;padding:10px;border-radius:18px}.of-cctv-stage{aspect-ratio:16/10}.of-cctv-actions button{padding:9px 5px;font-size:11px}.of-cctv-title b{font-size:14px}}
 
 </style>
 </head>
@@ -591,26 +591,22 @@
     <div id="posLiveBody"><div class="empty">افتح التبويب لبدء المتابعة</div></div>
   </section>
 
-  <!-- 📹 كاميرات الفروع — لا تبدأ أي بث إلا عند فتح الصفحة -->
+  <!-- 📹 CCTV v423 — بث كاميرا واحدة فقط حسب اختيار المستخدم -->
   <section class="tabPage" id="page-cctv">
-    <div style="margin:2px 2px 10px;">
-      <h2 style="font-size:19px;">📹 كاميرات الفرع</h2>
-      <div class="muted">Live محلي أو من شبكة تانية عبر HTTPS Gateway. الفيديو لا يمر على Firestore ولا يبدأ إلا وإنت فاتح الصفحة.</div>
-    </div>
-    <div class="panel">
-      <div class="of-cctv-toolbar">
-        <div class="wide">
-          <label class="muted" for="ofCctvGateway">Gateway URL</label>
-          <input class="f" id="ofCctvGateway" inputmode="url" value="https://cctv-madinaty.echarpe.store" placeholder="https://camera-gateway.example.com">
-        </div>
-        <button class="btn gold" id="ofCctvSave" type="button">حفظ وتشغيل</button>
-        <button class="btn no" id="ofCctvReload" type="button">تحديث</button>
+    <div class="of-cctv-shell">
+      <div class="of-cctv-top">
+        <div class="of-cctv-title"><span style="font-size:22px">📹</span><div><b>كاميرات الفروع</b><small>يتم تشغيل الكاميرا التي تختارها فقط</small></div></div>
+        <span class="of-cctv-status" id="ofCctvStatus">● متصل</span>
       </div>
+      <div class="of-cctv-branches" id="ofCctvBranches"></div>
+      <div class="of-cctv-cams" id="ofCctvCams"></div>
       <div id="ofCctvWarn" class="of-cctv-warning"></div>
-      <div class="hint" style="margin:0;">🔒 لا تضع اسم مستخدم أو Password داخل الرابط. بيانات الـNVR تظل على جهاز الفرع فقط.</div>
-    </div>
-    <div class="of-cctv-grid" id="ofCctvGrid">
-      <div class="empty" style="grid-column:1/-1;">افتح التبويب لبدء البث</div>
+      <div class="of-cctv-stage" id="ofCctvStage"><div class="empty" style="color:#94a3b8;padding-top:20%">اختر كاميرا لبدء البث</div></div>
+      <div class="of-cctv-actions">
+        <button type="button" id="ofCctvReload">↻ تحديث البث</button>
+        <button type="button" id="ofCctvShot">📸 لقطة الآن</button>
+        <button type="button" id="ofCctvOpen">⛶ فتح كامل</button>
+      </div>
     </div>
   </section>
 
@@ -719,7 +715,7 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
-<script src="cctv.js?v=422"></script>
+<script src="cctv.js?v=423"></script>
 <script src="office.js?v=76"></script>
 </body>
 </html>
