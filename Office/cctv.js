@@ -1,10 +1,9 @@
-/* ECHARPE Office CCTV v437
-   Fixed branch monitor: POS Live is always pinned at the top; all four branch cameras
-   stay below it in a stable grid. Reuses Office's existing office_pos_live listener. */
+/* ECHARPE Office CCTV v439
+   POS Live stays pinned. Four stable camera slots remain user-selectable and persist locally. */
 (function(){
   'use strict';
-  var KEY='echarpe.office.cctv.v437';
-  var OLD_KEY='echarpe.office.cctv.v436';
+  var KEY='echarpe.office.cctv.v438';
+  var OLD_KEY='echarpe.office.cctv.v437';
   var BRANCHES=[{
     id:'madinaty', name:'مدينتي', gateway:'https://cctv-madinaty.echarpe.store',
     liveAliases:['madinaty','مدينتي'],
@@ -15,7 +14,7 @@
       {id:'8',name:'D08',label:'كاميرا 8',stream:'camera8'}
     ]
   }];
-  var state={active:false,branch:'madinaty'};
+  var state={active:false,branch:'madinaty',slots:['4','5','7','8']};
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});}
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
@@ -25,9 +24,10 @@
     try{
       var raw=localStorage.getItem(KEY)||localStorage.getItem(OLD_KEY)||'{}', x=JSON.parse(raw);
       if(BRANCHES.some(function(y){return y.id===x.branch;}))state.branch=x.branch;
+      if(Array.isArray(x.slots)&&x.slots.length===4)state.slots=x.slots.map(function(v){return v==null?'off':String(v);});
     }catch(e){}
   }
-  function save(){try{localStorage.setItem(KEY,JSON.stringify({branch:state.branch}));}catch(e){}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify({branch:state.branch,slots:state.slots.slice(0,4)}));}catch(e){}}
   function liveDoc(){
     var docs=(window.ofLiveGetDocs&&window.ofLiveGetDocs())||[], x=b(), aliases=x.liveAliases||[];
     function norm(v){return String(v||'').trim().toLowerCase();}
@@ -61,9 +61,10 @@
       return '<div class="of-cctv-pos of-cctv-pos-complete">'+
         '<div class="of-cctv-pos-top"><div><b>✅ تم حفظ الفاتورة</b><small>'+esc(last.employee||d.employee||'')+' · '+esc(d.branch||'')+'</small></div><span class="of-cctv-pos-live done">محفوظة</span></div>'+
         '<div class="of-cctv-complete-head"><div><small>آخر فاتورة</small><b>'+(last.invoiceNo?'#'+esc(last.invoiceNo):esc(last.invoiceCode||''))+'</b></div><strong>'+money(last.total)+'</strong></div>'+
-        '<div class="of-cctv-pos-scroll of-cctv-frozen">'+frozenRows+'</div>'+
-        '<div class="of-cctv-pay"><div class="of-cctv-pay-head"><span>الدفع</span><small>العملية المكتملة</small></div><div class="of-cctv-pay-chips">'+(frozenPays||'<span class="muted">—</span>')+'</div></div>'+
-        '<div class="of-cctv-complete-note">تفضل ظاهرة هنا لحد ما تبدأ فاتورة جديدة</div></div>';
+        '<div class="of-cctv-last-meta"><span>🕒 '+new Date(Number(last.confirmedAtMs||last.atMs)||Date.now()).toLocaleString('ar-EG')+'</span><span>👤 '+(last.customerName?esc(last.customerName):'بدون عميل')+(last.customerPhone?' · '+esc(last.customerPhone):'')+'</span><span>🧾 '+Number(last.itemCount||((last.items||[]).length))+' صنف</span></div>'+
+        '<div class="of-cctv-pos-scroll of-cctv-frozen">'+(frozenRows||'<div class="of-cctv-cart-empty">تفاصيل الأصناف غير متاحة للفواتير المحفوظة قبل v439</div>')+'</div>'+
+        '<div class="of-cctv-pay"><div class="of-cctv-pay-head"><span>طريقة الدفع</span><small>تم التأكيد والحفظ</small></div><div class="of-cctv-pay-chips">'+(frozenPays||'<span class="muted">—</span>')+'</div></div>'+
+        '<div class="of-cctv-complete-note">آخر عملية مكتملة تفضل ثابتة هنا حتى تبدأ فاتورة جديدة</div></div>';
     }
     var rows=currentRows.map(function(x){return '<div class="of-cctv-pos-row"><span><b>'+esc(x.name||x.code||'صنف')+'</b>'+(x.isReturn?' <em>↩ مرتجع</em>':'')+'<small>× '+Number(x.qty||0)+(x.barcode?' · '+esc(x.barcode):'')+'</small></span><strong>'+money(Number(x.price||0)*Number(x.qty||0))+'</strong></div>';}).join('');
     var pays=(d.payments||[]).map(payLabel).join('');
@@ -79,10 +80,14 @@
     var body=document.getElementById('ofCctvPinnedLiveBody');
     if(body)body.innerHTML=posLiveHtml(liveDoc());
   }
-  function cameraCard(c,i){
-    return '<article class="of-cctv-panel of-cctv-camera-panel" data-camera="'+esc(c.id)+'" data-panel="'+i+'">'+
-      '<div class="of-cctv-panel-head"><div class="of-cctv-camera-title">📹 '+esc(c.name)+' · '+esc(c.label)+'</div><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة">⛶</button></div>'+
-      '<div class="of-cctv-panel-body of-cctv-video"><iframe title="'+esc(c.name)+'" allow="autoplay; fullscreen" referrerpolicy="no-referrer" src="'+esc(streamUrl(c))+'"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div></article>';
+  function cameraOptions(selected){
+    return '<option value="off"'+(selected==='off'?' selected':'')+'>إيقاف الكاميرا</option>'+b().cameras.map(function(c){return '<option value="'+esc(c.id)+'"'+(String(c.id)===String(selected)?' selected':'')+'>'+esc(c.name)+' · '+esc(c.label)+'</option>';}).join('');
+  }
+  function cameraCard(selected,i){
+    var c=selected==='off'?null:cam(selected);
+    return '<article class="of-cctv-panel of-cctv-camera-panel'+(c?'':' of-cctv-camera-off')+'" data-camera="'+esc(c?c.id:'off')+'" data-panel="'+i+'">'+
+      '<div class="of-cctv-panel-head"><select class="of-cctv-camera-select" data-cctv-select="'+i+'" aria-label="اختيار كاميرا المربع '+(i+1)+'">'+cameraOptions(c?c.id:'off')+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(c?'':' disabled')+'>⛶</button></div>'+
+      (c?'<div class="of-cctv-panel-body of-cctv-video"><iframe title="'+esc(c.name)+'" allow="autoplay; fullscreen" referrerpolicy="no-referrer" src="'+esc(streamUrl(c))+'"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div><b>الكاميرا متوقفة</b><small>اختار كاميرا من القائمة فوق</small></div></div>')+'</article>';
   }
   function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;save();render();};});}
   function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement||null;}
@@ -115,14 +120,50 @@
     renderLive();
     var grid=document.getElementById('ofCctvCameraGrid');if(!grid)return;
     grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);
-    grid.innerHTML=b().cameras.map(cameraCard).join('');
+    grid.innerHTML=state.slots.map(cameraCard).join('');
+    grid.querySelectorAll('[data-cctv-select]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSelect);state.slots[i]=sel.value;save();render();};});
     grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
   }
   function refreshPosOnly(){if(state.active)renderLive();}
   function stop(){state.active=false;clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvCameraGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
   function start(){state.active=true;render();}
+  function dayBounds(v){
+    var a=String(v||'').split('-').map(Number); if(a.length!==3||!a[0])return null;
+    var start=new Date(a[0],a[1]-1,a[2],0,0,0,0), end=new Date(a[0],a[1]-1,a[2]+1,0,0,0,0);
+    return {start:start.getTime(),end:end.getTime()};
+  }
+  function saleMs(x){return Number(x.createdAtMs||x.atMs||(x.createdAt&&x.createdAt.toMillis&&x.createdAt.toMillis())||0);}
+  function renderDayRows(rows){
+    var box=document.getElementById('ofCctvDayRows'); if(!box)return;
+    rows.sort(function(a,c){return saleMs(c)-saleMs(a);});
+    if(!rows.length){box.innerHTML='<div class="of-cctv-day-empty">مفيش فواتير في اليوم ده للفرع المختار.</div>';return;}
+    box.innerHTML=rows.map(function(x){
+      var pm=Object.keys(x.payments||{}).filter(function(k){return Math.abs(Number(x.payments[k]||0))>.001;}).map(function(k){return (k==='visa'?'Visa':k==='cash'?'كاش':k==='instapay'?'Instapay':esc(k))+' '+money(x.payments[k]);}).join(' · ');
+      var cust=x.customerName||x.customerPhone?('👤 '+esc(x.customerName||'عميل')+(x.customerPhone?' · '+esc(x.customerPhone):'')):'👤 بدون عميل';
+      return '<div class="of-cctv-day-row"><div class="of-cctv-day-time">'+new Date(saleMs(x)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</div><div class="of-cctv-day-main"><b>فاتورة '+esc(x.invoiceNo||x.invoiceCode||x.id||'')+' · '+money(x.total)+'</b><small>'+cust+' · '+esc(x.employeeName||x.employee||'')+'</small><small>💳 '+(pm||'—')+' · '+Number(x.itemCount||(x.items||[]).length)+' صنف</small></div><div class="of-cctv-day-actions"><button type="button" onclick="ofCctvInvoiceShot(\''+esc(String(x.invoiceCode||''))+'\')">📸 اللقطات</button>'+(x.id&&window.ofOpenSaleDetails?'<button type="button" data-open-sale="'+esc(x.id)+'">🧾 التفاصيل</button>':'')+'</div></div>';
+    }).join('');
+    box.querySelectorAll('[data-open-sale]').forEach(function(btn){btn.onclick=function(){try{window.ofOpenSaleDetails(btn.getAttribute('data-open-sale'));}catch(e){}};});
+  }
+  async function loadDayReview(){
+    var inp=document.getElementById('ofCctvDayDate'), btn=document.getElementById('ofCctvDayLoad'), box=document.getElementById('ofCctvDayRows');
+    if(!inp||!box)return; var r=dayBounds(inp.value); if(!r)return;
+    if(btn){btn.disabled=true;btn.textContent='جاري التحميل…';} box.innerHTML='<div class="of-cctv-day-empty">جاري تحميل اليوم…</div>';
+    try{
+      var cached=(window.ofCctvGetCachedSales&&window.ofCctvGetCachedSales())||[];
+      var aliases=(b().liveAliases||[]).map(function(v){return String(v).toLowerCase();});
+      var rows=cached.filter(function(x){var t=saleMs(x),br=String(x.branch||'').toLowerCase();return t>=r.start&&t<r.end&&aliases.some(function(a){return br.indexOf(a)>=0;});});
+      if(!rows.length && typeof db!=='undefined'){
+        var q=db.collection('pos_test_sales').where('createdAtMs','>=',r.start).where('createdAtMs','<',r.end);
+        var snap=await q.get(); rows=[]; snap.forEach(function(d){var x=Object.assign({id:d.id},d.data()||{}),br=String(x.branch||'').toLowerCase();if(aliases.some(function(a){return br.indexOf(a)>=0;}))rows.push(x);});
+      }
+      renderDayRows(rows);
+    }catch(e){box.innerHTML='<div class="of-cctv-day-empty">تعذر تحميل مراجعة اليوم: '+esc(e&&e.message||e)+'</div>';}
+    finally{if(btn){btn.disabled=false;btn.textContent='تحميل اليوم';}}
+  }
   function init(){
     load();
+    var di=document.getElementById('ofCctvDayDate'); if(di&&!di.value){var nd=new Date();di.value=nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');}
+    var dl=document.getElementById('ofCctvDayLoad'); if(dl)dl.onclick=loadDayReview;
     var roomFs=document.getElementById('ofCctvRoomFullscreen');if(roomFs)roomFs.onclick=toggleRoomFocus;
     ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(function(ev){document.addEventListener(ev,function(){if(!fsEl()&&!document.querySelector('.of-cctv-room-focus')&&!document.querySelector('.of-cctv-panel-focus'))clearFocusClasses();});});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'&&(document.querySelector('.of-cctv-room-focus')||document.querySelector('.of-cctv-panel-focus'))){clearFocusClasses();exitNativeFs();}});

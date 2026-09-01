@@ -1497,6 +1497,7 @@ const D = { leaves:[], regs:[], orders:[], shorts:[], merchants:[], mtxns:[], ex
             recurring:[], openShifts:[], salaryPays:[], rewards:[], cashBase:null, settlements:[],
             cashDays:{}, cashCfg:{},
             creditRequests:[], giftCards:[], creditLedger:[], refundsDue:[] };
+window.ofCctvGetCachedSales=function(){return D.sales.slice();};
 let started = false;
 let firstLoadDone = false;
 const seenIds = {};   // عشان الإشعار يطلع للجديد بس

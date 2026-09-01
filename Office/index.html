@@ -311,6 +311,17 @@
 @media(orientation:landscape){.of-cctv-room-focus .of-cctv-pinned-live{flex-basis:42%}.of-cctv-room-focus .of-cctv-camera-grid{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:minmax(0,1fr)}.of-cctv-room-focus .of-cctv-camera-section-title{display:none}.of-cctv-room-focus .of-cctv-camera-panel{min-height:0}.of-cctv-room-focus .of-cctv-pinned-live .of-cctv-pos-scroll{max-height:calc(42vh - 150px)}}
 </style>
 </style>
+
+<style>
+.of-cctv-camera-select{min-width:0;max-width:calc(100% - 48px);border:1px solid rgba(255,255,255,.15);background:rgba(7,12,22,.88);color:#eef2ff;border-radius:999px;padding:7px 30px 7px 10px;font:inherit;font-size:9px;font-weight:800;outline:none}
+.of-cctv-camera-select option{color:#111;background:#fff}.of-cctv-panel-full:disabled{opacity:.35;cursor:not-allowed}.of-cctv-off-body{display:flex;align-items:center;justify-content:center;text-align:center;color:#94a3b8;background:linear-gradient(145deg,#0b1220,#111827)}.of-cctv-off-body b,.of-cctv-off-body small{display:block}.of-cctv-off-body small{margin-top:5px;font-size:9px}
+@media(max-width:720px){.of-cctv-camera-select{font-size:8px;padding-top:6px;padding-bottom:6px}}
+</style>
+<style id="ofCctvV439Style">
+.of-cctv-last-meta{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.of-cctv-last-meta span{background:#0b1220;border:1px solid #263449;border-radius:999px;padding:5px 9px;font-size:11px;color:#dbeafe}
+.of-cctv-day-review{margin-top:14px;border:1px solid #243247;background:#0b1220;border-radius:16px;padding:12px}.of-cctv-day-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.of-cctv-day-head small{display:block;color:#94a3b8;margin-top:3px}.of-cctv-day-controls{display:flex;gap:7px}.of-cctv-day-controls input,.of-cctv-day-controls button{border:1px solid #334155;background:#111827;color:#fff;border-radius:9px;padding:8px}.of-cctv-day-controls button{cursor:pointer;font-weight:800}.of-cctv-day-row{display:grid;grid-template-columns:75px 1fr auto;gap:10px;align-items:center;border-top:1px solid #1f2937;padding:10px 2px}.of-cctv-day-time{font-weight:900}.of-cctv-day-main small{display:block;color:#94a3b8;margin-top:3px}.of-cctv-day-actions{display:flex;gap:6px}.of-cctv-day-actions button{border:1px solid #334155;background:#111827;color:#fff;border-radius:8px;padding:7px;cursor:pointer}.of-cctv-day-empty{text-align:center;color:#94a3b8;padding:18px}
+@media(max-width:700px){.of-cctv-day-head{align-items:stretch;flex-direction:column}.of-cctv-day-controls>*{flex:1}.of-cctv-day-row{grid-template-columns:60px 1fr}.of-cctv-day-actions{grid-column:1/-1}.of-cctv-day-actions button{flex:1}}
+</style>
 </head>
 <body>
 
@@ -657,8 +668,12 @@
         <div class="of-cctv-fixed-label"><span>🛒 POS LIVE</span><small>ثابت — لا يتغير</small></div>
         <div class="of-cctv-pinned-live-body" id="ofCctvPinnedLiveBody"></div>
       </section>
-      <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><small>الأربع كاميرات مباشرة</small></div>
-      <div class="of-cctv-camera-grid" id="ofCctvCameraGrid"></div>
+      <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><small>4 أماكن ثابتة · اختار كاميرا كل مكان</small></div>
+            <div class="of-cctv-camera-grid" id="ofCctvCameraGrid"></div>
+      <section class="of-cctv-day-review">
+        <div class="of-cctv-day-head"><div><b>🕘 مراجعة اليوم</b><small>Timeline للفواتير — اضغط على أي فاتورة لمراجعة تفاصيلها ولقطاتها</small></div><div class="of-cctv-day-controls"><input type="date" id="ofCctvDayDate"><button type="button" id="ofCctvDayLoad">تحميل اليوم</button></div></div>
+        <div id="ofCctvDayRows"><div class="of-cctv-day-empty">اختار التاريخ واضغط تحميل اليوم</div></div>
+      </section>
       <div class="of-cctv-footnote">الفاتورة Live ثابتة دائمًا بالأعلى، والأربع كاميرات ثابتة تحتها. ملء الشاشة يحافظ على نفس الترتيب.</div>
     </div>
   </section>
@@ -767,7 +782,7 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
-<script src="cctv.js?v=437"></script>
-<script src="office.js?v=79"></script>
+<script src="cctv.js?v=439"></script>
+<script src="office.js?v=80"></script>
 </body>
 </html>
