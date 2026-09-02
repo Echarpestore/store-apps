@@ -6511,6 +6511,34 @@ function computeSalary(emp, periodStart, end){
            notYetHired:false };
 }
 
+
+// ===== 💼 Payroll integrity — مصدر واحد للحسبة قبل العرض والصرف =====
+// يفصل الراتب عن العمولات ويمنع أي رقم "مستحق" لا يطابق المعادلة.
+function payrollMoneyBreakdown(calc, due){
+  const c = calc || {};
+  const d = due || {};
+  const base = Math.round((Number(c.proratedBase)||0)*100)/100;
+  const salaryAdditions = Math.round(((Number(c.overtimePay)||0) + (Number(c.dayOffBonusAmount)||0))*100)/100;
+  const salaryDeductions = Math.round(((Number(c.deductionAmount)||0) + (Number(c.timeCreditDeduction)||0) + (Number(c.adminDeductions)||0) + (Number(c.advancesTotal)||0))*100)/100;
+  const salaryNet = Math.round((base + salaryAdditions - salaryDeductions)*100)/100;
+  const commissionsDue = Math.round((Number(d.totalDue)||0)*100)/100;
+  const payoutIfAllCommissions = Math.round((salaryNet + commissionsDue)*100)/100;
+  const engineNet = Math.round((Number(c.netSalary)||0)*100)/100;
+  const delta = Math.round((engineNet - salaryNet)*100)/100;
+  return { base, salaryAdditions, salaryDeductions, salaryNet, commissionsDue, payoutIfAllCommissions, engineNet, delta, ok: Math.abs(delta) < 0.01 };
+}
+function payrollIntegrityCheck(calc, due){
+  const b = payrollMoneyBreakdown(calc, due);
+  return {
+    ...b,
+    message: b.ok ? '' : ('عدم تطابق حساب المرتب: المحرك '+b.engineNet+' ج.م بينما المعادلة '+b.salaryNet+' ج.م')
+  };
+}
+if(typeof window!=='undefined'){
+  window.payrollMoneyBreakdown = payrollMoneyBreakdown;
+  window.payrollIntegrityCheck = payrollIntegrityCheck;
+}
+
 function renderSalaryPanel(){
   const wrap = $('#salaryList');
   if(!wrap) return;
@@ -6528,9 +6556,10 @@ function renderSalaryPanel(){
       return `<div class="emp-row" style="padding:13px;"><div class="n">${e.name}</div><div class="meta">لسه معينش في الفترة دي</div></div>`;
     }
     const due = commissionDueFor(e, periodLabel);
-    const deductions = Math.round((c.deductionAmount + c.timeCreditDeduction + c.adminDeductions + c.advancesTotal) * 100)/100;
-    const additions = Math.round((c.overtimePay + c.dayOffBonusAmount + due.totalDue) * 100)/100;
-    const grand = Math.round((c.netSalary + due.totalDue) * 100)/100;
+    const pb = payrollMoneyBreakdown(c, due);
+    const deductions = pb.salaryDeductions;
+    const additions = pb.salaryAdditions;
+    const grand = pb.salaryNet;
     const paid = allSalaryPayments.find(p=> p.employeeId===e.id && p.periodLabel===periodLabel);
     const warn = c.incompleteShifts.length ? `<span style="color:#f59e0b;">⚠️ ${c.incompleteShifts.length} شيفت مفتوح</span>` : '';
     return `<div class="emp-row" style="cursor:pointer;padding:13px;display:block;" onclick="openPayrollEmployee('${e.id}','${periodLabel}')">
@@ -6543,7 +6572,8 @@ function renderSalaryPanel(){
         <span class="meta">حضور <b>${c.attendedDays}</b></span>
         <span class="meta">غياب <b>${c.extraOffDays}</b></span>
         <span class="meta" style="color:${deductions?'var(--bad)':'var(--sub)'}">خصم <b>-${deductions}</b></span>
-        <span class="meta" style="color:${additions?'var(--good)':'var(--sub)'}">إضافة <b>+${additions}</b></span>
+        <span class="meta" style="color:${additions?'var(--good)':'var(--sub)'}">إضافات راتب <b>+${additions}</b></span>
+        ${due.totalDue>0?`<span class="meta" style="color:var(--gold)">عمولات منفصلة <b>+${due.totalDue}</b></span>`:''}
       </div>
       <div style="margin-top:7px;text-align:left;font-size:10px;color:var(--sub);">${paid?'✅ مدفوع':'اضغط للتفاصيل ←'}</div>
     </div>`;
@@ -6614,9 +6644,10 @@ window.openPayrollEmployee = function(empId, periodKey){
   const ov = document.createElement('div'); ov.id='payrollEmpOv';
   ov.dataset.empId=emp.id; ov.dataset.periodKey=pk;
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.86);z-index:9999;overflow:auto;padding:12px 8px 28px;';
-  const deductions = Math.round((c.deductionAmount+c.timeCreditDeduction+c.adminDeductions+c.advancesTotal)*100)/100;
-  const salaryAdditions = Math.round((c.overtimePay+c.dayOffBonusAmount)*100)/100;
-  const grandDue = Math.round((c.netSalary+due.totalDue)*100)/100;
+  const pb = payrollMoneyBreakdown(c, due);
+  const deductions = pb.salaryDeductions;
+  const salaryAdditions = pb.salaryAdditions;
+  const grandDue = pb.payoutIfAllCommissions;
   const actualDays = new Date(Date.UTC(Number(pk.slice(0,4)), Number(pk.slice(5,7)), 0)).getUTCDate();
   const paid = allSalaryPayments.find(p=>p.employeeId===emp.id && p.periodLabel===pk);
   const paidTotal = paid ? Number(paid.payoutTotal||paid.amount||0) : 0;
@@ -6639,7 +6670,7 @@ window.openPayrollEmployee = function(empId, periodKey){
     #payrollEmpOv .pay-v393-card{max-width:540px;margin:auto;background:#171820;border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:15px;color:#f5f5f7;box-shadow:0 22px 70px rgba(0,0,0,.4)}
     #payrollEmpOv .pay-v393-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:4px 2px 12px;border-bottom:1px solid rgba(255,255,255,.08)}
     #payrollEmpOv .pay-v393-title{font-size:20px;font-weight:950}.pay-v393-sub{font-size:11px;color:var(--sub);margin-top:3px}
-    #payrollEmpOv .pay-v393-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+    #payrollEmpOv .pay-v393-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
     #payrollEmpOv .pay-v393-kpi{background:#20212a;border:1px solid rgba(255,255,255,.07);border-radius:13px;padding:10px;text-align:center;font-size:10px;color:var(--sub)}
     #payrollEmpOv .pay-v393-kpi b{display:block;margin-top:4px;font-size:16px;color:#fff;direction:ltr}
     #payrollEmpOv .pay-v393-sec{background:#1d1e27;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:10px 12px;margin-top:10px}
@@ -6653,10 +6684,11 @@ window.openPayrollEmployee = function(empId, periodKey){
     #payrollEmpOv .pay-v393-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.pay-v393-actions button{min-height:43px}
     #payrollEmpOv .pay-v393-paid{background:rgba(34,197,94,.12);color:#49db7e;border:1px solid rgba(34,197,94,.25);padding:10px;border-radius:12px;text-align:center;font-size:12px;font-weight:800;margin-top:10px}
     #payrollEmpOv .pay-v393-warn{color:#fbbf24;text-align:center;padding:9px}.pay-v393-muted{color:var(--sub);font-size:11px;text-align:center;padding:9px}
-    @media(max-width:430px){#payrollEmpOv{padding:0!important}#payrollEmpOv .pay-v393-card{border-radius:0;min-height:100dvh;border-left:0;border-right:0;padding:14px 12px}#payrollEmpOv .pay-v393-kpi{padding:8px 5px}#payrollEmpOv .pay-v393-kpi b{font-size:14px}}
+    @media(max-width:430px){#payrollEmpOv{padding:0!important}#payrollEmpOv .pay-v393-card{border-radius:0;min-height:100dvh;border-left:0;border-right:0;padding:14px 12px}#payrollEmpOv .pay-v393-kpis{grid-template-columns:repeat(2,1fr)}#payrollEmpOv .pay-v393-kpi{padding:8px 5px}#payrollEmpOv .pay-v393-kpi b{font-size:14px}}
   </style><div class="pay-v393-card">
     <div class="pay-v393-head"><div><div class="pay-v393-title">تفاصيل المرتب</div><div class="pay-v393-sub">${_payEsc(emp.name)} · ${_payEsc(emp.branch||'')} · ${_payEsc(payPeriodLabelAr(pk))}</div></div><button class="backBtn" onclick="document.getElementById('payrollEmpOv').remove()">✕</button></div>
-    <div class="pay-v393-kpis"><div class="pay-v393-kpi">الأساسي<b>${_payMoney(emp.baseSalary)}</b></div><div class="pay-v393-kpi">الخصومات<b class="bad">-${_payMoney(deductions)}</b></div><div class="pay-v393-kpi">المستحق الآن<b class="good">${_payMoney(paid?Math.max(0,due.totalDue):grandDue)}</b></div></div>
+    <div class="pay-v393-kpis"><div class="pay-v393-kpi">الأساسي للفترة<b>${_payMoney(pb.base)}</b></div><div class="pay-v393-kpi">إضافات الراتب<b class="good">+${_payMoney(salaryAdditions)}</b></div><div class="pay-v393-kpi">الخصومات<b class="bad">-${_payMoney(deductions)}</b></div><div class="pay-v393-kpi">صافي الراتب<b class="good">${_payMoney(pb.salaryNet)}</b></div></div>
+    ${!pb.ok?`<div class="pay-v393-warn" style="border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.1);color:#ff6b72;border-radius:12px">⛔ ${_payEsc(payrollIntegrityCheck(c,due).message)} — الصرف متوقف</div>`:''}
     ${section('🗓️ الحضور','',
       detailRow('فترة حساب الحضور',(c.attendanceStartKey||'—')+' ← '+(c.attendanceEndKey||'—'))+
       detailRow('أيام الشهر',actualDays+' يوم')+
@@ -6687,8 +6719,10 @@ window.openPayrollEmployee = function(empId, periodKey){
       detailRow('عمولة تارجت متبقية',_payMoney(due.tgtDueAmt),'good')+
       detailRow('إجمالي العمولات المتبقية',_payMoney(due.totalDue),'good'))}
     ${section('💰 صافي الحساب','',
-      detailRow('صافي الراتب قبل النقط والعمولات',_payMoney(c.netSalary),'good')+
-      detailRow(paid?'المتبقي من عمولات بعد صرف الراتب':'الإجمالي المستلم عند الصرف',_payMoney(paid?due.totalDue:grandDue),'good'))}
+      detailRow('المعادلة',_payMoney(pb.base)+' + '+_payMoney(salaryAdditions)+' − '+_payMoney(deductions))+
+      detailRow('صافي الراتب',_payMoney(pb.salaryNet),'good')+
+      detailRow('العمولات المتبقية (منفصلة)',_payMoney(due.totalDue),'gold')+
+      detailRow(paid?'المتبقي بعد صرف الراتب':'إجمالي الصرف لو ضمّيت كل العمولات',_payMoney(paid?due.totalDue:grandDue),'good'))}
     ${actions}
     <div class="pay-v393-actions"><button class="confirmBtnSmall" onclick="openAttendanceDaysDialog('${emp.id}','${pk}')">🗓️ سجل الأيام</button><button class="confirmBtnSmall" onclick="openSalaryPrintDialog('${emp.id}','${pk}')">🖨️ إيصال مفصل</button></div>
     ${hist.length?section('💵 سجل تعديل الراتب','',hist.slice(0,6).map(h=>detailRow(new Date(h.at).toLocaleString('ar-EG')+(h.by?' · '+h.by:''),_payMoney(h.from||0)+' ← '+_payMoney(h.to||0))).join('')):''}
@@ -6752,6 +6786,7 @@ function buildSalaryReceiptPayload(emp, calc, periodLabel){
   const money=(v)=>{ const n=Math.round((Number(v)||0)*100)/100; return (Number.isInteger(n)?String(n):n.toFixed(2).replace(/\.00$/,'').replace(/(\.\d)0$/,'$1'))+' ج.م'; };
   const pts=(v)=>fmtPts(Math.round((Number(v)||0)*100)/100);
   const due = commissionDueFor(emp, _pk);
+  const pb = payrollMoneyBreakdown(calc, due);
   const payment = (allSalaryPayments || []).find(p=> p.employeeId === emp.id && p.periodLabel === _pk);
   const already = !!payment;
   const ptsCnt  = already ? due.ptsPaid       : due.ptsDue;
@@ -6763,8 +6798,8 @@ function buildSalaryReceiptPayload(emp, calc, periodLabel){
   // الإيصال بعد الصرف يعرض الإجمالي التراكمي الحقيقي: الراتب + كل العمولات
   // المدفوعة للفترة، بما فيها أي نقط اتدفعت لاحقاً من نفس صفحة المرتب.
   const grand = already
-    ? Math.round((calc.netSalary + due.totalPaid) * 100)/100
-    : Math.round((calc.netSalary + commTotal) * 100)/100;
+    ? Math.round((pb.salaryNet + due.totalPaid) * 100)/100
+    : Math.round((pb.salaryNet + commTotal) * 100)/100;
   const paidAt = payment && payment.paidAt ? Number(payment.paidAt) : Date.now();
   const rcptNo = 'SAL-' + String(_pk).replace('-','') + '-' + String(emp.id||'').replace(/[^a-zA-Z0-9]/g,'').slice(-5).toUpperCase();
   const lines=[];
@@ -6795,7 +6830,8 @@ function buildSalaryReceiptPayload(emp, calc, periodLabel){
     const inv=a.invoiceNo||a.orderNo||a.ref||'';
     add('تفاصيل السلف والمشتريات',dt+' · '+(isOrder?'مشتريات':'سلفة')+(inv?' · #'+inv:''),'-'+money(a.amount),'bad');
   });
-  add('الصافي','صافي الراتب',money(calc.netSalary),'strong');
+  add('الصافي','معادلة الراتب',money(pb.base)+' + '+money(pb.salaryAdditions)+' - '+money(pb.salaryDeductions));
+  add('الصافي','صافي الراتب',money(pb.salaryNet),'strong');
   add('النقط والعمولات','إجمالي نقاط الفترة',pts(due.ptsTotal)+' نقطة');
   add('النقط والعمولات',already?'نقط تم صرفها':'نقط مستحقة',pts(ptsCnt)+' نقطة');
   if(ptsCnt>0) add('النقط والعمولات','عمولة نقط ('+pts(ptsCnt)+' نقطة)','+'+money(ptsAmt),'good');
@@ -6854,7 +6890,7 @@ function payoutBreakdown(calc, due, sel, rate){
   const commission = Math.round((ptsAmt + refAmt + tgtAmt) * 100)/100;
   return { pts, ptsAmt, refAmt, tgtAmt, commission,
            ptsLeft: Math.round((due.ptsDue - pts) * 100)/100,
-           total: Math.round((calc.netSalary + commission) * 100)/100 };
+           total: Math.round((payrollMoneyBreakdown(calc, due).salaryNet + commission) * 100)/100 };
 }
 window.payoutBreakdown = payoutBreakdown;
 
@@ -6865,12 +6901,15 @@ window.openSalaryPayoutDialog = function(empId, periodKey){
   const calc = computeSalary(emp, range.start, range.end);
   const due = commissionDueFor(emp, pk);
   const rate = commissionPerPoint || 0;
+  const pb = payrollMoneyBreakdown(calc, due);
+  const integrity = payrollIntegrityCheck(calc, due);
 
   const row = (label, val, color)=> '<div style="display:flex; justify-content:space-between; gap:10px; padding:5px 0; font-size:12.5px;">'
     + '<span style="color:var(--sub,#9aa);">' + label + '</span>'
     + '<span style="font-weight:700;' + (color ? 'color:' + color + ';' : '') + '">' + val + '</span></div>';
 
   let body = row('الراتب الأساسي المتفق عليه', '+' + (Number(emp.baseSalary)||0));
+  body += row('أساسي مستحق للفترة', '+' + pb.base, '#22c55e');
   if(calc.proratedBase !== Number(emp.baseSalary||0)) body += row('استحقاق الأساسي للفترة', '+' + calc.proratedBase, '#22c55e');
   body += row('🗓️ أيام الشغل', calc.attendedDays + ' من ' + calc.elapsedWorkDays + ' مطلوب');
   if(calc.overtimePay > 0) body += row('أوفرتايم (' + Math.round(calc.overtimeMinutes/60*10)/10 + ' ساعة)', '+' + calc.overtimePay, '#22c55e');
@@ -6882,7 +6921,8 @@ window.openSalaryPayoutDialog = function(empId, periodKey){
   if(calc.advOrders > 0) body += row('🛒 مشتريات (أوردرات)', '-' + calc.advOrders, '#ef4444');
   if(calc.advPrevCycle > 0) body += row('⚠️ سلف دورة سابقة (مش داخلة)', calc.advPrevCycle, '#f59e0b');
   body += '<div style="border-top:1px dashed rgba(255,255,255,.18); margin:7px 0;"></div>';
-  body += row('صافي الراتب', calc.netSalary + ' ج.م', '#22c55e');
+  body += row('المعادلة', pb.base + ' + ' + pb.salaryAdditions + ' - ' + pb.salaryDeductions);
+  body += row('صافي الراتب', pb.salaryNet + ' ج.م', '#22c55e');
 
   const old = document.getElementById('payoutOv'); if(old) old.remove();
   const ov = document.createElement('div');
@@ -6908,6 +6948,9 @@ window.openSalaryPayoutDialog = function(empId, periodKey){
         : '')
     + (due.tgtStale ? '<div style="color:#f59e0b; font-size:11px; margin-top:6px;">⏳ بيانات التارجت لسه بتتحمّل للفترة دي</div>' : '')
     + '<div id="poTotal" style="margin-top:12px; padding:11px; border-radius:12px; background:rgba(34,197,94,.14); text-align:center; font-weight:900; font-size:17px;"></div>'
+    + (!integrity.ok ? '<div style="margin-top:8px;padding:9px;border-radius:10px;background:rgba(239,68,68,.12);color:#ef4444;font-size:11.5px;text-align:center">⛔ '+integrity.message+'</div>' : '')
+    + '<label style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-size:11.5px;color:var(--sub,#9aa)"><input id="poReviewed" type="checkbox"> راجعت الحضور والإجازات والغياب والسلف والمشتريات والإضافات.</label>'
+    + '<label style="display:flex;align-items:flex-start;gap:8px;margin-top:7px;font-size:11.5px;color:var(--sub,#9aa)"><input id="poApproved" type="checkbox"> أعتمد المبلغ النهائي للصرف.</label>'
     + '<div id="poErr" style="color:#ef4444; font-size:11.5px; margin-top:6px; text-align:center;"></div>'
     + '<div style="display:flex; gap:8px; margin-top:12px;">'
       + '<button id="poGo" class="confirmBtn" style="flex:2;">✅ سجّل الصرف واطبع</button>'
@@ -6939,6 +6982,17 @@ window.openSalaryPayoutDialog = function(empId, periodKey){
     const btn = ov.querySelector('#poGo');
     if(btn.dataset.busy) return;                 // 🛡️ ضغطة تانية = صرفتين
     const s = refresh();
+    // 🧮 ممنوع الصرف لو المصدر الحسابي نفسه مش متزن.
+    const liveIntegrity = payrollIntegrityCheck(calc, due);
+    if(!liveIntegrity.ok){
+      alert('⛔ الصرف متوقف: ' + liveIntegrity.message); return;
+    }
+    if(!(ov.querySelector('#poReviewed') && ov.querySelector('#poReviewed').checked)){
+      alert('راجع الحضور والغياب والسلف والإضافات الأول.'); return;
+    }
+    if(!(ov.querySelector('#poApproved') && ov.querySelector('#poApproved').checked)){
+      alert('لازم تعتمد المبلغ النهائي قبل الصرف.'); return;
+    }
     // 🛡️ الشيفت المفتوح لازم يتراجع قبل قفل المرتب.
     if(calc.incompleteShifts && calc.incompleteShifts.length){
       alert('⚠️ فيه شيفت غير مقفول. راجعه قبل صرف المرتب.'); return;
@@ -6957,9 +7011,24 @@ window.openSalaryPayoutDialog = function(empId, periodKey){
         if(exists.exists()) throw new Error('__SALARY_ALREADY_PAID__');
         tx.set(salaryRef, {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
-          periodLabel: pk, amount: calc.netSalary,
+          periodLabel: pk, amount: liveIntegrity.salaryNet,
           commissionAmount: Math.round((s.ptsAmt + s.refAmt + s.tgtAmt) * 100)/100,
-          payoutTotal: s.total, paidAt
+          payoutTotal: s.total, paidAt,
+          status: 'paid', reviewedAt: paidAt, approvedAt: paidAt,
+          reviewedBy: (_auth.currentUser && _auth.currentUser.email) || 'admin',
+          payrollAudit: {
+            base: liveIntegrity.base,
+            salaryAdditions: liveIntegrity.salaryAdditions,
+            salaryDeductions: liveIntegrity.salaryDeductions,
+            salaryNet: liveIntegrity.salaryNet,
+            overtimePay: Math.round((Number(calc.overtimePay)||0)*100)/100,
+            dayOffBonusAmount: Math.round((Number(calc.dayOffBonusAmount)||0)*100)/100,
+            absenceDeduction: Math.round((Number(calc.deductionAmount)||0)*100)/100,
+            timeCreditDeduction: Math.round((Number(calc.timeCreditDeduction)||0)*100)/100,
+            adminDeductions: Math.round((Number(calc.adminDeductions)||0)*100)/100,
+            advancesTotal: Math.round((Number(calc.advancesTotal)||0)*100)/100,
+            formulaOk: true
+          }
         });
         if(s.pts > 0) tx.set(doc(db,'sales_commission_payments','salary_'+safeEmp+'_'+pk+'_points'), {
           employeeId: emp.id, employeeName: emp.name, branch: emp.branch,
