@@ -778,33 +778,33 @@ function ofPaymobWeeklyCycles(data, todayKey){
     if(!map[payout]) map[payout]={ payout:payout,start:c.start,end:c.end,gross:0,pct:pct };
     map[payout].gross += visa;
   });
-  const confirmed={};
-  (data&&data.settlements||[]).forEach(function(x){
-    const end=String(x.weeklyCycleEnd||x.forDay||'');
-    if(end) confirmed[end]=x;
-  });
   return Object.keys(map).sort().map(function(k){
     const c=map[k];
     c.gross=Math.round(c.gross*100)/100;
     c.expectedFee=paymobFeeOn(c.gross,pct);
     c.expectedNet=Math.round((c.gross-c.expectedFee)*100)/100;
-    c.confirmed=confirmed[c.end]||null;
+    c.transfers=(data&&data.settlements||[]).filter(function(x){
+      return String(x.weeklyCycleEnd||x.forDay||'')===c.end && String(x.status||'confirmed')!=='void';
+    }).sort(function(a,b){return Number(a.ts||a.confirmedAt||0)-Number(b.ts||b.confirmedAt||0);});
+    c.receivedNet=Math.round(c.transfers.reduce(function(a,x){return a+(Number(x.net)||0);},0)*100)/100;
+    c.receivedGross=Math.round(c.transfers.reduce(function(a,x){return a+(Number(x.grossAllocated)||Number(x.gross)||0);},0)*100)/100;
+    c.remainingNet=Math.max(0,Math.round((c.expectedNet-c.receivedNet)*100)/100);
+    c.remainingGross=Math.max(0,Math.round((c.gross-c.receivedGross)*100)/100);
+    c.confirmed=c.remainingNet<=0.01 ? (c.transfers[c.transfers.length-1]||null) : null;
     c.due=!!todayKey && c.payout<=todayKey && !c.confirmed;
     c.future=!!todayKey && c.payout>todayKey;
     return c;
   });
 }
 function ofPaymobWeeklyDue(data,todayKey){
-  return ofPaymobWeeklyCycles(data,todayKey).filter(function(c){return c.due&&c.gross>0;});
+  return ofPaymobWeeklyCycles(data,todayKey).filter(function(c){return c.due&&c.gross>0&&c.remainingNet>0.01;});
 }
 function ofPaymobNextCycle(data,todayKey){
-  const all=ofPaymobWeeklyCycles(data,todayKey).filter(function(c){return !c.confirmed&&c.gross>0;});
+  const all=ofPaymobWeeklyCycles(data,todayKey).filter(function(c){return c.gross>0 && c.remainingNet>0.01;});
   if(!all.length) return null;
   const due=all.filter(function(c){return c.due;});
-  if(due.length) return due[0];
-  return all[0];
+  return due.length?due[0]:all[0];
 }
-
 // بناء الوارد الموحّد من المصادر الأربعة
 function buildInbox(data){
   const out = [];
@@ -7348,140 +7348,115 @@ function ofDayName(key){
   }catch(e){ return key; }
 }
 
+function ofAccountingDaySummary(data, dayKey){
+  const byBranch={};
+  const out={key:dayKey,total:0,cash:0,visa:0,instapay:0,credit:0,gift:0,other:0,count:0,byBranch:byBranch};
+  (data&&data.sales||[]).forEach(function(s){
+    if(!s || s.reversed || s.isReversal) return;
+    if(ofDayKeyOf(_saleMs(s))!==dayKey) return;
+    const p=s.payments||{};
+    const br=String(s.branch||'غير محدد');
+    if(!byBranch[br]) byBranch[br]={branch:br,total:0,cash:0,visa:0,instapay:0,credit:0,gift:0,other:0,count:0};
+    const row=byBranch[br];
+    const vals={cash:Number(p.cash)||0,visa:Number(p.visa)||0,instapay:Number(p.instapay)||0,credit:Number(p.credit)||0,gift:Number(p.gift)||0};
+    const known=vals.cash+vals.visa+vals.instapay+vals.credit+vals.gift;
+    let total=Number(s.total);
+    if(!isFinite(total) || Math.abs(total)<0.001) total=known;
+    const other=Math.max(0,Math.round((total-known)*100)/100);
+    vals.other=other;
+    Object.keys(vals).forEach(function(k){out[k]+=vals[k];row[k]+=vals[k];});
+    out.total+=total; row.total+=total; out.count++; row.count++;
+  });
+  ['total','cash','visa','instapay','credit','gift','other'].forEach(function(k){out[k]=Math.round(out[k]*100)/100;});
+  Object.keys(byBranch).forEach(function(k){['total','cash','visa','instapay','credit','gift','other'].forEach(function(f){byBranch[k][f]=Math.round(byBranch[k][f]*100)/100;});});
+  return out;
+}
+window.ofAccountingDaySummary=ofAccountingDaySummary;
+
+function ofAccountingRecentDays(data, todayKey, n){
+  const rows=[]; let k=todayKey;
+  for(let i=0;i<(n||7);i++){ rows.push(ofAccountingDaySummary(data,k)); k=ofDayShift(k,-1); }
+  return rows;
+}
+window.ofAccountingRecentDays=ofAccountingRecentDays;
+
+function ofAccountingMoneyCell(label,value,kind){
+  const color=kind==='visa'?'#d7b45b':kind==='cash'?'var(--good)':kind==='insta'?'#60a5fa':'var(--text)';
+  return '<div class="of-money-card" style="min-width:0;"><div class="k">'+label+'</div><div class="v" style="font-size:19px;color:'+color+';">'+egp(value)+'</div></div>';
+}
+
 function renderCashHand(){
-  const host = document.getElementById('cashHandBody');
-  if(!host) return;
-  const base = D.cashBase;
-  const now = Date.now();
-  const cfg = ofLedgerCfg();
-  try{ setTimeout(function(){ ofAutoUpdateGoldPrice(false); },0); }catch(e){}
+  const host=document.getElementById('cashHandBody'); if(!host) return;
+  const today=ofDayKeyOf(Date.now());
+  const td=ofAccountingDaySummary(D,today);
+  const branches=Object.keys(td.byBranch).map(function(k){return td.byBranch[k];}).sort(function(a,b){return b.total-a.total;});
+  const cycle=ofPaymobNextCycle(D,today);
+  const recent=ofAccountingRecentDays(D,today,7);
 
-  if(!base || !base.atMs){
-    host.innerHTML =
-      '<div class="of-cash-hero">'
-      + '<div class="of-cash-caption">أول مرة؟ خلّي «معايا كام» رقم حقيقي من البداية</div>'
-      + '<div style="font-size:21px;font-weight:900;text-align:center;margin:8px 0 4px;">حدد نقطة البداية</div>'
-      + '<div class="of-cash-sub">اكتب السيولة المؤكدة (كاش + حساب بنكي تشغيلي)، وبعدها اللي لسه عند Paymob.</div>'
-      + '</div>'
-      + '<button class="btn" onclick="ofStartFresh()" style="width:100%;margin-top:9px;">🆕 ابدأ من الصفر — نقطة واضحة</button>';
-    try{ renderOfficeHomeSummary(); }catch(e){}
-    return;
-  }
-
-  const L = ofCashLedger(base, D, D.cashDays || {}, cfg, now, 5);
-  ofAutoFreeze(L);                       // 🧊 تثبيت الأيام اللي قربت تخرج من النافذة
-  const W = ofWealth(L, cfg, now);
-  const gold = W.goldInfo;
-
-  // 🔍 جودة الرقم: آخر مراجعة فعلية + أي يوم قديم غير موثوق.
-  const realRows = (L.rows || []).filter(function(r){ return !r.future && r.key <= L.todayKey; });
-  const countedRows = realRows.filter(function(r){ return r.counted !== null; });
-  const lastCount = countedRows.length ? countedRows[countedRows.length - 1] : null;
-  const hasUntrusted = realRows.some(function(r){ return r.untrusted; });
-  let confidence = 'محتاج مراجعة فعلية';
-  let confidenceIcon = '🟠';
-  if(hasUntrusted){
-    confidence = 'في أيام قديمة بياناتها ناقصة';
-    confidenceIcon = '🔴';
-  }else if(lastCount && lastCount.key === L.todayKey){
-    confidence = 'مراجع النهارده';
-    confidenceIcon = '🟢';
-  }else if(lastCount){
-    const a = Date.UTC.apply(Date, lastCount.key.split('-').map(function(x,i){ return Number(x) - (i===1?1:0); }));
-    const b = Date.UTC.apply(Date, L.todayKey.split('-').map(function(x,i){ return Number(x) - (i===1?1:0); }));
-    const age = Math.max(0, Math.round((b-a)/86400000));
-    confidence = age <= 3 ? ('آخر مراجعة من ' + age + ' يوم') : ('المراجعة قديمة — ' + age + ' يوم');
-    confidenceIcon = age <= 3 ? '🟡' : '🟠';
-  }
-
-  const pendingLabel = W.pmDayKeys && W.pmDayKeys.length
-    ? ('فيزا ' + W.pmDayKeys.map(ofDayName).join(' و'))
-    : 'حسب دورة التحويل';
-
-  /* الرقم الرئيسي = المؤكد فقط.
-     ⭐ ده جواب «معايا كام؟» داخل النظام، ومقصود إنه لا يضم Paymob اللي لسه
-        ماوصلش ولا الدهب. اسم «معاك في إيدك» القديم كان مضلل لأن الدفتر
-        بيجمع كاش + تحويلات بنك مسجلة؛ المعنى الصحيح هو «السيولة المؤكدة». */
-  const hero =
-    '<div class="of-cash-hero">'
-    + '<div class="of-cash-caption">💰 معايا كام دلوقتي؟</div>'
-    + '<div class="of-cash-big">' + egp(L.now) + '</div>'
-    + '<div class="of-cash-sub">السيولة المؤكدة بالنظام: كاش + بنك تشغيلي مسجل − المصاريف والمدفوعات.<br>'
-    + 'ده الرقم اللي تعتمد عليه للصرف الآن، مش المتوقع.</div>'
-    + '<div class="of-confidence"><span>' + confidenceIcon + ' ' + confidence + '</span></div>'
+  let html='';
+  html += '<div class="of-cash-hero" style="text-align:right;">'
+    + '<div class="of-cash-caption">📊 حسابات اليوم — '+ofDayName(today)+'</div>'
+    + '<div class="of-cash-big">'+egp(td.total)+'</div>'
+    + '<div class="of-cash-sub">إجمالي مبيعات الفروع المسجلة في الـPOS اليوم. الأرقام تحت مفصولة حسب طريقة الدفع ومصدرها الفواتير نفسها.</div>'
+    + '</div>';
+  html += '<div class="of-cash-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));">'
+    + ofAccountingMoneyCell('💵 كاش اليوم',td.cash,'cash')
+    + ofAccountingMoneyCell('💳 فيزا اليوم',td.visa,'visa')
+    + ofAccountingMoneyCell('📱 Instapay',td.instapay,'insta')
+    + ofAccountingMoneyCell('🧾 عدد الفواتير',td.count,'')
     + '</div>';
 
-  const giftDue = W.giftLiability > 0;
-
-  const cards =
-    '<div class="of-cash-grid">'
-    + '<div class="of-money-card"><div class="k">🏦 عند Paymob — لسه ماوصلش</div><div class="v">' + egp(W.paymobNet) + '</div>'
-    + '<div class="s">' + pendingLabel + ' · مش متاح للصرف لسه</div></div>'
-    + '<div class="of-money-card"><div class="k">🎁 التزامات كروت</div><div class="v" style="color:' + (giftDue ? 'var(--bad)' : 'var(--good)') + ';">'
-    + (giftDue ? ('− ' + egp(W.giftLiability)) : egp(0)) + '</div><div class="s">فلوس في إيدك مش بتاعتك لحد ما الكارت يتصرف</div></div>'
-    + '<div class="of-money-card"><div class="k">🥇 دهب</div><div class="v">' + egp(W.gold) + '</div>'
-    + '<div class="s">' + (gold.grams ? (gold.grams + ' جرام · 24K') : 'مش متسجل')
-    + (gold.price ? (' · '+egp(gold.price)+'/جم') : '')
-    + (gold.stale && gold.grams ? ' · السعر قديم' : '')
-    + (gold.source ? (' · '+esc(gold.source)) : '') + '</div></div>'
-    + '<div class="of-money-card"><div class="k">🧮 اللي ليك فعلًا</div><div class="v">' + egp(W.total) + '</div>'
-    + '<div class="s">المؤكد + Paymob المنتظر + الدهب − الالتزامات</div></div>'
-    + '</div>';
-
-  const weeklyCycle = ofPaymobNextCycle(D,L.todayKey);
-  const weeklyBox = weeklyCycle
-    ? ('<div class="of-verdict" style="border-color:'+(weeklyCycle.due?'var(--warn)':'var(--line)')+';">'
-      + '<div class="of-verdict-row"><div><b>🏦 تحويل Paymob الأسبوعي</b>'
-      + '<div class="muted">'+(weeklyCycle.due?'مستني تأكيدك':'التحويل الجاي')
-      +' · الثلاثاء '+ofDayName(weeklyCycle.payout)+'</div></div>'
-      + (weeklyCycle.due?"<button class='btn gold' onclick=\"ofConfirmWeeklyPaymob('"+weeklyCycle.end+"')\">✅ أكد المبلغ</button>":'')
-      + '</div><div class="of-cash-grid" style="margin-top:8px;">'
-      + '<div class="of-money-card"><div class="k">إجمالي الفيزا</div><div class="v">'+egp(weeklyCycle.gross)+'</div><div class="s">'+ofDayName(weeklyCycle.start)+' → '+ofDayName(weeklyCycle.end)+'</div></div>'
-      + '<div class="of-money-card"><div class="k">المتوقع ينزل</div><div class="v">'+egp(weeklyCycle.expectedNet)+'</div><div class="s">عمولة متوقعة '+egp(weeklyCycle.expectedFee)+' ('+weeklyCycle.pct+'%)</div></div>'
-      + '</div></div>')
-    : '';
-
-  const verdict =
-    '<div class="of-verdict">'
-    + '<div class="of-verdict-row"><div><b>الحكم السريع</b><div class="muted">لو هتصرف دلوقتي، اعتمد على «السيولة المؤكدة» فوق.</div></div>'
-    + '<button class="btn gold" onclick="ofCountDay(\'' + L.todayKey + '\')" style="white-space:nowrap;">🔍 راجع الرقم</button></div>'
-    + (W.paymobOpeningLanded
-        ? '<div style="margin-top:8px;color:var(--warn);font-size:11px;font-weight:800;">⚠️ رصيد Paymob الافتتاحي لسه غير مؤكد. أول تحويل أسبوعي تأكده هيقفل الجزء القديم تلقائيًا.</div>'
-        : '')
-    + '<div class="hint" style="margin-top:8px;line-height:1.8;">'
-    + '⚠️ النظام مش متصل بحساب البنك نفسه. أي حركة بنكية خارج المبيعات/المصاريف المسجلة لازم تدخلها أو تعمل مراجعة للسيولة، وإلا «معايا كام» مش هيقدر يعرفها لوحده.'
-    + '</div>'
-    + '<div class="of-quick">'
-    + '<button class="btn" onclick="ofAddSettlement()">🏦 تحويل استثنائي/تصحيح</button>'
-    + '<button class="btn" onclick="ofGoldRefreshNow()">🥇 تحديث الدهب الآن</button>'
-    + '</div>'
-    + '<div style="text-align:center;margin-top:6px;"><button class="ghost" onclick="ofSetGoldPrice()" style="padding:5px 9px;font-size:10px;">✍️ تعديل سعر الدهب يدويًا 24 ساعة</button></div>'
-    + '</div>';
-
-  let details = '';
-  if(_ofCashDetailsOpen){
-    const rows = L.rows.slice(-_ofLedgerDays).reverse();
-    const sheet = rows.map(function(r){ return ofLedgerRow(r, L); }).join('');
-    details =
-      '<div class="of-verdict" style="margin-top:9px;">'
-      + '<div class="of-verdict-row"><div><b>📒 يوم بيوم</b><div class="muted">دوس على أي يوم عشان تفهم أو تعدّل الحركة</div></div>'
-      + '<button class="ghost" onclick="ofToggleCashDetails()" style="padding:7px 10px;">إخفاء</button></div>'
-      + '<div style="margin-top:7px;">' + (sheet || '<div class="muted">لسه مفيش حركة</div>') + '</div>'
-      + (L.rows.length > _ofLedgerDays
-          ? '<button class="btn" onclick="ofMoreDays()" style="width:100%;margin-top:9px;">📆 أيام أكتر</button>' : '')
-      + '<div style="display:flex;gap:7px;margin-top:10px;">'
-      + '<button class="btn" onclick="ofSetGoldGrams()" style="flex:1;">⚖️ جرامات الدهب</button>'
-      + '<button class="btn" onclick="ofStartFresh()" style="flex:1;background:#fff;color:var(--bad);border:1px solid var(--line);">🆕 نقطة بداية جديدة</button>'
-      + '</div>'
+  html += '<div class="of-verdict" style="margin-top:10px;">'
+    + '<div class="of-verdict-row"><div><b>🏬 الفروع اليوم</b><div class="muted">كل فرع: إجمالي · كاش · فيزا · Instapay</div></div></div>';
+  if(!branches.length) html += '<div class="empty">مفيش مبيعات مسجلة النهارده</div>';
+  else html += branches.map(function(r){
+    return '<div style="padding:10px 0;border-bottom:1px solid var(--line);">'
+      + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;"><b>'+esc(r.branch)+'</b><b>'+egp(r.total)+'</b></div>'
+      + '<div class="muted" style="margin-top:5px;font-size:11px;line-height:1.8;">💵 '+egp(r.cash)+' &nbsp; · &nbsp; 💳 '+egp(r.visa)+' &nbsp; · &nbsp; 📱 '+egp(r.instapay)+' &nbsp; · &nbsp; 🧾 '+r.count+' فاتورة</div>'
       + '</div>';
-  }else{
-    details = '<button class="of-details-toggle" onclick="ofToggleCashDetails()">📒 افتح التفاصيل يوم بيوم</button>';
+  }).join('');
+  html += '</div>';
+
+  if(cycle){
+    const received=Number(cycle.receivedNet)||0, remaining=Number(cycle.remainingNet)||0;
+    html += '<div class="of-verdict" style="margin-top:10px;border-color:'+(cycle.due?'var(--warn)':'var(--line)')+';">'
+      + '<div class="of-verdict-row"><div><b>🏦 تسوية Paymob الأسبوعية</b><div class="muted">'+ofDayName(cycle.start)+' → '+ofDayName(cycle.end)+' · التحويل الثلاثاء '+ofDayName(cycle.payout)+'</div></div>'
+      + '<button class="btn gold" onclick="ofConfirmWeeklyPaymob(\''+cycle.end+'\')">💳 تسجيل تحويل</button></div>'
+      + '<div class="of-cash-grid" style="margin-top:8px;grid-template-columns:repeat(2,minmax(0,1fr));">'
+      + ofAccountingMoneyCell('إجمالي فيزا الفترة',cycle.gross,'visa')
+      + ofAccountingMoneyCell('تم استلامه بالبنك',received,'cash')
+      + ofAccountingMoneyCell('المتبقي لدى Paymob',remaining,'')
+      + '</div>'
+      + '<div class="hint" style="margin-top:8px;line-height:1.8;">'
+      + (cycle.transfers&&cycle.transfers.length
+          ? '✅ مسجل '+cycle.transfers.length+' تحويل فعلي · المستلم '+egp(received)+' · المتبقي '+egp(remaining)+'. تقدر تسجل أي سحبة جزئية في أي يوم.'
+          : 'المتوقع خصمه '+egp(cycle.expectedFee)+' ('+cycle.pct+'%). الثلاثاء موعد متوقع فقط؛ سجل أي مبلغ يصل البنك وقت وصوله.')
+      + '</div></div>';
   }
 
-  // 📜 نحافظ على العبارة القديمة في الشرح عشان أي حد متعود عليها يفهم الانتقال:
-  // «معاك في إيدك» = دلوقتي اسمها الأدق «السيولة المؤكدة».
-  host.innerHTML = hero + cards + weeklyBox + verdict + details;
-  try{ renderOfficeHomeSummary(); }catch(e){}
+  html += '<div class="of-verdict" style="margin-top:10px;">'
+    + '<div class="of-verdict-row"><div><b>📅 آخر 7 أيام</b><div class="muted">تجميعة تشغيلية واضحة من الفواتير</div></div></div>'
+    + '<div style="overflow:auto;margin-top:7px;"><table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">'
+    + '<thead><tr><th style="text-align:right;padding:7px;">اليوم</th><th>الإجمالي</th><th>كاش</th><th>فيزا</th><th>Instapay</th></tr></thead><tbody>'
+    + recent.map(function(r){return '<tr style="border-top:1px solid var(--line);"><td style="padding:8px 7px;font-weight:800;">'+ofDayName(r.key)+'</td><td style="text-align:center;">'+egp(r.total)+'</td><td style="text-align:center;">'+egp(r.cash)+'</td><td style="text-align:center;">'+egp(r.visa)+'</td><td style="text-align:center;">'+egp(r.instapay)+'</td></tr>';}).join('')
+    + '</tbody></table></div></div>';
+
+  html += '<div class="of-verdict" style="margin-top:10px;">'
+    + '<div class="of-verdict-row"><div><b>🔎 المراجعة المحاسبية</b><div class="muted">المبيعات تُؤخذ من الفواتير؛ Paymob لا يُعتبر وصل إلا بعد تأكيد التحويل البنكي.</div></div></div>'
+    + '<div class="hint" style="line-height:1.9;margin-top:7px;">مافيش خلط بين كاش الفرع وفيزا Paymob. أي مبلغ تؤكده بيتسجل كـSettlement مستقل بوقت الاعتماد والفرق الفعلي، وبالتالي تقدر ترجع له بعدين.</div>'
+    + '</div>';
+
+  if(D.cashBase&&D.cashBase.atMs){
+    html += '<button class="of-details-toggle" onclick="ofToggleCashDetails()">📒 دفتر السيولة والتفاصيل القديمة</button>';
+    if(_ofCashDetailsOpen){
+      const L=ofCashLedger(D.cashBase,D,D.cashDays||{},ofLedgerCfg(),Date.now(),5);
+      const rows=L.rows.slice(-_ofLedgerDays).reverse();
+      html += '<div class="of-verdict" style="margin-top:9px;"><div class="of-verdict-row"><div><b>📒 دفتر السيولة</b><div class="muted">للمراجعة والعد الفعلي فقط</div></div><button class="ghost" onclick="ofToggleCashDetails()">إخفاء</button></div>'
+        + '<div style="margin-top:7px;">'+rows.map(function(r){return ofLedgerRow(r,L);}).join('')+'</div></div>';
+    }
+  }
+  host.innerHTML=html;
+  try{renderOfficeHomeSummary();}catch(e){}
 }
 window.renderCashHand = renderCashHand;
 function ofToggleCashDetails(){
@@ -7856,31 +7831,45 @@ window.ofStartFresh = ofStartFresh;
 async function ofConfirmWeeklyPaymob(cycleEnd){
   const today=ofDayKeyOf(Date.now());
   const c=ofPaymobWeeklyCycles(D,today).filter(function(x){return x.end===cycleEnd;})[0];
-  if(!c){alert('مش لاقي الأسبوع ده في المبيعات المحمّلة');return;}
-  if(c.confirmed){alert('الأسبوع ده متأكد بالفعل: '+egp(c.confirmed.net||0));return;}
+  if(!c){alert('مش لاقي الفترة دي في المبيعات المحمّلة');return;}
+  if(c.remainingNet<=0.01){alert('الفترة دي متسوية بالكامل بالفعل');return;}
   const res=await officeAsk({
-    title:'🏦 تحويل Paymob — الأسبوع المنتهي '+ofDayName(c.end),
-    note:'إجمالي مبيعات الفيزا: '+egp(c.gross)
-      +'\\nالعمولة المتوقعة ('+c.pct+'%): '+egp(c.expectedFee)
-      +'\\nالمتوقع ينزل: '+egp(c.expectedNet)
-      +'\\n\\nراجع حساب البنك. لو الرقم مختلف عدّله واكتب الصافي اللي وصل فعلًا.',
-    ph:'الصافي اللي وصل فعلًا', value:c.expectedNet
+    title:'🏦 تسجيل تحويل Paymob — '+ofDayName(c.start)+' → '+ofDayName(c.end),
+    note:'إجمالي فيزا الفترة: '+egp(c.gross)
+      +'\nتم استلامه حتى الآن: '+egp(c.receivedNet)
+      +'\nالمتبقي المتوقع لدى Paymob: '+egp(c.remainingNet)
+      +'\n\nاكتب المبلغ الصافي الذي وصل البنك في هذه السحبة فقط. يمكن تسجيل أكثر من تحويل في أي يوم.',
+    ph:'مبلغ هذه السحبة فقط', value:c.remainingNet
   });
   if(!res) return;
   const net=Math.round((Number(res.amount)||0)*100)/100;
   if(!(net>0)){alert('اكتب مبلغ صحيح');return;}
-  if(net>c.gross){alert('الصافي أكبر من إجمالي مبيعات الفيزا — راجع الرقم');return;}
-  const ded=Math.round((c.gross-net)*100)/100;
-  const pct=c.gross>0?Math.round((ded/c.gross)*10000)/100:0;
+  if(net>c.remainingNet+0.01){alert('المبلغ أكبر من المتبقي المتوقع لدى Paymob — راجع الرقم');return;}
+  const isFinal=Math.abs(net-c.remainingNet)<=0.01;
+  const grossAllocated=c.remainingNet>0 ? Math.round((c.remainingGross*(net/c.remainingNet))*100)/100 : 0;
+  const ded=Math.max(0,Math.round((grossAllocated-net)*100)/100);
+  const pct=grossAllocated>0?Math.round((ded/grossAllocated)*10000)/100:0;
+  const id='weekly_'+c.end+'_'+Date.now();
+  const payload={
+    weekly:true, partial:!isFinal, final:isFinal, status:'confirmed', weeklyCycleStart:c.start, weeklyCycleEnd:c.end,
+    payoutDay:c.payout, forDay:c.end, cycleGross:c.gross, gross:grossAllocated, grossAllocated:grossAllocated,
+    net:net, deductions:ded, feePct:pct, expectedNet:c.expectedNet, expectedFee:c.expectedFee, expectedPct:c.pct,
+    receivedBefore:c.receivedNet, remainingBefore:c.remainingNet, remainingAfter:Math.max(0,Math.round((c.remainingNet-net)*100)/100),
+    bankRef:String(res.note||'').trim(), note:String(res.note||'').trim(), ts:Date.now(), confirmedAt:Date.now(), by:'office_paymob_v445'
+  };
   try{
-    await db.collection('office_paymob_settlements').doc('weekly_'+c.end).set({
-      weekly:true, weeklyCycleStart:c.start, weeklyCycleEnd:c.end,
-      payoutDay:c.payout, forDay:c.end,
-      gross:c.gross, net:net, deductions:ded, feePct:pct,
-      expectedNet:c.expectedNet, expectedFee:c.expectedFee, expectedPct:c.pct,
-      note:res.note||'', ts:Date.now(), by:'office_weekly_v65'
-    },{merge:true});
-  }catch(e){alert('تعذر الحفظ: '+(e&&e.message?e.message:e));}
+    await db.collection('office_paymob_settlements').doc(id).set(payload,{merge:false});
+    D.settlements=(D.settlements||[]).filter(function(x){return x.id!==id;});
+    D.settlements.push(Object.assign({id:id},payload));
+    try{ofLfSet('settlements',D.settlements);}catch(_e){}
+    renderCashHand(); renderInbox();
+    alert('✅ تم تسجيل تحويل Paymob\n\nهذه السحبة: '+egp(net)+'\nالمتبقي: '+egp(payload.remainingAfter)+(isFinal?'\n\nتمت تسوية الفترة بالكامل.':'\n\nالفترة مازالت مفتوحة للتحويلات التالية.'));
+  }catch(e){
+    const code=e&&e.code?String(e.code):'';
+    if(code.indexOf('permission-denied')>=0 || String(e&&e.message||'').toLowerCase().indexOf('permission')>=0){
+      alert('تعذر الحفظ لأن قواعد Firestore لا تسمح بتسجيل تسوية Paymob. نزّل قواعد v445 المرفقة كاملة ثم جرّب مرة ثانية.');
+    }else alert('تعذر الحفظ: '+(e&&e.message?e.message:e));
+  }
 }
 window.ofConfirmWeeklyPaymob=ofConfirmWeeklyPaymob;
 
