@@ -1,15 +1,20 @@
-/* ECHARPE POS CCTV evidence v426
+/* ECHARPE POS CCTV evidence v467
    - Four stills per invoice: first item, payment, saving, after save.
    - Pre-invoice stills are staged locally by cartSid, then flushed once invoiceCode exists.
    - Keeps v424 video evidence metadata/agent behavior.
    - Best-effort only: CCTV failure never blocks sale/payment/print. */
 (function(){
 'use strict';
-var SHOT_COL='pos_cctv_invoice_snapshots', EVENT_COL='pos_cctv_events', STREAM='camera4';
+var SHOT_COL='pos_cctv_invoice_snapshots', EVENT_COL='pos_cctv_events';
+function branchCfg(branch){
+  var s=String(branch || (typeof currentBranch!=='undefined'?currentBranch:'') || '').toLowerCase();
+  if(s.indexOf('الرحاب')>=0 || s.indexOf('rehab')>=0) return {id:'rehab',camera:'CAM1',stream:'rehab_cam1_h264',remote:''};
+  if(s.indexOf('مدينتي')>=0 || s.indexOf('madinaty')>=0) return {id:'madinaty',camera:'D04',stream:'camera4',remote:'https://cctv-madinaty.echarpe.store'};
+  return null;
+}
+function cfg(meta){ return branchCfg(meta&&meta.branch); }
 var LOCAL_GO2RTC='http://127.0.0.1:1984';
 var LOCAL_AGENT='http://127.0.0.1:1985/echarpe-events/event';
-var REMOTE_AGENT='https://cctv-madinaty.echarpe.store/echarpe-events/event';
-var REMOTE_VIEW='https://cctv-madinaty.echarpe.store/echarpe-events/view?id=';
 var STAGE_KEY='echarpe.cctv.invoice.stages.v426.';
 var STAGES={first_item:1,payment:1,saving:1,after_save:1};
 var pending={};
@@ -26,7 +31,7 @@ function activityEventId(type,atMs,sid){
   if(!HOT[type]) return '';
   return 'act_'+safeId(type)+'_'+String(Number(atMs)||Date.now())+'_'+safeId(sid||'nosid').slice(-24);
 }
-function frameUrl(){ return LOCAL_GO2RTC+'/api/frame.jpeg?src='+encodeURIComponent(STREAM)+'&_='+Date.now(); }
+function frameUrl(meta){ var c=cfg(meta); return c?LOCAL_GO2RTC+'/api/frame.jpeg?src='+encodeURIComponent(c.stream)+'&_='+Date.now():''; }
 function storageKey(sid){return STAGE_KEY+safeId(sid||'nosid');}
 function loadState(sid){
   var out={sid:String(sid||''),shots:{}};
@@ -57,10 +62,11 @@ function blobToJpegData(blob){
   });
 }
 async function grabShot(stage,meta){
-  var res=await fetch(frameUrl(),{cache:'no-store'});
+  var c=cfg(meta); if(!c) throw new Error('cctv_branch_not_configured');
+  var res=await fetch(frameUrl(meta),{cache:'no-store'});
   if(!res.ok) throw new Error('frame_http_'+res.status);
   var out=await blobToJpegData(await res.blob());
-  return {stage:stage,camera:'D04',stream:STREAM,capturedAtMs:Number(meta&&meta.atMs)||Date.now(),width:out.width,height:out.height,jpegData:out.data};
+  return {stage:stage,camera:c.camera,stream:c.stream,capturedAtMs:Number(meta&&meta.atMs)||Date.now(),width:out.width,height:out.height,jpegData:out.data};
 }
 function captureStage(stage,meta){
   try{
@@ -87,7 +93,8 @@ function publicShot(shot){return shot?{stage:shot.stage,camera:shot.camera,strea
 async function writeInvoiceDoc(meta,shots){
   if(typeof db==='undefined'||!meta||!meta.invoiceCode)return false;
   var preferred=shots.after_save||shots.saving||shots.payment||shots.first_item||null;
-  var doc={invoiceCode:String(meta.invoiceCode),invoiceNo:meta.invoiceNo||'',saleId:meta.saleId||'',branch:meta.branch||'',camera:'D04',stream:STREAM,version:426,shots:{}};
+  var c=cfg(meta); if(!c)return false;
+  var doc={invoiceCode:String(meta.invoiceCode),invoiceNo:meta.invoiceNo||'',saleId:meta.saleId||'',branch:meta.branch||'',camera:c.camera,stream:c.stream,version:467,shots:{}};
   Object.keys(shots||{}).forEach(function(k){if(STAGES[k]&&shots[k])doc.shots[k]=publicShot(shots[k]);});
   if(preferred){doc.capturedAtMs=preferred.capturedAtMs;doc.width=preferred.width;doc.height=preferred.height;doc.jpegData=preferred.jpegData;doc.stage=preferred.stage;}
   await db.collection(SHOT_COL).doc(String(meta.invoiceCode)).set(doc,{merge:true});
@@ -102,10 +109,10 @@ async function finalizeInvoice(meta){
     await writeInvoiceDoc(meta,shots);
     // After-save is deliberately a little later so it catches hand-over/receipt moment.
     setTimeout(function(){
-      grabShot('after_save',{atMs:Date.now()}).then(async function(shot){
+      grabShot('after_save',{atMs:Date.now(),branch:meta.branch||''}).then(async function(shot){
         try{
           var one={};one.after_save=shot;
-          var payload={version:426,capturedAtMs:shot.capturedAtMs,width:shot.width,height:shot.height,jpegData:shot.jpegData,stage:'after_save'};
+          var payload={version:467,capturedAtMs:shot.capturedAtMs,width:shot.width,height:shot.height,jpegData:shot.jpegData,stage:'after_save'};
           payload['shots.after_save']=publicShot(shot);
           await db.collection(SHOT_COL).doc(String(meta.invoiceCode)).update(payload);
         }catch(e){try{console.warn('CCTV after-save write skipped',e&&e.message||e);}catch(_){}}
@@ -119,17 +126,22 @@ async function finalizeInvoice(meta){
 async function snapshot(meta){
   try{meta=meta||{};if(!meta.invoiceCode||typeof db==='undefined')return false;var shot=await grabShot('after_save',meta);var shots={after_save:shot};return await writeInvoiceDoc(meta,shots);}catch(e){try{console.warn('CCTV invoice snapshot skipped',e&&e.message||e);}catch(_){}return false;}
 }
-function postAgent(payload){
+function postAgent(payload,meta){
   var body=JSON.stringify(payload),opt={method:'POST',headers:{'Content-Type':'application/json'},body:body,cache:'no-store'};
-  return fetch(LOCAL_AGENT,opt).catch(function(){return fetch(REMOTE_AGENT,opt);});
+  var c=cfg(meta);
+  return fetch(LOCAL_AGENT,opt).catch(function(){
+    if(!c||!c.remote) throw new Error('remote_agent_not_configured');
+    return fetch(c.remote+'/echarpe-events/event',opt);
+  });
 }
 async function registerEvent(meta){
   try{
     if(!meta||!meta.eventId||!meta.atMs||typeof db==='undefined')return false;
-    var id=safeId(meta.eventId),view=REMOTE_VIEW+encodeURIComponent(id);
-    var doc={eventId:id,type:meta.type||'event',branch:meta.branch||'',camera:'D04',stream:STREAM,atMs:Number(meta.atMs)||Date.now(),beforeSec:30, afterSec:30,invoiceCode:meta.invoiceCode||'',invoiceNo:meta.invoiceNo||'',sid:meta.sid||'',employeeId:meta.employeeId||'',employeeName:meta.employeeName||'',viewerUrl:view,storage:'branch_local',version:426};
+    var c=cfg(meta); if(!c)return false;
+    var id=safeId(meta.eventId),view=c.remote?(c.remote+'/echarpe-events/view?id='+encodeURIComponent(id)):'';
+    var doc={eventId:id,type:meta.type||'event',branch:meta.branch||'',camera:c.camera,stream:c.stream,atMs:Number(meta.atMs)||Date.now(),beforeSec:30,afterSec:30,invoiceCode:meta.invoiceCode||'',invoiceNo:meta.invoiceNo||'',sid:meta.sid||'',employeeId:meta.employeeId||'',employeeName:meta.employeeName||'',viewerUrl:view,storage:'branch_local',version:467};
     db.collection(EVENT_COL).doc(id).set(doc,{merge:true}).catch(function(){});
-    postAgent({id:id,type:doc.type,invoiceCode:doc.invoiceCode,branch:doc.branch,atMs:doc.atMs}).catch(function(){});
+    postAgent({id:id,type:doc.type,invoiceCode:doc.invoiceCode,branch:doc.branch,atMs:doc.atMs},meta).catch(function(){});
     return true;
   }catch(e){try{console.warn('CCTV event skipped',e&&e.message||e);}catch(_){}return false;}
 }
