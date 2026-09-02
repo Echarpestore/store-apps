@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v447
+/* ECHARPE Office CCTV v472
    POS Live stays pinned. Four stable camera slots remain user-selectable and persist locally. */
 (function(){
   'use strict';
@@ -12,6 +12,12 @@
       {id:'5',name:'D05',label:'كاميرا 5',stream:'camera5'},
       {id:'7',name:'D07',label:'كاميرا 7',stream:'camera7'},
       {id:'8',name:'D08',label:'كاميرا 8',stream:'camera8'}
+    ]
+  },{
+    id:'rehab', name:'الرحاب', gateway:'https://cctv-rehab.echarpe.store',
+    liveAliases:['rehab','الرحاب'],
+    cameras:[
+      {id:'1',name:'CAM1',label:'الكاشير',stream:'rehab_cam1_h264'}
     ]
   }];
   var state={active:false,branch:'madinaty',slots:['4','5','7','8']};
@@ -110,7 +116,7 @@
       '<div class="of-cctv-panel-head"><select class="of-cctv-camera-select" data-cctv-select="'+i+'" aria-label="اختيار كاميرا المربع '+(i+1)+'">'+cameraOptions(c?c.id:'off')+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(c?'':' disabled')+'>⛶</button></div>'+
       (c?'<div class="of-cctv-panel-body of-cctv-video"><video title="'+esc(c.name)+'" autoplay muted playsinline controls preload="none" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'"></video><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div><b>الكاميرا متوقفة</b><small>اختار كاميرا من القائمة فوق</small></div></div>')+'</article>';
   }
-  function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;save();render();};});}
+  function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;if(state.branch==='rehab')state.slots=['1','off','off','off'];else if(state.branch==='madinaty'&&!state.slots.some(function(v){return ['4','5','7','8'].indexOf(String(v))>=0;}))state.slots=['4','5','7','8'];save();render();};});}
   function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement||null;}
   function enterNativeFs(el){var fn=el&&(el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen);if(!fn)return;try{var r=fn.call(el);if(r&&r.catch)r.catch(function(){});}catch(e){}}
   function exitNativeFs(){var fn=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;if(!fn||!fsEl())return;try{var r=fn.call(document);if(r&&r.catch)r.catch(function(){});}catch(e){}}
@@ -226,7 +232,7 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
     var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});};
     var cards=valid.map(function(k){var x=shots[k]||{};return '<button type="button" data-cctv-shot="'+k+'" style="text-align:right;border:1px solid #334155;background:#0f172a;color:#fff;border-radius:14px;padding:8px;cursor:pointer"><img src="'+x.jpegData+'" alt="'+esc(labels[k])+'" style="display:block;width:100%;aspect-ratio:16/10;object-fit:cover;background:#000;border-radius:9px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px"><b style="font-size:12px">'+labels[k]+'</b><small style="color:#94a3b8">'+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleTimeString('ar-EG')+'</small></div></button>';}).join('');
     var ov=document.createElement('div');ov.id='ofCctvShotOv';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto;';
-    ov.innerHTML='<div style="max-width:1050px;width:100%;background:#111827;border:1px solid #334155;border-radius:18px;padding:12px;color:white;box-shadow:0 18px 60px rgba(0,0,0,.45)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px"><div><b>📸 لقطات الفاتورة '+esc(invoiceCode)+'</b><div style="font-size:11px;color:#94a3b8;margin-top:2px">D04 · '+valid.length+' لقطة محفوظة</div></div><button id="ofCctvShotClose" style="padding:8px 13px;border:0;border-radius:9px;cursor:pointer;font-weight:800">إغلاق</button></div><div id="ofCctvShotGrid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px">'+cards+'</div><div id="ofCctvShotFocus" style="display:none;margin-top:10px"><button id="ofCctvShotBack" style="margin-bottom:8px;padding:7px 11px;border:0;border-radius:8px;cursor:pointer">← كل اللقطات</button><img id="ofCctvShotBig" alt="CCTV invoice snapshot" style="display:block;width:100%;max-height:72vh;object-fit:contain;background:#000;border-radius:12px"><div id="ofCctvShotMeta" style="font-size:11px;color:#9ca3af;margin-top:7px"></div></div></div>';
+    ov.innerHTML='<div style="max-width:1050px;width:100%;background:#111827;border:1px solid #334155;border-radius:18px;padding:12px;color:white;box-shadow:0 18px 60px rgba(0,0,0,.45)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px"><div><b>📸 لقطات الفاتورة '+esc(invoiceCode)+'</b><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+esc((d.camera||((valid[0]&&shots[valid[0]]&&shots[valid[0]].camera)||'CCTV')))+' · '+valid.length+' لقطة محفوظة</div></div><button id="ofCctvShotClose" style="padding:8px 13px;border:0;border-radius:9px;cursor:pointer;font-weight:800">إغلاق</button></div><div id="ofCctvShotGrid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px">'+cards+'</div><div id="ofCctvShotFocus" style="display:none;margin-top:10px"><button id="ofCctvShotBack" style="margin-bottom:8px;padding:7px 11px;border:0;border-radius:8px;cursor:pointer">← كل اللقطات</button><img id="ofCctvShotBig" alt="CCTV invoice snapshot" style="display:block;width:100%;max-height:72vh;object-fit:contain;background:#000;border-radius:12px"><div id="ofCctvShotMeta" style="font-size:11px;color:#9ca3af;margin-top:7px"></div></div></div>';
     document.body.appendChild(ov);
     var grid=ov.querySelector('#ofCctvShotGrid'),focus=ov.querySelector('#ofCctvShotFocus'),big=ov.querySelector('#ofCctvShotBig'),meta=ov.querySelector('#ofCctvShotMeta');
     ov.querySelectorAll('[data-cctv-shot]').forEach(function(btn){btn.onclick=function(){var k=btn.getAttribute('data-cctv-shot'),x=shots[k]||{};grid.style.display='none';focus.style.display='block';big.src=x.jpegData;meta.textContent=labels[k]+' · '+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleString('ar-EG');};});
@@ -242,7 +248,7 @@ window.ofCctvOpenEvent = async function(eventId){
     var snap=await db.collection('pos_cctv_events').doc(String(eventId)).get();
     if(!snap.exists){ alert('مفيش فيديو محفوظ للحدث ده. الفيديوهات تبدأ من v424 بعد تشغيل Evidence Agent.'); return; }
     var d=snap.data()||{}, url=String(d.viewerUrl||'');
-    if(!/^https:\/\/cctv-madinaty\.echarpe\.store\/echarpe-events\/view\?id=/.test(url)) throw new Error('bad_viewer_url');
+    if(!/^https:\/\/cctv-(?:madinaty|rehab)\.echarpe\.store\/echarpe-events\/view\?id=/.test(url)) throw new Error('bad_viewer_url');
     window.open(url,'_blank','noopener');
   }catch(e){ alert('تعذر فتح فيديو الحدث'); }
 };
