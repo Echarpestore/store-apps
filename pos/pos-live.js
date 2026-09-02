@@ -1,4 +1,4 @@
-/* 🔴 POS Live v439 — low-cost operational live state for Office.
+/* 🔴 POS Live v446 — low-cost operational live state for Office.
    - Current cart/payment state is merged into one document per branch.
    - Daily branch KPIs are updated only after a sale is actually saved.
    - KPI update is idempotent per invoiceCode (transaction + countedSaleIds).
@@ -9,7 +9,7 @@
 
   var timer=null, lastJson='', stopped=false, flushing=false;
   var HEARTBEAT_MS=5*60*1000;
-  var PENDING_KEY='pos_live_pending_sales_v439';
+  var PENDING_KEY='pos_live_pending_sales_v446';
 
   function safeEmployee(){ try{return (currentEmployee&&currentEmployee.name)||'';}catch(e){return '';} }
   function safeBranch(){ try{return currentBranch||'';}catch(e){return '';} }
