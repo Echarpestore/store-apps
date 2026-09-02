@@ -149,8 +149,13 @@
     renderLive();
     renderCameras();
   }
-  function refreshPosOnly(){if(state.active)renderLive();}
-  function stop(){state.active=false;clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvCameraGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
+  var _liveRaf=0;
+  function refreshPosOnly(){
+    if(!state.active||document.hidden)return;
+    if(_liveRaf)return;
+    _liveRaf=requestAnimationFrame(function(){_liveRaf=0;if(state.active&&!document.hidden)renderLive();});
+  }
+  function stop(){state.active=false;if(_liveRaf){cancelAnimationFrame(_liveRaf);_liveRaf=0;}clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvCameraGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
   function start(){state.active=true;render();}
   function dayBounds(v){
     var a=String(v||'').split('-').map(Number); if(a.length!==3||!a[0])return null;
@@ -193,6 +198,11 @@
     ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(function(ev){document.addEventListener(ev,function(){if(!fsEl()&&!document.querySelector('.of-cctv-room-focus')&&!document.querySelector('.of-cctv-panel-focus'))clearFocusClasses();});});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'&&(document.querySelector('.of-cctv-room-focus')||document.querySelector('.of-cctv-panel-focus'))){clearFocusClasses();exitNativeFs();}});
     window.addEventListener('office-pos-live-update',refreshPosOnly);window.addEventListener('beforeunload',stop);
+    document.addEventListener('visibilitychange',function(){
+      var page=document.getElementById('page-cctv');
+      if(document.hidden){ if(state.active){ var grid=document.getElementById('ofCctvCameraGrid'); if(grid)grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel); } }
+      else if(state.active && page && page.classList.contains('on')) render();
+    });
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
   window.ofCctvStart=start;window.ofCctvStop=stop;

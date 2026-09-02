@@ -1403,9 +1403,9 @@ function ofGoPage(page, opts){
   // 📹 CCTV v420: البث يشتغل فقط أثناء فتح التبويب، ويتوقف فور مغادرته.
   if(page === 'cctv'){ try{ window.ofCctvStart && window.ofCctvStart(); }catch(e){ console.warn('cctv start',e); } }
   else { try{ window.ofCctvStop && window.ofCctvStop(); }catch(e){ console.warn('cctv stop',e); } }
-  if(page === 'cash'){ try{ renderCashHand(); }catch(e){ console.warn('cash', e); } }
+  if(page === 'cash'){ try{ loadSales(); renderCashHand(); }catch(e){ console.warn('cash', e); } }
   if(page === 'reports'){
-    try{ loadCustomers(); loadRatings(); }catch(e){ console.warn('reports load', e); }
+    try{ loadSales(); loadCustomers(); loadRatings(); }catch(e){ console.warn('reports load', e); }
   }
   // 🕵️ سجل النشاط: تحميل أول فتحة بس — بعدها الزرار هو اللي بيحدّث
   if(page === 'odd' && !_ofActRaw.length){
@@ -2800,8 +2800,17 @@ function startData(){
   //   • التحديث بيقف تمامًا والتطبيق في الخلفية
   //   • بيانات التقارير بتتحمّل عند فتح تبويب التقارير بس، ومع كاش
   //   • الفترات اتوسّعت (كانت 5 دقايق = آلاف القراءات في الساعة)
-  loadSales();
-  setInterval(function(){ if(!document.hidden) loadSales(); }, 20*60*1000);
+  // v454 Performance: مبيعات 30 يوم ثقيلة؛ لا نسحبها أثناء أول رسم للشاشة.
+  // نحمّلها في idle، وبعدها نحدّث فقط لو تبويب محتاج المبيعات مفتوح.
+  function ofSalesPageNeedsData(){
+    var on=document.querySelector('.tabPage.on');
+    var id=on&&on.id||'';
+    return id==='page-reports'||id==='page-cctv'||id==='page-cash'||id==='page-home';
+  }
+  var ofIdleLoadSales=function(){ if(!document.hidden && ofSalesPageNeedsData()) loadSales(); };
+  if(typeof requestIdleCallback==='function') requestIdleCallback(ofIdleLoadSales,{timeout:4500});
+  else setTimeout(ofIdleLoadSales,2500);
+  setInterval(function(){ if(!document.hidden && ofSalesPageNeedsData()) loadSales(); }, 20*60*1000);
   ofLfOnce(db.collection('pos_test_inventory'),'inventory',function(s){
     D.inventory=ofLfDocs(s); renderTop();
   },12*60*60*1000);
@@ -3744,33 +3753,17 @@ const OF_NUM_SMALL={
   'تسعه':9,'تسع':9,'عشره':10,'عشر':10,'حداشر':11,'احداشر':11,'اتناشر':12,'اثناشر':12,'تلتاشر':13,'تلاتاشر':13,
   'اربعتاشر':14,'خمستاشر':15,'ستاشر':16,'سبعتاشر':17,'تمنتاشر':18,'تسعتاشر':19,
   'عشرين':20,'تلاتين':30,'ثلاثين':30,'اربعين':40,'خمسين':50,'ستين':60,'سبعين':70,'تمانين':80,'ثمانين':80,'تسعين':90,
-  'ميه':100,'مائه':100,'مايه':100,
-  'متين':200,'ميتين':200,
-  'تلتميه':300,'تلاتميه':300,'ثلاثميه':300,
-  'اربعميه':400,'اربعمايه':400,
-  'خمسميه':500,'خمسمايه':500,
-  'ستميه':600,'ستمايه':600,
-  'سبعميه':700,'سبعمايه':700,
-  'تمنميه':800,'تمانميه':800,'ثمانميه':800,
-  'تسعميه':900,'تسعمايه':900
+  'ميه':100,'مائه':100,'مايه':100
 };
 function ofNaturalMoney(text){
   let raw=String(text||'').replace(/[٠-٩]/g,function(c){return String('٠١٢٣٤٥٦٧٨٩'.indexOf(c));});
-  // v448: JS \b لا يتعامل مع الحروف العربية كـ word chars، فكان "14 الف جنيه" يفشل رغم أن الرقم واضح.
-  // ننظف وحدات العملة كـ tokens عربية صريحة، ونقبل ج.م بعد التطبيع إلى "ج م".
-  raw=ofArNorm(raw)
-    .replace(/(^|\s)(?:جنيه|جنيهات|جنية|جنيات)(?=\s|$)/g,' ')
-    .replace(/(^|\s)ج\s+م(?=\s|$)/g,' ')
-    .replace(/(^|\s)جم(?=\s|$)/g,' ')
-    .replace(/(^|\s)مصري(?:ه)?(?=\s|$)/g,' ')
-    .replace(/والف/g,' و الف ')
-    .replace(/\s+/g,' ').trim();
+  raw=ofArNorm(raw).replace(/\bجنيهات?\b/g,' ').replace(/\bجنيه\b/g,' ').replace(/\bوالف\b/g,' و الف ').replace(/\s+/g,' ').trim();
   if(!raw)return null;
   if(/^\d+(?:\.\d{1,2})?$/.test(raw)){const n=Number(raw);return n>0&&n<=999999999?n:null;}
   const strict=ofArabicDigitsOnly(raw); if(strict)return strict;
   let toks=[]; raw.split(' ').forEach(function(x){
     if(!x)return; if(x==='و')return;
-    if(x.length>1&&x[0]==='و'&&(OF_NUM_SMALL[x.slice(1)]!=null||/^\d+$/.test(x.slice(1))||['الف','الاف','مليون','ملايين'].includes(x.slice(1)))){toks.push(x.slice(1));}else toks.push(x);
+    if(x.length>1&&x[0]==='و'&&(OF_NUM_SMALL[x.slice(1)]!=null||['الف','الاف','مليون','ملايين'].includes(x.slice(1)))){toks.push(x.slice(1));}else toks.push(x);
   });
   let total=0, group=0, seen=false;
   for(let i=0;i<toks.length;i++){
@@ -3806,7 +3799,7 @@ function ofVoiceLocalNatural(text){
   const n=ofArNorm(text); if(!n)return {ok:false,reason:'empty',confidence:0};
   // v376: "بدون اسم تاجر" اختيار صريح وصحيح، مش اسم تاجر ناقص.
   // بنستخدم حساب نظام ثابت عشان الحركة تفضل ظاهرة في حسابات/تقارير التجار من غير اختراع اسم.
-  const unnamedMerchant=/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)|(?:^|\s)(?:من\s+)?(?:تاجر|مورد)(?=\s+(?:ب|بمبلغ|المبلغ|قيمتها|قيمه)\s)/.test(n);
+  const unnamedMerchant=/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/.test(n);
   const exact=unnamedMerchant?null:ofVoiceMerchantFromText(n);
   let merchantSpoken='';
   if(unnamedMerchant)merchantSpoken='بدون اسم تاجر';
@@ -3826,7 +3819,7 @@ function ofVoiceLocalNatural(text){
     }
   }
   let mm=unnamedMerchant
-    ? {ok:true,merchant:{id:'system_unnamed_merchant',name:'بدون اسم تاجر'},score:1,exact:true}
+    ? {ok:true,merchant:{id:'__unnamed__',name:'بدون اسم تاجر'},score:1,exact:true}
     : (exact?{ok:true,merchant:exact.merchant,score:1,exact:true}:ofMerchantMatch(merchantSpoken));
   let needsMerchantCreate=false;
   if(!mm.ok){
@@ -3851,9 +3844,7 @@ function ofVoiceLocalNatural(text){
   if(isGoods&&pm>=0){beforePay=n.slice(0,pm);payText=n.slice(pm).replace(/^(?:\s*و?\s*)(?:دفعتله|دفعت|دفعه|حولت)\s*/, '');}
   function moneyTail(x){
     x=String(x||'');
-    if(unnamedMerchant)x=x
-      .replace(/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/g,' ')
-      .replace(/(?:^|\s)(?:من\s+)?(?:تاجر|مورد)(?=\s+(?:ب|بمبلغ|المبلغ|قيمتها|قيمه)\s)/g,' ');
+    if(unnamedMerchant)x=x.replace(/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/g,' ');
     else x=x.replace(new RegExp(ofArNorm(mm.merchant.name),'g'),' ');
     x=x.replace(/^(اشتريت|جبت|خدت|اخدت|استلمت|بضاعه|فاتوره|سجل|سجلت|دفعت|دفعه|حولت)\s*/, '')
       .replace(/^(?:فاتوره|بضاعه)\s*/, '')
@@ -3862,19 +3853,10 @@ function ofVoiceLocalNatural(text){
     return ofVoiceFindMoney(x);
   }
   let amount=null,payment=0,kind=isGoods?'order':'payment';
-  if(isGoods){
-    amount=moneyTail(beforePay);
-    if(payText){
-      const spokenPay=moneyTail(payText)||0;
-      // v450: في جملة شراء من نوع «اشتريت بضاعة بدون اسم تاجر دفعت 5775»
-      // كلمة «دفعت» هنا هي مؤشر مبلغ الفاتورة الوحيد، وليست دفعة ثانية.
-      // أما «اشتريت بـ 23000 ودفعت 10000» فتبقى فاتورة + دفعة كما كانت.
-      if(!amount && spokenPay){amount=spokenPay;payment=0;}
-      else payment=spokenPay;
-    }
-  } else {amount=moneyTail(n);}
+  if(isGoods){amount=moneyTail(beforePay);if(payText)payment=moneyTail(payText)||0;}
+  else {amount=moneyTail(n);}
   if(!amount)return {ok:false,reason:'amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
-  if(payText&&amount&&moneyTail(beforePay)&&!payment)return {ok:false,reason:'payment_amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
+  if(payText&&!payment)return {ok:false,reason:'payment_amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
   return {ok:true,kind:kind,merchant:mm.merchant,merchantSpoken:merchantSpoken,amount:amount,payment:payment,
     transcript:String(text||''),exactMerchant:mm.score===1||needsMerchantCreate,needsMerchantCreate:needsMerchantCreate,
     isUnnamedMerchant:unnamedMerchant,
@@ -3906,7 +3888,7 @@ async function ofVoiceAiFallback(text){
     if(x.kind==='payment'&&payment>0)return {ok:false,reason:'ai_invalid_payment'};
     const isUnnamedMerchant=x.isUnnamedMerchant===true;
     let m=isUnnamedMerchant
-      ? {id:'system_unnamed_merchant',name:'بدون اسم تاجر'}
+      ? {id:'__unnamed__',name:'بدون اسم تاجر'}
       : (D.merchants||[]).find(function(z){return String(z.id)===String(x.merchantId||'');});
     let needsMerchantCreate=false;
     if(!m){
@@ -4070,14 +4052,6 @@ async function ofVoiceRefreshPermission(){
   ofVoiceSetPermission('هيتأكد عند التشغيل','prompt'); return 'unknown';
 }
 async function ofVoiceEnsureMicPermission(){
-  // v449: لو Chrome بالفعل مدي صلاحية للمايك ما نفتحش getUserMedia كل مرة.
-  // ده كان بيضيف انتظار ملحوظ قبل ما SpeechRecognition يبدأ.
-  try{
-    if(navigator.permissions&&navigator.permissions.query){
-      const q=await navigator.permissions.query({name:'microphone'});
-      if(q&&q.state==='granted'){ofVoiceSetPermission('مسموح','granted');return true;}
-    }
-  }catch(e){}
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return true;
   const stream=await navigator.mediaDevices.getUserMedia({audio:true});
   try{(stream.getTracks()||[]).forEach(function(t){t.stop();});}catch(e){}
@@ -4117,8 +4091,10 @@ function ofVoiceRenderDraft(d){
   warn.textContent=warning; warn.style.display=warning?'block':'none';
   ofVoiceUi('review','✅ فهمت الحركة. راجع التاجر والمبالغ والحساب قبل التأكيد.',d.transcript);
   ofVoiceOverlay(true);
-  // v449: الرد الصوتي قصير عشان ما يعطلش المستخدم قبل تأكيد الحركة.
-  const sentence='فهمت. راجع الشاشة، وبعدها قل تأكيد أو إلغاء.';
+  const sentence=(d.needsMerchantCreate?'تاجر جديد '+name+'. ':'')
+    +(m.order?'فاتورة بضاعة '+ofVoiceMoneySpeak(m.order)+'. ':'')
+    +(m.payment?'دفعة '+ofVoiceMoneySpeak(m.payment)+'. ':'')
+    +'الحساب بعد الحركة '+ofVoiceMoneySpeak(Math.abs(m.after))+'. راجع الشاشة، وبعدها قل تأكيد أو إلغاء.';
   ofSpeak(sentence,function(){ofVoiceListenConfirm();});
 }
 function ofVoiceRecognition(){
@@ -4161,7 +4137,7 @@ async function ofVoiceCommit(){
     if(!merchant && d.merchant&&d.merchant.name) merchant=(D.merchants||[]).find(function(z){return ofArNorm(z.name||'')===ofArNorm(d.merchant.name||'');});
     let mid=merchant&&merchant.id || d.merchant.id || '';
     if(d.isUnnamedMerchant){
-      mid='system_unnamed_merchant';
+      mid='__unnamed__';
       batch.set(db.collection('office_merchants').doc(mid),{name:'بدون اسم تاجر',systemUnnamed:true,updatedAt:commitTs},{merge:true});
     }
     if(!mid){
@@ -4233,8 +4209,7 @@ async function ofVoiceStart(){
   }
   if(session!==_ofVoiceSession)return;
   const r=ofVoiceRecognition(); if(!r)return;
-  _ofVoiceRec=r; let handled=false,finalText='',latestShown='',silenceTimer=null;
-  function clearVoiceSilence(){if(silenceTimer){clearTimeout(silenceTimer);silenceTimer=null;}}
+  _ofVoiceRec=r; let handled=false,finalText='';
   r.onstart=function(){if(session===_ofVoiceSession)ofVoiceUi('listening','🔴 المايك شغال دلوقتي — اتكلم بطبيعتك.');};
   r.onresult=async function(e){
     if(session!==_ofVoiceSession)return;
@@ -4243,23 +4218,9 @@ async function ofVoiceStart(){
       const rr=e.results[ri]; if(rr&&rr[0])shown+=(shown?' ':'')+(rr[0].transcript||'');
       if(rr&&rr.isFinal&&rr[0])finalText+=(finalText?' ':'')+(rr[0].transcript||'');
     }
-    latestShown=(shown||finalText||latestShown).trim();
-    ofVoiceUi(handled?'processing':'listening',handled?'🧠 بفهم الكلام…':'🔴 سامعك… كمل.',latestShown);
+    ofVoiceUi(handled?'processing':'listening',handled?'🧠 بفهم الكلام…':'🔴 سامعك… كمل.',shown||finalText);
     const last=e.results[e.results.length-1];
-    // v449: لو الجملة المؤقتة اتفهمت محليًا بالكامل، 450ms هدوء كفاية
-    // عشان نطلب من Chrome إنه ينهي الجملة بدل الانتظار لثواني بلا داعي.
-    clearVoiceSilence();
-    if(!handled && last && !last.isFinal && latestShown){
-      const quick=ofVoiceLocalNatural(latestShown);
-      if(quick&&quick.ok&&Number(quick.confidence||0)>=0.90){
-        silenceTimer=setTimeout(function(){
-          if(session!==_ofVoiceSession||handled||!_ofVoiceRec)return;
-          try{_ofVoiceRec.stop();}catch(ex){}
-        },450);
-      }
-    }
     if(!last||!last.isFinal||handled)return;
-    clearVoiceSilence();
     handled=true; _ofVoiceRec=null;
     const alternatives=[]; for(let i=0;i<last.length;i++)if(last[i]&&last[i].transcript)alternatives.push(last[i].transcript);
     if(finalText&&!alternatives.includes(finalText))alternatives.unshift(finalText);
@@ -4275,7 +4236,6 @@ async function ofVoiceStart(){
     else {const msg=ofVoiceExplainError(best);ofVoiceUi('error','⚠️ '+msg,finalText||alternatives[0]||'');ofSpeak(msg);}
   };
   r.onerror=function(e){
-    clearVoiceSilence();
     if(session!==_ofVoiceSession||String(e&&e.error)==='aborted')return;
     _ofVoiceRec=null;
     const code=String(e&&e.error||'');
@@ -4287,7 +4247,6 @@ async function ofVoiceStart(){
     ofVoiceUi('error','⚠️ '+msg);
   };
   r.onend=function(){
-    clearVoiceSilence();
     if(session!==_ofVoiceSession)return; _ofVoiceRec=null;
     if(!handled&&_ofVoiceState==='listening')setTimeout(function(){if(session===_ofVoiceSession&&_ofVoiceState==='listening')ofVoiceUi('error','⚠️ التسجيل انتهى من غير ما أسمع جملة كاملة. جرّب تاني.');},120);
   };
