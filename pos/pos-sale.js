@@ -258,6 +258,66 @@ function normalizeScan(code){
 }
 window.normalizeScan = normalizeScan;
 
+// 🔫⌨️ v451 — Scanner مستقل عن لغة ويندوز.
+// KeyboardEvent.code بيرجع مكان الزر الحقيقي (KeyF / KeyT / Digit3...) حتى لو
+// Windows مضبوط عربي. بنستخدمه **فقط** لما السلسلة داخلة بسرعة قارئ باركود؛
+// الكتابة البشرية العادية تفضل تستخدم قيمة الحقل كما هي.
+let _scannerPhysicalBuf = '';
+let _scannerPhysicalStartAt = 0;
+let _scannerPhysicalLastAt = 0;
+function scannerPhysicalChar(e){
+  if(!e || e.ctrlKey || e.altKey || e.metaKey) return '';
+  const code = String(e.code || '');
+  if(/^Key[A-Z]$/.test(code)){
+    const ch = code.slice(3);
+    return e.shiftKey ? ch : ch.toLowerCase();
+  }
+  if(/^Digit[0-9]$/.test(code)){
+    const d = code.slice(5);
+    if(!e.shiftKey) return d;
+    return {'1':'!','2':'@','3':'#','4':'$','5':'%','6':'^','7':'&','8':'*','9':'(','0':')'}[d] || d;
+  }
+  const plain = {
+    Minus:'-', Equal:'=', BracketLeft:'[', BracketRight:']',
+    Backslash:'\\', Semicolon:';', Quote:"'", Comma:',', Period:'.', Slash:'/', Space:' '
+  };
+  const shifted = {
+    Minus:'_', Equal:'+', BracketLeft:'{', BracketRight:'}',
+    Backslash:'|', Semicolon:':', Quote:'"', Comma:'<', Period:'>', Slash:'?'
+  };
+  return e.shiftKey ? (shifted[code] || plain[code] || '') : (plain[code] || '');
+}
+function scannerTrackPhysicalKey(e, now){
+  const ch = scannerPhysicalChar(e);
+  if(!ch) return;
+  const t = Number(now || Date.now());
+  // قارئ حقيقي بيبعت الحروف ورا بعض بسرعة. gap كبير = بداية محاولة جديدة.
+  if(!_scannerPhysicalLastAt || (t - _scannerPhysicalLastAt) > 120){
+    _scannerPhysicalBuf = '';
+    _scannerPhysicalStartAt = t;
+  }
+  _scannerPhysicalBuf += ch;
+  _scannerPhysicalLastAt = t;
+}
+function scannerConsumePhysical(now){
+  const t = Number(now || Date.now());
+  const buf = _scannerPhysicalBuf;
+  const started = _scannerPhysicalStartAt;
+  const last = _scannerPhysicalLastAt;
+  _scannerPhysicalBuf = '';
+  _scannerPhysicalStartAt = 0;
+  _scannerPhysicalLastAt = 0;
+  if(!buf || buf.length < 4 || !started || !last) return '';
+  const duration = Math.max(1, last - started);
+  const avg = duration / Math.max(1, buf.length - 1);
+  // قبول مسح سريع فقط؛ لا نغيّر كتابة الموظف اليدوية.
+  if((t - last) <= 220 && avg <= 80 && duration <= Math.max(900, buf.length * 80)) return buf;
+  return '';
+}
+window.scannerPhysicalChar = scannerPhysicalChar;
+window.scannerTrackPhysicalKey = scannerTrackPhysicalKey;
+window.scannerConsumePhysical = scannerConsumePhysical;
+
 // 🔍 البحث بالباركود مع التسامح مع الأصفار البادئة
 // السبب: ليبلات QuickBooks القديمة مطبوعة بأصفار (000948) بينما الباركود
 // المستورد رقم مجرد (948). بنجرب المطابقة التامة الأول، وبعدين بعد شيل الأصفار.
@@ -312,9 +372,12 @@ window.findByBarcode = findByBarcode;
 window.stripZeros = stripZeros;
 
 searchBar.addEventListener('keydown', (e)=>{
+  if(e.key !== 'Enter'){ scannerTrackPhysicalKey(e); }
   if(e.key === 'Enter'){
-    // ⌨️ لو الكيبورد كان عربي، بنرجّع الكود لأصله قبل أي مطابقة
-    const code = normalizeScan(searchBar.value.trim());
+    // 🔫 v451: لو ده Scanner سريع، ناخد الحروف من physical key codes المستقلة عن لغة ويندوز.
+    // لو كتابة يدوية، نرجع للـnormalize القديم عادي.
+    const _physicalScan = scannerConsumePhysical();
+    const code = normalizeScan((_physicalScan || searchBar.value).trim());
     if(!code) return;
     // ↩️ R + رقم موبايل → مرتجع بفواتير العميل (مثال: R01012345678)
     if(/^[rR]\s*01\d{9}$/.test(code.replace(/\s/g,''))){
@@ -991,6 +1054,30 @@ async function openInvoiceForReturn(code){
            <div style="font-weight:600; font-size:11.5px; margin-top:3px;">راجع سياسة المرتجع بين الفروع قبل ما تكمّل.</div>
          </div>`;
 
+    // 💵💳📱 v451: طريقة دفع الفاتورة الأصلية تظهر في كل مرتجع، مش Visa بس.
+    // بنقرأ payments المحفوظة في نفس الفاتورة؛ عرض فقط ولا نغيّر أي حساب/مرتجع.
+    const _retPayLabels = { cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 Instapay', salary:'📄 خصم راتب' };
+    const _retPayments = (s.payments && typeof s.payments === 'object') ? s.payments : {};
+    let _retPayParts = Object.keys(_retPayLabels).filter(function(k){
+      return Math.abs(Number(_retPayments[k] || 0)) > 0.004;
+    }).map(function(k){
+      return _retPayLabels[k] + ' · ' + Math.abs(Number(_retPayments[k] || 0)).toFixed(2) + ' ج.م';
+    });
+    // توافق مع فواتير Visa القديمة اللي عندها cardTxn/cardTxns لكن payments ناقصة.
+    if(!_retPayParts.length && ((s.cardTxns && s.cardTxns.length) || s.cardTxn)){
+      const _legacyCards = (s.cardTxns && s.cardTxns.length) ? s.cardTxns : [s.cardTxn];
+      const _legacyVisa = _legacyCards.reduce(function(n,ct){ return n + Math.abs(Number((ct && ct.amount) || 0)); }, 0);
+      _retPayParts = ['💳 فيزا' + (_legacyVisa > 0 ? ' · ' + _legacyVisa.toFixed(2) + ' ج.م' : '')];
+    }
+    const paymentMethodBanner = _retPayParts.length ? `
+      <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:10px; padding:9px 11px; margin-bottom:8px; color:#0f172a;">
+        <div style="font-weight:900; font-size:12px; margin-bottom:4px;">طريقة دفع الفاتورة الأصلية</div>
+        <div style="font-weight:800; font-size:13px; line-height:1.8;">${_retPayParts.join(' <span style="color:#94a3b8; margin:0 5px;">+</span> ')}</div>
+      </div>` : `
+      <div style="background:#fff7ed; border:1.5px solid #fdba74; border-radius:10px; padding:8px 10px; margin-bottom:8px; color:#9a3412; font-size:12px; font-weight:800;">
+        طريقة الدفع غير مسجلة في الفاتورة القديمة
+      </div>`;
+
     // 💳 بيانات الدفع بالكارت — لازمة عشان تعمل المرتجع من Paymob
     // 💳💳 الفاتورة ممكن تكون اتدفعت بكارتين — كل عملية بترجع لوحدها من Paymob،
     // فبنعرض العمليتين بمبلغ كل واحدة عشان الكاشير ما يرجّعش المبلغ كله على كارت واحد
@@ -1048,6 +1135,7 @@ async function openInvoiceForReturn(code){
         ${windowBadge}
       </div>
       ${branchBanner}
+      ${paymentMethodBanner}
       ${cardBanner}
       ${customerBanner}
       ${alreadyReversed}
