@@ -3826,7 +3826,7 @@ function ofVoiceLocalNatural(text){
     }
   }
   let mm=unnamedMerchant
-    ? {ok:true,merchant:{id:'__unnamed__',name:'بدون اسم تاجر'},score:1,exact:true}
+    ? {ok:true,merchant:{id:'system_unnamed_merchant',name:'بدون اسم تاجر'},score:1,exact:true}
     : (exact?{ok:true,merchant:exact.merchant,score:1,exact:true}:ofMerchantMatch(merchantSpoken));
   let needsMerchantCreate=false;
   if(!mm.ok){
@@ -3897,7 +3897,7 @@ async function ofVoiceAiFallback(text){
     if(x.kind==='payment'&&payment>0)return {ok:false,reason:'ai_invalid_payment'};
     const isUnnamedMerchant=x.isUnnamedMerchant===true;
     let m=isUnnamedMerchant
-      ? {id:'__unnamed__',name:'بدون اسم تاجر'}
+      ? {id:'system_unnamed_merchant',name:'بدون اسم تاجر'}
       : (D.merchants||[]).find(function(z){return String(z.id)===String(x.merchantId||'');});
     let needsMerchantCreate=false;
     if(!m){
@@ -4061,6 +4061,14 @@ async function ofVoiceRefreshPermission(){
   ofVoiceSetPermission('هيتأكد عند التشغيل','prompt'); return 'unknown';
 }
 async function ofVoiceEnsureMicPermission(){
+  // v449: لو Chrome بالفعل مدي صلاحية للمايك ما نفتحش getUserMedia كل مرة.
+  // ده كان بيضيف انتظار ملحوظ قبل ما SpeechRecognition يبدأ.
+  try{
+    if(navigator.permissions&&navigator.permissions.query){
+      const q=await navigator.permissions.query({name:'microphone'});
+      if(q&&q.state==='granted'){ofVoiceSetPermission('مسموح','granted');return true;}
+    }
+  }catch(e){}
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return true;
   const stream=await navigator.mediaDevices.getUserMedia({audio:true});
   try{(stream.getTracks()||[]).forEach(function(t){t.stop();});}catch(e){}
@@ -4100,10 +4108,8 @@ function ofVoiceRenderDraft(d){
   warn.textContent=warning; warn.style.display=warning?'block':'none';
   ofVoiceUi('review','✅ فهمت الحركة. راجع التاجر والمبالغ والحساب قبل التأكيد.',d.transcript);
   ofVoiceOverlay(true);
-  const sentence=(d.needsMerchantCreate?'تاجر جديد '+name+'. ':'')
-    +(m.order?'فاتورة بضاعة '+ofVoiceMoneySpeak(m.order)+'. ':'')
-    +(m.payment?'دفعة '+ofVoiceMoneySpeak(m.payment)+'. ':'')
-    +'الحساب بعد الحركة '+ofVoiceMoneySpeak(Math.abs(m.after))+'. راجع الشاشة، وبعدها قل تأكيد أو إلغاء.';
+  // v449: الرد الصوتي قصير عشان ما يعطلش المستخدم قبل تأكيد الحركة.
+  const sentence='فهمت. راجع الشاشة، وبعدها قل تأكيد أو إلغاء.';
   ofSpeak(sentence,function(){ofVoiceListenConfirm();});
 }
 function ofVoiceRecognition(){
@@ -4146,7 +4152,7 @@ async function ofVoiceCommit(){
     if(!merchant && d.merchant&&d.merchant.name) merchant=(D.merchants||[]).find(function(z){return ofArNorm(z.name||'')===ofArNorm(d.merchant.name||'');});
     let mid=merchant&&merchant.id || d.merchant.id || '';
     if(d.isUnnamedMerchant){
-      mid='__unnamed__';
+      mid='system_unnamed_merchant';
       batch.set(db.collection('office_merchants').doc(mid),{name:'بدون اسم تاجر',systemUnnamed:true,updatedAt:commitTs},{merge:true});
     }
     if(!mid){
@@ -4218,7 +4224,8 @@ async function ofVoiceStart(){
   }
   if(session!==_ofVoiceSession)return;
   const r=ofVoiceRecognition(); if(!r)return;
-  _ofVoiceRec=r; let handled=false,finalText='';
+  _ofVoiceRec=r; let handled=false,finalText='',latestShown='',silenceTimer=null;
+  function clearVoiceSilence(){if(silenceTimer){clearTimeout(silenceTimer);silenceTimer=null;}}
   r.onstart=function(){if(session===_ofVoiceSession)ofVoiceUi('listening','🔴 المايك شغال دلوقتي — اتكلم بطبيعتك.');};
   r.onresult=async function(e){
     if(session!==_ofVoiceSession)return;
@@ -4227,9 +4234,23 @@ async function ofVoiceStart(){
       const rr=e.results[ri]; if(rr&&rr[0])shown+=(shown?' ':'')+(rr[0].transcript||'');
       if(rr&&rr.isFinal&&rr[0])finalText+=(finalText?' ':'')+(rr[0].transcript||'');
     }
-    ofVoiceUi(handled?'processing':'listening',handled?'🧠 بفهم الكلام…':'🔴 سامعك… كمل.',shown||finalText);
+    latestShown=(shown||finalText||latestShown).trim();
+    ofVoiceUi(handled?'processing':'listening',handled?'🧠 بفهم الكلام…':'🔴 سامعك… كمل.',latestShown);
     const last=e.results[e.results.length-1];
+    // v449: لو الجملة المؤقتة اتفهمت محليًا بالكامل، 450ms هدوء كفاية
+    // عشان نطلب من Chrome إنه ينهي الجملة بدل الانتظار لثواني بلا داعي.
+    clearVoiceSilence();
+    if(!handled && last && !last.isFinal && latestShown){
+      const quick=ofVoiceLocalNatural(latestShown);
+      if(quick&&quick.ok&&Number(quick.confidence||0)>=0.90){
+        silenceTimer=setTimeout(function(){
+          if(session!==_ofVoiceSession||handled||!_ofVoiceRec)return;
+          try{_ofVoiceRec.stop();}catch(ex){}
+        },450);
+      }
+    }
     if(!last||!last.isFinal||handled)return;
+    clearVoiceSilence();
     handled=true; _ofVoiceRec=null;
     const alternatives=[]; for(let i=0;i<last.length;i++)if(last[i]&&last[i].transcript)alternatives.push(last[i].transcript);
     if(finalText&&!alternatives.includes(finalText))alternatives.unshift(finalText);
@@ -4245,6 +4266,7 @@ async function ofVoiceStart(){
     else {const msg=ofVoiceExplainError(best);ofVoiceUi('error','⚠️ '+msg,finalText||alternatives[0]||'');ofSpeak(msg);}
   };
   r.onerror=function(e){
+    clearVoiceSilence();
     if(session!==_ofVoiceSession||String(e&&e.error)==='aborted')return;
     _ofVoiceRec=null;
     const code=String(e&&e.error||'');
@@ -4256,6 +4278,7 @@ async function ofVoiceStart(){
     ofVoiceUi('error','⚠️ '+msg);
   };
   r.onend=function(){
+    clearVoiceSilence();
     if(session!==_ofVoiceSession)return; _ofVoiceRec=null;
     if(!handled&&_ofVoiceState==='listening')setTimeout(function(){if(session===_ofVoiceSession&&_ofVoiceState==='listening')ofVoiceUi('error','⚠️ التسجيل انتهى من غير ما أسمع جملة كاملة. جرّب تاني.');},120);
   };
