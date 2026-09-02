@@ -1,0 +1,14 @@
+const fs=require('fs'), vm=require('vm'), assert=require('assert');
+const s=fs.readFileSync(__dirname+'/../sales/sales-app.js','utf8');
+assert(s.includes("detailRow('أوفرتايم · '+_payQty(c.overtimeMinutes/60,'ساعة'),'+'+_payMoney(c.overtimePay)"));
+assert(s.includes("detailRow('شغل يوم الإجازة · '+_payQty(c.dayOffBonusHours,'ساعة'),'+'+_payMoney(c.dayOffBonusAmount)"));
+assert(s.includes("detailRow('غياب مخصوم · '+_payQty(c.extraOffDays,'يوم'),'-'+_payMoney(c.deductionAmount)"));
+assert(s.includes("detailRow('رصيد وقت · '+_payQty(c.timeCreditHours,'ساعة'),'-'+_payMoney(c.timeCreditDeduction)"));
+assert(s.includes('dir="ltr"><bdi>${val}</bdi>'));
+assert(s.includes("+' = '+_payMoney(pb.salaryNet)"));
+assert(s.includes('Math.abs(n)<0.005'));
+const html=fs.readFileSync(__dirname+'/../sales/index.html','utf8');
+assert(html.includes('sales-app.js?v=443'));
+const sw=fs.readFileSync(__dirname+'/../sales/sw.js','utf8');
+assert(sw.includes('store-apps-shell-v443'));
+console.log('v443 payroll direction: 9/9 PASS');

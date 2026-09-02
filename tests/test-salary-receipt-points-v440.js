@@ -1,0 +1,23 @@
+const fs=require('fs'), path=require('path');
+const root=path.join(__dirname,'..');
+const sales=fs.readFileSync(path.join(root,'sales','sales-app.js'),'utf8');
+const salesHtml=fs.readFileSync(path.join(root,'sales','index.html'),'utf8');
+const salesSw=fs.readFileSync(path.join(root,'sales','sw.js'),'utf8');
+const pos=fs.readFileSync(path.join(root,'pos','app.js'),'utf8');
+const posHtml=fs.readFileSync(path.join(root,'pos','index.html'),'utf8');
+const posSw=fs.readFileSync(path.join(root,'pos','sw.js'),'utf8');
+let n=0; function ok(v,msg){ if(!v) throw new Error(msg); console.log('PASS',++n,msg); }
+ok(sales.includes('function employeePointPeriodTotals(empId, now)'), 'period totals helper exists');
+ok(sales.includes('week: sumRange(week.start.getTime()'), 'weekly total starts at current week boundary');
+ok(sales.includes('month: sumRange(month.start.getTime()'), 'monthly total starts at current month boundary');
+ok(!/employeePointPeriodTotals[\s\S]{0,1500}(deleteDoc|writeBatch|setDoc|updateDoc)/.test(sales), 'period reset does not delete/write historical points');
+ok(salesHtml.includes('id="dh_pointsWeek"'), 'employee dashboard shows weekly points');
+ok(salesHtml.includes('id="dh_pointsMonth"'), 'employee dashboard shows monthly points');
+ok(salesHtml.includes('تبدأ من 0 كل أسبوع') && salesHtml.includes('تبدأ من 0 كل شهر'), 'reset meaning is explicit in UI');
+ok(salesHtml.includes('sales-app.js?v=442'), 'sales cache bust bumped');
+ok(salesSw.includes("store-apps-shell-v442"), 'sales service worker bumped');
+ok(pos.includes('const isLong=rawValue.length>22'), 'salary receipt detects long values');
+ok(pos.includes('white-space:normal;overflow-wrap:anywhere'), 'long salary receipt values wrap instead of collapsing label column');
+ok(posHtml.includes('app.js?v=440'), 'POS app cache bust bumped');
+ok(posSw.includes("store-apps-shell-v440"), 'POS service worker bumped');
+console.log(`\n${n}/${n} PASS`);
