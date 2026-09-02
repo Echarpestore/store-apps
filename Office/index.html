@@ -1,2108 +1,792 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>POS تجريبي</title>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<!-- 💳 لازم للرصيد وكروت الهدايا: كل عملية فلوس بتروح لـCloud Function -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0c0f">
+<title>echarpe office</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0c0f'/><text x='50' y='68' font-size='52' text-anchor='middle'>🏢</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --panel3:#242833;
-  --border:#2a2f3a; --text:#e8e9ec; --muted:#8a8f9a;
-  --accent:#3b82f6; --plus:#22c55e; --minus:#ef4444; --warn:#f59e0b;
-  /* شاشة البيع نفسها بتستخدم تصميم فاتح (زي الجهاز الحقيقي في الصورة) — القائمة الجانبية بس تفضل غامقة */
-  --lt-bg:#f2f2f4; --lt-panel:#ffffff; --lt-panel2:#eef0f3; --lt-border:#d6d9de; --lt-text:#1a1c20;
-}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
+  /* 🎨 نفس أسلوب سجل المبيعات — فاتح ونضيف */
+  :root{
+    --bg:#eef1f6; --panel:#ffffff; --panel2:#f7f8fa; --line:#e6e9ef;
+    --ink:#1a1f2b; --sub:#6b7280; --gold:#D97706; --gold-dim:#fffbeb;
+    --good:#059669; --bad:#DC2626; --accent:#2563EB; --dark:#2f3545;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body{ background:var(--bg); color:var(--ink); font-family:'Cairo',sans-serif; min-height:100vh;
+        padding-bottom:calc(74px + env(safe-area-inset-bottom)); }
+  h1,h2,h3{ font-weight:900; }
+  button{ font-family:'Cairo'; }
 
-/* ---------- Light management theme (inventory, customers, roles, discounts, reports, import, profiles) ---------- */
-/* بيعيد تعريف المتغيرات نفسها (مش بس لون العنصر) عشان أي var(--text) أو var(--muted)
-   مكتوبة inline في أي مكان جوه الشاشات دي تتحول تلقائي للون غامق واضح، بدل ما تفضل
-   بيضا باهتة زي الثيم الغامق الأصلي. ده بيحل مشكلة "الأرقام مش واضحة" من الجذر. */
-.mgmt-light{
-  --text:#1a1a1a; --muted:#6b6b60; --panel:#ffffff; --panel2:#f7f6ef; --panel3:#eef0e0;
-  --border:#d8d5c5; --bg:#f3f1e7;
-  background:#f3f1e7 !important; color:#1a1a1a !important;
-}
-.mgmt-light .dash-header, .mgmt-light .mgmt-topbar{
-  background:#fff; border-bottom:2px solid #b9c9a0; padding:14px 18px; margin:0 0 16px;
-  border-radius:0 0 10px 10px; display:flex; justify-content:space-between; align-items:center;
-  gap:10px; flex-wrap:wrap;
-}
-/* العنوان دايمًا على اليمين (RTL) والأزرار على الشمال — نفس الترتيب في كل الشاشات */
-.mgmt-light .dash-header > div:first-child, .mgmt-light .mgmt-topbar > div:first-child{
-  display:flex; align-items:center; gap:10px; min-width:0;
-}
-.mgmt-light .mgmt-topbar h1{font-size:16px; margin:0; color:#2a2a2a;}
-.mgmt-light .topbar-actions{display:flex; align-items:center; gap:8px; flex-shrink:0;}
-.mgmt-light .dash-header h1{font-size:16px; margin:0; color:#2a2a2a;}
-.mgmt-light .logout-btn{background:#3d3d3f; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-weight:700; font-size:13px; cursor:pointer;}
-/* زر البيع الجديد — موحّد في كل الشاشات */
-.btn-newsale{
-  display:inline-flex; align-items:center; gap:7px;
-  background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; border:none;
-  border-radius:9px; padding:10px 18px; font-weight:800; font-size:13.5px; cursor:pointer;
-  box-shadow:0 2px 6px rgba(31,148,64,.3); transition:transform .12s;
-}
-.btn-newsale:hover{transform:translateY(-1px);}
-.btn-newsale .ns-ico{font-size:17px; line-height:1;}
-.mgmt-light input, .mgmt-light select, .mgmt-light textarea{
-  background:#fff !important; color:#1a1a1a !important; border:1px solid #b9c9a0 !important;
-}
-.mgmt-light input::placeholder{color:#8a8a80;}
-.mgmt-light .empty-cart{color:#999 !important;}
-.mgmt-light button:not(.logout-btn):not(.rep-range-btn):not(.bs-range-btn){
-  background:#eef0e0; color:#1a1a1a; border:1px solid #b9c9a0;
-}
-.screen{display:none;height:100vh;flex-direction:column;}
-.screen.active{display:flex;}
-/* ============================================================
-   🎨 نظام التصميم الموحّد
-   نفس أسلوب سجل المبيعات: خلفية فاتحة · كروت بيضا · ظلال خفيفة
-   · شريط لوني على الجنب · خط Cairo
-   ============================================================ */
-.mgmt-light{
-  --ui-line:#e6e9ef; --ui-soft:#f7f8fa; --ui-mut:#6b7280; --ui-ink:#1a1f2b;
-  --ui-blue:#2563EB; --ui-green:#059669; --ui-red:#DC2626;
-  --ui-amber:#D97706; --ui-violet:#7C3AED; --ui-dark:#2f3545;
-  background:#eef1f6 !important;
-}
+  /* ===== الدخول ===== */
+  /* 🔴 كانت display:flex — يعني شاشة الإيميل ظاهرة من أول لحظة تحميل الصفحة،
+     قبل ما أي كود يشتغل. Firebase بياخد جزء من الثانية عشان يرجّع الجلسة
+     المحفوظة، فالشاشة كانت تومض وبعدين تختفي.
+     دلوقتي بتبدأ **مخفية**، والكود هو اللي بيقرر يعرضها ولا لأ. */
+  #gate{ position:fixed; inset:0; z-index:100; background:var(--bg); display:none; align-items:center; justify-content:center; padding:22px; }
+  #gate.on{ display:flex; }
+  #bootWait{ position:fixed; inset:0; z-index:99; background:var(--bg); display:flex;
+    align-items:center; justify-content:center; color:var(--sub); font-size:13px; }
+  #gate .card{ width:100%; max-width:360px; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:26px 22px; text-align:center; }
+  #gate .logo{ font-size:44px; }
+  #gate h1{ font-size:20px; margin:8px 0 2px; }
+  #gate p{ color:var(--sub); font-size:12.5px; margin-bottom:18px; }
+  #gate input{ width:100%; padding:13px; border-radius:12px; border:1px solid var(--line); background:var(--panel2);
+    color:var(--ink); font-family:'Cairo'; font-size:14px; margin-bottom:10px; text-align:center; }
+  #gate button{ width:100%; padding:14px; border:none; border-radius:12px; font-weight:800; font-size:14px; cursor:pointer;
+    background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400; }
+  #gateErr{ color:var(--bad); font-size:12px; margin-top:8px; min-height:16px; }
+  #gateStep2{ display:none; }
 
-/* الشريط العلوي — أيقونات دايرية ملوّنة بدل الأزرار الرمادية */
-.mgmt-light .dash-header, .mgmt-light .mgmt-topbar{
-  background:#fff !important; border:none !important;
-  border-radius:0 0 20px 20px !important;
-  box-shadow:0 3px 16px rgba(20,25,40,.07) !important;
-  padding:14px 18px !important; margin-bottom:18px !important;
-  gap:9px !important;
-}
-.mgmt-light .dash-header h1{
-  font-size:19px !important; font-weight:900 !important; color:var(--ui-ink) !important;
-}
-.mgmt-light .logout-btn{
-  background:var(--ui-soft) !important; color:#374151 !important;
-  border:1px solid var(--ui-line) !important; border-radius:12px !important;
-  padding:9px 15px !important; font-weight:700 !important; font-size:13px !important;
-  font-family:'Cairo',sans-serif !important; transition:all .15s;
-}
-.mgmt-light .logout-btn:hover{
-  background:#fff !important; border-color:#c7cdd8 !important;
-  box-shadow:0 2px 8px rgba(20,25,40,.08) !important;
-}
-.mgmt-light .btn-newsale{
-  background:linear-gradient(135deg,#10B981,#047857) !important;
-  border-radius:12px !important; padding:10px 20px !important;
-  font-weight:800 !important; font-family:'Cairo',sans-serif !important;
-  box-shadow:0 4px 12px rgba(5,150,105,.28) !important;
-}
+  /* ===== الهيكل ===== */
+  /* الكروت والجداول والأزرار — موحّدة */
+  .card, .panel{
+    background:#fff !important; border:1px solid var(--line) !important;
+    border-radius:16px !important; box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
+    padding:16px 18px;
+  }
+  .row{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .muted{ color:var(--sub); }
+  input, select, textarea{
+    border-radius:11px !important; border:1.5px solid var(--line) !important;
+    background:#fff !important; color:var(--ink) !important; padding:11px 13px !important;
+    font-family:'Cairo',sans-serif !important; width:100%;
+  }
+  input:focus, select:focus{
+    outline:none !important; border-color:var(--accent) !important;
+    box-shadow:0 0 0 3px rgba(37,99,235,.12) !important;
+  }
+  button{
+    border-radius:11px !important; font-weight:800 !important; cursor:pointer;
+    border:none; padding:11px 18px; font-size:14px;
+    background:linear-gradient(135deg,#3B82F6,#1D4ED8); color:#fff;
+    transition:transform .12s, filter .12s;
+  }
+  button:hover{ filter:brightness(1.05); }
+  button:active{ transform:scale(.98); }
+  button.ghost{
+    background:#fff !important; color:#374151 !important;
+    border:1px solid var(--line) !important;
+  }
+  button.danger{ background:linear-gradient(135deg,#EF4444,#B91C1C) !important; }
+  table{ width:100%; border-collapse:separate; border-spacing:0;
+         border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,25,40,.05); }
+  th{ background:var(--dark); color:#fff; padding:12px 14px; text-align:right;
+      font-weight:700; font-size:14px; }
+  td{ padding:11px 14px; border-bottom:1px solid var(--line); font-size:14px; background:#fff; }
+  tr:nth-child(even) td{ background:#fbfcfd; }
+  tr:last-child td{ border-bottom:none; }
+  .amount{ font-weight:900; font-size:15px; }
+  .amount.neg{ color:var(--bad); }
+  .amount.pos{ color:var(--good); }
+  .empty{ color:var(--sub); text-align:center; padding:30px 14px; font-size:13.5px;
+          background:var(--panel2); border:1.5px dashed var(--line); border-radius:14px; }
+  nav{ overflow-x:auto; }
+  nav#tabsNav{
+    background:#fff !important; border-top:1px solid var(--line) !important;
+    box-shadow:0 -3px 16px rgba(20,25,40,.07) !important;
+  }
+  nav#tabsNav button{
+    background:transparent !important; color:var(--sub) !important;
+    border-radius:0 !important; font-weight:700 !important;
+  }
+  nav#tabsNav button.on{ color:var(--accent) !important; }
 
-/* الكروت */
-.mgmt-light .panel, .mgmt-light .card{
-  background:#fff !important; border:1px solid var(--ui-line) !important;
-  border-radius:16px !important; box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
-  padding:16px 18px !important;
-}
-.mgmt-light h3{
-  font-size:16px !important; font-weight:900 !important; color:var(--ui-ink) !important;
-}
+  header{ position:sticky; top:0; z-index:20; background:linear-gradient(180deg, var(--bg) 70%, transparent);
+    padding:14px 16px 10px; display:flex; align-items:center; justify-content:space-between; }
+  header h1{ font-size:17px; }
+  /* 🔧 أزرار الترويسة: مقاس ثابت ومفيش لفّ — كانت بتركب على العنوان */
+  .hdrBtns{ display:flex; gap:6px; align-items:center; flex-shrink:0; }
+  .hdrBtns .ico{
+    width:38px; height:38px; padding:0; font-size:16px; line-height:1;
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+  }
+  header > div:first-child{ min-width:0; }
+  header h1{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  header .sub{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  @media (max-width:380px){ .hdrBtns .ico{ width:34px; height:34px; font-size:15px; } }
+  header .sub{ color:var(--sub); font-size:11px; }
+  #notifBtn{ background:var(--panel2); border:1px solid var(--line); color:var(--ink); border-radius:99px;
+    padding:7px 13px; font-size:12px; font-weight:700; cursor:pointer; }
+  main{ padding:0 14px; }
+  .tabPage{ display:none; }
+  .tabPage.on{ display:block; animation:fadeIn .18s ease; }
+  @keyframes fadeIn{ from{ opacity:0; transform:translateY(4px);} to{ opacity:1; transform:none;} }
 
-/* الجداول */
-.mgmt-light table{
-  border-collapse:separate !important; border-spacing:0 !important;
-  border-radius:14px !important; overflow:hidden !important;
-  box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
-}
-.mgmt-light th{
-  background:var(--ui-dark) !important; color:#fff !important;
-  padding:12px 15px !important; font-weight:700 !important; font-size:14px !important;
-}
-.mgmt-light td{
-  padding:11px 15px !important; border-bottom:1px solid var(--ui-line) !important;
-  font-size:14px !important; background:#fff !important;
-}
-.mgmt-light tr:nth-child(even) td{ background:#fbfcfd !important; }
-.mgmt-light tr:last-child td{ border-bottom:none !important; }
+  /* 💼 تبويبات التوظيف الفرعية — المختار **لازم** يبان.
+     من غير الحالة دي الأربع أزرار بيبقوا شكل واحد بالظبط
+     (كلهم بياخدوا تدرّج الزرار العام) والمالك مش هيعرف هو فين. */
+  .hireSub{
+    background:#fff !important; color:var(--sub) !important;
+    border:1px solid var(--line) !important; font-size:12.5px !important;
+    padding:9px 6px !important;
+  }
+  .hireSub.on{
+    background:linear-gradient(135deg,#3B82F6,#1D4ED8) !important;
+    color:#fff !important; border-color:transparent !important;
+  }
 
-/* المدخلات */
-.mgmt-light input, .mgmt-light select, .mgmt-light textarea{
-  border-radius:11px !important; border:1.5px solid var(--ui-line) !important;
-  font-family:'Cairo',sans-serif !important; padding:11px 13px !important;
-  background:#fff !important;
-}
-.mgmt-light input:focus, .mgmt-light select:focus{
-  outline:none !important; border-color:var(--ui-blue) !important;
-  box-shadow:0 0 0 3px rgba(37,99,235,.12) !important;
-}
-.mgmt-light button{ font-family:'Cairo',sans-serif !important; }
+  /* 📅 تبويبات اليوم الفرعية — نفس مشكلة التوظيف بالظبط:
+     التلاتة كانوا بياخدوا تدرّج الزرار العام فشكلهم واحد،
+     ومفيش أي علامة على المفتوح. */
+  .daySub{
+    background:#fff !important; color:var(--sub) !important;
+    border:1px solid var(--line) !important; font-size:12.5px !important;
+    padding:9px 6px !important;
+  }
+  .daySub.on{
+    background:linear-gradient(135deg,#3B82F6,#1D4ED8) !important;
+    color:#fff !important; border-color:transparent !important;
+  }
 
-/* ============================================================
-   🛒 شاشة البيع — نفس الأسلوب مع الحفاظ على وضوح الشاشة الحرارية
-   ملاحظة: التخطيط (flex والتمرير الداخلي) متسابش زي ما هو عن قصد.
-   ============================================================ */
-.qbx-wrap{ background:#eef1f6 !important; }
-#searchBar{
-  border-radius:13px !important; border:2px solid #d8dce4 !important;
-  background:#fff !important; padding:14px 16px !important;
-  font-family:'Cairo',sans-serif !important; font-size:15px !important;
-  font-weight:600 !important; box-shadow:0 2px 8px rgba(20,25,40,.05) !important;
-  transition:border-color .15s, box-shadow .15s;
-}
-#searchBar:focus{
-  outline:none !important; border-color:#2563EB !important;
-  box-shadow:0 0 0 4px rgba(37,99,235,.12) !important;
-}
-.qbx-quickbtn{
-  border-radius:13px !important; border:none !important; width:50px !important;
-  height:50px !important; font-size:21px !important;
-  background:linear-gradient(135deg,#475569,#334155) !important;
-  box-shadow:0 3px 9px rgba(20,25,40,.16) !important; transition:transform .12s;
-}
-.qbx-quickbtn:hover{ transform:translateY(-1px); }
-.qbx-quickbtn-del{ background:linear-gradient(135deg,#EF4444,#B91C1C) !important; }
-.qbx-itemops button{
-  border-radius:13px !important; border:none !important;
-  background:linear-gradient(135deg,#475569,#334155) !important;
-  font-family:'Cairo',sans-serif !important; font-weight:800 !important;
-  box-shadow:0 3px 9px rgba(20,25,40,.14) !important;
-  padding:13px 6px !important; transition:transform .12s;
-}
-.qbx-itemops button:hover{ transform:translateY(-1px); }
-.qbx-return-all{ background:linear-gradient(135deg,#F59E0B,#B45309) !important; }
+  /* 🔢 عدّاد جوه الزرار الفرعي — بيقول «فيه كام مستني» من غير ما تفتح.
+     أحمر وهو مقفول عشان يشدّ العين، وأبيض شفاف وهو مفتوح عشان
+     ما يتصارعش مع خلفية الزرار الزرقا. */
+  .hsN{
+    display:none; min-width:17px; padding:0 5px; margin-inline-start:4px;
+    border-radius:99px; background:#e5484d; color:#fff;
+    font-size:10.5px; font-weight:900; line-height:17px; vertical-align:middle;
+  }
+  .hireSub.on .hsN{ background:rgba(255,255,255,.28); }
 
-/* السلة */
-.cart-table{ font-family:'Cairo',sans-serif !important; font-size:13px !important; }
-.cart-area{
-  /* 🔑 السلة بتاخد كل المساحة الفاضية — الشريط التحتاني بياخد قده بس */
-  flex:1 1 auto !important; min-height:0 !important; overflow-y:auto !important;
-  background:#fff !important; border-radius:16px !important;
-  border:1px solid #e6e9ef !important;
-  box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
-}
-.cart-code{ font-size:13px !important; font-weight:900 !important; color:#374151 !important; letter-spacing:.6px !important; }
-/* 🔑 كود القطعة على السطر المحدّد: الخلفية بتبقى زرقا (أو حمرا للمرتجع)
-   والرمادي كان بيختفي فيها. لازم !important عشان القاعدة اللي فوق
-   عليها !important — من غيره القاعدة دي بتخسر مهما كانت أوطى. */
-.cart-table tbody tr.sel .cart-code,
-.cart-table tbody tr.ret.sel .cart-code,
-.cart-table tbody tr.just-added.sel .cart-code{
-  color:#fff !important; text-shadow:0 1px 2px rgba(0,0,0,.45) !important;
-}
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:15px; padding:15px; margin-bottom:12px; }
+  .panel h3{ font-size:14.5px; margin-bottom:4px; }
+  .panel .hint{ color:var(--sub); font-size:11.5px; margin-bottom:12px; }
+  .card{ background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:11px 13px; margin-bottom:8px; }
+  .row{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .muted{ color:var(--sub); font-size:11.5px; }
+  .amount{ font-weight:900; font-size:15px; }
+  .amount.pos{ color:var(--good); } .amount.neg{ color:var(--bad); }
+  .btn{ border:none; border-radius:10px; padding:10px 14px; font-weight:800; font-size:12.5px; cursor:pointer; }
+  .btn.ok{ background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; }
+  .btn.no{ background:var(--panel); border:1px solid var(--line); color:var(--sub); }
+  .btn.gold{ background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400; }
+  .empty{ color:var(--sub); font-size:12.5px; text-align:center; padding:14px 0; }
+  input.f, select.f{ width:100%; padding:12px; border-radius:11px; border:1px solid var(--line); background:var(--panel2);
+    color:var(--ink); font-family:'Cairo'; font-size:13.5px; margin-bottom:8px; }
+  .pill{ display:inline-block; padding:2px 10px; border-radius:99px; font-size:10.5px; font-weight:800; }
+  .pill.g{ background:var(--gold-dim); color:var(--gold); }
+  .badge{ min-width:19px; height:19px; padding:0 6px; border-radius:99px; background:#e5484d; color:#fff;
+    font-size:11px; font-weight:900; display:inline-flex; align-items:center; justify-content:center; }
 
-/* 📏 تكبير مساحة القطع لتحت: السلة flex:1 فبتاخد أي مساحة العناصر اللي تحتها
-   بتسيبها — ضغط رأسي خفيف (هوامش وحشوات بس، مفيش تغيير مقاسات خط ولا أزرار) */
-#sellerRow{ margin-bottom:2px !important; }
-#sellerRow select, #sellerRow input{ padding:7px 11px !important; }
+  /* ===== شريط التبويبات السفلي ===== */
+  nav{ position:fixed; bottom:0; left:0; right:0; z-index:30; background:rgba(20,22,28,.97);
+    border-top:1px solid var(--line); display:flex; padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    backdrop-filter:blur(10px); }
+  nav button{ flex:1; background:none; border:none; color:var(--sub); font-size:10px; font-weight:700;
+    display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 2px; cursor:pointer; position:relative; }
+  nav button .ic{ font-size:20px; }
+  nav button.on{ color:var(--gold); }
+  nav button .nb{ position:absolute; top:0; right:calc(50% - 20px); }
+  /* 8 تبويبات على شاشة ضيقة — الأيقونة والخط بيصغّروا شوية بدل ما الكلام يتقص */
+  @media (max-width:400px){
+    nav button{ font-size:9px; padding:6px 0; }
+    nav button .ic{ font-size:18px; }
+  }
+
+  /* ===== Office v63 — Owner Control Center ===== */
+  .of-home-hero{
+    background:linear-gradient(135deg,#111827,#1f2937 58%,#0f172a);
+    color:#fff;border:0!important;border-radius:20px!important;padding:16px!important;
+    box-shadow:0 14px 35px rgba(15,23,42,.18)!important;margin-bottom:10px;
+  }
+  .of-home-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .of-home-kicker{font-size:11px;color:#cbd5e1;font-weight:800}
+  .of-home-title{font-size:18px;font-weight:900;margin-top:2px}
+  .of-home-date{font-size:10.5px;color:#94a3b8;white-space:nowrap}
+  .of-home-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}
+  .of-home-stat{background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.09);
+    border-radius:13px;padding:9px;min-width:0;cursor:pointer}
+  .of-home-stat b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .of-home-stat span{display:block;color:#cbd5e1;font-size:9.8px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .of-home-stat.hot{background:rgba(217,119,6,.16);border-color:rgba(245,158,11,.30)}
+  .of-home-actions{display:flex;gap:7px;margin-top:10px;overflow:auto;padding-bottom:1px}
+  .of-home-actions button{white-space:nowrap;background:rgba(255,255,255,.10)!important;color:#fff!important;
+    border:1px solid rgba(255,255,255,.12)!important;padding:8px 11px!important;font-size:11px!important}
+  .of-cash-hero{background:linear-gradient(135deg,#0f172a,#111827);color:#fff;border-radius:20px;
+    padding:18px 16px;box-shadow:0 16px 38px rgba(15,23,42,.16)}
+  .of-cash-caption{font-size:11px;color:#cbd5e1;font-weight:800;text-align:center}
+  .of-cash-big{font-size:36px;font-weight:900;text-align:center;margin:3px 0 3px;letter-spacing:-.5px}
+  .of-cash-sub{text-align:center;color:#94a3b8;font-size:10.8px;line-height:1.7}
+  .of-confidence{display:flex;justify-content:center;margin-top:8px}
+  .of-confidence span{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:5px 9px;
+    font-size:10.5px;font-weight:900;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.10)}
+  .of-cash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+  .of-money-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px}
+  .of-money-card .k{font-size:10.5px;color:var(--sub);font-weight:700}
+  .of-money-card .v{font-size:17px;font-weight:900;margin-top:2px}
+  .of-money-card .s{font-size:9.8px;color:var(--sub);margin-top:2px;line-height:1.5}
+  .of-verdict{background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px;margin-top:9px}
+  .of-verdict-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .of-verdict .num{font-size:21px;font-weight:900}
+  .of-quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:9px}
+  .of-quick .btn{margin:0!important}
+  .of-details-toggle{width:100%;margin-top:9px;background:#fff!important;color:var(--ink)!important;border:1px solid var(--line)!important}
+  #officeMoreSheet{position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.46);display:none;align-items:flex-end;justify-content:center}
+  #officeMoreSheet.on{display:flex}
+  #officeMoreSheet .sheet{width:100%;max-width:560px;background:#fff;border-radius:22px 22px 0 0;padding:13px 13px calc(16px + env(safe-area-inset-bottom));
+    box-shadow:0 -20px 55px rgba(15,23,42,.18)}
+  .of-more-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .of-more-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .of-more-item{background:#f8fafc!important;color:#111827!important;border:1px solid var(--line)!important;
+    min-height:62px;text-align:right!important;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .of-more-item .mi{font-size:20px}
+  .of-more-item .mt{flex:1;min-width:0}
+  .of-more-item .mt b{display:block;font-size:12.5px}
+  .of-more-item .mt small{display:block;color:var(--sub);font-size:9.8px;margin-top:1px}
+  #tabsNav{justify-content:space-around}
+  #tabsNav button{max-width:110px}
+  @media(max-width:620px){
+    .of-home-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .of-cash-big{font-size:32px}
+    .of-home-stat b{font-size:14px}
+  }
 
 
-/* الإجمالي وأزرار الدفع */
-.qbx-bottom{
-  /* ⚠️ العكس (row-reverse) مكرر هنا عن قصد — الإجمالي مكان أزرار الدفع.
-     من غيره القاعدة دي ممكن تلغي العكس حسب ترتيب التحميل. */
-  display:flex !important; flex-direction:row-reverse !important;
-  flex-shrink:0 !important;                  /* مياخدش من مساحة السلة */
-  background:#fff !important; border-top:1px solid #e6e9ef !important;
-  border-radius:18px 18px 0 0 !important;
-  box-shadow:0 -3px 14px rgba(20,25,40,.07) !important;
-  padding:6px 11px 7px !important; gap:8px !important; align-items:flex-end !important;
-  max-height:26vh !important;                /* سقف: مياخدش أكتر من ربع الشاشة */
-}
-.t-row{
-  font-family:'Cairo',sans-serif !important; font-size:13px !important;
-  font-weight:700 !important; gap:8px !important; margin:0 !important;
-  line-height:1.45 !important;
-}
-.t-val{
-  border-radius:9px !important; border:1.5px solid #e6e9ef !important;
-  background:#f7f8fa !important; font-family:'Cairo',sans-serif !important;
-  font-size:19px !important; font-weight:900 !important;
-  padding:2px 10px !important; min-width:104px !important; line-height:1.3 !important;
-}
-/* عدد القطع أصغر — أقل سطر مهم في العمود، وضغطه بينزّل العمود كله يتحاذى
-   مع صندوق المدفوعات اللي جنبه (كان شاقق فوقه) */
-#cartItemCount{ font-size:15px !important; padding:1px 10px !important; }
-/* الإجمالي والباقي أكبر — دول اللي العين بتدور عليهم */
-#cartTotal{ font-size:22px !important; }
-#qbxChange{ font-size:21px !important; }
-.qbx-totals{ gap:2px !important; width:238px !important; }
-/* ⚠️ الخانات دي كانت خلفيتها سودا ونصها أبيض. بعد ما التصميم بقى فاتح،
-   النص الأبيض فضل أبيض على أبيض ومبقاش باين. لكل خانة لون واضح دلوقتي. */
-.t-green{ color:#047857 !important; border-color:#a7f3d0 !important; background:#ecfdf5 !important; }
-.t-red{ color:#B91C1C !important; border-color:#fecaca !important; background:#fef2f2 !important; }
-/* ناقص — برتقالي: تنبيه إن الفاتورة لسه مش مكتملة */
-.t-val.t-dark{
-  color:#B45309 !important; border-color:#fcd34d !important;
-  background:#fffbeb !important;
-}
-/* ولما يبقى صفر (مفيش ناقص) يهدى ويبقى رمادي */
-.t-val.t-dark.t-zero{
-  color:#6b7280 !important; border-color:#e6e9ef !important;
-  background:#f7f8fa !important;
-}
-.qbx-pay-btns{ gap:6px !important; margin-top:6px !important; }
-.qbx-pay-btns button{
-  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:800 !important; padding:7px 12px !important; min-width:66px !important;
-  font-size:11.5px !important; gap:1px !important;
-  box-shadow:0 2px 7px rgba(20,25,40,.13) !important; transition:transform .12s;
-}
-.qbx-pay-btns button .pm-icon{ font-size:17px !important; }
-.qbx-pay{ padding:7px 9px !important; border-radius:11px !important; }
-.qbx-pay-btns button:hover{ transform:translateY(-2px); }
-.qbx-pay-btns button.selected{ box-shadow:0 0 0 3px rgba(37,99,235,.35) !important; }
-.qbx-clear-pay{
-  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:700 !important;
-}
-#confirmPayBtn{
-  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:900 !important; font-size:13.5px !important; padding:9px !important;
-  margin-top:4px !important;
-  box-shadow:0 3px 10px rgba(5,150,105,.26) !important;
-}
+  /* 📹 CCTV v429 — Premium Control Room */
+  .of-cctv-shell{position:relative;background:linear-gradient(180deg,#070b14 0%,#0a1020 100%);border:1px solid #202b3d;border-radius:22px;padding:12px;box-shadow:0 22px 60px rgba(2,6,23,.30);color:#fff;overflow:hidden}
+  .of-cctv-controlroom{min-height:62vh}.of-cctv-lock{overflow:hidden!important}
+  .of-cctv-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}.of-cctv-title{display:flex;align-items:center;gap:9px}.of-cctv-title b{font-size:16px}.of-cctv-title small{display:block;color:#7f8da4;margin-top:2px;font-size:10px}.of-cctv-top-actions{display:flex;align-items:center;gap:7px}
+  .of-cctv-status{font-size:9px;font-weight:900;color:#86efac;background:#082d22;border:1px solid #14532d;border-radius:999px;padding:5px 9px}.of-cctv-room-full{border:1px solid #34445d;background:#111a2a;color:#fff;border-radius:10px;padding:7px 10px;cursor:pointer;font:inherit;font-weight:900}.of-cctv-room-full:hover{background:#18243a}
+  .of-cctv-toolbar{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:6px;background:#070c16;border:1px solid #1c2738;border-radius:13px}.of-cctv-branches{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;flex:1}.of-cctv-branches::-webkit-scrollbar{display:none}
+  .of-cctv-chip{white-space:nowrap;border:1px solid #2b384d;background:#101827;color:#cbd5e1;border-radius:9px;padding:7px 10px;cursor:pointer;font:inherit;font-size:10px}.of-cctv-chip.active{background:#e8edf5;color:#0f172a;border-color:#e8edf5;font-weight:900}
+  .of-cctv-layouts{display:flex;gap:3px;background:#050914;border:1px solid #223047;border-radius:9px;padding:3px}.of-cctv-layout-btn{border:0;background:transparent;color:#8190a8;border-radius:7px;padding:6px 8px;cursor:pointer;font:inherit;font-size:10px;font-weight:900}.of-cctv-layout-btn.active{background:#2563eb;color:#fff;box-shadow:0 4px 14px rgba(37,99,235,.25)}
+  .of-cctv-warning{display:none;margin:8px 0;padding:10px 12px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:11px}
+  .of-cctv-grid{display:grid;gap:7px;margin-top:8px;align-items:stretch}.of-cctv-grid-1{grid-template-columns:minmax(0,1fr)}.of-cctv-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}.of-cctv-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .of-cctv-panel{position:relative;min-width:0;background:#02050b;border:1px solid #243248;border-radius:13px;overflow:hidden;display:flex;flex-direction:column;min-height:190px;box-shadow:0 10px 26px rgba(0,0,0,.24)}.of-cctv-panel:hover{border-color:#3f587a}
+  .of-cctv-panel-head{position:relative;z-index:4;display:flex;align-items:center;gap:5px;padding:5px;background:#0a111e;border-bottom:1px solid #1e2a3c}.of-cctv-source{min-width:0;flex:1;background:#111a29;color:#e5e7eb;border:1px solid #293950;border-radius:8px;padding:6px 7px;font:inherit;font-size:9px;outline:none}.of-cctv-source:focus{border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.16)}
+  .of-cctv-panel-full{width:31px;height:31px;flex:0 0 31px;border:1px solid #304159;background:#121c2c;color:#fff;border-radius:8px;cursor:pointer;font:inherit;font-size:14px}.of-cctv-panel-full:hover{background:#1c2a41}
+  .of-cctv-panel-body{position:relative;flex:1;min-height:0;background:#000}.of-cctv-panel-body iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}.of-cctv-video{aspect-ratio:16/9;min-height:0}.of-cctv-cam-badge{position:absolute;right:8px;bottom:7px;z-index:2;background:rgba(3,7,18,.72);border:1px solid rgba(255,255,255,.10);backdrop-filter:blur(8px);padding:4px 7px;border-radius:7px;font-size:8px;color:#e5e7eb;pointer-events:none}.of-cctv-cam-badge .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#22c55e;margin-left:4px;box-shadow:0 0 0 3px rgba(34,197,94,.10)}
+  .of-cctv-pos-body{background:#050914}.of-cctv-pos{height:100%;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(180deg,#0b1220,#080d17);color:#e5e7eb;padding:8px}.of-cctv-pos .muted{color:#6f7f95}.of-cctv-pos-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.of-cctv-pos-top b{font-size:11px}.of-cctv-pos-top small{display:block;color:#738198;font-size:7.5px;margin-top:2px}.of-cctv-pos-live{font-size:7px;font-weight:900;padding:3px 5px;border-radius:999px}.of-cctv-pos-live.online{color:#86efac;background:#073b2c}.of-cctv-pos-live.offline{color:#fca5a5;background:#451a1a}
+  .of-cctv-pos-scroll{flex:1;min-height:38px;max-height:105px;overflow:auto;margin-top:5px;border-top:1px solid #1e293b}.of-cctv-pos-row{display:flex;justify-content:space-between;gap:6px;padding:5px 1px;border-bottom:1px solid #172235;font-size:8.5px}.of-cctv-pos-row span{min-width:0}.of-cctv-pos-row span b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.of-cctv-pos-row small{display:block;color:#718096;font-size:7px;margin-top:1px}.of-cctv-pos-row em{color:#fca5a5;font-style:normal;font-size:7px}.of-cctv-pos-row strong{white-space:nowrap;font-size:8.5px}.of-cctv-cart-empty{padding:18px 0;text-align:center;color:#64748b;font-size:9px}
+  .of-cctv-pay{margin-top:5px;padding:5px 6px;border-radius:8px;background:#0d1626;border:1px solid #233149}.of-cctv-pay-head{display:flex;justify-content:space-between;align-items:center;font-size:8px}.of-cctv-pay-head span{font-weight:900}.of-cctv-pay-head small{color:#718096}.of-cctv-pay-chips{margin-top:3px;display:flex;flex-wrap:wrap;gap:3px}.of-cctv-pos-chip{display:inline-flex;align-items:center;gap:3px;padding:3px 5px;border-radius:999px;background:#1b2434;border:1px solid #334155;font-size:7px}.of-cctv-pos-total{display:flex;justify-content:space-between;gap:6px;margin-top:5px;padding:6px 7px;border-radius:8px;background:#08251e;border:1px solid #14532d}.of-cctv-pos-total b{font-size:9px}.of-cctv-pos-total strong{font-size:11px}.of-cctv-last{display:grid;grid-template-columns:1fr auto;gap:1px 6px;margin-top:4px;padding:5px 6px;border-radius:7px;background:#0b1730;border:1px solid #1e3a5f;font-size:7px}.of-cctv-last b{font-size:8px}.of-cctv-last small{grid-column:1/-1;color:#718096}.of-cctv-age{font-size:7px;color:#68778e;margin-top:3px}.of-cctv-empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:#64748b}.of-cctv-empty b{display:block;color:#cbd5e1;font-size:11px}.of-cctv-empty small{display:block;margin-top:5px;font-size:8px}
+  .of-cctv-footnote{font-size:8px;color:#68778e;margin-top:6px;text-align:center}
+  /* v430: real cinema mode. The CSS fallback is always applied even when the browser Fullscreen API succeeds. */
+  .of-cctv-controlroom.of-cctv-room-focus{position:fixed!important;inset:0!important;z-index:10050!important;width:100vw!important;height:100dvh!important;max-width:none!important;margin:0!important;border:0!important;border-radius:0!important;padding:8px!important;background:#03060b!important;display:flex!important;flex-direction:column!important;overflow:hidden!important}
+  .of-cctv-room-focus .of-cctv-top{margin:0 0 5px!important;min-height:34px}.of-cctv-room-focus .of-cctv-title small{display:none}.of-cctv-room-focus .of-cctv-title b{font-size:13px}.of-cctv-room-focus .of-cctv-toolbar{padding:4px;border-radius:10px}.of-cctv-room-focus .of-cctv-chip{padding:5px 8px;font-size:8px}.of-cctv-room-focus .of-cctv-layout-btn{padding:5px 7px;font-size:9px}.of-cctv-room-focus .of-cctv-footnote{display:none}.of-cctv-room-focus .of-cctv-grid{flex:1;min-height:0;margin-top:5px;grid-auto-rows:minmax(0,1fr)}.of-cctv-room-focus .of-cctv-panel{min-height:0;height:100%}.of-cctv-room-focus .of-cctv-video{aspect-ratio:auto}.of-cctv-room-focus .of-cctv-panel-head{padding:4px}.of-cctv-room-focus .of-cctv-source{padding:5px 6px;font-size:8px}.of-cctv-room-focus .of-cctv-panel-full{width:27px;height:27px;flex-basis:27px}
+  .of-cctv-panel.of-cctv-panel-focus{position:fixed!important;inset:0!important;z-index:10060!important;width:100vw!important;height:100dvh!important;max-width:none!important;margin:0!important;border:0!important;border-radius:0!important;background:#000!important;min-height:0!important}.of-cctv-panel-focus .of-cctv-panel-head{position:absolute;top:8px;left:8px;right:8px;z-index:8;background:rgba(7,12,22,.72);border:1px solid rgba(255,255,255,.10);border-radius:11px;backdrop-filter:blur(10px);opacity:.92}.of-cctv-panel-focus .of-cctv-panel-body{position:absolute;inset:0;height:100%!important}.of-cctv-panel-focus .of-cctv-video{aspect-ratio:auto}.of-cctv-panel-focus .of-cctv-cam-badge{right:12px;bottom:12px;font-size:10px}.of-cctv-panel-focus .of-cctv-pos{padding:58px 18px 18px}.of-cctv-panel-focus .of-cctv-pos-scroll{max-height:none}.of-cctv-panel-focus .of-cctv-pos-row{font-size:13px}.of-cctv-panel-focus .of-cctv-pos-row small,.of-cctv-panel-focus .of-cctv-pos-row em{font-size:10px}.of-cctv-panel-focus .of-cctv-pos-row strong{font-size:13px}.of-cctv-panel-focus .of-cctv-pos-top b{font-size:17px}.of-cctv-panel-focus .of-cctv-pos-top small{font-size:11px}.of-cctv-panel-focus .of-cctv-pay-head{font-size:12px}.of-cctv-panel-focus .of-cctv-pos-chip{font-size:10px}.of-cctv-panel-focus .of-cctv-pos-total b{font-size:13px}.of-cctv-panel-focus .of-cctv-pos-total strong{font-size:18px}
+  @media(max-width:1050px){.of-cctv-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}.of-cctv-panel{min-height:180px}}
+  @media(max-width:720px){.of-cctv-shell{margin:0 -3px;padding:7px;border-radius:16px}.of-cctv-title b{font-size:13px}.of-cctv-title small{font-size:8px}.of-cctv-top{margin-bottom:6px}.of-cctv-room-full{padding:6px 8px;font-size:9px}.of-cctv-toolbar{padding:4px}.of-cctv-chip{padding:6px 8px;font-size:9px}.of-cctv-layout-btn{padding:5px 7px;font-size:9px}.of-cctv-grid{gap:5px}.of-cctv-grid-2,.of-cctv-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}.of-cctv-panel{min-height:150px;border-radius:10px}.of-cctv-panel-head{padding:3px;gap:3px}.of-cctv-source{font-size:7.8px;padding:5px 4px}.of-cctv-panel-full{width:27px;height:27px;flex-basis:27px;padding:0}.of-cctv-grid-1 .of-cctv-panel{min-height:360px}.of-cctv-video{aspect-ratio:16/10}.of-cctv-pos{padding:5px}.of-cctv-pos-scroll{max-height:70px}.of-cctv-pay{padding:4px 5px}.of-cctv-last{display:none}.of-cctv-footnote{display:none}}
+  @media(orientation:landscape){.of-cctv-room-focus .of-cctv-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-template-rows:minmax(0,1fr)!important}.of-cctv-room-focus .of-cctv-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:minmax(0,1fr)!important}.of-cctv-room-focus .of-cctv-top{position:absolute;top:7px;left:7px;z-index:30;margin:0!important}.of-cctv-room-focus .of-cctv-title,.of-cctv-room-focus .of-cctv-status{display:none}.of-cctv-room-focus .of-cctv-toolbar{position:absolute;top:7px;left:50%;transform:translateX(-50%);z-index:20;width:auto;max-width:74vw;background:rgba(5,9,20,.76);backdrop-filter:blur(10px)}.of-cctv-room-focus .of-cctv-grid{margin-top:0!important}.of-cctv-room-focus .of-cctv-panel-head{position:absolute;left:5px;right:5px;top:5px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(5,9,20,.70);backdrop-filter:blur(8px)}.of-cctv-room-focus .of-cctv-panel-body{position:absolute;inset:0}.of-cctv-room-focus .of-cctv-pos{padding-top:40px}}
 
-/* 🧩 العناصر المشتركة في الشاشات الداخلية */
-.mgmt-light .rep-card{
-  background:#fff !important; border:1px solid var(--ui-line) !important;
-  border-radius:16px !important; box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
-}
-.mgmt-light .empty-cart{
-  color:var(--ui-mut) !important; text-align:center; padding:34px 16px !important;
-  font-size:14px !important; background:var(--ui-soft) !important;
-  border:1.5px dashed var(--ui-line) !important; border-radius:14px !important;
-}
-.mgmt-light .sugg-row{
-  border-bottom:1px solid var(--ui-line) !important; padding:11px 14px !important;
-  font-size:14px !important; transition:background .12s;
-}
-.mgmt-light .sugg-row:hover{ background:#eff6ff !important; }
-.mgmt-light .qty-cell{
-  display:flex; align-items:center; gap:7px;
-}
-.mgmt-light .qty-cell button{
-  width:36px !important; height:38px !important; border-radius:11px !important;
-  border:1.5px solid var(--ui-line) !important; background:#fff !important;
-  color:var(--ui-ink) !important; font-size:19px !important; font-weight:800 !important;
-  cursor:pointer; transition:all .12s;
-}
-.mgmt-light .qty-cell button:hover{ background:var(--ui-soft) !important; border-color:#c7cdd8 !important; }
-.mgmt-light .cart-del{
-  border:none !important; background:transparent !important; color:var(--ui-red) !important;
-  font-size:18px !important; cursor:pointer; padding:6px !important; border-radius:9px;
-}
-.mgmt-light .cart-del:hover{ background:#fef2f2 !important; }
 
-/* النوافذ */
-.modal-sheet{
-  border-radius:20px !important; box-shadow:0 20px 60px rgba(0,0,0,.3) !important;
-  font-family:'Cairo',sans-serif !important;
-}
-.mgmt-light .modal-sheet{ background:#fff !important; border:none !important; }
-
-/* الشرائح والتبويبات */
-.mgmt-light .tab, .mgmt-light .chip{
-  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:700 !important; transition:all .12s;
-}
-.mgmt-light .tab.active{
-  background:var(--ui-dark) !important; color:#fff !important; border-color:var(--ui-dark) !important;
-}
-
-/* رسايل الخطأ */
-.mgmt-light .field-err{
-  color:var(--ui-red) !important; font-size:12.5px !important; font-weight:700 !important;
-  margin-top:5px !important;
-}
-
-/* نماذج الإضافة */
-.mgmt-light .add-form{
-  display:flex; gap:9px; flex-wrap:wrap; align-items:center;
-  background:var(--ui-soft) !important; border:1px solid var(--ui-line) !important;
-  border-radius:14px !important; padding:14px !important;
-}
-
-/* الأزرار الأساسية جوه الشاشات */
-.mgmt-light .panel button:not(.logout-btn):not(.cart-del):not(.qty-cell button){
-  border-radius:11px !important; font-weight:700 !important; padding:10px 16px !important;
-  cursor:pointer;
-}
-
-/* 🏠 القايمة الرئيسية — أقسام وأزرار موحّدة */
-.qb-section-head{
-  font-size:14px !important; font-weight:900 !important; color:#374151 !important;
-  margin:18px 0 10px !important; display:flex; align-items:center; gap:8px;
-}
-.qb-section-head::before{
-  content:''; width:4px; height:17px; border-radius:99px;
-  background:linear-gradient(180deg,#3B82F6,#1D4ED8); display:inline-block;
-}
-.qb-section-body{
-  background:#fff !important; border:1px solid var(--ui-line) !important;
-  border-radius:18px !important; padding:16px 14px !important;
-  box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
-}
-
-/* الأزرار الثانوية والنوافذ */
-.mgmt-light .secondary, .secondary{
-  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:700 !important;
-}
-.modal-btns button, .btn-cancel{
-  border-radius:12px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:800 !important; padding:13px !important;
-}
-.rep-range-btn, .rep-type-btn{
-  border-radius:11px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:700 !important; padding:9px 15px !important; transition:all .12s;
-}
-.rep-range-btn.active, .rep-type-btn.active{
-  background:var(--ui-dark) !important; color:#fff !important; border-color:var(--ui-dark) !important;
-}
-
-/* لوحة الأرقام (الدخول بالـ PIN) */
-.pin-pad button{
-  border-radius:15px !important; font-family:'Cairo',sans-serif !important;
-  font-weight:800 !important; font-size:21px !important; padding:16px !important;
-  transition:transform .1s;
-}
-.pin-pad button:active{ transform:scale(.95); }
-
-/* 🔵 أيقونات القايمة الرئيسية — دوائر ملوّنة بدل الإيموجي السادة */
-.qb-nav-item{
-  transition:transform .15s, background .15s;
-}
-.qb-nav-item:hover{ transform:translateY(-2px); }
-.qb-icon{
-  width:56px !important; height:56px !important; border-radius:18px !important;
-  display:flex !important; align-items:center; justify-content:center;
-  font-size:27px !important; margin:0 auto;
-  box-shadow:0 4px 12px rgba(20,25,40,.14);
-}
-/* لون لكل قسم — العين بتوصل للمكان من غير ما تقرا */
-.qb-nav-item[onclick*="Sale"]      .qb-icon,
-.qb-nav-item[onclick*="resumeOr"]  .qb-icon{ background:linear-gradient(135deg,#10B981,#047857); }
-.qb-nav-item[onclick*="Inventory"] .qb-icon{ background:linear-gradient(135deg,#F59E0B,#B45309); }
-.qb-nav-item[onclick*="Receive"]   .qb-icon{ background:linear-gradient(135deg,#8B5CF6,#6D28D9); }
-.qb-nav-item[onclick*="Transfer"]  .qb-icon{ background:linear-gradient(135deg,#06B6D4,#0E7490); }
-.qb-nav-item[onclick*="Report"]    .qb-icon{ background:linear-gradient(135deg,#3B82F6,#1D4ED8); }
-.qb-nav-item[onclick*="History"]   .qb-icon{ background:linear-gradient(135deg,#6366F1,#4338CA); }
-.qb-nav-item[onclick*="Customer"]  .qb-icon{ background:linear-gradient(135deg,#EC4899,#BE185D); }
-.qb-nav-item[onclick*="Loyalty"]   .qb-icon{ background:linear-gradient(135deg,#F43F5E,#BE123C); }
-.qb-nav-item[onclick*="Discount"]  .qb-icon{ background:linear-gradient(135deg,#F97316,#C2410C); }
-.qb-nav-item[onclick*="EndOfDay"]  .qb-icon,
-.qb-nav-item[onclick*="Day"]       .qb-icon{ background:linear-gradient(135deg,#64748B,#334155); }
-.qb-nav-item[onclick*="Staff"]     .qb-icon,
-.qb-nav-item[onclick*="Roles"]     .qb-icon{ background:linear-gradient(135deg,#14B8A6,#0F766E); }
-.qb-nav-item[onclick*="Import"]    .qb-icon{ background:linear-gradient(135deg,#A855F7,#7E22CE); }
-.qb-nav-item[onclick*="Receipt"]   .qb-icon{ background:linear-gradient(135deg,#0EA5E9,#0369A1); }
-/* 📱 مجموعة التطبيق — لون خاص بيها.
-   ⚠️ لازم بالـid مش بـ[onclick*="Customer"]: القاعدة دي بتلقّط
-      `goToCustomerRequests` كمان فكانت بتديها لون العملاء الوردي،
-      والمجموعة الجديدة كانت هتبان امتداد للي فوقها مش مجموعة لوحدها. */
-#navCustRequests .qb-icon{ background:linear-gradient(135deg,#7C3AED,#5B21B6); }
-.qb-nav-item .qb-label{
-  font-size:12px !important; font-weight:700 !important; margin-top:7px !important;
-}
-
-/* 📜 شاشات الإدارة كانت height:100vh من غير overflow — المحتوى اللي أطول
-   من الشاشة كان بيتقص ومفيش تمرير خالص (باين في شاشة استلام البضاعة). */
-.screen.mgmt-light{ overflow-y:auto; -webkit-overflow-scrolling:touch; }
-.screen.mgmt-light > *:last-child{ padding-bottom:24px; }
-/* 📜 شاشة الدخول (كروت الموظفين بتكبر مع كل موظفة) والقايمة الرئيسية
-   (بتتقص على الشاشات الصغيرة) — نفس المشكلة بالظبط.
-   ⚠️ شاشة البيع مستثناة عن قصد: عندها تمرير داخلي للسلة،
-   والتمرير على مستوى الشاشة بيبوّظ تخطيطها. */
-.screen#loginScreen, .screen#dashboardScreen, .screen#branchSetupScreen{
-  overflow-y:auto; -webkit-overflow-scrolling:touch;
-}
-/* 🏷️ شارة النسخة: في الشاشة الرئيسية بس — كانت في كل شاشة وبتغطي الساعة */
-.badge-test{
-  position:fixed;top:8px;left:8px;background:var(--warn);color:#1a1200;
-  font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;z-index:999;
-  display:none;
-}
-body.on-dashboard .badge-test{ display:block; }
-.online-badge{
-  position:fixed; top:8px; right:8px; font-size:11px; font-weight:800;
-  padding:5px 12px; border-radius:20px; z-index:999;
-}
-.online-badge.online{background:#1f9440; color:#fff;}
-.online-badge.offline{background:#d9534f; color:#fff; animation:offlinePulse 1.5s ease-in-out infinite;}
-@keyframes offlinePulse{0%,100%{opacity:1;} 50%{opacity:.6;}}
-
-/* ---------- Login ---------- */
-#loginScreen{align-items:center;justify-content:center;}
-.pin-box{width:280px;text-align:center;}
-.pin-box h2{margin-bottom:18px;font-size:18px;}
-.pin-display{
-  font-size:28px;letter-spacing:10px;background:var(--panel2);border:1px solid var(--border);
-  border-radius:12px;padding:14px;margin-bottom:16px;min-height:24px;
-}
-.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
-.pin-pad button{
-  padding:18px 0;font-size:20px;border-radius:12px;border:1px solid var(--border);
-  background:var(--panel2);color:var(--text);cursor:pointer;
-}
-.pin-pad button:active{background:var(--panel3);}
-.pin-pad .clear{color:var(--minus);}
-.pin-pad .ok{color:var(--plus);}
-.login-err{color:var(--minus);font-size:13px;margin-top:10px;min-height:16px;}
-.emp-pick-tile{
-  background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:16px 8px;
-  display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer;
-}
-.emp-pick-tile:active{background:var(--panel3);}
-.emp-pick-tile .av{width:44px; height:44px; border-radius:50%; background:var(--panel3); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--accent);}
-.emp-pick-tile .n{font-size:12px; font-weight:700; text-align:center;}
-
-/* ===== v341 Premium POS dashboard ===== */
-@media (min-width:900px){
- body.on-dashboard{overflow:hidden}
- body.on-dashboard #dashboardScreen{overflow:hidden!important}
- body.on-dashboard .qb-layout{height:100dvh;min-height:0;overflow:hidden;background:#f7f7f5}
- body.on-dashboard .qb-sidebar{width:176px;padding:12px 10px;gap:6px;overflow-y:auto;scrollbar-width:thin;background:#111318;border-left:1px solid #252932}
- body.on-dashboard .qb-sidebar button{padding:10px 8px;min-height:40px;border-radius:11px;font-size:12px}
- body.on-dashboard .qb-sidebar button.secondary{background:#191c22;border-color:#2a2f39;color:#f5f7fa}
- body.on-dashboard .qb-main{min-width:0;min-height:0;overflow:hidden;padding:14px 18px 12px;background:#f7f7f5}
- body.on-dashboard .qb-global-search{margin:0 0 12px!important;flex:0 0 auto}
- body.on-dashboard #globalSearchInput{height:58px;box-sizing:border-box;padding:0 22px!important;border:1px solid #d7d9dd!important;border-radius:16px!important;background:#fff!important;font-size:16px!important;font-weight:700;box-shadow:0 6px 22px rgba(17,24,39,.06);outline:none;transition:.16s ease}
- body.on-dashboard #globalSearchInput:focus{border-color:#111827!important;box-shadow:0 0 0 3px rgba(17,24,39,.08),0 8px 24px rgba(17,24,39,.08)}
- body.on-dashboard #globalSearchResults{top:64px!important;border:1px solid #e2e4e8!important;border-radius:16px!important;box-shadow:0 18px 45px rgba(15,23,42,.16)}
- body.on-dashboard .qb-section-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:10px;align-content:stretch;overflow:hidden}
- body.on-dashboard .qb-section{min-width:0;min-height:0;border:1px solid #e1e3e6;border-radius:16px;box-shadow:0 3px 14px rgba(15,23,42,.045);display:flex;flex-direction:column;overflow:hidden}
- body.on-dashboard .qb-section-head{flex:0 0 auto;margin:0!important;padding:8px 11px!important;font-size:12.5px!important;background:#f4f5f6!important;color:#20242b!important;border-bottom:1px solid #e5e7eb!important}
- body.on-dashboard .qb-section.gold .qb-section-head{background:#fbf7e8!important}
- body.on-dashboard .qb-section-body{flex:1;min-height:0;display:grid!important;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));align-items:center;align-content:center;gap:5px!important;padding:8px!important;box-shadow:none!important;border:0!important;border-radius:0!important}
- body.on-dashboard .qb-nav-item{min-width:0;padding:5px 3px;gap:3px;border-radius:12px}
- body.on-dashboard .qb-nav-item:hover{background:#f7f7f8;transform:translateY(-1px)}
- body.on-dashboard .qb-icon{width:42px!important;height:42px!important;border-radius:13px!important;font-size:20px!important;box-shadow:0 3px 9px rgba(20,25,40,.12)}
- body.on-dashboard .qb-nav-item .qb-label{font-size:10.5px!important;line-height:1.25;margin-top:3px!important}
-}
-@media(max-width:899px){#dashboardScreen{overflow-y:auto!important}.qb-layout{height:auto;min-height:100vh}.qb-main{overflow:visible}#globalSearchInput{min-height:54px;font-size:15px!important}}
-
-/* ---------- Dashboard ---------- */
-#dashboardScreen{padding:0;}
-.dash-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:8px;}
-.dash-header h1{font-size:18px;margin:0;}
-.dash-header .who{font-size:13px;color:var(--muted);}
-
-/* ---------- QuickBooks-style layout (sidebar + Navigator) ---------- */
-.qb-layout{display:flex; height:100vh;}
-.qb-sidebar{
-  width:190px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border);
-  display:flex; flex-direction:column; gap:10px; padding:16px 12px; overflow-y:auto;
-}
-.qb-sidebar button{
-  padding:14px 10px; border-radius:10px; border:1px solid var(--accent); background:var(--accent);
-  color:#fff; font-size:13px; font-weight:700; cursor:pointer; text-align:center;
-}
-.qb-sidebar button.secondary{background:var(--panel2); border-color:var(--border); color:var(--text);}
-.qb-sidebar button:active{opacity:.8;}
-.qb-main{flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; background:#f3f1e7;}
-.qb-section-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:14px; align-content:start;}
-.qb-section{border-radius:10px; overflow:hidden; border:1px solid #b9c9a0; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.08);}
-.qb-section.gold{border-color:#d8c477;}
-.qb-section-head{
-  background:linear-gradient(#eef3de,#dde8c4); color:#3c4a26; font-weight:800; font-size:13px;
-  padding:8px 12px; border-bottom:1px solid #b9c9a0;
-}
-.qb-section.gold .qb-section-head{background:linear-gradient(#fbf3d6,#f3e3a6); color:#5c4a10; border-bottom-color:#d8c477;}
-.qb-section-body{display:flex; flex-wrap:wrap; gap:4px; padding:10px; justify-content:space-around;}
-.qb-nav-item{
-  display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer;
-  padding:8px 6px; border-radius:10px; min-width:64px; text-align:center; color:#2a2a2a;
-}
-.qb-nav-item:active{background:#f0efe6;}
-.qb-nav-item .qb-icon{font-size:32px; line-height:1;}
-.qb-nav-item .qb-label{font-size:10.5px; font-weight:700;}
-.qb-nav-item.disabled{opacity:.3; pointer-events:none;}
-.rep-range-btn{
-  padding:8px 14px; border-radius:20px; border:1px solid var(--border); background:var(--panel2);
-  color:var(--text); font-size:12px; font-weight:700; cursor:pointer;
-}
-.rep-range-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
-.bs-range-btn{padding:8px 14px; border-radius:20px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:12px; font-weight:700; cursor:pointer;}
-.bs-range-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
-.rep-type-btn{padding:11px 16px; border-radius:11px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-weight:800; font-size:14px; cursor:pointer;}
-.rep-type-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
-.rep-print-btn{padding:10px 16px; border-radius:10px; border:none; background:#334155; color:#fff; font-weight:800; font-size:13px; cursor:pointer;}
-.rep-tbl{width:100%; border-collapse:collapse;}
-.rep-tbl th{text-align:right; font-size:12px; color:var(--muted); padding:8px 6px; border-bottom:2px solid var(--border); font-weight:800;}
-.rep-tbl td{text-align:right; font-size:13px; padding:9px 6px; border-bottom:1px solid var(--border); color:var(--text);}
-.rep-tbl td.num, .rep-tbl th.num{text-align:left; font-variant-numeric:tabular-nums;}
-.rep-tbl tr.grand td{font-weight:900; border-top:2px solid var(--border); border-bottom:none; font-size:14px;}
-.rep-card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:12px;}
-.rep-receipt{background:#fff; border:1px dashed #999; border-radius:10px; padding:20px 22px; max-width:360px; margin:0 auto; color:#111; font-family:'Courier New',monospace;}
-.rep-receipt .rc-h{text-align:center; font-weight:900; font-size:16px;}
-.rep-receipt .rc-sub{text-align:center; font-size:12px; color:#555; margin-bottom:12px;}
-.rep-receipt .rc-line{display:flex; justify-content:space-between; padding:4px 0; font-size:13.5px;}
-.rep-receipt .rc-sep{border-top:1px dashed #999; margin:8px 0;}
-.rep-receipt .rc-big{font-weight:900; font-size:15px;}
-.logout-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 12px;font-size:12px;}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1;}
-.tile{
-  background:var(--panel);border:1px solid var(--border);border-radius:16px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-  cursor:pointer;padding:20px;min-height:120px;
-}
-.tile:active{background:var(--panel2);}
-.tile .icon{font-size:32px;}
-.tile .label{font-size:14px;font-weight:700;}
-.tile.disabled{opacity:.35;}
-.tile .sub{font-size:11px;color:var(--muted);}
-
-/* ---------- Make Sale ---------- */
-#saleScreen{padding:0;}
-/* ---------- QuickBooks-POS-exact light theme for the sale screen ---------- */
-.qbx-wrap{
-  display:flex; flex-direction:column; height:100vh;
-  background:#e7e4dd; color:#1a1a1a;
-}
-.qbx-top{
-  display:flex; justify-content:space-between; align-items:flex-start;
-  padding:10px 14px 4px;
-}
-.qbx-title{font-size:16px; font-weight:800;}
-.qbx-meta{font-size:12px; color:#333; text-align:left; line-height:1.5;}
-.qbx-body{flex:1; display:flex; gap:8px; padding:0 10px; overflow:hidden;}
-.qbx-actions{
-  width:170px; flex-shrink:0; display:grid; grid-template-columns:1fr 1fr;
-  gap:8px; align-content:start; padding-top:4px;
-}
-.qbx-actions button{
-  padding:16px 6px; border-radius:8px; border:1px solid #222; background:#3d3d3f;
-  color:#fff; font-size:13px; font-weight:700; cursor:pointer; text-align:center;
-}
-.qbx-actions button:active{background:#555;}
-/* زرّي الهولد الملوّنين */
-.hold-slot{line-height:1.35 !important;}
-.hold-slot.hs0{background:linear-gradient(#e8912e,#c96f14) !important; border-color:#a85c0d !important;}
-.hold-slot.hs1{background:linear-gradient(#2fa4a0,#1c7f7b) !important; border-color:#155f5c !important;}
-.hold-slot.filled{outline:3px solid #ffd23f; outline-offset:1px;}
-.hold-slot.hs0.filled{background:linear-gradient(#f5a742,#d97b16) !important;}
-.hold-slot.hs1.filled{background:linear-gradient(#3ec9c4,#20938f) !important;}
-.hold-slot b{font-size:14px;}
-.qbx-center{flex:1; display:flex; flex-direction:column; overflow:hidden;}
-.qbx-itemops{
-  width:110px; flex-shrink:0; display:flex; flex-direction:column; gap:7px; padding-top:44px;
-}
-.qbx-itemops button{
-  padding:12px 6px; border-radius:8px; border:1px solid #222; background:#3d3d3f;
-  color:#fff; font-size:13px; font-weight:800; cursor:pointer;
-}
-.qbx-itemops button.qbx-return-all{background:linear-gradient(#d9534f,#a5271f); margin-top:7px;}
-.qbx-bottom{
-  /* 🔄 معكوس بطلب المالك: الإجمالي مكان أزرار الدفع والعكس */
-  display:flex; flex-direction:row-reverse;
-  gap:10px; padding:8px 10px 10px; align-items:stretch;
-  border-top:1px solid #b8b5ad; background:#e0ddd5;
-}
-.qbx-pay{flex:1; background:#f4f3ef; border:1px solid #b8b5ad; border-radius:6px; padding:8px 10px;}
-.qbx-pay-title{font-size:12px; font-weight:800; margin-bottom:4px; border-bottom:1px solid #ccc; padding-bottom:3px;}
-#qbxPayList{min-height:40px; font-size:12px;}
-#qbxPayList .pl-row{display:flex; justify-content:space-between; padding:2px 0; border-bottom:1px dotted #ddd;}
-.qbx-pay-btns{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;}
-.qbx-pay-btns button{
-  display:flex; flex-direction:column; align-items:center; gap:2px;
-  padding:12px 16px; border-radius:12px; border:none; min-width:82px;
-  color:#fff; font-size:12px; font-weight:800; cursor:pointer;
-  box-shadow:0 2px 5px rgba(0,0,0,.25);
-}
-.qbx-pay-btns button .pm-icon{font-size:26px; line-height:1;}
-.qbx-pay-btns button#pmCash{background:linear-gradient(#3fbf60,#1f9440);}
-.qbx-pay-btns button#pmVisa{background:linear-gradient(#3b82f6,#1d4fd6);}
-/* 💳💳 الكارت التاني: نفس لون الكارت الأول (مش لون شبكة معينة — العميل ممكن
-   يدفع بفيزتين) + شارة رقم عشان الكاشير يفرّق بلمحة */
-.qbx-pay-btns button#pmVisa2{background:linear-gradient(#3b82f6,#1d4fd6); position:relative;}
-.qbx-pay-btns button#pmVisa2::after{
-  content:'2'; position:absolute; top:4px; left:6px; min-width:16px; height:16px;
-  border-radius:99px; background:#0b2a63; color:#fff; font-size:10px; font-weight:900;
-  display:flex; align-items:center; justify-content:center; padding:0 4px;
-}
-/* مقفول: الشرط لسه ما اتحققش (الكارت الأول لسه ما اتأكدش / الماكينة بتستنى) */
-.qbx-pay-btns button.pm-locked{filter:grayscale(.85) brightness(.75); cursor:not-allowed;}
-/* اتسحب فعلًا: علامة صح خضرا ثابتة — مفيش تعديل بعدها إلا بمرتجع من Paymob */
-.qbx-pay-btns button.pm-done{background:linear-gradient(#16a34a,#15803d) !important; filter:none;}
-.qbx-pay-btns button.pm-done::before{
-  content:'✓'; position:absolute; top:3px; right:6px; width:17px; height:17px;
-  border-radius:99px; background:#fff; color:#15803d; font-size:12px; font-weight:900;
-  display:flex; align-items:center; justify-content:center;
-}
-.qbx-pay-btns button#pmVisa{position:relative;}
-.qbx-pay-btns button#pmInsta{background:linear-gradient(#a855f7,#7c22d6);}
-.qbx-pay-btns button#pmSalary{background:linear-gradient(#f0a030,#c97b12);}
-.qbx-pay-btns button.selected{outline:3px solid #ffd23f; outline-offset:1px;}
-.qbx-pay-btns button.qbx-clear-pay{background:linear-gradient(#d9534f,#b52b27); min-width:auto; flex-direction:row; padding:10px 16px;}
-.qbx-totals{
-  width:240px; flex-shrink:0; display:flex; flex-direction:column; gap:3px; justify-content:flex-end;
-}
-.t-row{display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:800;}
-.t-val{min-width:115px; text-align:center; padding:4px 8px; border-radius:5px; background:#f4f3ef; border:1px solid #b8b5ad; font-family:monospace; font-size:17px; font-weight:900;}
-.t-val.t-green{background:#0d5c19; color:#7dff8f; border-color:#0a4413;}
-.t-val.t-dark{background:#1c1c1e; color:#fff; border-color:#000;}
-.t-val.t-red{background:#1c1c1e; color:#ff5a5a; border-color:#000;}
-/* أزرار الكمية والمسح جوه سطر السلة */
-.qty-cell{display:flex; align-items:center; justify-content:center; gap:7px;}
-.qty-cell button{width:28px; height:28px; border-radius:6px; border:1px solid #b8b5ad; background:#fff; font-weight:900; font-size:17px; line-height:1; cursor:pointer; color:#333;}
-.qty-cell button:active{background:#eee;}
-.qty-cell .qn{min-width:22px; text-align:center; font-weight:800;}
-.qty-cell .qn-input{width:46px; text-align:center; font-weight:800; font-size:15px; border:1px solid #b8b5ad; border-radius:6px; padding:5px 2px; background:#fff; color:#111;}
-.qty-cell .qn-input::-webkit-outer-spin-button,.qty-cell .qn-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
-.cart-del{border:none; background:none; cursor:pointer; font-size:17px; padding:2px 6px;}
-.cart-code{font-size:14px; font-weight:700; color:#4a5568; direction:ltr; text-align:right; font-family:'Courier New',monospace; letter-spacing:.5px; margin-top:2px;}
-.qbx-save{
-  margin-top:4px; padding:11px 0; border-radius:6px; border:1px solid #2c7a35;
-  background:linear-gradient(#4db658,#348c3e); color:#fff; font-size:15px; font-weight:800; cursor:pointer;
-}
-.qbx-save:disabled{opacity:.45; cursor:not-allowed;}
-
-.sale-top{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
-.qbx-quickbtn{
-  flex-shrink:0; width:46px; height:46px; border-radius:8px; border:1px solid #222;
-  background:#3d3d3f; color:#fff; font-size:20px; cursor:pointer;
-}
-.qbx-quickbtn-del{background:linear-gradient(#d9534f,#a5271f);}
-.back-btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:14px;flex-shrink:0;}
-.search-wrap{position:relative;flex:1;}
-#searchBar{
-  width:100%;padding:10px 12px;border-radius:4px;border:1px solid #a8a49b;
-  background:#fdf6d8;color:#1a1a1a;font-size:14px;
-}
-#suggestBox{
-  position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;
-  border:1px solid #a8a49b;border-radius:6px;max-height:240px;overflow-y:auto;z-index:20;
-  color:#1a1a1a;
-}
-.sugg-row{padding:11px;border-bottom:1px solid #e4e1d9;display:flex;justify-content:space-between;cursor:pointer;}
-.sugg-row:last-child{border-bottom:none;}
-.sugg-row:active{background:#eef0f3;}
-
-.customer-row{display:flex;gap:8px;margin:8px 0 4px;}
-/* ============================================================
-   🎯 خانة العميل — **خط واحد** لا غير
-   المربع الملوّن فيه بيانات العميل بس · وأيقونة «يكتب رقمه» وزرار
-   الاستبدال برّه المربع على نفس السطر. خانة الرقم طويلة وهي فاضية،
-   وبتقصر لما العميل يبان عشان تفسح للاسم والنقط.
-   الأيقونة آخر السطر دايمًا فمكانها ثابت مهما ظهر أو اختفى.
-   ============================================================ */
-.cust-line{ display:flex; align-items:center; gap:7px; margin:5px 0 3px; min-width:0; }
-
-#custBox{
-  flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:7px;
-  border:1.5px solid #e1e4ea !important; border-radius:11px !important;
-  background:#fbfcfd !important; padding:4px 6px 4px 4px !important; margin:0 !important;
-  opacity:1 !important; transition:border-color .18s, background .18s;
-}
-#custBox.st-found{ border-color:#5cb377 !important; background:#f2fbf5 !important; }
-#custBox.st-new  { border-color:#e0a33f !important; background:#fffaf0 !important; }
-#custBox.st-bad  { border-color:#e07b7b !important; background:#fff5f5 !important; }
-
-/* 📱 طويلة وهي فاضية · بتقصر أول ما العميل يبان */
-#customerPhone{
-  flex:1 1 auto !important; min-width:110px !important;
-  padding:7px 11px !important; border-radius:8px !important;
-  border:1.5px solid #d8dce4 !important; background:#fff !important;
-  font-size:14.5px !important; font-weight:800 !important; letter-spacing:.4px;
-  direction:ltr; text-align:right; transition:flex-basis .18s;
-}
-#customerPhone:focus{ outline:none; border-color:#5b9bd5 !important; }
-#custBox.st-found #customerPhone,
-#custBox.st-new   #customerPhone,
-#custBox.st-bad   #customerPhone{ flex:0 0 132px !important; }
-#custBox.st-found #customerPhone{ border-color:#5cb377 !important; color:#14663a !important; }
-#custBox.st-new   #customerPhone{ border-color:#e0a33f !important; color:#8a5200 !important; }
-#custBox.st-bad   #customerPhone{ border-color:#e07b7b !important; color:#a33 !important; }
-
-/* 👤 الاسم — بياخد الباقي وبيتقص بنقط لو طويل */
-#customerInfo{
-  flex:1 1 auto; min-width:0; font-size:13px !important; font-weight:800;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  padding:0 !important; max-height:none !important; color:#6b7280 !important;
-}
-#custBox.st-found #customerInfo{ color:#14663a !important; }
-#custBox.st-new   #customerInfo{ color:#8a5200 !important; }
-#custBox.st-bad   #customerInfo{ color:#a33 !important; }
-
-/* 💳 النقط — شارة صغيرة، بتبان بس لما يكون فيه عميل */
-#custPts{
-  flex:0 0 auto; display:none; font-size:12.5px; font-weight:900;
-  background:#fff; border:1.5px solid #7fd0a0; color:#14663a;
-  border-radius:999px; padding:4px 10px; white-space:nowrap;
-}
-#custBox.st-found #custPts{ display:inline-block; }
-
-#customerName{
-  flex:1 1 auto; min-width:0; display:none;
-  padding:7px 10px !important; border-radius:8px !important;
-  border:1.5px solid #e0a33f !important; background:#fff !important;
-  font-size:13.5px !important; font-weight:700 !important;
-}
-#customerName:focus{ outline:none; box-shadow:0 0 0 3px rgba(224,163,63,.18); }
-/* 🛡️ !important عشان أي `style="display:none"` سطري (من كود قديم أو إضافة
-   جديدة) ميقدرش يخفي خانة الاسم وهي مفروض تبان — ده كان الباج بالظبط. */
-#custBox.st-new #customerName{ display:block !important; }
-#custBox.st-new #customerInfo{ flex:0 0 auto; }
-
-/* ✕ جوه المربع، مكانه محجوز فمفيش حاجة بتتحرك */
-#custClearBtn{
-  flex:0 0 auto; width:30px; height:30px; visibility:hidden;
-  border:1.5px solid #d8dce4; background:#fff; color:#7a8090; border-radius:8px;
-  cursor:pointer; font-weight:900; font-family:'Cairo'; font-size:13px; line-height:1; padding:0;
-}
-#custClearBtn.on{ visibility:visible; }
-#custClearBtn:hover{ background:#f2f5f9; color:#a33; }
-
-/* 📱 الأيقونة برّه المربع وآخر السطر — مكانها ثابت دايمًا */
-#custCapBtn{
-  flex:0 0 auto; width:38px; height:38px; padding:0; line-height:1;
-  border:1.5px solid #d8dce4; background:#fff; color:#4a5160;
-  border-radius:10px; cursor:pointer; font-size:16px; font-family:'Cairo';
-}
-#custCapBtn:hover{ background:#f2f5f9; }
-
-/* 🎁 زرار الاستبدال/المكافأة — نفس السطر، وبيبان وقت الحاجة بس */
-#custAction{ flex:0 0 auto; display:flex; }
-#custAction:empty{ display:none; }
-#custAction button{
-  padding:8px 13px; border-radius:10px; border:none; cursor:pointer;
-  font-family:'Cairo'; font-weight:900; font-size:13px; white-space:nowrap; line-height:1.2;
-}
-#custAction .act-redeem{ background:linear-gradient(#4db658,#348c3e); color:#fff; }
-#custAction .act-reward{ background:linear-gradient(#e8a13c,#c9821c); color:#3a2500; }
-#custAction .act-wait{ background:#f0f2f6; color:#8a90a0; cursor:default; font-weight:700; }
-/* 🧠 تلميح شريط الفرصة — معلومة مالهاش زرار.
-   ⚠️ شكله **مختلف عن الأزرار عن قصد**: مفيش خلفية زرار ومفيش
-      مؤشر يد. لو شبه زرار، الكاشير هتدوس عليه ومايحصلش حاجة
-      وتفتكر إن البرنامج واقف. */
-#custAction .act-hint{ display:inline-block; padding:6px 10px; border-radius:8px;
-  background:rgba(37,99,235,.08); border:1px dashed #93b4f5; color:#1d4ed8;
-  font-weight:700; font-size:12.5px; cursor:default; }
-#newCustomerRow{ display:none !important; margin:0 !important; padding:0 !important;
-  background:none !important; border:none !important; }
-.cust-line:has(#custBox.st-new) #newCustomerRow{ display:block !important; }
-#custAction.reg #newCustomerRow{ display:block !important; }   /* فولباك لو :has مش مدعومة */
-#newCustomerRow button{
-  padding:8px 13px; border-radius:10px; border:none; cursor:pointer;
-  font-family:'Cairo'; font-weight:900; font-size:13px;
-  background:linear-gradient(#4db658,#348c3e); color:#fff;
-}
-#resetPinRow{ margin-top:5px; }
-#resetPinRow button{
-  padding:6px 12px; border-radius:8px; border:1px solid #c98; background:#fff3ef;
-  color:#a23; font-size:12px; font-weight:800; cursor:pointer; font-family:'Cairo';
-}
-#resetPinRow span{ font-size:11px; color:#8a6d00; margin-inline-start:6px; }
-.customer-row input{
-  flex:1;padding:9px 11px;border-radius:4px;border:1px solid #a8a49b;
-  background:#fff;color:#1a1a1a;font-size:13px;
-}
-.customer-info{font-size:11.5px;color:#1c7a2e;padding:0;min-height:0;width:100%;}
-#newCustomerRow{display:none; gap:6px; margin:0; align-items:center; flex-wrap:wrap; background:transparent; border:none; padding:0;}
-#newCustomerRow button{padding:5px 10px; border-radius:5px; border:1px solid #2c7a35; background:linear-gradient(#4db658,#348c3e); color:#fff; font-weight:700; font-size:11.5px; cursor:pointer; white-space:nowrap;}
-
-/* ---------- Item table (QuickBooks style, white, no Tax column) ---------- */
-.cart-area{flex:1;overflow-y:auto; border:1px solid #a8a49b; border-radius:4px; background:#fff;}
-.cart-table{width:100%; border-collapse:collapse; font-size:12px; color:#1a1a1a;}
-.cart-table thead th{
-  position:sticky; top:0; background:#eceae4; padding:8px 6px; text-align:center; font-weight:800;
-  color:#333; border-bottom:1px solid #b8b5ad;
-}
-.cart-table tbody td{padding:9px 6px; text-align:center; border-bottom:1px solid #eee;}
-.cart-table tbody tr{cursor:pointer;}
-.cart-table tbody tr.sel td{
-  background:linear-gradient(#5b9bd5,#3a7bbf); color:#fff; border-bottom-color:#2a6aae;
-}
-.cart-table tbody tr.ret td{color:var(--minus); font-weight:700;}
-.cart-table tbody tr.ret.sel td{background:linear-gradient(#c0392b,#992d22); color:#fff;}
-/* آخر منتج اتضاف: إطار أخضر مميّز + خلفية خفيفة + ومضة بسيطة أول ما يتضاف */
-.cart-table tbody tr.just-added td{
-  background:linear-gradient(90deg, rgba(34,197,94,.30), rgba(34,197,94,.08));
-  border-top:2px solid var(--plus); border-bottom:2px solid var(--plus);
-}
-.cart-table tbody tr.just-added td:first-child{ border-right:4px solid var(--plus); }
-.cart-table tbody tr.just-added td:last-child{ border-left:4px solid var(--plus); }
-.cart-table tbody tr.just-added.sel td{ background:linear-gradient(#5b9bd5,#3a7bbf); color:#fff; }
-.cart-table tbody tr.just-added{ animation:justAddedFlash .6s ease-out; }
-@keyframes justAddedFlash{ 0%{ filter:brightness(1.6);} 55%{ filter:brightness(1.18);} 100%{ filter:brightness(1);} }
-.last-badge{ display:inline-block; background:var(--plus); color:#053018; font-size:9px; font-weight:900; padding:1px 7px; border-radius:99px; vertical-align:middle; }
-.cart-table .item-name{text-align:right; font-weight:600;}
-.empty-cart{color:#888;text-align:center;padding:40px 0;font-size:13px;}
-
-/* ---------- Payment Modal ---------- */
-.modal-overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:200;
-}
-.modal-overlay.active{display:flex;}
-.modal-sheet{
-  background:var(--panel);border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:88vh;overflow-y:auto;
-}
-.modal-sheet h3{margin:0 0 14px;font-size:16px;text-align:center;}
-.pay-methods{display:flex;gap:8px;margin-bottom:14px;}
-.pay-method{
-  flex:1;padding:14px 0;border-radius:12px;border:2px solid var(--border);background:var(--panel2);
-  color:var(--text);text-align:center;cursor:pointer;
-}
-.pay-method.selected{border-color:var(--accent);background:rgba(59,130,246,.12);}
-.pay-method .m-label{font-size:13px;font-weight:700;}
-.pay-inputs{margin-bottom:12px;}
-.pay-input-row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;}
-.pay-input-row label{font-size:13px;color:var(--muted);flex-shrink:0;}
-.pay-input-row input{width:120px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:15px;text-align:left;}
-.summary-box{background:var(--panel2);border-radius:12px;padding:12px;margin-bottom:14px;font-size:14px;}
-.summary-box .row{display:flex;justify-content:space-between;padding:4px 0;}
-.summary-box .row.err{color:var(--minus);font-weight:700;}
-.summary-box .row.ok{color:var(--plus);font-weight:700;}
-.modal-btns{display:flex;gap:8px;}
-.modal-btns button{flex:1;padding:14px 0;border-radius:12px;border:none;font-size:15px;font-weight:700;}
-.btn-cancel{background:var(--panel2);color:var(--muted);}
-.btn-confirm{background:var(--plus);color:#04170a;}
-.btn-confirm:disabled{opacity:.35;}
-
-/* Held invoices modal */
-.held-row{
-  background:var(--panel2);border-radius:12px;padding:12px;margin-bottom:8px;
-  display:flex;justify-content:space-between;align-items:center;
-}
-.held-row .h-info{font-size:13px;}
-.held-row .h-time{color:var(--muted);font-size:11px;}
-.held-row button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;}
-
-.toast{
-  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
-  background:var(--panel3);border:1px solid var(--border);padding:12px 20px;border-radius:10px;
-  font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:999;
-}
-.toast.show{opacity:1;}
-.toast.err{border-color:var(--minus);color:var(--minus);}
-.toast.ok{border-color:var(--plus);color:var(--plus);}
-
-/* Printable receipt (hidden until print) — مقاس 58mm (طابعة حرارية عادية) */
-#receiptPrint{display:none;}
-/* ===== معاينة الفاتورة الحية في شاشة التصميم ===== */
-#rdPreview{background:#fff; color:#000; font-family:'Cairo',Tahoma,sans-serif; padding:10px 8px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.35); margin:0 auto;}
-#rdPreview.w80{width:302px;}
-#rdPreview.w58{width:219px;}
-#rdPreview img.pv-logo{display:block; margin:0 auto 6px; max-width:60%; max-height:70px;}
-#rdPreview h2{text-align:center; margin:0 0 4px; font-size:14px; color:#000;}
-#rdPreview .pv-meta{text-align:center; font-size:10px; color:#333; margin-bottom:8px;}
-#rdPreview table{width:100%; border-collapse:collapse; font-size:10px; color:#000;}
-#rdPreview td{padding:2px 0; border-bottom:1px dashed #bbb;}
-#rdPreview td:nth-child(2), #rdPreview td:nth-child(3){text-align:left; white-space:nowrap; padding-right:6px;}
-#rdPreview .pv-total{font-weight:800; font-size:12px; border-top:1px dashed #000; padding-top:4px; text-align:center; margin-top:4px;}
-#rdPreview .pv-inv{text-align:center; font-size:10.5px; font-weight:800; margin-top:6px;}
-#rdPreview .pv-bar{text-align:center; margin-top:4px;}
-#rdPreview .pv-bar svg{max-width:100%;}
-#rdPreview .pv-foot{text-align:center; font-size:10px; margin-top:8px; color:#000;}
-/* معاينة ليبل السعر */
-#rdLabelPreview{background:#fff; color:#000; font-family:Tahoma,Arial,sans-serif; text-align:center; padding:12px; border-radius:8px; width:210px; margin:0 auto; box-shadow:0 6px 18px rgba(0,0,0,.35);}
-#rdLabelPreview .lv-shop{font-size:10px; color:#666; margin-bottom:3px;}
-#rdLabelPreview h3{margin:3px 0; font-size:14px; color:#000;}
-#rdLabelPreview .lv-price{font-size:22px; font-weight:900; margin:5px 0; color:#000;}
-#rdLabelPreview svg{max-width:100%;}
-@media print{
-  @page{ size:58mm auto; margin:0; }
-  body *{visibility:hidden;}
-  #receiptPrint, #receiptPrint *{visibility:visible;}
-  #receiptPrint{display:block !important;position:absolute;top:0;left:0;width:58mm;padding:2mm;color:#000;background:#fff;font-family:'Cairo',Tahoma,sans-serif;}
-  #receiptPrint h2{text-align:center;margin:0 0 4px;font-size:14px;}
-  #receiptPrint table{width:100%;border-collapse:collapse;font-size:10px;}
-  #receiptPrint td{padding:2px 0;}
-  #receiptPrint .r-total{font-weight:800;font-size:13px;border-top:1px dashed #000;padding-top:4px;}
-  #receiptPrint .r-invoice-no{text-align:center;font-size:11px;font-weight:800;margin-top:6px;}
-  #receiptPrint .r-barcode{text-align:center;margin-top:4px;}
-  #receiptPrint .r-barcode svg{max-width:100%;}
-}
-/* ===== إغلاق اليوم ===== */
-.dc-summary{background:linear-gradient(135deg,#2c7a4b,#1f5e3a); color:#fff; border-radius:14px; padding:16px 18px; margin-bottom:14px;}
-.dc-summary .dc-sm-lbl{font-size:12px; opacity:.9;}
-.dc-summary .dc-sm-val{font-size:27px; font-weight:900; margin-top:2px;}
-.dc-summary .dc-sm-val span{font-size:15px; font-weight:700;}
-.dc-summary .dc-sm-sub{font-size:11.5px; opacity:.9; margin-top:6px;}
-.dc-card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px 16px; margin-bottom:14px;}
-.dc-card-h{font-weight:800; font-size:15px; margin-bottom:10px; color:var(--text);}
-.dc-den-row{display:flex; align-items:center; gap:9px; padding:5px 0;}
-.dc-den-face{width:66px; font-weight:800; color:var(--text); font-size:14px;}
-.dc-x{color:var(--muted); font-size:13px;}
-.dc-line{flex:1; text-align:left; font-weight:800; color:var(--text); font-size:14px;}
-.dc-inp{width:90px; padding:9px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:800; font-size:15px; outline:none;}
-.dc-inp:focus{border-color:var(--accent);}
-.dc-inp-count{width:80px;}
-.dc-total-row{display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:11px; border-top:2px solid var(--border); font-weight:900; font-size:15px; color:var(--text);}
-.dc-field{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--border);}
-.dc-field:last-child{border-bottom:none;}
-.dc-field-lbl{font-weight:700; font-size:14px; color:var(--text);}
-.dc-field-hint{font-size:11px; color:var(--muted); margin-top:2px;}
-.dc-ok{width:100%; padding:16px; border:none; border-radius:14px; background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; font-weight:900; font-size:16px; cursor:pointer; box-shadow:0 8px 20px -8px rgba(59,130,246,.6); margin-top:4px;}
-.dc-ok:active{transform:translateY(1px);}
-.dc-result{border:2px solid; border-radius:16px; padding:18px; margin-top:16px; text-align:center;}
-.dc-res-head{font-weight:900; font-size:17px;}
-.dc-res-big{font-weight:900; font-size:36px; margin:4px 0 12px;}
-.dc-res-break{text-align:right; background:rgba(255,255,255,.55); border-radius:12px; padding:10px 14px; font-size:13px;}
-.dc-res-break>div{display:flex; justify-content:space-between; padding:3px 0; color:#333;}
-.dc-res-break .dc-res-sep{border-top:1.5px solid #bbb; margin-top:4px; padding-top:6px; font-weight:900;}
-
-/* ===== Reports Hub 2026 ===== */
-#reportsScreen{background:#f6f7fb}.rep-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:2px 0 14px}.rep-kpi{background:#fff;border:1px solid #e7e9ef;border-radius:16px;padding:14px;box-shadow:0 3px 14px rgba(20,25,40,.04)}.rep-kpi span{display:block;color:#6b7280;font-size:11px;font-weight:700}.rep-kpi b{display:inline-block;font-size:22px;line-height:1.25;margin-top:4px;color:#111827}.rep-kpi small{font-size:10px;color:#9ca3af;margin-right:4px}.rep-kpi.primary{background:#111827;border-color:#111827}.rep-kpi.primary span,.rep-kpi.primary b,.rep-kpi.primary small{color:#fff}.rep-section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.rep-section-title h2{margin:0;font-size:17px}.rep-section-title p{margin:3px 0 0;color:#6b7280;font-size:11px}.rep-invoice-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid #eceef2}.rep-invoice-row:last-child{border-bottom:0}.rep-invoice-main,.rep-invoice-side{display:flex;flex-direction:column;gap:2px}.rep-invoice-main b{font-size:14px}.rep-invoice-main span,.rep-invoice-side span{font-size:10.5px;color:#6b7280}.rep-invoice-side{text-align:left;flex-shrink:0}.rep-invoice-side b{font-size:14px;color:#059669}.rep-empty{text-align:center;color:#9ca3af;padding:28px}.rep-range-btn,.rep-type-btn{transition:.15s ease}.rep-type-btn{border-radius:999px!important;padding:9px 13px!important;font-size:12px!important}.rep-range-btn{border-radius:999px!important}.rep-card{border-radius:18px!important;box-shadow:0 4px 18px rgba(20,25,40,.04)}
-@media(max-width:650px){.rep-kpis{grid-template-columns:1fr 1fr}.rep-kpi{padding:12px}.rep-kpi b{font-size:19px}#reportsScreen .dash-header{gap:7px;flex-wrap:wrap}#reportsScreen .dash-header .logout-btn{font-size:11px;padding:8px 10px}.rep-invoice-row{align-items:flex-start}}
-
+/* v441 — quiet POS live: one cart + one last-invoice line */
+.of-cctv-lastline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px;padding:7px 9px;border-top:1px solid #1f2b3d;color:#dbeafe;font-size:9px}.of-cctv-lastline b{font-size:9px}.of-cctv-lastline span:last-child{text-align:left;white-space:nowrap;color:#a7f3d0;font-weight:800}.of-cctv-lastline.muted span:last-child{color:#64748b}.of-cctv-pos .of-cctv-pay{display:none!important}.of-cctv-pos-complete,.of-cctv-complete-head,.of-cctv-last-meta,.of-cctv-complete-note{display:none!important}
+@media(max-width:720px){.of-cctv-lastline{font-size:8px;padding:6px 4px}.of-cctv-lastline b{font-size:8.5px}.of-cctv-pinned-live{min-height:245px}.of-cctv-pinned-live .of-cctv-pos{min-height:245px}}
 </style>
-<script src="jsbarcode.min.js" onerror="(function(){var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js'; document.head.appendChild(s);})()"></script>
-<style>
-.badge-test{ background:#e8e6dc !important; color:#666 !important; font-size:10.5px !important; box-shadow:none !important; }
+
+<style id="ofCctvV436Style">
+/* v436 — cleaner monitoring room + persistent completed invoice */
+.of-cctv-controlroom{background:#070b13;border:1px solid #1c2738;border-radius:22px;padding:10px;box-shadow:0 18px 45px rgba(15,23,42,.18)}
+.of-cctv-top{margin-bottom:8px}.of-cctv-title b{font-size:15px}.of-cctv-title small{opacity:.72}
+.of-cctv-toolbar{background:#0c1320;border:1px solid #1f2c3e;border-radius:14px;padding:6px}
+.of-cctv-panel{position:relative;overflow:hidden;background:#03060b;border:1px solid #253247;border-radius:16px;box-shadow:none}
+.of-cctv-panel-head{position:absolute;z-index:6;left:7px;right:7px;top:7px;padding:0;background:transparent;border:0;pointer-events:none}
+.of-cctv-source,.of-cctv-panel-full{pointer-events:auto;background:rgba(7,12,22,.82)!important;color:#eef2ff!important;border:1px solid rgba(255,255,255,.13)!important;backdrop-filter:blur(10px);box-shadow:0 5px 15px rgba(0,0,0,.18)}
+.of-cctv-source{border-radius:999px!important;padding:7px 10px!important}.of-cctv-panel-full{border-radius:10px!important}
+.of-cctv-panel-body{height:100%}.of-cctv-video iframe{min-height:100%;height:100%}.of-cctv-cam-badge{background:rgba(7,12,22,.78);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(9px)}
+.of-cctv-pos-body{background:#080e18}.of-cctv-pos{padding:48px 11px 10px;background:linear-gradient(180deg,#0a1220 0%,#070c14 100%)}
+.of-cctv-pos-top{align-items:center;margin-bottom:7px}.of-cctv-pos-top b{font-size:13px}.of-cctv-pos-top small{font-size:9px}.of-cctv-pos-live{font-size:8px;padding:5px 8px}.of-cctv-pos-live.done{background:#123524;color:#86efac}
+.of-cctv-pos-scroll{max-height:none;min-height:70px;margin-top:0;border-top:1px solid #1e293b}.of-cctv-pos-row{padding:7px 2px;font-size:10px}.of-cctv-pos-row small{font-size:8px}.of-cctv-pos-row strong{font-size:10px}
+.of-cctv-pay{margin-top:7px;padding:7px 8px}.of-cctv-pos-total{margin-top:7px;padding:8px 9px}.of-cctv-pos-total strong{font-size:15px}
+.of-cctv-complete-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;padding:10px 11px;margin:2px 0 7px;border-radius:12px;background:linear-gradient(135deg,#103425,#0b241b);border:1px solid #1b5a40}.of-cctv-complete-head small{display:block;color:#8fbca8;font-size:8px}.of-cctv-complete-head b{display:block;margin-top:2px;font-size:14px}.of-cctv-complete-head strong{font-size:18px;color:#d1fae5}.of-cctv-complete-note{text-align:center;color:#789186;font-size:8px;margin-top:6px}.of-cctv-frozen{border-bottom:1px solid #172235}
+@media(max-width:720px){
+ .of-cctv-controlroom{padding:8px;border-radius:18px}.of-cctv-grid{gap:7px}
+ .of-cctv-grid-4 .of-cctv-panel-pos{grid-column:1/-1;min-height:260px;order:-1}
+ .of-cctv-grid-4 .of-cctv-panel:not(.of-cctv-panel-pos){min-height:190px}
+ .of-cctv-pos{padding:48px 10px 10px}.of-cctv-pos-scroll{max-height:120px}.of-cctv-pos-row{font-size:10px}.of-cctv-last{display:grid}
+}
+
+<style id="ofCctvV437Style">
+/* v437 — pinned POS Live + fixed four-camera wall */
+.of-cctv-controlroom{display:flex;flex-direction:column;gap:8px}
+.of-cctv-toolbar{display:flex;align-items:center;justify-content:space-between}
+.of-cctv-pinned-live{position:relative;background:#080e18;border:1px solid #253247;border-radius:16px;overflow:hidden;min-height:250px}
+.of-cctv-fixed-label{position:absolute;z-index:7;top:8px;left:8px;display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:999px;background:rgba(7,12,22,.86);border:1px solid rgba(255,255,255,.12);color:#eef2ff;backdrop-filter:blur(10px);font-size:9px}
+.of-cctv-fixed-label small{color:#89a1bd;font-size:8px}.of-cctv-pinned-live-body{height:100%}.of-cctv-pinned-live .of-cctv-pos{min-height:250px;padding-top:48px}
+.of-cctv-camera-section-title{display:flex;align-items:center;justify-content:space-between;color:#dbe7f7;padding:2px 4px}.of-cctv-camera-section-title b{font-size:11px}.of-cctv-camera-section-title small{font-size:8px;color:#7f91a8}
+.of-cctv-camera-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-height:0}
+.of-cctv-camera-panel{min-height:220px;aspect-ratio:16/10}.of-cctv-camera-title{pointer-events:none;margin-inline-end:auto;max-width:calc(100% - 40px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:7px 10px;border-radius:999px;background:rgba(7,12,22,.82);color:#eef2ff;border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(10px);font-size:9px}
+.of-cctv-room-focus .of-cctv-pinned-live{flex:0 0 39%;min-height:0}.of-cctv-room-focus .of-cctv-pinned-live .of-cctv-pos{height:100%;min-height:0;overflow:auto}.of-cctv-room-focus .of-cctv-camera-section-title{flex:0 0 auto}.of-cctv-room-focus .of-cctv-camera-grid{flex:1;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));min-height:0}.of-cctv-room-focus .of-cctv-camera-panel{height:100%;min-height:0;aspect-ratio:auto}.of-cctv-room-focus .of-cctv-toolbar{flex:0 0 auto}.of-cctv-room-focus .of-cctv-fixed-label{top:5px;left:5px}
+@media(max-width:720px){.of-cctv-pinned-live{min-height:300px}.of-cctv-pinned-live .of-cctv-pos{min-height:300px}.of-cctv-camera-grid{gap:7px}.of-cctv-camera-panel{min-height:185px;aspect-ratio:10/11}.of-cctv-camera-title{font-size:8px;padding:6px 8px}.of-cctv-camera-section-title{padding-top:4px}}
+@media(orientation:landscape){.of-cctv-room-focus .of-cctv-pinned-live{flex-basis:42%}.of-cctv-room-focus .of-cctv-camera-grid{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:minmax(0,1fr)}.of-cctv-room-focus .of-cctv-camera-section-title{display:none}.of-cctv-room-focus .of-cctv-camera-panel{min-height:0}.of-cctv-room-focus .of-cctv-pinned-live .of-cctv-pos-scroll{max-height:calc(42vh - 150px)}}
 </style>
-<script>
-// 🏷️ شارة الإصدار: بتقرا الكاش الفعلي المتفعّل — نظرة واحدة تعرف التحديث وصل ولا لسه
-(function(){
-  function setV(){
-    try{
-      caches.keys().then(function(keys){
-        var k = keys.filter(function(x){ return /^store-apps-shell-v\d+$/.test(x); }).sort(function(a,b){
-          return parseInt(a.replace(/\D/g,'')) - parseInt(b.replace(/\D/g,''));
-        }).pop();
-        var el = document.getElementById('versionBadge');
-        if(el && k) el.textContent = 'echarpe POS · ' + k.replace('store-apps-shell-','');
-      }).catch(function(){});
-    }catch(e){}
-  }
-  setV(); setTimeout(setV, 4000);
-})();
-</script>
+</style>
+
 <style>
-.uniToolbar{ display:flex; gap:9px; align-items:center; flex-wrap:wrap; margin-inline-start:auto; }
-.uniToolbar .uniBtn{
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
-  min-width:64px; padding:9px 13px; border-radius:14px; cursor:pointer;
-  border:1px solid rgba(0,0,0,.14); background:rgba(255,255,255,.75); color:#333;
-  box-shadow:0 2px 6px rgba(0,0,0,.07); transition:transform .12s, box-shadow .12s;
-}
-.uniToolbar .uniBtn:hover{ transform:translateY(-2px); box-shadow:0 5px 14px rgba(0,0,0,.14); }
-.uniToolbar .uniIco{ font-size:24px; line-height:1; }
-.uniToolbar .uniLbl{ font-size:11px; font-weight:800; }
-.uniToolbar .uniBack{
-  display:flex; align-items:center; gap:6px; padding:13px 20px; border-radius:14px; cursor:pointer;
-  border:none; background:var(--accent, #b58900); color:#fff; font-weight:800; font-size:14px;
-  box-shadow:0 3px 10px rgba(0,0,0,.18); margin-inline-end:4px;
-}
-.uniToolbar .uniBack:hover{ filter:brightness(1.08); }
-/* الشاشات الغامقة (التحويلات/البطاقات) */
-.mgmt-light .uniToolbar .uniBtn{ background:var(--panel); color:var(--text); border-color:var(--border); }
-.dash-header, .mgmt-topbar{ flex-wrap:wrap; gap:8px; }
-@media (max-width: 860px){
-  .uniToolbar{ width:100%; gap:6px; flex-wrap:nowrap; }
-  .uniToolbar .uniBack{ flex:0 0 auto; padding:10px 14px; font-size:13px; }
-  .uniToolbar .uniBtn{ min-width:0; flex:1 1 0; padding:7px 2px; border-radius:12px; }
-  .uniToolbar .uniIco{ font-size:19px; }
-  .uniToolbar .uniLbl{ font-size:9px; }
-  .badge-test{ top:auto !important; bottom:8px !important; }
-}
-
-/* ============================================================
-   🖥️ اللوحة الرئيسية — تصغير **من غير قص**
-   ------------------------------------------------------------
-   ⚠️ المحاولة الأولى حطّت `max-height` + `overflow:hidden` على
-      `.qb-main` — فبدل ما تشيل السكرول، **قصّت** مجموعة «الإدارة»
-      وخلّت نصها مخفي من غير أي طريقة توصله. القص أوحش من السكرول
-      بكتير: السكرول بيوصلك، والقص بيخفي.
-   القاعدة: نصغّر المسافات والخطوط بس، ومنحطش سقف ارتفاع أبدًا.
-   ============================================================ */
-.qb-section-grid{ gap:clamp(6px, 0.7vw, 12px); }
-.qb-section{ padding:clamp(6px, 0.7vh, 12px); }
-.qb-section-head{ font-size:clamp(11px, 1.05vh, 14px); margin-bottom:clamp(3px, 0.4vh, 8px); }
-.qb-nav-item{ padding:clamp(5px, 0.7vh, 12px) clamp(4px, 0.5vw, 10px); }
-.qb-icon{ font-size:clamp(17px, 2.1vh, 28px); }
-.qb-label{ font-size:clamp(9.5px, 1.05vh, 13px); line-height:1.25; }
-@media (max-height: 800px){ .qb-section-body{ gap:4px; } }
-
-
-/* ============================================================
-   v388 — Mobile POS layout only
-   IMPORTANT: every rule is scoped to <= 899px. Desktop >= 900px
-   remains byte-for-byte governed by the existing desktop rules.
-   ============================================================ */
-@media (max-width:899px){
-  body.on-sale{overflow:auto!important;background:#eef1f6!important;}
-  body.on-sale #saleScreen{height:100dvh!important;min-height:100dvh!important;overflow:hidden!important;}
-  body.on-sale .qbx-wrap{height:100dvh!important;min-height:0!important;overflow:hidden!important;}
-  body.on-sale .qbx-top{padding:6px 8px 3px!important;align-items:center!important;flex:0 0 auto!important;}
-  body.on-sale .qbx-title{font-size:14px!important;}
-  body.on-sale .qbx-meta{font-size:10px!important;max-width:58vw!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;}
-
-  body.on-sale .qbx-body{
-    flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;
-    display:grid!important;grid-template-columns:1fr!important;gap:7px!important;padding:0 8px 7px!important;
-    -webkit-overflow-scrolling:touch!important;overscroll-behavior:contain!important;
-  }
-  body.on-sale .qbx-actions{
-    width:100%!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;
-    gap:5px!important;padding:2px 0!important;order:1!important;
-  }
-  body.on-sale .qbx-actions button{
-    min-width:0!important;min-height:44px!important;padding:7px 3px!important;border-radius:10px!important;
-    font-size:10.5px!important;line-height:1.25!important;touch-action:manipulation!important;
-  }
-  body.on-sale .qbx-center{order:2!important;overflow:visible!important;min-width:0!important;}
-  body.on-sale .sale-top{margin-bottom:6px!important;}
-  body.on-sale #searchBar{min-height:48px!important;font-size:16px!important;padding:10px 12px!important;}
-  body.on-sale .cart-area{min-height:210px!important;max-height:42dvh!important;overflow:auto!important;-webkit-overflow-scrolling:touch!important;}
-  body.on-sale .cart-table{min-width:620px!important;font-size:12px!important;}
-  body.on-sale .cart-table thead th,body.on-sale .cart-table tbody td{padding:8px 5px!important;}
-
-  body.on-sale #sellerRow{display:grid!important;grid-template-columns:minmax(0,1fr) 70px!important;gap:6px!important;}
-  body.on-sale #sellerRow select{width:100%!important;max-width:none!important;min-width:0!important;}
-  body.on-sale #sellerRow #sellerName{grid-column:1/-1!important;white-space:normal!important;}
-  body.on-sale .cust-line{flex-wrap:wrap!important;gap:5px!important;}
-  body.on-sale #custBox{min-width:0!important;flex:1 1 100%!important;}
-  body.on-sale #customerPhone{font-size:16px!important;}
-
-  body.on-sale .qbx-itemops{
-    order:3!important;width:100%!important;display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
-    gap:5px!important;padding:0!important;
-  }
-  body.on-sale .qbx-itemops button{
-    min-width:0!important;min-height:46px!important;margin:0!important;padding:7px 3px!important;
-    font-size:10.5px!important;line-height:1.2!important;touch-action:manipulation!important;
-  }
-  body.on-sale .qbx-itemops button.qbx-return-all{grid-column:span 2!important;margin:0!important;}
-
-  body.on-sale .qbx-bottom{
-    flex:0 0 auto!important;display:grid!important;grid-template-columns:1fr!important;gap:6px!important;
-    padding:6px 8px max(7px,env(safe-area-inset-bottom))!important;max-height:42dvh!important;overflow-y:auto!important;
-    align-items:stretch!important;border-radius:14px 14px 0 0!important;-webkit-overflow-scrolling:touch!important;
-  }
-  body.on-sale .qbx-pay{width:100%!important;min-width:0!important;}
-  body.on-sale #qbxPayList{min-height:0!important;max-height:64px!important;overflow:auto!important;}
-  body.on-sale .qbx-pay-btns{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important;}
-  body.on-sale .qbx-pay-btns button{min-width:0!important;min-height:48px!important;padding:6px 3px!important;font-size:10.5px!important;}
-  body.on-sale .qbx-pay-btns button.qbx-clear-pay{grid-column:span 2!important;justify-content:center!important;}
-  body.on-sale #chatMini{grid-column:1/-1!important;min-width:0!important;max-width:none!important;width:100%!important;}
-  body.on-sale .qbx-totals{width:100%!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:4px 8px!important;}
-  body.on-sale .qbx-totals .t-row{min-width:0!important;}
-  body.on-sale .qbx-totals .t-val{min-width:74px!important;font-size:16px!important;padding:3px 6px!important;}
-  body.on-sale #cartTotal,body.on-sale #qbxChange{font-size:18px!important;}
-  body.on-sale #confirmPayBtn{grid-column:1/-1!important;min-height:48px!important;font-size:15px!important;}
-
-  body.on-sale .modal-sheet{width:min(96vw,560px)!important;max-height:88dvh!important;overflow:auto!important;}
-}
-@media (max-width:480px){
-  body.on-sale .qbx-actions{grid-template-columns:repeat(4,minmax(0,1fr))!important;}
-  body.on-sale .qbx-itemops{grid-template-columns:repeat(3,minmax(0,1fr))!important;}
-  body.on-sale .qbx-pay-btns{grid-template-columns:repeat(3,minmax(0,1fr))!important;}
-  body.on-sale .cart-area{min-height:190px!important;}
-}
+.of-cctv-camera-select{min-width:0;max-width:calc(100% - 48px);border:1px solid rgba(255,255,255,.15);background:rgba(7,12,22,.88);color:#eef2ff;border-radius:999px;padding:7px 30px 7px 10px;font:inherit;font-size:9px;font-weight:800;outline:none}
+.of-cctv-camera-select option{color:#111;background:#fff}.of-cctv-panel-full:disabled{opacity:.35;cursor:not-allowed}.of-cctv-off-body{display:flex;align-items:center;justify-content:center;text-align:center;color:#94a3b8;background:linear-gradient(145deg,#0b1220,#111827)}.of-cctv-off-body b,.of-cctv-off-body small{display:block}.of-cctv-off-body small{margin-top:5px;font-size:9px}
+@media(max-width:720px){.of-cctv-camera-select{font-size:8px;padding-top:6px;padding-bottom:6px}}
+</style>
+<style id="ofCctvV439Style">
+.of-cctv-last-meta{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.of-cctv-last-meta span{background:#0b1220;border:1px solid #263449;border-radius:999px;padding:5px 9px;font-size:11px;color:#dbeafe}
+.of-cctv-day-review{margin-top:14px;border:1px solid #243247;background:#0b1220;border-radius:16px;padding:12px}.of-cctv-day-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.of-cctv-day-head small{display:block;color:#94a3b8;margin-top:3px}.of-cctv-day-controls{display:flex;gap:7px}.of-cctv-day-controls input,.of-cctv-day-controls button{border:1px solid #334155;background:#111827;color:#fff;border-radius:9px;padding:8px}.of-cctv-day-controls button{cursor:pointer;font-weight:800}.of-cctv-day-row{display:grid;grid-template-columns:75px 1fr auto;gap:10px;align-items:center;border-top:1px solid #1f2937;padding:10px 2px}.of-cctv-day-time{font-weight:900}.of-cctv-day-main small{display:block;color:#94a3b8;margin-top:3px}.of-cctv-day-actions{display:flex;gap:6px}.of-cctv-day-actions button{border:1px solid #334155;background:#111827;color:#fff;border-radius:8px;padding:7px;cursor:pointer}.of-cctv-day-empty{text-align:center;color:#94a3b8;padding:18px}
+@media(max-width:700px){.of-cctv-day-head{align-items:stretch;flex-direction:column}.of-cctv-day-controls>*{flex:1}.of-cctv-day-row{grid-template-columns:60px 1fr}.of-cctv-day-actions{grid-column:1/-1}.of-cctv-day-actions button{flex:1}}
 </style>
 </head>
 <body>
-<div class="badge-test" id="versionBadge" title="إصدار النسخة الشغّالة على الجهاز ده">echarpe POS</div>
-<div id="onlineStatusBadge" class="online-badge online">🟢 متصل</div>
 
-<div id="loadFailBanner" style="display:none; position:fixed; inset:0; z-index:99999; background:#12141a; color:#eef0f4; direction:rtl; font-family:'Cairo',sans-serif; align-items:center; justify-content:center; flex-direction:column; gap:16px; padding:24px; text-align:center;">
-  <div style="font-size:48px;">⚠️</div>
-  <h2 style="margin:0; font-size:19px;">فيه نسخة قديمة متخزّنة في الجهاز ده</h2>
-  <p style="color:#8b90a0; font-size:14px; max-width:320px; margin:0;">النظام بقى فيه كذا ملف منفصل، والجهاز ده لسه شايل نسخة قديمة من واحد منهم. امسح بيانات الموقع من إعدادات المتصفح وحدّث الصفحة.</p>
-  <p id="loadFailDetail" style="color:#e5484d; font-size:12px; max-width:320px; margin:0; word-break:break-word;"></p>
-  <button onclick="location.reload(true)" style="padding:14px 28px; border:none; border-radius:12px; background:#2fa36b; color:#fff; font-family:'Cairo',sans-serif; font-weight:800; font-size:15px; cursor:pointer;">🔄 تحديث الصفحة</button>
-</div>
-<script>
-  window.addEventListener('error', function(e){
-    const banner = document.getElementById('loadFailBanner');
-    const detail = document.getElementById('loadFailDetail');
-    if(banner && banner.style.display !== 'flex'){
-      banner.style.display = 'flex';
-      if(detail) detail.textContent = (e.message||'خطأ غير معروف') + (e.filename ? (' | ' + e.filename.split('/').pop() + ':' + e.lineno) : '');
-    }
-  });
-</script>
-
-<!-- ============ BRANCH SETUP (first run only) ============ -->
-<div class="screen active" id="branchSetupScreen">
-  <div class="pin-box">
-    <h2>إعداد الجهاز</h2>
-    <p style="color:var(--muted); font-size:12px; margin-bottom:14px;">اكتب اسم الفرع بالظبط زي ما مسجل في نظام المبيعات + حساب الفرع (بيتعمل مرة واحدة على الجهاز ده).</p>
-    <select id="branchSetupSelect" onchange="onBranchSetupSelect()" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:15px; text-align:center; margin-bottom:10px;">
-      <option value="">جارٍ تحميل الفروع...</option>
-    </select>
-    <input id="branchSetupInput" placeholder="اسم الفرع الجديد" style="display:none; width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:15px; text-align:center; margin-bottom:10px;">
-    <input id="branchSetupEmail" type="email" placeholder="إيميل حساب الفرع" autocomplete="username" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; text-align:center; margin-bottom:10px; direction:ltr;">
-    <input id="branchSetupPass" type="password" placeholder="الباسورد" autocomplete="current-password" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; text-align:center; margin-bottom:12px; direction:ltr;">
-    <div class="login-err" id="branchSetupErr" style="margin-bottom:8px;"></div>
-    <button class="ok" style="width:100%; padding:14px; border-radius:12px; border:1px solid var(--border); background:var(--panel2); color:var(--plus); font-size:15px; cursor:pointer;" onclick="saveBranchSetup()">دخول وحفظ</button>
-  </div>
-</div>
-
-<!-- ============ LOGIN ============ -->
-<div class="screen" id="loginScreen">
-  <div style="text-align:center; color:var(--muted); font-size:12px; margin-bottom:8px;">🎫 معاك كارتك؟ امسحه بالسكانر ويدخّلك فورًا</div>
-  <div class="pin-box" id="employeePickerBox" style="width:min(90vw,480px);">
-    <h2>مين هيدخل؟</h2>
-    <div id="employeePickerGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:10px;"></div>
-    <div class="login-err" id="employeePickerErr"></div>
-  </div>
-  <div class="pin-box" id="pinPadBox" style="display:none;">
-    <h2 id="pinPadEmpName">ادخل الـ PIN بتاعك</h2>
-    <input type="password" id="pinInput" inputmode="numeric" autocomplete="off" placeholder="••••••"
-      style="width:100%; padding:15px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:22px; text-align:center; letter-spacing:10px; margin-bottom:12px; box-sizing:border-box;">
-    <div style="display:flex; gap:10px;">
-      <button onclick="backToEmployeePicker()" style="flex:1; padding:14px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-weight:800; font-size:15px; cursor:pointer;">رجوع</button>
-      <button onclick="pinSubmit()" style="flex:2; padding:14px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:900; font-size:16px; cursor:pointer;">دخول ✔️</button>
+<!-- ===== بوابة الدخول: حساب فرع (Firebase) + كود المالك ===== -->
+<div id="bootWait">⏳ لحظة…</div>
+<div id="gate">
+  <div class="card">
+    <div class="logo">🏢</div>
+    <h1>echarpe office</h1>
+    <p>إدارة البيزنس — للمالك بس</p>
+    <div id="gateStep1">
+      <input id="gEmail" type="email" placeholder="إيميل حساب الفرع" autocomplete="username" style="direction:ltr;">
+      <input id="gPass" type="password" placeholder="الباسورد" autocomplete="current-password" style="direction:ltr;">
+      <button id="gLogin">دخول</button>
     </div>
-    <div class="login-err" id="loginErr"></div>
+    <div id="gateStep2">
+      <input id="gCode" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="كود المالك" style="letter-spacing:4px;">
+      <button id="gCodeBtn">تأكيد</button>
+      <button id="gBioBtn" style="display:none; margin-top:8px; width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--ink);">👆 افتح بالبصمة</button>
+      <label style="display:none; align-items:center; gap:7px; margin-top:10px; font-size:12px; color:var(--sub);" id="gBioEnrollRow"><input type="checkbox" id="gBioEnroll" style="width:16px; height:16px;"> اربط البصمة على الجهاز ده</label>
+    </div>
+    <div id="gateErr"></div>
   </div>
 </div>
 
-<!-- ============ DASHBOARD ============ -->
-<div class="screen" id="dashboardScreen">
-  <div class="qb-layout">
-    <div class="qb-sidebar">
-      <div style="color:var(--muted); font-size:11px; margin-bottom:2px;" id="dashWho"></div>
-      <button class="secondary" id="branchSwitchBtn" onclick="openBranchSwitch()" style="display:none; border-color:var(--accent); color:var(--accent);">🏬 بدّل الفرع</button>
-      <button onclick="resumeOrStartSale()">🧾 بيع جديد</button>
-      <button onclick="openHeldModal()">⏸️ فواتير معلّقة <span id="heldCountLabel" style="display:block; font-size:10px; font-weight:400; opacity:.8;">0 فاتورة</span></button>
-      <button class="secondary" onclick="goToInventory()">📦 قائمة الأصناف</button>
-      <button class="secondary" onclick="goToTransfers()">🚚 التحويلات</button>
-      <button class="secondary" onclick="goToCustomerList()">👤 قائمة العملاء</button>
-      <button class="secondary" onclick="goToCustomerRequests()">🔖 طلبات العملاء <span id="sideReqBadge" style="display:none; background:#E5484D; color:#fff; border-radius:99px; padding:0 6px; font-size:11px; font-weight:800;"></span></button>
-      <button class="secondary" id="reportsSidebarBtn" onclick="goToReports()">📊 التقارير</button>
-      <button class="secondary" id="rolesSidebarBtn" onclick="goToRoles()" style="display:none;">🛡️ الصلاحيات</button>
-      <button class="secondary" id="discountsSidebarBtn" onclick="goToDiscounts()" style="display:none;">🏷️ الخصومات</button>
-      <button class="secondary" id="loyaltySidebarBtn" onclick="goToLoyaltyScreen()" style="display:none;">🎁 برنامج الولاء</button>
-      <button class="secondary" id="importSidebarBtn" onclick="goToImport()" style="display:none;">📥 استيراد بيانات</button>
-      <button class="secondary" id="ownerAdminBtn" onclick="openOwnerAdminModal()" style="display:none; border-color:#c9a227; color:#8a6f2c;">👑 حساب المالك</button>
-      <div style="flex:1;"></div>
-      <button class="secondary" onclick="goToEndOfDay()">🌙 إغلاق اليوم</button>
-      <button class="secondary" style="border-color:var(--minus); color:var(--minus);" onclick="logout()">خروج 🔒</button>
-    </div>
-    <div class="qb-main">
-      <div class="qb-global-search" style="position:relative; margin-bottom:14px;">
-        <input type="text" id="globalSearchInput" placeholder="🔍 دوّر على أي حاجة: رقم فاتورة، رقم تليفون عميل، اسم منتج..." style="width:100%; padding:14px 16px; border-radius:10px; border:1px solid #b9c9a0; background:#fff; color:#1a1a1a; font-size:14px;">
-        <div id="globalSearchResults" style="position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid #b9c9a0; border-radius:10px; max-height:340px; overflow-y:auto; z-index:50; display:none;"></div>
+<header>
+  <div>
+    <h1>🏢 echarpe office</h1>
+    <div class="sub" id="hdrSub">…</div>
+  </div>
+  <!-- 🔧 أيقونات بس بمقاس واحد — النصوص الطويلة كانت بتلفّ السطر
+       وتركب على العنوان. الشرح في `title` وفي شاشة الإشعارات نفسها. -->
+  <div class="hdrBtns">
+    <button id="eyeBtn" class="ghost ico" onclick="ofToggleMoney()" title="إخفاء الأرقام">👁️</button>
+    <button id="notifBtn" class="ghost ico" title="تفعيل الإشعارات">🔔</button>
+    <button id="notifTestBtn" class="ghost ico" onclick="ofPushTest(this)" title="ابعت إشعار تجربة">🧪</button>
+    <button onclick="officeLogout()" class="ghost ico" title="خروج ونسيان الدخول">🚪</button>
+  </div>
+</header>
+
+<main>
+  <!-- 🔔 الوارد -->
+  <section class="tabPage on" id="page-day">
+    <div id="officeHomeSummary"></div>
+    <div class="card" style="position:sticky; top:0; z-index:5;">
+      <div style="display:flex; gap:6px;">
+        <select id="dayBranch" style="flex:1;"></select>
+        <input id="dayDate" type="date" style="flex:1; direction:ltr;">
       </div>
-      <div class="qb-section-grid">
-        <div class="qb-section">
-          <div class="qb-section-head">🛒 نقطة البيع</div>
-          <div class="qb-section-body">
-            <div class="qb-nav-item" onclick="resumeOrStartSale()"><div class="qb-icon">🧾</div><div class="qb-label">بيع جديد</div></div>
-            <div class="qb-nav-item" onclick="openHeldModal()"><div class="qb-icon">⏸️</div><div class="qb-label">فواتير معلّقة</div></div>
-            <div class="qb-nav-item" onclick="goToSalesHistory()"><div class="qb-icon">🗂️</div><div class="qb-label">سجل المبيعات</div></div>
-            <div class="qb-nav-item" onclick="goToEndOfDay()"><div class="qb-icon">🌙</div><div class="qb-label">إغلاق اليوم</div></div>
-          </div>
-        </div>
-
-        <div class="qb-section">
-          <div class="qb-section-head">👥 العملاء</div>
-          <div class="qb-section-body">
-            <div class="qb-nav-item" onclick="goToCustomerList()"><div class="qb-icon">📇</div><div class="qb-label">قائمة العملاء</div></div>
-          </div>
-        </div>
-
-        <!-- ============================================================
-             📱 التطبيق — كل حاجة العميلة بتشوفها أو بتعملها من موبايلها
-             ------------------------------------------------------------
-             ⚠️ الاسم «التطبيق» مش «البيع أونلاين» عن قصد: اللي جاي مش
-                بيع بس — أوردرات + اختيار المنتجات المعروضة + الشات +
-                الطلبات. «البيع أونلاين» كانت هتضيق بعد أول إضافة.
-             ⚠️ «طلبات العملاء» اتنقلت من مجموعة «العملاء» لهنا: هي
-                فعلًا حاجة تطبيق — العميلة بتشوفها في «طلباتي» والرد
-                بيوصلها إشعار. تحت «العملاء» كانت بتبان زي بيانات،
-                وهي في الحقيقة **محادثة معلّقة** مع العميلة.
-             📌 الفرق: «العملاء» = مين همّ · «التطبيق» = بيتعاملوا معانا إزاي.
-             ⚠️ لسه فيها أيقونة واحدة — الباقي (أوردرات أونلاين ·
-                المعروض في التطبيق) بيتبني مع نظام الشراء (§12).
-             ============================================================ -->
-        <div class="qb-section">
-          <div class="qb-section-head">📱 التطبيق</div>
-          <div class="qb-section-body">
-            <div class="qb-nav-item" id="navCustRequests" onclick="goToCustomerRequests()" style="position:relative;">
-              <div class="qb-icon">🔖</div><div class="qb-label">طلبات العملاء</div>
-              <span id="navReqBadge" style="display:none; position:absolute; top:6px; inset-inline-end:8px; background:#E5484D; color:#fff; border-radius:99px; min-width:20px; height:20px; font-size:11.5px; font-weight:800; align-items:center; justify-content:center; padding:0 5px;"></span>
-            </div>
-            <!-- 🛍️ أوردرات أونلاين — التطبيقين **والموقع** (echarpe.store).
-                 ⚠️ الاسم مش «أوردرات التطبيق»: الموقع بيكتب على نفس
-                    المجموعة، والشاشة دي هي المستقبِل الوحيد لكلهم. -->
-            <div class="qb-nav-item" id="navOnlineShop" onclick="goToOnlineShopAdmin()">
-              <div class="qb-icon">🛒</div><div class="qb-label">منتجات البيع أونلاين</div>
-            </div>
-            <div class="qb-nav-item" id="navOnlineOrders" onclick="goToOnlineOrders()" style="position:relative;">
-              <div class="qb-icon">🛍️</div><div class="qb-label">أوردرات أونلاين</div>
-              <span id="navOrdBadge" style="display:none; position:absolute; top:6px; inset-inline-end:8px; background:#E5484D; color:#fff; border-radius:99px; min-width:20px; height:20px; font-size:11.5px; font-weight:800; align-items:center; justify-content:center; padding:0 5px;"></span>
-            </div>
-          </div>
-        </div>
-
-        <div class="qb-section">
-          <div class="qb-section-head">📦 المخزون</div>
-          <div class="qb-section-body">
-            <div class="qb-nav-item" id="navInventory" onclick="goToInventory()"><div class="qb-icon">📦</div><div class="qb-label">قائمة الأصناف</div></div>
-            <div class="qb-nav-item" id="navReceiveGoods" onclick="goToReceiveGoods()"><div class="qb-icon">📥</div><div class="qb-label">استلام بضاعة</div></div>
-            <div class="qb-nav-item" id="navTransfers" onclick="goToTransfers()"><div class="qb-icon">🚚</div><div class="qb-label">التحويلات</div></div>
-            <div class="qb-nav-item" id="navPriceLabel" onclick="goToInventory()"><div class="qb-icon">🏷️</div><div class="qb-label">طباعة أسعار</div></div>
-            <div class="qb-nav-item" id="navCatalog" onclick="goToCatalogEditor()"><div class="qb-icon">🖼️</div><div class="qb-label">كتالوج العرض</div></div>
-          </div>
-        </div>
-
-        <div class="qb-section">
-          <div class="qb-section-head">📊 التقارير</div>
-          <div class="qb-section-body">
-            <div class="qb-nav-item" id="navReports" onclick="goToReports()"><div class="qb-icon">📈</div><div class="qb-label">تقارير المبيعات</div></div>
-            <div class="qb-nav-item" id="navBranchSummary" onclick="goToBranchSummary()"><div class="qb-icon">🏬</div><div class="qb-label">ملخّص الفروع</div></div>
-            <div class="qb-nav-item" id="navBasket" onclick="goToBasketInsights()"><div class="qb-icon">🧺</div><div class="qb-label">بيتباع مع بعضه</div></div>
-          </div>
-        </div>
-
-        <div class="qb-section gold" id="navMgmtSection" style="display:none;">
-          <div class="qb-section-head">⚙️ الإدارة</div>
-          <div class="qb-section-body">
-            <div class="qb-nav-item" id="navRoles" onclick="goToRoles()" style="display:none;"><div class="qb-icon">🛡️</div><div class="qb-label">الصلاحيات</div></div>
-            <div class="qb-nav-item" id="navDiscounts" onclick="goToDiscounts()" style="display:none;"><div class="qb-icon">🏷️</div><div class="qb-label">الخصومات</div></div>
-            <div class="qb-nav-item" id="navImport" onclick="goToImport()" style="display:none;"><div class="qb-icon">📥</div><div class="qb-label">استيراد بيانات</div></div>
-            <div class="qb-nav-item" id="navReceiptDesign" onclick="goToReceiptDesign()" style="display:none;"><div class="qb-icon">🖨️</div><div class="qb-label">تصميم الفاتورة</div></div>
-            <div class="qb-nav-item" id="navLoyalty" onclick="goToLoyaltyScreen()" style="display:none;"><div class="qb-icon">🎁</div><div class="qb-label">برنامج الولاء</div></div>
-            <div class="qb-nav-item" id="navBoosts" onclick="goToStaffBoosts()"><div class="qb-icon">⭐</div><div class="qb-label">حملة نقط منتج</div></div>
-            <div class="qb-nav-item" id="navStaffCards" onclick="goToStaffCards()" style="display:none;"><div class="qb-icon">🎫</div><div class="qb-label">بطاقات الموظفين</div></div>
-          </div>
-        </div>
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <button class="dayNav" data-d="-1" style="flex:1;">◀ امبارح</button>
+        <button class="dayNav" data-d="0"  style="flex:1;">النهاردة</button>
+        <button class="dayNav" data-d="1"  style="flex:1;">بكرة ▶</button>
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- ============ SALES HISTORY ============ -->
-<div class="screen mgmt-light" id="salesHistoryScreen">
-  <div class="dash-header">
-    <div><h1>🗂️ سجل المبيعات</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="padding:0 20px;">
-    <div style="display:flex; gap:6px; margin-bottom:10px;">
-      <button class="rep-range-btn active" id="shTabLive" onclick="switchSalesHistoryTab('live')">مبيعات النظام الجديد</button>
-      <button class="rep-range-btn" id="shTabLegacy" onclick="switchSalesHistoryTab('legacy')">مبيعات مستوردة من QuickBooks (للرجوع بس)</button>
-    </div>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="salesHistoryWrap"></div>
-</div>
-
-<!-- ============ CUSTOMER LIST ============ -->
-<div class="screen mgmt-light" id="customerListScreen">
-  <div class="dash-header">
-    <div><h1>👤 قائمة العملاء</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="padding:0 20px 10px;">
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-      <button onclick="goToImport(); switchImportTab('customers');" style="padding:9px 14px; border-radius:9px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:800; font-size:13px; cursor:pointer;">📥 استيراد من كويك بوكس</button>
-      <button onclick="exportCustomersCSV()" style="padding:9px 14px; border-radius:9px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-weight:800; font-size:13px; cursor:pointer;">📤 تصدير Excel/CSV</button>
-    </div>
-    <div id="custSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <input type="text" id="custSearch" placeholder="🔍 دوّر بالاسم أو الرقم..." oninput="renderCustList()"
-        style="flex:1; min-width:180px; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; outline:none;">
-      <select id="custSort" onchange="renderCustList()" style="padding:11px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;">
-        <option value="spend">الأكثر إنفاقًا</option>
-        <option value="recent">آخر زيارة</option>
-        <option value="points">النقاط</option>
-        <option value="name">الاسم</option>
-      </select>
-    </div>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="customerListWrap"></div>
-</div>
-
-<!-- ============ CUSTOMER REQUESTS ============
-     🔖 شاشة مستقلة للطلبات. اللوحة الجوّه في «استلام بضاعة» فاضلة زي
-        ما هي عن قصد — دي اللحظة اللي البضاعة بتوصل فيها. الشاشة دي
-        للمتابعة اليومية (مين طالب إيه ومن إمتى). -->
-<!-- ============================================================
-     🛍️ أوردرات أونلاين — التطبيق (إيشارب/Glow) **والموقع**
-     ⚠️ الشاشة دي شرط قبل أي واجهة عميلة: من غيرها الطلب بيروح في
-        الفراغ والعميلة تروح الفرع تلاقي محدش عارف حاجة.
-     ============================================================ -->
-<!-- ============================================================
-     🛒 منتجات البيع أونلاين — مصدر الحقيقة الوحيد لتبويب «اطلبي»
-     ⚠️ منفصلة عن «كتالوج العرض» عن قصد: الكتالوج عرض وعروض، ودي
-        التزام بكمية وسعر لعميلة هتيجي تستلم.
-     ============================================================ -->
-<!-- 🧺 اللي بيتباع مع بعضه — الأنماط اللي البيع اتعلّمها -->
-<!-- ⭐ حملة نقط على منتج — «القطعة دي بنقطة للموظفة» -->
-<div class="screen mgmt-light" id="boostScreen">
-  <div class="dash-header">
-    <div><h1>⭐ حملة نقط منتج</h1></div>
-    <button class="logout-btn" onclick="goToBasketInsights()">🧺 بيتباع مع بعضه</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div id="boostWrap" style="padding:0 20px 24px;"></div>
-</div>
-
-<div class="screen mgmt-light" id="basketScreen">
-  <div class="dash-header">
-    <div><h1>🧺 بيتباع مع بعضه</h1></div>
-    <button class="btn-newsale" id="basketBuildBtn" onclick="basketRebuild()"><span class="ns-ico">🔨</span> إعادة البناء</button>
-    <button class="logout-btn" onclick="goToReports()">📈 التقارير</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div id="basketWrap" style="padding:0 20px 24px;"></div>
-</div>
-
-<div class="screen mgmt-light" id="onlineShopScreen">
-  <div class="dash-header">
-    <div><h1>🛒 منتجات البيع أونلاين</h1></div>
-    <button class="logout-btn" onclick="goToOnlineOrders()">🛍️ الأوردرات</button>
-    <button class="logout-btn" onclick="goToCatalogEditor()">🖼️ كتالوج العرض</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div id="shopAdminWrap" style="padding:0 20px 24px;"></div>
-</div>
-
-<div class="screen mgmt-light" id="onlineOrdersScreen">
-  <div class="dash-header">
-    <div><h1>🛍️ أوردرات أونلاين</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToCustomerRequests()">🔖 طلبات العملاء</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="padding:0 20px 10px;">
-    <div id="ordSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <input type="text" id="ordSearch" placeholder="🔍 رقم الأوردر أو تليفون العميلة أو اسمها..." oninput="renderOrdersScreen()"
-        style="flex:1; min-width:180px; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; outline:none;">
-      <select id="ordScope" onchange="renderOrdersScreen()" style="padding:11px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;">
-        <option value="mine">فرعي</option>
-        <option value="all">كل الفروع</option>
-      </select>
-    </div>
-  </div>
-  <div id="ordersScreenWrap" style="padding:0 20px 24px;"></div>
-</div>
-
-<div class="screen mgmt-light" id="customerRequestsScreen">
-  <div class="dash-header">
-    <div><h1>🔖 طلبات العملاء</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReceiveGoods()">📥 استلام بضاعة</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="padding:0 20px 10px;">
-    <div id="reqSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-      <input type="text" id="reqSearch" placeholder="🔍 دوّر بالوصف أو الاسم أو الرقم..." oninput="renderRequestsScreen()"
-        style="flex:1; min-width:180px; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; outline:none;">
-      <select id="reqScope" onchange="renderRequestsScreen()" style="padding:11px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;">
-        <option value="mine">فرعي</option>
-        <option value="all">كل الفروع</option>
-      </select>
-      <select id="reqSort" onchange="renderRequestsScreen()" style="padding:11px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;">
-        <option value="old">الأقدم الأول</option>
-        <option value="new">الأحدث الأول</option>
-      </select>
-    </div>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="requestsScreenWrap"></div>
-</div>
-
-<!-- ============ END OF DAY ============ -->
-<div class="screen mgmt-light" id="endOfDayScreen">
-  <div class="dash-header">
-    <div><h1>🌙 إغلاق اليوم</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="endOfDayWrap"></div>
-</div>
-
-<!-- ============ INVENTORY ============ -->
-<div class="screen mgmt-light" id="branchSummaryScreen">
-  <div class="dash-header">
-    <div><h1>🏬 ملخّص الأصناف لكل الفروع</h1></div>
-    <div class="topbar-actions">
-      <button class="logout-btn" onclick="goToDashboard()">⬅️ رجوع</button>
-      <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    </div>
-  </div>
-  <div style="padding:12px 16px 0;">
-    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-      <button class="bs-range-btn" data-bsrange="today" onclick="setBranchRange('today')">النهاردة</button>
-      <button class="bs-range-btn" data-bsrange="yesterday" onclick="setBranchRange('yesterday')">امبارح</button>
-      <button class="bs-range-btn" data-bsrange="week" onclick="setBranchRange('week')">آخر 7 أيام</button>
-      <button class="bs-range-btn" data-bsrange="month" onclick="setBranchRange('month')">آخر 30 يوم</button>
-      <button class="bs-range-btn active" data-bsrange="all" onclick="setBranchRange('all')">الكل</button>
-    </div>
-    <div style="display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
-      <input type="date" id="bsFrom" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-      <span style="color:var(--muted); font-size:12px;">لـ</span>
-      <input type="date" id="bsTo" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-      <button class="bs-range-btn" onclick="setBranchRange('custom')">تطبيق</button>
-    </div>
-    <div style="font-size:11px; color:var(--muted); margin-bottom:4px;">📦 المخزون = الحالي · 🛒 المُباع = خلال الفترة المختارة</div>
-  </div>
-  <div id="branchSummaryWrap" style="flex:1; overflow:auto; -webkit-overflow-scrolling:touch; padding:8px 16px 60px;"></div>
-</div>
-
-<div class="screen mgmt-light" id="catalogScreen">
-  <div class="dash-header">
-    <div><h1>🖼️ كتالوج العرض</h1></div>
-    <div class="topbar-actions">
-      <button class="logout-btn" onclick="goToDashboard()">⬅️ رجوع</button>
-      <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    </div>
-  </div>
-  <div id="catalogWrap" style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:14px 16px 60px;"></div>
-</div>
-
-<div class="screen mgmt-light" id="inventoryScreen">
-  <div class="dash-header">
-    <div><h1>📦 المخزون</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="padding:0 4px;" id="lowStockAlertBar"></div>
-  <div style="padding:0 4px;">
-    <!-- 🔍 البحث فوق خالص بخلفية مميزة — ده اللي بيتستخدم طول الوقت -->
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; background:rgba(90,140,60,.12); border:1.5px solid var(--accent); border-radius:13px; padding:9px;">
-      <input type="text" id="invSearch" placeholder="🔍 دوّر باسم الصنف أو الباركود..." oninput="renderInventoryList()"
-        style="flex:1; min-width:180px; padding:11px 14px; border-radius:10px; border:1.5px solid var(--accent); background:var(--panel2); color:var(--text); font-size:14.5px; font-weight:700; outline:none;">
-      <select id="invFilter" onchange="renderInventoryList()" style="padding:11px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; font-weight:700;">
-        <option value="all">كل الأصناف</option>
-        <option value="low">نواقص ⚠️</option>
-        <option value="out">نافد ⛔</option>
-        <option value="hidden">مخفي 🚫</option>
-      </select>
-    </div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-      <span id="inventoryAddRow" style="display:contents;"></span>
-      <button onclick="goToImport(); switchImportTab('inventory');" style="padding:9px 14px; border-radius:9px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:800; font-size:13px; cursor:pointer;">📥 استيراد من كويك بوكس</button>
-      <button id="invLabelBtn" onclick="printSelectedLabels()" style="padding:9px 14px; border-radius:9px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-weight:800; font-size:13px; cursor:pointer;">🏷️ طباعة ليبل</button>
-      <button onclick="exportInventoryCSV()" style="padding:9px 14px; border-radius:9px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-weight:800; font-size:13px; cursor:pointer;">📤 تصدير Excel/CSV</button>
-    </div>
-    <div id="invAddFormWrap" style="padding:0 0 8px;"></div>
-    <div id="invSummary" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;"></div>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 4px 16px;" id="inventoryListWrap"></div>
-</div>
-
-<!-- ============ RECEIVE GOODS ============ -->
-<div class="screen mgmt-light" id="receiveGoodsScreen">
-  <div class="dash-header">
-    <div><h1>📥 استلام بضاعة</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="padding:0 16px;">
-    <p style="color:var(--muted); font-size:12px; margin:-6px 0 12px;">
-      امسح أو اكتب كود المنتج ودوس Enter — هيتضاف لقايمة تحت. اكتب العدد وكمّل باقي المنتجات، وفي الآخر دوس «تأكيد الاستلام». (رقم بالسالب = خصم تالف/مرتجع للمورد.)
-    </p>
-    <div style="position:relative; margin-bottom:14px;">
-      <input type="text" id="receiveGoodsBarcode" placeholder="امسح أو اكتب الباركود أو اسم المنتج..." autocomplete="off"
-        style="width:100%; padding:14px; border-radius:10px; border:1px solid #b9c9a0; background:#fff; color:#1a1a1a; font-size:15px;">
-      <div id="receiveSuggestBox" style="position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid #a8a49b; border-radius:6px; max-height:260px; overflow-y:auto; z-index:30; color:#1a1a1a;"></div>
-    </div>
-    <div id="receiveCartWrap"></div>
-    <button id="receiveConfirmBtn" onclick="confirmReceiveCart()" style="display:none; width:100%; padding:15px; border-radius:10px; border:none; background:var(--plus); color:#062; font-weight:900; font-size:15px; cursor:pointer; margin-bottom:16px;">✔️ تأكيد الاستلام</button>
-    <!-- 🔖 طلبات الزباين المفتوحة — مكانها هنا عن قصد:
-         دي الشاشة اللي بتتفتح وقت الاستلام، يعني اللحظة اللي
-         المالك بيحتاج يعرف فيها مين طالب إيه. -->
-    <div style="margin-top:8px;">
-      <div style="font-weight:800; margin-bottom:6px;">🔖 طلبات الزباين المفتوحة</div>
-      <div id="requestsBody"></div>
-    </div>
-    <div style="margin-top:14px;">
-      <div style="font-weight:800; margin-bottom:6px;">📋 آخر عمليات الاستلام</div>
-      <div id="receiveGoodsLog"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ============ PRODUCT DETAILS ============ -->
-<div class="screen mgmt-light" id="productDetailsScreen">
-  <div class="dash-header">
-    <div><h1 id="pdTitle">📦 تفاصيل المنتج</h1></div>
-    <button class="logout-btn" onclick="goToInventory()">◀ رجوع للمخزون</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
-    <div id="pdInfoCard"></div>
-    <div id="pdStockCard"></div>
-    <div id="pdTimelineCard"></div>
-    <div id="pdLogCard"></div>
-  </div>
-</div>
-
-<!-- ============ INVOICE DETAILS ============ -->
-<div class="screen mgmt-light" id="invoiceScreen">
-  <div class="dash-header">
-    <div><h1 id="invTitle">🧾 فاتورة</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="invoiceWrap"></div>
-</div>
-
-<!-- ============ CUSTOMER PROFILE ============ -->
-<div class="screen mgmt-light" id="customerProfileScreen">
-  <div class="dash-header">
-    <div><h1 id="custProfTitle">👤 بروفايل عميل</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="customerProfileWrap"></div>
-</div>
-
-<!-- ============ EMPLOYEE PROFILE ============ -->
-<div class="screen mgmt-light" id="employeeProfileScreen">
-  <div class="dash-header">
-    <div><h1 id="empProfTitle">👤 بروفايل موظف</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="profileBack()">◀ رجوع</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="employeeProfileWrap"></div>
-</div>
-
-<!-- ============ DISCOUNTS (manager only) ============ -->
-<div class="screen mgmt-light" id="discountsScreen">
-  <div class="dash-header">
-    <div><h1>🏷️ الخصومات</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
-    <div id="discountAddCard"></div>
-    <div id="discountListCard"></div>
-  </div>
-</div>
-
-<!-- ============ LOYALTY PROGRAM (manager only) ============ -->
-<div class="screen mgmt-light" id="transfersScreen">
-  <div class="mgmt-topbar">
-    <div><h1>🚚 التحويلات بين الفروع</h1></div>
-    <div class="topbar-actions">
-      <button class="logout-btn" onclick="showScreen('dashboardScreen')">⬅️ رجوع</button>
-      <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    </div>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="transfersWrap"></div>
-</div>
-
-<div class="screen mgmt-light" id="staffCardsScreen">
-  <div class="mgmt-topbar">
-    <div><h1>🎫 بطاقات الموظفين</h1></div>
-    <div class="topbar-actions">
-      <button class="logout-btn" onclick="showScreen('dashboardScreen')">⬅️ رجوع</button>
-      <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    </div>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="staffCardsWrap"></div>
-</div>
-
-<div class="screen mgmt-light" id="loyaltyScreen">
-  <div class="dash-header">
-    <div><h1>🎁 برنامج الولاء</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="loyaltyScreenWrap"></div>
-</div>
-
-<!-- ============ RECEIPT & LABEL DESIGN (manager only) ============ -->
-<div class="screen mgmt-light" id="receiptDesignScreen">
-  <div class="dash-header">
-    <div><h1>🖨️ تصميم الفاتورة والليبل</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="receiptDesignWrap"></div>
-</div>
-
-<!-- ============ DATA IMPORT (manager only) ============ -->
-<div class="screen mgmt-light" id="importScreen">
-  <div class="dash-header">
-    <div><h1>📥 استيراد بيانات من QuickBooks <span style="font-size:11px;color:#60a5fa;vertical-align:middle;">v398</span></h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;">
-    <div style="display:flex; gap:6px; margin-bottom:14px;">
-      <button class="rep-range-btn active" data-tab="inventory" onclick="switchImportTab('inventory')">📦 المخزون</button>
-      <button class="rep-range-btn" data-tab="customers" onclick="switchImportTab('customers')">👤 العملاء</button>
-      <button class="rep-range-btn" data-tab="sales" onclick="switchImportTab('sales')">🗂️ مبيعات قديمة (للرجوع بس)</button>
-    </div>
-    <div id="importPanelWrap"></div>
-  </div>
-</div>
-
-<!-- ============ ROLES / PERMISSIONS (manager only) ============ -->
-<div class="screen mgmt-light" id="rolesScreen">
-  <div class="dash-header">
-    <div><h1>🛡️ الصلاحيات</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 4px;">
-    <h3 style="margin:8px 0;">تخصيص صلاحيات كل دور</h3>
-    <div class="panel" style="margin-bottom:14px;">
-      <h3>🔢 أكواد البياعات</h3>
-      <p style="color:var(--ui-mut); font-size:12.5px; margin:4px 0 12px; line-height:1.7;">
-        كل بياعة ليها كود ثابت تكتبه الكاشير في شاشة البيع بدل ما تدوّر في القايمة.
-        <b>الكود بيمشي مع صاحبته لو سابت الشغل ومحدش بياخده</b> — عشان بيعة ما تروحش لواحدة غلط.
-      </p>
-      <button onclick="genSellerCodes()" style="width:100%; padding:13px; border:none;
-        border-radius:12px; background:linear-gradient(135deg,#8B5CF6,#6D28D9); color:#fff;
-        font-weight:900; font-size:14px; cursor:pointer;">🔢 ولّد أكواد للموظفين اللي مالهمش</button>
-      <div id="sellerCodesList" style="margin-top:12px;"></div>
+      <div id="dayWindow" style="font-size:11px; color:var(--sub); margin-top:7px; text-align:center;"></div>
     </div>
 
-    <div class="panel" style="margin-bottom:14px;">
-      <h3>🔄 تحديثات الأجهزة</h3>
-      <p style="color:var(--ui-mut); font-size:12.5px; margin:4px 0 12px; line-height:1.7;">
-        بعد ما ترفع الملفات على GitHub وتستنى العلامة الخضراء، اضغط
-        <b>«أبلغ الأجهزة»</b> — شريط التحديث هيظهر عند كل الكاشيرات في ثانية،
-        وكل واحد يفعّله في الوقت المناسب ليه.
-      </p>
-      <div style="display:flex; gap:9px; flex-wrap:wrap;">
-        <button onclick="notifyDevicesUpdate()" style="flex:2; min-width:180px; padding:13px;
-          border:none; border-radius:12px; background:linear-gradient(135deg,#3B82F6,#1D4ED8);
-          color:#fff; font-weight:900; font-size:14px; cursor:pointer;">📡 أبلغ الأجهزة بالتحديث</button>
-        <button onclick="showDeviceVersions()" style="flex:1; min-width:130px; padding:13px;
-          border:1px solid var(--ui-line); border-radius:12px; background:#fff;
-          color:#374151; font-weight:800; font-size:13px; cursor:pointer;">📋 نسخ الأجهزة</button>
+    <!-- 👥 الحاضرين دلوقتي (لايف — مستقل عن تاريخ اليوم المختار) -->
+    <div id="dayPresent"></div>
+
+    <div class="card">
+      <div id="daySubNav" style="display:flex; gap:4px;">
+        <button class="daySub" data-s="pay"   style="flex:1;">💵 الدفع</button>
+        <button class="daySub on" data-s="sales"    style="flex:1;">🧾 سجل المبيعات</button>
+        <button class="daySub" data-s="items"    style="flex:1;">📦 الأصناف</button>
       </div>
     </div>
 
-    <div id="rolePermsWrap"></div>
+    <div id="dayPay"   class="daySec" style="display:none;"></div>
+    <div id="daySales" class="daySec"></div>
+    <div id="dayItems" class="daySec" style="display:none;"></div>
+  </section>
 
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin:16px 0;">
-      <h3 style="margin:0 0 6px; font-size:15px;">🕕 بداية يوم الشغل</h3>
-      <p style="color:var(--muted); font-size:12px; margin:0 0 10px; line-height:1.7;">
-        المحل بيفضل فاتح بعد نص الليل، فالبيعة الساعة 2 الفجر تخص يوم أمس.
-        حدد الساعة اللي اليوم الجديد بيبدأ عندها — أي بيعة قبلها بتتحسب على اليوم اللي فات.
-        <b>الافتراضي 6 صباحًا</b> (مناسب لمحل بيقفل 5 الفجر).
-      </p>
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <span style="font-size:13px; font-weight:700;">اليوم يبدأ الساعة</span>
-        <input type="number" min="0" max="23" step="1" id="dayStartHour" value="6"
-          onchange="saveDayStartHour(this)"
-          style="width:80px; padding:8px; border-radius:8px; border:1.5px solid var(--border);
-                 background:var(--panel2); color:var(--text); font-weight:800; text-align:center; font-size:15px;">
-        <span style="font-size:13px; color:var(--muted);">صباحًا</span>
+  <section class="tabPage" id="page-tasks">
+    <div class="card" style="position:sticky; top:0; z-index:5;">
+      <select id="tkBranch" style="width:100%;"></select>
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <button class="tkNav" data-d="-1" style="flex:1;">◀ اللي فات</button>
+        <button class="tkNav" data-d="0"  style="flex:1;">الأسبوع ده</button>
+        <button class="tkNav" data-d="1"  style="flex:1;">اللي جاي ▶</button>
       </div>
-      <div style="color:var(--muted); font-size:11.5px; margin-top:8px;">
-        ⚠️ الفواتير القديمة هتفضل بتاريخها زي ما هي — التغيير بيسري على الجديد بس.
-      </div>
+      <div id="tkRange" style="font-size:11px; color:var(--sub); margin-top:7px; text-align:center;"></div>
+    </div>
+    <div id="tkList"></div>
+  </section>
+
+  <section class="tabPage" id="page-inbox">
+    <div class="panel">
+      <h3>🔔 الوارد — محتاج قرارك</h3>
+      <div class="hint">أذونات وتسجيلات وأوردرات ونواقص من كل الفروع، لحظة بلحظة.</div>
+      <div id="inboxList"></div>
     </div>
 
-    <h3 style="margin:20px 0 8px;">دور كل موظف</h3>
-    <div id="employeeRolesWrap"></div>
+  </section>
 
-    <h3 style="margin:24px 0 8px;">📟 ماكينة الفيزا (Paymob)</h3>
-    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; max-width:560px;">
-      <p style="color:var(--muted); font-size:12px; margin:0 0 12px;">
-        اكتب رقم الـ Terminal ID بتاع ماكينة الفرع ده — لما الكاشير يدوس فيزا ويأكد المبلغ،
-        المبلغ هيظهر على الماكينة لوحده. كل فرع بيكتب رقم ماكينته من جهازه.
-      </p>
-      <label style="display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:13px; cursor:pointer;">
-        <input type="checkbox" id="pmbEnabled" style="width:18px; height:18px;">
-        تفعيل الإرسال للماكينة (لكل الفروع)
-      </label>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-        <span style="font-size:13px;">ماكينة <b id="pmbBranchName">الفرع ده</b>:</span>
-        <input type="text" inputmode="numeric" id="pmbTerminalId" placeholder="Terminal ID"
-          style="width:140px; padding:10px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-family:'Cairo'; text-align:center; letter-spacing:1px;">
-        <button onclick="savePaymobCfg()" style="padding:10px 18px; border:none; border-radius:9px; background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; font-family:'Cairo'; font-weight:800; cursor:pointer;">حفظ</button>
-      </div>
-      <div id="pmbOthers" style="color:var(--muted); font-size:11.5px; margin-top:10px;"></div>
-      <div id="pmbErr" style="color:#e0796b; font-size:12px; margin-top:6px;"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ============ REPORTS (manager only, basic) ============ -->
-<div class="screen mgmt-light" id="reportsScreen">
-  <div class="dash-header">
-    <div><h1>📊 تقارير المبيعات</h1></div>
-    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
-    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
-    <button class="logout-btn" onclick="goToCustomerList()">👤 العملاء</button>
-    <button class="logout-btn" onclick="goToReports()">📊 التقارير</button>
-    <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
-    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
-  </div>
-  <div style="padding:0 20px;">
-    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
-      <button class="rep-range-btn" data-range="today" onclick="setReportRange('today')">النهاردة</button>
-      <button class="rep-range-btn" data-range="yesterday" onclick="setReportRange('yesterday')">امبارح</button>
-      <button class="rep-range-btn" data-range="week" onclick="setReportRange('week')">آخر 7 أيام</button>
-      <button class="rep-range-btn" data-range="month" onclick="setReportRange('month')">آخر 30 يوم</button>
-      <button class="rep-range-btn" data-range="all" onclick="setReportRange('all')">الكل</button>
-    </div>
-    <div style="display:flex; gap:6px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
-      <input type="date" id="repFrom" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-      <span style="color:var(--muted); font-size:12px;">لـ</span>
-      <input type="date" id="repTo" style="padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-      <button class="rep-range-btn" onclick="setReportRange('custom')">تطبيق</button>
-    </div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
-      <button class="rep-type-btn active" data-rtype="receipt" onclick="setReportType('receipt')">📊 نظرة عامة</button>
-      <button class="rep-type-btn" data-rtype="invoices" onclick="setReportType('invoices')">🧾 الفواتير</button>
-      <button class="rep-type-btn" data-rtype="items" onclick="setReportType('items')">📦 ملخص الأصناف</button>
-      <button class="rep-type-btn" data-rtype="payments" onclick="setReportType('payments')">💳 ملخص المدفوعات</button>
-      <button class="rep-type-btn" data-rtype="customers" onclick="setReportType('customers')">👥 العملاء والتطبيق</button>
-      <button class="rep-type-btn" data-rtype="ratings" onclick="setReportType('ratings')">⭐ التقييمات</button>
-      <button class="rep-type-btn" data-rtype="staff" onclick="setReportType('staff')">🕐 الموظفين والحضور</button>
-      <button class="rep-type-btn" data-rtype="qtydisc" onclick="setReportType('qtydisc')">🎁 خصم الكمية</button>
-    </div>
-  </div>
-  <div style="flex:1; overflow-y:auto; padding:0 20px 20px;" id="reportsWrap"></div>
-</div>
-
-<!-- ============ MAKE SALE ============ -->
-<div class="screen" id="saleScreen">
-  <div class="qbx-wrap">
-    <!-- ☕🔔 تنبيه رجوع البريك — فوق خالص عشان الكاشير تشوفه من غير ما تدوّر -->
-    <div id="posBreakAlert" style="display:none; margin-bottom:10px;"></div>
-    <!-- 🛟 الدفع اتقبل والفاتورة ماتحفظتش — بانر إنقاذ بدل سكوت -->
-    <div id="paymobStuckBox" style="display:none; margin-bottom:10px;"></div>
-    <div class="qbx-top">
-      <div class="qbx-title">فاتورة بيع جديدة</div>
-      <div class="qbx-meta" id="qbxMeta"></div>
-    </div>
-    <div class="qbx-body">
-      <div class="qbx-actions">
-        <button data-uid="sa_back" onclick="goToDashboard()">◀ رجوع</button>
-        <button data-uid="sa_hold0" id="holdBtn0" class="hold-slot hs0" onclick="toggleHold(0)">هولد ١<br><span style="opacity:.7;">فاضي</span></button>
-        <button data-uid="sa_hold1" id="holdBtn1" class="hold-slot hs1" onclick="toggleHold(1)">هولد ٢<br><span style="opacity:.7;">فاضي</span></button>
-        <button data-uid="sa_drawer" onclick="openCashDrawer()">فتح الدرج</button>
-        <button data-uid="sa_discount" onclick="openGiveDiscount()">خصم</button>
-        <button data-uid="sa_addcust" onclick="focusAddCustomer()">إضافة عميل</button>
-        <button data-uid="sa_redeem" onclick="openRedeemPoints()">🎁 استبدال نقاط</button>
-        <!-- 🎁 بيبان بس بعد فاتورة قريبة (١٥ دقيقة) — شوف printGiftReceiptForLast -->
-        <button data-uid="sa_gift" id="giftReceiptBtn" onclick="printGiftReceiptForLast()" style="display:none;">🎁 إيصال هدية</button>
-        <button data-uid="sa_cashier" onclick="showCashierInfo()">الكاشير</button>
-        <button data-uid="sa_logout" onclick="logout()">خروج</button>
-        <button data-uid="sa_receive" onclick="goToReceiveGoods()">📥 استلام المنتجات</button>
-      </div>
-      <div class="qbx-center">
-        <div class="sale-top">
-          <div class="search-wrap">
-            <input type="text" id="searchBar" placeholder="&lt; اكتب اسم المنتج أو امسح الباركود هنا &gt;" autocomplete="off">
-            <div id="suggestBox"></div>
-          </div>
-        </div>
-        <div class="cart-area" id="cartArea">
-<!-- ⭐ نقط الحملة — الكاشير لازم تشوف الحافز وهي بتبيع مش في شاشة إدارة -->
-<div id="boostStrip" style="display:none; padding:8px 12px; margin-bottom:8px; border-radius:11px; background:#FFF7DB; border:1.5px solid #E6B450; color:#7A5A16; font-size:13px; font-weight:800;"></div>
-<table class="cart-table">
-            <thead>
-              <tr>
-                <th>#</th><th>الصنف</th><th>السعر</th><th>الكمية</th><th>الإجمالي</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="cartTbody">
-              <tr><td colspan="6" class="empty-cart">لسه مفيش أصناف في الفاتورة</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="customer-row" id="sellerRow" style="margin-bottom:4px; gap:7px; align-items:center;">
-          <select id="sellerEmployeeSelect" style="flex:0 1 230px; padding:9px 11px;
-            border-radius:10px; border:1.5px solid #d8dce4; background:#fff; color:#1a1a1a;
-            font-size:13px; font-family:'Cairo';">
-            <option value="">👤 مين اللي باعت؟</option>
-          </select>
-          <input id="sellerCodeInput" inputmode="numeric" maxlength="3" placeholder="كود"
-            title="اكتبي كود البياعة بدل ما تدوّري في القايمة"
-            style="width:74px; padding:9px; border-radius:10px; border:1.5px solid #d8dce4;
-                   background:#fff; color:#1a1a1a; font-size:16px; font-weight:900;
-                   text-align:center; font-family:'Cairo'; letter-spacing:1px;">
-          <span id="sellerName" style="font-size:12.5px; font-weight:800; color:#6b7280;
-            white-space:nowrap;"></span>
-        </div>
-        <!-- 🎯 كله في **خط واحد**: المربع الملوّن فيه بيانات العميل بس،
-             وأيقونة «يكتب رقمه» وزرار الاستبدال برّه المربع على نفس السطر.
-             خانة الرقم بتبقى طويلة وهي فاضية، وبتقصر لما العميل يبان
-             عشان تفسح للاسم والنقط. مفيش أي سطر تاني بياكل من مساحة البيع. -->
-        <div class="cust-line">
-          <div id="custBox">
-            <input type="tel" id="customerPhone" placeholder="📱 رقم العميل" inputmode="numeric" maxlength="11">
-            <span id="customerInfo"></span>
-            <input type="text" id="customerName" placeholder="اسم العميل" autocomplete="off">
-            <span id="custPts"></span>
-            <button type="button" id="custClearBtn" onclick="clearCustomer()" title="شيل العميل من الفاتورة">✕</button>
-          </div>
-          <div id="custAction"><div id="newCustomerRow"><button onclick="registerNewCustomer()">➕ سجّل</button></div></div>
-          <button type="button" id="custCapBtn" onclick="capAskCustomer()" title="العميل يكتب رقمه بنفسه على شاشة التقييم">📱</button>
-        </div>
-        <!-- 🎁 بيع كارت هدية — بيدخل السلة كسطر بقيمته والعميلة بتدفعه عادي -->
-        <div id="giftCardRow" style="margin-top:6px;">
-          <button type="button" onclick="addCustomerRequest()"
-            title="العميلة بتدوّر على حاجة مش موجودة">🔖 طلب خاص</button>
-          <button type="button" onclick="sellGiftCard()"
-            title="كارت هدية العميلة بتشتريه وتديه لأي حد">🎁 كارت هدية</button>
-        </div>
-        <div id="resetPinRow" style="display:none;">
-          <button onclick="resetLoyaltyPin()">🔑 مسح الرقم السري للعميل</button>
-          <span>لو العميل نسي رقمه السري في التطبيق</span>
-        </div>
-      </div>
-      <div class="qbx-itemops">
-        <button data-uid="io_qtyplus" onclick="qbxQty(1)">➕<br>كمية</button>
-        <button data-uid="io_qtyminus" onclick="qbxQty(-1)">➖<br>كمية</button>
-        <button data-uid="io_returnitem" onclick="qbxReturnSel()">↩️<br>مرتجع الصنف</button>
-        <button data-uid="io_splititem" onclick="qbxSplitSel()">✂️<br>افصل قطعة</button>
-        <button data-uid="io_edititem" onclick="qbxEditSel()">✏️<br>تعديل الصنف</button>
-        <button data-uid="io_delitem" onclick="qbxDeleteSel()">🗑️<br>حذف الصنف</button>
-        <button data-uid="io_returnall" class="qbx-return-all" onclick="qbxReturnWholeInvoice()">🔄<br>مرتجع الفاتورة كاملة</button>
+  <!-- 💼 التوظيف: الحلقة كاملة — شواغر ← متقدّمين ← دعوة ← طلبات ← ملف -->
+  <!-- 💼 التوظيف — أربع شاشات منفصلة، واحدة تبان في المرة.
+       🔴 قبل كده: خمس لوحات مرصوصة في سكرول واحد بنفس الشكل، فالمتقدّمين
+          على الإعلان (job_applications) كانوا تايهين وسط اللي قدّم الورق
+          بعد الدعوة (staff_docs) — مجموعتين مختلفتين تمامًا. -->
+  <section class="tabPage" id="page-hire">
+    <div class="card" style="position:sticky; top:0; z-index:5;">
+      <div id="hireSubNav" style="display:flex; gap:4px;">
+        <button class="hireSub on" data-h="apps"  style="flex:1;">📋 مقدّمين<span class="hsN" id="hsnApps">0</span></button>
+        <button class="hireSub" data-h="docs"     style="flex:1;">📄 ورق<span class="hsN" id="hsnDocs">0</span></button>
+        <button class="hireSub" data-h="vac"      style="flex:1;">📌 شواغر</button>
+        <button class="hireSub" data-h="files"    style="flex:1;">🗂️ ملفات</button>
       </div>
     </div>
-    <div class="qbx-bottom">
-      <div class="qbx-pay">
-        <div class="qbx-pay-title">المدفوعات</div>
-        <div id="qbxPayList"></div>
-        <div class="qbx-pay-btns">
-          <button id="pmCash" onclick="togglePayMethod('cash')"><span class="pm-icon">💵</span>كاش</button>
-          <button id="pmVisa" onclick="togglePayMethod('visa')"><span class="pm-icon">💳</span>فيزا 1</button>
-          <button id="pmVisa2" onclick="togglePayMethod('visa2')"><span class="pm-icon">💳</span>فيزا 2</button>
-          <button id="pmInsta" onclick="togglePayMethod('instapay')"><span class="pm-icon">📱</span>انستا باي</button>
-          <button class="qbx-clear-pay" onclick="resetPaymentUI()">🗑️ مسح المدفوعات</button>
-          <div id="chatMini" onclick="if(typeof chatOpen==='function')chatOpen()" style="display:none; align-items:center; background:#222a35; border:1.5px solid #46536b; border-radius:11px; padding:6px 11px; margin:6px 0; cursor:pointer; height:62px; flex:0 1 360px; min-width:200px; max-width:400px; color:#f1f5fb; overflow:hidden;"></div>
-        </div>
-      </div>
-      <div class="qbx-totals">
-        <div class="t-row" style="font-size:13px; color:var(--muted);"><span>عدد القطع</span><span class="t-val" id="cartItemCount">0</span></div>
-        <div class="t-row"><span>إجمالي الفاتورة</span><span class="t-val t-green" id="cartTotal">0.00</span></div>
-        <div class="t-row"><span>المدفوع</span><span class="t-val" id="qbxPaid">0.00</span></div>
-        <div class="t-row"><span id="qbxDueLabel">ناقص</span><span class="t-val t-dark" id="qbxDue">0.00</span></div>
-        <div class="t-row"><span>الباقي</span><span class="t-val t-red" id="qbxChange">0.00</span></div>
-        <button class="qbx-save" id="confirmPayBtn" onclick="confirmPayment()" disabled>حفظ وطباعة</button>
-      </div>
-    </div>
-  </div>
-</div>
 
-<!-- ============ HELD INVOICES MODAL ============ -->
-<div class="modal-overlay" id="branchSwitchModal">
-  <div class="modal-sheet">
-    <h3>🏬 بدّل الفرع</h3>
-    <div style="color:var(--muted); font-size:12px; margin-bottom:10px;">اختار الفرع اللي عايز تشتغل عليه دلوقتي. التبديل مؤقت للجلسة، والجهاز بيرجع لفرعه الأصلي بعد الخروج.</div>
-    <div id="branchSwitchList"><div class="empty-cart">جارٍ التحميل...</div></div>
-    <div class="modal-btns" style="margin-top:10px;">
-      <button class="btn-cancel" onclick="closeBranchSwitch()" style="flex:1;">إغلاق</button>
-    </div>
-  </div>
-</div>
-<div class="modal-overlay" id="heldModal">
-  <div class="modal-sheet">
-    <h3>الفواتير المعلّقة</h3>
-    <div id="heldList"><div class="empty-cart">مفيش فواتير معلّقة</div></div>
-    <div class="modal-btns" style="margin-top:10px;">
-      <button class="btn-cancel" onclick="closeHeldModal()" style="flex:1;">إغلاق</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============ REVERSE RECEIPT MODAL ============ -->
-<!-- ============ PAYMENT AMOUNT POPUP ============ -->
-<div class="modal-overlay" id="payAmountModal" style="align-items:center; justify-content:center;">
-  <div class="modal-sheet" style="width:min(90vw,340px); border-radius:16px; margin:0;">
-    <h3 id="payAmountTitle">💵 كاش</h3>
-    <input type="number" step="0.01" id="payAmountInput" style="width:100%; padding:16px; font-size:22px; text-align:center; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); margin-bottom:12px;">
-    <div id="payAmountChange" style="text-align:center; font-size:16px; font-weight:800; margin-bottom:14px; min-height:22px;"></div>
-    <div class="modal-btns">
-      <button class="btn-cancel" onclick="closePayAmountPopup()">إلغاء</button>
-      <button class="btn-confirm" onclick="confirmPayAmount()">OK ✔</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="reverseModal">
-  <div class="modal-sheet">
-    <h3>عكس فاتورة (استرجاع كامل)</h3>
-    <p style="font-size:12px; color:var(--muted); margin:-6px 0 10px;">بيرجّع الكمية للمخزون ويسجل الفاتورة كملغاة. مينفعش يترجع.</p>
-    <div id="reverseList"><div class="empty-cart">بيتحمّل...</div></div>
-    <div class="modal-btns" style="margin-top:10px;">
-      <button class="btn-cancel" onclick="closeReverseModal()" style="flex:1;">إغلاق</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="ownerAdminModal">
-  <div class="modal-sheet">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-      <h3 style="margin:0;">👑 حساب المالك</h3>
-      <button onclick="closeOwnerAdminModal()" style="border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:10px; width:40px; height:40px; font-size:16px; font-weight:900; cursor:pointer;">✖</button>
-    </div>
-    <p style="color:var(--muted); font-size:12px; margin:0 0 14px;">ده حساب الطوارئ بتاعك — مستقل عن الموظفين ومش بيتأثر بأي تصفير.</p>
-    <label style="display:block; font-size:12.5px; margin-bottom:5px;">الرقم السري الحالي</label>
-    <input type="password" id="oaCurrentPin" inputmode="numeric" placeholder="••••" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:16px; text-align:center; letter-spacing:6px; margin-bottom:14px;">
-    <label style="display:block; font-size:12.5px; margin-bottom:5px;">الاسم الجديد (اختياري)</label>
-    <input type="text" id="oaNewName" placeholder="سيبه فاضي لو مش عايز تغيّره" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px; margin-bottom:14px;">
-    <label style="display:block; font-size:12.5px; margin-bottom:5px;">الرقم السري الجديد (اختياري)</label>
-    <input type="password" id="oaNewPin" inputmode="numeric" placeholder="من 4 لـ 8 أرقام" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:16px; text-align:center; letter-spacing:6px; margin-bottom:6px;">
-    <div id="oaErr" style="color:var(--minus); font-size:12px; min-height:18px; margin-bottom:8px;"></div>
-    <button onclick="submitOwnerAdmin()" style="width:100%; padding:14px; border:none; border-radius:11px; background:var(--accent); color:#fff; font-weight:900; font-size:15px; cursor:pointer;">💾 حفظ</button>
-  </div>
-</div>
-
-<div class="modal-overlay" id="returnInvoiceModal">
-  <div class="modal-sheet">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-      <h3 style="margin:0;">↩️ مرتجع من فاتورة</h3>
-      <button onclick="closeReturnInvoiceModal()" title="إغلاق" style="border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:10px; width:40px; height:40px; font-size:16px; font-weight:900; cursor:pointer; flex-shrink:0;">✖</button>
-    </div>
-    <div id="returnInvoiceBody"><div class="empty-cart">بيتحمّل...</div></div>
-    <div class="modal-btns" style="margin-top:10px; gap:8px;">
-      <button onclick="finishReturnAndSell()" style="flex:2; background:linear-gradient(#16a34a,#15803d); color:#fff; border:none; border-radius:10px; padding:13px; font-family:'Cairo'; font-weight:900; font-size:14px; cursor:pointer;">
-        🔄 خلصت المرتجع — كمّل بيع
-      </button>
-      <button class="btn-cancel" onclick="closeReturnInvoiceModal()" style="flex:1;">إغلاق</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="rewardModal">
-  <div class="modal-sheet">
-    <h3>🎁 ابعت مكافأة</h3>
-    <div id="rewardTargetLbl" style="font-size:13px; color:var(--muted); margin:-6px 0 12px;"></div>
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      <div style="display:flex; gap:8px;">
-        <select id="rwType" style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-          <option value="amount">مبلغ خصم (ج.م)</option>
-          <option value="percent">نسبة خصم (%)</option>
+    <!-- 📋 مقدّمين — اللي جه من رابط الإعلان، قبل أي مقابلة -->
+    <div id="hireApps" class="hireSec">
+    <div class="panel">
+      <h3>💼 المتقدّمين للوظائف</h3>
+      <div class="hint">الطلبات الجاية من رابط الإعلان. افرز، وابعت دعوة تسجيل
+        لأي حد بعد المقابلة.</div>
+      <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;">
+        <select id="apStatus" style="flex:1 1 130px;">
+          <option value="new">🆕 جديد</option>
+          <option value="interview">📞 للمقابلة</option>
+          <option value="hired">✅ اتوظف</option>
+          <option value="rejected">❌ مرفوض</option>
+          <option value="">الكل</option>
         </select>
-        <input id="rwValue" type="number" placeholder="القيمة" style="flex:1; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+        <select id="apBranch" style="flex:1 1 120px;"><option value="">كل الفروع</option></select>
+        <select id="apShift" style="flex:1 1 120px;">
+          <option value="">كل الشيفتات</option>
+          <option value="morning">صباحي</option>
+          <option value="evening">مسائي</option>
+          <option value="setup">تجهيز ٧–١٠</option>
+          <option value="any">أي شيفت</option>
+        </select>
       </div>
-      <input id="rwMin" type="number" placeholder="الحد الأدنى للفاتورة (ج.م) — اختياري" style="padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-      <input id="rwDays" type="number" placeholder="صالحة كام يوم (مثلاً 7)" value="7" style="padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+      <div id="apList"></div>
     </div>
-    <div class="modal-btns" style="margin-top:14px;">
-      <button class="btn-cancel" onclick="closeRewardModal()" style="flex:1;">إلغاء</button>
-      <button class="btn-ok" onclick="sendRewardConfirm()" style="flex:1;">ابعت المكافأة</button>
+
+    <!-- 🗂️ ملف الموظفة: بحث بالاسم أو الرقم في **كل** التاريخ، والمستندات
+         بتتجاب على الطلب مش على نافذة زمنية -->
+    </div>
+
+    <!-- 📄 ورق — الدعوة بتتبعت هنا، وطلباتها بمستنداتها بتنزل تحتيها -->
+    <div id="hireDocs" class="hireSec" style="display:none;">
+    <div class="panel">
+      <h3>🧑‍💼 دعوة موظف جديد</h3>
+      <div class="hint">بيتولّد رابط بكود لمرة واحدة — الفرع والوظيفة محدّدين فيه،
+        فالموظفة مش بتختارهم ومفيش فرصة غلط.</div>
+      <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;">
+        <select id="hvBrand" style="flex:1 1 120px;">
+          <option value="echarpe">echarpe</option>
+          <option value="glow">Glow</option>
+        </select>
+        <select id="hvBranch" style="flex:1 1 130px;"></select>
+        <select id="hvRole" style="flex:1 1 190px;">
+          <option value="sales_social">مبيعات ومساعدة تسويق رقمي</option>
+          <option value="cashier">كاشير ومبيعات</option>
+        </select>
+        <select id="hvDays" style="flex:1 1 110px;">
+          <option value="3">تنتهي بعد 3 أيام</option>
+          <option value="1">تنتهي بعد يوم</option>
+          <option value="7">تنتهي بعد 7 أيام</option>
+        </select>
+      </div>
+      <button id="hvMake" style="width:100%; margin-top:10px;">🔗 اعمل رابط دعوة</button>
+      <div id="hvOut"></div>
+      <div id="hvList"></div>
+    </div>
+    <div class="panel">
+      <h3>📥 طلبات التوظيف</h3>
+      <div class="hint">الطلبات الجاية من رابط الدعوة — بمستنداتها.</div>
+      <div id="hrList"></div>
+    </div>
+
+    <!-- 📌 الشواغر: إنت اللي بتحدد أي فرع محتاج أي وظيفة -->
+    </div>
+
+    <!-- 📌 شواغر — إنت اللي بتحدد أي فرع محتاج أي وظيفة -->
+    <div id="hireVac" class="hireSec" style="display:none;">
+    <div class="panel">
+      <h3>📌 الوظائف المتاحة</h3>
+      <div class="hint">علّم الفرع والوظيفة اللي محتاج فيها حد — استمارة التقديم
+        بتعرض المتاح بس. لو مفيش أي علامة، الاستمارة بتقول «لا توجد شواغر».</div>
+      <div id="opGrid"></div>
+      <button id="opSave" style="width:100%; margin-top:11px;">💾 احفظ الشواغر</button>
+    </div>
+
+    <!-- 💼 المتقدّمين للوظائف — الفرز قبل المقابلة -->
+    </div>
+
+    <!-- 🗂️ ملفات — بحث في كل التاريخ بلا حد زمني -->
+    <div id="hireFiles" class="hireSec" style="display:none;">
+    <div class="panel">
+      <h3>🗂️ ملف الموظفة</h3>
+      <div class="hint">اكتب اسم أو رقم موبايل — بيدوّر في كل التسجيلات
+        والموظفين، من غير حد زمني.</div>
+      <input id="efQ" placeholder="اسم أو رقم موبايل" style="width:100%; margin-top:9px;">
+      <div id="efList"></div>
+      <div id="efCard"></div>
+    </div>
+    </div>
+  </section>
+
+  <!-- 📦 النواقص -->
+  <section class="tabPage" id="page-short">
+    <div class="panel">
+      <h3>📦 النواقص المطلوبة</h3>
+      <div class="hint">اللي الموظفين طالبينه — بالاسم والفرع والمخزون وقت الطلب.</div>
+      <div id="shortList"></div>
+    </div>
+  </section>
+
+  <!-- 💰 الفلوس: أرباح وخسائر + تجار + مصاريف -->
+  <section class="tabPage" id="page-money">
+    <!-- 💳↩️ فروق فيزا مستحقة الرد — من POS لما يتسحب أكتر من الفاتورة -->
+    <div class="panel" id="refundsDuePanel" style="display:none; border:2px solid #dc2626;">
+      <h3>💳↩️ فيزا مسحوبة زيادة — مستحقة الرد</h3>
+      <div class="hint">اتسحب من كارت العميلة أكتر من الفاتورة (السلة اتعدّلت بعد الماكينة). الرد بيتم على نفس العملية من داشبورد Paymob — مش من الدرج. بعد ما ترد فعلًا، دوس «اترد».</div>
+      <div id="refundsDueBody"></div>
+    </div>
+
+    <!-- 💳 الرصيد وكروت الهدايا -->
+    <div class="panel">
+      <h3>💳 الرصيد وكروت الهدايا</h3>
+      <div id="creditAdminBody"></div>
+    </div>
+
+    <div class="panel">
+      <h3>💹 بنكسب ولا بنخسر؟</h3>
+      <div class="hint">مبيعات الفروع − المرتبات − البضاعة (أوردرات التجار) − المصاريف والإيجارات. السلف مش بند خصم إضافي — هي جزء متدفع بدري من المرتبات.</div>
+      <select class="f" id="plMonthSel"></select>
+      <div id="plBranches"></div>
+      <div id="plBody"></div>
+      <div id="plResult" style="text-align:center; border-radius:13px; padding:14px; margin-top:10px; font-size:15px; font-weight:900;"></div>
+    </div>
+    <div class="panel" id="quickGoodsPanel">
+      <h3>📦 تسجيل بضاعة بسرعة</h3>
+      <div class="hint">بدل ما تسجل نفس الحاجة مرتين: الأوردر هنا يتحسب «تكلفة بضاعة». ولما تسجل دفعة للتاجر من حسابه، الدفعة الجديدة تتخصم تلقائيًا من «فلوسي» — ما تسجلهاش تاني كمصروف.</div>
+      <div style="display:grid;grid-template-columns:1.3fr .8fr 1.4fr auto;gap:7px;align-items:center;">
+        <select class="f" id="qgMerchant"><option value="">اختار التاجر</option></select>
+        <input class="f" id="qgAmount" type="number" inputmode="decimal" placeholder="المبلغ">
+        <input class="f" id="qgNote" placeholder="ملاحظة / رقم فاتورة (اختياري)">
+        <button class="btn gold" id="qgAdd" style="margin:0;">+ بضاعة</button>
+      </div>
+      <div id="qgStatus" class="muted" style="font-size:11px;margin-top:7px;"></div>
+      <div style="display:flex;gap:7px;margin-top:9px;align-items:center;flex-wrap:wrap;">
+        <button class="btn gold" id="qgVoiceBtn" type="button" style="margin:0;min-width:155px;">🎙️ ابدأ تسجيل</button>
+        <span class="muted" style="font-size:10.5px;flex:1;min-width:190px;">قولها بطبيعتك: «اشتريت من أحمد بـ٢٣ ألف ودفعت ١٠ آلاف». لو أحمد مش متسجل، النظام يقدر يقترح إضافته كتاجر جديد بعد مراجعتك.</span>
+      </div>
+      <div id="qgVoiceLive" style="margin-top:9px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:10px 11px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span id="qgMicDot" style="width:10px;height:10px;border-radius:50%;background:#94a3b8;display:inline-block;"></span>
+            <b id="qgVoiceStateTitle" style="font-size:12px;">المايك جاهز</b>
+          </div>
+          <span id="qgMicPermission" class="muted" style="font-size:10.5px;">صلاحية المايك: بنفحص…</span>
+        </div>
+        <div id="qgVoiceStatus" style="font-size:11.5px;margin-top:6px;line-height:1.7;">اضغط «ابدأ تسجيل» واتكلم. مش هيتحفظ أي مبلغ قبل المراجعة والتأكيد.</div>
+        <div id="qgVoiceLiveText" style="display:none;margin-top:7px;background:#fff;border-radius:10px;padding:8px;font-size:12px;font-weight:700;word-break:break-word;"></div>
+        <div style="display:flex;gap:7px;margin-top:8px;">
+          <button class="ghost danger" id="qgVoiceCancelBtn" type="button" style="display:none;margin:0;padding:7px 12px;">✕ إلغاء التسجيل</button>
+          <button class="ghost" id="qgVoiceAgainBtn" type="button" style="display:none;margin:0;padding:7px 12px;">↻ أقولها تاني</button>
+        </div>
+      </div>
+      <div id="qgAiHint" style="margin-top:8px;background:#fffbeb;border:1px solid #fde68a;border-radius:11px;padding:8px 10px;font-size:11px;line-height:1.7;">
+        <b>🧠 سريع وآمن:</b> الكلام الواضح بيتفهم محليًا فورًا، والـAI بيتدخل بس لو محتاجين نفهم الاسم أو الجملة. هتشوف <b>التاجر + الفاتورة + المدفوع + الحساب قبل وبعد</b> قبل الحفظ.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🧾 حسابات التجار</h3>
+      <div class="hint">أوردر جديد بيزوّد اللي عليك، والدفعة بتخصم. الرصيد بيتحسب لوحده.</div>
+      <div style="display:flex; gap:8px;">
+        <input class="f" id="mName" placeholder="اسم تاجر جديد" style="flex:1;">
+        <button class="btn gold" id="mAdd" style="margin-bottom:8px;">إضافة</button>
+      </div>
+      <div id="merchantsList"></div>
+    </div>
+    <div class="panel">
+      <h3>💸 المصاريف</h3>
+      <div class="hint">مصاريف التشغيل — إيجار، مرتبات خارجية، تسويق، أي حاجة.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input class="f" id="exAmount" type="number" inputmode="decimal" placeholder="المبلغ" style="flex:1; min-width:100px;">
+        <input class="f" id="exNote" placeholder="على إيه؟" style="flex:2; min-width:140px;">
+        <button class="btn gold" id="exAdd" style="margin-bottom:8px;">تسجيل</button>
+      </div>
+      <div class="row" style="margin:4px 0 10px;">
+        <span class="muted">إجمالي الشهر ده:</span><span class="amount neg" id="exMonthTotal">0 ج.م</span>
+      </div>
+      <div id="recurringBox" style="margin-bottom:12px;"></div>
+      <div id="expensesList"></div>
+    </div>
+  </section>
+
+  <!-- 📊 التقارير -->
+  <section class="tabPage" id="page-reports">
+    <div class="panel">
+      <h3>🔥 الأكثر مبيعًا (آخر 30 يوم)</h3>
+      <div class="hint">لكل فرع — بعدد القطع، ومعاه مخزون الفرع الحالي من الصنف.</div>
+      <select class="f" id="topBranchSel"></select>
+      <div id="topSellers"></div>
+    </div>
+
+    <!-- 📈 فرص الزيادة -->
+    <div class="panel">
+      <h3>📈 فرص الزيادة</h3>
+      <div class="hint">تحليل مبيعات آخر ٣٠ يوم — فين الفلوس الضايعة وإزاي تتكسب.</div>
+      <select class="f" id="gxBranchSel"></select>
+    </div>
+    <div id="growthBox"></div>
+
+    <!-- 📈 نشاط يومي: تحميلات · مكافآت · نقط · تقييمات -->
+    <div id="activityReports"></div>
+
+    <!-- 🔎 مين قيّم — بالاسم والرقم (تقييمات التطبيق بس؛ الكشك مجهول) -->
+    <div id="whoRated"></div>
+
+    <div class="panel">
+      <h3>💵 المرتبات والسلف (الشهر الحالي)</h3>
+      <div class="hint">المرتب الأساسي لكل موظف، والسلف المسحوبة الشهر ده، والصافي التقريبي.</div>
+      <div id="salariesList"></div>
+    </div>
+  </section>
+
+  <!-- 🔴 POS Live — مشاهدة فقط، بدون تحكم عن بُعد -->
+  <section class="tabPage" id="page-live">
+    <div style="margin:2px 2px 10px;">
+      <h2 style="font-size:19px;">🔴 POS Live</h2>
+      <div class="muted">لوحة تشغيل الفروع لحظيًا: مبيعات اليوم، آخر بيع، طرق الدفع والسلة الحالية — مشاهدة فقط.</div>
+    </div>
+    <div id="posLiveBody"><div class="empty">افتح التبويب لبدء المتابعة</div></div>
+  </section>
+
+  <!-- 📹 CCTV v429 — Premium Control Room -->
+  <section class="tabPage" id="page-cctv">
+    <div class="of-cctv-shell of-cctv-controlroom">
+      <div class="of-cctv-top">
+        <div class="of-cctv-title"><span style="font-size:22px">📹</span><div><b>غرفة المراقبة</b><small>السلة Live + آخر فاتورة + كاميرات الفرع</small></div></div>
+        <div class="of-cctv-top-actions"><span class="of-cctv-status" id="ofCctvStatus">● LIVE</span><button type="button" class="of-cctv-room-full" id="ofCctvRoomFullscreen" title="ملء الشاشة">⛶ ملء الشاشة</button></div>
+      </div>
+      <div class="of-cctv-toolbar">
+        <div class="of-cctv-branches" id="ofCctvBranches"></div>
+      </div>
+      <div id="ofCctvWarn" class="of-cctv-warning"></div>
+      <section class="of-cctv-pinned-live" id="ofCctvPinnedLive">
+        <div class="of-cctv-fixed-label"><span>🛒 السلة LIVE</span><small>ثابتة — لا تتغير</small></div>
+        <div class="of-cctv-pinned-live-body" id="ofCctvPinnedLiveBody"></div>
+      </section>
+      <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><small>اختار الكاميرا لكل مربع أو أوقفه</small></div>
+            <div class="of-cctv-camera-grid" id="ofCctvCameraGrid"></div>
+      <section class="of-cctv-day-review">
+        <div class="of-cctv-day-head"><div><b>🕘 مراجعة اليوم</b><small>Timeline للفواتير — اضغط على أي فاتورة لمراجعة تفاصيلها ولقطاتها</small></div><div class="of-cctv-day-controls"><input type="date" id="ofCctvDayDate"><button type="button" id="ofCctvDayLoad">تحميل اليوم</button></div></div>
+        <div id="ofCctvDayRows"><div class="of-cctv-day-empty">اختار التاريخ واضغط تحميل اليوم</div></div>
+      </section>
+      <div class="of-cctv-footnote">السلة Live ثابتة بالأعلى، وسطر آخر فاتورة يعرض رقمها وطريقة دفعها فقط. الكاميرات تحتها ويمكن إيقاف أي مربع.</div>
+    </div>
+  </section>
+  <!-- 🕵️ سجل النشاط -->
+  <section class="tabPage" id="page-odd">
+    <!-- 🐞 بلاغات الفروع -->
+    <div class="panel">
+      <h3>🐞 بلاغات المشاكل</h3>
+      <div class="hint">لما موظفة تدوس زرار المشكلة في الكاشير، البلاغ بيوصل هنا بكل التفاصيل التقنية. بيتحمّل بدوسة.</div>
+      <button class="btn gold" id="incLoad" style="width:100%;">تحميل البلاغات</button>
+      <div id="incBox" style="margin-top:10px;"></div>
+    </div>
+    <div class="panel">
+      <h3>🕵️ سجل النشاط</h3>
+      <div class="hint">كل حاجة غير عادية بتحصل على الأجهزة بتتسجل هنا. السجل بيتحفظ محليًا على الجهاز ويتزامن مع Firestore؛ مفيش حد أقصى لعدد الأحداث المعروضة، وبعد أول تحميل بنقرأ الجديد فقط قدر الإمكان.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+        <select class="f" id="actDays" style="flex:1; min-width:110px;">
+          <option value="1">النهاردة</option>
+          <option value="7" selected>آخر ٧ أيام</option>
+          <option value="30">آخر ٣٠ يوم</option>
+          <option value="0">كل السجل</option>
+        </select>
+        <select class="f" id="actKind" style="flex:1; min-width:130px;">
+          <option value="">كل الأنواع</option>
+          <option value="money">💰 فلوس بس</option>
+          <option value="cart">🛒 السلة بس</option>
+          <option value="stock">📦 المخزون بس</option>
+        </select>
+        <select class="f" id="actAttention" style="flex:1; min-width:145px;">
+          <option value="">كل المستويات</option>
+          <option value="action">🚨 محتاج إجراء</option>
+          <option value="watch">⚠️ محتاج متابعة</option>
+          <option value="normal">✅ معلومات عادية</option>
+        </select>
+        <button class="btn gold" id="actLoad" style="margin-bottom:0;">تحديث</button>
+      </div>
+      <!-- 🤫 الأحداث العادية (بيع/قياس طباعة) مخفية افتراضيًا — تبويب
+           بيصيح على كل حاجة محدش بيسمعه. الشيك بوكس بيرجّعها للي عايز
+           يتتبع فاتورة بعينها. -->
+      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px;
+                    margin-bottom:8px; cursor:pointer; user-select:none;">
+        <input type="checkbox" id="actQuiet" style="width:16px; height:16px; cursor:pointer;">
+        <span>ورّيني كمان المبيعات العادية وقياسات الطباعة</span>
+      </label>
+      <input class="f" id="actSearch" placeholder="بحث: اسم موظف / فرع / صنف / رقم فاتورة" style="margin-bottom:8px;">
+      <div id="actSummary"></div>
+      <div id="actBody"><div class="empty">دوس «تحميل» عشان تجيب السجل</div></div>
+    </div>
+  </section>
+  <section class="tabPage" id="page-cash">
+    <div style="margin:2px 2px 10px;">
+      <h2 style="font-size:19px;">💰 فلوسي</h2>
+      <div class="muted">رقم واحد واضح للسيولة المؤكدة، وبعده اللي لسه جاي والتزاماتك.</div>
+    </div>
+    <div id="cashHandBody"></div>
+  </section>
+</main>
+
+<div id="ofVoiceOverlay" aria-hidden="true" style="display:none;position:fixed;inset:0;z-index:95;background:rgba(15,23,42,.58);align-items:flex-end;justify-content:center;">
+  <div style="width:100%;max-width:560px;background:#fff;color:#111827;border-radius:22px 22px 0 0;padding:16px 14px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -20px 55px rgba(15,23,42,.22);">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <div><b style="font-size:16px;">🎙️ راجع اللي فهمته</b><div id="ofVoiceHeard" style="font-size:10.5px;color:#64748b;margin-top:2px;"></div></div>
+      <button class="ghost ico" type="button" onclick="ofVoiceCancel()">✕</button>
+    </div>
+    <div id="ofVoiceSummary" style="margin-top:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px;line-height:1.9;font-size:13px;"></div>
+    <div id="ofVoiceWarn" style="display:none;margin-top:8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:9px;font-size:11px;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px;">
+      <button class="btn gold" id="ofVoiceConfirmBtn" type="button">✅ تأكيد</button>
+      <button class="btn" type="button" onclick="ofVoiceRetry()">🎙️ أقولها تاني</button>
     </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
-
-<!-- Printable receipt template -->
-<div id="receiptPrint">
-  <img id="rLogo" style="display:none; max-width:60%; max-height:70px; margin:0 auto 6px; display:block;" alt="">
-  <h2 id="rShopName">إيشارب ستور</h2>
-  <div style="text-align:center;font-size:11px;margin-bottom:8px;" id="rMeta"></div>
-  <table id="rItemsTable"></table>
-  <div class="r-total" id="rTotalLine"></div>
-  <div class="r-invoice-no" id="rInvoiceNo"></div>
-  <div class="r-barcode"><svg id="rBarcode"></svg></div>
-  <div style="text-align:center;font-size:11px;margin-top:10px;">شكرًا لتعاملكم معنا 🙏</div>
+<div id="officeMoreSheet" aria-hidden="true">
+  <div class="sheet">
+    <div class="of-more-head">
+      <div><b style="font-size:15px;">المزيد</b><div class="muted">الحاجات اللي مش محتاجها كل دقيقة</div></div>
+      <button class="ghost ico" type="button" onclick="ofCloseMore()">✕</button>
+    </div>
+    <div class="of-more-grid">
+      <button class="of-more-item" type="button" data-office-go="tasks"><span class="mi">✅</span><span class="mt"><b>التاسكات</b><small>تشغيل الأسبوع</small></span></button>
+      <button class="of-more-item" type="button" data-office-go="short"><span class="mi">📦</span><span class="mt"><b>النواقص</b><small>طلبات الفروع</small></span><span class="badge" id="nbShort" style="display:none;">0</span></button>
+      <button class="of-more-item" type="button" data-office-go="money"><span class="mi">🧾</span><span class="mt"><b>الحسابات</b><small>ربح وخسارة · تجار · مصاريف</small></span><span class="badge" id="nbMoney" style="display:none;">0</span></button>
+      <button class="of-more-item" type="button" data-office-go="hire"><span class="mi">💼</span><span class="mt"><b>التوظيف</b><small>متقدمين وملفات</small></span><span class="badge" id="nbHire" style="display:none;">0</span></button>
+      <button class="of-more-item" type="button" data-office-go="live"><span class="mi">🔴</span><span class="mt"><b>POS Live</b><small>السلة والحركة الآن</small></span></button>
+      <button class="of-more-item" type="button" data-office-go="cctv"><span class="mi">📹</span><span class="mt"><b>الكاميرات</b><small>Live من الفروع</small></span></button>
+      <button class="of-more-item" type="button" data-office-go="odd"><span class="mi">🕵️</span><span class="mt"><b>النشاط والمشاكل</b><small>بلاغات وسجل غير عادي</small></span></button>
+    </div>
+  </div>
 </div>
 
-<!-- كود الكاشير مُقسّم لموديولات — الترتيب مهم -->
-<!-- 🐞 الصندوق الأسود: **لازم يفضل أول واحد خالص**. الفايدة كلها إنه
-     شايف الأخطاء من لحظة الفتح — لو اتأخر، اللي حصل قبله بيضيع. -->
-<script src="blackbox.js"></script>
-<script src="pos-core.js"></script>
-<script src="pos-admin.js"></script>
-<script src="pos-reports.js"></script>
-<script src="cctv-invoice.js?v=426"></script>
-<script src="pos-sale.js?v=435"></script>
-<script src="pos-live.js?v=439"></script>
-<script src="app.js?v=440"></script>
-<script src="products.js"></script>
-<script src="profiles.js"></script>
-<script src="discounts.js"></script>
-<script src="pako_inflate.min.js?v=400-20260830"></script>
-<script src="xlsx.full.min.js"></script>
-<script src="import.js?v=406-20260830"></script>
-<script src="local-search-cache.js"></script>
-<script src="search.js"></script>
-<script src="loyalty.js"></script>
-<script src="staff.js"></script>
-<script src="transfers.js"></script>
-<script src="ui-editor.js"></script>
-<script src="chat.js"></script>
-<!-- 🖼️ نظام الإطارات والتارجت.
-     🔴 الملف ده كان **موجود في الريبو ومش متحمّل من هنا خالص** — يعني
-        الميزة كانت ميتة على كل الأجهزة، و`test-frames.js` كان بيعدّي
-        أخضر لأنه بيقرا الملف مباشرة مش بيتأكد إنه محمّل.
-        وتطبيق الحضور كان مستني `shift_status_<branch>` اللي الملف ده
-        هو كاتبها الوحيد — فشاشة الشيفت عمرها ما اتحوّلت.
-     ⚠️ بيشتغل لوحده أول ما `db` و`currentBranch` يجهزوا، فلازم يفضل
-        آخر واحد بعد pos-core.js. -->
-<script src="frames.js"></script>
-<!-- 💳 منظومة الرصيد وكروت الهدايا -->
-<script src="credit-core.js"></script>
-<script src="credit-ui.js"></script>
-<!-- 🧠 شريط الفرصة -->
-<script src="opportunity-core.js"></script>
-<!-- 🔖 طلبات الزباين -->
-<script src="requests-core.js"></script>
-<script src="requests-ui.js"></script>
-<!-- 🛍️ أوردرات أونلاين — المحرك المشترك (التطبيقين والموقع بيقروا نفس الملف) ثم الواجهة -->
-<script src="orders-core.js"></script>
-<script src="orders-ui.js"></script>
-<script src="shop-admin.js"></script>
-<!-- 🧺 محرك «اللي بيتاخد مع» ثم واجهته -->
-<script src="basket-core.js"></script>
-<script src="basket-ui.js"></script>
-<!-- 💬 مؤلّف رسايل واتساب (أسعار/خصم/وصل جديد) — بيستخدم reqEsc فلازم بعد requests-ui -->
-<script src="wa-compose.js"></script>
-<!-- 💬 شات العميلة (معزول عن مسار البيع) -->
-<script src="chat-core.js"></script>
-<!-- 💬 شاشة شات العملاء (مشتركة مع Office) — بتحقن نفسها -->
-<script src="chat-staff-ui.js?v=383"></script>
+<nav id="tabsNav">
+  <button data-page="day" class="on"><span class="ic">⌂</span>الرئيسية</button>
+  <button data-page="inbox"><span class="ic">🔔</span>الوارد<span class="nb badge" id="nbInbox" style="display:none;">0</span></button>
+  <button data-page="cash"><span class="ic">💰</span>فلوسي</button>
+  <button data-page="reports"><span class="ic">📊</span>تقارير</button>
+  <button id="officeMoreBtn" type="button"><span class="ic">•••</span>المزيد</button>
+</nav>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<!-- 💳 لازم للموافقة على طلبات الرصيد -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
+<!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
+<script src="../pos/chat-core.js"></script>
+<script src="../pos/chat-staff-ui.js?v=384"></script>
+<script src="cctv.js?v=441"></script>
+<script src="office.js?v=80"></script>
 </body>
 </html>

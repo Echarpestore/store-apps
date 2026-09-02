@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v439
+/* ECHARPE Office CCTV v441
    POS Live stays pinned. Four stable camera slots remain user-selectable and persist locally. */
 (function(){
   'use strict';
@@ -52,27 +52,30 @@
       return '<span class="of-cctv-pos-chip">'+nm+' <b>'+money(p[k])+'</b></span>';
     }).join('');
   }
+  function lastPaymentText(last){
+    var p=(last&&last.payments)||{};
+    var parts=Object.keys(p).filter(function(k){return Math.abs(Number(p[k]||0))>.001;}).map(function(k){
+      var nm=k==='visa'?'Visa':k==='cash'?'كاش':k==='instapay'?'Instapay':String(k||'دفع');
+      return nm+' '+money(p[k]);
+    });
+    return parts.join(' + ')||'—';
+  }
   function posLiveHtml(d){
     if(!d)return '<div class="of-cctv-empty"><div><b>POS Live غير متصل</b><small>مفيش حالة Live وصلت من جهاز الفرع حتى الآن</small></div></div>';
-    var currentRows=(d.cart||[]), hasCurrent=currentRows.length>0 || (d.payments||[]).length>0;
-    var last=d.lastSale||null, age=Math.max(0,Date.now()-Number(d.updatedAtMs||0));
-    if(!hasCurrent && last && Array.isArray(last.items) && last.items.length){
-      var frozenRows=saleItemsHtml(last.items), frozenPays=salePaymentHtml(last.payments||{});
-      return '<div class="of-cctv-pos of-cctv-pos-complete">'+
-        '<div class="of-cctv-pos-top"><div><b>✅ تم حفظ الفاتورة</b><small>'+esc(last.employee||d.employee||'')+' · '+esc(d.branch||'')+'</small></div><span class="of-cctv-pos-live done">محفوظة</span></div>'+
-        '<div class="of-cctv-complete-head"><div><small>آخر فاتورة</small><b>'+(last.invoiceNo?'#'+esc(last.invoiceNo):esc(last.invoiceCode||''))+'</b></div><strong>'+money(last.total)+'</strong></div>'+
-        '<div class="of-cctv-last-meta"><span>🕒 '+new Date(Number(last.confirmedAtMs||last.atMs)||Date.now()).toLocaleString('ar-EG')+'</span><span>👤 '+(last.customerName?esc(last.customerName):'بدون عميل')+(last.customerPhone?' · '+esc(last.customerPhone):'')+'</span><span>🧾 '+Number(last.itemCount||((last.items||[]).length))+' صنف</span></div>'+
-        '<div class="of-cctv-pos-scroll of-cctv-frozen">'+(frozenRows||'<div class="of-cctv-cart-empty">تفاصيل الأصناف غير متاحة للفواتير المحفوظة قبل v439</div>')+'</div>'+
-        '<div class="of-cctv-pay"><div class="of-cctv-pay-head"><span>طريقة الدفع</span><small>تم التأكيد والحفظ</small></div><div class="of-cctv-pay-chips">'+(frozenPays||'<span class="muted">—</span>')+'</div></div>'+
-        '<div class="of-cctv-complete-note">آخر عملية مكتملة تفضل ثابتة هنا حتى تبدأ فاتورة جديدة</div></div>';
-    }
+    var currentRows=(d.cart||[]), last=d.lastSale||null, age=Math.max(0,Date.now()-Number(d.updatedAtMs||0));
     var rows=currentRows.map(function(x){return '<div class="of-cctv-pos-row"><span><b>'+esc(x.name||x.code||'صنف')+'</b>'+(x.isReturn?' <em>↩ مرتجع</em>':'')+'<small>× '+Number(x.qty||0)+(x.barcode?' · '+esc(x.barcode):'')+'</small></span><strong>'+money(Number(x.price||0)*Number(x.qty||0))+'</strong></div>';}).join('');
-    var pays=(d.payments||[]).map(payLabel).join('');
+    var lastLine='';
+    if(last){
+      var inv=last.invoiceNo?'#'+esc(last.invoiceNo):esc(last.invoiceCode||'—');
+      lastLine='<div class="of-cctv-lastline"><span><b>آخر فاتورة: '+inv+'</b></span><span>'+esc(lastPaymentText(last))+'</span></div>';
+    }else{
+      lastLine='<div class="of-cctv-lastline muted"><span><b>آخر فاتورة: —</b></span><span>—</span></div>';
+    }
     return '<div class="of-cctv-pos">'+
-      '<div class="of-cctv-pos-top"><div><b>🛒 الفاتورة الحالية</b><small>'+esc(d.employee||'بدون موظف')+' · '+esc(d.branch||'')+'</small></div><span class="of-cctv-pos-live '+(isOnline(d)?'online':'offline')+'">● '+(isOnline(d)?'LIVE':'OFFLINE')+'</span></div>'+
+      '<div class="of-cctv-pos-top"><div><b>🛒 السلة Live</b><small>'+esc(d.employee||'بدون موظف')+' · '+esc(d.branch||'')+'</small></div><span class="of-cctv-pos-live '+(isOnline(d)?'online':'offline')+'">● '+(isOnline(d)?'LIVE':'OFFLINE')+'</span></div>'+
       '<div class="of-cctv-pos-scroll">'+(rows||'<div class="of-cctv-cart-empty">في انتظار أول صنف…</div>')+'</div>'+
-      '<div class="of-cctv-pay"><div class="of-cctv-pay-head"><span>الدفع</span><small>'+(pays?'جاري':'لسه مبدأش')+'</small></div><div class="of-cctv-pay-chips">'+(pays||'<span class="muted">—</span>')+'</div></div>'+
-      '<div class="of-cctv-pos-total"><b>الإجمالي</b><strong>'+money(d.total)+'</strong></div>'+
+      '<div class="of-cctv-pos-total"><b>إجمالي السلة</b><strong>'+money(d.total)+'</strong></div>'+
+      lastLine+
       '<div class="of-cctv-age">آخر تحديث منذ '+Math.round(age/1000)+' ثانية</div></div>';
   }
   function stopPanel(panel){panel.querySelectorAll('iframe').forEach(function(f){try{f.src='about:blank';f.remove();}catch(e){}});}
@@ -114,15 +117,18 @@
     panel.classList.add('of-cctv-panel-focus');document.body.classList.add('of-cctv-lock');
     if(btn){btn.textContent='✕';btn.title='خروج من ملء الشاشة';}enterNativeFs(panel);
   }
+  function renderCameras(){
+    var grid=document.getElementById('ofCctvCameraGrid');if(!grid)return;
+    grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);
+    grid.innerHTML=state.slots.map(cameraCard).join('');
+    grid.querySelectorAll('[data-cctv-select]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSelect);state.slots[i]=sel.value;save();renderCameras();};});
+    grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
+  }
   function render(){
     if(!state.active)return;renderBranches();
     var live=document.getElementById('ofCctvPinnedLive');if(live)live.setAttribute('data-branch',state.branch);
     renderLive();
-    var grid=document.getElementById('ofCctvCameraGrid');if(!grid)return;
-    grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);
-    grid.innerHTML=state.slots.map(cameraCard).join('');
-    grid.querySelectorAll('[data-cctv-select]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSelect);state.slots[i]=sel.value;save();render();};});
-    grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
+    renderCameras();
   }
   function refreshPosOnly(){if(state.active)renderLive();}
   function stop(){state.active=false;clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvCameraGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
