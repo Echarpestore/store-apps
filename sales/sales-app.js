@@ -6581,8 +6581,13 @@ function renderSalaryPanel(){
 }
 
 function _payMoney(v){
-  const n = Math.round((Number(v)||0)*100)/100;
+  let n = Math.round((Number(v)||0)*100)/100;
+  if(Object.is(n,-0) || Math.abs(n)<0.005) n=0;
   return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ج.م';
+}
+function _payQty(v, unit){
+  let n=Math.round((Number(v)||0)*10)/10; if(Object.is(n,-0)||Math.abs(n)<0.05)n=0;
+  return n.toLocaleString('en-US',{maximumFractionDigits:1})+' '+unit;
 }
 function _payPts(v){ return fmtPts(Math.round((Number(v)||0)*100)/100); }
 function _payEsc(v){ return esc(String(v==null?'':v)); }
@@ -6654,7 +6659,7 @@ window.openPayrollEmployee = function(empId, periodKey){
   const pointState = due.ptsDue>0
     ? `<div style="color:#fbbf24;font-weight:900;font-size:24px;direction:ltr">${_payPts(due.ptsDue)}</div><div style="font-size:10px;color:var(--sub)">نقطة متبقية للصرف</div>`
     : `<div style="color:#22c55e;font-weight:900;font-size:15px">✅ تم صرف كل النقط</div>`;
-  const detailRow=(label,val,tone='')=>`<div class="pay-v393-row"><span>${label}</span><b class="${tone}">${val}</b></div>`;
+  const detailRow=(label,val,tone='')=>`<div class="pay-v393-row"><span>${label}</span><b class="${tone}" dir="ltr"><bdi>${val}</bdi></b></div>`;
   const section=(title,cls,body)=>`<section class="pay-v393-sec ${cls||''}"><div class="pay-v393-sec-title">${title}</div>${body}</section>`;
   const absenceText = c.absenceDates.length ? c.absenceDates.map(x=>x.date+(x.approved?' (مصرح)':'')).join('، ') : '—';
   const offText = c.dayOffDates.length ? c.dayOffDates.join('، ') : '—';
@@ -6696,16 +6701,16 @@ window.openPayrollEmployee = function(empId, periodKey){
       detailRow('أيام الحضور المسجلة',c.attendedDays+' يوم')+
       detailRow('الإجازة الأسبوعية داخل الفترة',c.dayOffDates.length+' يوم')+
       detailRow('تواريخ الإجازة الأسبوعية',offText)+
-      detailRow('غياب مخصوم',c.extraOffDays+' يوم = -'+_payMoney(c.deductionAmount),'bad')+
+      detailRow('غياب مخصوم · '+_payQty(c.extraOffDays,'يوم'),'-'+_payMoney(c.deductionAmount),'bad')+
       (c.absenceDates.length?detailRow('تواريخ الغياب',absenceText,'bad'):'')+
       (c.incompleteShifts.length?detailRow('⚠️ شيفتات غير مقفولة',c.incompleteShifts.map(x=>x.date).join('، '),'gold'):''))}
     ${section('＋ الإضافات','add',
       (c.proratedBase!==Number(emp.baseSalary)?detailRow('استحقاق الأساسي للفترة','+'+_payMoney(c.proratedBase),'good'):'')+
-      detailRow('أوفرتايم',Math.round(c.overtimeMinutes/6)/10+' س = +'+_payMoney(c.overtimePay),'good')+
-      detailRow('شغل يوم الإجازة',c.dayOffBonusHours+' س = +'+_payMoney(c.dayOffBonusAmount),'good')+
+      detailRow('أوفرتايم · '+_payQty(c.overtimeMinutes/60,'ساعة'),'+'+_payMoney(c.overtimePay),'good')+
+      detailRow('شغل يوم الإجازة · '+_payQty(c.dayOffBonusHours,'ساعة'),'+'+_payMoney(c.dayOffBonusAmount),'good')+
       detailRow('إجمالي إضافات الراتب','+'+_payMoney(salaryAdditions),'good'))}
     ${section('− الخصومات','ded',
-      detailRow('رصيد وقت',c.timeCreditHours+' س = -'+_payMoney(c.timeCreditDeduction),'bad')+
+      detailRow('رصيد وقت · '+_payQty(c.timeCreditHours,'ساعة'),'-'+_payMoney(c.timeCreditDeduction),'bad')+
       detailRow('خصومات إدارية','-'+_payMoney(c.adminDeductions),'bad')+
       detailRow('سلف','-'+_payMoney(c.advCash),'bad')+
       detailRow('مشتريات','-'+_payMoney(c.advOrders),'bad')+
@@ -6719,7 +6724,7 @@ window.openPayrollEmployee = function(empId, periodKey){
       detailRow('عمولة تارجت متبقية',_payMoney(due.tgtDueAmt),'good')+
       detailRow('إجمالي العمولات المتبقية',_payMoney(due.totalDue),'good'))}
     ${section('💰 صافي الحساب','',
-      detailRow('المعادلة',_payMoney(pb.base)+' + '+_payMoney(salaryAdditions)+' − '+_payMoney(deductions))+
+      detailRow('المعادلة',_payMoney(pb.base)+' + '+_payMoney(salaryAdditions)+' − '+_payMoney(deductions)+' = '+_payMoney(pb.salaryNet))+
       detailRow('صافي الراتب',_payMoney(pb.salaryNet),'good')+
       detailRow('العمولات المتبقية (منفصلة)',_payMoney(due.totalDue),'gold')+
       detailRow(paid?'المتبقي بعد صرف الراتب':'إجمالي الصرف لو ضمّيت كل العمولات',_payMoney(paid?due.totalDue:grandDue),'good'))}
@@ -6783,7 +6788,7 @@ window._nextMonthKey = _nextMonthKey;
 
 function buildSalaryReceiptPayload(emp, calc, periodLabel){
   const _pk = periodLabel || defaultPayPeriodKey(new Date());
-  const money=(v)=>{ const n=Math.round((Number(v)||0)*100)/100; return (Number.isInteger(n)?String(n):n.toFixed(2).replace(/\.00$/,'').replace(/(\.\d)0$/,'$1'))+' ج.م'; };
+  const money=(v)=>{ let n=Math.round((Number(v)||0)*100)/100; if(Object.is(n,-0)||Math.abs(n)<0.005)n=0; return (Number.isInteger(n)?String(n):n.toFixed(2).replace(/\.00$/,'').replace(/(\.\d)0$/,'$1'))+' ج.م'; };
   const pts=(v)=>fmtPts(Math.round((Number(v)||0)*100)/100);
   const due = commissionDueFor(emp, _pk);
   const pb = payrollMoneyBreakdown(calc, due);
