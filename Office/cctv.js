@@ -53,11 +53,14 @@
     }).join('');
   }
   function lastPaymentText(last){
-    var p=(last&&last.payments)||{};
-    var parts=Object.keys(p).filter(function(k){return Math.abs(Number(p[k]||0))>.001;}).map(function(k){
-      var nm=k==='visa'?'Visa':k==='cash'?'كاش':k==='instapay'?'Instapay':String(k||'دفع');
-      return nm+' '+money(p[k]);
-    });
+    // v446: آخر فاتورة فقط. لا نعرض مبالغ طرق الدفع هنا حتى لا تختلط
+    // بإجماليات اليوم. ولو بيانات Live القديمة لا تطابق إجمالي الفاتورة،
+    // لا نخمن طريقة دفع خاطئة.
+    var p=(last&&last.payments)||{}, total=Math.abs(Number(last&&last.total||0));
+    var keys=Object.keys(p).filter(function(k){return Math.abs(Number(p[k]||0))>.001;});
+    var paid=keys.reduce(function(n,k){return n+Math.abs(Number(p[k]||0));},0);
+    if(total>0.001 && Math.abs(paid-total)>0.02) return 'طريقة الدفع غير متاحة';
+    var parts=keys.map(function(k){return k==='visa'?'Visa':k==='cash'?'كاش':k==='instapay'?'Instapay':String(k||'دفع');});
     return parts.join(' + ')||'—';
   }
   function posLiveHtml(d){
