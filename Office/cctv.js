@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v441
+/* ECHARPE Office CCTV v447
    POS Live stays pinned. Four stable camera slots remain user-selectable and persist locally. */
 (function(){
   'use strict';
@@ -19,7 +19,7 @@
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
   function cam(id){var x=b();return x.cameras.find(function(c){return c.id===String(id);})||x.cameras[0];}
-  function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(c.stream);}
+  function streamUrl(c){return b().gateway+'/api/stream.mp4?src='+encodeURIComponent(c.stream);}
   function load(){
     try{
       var raw=localStorage.getItem(KEY)||localStorage.getItem(OLD_KEY)||'{}', x=JSON.parse(raw);
@@ -81,7 +81,22 @@
       lastLine+
       '<div class="of-cctv-age">آخر تحديث منذ '+Math.round(age/1000)+' ثانية</div></div>';
   }
-  function stopPanel(panel){panel.querySelectorAll('iframe').forEach(function(f){try{f.src='about:blank';f.remove();}catch(e){}});}
+  function stopPanel(panel){panel.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}});}
+  function armCameraPlayer(v){
+    if(!v)return;
+    function retry(){
+      if(!state.active||!document.documentElement.contains(v))return;
+      if(v._retryTimer)clearTimeout(v._retryTimer);
+      v._retryTimer=setTimeout(function(){
+        if(!state.active||!document.documentElement.contains(v))return;
+        var src=v.getAttribute('data-stream-src');
+        try{v.pause();v.src=src;v.load();var r=v.play();if(r&&r.catch)r.catch(function(){});}catch(e){}
+      },2500);
+    }
+    ['error','stalled','abort'].forEach(function(ev){v.addEventListener(ev,retry);});
+    ['loadeddata','playing'].forEach(function(ev){v.addEventListener(ev,function(){if(v._retryTimer){clearTimeout(v._retryTimer);v._retryTimer=null;}});});
+    try{var r=v.play();if(r&&r.catch)r.catch(function(){});}catch(e){}
+  }
   function renderLive(){
     var body=document.getElementById('ofCctvPinnedLiveBody');
     if(body)body.innerHTML=posLiveHtml(liveDoc());
@@ -93,7 +108,7 @@
     var c=selected==='off'?null:cam(selected);
     return '<article class="of-cctv-panel of-cctv-camera-panel'+(c?'':' of-cctv-camera-off')+'" data-camera="'+esc(c?c.id:'off')+'" data-panel="'+i+'">'+
       '<div class="of-cctv-panel-head"><select class="of-cctv-camera-select" data-cctv-select="'+i+'" aria-label="اختيار كاميرا المربع '+(i+1)+'">'+cameraOptions(c?c.id:'off')+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(c?'':' disabled')+'>⛶</button></div>'+
-      (c?'<div class="of-cctv-panel-body of-cctv-video"><iframe title="'+esc(c.name)+'" allow="autoplay; fullscreen" referrerpolicy="no-referrer" src="'+esc(streamUrl(c))+'"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div><b>الكاميرا متوقفة</b><small>اختار كاميرا من القائمة فوق</small></div></div>')+'</article>';
+      (c?'<div class="of-cctv-panel-body of-cctv-video"><video title="'+esc(c.name)+'" autoplay muted playsinline controls preload="none" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'"></video><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div><b>الكاميرا متوقفة</b><small>اختار كاميرا من القائمة فوق</small></div></div>')+'</article>';
   }
   function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;save();render();};});}
   function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement||null;}
@@ -126,6 +141,7 @@
     grid.innerHTML=state.slots.map(cameraCard).join('');
     grid.querySelectorAll('[data-cctv-select]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSelect);state.slots[i]=sel.value;save();renderCameras();};});
     grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
+    grid.querySelectorAll('video[data-stream-src]').forEach(armCameraPlayer);
   }
   function render(){
     if(!state.active)return;renderBranches();
