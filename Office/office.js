@@ -3744,17 +3744,33 @@ const OF_NUM_SMALL={
   'تسعه':9,'تسع':9,'عشره':10,'عشر':10,'حداشر':11,'احداشر':11,'اتناشر':12,'اثناشر':12,'تلتاشر':13,'تلاتاشر':13,
   'اربعتاشر':14,'خمستاشر':15,'ستاشر':16,'سبعتاشر':17,'تمنتاشر':18,'تسعتاشر':19,
   'عشرين':20,'تلاتين':30,'ثلاثين':30,'اربعين':40,'خمسين':50,'ستين':60,'سبعين':70,'تمانين':80,'ثمانين':80,'تسعين':90,
-  'ميه':100,'مائه':100,'مايه':100
+  'ميه':100,'مائه':100,'مايه':100,
+  'متين':200,'ميتين':200,
+  'تلتميه':300,'تلاتميه':300,'ثلاثميه':300,
+  'اربعميه':400,'اربعمايه':400,
+  'خمسميه':500,'خمسمايه':500,
+  'ستميه':600,'ستمايه':600,
+  'سبعميه':700,'سبعمايه':700,
+  'تمنميه':800,'تمانميه':800,'ثمانميه':800,
+  'تسعميه':900,'تسعمايه':900
 };
 function ofNaturalMoney(text){
   let raw=String(text||'').replace(/[٠-٩]/g,function(c){return String('٠١٢٣٤٥٦٧٨٩'.indexOf(c));});
-  raw=ofArNorm(raw).replace(/\bجنيهات?\b/g,' ').replace(/\bجنيه\b/g,' ').replace(/\bوالف\b/g,' و الف ').replace(/\s+/g,' ').trim();
+  // v448: JS \b لا يتعامل مع الحروف العربية كـ word chars، فكان "14 الف جنيه" يفشل رغم أن الرقم واضح.
+  // ننظف وحدات العملة كـ tokens عربية صريحة، ونقبل ج.م بعد التطبيع إلى "ج م".
+  raw=ofArNorm(raw)
+    .replace(/(^|\s)(?:جنيه|جنيهات|جنية|جنيات)(?=\s|$)/g,' ')
+    .replace(/(^|\s)ج\s+م(?=\s|$)/g,' ')
+    .replace(/(^|\s)جم(?=\s|$)/g,' ')
+    .replace(/(^|\s)مصري(?:ه)?(?=\s|$)/g,' ')
+    .replace(/والف/g,' و الف ')
+    .replace(/\s+/g,' ').trim();
   if(!raw)return null;
   if(/^\d+(?:\.\d{1,2})?$/.test(raw)){const n=Number(raw);return n>0&&n<=999999999?n:null;}
   const strict=ofArabicDigitsOnly(raw); if(strict)return strict;
   let toks=[]; raw.split(' ').forEach(function(x){
     if(!x)return; if(x==='و')return;
-    if(x.length>1&&x[0]==='و'&&(OF_NUM_SMALL[x.slice(1)]!=null||['الف','الاف','مليون','ملايين'].includes(x.slice(1)))){toks.push(x.slice(1));}else toks.push(x);
+    if(x.length>1&&x[0]==='و'&&(OF_NUM_SMALL[x.slice(1)]!=null||/^\d+$/.test(x.slice(1))||['الف','الاف','مليون','ملايين'].includes(x.slice(1)))){toks.push(x.slice(1));}else toks.push(x);
   });
   let total=0, group=0, seen=false;
   for(let i=0;i<toks.length;i++){
@@ -3790,7 +3806,7 @@ function ofVoiceLocalNatural(text){
   const n=ofArNorm(text); if(!n)return {ok:false,reason:'empty',confidence:0};
   // v376: "بدون اسم تاجر" اختيار صريح وصحيح، مش اسم تاجر ناقص.
   // بنستخدم حساب نظام ثابت عشان الحركة تفضل ظاهرة في حسابات/تقارير التجار من غير اختراع اسم.
-  const unnamedMerchant=/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/.test(n);
+  const unnamedMerchant=/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)|(?:^|\s)(?:من\s+)?(?:تاجر|مورد)(?=\s+(?:ب|بمبلغ|المبلغ|قيمتها|قيمه)\s)/.test(n);
   const exact=unnamedMerchant?null:ofVoiceMerchantFromText(n);
   let merchantSpoken='';
   if(unnamedMerchant)merchantSpoken='بدون اسم تاجر';
@@ -3835,7 +3851,9 @@ function ofVoiceLocalNatural(text){
   if(isGoods&&pm>=0){beforePay=n.slice(0,pm);payText=n.slice(pm).replace(/^(?:\s*و?\s*)(?:دفعتله|دفعت|دفعه|حولت)\s*/, '');}
   function moneyTail(x){
     x=String(x||'');
-    if(unnamedMerchant)x=x.replace(/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/g,' ');
+    if(unnamedMerchant)x=x
+      .replace(/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/g,' ')
+      .replace(/(?:^|\s)(?:من\s+)?(?:تاجر|مورد)(?=\s+(?:ب|بمبلغ|المبلغ|قيمتها|قيمه)\s)/g,' ');
     else x=x.replace(new RegExp(ofArNorm(mm.merchant.name),'g'),' ');
     x=x.replace(/^(اشتريت|جبت|خدت|اخدت|استلمت|بضاعه|فاتوره|سجل|سجلت|دفعت|دفعه|حولت)\s*/, '')
       .replace(/^(?:فاتوره|بضاعه)\s*/, '')
