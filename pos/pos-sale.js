@@ -4123,6 +4123,41 @@ function showChangeAfterPrint(change, ctx){
 window.showChangeAfterPrint = showChangeAfterPrint;
 
 
+// 🎯 v452 — استرجاع الكتابة بعد تأكيد Paymob اليدوي.
+// بعض أجهزة Windows/Chrome بتخرج من native confirm() والـDOM focus واقع على body؛
+// النتيجة إن السكانر/الكيبورد يبانوا واقفين لحد ما المستخدم يلمس Windows.
+// بننضف أي overlay دفع نشط، ونرجع searchBar بعد اكتمال render/print على كذا frame.
+// لا يغير أي حالة دفع ولا يحفظ/يطبع حاجة؛ UI lifecycle فقط.
+function restorePosInputAfterPayment(reason){
+  function cleanAndFocus(){
+    try{
+      var active = document.activeElement;
+      if(active && active !== document.body && typeof active.blur === 'function' &&
+         (active.closest && active.closest('#payAmountModal, #askConfirmOverlay, #cancelTerminalOverlay'))){
+        active.blur();
+      }
+    }catch(e){}
+    try{
+      var sb = document.getElementById('searchBar');
+      if(!sb || sb.disabled) return false;
+      sb.focus({preventScroll:true});
+      if(typeof sb.select === 'function') sb.select();
+      return document.activeElement === sb;
+    }catch(e){ return false; }
+  }
+  try{ if(typeof window.focus === 'function') window.focus(); }catch(e){}
+  try{ cleanAndFocus(); }catch(e){}
+  // بعد native confirm + goToSale/render: frame ثم retry قصير للأجهزة الأبطأ.
+  try{ requestAnimationFrame(function(){ cleanAndFocus(); requestAnimationFrame(cleanAndFocus); }); }catch(e){}
+  setTimeout(cleanAndFocus, 80);
+  setTimeout(cleanAndFocus, 250);
+  // لو الـOS رجّع النافذة بعد لحظة، أول focus event يكمل الاسترجاع تلقائيًا.
+  var once = function(){ cleanAndFocus(); try{ window.removeEventListener('focus', once, true); }catch(e){} };
+  try{ window.addEventListener('focus', once, true); setTimeout(function(){ try{ window.removeEventListener('focus', once, true); }catch(e){} }, 5000); }catch(e){}
+  try{ if(typeof _logActivity === 'function') _logActivity('pos_focus_recovered', {reason:reason||'payment'}); }catch(e){}
+}
+window.restorePosInputAfterPayment = restorePosInputAfterPayment;
+
 let _confirmSaving = false;
 async function confirmPayment(){
   if(typeof confirmForeignBranchAction === 'function' && !confirmForeignBranchAction('حفظ الفاتورة والبيع')) return;
@@ -4132,6 +4167,7 @@ async function confirmPayment(){
   // 💵 رقم العميلة ورقم الفاتورة لازم يتمسكوا **قبل** ما السلة تتفضّى —
   //    شاشة الباقي بتظهر بعد كده والخانات بتكون اتمسحت خلاص.
   let _changeCtx = { phone:'', invoiceCode:'' };
+  let _manualPaymobConfirmed = false;
   try{
     _changeCtx.phone = (document.getElementById('customerPhone') || {value:''}).value.trim();
   }catch(e){}
@@ -4161,6 +4197,7 @@ async function confirmPayment(){
         + 'لو الماكينة مطبعتش أو رفضت العملية، الفاتورة دي هتطلع عجز في التقفيل.\n\n'
         + 'إيصال الموافقة طلع من الماكينة؟');
       if(!ok) return;
+      _manualPaymobConfirmed = true;
       const _tid = (typeof paymobTerminalId === 'function') ? paymobTerminalId() : null;
       const _added = [];
       _pend.forEach(function(l){
@@ -4225,6 +4262,10 @@ async function confirmPayment(){
     _confirmSaving = false;
     if(_btn){ _btn.textContent = _btn.dataset.lbl || 'حفظ وطباعة'; }
     if(typeof updatePaySummary === 'function') updatePaySummary();   // بيظبط تفعيل/تعطيل الزر حسب السلة
+    // v452: المسار اليدوي بالذات كان يسيب الكتابة معلّقة بعد native confirm.
+    if(_saved && _manualPaymobConfirmed){
+      try{ restorePosInputAfterPayment('paymob-manual-confirm'); }catch(e){}
+    }
   }
 }
 
