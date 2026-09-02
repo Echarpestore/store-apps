@@ -4192,11 +4192,22 @@ async function confirmPayment(){
     const _pend = cardPendingLegs(cardLegs);
     if(_pend.length){
       const _sum = cardPendingSum(cardLegs);
-      const ok = confirm('⚠️ الماكينة لسه ماأكدتش ' + _sum.toFixed(2) + ' ج.م.\n\n'
-        + 'متحفظش غير لو إيصال الماكينة طلع فعلًا ومكتوب عليه موافقة/APPROVED.\n'
-        + 'لو الماكينة مطبعتش أو رفضت العملية، الفاتورة دي هتطلع عجز في التقفيل.\n\n'
-        + 'إيصال الموافقة طلع من الماكينة؟');
-      if(!ok) return;
+      // v453: ممنوع native confirm() في مسار Paymob اليدوي. على أجهزة Windows/POS
+      // كان الـnative dialog بيرجع من التأكيد والنافذة نفسها فاقدة keyboard activation؛
+      // focus() على searchBar وحده لا يصلحها، وزر Windows كان هو اللي يعيدها.
+      // askConfirm Overlay داخل الـDOM بالكامل، لذلك لا نخرج من lifecycle المتصفح أصلًا.
+      const ok = await askConfirm({
+        icon:'📟',
+        title:'تأكيد عملية الفيزا يدويًا',
+        message:'الماكينة لسه ماأكدتش ' + _sum.toFixed(2) + ' ج.م.\n\n'
+          + 'متحفظش غير لو إيصال الماكينة طلع فعلًا ومكتوب عليه موافقة/APPROVED.\n'
+          + 'لو الماكينة مطبعتش أو رفضت العملية، الفاتورة دي هتطلع عجز في التقفيل.',
+        okText:'✅ الإيصال APPROVED — احفظ واطبع',
+        cancelText:'رجوع — متحفظش',
+        danger:true,
+        waitSec:0
+      });
+      if(!ok){ try{ restorePosInputAfterPayment('paymob-manual-cancel'); }catch(e){} return; }
       _manualPaymobConfirmed = true;
       const _tid = (typeof paymobTerminalId === 'function') ? paymobTerminalId() : null;
       const _added = [];
