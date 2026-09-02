@@ -3862,10 +3862,19 @@ function ofVoiceLocalNatural(text){
     return ofVoiceFindMoney(x);
   }
   let amount=null,payment=0,kind=isGoods?'order':'payment';
-  if(isGoods){amount=moneyTail(beforePay);if(payText)payment=moneyTail(payText)||0;}
-  else {amount=moneyTail(n);}
+  if(isGoods){
+    amount=moneyTail(beforePay);
+    if(payText){
+      const spokenPay=moneyTail(payText)||0;
+      // v450: في جملة شراء من نوع «اشتريت بضاعة بدون اسم تاجر دفعت 5775»
+      // كلمة «دفعت» هنا هي مؤشر مبلغ الفاتورة الوحيد، وليست دفعة ثانية.
+      // أما «اشتريت بـ 23000 ودفعت 10000» فتبقى فاتورة + دفعة كما كانت.
+      if(!amount && spokenPay){amount=spokenPay;payment=0;}
+      else payment=spokenPay;
+    }
+  } else {amount=moneyTail(n);}
   if(!amount)return {ok:false,reason:'amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
-  if(payText&&!payment)return {ok:false,reason:'payment_amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
+  if(payText&&amount&&moneyTail(beforePay)&&!payment)return {ok:false,reason:'payment_amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
   return {ok:true,kind:kind,merchant:mm.merchant,merchantSpoken:merchantSpoken,amount:amount,payment:payment,
     transcript:String(text||''),exactMerchant:mm.score===1||needsMerchantCreate,needsMerchantCreate:needsMerchantCreate,
     isUnnamedMerchant:unnamedMerchant,
