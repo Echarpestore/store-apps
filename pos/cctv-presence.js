@@ -1,7 +1,7 @@
-/* ECHARPE POS customer-presence correlation v476
+/* ECHARPE POS customer-presence correlation v477
    ------------------------------------------------------------
    Madinaty only for now:
-   - Reads local branch-PC Presence Agent (camera7/camera8 customer area).
+   - Reads local branch-PC Presence Agent using the cameras/ROI confirmed on that PC.
    - NEVER flags anything when the agent is unavailable/stale.
    - sale saved + no observed customer presence => suspicious activity.
    - observed customer session ends + no sale => suspicious activity.
@@ -10,7 +10,7 @@
 (function(){
 'use strict';
 
-var VERSION=476;
+var VERSION=477;
 var URL='http://127.0.0.1:1985/echarpe-presence/status';
 var POLL_MS=2500, STALE_MS=12000, NO_SALE_GRACE_MS=90000;
 var SALE_BEFORE_MS=30000, SALE_AFTER_MS=90000, MIN_SESSION_MS=8000;
@@ -43,7 +43,7 @@ function overlapSale(session, rows){
   return (rows||sales()).find(function(x){var t=Number(x.atMs)||0;return t>=a-SALE_BEFORE_MS&&t<=b+SALE_AFTER_MS;})||null;
 }
 function sessionDuration(s){return Math.max(0,(Number(s.endedAtMs)||Number(s.lastPresenceAtMs)||Date.now())-(Number(s.startedAtMs)||Date.now()));}
-function sessionCameras(s){return Array.isArray(s.cameras)?s.cameras.join(', '):String(s.cameras||'camera7,camera8');}
+function sessionCameras(s){return Array.isArray(s.cameras)?s.cameras.join(', '):String(s.cameras||'');}
 function logForSid(type,data,sid){
   try{
     if(typeof _logActivityForSid==='function') return _logActivityForSid(type,data,sid||null);
@@ -77,7 +77,7 @@ function processEnded(status){
       presenceCameras:sessionCameras(s), presenceConfidence:Number(s.confidence)||0,
       hadCartActivity:!!m.cartActions, cartActions:Number(m.cartActions)||0,
       removedQty:Number(m.removedQty)||0, hadDrawerOpen:!!m.hadDrawerOpen,
-      detector:'branch_local_occupancy_v476',
+      detector:'branch_local_occupancy_v477',
       __eventAtMsOverride:Number(s.endedAtMs)||Number(s.lastPresenceAtMs)||Date.now()
     },m.sid||null);
     markDone(s.id); delete observed[s.id]; delete metrics[s.id];
@@ -124,7 +124,8 @@ window.cctvPresenceRecordSale=function(meta){
       invoiceCode:String(meta.invoiceCode||''), invoiceNo:String(meta.invoiceNo||''),
       total:Number(meta.total)||0, itemCount:Number(meta.itemCount)||0,
       checkedAtMs:Date.now(), presenceLookbackSec:Math.round(SALE_BEFORE_MS/1000),
-      presenceCameras:'camera7, camera8', detector:'branch_local_occupancy_v476'
+      presenceCameras:Array.isArray(lastStatus.configuredCameras)?lastStatus.configuredCameras.join(', '):String(lastStatus.configuredCameras||''),
+      detector:'branch_local_occupancy_v477'
     },meta.sid||null);
     return false;
   }catch(e){return false;}
