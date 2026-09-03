@@ -2059,6 +2059,9 @@ const OF_ACT_KINDS = {
   same_day_reversal:     { t:'↩️ عكس فاتورة نفس اليوم', g:'money', hot:true },
   same_day_return:       { t:'↩️ مرتجع نفس اليوم', g:'money' },
   item_removed:          { t:'🛒 صنف اتشال من السلة', g:'cart' },
+  item_qty_reduced:      { t:'🛒 كمية اتشالت من السلة', g:'cart' },
+  sale_without_customer_presence:{ t:'📹 فاتورة بدون وجود عميل أمام الكاشير', g:'cart', hot:true },
+  customer_presence_no_sale:{ t:'📹 عميل عند الكاشير بدون فاتورة محفوظة', g:'cart', hot:true },
   cart_item_edited:      { t:'🛒 سطر اتعدّل في السلة', g:'cart' },
   cart_abandoned:        { t:'🛒 سلة اتسابت', g:'cart' },
   print_latency:         { t:'🖨️ زمن الطباعة', g:'cart', quiet:true },
@@ -2084,6 +2087,14 @@ function ofActLabel(type){
   return k ? k.t : ('• ' + String(type || '—'));
 }
 // تفاصيل الحدث بالعربي — الحقول بتختلف من نوع لنوع
+function ofActDuration(ms){
+  ms=Math.max(0,Number(ms)||0);var sec=Math.round(ms/1000),m=Math.floor(sec/60),s=sec%60;
+  return (m?m+' د ':'')+s+' ث';
+}
+function ofActClock(ms){
+  if(!Number(ms))return '';
+  try{return new Date(Number(ms)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(_){return '';}
+}
 function ofActDetail(a){
   const p = [];
   if(a.name) p.push(esc(a.name) + (a.qty ? ' ×' + a.qty : ''));
@@ -2102,6 +2113,15 @@ function ofActDetail(a){
     + (a.causeExact === false ? ' <span style="color:#b45309;">(مش مغطي الفرق كله)</span>' : ''));
   if(a.customerPhone) p.push('<span dir="ltr">' + esc(a.customerPhone) + '</span>');
   if(a.txnId) p.push('<span dir="ltr">TXN ' + esc(String(a.txnId)) + '</span>');
+  if((a.type==='item_removed'||a.type==='item_qty_reduced') && a.addedAtMs){
+    p.push('اتحطت أول مرة ' + esc(ofActClock(a.addedAtMs)));
+    if(a.lastAddedAtMs && Number(a.lastAddedAtMs)!==Number(a.addedAtMs)) p.push('آخر قطعة من نفس السطر ' + esc(ofActClock(a.lastAddedAtMs)));
+    if(a.timeInCartMs!=null) p.push('فضلت في السلة ' + esc(ofActDuration(a.timeInCartMs)));
+  }
+  if(a.presenceStartedAtMs) p.push('العميل ظهر ' + esc(ofActClock(a.presenceStartedAtMs)));
+  if(a.presenceEndedAtMs) p.push('غادر ' + esc(ofActClock(a.presenceEndedAtMs)));
+  if(a.presenceDurationMs!=null) p.push('المدة ' + esc(ofActDuration(a.presenceDurationMs)));
+  if(a.presenceCameras) p.push('كاميرات ' + esc(a.presenceCameras));
   return p.join(' · ');
 }
 
@@ -2214,10 +2234,28 @@ function ofActIntelligence(a){
     'اتعمل مرتجع لصنف من فاتورة في نفس اليوم.',
     'المبيعات والمخزون اتعدلوا بقيمة الصنف المرتجع.',
     'لا إجراء إلا لو المرتجعات متكررة بشكل غير طبيعي.');
-  if(type === 'item_removed') return normal(
-    'صنف اتشال من السلة قبل إتمام البيع.',
+  if(type === 'item_removed' || type === 'item_qty_reduced') return normal(
+    (type==='item_removed'?'صنف اتشال من السلة':'كمية من صنف اتشالت من السلة')
+      + (a.addedAtMs ? ' بعد ما كانت مضافة من ' + ofActClock(a.addedAtMs)
+        + (a.timeInCartMs!=null ? ' لمدة ' + ofActDuration(a.timeInCartMs) : '') + '.' : '.'),
     'لو حصل قبل الدفع فده تعديل عادي. لو بعد قبول الكارت، قصة السلة هتوضح إنه ممكن يكون سبب فرق مالي.',
     'راجع التوقيت داخل قصة السلة فقط لو الحدث مرتبط بدفع كارت أو بيتكرر بشكل مبالغ فيه.');
+  if(type === 'sale_without_customer_presence') return action(
+    'فاتورة اتحفظت، لكن Presence Agent السليم ماشفش وجود عميل في منطقة العميل على D07/D08 خلال نافذة المراجعة.',
+    'دي حالة غير طبيعية: ممكن تكون فاتورة اتسجلت من غير عميل فعلي أمام الكاشير، أو منطقة الكاميرا محتاجة معايرة.',
+    'افتح فيديو الحدث ولقطات الفاتورة وراجع D07/D08 في نفس التوقيت. لو العميل ظاهر خارج المنطقة، عدّل ROI بدل اعتبارها مخالفة.', 0);
+  if(type === 'customer_presence_no_sale'){
+    const risky=!!a.hadDrawerOpen||Number(a.cartActions||0)>0;
+    return risky ? action(
+      'العميل اتشاف في منطقة العميل لمدة ' + ofActDuration(a.presenceDurationMs) + ' ومفيش فاتورة اتحفظت، وفي نفس الجلسة حصل تعامل مع السلة'
+        + (a.hadDrawerOpen?' وفتح درج يدوي':'') + '.',
+      'دي إشارة قوية إن فيه تعامل عند الكاشير انتهى من غير فاتورة محفوظة.',
+      'راجع فيديو الحدث وقصة السلة فورًا، وطابق الوقت مع الكاش/الدرج وأي حذف أصناف.', 0)
+      : watch(
+      'العميل اتشاف في منطقة العميل لمدة ' + ofActDuration(a.presenceDurationMs) + ' وبعد مهلة المراجعة مفيش فاتورة اتحفظت.',
+      'ممكن تكون استفسار/عميلة غيرت رأيها، لكن تكرارها يستحق المتابعة.',
+      'راجع الفيديو لو المدة طويلة أو الحدث متكرر لنفس الفرع/الموظفة.');
+  }
   if(type === 'cart_item_edited') return watch(
     'سعر أو كمية سطر في السلة اتعدل يدويًا.',
     'التعديل ممكن يغير إجمالي الفاتورة بعيدًا عن السعر الأصلي.',
@@ -2328,7 +2366,8 @@ function ofActBehaviorInsights(list, now){
   const baselineDays=Math.max(1, Math.min(29, (curFrom-oldest)/DAY));
   const riskTypes={manual_discount:1,manual_drawer_open:1,customer_points_edit:1,
     card_overcharge_saved:1,paymob_stuck:1,paymob_orphan_detected:1,same_day_reversal:1,
-    inventory_wiped:1,inventory_merge_bulk:1,inventory_branch_catalog_replace:1,inventory_full_reconcile:1};
+    inventory_wiped:1,inventory_merge_bulk:1,inventory_branch_catalog_replace:1,inventory_full_reconcile:1,
+    sale_without_customer_presence:1,customer_presence_no_sale:1};
   function key(a,dim){ return String(dim==='employee'?(a.employeeName||''):(a.branch||'')); }
   function counts(arr,dim,type){ const m={}; arr.forEach(function(a){
     if(a.type!==type)return; const k=key(a,dim); if(k)m[k]=(m[k]||0)+1; }); return m; }
@@ -2619,7 +2658,13 @@ const OF_ACT_FIELD_AR = {
   refs:'مراجع الدفع', waitedMs:'مدة الانتظار (ms)', skip:'سبب تخطي الحفظ', online:'الإنترنت',
   expected:'المرجع المتوقع', matched:'المرجع المطابق', last4:'آخر 4 أرقام',
   groups:'مجموعات الدمج', closed:'المغلقة', failed:'فشل', reqPoints:'النقط المطلوبة',
-  reqValue:'القيمة المطلوبة', sanePoints:'النقط الصحيحة', saneValue:'القيمة الصحيحة', balance:'الرصيد'
+  reqValue:'القيمة المطلوبة', sanePoints:'النقط الصحيحة', saneValue:'القيمة الصحيحة', balance:'الرصيد',
+  lineId:'معرّف سطر السلة', addedAtMs:'اتضافت الساعة', lastAddedAtMs:'آخر زيادة للكمية', timeInCartMs:'المدة في السلة (ms)',
+  qtyBefore:'الكمية قبل', qtyAfter:'الكمية بعد', presenceSessionId:'جلسة العميل',
+  presenceStartedAtMs:'ظهور العميل', presenceEndedAtMs:'مغادرة العميل', presenceDurationMs:'مدة وجود العميل (ms)',
+  presenceCameras:'كاميرات منطقة العميل', presenceConfidence:'ثقة الكشف', presenceLookbackSec:'نافذة البحث (ث)',
+  hadCartActivity:'حصل تعامل مع السلة', cartActions:'حركات السلة', removedQty:'كمية اتحذفت',
+  hadDrawerOpen:'الدرج اتفتح', detector:'مصدر الكشف', checkedAtMs:'وقت فحص الكاميرات'
 };
 const OF_ACT_SKIP = { id:1, type:1, ts:1, employeeId:1, _linkedInvoice:1 };
 window.ofActOpen = function(id){
@@ -2648,6 +2693,7 @@ window.ofActOpen = function(id){
     + (inv ? '<div style="background:var(--panel2); border-radius:8px; padding:7px 9px; margin-bottom:8px; font-weight:800; font-size:13px;">🧾 ' + esc(inv)
       + '<button type="button" onclick="ofCctvInvoiceShot(\'' + String(inv).replace(/'/g,"\\'") + '\')" style="float:left;border:0;border-radius:8px;padding:5px 8px;cursor:pointer;">📸 لقطة الفاتورة</button><div style="clear:both"></div></div>'
            : '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">🧾 مفيش فاتورة مربوطة — إما السلة اتسابت من غير بيع، أو الحدث قديم (قبل تحديث الربط)</div>')
+    + (a.cctvEventId ? '<button type="button" onclick="ofCctvOpenEvent(\'' + String(a.cctvEventId).replace(/'/g,"\\'") + '\')" style="width:100%;border:0;border-radius:9px;padding:8px 10px;margin-bottom:8px;cursor:pointer;font-weight:800;">🎥 افتح فيديو الحدث 30 ثانية قبل + 30 بعد</button>' : '')
     + '<div style="border:1px solid var(--line); border-right:4px solid ' + _icol + '; border-radius:11px; padding:10px; margin-bottom:10px; background:var(--panel2);">'
       + '<div style="font-weight:900; color:' + _icol + '; margin-bottom:5px;">' + intel.icon + ' ' + esc(intel.levelLabel) + '</div>'
       + '<div style="font-size:12.5px; line-height:1.8;"><b>التفسير:</b> ' + esc(intel.explain) + '</div>'
@@ -3753,17 +3799,33 @@ const OF_NUM_SMALL={
   'تسعه':9,'تسع':9,'عشره':10,'عشر':10,'حداشر':11,'احداشر':11,'اتناشر':12,'اثناشر':12,'تلتاشر':13,'تلاتاشر':13,
   'اربعتاشر':14,'خمستاشر':15,'ستاشر':16,'سبعتاشر':17,'تمنتاشر':18,'تسعتاشر':19,
   'عشرين':20,'تلاتين':30,'ثلاثين':30,'اربعين':40,'خمسين':50,'ستين':60,'سبعين':70,'تمانين':80,'ثمانين':80,'تسعين':90,
-  'ميه':100,'مائه':100,'مايه':100
+  'ميه':100,'مائه':100,'مايه':100,
+  'متين':200,'ميتين':200,
+  'تلتميه':300,'تلاتميه':300,'ثلاثميه':300,
+  'اربعميه':400,'اربعمايه':400,
+  'خمسميه':500,'خمسمايه':500,
+  'ستميه':600,'ستمايه':600,
+  'سبعميه':700,'سبعمايه':700,
+  'تمنميه':800,'تمانميه':800,'ثمانميه':800,
+  'تسعميه':900,'تسعمايه':900
 };
 function ofNaturalMoney(text){
   let raw=String(text||'').replace(/[٠-٩]/g,function(c){return String('٠١٢٣٤٥٦٧٨٩'.indexOf(c));});
-  raw=ofArNorm(raw).replace(/\bجنيهات?\b/g,' ').replace(/\bجنيه\b/g,' ').replace(/\bوالف\b/g,' و الف ').replace(/\s+/g,' ').trim();
+  // v448: JS \b لا يتعامل مع الحروف العربية كـ word chars، فكان "14 الف جنيه" يفشل رغم أن الرقم واضح.
+  // ننظف وحدات العملة كـ tokens عربية صريحة، ونقبل ج.م بعد التطبيع إلى "ج م".
+  raw=ofArNorm(raw)
+    .replace(/(^|\s)(?:جنيه|جنيهات|جنية|جنيات)(?=\s|$)/g,' ')
+    .replace(/(^|\s)ج\s+م(?=\s|$)/g,' ')
+    .replace(/(^|\s)جم(?=\s|$)/g,' ')
+    .replace(/(^|\s)مصري(?:ه)?(?=\s|$)/g,' ')
+    .replace(/والف/g,' و الف ')
+    .replace(/\s+/g,' ').trim();
   if(!raw)return null;
   if(/^\d+(?:\.\d{1,2})?$/.test(raw)){const n=Number(raw);return n>0&&n<=999999999?n:null;}
   const strict=ofArabicDigitsOnly(raw); if(strict)return strict;
   let toks=[]; raw.split(' ').forEach(function(x){
     if(!x)return; if(x==='و')return;
-    if(x.length>1&&x[0]==='و'&&(OF_NUM_SMALL[x.slice(1)]!=null||['الف','الاف','مليون','ملايين'].includes(x.slice(1)))){toks.push(x.slice(1));}else toks.push(x);
+    if(x.length>1&&x[0]==='و'&&(OF_NUM_SMALL[x.slice(1)]!=null||/^\d+$/.test(x.slice(1))||['الف','الاف','مليون','ملايين'].includes(x.slice(1)))){toks.push(x.slice(1));}else toks.push(x);
   });
   let total=0, group=0, seen=false;
   for(let i=0;i<toks.length;i++){
@@ -3799,7 +3861,7 @@ function ofVoiceLocalNatural(text){
   const n=ofArNorm(text); if(!n)return {ok:false,reason:'empty',confidence:0};
   // v376: "بدون اسم تاجر" اختيار صريح وصحيح، مش اسم تاجر ناقص.
   // بنستخدم حساب نظام ثابت عشان الحركة تفضل ظاهرة في حسابات/تقارير التجار من غير اختراع اسم.
-  const unnamedMerchant=/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/.test(n);
+  const unnamedMerchant=/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)|(?:^|\s)(?:من\s+)?(?:تاجر|مورد)(?=\s+(?:ب|بمبلغ|المبلغ|قيمتها|قيمه)\s)/.test(n);
   const exact=unnamedMerchant?null:ofVoiceMerchantFromText(n);
   let merchantSpoken='';
   if(unnamedMerchant)merchantSpoken='بدون اسم تاجر';
@@ -3819,7 +3881,7 @@ function ofVoiceLocalNatural(text){
     }
   }
   let mm=unnamedMerchant
-    ? {ok:true,merchant:{id:'__unnamed__',name:'بدون اسم تاجر'},score:1,exact:true}
+    ? {ok:true,merchant:{id:'system_unnamed_merchant',name:'بدون اسم تاجر'},score:1,exact:true}
     : (exact?{ok:true,merchant:exact.merchant,score:1,exact:true}:ofMerchantMatch(merchantSpoken));
   let needsMerchantCreate=false;
   if(!mm.ok){
@@ -3844,7 +3906,9 @@ function ofVoiceLocalNatural(text){
   if(isGoods&&pm>=0){beforePay=n.slice(0,pm);payText=n.slice(pm).replace(/^(?:\s*و?\s*)(?:دفعتله|دفعت|دفعه|حولت)\s*/, '');}
   function moneyTail(x){
     x=String(x||'');
-    if(unnamedMerchant)x=x.replace(/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/g,' ');
+    if(unnamedMerchant)x=x
+      .replace(/(?:بدون|من غير)\s+(?:اسم\s+)?تاجر|تاجر\s+(?:مجهول|غير معروف)|مورد\s+(?:مجهول|غير معروف)/g,' ')
+      .replace(/(?:^|\s)(?:من\s+)?(?:تاجر|مورد)(?=\s+(?:ب|بمبلغ|المبلغ|قيمتها|قيمه)\s)/g,' ');
     else x=x.replace(new RegExp(ofArNorm(mm.merchant.name),'g'),' ');
     x=x.replace(/^(اشتريت|جبت|خدت|اخدت|استلمت|بضاعه|فاتوره|سجل|سجلت|دفعت|دفعه|حولت)\s*/, '')
       .replace(/^(?:فاتوره|بضاعه)\s*/, '')
@@ -3853,10 +3917,19 @@ function ofVoiceLocalNatural(text){
     return ofVoiceFindMoney(x);
   }
   let amount=null,payment=0,kind=isGoods?'order':'payment';
-  if(isGoods){amount=moneyTail(beforePay);if(payText)payment=moneyTail(payText)||0;}
-  else {amount=moneyTail(n);}
+  if(isGoods){
+    amount=moneyTail(beforePay);
+    if(payText){
+      const spokenPay=moneyTail(payText)||0;
+      // v450: في جملة شراء من نوع «اشتريت بضاعة بدون اسم تاجر دفعت 5775»
+      // كلمة «دفعت» هنا هي مؤشر مبلغ الفاتورة الوحيد، وليست دفعة ثانية.
+      // أما «اشتريت بـ 23000 ودفعت 10000» فتبقى فاتورة + دفعة كما كانت.
+      if(!amount && spokenPay){amount=spokenPay;payment=0;}
+      else payment=spokenPay;
+    }
+  } else {amount=moneyTail(n);}
   if(!amount)return {ok:false,reason:'amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
-  if(payText&&!payment)return {ok:false,reason:'payment_amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
+  if(payText&&amount&&moneyTail(beforePay)&&!payment)return {ok:false,reason:'payment_amount',merchant:mm.merchant,merchantSpoken:merchantSpoken,confidence:0.55};
   return {ok:true,kind:kind,merchant:mm.merchant,merchantSpoken:merchantSpoken,amount:amount,payment:payment,
     transcript:String(text||''),exactMerchant:mm.score===1||needsMerchantCreate,needsMerchantCreate:needsMerchantCreate,
     isUnnamedMerchant:unnamedMerchant,
@@ -3888,7 +3961,7 @@ async function ofVoiceAiFallback(text){
     if(x.kind==='payment'&&payment>0)return {ok:false,reason:'ai_invalid_payment'};
     const isUnnamedMerchant=x.isUnnamedMerchant===true;
     let m=isUnnamedMerchant
-      ? {id:'__unnamed__',name:'بدون اسم تاجر'}
+      ? {id:'system_unnamed_merchant',name:'بدون اسم تاجر'}
       : (D.merchants||[]).find(function(z){return String(z.id)===String(x.merchantId||'');});
     let needsMerchantCreate=false;
     if(!m){
@@ -4052,6 +4125,14 @@ async function ofVoiceRefreshPermission(){
   ofVoiceSetPermission('هيتأكد عند التشغيل','prompt'); return 'unknown';
 }
 async function ofVoiceEnsureMicPermission(){
+  // v449: لو Chrome بالفعل مدي صلاحية للمايك ما نفتحش getUserMedia كل مرة.
+  // ده كان بيضيف انتظار ملحوظ قبل ما SpeechRecognition يبدأ.
+  try{
+    if(navigator.permissions&&navigator.permissions.query){
+      const q=await navigator.permissions.query({name:'microphone'});
+      if(q&&q.state==='granted'){ofVoiceSetPermission('مسموح','granted');return true;}
+    }
+  }catch(e){}
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return true;
   const stream=await navigator.mediaDevices.getUserMedia({audio:true});
   try{(stream.getTracks()||[]).forEach(function(t){t.stop();});}catch(e){}
@@ -4091,10 +4172,8 @@ function ofVoiceRenderDraft(d){
   warn.textContent=warning; warn.style.display=warning?'block':'none';
   ofVoiceUi('review','✅ فهمت الحركة. راجع التاجر والمبالغ والحساب قبل التأكيد.',d.transcript);
   ofVoiceOverlay(true);
-  const sentence=(d.needsMerchantCreate?'تاجر جديد '+name+'. ':'')
-    +(m.order?'فاتورة بضاعة '+ofVoiceMoneySpeak(m.order)+'. ':'')
-    +(m.payment?'دفعة '+ofVoiceMoneySpeak(m.payment)+'. ':'')
-    +'الحساب بعد الحركة '+ofVoiceMoneySpeak(Math.abs(m.after))+'. راجع الشاشة، وبعدها قل تأكيد أو إلغاء.';
+  // v449: الرد الصوتي قصير عشان ما يعطلش المستخدم قبل تأكيد الحركة.
+  const sentence='فهمت. راجع الشاشة، وبعدها قل تأكيد أو إلغاء.';
   ofSpeak(sentence,function(){ofVoiceListenConfirm();});
 }
 function ofVoiceRecognition(){
@@ -4137,7 +4216,7 @@ async function ofVoiceCommit(){
     if(!merchant && d.merchant&&d.merchant.name) merchant=(D.merchants||[]).find(function(z){return ofArNorm(z.name||'')===ofArNorm(d.merchant.name||'');});
     let mid=merchant&&merchant.id || d.merchant.id || '';
     if(d.isUnnamedMerchant){
-      mid='__unnamed__';
+      mid='system_unnamed_merchant';
       batch.set(db.collection('office_merchants').doc(mid),{name:'بدون اسم تاجر',systemUnnamed:true,updatedAt:commitTs},{merge:true});
     }
     if(!mid){
@@ -4209,7 +4288,8 @@ async function ofVoiceStart(){
   }
   if(session!==_ofVoiceSession)return;
   const r=ofVoiceRecognition(); if(!r)return;
-  _ofVoiceRec=r; let handled=false,finalText='';
+  _ofVoiceRec=r; let handled=false,finalText='',latestShown='',silenceTimer=null;
+  function clearVoiceSilence(){if(silenceTimer){clearTimeout(silenceTimer);silenceTimer=null;}}
   r.onstart=function(){if(session===_ofVoiceSession)ofVoiceUi('listening','🔴 المايك شغال دلوقتي — اتكلم بطبيعتك.');};
   r.onresult=async function(e){
     if(session!==_ofVoiceSession)return;
@@ -4218,9 +4298,23 @@ async function ofVoiceStart(){
       const rr=e.results[ri]; if(rr&&rr[0])shown+=(shown?' ':'')+(rr[0].transcript||'');
       if(rr&&rr.isFinal&&rr[0])finalText+=(finalText?' ':'')+(rr[0].transcript||'');
     }
-    ofVoiceUi(handled?'processing':'listening',handled?'🧠 بفهم الكلام…':'🔴 سامعك… كمل.',shown||finalText);
+    latestShown=(shown||finalText||latestShown).trim();
+    ofVoiceUi(handled?'processing':'listening',handled?'🧠 بفهم الكلام…':'🔴 سامعك… كمل.',latestShown);
     const last=e.results[e.results.length-1];
+    // v449: لو الجملة المؤقتة اتفهمت محليًا بالكامل، 450ms هدوء كفاية
+    // عشان نطلب من Chrome إنه ينهي الجملة بدل الانتظار لثواني بلا داعي.
+    clearVoiceSilence();
+    if(!handled && last && !last.isFinal && latestShown){
+      const quick=ofVoiceLocalNatural(latestShown);
+      if(quick&&quick.ok&&Number(quick.confidence||0)>=0.90){
+        silenceTimer=setTimeout(function(){
+          if(session!==_ofVoiceSession||handled||!_ofVoiceRec)return;
+          try{_ofVoiceRec.stop();}catch(ex){}
+        },450);
+      }
+    }
     if(!last||!last.isFinal||handled)return;
+    clearVoiceSilence();
     handled=true; _ofVoiceRec=null;
     const alternatives=[]; for(let i=0;i<last.length;i++)if(last[i]&&last[i].transcript)alternatives.push(last[i].transcript);
     if(finalText&&!alternatives.includes(finalText))alternatives.unshift(finalText);
@@ -4236,6 +4330,7 @@ async function ofVoiceStart(){
     else {const msg=ofVoiceExplainError(best);ofVoiceUi('error','⚠️ '+msg,finalText||alternatives[0]||'');ofSpeak(msg);}
   };
   r.onerror=function(e){
+    clearVoiceSilence();
     if(session!==_ofVoiceSession||String(e&&e.error)==='aborted')return;
     _ofVoiceRec=null;
     const code=String(e&&e.error||'');
@@ -4247,6 +4342,7 @@ async function ofVoiceStart(){
     ofVoiceUi('error','⚠️ '+msg);
   };
   r.onend=function(){
+    clearVoiceSilence();
     if(session!==_ofVoiceSession)return; _ofVoiceRec=null;
     if(!handled&&_ofVoiceState==='listening')setTimeout(function(){if(session===_ofVoiceSession&&_ofVoiceState==='listening')ofVoiceUi('error','⚠️ التسجيل انتهى من غير ما أسمع جملة كاملة. جرّب تاني.');},120);
   };
