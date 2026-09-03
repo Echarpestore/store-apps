@@ -510,48 +510,6 @@ if(typeof window !== 'undefined'){
   window.blockCartEditAfterCard = blockCartEditAfterCard;
 }
 
-// 🕵️ v476: عمر القطعة داخل السلة — من غير Firestore write لكل Scan.
-// بنخزن التوقيت على سطر السلة نفسه، ولما قطعة تتشال نسجل وقت دخولها
-// مع حدث الحذف فقط. كده Office يقدر يقول «اتحطت إمتى واتشالت بعد قد إيه»
-// من غير ما نضاعف تكلفة pos_activity_log.
-function _cartAuditId(){
-  return 'ln_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
-}
-function _cartAuditEnsure(line, atMs){
-  if(!line || line.isRedemption || line.isRewardDiscount) return line;
-  const t = Number(atMs) || Date.now();
-  if(!line._lineAuditId) line._lineAuditId = _cartAuditId();
-  if(!Number(line._addedAtMs)) line._addedAtMs = t;
-  if(!Number(line._lastAddedAtMs)) line._lastAddedAtMs = Number(line._addedAtMs) || t;
-  return line;
-}
-function _cartAuditAdded(line, atMs){
-  if(!line || line.isRedemption || line.isRewardDiscount) return;
-  const t = Number(atMs) || Date.now();
-  _cartAuditEnsure(line, t);
-  line._lastAddedAtMs = t;
-}
-function _cartRemovalData(line, qtyRemoved, extra){
-  const now = Date.now();
-  line = line || {};
-  const added = Number(line._addedAtMs) || Number(_cartFirstItemAt) || now;
-  const lastAdded = Number(line._lastAddedAtMs) || added;
-  return Object.assign({
-    name:line.name||'', barcode:line.barcode||'', price:Number(line.price)||0,
-    qty:Number(qtyRemoved)||1, lineId:line._lineAuditId||'',
-    addedAtMs:added, lastAddedAtMs:lastAdded,
-    timeInCartMs:Math.max(0, now-added)
-  }, extra||{});
-}
-function _cartPresenceNote(kind, line, qty){
-  try{
-    if(typeof cctvPresenceNoteCartActivity === 'function') cctvPresenceNoteCartActivity(kind, {
-      sid:_cartSid||'', name:(line&&line.name)||'', barcode:(line&&line.barcode)||'',
-      qty:Number(qty)||0, value:Math.abs(Number(line&&line.price)||0)*Math.abs(Number(qty)||0)
-    });
-  }catch(e){}
-}
-
 function addToCart(item){
   if(blockCartEditAfterCard()) return;
   // 🕵️ v296: مع أول قطعة بيتولد **معرّف سلة** بيتحط على كل حدث بيحصل
@@ -570,8 +528,7 @@ function addToCart(item){
   //    بإيدها (عشان تخصم على قطعة واحدة) بيتعلّم `noMerge` وبيتستثنى من الدمج،
   //    وإلا الضربة الجاية لنفس الباركود كانت هترجع تدمجهم وتلغي الفصل.
   const existing = cart.find(c => c.id === item.id && !c.isReturn && !c.noMerge);
-  const _addAt = Date.now();
-  if(existing){ existing.qty += 1; _cartAuditAdded(existing, _addAt); _cartPresenceNote('add', existing, 1); }
+  if(existing){ existing.qty += 1; }
   else{
     // تطبيق أفضل خصم ساري تلقائيًا (لو فيه) — بقاعدة "الأفضل للعميل بس، مش تجميع"
     let finalPrice = item.price;
@@ -586,10 +543,7 @@ function addToCart(item){
         showToast(`🏷️ اتطبق خصم "${discountName}" — وفّر ${best.saving.toFixed(2)} ج.م`, 'ok');
       }
     }
-    const _newLine = {id:item.id, name:item.name, barcode:item.barcode, price:finalPrice, originalPrice, discountName, qty:1, attribute:item.attribute||'', size:item.size||''};
-    _cartAuditAdded(_newLine, _addAt);
-    cart.push(_newLine);
-    _cartPresenceNote('add', _newLine, 1);
+    cart.push({id:item.id, name:item.name, barcode:item.barcode, price:finalPrice, originalPrice, discountName, qty:1, attribute:item.attribute||'', size:item.size||''});
   }
   lastAddedId = item.id;   // ده آخر منتج ضربته — هيتميّز في السلة
   // 🎯 وبيتحدد تلقائي — عشان + و− و«تعديل» و«حذف» يشتغلوا عليه على طول
@@ -769,7 +723,6 @@ function _saleDraftRestore(){
     cart = items;
     selectedCartIdx = null;
     if(typeof _cartFirstItemAt !== 'undefined') _cartFirstItemAt = Number(d.firstItemAt) || Date.now();
-    cart.forEach(function(line){ _cartAuditEnsure(line, Number(line._addedAtMs)||Number(d.firstItemAt)||Number(d.savedAt)||Date.now()); });
     if(typeof _cartSid !== 'undefined') _cartSid = (typeof _newCartSid === 'function') ? _newCartSid() : null;
     // مهم: نرجّع الأصناف فقط — ولا أي حالة دفع قديمة.
     try{ if(typeof clearCardSaleCompleteState === 'function') clearCardSaleCompleteState(); }catch(e){}
@@ -904,17 +857,8 @@ function renderHoldButtons(){
 function cartSetQty(idx, val){
   if(blockCartEditAfterCard()) return;
   const c = cart[idx]; if(!c) return;
-  const oldQty = Number(c.qty)||1;
   let nq = parseInt(val);
   if(isNaN(nq) || nq < 1){ if(nq === 0){ cartRemove(idx); return; } nq = 1; }
-  if(nq < oldQty){
-    const removed = oldQty - nq;
-    _logActivity('item_qty_reduced', _cartRemovalData(c, removed, {qtyBefore:oldQty, qtyAfter:nq}));
-    _cartPresenceNote('remove', c, removed);
-  }else if(nq > oldQty){
-    _cartAuditAdded(c, Date.now());
-    _cartPresenceNote('add', c, nq-oldQty);
-  }
   c.qty = nq;   // مسموح بأي كمية حتى لو أكبر من المخزون
   renderCart();
 }
@@ -923,17 +867,8 @@ function cartSetQty(idx, val){
 function cartQty(idx, delta){
   if(blockCartEditAfterCard()) return;
   const c = cart[idx]; if(!c) return;
-  const oldQty = Number(c.qty)||1;
-  let nq = oldQty + delta;
+  let nq = (c.qty||1) + delta;
   if(nq < 1){ cartRemove(idx); return; }
-  if(nq < oldQty){
-    const removed = oldQty - nq;
-    _logActivity('item_qty_reduced', _cartRemovalData(c, removed, {qtyBefore:oldQty, qtyAfter:nq}));
-    _cartPresenceNote('remove', c, removed);
-  }else if(nq > oldQty){
-    _cartAuditAdded(c, Date.now());
-    _cartPresenceNote('add', c, nq-oldQty);
-  }
   c.qty = nq;   // مسموح بأي كمية حتى لو أكبر من المخزون
   renderCart();
 }
@@ -942,8 +877,7 @@ function cartRemove(idx){
   if(blockCartEditAfterCard()) return;
   if(idx < 0 || idx >= cart.length) return;
   const _rm = cart[idx];
-  _logActivity('item_removed', _cartRemovalData(_rm, _rm.qty||1, {cartCountAfter: cart.length-1}));
-  _cartPresenceNote('remove', _rm, _rm.qty||1);
+  _logActivity('item_removed', { name:_rm.name||'', qty:_rm.qty||1, price:_rm.price||0, cartCountAfter: cart.length-1 });
   // 🕵️ v297: اتشال **بعد** ما الكارت اتسحب؟ يبقى ده سبب الفرق —
   //    بيتحفظ عشان حدث السحب الزيادة يقول ليه بدل ما المالك يدوّر
   _trackEditAfterCard('شيل', _rm.name || '', _rm.qty || 1,
@@ -1461,14 +1395,6 @@ function qbxEditSel(){
     if(blockCartEditAfterCard()) return;
     const v = out.v;
     if(line.origPrice == null) line.origPrice = base;   // الأصلي بيتحفظ مرة واحدة
-    const _oldEditQty=Number(line.qty)||1;
-    if(v.qty < _oldEditQty){
-      const _removedEditQty=_oldEditQty-v.qty;
-      _logActivity('item_qty_reduced', _cartRemovalData(line,_removedEditQty,{qtyBefore:_oldEditQty,qtyAfter:v.qty,source:'edit_item'}));
-      _cartPresenceNote('remove',line,_removedEditQty);
-    }else if(v.qty > _oldEditQty){
-      _cartAuditAdded(line,Date.now()); _cartPresenceNote('add',line,v.qty-_oldEditQty);
-    }
     line.price   = line.isReturn ? -out.unit : out.unit;
     line.qty     = v.qty;
     line.edited  = true;
@@ -1553,8 +1479,7 @@ function splitCartLine(idx){
   if(line.isRedemption || line.isRewardDiscount){ showToast('السطر ده مينفعش يتفصل', 'err'); return; }
   if((line.qty || 0) <= 1){ showToast('السطر ده قطعة واحدة أصلًا', 'err'); return; }
   line.qty -= 1;
-  const copy = Object.assign({}, line, { qty: 1, noMerge: true, _lineAuditId:_cartAuditId() });
-  _cartAuditEnsure(copy, Number(line._addedAtMs)||Date.now());
+  const copy = Object.assign({}, line, { qty: 1, noMerge: true });
   cart.splice(idx + 1, 0, copy);
   selectedCartIdx = idx + 1;               // القطعة المفصولة هي المحددة
   renderCart();
@@ -1564,27 +1489,13 @@ if(typeof window !== 'undefined') window.splitCartLine = splitCartLine;
 
 function changeQty(idx, delta){
   if(blockCartEditAfterCard()) return;
-  const line = cart[idx]; if(!line) return;
-  const oldQty=Number(line.qty)||1, next=oldQty+delta;
-  if(delta < 0){
-    const removed=Math.min(oldQty, Math.abs(delta));
-    _logActivity(next<=0?'item_removed':'item_qty_reduced',
-      _cartRemovalData(line, removed, {qtyBefore:oldQty, qtyAfter:Math.max(0,next), cartCountAfter:next<=0?cart.length-1:cart.length}));
-    _cartPresenceNote('remove', line, removed);
-  }else if(delta > 0){
-    _cartAuditAdded(line, Date.now()); _cartPresenceNote('add', line, delta);
-  }
-  line.qty = next;   // مسموح بأي كمية حتى لو أكبر من المخزون
+  const line = cart[idx];
+  line.qty += delta;   // مسموح بأي كمية حتى لو أكبر من المخزون
   if(line.qty <= 0){ cart.splice(idx,1); selectedCartIdx = null; }
   renderCart();
 }
 function removeFromCart(idx){
   if(blockCartEditAfterCard()) return;
-  const _rmLine = cart[idx];
-  if(_rmLine && !_rmLine.isRedemption && !_rmLine.isRewardDiscount){
-    _logActivity('item_removed', _cartRemovalData(_rmLine, _rmLine.qty||1, {cartCountAfter:cart.length-1}));
-    _cartPresenceNote('remove', _rmLine, _rmLine.qty||1);
-  }
   if(cart[idx] && cart[idx].isRedemption) pendingRedemption = null;
   // 🔴 باج التركيز (AI_HANDOFF §0، مسار ١) — نفس منطق cartRemove بالظبط:
   // فوكس searchBar قبل ما renderCart تمسح الزرار المفوكس.
@@ -2112,7 +2023,10 @@ async function openRedeemPoints(){
 
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
-    if(_stale()) return;                      // الكاشير مسحت أو غيّرت الرقم وإحنا بنقرا
+    // v488: `_stale` is local to refreshCustomerInfo() and cannot be used here.
+    // Keep the same safety goal locally: ignore the async result if the cashier changed/cleared the phone.
+    const _redeemPhoneEl = document.getElementById('customerPhone');
+    if(!_redeemPhoneEl || _redeemPhoneEl.value.trim() !== phone) return;
     custExists = doc.exists;
     { const _d = doc.exists ? (doc.data()||{}) : {};
       // "معاه التطبيق" = عنده PIN أو كود ولاء أو مصدره التطبيق
@@ -2242,10 +2156,8 @@ window.cardRefundDuePayload = cardRefundDuePayload;
 
 function _logActivity(type, data){
   try{
-    data = data || {};
-    const _actTs = Number(data.__eventAtMsOverride) || Date.now();
-    const _actSid = Object.prototype.hasOwnProperty.call(data,'__sidOverride') ? (data.__sidOverride || null) : (_cartSid || null);
-    const _actData = Object.assign({}, data); delete _actData.__sidOverride; delete _actData.__eventAtMsOverride;
+    const _actTs = Date.now();
+    const _actSid = _cartSid || null;
     const _cctvEventId = (typeof cctvActivityEventId === 'function')
       ? cctvActivityEventId(type, _actTs, _actSid) : '';
     const _payload = {
@@ -2255,23 +2167,18 @@ function _logActivity(type, data){
       // 🕵️ معرّف السلة على كل حدث — من غيره الأحداث أيتام مش معروف
       //    تخص أنهي فاتورة (وقت وقوعها الفاتورة لسه مالهاش رقم)
       sid: _actSid,
-      ts: _actTs, ..._actData
+      ts: _actTs, ...data
     };
     if(_cctvEventId) _payload.cctvEventId = _cctvEventId;
     db.collection('pos_activity_log').add(_payload).catch(()=>{});
     // 🎥 v424+: الأحداث المقلقة فقط تحفظ نافذة فيديو محلية 30ث قبل/بعد.
     try{ if(_cctvEventId && typeof cctvCaptureActivityEvent === 'function') cctvCaptureActivityEvent({
       eventId:_cctvEventId, type:type, branch:currentBranch, atMs:_actTs, sid:_actSid,
-      invoiceCode:(_actData&&_actData.invoiceCode)||'', employeeId:(currentEmployee&&currentEmployee.id)||'',
+      invoiceCode:(data&&data.invoiceCode)||'', employeeId:(currentEmployee&&currentEmployee.id)||'',
       employeeName:(currentEmployee&&currentEmployee.name)||''
     }); }catch(e){}
   }catch(e){}
-}
-function _logActivityForSid(type, data, sid){
-  const d=Object.assign({},data||{}); d.__sidOverride=sid||null; return _logActivity(type,d);
-}
-if(typeof window!=='undefined') window._logActivityForSid=_logActivityForSid;
-   // لعرض QR التطبيق في الفاتورة للغير مسجّل/غير مثبّت
+}   // لعرض QR التطبيق في الفاتورة للغير مسجّل/غير مثبّت
 let custPendingRedeem = null, custBaseText = '';
 let custPointsBalance = 0;       // رصيد العميل الفعلي (من المستند) — مصدر الحقيقة للاستبدال
 let _offCatalog = null;          // شروط العروض الرسمية من كتالوج المحل {barcode: item}
@@ -2466,7 +2373,6 @@ function openCashDrawer(){
   if(!hasPerm('canOpenDrawer')){ showToast('فتح الدرج للمشرف/المدير بس', 'err'); return; }
   // 📋 نسجّل فتح الدرج اليدوي (من غير بيع) — عشان المراقبة
   try{ if(typeof _logActivity === 'function') _logActivity('manual_drawer_open', { by: currentEmployee.name||'' }); }catch(e){}
-  try{ if(typeof cctvPresenceNoteCartActivity === 'function') cctvPresenceNoteCartActivity('drawer', {sid:_cartSid||''}); }catch(e){}
   // لو داخل الـexe: نبعت أمر فتح الدرج مباشرة (من غير نافذة طباعة)
   if(typeof window.posShell !== 'undefined' && typeof testCashDrawer === 'function'){
     testCashDrawer();
@@ -4578,14 +4484,6 @@ window.returnPointsDeduction = returnPointsDeduction;
         invoiceCode: invoiceCode, invoiceNo: invoiceNo,
         total: total, itemCount: itemCount,
         cctvEventId: _cctvInvoiceId || undefined
-      });
-    }catch(e){}
-    // 👤📹 v476: اربط الفاتورة بوجود العميل في كاميرات منطقة العميل.
-    // لو Presence Agent غير متاح، بنسكت تمامًا — ممنوع false alarm بسبب جهاز/شبكة.
-    try{
-      if(typeof cctvPresenceRecordSale === 'function') cctvPresenceRecordSale({
-        invoiceCode:invoiceCode, invoiceNo:invoiceNo, branch:currentBranch,
-        sid:_cartSid||'', atMs:Date.now(), total:total, itemCount:itemCount
       });
     }catch(e){}
 
