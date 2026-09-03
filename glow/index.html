@@ -885,6 +885,39 @@ window.fbApp = fbApp; window.fbAuth = fbAuth; window.ensureAnonAuth = ensureAnon
 var db = firebase.firestore(fbApp);
 /* FB-APP-INIT-END */
 
+/* v488 — registration write barrier.
+   Firestore customer create/update rules require an authenticated (anonymous) customer session.
+   The anonymous sign-in starts immediately, but registration can be completed before that async
+   sign-in has settled on a fresh QR/browser session. Wait for the named app's auth before writes. */
+function waitForCustomerAuth(){
+  return new Promise(function(resolve, reject){
+    if(fbAuth.currentUser){ resolve(fbAuth.currentUser); return; }
+    var settled = false, off = null;
+    var timer = setTimeout(function(){
+      if(settled) return; settled = true;
+      try{ if(off) off(); }catch(_){}
+      reject(new Error('auth-timeout'));
+    }, 8000);
+    try{
+      off = fbAuth.onAuthStateChanged(function(u){
+        if(!u || settled) return;
+        settled = true; clearTimeout(timer);
+        try{ if(off) off(); }catch(_){}
+        resolve(u);
+      }, function(e){
+        if(settled) return; settled = true; clearTimeout(timer);
+        try{ if(off) off(); }catch(_){}
+        reject(e || new Error('auth-failed'));
+      });
+      ensureAnonAuth();
+    }catch(e){
+      if(!settled){ settled = true; clearTimeout(timer); reject(e); }
+    }
+  });
+}
+window.waitForCustomerAuth = waitForCustomerAuth;
+
+
 // 📱 تتبّع مصدر الزيارة (QR أو غيره): ?src=qr-rehab مثلاً
 // بنخزّنه عشان يتسجّل مع العميل عند الدخول + بنستخدمه لإظهار البانر بأولوية
 var visitSrc = '';
@@ -1335,7 +1368,9 @@ function stepSetPin(){
   if(pendingIsNew){
     createCustomer(pendingPhone, pendingName, pin);
   }else{
-    db.collection(COL_CUSTOMERS).doc(pendingPhone).set({ loyaltyPin: pin }, { merge:true }).then(function(){
+    waitForCustomerAuth().then(function(){
+      return db.collection(COL_CUSTOMERS).doc(pendingPhone).set({ loyaltyPin: pin }, { merge:true });
+    }).then(function(){
       localStorage.setItem(LS_PHONE, pendingPhone);
       $('loginBtn').disabled=false; enterApp(pendingPhone);
     }).catch(function(e){
@@ -1354,7 +1389,9 @@ function stepEnterPin(){
 }
 
 function createCustomer(phone, name, pin){
-  makeUniqueCode(0).then(function(code){
+  waitForCustomerAuth().then(function(){
+    return makeUniqueCode(0);
+  }).then(function(code){
     var data = {
       name: name, phone: phone, points: 0, totalSpent: 0,
       lastVisit: null, notes: '', branch: '',
@@ -1368,7 +1405,10 @@ function createCustomer(phone, name, pin){
     $('loginBtn').disabled=false; enterApp(phone);
   }).catch(function(e){
     $('loginBtn').disabled=false; $('loginBtn').textContent='حفظ ودخول';
-    $('loginErr').textContent='معرفناش نحفظ الحساب — حاولي تاني'; console.warn(e);
+    $('loginErr').textContent = (e && e.message === 'auth-timeout')
+      ? 'الاتصال بالحساب اتأخر — تأكدي من النت وحاولي تاني'
+      : 'معرفناش نحفظ الحساب — حاولي تاني';
+    console.warn('customer registration failed', e && (e.code || e.message), e);
   });
 }
 
