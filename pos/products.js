@@ -474,6 +474,7 @@ function renderReceiveCart(){
 }
 
 async function confirmReceiveCart(){
+  if(typeof confirmForeignBranchAction === 'function' && !confirmForeignBranchAction('استلام/خصم البضاعة')) return;
   if(!hasPerm('canReceiveGoods') && !hasPerm('canEditInventory')){ showToast('محتاج صلاحية استلام البضاعة', 'err'); return; }
   const rows = receiveCart.filter(r=> (r.qty || 0) !== 0);
   const _negRows = [];   // الأصناف اللي رصيدها هينزل سالب — للتأكيد والسجل

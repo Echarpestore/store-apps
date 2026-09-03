@@ -1238,6 +1238,7 @@ function logout(){
   currentEmployee = null;
   cart = [];
   currentBranch = localStorage.getItem('pos_branch') || currentBranch;   // الجهاز يرجع لفرعه الأصلي بعد خروج الأدمن
+  try{ refreshForeignBranchWarning(); }catch(e){}
   backToEmployeePicker();
   showScreen('loginScreen');
 }
@@ -1269,8 +1270,63 @@ async function openBranchSwitch(){
   }catch(e){ list.innerHTML = '<div class="empty-cart">تعذر التحميل: '+e.message+'</div>'; }
 }
 function closeBranchSwitch(){ const m=document.getElementById('branchSwitchModal'); if(m) m.classList.remove('active'); }
+function _branchWarnEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function deviceHomeBranch(){
+  try{ return (localStorage.getItem('pos_branch') || '').trim(); }catch(e){ return ''; }
+}
+function isForeignBranchSession(){
+  const home = deviceHomeBranch();
+  return !!(home && currentBranch && home !== currentBranch);
+}
+function ensureForeignBranchBanner(){
+  let bar = document.getElementById('foreignBranchWarning');
+  if(!bar){
+    bar = document.createElement('div');
+    bar.id = 'foreignBranchWarning';
+    bar.style.cssText = 'display:none;position:fixed;top:0;left:0;right:0;z-index:20000;background:#b91c1c;color:#fff;padding:10px 14px;text-align:center;font-weight:900;font-size:14px;box-shadow:0 3px 14px rgba(0,0,0,.35);direction:rtl;';
+    document.body.appendChild(bar);
+  }
+  return bar;
+}
+function refreshForeignBranchWarning(){
+  const bar = ensureForeignBranchBanner();
+  const home = deviceHomeBranch();
+  if(!isForeignBranchSession()){
+    bar.style.display = 'none'; bar.innerHTML = ''; return;
+  }
+  bar.innerHTML = '⚠️ تحذير: الجهاز تابع لفرع <b>'+_branchWarnEsc(home)+'</b> وأنت تعمل الآن على <b>'+_branchWarnEsc(currentBranch)+'</b> — أي بيع أو حركة مخزون ستؤثر على '+_branchWarnEsc(currentBranch)
+    +' <button type="button" onclick="returnToDeviceBranch()" style="margin-right:12px;border:0;border-radius:8px;padding:6px 10px;font-weight:900;cursor:pointer;">↩ الرجوع لفرع الجهاز</button>';
+  bar.style.display = 'block';
+}
+function returnToDeviceBranch(){
+  const home = deviceHomeBranch(); if(!home) return;
+  currentBranch = home;
+  refreshForeignBranchWarning();
+  const roleLabel = (typeof myPerms==='function' && myPerms().label) || '';
+  const el=document.getElementById('dashWho'); if(el && currentEmployee) el.textContent=(currentEmployee.name||'')+' — '+roleLabel+' · 🏬 '+currentBranch;
+  const bb=document.getElementById('branchSwitchBtn'); if(bb) bb.innerHTML='🏬 بدّل الفرع<span style="display:block; font-size:10px; font-weight:400; opacity:.8;">'+currentBranch+'</span>';
+  try{ if(typeof loadActiveDiscounts==='function') loadActiveDiscounts(); }catch(e){}
+  try{ if(typeof loadLoyaltyRedemptionConfig==='function') loadLoyaltyRedemptionConfig(); }catch(e){}
+  showToast('رجعت لفرع الجهاز: '+currentBranch+' ✔');
+  goToDashboard();
+}
+function confirmForeignBranchAction(actionLabel){
+  if(!isForeignBranchSession()) return true;
+  const home=deviceHomeBranch();
+  return confirm('🔴 تحذير فرع مختلف\n\nهذا الجهاز تابع لفرع: '+home+'\nأنت تعمل الآن على: '+currentBranch+'\n\n'+(actionLabel||'هذه العملية')+' ستُسجّل وتؤثر على فرع '+currentBranch+' وليس '+home+'.\n\nهل أنت متأكد أنك تريد الاستمرار؟');
+}
+window.deviceHomeBranch=deviceHomeBranch;
+window.isForeignBranchSession=isForeignBranchSession;
+window.refreshForeignBranchWarning=refreshForeignBranchWarning;
+window.returnToDeviceBranch=returnToDeviceBranch;
+window.confirmForeignBranchAction=confirmForeignBranchAction;
 function doBranchSwitch(branch){
   if(!hasPerm('canSwitchBranch')) return;
+  const _home = deviceHomeBranch();
+  if(_home && branch !== _home){
+    const ok = confirm('🔴 أنت على وشك ترك فرع الجهاز '+_home+' والعمل مؤقتًا على '+branch+'.\n\nأي بيع أو استلام أو حركة مخزون بعد التبديل ستؤثر على '+branch+'.\n\nمتأكد من التبديل؟');
+    if(!ok) return;
+  }
   currentBranch = branch;   // مؤقت للجلسة — مش بيتخزّن، فالجهاز يفضل على فرعه الأصلي بعد الخروج
   closeBranchSwitch();
   const roleLabel = myPerms().label || '';
@@ -1278,6 +1334,7 @@ function doBranchSwitch(branch){
   const bb = document.getElementById('branchSwitchBtn'); if(bb) bb.innerHTML = '🏬 بدّل الفرع<span style="display:block; font-size:10px; font-weight:400; opacity:.8;">'+currentBranch+'</span>';
   if(typeof loadActiveDiscounts === 'function') loadActiveDiscounts();
   if(typeof loadLoyaltyRedemptionConfig === 'function') loadLoyaltyRedemptionConfig();
+  refreshForeignBranchWarning();
   showToast('اتبدّل الفرع لـ ' + currentBranch + ' ✔');
   goToDashboard();
 }
@@ -1285,6 +1342,7 @@ function doBranchSwitch(branch){
 let noRoleAssignmentsYet = false; // bootstrap flag: true if the system has never had any role assigned
 
 function enterDashboard(){
+  try{ refreshForeignBranchWarning(); }catch(e){}
   const roleLabel = myPerms().label || 'كاشير';
   // 💾 لو البرنامج اتقفل أو حصل Logout وفيه فاتورة غير مكتملة، رجّع أصنافها للفرع نفسه.
   try{ if(typeof restoreSaleDraft === 'function') restoreSaleDraft(); }catch(e){}

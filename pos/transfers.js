@@ -444,6 +444,7 @@ document.addEventListener('keydown', function(e){
   if(_trBuf.length > 30) _trBuf = _trBuf.slice(-30);
 }, true);
 async function sendTransfer(){
+  if(typeof confirmForeignBranchAction === 'function' && !confirmForeignBranchAction('إرسال التحويلة وخصم البضاعة من المخزون')) return;
   const dest = (document.getElementById('trDestSel')||{}).value;
   if(!_trNewItems.length){ showToast('امسح القطع الأول', 'err'); return; }
   if(!dest){ showToast('اختار الفرع المستلم', 'err'); return; }
@@ -540,6 +541,7 @@ async function confirmTransferByPin(id){
 window.confirmTransferByPin = confirmTransferByPin;
 
 async function confirmTransfer(id, confirmer){
+  if(typeof confirmForeignBranchAction === 'function' && !confirmForeignBranchAction('استلام التحويلة')) return;
   const t = _trList.find(x=> x.id === id); if(!t) return;
   const who = confirmer || (currentEmployee ? { id: currentEmployee.id, name: currentEmployee.name||'' } : null);
   if(who && who.id === t.carrierId){
