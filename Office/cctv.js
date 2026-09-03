@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v472
+/* ECHARPE Office CCTV v477
    POS Live stays pinned. Four stable camera slots remain user-selectable and persist locally. */
 (function(){
   'use strict';
@@ -12,6 +12,12 @@
       {id:'5',name:'D05',label:'كاميرا 5',stream:'camera5'},
       {id:'7',name:'D07',label:'كاميرا 7',stream:'camera7'},
       {id:'8',name:'D08',label:'كاميرا 8',stream:'camera8'}
+    ]
+  },{
+    id:'glow', name:'Glow', gateway:'https://cctv-glow.echarpe.store',
+    liveAliases:['glow','Glow'], playback:true, playbackCamera:'1',
+    cameras:[
+      {id:'1',name:'CAM1',label:'الكاشير',stream:'glow_cam1_h264'}
     ]
   },{
     id:'rehab', name:'الرحاب', gateway:'https://cctv-rehab.echarpe.store',
@@ -116,7 +122,27 @@
       '<div class="of-cctv-panel-head"><select class="of-cctv-camera-select" data-cctv-select="'+i+'" aria-label="اختيار كاميرا المربع '+(i+1)+'">'+cameraOptions(c?c.id:'off')+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(c?'':' disabled')+'>⛶</button></div>'+
       (c?'<div class="of-cctv-panel-body of-cctv-video"><video title="'+esc(c.name)+'" autoplay muted playsinline controls preload="none" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'"></video><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div><b>الكاميرا متوقفة</b><small>اختار كاميرا من القائمة فوق</small></div></div>')+'</article>';
   }
-  function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;if(state.branch==='rehab')state.slots=['1','off','off','off'];else if(state.branch==='madinaty'&&!state.slots.some(function(v){return ['4','5','7','8'].indexOf(String(v))>=0;}))state.slots=['4','5','7','8'];save();render();};});}
+  function playbackUrl(atMs,durationMin){
+    var x=b();if(!x.playback)return '';
+    var t=Math.max(1,Number(atMs)||Date.now()),d=Math.min(60,Math.max(5,Number(durationMin)||30));
+    return x.gateway+'/echarpe-playback/view?camera='+encodeURIComponent(x.playbackCamera||'1')+'&atMs='+encodeURIComponent(t)+'&durationMin='+encodeURIComponent(d);
+  }
+  function openPlayback(atMs,durationMin){
+    var u=playbackUrl(atMs,durationMin);if(!u){alert('مراجعة تسجيلات الـNVR لسه مش متاحة للفرع ده.');return;}
+    window.open(u,'_blank','noopener');
+  }
+  function syncPlaybackPanel(){
+    var panel=document.getElementById('ofCctvNvrReview');if(!panel)return;
+    panel.style.display=b().playback?'block':'none';
+    var hint=document.getElementById('ofCctvNvrHint');if(hint)hint.textContent=b().playback?'تسجيلات Hikvision الأصلية من هارد الـNVR — اختار أي يوم ووقت.':'';
+  }
+  function openPlaybackFromControls(){
+    var di=document.getElementById('ofCctvNvrDate'),ti=document.getElementById('ofCctvNvrTime'),du=document.getElementById('ofCctvNvrDuration');
+    if(!di||!ti||!di.value||!ti.value)return;
+    var a=di.value.split('-').map(Number),q=ti.value.split(':').map(Number),dt=new Date(a[0],a[1]-1,a[2],q[0]||0,q[1]||0,0,0);
+    openPlayback(dt.getTime(),Number(du&&du.value)||30);
+  }
+  function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;if(state.branch==='rehab'||state.branch==='glow')state.slots=['1','off','off','off'];else if(state.branch==='madinaty'&&!state.slots.some(function(v){return ['4','5','7','8'].indexOf(String(v))>=0;}))state.slots=['4','5','7','8'];save();render();};});syncPlaybackPanel();}
   function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement||null;}
   function enterNativeFs(el){var fn=el&&(el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen);if(!fn)return;try{var r=fn.call(el);if(r&&r.catch)r.catch(function(){});}catch(e){}}
   function exitNativeFs(){var fn=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;if(!fn||!fsEl())return;try{var r=fn.call(document);if(r&&r.catch)r.catch(function(){});}catch(e){}}
@@ -176,8 +202,9 @@
     box.innerHTML=rows.map(function(x){
       var pm=Object.keys(x.payments||{}).filter(function(k){return Math.abs(Number(x.payments[k]||0))>.001;}).map(function(k){return (k==='visa'?'Visa':k==='cash'?'كاش':k==='instapay'?'Instapay':esc(k))+' '+money(x.payments[k]);}).join(' · ');
       var cust=x.customerName||x.customerPhone?('👤 '+esc(x.customerName||'عميل')+(x.customerPhone?' · '+esc(x.customerPhone):'')):'👤 بدون عميل';
-      return '<div class="of-cctv-day-row"><div class="of-cctv-day-time">'+new Date(saleMs(x)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</div><div class="of-cctv-day-main"><b>فاتورة '+esc(x.invoiceNo||x.invoiceCode||x.id||'')+' · '+money(x.total)+'</b><small>'+cust+' · '+esc(x.employeeName||x.employee||'')+'</small><small>💳 '+(pm||'—')+' · '+Number(x.itemCount||(x.items||[]).length)+' صنف</small></div><div class="of-cctv-day-actions"><button type="button" onclick="ofCctvInvoiceShot(\''+esc(String(x.invoiceCode||''))+'\')">📸 اللقطات</button>'+(x.id&&window.ofOpenSaleDetails?'<button type="button" data-open-sale="'+esc(x.id)+'">🧾 التفاصيل</button>':'')+'</div></div>';
+      return '<div class="of-cctv-day-row"><div class="of-cctv-day-time">'+new Date(saleMs(x)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</div><div class="of-cctv-day-main"><b>فاتورة '+esc(x.invoiceNo||x.invoiceCode||x.id||'')+' · '+money(x.total)+'</b><small>'+cust+' · '+esc(x.employeeName||x.employee||'')+'</small><small>💳 '+(pm||'—')+' · '+Number(x.itemCount||(x.items||[]).length)+' صنف</small></div><div class="of-cctv-day-actions"><button type="button" onclick="ofCctvInvoiceShot(\''+esc(String(x.invoiceCode||''))+'\')">📸 اللقطات</button>'+(b().playback?'<button type="button" data-playback-at="'+saleMs(x)+'">🎥 التسجيل</button>':'')+(x.id&&window.ofOpenSaleDetails?'<button type="button" data-open-sale="'+esc(x.id)+'">🧾 التفاصيل</button>':'')+'</div></div>';
     }).join('');
+    box.querySelectorAll('[data-playback-at]').forEach(function(btn){btn.onclick=function(){openPlayback(Math.max(1,Number(btn.getAttribute('data-playback-at'))-5*60*1000),15);};});
     box.querySelectorAll('[data-open-sale]').forEach(function(btn){btn.onclick=function(){try{window.ofOpenSaleDetails(btn.getAttribute('data-open-sale'));}catch(e){}};});
   }
   async function loadDayReview(){
@@ -200,6 +227,10 @@
     load();
     var di=document.getElementById('ofCctvDayDate'); if(di&&!di.value){var nd=new Date();di.value=nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');}
     var dl=document.getElementById('ofCctvDayLoad'); if(dl)dl.onclick=loadDayReview;
+    var ndt=new Date(),nvd=document.getElementById('ofCctvNvrDate'),nvt=document.getElementById('ofCctvNvrTime'),nvb=document.getElementById('ofCctvNvrOpen');
+    if(nvd&&!nvd.value)nvd.value=ndt.getFullYear()+'-'+String(ndt.getMonth()+1).padStart(2,'0')+'-'+String(ndt.getDate()).padStart(2,'0');
+    if(nvt&&!nvt.value)nvt.value=String(ndt.getHours()).padStart(2,'0')+':'+String(Math.floor(ndt.getMinutes()/5)*5).padStart(2,'0');
+    if(nvb)nvb.onclick=openPlaybackFromControls;syncPlaybackPanel();
     var roomFs=document.getElementById('ofCctvRoomFullscreen');if(roomFs)roomFs.onclick=toggleRoomFocus;
     ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(function(ev){document.addEventListener(ev,function(){if(!fsEl()&&!document.querySelector('.of-cctv-room-focus')&&!document.querySelector('.of-cctv-panel-focus'))clearFocusClasses();});});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'&&(document.querySelector('.of-cctv-room-focus')||document.querySelector('.of-cctv-panel-focus'))){clearFocusClasses();exitNativeFs();}});
@@ -211,7 +242,7 @@
     });
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-  window.ofCctvStart=start;window.ofCctvStop=stop;
+  window.ofCctvStart=start;window.ofCctvStop=stop;window.ofCctvOpenPlayback=openPlayback;
 })();
 
 /* v426 invoice snapshot timeline: up to 4 stages, with legacy one-shot fallback. */
@@ -248,7 +279,23 @@ window.ofCctvOpenEvent = async function(eventId){
     var snap=await db.collection('pos_cctv_events').doc(String(eventId)).get();
     if(!snap.exists){ alert('مفيش فيديو محفوظ للحدث ده. الفيديوهات تبدأ من v424 بعد تشغيل Evidence Agent.'); return; }
     var d=snap.data()||{}, url=String(d.viewerUrl||'');
-    if(!/^https:\/\/cctv-(?:madinaty|rehab)\.echarpe\.store\/echarpe-events\/view\?id=/.test(url)) throw new Error('bad_viewer_url');
+    if(!/^https:\/\/cctv-(?:madinaty|rehab|glow)\.echarpe\.store\/echarpe-events\/view\?id=/.test(url)) throw new Error('bad_viewer_url');
     window.open(url,'_blank','noopener');
   }catch(e){ alert('تعذر فتح فيديو الحدث'); }
 };
+
+/* v477 safety wording: v476 shipped D07/D08 as if confirmed. The owner later clarified
+   D04/D05 are only candidates. Patch the intelligence wording without touching Office core. */
+setTimeout(function(){
+  try{
+    var orig=window.ofActIntelligence;if(typeof orig!=='function'||orig.__cctv477)return;
+    var wrapped=function(a){
+      var r=orig(a);if(!r||!a)return r;
+      if(a.type==='sale_without_customer_presence'){
+        if(r.explain)r.explain=String(r.explain).replace(/D07\/D08/g,'الكاميرات المعرّفة');
+        if(r.action)r.action=String(r.action).replace(/D07\/D08/g,'الكاميرات المذكورة في تفاصيل الحدث');
+      }
+      return r;
+    };wrapped.__cctv477=true;window.ofActIntelligence=wrapped;
+  }catch(e){}
+},0);
