@@ -34,7 +34,7 @@
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
   function cam(id){var x=b();return x.cameras.find(function(c){return c.id===String(id);})||x.cameras[0];}
-  function streamUrl(c){return b().gateway+'/api/stream.mp4?src='+encodeURIComponent(c.stream);}
+  function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(c.stream)+'&mode=mse&background=false';}
   function load(){
     try{
       var fresh=localStorage.getItem(KEY), raw=fresh||localStorage.getItem(OLD_KEY)||'{}', x=JSON.parse(raw);
@@ -97,7 +97,7 @@
       lastLine+
       '<div class="of-cctv-age">آخر تحديث منذ '+Math.round(age/1000)+' ثانية</div></div>';
   }
-  function stopPanel(panel){panel.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}});}
+  function stopPanel(panel){panel.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}});panel.querySelectorAll('iframe[data-stream-src]').forEach(function(f){try{f.src='about:blank';f.remove();}catch(e){}});}
   function armCameraPlayer(v){
     if(!v)return;
     function retry(){
@@ -124,7 +124,7 @@
     var c=selected==='off'?null:cam(selected);
     return '<article class="of-cctv-panel of-cctv-camera-panel'+(c?'':' of-cctv-camera-off')+'" data-camera="'+esc(c?c.id:'off')+'" data-panel="'+i+'">'+
       '<div class="of-cctv-panel-head"><select class="of-cctv-camera-select" data-cctv-select="'+i+'" aria-label="اختيار كاميرا المربع '+(i+1)+'">'+cameraOptions(c?c.id:'off')+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(c?'':' disabled')+'>⛶</button></div>'+
-      (c?'<div class="of-cctv-panel-body of-cctv-video"><video title="'+esc(c.name)+'" autoplay muted playsinline controls preload="none" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'"></video><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div><b>الكاميرا متوقفة</b><small>اختار كاميرا من القائمة فوق</small></div></div>')+'</article>';
+      (c?'<div class="of-cctv-panel-body of-cctv-video"><iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div><b>الكاميرا متوقفة</b><small>اختار كاميرا من القائمة فوق</small></div></div>')+'</article>';
   }
   function playbackUrl(atMs,durationMin,cameraId){
     var x=b();if(!x.playback)return '';
@@ -132,9 +132,19 @@
     var cid=String(cameraId||x.playbackCamera||'1');if(!x.cameras.some(function(c){return String(c.id)===cid;}))cid=String(x.playbackCamera||x.cameras[0].id||'1');
     return x.gateway+'/echarpe-playback/view?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(t)+'&durationMin='+encodeURIComponent(d);
   }
+  function closePlaybackModal(){
+    var ov=document.getElementById('ofCctvPlaybackOv');if(!ov)return;
+    var fr=ov.querySelector('iframe');if(fr)fr.src='about:blank';
+    ov.remove();
+  }
   function openPlayback(atMs,durationMin,cameraId){
     var u=playbackUrl(atMs,durationMin,cameraId);if(!u){alert('مراجعة تسجيلات الـNVR لسه مش متاحة للفرع ده.');return;}
-    window.open(u,'_blank','noopener');
+    closePlaybackModal();
+    var ov=document.createElement('div');ov.id='ofCctvPlaybackOv';ov.className='of-cctv-playback-ov';
+    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><b>🎞️ مراجعة تسجيل الـNVR</b><div><a class="of-cctv-playback-external" href="'+esc(u)+'" target="_blank" rel="noopener">فتح منفصل ↗</a><button type="button" class="of-cctv-playback-close" aria-label="إغلاق">✕</button></div></div><iframe title="Glow NVR Playback" src="'+esc(u)+'" allow="autoplay; fullscreen" allowfullscreen></iframe></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('.of-cctv-playback-close').onclick=closePlaybackModal;
+    ov.onclick=function(e){if(e.target===ov)closePlaybackModal();};
   }
   function syncPlaybackPanel(){
     var panel=document.getElementById('ofCctvNvrReview');if(!panel)return;
@@ -239,7 +249,7 @@
     if(nvb)nvb.onclick=openPlaybackFromControls;syncPlaybackPanel();
     var roomFs=document.getElementById('ofCctvRoomFullscreen');if(roomFs)roomFs.onclick=toggleRoomFocus;
     ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(function(ev){document.addEventListener(ev,function(){if(!fsEl()&&!document.querySelector('.of-cctv-room-focus')&&!document.querySelector('.of-cctv-panel-focus'))clearFocusClasses();});});
-    document.addEventListener('keydown',function(e){if(e.key==='Escape'&&(document.querySelector('.of-cctv-room-focus')||document.querySelector('.of-cctv-panel-focus'))){clearFocusClasses();exitNativeFs();}});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'&&document.getElementById('ofCctvPlaybackOv')){closePlaybackModal();return;}if(e.key==='Escape'&&(document.querySelector('.of-cctv-room-focus')||document.querySelector('.of-cctv-panel-focus'))){clearFocusClasses();exitNativeFs();}});
     window.addEventListener('office-pos-live-update',refreshPosOnly);window.addEventListener('beforeunload',stop);
     document.addEventListener('visibilitychange',function(){
       var page=document.getElementById('page-cctv');
