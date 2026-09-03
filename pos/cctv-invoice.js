@@ -1,4 +1,4 @@
-/* ECHARPE POS CCTV evidence v470
+/* ECHARPE POS CCTV evidence v476
    - Four stills per invoice: first item, payment, saving, after save.
    - Pre-invoice stills are staged locally by cartSid, then flushed once invoiceCode exists.
    - Keeps v424 video evidence metadata/agent behavior.
@@ -8,6 +8,7 @@
 var SHOT_COL='pos_cctv_invoice_snapshots', EVENT_COL='pos_cctv_events';
 function branchCfg(branch){
   var s=String(branch || (typeof currentBranch!=='undefined'?currentBranch:'') || '').toLowerCase();
+  if(s.indexOf('glow')>=0) return {id:'glow',camera:'CAM1',stream:'glow_cam1_h264',remote:'https://cctv-glow.echarpe.store'};
   if(s.indexOf('الرحاب')>=0 || s.indexOf('rehab')>=0) return {id:'rehab',camera:'CAM1',stream:'rehab_cam1_h264',remote:'https://cctv-rehab.echarpe.store'};
   if(s.indexOf('مدينتي')>=0 || s.indexOf('madinaty')>=0) return {id:'madinaty',camera:'D04',stream:'camera4',remote:'https://cctv-madinaty.echarpe.store'};
   return null;
@@ -23,7 +24,8 @@ var HOT={
   card_overcharge_ok:1, manual_discount:1, manual_drawer_open:1, customer_points_edit:1,
   redeem_value_mismatch:1, card_saved_manual:1, paymob_stuck:1, paymob_orphan_detected:1,
   same_day_reversal:1, lost_sale:1, inventory_wiped:1, inventory_merge_bulk:1,
-  inventory_branch_catalog_replace:1, inventory_full_reconcile:1
+  inventory_branch_catalog_replace:1, inventory_full_reconcile:1,
+  sale_without_customer_presence:1, customer_presence_no_sale:1
 };
 function safeId(v){return String(v==null?'':v).replace(/[^A-Za-z0-9._-]/g,'_').slice(0,120);}
 function invoiceEventId(code){return 'inv_'+safeId(code);}
@@ -94,7 +96,7 @@ async function writeInvoiceDoc(meta,shots){
   if(typeof db==='undefined'||!meta||!meta.invoiceCode)return false;
   var preferred=shots.after_save||shots.saving||shots.payment||shots.first_item||null;
   var c=cfg(meta); if(!c)return false;
-  var doc={invoiceCode:String(meta.invoiceCode),invoiceNo:meta.invoiceNo||'',saleId:meta.saleId||'',branch:meta.branch||'',camera:c.camera,stream:c.stream,version:472,shots:{}};
+  var doc={invoiceCode:String(meta.invoiceCode),invoiceNo:meta.invoiceNo||'',saleId:meta.saleId||'',branch:meta.branch||'',camera:c.camera,stream:c.stream,version:476,shots:{}};
   Object.keys(shots||{}).forEach(function(k){if(STAGES[k]&&shots[k])doc.shots[k]=publicShot(shots[k]);});
   if(preferred){doc.capturedAtMs=preferred.capturedAtMs;doc.width=preferred.width;doc.height=preferred.height;doc.jpegData=preferred.jpegData;doc.stage=preferred.stage;}
   await db.collection(SHOT_COL).doc(String(meta.invoiceCode)).set(doc,{merge:true});
@@ -112,7 +114,7 @@ async function finalizeInvoice(meta){
       grabShot('after_save',{atMs:Date.now(),branch:meta.branch||''}).then(async function(shot){
         try{
           var one={};one.after_save=shot;
-          var payload={version:472,capturedAtMs:shot.capturedAtMs,width:shot.width,height:shot.height,jpegData:shot.jpegData,stage:'after_save'};
+          var payload={version:476,capturedAtMs:shot.capturedAtMs,width:shot.width,height:shot.height,jpegData:shot.jpegData,stage:'after_save'};
           payload['shots.after_save']=publicShot(shot);
           await db.collection(SHOT_COL).doc(String(meta.invoiceCode)).update(payload);
         }catch(e){try{console.warn('CCTV after-save write skipped',e&&e.message||e);}catch(_){}}
@@ -139,7 +141,7 @@ async function registerEvent(meta){
     if(!meta||!meta.eventId||!meta.atMs||typeof db==='undefined')return false;
     var c=cfg(meta); if(!c)return false;
     var id=safeId(meta.eventId),view=c.remote?(c.remote+'/echarpe-events/view?id='+encodeURIComponent(id)):'';
-    var doc={eventId:id,type:meta.type||'event',branch:meta.branch||'',camera:c.camera,stream:c.stream,atMs:Number(meta.atMs)||Date.now(),beforeSec:30,afterSec:30,invoiceCode:meta.invoiceCode||'',invoiceNo:meta.invoiceNo||'',sid:meta.sid||'',employeeId:meta.employeeId||'',employeeName:meta.employeeName||'',viewerUrl:view,storage:'branch_local',version:472};
+    var doc={eventId:id,type:meta.type||'event',branch:meta.branch||'',camera:c.camera,stream:c.stream,atMs:Number(meta.atMs)||Date.now(),beforeSec:30,afterSec:30,invoiceCode:meta.invoiceCode||'',invoiceNo:meta.invoiceNo||'',sid:meta.sid||'',employeeId:meta.employeeId||'',employeeName:meta.employeeName||'',viewerUrl:view,storage:'branch_local',version:476};
     db.collection(EVENT_COL).doc(id).set(doc,{merge:true}).catch(function(){});
     postAgent({id:id,type:doc.type,invoiceCode:doc.invoiceCode,branch:doc.branch,atMs:doc.atMs},meta).catch(function(){});
     return true;
