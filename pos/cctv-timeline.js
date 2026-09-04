@@ -41,13 +41,22 @@
       s.lastHash=hash;s.lastCart=packed;save(s);return true;
     }catch(e){return false;}
   }
+  function wireDoc(doc){
+    // Firestore rejects directly nested arrays. Numeric map keys preserve
+    // compatibility with the existing Office row[0..3] reader.
+    return Object.assign({},doc,{events:(doc.events||[]).map(function(event){
+      return Object.assign({},event,{cart:(event.cart||[]).map(function(row){
+        return Array.isArray(row)?{'0':row[0],'1':row[1],'2':row[2],'3':row[3]}:row;
+      })});
+    })});
+  }
   function writeDoc(doc){
     if(typeof db==='undefined'||!db)return Promise.reject(new Error('timeline_db_unavailable'));
-    return db.collection(COL).doc(String(doc.invoiceCode)).set(doc,{merge:true});
+    return Promise.resolve().then(function(){return db.collection(COL).doc(String(doc.invoiceCode)).set(wireDoc(doc),{merge:true});});
   }
   function writeSnapshotFallback(doc){
     if(typeof db==='undefined'||!db)return Promise.reject(new Error('timeline_db_unavailable'));
-    return db.collection('pos_cctv_invoice_snapshots').doc(String(doc.invoiceCode)).set({basketTimeline:doc,timelineFallback:true},{merge:true});
+    return Promise.resolve().then(function(){return db.collection('pos_cctv_invoice_snapshots').doc(String(doc.invoiceCode)).set({basketTimeline:wireDoc(doc),timelineFallback:true},{merge:true});});
   }
   function enqueue(doc){var q=queueLoad();q[String(doc.invoiceCode)]=doc;var keys=Object.keys(q).sort(function(a,b){return Number(q[a].endedAtMs||0)-Number(q[b].endedAtMs||0);});while(keys.length>80){delete q[keys.shift()];}queueSave(q);}
   function flush(){
