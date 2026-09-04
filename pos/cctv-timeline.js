@@ -1,4 +1,4 @@
-/* ECHARPE synchronized basket timeline v506.
+/* ECHARPE synchronized basket timeline v507.
    Cart changes stay local while the sale is open, then one idempotent document
    is written per invoice. This avoids a Firestore write/read for every scan and
    lets Office rebuild the basket at any video time. */
@@ -29,7 +29,7 @@
     var pq=prev.reduce(function(n,x){return n+Number(x[1]||0);},0),nq=next.reduce(function(n,x){return n+Number(x[1]||0);},0);
     if(nq>pq)return 'qty_increased';if(nq<pq)return 'qty_decreased';return 'cart_edited';
   }
-  function newState(meta,sid,at){return {version:506,sid:sid,branch:safe(meta.branch||'',100),startedAtMs:Number(meta.firstItemAt)||at,catalog:{},events:[],lastHash:'',lastCart:[]};}
+  function newState(meta,sid,at){return {version:507,sid:sid,branch:safe(meta.branch||'',100),startedAtMs:Number(meta.firstItemAt)||at,catalog:{},events:[],lastHash:'',lastCart:[]};}
   function observe(meta){
     try{
       meta=meta||{};var sid=safe(meta.sid||meta.cartSid||(typeof _cartSid!=='undefined'&&_cartSid)||'',140);if(!sid)return false;
@@ -45,9 +45,13 @@
     if(typeof db==='undefined'||!db)return Promise.reject(new Error('timeline_db_unavailable'));
     return db.collection(COL).doc(String(doc.invoiceCode)).set(doc,{merge:true});
   }
+  function writeSnapshotFallback(doc){
+    if(typeof db==='undefined'||!db)return Promise.reject(new Error('timeline_db_unavailable'));
+    return db.collection('pos_cctv_invoice_snapshots').doc(String(doc.invoiceCode)).set({basketTimeline:doc,timelineFallback:true},{merge:true});
+  }
   function enqueue(doc){var q=queueLoad();q[String(doc.invoiceCode)]=doc;var keys=Object.keys(q).sort(function(a,b){return Number(q[a].endedAtMs||0)-Number(q[b].endedAtMs||0);});while(keys.length>80){delete q[keys.shift()];}queueSave(q);}
   function flush(){
-    var q=queueLoad(),keys=Object.keys(q),chain=Promise.resolve();keys.forEach(function(k){chain=chain.then(function(){return writeDoc(q[k]).then(function(){var latest=queueLoad();delete latest[k];queueSave(latest);}).catch(function(){});});});return chain;
+    var q=queueLoad(),keys=Object.keys(q),chain=Promise.resolve();keys.forEach(function(k){chain=chain.then(function(){return writeDoc(q[k]).catch(function(){return writeSnapshotFallback(q[k]);}).then(function(){var latest=queueLoad();delete latest[k];queueSave(latest);}).catch(function(){});});});return chain;
   }
   function finalize(meta){
     try{
@@ -56,8 +60,10 @@
       if(liveCart)observe({sid:sid,branch:meta.branch,cart:liveCart,atMs:Number(meta.atMs)||Date.now()});
       var s=load(sid);if(!s)return Promise.resolve(false);var end=Number(meta.atMs)||Date.now();
       s.events.push({seq:s.events.length+1,atMs:end,kind:'sale_saved',cart:s.lastCart||[],total:Number(meta.total)||Number((s.events[s.events.length-1]||{}).total)||0});
-      var doc={version:506,invoiceCode:code,invoiceNo:safe(meta.invoiceNo||'',80),saleId:safe(meta.saleId||'',140),sid:sid,branch:safe(meta.branch||s.branch||'',100),startedAtMs:Number(s.startedAtMs)||end,endedAtMs:end,clipStartAtMs:Math.max(1,(Number(s.startedAtMs)||end)-5000),clipEndAtMs:end+10000,catalog:s.catalog||{},events:s.events||[],eventCount:(s.events||[]).length,storage:'one_doc_per_invoice'};
-      enqueue(doc);drop(sid);return writeDoc(doc).then(function(){var q=queueLoad();delete q[code];queueSave(q);return true;}).catch(function(){return false;});
+      var doc={version:507,invoiceCode:code,invoiceNo:safe(meta.invoiceNo||'',80),saleId:safe(meta.saleId||'',140),sid:sid,branch:safe(meta.branch||s.branch||'',100),startedAtMs:Number(s.startedAtMs)||end,endedAtMs:end,clipStartAtMs:Math.max(1,(Number(s.startedAtMs)||end)-5000),clipEndAtMs:end+10000,catalog:s.catalog||{},events:s.events||[],eventCount:(s.events||[]).length,storage:'one_doc_per_invoice'};
+      enqueue(doc);drop(sid);return writeDoc(doc).then(function(){var q=queueLoad();delete q[code];queueSave(q);return true;}).catch(function(){
+        return writeSnapshotFallback(doc).then(function(){var q=queueLoad();delete q[code];queueSave(q);return true;}).catch(function(){return false;});
+      });
     }catch(e){return Promise.resolve(false);}
   }
   window.cctvBasketTimelineObserve=observe;
