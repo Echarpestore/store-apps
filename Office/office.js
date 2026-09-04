@@ -2059,9 +2059,6 @@ const OF_ACT_KINDS = {
   same_day_reversal:     { t:'↩️ عكس فاتورة نفس اليوم', g:'money', hot:true },
   same_day_return:       { t:'↩️ مرتجع نفس اليوم', g:'money' },
   item_removed:          { t:'🛒 صنف اتشال من السلة', g:'cart' },
-  item_qty_reduced:      { t:'🛒 كمية اتشالت من السلة', g:'cart' },
-  sale_without_customer_presence:{ t:'📹 فاتورة بدون وجود عميل أمام الكاشير', g:'cart', hot:true },
-  customer_presence_no_sale:{ t:'📹 عميل عند الكاشير بدون فاتورة محفوظة', g:'cart', hot:true },
   cart_item_edited:      { t:'🛒 سطر اتعدّل في السلة', g:'cart' },
   cart_abandoned:        { t:'🛒 سلة اتسابت', g:'cart' },
   print_latency:         { t:'🖨️ زمن الطباعة', g:'cart', quiet:true },
@@ -2087,14 +2084,6 @@ function ofActLabel(type){
   return k ? k.t : ('• ' + String(type || '—'));
 }
 // تفاصيل الحدث بالعربي — الحقول بتختلف من نوع لنوع
-function ofActDuration(ms){
-  ms=Math.max(0,Number(ms)||0);var sec=Math.round(ms/1000),m=Math.floor(sec/60),s=sec%60;
-  return (m?m+' د ':'')+s+' ث';
-}
-function ofActClock(ms){
-  if(!Number(ms))return '';
-  try{return new Date(Number(ms)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(_){return '';}
-}
 function ofActDetail(a){
   const p = [];
   if(a.name) p.push(esc(a.name) + (a.qty ? ' ×' + a.qty : ''));
@@ -2113,15 +2102,6 @@ function ofActDetail(a){
     + (a.causeExact === false ? ' <span style="color:#b45309;">(مش مغطي الفرق كله)</span>' : ''));
   if(a.customerPhone) p.push('<span dir="ltr">' + esc(a.customerPhone) + '</span>');
   if(a.txnId) p.push('<span dir="ltr">TXN ' + esc(String(a.txnId)) + '</span>');
-  if((a.type==='item_removed'||a.type==='item_qty_reduced') && a.addedAtMs){
-    p.push('اتحطت أول مرة ' + esc(ofActClock(a.addedAtMs)));
-    if(a.lastAddedAtMs && Number(a.lastAddedAtMs)!==Number(a.addedAtMs)) p.push('آخر قطعة من نفس السطر ' + esc(ofActClock(a.lastAddedAtMs)));
-    if(a.timeInCartMs!=null) p.push('فضلت في السلة ' + esc(ofActDuration(a.timeInCartMs)));
-  }
-  if(a.presenceStartedAtMs) p.push('العميل ظهر ' + esc(ofActClock(a.presenceStartedAtMs)));
-  if(a.presenceEndedAtMs) p.push('غادر ' + esc(ofActClock(a.presenceEndedAtMs)));
-  if(a.presenceDurationMs!=null) p.push('المدة ' + esc(ofActDuration(a.presenceDurationMs)));
-  if(a.presenceCameras) p.push('كاميرات ' + esc(a.presenceCameras));
   return p.join(' · ');
 }
 
@@ -2234,28 +2214,10 @@ function ofActIntelligence(a){
     'اتعمل مرتجع لصنف من فاتورة في نفس اليوم.',
     'المبيعات والمخزون اتعدلوا بقيمة الصنف المرتجع.',
     'لا إجراء إلا لو المرتجعات متكررة بشكل غير طبيعي.');
-  if(type === 'item_removed' || type === 'item_qty_reduced') return normal(
-    (type==='item_removed'?'صنف اتشال من السلة':'كمية من صنف اتشالت من السلة')
-      + (a.addedAtMs ? ' بعد ما كانت مضافة من ' + ofActClock(a.addedAtMs)
-        + (a.timeInCartMs!=null ? ' لمدة ' + ofActDuration(a.timeInCartMs) : '') + '.' : '.'),
+  if(type === 'item_removed') return normal(
+    'صنف اتشال من السلة قبل إتمام البيع.',
     'لو حصل قبل الدفع فده تعديل عادي. لو بعد قبول الكارت، قصة السلة هتوضح إنه ممكن يكون سبب فرق مالي.',
     'راجع التوقيت داخل قصة السلة فقط لو الحدث مرتبط بدفع كارت أو بيتكرر بشكل مبالغ فيه.');
-  if(type === 'sale_without_customer_presence') return action(
-    'فاتورة اتحفظت، لكن Presence Agent السليم ماشفش وجود عميل في منطقة العميل على D07/D08 خلال نافذة المراجعة.',
-    'دي حالة غير طبيعية: ممكن تكون فاتورة اتسجلت من غير عميل فعلي أمام الكاشير، أو منطقة الكاميرا محتاجة معايرة.',
-    'افتح فيديو الحدث ولقطات الفاتورة وراجع D07/D08 في نفس التوقيت. لو العميل ظاهر خارج المنطقة، عدّل ROI بدل اعتبارها مخالفة.', 0);
-  if(type === 'customer_presence_no_sale'){
-    const risky=!!a.hadDrawerOpen||Number(a.cartActions||0)>0;
-    return risky ? action(
-      'العميل اتشاف في منطقة العميل لمدة ' + ofActDuration(a.presenceDurationMs) + ' ومفيش فاتورة اتحفظت، وفي نفس الجلسة حصل تعامل مع السلة'
-        + (a.hadDrawerOpen?' وفتح درج يدوي':'') + '.',
-      'دي إشارة قوية إن فيه تعامل عند الكاشير انتهى من غير فاتورة محفوظة.',
-      'راجع فيديو الحدث وقصة السلة فورًا، وطابق الوقت مع الكاش/الدرج وأي حذف أصناف.', 0)
-      : watch(
-      'العميل اتشاف في منطقة العميل لمدة ' + ofActDuration(a.presenceDurationMs) + ' وبعد مهلة المراجعة مفيش فاتورة اتحفظت.',
-      'ممكن تكون استفسار/عميلة غيرت رأيها، لكن تكرارها يستحق المتابعة.',
-      'راجع الفيديو لو المدة طويلة أو الحدث متكرر لنفس الفرع/الموظفة.');
-  }
   if(type === 'cart_item_edited') return watch(
     'سعر أو كمية سطر في السلة اتعدل يدويًا.',
     'التعديل ممكن يغير إجمالي الفاتورة بعيدًا عن السعر الأصلي.',
@@ -2366,8 +2328,7 @@ function ofActBehaviorInsights(list, now){
   const baselineDays=Math.max(1, Math.min(29, (curFrom-oldest)/DAY));
   const riskTypes={manual_discount:1,manual_drawer_open:1,customer_points_edit:1,
     card_overcharge_saved:1,paymob_stuck:1,paymob_orphan_detected:1,same_day_reversal:1,
-    inventory_wiped:1,inventory_merge_bulk:1,inventory_branch_catalog_replace:1,inventory_full_reconcile:1,
-    sale_without_customer_presence:1,customer_presence_no_sale:1};
+    inventory_wiped:1,inventory_merge_bulk:1,inventory_branch_catalog_replace:1,inventory_full_reconcile:1};
   function key(a,dim){ return String(dim==='employee'?(a.employeeName||''):(a.branch||'')); }
   function counts(arr,dim,type){ const m={}; arr.forEach(function(a){
     if(a.type!==type)return; const k=key(a,dim); if(k)m[k]=(m[k]||0)+1; }); return m; }
@@ -2658,13 +2619,7 @@ const OF_ACT_FIELD_AR = {
   refs:'مراجع الدفع', waitedMs:'مدة الانتظار (ms)', skip:'سبب تخطي الحفظ', online:'الإنترنت',
   expected:'المرجع المتوقع', matched:'المرجع المطابق', last4:'آخر 4 أرقام',
   groups:'مجموعات الدمج', closed:'المغلقة', failed:'فشل', reqPoints:'النقط المطلوبة',
-  reqValue:'القيمة المطلوبة', sanePoints:'النقط الصحيحة', saneValue:'القيمة الصحيحة', balance:'الرصيد',
-  lineId:'معرّف سطر السلة', addedAtMs:'اتضافت الساعة', lastAddedAtMs:'آخر زيادة للكمية', timeInCartMs:'المدة في السلة (ms)',
-  qtyBefore:'الكمية قبل', qtyAfter:'الكمية بعد', presenceSessionId:'جلسة العميل',
-  presenceStartedAtMs:'ظهور العميل', presenceEndedAtMs:'مغادرة العميل', presenceDurationMs:'مدة وجود العميل (ms)',
-  presenceCameras:'كاميرات منطقة العميل', presenceConfidence:'ثقة الكشف', presenceLookbackSec:'نافذة البحث (ث)',
-  hadCartActivity:'حصل تعامل مع السلة', cartActions:'حركات السلة', removedQty:'كمية اتحذفت',
-  hadDrawerOpen:'الدرج اتفتح', detector:'مصدر الكشف', checkedAtMs:'وقت فحص الكاميرات'
+  reqValue:'القيمة المطلوبة', sanePoints:'النقط الصحيحة', saneValue:'القيمة الصحيحة', balance:'الرصيد'
 };
 const OF_ACT_SKIP = { id:1, type:1, ts:1, employeeId:1, _linkedInvoice:1 };
 window.ofActOpen = function(id){
@@ -2693,7 +2648,6 @@ window.ofActOpen = function(id){
     + (inv ? '<div style="background:var(--panel2); border-radius:8px; padding:7px 9px; margin-bottom:8px; font-weight:800; font-size:13px;">🧾 ' + esc(inv)
       + '<button type="button" onclick="ofCctvInvoiceShot(\'' + String(inv).replace(/'/g,"\\'") + '\')" style="float:left;border:0;border-radius:8px;padding:5px 8px;cursor:pointer;">📸 لقطة الفاتورة</button><div style="clear:both"></div></div>'
            : '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">🧾 مفيش فاتورة مربوطة — إما السلة اتسابت من غير بيع، أو الحدث قديم (قبل تحديث الربط)</div>')
-    + (a.cctvEventId ? '<button type="button" onclick="ofCctvOpenEvent(\'' + String(a.cctvEventId).replace(/'/g,"\\'") + '\')" style="width:100%;border:0;border-radius:9px;padding:8px 10px;margin-bottom:8px;cursor:pointer;font-weight:800;">🎥 افتح فيديو الحدث 30 ثانية قبل + 30 بعد</button>' : '')
     + '<div style="border:1px solid var(--line); border-right:4px solid ' + _icol + '; border-radius:11px; padding:10px; margin-bottom:10px; background:var(--panel2);">'
       + '<div style="font-weight:900; color:' + _icol + '; margin-bottom:5px;">' + intel.icon + ' ' + esc(intel.levelLabel) + '</div>'
       + '<div style="font-size:12.5px; line-height:1.8;"><b>التفسير:</b> ' + esc(intel.explain) + '</div>'
@@ -5182,7 +5136,26 @@ function _ofHubShifts(){
 //    من `sales_settings/<الفرع>` — **نفس المستند اللي sales بيقرا منه**،
 //    عشان قفل الشيفت وحساب البريك يطلعوا نفس أرقام sales بالظبط.
 // ------------------------------------------------------------
-const OF_TIME_DEFAULTS = { breakMin: 30, breakGraceMin: 5, breakMinPerHour: 10 };
+const OF_TIME_DEFAULTS = { breakMin: 30, breakGraceMin: 5, breakMinPerHour: 10, autoOvertimeMaxMin: 120 };
+
+// v492: نفس سياسة Sales — الأوفرتايم المنطقي يتعتمد تلقائيًا، والمشبوه فقط للمراجعة.
+function ofOvertimeReviewInfo(s,cfg){
+  cfg=cfg||OF_TIME_DEFAULTS; if(!s) return {needsReview:false,reason:'none'};
+  if(s.needsClockOutReview||s.autoClosedAt1) return {needsReview:true,reason:'auto_closed'};
+  if(s.forgotClockOut) return {needsReview:true,reason:'forgot_clockout'};
+  if(!Number(s.clockOutTs)) return {needsReview:true,reason:'open_shift'};
+  const dur=Number(s.shiftMinutes)||Math.max(0,Math.round((Number(s.clockOutTs)-Number(s.clockInTs||0))/60000));
+  const expected=Math.max(0,dur-(8*60+15)), asked=Number(s.overtimeMinutes)||0;
+  if(Math.abs(expected-asked)>2) return {needsReview:true,reason:'calc_mismatch'};
+  const m=Number(cfg.autoOvertimeMaxMin), max=Number.isFinite(m)&&m>=0?m:120;
+  return asked>max?{needsReview:true,reason:'too_much_overtime'}:{needsReview:false,reason:'normal'};
+}
+function ofAutoApprovedOvertimeMinutes(s,cfg){
+  if(!s) return 0; if(!s.otRequiresApproval) return Number(s.overtimeMinutes)||0;
+  if(s.overtimeDecision==='approved'||s.overtimeDecision==='auto') return Number(s.overtimeApprovedMin)||Number(s.overtimeMinutes)||0;
+  if(s.overtimeDecision==='rejected') return 0;
+  return ofOvertimeReviewInfo(s,cfg).needsReview?0:(Number(s.overtimeMinutes)||0);
+}
 let _ofCfgBy = {};   // { branch: { shifts, timeCfg, at } }
 async function _ofBranchCfg(branch){
   const c = _ofCfgBy[branch];
@@ -5643,7 +5616,7 @@ function ofPayrollAttendanceBalance(emp,start,end,shifts,reqs){
     if(came) attendedDays++;
     let mins=0;
     arr.forEach(function(sh){
-      if(sh.clockInTs && !sh.clockOutTs){ incompleteShifts.push({date:key,shiftId:sh.id||'',clockInTs:sh.clockInTs}); return; }
+      if(sh.clockInTs && (!sh.clockOutTs || sh.needsClockOutReview)){ incompleteShifts.push({date:key,shiftId:sh.id||'',clockInTs:sh.clockInTs,autoClosedAt1:!!sh.autoClosedAt1,provisionalOutTs:sh.clockOutTs||null}); return; }
       if(Number(sh.clockOutTs)>Number(sh.clockInTs)) mins += Math.max(0,Math.round((Number(sh.clockOutTs)-Number(sh.clockInTs))/60000));
     });
     mins=Math.min(480,mins);
@@ -5695,7 +5668,16 @@ function ofComputeSalary(emp, periodStart, end, data){
   const proratedBase=isPartialPeriod?Math.round(dailyRate*daysInCalc*100)/100:baseSalary;
   const allShifts=data.shifts||[];
   const rangeShifts=allShifts.filter(function(sh){ return sh.employeeId===emp.id&&sh.clockInTs>=start.getTime()&&sh.clockInTs<=end.getTime(); });
-  const overtimeMinutes=rangeShifts.reduce(function(sum,sh){ return sum+(sh.otRequiresApproval?(Number(sh.overtimeApprovedMin)||0):(Number(sh.overtimeMinutes)||0)); },0);
+  const overtimeMinutes=rangeShifts.reduce(function(sum,sh){
+    if(!sh.otRequiresApproval) return sum+(Number(sh.overtimeMinutes)||0);
+    if(sh.overtimeDecision==='approved'||sh.overtimeDecision==='auto') return sum+(Number(sh.overtimeApprovedMin)||Number(sh.overtimeMinutes)||0);
+    if(sh.overtimeDecision==='rejected'||sh.needsClockOutReview||sh.autoClosedAt1||sh.forgotClockOut||!Number(sh.clockOutTs)) return sum;
+    const dur=Number(sh.shiftMinutes)||Math.max(0,Math.round((Number(sh.clockOutTs)-Number(sh.clockInTs||0))/60000));
+    const expected=Math.max(0,dur-(8*60+15)), asked=Number(sh.overtimeMinutes)||0;
+    const maxCfg=Number((data.timeCfg||{}).autoOvertimeMaxMin), autoMax=Number.isFinite(maxCfg)&&maxCfg>=0?maxCfg:120;
+    if(Math.abs(expected-asked)>2||asked>autoMax) return sum;
+    return sum+asked;
+  },0);
   const overtimePay=Math.round((overtimeMinutes/60)*hourlyRate*100)/100;
   let absenceRangeStart=start;
   if(emp.attendanceTrackingStart){ const t=new Date(emp.attendanceTrackingStart+'T00:00:00'); if(t>absenceRangeStart) absenceRangeStart=t; }
