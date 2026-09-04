@@ -340,6 +340,10 @@
 .of-cctv-camera-select{min-width:0;max-width:calc(100% - 48px);border:1px solid rgba(255,255,255,.15);background:rgba(7,12,22,.88);color:#eef2ff;border-radius:999px;padding:7px 30px 7px 10px;font:inherit;font-size:9px;font-weight:800;outline:none}
 .of-cctv-camera-select option{color:#111;background:#fff}.of-cctv-panel-full:disabled{opacity:.35;cursor:not-allowed}.of-cctv-off-body{display:flex;align-items:center;justify-content:center;text-align:center;color:#94a3b8;background:linear-gradient(145deg,#0b1220,#111827)}.of-cctv-off-body b,.of-cctv-off-body small{display:block}.of-cctv-off-body small{margin-top:5px;font-size:9px}
 @media(max-width:720px){.of-cctv-camera-select{font-size:8px;padding-top:6px;padding-bottom:6px}}
+/* v500 — live video is opt-in; only selected slots create stream iframes. */
+.of-cctv-layouts{display:flex;align-items:center;gap:4px;flex:0 0 auto}.of-cctv-layout-btn:disabled{opacity:.3;cursor:not-allowed}.of-cctv-stop-all{border:1px solid #334155!important;background:#111827!important;color:#cbd5e1!important;border-radius:8px!important;padding:6px 8px!important;font:inherit!important;font-size:9px!important;font-weight:900!important}.of-cctv-status.idle{color:#cbd5e1;background:#172033;border-color:#334155}.of-cctv-camera-grid-1{grid-template-columns:minmax(0,1fr)!important}.of-cctv-camera-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))!important}.of-cctv-camera-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+@media(min-width:1051px){.of-cctv-camera-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
+@media(max-width:720px){.of-cctv-toolbar{align-items:flex-start;flex-wrap:wrap}.of-cctv-branches{min-width:100%}.of-cctv-layouts{width:100%;justify-content:flex-end}.of-cctv-camera-grid-1{grid-template-columns:minmax(0,1fr)!important}.of-cctv-camera-grid-2,.of-cctv-camera-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))!important}.of-cctv-camera-grid-1 .of-cctv-camera-panel{height:280px!important;min-height:280px!important}}
 </style>
 <style id="ofCctvV439Style">
 .of-cctv-last-meta{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.of-cctv-last-meta span{background:#0b1220;border:1px solid #263449;border-radius:999px;padding:5px 9px;font-size:11px;color:#dbeafe}
@@ -712,13 +716,19 @@
       </div>
       <div class="of-cctv-toolbar">
         <div class="of-cctv-branches" id="ofCctvBranches"></div>
+        <div class="of-cctv-layouts" id="ofCctvLayouts" aria-label="عدد كاميرات المشاهدة">
+          <button type="button" class="of-cctv-layout-btn active" data-cctv-layout="1">1 ▣</button>
+          <button type="button" class="of-cctv-layout-btn" data-cctv-layout="2">2 ▥</button>
+          <button type="button" class="of-cctv-layout-btn" data-cctv-layout="4">4 ▦</button>
+          <button type="button" class="of-cctv-stop-all" id="ofCctvStopAll">إيقاف الكل</button>
+        </div>
       </div>
       <div id="ofCctvWarn" class="of-cctv-warning"></div>
       <section class="of-cctv-pinned-live" id="ofCctvPinnedLive">
         <div class="of-cctv-fixed-label"><span>🛒 السلة LIVE</span><small>ثابتة — لا تتغير</small></div>
         <div class="of-cctv-pinned-live-body" id="ofCctvPinnedLiveBody"></div>
       </section>
-      <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><small>اختار الكاميرا لكل مربع أو أوقفه</small></div>
+      <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><small>لا يبدأ أي Live تلقائيًا · اختار 1 أو 2 أو 4 ثم الكاميرات</small></div>
             <div class="of-cctv-camera-grid" id="ofCctvCameraGrid"></div>
       <section class="of-cctv-day-review" id="ofCctvNvrReview" style="display:none">
         <div class="of-cctv-day-head"><div><b>🎞️ مراجعة تسجيلات الـNVR</b><small id="ofCctvNvrHint">اختار الكاميرا واليوم والوقت من التسجيل الأصلي</small></div><div class="of-cctv-day-controls of-cctv-nvr-controls"><select id="ofCctvNvrCamera" aria-label="اختيار كاميرا التسجيل"></select><input type="date" id="ofCctvNvrDate"><input type="time" id="ofCctvNvrTime" step="300"><select id="ofCctvNvrDuration"><option value="15">15 دقيقة</option><option value="30" selected>30 دقيقة</option><option value="60">60 دقيقة</option></select><button type="button" id="ofCctvNvrOpen">▶ فتح التسجيل</button></div></div>
@@ -727,7 +737,7 @@
         <div class="of-cctv-day-head"><div><b>🕘 مراجعة اليوم</b><small>Timeline للفواتير — اللقطات + التسجيل الأصلي حول وقت الفاتورة</small></div><div class="of-cctv-day-controls"><input type="date" id="ofCctvDayDate"><button type="button" id="ofCctvDayLoad">تحميل اليوم</button></div></div>
         <div id="ofCctvDayRows"><div class="of-cctv-day-empty">اختار التاريخ واضغط تحميل اليوم</div></div>
       </section>
-      <div class="of-cctv-footnote">السلة Live ثابتة بالأعلى، وسطر آخر فاتورة يعرض رقمها وطريقة دفعها فقط. الكاميرات تحتها ويمكن إيقاف أي مربع.</div>
+      <div class="of-cctv-footnote">السلة Live ثابتة بالأعلى، وسطر آخر فاتورة يعرض رقمها وطريقة دفعها فقط. الكاميرات لا تبدأ تلقائيًا؛ فقط المربعات التي تختارها تسحب Live.</div>
     </div>
   </section>
   <!-- 🕵️ سجل النشاط -->
@@ -835,7 +845,7 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
-<script src="cctv.js?v=499"></script>
+<script src="cctv.js?v=500"></script>
 <script src="office.js?v=476"></script>
 </body>
 </html>

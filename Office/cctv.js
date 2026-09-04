@@ -1,5 +1,5 @@
-/* ECHARPE Office CCTV v494
-   POS Live stays pinned. Four stable camera slots remain user-selectable and persist locally. */
+/* ECHARPE Office CCTV v500
+   Camera live is opt-in: opening the room starts zero streams; user chooses 1, 2 or 4 slots. */
 (function(){
   'use strict';
   var KEY='echarpe.office.cctv.v478';
@@ -29,7 +29,7 @@
       {id:'1',name:'CAM1',label:'الكاشير',stream:'rehab_cam1_h264'}
     ]
   }];
-  var state={active:false,branch:'madinaty',slots:['4','5','7','8']};
+  var state={active:false,branch:'madinaty',layout:1,slots:['off','off','off','off']};
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});}
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
@@ -39,11 +39,13 @@
     try{
       var fresh=localStorage.getItem(KEY), raw=fresh||localStorage.getItem(OLD_KEY)||'{}', x=JSON.parse(raw);
       if(BRANCHES.some(function(y){return y.id===x.branch;}))state.branch=x.branch;
-      if(Array.isArray(x.slots)&&x.slots.length===4)state.slots=x.slots.map(function(v){return v==null?'off':String(v);});
-      if(!fresh&&state.branch==='glow')state.slots=['1','2','3','4'];
+      if([1,2,4].indexOf(Number(x.layout))>=0)state.layout=Number(x.layout);
     }catch(e){}
+    // v500: never restore camera streams. Every room entry starts with zero live video traffic.
+    state.slots=['off','off','off','off'];
+    if(b().cameras.length<state.layout)state.layout=1;
   }
-  function save(){try{localStorage.setItem(KEY,JSON.stringify({branch:state.branch,slots:state.slots.slice(0,4)}));}catch(e){}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify({branch:state.branch,layout:state.layout}));}catch(e){}}
   function liveDoc(){
     var docs=(window.ofLiveGetDocs&&window.ofLiveGetDocs())||[], x=b(), aliases=x.liveAliases||[];
     function norm(v){return String(v||'').trim().toLowerCase();}
@@ -158,7 +160,21 @@
     var a=di.value.split('-').map(Number),q=ti.value.split(':').map(Number),dt=new Date(a[0],a[1]-1,a[2],q[0]||0,q[1]||0,0,0);
     openPlayback(dt.getTime(),Number(du&&du.value)||30,String(ca&&ca.value||b().playbackCamera||'1'));
   }
-  function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;if(state.branch==='rehab')state.slots=['1','off','off','off'];else if(state.branch==='glow')state.slots=['1','2','3','4'];else if(state.branch==='madinaty'&&!state.slots.some(function(v){return ['4','5','7','8'].indexOf(String(v))>=0;}))state.slots=['4','5','7','8'];save();render();};});syncPlaybackPanel();}
+  function resetLiveSlots(){state.slots=['off','off','off','off'];}
+  function activeCameraCount(){return state.slots.slice(0,state.layout).filter(function(v){return v!=='off';}).length;}
+  function renderLiveStatus(){var el=document.getElementById('ofCctvStatus');if(!el)return;var n=activeCameraCount();el.textContent=n?'● '+n+' LIVE':'● متوقف';el.classList.toggle('idle',!n);}
+  function setLayout(n){
+    n=Number(n);if([1,2,4].indexOf(n)<0)return;if(b().cameras.length<n)return;
+    // Stop hidden streams immediately when reducing the wall.
+    for(var i=n;i<4;i++)state.slots[i]='off';
+    state.layout=n;save();renderLayouts();renderCameras();renderLiveStatus();
+  }
+  function renderLayouts(){
+    var el=document.getElementById('ofCctvLayouts');if(!el)return;
+    el.querySelectorAll('[data-cctv-layout]').forEach(function(btn){var n=Number(btn.dataset.cctvLayout);btn.classList.toggle('active',n===state.layout);btn.disabled=b().cameras.length<n;btn.onclick=function(){setLayout(n);};});
+    var stop=document.getElementById('ofCctvStopAll');if(stop)stop.onclick=function(){resetLiveSlots();renderCameras();renderLiveStatus();};
+  }
+  function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;resetLiveSlots();if(b().cameras.length<state.layout)state.layout=1;save();render();};});syncPlaybackPanel();}
   function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement||null;}
   function enterNativeFs(el){var fn=el&&(el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen);if(!fn)return;try{var r=fn.call(el);if(r&&r.catch)r.catch(function(){});}catch(e){}}
   function exitNativeFs(){var fn=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;if(!fn||!fsEl())return;try{var r=fn.call(document);if(r&&r.catch)r.catch(function(){});}catch(e){}}
@@ -186,14 +202,17 @@
   function renderCameras(){
     var grid=document.getElementById('ofCctvCameraGrid');if(!grid)return;
     grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);
-    grid.innerHTML=state.slots.map(cameraCard).join('');
-    grid.querySelectorAll('[data-cctv-select]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSelect);state.slots[i]=sel.value;save();renderCameras();};});
+    grid.classList.remove('of-cctv-camera-grid-1','of-cctv-camera-grid-2','of-cctv-camera-grid-4');
+    grid.classList.add('of-cctv-camera-grid-'+state.layout);
+    grid.innerHTML=state.slots.slice(0,state.layout).map(cameraCard).join('');
+    grid.querySelectorAll('[data-cctv-select]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSelect),next=sel.value;if(next!=='off'){state.slots.forEach(function(v,j){if(j!==i&&v===next)state.slots[j]='off';});}state.slots[i]=next;renderCameras();renderLiveStatus();};});
     grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
     grid.querySelectorAll('video[data-stream-src]').forEach(armCameraPlayer);
+    renderLiveStatus();
   }
   function render(){
     if(!state.active)return;
-    try{renderBranches();}catch(e){console.warn('cctv branches',e);}
+    try{renderBranches();renderLayouts();}catch(e){console.warn('cctv branches',e);}
     var live=document.getElementById('ofCctvPinnedLive');if(live)live.setAttribute('data-branch',state.branch);
     try{renderLive();}catch(e){console.warn('cctv pos live',e);var body=document.getElementById('ofCctvPinnedLiveBody');if(body)body.innerHTML='<div class=\"of-cctv-empty\"><div><b>POS Live غير متاح مؤقتًا</b><small>الكاميرات مستمرة بشكل مستقل</small></div></div>';}
     try{renderCameras();}catch(e){console.warn('cctv cameras',e);var grid=document.getElementById('ofCctvCameraGrid');if(grid)grid.innerHTML='<div class=\"of-cctv-day-empty\">تعذر رسم الكاميرات: '+esc(e&&e.message||e)+'</div>';}
@@ -205,7 +224,7 @@
     _liveRaf=requestAnimationFrame(function(){_liveRaf=0;if(state.active&&!document.hidden)renderLive();});
   }
   function stop(){state.active=false;if(_liveRaf){cancelAnimationFrame(_liveRaf);_liveRaf=0;}clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvCameraGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
-  function start(){state.active=true;render();}
+  function start(){state.active=true;resetLiveSlots();render();}
   function dayBounds(v){
     var a=String(v||'').split('-').map(Number); if(a.length!==3||!a[0])return null;
     var start=new Date(a[0],a[1]-1,a[2],0,0,0,0), end=new Date(a[0],a[1]-1,a[2]+1,0,0,0,0);
