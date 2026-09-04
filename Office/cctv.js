@@ -1,5 +1,5 @@
-/* ECHARPE Office CCTV v500
-   Camera live is opt-in: opening the room starts zero streams; user chooses 1, 2 or 4 slots. */
+/* ECHARPE Office CCTV v503
+   Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
   var KEY='echarpe.office.cctv.v478';
@@ -29,7 +29,7 @@
       {id:'1',name:'CAM1',label:'الكاشير',stream:'rehab_cam1_h264'}
     ]
   }];
-  var state={active:false,branch:'madinaty',layout:1,slots:['off','off','off','off']};
+  var state={active:false,branch:'madinaty',layout:4,slots:['off','off','off','off']};
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});}
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
@@ -39,13 +39,13 @@
     try{
       var fresh=localStorage.getItem(KEY), raw=fresh||localStorage.getItem(OLD_KEY)||'{}', x=JSON.parse(raw);
       if(BRANCHES.some(function(y){return y.id===x.branch;}))state.branch=x.branch;
-      if([1,2,4].indexOf(Number(x.layout))>=0)state.layout=Number(x.layout);
+      state.layout=4; // v503 fixed wall; old saved layout ignored
     }catch(e){}
     // v500: never restore camera streams. Every room entry starts with zero live video traffic.
     state.slots=['off','off','off','off'];
-    if(b().cameras.length<state.layout)state.layout=1;
+    state.layout=4;
   }
-  function save(){try{localStorage.setItem(KEY,JSON.stringify({branch:state.branch,layout:state.layout}));}catch(e){}}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify({branch:state.branch}));}catch(e){}}
   function liveDoc(){
     var docs=(window.ofLiveGetDocs&&window.ofLiveGetDocs())||[], x=b(), aliases=x.liveAliases||[];
     function norm(v){return String(v||'').trim().toLowerCase();}
@@ -119,14 +119,12 @@
     var body=document.getElementById('ofCctvPinnedLiveBody');
     if(body)body.innerHTML=posLiveHtml(liveDoc());
   }
-  function cameraOptions(selected){
-    return '<option value="off"'+(selected==='off'?' selected':'')+'>إيقاف الكاميرا</option>'+b().cameras.map(function(c){return '<option value="'+esc(c.id)+'"'+(String(c.id)===String(selected)?' selected':'')+'>'+esc(c.name)+' · '+esc(c.label)+'</option>';}).join('');
-  }
-  function cameraCard(selected,i){
-    var c=selected==='off'?null:cam(selected);
-    return '<article class="of-cctv-panel of-cctv-camera-panel'+(c?'':' of-cctv-camera-off')+'" data-camera="'+esc(c?c.id:'off')+'" data-panel="'+i+'">'+
-      '<div class="of-cctv-panel-head"><select class="of-cctv-camera-select" data-cctv-select="'+i+'" aria-label="اختيار كاميرا المربع '+(i+1)+'">'+cameraOptions(c?c.id:'off')+'</select><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(c?'':' disabled')+'>⛶</button></div>'+
-      (c?'<div class="of-cctv-panel-body of-cctv-video"><iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div><b>الكاميرا متوقفة</b><small>اختار كاميرا من القائمة فوق</small></div></div>')+'</article>';
+  function cameraCard(c,i){
+    var on=String(state.slots[i]||'off')===String(c.id);
+    var toggleLabel=on?'إيقاف':'تشغيل';
+    return '<article class="of-cctv-panel of-cctv-camera-panel '+(on?'is-live':'is-off')+'" data-camera="'+esc(c.id)+'" data-panel="'+i+'">'+
+      '<div class="of-cctv-panel-head"><div class="of-cctv-camera-name"><b>'+esc(c.name)+'</b><small>'+esc(c.label)+'</small></div><div class="of-cctv-camera-actions"><button type="button" class="of-cctv-cam-toggle '+(on?'on':'off')+'" data-cctv-toggle="'+i+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+toggleLabel+' '+esc(c.name)+'"><span class="of-cctv-switch-track"><span class="of-cctv-switch-knob"></span></span><span class="of-cctv-switch-text">'+toggleLabel+'</span></button><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(on?'':' disabled')+'>⛶</button></div></div>'+
+      (on?'<div class="of-cctv-panel-body of-cctv-video"><iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div class="of-cctv-off-camera"><span>📹</span><b>'+esc(c.name)+'</b><small>'+esc(c.label)+' · متوقفة</small><em>اضغط تشغيل للمشاهدة</em></div></div>')+'</article>';
   }
   function playbackUrl(atMs,durationMin,cameraId){
     var x=b();if(!x.playback)return '';
@@ -161,20 +159,18 @@
     openPlayback(dt.getTime(),Number(du&&du.value)||30,String(ca&&ca.value||b().playbackCamera||'1'));
   }
   function resetLiveSlots(){state.slots=['off','off','off','off'];}
-  function activeCameraCount(){return state.slots.slice(0,state.layout).filter(function(v){return v!=='off';}).length;}
+  function activeCameraCount(){return b().cameras.reduce(function(n,c,i){return n+(String(state.slots[i])===String(c.id)?1:0);},0);}
   function renderLiveStatus(){var el=document.getElementById('ofCctvStatus');if(!el)return;var n=activeCameraCount();el.textContent=n?'● '+n+' LIVE':'● متوقف';el.classList.toggle('idle',!n);}
-  function setLayout(n){
-    n=Number(n);if([1,2,4].indexOf(n)<0)return;if(b().cameras.length<n)return;
-    // Stop hidden streams immediately when reducing the wall.
-    for(var i=n;i<4;i++)state.slots[i]='off';
-    state.layout=n;save();renderLayouts();renderCameras();renderLiveStatus();
+  function setAllCameras(on){
+    var cams=b().cameras;
+    for(var i=0;i<4;i++)state.slots[i]=(on&&cams[i])?String(cams[i].id):'off';
+    renderCameras();renderLiveStatus();
   }
   function renderLayouts(){
-    var el=document.getElementById('ofCctvLayouts');if(!el)return;
-    el.querySelectorAll('[data-cctv-layout]').forEach(function(btn){var n=Number(btn.dataset.cctvLayout);btn.classList.toggle('active',n===state.layout);btn.disabled=b().cameras.length<n;btn.onclick=function(){setLayout(n);};});
-    var stop=document.getElementById('ofCctvStopAll');if(stop)stop.onclick=function(){resetLiveSlots();renderCameras();renderLiveStatus();};
+    var startAll=document.getElementById('ofCctvStartAll');if(startAll)startAll.onclick=function(){setAllCameras(true);};
+    var stop=document.getElementById('ofCctvStopAll');if(stop)stop.onclick=function(){setAllCameras(false);};
   }
-  function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;resetLiveSlots();if(b().cameras.length<state.layout)state.layout=1;save();render();};});syncPlaybackPanel();}
+  function renderBranches(){var el=document.getElementById('ofCctvBranches');if(!el)return;el.innerHTML=BRANCHES.map(function(x){return '<button class="of-cctv-chip '+(x.id===state.branch?'active':'')+'" data-cctv-branch="'+esc(x.id)+'">🏬 '+esc(x.name)+'</button>';}).join('');el.querySelectorAll('[data-cctv-branch]').forEach(function(btn){btn.onclick=function(){if(btn.dataset.cctvBranch===state.branch)return;state.branch=btn.dataset.cctvBranch;resetLiveSlots();save();render();};});syncPlaybackPanel();}
   function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement||null;}
   function enterNativeFs(el){var fn=el&&(el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen);if(!fn)return;try{var r=fn.call(el);if(r&&r.catch)r.catch(function(){});}catch(e){}}
   function exitNativeFs(){var fn=document.exitFullscreen||document.webkitExitFullscreen||document.msExitFullscreen;if(!fn||!fsEl())return;try{var r=fn.call(document);if(r&&r.catch)r.catch(function(){});}catch(e){}}
@@ -203,9 +199,13 @@
     var grid=document.getElementById('ofCctvCameraGrid');if(!grid)return;
     grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);
     grid.classList.remove('of-cctv-camera-grid-1','of-cctv-camera-grid-2','of-cctv-camera-grid-4');
-    grid.classList.add('of-cctv-camera-grid-'+state.layout);
-    grid.innerHTML=state.slots.slice(0,state.layout).map(cameraCard).join('');
-    grid.querySelectorAll('[data-cctv-select]').forEach(function(sel){sel.onchange=function(){var i=Number(sel.dataset.cctvSelect),next=sel.value;if(next!=='off'){state.slots.forEach(function(v,j){if(j!==i&&v===next)state.slots[j]='off';});}state.slots[i]=next;renderCameras();renderLiveStatus();};});
+    grid.classList.add('of-cctv-camera-grid-'+Math.min(4,Math.max(1,b().cameras.length)));
+    grid.innerHTML=b().cameras.map(cameraCard).join('');
+    grid.querySelectorAll('[data-cctv-toggle]').forEach(function(btn){btn.onclick=function(){
+      var i=Number(btn.dataset.cctvToggle),c=b().cameras[i];if(!c)return;
+      state.slots[i]=String(state.slots[i])===String(c.id)?'off':String(c.id);
+      renderCameras();renderLiveStatus();
+    };});
     grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
     grid.querySelectorAll('video[data-stream-src]').forEach(armCameraPlayer);
     renderLiveStatus();

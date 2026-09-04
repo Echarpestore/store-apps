@@ -376,6 +376,30 @@
   .of-cctv-playback-head{padding:8px 10px}.of-cctv-playback-head b{font-size:13px}.of-cctv-playback-external{font-size:11px;padding:7px 8px}.of-cctv-playback-close{padding:7px 10px}
 }
 </style>
+
+<style id="ofCctvV503Style">
+/* v503 — fixed four-camera wall with independent premium on/off switches. */
+.of-cctv-start-all,.of-cctv-stop-all{border-radius:10px!important;padding:7px 10px!important;font:inherit!important;font-size:9px!important;font-weight:900!important;cursor:pointer!important}
+.of-cctv-start-all{border:1px solid #166534!important;background:#0d2d20!important;color:#bbf7d0!important}
+.of-cctv-stop-all{border:1px solid #334155!important;background:#111827!important;color:#cbd5e1!important}
+.of-cctv-camera-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.of-cctv-camera-grid-1{grid-template-columns:minmax(0,1fr)!important}
+.of-cctv-camera-panel{position:relative}
+.of-cctv-panel-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:7px!important;pointer-events:none!important}
+.of-cctv-camera-name{pointer-events:none;min-width:0;padding:7px 10px;border-radius:12px;background:rgba(7,12,22,.86);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px);color:#f8fafc}
+.of-cctv-camera-name b{display:block;font-size:10px;line-height:1.1}.of-cctv-camera-name small{display:block;color:#94a3b8;font-size:8px;margin-top:3px}
+.of-cctv-camera-actions{display:flex;align-items:center;gap:5px;pointer-events:auto}
+.of-cctv-cam-toggle{display:flex;align-items:center;gap:6px;border:1px solid #334155;background:rgba(15,23,42,.9);color:#cbd5e1;border-radius:999px;padding:5px 7px;cursor:pointer;font:inherit;font-size:8px;font-weight:900;backdrop-filter:blur(10px)}
+.of-cctv-cam-toggle.on{border-color:#15803d;background:rgba(20,83,45,.92);color:#dcfce7}
+.of-cctv-switch-track{position:relative;width:29px;height:16px;border-radius:999px;background:#334155;display:inline-block;flex:0 0 auto;transition:.18s ease}.of-cctv-cam-toggle.on .of-cctv-switch-track{background:#22c55e}
+.of-cctv-switch-knob{position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 4px rgba(0,0,0,.35);transition:transform .18s ease}.of-cctv-cam-toggle.on .of-cctv-switch-knob{transform:translateX(13px)}
+.of-cctv-panel-full{pointer-events:auto!important}
+.of-cctv-camera-panel.is-live{border-color:#14532d;box-shadow:0 0 0 1px rgba(34,197,94,.08),0 10px 28px rgba(0,0,0,.22)}
+.of-cctv-off-body{background:radial-gradient(circle at 50% 15%,rgba(30,41,59,.7),rgba(5,9,16,.96) 66%)}
+.of-cctv-off-camera span{font-size:25px;opacity:.7}.of-cctv-off-camera b{margin-top:8px;font-size:13px;color:#e2e8f0}.of-cctv-off-camera small{font-size:9px;color:#94a3b8}.of-cctv-off-camera em{display:inline-block;margin-top:9px;padding:6px 10px;border:1px solid #253247;border-radius:999px;color:#64748b;font-size:8px;font-style:normal}
+@media(min-width:1051px){.of-cctv-camera-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
+@media(max-width:720px){.of-cctv-camera-panel{height:190px!important;min-height:190px!important;aspect-ratio:auto!important}.of-cctv-camera-name{padding:6px 7px}.of-cctv-camera-name b{font-size:9px}.of-cctv-camera-name small{font-size:7px}.of-cctv-cam-toggle{padding:4px 5px}.of-cctv-switch-track{width:27px;height:15px}.of-cctv-switch-knob{width:11px;height:11px}.of-cctv-cam-toggle.on .of-cctv-switch-knob{transform:translateX(12px)}.of-cctv-switch-text{display:none}}
+</style>
 </head>
 <body>
 
@@ -716,11 +740,9 @@
       </div>
       <div class="of-cctv-toolbar">
         <div class="of-cctv-branches" id="ofCctvBranches"></div>
-        <div class="of-cctv-layouts" id="ofCctvLayouts" aria-label="عدد كاميرات المشاهدة">
-          <button type="button" class="of-cctv-layout-btn active" data-cctv-layout="1">1 ▣</button>
-          <button type="button" class="of-cctv-layout-btn" data-cctv-layout="2">2 ▥</button>
-          <button type="button" class="of-cctv-layout-btn" data-cctv-layout="4">4 ▦</button>
-          <button type="button" class="of-cctv-stop-all" id="ofCctvStopAll">إيقاف الكل</button>
+        <div class="of-cctv-layouts" id="ofCctvLayouts" aria-label="تحكم كاميرات المشاهدة">
+          <button type="button" class="of-cctv-start-all" id="ofCctvStartAll">▶ تشغيل الكل</button>
+          <button type="button" class="of-cctv-stop-all" id="ofCctvStopAll">■ إيقاف الكل</button>
         </div>
       </div>
       <div id="ofCctvWarn" class="of-cctv-warning"></div>
@@ -728,7 +750,7 @@
         <div class="of-cctv-fixed-label"><span>🛒 السلة LIVE</span><small>ثابتة — لا تتغير</small></div>
         <div class="of-cctv-pinned-live-body" id="ofCctvPinnedLiveBody"></div>
       </section>
-      <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><small>لا يبدأ أي Live تلقائيًا · اختار 1 أو 2 أو 4 ثم الكاميرات</small></div>
+      <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><small>الأربع كاميرات ثابتة في مكانها · شغّل فقط الكاميرا اللي محتاجها</small></div>
             <div class="of-cctv-camera-grid" id="ofCctvCameraGrid"></div>
       <section class="of-cctv-day-review" id="ofCctvNvrReview" style="display:none">
         <div class="of-cctv-day-head"><div><b>🎞️ مراجعة تسجيلات الـNVR</b><small id="ofCctvNvrHint">اختار الكاميرا واليوم والوقت من التسجيل الأصلي</small></div><div class="of-cctv-day-controls of-cctv-nvr-controls"><select id="ofCctvNvrCamera" aria-label="اختيار كاميرا التسجيل"></select><input type="date" id="ofCctvNvrDate"><input type="time" id="ofCctvNvrTime" step="300"><select id="ofCctvNvrDuration"><option value="15">15 دقيقة</option><option value="30" selected>30 دقيقة</option><option value="60">60 دقيقة</option></select><button type="button" id="ofCctvNvrOpen">▶ فتح التسجيل</button></div></div>
@@ -737,7 +759,7 @@
         <div class="of-cctv-day-head"><div><b>🕘 مراجعة اليوم</b><small>Timeline للفواتير — اللقطات + التسجيل الأصلي حول وقت الفاتورة</small></div><div class="of-cctv-day-controls"><input type="date" id="ofCctvDayDate"><button type="button" id="ofCctvDayLoad">تحميل اليوم</button></div></div>
         <div id="ofCctvDayRows"><div class="of-cctv-day-empty">اختار التاريخ واضغط تحميل اليوم</div></div>
       </section>
-      <div class="of-cctv-footnote">السلة Live ثابتة بالأعلى، وسطر آخر فاتورة يعرض رقمها وطريقة دفعها فقط. الكاميرات لا تبدأ تلقائيًا؛ فقط المربعات التي تختارها تسحب Live.</div>
+      <div class="of-cctv-footnote">السلة Live ثابتة بالأعلى، وسطر آخر فاتورة يعرض رقمها وطريقة دفعها فقط. الكاميرات لا تبدأ تلقائيًا؛ كل كاميرا لها زر تشغيل مستقل، والكاميرات المشغلة فقط هي التي تسحب Live.</div>
     </div>
   </section>
   <!-- 🕵️ سجل النشاط -->
@@ -845,7 +867,7 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
-<script src="cctv.js?v=500"></script>
+<script src="cctv.js?v=503"></script>
 <script src="office.js?v=476"></script>
 </body>
 </html>
