@@ -1,0 +1,24 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const agent=fs.readFileSync(path.join(root,'branch-tools/glow/cctv-gateway/GLOW-CCTV-AGENT.ps1'),'utf8');
+const office=fs.readFileSync(path.join(root,'Office/cctv.js'),'utf8');
+const html=fs.readFileSync(path.join(root,'Office/index.html'),'utf8');
+let ok=0,fail=0;function t(n,v){if(v){ok++;console.log('PASS',n)}else{fail++;console.error('FAIL',n)}}
+t('Agent version 499+',/version=(?:499|[5-9]\d{2,})/.test(agent));
+t('Default profile is 480p',/return @\{quality='480';scale='854:-2';bitrate='600k';maxrate='750k';bufsize='1500k'\}/.test(agent));
+t('720p profile remains available',/quality='720';scale='1280:-2';bitrate='1200k';maxrate='1500k';bufsize='3000k'/.test(agent));
+t('Only explicit 720 selects high profile',/Trim\(\) -eq '720'/.test(agent));
+t('Playback endpoint accepts quality',/QueryString\['quality'\]/.test(agent)&&/StreamPlayback \$c \$cam \$at \$ds \$quality/.test(agent));
+t('NVR viewer defaults selector to 480',/<option value="480" selected>480p<\/option>/.test(agent));
+t('NVR viewer offers 720',/<option value="720">720p<\/option>/.test(agent));
+t('NVR viewer sends quality',/&quality='\+encodeURIComponent\(q\.value\)/.test(agent));
+t('Invoice video defaults to 480',/invoiceVideoUrl\('480'\)/.test(office));
+t('Invoice viewer offers 480 fast',/<option value="480" selected>480p سريع<\/option>/.test(office));
+t('Invoice viewer offers 720 clearer',/<option value="720">720p أوضح<\/option>/.test(office));
+t('Invoice quality change reloads video',/qualitySel\.onchange=function\(\)/.test(office)&&/invoiceVideoUrl\(qualitySel\.value\)/.test(office));
+t('Exact invoice window remains 60 sec',/durationSec=60/.test(office)&&/videoAtMs\)-30000/.test(office));
+t('Original NVR wording remains',/التسجيل الأصلي يظل على الـNVR/.test(office));
+t('Snapshots remain unchanged quality path',/frames:v 1 -q:v 5/.test(agent));
+t('Office cache bust 499+',/cctv\.js\?v=(?:499|[5-9][0-9]{2,})/.test(html));
+t('No credential JSON embedded',!/(passwordDpapi\s*[:=]\s*['"][A-Za-z0-9+/=]{20,})/.test(agent));
+console.log(`RESULT ${ok} PASS ${fail} FAIL`);if(fail)process.exit(1);

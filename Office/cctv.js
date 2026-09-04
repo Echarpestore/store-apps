@@ -1,10 +1,10 @@
-/* ECHARPE Office CCTV v503
+/* ECHARPE Office CCTV v506
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
   var KEY='echarpe.office.cctv.v478';
   var OLD_KEY='echarpe.office.cctv.v438';
-  var BRANCHES=[{
+  var FALLBACK_BRANCHES=[{
     id:'madinaty', name:'مدينتي', gateway:'https://cctv-madinaty.echarpe.store',
     liveAliases:['madinaty','مدينتي'],
     cameras:[
@@ -29,6 +29,9 @@
       {id:'1',name:'CAM1',label:'الكاشير',stream:'rehab_cam1_h264'}
     ]
   }];
+  var BRANCHES=(typeof window.echarpeCctvProfiles==='function'?window.echarpeCctvProfiles():FALLBACK_BRANCHES).map(function(x){
+    return {id:x.id,name:x.name,gateway:x.gateway,liveAliases:x.aliases||x.liveAliases||[x.id,x.name],playback:!!x.playback,playbackCamera:String(x.cashierCamera||x.playbackCamera||'1'),cameras:x.cameras||[]};
+  });
   var state={active:false,branch:'madinaty',layout:4,slots:['off','off','off','off']};
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});}
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
@@ -321,6 +324,64 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
   }catch(e){console.warn('invoice shots',e);alert('تعذر فتح لقطات الفاتورة');}
 };
 
+/* v506: authoritative invoice viewer. It replaces the v495 handler above at
+   load time, keeps old invoice compatibility, and adds camera+basket replay. */
+window.ofCctvTimelineStateAt=function(events,clipStartAtMs,videoSeconds){
+  var now=Number(clipStartAtMs)+(Number(videoSeconds)||0)*1000,hit=null,list=Array.isArray(events)?events:[];
+  for(var i=0;i<list.length&&Number(list[i].atMs)<=now;i++)hit=list[i];
+  return {atMs:now,event:hit};
+};
+window.ofCctvInvoiceShot = async function(invoiceCode){
+  try{
+    if(!invoiceCode||typeof db==='undefined')return;
+    var reads=await Promise.all([
+      db.collection('pos_cctv_invoice_snapshots').doc(String(invoiceCode)).get().catch(function(){return null;}),
+      db.collection('pos_cctv_invoice_timelines').doc(String(invoiceCode)).get().catch(function(){return null;})
+    ]);
+    var snap=reads[0],timelineSnap=reads[1];
+    if(!snap||!snap.exists){alert('مفيش لقطات محفوظة للفاتورة دي.');return;}
+    var d=snap.data()||{},timeline=(timelineSnap&&timelineSnap.exists)?(timelineSnap.data()||{}):null,shots=d.shots||{};
+    var profile=(typeof window.echarpeCctvProfile==='function'&&window.echarpeCctvProfile(d.branch||d.branchProfile))||null;
+    var localBranch=!!d.localSnapshots,gateway=String(d.gateway||(profile&&profile.gateway)||'').replace(/\/$/,'');
+    var playbackReady=!!gateway&&!!(profile&&profile.playback)&&Number(d.videoAtMs)>0;
+    if(!Object.keys(shots).length&&/^data:image\/jpeg;base64,/.test(String(d.jpegData||'')))shots={after_save:{jpegData:d.jpegData,capturedAtMs:d.capturedAtMs,width:d.width,height:d.height,camera:d.camera||'CCTV'}};
+    var order=['first_item','payment','saving','after_save'];
+    var labels={first_item:'1️⃣ أول كود',payment:'2️⃣ أثناء الدفع',saving:'3️⃣ أثناء الحفظ',after_save:'4️⃣ بعد الحفظ'};
+    var valid=order.filter(function(k){var x=shots[k]||{};return localBranch?!!x.available:/^data:image\/jpeg;base64,/.test(String(x.jpegData||''));});
+    if(!valid.length&&!playbackReady){alert('مفيش صورة أو تسجيل صالح محفوظ للفاتورة دي.');return;}
+    var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});};
+    function shotUrl(k){return localBranch?(gateway+'/echarpe-events/snapshot?invoice='+encodeURIComponent(String(invoiceCode))+'&stage='+encodeURIComponent(k)+'&_='+Date.now()):String((shots[k]||{}).jpegData||'');}
+    function videoUrl(startAtMs,durationSec,quality){
+      var cid=String(d.cameraId||(profile&&profile.cashierCamera)||'1'),u=gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(Math.max(1,Number(startAtMs)||1))+'&durationSec='+encodeURIComponent(Math.max(30,Math.min(1800,Number(durationSec)||60)))+'&quality='+encodeURIComponent(quality||'480');
+      if(d.clockSource==='nvr_isapi'||d.clockSource==='config')u+='&offsetMs='+encodeURIComponent(Number(d.nvrOffsetMs)||0);
+      return u+'&_='+Date.now();
+    }
+    if(!document.getElementById('ofCctvInvoiceStyle506')){
+      var st=document.createElement('style');st.id='ofCctvInvoiceStyle506';st.textContent='.of-inv506-ov{position:fixed;inset:0;z-index:10020;background:rgba(2,6,23,.95);display:flex;align-items:center;justify-content:center;padding:12px;color:#fff;direction:rtl}.of-inv506-box{width:min(1100px,100%);max-height:94vh;overflow:auto;background:#0b1220;border:1px solid #334155;border-radius:18px;padding:13px}.of-inv506-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}.of-inv506-actions{display:flex;gap:7px;flex-wrap:wrap}.of-inv506-btn{border:0;border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer}.of-inv506-blue{background:#2563eb;color:#fff}.of-inv506-gold{background:#d6a72f;color:#111827}.of-inv506-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.of-inv506-shot{border:1px solid #334155;background:#111827;color:#fff;border-radius:13px;padding:7px;text-align:right;cursor:pointer}.of-inv506-shot img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;background:#000;border-radius:9px}.of-inv506-foot{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:12px}.of-sync506{width:min(1220px,100%);height:min(90vh,820px);display:flex;flex-direction:column;background:#05070b;border:1px solid #334155;border-radius:16px;overflow:hidden}.of-sync506-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:#0f172a}.of-sync506-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.7fr) minmax(290px,.8fr);direction:ltr}.of-sync506-video{position:relative;min-width:0;background:#000}.of-sync506-video video{width:100%;height:100%;display:block;object-fit:contain}.of-sync506-status{position:absolute;right:10px;left:10px;bottom:10px;padding:8px;background:rgba(15,23,42,.9);border-radius:9px;font-size:12px}.of-sync506-status.ok{display:none}.of-sync506-cart{direction:rtl;background:#0f172a;border-right:1px solid #334155;display:flex;flex-direction:column;min-height:0}.of-sync506-carthead{padding:11px;border-bottom:1px solid #334155}.of-sync506-rows{overflow:auto;flex:1;padding:8px}.of-sync506-row{display:flex;justify-content:space-between;gap:8px;padding:8px;border-bottom:1px solid #263449;font-size:12px}.of-sync506-row small{display:block;color:#94a3b8;margin-top:3px}.of-sync506-total{display:flex;justify-content:space-between;padding:12px;font-weight:900;border-top:1px solid #334155}.of-sync506-event{color:#f5cf68;font-size:11px;margin-top:4px}.of-inv506-muted{color:#94a3b8;font-size:11px}@media(max-width:760px){.of-inv506-ov{padding:0;align-items:stretch}.of-inv506-box,.of-sync506{width:100%;height:100%;max-height:none;border:0;border-radius:0}.of-inv506-grid{grid-template-columns:1fr}.of-sync506-body{grid-template-columns:1fr;grid-template-rows:minmax(45%,1fr) minmax(35%,.8fr)}.of-sync506-cart{border-right:0;border-top:1px solid #334155}.of-inv506-head,.of-sync506-head{align-items:flex-start;flex-direction:column}.of-inv506-actions{width:100%}.of-inv506-actions .of-inv506-btn{flex:1}}';document.head.appendChild(st);
+    }
+    var cards=valid.map(function(k){var x=shots[k]||{};return '<button type="button" data-shot="'+k+'" class="of-inv506-shot"><img src="'+esc(shotUrl(k))+'" alt="'+esc(labels[k])+'"><div class="of-inv506-foot"><b>'+labels[k]+'</b><small>'+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleTimeString('ar-EG')+'</small></div></button>';}).join('');
+    var hasTimeline=!!(timeline&&Array.isArray(timeline.events)&&timeline.events.length);
+    var ov=document.createElement('div');ov.className='of-inv506-ov';ov.id='ofCctvShotOv';
+    ov.innerHTML='<div class="of-inv506-box"><div class="of-inv506-head"><div><b>📸 فاتورة '+esc(invoiceCode)+'</b><div class="of-inv506-muted">'+esc(d.camera||'CCTV')+' · '+valid.length+' لقطة'+(hasTimeline?' · Timeline السلة محفوظ':'')+'</div></div><div class="of-inv506-actions">'+(playbackReady?'<button id="ofInv506Video" class="of-inv506-btn of-inv506-blue">🎥 30 ثانية قبل + 30 بعد</button>':'')+(playbackReady&&hasTimeline?'<button id="ofInv506Sync" class="of-inv506-btn of-inv506-gold">🎬 الكاميرا + السلة</button>':'')+'<button id="ofInv506Close" class="of-inv506-btn">إغلاق</button></div></div><div class="of-inv506-grid">'+(cards||'<div class="of-inv506-muted">الصور غير متاحة، التسجيل موجود.</div>')+'</div></div>';
+    document.body.appendChild(ov);
+    function closeOverlay(x){if(x&&x.parentNode)x.parentNode.removeChild(x);}
+    ov.querySelector('#ofInv506Close').onclick=function(){closeOverlay(ov);};ov.onclick=function(e){if(e.target===ov)closeOverlay(ov);};
+    ov.querySelectorAll('[data-shot]').forEach(function(btn){btn.onclick=function(){var img=btn.querySelector('img');if(img&&img.requestFullscreen)img.requestFullscreen().catch(function(){});};});
+    function openPlayer(sync){
+      var start=Number(d.videoAtMs)-30000,duration=60,events=[],catalog={};
+      if(sync){start=Number(timeline.clipStartAtMs)||Math.max(1,Number(timeline.startedAtMs)-5000);var end=Number(timeline.clipEndAtMs)||Number(timeline.endedAtMs)+10000;duration=Math.max(30,Math.min(1800,Math.ceil((end-start)/1000)));events=(timeline.events||[]).slice().sort(function(a,b){return Number(a.atMs)-Number(b.atMs);});catalog=timeline.catalog||{};}
+      var pv=document.createElement('div');pv.className='of-inv506-ov';pv.id='ofCctvInvoicePlayback';
+      pv.innerHTML='<div class="of-sync506"><div class="of-sync506-head"><div><b>'+(sync?'🎬 Playback الكاميرا والسلة':'🎥 فيديو الفاتورة')+'</b><div class="of-inv506-muted">'+(sync?'كل حركة تظهر في السلة عند نفس لحظتها في الفيديو':'30 ثانية قبل الحفظ + 30 ثانية بعده')+' · التسجيل الأصلي على الـNVR</div></div><div class="of-inv506-actions"><select id="ofSync506Quality" class="of-inv506-btn"><option value="480" selected>480p سريع</option><option value="720">720p أوضح</option></select><button id="ofSync506Close" class="of-inv506-btn">✕</button></div></div><div class="of-sync506-body"><div class="of-sync506-video"><video id="ofSync506Video" controls autoplay muted playsinline preload="none"></video><div id="ofSync506Status" class="of-sync506-status">جاري تجهيز التسجيل من الـNVR…</div></div>'+(sync?'<aside class="of-sync506-cart"><div class="of-sync506-carthead"><b>🛒 السلة في هذه اللحظة</b><div id="ofSync506Clock" class="of-inv506-muted">—</div><div id="ofSync506Event" class="of-sync506-event">قبل أول صنف</div></div><div id="ofSync506Rows" class="of-sync506-rows"></div><div class="of-sync506-total"><span>الإجمالي</span><strong id="ofSync506Total">0.00 ج.م</strong></div></aside>':'')+'</div></div>';
+      document.body.appendChild(pv);var video=pv.querySelector('#ofSync506Video'),status=pv.querySelector('#ofSync506Status'),quality=pv.querySelector('#ofSync506Quality');
+      function stop(){try{video.pause();video.removeAttribute('src');video.load();}catch(e){}closeOverlay(pv);}
+      function loadVideo(){status.className='of-sync506-status';status.textContent='جاري تجهيز التسجيل من الـNVR…';video.src=videoUrl(start,duration,quality.value);video.load();video.play().catch(function(){});}
+      function renderAt(){if(!sync)return;var state=window.ofCctvTimelineStateAt(events,start,video.currentTime),now=state.atMs,hit=state.event;var rowsEl=pv.querySelector('#ofSync506Rows'),totalEl=pv.querySelector('#ofSync506Total'),clockEl=pv.querySelector('#ofSync506Clock'),eventEl=pv.querySelector('#ofSync506Event');clockEl.textContent=new Date(now).toLocaleTimeString('ar-EG');if(!hit){rowsEl.innerHTML='<div class="of-inv506-muted" style="padding:12px">السلة لسه فاضية</div>';totalEl.textContent='0.00 ج.م';eventEl.textContent='قبل أول صنف';return;}var kind={item_added:'إضافة صنف',item_removed:'حذف صنف',qty_increased:'زيادة كمية',qty_decreased:'تقليل كمية',cart_edited:'تعديل السلة',payment:'بدء الدفع',saving:'بدء الحفظ',sale_saved:'حفظ الفاتورة'}[hit.kind]||'تغيير السلة';eventEl.textContent=kind+' · '+new Date(Number(hit.atMs)).toLocaleTimeString('ar-EG');var rows=Array.isArray(hit.cart)?hit.cart:[];rowsEl.innerHTML=rows.map(function(r){var item=catalog[r[0]]||{},q=Number(r[1])||0,p=Number(r[2])||0,ret=Number(r[3])===1;return '<div class="of-sync506-row"><span><b>'+esc(item.name||item.id||'صنف')+(ret?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(item.barcode?' · '+esc(item.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-inv506-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent=Number(hit.total||0).toFixed(2)+' ج.م';}
+      video.addEventListener('playing',function(){status.className='of-sync506-status ok';});video.addEventListener('loadeddata',function(){status.className='of-sync506-status ok';renderAt();});video.addEventListener('timeupdate',renderAt);video.addEventListener('seeking',renderAt);video.addEventListener('error',function(){status.className='of-sync506-status';status.textContent='تعذر تشغيل التسجيل — افتح بوابة CCTV وتأكد من الاتصال بالفرع.';});quality.onchange=loadVideo;pv.querySelector('#ofSync506Close').onclick=stop;pv.onclick=function(e){if(e.target===pv)stop();};loadVideo();renderAt();
+    }
+    var vbtn=ov.querySelector('#ofInv506Video');if(vbtn)vbtn.onclick=function(){openPlayer(false);};var sbtn=ov.querySelector('#ofInv506Sync');if(sbtn)sbtn.onclick=function(){openPlayer(true);};
+  }catch(e){console.warn('invoice cctv v506',e);alert('تعذر فتح مراجعة الفاتورة');}
+};
+
 
 /* v424: video evidence viewer. Firestore contains metadata only; video stays at branch. */
 window.ofCctvOpenEvent = async function(eventId){
@@ -328,8 +389,9 @@ window.ofCctvOpenEvent = async function(eventId){
     if(!eventId || typeof db==='undefined') return;
     var snap=await db.collection('pos_cctv_events').doc(String(eventId)).get();
     if(!snap.exists){ alert('مفيش فيديو محفوظ للحدث ده. الفيديوهات تبدأ من v424 بعد تشغيل Evidence Agent.'); return; }
-    var d=snap.data()||{}, url=String(d.viewerUrl||'');
-    if(!/^https:\/\/cctv-(?:madinaty|rehab|glow)\.echarpe\.store\/echarpe-events\/view\?id=/.test(url)) throw new Error('bad_viewer_url');
+    var d=snap.data()||{}, url=String(d.viewerUrl||''),profiles=(typeof window.echarpeCctvProfiles==='function'?window.echarpeCctvProfiles():[]);
+    var allowed=profiles.some(function(p){var g=String(p.gateway||'').replace(/\/$/,'');return g&&url.indexOf(g+'/echarpe-events/view?id=')===0;});
+    if(!allowed) throw new Error('bad_viewer_url');
     window.open(url,'_blank','noopener');
   }catch(e){ alert('تعذر فتح فيديو الحدث'); }
 };

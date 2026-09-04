@@ -258,66 +258,6 @@ function normalizeScan(code){
 }
 window.normalizeScan = normalizeScan;
 
-// 🔫⌨️ v451 — Scanner مستقل عن لغة ويندوز.
-// KeyboardEvent.code بيرجع مكان الزر الحقيقي (KeyF / KeyT / Digit3...) حتى لو
-// Windows مضبوط عربي. بنستخدمه **فقط** لما السلسلة داخلة بسرعة قارئ باركود؛
-// الكتابة البشرية العادية تفضل تستخدم قيمة الحقل كما هي.
-let _scannerPhysicalBuf = '';
-let _scannerPhysicalStartAt = 0;
-let _scannerPhysicalLastAt = 0;
-function scannerPhysicalChar(e){
-  if(!e || e.ctrlKey || e.altKey || e.metaKey) return '';
-  const code = String(e.code || '');
-  if(/^Key[A-Z]$/.test(code)){
-    const ch = code.slice(3);
-    return e.shiftKey ? ch : ch.toLowerCase();
-  }
-  if(/^Digit[0-9]$/.test(code)){
-    const d = code.slice(5);
-    if(!e.shiftKey) return d;
-    return {'1':'!','2':'@','3':'#','4':'$','5':'%','6':'^','7':'&','8':'*','9':'(','0':')'}[d] || d;
-  }
-  const plain = {
-    Minus:'-', Equal:'=', BracketLeft:'[', BracketRight:']',
-    Backslash:'\\', Semicolon:';', Quote:"'", Comma:',', Period:'.', Slash:'/', Space:' '
-  };
-  const shifted = {
-    Minus:'_', Equal:'+', BracketLeft:'{', BracketRight:'}',
-    Backslash:'|', Semicolon:':', Quote:'"', Comma:'<', Period:'>', Slash:'?'
-  };
-  return e.shiftKey ? (shifted[code] || plain[code] || '') : (plain[code] || '');
-}
-function scannerTrackPhysicalKey(e, now){
-  const ch = scannerPhysicalChar(e);
-  if(!ch) return;
-  const t = Number(now || Date.now());
-  // قارئ حقيقي بيبعت الحروف ورا بعض بسرعة. gap كبير = بداية محاولة جديدة.
-  if(!_scannerPhysicalLastAt || (t - _scannerPhysicalLastAt) > 120){
-    _scannerPhysicalBuf = '';
-    _scannerPhysicalStartAt = t;
-  }
-  _scannerPhysicalBuf += ch;
-  _scannerPhysicalLastAt = t;
-}
-function scannerConsumePhysical(now){
-  const t = Number(now || Date.now());
-  const buf = _scannerPhysicalBuf;
-  const started = _scannerPhysicalStartAt;
-  const last = _scannerPhysicalLastAt;
-  _scannerPhysicalBuf = '';
-  _scannerPhysicalStartAt = 0;
-  _scannerPhysicalLastAt = 0;
-  if(!buf || buf.length < 4 || !started || !last) return '';
-  const duration = Math.max(1, last - started);
-  const avg = duration / Math.max(1, buf.length - 1);
-  // قبول مسح سريع فقط؛ لا نغيّر كتابة الموظف اليدوية.
-  if((t - last) <= 220 && avg <= 80 && duration <= Math.max(900, buf.length * 80)) return buf;
-  return '';
-}
-window.scannerPhysicalChar = scannerPhysicalChar;
-window.scannerTrackPhysicalKey = scannerTrackPhysicalKey;
-window.scannerConsumePhysical = scannerConsumePhysical;
-
 // 🔍 البحث بالباركود مع التسامح مع الأصفار البادئة
 // السبب: ليبلات QuickBooks القديمة مطبوعة بأصفار (000948) بينما الباركود
 // المستورد رقم مجرد (948). بنجرب المطابقة التامة الأول، وبعدين بعد شيل الأصفار.
@@ -372,12 +312,9 @@ window.findByBarcode = findByBarcode;
 window.stripZeros = stripZeros;
 
 searchBar.addEventListener('keydown', (e)=>{
-  if(e.key !== 'Enter'){ scannerTrackPhysicalKey(e); }
   if(e.key === 'Enter'){
-    // 🔫 v451: لو ده Scanner سريع، ناخد الحروف من physical key codes المستقلة عن لغة ويندوز.
-    // لو كتابة يدوية، نرجع للـnormalize القديم عادي.
-    const _physicalScan = scannerConsumePhysical();
-    const code = normalizeScan((_physicalScan || searchBar.value).trim());
+    // ⌨️ لو الكيبورد كان عربي، بنرجّع الكود لأصله قبل أي مطابقة
+    const code = normalizeScan(searchBar.value.trim());
     if(!code) return;
     // ↩️ R + رقم موبايل → مرتجع بفواتير العميل (مثال: R01012345678)
     if(/^[rR]\s*01\d{9}$/.test(code.replace(/\s/g,''))){
@@ -670,6 +607,11 @@ function renderCart(){
   try{ _saleDraftSave(); }catch(e){}
   try{ if(typeof boostRenderStrip === 'function') boostRenderStrip(); }catch(e){}
   try{ if(typeof posLivePublish === 'function') posLivePublish(); }catch(e){}
+  // 🎬 v506: timeline محلي؛ الدالة نفسها تمنع التكرار، فلا توجد كتابة
+  // Firestore مع كل render/scan. المستند الواحد يُكتب بعد حفظ الفاتورة فقط.
+  try{ if(typeof cctvBasketTimelineObserve === 'function') cctvBasketTimelineObserve({
+    sid:_cartSid, branch:currentBranch, firstItemAt:_cartFirstItemAt, cart:cart
+  }); }catch(e){}
 }
 
 // يرجّع أي منتج اتطبّق عليه عرض العميل لسعره وشكله الأصلي (لما نشيل/نغيّر العميل)
@@ -701,6 +643,7 @@ function _saleDraftSave(){
     localStorage.setItem(key, JSON.stringify({
       v:1, branch:String(currentBranch), savedAt:Date.now(),
       firstItemAt:(typeof _cartFirstItemAt !== 'undefined' ? _cartFirstItemAt : null),
+      cartSid:(typeof _cartSid !== 'undefined' ? _cartSid : null),
       items:cart
     }));
   }catch(e){ console.warn('sale draft save', e && e.message); }
@@ -723,7 +666,9 @@ function _saleDraftRestore(){
     cart = items;
     selectedCartIdx = null;
     if(typeof _cartFirstItemAt !== 'undefined') _cartFirstItemAt = Number(d.firstItemAt) || Date.now();
-    if(typeof _cartSid !== 'undefined') _cartSid = (typeof _newCartSid === 'function') ? _newCartSid() : null;
+    // نفس sid بعد refresh/reopen ضروري لاستكمال Timeline الفاتورة بدل فصلها
+    // لقصة جديدة. بيانات الدفع لا تُستعاد وما زالت تتصفّر تحت.
+    if(typeof _cartSid !== 'undefined') _cartSid = d.cartSid || ((typeof _newCartSid === 'function') ? _newCartSid() : null);
     // مهم: نرجّع الأصناف فقط — ولا أي حالة دفع قديمة.
     try{ if(typeof clearCardSaleCompleteState === 'function') clearCardSaleCompleteState(); }catch(e){}
     try{ if(typeof paymobReset === 'function') paymobReset(); }catch(e){}
@@ -1054,30 +999,6 @@ async function openInvoiceForReturn(code){
            <div style="font-weight:600; font-size:11.5px; margin-top:3px;">راجع سياسة المرتجع بين الفروع قبل ما تكمّل.</div>
          </div>`;
 
-    // 💵💳📱 v451: طريقة دفع الفاتورة الأصلية تظهر في كل مرتجع، مش Visa بس.
-    // بنقرأ payments المحفوظة في نفس الفاتورة؛ عرض فقط ولا نغيّر أي حساب/مرتجع.
-    const _retPayLabels = { cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 Instapay', salary:'📄 خصم راتب' };
-    const _retPayments = (s.payments && typeof s.payments === 'object') ? s.payments : {};
-    let _retPayParts = Object.keys(_retPayLabels).filter(function(k){
-      return Math.abs(Number(_retPayments[k] || 0)) > 0.004;
-    }).map(function(k){
-      return _retPayLabels[k] + ' · ' + Math.abs(Number(_retPayments[k] || 0)).toFixed(2) + ' ج.م';
-    });
-    // توافق مع فواتير Visa القديمة اللي عندها cardTxn/cardTxns لكن payments ناقصة.
-    if(!_retPayParts.length && ((s.cardTxns && s.cardTxns.length) || s.cardTxn)){
-      const _legacyCards = (s.cardTxns && s.cardTxns.length) ? s.cardTxns : [s.cardTxn];
-      const _legacyVisa = _legacyCards.reduce(function(n,ct){ return n + Math.abs(Number((ct && ct.amount) || 0)); }, 0);
-      _retPayParts = ['💳 فيزا' + (_legacyVisa > 0 ? ' · ' + _legacyVisa.toFixed(2) + ' ج.م' : '')];
-    }
-    const paymentMethodBanner = _retPayParts.length ? `
-      <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:10px; padding:9px 11px; margin-bottom:8px; color:#0f172a;">
-        <div style="font-weight:900; font-size:12px; margin-bottom:4px;">طريقة دفع الفاتورة الأصلية</div>
-        <div style="font-weight:800; font-size:13px; line-height:1.8;">${_retPayParts.join(' <span style="color:#94a3b8; margin:0 5px;">+</span> ')}</div>
-      </div>` : `
-      <div style="background:#fff7ed; border:1.5px solid #fdba74; border-radius:10px; padding:8px 10px; margin-bottom:8px; color:#9a3412; font-size:12px; font-weight:800;">
-        طريقة الدفع غير مسجلة في الفاتورة القديمة
-      </div>`;
-
     // 💳 بيانات الدفع بالكارت — لازمة عشان تعمل المرتجع من Paymob
     // 💳💳 الفاتورة ممكن تكون اتدفعت بكارتين — كل عملية بترجع لوحدها من Paymob،
     // فبنعرض العمليتين بمبلغ كل واحدة عشان الكاشير ما يرجّعش المبلغ كله على كارت واحد
@@ -1135,7 +1056,6 @@ async function openInvoiceForReturn(code){
         ${windowBadge}
       </div>
       ${branchBanner}
-      ${paymentMethodBanner}
       ${cardBanner}
       ${customerBanner}
       ${alreadyReversed}
@@ -2023,10 +1943,7 @@ async function openRedeemPoints(){
 
   try{
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
-    // v488: `_stale` is local to refreshCustomerInfo() and cannot be used here.
-    // Keep the same safety goal locally: ignore the async result if the cashier changed/cleared the phone.
-    const _redeemPhoneEl = document.getElementById('customerPhone');
-    if(!_redeemPhoneEl || _redeemPhoneEl.value.trim() !== phone) return;
+    if(_stale()) return;                      // الكاشير مسحت أو غيّرت الرقم وإحنا بنقرا
     custExists = doc.exists;
     { const _d = doc.exists ? (doc.data()||{}) : {};
       // "معاه التطبيق" = عنده PIN أو كود ولاء أو مصدره التطبيق
@@ -2998,109 +2915,6 @@ function cardLegToManual(leg, terminalId, now){
 window.cardPendingLegs = cardPendingLegs;
 window.cardPendingSum = cardPendingSum;
 window.cardLegToManual = cardLegToManual;
-
-
-// 💳 v435 — حارس سلامة سريع قبل حفظ الفاتورة.
-// المسار الطبيعي (Paymob success كامل وصل للـwatcher) = صفر قراءات وزيادة زمن شبه صفر.
-// بنرجع للسيرفر فقط لو الشريحة مشكوك فيها: manual أو ناقصها transactionId/amountCents.
-// الهدف: محاولة Failed/Reversal قديمة مستحيل تتسجل كأنها العملية الناجحة التالية،
-// وفي نفس الوقت منضيفش انتظار شبكة لكل فاتورة Visa سليمة.
-function paymobCardLegNeedsServerCheck(leg){
-  if(!leg || !leg.ref) return false;
-  const t = leg.txn || {};
-  return leg.status === 'manual' || !t.transactionId || !(Number(t.amountCents) > 0);
-}
-function paymobCardLegIntegrity(leg){
-  if(!leg) return { ok:false, reason:'missing-leg' };
-  if(leg.status === 'failed') return { ok:false, reason:'failed' };
-  if(leg.status === 'approved'){
-    const t = leg.txn || {};
-    const want = Math.round(Math.abs(Number(leg.amount) || 0) * 100);
-    const got = Number(t.amountCents) || 0;
-    if(got && want && got !== want) return { ok:false, reason:'amount-mismatch' };
-    return { ok:true };
-  }
-  if(leg.status === 'manual') return { ok:true, manual:true };
-  return { ok:false, reason:String(leg.status || 'unknown') };
-}
-async function paymobReconcileCardTxnsBeforeSale(timeoutMs){
-  timeoutMs = Math.max(400, Number(timeoutMs) || 1200);
-  const live = (cardLegs || []).filter(function(l){ return l && l.status !== 'failed'; });
-  const badLocal = live.filter(function(l){ return !paymobCardLegIntegrity(l).ok; });
-  if(badLocal.length) return { checked:0, refreshed:0, mismatches:0, invalid:badLocal.length };
-
-  // ⚡ Fast path: العملية وصلت Success كاملة بالفعل — لا Firestore read ولا انتظار.
-  const legs = live.filter(paymobCardLegNeedsServerCheck);
-  if(!legs.length) return { checked:0, refreshed:0, mismatches:0, invalid:0, fastPath:true };
-
-  let refreshed = 0, mismatches = 0, invalid = 0;
-  await Promise.all(legs.map(async function(leg){
-    try{
-      const read = db.collection('pos_paymob_txns').doc(String(leg.ref)).get({ source:'server' });
-      const snap = await Promise.race([
-        read,
-        new Promise(function(_, reject){ setTimeout(function(){ reject(new Error('paymob-reconcile-timeout')); }, timeoutMs); })
-      ]);
-      if(!snap || !snap.exists) return; // manual/offline recovery stays available; never freeze sale
-      const d = snap.data() || {};
-      // 🔒 لو نفس orderRef عند Paymob بيقول Failed/Reversal/Refunded، ممنوع نحتفظ
-      // ببيانات نجاح قديمة عليه. نمسح txn ونوقف الحفظ برسالة واضحة بدل فاتورة غلط.
-      if(d.status === 'failed' || d.status === 'voided' || d.status === 'refunded'){
-        leg.status = 'failed'; leg.txn = null; invalid++;
-        if(typeof _logActivity === 'function') _logActivity('paymob_presave_rejected_attempt', {
-          orderRef:String(leg.ref), status:String(d.status), amount:Number(leg.amount)||0
-        });
-        return;
-      }
-      if(d.status !== 'success') return;
-      const want = Math.round(Math.abs(Number(leg.amount) || 0) * 100);
-      const got = Number(d.amountCents) || 0;
-      if(!want || got !== want){
-        mismatches++; invalid++;
-        if(typeof _logActivity === 'function') _logActivity('paymob_presave_amount_mismatch', {
-          orderRef:String(leg.ref), expectedCents:want, gotCents:got
-        });
-        return;
-      }
-      const oldTxn = leg.txn || {};
-      if(d.transactionId && oldTxn.transactionId && String(d.transactionId) !== String(oldTxn.transactionId)){
-        if(typeof _logActivity === 'function') _logActivity('paymob_txn_id_reconciled', {
-          orderRef:String(leg.ref), from:String(oldTxn.transactionId), to:String(d.transactionId)
-        });
-      }
-      leg.txn = Object.assign({}, oldTxn, {
-        seq:leg.seq, amount:+Math.abs(Number(leg.amount)||0).toFixed(2),
-        last4:d.cardLast4 ? String(d.cardLast4).slice(-4) : (oldTxn.last4||null),
-        scheme:d.cardScheme || oldTxn.scheme || null,
-        transactionId:d.transactionId || oldTxn.transactionId || null,
-        approvalCode:d.approvalCode || oldTxn.approvalCode || null,
-        rrn:d.rrn || oldTxn.rrn || null,
-        terminalId:d.terminalId || oldTxn.terminalId || paymobTerminalId() || null,
-        orderRef:String(leg.ref), amountCents:got, manual:false
-      });
-      leg.status = 'approved'; refreshed++;
-    }catch(e){
-      // الشبكة لا تحبس الكاشير. لو كانت manual يفضل مسار المراجعة اليدوية كما هو.
-      console.warn('paymob pre-save reconcile', e && e.message);
-    }
-  }));
-
-  // أي محاولة ثبت فشلها تتشال فورًا من المدفوعات؛ Retry يبدأ بمرجع جديد.
-  if(invalid){
-    cardLegs = (cardLegs || []).filter(function(l){ return l && l.status !== 'failed'; });
-    window.cardLegs = cardLegs;
-    try{ syncCardPayment(); }catch(e){}
-  }
-  paymobCardTxns = (cardLegs || []).filter(function(l){ return l && l.txn && (l.status === 'approved' || l.status === 'manual'); })
-    .map(function(l){ return l.txn; });
-  window.paymobCardTxns = paymobCardTxns;
-  paymobCardInfo = paymobCardTxns[0] || null;
-  window.paymobCardInfo = paymobCardInfo;
-  return { checked:legs.length, refreshed:refreshed, mismatches:mismatches, invalid:invalid };
-}
-window.paymobCardLegNeedsServerCheck = paymobCardLegNeedsServerCheck;
-window.paymobCardLegIntegrity = paymobCardLegIntegrity;
-window.paymobReconcileCardTxnsBeforeSale = paymobReconcileCardTxnsBeforeSale;
 
 // 🚧 هل مسموح أفتح شريحة الكارت رقم seq دلوقتي؟ (بترجّع سبب المنع أو null)
 function cardLegBlockReason(legs, seq, isRefund, maxLegs){
@@ -4126,41 +3940,6 @@ function showChangeAfterPrint(change, ctx){
 window.showChangeAfterPrint = showChangeAfterPrint;
 
 
-// 🎯 v452 — استرجاع الكتابة بعد تأكيد Paymob اليدوي.
-// بعض أجهزة Windows/Chrome بتخرج من native confirm() والـDOM focus واقع على body؛
-// النتيجة إن السكانر/الكيبورد يبانوا واقفين لحد ما المستخدم يلمس Windows.
-// بننضف أي overlay دفع نشط، ونرجع searchBar بعد اكتمال render/print على كذا frame.
-// لا يغير أي حالة دفع ولا يحفظ/يطبع حاجة؛ UI lifecycle فقط.
-function restorePosInputAfterPayment(reason){
-  function cleanAndFocus(){
-    try{
-      var active = document.activeElement;
-      if(active && active !== document.body && typeof active.blur === 'function' &&
-         (active.closest && active.closest('#payAmountModal, #askConfirmOverlay, #cancelTerminalOverlay'))){
-        active.blur();
-      }
-    }catch(e){}
-    try{
-      var sb = document.getElementById('searchBar');
-      if(!sb || sb.disabled) return false;
-      sb.focus({preventScroll:true});
-      if(typeof sb.select === 'function') sb.select();
-      return document.activeElement === sb;
-    }catch(e){ return false; }
-  }
-  try{ if(typeof window.focus === 'function') window.focus(); }catch(e){}
-  try{ cleanAndFocus(); }catch(e){}
-  // بعد native confirm + goToSale/render: frame ثم retry قصير للأجهزة الأبطأ.
-  try{ requestAnimationFrame(function(){ cleanAndFocus(); requestAnimationFrame(cleanAndFocus); }); }catch(e){}
-  setTimeout(cleanAndFocus, 80);
-  setTimeout(cleanAndFocus, 250);
-  // لو الـOS رجّع النافذة بعد لحظة، أول focus event يكمل الاسترجاع تلقائيًا.
-  var once = function(){ cleanAndFocus(); try{ window.removeEventListener('focus', once, true); }catch(e){} };
-  try{ window.addEventListener('focus', once, true); setTimeout(function(){ try{ window.removeEventListener('focus', once, true); }catch(e){} }, 5000); }catch(e){}
-  try{ if(typeof _logActivity === 'function') _logActivity('pos_focus_recovered', {reason:reason||'payment'}); }catch(e){}
-}
-window.restorePosInputAfterPayment = restorePosInputAfterPayment;
-
 let _confirmSaving = false;
 async function confirmPayment(){
   if(typeof confirmForeignBranchAction === 'function' && !confirmForeignBranchAction('حفظ الفاتورة والبيع')) return;
@@ -4170,7 +3949,6 @@ async function confirmPayment(){
   // 💵 رقم العميلة ورقم الفاتورة لازم يتمسكوا **قبل** ما السلة تتفضّى —
   //    شاشة الباقي بتظهر بعد كده والخانات بتكون اتمسحت خلاص.
   let _changeCtx = { phone:'', invoiceCode:'' };
-  let _manualPaymobConfirmed = false;
   try{
     _changeCtx.phone = (document.getElementById('customerPhone') || {value:''}).value.trim();
   }catch(e){}
@@ -4195,23 +3973,11 @@ async function confirmPayment(){
     const _pend = cardPendingLegs(cardLegs);
     if(_pend.length){
       const _sum = cardPendingSum(cardLegs);
-      // v453: ممنوع native confirm() في مسار Paymob اليدوي. على أجهزة Windows/POS
-      // كان الـnative dialog بيرجع من التأكيد والنافذة نفسها فاقدة keyboard activation؛
-      // focus() على searchBar وحده لا يصلحها، وزر Windows كان هو اللي يعيدها.
-      // askConfirm Overlay داخل الـDOM بالكامل، لذلك لا نخرج من lifecycle المتصفح أصلًا.
-      const ok = await askConfirm({
-        icon:'📟',
-        title:'تأكيد عملية الفيزا يدويًا',
-        message:'الماكينة لسه ماأكدتش ' + _sum.toFixed(2) + ' ج.م.\n\n'
-          + 'متحفظش غير لو إيصال الماكينة طلع فعلًا ومكتوب عليه موافقة/APPROVED.\n'
-          + 'لو الماكينة مطبعتش أو رفضت العملية، الفاتورة دي هتطلع عجز في التقفيل.',
-        okText:'✅ الإيصال APPROVED — احفظ واطبع',
-        cancelText:'رجوع — متحفظش',
-        danger:true,
-        waitSec:0
-      });
-      if(!ok){ try{ restorePosInputAfterPayment('paymob-manual-cancel'); }catch(e){} return; }
-      _manualPaymobConfirmed = true;
+      const ok = confirm('⚠️ الماكينة لسه ماأكدتش ' + _sum.toFixed(2) + ' ج.م.\n\n'
+        + 'متحفظش غير لو إيصال الماكينة طلع فعلًا ومكتوب عليه موافقة/APPROVED.\n'
+        + 'لو الماكينة مطبعتش أو رفضت العملية، الفاتورة دي هتطلع عجز في التقفيل.\n\n'
+        + 'إيصال الموافقة طلع من الماكينة؟');
+      if(!ok) return;
       const _tid = (typeof paymobTerminalId === 'function') ? paymobTerminalId() : null;
       const _added = [];
       _pend.forEach(function(l){
@@ -4276,10 +4042,6 @@ async function confirmPayment(){
     _confirmSaving = false;
     if(_btn){ _btn.textContent = _btn.dataset.lbl || 'حفظ وطباعة'; }
     if(typeof updatePaySummary === 'function') updatePaySummary();   // بيظبط تفعيل/تعطيل الزر حسب السلة
-    // v452: المسار اليدوي بالذات كان يسيب الكتابة معلّقة بعد native confirm.
-    if(_saved && _manualPaymobConfirmed){
-      try{ restorePosInputAfterPayment('paymob-manual-confirm'); }catch(e){}
-    }
   }
 }
 
@@ -4414,19 +4176,6 @@ window.returnPointsDeduction = returnPointsDeduction;
     // لو الشِل قديم ومفيهوش openDrawer مستقل، printReceipt يحتفظ بالفولباك المعتاد.
     try{ if(typeof preOpenCashDrawerForSale === 'function') preOpenCashDrawerForSale(invoiceCode, payments); }catch(e){}
 
-    // 💳 v434: قبل تثبيت فاتورة Visa، هات آخر نسخة من مستند Paymob نفسه.
-    // ده يمنع طباعة Transaction ID قديم لو webhook حدّث نفس العملية على مراحل.
-    // Best-effort بمهلة قصيرة؛ الأوفلاين/التأخير لا يحبّس الكاشير.
-    if(Number(payments.visa || 0) > 0){
-      try{
-        const _pmSafe = await paymobReconcileCardTxnsBeforeSale(1200);
-        if(_pmSafe && _pmSafe.invalid){
-          showToast('⛔ محاولة الفيزا دي فاشلة/ملغاة عند Paymob — جرّب الفيزا من جديد. مش هنحفظ مرجع دفع غلط.', 'err');
-          return;
-        }
-      }catch(e){ console.warn('paymob pre-save guard', e); }
-    }
-
     // 1) سجل البيع (📴 مش بنستنى السيرفر أكتر من ثواني — أوفلاين بتتسجل محليًا وبتترفع بعدين)
     const _saleW = await _waitWrite(db.collection(TEST_SALES).add({
       invoiceNo,
@@ -4470,9 +4219,7 @@ window.returnPointsDeduction = returnPointsDeduction;
         branch: currentBranch, invoiceCode: invoiceCode, invoiceNo: invoiceNo,
         total: total, itemCount: itemCount, payments: payments,
         seller: sellerEmployeeName || '', employee: (currentEmployee&&currentEmployee.name)||'',
-        customerName: custName || '', customerPhone: phone || '',
-        items: cart, cardTxns: (paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : [],
-        atMs: Date.now(), confirmedAtMs: Date.now()
+        atMs: Date.now()
       });
     }catch(e){}
 
@@ -4494,6 +4241,7 @@ window.returnPointsDeduction = returnPointsDeduction;
         invoiceCode: invoiceCode, invoiceNo: invoiceNo, branch: currentBranch,
         saleId: (_saleW && _saleW.value && _saleW.value.id) || '',
         sid: _cartSid || '', cartSid: _cartSid || '', atMs: Date.now(),
+        total: total, itemCount: itemCount,
         employeeId: (currentEmployee && currentEmployee.id) || '',
         employeeName: (currentEmployee && currentEmployee.name) || ''
       };

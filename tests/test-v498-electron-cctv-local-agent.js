@@ -11,10 +11,10 @@ t('local POST body remains JSON payload',/body:JSON\.stringify\(payload\|\|\{\}\
 const postLocalBlock=pos.slice(pos.indexOf('function postLocal'),pos.indexOf('function encodeCanvas'));
 t('snapshot local POST does not force application/json preflight',!postLocalBlock.includes('Content-Type'));
 t('activity local POST is also simple',/localOpt=\{method:'POST',body:body,cache:'no-store'\}/.test(pos));
-t('local POST does not add custom request headers',/fetchTimeout\(LOCAL_AGENT\+path,\{method:'POST',body:JSON\.stringify/.test(pos));
+t('local POST does not add custom request headers',/fetchTimeout\(base\+path,\{method:'POST',body:JSON\.stringify/.test(pos));
 t('CCTV remains best effort',/\.catch\(function\(e\).*return false/.test(pos));
 t('Glow metadata is branch-local',pos.includes("storage:localOnly?'branch_local':'firestore_legacy'"));
 t('Glow video remains NVR on demand',pos.includes("doc.video='nvr_on_demand'"));
-t('POS cache bust is v498',idx.includes('cctv-invoice.js?v=498'));
-t('v498 metadata marker present',pos.includes('version:498'));
+t('POS cache bust is v498+',/cctv-invoice\.js\?v=(?:49[8-9]|[5-9]\d{2,})/.test(idx));
+t('v498+ metadata marker present',/version:(?:49[8-9]|[5-9]\d{2,})/.test(pos));
 console.log(`RESULT ${pass}/${pass+fail} PASS`);process.exit(fail?1:0);

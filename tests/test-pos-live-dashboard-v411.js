@@ -25,6 +25,6 @@ assert((block.match(/collection\('office_pos_live'\)\.onSnapshot/g)||[]).length=
 assert(!block.includes("collection('pos_test_sales')") && !block.includes('TEST_SALES'), 'Office live dashboard does not query sales history');
 assert(block.includes('ملخص الفروع اليوم') && block.includes('صافي اليوم') && block.includes('آخر بيع') && block.includes('طرق الدفع اليوم'), 'Office v411 renders useful branch/global KPIs and payment method info');
 assert(oi.includes('مبيعات اليوم، آخر بيع، طرق الدفع والسلة الحالية'), 'Office POS Live copy describes operational dashboard');
-assert(pi.includes('pos-live.js?v=411') && psw.includes("store-apps-shell-v411"), 'POS v411 cache/script versions are bumped together');
+assert(pi.includes('pos-live.js?v=411') && /store-apps-shell-v(?:41[1-9]|4[2-9]\d|[5-9]\d{2,})/.test(psw), 'POS keeps v411 live module under a v411+ application cache');
 
 console.log('PASS POS Live operational dashboard v411');

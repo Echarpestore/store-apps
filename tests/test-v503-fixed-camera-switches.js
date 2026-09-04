@@ -1,0 +1,21 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const js=fs.readFileSync(path.join(root,'Office/cctv.js'),'utf8');
+const html=fs.readFileSync(path.join(root,'Office/index.html'),'utf8');
+let ok=0,fail=0;function t(n,v){if(v){ok++;console.log('PASS',n)}else{fail++;console.error('FAIL',n)}}
+t('v503+ code marker',/ECHARPE Office CCTV v(?:50[3-9]|5[1-9]\d|[6-9]\d{2,})/.test(js));
+t('room still starts with every camera off',/function start\(\)\{state\.active=true;resetLiveSlots\(\);render\(\);\}/.test(js));
+t('fixed camera wall renders branch cameras directly',/grid\.innerHTML=b\(\)\.cameras\.map\(cameraCard\)\.join\(''\)/.test(js));
+t('each camera has independent toggle',/data-cctv-toggle=/.test(js)&&/of-cctv-cam-toggle/.test(js));
+t('off camera creates no iframe',/on\?'<div class="of-cctv-panel-body of-cctv-video"><iframe/.test(js));
+t('toggle only changes selected camera slot',/state\.slots\[i\]=String\(state\.slots\[i\]\)===String\(c\.id\)\?'off':String\(c\.id\)/.test(js));
+t('explicit start all exists',/id="ofCctvStartAll"/.test(html)&&/setAllCameras\(true\)/.test(js));
+t('explicit stop all exists',/id="ofCctvStopAll"/.test(html)&&/setAllCameras\(false\)/.test(js));
+t('old 1 2 4 layout dropdown controls removed',!/data-cctv-layout=/.test(html));
+t('camera selector dropdown removed from live wall',!/of-cctv-camera-select/.test(js));
+t('premium switch CSS exists',/of-cctv-switch-track/.test(html)&&/of-cctv-switch-knob/.test(html));
+t('mobile keeps four fixed cards in two-column wall',/@media\(max-width:720px\)[\s\S]*of-cctv-camera-panel/.test(html)&&/grid-template-columns:repeat\(2,minmax\(0,1fr\)\)!important/.test(html));
+t('section explains fixed cameras',/الأربع كاميرات ثابتة في مكانها/.test(html));
+t('Office cache bust 503+',/cctv\.js\?v=(?:50[3-9]|5[1-9]\d|[6-9]\d{2,})/.test(html));
+t('no CCTV credentials embedded',!/(glow-credentials\.json|passwordDpapi|rtsp:\/\/[^\s<]+@)/i.test(html+js));
+console.log(`RESULT ${ok} PASS ${fail} FAIL`);if(fail)process.exit(1);
