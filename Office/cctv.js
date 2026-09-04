@@ -81,7 +81,7 @@
   }
   function posLiveHtml(d){
     if(!d)return '<div class="of-cctv-empty"><div><b>POS Live غير متصل</b><small>مفيش حالة Live وصلت من جهاز الفرع حتى الآن</small></div></div>';
-    var currentRows=(d.cart||[]), last=d.lastSale||null, age=Math.max(0,Date.now()-Number(d.updatedAtMs||0));
+    var currentRows=Array.isArray(d.cart)?d.cart:[], last=d.lastSale||null, age=Math.max(0,Date.now()-Number(d.updatedAtMs||0));
     var rows=currentRows.map(function(x){return '<div class="of-cctv-pos-row"><span><b>'+esc(x.name||x.code||'صنف')+'</b>'+(x.isReturn?' <em>↩ مرتجع</em>':'')+'<small>× '+Number(x.qty||0)+(x.barcode?' · '+esc(x.barcode):'')+'</small></span><strong>'+money(Number(x.price||0)*Number(x.qty||0))+'</strong></div>';}).join('');
     var lastLine='';
     if(last){
@@ -192,10 +192,11 @@
     grid.querySelectorAll('video[data-stream-src]').forEach(armCameraPlayer);
   }
   function render(){
-    if(!state.active)return;renderBranches();
+    if(!state.active)return;
+    try{renderBranches();}catch(e){console.warn('cctv branches',e);}
     var live=document.getElementById('ofCctvPinnedLive');if(live)live.setAttribute('data-branch',state.branch);
-    renderLive();
-    renderCameras();
+    try{renderLive();}catch(e){console.warn('cctv pos live',e);var body=document.getElementById('ofCctvPinnedLiveBody');if(body)body.innerHTML='<div class=\"of-cctv-empty\"><div><b>POS Live غير متاح مؤقتًا</b><small>الكاميرات مستمرة بشكل مستقل</small></div></div>';}
+    try{renderCameras();}catch(e){console.warn('cctv cameras',e);var grid=document.getElementById('ofCctvCameraGrid');if(grid)grid.innerHTML='<div class=\"of-cctv-day-empty\">تعذر رسم الكاميرات: '+esc(e&&e.message||e)+'</div>';}
   }
   var _liveRaf=0;
   function refreshPosOnly(){
