@@ -1,0 +1,25 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const pos=fs.readFileSync(path.join(root,'pos','cctv-invoice.js'),'utf8');
+const pidx=fs.readFileSync(path.join(root,'pos','index.html'),'utf8');
+const off=fs.readFileSync(path.join(root,'Office','cctv.js'),'utf8');
+const oidx=fs.readFileSync(path.join(root,'Office','index.html'),'utf8');
+let ok=0,fail=0;function t(name,cond){if(cond){console.log('PASS',name);ok++}else{console.error('FAIL',name);fail++}}
+t('POS uses local agent for Glow stages',pos.includes("/echarpe-events/snapshot-stage"));
+t('POS finalizes local snapshot folder',pos.includes("/echarpe-events/snapshot-finalize"));
+t('Glow metadata says branch local',pos.includes("storage:localOnly?'branch_local':'firestore_legacy'"));
+t('Glow sale_saved does not generate stored evidence video',pos.includes("c.id==='glow'&&meta.type==='sale_saved')return true"));
+t('Glow metadata marks NVR on demand',pos.includes("doc.video='nvr_on_demand'"));
+t('POS cache bust v495+',/cctv-invoice\.js\?v=49[5-9]/.test(pidx));
+t('Office reads one snapshot metadata document',off.includes("collection('pos_cctv_invoice_snapshots').doc(String(invoiceCode)).get()"));
+t('Office loads local snapshots only on open',off.includes('/echarpe-events/snapshot?invoice='));
+t('Invoice video is exact 60 sec',off.includes("durationSec=60"));
+t('Invoice video starts 30 sec before invoice',off.includes('Number(d.videoAtMs)-30000'));
+t('Invoice video streams directly, not broken playback iframe',off.includes('id="ofCctvInvoiceVideo"') && !off.includes('iframe src="'+"'+esc(u)+'"+'" title="Invoice NVR playback"'));
+t('Invoice video explains lightweight 720p',off.includes('نسخة مشاهدة خفيفة 720p عند الطلب'));
+t('Original stays on NVR wording',off.includes('التسجيل الأصلي يظل على الـNVR'));
+t('Mobile snapshot grid collapses to one column',off.includes('@media(max-width:620px)') && off.includes('.of-inv-cctv-grid{grid-template-columns:1fr}'));
+t('Snapshot load failure has visible message',off.includes('تعذر تحميل اللقطة من كمبيوتر الفرع'));
+t('Video Access failure has visible recovery message',off.includes('Cloudflare Access'));
+t('Office cache bust v495',oidx.includes('cctv.js?v=495'));
+console.log(`RESULT ${ok}/${ok+fail}`);if(fail)throw new Error('v495 CCTV: '+fail+' checks failed');

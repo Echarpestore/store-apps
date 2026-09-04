@@ -1,0 +1,27 @@
+const fs=require('fs'),path=require('path');
+const root=path.resolve(__dirname,'..');
+const rd=p=>fs.readFileSync(path.join(root,p),'utf8');
+const pos=rd('pos/cctv-invoice.js'), office=rd('Office/cctv.js'), agent=rd('branch-tools/glow/cctv-gateway/GLOW-CCTV-AGENT.ps1');
+let ok=0,bad=0;function t(name,cond){if(cond){console.log('PASS',name);ok++;}else{console.error('FAIL',name);bad++;}}
+t('POS v494+ local evidence contract',/evidence v49[4-9]/.test(pos));
+t('Glow stage capture goes to local agent',/snapshot-stage/.test(pos)&&/grabGlowStage/.test(pos));
+t('Glow finalizes local files',/snapshot-finalize/.test(pos)&&/finalizeGlow/.test(pos));
+t('Glow metadata marks branch-local storage',/storage:localOnly\?'branch_local'/.test(pos)&&/localSnapshots=true/.test(pos));
+t('Glow local metadata excludes jpegData',/function publicLocalShot\(shot\)[\s\S]*available:true/.test(pos)&&!/function publicLocalShot\(shot\)[\s\S]{0,250}jpegData/.test(pos));
+t('Glow invoice does not pre-generate video',/c\.id==='glow'&&meta\.type==='sale_saved'\)return true/.test(pos));
+t('Other branches retain legacy go2rtc JPEG',/api\/frame\.jpeg\?src=/.test(pos)&&/grabLegacyShot/.test(pos));
+t('Four invoice stages retained',/first_item:1,payment:1,saving:1,after_save:1/.test(pos));
+t('Agent has stage endpoint',/echarpe-events\/snapshot-stage/.test(agent));
+t('Agent has finalize endpoint',/echarpe-events\/snapshot-finalize/.test(agent));
+t('Agent has on-demand snapshot image endpoint',/echarpe-events\/snapshot'/.test(agent)&&/image\/jpeg/.test(agent));
+t('Agent snapshot source uses loopback only',/rtsp:\/\/127\.0\.0\.1:8554\/glow_cam\$\(\$camera\)_h264/.test(agent));
+t('Agent snapshot capture bounded',/WaitForExit\(8000\)/.test(agent));
+t('Agent local snapshot retention is 14 days',/AddDays\(-14\)/.test(agent));
+t('Playback is on-demand 720p',/scale=1280:-2/.test(agent));
+t('Playback bandwidth is bounded',/-b:v 1200k -maxrate 1500k -bufsize 3000k/.test(agent));
+t('Office reads local snapshot only on click',/collection\('pos_cctv_invoice_snapshots'\)\.doc\(String\(invoiceCode\)\)\.get\(\)/.test(office));
+t('Office loads Glow images from branch gateway',/echarpe-events\/snapshot\?invoice=/.test(office));
+t('Office has invoice 30-before-30-after button',/30 ثانية قبل \+ 30 بعد/.test(office));
+t('Invoice video starts 30 seconds before sale time',/Number\(d\.videoAtMs\)-30000/.test(office));
+t('No camera password literal in changed files',!/(passwordDpapi\s*[:=]\s*['\"]|admin:\w+@192\.168)/i.test(pos+office+agent));
+console.log(`RESULT ${ok}/${ok+bad}`);process.exitCode=bad?1:0;

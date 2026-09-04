@@ -1,4 +1,4 @@
-/* ECHARPE POS CCTV evidence v495
+/* ECHARPE POS CCTV evidence v498
    Glow: four invoice stills stay on the branch PC; Firestore stores metadata only.
    Glow invoice video is read from the NVR only when Office asks for it.
    Other branches keep the existing v426 snapshot behavior unchanged.
@@ -16,7 +16,7 @@ function branchCfg(branch){
 function cfg(meta){return branchCfg(meta&&meta.branch);}
 var LOCAL_GO2RTC='http://127.0.0.1:1984';
 var LOCAL_AGENT='http://127.0.0.1:1985';
-var STAGE_KEY='echarpe.cctv.invoice.stages.v495.';
+var STAGE_KEY='echarpe.cctv.invoice.stages.v498.';
 var STAGES={first_item:1,payment:1,saving:1,after_save:1};
 var pending={};
 var HOT={
@@ -40,7 +40,9 @@ function fetchTimeout(url,opt,ms){
   return fetch(url,o).finally(function(){clearTimeout(timer);});
 }
 function postLocal(path,payload,ms){
-  return fetchTimeout(LOCAL_AGENT+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{}),cache:'no-store'},ms||10000).then(function(r){if(!r.ok)throw new Error('agent_http_'+r.status);return r.json();});
+  // Keep this a CORS-simple request. The Glow POS runs inside Electron and the local agent
+  // already parses JSON from the raw body; adding a non-simple content type would force a preflight.
+  return fetchTimeout(LOCAL_AGENT+path,{method:'POST',body:JSON.stringify(payload||{}),cache:'no-store'},ms||10000).then(function(r){if(!r.ok)throw new Error('agent_http_'+r.status);return r.json();});
 }
 function encodeCanvas(img,maxW,quality){var scale=Math.min(1,maxW/img.naturalWidth),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));var c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return {data:c.toDataURL('image/jpeg',quality),width:w,height:h};}
 function blobToJpegData(blob){return new Promise(function(resolve,reject){var img=new Image(),u=URL.createObjectURL(blob);img.onload=function(){try{var out=encodeCanvas(img,480,0.40);if(out.data.length>185000)out=encodeCanvas(img,380,0.32);URL.revokeObjectURL(u);if(out.data.length>210000)return reject(new Error('snapshot_too_large'));resolve(out);}catch(e){URL.revokeObjectURL(u);reject(e);}};img.onerror=function(){URL.revokeObjectURL(u);reject(new Error('snapshot_decode'));};img.src=u;});}
@@ -68,7 +70,7 @@ function publicLocalShot(shot){return shot?{stage:shot.stage,camera:shot.camera|
 async function writeInvoiceDoc(meta,shots,localOnly){
   if(typeof db==='undefined'||!meta||!meta.invoiceCode)return false;var c=cfg(meta);if(!c)return false;
   var preferred=shots.after_save||shots.saving||shots.payment||shots.first_item||null;
-  var doc={invoiceCode:String(meta.invoiceCode),invoiceNo:meta.invoiceNo||'',saleId:meta.saleId||'',branch:meta.branch||'',camera:c.camera,stream:c.stream,version:495,storage:localOnly?'branch_local':'firestore_legacy',shots:{}};
+  var doc={invoiceCode:String(meta.invoiceCode),invoiceNo:meta.invoiceNo||'',saleId:meta.saleId||'',branch:meta.branch||'',camera:c.camera,stream:c.stream,version:498,storage:localOnly?'branch_local':'firestore_legacy',shots:{}};
   Object.keys(shots||{}).forEach(function(k){if(STAGES[k]&&shots[k])doc.shots[k]=localOnly?publicLocalShot(shots[k]):publicLegacyShot(shots[k]);});
   if(preferred){doc.capturedAtMs=Number(preferred.capturedAtMs)||Date.now();doc.stage=preferred.stage;}
   if(localOnly){doc.localSnapshots=true;doc.video='nvr_on_demand';doc.videoAtMs=Number(meta.atMs)||Date.now();doc.beforeSec=30;doc.afterSec=30;}
@@ -100,7 +102,7 @@ async function finalizeInvoice(meta){
 async function snapshot(meta){
   try{meta=meta||{};var c=cfg(meta);if(!c||!meta.invoiceCode||typeof db==='undefined')return false;if(c.id==='glow'){var shot=await grabGlowStage('after_save',{invoiceCode:String(meta.invoiceCode),branch:meta.branch||'',atMs:Number(meta.atMs)||Date.now()});var s={after_save:shot};return await writeInvoiceDoc(meta,s,true);}var legacy=await grabLegacyShot('after_save',meta);return await writeInvoiceDoc(meta,{after_save:legacy},false);}catch(e){try{console.warn('CCTV invoice snapshot skipped',e&&e.message||e);}catch(_){}return false;}
 }
-function postAgent(payload,meta){var body=JSON.stringify(payload),opt={method:'POST',headers:{'Content-Type':'application/json'},body:body,cache:'no-store'},c=cfg(meta);return fetchTimeout(LOCAL_AGENT+'/echarpe-events/event',opt,8000).catch(function(){if(!c||!c.remote)throw new Error('remote_agent_not_configured');return fetchTimeout(c.remote+'/echarpe-events/event',opt,10000);});}
+function postAgent(payload,meta){var body=JSON.stringify(payload),localOpt={method:'POST',body:body,cache:'no-store'},remoteOpt={method:'POST',headers:{'Content-Type':'application/json'},body:body,cache:'no-store'},c=cfg(meta);return fetchTimeout(LOCAL_AGENT+'/echarpe-events/event',localOpt,8000).catch(function(){if(!c||!c.remote)throw new Error('remote_agent_not_configured');return fetchTimeout(c.remote+'/echarpe-events/event',remoteOpt,10000);});}
 async function registerEvent(meta){
   try{
     if(!meta||!meta.eventId||!meta.atMs||typeof db==='undefined')return false;var c=cfg(meta);if(!c)return false;

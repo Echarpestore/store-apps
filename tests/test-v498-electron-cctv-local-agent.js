@@ -1,0 +1,20 @@
+const fs=require('fs'), path=require('path');
+const root=path.resolve(__dirname,'..');
+const pos=fs.readFileSync(path.join(root,'pos','cctv-invoice.js'),'utf8');
+const idx=fs.readFileSync(path.join(root,'pos','index.html'),'utf8');
+let pass=0, fail=0;
+function t(name,ok){if(ok){pass++;console.log('PASS',name)}else{fail++;console.error('FAIL',name)}}
+t('Glow local agent remains loopback-only',pos.includes("var LOCAL_AGENT='http://127.0.0.1:1985'"));
+t('snapshot-stage still uses local agent',pos.includes("/echarpe-events/snapshot-stage"));
+t('snapshot-finalize still uses local agent',pos.includes("/echarpe-events/snapshot-finalize"));
+t('local POST body remains JSON payload',/body:JSON\.stringify\(payload\|\|\{\}\)/.test(pos));
+const postLocalBlock=pos.slice(pos.indexOf('function postLocal'),pos.indexOf('function encodeCanvas'));
+t('snapshot local POST does not force application/json preflight',!postLocalBlock.includes('Content-Type'));
+t('activity local POST is also simple',/localOpt=\{method:'POST',body:body,cache:'no-store'\}/.test(pos));
+t('local POST does not add custom request headers',/fetchTimeout\(LOCAL_AGENT\+path,\{method:'POST',body:JSON\.stringify/.test(pos));
+t('CCTV remains best effort',/\.catch\(function\(e\).*return false/.test(pos));
+t('Glow metadata is branch-local',pos.includes("storage:localOnly?'branch_local':'firestore_legacy'"));
+t('Glow video remains NVR on demand',pos.includes("doc.video='nvr_on_demand'"));
+t('POS cache bust is v498',idx.includes('cctv-invoice.js?v=498'));
+t('v498 metadata marker present',pos.includes('version:498'));
+console.log(`RESULT ${pass}/${pass+fail} PASS`);process.exit(fail?1:0);
