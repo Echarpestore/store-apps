@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v478
+/* ECHARPE Office CCTV v494
    POS Live stays pinned. Four stable camera slots remain user-selectable and persist locally. */
 (function(){
   'use strict';
@@ -261,32 +261,46 @@
   window.ofCctvStart=start;window.ofCctvStop=stop;window.ofCctvOpenPlayback=openPlayback;
 })();
 
-/* v426 invoice snapshot timeline: up to 4 stages, with legacy one-shot fallback. */
+/* v495 invoice CCTV: branch-local stills + exact 30s before/30s after lightweight NVR stream. */
 window.ofCctvInvoiceShot = async function(invoiceCode){
   try{
     if(!invoiceCode||typeof db==='undefined')return;
     var snap=await db.collection('pos_cctv_invoice_snapshots').doc(String(invoiceCode)).get();
     if(!snap.exists){alert('مفيش لقطات محفوظة للفاتورة دي.');return;}
-    var d=snap.data()||{}, shots=d.shots||{};
-    // توافق كامل مع v421-v425: المستند القديم فيه jpegData واحدة فقط.
-    if(!Object.keys(shots).length && /^data:image\/jpeg;base64,/.test(String(d.jpegData||''))){
-      shots={after_save:{jpegData:d.jpegData,capturedAtMs:d.capturedAtMs,width:d.width,height:d.height,camera:d.camera||'D04'}};
-    }
+    var d=snap.data()||{},shots=d.shots||{},localGlow=!!d.localSnapshots&&String(d.branch||'').toLowerCase().indexOf('glow')>=0;
+    if(!Object.keys(shots).length && /^data:image\/jpeg;base64,/.test(String(d.jpegData||'')))shots={after_save:{jpegData:d.jpegData,capturedAtMs:d.capturedAtMs,width:d.width,height:d.height,camera:d.camera||'D04'}};
     var order=['first_item','payment','saving','after_save'];
     var labels={first_item:'1️⃣ أول كود',payment:'2️⃣ أثناء الدفع',saving:'3️⃣ أثناء الحفظ',after_save:'4️⃣ بعد الحفظ'};
-    var valid=order.filter(function(k){return shots[k]&&/^data:image\/jpeg;base64,/.test(String(shots[k].jpegData||''));});
+    var valid=order.filter(function(k){var x=shots[k]||{};return localGlow?!!x.available:/^data:image\/jpeg;base64,/.test(String(x.jpegData||''));});
     if(!valid.length){alert('مفيش صورة صالحة محفوظة للفاتورة دي.');return;}
     var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});};
-    var cards=valid.map(function(k){var x=shots[k]||{};return '<button type="button" data-cctv-shot="'+k+'" style="text-align:right;border:1px solid #334155;background:#0f172a;color:#fff;border-radius:14px;padding:8px;cursor:pointer"><img src="'+x.jpegData+'" alt="'+esc(labels[k])+'" style="display:block;width:100%;aspect-ratio:16/10;object-fit:cover;background:#000;border-radius:9px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px"><b style="font-size:12px">'+labels[k]+'</b><small style="color:#94a3b8">'+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleTimeString('ar-EG')+'</small></div></button>';}).join('');
-    var ov=document.createElement('div');ov.id='ofCctvShotOv';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto;';
-    ov.innerHTML='<div style="max-width:1050px;width:100%;background:#111827;border:1px solid #334155;border-radius:18px;padding:12px;color:white;box-shadow:0 18px 60px rgba(0,0,0,.45)"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px"><div><b>📸 لقطات الفاتورة '+esc(invoiceCode)+'</b><div style="font-size:11px;color:#94a3b8;margin-top:2px">'+esc((d.camera||((valid[0]&&shots[valid[0]]&&shots[valid[0]].camera)||'CCTV')))+' · '+valid.length+' لقطة محفوظة</div></div><button id="ofCctvShotClose" style="padding:8px 13px;border:0;border-radius:9px;cursor:pointer;font-weight:800">إغلاق</button></div><div id="ofCctvShotGrid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px">'+cards+'</div><div id="ofCctvShotFocus" style="display:none;margin-top:10px"><button id="ofCctvShotBack" style="margin-bottom:8px;padding:7px 11px;border:0;border-radius:8px;cursor:pointer">← كل اللقطات</button><img id="ofCctvShotBig" alt="CCTV invoice snapshot" style="display:block;width:100%;max-height:72vh;object-fit:contain;background:#000;border-radius:12px"><div id="ofCctvShotMeta" style="font-size:11px;color:#9ca3af;margin-top:7px"></div></div></div>';
+    var gateway=localGlow?'https://cctv-glow.echarpe.store':'';
+    function shotUrl(k){return localGlow?(gateway+'/echarpe-events/snapshot?invoice='+encodeURIComponent(String(invoiceCode))+'&stage='+encodeURIComponent(k)+'&_='+Date.now()):String((shots[k]||{}).jpegData||'');}
+    if(!document.getElementById('ofCctvInvoiceStyle')){
+      var st=document.createElement('style');st.id='ofCctvInvoiceStyle';st.textContent='.of-inv-cctv-ov{position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,.94);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto}.of-inv-cctv-box{width:min(100%,1050px);background:#111827;border:1px solid #334155;border-radius:20px;padding:14px;color:#fff;box-shadow:0 22px 70px rgba(0,0,0,.55)}.of-inv-cctv-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}.of-inv-cctv-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.of-inv-cctv-btn{border:0;border-radius:10px;padding:9px 13px;cursor:pointer;font-weight:800}.of-inv-cctv-video-btn{background:#2563eb;color:#fff}.of-inv-cctv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.of-inv-cctv-card{text-align:right;border:1px solid #334155;background:#0f172a;color:#fff;border-radius:15px;padding:8px;cursor:pointer}.of-inv-cctv-card img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;background:#000;border-radius:10px}.of-inv-cctv-card-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px}.of-inv-cctv-muted{font-size:11px;color:#94a3b8}.of-inv-cctv-error{display:none;padding:22px 10px;text-align:center;color:#fecaca}.of-inv-play-ov{position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.94);display:flex;align-items:center;justify-content:center;padding:10px}.of-inv-play-box{width:min(100%,1000px);height:min(88vh,760px);background:#05070b;border:1px solid #25324a;border-radius:16px;overflow:hidden;display:flex;flex-direction:column}.of-inv-play-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;color:#fff}.of-inv-play-stage{position:relative;flex:1;min-height:0;background:#000;display:flex;align-items:center;justify-content:center}.of-inv-play-stage video{display:block;width:100%;height:100%;object-fit:contain;background:#000}.of-inv-play-status{position:absolute;right:12px;left:12px;bottom:12px;padding:8px 10px;border:1px solid #334155;border-radius:10px;background:rgba(15,23,42,.88);color:#e2e8f0;font-size:12px}.of-inv-play-status.ok{display:none}.of-inv-play-status.err{color:#fecaca;border-color:#7f1d1d;background:rgba(69,10,10,.92)}@media(max-width:620px){.of-inv-cctv-ov{padding:8px;align-items:flex-start}.of-inv-cctv-box{border-radius:15px;padding:10px}.of-inv-cctv-head{align-items:flex-start;flex-direction:column}.of-inv-cctv-actions{width:100%}.of-inv-cctv-actions .of-inv-cctv-btn{flex:1}.of-inv-cctv-grid{grid-template-columns:1fr}.of-inv-play-ov{padding:0}.of-inv-play-box{width:100%;height:100%;max-height:none;border:0;border-radius:0}}';document.head.appendChild(st);
+    }
+    var cards=valid.map(function(k){var x=shots[k]||{};return '<button type="button" data-cctv-shot="'+k+'" class="of-inv-cctv-card"><img src="'+esc(shotUrl(k))+'" alt="'+esc(labels[k])+'" loading="lazy"><div class="of-inv-cctv-error">تعذر تحميل اللقطة من كمبيوتر الفرع</div><div class="of-inv-cctv-card-foot"><b style="font-size:12px">'+labels[k]+'</b><small class="of-inv-cctv-muted">'+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleTimeString('ar-EG')+'</small></div></button>';}).join('');
+    var videoBtn=(localGlow&&Number(d.videoAtMs)>0)?'<button id="ofCctvShotVideo" class="of-inv-cctv-btn of-inv-cctv-video-btn">🎥 30 ثانية قبل + 30 بعد</button>':'';
+    var ov=document.createElement('div');ov.id='ofCctvShotOv';ov.className='of-inv-cctv-ov';
+    ov.innerHTML='<div class="of-inv-cctv-box"><div class="of-inv-cctv-head"><div><b>📸 لقطات الفاتورة '+esc(invoiceCode)+'</b><div class="of-inv-cctv-muted" style="margin-top:3px">'+esc((d.camera||((valid[0]&&shots[valid[0]]&&shots[valid[0]].camera)||'CCTV')))+' · '+valid.length+' لقطة · محفوظة محليًا في الفرع</div></div><div class="of-inv-cctv-actions">'+videoBtn+'<button id="ofCctvShotClose" class="of-inv-cctv-btn">إغلاق</button></div></div><div id="ofCctvShotGrid" class="of-inv-cctv-grid">'+cards+'</div><div id="ofCctvShotFocus" style="display:none;margin-top:10px"><button id="ofCctvShotBack" class="of-inv-cctv-btn" style="margin-bottom:8px">← كل اللقطات</button><img id="ofCctvShotBig" alt="CCTV invoice snapshot" style="display:block;width:100%;max-height:72vh;object-fit:contain;background:#000;border-radius:12px"><div id="ofCctvShotMeta" class="of-inv-cctv-muted" style="margin-top:7px"></div></div></div>';
     document.body.appendChild(ov);
+    ov.querySelectorAll('.of-inv-cctv-card img').forEach(function(img){img.onerror=function(){img.style.display='none';var er=img.parentNode.querySelector('.of-inv-cctv-error');if(er)er.style.display='block';};});
     var grid=ov.querySelector('#ofCctvShotGrid'),focus=ov.querySelector('#ofCctvShotFocus'),big=ov.querySelector('#ofCctvShotBig'),meta=ov.querySelector('#ofCctvShotMeta');
-    ov.querySelectorAll('[data-cctv-shot]').forEach(function(btn){btn.onclick=function(){var k=btn.getAttribute('data-cctv-shot'),x=shots[k]||{};grid.style.display='none';focus.style.display='block';big.src=x.jpegData;meta.textContent=labels[k]+' · '+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleString('ar-EG');};});
+    ov.querySelectorAll('[data-cctv-shot]').forEach(function(btn){btn.onclick=function(){var k=btn.getAttribute('data-cctv-shot'),x=shots[k]||{};grid.style.display='none';focus.style.display='block';big.src=shotUrl(k);meta.textContent=labels[k]+' · '+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleString('ar-EG');};});
     ov.querySelector('#ofCctvShotBack').onclick=function(){focus.style.display='none';big.src='';grid.style.display='grid';};
+    var vb=ov.querySelector('#ofCctvShotVideo');if(vb)vb.onclick=function(){
+      var at=Math.max(1,Number(d.videoAtMs)-30000),videoUrl=gateway+'/echarpe-playback/video?camera=1&atMs='+encodeURIComponent(at)+'&durationSec=60&_='+Date.now();
+      var pv=document.createElement('div');pv.id='ofCctvInvoicePlayback';pv.className='of-inv-play-ov';
+      pv.innerHTML='<div class="of-inv-play-box"><div class="of-inv-play-head"><div><b>🎥 الفاتورة · 30 ثانية قبل + 30 بعد</b><div class="of-inv-cctv-muted">نسخة مشاهدة خفيفة 720p عند الطلب · التسجيل الأصلي يظل على الـNVR</div></div><button id="ofCctvInvoicePlaybackClose" class="of-inv-cctv-btn">✕</button></div><div class="of-inv-play-stage"><video id="ofCctvInvoiceVideo" controls autoplay muted playsinline preload="none"></video><div id="ofCctvInvoiceVideoStatus" class="of-inv-play-status">جاري تجهيز الدقيقة من الـNVR…</div></div></div>';
+      document.body.appendChild(pv);var video=pv.querySelector('#ofCctvInvoiceVideo'),status=pv.querySelector('#ofCctvInvoiceVideoStatus');
+      function close(){try{video.pause();video.removeAttribute('src');video.load();}catch(e){}pv.remove();}
+      video.addEventListener('playing',function(){status.className='of-inv-play-status ok';});video.addEventListener('loadeddata',function(){status.className='of-inv-play-status ok';});video.addEventListener('waiting',function(){if(!status.classList.contains('err')){status.className='of-inv-play-status';status.textContent='جاري تحميل التسجيل…';}});video.addEventListener('error',function(){status.className='of-inv-play-status err';status.innerHTML='تعذر تشغيل التسجيل. افتح بوابة CCTV مرة واحدة وتأكد إنك مسجل دخول Cloudflare Access.';});
+      pv.querySelector('#ofCctvInvoicePlaybackClose').onclick=close;pv.onclick=function(e){if(e.target===pv)close();};video.src=videoUrl;video.load();video.play().catch(function(){});
+    };
     ov.onclick=function(e){if(e.target===ov)ov.remove();};ov.querySelector('#ofCctvShotClose').onclick=function(){ov.remove();};
   }catch(e){console.warn('invoice shots',e);alert('تعذر فتح لقطات الفاتورة');}
 };
+
 
 /* v424: video evidence viewer. Firestore contains metadata only; video stays at branch. */
 window.ofCctvOpenEvent = async function(eventId){

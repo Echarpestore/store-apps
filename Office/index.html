@@ -272,105 +272,6 @@
   @media(max-width:720px){.of-cctv-shell{margin:0 -3px;padding:7px;border-radius:16px}.of-cctv-title b{font-size:13px}.of-cctv-title small{font-size:8px}.of-cctv-top{margin-bottom:6px}.of-cctv-room-full{padding:6px 8px;font-size:9px}.of-cctv-toolbar{padding:4px}.of-cctv-chip{padding:6px 8px;font-size:9px}.of-cctv-layout-btn{padding:5px 7px;font-size:9px}.of-cctv-grid{gap:5px}.of-cctv-grid-2,.of-cctv-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}.of-cctv-panel{min-height:150px;border-radius:10px}.of-cctv-panel-head{padding:3px;gap:3px}.of-cctv-source{font-size:7.8px;padding:5px 4px}.of-cctv-panel-full{width:27px;height:27px;flex-basis:27px;padding:0}.of-cctv-grid-1 .of-cctv-panel{min-height:360px}.of-cctv-video{aspect-ratio:16/10}.of-cctv-pos{padding:5px}.of-cctv-pos-scroll{max-height:70px}.of-cctv-pay{padding:4px 5px}.of-cctv-last{display:none}.of-cctv-footnote{display:none}}
   @media(orientation:landscape){.of-cctv-room-focus .of-cctv-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-template-rows:minmax(0,1fr)!important}.of-cctv-room-focus .of-cctv-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:minmax(0,1fr)!important}.of-cctv-room-focus .of-cctv-top{position:absolute;top:7px;left:7px;z-index:30;margin:0!important}.of-cctv-room-focus .of-cctv-title,.of-cctv-room-focus .of-cctv-status{display:none}.of-cctv-room-focus .of-cctv-toolbar{position:absolute;top:7px;left:50%;transform:translateX(-50%);z-index:20;width:auto;max-width:74vw;background:rgba(5,9,20,.76);backdrop-filter:blur(10px)}.of-cctv-room-focus .of-cctv-grid{margin-top:0!important}.of-cctv-room-focus .of-cctv-panel-head{position:absolute;left:5px;right:5px;top:5px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(5,9,20,.70);backdrop-filter:blur(8px)}.of-cctv-room-focus .of-cctv-panel-body{position:absolute;inset:0}.of-cctv-room-focus .of-cctv-pos{padding-top:40px}}
 
-
-/* v441 — quiet POS live: one cart + one last-invoice line */
-.of-cctv-lastline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px;padding:7px 9px;border-top:1px solid #1f2b3d;color:#dbeafe;font-size:9px}.of-cctv-lastline b{font-size:9px}.of-cctv-lastline span:last-child{text-align:left;white-space:nowrap;color:#a7f3d0;font-weight:800}.of-cctv-lastline.muted span:last-child{color:#64748b}.of-cctv-pos .of-cctv-pay{display:none!important}.of-cctv-pos-complete,.of-cctv-complete-head,.of-cctv-last-meta,.of-cctv-complete-note{display:none!important}
-@media(max-width:720px){.of-cctv-lastline{font-size:8px;padding:6px 4px}.of-cctv-lastline b{font-size:8.5px}.of-cctv-pinned-live{min-height:245px}.of-cctv-pinned-live .of-cctv-pos{min-height:245px}}
-
-/* v446 — غرفة المراقبة: كاميرات ثابتة + مراجعة اليوم خارج ملء الشاشة فقط */
-.of-cctv-camera-panel{min-height:220px!important;overflow:hidden!important}
-.of-cctv-camera-panel .of-cctv-panel-body{min-height:0!important;height:100%!important}
-.of-cctv-camera-panel iframe{display:block!important;width:100%!important;height:100%!important;min-height:190px!important;border:0!important}
-.of-cctv-room-focus .of-cctv-day-review{display:none!important}
-.of-cctv-room-focus .of-cctv-footnote{display:none!important}
-.of-cctv-room-focus .of-cctv-camera-grid{overflow:hidden!important}
-.of-cctv-room-focus .of-cctv-camera-panel{min-height:0!important;height:100%!important}
-.of-cctv-room-focus .of-cctv-camera-panel iframe{min-height:0!important;height:100%!important}
-@media(max-width:720px){
- .of-cctv-camera-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:stretch!important}
- .of-cctv-camera-panel{min-height:210px!important;height:210px!important;aspect-ratio:auto!important}
- .of-cctv-camera-panel .of-cctv-panel-body{height:100%!important}
-}
-@media(max-width:720px) and (orientation:landscape){
- .of-cctv-room-focus .of-cctv-pinned-live{flex:0 0 40%!important}
- .of-cctv-room-focus .of-cctv-camera-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-template-rows:minmax(0,1fr)!important}
- .of-cctv-room-focus .of-cctv-camera-panel{height:100%!important;min-height:0!important}
-}
-</style>
-
-<style id="ofCctvV436Style">
-/* v436 — cleaner monitoring room + persistent completed invoice */
-.of-cctv-controlroom{background:#070b13;border:1px solid #1c2738;border-radius:22px;padding:10px;box-shadow:0 18px 45px rgba(15,23,42,.18)}
-.of-cctv-top{margin-bottom:8px}.of-cctv-title b{font-size:15px}.of-cctv-title small{opacity:.72}
-.of-cctv-toolbar{background:#0c1320;border:1px solid #1f2c3e;border-radius:14px;padding:6px}
-.of-cctv-panel{position:relative;overflow:hidden;background:#03060b;border:1px solid #253247;border-radius:16px;box-shadow:none}
-.of-cctv-panel-head{position:absolute;z-index:6;left:7px;right:7px;top:7px;padding:0;background:transparent;border:0;pointer-events:none}
-.of-cctv-source,.of-cctv-panel-full{pointer-events:auto;background:rgba(7,12,22,.82)!important;color:#eef2ff!important;border:1px solid rgba(255,255,255,.13)!important;backdrop-filter:blur(10px);box-shadow:0 5px 15px rgba(0,0,0,.18)}
-.of-cctv-source{border-radius:999px!important;padding:7px 10px!important}.of-cctv-panel-full{border-radius:10px!important}
-.of-cctv-panel-body{height:100%}.of-cctv-video iframe,.of-cctv-video video{min-height:100%;height:100%}.of-cctv-video video{width:100%;display:block;object-fit:cover;background:#000}.of-cctv-cam-badge{background:rgba(7,12,22,.78);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(9px)}
-.of-cctv-pos-body{background:#080e18}.of-cctv-pos{padding:48px 11px 10px;background:linear-gradient(180deg,#0a1220 0%,#070c14 100%)}
-.of-cctv-pos-top{align-items:center;margin-bottom:7px}.of-cctv-pos-top b{font-size:13px}.of-cctv-pos-top small{font-size:9px}.of-cctv-pos-live{font-size:8px;padding:5px 8px}.of-cctv-pos-live.done{background:#123524;color:#86efac}
-.of-cctv-pos-scroll{max-height:none;min-height:70px;margin-top:0;border-top:1px solid #1e293b}.of-cctv-pos-row{padding:7px 2px;font-size:10px}.of-cctv-pos-row small{font-size:8px}.of-cctv-pos-row strong{font-size:10px}
-.of-cctv-pay{margin-top:7px;padding:7px 8px}.of-cctv-pos-total{margin-top:7px;padding:8px 9px}.of-cctv-pos-total strong{font-size:15px}
-.of-cctv-complete-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;padding:10px 11px;margin:2px 0 7px;border-radius:12px;background:linear-gradient(135deg,#103425,#0b241b);border:1px solid #1b5a40}.of-cctv-complete-head small{display:block;color:#8fbca8;font-size:8px}.of-cctv-complete-head b{display:block;margin-top:2px;font-size:14px}.of-cctv-complete-head strong{font-size:18px;color:#d1fae5}.of-cctv-complete-note{text-align:center;color:#789186;font-size:8px;margin-top:6px}.of-cctv-frozen{border-bottom:1px solid #172235}
-@media(max-width:720px){
- .of-cctv-controlroom{padding:8px;border-radius:18px}.of-cctv-grid{gap:7px}
- .of-cctv-grid-4 .of-cctv-panel-pos{grid-column:1/-1;min-height:260px;order:-1}
- .of-cctv-grid-4 .of-cctv-panel:not(.of-cctv-panel-pos){min-height:190px}
- .of-cctv-pos{padding:48px 10px 10px}.of-cctv-pos-scroll{max-height:120px}.of-cctv-pos-row{font-size:10px}.of-cctv-last{display:grid}
-}
-
-<style id="ofCctvV437Style">
-/* v437 — pinned POS Live + fixed four-camera wall */
-.of-cctv-controlroom{display:flex;flex-direction:column;gap:8px}
-.of-cctv-toolbar{display:flex;align-items:center;justify-content:space-between}
-.of-cctv-pinned-live{position:relative;background:#080e18;border:1px solid #253247;border-radius:16px;overflow:hidden;min-height:250px}
-.of-cctv-fixed-label{position:absolute;z-index:7;top:8px;left:8px;display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:999px;background:rgba(7,12,22,.86);border:1px solid rgba(255,255,255,.12);color:#eef2ff;backdrop-filter:blur(10px);font-size:9px}
-.of-cctv-fixed-label small{color:#89a1bd;font-size:8px}.of-cctv-pinned-live-body{height:100%}.of-cctv-pinned-live .of-cctv-pos{min-height:250px;padding-top:48px}
-.of-cctv-camera-section-title{display:flex;align-items:center;justify-content:space-between;color:#dbe7f7;padding:2px 4px}.of-cctv-camera-section-title b{font-size:11px}.of-cctv-camera-section-title small{font-size:8px;color:#7f91a8}
-.of-cctv-camera-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-height:0}
-.of-cctv-camera-panel{min-height:220px;aspect-ratio:16/10}.of-cctv-camera-title{pointer-events:none;margin-inline-end:auto;max-width:calc(100% - 40px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:7px 10px;border-radius:999px;background:rgba(7,12,22,.82);color:#eef2ff;border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(10px);font-size:9px}
-.of-cctv-room-focus .of-cctv-pinned-live{flex:0 0 39%;min-height:0}.of-cctv-room-focus .of-cctv-pinned-live .of-cctv-pos{height:100%;min-height:0;overflow:auto}.of-cctv-room-focus .of-cctv-camera-section-title{flex:0 0 auto}.of-cctv-room-focus .of-cctv-camera-grid{flex:1;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));min-height:0}.of-cctv-room-focus .of-cctv-camera-panel{height:100%;min-height:0;aspect-ratio:auto}.of-cctv-room-focus .of-cctv-toolbar{flex:0 0 auto}.of-cctv-room-focus .of-cctv-fixed-label{top:5px;left:5px}
-@media(max-width:720px){.of-cctv-pinned-live{min-height:300px}.of-cctv-pinned-live .of-cctv-pos{min-height:300px}.of-cctv-camera-grid{gap:7px}.of-cctv-camera-panel{min-height:185px;aspect-ratio:10/11}.of-cctv-camera-title{font-size:8px;padding:6px 8px}.of-cctv-camera-section-title{padding-top:4px}}
-@media(orientation:landscape){.of-cctv-room-focus .of-cctv-pinned-live{flex-basis:42%}.of-cctv-room-focus .of-cctv-camera-grid{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:minmax(0,1fr)}.of-cctv-room-focus .of-cctv-camera-section-title{display:none}.of-cctv-room-focus .of-cctv-camera-panel{min-height:0}.of-cctv-room-focus .of-cctv-pinned-live .of-cctv-pos-scroll{max-height:calc(42vh - 150px)}}
-</style>
-</style>
-
-<style>
-.of-cctv-camera-select{min-width:0;max-width:calc(100% - 48px);border:1px solid rgba(255,255,255,.15);background:rgba(7,12,22,.88);color:#eef2ff;border-radius:999px;padding:7px 30px 7px 10px;font:inherit;font-size:9px;font-weight:800;outline:none}
-.of-cctv-camera-select option{color:#111;background:#fff}.of-cctv-panel-full:disabled{opacity:.35;cursor:not-allowed}.of-cctv-off-body{display:flex;align-items:center;justify-content:center;text-align:center;color:#94a3b8;background:linear-gradient(145deg,#0b1220,#111827)}.of-cctv-off-body b,.of-cctv-off-body small{display:block}.of-cctv-off-body small{margin-top:5px;font-size:9px}
-@media(max-width:720px){.of-cctv-camera-select{font-size:8px;padding-top:6px;padding-bottom:6px}}
-</style>
-<style id="ofCctvV439Style">
-.of-cctv-last-meta{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.of-cctv-last-meta span{background:#0b1220;border:1px solid #263449;border-radius:999px;padding:5px 9px;font-size:11px;color:#dbeafe}
-.of-cctv-day-review{margin-top:14px;border:1px solid #243247;background:#0b1220;border-radius:16px;padding:12px}.of-cctv-day-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.of-cctv-day-head small{display:block;color:#94a3b8;margin-top:3px}.of-cctv-day-controls{display:flex;gap:7px}.of-cctv-day-controls input,.of-cctv-day-controls button{border:1px solid #334155;background:#111827;color:#fff;border-radius:9px;padding:8px}.of-cctv-day-controls button{cursor:pointer;font-weight:800}.of-cctv-day-row{display:grid;grid-template-columns:75px 1fr auto;gap:10px;align-items:center;border-top:1px solid #1f2937;padding:10px 2px}.of-cctv-day-time{font-weight:900}.of-cctv-day-main small{display:block;color:#94a3b8;margin-top:3px}.of-cctv-day-actions{display:flex;gap:6px}.of-cctv-day-actions button{border:1px solid #334155;background:#111827;color:#fff;border-radius:8px;padding:7px;cursor:pointer}.of-cctv-day-empty{text-align:center;color:#94a3b8;padding:18px}
-@media(max-width:700px){.of-cctv-day-head{align-items:stretch;flex-direction:column}.of-cctv-day-controls>*{flex:1}.of-cctv-day-row{grid-template-columns:60px 1fr}.of-cctv-day-actions{grid-column:1/-1}.of-cctv-day-actions button{flex:1}}
-</style>
-
-<style id="ofCctvV491PlaybackStyle">
-/* v491 — mobile-safe NVR review + in-Office playback modal */
-.of-cctv-nvr-controls{display:grid;grid-template-columns:minmax(150px,1.25fr) minmax(145px,1fr) minmax(115px,.8fr) minmax(100px,.7fr) minmax(135px,.85fr);gap:7px;min-width:0;max-width:100%}
-.of-cctv-nvr-controls>*{min-width:0;width:100%;box-sizing:border-box}
-.of-cctv-playback-ov{position:fixed;inset:0;z-index:10050;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center;padding:12px}
-.of-cctv-playback-modal{width:min(1180px,100%);height:min(92vh,850px);background:#070b12;border:1px solid #334155;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.55)}
-.of-cctv-playback-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#111827;color:#fff;border-bottom:1px solid #263449}
-.of-cctv-playback-head>div{display:flex;align-items:center;gap:7px}.of-cctv-playback-external,.of-cctv-playback-close{border:1px solid #334155;background:#172033;color:#fff;border-radius:9px;padding:8px 10px;font:inherit;font-weight:800;text-decoration:none;cursor:pointer}
-.of-cctv-playback-modal iframe{display:block;flex:1;width:100%;min-height:0;border:0;background:#000}
-@media(max-width:700px){
-  #ofCctvNvrReview{overflow:hidden}
-  #ofCctvNvrReview .of-cctv-day-head{display:block}
-  #ofCctvNvrReview .of-cctv-day-head>div:first-child{margin-bottom:10px}
-  .of-cctv-nvr-controls{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;width:100%;gap:8px}
-  .of-cctv-nvr-controls>*{font-size:16px!important;padding:10px 8px!important;min-width:0!important;max-width:none!important}
-  #ofCctvNvrCamera{grid-column:1/-1}
-  #ofCctvNvrDate{grid-column:1}
-  #ofCctvNvrTime{grid-column:2}
-  #ofCctvNvrDuration{grid-column:1}
-  #ofCctvNvrOpen{grid-column:2}
-  .of-cctv-playback-ov{padding:0}
-  .of-cctv-playback-modal{width:100%;height:100dvh;max-height:none;border:0;border-radius:0}
-  .of-cctv-playback-head{padding:8px 10px}.of-cctv-playback-head b{font-size:13px}.of-cctv-playback-external{font-size:11px;padding:7px 8px}.of-cctv-playback-close{padding:7px 10px}
-}
 </style>
 </head>
 <body>
@@ -707,27 +608,20 @@
   <section class="tabPage" id="page-cctv">
     <div class="of-cctv-shell of-cctv-controlroom">
       <div class="of-cctv-top">
-        <div class="of-cctv-title"><span style="font-size:22px">📹</span><div><b>غرفة المراقبة</b><small>السلة Live + آخر فاتورة + كاميرات الفرع</small></div></div>
+        <div class="of-cctv-title"><span style="font-size:22px">📹</span><div><b>غرفة المراقبة</b><small>كاميرات + السلة والدفع Live في شاشة واحدة</small></div></div>
         <div class="of-cctv-top-actions"><span class="of-cctv-status" id="ofCctvStatus">● LIVE</span><button type="button" class="of-cctv-room-full" id="ofCctvRoomFullscreen" title="ملء الشاشة">⛶ ملء الشاشة</button></div>
       </div>
       <div class="of-cctv-toolbar">
         <div class="of-cctv-branches" id="ofCctvBranches"></div>
+        <div class="of-cctv-layouts" aria-label="تقسيم الشاشة">
+          <button type="button" class="of-cctv-layout-btn" data-layout="1">▣ 1</button>
+          <button type="button" class="of-cctv-layout-btn" data-layout="2">▥ 2</button>
+          <button type="button" class="of-cctv-layout-btn" data-layout="4">▦ 4</button>
+        </div>
       </div>
       <div id="ofCctvWarn" class="of-cctv-warning"></div>
-      <section class="of-cctv-pinned-live" id="ofCctvPinnedLive">
-        <div class="of-cctv-fixed-label"><span>🛒 السلة LIVE</span><small>ثابتة — لا تتغير</small></div>
-        <div class="of-cctv-pinned-live-body" id="ofCctvPinnedLiveBody"></div>
-      </section>
-      <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><small>اختار الكاميرا لكل مربع أو أوقفه</small></div>
-            <div class="of-cctv-camera-grid" id="ofCctvCameraGrid"></div>
-      <section class="of-cctv-day-review" id="ofCctvNvrReview" style="display:none">
-        <div class="of-cctv-day-head"><div><b>🎞️ مراجعة تسجيلات الـNVR</b><small id="ofCctvNvrHint">اختار الكاميرا واليوم والوقت من التسجيل الأصلي</small></div><div class="of-cctv-day-controls of-cctv-nvr-controls"><select id="ofCctvNvrCamera" aria-label="اختيار كاميرا التسجيل"></select><input type="date" id="ofCctvNvrDate"><input type="time" id="ofCctvNvrTime" step="300"><select id="ofCctvNvrDuration"><option value="15">15 دقيقة</option><option value="30" selected>30 دقيقة</option><option value="60">60 دقيقة</option></select><button type="button" id="ofCctvNvrOpen">▶ فتح التسجيل</button></div></div>
-      </section>
-      <section class="of-cctv-day-review">
-        <div class="of-cctv-day-head"><div><b>🕘 مراجعة اليوم</b><small>Timeline للفواتير — اللقطات + التسجيل الأصلي حول وقت الفاتورة</small></div><div class="of-cctv-day-controls"><input type="date" id="ofCctvDayDate"><button type="button" id="ofCctvDayLoad">تحميل اليوم</button></div></div>
-        <div id="ofCctvDayRows"><div class="of-cctv-day-empty">اختار التاريخ واضغط تحميل اليوم</div></div>
-      </section>
-      <div class="of-cctv-footnote">السلة Live ثابتة بالأعلى، وسطر آخر فاتورة يعرض رقمها وطريقة دفعها فقط. الكاميرات تحتها ويمكن إيقاف أي مربع.</div>
+      <div class="of-cctv-grid of-cctv-grid-4" id="ofCctvGrid"></div>
+      <div class="of-cctv-footnote">اعرض 1 أو 2 أو 4 شاشات معًا، وكل مربع تقدر تختار له كاميرا أو POS Live. تغيير المصدر يوقف البث السابق فورًا.</div>
     </div>
   </section>
   <!-- 🕵️ سجل النشاط -->
@@ -835,7 +729,7 @@
 <!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
-<script src="cctv.js?v=491"></script>
-<script src="office.js?v=492"></script>
+<script src="cctv.js?v=495"></script>
+<script src="office.js?v=79"></script>
 </body>
 </html>
