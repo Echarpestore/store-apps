@@ -2736,6 +2736,8 @@ async function clockIn(empId, photoDataUri){
       scheduledStartTime: emp.scheduledStartTime || null, lateMinutes, latePenalized,
       clockInPhoto: photoDataUri || null
     });
+    // v502: ما نعلّمش رسالة النقاب إنها خلصت إلا بعد نجاح كتابة الحضور نفسه.
+    if(emp.niqabAttendance === true){ await markNiqabWelcomeClockInDone(emp); }
     // ⏳ التأخير بيتسجل ساعات في رصيد الوقت (10 دقايق = ساعة — قرار المالك):
     // المحرك ده حل محل الغرامة الثابتة القديمة. الكود القديم كان لسه بيكتب
     // خصم فلوس ثابت في sales_deductions — فالتأخير كان بيتحاسب بالنظام القديم
@@ -2848,16 +2850,43 @@ function attActionLabel(type){
   if(type==='out')         return 'اكتب كودك عشان تسجل انصراف';
   return 'اكتب كودك عشان تسجل حضور';
 }
+// v502 — رسالة النقاب تفضل ظاهرة لحد أول تسجيل حضور ناجح فعلًا.
+// بنستخدم field جديد بدل niqabWelcomeShownAt القديم لأن v501 كان ممكن
+// يعتبر الرسالة "اتعرضت" قبل ما الحضور نفسه ينجح.
+function niqabWelcomePending(emp, actionType){
+  if(!emp || emp.niqabAttendance !== true || actionType !== 'in') return false;
+  let localDone = false;
+  try{ localDone = localStorage.getItem('echarpe_niqab_clockin_welcome_v502_'+emp.id) === '1'; }catch(_e){}
+  return !emp.niqabWelcomeClockInAt && !localDone;
+}
+function niqabWelcomeText(emp){
+  const first = String((emp && emp.name) || '').trim().split(/\s+/)[0] || '';
+  return 'أهلاً يا ' + first + ' 🌷\n'
+    + 'ظبطنا تسجيل الحضور علشان السيستم يتعرف عليكي بالنقاب عادي، من غير ما تحتاجي تكشفي وشك.\n'
+    + 'اكتبي كودك وبصي للكاميرا عادي — والصورة هتتسجل للمراجعة زي باقي الفريق.';
+}
+async function markNiqabWelcomeClockInDone(emp){
+  if(!emp || emp.niqabAttendance !== true || emp.niqabWelcomeClockInAt) return;
+  const doneAt = Date.now();
+  // نجاح الحضور حصل بالفعل؛ localStorage يمنع إعادة الرسالة على نفس الجهاز
+  // حتى لو كتابة علامة الترحيب في Firestore تعطلت مؤقتًا.
+  try{ localStorage.setItem('echarpe_niqab_clockin_welcome_v502_'+emp.id, '1'); }catch(_e){}
+  emp.niqabWelcomeClockInAt = doneAt;
+  try{ await updateDoc(doc(db,'sales_employees', emp.id), { niqabWelcomeClockInAt: doneAt }); }catch(_e){}
+}
 function promptAttPin(type, empId){
   const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return;
   pendingAttAction = { type, empId };
+  const welcomePending = niqabWelcomePending(emp, type);
+  const actionText = welcomePending ? niqabWelcomeText(emp) : attActionLabel(type);
+  $('#attPinAction').style.whiteSpace = welcomePending ? 'pre-line' : '';
 
   if(!emp.pin){
     // First time this employee is clocking in/out — let them set their own PIN.
     newPinBuffer = '';
     $('#attPinName').textContent = emp.name;
-    $('#attPinAction').textContent = attActionLabel(type);
+    $('#attPinAction').textContent = actionText;
     $('#attNewPinErrText').textContent = '';
     updateNewPinDots(false);
     $('#attPinKeypadArea').style.display = 'none';
@@ -2868,7 +2897,7 @@ function promptAttPin(type, empId){
 
   attPinBuffer = '';
   $('#attPinName').textContent = emp.name;
-  $('#attPinAction').textContent = attActionLabel(type);
+  $('#attPinAction').textContent = actionText;
   $('#attPinErrText').textContent = '';
   updateAttPinDots(false);
   $('#attPinKeypadArea').style.display = 'block';
@@ -4652,6 +4681,7 @@ window.openEmployeeRecord = function(empId){
       <label>تاريخ التعيين<input id="erHire" type="date" value="${_empEsc(emp.hireDate||'')}"></label>
       <label>تتبع الحضور من<input id="erTrack" type="date" value="${_empEsc(emp.attendanceTrackingStart||'')}"></label>
       <label>كلمة مرور الموظف (4 أرقام)<input id="erPin" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="اكتب 4 أرقام" value="${/^\d{4}$/.test(String(emp.pin||''))?_empEsc(String(emp.pin)):''}"><span style="display:block;margin-top:5px;font-size:11px;color:var(--sub)">${/^\d{4}$/.test(String(emp.pin||''))?'كلمة مرور معيّنة ✓':'لم يتم تعيين كلمة مرور'}</span></label>
+      <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erNiqabAttendance" type="checkbox" ${emp.niqabAttendance===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>تسجيل بالنقاب <small style="display:block;color:var(--sub);font-weight:600">الصورة تفضل إجبارية، من غير انتظار كشف الوجه</small></span></label>
     </div>
     <div style="margin:14px 0 6px;font-weight:900">سجل تعديل الراتب</div>
     <div>${(Array.isArray(emp.salaryHistory)&&emp.salaryHistory.length)?emp.salaryHistory.slice().reverse().slice(0,8).map(x=>`<div class="er-info" style="margin-bottom:6px"><span>${x.at?new Date(x.at).toLocaleString('ar-EG'):'—'}</span><b>${Number(x.from||0).toLocaleString('ar-EG')} ← ${Number(x.to||0).toLocaleString('ar-EG')} ج.م</b></div>`).join(''):'<div class="empty">مفيش تعديلات راتب مسجلة</div>'}</div>
@@ -4669,7 +4699,8 @@ window.openEmployeeRecord = function(empId){
     const patch={
       name:ov.querySelector('#erName').value.trim(), branch:ov.querySelector('#erBranch').value.trim(),
       baseSalary:Number(ov.querySelector('#erSalary').value)||0, dayOff:ov.querySelector('#erDayOff').value,
-      hireDate:ov.querySelector('#erHire').value||'', attendanceTrackingStart:ov.querySelector('#erTrack').value||'', updatedAt:Date.now()
+      hireDate:ov.querySelector('#erHire').value||'', attendanceTrackingStart:ov.querySelector('#erTrack').value||'',
+      niqabAttendance:!!ov.querySelector('#erNiqabAttendance')?.checked, updatedAt:Date.now()
     };
     if(!patch.name){msg.textContent='الاسم مطلوب';return;}
     if(!/^\d{4}$/.test(pin)){msg.textContent='كلمة المرور لازم تكون 4 أرقام';return;}
@@ -7357,6 +7388,17 @@ async function openAttPhoto(action){
     const video = $('#attPhotoVideo');
     video.srcObject = attPhotoStream;
     await video.play();
+    if(emp && emp.niqabAttendance === true){
+      // الموظفة المفعّل لها الاستثناء فقط: الـPIN والصورة ما زالوا إجباريين،
+      // لكننا لا ننتظر FaceDetector لأن النقاب قد يمنع اكتشاف الوجه.
+      const firstWelcome = niqabWelcomePending(emp, action.type);
+      $('#attPhotoStatus').style.whiteSpace = firstWelcome ? 'pre-line' : '';
+      $('#attPhotoStatus').textContent = firstWelcome ? niqabWelcomeText(emp) : 'تمام، بيصور...';
+      // الرسالة اتعرضت بالفعل على شاشة الـPIN؛ هنا نسيب وقت قصير للصورة فقط.
+      // الأهم: لا نسجلها كمقروءة هنا — العلامة تتكتب بعد نجاح clockIn فقط.
+      setTimeout(()=> captureAttPhoto(video), 650);
+      return;
+    }
     $('#attPhotoStatus').textContent = 'بص للكاميرا...';
     waitForFaceThenCapture(video, Date.now());
   }catch(err){
