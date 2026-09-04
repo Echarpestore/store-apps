@@ -182,7 +182,8 @@ window.renderAttIssues = function(){
   const to = Date.now(), from = to - 30*86400000;
   const raw = window.detectAttendanceIssues(emps, shifts, from, to, decided, Date.now());
   const { swaps, singles } = window.pairSwaps(raw);
-  const all = [...swaps, ...singles].sort((a,b)=> a.dateKey < b.dateKey ? 1 : -1);
+  // v492: الشغل في يوم الإجازة لوحده مش مخالفة؛ محرك المرتب بيحسبه إضافة تلقائيًا.
+  const all = [...swaps, ...singles.filter(i=>i.type!=='workedDayOff')].sort((a,b)=> a.dateKey < b.dateKey ? 1 : -1);
 
   const badge = document.querySelector('#issuesBadge');
   if(badge){ badge.textContent = all.length; badge.style.display = all.length ? 'inline-flex' : 'none'; }
@@ -201,29 +202,61 @@ window.renderAttIssues = function(){
     return `<div style="background:var(--panel); border:1px solid #5a3a3a; border-radius:13px; padding:12px 13px; margin-bottom:9px;">
       <div style="font-weight:800; font-size:14px;">${m.icon} ${i.empName}</div>
       <div style="color:var(--sub); font-size:12.5px; margin:4px 0 11px;">${m.title} — ${dayName[i.dow]} ${i.dateKey}${extra}</div>
-      <div style="display:flex; gap:8px;">
-        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','charge')" style="flex:1; padding:10px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#ffb4a6; font-family:'Cairo'; font-weight:800; cursor:pointer;">خصم ${window.complianceCfg.penalty} ج</button>
-        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','ignore')" style="flex:1; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--sub); font-family:'Cairo'; font-weight:700; cursor:pointer;">تجاهل (بموافقتي)</button>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','normal')" style="flex:1; min-width:145px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">${i.type==='dayoffSwap'?'✅ اعتمد كتبديل':'📅 غياب عادي — خصم يوم'}</button>
+        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','unauthorized')" style="flex:1; min-width:145px; padding:10px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#ffb4a6; font-family:'Cairo'; font-weight:800; cursor:pointer;">🚫 بدون إذن — +4س رصيد</button>
       </div>
+      ${i.type==='absent'?'<div style="font-size:10.5px;color:var(--sub);margin-top:7px;">في الحالتين يوم الغياب نفسه بيتخصم من المرتب. «بدون إذن» يضيف 4 ساعات رصيد كجزاء.</div>':''}
     </div>`;
   }).join('');
 }
 
-// قرار الأدمن على مخالفة: خصم أو تجاهل — الاتنين بيتسجّلوا فمش هتظهر تاني
+// v492: مفيش غرامة 5 جنيه. يوم الغياب بيتخصم أصلًا من محرك المرتب.
+// «بدون إذن» = نفس خصم اليوم + 4 ساعات رصيد إضافية. الكتابتين atomic + idempotent.
+const _attDecisionBusy = new Set();
 window.decideIssue = async function(empId, empName, dateKey, kind, action){
+  const key = empId + '|' + dateKey;
+  if(_attDecisionBusy.has(key)) return;
+  const unauthorized = action === 'unauthorized';
+  const extraHours = unauthorized ? (window.absenceHoursFrom ? window.absenceHoursFrom(window.timeCfg||window.timeCfgDefaults) : 4) : 0;
+  const msg = unauthorized
+    ? ('تأكيد غياب بدون إذن لـ ' + empName + '?\n\nيوم الغياب هيتخصم عادي + ' + extraHours + ' ساعات رصيد إضافية.')
+    : (kind === 'absent' ? ('تأكيد غياب عادي لـ ' + empName + '?\n\nهيتخصم يوم الغياب فقط من المرتب.') : ('اعتماد التبديل لـ ' + empName + '؟'));
+  if(!confirm(msg)) return;
+  _attDecisionBusy.add(key);
+  const wrap = document.querySelector('#attIssuesList'); if(wrap) wrap.style.opacity='.65';
   try{
-    await window.fbAddDoc(window.fbCollection(window.db,'sales_att_decisions'), {
+    const safe = String(empId).replace(/[^a-zA-Z0-9_-]/g,'_') + '_' + String(dateKey).replace(/[^0-9-]/g,'');
+    const decisionRef = window.fbDoc(window.db,'sales_att_decisions','att_'+safe);
+    const creditRef = window.fbDoc(window.db,'sales_time_credit','absence_'+safe);
+    const batch = window.fbWriteBatch(window.db);
+    batch.set(decisionRef, {
       empId, empName, dateKey, type: kind, branch: window.currentBranch,
-      decision: action === 'charge' ? 'charged' : 'ignored',
-      ts: Date.now()
-    });
-    if(action === 'charge'){
-      await window.fbAddDoc(window.fbCollection(window.db,'sales_deductions'), {
+      decision: unauthorized ? 'unauthorized' : 'normal', unauthorizedHours: extraHours, ts: Date.now()
+    }, {merge:true});
+    if(unauthorized && extraHours > 0){
+      batch.set(creditRef, {
         employeeId: empId, employeeName: empName, branch: window.currentBranch,
-        type: kind, amount: window.complianceCfg.penalty, date: dateKey, ts: Date.now()
-      });
+        type:'absence', hours:extraHours, date:dateKey,
+        note:'غياب بدون إذن — جزاء إضافي', ts:Date.now(), source:'attendance_review'
+      }, {merge:true});
+    }else{
+      // لو القرار اتعاد كعادي بعد محاولة سابقة، صفّر البند الحتمي بدل ما يفضل جزاء قديم.
+      batch.set(creditRef, {
+        employeeId: empId, employeeName: empName, branch: window.currentBranch,
+        type:'absence', hours:0, originalHours:0, date:dateKey,
+        note:'غياب عادي — بدون جزاء ساعات', excused:true, excuseReason:'غياب عادي', ts:Date.now(), source:'attendance_review'
+      }, {merge:true});
     }
-  }catch(e){ alert('تعذر تسجيل القرار: ' + e.message); }
+    const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('__SAVE_TIMEOUT__')),12000));
+    await Promise.race([batch.commit(), timeout]);
+  }catch(e){
+    if(e && e.message === '__SAVE_TIMEOUT__') alert('الاتصال بطيء والقرار لسه ما اتأكدش. لو ضغطت تاني مش هيتكرر الخصم لأن الحفظ محمي من التكرار.');
+    else alert('تعذر تسجيل القرار: ' + (e&&e.message?e.message:e));
+  }finally{
+    _attDecisionBusy.delete(key); if(wrap) wrap.style.opacity='';
+    try{ window.renderAttIssues(); }catch(e){}
+  }
 };
 
 // 💰 كشف الخصومات (الشهر الحالي)
@@ -325,6 +358,8 @@ window.excuseTimeCredit = async function(id){
     await window.fbUpdateDoc(window.fbDoc(window.db,'sales_time_credit', id), {
       hours: 0, originalHours: item.hours, excused: true, excuseReason: reason || 'بعذر', excusedAt: Date.now()
     });
+    try{ if(typeof window.refreshOpenPayrollEmployee==='function') window.refreshOpenPayrollEmployee(); }catch(_e){}
+    try{ if(typeof window.renderTimeCreditLog==='function') window.renderTimeCreditLog(); }catch(_e){}
   }catch(e){ alert('تعذر تسجيل العذر: '+e.message); }
 };
 
@@ -524,7 +559,7 @@ window.renderTimeSettings = function(){
     <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">🔄 التبديل والغياب</div>
     ${row('تبديل مجاني في الشهر', 'tsSwapFree', c.swapFreePerMonth)}
     ${row('ساعات التبديل بعد المجاني', 'tsSwapHours', c.swapHours)}
-    ${row('ساعات الغياب بدون عذر', 'tsAbsence', c.absenceHours, 'الغياب = خروج من المكافأة')}
+    ${row('جزاء الغياب بدون إذن (ساعات رصيد)', 'tsAbsence', (c.unauthorizedAbsenceHours==null?4:c.unauthorizedAbsenceHours), 'يوم الغياب نفسه بيتخصم عادي؛ دي ساعات جزاء إضافية')}
     <div style="height:1px; background:var(--line); margin:12px 0;"></div>
     <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">💰 الخصم والمكافأة</div>
     ${row('كل كام ساعة = يوم خصم', 'tsHoursPerDay', c.hoursPerDay)}
@@ -548,7 +583,7 @@ window.saveTimeSettings = async function(){
     maxOnBreak: n('tsMaxOnBreak', c.maxOnBreak),
     swapFreePerMonth: n('tsSwapFree', c.swapFreePerMonth),
     swapHours: n('tsSwapHours', c.swapHours),
-    absenceHours: n('tsAbsence', c.absenceHours),
+    unauthorizedAbsenceHours: n('tsAbsence', (c.unauthorizedAbsenceHours==null?4:c.unauthorizedAbsenceHours)),
     hoursPerDay: n('tsHoursPerDay', c.hoursPerDay),
     maxDaysPerMonth: n('tsMaxDays', c.maxDaysPerMonth),
     allowedHoursWeek: n('tsAllowWeek', c.allowedHoursWeek),

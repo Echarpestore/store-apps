@@ -30,6 +30,8 @@ window.fbAddDoc = addDoc;
 window.fbUpdateDoc = updateDoc;
 window.fbDeleteDoc = deleteDoc;
 window.fbCollection = collection;
+window.fbWriteBatch = (typeof writeBatch === 'function' ? writeBatch : null);   // v492: قرارات الحضور المركبة تتكتب atomically
+
 
 
 /* ============================================================
@@ -441,7 +443,7 @@ const PANEL_PERM_KEYS = [
   ['terminate', ['إنهاء خدمة','سجل المغادرين']],
   ['settings',  ['إعدادات الالتزام','إعدادات رصيد الوقت','تارجت مبيعات الشيفت','إدارة الفروع','كود المدير','إعدادات السلف']],
   ['money',     ['كشف الخصومات','رصيد الوقت والخصومات','عمولة النقط','سجل دفع العمولات',
-                 'الرواتب الشهرية','سجل صرف الرواتب','سجل السلف','أوفرتايم مستني','ميزانية المكافآت']],
+                 'الرواتب الشهرية','سجل صرف الرواتب','سجل السلف','أوفرتايم','ميزانية المكافآت']],
   ['people',    ['إضافة موظف','الموظفين الحاليين','مواعيد الحضور']],
   ['tasks',     ['المهام الأسبوعية','مراجعة تنفيذ','المهام المؤكدة','سجل المكافآت']],
   ['orders',    ['أوردرات الموظفين','أكواد دعوة','طلبات النواقص']],
@@ -985,7 +987,8 @@ const timeCfgDefaults = {
   earlyMinPerHour: 10,     // 🚪 الانصراف بدري: كل كام دقيقة = ساعة (زي التأخير)
   earlyGraceMin: 5,        // 🚪 سماح النقص عن مدة الشيفت قبل أي خصم
   maxEarlyHoursPerDay: 8,  // 🧢 سقف عقوبة الانصراف بدري في اليوم (8 = يوم واحد بحد أقصى)
-  absenceHours: 8,         // 🚫 غياب بدون عذر = كام ساعة رصيد (8 = يوم مالي)
+  absenceHours: 8,         // legacy فقط — متساب للتوافق مع الإعدادات القديمة
+  unauthorizedAbsenceHours: 4, // 🚫 v492: الغياب بدون إذن = يوم غياب عادي + 4 ساعات رصيد إضافية
   autoCloseBreakMult: 2,   // البريك بيتقفل تلقائي بعد كام ضعف من مدته
   breakAlertBeeps: 4,      // 🔔 بعد ما مدة البريك تخلص: بيرن كام مرة (مرة كل دقيقة) جوه فترة السماح
   maxShiftHours: 14,       // 🚨 أطول شيفت معقول — فوق كده يبقى "نسيت الانصراف" مش شغل
@@ -1228,11 +1231,42 @@ function forgottenShifts(shifts, cfg, nowTs){
   });
 }
 
-/* ⏱️ الشيفتات اللي ليها أوفرتايم مستني موافقة المالك */
-function pendingOvertimeShifts(shifts){
-  return (shifts || []).filter(s=>
-    s && s.otRequiresApproval && (Number(s.overtimeMinutes)||0) > 0 && s.overtimeDecision === 'pending');
+/* ⏱️ v492 — الأوفرتايم المنطقي يتعتمد تلقائيًا، والمشبوه بس يروح للمالك.
+   - الحساب المرجعي = مدة الشيفت - 8س15د.
+   - لحد ساعتين إضافي عادي يتعتمد تلقائيًا لو الحساب مطابق ومفيش نسيان.
+   - نسيان انصراف / قفل 1ص تلقائي / رقم غير منطقي / أكتر من ساعتين = مراجعة. */
+function overtimeReviewInfo(s, cfg){
+  cfg = cfg || (typeof window !== 'undefined' && window.timeCfg) || timeCfgDefaults;
+  if(!s) return { needsReview:false, reason:'none', expected:0, asked:0 };
+  if(s.needsClockOutReview || s.autoClosedAt1) return { needsReview:true, reason:'auto_closed', expected:0, asked:Number(s.overtimeMinutes)||0 };
+  if(s.forgotClockOut) return { needsReview:true, reason:'forgot_clockout', expected:0, asked:Number(s.overtimeMinutes)||0 };
+  if(!Number(s.clockOutTs)) return { needsReview:true, reason:'open_shift', expected:0, asked:Number(s.overtimeMinutes)||0 };
+  const dur = Number(s.shiftMinutes) || Math.max(0, Math.round((Number(s.clockOutTs)-Number(s.clockInTs||0))/60000));
+  const expected = Math.max(0, dur - (8*60+15));
+  const asked = Number(s.overtimeMinutes)||0;
+  if(Math.abs(expected-asked) > 2) return { needsReview:true, reason:'calc_mismatch', expected, asked };
+  const autoMax = Number(cfg.autoOvertimeMaxMin);
+  const maxMin = Number.isFinite(autoMax) && autoMax >= 0 ? autoMax : 120;
+  if(asked > maxMin) return { needsReview:true, reason:'too_much_overtime', expected, asked };
+  return { needsReview:false, reason:'normal', expected, asked };
 }
+function autoApprovedOvertimeMinutes(s, cfg){
+  if(!s) return 0;
+  if(!s.otRequiresApproval) return Number(s.overtimeMinutes)||0;
+  if(s.overtimeDecision === 'approved' || s.overtimeDecision === 'auto') return Number(s.overtimeApprovedMin)||Number(s.overtimeMinutes)||0;
+  if(s.overtimeDecision === 'rejected') return 0;
+  const info = overtimeReviewInfo(s, cfg);
+  return info.needsReview ? 0 : (Number(s.overtimeMinutes)||0);
+}
+function pendingOvertimeShifts(shifts, cfg){
+  return (shifts || []).filter(s=>{
+    if(!s || !s.otRequiresApproval || (Number(s.overtimeMinutes)||0) <= 0) return false;
+    if(s.overtimeDecision !== 'pending') return false;
+    return overtimeReviewInfo(s, cfg).needsReview;
+  });
+}
+window.overtimeReviewInfo = overtimeReviewInfo;
+window.autoApprovedOvertimeMinutes = autoApprovedOvertimeMinutes;
 
 /* 🚫 الغياب مبيتحسبش غير بعد ما الشيفت يخلص
    ------------------------------------------------------------
@@ -1401,7 +1435,10 @@ window.earlyLeaveFromWorked = earlyLeaveFromWorked;
 // 🚫 ساعات الغياب بدون عذر
 function absenceHoursFrom(cfg){
   cfg = cfg || timeCfgDefaults;
-  return Number(cfg.absenceHours) || 0;
+  // v492: قرار المالك ثابت افتراضيًا 4 ساعات. بنستخدم الحقل الجديد عشان
+  // إعداد قديم absenceHours=8 مايرجعش السياسة القديمة بالغلط.
+  const v = Number(cfg.unauthorizedAbsenceHours);
+  return Number.isFinite(v) && v >= 0 ? v : 4;
 }
 
 // 🩹 العفو الشامل — «اللي فات كله، ومن بكرا نحسب»
@@ -2762,17 +2799,21 @@ async function clockOut(empId, photoDataUri){
   if(!forgotten) earlyInfo = earlyLeaveFromWorked(totalMin, _reqMin, Number(shift.lateMinutes)||0, cfg);
 
   try{
+    const _otProbe = { clockInTs:shift.clockInTs, clockOutTs:now, shiftMinutes:totalMin,
+      overtimeMinutes, forgotClockOut:forgotten || false, otRequiresApproval:true,
+      overtimeDecision:overtimeMinutes > 0 ? 'pending' : 'none' };
+    const _otInfo = overtimeReviewInfo(_otProbe, cfg);
+    const _otAuto = overtimeMinutes > 0 && !_otInfo.needsReview;
     await updateDoc(doc(db,'sales_shifts', shift.id), {
       clockOutTs: now, overtimeMinutes, clockOutPhoto: photoDataUri || null,
       earlyMin: earlyInfo.earlyMin, earlyHours: earlyInfo.hours,
-      // ⏱️ العلامة دي هي اللي بتخلي المرتب يستنى الموافقة. الشيفتات القديمة
-      //    (اللي اتقفلت قبل التحديث) مفيهاش العلامة، فبتفضل شغالة بالقديم —
-      //    مفيش تغيير بأثر رجعي (قرار المالك).
       otRequiresApproval: true,
-      overtimeApprovedMin: 0,
-      overtimeDecision: overtimeMinutes > 0 ? 'pending' : 'none',
+      overtimeApprovedMin: _otAuto ? overtimeMinutes : 0,
+      overtimeDecision: overtimeMinutes > 0 ? (_otAuto ? 'approved' : 'pending') : 'none',
+      overtimeAutoApproved: _otAuto,
       shiftMinutes: totalMin,
-      forgotClockOut: forgotten || false
+      forgotClockOut: forgotten || false,
+      needsClockOutReview: forgotten || false
     });
     // نسجّل ساعات الانصراف بدري في رصيد الوقت
     if(earlyInfo.hours > 0){
@@ -2787,7 +2828,9 @@ async function clockOut(empId, photoDataUri){
     const h = Math.floor(totalMin/60), m = totalMin%60;
     let msg = `تم تسجيل الانصراف ✅\nمدة الشيفت: ${h} س ${m} د`;
     if(earlyInfo.hours > 0) msg += `\n🚪 ناقص ${earlyInfo.earlyMin} دقيقة عن مدة شيفتك → ${earlyInfo.hours} ساعة رصيد`;
-    if(overtimeMinutes > 0) msg += `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة (مستني موافقة الإدارة)`;
+    if(overtimeMinutes > 0) msg += _otAuto
+      ? `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة — اتعتمد تلقائيًا ✅`
+      : `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة — محتاج مراجعة الإدارة`;
     alert(msg);
   }catch(err){
     console.error('تعذر تسجيل الانصراف', err);
@@ -6077,8 +6120,11 @@ function payrollAttendanceBalance(emp, start, end, shifts, reqs){
     if(hasAttendance) attendedDays++;
     let closedMinutes = 0;
     dayShifts.forEach(sh=>{
-      if(sh.clockInTs && !sh.clockOutTs){
-        incompleteShifts.push({ date:key, shiftId:sh.id||'', clockInTs:sh.clockInTs });
+      if(sh.clockInTs && (!sh.clockOutTs || sh.needsClockOutReview)){
+        incompleteShifts.push({ date:key, shiftId:sh.id||'', clockInTs:sh.clockInTs,
+          autoClosedAt1:!!sh.autoClosedAt1, provisionalOutTs:sh.clockOutTs||null });
+        // القفل التلقائي 1ص مؤقت فقط؛ ممنوع ندخل مدته في القبض قبل قرار المالك.
+        if(sh.needsClockOutReview) return;
         return;
       }
       if(Number(sh.clockOutTs) > Number(sh.clockInTs)){
@@ -6373,10 +6419,10 @@ function computeSalary(emp, periodStart, end){
      العلامة فبتتحسب زي الأول بالظبط (مفيش تغيير بأثر رجعي — قرار المالك).
      ⚠️ من غير الفصل ده، شيفت منسي واحد (24 ساعة) كان بيدفع ~15.75 ساعة. */
   const overtimeMinutes = rangeShifts.reduce((sum,s)=>
-    sum + (s.otRequiresApproval ? (Number(s.overtimeApprovedMin)||0) : (Number(s.overtimeMinutes)||0)), 0);
-  // المستني موافقة (معروض بس — مش داخل الحساب)
+    sum + autoApprovedOvertimeMinutes(s, _timeCfgNow()), 0);
+  // المستني مراجعة فعلًا فقط — الأوفرتايم المنطقي pending القديم يتعتمد تلقائيًا.
   const overtimePendingMin = rangeShifts.reduce((sum,s)=>
-    sum + ((s.otRequiresApproval && s.overtimeDecision === 'pending') ? (Number(s.overtimeMinutes)||0) : 0), 0);
+    sum + ((s.otRequiresApproval && s.overtimeDecision === 'pending' && overtimeReviewInfo(s,_timeCfgNow()).needsReview) ? (Number(s.overtimeMinutes)||0) : 0), 0);
   const overtimePay = Math.round((overtimeMinutes/60) * hourlyRate * 100)/100;
 
   // 🗓️ الحضور والغياب: شهر تقويمي حقيقي، ومصدر واحد للحسبة وللواجهة.
@@ -6663,6 +6709,7 @@ window.openPayrollEmployee = function(empId, periodKey){
   const section=(title,cls,body)=>`<section class="pay-v393-sec ${cls||''}"><div class="pay-v393-sec-title">${title}</div>${body}</section>`;
   const absenceText = c.absenceDates.length ? c.absenceDates.map(x=>x.date+(x.approved?' (مصرح)':'')).join('، ') : '—';
   const offText = c.dayOffDates.length ? c.dayOffDates.join('، ') : '—';
+  const timeCreditRow = `<button type="button" onclick="openPayrollTimeCreditDetails('${emp.id}','${pk}')" style="width:100%;display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;border-bottom:1px solid rgba(255,255,255,.055);background:transparent;color:inherit;padding:8px 0;font-family:inherit;cursor:pointer;text-align:right"><span style="color:#aaaab4;flex:1">⏳ رصيد الوقت <small style="color:#fbbf24">اضغط للتفاصيل والتعديل</small></span><b class="bad" style="text-align:left;direction:ltr">${_payQty(c.timeCreditHours,'ساعة')} = -${_payMoney(c.timeCreditDeduction)}</b></button>`;
   const actions = paid
     ? `<div class="pay-v393-paid">✅ المرتب اتسجل صرفه${paidTotal?' · '+_payMoney(paidTotal):''}</div>
        ${due.ptsDue>0?`<button class="pay-v393-primary" onclick="payPayrollPointsNow('${emp.id}','${pk}',this)">⭐ ادفع النقط المتبقية — ${_payMoney(due.ptsDueAmt)}</button>`:''}`
@@ -6710,7 +6757,7 @@ window.openPayrollEmployee = function(empId, periodKey){
       detailRow('شغل يوم الإجازة · '+_payQty(c.dayOffBonusHours,'ساعة'),'+'+_payMoney(c.dayOffBonusAmount),'good')+
       detailRow('إجمالي إضافات الراتب','+'+_payMoney(salaryAdditions),'good'))}
     ${section('− الخصومات','ded',
-      detailRow('رصيد وقت · '+_payQty(c.timeCreditHours,'ساعة'),'-'+_payMoney(c.timeCreditDeduction),'bad')+
+      timeCreditRow+
       detailRow('خصومات إدارية','-'+_payMoney(c.adminDeductions),'bad')+
       detailRow('سلف','-'+_payMoney(c.advCash),'bad')+
       detailRow('مشتريات','-'+_payMoney(c.advOrders),'bad')+
@@ -6733,6 +6780,39 @@ window.openPayrollEmployee = function(empId, periodKey){
     ${hist.length?section('💵 سجل تعديل الراتب','',hist.slice(0,6).map(h=>detailRow(new Date(h.at).toLocaleString('ar-EG')+(h.by?' · '+h.by:''),_payMoney(h.from||0)+' ← '+_payMoney(h.to||0))).join('')):''}
   </div>`;
   document.body.appendChild(ov);
+};
+
+// ⏳ v492 — تفاصيل رصيد الوقت من داخل المرتب نفسه، مع إمكانية إلغاء/عذر أي بند.
+window.openPayrollTimeCreditDetails = function(empId, periodKey){
+  const emp = allEmployees.find(e=>e.id===empId); if(!emp) return;
+  const pk = periodKey || window.salaryPeriodKey || defaultPayPeriodKey(new Date());
+  const range = payPeriodRange(pk);
+  const cfg = window.timeCfg || timeCfgDefaults;
+  const labels = {late:'⏰ تأخير',break:'☕ بريك زايد',early:'🚪 انصراف بدري',swap:'🔄 تبديل',absence:'🚫 غياب بدون إذن'};
+  const rows = (window.allTimeCredit||[]).filter(x=>{
+    if(!x || x.employeeId!==empId) return false;
+    const d=payrollDateFromKey(x.date); return d && d>=range.start && d<=range.end;
+  }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')) || (Number(b.ts)||0)-(Number(a.ts)||0));
+  const counted = rows.filter(x=>tcCounts(x,cfg));
+  const total = counted.reduce((n,x)=>n+(Number(x.hours)||0),0);
+  const old=document.getElementById('payrollTcOv'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.id='payrollTcOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10050;overflow:auto;padding:12px 8px 28px;';
+  const items = rows.length ? rows.map(x=>{
+    const active=tcCounts(x,cfg), h=active?(Number(x.hours)||0):(Number(x.originalHours)||Number(x.hours)||0);
+    return `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08);${active?'':'opacity:.55'}">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><b>${labels[x.type]||_payEsc(x.type||'بند')}</b><div style="font-size:10.5px;color:var(--sub);margin-top:3px">${_payEsc(x.date||'')} ${x.note?'· '+_payEsc(x.note):''}</div></div><b style="color:${active?'#ff5b63':'#888'};direction:ltr">${_payQty(h,'ساعة')}</b></div>
+      ${active?`<button type="button" onclick="excusePayrollTimeCredit('${_payEsc(x.id)}','${empId}','${pk}')" style="margin-top:7px;border:1px solid rgba(255,255,255,.14);background:#292a34;color:#fff;border-radius:9px;padding:6px 10px;font-family:inherit;font-size:11px;cursor:pointer">🩺 إلغاء/عذر البند</button>`:`<div style="font-size:10.5px;color:#49db7e;margin-top:5px">✅ ملغي/معذور${x.excuseReason?' — '+_payEsc(x.excuseReason):''}</div>`}
+    </div>`;
+  }).join('') : '<div style="color:var(--sub);padding:14px 0;text-align:center">مفيش رصيد وقت في الفترة دي ✅</div>';
+  ov.innerHTML=`<div style="max-width:500px;margin:auto;background:#171820;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:15px;color:#f5f5f7"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div style="font-size:18px;font-weight:950">⏳ رصيد الوقت</div><div style="font-size:11px;color:var(--sub)">${_payEsc(emp.name)} · ${_payEsc(payPeriodLabelAr(pk))}</div></div><button class="backBtn" onclick="document.getElementById('payrollTcOv').remove()">✕</button></div><div style="margin:12px 0;padding:10px;border-radius:12px;background:#20212a;display:flex;justify-content:space-between"><span>المحتسب حاليًا</span><b style="color:${total?'#ff5b63':'#49db7e'}">${_payQty(total,'ساعة')}</b></div>${items}</div>`;
+  document.body.appendChild(ov);
+};
+window.excusePayrollTimeCredit = async function(id,empId,pk){
+  if(typeof window.excuseTimeCredit!=='function') return;
+  await window.excuseTimeCredit(id);
+  const ov=document.getElementById('payrollTcOv'); if(ov) ov.remove();
+  try{ window.openPayrollTimeCreditDetails(empId,pk); }catch(e){}
 };
 
 // 💰🛒 تفاصيل السلف ومشتريات الموظف داخل دورة القبض — تجميعي + كل حركة بتاريخها.
@@ -8115,7 +8195,7 @@ function renderOvertimeApprovals(){
      الصح: الشيفت المفتوح مايبقاش "نسيان" غير لما يعدّي الحد الأقصى
      (14 ساعة افتراضيًا) — وده اللي forgottenShifts بتعمله بالظبط. */
   const needTime = forgottenShifts(window.allShifts || [], cfg0)
-    .concat((window.allShifts || []).filter(sh=> sh && sh.forgotClockOut))
+    .concat((window.allShifts || []).filter(sh=> sh && (sh.forgotClockOut || sh.needsClockOutReview || sh.autoClosedAt1)))
     .filter((sh, i, arr)=> arr.findIndex(x=> x.id === sh.id) === i)
     .filter(sh=> !pend.some(p=> p.id === sh.id));
   const list = needTime.concat(pend).sort((a,b)=> (b.clockInTs||0) - (a.clockInTs||0));
@@ -8133,7 +8213,7 @@ function renderOvertimeApprovals(){
     const dur  = open
       ? Math.round((Date.now() - (Number(s.clockInTs)||Date.now()))/60000)
       : (Number(s.shiftMinutes) || Math.round((Number(s.clockOutTs) - (Number(s.clockInTs)||0))/60000));
-    const susp = s.forgotClockOut || dur > maxMin;
+    const susp = s.forgotClockOut || s.needsClockOutReview || s.autoClosedAt1 || dur > maxMin;
     return `<div style="border:1px solid ${susp?'#7f1d1d':'var(--line)'}; background:${susp?'#2a1111':'var(--panel2)'};
                 border-radius:12px; padding:11px 13px; margin-bottom:9px;">
       <div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:center;">
@@ -8144,7 +8224,7 @@ function renderOvertimeApprovals(){
         ${open ? 'مفتوح من' : 'مدة الشيفت'} <b>${Math.max(0,Math.floor(dur/60))} س ${Math.max(0,dur%60)} د</b>${open ? ' — لسه ماسجّلتش انصراف' : ''} ·
         أوفرتايم مطلوب <b style="color:var(--gold);">${mins} دقيقة</b>
       </div>
-      ${susp ? '<div style="font-size:12px; color:#ff9a9d; font-weight:800; margin-top:5px;">🚨 شكله نسيان انصراف مش شغل فعلي — راجعه كويس</div>' : ''}
+      ${s.autoClosedAt1 ? '<div style="font-size:12px; color:#fbbf24; font-weight:800; margin-top:5px;">🕐 اتقفل تلقائيًا الساعة 1:00 ص للحماية — حدّد وقت المشي الحقيقي قبل القبض</div>' : (susp ? '<div style="font-size:12px; color:#ff9a9d; font-weight:800; margin-top:5px;">🚨 محتاج مراجعة وقت الانصراف قبل القبض</div>' : '')}
       <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:9px;">
         ${(!s.clockOutTs || susp) ? `<button data-ot-time="${s.id}" style="flex:1 1 100%; padding:9px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--gold); font-family:'Cairo'; font-weight:800; cursor:pointer;">🕐 حدّد ساعة المشي واقفل الشيفت</button>` : ''}
         <button data-ot-full="${s.id}" style="flex:1; min-width:96px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--gold-dim); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">✅ اعتمد كامل</button>
@@ -8165,7 +8245,9 @@ function renderOvertimeApprovals(){
 }
 window.renderOvertimeApprovals = renderOvertimeApprovals;
 
+const _otDecisionBusy = new Set();
 async function decideOvertime(shiftId, kind){
+  if(_otDecisionBusy.has(shiftId)) return;
   const s = (window.allShifts||[]).find(x=> x.id === shiftId);
   if(!s) return;
   const asked = Number(s.overtimeMinutes)||0;
@@ -8174,20 +8256,29 @@ async function decideOvertime(shiftId, kind){
   else if(kind === 'part'){
     const v = prompt('اعتمد كام دقيقة أوفرتايم؟ (المطلوب ' + asked + ' دقيقة)', String(Math.min(asked, 60)));
     if(v === null) return;
-    approved = Math.max(0, Math.min(asked, Math.round(Number(v)||0)));   // 🧢 مينفعش يزيد عن المسجّل
+    approved = Math.max(0, Math.min(asked, Math.round(Number(v)||0)));
   }
   const emp = (window.employees||[]).find(e=> e.id === s.employeeId);
   const nice = approved > 0 ? (approved + ' دقيقة') : 'مفيش (مش معتمد)';
   if(!confirm('أوفرتايم ' + ((emp && emp.name) || s.employeeName || '') + '\n\nالمعتمد: ' + nice + '\n\nده اللي هيتدفع في المرتب. تكمّل؟')) return;
+  _otDecisionBusy.add(shiftId);
+  const host=document.getElementById('overtimeApprovals'); if(host) host.style.opacity='.65';
   try{
-    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_shifts', shiftId), {
+    const save = window.fbUpdateDoc(window.fbDoc(window.db,'sales_shifts', shiftId), {
       overtimeApprovedMin: approved,
       overtimeDecision: approved > 0 ? 'approved' : 'rejected',
+      overtimeAutoApproved: false,
       overtimeDecidedAt: Date.now(),
       overtimeDecidedBy: (typeof adminRole !== 'undefined' ? adminRole : '') || ''
     });
-    renderOvertimeApprovals();
-  }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
+    const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('__SAVE_TIMEOUT__')),12000));
+    await Promise.race([save, timeout]);
+  }catch(e){
+    if(e && e.message==='__SAVE_TIMEOUT__') alert('الاتصال بطيء والاعتماد لسه ما اتأكدش. تقدر تعيد المحاولة؛ نفس الشيفت مش هيتكرر في المرتب.');
+    else alert('تعذر الحفظ: ' + (e && e.message ? e.message : e));
+  }finally{
+    _otDecisionBusy.delete(shiftId); if(host) host.style.opacity=''; renderOvertimeApprovals();
+  }
 }
 window.decideOvertime = decideOvertime;
 
@@ -8410,11 +8501,14 @@ async function ownerCloseShift(shiftId){
       // 🕐 هو اللي حدد الوقت، فالأوفرتايم معتمد بقراره
       otRequiresApproval: true, overtimeApprovedMin: overtimeMinutes,
       overtimeDecision: overtimeMinutes > 0 ? 'approved' : 'none',
+      overtimeAutoApproved: false,
       // ⛔ مفيش خصم انصراف بدري — الوقت اتحدد يدوي مش من الجهاز
       earlyMin: 0, earlyHours: 0,
-      forgotClockOut: false, closedByOwner: true, closedAt: Date.now()
+      forgotClockOut: false, autoClosedAt1: false, needsClockOutReview: false,
+      closedByOwner: true, closedAt: Date.now()
     });
     renderOvertimeApprovals();
+    try{ renderSalaryPanel(); }catch(_e){}
   }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
 }
 window.ownerCloseShift = ownerCloseShift;
