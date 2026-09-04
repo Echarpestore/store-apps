@@ -7550,9 +7550,28 @@ function closeAttPhoto(){
 $('#attPhotoCancel')?.addEventListener('click', closeAttPhoto);
 
 // ==================== SALARY ADVANCES ====================
+// v505 — السلفة تتعرض في واجهة Sales حسب *يوم الشغل* (6ص→6ص)، مش منتصف الليل.
+// مهم: ده تغيير عرض/تجميع فقط. ما بنغيرش ts/date/cycleKey ولا حساب المرتب ولا بيانات قديمة.
+// POS أصلًا بيحسب التقفيل من bizDayStartMs()، فبنخلي واجهة Sales متوافقة مع نفس الحد.
+const ADV_BUSINESS_DAY_CUT = 6;
+function advanceBusinessDayKey(ts, fallbackDate){
+  const n = Number(ts);
+  if(!Number.isFinite(n) || n <= 0) return String(fallbackDate || '');
+  const p = caiParts(n);
+  const d = new Date(Date.UTC(p.y, p.m - 1, p.d));
+  if(p.hh < ADV_BUSINESS_DAY_CUT) d.setUTCDate(d.getUTCDate() - 1);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth()+1).padStart(2,'0') + '-' + String(d.getUTCDate()).padStart(2,'0');
+}
+function advanceBusinessDayLabel(key){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key||''));
+  if(!m) return String(key||'—');
+  const ts = caiStamp(+m[1], +m[2], +m[3], 12, 0, 0, 0);
+  return new Intl.DateTimeFormat('ar-EG', { timeZone: CAI_TZ, day:'2-digit', month:'2-digit', year:'numeric' }).format(new Date(ts));
+}
 function todayAdvancesTotal(){
-  const today = todayStr();
-  return advances.filter(a=> a.date === today).reduce((sum,a)=> sum + a.amount, 0);
+  const businessToday = advanceBusinessDayKey(Date.now());
+  return advances.filter(a=> advanceBusinessDayKey(a.ts, a.date) === businessToday)
+    .reduce((sum,a)=> sum + (Number(a.amount)||0), 0);
 }
 function renderTodayAdvancesSummary(){
   const tag = $('#todayAdvancesTag');
@@ -7788,7 +7807,8 @@ function renderAdvancesLog(){
 
   const byDay = new Map();
   sorted.forEach(a=>{
-    const key = new Date(a.ts).toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric'});
+    // v505: 01:00 مثلًا تتجمع تحت يوم الشغل السابق، لكن ساعة الحركة نفسها تفضل 01:00.
+    const key = advanceBusinessDayKey(a.ts, a.date);
     if(!byDay.has(key)) byDay.set(key, []);
     byDay.get(key).push(a);
   });
@@ -7796,6 +7816,7 @@ function renderAdvancesLog(){
 
   wrap.innerHTML = dayKeys.map(dayKey=>{
     const items = byDay.get(dayKey);
+    const dayLabel = advanceBusinessDayLabel(dayKey);
     const dayTotal = items.reduce((sum,a)=> sum + a.amount, 0);
     const rows = items.map(a=>{
       const time = new Date(a.ts).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
@@ -7804,7 +7825,7 @@ function renderAdvancesLog(){
     return `
     <div class="dayLogGroup">
       <div class="dayLogHead" data-group="${dayKey}">
-        <span>${dayKey}</span>
+        <span>${dayLabel}</span>
         <span style="color:var(--gold);">${dayTotal} ج.م (${items.length}) <span class="chev">▾</span></span>
       </div>
       <div class="dayLogBody">
