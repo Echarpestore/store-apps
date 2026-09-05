@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v510
+/* ECHARPE Office CCTV v511
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -133,28 +133,31 @@
     var x=b();if(!x.playback)return '';
     var t=Math.max(1,Number(atMs)||Date.now()),d=Math.min(60,Math.max(5,Number(durationMin)||30));
     var cid=String(cameraId||x.playbackCamera||'1');if(!x.cameras.some(function(c){return String(c.id)===cid;}))cid=String(x.playbackCamera||x.cameras[0].id||'1');
-    var u=x.gateway+'/echarpe-playback/view?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(t)+'&durationMin='+encodeURIComponent(d);
+    var u=x.gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(t)+'&durationSec='+encodeURIComponent(d*60)+'&quality=480&mode=fast';
     if(offsetMs!==undefined&&offsetMs!==null)u+='&offsetMs='+encodeURIComponent(Number(offsetMs)||0);
     return u;
   }
   function closePlaybackModal(){
     var ov=document.getElementById('ofCctvPlaybackOv');if(!ov)return;
-    var fr=ov.querySelector('iframe');if(fr)fr.src='about:blank';
+    var fr=ov.querySelector('iframe');if(fr)fr.src='about:blank';var v=ov.querySelector('video');if(v){try{v.pause();v.removeAttribute('src');v.load();}catch(e){}}
     ov.remove();
   }
   function openPlayback(atMs,durationMin,cameraId,offsetMs){
     var u=playbackUrl(atMs,durationMin,cameraId,offsetMs);if(!u){alert('مراجعة تسجيلات الـNVR لسه مش متاحة للفرع ده.');return;}
     closePlaybackModal();
     var ov=document.createElement('div');ov.id='ofCctvPlaybackOv';ov.className='of-cctv-playback-ov';
-    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><b>🎞️ مراجعة تسجيل الـNVR</b><div><a class="of-cctv-playback-external" href="'+esc(u)+'" target="_blank" rel="noopener">فتح منفصل ↗</a><button type="button" class="of-cctv-playback-close" aria-label="إغلاق">✕</button></div></div><iframe title="Glow NVR Playback" src="'+esc(u)+'" allow="autoplay; fullscreen" allowfullscreen></iframe></div>';
+    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><b>🎞️ مراجعة التسجيل</b><div><a class="of-cctv-playback-external" href="'+esc(u)+'" target="_blank" rel="noopener">فتح منفصل ↗</a><button type="button" class="of-cctv-playback-close" aria-label="إغلاق">✕</button></div></div><video controls autoplay muted playsinline src="'+esc(u)+'"></video><div style="display:flex;gap:8px;align-items:center;justify-content:center;padding:9px;background:#111827;color:#fff"><button type="button" data-pb-prev class="of-cctv-playback-close">⏮ السابق</button><b data-pb-clock></b><button type="button" data-pb-next class="of-cctv-playback-close">التالي ⏭</button></div></div>';
     document.body.appendChild(ov);
+    var start=Number(atMs)||Date.now(),step=(Number(durationMin)||30)*60000,video=ov.querySelector('video'),clock=ov.querySelector('[data-pb-clock]'),ext=ov.querySelector('.of-cctv-playback-external');
+    function loadAt(next){start=Math.max(1,next);var nextUrl=playbackUrl(start,durationMin,cameraId,offsetMs);clock.textContent=new Date(start).toLocaleString('ar-EG');ext.href=nextUrl;video.src=nextUrl;video.load();video.play().catch(function(){});}
+    ov.querySelector('[data-pb-prev]').onclick=function(){loadAt(start-step);};ov.querySelector('[data-pb-next]').onclick=function(){loadAt(start+step);};loadAt(start);
     ov.querySelector('.of-cctv-playback-close').onclick=closePlaybackModal;
     ov.onclick=function(e){if(e.target===ov)closePlaybackModal();};
   }
   function syncPlaybackPanel(){
     var panel=document.getElementById('ofCctvNvrReview');if(!panel)return;
     panel.style.display=b().playback?'block':'none';
-    var hint=document.getElementById('ofCctvNvrHint');if(hint)hint.textContent=b().playback?'تسجيلات Hikvision الأصلية من هارد الـNVR — اختار الكاميرا واليوم والوقت.':'';
+    var hint=document.getElementById('ofCctvNvrHint');if(hint)hint.textContent=b().playback?(b().id==='madinaty'?'تسجيل كمبيوتر الفرع — اختار اليوم والوقت، والتوقيت مستقل عن ساعة الـDVR.':'تسجيلات Hikvision الأصلية من هارد الـNVR — اختار الكاميرا واليوم والوقت.'):'';
     var cs=document.getElementById('ofCctvNvrCamera');if(cs){var old=String(cs.value||b().playbackCamera||'1');cs.innerHTML=b().cameras.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+' · '+esc(c.label)+'</option>';}).join('');if(b().cameras.some(function(c){return String(c.id)===old;}))cs.value=old;else cs.value=String(b().playbackCamera||b().cameras[0].id||'1');}
   }
   function openPlaybackFromControls(){
@@ -238,6 +241,34 @@
     return {start:start.getTime(),end:end.getTime()};
   }
   function saleMs(x){return Number(x.createdAtMs||x.atMs||(x.createdAt&&x.createdAt.toMillis&&x.createdAt.toMillis())||0);}
+  var dayReviewBounds=null,dayReviewRows=[];
+  async function openDayBasketPlayback(){
+    if(!dayReviewBounds||typeof db==='undefined')return;
+    var x=b(),gateway=String(x.gateway||'').replace(/\/$/,''),aliases=(x.liveAliases||[]).map(function(v){return String(v).toLowerCase();});
+    var range=null,timelineDocs=[];
+    try{
+      var pair=await Promise.all([
+        fetch(gateway+'/echarpe-playback/range?camera='+encodeURIComponent(x.playbackCamera||'4')+'&_='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('range_http_'+r.status);return r.json();}),
+        db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',dayReviewBounds.start).where('endedAtMs','<',dayReviewBounds.end).get()
+      ]);
+      range=pair[0];pair[1].forEach(function(s){var d=s.data()||{},br=String(d.branch||'').toLowerCase();if(aliases.some(function(a){return br.indexOf(a)>=0;}))timelineDocs.push(d);});
+    }catch(e){alert('تعذر تجهيز مراجعة اليوم: '+(e&&e.message||e));return;}
+    var coverageStart=Math.max(dayReviewBounds.start,Number(range.startMs)||0),coverageEnd=Math.min(dayReviewBounds.end,Number(range.endMs)||0);
+    if(!coverageStart||coverageEnd-coverageStart<30000){alert('مفيش تسجيل كفاية محفوظ لليوم المختار.');return;}
+    var events=[];timelineDocs.forEach(function(t){var catalog=t.catalog||{},code=t.invoiceCode||'';(t.events||[]).forEach(function(e){events.push(Object.assign({},e,{catalog:catalog,invoiceCode:code}));});events.push({atMs:Number(t.endedAtMs||0)+1,kind:'cart_cleared',cart:[],total:0,catalog:{},invoiceCode:''});});events.sort(function(a,c){return Number(a.atMs)-Number(c.atMs);});
+    var firstEvent=events.find(function(e){return Number(e.atMs)>=coverageStart;}),chunkMs=15*60000,chunkStart=firstEvent?Math.max(coverageStart,Number(firstEvent.atMs)-5*60000):coverageStart;
+    var ov=document.createElement('div');ov.id='ofCctvPlaybackOv';ov.className='of-cctv-playback-ov';
+    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><div><b>🎬 اليوم الكامل + السلة</b><small class="of-day511-muted" data-day-coverage></small></div><button type="button" class="of-cctv-playback-close">✕ إغلاق</button></div><div class="of-day511-body"><div class="of-day511-stage"><video controls autoplay muted playsinline></video><div class="of-day511-nav"><button type="button" data-day-prev>⏮ 15 دقيقة</button><input type="range" data-day-slider step="1"><button type="button" data-day-next>15 دقيقة ⏭</button></div></div><aside class="of-day511-cart"><div class="of-day511-carthead"><b>🛒 السلة في هذه اللحظة</b><div class="of-day511-muted" data-day-clock>—</div><div class="of-day511-event" data-day-event>بين الفواتير</div><div class="of-day511-muted" data-day-status>جاري تجهيز التسجيل…</div></div><div class="of-day511-rows" data-day-rows></div><div class="of-day511-total"><span>الإجمالي</span><strong data-day-total>0.00 ج.م</strong></div></aside></div></div>';
+    closePlaybackModal();document.body.appendChild(ov);
+    var video=ov.querySelector('video'),slider=ov.querySelector('[data-day-slider]'),clock=ov.querySelector('[data-day-clock]'),eventEl=ov.querySelector('[data-day-event]'),rowsEl=ov.querySelector('[data-day-rows]'),totalEl=ov.querySelector('[data-day-total]'),status=ov.querySelector('[data-day-status]');
+    ov.querySelector('[data-day-coverage]').textContent='المتاح '+new Date(coverageStart).toLocaleTimeString('ar-EG')+' — '+new Date(coverageEnd).toLocaleTimeString('ar-EG')+' · مقاطع 15 دقيقة متصلة تلقائيًا';
+    slider.min=String(Math.floor((coverageStart-dayReviewBounds.start)/60000));slider.max=String(Math.max(Number(slider.min),Math.floor((coverageEnd-dayReviewBounds.start-30000)/60000)));
+    function kindName(k){return ({item_added:'إضافة صنف',item_removed:'حذف صنف',qty_increased:'زيادة كمية',qty_decreased:'تقليل كمية',cart_edited:'تعديل السلة',payment:'بدء الدفع',saving:'بدء الحفظ',sale_saved:'حفظ الفاتورة',cart_cleared:'بين الفواتير'})[k]||'حركة سلة';}
+    function renderAt(){var now=chunkStart+(Number(video.currentTime)||0)*1000,hit=null;for(var i=0;i<events.length&&Number(events[i].atMs)<=now;i++)hit=events[i];clock.textContent=new Date(now).toLocaleString('ar-EG');if(!hit||hit.kind==='cart_cleared'){eventEl.textContent='بين الفواتير';rowsEl.innerHTML='<div class="of-day511-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent='0.00 ج.م';return;}eventEl.textContent=kindName(hit.kind)+(hit.invoiceCode?' · فاتورة '+esc(hit.invoiceCode):'');var rows=Array.isArray(hit.cart)?hit.cart:[],catalog=hit.catalog||{};rowsEl.innerHTML=rows.map(function(r){var item=catalog[r[0]]||{},q=Number(r[1])||0,p=Number(r[2])||0,ret=Number(r[3])===1;return '<div class="of-day511-row"><span><b>'+esc(item.name||item.id||'صنف')+(ret?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(item.barcode?' · '+esc(item.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-day511-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent=Number(hit.total||0).toFixed(2)+' ج.م';}
+    function loadChunk(next){var latestStart=Math.max(coverageStart,coverageEnd-30000);chunkStart=Math.max(coverageStart,Math.min(Number(next)||coverageStart,latestStart));var duration=Math.max(30,Math.min(900,Math.floor((coverageEnd-chunkStart)/1000))),cid=String(x.playbackCamera||'4');slider.value=String(Math.floor((chunkStart-dayReviewBounds.start)/60000));status.textContent='جاري تجهيز '+new Date(chunkStart).toLocaleTimeString('ar-EG')+'…';status.style.display='block';video.src=gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(chunkStart)+'&durationSec='+duration+'&quality=480&mode=fast&_='+Date.now();video.load();video.play().catch(function(){});renderAt();}
+    video.addEventListener('playing',function(){status.style.display='none';});video.addEventListener('timeupdate',renderAt);video.addEventListener('seeking',renderAt);video.addEventListener('error',function(){status.style.display='block';status.textContent='تعذر تحميل هذا الجزء — جرّب السابق أو التالي.';});video.addEventListener('ended',function(){if(chunkStart+chunkMs<coverageEnd-30000)loadChunk(chunkStart+chunkMs);});
+    slider.onchange=function(){loadChunk(dayReviewBounds.start+Number(slider.value)*60000);};ov.querySelector('[data-day-prev]').onclick=function(){loadChunk(chunkStart-chunkMs);};ov.querySelector('[data-day-next]').onclick=function(){loadChunk(chunkStart+chunkMs);};ov.querySelector('.of-cctv-playback-close').onclick=closePlaybackModal;ov.onclick=function(e){if(e.target===ov)closePlaybackModal();};loadChunk(chunkStart);
+  }
   function renderDayRows(rows){
     var box=document.getElementById('ofCctvDayRows'); if(!box)return;
     rows.sort(function(a,c){return saleMs(c)-saleMs(a);});
@@ -252,7 +283,7 @@
   }
   async function loadDayReview(){
     var inp=document.getElementById('ofCctvDayDate'), btn=document.getElementById('ofCctvDayLoad'), box=document.getElementById('ofCctvDayRows');
-    if(!inp||!box)return; var r=dayBounds(inp.value); if(!r)return;
+    if(!inp||!box)return; var r=dayBounds(inp.value); if(!r)return;dayReviewBounds=r;dayReviewRows=[];var playBtn=document.getElementById('ofCctvDayPlay');if(playBtn)playBtn.disabled=true;
     if(btn){btn.disabled=true;btn.textContent='جاري التحميل…';} box.innerHTML='<div class="of-cctv-day-empty">جاري تحميل اليوم…</div>';
     try{
       var cached=(window.ofCctvGetCachedSales&&window.ofCctvGetCachedSales())||[];
@@ -262,7 +293,7 @@
         var q=db.collection('pos_test_sales').where('createdAtMs','>=',r.start).where('createdAtMs','<',r.end);
         var snap=await q.get(); rows=[]; snap.forEach(function(d){var x=Object.assign({id:d.id},d.data()||{}),br=String(x.branch||'').toLowerCase();if(aliases.some(function(a){return br.indexOf(a)>=0;}))rows.push(x);});
       }
-      renderDayRows(rows);
+      dayReviewRows=rows.slice();renderDayRows(rows);if(playBtn)playBtn.disabled=false;
     }catch(e){box.innerHTML='<div class="of-cctv-day-empty">تعذر تحميل مراجعة اليوم: '+esc(e&&e.message||e)+'</div>';}
     finally{if(btn){btn.disabled=false;btn.textContent='تحميل اليوم';}}
   }
@@ -270,6 +301,7 @@
     load();
     var di=document.getElementById('ofCctvDayDate'); if(di&&!di.value){var nd=new Date();di.value=nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');}
     var dl=document.getElementById('ofCctvDayLoad'); if(dl)dl.onclick=loadDayReview;
+    var dp=document.getElementById('ofCctvDayPlay');if(dp)dp.onclick=openDayBasketPlayback;
     var ndt=new Date(),nvd=document.getElementById('ofCctvNvrDate'),nvt=document.getElementById('ofCctvNvrTime'),nvb=document.getElementById('ofCctvNvrOpen');
     if(nvd&&!nvd.value)nvd.value=ndt.getFullYear()+'-'+String(ndt.getMonth()+1).padStart(2,'0')+'-'+String(ndt.getDate()).padStart(2,'0');
     if(nvt&&!nvt.value)nvt.value=String(ndt.getHours()).padStart(2,'0')+':'+String(Math.floor(ndt.getMinutes()/5)*5).padStart(2,'0');

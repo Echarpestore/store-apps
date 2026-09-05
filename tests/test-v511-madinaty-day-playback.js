@@ -1,0 +1,24 @@
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert');
+const root=path.resolve(__dirname,'..'),rd=p=>fs.readFileSync(path.join(root,p),'utf8');
+const office=rd('Office/cctv.js'),html=rd('Office/index.html'),sw=rd('Office/sw.js');
+const agent=rd('branch-tools/madinaty/cctv-recorder/ECHARPE-MADINATY-RECORDER.ps1');
+const updater=rd('branch-tools/madinaty/cctv-recorder/UPDATE-MADINATY-v511.ps1');
+
+assert(!office.includes('/echarpe-playback/view?camera='),'Office normal playback no longer embeds the missing agent page');
+assert(office.includes('/echarpe-playback/video?camera=')&&office.includes('&mode=fast'),'normal long playback uses direct fast MP4');
+assert(office.includes('[data-pb-prev]')&&office.includes('[data-pb-next]'),'normal playback navigates backward and forward without closing');
+assert(html.includes('id="ofCctvDayPlay"')&&html.includes('▶ اليوم + السلة'),'full-day synchronized review action is visible');
+assert(office.includes('function openDayBasketPlayback('),'full-day player exists');
+assert(office.includes("collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',dayReviewBounds.start).where('endedAtMs','<',dayReviewBounds.end)"),'day timelines load only on demand and only for selected day');
+assert(office.includes("kind:'cart_cleared'"),'basket clears between invoices instead of leaking previous sale');
+assert(office.includes("video.addEventListener('timeupdate',renderAt)")&&office.includes("video.addEventListener('seeking',renderAt)"),'basket follows playback and manual seeking');
+assert(office.includes("video.addEventListener('ended'")&&office.includes('loadChunk(chunkStart+chunkMs)'),'15-minute chunks continue through the day automatically');
+assert(office.includes('/echarpe-playback/range?camera='),'Office clamps review to real PC recording coverage');
+assert(agent.includes("$path -eq '/echarpe-playback/view'")&&agent.includes("$path -eq '/echarpe-playback/range'"),'agent supports old-cache view and day coverage endpoints');
+assert(agent.includes("if ($DurationSec -gt 3600)"),'agent supports hour review while day mode uses lighter chunks');
+assert(agent.includes("if($Fast)")&&agent.includes('-c:v copy'),'long review avoids expensive full re-encode');
+assert(agent.includes("else{")&&agent.includes('libx264'),'exact invoice clips retain accurate re-encode path');
+assert(updater.includes("$h.version -lt 511")&&updater.includes('MADINATY_V511=OK'),'field updater validates running v511 agent');
+assert(html.includes('cctv.js?v=511')&&sw.includes('echarpe-office-v511'),'Office cache is safely busted');
+console.log('Madinaty full-day playback + synchronized basket v511: PASS');

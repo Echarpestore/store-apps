@@ -359,7 +359,8 @@
 .of-cctv-playback-modal{width:min(1180px,100%);height:min(92vh,850px);background:#070b12;border:1px solid #334155;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.55)}
 .of-cctv-playback-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#111827;color:#fff;border-bottom:1px solid #263449}
 .of-cctv-playback-head>div{display:flex;align-items:center;gap:7px}.of-cctv-playback-external,.of-cctv-playback-close{border:1px solid #334155;background:#172033;color:#fff;border-radius:9px;padding:8px 10px;font:inherit;font-weight:800;text-decoration:none;cursor:pointer}
-.of-cctv-playback-modal iframe{display:block;flex:1;width:100%;min-height:0;border:0;background:#000}
+.of-cctv-playback-modal iframe,.of-cctv-playback-modal>video{display:block;flex:1;width:100%;min-height:0;border:0;background:#000;object-fit:contain}
+.of-day511-body{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(270px,.75fr);direction:ltr;flex:1;min-height:0}.of-day511-stage{display:flex;flex-direction:column;min-width:0;background:#000}.of-day511-stage video{width:100%;flex:1;min-height:0;object-fit:contain}.of-day511-nav{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:8px;background:#111827;color:#fff;direction:rtl}.of-day511-nav input{width:100%}.of-day511-nav button{border:1px solid #334155;background:#172033;color:#fff;border-radius:8px;padding:8px;font-weight:800}.of-day511-cart{direction:rtl;background:#0f172a;color:#fff;display:flex;flex-direction:column;min-height:0;border-right:1px solid #334155}.of-day511-carthead{padding:10px;border-bottom:1px solid #334155}.of-day511-rows{overflow:auto;flex:1;padding:8px}.of-day511-row{display:flex;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid #263449;font-size:12px}.of-day511-row small{display:block;color:#94a3b8}.of-day511-total{display:flex;justify-content:space-between;padding:12px;border-top:1px solid #334155;font-weight:900}.of-day511-muted{color:#94a3b8;font-size:11px}.of-day511-event{color:#f5cf68;font-size:11px;margin-top:4px}
 @media(max-width:700px){
   #ofCctvNvrReview{overflow:hidden}
   #ofCctvNvrReview .of-cctv-day-head{display:block}
@@ -374,6 +375,7 @@
   .of-cctv-playback-ov{padding:0}
   .of-cctv-playback-modal{width:100%;height:100dvh;max-height:none;border:0;border-radius:0}
   .of-cctv-playback-head{padding:8px 10px}.of-cctv-playback-head b{font-size:13px}.of-cctv-playback-external{font-size:11px;padding:7px 8px}.of-cctv-playback-close{padding:7px 10px}
+  .of-day511-body{grid-template-columns:1fr;grid-template-rows:minmax(43%,1fr) minmax(35%,.85fr)}.of-day511-cart{border-right:0;border-top:1px solid #334155}.of-day511-nav{grid-template-columns:1fr 1fr}.of-day511-nav input{grid-column:1/-1}
 }
 </style>
 
@@ -756,7 +758,7 @@
         <div class="of-cctv-day-head"><div><b>🎞️ مراجعة تسجيلات الـNVR</b><small id="ofCctvNvrHint">اختار الكاميرا واليوم والوقت من التسجيل الأصلي</small></div><div class="of-cctv-day-controls of-cctv-nvr-controls"><select id="ofCctvNvrCamera" aria-label="اختيار كاميرا التسجيل"></select><input type="date" id="ofCctvNvrDate"><input type="time" id="ofCctvNvrTime" step="300"><select id="ofCctvNvrDuration"><option value="15">15 دقيقة</option><option value="30" selected>30 دقيقة</option><option value="60">60 دقيقة</option></select><button type="button" id="ofCctvNvrOpen">▶ فتح التسجيل</button></div></div>
       </section>
       <section class="of-cctv-day-review">
-        <div class="of-cctv-day-head"><div><b>🕘 مراجعة اليوم</b><small>Timeline للفواتير — اللقطات + التسجيل الأصلي حول وقت الفاتورة</small></div><div class="of-cctv-day-controls"><input type="date" id="ofCctvDayDate"><button type="button" id="ofCctvDayLoad">تحميل اليوم</button></div></div>
+        <div class="of-cctv-day-head"><div><b>🕘 مراجعة اليوم</b><small>Timeline للفواتير — الفيديو والسلة على نفس الثانية</small></div><div class="of-cctv-day-controls"><input type="date" id="ofCctvDayDate"><button type="button" id="ofCctvDayLoad">تحميل اليوم</button><button type="button" id="ofCctvDayPlay" disabled>▶ اليوم + السلة</button></div></div>
         <div id="ofCctvDayRows"><div class="of-cctv-day-empty">اختار التاريخ واضغط تحميل اليوم</div></div>
       </section>
       <div class="of-cctv-footnote">السلة Live ثابتة بالأعلى، وسطر آخر فاتورة يعرض رقمها وطريقة دفعها فقط. الكاميرات لا تبدأ تلقائيًا؛ كل كاميرا لها زر تشغيل مستقل، والكاميرات المشغلة فقط هي التي تسحب Live.</div>
@@ -868,7 +870,7 @@
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
 <script src="../cctv-config.js?v=510"></script>
-<script src="cctv.js?v=510"></script>
+<script src="cctv.js?v=511"></script>
 <script src="office.js?v=476"></script>
 </body>
 </html>
