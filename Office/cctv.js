@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v525
+/* ECHARPE Office CCTV v526
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -39,15 +39,25 @@
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
   function cam(id){var x=b();return x.cameras.find(function(c){return c.id===String(id);})||x.cameras[0];}
-  function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(c.stream)+'&mode=mse&background=false';}
+  function streamUrl(c){return b().gateway+'/api/stream.mp4?src='+encodeURIComponent(c.stream);}
   function frameUrl(c){return b().gateway+'/api/frame.jpeg?src='+encodeURIComponent(c.stream)+'&_=';}
   function profileFor(branch){
     var n=String(branch||'').trim().toLowerCase();
     return BRANCHES.find(function(p){return p.id===n||(p.liveAliases||[]).some(function(a){var q=String(a||'').toLowerCase();return q&&(n===q||n.indexOf(q)>=0);});})||null;
   }
+  function fetchJsonp(url){
+    return new Promise(function(resolve,reject){
+      var cb='__echarpeCctvJsonp'+Date.now()+Math.random().toString(36).slice(2),script=document.createElement('script'),timer=0;
+      function done(err,value){if(timer)clearTimeout(timer);try{delete window[cb];}catch(e){window[cb]=undefined;}if(script.parentNode)script.parentNode.removeChild(script);if(err)reject(err);else resolve(value);}
+      window[cb]=function(value){done(null,value);};script.onerror=function(){done(new Error('cctv_jsonp_failed'));};
+      timer=setTimeout(function(){done(new Error('cctv_jsonp_timeout'));},10000);
+      script.src=url+(url.indexOf('?')>=0?'&':'?')+'callback='+encodeURIComponent(cb);document.head.appendChild(script);
+    });
+  }
   function fetchJsonRetry(url,branchId,tries){
     var left=Math.max(1,Number(tries)||1),opt={cache:'no-store',credentials:branchId==='glow'?'include':'omit'};
-    function run(){return fetch(url,opt).then(function(r){if(!r.ok)throw new Error('cctv_http_'+r.status);return r.json();}).catch(function(e){if(--left<=0)throw e;return new Promise(function(resolve){setTimeout(resolve,1200);}).then(run);});}
+    function request(){return fetch(url,opt).then(function(r){if(!r.ok)throw new Error('cctv_http_'+r.status);return r.json();}).catch(function(e){return branchId==='madinaty'?fetchJsonp(url):Promise.reject(e);});}
+    function run(){return request().catch(function(e){if(--left<=0)throw e;return new Promise(function(resolve){setTimeout(resolve,1200);}).then(run);});}
     return run();
   }
   function cartRows(rows){
@@ -150,9 +160,9 @@
   function cameraCard(c,i){
     var on=String(state.slots[i]||'off')===String(c.id);
     var toggleLabel=on?'إيقاف':'تشغيل';
-    /* v524: restore the original go2rtc MSE live player. Snapshot polling
-       caused visible zoom/cropping and refreshed too slowly on mobile. */
-    var liveMedia='<iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>';
+    /* v526: direct fragmented MP4 avoids both the failing MSE iframe and the
+       slow, cropped JPEG polling fallback. */
+    var liveMedia='<video title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" autoplay muted playsinline preload="none"></video>';
     return '<article class="of-cctv-panel of-cctv-camera-panel '+(on?'is-live':'is-off')+'" data-camera="'+esc(c.id)+'" data-panel="'+i+'">'+
       '<div class="of-cctv-panel-head"><div class="of-cctv-camera-name"><b>'+esc(c.name)+'</b><small>'+esc(c.label)+'</small></div><div class="of-cctv-camera-actions"><button type="button" class="of-cctv-cam-toggle '+(on?'on':'off')+'" data-cctv-toggle="'+i+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+toggleLabel+' '+esc(c.name)+'"><span class="of-cctv-switch-track"><span class="of-cctv-switch-knob"></span></span><span class="of-cctv-switch-text">'+toggleLabel+'</span></button><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(on?'':' disabled')+'>⛶</button></div></div>'+
       (on?'<div class="of-cctv-panel-body of-cctv-video">'+liveMedia+'<div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div class="of-cctv-off-camera"><span>📹</span><b>'+esc(c.name)+'</b><small>'+esc(c.label)+' · متوقفة</small><em>اضغط تشغيل للمشاهدة</em></div></div>')+'</article>';
