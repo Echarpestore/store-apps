@@ -1,4 +1,4 @@
-/* ECHARPE POS CCTV evidence v506
+/* ECHARPE POS CCTV evidence v510
    Branch behavior comes from the shared credential-free cctv-config.js profile.
    Local-agent branches keep stills on the branch PC and read NVR video on demand.
    Legacy branches keep the existing Firestore JPEG path until their agent is installed.
@@ -17,7 +17,7 @@ function branchCfg(branch){
   var s=String(branch || (typeof currentBranch!=='undefined'?currentBranch:'') || '').toLowerCase();
   if(s.indexOf('glow')>=0) return {id:'glow',camera:'CAM1',cameraId:'1',stream:'glow_cam1_h264',remote:'https://cctv-glow.echarpe.store',localAgent:'http://127.0.0.1:1985',localOnly:true,playback:true};
   if(s.indexOf('الرحاب')>=0 || s.indexOf('rehab')>=0) return {id:'rehab',camera:'CAM1',cameraId:'1',stream:'rehab_cam1_h264',remote:'https://cctv-rehab.echarpe.store'};
-  if(s.indexOf('مدينتي')>=0 || s.indexOf('madinaty')>=0) return {id:'madinaty',camera:'D04',cameraId:'4',stream:'camera4',remote:'https://cctv-madinaty.echarpe.store'};
+  if(s.indexOf('مدينتي')>=0 || s.indexOf('madinaty')>=0) return {id:'madinaty',camera:'D04',cameraId:'4',stream:'camera4',remote:'https://cctv-madinaty.echarpe.store',localAgent:'http://127.0.0.1:1985',playback:true};
   return null;
 }
 function cfg(meta){return branchCfg(meta&&meta.branch);}
@@ -84,7 +84,12 @@ async function writeInvoiceDoc(meta,shots,localOnly){
   Object.keys(shots||{}).forEach(function(k){if(STAGES[k]&&shots[k])doc.shots[k]=localOnly?publicLocalShot(shots[k]):publicLegacyShot(shots[k]);});
   if(preferred){doc.capturedAtMs=Number(preferred.capturedAtMs)||Date.now();doc.stage=preferred.stage;}
   if(localOnly){doc.localSnapshots=true;doc.video='nvr_on_demand';doc.videoAtMs=Number(preferred&&preferred.capturedAtMs)||Number(meta.atMs)||Date.now();doc.videoNvrAtMs=Number(preferred&&preferred.nvrAtMs)||0;doc.nvrOffsetMs=Number(preferred&&preferred.nvrOffsetMs)||0;doc.clockSource=String(preferred&&preferred.clockSource||'');doc.beforeSec=30;doc.afterSec=30;}
-  else if(preferred){doc.width=preferred.width;doc.height=preferred.height;doc.jpegData=preferred.jpegData;}
+  else {
+    if(preferred){doc.width=preferred.width;doc.height=preferred.height;doc.jpegData=preferred.jpegData;}
+    // Madinaty records camera4 continuously on the POS computer. Date.now() and
+    // the segment index therefore share the same clock; DVR timezone is irrelevant.
+    if(c.playback){doc.video='pc_ring_recording';doc.videoAtMs=Number(meta.atMs)||Number(preferred&&preferred.capturedAtMs)||Date.now();doc.clockSource='pos_pc';doc.beforeSec=30;doc.afterSec=30;}
+  }
   await db.collection(SHOT_COL).doc(String(meta.invoiceCode)).set(doc,{merge:true});return true;
 }
 function delay(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});}
