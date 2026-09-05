@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v511
+/* ECHARPE Office CCTV v512
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -129,11 +129,12 @@
       '<div class="of-cctv-panel-head"><div class="of-cctv-camera-name"><b>'+esc(c.name)+'</b><small>'+esc(c.label)+'</small></div><div class="of-cctv-camera-actions"><button type="button" class="of-cctv-cam-toggle '+(on?'on':'off')+'" data-cctv-toggle="'+i+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+toggleLabel+' '+esc(c.name)+'"><span class="of-cctv-switch-track"><span class="of-cctv-switch-knob"></span></span><span class="of-cctv-switch-text">'+toggleLabel+'</span></button><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(on?'':' disabled')+'>⛶</button></div></div>'+
       (on?'<div class="of-cctv-panel-body of-cctv-video"><iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div class="of-cctv-off-camera"><span>📹</span><b>'+esc(c.name)+'</b><small>'+esc(c.label)+' · متوقفة</small><em>اضغط تشغيل للمشاهدة</em></div></div>')+'</article>';
   }
-  function playbackUrl(atMs,durationMin,cameraId,offsetMs){
+  function playbackUrl(atMs,durationMin,cameraId,offsetMs,quality){
     var x=b();if(!x.playback)return '';
     var t=Math.max(1,Number(atMs)||Date.now()),d=Math.min(60,Math.max(5,Number(durationMin)||30));
     var cid=String(cameraId||x.playbackCamera||'1');if(!x.cameras.some(function(c){return String(c.id)===cid;}))cid=String(x.playbackCamera||x.cameras[0].id||'1');
-    var u=x.gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(t)+'&durationSec='+encodeURIComponent(d*60)+'&quality=480&mode=fast';
+    var q=Number(quality)===720?720:480;
+    var u=x.gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(t)+'&durationSec='+encodeURIComponent(d*60)+'&quality='+q+(q===480?'&mode=fast':'');
     if(offsetMs!==undefined&&offsetMs!==null)u+='&offsetMs='+encodeURIComponent(Number(offsetMs)||0);
     return u;
   }
@@ -146,10 +147,11 @@
     var u=playbackUrl(atMs,durationMin,cameraId,offsetMs);if(!u){alert('مراجعة تسجيلات الـNVR لسه مش متاحة للفرع ده.');return;}
     closePlaybackModal();
     var ov=document.createElement('div');ov.id='ofCctvPlaybackOv';ov.className='of-cctv-playback-ov';
-    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><b>🎞️ مراجعة التسجيل</b><div><a class="of-cctv-playback-external" href="'+esc(u)+'" target="_blank" rel="noopener">فتح منفصل ↗</a><button type="button" class="of-cctv-playback-close" aria-label="إغلاق">✕</button></div></div><video controls autoplay muted playsinline src="'+esc(u)+'"></video><div style="display:flex;gap:8px;align-items:center;justify-content:center;padding:9px;background:#111827;color:#fff"><button type="button" data-pb-prev class="of-cctv-playback-close">⏮ السابق</button><b data-pb-clock></b><button type="button" data-pb-next class="of-cctv-playback-close">التالي ⏭</button></div></div>';
+    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><b>🎞️ مراجعة التسجيل</b><div><select data-pb-quality aria-label="جودة التسجيل"><option value="480" selected>480p سريع</option><option value="720">720p</option></select><a class="of-cctv-playback-external" href="'+esc(u)+'" target="_blank" rel="noopener">فتح منفصل ↗</a><button type="button" class="of-cctv-playback-close" aria-label="إغلاق">✕</button></div></div><video controls autoplay muted playsinline src="'+esc(u)+'"></video><div style="display:flex;gap:8px;align-items:center;justify-content:center;padding:9px;background:#111827;color:#fff"><button type="button" data-pb-prev class="of-cctv-playback-close">⏮ السابق</button><b data-pb-clock></b><button type="button" data-pb-next class="of-cctv-playback-close">التالي ⏭</button></div></div>';
     document.body.appendChild(ov);
-    var start=Number(atMs)||Date.now(),step=(Number(durationMin)||30)*60000,video=ov.querySelector('video'),clock=ov.querySelector('[data-pb-clock]'),ext=ov.querySelector('.of-cctv-playback-external');
-    function loadAt(next){start=Math.max(1,next);var nextUrl=playbackUrl(start,durationMin,cameraId,offsetMs);clock.textContent=new Date(start).toLocaleString('ar-EG');ext.href=nextUrl;video.src=nextUrl;video.load();video.play().catch(function(){});}
+    var start=Number(atMs)||Date.now(),step=(Number(durationMin)||30)*60000,video=ov.querySelector('video'),clock=ov.querySelector('[data-pb-clock]'),ext=ov.querySelector('.of-cctv-playback-external'),quality=ov.querySelector('[data-pb-quality]');
+    function loadAt(next,resumeSec){start=Math.max(1,next);var nextUrl=playbackUrl(start,durationMin,cameraId,offsetMs,quality.value);clock.textContent=new Date(start).toLocaleString('ar-EG');ext.href=nextUrl;video.src=nextUrl;video.load();if(resumeSec>0)video.addEventListener('loadedmetadata',function seek(){video.removeEventListener('loadedmetadata',seek);video.currentTime=Math.min(resumeSec,Math.max(0,(video.duration||resumeSec)-.25));video.play().catch(function(){});},{once:true});else video.play().catch(function(){});}
+    quality.onchange=function(){loadAt(start,Number(video.currentTime)||0);};
     ov.querySelector('[data-pb-prev]').onclick=function(){loadAt(start-step);};ov.querySelector('[data-pb-next]').onclick=function(){loadAt(start+step);};loadAt(start);
     ov.querySelector('.of-cctv-playback-close').onclick=closePlaybackModal;
     ov.onclick=function(e){if(e.target===ov)closePlaybackModal();};
@@ -243,6 +245,8 @@
   function saleMs(x){return Number(x.createdAtMs||x.atMs||(x.createdAt&&x.createdAt.toMillis&&x.createdAt.toMillis())||0);}
   var dayReviewBounds=null,dayReviewRows=[];
   async function openDayBasketPlayback(){
+    var dayInput=document.getElementById('ofCctvDayDate'),timeInput=document.getElementById('ofCctvDayTime'),currentBounds=dayBounds(dayInput&&dayInput.value);
+    if(currentBounds)dayReviewBounds=currentBounds;
     if(!dayReviewBounds||typeof db==='undefined')return;
     var x=b(),gateway=String(x.gateway||'').replace(/\/$/,''),aliases=(x.liveAliases||[]).map(function(v){return String(v).toLowerCase();});
     var range=null,timelineDocs=[];
@@ -253,10 +257,11 @@
       ]);
       range=pair[0];pair[1].forEach(function(s){var d=s.data()||{},br=String(d.branch||'').toLowerCase();if(aliases.some(function(a){return br.indexOf(a)>=0;}))timelineDocs.push(d);});
     }catch(e){alert('تعذر تجهيز مراجعة اليوم: '+(e&&e.message||e));return;}
-    var coverageStart=Math.max(dayReviewBounds.start,Number(range.startMs)||0),coverageEnd=Math.min(dayReviewBounds.end,Number(range.endMs)||0);
-    if(!coverageStart||coverageEnd-coverageStart<30000){alert('مفيش تسجيل كفاية محفوظ لليوم المختار.');return;}
+    var rangeStart=Number(range.startMs)||0,rangeEnd=Number(range.endMs)||0,coverageStart=Math.max(dayReviewBounds.start,rangeStart),coverageEnd=Math.min(dayReviewBounds.end,rangeEnd);
+    if(!coverageStart||coverageEnd-coverageStart<30000){alert('مفيش تسجيل محفوظ في التاريخ المختار. التسجيل المتاح يبدأ '+(rangeStart?new Date(rangeStart).toLocaleString('ar-EG'):'—')+'.');return;}
     var events=[];timelineDocs.forEach(function(t){var catalog=t.catalog||{},code=t.invoiceCode||'';(t.events||[]).forEach(function(e){events.push(Object.assign({},e,{catalog:catalog,invoiceCode:code}));});events.push({atMs:Number(t.endedAtMs||0)+1,kind:'cart_cleared',cart:[],total:0,catalog:{},invoiceCode:''});});events.sort(function(a,c){return Number(a.atMs)-Number(c.atMs);});
-    var firstEvent=events.find(function(e){return Number(e.atMs)>=coverageStart;}),chunkMs=15*60000,chunkStart=firstEvent?Math.max(coverageStart,Number(firstEvent.atMs)-5*60000):coverageStart;
+    var tq=String(timeInput&&timeInput.value||'').split(':').map(Number),chosenStart=tq.length>1?new Date(new Date(dayReviewBounds.start).getFullYear(),new Date(dayReviewBounds.start).getMonth(),new Date(dayReviewBounds.start).getDate(),tq[0]||0,tq[1]||0,0,0).getTime():0;
+    var firstEvent=events.find(function(e){return Number(e.atMs)>=coverageStart;}),chunkMs=15*60000,chunkStart=chosenStart?Math.max(coverageStart,Math.min(chosenStart,coverageEnd-30000)):(firstEvent?Math.max(coverageStart,Number(firstEvent.atMs)-5*60000):coverageStart);
     var ov=document.createElement('div');ov.id='ofCctvPlaybackOv';ov.className='of-cctv-playback-ov';
     ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><div><b>🎬 اليوم الكامل + السلة</b><small class="of-day511-muted" data-day-coverage></small></div><button type="button" class="of-cctv-playback-close">✕ إغلاق</button></div><div class="of-day511-body"><div class="of-day511-stage"><video controls autoplay muted playsinline></video><div class="of-day511-nav"><button type="button" data-day-prev>⏮ 15 دقيقة</button><input type="range" data-day-slider step="1"><button type="button" data-day-next>15 دقيقة ⏭</button></div></div><aside class="of-day511-cart"><div class="of-day511-carthead"><b>🛒 السلة في هذه اللحظة</b><div class="of-day511-muted" data-day-clock>—</div><div class="of-day511-event" data-day-event>بين الفواتير</div><div class="of-day511-muted" data-day-status>جاري تجهيز التسجيل…</div></div><div class="of-day511-rows" data-day-rows></div><div class="of-day511-total"><span>الإجمالي</span><strong data-day-total>0.00 ج.م</strong></div></aside></div></div>';
     closePlaybackModal();document.body.appendChild(ov);
@@ -300,6 +305,7 @@
   function init(){
     load();
     var di=document.getElementById('ofCctvDayDate'); if(di&&!di.value){var nd=new Date();di.value=nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');}
+    var dti=document.getElementById('ofCctvDayTime');if(dti&&!dti.value){var dtn=new Date();dti.value=String(dtn.getHours()).padStart(2,'0')+':'+String(Math.floor(dtn.getMinutes()/5)*5).padStart(2,'0');}
     var dl=document.getElementById('ofCctvDayLoad'); if(dl)dl.onclick=loadDayReview;
     var dp=document.getElementById('ofCctvDayPlay');if(dp)dp.onclick=openDayBasketPlayback;
     var ndt=new Date(),nvd=document.getElementById('ofCctvNvrDate'),nvt=document.getElementById('ofCctvNvrTime'),nvb=document.getElementById('ofCctvNvrOpen');

@@ -29,12 +29,12 @@ assert(agent.includes("$Stream = 'rtsp://127.0.0.1:8554/camera4'"),'recorder con
 assert(agent.includes("$RetentionHours = 168"),'one week ring retention is configured');
 assert(agent.includes("-c:v copy -f segment")&&agent.includes('-segment_time 2'),'continuous capture is segmented without re-encoding sale flow');
 assert(agent.includes("$StartMs - 6000")&&agent.includes("$endMs + 4000"),'clip includes safe segment boundaries around requested POS time');
-assert(agent.includes("if ($DurationSec -gt 1800)"),'full basket playback supports up to 30 minutes');
+assert(agent.includes("if ($DurationSec -gt 3600)"),'review supports hour clips while day playback is chunked');
 assert(agent.includes("Content-Range")&&agent.includes("Accept-Ranges"),'MP4 supports browser seeking for basket synchronization');
 assert(agent.includes("libx264")&&agent.includes("yuv420p"),'clips are browser-compatible H.264');
 assert(agent.includes("clockSource='pos_pc'"),'health reports the authoritative clock');
 assert(!/password|2418Mm/i.test(agent+watch+install),'package contains no NVR/camera credentials');
 assert(watch.includes('ECHARPE-MADINATY-RECORDER.ps1')&&install.includes("/SC MINUTE /MO 1"),'watchdog restarts agent every minute if needed');
 
-for(const pair of [[pidx,'cctv-config.js?v=510'],[pidx,'cctv-invoice.js?v=510'],[oidx,'cctv-config.js?v=510'],[oidx,'cctv.js?v=510'],[psw,"store-apps-shell-v510"],[osw,"echarpe-office-v510"]]) assert(pair[0].includes(pair[1]),'cache bust '+pair[1]);
+for(const pair of [[pidx,'cctv-config.js?v=510'],[pidx,'cctv-invoice.js?v=510'],[oidx,'cctv-config.js?v=510'],[oidx,'cctv.js?v=512'],[psw,"store-apps-shell-v510"],[osw,"echarpe-office-v512"]]) assert(pair[0].includes(pair[1]),'cache bust '+pair[1]);
 console.log('Madinaty PC-clock 30+30 + synchronized basket v510: PASS');
