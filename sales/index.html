@@ -997,7 +997,7 @@
 
     <div class="panel">
       <h3>⏳ رصيد الوقت والخصومات (الشهر الحالي)</h3>
-      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">ساعات كل موظف (تأخير/بريك/انصراف بدري/غياب) وكل 7 ساعات = يوم يتخصم من مرتبه.</p>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">ساعات كل موظف (تأخير/بريك/انصراف بدري/غياب) وكل 8 ساعات = يوم يتخصم من مرتبه.</p>
       <div id="timeCreditLog"></div>
     </div>
 
@@ -1010,9 +1010,12 @@
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0;">💰 كشف الخصومات</h3>
-        <button class="backBtn" id="addSwapDeductionBtn" onclick="openSwapDeduction()">➕ تسجيل خصم يدوي</button>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
+          <button class="backBtn" id="addManualDeductionBtn" onclick="openOwnerDeductionDialog()">➖ خصم مالي / أيام</button>
+          <button class="backBtn" id="addSwapDeductionBtn" onclick="openSwapDeduction()">🔄 تسجيل تبديل</button>
+        </div>
       </div>
-      <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">التأخير بيتخصم تلقائي عند الحضور. تبديل الشيفت أو يوم الإجازة تسجّله يدوي من هنا.</p>
+      <p style="color:var(--sub); font-size:12px; margin:-2px 0 12px;">سجّل مبلغ مباشر، نصف يوم، يوم، أو أي عدد أيام. قيمة اليوم = المرتب الأساسي ÷ 30، وتظل منفصلة عن خصومات الحضور ورصيد الوقت.</p>
       <div id="deductionsLog"></div>
     </div>
     <div class="panel">
@@ -1231,15 +1234,18 @@
     </div>
 
     <div class="panel">
-      <h3>💰 سجل السلف</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <h3 style="margin:0;">💰 سجل السلف</h3>
+        <button class="backBtn" id="addManualAdvanceBtn" onclick="openOwnerAdvanceDialog()">➕ تسجيل سلفة يدويًا</button>
+      </div>
       <div id="advancesLogList"></div>
     </div>
   </div>
 
 </div>
 
-<script type="module" src="sales-app.js?v=505"></script>
-<script src="sales-ui.js?v=492"></script>
+<script type="module" src="sales-app.js?v=517"></script>
+<script src="sales-ui.js?v=517"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
      ⚠️ `chat-staff-ui.js?v=384` مكتوب compat، وبيكتشف إنه في بيئة modular

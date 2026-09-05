@@ -1344,6 +1344,29 @@ function deductionAmount(days, monthlySalary){
   return Math.round((Number(days)||0) * dayValue);
 }
 
+// Manual owner deductions use the same binding payroll rule (base salary / 30),
+// but preserve half-days and decimal day counts to the nearest piaster.
+function manualPayrollDeduction(employee, mode, value){
+  const salary = Number(employee && employee.baseSalary) || 0;
+  let days = 0, amount = 0;
+  if(mode === 'half_day') days = 0.5;
+  else if(mode === 'day') days = 1;
+  else if(mode === 'days') days = Number(value) || 0;
+  else if(mode === 'money') amount = Number(value) || 0;
+  if(mode !== 'money') amount = days * (salary / 30);
+  amount = Math.round(amount * 100) / 100;
+  days = Math.round(days * 1000) / 1000;
+  return { ok: amount > 0 && (mode === 'money' || (salary > 0 && days > 0)), mode, days, amount,
+    dayRate: Math.round((salary / 30) * 100) / 100 };
+}
+function payrollManualMovementTs(dateKey){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateKey||''));
+  if(!m) return Date.now();
+  return caiStamp(Number(m[1]), Number(m[2]), Number(m[3]), 12, 0, 0, 0);
+}
+window.manualPayrollDeduction = manualPayrollDeduction;
+window.payrollManualMovementTs = payrollManualMovementTs;
+
 // 🚪 ساعات الانصراف بدري — نفس منطق التأخير
 // clockOutDate = وقت الانصراف الفعلي · shiftEnd = "HH:MM" نهاية شيفته
 /* ⏰ نهاية شيفت الموظف كـ **طابع زمني** (مش ساعة في اليوم)
@@ -1778,6 +1801,9 @@ function reviewEmployeesFor(branch){
   const target = norm(branch);
   return allEmployees.filter(e => norm(e.branch) === target);
 }
+window.getPayrollReviewEmployees = function(){
+  return reviewEmployeesFor(viewBranch).filter(e=> !e.deletedAt && e.active !== false);
+};
 function populateBranchSelect(sel){
   const branches = [...new Set(allEmployees.map(e=>String(e.branch||'').trim()).filter(Boolean))].sort();
   const prevValue = sel.value || viewBranch;
@@ -6527,11 +6553,16 @@ function computeSalary(emp, periodStart, end){
 
   // 💰 الخصومات الإدارية بالجنيه (كشف الخصومات): قرارات الأدمن على المخالفات
   // والخصومات اليدوية — كانت بتتسجل وتتعرض ومتتخصمش من المرتب خالص.
-  const adminDeductions = ((typeof window !== 'undefined' && window.deductions) || []).filter(d=>{
+  // allDeductions is cross-branch so owner review calculates the selected employee even
+  // when this device belongs to another branch. window.deductions is the kiosk fallback/test seam.
+  const _deductionSource = (allDeductions && allDeductions.length)
+    ? allDeductions : (((typeof window !== 'undefined' && window.deductions) || []));
+  const adminDeductionItems = _deductionSource.filter(d=>{
     if(d.employeeId !== emp.id) return false;
     const t = d.ts || new Date((d.date||'') + 'T00:00:00').getTime();
     return t >= start.getTime() && t <= end.getTime();
-  }).reduce((s,d)=> s + (Number(d.amount)||0), 0);
+  }).sort((a,b)=>(Number(b.ts)||0)-(Number(a.ts)||0));
+  const adminDeductions = adminDeductionItems.reduce((s,d)=> s + (Number(d.amount)||0), 0);
 
   // 💵 السلف دين مش وقت شغل: فترة المرتب 1→30 (قرار المالك)، لكن سلفة يوم 31
   // كانت بتقع في فجوة — مش داخلة في الشهر ده ولا الشهر الجاي (اللي بيبدأ يوم 1)
@@ -6573,7 +6604,7 @@ function computeSalary(emp, periodStart, end){
 
   const netSalary = Math.round((proratedBase - deductionAmount - timeCreditDeduction - adminDeductions + overtimePay + dayOffBonusAmount - advancesTotal) * 100)/100;
   return { proratedBase, overtimeMinutes, overtimePay, overtimePendingMin, dayOffOccurrences, extraOffDays, deductionAmount,
-           timeCreditHours, timeCreditDays, timeCreditDeduction, adminDeductions,
+           timeCreditHours, timeCreditDays, timeCreditDeduction, adminDeductions, adminDeductionItems,
            dayOffBonusDays, dayOffBonusHours, dayOffBonusAmount, advancesTotal, advCash, advOrders, advPrevCycle, netSalary, daysInCalc,
            attendedDays, elapsedWorkDays, absenceDays,
            absenceDates: attendance.absenceDates, dayOffDates: attendance.dayOffDates,
@@ -6741,6 +6772,11 @@ window.openPayrollEmployee = function(empId, periodKey){
   const absenceText = c.absenceDates.length ? c.absenceDates.map(x=>x.date+(x.approved?' (مصرح)':'')).join('، ') : '—';
   const offText = c.dayOffDates.length ? c.dayOffDates.join('، ') : '—';
   const timeCreditRow = `<button type="button" onclick="openPayrollTimeCreditDetails('${emp.id}','${pk}')" style="width:100%;display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;border-bottom:1px solid rgba(255,255,255,.055);background:transparent;color:inherit;padding:8px 0;font-family:inherit;cursor:pointer;text-align:right"><span style="color:#aaaab4;flex:1">⏳ رصيد الوقت <small style="color:#fbbf24">اضغط للتفاصيل والتعديل</small></span><b class="bad" style="text-align:left;direction:ltr">${_payQty(c.timeCreditHours,'ساعة')} = -${_payMoney(c.timeCreditDeduction)}</b></button>`;
+  const adminDeductionRows = (c.adminDeductionItems||[]).map(d=>{
+    const unit = Number(d.days)>0 ? (' · '+_payQty(d.days,'يوم')) : '';
+    const why = d.reason ? (' · '+_payEsc(d.reason)) : '';
+    return detailRow((d.date||'—')+unit+why,'-'+_payMoney(d.amount),'bad');
+  }).join('');
   const actions = paid
     ? `<div class="pay-v393-paid">✅ المرتب اتسجل صرفه${paidTotal?' · '+_payMoney(paidTotal):''}</div>
        ${due.ptsDue>0?`<button class="pay-v393-primary" onclick="payPayrollPointsNow('${emp.id}','${pk}',this)">⭐ ادفع النقط المتبقية — ${_payMoney(due.ptsDueAmt)}</button>`:''}`
@@ -6790,6 +6826,7 @@ window.openPayrollEmployee = function(empId, periodKey){
     ${section('− الخصومات','ded',
       timeCreditRow+
       detailRow('خصومات إدارية','-'+_payMoney(c.adminDeductions),'bad')+
+      adminDeductionRows+
       detailRow('سلف','-'+_payMoney(c.advCash),'bad')+
       detailRow('مشتريات','-'+_payMoney(c.advOrders),'bad')+
       (c.advancesTotal>0?`<div style="text-align:left;padding-top:8px"><button type="button" onclick="openPayrollAdvanceDetails('${emp.id}','${pk}')" style="border:1px solid rgba(255,255,255,.16);background:#2b2c36;color:#fff;border-radius:9px;padding:7px 10px;font-family:inherit;font-size:11px;cursor:pointer">التفاصيل والتواريخ</button></div>`:''))}
@@ -6937,6 +6974,11 @@ function buildSalaryReceiptPayload(emp, calc, periodLabel){
   if(calc.deductionAmount>0) add('الخصومات','خصم غياب '+calc.extraOffDays+' يوم','-'+money(calc.deductionAmount),'bad');
   if(calc.timeCreditDeduction>0) add('الخصومات','رصيد الوقت '+calc.timeCreditHours+' ساعة','-'+money(calc.timeCreditDeduction),'bad');
   if(calc.adminDeductions>0) add('الخصومات','خصومات إدارية','-'+money(calc.adminDeductions),'bad');
+  (calc.adminDeductionItems||[]).slice().reverse().forEach(d=>{
+    const unit=Number(d.days)>0?(' · '+d.days+' يوم'):'';
+    const why=d.reason?(' · '+d.reason):'';
+    add('تفاصيل الخصومات اليدوية',(d.date||'—')+unit+why,'-'+money(d.amount),'bad');
+  });
   if(calc.advCash>0) add('الخصومات','سلف كاش','-'+money(calc.advCash),'bad');
   if(calc.advOrders>0) add('الخصومات','مشتريات','-'+money(calc.advOrders),'bad');
   // كل سلفة/مشتريات بتاريخها — نخلي الإيصال أطول بدل ما نزود عرضه.

@@ -182,8 +182,7 @@ window.renderAttIssues = function(){
   const to = Date.now(), from = to - 30*86400000;
   const raw = window.detectAttendanceIssues(emps, shifts, from, to, decided, Date.now());
   const { swaps, singles } = window.pairSwaps(raw);
-  // v492: الشغل في يوم الإجازة لوحده مش مخالفة؛ محرك المرتب بيحسبه إضافة تلقائيًا.
-  const all = [...swaps, ...singles.filter(i=>i.type!=='workedDayOff')].sort((a,b)=> a.dateKey < b.dateKey ? 1 : -1);
+  const all = [...swaps, ...singles].sort((a,b)=> a.dateKey < b.dateKey ? 1 : -1);
 
   const badge = document.querySelector('#issuesBadge');
   if(badge){ badge.textContent = all.length; badge.style.display = all.length ? 'inline-flex' : 'none'; }
@@ -202,61 +201,29 @@ window.renderAttIssues = function(){
     return `<div style="background:var(--panel); border:1px solid #5a3a3a; border-radius:13px; padding:12px 13px; margin-bottom:9px;">
       <div style="font-weight:800; font-size:14px;">${m.icon} ${i.empName}</div>
       <div style="color:var(--sub); font-size:12.5px; margin:4px 0 11px;">${m.title} — ${dayName[i.dow]} ${i.dateKey}${extra}</div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','normal')" style="flex:1; min-width:145px; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">${i.type==='dayoffSwap'?'✅ اعتمد كتبديل':'📅 غياب عادي — خصم يوم'}</button>
-        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','unauthorized')" style="flex:1; min-width:145px; padding:10px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#ffb4a6; font-family:'Cairo'; font-weight:800; cursor:pointer;">🚫 بدون إذن — +4س رصيد</button>
+      <div style="display:flex; gap:8px;">
+        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','charge')" style="flex:1; padding:10px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#ffb4a6; font-family:'Cairo'; font-weight:800; cursor:pointer;">خصم ${window.complianceCfg.penalty} ج</button>
+        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','ignore')" style="flex:1; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--sub); font-family:'Cairo'; font-weight:700; cursor:pointer;">تجاهل (بموافقتي)</button>
       </div>
-      ${i.type==='absent'?'<div style="font-size:10.5px;color:var(--sub);margin-top:7px;">في الحالتين يوم الغياب نفسه بيتخصم من المرتب. «بدون إذن» يضيف 4 ساعات رصيد كجزاء.</div>':''}
     </div>`;
   }).join('');
 }
 
-// v492: مفيش غرامة 5 جنيه. يوم الغياب بيتخصم أصلًا من محرك المرتب.
-// «بدون إذن» = نفس خصم اليوم + 4 ساعات رصيد إضافية. الكتابتين atomic + idempotent.
-const _attDecisionBusy = new Set();
+// قرار الأدمن على مخالفة: خصم أو تجاهل — الاتنين بيتسجّلوا فمش هتظهر تاني
 window.decideIssue = async function(empId, empName, dateKey, kind, action){
-  const key = empId + '|' + dateKey;
-  if(_attDecisionBusy.has(key)) return;
-  const unauthorized = action === 'unauthorized';
-  const extraHours = unauthorized ? (window.absenceHoursFrom ? window.absenceHoursFrom(window.timeCfg||window.timeCfgDefaults) : 4) : 0;
-  const msg = unauthorized
-    ? ('تأكيد غياب بدون إذن لـ ' + empName + '?\n\nيوم الغياب هيتخصم عادي + ' + extraHours + ' ساعات رصيد إضافية.')
-    : (kind === 'absent' ? ('تأكيد غياب عادي لـ ' + empName + '?\n\nهيتخصم يوم الغياب فقط من المرتب.') : ('اعتماد التبديل لـ ' + empName + '؟'));
-  if(!confirm(msg)) return;
-  _attDecisionBusy.add(key);
-  const wrap = document.querySelector('#attIssuesList'); if(wrap) wrap.style.opacity='.65';
   try{
-    const safe = String(empId).replace(/[^a-zA-Z0-9_-]/g,'_') + '_' + String(dateKey).replace(/[^0-9-]/g,'');
-    const decisionRef = window.fbDoc(window.db,'sales_att_decisions','att_'+safe);
-    const creditRef = window.fbDoc(window.db,'sales_time_credit','absence_'+safe);
-    const batch = window.fbWriteBatch(window.db);
-    batch.set(decisionRef, {
+    await window.fbAddDoc(window.fbCollection(window.db,'sales_att_decisions'), {
       empId, empName, dateKey, type: kind, branch: window.currentBranch,
-      decision: unauthorized ? 'unauthorized' : 'normal', unauthorizedHours: extraHours, ts: Date.now()
-    }, {merge:true});
-    if(unauthorized && extraHours > 0){
-      batch.set(creditRef, {
+      decision: action === 'charge' ? 'charged' : 'ignored',
+      ts: Date.now()
+    });
+    if(action === 'charge'){
+      await window.fbAddDoc(window.fbCollection(window.db,'sales_deductions'), {
         employeeId: empId, employeeName: empName, branch: window.currentBranch,
-        type:'absence', hours:extraHours, date:dateKey,
-        note:'غياب بدون إذن — جزاء إضافي', ts:Date.now(), source:'attendance_review'
-      }, {merge:true});
-    }else{
-      // لو القرار اتعاد كعادي بعد محاولة سابقة، صفّر البند الحتمي بدل ما يفضل جزاء قديم.
-      batch.set(creditRef, {
-        employeeId: empId, employeeName: empName, branch: window.currentBranch,
-        type:'absence', hours:0, originalHours:0, date:dateKey,
-        note:'غياب عادي — بدون جزاء ساعات', excused:true, excuseReason:'غياب عادي', ts:Date.now(), source:'attendance_review'
-      }, {merge:true});
+        type: kind, amount: window.complianceCfg.penalty, date: dateKey, ts: Date.now()
+      });
     }
-    const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('__SAVE_TIMEOUT__')),12000));
-    await Promise.race([batch.commit(), timeout]);
-  }catch(e){
-    if(e && e.message === '__SAVE_TIMEOUT__') alert('الاتصال بطيء والقرار لسه ما اتأكدش. لو ضغطت تاني مش هيتكرر الخصم لأن الحفظ محمي من التكرار.');
-    else alert('تعذر تسجيل القرار: ' + (e&&e.message?e.message:e));
-  }finally{
-    _attDecisionBusy.delete(key); if(wrap) wrap.style.opacity='';
-    try{ window.renderAttIssues(); }catch(e){}
-  }
+  }catch(e){ alert('تعذر تسجيل القرار: ' + e.message); }
 };
 
 // 💰 كشف الخصومات (الشهر الحالي)
@@ -358,8 +325,6 @@ window.excuseTimeCredit = async function(id){
     await window.fbUpdateDoc(window.fbDoc(window.db,'sales_time_credit', id), {
       hours: 0, originalHours: item.hours, excused: true, excuseReason: reason || 'بعذر', excusedAt: Date.now()
     });
-    try{ if(typeof window.refreshOpenPayrollEmployee==='function') window.refreshOpenPayrollEmployee(); }catch(_e){}
-    try{ if(typeof window.renderTimeCreditLog==='function') window.renderTimeCreditLog(); }catch(_e){}
   }catch(e){ alert('تعذر تسجيل العذر: '+e.message); }
 };
 
@@ -373,15 +338,16 @@ window.renderDeductionsLog = function(){
   const byEmp = {};
   rows.forEach(d=>{ byEmp[d.employeeName] = (byEmp[d.employeeName]||0) + (Number(d.amount)||0); });
   const total = rows.reduce((x,d)=> x + (Number(d.amount)||0), 0);
-  const label = { late:'⏰ تأخير', shiftSwap:'🔄 تبديل شيفت', dayoffSwap:'📅 تبديل إجازة', absence:'🚫 غياب' };
+  const label = { late:'⏰ تأخير', shiftSwap:'🔄 تبديل شيفت', dayoffSwap:'📅 تبديل إجازة', absence:'🚫 غياب',
+    manual_money:'💵 خصم مبلغ', manual_days:'📅 خصم أيام' };
   wrap.innerHTML = `
     <div style="display:flex; flex-wrap:wrap; gap:7px; margin-bottom:12px;">
-      ${Object.entries(byEmp).map(([n,v])=>`<span style="background:var(--panel2); border:1px solid var(--line); border-radius:99px; padding:6px 12px; font-size:12px; font-weight:700;">${n}: <b style="color:#e0796b;">${v} ج</b></span>`).join('')}
+      ${Object.entries(byEmp).map(([n,v])=>`<span style="background:var(--panel2); border:1px solid var(--line); border-radius:99px; padding:6px 12px; font-size:12px; font-weight:700;">${movementEsc(n)}: <b style="color:#e0796b;">${v} ج</b></span>`).join('')}
       <span style="background:linear-gradient(180deg,#3a1e1a,var(--panel2)); border:1px solid #5a3a3a; border-radius:99px; padding:6px 12px; font-size:12px; font-weight:800;">الإجمالي: ${total} ج</span>
     </div>
     ${rows.map(d=>`
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:9px 11px; border-bottom:1px solid var(--line); font-size:13px;">
-        <span><b>${(d.employeeName||'—')}</b> · ${label[d.type]||d.type}${d.lateMin?(' ('+d.lateMin+'د)'):''}</span>
+        <span><b>${movementEsc(d.employeeName||'—')}</b> · ${movementEsc(label[d.type]||d.type)}${d.days?(' ('+d.days+' يوم)'):''}${d.lateMin?(' ('+d.lateMin+'د)'):''}${d.reason?(' · '+movementEsc(d.reason)):''}</span>
         <span style="display:flex; align-items:center; gap:10px;">
           <span style="color:#e0796b; font-weight:800;">-${d.amount} ج</span>
           <span style="color:var(--sub); font-size:11px;">${d.date||''}</span>
@@ -394,6 +360,77 @@ window.deleteDeduction = async function(id){
   if(!confirm('تشيل الخصم ده؟')) return;
   try{ await window.fbDeleteDoc(window.fbDoc(window.db,'sales_deductions', id)); }catch(e){ alert('تعذر الحذف: '+e.message); }
 };
+
+function payrollOwnerOnly(){
+  if(window.adminRole !== 'owner' || !window.roleCan || !window.roleCan('money')){
+    alert('التسجيل اليدوي متاح للمالك فقط');
+    return false;
+  }
+  return true;
+}
+function payrollEmployees(){
+  const rows = window.getPayrollReviewEmployees ? window.getPayrollReviewEmployees() : (window.allEmployeesAll||[]);
+  return (rows||[]).filter(e=>e && e.active!==false && !e.deletedAt);
+}
+function movementEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function closeOwnerMovement(){ const n=document.getElementById('ownerMovementOv'); if(n)n.remove(); }
+window.closeOwnerMovement = closeOwnerMovement;
+
+function openOwnerMovement(kind){
+  if(!payrollOwnerOnly()) return;
+  const emps=payrollEmployees();
+  if(!emps.length){ alert('مفيش موظفين متاحين'); return; }
+  closeOwnerMovement();
+  const isAdvance=kind==='advance';
+  const ov=document.createElement('div'); ov.id='ownerMovementOv';
+  ov.style.cssText='position:fixed;inset:0;z-index:10020;background:rgba(0,0,0,.82);display:flex;align-items:flex-start;justify-content:center;padding:18px 10px;overflow:auto;';
+  ov.innerHTML=`<div style="width:min(430px,100%);background:var(--panel,#181923);border:1px solid var(--line,#343642);border-radius:18px;padding:16px;color:var(--ink,#fff);font-family:Cairo,sans-serif;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:13px"><b style="font-size:18px">${isAdvance?'💰 تسجيل سلفة يدويًا':'➖ تسجيل خصم يدوي'}</b><button type="button" class="backBtn" onclick="closeOwnerMovement()">✕</button></div>
+    <label style="font-size:12px;color:var(--sub)">الموظف</label><select id="movEmp" style="width:100%;padding:11px;border-radius:10px;margin:4px 0 11px;font-family:inherit">${emps.map(e=>`<option value="${movementEsc(e.id)}">${movementEsc(e.name)} — ${movementEsc(e.branch||'')}</option>`).join('')}</select>
+    ${isAdvance?'':`<label style="font-size:12px;color:var(--sub)">طريقة الخصم</label><select id="movMode" style="width:100%;padding:11px;border-radius:10px;margin:4px 0 11px;font-family:inherit"><option value="half_day">نصف يوم</option><option value="day">يوم كامل</option><option value="days">عدد أيام</option><option value="money">مبلغ مباشر</option></select>`}
+    <div id="movValueWrap" style="${isAdvance?'':'display:none'}"><label id="movValueLabel" style="font-size:12px;color:var(--sub)">${isAdvance?'مبلغ السلفة':'القيمة'}</label><input id="movValue" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="${isAdvance?'المبلغ بالجنيه':'القيمة'}" style="box-sizing:border-box;width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);margin:4px 0 11px;font-size:17px"></div>
+    <label style="font-size:12px;color:var(--sub)">تاريخ الحركة</label><input id="movDate" type="date" value="${movementEsc(window.todayStr())}" style="box-sizing:border-box;width:100%;padding:11px;border-radius:10px;border:1px solid var(--line);margin:4px 0 11px;font-family:inherit">
+    <label style="font-size:12px;color:var(--sub)">السبب / ملاحظة</label><textarea id="movReason" rows="2" placeholder="اكتب السبب" style="box-sizing:border-box;width:100%;padding:11px;border-radius:10px;border:1px solid var(--line);margin:4px 0 8px;font-family:inherit;resize:vertical"></textarea>
+    <div id="movPreview" style="min-height:22px;color:#fbbf24;font-size:12px;margin:3px 0 8px"></div><div id="movErr" style="min-height:20px;color:#ef4444;font-size:12px"></div>
+    <button id="movSave" type="button" style="width:100%;border:0;border-radius:12px;background:var(--gold,#e6ad36);color:#111;padding:13px;font-family:inherit;font-weight:900;cursor:pointer">${isAdvance?'حفظ السلفة':'حفظ الخصم'}</button>
+  </div>`;
+  document.body.appendChild(ov);
+  const empEl=ov.querySelector('#movEmp'), modeEl=ov.querySelector('#movMode'), valueEl=ov.querySelector('#movValue'), wrap=ov.querySelector('#movValueWrap'), labelEl=ov.querySelector('#movValueLabel'), preview=ov.querySelector('#movPreview');
+  function quote(){
+    if(isAdvance){ preview.textContent=''; return; }
+    const emp=emps.find(e=>e.id===empEl.value), mode=modeEl.value;
+    wrap.style.display=(mode==='days'||mode==='money')?'':'none';
+    if(mode==='days'){ labelEl.textContent='عدد الأيام (يسمح بالكسور مثل 2.5)'; valueEl.step='0.5'; valueEl.placeholder='مثال: 3.5'; }
+    if(mode==='money'){ labelEl.textContent='المبلغ بالجنيه'; valueEl.step='0.01'; valueEl.placeholder='المبلغ'; }
+    const q=window.manualPayrollDeduction(emp,mode,valueEl.value);
+    preview.textContent=q.ok ? (mode==='money'?`سيُخصم ${q.amount} ج.م`:`${q.days} يوم × ${q.dayRate} ج.م = ${q.amount} ج.م`) : (emp&&Number(emp.baseSalary)<=0?'لازم تسجل المرتب الأساسي أولًا':'');
+  }
+  if(modeEl) modeEl.onchange=quote; empEl.onchange=quote; valueEl.oninput=quote; quote();
+  ov.querySelector('#movSave').onclick=async function(){
+    if(this.dataset.busy) return;
+    const emp=emps.find(e=>e.id===empEl.value), date=ov.querySelector('#movDate').value, reason=ov.querySelector('#movReason').value.trim(), err=ov.querySelector('#movErr');
+    if(!emp||!date){ err.textContent='اختار الموظف والتاريخ'; return; }
+    if(!reason){ err.textContent='اكتب سبب الحركة عشان تفضل قابلة للمراجعة'; return; }
+    const ts=window.payrollManualMovementTs(date);
+    let payload;
+    if(isAdvance){
+      const amount=Math.round((Number(valueEl.value)||0)*100)/100;
+      if(!(amount>0)){ err.textContent='اكتب مبلغ سلفة صحيح'; return; }
+      payload={employeeId:emp.id,employeeName:emp.name,branch:emp.branch||window.currentBranch,amount,date,ts,reason,manual:true,source:'owner_manual',cycleKey:window.advCycleKey(new Date(ts),(window.advCfg||{}).openDay,(window.advCfg||{}).closeDay)};
+    }else{
+      const mode=modeEl.value, q=window.manualPayrollDeduction(emp,mode,valueEl.value);
+      if(!q.ok){ err.textContent=mode==='money'?'اكتب مبلغ خصم صحيح':'اكتب عدد أيام صحيح وتأكد إن المرتب الأساسي مسجل'; return; }
+      payload={employeeId:emp.id,employeeName:emp.name,branch:emp.branch||window.currentBranch,type:mode==='money'?'manual_money':'manual_days',mode,days:q.days,dayRate:q.dayRate,amount:q.amount,date,ts,reason,manual:true,source:'owner_manual'};
+    }
+    this.dataset.busy='1'; this.disabled=true; err.textContent='';
+    try{
+      await window.fbAddDoc(window.fbCollection(window.db,isAdvance?'sales_advances':'sales_deductions'),payload);
+      closeOwnerMovement(); alert((isAdvance?'تم تسجيل السلفة':'تم تسجيل الخصم')+' لـ '+emp.name+' ✅');
+    }catch(e){ err.textContent='تعذر الحفظ: '+(e&&e.message?e.message:'خطأ غير معروف'); this.disabled=false; delete this.dataset.busy; }
+  };
+}
+window.openOwnerDeductionDialog=function(){ openOwnerMovement('deduction'); };
+window.openOwnerAdvanceDialog=function(){ openOwnerMovement('advance'); };
 
 // ➕ تسجيل تبديل (شيفت / يوم إجازة) — بيتسجل ساعات رصيد وقت مش غرامة ثابتة:
 // أول تبديل في الشهر مجاني وبعده كل تبديل بساعاته (قرار المالك — swapHoursFrom)
@@ -559,7 +596,7 @@ window.renderTimeSettings = function(){
     <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">🔄 التبديل والغياب</div>
     ${row('تبديل مجاني في الشهر', 'tsSwapFree', c.swapFreePerMonth)}
     ${row('ساعات التبديل بعد المجاني', 'tsSwapHours', c.swapHours)}
-    ${row('جزاء الغياب بدون إذن (ساعات رصيد)', 'tsAbsence', (c.unauthorizedAbsenceHours==null?4:c.unauthorizedAbsenceHours), 'يوم الغياب نفسه بيتخصم عادي؛ دي ساعات جزاء إضافية')}
+    ${row('ساعات الغياب بدون عذر', 'tsAbsence', c.absenceHours, 'الغياب = خروج من المكافأة')}
     <div style="height:1px; background:var(--line); margin:12px 0;"></div>
     <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">💰 الخصم والمكافأة</div>
     ${row('كل كام ساعة = يوم خصم', 'tsHoursPerDay', c.hoursPerDay)}
@@ -583,7 +620,7 @@ window.saveTimeSettings = async function(){
     maxOnBreak: n('tsMaxOnBreak', c.maxOnBreak),
     swapFreePerMonth: n('tsSwapFree', c.swapFreePerMonth),
     swapHours: n('tsSwapHours', c.swapHours),
-    unauthorizedAbsenceHours: n('tsAbsence', (c.unauthorizedAbsenceHours==null?4:c.unauthorizedAbsenceHours)),
+    absenceHours: n('tsAbsence', c.absenceHours),
     hoursPerDay: n('tsHoursPerDay', c.hoursPerDay),
     maxDaysPerMonth: n('tsMaxDays', c.maxDaysPerMonth),
     allowedHoursWeek: n('tsAllowWeek', c.allowedHoursWeek),
