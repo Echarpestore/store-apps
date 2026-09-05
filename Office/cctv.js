@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v512
+/* ECHARPE Office CCTV v513
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -131,7 +131,7 @@
   }
   function playbackUrl(atMs,durationMin,cameraId,offsetMs,quality){
     var x=b();if(!x.playback)return '';
-    var t=Math.max(1,Number(atMs)||Date.now()),d=Math.min(60,Math.max(5,Number(durationMin)||30));
+    var t=Math.max(1,Number(atMs)||Date.now()),d=Math.min(60,Math.max(1,Number(durationMin)||30));
     var cid=String(cameraId||x.playbackCamera||'1');if(!x.cameras.some(function(c){return String(c.id)===cid;}))cid=String(x.playbackCamera||x.cameras[0].id||'1');
     var q=Number(quality)===720?720:480;
     var u=x.gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(t)+'&durationSec='+encodeURIComponent(d*60)+'&quality='+q+(q===480?'&mode=fast':'');
@@ -228,6 +228,7 @@
     var live=document.getElementById('ofCctvPinnedLive');if(live)live.setAttribute('data-branch',state.branch);
     try{renderLive();}catch(e){console.warn('cctv pos live',e);var body=document.getElementById('ofCctvPinnedLiveBody');if(body)body.innerHTML='<div class=\"of-cctv-empty\"><div><b>POS Live غير متاح مؤقتًا</b><small>الكاميرات مستمرة بشكل مستقل</small></div></div>';}
     try{renderCameras();}catch(e){console.warn('cctv cameras',e);var grid=document.getElementById('ofCctvCameraGrid');if(grid)grid.innerHTML='<div class=\"of-cctv-day-empty\">تعذر رسم الكاميرات: '+esc(e&&e.message||e)+'</div>';}
+    try{loadActivityAlerts();}catch(e){console.warn('cctv activity alerts',e);}
   }
   var _liveRaf=0;
   function refreshPosOnly(){
@@ -302,12 +303,28 @@
     }catch(e){box.innerHTML='<div class="of-cctv-day-empty">تعذر تحميل مراجعة اليوم: '+esc(e&&e.message||e)+'</div>';}
     finally{if(btn){btn.disabled=false;btn.textContent='تحميل اليوم';}}
   }
+  async function loadActivityAlerts(){
+    var section=document.getElementById('ofCctvActivityReview'),box=document.getElementById('ofCctvActivityRows'),status=document.getElementById('ofCctvActivityStatus');if(!section||!box)return;
+    var x=b();section.style.display=x.id==='madinaty'?'block':'none';if(x.id!=='madinaty')return;
+    box.innerHTML='<div class="of-cctv-day-empty">جاري فحص التنبيهات…</div>';
+    try{
+      var base=String(x.gateway||'').replace(/\/$/,''),pair=await Promise.all([
+        fetch(base+'/echarpe-playback/alerts?_='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('alerts_http_'+r.status);return r.json();}),
+        fetch(base+'/echarpe-playback/activity-status?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;})
+      ]),items=Array.isArray(pair[0].items)?pair[0].items:[],det=pair[1]||{};
+      if(status){var s=det.state||{};status.textContent=det.detector?('● الكشف شغال · موظف '+(s.employee?'موجود':'—')+' · عميل '+(s.customer?'موجود':'—')):'● كاشف الأشخاص غير متصل';status.classList.toggle('offline',!det.detector);}
+      if(!items.length){box.innerHTML='<div class="of-cctv-day-empty">لا يوجد نشاط عميل + موظف بدون فاتورة.</div>';return;}
+      box.innerHTML=items.map(function(a){return '<div class="of-cctv-day-row of-cctv-alert-row"><div class="of-cctv-day-time">'+new Date(Number(a.atMs)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</div><div class="of-cctv-day-main"><b>⚠️ عميل عند الكاشير بدون فاتورة</b><small>'+new Date(Number(a.atMs)).toLocaleDateString('ar-EG')+' · تم التأكد بعد مهلة 3 دقائق</small></div><div class="of-cctv-day-actions"><button type="button" data-activity-play="'+esc(String(a.id||''))+'">🎥 مشاهدة الفيديو</button></div></div>';}).join('');
+      box.querySelectorAll('[data-activity-play]').forEach(function(btn){btn.onclick=function(){var a=items.find(function(q){return String(q.id)===btn.getAttribute('data-activity-play');});if(a)openPlayback(Number(a.startMs),Math.max(1,Math.ceil(Number(a.durationSec||60)/60)),'4');};});
+    }catch(e){if(status){status.textContent='● تعذر الاتصال بكاشف الأشخاص';status.classList.add('offline');}box.innerHTML='<div class="of-cctv-day-empty">تعذر تحميل تنبيهات النشاط: '+esc(e&&e.message||e)+'</div>';}
+  }
   function init(){
     load();
     var di=document.getElementById('ofCctvDayDate'); if(di&&!di.value){var nd=new Date();di.value=nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');}
     var dti=document.getElementById('ofCctvDayTime');if(dti&&!dti.value){var dtn=new Date();dti.value=String(dtn.getHours()).padStart(2,'0')+':'+String(Math.floor(dtn.getMinutes()/5)*5).padStart(2,'0');}
     var dl=document.getElementById('ofCctvDayLoad'); if(dl)dl.onclick=loadDayReview;
     var dp=document.getElementById('ofCctvDayPlay');if(dp)dp.onclick=openDayBasketPlayback;
+    var ar=document.getElementById('ofCctvActivityReload');if(ar)ar.onclick=loadActivityAlerts;
     var ndt=new Date(),nvd=document.getElementById('ofCctvNvrDate'),nvt=document.getElementById('ofCctvNvrTime'),nvb=document.getElementById('ofCctvNvrOpen');
     if(nvd&&!nvd.value)nvd.value=ndt.getFullYear()+'-'+String(ndt.getMonth()+1).padStart(2,'0')+'-'+String(ndt.getDate()).padStart(2,'0');
     if(nvt&&!nvt.value)nvt.value=String(ndt.getHours()).padStart(2,'0')+':'+String(Math.floor(ndt.getMinutes()/5)*5).padStart(2,'0');

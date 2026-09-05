@@ -20,5 +20,5 @@ assert(agent.includes("if ($DurationSec -gt 3600)"),'agent supports hour review 
 assert(agent.includes("if($Fast)")&&agent.includes('-c:v copy'),'long review avoids expensive full re-encode');
 assert(agent.includes("else{")&&agent.includes('libx264'),'exact invoice clips retain accurate re-encode path');
 assert(updater.includes("$h.version -lt 511")&&updater.includes('MADINATY_V511=OK'),'field updater validates running v511 agent');
-assert(/cctv\.js\?v=51[12]/.test(html)&&/echarpe-office-v51[12]/.test(sw),'Office cache is safely busted');
+assert(/cctv\.js\?v=51[123]/.test(html)&&/echarpe-office-v51[123]/.test(sw),'Office cache is safely busted');
 console.log('Madinaty full-day playback + synchronized basket v511: PASS');

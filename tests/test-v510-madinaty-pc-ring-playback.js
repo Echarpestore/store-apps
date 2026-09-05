@@ -36,5 +36,5 @@ assert(agent.includes("clockSource='pos_pc'"),'health reports the authoritative 
 assert(!/password|2418Mm/i.test(agent+watch+install),'package contains no NVR/camera credentials');
 assert(watch.includes('ECHARPE-MADINATY-RECORDER.ps1')&&install.includes("/SC MINUTE /MO 1"),'watchdog restarts agent every minute if needed');
 
-for(const pair of [[pidx,'cctv-config.js?v=510'],[pidx,'cctv-invoice.js?v=510'],[oidx,'cctv-config.js?v=510'],[oidx,'cctv.js?v=512'],[psw,"store-apps-shell-v510"],[osw,"echarpe-office-v512"]]) assert(pair[0].includes(pair[1]),'cache bust '+pair[1]);
+for(const pair of [[pidx,'cctv-config.js?v=510'],[pidx,'cctv-invoice.js?v=510'],[oidx,'cctv-config.js?v=510'],[oidx,'cctv.js?v=513'],[psw,"store-apps-shell-v510"],[osw,"echarpe-office-v513"]]) assert(pair[0].includes(pair[1]),'cache bust '+pair[1]);
 console.log('Madinaty PC-clock 30+30 + synchronized basket v510: PASS');

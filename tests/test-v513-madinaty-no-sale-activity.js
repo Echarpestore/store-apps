@@ -1,0 +1,24 @@
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert');
+const root=path.resolve(__dirname,'..'),rd=p=>fs.readFileSync(path.join(root,p),'utf8');
+const office=rd('Office/cctv.js'),html=rd('Office/index.html'),sw=rd('Office/sw.js');
+const agent=rd('branch-tools/madinaty/cctv-recorder/ECHARPE-MADINATY-RECORDER.ps1');
+const detector=rd('branch-tools/madinaty/cctv-recorder/ECHARPE-MADINATY-PERSON-DETECTOR.py');
+const watcher=rd('branch-tools/madinaty/cctv-recorder/WATCH-MADINATY-RECORDER.ps1');
+const updater=rd('branch-tools/madinaty/cctv-recorder/UPDATE-MADINATY-v513.ps1');
+
+assert(detector.includes('if e[0] != c[0]'),'employee and customer must be two distinct detected people');
+assert(detector.includes('PresenceGate(cfg["holdSeconds"], cfg["clearSeconds"])'),'presence must remain continuously inside both cashier zones');
+assert(detector.includes('"holdSeconds": 30')&&detector.includes('"clearSeconds": 10'),'detector uses stable presence and exit thresholds');
+assert(detector.includes('/echarpe-playback/activity-candidate')&&detector.includes('/echarpe-playback/activity-state'),'detector reports metadata only to the local agent');
+assert(agent.includes("$path -eq '/echarpe-events/event'")&&agent.includes("[string]$body.type -eq 'sale_saved'"),'agent receives saved invoices without touching checkout success');
+assert(agent.includes('reviewAfterMs=$end+180000L'),'agent waits three minutes before deciding no invoice was saved');
+assert(agent.includes('[long]$_.atMs -ge [long]$item.startMs'),'an invoice saved before the new interaction cannot hide the alert');
+assert(agent.includes("type='cashier_people_no_sale'")&&agent.includes("$item.startMs-30000L"),'no-sale alert preserves a video window beginning 30 seconds before presence');
+assert(agent.includes("$path -eq '/echarpe-playback/alerts'")&&agent.includes("$path -eq '/echarpe-playback/activity-status'"),'Office can read local alert and detector status endpoints');
+assert(html.includes('id="ofCctvActivityReview"')&&html.includes('موظف خلف الكاشير + عميل أمامه'),'Office explains the exact two-person rule');
+assert(office.includes('function loadActivityAlerts()')&&office.includes('data-activity-play'),'Office lists alerts and opens their videos');
+assert(watcher.includes('ECHARPE-MADINATY-PERSON-DETECTOR.py'),'watchdog restarts the isolated detector');
+assert(updater.includes('mediapipe==0.10.21')&&updater.includes('AI_GATE_SELF_TEST_FAILED'),'installer provisions and self-tests the local detector');
+assert(html.includes('cctv.js?v=513')&&sw.includes('echarpe-office-v513'),'Office cache is safely busted');
+console.log('Madinaty employee+customer without sale video v513: PASS');

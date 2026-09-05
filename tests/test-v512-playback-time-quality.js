@@ -10,5 +10,5 @@ assert(office.includes("quality.onchange=function(){loadAt(start,Number(video.cu
 assert(html.includes('id="ofCctvDayDate"')&&html.includes('id="ofCctvDayTime"'), 'day review exposes date and time inputs');
 assert(office.includes("currentBounds=dayBounds(dayInput&&dayInput.value)"), 'day bounds are refreshed from the visible date at playback click');
 assert(office.includes('chosenStart=tq.length>1?new Date('), 'synchronized day review starts from the selected time');
-assert(html.includes('cctv.js?v=512')&&sw.includes('echarpe-office-v512'), 'Office cache is safely busted for v512');
+assert(/cctv\.js\?v=51[23]/.test(html)&&/echarpe-office-v51[23]/.test(sw), 'Office cache is safely busted at or after v512');
 console.log('Madinaty selectable day/time + 480/720 playback v512: PASS');
