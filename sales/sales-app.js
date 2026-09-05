@@ -4276,6 +4276,23 @@ function countsFor(empId, sinceTs){
   return sumPoints(list);
 }
 
+// 🏆 ترتيب الموظفين للشهر الحالي فقط.
+// لا نحذف تاريخ النقط: أول الشهر يتغير النطاق الزمني فيظهر الجميع من صفر،
+// بينما تظل الشهور السابقة متاحة للرواتب والتقارير والمراجعة.
+function monthlyLeaderboardRows(employees, points, now){
+  const range = getMonthRange(now != null ? now : Date.now());
+  const rows = Array.isArray(points) ? points : [];
+  return (employees||[]).map(function(e){
+    const count = sumPoints(rows.filter(function(p){
+      const ts = Number(p && p.ts) || 0;
+      return p && p.employeeId === e.id && ts >= range.start.getTime() && ts <= range.end.getTime();
+    }));
+    return { id:e.id, name:e.name, count:count };
+  }).filter(function(e){ return e.count > 0; })
+    .sort(function(a,b){ return (b.count-a.count) || String(a.name||'').localeCompare(String(b.name||''),'ar'); });
+}
+window.monthlyLeaderboardRows = monthlyLeaderboardRows;
+
 let highlightEmpId = null;
 let highlightTimer = null;
 
@@ -4314,7 +4331,7 @@ function renderEmpGrid(){
         ? `<div class="winNameWrap"><span class="emp-name">${e.name}</span></div>
            <div class="winPrize">${Number(win.amount)||0} <span>ج.م</span></div>`
         : `<div class="emp-name">${e.name}</div>
-           <div class="emp-count">${fmtPts(countsFor(e.id))} نقطة</div>`}
+           <div class="emp-count">${fmtPts(employeePointPeriodTotals(e.id, Date.now()).month)} نقطة هذا الشهر</div>`}
     </div>
   `;}).join('');
   grid.querySelectorAll('.emp-tile').forEach(tile=>{
@@ -4509,7 +4526,7 @@ function buildRows(list, key){
     <div class="lb-row ${i===0?'rank1':''}">
       <div class="lb-rank">${medalOrRank(i)}</div>
       <div class="lb-avatar">${avatarOf(e)}</div>
-      <div class="lb-name">${e.name} ${i===0 && key==='w' ? '<span class="crown">👑</span>' : ''}</div>
+      <div class="lb-name">${e.name} ${i===0 && key==='m' ? '<span class="crown">👑</span>' : ''}</div>
       <div class="lb-points">${fmtPts(e.count)} نقطة</div>
     </div>
   `).join('');
@@ -4518,13 +4535,8 @@ function buildRows(list, key){
 function renderLeaderboard(){
   // The kiosk-facing leaderboard always shows this device's own branch only.
   const lbEmployees = window.employees;
-  const weekAgo = Date.now() - 7*24*60*60*1000;
-  const weekly = lbEmployees.map(e=>({name:e.name, count: countsFor(e.id, weekAgo)}))
-    .filter(e=>e.count>0).sort((a,b)=>b.count-a.count);
-  const allTime = lbEmployees.map(e=>({name:e.name, count: countsFor(e.id)}))
-    .filter(e=>e.count>0).sort((a,b)=>b.count-a.count);
-  $('#weeklyList').innerHTML = buildRows(weekly, 'w');
-  $('#allTimeList').innerHTML = buildRows(allTime, 'a');
+  const monthly = monthlyLeaderboardRows(lbEmployees, window.points, Date.now());
+  $('#monthlyList').innerHTML = buildRows(monthly, 'm');
 }
 
 // ---------- ADMIN GATE ----------
