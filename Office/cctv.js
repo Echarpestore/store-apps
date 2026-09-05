@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v513
+/* ECHARPE Office CCTV v521
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -38,6 +38,7 @@
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
   function cam(id){var x=b();return x.cameras.find(function(c){return c.id===String(id);})||x.cameras[0];}
   function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(c.stream)+'&mode=mse&background=false';}
+  function frameUrl(c){return b().gateway+'/api/frame.jpeg?src='+encodeURIComponent(c.stream)+'&_=';}
   function load(){
     try{
       var fresh=localStorage.getItem(KEY), raw=fresh||localStorage.getItem(OLD_KEY)||'{}', x=JSON.parse(raw);
@@ -102,7 +103,13 @@
       lastLine+
       '<div class="of-cctv-age">آخر تحديث منذ '+Math.round(age/1000)+' ثانية</div></div>';
   }
-  function stopPanel(panel){panel.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}});panel.querySelectorAll('iframe[data-stream-src]').forEach(function(f){try{f.src='about:blank';f.remove();}catch(e){}});}
+  function stopPanel(panel){panel.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}});panel.querySelectorAll('iframe[data-stream-src]').forEach(function(f){try{f.src='about:blank';f.remove();}catch(e){}});panel.querySelectorAll('img[data-live-frame]').forEach(function(img){try{if(img._frameTimer)clearTimeout(img._frameTimer);img.onload=null;img.onerror=null;img.removeAttribute('src');}catch(e){}});}
+  function armSnapshotFrame(img){
+    if(!img)return;var base=img.getAttribute('data-live-frame'),delay=900;
+    function next(ms){if(img._frameTimer)clearTimeout(img._frameTimer);img._frameTimer=setTimeout(load,ms);}
+    function load(){if(!state.active||document.hidden||!document.documentElement.contains(img))return;img.onload=function(){img.classList.add('is-ready');next(delay);};img.onerror=function(){img.classList.remove('is-ready');next(2500);};img.src=base+Date.now();}
+    load();
+  }
   function armCameraPlayer(v){
     if(!v)return;
     function retry(){
@@ -125,9 +132,10 @@
   function cameraCard(c,i){
     var on=String(state.slots[i]||'off')===String(c.id);
     var toggleLabel=on?'إيقاف':'تشغيل';
+    var liveMedia=b().id==='madinaty'?'<img title="'+esc(c.name)+'" data-live-frame="'+esc(frameUrl(c))+'" alt="'+esc(c.name)+' live" loading="eager">':'<iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>';
     return '<article class="of-cctv-panel of-cctv-camera-panel '+(on?'is-live':'is-off')+'" data-camera="'+esc(c.id)+'" data-panel="'+i+'">'+
       '<div class="of-cctv-panel-head"><div class="of-cctv-camera-name"><b>'+esc(c.name)+'</b><small>'+esc(c.label)+'</small></div><div class="of-cctv-camera-actions"><button type="button" class="of-cctv-cam-toggle '+(on?'on':'off')+'" data-cctv-toggle="'+i+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+toggleLabel+' '+esc(c.name)+'"><span class="of-cctv-switch-track"><span class="of-cctv-switch-knob"></span></span><span class="of-cctv-switch-text">'+toggleLabel+'</span></button><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(on?'':' disabled')+'>⛶</button></div></div>'+
-      (on?'<div class="of-cctv-panel-body of-cctv-video"><iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe><div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div class="of-cctv-off-camera"><span>📹</span><b>'+esc(c.name)+'</b><small>'+esc(c.label)+' · متوقفة</small><em>اضغط تشغيل للمشاهدة</em></div></div>')+'</article>';
+      (on?'<div class="of-cctv-panel-body of-cctv-video">'+liveMedia+'<div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div class="of-cctv-off-camera"><span>📹</span><b>'+esc(c.name)+'</b><small>'+esc(c.label)+' · متوقفة</small><em>اضغط تشغيل للمشاهدة</em></div></div>')+'</article>';
   }
   function playbackUrl(atMs,durationMin,cameraId,offsetMs,quality){
     var x=b();if(!x.playback)return '';
@@ -220,6 +228,7 @@
     };});
     grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
     grid.querySelectorAll('video[data-stream-src]').forEach(armCameraPlayer);
+    grid.querySelectorAll('img[data-live-frame]').forEach(armSnapshotFrame);
     renderLiveStatus();
   }
   function render(){
@@ -438,10 +447,10 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
       var pv=document.createElement('div');pv.className='of-inv506-ov';pv.id='ofCctvInvoicePlayback';
       pv.innerHTML='<div class="of-sync506"><div class="of-sync506-head"><div><b>'+(sync?'🎬 Playback الكاميرا والسلة':'🎥 فيديو الفاتورة')+'</b><div class="of-inv506-muted">'+(sync?'كل حركة تظهر في السلة عند نفس لحظتها في الفيديو':'30 ثانية قبل الحفظ + 30 ثانية بعده')+' · التسجيل محفوظ على '+sourceName+'</div></div><div class="of-inv506-actions"><select id="ofSync506Quality" class="of-inv506-btn"><option value="480" selected>480p سريع</option><option value="720">720p أوضح</option></select><button id="ofSync506Close" class="of-inv506-btn">✕</button></div></div><div class="of-sync506-body"><div class="of-sync506-video"><video id="ofSync506Video" controls autoplay muted playsinline preload="none"></video><div id="ofSync506Status" class="of-sync506-status">جاري تجهيز التسجيل من '+sourceName+'…</div></div>'+(sync?'<aside class="of-sync506-cart"><div class="of-sync506-carthead"><b>🛒 السلة في هذه اللحظة</b><div id="ofSync506Clock" class="of-inv506-muted">—</div><div id="ofSync506Event" class="of-sync506-event">قبل أول صنف</div></div><div id="ofSync506Rows" class="of-sync506-rows"></div><div class="of-sync506-total"><span>الإجمالي</span><strong id="ofSync506Total">0.00 ج.م</strong></div></aside>':'')+'</div></div>';
       document.body.appendChild(pv);var video=pv.querySelector('#ofSync506Video'),status=pv.querySelector('#ofSync506Status'),quality=pv.querySelector('#ofSync506Quality');
-      function stop(){try{video.pause();video.removeAttribute('src');video.load();}catch(e){}closeOverlay(pv);}
-      function loadVideo(){status.className='of-sync506-status';status.textContent='جاري تجهيز التسجيل من '+sourceName+'…';video.src=videoUrl(start,duration,quality.value);video.load();video.play().catch(function(){});}
+      function stop(){if(retryTimer)clearTimeout(retryTimer);try{video.pause();video.removeAttribute('src');video.load();}catch(e){}closeOverlay(pv);}
+      var videoRetry=0,retryTimer=0;function loadVideo(){if(retryTimer){clearTimeout(retryTimer);retryTimer=0;}status.className='of-sync506-status';status.textContent=videoRetry?'إعادة الاتصال بالتسجيل تلقائيًا…':'جاري تجهيز التسجيل من '+sourceName+'…';video.src=videoUrl(start,duration,quality.value)+'&retry='+Date.now();video.load();video.play().catch(function(){});}
       function renderAt(){if(!sync)return;var state=window.ofCctvTimelineStateAt(events,start,video.currentTime),now=state.atMs,hit=state.event;var rowsEl=pv.querySelector('#ofSync506Rows'),totalEl=pv.querySelector('#ofSync506Total'),clockEl=pv.querySelector('#ofSync506Clock'),eventEl=pv.querySelector('#ofSync506Event');clockEl.textContent=new Date(now).toLocaleTimeString('ar-EG');if(!hit){rowsEl.innerHTML='<div class="of-inv506-muted" style="padding:12px">السلة لسه فاضية</div>';totalEl.textContent='0.00 ج.م';eventEl.textContent='قبل أول صنف';return;}var kind={item_added:'إضافة صنف',item_removed:'حذف صنف',qty_increased:'زيادة كمية',qty_decreased:'تقليل كمية',cart_edited:'تعديل السلة',payment:'بدء الدفع',saving:'بدء الحفظ',sale_saved:'حفظ الفاتورة'}[hit.kind]||'تغيير السلة';eventEl.textContent=kind+' · '+new Date(Number(hit.atMs)).toLocaleTimeString('ar-EG');var rows=Array.isArray(hit.cart)?hit.cart:[];rowsEl.innerHTML=rows.map(function(r){var item=catalog[r[0]]||{},q=Number(r[1])||0,p=Number(r[2])||0,ret=Number(r[3])===1;return '<div class="of-sync506-row"><span><b>'+esc(item.name||item.id||'صنف')+(ret?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(item.barcode?' · '+esc(item.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-inv506-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent=Number(hit.total||0).toFixed(2)+' ج.م';}
-      video.addEventListener('playing',function(){status.className='of-sync506-status ok';});video.addEventListener('loadeddata',function(){status.className='of-sync506-status ok';renderAt();});video.addEventListener('timeupdate',renderAt);video.addEventListener('seeking',renderAt);video.addEventListener('error',function(){status.className='of-sync506-status';status.textContent='تعذر تشغيل التسجيل — افتح بوابة CCTV وتأكد من الاتصال بالفرع.';});quality.onchange=loadVideo;pv.querySelector('#ofSync506Close').onclick=stop;pv.onclick=function(e){if(e.target===pv)stop();};loadVideo();renderAt();
+      video.addEventListener('playing',function(){videoRetry=0;status.className='of-sync506-status ok';});video.addEventListener('loadeddata',function(){videoRetry=0;status.className='of-sync506-status ok';renderAt();});video.addEventListener('timeupdate',renderAt);video.addEventListener('seeking',renderAt);video.addEventListener('error',function(){if(videoRetry<4&&document.documentElement.contains(pv)){videoRetry++;status.className='of-sync506-status';status.textContent='التسجيل لسه بيتجهز — إعادة المحاولة تلقائيًا ('+videoRetry+'/4)…';retryTimer=setTimeout(loadVideo,4000);return;}status.className='of-sync506-status';status.textContent='التسجيل غير متاح لهذا التوقيت.';});quality.onchange=function(){videoRetry=0;loadVideo();};pv.querySelector('#ofSync506Close').onclick=stop;pv.onclick=function(e){if(e.target===pv)stop();};loadVideo();renderAt();
     }
     var vbtn=ov.querySelector('#ofInv506Video');if(vbtn)vbtn.onclick=function(){openPlayer(false);};var sbtn=ov.querySelector('#ofInv506Sync');if(sbtn)sbtn.onclick=function(){openPlayer(true);};var retry=ov.querySelector('#ofInv506Retry');if(retry)retry.onclick=function(){retry.disabled=true;retry.textContent='جاري الفحص…';setTimeout(function(){closeOverlay(ov);window.ofCctvInvoiceShot(invoiceCode);},700);};
   }catch(e){console.warn('invoice cctv v506',e);alert('تعذر فتح مراجعة الفاتورة');}

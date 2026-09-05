@@ -403,6 +403,12 @@
 @media(min-width:1051px){.of-cctv-camera-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
 @media(max-width:720px){.of-cctv-camera-panel{height:190px!important;min-height:190px!important;aspect-ratio:auto!important}.of-cctv-camera-name{padding:6px 7px}.of-cctv-camera-name b{font-size:9px}.of-cctv-camera-name small{font-size:7px}.of-cctv-cam-toggle{padding:4px 5px}.of-cctv-switch-track{width:27px;height:15px}.of-cctv-switch-knob{width:11px;height:11px}.of-cctv-cam-toggle.on .of-cctv-switch-knob{transform:translateX(12px)}.of-cctv-switch-text{display:none}}
 </style>
+
+<style id="ofCctvV521Style">
+/* Madinaty reliable live fallback: current JPEG frames avoid failed remote MSE sessions. */
+.of-cctv-video img[data-live-frame]{position:absolute;inset:0;display:block;width:100%;height:100%;min-height:100%;object-fit:cover;background:#000;opacity:0;transition:opacity .15s ease}
+.of-cctv-video img[data-live-frame].is-ready{opacity:1}
+</style>
 </head>
 <body>
 
@@ -875,7 +881,7 @@
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=384"></script>
 <script src="../cctv-config.js?v=510"></script>
-<script src="cctv.js?v=513"></script>
+<script src="cctv.js?v=521"></script>
 <script src="office.js?v=476"></script>
 </body>
 </html>
