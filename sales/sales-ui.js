@@ -332,7 +332,7 @@ window.renderDeductionsLog = function(){
   const wrap = document.querySelector('#deductionsLog'); if(!wrap) return;
   const now = new Date();
   const mk = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const rows = (window.deductions||[]).filter(d=> String(d.date||'').startsWith(mk)).sort((a,b)=> (b.ts||0)-(a.ts||0));
+  const rows = (window.deductions||[]).filter(d=> !d.deleted && String(d.date||'').startsWith(mk)).sort((a,b)=> (b.ts||0)-(a.ts||0));
   if(!rows.length){ wrap.innerHTML = '<p style="color:var(--sub); font-size:12px;">مفيش خصومات الشهر ده ✅</p>'; return; }
   // إجمالي لكل موظف
   const byEmp = {};
@@ -357,8 +357,21 @@ window.renderDeductionsLog = function(){
 }
 
 window.deleteDeduction = async function(id){
-  if(!confirm('تشيل الخصم ده؟')) return;
-  try{ await window.fbDeleteDoc(window.fbDoc(window.db,'sales_deductions', id)); }catch(e){ alert('تعذر الحذف: '+e.message); }
+  if(!payrollOwnerOnly()) return;
+  const item = window.getPayrollDeductionById ? window.getPayrollDeductionById(id) : null;
+  const details = item
+    ? `${item.employeeName||'الموظف'}\n${Number(item.amount||0)} ج.م · ${item.date||'بدون تاريخ'}${item.reason?'\nالسبب: '+item.reason:''}`
+    : 'الخصم المحدد';
+  if(!confirm('حذف الخصم من حساب الراتب؟\n\n'+details+'\n\nالسجل سيُحفظ كمحذوف للمراجعة ولن يدخل الحساب مرة أخرى.')) return;
+  if(window.payrollDeductionAlreadyPaid && window.payrollDeductionAlreadyPaid(item)){
+    if(!confirm('⚠️ مرتب الفترة دي متسجل كمدفوع بالفعل.\nالحذف هيصحح المراجعة فقط ولن يغيّر المبلغ اللي اتصرف.\n\nمتأكد تكمل؟')) return;
+  }
+  try{
+    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_deductions', id), {
+      deleted:true, deletedAt:Date.now(), deletedByRole:window.adminRole||'owner'
+    });
+    if(window.afterPayrollDeductionDeleted) window.afterPayrollDeductionDeleted(id);
+  }catch(e){ alert('تعذر الحذف: '+e.message); }
 };
 
 function payrollOwnerOnly(){

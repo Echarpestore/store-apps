@@ -404,6 +404,7 @@ let allTimeCredit = [];
 const leaveReqCol = collection(db, 'sales_leave_requests');  // 📩 طلبات الإذن/الإجازة
 let allLeaveReqs = [];
 let allSettingsDocs = [];   // معرّفات مستندات الإعدادات = أسماء الفروع
+let allSettingsByBranch = {}; // 👑 v519: سعر النقطة وإعدادات المال الصحيحة لكل فرع في المراجعة العامة
 
 // Simple admin access code — checked on-device, no network call.
 // Change this string to whatever code you want, then re-download the file.
@@ -1881,7 +1882,7 @@ function applyBranchFilter(){
   terminations = allTerminations.filter(t => t.branch === window.currentBranch);
   window.allAdvances = allAdvances;   // 🌍 للفحوصات (advCheck)
   advances = allAdvances.filter(a => a.branch === window.currentBranch);
-  deductions = allDeductions.filter(a => a.branch === window.currentBranch);
+  deductions = allDeductions.filter(a => a.branch === window.currentBranch && !a.deleted);
   window.deductions = deductions;
   renderEmpGrid();
   renderTodayAdvancesSummary();
@@ -2011,12 +2012,13 @@ const _scopedDays = (col, field, days)=> query(col, where(field, '>=', Date.now(
 onSnapshot(referralsCol, (snap)=>{
   window.appReferrals = snap.docs.map(d=> ({id:d.id, ...d.data()}));
   if(typeof renderCommissionPanel==='function') renderCommissionPanel();
+  if(adminUnlocked && typeof renderSalaryPanel==='function') renderSalaryPanel();
   if(typeof renderReferralPanel==='function') renderReferralPanel();
 });
 lf431History('points190', _scoped(pointsCol,'ts'), _recent(pointsCol,'ts'), ()=>window.points, (rows)=>{
   window.points=rows; renderEmpGrid(); renderDailyTargetCard();
   if($('#leaderboard').classList.contains('show')) renderLeaderboard();
-  if(adminUnlocked){renderLog();renderPerformanceLink();}
+  if(adminUnlocked){renderLog();renderPerformanceLink();renderCommissionPanel();renderSalaryPanel();refreshOpenPayrollEmployee();}
 });
 
 // 📉 تقييمات العملاء بتكبر مع كل تقييم للأبد — دي أكبر مصدر قراءات في التطبيق
@@ -2042,6 +2044,8 @@ lf431History('rewards190', _scoped(rewardsCol,'earnedAt'), _recent(rewardsCol,'e
 onSnapshot(settingsCol, (snap)=>{
   allSettingsDocs = snap.docs.map(d=> d.id);   // 🏬 كل مستند إعدادات = فرع موجود
   window.allSettingsDocs = allSettingsDocs;
+  allSettingsByBranch = Object.fromEntries(snap.docs.map(d=>[String(d.id).trim(),d.data()||{}]));
+  window.allSettingsByBranch = allSettingsByBranch;
   const branchDoc = snap.docs.find(d=> d.id === window.currentBranch);
   const data = branchDoc ? branchDoc.data() : {};
   commissionPerPoint = data.commissionPerPoint || 0;
@@ -2091,7 +2095,7 @@ onSnapshot(settingsCol, (snap)=>{
   }catch(e){ console.warn('weeklyStartFloor init', e); }
   renderAnnouncementBanner();
   renderDailyTargetCard();
-  if(adminUnlocked){ renderCommissionPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); try{ window.renderTimeSettings(); }catch(e){} }
+  if(adminUnlocked){ renderCommissionPanel(); renderSalaryPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); try{ window.renderTimeSettings(); }catch(e){} }
 }, (err)=> console.error('settings sync error', err));
 
 lf431History('vio190', _scoped(vioReviewCol,'ts'), _recent(vioReviewCol,'ts'), ()=>allVioReviews, (rows)=>{allVioReviews=rows;if(adminUnlocked&&typeof renderViolationsReview==='function')renderViolationsReview();});
@@ -2107,13 +2111,14 @@ onSnapshot(leaveReqCol, (snap)=>{
   window.allLeaveReqs = allLeaveReqs;
   if(adminUnlocked && typeof window.renderLeaveRequests==='function'){ try{ window.renderLeaveRequests(); }catch(e){} }
   if(typeof updateLeaveBadge==='function'){ try{ updateLeaveBadge(); }catch(e){} }
+  if(adminUnlocked){ try{ renderSalaryPanel(); refreshOpenPayrollEmployee(); }catch(e){} }
 }, (e)=> console.warn('leave sync', e && e.code));
 
-lf431History('timecredit190', _scoped(timeCreditCol,'ts'), _recent(timeCreditCol,'ts'), ()=>allTimeCredit, (rows)=>{allTimeCredit=rows;window.allTimeCredit=allTimeCredit;if(adminUnlocked&&typeof window.renderTimeCreditLog==='function'){try{window.renderTimeCreditLog();}catch(e){}}if(adminUnlocked&&typeof window.renderGraceDay==='function'){try{window.renderGraceDay();}catch(e){}}});
+lf431History('timecredit190', _scoped(timeCreditCol,'ts'), _recent(timeCreditCol,'ts'), ()=>allTimeCredit, (rows)=>{allTimeCredit=rows;window.allTimeCredit=allTimeCredit;if(adminUnlocked&&typeof window.renderTimeCreditLog==='function'){try{window.renderTimeCreditLog();}catch(e){}}if(adminUnlocked&&typeof window.renderGraceDay==='function'){try{window.renderGraceDay();}catch(e){}}if(adminUnlocked){renderSalaryPanel();refreshOpenPayrollEmployee();}});
 
-lf431History('deductions190', _scoped(deductionsCol,'ts'), _recent(deductionsCol,'ts'), ()=>allDeductions, (rows)=>{allDeductions=rows;deductions=allDeductions.filter(x=>x.branch===window.currentBranch);window.deductions=deductions;if(adminUnlocked&&typeof renderDeductionsLog==='function')window.renderDeductionsLog();});
+lf431History('deductions190', _scoped(deductionsCol,'ts'), _recent(deductionsCol,'ts'), ()=>allDeductions, (rows)=>{allDeductions=rows;deductions=allDeductions.filter(x=>x.branch===window.currentBranch&&!x.deleted);window.deductions=deductions;if(adminUnlocked){if(typeof renderDeductionsLog==='function')window.renderDeductionsLog();renderSalaryPanel();refreshOpenPayrollEmployee();const open=document.getElementById('payrollBranchOv');if(open)window.openPayrollBranchControl(open.dataset.branch,open.dataset.periodKey);}});
 
-lf431History('commission190', _scoped(commissionPaymentsCol,'paidAt'), _recent(commissionPaymentsCol,'paidAt'), ()=>allCommissionPayments, (rows)=>{allCommissionPayments=rows;commissionPayments=allCommissionPayments.filter(p=>p.branch===window.currentBranch);if(adminUnlocked){renderCommissionPanel();refreshOpenPayrollEmployee();}});
+lf431History('commission190', _scoped(commissionPaymentsCol,'paidAt'), _recent(commissionPaymentsCol,'paidAt'), ()=>allCommissionPayments, (rows)=>{allCommissionPayments=rows;commissionPayments=allCommissionPayments.filter(p=>p.branch===window.currentBranch);if(adminUnlocked){renderCommissionPanel();renderSalaryPanel();refreshOpenPayrollEmployee();}});
 
 lf431History('salary190', _scoped(salaryPaymentsCol,'paidAt'), _recent(salaryPaymentsCol,'paidAt'), ()=>allSalaryPayments, (rows)=>{allSalaryPayments=rows;salaryPayments=allSalaryPayments.filter(p=>p.branch===window.currentBranch);if(adminUnlocked){renderSalaryPanel();renderSalaryPaymentLog();refreshOpenPayrollEmployee();}});
 
@@ -5616,6 +5621,7 @@ async function loadTargetData(){
   }catch(e){ console.warn('target data', e); }
   _tgtCache.loading = false;
   renderCommissionPanel();
+  if(adminUnlocked) renderSalaryPanel();
 }
 function _targetInfoFor(emp){
   const cfg = staffPointsCfg;
@@ -5744,7 +5750,12 @@ function commissionDueFor(emp, monthKey){
   const ptsPaid = ptsPaidDocs.reduce((s,p)=> s + (Number(p.pointsCount)||0), 0);
   const ptsPaidAmt = Math.round(ptsPaidDocs.reduce((s,p)=> s + (Number(p.commissionAmount)||0), 0) * 100)/100;
   const ptsDue = Math.max(0, Math.round((ptsTotal - ptsPaid) * 100)/100);
-  const ptsDueAmt = Math.round(ptsDue * (commissionPerPoint || 0) * 100)/100;
+  const branchCfg = (typeof allSettingsByBranch!=='undefined' && allSettingsByBranch)
+    ? allSettingsByBranch[String(emp.branch||'').trim()] : null;
+  const pointRate = branchCfg && Object.prototype.hasOwnProperty.call(branchCfg,'commissionPerPoint')
+    ? (Number(branchCfg.commissionPerPoint)||0)
+    : ((typeof allSettingsByBranch==='undefined' || String(emp.branch||'').trim()===String((typeof window!=='undefined'&&window.currentBranch)||'').trim()) ? (Number(commissionPerPoint)||0) : 0);
+  const ptsDueAmt = Math.round(ptsDue * pointRate * 100)/100;
 
   const refsAll = (window.appReferrals || []).filter(r=> r.employeeId === emp.id
     && r.ts >= range.start.getTime() && r.ts <= range.end.getTime() && _refIsActive(r));
@@ -5768,6 +5779,13 @@ function commissionDueFor(emp, monthKey){
            totalPaid: Math.round((ptsPaidAmt + refPaidAmt + tgtPaidAmt) * 100)/100 };
 }
 window.commissionDueFor = commissionDueFor;
+function commissionRateForEmployee(emp){
+  const cfg=(allSettingsByBranch||{})[String(emp&&emp.branch||'').trim()];
+  return cfg && Object.prototype.hasOwnProperty.call(cfg,'commissionPerPoint')
+    ? (Number(cfg.commissionPerPoint)||0)
+    : (String(emp&&emp.branch||'').trim()===String(window.currentBranch||'').trim() ? (Number(commissionPerPoint)||0) : 0);
+}
+window.commissionRateForEmployee=commissionRateForEmployee;
 function renderCommissionPanel(){
   const input = $('#commissionPerPointInput');
   if(!input) return;
@@ -5880,7 +5898,7 @@ function renderCommissionPanel(){
       const n = Math.round((parseFloat(String(raw).replace(',', '.')) || 0) * 100) / 100;
       if(!(n > 0)){ alert('اكتب رقم أكبر من صفر'); return; }
       if(n > maxPts){ alert(`أكبر من المستحق — أقصى حاجة ${fmtPts(maxPts)} نقطة`); return; }
-      const amt = Math.round(n * commissionPerPoint * 100) / 100;
+      const amt = Math.round(n * commissionRateForEmployee(emp) * 100) / 100;
       const left = Math.round((maxPts - n) * 100) / 100;
       if(!confirm(`تأكيد دفع ${amt} ج.م لـ ${emp.name} عن ${fmtPts(n)} نقطة (شهر ${monthLabel})؟\nهيفضل مستحق ${fmtPts(left)} نقطة.`)) return;
       btn.dataset.busy = '1';
@@ -6570,6 +6588,7 @@ function computeSalary(emp, periodStart, end){
   const _deductionSource = (allDeductions && allDeductions.length)
     ? allDeductions : (((typeof window !== 'undefined' && window.deductions) || []));
   const adminDeductionItems = _deductionSource.filter(d=>{
+    if(d.deleted) return false;
     if(d.employeeId !== emp.id) return false;
     const t = d.ts || new Date((d.date||'') + 'T00:00:00').getTime();
     return t >= start.getTime() && t <= end.getTime();
@@ -6654,6 +6673,122 @@ function payrollIntegrityCheck(calc, due){
     message: b.ok ? '' : ('عدم تطابق حساب المرتب: المحرك '+b.engineNet+' ج.م بينما المعادلة '+b.salaryNet+' ج.م')
   };
 }
+
+// ===== 👑 v519 — سيطرة الرواتب حسب الفرع =====
+// التجميع دالة نقية عشان نفس الأرقام تظهر في الكارت والتفاصيل والاختبارات.
+function payrollBranchTotals(rows){
+  const money=n=>Math.round((Number(n)||0)*100)/100;
+  const out=new Map();
+  (rows||[]).forEach(r=>{
+    const branch=String(r.branch||'').trim()||'بدون فرع';
+    if(!out.has(branch)) out.set(branch,{
+      branch,employees:0,paidEmployees:0,base:0,additions:0,deductions:0,
+      manualDeductions:0,salaryNet:0,salaryDue:0,pointsDue:0,pointsDueAmount:0,
+      otherCommissionsDue:0,totalDue:0
+    });
+    const x=out.get(branch);
+    x.employees+=1;
+    if(r.paid) x.paidEmployees+=1;
+    ['base','additions','deductions','manualDeductions','salaryNet','salaryDue','pointsDue','pointsDueAmount','otherCommissionsDue','totalDue']
+      .forEach(k=>{ x[k]=money(x[k]+(Number(r[k])||0)); });
+  });
+  return [...out.values()].sort((a,b)=>a.branch.localeCompare(b.branch,'ar'));
+}
+window.payrollBranchTotals=payrollBranchTotals;
+
+function payrollPeriodRows(periodLabel, employees){
+  const range=payPeriodRange(periodLabel);
+  return (employees||[]).filter(e=>e && e.baseSalary && e.active!==false && !e.deletedAt).map(emp=>{
+    const calc=computeSalary(emp,range.start,range.end);
+    if(calc.notYetHired) return null;
+    const due=commissionDueFor(emp,periodLabel);
+    const pb=payrollMoneyBreakdown(calc,due);
+    const paid=(allSalaryPayments||[]).find(p=>p.employeeId===emp.id && p.periodLabel===periodLabel);
+    const salaryDue=paid?0:Math.max(0,pb.salaryNet);
+    const otherCommissionsDue=Math.round(((Number(due.refDueAmt)||0)+(Number(due.tgtDueAmt)||0))*100)/100;
+    return {
+      employeeId:emp.id,employeeName:emp.name||'',branch:emp.branch||'',emp,calc,due,pb,paid:!!paid,
+      base:pb.base,additions:pb.salaryAdditions,deductions:pb.salaryDeductions,
+      manualDeductions:Number(calc.adminDeductions)||0,salaryNet:pb.salaryNet,salaryDue,
+      pointsDue:Number(due.ptsDue)||0,pointsDueAmount:Number(due.ptsDueAmt)||0,
+      otherCommissionsDue,totalDue:Math.round((salaryDue+(Number(due.totalDue)||0))*100)/100
+    };
+  }).filter(Boolean);
+}
+window.payrollPeriodRows=function(periodLabel){ return payrollPeriodRows(periodLabel,reviewEmployeesFor(viewBranch)); };
+
+function renderPayrollBranchSummary(periodLabel, employees){
+  const wrap=document.getElementById('salaryBranchControl'); if(!wrap) return;
+  const totals=payrollBranchTotals(payrollPeriodRows(periodLabel,employees));
+  const missing=(employees||[]).filter(e=>e&&e.active!==false&&!e.deletedAt&&!(Number(e.baseSalary)>0));
+  if(!totals.length){
+    wrap.innerHTML=missing.length?`<div style="margin:0 0 12px;color:#fbbf24;font-size:11px">⚠️ ${missing.length} موظف بدون راتب أساسي غير داخل الإجمالي: ${missing.map(e=>_payEsc(e.name||'—')).join('، ')}</div>`:'';
+    return;
+  }
+  wrap.innerHTML=`<style>
+    #salaryBranchControl{margin:0 0 14px}#salaryBranchControl .pbc-title{font-size:14px;font-weight:950;margin-bottom:8px}
+    #salaryBranchControl .pbc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:9px}
+    #salaryBranchControl .pbc-card{background:linear-gradient(180deg,rgba(22,168,102,.12),rgba(255,255,255,.025));border:1px solid rgba(52,211,153,.28);border-radius:15px;padding:12px;color:inherit;text-align:right;font-family:inherit}
+    #salaryBranchControl .pbc-head{display:flex;justify-content:space-between;gap:10px;align-items:center}.pbc-branch{font-weight:950;font-size:15px}.pbc-due{font-size:18px;font-weight:950;color:#49db7e;direction:ltr}
+    #salaryBranchControl .pbc-lines{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;font-size:10.5px;color:var(--sub)}#salaryBranchControl .pbc-lines b{display:block;color:#fff;font-size:12px;margin-top:2px;direction:ltr}
+    #salaryBranchControl .pbc-open{width:100%;margin-top:10px;border:1px solid rgba(255,255,255,.13);background:#272833;color:#fff;border-radius:10px;padding:8px;font-family:inherit;font-weight:800;cursor:pointer}
+  </style><div class="pbc-title">👑 إجمالي المطلوب لكل فرع — الراتب + النقط</div><div class="pbc-grid">${totals.map(t=>`
+    <div class="pbc-card"><div class="pbc-head"><div><div class="pbc-branch">${_payEsc(t.branch)}</div><div style="font-size:10px;color:var(--sub)">${t.employees} موظف · ${t.paidEmployees} راتب مدفوع</div></div><div><div class="pbc-due">${_payMoney(t.totalDue)}</div><div style="font-size:9px;color:var(--sub);text-align:left">المطلوب الآن</div></div></div>
+      <div class="pbc-lines"><span>رواتب غير مدفوعة<b>${_payMoney(t.salaryDue)}</b></span><span>النقط المتبقية<b>${_payPts(t.pointsDue)} = ${_payMoney(t.pointsDueAmount)}</b></span><span>عمولات أخرى متبقية<b>${_payMoney(t.otherCommissionsDue)}</b></span><span>إجمالي كل الخصومات<b style="color:#ff6b72">-${_payMoney(t.deductions)}</b></span><span>خصم مالي قابل للحذف<b style="color:#ff9a9f">-${_payMoney(t.manualDeductions)}</b></span></div>
+      <button type="button" class="pbc-open" data-payroll-branch="${_payEsc(t.branch)}">فتح السيطرة والتفاصيل</button>
+    </div>`).join('')}</div>${missing.length?`<div style="margin-top:8px;color:#fbbf24;font-size:11px">⚠️ ${missing.length} موظف بدون راتب أساسي غير داخل الإجمالي: ${missing.map(e=>_payEsc(e.name||'—')).join('، ')}</div>`:''}`;
+  wrap.querySelectorAll('[data-payroll-branch]').forEach(btn=>{
+    btn.onclick=()=>window.openPayrollBranchControl(btn.dataset.payrollBranch,periodLabel);
+  });
+}
+
+window.getPayrollDeductionById=function(id){ return (allDeductions||[]).find(d=>String(d.id)===String(id))||null; };
+window.payrollDeductionAlreadyPaid=function(item){
+  if(!item) return false;
+  const pk=String(item.date||'').slice(0,7);
+  return !!(pk && (allSalaryPayments||[]).some(p=>p.employeeId===item.employeeId && p.periodLabel===pk));
+};
+
+window.openPayrollBranchControl=function(branch,periodLabel){
+  const pk=periodLabel||window.salaryPeriodKey||defaultPayPeriodKey(new Date());
+  const wanted=String(branch||'').trim()||'بدون فرع';
+  const emps=reviewEmployeesFor('__ALL__').filter(e=>(String(e.branch||'').trim()||'بدون فرع')===wanted);
+  const rows=payrollPeriodRows(pk,emps), total=payrollBranchTotals(rows)[0];
+  if(!total){ alert('مفيش رواتب في الفرع للفترة دي'); return; }
+  document.getElementById('payrollBranchOv')?.remove();
+  const ov=document.createElement('div'); ov.id='payrollBranchOv'; ov.dataset.branch=wanted; ov.dataset.periodKey=pk;
+  ov.style.cssText='position:fixed;inset:0;z-index:10030;background:rgba(0,0,0,.88);overflow:auto;padding:12px 8px 30px;color:#f5f5f7;font-family:Cairo,sans-serif';
+  const typeLabel={late:'تأخير',shiftSwap:'تبديل شيفت',dayoffSwap:'تبديل إجازة',absence:'غياب',manual_money:'خصم مبلغ',manual_days:'خصم أيام'};
+  ov.innerHTML=`<div style="max-width:720px;margin:auto;background:#171820;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:14px">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div style="font-size:20px;font-weight:950">👑 سيطرة رواتب ${_payEsc(wanted)}</div><div style="font-size:11px;color:var(--sub)">${_payEsc(payPeriodLabelAr(pk))} · الراتب والنقط والخصومات من نفس حسبة الصرف</div></div><button class="backBtn" data-pbc-close>✕</button></div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:13px 0"><div style="background:rgba(34,197,94,.12);padding:11px;border-radius:12px;text-align:center;color:var(--sub);font-size:10px">المطلوب الآن<b style="display:block;color:#49db7e;font-size:20px;direction:ltr">${_payMoney(total.totalDue)}</b></div><div style="background:rgba(239,68,68,.1);padding:11px;border-radius:12px;text-align:center;color:var(--sub);font-size:10px">كل الخصومات<b style="display:block;color:#ff6b72;font-size:20px;direction:ltr">-${_payMoney(total.deductions)}</b></div></div>
+    <div style="font-size:11px;color:#fbbf24;margin:0 2px 10px">زر الحذف يخص سجلات الخصم المالي فقط. الغياب ورصيد الوقت والسلف لهم مراجعتهم المنفصلة ولا يتم حذفهم من هنا.</div>
+    ${rows.map(r=>{
+      const locked=Math.max(0,r.deductions-r.manualDeductions);
+      const items=(r.calc.adminDeductionItems||[]).filter(d=>!d.deleted);
+      return `<section style="background:#20212a;border:1px solid rgba(255,255,255,.08);border-radius:15px;padding:11px;margin-top:9px"><div style="display:flex;justify-content:space-between;gap:10px"><div><b>${_payEsc(r.employeeName)}</b><div style="font-size:10px;color:var(--sub)">${r.paid?'✅ الراتب مدفوع':'⏳ الراتب غير مدفوع'}</div></div><div style="text-align:left"><b style="color:#49db7e;direction:ltr">${_payMoney(r.totalDue)}</b><div style="font-size:9px;color:var(--sub)">مطلوب الآن</div></div></div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:9px;font-size:10px;color:var(--sub);text-align:center"><span>صافي الراتب<b style="display:block;color:#fff">${_payMoney(r.salaryNet)}</b></span><span>النقط<b style="display:block;color:#fbbf24">${_payPts(r.pointsDue)} = ${_payMoney(r.pointsDueAmount)}</b></span><span>عمولات أخرى<b style="display:block;color:#fff">${_payMoney(r.otherCommissionsDue)}</b></span><span>خصومات لا تُحذف من هنا<b style="display:block;color:#ff9a9f">-${_payMoney(locked)}</b></span></div>
+        ${items.length?`<div style="margin-top:9px;border-top:1px solid rgba(255,255,255,.07)">${items.map(d=>`<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.055);font-size:11px"><span><b>${_payEsc(typeLabel[d.type]||d.type||'خصم مالي')}</b> · ${_payEsc(d.date||'—')}${d.reason?' · '+_payEsc(d.reason):''}</span><span style="display:flex;gap:7px;align-items:center"><b style="color:#ff6b72;white-space:nowrap">-${_payMoney(d.amount)}</b><button type="button" class="backBtn" style="padding:5px 8px;color:#ff858b" data-delete-deduction="${_payEsc(d.id)}">حذف</button></span></div>`).join('')}</div>`:'<div style="font-size:10px;color:var(--sub);margin-top:9px">لا يوجد خصم مالي يدوي في الفترة.</div>'}
+        <button type="button" class="backBtn" style="width:100%;margin-top:8px" data-open-payroll-emp="${_payEsc(r.employeeId)}">تفاصيل حساب الموظف</button>
+      </section>`;
+    }).join('')}
+  </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('[data-pbc-close]').onclick=()=>ov.remove();
+  ov.querySelectorAll('[data-delete-deduction]').forEach(btn=>btn.onclick=()=>window.deleteDeduction(btn.dataset.deleteDeduction));
+  ov.querySelectorAll('[data-open-payroll-emp]').forEach(btn=>btn.onclick=()=>window.openPayrollEmployee(btn.dataset.openPayrollEmp,pk));
+};
+
+window.afterPayrollDeductionDeleted=function(id){
+  allDeductions=(allDeductions||[]).map(d=>String(d.id)===String(id)?{...d,deleted:true,deletedAt:Date.now()}:d);
+  deductions=allDeductions.filter(d=>d.branch===window.currentBranch&&!d.deleted);
+  window.deductions=deductions;
+  try{ window.renderDeductionsLog?.(); }catch(e){}
+  try{ renderSalaryPanel(); }catch(e){}
+  try{ refreshOpenPayrollEmployee(); }catch(e){}
+  const open=document.getElementById('payrollBranchOv');
+  if(open) window.openPayrollBranchControl(open.dataset.branch,open.dataset.periodKey);
+};
 if(typeof window!=='undefined'){
   window.payrollMoneyBreakdown = payrollMoneyBreakdown;
   window.payrollIntegrityCheck = payrollIntegrityCheck;
@@ -6665,6 +6800,7 @@ function renderSalaryPanel(){
   const periodLabel = window.salaryPeriodKey || defaultPayPeriodKey(new Date());
   _renderPeriodPicker('salaryPeriodSelect', periodLabel);
   const emps = reviewEmployeesFor(viewBranch);
+  renderPayrollBranchSummary(periodLabel, emps);
   if(!emps.length){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const range = payPeriodRange(periodLabel);
   wrap.innerHTML = emps.map(e=>{
@@ -6728,7 +6864,7 @@ window.payPayrollPointsNow = async function(empId, periodKey, btn){
   const pk = periodKey || window.salaryPeriodKey || defaultPayPeriodKey(new Date());
   const due = commissionDueFor(emp, pk);
   if(!(due.ptsDue>0)){ refreshOpenPayrollEmployee(); return; }
-  const rate = Number(commissionPerPoint)||0;
+  const rate = commissionRateForEmployee(emp);
   if(!(rate>0)){ alert('حدد قيمة النقطة الأول من إعدادات العمولات.'); return; }
   const amount = Math.round(due.ptsDue*rate*100)/100;
   if(!confirm('تأكيد دفع '+_payPts(due.ptsDue)+' نقطة = '+_payMoney(amount)+' لـ '+emp.name+'؟')) return;
@@ -6763,7 +6899,7 @@ window.openPayrollEmployee = function(empId, periodKey){
   const range = payPeriodRange(pk);
   const c = computeSalary(emp, range.start, range.end);
   const due = commissionDueFor(emp, pk);
-  const rate = Number(commissionPerPoint)||0;
+  const rate = commissionRateForEmployee(emp);
   const hist = (emp.salaryHistory||[]).slice().reverse().slice(0,20);
   const old = document.getElementById('payrollEmpOv'); if(old) old.remove();
   const ov = document.createElement('div'); ov.id='payrollEmpOv';
@@ -7070,7 +7206,7 @@ window.openSalaryPayoutDialog = function(empId, periodKey){
   const range = payPeriodRange(pk);
   const calc = computeSalary(emp, range.start, range.end);
   const due = commissionDueFor(emp, pk);
-  const rate = commissionPerPoint || 0;
+  const rate = commissionRateForEmployee(emp);
   const pb = payrollMoneyBreakdown(calc, due);
   const integrity = payrollIntegrityCheck(calc, due);
 
