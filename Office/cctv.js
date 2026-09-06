@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v530
+/* ECHARPE Office CCTV v531
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -9,9 +9,9 @@
     liveAliases:['madinaty','مدينتي'], playback:true, playbackCamera:'4',
     cameras:[
       {id:'4',name:'D04',label:'الكاشير',stream:'camera4',liveStream:'camera4_live'},
-      {id:'5',name:'D05',label:'كاميرا 5',stream:'camera5'},
-      {id:'7',name:'D07',label:'كاميرا 7',stream:'camera7'},
-      {id:'8',name:'D08',label:'كاميرا 8',stream:'camera8'}
+      {id:'5',name:'D05',label:'كاميرا 5',stream:'camera5',liveStream:'camera5_live'},
+      {id:'7',name:'D07',label:'كاميرا 7',stream:'camera7',liveStream:'camera7_live'},
+      {id:'8',name:'D08',label:'كاميرا 8',stream:'camera8',liveStream:'camera8_live'}
     ]
   },{
     id:'glow', name:'Glow', gateway:'https://cctv-glow.echarpe.store',
