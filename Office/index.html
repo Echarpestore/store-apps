@@ -636,7 +636,7 @@
 
     <div class="panel">
       <h3>💹 بنكسب ولا بنخسر؟</h3>
-      <div class="hint">مبيعات الفروع − المرتبات − البضاعة (أوردرات التجار) − المصاريف والإيجارات. السلف مش بند خصم إضافي — هي جزء متدفع بدري من المرتبات.</div>
+      <div class="hint">مبيعات الفروع − ما تم صرفه فعليًا من المرتبات والعمولات − السلف ومشتريات الموظفين − البضاعة − مصاريف الفروع. كل حركة تُحسب في شهر تسجيلها.</div>
       <select class="f" id="plMonthSel"></select>
       <div id="plBranches"></div>
       <div id="plBody"></div>
@@ -690,6 +690,7 @@
       <div class="hint">مصاريف التشغيل — إيجار، مرتبات خارجية، تسويق، أي حاجة.</div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <input class="f" id="exAmount" type="number" inputmode="decimal" placeholder="المبلغ" style="flex:1; min-width:100px;">
+        <select class="f" id="exBranch" style="flex:1;min-width:140px;"><option value="">عام / الشركة</option></select>
         <input class="f" id="exNote" placeholder="على إيه؟" style="flex:2; min-width:140px;">
         <button class="btn gold" id="exAdd" style="margin-bottom:8px;">تسجيل</button>
       </div>
@@ -882,6 +883,6 @@
 <script src="../pos/chat-staff-ui.js?v=384"></script>
 <script src="../cctv-config.js?v=522"></script>
 <script src="cctv.js?v=533"></script>
-<script src="office.js?v=476"></script>
+<script src="office.js?v=535"></script>
 </body>
 </html>
