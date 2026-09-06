@@ -737,7 +737,7 @@ window._nextDayStr = _nextDayStr;
 window.graceCloseTsFor = function(shift, emp, cfg){
   if(!shift || !shift.clockInTs) return null;
   const sdef = (cfg && cfg.shifts) ? cfg.shifts[emp && emp.shift] : null;
-  const endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
+  const endHM = shift.scheduledEndTime || (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
   let endTs = null;
   if(/^\d{1,2}:\d{2}$/.test(endHM)){
     const parts = String(endHM).split(':').map(Number);

@@ -796,6 +796,43 @@ function effectiveEndHM(emp, cfg, dateKey){
   return (sh && sh.end) || '';
 }
 
+/* 🔀 موظف مرن بين الصباحي والمسائي
+   ------------------------------------------------------------
+   يتفعّل للموظفين المختارين فقط بـ flexibleMorningEvening=true.
+   الاختيار هو أقرب بداية شيفت لوقت الحضور، وعند التعادل نختار
+   الشيفت الأحدث حتى لا يتحول منتصف المسافة إلى تأخير ظالم.
+   أي تبديل شيفت معتمد ليوم محدد يظل قرارًا صريحًا ويغلب الاختيار الآلي. */
+function resolveAttendanceShift(clockInDate, emp, cfg){
+  cfg = cfg || complianceCfg;
+  const dateKey = clockInDate ? _dayKeyOf(clockInDate) : '';
+  const approved = dateKey && emp ? approvedLeaveFor(emp.id,dateKey) : null;
+  if(approved && approved.type==='shiftSwap' && approved.toShift){
+    const chosen=(cfg.shifts||{})[approved.toShift]||{};
+    return { key:approved.toShift, label:chosen.label||approved.toShift,
+      start:chosen.start||'', end:chosen.end||'', mode:'approved' };
+  }
+  if(emp && emp.flexibleMorningEvening===true && clockInDate){
+    const candidates=['morning','evening'].map(key=>{
+      const x=(cfg.shifts||{})[key]||{};
+      return {key,label:x.label||key,start:x.start||'',end:x.end||'',startMin:_hm2min(x.start)};
+    }).filter(x=>/^\d{1,2}:\d{2}$/.test(x.start));
+    if(candidates.length){
+      const c=cai(clockInDate), inMin=c.getHours()*60+c.getMinutes();
+      candidates.sort((a,b)=>{
+        const da=Math.abs(inMin-a.startMin), db=Math.abs(inMin-b.startMin);
+        return da===db ? b.startMin-a.startMin : da-db;
+      });
+      const x=candidates[0];
+      return {key:x.key,label:x.label,start:x.start,end:x.end,mode:'auto'};
+    }
+  }
+  const key=(emp&&emp.shift)||'';
+  const def=(cfg.shifts||{})[key]||{};
+  return {key,label:def.label||key,start:effectiveStartHM(emp,cfg,dateKey),
+    end:effectiveEndHM(emp,cfg,dateKey),mode:'fixed'};
+}
+window.resolveAttendanceShift=resolveAttendanceShift;
+
 // clockInDate = وقت الحضور · empOrShiftKey = مستند الموظف (الأفضل) أو مفتاح
 //   الشيفت (توافق قديم — الاختبارات القديمة بتناديها كده)
 function computeLate(clockInDate, empOrShiftKey, cfg){
@@ -803,7 +840,7 @@ function computeLate(clockInDate, empOrShiftKey, cfg){
   if(!clockInDate) return { lateMin: 0, penalized: false };
   let startHM;
   if(empOrShiftKey && typeof empOrShiftKey === 'object'){
-    startHM = effectiveStartHM(empOrShiftKey, cfg, _dayKeyOf(clockInDate));
+    startHM = resolveAttendanceShift(clockInDate,empOrShiftKey,cfg).start;
   }else{
     const sh = (cfg.shifts||{})[empOrShiftKey];
     startHM = sh && sh.start;
@@ -1278,8 +1315,26 @@ window.autoApprovedOvertimeMinutes = autoApprovedOvertimeMinutes;
    غير بعد ما شيفت الموظفة نفسها يخلص. */
 function shiftEndTsForDay(emp, dayDate, cCfg){
   const _dk = _dayKeyOf(dayDate);
-  const endHM   = effectiveEndHM(emp, cCfg, _dk);
-  const startHM = effectiveStartHM(emp, cCfg, _dk);
+  const _cfg = cCfg || complianceCfg;
+  // الموظف المرن ممكن يشتغل المسائي؛ الغياب لا يُحكم عليه عند نهاية
+  // الصباحي وهو ما زال مسموحًا له بالحضور للمسائي.
+  const _lv = emp ? approvedLeaveFor(emp.id,_dk) : null;
+  if(emp && emp.flexibleMorningEvening===true && !(_lv&&_lv.type==='shiftSwap')){
+    const c=cai(dayDate);
+    const ends=['morning','evening'].map(key=>{
+      const d=(_cfg.shifts||{})[key]||{};
+      if(!/^\d{1,2}:\d{2}$/.test(String(d.start||'')) || !/^\d{1,2}:\d{2}$/.test(String(d.end||''))) return null;
+      const p=String(d.end).split(':').map(Number);
+      let ts=caiStamp(c.getFullYear(),c.getMonth()+1,c.getDate(),p[0],p[1],0,0);
+      if(_hm2min(d.end)<=_hm2min(d.start)){
+        const n=cai(ts+86400000); ts=caiStamp(n.getFullYear(),n.getMonth()+1,n.getDate(),p[0],p[1],0,0);
+      }
+      return ts;
+    }).filter(Number.isFinite);
+    if(ends.length) return Math.max(...ends);
+  }
+  const endHM   = effectiveEndHM(emp, _cfg, _dk);
+  const startHM = effectiveStartHM(emp, _cfg, _dk);
   if(!/^\d{1,2}:\d{2}$/.test(String(endHM))) return null;
   const parts = String(endHM).split(':').map(Number);
   const c = cai(dayDate);                                // 🕒 اليوم بالقاهرة
@@ -2544,7 +2599,10 @@ function renderAttendanceLists(){
 
   const notInWrap = $('#notInGrid');
   notInWrap.innerHTML = notIn.length ? notIn.map(e=>{
-    let subText = e.scheduledStartTime ? 'ميعادك '+e.scheduledStartTime : 'دوس للحضور';
+    const _m=(complianceCfg.shifts||{}).morning||{}, _v=(complianceCfg.shifts||{}).evening||{};
+    let subText = e.flexibleMorningEvening===true
+      ? ('🔀 مرن: '+(_m.start||'صباحي')+' أو '+(_v.start||'مسائي'))
+      : (e.scheduledStartTime ? 'ميعادك '+e.scheduledStartTime : 'دوس للحضور');
     let reminderBadge = '';
     /* 📩 الإجازة المعتمدة **لازم تبان هنا**
        ------------------------------------------------------------
@@ -2945,12 +3003,16 @@ async function clockIn(empId, photoDataUri){
   // 🕒 بنبعت مستند الموظف نفسه — عشان الميعاد الفردي يغلب بداية الشيفت
   //    (الفولباك القديم اتشال: كان بيشتغل بس لو الموظف مالوش شيفت أصلًا)
   const lateInfo = computeLate(new Date(clockInTs), emp, complianceCfg);
+  const shiftChoice = resolveAttendanceShift(new Date(clockInTs),emp,complianceCfg);
   lateMinutes = lateInfo.lateMin;
   latePenalized = lateInfo.penalized;
   const shiftId = attendanceDocId('shift', empId, dateKey+'_'+clockInTs);
   const optimisticShift = {
     id:shiftId, employeeId:empId, employeeName:emp.name, branch:window.currentBranch,
-    clockInTs, clockOutTs:null, scheduledStartTime:emp.scheduledStartTime || null,
+    clockInTs, clockOutTs:null,
+    scheduledStartTime:shiftChoice.start || null, scheduledEndTime:shiftChoice.end || null,
+    attendanceShiftKey:shiftChoice.key || null, attendanceShiftLabel:shiftChoice.label || null,
+    attendanceShiftMode:shiftChoice.mode,
     lateMinutes, latePenalized, clockInPhoto:photoDataUri || null
   };
   // ⏳ التأخير وشيفته عملية مالية واحدة؛ retry لن يكرر رصيد الوقت.
@@ -2996,6 +3058,11 @@ async function clockOut(empId, photoDataUri){
   const emp = window.employees.find(e=> e.id === empId);
   const shiftDay = caiDayKey(shift.clockInTs);
   const now = fixedAttendanceTs('clock-out-'+shift.id, empId, shiftDay);
+  // الشيفت الذي اختير لحظة الحضور هو مصدر الحقيقة للانصراف؛ إعداد
+  // الموظف العام قد يظل صباحيًا رغم أن يومه الحالي اختير مسائيًا.
+  const shiftEmp = shift.scheduledStartTime ? { ...(emp||{}),
+    scheduledStartTime:shift.scheduledStartTime,
+    scheduledEndTime:shift.scheduledEndTime || (emp&&emp.scheduledEndTime) } : emp;
 
   // Overtime is based on actual shift duration exceeding the standard 8h15m
   // (495 minutes) — not on a fixed clock-out time. This naturally accounts
@@ -3020,12 +3087,12 @@ async function clockOut(empId, photoDataUri){
 
   // 🚪 انصراف بدري: بالطابع الزمني لنهاية الشيفت (مش بساعة اليوم)
   let earlyInfo = { earlyMin: 0, hours: 0 };
-  const shiftDef = complianceCfg.shifts[emp && emp.shift];
-  const shiftEnd = (emp && emp.scheduledEndTime) || (shiftDef && shiftDef.end);
-  const endTs = expectedShiftEndTs(shift, emp, complianceCfg);
+  const shiftDef = complianceCfg.shifts[shiftEmp && shiftEmp.shift];
+  const shiftEnd = (shiftEmp && shiftEmp.scheduledEndTime) || (shiftDef && shiftDef.end);
+  const endTs = expectedShiftEndTs(shift, shiftEmp, complianceCfg);
   // ⛔ الشيفت المنسي مبياخدش خصم انصراف بدري خالص — هي اتأخرت مش مشيت بدري
   // 🚪 الخصم بقى على النقص في الساعات مش على ساعة الخروج (شوف earlyLeaveFromWorked)
-  const _reqMin = scheduledShiftMinutes(emp, complianceCfg, caiDayKey(shift.clockInTs));
+  const _reqMin = scheduledShiftMinutes(shiftEmp, complianceCfg, caiDayKey(shift.clockInTs));
   if(!forgotten) earlyInfo = earlyLeaveFromWorked(totalMin, _reqMin, Number(shift.lateMinutes)||0, cfg);
 
   const _otProbe = { clockInTs:shift.clockInTs, clockOutTs:now, shiftMinutes:totalMin,
@@ -3245,7 +3312,8 @@ function renderDayHub(empId){
   // جزء الشيفت بيظهر بس لو الموظف مسجّل حضور دلوقتي
   if(shift){
     const lateTxt = shift.lateMinutes > 0 ? ` — متأخر ${shift.lateMinutes} دقيقة` : ' — في الميعاد ✅';
-    $('#dh_shiftInfo').textContent = 'دخل الشيفت الساعة ' + new Date(shift.clockInTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) + lateTxt;
+    const chosenTxt=shift.attendanceShiftMode==='auto' ? (' · '+(shift.attendanceShiftLabel||shift.attendanceShiftKey||'شيفت مرن')) : '';
+    $('#dh_shiftInfo').textContent = 'دخل الشيفت الساعة ' + new Date(shift.clockInTs).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) + chosenTxt + lateTxt;
     const elapsedMs = Date.now() - shift.clockInTs;
     $('#dh_shiftDuration').textContent = formatDuration(elapsedMs) + ' من 8 ساعات';
   }else{
@@ -3802,12 +3870,16 @@ function renderStaffOverview(){
       else if(lm <= SEVERE_LATE_MINUTES){ statusColor='yellow'; statusText='متأخر '+lm+' د'; }
       else { statusColor='red'; statusText='متأخر '+lm+' د'; }
     } else {
-      // نفس قاعدة التأخير: الميعاد الفردي يغلب، والشيفت افتراضي
-      const hm = effectiveStartHM(e, complianceCfg);
+      // المرن لا يعتبر متأخرًا قبل ميعاد الشيفت المسائي؛ لأنه لم يسجل بعد
+      // ولا يمكن تحديد إن كان يومه صباحي أو مسائي.
+      const hm = e.flexibleMorningEvening===true
+        ? (((complianceCfg.shifts||{}).evening||{}).start || effectiveStartHM(e, complianceCfg))
+        : effectiveStartHM(e, complianceCfg);
       if(hm){
         const [h,m] = hm.split(':').map(Number);
         const scheduled = new Date(); scheduled.setHours(h,m,0,0);
         if(Date.now() > scheduled.getTime()){ statusColor = 'red'; statusText = 'لسه محضرش (فات ميعاده)'; }
+        else if(e.flexibleMorningEvening===true){ statusText = 'مرن — لسه محضرش'; }
       }
     }
 
@@ -4915,6 +4987,8 @@ function _employeeSummary(emp){
 window.openEmployeeRecord = function(empId){
   const emp=(allEmployees||[]).find(e=>e.id===empId); if(!emp) return;
   const sum=_employeeSummary(emp);
+  const _morningStart=((complianceCfg.shifts||{}).morning||{}).start||'صباحي';
+  const _eveningStart=((complianceCfg.shifts||{}).evening||{}).start||'مسائي';
   document.getElementById('employeeRecordOv')?.remove();
   const ov=document.createElement('div'); ov.id='employeeRecordOv';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10020;overflow:auto;padding:18px 10px;';
@@ -4930,6 +5004,7 @@ window.openEmployeeRecord = function(empId){
       <label>تتبع الحضور من<input id="erTrack" type="date" value="${_empEsc(emp.attendanceTrackingStart||'')}"></label>
       <label>كلمة مرور الموظف (4 أرقام)<input id="erPin" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="اكتب 4 أرقام" value="${/^\d{4}$/.test(String(emp.pin||''))?_empEsc(String(emp.pin)):''}"><span style="display:block;margin-top:5px;font-size:11px;color:var(--sub)">${/^\d{4}$/.test(String(emp.pin||''))?'كلمة مرور معيّنة ✓':'لم يتم تعيين كلمة مرور'}</span></label>
       <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erNiqabAttendance" type="checkbox" ${emp.niqabAttendance===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>تسجيل بالنقاب <small style="display:block;color:var(--sub);font-weight:600">الصورة تفضل إجبارية، من غير انتظار كشف الوجه</small></span></label>
+      <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erFlexibleMorningEvening" type="checkbox" ${emp.flexibleMorningEvening===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>🔀 مرن صباحي/مسائي <small style="display:block;color:var(--sub);font-weight:600">السيستم يختار تلقائيًا الأقرب من ${_empEsc(_morningStart)} أو ${_empEsc(_eveningStart)}</small></span></label>
     </div>
     <div style="margin:14px 0 6px;font-weight:900">سجل تعديل الراتب</div>
     <div>${(Array.isArray(emp.salaryHistory)&&emp.salaryHistory.length)?emp.salaryHistory.slice().reverse().slice(0,8).map(x=>`<div class="er-info" style="margin-bottom:6px"><span>${x.at?new Date(x.at).toLocaleString('ar-EG'):'—'}</span><b>${Number(x.from||0).toLocaleString('ar-EG')} ← ${Number(x.to||0).toLocaleString('ar-EG')} ج.م</b></div>`).join(''):'<div class="empty">مفيش تعديلات راتب مسجلة</div>'}</div>
@@ -4948,7 +5023,8 @@ window.openEmployeeRecord = function(empId){
       name:ov.querySelector('#erName').value.trim(), branch:ov.querySelector('#erBranch').value.trim(),
       baseSalary:Number(ov.querySelector('#erSalary').value)||0, dayOff:ov.querySelector('#erDayOff').value,
       hireDate:ov.querySelector('#erHire').value||'', attendanceTrackingStart:ov.querySelector('#erTrack').value||'',
-      niqabAttendance:!!ov.querySelector('#erNiqabAttendance')?.checked, updatedAt:Date.now()
+      niqabAttendance:!!ov.querySelector('#erNiqabAttendance')?.checked,
+      flexibleMorningEvening:!!ov.querySelector('#erFlexibleMorningEvening')?.checked, updatedAt:Date.now()
     };
     if(!patch.name){msg.textContent='الاسم مطلوب';return;}
     if(!/^\d{4}$/.test(pin)){msg.textContent='كلمة المرور لازم تكون 4 أرقام';return;}
@@ -5044,6 +5120,10 @@ function renderScheduleList(){
           ${DAY_NAMES.map((d,i)=> `<option value="${i}" ${String(e.dayOff)===String(i)?'selected':''}>${d}</option>`).join('')}
         </select>
       </div>
+      <label style="display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;cursor:pointer">
+        <input type="checkbox" data-act="flexshift" data-id="${e.id}" ${e.flexibleMorningEvening===true?'checked':''} style="width:17px;height:17px">
+        <span style="font-size:11px;color:var(--ink)">🔀 مرن (${((complianceCfg.shifts||{}).morning||{}).start||'صباحي'} / ${((complianceCfg.shifts||{}).evening||{}).start||'مسائي'})</span>
+      </label>
       <div style="display:flex; align-items:center; gap:6px;">
         <span style="font-size:11px; color:var(--sub);">حد أدنى نقط/أسبوع لاستحقاق المكافأة</span>
         <input type="number" min="0" data-act="minpoints" data-id="${e.id}" value="${e.minWeeklyPoints || ''}" placeholder="بدون حد"
@@ -5076,6 +5156,12 @@ function renderScheduleList(){
     inp.addEventListener('change', async ()=>{
       try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { scheduledEndTime: inp.value }); }
       catch(err){ console.error('تعذر حفظ ميعاد الانصراف', err); }
+    });
+  });
+  wrap.querySelectorAll('input[data-act="flexshift"]').forEach(inp=>{
+    inp.addEventListener('change', async ()=>{
+      try{ await updateDoc(doc(db,'sales_employees', inp.dataset.id), { flexibleMorningEvening: inp.checked }); }
+      catch(err){ inp.checked=!inp.checked; console.error('تعذر حفظ الشيفت المرن', err); }
     });
   });
   wrap.querySelectorAll('input[data-act="minpoints"]').forEach(inp=>{
