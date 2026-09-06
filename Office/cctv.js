@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v531
+/* ECHARPE Office CCTV v533
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -67,10 +67,27 @@
   function cartRows(rows){
     return (Array.isArray(rows)?rows:[]).map(function(r){return Array.isArray(r)?r:[r&&r['0'],r&&r['1'],r&&r['2'],r&&r['3']];});
   }
+  function timelineFromSale(sale){
+    sale=sale||{};var end=Number(sale.createdAtMs||sale.atMs||(sale.createdAt&&sale.createdAt.toMillis&&sale.createdAt.toMillis())||0);if(!end)return null;
+    var start=Number(sale.firstItemAt)||Math.max(1,end-30000),catalog={},seen={},packed=[];
+    (Array.isArray(sale.items)?sale.items:[]).filter(function(item){return item&&!item.isRedemption;}).forEach(function(item){
+      var base=String(item.id||item.barcode||item.name||'item'),n=(seen[base]||0)+1,key=base+'#'+n;seen[base]=n;
+      catalog[key]={id:String(item.id||''),name:String(item.name||item.code||'صنف'),barcode:String(item.barcode||'')};
+      packed.push([key,Number(item.qty)||0,Number(item.price)||0,item.isReturn?1:0]);
+    });
+    if(!packed.length)return null;
+    var total=Number(sale.total);if(!isFinite(total))total=packed.reduce(function(sum,row){return sum+(Number(row[1])||0)*(Number(row[2])||0);},0);
+    return {version:533,synthetic:true,invoiceCode:String(sale.invoiceCode||''),invoiceNo:String(sale.invoiceNo||''),saleId:String(sale.id||''),branch:String(sale.branch||''),startedAtMs:start,endedAtMs:end,clipStartAtMs:Math.max(1,start-5000),clipEndAtMs:end+10000,catalog:catalog,events:[{seq:1,atMs:start,kind:'invoice_cart',cart:packed,total:total},{seq:2,atMs:end,kind:'sale_saved',cart:packed,total:total}]};
+  }
+  function branchMatches(branch,branchId,aliases){
+    var p=profileFor(branch);if(p)return p.id===branchId;
+    var value=String(branch||'').toLowerCase();return (aliases||[]).some(function(a){return a&&(value===a||value.indexOf(a)>=0);});
+  }
   /* Invoice review is installed after this closure. Export only the two
      audited helpers it needs instead of relying on inaccessible local names. */
   window.ofCctvProfileFor=profileFor;
   window.ofCctvCartRows=cartRows;
+  window.ofCctvTimelineFromSale=timelineFromSale;
   function load(){
     try{
       var fresh=localStorage.getItem(KEY), raw=fresh||localStorage.getItem(OLD_KEY)||'{}', x=JSON.parse(raw);
@@ -301,8 +318,10 @@
         fetchJsonRetry(gateway+'/echarpe-playback/range?camera='+encodeURIComponent(x.playbackCamera||'4')+'&_='+Date.now(),x.id,3),
         db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',dayReviewBounds.start).where('endedAtMs','<',dayReviewBounds.end).get()
       ]);
-      range=pair[0];pair[1].forEach(function(s){var d=s.data()||{},br=String(d.branch||'').toLowerCase();if(aliases.some(function(a){return br.indexOf(a)>=0;}))timelineDocs.push(d);});
+      range=pair[0];pair[1].forEach(function(s){var d=s.data()||{};if(branchMatches(d.branch,x.id,aliases))timelineDocs.push(d);});
     }catch(e){alert('تعذر تجهيز مراجعة اليوم: '+(e&&e.message||e));return;}
+    var timelineCodes={};timelineDocs.forEach(function(t){if(t&&t.invoiceCode)timelineCodes[String(t.invoiceCode)]=true;});
+    (dayReviewRows||[]).forEach(function(sale){var code=String(sale&&sale.invoiceCode||'');if(!code||timelineCodes[code]||!branchMatches(sale.branch,x.id,aliases))return;var fallback=timelineFromSale(sale);if(fallback){timelineDocs.push(fallback);timelineCodes[code]=true;}});
     var rangeStart=Number(range.startMs)||0,rangeEnd=Number(range.endMs)||0,coverageStart=Math.max(dayReviewBounds.start,rangeStart),coverageEnd=Math.min(dayReviewBounds.end,rangeEnd);
     if(!coverageStart||coverageEnd-coverageStart<30000){alert('مفيش تسجيل محفوظ في التاريخ المختار. التسجيل المتاح يبدأ '+(rangeStart?new Date(rangeStart).toLocaleString('ar-EG'):'—')+'.');return;}
     var events=[];timelineDocs.forEach(function(t){var catalog=t.catalog||{},code=t.invoiceCode||'';(t.events||[]).forEach(function(e){events.push(Object.assign({},e,{catalog:catalog,invoiceCode:code}));});events.push({atMs:Number(t.endedAtMs||0)+1,kind:'cart_cleared',cart:[],total:0,catalog:{},invoiceCode:''});});events.sort(function(a,c){return Number(a.atMs)-Number(c.atMs);});
@@ -339,10 +358,11 @@
     try{
       var cached=(window.ofCctvGetCachedSales&&window.ofCctvGetCachedSales())||[];
       var aliases=(b().liveAliases||[]).map(function(v){return String(v).toLowerCase();});
-      var rows=cached.filter(function(x){var t=saleMs(x),br=String(x.branch||'').toLowerCase();return t>=r.start&&t<r.end&&aliases.some(function(a){return br.indexOf(a)>=0;});});
+      var branchId=b().id;
+      var rows=cached.filter(function(x){var t=saleMs(x);return t>=r.start&&t<r.end&&branchMatches(x.branch,branchId,aliases);});
       if(!rows.length && typeof db!=='undefined'){
         var q=db.collection('pos_test_sales').where('createdAtMs','>=',r.start).where('createdAtMs','<',r.end);
-        var snap=await q.get(); rows=[]; snap.forEach(function(d){var x=Object.assign({id:d.id},d.data()||{}),br=String(x.branch||'').toLowerCase();if(aliases.some(function(a){return br.indexOf(a)>=0;}))rows.push(x);});
+        var snap=await q.get(); rows=[]; snap.forEach(function(d){var x=Object.assign({id:d.id},d.data()||{});if(branchMatches(x.branch,branchId,aliases))rows.push(x);});
       }
       dayReviewRows=rows.slice();renderDayRows(rows);if(playBtn)playBtn.disabled=false;
     }catch(e){box.innerHTML='<div class="of-cctv-day-empty">تعذر تحميل مراجعة اليوم: '+esc(e&&e.message||e)+'</div>';}
@@ -443,8 +463,22 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
       db.collection('pos_cctv_invoice_timelines').doc(String(invoiceCode)).get().catch(function(){return null;})
     ]);
     var snap=reads[0],timelineSnap=reads[1];
-    if(!snap||!snap.exists){alert('مفيش لقطات محفوظة للفاتورة دي.');return;}
-    var d=snap.data()||{},timeline=(timelineSnap&&timelineSnap.exists)?(timelineSnap.data()||{}):(d.basketTimeline||null),shots=d.shots||{};
+    var d=(snap&&snap.exists)?(snap.data()||{}):{},timeline=(timelineSnap&&timelineSnap.exists)?(timelineSnap.data()||{}):(d.basketTimeline||null),sale=null;
+    var timelineOk=!!(timeline&&Array.isArray(timeline.events)&&timeline.events.length);
+    if(timelineOk&&d.branch&&timeline.branch){var invoiceProfile=window.ofCctvProfileFor(d.branch),timelineProfile=window.ofCctvProfileFor(timeline.branch);if(invoiceProfile&&timelineProfile&&invoiceProfile.id!==timelineProfile.id){timeline=null;timelineOk=false;}}
+    if(!snap||!snap.exists||!timelineOk){
+      try{
+        var saleSnap=await db.collection('pos_test_sales').where('invoiceCode','==',String(invoiceCode)).limit(1).get();
+        if(saleSnap&&!saleSnap.empty){var saleDoc=saleSnap.docs[0];sale=Object.assign({id:saleDoc.id},saleDoc.data()||{});}
+      }catch(e){}
+    }
+    if((!snap||!snap.exists)&&!sale){alert('الفاتورة غير موجودة أو لم تصل إلى Office حتى الآن.');return;}
+    if(!snap||!snap.exists){
+      var saleProfile=window.ofCctvProfileFor(sale.branch),saleAt=Number(sale.createdAtMs||sale.atMs||0);
+      d={invoiceCode:String(invoiceCode),invoiceNo:sale.invoiceNo||'',saleId:sale.id||'',branch:sale.branch||'',branchProfile:saleProfile&&saleProfile.id||'',camera:saleProfile&&((saleProfile.cameras||[]).find(function(c){return String(c.id)===String(saleProfile.playbackCamera);})||{}).name||'CCTV',cameraId:saleProfile&&saleProfile.playbackCamera||'1',gateway:saleProfile&&saleProfile.gateway||'',video:'pc_ring_recording',videoAtMs:saleAt,clockSource:(saleProfile&&saleProfile.id==='madinaty')?'pos_pc':'',shots:{}};
+    }
+    if(!timelineOk&&sale){timeline=window.ofCctvTimelineFromSale(sale);timelineOk=!!timeline;}
+    var shots=d.shots||{};
     var profile=window.ofCctvProfileFor(d.branchProfile||d.branch);
     var localBranch=!!d.localSnapshots,gateway=String(d.gateway||(profile&&profile.gateway)||'').replace(/\/$/,'');
     var playbackReady=!!gateway&&!!(profile&&profile.playback)&&Number(d.videoAtMs)>0;
@@ -465,9 +499,9 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
       var st=document.createElement('style');st.id='ofCctvInvoiceStyle506';st.textContent='.of-inv506-ov{position:fixed;inset:0;z-index:10020;background:rgba(2,6,23,.95);display:flex;align-items:center;justify-content:center;padding:12px;color:#fff;direction:rtl}.of-inv506-box{width:min(1100px,100%);max-height:94vh;overflow:auto;background:#0b1220;border:1px solid #334155;border-radius:18px;padding:13px}.of-inv506-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}.of-inv506-actions{display:flex;gap:7px;flex-wrap:wrap}.of-inv506-btn{border:0;border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer}.of-inv506-blue{background:#2563eb;color:#fff}.of-inv506-gold{background:#d6a72f;color:#111827}.of-inv506-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.of-inv506-shot{border:1px solid #334155;background:#111827;color:#fff;border-radius:13px;padding:7px;text-align:right;cursor:pointer}.of-inv506-shot img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;background:#000;border-radius:9px}.of-inv506-foot{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:12px}.of-sync506{width:min(1220px,100%);height:min(90vh,820px);display:flex;flex-direction:column;background:#05070b;border:1px solid #334155;border-radius:16px;overflow:hidden}.of-sync506-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:#0f172a}.of-sync506-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.7fr) minmax(290px,.8fr);direction:ltr}.of-sync506-video{position:relative;min-width:0;background:#000}.of-sync506-video video{width:100%;height:100%;display:block;object-fit:contain}.of-sync506-status{position:absolute;right:10px;left:10px;bottom:10px;padding:8px;background:rgba(15,23,42,.9);border-radius:9px;font-size:12px}.of-sync506-status.ok{display:none}.of-sync506-cart{direction:rtl;background:#0f172a;border-right:1px solid #334155;display:flex;flex-direction:column;min-height:0}.of-sync506-carthead{padding:11px;border-bottom:1px solid #334155}.of-sync506-rows{overflow:auto;flex:1;padding:8px}.of-sync506-row{display:flex;justify-content:space-between;gap:8px;padding:8px;border-bottom:1px solid #263449;font-size:12px}.of-sync506-row small{display:block;color:#94a3b8;margin-top:3px}.of-sync506-total{display:flex;justify-content:space-between;padding:12px;font-weight:900;border-top:1px solid #334155}.of-sync506-event{color:#f5cf68;font-size:11px;margin-top:4px}.of-inv506-muted{color:#94a3b8;font-size:11px}@media(max-width:760px){.of-inv506-ov{padding:0;align-items:stretch}.of-inv506-box,.of-sync506{width:100%;height:100%;max-height:none;border:0;border-radius:0}.of-inv506-grid{grid-template-columns:1fr}.of-sync506-body{grid-template-columns:1fr;grid-template-rows:minmax(45%,1fr) minmax(35%,.8fr)}.of-sync506-cart{border-right:0;border-top:1px solid #334155}.of-inv506-head,.of-sync506-head{align-items:flex-start;flex-direction:column}.of-inv506-actions{width:100%}.of-inv506-actions .of-inv506-btn{flex:1}}';document.head.appendChild(st);
     }
     var cards=valid.map(function(k){var x=shots[k]||{};return '<button type="button" data-shot="'+k+'" class="of-inv506-shot"><img src="'+esc(shotUrl(k))+'" alt="'+esc(labels[k])+'"><div class="of-inv506-foot"><b>'+labels[k]+'</b><small>'+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleTimeString('ar-EG')+'</small></div></button>';}).join('');
-    var hasTimeline=!!(timeline&&Array.isArray(timeline.events)&&timeline.events.length);
+    var hasTimeline=!!(timeline&&Array.isArray(timeline.events)&&timeline.events.length),timelineFallback=!!(timeline&&timeline.synthetic);
     var ov=document.createElement('div');ov.className='of-inv506-ov';ov.id='ofCctvShotOv';
-    ov.innerHTML='<div class="of-inv506-box"><div class="of-inv506-head"><div><b>📸 فاتورة '+esc(invoiceCode)+'</b><div class="of-inv506-muted">'+esc(d.camera||'CCTV')+' · '+valid.length+' لقطة'+(hasTimeline?' · Timeline السلة محفوظ':'')+'</div></div><div class="of-inv506-actions">'+(playbackReady?'<button id="ofInv506Video" class="of-inv506-btn of-inv506-blue">🎥 30 ثانية قبل + 30 بعد</button>':'')+(playbackReady&&hasTimeline?'<button id="ofInv506Sync" class="of-inv506-btn of-inv506-gold">🎬 الكاميرا + السلة</button>':'')+(!hasTimeline?'<button id="ofInv506Retry" class="of-inv506-btn">🔄 إعادة فحص السلة</button>':'')+'<button id="ofInv506Close" class="of-inv506-btn">إغلاق</button></div></div><div class="of-inv506-grid">'+(cards||'<div class="of-inv506-muted">الصور غير متاحة، التسجيل موجود.</div>')+'</div>'+(!hasTimeline?'<div class="of-inv506-muted" style="margin-top:10px;padding:10px;border:1px solid #92400e;background:#451a03;color:#fde68a;border-radius:10px">السلة لم تصل من POS لهذه الفاتورة حتى الآن. اضغط «إعادة فحص السلة» بعد ثوانٍ.</div>':'')+'</div>';
+    ov.innerHTML='<div class="of-inv506-box"><div class="of-inv506-head"><div><b>🎬 مراجعة فاتورة '+esc(invoiceCode)+'</b><div class="of-inv506-muted">'+esc(d.camera||'CCTV')+' · '+valid.length+' لقطة'+(hasTimeline?(timelineFallback?' · السلة النهائية من الفاتورة':' · Timeline السلة محفوظ'):'')+'</div></div><div class="of-inv506-actions">'+(playbackReady?'<button id="ofInv506Video" class="of-inv506-btn of-inv506-blue">🎥 30 ثانية قبل + 30 بعد</button>':'')+(playbackReady&&hasTimeline?'<button id="ofInv506Sync" class="of-inv506-btn of-inv506-gold">🎬 الكاميرا + السلة</button>':'')+(!hasTimeline?'<button id="ofInv506Retry" class="of-inv506-btn">🔄 إعادة فحص السلة</button>':'')+'<button id="ofInv506Close" class="of-inv506-btn">إغلاق</button></div></div><div class="of-inv506-grid">'+(cards||'<div class="of-inv506-muted">الصور غير متاحة، التسجيل موجود.</div>')+'</div>'+(timelineFallback?'<div class="of-inv506-muted" style="margin-top:10px;padding:10px;border:1px solid #365314;background:#1a2e05;color:#d9f99d;border-radius:10px">تم استرجاع السلة من الفاتورة نفسها لأن Timeline التفصيلي لم يصل؛ الفيديو والتوقيت يظلان من تسجيل مدينتي.</div>':(!hasTimeline?'<div class="of-inv506-muted" style="margin-top:10px;padding:10px;border:1px solid #92400e;background:#451a03;color:#fde68a;border-radius:10px">السلة لم تصل من POS لهذه الفاتورة حتى الآن. اضغط «إعادة فحص السلة» بعد ثوانٍ.</div>':''))+'</div>';
     document.body.appendChild(ov);
     function closeOverlay(x){if(x&&x.parentNode)x.parentNode.removeChild(x);}
     ov.querySelector('#ofInv506Close').onclick=function(){closeOverlay(ov);};ov.onclick=function(e){if(e.target===ov)closeOverlay(ov);};
@@ -486,7 +520,7 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
       document.body.appendChild(pv);var video=pv.querySelector('#ofSync506Video'),status=pv.querySelector('#ofSync506Status'),quality=pv.querySelector('#ofSync506Quality');
       function stop(){if(retryTimer)clearTimeout(retryTimer);try{video.pause();video.removeAttribute('src');video.load();}catch(e){}closeOverlay(pv);}
       var videoRetry=0,retryTimer=0;function loadVideo(){if(retryTimer){clearTimeout(retryTimer);retryTimer=0;}status.className='of-sync506-status';status.textContent=videoRetry?'إعادة الاتصال بالتسجيل تلقائيًا…':'جاري تجهيز التسجيل من '+sourceName+'…';video.src=videoUrl(start,duration,quality.value)+'&retry='+Date.now();video.load();video.play().catch(function(){});}
-      function renderAt(){if(!sync)return;var state=window.ofCctvTimelineStateAt(events,start,video.currentTime),now=state.atMs,hit=state.event;var rowsEl=pv.querySelector('#ofSync506Rows'),totalEl=pv.querySelector('#ofSync506Total'),clockEl=pv.querySelector('#ofSync506Clock'),eventEl=pv.querySelector('#ofSync506Event');clockEl.textContent=new Date(now).toLocaleTimeString('ar-EG');if(!hit){rowsEl.innerHTML='<div class="of-inv506-muted" style="padding:12px">السلة لسه فاضية</div>';totalEl.textContent='0.00 ج.م';eventEl.textContent='قبل أول صنف';return;}var kind={item_added:'إضافة صنف',item_removed:'حذف صنف',qty_increased:'زيادة كمية',qty_decreased:'تقليل كمية',cart_edited:'تعديل السلة',payment:'بدء الدفع',saving:'بدء الحفظ',sale_saved:'حفظ الفاتورة'}[hit.kind]||'تغيير السلة';eventEl.textContent=kind+' · '+new Date(Number(hit.atMs)).toLocaleTimeString('ar-EG');var rows=window.ofCctvCartRows(hit.cart);rowsEl.innerHTML=rows.map(function(r){var item=catalog[r[0]]||{},q=Number(r[1])||0,p=Number(r[2])||0,ret=Number(r[3])===1;return '<div class="of-sync506-row"><span><b>'+esc(item.name||item.id||'صنف')+(ret?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(item.barcode?' · '+esc(item.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-inv506-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent=Number(hit.total||0).toFixed(2)+' ج.م';}
+      function renderAt(){if(!sync)return;var state=window.ofCctvTimelineStateAt(events,start,video.currentTime),now=state.atMs,hit=state.event;var rowsEl=pv.querySelector('#ofSync506Rows'),totalEl=pv.querySelector('#ofSync506Total'),clockEl=pv.querySelector('#ofSync506Clock'),eventEl=pv.querySelector('#ofSync506Event');clockEl.textContent=new Date(now).toLocaleTimeString('ar-EG');if(!hit){rowsEl.innerHTML='<div class="of-inv506-muted" style="padding:12px">السلة لسه فاضية</div>';totalEl.textContent='0.00 ج.م';eventEl.textContent='قبل أول صنف';return;}var kind={invoice_cart:'سلة الفاتورة',item_added:'إضافة صنف',item_removed:'حذف صنف',qty_increased:'زيادة كمية',qty_decreased:'تقليل كمية',cart_edited:'تعديل السلة',payment:'بدء الدفع',saving:'بدء الحفظ',sale_saved:'حفظ الفاتورة'}[hit.kind]||'تغيير السلة';eventEl.textContent=kind+' · '+new Date(Number(hit.atMs)).toLocaleTimeString('ar-EG');var rows=window.ofCctvCartRows(hit.cart);rowsEl.innerHTML=rows.map(function(r){var item=catalog[r[0]]||{},q=Number(r[1])||0,p=Number(r[2])||0,ret=Number(r[3])===1;return '<div class="of-sync506-row"><span><b>'+esc(item.name||item.id||'صنف')+(ret?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(item.barcode?' · '+esc(item.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-inv506-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent=Number(hit.total||0).toFixed(2)+' ج.م';}
       video.addEventListener('playing',function(){videoRetry=0;status.className='of-sync506-status ok';});video.addEventListener('loadeddata',function(){videoRetry=0;status.className='of-sync506-status ok';renderAt();});video.addEventListener('timeupdate',renderAt);video.addEventListener('seeking',renderAt);video.addEventListener('error',function(){if(videoRetry<4&&document.documentElement.contains(pv)){videoRetry++;status.className='of-sync506-status';status.textContent='التسجيل لسه بيتجهز — إعادة المحاولة تلقائيًا ('+videoRetry+'/4)…';retryTimer=setTimeout(loadVideo,4000);return;}status.className='of-sync506-status';status.textContent='التسجيل غير متاح لهذا التوقيت.';});quality.onchange=function(){videoRetry=0;loadVideo();};pv.querySelector('#ofSync506Close').onclick=stop;pv.onclick=function(e){if(e.target===pv)stop();};loadVideo();renderAt();
     }
     var vbtn=ov.querySelector('#ofInv506Video');if(vbtn)vbtn.onclick=function(){openPlayer(false);};var sbtn=ov.querySelector('#ofInv506Sync');if(sbtn)sbtn.onclick=function(){openPlayer(true);};var retry=ov.querySelector('#ofInv506Retry');if(retry)retry.onclick=function(){retry.disabled=true;retry.textContent='جاري الفحص…';setTimeout(function(){closeOverlay(ov);window.ofCctvInvoiceShot(invoiceCode);},700);};
