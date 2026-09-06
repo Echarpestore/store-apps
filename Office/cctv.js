@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v527
+/* ECHARPE Office CCTV v530
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -8,7 +8,7 @@
     id:'madinaty', name:'مدينتي', gateway:'https://cctv-madinaty.echarpe.store',
     liveAliases:['madinaty','مدينتي'], playback:true, playbackCamera:'4',
     cameras:[
-      {id:'4',name:'D04',label:'الكاشير',stream:'camera4'},
+      {id:'4',name:'D04',label:'الكاشير',stream:'camera4',liveStream:'camera4_live'},
       {id:'5',name:'D05',label:'كاميرا 5',stream:'camera5'},
       {id:'7',name:'D07',label:'كاميرا 7',stream:'camera7'},
       {id:'8',name:'D08',label:'كاميرا 8',stream:'camera8'}
@@ -39,8 +39,9 @@
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
   function cam(id){var x=b();return x.cameras.find(function(c){return c.id===String(id);})||x.cameras[0];}
-  function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(c.stream)+'&mode=mse&background=false';}
-  function frameUrl(c){return b().gateway+'/api/frame.jpeg?src='+encodeURIComponent(c.stream)+'&_=';}
+  function liveStreamName(c){return c.liveStream||c.stream;}
+  function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(liveStreamName(c))+'&mode=mse&background=false';}
+  function frameUrl(c){return b().gateway+'/api/frame.jpeg?src='+encodeURIComponent(liveStreamName(c))+'&_=';}
   function profileFor(branch){
     var n=String(branch||'').trim().toLowerCase();
     return BRANCHES.find(function(p){return p.id===n||(p.liveAliases||[]).some(function(a){var q=String(a||'').toLowerCase();return q&&(n===q||n.indexOf(q)>=0);});})||null;
@@ -163,9 +164,10 @@
   function cameraCard(c,i){
     var on=String(state.slots[i]||'off')===String(c.id);
     var toggleLabel=on?'إيقاف':'تشغيل';
-    /* Restore the last proven live path: Madinaty uses current JPEG frames;
-       Glow and Rehab keep their original go2rtc MSE viewer. */
-    var liveMedia=b().id==='madinaty'?'<img title="'+esc(c.name)+'" data-live-frame="'+esc(frameUrl(c))+'" alt="'+esc(c.name)+' live" loading="eager">':'<iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>';
+    /* Madinaty D04 has a proven Intel-QSV H264 live-only alias. Keep the
+       bounded JPEG fallback for its other H265 cameras; Glow/Rehab are unchanged. */
+    var useMse=!!c.liveStream||b().id!=='madinaty';
+    var liveMedia=useMse?'<iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>':'<img title="'+esc(c.name)+'" data-live-frame="'+esc(frameUrl(c))+'" alt="'+esc(c.name)+' live" loading="eager">';
     return '<article class="of-cctv-panel of-cctv-camera-panel '+(on?'is-live':'is-off')+'" data-camera="'+esc(c.id)+'" data-panel="'+i+'">'+
       '<div class="of-cctv-panel-head"><div class="of-cctv-camera-name"><b>'+esc(c.name)+'</b><small>'+esc(c.label)+'</small></div><div class="of-cctv-camera-actions"><button type="button" class="of-cctv-cam-toggle '+(on?'on':'off')+'" data-cctv-toggle="'+i+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+toggleLabel+' '+esc(c.name)+'"><span class="of-cctv-switch-track"><span class="of-cctv-switch-knob"></span></span><span class="of-cctv-switch-text">'+toggleLabel+'</span></button><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(on?'':' disabled')+'>⛶</button></div></div>'+
       (on?'<div class="of-cctv-panel-body of-cctv-video">'+liveMedia+'<div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div class="of-cctv-off-camera"><span>📹</span><b>'+esc(c.name)+'</b><small>'+esc(c.label)+' · متوقفة</small><em>اضغط تشغيل للمشاهدة</em></div></div>')+'</article>';
