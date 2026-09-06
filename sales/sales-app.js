@@ -2027,7 +2027,7 @@ lf431History('feedback65', _scopedDays(entriesCol,'ts',65), _recent(entriesCol,'
 });
 
 lf431History('shifts190', _scoped(shiftsCol,'clockInTs'), _recent(shiftsCol,'clockInTs'), ()=>allShifts, (rows)=>{
-  allShifts=rows; window.allShifts=allShifts; applyBranchFilter();
+  allShifts=overlayAttendancePending('shifts', rows); window.allShifts=allShifts; applyBranchFilter();
 });
 
 onSnapshot(tasksCol, (snap)=>{
@@ -2103,7 +2103,7 @@ lf431History('vio190', _scoped(vioReviewCol,'ts'), _recent(vioReviewCol,'ts'), (
 lf431History('attdec190', _scoped(attDecisionsCol,'ts'), _recent(attDecisionsCol,'ts'), ()=>allAttDecisions, (rows)=>{allAttDecisions=rows;window.allAttDecisions=allAttDecisions;if(adminUnlocked&&typeof renderAttIssues==='function')window.renderAttIssues();});
 
 lf431History('breaks190', _scoped(breaksCol,'startTs'), _recent(breaksCol,'startTs'), ()=>allBreaks, (rows)=>{
-  allBreaks=rows;window.allBreaks=allBreaks;autoCloseStaleBreaks();renderAttendanceLists();try{renderBreakAlert();}catch(e){}
+  allBreaks=overlayAttendancePending('breaks', rows);window.allBreaks=allBreaks;autoCloseStaleBreaks();renderAttendanceLists();try{renderBreakAlert();}catch(e){}
 });
 
 onSnapshot(leaveReqCol, (snap)=>{
@@ -2114,7 +2114,7 @@ onSnapshot(leaveReqCol, (snap)=>{
   if(adminUnlocked){ try{ renderSalaryPanel(); refreshOpenPayrollEmployee(); }catch(e){} }
 }, (e)=> console.warn('leave sync', e && e.code));
 
-lf431History('timecredit190', _scoped(timeCreditCol,'ts'), _recent(timeCreditCol,'ts'), ()=>allTimeCredit, (rows)=>{allTimeCredit=rows;window.allTimeCredit=allTimeCredit;if(adminUnlocked&&typeof window.renderTimeCreditLog==='function'){try{window.renderTimeCreditLog();}catch(e){}}if(adminUnlocked&&typeof window.renderGraceDay==='function'){try{window.renderGraceDay();}catch(e){}}if(adminUnlocked){renderSalaryPanel();refreshOpenPayrollEmployee();}});
+lf431History('timecredit190', _scoped(timeCreditCol,'ts'), _recent(timeCreditCol,'ts'), ()=>allTimeCredit, (rows)=>{allTimeCredit=overlayAttendancePending('credits', rows);window.allTimeCredit=allTimeCredit;if(adminUnlocked&&typeof window.renderTimeCreditLog==='function'){try{window.renderTimeCreditLog();}catch(e){}}if(adminUnlocked&&typeof window.renderGraceDay==='function'){try{window.renderGraceDay();}catch(e){}}if(adminUnlocked){renderSalaryPanel();refreshOpenPayrollEmployee();}});
 
 lf431History('deductions190', _scoped(deductionsCol,'ts'), _recent(deductionsCol,'ts'), ()=>allDeductions, (rows)=>{allDeductions=rows;deductions=allDeductions.filter(x=>x.branch===window.currentBranch&&!x.deleted);window.deductions=deductions;if(adminUnlocked){if(typeof renderDeductionsLog==='function')window.renderDeductionsLog();renderSalaryPanel();refreshOpenPayrollEmployee();const open=document.getElementById('payrollBranchOv');if(open)window.openPayrollBranchControl(open.dataset.branch,open.dataset.periodKey);}});
 
@@ -2648,6 +2648,164 @@ function breakTimeAllowed(cfg){
   return { allowed:true };
 }
 
+/* ============================================================
+   🛡️ v543 — حضور وبريك local-first وآمن من التكرار
+
+   Firestore يحفظ الكتابة محليًا وقت انقطاع الشبكة، لكن Promise الكتابة
+   لا تنتهي إلا بعد وصول السيرفر. الكود القديم كان ينتظرها قبل تغيير
+   الشاشة، فيبدو التسجيل كأنه فشل ويعيده الموظف. كما أن addDoc كان يولّد
+   مستندًا جديدًا لكل محاولة، وفصل الشيفت عن رصيد الوقت كان يسمح بنصف
+   عملية فقط. هنا كل حركة لها ID ثابت، وتظهر محليًا فورًا، وتُكتب مع
+   أثرها المالي في batch واحدة، مع رسالة مزامنة وزر إعادة محاولة حقيقي.
+   ============================================================ */
+const ATT_MUTATION_TIMEOUT_MS = 2500;
+const attMutationLocks = new Set();
+const attPendingRows = { shifts:new Map(), breaks:new Map(), credits:new Map() };
+
+function attendanceIdPart(value){
+  const raw = String(value == null ? '' : value);
+  let hash = 2166136261;
+  for(let i=0;i<raw.length;i++){
+    hash ^= raw.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const readable = raw.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 48) || 'x';
+  return readable + '_' + (hash >>> 0).toString(36);
+}
+function attendanceDocId(kind, empId, sourceKey){
+  return 'att_' + attendanceIdPart(kind) + '_' + attendanceIdPart(empId) + '_' + attendanceIdPart(sourceKey);
+}
+window.attendanceDocId = attendanceDocId;
+
+function attendanceTsKey(kind, empId, dateKey){
+  return 'echarpe_att_ts_v543_' + attendanceDocId(kind, empId, dateKey);
+}
+function fixedAttendanceTs(kind, empId, dateKey){
+  const key = attendanceTsKey(kind, empId, dateKey);
+  try{
+    const saved = Number(localStorage.getItem(key));
+    // نفس المحاولة خلال ربع ساعة تأخذ نفس الوقت؛ شيفت جديد حقيقي بعد
+    // ساعات لا يعيد استعمال وقت الشيفت السابق ولا يكتب فوقه.
+    if(Number.isFinite(saved) && saved > 0 && Math.abs(Date.now()-saved) <= 15*60*1000) return saved;
+    const now = Date.now(); localStorage.setItem(key, String(now)); return now;
+  }catch(_e){ return Date.now(); }
+}
+function clearFixedAttendanceTs(kind, empId, dateKey){
+  try{ localStorage.removeItem(attendanceTsKey(kind,empId,dateKey)); }catch(_e){}
+}
+
+function attendanceSyncHost(){
+  let host = document.getElementById('attendanceSyncStatus');
+  if(host) return host;
+  host = document.createElement('div');
+  host.id = 'attendanceSyncStatus';
+  host.style.cssText = 'position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:10060;'
+    + 'width:min(92vw,430px);padding:11px 13px;border-radius:13px;display:none;align-items:center;gap:10px;'
+    + 'box-shadow:0 8px 28px rgba(0,0,0,.4);font-family:Cairo,sans-serif;font-size:13px;font-weight:800;direction:rtl;';
+  document.body.appendChild(host);
+  return host;
+}
+function showAttendanceSync(message, state, retryFn){
+  const host = attendanceSyncHost();
+  const pending = state === 'pending';
+  const error = state === 'error';
+  host.style.display = 'flex';
+  host.style.background = error ? '#7f1d1d' : (pending ? '#7c4a03' : '#075a36');
+  host.style.color = '#fff';
+  host.innerHTML = '<span style="flex:1">' + esc(message) + '</span>'
+    + (error && retryFn ? '<button type="button" id="attendanceSyncRetry" style="border:0;border-radius:9px;padding:7px 11px;background:#fff;color:#7f1d1d;font-family:inherit;font-weight:900;cursor:pointer">إعادة المحاولة</button>' : '');
+  const btn = document.getElementById('attendanceSyncRetry');
+  if(btn) btn.onclick = retryFn;
+  if(!error && !pending) setTimeout(()=>{ if(host.textContent.indexOf(message)>=0) host.style.display='none'; }, 3500);
+}
+window.showAttendanceSync = showAttendanceSync;
+
+function attendanceRows(kind){
+  if(kind==='shifts') return allShifts;
+  if(kind==='breaks') return allBreaks;
+  return allTimeCredit;
+}
+function setAttendanceRows(kind, rows){
+  if(kind==='shifts'){
+    allShifts=rows; window.allShifts=rows;
+    shifts=rows.filter(x=>x.branch===window.currentBranch);
+    try{ renderAttendanceLists(); }catch(_e){}
+  }else if(kind==='breaks'){
+    allBreaks=rows; window.allBreaks=rows;
+    try{ renderAttendanceLists(); renderBreakBanner(); renderBreakAlert(); }catch(_e){}
+  }else{
+    allTimeCredit=rows; window.allTimeCredit=rows;
+    try{ if(typeof window.renderTimeCreditLog==='function') window.renderTimeCreditLog(); }catch(_e){}
+    try{ if(adminUnlocked){ renderSalaryPanel(); refreshOpenPayrollEmployee(); } }catch(_e){}
+  }
+}
+function overlayAttendancePending(kind, rows){
+  const merged = new Map((rows||[]).map(x=>[String(x.id),x]));
+  const pending = attPendingRows[kind];
+  if(pending) pending.forEach((entry,id)=> merged.set(String(id), { ...(merged.get(String(id))||{}), ...entry.row }));
+  return Array.from(merged.values());
+}
+function optimisticAttendanceRow(kind, row, mutationKey){
+  const id = String(row.id);
+  const before = attendanceRows(kind).find(x=>String(x.id)===id) || null;
+  const optimistic = { ...(before||{}), ...row, _attPending:true, _attMutation:mutationKey };
+  attPendingRows[kind].set(id, { row:optimistic, key:mutationKey });
+  setAttendanceRows(kind, overlayAttendancePending(kind, attendanceRows(kind)));
+  const rollback = function(){
+    const current = attPendingRows[kind].get(id);
+    if(!current || current.key!==mutationKey) return;
+    attPendingRows[kind].delete(id);
+    const clean = attendanceRows(kind).filter(x=>String(x.id)!==id || x._attMutation!==mutationKey);
+    if(before) clean.push(before);
+    setAttendanceRows(kind, clean);
+  };
+  rollback.confirm = function(){
+    const current = attPendingRows[kind].get(id);
+    if(current && current.key===mutationKey) attPendingRows[kind].delete(id);
+    const clean = attendanceRows(kind).map(x=>String(x.id)===id ? (()=>{ const y={...x}; delete y._attPending; delete y._attMutation; return y; })() : x);
+    setAttendanceRows(kind, clean);
+  };
+  return rollback;
+}
+function optimisticTimeCredit(id, patch, mutationKey){
+  const item = (allTimeCredit||[]).find(x=>String(x.id)===String(id));
+  if(!item) return function(){};
+  return optimisticAttendanceRow('credits', { ...item, ...patch, id:String(id) }, mutationKey);
+}
+window.optimisticTimeCredit = optimisticTimeCredit;
+
+function queueAttendanceMutation(options){
+  const key = String(options.key);
+  if(attMutationLocks.has(key)){
+    showAttendanceSync('العملية محفوظة بالفعل وجاري مزامنتها…', 'pending');
+    return Promise.resolve({ pending:true });
+  }
+  attMutationLocks.add(key);
+  let rollback = function(){};
+  try{ rollback = options.optimistic ? options.optimistic() : rollback; }
+  catch(err){ attMutationLocks.delete(key); throw err; }
+  showAttendanceSync(options.savingText || 'تم التسجيل على الجهاز — جاري المزامنة…', 'pending');
+  let settled = false;
+  const timer = setTimeout(()=>{
+    if(!settled) showAttendanceSync(options.pendingText || 'تم الحفظ على الجهاز — سيكتمل الإرسال تلقائيًا عند استقرار الإنترنت.', 'pending');
+  }, ATT_MUTATION_TIMEOUT_MS);
+  Promise.resolve().then(options.commit).then(()=>{
+    settled = true; clearTimeout(timer); attMutationLocks.delete(key);
+    if(rollback && typeof rollback.confirm==='function') rollback.confirm();
+    if(typeof options.onCommitted==='function') options.onCommitted();
+    showAttendanceSync(options.successText || 'تم الحفظ والمزامنة ✅', 'success');
+  }).catch(err=>{
+    settled = true; clearTimeout(timer); attMutationLocks.delete(key);
+    try{ rollback(); }catch(_e){}
+    console.error('attendance mutation failed', key, err);
+    showAttendanceSync((options.errorText || 'تعذر الحفظ') + ': ' + ((err&&err.code)||'تحقق من الإنترنت وحاول مرة أخرى'), 'error', ()=>queueAttendanceMutation(options));
+  });
+  // الموظف لا ينتظر رد السيرفر: Firestore يحتفظ بالكتابة في IndexedDB،
+  // والواجهة تعتمد فورًا على النسخة المحلية أعلاه.
+  return Promise.resolve({ queued:true });
+}
+window.queueAttendanceMutation = queueAttendanceMutation;
+
 // بداية البريك — بعد الـPIN والصورة
 async function startBreak(empId, photoDataUri){
   const emp = window.employees.find(e=> e.id===empId); if(!emp) return;
@@ -2671,13 +2829,27 @@ async function startBreak(empId, photoDataUri){
   // الوقت مسموح؟
   const timeChk = breakTimeAllowed(cfg);
   if(!timeChk.allowed){ alert('البريك مش مسموح دلوقتي (وقت الزحمة). حاول بعد ' + timeChk.until); return; }
-  try{
-    await window.fbAddDoc(breaksCol, {
-      employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
-      dateKey: todayStr(), startTs: Date.now(), endTs: null,
-      startPhoto: photoDataUri || null
-    });
-  }catch(e){ alert('تعذر بدء البريك: ' + e.message); }
+  const dateKey = todayStr();
+  const breakId = attendanceDocId('break', empId, dateKey);
+  const startTs = fixedAttendanceTs('break-start', empId, dateKey);
+  const optimisticBreak = {
+    id:breakId, employeeId:empId, employeeName:emp.name, branch:window.currentBranch,
+    dateKey, startTs, endTs:null, startPhoto:photoDataUri || null
+  };
+  return queueAttendanceMutation({
+    key:'break-start:'+breakId,
+    optimistic:()=>optimisticAttendanceRow('breaks', optimisticBreak, 'break-start:'+breakId),
+    commit:()=>{
+      const batch = writeBatch(db);
+      const breakRef = doc(db,'sales_breaks',breakId);
+      const cleanBreak={...optimisticBreak}; delete cleanBreak.id;
+      batch.set(breakRef, cleanBreak, { merge:true });
+      return batch.commit();
+    },
+    savingText:'تم بدء البريك على الجهاز — جاري المزامنة…',
+    successText:'تم بدء البريك والمزامنة ✅',
+    errorText:'تعذر بدء البريك'
+  });
 }
 
 // نهاية البريك
@@ -2687,41 +2859,46 @@ async function endBreak(empId, photoDataUri){
   const brk = openBreakFor(empId) || todaysBreak(empId);
   if(!brk || brk.endTs){ alert('مفيش بريك مفتوح'); return; }
   const cfg = window.timeCfg || timeCfgDefaults;
-  const info = breakCloseInfo(brk, cfg, Date.now());
+  const endAt = fixedAttendanceTs('break-end-'+brk.id, empId, brk.dateKey || todayStr());
+  const info = breakCloseInfo(brk, cfg, endAt);
   const durMin = info.durMin, overHours = info.overHours;
-  try{
-    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_breaks', brk.id), {
+  const patch = {
       endTs: info.endTs, durationMin: durMin, overHours, endPhoto: photoDataUri || null,
       // 📷 الصورة إجبارية — غيابها مش عادي، فبيتعلّم ويوصل للمسؤول
       endPhotoMissing: !photoDataUri,
       // 🚨 نسيت تقفله — المدة الحقيقية متسجّلة للمراجعة بس الخصم على السقف
       forgotEndBreak: info.forgot, rawMin: info.rawMin
-    });
-    // لو فيه ساعات زيادة، تتسجّل في رصيد الوقت
-    if(overHours > 0){
-      await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
-        employeeId: empId, employeeName: brk.employeeName, branch: window.currentBranch,
-        type: 'break', hours: overHours, date: todayStr(),
-        note: info.forgot ? `بريك منسي (اتحسب ${durMin} دقيقة)` : `بريك ${durMin} دقيقة`, ts: Date.now()
-      });
-    }
-    /* ✅ تأكيد بعد ما الكتابة تتأكد فعلًا.
-       قبل كده السكوت كان معناه نجاح ومعناه فشل — الموظفة تدوس وتمشي
-       وهي فاكرة إنه اتقفل، وتلاقي 20 ساعة بعدين. دلوقتي مفيش رسالة
-       = مفيش قفل. */
-    photoFailedFor = null;
-    if(info.forgot){
-      alert('⚠️ البريك ده فضل مفتوح ' + info.rawMin + ' دقيقة.\nاتحسب ' + durMin + ' دقيقة بس (الحد الأقصى) والباقي متسجّل للمراجعة.');
-    }else{
-      alert('✅ رجعتي — البريك كان ' + durMin + ' دقيقة'
-        + (overHours > 0 ? ('\n⏳ زيادة ' + overHours + ' ساعة رصيد') : '')
-        + (photoDataUri ? '' : '\n\n📷 الصورة مأخدتش — المسؤول هيراجعها معاكي.'));
-    }
-  }catch(e){
-    // ❗ فشل صريح — البريك **لسه مفتوح** ولازم تعرف
-    alert('❌ البريك ماتقفلش!\n' + (e && e.message ? e.message : e)
-      + '\n\nجرّبي تاني. لو فضل كده، بلّغي المسؤول قبل ما تمشي.');
-  }
+  };
+  const creditId = attendanceDocId('break-credit', empId, brk.id);
+  const credit = overHours > 0 ? {
+    id:creditId, employeeId:empId, employeeName:brk.employeeName, branch:window.currentBranch,
+    type:'break', hours:overHours, date:brk.dateKey || todayStr(),
+    note:info.forgot ? `بريك منسي (اتحسب ${durMin} دقيقة)` : `بريك ${durMin} دقيقة`, ts:endAt,
+    sourceBreakId:brk.id
+  } : null;
+  const mutationKey = 'break-end:'+brk.id;
+  return queueAttendanceMutation({
+    key:mutationKey,
+    optimistic:()=>{
+      const undoBreak = optimisticAttendanceRow('breaks', { ...brk, ...patch, id:brk.id }, mutationKey);
+      const undoCredit = credit ? optimisticAttendanceRow('credits', credit, mutationKey) : function(){};
+      const undo = ()=>{ undoCredit(); undoBreak(); };
+      undo.confirm = ()=>{ if(undoCredit.confirm)undoCredit.confirm(); if(undoBreak.confirm)undoBreak.confirm(); };
+      return undo;
+    },
+    commit:()=>{
+      const batch = writeBatch(db);
+      batch.update(doc(db,'sales_breaks',brk.id), patch);
+      if(credit){ const clean={...credit}; delete clean.id; batch.set(doc(db,'sales_time_credit',creditId), clean, {merge:true}); }
+      return batch.commit();
+    },
+    onCommitted:()=>{ photoFailedFor=null; },
+    savingText:'تم تسجيل الرجوع من البريك على الجهاز — جاري المزامنة…',
+    successText: info.forgot
+      ? ('تم قفل البريك. اتُحسب '+durMin+' دقيقة فقط للمراجعة ✅')
+      : ('تم الرجوع — مدة البريك '+durMin+' دقيقة ✅'+(overHours>0?' · الزيادة '+overHours+' ساعة':'')),
+    errorText:'البريك لم يُغلق'
+  });
 }
 
 // قفل تلقائي للبريكات المنسية
@@ -2734,16 +2911,20 @@ async function autoCloseStaleBreaks(){
       const info = breakCloseInfo(b, cfg, Date.now());
       const durMin = info.durMin, overHours = info.overHours;
       try{
-        await window.fbUpdateDoc(window.fbDoc(window.db,'sales_breaks', b.id), {
+        const batch = writeBatch(db);
+        batch.update(doc(db,'sales_breaks', b.id), {
           endTs: info.endTs, durationMin: durMin, overHours, autoClosed: true,
           forgotEndBreak: info.forgot, rawMin: info.rawMin
         });
         if(overHours>0){
-          await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
+          const creditId = attendanceDocId('break-credit', b.employeeId, b.id);
+          batch.set(doc(db,'sales_time_credit',creditId), {
             employeeId: b.employeeId, employeeName: b.employeeName, branch: b.branch,
-            type:'break', hours: overHours, date: b.dateKey, note:'بريك مقفول تلقائي', ts: Date.now()
-          });
+            type:'break', hours: overHours, date: b.dateKey, note:'بريك مقفول تلقائي', ts: info.endTs,
+            sourceBreakId:b.id
+          }, {merge:true});
         }
+        await batch.commit();
       }catch(e){}
     }
   }
@@ -2753,52 +2934,68 @@ window.startBreak = startBreak; window.endBreak = endBreak;
 async function clockIn(empId, photoDataUri){
   const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return;
+  if(getOpenShift(empId)){
+    showAttendanceSync('الحضور مسجّل بالفعل — لن يتم إنشاء تسجيل مكرر.', 'success');
+    return;
+  }
+  const dateKey = todayStr();
+  const clockInTs = fixedAttendanceTs('clock-in', empId, dateKey);
   // 🕒 التأخير من بداية شيفت الموظف (complianceCfg) + سماح الأدمن
   let lateMinutes = 0, latePenalized = false;
   // 🕒 بنبعت مستند الموظف نفسه — عشان الميعاد الفردي يغلب بداية الشيفت
   //    (الفولباك القديم اتشال: كان بيشتغل بس لو الموظف مالوش شيفت أصلًا)
-  const lateInfo = computeLate(new Date(), emp, complianceCfg);
+  const lateInfo = computeLate(new Date(clockInTs), emp, complianceCfg);
   lateMinutes = lateInfo.lateMin;
   latePenalized = lateInfo.penalized;
-  try{
-    await addDoc(shiftsCol, {
-      employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
-      clockInTs: Date.now(), clockOutTs: null,
-      scheduledStartTime: emp.scheduledStartTime || null, lateMinutes, latePenalized,
-      clockInPhoto: photoDataUri || null
-    });
-    // v502: ما نعلّمش رسالة النقاب إنها خلصت إلا بعد نجاح كتابة الحضور نفسه.
-    if(emp.niqabAttendance === true){ await markNiqabWelcomeClockInDone(emp); }
-    // ⏳ التأخير بيتسجل ساعات في رصيد الوقت (10 دقايق = ساعة — قرار المالك):
-    // المحرك ده حل محل الغرامة الثابتة القديمة. الكود القديم كان لسه بيكتب
-    // خصم فلوس ثابت في sales_deductions — فالتأخير كان بيتحاسب بالنظام القديم
-    // (اللي أصلًا مش بيتخصم من المرتب) ومش بيدخل رصيد الوقت ولا بوابة المكافأة خالص.
-    // ✨ شيفت التجهيز: التأخير بيتسجّل في الشيفت للمتابعة، بس **مش**
-    //    بيتحوّل رصيد وقت — مفيش عميل بيتأثر بتأخيره.
-    if(latePenalized && !isSetupShift(emp)){
-      const _lateHours = lateHoursFrom(lateMinutes, window.timeCfg || timeCfgDefaults);
-      if(_lateHours > 0){
-        try{
-          await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
-            employeeId: empId, employeeName: emp.name, branch: window.currentBranch,
-            type: 'late', hours: _lateHours, date: todayStr(),
-            note: `تأخير ${lateMinutes} دقيقة`, ts: Date.now()
-          });
-        }catch(_e){}
-      }
-    }
-  }catch(err){
-    console.error('تعذر تسجيل الحضور', err);
-    alert('تعذر تسجيل الحضور: ' + (err && err.code ? err.code : 'غير معروف') + '\n\nتأكد إنك ضايف Firestore Rules الخاصة بـ sales_shifts.');
-  }
-  renderAttendanceLists();
+  const shiftId = attendanceDocId('shift', empId, dateKey+'_'+clockInTs);
+  const optimisticShift = {
+    id:shiftId, employeeId:empId, employeeName:emp.name, branch:window.currentBranch,
+    clockInTs, clockOutTs:null, scheduledStartTime:emp.scheduledStartTime || null,
+    lateMinutes, latePenalized, clockInPhoto:photoDataUri || null
+  };
+  // ⏳ التأخير وشيفته عملية مالية واحدة؛ retry لن يكرر رصيد الوقت.
+  const lateHours = latePenalized && !isSetupShift(emp)
+    ? lateHoursFrom(lateMinutes, window.timeCfg || timeCfgDefaults) : 0;
+  const creditId = attendanceDocId('late', empId, shiftId);
+  const credit = lateHours > 0 ? {
+    id:creditId, employeeId:empId, employeeName:emp.name, branch:window.currentBranch,
+    type:'late', hours:lateHours, date:dateKey, note:`تأخير ${lateMinutes} دقيقة`,
+    ts:clockInTs, sourceShiftId:shiftId
+  } : null;
+  const mutationKey = 'clock-in:'+shiftId;
+  return queueAttendanceMutation({
+    key:mutationKey,
+    optimistic:()=>{
+      const undoShift = optimisticAttendanceRow('shifts', optimisticShift, mutationKey);
+      const undoCredit = credit ? optimisticAttendanceRow('credits', credit, mutationKey) : function(){};
+      const undo=()=>{ undoCredit(); undoShift(); };
+      undo.confirm=()=>{ if(undoCredit.confirm)undoCredit.confirm(); if(undoShift.confirm)undoShift.confirm(); };
+      return undo;
+    },
+    commit:()=>{
+      const batch = writeBatch(db);
+      const shiftRef = doc(db,'sales_shifts',shiftId);
+      const cleanShift={...optimisticShift}; delete cleanShift.id;
+      batch.set(shiftRef, cleanShift, {merge:true});
+      if(credit){ const cleanCredit={...credit}; delete cleanCredit.id; batch.set(doc(db,'sales_time_credit',creditId), cleanCredit, {merge:true}); }
+      return batch.commit();
+    },
+    onCommitted:()=>{
+      clearFixedAttendanceTs('clock-in',empId,dateKey);
+      if(emp.niqabAttendance===true) markNiqabWelcomeClockInDone(emp);
+    },
+    savingText:'تم تسجيل الحضور على الجهاز — جاري المزامنة…',
+    successText:'تم تسجيل الحضور والمزامنة ✅',
+    errorText:'تعذر تسجيل الحضور'
+  });
 }
 
 async function clockOut(empId, photoDataUri){
   const shift = getOpenShift(empId);
   if(!shift) return;
   const emp = window.employees.find(e=> e.id === empId);
-  const now = Date.now();
+  const shiftDay = caiDayKey(shift.clockInTs);
+  const now = fixedAttendanceTs('clock-out-'+shift.id, empId, shiftDay);
 
   // Overtime is based on actual shift duration exceeding the standard 8h15m
   // (495 minutes) — not on a fixed clock-out time. This naturally accounts
@@ -2831,13 +3028,12 @@ async function clockOut(empId, photoDataUri){
   const _reqMin = scheduledShiftMinutes(emp, complianceCfg, caiDayKey(shift.clockInTs));
   if(!forgotten) earlyInfo = earlyLeaveFromWorked(totalMin, _reqMin, Number(shift.lateMinutes)||0, cfg);
 
-  try{
-    const _otProbe = { clockInTs:shift.clockInTs, clockOutTs:now, shiftMinutes:totalMin,
+  const _otProbe = { clockInTs:shift.clockInTs, clockOutTs:now, shiftMinutes:totalMin,
       overtimeMinutes, forgotClockOut:forgotten || false, otRequiresApproval:true,
       overtimeDecision:overtimeMinutes > 0 ? 'pending' : 'none' };
-    const _otInfo = overtimeReviewInfo(_otProbe, cfg);
-    const _otAuto = overtimeMinutes > 0 && !_otInfo.needsReview;
-    await updateDoc(doc(db,'sales_shifts', shift.id), {
+  const _otInfo = overtimeReviewInfo(_otProbe, cfg);
+  const _otAuto = overtimeMinutes > 0 && !_otInfo.needsReview;
+  const patch = {
       clockOutTs: now, overtimeMinutes, clockOutPhoto: photoDataUri || null,
       earlyMin: earlyInfo.earlyMin, earlyHours: earlyInfo.hours,
       otRequiresApproval: true,
@@ -2847,28 +3043,37 @@ async function clockOut(empId, photoDataUri){
       shiftMinutes: totalMin,
       forgotClockOut: forgotten || false,
       needsClockOutReview: forgotten || false
-    });
-    // نسجّل ساعات الانصراف بدري في رصيد الوقت
-    if(earlyInfo.hours > 0){
-      try{
-        await window.fbAddDoc(window.fbCollection(window.db,'sales_time_credit'), {
-          employeeId: empId, employeeName: (emp&&emp.name)||'', branch: window.currentBranch,
-          type: 'early', hours: earlyInfo.hours, date: caiDayKey(shift.clockInTs),
-          note: `ناقص ${earlyInfo.earlyMin} دقيقة عن مدة شيفته`, ts: Date.now()
-        });
-      }catch(_e){}
-    }
-    const h = Math.floor(totalMin/60), m = totalMin%60;
-    let msg = `تم تسجيل الانصراف ✅\nمدة الشيفت: ${h} س ${m} د`;
-    if(earlyInfo.hours > 0) msg += `\n🚪 ناقص ${earlyInfo.earlyMin} دقيقة عن مدة شيفتك → ${earlyInfo.hours} ساعة رصيد`;
-    if(overtimeMinutes > 0) msg += _otAuto
-      ? `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة — اتعتمد تلقائيًا ✅`
-      : `\n⏱️ وقت إضافي: ${overtimeMinutes} دقيقة — محتاج مراجعة الإدارة`;
-    alert(msg);
-  }catch(err){
-    console.error('تعذر تسجيل الانصراف', err);
-    alert('تعذر تسجيل الانصراف: ' + (err && err.code ? err.code : 'غير معروف'));
-  }
+  };
+  const creditId = attendanceDocId('early', empId, shift.id);
+  const credit = earlyInfo.hours > 0 ? {
+    id:creditId, employeeId:empId, employeeName:(emp&&emp.name)||'', branch:window.currentBranch,
+    type:'early', hours:earlyInfo.hours, date:shiftDay,
+    note:`ناقص ${earlyInfo.earlyMin} دقيقة عن مدة شيفته`, ts:now, sourceShiftId:shift.id
+  } : null;
+  const h=Math.floor(totalMin/60), m=totalMin%60;
+  let successText=`تم تسجيل الانصراف — مدة الشيفت ${h} س ${m} د ✅`;
+  if(earlyInfo.hours>0) successText += ` · نقص ${earlyInfo.earlyMin} دقيقة`;
+  if(overtimeMinutes>0) successText += _otAuto ? ' · الإضافي اتعتمد تلقائيًا' : ' · الإضافي محتاج مراجعة الإدارة';
+  const mutationKey='clock-out:'+shift.id;
+  return queueAttendanceMutation({
+    key:mutationKey,
+    optimistic:()=>{
+      const undoShift=optimisticAttendanceRow('shifts',{...shift,...patch,id:shift.id},mutationKey);
+      const undoCredit=credit?optimisticAttendanceRow('credits',credit,mutationKey):function(){};
+      const undo=()=>{undoCredit();undoShift();};
+      undo.confirm=()=>{if(undoCredit.confirm)undoCredit.confirm();if(undoShift.confirm)undoShift.confirm();};
+      return undo;
+    },
+    commit:()=>{
+      const batch = writeBatch(db);
+      batch.update(doc(db,'sales_shifts',shift.id),patch);
+      if(credit){const clean={...credit};delete clean.id;batch.set(doc(db,'sales_time_credit',creditId),clean,{merge:true});}
+      return batch.commit();
+    },
+    savingText:'تم تسجيل الانصراف على الجهاز — جاري المزامنة…',
+    successText,
+    errorText:'تعذر تسجيل الانصراف'
+  });
 }
 
 // ---------- ATTENDANCE PIN GATE ----------

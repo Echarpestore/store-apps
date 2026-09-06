@@ -321,11 +321,31 @@ window.excuseTimeCredit = async function(id){
   const reason = prompt('سبب العذر؟ (مرض / ظرف / بأمر مني ...)');
   if(reason===null) return;
   const item = (window.allTimeCredit||[]).find(x=> x.id===id); if(!item) return;
-  try{
-    await window.fbUpdateDoc(window.fbDoc(window.db,'sales_time_credit', id), {
-      hours: 0, originalHours: item.hours, excused: true, excuseReason: reason || 'بعذر', excusedAt: Date.now()
-    });
-  }catch(e){ alert('تعذر تسجيل العذر: '+e.message); }
+  const patch = {
+    hours:0, originalHours:item.originalHours != null ? item.originalHours : item.hours,
+    excused:true, excuseReason:reason || 'بعذر', excusedAt:Date.now()
+  };
+  const mutationKey = 'time-credit-excuse:'+id;
+  // v543: العذر يظهر فورًا في القائمة والمرتب. لو السيرفر رفضه نرجّع
+  // القيمة القديمة ونترك زر إعادة المحاولة بدل ما تظل الشاشة صامتة.
+  const optimisticTimeCredit = window.optimisticTimeCredit;
+  const rollbackTimeCredit = ()=> optimisticTimeCredit
+    ? optimisticTimeCredit(id, patch, mutationKey)
+    : function(){};
+  const options = {
+    key:mutationKey,
+    optimistic:rollbackTimeCredit,
+    commit:()=>window.fbUpdateDoc(window.fbDoc(window.db,'sales_time_credit',id),patch),
+    savingText:'تم تسجيل العذر على الجهاز — جاري المزامنة…',
+    successText:'تم تسجيل العذر والمزامنة ✅',
+    errorText:'تعذر تسجيل العذر'
+  };
+  if(typeof window.queueAttendanceMutation==='function'){
+    return window.queueAttendanceMutation(options);
+  }
+  const rollback = rollbackTimeCredit();
+  try{ await options.commit(); if(rollback.confirm)rollback.confirm(); }
+  catch(e){ rollback(); alert('تعذر تسجيل العذر: '+e.message); }
 };
 
 window.renderDeductionsLog = function(){
