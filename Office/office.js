@@ -5166,7 +5166,7 @@ async function _ofBranchCfg(branch){
 function ofGraceCloseTs(shift, emp, shiftDefs){
   if(!shift || !shift.clockInTs) return null;
   const sdef = shiftDefs ? shiftDefs[emp && emp.shift] : null;
-  const endHM = (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
+  const endHM = shift.scheduledEndTime || (emp && emp.scheduledEndTime) || (sdef && sdef.end) || '';
   let endTs = null;
   if(/^\d{1,2}:\d{2}$/.test(endHM)){
     const parts = String(endHM).split(':').map(Number);
