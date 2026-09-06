@@ -529,6 +529,32 @@ function receiveRemove(idx){
 }
 function receiveSelectRow(entryId){ receiveSelectedEntryId=entryId;renderReceiveCart(); }
 
+// ⌨️ + / - من الكيبورد أو الـNumpad يعدّل السطر المحدد في شاشة الاستلام.
+// خانة الباركود تفضل عليها الـfocus عشان السكانر يشتغل فورًا بعد كل تعديل.
+function receiveKeyboardQty(e){
+  const screen=document.getElementById('receiveGoodsScreen');
+  if(!screen || !screen.classList.contains('active')) return;
+  if(e.ctrlKey || e.altKey || e.metaKey) return;
+  const plus=(e.key==='+' || e.key==='Add' || e.code==='NumpadAdd');
+  const minus=(e.key==='-' || e.key==='Subtract' || e.code==='NumpadSubtract');
+  if(!plus && !minus) return;
+  const target=e.target;
+  // جوه خانة العدد نفسها، نخلي المستخدم يكتب الرقم/الإشارة طبيعي.
+  if(target && target.classList && target.classList.contains('work-qty-input')) return;
+  // لو الكاشير بدأت تكتب كود فيه شرطة، ما نسرقش الحرف من الباركود.
+  if(target && target.id==='receiveGoodsBarcode' && String(target.value||'').trim()) return;
+  if(!receiveCart.length) return;
+  let idx=receiveCart.findIndex(function(x){ return x.entryId===receiveSelectedEntryId; });
+  if(idx<0){ idx=receiveCart.length-1; receiveSelectedEntryId=receiveCart[idx].entryId; }
+  e.preventDefault();
+  e.stopPropagation();
+  receiveQty(idx,plus?1:-1);
+  const barcode=document.getElementById('receiveGoodsBarcode');
+  if(barcode) setTimeout(function(){ try{ barcode.focus(); }catch(_e){} },0);
+}
+if(typeof document!=='undefined') document.addEventListener('keydown',receiveKeyboardQty,true);
+if(typeof window!=='undefined') window.receiveKeyboardQty=receiveKeyboardQty;
+
 // ⚠️ الـ inline handlers بتشتغل في النطاق العام، و`receiveCart` معرّف بـ let
 // فمش بيوصلها — كان بيفشل بصمت. (نفس الباج المتكرر: const/let مش بتتعلّق على window)
 function receiveTogglePick(idx, checked){
