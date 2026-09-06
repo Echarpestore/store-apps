@@ -178,14 +178,133 @@ async function renderPdStockLog(){
 }
 
 // ============================================================
+// طباعة الأسعار — قائمة تجهيز مستقلة عن شاشة الأصناف
+// ============================================================
+let priceLabelQueue = []; // {id,name,barcode,price,qty,addedAtMs}
+let priceLabelSelectedId = '';
+const PRICE_LABEL_QUEUE_PREFIX = 'pos_price_label_queue_v1_';
+
+function _workEsc(v){
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function(ch){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];
+  });
+}
+function _priceLabelKey(){
+  const br = (typeof currentBranch !== 'undefined' ? currentBranch : '') || 'default';
+  return PRICE_LABEL_QUEUE_PREFIX + encodeURIComponent(String(br));
+}
+function savePriceLabelQueue(){
+  try{ localStorage.setItem(_priceLabelKey(), JSON.stringify({v:1,items:priceLabelQueue,savedAt:Date.now()})); }
+  catch(e){ console.warn('price label queue save', e && e.message); }
+}
+function loadPriceLabelQueue(){
+  try{
+    const raw = localStorage.getItem(_priceLabelKey());
+    if(!raw){ priceLabelQueue=[]; return; }
+    const data = JSON.parse(raw);
+    priceLabelQueue = (data && Array.isArray(data.items) ? data.items : []).filter(function(x){ return x && x.id; }).map(function(x){
+      return Object.assign({}, x, {qty:Math.max(1, parseInt(x.qty,10)||1)});
+    });
+  }catch(e){ priceLabelQueue=[]; console.warn('price label queue load', e && e.message); }
+}
+function goToPriceLabels(){
+  if(!hasPerm('canPrintLabel')){ showToast('مفيش صلاحية طباعة الليبل', 'err'); return; }
+  showScreen('priceLabelsScreen');
+  loadPriceLabelQueue();
+  renderPriceLabelQueue();
+  if(typeof loadInventory === 'function') loadInventory().then(renderPriceLabelQueue).catch(function(){});
+  const input = document.getElementById('priceLabelBarcode');
+  if(input){ input.value=''; setTimeout(function(){ input.focus(); },80); }
+  const box = document.getElementById('priceLabelSuggestBox'); if(box) box.innerHTML='';
+}
+function priceLabelFindItems(query){
+  const q=String(query||'').trim().toLowerCase();
+  if(!q) return [];
+  const items = (typeof receiveCanonicalItems === 'function') ? receiveCanonicalItems(allInventory,currentBranch) : (allInventory||[]);
+  const sm = (typeof searchMatch === 'function') ? searchMatch : function(h,n){return String(h||'').toLowerCase().includes(n);};
+  const bp = (typeof barcodePrefix === 'function') ? barcodePrefix : function(h,n){return String(h||'').toLowerCase().startsWith(n);};
+  return items.filter(function(it){ return sm(it.name,q)||bp(it.barcode,q); }).sort(function(a,b){
+    const ac=String(a.barcode||'').toLowerCase(),bc=String(b.barcode||'').toLowerCase();
+    return ((bc===q)-(ac===q)) || (ac.length-bc.length);
+  });
+}
+function addToPriceLabelQueue(product){
+  if(!product) return;
+  const old=priceLabelQueue.find(function(x){return x.id===product.id;});
+  if(old){ old.qty=Math.max(1,Number(old.qty)||1)+1; old.addedAtMs=Date.now(); priceLabelSelectedId=old.id; }
+  else{
+    priceLabelQueue.push({id:product.id,name:product.name||'صنف',barcode:product.barcode||'',price:Number(product.price||0),qty:1,addedAtMs:Date.now()});
+    priceLabelSelectedId=product.id;
+  }
+  savePriceLabelQueue(); renderPriceLabelQueue();
+}
+function priceLabelSetQty(id,value){
+  const row=priceLabelQueue.find(function(x){return x.id===id;}); if(!row)return;
+  row.qty=Math.max(1,parseInt(value,10)||1); savePriceLabelQueue(); renderPriceLabelQueue();
+}
+function priceLabelRemove(id){
+  priceLabelQueue=priceLabelQueue.filter(function(x){return x.id!==id;});
+  if(priceLabelSelectedId===id)priceLabelSelectedId=''; savePriceLabelQueue(); renderPriceLabelQueue();
+}
+function priceLabelSelect(id){ priceLabelSelectedId=(priceLabelSelectedId===id?'':id); renderPriceLabelQueue(); }
+function priceLabelApplyQtyToAll(){
+  const el=document.getElementById('priceLabelAllQty'); const qty=Math.max(1,parseInt(el&&el.value,10)||1);
+  priceLabelQueue.forEach(function(x){x.qty=qty;}); savePriceLabelQueue(); renderPriceLabelQueue();
+}
+function clearPriceLabelQueue(){
+  if(priceLabelQueue.length && !confirm('تمسح كل الأكواد المجهزة للطباعة؟'))return;
+  priceLabelQueue=[];priceLabelSelectedId='';savePriceLabelQueue();renderPriceLabelQueue();
+}
+function printPriceLabelQueue(){
+  if(!priceLabelQueue.length){showToast('اكتب أو امسح كود الأول','err');return;}
+  const jobs=priceLabelQueue.map(function(x){return {name:x.name,price:x.price,barcode:x.barcode,qty:Math.max(1,Number(x.qty)||1)};});
+  doPrintLabels(jobs);
+}
+function renderPriceLabelQueue(){
+  const wrap=document.getElementById('priceLabelQueueWrap'),sum=document.getElementById('priceLabelQueueSummary'),btn=document.getElementById('priceLabelPrintAllBtn');
+  if(!wrap)return;
+  const total=priceLabelQueue.reduce(function(s,x){return s+Math.max(1,Number(x.qty)||1);},0);
+  if(sum)sum.innerHTML='<span>'+priceLabelQueue.length+' كود مختلف</span><span>'+total+' ليبل جاهز</span>';
+  if(btn){btn.disabled=!priceLabelQueue.length;btn.textContent='🖨️ طباعة الكل ('+total+' ليبل)';}
+  if(!priceLabelQueue.length){wrap.innerHTML='<div class="work-empty">القائمة فاضية — امسح أول كود وسيظهر هنا فورًا.</div>';return;}
+  const rows=priceLabelQueue.slice().reverse().map(function(r){
+    return '<tr data-item-id="'+_workEsc(r.id)+'" class="'+(priceLabelSelectedId===r.id?'is-selected':'')+'" onclick="priceLabelSelect(this.dataset.itemId)">'
+      +'<td class="work-code">'+_workEsc(r.barcode||'—')+'</td><td class="work-name">'+_workEsc(r.name)+'</td>'
+      +'<td style="font-weight:900;white-space:nowrap">'+Number(r.price||0).toFixed(2)+' ج.م</td>'
+      +'<td><input class="work-qty-input" data-item-id="'+_workEsc(r.id)+'" type="number" min="1" value="'+Math.max(1,Number(r.qty)||1)+'" onclick="event.stopPropagation()" onchange="priceLabelSetQty(this.dataset.itemId,this.value)"></td>'
+      +'<td><button class="work-row-delete" data-item-id="'+_workEsc(r.id)+'" onclick="event.stopPropagation();priceLabelRemove(this.dataset.itemId)">حذف</button></td></tr>';
+  }).join('');
+  wrap.innerHTML='<div class="work-table-shell"><table class="work-table"><thead><tr><th>الكود</th><th>اسم الصنف</th><th>السعر</th><th>عدد الليبلات</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+const _priceLabelInput=document.getElementById('priceLabelBarcode');
+if(_priceLabelInput){
+  _priceLabelInput.addEventListener('input',function(e){
+    const box=document.getElementById('priceLabelSuggestBox'),q=e.target.value.trim(); if(!box)return;box.innerHTML='';if(!q)return;
+    const matches=priceLabelFindItems(q).slice(0,12);
+    if(!matches.length){box.innerHTML='<div style="padding:12px;color:#64748b">مفيش منتج بالكود أو الاسم ده</div>';return;}
+    matches.forEach(function(it){const row=document.createElement('div');row.className='sugg-row';row.innerHTML='<span><b>'+_workEsc(it.name)+'</b><br><span class="work-code">'+_workEsc(it.barcode||'—')+'</span></span><span>'+Number(it.price||0).toFixed(2)+' ج.م</span>';row.onclick=function(){addToPriceLabelQueue(it);e.target.value='';box.innerHTML='';e.target.focus();};box.appendChild(row);});
+  });
+  _priceLabelInput.addEventListener('keydown',function(e){
+    if(e.key!=='Enter')return;e.preventDefault();const q=e.target.value.trim();if(!q)return;
+    const matches=priceLabelFindItems(q),exact=matches.find(function(x){return String(x.barcode||'')===q||String(x.name||'')===q;});
+    const product=exact||(matches.length===1?matches[0]:null);
+    if(!product){showToast(matches.length?'اختار الصنف الصحيح من القائمة':'مفيش منتج بالكود ده','err');return;}
+    addToPriceLabelQueue(product);e.target.value='';const box=document.getElementById('priceLabelSuggestBox');if(box)box.innerHTML='';e.target.focus();
+  });
+}
+
+// ============================================================
 // استلام بضاعة (Receive Goods) — اكتب/امسح باركود، دوس Enter،
 // عدّل الكمية (موجب = توريد جديد، سالب = خصم تالف/مرتجع للمورد).
 // لو الكمية النهائية بقت صفر أو أقل، المنتج بيتحط "نافد" تلقائي
 // ويختفي من شاشة البيع. لو اتضاف رصيد لمنتج كان "نافد"، بيرجع "نشط" تلقائي.
 // ============================================================
 
-let receiveCart = [];          // {id, name, barcode, currentQty, qty}
+let receiveCart = [];          // كل مسحة سطر مستقل: {entryId,id,name,barcode,currentQty,qty,receivedAtMs}
 let receiveGoodsTodayLog = [];
+let receiveSelectedEntryId = '';
+let receiveLogSelectedId = '';
 
 // ============================================================
 // 🧾 سجل الاستلامات — بيعيش بعد قفل التطبيق
@@ -248,6 +367,11 @@ function _recvDraftLoadForCurrentBranch(){
     if(!d || !Array.isArray(d.items)){ _recvDraftClear(br); return false; }
     receiveCart = d.items.filter(function(x){
       return x && x.id && Number.isFinite(Number(x.qty));
+    }).map(function(x,idx){
+      return Object.assign({},x,{
+        entryId:x.entryId||('legacy_'+Date.now()+'_'+idx),
+        receivedAtMs:Number(x.receivedAtMs)||Number(d.savedAt)||Date.now()
+      });
     });
     if(!receiveCart.length){ _recvDraftClear(br); return false; }
     return true;
@@ -374,9 +498,11 @@ document.getElementById('receiveGoodsBarcode').addEventListener('keydown', (e)=>
 });
 
 function addToReceiveCart(product){
-  const ex = receiveCart.find(r=> r.id === product.id);
-  if(ex){ ex.qty += 1; }
-  else receiveCart.push({ id:product.id, name:product.name, barcode:product.barcode, currentQty:branchQty(product), qty:1 });
+  // كل مسحة/إدخال حركة مستقلة. تكرار نفس الكود لا يغيّر سطرًا قديمًا.
+  const now=Date.now();
+  const entry={entryId:'recv_'+now+'_'+Math.random().toString(36).slice(2,8),id:product.id,name:product.name,barcode:product.barcode,currentQty:branchQty(product),qty:1,receivedAtMs:now};
+  receiveCart.push(entry);
+  receiveSelectedEntryId=entry.entryId;
   renderReceiveCart();
 }
 function receiveQty(idx, delta){
@@ -390,9 +516,12 @@ function receiveSetQty(idx, val){
   renderReceiveCart();
 }
 function receiveRemove(idx){
+  const old=receiveCart[idx];
   receiveCart.splice(idx, 1);
+  if(old&&receiveSelectedEntryId===old.entryId)receiveSelectedEntryId='';
   renderReceiveCart();
 }
+function receiveSelectRow(entryId){ receiveSelectedEntryId=(receiveSelectedEntryId===entryId?'':entryId);renderReceiveCart(); }
 
 // ⚠️ الـ inline handlers بتشتغل في النطاق العام، و`receiveCart` معرّف بـ let
 // فمش بيوصلها — كان بيفشل بصمت. (نفس الباج المتكرر: const/let مش بتتعلّق على window)
@@ -415,45 +544,22 @@ function renderReceiveCart(){
     return;
   }
   const lastIdx = receiveCart.length - 1;
-  // 🔝 آخر صنف اتضاف يبقى **أول سطر** — نفس ترتيب شاشة البيع.
-  // ⚠️ بنعكس العرض بس، والـ idx الأصلي بيفضل زي ما هو عشان أزرار
-  //    الكمية والمسح تشتغل على الصف الصح (نفس أسلوب renderCart).
-  wrap.innerHTML = receiveCart.map((r, idx)=> ({ r, idx })).reverse().map(({ r, idx })=>{
+  const stageRows=receiveCart.map((r, idx)=> ({ r, idx })).reverse().map(({ r, idx })=>{
     const isLast = idx === lastIdx;
-    // نحسب المخزون الجديد من الرصيد الحالي الفعلي
     const p = allInventory.find(x=> x.id === r.id);
     const cur = p ? branchQty(p) : r.currentQty;
     const newQty = cur + (r.qty || 0);
-    const isNeg = (r.qty || 0) < 0;                       // كمية بالسالب = تالف/مرتجع
-    const price = p ? p.price : '';
-    // 🆕 آخر صنف اتضاف بإطار واضح — عشان الكاشير ميشكّش ويمسح تاني
-    const border = isNeg ? 'var(--minus)' : (isLast ? '#16a34a' : '#b9c9a0');
-    const bg = isNeg ? '#fdecec' : (isLast ? '#f0fdf4' : '#fff');
-    return `
-    <div id="rcRow_${idx}" style="background:${bg}; border:${isLast?'2px':'1.5px'} solid ${border}; border-radius:12px; padding:12px 14px; margin-bottom:9px;">
-      ${isLast ? '<div style="font-size:10.5px; font-weight:900; color:#16a34a; margin-bottom:5px;">🆕 آخر واحد اتضاف</div>' : ''}
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-        <label style="display:flex; align-items:flex-start; gap:6px; padding-top:2px;" title="تحديد لطباعة الليبل">
-          <input type="checkbox" class="lbl-pick" data-idx="${idx}" ${r._lblPick!==false && !isNeg ?'checked':''} onchange="receiveTogglePick(${idx}, this.checked)" style="width:17px; height:17px;">
-        </label>
-        <div style="min-width:0;">
-          <div style="font-weight:800; font-size:14px; color:${isNeg?'var(--minus)':'inherit'};">${r.name}${isNeg?' ↩️':''}</div>
-          <div style="color:#555; font-size:11.5px; margin-top:3px;">🔖 كود: <b style="direction:ltr; display:inline-block;">${r.barcode || '—'}</b>${price!==''?` · 💵 السعر: <b>${price} ج.م</b>`:''}</div>
-          <div style="color:#888; font-size:11px; margin-top:2px;">المخزون: ${cur} ← <b style="color:${newQty<0?'var(--minus)':'var(--plus)'};">${newQty}</b></div>
-        </div>
-        <button class="cart-del" onclick="receiveRemove(${idx})" title="مسح">🗑️</button>
-      </div>
-      <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
-        <div class="qty-cell">
-          <button onclick="receiveQty(${idx},-1)">−</button>
-          <input type="number" value="${r.qty}" onchange="receiveSetQty(${idx}, this.value)" style="width:66px; text-align:center; font-weight:800; font-size:15px; border-radius:6px; border:1px solid #b9c9a0; padding:6px;">
-          <button onclick="receiveQty(${idx},1)">+</button>
-        </div>
-        <span style="font-size:11px; color:#888;">(بالسالب = خصم تالف/مرتجع)</span>
-      </div>
-    </div>`;
+    const when=new Date(Number(r.receivedAtMs)||Date.now()).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return '<div id="rcRow_'+idx+'" data-entry-id="'+_workEsc(r.entryId)+'" class="receive-stage-card '+(receiveSelectedEntryId===r.entryId?'is-selected':'')+'" onclick="receiveSelectRow(this.dataset.entryId)"><div class="receive-stage-grid">'
+      +'<div class="work-code">'+_workEsc(r.barcode||'—')+(isLast?'<div style="font:900 10px Cairo;color:#15803d">آخر إضافة</div>':'')+'</div>'
+      +'<div><div class="work-name">'+_workEsc(r.name)+'</div><div style="font-size:11px;color:#64748b">المخزون '+cur+' ← <b>'+newQty+'</b></div></div>'
+      +'<div class="qty-cell" onclick="event.stopPropagation()"><button onclick="receiveQty('+idx+',-1)">−</button><input class="work-qty-input" type="number" value="'+r.qty+'" onchange="receiveSetQty('+idx+',this.value)"><button onclick="receiveQty('+idx+',1)">+</button></div>'
+      +'<div class="work-time">'+when+'</div>'
+      +'<div><input title="طباعة ليبل" type="checkbox" '+(r._lblPick!==false&&(r.qty||0)>0?'checked':'')+' onclick="event.stopPropagation()" onchange="receiveTogglePick('+idx+',this.checked)"><button class="work-row-delete" style="margin-top:5px" onclick="event.stopPropagation();receiveRemove('+idx+')">×</button></div>'
+      +'</div></div>';
   }).join('');
-  if(btn){ btn.style.display = 'block'; btn.textContent = '✔️ تأكيد الاستلام (' + receiveCart.length + ' صنف)'; }
+  wrap.innerHTML='<div class="receive-stage-scroll"><div class="receive-stage-list"><div class="receive-stage-head"><span>الكود</span><span>الاسم</span><span>العدد</span><span>وقت الإدخال</span><span></span></div>'+stageRows+'</div></div>';
+  if(btn){ btn.style.display = 'block'; btn.textContent = '✔️ تأكيد الاستلام (' + receiveCart.length + ' حركة)'; }
   // 📜 نمرّر لآخر صنف اتضاف — من غير كده بيضيف ومايشوفش النتيجة
   if(lastIdx >= 0){
     setTimeout(function(){
@@ -474,7 +580,6 @@ function renderReceiveCart(){
 }
 
 async function confirmReceiveCart(){
-  if(typeof confirmForeignBranchAction === 'function' && !confirmForeignBranchAction('استلام/خصم البضاعة')) return;
   if(!hasPerm('canReceiveGoods') && !hasPerm('canEditInventory')){ showToast('محتاج صلاحية استلام البضاعة', 'err'); return; }
   const rows = receiveCart.filter(r=> (r.qty || 0) !== 0);
   const _negRows = [];   // الأصناف اللي رصيدها هينزل سالب — للتأكيد والسجل
@@ -514,11 +619,12 @@ async function confirmReceiveCart(){
       const _wentNeg = newQty < 0;
       await logStockMovement(r.id, r.name, r.qty, r.qty > 0 ? 'receipt' : 'adjustment',
         (r.qty > 0 ? 'استلام بضاعة (توريد)' : 'خصم بضاعة (تالف/مرتجع للمورد)')
-        + (_wentNeg ? ` — ⚠️ الرصيد نزل سالب (${newQty}) · الجرد لسه ماتعملش` : ''));
-      receiveGoodsTodayLog.unshift({ name:r.name, qtyChange:r.qty, ts:Date.now() });
+        + (_wentNeg ? ` — ⚠️ الرصيد نزل سالب (${newQty}) · الجرد لسه ماتعملش` : ''),
+        {barcode:r.barcode,receivedAtMs:r.receivedAtMs,entryId:r.entryId});
+      receiveGoodsTodayLog.unshift({ id:r.entryId, barcode:r.barcode||'', name:r.name, qtyChange:r.qty, ts:Number(r.receivedAtMs)||Date.now(), employeeName:currentEmployee?(currentEmployee.name||''):'' });
       _recvLogSave();                       // يفضل موجود بعد قفل التطبيق
     }
-    showToast(`اتأكد استلام ${rows.length} صنف ✅`);
+    showToast(`اتأكد استلام ${rows.length} حركة ✅`);
     await loadInventory();
     // 🔖 مين كان طالب حاجة وصلت؟
     //    ⚠️ **بعد** الاستلام ما يخلص وجوّه try — الاستلام عملية شغل
@@ -548,17 +654,18 @@ async function renderReceiveGoodsLog(){
       return;
     }
     const dayStart = (typeof bizDayStartMs === 'function') ? bizDayStartMs(Date.now()) : (function(){ const d=new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
-    wrap.innerHTML = rows.map(function(l){
+    wrap.innerHTML = '<div class="work-table-shell"><table class="work-table"><thead><tr><th>الكود</th><th>اسم الصنف</th><th>العدد</th><th>الوقت</th><th>الموظف</th></tr></thead><tbody>' + rows.map(function(l,idx){
       const ts = Number(l.ts || 0);
       const d = ts ? new Date(ts) : null;
-      const when = d ? (ts >= dayStart ? d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : d.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})) : '—';
+      const when = d ? (ts >= dayStart ? d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : d.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'})) : '—';
       const qty = Number(l.qtyChange || l.delta || 0);
-      const emp = l.employeeName ? (' · ' + l.employeeName) : '';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee;font-size:12px;">'
-        + '<span style="min-width:0;"><b>' + String(l.name || l.productName || 'صنف') + '</b><span style="color:#999;font-size:10.5px;margin-right:5px;">' + when + emp + '</span></span>'
-        + '<span style="font-weight:900;white-space:nowrap;color:' + (qty >= 0 ? 'var(--plus)' : 'var(--minus)') + ';">' + (qty > 0 ? '+' : '') + qty + '</span>'
-        + '</div>';
-    }).join('') + (note ? '<div style="color:#999;font-size:10.5px;padding-top:7px;text-align:center;">' + note + '</div>' : '');
+      const rowId=String(l.id||('log_'+ts+'_'+idx));
+      return '<tr data-row-id="'+_workEsc(rowId)+'" class="'+(receiveLogSelectedId===rowId?'is-selected':'')+'" onclick="receiveLogSelect(this.dataset.rowId)">'
+        +'<td class="work-code">'+_workEsc(l.barcode||l.productBarcode||'—')+'</td>'
+        +'<td class="work-name">'+_workEsc(l.name||l.productName||'صنف')+'</td>'
+        +'<td style="font-weight:900;color:'+(qty>=0?'#047857':'#b91c1c')+'">'+(qty>0?'+':'')+qty+'</td>'
+        +'<td class="work-time">'+_workEsc(when)+'</td><td>'+_workEsc(l.employeeName||'—')+'</td></tr>';
+    }).join('') + '</tbody></table></div>' + (note ? '<div style="color:#64748b;font-size:11px;padding-top:7px;text-align:center;">' + _workEsc(note) + '</div>' : '');
   };
   renderRows(receiveGoodsTodayLog, 'آخر بيانات محفوظة على الجهاز');
 
@@ -583,8 +690,9 @@ async function renderReceiveGoodsLog(){
     (snap && snap.docs || []).forEach(function(d){
       const x=d.data()||{};
       if(x.branch !== currentBranch || x.type !== 'receipt') return;
-      const ts = x.createdAt && x.createdAt.toMillis ? x.createdAt.toMillis() : (x.createdAtMs || 0);
-      rows.push({ name:x.productName||'صنف', qtyChange:Number(x.delta||0), ts:ts, employeeName:x.employeeName||'' });
+      const ts = Number(x.receivedAtMs)||(x.createdAt && x.createdAt.toMillis ? x.createdAt.toMillis() : (x.createdAtMs || 0));
+      const inv=(allInventory||[]).find(function(it){return it&&it.id===x.productId;})||{};
+      rows.push({ id:x.receiveEntryId||d.id, barcode:x.productBarcode||inv.barcode||'', name:x.productName||inv.name||'صنف', qtyChange:Number(x.delta||0), ts:ts, employeeName:x.employeeName||'' });
     });
     rows.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
     if(rows.length){
@@ -597,6 +705,8 @@ async function renderReceiveGoodsLog(){
     // الكاش المحلي اللي اتعرض فوق يفضل ظاهر بدل شاشة فاضية.
   }
 }
+
+function receiveLogSelect(id){ receiveLogSelectedId=(receiveLogSelectedId===id?'':id);renderReceiveGoodsLog(); }
 
 
 // 🏷️ طباعة ليبلات الأصناف المحدّدة في الاستلام — الاقتراح = الكمية المستلمة دلوقتي

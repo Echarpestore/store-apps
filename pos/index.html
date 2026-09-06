@@ -131,6 +131,35 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
 .mgmt-light tr:nth-child(even) td{ background:#fbfcfd !important; }
 .mgmt-light tr:last-child td{ border-bottom:none !important; }
 
+/* قوائم العمل: طباعة الأسعار وسجل الاستلام */
+.work-list-page{padding:0 16px 34px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.work-entry-card{background:#fff;border:1px solid var(--ui-line);border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 3px 14px rgba(20,25,40,.06)}
+.work-entry-title{font-size:18px;font-weight:900;color:var(--ui-ink)}
+.work-entry-hint{font-size:12px;color:var(--ui-mut);margin:2px 0 12px}
+.work-entry-search{position:relative}
+.work-entry-search input{width:100%;font-size:16px!important;font-weight:800!important;direction:ltr;text-align:right}
+.work-suggest-box{position:absolute;top:calc(100% + 5px);left:0;right:0;background:#fff;border:1px solid #cbd5e1;border-radius:12px;max-height:280px;overflow:auto;z-index:40;box-shadow:0 12px 30px rgba(15,23,42,.16)}
+.work-bulk-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--ui-line)}
+.work-bulk-row label{font-size:13px;font-weight:800}.work-bulk-row input{width:88px!important;text-align:center;font-weight:900}.work-bulk-row button{padding:10px 14px!important;border-radius:10px!important;font-weight:800!important}
+.work-list-summary{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:5px 2px 10px;font-size:13px;font-weight:800;color:#475569}
+.work-table-shell{overflow-x:auto;border:1px solid #dbe2ea;border-radius:15px;background:#fff;box-shadow:0 3px 14px rgba(20,25,40,.05)}
+.work-table{width:100%;min-width:660px;border-collapse:separate!important;border-spacing:0!important;box-shadow:none!important}
+.work-table th{position:sticky;top:0;z-index:2;white-space:nowrap;text-align:right}
+.work-table td{vertical-align:middle;font-size:14px!important}
+.work-table tbody tr{cursor:pointer}
+.work-table tbody tr:nth-child(odd) td{background:#fff!important}.work-table tbody tr:nth-child(even) td{background:#eef4fb!important}
+.work-table tbody tr.is-selected td{background:#dbeafe!important;box-shadow:inset 0 1px #60a5fa,inset 0 -1px #60a5fa}
+.work-code{direction:ltr;text-align:right;font-family:Consolas,'Courier New',monospace;font-size:14px;font-weight:900;color:#1d4ed8;white-space:nowrap}
+.work-name{font-weight:900;color:#111827}.work-time{direction:ltr;text-align:right;white-space:nowrap;font-weight:800;color:#475569}
+.work-qty-input{width:76px!important;text-align:center;font-weight:900!important;font-size:15px!important;padding:7px!important}
+.work-row-delete{border:1px solid #fecaca!important;background:#fff1f2!important;color:#b91c1c!important;border-radius:9px!important;padding:7px 10px!important;font-weight:900!important}
+.work-actions-row{display:flex;gap:10px;margin:14px 0 6px;position:sticky;bottom:0;background:rgba(238,241,246,.94);padding:10px 0;z-index:5}
+.work-actions-row button{padding:14px!important;border-radius:12px!important;font-size:15px!important;font-weight:900!important}
+.work-clear-btn{flex:1;background:#fff1f2!important;color:#b91c1c!important;border-color:#fecaca!important}.work-primary-btn{flex:2;background:#047857!important;color:#fff!important;border-color:#047857!important}
+.work-primary-btn:disabled{opacity:.45}.work-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:14px;padding:30px 16px;text-align:center;color:#64748b;font-size:13px}
+.receive-stage-card{margin-bottom:9px;border:1px solid #dbe2ea;border-radius:14px;background:#fff;overflow:hidden;cursor:pointer}.receive-stage-card:nth-child(even){background:#eef4fb}.receive-stage-card.is-selected{outline:2px solid #3b82f6;background:#dbeafe}.receive-stage-grid{display:grid;grid-template-columns:minmax(95px,1.1fr) minmax(140px,2fr) 105px 112px 44px;align-items:center;gap:8px;padding:11px 12px}.receive-stage-head{display:grid;grid-template-columns:minmax(95px,1.1fr) minmax(140px,2fr) 105px 112px 44px;gap:8px;padding:9px 12px;background:#2f3545;color:#fff;border-radius:12px 12px 0 0;font-size:12px;font-weight:800}
+@media(max-width:650px){.work-list-page{padding:0 10px 28px}.work-entry-card{padding:13px}.receive-stage-scroll{overflow-x:auto}.receive-stage-list{min-width:650px}.work-actions-row{bottom:0}.work-table{min-width:620px}}
+
 /* المدخلات */
 .mgmt-light input, .mgmt-light select, .mgmt-light textarea{
   border-radius:11px !important; border:1.5px solid var(--ui-line) !important;
@@ -1241,7 +1270,7 @@ body.on-dashboard .badge-test{ display:block; }
             <div class="qb-nav-item" id="navInventory" onclick="goToInventory()"><div class="qb-icon">📦</div><div class="qb-label">قائمة الأصناف</div></div>
             <div class="qb-nav-item" id="navReceiveGoods" onclick="goToReceiveGoods()"><div class="qb-icon">📥</div><div class="qb-label">استلام بضاعة</div></div>
             <div class="qb-nav-item" id="navTransfers" onclick="goToTransfers()"><div class="qb-icon">🚚</div><div class="qb-label">التحويلات</div></div>
-            <div class="qb-nav-item" id="navPriceLabel" onclick="goToInventory()"><div class="qb-icon">🏷️</div><div class="qb-label">طباعة أسعار</div></div>
+            <div class="qb-nav-item" id="navPriceLabel" onclick="goToPriceLabels()"><div class="qb-icon">🏷️</div><div class="qb-label">طباعة أسعار</div></div>
             <div class="qb-nav-item" id="navCatalog" onclick="goToCatalogEditor()"><div class="qb-icon">🖼️</div><div class="qb-label">كتالوج العرض</div></div>
           </div>
         </div>
@@ -1503,6 +1532,37 @@ body.on-dashboard .badge-test{ display:block; }
   <div style="flex:1; overflow-y:auto; padding:0 4px 16px;" id="inventoryListWrap"></div>
 </div>
 
+<!-- ============ PRICE LABEL QUEUE ============ -->
+<div class="screen mgmt-light" id="priceLabelsScreen">
+  <div class="dash-header">
+    <div><h1>🏷️ تجهيز وطباعة الأسعار</h1></div>
+    <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
+    <button class="logout-btn" onclick="goToInventory()">📦 المخزون</button>
+    <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
+  </div>
+  <div class="work-list-page">
+    <div class="work-entry-card">
+      <div class="work-entry-title">امسح أو اكتب الكود ثم Enter</div>
+      <div class="work-entry-hint">كل الأكواد تفضل في قائمة تجهيز مستقلة لحد ما تطبعها أو تمسحها.</div>
+      <div class="work-entry-search">
+        <input type="text" id="priceLabelBarcode" placeholder="الباركود أو اسم المنتج..." autocomplete="off">
+        <div id="priceLabelSuggestBox" class="work-suggest-box"></div>
+      </div>
+      <div class="work-bulk-row">
+        <label for="priceLabelAllQty">عدد الليبلات لكل الأصناف</label>
+        <input type="number" id="priceLabelAllQty" min="1" value="1">
+        <button type="button" onclick="priceLabelApplyQtyToAll()">تطبيق على الكل</button>
+      </div>
+    </div>
+    <div id="priceLabelQueueSummary" class="work-list-summary"></div>
+    <div id="priceLabelQueueWrap"></div>
+    <div class="work-actions-row">
+      <button type="button" class="work-clear-btn" onclick="clearPriceLabelQueue()">🗑️ مسح القائمة</button>
+      <button type="button" class="work-primary-btn" id="priceLabelPrintAllBtn" onclick="printPriceLabelQueue()">🖨️ طباعة الكل</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ RECEIVE GOODS ============ -->
 <div class="screen mgmt-light" id="receiveGoodsScreen">
   <div class="dash-header">
@@ -1514,7 +1574,7 @@ body.on-dashboard .badge-test{ display:block; }
     <button class="logout-btn" onclick="goToSalesHistory()">🗂️ سجل المبيعات</button>
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
-  <div style="padding:0 16px;">
+  <div class="work-list-page">
     <p style="color:var(--muted); font-size:12px; margin:-6px 0 12px;">
       امسح أو اكتب كود المنتج ودوس Enter — هيتضاف لقايمة تحت. اكتب العدد وكمّل باقي المنتجات، وفي الآخر دوس «تأكيد الاستلام». (رقم بالسالب = خصم تالف/مرتجع للمورد.)
     </p>
@@ -1533,7 +1593,7 @@ body.on-dashboard .badge-test{ display:block; }
       <div id="requestsBody"></div>
     </div>
     <div style="margin-top:14px;">
-      <div style="font-weight:800; margin-bottom:6px;">📋 آخر عمليات الاستلام</div>
+      <div style="font-weight:900; font-size:17px; margin-bottom:8px;">📋 سجل الاستلام — كل عملية سطر مستقل</div>
       <div id="receiveGoodsLog"></div>
     </div>
   </div>
@@ -2055,7 +2115,7 @@ body.on-dashboard .badge-test{ display:block; }
      شايف الأخطاء من لحظة الفتح — لو اتأخر، اللي حصل قبله بيضيع. -->
 <script src="blackbox.js"></script>
 <script src="pos-core.js"></script>
-<script src="pos-admin.js"></script>
+<script src="pos-admin.js?v=534"></script>
 <script src="pos-reports.js"></script>
 <script src="../cctv-config.js?v=522"></script>
 <script src="cctv-timeline.js?v=509"></script>
@@ -2063,7 +2123,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="pos-sale.js"></script>
 <script src="pos-live.js?v=411"></script>
 <script src="app.js"></script>
-<script src="products.js"></script>
+<script src="products.js?v=534"></script>
 <script src="profiles.js"></script>
 <script src="discounts.js"></script>
 <script src="pako_inflate.min.js?v=400-20260830"></script>

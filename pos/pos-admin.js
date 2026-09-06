@@ -1049,14 +1049,19 @@ async function addInventoryItem(){
 }
 // سجل حركة المخزون — كل تغيير في الكمية بيتسجل هنا (توريد، بيع، تسوية يدوية، عكس فاتورة)
 // عشان يبقى فيه Audit Log كامل تقدر ترجعله في أي وقت.
-async function logStockMovement(productId, productName, delta, type, reason){
+async function logStockMovement(productId, productName, delta, type, reason, metadata){
   try{
-    await db.collection(TEST_STOCK_LOG).add({
+    const row = {
       productId, productName, delta, type, reason: reason || '',
       branch: currentBranch,
       employeeName: currentEmployee ? (currentEmployee.name||'') : '',
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    metadata = metadata || {};
+    if(metadata.barcode) row.productBarcode = String(metadata.barcode);
+    if(Number(metadata.receivedAtMs)>0) row.receivedAtMs = Number(metadata.receivedAtMs);
+    if(metadata.entryId) row.receiveEntryId = String(metadata.entryId);
+    await db.collection(TEST_STOCK_LOG).add(row);
   }catch(e){ console.warn('تعذر تسجيل حركة المخزون', e); }
 }
 async function deleteInventoryItem(id){
@@ -1084,4 +1089,3 @@ function printPriceLabel(id){
   openLabelQtyModal([{ name: it.name, price: it.price, barcode: it.barcode, suggestedQty: suggested,
     stockQty: (typeof branchQty==='function') ? (branchQty(it)||0) : null }]);
 }
-
