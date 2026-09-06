@@ -149,6 +149,7 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
 .work-table tbody tr{cursor:pointer}
 .work-table tbody tr:nth-child(odd) td{background:#fff!important}.work-table tbody tr:nth-child(even) td{background:#eef4fb!important}
 .work-table tbody tr.is-selected td{background:#dbeafe!important;box-shadow:inset 0 1px #60a5fa,inset 0 -1px #60a5fa}
+.work-table tbody tr.is-negative td{background:#fff1f2!important;color:#991b1b!important;box-shadow:inset 0 1px #fecaca,inset 0 -1px #fecaca}
 .work-code{direction:ltr;text-align:right;font-family:Consolas,'Courier New',monospace;font-size:14px;font-weight:900;color:#1d4ed8;white-space:nowrap}
 .work-name{font-weight:900;color:#111827}.work-time{direction:ltr;text-align:right;white-space:nowrap;font-weight:800;color:#475569}
 .work-qty-input{width:76px!important;text-align:center;font-weight:900!important;font-size:15px!important;padding:7px!important}
@@ -157,8 +158,8 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
 .work-actions-row button{padding:14px!important;border-radius:12px!important;font-size:15px!important;font-weight:900!important}
 .work-clear-btn{flex:1;background:#fff1f2!important;color:#b91c1c!important;border-color:#fecaca!important}.work-primary-btn{flex:2;background:#047857!important;color:#fff!important;border-color:#047857!important}
 .work-primary-btn:disabled{opacity:.45}.work-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:14px;padding:30px 16px;text-align:center;color:#64748b;font-size:13px}
-.receive-stage-card{margin-bottom:9px;border:1px solid #dbe2ea;border-radius:14px;background:#fff;overflow:hidden;cursor:pointer}.receive-stage-card:nth-child(even){background:#eef4fb}.receive-stage-card.is-selected{outline:2px solid #3b82f6;background:#dbeafe}.receive-stage-grid{display:grid;grid-template-columns:minmax(95px,1.1fr) minmax(140px,2fr) 105px 112px 44px;align-items:center;gap:8px;padding:11px 12px}.receive-stage-head{display:grid;grid-template-columns:minmax(95px,1.1fr) minmax(140px,2fr) 105px 112px 44px;gap:8px;padding:9px 12px;background:#2f3545;color:#fff;border-radius:12px 12px 0 0;font-size:12px;font-weight:800}
-@media(max-width:650px){.work-list-page{padding:0 10px 28px}.work-entry-card{padding:13px}.receive-stage-scroll{overflow-x:auto}.receive-stage-list{min-width:650px}.work-actions-row{bottom:0}.work-table{min-width:620px}}
+.receive-stage-card{margin-bottom:9px;border:1px solid #dbe2ea;border-radius:14px;background:#fff;overflow:hidden;cursor:pointer}.receive-stage-card:nth-child(even){background:#eef4fb}.receive-stage-card.is-selected{outline:3px solid #2563eb;background:#dbeafe}.receive-stage-card.is-negative{border-color:#ef4444;background:#fff1f2}.receive-stage-card.is-negative.is-selected{outline-color:#dc2626;background:#ffe4e6}.receive-stage-card.is-negative .work-qty-input{border-color:#ef4444!important;color:#b91c1c!important;background:#fff!important}.receive-stage-grid{display:grid;grid-template-columns:minmax(105px,1.1fr) minmax(180px,2fr) 160px 132px 64px;align-items:center;gap:12px;padding:12px 14px}.receive-stage-head{display:grid;grid-template-columns:minmax(105px,1.1fr) minmax(180px,2fr) 160px 132px 64px;gap:12px;padding:10px 14px;background:#2f3545;color:#fff;border-radius:12px 12px 0 0;font-size:12px;font-weight:800}.receive-stage-grid .qty-cell{min-width:150px;white-space:nowrap}.receive-stage-grid .work-time{min-width:118px;overflow:hidden;text-overflow:ellipsis}.receive-stage-actions{display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}.receive-stage-actions .work-row-delete{margin:0!important}
+@media(max-width:650px){.work-list-page{padding:0 10px 28px}.work-entry-card{padding:13px}.receive-stage-scroll{overflow-x:auto}.receive-stage-list{min-width:775px}.work-actions-row{bottom:0}.work-table{min-width:620px}}
 
 /* المدخلات */
 .mgmt-light input, .mgmt-light select, .mgmt-light textarea{
@@ -2116,14 +2117,14 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="blackbox.js"></script>
 <script src="pos-core.js"></script>
 <script src="pos-admin.js?v=534"></script>
-<script src="pos-reports.js"></script>
+<script src="pos-reports.js?v=535"></script>
 <script src="../cctv-config.js?v=522"></script>
 <script src="cctv-timeline.js?v=509"></script>
 <script src="cctv-invoice.js?v=510"></script>
-<script src="pos-sale.js"></script>
+<script src="pos-sale.js?v=536"></script>
 <script src="pos-live.js?v=411"></script>
 <script src="app.js"></script>
-<script src="products.js?v=534"></script>
+<script src="products.js?v=536"></script>
 <script src="profiles.js"></script>
 <script src="discounts.js"></script>
 <script src="pako_inflate.min.js?v=400-20260830"></script>

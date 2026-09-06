@@ -3144,7 +3144,6 @@ function paymobTerminalId(){
 // 🔒 حالة الدفع بالكارت للعملية الحالية — بتتصفّر مع كل سلة جديدة
 let paymobPending = null;     // { ref, unsub, amount }
 let paymobApproved = false;   // بيبقى true بس لما Paymob يأكد النجاح
-const PM_PENDING_RECOVERY_MS = 8000; // لو الماكينة طبعت قبل وصول الويبهوك، نظهر مخرج واضح بسرعة
 window.paymobApproved = false;
 
 // 🔌 بيقفل المتابعة الحالية بس (شريحة كارت خلصت أو اتلغت) —
@@ -3226,29 +3225,6 @@ function paymobPendingRecoveryClear(){
   }
 }
 window.paymobPendingRecoveryClear = paymobPendingRecoveryClear;
-
-function paymobPendingRecoveryRender(orderRef, amountEGP, seq){
-  const box = document.getElementById('paymobStuckBox');
-  if(!box || paymobApproved || !paymobPending || paymobPending.ref !== orderRef) return;
-  const leg = findCardLeg(cardLegs, seq || 1, orderRef);
-  if(!leg || leg.status !== 'pending') return;
-  box.dataset.mode = 'pending-recovery';
-  box.style.display = 'block';
-  box.innerHTML = '<div style="background:#3a2c0e;color:#fff;border-radius:12px;padding:13px 15px;text-align:center;">'
-    + '<div style="font-weight:900;font-size:16px;">📟 الماكينة لسه سابقه السيستم</div>'
-    + '<div style="font-size:13px;font-weight:700;margin-top:5px;line-height:1.7;">لو إيصال الماكينة طلع ومكتوب عليه APPROVED، متستناش الويبهوك.</div>'
-    + '<button id="pmPendingApprovedBtn" style="margin-top:10px;width:100%;padding:12px;border:none;border-radius:10px;background:#fff;color:#7c2d12;font-family:Cairo;font-weight:900;font-size:15px;cursor:pointer;">✅ الإيصال APPROVED — احفظ واطبع</button>'
-    + '<button id="pmPendingWaitBtn" style="margin-top:7px;width:100%;padding:9px;border:1px solid rgba(255,255,255,.35);border-radius:10px;background:transparent;color:#fff;font-family:Cairo;font-weight:800;cursor:pointer;">⏳ لسه مستني</button>'
-    + '</div>';
-  const saveBtn = document.getElementById('pmPendingApprovedBtn');
-  if(saveBtn) saveBtn.addEventListener('click', function(){
-    try{ if(typeof _logActivity === 'function') _logActivity('paymob_stuck_rescue', { ref:orderRef, amount:Number(amountEGP)||0, seq:seq||1 }); }catch(e){}
-    try{ confirmPayment(); }catch(e){ console.warn('pending rescue', e); }
-  });
-  const waitBtn = document.getElementById('pmPendingWaitBtn');
-  if(waitBtn) waitBtn.addEventListener('click', function(){ paymobPendingRecoveryClear(); });
-}
-window.paymobPendingRecoveryRender = paymobPendingRecoveryRender;
 
 function paymobShow(text, kind){
   let box = document.getElementById('paymobStatus');
@@ -3583,7 +3559,6 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
     try{ if(unsub) unsub(); }catch(e){}
     try{ clearInterval(poll); }catch(e){}
     try{ clearInterval(rescue); }catch(e){}
-    try{ clearTimeout(_manualRecoveryT); }catch(e){}
     try{ clearTimeout(_warnT); }catch(e){}
     try{ clearTimeout(_giveUpT); }catch(e){}
   }
@@ -3663,13 +3638,9 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
     }
   }, 4000);
   paymobPending = { ref: orderRef, unsub: unsub, poll: poll, rescue: rescue, amount: amountEGP, seq: seq };
-  // 🛟 الماكينة ممكن تطبع APPROVED قبل وصول الويبهوك بثواني. بدل ما الكاشير تفضل
-  // معلّقة أو تطبع من برّه، نظهر مسار استرداد واضح من نفس شاشة الـPOS.
-  const _manualRecoveryT = setTimeout(function(){
-    if(paymobPending && paymobPending.ref === orderRef && !paymobApproved){
-      paymobPendingRecoveryRender(orderRef, amountEGP, seq);
-    }
-  }, PM_PENDING_RECOVERY_MS);
+  // قرار المالك: مفيش بانر إضافي «الماكينة سابقة السيستم».
+  // مسار الاسترداد الآمن ما زال موجودًا من زر «حفظ وطباعة» الرئيسي:
+  // لو الشريحة معلّقة، confirmPayment يطلب تأكيد إيصال APPROVED ويسجلها manual.
   // ⏳ 3 دقايق = تحذير بس — 🔴 كانت بتقتل المتابعة نهائيًا: عميل اتلكّع وأكّد
   // في الدقيقة الرابعة كان تأكيده بيضيع رغم إن الماكينة طبعت. دلوقتي المتابعة
   // مستمرة لحد 10 دقايق، وبعدها بس بتقف بمسح كامل.

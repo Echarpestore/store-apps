@@ -468,7 +468,9 @@ document.getElementById('receiveGoodsBarcode').addEventListener('input', (e)=>{
   matches.forEach(it=>{
     const row = document.createElement('div');
     row.className = 'sugg-row';
-    row.innerHTML = `<span>${it.name} <span style="color:#999; font-size:11px;">${it.barcode||''}</span></span><span style="color:var(--muted)">${it.price} ج.م · مخزون: ${branchQty(it)}</span>`;
+    // الكاشير تحتاج تعرف إنها اختارت الصنف الصحيح، مش رصيد الفرع.
+    // الرصيد يفضل داخليًا للحساب والتحديث فقط ولا يظهر في شاشة الاستلام.
+    row.innerHTML = `<span>${it.name} <span style="color:#999; font-size:11px;">${it.barcode||''}</span></span><span style="color:var(--muted)">${it.price} ج.م</span>`;
     row.onclick = ()=>{ addToReceiveCart(it); e.target.value=''; box.innerHTML=''; e.target.focus(); };
     box.appendChild(row);
   });
@@ -507,21 +509,25 @@ function addToReceiveCart(product){
 }
 function receiveQty(idx, delta){
   const r = receiveCart[idx]; if(!r) return;
+  receiveSelectedEntryId = r.entryId;
   r.qty = (r.qty || 0) + delta;
   renderReceiveCart();
 }
 function receiveSetQty(idx, val){
   const r = receiveCart[idx]; if(!r) return;
+  receiveSelectedEntryId = r.entryId;
   r.qty = parseInt(val) || 0;
   renderReceiveCart();
 }
 function receiveRemove(idx){
   const old=receiveCart[idx];
   receiveCart.splice(idx, 1);
-  if(old&&receiveSelectedEntryId===old.entryId)receiveSelectedEntryId='';
+  if(old&&receiveSelectedEntryId===old.entryId){
+    receiveSelectedEntryId=receiveCart.length?receiveCart[receiveCart.length-1].entryId:'';
+  }
   renderReceiveCart();
 }
-function receiveSelectRow(entryId){ receiveSelectedEntryId=(receiveSelectedEntryId===entryId?'':entryId);renderReceiveCart(); }
+function receiveSelectRow(entryId){ receiveSelectedEntryId=entryId;renderReceiveCart(); }
 
 // ⚠️ الـ inline handlers بتشتغل في النطاق العام، و`receiveCart` معرّف بـ let
 // فمش بيوصلها — كان بيفشل بصمت. (نفس الباج المتكرر: const/let مش بتتعلّق على window)
@@ -543,19 +549,21 @@ function renderReceiveCart(){
     const lb0 = document.getElementById('receiveLabelsBtn'); if(lb0) lb0.style.display = 'none';
     return;
   }
+  // آخر قطعة مسجلة هي الاختيار الافتراضي دائمًا، حتى بعد استرجاع مسودة محفوظة.
+  if(!receiveCart.some(function(x){ return x.entryId===receiveSelectedEntryId; })){
+    receiveSelectedEntryId=receiveCart[receiveCart.length-1].entryId;
+  }
   const lastIdx = receiveCart.length - 1;
   const stageRows=receiveCart.map((r, idx)=> ({ r, idx })).reverse().map(({ r, idx })=>{
     const isLast = idx === lastIdx;
-    const p = allInventory.find(x=> x.id === r.id);
-    const cur = p ? branchQty(p) : r.currentQty;
-    const newQty = cur + (r.qty || 0);
     const when=new Date(Number(r.receivedAtMs)||Date.now()).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    return '<div id="rcRow_'+idx+'" data-entry-id="'+_workEsc(r.entryId)+'" class="receive-stage-card '+(receiveSelectedEntryId===r.entryId?'is-selected':'')+'" onclick="receiveSelectRow(this.dataset.entryId)"><div class="receive-stage-grid">'
+    const negative=Number(r.qty||0)<0;
+    return '<div id="rcRow_'+idx+'" data-entry-id="'+_workEsc(r.entryId)+'" class="receive-stage-card '+(receiveSelectedEntryId===r.entryId?'is-selected ':'')+(negative?'is-negative':'')+'" onclick="receiveSelectRow(this.dataset.entryId)"><div class="receive-stage-grid">'
       +'<div class="work-code">'+_workEsc(r.barcode||'—')+(isLast?'<div style="font:900 10px Cairo;color:#15803d">آخر إضافة</div>':'')+'</div>'
-      +'<div><div class="work-name">'+_workEsc(r.name)+'</div><div style="font-size:11px;color:#64748b">المخزون '+cur+' ← <b>'+newQty+'</b></div></div>'
+      +'<div><div class="work-name">'+_workEsc(r.name)+'</div></div>'
       +'<div class="qty-cell" onclick="event.stopPropagation()"><button onclick="receiveQty('+idx+',-1)">−</button><input class="work-qty-input" type="number" value="'+r.qty+'" onchange="receiveSetQty('+idx+',this.value)"><button onclick="receiveQty('+idx+',1)">+</button></div>'
       +'<div class="work-time">'+when+'</div>'
-      +'<div><input title="طباعة ليبل" type="checkbox" '+(r._lblPick!==false&&(r.qty||0)>0?'checked':'')+' onclick="event.stopPropagation()" onchange="receiveTogglePick('+idx+',this.checked)"><button class="work-row-delete" style="margin-top:5px" onclick="event.stopPropagation();receiveRemove('+idx+')">×</button></div>'
+      +'<div class="receive-stage-actions"><input title="طباعة ليبل" type="checkbox" '+(r._lblPick!==false&&(r.qty||0)>0?'checked':'')+' onclick="event.stopPropagation()" onchange="receiveTogglePick('+idx+',this.checked)"><button class="work-row-delete" onclick="event.stopPropagation();receiveRemove('+idx+')">×</button></div>'
       +'</div></div>';
   }).join('');
   wrap.innerHTML='<div class="receive-stage-scroll"><div class="receive-stage-list"><div class="receive-stage-head"><span>الكود</span><span>الاسم</span><span>العدد</span><span>وقت الإدخال</span><span></span></div>'+stageRows+'</div></div>';
@@ -593,7 +601,7 @@ async function confirmReceiveCart(){
     //    إن التالف مايتسجلش خالص، والأرقام تبعد عن الواقع أكتر مش أقل.
     if(cur + r.qty < 0){
       if(!window.allowNegativeStock){
-        showToast(`«${r.name}» مينفعش تخصم أكتر من الموجود (${cur})`, 'err');
+        showToast(`«${r.name}» مينفعش تخصم الكمية دي`, 'err');
         return;
       }
       _negRows.push(`${r.name} → ${cur + r.qty}`);
@@ -660,7 +668,7 @@ async function renderReceiveGoodsLog(){
       const when = d ? (ts >= dayStart ? d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : d.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'})) : '—';
       const qty = Number(l.qtyChange || l.delta || 0);
       const rowId=String(l.id||('log_'+ts+'_'+idx));
-      return '<tr data-row-id="'+_workEsc(rowId)+'" class="'+(receiveLogSelectedId===rowId?'is-selected':'')+'" onclick="receiveLogSelect(this.dataset.rowId)">'
+      return '<tr data-row-id="'+_workEsc(rowId)+'" class="'+(receiveLogSelectedId===rowId?'is-selected ':'')+(qty<0?'is-negative':'')+'" onclick="receiveLogSelect(this.dataset.rowId)">'
         +'<td class="work-code">'+_workEsc(l.barcode||l.productBarcode||'—')+'</td>'
         +'<td class="work-name">'+_workEsc(l.name||l.productName||'صنف')+'</td>'
         +'<td style="font-weight:900;color:'+(qty>=0?'#047857':'#b91c1c')+'">'+(qty>0?'+':'')+qty+'</td>'
