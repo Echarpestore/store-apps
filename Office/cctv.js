@@ -208,7 +208,7 @@
   }
   function closePlaybackModal(){
     var ov=document.getElementById('ofCctvPlaybackOv');if(!ov)return;
-    var fr=ov.querySelector('iframe');if(fr)fr.src='about:blank';var v=ov.querySelector('video');if(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();}catch(e){}}
+    ov.querySelectorAll('iframe').forEach(function(fr){fr.src='about:blank';});ov.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();}catch(e){}});
     ov.remove();
   }
   function openPlayback(atMs,durationMin,cameraId,offsetMs){
@@ -376,6 +376,21 @@
     }catch(e){box.innerHTML='<div class="of-cctv-day-empty">تعذر تحميل مراجعة اليوم: '+esc(e&&e.message||e)+'</div>';}
     finally{if(btn){btn.disabled=false;btn.textContent='تحميل اليوم';}}
   }
+  function openSmartActivityReview(alert){
+    alert=alert||{};var start=Math.max(1,Number(alert.startMs)||Number(alert.atMs)-30000),duration=Math.max(30,Number(alert.durationSec)||90),events=Array.isArray(alert.events)?alert.events.slice():[];
+    events.sort(function(a,c){return Number(a.atMs)-Number(c.atMs);});closePlaybackModal();
+    var u4=playbackUrl(start,Math.max(1,duration/60),'4',null,480),u8=playbackUrl(start,Math.max(1,duration/60),'8',null,480);
+    var ov=document.createElement('div');ov.id='ofCctvPlaybackOv';ov.className='of-cctv-playback-ov';
+    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><div><b>🚨 مراجعة مدينتي المتزامنة</b><small class="of-day511-muted">الصوت من كاميرا 4 · العلامات الحمراء أحداث قوية</small></div><button type="button" class="of-cctv-playback-close">✕ إغلاق</button></div><div class="of-smart555-body"><div class="of-smart555-stage"><div class="of-smart555-videos"><div class="of-smart555-video"><span class="of-smart555-label">كاميرا 4 · صوت</span><video data-smart-master controls playsinline></video></div><div class="of-smart555-video"><span class="of-smart555-label">كاميرا 8 · متزامنة</span><video data-smart-slave muted playsinline></video></div></div><div class="of-smart555-timeline"><div class="of-smart555-markers" data-smart-markers></div><input type="range" min="0" max="'+Math.max(1,Math.floor(duration*10))+'" value="0" step="1" data-smart-slider></div></div><aside class="of-smart555-cart"><div class="of-smart555-carthead"><b>🛒 السلة عند هذه اللحظة</b><div class="of-day511-muted" data-smart-clock>—</div><div class="of-smart555-event" data-smart-event>قبل أول حدث</div></div><div class="of-smart555-rows" data-smart-rows></div><div class="of-smart555-total"><span>الإجمالي</span><strong data-smart-total>0.00 ج.م</strong></div></aside></div></div>';
+    document.body.appendChild(ov);var master=ov.querySelector('[data-smart-master]'),slave=ov.querySelector('[data-smart-slave]'),slider=ov.querySelector('[data-smart-slider]'),marks=ov.querySelector('[data-smart-markers]'),clock=ov.querySelector('[data-smart-clock]'),eventEl=ov.querySelector('[data-smart-event]'),rowsEl=ov.querySelector('[data-smart-rows]'),totalEl=ov.querySelector('[data-smart-total]');
+    function renderCart(hit){var rows=Array.isArray(hit&&hit.cart)?hit.cart:[];eventEl.textContent=hit?String(hit.label||hit.kind||'حركة'):'قبل أول حدث';rowsEl.innerHTML=rows.map(function(r){var q=Number(r.qty)||0,p=Number(r.price)||0;return '<div class="of-smart555-row"><span><b>'+esc(r.name||r.id||'صنف')+(r.isReturn?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(r.barcode?' · '+esc(r.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-day511-muted" style="padding:12px">لا توجد سلة مسجلة في هذه اللحظة</div>';totalEl.textContent=Number(hit&&hit.total||0).toFixed(2)+' ج.م';}
+    function update(){var sec=Number(master.currentTime)||0,at=start+sec*1000,hit=null;slider.value=String(Math.min(Number(slider.max),Math.round(sec*10)));clock.textContent=new Date(at).toLocaleString('ar-EG');for(var i=0;i<events.length&&Number(events[i].atMs)<=at;i++)hit=events[i];renderCart(hit);if(slave.readyState>=1&&Math.abs((Number(slave.currentTime)||0)-sec)>.35)slave.currentTime=sec;}
+    marks.innerHTML=events.map(function(e,i){var pct=Math.max(0,Math.min(100,(Number(e.atMs)-start)/(duration*1000)*100));return '<button type="button" class="of-smart555-marker '+(e.severity==='context'?'context':'')+'" style="left:'+pct+'%" data-smart-jump="'+i+'" title="'+esc(e.label||e.kind||'حدث')+'"></button>';}).join('');
+    marks.querySelectorAll('[data-smart-jump]').forEach(function(btn){btn.onclick=function(){var e=events[Number(btn.dataset.smartJump)];if(!e)return;var sec=Math.max(0,Math.min(duration,(Number(e.atMs)-start)/1000));master.currentTime=sec;slave.currentTime=sec;master.play().catch(function(){});slave.play().catch(function(){});update();};});
+    master.addEventListener('play',function(){slave.currentTime=master.currentTime;slave.play().catch(function(){});});master.addEventListener('pause',function(){slave.pause();});master.addEventListener('seeking',function(){slave.currentTime=master.currentTime;update();});master.addEventListener('timeupdate',update);slider.oninput=function(){var sec=Number(slider.value)/10;master.currentTime=sec;slave.currentTime=sec;update();};
+    master.src=u4+'&smart=555';slave.src=u8+'&smart=555';master.load();slave.load();master.play().catch(function(){});slave.play().catch(function(){});update();
+    ov.querySelector('.of-cctv-playback-close').onclick=closePlaybackModal;ov.onclick=function(e){if(e.target===ov)closePlaybackModal();};
+  }
   async function loadActivityAlerts(){
     var section=document.getElementById('ofCctvActivityReview'),box=document.getElementById('ofCctvActivityRows'),status=document.getElementById('ofCctvActivityStatus');if(!section||!box)return;
     var x=b();section.style.display=x.id==='madinaty'?'block':'none';if(x.id!=='madinaty')return;
@@ -385,10 +400,10 @@
         fetchJsonRetry(base+'/echarpe-playback/alerts?_='+Date.now(),x.id,3),
         fetchJsonRetry(base+'/echarpe-playback/activity-status?_='+Date.now(),x.id,2).catch(function(){return null;})
       ]),items=Array.isArray(pair[0].items)?pair[0].items:[],det=pair[1]||{};
-      if(status){var s=det.state||{};status.textContent=det.detector?('● الكشف شغال · موظف '+(s.employee?'موجود':'—')+' · عميل '+(s.customer?'موجود':'—')):'● كاشف الأشخاص غير متصل';status.classList.toggle('offline',!det.detector);}
-      if(!items.length){box.innerHTML='<div class="of-cctv-day-empty">لا يوجد نشاط عميل + موظف بدون فاتورة.</div>';return;}
-      box.innerHTML=items.map(function(a){return '<div class="of-cctv-day-row of-cctv-alert-row"><div class="of-cctv-day-time">'+new Date(Number(a.atMs)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</div><div class="of-cctv-day-main"><b>⚠️ عميل عند الكاشير بدون فاتورة</b><small>'+new Date(Number(a.atMs)).toLocaleDateString('ar-EG')+' · تم التأكد بعد مهلة 3 دقائق</small></div><div class="of-cctv-day-actions"><button type="button" data-activity-play="'+esc(String(a.id||''))+'">🎥 مشاهدة الفيديو</button></div></div>';}).join('');
-      box.querySelectorAll('[data-activity-play]').forEach(function(btn){btn.onclick=function(){var a=items.find(function(q){return String(q.id)===btn.getAttribute('data-activity-play');});if(a)openPlayback(Number(a.startMs),Math.max(1,Math.ceil(Number(a.durationSec||60)/60)),'4');};});
+      if(status){var s=det.state||{},healthy=det.detector&&s.attendanceFresh&&s.camera4Online&&s.camera8Online;status.textContent=det.detector?('● كاميرا 4 '+(s.camera4Online?'✓':'✕')+' · كاميرا 8 '+(s.camera8Online?'✓':'✕')+' · داخل الفرع '+Number(s.activeStaffCount||0)+' موظف بعد خصم البريك'):'● الكاشف غير متصل';status.classList.toggle('offline',!healthy);}
+      if(!items.length){box.innerHTML='<div class="of-cctv-day-empty">لا يوجد نشاط قوي يحتاج مراجعة.</div>';return;}
+      box.innerHTML=items.map(function(a){var sale=a.type==='sale_without_customer',label=sale?(a.transactionKind==='return_or_exchange'?'مرتجع/تبديل بدون عميل ظاهر':'فاتورة بيع بدون عميل ظاهر'):'نشاط سلة قوي بدون فاتورة';return '<div class="of-cctv-day-row of-cctv-alert-row"><div class="of-cctv-day-time">'+new Date(Number(a.atMs)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</div><div class="of-cctv-day-main"><b>🚨 '+label+'</b><small>'+new Date(Number(a.atMs)).toLocaleDateString('ar-EG')+' · كاميرا 4 و8 + صوت + سلة · '+Number((a.events||[]).length)+' علامة</small></div><div class="of-cctv-day-actions"><button type="button" data-activity-play="'+esc(String(a.id||''))+'">🎥 مراجعة متزامنة</button></div></div>';}).join('');
+      box.querySelectorAll('[data-activity-play]').forEach(function(btn){btn.onclick=function(){var a=items.find(function(q){return String(q.id)===btn.getAttribute('data-activity-play');});if(a)openSmartActivityReview(a);};});
     }catch(e){if(status){status.textContent='● تعذر الاتصال بكاشف الأشخاص';status.classList.add('offline');}box.innerHTML='<div class="of-cctv-day-empty">تعذر تحميل تنبيهات النشاط: '+esc(e&&e.message||e)+'</div>';}
   }
   function init(){

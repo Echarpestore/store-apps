@@ -39,7 +39,7 @@ ok(clear.includes("_bc.value = ''") && clear.includes('CST.bandSelected = []') &
   [posHtml, 'pos'], [salesHtml, 'sales'], [officeHtml, 'office']
 ].forEach(([html, name])=> ok(/chat-staff-ui\.js\?v=545/.test(html), name + ' loads shared chat v545'));
 ok(Number((posSw.match(/store-apps-shell-v(\d+)/)||[])[1])>=545, 'POS cache includes v545 or newer');
-ok(/store-apps-shell-v545/.test(salesSw), 'Sales cache is v545');
+ok(/store-apps-shell-v554/.test(salesSw), 'Sales cache contains the v545 fix in v554');
 ok(Number((officeSw.match(/echarpe-office-v(\d+)/)||[])[1])>=545, 'Office cache includes v545 or newer');
 
 console.log(`chat compose mobile v545: ${passed}/${passed} PASS`);

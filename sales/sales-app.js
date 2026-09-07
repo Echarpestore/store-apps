@@ -16,11 +16,18 @@ const firebaseConfig = {
   measurementId: "G-6K33TSHDZ6"
 };
 
-const app = initializeApp(firebaseConfig);
+// Keep Sales auth completely separate from POS, Office and customer try-on.
+// Firebase persists auth by app name; using [DEFAULT] here allowed another
+// page on the same origin to replace the branch email session with anonymous.
+const app = initializeApp(firebaseConfig, 'sales');
 // حساب الفرع (Email/Password) — نفس نظام الكاشير: الجهاز بيدخل مرة واحدة
 // وده اللي بيسمحله يكتب الحضور/النقط/المرتبات تحت قواعد الأمان الجديدة.
 const _auth = getAuth(app);
-setPersistence(_auth, browserLocalPersistence).catch(()=>{});
+const _authPersistenceReady = setPersistence(_auth, browserLocalPersistence).catch((err)=>{
+  console.error('sales auth persistence failed', err && err.code);
+  return false;
+});
+window.salesAuthDiagnostics = { appName:'sales', state:'starting', attempts:0, lastError:'', changedAt:Date.now() };
 const db = getFirestore(app);
 // 🔗 نعرّض أدوات Firestore على window عشان بلوكات السكريبت التانية في الصفحة تقدر تستخدمها
 window.db = db;
@@ -1740,6 +1747,15 @@ function refreshBranchUI(){
   const u = _auth.currentUser;
   const staffIn = !!(u && !u.isAnonymous);
   if(!window.currentBranch || !staffIn){
+    const hasSavedLogin = !!localStorage.getItem('sales_dev_cred');
+    const authState = (window.salesAuthDiagnostics && window.salesAuthDiagnostics.state) || '';
+    const recovering = !!window.currentBranch && hasSavedLogin && (authState==='starting' || authState==='recovering');
+    // A temporary auth/network loss must not throw staff out of the kiosk.
+    // Attendance writes are kept in the durable outbox while recovery runs.
+    if(recovering && !$('#branchSetup').classList.contains('manual-open')){
+      $('#branchSetup').classList.remove('show');
+      return;
+    }
     // مرحلتين واضحتين: (1) دخول حساب الفرع → (2) اختيار الفرع
     $('#branchEmail').style.display = staffIn ? 'none' : '';
     $('#branchPass').style.display  = staffIn ? 'none' : '';
@@ -1784,12 +1800,14 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
     if(!email || !pass){ err.textContent='اكتب إيميل وباسورد حساب الفرع الأول'; return; }
     err.textContent = 'جارٍ الدخول...';
     try{
+      await _authPersistenceReady;
       await signInWithEmailAndPassword(_auth, email, pass);
       // 💾 نحفظ بيانات دخول الفرع محليًا — عشان لو المتصفح مسح الجلسة، نعيد الدخول تلقائي
       try{ localStorage.setItem('sales_dev_cred', btoa(unescape(encodeURIComponent(JSON.stringify({e:email,p:pass}))))); }catch(_e){}
-      err.textContent = '✅ تم الدخول — اختار الفرع من القايمة';
-      refreshBranchUI();
-      setTimeout(populateBranchSetupSelect, 800);
+      err.textContent = '✅ تم الدخول — بيتم تثبيت الجلسة...';
+      // First-login listeners may have received permission-denied before auth.
+      // Reload once with the now-persisted named session so every listener starts authenticated.
+      setTimeout(()=> location.reload(), 250);
     }catch(e){
       err.textContent = (e && (e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found'))
         ? 'الإيميل أو الباسورد غلط' : 'تعذر الدخول: ' + (e.message||e);
@@ -1809,27 +1827,72 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
   refreshBranchUI();
   applyBranchFilter();
 });
-// لو الجلسة انتهت (اتمسحت من المتصفح)، نرجّع لشاشة الإعداد تلقائيًا
-// 🔄 إعادة دخول تلقائي: لو المتصفح (زي Brave) مسح الجلسة بس عندنا بيانات محفوظة
-let _autoReloginTried = false;
-async function _tryAutoRelogin(){
-  if(_autoReloginTried) return;
-  _autoReloginTried = true;
+// Continuous recovery: a transient failure never consumes the only retry.
+let _autoReloginPromise = null;
+let _autoReloginTimer = null;
+function _savedSalesLogin(){
   try{
-    const raw = localStorage.getItem('sales_dev_cred');
-    if(!raw) return;
-    const { e, p } = JSON.parse(decodeURIComponent(escape(atob(raw))));
-    if(e && p){ await signInWithEmailAndPassword(_auth, e, p); }
-  }catch(err){ console.warn('auto relogin failed', err && err.code); }
+    const raw=localStorage.getItem('sales_dev_cred');
+    if(!raw)return null;
+    const x=JSON.parse(decodeURIComponent(escape(atob(raw))));
+    return x&&x.e&&x.p?x:null;
+  }catch(_e){return null;}
 }
-onAuthStateChanged(_auth, (u)=>{
-  // مش داخل + عندنا بيانات محفوظة → نجرّب نعيد الدخول لوحدنا قبل ما نزعّج الموظف
-  if((!u || u.isAnonymous) && localStorage.getItem('sales_dev_cred') && !_autoReloginTried){
-    _tryAutoRelogin().then(()=> refreshBranchUI());
-  }else{
+function _salesAuthState(state, err){
+  const d=window.salesAuthDiagnostics;
+  d.state=state; d.changedAt=Date.now(); d.lastError=err&&err.code?String(err.code):'';
+}
+function _scheduleSalesRelogin(delay){
+  if(_autoReloginTimer || (_auth.currentUser && !_auth.currentUser.isAnonymous))return;
+  _autoReloginTimer=setTimeout(()=>{
+    _autoReloginTimer=null;
+    _tryAutoRelogin();
+  }, Math.max(0,Number(delay)||0));
+}
+async function _tryAutoRelogin(){
+  if(_auth.currentUser && !_auth.currentUser.isAnonymous)return true;
+  if(_autoReloginPromise)return _autoReloginPromise;
+  const saved=_savedSalesLogin();
+  if(!saved){_salesAuthState('signed_out');refreshBranchUI();return false;}
+  _salesAuthState('recovering');
+  window.salesAuthDiagnostics.attempts++;
+  refreshBranchUI();
+  _autoReloginPromise=(async()=>{
+    try{
+      await _authPersistenceReady;
+      await signInWithEmailAndPassword(_auth,saved.e,saved.p);
+      _salesAuthState('connected');
+      window.salesAuthDiagnostics.attempts=0;
+      if(typeof window.replayAttendanceOutbox==='function')window.replayAttendanceOutbox();
+      return true;
+    }catch(err){
+      console.warn('sales auto relogin failed',err&&err.code);
+      const permanent=err&&(err.code==='auth/invalid-credential'||err.code==='auth/wrong-password'||err.code==='auth/user-not-found');
+      _salesAuthState(permanent?'blocked':'recovering',err);
+      if(permanent)refreshBranchUI();
+      else{
+        const n=window.salesAuthDiagnostics.attempts;
+        _scheduleSalesRelogin(n<2?2000:n<4?5000:n<7?15000:60000);
+      }
+      return false;
+    }finally{_autoReloginPromise=null;}
+  })();
+  return _autoReloginPromise;
+}
+window.retrySalesAuth=_tryAutoRelogin;
+onAuthStateChanged(_auth,(u)=>{
+  if(u&&!u.isAnonymous){
+    if(_autoReloginTimer){clearTimeout(_autoReloginTimer);_autoReloginTimer=null;}
+    _salesAuthState('connected'); window.salesAuthDiagnostics.attempts=0;
     refreshBranchUI();
+    if(typeof window.replayAttendanceOutbox==='function')window.replayAttendanceOutbox();
+  }else if(_savedSalesLogin()){
+    _salesAuthState('recovering'); refreshBranchUI(); _scheduleSalesRelogin(0);
+  }else{
+    _salesAuthState('signed_out'); refreshBranchUI();
   }
 });
+window.addEventListener('online',()=>{_scheduleSalesRelogin(0);if(typeof window.replayAttendanceOutbox==='function')window.replayAttendanceOutbox();});
 $('#changeBranchBtn').addEventListener('click', ()=>{
   $('#admin').classList.remove('show');
   $('#branchErr').textContent = '';
@@ -2717,6 +2780,75 @@ function breakTimeAllowed(cfg){
 const ATT_MUTATION_TIMEOUT_MS = 2500;
 const attMutationLocks = new Set();
 const attPendingRows = { shifts:new Map(), breaks:new Map(), credits:new Map() };
+const ATT_OUTBOX_KEY = 'echarpe_sales_attendance_outbox_v554';
+let attOutboxReplayPromise = null;
+
+function readAttendanceOutbox(){
+  try{
+    const x=JSON.parse(localStorage.getItem(ATT_OUTBOX_KEY)||'[]');
+    return Array.isArray(x)?x.filter(v=>v&&v.key&&Array.isArray(v.ops)):[];
+  }catch(_e){return [];}
+}
+function writeAttendanceOutbox(rows){
+  try{localStorage.setItem(ATT_OUTBOX_KEY,JSON.stringify(rows||[]));return true;}catch(err){
+    console.error('attendance outbox write failed',err);return false;
+  }
+}
+function putAttendanceOutbox(item){
+  const rows=readAttendanceOutbox().filter(x=>String(x.key)!==String(item.key));
+  rows.push({...item,savedAt:Date.now()});
+  if(!writeAttendanceOutbox(rows))throw new Error('attendance/outbox-unavailable');
+}
+function removeAttendanceOutbox(key){
+  writeAttendanceOutbox(readAttendanceOutbox().filter(x=>String(x.key)!==String(key)));
+}
+function attendanceBatchFromOps(ops){
+  const batch=writeBatch(db);
+  (ops||[]).forEach(op=>{
+    const ref=doc(db,String(op.collection),String(op.id));
+    if(op.mode==='update')batch.update(ref,op.data||{});
+    else if(op.merge===false)batch.set(ref,op.data||{});
+    else batch.set(ref,op.data||{},{merge:true});
+  });
+  return batch.commit();
+}
+function confirmAttendanceMutationKey(key){
+  Object.keys(attPendingRows).forEach(kind=>{
+    const pending=attPendingRows[kind];
+    pending.forEach((entry,id)=>{if(entry&&entry.key===key)pending.delete(id);});
+    const clean=attendanceRows(kind).map(x=>{
+      if(x&&x._attMutation===key){const y={...x};delete y._attPending;delete y._attMutation;return y;}
+      return x;
+    });
+    setAttendanceRows(kind,clean);
+  });
+}
+async function replayAttendanceOutbox(){
+  if(attOutboxReplayPromise)return attOutboxReplayPromise;
+  const u=_auth.currentUser;
+  if(!u||u.isAnonymous||!navigator.onLine)return false;
+  attOutboxReplayPromise=(async()=>{
+    let allOk=true;
+    for(const item of readAttendanceOutbox()){
+      try{
+        await attendanceBatchFromOps(item.ops);
+        removeAttendanceOutbox(item.key);
+        confirmAttendanceMutationKey(String(item.key));
+      }catch(err){
+        allOk=false;
+        console.warn('attendance outbox replay',item.key,err&&err.code);
+        if(err&&(err.code==='permission-denied'||err.code==='unauthenticated'))_scheduleSalesRelogin(0);
+        break;
+      }
+    }
+    if(readAttendanceOutbox().length){
+      showAttendanceSync('فيه تسجيل حضور محفوظ على الجهاز — سيُرسل تلقائيًا عند استقرار الاتصال.','pending');
+    }
+    return allOk;
+  })().finally(()=>{attOutboxReplayPromise=null;});
+  return attOutboxReplayPromise;
+}
+window.replayAttendanceOutbox=replayAttendanceOutbox;
 
 function attendanceIdPart(value){
   const raw = String(value == null ? '' : value);
@@ -2781,14 +2913,45 @@ function attendanceRows(kind){
   if(kind==='breaks') return allBreaks;
   return allTimeCredit;
 }
+let madinatyStaffPublishTimer = 0;
+function publishMadinatyStaffState(){
+  clearTimeout(madinatyStaffPublishTimer);
+  madinatyStaffPublishTimer = setTimeout(()=>{
+    try{
+      const branch=String(window.currentBranch||'').toLowerCase();
+      if(branch.indexOf('madinaty')<0 && branch.indexOf('مدينتي')<0) return;
+      const open=(allShifts||[]).filter(s=>s&&s.branch===window.currentBranch&&!s.clockOutTs);
+      const unique=[];
+      open.forEach(s=>{ const id=String(s.employeeId||''); if(id&&unique.indexOf(id)<0) unique.push(id); });
+      const breakIds=[];
+      (allBreaks||[]).filter(b=>b&&b.branch===window.currentBranch&&!b.endTs).forEach(b=>{
+        const id=String(b.employeeId||'');if(id&&unique.indexOf(id)>=0&&breakIds.indexOf(id)<0)breakIds.push(id);
+      });
+      const onFloor=unique.filter(id=>breakIds.indexOf(id)<0);
+      fetch('http://127.0.0.1:1985/echarpe-playback/staff-state',{
+        method:'POST',cache:'no-store',body:JSON.stringify({
+          version:555,branch:'madinaty',generatedAtMs:Date.now(),
+          clockedInCount:unique.length,openBreakCount:breakIds.length,
+          activeStaffCount:onFloor.length,employeeIds:onFloor
+        })
+      }).catch(()=>{});
+    }catch(_e){}
+  },250);
+}
+window.publishMadinatyStaffState=publishMadinatyStaffState;
+setInterval(publishMadinatyStaffState,30000);
+window.addEventListener('online',publishMadinatyStaffState);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) publishMadinatyStaffState(); });
 function setAttendanceRows(kind, rows){
   if(kind==='shifts'){
     allShifts=rows; window.allShifts=rows;
     shifts=rows.filter(x=>x.branch===window.currentBranch);
     try{ renderAttendanceLists(); }catch(_e){}
+    publishMadinatyStaffState();
   }else if(kind==='breaks'){
     allBreaks=rows; window.allBreaks=rows;
     try{ renderAttendanceLists(); renderBreakBanner(); renderBreakAlert(); }catch(_e){}
+    publishMadinatyStaffState();
   }else{
     allTimeCredit=rows; window.allTimeCredit=rows;
     try{ if(typeof window.renderTimeCreditLog==='function') window.renderTimeCreditLog(); }catch(_e){}
@@ -2837,6 +3000,14 @@ function queueAttendanceMutation(options){
     return Promise.resolve({ pending:true });
   }
   attMutationLocks.add(key);
+  if(options.durableOps){
+    try{putAttendanceOutbox({key,ops:options.durableOps,rows:options.durableRows||[]});}
+    catch(err){
+      attMutationLocks.delete(key);
+      showAttendanceSync('تعذر حفظ العملية على الجهاز — لم يتم اعتبارها حضورًا.','error');
+      return Promise.resolve({queued:false,error:err});
+    }
+  }
   let rollback = function(){};
   try{ rollback = options.optimistic ? options.optimistic() : rollback; }
   catch(err){ attMutationLocks.delete(key); throw err; }
@@ -2847,20 +3018,40 @@ function queueAttendanceMutation(options){
   }, ATT_MUTATION_TIMEOUT_MS);
   Promise.resolve().then(options.commit).then(()=>{
     settled = true; clearTimeout(timer); attMutationLocks.delete(key);
+    if(options.durableOps)removeAttendanceOutbox(key);
     if(rollback && typeof rollback.confirm==='function') rollback.confirm();
     if(typeof options.onCommitted==='function') options.onCommitted();
     showAttendanceSync(options.successText || 'تم الحفظ والمزامنة ✅', 'success');
   }).catch(err=>{
     settled = true; clearTimeout(timer); attMutationLocks.delete(key);
-    try{ rollback(); }catch(_e){}
     console.error('attendance mutation failed', key, err);
-    showAttendanceSync((options.errorText || 'تعذر الحفظ') + ': ' + ((err&&err.code)||'تحقق من الإنترنت وحاول مرة أخرى'), 'error', ()=>queueAttendanceMutation(options));
+    if(options.durableOps){
+      // Never make a clock-in disappear after showing it. The durable outbox
+      // retains the original timestamp/document id and retries the same write.
+      showAttendanceSync((options.errorText||'تعذر الإرسال')+' — التسجيل محفوظ على الجهاز وسيُعاد إرساله بنفس وقته.','pending');
+      if(err&&(err.code==='permission-denied'||err.code==='unauthenticated'))_scheduleSalesRelogin(0);
+    }else{
+      try{rollback();}catch(_e){}
+      showAttendanceSync((options.errorText||'تعذر الحفظ')+': '+((err&&err.code)||'تحقق من الإنترنت وحاول مرة أخرى'),'error',()=>queueAttendanceMutation(options));
+    }
   });
   // الموظف لا ينتظر رد السيرفر: Firestore يحتفظ بالكتابة في IndexedDB،
   // والواجهة تعتمد فورًا على النسخة المحلية أعلاه.
   return Promise.resolve({ queued:true });
 }
 window.queueAttendanceMutation = queueAttendanceMutation;
+
+// Restore pending rows after a refresh before replaying them. This prevents
+// the employee from returning to the "not present" list while a saved write waits.
+setTimeout(()=>{
+  readAttendanceOutbox().forEach(item=>(item.rows||[]).forEach(x=>{
+    if(!x||!attPendingRows[x.kind]||!x.row||!x.row.id)return;
+    attPendingRows[x.kind].set(String(x.row.id),{row:{...x.row,_attPending:true,_attMutation:String(item.key)},key:String(item.key)});
+  }));
+  Object.keys(attPendingRows).forEach(kind=>setAttendanceRows(kind,overlayAttendancePending(kind,attendanceRows(kind))));
+  replayAttendanceOutbox();
+},0);
+setInterval(replayAttendanceOutbox,15000);
 
 // بداية البريك — بعد الـPIN والصورة
 async function startBreak(empId, photoDataUri){
@@ -2892,13 +3083,15 @@ async function startBreak(empId, photoDataUri){
     id:breakId, employeeId:empId, employeeName:emp.name, branch:window.currentBranch,
     dateKey, startTs, endTs:null, startPhoto:photoDataUri || null
   };
+  const cleanBreak={...optimisticBreak}; delete cleanBreak.id;
   return queueAttendanceMutation({
     key:'break-start:'+breakId,
+    durableOps:[{mode:'set',collection:'sales_breaks',id:breakId,data:cleanBreak,merge:true}],
+    durableRows:[{kind:'breaks',row:optimisticBreak}],
     optimistic:()=>optimisticAttendanceRow('breaks', optimisticBreak, 'break-start:'+breakId),
     commit:()=>{
       const batch = writeBatch(db);
       const breakRef = doc(db,'sales_breaks',breakId);
-      const cleanBreak={...optimisticBreak}; delete cleanBreak.id;
       batch.set(breakRef, cleanBreak, { merge:true });
       return batch.commit();
     },
@@ -2933,8 +3126,12 @@ async function endBreak(empId, photoDataUri){
     sourceBreakId:brk.id
   } : null;
   const mutationKey = 'break-end:'+brk.id;
+  const breakOps=[{mode:'update',collection:'sales_breaks',id:brk.id,data:patch}];
+  if(credit){const clean={...credit};delete clean.id;breakOps.push({mode:'set',collection:'sales_time_credit',id:creditId,data:clean,merge:true});}
   return queueAttendanceMutation({
     key:mutationKey,
+    durableOps:breakOps,
+    durableRows:[{kind:'breaks',row:{...brk,...patch,id:brk.id}}].concat(credit?[{kind:'credits',row:credit}]:[]),
     optimistic:()=>{
       const undoBreak = optimisticAttendanceRow('breaks', { ...brk, ...patch, id:brk.id }, mutationKey);
       const undoCredit = credit ? optimisticAttendanceRow('credits', credit, mutationKey) : function(){};
@@ -3023,8 +3220,13 @@ async function clockIn(empId, photoDataUri){
     ts:clockInTs, sourceShiftId:shiftId
   } : null;
   const mutationKey = 'clock-in:'+shiftId;
+  const cleanShift={...optimisticShift}; delete cleanShift.id;
+  const clockInOps=[{mode:'set',collection:'sales_shifts',id:shiftId,data:cleanShift,merge:true}];
+  if(credit){const clean={...credit};delete clean.id;clockInOps.push({mode:'set',collection:'sales_time_credit',id:creditId,data:clean,merge:true});}
   return queueAttendanceMutation({
     key:mutationKey,
+    durableOps:clockInOps,
+    durableRows:[{kind:'shifts',row:optimisticShift}].concat(credit?[{kind:'credits',row:credit}]:[]),
     optimistic:()=>{
       const undoShift = optimisticAttendanceRow('shifts', optimisticShift, mutationKey);
       const undoCredit = credit ? optimisticAttendanceRow('credits', credit, mutationKey) : function(){};
@@ -3035,7 +3237,6 @@ async function clockIn(empId, photoDataUri){
     commit:()=>{
       const batch = writeBatch(db);
       const shiftRef = doc(db,'sales_shifts',shiftId);
-      const cleanShift={...optimisticShift}; delete cleanShift.id;
       batch.set(shiftRef, cleanShift, {merge:true});
       if(credit){ const cleanCredit={...credit}; delete cleanCredit.id; batch.set(doc(db,'sales_time_credit',creditId), cleanCredit, {merge:true}); }
       return batch.commit();
@@ -3120,8 +3321,12 @@ async function clockOut(empId, photoDataUri){
   if(earlyInfo.hours>0) successText += ` · نقص ${earlyInfo.earlyMin} دقيقة`;
   if(overtimeMinutes>0) successText += _otAuto ? ' · الإضافي اتعتمد تلقائيًا' : ' · الإضافي محتاج مراجعة الإدارة';
   const mutationKey='clock-out:'+shift.id;
+  const clockOutOps=[{mode:'update',collection:'sales_shifts',id:shift.id,data:patch}];
+  if(credit){const clean={...credit};delete clean.id;clockOutOps.push({mode:'set',collection:'sales_time_credit',id:creditId,data:clean,merge:true});}
   return queueAttendanceMutation({
     key:mutationKey,
+    durableOps:clockOutOps,
+    durableRows:[{kind:'shifts',row:{...shift,...patch,id:shift.id}}].concat(credit?[{kind:'credits',row:credit}]:[]),
     optimistic:()=>{
       const undoShift=optimisticAttendanceRow('shifts',{...shift,...patch,id:shift.id},mutationKey);
       const undoCredit=credit?optimisticAttendanceRow('credits',credit,mutationKey):function(){};

@@ -2290,6 +2290,7 @@ function openCashDrawer(){
   if(!hasPerm('canOpenDrawer')){ showToast('فتح الدرج للمشرف/المدير بس', 'err'); return; }
   // 📋 نسجّل فتح الدرج اليدوي (من غير بيع) — عشان المراقبة
   try{ if(typeof _logActivity === 'function') _logActivity('manual_drawer_open', { by: currentEmployee.name||'' }); }catch(e){}
+  try{ if(typeof cctvPresenceNoteCartActivity === 'function') cctvPresenceNoteCartActivity('drawer',{sid:_cartSid,atMs:Date.now(),cart:cart}); }catch(e){}
   // لو داخل الـexe: نبعت أمر فتح الدرج مباشرة (من غير نافذة طباعة)
   if(typeof window.posShell !== 'undefined' && typeof testCashDrawer === 'function'){
     testCashDrawer();
@@ -4213,6 +4214,7 @@ window.returnPointsDeduction = returnPointsDeduction;
         saleId: (_saleW && _saleW.value && _saleW.value.id) || '',
         sid: _cartSid || '', cartSid: _cartSid || '', atMs: Date.now(),
         total: total, itemCount: itemCount,
+        transactionKind: cart.some(function(line){ return !!line.isReturn; }) ? 'return_or_exchange' : 'sale',
         employeeId: (currentEmployee && currentEmployee.id) || '',
         employeeName: (currentEmployee && currentEmployee.name) || ''
       };

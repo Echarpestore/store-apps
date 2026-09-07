@@ -37,6 +37,7 @@
       var rows=rowsOf(meta.cart||(typeof cart!=='undefined'?cart:[])),packed=compactCart(s,rows),hash=stateHash(packed);if(hash===s.lastHash&&!meta.force)return false;
       var kind=s.events.length?classify(s.lastCart,packed):(meta.kind||'item_added');
       s.events.push({seq:s.events.length+1,atMs:at,kind:safe(meta.kind||kind,40),cart:packed,total:totalOf(rows)});
+      try{if(typeof window.cctvPresenceNoteCartActivity==='function')window.cctvPresenceNoteCartActivity(meta.kind||kind,{sid:sid,atMs:at,cart:rows,total:totalOf(rows)});}catch(_e){}
       if(s.events.length>MAX_EVENTS)s.events.splice(1,s.events.length-MAX_EVENTS);
       s.lastHash=hash;s.lastCart=packed;save(s);return true;
     }catch(e){return false;}

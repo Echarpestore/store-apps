@@ -62,7 +62,7 @@ ok(ui.indexOf('optimisticTimeCredit') < ui.indexOf('fbUpdateDoc', ui.indexOf('wi
 ok(ui.includes('rollbackTimeCredit'), 'failed excuse rolls back instead of silently lying');
 ok(ui.includes('queueAttendanceMutation'), 'excuse uses the same pending/error/retry feedback');
 
-ok(/sales-app\.js\?v=544/.test(html) && /sales-ui\.js\?v=544/.test(html), 'Sales scripts are cache-busted to v544');
-ok(/store-apps-shell-v545/.test(sw), 'Sales service worker cache is v545');
+ok(/sales-app\.js\?v=554/.test(html) && /sales-ui\.js\?v=554/.test(html), 'Sales scripts are cache-busted to v554');
+ok(/store-apps-shell-v554/.test(sw), 'Sales service worker cache is v554');
 
 console.log(`sales attendance resilience v543: ${passed}/${passed} PASS`);

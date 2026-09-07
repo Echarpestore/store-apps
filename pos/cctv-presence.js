@@ -10,8 +10,9 @@
 (function(){
 'use strict';
 
-var VERSION=477;
+var VERSION=555;
 var URL='http://127.0.0.1:1985/echarpe-presence/status';
+var SIGNAL_URL='http://127.0.0.1:1985/echarpe-playback/session-signal';
 var POLL_MS=2500, STALE_MS=12000, NO_SALE_GRACE_MS=90000;
 var SALE_BEFORE_MS=30000, SALE_AFTER_MS=90000, MIN_SESSION_MS=8000;
 var SALES_KEY='echarpe.cctv.presence.sales.v476';
@@ -142,6 +143,14 @@ window.cctvPresenceNoteCartActivity=function(kind,data){
       m.cartActions=(Number(m.cartActions)||0)+1;
       if(kind==='remove')m.removedQty=(Number(m.removedQty)||0)+Math.max(0,Number(data&&data.qty)||0);
     }
+    var rows=(Array.isArray(data&&data.cart)?data.cart:[]).slice(0,100).map(function(x){return {
+      id:String(x&&x.id||'').slice(0,100),name:String(x&&x.name||x&&x.code||'صنف').slice(0,120),
+      barcode:String(x&&x.barcode||'').slice(0,80),qty:Number(x&&x.qty)||0,price:Number(x&&x.price)||0,isReturn:!!(x&&x.isReturn)
+    };});
+    fetch(SIGNAL_URL,{method:'POST',cache:'no-store',body:JSON.stringify({
+      version:555,sessionId:String(s.id),sid:String(data&&data.sid||m.sid||''),atMs:Number(data&&data.atMs)||Date.now(),
+      kind:String(kind||'cart_edited'),qty:Math.max(0,Number(data&&data.qty)||0),cart:rows,total:Number(data&&data.total)||0
+    })}).catch(function(){});
   }catch(e){}
 };
 

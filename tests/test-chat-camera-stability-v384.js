@@ -16,7 +16,7 @@ must(bandCss && !/overflow-y\s*:\s*auto|max-height/.test(bandCss), 'bandana row 
 must(sales.includes('getEmployees: function(col, branch)'), 'Sales bridge exposes employee names');
 must(sales.includes("where('barcode','==',bc)"), 'new barcode lookup remains field-based');
 must(Number((psw.match(/store-apps-shell-v(\d+)/)||[])[1])>=545, 'POS SW ships v545 or newer');
-must(ssw.includes('store-apps-shell-v545'), 'Sales SW ships the v545 mobile composer fix');
+must(ssw.includes('store-apps-shell-v554'), 'Sales SW ships the v545 mobile composer fix in v554');
 // ⚠️ إصلاح: process.exit() هنا كان بيقفل عملية run.js كلها عند أول فشل،
 // فيوقف تنفيذ كل ملفات الاختبار اللي بعده أبجديًا. الحل: throw عادي.
 if(process.exitCode){
