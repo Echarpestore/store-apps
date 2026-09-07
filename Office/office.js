@@ -5179,6 +5179,39 @@ function ofGraceCloseTs(shift, emp, shiftDefs){
   return endTs;
 }
 
+// حساب نقي لإغلاق الشيفت "الآن". وقت الضغط هو وقت الانصراف الحقيقي؛
+// النقص يتحول لرصيد وقت، والأوفرتايم يعتمد لأنه قرار مباشر من المالك.
+function ofCloseNowCalc(shift, emp, cfg, nowTs){
+  cfg = cfg || { shifts:{}, timeCfg:{} };
+  const now = Number(nowTs) || Date.now();
+  const worked = Math.max(0, Math.round((now - Number(shift.clockInTs||0)) / 60000));
+  const def = (cfg.shifts||{})[(emp||{}).shift] || {};
+  const startHM = shift.scheduledStartTime || (emp&&emp.scheduledStartTime) || def.start || '';
+  const endHM = shift.scheduledEndTime || (emp&&emp.scheduledEndTime) || def.end || '';
+  const hm = function(v){ const p=String(v||'').split(':').map(Number); return (p[0]||0)*60+(p[1]||0); };
+  let required = 0;
+  if(/^\d{1,2}:\d{2}$/.test(startHM) && /^\d{1,2}:\d{2}$/.test(endHM)){
+    required = hm(endHM)-hm(startHM); if(required<=0) required+=1440;
+  }
+  const tc = cfg.timeCfg || {};
+  const grace = isNaN(Number(tc.earlyGraceMin)) ? 5 : Number(tc.earlyGraceMin);
+  const shortfall = required ? Math.max(0,required-worked-(Number(shift.lateMinutes)||0)-grace) : 0;
+  const per = Number(tc.earlyMinPerHour)||10;
+  let earlyHours = Math.floor(shortfall/per);
+  const cap = Number(tc.maxEarlyHoursPerDay)||Number(tc.maxLateHoursPerDay)||0;
+  if(cap>0 && earlyHours>cap) earlyHours=cap;
+  return { now:now, worked:worked, required:required, earlyMin:shortfall, earlyHours:earlyHours,
+    overtimeMinutes:Math.max(0,worked-(8*60+15)) };
+}
+window.ofCloseNowCalc = ofCloseNowCalc;
+function ofAttendanceIdPart(value){
+  const raw=String(value==null?'':value);let hash=2166136261;
+  for(let i=0;i<raw.length;i++){hash^=raw.charCodeAt(i);hash=Math.imul(hash,16777619);}
+  const readable=raw.replace(/[^a-zA-Z0-9_-]+/g,'_').slice(0,48)||'x';
+  return readable+'_'+(hash>>>0).toString(36);
+}
+function ofAttendanceDocId(kind,empId,sourceKey){return 'att_'+ofAttendanceIdPart(kind)+'_'+ofAttendanceIdPart(empId)+'_'+ofAttendanceIdPart(sourceKey);}
+
 // ☕ ساعات زيادة البريك — نفس حساب breakHoursFrom في sales بالظبط:
 // الزيادة = الفعلي − المسموح − السماح، وكل (breakMinPerHour) دقيقة = ساعة (floor)
 function ofBreakOverHours(actualMin, cfg){
@@ -5368,8 +5401,11 @@ window.ofHubSheet = async function(empId){
     const bel = Math.round((now - p.brk.open.startTs) / 60000);
     acts += '<button onclick="ofHubBreakClose(\'' + esc(p.brk.open.id) + '\',\'' + esc(empId) + '\')" style="background:#92400e; color:#fff; border:none; border-radius:10px; padding:9px 12px; font-size:13px; font-weight:700; cursor:pointer;">☕ اقفل البريك (' + bel + 'د)</button>';
   }
+  if(p && p.clockInTs && !p.clockOutTs){
+    acts += '<button onclick="ofHubCloseNow(\'' + esc(p.shiftId) + '\',\'' + esc(empId) + '\')" style="background:#b91c1c; color:#fff; border:none; border-radius:10px; padding:10px 14px; font-size:13px; font-weight:900; cursor:pointer;">🚪 إغلاق الشيفت الآن</button>';
+  }
   if(p && p.reason === 'stale'){
-    acts += '<button onclick="ofHubGraceClose(\'' + esc(p.shiftId) + '\',\'' + esc(empId) + '\')" style="background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:9px 12px; font-size:13px; font-weight:700; cursor:pointer;">🚪 اقفل الشيفت (نهاية معاده)</button>';
+    acts += '<button onclick="ofHubGraceClose(\'' + esc(p.shiftId) + '\',\'' + esc(empId) + '\')" style="background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:9px 12px; font-size:13px; font-weight:700; cursor:pointer;">إغلاق على نهاية المعاد</button>';
   }
   if(acts) body += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">' + acts + '</div>';
 
@@ -5378,6 +5414,10 @@ window.ofHubSheet = async function(empId){
     + '<button onclick="ofHubMoney(' + "'" + esc(empId) + "'" + ')" style="background:#3b3b52; color:#fff; border:none; border-radius:10px; padding:8px 12px; font-size:12.5px; font-weight:700; cursor:pointer; width:100%;">💰 الفلوس — العمولة والمرتب</button>'
     + '<div id="ofHubMoneyBox"></div></div>';
 
+  body += '<div style="margin-top:10px;">'
+    + '<button onclick="ofHubEmployeeSettings(\'' + esc(empId) + '\')" style="background:#1d4ed8; color:#fff; border:none; border-radius:10px; padding:10px 12px; font-size:13px; font-weight:800; cursor:pointer; width:100%;">⚙️ إدارة الموظف — الراتب والمواعيد والإجازة</button>'
+    + '<div id="ofHubEmployeeSettingsBox"></div></div>';
+
   ov.firstChild.innerHTML =
     '<div style="display:flex; justify-content:space-between; align-items:center;">'
     + '<div><div style="font-weight:900; font-size:16px;">' + esc(emp.name || 'موظف') + '</div>'
@@ -5385,6 +5425,45 @@ window.ofHubSheet = async function(empId){
     + '<button onclick="document.getElementById(\'ofHubOv\').remove()" style="background:none; border:none; color:var(--sub); font-size:20px; cursor:pointer;">✖</button></div>'
     + '<div style="margin-top:8px;">' + body + '</div>'
     ;
+};
+
+window.ofHubEmployeeSettings = function(empId){
+  const emp = (D.employees||[]).find(function(e){ return e && e.id===empId; });
+  const box = document.getElementById('ofHubEmployeeSettingsBox');
+  if(!emp || !box) return;
+  const days=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  const input='width:100%;box-sizing:border-box;margin-top:4px;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--ink);font-family:Cairo;';
+  box.innerHTML='<div style="margin-top:9px;padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--panel2);">'
+    +'<div style="font-weight:900;margin-bottom:8px;">ملف الموظف</div>'
+    +'<label style="display:block;font-size:12px;margin-bottom:8px;">الراتب الأساسي<input id="ofEmpSalary" type="number" min="0" value="'+Number(emp.baseSalary||0)+'" style="'+input+'"></label>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+    +'<label style="font-size:12px;">بداية العمل<input id="ofEmpStart" type="time" value="'+esc(emp.scheduledStartTime||'')+'" style="'+input+'"></label>'
+    +'<label style="font-size:12px;">نهاية العمل<input id="ofEmpEnd" type="time" value="'+esc(emp.scheduledEndTime||'')+'" style="'+input+'"></label></div>'
+    +'<label style="display:block;font-size:12px;margin-top:8px;">الإجازة الأسبوعية<select id="ofEmpDayOff" style="'+input+'">'
+    +days.map(function(d,i){return '<option value="'+i+'" '+(String(emp.dayOff)===String(i)?'selected':'')+'>'+d+'</option>';}).join('')+'</select></label>'
+    +'<label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;"><input id="ofEmpFlexible" type="checkbox" '+(emp.flexibleMorningEvening===true?'checked':'')+'> مرن صباحي/مسائي — يختار أقرب شيفت تلقائيًا</label>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">'
+    +'<label style="font-size:12px;">تاريخ التعيين<input id="ofEmpHire" type="date" value="'+esc(emp.hireDate||'')+'" style="'+input+'"></label>'
+    +'<label style="font-size:12px;">حساب الحضور من<input id="ofEmpTrack" type="date" value="'+esc(emp.attendanceTrackingStart||'')+'" style="'+input+'"></label></div>'
+    +'<button id="ofEmpSave" style="width:100%;margin-top:11px;padding:11px;border:0;border-radius:9px;background:#15803d;color:#fff;font-family:Cairo;font-weight:900;">💾 حفظ بيانات الموظف</button>'
+    +'<div id="ofEmpSaveMsg" style="font-size:11px;margin-top:6px;color:var(--sub);"></div></div>';
+  document.getElementById('ofEmpSave').onclick=async function(){
+    const btn=this, msg=document.getElementById('ofEmpSaveMsg');
+    const oldSalary=Number(emp.baseSalary)||0, newSalary=Number(document.getElementById('ofEmpSalary').value)||0;
+    const patch={baseSalary:newSalary,scheduledStartTime:document.getElementById('ofEmpStart').value||null,
+      scheduledEndTime:document.getElementById('ofEmpEnd').value||null,dayOff:document.getElementById('ofEmpDayOff').value,
+      flexibleMorningEvening:document.getElementById('ofEmpFlexible').checked,
+      hireDate:document.getElementById('ofEmpHire').value||'',attendanceTrackingStart:document.getElementById('ofEmpTrack').value||'',updatedAt:Date.now()};
+    if(newSalary!==oldSalary){
+      const hist=Array.isArray(emp.salaryHistory)?emp.salaryHistory.slice(-49):[];
+      hist.push({from:oldSalary,to:newSalary,at:Date.now(),by:(ofAuth.currentUser&&ofAuth.currentUser.email)||'office'});
+      patch.salaryHistory=hist; patch.salaryUpdatedAt=Date.now();
+    }
+    btn.disabled=true;btn.textContent='بيتحفظ…';
+    try{await db.collection('sales_employees').doc(empId).update(patch);Object.assign(emp,patch);msg.style.color='var(--good,#22c55e)';msg.textContent='اتحفظ ✅';}
+    catch(e){msg.style.color='var(--bad,#ef4444)';msg.textContent='تعذر الحفظ: '+(e&&e.code?e.code:e);}
+    finally{btn.disabled=false;btn.textContent='💾 حفظ بيانات الموظف';}
+  };
 };
 
 // ============================================================
@@ -5767,6 +5846,41 @@ window.ofHubBreakClose = async function(breakId, empId){
     _ofHubLoad(true);
     setTimeout(function(){ window.ofHubSheet(empId); }, 400);
   }catch(e){ alert('تعذر القفل: ' + (e && e.code ? e.code : e)); }
+};
+
+// 🚪 إغلاق فوري من Office — نفس سياسة Sales: وقت حقيقي + رصيد نقص
+// بسجل ثابت، لذلك إعادة الضغط أو انقطاع الشبكة لا يكرر الجزاء.
+window.ofHubCloseNow = async function(shiftId, empId){
+  const sh = _ofHubShifts().find(function(x){ return x && x.id===shiftId; });
+  if(!sh || !sh.clockInTs){ alert('مش لاقي الشيفت ده'); return; }
+  if(sh.clockOutTs){ alert('الشيفت ده مقفول خلاص'); return; }
+  const emp=(D.employees||[]).find(function(e){return e&&e.id===empId;})||{};
+  const cfg=await _ofBranchCfg(emp.branch||'');
+  const c=ofCloseNowCalc(sh,emp,cfg,Date.now());
+  const maxMin=(Number((cfg.timeCfg||{}).maxShiftHours)||14)*60;
+  if(c.worked>maxMin){alert('الشيفت مفتوح من '+Math.floor(c.worked/60)+' ساعة. استخدم «إغلاق على نهاية المعاد» للشيفت المنسي.');return;}
+  if(!confirm('🚪 إغلاق شيفت '+(emp.name||'الموظف')+' الآن؟\n\nمدة الشيفت: '
+    +Math.floor(c.worked/60)+' س '+(c.worked%60)+' د'
+    +(c.earlyHours?('\nنقص: '+c.earlyMin+' دقيقة = '+c.earlyHours+' ساعات رصيد'):'')
+    +(c.overtimeMinutes?('\nأوفرتايم معتمد: '+c.overtimeMinutes+' دقيقة'):'')+'\n\nتكمّل؟')) return;
+  const patch={clockOutTs:c.now,shiftMinutes:c.worked,overtimeMinutes:c.overtimeMinutes,
+    earlyMin:c.earlyMin,earlyHours:c.earlyHours,otRequiresApproval:true,
+    overtimeApprovedMin:c.overtimeMinutes,overtimeDecision:c.overtimeMinutes>0?'approved':'none',
+    overtimeAutoApproved:false,forgotClockOut:false,needsClockOutReview:false,
+    closedByOwner:true,closedFrom:'office',closedAt:c.now};
+  const creditId=ofAttendanceDocId('early',empId,shiftId);
+  const dp=_ofShopParts(sh.clockInTs);
+  try{
+    const batch=db.batch();
+    batch.update(db.collection('sales_shifts').doc(shiftId),patch);
+    if(c.earlyHours>0) batch.set(db.collection('sales_time_credit').doc(creditId),{
+      employeeId:empId,employeeName:emp.name||'',branch:emp.branch||sh.branch||'',type:'early',hours:c.earlyHours,
+      date:dp.y+'-'+String(dp.m).padStart(2,'0')+'-'+String(dp.d).padStart(2,'0'),
+      note:'نقص '+c.earlyMin+' دقيقة — إغلاق الإدارة الآن',ts:c.now,sourceShiftId:shiftId
+    },{merge:true});
+    await batch.commit();
+    _ofHubLoad(true);setTimeout(function(){window.ofHubSheet(empId);},400);
+  }catch(e){alert('تعذر القفل: '+(e&&e.code?e.code:e));}
 };
 
 // 🚪 قفل شيفت منسي — **نفس حساب وحقول graceCloseShift في sales**:
