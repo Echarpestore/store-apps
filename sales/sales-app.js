@@ -645,7 +645,6 @@ window.sumPoints = sumPoints;
 // كل القيم دي افتراضية وبتتحمّل من إعدادات الفرع (الأدمن بيعدّلها من لوحته).
 // ============================================================================
 let complianceCfg = {
-  penalty: 50,                       // خصم الجنيه للمخالفة الواحدة
   lateGraceMin: 20,                  // سماح التأخير بالدقايق قبل الخصم
   shifts: {
     morning: { label: '🌅 صباحي', start: '10:00', end: '18:00' },
@@ -2114,7 +2113,6 @@ onSnapshot(settingsCol, (snap)=>{
   window.regButtonOn = (data.regButtonOn !== false);
   window.applyRegButtonVisibility();
   if(data.compliance){
-    if(data.compliance.penalty != null) complianceCfg.penalty = data.compliance.penalty;
     if(data.compliance.lateGraceMin != null) complianceCfg.lateGraceMin = data.compliance.lateGraceMin;
     if(data.compliance.weights) complianceCfg.weights = { ...complianceCfg.weights, ...data.compliance.weights };
     if(data.compliance.shifts) complianceCfg.shifts = { ...complianceCfg.shifts, ...data.compliance.shifts };

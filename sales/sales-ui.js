@@ -73,7 +73,9 @@ window.renderComplianceSettingsForm = function(){
   const wsum = c.weights.commitment + c.weights.sales + c.weights.rating;
   wrap.innerHTML = `
     <div style="display:flex; flex-direction:column;">
-      ${fld('💰 الخصم للمخالفة', 'csPenalty', c.penalty, 'ج.م')}
+      <div style="background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:10px; font-size:12px; line-height:1.8;">
+        ⏳ المخالفة بدون إذن تسجل <b>4 ساعات رصيد وقت</b> — لا يوجد خصم نقدي ثابت.
+      </div>
       ${fld('⏰ سماح التأخير', 'csGrace', c.lateGraceMin, 'دقيقة')}
       <div style="height:1px; background:var(--line); margin:8px 0 12px;"></div>
       <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">أوزان المكافأة (المجموع لازم = 100)</div>
@@ -139,7 +141,7 @@ function renderViolationsReview(){
         ${v.type==='dayoffSwap' ? '📅' : '🚫'} ${v.label} — ${dLabel} ${v.date}${extra}
       </div>
       <div style="display:flex; gap:8px;">
-        <button onclick="resolveViolation('${v.empId}','${v.date}','${v.type}','deducted')" style="flex:1; padding:11px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#f0b0a0; font-family:'Cairo'; font-weight:800; cursor:pointer;">خصم ${window.complianceCfg.penalty} ج</button>
+        <button onclick="resolveViolation('${v.empId}','${v.date}','${v.type}','time_credit')" style="flex:1; padding:11px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#f0b0a0; font-family:'Cairo'; font-weight:800; cursor:pointer;">⏳ إضافة 4 ساعات رصيد</button>
         <button onclick="resolveViolation('${v.empId}','${v.date}','${v.type}','excused')" style="flex:1; padding:11px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--sub); font-family:'Cairo'; font-weight:700; cursor:pointer;">إجازة بموافقتي</button>
       </div>
     </div>`;
@@ -154,18 +156,32 @@ function todayStrFromDate(d){
 window.resolveViolation = async function(empId, date, type, decision){
   const emp = (window.employees||[]).find(e=> e.id===empId);
   const name = emp ? emp.name : '';
-  if(decision==='deducted' && !confirm('تأكيد خصم ' + window.complianceCfg.penalty + ' ج على ' + name + '؟')) return;
+  const charged = decision === 'time_credit' || decision === 'deducted';
+  if(charged && !confirm('تأكيد إضافة 4 ساعات رصيد وقت على ' + name + '؟')) return;
   try{
-    await window.fbAddDoc(window.fbCollection(window.db,'sales_violation_reviews'), {
+    const reviewId = window.attendanceDocId('violation-review', empId, date + '_' + type);
+    const creditId = window.attendanceDocId('violation-credit', empId, date + '_' + type);
+    const review = {
       employeeId: empId, employeeName: name, branch: window.currentBranch,
-      date, type, decision, ts: Date.now()
-    });
-    if(decision==='deducted'){
-      await window.fbAddDoc(window.fbCollection(window.db,'sales_deductions'), {
+      date, type, decision: charged ? 'time_credit' : decision, ts: Date.now()
+    };
+    const batch = window.fbWriteBatch && window.fbWriteBatch(window.db);
+    if(batch){
+      batch.set(window.fbDoc(window.db,'sales_violation_reviews',reviewId), review, {merge:true});
+      if(charged) batch.set(window.fbDoc(window.db,'sales_time_credit',creditId), {
         employeeId: empId, employeeName: name, branch: window.currentBranch,
-        type: (type==='dayoffSwap' ? 'dayoffSwap' : 'absence'),
-        amount: window.complianceCfg.penalty, date, ts: Date.now()
-      });
+        type: (type==='dayoffSwap' ? 'swap' : 'absence'),
+        hours: 4, date, note: 'مخالفة بدون إذن — قرار الإدارة', ts: Date.now(),
+        source: 'violation_review', sourceReviewId: reviewId
+      }, {merge:true});
+      await batch.commit();
+    }else{
+      await window.fbSetDoc(window.fbDoc(window.db,'sales_violation_reviews',reviewId),review,{merge:true});
+      if(charged) await window.fbSetDoc(window.fbDoc(window.db,'sales_time_credit',creditId),{
+        employeeId:empId,employeeName:name,branch:window.currentBranch,
+        type:(type==='dayoffSwap'?'swap':'absence'),hours:4,date,
+        note:'مخالفة بدون إذن — قرار الإدارة',ts:Date.now(),source:'violation_review',sourceReviewId:reviewId
+      },{merge:true});
     }
   }catch(e){ alert('تعذر الحفظ: ' + e.message); }
 };
@@ -202,7 +218,7 @@ window.renderAttIssues = function(){
       <div style="font-weight:800; font-size:14px;">${m.icon} ${i.empName}</div>
       <div style="color:var(--sub); font-size:12.5px; margin:4px 0 11px;">${m.title} — ${dayName[i.dow]} ${i.dateKey}${extra}</div>
       <div style="display:flex; gap:8px;">
-        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','charge')" style="flex:1; padding:10px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#ffb4a6; font-family:'Cairo'; font-weight:800; cursor:pointer;">خصم ${window.complianceCfg.penalty} ج</button>
+        <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','charge')" style="flex:1; padding:10px; border:none; border-radius:10px; background:linear-gradient(180deg,#5a3a3a,#3a2422); color:#ffb4a6; font-family:'Cairo'; font-weight:800; cursor:pointer;">⏳ إضافة 4 ساعات رصيد</button>
         <button onclick="decideIssue('${i.empId}','${i.empName}','${i.dateKey}','${m.kind}','ignore')" style="flex:1; padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--sub); font-family:'Cairo'; font-weight:700; cursor:pointer;">تجاهل (بموافقتي)</button>
       </div>
     </div>`;
@@ -211,17 +227,31 @@ window.renderAttIssues = function(){
 
 // قرار الأدمن على مخالفة: خصم أو تجاهل — الاتنين بيتسجّلوا فمش هتظهر تاني
 window.decideIssue = async function(empId, empName, dateKey, kind, action){
+  if(action === 'charge' && !confirm('تأكيد إضافة 4 ساعات رصيد وقت على ' + empName + '؟')) return;
   try{
-    await window.fbAddDoc(window.fbCollection(window.db,'sales_att_decisions'), {
+    const decisionId = window.attendanceDocId('attendance-decision', empId, dateKey + '_' + kind);
+    const creditId = window.attendanceDocId('attendance-credit', empId, dateKey + '_' + kind);
+    const decision = {
       empId, empName, dateKey, type: kind, branch: window.currentBranch,
-      decision: action === 'charge' ? 'charged' : 'ignored',
+      decision: action === 'charge' ? 'time_credit' : 'ignored',
       ts: Date.now()
-    });
-    if(action === 'charge'){
-      await window.fbAddDoc(window.fbCollection(window.db,'sales_deductions'), {
+    };
+    const batch = window.fbWriteBatch && window.fbWriteBatch(window.db);
+    if(batch){
+      batch.set(window.fbDoc(window.db,'sales_att_decisions',decisionId),decision,{merge:true});
+      if(action === 'charge') batch.set(window.fbDoc(window.db,'sales_time_credit',creditId),{
         employeeId: empId, employeeName: empName, branch: window.currentBranch,
-        type: kind, amount: window.complianceCfg.penalty, date: dateKey, ts: Date.now()
-      });
+        type:kind==='dayoffSwap'?'swap':'absence',hours:4,date:dateKey,
+        note:'غياب بدون إذن — قرار الإدارة',ts:Date.now(),source:'attendance_review',sourceDecisionId:decisionId
+      },{merge:true});
+      await batch.commit();
+    }else{
+      await window.fbSetDoc(window.fbDoc(window.db,'sales_att_decisions',decisionId),decision,{merge:true});
+      if(action === 'charge') await window.fbSetDoc(window.fbDoc(window.db,'sales_time_credit',creditId),{
+        employeeId:empId,employeeName:empName,branch:window.currentBranch,
+        type:kind==='dayoffSwap'?'swap':'absence',hours:4,date:dateKey,
+        note:'غياب بدون إذن — قرار الإدارة',ts:Date.now(),source:'attendance_review',sourceDecisionId:decisionId
+      },{merge:true});
     }
   }catch(e){ alert('تعذر تسجيل القرار: ' + e.message); }
 };
@@ -680,7 +710,6 @@ window.saveComplianceSettings = async function(){
   const wc = num('csWc', 40), ws = num('csWs', 30), wr = num('csWr', 30);
   if(wc + ws + wr !== 100){ alert('مجموع أوزان المكافأة لازم يساوي 100 (دلوقتي ' + (wc+ws+wr) + ')'); return; }
   const payload = {
-    penalty: num('csPenalty', 50),
     lateGraceMin: num('csGrace', 20),
     weights: { commitment: wc, sales: ws, rating: wr },
     shifts: {
@@ -748,6 +777,65 @@ window.graceCloseTsFor = function(shift, emp, cfg){
   }
   if(!endTs) endTs = shift.clockInTs + (8*60 + 15) * 60000;          // فولباك: الشيفت القياسي
   return endTs;
+};
+
+// 🚪 قفل فوري بقرار الإدارة. بعكس قفل "نهاية المعاد"، ده يسجل وقت
+// الضغط الحقيقي ويحسب نقص الساعات أو الأوفرتايم من مدة الشيفت الفعلية.
+window.closeShiftNow = async function(shiftId){
+  const s = (window.allShifts||[]).find(function(x){ return x && x.id === shiftId; });
+  if(!s || !s.clockInTs){ alert('مش لاقي الشيفت ده'); return; }
+  if(s.clockOutTs){ alert('الشيفت ده مقفول خلاص'); window.renderGraceDay(); return; }
+  const emp = (window.employees||[]).find(function(e){ return e.id === s.employeeId; }) || {};
+  const now = Date.now();
+  const totalMin = Math.max(0, Math.round((now - s.clockInTs) / 60000));
+  const tc = window.timeCfg || window.timeCfgDefaults || {};
+  const maxMin = (Number(tc.maxShiftHours) || 14) * 60;
+  if(totalMin > maxMin){
+    alert('الشيفت مفتوح من ' + Math.floor(totalMin/60) + ' ساعة. استخدم «نهاية المعاد» للشيفت المنسي، أو حدّد وقت المشي من مراجعة الأوفرتايم.');
+    return;
+  }
+  const shiftEmp = s.scheduledStartTime ? Object.assign({}, emp, {
+    scheduledStartTime:s.scheduledStartTime,
+    scheduledEndTime:s.scheduledEndTime || emp.scheduledEndTime
+  }) : emp;
+  const requiredMin = window.scheduledShiftMinutes(shiftEmp, window.complianceCfg, window.todayStr(new Date(s.clockInTs)));
+  const early = window.earlyLeaveFromWorked(totalMin, requiredMin, Number(s.lateMinutes)||0, tc);
+  const overtimeMinutes = Math.max(0, totalMin - (8*60 + 15));
+  const msg = '🚪 إغلاق شيفت ' + (emp.name || 'الموظف') + ' الآن؟\n\n'
+    + 'مدة الشيفت: ' + Math.floor(totalMin/60) + ' س ' + (totalMin%60) + ' د'
+    + (early.hours ? ('\nنقص: ' + early.earlyMin + ' دقيقة = ' + early.hours + ' ساعات رصيد') : '')
+    + (overtimeMinutes ? ('\nأوفرتايم معتمد: ' + overtimeMinutes + ' دقيقة') : '') + '\n\nتكمّل؟';
+  if(!confirm(msg)) return;
+  const patch = {
+    clockOutTs:now, shiftMinutes:totalMin, overtimeMinutes:overtimeMinutes,
+    earlyMin:early.earlyMin, earlyHours:early.hours,
+    otRequiresApproval:true, overtimeApprovedMin:overtimeMinutes,
+    overtimeDecision:overtimeMinutes>0?'approved':'none', overtimeAutoApproved:false,
+    forgotClockOut:false, needsClockOutReview:false,
+    closedByOwner:true, closedFrom:'sales', closedAt:now
+  };
+  const creditId = window.attendanceDocId('early', s.employeeId, s.id);
+  try{
+    const batch = window.fbWriteBatch && window.fbWriteBatch(window.db);
+    if(batch){
+      batch.update(window.fbDoc(window.db,'sales_shifts',s.id),patch);
+      if(early.hours>0) batch.set(window.fbDoc(window.db,'sales_time_credit',creditId),{
+        employeeId:s.employeeId,employeeName:emp.name||'',branch:s.branch||window.currentBranch,
+        type:'early',hours:early.hours,date:window.todayStr(new Date(s.clockInTs)),
+        note:'نقص '+early.earlyMin+' دقيقة — إغلاق الإدارة الآن',ts:now,sourceShiftId:s.id
+      },{merge:true});
+      await batch.commit();
+    }else{
+      await window.fbUpdateDoc(window.fbDoc(window.db,'sales_shifts',s.id),patch);
+      if(early.hours>0) await window.fbSetDoc(window.fbDoc(window.db,'sales_time_credit',creditId),{
+        employeeId:s.employeeId,employeeName:emp.name||'',branch:s.branch||window.currentBranch,
+        type:'early',hours:early.hours,date:window.todayStr(new Date(s.clockInTs)),
+        note:'نقص '+early.earlyMin+' دقيقة — إغلاق الإدارة الآن',ts:now,sourceShiftId:s.id
+      },{merge:true});
+    }
+    alert('اتقفل الآن ✅');
+  }catch(e){ alert('تعذر القفل: ' + (e && e.message ? e.message : e)); }
+  window.renderGraceDay();
 };
 
 // 🚪 قفل شيفت **موظف واحد** — نفس حساب القفل الجماعي بالظبط
@@ -846,15 +934,18 @@ window.renderGraceDay = function(){
               const inT = new Date(s.clockInTs).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
               const outTs = window.graceCloseTsFor(s, emp, window.complianceCfg);
               const outT = outTs ? new Date(outTs).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' }) : '—';
-              return '<div style="display:flex; align-items:center; gap:8px; background:var(--panel2);'
+              return '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--panel2);'
                 + ' border:1px solid var(--line); border-radius:10px; padding:9px 10px; margin-bottom:6px;">'
                 + '<div style="flex:1; min-width:0;">'
                 +   '<div style="font-weight:800; font-size:13px;">' + ((emp && emp.name) || 'موظف') + '</div>'
                 +   '<div style="font-size:11px; color:var(--sub);">حضور ' + inT + ' → هيقفل ' + outT + '</div>'
                 + '</div>'
+                + '<button data-close-now="' + s.id + '" style="padding:8px 13px; border:none; border-radius:9px;'
+                + ' background:linear-gradient(180deg,#dc2626,#991b1b); color:#fff; font-family:\'Cairo\';'
+                + ' font-weight:900; cursor:pointer; white-space:nowrap;">🚪 إغلاق الآن</button>'
                 + '<button data-close-shift="' + s.id + '" style="padding:8px 13px; border:none; border-radius:9px;'
                 + ' background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; font-family:\'Cairo\';'
-                + ' font-weight:800; cursor:pointer; white-space:nowrap;">🚪 اقفل</button>'
+                + ' font-weight:800; cursor:pointer; white-space:nowrap;">نهاية المعاد</button>'
                 + '</div>';
             }).join('') + '</div>'
           + (open.length > 1
@@ -899,6 +990,9 @@ window.renderGraceDay = function(){
   // أزرار القفل الفردي
   Array.prototype.forEach.call(wrap.querySelectorAll('[data-close-shift]'), function(b){
     b.onclick = function(){ window.graceCloseShift(b.getAttribute('data-close-shift')); };
+  });
+  Array.prototype.forEach.call(wrap.querySelectorAll('[data-close-now]'), function(b){
+    b.onclick = function(){ window.closeShiftNow(b.getAttribute('data-close-now')); };
   });
 
   const cb = wrap.querySelector('#gdCloseBtn');
