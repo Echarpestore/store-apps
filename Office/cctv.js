@@ -320,13 +320,19 @@
     if(currentBounds)dayReviewBounds=currentBounds;
     if(!dayReviewBounds||typeof db==='undefined')return;
     var x=b(),gateway=String(x.gateway||'').replace(/\/$/,''),aliases=(x.liveAliases||[]).map(function(v){return String(v).toLowerCase();});
-    var range=null,timelineDocs=[];
+    var range=null,timelineDocs=[],range8=null;
+    var primaryCam=String(x.playbackCamera||'4');
     try{
       var pair=await Promise.all([
-        fetchJsonRetry(gateway+'/echarpe-playback/range?camera='+encodeURIComponent(x.playbackCamera||'4')+'&_='+Date.now(),x.id,3),
-        db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',dayReviewBounds.start).where('endedAtMs','<',dayReviewBounds.end).get()
+        fetchJsonRetry(gateway+'/echarpe-playback/range?camera='+encodeURIComponent(primaryCam)+'&_='+Date.now(),x.id,3),
+        db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',dayReviewBounds.start).where('endedAtMs','<',dayReviewBounds.end).get(),
+        // v563: كاميرا 8 اختيارية — لو الفرع مش مسجّلها، المراجعة بتفضل بكاميرا واحدة
+        // زي الأول بالظبط. بنسأل الـagent نفسه بدل ما نفترض من قائمة الكاميرات
+        // (مدينتي مثلًا عندها كاميرات في القائمة بس المسجَّل فعليًا 4 و8 بس).
+        (primaryCam==='8'?Promise.resolve(null):fetchJsonRetry(gateway+'/echarpe-playback/range?camera=8&_='+Date.now(),x.id,1).catch(function(){return null;}))
       ]);
       range=pair[0];pair[1].forEach(function(s){var d=s.data()||{};if(branchMatches(d.branch,x.id,aliases))timelineDocs.push(d);});
+      range8=pair[2];
     }catch(e){alert('تعذر تجهيز مراجعة اليوم: '+(e&&e.message||e));return;}
     var timelineCodes={};timelineDocs.forEach(function(t){if(t&&t.invoiceCode)timelineCodes[String(t.invoiceCode)]=true;});
     (dayReviewRows||[]).forEach(function(sale){var code=String(sale&&sale.invoiceCode||'');if(!code||timelineCodes[code]||!branchMatches(sale.branch,x.id,aliases))return;var fallback=timelineFromSale(sale);if(fallback){timelineDocs.push(fallback);timelineCodes[code]=true;}});
@@ -335,16 +341,63 @@
     var events=[];timelineDocs.forEach(function(t){var catalog=t.catalog||{},code=t.invoiceCode||'';(t.events||[]).forEach(function(e){events.push(Object.assign({},e,{catalog:catalog,invoiceCode:code}));});events.push({atMs:Number(t.endedAtMs||0)+1,kind:'cart_cleared',cart:[],total:0,catalog:{},invoiceCode:''});});events.sort(function(a,c){return Number(a.atMs)-Number(c.atMs);});
     var tq=String(timeInput&&timeInput.value||'').split(':').map(Number),chosenStart=tq.length>1?new Date(new Date(dayReviewBounds.start).getFullYear(),new Date(dayReviewBounds.start).getMonth(),new Date(dayReviewBounds.start).getDate(),tq[0]||0,tq[1]||0,0,0).getTime():0;
     var firstEvent=events.find(function(e){return Number(e.atMs)>=coverageStart;}),chunkMs=15*60000,chunkStart=chosenStart?Math.max(coverageStart,Math.min(chosenStart,coverageEnd-30000)):(firstEvent?Math.max(coverageStart,Number(firstEvent.atMs)-5*60000):coverageStart);
+    // v563: كاميرا 8 بتشتغل جنب الأساسية بس لو الـagent مأكد إن عندها تسجيل فعلي
+    var dualCam=!!(range8&&range8.ok&&Number(range8.segmentCount)>0);
+    var coverageSpan=Math.max(1,coverageEnd-coverageStart);
+    // 🔴 الأحداث القوية (اللي تستاهل مراجعة) بتتعلّم أحمر، والباقي سياق أصفر
+    var STRONG={item_removed:1,qty_decreased:1,remove:1,drawer:1,cart_edited:1};
+    var jumpEvents=events.filter(function(e){var t=Number(e.atMs)||0;return e.kind!=='cart_cleared'&&t>=coverageStart&&t<=coverageEnd;});
     var ov=document.createElement('div');ov.id='ofCctvPlaybackOv';ov.className='of-cctv-playback-ov';
-    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><div><b>🎬 اليوم الكامل + السلة</b><small class="of-day511-muted" data-day-coverage></small></div><button type="button" class="of-cctv-playback-close">✕ إغلاق</button></div><div class="of-day511-body"><div class="of-day511-stage"><video controls autoplay muted playsinline></video><div class="of-day511-nav"><button type="button" data-day-prev>⏮ 15 دقيقة</button><input type="range" data-day-slider step="1"><button type="button" data-day-next>15 دقيقة ⏭</button></div></div><aside class="of-day511-cart"><div class="of-day511-carthead"><b>🛒 السلة في هذه اللحظة</b><div class="of-day511-muted" data-day-clock>—</div><div class="of-day511-event" data-day-event>بين الفواتير</div><div class="of-day511-muted" data-day-status>جاري تجهيز التسجيل…</div></div><div class="of-day511-rows" data-day-rows></div><div class="of-day511-total"><span>الإجمالي</span><strong data-day-total>0.00 ج.م</strong></div></aside></div></div>';
+    var videosHtml=dualCam
+      ? '<div class="of-smart555-videos"><div class="of-smart555-video"><span class="of-smart555-label">كاميرا '+esc(primaryCam)+' · صوت</span><video data-day-master controls playsinline></video></div><div class="of-smart555-video"><span class="of-smart555-label">كاميرا 8 · متزامنة</span><video data-day-slave muted playsinline></video></div></div>'
+      : '<video data-day-master controls autoplay muted playsinline></video>';
+    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><div><b>🎬 اليوم الكامل + السلة</b><small class="of-day511-muted" data-day-coverage></small></div><button type="button" class="of-cctv-playback-close">✕ إغلاق</button></div><div class="of-day511-body"><div class="of-day511-stage">'+videosHtml+'<div class="of-smart555-timeline"><div class="of-smart555-markers" data-day-markers></div><input type="range" data-day-slider step="1"></div><div class="of-day511-nav" style="grid-template-columns:1fr 1fr"><button type="button" data-day-prev>⏮ 15 دقيقة</button><button type="button" data-day-next>15 دقيقة ⏭</button></div></div><aside class="of-day511-cart"><div class="of-day511-carthead"><b>🛒 السلة في هذه اللحظة</b><div class="of-day511-muted" data-day-clock>—</div><div class="of-day511-event" data-day-event>بين الفواتير</div><div class="of-day511-muted" data-day-status>جاري تجهيز التسجيل…</div></div><div class="of-day511-rows" data-day-rows></div><div class="of-day511-total"><span>الإجمالي</span><strong data-day-total>0.00 ج.م</strong></div></aside></div></div>';
     closePlaybackModal();document.body.appendChild(ov);
-    var video=ov.querySelector('video'),slider=ov.querySelector('[data-day-slider]'),clock=ov.querySelector('[data-day-clock]'),eventEl=ov.querySelector('[data-day-event]'),rowsEl=ov.querySelector('[data-day-rows]'),totalEl=ov.querySelector('[data-day-total]'),status=ov.querySelector('[data-day-status]');
-    ov.querySelector('[data-day-coverage]').textContent='المتاح '+new Date(coverageStart).toLocaleTimeString('ar-EG')+' — '+new Date(coverageEnd).toLocaleTimeString('ar-EG')+' · مقاطع 15 دقيقة متصلة تلقائيًا';
+    var master=ov.querySelector('[data-day-master]'),slave=dualCam?ov.querySelector('[data-day-slave]'):null;
+    var slider=ov.querySelector('[data-day-slider]'),marks=ov.querySelector('[data-day-markers]'),clock=ov.querySelector('[data-day-clock]'),eventEl=ov.querySelector('[data-day-event]'),rowsEl=ov.querySelector('[data-day-rows]'),totalEl=ov.querySelector('[data-day-total]'),status=ov.querySelector('[data-day-status]');
+    ov.querySelector('[data-day-coverage]').textContent='المتاح '+new Date(coverageStart).toLocaleTimeString('ar-EG')+' — '+new Date(coverageEnd).toLocaleTimeString('ar-EG')+' · مقاطع 15 دقيقة متصلة تلقائيًا'+(dualCam?' · كاميرتين متزامنتين':' · كاميرا واحدة')+' · '+jumpEvents.length+' علامة';
     slider.min=String(Math.floor((coverageStart-dayReviewBounds.start)/60000));slider.max=String(Math.max(Number(slider.min),Math.floor((coverageEnd-dayReviewBounds.start-30000)/60000)));
     function kindName(k){return ({item_added:'إضافة صنف',item_removed:'حذف صنف',qty_increased:'زيادة كمية',qty_decreased:'تقليل كمية',cart_edited:'تعديل السلة',payment:'بدء الدفع',saving:'بدء الحفظ',sale_saved:'حفظ الفاتورة',cart_cleared:'بين الفواتير'})[k]||'حركة سلة';}
-    function renderAt(){var now=chunkStart+(Number(video.currentTime)||0)*1000,hit=null;for(var i=0;i<events.length&&Number(events[i].atMs)<=now;i++)hit=events[i];clock.textContent=new Date(now).toLocaleString('ar-EG');if(!hit||hit.kind==='cart_cleared'){eventEl.textContent='بين الفواتير';rowsEl.innerHTML='<div class="of-day511-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent='0.00 ج.م';return;}eventEl.textContent=kindName(hit.kind)+(hit.invoiceCode?' · فاتورة '+esc(hit.invoiceCode):'');var rows=cartRows(hit.cart),catalog=hit.catalog||{};rowsEl.innerHTML=rows.map(function(r){var item=catalog[r[0]]||{},q=Number(r[1])||0,p=Number(r[2])||0,ret=Number(r[3])===1;return '<div class="of-day511-row"><span><b>'+esc(item.name||item.id||'صنف')+(ret?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(item.barcode?' · '+esc(item.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-day511-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent=Number(hit.total||0).toFixed(2)+' ج.م';}
-    var chunkRetry=0;function loadChunk(next,isRetry){if(!isRetry)chunkRetry=0;var latestStart=Math.max(coverageStart,coverageEnd-30000);chunkStart=Math.max(coverageStart,Math.min(Number(next)||coverageStart,latestStart));var duration=Math.max(30,Math.min(900,Math.floor((coverageEnd-chunkStart)/1000))),cid=String(x.playbackCamera||'4');slider.value=String(Math.floor((chunkStart-dayReviewBounds.start)/60000));status.textContent=chunkRetry?'إعادة الاتصال بالتسجيل تلقائيًا…':'جاري تجهيز '+new Date(chunkStart).toLocaleTimeString('ar-EG')+'…';status.style.display='block';video.src=gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(chunkStart)+'&durationSec='+duration+'&quality=480&mode=fast&_='+Date.now();video.load();video.play().catch(function(){});renderAt();}
-    video.addEventListener('playing',function(){chunkRetry=0;status.style.display='none';});video.addEventListener('timeupdate',renderAt);video.addEventListener('seeking',renderAt);video.addEventListener('error',function(){if(chunkRetry<3&&document.documentElement.contains(ov)){chunkRetry++;status.style.display='block';status.textContent='إعادة الاتصال بالتسجيل تلقائيًا ('+chunkRetry+'/3)…';if(video._retryTimer)clearTimeout(video._retryTimer);video._retryTimer=setTimeout(function(){loadChunk(chunkStart,true);},2500);return;}status.style.display='block';status.textContent='التسجيل غير متاح في هذا التوقيت.';});video.addEventListener('ended',function(){if(chunkStart+chunkMs<coverageEnd-30000)loadChunk(chunkStart+chunkMs);});
+    // 🔖 شريط العلامات على مدى اليوم كله — الدوسة بتنقلك للحظة نفسها في الكاميرتين
+    marks.innerHTML=jumpEvents.map(function(e,i){
+      var pct=Math.max(0,Math.min(100,(Number(e.atMs)-coverageStart)/coverageSpan*100));
+      var strong=!!STRONG[String(e.kind)];
+      return '<button type="button" class="of-smart555-marker '+(strong?'':'context')+'" style="left:'+pct.toFixed(3)+'%" data-day-jump="'+i+'" title="'+esc(new Date(Number(e.atMs)).toLocaleTimeString('ar-EG')+' · '+kindName(e.kind)+(e.invoiceCode?' · فاتورة '+e.invoiceCode:''))+'"></button>';
+    }).join('');
+    function renderAt(){var now=chunkStart+(Number(master.currentTime)||0)*1000,hit=null;for(var i=0;i<events.length&&Number(events[i].atMs)<=now;i++)hit=events[i];clock.textContent=new Date(now).toLocaleString('ar-EG');if(slave&&slave.readyState>=1&&Math.abs((Number(slave.currentTime)||0)-(Number(master.currentTime)||0))>.35)slave.currentTime=Number(master.currentTime)||0;if(!hit||hit.kind==='cart_cleared'){eventEl.textContent='بين الفواتير';rowsEl.innerHTML='<div class="of-day511-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent='0.00 ج.م';return;}eventEl.textContent=kindName(hit.kind)+(hit.invoiceCode?' · فاتورة '+esc(hit.invoiceCode):'');var rows=cartRows(hit.cart),catalog=hit.catalog||{};rowsEl.innerHTML=rows.map(function(r){var item=catalog[r[0]]||{},q=Number(r[1])||0,p=Number(r[2])||0,ret=Number(r[3])===1;return '<div class="of-day511-row"><span><b>'+esc(item.name||item.id||'صنف')+(ret?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(item.barcode?' · '+esc(item.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-day511-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent=Number(hit.total||0).toFixed(2)+' ج.م';}
+    var chunkRetry=0,pendingSeekMs=0;
+    function clipUrl(cid,at,duration){return gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(at)+'&durationSec='+duration+'&quality=480&mode=fast&_='+Date.now();}
+    function loadChunk(next,isRetry){
+      if(!isRetry)chunkRetry=0;
+      var latestStart=Math.max(coverageStart,coverageEnd-30000);
+      chunkStart=Math.max(coverageStart,Math.min(Number(next)||coverageStart,latestStart));
+      var duration=Math.max(30,Math.min(900,Math.floor((coverageEnd-chunkStart)/1000)));
+      slider.value=String(Math.floor((chunkStart-dayReviewBounds.start)/60000));
+      status.textContent=chunkRetry?'إعادة الاتصال بالتسجيل تلقائيًا…':'جاري تجهيز '+new Date(chunkStart).toLocaleTimeString('ar-EG')+'…';status.style.display='block';
+      master.src=clipUrl(primaryCam,chunkStart,duration);master.load();master.play().catch(function(){});
+      if(slave){slave.src=clipUrl('8',chunkStart,duration);slave.load();slave.play().catch(function(){});}
+      renderAt();
+    }
+    // النطّ لحظة معيّنة: لو جوه المقطع الحالي نتحرك فيه، وإلا نحمّل المقطع اللي فيها
+    function seekToMs(targetMs){
+      var duration=Math.max(30,Math.min(900,Math.floor((coverageEnd-chunkStart)/1000)));
+      if(targetMs>=chunkStart&&targetMs<chunkStart+duration*1000&&master.readyState>=1){
+        var sec=Math.max(0,(targetMs-chunkStart)/1000);
+        master.currentTime=sec;if(slave)slave.currentTime=sec;
+        master.play().catch(function(){});if(slave)slave.play().catch(function(){});
+        renderAt();return;
+      }
+      pendingSeekMs=targetMs;
+      loadChunk(Math.max(coverageStart,targetMs-60000));
+    }
+    marks.querySelectorAll('[data-day-jump]').forEach(function(btn){btn.onclick=function(){var e=jumpEvents[Number(btn.getAttribute('data-day-jump'))];if(e)seekToMs(Number(e.atMs));};});
+    master.addEventListener('loadedmetadata',function(){if(!pendingSeekMs)return;var sec=Math.max(0,(pendingSeekMs-chunkStart)/1000);pendingSeekMs=0;if(sec>0&&isFinite(sec)){master.currentTime=sec;if(slave)slave.currentTime=sec;}renderAt();});
+    master.addEventListener('playing',function(){chunkRetry=0;status.style.display='none';});
+    master.addEventListener('timeupdate',renderAt);
+    master.addEventListener('seeking',renderAt);
+    if(slave){master.addEventListener('play',function(){slave.currentTime=master.currentTime;slave.play().catch(function(){});});master.addEventListener('pause',function(){slave.pause();});}
+    master.addEventListener('error',function(){if(chunkRetry<3&&document.documentElement.contains(ov)){chunkRetry++;status.style.display='block';status.textContent='إعادة الاتصال بالتسجيل تلقائيًا ('+chunkRetry+'/3)…';if(master._retryTimer)clearTimeout(master._retryTimer);master._retryTimer=setTimeout(function(){loadChunk(chunkStart,true);},2500);return;}status.style.display='block';status.textContent='التسجيل غير متاح في هذا التوقيت.';});
+    master.addEventListener('ended',function(){if(chunkStart+chunkMs<coverageEnd-30000)loadChunk(chunkStart+chunkMs);});
     slider.onchange=function(){loadChunk(dayReviewBounds.start+Number(slider.value)*60000);};ov.querySelector('[data-day-prev]').onclick=function(){loadChunk(chunkStart-chunkMs);};ov.querySelector('[data-day-next]').onclick=function(){loadChunk(chunkStart+chunkMs);};ov.querySelector('.of-cctv-playback-close').onclick=closePlaybackModal;ov.onclick=function(e){if(e.target===ov)closePlaybackModal();};loadChunk(chunkStart);
   }
   function renderDayRows(rows){
