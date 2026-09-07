@@ -101,22 +101,73 @@ function lf431Docs(snap){return (snap&&snap.docs?snap.docs:[]).map(d=>({id:d.id,
 function lf431Merge(base,fresh){
   const m=new Map(); (base||[]).forEach(x=>m.set(String(x.id),x)); (fresh||[]).forEach(x=>m.set(String(x.id),x)); return Array.from(m.values());
 }
+// v560: the full-history server fetch used to fail silently (bare console.warn)
+// with no retry and no visible trace — if it kept failing on a device, that
+// device's screens would only ever show whatever the 2-day "recent" listener
+// had accumulated since the device started using this build. That reads
+// exactly like "history only from the day I updated the app", not a real
+// data loss. Two fixes: (1) record diagnostics on window.salesHistoryDiagnostics
+// so a failure is visible instead of buried in devtools console, and (2) retry
+// once with plain getDocs (covers transient offline blips / server-API edge
+// cases) instead of waiting for the next full page reload.
+window.salesHistoryDiagnostics = window.salesHistoryDiagnostics || {};
+function lf431Report(name, patch){
+  const cur = window.salesHistoryDiagnostics[name] || {};
+  window.salesHistoryDiagnostics[name] = Object.assign(cur, patch, {updatedAt: Date.now()});
+}
 function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*1000){
   // production uses explicit cache/server APIs; the getDocs fallback only keeps the legacy node harness compatible.
   const _cacheGet=(typeof getDocsFromCache==='function')?getDocsFromCache:getDocs;
   const _serverGet=(typeof getDocsFromServer==='function')?getDocsFromServer:getDocs;
   // zero-server-read startup from persistent IndexedDB cache
-  _salesInitialAuthReady.then(()=>_cacheGet(fullQ)).then(s=>{if(!s.empty)apply(lf431Docs(s),'cache');}).catch(()=>{});
+  _salesInitialAuthReady.then(()=>_cacheGet(fullQ)).then(s=>{if(!s.empty){apply(lf431Docs(s),'cache');lf431Report(name,{cacheCount:s.size});}}).catch(e=>lf431Report(name,{cacheError:(e&&e.code)||String(e)}));
+  function runServerFetch(isRetry){
+    lf431Report(name,{status:'fetching',lastAttemptAt:Date.now()});
+    _salesInitialAuthReady.then(()=>_serverGet(fullQ)).then(s=>{
+      apply(lf431Docs(s),'server');
+      lf431Mark(name);
+      lf431Report(name,{status:'ok',error:null,serverCount:s.size,lastSuccessAt:Date.now()});
+    }).catch(e=>{
+      const code=(e&&e.code)||String(e);
+      console.warn('lf431 '+name,code);
+      lf431Report(name,{status:'error',error:code});
+      if(!isRetry){
+        setTimeout(()=>{
+          _salesInitialAuthReady.then(()=>getDocs(fullQ)).then(s=>{
+            apply(lf431Docs(s),'server-retry');
+            lf431Mark(name);
+            lf431Report(name,{status:'ok',error:null,serverCount:s.size,lastSuccessAt:Date.now(),recovered:true});
+          }).catch(e2=>{
+            const code2=(e2&&e2.code)||String(e2);
+            console.warn('lf431 retry '+name,code2);
+            lf431Report(name,{status:'error',error:code2});
+          });
+        },5000);
+      }
+    });
+  }
   // full history refresh only when stale, not every application start/reconnect
   if((Date.now()-lf431Last(name))>=ttlMs){
-    _salesInitialAuthReady.then(()=>_serverGet(fullQ)).then(s=>{apply(lf431Docs(s),'server');lf431Mark(name);}).catch(e=>console.warn('lf431 '+name,e&&e.code));
+    runServerFetch(false);
+  } else {
+    lf431Report(name,{status:'cached-fresh',note:'ttl not expired; call window.salesForceRefreshHistory() to force'});
   }
   // live only for recent records; merge into cached long history
   if(recentQ){
-    return onSnapshot(recentQ,s=>apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'recent'),e=>console.warn('lf431 recent '+name,e&&e.code));
+    return onSnapshot(recentQ,s=>apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'recent'),e=>{console.warn('lf431 recent '+name,e&&e.code);lf431Report(name,{recentError:(e&&e.code)||String(e)});});
   }
   return ()=>{};
 }
+// One-tap fix for "history only shows recent days": clears every lf431 TTL
+// marker so the next load forces a real server fetch for every collection
+// (points/shifts/submissions/rewards/deductions/commission/salary/advances/etc)
+// instead of trusting a possibly-stale or failed cache.
+window.salesForceRefreshHistory = function(){
+  try{
+    Object.keys(localStorage).forEach(function(k){ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
+  }catch(e){}
+  location.reload();
+};
 const LF431_RECENT_MS=2*24*3600000;
 const _recent=(col,field)=>query(col,where(field,'>=',Date.now()-LF431_RECENT_MS));
 // 🔍 نعرّض دوال الكشف عشان لوحة المراجعة (في بلوك تاني) تستخدمها

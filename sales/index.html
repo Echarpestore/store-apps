@@ -1017,7 +1017,10 @@
     <div class="panel">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
         <h3 style="margin:0;">سجل العمليات (مقسّم باليوم)</h3>
-        <button class="backBtn" id="exportPointsCsvBtn">⬇️ CSV كامل</button>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
+          <button class="backBtn" id="forceRefreshHistoryBtn" onclick="if(confirm('هيعيد تحميل كل السجلات من السيرفر (النقط/الحضور/السلف/الرواتب..) — ممكن ياخد شوية ثواني. متابع؟'))window.salesForceRefreshHistory()">🔄 تحديث كامل من السيرفر</button>
+          <button class="backBtn" id="exportPointsCsvBtn">⬇️ CSV كامل</button>
+        </div>
       </div>
       <p style="color:var(--sub); font-size:12px; margin:-4px 0 14px;">كل يوم يفتح لوحده بالضغط عليه. آخر 60 يوم بيظهروا هنا؛ التاريخ الأقدم من كده متاح بالكامل عن طريق تصدير CSV.</p>
       <div id="logList"></div>
