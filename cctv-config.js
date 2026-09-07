@@ -1,8 +1,7 @@
-/* ECHARPE CCTV branch profiles v510.
-   One shared, credential-free registry for POS and Office. Installations can
-   replace/extend profiles at runtime with localStorage key
-   `echarpe.cctv.profiles.v506` or by defining window.ECHARPE_CCTV_CONFIG
-   before this file loads. No camera/NVR password belongs in web code. */
+/* ECHARPE CCTV branch profiles v522.
+   The three production routes are authoritative. Old browser overrides are
+   deliberately ignored so one branch can never inherit another branch's
+   gateway or stream name. No camera/NVR password belongs in web code. */
 (function(){
   'use strict';
   var KEY='echarpe.cctv.profiles.v506';
@@ -19,8 +18,15 @@
       {id:'3',name:'CAM3',label:'كاميرا 3',stream:'glow_cam3_h264'},
       {id:'4',name:'CAM4',label:'كاميرا 4',stream:'glow_cam4_h264'}
     ]},
-    {id:'rehab',name:'الرحاب',aliases:['rehab','الرحاب'],gateway:'https://cctv-rehab.echarpe.store',localAgent:'http://127.0.0.1:1985',localEvidence:false,playback:false,cashierCamera:'1',cameras:[
-      {id:'1',name:'CAM1',label:'الكاشير',stream:'rehab_cam1_h264'}
+    {id:'rehab',name:'الرحاب',aliases:['rehab','الرحاب'],gateway:'https://cctv-rehab.echarpe.store',localAgent:'http://127.0.0.1:1985',localEvidence:false,playback:true,cashierCamera:'1',cameras:[
+      {id:'1',name:'CAM1',label:'الكاشير',stream:'rehab_cam1_h264'},
+      {id:'2',name:'CAM2',label:'كاميرا 2',stream:'rehab_cam2_h264'},
+      {id:'3',name:'CAM3',label:'كاميرا 3',stream:'rehab_cam3_h264'},
+      {id:'4',name:'CAM4',label:'كاميرا 4',stream:'rehab_cam4_h264'},
+      {id:'5',name:'CAM5',label:'كاميرا 5',stream:'rehab_cam5_h264'},
+      {id:'6',name:'CAM6',label:'كاميرا 6',stream:'rehab_cam6_h264'},
+      {id:'7',name:'CAM7',label:'كاميرا 7',stream:'rehab_cam7_h264'},
+      {id:'8',name:'CAM8',label:'كاميرا 8',stream:'rehab_cam8_h264'}
     ]}
   ];
   function norm(v){return String(v==null?'':v).trim().toLowerCase();}
@@ -35,9 +41,11 @@
     return {id:id,name:String(p.name||id),aliases:aliases,gateway:String(p.gateway||'').replace(/\/$/,''),localAgent:String(p.localAgent||'http://127.0.0.1:1985').replace(/\/$/,''),localEvidence:!!p.localEvidence,playback:id==='madinaty'?true:!!p.playback,cashierCamera:cashier,playbackCamera:cashier,cameras:cams};
   }
   function configured(){
-    var src=null;
-    try{src=window.ECHARPE_CCTV_CONFIG;}catch(e){}
-    if(!Array.isArray(src)){try{var raw=localStorage.getItem(KEY);if(raw)src=JSON.parse(raw);}catch(e){}}
+    /* v522: a stale override produced a Madinaty URL carrying a Rehab stream.
+       Clear it once. A deliberate same-page deployment override is still
+       supported for sold installations, but nothing persists in the browser. */
+    try{localStorage.removeItem(KEY);}catch(e){}
+    var src=null;try{src=window.ECHARPE_CCTV_CONFIG;}catch(e){}
     if(!Array.isArray(src)||!src.length)src=DEFAULTS;
     return src.map(cleanProfile).filter(Boolean);
   }
@@ -49,7 +57,8 @@
   function setProfiles(next){
     if(!Array.isArray(next)||!next.length)throw new Error('cctv_profiles_required');
     var cleaned=next.map(cleanProfile).filter(Boolean);if(!cleaned.length)throw new Error('cctv_profiles_invalid');
-    localStorage.setItem(KEY,JSON.stringify(cleaned));profiles=cleaned;return profiles.slice();
+    /* Session-only escape hatch for diagnostics. It cannot poison later visits. */
+    profiles=cleaned;return profiles.slice();
   }
   window.echarpeCctvProfiles=function(){return profiles.slice();};
   window.echarpeCctvProfile=find;

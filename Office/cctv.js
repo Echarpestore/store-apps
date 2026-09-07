@@ -24,9 +24,16 @@
     ]
   },{
     id:'rehab', name:'الرحاب', gateway:'https://cctv-rehab.echarpe.store',
-    liveAliases:['rehab','الرحاب'],
+    liveAliases:['rehab','الرحاب'], playback:true, playbackCamera:'1',
     cameras:[
-      {id:'1',name:'CAM1',label:'الكاشير',stream:'rehab_cam1_h264'}
+      {id:'1',name:'CAM1',label:'الكاشير',stream:'rehab_cam1_h264'},
+      {id:'2',name:'CAM2',label:'كاميرا 2',stream:'rehab_cam2_h264'},
+      {id:'3',name:'CAM3',label:'كاميرا 3',stream:'rehab_cam3_h264'},
+      {id:'4',name:'CAM4',label:'كاميرا 4',stream:'rehab_cam4_h264'},
+      {id:'5',name:'CAM5',label:'كاميرا 5',stream:'rehab_cam5_h264'},
+      {id:'6',name:'CAM6',label:'كاميرا 6',stream:'rehab_cam6_h264'},
+      {id:'7',name:'CAM7',label:'كاميرا 7',stream:'rehab_cam7_h264'},
+      {id:'8',name:'CAM8',label:'كاميرا 8',stream:'rehab_cam8_h264'}
     ]
   }];
   /* Production profiles are locked here too. Office must remain correct even
@@ -189,10 +196,11 @@
       '<div class="of-cctv-panel-head"><div class="of-cctv-camera-name"><b>'+esc(c.name)+'</b><small>'+esc(c.label)+'</small></div><div class="of-cctv-camera-actions"><button type="button" class="of-cctv-cam-toggle '+(on?'on':'off')+'" data-cctv-toggle="'+i+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+toggleLabel+' '+esc(c.name)+'"><span class="of-cctv-switch-track"><span class="of-cctv-switch-knob"></span></span><span class="of-cctv-switch-text">'+toggleLabel+'</span></button><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(on?'':' disabled')+'>⛶</button></div></div>'+
       (on?'<div class="of-cctv-panel-body of-cctv-video">'+liveMedia+'<div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div class="of-cctv-off-camera"><span>📹</span><b>'+esc(c.name)+'</b><small>'+esc(c.label)+' · متوقفة</small><em>اضغط تشغيل للمشاهدة</em></div></div>')+'</article>';
   }
+  function recordedCameras(x){return x.id==='rehab'?x.cameras.filter(function(c){return String(c.id)===String(x.playbackCamera);}):x.cameras;}
   function playbackUrl(atMs,durationMin,cameraId,offsetMs,quality){
     var x=b();if(!x.playback)return '';
     var t=Math.max(1,Number(atMs)||Date.now()),d=Math.min(60,Math.max(1,Number(durationMin)||30));
-    var cid=String(cameraId||x.playbackCamera||'1');if(!x.cameras.some(function(c){return String(c.id)===cid;}))cid=String(x.playbackCamera||x.cameras[0].id||'1');
+    var cid=String(cameraId||x.playbackCamera||'1');if(!recordedCameras(x).some(function(c){return String(c.id)===cid;}))cid=String(x.playbackCamera||x.cameras[0].id||'1');
     var q=Number(quality)===720?720:480;
     var u=x.gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(t)+'&durationSec='+encodeURIComponent(d*60)+'&quality='+q+(q===480?'&mode=fast':'');
     if(offsetMs!==undefined&&offsetMs!==null)u+='&offsetMs='+encodeURIComponent(Number(offsetMs)||0);
@@ -220,8 +228,8 @@
   function syncPlaybackPanel(){
     var panel=document.getElementById('ofCctvNvrReview');if(!panel)return;
     panel.style.display=b().playback?'block':'none';
-    var hint=document.getElementById('ofCctvNvrHint');if(hint)hint.textContent=b().playback?(b().id==='madinaty'?'تسجيل كمبيوتر الفرع — اختار اليوم والوقت، والتوقيت مستقل عن ساعة الـDVR.':'تسجيلات Hikvision الأصلية من هارد الـNVR — اختار الكاميرا واليوم والوقت.'):'';
-    var cs=document.getElementById('ofCctvNvrCamera');if(cs){var old=String(cs.value||b().playbackCamera||'1');cs.innerHTML=b().cameras.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+' · '+esc(c.label)+'</option>';}).join('');if(b().cameras.some(function(c){return String(c.id)===old;}))cs.value=old;else cs.value=String(b().playbackCamera||b().cameras[0].id||'1');}
+    var hint=document.getElementById('ofCctvNvrHint');if(hint)hint.textContent=b().playback?(b().id==='rehab'?'تسجيل الكاشير فقط على كمبيوتر الفرع · باقي الكاميرات للمشاهدة المباشرة':b().id==='madinaty'?'تسجيل كمبيوتر الفرع — اختار اليوم والوقت، والتوقيت مستقل عن ساعة الـDVR.':'تسجيلات Hikvision الأصلية من هارد الـNVR — اختار الكاميرا واليوم والوقت.'):'';
+    var cs=document.getElementById('ofCctvNvrCamera');if(cs){var old=String(cs.value||b().playbackCamera||'1'),available=recordedCameras(b());cs.innerHTML=available.map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+' · '+esc(c.label)+'</option>';}).join('');if(available.some(function(c){return String(c.id)===old;}))cs.value=old;else cs.value=String(b().playbackCamera||b().cameras[0].id||'1');}
   }
   function openPlaybackFromControls(){
     var di=document.getElementById('ofCctvNvrDate'),ti=document.getElementById('ofCctvNvrTime'),du=document.getElementById('ofCctvNvrDuration'),ca=document.getElementById('ofCctvNvrCamera');
@@ -236,7 +244,7 @@
   function renderLiveStatus(){var el=document.getElementById('ofCctvStatus');if(!el)return;var n=activeCameraCount();el.textContent=n?'● '+n+' LIVE':'● متوقف';el.classList.toggle('idle',!n);}
   function setAllCameras(on){
     var cams=b().cameras;
-    for(var i=0;i<4;i++)state.slots[i]=(on&&cams[i])?String(cams[i].id):'off';
+    state.slots=cams.map(function(c){return on?String(c.id):'off';});
     renderCameras();renderLiveStatus();
   }
   function renderLayouts(){
@@ -475,9 +483,10 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
     if((!snap||!snap.exists)&&!sale){alert('الفاتورة غير موجودة أو لم تصل إلى Office حتى الآن.');return;}
     if(!snap||!snap.exists){
       var saleProfile=window.ofCctvProfileFor(sale.branch),saleAt=Number(sale.createdAtMs||sale.atMs||0);
-      d={invoiceCode:String(invoiceCode),invoiceNo:sale.invoiceNo||'',saleId:sale.id||'',branch:sale.branch||'',branchProfile:saleProfile&&saleProfile.id||'',camera:saleProfile&&((saleProfile.cameras||[]).find(function(c){return String(c.id)===String(saleProfile.playbackCamera);})||{}).name||'CCTV',cameraId:saleProfile&&saleProfile.playbackCamera||'1',gateway:saleProfile&&saleProfile.gateway||'',video:'pc_ring_recording',videoAtMs:saleAt,clockSource:(saleProfile&&saleProfile.id==='madinaty')?'pos_pc':'',shots:{}};
+      d={invoiceCode:String(invoiceCode),invoiceNo:sale.invoiceNo||'',saleId:sale.id||'',branch:sale.branch||'',branchProfile:saleProfile&&saleProfile.id||'',camera:saleProfile&&((saleProfile.cameras||[]).find(function(c){return String(c.id)===String(saleProfile.playbackCamera);})||{}).name||'CCTV',cameraId:saleProfile&&saleProfile.playbackCamera||'1',gateway:saleProfile&&saleProfile.gateway||'',video:'pc_ring_recording',videoAtMs:saleAt,clockSource:(saleProfile&&(saleProfile.id==='madinaty'||saleProfile.id==='rehab'))?'pos_pc':'',shots:{}};
     }
     if(!timelineOk&&sale){timeline=window.ofCctvTimelineFromSale(sale);timelineOk=!!timeline;}
+    if(window.ofCctvProfileFor(d.branchProfile||d.branch)&&window.ofCctvProfileFor(d.branchProfile||d.branch).id==='rehab'){d.clockSource='pos_pc';d.cameraId='1';}
     var shots=d.shots||{};
     var profile=window.ofCctvProfileFor(d.branchProfile||d.branch);
     var localBranch=!!d.localSnapshots,gateway=String(d.gateway||(profile&&profile.gateway)||'').replace(/\/$/,'');
@@ -501,7 +510,7 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
     var cards=valid.map(function(k){var x=shots[k]||{};return '<button type="button" data-shot="'+k+'" class="of-inv506-shot"><img src="'+esc(shotUrl(k))+'" alt="'+esc(labels[k])+'"><div class="of-inv506-foot"><b>'+labels[k]+'</b><small>'+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleTimeString('ar-EG')+'</small></div></button>';}).join('');
     var hasTimeline=!!(timeline&&Array.isArray(timeline.events)&&timeline.events.length),timelineFallback=!!(timeline&&timeline.synthetic);
     var ov=document.createElement('div');ov.className='of-inv506-ov';ov.id='ofCctvShotOv';
-    ov.innerHTML='<div class="of-inv506-box"><div class="of-inv506-head"><div><b>🎬 مراجعة فاتورة '+esc(invoiceCode)+'</b><div class="of-inv506-muted">'+esc(d.camera||'CCTV')+' · '+valid.length+' لقطة'+(hasTimeline?(timelineFallback?' · السلة النهائية من الفاتورة':' · Timeline السلة محفوظ'):'')+'</div></div><div class="of-inv506-actions">'+(playbackReady?'<button id="ofInv506Video" class="of-inv506-btn of-inv506-blue">🎥 30 ثانية قبل + 30 بعد</button>':'')+(playbackReady&&hasTimeline?'<button id="ofInv506Sync" class="of-inv506-btn of-inv506-gold">🎬 الكاميرا + السلة</button>':'')+(!hasTimeline?'<button id="ofInv506Retry" class="of-inv506-btn">🔄 إعادة فحص السلة</button>':'')+'<button id="ofInv506Close" class="of-inv506-btn">إغلاق</button></div></div><div class="of-inv506-grid">'+(cards||'<div class="of-inv506-muted">الصور غير متاحة، التسجيل موجود.</div>')+'</div>'+(timelineFallback?'<div class="of-inv506-muted" style="margin-top:10px;padding:10px;border:1px solid #365314;background:#1a2e05;color:#d9f99d;border-radius:10px">تم استرجاع السلة من الفاتورة نفسها لأن Timeline التفصيلي لم يصل؛ الفيديو والتوقيت يظلان من تسجيل مدينتي.</div>':(!hasTimeline?'<div class="of-inv506-muted" style="margin-top:10px;padding:10px;border:1px solid #92400e;background:#451a03;color:#fde68a;border-radius:10px">السلة لم تصل من POS لهذه الفاتورة حتى الآن. اضغط «إعادة فحص السلة» بعد ثوانٍ.</div>':''))+'</div>';
+    ov.innerHTML='<div class="of-inv506-box"><div class="of-inv506-head"><div><b>🎬 مراجعة فاتورة '+esc(invoiceCode)+'</b><div class="of-inv506-muted">'+esc(d.camera||'CCTV')+' · '+valid.length+' لقطة'+(hasTimeline?(timelineFallback?' · السلة النهائية من الفاتورة':' · Timeline السلة محفوظ'):'')+'</div></div><div class="of-inv506-actions">'+(playbackReady?'<button id="ofInv506Video" class="of-inv506-btn of-inv506-blue">🎥 30 ثانية قبل + 30 بعد</button>':'')+(playbackReady&&hasTimeline?'<button id="ofInv506Sync" class="of-inv506-btn of-inv506-gold">🎬 الكاميرا + السلة</button>':'')+(!hasTimeline?'<button id="ofInv506Retry" class="of-inv506-btn">🔄 إعادة فحص السلة</button>':'')+'<button id="ofInv506Close" class="of-inv506-btn">إغلاق</button></div></div><div class="of-inv506-grid">'+(cards||'<div class="of-inv506-muted">الصور غير متاحة، التسجيل موجود.</div>')+'</div>'+(timelineFallback?'<div class="of-inv506-muted" style="margin-top:10px;padding:10px;border:1px solid #365314;background:#1a2e05;color:#d9f99d;border-radius:10px">تم استرجاع السلة من الفاتورة نفسها لأن Timeline التفصيلي لم يصل؛ المعروض هو السلة النهائية فقط، وليس توقيت كل حركة؛ الفيديو من تسجيل الفرع.</div>':(!hasTimeline?'<div class="of-inv506-muted" style="margin-top:10px;padding:10px;border:1px solid #92400e;background:#451a03;color:#fde68a;border-radius:10px">السلة لم تصل من POS لهذه الفاتورة حتى الآن. اضغط «إعادة فحص السلة» بعد ثوانٍ.</div>':''))+'</div>';
     document.body.appendChild(ov);
     function closeOverlay(x){if(x&&x.parentNode)x.parentNode.removeChild(x);}
     ov.querySelector('#ofInv506Close').onclick=function(){closeOverlay(ov);};ov.onclick=function(e){if(e.target===ov)closeOverlay(ov);};
@@ -516,7 +525,7 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
       var sourceName=d.clockSource==='pos_pc'?'كمبيوتر الفرع':'الـNVR';
       if(sync){start=Number(timeline.clipStartAtMs)||Math.max(1,Number(timeline.startedAtMs)-5000);var end=Number(timeline.clipEndAtMs)||Number(timeline.endedAtMs)+10000;duration=Math.max(30,Math.min(1800,Math.ceil((end-start)/1000)));events=(timeline.events||[]).slice().sort(function(a,b){return Number(a.atMs)-Number(b.atMs);});catalog=timeline.catalog||{};}
       var pv=document.createElement('div');pv.className='of-inv506-ov';pv.id='ofCctvInvoicePlayback';
-      pv.innerHTML='<div class="of-sync506"><div class="of-sync506-head"><div><b>'+(sync?'🎬 Playback الكاميرا والسلة':'🎥 فيديو الفاتورة')+'</b><div class="of-inv506-muted">'+(sync?'كل حركة تظهر في السلة عند نفس لحظتها في الفيديو':'30 ثانية قبل الحفظ + 30 ثانية بعده')+' · التسجيل محفوظ على '+sourceName+'</div></div><div class="of-inv506-actions"><select id="ofSync506Quality" class="of-inv506-btn"><option value="480" selected>480p سريع</option><option value="720">720p أوضح</option></select><button id="ofSync506Close" class="of-inv506-btn">✕</button></div></div><div class="of-sync506-body"><div class="of-sync506-video"><video id="ofSync506Video" controls autoplay muted playsinline preload="none"></video><div id="ofSync506Status" class="of-sync506-status">جاري تجهيز التسجيل من '+sourceName+'…</div></div>'+(sync?'<aside class="of-sync506-cart"><div class="of-sync506-carthead"><b>🛒 السلة في هذه اللحظة</b><div id="ofSync506Clock" class="of-inv506-muted">—</div><div id="ofSync506Event" class="of-sync506-event">قبل أول صنف</div></div><div id="ofSync506Rows" class="of-sync506-rows"></div><div class="of-sync506-total"><span>الإجمالي</span><strong id="ofSync506Total">0.00 ج.م</strong></div></aside>':'')+'</div></div>';
+      pv.innerHTML='<div class="of-sync506"><div class="of-sync506-head"><div><b>'+(sync?'🎬 Playback الكاميرا والسلة':'🎥 فيديو الفاتورة')+'</b><div class="of-inv506-muted">'+(sync?(timelineFallback?'السلة النهائية للفاتورة؛ توقيت الحركات التفصيلي غير متاح':'كل حركة تظهر في السلة عند نفس لحظتها في الفيديو'):'30 ثانية قبل الحفظ + 30 ثانية بعده')+' · التسجيل محفوظ على '+sourceName+'</div></div><div class="of-inv506-actions"><select id="ofSync506Quality" class="of-inv506-btn"><option value="480" selected>480p سريع</option><option value="720">720p أوضح</option></select><button id="ofSync506Close" class="of-inv506-btn">✕</button></div></div><div class="of-sync506-body"><div class="of-sync506-video"><video id="ofSync506Video" controls autoplay muted playsinline preload="none"></video><div id="ofSync506Status" class="of-sync506-status">جاري تجهيز التسجيل من '+sourceName+'…</div></div>'+(sync?'<aside class="of-sync506-cart"><div class="of-sync506-carthead"><b>🛒 السلة في هذه اللحظة</b><div id="ofSync506Clock" class="of-inv506-muted">—</div><div id="ofSync506Event" class="of-sync506-event">قبل أول صنف</div></div><div id="ofSync506Rows" class="of-sync506-rows"></div><div class="of-sync506-total"><span>الإجمالي</span><strong id="ofSync506Total">0.00 ج.م</strong></div></aside>':'')+'</div></div>';
       document.body.appendChild(pv);var video=pv.querySelector('#ofSync506Video'),status=pv.querySelector('#ofSync506Status'),quality=pv.querySelector('#ofSync506Quality');
       function stop(){if(retryTimer)clearTimeout(retryTimer);try{video.pause();video.removeAttribute('src');video.load();}catch(e){}closeOverlay(pv);}
       var videoRetry=0,retryTimer=0;function loadVideo(){if(retryTimer){clearTimeout(retryTimer);retryTimer=0;}status.className='of-sync506-status';status.textContent=videoRetry?'إعادة الاتصال بالتسجيل تلقائيًا…':'جاري تجهيز التسجيل من '+sourceName+'…';video.src=videoUrl(start,duration,quality.value)+'&retry='+Date.now();video.load();video.play().catch(function(){});}
