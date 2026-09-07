@@ -1,0 +1,23 @@
+'use strict';
+const assert=require('assert');
+const fs=require('fs');
+const path=require('path');
+const root=path.join(__dirname,'..');
+const app=fs.readFileSync(path.join(root,'sales','sales-app.js'),'utf8');
+const html=fs.readFileSync(path.join(root,'sales','index.html'),'utf8');
+const sw=fs.readFileSync(path.join(root,'sales','sw.js'),'utf8');
+
+let n=0; const ok=(cond,msg)=>{assert(cond,msg); n++;};
+ok(app.includes('id="erNiqabAttendance"'),'owner-only employee record has niqab toggle');
+ok(app.includes("niqabAttendance:!!ov.querySelector('#erNiqabAttendance')?.checked"),'toggle persists per employee');
+ok(app.includes("if(emp && emp.niqabAttendance === true)"),'bypass is scoped only to opted-in employee');
+ok(app.includes("setTimeout(()=> captureAttPhoto(video), 650)"),'niqab path captures mandatory photo without face wait');
+ok(app.includes("actionType !== 'in'"),'welcome is limited to clock-in');
+ok(app.includes("!emp.niqabWelcomeClockInAt && !localDone"),'welcome remains until successful clock-in with persistent + local fallback');
+ok(app.includes("niqabWelcomeClockInAt: doneAt"),'successful clock-in state persists to employee record');
+ok(app.includes("أهلاً يا ") && app.includes("من غير ما تحتاجي تكشفي وشك"),'welcome copy is friendly and clear');
+ok(app.includes("waitForFaceThenCapture(video, Date.now())"),'normal employees retain existing face-detection path');
+ok(app.includes("const dataUri = canvas.toDataURL('image/jpeg', 0.5)"),'photo remains mandatory audit capture');
+ok(/sales-app\.js\?v=(?:501|502|505|543|544|545)/.test(html),'sales app cache bust is current');
+ok(/store-apps-shell-v(?:501|502|505|543|544|545)/.test(sw),'service worker cache bust is current');
+console.log(`niqab attendance v501: ${n}/${n} PASS`);

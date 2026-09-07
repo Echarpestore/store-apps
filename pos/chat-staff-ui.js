@@ -400,7 +400,7 @@
       + ' border-radius:99px; padding:7px 13px; font-size:12px; font-family:inherit; cursor:pointer;'
       + ' white-space:nowrap; max-width:230px; overflow:hidden; text-overflow:ellipsis;}'
       + '.ccQuickChip:hover{background:#343b49;}'
-      + '#ccCompose{flex:0 1 auto; min-height:0; max-height:52vh; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; background:#1b1e26;}'
+      + '#ccCompose{flex:0 1 auto; min-height:0; max-height:52vh; overflow-y:auto; overscroll-behavior-y:auto; touch-action:pan-y; -webkit-overflow-scrolling:touch; background:#1b1e26;}'
       + '#ccBar{display:none; flex:0 0 auto; gap:8px; padding:9px 12px; background:#1b1e26;'
       + 'border-top:1px solid #2a2e39; align-items:flex-end;}'
       + '#ccText{flex:1; border:1px solid #2a2e39; border-radius:12px; padding:9px 12px;'
@@ -409,17 +409,22 @@
       + '.ccIco{border:none; background:#232733; color:#eceef2; border-radius:50%; width:40px;'
       + 'height:40px; font-size:17px; cursor:pointer; flex:0 0 auto;}'
       + '.ccIco.send{background:#C79A38; color:#14161c;}'
-      + '#ccImgPrev{display:none; padding:8px 12px; background:#1b1e26; gap:10px; align-items:center;}'
+      + '.ccIco.send.has-image{width:68px; border-radius:12px; font-size:12px; font-weight:900;}'
+      + '#ccImgPrev{display:none; padding:8px 12px; background:#1b1e26; gap:10px; align-items:center; flex-wrap:wrap;}'
       + '#ccImgPrev img{height:54px; border-radius:8px;}'
       + '#ccImgPrev label{font-size:12px; color:#9aa1af; display:flex; gap:5px; align-items:center;}'
-      + '#ccBandRow{display:none; gap:8px; padding:6px 12px; background:#1b1e26; align-items:center; flex-wrap:wrap;'
-      + 'max-height:38vh; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch;}'
+      // منطقة البندانة جزء من scroll المؤلف كله؛ scroll داخل scroll كان
+      // يحتجز لمسة الموبايل ويظهر كأن الشاشة علقت.
+      + '#ccBandRow{display:none; gap:8px; padding:6px 12px; background:#1b1e26; align-items:center; flex-wrap:wrap;}'
       + '#ccBandRow input{font-size:12px; padding:6px 8px; border:1px solid #2a2e39; border-radius:8px; background:#14161c; color:#eceef2;}'
       + '.ccBandChip{display:inline-flex; align-items:center; gap:6px; border:1.5px solid #2a2e39;'
       + 'background:#14161c; color:#c7cbd4; border-radius:99px; padding:5px 10px 5px 6px; font-size:11.5px;'
       + 'font-weight:700; cursor:pointer; font-family:inherit;}'
       + '.ccBandChip .dot{width:14px; height:14px; border-radius:50%; flex:0 0 auto; border:1px solid rgba(255,255,255,.25);}'
       + '.ccBandChip.on{border-color:#C79A38; background:rgba(199,154,56,.15); color:#eceef2;}'
+      + '@media (max-width:760px){#ccCompose{max-height:55dvh;}#ccImgPrev{align-items:flex-start;}'
+      + '#ccImgPrev #ccTryBc{flex:1 1 150px;min-width:0!important;}'
+      + '#ccImgPrev .ccSgName{flex:1 1 auto;}}'
       + '#ccBlock{border:1px solid #E5484D; background:none; color:#E5484D; border-radius:99px;'
       + 'padding:4px 11px; font-size:11.5px; font-weight:800; cursor:pointer; font-family:inherit;}';
     document.head.appendChild(css);
@@ -467,7 +472,7 @@
       + '<button class="ccIco" onclick="ccPickImage(\'gallery\')" title="اختار صورة من الجهاز">🖼️</button>'
       + '<button class="ccIco" onclick="ccOutfitToggle()" title="اقتراح طقم (٣ طرح)">🎨</button>'
       + '<textarea id="ccText" rows="1" placeholder="اكتب الرد…" maxlength="500"></textarea>'
-      + '<button class="ccIco send" onclick="ccSend()">➤</button>'
+      + '<button class="ccIco send" id="ccSendBtn" onclick="ccSend()" title="إرسال الرد">➤</button>'
       + '</div>'
       + '<input type="file" id="ccCamera" accept="image/*" capture="environment" style="display:none;">'
       + '<input type="file" id="ccFile" accept="image/*" style="display:none;">';
@@ -680,6 +685,25 @@
   }
   window.ccPickImage = ccPickImage;
 
+  // بعد الرجوع من كاميرا الهاتف، المتصفح أحيانًا يحافظ على scrollTop
+  // القديم رغم ظهور المعاينة في أول المؤلف؛ النتيجة أن الكود والبندانة
+  // موجودان فعلًا لكن خارج الشاشة. نرجع لأول المؤلف بعد اكتمال الـlayout.
+  function ccRevealImageControls(){
+    var compose = document.getElementById('ccCompose');
+    if(!compose) return;
+    compose.scrollTop = 0;
+    setTimeout(function(){ if(compose) compose.scrollTop = 0; }, 0);
+  }
+
+  function ccSyncSendButton(){
+    var btn = document.getElementById('ccSendBtn');
+    if(!btn) return;
+    var hasImage = !!CST.imgData;
+    btn.classList.toggle('has-image', hasImage);
+    btn.textContent = hasImage ? '➤ إرسال' : '➤';
+    btn.title = hasImage ? 'إرسال الطرحة للعميلة' : 'إرسال الرد';
+  }
+
   function onPickImage(e){
     var f = e.target.files && e.target.files[0];
     e.target.value = '';
@@ -690,6 +714,9 @@
       CST.imgData = data;
       document.getElementById('ccImgTag').src = data;
       document.getElementById('ccImgPrev').style.display = 'flex';
+      // تغيير الصورة لا يمسح كود الطرحة أو البندانة؛ الإلغاء الصريح فقط يمسحهم.
+      ccSyncSendButton();
+      ccRevealImageControls();
     });
   }
 
@@ -707,6 +734,8 @@
     var _bbi = document.getElementById('ccBandBcInfo'); if(_bbi) _bbi.textContent = '';
     CST.bandBcInfo = null;
     document.getElementById('ccImgPrev').style.display = 'none';
+    ccSyncSendButton();
+    var _compose = document.getElementById('ccCompose'); if(_compose) _compose.scrollTop = 0;
   }
 
   /* 🧢 إظهار/إخفاء صف ألوان وباركود البندانة — بيتمسحوا لو اتقفل

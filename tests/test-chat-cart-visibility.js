@@ -126,7 +126,7 @@ syntaxCheckAll(read('glow/index.html'), 'glow');
   assert(/CST\.bandSelected\.length >= CC_BAND_MAX/.test(P), '🔴 سقف الألوان بيتفحص عند الضغط على الزرار');
 
   // ٣) 🔴 التحقق قبل الإرسال — لازم يحصل **قبل** CST.sending = true
-  const iValidateColors = sendFn.indexOf("toast('اختاري ٢ لون على الأقل للبندانة'");
+  const iValidateColors = sendFn.indexOf("toast('اختاري لون واحد على الأقل للبندانة'");
   const iValidateBc = sendFn.indexOf("toast('حطي باركود البندانة");
   const iValidateBcReal = sendFn.indexOf("toast('باركود البندانة مش لاقياه في المخزون");
   const iSendingLock = sendFn.indexOf('CST.sending = true;');
