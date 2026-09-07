@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, getDocsFromCache, getDocsFromServer, query, where, Timestamp, runTransaction,
+  getFirestore, collection, addDoc, onSnapshot as firebaseOnSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, getDocsFromCache, getDocsFromServer, query, where, Timestamp, runTransaction,
   // 💬 للشات: chat-staff-ui.js مكتوب compat، فبنعرّضله العمليات دي
   orderBy, limit, writeBatch, increment, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -28,6 +28,52 @@ const _authPersistenceReady = setPersistence(_auth, browserLocalPersistence).cat
   return false;
 });
 window.salesAuthDiagnostics = { appName:'sales', state:'starting', attempts:0, lastError:'', changedAt:Date.now() };
+
+// v559: Firestore listeners must never start before the named Sales session
+// finishes restoring. A listener opened while signed out can terminate with
+// permission-denied and stays empty even if Auth signs in a moment later.
+function decodeSavedSalesLogin(){
+  try{
+    const raw=localStorage.getItem('sales_dev_cred');
+    if(!raw)return null;
+    const x=JSON.parse(decodeURIComponent(escape(atob(raw))));
+    return x&&x.e&&x.p?x:null;
+  }catch(_e){return null;}
+}
+let _salesBootstrapInProgress=true;
+let _salesListenersNeedReload=false;
+const _salesInitialAuthReady=_authPersistenceReady.then(()=>new Promise((resolve)=>{
+  let done=false,off=()=>{};
+  const finish=(user)=>{if(done)return;done=true;try{off();}catch(_e){}resolve(user||null);};
+  off=onAuthStateChanged(_auth,(user)=>finish(user),()=>finish(null));
+})).then(async(user)=>{
+  if(user&&!user.isAnonymous){window.salesAuthDiagnostics.state='connected';return true;}
+  const saved=decodeSavedSalesLogin();
+  if(!saved){window.salesAuthDiagnostics.state='signed_out';return false;}
+  window.salesAuthDiagnostics.state='recovering';
+  try{
+    await signInWithEmailAndPassword(_auth,saved.e,saved.p);
+    window.salesAuthDiagnostics.state='connected';
+    return true;
+  }catch(err){
+    window.salesAuthDiagnostics.lastError=err&&err.code?String(err.code):'';
+    console.warn('sales bootstrap relogin failed',err&&err.code);
+    return false;
+  }
+}).finally(()=>{_salesBootstrapInProgress=false;});
+
+// Keep the normal synchronous Firestore unsubscribe contract while delaying
+// the actual subscription until initial Sales authentication is settled.
+function onSnapshot(){
+  const args=Array.from(arguments);
+  let stopped=false,unsubscribe=()=>{};
+  _salesInitialAuthReady.then(()=>{
+    if(stopped)return;
+    if(!_auth.currentUser||_auth.currentUser.isAnonymous)_salesListenersNeedReload=true;
+    unsubscribe=firebaseOnSnapshot.apply(null,args);
+  });
+  return ()=>{stopped=true;try{unsubscribe();}catch(_e){}};
+}
 const db = getFirestore(app);
 // 🔗 نعرّض أدوات Firestore على window عشان بلوكات السكريبت التانية في الصفحة تقدر تستخدمها
 window.db = db;
@@ -60,10 +106,10 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
   const _cacheGet=(typeof getDocsFromCache==='function')?getDocsFromCache:getDocs;
   const _serverGet=(typeof getDocsFromServer==='function')?getDocsFromServer:getDocs;
   // zero-server-read startup from persistent IndexedDB cache
-  _cacheGet(fullQ).then(s=>{if(!s.empty)apply(lf431Docs(s),'cache');}).catch(()=>{});
+  _salesInitialAuthReady.then(()=>_cacheGet(fullQ)).then(s=>{if(!s.empty)apply(lf431Docs(s),'cache');}).catch(()=>{});
   // full history refresh only when stale, not every application start/reconnect
   if((Date.now()-lf431Last(name))>=ttlMs){
-    _serverGet(fullQ).then(s=>{apply(lf431Docs(s),'server');lf431Mark(name);}).catch(e=>console.warn('lf431 '+name,e&&e.code));
+    _salesInitialAuthReady.then(()=>_serverGet(fullQ)).then(s=>{apply(lf431Docs(s),'server');lf431Mark(name);}).catch(e=>console.warn('lf431 '+name,e&&e.code));
   }
   // live only for recent records; merge into cached long history
   if(recentQ){
@@ -1831,12 +1877,7 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
 let _autoReloginPromise = null;
 let _autoReloginTimer = null;
 function _savedSalesLogin(){
-  try{
-    const raw=localStorage.getItem('sales_dev_cred');
-    if(!raw)return null;
-    const x=JSON.parse(decodeURIComponent(escape(atob(raw))));
-    return x&&x.e&&x.p?x:null;
-  }catch(_e){return null;}
+  return decodeSavedSalesLogin();
 }
 function _salesAuthState(state, err){
   const d=window.salesAuthDiagnostics;
@@ -1851,6 +1892,7 @@ function _scheduleSalesRelogin(delay){
 }
 async function _tryAutoRelogin(){
   if(_auth.currentUser && !_auth.currentUser.isAnonymous)return true;
+  if(_salesBootstrapInProgress)return _salesInitialAuthReady.then(()=>!!(_auth.currentUser&&!_auth.currentUser.isAnonymous));
   if(_autoReloginPromise)return _autoReloginPromise;
   const saved=_savedSalesLogin();
   if(!saved){_salesAuthState('signed_out');refreshBranchUI();return false;}
@@ -1884,9 +1926,15 @@ onAuthStateChanged(_auth,(u)=>{
   if(u&&!u.isAnonymous){
     if(_autoReloginTimer){clearTimeout(_autoReloginTimer);_autoReloginTimer=null;}
     _salesAuthState('connected'); window.salesAuthDiagnostics.attempts=0;
+    if(_salesListenersNeedReload){
+      _salesListenersNeedReload=false;
+      setTimeout(()=>location.reload(),50);
+      return;
+    }
     refreshBranchUI();
     if(typeof window.replayAttendanceOutbox==='function')window.replayAttendanceOutbox();
   }else if(_savedSalesLogin()){
+    _salesListenersNeedReload=true;
     _salesAuthState('recovering'); refreshBranchUI(); _scheduleSalesRelogin(0);
   }else{
     _salesAuthState('signed_out'); refreshBranchUI();
