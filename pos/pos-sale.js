@@ -3945,11 +3945,17 @@ async function confirmPayment(){
     const _pend = cardPendingLegs(cardLegs);
     if(_pend.length){
       const _sum = cardPendingSum(cardLegs);
+      // 🎯 v583: التأكيد اليدوي نفسه Native confirm في Electron/Windows.
+      // في بعض الأجهزة الحوار يقفل ويرجع DOM لكن يسيب نافذة الـPOS من غير
+      // system focus؛ العرض: لا كتابة/اختيار خانة لحد Alt-Tab/زر Windows.
+      // نعلّم فترة الخطر قبل فتح الحوار، ونسترجع التركيز فور إغلاقه.
+      try{ if(typeof markWindowFocusRisk === 'function') markWindowFocusRisk('paymob-manual-confirm', 12000); }catch(_e){}
       const ok = confirm('⚠️ الماكينة لسه ماأكدتش ' + _sum.toFixed(2) + ' ج.م.\n\n'
         + 'متحفظش غير لو إيصال الماكينة طلع فعلًا ومكتوب عليه موافقة/APPROVED.\n'
         + 'لو الماكينة مطبعتش أو رفضت العملية، الفاتورة دي هتطلع عجز في التقفيل.\n\n'
         + 'إيصال الموافقة طلع من الماكينة؟');
       if(!ok) return;
+      try{ if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(80); }catch(_e){}
       const _tid = (typeof paymobTerminalId === 'function') ? paymobTerminalId() : null;
       const _added = [];
       _pend.forEach(function(l){
