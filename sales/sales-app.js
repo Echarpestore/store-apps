@@ -3027,13 +3027,19 @@ function publishMadinatyStaffState(){
         const id=String(b.employeeId||'');if(id&&unique.indexOf(id)>=0&&breakIds.indexOf(id)<0)breakIds.push(id);
       });
       const onFloor=unique.filter(id=>breakIds.indexOf(id)<0);
-      fetch('http://127.0.0.1:1985/echarpe-playback/staff-state',{
-        method:'POST',cache:'no-store',body:JSON.stringify({
-          version:555,branch:'madinaty',generatedAtMs:Date.now(),
-          clockedInCount:unique.length,openBreakCount:breakIds.length,
-          activeStaffCount:onFloor.length,employeeIds:onFloor
-        })
-      }).catch(()=>{});
+      const _staffPayload={
+        version:574,source:'sales_fallback',sourceHealthy:true,branch:'madinaty',generatedAtMs:Date.now(),
+        clockedInCount:unique.length,openBreakCount:breakIds.length,
+        activeStaffCount:onFloor.length,employeeIds:onFloor
+      };
+      const _staffUrl='http://127.0.0.1:1985/echarpe-playback/staff-state';
+      fetch(_staffUrl,{
+        method:'POST',mode:'cors',cache:'no-store',
+        headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(_staffPayload),keepalive:true
+      }).catch(()=>fetch(_staffUrl,{
+        method:'POST',mode:'no-cors',cache:'no-store',
+        headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(_staffPayload),keepalive:true
+      }).catch(()=>{}));
     }catch(_e){}
   },250);
 }
