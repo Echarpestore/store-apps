@@ -1492,10 +1492,15 @@ document.querySelectorAll('#tabsNav button[data-page]').forEach(function(b){
 const _ofMoreBtn = document.getElementById('officeMoreBtn');
 if(_ofMoreBtn) _ofMoreBtn.addEventListener('click', ofOpenMore);
 document.querySelectorAll('[data-office-go]').forEach(function(b){
-  b.addEventListener('click', function(){ ofGoPage(b.dataset.officeGo); });
+  b.addEventListener('click', function(){
+    const more=document.getElementById('officeMoreSheet');
+    // v582: اختيار صفحة من "المزيد" يستبدل خطوة القائمة بدل إضافتها.
+    // Back يرجع للصفحة السابقة مباشرة ولا يعيد فتح القائمة كخطوة وهمية.
+    ofGoPage(b.dataset.officeGo,{replace:!!(more&&more.classList.contains('on'))});
+  });
 });
 const _ofMoreSheet = document.getElementById('officeMoreSheet');
-if(_ofMoreSheet) _ofMoreSheet.addEventListener('click', function(e){ if(e.target === _ofMoreSheet) ofCloseMore(); });
+if(_ofMoreSheet) _ofMoreSheet.addEventListener('click', function(e){ if(e.target === _ofMoreSheet){ try{ if(history.state&&history.state.officeNavV64==='more') history.back(); else ofCloseMore(); }catch(err){ ofCloseMore(); } } });
 /* 💼 تبويبات التوظيف الفرعية
    ------------------------------------------------------------
    نفس نمط `.daySub` بالظبط — إخفاء/إظهار بس، **مفيش إعادة رسم**.
@@ -3392,6 +3397,34 @@ window.ofLeaveContextHtml = ofLeaveContextHtml;
 /* ============================================================
    🏠 الرئيسية — صاحب البيزنس يشوف اللي محتاجه في 10 ثواني
    ============================================================ */
+var _ofOwnerSalesCache={};
+function ofOwnerPeriodBounds(kind){
+  var date=String((document.getElementById('dayDate')||{}).value||''); if(!date)return null;
+  if(kind==='day')return ofBizDayRange(date);
+  var a=date.split('-').map(Number), first=String(a[0])+'-'+String(a[1]).padStart(2,'0')+'-01';
+  var next=new Date(a[0],a[1],1), nextKey=next.getFullYear()+'-'+String(next.getMonth()+1).padStart(2,'0')+'-01';
+  var r1=ofBizDayRange(first),r2=ofBizDayRange(nextKey);return {start:r1.start,end:r2.start};
+}
+function ofOwnerSalesRender(rows,kind,bounds){
+  var host=document.getElementById('ofSalesAllBody');if(!host)return;
+  var by={},count=0,total=0;
+  (rows||[]).forEach(function(x){var t=ofSaleTs(x);if(!t||t<bounds.start||t>=bounds.end)return;var br=String(x.branch||'غير محدد'),v=Number(x.total)||0;by[br]=(by[br]||0)+v;total+=v;count++;});
+  var names=Object.keys(by).sort(function(a,b){return by[b]-by[a];});
+  host.innerHTML=(names.length?'<div class="of-owner-sales-grid">'+names.map(function(br){return '<div class="of-owner-sales-kpi"><b>'+ofMoney(by[br])+' ج.م</b><span>🏬 '+esc(br)+'</span></div>';}).join('')+'</div>':'<div class="empty">مفيش مبيعات في الفترة دي</div>')+'<div class="of-owner-sales-total"><span>الإجمالي · '+count+' فاتورة</span><span>'+ofMoney(total)+' ج.م</span></div>';
+}
+async function ofLoadOwnerSales(kind){
+  var host=document.getElementById('ofSalesAllBody'),bounds=ofOwnerPeriodBounds(kind);if(!host||!bounds)return;
+  var key=kind+':'+bounds.start+':'+bounds.end,hit=_ofOwnerSalesCache[key];
+  if(hit){ofOwnerSalesRender(hit,kind,bounds);return;}
+  host.innerHTML='<div class="empty">جاري تحميل مبيعات كل الفروع…</div>';
+  try{
+    var snap=await db.collection('pos_test_sales').where('createdAt','>=',firebase.firestore.Timestamp.fromMillis(bounds.start)).where('createdAt','<',firebase.firestore.Timestamp.fromMillis(bounds.end)).get();
+    var rows=snap.docs.map(function(d){var x=d.data()||{};x.id=d.id;return x;});_ofOwnerSalesCache[key]=rows;ofOwnerSalesRender(rows,kind,bounds);
+  }catch(e){host.innerHTML='<div class="empty" style="color:var(--minus)">تعذر تحميل الإجمالي: '+esc(e.code||e.message||e)+'</div>';}
+}
+window.ofLoadOwnerSales=ofLoadOwnerSales;
+setTimeout(function(){var d=document.getElementById('ofSalesAllDay'),m=document.getElementById('ofSalesAllMonth');if(d)d.onclick=function(){ofLoadOwnerSales('day');};if(m)m.onclick=function(){ofLoadOwnerSales('month');};},0);
+
 function renderOfficeHomeSummary(){
   const host = document.getElementById('officeHomeSummary');
   if(!host || typeof D === 'undefined') return;

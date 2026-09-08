@@ -383,6 +383,11 @@
 }
 </style>
 
+
+<style id="ofOfficeV582Style">
+.of-owner-sales-overview{overflow:hidden}.of-owner-sales-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.of-owner-sales-actions button{border:1px solid var(--line);background:var(--panel2);color:var(--txt);border-radius:11px;padding:10px;font-weight:900;cursor:pointer}.of-owner-sales-body{margin-top:10px}.of-owner-sales-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.of-owner-sales-kpi{border:1px solid var(--line);background:var(--panel2);border-radius:12px;padding:10px;min-width:0}.of-owner-sales-kpi b{display:block;font-size:18px}.of-owner-sales-kpi span{display:block;color:var(--sub);font-size:11px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.of-owner-sales-total{margin-top:8px;border-top:1px solid var(--line);padding-top:9px;display:flex;justify-content:space-between;font-weight:900}.of-cctv-multibranch{margin:10px 0 12px;padding:10px;background:#070c16;border:1px solid #1c2738;border-radius:14px;color:#fff;overflow:hidden}.of-cctv-multi-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.of-cctv-multi-head small{display:block;color:#94a3b8;margin-top:3px}.of-cctv-multi-head button{border:1px solid #334155;background:#111827;color:#fff;border-radius:9px;padding:7px 9px;font-weight:800}.of-cctv-multi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.of-cctv-multi-card{min-width:0;border:1px solid #263449;border-radius:12px;overflow:hidden;background:#0b1220}.of-cctv-multi-card-head{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:8px}.of-cctv-multi-card-head button{border:1px solid #334155;background:#172033;color:#fff;border-radius:8px;padding:6px 8px;font-weight:800}.of-cctv-multi-media{height:180px;background:#000;display:flex;align-items:center;justify-content:center}.of-cctv-multi-media iframe,.of-cctv-multi-media img{width:100%;height:100%;border:0;display:block;object-fit:contain}.of-cctv-multi-off{color:#94a3b8;text-align:center;font-size:12px;padding:20px}.of-cctv-playback-modal{max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px)}.of-cctv-playback-head{flex-wrap:wrap}.of-cctv-playback-head>div{max-width:100%;overflow-x:auto;padding-bottom:2px}.of-cctv-playback-modal video{min-width:0;min-height:0;object-fit:contain;background:#000}
+@media(max-width:900px){.of-cctv-multi-grid{grid-template-columns:1fr}.of-cctv-multi-media{height:220px}.of-owner-sales-grid{grid-template-columns:1fr}.of-cctv-playback-modal{width:100%;height:100dvh;max-width:none;max-height:none;border-radius:0}.of-cctv-playback-head>div{width:100%}}
+</style>
 <style id="ofCctvV503Style">
 /* v503 — fixed four-camera wall with independent premium on/off switches. */
 .of-cctv-start-all,.of-cctv-stop-all{border-radius:10px!important;padding:7px 10px!important;font:inherit!important;font-size:9px!important;font-weight:900!important;cursor:pointer!important}
@@ -456,6 +461,11 @@
   <!-- 🔔 الوارد -->
   <section class="tabPage on" id="page-day">
     <div id="officeHomeSummary"></div>
+    <div class="card of-owner-sales-overview" id="officeSalesOverview">
+      <div class="row"><div><b>📊 إجمالي مبيعات الفروع</b><div class="hint">اعرض كل الفروع لليوم أو الشهر عند الطلب — بدون قراءات مستمرة في الخلفية.</div></div></div>
+      <div class="of-owner-sales-actions"><button type="button" id="ofSalesAllDay">اليوم المختار</button><button type="button" id="ofSalesAllMonth">الشهر المختار</button></div>
+      <div id="ofSalesAllBody" class="of-owner-sales-body"><div class="empty">اختار اليوم فوق واضغط اليوم أو الشهر</div></div>
+    </div>
     <div class="card" style="position:sticky; top:0; z-index:5;">
       <div style="display:flex; gap:6px;">
         <select id="dayBranch" style="flex:1;"></select>
@@ -759,6 +769,10 @@
         </div>
       </div>
       <div id="ofCctvWarn" class="of-cctv-warning"></div>
+      <section class="of-cctv-multibranch" id="ofCctvMultiBranch">
+        <div class="of-cctv-multi-head"><div><b>🏬 نظرة كل الفروع</b><small>شغّل كاميرا الكاشير لأي فرع بشكل مستقل — تشغيل فرع لا يعيد تشغيل الفروع الأخرى.</small></div><button type="button" id="ofCctvMultiStop">■ إيقاف الكل</button></div>
+        <div class="of-cctv-multi-grid" id="ofCctvMultiGrid"></div>
+      </section>
       <section class="of-cctv-pinned-live" id="ofCctvPinnedLive">
         <div class="of-cctv-fixed-label"><span>🛒 السلة LIVE</span><small>ثابتة — لا تتغير</small></div>
         <div class="of-cctv-pinned-live-body" id="ofCctvPinnedLiveBody"></div>
@@ -885,7 +899,7 @@
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=545"></script>
 <script src="../cctv-config.js?v=549"></script>
-<script src="cctv.js?v=574"></script>
-<script src="office.js?v=552"></script>
+<script src="cctv.js?v=582"></script>
+<script src="office.js?v=582"></script>
 </body>
 </html>

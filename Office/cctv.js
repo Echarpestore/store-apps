@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v533
+/* ECHARPE Office CCTV v582
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -41,7 +41,7 @@
   var BRANCHES=FALLBACK_BRANCHES.map(function(x){
     return {id:x.id,name:x.name,gateway:x.gateway,liveAliases:x.aliases||x.liveAliases||[x.id,x.name],playback:!!x.playback,playbackCamera:String(x.cashierCamera||x.playbackCamera||'1'),cameras:x.cameras||[]};
   });
-  var state={active:false,branch:'madinaty',layout:4,slots:['off','off','off','off']};
+  var state={active:false,branch:'madinaty',layout:4,slots:['off','off','off','off'],multi:{madinaty:false,glow:false,rehab:false}};
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});}
   function money(v){return Number(v||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' ج.م';}
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
@@ -49,6 +49,8 @@
   function liveStreamName(c){return c.liveStream||c.stream;}
   function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(liveStreamName(c))+'&mode=mse&background=false';}
   function frameUrl(c){return b().gateway+'/api/frame.jpeg?src='+encodeURIComponent(liveStreamName(c))+'&_=';}
+  function profileStreamUrl(p,c){return p.gateway+'/stream.html?src='+encodeURIComponent(c.liveStream||c.stream)+'&mode=mse&background=false';}
+  function profileFrameUrl(p,c){return p.gateway+'/api/frame.jpeg?src='+encodeURIComponent(c.liveStream||c.stream)+'&_=';}
   function profileFor(branch){
     var n=String(branch||'').trim().toLowerCase();
     return BRANCHES.find(function(p){return p.id===n||(p.liveAliases||[]).some(function(a){var q=String(a||'').toLowerCase();return q&&(n===q||n.indexOf(q)>=0);});})||null;
@@ -181,6 +183,15 @@
     ['loadeddata','playing'].forEach(function(ev){v.addEventListener(ev,function(){if(v._retryTimer){clearTimeout(v._retryTimer);v._retryTimer=null;}});});
     try{var r=v.play();if(r&&r.catch)r.catch(function(){});}catch(e){}
   }
+  function multiCamera(p){return p.cameras.find(function(c){return String(c.id)===String(p.playbackCamera);})||p.cameras[0];}
+  function stopMultiCard(card){if(!card)return;stopPanel(card);}
+  function multiCardHtml(p){
+    var on=!!state.multi[p.id],c=multiCamera(p),useMse=!!c.liveStream||p.id!=='madinaty';
+    var media=useMse?'<iframe data-stream-src="'+esc(profileStreamUrl(p,c))+'" src="'+esc(profileStreamUrl(p,c))+'" allow="autoplay; fullscreen" allowfullscreen></iframe>':'<img data-live-frame="'+esc(profileFrameUrl(p,c))+'" alt="'+esc(p.name)+' live">';
+    return '<article class="of-cctv-multi-card" data-multi-branch="'+esc(p.id)+'"><div class="of-cctv-multi-card-head"><div><b>'+esc(p.name)+'</b><small style="display:block;color:#94a3b8">'+esc(c.name)+' · '+esc(c.label)+'</small></div><button type="button" data-multi-toggle="'+esc(p.id)+'">'+(on?'■ إيقاف':'▶ تشغيل')+'</button></div><div class="of-cctv-multi-media">'+(on?media:'<div class="of-cctv-multi-off">📹 متوقفة — شغّلها وقت الحاجة</div>')+'</div></article>';
+  }
+  function bindMultiCard(card){if(!card)return;var btn=card.querySelector('[data-multi-toggle]');if(btn)btn.onclick=function(){var id=btn.dataset.multiToggle,p=BRANCHES.find(function(x){return x.id===id;});if(!p)return;state.multi[id]=!state.multi[id];var fresh=document.createElement('div');fresh.innerHTML=multiCardHtml(p);var next=fresh.firstElementChild;stopMultiCard(card);card.replaceWith(next);bindMultiCard(next);};card.querySelectorAll('img[data-live-frame]').forEach(armSnapshotFrame);}
+  function renderMulti(){var grid=document.getElementById('ofCctvMultiGrid');if(!grid)return;grid.innerHTML=BRANCHES.map(multiCardHtml).join('');grid.querySelectorAll('.of-cctv-multi-card').forEach(bindMultiCard);var stop=document.getElementById('ofCctvMultiStop');if(stop)stop.onclick=function(){Object.keys(state.multi).forEach(function(k){state.multi[k]=false;});grid.querySelectorAll('.of-cctv-multi-card').forEach(stopMultiCard);renderMulti();};}
   function renderLive(){
     var body=document.getElementById('ofCctvPinnedLiveBody');
     if(body)body.innerHTML=posLiveHtml(liveDoc());
@@ -277,25 +288,24 @@
     panel.classList.add('of-cctv-panel-focus');document.body.classList.add('of-cctv-lock');
     if(btn){btn.textContent='✕';btn.title='خروج من ملء الشاشة';}enterNativeFs(panel);
   }
+  function bindCameraPanel(panel){
+    if(!panel)return;
+    var toggle=panel.querySelector('[data-cctv-toggle]');if(toggle)toggle.onclick=function(){var i=Number(toggle.dataset.cctvToggle),c=b().cameras[i];if(!c)return;state.slots[i]=String(state.slots[i])===String(c.id)?'off':String(c.id);var box=document.createElement('div');box.innerHTML=cameraCard(c,i);var next=box.firstElementChild;stopPanel(panel);panel.replaceWith(next);bindCameraPanel(next);renderLiveStatus();};
+    var full=panel.querySelector('[data-cctv-full]');if(full)full.onclick=function(){togglePanelFocus(panel,full);};
+    panel.querySelectorAll('video[data-stream-src]').forEach(armCameraPlayer);panel.querySelectorAll('img[data-live-frame]').forEach(armSnapshotFrame);
+  }
   function renderCameras(){
     var grid=document.getElementById('ofCctvCameraGrid');if(!grid)return;
     grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);
     grid.classList.remove('of-cctv-camera-grid-1','of-cctv-camera-grid-2','of-cctv-camera-grid-4');
     grid.classList.add('of-cctv-camera-grid-'+Math.min(4,Math.max(1,b().cameras.length)));
     grid.innerHTML=b().cameras.map(cameraCard).join('');
-    grid.querySelectorAll('[data-cctv-toggle]').forEach(function(btn){btn.onclick=function(){
-      var i=Number(btn.dataset.cctvToggle),c=b().cameras[i];if(!c)return;
-      state.slots[i]=String(state.slots[i])===String(c.id)?'off':String(c.id);
-      renderCameras();renderLiveStatus();
-    };});
-    grid.querySelectorAll('[data-cctv-full]').forEach(function(btn){btn.onclick=function(){togglePanelFocus(grid.querySelector('.of-cctv-panel[data-panel="'+btn.dataset.cctvFull+'"]'),btn);};});
-    grid.querySelectorAll('video[data-stream-src]').forEach(armCameraPlayer);
-    grid.querySelectorAll('img[data-live-frame]').forEach(armSnapshotFrame);
+    grid.querySelectorAll('.of-cctv-panel').forEach(bindCameraPanel);
     renderLiveStatus();
   }
   function render(){
     if(!state.active)return;
-    try{renderBranches();renderLayouts();}catch(e){console.warn('cctv branches',e);}
+    try{renderBranches();renderLayouts();renderMulti();}catch(e){console.warn('cctv branches',e);}
     var live=document.getElementById('ofCctvPinnedLive');if(live)live.setAttribute('data-branch',state.branch);
     try{renderLive();}catch(e){console.warn('cctv pos live',e);var body=document.getElementById('ofCctvPinnedLiveBody');if(body)body.innerHTML='<div class=\"of-cctv-empty\"><div><b>POS Live غير متاح مؤقتًا</b><small>الكاميرات مستمرة بشكل مستقل</small></div></div>';}
     try{renderCameras();}catch(e){console.warn('cctv cameras',e);var grid=document.getElementById('ofCctvCameraGrid');if(grid)grid.innerHTML='<div class=\"of-cctv-day-empty\">تعذر رسم الكاميرات: '+esc(e&&e.message||e)+'</div>';}
@@ -307,7 +317,7 @@
     if(_liveRaf)return;
     _liveRaf=requestAnimationFrame(function(){_liveRaf=0;if(state.active&&!document.hidden)renderLive();});
   }
-  function stop(){state.active=false;if(_liveRaf){cancelAnimationFrame(_liveRaf);_liveRaf=0;}clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvCameraGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}}
+  function stop(){state.active=false;if(_liveRaf){cancelAnimationFrame(_liveRaf);_liveRaf=0;}clearFocusClasses();exitNativeFs();var grid=document.getElementById('ofCctvCameraGrid');if(grid){grid.querySelectorAll('.of-cctv-panel').forEach(stopPanel);grid.innerHTML='';}var multi=document.getElementById('ofCctvMultiGrid');if(multi){multi.querySelectorAll('.of-cctv-multi-card').forEach(stopMultiCard);multi.innerHTML='';}Object.keys(state.multi).forEach(function(k){state.multi[k]=false;});}
   function start(){state.active=true;resetLiveSlots();render();}
   function dayBounds(v){
     var a=String(v||'').split('-').map(Number); if(a.length!==3||!a[0])return null;
