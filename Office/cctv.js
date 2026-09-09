@@ -163,7 +163,7 @@
   }
   function stopPanel(panel){panel.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}});panel.querySelectorAll('iframe[data-stream-src]').forEach(function(f){try{f.src='about:blank';f.remove();}catch(e){}});panel.querySelectorAll('img[data-live-frame]').forEach(function(img){try{if(img._frameTimer)clearTimeout(img._frameTimer);img.onload=null;img.onerror=null;img.removeAttribute('src');}catch(e){}});}
   function armSnapshotFrame(img){
-    if(!img)return;var base=img.getAttribute('data-live-frame'),delay=900;
+    if(!img)return;var base=img.getAttribute('data-live-frame'),delay=Math.max(900,Number(img.getAttribute('data-frame-delay')||900));
     function next(ms){if(img._frameTimer)clearTimeout(img._frameTimer);img._frameTimer=setTimeout(load,ms);}
     function load(){if(!state.active||document.hidden||!document.documentElement.contains(img))return;img.onload=function(){img.classList.add('is-ready');next(delay);};img.onerror=function(){img.classList.remove('is-ready');next(2500);};img.src=base+Date.now();}
     load();
@@ -186,9 +186,12 @@
   function multiCamera(p){return p.cameras.find(function(c){return String(c.id)===String(p.playbackCamera);})||p.cameras[0];}
   function stopMultiCard(card){if(!card)return;stopPanel(card);}
   function multiCardHtml(p){
-    var on=!!state.multi[p.id],c=multiCamera(p),useMse=!!c.liveStream||p.id!=='madinaty';
-    var media=useMse?'<iframe data-stream-src="'+esc(profileStreamUrl(p,c))+'" src="'+esc(profileStreamUrl(p,c))+'" allow="autoplay; fullscreen" allowfullscreen></iframe>':'<img data-live-frame="'+esc(profileFrameUrl(p,c))+'" alt="'+esc(p.name)+' live">';
-    return '<article class="of-cctv-multi-card" data-multi-branch="'+esc(p.id)+'"><div class="of-cctv-multi-card-head"><div><b>'+esc(p.name)+'</b><small style="display:block;color:#94a3b8">'+esc(c.name)+' · '+esc(c.label)+'</small></div><button type="button" data-multi-toggle="'+esc(p.id)+'">'+(on?'■ إيقاف':'▶ تشغيل')+'</button></div><div class="of-cctv-multi-media">'+(on?media:'<div class="of-cctv-multi-off">📹 متوقفة — شغّلها وقت الحاجة</div>')+'</div></article>';
+    var on=!!state.multi[p.id],c=multiCamera(p);
+    // v585 RESOURCE-SAFE: the all-branches overview uses throttled JPEG
+    // snapshots, never another continuous MSE/RTSP session. This prevents
+    // Office overview traffic from competing with branch recording.
+    var media='<img data-live-frame="'+esc(profileFrameUrl(p,c))+'" data-frame-delay="3500" alt="'+esc(p.name)+' live">';
+    return '<article class="of-cctv-multi-card" data-multi-branch="'+esc(p.id)+'"><div class="of-cctv-multi-card-head"><div><b>'+esc(p.name)+'</b><small style="display:block;color:#94a3b8">'+esc(c.name)+' · '+esc(c.label)+' · صور متجددة</small></div><button type="button" data-multi-toggle="'+esc(p.id)+'">'+(on?'■ إيقاف':'▶ تشغيل')+'</button></div><div class="of-cctv-multi-media">'+(on?media:'<div class="of-cctv-multi-off">📹 متوقفة — شغّلها وقت الحاجة</div>')+'</div></article>';
   }
   function bindMultiCard(card){if(!card)return;var btn=card.querySelector('[data-multi-toggle]');if(btn)btn.onclick=function(){var id=btn.dataset.multiToggle,p=BRANCHES.find(function(x){return x.id===id;});if(!p)return;state.multi[id]=!state.multi[id];var fresh=document.createElement('div');fresh.innerHTML=multiCardHtml(p);var next=fresh.firstElementChild;stopMultiCard(card);card.replaceWith(next);bindMultiCard(next);};card.querySelectorAll('img[data-live-frame]').forEach(armSnapshotFrame);}
   function renderMulti(){var grid=document.getElementById('ofCctvMultiGrid');if(!grid)return;grid.innerHTML=BRANCHES.map(multiCardHtml).join('');grid.querySelectorAll('.of-cctv-multi-card').forEach(bindMultiCard);var stop=document.getElementById('ofCctvMultiStop');if(stop)stop.onclick=function(){Object.keys(state.multi).forEach(function(k){state.multi[k]=false;});grid.querySelectorAll('.of-cctv-multi-card').forEach(stopMultiCard);renderMulti();};}
