@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v594
+/* ECHARPE Office CCTV v595
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -224,8 +224,6 @@
   function closePlaybackModal(){
     var ov=document.getElementById('ofCctvPlaybackOv');if(!ov)return false;
     ov.querySelectorAll('iframe').forEach(function(fr){fr.src='about:blank';});ov.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();}catch(e){}});
-    try{if(typeof playbackAbort!=='undefined'&&playbackAbort)playbackAbort.abort();}catch(e){}
-    try{if(typeof playbackBlobUrl!=='undefined'&&playbackBlobUrl)URL.revokeObjectURL(playbackBlobUrl);}catch(e){}
     ov.remove();return true;
   }
   function armPlaybackBackGuard(){
@@ -248,46 +246,33 @@
     var u=playbackUrl(atMs,durationMin,cameraId,offsetMs);if(!u){alert('التسجيل مش متاح للفرع ده.');return;}
     closePlaybackModal();
     var ov=document.createElement('div');ov.id='ofCctvPlaybackOv';ov.className='of-cctv-playback-ov';
-    var videoOnly=(x.id==='glow'||x.id==='madinaty');
-    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><b>🎞️ مراجعة التسجيل · '+esc(x.name)+'</b><div>'+(videoOnly?'<span class="of-cctv-playback-noaudio">🔇 بدون صوت</span>':'<button type="button" data-pb-sound class="of-cctv-playback-close">🔊 تشغيل الصوت</button>')+'<select data-pb-quality aria-label="جودة التسجيل"><option value="480" selected>480p سريع</option><option value="720">720p</option></select><a class="of-cctv-playback-external" href="'+esc(u)+'" target="_blank" rel="noopener">فتح منفصل ↗</a><button type="button" class="of-cctv-playback-close" data-pb-close aria-label="إغلاق">✕</button></div></div><video controls autoplay playsinline src="'+esc(u)+'"></video><div data-pb-status style="display:block;padding:8px;background:#0f172a;color:#cbd5e1;text-align:center;font-size:12px">جاري تجهيز دقيقة التسجيل…</div><div style="display:flex;gap:8px;align-items:center;justify-content:center;padding:9px;background:#111827;color:#fff"><button type="button" data-pb-prev class="of-cctv-playback-close">⏮ السابق</button><b data-pb-clock></b><button type="button" data-pb-next class="of-cctv-playback-close">التالي ⏭</button></div></div>';
+    var videoOnly=(x.id==='glow'||x.id==='madinaty'),isGlow=(x.id==='glow');
+    var glowViewer=isGlow?(String(x.gateway||'').replace(/\/$/,'')+'/echarpe-playback/view?camera='+encodeURIComponent(String(cameraId||x.playbackCamera||'1'))+'&atMs='+encodeURIComponent(String(atMs))+'&durationMin='+encodeURIComponent(String(durationMin))):'';
+    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><b>🎞️ مراجعة التسجيل · '+esc(x.name)+'</b><div>'+(videoOnly?'<span class="of-cctv-playback-noaudio">🔇 بدون صوت</span>':'<button type="button" data-pb-sound class="of-cctv-playback-close">🔊 تشغيل الصوت</button>')+(isGlow?'':'<select data-pb-quality aria-label="جودة التسجيل"><option value="480" selected>480p سريع</option><option value="720">720p</option></select>')+'<a class="of-cctv-playback-external" href="'+esc(isGlow?glowViewer:u)+'" target="_blank" rel="noopener">فتح منفصل ↗</a><button type="button" class="of-cctv-playback-close" data-pb-close aria-label="إغلاق">✕</button></div></div>'+(isGlow?'<iframe data-pb-glow title="Glow playback" src="'+esc(glowViewer)+'" allow="autoplay; fullscreen" referrerpolicy="no-referrer-when-downgrade"></iframe>':'<video controls autoplay playsinline src="'+esc(u)+'"></video>')+'<div data-pb-status style="display:block;padding:8px;background:#0f172a;color:#cbd5e1;text-align:center;font-size:12px">'+(isGlow?'تحميل مشغل Glow…':'جاري تجهيز دقيقة التسجيل…')+'</div><div style="display:flex;gap:8px;align-items:center;justify-content:center;padding:9px;background:#111827;color:#fff"><button type="button" data-pb-prev class="of-cctv-playback-close">⏮ السابق</button><b data-pb-clock></b><button type="button" data-pb-next class="of-cctv-playback-close">التالي ⏭</button></div></div>';
     document.body.appendChild(ov);armPlaybackBackGuard();
-    var start=Number(atMs)||Date.now(),step=(Number(durationMin)||playbackDefaultMinutes(x))*60000,video=ov.querySelector('video'),clock=ov.querySelector('[data-pb-clock]'),ext=ov.querySelector('.of-cctv-playback-external'),quality=ov.querySelector('[data-pb-quality]'),pbStatus=ov.querySelector('[data-pb-status]'),pbRetry=0;
-    var playbackAbort=null,playbackBlobUrl='';
-    function clearPlaybackBlob(){if(playbackBlobUrl){try{URL.revokeObjectURL(playbackBlobUrl);}catch(e){}playbackBlobUrl='';}}
+    var start=Number(atMs)||Date.now(),step=(Number(durationMin)||playbackDefaultMinutes(x))*60000,video=ov.querySelector('video'),glowFrame=ov.querySelector('[data-pb-glow]'),clock=ov.querySelector('[data-pb-clock]'),ext=ov.querySelector('.of-cctv-playback-external'),quality=ov.querySelector('[data-pb-quality]'),pbStatus=ov.querySelector('[data-pb-status]'),pbRetry=0;
+    function glowViewerUrl(at){
+      return String(x.gateway||'').replace(/\/$/,'')+'/echarpe-playback/view?camera='+encodeURIComponent(String(cameraId||x.playbackCamera||'1'))+'&atMs='+encodeURIComponent(String(at))+'&durationMin='+encodeURIComponent(String(durationMin));
+    }
     async function loadAt(next,resumeSec,isRetry){
       if(!isRetry)pbRetry=0;
       start=await normalizePlaybackStart(x,next,durationMin,cameraId);
-      var nextUrl=playbackUrl(start,durationMin,cameraId,offsetMs,quality.value);
-      clock.textContent=new Date(start).toLocaleString('ar-EG');ext.href=nextUrl;
-      pbStatus.style.display='block';pbStatus.textContent=pbRetry?'إعادة تجهيز التسجيل تلقائيًا ('+pbRetry+'/3)…':'جاري تجهيز دقيقة التسجيل…';
+      clock.textContent=new Date(start).toLocaleString('ar-EG');
       if(x.id==='glow'){
-        if(playbackAbort)try{playbackAbort.abort();}catch(e){}
-        playbackAbort=(typeof AbortController!=='undefined')?new AbortController():null;
-        try{
-          var response=await fetch(nextUrl+'&download=1&_='+Date.now(),{cache:'no-store',signal:playbackAbort?playbackAbort.signal:undefined});
-          if(!response.ok)throw new Error('HTTP_'+response.status);
-          var blob=await response.blob();
-          if(!blob||blob.size<4096)throw new Error('EMPTY_PLAYBACK');
-          clearPlaybackBlob();playbackBlobUrl=URL.createObjectURL(blob);
-          video.src=playbackBlobUrl;video.load();
-          pbStatus.textContent='تم تجهيز التسجيل';
-          video.addEventListener('loadedmetadata',function seekGlow(){
-            video.removeEventListener('loadedmetadata',seekGlow);
-            if(resumeSec>0)video.currentTime=Math.min(resumeSec,Math.max(0,(video.duration||resumeSec)-.25));
-            video.play().catch(function(){});
-          },{once:true});
-          return;
-        }catch(e){
-          if(e&&e.name==='AbortError')return;
-          if(pbRetry<3&&document.documentElement.contains(ov)){pbRetry++;pbStatus.textContent='إعادة تجهيز التسجيل تلقائيًا ('+pbRetry+'/3)…';if(video._retryTimer)clearTimeout(video._retryTimer);video._retryTimer=setTimeout(function(){loadAt(start,0,true);},2000);return;}
-          pbStatus.style.display='block';pbStatus.textContent='تعذر تحميل تسجيل Glow. جرّب السابق أو التالي.';return;
-        }
+        var viewer=glowViewerUrl(start);
+        ext.href=viewer;
+        pbStatus.style.display='block';pbStatus.textContent='تحميل مشغل Glow…';
+        if(glowFrame){glowFrame.src=viewer+'&_='+Date.now();}
+        return;
       }
+      var nextUrl=playbackUrl(start,durationMin,cameraId,offsetMs,quality&&quality.value);
+      ext.href=nextUrl;pbStatus.style.display='block';pbStatus.textContent=pbRetry?'إعادة الاتصال بالتسجيل تلقائيًا ('+pbRetry+'/3)…':'جاري تجهيز دقيقة التسجيل…';
       video.src=nextUrl+'&retry='+Date.now();video.load();
       if(resumeSec>0)video.addEventListener('loadedmetadata',function seek(){video.removeEventListener('loadedmetadata',seek);video.currentTime=Math.min(resumeSec,Math.max(0,(video.duration||resumeSec)-.25));video.play().catch(function(){});},{once:true});else video.play().catch(function(){});
     }
-    video.addEventListener('loadeddata',function(){pbRetry=0;pbStatus.style.display='none';});video.addEventListener('playing',function(){pbRetry=0;pbStatus.style.display='none';});video.addEventListener('error',function(){if(x.id==='glow')return;if(pbRetry<3&&document.documentElement.contains(ov)){pbRetry++;pbStatus.style.display='block';pbStatus.textContent='إعادة الاتصال بالتسجيل تلقائيًا ('+pbRetry+'/3)…';if(video._retryTimer)clearTimeout(video._retryTimer);video._retryTimer=setTimeout(function(){loadAt(start,0,true);},2500);return;}pbStatus.style.display='block';pbStatus.textContent='التسجيل غير متاح في هذا التوقيت.';});
-    quality.onchange=function(){loadAt(start,Number(video.currentTime)||0);};
+    if(video){video.addEventListener('loadeddata',function(){pbRetry=0;pbStatus.style.display='none';});video.addEventListener('playing',function(){pbRetry=0;pbStatus.style.display='none';});video.addEventListener('error',function(){if(pbRetry<3&&document.documentElement.contains(ov)){pbRetry++;pbStatus.style.display='block';pbStatus.textContent='إعادة الاتصال بالتسجيل تلقائيًا ('+pbRetry+'/3)…';if(video._retryTimer)clearTimeout(video._retryTimer);video._retryTimer=setTimeout(function(){loadAt(start,0,true);},2500);return;}pbStatus.style.display='block';pbStatus.textContent='التسجيل غير متاح في هذا التوقيت.';});}
+    if(glowFrame){glowFrame.addEventListener('load',function(){pbStatus.style.display='none';});}
+    if(quality)quality.onchange=function(){loadAt(start,video?Number(video.currentTime)||0:0);};
     var soundBtn=ov.querySelector('[data-pb-sound]');if(soundBtn)soundBtn.onclick=function(){video.muted=false;video.volume=1;video.play().catch(function(){});this.textContent='🔊 الصوت يعمل';};
     ov.querySelector('[data-pb-prev]').onclick=function(){loadAt(start-step);};ov.querySelector('[data-pb-next]').onclick=function(){loadAt(start+step);};loadAt(start);
     var closeBtn=ov.querySelector('[data-pb-close]');if(closeBtn)closeBtn.onclick=closePlaybackModalByUser;
@@ -499,7 +484,7 @@
     master.addEventListener('error',function(){if(chunkRetry<3&&document.documentElement.contains(ov)){chunkRetry++;status.style.display='block';status.textContent='إعادة الاتصال بالتسجيل تلقائيًا ('+chunkRetry+'/3)…';if(master._retryTimer)clearTimeout(master._retryTimer);master._retryTimer=setTimeout(function(){loadChunk(chunkStart,true);},2500);return;}status.style.display='block';status.textContent='التسجيل غير متاح في هذا التوقيت.';});
     master.addEventListener('ended',function(){if(chunkStart+chunkMs<coverageEnd-30000)loadChunk(chunkStart+chunkMs);});
     function setBasketOffset(next){basketOffsetMs=Math.max(-15000,Math.min(15000,next));localStorage.setItem('echarpe.cctv.madinaty.basketOffsetMs',String(basketOffsetMs));renderAt();}
-    ov.querySelector('[data-day-sound]').onclick=function(){master.muted=false;master.volume=1;master.play().catch(function(){});this.textContent='🔊 الصوت يعمل من كاميرا 4';};
+    var daySoundBtn=ov.querySelector('[data-day-sound]');if(daySoundBtn)daySoundBtn.onclick=function(){master.muted=false;master.volume=1;master.play().catch(function(){});};
     ov.querySelector('[data-sync-minus]').onclick=function(){setBasketOffset(basketOffsetMs-1000);};ov.querySelector('[data-sync-plus]').onclick=function(){setBasketOffset(basketOffsetMs+1000);};ov.querySelector('[data-sync-zero]').onclick=function(){setBasketOffset(0);};
     slider.oninput=function(){clock.textContent='الانتقال إلى '+new Date(dayReviewBounds.start+Number(slider.value)*60000).toLocaleString('ar-EG');};slider.onchange=function(){loadChunk(dayReviewBounds.start+Number(slider.value)*60000);};ov.querySelector('[data-day-prev]').onclick=function(){loadChunk(chunkStart-chunkMs);};ov.querySelector('[data-day-next]').onclick=function(){loadChunk(chunkStart+chunkMs);};var closeBtn=ov.querySelector('[data-pb-close]');if(closeBtn)closeBtn.onclick=closePlaybackModalByUser;ov.onclick=function(e){if(e.target===ov)closePlaybackModalByUser();};loadChunk(chunkStart);
   }
@@ -537,7 +522,7 @@
     events.sort(function(a,c){return Number(a.atMs)-Number(c.atMs);});closePlaybackModal();
     var u4=playbackUrl(start,Math.max(1,duration/60),'4',null,480),u8=playbackUrl(start,Math.max(1,duration/60),'8',null,480);
     var ov=document.createElement('div');ov.id='ofCctvPlaybackOv';ov.className='of-cctv-playback-ov';
-    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><div><b>🚨 مراجعة مدينتي المتزامنة</b><small class="of-day511-muted">الصوت من كاميرا 4 · العلامات الحمراء أحداث قوية</small></div><div class="of-day564-head-actions"><button type="button" data-smart-sound>🔊 تشغيل الصوت</button><button type="button" class="of-cctv-playback-close" data-pb-close>✕ إغلاق</button></div></div><div class="of-smart555-body"><div class="of-smart555-stage"><div class="of-smart555-videos"><div class="of-smart555-video"><span class="of-smart555-label">كاميرا 4 · صوت</span><video data-smart-master controls playsinline></video></div><div class="of-smart555-video"><span class="of-smart555-label">كاميرا 8 · متزامنة</span><video data-smart-slave muted playsinline></video></div></div><div class="of-smart555-timeline"><div class="of-smart555-markers" data-smart-markers></div><input type="range" min="0" max="'+Math.max(1,Math.floor(duration*10))+'" value="0" step="1" data-smart-slider></div></div><aside class="of-smart555-cart"><div class="of-smart555-carthead"><b>🛒 السلة عند هذه اللحظة</b><div class="of-day511-muted" data-smart-clock>—</div><div class="of-smart555-event" data-smart-event>قبل أول حدث</div></div><div class="of-smart555-rows" data-smart-rows></div><div class="of-smart555-total"><span>الإجمالي</span><strong data-smart-total>0.00 ج.م</strong></div></aside></div></div>';
+    ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><div><b>🚨 مراجعة مدينتي المتزامنة</b><small class="of-day511-muted">العلامات الحمراء أحداث قوية</small></div><div class="of-day564-head-actions"><button type="button" data-smart-sound>🔊 تشغيل الصوت</button><button type="button" class="of-cctv-playback-close" data-pb-close>✕ إغلاق</button></div></div><div class="of-smart555-body"><div class="of-smart555-stage"><div class="of-smart555-videos"><div class="of-smart555-video"><span class="of-smart555-label">كاميرا 4</span><video data-smart-master controls playsinline></video></div><div class="of-smart555-video"><span class="of-smart555-label">كاميرا 8 · متزامنة</span><video data-smart-slave muted playsinline></video></div></div><div class="of-smart555-timeline"><div class="of-smart555-markers" data-smart-markers></div><input type="range" min="0" max="'+Math.max(1,Math.floor(duration*10))+'" value="0" step="1" data-smart-slider></div></div><aside class="of-smart555-cart"><div class="of-smart555-carthead"><b>🛒 السلة عند هذه اللحظة</b><div class="of-day511-muted" data-smart-clock>—</div><div class="of-smart555-event" data-smart-event>قبل أول حدث</div></div><div class="of-smart555-rows" data-smart-rows></div><div class="of-smart555-total"><span>الإجمالي</span><strong data-smart-total>0.00 ج.م</strong></div></aside></div></div>';
     document.body.appendChild(ov);var master=ov.querySelector('[data-smart-master]'),slave=ov.querySelector('[data-smart-slave]'),slider=ov.querySelector('[data-smart-slider]'),marks=ov.querySelector('[data-smart-markers]'),clock=ov.querySelector('[data-smart-clock]'),eventEl=ov.querySelector('[data-smart-event]'),rowsEl=ov.querySelector('[data-smart-rows]'),totalEl=ov.querySelector('[data-smart-total]');
     function renderCart(hit){var rows=Array.isArray(hit&&hit.cart)?hit.cart:[];eventEl.textContent=hit?String(hit.label||hit.kind||'حركة'):'قبل أول حدث';rowsEl.innerHTML=rows.map(function(r){var q=Number(r.qty)||0,p=Number(r.price)||0;return '<div class="of-smart555-row"><span><b>'+esc(r.name||r.id||'صنف')+(r.isReturn?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(r.barcode?' · '+esc(r.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-day511-muted" style="padding:12px">لا توجد سلة مسجلة في هذه اللحظة</div>';totalEl.textContent=Number(hit&&hit.total||0).toFixed(2)+' ج.م';}
     function update(){var sec=Number(master.currentTime)||0,at=start+sec*1000,hit=null;slider.value=String(Math.min(Number(slider.max),Math.round(sec*10)));clock.textContent=new Date(at).toLocaleString('ar-EG');for(var i=0;i<events.length&&Number(events[i].atMs)<=at;i++)hit=events[i];renderCart(hit);if(slave.readyState>=1&&Math.abs((Number(slave.currentTime)||0)-sec)>.35)slave.currentTime=sec;}
@@ -546,7 +531,7 @@
     master.addEventListener('play',function(){slave.currentTime=master.currentTime;slave.play().catch(function(){});});master.addEventListener('pause',function(){slave.pause();});master.addEventListener('seeking',function(){slave.currentTime=master.currentTime;update();});master.addEventListener('timeupdate',update);slider.oninput=function(){var sec=Number(slider.value)/10;master.currentTime=sec;slave.currentTime=sec;update();};
     master.addEventListener('loadeddata',function(){if(slave.src)return;slave.src=u8+'&smart=564';slave.load();slave.addEventListener('loadedmetadata',function align(){slave.removeEventListener('loadedmetadata',align);slave.currentTime=master.currentTime;slave.play().catch(function(){});},{once:true});});
     master.src=u4+'&smart=564';master.load();master.play().catch(function(){});update();
-    ov.querySelector('[data-smart-sound]').onclick=function(){master.muted=false;master.volume=1;master.play().catch(function(){});this.textContent='🔊 الصوت يعمل';};
+    var smartSound=ov.querySelector('[data-smart-sound]');if(smartSound)smartSound.onclick=function(){master.muted=false;master.volume=1;master.play().catch(function(){});};
     var closeBtn=ov.querySelector('[data-pb-close]');if(closeBtn)closeBtn.onclick=closePlaybackModalByUser;ov.onclick=function(e){if(e.target===ov)closePlaybackModalByUser();};
   }
   async function loadActivityAlerts(){
