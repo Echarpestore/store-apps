@@ -998,6 +998,14 @@
     </div>
 
     <div class="panel">
+      <h3>🛡️ Face Attendance</h3>
+      <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">اختياري لكل فرع. عند التفعيل: PIN + Face + Liveness للحضور والانصراف. المنتقبة تفضل بالنظام الحالي والصورة الحالية إجبارية زي ما هي.</p>
+      <label style="display:flex;gap:9px;align-items:center;cursor:pointer"><input id="faceAttendanceEnabledInput" type="checkbox" style="width:19px;height:19px"><b>تفعيل Face Attendance لهذا الفرع</b></label>
+      <div id="faceAttendanceStatus" style="font-size:12px;color:var(--sub);margin:8px 0"></div>
+      <button id="saveFaceAttendanceBtn" class="confirmBtnSmall">حفظ</button>
+    </div>
+
+    <div class="panel">
       <h3>⚙️ إعدادات رصيد الوقت</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 14px;">كل الأرقام دي تحت إيدك. بتتطبّق على الفرع ده.</p>
       <div id="timeSettingsForm"></div>
@@ -1244,7 +1252,7 @@
 
 </div>
 
-<script type="module" src="sales-app.js?v=574"></script>
+<script type="module" src="sales-app.js?v=600"></script>
 <script src="sales-ui.js?v=559"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.

@@ -2267,6 +2267,9 @@ onSnapshot(settingsCol, (snap)=>{
   commissionPerPoint = data.commissionPerPoint || 0;
   window.currentAnnouncement = data.announcement || '';
   window.dailyTarget = data.dailyTarget || 0;
+  // v600 — Face Attendance is opt-in per branch. Default OFF so existing branches
+  // keep the exact current attendance flow until the owner enables it.
+  window.faceAttendanceEnabled = (data.faceAttendanceEnabled === true);
   // 🧭 تحميل إعدادات الالتزام لو الأدمن عدّلها للفرع ده (مع الإبقاء على الافتراضي)
   // 🙋 زر تسجيل موظف جديد — الافتراضي **ظاهر**.
   // كان مخفي افتراضيًا، والنتيجة إن الفرع اللي ملوش مستند إعدادات
@@ -2310,7 +2313,7 @@ onSnapshot(settingsCol, (snap)=>{
   }catch(e){ console.warn('weeklyStartFloor init', e); }
   renderAnnouncementBanner();
   renderDailyTargetCard();
-  if(adminUnlocked){ renderCommissionPanel(); renderSalaryPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); try{ window.renderTimeSettings(); }catch(e){} }
+  if(adminUnlocked){ renderCommissionPanel(); renderSalaryPanel(); renderAdminSettingsForm(); window.renderComplianceSettingsForm(); try{ window.renderTimeSettings(); }catch(e){} try{renderFaceAttendanceSettings();}catch(e){} }
 }, (err)=> console.error('settings sync error', err));
 
 lf431History('vio190', _scoped(vioReviewCol,'ts'), _recent(vioReviewCol,'ts'), ()=>allVioReviews, (rows)=>{allVioReviews=rows;if(adminUnlocked&&typeof renderViolationsReview==='function')renderViolationsReview();});
@@ -3027,19 +3030,13 @@ function publishMadinatyStaffState(){
         const id=String(b.employeeId||'');if(id&&unique.indexOf(id)>=0&&breakIds.indexOf(id)<0)breakIds.push(id);
       });
       const onFloor=unique.filter(id=>breakIds.indexOf(id)<0);
-      const _staffPayload={
-        version:574,source:'sales_fallback',sourceHealthy:true,branch:'madinaty',generatedAtMs:Date.now(),
-        clockedInCount:unique.length,openBreakCount:breakIds.length,
-        activeStaffCount:onFloor.length,employeeIds:onFloor
-      };
-      const _staffUrl='http://127.0.0.1:1985/echarpe-playback/staff-state';
-      fetch(_staffUrl,{
-        method:'POST',mode:'cors',cache:'no-store',
-        headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(_staffPayload),keepalive:true
-      }).catch(()=>fetch(_staffUrl,{
-        method:'POST',mode:'no-cors',cache:'no-store',
-        headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(_staffPayload),keepalive:true
-      }).catch(()=>{}));
+      fetch('http://127.0.0.1:1985/echarpe-playback/staff-state',{
+        method:'POST',cache:'no-store',body:JSON.stringify({
+          version:564,source:'sales_fallback',sourceHealthy:true,branch:'madinaty',generatedAtMs:Date.now(),
+          clockedInCount:unique.length,openBreakCount:breakIds.length,
+          activeStaffCount:onFloor.length,employeeIds:onFloor
+        })
+      }).catch(()=>{});
     }catch(_e){}
   },250);
 }
@@ -3289,6 +3286,120 @@ async function autoCloseStaleBreaks(){
 }
 window.startBreak = startBreak; window.endBreak = endBreak;
 
+// ==================== v600 ATTENDANCE IDENTITY / SECURITY ====================
+function activePinOwner(pin, excludeEmpId){
+  const p=String(pin||'').trim();
+  if(!/^\d{4}$/.test(p)) return null;
+  return (allEmployees||[]).find(e=> e && e.active!==false && !e.deletedAt &&
+    String(e.id)!==String(excludeEmpId||'') && String(e.pin||'')===p) || null;
+}
+window.activePinOwner=activePinOwner;
+function employeeHasDuplicatePin(emp){ return !!(emp && emp.pin && activePinOwner(emp.pin, emp.id)); }
+window.employeeHasDuplicatePin=employeeHasDuplicatePin;
+
+function approvedLeaveBlocksClockIn(empId,dateKey){
+  const l=approvedLeaveFor(empId,dateKey);
+  return !!(l && (l.type==='dayoff' || l.type==='changeDayoff'));
+}
+function leaveWorkAllowed(emp,dateKey){ return !!(emp && String(emp.leaveWorkOverrideDateKey||'')===String(dateKey||'')); }
+function closedShiftToday(empId,dateKey){
+  return (allShifts||[]).find(x=>x && x.employeeId===empId && !!x.clockOutTs && caiDayKey(x.clockInTs)===dateKey) || null;
+}
+function secondShiftAllowed(emp,dateKey){ return !!(emp && String(emp.reopenShiftDateKey||'')===String(dateKey||'')); }
+function clockInBlockReason(emp,dateKey){
+  if(!emp) return 'employee';
+  if(approvedLeaveBlocksClockIn(emp.id,dateKey) && !leaveWorkAllowed(emp,dateKey)) return 'leave';
+  if(closedShiftToday(emp.id,dateKey) && !secondShiftAllowed(emp,dateKey)) return 'second-shift';
+  return '';
+}
+window.clockInBlockReason=clockInBlockReason;
+
+function faceRequiredFor(emp,actionType){
+  return !!(window.faceAttendanceEnabled===true && emp && emp.niqabAttendance!==true &&
+    emp.faceAttendanceExempt!==true && (actionType==='in' || actionType==='out'));
+}
+window.faceRequiredFor=faceRequiredFor;
+const FACE_MODEL_URL='https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+const FACE_MATCH_THRESHOLD=0.50;
+let faceAuthModelsPromise=null;
+function ensureFaceAuthModels(){
+  if(faceAuthModelsPromise) return faceAuthModelsPromise;
+  faceAuthModelsPromise=Promise.all([
+    faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL),
+    faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_URL),
+    faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL)
+  ]).then(()=>true).catch(err=>{ faceAuthModelsPromise=null; throw err; });
+  return faceAuthModelsPromise;
+}
+function faceDistance(a,b){
+  if(!Array.isArray(a)||!b||a.length!==b.length) return Infinity;
+  let n=0; for(let i=0;i<a.length;i++){ const d=Number(a[i])-Number(b[i]); n+=d*d; }
+  return Math.sqrt(n);
+}
+function avgFaceDescriptors(rows){
+  if(!rows||!rows.length) return null; const n=rows[0].length, out=new Array(n).fill(0);
+  rows.forEach(r=>{for(let i=0;i<n;i++)out[i]+=Number(r[i])||0;});
+  let norm=0; for(let i=0;i<n;i++){out[i]/=rows.length;norm+=out[i]*out[i];}
+  norm=Math.sqrt(norm)||1; return out.map(v=>Math.round((v/norm)*1000000)/1000000);
+}
+window.faceDistance=faceDistance; window.avgFaceDescriptors=avgFaceDescriptors;
+async function faceFrame(video){
+  return faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:0.55}))
+    .withFaceLandmarks(true).withFaceDescriptor();
+}
+function eyeRatio(pts){
+  if(!pts||pts.length<6)return 1;
+  const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  return (d(pts[1],pts[5])+d(pts[2],pts[4]))/(2*Math.max(1,d(pts[0],pts[3])));
+}
+function headRatio(lm){
+  const le=lm.getLeftEye(), re=lm.getRightEye(), no=lm.getNose();
+  if(!le.length||!re.length||!no.length)return 0;
+  const lx=le.reduce((a,p)=>a+p.x,0)/le.length, rx=re.reduce((a,p)=>a+p.x,0)/re.length;
+  return (no[3].x-lx)/Math.max(1,rx-lx);
+}
+async function runActiveLiveness(video){
+  // Active random-free challenge intentionally requires BOTH a real blink and
+  // 3-D head geometry movement. A moved static phone photo cannot satisfy blink.
+  const until=Date.now()+7000; let maxEye=0, blink=false, minHead=Infinity,maxHead=-Infinity;
+  while(Date.now()<until && pendingPhotoAction){
+    const r=await faceFrame(video).catch(()=>null);
+    if(!r){ $('#attPhotoStatus').textContent='ثبّت وشك قدام الكاميرا…'; await new Promise(x=>setTimeout(x,130)); continue; }
+    const lm=r.landmarks, er=(eyeRatio(lm.getLeftEye())+eyeRatio(lm.getRightEye()))/2;
+    maxEye=Math.max(maxEye,er); if(maxEye>0 && er<maxEye*0.60) blink=true;
+    const hr=headRatio(lm); minHead=Math.min(minHead,hr); maxHead=Math.max(maxHead,hr);
+    const moved=(maxHead-minHead)>=0.16;
+    $('#attPhotoStatus').textContent=!blink?'ارمش مرة طبيعي…':(!moved?'لف وشك سنة يمين وشمال…':'تم التحقق ✅');
+    if(blink && moved) return true;
+    await new Promise(x=>setTimeout(x,120));
+  }
+  return false;
+}
+async function enrollOrVerifyFace(emp,video){
+  await ensureFaceAuthModels();
+  const live=await runActiveLiveness(video); if(!live) throw new Error('liveness');
+  if(!emp.faceProfile || !Array.isArray(emp.faceProfile.descriptor) || emp.faceProfile.descriptor.length!==128){
+    $('#attPhotoStatus').textContent='أول مرة — بنسجل وشك تلقائيًا 1/12';
+    const rows=[]; let attempts=0;
+    while(rows.length<12 && attempts<60 && pendingPhotoAction){
+      attempts++; const r=await faceFrame(video).catch(()=>null);
+      if(r && r.descriptor){ rows.push(Array.from(r.descriptor)); $('#attPhotoStatus').textContent='أول مرة — بنسجل وشك تلقائيًا '+rows.length+'/12'; }
+      await new Promise(x=>setTimeout(x,90));
+    }
+    if(rows.length<12) throw new Error('enrollment');
+    const descriptor=avgFaceDescriptors(rows), profile={v:1,descriptor,enrolledAt:Date.now(),sampleCount:12};
+    await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:profile,faceProfileUpdatedAt:Date.now()});
+    emp.faceProfile=profile;
+    $('#attPhotoStatus').textContent='تم تسجيل الوجه لأول مرة ✅';
+    return true;
+  }
+  $('#attPhotoStatus').textContent='بنتأكد من الوجه…';
+  const r=await faceFrame(video); if(!r||!r.descriptor) throw new Error('face-not-found');
+  const dist=faceDistance(emp.faceProfile.descriptor,Array.from(r.descriptor));
+  if(!(dist<=FACE_MATCH_THRESHOLD)){ const e=new Error('face-mismatch'); e.distance=dist; throw e; }
+  $('#attPhotoStatus').textContent='الوجه مطابق ✅'; return true;
+}
+
 async function clockIn(empId, photoDataUri){
   const emp = window.employees.find(e=> e.id === empId);
   if(!emp) return;
@@ -3297,6 +3408,9 @@ async function clockIn(empId, photoDataUri){
     return;
   }
   const dateKey = todayStr();
+  const blockReason=clockInBlockReason(emp,dateKey);
+  if(blockReason==='leave'){ showAttendanceSync('الموظف في إجازة معتمدة اليوم — لازم المالك يفعّل «السماح بالعمل اليوم» من الإدارة.', 'error'); return; }
+  if(blockReason==='second-shift'){ showAttendanceSync('تم تسجيل انصراف نهائي اليوم — حضور جديد يحتاج فتح يوم جديد من المالك.', 'error'); return; }
   const clockInTs = fixedAttendanceTs('clock-in', empId, dateKey);
   // 🕒 التأخير من بداية شيفت الموظف (complianceCfg) + سماح الأدمن
   let lateMinutes = 0, latePenalized = false;
@@ -3535,6 +3649,8 @@ $('#attNewPinKeypad').addEventListener('click', async (e)=>{
     const action = pendingAttAction;
     const empId = action.empId;
     try{
+      const usedBy=activePinOwner(newPinBuffer,empId);
+      if(usedBy){ updateNewPinDots(true); $('#attNewPinErrText').textContent='الكود مستخدم لموظف آخر — اختار كود مختلف'; setTimeout(()=>{newPinBuffer='';updateNewPinDots(false);},900); return; }
       await updateDoc(doc(db,'sales_employees', empId), { pin: newPinBuffer });
       closeAttPin();
       openAttPhoto(action);
@@ -3576,6 +3692,13 @@ async function checkAttPin(){
   if(!emp) return;
   if(attPinBuffer === String(emp.pin)){
     const action = pendingAttAction;
+    if(action && action.type==='in'){
+      const reason=clockInBlockReason(emp,todayStr());
+      if(reason){
+        $('#attPinErrText').textContent=reason==='leave' ? 'إجازة معتمدة اليوم — المالك لازم يفعّل العمل اليوم' : 'انصرفت بالفعل اليوم — حضور جديد يحتاج فتح من المالك';
+        attPinBuffer=''; updateAttPinDots(true); setTimeout(()=>updateAttPinDots(false),700); return;
+      }
+    }
     closeAttPin();
     openAttPhoto(action);
   } else {
@@ -5312,6 +5435,9 @@ window.openEmployeeRecord = function(empId){
       <label>تتبع الحضور من<input id="erTrack" type="date" value="${_empEsc(emp.attendanceTrackingStart||'')}"></label>
       <label>كلمة مرور الموظف (4 أرقام)<input id="erPin" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="اكتب 4 أرقام" value="${/^\d{4}$/.test(String(emp.pin||''))?_empEsc(String(emp.pin)):''}"><span style="display:block;margin-top:5px;font-size:11px;color:var(--sub)">${/^\d{4}$/.test(String(emp.pin||''))?'كلمة مرور معيّنة ✓':'لم يتم تعيين كلمة مرور'}</span></label>
       <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erNiqabAttendance" type="checkbox" ${emp.niqabAttendance===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>تسجيل بالنقاب <small style="display:block;color:var(--sub);font-weight:600">الصورة تفضل إجبارية، من غير انتظار كشف الوجه</small></span></label>
+      <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erFaceAttendanceExempt" type="checkbox" ${emp.faceAttendanceExempt===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>استثناء من Face Attendance <small style="display:block;color:var(--sub);font-weight:600">PIN + صورة الحضور الحالية فقط. المنتقبة مستثناة تلقائيًا.</small></span></label>
+      ${employeeHasDuplicatePin(emp)?'<div class="field-err" style="margin:6px 0">⚠️ الـPIN الحالي مكرر مع موظف آخر. غيّره عند أول فرصة.</div>':''}
+      ${adminRole==='owner'?'<div style="display:flex;gap:7px;flex-wrap:wrap;margin:8px 0"><button type="button" id="erAllowLeaveWork" class="backBtn">السماح بالعمل في الإجازة اليوم</button><button type="button" id="erReopenShift" class="backBtn">فتح حضور جديد اليوم</button><button type="button" id="erResetFace" class="backBtn">إعادة تسجيل الوجه</button></div>':''}
       <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erFlexibleMorningEvening" type="checkbox" ${emp.flexibleMorningEvening===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>🔀 مرن صباحي/مسائي <small style="display:block;color:var(--sub);font-weight:600">السيستم يختار تلقائيًا الأقرب من ${_empEsc(_morningStart)} أو ${_empEsc(_eveningStart)}</small></span></label>
     </div>
     <div style="margin:14px 0 6px;font-weight:900">سجل تعديل الراتب</div>
@@ -5324,6 +5450,9 @@ window.openEmployeeRecord = function(empId){
   ov.querySelector('#erClose').onclick=()=>ov.remove();
   ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
   ov.querySelector('#erDays').onclick=()=>{ try{ window.openAttendanceDaysDialog?.(emp.id, window.salaryPeriodKey || defaultPayPeriodKey(new Date())); }catch(e){ console.error(e); } };
+  if(ov.querySelector('#erAllowLeaveWork')) ov.querySelector('#erAllowLeaveWork').onclick=async()=>{ const k=todayStr(); await updateDoc(doc(db,'sales_employees',emp.id),{leaveWorkOverrideDateKey:k,leaveWorkOverrideAt:Date.now(),leaveWorkOverrideBy:'owner'}); emp.leaveWorkOverrideDateKey=k; ov.querySelector('#erMsg').style.color='var(--good)'; ov.querySelector('#erMsg').textContent='تم السماح بالعمل في الإجازة اليوم ✅'; };
+  if(ov.querySelector('#erReopenShift')) ov.querySelector('#erReopenShift').onclick=async()=>{ const k=todayStr(); await updateDoc(doc(db,'sales_employees',emp.id),{reopenShiftDateKey:k,reopenShiftAt:Date.now(),reopenShiftBy:'owner'}); emp.reopenShiftDateKey=k; ov.querySelector('#erMsg').style.color='var(--good)'; ov.querySelector('#erMsg').textContent='تم فتح حضور جديد لليوم فقط ✅'; };
+  if(ov.querySelector('#erResetFace')) ov.querySelector('#erResetFace').onclick=async()=>{ if(!confirm('إعادة تسجيل الوجه في أول حضور/انصراف قادم؟'))return; await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:null,faceProfileUpdatedAt:Date.now()}); emp.faceProfile=null; ov.querySelector('#erMsg').style.color='var(--good)'; ov.querySelector('#erMsg').textContent='هيتعمل تسجيل وجه جديد تلقائيًا المرة الجاية ✅'; };
   ov.querySelector('#erSave').onclick=async()=>{
     const btn=ov.querySelector('#erSave'), msg=ov.querySelector('#erMsg'); msg.textContent='';
     const pin=String(ov.querySelector('#erPin')?.value||'').trim();
@@ -5332,12 +5461,13 @@ window.openEmployeeRecord = function(empId){
       baseSalary:Number(ov.querySelector('#erSalary').value)||0, dayOff:ov.querySelector('#erDayOff').value,
       hireDate:ov.querySelector('#erHire').value||'', attendanceTrackingStart:ov.querySelector('#erTrack').value||'',
       niqabAttendance:!!ov.querySelector('#erNiqabAttendance')?.checked,
+      faceAttendanceExempt:!!ov.querySelector('#erFaceAttendanceExempt')?.checked,
       flexibleMorningEvening:!!ov.querySelector('#erFlexibleMorningEvening')?.checked, updatedAt:Date.now()
     };
     if(!patch.name){msg.textContent='الاسم مطلوب';return;}
     if(!/^\d{4}$/.test(pin)){msg.textContent='كلمة المرور لازم تكون 4 أرقام';return;}
     const pinChanged=pin!==String(emp.pin||'');
-    if(pinChanged) patch.pin=pin;
+    if(pinChanged){ const usedBy=activePinOwner(pin,emp.id); if(usedBy){msg.textContent='الـPIN مستخدم للموظف '+usedBy.name+' — اختار PIN مختلف';return;} patch.pin=pin; }
     btn.disabled=true; btn.textContent='بيتحفظ…';
     try{
       await updateDoc(doc(db,'sales_employees',emp.id),patch);
@@ -6564,6 +6694,17 @@ function renderCommissionPaymentLog(){
   }).join('');
   wireDayLogToggles(wrap);
 }
+
+function renderFaceAttendanceSettings(){
+  const cb=$('#faceAttendanceEnabledInput'); if(cb) cb.checked=(window.faceAttendanceEnabled===true);
+  const st=$('#faceAttendanceStatus'); if(st) st.textContent=window.faceAttendanceEnabled===true ? 'مفعّل في الفرع ده' : 'مقفول — النظام الحالي شغال بدون تغيير';
+}
+window.renderFaceAttendanceSettings=renderFaceAttendanceSettings;
+$('#saveFaceAttendanceBtn')?.addEventListener('click', async ()=>{
+  const enabled=!!$('#faceAttendanceEnabledInput')?.checked;
+  try{ await setDoc(doc(db,'sales_settings',window.currentBranch),{faceAttendanceEnabled:enabled},{merge:true}); window.faceAttendanceEnabled=enabled; renderFaceAttendanceSettings(); }
+  catch(err){ alert('تعذر حفظ Face Attendance'); console.error(err); }
+});
 
 $('#saveCommissionBtn')?.addEventListener('click', async ()=>{
   const val = parseFloat($('#commissionPerPointInput').value);
@@ -8165,6 +8306,7 @@ let attPhotoStream = null;
 let pendingPhotoAction = null;
 
 async function openAttPhoto(action){
+  if(attPhotoStream){ try{attPhotoStream.getTracks().forEach(t=>t.stop());}catch(_e){} attPhotoStream=null; }
   pendingPhotoAction = action;
   const emp = window.employees.find(e=> e.id === action.empId);
   $('#attPhotoName').textContent = emp ? emp.name : '—';
@@ -8177,6 +8319,20 @@ async function openAttPhoto(action){
     const video = $('#attPhotoVideo');
     video.srcObject = attPhotoStream;
     await video.play();
+    if(faceRequiredFor(emp, action.type)){
+      try{
+        await enrollOrVerifyFace(emp,video);
+      }catch(err){
+        $('#attPhotoStatus').textContent='';
+        $('#attPhotoErr').textContent = err&&err.message==='liveness' ? 'فشل التحقق إنه شخص حقيقي. ارمش ولف وشك سنة وحاول تاني.'
+          : (err&&err.message==='face-mismatch' ? 'الوجه مش مطابق للموظف المختار.' : 'تعذر التحقق من الوجه. حاول تاني.');
+        $('#attPhotoRetryBtn').style.display='block';
+        return;
+      }
+      // Keep the existing mandatory attendance snapshot exactly as before.
+      setTimeout(()=>captureAttPhoto(video),250);
+      return;
+    }
     if(emp && emp.niqabAttendance === true){
       // الموظفة المفعّل لها الاستثناء فقط: الـPIN والصورة ما زالوا إجباريين،
       // لكننا لا ننتظر FaceDetector لأن النقاب قد يمنع اكتشاف الوجه.
