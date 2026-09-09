@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v598
+/* ECHARPE Office CCTV v599
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -415,18 +415,29 @@
     var x=b(),gateway=String(x.gateway||'').replace(/\/$/,''),aliases=(x.liveAliases||[]).map(function(v){return String(v).toLowerCase();});
     var range=null,timelineDocs=[],range8=null,cashierInfo=await resolveCashierCamera(x,gateway);
     var primaryCam=String(cashierInfo.camera||x.playbackCamera||'1');
+    // v599: افصل اختبار تسجيل الكاميرا عن Firestore. في v598 كان Promise.all
+    // بيحوّل أي فشل في timeline query إلى رسالة مضللة "بوابة Glow فشل".
     try{
-      var pair=await Promise.all([
-        fetchJsonRetry(gateway+'/echarpe-playback/range?camera='+encodeURIComponent(primaryCam)+'&_='+Date.now(),x.id,3),
-        db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',dayReviewBounds.start).where('endedAtMs','<',dayReviewBounds.end).get(),
-        // v563: كاميرا 8 اختيارية — لو الفرع مش مسجّلها، المراجعة بتفضل بكاميرا واحدة
-        // زي الأول بالظبط. بنسأل الـagent نفسه بدل ما نفترض من قائمة الكاميرات
-        // (مدينتي مثلًا عندها كاميرات في القائمة بس المسجَّل فعليًا 4 و8 بس).
-        (primaryCam==='8'?Promise.resolve(null):fetchJsonRetry(gateway+'/echarpe-playback/range?camera=8&_='+Date.now(),x.id,1).catch(function(){return null;}))
-      ]);
-      range=pair[0];pair[1].forEach(function(s){var d=s.data()||{};if(branchMatches(d.branch,x.id,aliases))timelineDocs.push(d);});
-      range8=pair[2];
-    }catch(e){var msg=(e&&e.message)||String(e||'');alert('تعذر تجهيز مراجعة اليوم · كاميرا الكاشير '+primaryCam+(msg==='Failed to fetch'?' — الاتصال ببوابة Glow فشل.':' : '+msg));return;}
+      range=await fetchJsonRetry(gateway+'/echarpe-playback/range?camera='+encodeURIComponent(primaryCam)+'&_='+Date.now(),x.id,3);
+    }catch(e){
+      var rangeMsg=(e&&e.message)||String(e||'');
+      alert('تعذر تجهيز تسجيل كاميرا الكاشير '+primaryCam+(rangeMsg==='Failed to fetch'?' — الاتصال ببوابة Glow فشل.':' : '+rangeMsg));
+      return;
+    }
+    if(!range||!range.ok||String(range.camera)!==String(primaryCam)){
+      alert('تسجيل كاميرا الكاشير غير متاح أو رقم الكاميرا غير مطابق. المطلوب '+primaryCam+'.');
+      return;
+    }
+    try{
+      var timelineSnap=await db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',dayReviewBounds.start).where('endedAtMs','<',dayReviewBounds.end).get();
+      timelineSnap.forEach(function(s){var d=s.data()||{};if(branchMatches(d.branch,x.id,aliases))timelineDocs.push(d);});
+    }catch(timelineErr){
+      console.warn('CCTV timeline query unavailable; continuing with dayReviewRows fallback',timelineErr);
+    }
+    // كاميرا 8 اختيارية لمدينتي فقط؛ Glow لا يحتاجها في مراجعة السلة.
+    if(x.id==='madinaty'&&primaryCam!=='8'){
+      range8=await fetchJsonRetry(gateway+'/echarpe-playback/range?camera=8&_='+Date.now(),x.id,1).catch(function(){return null;});
+    }else range8=null;
     var timelineCodes={};timelineDocs.forEach(function(t){if(t&&t.invoiceCode)timelineCodes[String(t.invoiceCode)]=true;});
     (dayReviewRows||[]).forEach(function(sale){var code=String(sale&&sale.invoiceCode||'');if(!code||timelineCodes[code]||!branchMatches(sale.branch,x.id,aliases))return;var fallback=timelineFromSale(sale);if(fallback){timelineDocs.push(fallback);timelineCodes[code]=true;}});
     var rangeStart=Number(range.startMs)||0,rangeEnd=Number(range.endMs)||0,coverageStart=Math.max(dayReviewBounds.start,rangeStart),coverageEnd=Math.min(dayReviewBounds.end,rangeEnd);
@@ -451,7 +462,7 @@
     var master=ov.querySelector('[data-day-master]'),slave=dualCam?ov.querySelector('[data-day-slave]'):null,glowFrame=glowDay?ov.querySelector('[data-day-glow]'):null;
     var slider=ov.querySelector('[data-day-slider]'),marks=ov.querySelector('[data-day-markers]'),rail=ov.querySelector('[data-day-event-rail]'),clock=ov.querySelector('[data-day-clock]'),eventEl=ov.querySelector('[data-day-event]'),rowsEl=ov.querySelector('[data-day-rows]'),totalEl=ov.querySelector('[data-day-total]'),status=ov.querySelector('[data-day-status]'),syncText=ov.querySelector('[data-day-sync]');
     var basketOffsetKey='echarpe.cctv.'+x.id+'.basketOffsetMs',basketOffsetMs=Number(localStorage.getItem(basketOffsetKey)||0);if(!isFinite(basketOffsetMs)||Math.abs(basketOffsetMs)>15000)basketOffsetMs=0;
-    ov.querySelector('[data-day-coverage]').textContent='المتاح '+new Date(coverageStart).toLocaleTimeString('ar-EG')+' — '+new Date(coverageEnd).toLocaleTimeString('ar-EG')+' · '+(dualCam?'كاميرتين متزامنتين':glowDay?'Glow · كاميرا الكاشير '+primaryCam:'كاميرا واحدة')+' · '+jumpEvents.length+' علامة';
+    ov.querySelector('[data-day-coverage]').textContent='المتاح '+new Date(coverageStart).toLocaleTimeString('ar-EG')+' — '+new Date(coverageEnd).toLocaleTimeString('ar-EG')+' · '+(dualCam?'كاميرتين متزامنتين':glowDay?'Glow · كاميرا الكاشير '+primaryCam+' ✓':'كاميرا واحدة')+' · '+jumpEvents.length+' علامة';
     slider.min=String(Math.floor((coverageStart-dayReviewBounds.start)/60000));slider.max=String(Math.max(Number(slider.min),Math.floor((coverageEnd-dayReviewBounds.start-30000)/60000)));
     function kindName(k){return ({item_added:'إضافة صنف',item_removed:'حذف صنف',qty_increased:'زيادة كمية',qty_decreased:'تقليل كمية',cart_edited:'تعديل السلة',payment:'بدء الدفع',saving:'بدء الحفظ',sale_saved:'حفظ الفاتورة',cart_cleared:'بين الفواتير'})[k]||'حركة سلة';}
     // 🔖 شريط العلامات على مدى اليوم كله — الدوسة بتنقلك للحظة نفسها في الكاميرتين
