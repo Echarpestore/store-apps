@@ -414,7 +414,7 @@
 .of-cctv-video img[data-live-frame].is-ready{opacity:1}
 </style>
 \n<style id="ofCctvV583Style">
-/* v595 compact CCTV navigation: one workspace at a time, sticky controls, all-branch live shortcuts. */
+/* v596 compact CCTV navigation: one workspace at a time, sticky controls, all-branch live shortcuts. */
 #page-cctv{overflow-x:hidden}.of-cctv-controlroom{padding-bottom:18px}.of-cctv-toolbar{position:sticky;top:0;z-index:28;background:rgba(5,9,16,.96);backdrop-filter:blur(12px);padding:8px 0;margin-bottom:8px}
 .of-cctv-branches{display:grid!important;grid-template-columns:repeat(4,minmax(120px,1fr));gap:7px!important;flex:1}.of-cctv-branch-card{display:flex;align-items:stretch;min-width:0;border:1px solid #263449;background:#0f172a;border-radius:13px;overflow:hidden;color:#e5e7eb}.of-cctv-branch-card.active{border-color:#2563eb;box-shadow:0 0 0 1px rgba(37,99,235,.25)}.of-cctv-branch-card.all{appearance:none;padding:0;cursor:pointer;align-items:center;justify-content:center;gap:6px;flex-direction:column}.of-cctv-branch-card.all span{font-size:18px}.of-cctv-branch-card.all b,.of-cctv-branch-main b{font-size:10px}.of-cctv-branch-card small,.of-cctv-branch-main small{font-size:8px;color:#94a3b8}.of-cctv-branch-main{flex:1;min-width:0;border:0;background:transparent;color:inherit;padding:8px 7px;cursor:pointer;display:grid;grid-template-columns:auto 1fr;column-gap:6px;text-align:right}.of-cctv-branch-main span{grid-row:1/3;font-size:17px;align-self:center}.of-cctv-branch-main b,.of-cctv-branch-main small{display:block}.of-cctv-branch-play{border:0;border-right:1px solid #263449;background:#111827;color:#f8d568;padding:7px 6px;cursor:pointer;font-size:8px;font-weight:900;white-space:nowrap}
 .of-cctv-worknav{display:flex;gap:6px;overflow:auto;padding:4px 0 8px;scrollbar-width:none}.of-cctv-worknav::-webkit-scrollbar{display:none}.of-cctv-worknav button{border:1px solid #334155;background:#111827;color:#cbd5e1;border-radius:999px;padding:8px 11px;white-space:nowrap;font:inherit;font-size:9px;font-weight:900;cursor:pointer}.of-cctv-worknav button.active{background:#1d4ed8;border-color:#3b82f6;color:#fff}.of-cctv-workpane{margin-top:7px}.of-cctv-all-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.of-cctv-all-card{border:1px solid #263449;border-radius:14px;background:#0b1220;overflow:hidden}.of-cctv-all-head{display:flex;justify-content:space-between;gap:7px;align-items:center;padding:8px 9px}.of-cctv-all-head b{display:block;font-size:11px}.of-cctv-all-head small{display:block;color:#94a3b8;font-size:8px}.of-cctv-all-head button{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:8px;padding:5px 7px;font-size:8px;font-weight:800;cursor:pointer;margin-inline-start:4px}.of-cctv-all-media{height:250px;background:#000}.of-cctv-all-media iframe,.of-cctv-all-media img{width:100%;height:100%;border:0;object-fit:contain;background:#000}.of-cctv-day-review{margin-top:8px!important}.of-cctv-nvr-controls{gap:6px!important}.of-cctv-nvr-controls>*{min-height:36px}.of-cctv-playback-modal{max-height:92vh}.of-cctv-playback-modal video{min-height:min(58vh,520px)}
@@ -528,6 +528,21 @@
 }
 </style>
 
+<style id="ofCctvV596FinalReviewStyle">
+#ofCctvPlaybackOv .of-day596-glow-wrap{position:relative;width:100%;height:min(52dvh,430px);min-height:300px;background:#000}
+#ofCctvPlaybackOv iframe[data-day-glow]{display:block;width:100%;height:100%;border:0;background:#000}
+@media(max-width:700px){
+#ofCctvPlaybackOv .of-day511-body{height:calc(100dvh - 50px)!important}
+#ofCctvPlaybackOv .of-day511-stage>.of-smart555-videos{display:flex!important;flex-direction:column!important;width:100%!important;height:auto!important;max-height:none!important;gap:2px!important}
+#ofCctvPlaybackOv .of-smart555-video{width:100%!important;height:clamp(165px,24dvh,205px)!important;min-height:165px!important;max-height:205px!important;flex:0 0 auto!important}
+#ofCctvPlaybackOv .of-smart555-video video{width:100%!important;height:100%!important;object-fit:contain!important;background:#000!important}
+#ofCctvPlaybackOv .of-day596-glow-wrap{height:clamp(300px,48dvh,390px)!important;min-height:300px!important}
+#ofCctvPlaybackOv .of-smart555-timeline{height:34px!important;padding:7px 10px 8px!important}
+#ofCctvPlaybackOv .of-day564-event-rail{display:flex!important;min-height:64px!important;max-height:72px!important;padding:7px 8px!important;gap:7px!important;overflow-x:auto!important;overflow-y:hidden!important}
+#ofCctvPlaybackOv .of-day564-event{min-width:170px!important;max-width:220px!important;min-height:50px!important;padding:7px 9px!important;font-size:10px!important;line-height:1.25!important;display:flex!important;flex-direction:column!important;align-items:flex-start!important}
+#ofCctvPlaybackOv .of-day564-event span{width:100%!important;white-space:normal!important;overflow:visible!important}
+#ofCctvPlaybackOv .of-day511-cart{flex:1 1 0!important;min-height:135px!important}
+}</style>
 </head>
 <body>
 
@@ -860,7 +875,7 @@
     <div id="posLiveBody"><div class="empty">افتح التبويب لبدء المتابعة</div></div>
   </section>
 
-  <!-- 📹 CCTV v595 — compact control room -->
+  <!-- 📹 CCTV v596 — compact control room -->
   <section class="tabPage" id="page-cctv">
     <div class="of-cctv-shell of-cctv-controlroom">
       <div class="of-cctv-top">
@@ -997,7 +1012,7 @@
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=545"></script>
 <script src="../cctv-config.js?v=549"></script>
-<script src="cctv.js?v=595"></script>
+<script src="cctv.js?v=596"></script>
 <script src="office.js?v=552"></script>
 </body>
 </html>
