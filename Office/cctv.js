@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v592
+/* ECHARPE Office CCTV v594
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -224,6 +224,8 @@
   function closePlaybackModal(){
     var ov=document.getElementById('ofCctvPlaybackOv');if(!ov)return false;
     ov.querySelectorAll('iframe').forEach(function(fr){fr.src='about:blank';});ov.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();}catch(e){}});
+    try{if(typeof playbackAbort!=='undefined'&&playbackAbort)playbackAbort.abort();}catch(e){}
+    try{if(typeof playbackBlobUrl!=='undefined'&&playbackBlobUrl)URL.revokeObjectURL(playbackBlobUrl);}catch(e){}
     ov.remove();return true;
   }
   function armPlaybackBackGuard(){
@@ -250,8 +252,41 @@
     ov.innerHTML='<div class="of-cctv-playback-modal"><div class="of-cctv-playback-head"><b>🎞️ مراجعة التسجيل · '+esc(x.name)+'</b><div>'+(videoOnly?'<span class="of-cctv-playback-noaudio">🔇 بدون صوت</span>':'<button type="button" data-pb-sound class="of-cctv-playback-close">🔊 تشغيل الصوت</button>')+'<select data-pb-quality aria-label="جودة التسجيل"><option value="480" selected>480p سريع</option><option value="720">720p</option></select><a class="of-cctv-playback-external" href="'+esc(u)+'" target="_blank" rel="noopener">فتح منفصل ↗</a><button type="button" class="of-cctv-playback-close" data-pb-close aria-label="إغلاق">✕</button></div></div><video controls autoplay playsinline src="'+esc(u)+'"></video><div data-pb-status style="display:block;padding:8px;background:#0f172a;color:#cbd5e1;text-align:center;font-size:12px">جاري تجهيز دقيقة التسجيل…</div><div style="display:flex;gap:8px;align-items:center;justify-content:center;padding:9px;background:#111827;color:#fff"><button type="button" data-pb-prev class="of-cctv-playback-close">⏮ السابق</button><b data-pb-clock></b><button type="button" data-pb-next class="of-cctv-playback-close">التالي ⏭</button></div></div>';
     document.body.appendChild(ov);armPlaybackBackGuard();
     var start=Number(atMs)||Date.now(),step=(Number(durationMin)||playbackDefaultMinutes(x))*60000,video=ov.querySelector('video'),clock=ov.querySelector('[data-pb-clock]'),ext=ov.querySelector('.of-cctv-playback-external'),quality=ov.querySelector('[data-pb-quality]'),pbStatus=ov.querySelector('[data-pb-status]'),pbRetry=0;
-    async function loadAt(next,resumeSec,isRetry){if(!isRetry)pbRetry=0;start=await normalizePlaybackStart(x,next,durationMin,cameraId);var nextUrl=playbackUrl(start,durationMin,cameraId,offsetMs,quality.value);clock.textContent=new Date(start).toLocaleString('ar-EG');ext.href=nextUrl;pbStatus.style.display='block';pbStatus.textContent=pbRetry?'إعادة الاتصال بالتسجيل تلقائيًا ('+pbRetry+'/3)…':'جاري تجهيز دقيقة التسجيل…';video.src=nextUrl+'&retry='+Date.now();video.load();if(resumeSec>0)video.addEventListener('loadedmetadata',function seek(){video.removeEventListener('loadedmetadata',seek);video.currentTime=Math.min(resumeSec,Math.max(0,(video.duration||resumeSec)-.25));video.play().catch(function(){});},{once:true});else video.play().catch(function(){});}
-    video.addEventListener('loadeddata',function(){pbRetry=0;pbStatus.style.display='none';});video.addEventListener('playing',function(){pbRetry=0;pbStatus.style.display='none';});video.addEventListener('error',function(){if(pbRetry<3&&document.documentElement.contains(ov)){pbRetry++;pbStatus.style.display='block';pbStatus.textContent='إعادة الاتصال بالتسجيل تلقائيًا ('+pbRetry+'/3)…';if(video._retryTimer)clearTimeout(video._retryTimer);video._retryTimer=setTimeout(function(){loadAt(start,0,true);},2500);return;}pbStatus.style.display='block';pbStatus.textContent='التسجيل غير متاح في هذا التوقيت.';});
+    var playbackAbort=null,playbackBlobUrl='';
+    function clearPlaybackBlob(){if(playbackBlobUrl){try{URL.revokeObjectURL(playbackBlobUrl);}catch(e){}playbackBlobUrl='';}}
+    async function loadAt(next,resumeSec,isRetry){
+      if(!isRetry)pbRetry=0;
+      start=await normalizePlaybackStart(x,next,durationMin,cameraId);
+      var nextUrl=playbackUrl(start,durationMin,cameraId,offsetMs,quality.value);
+      clock.textContent=new Date(start).toLocaleString('ar-EG');ext.href=nextUrl;
+      pbStatus.style.display='block';pbStatus.textContent=pbRetry?'إعادة تجهيز التسجيل تلقائيًا ('+pbRetry+'/3)…':'جاري تجهيز دقيقة التسجيل…';
+      if(x.id==='glow'){
+        if(playbackAbort)try{playbackAbort.abort();}catch(e){}
+        playbackAbort=(typeof AbortController!=='undefined')?new AbortController():null;
+        try{
+          var response=await fetch(nextUrl+'&download=1&_='+Date.now(),{cache:'no-store',signal:playbackAbort?playbackAbort.signal:undefined});
+          if(!response.ok)throw new Error('HTTP_'+response.status);
+          var blob=await response.blob();
+          if(!blob||blob.size<4096)throw new Error('EMPTY_PLAYBACK');
+          clearPlaybackBlob();playbackBlobUrl=URL.createObjectURL(blob);
+          video.src=playbackBlobUrl;video.load();
+          pbStatus.textContent='تم تجهيز التسجيل';
+          video.addEventListener('loadedmetadata',function seekGlow(){
+            video.removeEventListener('loadedmetadata',seekGlow);
+            if(resumeSec>0)video.currentTime=Math.min(resumeSec,Math.max(0,(video.duration||resumeSec)-.25));
+            video.play().catch(function(){});
+          },{once:true});
+          return;
+        }catch(e){
+          if(e&&e.name==='AbortError')return;
+          if(pbRetry<3&&document.documentElement.contains(ov)){pbRetry++;pbStatus.textContent='إعادة تجهيز التسجيل تلقائيًا ('+pbRetry+'/3)…';if(video._retryTimer)clearTimeout(video._retryTimer);video._retryTimer=setTimeout(function(){loadAt(start,0,true);},2000);return;}
+          pbStatus.style.display='block';pbStatus.textContent='تعذر تحميل تسجيل Glow. جرّب السابق أو التالي.';return;
+        }
+      }
+      video.src=nextUrl+'&retry='+Date.now();video.load();
+      if(resumeSec>0)video.addEventListener('loadedmetadata',function seek(){video.removeEventListener('loadedmetadata',seek);video.currentTime=Math.min(resumeSec,Math.max(0,(video.duration||resumeSec)-.25));video.play().catch(function(){});},{once:true});else video.play().catch(function(){});
+    }
+    video.addEventListener('loadeddata',function(){pbRetry=0;pbStatus.style.display='none';});video.addEventListener('playing',function(){pbRetry=0;pbStatus.style.display='none';});video.addEventListener('error',function(){if(x.id==='glow')return;if(pbRetry<3&&document.documentElement.contains(ov)){pbRetry++;pbStatus.style.display='block';pbStatus.textContent='إعادة الاتصال بالتسجيل تلقائيًا ('+pbRetry+'/3)…';if(video._retryTimer)clearTimeout(video._retryTimer);video._retryTimer=setTimeout(function(){loadAt(start,0,true);},2500);return;}pbStatus.style.display='block';pbStatus.textContent='التسجيل غير متاح في هذا التوقيت.';});
     quality.onchange=function(){loadAt(start,Number(video.currentTime)||0);};
     var soundBtn=ov.querySelector('[data-pb-sound]');if(soundBtn)soundBtn.onclick=function(){video.muted=false;video.volume=1;video.play().catch(function(){});this.textContent='🔊 الصوت يعمل';};
     ov.querySelector('[data-pb-prev]').onclick=function(){loadAt(start-step);};ov.querySelector('[data-pb-next]').onclick=function(){loadAt(start+step);};loadAt(start);
