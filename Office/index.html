@@ -381,6 +381,7 @@
   .of-cctv-playback-head{padding:8px 10px}.of-cctv-playback-head b{font-size:13px}.of-cctv-playback-external{font-size:11px;padding:7px 8px}.of-cctv-playback-close{padding:7px 10px}
   .of-day511-body{grid-template-columns:1fr;grid-template-rows:minmax(43%,1fr) minmax(35%,.85fr)}.of-day511-cart{border-right:0;border-top:1px solid #334155}.of-day511-nav{grid-template-columns:1fr 1fr}.of-day511-nav input{grid-column:1/-1}
 }
+.of-cctv-playback-noaudio{display:inline-flex;align-items:center;padding:7px 9px;border:1px solid #334155;border-radius:9px;color:#cbd5e1;font-size:11px;font-weight:800}
 </style>
 
 <style id="ofCctvV503Style">
@@ -413,7 +414,7 @@
 .of-cctv-video img[data-live-frame].is-ready{opacity:1}
 </style>
 \n<style id="ofCctvV583Style">
-/* v583 compact CCTV navigation: one workspace at a time, sticky controls, all-branch live shortcuts. */
+/* v591 compact CCTV navigation: one workspace at a time, sticky controls, all-branch live shortcuts. */
 #page-cctv{overflow-x:hidden}.of-cctv-controlroom{padding-bottom:18px}.of-cctv-toolbar{position:sticky;top:0;z-index:28;background:rgba(5,9,16,.96);backdrop-filter:blur(12px);padding:8px 0;margin-bottom:8px}
 .of-cctv-branches{display:grid!important;grid-template-columns:repeat(4,minmax(120px,1fr));gap:7px!important;flex:1}.of-cctv-branch-card{display:flex;align-items:stretch;min-width:0;border:1px solid #263449;background:#0f172a;border-radius:13px;overflow:hidden;color:#e5e7eb}.of-cctv-branch-card.active{border-color:#2563eb;box-shadow:0 0 0 1px rgba(37,99,235,.25)}.of-cctv-branch-card.all{appearance:none;padding:0;cursor:pointer;align-items:center;justify-content:center;gap:6px;flex-direction:column}.of-cctv-branch-card.all span{font-size:18px}.of-cctv-branch-card.all b,.of-cctv-branch-main b{font-size:10px}.of-cctv-branch-card small,.of-cctv-branch-main small{font-size:8px;color:#94a3b8}.of-cctv-branch-main{flex:1;min-width:0;border:0;background:transparent;color:inherit;padding:8px 7px;cursor:pointer;display:grid;grid-template-columns:auto 1fr;column-gap:6px;text-align:right}.of-cctv-branch-main span{grid-row:1/3;font-size:17px;align-self:center}.of-cctv-branch-main b,.of-cctv-branch-main small{display:block}.of-cctv-branch-play{border:0;border-right:1px solid #263449;background:#111827;color:#f8d568;padding:7px 6px;cursor:pointer;font-size:8px;font-weight:900;white-space:nowrap}
 .of-cctv-worknav{display:flex;gap:6px;overflow:auto;padding:4px 0 8px;scrollbar-width:none}.of-cctv-worknav::-webkit-scrollbar{display:none}.of-cctv-worknav button{border:1px solid #334155;background:#111827;color:#cbd5e1;border-radius:999px;padding:8px 11px;white-space:nowrap;font:inherit;font-size:9px;font-weight:900;cursor:pointer}.of-cctv-worknav button.active{background:#1d4ed8;border-color:#3b82f6;color:#fff}.of-cctv-workpane{margin-top:7px}.of-cctv-all-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.of-cctv-all-card{border:1px solid #263449;border-radius:14px;background:#0b1220;overflow:hidden}.of-cctv-all-head{display:flex;justify-content:space-between;gap:7px;align-items:center;padding:8px 9px}.of-cctv-all-head b{display:block;font-size:11px}.of-cctv-all-head small{display:block;color:#94a3b8;font-size:8px}.of-cctv-all-head button{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:8px;padding:5px 7px;font-size:8px;font-weight:800;cursor:pointer;margin-inline-start:4px}.of-cctv-all-media{height:250px;background:#000}.of-cctv-all-media iframe,.of-cctv-all-media img{width:100%;height:100%;border:0;object-fit:contain;background:#000}.of-cctv-day-review{margin-top:8px!important}.of-cctv-nvr-controls{gap:6px!important}.of-cctv-nvr-controls>*{min-height:36px}.of-cctv-playback-modal{max-height:92vh}.of-cctv-playback-modal video{min-height:min(58vh,520px)}
@@ -751,7 +752,7 @@
     <div id="posLiveBody"><div class="empty">افتح التبويب لبدء المتابعة</div></div>
   </section>
 
-  <!-- 📹 CCTV v583 — compact control room -->
+  <!-- 📹 CCTV v591 — compact control room -->
   <section class="tabPage" id="page-cctv">
     <div class="of-cctv-shell of-cctv-controlroom">
       <div class="of-cctv-top">
@@ -776,7 +777,7 @@
       </div>
       <div id="ofCctvAllPane" class="of-cctv-workpane" style="display:none"><div class="of-cctv-camera-section-title"><b>🌐 كل الفروع Live</b><small>كاميرا الكاشير من كل فرع — اضغط اسم الفرع لباقي الكاميرات</small></div><div class="of-cctv-all-grid" id="ofCctvAllGrid"></div></div>
       <section class="of-cctv-day-review" id="ofCctvNvrReview" style="display:none">
-        <div class="of-cctv-day-head"><div><b>🎞️ التسجيل السريع</b><small id="ofCctvNvrHint">اختار الكاميرا والوقت</small></div><div class="of-cctv-day-controls of-cctv-nvr-controls"><select id="ofCctvNvrCamera"></select><input type="date" id="ofCctvNvrDate"><input type="time" id="ofCctvNvrTime" step="60"><select id="ofCctvNvrDuration"><option value="1">1 دقيقة</option><option value="5" selected>5 دقائق — أسرع</option><option value="10">10 دقائق</option><option value="15">15 دقيقة</option><option value="30">30 دقيقة</option></select><button type="button" id="ofCctvNvrNow">⏱ آخر 5 دقائق</button><button type="button" id="ofCctvNvrOpen">▶ تشغيل</button></div></div>
+        <div class="of-cctv-day-head"><div><b>🎞️ التسجيل السريع</b><small id="ofCctvNvrHint">اختار الكاميرا والوقت</small></div><div class="of-cctv-day-controls of-cctv-nvr-controls"><select id="ofCctvNvrCamera"></select><input type="date" id="ofCctvNvrDate"><input type="time" id="ofCctvNvrTime" step="60"><select id="ofCctvNvrDuration"><option value="1" selected>1 دقيقة — أسرع</option><option value="5">5 دقائق</option><option value="10">10 دقائق</option><option value="15">15 دقيقة</option><option value="30">30 دقيقة</option></select><button type="button" id="ofCctvNvrNow">⏱ آخر دقيقة</button><button type="button" id="ofCctvNvrOpen">▶ تشغيل</button></div></div>
       </section>
       <section class="of-cctv-day-review" id="ofCctvDayReview" style="display:none"><div class="of-cctv-day-head"><div><b>🕘 مراجعة اليوم + السلة</b><small>التسجيل والسلة على نفس الخط الزمني</small></div><div class="of-cctv-day-controls"><input type="date" id="ofCctvDayDate"><input type="time" id="ofCctvDayTime" step="300"><button type="button" id="ofCctvDayLoad">تحميل الفواتير</button><button type="button" id="ofCctvDayPlay">▶ مراجعة اليوم كله</button></div></div><div id="ofCctvDayRows"><div class="of-cctv-day-empty">اختار التاريخ واضغط تحميل اليوم</div></div></section>
       <section class="of-cctv-day-review" id="ofCctvActivityReview" style="display:none"><div class="of-cctv-day-head"><div><b>🚨 النشاط القوي</b><small>الأحداث التي تحتاج مراجعة فقط</small><span class="of-cctv-activity-status" id="ofCctvActivityStatus">● جاري الفحص</span></div><div class="of-cctv-day-controls"><button type="button" id="ofCctvActivityReload">↻ تحديث</button></div></div><div id="ofCctvActivityRows"><div class="of-cctv-day-empty">جاري فحص التنبيهات…</div></div></section>
@@ -888,7 +889,7 @@
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=545"></script>
 <script src="../cctv-config.js?v=549"></script>
-<script src="cctv.js?v=583"></script>
+<script src="cctv.js?v=591"></script>
 <script src="office.js?v=552"></script>
 </body>
 </html>
