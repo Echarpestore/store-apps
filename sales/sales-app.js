@@ -3347,10 +3347,15 @@ async function faceFrame(video){
   return faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:0.55}))
     .withFaceLandmarks(true).withFaceDescriptor();
 }
-function eyeRatio(pts){
-  if(!pts||pts.length<6)return 1;
+function mouthOpenRatio(lm){
+  const m=lm.getMouth();
+  if(!m||m.length<20)return 0;
   const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
-  return (d(pts[1],pts[5])+d(pts[2],pts[4]))/(2*Math.max(1,d(pts[0],pts[3])));
+  // face-api 68-point mouth landmarks: 12 outer + 8 inner.
+  // Compare inner vertical opening to mouth width so it scales across phones/distances.
+  const width=Math.max(1,d(m[0],m[6]));
+  const innerGap=(d(m[13],m[19])+d(m[14],m[18])+d(m[15],m[17]))/3;
+  return innerGap/width;
 }
 function headRatio(lm){
   const le=lm.getLeftEye(), re=lm.getRightEye(), no=lm.getNose();
@@ -3359,22 +3364,32 @@ function headRatio(lm){
   return (no[3].x-lx)/Math.max(1,rx-lx);
 }
 async function runActiveLiveness(video){
-  // v601 — keep ONE camera overlay open and retry silently.
-  // We still require BOTH blink + small head movement; thresholds are tuned for mobile front cameras.
-  const until=Date.now()+6500;
-  let maxEye=0, blink=false, minHead=Infinity,maxHead=-Infinity, frames=0;
+  // v602 — mobile-friendly active liveness.
+  // Blink detection was unreliable on real phones, so use a CHANGE in mouth opening
+  // plus a small head movement. A static photo cannot satisfy the mouth-change step.
+  const until=Date.now()+7000;
+  let minMouth=Infinity,maxMouth=-Infinity,minHead=Infinity,maxHead=-Infinity,frames=0;
   while(Date.now()<until && pendingPhotoAction){
     const r=await faceFrame(video).catch(()=>null);
-    if(!r){ $('#attPhotoStatus').textContent='خليك قدام الكاميرا…'; await new Promise(x=>setTimeout(x,120)); continue; }
+    if(!r){
+      $('#attPhotoStatus').textContent='خليك قدام الكاميرا…';
+      await new Promise(x=>setTimeout(x,120));
+      continue;
+    }
     frames++;
-    const lm=r.landmarks, er=(eyeRatio(lm.getLeftEye())+eyeRatio(lm.getRightEye()))/2;
-    // Build a natural open-eye baseline first, then accept a normal blink.
-    if(frames>2) maxEye=Math.max(maxEye,er);
-    if(maxEye>0 && er<maxEye*0.72) blink=true;
+    const lm=r.landmarks;
+    const mr=mouthOpenRatio(lm);
+    if(Number.isFinite(mr)){ minMouth=Math.min(minMouth,mr); maxMouth=Math.max(maxMouth,mr); }
     const hr=headRatio(lm); minHead=Math.min(minHead,hr); maxHead=Math.max(maxHead,hr);
-    const moved=(maxHead-minHead)>=0.11;
-    $('#attPhotoStatus').textContent=!blink?'ارمش مرة طبيعي…':(!moved?'تمام ✅ حرّك وشك سنة يمين أو شمال…':'تم التحقق ✅');
-    if(blink && moved) return true;
+
+    const mouthChanged=frames>=5 && (maxMouth-minMouth)>=0.055;
+    const moved=(maxHead-minHead)>=0.09;
+
+    $('#attPhotoStatus').textContent=!mouthChanged
+      ? 'افتح بُقك واقفله مرة طبيعي…'
+      : (!moved ? 'تمام ✅ حرّك وشك سنة يمين أو شمال…' : 'تم التحقق ✅');
+
+    if(mouthChanged && moved) return true;
     await new Promise(x=>setTimeout(x,110));
   }
   return false;
@@ -3390,7 +3405,7 @@ async function verifyFaceWithSilentRetry(emp,video){
         // Do not close/reopen the modal and do not force the user to press Retry.
         $('#attPhotoErr').textContent='';
         $('#attPhotoRetryBtn').style.display='none';
-        $('#attPhotoStatus').textContent='مشفتش الحركة بوضوح — كمّل قدام الكاميرا، هحاول تلقائي…';
+        $('#attPhotoStatus').textContent='كمّل قدام الكاميرا — افتح بُقك واقفله وحرّك وشك سنة، هحاول تلقائي…';
         await new Promise(x=>setTimeout(x,650));
         continue;
       }
