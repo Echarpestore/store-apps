@@ -3359,21 +3359,45 @@ function headRatio(lm){
   return (no[3].x-lx)/Math.max(1,rx-lx);
 }
 async function runActiveLiveness(video){
-  // Active random-free challenge intentionally requires BOTH a real blink and
-  // 3-D head geometry movement. A moved static phone photo cannot satisfy blink.
-  const until=Date.now()+7000; let maxEye=0, blink=false, minHead=Infinity,maxHead=-Infinity;
+  // v601 — keep ONE camera overlay open and retry silently.
+  // We still require BOTH blink + small head movement; thresholds are tuned for mobile front cameras.
+  const until=Date.now()+6500;
+  let maxEye=0, blink=false, minHead=Infinity,maxHead=-Infinity, frames=0;
   while(Date.now()<until && pendingPhotoAction){
     const r=await faceFrame(video).catch(()=>null);
-    if(!r){ $('#attPhotoStatus').textContent='ثبّت وشك قدام الكاميرا…'; await new Promise(x=>setTimeout(x,130)); continue; }
+    if(!r){ $('#attPhotoStatus').textContent='خليك قدام الكاميرا…'; await new Promise(x=>setTimeout(x,120)); continue; }
+    frames++;
     const lm=r.landmarks, er=(eyeRatio(lm.getLeftEye())+eyeRatio(lm.getRightEye()))/2;
-    maxEye=Math.max(maxEye,er); if(maxEye>0 && er<maxEye*0.60) blink=true;
+    // Build a natural open-eye baseline first, then accept a normal blink.
+    if(frames>2) maxEye=Math.max(maxEye,er);
+    if(maxEye>0 && er<maxEye*0.72) blink=true;
     const hr=headRatio(lm); minHead=Math.min(minHead,hr); maxHead=Math.max(maxHead,hr);
-    const moved=(maxHead-minHead)>=0.16;
-    $('#attPhotoStatus').textContent=!blink?'ارمش مرة طبيعي…':(!moved?'لف وشك سنة يمين وشمال…':'تم التحقق ✅');
+    const moved=(maxHead-minHead)>=0.11;
+    $('#attPhotoStatus').textContent=!blink?'ارمش مرة طبيعي…':(!moved?'تمام ✅ حرّك وشك سنة يمين أو شمال…':'تم التحقق ✅');
     if(blink && moved) return true;
-    await new Promise(x=>setTimeout(x,120));
+    await new Promise(x=>setTimeout(x,110));
   }
   return false;
+}
+
+async function verifyFaceWithSilentRetry(emp,video){
+  while(pendingPhotoAction && attPhotoStream){
+    try{
+      await enrollOrVerifyFace(emp,video);
+      return true;
+    }catch(err){
+      if(err && err.message==='liveness'){
+        // Do not close/reopen the modal and do not force the user to press Retry.
+        $('#attPhotoErr').textContent='';
+        $('#attPhotoRetryBtn').style.display='none';
+        $('#attPhotoStatus').textContent='مشفتش الحركة بوضوح — كمّل قدام الكاميرا، هحاول تلقائي…';
+        await new Promise(x=>setTimeout(x,650));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('cancelled');
 }
 async function enrollOrVerifyFace(emp,video){
   await ensureFaceAuthModels();
@@ -8321,11 +8345,11 @@ async function openAttPhoto(action){
     await video.play();
     if(faceRequiredFor(emp, action.type)){
       try{
-        await enrollOrVerifyFace(emp,video);
+        await verifyFaceWithSilentRetry(emp,video);
       }catch(err){
+        if(err&&err.message==='cancelled') return;
         $('#attPhotoStatus').textContent='';
-        $('#attPhotoErr').textContent = err&&err.message==='liveness' ? 'فشل التحقق إنه شخص حقيقي. ارمش ولف وشك سنة وحاول تاني.'
-          : (err&&err.message==='face-mismatch' ? 'الوجه مش مطابق للموظف المختار.' : 'تعذر التحقق من الوجه. حاول تاني.');
+        $('#attPhotoErr').textContent = err&&err.message==='face-mismatch' ? 'الوجه مش مطابق للموظف المختار.' : 'تعذر التحقق من الوجه. حاول تاني.';
         $('#attPhotoRetryBtn').style.display='block';
         return;
       }
