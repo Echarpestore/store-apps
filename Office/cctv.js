@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v596
+/* ECHARPE Office CCTV v598
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -68,10 +68,21 @@
     });
   }
   function fetchJsonRetry(url,branchId,tries){
-    var left=Math.max(1,Number(tries)||1),opt={cache:'no-store',credentials:branchId==='glow'?'include':'omit'};
+    var left=Math.max(1,Number(tries)||1),opt={cache:'no-store',credentials:'omit'};
     function request(){return fetch(url,opt).then(function(r){if(!r.ok)throw new Error('cctv_http_'+r.status);return r.json();}).catch(function(e){return branchId==='madinaty'?fetchFrameBridge(url):Promise.reject(e);});}
     function run(){return request().catch(function(e){if(--left<=0)throw e;return new Promise(function(resolve){setTimeout(resolve,1200);}).then(run);});}
     return run();
+  }
+  async function resolveCashierCamera(x,gateway){
+    var fallback=String(x&&x.playbackCamera||'1');
+    try{
+      var h=await fetchJsonRetry(String(gateway||'').replace(/\/$/,'')+'/health?_='+Date.now(),x.id,2);
+      var cid=String(h&&h.cashierCamera||fallback);
+      if(h&&Array.isArray(h.cameras)&&h.cameras.length&&!h.cameras.map(String).includes(cid))cid=fallback;
+      return {camera:cid,health:h||null,source:(h&&h.cashierCamera!=null)?'health.cashierCamera':'profile.playbackCamera'};
+    }catch(e){
+      return {camera:fallback,health:null,source:'profile.playbackCamera',healthError:e};
+    }
   }
   function cartRows(rows){
     return (Array.isArray(rows)?rows:[]).map(function(r){return Array.isArray(r)?r:[r&&r['0'],r&&r['1'],r&&r['2'],r&&r['3']];});
@@ -402,8 +413,8 @@
     if(currentBounds)dayReviewBounds=currentBounds;
     if(!dayReviewBounds||typeof db==='undefined')return;
     var x=b(),gateway=String(x.gateway||'').replace(/\/$/,''),aliases=(x.liveAliases||[]).map(function(v){return String(v).toLowerCase();});
-    var range=null,timelineDocs=[],range8=null;
-    var primaryCam=String(x.playbackCamera||'4');
+    var range=null,timelineDocs=[],range8=null,cashierInfo=await resolveCashierCamera(x,gateway);
+    var primaryCam=String(cashierInfo.camera||x.playbackCamera||'1');
     try{
       var pair=await Promise.all([
         fetchJsonRetry(gateway+'/echarpe-playback/range?camera='+encodeURIComponent(primaryCam)+'&_='+Date.now(),x.id,3),
@@ -415,7 +426,7 @@
       ]);
       range=pair[0];pair[1].forEach(function(s){var d=s.data()||{};if(branchMatches(d.branch,x.id,aliases))timelineDocs.push(d);});
       range8=pair[2];
-    }catch(e){alert('تعذر تجهيز مراجعة اليوم: '+(e&&e.message||e));return;}
+    }catch(e){var msg=(e&&e.message)||String(e||'');alert('تعذر تجهيز مراجعة اليوم · كاميرا الكاشير '+primaryCam+(msg==='Failed to fetch'?' — الاتصال ببوابة Glow فشل.':' : '+msg));return;}
     var timelineCodes={};timelineDocs.forEach(function(t){if(t&&t.invoiceCode)timelineCodes[String(t.invoiceCode)]=true;});
     (dayReviewRows||[]).forEach(function(sale){var code=String(sale&&sale.invoiceCode||'');if(!code||timelineCodes[code]||!branchMatches(sale.branch,x.id,aliases))return;var fallback=timelineFromSale(sale);if(fallback){timelineDocs.push(fallback);timelineCodes[code]=true;}});
     var rangeStart=Number(range.startMs)||0,rangeEnd=Number(range.endMs)||0,coverageStart=Math.max(dayReviewBounds.start,rangeStart),coverageEnd=Math.min(dayReviewBounds.end,rangeEnd);
@@ -440,7 +451,7 @@
     var master=ov.querySelector('[data-day-master]'),slave=dualCam?ov.querySelector('[data-day-slave]'):null,glowFrame=glowDay?ov.querySelector('[data-day-glow]'):null;
     var slider=ov.querySelector('[data-day-slider]'),marks=ov.querySelector('[data-day-markers]'),rail=ov.querySelector('[data-day-event-rail]'),clock=ov.querySelector('[data-day-clock]'),eventEl=ov.querySelector('[data-day-event]'),rowsEl=ov.querySelector('[data-day-rows]'),totalEl=ov.querySelector('[data-day-total]'),status=ov.querySelector('[data-day-status]'),syncText=ov.querySelector('[data-day-sync]');
     var basketOffsetKey='echarpe.cctv.'+x.id+'.basketOffsetMs',basketOffsetMs=Number(localStorage.getItem(basketOffsetKey)||0);if(!isFinite(basketOffsetMs)||Math.abs(basketOffsetMs)>15000)basketOffsetMs=0;
-    ov.querySelector('[data-day-coverage]').textContent='المتاح '+new Date(coverageStart).toLocaleTimeString('ar-EG')+' — '+new Date(coverageEnd).toLocaleTimeString('ar-EG')+' · '+(dualCam?'كاميرتين متزامنتين':'كاميرا واحدة')+' · '+jumpEvents.length+' علامة';
+    ov.querySelector('[data-day-coverage]').textContent='المتاح '+new Date(coverageStart).toLocaleTimeString('ar-EG')+' — '+new Date(coverageEnd).toLocaleTimeString('ar-EG')+' · '+(dualCam?'كاميرتين متزامنتين':glowDay?'Glow · كاميرا الكاشير '+primaryCam:'كاميرا واحدة')+' · '+jumpEvents.length+' علامة';
     slider.min=String(Math.floor((coverageStart-dayReviewBounds.start)/60000));slider.max=String(Math.max(Number(slider.min),Math.floor((coverageEnd-dayReviewBounds.start-30000)/60000)));
     function kindName(k){return ({item_added:'إضافة صنف',item_removed:'حذف صنف',qty_increased:'زيادة كمية',qty_decreased:'تقليل كمية',cart_edited:'تعديل السلة',payment:'بدء الدفع',saving:'بدء الحفظ',sale_saved:'حفظ الفاتورة',cart_cleared:'بين الفواتير'})[k]||'حركة سلة';}
     // 🔖 شريط العلامات على مدى اليوم كله — الدوسة بتنقلك للحظة نفسها في الكاميرتين
