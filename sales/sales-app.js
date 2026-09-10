@@ -95,14 +95,17 @@ window.fbWriteBatch = (typeof writeBatch === 'function' ? writeBatch : null);   
    This cuts the repeated 190-day listener re-reads without losing local history.
    ============================================================ */
 const LF431_PREFIX='sales_lf_v431_';
-// v603 — one-time history repair. A previous successful/failed long-history fetch
-// could leave a fresh TTL marker while this device no longer had the matching
-// IndexedDB rows. Clear only LF431 freshness markers once so the real Firestore
-// history is reloaded; this does NOT delete any Firestore data.
+// v604 — إصلاح التاريخ بعد كل تحديث (كان v603 بيتنفّذ مرة واحدة للأبد).
+// المشكلة: علامة الـTTL في localStorage بتعيش عبر التحديثات، وبتقول "التاريخ
+// طازة" حتى لو الكاش المحلي (IndexedDB) بقى فاضي أو الـpersistence فشلت بعد
+// التحديث. النتيجة: التطبيق ميجيبش الـ190 يوم من السيرفر ويكتفي بآخر يومين،
+// فالتاريخ يبان مقطوع من يوم التحديث — وده اللي بيتكرر بعد كل تحديث.
+// الحل: نربط الإصلاح برقم النسخة، فأي تحديث يجبر تحديث كامل من السيرفر مرة.
+const SALES_BUILD='604';
 try{
-  if(localStorage.getItem('sales_history_repair_v603')!=='1'){
+  if(localStorage.getItem('sales_history_repair_build')!==SALES_BUILD){
     Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
-    localStorage.setItem('sales_history_repair_v603','1');
+    localStorage.setItem('sales_history_repair_build',SALES_BUILD);
   }
 }catch(_e){}
 function lf431Last(k){try{return Number(localStorage.getItem(LF431_PREFIX+k)||0)||0;}catch(e){return 0;}}
@@ -121,6 +124,24 @@ function lf431Merge(base,fresh){
 // once with plain getDocs (covers transient offline blips / server-API edge
 // cases) instead of waiting for the next full page reload.
 window.salesHistoryDiagnostics = window.salesHistoryDiagnostics || {};
+// v604: السبب الجذري لاختفاء التاريخ.
+// _salesInitialAuthReady بيرجع false لو إعادة الدخول وقت التشغيل فشلت (نت ضعيف
+// لحظة الفتح)، لكن الاستعلام كان بيتطلق على طول ويتجاهل القيمة دي → القواعد
+// بترفض (isStaff بتشترط دخول بإيميل وباسورد) → permission-denied → المحاولة
+// التانية بعد 5 ثواني برضه فاشلة لأن الدخول لسه ما تمّش → وبعدين مفيش أي محاولة
+// تانية طول الجلسة، فاللي بيتعرض هو بس اللي في الكاش من قبل كده.
+// الحل: منطلقش الاستعلام غير لما الدخول يتأكد، ونعيده تلقائي أول ما ينجح.
+const _lf431Pending = new Map();
+function _lf431Authed(){
+  try{ return !!(_auth && _auth.currentUser && !_auth.currentUser.isAnonymous); }catch(e){ return false; }
+}
+// بيتنادى من onAuthStateChanged بعد ما الدخول يرجع
+window._lf431RetryPending = function(){
+  if(!_lf431Authed()) return;
+  const jobs = Array.from(_lf431Pending.values());
+  _lf431Pending.clear();
+  jobs.forEach(fn=>{ try{ fn(); }catch(e){} });
+};
 function lf431Report(name, patch){
   const cur = window.salesHistoryDiagnostics[name] || {};
   window.salesHistoryDiagnostics[name] = Object.assign(cur, patch, {updatedAt: Date.now()});
@@ -141,6 +162,13 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
     }
   }).catch(e=>lf431Report(name,{cacheError:(e&&e.code)||String(e)}));
   function runServerFetch(isRetry){
+    // v604: لو الدخول لسه ما تمّش، متطلقش الاستعلام (هيترفض) — سجّله وانتظر
+    // إشارة الدخول. من غير ده الاستعلام بيفشل نهائيًا لبقية الجلسة.
+    if(!_lf431Authed()){
+      lf431Report(name,{status:'waiting_auth',note:'الاستعلام مؤجل لحد ما تسجيل الدخول يتم'});
+      _lf431Pending.set(name,()=>runServerFetch(false));
+      return;
+    }
     lf431Report(name,{status:'fetching',lastAttemptAt:Date.now()});
     _salesInitialAuthReady.then(()=>_serverGet(fullQ)).then(s=>{
       // v603 history-preservation guard: a refresh may add/update records,
@@ -152,6 +180,12 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
       const code=(e&&e.code)||String(e);
       console.warn('lf431 '+name,code);
       lf431Report(name,{status:'error',error:code});
+      // v604: أخطاء الصلاحيات معناها إن الجلسة مش مسجّلة — استنى الدخول
+      // وأعد المحاولة، مش تستسلم لبقية الجلسة.
+      if(code==='permission-denied'||code==='unauthenticated'){
+        _lf431Pending.set(name,()=>runServerFetch(false));
+        return;
+      }
       if(!isRetry){
         setTimeout(()=>{
           _salesInitialAuthReady.then(()=>getDocs(fullQ)).then(s=>{
@@ -162,6 +196,7 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
             const code2=(e2&&e2.code)||String(e2);
             console.warn('lf431 retry '+name,code2);
             lf431Report(name,{status:'error',error:code2});
+            if(code2==='permission-denied'||code2==='unauthenticated') _lf431Pending.set(name,()=>runServerFetch(false));
           });
         },5000);
       }
@@ -1998,6 +2033,8 @@ onAuthStateChanged(_auth,(u)=>{
   if(u&&!u.isAnonymous){
     if(_autoReloginTimer){clearTimeout(_autoReloginTimer);_autoReloginTimer=null;}
     _salesAuthState('connected'); window.salesAuthDiagnostics.attempts=0;
+    // v604: أي استعلام تاريخ كان مؤجل بسبب عدم تسجيل الدخول يتنفّذ دلوقتي
+    if(typeof window._lf431RetryPending==='function') window._lf431RetryPending();
     if(_salesListenersNeedReload){
       _salesListenersNeedReload=false;
       setTimeout(()=>location.reload(),50);
