@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v609
+/* ECHARPE Office CCTV v617
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -577,6 +577,18 @@
     var smartSound=ov.querySelector('[data-smart-sound]');if(smartSound)smartSound.onclick=function(){master.muted=false;master.volume=1;master.play().catch(function(){});};
     var closeBtn=ov.querySelector('[data-pb-close]');if(closeBtn)closeBtn.onclick=closePlaybackModalByUser;ov.onclick=function(e){if(e.target===ov)closePlaybackModalByUser();};
   }
+  function trackingProfile(x){
+    x=x||b();
+    if(x.id==='madinaty')return {enabled:true,door:'8',cashier:'4',expected:4,label:'Camera 8 يبدأ وينهي التراك · الكاميرات تسلّم الشخص لبعضها بنفس ID · Cam 4 تربط الأشخاص الموجودين خلف الكاشير بالموظفين النشطين · لا يتم حفظ صورة أو وجه في هوية الزائر.'};
+    if(x.id==='glow')return {enabled:true,door:'3',cashier:'1',expected:4,label:'Camera 3 يبدأ وينهي التراك · الكاميرات تسلّم الشخص لبعضها بنفس ID · Cam 1 تربط الأشخاص الموجودين خلف الكاشير بالموظفين النشطين · لا يتم حفظ صورة أو وجه في هوية الزائر.'};
+    return {enabled:false,door:'',cashier:String(x.playbackCamera||'1'),expected:(x.cameras||[]).length,label:''};
+  }
+  function normalizeTrackingStatus(raw){
+    if(!raw)return {};
+    if(raw.state)return raw;
+    if(raw.generatedAtMs&&raw.configuredCameras)return {detector:true,state:raw};
+    return raw;
+  }
   async function trafficSalesByDay(history){
     history=(Array.isArray(history)?history:[]).slice(0,7);
     if(!history.length||typeof db==='undefined')return {};
@@ -600,7 +612,7 @@
   function renderTrafficReport(det,salesByDay){
     var host=document.getElementById('ofCctvTrafficReport');if(!host)return;
     var s=det&&det.state||{},history=Array.isArray(s.trafficHistory)?s.trafficHistory.slice(0,7):[];
-    if(!history.length){host.innerHTML='<div class="of-cctv-day-empty">تقرير الزوار يبدأ بعد تثبيت Madinaty v606.</div>';return;}
+    if(!history.length){var tp0=trackingProfile(b());host.innerHTML='<div class="of-cctv-day-empty">تقرير الزوار يبدأ بعد أول حركة دخول/خروج في '+esc(b().name)+' عبر Camera '+esc(tp0.door)+'.</div>';return;}
     var today=history[0]||{},entries=Number(today.entries||0),unique=Number(today.uniqueVisitors||0),
         uniqueStarted=Number(today.uniqueStartedAtMs||0)>0,visitors=uniqueStarted?unique:entries,
         sales=Number((salesByDay||{})[today.dateKey]||0),conv=visitors>0?(sales/visitors*100):0;
@@ -619,29 +631,29 @@
       +'<div><small>Conversion</small><b>'+conv.toFixed(1)+'%</b></div>'
       +'<div><small>داخل الفرع الآن</small><b>'+(current===null?'غير مؤكد':current)+'</b></div>'
       +'</div>'
-      +'<div class="of-traffic606-note">Camera 8 يبدأ وينهي التراك · الكاميرات تسلّم الشخص لبعضها بنفس ID · Cam 4 تربط الأشخاص الموجودين خلف الكاشير بالموظفين النشطين · لا يتم حفظ صورة أو وجه في هوية الزائر.</div>'
+      +'<div class="of-traffic606-note">'+esc(trackingProfile(b()).label)+'</div>'
       +'<div class="of-traffic606-hours">'+(hourRows||'<span><small>لا توجد حركة مسجلة بالساعة حتى الآن.</small></span>')+'</div>'
       +'<div class="of-traffic606-tablewrap"><table class="of-traffic606-table"><thead><tr><th>اليوم</th><th>الزوار</th><th>المشترين</th><th>Conversion</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   }
 
   async function loadActivityAlerts(){
     var section=document.getElementById('ofCctvActivityReview'),box=document.getElementById('ofCctvActivityRows'),status=document.getElementById('ofCctvActivityStatus');if(!section||!box)return;
-    var x=b();section.style.display=x.id==='madinaty'?'block':'none';if(x.id!=='madinaty')return;
+    var x=b(),tp=trackingProfile(x);section.style.display=tp.enabled?'block':'none';if(!tp.enabled)return;
     box.innerHTML='<div class="of-cctv-day-empty">جاري فحص التنبيهات…</div>';
     try{
       var base=String(x.gateway||'').replace(/\/$/,''),pair=await Promise.all([
-        fetchJsonRetry(base+'/echarpe-playback/alerts?_='+Date.now(),x.id,3),
+        fetchJsonRetry(base+'/echarpe-playback/alerts?_='+Date.now(),x.id,3).catch(function(){return {items:[]};}),
         fetchJsonRetry(base+'/echarpe-playback/activity-status?_='+Date.now(),x.id,2).catch(function(){return null;})
-      ]),items=Array.isArray(pair[0].items)?pair[0].items:[],det=pair[1]||{};
-      var s=det.state||{},online=Array.isArray(s.onlineCameras)?s.onlineCameras.map(String):[],healthy=!!(det.detector&&s.attendanceFresh&&online.indexOf('8')>=0&&online.length>=3),source=s.staffSource==='pos_firestore'?'POS مباشر':s.staffSource==='sales_fallback'?'Sales احتياطي':'لا يوجد مصدر';
+      ]),items=Array.isArray(pair[0].items)?pair[0].items:[],det=normalizeTrackingStatus(pair[1]||{});
+      var s=det.state||{},online=Array.isArray(s.onlineCameras)?s.onlineCameras.map(String):[],healthy=!!(det.detector&&s.attendanceFresh&&online.indexOf(tp.door)>=0&&online.length>=Math.min(3,tp.expected)),source=s.staffSource==='pos_firestore'?'POS مباشر':s.staffSource==='sales_fallback'?'Sales احتياطي':'لا يوجد مصدر';
       if(status){
         var occ=s.occupancyCertain===true?Number(s.customersInside||0):'غير مؤكد';
-        status.textContent=det.detector?('● كاميرات '+online.length+'/4 · باب 8 '+(online.indexOf('8')>=0?'✓':'✕')+' · عملاء داخل الفرع '+occ+' · موظفين '+Number(s.activeStaffCount||0)+' · '+source):'● الكاشف غير متصل';
+        status.textContent=det.detector?('● كاميرات '+online.length+'/'+tp.expected+' · باب '+tp.door+' '+(online.indexOf(tp.door)>=0?'✓':'✕')+' · عملاء داخل الفرع '+occ+' · موظفين '+Number(s.activeStaffCount||0)+' · '+source):'● الكاشف غير متصل';
         status.classList.toggle('offline',!healthy);
       }
       try{renderTrafficReport(det,await trafficSalesByDay(s.trafficHistory));}catch(reportErr){console.warn('traffic report',reportErr);renderTrafficReport(det,{});}
       if(!items.length){box.innerHTML='<div class="of-cctv-day-empty">لا يوجد نشاط قوي يحتاج مراجعة.</div>';return;}
-      box.innerHTML=items.map(function(a){var sale=a.type==='sale_without_customer',label=sale?(a.transactionKind==='return_or_exchange'?'مرتجع/تبديل بدون عميل ظاهر':'فاتورة بيع بدون عميل ظاهر'):'نشاط سلة قوي بدون فاتورة';return '<div class="of-cctv-day-row of-cctv-alert-row"><div class="of-cctv-day-time">'+new Date(Number(a.atMs)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</div><div class="of-cctv-day-main"><b>🚨 '+label+'</b><small>'+new Date(Number(a.atMs)).toLocaleDateString('ar-EG')+' · كاميرا 4 و8 + صوت + سلة · '+Number((a.events||[]).length)+' علامة</small></div><div class="of-cctv-day-actions"><button type="button" data-activity-play="'+esc(String(a.id||''))+'">🎥 مراجعة متزامنة</button></div></div>';}).join('');
+      box.innerHTML=items.map(function(a){var sale=a.type==='sale_without_customer',label=sale?(a.transactionKind==='return_or_exchange'?'مرتجع/تبديل بدون عميل ظاهر':'فاتورة بيع بدون عميل ظاهر'):'نشاط سلة قوي بدون فاتورة';return '<div class="of-cctv-day-row of-cctv-alert-row"><div class="of-cctv-day-time">'+new Date(Number(a.atMs)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</div><div class="of-cctv-day-main"><b>🚨 '+label+'</b><small>'+new Date(Number(a.atMs)).toLocaleDateString('ar-EG')+' · كاميرا '+esc(tp.cashier)+' و'+esc(tp.door)+' + صوت + سلة · '+Number((a.events||[]).length)+' علامة</small></div><div class="of-cctv-day-actions"><button type="button" data-activity-play="'+esc(String(a.id||''))+'">🎥 مراجعة متزامنة</button></div></div>';}).join('');
       box.querySelectorAll('[data-activity-play]').forEach(function(btn){btn.onclick=function(){var a=items.find(function(q){return String(q.id)===btn.getAttribute('data-activity-play');});if(a)openSmartActivityReview(a);};});
     }catch(e){if(status){status.textContent='● تعذر الاتصال بكاشف الأشخاص';status.classList.add('offline');}box.innerHTML='<div class="of-cctv-day-empty">تعذر تحميل تنبيهات النشاط: '+esc(e&&e.message||e)+'</div>';}
   }

@@ -1,6 +1,6 @@
-/* ECHARPE POS customer-presence correlation v477
+/* ECHARPE POS customer-presence correlation v617
    ------------------------------------------------------------
-   Madinaty only for now:
+   Madinaty + Glow:
    - Reads local branch-PC Presence Agent using the cameras/ROI confirmed on that PC.
    - NEVER flags anything when the agent is unavailable/stale.
    - sale saved + no observed customer presence => suspicious activity.
@@ -10,7 +10,7 @@
 (function(){
 'use strict';
 
-var VERSION=609;
+var VERSION=617;
 var URL='http://127.0.0.1:1985/echarpe-presence/status';
 var SIGNAL_URL='http://127.0.0.1:1985/echarpe-playback/session-signal';
 var POLL_MS=2500, STALE_MS=12000, NO_SALE_GRACE_MS=90000;
@@ -22,7 +22,18 @@ var observed={}, metrics={};
 
 function branchId(){
   var s=String((typeof currentBranch!=='undefined'&&currentBranch)||'').toLowerCase();
-  return (s.indexOf('مدينتي')>=0||s.indexOf('madinaty')>=0)?'madinaty':'';
+  if(s.indexOf('مدينتي')>=0||s.indexOf('madinaty')>=0)return 'madinaty';
+  if(s.indexOf('glow')>=0)return 'glow';
+  return '';
+}
+function detectorName(){return branchId()==='glow'?'glow_persistent_handoff_v613':'madinaty_persistent_handoff_v609';}
+function normalizeStatus(d){
+  if(!d||d.ok!==true)return d;
+  if(d.state)return d;
+  if(d.generatedAtMs&&d.configuredCameras){
+    return {ok:true,generatedAtMs:Number(d.generatedAtMs)||0,configuredCameras:d.configuredCameras,current:d.current||null,recent:d.recent||[],state:d};
+  }
+  return d;
 }
 function read(key, fallback){try{var x=JSON.parse(localStorage.getItem(key)||'null');return x==null?fallback:x;}catch(e){return fallback;}}
 function write(key, value){try{localStorage.setItem(key,JSON.stringify(value));}catch(e){}}
@@ -78,7 +89,7 @@ function processEnded(status){
       presenceCameras:sessionCameras(s), presenceConfidence:Number(s.confidence)||0,
       hadCartActivity:!!m.cartActions, cartActions:Number(m.cartActions)||0,
       removedQty:Number(m.removedQty)||0, hadDrawerOpen:!!m.hadDrawerOpen,
-      detector:'madinaty_multicam_door8_v604',
+      detector:detectorName(),
       __eventAtMsOverride:Number(s.endedAtMs)||Number(s.lastPresenceAtMs)||Date.now()
     },m.sid||null);
     markDone(s.id); delete observed[s.id]; delete metrics[s.id];
@@ -86,10 +97,10 @@ function processEnded(status){
 }
 async function poll(){
   try{
-    if(branchId()!=='madinaty'){lastStatus=null;lastOkAt=0;return;}
+    if(!branchId()){lastStatus=null;lastOkAt=0;return;}
     var r=await fetch(URL,{cache:'no-store',headers:{'Accept':'application/json'}});
     if(!r.ok)throw new Error('presence_http_'+r.status);
-    var d=await r.json();
+    var d=normalizeStatus(await r.json());
     if(!d||d.ok!==true||Number(d.generatedAtMs)<Date.now()-STALE_MS)throw new Error('presence_stale');
     if(d.state && d.state.occupancyCertain===false) throw new Error('presence_uncertain');
     lastStatus=d;lastOkAt=Date.now();
@@ -113,7 +124,7 @@ function recentPresenceFor(atMs){
 
 window.cctvPresenceRecordSale=function(meta){
   try{
-    meta=meta||{}; if(branchId()!=='madinaty')return false;
+    meta=meta||{}; if(!branchId())return false;
     meta.atMs=Number(meta.atMs)||Date.now(); addSale(meta);
     if(!statusFresh())return false;
     var st=lastStatus&&lastStatus.state;
@@ -133,7 +144,7 @@ window.cctvPresenceRecordSale=function(meta){
         secondsAfterExit:Math.max(0,Math.round((meta.atMs-exitAt)/1000)),
         exitIdentity:String(st.lastCustomerExitIdentity||''),
         customersInside:0,occupancyCertain:true,
-        detector:'madinaty_persistent_handoff_v609'
+        detector:detectorName()
       },meta.sid||null);
       return false;
     }
@@ -146,7 +157,7 @@ window.cctvPresenceRecordSale=function(meta){
       recentPresenceSessionId:String(s&&s.id||''),
       customersInside:0,occupancyCertain:true,
       presenceCameras:Array.isArray(lastStatus.configuredCameras)?lastStatus.configuredCameras.join(', '):String(lastStatus.configuredCameras||''),
-      detector:'madinaty_persistent_handoff_v609'
+      detector:detectorName()
     },meta.sid||null);
     return false;
   }catch(e){return false;}
@@ -154,7 +165,7 @@ window.cctvPresenceRecordSale=function(meta){
 
 window.cctvPresenceNoteCartActivity=function(kind,data){
   try{
-    if(branchId()!=='madinaty'||!statusFresh())return;
+    if(!branchId()||!statusFresh())return;
     var s=currentSession(lastStatus);if(!s)return;
     noteObserved(s);var m=metrics[s.id];
     m.sid=(data&&data.sid)||m.sid||'';

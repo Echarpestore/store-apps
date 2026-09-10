@@ -1,4 +1,4 @@
-/* ECHARPE Madinaty CCTV staff-state bridge v574.
+/* ECHARPE CCTV staff-state bridge v617.
    The cashier POS is the always-on source of truth for CCTV headcount.
    Sales may still publish as a fallback, but a temporary Sales reload can no
    longer overwrite a healthy POS count with zero. */
@@ -11,9 +11,11 @@
   var shiftRows=null,breakRows=null,unsubShift=null,unsubBreak=null;
   var activeBranch='',publishTimer=0,retryTimer=0,lastPayload=null,lastSnapshotAt=0,fallbackBusy=false;
 
-  function isMadinaty(branch){
+  function branchProfile(branch){
     var s=String(branch||'').trim().toLowerCase();
-    return s.indexOf('madinaty')>=0||s.indexOf('\u0645\u062f\u064a\u0646\u062a\u064a')>=0;
+    if(s.indexOf('madinaty')>=0||s.indexOf('\u0645\u062f\u064a\u0646\u062a\u064a')>=0)return {id:'madinaty'};
+    if(s.indexOf('glow')>=0)return {id:'glow'};
+    return null;
   }
   function stopListeners(){
     try{if(unsubShift)unsubShift();}catch(_e){}
@@ -41,7 +43,7 @@
     });
     var onFloor=openIds.filter(function(id){return breakIds.indexOf(id)<0;});
     return {
-      version:564,source:SOURCE,sourceHealthy:true,branch:'madinaty',
+      version:617,source:SOURCE,sourceHealthy:true,branch:(branchProfile(activeBranch)||{}).id||'',
       branchName:activeBranch,generatedAtMs:Date.now(),
       clockedInCount:openIds.length,openBreakCount:breakIds.length,
       activeStaffCount:onFloor.length,employeeIds:onFloor,
@@ -99,7 +101,7 @@
   }
   function start(){
     var branch=(typeof currentBranch!=='undefined'&&currentBranch)||'';
-    if(!isMadinaty(branch)||typeof db==='undefined'||!db){stopListeners();activeBranch='';retry();return;}
+    if(!branchProfile(branch)||typeof db==='undefined'||!db){stopListeners();activeBranch='';retry();return;}
     if(activeBranch===String(branch)&&unsubShift&&unsubBreak)return;
     stopListeners();activeBranch=String(branch);
     try{
@@ -118,6 +120,8 @@
   document.addEventListener('visibilitychange',function(){if(!document.hidden)start();});
   if(typeof firebase!=='undefined'&&firebase.auth){firebase.auth().onAuthStateChanged(function(u){if(u)start();else stopListeners();});}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+  window.cctvStaffStateRefresh=start;
+  window.cctvStaffStateStatus=function(){return {version:617,branch:activeBranch,branchId:(branchProfile(activeBranch)||{}).id||'',hasShiftRows:Array.isArray(shiftRows),hasBreakRows:Array.isArray(breakRows),lastSuccessAt:lastSuccessAt,lastError:lastError,lastSnapshotAt:lastSnapshotAt};};
   window.cctvMadinatyStaffStateRefresh=start;
-  window.cctvMadinatyStaffStateStatus=function(){return {version:574,branch:activeBranch,hasShiftRows:Array.isArray(shiftRows),hasBreakRows:Array.isArray(breakRows),lastSuccessAt:lastSuccessAt,lastError:lastError,lastSnapshotAt:lastSnapshotAt};};
+  window.cctvMadinatyStaffStateStatus=window.cctvStaffStateStatus;
 })();
