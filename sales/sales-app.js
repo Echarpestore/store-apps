@@ -101,7 +101,7 @@ const LF431_PREFIX='sales_lf_v431_';
 // التحديث. النتيجة: التطبيق ميجيبش الـ190 يوم من السيرفر ويكتفي بآخر يومين،
 // فالتاريخ يبان مقطوع من يوم التحديث — وده اللي بيتكرر بعد كل تحديث.
 // الحل: نربط الإصلاح برقم النسخة، فأي تحديث يجبر تحديث كامل من السيرفر مرة.
-const SALES_BUILD='604';
+const SALES_BUILD='605';
 try{
   if(localStorage.getItem('sales_history_repair_build')!==SALES_BUILD){
     Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
@@ -2600,13 +2600,15 @@ $('#openAttendance').addEventListener('click', ()=>{
 $('#closeAttendance').addEventListener('click', ()=> $('#attendance').classList.remove('show'));
 
 function isDayOffToday(emp){
-  if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return false;
-  return caiNow().getDay() === Number(emp.dayOff);
+  if(!emp) return false;
+  const key=todayStr();
+  return effectiveDayOffKey(emp,key)===key;
 }
 function isDayOffTomorrow(emp){
-  if(emp.dayOff === undefined || emp.dayOff === null || emp.dayOff === '') return false;
-  const tomorrow = caiNow(); tomorrow.setDate(tomorrow.getDate()+1);
-  return tomorrow.getDay() === Number(emp.dayOff);
+  if(!emp) return false;
+  const tomorrow=caiNow(); tomorrow.setDate(tomorrow.getDate()+1);
+  const key=_fmtKey(tomorrow);
+  return effectiveDayOffKey(emp,key)===key;
 }
 
 // 📅 ملخّص يوم الموظف (من شاشة الحضور) — حضوره، نقاطه، وزر الانصراف
@@ -5512,6 +5514,50 @@ function _employeeSummary(emp){
   const pts=(window.points||[]).filter(x=>x.employeeId===emp.id);
   return { shifts:sh.length, points:pts.length };
 }
+
+async function _saveOwnerAttendanceOverride(emp,kind,btn,msg){
+  if(!emp || !btn || !msg) return false;
+  const k=todayStr();
+  const isLeave=kind==='leave';
+  const field=isLeave?'leaveWorkOverrideDateKey':'reopenShiftDateKey';
+  const patch=isLeave
+    ? {leaveWorkOverrideDateKey:k,leaveWorkOverrideAt:Date.now(),leaveWorkOverrideBy:'owner'}
+    : {reopenShiftDateKey:k,reopenShiftAt:Date.now(),reopenShiftBy:'owner'};
+  const okText=isLeave?'تم السماح بالعمل في الإجازة اليوم ✅':'تم فتح حضور جديد لليوم فقط ✅';
+  const busyText=isLeave?'جاري السماح بالعمل اليوم…':'جاري فتح حضور جديد اليوم…';
+  const oldText=btn.textContent;
+  btn.disabled=true;
+  msg.style.color='var(--gold)';
+  msg.textContent=busyText;
+  try{
+    if(!_auth.currentUser || _auth.currentUser.isAnonymous){
+      const authed=await _tryAutoRelogin();
+      if(!authed){
+        const e=new Error('sales-auth-required'); e.code='unauthenticated'; throw e;
+      }
+    }
+    await updateDoc(doc(db,'sales_employees',emp.id),patch);
+    emp[field]=k;
+    try{ await _employeeAudit(emp,isLeave?'allow_leave_work':'reopen_shift',{dateKey:k}); }catch(_auditErr){}
+    msg.style.color='var(--good)';
+    msg.textContent=okText;
+    try{ renderAttendanceLists(); }catch(_renderErr){}
+    return true;
+  }catch(err){
+    console.error('attendance owner override failed',kind,err);
+    if(err && (err.code==='permission-denied'||err.code==='unauthenticated')) _scheduleSalesRelogin(0);
+    msg.style.color='var(--bad)';
+    msg.textContent=(err && (err.code==='permission-denied'||err.code==='unauthenticated'))
+      ? 'تعذر التنفيذ لأن تسجيل دخول الفرع غير متصل — جاري إعادة الاتصال، حاول مرة أخرى.'
+      : 'تعذر تنفيذ التعديل — تحقق من الإنترنت وحاول مرة أخرى.';
+    return false;
+  }finally{
+    btn.disabled=false;
+    btn.textContent=oldText;
+  }
+}
+window._saveOwnerAttendanceOverride=_saveOwnerAttendanceOverride;
+
 window.openEmployeeRecord = function(empId){
   const emp=(allEmployees||[]).find(e=>e.id===empId); if(!emp) return;
   const sum=_employeeSummary(emp);
@@ -5547,8 +5593,14 @@ window.openEmployeeRecord = function(empId){
   ov.querySelector('#erClose').onclick=()=>ov.remove();
   ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
   ov.querySelector('#erDays').onclick=()=>{ try{ window.openAttendanceDaysDialog?.(emp.id, window.salaryPeriodKey || defaultPayPeriodKey(new Date())); }catch(e){ console.error(e); } };
-  if(ov.querySelector('#erAllowLeaveWork')) ov.querySelector('#erAllowLeaveWork').onclick=async()=>{ const k=todayStr(); await updateDoc(doc(db,'sales_employees',emp.id),{leaveWorkOverrideDateKey:k,leaveWorkOverrideAt:Date.now(),leaveWorkOverrideBy:'owner'}); emp.leaveWorkOverrideDateKey=k; ov.querySelector('#erMsg').style.color='var(--good)'; ov.querySelector('#erMsg').textContent='تم السماح بالعمل في الإجازة اليوم ✅'; };
-  if(ov.querySelector('#erReopenShift')) ov.querySelector('#erReopenShift').onclick=async()=>{ const k=todayStr(); await updateDoc(doc(db,'sales_employees',emp.id),{reopenShiftDateKey:k,reopenShiftAt:Date.now(),reopenShiftBy:'owner'}); emp.reopenShiftDateKey=k; ov.querySelector('#erMsg').style.color='var(--good)'; ov.querySelector('#erMsg').textContent='تم فتح حضور جديد لليوم فقط ✅'; };
+  if(ov.querySelector('#erAllowLeaveWork')) ov.querySelector('#erAllowLeaveWork').onclick=()=>{
+    const btn=ov.querySelector('#erAllowLeaveWork'), msg=ov.querySelector('#erMsg');
+    _saveOwnerAttendanceOverride(emp,'leave',btn,msg);
+  };
+  if(ov.querySelector('#erReopenShift')) ov.querySelector('#erReopenShift').onclick=()=>{
+    const btn=ov.querySelector('#erReopenShift'), msg=ov.querySelector('#erMsg');
+    _saveOwnerAttendanceOverride(emp,'reopen',btn,msg);
+  };
   if(ov.querySelector('#erResetFace')) ov.querySelector('#erResetFace').onclick=async()=>{ if(!confirm('إعادة تسجيل الوجه في أول حضور/انصراف قادم؟'))return; await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:null,faceProfileUpdatedAt:Date.now()}); emp.faceProfile=null; ov.querySelector('#erMsg').style.color='var(--good)'; ov.querySelector('#erMsg').textContent='هيتعمل تسجيل وجه جديد تلقائيًا المرة الجاية ✅'; };
   ov.querySelector('#erSave').onclick=async()=>{
     const btn=ov.querySelector('#erSave'), msg=ov.querySelector('#erMsg'); msg.textContent='';
