@@ -1,4 +1,4 @@
-/* ECHARPE CCTV staff-state bridge v624.
+/* ECHARPE CCTV staff-state bridge v644.
    The cashier POS is the always-on source of truth for CCTV headcount.
    Sales may still publish as a fallback, but a temporary Sales reload can no
    longer overwrite a healthy POS count with zero. */
@@ -43,7 +43,7 @@
     });
     var onFloor=openIds.filter(function(id){return breakIds.indexOf(id)<0;});
     return {
-      version:624,source:SOURCE,sourceHealthy:true,branch:(branchProfile(activeBranch)||{}).id||'',
+      version:644,source:SOURCE,sourceHealthy:true,branch:(branchProfile(activeBranch)||{}).id||'',
       branchName:activeBranch,generatedAtMs:Date.now(),
       clockedInCount:openIds.length,openBreakCount:breakIds.length,
       activeStaffCount:onFloor.length,employeeIds:onFloor,
@@ -125,7 +125,7 @@
   if(typeof firebase!=='undefined'&&firebase.auth){firebase.auth().onAuthStateChanged(function(u){if(u)start();else stopListeners();});}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
   window.cctvStaffStateRefresh=start;
-  window.cctvStaffStateStatus=function(){return {version:624,branch:activeBranch,branchId:(branchProfile(activeBranch)||{}).id||'',shiftReady:shiftReady,breakReady:breakReady,hasShiftRows:Array.isArray(shiftRows),hasBreakRows:Array.isArray(breakRows),lastSuccessAt:lastSuccessAt,lastError:lastError,lastSnapshotAt:lastSnapshotAt};};
+  window.cctvStaffStateStatus=function(){return {version:644,branch:activeBranch,branchId:(branchProfile(activeBranch)||{}).id||'',shiftReady:shiftReady,breakReady:breakReady,hasShiftRows:Array.isArray(shiftRows),hasBreakRows:Array.isArray(breakRows),lastSuccessAt:lastSuccessAt,lastError:lastError,lastSnapshotAt:lastSnapshotAt};};
   window.cctvMadinatyStaffStateRefresh=start;
   window.cctvMadinatyStaffStateStatus=window.cctvStaffStateStatus;
 })();
