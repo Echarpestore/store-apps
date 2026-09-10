@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v635
+/* ECHARPE Office CCTV v637
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -47,7 +47,7 @@
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
   function cam(id){var x=b();return x.cameras.find(function(c){return c.id===String(id);})||x.cameras[0];}
   function liveStreamName(c){return c.liveStream||c.stream;}
-  function liveMode(x){return x&&x.id==='glow'?'webrtc':'mse';}
+  function liveMode(x){return x&&x.id==='glow'?'mp4':'mse';}
   function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(liveStreamName(c))+'&mode='+liveMode(b())+'&background=false';}
   function streamUrlFor(x,c){return x.gateway+'/stream.html?src='+encodeURIComponent(c.liveStream||c.stream)+'&mode='+liveMode(x)+'&background=false';}
   function frameUrl(c){return b().gateway+'/api/frame.jpeg?src='+encodeURIComponent(liveStreamName(c))+'&_=';}
