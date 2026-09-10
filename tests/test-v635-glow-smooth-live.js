@@ -1,0 +1,15 @@
+const fs=require('fs'),assert=require('assert');
+const c=fs.readFileSync(__dirname+'/../Office/cctv.js','utf8');
+const i=fs.readFileSync(__dirname+'/../Office/index.html','utf8');
+const sw=fs.readFileSync(__dirname+'/../Office/sw.js','utf8');
+assert(c.includes("function liveMode(x){return x&&x.id==='glow'?'webrtc':'mse';}"),'Glow uses WebRTC, other branches keep MSE');
+assert(c.includes("'&mode='+liveMode(b())+'&background=false'"),'per-camera live URL is branch-aware');
+assert(c.includes("'&mode='+liveMode(x)+'&background=false'"),'all-branches live URL is branch-aware');
+assert(!c.includes("b().id==='glow'?false"),'Glow is no longer forced to JPEG polling');
+assert(!c.includes("x.id==='glow'?false"),'Glow all-branches is no longer forced to JPEG polling');
+assert(c.includes('/api/frame.jpeg?src='),'JPEG fallback implementation remains preserved');
+assert(c.includes("((q===480&&x.id!=='glow')?'&mode=fast':'')"),'v630 playback hardening preserved');
+assert(c.includes('var valid=localBranch?order.slice()'),'v629 snapshot source-of-truth fix preserved');
+assert(i.includes('cctv.js?v=635'),'Office JS reference bumped');
+assert(sw.includes('echarpe-office-v635'),'Office SW cache bumped');
+console.log('GLOW_SMOOTH_LIVE_WEBRTC_V635=PASS');

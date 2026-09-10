@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v633
+/* ECHARPE Office CCTV v635
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -47,8 +47,9 @@
   function b(){return BRANCHES.find(function(x){return x.id===state.branch;})||BRANCHES[0];}
   function cam(id){var x=b();return x.cameras.find(function(c){return c.id===String(id);})||x.cameras[0];}
   function liveStreamName(c){return c.liveStream||c.stream;}
-  function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(liveStreamName(c))+'&mode=mse&background=false';}
-  function streamUrlFor(x,c){return x.gateway+'/stream.html?src='+encodeURIComponent(c.liveStream||c.stream)+'&mode=mse&background=false';}
+  function liveMode(x){return x&&x.id==='glow'?'webrtc':'mse';}
+  function streamUrl(c){return b().gateway+'/stream.html?src='+encodeURIComponent(liveStreamName(c))+'&mode='+liveMode(b())+'&background=false';}
+  function streamUrlFor(x,c){return x.gateway+'/stream.html?src='+encodeURIComponent(c.liveStream||c.stream)+'&mode='+liveMode(x)+'&background=false';}
   function frameUrl(c){return b().gateway+'/api/frame.jpeg?src='+encodeURIComponent(liveStreamName(c))+'&_=';}
   function frameUrlFor(x,c){return x.gateway+'/api/frame.jpeg?src='+encodeURIComponent(c.liveStream||c.stream)+'&_=';}
   function profileFor(branch){
@@ -201,10 +202,10 @@
   function cameraCard(c,i){
     var on=String(state.slots[i]||'off')===String(c.id);
     var toggleLabel=on?'إيقاف':'تشغيل';
-    /* Glow v633: RTSP H264 and public JPEG frames are healthy, but go2rtc MSE
-       renders black in the Office browser. Use the proven public frame endpoint
-       for Glow only. Other branches keep their existing live transport. */
-    var useMse=b().id==='glow'?false:(!!c.liveStream||b().id!=='madinaty');
+    /* Glow v635: use go2rtc WebRTC for smooth real-time H264 live. v631 proved
+       CAM1..4 RTSP H264 and public go2rtc routes are healthy; only MSE rendered
+       black. JPEG polling remains available in this file as a safe fallback path. */
+    var useMse=!!c.liveStream||b().id!=='madinaty';
     var liveMedia=useMse?'<iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>':'<img title="'+esc(c.name)+'" data-live-frame="'+esc(frameUrl(c))+'" data-live-branch="'+esc(b().id)+'" alt="'+esc(c.name)+' live" loading="eager">';
     return '<article class="of-cctv-panel of-cctv-camera-panel '+(on?'is-live':'is-off')+'" data-camera="'+esc(c.id)+'" data-panel="'+i+'">'+
       '<div class="of-cctv-panel-head"><div class="of-cctv-camera-name"><b>'+esc(c.name)+'</b><small>'+esc(c.label)+'</small></div><div class="of-cctv-camera-actions"><button type="button" class="of-cctv-cam-toggle '+(on?'on':'off')+'" data-cctv-toggle="'+i+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+toggleLabel+' '+esc(c.name)+'"><span class="of-cctv-switch-track"><span class="of-cctv-switch-knob"></span></span><span class="of-cctv-switch-text">'+toggleLabel+'</span></button><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(on?'':' disabled')+'>⛶</button></div></div>'+
@@ -328,7 +329,7 @@
   }
   function renderAllBranchesLive(){
     var grid=document.getElementById('ofCctvAllGrid');if(!grid)return;
-    grid.innerHTML=BRANCHES.map(function(x){var c=(x.cameras||[]).find(function(q){return String(q.id)===String(x.playbackCamera);})||x.cameras[0],useMse=x.id==='glow'?false:(!!c.liveStream||x.id!=='madinaty'),media=useMse?'<iframe title="'+esc(x.name)+'" src="'+esc(streamUrlFor(x,c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>':'<img data-live-frame="'+esc(frameUrlFor(x,c))+'" data-live-branch="'+esc(x.id)+'" alt="'+esc(x.name)+' live">';return '<article class="of-cctv-all-card"><div class="of-cctv-all-head"><div><b>'+esc(x.name)+'</b><small>'+esc(c.label||c.name)+'</small></div><div><button type="button" data-all-branch="'+esc(x.id)+'">كل الكاميرات</button><button type="button" data-all-playback="'+esc(x.id)+'">🎞 تسجيل</button></div></div><div class="of-cctv-all-media">'+media+'</div></article>';}).join('');
+    grid.innerHTML=BRANCHES.map(function(x){var c=(x.cameras||[]).find(function(q){return String(q.id)===String(x.playbackCamera);})||x.cameras[0],useMse=!!c.liveStream||x.id!=='madinaty',media=useMse?'<iframe title="'+esc(x.name)+'" data-stream-src="'+esc(streamUrlFor(x,c))+'" src="'+esc(streamUrlFor(x,c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>':'<img data-live-frame="'+esc(frameUrlFor(x,c))+'" data-live-branch="'+esc(x.id)+'" alt="'+esc(x.name)+' live">';return '<article class="of-cctv-all-card"><div class="of-cctv-all-head"><div><b>'+esc(x.name)+'</b><small>'+esc(c.label||c.name)+'</small></div><div><button type="button" data-all-branch="'+esc(x.id)+'">كل الكاميرات</button><button type="button" data-all-playback="'+esc(x.id)+'">🎞 تسجيل</button></div></div><div class="of-cctv-all-media">'+media+'</div></article>';}).join('');
     grid.querySelectorAll('[data-all-branch]').forEach(function(btn){btn.onclick=function(){selectBranch(btn.getAttribute('data-all-branch'),'live');};});
     grid.querySelectorAll('[data-all-playback]').forEach(function(btn){btn.onclick=function(){selectBranch(btn.getAttribute('data-all-playback'),'playback');};});
     grid.querySelectorAll('img[data-live-frame]').forEach(armSnapshotFrame);
