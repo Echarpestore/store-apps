@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v617
+/* ECHARPE Office CCTV v633
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -174,7 +174,7 @@
   }
   function stopPanel(panel){panel.querySelectorAll('video').forEach(function(v){try{if(v._retryTimer)clearTimeout(v._retryTimer);v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}});panel.querySelectorAll('iframe[data-stream-src]').forEach(function(f){try{f.src='about:blank';f.remove();}catch(e){}});panel.querySelectorAll('img[data-live-frame]').forEach(function(img){try{if(img._frameTimer)clearTimeout(img._frameTimer);img.onload=null;img.onerror=null;img.removeAttribute('src');}catch(e){}});}
   function armSnapshotFrame(img){
-    if(!img)return;var base=img.getAttribute('data-live-frame'),delay=900;
+    if(!img)return;var base=img.getAttribute('data-live-frame'),branchId=img.getAttribute('data-live-branch')||'',delay=branchId==='glow'?500:900;
     function next(ms){if(img._frameTimer)clearTimeout(img._frameTimer);img._frameTimer=setTimeout(load,ms);}
     function load(){if(!state.active||document.hidden||!document.documentElement.contains(img))return;img.onload=function(){img.classList.add('is-ready');next(delay);};img.onerror=function(){img.classList.remove('is-ready');next(2500);};img.src=base+Date.now();}
     load();
@@ -201,10 +201,11 @@
   function cameraCard(c,i){
     var on=String(state.slots[i]||'off')===String(c.id);
     var toggleLabel=on?'إيقاف':'تشغيل';
-    /* Madinaty D04 has a proven Intel-QSV H264 live-only alias. Keep the
-       bounded JPEG fallback for its other H265 cameras; Glow/Rehab are unchanged. */
-    var useMse=!!c.liveStream||b().id!=='madinaty';
-    var liveMedia=useMse?'<iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>':'<img title="'+esc(c.name)+'" data-live-frame="'+esc(frameUrl(c))+'" alt="'+esc(c.name)+' live" loading="eager">';
+    /* Glow v633: RTSP H264 and public JPEG frames are healthy, but go2rtc MSE
+       renders black in the Office browser. Use the proven public frame endpoint
+       for Glow only. Other branches keep their existing live transport. */
+    var useMse=b().id==='glow'?false:(!!c.liveStream||b().id!=='madinaty');
+    var liveMedia=useMse?'<iframe title="'+esc(c.name)+'" data-stream-src="'+esc(streamUrl(c))+'" src="'+esc(streamUrl(c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>':'<img title="'+esc(c.name)+'" data-live-frame="'+esc(frameUrl(c))+'" data-live-branch="'+esc(b().id)+'" alt="'+esc(c.name)+' live" loading="eager">';
     return '<article class="of-cctv-panel of-cctv-camera-panel '+(on?'is-live':'is-off')+'" data-camera="'+esc(c.id)+'" data-panel="'+i+'">'+
       '<div class="of-cctv-panel-head"><div class="of-cctv-camera-name"><b>'+esc(c.name)+'</b><small>'+esc(c.label)+'</small></div><div class="of-cctv-camera-actions"><button type="button" class="of-cctv-cam-toggle '+(on?'on':'off')+'" data-cctv-toggle="'+i+'" aria-pressed="'+(on?'true':'false')+'" aria-label="'+toggleLabel+' '+esc(c.name)+'"><span class="of-cctv-switch-track"><span class="of-cctv-switch-knob"></span></span><span class="of-cctv-switch-text">'+toggleLabel+'</span></button><button type="button" class="of-cctv-panel-full" data-cctv-full="'+i+'" title="ملء الشاشة" aria-label="ملء الشاشة"'+(on?'':' disabled')+'>⛶</button></div></div>'+
       (on?'<div class="of-cctv-panel-body of-cctv-video">'+liveMedia+'<div class="of-cctv-cam-badge"><span class="dot"></span>'+esc(c.name)+' · '+esc(c.label)+'</div></div>':'<div class="of-cctv-panel-body of-cctv-video of-cctv-off-body"><div class="of-cctv-off-camera"><span>📹</span><b>'+esc(c.name)+'</b><small>'+esc(c.label)+' · متوقفة</small><em>اضغط تشغيل للمشاهدة</em></div></div>')+'</article>';
@@ -216,7 +217,7 @@
     var t=Math.max(1,Number(atMs)||Date.now()),d=Math.min(60,Math.max(1,Number(durationMin)||playbackDefaultMinutes(x)));
     var cid=String(cameraId||x.playbackCamera||'1');if(!recordedCameras(x).some(function(c){return String(c.id)===cid;}))cid=String(x.playbackCamera||x.cameras[0].id||'1');
     var q=Number(quality)===720?720:480;
-    var u=x.gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(t)+'&durationSec='+encodeURIComponent(d*60)+'&quality='+q+(q===480?'&mode=fast':'');
+    var u=x.gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(t)+'&durationSec='+encodeURIComponent(d*60)+'&quality='+q+((q===480&&x.id!=='glow')?'&mode=fast':'');
     if(offsetMs!==undefined&&offsetMs!==null)u+='&offsetMs='+encodeURIComponent(Number(offsetMs)||0);
     return u;
   }
@@ -327,7 +328,7 @@
   }
   function renderAllBranchesLive(){
     var grid=document.getElementById('ofCctvAllGrid');if(!grid)return;
-    grid.innerHTML=BRANCHES.map(function(x){var c=(x.cameras||[]).find(function(q){return String(q.id)===String(x.playbackCamera);})||x.cameras[0],useMse=!!c.liveStream||x.id!=='madinaty',media=useMse?'<iframe title="'+esc(x.name)+'" src="'+esc(streamUrlFor(x,c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>':'<img data-live-frame="'+esc(frameUrlFor(x,c))+'" alt="'+esc(x.name)+' live">';return '<article class="of-cctv-all-card"><div class="of-cctv-all-head"><div><b>'+esc(x.name)+'</b><small>'+esc(c.label||c.name)+'</small></div><div><button type="button" data-all-branch="'+esc(x.id)+'">كل الكاميرات</button><button type="button" data-all-playback="'+esc(x.id)+'">🎞 تسجيل</button></div></div><div class="of-cctv-all-media">'+media+'</div></article>';}).join('');
+    grid.innerHTML=BRANCHES.map(function(x){var c=(x.cameras||[]).find(function(q){return String(q.id)===String(x.playbackCamera);})||x.cameras[0],useMse=x.id==='glow'?false:(!!c.liveStream||x.id!=='madinaty'),media=useMse?'<iframe title="'+esc(x.name)+'" src="'+esc(streamUrlFor(x,c))+'" allow="autoplay; fullscreen" allowfullscreen loading="eager"></iframe>':'<img data-live-frame="'+esc(frameUrlFor(x,c))+'" data-live-branch="'+esc(x.id)+'" alt="'+esc(x.name)+' live">';return '<article class="of-cctv-all-card"><div class="of-cctv-all-head"><div><b>'+esc(x.name)+'</b><small>'+esc(c.label||c.name)+'</small></div><div><button type="button" data-all-branch="'+esc(x.id)+'">كل الكاميرات</button><button type="button" data-all-playback="'+esc(x.id)+'">🎞 تسجيل</button></div></div><div class="of-cctv-all-media">'+media+'</div></article>';}).join('');
     grid.querySelectorAll('[data-all-branch]').forEach(function(btn){btn.onclick=function(){selectBranch(btn.getAttribute('data-all-branch'),'live');};});
     grid.querySelectorAll('[data-all-playback]').forEach(function(btn){btn.onclick=function(){selectBranch(btn.getAttribute('data-all-playback'),'playback');};});
     grid.querySelectorAll('img[data-live-frame]').forEach(armSnapshotFrame);
@@ -463,7 +464,7 @@
     rail.innerHTML=jumpEvents.map(function(e,i){var strong=!!STRONG[String(e.kind)];return '<button type="button" class="of-day564-event '+(strong?'strong':'context')+'" data-day-rail-jump="'+i+'"><b>'+new Date(Number(e.atMs)).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+'</b><span>'+esc(kindName(e.kind))+(e.invoiceCode?' · '+esc(e.invoiceCode):'')+'</span></button>';}).join('')||'<span class="of-day511-muted">لا توجد أحداث سلة مسجلة في الفترة</span>';
     var currentVideoNow=chunkStart;function renderAt(forcedVideoNow){var videoNow=Number(forcedVideoNow)||(master?chunkStart+(Number(master.currentTime)||0)*1000:currentVideoNow||chunkStart);currentVideoNow=videoNow;var now=videoNow+basketOffsetMs,hit=null;for(var i=0;i<events.length&&Number(events[i].atMs)<=now;i++)hit=events[i];clock.textContent=new Date(videoNow).toLocaleString('ar-EG');syncText.textContent='تزامن السلة: '+(basketOffsetMs>=0?'+':'')+(basketOffsetMs/1000).toFixed(0)+' ثانية';if(slave&&master&&slave.readyState>=1&&Math.abs((Number(slave.currentTime)||0)-(Number(master.currentTime)||0))>.35)slave.currentTime=Number(master.currentTime)||0;if(!hit||hit.kind==='cart_cleared'){eventEl.textContent='بين الفواتير';rowsEl.innerHTML='<div class="of-day511-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent='0.00 ج.م';return;}eventEl.textContent=kindName(hit.kind)+(hit.invoiceCode?' · فاتورة '+esc(hit.invoiceCode):'');var rows=cartRows(hit.cart),catalog=hit.catalog||{};rowsEl.innerHTML=rows.map(function(r){var item=catalog[r[0]]||{},q=Number(r[1])||0,p=Number(r[2])||0,ret=Number(r[3])===1;return '<div class="of-day511-row"><span><b>'+esc(item.name||item.id||'صنف')+(ret?' ↩':'')+'</b><small>'+q+' × '+p.toFixed(2)+(item.barcode?' · '+esc(item.barcode):'')+'</small></span><strong>'+(q*p).toFixed(2)+'</strong></div>';}).join('')||'<div class="of-day511-muted" style="padding:12px">السلة فاضية</div>';totalEl.textContent=Number(hit.total||0).toFixed(2)+' ج.م';}
     var chunkRetry=0,pendingSeekMs=0;
-    function clipUrl(cid,at,duration){return gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(at)+'&durationSec='+duration+'&quality=480&mode=fast&_='+Date.now();}
+    function clipUrl(cid,at,duration){return gateway+'/echarpe-playback/video?camera='+encodeURIComponent(cid)+'&atMs='+encodeURIComponent(at)+'&durationSec='+duration+'&quality=480'+(glowDay?'':'&mode=fast')+'&_='+Date.now();}
     function loadChunk(next,isRetry){
       if(!isRetry)chunkRetry=0;
       var latestStart=Math.max(coverageStart,coverageEnd-30000);
