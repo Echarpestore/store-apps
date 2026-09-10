@@ -1,4 +1,4 @@
-/* ECHARPE Office CCTV v606
+/* ECHARPE Office CCTV v609
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -601,22 +601,25 @@
     var host=document.getElementById('ofCctvTrafficReport');if(!host)return;
     var s=det&&det.state||{},history=Array.isArray(s.trafficHistory)?s.trafficHistory.slice(0,7):[];
     if(!history.length){host.innerHTML='<div class="of-cctv-day-empty">تقرير الزوار يبدأ بعد تثبيت Madinaty v606.</div>';return;}
-    var today=history[0]||{},entries=Number(today.entries||0),sales=Number((salesByDay||{})[today.dateKey]||0),conv=entries>0?(sales/entries*100):0;
+    var today=history[0]||{},entries=Number(today.entries||0),unique=Number(today.uniqueVisitors||0),
+        uniqueStarted=Number(today.uniqueStartedAtMs||0)>0,visitors=uniqueStarted?unique:entries,
+        sales=Number((salesByDay||{})[today.dateKey]||0),conv=visitors>0?(sales/visitors*100):0;
     var certain=s.occupancyCertain===true,current=(certain?Number(s.customersInside||0):null);
     var hours=today.hours||{},hourRows=Object.keys(hours).sort().map(function(h){
       var r=hours[h]||{};return '<span><b>'+esc(h)+':00</b><small>'+Number(r.entries||0)+' دخول · '+Number(r.exits||0)+' خروج</small></span>';
     }).join('');
     var rows=history.map(function(r){
-      var e=Number(r.entries||0),sl=Number((salesByDay||{})[r.dateKey]||0),cv=e>0?(sl/e*100):0;
-      return '<tr><td>'+esc(r.dateKey)+'</td><td>'+e+'</td><td>'+sl+'</td><td>'+cv.toFixed(1)+'%</td></tr>';
+      var e=Number(r.entries||0),u=Number(r.uniqueVisitors||0),started=Number(r.uniqueStartedAtMs||0)>0,
+          v=started?u:e,sl=Number((salesByDay||{})[r.dateKey]||0),cv=v>0?(sl/v*100):0;
+      return '<tr><td>'+esc(r.dateKey)+'</td><td>'+v+'</td><td>'+sl+'</td><td>'+cv.toFixed(1)+'%</td></tr>';
     }).join('');
     host.innerHTML='<div class="of-traffic606-cards">'
-      +'<div><small>دخلوا اليوم</small><b>'+entries+'</b></div>'
+      +'<div><small>عملاء مختلفين اليوم</small><b>'+visitors+'</b></div>'
       +'<div><small>فواتير شراء</small><b>'+sales+'</b></div>'
       +'<div><small>Conversion</small><b>'+conv.toFixed(1)+'%</b></div>'
       +'<div><small>داخل الفرع الآن</small><b>'+(current===null?'غير مؤكد':current)+'</b></div>'
       +'</div>'
-      +'<div class="of-traffic606-note">Camera 8 هي عداد الدخول/الخروج الأساسي · باقي الكاميرات تؤكد الوجود · الموظفون مستبعدون من تقدير العملاء داخل الفرع.</div>'
+      +'<div class="of-traffic606-note">Camera 8 يبدأ وينهي التراك · الكاميرات تسلّم الشخص لبعضها بنفس ID · Cam 4 تربط الأشخاص الموجودين خلف الكاشير بالموظفين النشطين · لا يتم حفظ صورة أو وجه في هوية الزائر.</div>'
       +'<div class="of-traffic606-hours">'+(hourRows||'<span><small>لا توجد حركة مسجلة بالساعة حتى الآن.</small></span>')+'</div>'
       +'<div class="of-traffic606-tablewrap"><table class="of-traffic606-table"><thead><tr><th>اليوم</th><th>الزوار</th><th>المشترين</th><th>Conversion</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   }

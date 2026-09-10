@@ -10,11 +10,11 @@
 (function(){
 'use strict';
 
-var VERSION=604;
+var VERSION=609;
 var URL='http://127.0.0.1:1985/echarpe-presence/status';
 var SIGNAL_URL='http://127.0.0.1:1985/echarpe-playback/session-signal';
 var POLL_MS=2500, STALE_MS=12000, NO_SALE_GRACE_MS=90000;
-var SALE_BEFORE_MS=30000, SALE_AFTER_MS=90000, MIN_SESSION_MS=8000;
+var SALE_BEFORE_MS=30000, SALE_AFTER_MS=90000, MIN_SESSION_MS=8000, AFTER_EXIT_WINDOW_MS=10*60*1000;
 var SALES_KEY='echarpe.cctv.presence.sales.v476';
 var DONE_KEY='echarpe.cctv.presence.done.v476';
 var monitorStartedAt=Date.now(), timer=0, lastStatus=null, lastOkAt=0;
@@ -115,22 +115,38 @@ window.cctvPresenceRecordSale=function(meta){
   try{
     meta=meta||{}; if(branchId()!=='madinaty')return false;
     meta.atMs=Number(meta.atMs)||Date.now(); addSale(meta);
-    var s=recentPresenceFor(meta.atMs);
-    if(s){
-      markDone(String(s.id)); // same customer session is accounted for by this sale.
-      return true;
-    }
-    // v604: never accuse from a weak/uncertain count. The detector must explicitly
-    // report a certain zero-customer state using all available Madinaty cameras.
     if(!statusFresh())return false;
     var st=lastStatus&&lastStatus.state;
-    if(!st || st.occupancyCertain!==true || Number(st.customersInside)!==0)return false;
+    // Never accuse while occupancy is uncertain.
+    if(!st || st.occupancyCertain!==true)return false;
+
+    // Customer is still physically in the store: valid sale even if the old session heuristic missed them.
+    if(Number(st.customersInside)>0)return true;
+
+    // Certain zero occupancy. Distinguish "customer already left" from "no customer was seen".
+    var exitAt=Number(st.lastCustomerExitAtMs)||0;
+    if(exitAt>0 && meta.atMs>=exitAt && meta.atMs-exitAt<=AFTER_EXIT_WINDOW_MS){
+      logForSid('sale_after_customer_exit',{
+        invoiceCode:String(meta.invoiceCode||''),invoiceNo:String(meta.invoiceNo||''),
+        total:Number(meta.total)||0,itemCount:Number(meta.itemCount)||0,
+        saleAtMs:meta.atMs,lastCustomerExitAtMs:exitAt,
+        secondsAfterExit:Math.max(0,Math.round((meta.atMs-exitAt)/1000)),
+        exitIdentity:String(st.lastCustomerExitIdentity||''),
+        customersInside:0,occupancyCertain:true,
+        detector:'madinaty_persistent_handoff_v609'
+      },meta.sid||null);
+      return false;
+    }
+
+    var s=recentPresenceFor(meta.atMs);
     logForSid('sale_without_customer_presence',{
       invoiceCode:String(meta.invoiceCode||''), invoiceNo:String(meta.invoiceNo||''),
       total:Number(meta.total)||0, itemCount:Number(meta.itemCount)||0,
       checkedAtMs:Date.now(), presenceLookbackSec:Math.round(SALE_BEFORE_MS/1000),
+      recentPresenceSessionId:String(s&&s.id||''),
+      customersInside:0,occupancyCertain:true,
       presenceCameras:Array.isArray(lastStatus.configuredCameras)?lastStatus.configuredCameras.join(', '):String(lastStatus.configuredCameras||''),
-      detector:'madinaty_multicam_door8_v604'
+      detector:'madinaty_persistent_handoff_v609'
     },meta.sid||null);
     return false;
   }catch(e){return false;}
@@ -152,7 +168,7 @@ window.cctvPresenceNoteCartActivity=function(kind,data){
       barcode:String(x&&x.barcode||'').slice(0,80),qty:Number(x&&x.qty)||0,price:Number(x&&x.price)||0,isReturn:!!(x&&x.isReturn)
     };});
     fetch(SIGNAL_URL,{method:'POST',cache:'no-store',body:JSON.stringify({
-      version:555,sessionId:String(s.id),sid:String(data&&data.sid||m.sid||''),atMs:Number(data&&data.atMs)||Date.now(),
+      version:608,sessionId:String(s.id),sid:String(data&&data.sid||m.sid||''),atMs:Number(data&&data.atMs)||Date.now(),
       kind:String(kind||'cart_edited'),qty:Math.max(0,Number(data&&data.qty)||0),cart:rows,total:Number(data&&data.total)||0
     })}).catch(function(){});
   }catch(e){}
