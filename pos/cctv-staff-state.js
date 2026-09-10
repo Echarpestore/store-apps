@@ -1,4 +1,4 @@
-/* ECHARPE CCTV staff-state bridge v617.
+/* ECHARPE CCTV staff-state bridge v624.
    The cashier POS is the always-on source of truth for CCTV headcount.
    Sales may still publish as a fallback, but a temporary Sales reload can no
    longer overwrite a healthy POS count with zero. */
@@ -6,10 +6,10 @@
   'use strict';
   var ENDPOINT='http://127.0.0.1:1985/echarpe-playback/staff-state';
   var SOURCE='pos_firestore';
-  var HEARTBEAT_MS=15000,RETRY_MS=10000,FALLBACK_GET_MS=30000;
+  var HEARTBEAT_MS=15000,RETRY_MS=5000,FALLBACK_GET_MS=30000,BOOTSTRAP_RETRY_MS=3000;
   var lastError="",lastSuccessAt=0;
   var shiftRows=null,breakRows=null,unsubShift=null,unsubBreak=null;
-  var activeBranch='',publishTimer=0,retryTimer=0,lastPayload=null,lastSnapshotAt=0,fallbackBusy=false;
+  var activeBranch='',publishTimer=0,retryTimer=0,lastPayload=null,lastSnapshotAt=0,fallbackBusy=false,shiftReady=false,breakReady=false;
 
   function branchProfile(branch){
     var s=String(branch||'').trim().toLowerCase();
@@ -20,7 +20,7 @@
   function stopListeners(){
     try{if(unsubShift)unsubShift();}catch(_e){}
     try{if(unsubBreak)unsubBreak();}catch(_e){}
-    unsubShift=unsubBreak=null;shiftRows=breakRows=null;
+    unsubShift=unsubBreak=null;shiftRows=breakRows=null;shiftReady=breakReady=false;
   }
   function docs(snapshot){
     var out=[];if(!snapshot)return out;
@@ -28,7 +28,7 @@
     return out;
   }
   function buildPayload(){
-    if(!Array.isArray(shiftRows)||!Array.isArray(breakRows))return null;
+    if(!shiftReady||!breakReady||!Array.isArray(shiftRows)||!Array.isArray(breakRows))return null;
     var openIds=[],names={};
     shiftRows.forEach(function(s){
       if(!s||s.clockOutTs)return;
@@ -43,7 +43,7 @@
     });
     var onFloor=openIds.filter(function(id){return breakIds.indexOf(id)<0;});
     return {
-      version:617,source:SOURCE,sourceHealthy:true,branch:(branchProfile(activeBranch)||{}).id||'',
+      version:624,source:SOURCE,sourceHealthy:true,branch:(branchProfile(activeBranch)||{}).id||'',
       branchName:activeBranch,generatedAtMs:Date.now(),
       clockedInCount:openIds.length,openBreakCount:breakIds.length,
       activeStaffCount:onFloor.length,employeeIds:onFloor,
@@ -91,13 +91,15 @@
   function fallbackGet(){
     if(fallbackBusy||!activeBranch||typeof db==='undefined'||!db)return;
     fallbackBusy=true;
-    Promise.all([
-      db.collection('sales_shifts').where('branch','==',activeBranch).get(),
-      db.collection('sales_breaks').where('branch','==',activeBranch).get()
-    ]).then(function(rows){
-      shiftRows=docs(rows[0]);breakRows=docs(rows[1]);lastSnapshotAt=Date.now();lastError='';schedulePublish();
-    }).catch(function(e){lastError='firestore_get_'+String((e&&e.code)||e&&e.message||'failed');})
-      .then(function(){fallbackBusy=false;});
+    var shifts=db.collection('sales_shifts').where('branch','==',activeBranch).get()
+      .then(function(s){shiftRows=docs(s);shiftReady=true;lastSnapshotAt=Date.now();return true;})
+      .catch(function(e){shiftReady=false;lastError='shift_get_'+String((e&&e.code)||e&&e.message||'failed');return false;});
+    var breaks=db.collection('sales_breaks').where('branch','==',activeBranch).get()
+      .then(function(s){breakRows=docs(s);breakReady=true;lastSnapshotAt=Date.now();return true;})
+      .catch(function(e){breakReady=false;lastError='break_get_'+String((e&&e.code)||e&&e.message||'failed');return false;});
+    Promise.all([shifts,breaks]).then(function(ok){
+      if(ok[0]&&ok[1]){lastError='';schedulePublish();}
+    }).then(function(){fallbackBusy=false;});
   }
   function start(){
     var branch=(typeof currentBranch!=='undefined'&&currentBranch)||'';
@@ -105,8 +107,10 @@
     if(activeBranch===String(branch)&&unsubShift&&unsubBreak)return;
     stopListeners();activeBranch=String(branch);
     try{
-      unsubShift=db.collection('sales_shifts').where('branch','==',activeBranch).onSnapshot(function(s){shiftRows=docs(s);lastSnapshotAt=Date.now();schedulePublish();},function(){lastError='shift_snapshot_failed';fallbackGet();});
-      unsubBreak=db.collection('sales_breaks').where('branch','==',activeBranch).onSnapshot(function(s){breakRows=docs(s);lastSnapshotAt=Date.now();schedulePublish();},function(){lastError='break_snapshot_failed';fallbackGet();});
+      unsubShift=db.collection('sales_shifts').where('branch','==',activeBranch).onSnapshot(function(s){shiftRows=docs(s);shiftReady=true;lastSnapshotAt=Date.now();schedulePublish();},function(){shiftReady=false;lastError='shift_snapshot_failed';fallbackGet();});
+      unsubBreak=db.collection('sales_breaks').where('branch','==',activeBranch).onSnapshot(function(s){breakRows=docs(s);breakReady=true;lastSnapshotAt=Date.now();schedulePublish();},function(){breakReady=false;lastError='break_snapshot_failed';fallbackGet();});
+      // Bootstrap reads make the bridge publish even on browsers where the first listener callback is delayed.
+      setTimeout(fallbackGet,BOOTSTRAP_RETRY_MS);
     }catch(_e){stopListeners();retry();}
   }
   setInterval(function(){
@@ -121,7 +125,7 @@
   if(typeof firebase!=='undefined'&&firebase.auth){firebase.auth().onAuthStateChanged(function(u){if(u)start();else stopListeners();});}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
   window.cctvStaffStateRefresh=start;
-  window.cctvStaffStateStatus=function(){return {version:617,branch:activeBranch,branchId:(branchProfile(activeBranch)||{}).id||'',hasShiftRows:Array.isArray(shiftRows),hasBreakRows:Array.isArray(breakRows),lastSuccessAt:lastSuccessAt,lastError:lastError,lastSnapshotAt:lastSnapshotAt};};
+  window.cctvStaffStateStatus=function(){return {version:624,branch:activeBranch,branchId:(branchProfile(activeBranch)||{}).id||'',shiftReady:shiftReady,breakReady:breakReady,hasShiftRows:Array.isArray(shiftRows),hasBreakRows:Array.isArray(breakRows),lastSuccessAt:lastSuccessAt,lastError:lastError,lastSnapshotAt:lastSnapshotAt};};
   window.cctvMadinatyStaffStateRefresh=start;
   window.cctvMadinatyStaffStateStatus=window.cctvStaffStateStatus;
 })();
