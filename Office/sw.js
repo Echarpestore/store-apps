@@ -1,4 +1,4 @@
-const CACHE_NAME = 'echarpe-office-v637';
+const CACHE_NAME = 'echarpe-office-v643';
 self.addEventListener('install', (e)=> self.skipWaiting());
 self.addEventListener('activate', (e)=>{
   e.waitUntil(
