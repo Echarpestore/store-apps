@@ -1,4 +1,4 @@
-/* ECHARPE POS CCTV evidence v510
+/* ECHARPE POS CCTV evidence v604
    Branch behavior comes from the shared credential-free cctv-config.js profile.
    Local-agent branches keep stills on the branch PC and read NVR video on demand.
    Legacy branches keep the existing Firestore JPEG path until their agent is installed.
@@ -21,6 +21,14 @@ function branchCfg(branch){
   return null;
 }
 function cfg(meta){return branchCfg(meta&&meta.branch);}
+function cameraCfg(meta,cameraId){
+  var b=meta&&meta.branch, p=null;
+  try{ if(typeof window!=='undefined'&&typeof window.echarpeCctvProfile==='function') p=window.echarpeCctvProfile(b||''); }catch(e){}
+  if(!p)return cfg(meta);
+  var id=String(cameraId||p.cashierCamera||''),cam=(p.cameras||[]).find(function(x){return String(x.id)===id;});
+  if(!cam)return cfg(meta);
+  return {id:p.id,camera:cam.name||('CAM'+id),cameraId:id,stream:cam.stream,remote:p.gateway,localAgent:p.localAgent,localOnly:!!p.localEvidence,playback:!!p.playback};
+}
 var LOCAL_GO2RTC='http://127.0.0.1:1984';
 var LOCAL_AGENT='http://127.0.0.1:1985';
 var STAGE_KEY='echarpe.cctv.invoice.stages.v506.';
@@ -54,7 +62,7 @@ function postLocal(path,payload,ms,meta){
 }
 function encodeCanvas(img,maxW,quality){var scale=Math.min(1,maxW/img.naturalWidth),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));var c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);return {data:c.toDataURL('image/jpeg',quality),width:w,height:h};}
 function blobToJpegData(blob){return new Promise(function(resolve,reject){var img=new Image(),u=URL.createObjectURL(blob);img.onload=function(){try{var out=encodeCanvas(img,480,0.40);if(out.data.length>185000)out=encodeCanvas(img,380,0.32);URL.revokeObjectURL(u);if(out.data.length>210000)return reject(new Error('snapshot_too_large'));resolve(out);}catch(e){URL.revokeObjectURL(u);reject(e);}};img.onerror=function(){URL.revokeObjectURL(u);reject(new Error('snapshot_decode'));};img.src=u;});}
-async function grabLegacyShot(stage,meta){var c=cfg(meta);if(!c)throw new Error('cctv_branch_not_configured');var url=LOCAL_GO2RTC+'/api/frame.jpeg?src='+encodeURIComponent(c.stream)+'&_='+Date.now();var res=await fetchTimeout(url,{cache:'no-store'},9000);if(!res.ok)throw new Error('frame_http_'+res.status);var out=await blobToJpegData(await res.blob());return {stage:stage,camera:c.camera,stream:c.stream,capturedAtMs:Number(meta&&meta.atMs)||Date.now(),width:out.width,height:out.height,jpegData:out.data};}
+async function grabLegacyShot(stage,meta){var c=(meta&&meta.cameraId)?cameraCfg(meta,meta.cameraId):cfg(meta);if(!c)throw new Error('cctv_branch_not_configured');var url=LOCAL_GO2RTC+'/api/frame.jpeg?src='+encodeURIComponent(c.stream)+'&_='+Date.now();var res=await fetchTimeout(url,{cache:'no-store'},9000);if(!res.ok)throw new Error('frame_http_'+res.status);var out=await blobToJpegData(await res.blob());return {stage:stage,camera:c.camera,stream:c.stream,capturedAtMs:Number(meta&&meta.atMs)||Date.now(),width:out.width,height:out.height,jpegData:out.data};}
 async function grabGlowStage(stage,meta){
   var c=cfg(meta);if(!c)throw new Error('cctv_branch_not_configured');
   var sid=String(meta.sid||meta.cartSid||''),invoiceCode=String(meta.invoiceCode||'');
@@ -80,7 +88,8 @@ function publicLocalShot(shot){return shot?{stage:shot.stage,camera:shot.camera|
 async function writeInvoiceDoc(meta,shots,localOnly){
   if(typeof db==='undefined'||!meta||!meta.invoiceCode)return false;var c=cfg(meta);if(!c)return false;
   var preferred=shots.after_save||shots.saving||shots.payment||shots.first_item||null;
-  var doc={invoiceCode:String(meta.invoiceCode),invoiceNo:meta.invoiceNo||'',saleId:meta.saleId||'',branch:meta.branch||'',branchProfile:c.id,camera:c.camera,cameraId:c.cameraId||'',stream:c.stream,gateway:c.remote||'',version:506,storage:localOnly?'branch_local':'firestore_legacy',shots:{}};
+  var doc={invoiceCode:String(meta.invoiceCode),invoiceNo:meta.invoiceNo||'',saleId:meta.saleId||'',branch:meta.branch||'',branchProfile:c.id,camera:c.camera,cameraId:c.cameraId||'',stream:c.stream,gateway:c.remote||'',version:604,storage:localOnly?'branch_local':'firestore_legacy',shots:{},
+    evidenceContract:(c.id==='madinaty'?{cashierCamera:String(c.cameraId||'4'),cashierStages:['first_item','payment','saving'],afterSaveCamera:'7'}:undefined)};
   Object.keys(shots||{}).forEach(function(k){if(STAGES[k]&&shots[k])doc.shots[k]=localOnly?publicLocalShot(shots[k]):publicLegacyShot(shots[k]);});
   if(preferred){doc.capturedAtMs=Number(preferred.capturedAtMs)||Date.now();doc.stage=preferred.stage;}
   if(localOnly){doc.localSnapshots=true;doc.video='nvr_on_demand';doc.videoAtMs=Number(preferred&&preferred.capturedAtMs)||Number(meta.atMs)||Date.now();doc.videoNvrAtMs=Number(preferred&&preferred.nvrAtMs)||0;doc.nvrOffsetMs=Number(preferred&&preferred.nvrOffsetMs)||0;doc.clockSource=String(preferred&&preferred.clockSource||'');doc.beforeSec=30;doc.afterSec=30;}
@@ -110,7 +119,17 @@ async function finalizeInvoice(meta){
     meta=meta||{};var sid=String(meta.sid||meta.cartSid||'');if(!sid||!meta.invoiceCode||typeof db==='undefined')return false;var c=cfg(meta);if(!c)return false;
     if(c.localOnly)return await finalizeGlow(meta,sid);
     await waitPending(sid);var state=loadState(sid),shots=state.shots||{};await writeInvoiceDoc(meta,shots,false);
-    setTimeout(function(){grabLegacyShot('after_save',{atMs:Date.now(),branch:meta.branch||''}).then(async function(shot){try{var payload={version:495,capturedAtMs:shot.capturedAtMs,width:shot.width,height:shot.height,jpegData:shot.jpegData,stage:'after_save'};payload['shots.after_save']=publicLegacyShot(shot);await db.collection(SHOT_COL).doc(String(meta.invoiceCode)).update(payload);}catch(e){}}).catch(function(){});},1500);
+    setTimeout(function(){
+      var afterMeta={atMs:Date.now(),branch:meta.branch||''};
+      if(c.id==='madinaty')afterMeta.cameraId='7';
+      grabLegacyShot('after_save',afterMeta).then(async function(shot){
+        try{
+          var payload={version:604,capturedAtMs:shot.capturedAtMs,width:shot.width,height:shot.height,jpegData:shot.jpegData,stage:'after_save',afterSaveCamera:shot.camera||'',afterSaveCameraId:(c.id==='madinaty'?'7':c.cameraId||'')};
+          payload['shots.after_save']=publicLegacyShot(shot);
+          await db.collection(SHOT_COL).doc(String(meta.invoiceCode)).update(payload);
+        }catch(e){}
+      }).catch(function(){});
+    },700);
     clearState(sid);return true;
   }catch(e){try{console.warn('CCTV invoice finalize skipped',e&&e.message||e);}catch(_){}return false;}
 }

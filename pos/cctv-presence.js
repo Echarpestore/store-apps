@@ -10,7 +10,7 @@
 (function(){
 'use strict';
 
-var VERSION=555;
+var VERSION=604;
 var URL='http://127.0.0.1:1985/echarpe-presence/status';
 var SIGNAL_URL='http://127.0.0.1:1985/echarpe-playback/session-signal';
 var POLL_MS=2500, STALE_MS=12000, NO_SALE_GRACE_MS=90000;
@@ -78,7 +78,7 @@ function processEnded(status){
       presenceCameras:sessionCameras(s), presenceConfidence:Number(s.confidence)||0,
       hadCartActivity:!!m.cartActions, cartActions:Number(m.cartActions)||0,
       removedQty:Number(m.removedQty)||0, hadDrawerOpen:!!m.hadDrawerOpen,
-      detector:'branch_local_occupancy_v477',
+      detector:'madinaty_multicam_door8_v604',
       __eventAtMsOverride:Number(s.endedAtMs)||Number(s.lastPresenceAtMs)||Date.now()
     },m.sid||null);
     markDone(s.id); delete observed[s.id]; delete metrics[s.id];
@@ -91,6 +91,7 @@ async function poll(){
     if(!r.ok)throw new Error('presence_http_'+r.status);
     var d=await r.json();
     if(!d||d.ok!==true||Number(d.generatedAtMs)<Date.now()-STALE_MS)throw new Error('presence_stale');
+    if(d.state && d.state.occupancyCertain===false) throw new Error('presence_uncertain');
     lastStatus=d;lastOkAt=Date.now();
     var c=currentSession(d);if(c)noteObserved(c);
     processEnded(d);
@@ -119,14 +120,17 @@ window.cctvPresenceRecordSale=function(meta){
       markDone(String(s.id)); // same customer session is accounted for by this sale.
       return true;
     }
-    // Only flag when a healthy, fresh detector explicitly says there was no customer session.
+    // v604: never accuse from a weak/uncertain count. The detector must explicitly
+    // report a certain zero-customer state using all available Madinaty cameras.
     if(!statusFresh())return false;
+    var st=lastStatus&&lastStatus.state;
+    if(!st || st.occupancyCertain!==true || Number(st.customersInside)!==0)return false;
     logForSid('sale_without_customer_presence',{
       invoiceCode:String(meta.invoiceCode||''), invoiceNo:String(meta.invoiceNo||''),
       total:Number(meta.total)||0, itemCount:Number(meta.itemCount)||0,
       checkedAtMs:Date.now(), presenceLookbackSec:Math.round(SALE_BEFORE_MS/1000),
       presenceCameras:Array.isArray(lastStatus.configuredCameras)?lastStatus.configuredCameras.join(', '):String(lastStatus.configuredCameras||''),
-      detector:'branch_local_occupancy_v477'
+      detector:'madinaty_multicam_door8_v604'
     },meta.sid||null);
     return false;
   }catch(e){return false;}
