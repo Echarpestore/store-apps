@@ -95,6 +95,16 @@ window.fbWriteBatch = (typeof writeBatch === 'function' ? writeBatch : null);   
    This cuts the repeated 190-day listener re-reads without losing local history.
    ============================================================ */
 const LF431_PREFIX='sales_lf_v431_';
+// v603 — one-time history repair. A previous successful/failed long-history fetch
+// could leave a fresh TTL marker while this device no longer had the matching
+// IndexedDB rows. Clear only LF431 freshness markers once so the real Firestore
+// history is reloaded; this does NOT delete any Firestore data.
+try{
+  if(localStorage.getItem('sales_history_repair_v603')!=='1'){
+    Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
+    localStorage.setItem('sales_history_repair_v603','1');
+  }
+}catch(_e){}
 function lf431Last(k){try{return Number(localStorage.getItem(LF431_PREFIX+k)||0)||0;}catch(e){return 0;}}
 function lf431Mark(k){try{localStorage.setItem(LF431_PREFIX+k,String(Date.now()));}catch(e){}}
 function lf431Docs(snap){return (snap&&snap.docs?snap.docs:[]).map(d=>({id:d.id,...d.data()}));}
@@ -119,12 +129,23 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
   // production uses explicit cache/server APIs; the getDocs fallback only keeps the legacy node harness compatible.
   const _cacheGet=(typeof getDocsFromCache==='function')?getDocsFromCache:getDocs;
   const _serverGet=(typeof getDocsFromServer==='function')?getDocsFromServer:getDocs;
-  // zero-server-read startup from persistent IndexedDB cache
-  _salesInitialAuthReady.then(()=>_cacheGet(fullQ)).then(s=>{if(!s.empty){apply(lf431Docs(s),'cache');lf431Report(name,{cacheCount:s.size});}}).catch(e=>lf431Report(name,{cacheError:(e&&e.code)||String(e)}));
+  // zero-server-read startup from persistent IndexedDB cache.
+  // v603: if the cache is empty but the TTL says "fresh", force recovery from server.
+  _salesInitialAuthReady.then(()=>_cacheGet(fullQ)).then(s=>{
+    if(!s.empty){
+      apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'cache');
+      lf431Report(name,{cacheCount:s.size});
+    }else{
+      lf431Report(name,{cacheCount:0,cacheEmpty:true});
+      if((Date.now()-lf431Last(name))<ttlMs) runServerFetch(false);
+    }
+  }).catch(e=>lf431Report(name,{cacheError:(e&&e.code)||String(e)}));
   function runServerFetch(isRetry){
     lf431Report(name,{status:'fetching',lastAttemptAt:Date.now()});
     _salesInitialAuthReady.then(()=>_serverGet(fullQ)).then(s=>{
-      apply(lf431Docs(s),'server');
+      // v603 history-preservation guard: a refresh may add/update records,
+      // but must never erase already-visible cached/history rows.
+      apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'server');
       lf431Mark(name);
       lf431Report(name,{status:'ok',error:null,serverCount:s.size,lastSuccessAt:Date.now()});
     }).catch(e=>{
@@ -134,7 +155,7 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
       if(!isRetry){
         setTimeout(()=>{
           _salesInitialAuthReady.then(()=>getDocs(fullQ)).then(s=>{
-            apply(lf431Docs(s),'server-retry');
+            apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'server-retry');
             lf431Mark(name);
             lf431Report(name,{status:'ok',error:null,serverCount:s.size,lastSuccessAt:Date.now(),recovered:true});
           }).catch(e2=>{
@@ -5907,10 +5928,16 @@ function populateAttendanceEmpFilter(){
 $('#attendanceEmpFilter')?.addEventListener('change', renderAttendanceHistory);
 
 function getAttendanceHistoryList(){
+  // v603: history belongs to the attendance record itself. Do not hide old shifts
+  // just because an employee was later deleted/removed from sales_employees.
   const branchEmpIds = new Set(reviewEmployeesFor(viewBranch).map(e=>e.id));
   const filterEmp = $('#attendanceEmpFilter') ? $('#attendanceEmpFilter').value : '__ALL__';
-  return allShifts.filter(s=> branchEmpIds.has(s.employeeId) && (filterEmp==='__ALL__' || s.employeeId===filterEmp))
-    .sort((a,b)=> b.clockInTs - a.clockInTs);
+  const targetBranch=String(viewBranch||'').trim();
+  return allShifts.filter(s=>{
+    const shiftBranch=String((s&&s.branch)||'').trim();
+    const inBranch=(viewBranch==='__ALL__') || shiftBranch===targetBranch || branchEmpIds.has(s.employeeId);
+    return inBranch && (filterEmp==='__ALL__' || s.employeeId===filterEmp);
+  }).sort((a,b)=> b.clockInTs - a.clockInTs);
 }
 
 function renderAttendanceHistory(){

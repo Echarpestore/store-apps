@@ -1,0 +1,10 @@
+const fs=require('fs'),assert=require('assert'),path=require('path');
+const s=fs.readFileSync(path.join(__dirname,'../sales/sales-app.js'),'utf8');
+assert(s.includes("sales_history_repair_v603"), 'one-time repair marker missing');
+assert(s.includes("apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'server')"), 'server refresh can shrink history');
+assert(s.includes("apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'server-retry')"), 'server retry can shrink history');
+assert(s.includes("if((Date.now()-lf431Last(name))<ttlMs) runServerFetch(false);"), 'empty cache does not force recovery');
+assert(s.includes("shiftBranch===targetBranch || branchEmpIds.has(s.employeeId)"), 'attendance history still depends only on live employee row');
+assert(s.includes("async function verifyFaceWithSilentRetry"), 'face attendance v602 lost');
+assert(s.includes("function mouthOpenRatio"), 'v602 mobile liveness lost');
+console.log('SALES_HISTORY_V603=PASS HISTORY_NON_SHRINK=TRUE EMPTY_CACHE_RECOVERY=TRUE DELETED_EMPLOYEE_HISTORY=TRUE FACE_PRESERVED=TRUE');

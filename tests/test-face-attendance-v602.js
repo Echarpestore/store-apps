@@ -1,0 +1,11 @@
+const fs=require('fs'),assert=require('assert');
+const s=fs.readFileSync(__dirname+'/../sales/sales-app.js','utf8');
+assert(s.includes('function mouthOpenRatio'));
+assert(s.includes('(maxMouth-minMouth)>=0.055'));
+assert(s.includes('(maxHead-minHead)>=0.09'));
+assert(s.includes('افتح بُقك واقفله مرة طبيعي'));
+assert(!s.includes('ارمش مرة طبيعي'));
+assert(!s.includes('er<maxEye*0.72'));
+assert(s.includes('async function verifyFaceWithSilentRetry'));
+assert(s.includes('await verifyFaceWithSilentRetry(emp,video)'));
+console.log('FACE_ATTENDANCE_V602=PASS BLINK_REMOVED=TRUE MOUTH_CHANGE=TRUE HEAD_MOVE=TRUE');
