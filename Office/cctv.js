@@ -630,12 +630,19 @@
     try{
       var base=String(x.gateway||'').replace(/\/$/,''),pair=await Promise.all([
         fetchJsonRetry(base+'/echarpe-playback/alerts?_='+Date.now(),x.id,3).catch(function(){return {items:[]};}),
-        fetchJsonRetry(base+'/echarpe-playback/activity-status?_='+Date.now(),x.id,2).catch(function(){return null;})
-      ]),items=Array.isArray(pair[0].items)?pair[0].items:[],det=normalizeTrackingStatus(pair[1]||{});
-      var s=det.state||{},online=Array.isArray(s.onlineCameras)?s.onlineCameras.map(String):[],healthy=!!(det.detector&&s.attendanceFresh&&online.indexOf(tp.door)>=0&&online.length>=Math.min(3,tp.expected)),source=s.staffSource==='pos_firestore'?'POS مباشر':s.staffSource==='sales_fallback'?'Sales احتياطي':'لا يوجد مصدر';
+        fetchJsonRetry(base+'/echarpe-playback/activity-status?_='+Date.now(),x.id,2).catch(function(){return null;}),
+        fetchJsonRetry(base+'/echarpe-playback/staff-state?_='+Date.now(),x.id,2).catch(function(){return null;})
+      ]),items=Array.isArray(pair[0].items)?pair[0].items:[],det=normalizeTrackingStatus(pair[1]||{}),directStaff=pair[2]||null;
+      var s=det.state||{},online=Array.isArray(s.onlineCameras)?s.onlineCameras.map(String):[],
+          directValid=!!(directStaff&&String(directStaff.branch||directStaff.branchId||'').toLowerCase()===String(x.id||'').toLowerCase()),
+          staffSource=directValid?String(directStaff.source||''):String(s.staffSource||''),
+          staffCount=directValid?Number(directStaff.activeStaffCount||0):Number(s.activeStaffCount||0),
+          staffFresh=directValid?(directStaff.sourceHealthy!==false):!!s.attendanceFresh,
+          healthy=!!(det.detector&&staffFresh&&online.indexOf(tp.door)>=0&&online.length>=Math.min(3,tp.expected)),
+          source=staffSource==='pos_firestore'?'POS مباشر':staffSource==='sales_fallback'?'Sales احتياطي':staffSource==='diag_v648'?'تشخيص مؤقت':'لا يوجد مصدر';
       if(status){
         var occ=s.occupancyCertain===true?Number(s.customersInside||0):'غير مؤكد';
-        status.textContent=det.detector?('● كاميرات '+online.length+'/'+tp.expected+' · باب '+tp.door+' '+(online.indexOf(tp.door)>=0?'✓':'✕')+' · عملاء داخل الفرع '+occ+' · موظفين '+Number(s.activeStaffCount||0)+' · '+source):'● الكاشف غير متصل';
+        status.textContent=det.detector?('● كاميرات '+online.length+'/'+tp.expected+' · باب '+tp.door+' '+(online.indexOf(tp.door)>=0?'✓':'✕')+' · عملاء داخل الفرع '+occ+' · موظفين '+staffCount+' · '+source):'● الكاشف غير متصل';
         status.classList.toggle('offline',!healthy);
       }
       try{renderTrafficReport(det,await trafficSalesByDay(s.trafficHistory));}catch(reportErr){console.warn('traffic report',reportErr);renderTrafficReport(det,{});}
