@@ -410,9 +410,15 @@
       + 'height:40px; font-size:17px; cursor:pointer; flex:0 0 auto;}'
       + '.ccIco.send{background:#C79A38; color:#14161c;}'
       + '.ccIco.send.has-image{width:68px; border-radius:12px; font-size:12px; font-weight:900;}'
-      + '#ccImgPrev{display:none; padding:8px 12px; background:#1b1e26; gap:10px; align-items:center; flex-wrap:wrap;}'
+      + '#ccImgPrev{display:none; padding:10px 12px; background:#1b1e26; gap:8px; align-items:center; flex-wrap:wrap; border-top:1px solid #2a2e39;}'
       + '#ccImgPrev img{height:54px; border-radius:8px;}'
       + '#ccImgPrev label{font-size:12px; color:#9aa1af; display:flex; gap:5px; align-items:center;}'
+      + '.ccProductHead{display:flex;align-items:center;gap:8px;flex:1 1 220px;min-width:0;}'
+      + '.ccProductFields{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;flex:1 1 100%;}'
+      + '.ccFieldLabel{font-size:11px;color:#9aa1af;font-weight:800;}'
+      + '#ccTryBc{width:100%;box-sizing:border-box;background:#14161c!important;color:#eceef2!important;border-color:#2a2e39!important;}'
+      + '.ccBandToggleLine{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:1 1 100%;padding-top:2px;}'
+      + '#ccProductSendBtn{display:block;width:100%;border:0;border-radius:12px;background:#C79A38;color:#14161c;padding:11px 14px;font:900 13px inherit;cursor:pointer;}'
       // منطقة البندانة جزء من scroll المؤلف كله؛ scroll داخل scroll كان
       // يحتجز لمسة الموبايل ويظهر كأن الشاشة علقت.
       + '#ccBandRow{display:none; gap:8px; padding:6px 12px; background:#1b1e26; align-items:center; flex-wrap:wrap;}'
@@ -422,9 +428,10 @@
       + 'font-weight:700; cursor:pointer; font-family:inherit;}'
       + '.ccBandChip .dot{width:14px; height:14px; border-radius:50%; flex:0 0 auto; border:1px solid rgba(255,255,255,.25);}'
       + '.ccBandChip.on{border-color:#C79A38; background:rgba(199,154,56,.15); color:#eceef2;}'
-      + '@media (max-width:760px){#ccCompose{max-height:55dvh;}#ccImgPrev{align-items:flex-start;}'
-      + '#ccImgPrev #ccTryBc{flex:1 1 150px;min-width:0!important;}'
-      + '#ccImgPrev .ccSgName{flex:1 1 auto;}}'
+      + '@media (max-width:760px){#ccCompose{max-height:46dvh;}#ccImgPrev{align-items:stretch;}'
+      + '#ccImgPrev .ccProductHead{flex:1 1 100%;}'
+      + '#ccImgPrev #ccTryBc{min-width:0!important;}'
+      + '#ccImgPrev .ccSgName{flex:1 1 auto;}#ccBandRow{padding:5px 0;}#ccBandBcInfo{padding:0!important;}}'
       + '#ccBlock{border:1px solid #E5484D; background:none; color:#E5484D; border-radius:99px;'
       + 'padding:4px 11px; font-size:11.5px; font-weight:800; cursor:pointer; font-family:inherit;}';
     document.head.appendChild(css);
@@ -452,17 +459,19 @@
       + '<div id="ccList"></div>'
       + '<div id="ccThread"></div>'
       + '<div id="ccCompose">'
-      + '<div id="ccImgPrev"><span id="ccImgPreviewBox" style="display:none">معاينة الصورة قبل الإرسال</span><img id="ccImgTag" alt="">'
-      + '<label><input type="checkbox" id="ccTryFlag" checked style="width:15px;height:15px;"> زرار 🧕 جرّبيها</label>'
-      + '<input id="ccTryBc" type="text" inputmode="latin" placeholder="باركود المنتج (للسلة)" oninput="ccTryBcPreview()" style="flex:1; min-width:120px; font-size:12px; padding:6px 8px; border:1px solid #ddd; border-radius:8px;">'
-      + '<label><input type="checkbox" id="ccBandFlag" onchange="ccBandToggle()" style="width:15px;height:15px;"> 🧢 بندانة</label>'
-      + '<button class="ccSgName" onclick="ccPickImage(\'gallery\')">🖼️ تغيير الصورة</button><button class="ccSgName" onclick="ccImgClear()">✖ إلغاء</button></div>'
-      + '<div id="ccTryBcInfo" style="font-size:11.5px; padding:0 2px; color:#888;"></div>'
-      + '<div id="ccBandRow">'
-      + '<div id="ccBandChips" style="display:flex; flex-wrap:wrap; gap:6px; flex:1 1 100%;"></div>'
-      + '<input id="ccBandBc" type="text" inputmode="latin" placeholder="باركود البندانة" oninput="ccBandBcPreview()" style="flex:1; min-width:100px;">'
-      + '</div>'
-      + '<div id="ccBandBcInfo" style="font-size:11.5px; padding:0 12px; color:#888;"></div>'
+      + '<div id="ccImgPrev"><span id="ccImgPreviewBox" style="display:none">معاينة الصورة قبل الإرسال</span>'
+      + '<div class="ccProductHead"><img id="ccImgTag" alt=""><label><input type="checkbox" id="ccTryFlag" checked style="width:15px;height:15px;"> 🧕 زر جرّبيها</label>'
+      + '<button class="ccSgName" onclick="ccPickImage(\'gallery\')">🖼️ تغيير</button><button class="ccSgName" onclick="ccImgClear()">✖</button></div>'
+      + '<div class="ccProductFields"><div class="ccFieldLabel">كود المنتج</div>'
+      + '<input id="ccTryBc" type="text" inputmode="latin" placeholder="اكتب أو امسح باركود المنتج" oninput="ccTryBcPreview()" style="font-size:12px;padding:8px;border:1px solid #ddd;border-radius:8px;">'
+      + '<div id="ccTryBcInfo" style="font-size:11.5px;color:#888;"></div></div>'
+      + '<div class="ccBandToggleLine"><label><input type="checkbox" id="ccBandFlag" onchange="ccBandToggle()" style="width:15px;height:15px;"> 🧢 إضافة بندانة</label></div>'
+      + '<div id="ccBandRow"><div class="ccFieldLabel" style="flex:1 1 100%">ألوان البندانة</div>'
+      + '<div id="ccBandChips" style="display:flex;flex-wrap:wrap;gap:6px;flex:1 1 100%;"></div>'
+      + '<div class="ccFieldLabel" style="flex:1 1 100%">كود البندانة</div>'
+      + '<input id="ccBandBc" type="text" inputmode="latin" placeholder="اكتب أو امسح باركود البندانة" oninput="ccBandBcPreview()" style="flex:1 1 100%;min-width:100px;">'
+      + '<div id="ccBandBcInfo" style="font-size:11.5px;color:#888;flex:1 1 100%;"></div></div>'
+      + '<button id="ccProductSendBtn" type="button" onclick="ccSend()">➤ إرسال للعميلة</button></div>'
       + ccOutfitPrevHtml()
       + '<div id="ccSigner"></div>'
       + ccQuickHtml()
@@ -702,6 +711,8 @@
     btn.classList.toggle('has-image', hasImage);
     btn.textContent = hasImage ? '➤ إرسال' : '➤';
     btn.title = hasImage ? 'إرسال الطرحة للعميلة' : 'إرسال الرد';
+    var pbtn = document.getElementById('ccProductSendBtn');
+    if(pbtn){ pbtn.style.display = hasImage ? 'block' : 'none'; pbtn.disabled = false; }
   }
 
   function onPickImage(e){
