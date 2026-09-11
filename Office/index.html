@@ -609,6 +609,14 @@ document.addEventListener('DOMContentLoaded',function(){
   });
 });
 </script>
+
+<style id="ofCctvV671LocalReviewStyle">
+.of-cctv-connection-mode{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border-radius:999px;font-size:11px;font-weight:900;white-space:nowrap;border:1px solid #334155;background:#0f172a;color:#cbd5e1}
+.of-cctv-connection-mode.local{background:#052e16;border-color:#166534;color:#bbf7d0}
+.of-cctv-connection-mode.remote{background:#172554;border-color:#1d4ed8;color:#bfdbfe}
+.of-cctv-local-open{border:1px solid #166534;background:#052e16;color:#bbf7d0;border-radius:10px;padding:6px 9px;font-size:11px;font-weight:900;cursor:pointer}
+@media(max-width:700px){.of-cctv-connection-mode{font-size:9px;padding:5px 7px}}
+</style>
 </head>
 <body>
 
@@ -953,7 +961,7 @@ document.addEventListener('DOMContentLoaded',function(){
     <div class="of-cctv-shell of-cctv-controlroom">
       <div class="of-cctv-top">
         <div class="of-cctv-title"><span style="font-size:22px">📹</span><div><b>غرفة المراقبة</b><small>Live · تسجيل · سلة — بدون لف وسكرول طويل</small></div></div>
-        <div class="of-cctv-top-actions"><span class="of-cctv-status" id="ofCctvStatus">● متوقف</span><button type="button" class="of-cctv-room-full" id="ofCctvRoomFullscreen">⛶ ملء الشاشة</button></div>
+        <div class="of-cctv-top-actions"><span class="of-cctv-connection-mode remote" id="ofCctvConnectionMode" title="مسار الاتصال">☁ REMOTE</span><button type="button" class="of-cctv-local-open" id="ofCctvLocalOpen" title="افتح Office مباشرة من شبكة Glow">⚡ Local</button><span class="of-cctv-status" id="ofCctvStatus">● متوقف</span><button type="button" class="of-cctv-room-full" id="ofCctvRoomFullscreen">⛶ ملء الشاشة</button></div>
       </div>
       <div class="of-cctv-toolbar">
         <div class="of-cctv-branches" id="ofCctvBranches"></div>
@@ -1086,7 +1094,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=545"></script>
 <script src="../cctv-config.js?v=549"></script>
-<script src="cctv.js?v=670"></script>
-<script src="office.js?v=670"></script>
+<script src="cctv.js?v=671"></script>
+<script src="office.js?v=671"></script>
 </body>
 </html>
