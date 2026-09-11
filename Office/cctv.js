@@ -790,7 +790,8 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
     if(window.ofCctvProfileFor(d.branchProfile||d.branch)&&window.ofCctvProfileFor(d.branchProfile||d.branch).id==='rehab'){d.clockSource='pos_pc';d.cameraId='1';}
     var shots=d.shots||{};
     var profile=window.ofCctvProfileFor(d.branchProfile||d.branch);
-    var localBranch=!!d.localSnapshots,gateway=String(d.gateway||(profile&&profile.gateway)||'').replace(/\/$/,'');
+    var localBranch=!!d.localSnapshots||String(d.storage||'').toLowerCase()==='branch_local';
+    var gateway=String((profile&&profile.gateway)||d.gateway||'').replace(/\/$/,'');
     var playbackReady=!!gateway&&!!(profile&&profile.playback)&&Number(d.videoAtMs)>0;
     if(!Object.keys(shots).length&&/^data:image\/jpeg;base64,/.test(String(d.jpegData||'')))shots={after_save:{jpegData:d.jpegData,capturedAtMs:d.capturedAtMs,width:d.width,height:d.height,camera:d.camera||'CCTV'}};
     var order=['first_item','payment','saving','after_save'];

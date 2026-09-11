@@ -6232,8 +6232,14 @@ function _ofDetailItems(s){
   return a.map(function(x){const q=Number(x.qty)||0,p=Number(x.price)||0;return '<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)"><div><b>'+esc(x.name||x.barcode||'صنف')+'</b><div class="muted" style="font-size:10px">'+esc(x.barcode||'')+(x.fromInvoice?' · من '+esc(x.fromInvoice):'')+'</div></div><span>'+ofNum(q)+' × '+ofMoney(Math.abs(p))+'</span><b>'+ofMoney(q*p)+' ج.م</b></div>';}).join('');
 }
 function _ofTimelineCard(icon,title,ts,body,shotKey,shotDoc){
-  let shot=''; const x=shotDoc&&shotDoc.shots&&shotDoc.shots[shotKey];
-  if(x&&/^data:image\/jpeg;base64,/.test(String(x.jpegData||''))) shot='<img src="'+x.jpegData+'" style="width:112px;height:74px;object-fit:cover;border-radius:10px;background:#000;cursor:pointer" onclick="ofCctvInvoiceShot(\''+esc(shotDoc.invoiceCode||'')+'\')">';
+  let shot='',src=''; const x=shotDoc&&shotDoc.shots&&shotDoc.shots[shotKey];
+  if(x&&/^data:image\/jpeg;base64,/.test(String(x.jpegData||''))) src=String(x.jpegData||'');
+  else if(x&&shotDoc&&(shotDoc.localSnapshots||String(shotDoc.storage||'').toLowerCase()==='branch_local')){
+    const p=(typeof window.ofCctvProfileFor==='function'?window.ofCctvProfileFor(shotDoc.branchProfile||shotDoc.branch):null);
+    const gateway=String((p&&p.gateway)||shotDoc.gateway||'').replace(/\/$/,'');
+    if(gateway&&shotDoc.invoiceCode)src=gateway+'/echarpe-events/snapshot?invoice='+encodeURIComponent(String(shotDoc.invoiceCode))+'&stage='+encodeURIComponent(String(shotKey))+'&_='+Date.now();
+  }
+  if(src) shot='<img src="'+esc(src)+'" loading="lazy" style="width:112px;height:74px;object-fit:cover;border-radius:10px;background:#000;cursor:pointer" onclick="ofCctvInvoiceShot(\''+esc(shotDoc.invoiceCode||'')+'\')" onerror="this.style.display=\'none\'">';
   return '<div style="display:flex;gap:10px;position:relative;padding:0 0 14px"><div style="width:34px;height:34px;border-radius:50%;background:var(--panel2);display:grid;place-items:center;flex:0 0 34px">'+icon+'</div><div style="flex:1;border-bottom:1px solid var(--line);padding-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px"><b>'+title+'</b><small class="muted">'+(ts?ofTime(ts):'—')+'</small></div>'+(body?'<div class="muted" style="font-size:11px;margin-top:3px">'+body+'</div>':'')+(shot?'<div style="margin-top:7px">'+shot+'</div>':'')+'</div></div>';
 }
 window.ofOpenSaleDetails=async function(id){
