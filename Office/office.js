@@ -6234,9 +6234,9 @@ function _ofDetailItems(s){
 function _ofTimelineCard(icon,title,ts,body,shotKey,shotDoc){
   let shot='',src=''; const x=shotDoc&&shotDoc.shots&&shotDoc.shots[shotKey];
   if(x&&/^data:image\/jpeg;base64,/.test(String(x.jpegData||''))) src=String(x.jpegData||'');
-  else if(x&&shotDoc&&(shotDoc.localSnapshots||String(shotDoc.storage||'').toLowerCase()==='branch_local')){
-    const p=(typeof window.ofCctvProfileFor==='function'?window.ofCctvProfileFor(shotDoc.branchProfile||shotDoc.branch):null);
-    const gateway=String((p&&p.gateway)||shotDoc.gateway||'').replace(/\/$/,'');
+  else if(shotDoc&&(shotDoc.localSnapshots||String(shotDoc.storage||'').toLowerCase()==='branch_local')){
+    const p=(typeof window.ofCctvProfileFor==='function'?window.ofCctvProfileFor(shotDoc.branchProfile||shotDoc.branch||'glow'):null);
+    const gateway=String((p&&p.gateway)||shotDoc.gateway||((String(shotDoc.branchProfile||'').toLowerCase()==='glow'||String(shotDoc.branch||'').toLowerCase().indexOf('glow')>=0)?'https://cctv-glow.echarpe.store':'')).replace(/\/$/,'');
     if(gateway&&shotDoc.invoiceCode)src=gateway+'/echarpe-events/snapshot?invoice='+encodeURIComponent(String(shotDoc.invoiceCode))+'&stage='+encodeURIComponent(String(shotKey))+'&_='+Date.now();
   }
   if(src) shot='<img src="'+esc(src)+'" loading="lazy" style="width:112px;height:74px;object-fit:cover;border-radius:10px;background:#000;cursor:pointer" onclick="ofCctvInvoiceShot(\''+esc(shotDoc.invoiceCode||'')+'\')" onerror="this.style.display=\'none\'">';
