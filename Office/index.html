@@ -576,7 +576,7 @@
 .of-cctv-day-empty small{display:block;margin-top:5px;color:#94a3b8}
 .of-sales665-panel{border:1px solid #dbe3ee!important;box-shadow:0 10px 30px rgba(15,23,42,.05)}
 .of-sales665-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.of-sales665-head h3{margin-bottom:2px!important}.of-sales665-live{font-size:9px;font-weight:900;letter-spacing:.12em;background:#111827;color:#fff;border-radius:999px;padding:6px 8px}
-.of-sales665-quick{display:flex;gap:6px;margin:12px 0 9px}.of-sales665-quick button{flex:1;border:1px solid #e2e8f0;background:#fff;border-radius:11px;padding:9px;font-weight:800}.of-sales665-quick button.on{background:#111827;color:#fff;border-color:#111827}
+.of-sales665-quick{display:flex;gap:6px;margin:12px 0 9px}.of-sales665-quick button{flex:1;border:1px solid #e2e8f0;background:#fff;color:#111827!important;border-radius:11px;padding:9px;font-weight:800}.of-sales665-quick button.on{background:#111827!important;color:#fff!important;border-color:#111827}
 .of-sales665-controls{display:grid;grid-template-columns:1fr 1fr 1.1fr auto;gap:8px;align-items:end}.of-sales665-controls label{display:grid;gap:4px;font-size:10px;color:#64748b}.of-sales665-controls input,.of-sales665-controls select{width:100%;min-width:0}.of-sales665-controls button{height:42px;border:0;border-radius:12px;background:#111827;color:#fff;font-weight:900;padding:0 15px}
 .of-sales665-progress{display:none;margin-top:12px}.of-sales665-progress.show{display:grid;gap:6px}.of-sales665-progress span{font-size:10px;color:#64748b}.of-sales665-progress i{animation:of665load 1.05s ease-in-out infinite}
 .of-sales665-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:13px}.of-sales665-kpi,.of-sales665-branch{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#fff}.of-sales665-kpi b{display:block;font-size:18px;color:#0f172a}.of-sales665-kpi span,.of-sales665-branch small{font-size:10px;color:#64748b}
@@ -592,6 +592,23 @@
 }
 </style>
 
+
+<style id="ofV666PlaybackPolish">
+#ofCctvPlaybackOv .of-day666-buffer{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:7px 10px;background:#0b1220;color:#cbd5e1;font-size:10px}
+#ofCctvPlaybackOv .of-day666-buffer>div{height:5px;background:#263244;border-radius:999px;overflow:hidden}
+#ofCctvPlaybackOv .of-day666-buffer i{display:block;width:0;height:100%;background:#e2e8f0;border-radius:999px;transition:width .18s linear}
+#ofCctvPlaybackOv .of-day666-nav{grid-template-columns:1fr 1fr!important}
+#ofCctvPlaybackOv .of-day666-nav button{font-size:13px!important;min-height:42px}
+.of-sales665-quick button{color:#111827!important}
+.of-sales665-quick button.on{background:#111827!important;color:#fff!important}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  Array.from(document.body.childNodes).forEach(function(n){
+    if(n.nodeType===3 && /^\s*(?:n|\\n)+\s*$/i.test(n.nodeValue||'')) n.remove();
+  });
+});
+</script>
 </head>
 <body>
 
@@ -1069,7 +1086,7 @@
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=545"></script>
 <script src="../cctv-config.js?v=549"></script>
-<script src="cctv.js?v=665"></script>
-<script src="office.js?v=665"></script>
+<script src="cctv.js?v=666"></script>
+<script src="office.js?v=666"></script>
 </body>
 </html>
