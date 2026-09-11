@@ -545,6 +545,53 @@
 #ofCctvPlaybackOv .of-day564-event span{width:100%!important;white-space:normal!important;overflow:visible!important}
 #ofCctvPlaybackOv .of-day511-cart{flex:1 1 0!important;min-height:135px!important}
 }</style>
+
+<style id="ofV665OfficeUx">
+/* Office v665 — simpler CCTV navigation, visible loading, premium playback timeline */
+#page-cctv .of-cctv-shell{max-width:1180px;margin:0 auto}
+#page-cctv .of-cctv-toolbar{display:grid;gap:10px}
+#page-cctv .of-cctv-worknav{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px!important;overflow:visible!important}
+#page-cctv .of-cctv-worknav button{min-width:0!important;min-height:66px;border:1px solid #e2e8f0!important;border-radius:15px!important;background:#fff!important;color:#334155!important;display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px!important;box-shadow:0 4px 14px rgba(15,23,42,.04)}
+#page-cctv .of-cctv-worknav button span{font-size:18px} #page-cctv .of-cctv-worknav button b{font-size:12px} #page-cctv .of-cctv-worknav button small{font-size:9px;color:#94a3b8;line-height:1.15}
+#page-cctv .of-cctv-worknav button.active{border-color:#111827!important;background:#111827!important;color:#fff!important;box-shadow:0 8px 20px rgba(15,23,42,.18)}
+#page-cctv .of-cctv-worknav button.active small{color:#cbd5e1}
+.of-cctv665-busy{display:none;margin:10px 0 12px;padding:11px 13px;border:1px solid #dbeafe;border-radius:14px;background:#f8fbff;box-shadow:0 8px 24px rgba(37,99,235,.06)}
+.of-cctv665-busy.show{display:block}.of-cctv665-busy-top{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:11px;color:#475569;margin-bottom:7px}.of-cctv665-busy-top b{font-size:12px;color:#0f172a}
+.of-cctv665-busy-track,.of-pb665-loader-track,.of-day665-load>div,.of-sales665-progress>div,.of-inline665-loader{height:5px;border-radius:999px;background:#e2e8f0;overflow:hidden;position:relative}
+.of-cctv665-busy-track i,.of-pb665-loader-track i,.of-day665-load i,.of-sales665-progress i,.of-inline665-loader i{display:block;height:100%;width:38%;border-radius:inherit;background:linear-gradient(90deg,#0f172a,#64748b);transition:width .25s ease}
+.of-cctv665-busy-track i.indeterminate,.of-pb665-loader-track i.indeterminate,.of-day665-load i.indeterminate{animation:of665load 1.05s ease-in-out infinite}
+@keyframes of665load{0%{transform:translateX(-130%)}55%{transform:translateX(130%)}100%{transform:translateX(290%)}}
+.of-pb665-loader{display:none;padding:10px 12px;background:#0f172a;color:#e2e8f0}.of-pb665-loader.show{display:block}.of-pb665-loader-top{display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:7px}.of-pb665-loader-top b{font-size:9px;letter-spacing:.12em;color:#94a3b8}
+#ofCctvPlaybackOv .of-day665-timeline{background:#0b1220;padding:10px 12px 12px;border-top:1px solid #263244;position:relative;z-index:3}
+#ofCctvPlaybackOv .of-day665-timeline-head{display:flex;justify-content:space-between;align-items:center;gap:12px;color:#cbd5e1;margin-bottom:7px;font-size:10px}
+#ofCctvPlaybackOv .of-day665-timeline-head b{color:#fff;font-size:12px}
+#ofCctvPlaybackOv input[data-day-slider]{display:block!important;width:100%!important;height:26px!important;margin:0!important;accent-color:#fff;touch-action:pan-x;cursor:pointer}
+#ofCctvPlaybackOv .of-day665-marker-track{position:relative!important;height:9px!important;margin-top:3px!important;background:#1e293b;border-radius:99px;overflow:visible!important}
+#ofCctvPlaybackOv .of-day665-marker-track .of-smart555-marker{top:0!important;transform:translate(-50%,-1px)!important;height:11px!important;width:4px!important;border-radius:3px!important}
+#ofCctvPlaybackOv .of-day665-events-head{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#111827;color:#e2e8f0;padding:7px 10px 3px;font-size:9px}
+#ofCctvPlaybackOv .of-day665-events-head b{font-size:11px;color:#fff}
+#ofCctvPlaybackOv .of-day564-event-rail{position:relative!important;z-index:2!important;border-top:0!important}
+#ofCctvPlaybackOv .of-day665-load{display:none;margin-top:5px}.of-day665-load.show{display:block}#ofCctvPlaybackOv .of-day665-load span{display:block;font-size:9px;margin-bottom:5px;color:#cbd5e1}
+.of-inline665-loader{width:150px;max-width:80%;margin:0 auto 10px}.of-inline665-loader i{animation:of665load 1.05s ease-in-out infinite}
+.of-cctv-day-empty small{display:block;margin-top:5px;color:#94a3b8}
+.of-sales665-panel{border:1px solid #dbe3ee!important;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+.of-sales665-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.of-sales665-head h3{margin-bottom:2px!important}.of-sales665-live{font-size:9px;font-weight:900;letter-spacing:.12em;background:#111827;color:#fff;border-radius:999px;padding:6px 8px}
+.of-sales665-quick{display:flex;gap:6px;margin:12px 0 9px}.of-sales665-quick button{flex:1;border:1px solid #e2e8f0;background:#fff;border-radius:11px;padding:9px;font-weight:800}.of-sales665-quick button.on{background:#111827;color:#fff;border-color:#111827}
+.of-sales665-controls{display:grid;grid-template-columns:1fr 1fr 1.1fr auto;gap:8px;align-items:end}.of-sales665-controls label{display:grid;gap:4px;font-size:10px;color:#64748b}.of-sales665-controls input,.of-sales665-controls select{width:100%;min-width:0}.of-sales665-controls button{height:42px;border:0;border-radius:12px;background:#111827;color:#fff;font-weight:900;padding:0 15px}
+.of-sales665-progress{display:none;margin-top:12px}.of-sales665-progress.show{display:grid;gap:6px}.of-sales665-progress span{font-size:10px;color:#64748b}.of-sales665-progress i{animation:of665load 1.05s ease-in-out infinite}
+.of-sales665-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:13px}.of-sales665-kpi,.of-sales665-branch{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#fff}.of-sales665-kpi b{display:block;font-size:18px;color:#0f172a}.of-sales665-kpi span,.of-sales665-branch small{font-size:10px;color:#64748b}
+.of-sales665-branches{display:grid;gap:7px;margin-top:10px}.of-sales665-branch{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}.of-sales665-branch strong{font-size:14px}.of-sales665-share{grid-column:1/-1;height:5px;background:#e2e8f0;border-radius:999px;overflow:hidden}.of-sales665-share i{display:block;height:100%;background:#111827;border-radius:999px}
+@media(max-width:700px){
+ #page-cctv .of-cctv-worknav{grid-template-columns:repeat(5,1fr)!important;gap:5px!important}
+ #page-cctv .of-cctv-worknav button{min-height:58px!important;padding:6px 2px!important;border-radius:12px!important} #page-cctv .of-cctv-worknav button span{font-size:16px} #page-cctv .of-cctv-worknav button b{font-size:10px} #page-cctv .of-cctv-worknav button small{display:none}
+ #ofCctvPlaybackOv .of-day665-timeline{padding:8px 10px 10px!important}
+ #ofCctvPlaybackOv .of-day665-events-head{padding:6px 8px 3px!important}
+ #ofCctvPlaybackOv .of-day564-event-rail{min-height:54px!important;max-height:62px!important}
+ .of-sales665-controls{grid-template-columns:1fr 1fr}.of-sales665-controls label:nth-child(3),.of-sales665-controls button{grid-column:1/-1}
+ .of-sales665-kpis{grid-template-columns:1fr 1fr}.of-sales665-kpi:first-child{grid-column:1/-1}
+}
+</style>
+
 </head>
 <body>
 
@@ -840,6 +887,13 @@
 
   <!-- 📊 التقارير -->
   <section class="tabPage" id="page-reports">
+    <div class="panel of-sales665-panel">
+      <div class="of-sales665-head"><div><h3>💰 مبيعات الفروع</h3><div class="hint">اليوم أو أي فترة — كل الفروع مع بعض أو فرع واحد. الاستعلام محدد بالتاريخ ولا يسحب تاريخ المبيعات كله.</div></div><span class="of-sales665-live">OWNER</span></div>
+      <div class="of-sales665-quick"><button type="button" data-sales665-quick="today" class="on">اليوم</button><button type="button" data-sales665-quick="7">7 أيام</button><button type="button" data-sales665-quick="30">30 يوم</button></div>
+      <div class="of-sales665-controls"><label><span>من</span><input type="date" id="ofSales665From"></label><label><span>إلى</span><input type="date" id="ofSales665To"></label><label><span>الفرع</span><select id="ofSales665Branch"><option value="">كل الفروع</option></select></label><button type="button" id="ofSales665Load">عرض التقرير</button></div>
+      <div id="ofSales665Progress" class="of-sales665-progress"><div><i></i></div><span>جاري تحميل المبيعات…</span></div>
+      <div id="ofSales665Body"><div class="empty">اختار الفترة واضغط «عرض التقرير».</div></div>
+    </div>
     <div class="panel">
       <h3>🔥 الأكثر مبيعًا (آخر 30 يوم)</h3>
       <div class="hint">لكل فرع — بعدد القطع، ومعاه مخزون الفرع الحالي من الصنف.</div>
@@ -887,14 +941,15 @@
       <div class="of-cctv-toolbar">
         <div class="of-cctv-branches" id="ofCctvBranches"></div>
         <div class="of-cctv-worknav" id="ofCctvWorkNav" aria-label="التنقل داخل الكاميرات">
-          <button type="button" data-cctv-view="live" class="active">📹 مباشر</button>
-          <button type="button" data-cctv-view="all">🌐 كل الفروع Live</button>
-          <button type="button" data-cctv-view="playback">🎞 التسجيل</button>
-          <button type="button" data-cctv-view="day">🕘 اليوم + السلة</button>
-          <button type="button" data-cctv-view="activity">🚨 النشاط</button>
+          <button type="button" data-cctv-view="live" class="active"><span>📹</span><b>مباشر</b><small>كاميرات الفرع</small></button>
+          <button type="button" data-cctv-view="all"><span>🌐</span><b>كل الفروع</b><small>الكاشير Live</small></button>
+          <button type="button" data-cctv-view="playback"><span>🎞</span><b>تسجيل</b><small>وقت محدد</small></button>
+          <button type="button" data-cctv-view="day"><span>🕘</span><b>اليوم</b><small>فيديو + سلة</small></button>
+          <button type="button" data-cctv-view="activity"><span>🚨</span><b>النشاط</b><small>زوار وتنبيهات</small></button>
         </div>
       </div>
       <div id="ofCctvWarn" class="of-cctv-warning"></div>
+      <div id="ofCctvBusy" class="of-cctv665-busy" aria-live="polite"><div class="of-cctv665-busy-top"><b data-cctv-busy-text>جاري التحميل…</b><span>يرجى الانتظار</span></div><div class="of-cctv665-busy-track"><i data-cctv-busy-bar></i></div></div>
       <div id="ofCctvLivePane" class="of-cctv-workpane">
         <section class="of-cctv-pinned-live" id="ofCctvPinnedLive"><div class="of-cctv-fixed-label"><span>🛒 السلة LIVE</span><small>الفرع المختار</small></div><div class="of-cctv-pinned-live-body" id="ofCctvPinnedLiveBody"></div></section>
         <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><div class="of-cctv-layouts" id="ofCctvLayouts"><button type="button" class="of-cctv-start-all" id="ofCctvStartAll">▶ تشغيل الكل</button><button type="button" class="of-cctv-stop-all" id="ofCctvStopAll">■ إيقاف الكل</button></div></div>
@@ -1014,7 +1069,7 @@
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/chat-staff-ui.js?v=545"></script>
 <script src="../cctv-config.js?v=549"></script>
-<script src="cctv.js?v=649"></script>
-<script src="office.js?v=552"></script>
+<script src="cctv.js?v=665"></script>
+<script src="office.js?v=665"></script>
 </body>
 </html>

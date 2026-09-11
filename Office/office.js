@@ -8133,3 +8133,74 @@ async function ofAddSettlement(){
   }catch(e){ alert('تعذر الحفظ: ' + (e && e.message ? e.message : e)); }
 }
 window.ofAddSettlement = ofAddSettlement;
+
+
+/* ============================================================
+   v665 — Owner sales period report
+   Time-bounded Firestore query + existing Cairo business-day semantics.
+   Financial inclusion follows profitReport: reversed / reversal docs excluded.
+   ============================================================ */
+var _ofSales665Cache={};
+function ofSales665DateKey(ts){
+  try{
+    var f=new Intl.DateTimeFormat('en-CA',{timeZone:OF_TZ,year:'numeric',month:'2-digit',day:'2-digit'});
+    var p={};f.formatToParts(new Date(ts)).forEach(function(x){p[x.type]=x.value;});
+    return p.year+'-'+p.month+'-'+p.day;
+  }catch(e){var d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+}
+function ofSales665Bounds(fromKey,toKey){
+  if(!fromKey||!toKey)return null;
+  var a=ofBizDayRange(fromKey),z=ofBizDayRange(toKey);
+  if(!a||!z||a.start>z.start)return null;
+  var end=z.end,days=Math.ceil((end-a.start)/86400000);
+  if(days>366)return {error:'اختار فترة أقصاها سنة واحدة في كل مرة.'};
+  return {start:a.start,end:end,days:days};
+}
+function ofSales665Branches(){
+  var set={};
+  (D.employees||[]).forEach(function(x){if(x&&x.branch)set[String(x.branch)]=1;});
+  (D.sales||[]).forEach(function(x){if(x&&x.branch)set[String(x.branch)]=1;});
+  return Object.keys(set).sort();
+}
+function ofSales665FillBranches(){
+  var el=document.getElementById('ofSales665Branch');if(!el)return;
+  var old=el.value,names=ofSales665Branches();el.innerHTML='<option value="">كل الفروع</option>'+names.map(function(x){return '<option value="'+esc(x)+'">'+esc(x)+'</option>';}).join('');
+  if(names.indexOf(old)>=0)el.value=old;
+}
+function ofSales665SetQuick(kind){
+  var to=ofSales665DateKey(Date.now()),from=to;
+  if(kind==='7'||kind==='30'){var d=new Date(Date.now()-(Number(kind)-1)*86400000);from=ofSales665DateKey(d.getTime());}
+  var f=document.getElementById('ofSales665From'),t=document.getElementById('ofSales665To');if(f)f.value=from;if(t)t.value=to;
+  document.querySelectorAll('[data-sales665-quick]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-sales665-quick')===String(kind));});
+}
+function ofSales665Render(rows,bounds,branchFilter){
+  var host=document.getElementById('ofSales665Body');if(!host)return;
+  var valid=(rows||[]).filter(function(s){if(!s||s.reversed||s.isReversal)return false;var ts=ofSaleTs(s);if(!ts||ts<bounds.start||ts>=bounds.end)return false;if(branchFilter&&String(s.branch||'')!==branchFilter)return false;return true;});
+  var by={},count=0,total=0;
+  valid.forEach(function(s){var br=String(s.branch||'غير محدد'),v=Number(s.total)||0;if(v<0)return;by[br]=(by[br]||0)+v;total+=v;count++;});
+  var names=Object.keys(by).sort(function(a,b){return by[b]-by[a];}),avg=count?total/count:0;
+  var top=names.length?by[names[0]]:0;
+  host.innerHTML='<div class="of-sales665-kpis"><div class="of-sales665-kpi"><b>'+ofMoney(total)+' ج.م</b><span>إجمالي المبيعات</span></div><div class="of-sales665-kpi"><b>'+ofNum(count)+'</b><span>عدد الفواتير</span></div><div class="of-sales665-kpi"><b>'+ofMoney(avg)+' ج.م</b><span>متوسط الفاتورة</span></div></div>'
+    +(names.length?'<div class="of-sales665-branches">'+names.map(function(br){var share=total?by[br]/total*100:0;return '<div class="of-sales665-branch"><div><b>🏬 '+esc(br)+'</b><small>'+share.toFixed(1)+'% من الفترة</small></div><strong>'+ofMoney(by[br])+' ج.م</strong><div class="of-sales665-share"><i style="width:'+Math.max(2,Math.min(100,share))+'%"></i></div></div>';}).join('')+'</div>':'<div class="empty">مفيش مبيعات صالحة في الفترة دي.</div>');
+}
+async function ofSales665Load(){
+  var f=document.getElementById('ofSales665From'),t=document.getElementById('ofSales665To'),br=document.getElementById('ofSales665Branch'),host=document.getElementById('ofSales665Body'),prog=document.getElementById('ofSales665Progress'),btn=document.getElementById('ofSales665Load');
+  if(!f||!t||!host)return;var bounds=ofSales665Bounds(f.value,t.value);if(!bounds){host.innerHTML='<div class="empty">راجع تاريخ البداية والنهاية.</div>';return;}if(bounds.error){host.innerHTML='<div class="empty">'+esc(bounds.error)+'</div>';return;}
+  var key=bounds.start+':'+bounds.end,rows=_ofSales665Cache[key];if(btn)btn.disabled=true;if(prog)prog.classList.add('show');
+  try{
+    if(!rows){
+      var snap=await db.collection('pos_test_sales').where('createdAt','>=',firebase.firestore.Timestamp.fromMillis(bounds.start)).where('createdAt','<',firebase.firestore.Timestamp.fromMillis(bounds.end)).get();
+      rows=snap.docs.map(function(d){var x=d.data()||{};x.id=d.id;return x;});_ofSales665Cache[key]=rows;
+    }
+    ofSales665Render(rows,bounds,String(br&&br.value||''));
+  }catch(e){host.innerHTML='<div class="empty" style="color:var(--minus)">تعذر تحميل التقرير: '+esc(e&&e.code||e&&e.message||e)+'</div>';}
+  finally{if(btn)btn.disabled=false;if(prog)prog.classList.remove('show');}
+}
+function ofSales665Init(){
+  if(!document.getElementById('ofSales665Body'))return;ofSales665FillBranches();var f=document.getElementById('ofSales665From'),t=document.getElementById('ofSales665To');if(f&&!f.value)ofSales665SetQuick('today');
+  document.querySelectorAll('[data-sales665-quick]').forEach(function(b){b.onclick=function(){ofSales665SetQuick(b.getAttribute('data-sales665-quick'));ofSales665Load();};});
+  var load=document.getElementById('ofSales665Load');if(load)load.onclick=ofSales665Load;
+}
+window.ofSales665Load=ofSales665Load;window.ofSales665Bounds=ofSales665Bounds;window.ofSales665Render=ofSales665Render;
+setTimeout(ofSales665Init,0);
+
