@@ -254,6 +254,14 @@ function normalizeScan(code){
   if(/^FT[A-Z0-9-]+$/.test(fixed)) return fixed;      // كود فاتورة
   if(/^ECH\d+$/.test(fixed) || /^GLW\d+$/.test(fixed)) return fixed;   // كود عضوية
   if(/^EC[A-Z2-9]{10}$/.test(fixed)) return fixed;    // كارت موظف
+  // v667: باركود منتج على كيبورد عربي. لو التحويل يطابق باركود موجود فعلًا،
+  // نستخدمه. ده يمنع إجبار الكاشير يحوّل Windows للإنجليزي، من غير ما نفسد بحث الأسماء العربية.
+  try{
+    const inv = (typeof allInventory !== 'undefined' && Array.isArray(allInventory)) ? allInventory : [];
+    if(inv.some(function(it){ return it && String(it.barcode || '').trim().toUpperCase() === fixed; })) return fixed;
+  }catch(e){}
+  // الأرقام العربية آمنة للتحويل دائمًا لأن الباركود الرقمي لا يحمل نصًا عربيًا.
+  if(/^\d+$/.test(fixed)) return fixed;
   return raw;
 }
 window.normalizeScan = normalizeScan;
@@ -1444,6 +1452,8 @@ function staffDiscountAmount(){
 function cartTotal(){ return +(cartSubtotal() - staffDiscountAmount()).toFixed(2); }
 
 async function activateStaffPurchase(code){
+  // v667: كارت الموظف أثناء مرحلة دفع فيزا لا يجوز أن يغيّر خصم/إجمالي الفاتورة.
+  if(typeof blockCartEditAfterCard === 'function' && blockCartEditAfterCard()) return;
   try{
     if(typeof loadStaffCardsConfig === 'function' && !staffCardsConfig) await loadStaffCardsConfig();
     const cfg = (typeof staffCardsConfig !== 'undefined' && staffCardsConfig) ? staffCardsConfig : null;
@@ -3073,6 +3083,11 @@ function confirmPayAmount(){
     cardLegs = cardLegs.filter(function(l){ return !(l.seq === seq && l.status !== 'approved'); });
     cardLegs.push({ seq: seq, amount: total < 0 ? -val : val, ref: null, status: 'entered', txn: null });
     cardLegs.sort(function(a,b){ return a.seq - b.seq; });
+    // v667 PAYMENT INTEGRITY: من لحظة تأكيد مبلغ الفيزا السلة مقفولة، حتى لو الفرع
+    // بيستخدم ماكينة غير مربوطة بالـAPI وبيعمل Manual Confirm بعد إيصال APPROVED.
+    // قبل كده القفل كان يبدأ فقط داخل sendToPaymobTerminal() بعد وجود terminalId؛
+    // فالفروع اليدوية كان ممكن scanner/كارت موظف يغيّر السلة أثناء انتظار الإيصال.
+    if(!_cardMoneyAtRiskAt) _cardMoneyAtRiskAt = Date.now();
     syncCardPayment();
   } else {
     paymentAmounts[method] = total < 0 ? -val : val;
