@@ -366,6 +366,18 @@
     if(state.view==='playback')syncPlaybackPanel();
     if(state.view==='activity')loadActivityAlerts();
   }
+  /* 🎥 v675: فتح التسجيل عند لحظة حدث من سجل النشاط.
+     openPlayback بيشتغل على الفرع المختار في شاشة الكاميرات (b())، والحدث
+     ممكن يكون من فرع تاني خالص — فبنحوّل الفرع لفرع الحدث الأول.
+     بيترجع سبب واضح لو الفرع مالوش تسجيل بدل ما الزرار يبان ميت. */
+  async function openPlaybackAtEvent(branch,atMs,durationMin,cameraId){
+    var p=profileFor(branch);
+    if(!p){alert('الفرع ده مفيش له كاميرات معرّفة في النظام.');return;}
+    if(!p.playback){alert('التسجيل مش متاح لفرع '+(p.name||p.id)+'.');return;}
+    if(state.branch!==p.id){state.branch=p.id;resetLiveSlots();save();}
+    await openPlayback(atMs,durationMin,cameraId);
+  }
+  window.ofCctvOpenPlaybackAt=openPlaybackAtEvent;
   function selectBranch(id,view){
     if(BRANCHES.some(function(x){return x.id===id;})){if(state.branch!==id){state.branch=id;resetLiveSlots();save();}state.allLive=false;render();setView(view||'live');}
   }

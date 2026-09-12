@@ -2140,6 +2140,34 @@ function ofActLabel(type){
   return k ? k.t : ('• ' + String(type || '—'));
 }
 // تفاصيل الحدث بالعربي — الحقول بتختلف من نوع لنوع
+/* 🎥 v675: التسجيل وقت الحدث — من غير ما نستنى فاتورة مربوطة.
+   الزرار اللي كان بيفتح الكاميرا من تفاصيل الحدث اختفى، وكل اللي فضل هو
+   زر لقطات الفاتورة — واللي بيظهر فقط لما الحدث يكون متربط بفاتورة.
+   لكن أهم الأحداث (صنف اتشال من السلة · حفظ متأخر · سلة اتسابت) بتحصل
+   **قبل** ما يبقى فيه فاتورة أصلًا، فكان بيفضل من غير أي دليل مرئي.
+   دلوقتي أي حدث له وقت وفرع فيه تسجيل بيبقى له زرار. */
+function ofActEventVideoBtn(a){
+  try{
+    const ts = Number(a && a.ts) || 0;
+    if(!ts) return '';
+    if(typeof window.ofCctvOpenPlaybackAt !== 'function') return '';
+    if(typeof window.ofCctvProfileFor !== 'function') return '';
+    const p = window.ofCctvProfileFor(a.branch || '');
+    if(!p || !p.playback) return '';
+    return '<button type="button" onclick="ofActOpenEventVideo(\'' + String(a.branch||'').replace(/'/g,"\\'") + '\',' + ts + ')"'
+      + ' style="width:100%; margin-bottom:10px; padding:11px; border:0; border-radius:10px; cursor:pointer;'
+      + ' background:#2563eb; color:#fff; font-family:inherit; font-weight:800; font-size:13px;">'
+      + '🎥 التسجيل وقت الحدث (٣٠ ثانية قبل)</button>';
+  }catch(e){ return ''; }
+}
+window.ofActEventVideoBtn = ofActEventVideoBtn;
+// ⚠️ §18: الزرار inline فلازم تكون على window بالاسم ده بالظبط
+function ofActOpenEventVideo(branch, ts){
+  const at = Math.max(1, (Number(ts) || Date.now()) - 30000);
+  try{ window.ofCctvOpenPlaybackAt(branch, at, 2); }
+  catch(e){ console.warn('act event video', e); alert('تعذر فتح التسجيل'); }
+}
+window.ofActOpenEventVideo = ofActOpenEventVideo;
 function ofActDetail(a){
   const p = [];
   if(a.name) p.push(esc(a.name) + (a.qty ? ' ×' + a.qty : ''));
@@ -2704,6 +2732,7 @@ window.ofActOpen = function(id){
     + (inv ? '<div style="background:var(--panel2); border-radius:8px; padding:7px 9px; margin-bottom:8px; font-weight:800; font-size:13px;">🧾 ' + esc(inv)
       + '<button type="button" onclick="ofCctvInvoiceShot(\'' + String(inv).replace(/'/g,"\\'") + '\')" style="float:left;border:0;border-radius:8px;padding:5px 8px;cursor:pointer;">📸 لقطة الفاتورة</button><div style="clear:both"></div></div>'
            : '<div class="muted" style="font-size:11.5px; margin-bottom:8px;">🧾 مفيش فاتورة مربوطة — إما السلة اتسابت من غير بيع، أو الحدث قديم (قبل تحديث الربط)</div>')
+    + ofActEventVideoBtn(a)
     + '<div style="border:1px solid var(--line); border-right:4px solid ' + _icol + '; border-radius:11px; padding:10px; margin-bottom:10px; background:var(--panel2);">'
       + '<div style="font-weight:900; color:' + _icol + '; margin-bottom:5px;">' + intel.icon + ' ' + esc(intel.levelLabel) + '</div>'
       + '<div style="font-size:12.5px; line-height:1.8;"><b>التفسير:</b> ' + esc(intel.explain) + '</div>'
