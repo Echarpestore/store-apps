@@ -136,6 +136,12 @@
   /* Invoice review is installed after this closure. Export only the two
      audited helpers it needs instead of relying on inaccessible local names. */
   window.ofCctvProfileFor=profileFor;
+  // ⚠️ القاعدة الذهبية (بند 18): الدوال دي متعرّفة جوه الـIIFE، وأي كود
+  //    بره الـIIFE (زي ofCctvInvoiceShot تحت) بينده عليها مباشرة بيرمي
+  //    ReferenceError بيتاكل في الـtry/catch → الزرار يبان شغال ومش شغال.
+  window.ofCctvAgentGateway=agentGateway;
+  window.ofCctvArmGlowNativeLive=armGlowNativeLive;
+  window.ofCctvArmPlaybackBackGuard=armPlaybackBackGuard;
   window.ofCctvCartRows=cartRows;
   window.ofCctvTimelineFromSale=timelineFromSale;
   function load(){
@@ -745,7 +751,7 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
     var valid=localGlow?order.slice():order.filter(function(k){var x=shots[k]||{};return /^data:image\/jpeg;base64,/.test(String(x.jpegData||''));});
     if(!valid.length){alert('مفيش صورة صالحة محفوظة للفاتورة دي.');return;}
     var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);});};
-    var glowProfile=localGlow?profileFor(d.branchProfile||d.branch||'glow'):null;var gateway=localGlow?String((glowProfile&&agentGateway(glowProfile))||d.gateway||'https://cctv-glow.echarpe.store').replace(/\/$/,''):'';
+    var glowProfile=localGlow?window.ofCctvProfileFor(d.branchProfile||d.branch||'glow'):null;var gateway=localGlow?String((glowProfile&&window.ofCctvAgentGateway(glowProfile))||d.gateway||'https://cctv-glow.echarpe.store').replace(/\/$/,''):'';
     function shotUrl(k){return localGlow?(gateway+'/echarpe-events/snapshot?invoice='+encodeURIComponent(String(invoiceCode))+'&stage='+encodeURIComponent(k)+'&_='+Date.now()):String((shots[k]||{}).jpegData||'');}
     if(!document.getElementById('ofCctvInvoiceStyle')){
       var st=document.createElement('style');st.id='ofCctvInvoiceStyle';st.textContent='.of-inv-cctv-ov{position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,.94);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto}.of-inv-cctv-box{width:min(100%,1050px);background:#111827;border:1px solid #334155;border-radius:20px;padding:14px;color:#fff;box-shadow:0 22px 70px rgba(0,0,0,.55)}.of-inv-cctv-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}.of-inv-cctv-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.of-inv-cctv-btn{border:0;border-radius:10px;padding:9px 13px;cursor:pointer;font-weight:800}.of-inv-cctv-video-btn{background:#2563eb;color:#fff}.of-inv-cctv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.of-inv-cctv-card{text-align:right;border:1px solid #334155;background:#0f172a;color:#fff;border-radius:15px;padding:8px;cursor:pointer}.of-inv-cctv-card img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;background:#000;border-radius:10px}.of-inv-cctv-card-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:7px}.of-inv-cctv-muted{font-size:11px;color:#94a3b8}.of-inv-cctv-error{display:none;padding:22px 10px;text-align:center;color:#fecaca}.of-inv-play-ov{position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.94);display:flex;align-items:center;justify-content:center;padding:10px}.of-inv-play-box{width:min(100%,1000px);height:min(88vh,760px);background:#05070b;border:1px solid #25324a;border-radius:16px;overflow:hidden;display:flex;flex-direction:column}.of-inv-play-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;color:#fff}.of-inv-play-stage{position:relative;flex:1;min-height:0;background:#000;display:flex;align-items:center;justify-content:center}.of-inv-play-stage video{display:block;width:100%;height:100%;object-fit:contain;background:#000}.of-inv-play-status{position:absolute;right:12px;left:12px;bottom:12px;padding:8px 10px;border:1px solid #334155;border-radius:10px;background:rgba(15,23,42,.88);color:#e2e8f0;font-size:12px}.of-inv-play-status.ok{display:none}.of-inv-play-status.err{color:#fecaca;border-color:#7f1d1d;background:rgba(69,10,10,.92)}@media(max-width:620px){.of-inv-cctv-ov{padding:8px;align-items:flex-start}.of-inv-cctv-box{border-radius:15px;padding:10px}.of-inv-cctv-head{align-items:flex-start;flex-direction:column}.of-inv-cctv-actions{width:100%}.of-inv-cctv-actions .of-inv-cctv-btn{flex:1}.of-inv-cctv-grid{grid-template-columns:1fr}.of-inv-play-ov{padding:0}.of-inv-play-box{width:100%;height:100%;max-height:none;border:0;border-radius:0}}';document.head.appendChild(st);
@@ -754,7 +760,7 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
     var videoBtn=(localGlow&&Number(d.videoAtMs)>0)?'<button id="ofCctvShotVideo" class="of-inv-cctv-btn of-inv-cctv-video-btn">🎥 30 ثانية قبل + 30 بعد</button>':'';
     var ov=document.createElement('div');ov.id='ofCctvShotOv';ov.className='of-inv-cctv-ov';
     ov.innerHTML='<div class="of-inv-cctv-box"><div class="of-inv-cctv-head"><div><b>📸 لقطات الفاتورة '+esc(invoiceCode)+'</b><div class="of-inv-cctv-muted" style="margin-top:3px">'+esc((d.camera||((valid[0]&&shots[valid[0]]&&shots[valid[0]].camera)||'CCTV')))+' · '+valid.length+' لقطة · محفوظة محليًا في الفرع</div></div><div class="of-inv-cctv-actions">'+videoBtn+'<button id="ofCctvShotClose" class="of-inv-cctv-btn">إغلاق</button></div></div><div id="ofCctvShotGrid" class="of-inv-cctv-grid">'+cards+'</div><div id="ofCctvShotFocus" style="display:none;margin-top:10px"><button id="ofCctvShotBack" class="of-inv-cctv-btn" style="margin-bottom:8px">← كل اللقطات</button><img id="ofCctvShotBig" alt="CCTV invoice snapshot" style="display:block;width:100%;max-height:72vh;object-fit:contain;background:#000;border-radius:12px"><div id="ofCctvShotMeta" class="of-inv-cctv-muted" style="margin-top:7px"></div></div></div>';
-    document.body.appendChild(ov);armPlaybackBackGuard();
+    document.body.appendChild(ov);window.ofCctvArmPlaybackBackGuard();
     ov.querySelectorAll('.of-inv-cctv-card img').forEach(function(img){img.onerror=function(){img.style.display='none';var er=img.parentNode.querySelector('.of-inv-cctv-error');if(er)er.style.display='block';};});
     var grid=ov.querySelector('#ofCctvShotGrid'),focus=ov.querySelector('#ofCctvShotFocus'),big=ov.querySelector('#ofCctvShotBig'),meta=ov.querySelector('#ofCctvShotMeta');
     ov.querySelectorAll('[data-cctv-shot]').forEach(function(btn){btn.onclick=function(){var k=btn.getAttribute('data-cctv-shot'),x=shots[k]||{};grid.style.display='none';focus.style.display='block';big.src=shotUrl(k);meta.textContent=labels[k]+' · '+new Date(Number(x.capturedAtMs)||Date.now()).toLocaleString('ar-EG');};});
@@ -806,7 +812,7 @@ window.ofCctvInvoiceShot = async function(invoiceCode){
     var shots=d.shots||{};
     var profile=window.ofCctvProfileFor(d.branchProfile||d.branch);
     var localBranch=!!d.localSnapshots||String(d.storage||'').toLowerCase()==='branch_local';
-    var gateway=String(profile?agentGateway(profile):(d.gateway||'')).replace(/\/$/,'');
+    var gateway=String(profile?window.ofCctvAgentGateway(profile):(d.gateway||'')).replace(/\/$/,'');
     var playbackReady=!!gateway&&!!(profile&&profile.playback)&&Number(d.videoAtMs)>0;
     if(!Object.keys(shots).length&&/^data:image\/jpeg;base64,/.test(String(d.jpegData||'')))shots={after_save:{jpegData:d.jpegData,capturedAtMs:d.capturedAtMs,width:d.width,height:d.height,camera:d.camera||'CCTV'}};
     var order=['first_item','payment','saving','after_save'];
@@ -883,4 +889,4 @@ setTimeout(function(){
   }catch(e){}
 },0);
 
-try{new MutationObserver(function(){armGlowNativeLive(document);}).observe(document.documentElement,{childList:true,subtree:true});setTimeout(function(){armGlowNativeLive(document);},0);}catch(e){}
+try{new MutationObserver(function(){window.ofCctvArmGlowNativeLive(document);}).observe(document.documentElement,{childList:true,subtree:true});setTimeout(function(){window.ofCctvArmGlowNativeLive(document);},0);}catch(e){}
