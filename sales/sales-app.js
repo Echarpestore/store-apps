@@ -102,7 +102,7 @@ const LF431_PREFIX='sales_lf_v431_';
 // التحديث. النتيجة: التطبيق ميجيبش الـ190 يوم من السيرفر ويكتفي بآخر يومين،
 // فالتاريخ يبان مقطوع من يوم التحديث — وده اللي بيتكرر بعد كل تحديث.
 // الحل: نربط الإصلاح برقم النسخة، فأي تحديث يجبر تحديث كامل من السيرفر مرة.
-const SALES_BUILD='608';
+const SALES_BUILD='609';
 try{
   if(localStorage.getItem('sales_history_repair_build')!==SALES_BUILD){
     Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
@@ -6649,6 +6649,16 @@ window.openAttendanceDaysDialog = function(empId, periodKey){
       + (calc && calc.absenceDays > 0 ? '<div style="background:rgba(239,68,68,.15); padding:7px 11px; border-radius:9px;">غياب ' + calc.absenceDays + '</div>' : '')
       + (offWorked > 0 ? '<div style="background:rgba(250,204,21,.15); padding:7px 11px; border-radius:9px;">🎁 اشتغل ' + offWorked + ' يوم إجازة</div>' : '')
     + '</div>'
+    /* 🗓️ v609 — إجازته الفعلية في الفترة (بعد أي تبديل معتمد) + الغياب اللي
+       كان بإذن. من غير السطرين دول المالك مش قادر يفرق بين غياب بإذن وغياب
+       من غير إذن، ولا يعرف إن التبديل نقل الإجازة ليوم تاني. */
+    + (calc && calc.dayOffDates && calc.dayOffDates.length
+        ? '<div style="font-size:11.5px; color:var(--sub,#9aa); margin:-4px 0 8px; text-align:center;">🎁 إجازته في الفترة: ' + calc.dayOffDates.join(' · ') + '</div>'
+        : '')
+    + (calc && calc.absenceDates && calc.absenceDates.some(function(x){ return x && x.approved; })
+        ? '<div style="font-size:11.5px; color:#f59e0b; margin:-2px 0 8px; text-align:center;">📩 غياب بإذن معتمد (بيتخصم برضه حسب سياسة المحل): '
+          + calc.absenceDates.filter(function(x){ return x && x.approved; }).map(function(x){ return x.date; }).join(' · ') + '</div>'
+        : '')
     /* 🗓️ تفصيل الأسابيع — ده اللي بيشرح الخصم. من غيره الرقم بيبان
        عشوائي والمالك مش قادر يراجعه قدام الموظفة. */
     + (calc && calc.weekRows && calc.weekRows.length
@@ -7120,10 +7130,24 @@ function attendedDaysDetail(empId, start, end, emp){
     cur.shifts += 1;
     byDay.set(key, cur);
   });
+  /* 🔴 v609 — الباج: علامة "🎁 إجازته" كانت بترسم على **رقم اليوم في الأسبوع**
+     (emp.dayOff) وبس، يعني بتتجاهل تبديل الإجازة المعتمد (changeDayoff) تمامًا.
+     النتيجة اللي المالك شافها: الجدول بيقول "اشتغل 1 يوم إجازة" والمرتب بيقول
+     "شغل يوم الإجازة · 0 ساعة · +0.00" — لأن المرتب بيحسب من effectiveDayOffKey
+     (اللي بيعرف التبديل) والجدول بيحسب من يوم الأسبوع الثابت. رقمين مختلفين
+     لنفس اليوم، والمالك بيفتح يراجع قدام الموظفة فيلاقي تناقض.
+     دلوقتي الاتنين من نفس المصدر بالظبط. */
   const offDow = (emp && emp.dayOff !== undefined && emp.dayOff !== null && emp.dayOff !== '') ? Number(emp.dayOff) : -1;
+  const _isOff = (key, dow)=>{
+    if(emp && typeof effectiveDayOffKey === 'function'){
+      const eff = effectiveDayOffKey(emp, key);
+      if(eff) return eff === key;
+    }
+    return dow === offDow;   // فولباك: موظف من غير إعدادات إجازة
+  };
   return Array.from(byDay.values())
     .sort((a,b)=> a.key < b.key ? -1 : 1)
-    .map(r=> Object.assign(r, { isDayOff: r.dow === offDow }));
+    .map(r=> Object.assign(r, { isDayOff: _isOff(r.key, r.dow) }));
 }
 window.attendedDaysDetail = attendedDaysDetail;
 
