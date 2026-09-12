@@ -102,7 +102,7 @@ const LF431_PREFIX='sales_lf_v431_';
 // التحديث. النتيجة: التطبيق ميجيبش الـ190 يوم من السيرفر ويكتفي بآخر يومين،
 // فالتاريخ يبان مقطوع من يوم التحديث — وده اللي بيتكرر بعد كل تحديث.
 // الحل: نربط الإصلاح برقم النسخة، فأي تحديث يجبر تحديث كامل من السيرفر مرة.
-const SALES_BUILD='607';
+const SALES_BUILD='608';
 try{
   if(localStorage.getItem('sales_history_repair_build')!==SALES_BUILD){
     Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
@@ -3405,9 +3405,47 @@ function clockInBlockReason(emp,dateKey){
 }
 window.clockInBlockReason=clockInBlockReason;
 
+/* 🛑 v608 — مفتاح إيقاف عام لكل الفروع.
+   المشكلة: التفعيل/الإيقاف كان بيتكتب على مستند الفرع اللي الجهاز واقف عليه
+   بس (sales_settings/<branch>)، فالمالك يقفلها من جهاز ويفضل باقي الفروع
+   بتطلب مطابقة الوجه — وشكلها إن "زرار الإيقاف مش شغال".
+   الحل: مستند واحد sales_settings/_global بيغلب أي تفعيل فرعي. كل الأجهزة
+   بتقرا مجموعة الإعدادات كاملة أصلًا، فالتغيير بيوصل فورًا من غير رفع نسخة. */
+const FACE_GLOBAL_DOC='_global';
+function faceAttendanceOffAll(){
+  const g=(window.allSettingsByBranch||{})[FACE_GLOBAL_DOC]||{};
+  return g.faceAttendanceOffAll===true;
+}
+window.faceAttendanceOffAll=faceAttendanceOffAll;
+/* 🧑‍💼 v608 — وقت تسجيل الوجه لأول مرة:
+   auto   = أول حضور أو انصراف (الوضع القديم)
+   out    = الانصراف بس (الصبح زحمة — التسجيل بياخد وقت)
+   manual = مفيش تسجيل تلقائي خالص؛ المالك بيسمح لموظف بعينه (faceEnrollNow) */
+function faceEnrollMode(){
+  const d=(window.allSettingsByBranch||{})[window.currentBranch]||{};
+  const m=String(d.faceEnrollMode||'auto');
+  return (m==='out'||m==='manual') ? m : 'auto';
+}
+window.faceEnrollMode=faceEnrollMode;
+function faceHasProfile(emp){
+  return !!(emp && emp.faceProfile && Array.isArray(emp.faceProfile.descriptor) &&
+    emp.faceProfile.descriptor.length===128);
+}
+window.faceHasProfile=faceHasProfile;
 function faceRequiredFor(emp,actionType){
-  return !!(window.faceAttendanceEnabled===true && emp && emp.niqabAttendance!==true &&
-    emp.faceAttendanceExempt!==true && (actionType==='in' || actionType==='out'));
+  if(faceAttendanceOffAll()) return false;                 // 🛑 الإيقاف العام بيغلب كل حاجة
+  if(window.faceAttendanceEnabled!==true) return false;
+  if(!emp || emp.niqabAttendance===true || emp.faceAttendanceExempt===true) return false;
+  if(actionType!=='in' && actionType!=='out') return false;
+  if(!faceHasProfile(emp)){
+    // موظف لسه مسجّلش وشه: التسجيل بيحصل حسب الوضع المختار بس.
+    // في أي حالة تانية بيعدّي بالنظام القديم (PIN + صورة) من غير ما يتقفل عليه.
+    if(emp.faceEnrollNow===true) return true;
+    const mode=faceEnrollMode();
+    if(mode==='manual') return false;
+    if(mode==='out' && actionType!=='out') return false;
+  }
+  return true;
 }
 window.faceRequiredFor=faceRequiredFor;
 const FACE_MODEL_URL='https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
@@ -3518,8 +3556,9 @@ async function enrollOrVerifyFace(emp,video){
     }
     if(rows.length<12) throw new Error('enrollment');
     const descriptor=avgFaceDescriptors(rows), profile={v:1,descriptor,enrolledAt:Date.now(),sampleCount:12};
-    await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:profile,faceProfileUpdatedAt:Date.now()});
-    emp.faceProfile=profile;
+    // v608: إذن المالك لمرة واحدة — بيتقفل أول ما التسجيل ينجح
+    await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:profile,faceProfileUpdatedAt:Date.now(),faceEnrollNow:false});
+    emp.faceProfile=profile; emp.faceEnrollNow=false;
     $('#attPhotoStatus').textContent='تم تسجيل الوجه لأول مرة ✅';
     return true;
   }
@@ -6882,14 +6921,53 @@ function renderCommissionPaymentLog(){
 }
 
 function renderFaceAttendanceSettings(){
+  const offAll=faceAttendanceOffAll();
   const cb=$('#faceAttendanceEnabledInput'); if(cb) cb.checked=(window.faceAttendanceEnabled===true);
-  const st=$('#faceAttendanceStatus'); if(st) st.textContent=window.faceAttendanceEnabled===true ? 'مفعّل في الفرع ده' : 'مقفول — النظام الحالي شغال بدون تغيير';
+  const off=$('#faceOffAllInput'); if(off) off.checked=offAll;
+  const md=$('#faceEnrollModeInput'); if(md) md.value=faceEnrollMode();
+  const box=$('#faceEnrollManualBox'); if(box) box.style.display=(faceEnrollMode()==='manual' && !offAll) ? 'block' : 'none';
+  const sel=$('#faceEnrollEmpInput');
+  if(sel){
+    const cur=sel.value;
+    sel.innerHTML=(window.employees||[]).filter(e=>e && e.active!==false && !e.deletedAt)
+      .map(e=>'<option value="'+e.id+'">'+e.name+(faceHasProfile(e)?' — وشه متسجّل':(e.faceEnrollNow===true?' — مسموح له دلوقتي':''))+'</option>').join('');
+    if(cur) sel.value=cur;
+  }
+  const st=$('#faceAttendanceStatus');
+  if(st) st.textContent = offAll ? '🛑 متوقف في كل الفروع — مفيش مطابقة وجه في أي جهاز'
+    : (window.faceAttendanceEnabled===true ? 'مفعّل في الفرع ده' : 'مقفول — النظام الحالي شغال بدون تغيير');
 }
 window.renderFaceAttendanceSettings=renderFaceAttendanceSettings;
+$('#faceEnrollModeInput')?.addEventListener('change', ()=>{
+  const box=$('#faceEnrollManualBox');
+  if(box) box.style.display=($('#faceEnrollModeInput').value==='manual') ? 'block' : 'none';
+});
 $('#saveFaceAttendanceBtn')?.addEventListener('click', async ()=>{
   const enabled=!!$('#faceAttendanceEnabledInput')?.checked;
-  try{ await setDoc(doc(db,'sales_settings',window.currentBranch),{faceAttendanceEnabled:enabled},{merge:true}); window.faceAttendanceEnabled=enabled; renderFaceAttendanceSettings(); }
+  const offAll=!!$('#faceOffAllInput')?.checked;
+  const mode=String($('#faceEnrollModeInput')?.value||'auto');
+  try{
+    await setDoc(doc(db,'sales_settings',window.currentBranch),{faceAttendanceEnabled:enabled,faceEnrollMode:mode},{merge:true});
+    await setDoc(doc(db,'sales_settings',FACE_GLOBAL_DOC),{faceAttendanceOffAll:offAll,updatedAt:Date.now()},{merge:true});
+    window.faceAttendanceEnabled=enabled;
+    // نحدّث النسخة المحلية فورًا لحد ما الـsnapshot يوصل
+    window.allSettingsByBranch=window.allSettingsByBranch||{};
+    window.allSettingsByBranch[FACE_GLOBAL_DOC]=Object.assign({},window.allSettingsByBranch[FACE_GLOBAL_DOC]||{},{faceAttendanceOffAll:offAll});
+    window.allSettingsByBranch[window.currentBranch]=Object.assign({},window.allSettingsByBranch[window.currentBranch]||{},{faceEnrollMode:mode});
+    renderFaceAttendanceSettings();
+  }
   catch(err){ alert('تعذر حفظ Face Attendance'); console.error(err); }
+});
+$('#faceEnrollAllowBtn')?.addEventListener('click', async ()=>{
+  const sel=$('#faceEnrollEmpInput'); const st=$('#faceEnrollManualStatus');
+  const empId=sel && sel.value; if(!empId){ if(st) st.textContent='اختار موظف الأول'; return; }
+  const emp=(window.employees||[]).find(e=>String(e.id)===String(empId));
+  try{
+    await updateDoc(doc(db,'sales_employees',empId),{faceEnrollNow:true});
+    if(emp) emp.faceEnrollNow=true;
+    if(st) st.textContent='تمام — '+((emp&&emp.name)||'الموظف')+' هيتسجل وشه في أول حضور أو انصراف، وبعدين الإذن بيتقفل لوحده.';
+    renderFaceAttendanceSettings();
+  }catch(err){ if(st) st.textContent='تعذر الحفظ'; console.error(err); }
 });
 
 $('#saveCommissionBtn')?.addEventListener('click', async ()=>{

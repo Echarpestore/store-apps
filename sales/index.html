@@ -1001,6 +1001,21 @@
       <h3>🛡️ Face Attendance</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">اختياري لكل فرع. عند التفعيل: PIN + Face + Liveness للحضور والانصراف. المنتقبة تفضل بالنظام الحالي والصورة الحالية إجبارية زي ما هي.</p>
       <label style="display:flex;gap:9px;align-items:center;cursor:pointer"><input id="faceAttendanceEnabledInput" type="checkbox" style="width:19px;height:19px"><b>تفعيل Face Attendance لهذا الفرع</b></label>
+      <label style="display:flex;gap:9px;align-items:center;cursor:pointer;margin-top:10px"><input id="faceOffAllInput" type="checkbox" style="width:19px;height:19px"><b>🛑 إيقاف Face Attendance في كل الفروع</b></label>
+      <p style="color:var(--sub); font-size:11.5px; margin:5px 0 12px;">مفتاح واحد بيغلب تفعيل أي فرع — بيوقف مطابقة الوجه فورًا في كل الأجهزة من غير ما تلف على الفروع.</p>
+      <div style="margin:10px 0">
+        <b style="font-size:13px">تسجيل الوجه لأول مرة</b>
+        <select id="faceEnrollModeInput" style="width:100%;margin-top:6px;padding:9px;border-radius:9px">
+          <option value="auto">تلقائي — أول حضور أو انصراف (الوضع الحالي)</option>
+          <option value="out">وقت الانصراف بس</option>
+          <option value="manual">يدوي — لما أنا أسمح للموظف</option>
+        </select>
+      </div>
+      <div id="faceEnrollManualBox" style="margin:10px 0;display:none">
+        <select id="faceEnrollEmpInput" style="width:100%;padding:9px;border-radius:9px"></select>
+        <button id="faceEnrollAllowBtn" class="confirmBtnSmall" style="margin-top:7px">اسمح بتسجيل وشه في أول حضور/انصراف</button>
+        <div id="faceEnrollManualStatus" style="font-size:12px;color:var(--sub);margin-top:6px"></div>
+      </div>
       <div id="faceAttendanceStatus" style="font-size:12px;color:var(--sub);margin:8px 0"></div>
       <button id="saveFaceAttendanceBtn" class="confirmBtnSmall">حفظ</button>
     </div>
@@ -1252,7 +1267,7 @@
 
 </div>
 
-<script type="module" src="sales-app.js?v=607"></script>
+<script type="module" src="sales-app.js?v=608"></script>
 <script src="sales-ui.js?v=559"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
