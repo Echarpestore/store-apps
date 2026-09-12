@@ -1793,7 +1793,25 @@ function setCustBox(on){
 document.getElementById('customerPhone').addEventListener('blur', refreshCustomerInfo);
 // دوس Enter في خانة رقم العميل يظهر العميل على طول (من غير ما تحتاج تدوس في مكان تاني)
 document.getElementById('customerPhone').addEventListener('keydown', function(e){
-  if(e.key === 'Enter'){ e.preventDefault(); refreshCustomerInfo(); }
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  /* 💳 v668: الكاشير بتكون واقفة في خانة رقم العميل وتمسح كارت العميل.
+     · السكان العام (app.js) بيتخطى أي خانة كتابة، فالكود بيتكتب هنا خام.
+     · ولو ويندوز على عربي، اللي بيتكتب حروف عربية ("رموز غريبة")
+       والبحث بيرجع فاضي — الخانة دي كانت بتنادي refreshCustomerInfo على طول
+       من غير ما تعدّي الكود على normalizeScan زي خانة البحث.
+     الحل: نفس تطبيع خانة البحث + توجيه كود العضوية لمساره. */
+  const raw = String(this.value || '').trim();
+  const code = ((typeof normalizeScan === 'function') ? normalizeScan(raw) : raw).toUpperCase();
+  if(/^(ECH|GLW)/.test(code) && typeof resolveLoyaltyScan === 'function'){
+    resolveLoyaltyScan(code).then(function(found){
+      if(!found && typeof showToast === 'function') showToast('كود العضوية مش موجود', 'err');
+    });
+    return;
+  }
+  // أرقام عربية/فارسية اتحولت لإنجليزي → نكتبها مكان الخام قبل البحث
+  if(code !== raw && /^\d+$/.test(code)) this.value = code;
+  refreshCustomerInfo();
 });
 // ✕ زرار المسح يبان أول ما تكتب رقم — مش مستني blur
 // ✏️ ولو غيّرت رقم عميل متربط، الأخضر يقع فورًا وسياق العميل يتفك
@@ -3964,11 +3982,20 @@ async function confirmPayment(){
       // في بعض الأجهزة الحوار يقفل ويرجع DOM لكن يسيب نافذة الـPOS من غير
       // system focus؛ العرض: لا كتابة/اختيار خانة لحد Alt-Tab/زر Windows.
       // نعلّم فترة الخطر قبل فتح الحوار، ونسترجع التركيز فور إغلاقه.
+      // 🎯 v668: الحوار بقى جوّه الصفحة (askConfirm) بدل confirm() الأصلي.
+      //    السبب: confirm() في Electron نافذة ويندوز حقيقية، وبعد ما تتقفل
+      //    نافذة الـPOS بتفضل من غير system focus — الشاشة ظاهرة والكاشير
+      //    مش قادرة تكتب في أي خانة لحد ما تدوس زر ويندوز/taskbar.
+      //    استرجاع التركيز (reclaimWindowFocus) كان بيداري على المشكلة أحيانًا
+      //    بس مش دايمًا؛ الحل الجذري إننا منفتحش نافذة نظام من الأساس.
       try{ if(typeof markWindowFocusRisk === 'function') markWindowFocusRisk('paymob-manual-confirm', 12000); }catch(_e){}
-      const ok = confirm('⚠️ الماكينة لسه ماأكدتش ' + _sum.toFixed(2) + ' ج.م.\n\n'
-        + 'متحفظش غير لو إيصال الماكينة طلع فعلًا ومكتوب عليه موافقة/APPROVED.\n'
-        + 'لو الماكينة مطبعتش أو رفضت العملية، الفاتورة دي هتطلع عجز في التقفيل.\n\n'
-        + 'إيصال الموافقة طلع من الماكينة؟');
+      const ok = await askConfirm({
+        icon:'⚠️', danger:true, waitSec:0,
+        title:'الماكينة لسه ماأكدتش ' + _sum.toFixed(2) + ' ج.م',
+        message:'متحفظش غير لو إيصال الماكينة طلع فعلًا ومكتوب عليه موافقة/APPROVED.\n'
+          + 'لو الماكينة مطبعتش أو رفضت العملية، الفاتورة دي هتطلع عجز في التقفيل.',
+        okText:'أيوه، إيصال الموافقة طلع', cancelText:'لأ، استنى'
+      });
       if(!ok) return;
       try{ if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(80); }catch(_e){}
       const _tid = (typeof paymobTerminalId === 'function') ? paymobTerminalId() : null;
@@ -3995,10 +4022,15 @@ async function confirmPayment(){
   try{
     const _over = cardOvercharge(cardLegs, cartTotal());
     if(_over > 0){
-      const ok = confirm('⚠️ اتسحب من الكروت ' + Math.abs(cardApprovedSum(cardLegs)).toFixed(2)
-        + ' ج.م والفاتورة ' + Math.abs(cartTotal()).toFixed(2) + ' ج.م.\n'
-        + 'زيادة ' + _over.toFixed(2) + ' ج.م لازم تترد بمرتجع من Paymob — مش من الدرج.\n\n'
-        + 'تحفظ الفاتورة بالمبلغ ده؟');
+      // v668: نفس سبب التأكيد اليدوي — مفيش نوافذ نظام في مسار الدفع.
+      const ok = await askConfirm({
+        icon:'⚠️', danger:true, waitSec:0,
+        title:'اتسحب من الكروت أكتر من الفاتورة',
+        message:'اتسحب ' + Math.abs(cardApprovedSum(cardLegs)).toFixed(2) + ' ج.م والفاتورة '
+          + Math.abs(cartTotal()).toFixed(2) + ' ج.م.\n'
+          + 'زيادة ' + _over.toFixed(2) + ' ج.م لازم تترد بمرتجع من Paymob — مش من الدرج.',
+        okText:'احفظ الفاتورة', cancelText:'إلغاء'
+      });
       if(!ok) return;
       // ⚠️ ده وقت **التأكيد** (قبل الحفظ) — الفاتورة لسه مالهاش رقم.
       //    الحدث اللي فيه الرقم بيتسجل بعد الحفظ باسم card_overcharge_saved.
