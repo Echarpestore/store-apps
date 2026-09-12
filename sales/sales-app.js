@@ -1,8 +1,8 @@
-// Sales v606 — chat product composer visibility/cache alignment
+// Sales v607 — تحقق من اكتمال الكاش المحلي قبل الاعتماد عليه (نقط/حضور ناقصة على جهاز واحد)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, onSnapshot as firebaseOnSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, getDocsFromCache, getDocsFromServer, query, where, Timestamp, runTransaction,
+  getFirestore, collection, addDoc, onSnapshot as firebaseOnSnapshot, doc, setDoc, deleteDoc, updateDoc, enableIndexedDbPersistence, getDoc, getDocs, getDocsFromCache, getDocsFromServer, getCountFromServer, query, where, Timestamp, runTransaction,
   // 💬 للشات: chat-staff-ui.js مكتوب compat، فبنعرّضله العمليات دي
   orderBy, limit, writeBatch, increment, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -102,7 +102,7 @@ const LF431_PREFIX='sales_lf_v431_';
 // التحديث. النتيجة: التطبيق ميجيبش الـ190 يوم من السيرفر ويكتفي بآخر يومين،
 // فالتاريخ يبان مقطوع من يوم التحديث — وده اللي بيتكرر بعد كل تحديث.
 // الحل: نربط الإصلاح برقم النسخة، فأي تحديث يجبر تحديث كامل من السيرفر مرة.
-const SALES_BUILD='605';
+const SALES_BUILD='607';
 try{
   if(localStorage.getItem('sales_history_repair_build')!==SALES_BUILD){
     Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
@@ -153,16 +153,42 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
   const _serverGet=(typeof getDocsFromServer==='function')?getDocsFromServer:getDocs;
   // zero-server-read startup from persistent IndexedDB cache.
   // v603: if the cache is empty but the TTL says "fresh", force recovery from server.
+  // v607: الكاش *الناقص* كان بيتصدّق. الكاش مش فاضي → بنطبّقه والـTTL بيقول
+  // "طازة" → مفيش تحميل كامل، والجهاز يفضل ناقص سجلات لحد ما يعدّي 24 ساعة.
+  // ده اللي بيخلّي النقط/الحضور يبانوا أقل على جهاز الفرع وصح على جهاز تاني،
+  // وبشكل عشوائي (على حسب إيه اللي فضل في IndexedDB بعد أي تنضيف/انقطاع).
+  // الحل: بعد ما نطبّق الكاش، نعدّ المستندات على السيرفر (عدّة رخيصة جدًا —
+  // قراءة واحدة لكل 1000 مستند) ونقارن. أي نقص = تحميل كامل فورًا.
+  let _fetchInFlight=false, _fetchDone=false;
   _salesInitialAuthReady.then(()=>_cacheGet(fullQ)).then(s=>{
     if(!s.empty){
       apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'cache');
       lf431Report(name,{cacheCount:s.size});
+      verifyCoverage(s.size);
     }else{
       lf431Report(name,{cacheCount:0,cacheEmpty:true});
       if((Date.now()-lf431Last(name))<ttlMs) runServerFetch(false);
     }
   }).catch(e=>lf431Report(name,{cacheError:(e&&e.code)||String(e)}));
+  function verifyCoverage(cacheCount){
+    if(typeof getCountFromServer!=='function') return;   // node harness
+    if(_fetchInFlight||_fetchDone) return;               // هيتحمّل كامل أصلًا
+    if(!_lf431Authed()){
+      _lf431Pending.set(name+'::count',()=>verifyCoverage(cacheCount));
+      return;
+    }
+    getCountFromServer(fullQ).then(cs=>{
+      const serverCount=Number(cs&&cs.data&&cs.data().count)||0;
+      lf431Report(name,{serverTotal:serverCount,coverageCheckedAt:Date.now()});
+      if(serverCount>cacheCount){
+        lf431Report(name,{status:'cache_incomplete',missing:serverCount-cacheCount});
+        runServerFetch(false);
+      }
+    }).catch(e=>lf431Report(name,{countError:(e&&e.code)||String(e)}));
+  }
   function runServerFetch(isRetry){
+    // v607: منع تكرار نفس التحميل لما أكتر من سبب يطلبه (TTL + فحص الاكتمال).
+    if(_fetchInFlight||_fetchDone) return;
     // v604: لو الدخول لسه ما تمّش، متطلقش الاستعلام (هيترفض) — سجّله وانتظر
     // إشارة الدخول. من غير ده الاستعلام بيفشل نهائيًا لبقية الجلسة.
     if(!_lf431Authed()){
@@ -170,14 +196,17 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
       _lf431Pending.set(name,()=>runServerFetch(false));
       return;
     }
+    _fetchInFlight=true;
     lf431Report(name,{status:'fetching',lastAttemptAt:Date.now()});
     _salesInitialAuthReady.then(()=>_serverGet(fullQ)).then(s=>{
       // v603 history-preservation guard: a refresh may add/update records,
       // but must never erase already-visible cached/history rows.
+      _fetchInFlight=false; _fetchDone=true;
       apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'server');
       lf431Mark(name);
       lf431Report(name,{status:'ok',error:null,serverCount:s.size,lastSuccessAt:Date.now()});
     }).catch(e=>{
+      _fetchInFlight=false;
       const code=(e&&e.code)||String(e);
       console.warn('lf431 '+name,code);
       lf431Report(name,{status:'error',error:code});
@@ -190,6 +219,7 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
       if(!isRetry){
         setTimeout(()=>{
           _salesInitialAuthReady.then(()=>getDocs(fullQ)).then(s=>{
+            _fetchDone=true;
             apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'server-retry');
             lf431Mark(name);
             lf431Report(name,{status:'ok',error:null,serverCount:s.size,lastSuccessAt:Date.now(),recovered:true});
