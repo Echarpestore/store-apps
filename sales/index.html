@@ -1011,8 +1011,9 @@
           <option value="manual">يدوي — لما أنا أسمح للموظف</option>
         </select>
       </div>
-      <div id="faceEnrollManualBox" style="margin:10px 0;display:none">
+      <div id="faceEnrollManualBox" style="margin:10px 0">
         <select id="faceEnrollEmpInput" style="width:100%;padding:9px;border-radius:9px"></select>
+        <button id="faceEnrollNowBtn" class="confirmBtnSmall" style="margin-top:7px">📸 سجّل وشه دلوقتي (من غير حضور/انصراف)</button>
         <button id="faceEnrollAllowBtn" class="confirmBtnSmall" style="margin-top:7px">اسمح بتسجيل وشه في أول حضور/انصراف</button>
         <div id="faceEnrollManualStatus" style="font-size:12px;color:var(--sub);margin-top:6px"></div>
       </div>
@@ -1267,7 +1268,7 @@
 
 </div>
 
-<script type="module" src="sales-app.js?v=609"></script>
+<script type="module" src="sales-app.js?v=610"></script>
 <script src="sales-ui.js?v=559"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.

@@ -102,7 +102,7 @@ const LF431_PREFIX='sales_lf_v431_';
 // التحديث. النتيجة: التطبيق ميجيبش الـ190 يوم من السيرفر ويكتفي بآخر يومين،
 // فالتاريخ يبان مقطوع من يوم التحديث — وده اللي بيتكرر بعد كل تحديث.
 // الحل: نربط الإصلاح برقم النسخة، فأي تحديث يجبر تحديث كامل من السيرفر مرة.
-const SALES_BUILD='609';
+const SALES_BUILD='610';
 try{
   if(localStorage.getItem('sales_history_repair_build')!==SALES_BUILD){
     Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
@@ -3472,6 +3472,51 @@ function avgFaceDescriptors(rows){
   norm=Math.sqrt(norm)||1; return out.map(v=>Math.round((v/norm)*1000000)/1000000);
 }
 window.faceDistance=faceDistance; window.avgFaceDescriptors=avgFaceDescriptors;
+/* 📸 v610 — جودة لقطات التسجيل.
+   🔴 الباج اللي المالك شافه: "الموظف بيسجل أول مرة والنظام يقول الوجه غير مطابق".
+      التسلسل كان: liveness (افتح بقك + لف وشك) ← وبعده **على طول** ناخد 12 لقطة
+      من غير أي فحص جودة. يعني نص اللقطات ببق مفتوح أو وش ملفوف، فالبروفايل
+      المحفوظ بيبقى "متوسط وش مشوّه". وبعدين التحقق بياخد **لقطة واحدة** ويقارن
+      بعتبة 0.50 (أضيق من 0.6 المعتادة) → أول مطابقة بتفشل، والموظف متأكد إنه
+      عمره ما سجّل. المشكلة مش في وشه — في البروفايل اللي اتحفظ.
+   الحل 3 طبقات: لقطة مؤهلة بس تدخل التسجيل · استبعاد اللقطات الشاذة قبل
+   المتوسط · والتحقق بأحسن لقطة من عدة لقطات مش لقطة واحدة. */
+const FACE_MIN_SCORE=0.62, FACE_MAX_MOUTH=0.12, FACE_FRONT_MIN=0.34, FACE_FRONT_MAX=0.66;
+const FACE_ENROLL_TARGET=12, FACE_ENROLL_MIN=8, FACE_OUTLIER_MAX=0.38, FACE_VERIFY_FRAMES=5;
+function faceSampleUsable(r){
+  if(!r || !r.landmarks) return false;
+  const sc=Number(r.detection && r.detection.score);
+  if(!(sc>=FACE_MIN_SCORE)) return false;
+  const mr=mouthOpenRatio(r.landmarks);
+  if(!(Number.isFinite(mr) && mr<=FACE_MAX_MOUTH)) return false;   // بق مفتوح = ملامح مشوّهة
+  const hr=headRatio(r.landmarks);
+  return Number.isFinite(hr) && hr>=FACE_FRONT_MIN && hr<=FACE_FRONT_MAX;  // وش قدام الكاميرا
+}
+/* ⚠️ المتوسط **مش** مرجع صالح لاستبعاد الشاذ: لو ربع اللقطات مشوّهة،
+   المتوسط نفسه بيتسحب ناحيتهم فيبقى الكل "قريب منه" ومحدش بيتشال.
+   بنستخدم أكتف نقطة (أكبر عدد جيران جوه الحد) كمرجع — دي بتبقى دايمًا
+   من مجموعة اللقطات السليمة طول ما هي الأغلبية. */
+function pickStableDescriptors(rows,maxDist){
+  const list=(rows||[]).filter(r=>Array.isArray(r)&&r.length===128);
+  if(list.length<2) return list;
+  const lim=Number(maxDist)||FACE_OUTLIER_MAX;
+  let seed=0, bestCount=-1;
+  for(let i=0;i<list.length;i++){
+    let c=0;
+    for(let j=0;j<list.length;j++) if(faceDistance(list[i],list[j])<=lim) c++;
+    if(c>bestCount){ bestCount=c; seed=i; }
+  }
+  const kept=list.filter(r=>faceDistance(list[seed],r)<=lim);
+  // لو المجموعة المتماسكة صغيرة أوي يبقى الجلسة كلها مش نضيفة — نرجّع الكل
+  // ونسيب القرار للحد الأدنى (FACE_ENROLL_MIN) بدل ما نبني بروفايل من لقطتين.
+  return kept.length>=Math.max(5,Math.ceil(list.length*0.5)) ? kept : list;
+}
+function bestFaceDistance(profile,samples){
+  return (samples||[]).reduce((m,x)=>Math.min(m,faceDistance(profile,x)),Infinity);
+}
+window.faceSampleUsable=faceSampleUsable;
+window.pickStableDescriptors=pickStableDescriptors;
+window.bestFaceDistance=bestFaceDistance;
 async function faceFrame(video){
   return faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:0.55}))
     .withFaceLandmarks(true).withFaceDescriptor();
@@ -3492,16 +3537,18 @@ function headRatio(lm){
   const lx=le.reduce((a,p)=>a+p.x,0)/le.length, rx=re.reduce((a,p)=>a+p.x,0)/re.length;
   return (no[3].x-lx)/Math.max(1,rx-lx);
 }
-async function runActiveLiveness(video){
+async function runActiveLiveness(video,setStatus,isActive){
+  const _st=setStatus||((t)=>{const el=$('#attPhotoStatus'); if(el) el.textContent=t;});
+  const _alive=isActive||(()=>!!pendingPhotoAction);
   // v602 — mobile-friendly active liveness.
   // Blink detection was unreliable on real phones, so use a CHANGE in mouth opening
   // plus a small head movement. A static photo cannot satisfy the mouth-change step.
   const until=Date.now()+7000;
   let minMouth=Infinity,maxMouth=-Infinity,minHead=Infinity,maxHead=-Infinity,frames=0;
-  while(Date.now()<until && pendingPhotoAction){
+  while(Date.now()<until && _alive()){
     const r=await faceFrame(video).catch(()=>null);
     if(!r){
-      $('#attPhotoStatus').textContent='خليك قدام الكاميرا…';
+      _st('خليك قدام الكاميرا…');
       await new Promise(x=>setTimeout(x,120));
       continue;
     }
@@ -3514,9 +3561,9 @@ async function runActiveLiveness(video){
     const mouthChanged=frames>=5 && (maxMouth-minMouth)>=0.055;
     const moved=(maxHead-minHead)>=0.09;
 
-    $('#attPhotoStatus').textContent=!mouthChanged
+    _st(!mouthChanged
       ? 'افتح بُقك واقفله مرة طبيعي…'
-      : (!moved ? 'تمام ✅ حرّك وشك سنة يمين أو شمال…' : 'تم التحقق ✅');
+      : (!moved ? 'تمام ✅ حرّك وشك سنة يمين أو شمال…' : 'تم التحقق ✅'));
 
     if(mouthChanged && moved) return true;
     await new Promise(x=>setTimeout(x,110));
@@ -3543,31 +3590,100 @@ async function verifyFaceWithSilentRetry(emp,video){
   }
   throw new Error('cancelled');
 }
+/* 📸 v610 — تسجيل البروفايل: لقطات مؤهلة بس + استبعاد الشاذ قبل المتوسط. */
+async function enrollFaceProfile(emp,video,opts){
+  opts=opts||{};
+  const _st=opts.status||((t)=>{const el=$('#attPhotoStatus'); if(el) el.textContent=t;});
+  const _alive=opts.alive||(()=>!!pendingPhotoAction);
+  await ensureFaceAuthModels();
+  const rows=[]; let attempts=0, rejected=0;
+  _st('بنسجل وشك — بص قدام وبُقك مقفول 0/'+FACE_ENROLL_TARGET);
+  while(rows.length<FACE_ENROLL_TARGET && attempts<90 && _alive()){
+    attempts++;
+    const r=await faceFrame(video).catch(()=>null);
+    if(r && r.descriptor && faceSampleUsable(r)){
+      rows.push(Array.from(r.descriptor));
+      _st('بنسجل وشك — بص قدام وبُقك مقفول '+rows.length+'/'+FACE_ENROLL_TARGET);
+    }else{
+      rejected++;
+      if(rejected%8===0) _st('قرّب شوية وبص قدام الكاميرا وبُقك مقفول…');
+    }
+    await new Promise(x=>setTimeout(x,90));
+  }
+  if(rows.length<FACE_ENROLL_MIN) throw new Error('enrollment');
+  const kept=pickStableDescriptors(rows,FACE_OUTLIER_MAX);
+  const descriptor=avgFaceDescriptors(kept);
+  const profile={v:2,descriptor,enrolledAt:Date.now(),sampleCount:kept.length,rawCount:rows.length};
+  // v608: إذن المالك لمرة واحدة — بيتقفل أول ما التسجيل ينجح
+  await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:profile,faceProfileUpdatedAt:Date.now(),faceEnrollNow:false});
+  emp.faceProfile=profile; emp.faceEnrollNow=false;
+  _st('تم تسجيل الوجه ✅');
+  return profile;
+}
+window.enrollFaceProfile=enrollFaceProfile;
 async function enrollOrVerifyFace(emp,video){
   await ensureFaceAuthModels();
   const live=await runActiveLiveness(video); if(!live) throw new Error('liveness');
-  if(!emp.faceProfile || !Array.isArray(emp.faceProfile.descriptor) || emp.faceProfile.descriptor.length!==128){
-    $('#attPhotoStatus').textContent='أول مرة — بنسجل وشك تلقائيًا 1/12';
-    const rows=[]; let attempts=0;
-    while(rows.length<12 && attempts<60 && pendingPhotoAction){
-      attempts++; const r=await faceFrame(video).catch(()=>null);
-      if(r && r.descriptor){ rows.push(Array.from(r.descriptor)); $('#attPhotoStatus').textContent='أول مرة — بنسجل وشك تلقائيًا '+rows.length+'/12'; }
-      await new Promise(x=>setTimeout(x,90));
-    }
-    if(rows.length<12) throw new Error('enrollment');
-    const descriptor=avgFaceDescriptors(rows), profile={v:1,descriptor,enrolledAt:Date.now(),sampleCount:12};
-    // v608: إذن المالك لمرة واحدة — بيتقفل أول ما التسجيل ينجح
-    await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:profile,faceProfileUpdatedAt:Date.now(),faceEnrollNow:false});
-    emp.faceProfile=profile; emp.faceEnrollNow=false;
-    $('#attPhotoStatus').textContent='تم تسجيل الوجه لأول مرة ✅';
+  if(!faceHasProfile(emp)){
+    await enrollFaceProfile(emp,video);
     return true;
   }
   $('#attPhotoStatus').textContent='بنتأكد من الوجه…';
-  const r=await faceFrame(video); if(!r||!r.descriptor) throw new Error('face-not-found');
-  const dist=faceDistance(emp.faceProfile.descriptor,Array.from(r.descriptor));
+  /* v610: التحقق بأحسن لقطة من عدة لقطات بدل لقطة واحدة. اللقطة الواحدة كانت
+     بتتاخد بعد حركة الـliveness على طول، فأي رمشة/لفة بتطلّع "غير مطابق". */
+  const samples=[]; let tries=0;
+  while(samples.length<FACE_VERIFY_FRAMES && tries<14 && pendingPhotoAction){
+    tries++;
+    const r=await faceFrame(video).catch(()=>null);
+    if(r && r.descriptor && faceSampleUsable(r)) samples.push(Array.from(r.descriptor));
+    await new Promise(x=>setTimeout(x,90));
+  }
+  if(!samples.length) throw new Error('face-not-found');
+  const dist=bestFaceDistance(emp.faceProfile.descriptor,samples);
   if(!(dist<=FACE_MATCH_THRESHOLD)){ const e=new Error('face-mismatch'); e.distance=dist; throw e; }
   $('#attPhotoStatus').textContent='الوجه مطابق ✅'; return true;
 }
+
+/* 🧑‍💼 v610 — تسجيل الوجه من لوحة المالك في أي وقت، من غير حضور ولا انصراف.
+   ده اللي بيخلي وضع "يدوي" عملي: مفيش أي طلب وجه على الموظف وقت الشغل،
+   والمالك بيسجّلهم بنفسه في وقت هادي وإضاءة كويسة — وهي نفس الظروف اللي
+   بتخلّي البروفايل نضيف والمطابقة بعدها تعدّي من أول مرة. */
+window.openFaceEnrollDialog = async function(empId){
+  const emp=(window.allEmployees||[]).find(e=>String(e.id)===String(empId))
+    ||(window.employees||[]).find(e=>String(e.id)===String(empId));
+  if(!emp){ alert('اختار موظف الأول'); return; }
+  const old=document.getElementById('faceEnrollOv'); if(old) old.remove();
+  let live=true, stream=null;
+  const ov=document.createElement('div');
+  ov.id='faceEnrollOv';
+  ov.style.cssText='position:fixed; inset:0; background:rgba(0,0,0,.9); z-index:14000; display:flex; align-items:center; justify-content:center; padding:16px;';
+  ov.innerHTML='<div style="background:var(--card,#1d1d27); border-radius:16px; padding:14px; max-width:400px; width:100%; text-align:center;">'
+    +'<div style="font-weight:800; margin-bottom:8px;">📸 تسجيل وش '+(emp.name||'')+'</div>'
+    +'<video id="faceEnrollVideo" autoplay playsinline muted style="width:100%; border-radius:12px; background:#000;"></video>'
+    +'<div id="faceEnrollStatus" style="font-size:12.5px; color:var(--sub,#9aa); margin:9px 0; min-height:18px;">بيفتح الكاميرا…</div>'
+    +'<button id="faceEnrollClose" class="backBtn" style="width:100%; padding:11px; border-radius:10px;">إغلاق</button></div>';
+  document.body.appendChild(ov);
+  const st=(t)=>{ const el=document.getElementById('faceEnrollStatus'); if(el) el.textContent=t; };
+  const stop=()=>{ live=false; try{ if(stream) stream.getTracks().forEach(t=>t.stop()); }catch(_e){} ov.remove(); };
+  ov.querySelector('#faceEnrollClose').onclick=stop;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' } });
+    const video=ov.querySelector('#faceEnrollVideo');
+    video.srcObject=stream; await video.play();
+    const ok=await runActiveLiveness(video, st, ()=>live);
+    if(!ok){ st('مقدرتش أتأكد إنه شخص حقيقي — قرّب وجرّب تاني.'); return; }
+    if(!live) return;
+    await enrollFaceProfile(emp, video, { status:st, alive:()=>live });
+    st('تم تسجيل وش '+(emp.name||'')+' ✅ — يقدر يسجل حضور وانصراف عادي دلوقتي.');
+    if(typeof renderFaceAttendanceSettings==='function'){ try{ renderFaceAttendanceSettings(); }catch(_e){} }
+    setTimeout(stop,2200);
+  }catch(err){
+    st(err && err.message==='enrollment'
+      ? 'اللقطات مش واضحة كفاية — إضاءة أحسن، وش قدام الكاميرا، وبُق مقفول.'
+      : 'تعذر تسجيل الوجه ('+((err&&err.name)||'')+')');
+    console.warn('face enroll', err);
+  }
+};
 
 async function clockIn(empId, photoDataUri){
   const emp = window.employees.find(e=> e.id === empId);
@@ -6935,7 +7051,9 @@ function renderFaceAttendanceSettings(){
   const cb=$('#faceAttendanceEnabledInput'); if(cb) cb.checked=(window.faceAttendanceEnabled===true);
   const off=$('#faceOffAllInput'); if(off) off.checked=offAll;
   const md=$('#faceEnrollModeInput'); if(md) md.value=faceEnrollMode();
-  const box=$('#faceEnrollManualBox'); if(box) box.style.display=(faceEnrollMode()==='manual' && !offAll) ? 'block' : 'none';
+  // v610: أداة التسجيل المباشر مفيدة في كل الأوضاع — بتتخفي بس لو النظام متوقف عام
+  const box=$('#faceEnrollManualBox'); if(box) box.style.display=offAll ? 'none' : 'block';
+  const allowBtn=$('#faceEnrollAllowBtn'); if(allowBtn) allowBtn.style.display=(faceEnrollMode()==='auto') ? 'none' : 'block';
   const sel=$('#faceEnrollEmpInput');
   if(sel){
     const cur=sel.value;
@@ -6949,8 +7067,14 @@ function renderFaceAttendanceSettings(){
 }
 window.renderFaceAttendanceSettings=renderFaceAttendanceSettings;
 $('#faceEnrollModeInput')?.addEventListener('change', ()=>{
-  const box=$('#faceEnrollManualBox');
-  if(box) box.style.display=($('#faceEnrollModeInput').value==='manual') ? 'block' : 'none';
+  const allowBtn=$('#faceEnrollAllowBtn');
+  if(allowBtn) allowBtn.style.display=($('#faceEnrollModeInput').value==='auto') ? 'none' : 'block';
+});
+$('#faceEnrollNowBtn')?.addEventListener('click', ()=>{
+  const sel=$('#faceEnrollEmpInput'); const st=$('#faceEnrollManualStatus');
+  if(!sel || !sel.value){ if(st) st.textContent='اختار موظف الأول'; return; }
+  if(st) st.textContent='';
+  window.openFaceEnrollDialog(sel.value);
 });
 $('#saveFaceAttendanceBtn')?.addEventListener('click', async ()=>{
   const enabled=!!$('#faceAttendanceEnabledInput')?.checked;
