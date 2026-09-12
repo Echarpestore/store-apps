@@ -102,7 +102,7 @@ const LF431_PREFIX='sales_lf_v431_';
 // التحديث. النتيجة: التطبيق ميجيبش الـ190 يوم من السيرفر ويكتفي بآخر يومين،
 // فالتاريخ يبان مقطوع من يوم التحديث — وده اللي بيتكرر بعد كل تحديث.
 // الحل: نربط الإصلاح برقم النسخة، فأي تحديث يجبر تحديث كامل من السيرفر مرة.
-const SALES_BUILD='610';
+const SALES_BUILD='611';
 try{
   if(localStorage.getItem('sales_history_repair_build')!==SALES_BUILD){
     Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
@@ -2291,6 +2291,11 @@ onSnapshot(empCol, (snap)=>{
   window.allEmployees = allEmployees;      // 🗓️ dialogs/buttons need the live employee list too
   applyBranchFilter();
   try{ if(document.getElementById('admin')?.classList.contains('show')) renderAdminList(); }catch(e){}
+  /* 🔴 v611: قايمة موظفين تسجيل الوجه كانت بتفضل فاضية.
+     renderFaceAttendanceSettings بتتنادى من snapshot الإعدادات بس، وده بيوصل
+     **قبل** مستندات الموظفين — فالقايمة بتتبني وwindow.employees لسه فاضية
+     ومحدش بيعيد بناءها بعد ما الموظفين يوصلوا. */
+  try{ if(typeof renderFaceAttendanceSettings==='function') renderFaceAttendanceSettings(); }catch(e){}
   if($('#branchSetup').classList.contains('show')) populateBranchSetupSelect();   // الشاشة مفتوحة؟ حدّث القايمة
 }, (err)=> console.error('window.employees sync error', err));
 
@@ -7057,8 +7062,12 @@ function renderFaceAttendanceSettings(){
   const sel=$('#faceEnrollEmpInput');
   if(sel){
     const cur=sel.value;
-    sel.innerHTML=(window.employees||[]).filter(e=>e && e.active!==false && !e.deletedAt)
-      .map(e=>'<option value="'+e.id+'">'+e.name+(faceHasProfile(e)?' — وشه متسجّل':(e.faceEnrollNow===true?' — مسموح له دلوقتي':''))+'</option>').join('');
+    // فرع الجهاز الأول، ولو لسه الفلترة ماتمتش نرجع للقايمة الكاملة بدل قايمة فاضية
+    let list=(window.employees||[]).filter(e=>e && e.active!==false && !e.deletedAt);
+    if(!list.length) list=(window.allEmployees||[]).filter(e=>e && e.active!==false && !e.deletedAt);
+    sel.innerHTML=list.length
+      ? list.map(e=>'<option value="'+e.id+'">'+e.name+(faceHasProfile(e)?' — وشه متسجّل':(e.faceEnrollNow===true?' — مسموح له دلوقتي':''))+'</option>').join('')
+      : '<option value="">(لسه بيحمّل الموظفين…)</option>';
     if(cur) sel.value=cur;
   }
   const st=$('#faceAttendanceStatus');
