@@ -102,7 +102,7 @@ const LF431_PREFIX='sales_lf_v431_';
 // التحديث. النتيجة: التطبيق ميجيبش الـ190 يوم من السيرفر ويكتفي بآخر يومين،
 // فالتاريخ يبان مقطوع من يوم التحديث — وده اللي بيتكرر بعد كل تحديث.
 // الحل: نربط الإصلاح برقم النسخة، فأي تحديث يجبر تحديث كامل من السيرفر مرة.
-const SALES_BUILD='611';
+const SALES_BUILD='614';
 try{
   if(localStorage.getItem('sales_history_repair_build')!==SALES_BUILD){
     Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
@@ -2110,6 +2110,16 @@ function reviewEmployeesFor(branch){
 window.getPayrollReviewEmployees = function(){
   return reviewEmployeesFor(viewBranch).filter(e=> !e.deletedAt && e.active !== false);
 };
+/* 🚪 v612 — reviewEmployeesFor بترجع **كل** موظفي الفرع، بمن فيهم اللي
+   اتنهت خدمته (active:false). اللوحات اللي بتتعامل مع الموظفين الحاليين
+   (إنهاء الخدمة · متابعة اليوم · جدول المواعيد) كانت بتستخدمها على طول،
+   فالموظف المغادر يفضل ظاهر في كل مكان ومعاه زرار "إنهاء الخدمة" تاني.
+   السجلات التاريخية (النقط/التقارير) بتفضل على reviewEmployeesFor عمدًا
+   عشان شغل المغادر ما يختفيش من التاريخ. */
+function currentEmployeesFor(branch){
+  return reviewEmployeesFor(branch).filter(e=> !e.deletedAt && e.active !== false);
+}
+window.currentEmployeesFor = currentEmployeesFor;
 function populateBranchSelect(sel){
   const branches = [...new Set(allEmployees.map(e=>String(e.branch||'').trim()).filter(Boolean))].sort();
   const prevValue = sel.value || viewBranch;
@@ -4579,10 +4589,10 @@ function computeAvgRatingToday(empId){
 function renderStaffOverview(){
   const wrap = $('#staffOverviewList');
   if(!wrap) return;
-  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  if(currentEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const dayStart = new Date(); dayStart.setHours(0,0,0,0);
 
-  const rows = reviewEmployeesFor(viewBranch).map(e=>{
+  const rows = currentEmployeesFor(viewBranch).map(e=>{
     const shift = getOpenShift(e.id);
     let statusColor = 'gray', statusText = 'لسه محضرش';
     if(shift){
@@ -5006,11 +5016,37 @@ function rewardGateReport(emp, range, type){
 }
 window.rewardGateReport = rewardGateReport;
 
+/* ⏱️ v614 — رصيد الوقت (تأخير/انصراف بدري/بريك زيادة) في فترة.
+   اتشال بره عشان الأسبوعية والشهرية يستخدموا **نفس** الحسبة. */
+function rewardCreditHours(emp, range){
+  return (window.allTimeCredit||[]).filter(x=>{
+    if(!x || x.employeeId!==emp.id || !tcCounts(x)) return false;
+    const t = new Date((x.date||'')+'T00:00:00').getTime();
+    return t >= range.start.getTime() && t <= range.end.getTime();
+  }).reduce((a,x)=> a + (Number(x.hours)||0), 0);
+}
+window.rewardCreditHours = rewardCreditHours;
+
 function qualifiesForReward(emp, range, type){
   if(!emp || emp.active === false) return false;
   if(!rewardFullPeriodEligible(emp, range)) return false;
 
   if(type === 'monthly'){
+    /* 🔴 v614 — الثغرة اللي خلّت موظفة متأخرة تاخد مكافأة:
+       المسار الشهري كان بيعمل `return` من هنا **قبل** بوابة الالتزام
+       اللي تحت (سطر ~5050)، فالشهرية كانت بتتحكم بمتوسط درجات بس:
+       حضور + انضباط + مهام + تقييم ÷ 4 ≥ 80%.
+       والأسوأ: "الانضباط" في المتوسط ده = **عدد الأيام** اللي فيها تأخير،
+       مش **ساعات** التأخير. يعني اللي اتأخر 3 ساعات في يوم بيخسر نفس
+       اللي اتأخر 5 دقايق. موظفة برصيد 14 ساعة (المسموح 8) كانت بتعدّي
+       بسهولة لأن مبيعاتها وتقييمها بيغطوا على التأخير.
+       ✅ دلوقتي نفس بوابة الأسبوعية بالظبط: رصيد الوقت شرط دخول مش وزن،
+          والحد الأدنى للتقييم بيتطبّق برضه. */
+    const _cfg = window.timeCfg || timeCfgDefaults;
+    if(!window.rewardEligibility(rewardCreditHours(emp, range), 'month', _cfg).eligible) return false;
+    const _rating = computeAvgRatingInRange(emp.id, range.start.getTime(), range.end.getTime());
+    if(_rating !== null && _rating < MIN_RATING_FOR_REWARD) return false;
+
     // الشهرية: الشهر بيتقسم ~4 أسابيع ومتوسط درجاتها لازم يعدّي 80%
     const MONTHLY_THRESHOLD_PCT = 80;
     const chunks = [];
@@ -5037,15 +5073,9 @@ function qualifiesForReward(emp, range, type){
     if(confirmedDays < requiredDays) return false;
   }
 
-  // 🚪 بوابة الالتزام: رصيد الوقت مايعدّيش المسموح
+  // 🚪 بوابة الالتزام: رصيد الوقت مايعدّيش المسموح (نفس حسبة الشهرية — v614)
   const cfg = window.timeCfg || timeCfgDefaults;
-  const credit = (window.allTimeCredit||[]).filter(x=>{
-    if(x.employeeId!==emp.id || !tcCounts(x)) return false;
-    const t = new Date((x.date||'')+'T00:00:00').getTime();
-    return t >= range.start.getTime() && t <= range.end.getTime();
-  });
-  const creditHours = credit.reduce((a,x)=> a + (Number(x.hours)||0), 0);
-  const elig = window.rewardEligibility(creditHours, type === 'monthly' ? 'month' : 'week', cfg);
+  const elig = window.rewardEligibility(rewardCreditHours(emp, range), type === 'monthly' ? 'month' : 'week', cfg);
   if(!elig.eligible) return false;
 
   // تقييم العملاء — بيتطبّق بس لو فيه تقييمات فعلًا في الفترة
@@ -5158,9 +5188,13 @@ async function awardPeriod(range, type, label){
       const money = {
         employeeId: e.id, employeeName: e.name, branch: e.branch || window.currentBranch,
         type, periodLabel: label, amount: share.amount,
-        winners: share.count, budget: share.budget,
-        // 🚧 فوق الميزانية → مستنية موافقة، ومتظهرش للموظفين قبلها
-        status: share.overBudget ? 'pending' : 'approved'
+        winners: share.count, budget: share.budget, overBudget: !!share.overBudget,
+        /* 🛑 v613 — قرار المالك: **كل** مكافأة تستنى موافقته.
+           اللي كان: `share.overBudget ? 'pending' : 'approved'` — يعني طول
+           ما المبلغ جوه الميزانية بيتصرف ويتعلن للفريق لوحده، والمالك يشوفه
+           آخر الشهر في الأرقام. المفاجأة دي هي المشكلة مش الرقم نفسه.
+           دلوقتي مفيش مبلغ بيبان لحد ولا بيتحسب مصروف قبل ما يتعتمد. */
+        status: 'pending'
       };
       // 🔒 معرّف ثابت: لو جهازين حسبوا نفس الفترة، هيكتبوا نفس المستند
       //    مش مستندين — وده اللي بيمنع صرف المكافأة مرتين.
@@ -5877,8 +5911,8 @@ const DAY_NAMES = ['الأحد','الإثنين','الثلاثاء','الأرب�
 
 function renderScheduleList(){
   const wrap = $('#scheduleList');
-  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=> `
+  if(currentEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = currentEmployeesFor(viewBranch).map(e=> `
     <div class="emp-row" style="flex-wrap:wrap; gap:8px;">
       <div class="n">${e.name}</div>
       <div style="display:flex; align-items:center; gap:6px;">
@@ -8627,8 +8661,8 @@ let pendingTerminateEmpId = null;
 function renderTerminationPanel(){
   const wrap = $('#terminateEmpList');
   if(!wrap) return;
-  if(reviewEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=> `
+  if(currentEmployeesFor(viewBranch).length === 0){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
+  wrap.innerHTML = currentEmployeesFor(viewBranch).map(e=> `
     <div class="emp-row">
       <div class="n">${e.name}${e.fullName && e.fullName !== e.name
         ? `<div style="font-size:10px; color:var(--sub); font-weight:400;">${e.fullName}</div>` : ''}</div>
@@ -8716,8 +8750,21 @@ function renderTerminationLog(){
   wrap.querySelectorAll('button[data-id]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       if(!confirm('تأكيد صرف مستحقات الموظف؟')) return;
-      try{ await updateDoc(doc(db,'sales_terminations', btn.dataset.id), { paidAt: Date.now() }); }
-      catch(err){ console.error('تعذر تسجيل الدفع', err); }
+      /* 💸 v612: الفشل كان **صامت** (console.error بس) — القاعدة كانت
+         `update: false` على sales_terminations، فالضغطة بتترفض والزرار
+         يرجع تاني وكأن مفيش حاجة حصلت. دلوقتي الخطأ بيتقال بصوت عالي
+         ومعاه السبب الحقيقي، وبيمنع ضغطتين في نفس الوقت. */
+      if(btn.disabled) return;
+      btn.disabled = true; const _label = btn.textContent; btn.textContent = 'بيتسجل…';
+      try{
+        await updateDoc(doc(db,'sales_terminations', btn.dataset.id), { paidAt: Date.now() });
+      }catch(err){
+        console.error('تعذر تسجيل الدفع', err);
+        alert((err && err.code === 'permission-denied')
+          ? 'الصرف مترفض من قواعد الأمان — انشر security/firestore-phase2.rules من Firebase Console وجرّب تاني.'
+          : 'تعذر تسجيل الدفع: ' + ((err && (err.code || err.message)) || 'خطأ غير معروف'));
+        btn.disabled = false; btn.textContent = _label;
+      }
     });
   });
 }
@@ -9826,6 +9873,10 @@ function renderRewardBudget(){
   let html = bar('📅 الأسبوعي (الشهر ده)', sp.weekly, sp.weeklyBudget)
            + bar('🗓️ الشهري', sp.monthly, sp.monthlyBudget);
 
+  /* 🗑️ v613: مكافآت **معتمدة** (قديمة أو اتعتمدت بالغلط) — المالك يقدر
+     يلغيها. من غير ده، أي مبلغ قديم بيفضل ظاهر للفريق وبيتحسب مصروف. */
+  const approved = (all||[]).filter(r=> r && r.status === 'approved')
+    .sort((a,b)=> (Number(b.earnedAt)||0) - (Number(a.earnedAt)||0)).slice(0,12);
   if(!pend.length){
     html += '<p style="color:var(--sub); font-size:12.5px; margin:6px 0 0;">مفيش مكافآت مستنية موافقتك ✅</p>';
   }else{
@@ -9842,12 +9893,23 @@ function renderRewardBudget(){
           ${budget ? ' · الميزانية <b>' + budget + ' ج</b> · الزيادة <b style="color:#ff9a9d;">' + Math.max(0, total-budget) + ' ج</b>' : ''}
         </div>
         <div style="font-size:12px; color:var(--sub); margin-top:4px;">
-          الحد الأدنى ${REWARD_CFG.minPerAward} ج للمكافأة خلّى الإجمالي يعدّي الميزانية.</div>
+          ${g.map(r=> r.employeeName).join(' · ')}</div>
+        ${g[0].overBudget ? '<div style="font-size:12px; color:#ff9a9d; margin-top:4px;">⚠️ الإجمالي ده فوق الميزانية.</div>' : ''}
+        <div style="font-size:11.5px; color:var(--sub); margin-top:4px;">محدش شافها لسه — مفيش مبلغ بيبان للفريق قبل موافقتك.</div>
         <div style="display:flex; gap:7px; margin-top:9px; flex-wrap:wrap;">
           <button data-rwok="${k}" style="flex:1; min-width:110px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--gold-dim); color:var(--ink); font-family:'Cairo'; font-weight:800; cursor:pointer;">✅ اعتمدها</button>
           <button data-rwno="${k}" style="flex:1; min-width:110px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:#ff9a9d; font-family:'Cairo'; font-weight:800; cursor:pointer;">🚫 مش دلوقتي</button>
         </div></div>`;
     }).join('');
+  }
+  if(approved.length){
+    html += '<div style="margin-top:14px;"><b style="font-size:13px;">✅ مكافآت معتمدة</b>'
+      + '<div style="font-size:11.5px; color:var(--sub); margin:3px 0 7px;">دي ظاهرة للفريق ومحسوبة في المصروف. الإلغاء بيشيلها من الاتنين.</div>'
+      + approved.map(r=> '<div style="display:flex; align-items:center; gap:8px; justify-content:space-between; border-bottom:1px solid var(--line); padding:7px 0;">'
+        + '<div style="font-size:12.5px;"><b>' + _esc(r.employeeName) + '</b> · <span style="color:var(--gold); font-weight:800;">' + (Number(r.amount)||0) + ' ج</span>'
+        + '<div style="font-size:11px; color:var(--sub);">' + (r.type === 'monthly' ? 'شهرية' : 'أسبوعية') + ' — ' + _esc(r.periodLabel || '') + '</div></div>'
+        + '<button data-rwcancel="' + _esc(r.id) + '" style="padding:7px 11px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:#ff9a9d; font-family:\'Cairo\'; font-weight:800; font-size:12px; cursor:pointer;">🗑️ إلغاء</button>'
+        + '</div>').join('') + '</div>';
   }
   host.innerHTML = html;
   try{ renderRewardGates(); }catch(e){ console.warn('reward gates', e); }
@@ -9855,7 +9917,25 @@ function renderRewardBudget(){
     b.addEventListener('click', ()=> decideRewardBudget(b.dataset.rwok, 'approved')));
   host.querySelectorAll('[data-rwno]').forEach(b=>
     b.addEventListener('click', ()=> decideRewardBudget(b.dataset.rwno, 'rejected')));
+  host.querySelectorAll('[data-rwcancel]').forEach(b=>
+    b.addEventListener('click', ()=> cancelApprovedReward(b.dataset.rwcancel)));
 }
+/* 🗑️ v613 — إلغاء مكافأة معتمدة (زي الـ750 القديمة). بترجع 'rejected'
+   فتختفي من كارت الموظفة ومن حساب المصروف. مفيش مسح — الأثر بيفضل. */
+async function cancelApprovedReward(id){
+  const r = (window.allRewards || []).find(x=> x && x.id === id);
+  if(!r) return;
+  if(!confirm('هتلغي مكافأة ' + (r.employeeName||'') + ' بمبلغ ' + (Number(r.amount)||0)
+    + ' ج. هتختفي من كارتها ومن المصروف. تكمّل؟')) return;
+  try{
+    await updateDoc(doc(db,'sales_rewards', id), { status:'rejected', budgetDecidedAt: Date.now() });
+  }catch(e){
+    alert('تعذر الإلغاء: ' + ((e && (e.code || e.message)) || 'خطأ غير معروف'));
+    return;
+  }
+  renderRewardBudget();
+}
+window.cancelApprovedReward = cancelApprovedReward;
 window.renderRewardBudget = renderRewardBudget;
 
 async function decideRewardBudget(groupKey, status){
@@ -9864,8 +9944,10 @@ async function decideRewardBudget(groupKey, status){
     .filter(r=> r.type === parts[0] && r.periodLabel === parts[1]);
   if(!list.length) return;
   const total = list.reduce((a,r)=> a + (Number(r.amount)||0), 0);
+  const over = list.some(r=> r && r.overBudget);
   const msg = status === 'approved'
-    ? 'هتعتمد ' + list.length + ' مكافأة بإجمالي ' + total + ' ج (فوق الميزانية). تكمّل؟'
+    ? 'هتعتمد ' + list.length + ' مكافأة بإجمالي ' + total + ' ج'
+      + (over ? ' (فوق الميزانية)' : '') + '. هتبان للفريق بعد كده. تكمّل؟'
     : 'هترفض ' + list.length + ' مكافأة. الموظفين مشافوهاش أصلًا. تكمّل؟';
   if(!confirm(msg)) return;
   for(const r of list){
