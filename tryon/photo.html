@@ -374,7 +374,11 @@
        computeGridLayout(n): 2=>2x1، 3=>3x1، 4=>2x2. تثبيت العدد على 4
        كان سبب الباج الظاهر فعليًا مع لونين: خرج السيرفر 3x1 بينما
        الواجهة قصته 2x2، فظهر شريط من خليتين/أجزاء متجاورة. */
-    var n = gridCells.length;
+    /* Server always generates a full 2x2 bandana grid now, even when the
+       product has only 1 or 2 bandana colours. The unused trailing cells are
+       harmless duplicates. Cropping the fixed 2x2 geometry prevents Gemini's
+       1x2/1x3 wide output from appearing as a thin horizontal strip. */
+    var n = 4;
     var layout = PC.computeGridLayout(n);
     var cells = PC.sliceGridProportional(
       imgEl.naturalWidth, imgEl.naturalHeight,
