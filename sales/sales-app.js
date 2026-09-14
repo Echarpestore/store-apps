@@ -102,7 +102,7 @@ const LF431_PREFIX='sales_lf_v431_';
 // التحديث. النتيجة: التطبيق ميجيبش الـ190 يوم من السيرفر ويكتفي بآخر يومين،
 // فالتاريخ يبان مقطوع من يوم التحديث — وده اللي بيتكرر بعد كل تحديث.
 // الحل: نربط الإصلاح برقم النسخة، فأي تحديث يجبر تحديث كامل من السيرفر مرة.
-const SALES_BUILD='614';
+const SALES_BUILD='616';
 try{
   if(localStorage.getItem('sales_history_repair_build')!==SALES_BUILD){
     Object.keys(localStorage).forEach(k=>{ if(k.indexOf(LF431_PREFIX)===0) localStorage.removeItem(k); });
@@ -2915,7 +2915,12 @@ function renderAttendanceLists(){
     // waiting to be celebrated.
     const sub = getTodaysSubmission(e.id);
     const hasTask = !!getCurrentTask(e.id);
-    const hasUnseenReward = rewards.some(r=> r.employeeId===e.id && !r.seen);
+    /* 🎁 v616 — لازم visibleRewards: من غيرها البادج بيظهر للمكافآت
+       **المستنية موافقة المالك** (وv613 خلّى كلها مستنية) — يعني كل
+       الموظفين بياخدوا 🎁 على كارتهم، والضغط مبيعملش حاجة لأن الاحتفال
+       نفسه بيفلتر بـvisibleRewards. وده بيسرّب إن فيه مكافأة قبل ما
+       المالك يقرر — وهو بالظبط اللي اتعمل عشان ميحصلش. */
+    const hasUnseenReward = visibleRewards(rewards).some(r=> r.employeeId===e.id && !r.seen);
     const hasDecision = unseenDecisions(window.allLeaveReqs, e.id).length > 0;
     let badge = '';
     if(hasDecision) badge = '📩';                 // فيه رد على طلبه — يفتح يشوف
@@ -5354,7 +5359,12 @@ function renderEmpGrid(){
     } else if(hasTask){
       taskIcon = '📸'; // task assigned, nothing submitted yet today
     }
-    const hasUnseenReward = rewards.some(r=> r.employeeId===e.id && !r.seen);
+    /* 🎁 v616 — لازم visibleRewards: من غيرها البادج بيظهر للمكافآت
+       **المستنية موافقة المالك** (وv613 خلّى كلها مستنية) — يعني كل
+       الموظفين بياخدوا 🎁 على كارتهم، والضغط مبيعملش حاجة لأن الاحتفال
+       نفسه بيفلتر بـvisibleRewards. وده بيسرّب إن فيه مكافأة قبل ما
+       المالك يقرر — وهو بالظبط اللي اتعمل عشان ميحصلش. */
+    const hasUnseenReward = visibleRewards(rewards).some(r=> r.employeeId===e.id && !r.seen);
     // 🏅 فازت النهاردة؟ الكارت بياخد إطار دهبي متحرك ومبلغها عليه —
     //    وبيفضل كده طول اليوم، مش 4 ثواني وتمشي.
     const win = todaysRewardFor(e.id);
