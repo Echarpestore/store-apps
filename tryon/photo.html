@@ -88,8 +88,9 @@
      فاجئ. وكبّرت المساحة (44vh → 62vh) لأن الكارت كان صغير أوي. */
   .resultCard{ position:relative; border-radius:22px; overflow:hidden;
     box-shadow:0 10px 30px rgba(33,27,23,.14); background:var(--cream);
-    aspect-ratio: 4 / 5; max-height:62vh; max-width:calc(62vh * 4 / 5);
-    width:100%; margin:0 auto; }
+    aspect-ratio: var(--result-ratio, 4 / 5); max-height:62vh;
+    max-width:min(100%, calc(62vh * var(--result-ratio-num, .8)));
+    width:100%; margin:0 auto; transition:max-width .12s ease; }
   .result{ width:100%; height:100%; }
   .result img{ width:100%; height:100%; object-fit:contain; display:block; }
 
@@ -235,7 +236,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-<script src="./photo-core.js?v=63"></script>
+<script src="./photo-core.js"></script>
 <script>
 "use strict";
 (function(){
@@ -345,7 +346,7 @@
   var lastResultImageForCart = null;
   var lastGridImage = null;
   var _lastLoadedGridImg = null;
-  var gridCells = ["none"].concat(bandanaColorsRequested);
+  var gridCells = PC.computeBandanaGridCells(bandanaColorsRequested);
 
   function hideBandRow(){
     var row = $("bandRow");
@@ -369,31 +370,29 @@
   }
 
   function cropFromGrid(imgEl, whichIndex){
-    /* v63 — عدد خانات خرج hijabTryOn هو عدد النتائج المطلوبة فعلًا:
-       none + ألوان البندانة المختارة (حد أقصى 4). هندسة السيرفر هي
-       computeGridLayout(n): 2=>2x1، 3=>3x1، 4=>2x2. تثبيت العدد على 4
-       كان سبب الباج الظاهر فعليًا مع لونين: خرج السيرفر 3x1 بينما
-       الواجهة قصته 2x2، فظهر شريط من خليتين/أجزاء متجاورة. */
-    /* Server always generates a full 2x2 bandana grid now, even when the
-       product has only 1 or 2 bandana colours. The unused trailing cells are
-       harmless duplicates. Cropping the fixed 2x2 geometry prevents Gemini's
-       1x2/1x3 wide output from appearing as a thin horizontal strip. */
-    var n = 4;
+    var n = gridCells.length;
     var layout = PC.computeGridLayout(n);
     var cells = PC.sliceGridProportional(
       imgEl.naturalWidth, imgEl.naturalHeight,
-      layout.cols, layout.rows, n, 0.025
+      layout.cols, layout.rows, n, 0.015
     );
     return cells[whichIndex] ? cropCell(imgEl, cells[whichIndex]) : "";
   }
 
   function showBandResult(label, dataUrl){
-    // 🔴 Grid safety: في وضع البندانة ممنوع نهائيًا عرض صورة الـgrid الأصلية.
-    // لو القص فشل، نفشل بوضوح بدل ما العميلة تشوف 3/4 صور جنب بعض.
-    if(!dataUrl || (gridMode && dataUrl === lastGridImage)){ fail(); return; }
+    if(!dataUrl) return;
     selectedBandColor = label;
     lastResultImageForCart = dataUrl;
-    $("resultImg").src = dataUrl;
+    var resultImg = $("resultImg");
+    resultImg.onload = function(){
+      var w = resultImg.naturalWidth || 4, h = resultImg.naturalHeight || 5;
+      var card = resultImg.closest(".resultCard");
+      if(card){
+        card.style.setProperty("--result-ratio", w + " / " + h);
+        card.style.setProperty("--result-ratio-num", String(w / h));
+      }
+    };
+    resultImg.src = dataUrl;
     $("dlBtn").href = dataUrl;
     $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed || label === "none");
     var row = $("bandRow");
@@ -412,7 +411,7 @@
   function renderBandRow(){
     var row = $("bandRow");
     while(row.firstChild) row.removeChild(row.firstChild);
-    gridCells.forEach(function(label){
+    ["none"].concat(bandanaColorsRequested).forEach(function(label){
       var isNone = label === "none";
       var item = document.createElement("div");
       item.className = "band-item";
@@ -499,7 +498,7 @@
     hideBandRow();
 
     if(gridMode){
-      gridCells = ["none"].concat(bandanaColorsRequested);
+      gridCells = PC.computeBandanaGridCells(bandanaColorsRequested);
       renderBandRow();
       /* نفس الوجه + نفس صورة المنتج + نفس مجموعة الألوان = cache hit فوري.
          صورة المنتج داخلة في المفتاح عشان رسالة/باركود قديم ما يرجعش طرحة قبلها. */
@@ -549,7 +548,16 @@
 
   function succeedPlain(imageDataUrl, fromCache){
     lastResultImageForCart = imageDataUrl;
-    $("resultImg").src = imageDataUrl;          // src بس — مفيش innerHTML لبيانات جاية من بره
+    var resultImg = $("resultImg");
+    resultImg.onload = function(){
+      var w = resultImg.naturalWidth || 4, h = resultImg.naturalHeight || 5;
+      var card = resultImg.closest(".resultCard");
+      if(card){
+        card.style.setProperty("--result-ratio", w + " / " + h);
+        card.style.setProperty("--result-ratio-num", String(w / h));
+      }
+    };
+    resultImg.src = imageDataUrl;          // src بس — مفيش innerHTML لبيانات جاية من بره
     $("dlBtn").href = imageDataUrl;              // نفس الصورة، تحميل مباشر من غير رفع لأي سيرفر
     var acts = PC.resultActions(productId, bandanaPid);
     $("cartBtn").classList.toggle("hidden", !acts.addToCart);
