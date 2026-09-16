@@ -86,13 +86,14 @@
      "بيطير جزء من الصورة". الحل: object-fit:contain (الصورة كاملة
      دايمًا، من غير قص) + خلفية كريمي تملأ أي فراغ جانبي بدل رمادي
      فاجئ. وكبّرت المساحة (44vh → 62vh) لأن الكارت كان صغير أوي. */
+  /* v622 UI-only: let the result card follow the actual cropped image ratio.
+     This removes letterbox/white space without touching AI generation, prompt,
+     grid composition, product colour/pattern or hijab drape. */
   .resultCard{ position:relative; border-radius:22px; overflow:hidden;
     box-shadow:0 10px 30px rgba(33,27,23,.14); background:var(--cream);
-    aspect-ratio: var(--result-ratio, 4 / 5); max-height:62vh;
-    max-width:min(100%, calc(62vh * var(--result-ratio-num, .8)));
-    width:100%; margin:0 auto; transition:max-width .12s ease; }
-  .result{ width:100%; height:100%; }
-  .result img{ width:100%; height:100%; object-fit:contain; display:block; }
+    width:100%; max-width:620px; margin:0 auto; }
+  .result{ width:100%; height:auto; }
+  .result img{ width:100%; height:auto; max-height:62vh; object-fit:contain; display:block; margin:0 auto; }
 
   .dlPill{
     position:absolute; left:12px; bottom:12px; display:flex; align-items:center; gap:6px;
@@ -346,7 +347,7 @@
   var lastResultImageForCart = null;
   var lastGridImage = null;
   var _lastLoadedGridImg = null;
-  var gridCells = PC.computeBandanaGridCells(bandanaColorsRequested);
+  var gridCells = ["none"].concat(bandanaColorsRequested);
 
   function hideBandRow(){
     var row = $("bandRow");
@@ -383,16 +384,7 @@
     if(!dataUrl) return;
     selectedBandColor = label;
     lastResultImageForCart = dataUrl;
-    var resultImg = $("resultImg");
-    resultImg.onload = function(){
-      var w = resultImg.naturalWidth || 4, h = resultImg.naturalHeight || 5;
-      var card = resultImg.closest(".resultCard");
-      if(card){
-        card.style.setProperty("--result-ratio", w + " / " + h);
-        card.style.setProperty("--result-ratio-num", String(w / h));
-      }
-    };
-    resultImg.src = dataUrl;
+    $("resultImg").src = dataUrl;
     $("dlBtn").href = dataUrl;
     $("bandCartBtn").classList.toggle("hidden", !bandCartAllowed || label === "none");
     var row = $("bandRow");
@@ -411,7 +403,7 @@
   function renderBandRow(){
     var row = $("bandRow");
     while(row.firstChild) row.removeChild(row.firstChild);
-    ["none"].concat(bandanaColorsRequested).forEach(function(label){
+    gridCells.forEach(function(label){
       var isNone = label === "none";
       var item = document.createElement("div");
       item.className = "band-item";
@@ -498,7 +490,7 @@
     hideBandRow();
 
     if(gridMode){
-      gridCells = PC.computeBandanaGridCells(bandanaColorsRequested);
+      gridCells = ["none"].concat(bandanaColorsRequested);
       renderBandRow();
       /* نفس الوجه + نفس صورة المنتج + نفس مجموعة الألوان = cache hit فوري.
          صورة المنتج داخلة في المفتاح عشان رسالة/باركود قديم ما يرجعش طرحة قبلها. */
@@ -548,16 +540,7 @@
 
   function succeedPlain(imageDataUrl, fromCache){
     lastResultImageForCart = imageDataUrl;
-    var resultImg = $("resultImg");
-    resultImg.onload = function(){
-      var w = resultImg.naturalWidth || 4, h = resultImg.naturalHeight || 5;
-      var card = resultImg.closest(".resultCard");
-      if(card){
-        card.style.setProperty("--result-ratio", w + " / " + h);
-        card.style.setProperty("--result-ratio-num", String(w / h));
-      }
-    };
-    resultImg.src = imageDataUrl;          // src بس — مفيش innerHTML لبيانات جاية من بره
+    $("resultImg").src = imageDataUrl;          // src بس — مفيش innerHTML لبيانات جاية من بره
     $("dlBtn").href = imageDataUrl;              // نفس الصورة، تحميل مباشر من غير رفع لأي سيرفر
     var acts = PC.resultActions(productId, bandanaPid);
     $("cartBtn").classList.toggle("hidden", !acts.addToCart);

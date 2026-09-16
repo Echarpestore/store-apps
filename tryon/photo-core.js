@@ -98,19 +98,6 @@
   }
 
   /* raw ممكن يكون array جاهزة أو نص JSON من sessionStorage */
-  /* نفس خلايا السيرفر بالضبط: الشبكة المولدة ثابتة 2x2 حتى لو الموظفة
-     اختارت لون أو لونين فقط. الألوان الاحتياطية لا تظهر كأزرار للعميلة؛
-     وجودها فقط يحافظ على هندسة القص الصحيحة وتوليد واحد ثابت. */
-  var BANDANA_FALLBACKS = ["off-white", "black", "beige"];
-  function computeBandanaGridCells(colors) {
-    var asked = parseBandanaColors(colors);
-    var real = asked.slice(0, MAX_BANDANA_COLORS);
-    for (var i = 0; i < BANDANA_FALLBACKS.length && real.length < MAX_BANDANA_COLORS; i++) {
-      if (real.indexOf(BANDANA_FALLBACKS[i]) === -1) real.push(BANDANA_FALLBACKS[i]);
-    }
-    return ["none"].concat(real);
-  }
-
   function parseBandanaColors(raw) {
     var arr = raw;
     if (typeof raw === "string") {
@@ -524,7 +511,6 @@
     cleanColorName: cleanColorName,
     MAX_BANDANA_COLORS: MAX_BANDANA_COLORS,
     parseBandanaColors: parseBandanaColors,
-    computeBandanaGridCells: computeBandanaGridCells,
     readBandanaColors: readBandanaColors,
     readBandanaPid: readBandanaPid,
     isGridMode: isGridMode,
