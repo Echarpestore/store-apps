@@ -236,9 +236,13 @@
     if(!conv()){ box.innerHTML = ''; return; }
     var cur = myName();
     var picked = !!ccSigner();
+    /* 👤 v677: من غير اختيار صريح، الرسالة بتتوقّع باسم الفرع (في تطبيق
+       الحضور) أو "الإدارة" (في Office) — فالمالك بيفتح الشات ومش عارف مين
+       من البنات ردّ. الصف بقى أحمر وبيقول اختار اسمك لحد ما يتحدد. */
     box.innerHTML = '<span class="ccSgLbl">بترد باسم:</span>'
-      + '<button class="ccSgName' + (picked ? ' on' : '') + '" onclick="ccSignerOpen()">'
-      + ccEsc(cur) + ' ▾</button>';
+      + '<button class="ccSgName' + (picked ? ' on' : ' unset') + '" onclick="ccSignerOpen()">'
+      + ccEsc(cur) + ' ▾</button>'
+      + (picked ? '' : '<span class="ccSgWarn">⚠️ اختار اسمك عشان يتسجل مين اللي رد</span>');
   }
   window.ccSignerRender = ccSignerRender;
 
@@ -384,12 +388,14 @@
       + '.ccAuto{align-self:center; background:#20242e; color:#9aa1af; font-size:11.5px;'
       + 'border-radius:99px; padding:4px 13px;}'
       + '#ccSigner{display:flex; align-items:center; gap:7px; overflow-x:auto;'
-      + ' padding:8px 12px 0; background:#1b1e26; font-size:12px;}'
+      + ' padding:8px 12px; background:#1b1e26; font-size:12px; flex:0 0 auto;}'
       + '#ccSigner:empty{display:none;}'
       + '.ccSgLbl{color:#8b93a7; flex:0 0 auto;}'
       + '.ccSgName{background:#2a2f3a; color:#dfe4ee; border:1px solid #3a4152; border-radius:99px;'
       + ' padding:5px 12px; font-size:12px; font-family:inherit; cursor:pointer; flex:0 0 auto;}'
       + '.ccSgName.on{border-color:#c79a38; color:#f0d79a;}'
+      + '.ccSgName.unset{border-color:#c05b5b; color:#ffb4b4; background:#2e2226;}'
+      + '.ccSgWarn{color:#ffb4b4; font-size:11px; flex:1 1 100%; padding-top:3px;}'
       + '.ccSgPick{background:#2a2f3a; color:#dfe4ee; border:1px solid #3a4152; border-radius:99px;'
       + ' padding:5px 12px; font-size:12px; font-family:inherit; cursor:pointer; flex:0 0 auto;}'
       + '.ccSgPick:hover{background:#343b49;}'
@@ -400,7 +406,7 @@
       + ' border-radius:99px; padding:7px 13px; font-size:12px; font-family:inherit; cursor:pointer;'
       + ' white-space:nowrap; max-width:230px; overflow:hidden; text-overflow:ellipsis;}'
       + '.ccQuickChip:hover{background:#343b49;}'
-      + '#ccCompose{flex:0 1 auto; min-height:0; max-height:62vh; overflow-y:auto; overscroll-behavior-y:auto; touch-action:pan-y; -webkit-overflow-scrolling:touch; background:#1b1e26;}'
+      + '/* 🔻 v677: كان flex:0 1 auto يعني مسموح للمؤلف ينكمش — لما الثريد يطول بيتخنق ومبيبانش منه غير شريط: صف بترد باسم بيختفي وزر المتابعة الذكية بيتقص ورا شريط الكتابة. الثريد هو اللي يستحمل النقص لأنه بيعمل scroll أصلًا. */ #ccCompose{flex:0 0 auto; min-height:0; max-height:62vh; overflow-y:auto; overscroll-behavior-y:auto; touch-action:pan-y; -webkit-overflow-scrolling:touch; background:#1b1e26;}'
       + '#ccBar{display:none; flex:0 0 auto; gap:8px; padding:9px 12px; background:#1b1e26;'
       + 'border-top:1px solid #2a2e39; align-items:flex-end;}'
       + '#ccText{flex:1; border:1px solid #2a2e39; border-radius:12px; padding:9px 12px;'
@@ -473,9 +479,11 @@
       + '<div id="ccBandBcInfo" style="font-size:11.5px;color:#888;flex:1 1 100%;"></div></div>'
       + '<button id="ccProductSendBtn" type="button" onclick="ccSend()">➤ إرسال للعميلة</button></div>'
       + ccOutfitPrevHtml()
+      + '</div>'
+      /* 📌 v678: ccSigner وccQuick اتنقلوا برّة ccCompose لأنهم كانوا
+         يتدفنوا جوه الـoverflow لما تُفتح معاينة صورة أو طقم. */
       + '<div id="ccSigner"></div>'
       + ccQuickHtml()
-      + '</div>'
       + '<div id="ccBar">'
       + '<button class="ccIco" onclick="ccPickImage(\'camera\')" title="افتح الكاميرا">📷</button>'
       + '<button class="ccIco" onclick="ccPickImage(\'gallery\')" title="اختار صورة من الجهاز">🖼️</button>'
