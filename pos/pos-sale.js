@@ -2764,6 +2764,11 @@ function resetPaymentUI(_force){
     if(!ok) return;
     if(typeof _logActivity === 'function') _logActivity('card_payments_cleared', { amount: _appr });
   }
+  if(typeof window.financeHasActiveInsta==='function' && window.financeHasActiveInsta()){
+    if(!_force && !(window.financeCancellationPending&&window.financeCancellationPending()) && !confirm('فيه طلب InstaPay مفتوح. مسح المدفوعات هيلغي جلسة العرض، لكنه مش بيرجع أي تحويل بنكي. تكمّل؟'))return;
+    if(typeof window.financeCancelPending==='function')
+      window.financeCancelPending().catch(e=>showToast('تعذر إلغاء جلسة InstaPay: '+e.message,'err'));
+  }
   selectedPayMethods = new Set();
   paymentAmounts = {};
   cardLegs = []; window.cardLegs = cardLegs;
@@ -3095,6 +3100,9 @@ function confirmPayAmount(){
   const remaining = Math.max(0, +(requiredAbs - alreadyAbs).toFixed(2));
   if(method==='credit_return' && (total>=0 || Math.abs(val-requiredAbs)>.005 || Object.entries(paymentAmounts).some(([key,v])=>key!=='credit_return'&&Math.abs(Number(v)||0)>.005))){showToast('رصيد المرتجع طريقة واحدة وبقيمة المرتجع بالكامل','err');return;}
   if(method!=='credit_return' && Math.abs(Number(paymentAmounts.credit_return)||0)>.005){showToast('امسحي رصيد المرتجع الأول؛ ممنوع تقسيم الاسترداد','err');return;}
+  if(method==='instapay' && (total<=0 || Math.abs(val-total)>.005 || Object.entries(paymentAmounts).some(([k,v])=>k!=='instapay'&&Math.abs(Number(v)||0)>.005))){showToast('InstaPay يلزم قيمة الفاتورة بالكامل، بدون تقسيم دفع','err');return;}
+  if(method==='instapay' && window.financeCanUseInstaAmount && !window.financeCanUseInstaAmount(val,total)){showToast('الطلب القديم ما زال مفتوحًا؛ امسح المدفوعات لإلغائه أولًا','err');return;}
+  if(method!=='instapay' && Number(paymentAmounts.instapay)>0){showToast('ألغي طلب InstaPay الأول قبل تغيير طريقة الدفع','err');return;}
   let sentToTerminal = false;
   if(isCard){
     // 💳 سقف صارم: الكارت مفيهوش فكة — لو سحبنا أكتر من الفاتورة هيطلع أوفر في التقفيل
@@ -3120,6 +3128,9 @@ function confirmPayAmount(){
   pendingPayMethod = null;
   pendingCardSeq = 0;
   updatePaySummary();
+  // Send when cashier confirms amount, never when the invoice is prematurely saved.
+  if(method==='instapay' && typeof window.financeStartInstaOnAmountOK==='function')
+    window.financeStartInstaOnAmountOK(val,total);
   // 📟 فيزا في بيع عادي → المبلغ يروح لماكينة Paymob تلقائيًا (لو الربط متفعّل)
   if(isCard && val > 0 && total > 0){ sentToTerminal = true; sendToPaymobTerminal(val, seq); }
   // ⚡ دفع مقسّم (فيزا + كاش): الماكينة أكدت الأول والكاشير كمّل الباقي دلوقتي —

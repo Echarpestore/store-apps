@@ -606,6 +606,7 @@ $('#branchSaveBtn').addEventListener('click', async ()=>{
   if(!val || val === '__new__'){ alert('اختار الفرع الأول'); return; }
   currentBranch = val;
   localStorage.setItem('feedback_branch', val);
+  window.dispatchEvent(new Event('echarpe:branch-changed'));
   capStartListener();   // 📱 أول ما الفرع يتحدد، استماع طلبات تسجيل الرقم
   refreshBranchUI();
   applyBranchFilter();
@@ -633,6 +634,7 @@ $('#changeBranchBtn').addEventListener('click', ()=>{
   $('#branchSetup').classList.add('show');
 });
 refreshBranchUI();
+window.financeFeedbackBranch=()=>currentBranch;
 
 function applyBranchFilter(){
   // Dashboard branch selector now controls what's reviewed — this keeps
@@ -1311,6 +1313,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
-<script type="module" src="finance-tablet.js?v=22"></script>
+<script type="module" src="finance-tablet.js?v=682"></script>
 </body>
 </html>

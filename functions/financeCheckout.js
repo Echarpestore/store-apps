@@ -2,12 +2,13 @@
 // ECHARPE finance checkout — server authority. Never infer bank settlement from a photo.
 const crypto = require('crypto');
 const {validateCreditSale,validateBase} = require('./financeIntegrity');
-const admin = require('firebase-admin');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const {onCall, HttpsError} = require('firebase-functions/v2/https');
 const {defineSecret} = require('firebase-functions/params');
 const OWNER_EMAIL = defineSecret('OWNER_EMAIL');
 const CREDIT_PIN_PEPPER = defineSecret('CREDIT_PIN_PEPPER');
-const db = () => admin.firestore();
+const db = () => getFirestore();
 const REGION = 'us-central1';
 const MONEY = n => {const v=Number(n); if(!Number.isFinite(v)) throw new HttpsError('invalid-argument','المبلغ غير صالح'); return Math.round(v*100);};
 const phoneOf = p => {const x=String(p||'').replace(/\D/g,''); if(!/^01\d{9}$/.test(x)) throw new HttpsError('invalid-argument','رقم العميل غير صحيح'); return x;};
@@ -55,7 +56,7 @@ async function startSession(req,kind,args){
 exports.financePairTablet=callable(async req=>{
   const who=await staff(req,true), uid=String(req.data?.uid||'').trim(),branch=branchOf(req.data?.branch);
   if(!/^[\w-]{15,160}$/.test(uid))fail('invalid-argument','معرف التابلت غير صالح');
-  const u=await admin.auth().getUser(uid).catch(()=>null);
+  const u=await getAuth().getUser(uid).catch(()=>null);
   if(!u || u.email || u.phoneNumber || u.providerData.length)fail('failed-precondition','المعرف لا يخص جهازًا بحساب مجهول');
   await db().runTransaction(async tx=>{
     const b=db().collection('finance_tablet_branches').doc(branch),t=db().collection('finance_tablets').doc(uid);
@@ -65,6 +66,91 @@ exports.financePairTablet=callable(async req=>{
     tx.set(b,{uid,branch,pairedAt:stamp(),by:who.uid});tx.set(t,{branch,active:true,pairedAt:stamp(),by:who.uid},{merge:true});
   });return {ok:true,branch};
 });
+// Secure branch discovery: tablet claims its chosen branch; owner approves one time.
+// No anonymous device can bind itself or replace an existing branch device.
+const pairingRef = uid => db().collection('finance_tablet_pair_requests').doc(uid);
+const pairingCode = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+const pairingTTL = 5 * 60 * 1000;
+exports.financeTabletPairStatus = callable(async req => {
+  const uid=needTablet(req),branch=branchOf(req.data?.branch);
+  const [device,request,assigned]=await Promise.all([
+    db().collection('finance_tablets').doc(uid).get(), pairingRef(uid).get(),
+    db().collection('finance_tablet_branches').doc(branch).get()
+  ]);
+  if(device.exists && device.data().active){
+    return device.data().branch===branch && assigned.data()?.uid===uid
+      ?{status:'paired',branch}:{status:'other-branch'};
+  }
+  const r=request.data();
+  if(r && r.status==='pending' && r.branch===branch && r.expiresAt>stamp())
+    return {status:'pending',branch,code:r.code,expiresAt:r.expiresAt};
+  return {status:'unpaired'};
+});
+exports.financeTabletRequestPair = callable(async req => {
+  const uid=needTablet(req),branch=branchOf(req.data?.branch),now=stamp(),ref=pairingRef(uid);
+  return db().runTransaction(async tx=>{
+    const deviceRef=db().collection('finance_tablets').doc(uid);
+    const branchRef=db().collection('finance_tablet_branches').doc(branch);
+    const [device,assigned,existing]=await Promise.all([tx.get(deviceRef),tx.get(branchRef),tx.get(ref)]);
+    if(device.exists && device.data().active){
+      if(device.data().branch!==branch)fail('failed-precondition','الجهاز معتمد لفرع مختلف؛ اطلب تغيير الفرع من المالك');
+      return {status:'paired',branch};
+    }
+    const r=existing.data();
+    if(r && r.status==='pending' && r.branch===branch && r.expiresAt>now)
+      return {status:'pending',branch,code:r.code,expiresAt:r.expiresAt};
+    if(r && r.createdAt>now-15000)fail('resource-exhausted','انتظر لحظة قبل طلب كود جديد');
+    const code=pairingCode(),expiresAt=now+pairingTTL;
+    tx.set(ref,{uid,branch,code,createdAt:now,expiresAt,status:'pending'});
+    return {status:'pending',branch,code,expiresAt};
+  });
+});
+exports.financeOwnerPairRequests = callable(async req => {
+  await staff(req,true);
+  const branch=branchOf(req.data?.branch),now=stamp();
+  const [rows,assigned]=await Promise.all([
+    db().collection('finance_tablet_pair_requests').where('branch','==',branch).limit(50).get(),
+    db().collection('finance_tablet_branches').doc(branch).get()
+  ]);
+  return {branch,rows:rows.docs.filter(d=>d.data().status==='pending' && d.data().expiresAt>now)
+    .map(d=>({requestId:d.id,code:d.data().code,expiresAt:d.data().expiresAt,
+      replacesExisting:!!(assigned.data()?.uid && assigned.data().uid!==d.id)}))};
+});
+exports.financeOwnerApprovePair = callable(async req => {
+  const who=await staff(req,true),branch=branchOf(req.data?.branch);
+  const uid=String(req.data?.requestId||''),code=String(req.data?.code||'');
+  if(!/^[\w-]{15,160}$/.test(uid)||!/^\d{6}$/.test(code))
+    fail('invalid-argument','طلب أو رمز اعتماد غير صالح');
+  const user=await getAuth().getUser(uid).catch(()=>null);
+  if(!user || user.email || user.phoneNumber || user.providerData.length)
+    fail('failed-precondition','الطلب لا يخص حساب تابلت مجهول');
+  return db().runTransaction(async tx=>{
+    const r=pairingRef(uid),b=db().collection('finance_tablet_branches').doc(branch),t=db().collection('finance_tablets').doc(uid);
+    const [request,assigned,device]=await Promise.all([tx.get(r),tx.get(b),tx.get(t)]);
+    const v=request.data();
+    if(!v||v.status!=='pending'||v.branch!==branch||v.code!==code||v.expiresAt<=stamp())
+      fail('failed-precondition','الرمز منتهي أو لا يطابق طلب التابلت');
+    const previousUid=assigned.data()?.uid && assigned.data().uid!==uid ? assigned.data().uid : null;
+    if(previousUid && req.data?.replaceExisting!==true)
+      fail('failed-precondition','الفرع مرتبط بجهاز سابق؛ المالك لازم يوافق صراحة على الاستبدال');
+    const previousRef=previousUid?db().collection('finance_tablets').doc(previousUid):null;
+    const previous=previousRef?await tx.get(previousRef):null;
+    if(previous?.data()?.activeSession)
+      fail('failed-precondition','الجهاز القديم عليه جلسة مالية؛ لازم إلغاؤها أو تسويتها قبل الاستبدال');
+    if(device.exists&&device.data().active&&device.data().branch!==branch)
+      fail('failed-precondition','الجهاز مربوط بفرع آخر');
+    if(previousRef){
+      tx.set(previousRef,{active:false,unpairedAt:stamp(),unpairedBy:who.uid},{merge:true});
+      tx.create(db().collection('finance_pair_audit').doc(),
+        {branch,previousUid,newUid:uid,by:who.uid,at:stamp(),action:'owner_device_replacement'});
+    }
+    tx.set(b,{uid,branch,pairedAt:stamp(),by:who.uid});
+    tx.set(t,{branch,active:true,pairedAt:stamp(),by:who.uid},{merge:true});
+    tx.update(r,{status:'approved',code:null,approvedAt:stamp(),by:who.uid});
+    return {ok:true,branch};
+  });
+});
+
 // Owner verifies identity OFFLINE by an approved documented procedure BEFORE this call.
 exports.creditPinSetupStart=callable(async req=>{
   const who=await staff(req,true),phone=phoneOf(req.data?.phone),branch=branchOf(req.data?.branch);
@@ -141,7 +227,7 @@ exports.creditFinalizeSale=callable(async req=>{
     try { validateCreditSale(sale,s); }catch(e){fail('failed-precondition',e.message);}
     const before=MONEY(customer.data()?.credit||0);if(before<s.amountCents)fail('failed-precondition','رصيد العميل غير كافٍ');
     const after=(before-s.amountCents)/100, now=stamp();
-    const immutable={...sale,creditCheckoutSession:sid,creditApplied:s.amountCents/100,creditApprovalAt:s.approvedAt,createdAt:admin.firestore.FieldValue.serverTimestamp()};
+    const immutable={...sale,creditCheckoutSession:sid,creditApplied:s.amountCents/100,creditApprovalAt:s.approvedAt,createdAt:FieldValue.serverTimestamp()};
     tx.create(invoiceKey,{invoiceCode:code,sessionId:sid,kind:'credit',invoiceId:inv.id,createdAt:now});
     tx.create(inv,immutable);
     tx.set(cust,{credit:after,creditAt:now},{merge:true});
@@ -224,7 +310,7 @@ exports.creditReturnFinalizeSale=callable(async req=>{
     const paymentMethods=orig.payments||{};
     const visaRefs=(orig.cardTxns||[orig.cardTxn].filter(Boolean)).map(x=>String(x.ref||x.txn?.ref||x.txn?.transactionId||'')).filter(Boolean).slice(0,2);
     tx.create(invoiceKey,{invoiceCode:code,sessionId:null,kind:'credit_return',invoiceId:inv.id,createdAt:now});
-    tx.create(inv,{...sale,creditReturn:{receiptRef,originalInvoice:source,amount:amount/100},creditReturnPointsDeduct:pointsDeduct,createdAt:admin.firestore.FieldValue.serverTimestamp()});
+    tx.create(inv,{...sale,creditReturn:{receiptRef,originalInvoice:source,amount:amount/100},creditReturnPointsDeduct:pointsDeduct,createdAt:FieldValue.serverTimestamp()});
     tx.update(original.ref,{returnedQty:returned,refundedValue:(refundedBefore+amount)/100,pointsRefunded:alreadyPts+pointsDeduct});
     tx.update(cust,{credit:after,creditAt:now});
     tx.create(ledger,{phone,amount:amount/100,balanceAfter:after,type:'return_credit',source:'verified_return',originalInvoice:source,

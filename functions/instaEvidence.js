@@ -2,12 +2,13 @@
 // InstaPay evidence != bank confirmation. All accepted sales await reconciliation.
 const crypto = require('crypto');
 const {validateInstaSale}=require('./financeIntegrity');
-const admin = require('firebase-admin');
+const {getFirestore,FieldValue}=require('firebase-admin/firestore');
+const {getStorage}=require('firebase-admin/storage');
 const {onCall,HttpsError}=require('firebase-functions/v2/https');
 const {defineSecret}=require('firebase-functions/params');
 const {GoogleAuth}=require('google-auth-library');
 const OWNER_EMAIL=defineSecret('OWNER_EMAIL');
-const db=()=>admin.firestore();
+const db=()=>getFirestore();
 const err=(c,m)=>{throw new HttpsError(c,m);};
 const fn=f=>onCall({region:'us-central1',secrets:[OWNER_EMAIL],timeoutSeconds:60,memory:'512MiB'},f);
 const cents=v=>{const n=Number(v);if(!Number.isFinite(n))err('invalid-argument','مبلغ غير صالح');return Math.round(n*100);};
@@ -48,7 +49,7 @@ exports.instaTabletDetails=fn(async req=>{const tab=await kiosk(req),sid=tab.act
 exports.instaSubmitPhoto=fn(async req=>{
  const tab=await kiosk(req),sid=String(req.data?.sessionId||''),snap=await session(sid).get();if(!snap.exists||snap.data().tabletUid!==tab.uid||tab.activeSession!==sid||snap.data().kind!=='instapay'||Date.now()>snap.data().expiresAt||!['pending','captured'].includes(snap.data().status))err('failed-precondition','جلسة التصوير غير صالحة');
  const raw=String(req.data?.jpeg||''),m=/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(raw);if(!m||raw.length>1100000)err('invalid-argument','الصورة لازم JPEG كاملة وأقل من 800 كيلوبايت');const bytes=Buffer.from(m[1],'base64');if(bytes.length<15000||bytes.length>800000||bytes[0]!==0xff||bytes[1]!==0xd8)err('invalid-argument','صورة غير صحيحة');
- const path='finance-evidence/'+sid+'/'+crypto.randomBytes(12).toString('hex')+'.jpg';await admin.storage().bucket().file(path).save(bytes,{resumable:false,contentType:'image/jpeg',metadata:{cacheControl:'private, no-store'}});
+ const path='finance-evidence/'+sid+'/'+crypto.randomBytes(12).toString('hex')+'.jpg';await getStorage().bucket().file(path).save(bytes,{resumable:false,contentType:'image/jpeg',metadata:{cacheControl:'private, no-store'}});
  await db().runTransaction(async tx=>{const latest=await tx.get(session(sid));
  if(!latest.exists||latest.data().tabletUid!==tab.uid||latest.data().status!=='pending'||Date.now()>latest.data().expiresAt)err('failed-precondition','جلسة التصوير اتغيرت؛ امنع التصوير المتوازي');
  tx.update(session(sid),{photoPath:path,photoAt:Date.now(),status:'reading'});
@@ -60,7 +61,7 @@ exports.instaSubmitPhoto=fn(async req=>{
  if(!checked.ok)return {status:'manual_review',checks:checked.checks,ocrError:visionError};
  const done=await acceptEvidence(sid,checked.reference,{uid:'automatic'},'auto',{checks:checked.checks,amountCents:checked.amountCents});return {status:done.ok?'approved':'manual_review',checks:checked.checks};
 });
-exports.instaGetEvidence=fn(async req=>{const who=await staff(req),doc=await session(req.data?.sessionId).get();if(!doc.exists||doc.data().kind!=='instapay'||doc.data().staffUid!==who.uid||!doc.data().photoPath)err('permission-denied','الصورة غير متاحة');const [bytes]=await admin.storage().bucket().file(doc.data().photoPath).download();if(bytes.length>800000)err('failed-precondition','الصورة كبيرة');return {jpeg:'data:image/jpeg;base64,'+bytes.toString('base64')};});
+exports.instaGetEvidence=fn(async req=>{const who=await staff(req),doc=await session(req.data?.sessionId).get();if(!doc.exists||doc.data().kind!=='instapay'||doc.data().staffUid!==who.uid||!doc.data().photoPath)err('permission-denied','الصورة غير متاحة');const [bytes]=await getStorage().bucket().file(doc.data().photoPath).download();if(bytes.length>800000)err('failed-precondition','الصورة كبيرة');return {jpeg:'data:image/jpeg;base64,'+bytes.toString('base64')};});
 exports.instaManualApprove=fn(async req=>{const who=await staff(req),sid=String(req.data?.sessionId||''),doc=await session(sid).get();if(!doc.exists||doc.data().staffUid!==who.uid||doc.data().kind!=='instapay'||!doc.data().photoPath)err('failed-precondition','لا يوجد إيصال مصور مرتبط بالموظف');const s=doc.data(),reference=String(req.data?.reference||'').trim(),actual=cents(req.data?.amount),reason=String(req.data?.reason||'').trim();if(!/^\d{10,24}$/.test(reference)||reason.length<12)err('invalid-argument','مطلوب رقم مرجعي واضح وسبب مكتوب');if(actual!==s.amountCents)err('failed-precondition','المبلغ غير مطابق؛ لا يمكن إغلاق الفاتورة مدفوعة بالكامل بدون تسوية الفرق');return acceptEvidence(sid,reference,who,'manual',{amountCents:actual,reason,manualAt:Date.now(),declaredBeneficiary:clean(req.data?.beneficiary)});});
 exports.instaStatus=fn(async req=>{const who=await staff(req),doc=await session(req.data?.sessionId).get();if(!doc.exists||doc.data().staffUid!==who.uid||doc.data().kind!=='instapay')err('permission-denied','جلسة غير مصرح بها');const s=doc.data();return {status:s.status,reference:s.reference||null,mode:s.mode||null,ocr:s.ocr?{checks:s.ocr.checks,error:s.ocr.error}:null,photoAvailable:!!s.photoPath,expiresAt:s.expiresAt,invoiceCode:s.invoiceCode||null};});
 exports.instaFinalizeSale=fn(async req=>{const who=await staff(req),sid=String(req.data?.sessionId||''),sale=req.data?.sale;if(!sale||!sale.invoiceCode)err('invalid-argument','الفاتورة ناقصة');const sr=session(sid),inv=db().collection('pos_test_sales').doc('INSTA_'+sid);
@@ -70,7 +71,7 @@ exports.instaFinalizeSale=fn(async req=>{const who=await staff(req),sid=String(r
  const rr=await tx.get(ref),key=await tx.get(invoiceKey);if(!rr.exists||rr.data().sessionId!==sid||rr.data().status!=='reserved')err('failed-precondition','المرجع غير محجوز للعملية');
  if(key.exists)err('already-exists','رقم الفاتورة سبق استخدامه في عملية مالية أخرى');
  tx.create(invoiceKey,{invoiceCode:sale.invoiceCode,sessionId:sid,kind:'instapay',invoiceId:inv.id,createdAt:Date.now()});
- tx.create(inv,{...sale,instapayEvidence:{sessionId:sid,reference:s.reference,mode:s.mode,bankStatus:'PENDING_BANK_RECONCILIATION'},createdAt:admin.firestore.FieldValue.serverTimestamp()});tx.update(ref,{status:'invoiced',invoiceCode:sale.invoiceCode,invoiceId:inv.id});tx.update(sr,{status:'finished',invoiceCode:sale.invoiceCode,completedAt:Date.now()});tx.set(db().collection('finance_tablets').doc(s.tabletUid),{activeSession:null},{merge:true});return {ok:true,repeat:false,saleId:inv.id};});});
+ tx.create(inv,{...sale,instapayEvidence:{sessionId:sid,reference:s.reference,mode:s.mode,bankStatus:'PENDING_BANK_RECONCILIATION'},createdAt:FieldValue.serverTimestamp()});tx.update(ref,{status:'invoiced',invoiceCode:sale.invoiceCode,invoiceId:inv.id});tx.update(sr,{status:'finished',invoiceCode:sale.invoiceCode,completedAt:Date.now()});tx.set(db().collection('finance_tablets').doc(s.tabletUid),{activeSession:null},{merge:true});return {ok:true,repeat:false,saleId:inv.id};});});
 exports.instaReconcile=fn(async req=>{const who=await staff(req,true),sid=String(req.data?.sessionId||''),status=String(req.data?.status||'');if(!['BANK_CONFIRMED','BANK_MISSING','AMOUNT_MISMATCH'].includes(status))err('invalid-argument','حالة غير صالحة');const note=String(req.data?.note||'').trim();if(note.length<8)err('invalid-argument','التعليق مطلوب');const sr=session(sid),inv=db().collection('pos_test_sales').doc('INSTA_'+sid);await db().runTransaction(async tx=>{const ss=await tx.get(sr),invoice=await tx.get(inv);if(!ss.exists||!invoice.exists||ss.data().kind!=='instapay'||ss.data().status!=='finished')err('failed-precondition','التحويل غير موجود أو الفاتورة لم تحفظ');if(ss.data().bankStatus==='BANK_CONFIRMED'&&status!=='BANK_CONFIRMED')err('failed-precondition','عملية مؤكدة بنكيًا تحتاج تسوية مستقلة');tx.update(sr,{bankStatus:status,bankNote:note,bankReviewedBy:who.uid,bankReviewedAt:Date.now()});
  tx.update(inv,{'instapayEvidence.bankStatus':status,'instapayEvidence.bankReviewedAt':Date.now(),'instapayEvidence.bankReviewedBy':who.uid});tx.create(db().collection('instapay_reconciliation_log').doc(),{sessionId:sid,reference:ss.data().reference,invoiceCode:ss.data().invoiceCode,status,note,by:who.uid,at:Date.now()});});return {ok:true};});
 
@@ -87,7 +88,7 @@ exports.instaOwnerList=fn(async req=>{
 exports.instaOwnerEvidence=fn(async req=>{
  await staff(req,true);const d=await session(req.data?.sessionId).get();
  if(!d.exists||d.data().kind!=='instapay'||!d.data().photoPath)err('not-found','الصورة غير موجودة');
- const [buf]=await admin.storage().bucket().file(d.data().photoPath).download();
+ const [buf]=await getStorage().bucket().file(d.data().photoPath).download();
  if(buf.length>800000)err('failed-precondition','صورة أكبر من الحد');
  return {jpeg:'data:image/jpeg;base64,'+buf.toString('base64')};
 });

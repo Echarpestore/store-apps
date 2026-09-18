@@ -982,6 +982,33 @@ body.on-dashboard .badge-test{ display:block; }
 #reportsScreen{background:#f6f7fb}.rep-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:2px 0 14px}.rep-kpi{background:#fff;border:1px solid #e7e9ef;border-radius:16px;padding:14px;box-shadow:0 3px 14px rgba(20,25,40,.04)}.rep-kpi span{display:block;color:#6b7280;font-size:11px;font-weight:700}.rep-kpi b{display:inline-block;font-size:22px;line-height:1.25;margin-top:4px;color:#111827}.rep-kpi small{font-size:10px;color:#9ca3af;margin-right:4px}.rep-kpi.primary{background:#111827;border-color:#111827}.rep-kpi.primary span,.rep-kpi.primary b,.rep-kpi.primary small{color:#fff}.rep-section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}.rep-section-title h2{margin:0;font-size:17px}.rep-section-title p{margin:3px 0 0;color:#6b7280;font-size:11px}.rep-invoice-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 2px;border-bottom:1px solid #eceef2}.rep-invoice-row:last-child{border-bottom:0}.rep-invoice-main,.rep-invoice-side{display:flex;flex-direction:column;gap:2px}.rep-invoice-main b{font-size:14px}.rep-invoice-main span,.rep-invoice-side span{font-size:10.5px;color:#6b7280}.rep-invoice-side{text-align:left;flex-shrink:0}.rep-invoice-side b{font-size:14px;color:#059669}.rep-empty{text-align:center;color:#9ca3af;padding:28px}.rep-range-btn,.rep-type-btn{transition:.15s ease}.rep-type-btn{border-radius:999px!important;padding:9px 13px!important;font-size:12px!important}.rep-range-btn{border-radius:999px!important}.rep-card{border-radius:18px!important;box-shadow:0 4px 18px rgba(20,25,40,.04)}
 @media(max-width:650px){.rep-kpis{grid-template-columns:1fr 1fr}.rep-kpi{padding:12px}.rep-kpi b{font-size:19px}#reportsScreen .dash-header{gap:7px;flex-wrap:wrap}#reportsScreen .dash-header .logout-btn{font-size:11px;padding:8px 10px}.rep-invoice-row{align-items:flex-start}}
 
+
+/* v682 payment: clear contrast regardless of active management theme. */
+.qbx-pay-btns button#pmCreditReturn{
+  background:linear-gradient(160deg,#0e766a,#075b52)!important;color:#fff!important;
+  border:1px solid #075b52!important;text-shadow:0 1px 1px #073e3866!important;
+}
+.qbx-pay-btns button#pmCreditReturn .pm-icon{color:#fff!important;}
+.finOwnerPanel[hidden]{display:none!important;}
+.finOwnerPanel{background:linear-gradient(140deg,#fff,#f2f7f4)!important;border:1px solid #d8e3dc!important;
+  border-radius:22px!important;padding:22px!important;max-width:760px;box-shadow:0 14px 40px #102b2010!important;}
+.finOwnerPanel .finOwnerEyebrow{font:700 10px 'Space Grotesk',Arial,sans-serif;letter-spacing:.21em;color:#167356;margin-bottom:8px;}
+.finOwnerPanel .finOwnerHint{color:#64746d;font-size:12px;line-height:1.8;margin:8px 0;}
+.finOwnerPanel .finOwnerActions{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0;}
+.finOwnerPanel .finOwnerActions button,.finOwnerPanel .finApproveBtn{
+  background:#173e35!important;border:1px solid #173e35!important;color:#fff!important;
+  border-radius:12px;padding:12px 16px;min-height:46px;font:800 12px Cairo,sans-serif;cursor:pointer;
+  transition:transform .18s ease,box-shadow .18s ease;}
+.finOwnerPanel button:hover{transform:translateY(-2px);box-shadow:0 6px 16px #163a2c24;}
+.finOwnerPanel .finPairRequest{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+ gap:12px;padding:14px;background:white;border:1px solid #dce8e0;border-radius:14px;margin:10px 0;}
+.finOwnerPanel .finPairCode{font:800 25px 'Space Grotesk',Arial,sans-serif;letter-spacing:.18em;color:#183c34;direction:ltr;}
+#finInstaStatus{margin-top:7px;min-height:0;font:700 12px Cairo,sans-serif;line-height:1.55;}
+#finInstaStatus:not(:empty){padding:8px 11px;border-radius:12px;background:#eef7f3;color:#145a43;border:1px solid #b9ddce;animation:finStatusEnter .24s ease-out;}
+#finInstaStatus[data-state="error"]{background:#fff2f0;color:#9e3030;border-color:#f3c4be;}
+#finInstaStatus[data-state="pending"]{background:#f1f3ff;color:#3d4084;border-color:#d3d9f7;}
+@keyframes finStatusEnter{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.finOwnerPanel button,#finInstaStatus{animation:none!important;transition:none!important}}
 </style>
 <script src="jsbarcode.min.js" onerror="(function(){var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/JsBarcode/3.11.5/JsBarcode.all.min.js'; document.head.appendChild(s);})()"></script>
 <style>
@@ -1756,6 +1783,18 @@ body.on-dashboard .badge-test{ display:block; }
     <button class="logout-btn" onclick="goToDashboard()">◀ رجوع</button>
   </div>
   <div style="flex:1; overflow-y:auto; padding:0 4px;">
+    <section class="finOwnerPanel panel" aria-label="الإعدادات المالية للمالك">
+      <div class="finOwnerEyebrow">ECHARPE · FINANCE CONTROL</div>
+      <h3>إعدادات الدفع والأجهزة</h3>
+      <p class="finOwnerHint">المالك يعتمد التابلت مرة واحدة برمز يظهر على شاشة الجهاز. اختيار الفرع وحده لا يمنح صلاحية استقبال مدفوعات.</p>
+      <div class="finOwnerActions">
+        <button type="button" onclick="financeShowPairRequests()">عرض طلبات تابلت الفرع</button>
+        <button type="button" onclick="financeInstaConfigure()">بيانات مستفيد InstaPay</button>
+        <button type="button" onclick="financePinSetup()">تفعيل أو استرجاع PIN</button>
+      </div>
+      <div id="finOwnerPairRequests" aria-live="polite"></div>
+      <p class="finOwnerHint">اعتماد الأجهزة وحساب المستفيد وPIN يتم التحقق منهم على السيرفر بحساب المالك فقط.</p>
+    </section>
     <h3 style="margin:8px 0;">تخصيص صلاحيات كل دور</h3>
     <div class="panel" style="margin-bottom:14px;">
       <h3>🔢 أكواد البياعات</h3>
@@ -1959,15 +1998,6 @@ body.on-dashboard .badge-test{ display:block; }
           <button onclick="resetLoyaltyPin()">🔑 مسح الرقم السري للعميل</button>
           <span>لو العميل نسي رقمه السري في التطبيق</span>
         </div>
-        <details class="financeOwnerTools" style="margin-top:8px;padding:8px;border:1px solid #d6d2c9;border-radius:12px;background:#fcfaf7">
-          <summary style="cursor:pointer;font-size:12px;font-weight:800;color:#76684d">🔐 إعدادات المالك · نظام الرصيد وInstaPay</summary>
-          <div style="display:flex;gap:7px;flex-wrap:wrap;padding-top:9px">
-            <button type="button" onclick="financePairTablet()" style="border-radius:11px">ربط تابلت الفرع</button>
-            <button type="button" onclick="financePinSetup()" style="border-radius:11px">تفعيل / استرجاع PIN للعميلة</button>
-            <button type="button" onclick="financeInstaConfigure()" style="border-radius:11px">بيانات مستفيد InstaPay</button>
-          </div>
-          <small style="color:#847d73">الأزرار لا تعمل إلا بحساب المالك. إثبات الهوية يدوي وموثّق. لا يُطلب OTP حاليًا.</small>
-        </details>
       </div>
       <div class="qbx-itemops">
         <button data-uid="io_qtyplus" onclick="qbxQty(1)">➕<br>كمية</button>
@@ -1983,6 +2013,7 @@ body.on-dashboard .badge-test{ display:block; }
       <div class="qbx-pay">
         <div class="qbx-pay-title">المدفوعات</div>
         <div id="qbxPayList"></div>
+        <div id="finInstaStatus" role="status" aria-live="polite"></div>
         <div class="qbx-pay-btns">
           <button id="pmCash" onclick="togglePayMethod('cash')"><span class="pm-icon">💵</span>كاش</button>
           <button id="pmVisa" onclick="togglePayMethod('visa')"><span class="pm-icon">💳</span>فيزا 1</button>
@@ -2133,7 +2164,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="cctv-staff-state.js?v=644"></script>
 <script src="cctv-timeline.js?v=555"></script>
 <script src="cctv-invoice.js?v=604"></script>
-<script src="pos-sale.js?v=680"></script>
+<script src="pos-sale.js?v=682"></script>
 <script src="pos-live.js?v=411"></script>
 <script src="app.js"></script>
 <script src="products.js?v=537"></script>
@@ -2161,7 +2192,7 @@ body.on-dashboard .badge-test{ display:block; }
 <!-- 💳 منظومة الرصيد وكروت الهدايا -->
 <script src="credit-core.js"></script>
 <script src="credit-ui.js"></script>
-<script src="finance-pos.js?v=679"></script>
+<script src="finance-pos.js?v=682"></script>
 <div id="financeManagement" style="display:none"></div>
 <!-- 🧠 شريط الفرصة -->
 <script src="opportunity-core.js"></script>

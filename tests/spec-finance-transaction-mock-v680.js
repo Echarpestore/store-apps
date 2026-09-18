@@ -28,6 +28,9 @@ admin.firestore.FieldValue={serverTimestamp:()=>0};
 const original=Module._load;
 Module._load=function(name,parent,isMain){
  if(name==='firebase-admin')return admin;
+ if(name==='firebase-admin/firestore')return {getFirestore:()=>db,FieldValue:{serverTimestamp:()=>0}};
+ if(name==='firebase-admin/auth')return {getAuth:()=>({getUser:async uid=>({uid,email:null,phoneNumber:null,providerData:[]})})};
+ if(name==='firebase-admin/storage')return {getStorage:()=>({bucket:()=>({file:()=>({})})})};
  if(name==='firebase-functions/v2/https')return {onCall:(_opts,handler)=>handler,HttpsError:E};
  if(name==='firebase-functions/params')return {defineSecret:name=>({value:()=>name==='OWNER_EMAIL'?'owner@example.test':'privatepepper'})};
  if(name==='google-auth-library')return {GoogleAuth:class{}};
@@ -119,6 +122,51 @@ async function check(name,fn){await fn();passed++;console.log('  ✓ '+name);}
  await check('manual InstaPay underpayment cannot approve',async()=>{
   const sid='1'.repeat(36);put('finance_sessions/'+sid,{kind:'instapay',staffUid:'owner-uid',tabletUid:'tablet-uid',branch:'madinaty',status:'captured',photoPath:'private/test.jpg',amountCents:85000,expiresAt:Date.now()+180000});
   await assert.rejects(()=>insta.instaManualApprove({...owner,data:{sessionId:sid,reference:'462046147041',amount:800,reason:'مراجعة كاملة وإثبات الفرق'}}));
+ });
+ const fresh={auth:{uid:'tablet-branch-new',token:{firebase:{sign_in_provider:'anonymous'}}},data:{branch:'rehab'}};
+ await check('branch alone cannot authorize anonymous payment device',async()=>{
+   const result=await finance.financeTabletRequestPair(fresh);
+   assert.equal(result.status,'pending');assert(/^\d{6}$/.test(result.code));
+   assert.equal((await finance.financeTabletPairStatus(fresh)).status,'pending');
+   assert(!store.has('finance_tablet_branches/rehab'));
+   await assert.rejects(()=>finance.financeTabletPoll({...fresh,data:{}}),e=>e.code==='permission-denied');
+ });
+ await check('unapproved caller cannot approve tablet',async()=>{
+   const request=store.get('finance_tablet_pair_requests/tablet-branch-new');
+   await assert.rejects(()=>finance.financeOwnerApprovePair({...fresh,data:{requestId:fresh.auth.uid,branch:'rehab',code:request.code}}),e=>e.code==='permission-denied');
+   assert(!store.has('finance_tablet_branches/rehab'));
+ });
+ await check('owner must verify exact unexpired device code',async()=>{
+   const request=store.get('finance_tablet_pair_requests/tablet-branch-new');
+   const wrong=request.code==='000000'?'000001':'000000';
+   await assert.rejects(()=>finance.financeOwnerApprovePair({...owner,data:{requestId:fresh.auth.uid,branch:'rehab',code:wrong}}),e=>e.code==='failed-precondition');
+   assert(!store.has('finance_tablet_branches/rehab'));
+ });
+ await check('matching owner approval pairs device permanently',async()=>{
+   const request=store.get('finance_tablet_pair_requests/tablet-branch-new');
+   const result=await finance.financeOwnerApprovePair({...owner,data:{requestId:fresh.auth.uid,branch:'rehab',code:request.code}});
+   assert.equal(result.ok,true);
+   assert.equal(store.get('finance_tablet_branches/rehab').uid,fresh.auth.uid);
+   assert.equal(store.get('finance_tablets/'+fresh.auth.uid).active,true);
+   assert.equal(store.get('finance_tablet_pair_requests/'+fresh.auth.uid).code,null);
+   assert.equal((await finance.financeTabletPairStatus(fresh)).status,'paired');
+ });
+ const replacement={auth:{uid:'tablet-replacement',token:{firebase:{sign_in_provider:'anonymous'}}},data:{branch:'rehab'}};
+ await check('owner can replace mistakenly paired desktop only with explicit audit and idle previous device',async()=>{
+   const proposal=await finance.financeTabletRequestPair(replacement);assert.equal(proposal.status,'pending');
+   const pending=await finance.financeOwnerPairRequests({...owner,data:{branch:'rehab'}});
+   assert(pending.rows.some(r=>r.requestId===replacement.auth.uid&&r.replacesExisting));
+   const args={requestId:replacement.auth.uid,branch:'rehab',code:proposal.code};
+   await assert.rejects(()=>finance.financeOwnerApprovePair({...owner,data:args}),e=>e.code==='failed-precondition');
+   store.get('finance_tablets/'+fresh.auth.uid).activeSession='active-finance-session';
+   await assert.rejects(()=>finance.financeOwnerApprovePair({...owner,data:{...args,replaceExisting:true}}),e=>e.code==='failed-precondition');
+   store.get('finance_tablets/'+fresh.auth.uid).activeSession=null;
+   const result=await finance.financeOwnerApprovePair({...owner,data:{...args,replaceExisting:true}});
+   assert.equal(result.ok,true);
+   assert.equal(store.get('finance_tablets/'+fresh.auth.uid).active,false);
+   assert.equal(store.get('finance_tablets/'+replacement.auth.uid).active,true);
+   assert.equal(store.get('finance_tablet_branches/rehab').uid,replacement.auth.uid);
+   assert([...store.keys()].some(k=>k.startsWith('finance_pair_audit/')&&store.get(k).previousUid===fresh.auth.uid));
  });
  console.log('FINANCE TRANSACTION MOCK '+passed+'/'+passed+' PASS; mock only, not emulator or real hardware');
 })().catch(e=>{console.error(e);process.exitCode=1;});

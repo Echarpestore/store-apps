@@ -49,6 +49,64 @@ window.financeInstaConfigure=async function(){
   await call('instaConfigure',{alias,beneficiaryName,bank:'CIB'});notify('تم إعداد مستفيد InstaPay');
  }catch(e){notify(msg(e),true);}
 };
+
+function setInstaStatus(message,state){
+ const el=document.getElementById('finInstaStatus');
+ if(el){el.textContent=message||'';el.dataset.state=state||'';}
+}
+let instaStartPromise=null,instaCancelPromise=null;
+window.financeShowPairRequests=async function(){
+ const host=document.getElementById('finOwnerPairRequests');if(!host)return;
+ host.textContent='جارٍ تحميل طلبات تابلت '+currentBranch+'…';
+ try{
+  const data=await call('financeOwnerPairRequests',{branch:currentBranch});host.replaceChildren();
+  if(!data.rows.length){host.textContent='لا توجد أجهزة جديدة تنتظر الاعتماد. افتح شاشة التقييم على تابلت الفرع.';return;}
+  data.rows.forEach(r=>{
+   const row=document.createElement('div');row.className='finPairRequest';
+   const info=document.createElement('div');
+   const title=document.createElement('strong');title.textContent='طلب ربط · '+data.branch;
+   const code=document.createElement('div');code.className='finPairCode';code.textContent=r.code;
+   info.append(title,code);
+   const button=document.createElement('button');button.type='button';button.className='finApproveBtn';button.textContent=r.replacesExisting?'استبدال الجهاز القديم':'اعتماد التابلت';
+   button.onclick=async()=>{
+    const ok=await askConfirm({title:r.replacesExisting?'استبدال تابلت الفرع':'اعتماد تابلت الفرع',
+      message:'تأكد أن الرمز '+r.code+' ظاهر الآن على تابلت '+data.branch+' الفعلي. '+
+        (r.replacesExisting?'التابلت القديم هيتفصل، وممنوع الاستبدال أثناء أي عملية مالية.':'لا توافق على جهاز غير معروف.'),
+      okText:r.replacesExisting?'أوافق على استبدال الجهاز':'اعتماد هذا الجهاز',cancelText:'إلغاء'});
+    if(!ok)return;
+    button.disabled=true;
+    try{await call('financeOwnerApprovePair',{requestId:r.requestId,branch:data.branch,code:r.code,replaceExisting:!!r.replacesExisting});notify('تم اعتماد التابلت؛ هيشتغل تلقائيًا الآن');await window.financeShowPairRequests();}
+    catch(e){notify(msg(e),true);button.disabled=false;}
+   };
+   row.append(info,button);host.appendChild(row);
+  });
+ }catch(e){host.textContent='تعذر جلب الطلبات: '+msg(e);}
+};
+window.financeStartInstaOnAmountOK=async function(amount,invoiceTotal){
+ try{
+  if(instaCancelPromise)await instaCancelPromise;
+  if(!navigator.onLine)throw Error('اتصال الإنترنت مطلوب لإرسال الدفع للتابلت');
+  if(!Number.isFinite(amount)||amount<=0||Math.abs(amount-invoiceTotal)>.005)
+    throw Error('InstaPay يجب أن يغطي الفاتورة بالكامل في الإصدار الحالي');
+  if(instaSession){
+   if(instaAmount!==amount||instaInvoiceTotal!==invoiceTotal)
+    throw Error('لا يمكن تغيير مبلغ جلسة قائمة؛ ألغِ الطلب القديم أولًا');
+   setInstaStatus('الطلب ظاهر على التابلت · في انتظار تصوير الإيصال','pending');return true;
+  }
+  if(instaStartPromise)return instaStartPromise;
+  setInstaStatus('جارٍ إرسال المبلغ إلى تابلت الفرع…','pending');
+  const promise=(async()=>{
+   const s=await call('instaStart',{amount,invoiceTotal,branch:currentBranch});
+   instaSession=s.sessionId;instaAmount=amount;instaInvoiceTotal=invoiceTotal;
+   setInstaStatus('تم إرسال '+amount.toFixed(2)+' ج.م · في انتظار تصوير الإيصال','pending');
+   return true;
+  })();
+  instaStartPromise=promise;
+  return await promise;
+ }catch(e){setInstaStatus(msg(e),'error');notify(msg(e),true);return false;}
+ finally{instaStartPromise=null;}
+};
+
 async function manual(sid,state){
  const evidence=await call('instaGetEvidence',{sessionId:sid});
  if(!evidence.jpeg)throw Error('صورة الإثبات غير متاحة — لا يمكن التأكيد اليدوي');
@@ -70,11 +128,9 @@ window.financeEnsureInstaApproved=async function(){
  if(amount<=0)return true;
  const total=cartTotal();
  try{
-  if(!instaSession || instaAmount!==amount || instaInvoiceTotal!==total){
-   if(instaSession && instaAmount!==amount)throw Error('تم تغيير المبلغ بعد بدء التحويل؛ ألغِ الجلسة القديمة أولًا');
-   const s=await call('instaStart',{amount,invoiceTotal:total,branch:currentBranch});instaSession=s.sessionId;instaAmount=amount;instaInvoiceTotal=total;
-   notify('التابلت يعرض بيانات التحويل. ينتظر تصوير الإيصال…');
-  }
+  if(instaStartPromise)await instaStartPromise;
+  if(!instaSession){throw Error('طلب InstaPay لم يبدأ؛ افتح مبلغ InstaPay واضغط OK مرة أخرى');}
+  if(instaAmount!==amount || instaInvoiceTotal!==total)throw Error('الفاتورة أو المبلغ تغير بعد بدء الدفع؛ لا يمكن الحفظ');
   let state=await poll('instaStatus',instaSession,295000);
   if(state.status==='captured'){
    notify('التصوير وصل؛ المراجعة الآلية لم تُطابق كل البيانات',true);
@@ -109,7 +165,7 @@ window.financeSaleWrite=async function(sale){
    if(instaInvoiceTotal!==sale.total)throw Error('تغيّر مبلغ الفاتورة بعد الفحص');
    const data={...sale};delete data.createdAt;
    const r=await call('instaFinalizeSale',{sessionId:instaSession,sale:data});
-   if(!r.ok)throw Error('فشل تسجيل دليل التحويل');instaSession=null;return {ok:true,value:{id:r.saleId}};
+   if(!r.ok)throw Error('فشل تسجيل دليل التحويل');instaSession=null;instaAmount=0;instaInvoiceTotal=0;setInstaStatus('','');return {ok:true,value:{id:r.saleId}};
  }
  throw Error('غير مدعوم');
 };
@@ -123,13 +179,22 @@ window.financeScanCreditReceipt=async function(code){
   notify('إيصال '+code+' · رصيد متاح '+Number(d.balance).toFixed(2)+' ج.م. الصرف يحتاج PIN العميلة على التابلت.');
  }catch(e){notify(msg(e),true);}
 };
+window.financeHasActiveInsta=()=>!!instaSession||!!instaStartPromise;
+window.financeCanUseInstaAmount=(amount,total)=>!instaSession||(instaAmount===amount&&instaInvoiceTotal===total);
+window.financeCancellationPending=()=>!!instaCancelPromise;
 window.financeCancelPending=async function(){
- const s=instaSession,credit=window.pendingCreditSpend;
- // Clear only the abandoned attempt: a newer checkout may start during the network await.
- if(instaSession===s){instaSession=null;instaAmount=0;instaInvoiceTotal=0;}
- if(window.pendingCreditSpend===credit)window.pendingCreditSpend=null;
- if(s)await call('financeCancelSession',{sessionId:s});
- if(credit?.sessionId&&!credit._committed)await call('financeCancelSession',{sessionId:credit.sessionId});
+ if(instaCancelPromise)return instaCancelPromise;
+ const action=(async()=>{
+  if(instaStartPromise)await instaStartPromise.catch(()=>{});
+  const s=instaSession,credit=window.pendingCreditSpend;
+  if(s)await call('financeCancelSession',{sessionId:s});
+  if(credit?.sessionId&&!credit._committed)await call('financeCancelSession',{sessionId:credit.sessionId});
+  if(instaSession===s){instaSession=null;instaAmount=0;instaInvoiceTotal=0;}
+  if(window.pendingCreditSpend===credit)window.pendingCreditSpend=null;
+  setInstaStatus('','');
+ })();
+ instaCancelPromise=action;
+ try{return await action;}finally{instaCancelPromise=null;}
 };
-window.financeSaleReset=function(){instaSession=null;instaAmount=0;instaInvoiceTotal=0;};
+window.financeSaleReset=function(){if(!instaSession&&!instaStartPromise){instaAmount=0;instaInvoiceTotal=0;setInstaStatus('','');}};
 })();
