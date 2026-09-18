@@ -1,7 +1,8 @@
 /* ECHARPE Customer Display — dedicated anonymous Firebase app, isolated from Feedback. */
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-functions.js';
 import {onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js';
-import {inspectFrame,captureReady} from './receipt-scan-core.js?v=684';
+import {inspectFrame} from './receipt-scan-core.js?v=684';
+import {readLiveFrame} from './live-ocr-engine.js?v=686';
 const app=window.fbApp,auth=window.fbAuth;
 if(!app||!auth)throw new Error('Feedback Firebase app not initialized');
 const functions=getFunctions(app,'us-central1');
@@ -29,6 +30,12 @@ const style=document.createElement('style');style.textContent=`
 #finOverlay .finScanState{font-size:15px;font-weight:800;color:#175c40;line-height:1.6;min-height:26px;padding:7px 0}
 #finOverlay .finManual{width:100%;margin-top:10px;background:white;color:#285a46;border:1px solid #a9cbb6;min-height:48px;border-radius:15px}
 #finOverlay .finManual:disabled{opacity:.5;cursor:not-allowed}
+#finOverlay .finScanCard{width:min(900px,100%);padding:12px;max-height:98dvh}
+#finOverlay .finScanCard .finBrand{margin-bottom:6px;padding-bottom:6px}
+#finOverlay .finScanCard .finCameraFrame{margin:6px 0;background:#0b1714}
+#finOverlay .finScanCard video{height:min(69dvh,690px);max-height:none;object-fit:cover}
+#finOverlay .finScanCard .finCameraFrame::after{inset:8% 13%;border:3px solid #79e6ac;box-shadow:0 0 0 130px #0005}
+#finOverlay .finScanCard .finScanState{font-size:18px;min-height:32px}
 @keyframes finAppear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @media (prefers-reduced-motion:reduce){#finOverlay,*{animation:none!important;transition:none!important}}
 
@@ -126,14 +133,15 @@ async function cameraScreen(s){
    if(details.sessionId!==activeId||details.status==='idle')throw Error('الجلسة اتغيرت؛ استني طلب جديد من الكاشير');
    if(!details.recipientName||!details.recipientAlias||!details.recipientBank)throw Error('بيانات المستفيد ناقصة؛ راجعي إعدادات المالك');
    if(!overlay.querySelector('#finRecipient')||activeId!==s.sessionId)return false;
+   s.recipientAlias=details.recipientAlias;s.createdAt=details.createdAt;
    recipient.textContent=details.recipientName+' · '+details.recipientBank+' · '+details.recipientAlias+' · تأكدي من المبلغ والمستفيد قبل التحويل';
    const qrHost=overlay.querySelector('#finPaymentQrHost');qrHost.replaceChildren();
    const matches=String(details.recipientAlias||'').trim().toLowerCase()==='zogzog2000@instapay';
    if(matches){
     const image=document.createElement('img');image.className='finPaymentQr';image.src='instapay-qr.png?v=683';image.alt='QR حساب InstaPay: zogzog2000@instapay';
-    image.width=260;image.height=260;image.onerror=()=>{image.remove();error('صورة QR غير متاحة، راجعي حساب المستفيد المكتوب.');};qrHost.appendChild(image);
+    image.width=260;image.height=260;image.onerror=()=>{image.remove();const hint=document.createElement('p');hint.className='finSub';hint.textContent='استخدمي بيانات الحساب المكتوبة بالأعلى';qrHost.replaceChildren(hint);};qrHost.appendChild(image);
    }else{const note=document.createElement('p');note.className='finSub';note.textContent='QR غير متاح لهذا الحساب؛ استخدمي بيانات المستفيد المكتوبة فقط بعد التحقق منها.';qrHost.appendChild(note);}
-   error('');button.disabled=false;button.textContent='تم التحويل — ابدئي المسح الذكي';return true;
+   error('');button.disabled=false;button.textContent='تم التحويل — افتحي الكاميرا';return true;
   }catch(e){
    if(activeId!==s.sessionId)return false;
    recipient.textContent='تعذّر تحميل بيانات المستفيد؛ لا تحوّلي أي مبلغ الآن.';error(e.message||'فشل الاتصال ببيانات المستفيد');
@@ -150,13 +158,13 @@ async function cameraScreen(s){
    const opened=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:20}}});
    if(epoch!==scanEpoch||activeId!==sessionId){opened.getTracks().forEach(t=>t.stop());return;}
    stream=opened;
-   card('<div class="finSteps"><span><b>1</b> الدفع</span><span>—</span><span class="finCurrent"><b>2</b> الإيصال</span><span>—</span><span><b>3</b> المراجعة</span></div><h2>ورّي الإيصال للكاميرا الأمامية</h2><p class="finSub">مش محتاجة تضغطي تصوير: أول ما الصورة تثبت هنلتقطها تلقائيًا</p><div class="finCameraFrame"><video autoplay playsinline muted id="finVideo"></video></div><div class="finScanState" id="finScanState" role="status">جاري تشغيل الكاميرا…</div><button class="finManual" type="button" id="finManualSnap">تصوير دلوقتي لو المسح التلقائي اتأخر</button><p class="finErr" role="alert"></p>');
+   card('<h2>وجّهي الإيصال للكاميرا</h2><div class="finCameraFrame"><video autoplay playsinline muted id="finVideo"></video></div><div class="finScanState" id="finScanState" role="status">بنجهز القراءة المباشرة…</div><button class="finManual" type="button" id="finManualSnap" disabled>إعادة فحص الإيصال</button>');overlay.querySelector('.finCard')?.classList.add('finScanCard');
    const video=overlay.querySelector('#finVideo');video.srcObject=stream;await video.play();
    if(epoch!==scanEpoch||activeId!==sessionId)return;
    const status=overlay.querySelector('#finScanState'),manual=overlay.querySelector('#finManualSnap');
    const qualityCanvas=document.createElement('canvas');qualityCanvas.width=240;qualityCanvas.height=180;
    const qc=qualityCanvas.getContext('2d',{willReadFrequently:true});
-   let previous=null,consecutive=0,startedAt=Date.now(),running=true,timer=null;
+   let previous=null,consecutive=0,running=true,timer=null,reading=false,verifiedFrames=0,lastReference='',lastReadAt=0;
    const stopScan=()=>{running=false;if(timer!==null)clearTimeout(timer);timer=null;};
    const upload=async()=>{
     if(busy||!running||epoch!==scanEpoch||activeId!==sessionId)return;
@@ -169,15 +177,15 @@ async function cameraScreen(s){
      if(epoch!==scanEpoch||activeId!==sessionId)return;
      lastStatus=result.status;
      if(result.status==='approved')card('<span class="finBadge">✓ الإيصال اتقرأ واتطابق</span><h2>شكرًا ليكي</h2><p class="finSub">الكاشير يقدر يكمل الحفظ والطباعة؛ تأكيد وصول الفلوس للبنك لسه محتاج تسوية مستقلة.</p>');
-     else card('<span class="finBadge">تم استلام الإيصال</span><h2>الموظفة هتراجع البيانات</h2><p class="finSub">في بيانات ناقصة أو مش متطابقة. الفاتورة مش هتطبع كمدفوعة تلقائيًا قبل المراجعة.</p>');
+     else card('<span class="finBadge">تم استلام الإيصال</span><h2>الإيصال محتاج تحقق</h2><p class="finSub">في بيانات مش متطابقة أو مش مقروءة. خلي الكاشير يفتح تفاصيل الإيصال المرتبطة بالفاتورة.</p>');
     }catch(e){
      if(epoch!==scanEpoch||activeId!==sessionId)return;
      if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
      // Network failure may occur AFTER upload; never silently resend and create competing evidence.
-     card('<span class="finBadge">المراجعة مطلوبة</span><h2>ما قدرناش نعرف نتيجة الفحص</h2><p class="finSub">راجعي الكاشير لحالة الطلب قبل أي محاولة جديدة. ما تعيديش التحويل.</p><p class="finErr" role="alert"></p>');error(e.message||'فشل فحص الإيصال');
+     card('<span class="finBadge">تعذّر عرض النتيجة</span><h2>لحظة من فضلك</h2><p class="finSub">الكاشير هيتأكد من حالة الطلب. ما تعيديش التحويل.</p>');console.error('InstaPay evidence upload failed',e);
     }finally{busy=false;}
    };
-   manual.onclick=()=>upload();
+   manual.onclick=()=>{verifiedFrames=0;lastReference='';lastReadAt=0;manual.disabled=true;};
    const analyze=()=>{
     if(!running||busy||epoch!==scanEpoch||activeId!==sessionId)return;
     try{
@@ -185,10 +193,20 @@ async function cameraScreen(s){
       qc.drawImage(video,0,0,video.videoWidth,video.videoHeight,0,0,240,180);
       const metrics=inspectFrame(qc.getImageData(0,0,240,180),previous);previous=metrics.sample;
       consecutive=metrics.ready?consecutive+1:0;
-      status.textContent=metrics.reason;
-      if(captureReady(metrics,consecutive,Date.now()-startedAt)){upload();return;}
+      if(!metrics.ready){status.textContent='وجّهي الإيصال داخل الإطار';verifiedFrames=0;}
+      else if(consecutive>=3&&!reading&&Date.now()-lastReadAt>=700){
+       reading=true;lastReadAt=Date.now();status.textContent='بنقرأ بيانات الإيصال…';
+       readLiveFrame(video,{amount:s.amount,alias:s.recipientAlias,startedAt:s.createdAt}).then(result=>{
+        if(!running||epoch!==scanEpoch||activeId!==sessionId)return;
+        if(!result.ready){verifiedFrames=0;lastReference='';status.textContent='وجّهي إيصال InstaPay واضح للكاميرا';return;}
+        if(result.reference===lastReference)verifiedFrames++;else{lastReference=result.reference;verifiedFrames=1;}
+        status.textContent=verifiedFrames>=2?'البيانات متطابقة · بنثبت الإيصال…':'تمت قراءة البيانات · بنأكدها…';
+        if(verifiedFrames>=2)upload();
+       }).catch(e=>{if(running)status.textContent='تعذّرت القراءة المحلية، تحققي من الاتصال أو ساعدي العميل';console.error('Local OCR unavailable',e);})
+       .finally(()=>{reading=false;});
+      }
      }else status.textContent='جاري ضبط وضوح الكاميرا…';
-    }catch(e){status.textContent='المسح التلقائي غير متاح؛ دوسّي تصوير دلوقتي';stopScan();manual.disabled=false;manual.onclick=()=>{running=true;upload();};return;}
+    }catch(e){status.textContent='تعذّرت القراءة، اطلب مساعدة الكاشير';stopScan();return;}
     timer=setTimeout(analyze,190);
    };
    analyze();
