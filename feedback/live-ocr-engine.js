@@ -1,5 +1,5 @@
 /* Tesseract OCR runs on-device; engine/data downloads on first use. Fail closed. */
-import {inspectReceiptText} from './live-receipt-core.js?v=686';
+import {inspectReceiptText} from './live-receipt-core.js?v=687';
 let promise;
 function loadLibrary(){return new Promise((resolve,reject)=>{
  if(window.Tesseract?.createWorker){resolve(window.Tesseract);return;}

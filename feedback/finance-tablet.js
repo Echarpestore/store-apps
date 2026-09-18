@@ -1,8 +1,7 @@
 /* ECHARPE Customer Display — dedicated anonymous Firebase app, isolated from Feedback. */
 import {getFunctions,httpsCallable} from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-functions.js';
 import {onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js';
-import {inspectFrame} from './receipt-scan-core.js?v=684';
-import {readLiveFrame} from './live-ocr-engine.js?v=686';
+import {readLiveFrame} from './live-ocr-engine.js?v=687';
 const app=window.fbApp,auth=window.fbAuth;
 if(!app||!auth)throw new Error('Feedback Firebase app not initialized');
 const functions=getFunctions(app,'us-central1');
@@ -35,7 +34,13 @@ const style=document.createElement('style');style.textContent=`
 #finOverlay .finScanCard .finCameraFrame{margin:6px 0;background:#0b1714}
 #finOverlay .finScanCard video{height:min(69dvh,690px);max-height:none;object-fit:cover}
 #finOverlay .finScanCard .finCameraFrame::after{inset:8% 13%;border:3px solid #79e6ac;box-shadow:0 0 0 130px #0005}
-#finOverlay .finScanCard .finScanState{font-size:18px;min-height:32px}
+#finOverlay .finScanCard .finScanState{font-size:15px;min-height:26px}
+#finOverlay .finChecks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;text-align:right;margin:8px 0}
+#finOverlay .finCheck{background:#f5f6f3;border:1px solid #dfe5de;color:#5c6a61;border-radius:12px;padding:8px 10px;font-size:13px;font-weight:800}
+#finOverlay .finCheck.ok{background:#e1f6e9;border-color:#54b87a;color:#145832}
+#finOverlay .finCheck.bad{background:#fff0e9;border-color:#e6a48b;color:#983d26}
+#finOverlay .finScanCard .finCameraFrame{margin:5px 0}
+#finOverlay .finScanCard video{height:min(59dvh,590px)}
 @keyframes finAppear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @media (prefers-reduced-motion:reduce){#finOverlay,*{animation:none!important;transition:none!important}}
 
@@ -158,13 +163,23 @@ async function cameraScreen(s){
    const opened=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:20}}});
    if(epoch!==scanEpoch||activeId!==sessionId){opened.getTracks().forEach(t=>t.stop());return;}
    stream=opened;
-   card('<h2>وجّهي الإيصال للكاميرا</h2><div class="finCameraFrame"><video autoplay playsinline muted id="finVideo"></video></div><div class="finScanState" id="finScanState" role="status">بنجهز القراءة المباشرة…</div><button class="finManual" type="button" id="finManualSnap" disabled>إعادة فحص الإيصال</button>');overlay.querySelector('.finCard')?.classList.add('finScanCard');
+   card('<h2>مسح إيصال InstaPay</h2><div class="finCameraFrame"><video autoplay playsinline muted id="finVideo"></video></div><div class="finChecks" id="finChecks" role="status"></div><div class="finScanState" id="finScanState" role="status">جاري تشغيل القارئ…</div><button class="finManual" type="button" id="finManualSnap" disabled>إعادة القراءة</button>');overlay.querySelector('.finCard')?.classList.add('finScanCard');
    const video=overlay.querySelector('#finVideo');video.srcObject=stream;await video.play();
    if(epoch!==scanEpoch||activeId!==sessionId)return;
    const status=overlay.querySelector('#finScanState'),manual=overlay.querySelector('#finManualSnap');
-   const qualityCanvas=document.createElement('canvas');qualityCanvas.width=240;qualityCanvas.height=180;
-   const qc=qualityCanvas.getContext('2d',{willReadFrequently:true});
-   let previous=null,consecutive=0,running=true,timer=null,reading=false,verifiedFrames=0,lastReference='',lastReadAt=0;
+   const checksHost=overlay.querySelector('#finChecks');
+   const labels={provider:'InstaPay',success:'نجاح التحويل',amount:'المبلغ',recipient:'المستفيد',reference:'رقم العملية',date:'التاريخ والوقت'};
+   let running=true,timer=null,reading=false,verifiedFrames=0,lastReference='',lastReadAt=0;
+   const renderChecks=(checks={})=>{
+    checksHost.replaceChildren();
+    for(const [key,label] of Object.entries(labels)){
+     const item=document.createElement('div');const val=checks[key];
+     item.className='finCheck '+(val===true?'ok':val===false?'bad':'');
+     item.textContent=(val===true?'✓ ':val===false?'○ ':'· ')+label;
+     checksHost.appendChild(item);
+    }
+   };
+   renderChecks();
    const stopScan=()=>{running=false;if(timer!==null)clearTimeout(timer);timer=null;};
    const upload=async()=>{
     if(busy||!running||epoch!==scanEpoch||activeId!==sessionId)return;
@@ -185,29 +200,22 @@ async function cameraScreen(s){
      card('<span class="finBadge">تعذّر عرض النتيجة</span><h2>لحظة من فضلك</h2><p class="finSub">الكاشير هيتأكد من حالة الطلب. ما تعيديش التحويل.</p>');console.error('InstaPay evidence upload failed',e);
     }finally{busy=false;}
    };
-   manual.onclick=()=>{verifiedFrames=0;lastReference='';lastReadAt=0;manual.disabled=true;};
+   manual.onclick=()=>{verifiedFrames=0;lastReference='';lastReadAt=0;manual.disabled=true;renderChecks();};
    const analyze=()=>{
     if(!running||busy||epoch!==scanEpoch||activeId!==sessionId)return;
-    try{
-     if(video.readyState>=2&&video.videoWidth>=640&&video.videoHeight>=480){
-      qc.drawImage(video,0,0,video.videoWidth,video.videoHeight,0,0,240,180);
-      const metrics=inspectFrame(qc.getImageData(0,0,240,180),previous);previous=metrics.sample;
-      consecutive=metrics.ready?consecutive+1:0;
-      if(!metrics.ready){status.textContent='وجّهي الإيصال داخل الإطار';verifiedFrames=0;}
-      else if(consecutive>=3&&!reading&&Date.now()-lastReadAt>=700){
-       reading=true;lastReadAt=Date.now();status.textContent='بنقرأ بيانات الإيصال…';
-       readLiveFrame(video,{amount:s.amount,alias:s.recipientAlias,startedAt:s.createdAt}).then(result=>{
-        if(!running||epoch!==scanEpoch||activeId!==sessionId)return;
-        if(!result.ready){verifiedFrames=0;lastReference='';status.textContent='وجّهي إيصال InstaPay واضح للكاميرا';return;}
-        if(result.reference===lastReference)verifiedFrames++;else{lastReference=result.reference;verifiedFrames=1;}
-        status.textContent=verifiedFrames>=2?'البيانات متطابقة · بنثبت الإيصال…':'تمت قراءة البيانات · بنأكدها…';
-        if(verifiedFrames>=2)upload();
-       }).catch(e=>{if(running)status.textContent='تعذّرت القراءة المحلية، تحققي من الاتصال أو ساعدي العميل';console.error('Local OCR unavailable',e);})
-       .finally(()=>{reading=false;});
-      }
-     }else status.textContent='جاري ضبط وضوح الكاميرا…';
-    }catch(e){status.textContent='تعذّرت القراءة، اطلب مساعدة الكاشير';stopScan();return;}
-    timer=setTimeout(analyze,190);
+    if(video.readyState>=2&&video.videoWidth>=320&&video.videoHeight>=240&&!reading&&Date.now()-lastReadAt>=250){
+     reading=true;lastReadAt=Date.now();
+     readLiveFrame(video,{amount:s.amount,alias:s.recipientAlias,startedAt:s.createdAt}).then(result=>{
+      if(!running||epoch!==scanEpoch||activeId!==sessionId)return;
+      renderChecks(result.checks);
+      if(!result.ready){verifiedFrames=0;lastReference='';status.textContent='بنقرأ الإيصال…';return;}
+      if(result.reference===lastReference)verifiedFrames++;else{lastReference=result.reference;verifiedFrames=1;}
+      status.textContent=verifiedFrames>=2?'كل البيانات متطابقة ✓':'بنأكد البيانات…';
+      if(verifiedFrames>=2)upload();
+     }).catch(e=>{if(running)status.textContent='القارئ غير متاح؛ لا يمكن اعتماد الإيصال';console.error('Local OCR unavailable',e);})
+      .finally(()=>{reading=false;});
+    }
+    timer=setTimeout(analyze,160);
    };
    analyze();
   }catch(e){
