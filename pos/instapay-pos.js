@@ -86,6 +86,9 @@
     <div class="ipPill" id="ipP3">رقم العملية</div>
   </div>
   <div class="ipState" id="ipPosState">في انتظار العميلة…</div>
+  <div id="ipPosWhy" style="display:none;font-size:11.5px;color:var(--muted,#8b90a0);
+    background:var(--panel2,#232733);border-radius:9px;padding:8px;margin-bottom:10px;
+    line-height:1.7;direction:rtl"></div>
   <div class="ipBtns">
     <button class="ipMan" id="ipPosManual">✍️ راجعت الإيصال — أكّدي يدوي</button>
   </div>
@@ -98,6 +101,55 @@
   document.head.insertAdjacentHTML('beforeend', '<style>' + CSS + '</style>');
   document.body.insertAdjacentHTML('beforeend', HTML);
   const $ = id => document.getElementById(id);
+
+  /* ============================================================
+     ✋ مودال تأكيد داخلي — بديل confirm()/prompt()
+     ⚠️ §10 في المستند: `prompt()` **ممنوع في POS** لأن Electron
+        مش بيدعمها. وأنا خالفت القاعدة في أول نسخة: الديالوج طلع
+        بشكل ويندوز وحش، والـprompt بعده فشل بصمت فالتأكيد اليدوي
+        ماكانش بيتنفذ — والبوابة كانت بتفضل قافلة الفاتورة.
+     ============================================================ */
+  document.body.insertAdjacentHTML('beforeend', `
+<div id="ipAsk" style="position:fixed;inset:0;z-index:9500;display:none;
+  align-items:center;justify-content:center;background:rgba(6,8,12,.8);backdrop-filter:blur(5px);padding:18px">
+  <div style="width:min(400px,94vw);background:var(--panel,#1b1e27);
+    border:1px solid var(--border,#2b2f3b);border-radius:18px;padding:22px;
+    color:var(--text,#eef0f4);animation:ipPopIn .25s cubic-bezier(.2,.8,.2,1)">
+    <div id="ipAskTitle" style="font-size:17px;font-weight:900;margin-bottom:8px"></div>
+    <div id="ipAskBody" style="font-size:13px;line-height:1.9;color:var(--muted,#8b90a0);margin-bottom:14px"></div>
+    <input id="ipAskInput" style="display:none;width:100%;padding:11px;border-radius:10px;
+      border:1px solid var(--border,#2b2f3b);background:var(--panel2,#232733);
+      color:var(--text,#eef0f4);font-family:inherit;font-size:13px;margin-bottom:12px">
+    <div style="display:flex;gap:8px">
+      <button id="ipAskNo" style="flex:1;padding:12px;border-radius:11px;font-family:inherit;
+        font-weight:800;font-size:13px;cursor:pointer;background:var(--panel2,#232733);
+        color:var(--text,#eef0f4);border:1px solid var(--border,#2b2f3b)">رجوع</button>
+      <button id="ipAskYes" style="flex:2;padding:12px;border:none;border-radius:11px;
+        font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;
+        background:linear-gradient(#16a34a,#15803d);color:#fff">تأكيد</button>
+    </div>
+  </div></div>`);
+
+  function ipAsk(opt) {
+    return new Promise(function (res) {
+      const box = $('ipAsk'), inp = $('ipAskInput');
+      $('ipAskTitle').textContent = opt.title || '';
+      $('ipAskBody').innerHTML = opt.body || '';
+      $('ipAskYes').textContent = opt.yes || 'تأكيد';
+      inp.style.display = opt.input ? '' : 'none';
+      inp.value = ''; inp.placeholder = opt.input || '';
+      box.style.display = 'flex';
+      if (opt.input) setTimeout(function () { inp.focus(); }, 60);
+      function done(v) {
+        box.style.display = 'none';
+        $('ipAskYes').onclick = null; $('ipAskNo').onclick = null; inp.onkeydown = null;
+        res(v);
+      }
+      $('ipAskYes').onclick = function () { done(opt.input ? { text: inp.value.trim() } : true); };
+      $('ipAskNo').onclick = function () { done(null); };
+      inp.onkeydown = function (e) { if (e.key === 'Enter') $('ipAskYes').click(); };
+    });
+  }
 
   function paint(st) {
     const c = (st && st.checks) || {};
@@ -116,7 +168,26 @@
       $('ipPosSpin').style.display = '';
       $('ipPosState').textContent = (st && st.hint) ||
         (s === 'scanning' ? 'العميلة بتمسح الإيصال…' : 'في انتظار العميلة…');
+      const ex = explain(st);
+      $('ipPosWhy').textContent = ex;
+      $('ipPosWhy').style.display = ex ? '' : 'none';
     }
+  }
+
+  /* 🩺 سبب الرفض بالأرقام — للكاشير بس.
+     ⚠️ من غير ده أول رفض صح بيتحسب عطل: الشاشة بتقول "المبلغ
+        مختلف" والكاشير مش عارفة قرا كام ولا المطلوب كام. */
+  function explain(st) {
+    const d = st && st.detail; if (!d) return '';
+    const bits = [];
+    if (d.seenCents && d.seenCents.length)
+      bits.push('الإيصال: ' + d.seenCents.map(c => (c / 100).toFixed(2)).join(' / '));
+    if (d.expectedCents) bits.push('المطلوب: ' + (d.expectedCents / 100).toFixed(2));
+    if (d.driftMin != null) bits.push('فرق الوقت: ' + d.driftMin + ' دقيقة');
+    if (d.benReason === 'ALIAS_IS_SENDER') bits.push('⚠️ تحويل صادر منك مش وارد');
+    if (d.benReason === 'ALIAS_NOT_FOUND') bits.push('⚠️ العنوان مش في الإيصال');
+    if (d.ref) bits.push('رقم العملية: ' + d.ref);
+    return bits.join(' · ');
   }
 
   function listen(sid) {
@@ -178,9 +249,11 @@
 
   $('ipPosCancel').onclick = async function () {
     if (!S) { resetFlow(); return; }
-    if (!confirm('تلغي طلب الانستا باي؟')) return;
+    const go = await ipAsk({ title: 'إلغاء طلب الانستا باي',
+      body: 'الطلب هيتشال من التابلت والفاتورة ترجع من غير انستا باي.', yes: 'إلغاء الطلب' });
+    if (!go) return;
     try { await fnCall('instaPay', { action: 'cancel', sid: S.sid }); } catch (e) {
-      alert('ماتلغاش: ' + ((e && e.message) || ''));
+      $('ipPosState').textContent = '⛔ ماتلغاش: ' + ((e && e.message) || '');
       return;
     }
     try {
@@ -198,15 +271,22 @@
         PENDING_BANK_RECONCILIATION لحد ما تراجع كشف الحساب. */
   $('ipPosManual').onclick = async function () {
     if (!S) return;
-    if (!confirm('⚠️ تأكيد يدوي معناه إنك شفتِ الإيصال بعينك.\n\n'
-      + 'هيتسجّل باسمك، ولو طلع غلط الفرق بيتحسب عليكِ.\n\nتأكدي؟')) return;
-    const why = prompt('السبب (الكاميرا مش شغالة / الإيصال مش واضح / النت):', '') || '';
+    const r = await ipAsk({
+      title: '✍️ تأكيد يدوي',
+      body: 'اتأكدي إن الإيصال ناجح، والمبلغ والمستفيد صح. التأكيد بيتسجّل باسمك.',
+      input: 'السبب (اختياري) — الكاميرا / النت / الإيصال مش واضح',
+      yes: 'أكّدي وكمّلي'
+    });
+    if (!r) return;
+    const why = r.text || '';
     $('ipPosManual').disabled = true;
     try {
       await fnCall('instaPay', { action: 'approveManual', sid: S.sid, reason: why });
       approved = true;
       paint({ status: 'approved', mode: 'manual' });
-    } catch (e) { alert('ماتمّش: ' + ((e && e.message) || '')); }
+    } catch (e) {
+      $('ipPosState').textContent = '⛔ ماتمّش: ' + ((e && e.message) || 'مشكلة اتصال');
+    }
     $('ipPosManual').disabled = false;
   };
 
@@ -398,6 +478,15 @@
   } catch (e) { console.warn('[instapay] settings inject', e); }
 
   // 🩺 تشخيص: اكتب instaDiag() في الكونسول
+  window.instaText = async function () {
+    if (!S) { console.log('مفيش طلب شغال'); return; }
+    const d = await db.collection('finance_sessions').doc(S.sid).get();
+    const x = d.exists ? d.data() : {};
+    console.log('— النص اللي Vision قراه —\n' + (x.lastText || '(لسه مفيش مسح)'));
+    console.log('التفاصيل:', x.detail || null);
+    console.log('الحقول:', x.checks || null);
+  };
+
   window.instaDiag = function () {
     console.log('الفرع:', window.currentBranch || currentBranch);
     console.log('الطلب:', S ? S.sid : '— مفيش');
