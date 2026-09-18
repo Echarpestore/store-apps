@@ -107,17 +107,16 @@ service cloud.firestore {
       allow get:  if signedIn();
       allow list: if isStaff() || (signedIn() && request.query.limit <= 5);
 
-      // Finance v680: forbid minting customer credit on CREATE for both staff and
-      // anonymous customers. Staff previously bypassed the customer-only guard.
-      // Server Admin SDK writes authorized credits without evaluating these rules.
-      allow create: if (!('credit' in request.resource.data) || request.resource.data.credit == 0)
-        && (!('creditAt' in request.resource.data) || request.resource.data.creditAt == 0)
-        && (isStaff()
-          || (signedIn()
+      allow create: if isStaff()
+        || (signedIn()
             && (!('points' in request.resource.data)      || request.resource.data.points == 0)
             && (!('points_glow' in request.resource.data) || request.resource.data.points_glow == 0)
             && (!('totalSpent' in request.resource.data)  || request.resource.data.totalSpent == 0)
-            && !('rewards' in request.resource.data)));
+            // 🔒 وكمان ميقدرش يخلق نفسه ومعاه مكافآت جاهزة
+            && !('rewards' in request.resource.data)
+            // 💳🔒 ولا رصيد فلوس. ده أخطر حقل في المستند كله:
+            //    النقط بتتكسب بقاعدة، الرصيد فلوس بتتحط بإيد بشر.
+            && !('credit' in request.resource.data));
 
       // 💳⭐⭐ التعديل: نفس الحقول المسموحة زي ما هي، و`credit` **مش
       //    فيها** — يعني العميل مايقدرش يلمسها أصلًا.
@@ -226,8 +225,7 @@ service cloud.firestore {
     //    وحلّه واحد: ربط uid بالمستند في تطبيق الولاء.
     //    ⚠️ الكتابة مقفولة تمامًا — فمفيش خطر على الفلوس نفسها.
     match /credit_ledger/{entryId} {
-      // كشف الرصيد بPIN من creditCustomerStatement فقط؛ لا يُعرَض لمجرد معرفة رقم الهاتف.
-      allow read: if isStaff();
+      allow read: if signedIn();
       allow create, update, delete: if false;   // 🔒 الدوال بس
     }
 
@@ -243,17 +241,6 @@ service cloud.firestore {
     //    ولو قدر يصفّر حارس المحاولات، تخمين أكواد الكروت يبقى بلا حدود.
     match /credit_idem/{key}  { allow read, write: if false; }
     match /credit_guard/{key} { allow read, write: if false; }
-
-    // 🔒 finance server authority. Never grant direct customer/employee CRUD.
-    match /finance_sessions/{id} { allow read, write: if false; }
-    match /finance_tablets/{id} { allow read, write: if false; }
-    match /finance_tablet_branches/{id} { allow read, write: if false; }
-    match /finance_config/{id} { allow read, write: if false; }
-    match /credit_pins/{id} { allow read, write: if false; }
-    match /credit_pin_attempts/{id} { allow read, write: if false; }
-    match /finance_invoice_keys/{id} { allow read, write: if false; }
-    match /instapay_references/{id} { allow read, write: if false; }
-    match /instapay_reconciliation_log/{id} { allow read, write: if false; }
 
     // ---------- 🔖 طلبات الزباين ----------
     // ⚠️ القراءة مفتوحة للداخلين عشان العميلة تشوف طلباتها في
@@ -360,16 +347,46 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    /* Online orders v681: creation ONLY through onlineOrderPlace, which reads
-       server catalog prices and allocates inventory atomically. Anonymous
-       browser accounts must not create forged orders directly. Staff may
-       update limited order fields under the existing update restrictions. */
+    /* ============================================================
+       🛍️ أوردرات أونلاين — التطبيقين **والموقع** (echarpe.store)
+       ------------------------------------------------------------
+       ⚠️ الدخول من التطبيق والموقع **مجهول** (`signedIn()` بس) —
+          مفيش `request.auth.token.phone`. يعني القاعدة مش قادرة
+          تتأكد إن الرقم ده رقمها فعلًا. اللي القاعدة بتقفله هو
+          اللي بيفرق ماديًا:
+            · الفلوس: `total` و`price` **ممنوع** ييجوا من العميلة —
+              بيتحسبوا من الكتالوج في `orders-core`. من غير القفل ده
+              تقدر تطلب بـ٠ جنيه.
+            · الحالة: العميلة **متقدرش تعدّل** خالص. لو قدرت، تكتب
+              `collected` بنفسها وتمشي بالبضاعة.
+            · المسح ممنوع للطرفين — الأوردر سجل بيع.
+       ⚠️ القفل **برّه** كل الفروع (`allow update: if isStaff()`)
+          مش جوّه فرع واحد — درس: القواعد بتتجمع بـ«أو» مش «و».
+       ============================================================ */
     match /online_orders/{id} {
       allow read: if signedIn();
-      // v681: onlineOrderPlace Cloud Function exclusively owns order creation and totals.
-      // All clients already call onlineOrderPlace; allowing anonymous direct create
-      // would bypass catalog prices, inventory reservation and rate limits.
-      allow create: if false;
+      allow create: if signedIn()
+        && request.resource.data.status == 'placed'
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.phone is string
+        && request.resource.data.branch is string
+        && (request.resource.data.payMethod == 'cash'
+            || request.resource.data.payMethod == 'visa')
+        && (request.resource.data.source == 'app'
+            || request.resource.data.source == 'glow'
+            || request.resource.data.source == 'web')
+        // 🚚 طريقة التسليم — والشحن رقم موجب.
+        // ⚠️ من غير القفلة دي تقدر تبعت `shipping: -500` وتخلي
+        //    الإجمالي أقل من قيمة البضاعة.
+        && (request.resource.data.fulfillment == 'pickup'
+            || request.resource.data.fulfillment == 'delivery')
+        && request.resource.data.shipping is number
+        && request.resource.data.shipping >= 0
+        && request.resource.data.grandTotal is number
+        && request.resource.data.grandTotal >= request.resource.data.total;
       // التعديل للموظفين بس — الحالة بتتحرك للأمام من POS
       allow update: if isStaff()
         && request.resource.data.total == resource.data.total
