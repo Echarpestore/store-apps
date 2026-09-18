@@ -142,17 +142,15 @@ async function useCustomerCredit(){
     okText:'اخصمي ' + max.toFixed(2)
   });
   if(!ok) return;
-  const sessionId = window.financeCreditAuthorize && await window.financeCreditAuthorize(phone, max, total);
-  if(!sessionId) return; // no cart discount without real tablet approval
 
   cart.push({
     id: '__credit_spend__',
     name: '💳 خصم من الرصيد',
     price: -max, qty: 1, isReturn: false, isRedemption: true, isCreditSpend: true
   });
-  pendingCreditSpend = { phone: phone, amount: max, invoiceTotal: total, sessionId: sessionId, _committed: false };
+  pendingCreditSpend = { phone: phone, amount: max };
   renderCart();
-  showToast('العميلة وافقت على ' + max.toFixed(2) + ' ج.م — الخصم النهائي مع حفظ الفاتورة');
+  showToast('اتخصم ' + max.toFixed(2) + ' ج.م من الرصيد ✅');
 }
 window.useCustomerCredit = useCustomerCredit;
 
@@ -161,14 +159,20 @@ window.useCustomerCredit = useCustomerCredit;
       قبلها والفاتورة فشلت، الرصيد اتخصم والعميلة ماخدتش حاجة. */
 async function commitCreditSpend(invoiceCode, invoiceTotal){
   if(!pendingCreditSpend) return null;
-  // Credit balance and invoice are committed ATOMICALLY by creditFinalizeSale.
-  // Never call legacy creditSpend after the invoice, even on retry/print failure.
-  if(!pendingCreditSpend._committed){
-    showToast('⛔ الفاتورة لم تثبت خصم الرصيد بالسيرفر — بلّغ المالك فورًا', 'err');
-    throw new Error('Uncommitted credit invoice — بلّغ المالك فورًا');
+  const p = pendingCreditSpend;
+  const r = await callCredit('creditSpend', {
+    phone: p.phone, amount: p.amount,
+    invoiceTotal: Math.abs(Number(invoiceTotal) || 0) + p.amount,
+    invoiceCode: invoiceCode,
+    idem: creditIdem('spend', [invoiceCode, p.phone, p.amount])
+  });
+  if(!r){
+    // ⚠️ الفاتورة اتقفلت بخصم والرصيد مااتخصمش = خسارة عليك.
+    //    لازم تبان بصوت عالي مش تعدّي في اللوج.
+    showToast('⚠️⚠️ الرصيد مااتخصمش من حساب العميلة — بلّغ المالك فورًا', 'err');
   }
   pendingCreditSpend = null;
-  return {ok:true};
+  return r;
 }
 window.commitCreditSpend = commitCreditSpend;
 
@@ -231,7 +235,11 @@ async function keepChangeAsCredit(changeAmount, invoiceCode, phoneArg){
   });
   if(!ok) return null;
 
-  return callCredit('creditKeepChange', {phone:phone,amount:amt,invoiceCode:invoiceCode});
+  return callCredit('creditAdjust', {
+    phone: phone, amount: amt, source:'change', invoiceCode: invoiceCode,
+    reason:'باقي فاتورة ' + (invoiceCode || ''),
+    idem: creditIdem('change', [invoiceCode, phone, amt])
+  });
 }
 window.keepChangeAsCredit = keepChangeAsCredit;
 
@@ -291,45 +299,6 @@ async function printGiftCardSlips(cards){
   }
 }
 window.printGiftCardSlips = printGiftCardSlips;
-
-
-/* Receipt is evidence of wallet issuance, NOT a bearer voucher; scan only opens the account. */
-function creditSlipHtml(s){
-  const safe=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const ref=String(s.creditReceipt||'');
-  if(!/^CR-[A-F0-9]{20}$/.test(ref))throw Error('الرقم المرجعي لإيصال الرصيد غير صحيح');
-  const barcode=typeof receiptBarcodeImg==='function'?receiptBarcodeImg(ref):'';
-  const methods=Object.entries(s.originalPayments||{}).filter(([,v])=>Number(v)!==0).map(([k,v])=>k+': '+Number(v).toFixed(2)).join(' | ');
-  const visa=(s.visaRefs||[]).join(', ');
-  return '<div style="direction:rtl;text-align:center;color:#171717;background:#fff;font-family:Arial,sans-serif;padding:14px 9px;width:100%;box-sizing:border-box">'
-   +'<div style="font-weight:900;font-size:23px;letter-spacing:2px">echarpe</div>'
-   +'<div style="font-size:12px;margin-top:4px">إيصال إضافة رصيد مشتريات</div>'
-   +'<div style="font-weight:900;font-size:32px;padding:14px 0">+'+safe(Number(s.amount).toFixed(2))+' ج.م</div>'
-   +'<div style="font-size:12px">رصيد الحساب بعد المرتجع: <b>'+safe(Number(s.balance).toFixed(2))+' ج.م</b></div>'
-   +'<hr><div style="font-size:11px;line-height:2;text-align:right">'
-   +'فاتورة المرتجع: '+safe(s.refundInvoice||window._lastInvoiceCode||'—')+'<br>'
-   +'الفاتورة الأصلية: '+safe(s.originalInvoice)+'<br>'
-   +'الدفع الأصلي: '+safe(methods||'غير مسجل')+'<br>'
-   +(visa?'رقم عملية الفيزا: '+safe(visa)+'<br>':'')
-   +'المرجع: '+safe(ref)+'<br>بدون تاريخ انتهاء</div>'
-   +(barcode?'<img alt="باركود الإيصال" style="width:100%;height:auto" src="'+safe(barcode)+'">':'')
-   +'<div dir="ltr" style="font-size:12px;font-weight:bold;word-break:break-all">'+safe(ref)+'</div>'
-   +'<hr><div style="font-size:10px;line-height:1.7">الباركود للاستعلام فقط، وليس رصيدًا مستقلًا.<br>استخدام الرصيد يتطلب موافقة العميلة بالرقم السري على التابلت.</div></div>';
-}
-window.creditSlipHtml=creditSlipHtml;
-async function printCreditSlip(s){
- const h=document.createElement('div');h.innerHTML=creditSlipHtml(s);
- if(window.posShell&&window.posShell.printReceipt){
-   const cfg=window.shellCfg||{};
-   const result=await window.posShell.printReceipt({printer:cfg.invoicePrinter,paperWidth:(window.receiptDesignConfig&&receiptDesignConfig.paperWidth)||'80',html:h.outerHTML,openDrawer:false});
-   if(result?.error)throw Error(result.error);
- }else{
-   const f=document.createElement('iframe');f.style.cssText='position:fixed;left:-10000px;top:0;width:360px;height:650px';document.body.appendChild(f);
-   f.contentDocument.open();f.contentDocument.write('<!doctype html><html lang="ar"><head><meta charset="utf-8"></head><body>'+h.outerHTML+'</body></html>');f.contentDocument.close();
-   f.contentWindow.focus();f.contentWindow.print();setTimeout(()=>f.remove(),30000);
- }
-}
-window.printCreditSlip=printCreditSlip;
 
 /* ============================================================
    📤 كارت الهدية للمشاركة — صورة شيك تتبعت واتساب

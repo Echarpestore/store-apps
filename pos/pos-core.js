@@ -1414,8 +1414,6 @@ function goToRoles(){
   if(!hasPerm('canManageRoles') && !noRoleAssignmentsYet){ showToast('الصلاحية دي للمدير بس', 'err'); return; }
   showScreen('rolesScreen');
   renderRolesScreen();
-  const financePanel=document.querySelector('#rolesScreen .finOwnerPanel');
-  if(financePanel)financePanel.hidden=!(currentEmployee&&currentEmployee.id===FIXED_ADMIN.id);
 }
 
 
