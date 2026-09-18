@@ -31,8 +31,8 @@ console.log('\n🧯 الأعطال');
 t('فشل فتح الطلب بيشيل إنستاباي من الفاتورة',()=>has("selectedPayMethods.delete('instapay')"));
 t('فشل التثبيت بيتبلّغ بصوت عالي',()=>has('تثبيت الانستا باي فشل'));
 t('سلة جديدة بتصفّر الطلب',()=>has('window.clearCart = function'));
-t('الإلغاء بيتأكد الأول',()=>has("confirm('تلغي طلب الانستا باي؟')"));
-t('اليدوي بيحذّر إنه مسؤوليتها',()=>has('هيتسجّل باسمك'));
+t('الإلغاء بيتأكد الأول',()=>has("title: 'إلغاء طلب الانستا باي'"));
+t('اليدوي بيحذّر إنه مسؤوليتها',()=>has('التأكيد بيتسجّل باسمك'));
 
 console.log('\n⚙️ الإعدادات');
 t('فرع مفعّل لازم له عنوان',()=>has("if (on && !alias)"));
@@ -43,6 +43,16 @@ t('الحقن مبيعدّلش pos-reports',()=>{
   const a=fs.readFileSync('/home/claude/repo/store-apps-main/pos/pos-reports.js','utf8');
   const b=fs.existsSync('pos/pos-reports.js')?fs.readFileSync('pos/pos-reports.js','utf8'):a;
   if(a!==b)throw Error('pos-reports.js اتغير')});
+
+console.log('\n🚫 §10 ممنوع prompt/confirm في POS');
+// ⚠️ الفحص لازم يشيل التعليقات الأول — الاختبار وقع مرة على كلمة
+//    prompt جوّه تعليق بيشرح المنع نفسه (فشل وهمي شكله باج حقيقي).
+const code=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/(^|[^:])\/\/.*$/gm,'$1');
+t('مفيش confirm()',()=>{if(/[^a-zA-Z.]confirm\(/.test(code))throw Error('لسه فيه confirm')});
+t('مفيش prompt()',()=>{if(/[^a-zA-Z.]prompt\(/.test(code))throw Error('لسه فيه prompt')});
+t('مفيش alert()',()=>{if(/[^a-zA-Z.]alert\(/.test(code))throw Error('لسه فيه alert')});
+t('فيه مودال بديل',()=>{has('function ipAsk(');has("id=\"ipAsk\"")});
+t('التأكيد اليدوي خطوة واحدة',()=>has("yes: 'أكّدي وكمّلي'"));
 
 console.log('\n📄 الربط');
 t('الملف متحمّل في index.html',()=>{if(!html.includes('instapay-pos.js?v=690'))throw Error('مش متحمّل')});

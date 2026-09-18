@@ -127,7 +127,10 @@ const HTML = `
       <div class="ipChip" id="ipC3"><span>رقم العملية</span></div>
     </div>
     <div class="ipHint" id="ipHint">وجّهي شاشة الإيصال ناحية الكاميرا</div>
-    <button class="ipBtn ipGhost" id="ipHelp">مش راضي يقرا — سلّمي الكاشير</button>
+    <div style="display:flex;gap:1.6vw;width:min(70vh,86vw)">
+      <button class="ipBtn ipGhost" id="ipFlip" style="flex:1;padding:1.4vh 2vw;font-size:2vh">🔄 اقلبي الكاميرا</button>
+      <button class="ipBtn ipGhost" id="ipHelp" style="flex:2;padding:1.4vh 2vw;font-size:2vh">سلّمي الكاشير</button>
+    </div>
   </div>
 
   <!-- 3️⃣ تم -->
@@ -216,7 +219,17 @@ function diffScore(a, b) {
    بدل ما نكتشفها في الفرع، بنكتشفها لوحدنا: ٣ محاولات من غير ما
    يتقرا **أي** حقل = نقلب ونكمّل. القلب بيتطبّق على اللقطة
    والعرض مع بعض عشان العميلة تشوف اللي بيتبعت. */
-let flipCapture = false, blindTries = 0;
+const FLIP_KEY = 'insta_flip_' + branch;
+let flipCapture = localStorage.getItem(FLIP_KEY) === '1', blindTries = 0;
+
+/* 💾 القلب بيتحفظ **للجهاز**. التابلت اللي بيعكس هيفضل يعكس، فمفيش
+   معنى إننا نكتشفه من أول في كل عملية ونضيّع محاولة على العميلة. */
+function setFlip(on) {
+  flipCapture = !!on;
+  try { localStorage.setItem(FLIP_KEY, flipCapture ? '1' : '0'); } catch (e) {}
+  $('ipVid').classList.toggle('flip', flipCapture);
+  $('ipFlip').textContent = flipCapture ? '🔄 الكاميرا مقلوبة' : '🔄 اقلبي الكاميرا';
+}
 
 function frameJpeg(video) {
   const w = video.videoWidth, h = video.videoHeight;
@@ -258,17 +271,21 @@ async function tick() {
     const sawSomething = ch.amount || ch.reference || ch.time || ch.success || ch.beneficiary;
     if (!sawSomething && !r.ok) {
       blindTries++;
-      if (blindTries === 3 && !flipCapture) {
-        flipCapture = true;
-        $('ipVid').classList.add('flip');
+      // محاولة واحدة عمياء تكفي: صفر حقول = صورة مقلوبة، مش صورة وحشة.
+      if (blindTries === 1 && !flipCapture) {
+        setFlip(true);
         $('ipHint').textContent = 'بنظبط الكاميرا…';
         return;
       }
+      if (blindTries >= 3 && flipCapture && localStorage.getItem(FLIP_KEY) !== '1') setFlip(false);
     } else { blindTries = 0; }
 
     if (r.ok) { stopCam(); show('ok'); return; }
     if (r.error === 'DUPLICATE') { $('ipHint').textContent = 'الإيصال ده اتستخدم قبل كده'; return; }
-    $('ipHint').textContent = r.hint || 'قرّبي الإيصال شوية';
+    // ⚠️ كانت بتفضل على "بنقرا…" لما الرد يرجع فاضي — فالعميلة
+    //    والكاشير فاكرين إن النظام معلّق وهو شغال.
+    $('ipHint').textContent = r.hint
+      || (sawSomething ? 'ثبّتي شوية كمان' : 'مش شايف الإيصال — قرّبيه أو اقلبي الكاميرا');
   } catch (e) {
     const c = String((e && e.code) || '');
     // خلصت المحاولات أو الطلب اتقفل → الكاشير تكمّل
@@ -288,6 +305,8 @@ $('ipDone').onclick = async () => {
   if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 900); }
 };
 $('ipHelp').onclick = () => { stopCam(); show('man'); };
+$('ipFlip').onclick = () => { setFlip(!flipCapture); blindTries = 0; $('ipHint').textContent = 'جرّبي تاني'; };
+setFlip(flipCapture);
 
 /* 🖼️ الـQR بيتقرا من إعدادات الفرع **مرة واحدة** ويتخزّن في الذاكرة.
    ⚠️ عن قصد مش جوّه مستند الحالة: صورة الـQR حوالي ٢٠٠ كيلو، ولو
@@ -313,7 +332,7 @@ if (branch) {
     if (!cur || cur.sid !== s.sid) {
       cur = { sid: s.sid };
       stopCam(); paintChecks(null);
-      flipCapture = false; blindTries = 0; $('ipVid').classList.remove('flip');
+      blindTries = 0;   // القلب إعداد جهاز — بيفضل، والعداد بس بيتصفّر
       $('ipAmt').innerHTML = (Number(s.amountCents || 0) / 100)
         .toLocaleString('en-EG', { minimumFractionDigits: 0 }) + '<span>ج.م</span>';
       $('ipWho').innerHTML = (s.alias || '') + '<small>' + (s.beneficiary || '') + '</small>';

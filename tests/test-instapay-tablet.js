@@ -18,9 +18,11 @@ t('الـQR بيتحمّل مرة واحدة',()=>has('if (_qr)'));
 console.log('\n🖼️ الصورة');
 t('العرض مش مقلوب (العميلة تشوف اللي بيتبعت)',()=>{
   if(src.includes('object-fit:cover;transform:scaleX(-1)'))throw Error('العرض لسه مقلوب')});
-t('فيه شبكة أمان للانعكاس',()=>{has('let flipCapture = false');has('x.scale(-1, 1)')});
-t('القلب بيتفعّل بعد 3 محاولات عمياء',()=>has('blindTries === 3'));
-t('القلب بيتصفّر مع كل طلب جديد',()=>has('flipCapture = false; blindTries = 0'));
+t('فيه شبكة أمان للانعكاس',()=>{has('let flipCapture =');has('x.scale(-1, 1)')});
+t('القلب بيتفعّل من أول محاولة عمياء',()=>has('blindTries === 1'));
+t('القلب بيتحفظ للجهاز',()=>{has('FLIP_KEY');has('localStorage.setItem(FLIP_KEY')});
+t('فيه زرار قلب يدوي',()=>{has("id=\"ipFlip\"");has("$('ipFlip').onclick")});
+t('الشاشة متفضلش واقفة على بنقرا',()=>has('مش شايف الإيصال'));
 t('الجودة مضغوطة',()=>has("'image/jpeg', 0.82"));
 t('الكاميرا الأمامية',()=>has("facingMode: 'user'"));
 
