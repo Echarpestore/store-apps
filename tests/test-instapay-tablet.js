@@ -16,7 +16,11 @@ t('قفل تزامن يمنع نداءين مع بعض',()=>has('if (busy || !cu
 t('الـQR بيتحمّل مرة واحدة',()=>has('if (_qr)'));
 
 console.log('\n🖼️ الصورة');
-t('الصورة المبعوتة مش معكوسة',()=>has('// الفيديو معكوس للعرض بس'));
+t('العرض مش مقلوب (العميلة تشوف اللي بيتبعت)',()=>{
+  if(src.includes('object-fit:cover;transform:scaleX(-1)'))throw Error('العرض لسه مقلوب')});
+t('فيه شبكة أمان للانعكاس',()=>{has('let flipCapture = false');has('x.scale(-1, 1)')});
+t('القلب بيتفعّل بعد 3 محاولات عمياء',()=>has('blindTries === 3'));
+t('القلب بيتصفّر مع كل طلب جديد',()=>has('flipCapture = false; blindTries = 0'));
 t('الجودة مضغوطة',()=>has("'image/jpeg', 0.82"));
 t('الكاميرا الأمامية',()=>has("facingMode: 'user'"));
 

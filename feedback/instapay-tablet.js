@@ -70,7 +70,12 @@ const CSS = `
 /* الكاميرا */
 .ipCam{position:relative;width:min(70vh,86vw);aspect-ratio:3/4;border-radius:3vh;
   overflow:hidden;background:#000;box-shadow:0 3vh 8vh rgba(0,0,0,.65)}
-.ipCam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.ipCam video{width:100%;height:100%;object-fit:cover}
+/* ⚠️ العرض **مش** مقلوب عن قصد. الكاميرا الأمامية بتتعرض عادة
+   كمراية، وده هنا ضار: العميلة بتشوف إيصالها مقلوب فتلف التليفون
+   عشان تظبطه — وتخرّب اللقطة. من غير قلب، اللي على الشاشة هو
+   نفسه اللي بيتبعت. */
+.ipCam video.flip{transform:scaleX(-1)}
 .ipCam .frame{position:absolute;inset:6%;border-radius:2vh;
   box-shadow:0 0 0 2px rgba(255,255,255,.22) inset}
 /* شعاع المسح — بيوضّح للعميلة إن الجهاز بيقرا فعلًا */
@@ -204,6 +209,15 @@ function diffScore(a, b) {
   return s / (a.length / 3);
 }
 
+/* 🔄 شبكة أمان للانعكاس.
+   الأصل إن الفريم الخام من الكاميرا **مش** معكوس، وده اللي بنبعته.
+   لكن فيه أجهزة (ويب-فيو على بعض التابلتات) بترجّع الفريم معكوس
+   فعلًا — وساعتها النص بيوصل Vision مقلوب ومحصلتش قراءة خالص.
+   بدل ما نكتشفها في الفرع، بنكتشفها لوحدنا: ٣ محاولات من غير ما
+   يتقرا **أي** حقل = نقلب ونكمّل. القلب بيتطبّق على اللقطة
+   والعرض مع بعض عشان العميلة تشوف اللي بيتبعت. */
+let flipCapture = false, blindTries = 0;
+
 function frameJpeg(video) {
   const w = video.videoWidth, h = video.videoHeight;
   if (!w || !h) return null;
@@ -211,8 +225,7 @@ function frameJpeg(video) {
   const c = document.createElement('canvas');
   c.width = Math.round(w * scale); c.height = Math.round(h * scale);
   const x = c.getContext('2d', { alpha: false });
-  // الفيديو معكوس للعرض بس — الصورة المبعوتة **مش** معكوسة،
-  // وإلا النص بيوصل السيرفر مقلوب ومش بيتقرا.
+  if (flipCapture) { x.translate(c.width, 0); x.scale(-1, 1); }
   x.drawImage(video, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', 0.82).split(',')[1];
 }
@@ -239,6 +252,20 @@ async function tick() {
     $('ipHint').textContent = 'بنقرا…';
     const r = (await callScan({ sid: cur.sid, image: img })).data || {};
     paintChecks(r.checks);
+
+    // 👁️ عمى كامل: مفيش ولا حقل اتقرا → غالبًا الصورة مقلوبة
+    const ch = r.checks || {};
+    const sawSomething = ch.amount || ch.reference || ch.time || ch.success || ch.beneficiary;
+    if (!sawSomething && !r.ok) {
+      blindTries++;
+      if (blindTries === 3 && !flipCapture) {
+        flipCapture = true;
+        $('ipVid').classList.add('flip');
+        $('ipHint').textContent = 'بنظبط الكاميرا…';
+        return;
+      }
+    } else { blindTries = 0; }
+
     if (r.ok) { stopCam(); show('ok'); return; }
     if (r.error === 'DUPLICATE') { $('ipHint').textContent = 'الإيصال ده اتستخدم قبل كده'; return; }
     $('ipHint').textContent = r.hint || 'قرّبي الإيصال شوية';
@@ -286,6 +313,7 @@ if (branch) {
     if (!cur || cur.sid !== s.sid) {
       cur = { sid: s.sid };
       stopCam(); paintChecks(null);
+      flipCapture = false; blindTries = 0; $('ipVid').classList.remove('flip');
       $('ipAmt').innerHTML = (Number(s.amountCents || 0) / 100)
         .toLocaleString('en-EG', { minimumFractionDigits: 0 }) + '<span>ج.م</span>';
       $('ipWho').innerHTML = (s.alias || '') + '<small>' + (s.beneficiary || '') + '</small>';
