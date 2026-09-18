@@ -836,20 +836,6 @@ document.addEventListener('DOMContentLoaded',function(){
       <div id="refundsDueBody"></div>
     </div>
 
-    <!-- FINANCE v679: Owner-only reconciliation and immutable wallet journal via Functions. -->
-    <div class="panel" id="financeOfficePanel">
-      <div class="row" style="gap:10px;flex-wrap:wrap"><h3>🏦 InstaPay · المطابقة البنكية</h3>
-        <button type="button" class="ghost" onclick="financeOfficeRefresh()">↻ تحديث التحويلات</button></div>
-      <div class="hint">قبول صورة الإيصال يُكمل البيع لكنه لا يؤكد وصول المبلغ للبنك. لازم مراجعة حساب CIB.</div>
-      <input type="search" id="financeOfficeSearch" placeholder="ابحث برقم الفاتورة أو الرقم المرجعي أو الفرع" aria-label="بحث التحويلات" oninput="financeOfficeFilter()" style="margin:10px 0;max-width:480px">
-      <div id="financeOfficeStatus" class="hint" role="status">اضغط تحديث التحويلات بعد تسجيل الدخول.</div>
-      <div id="financeOfficeRows"></div>
-      <h3 style="margin:26px 0 8px">💳 سجل رصيد العملاء</h3>
-      <div class="hint">كل إضافة وخصم مرتبط بفاتورة وموظف. كشف الرصيد في تطبيق العميل يحتاج PIN.</div>
-      <button type="button" class="ghost" onclick="financeOfficeCreditRefresh()" style="margin:8px 0">↻ تحديث دفتر الرصيد</button>
-      <div id="financeCreditRows"></div>
-    </div>
-
     <!-- 💳 الرصيد وكروت الهدايا -->
     <div class="panel">
       <h3>💳 الرصيد وكروت الهدايا</h3>
@@ -1110,6 +1096,5 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="../cctv-config.js?v=549"></script>
 <script src="cctv.js?v=675"></script>
 <script src="office.js?v=675"></script>
-<script src="finance-office.js?v=680"></script>
 </body>
 </html>

@@ -7535,8 +7535,13 @@ async function approveCreditReq(id){
     + 'طالبها: ' + (r.byName || '—') + '\n\n'
     + '⚠️ دي فلوس بتتضاف من العدم.')) return;
   try{
-    const fn = ofApp.functions('us-central1').httpsCallable('creditRequestDecision');
-    await fn({requestId:id,decision:'approved'}); // balance, ledger & decision in ONE server transaction
+    const fn = ofApp.functions('us-central1').httpsCallable('creditAdjust');
+    // 🔁 مفتاح التكرار من الطلب نفسه — الموافقة مرتين بالغلط
+    //    مبتضيفش الفلوس مرتين.
+    await fn({ phone: r.phone, amount: r.amount, reason: r.reason,
+               idem: 'req:' + id, source: 'approved' });
+    await db.collection('credit_requests').doc(id)
+      .set({ status:'approved', decidedAt: Date.now() }, { merge: true });
   }catch(e){ alert('ماتمّتش: ' + (e.message || e.code)); }
 }
 window.approveCreditReq = approveCreditReq;
@@ -7544,8 +7549,8 @@ window.approveCreditReq = approveCreditReq;
 async function rejectCreditReq(id){
   if(!confirm('ترفض الطلب ده؟')) return;
   try{
-    const fn=ofApp.functions('us-central1').httpsCallable('creditRequestDecision');
-    await fn({requestId:id,decision:'rejected'});
+    await db.collection('credit_requests').doc(id)
+      .set({ status:'rejected', decidedAt: Date.now() }, { merge: true });
   }catch(e){ alert('ماتمّتش: ' + (e.message || e.code)); }
 }
 window.rejectCreditReq = rejectCreditReq;
