@@ -1,0 +1,5 @@
+// Merge into deployed Firebase Storage rules; do NOT replace existing rules wholesale.
+// Evidence is written/read through Cloud Functions Admin SDK only.
+match /finance-evidence/{path=**} {
+  allow read, write: if false;
+}

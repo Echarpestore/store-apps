@@ -53,11 +53,13 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
     'مفيش استعلام على المخزون كله (آلاف المستندات على موبايل)');
 
   const iSubmit = LOY.indexOf('function shopSubmit');
-  const iAdd = LOY.indexOf('.add(doc)');
-  assert(iSubmit > 0 && iAdd > iSubmit, 'الكتابة جوه دالة الإرسال');
-  const body = LOY.slice(iSubmit, iAdd);
-  assert(body.indexOf('orderValidateCart') > 0 && body.indexOf('orderValidateCart') < body.length,
-    '⭐⭐ الفحص **قبل** الكتابة مش بعدها');
+  const body = LOY.slice(iSubmit,LOY.indexOf('window.shopSubmit = shopSubmit;',iSubmit));
+  assert(iSubmit > 0 && /httpsCallable\('onlineOrderPlace'\)/.test(body), 'الكتابة تتم من خلال الدالة السحابية حصريًا');
+  assert(body.indexOf('orderValidateCart') > 0 && body.indexOf('orderValidateCart') < body.indexOf('httpsCallable'),
+    '⭐⭐ الفحص **قبل** نداء السيرفر');
+  assert(!/\.add\(doc\)/.test(body), '⭐⭐ ممنوع fallback مباشر يتجاوز السعر والحجز');
+  const glowBody = GLOW.slice(GLOW.indexOf('function shopSubmit'),GLOW.indexOf('window.shopSubmit = shopSubmit;'));
+  assert(!/\.add\(doc\)/.test(glowBody) && /httpsCallable\('onlineOrderPlace'\)/.test(glowBody), '⭐⭐ Glow كمان ممنوع fallback مباشر');
 })();
 
 /* ============================================================
@@ -346,12 +348,17 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
   // 🔐 القواعد
   const i = RULES.indexOf('match /online_orders/{id}');
   const block = RULES.slice(i, RULES.indexOf('allow delete: if false;', i));
-  assert(/fulfillment == 'pickup'/.test(block) && /fulfillment == 'delivery'/.test(block),
-    '⭐ القاعدة بتحصر طريقة التسليم');
-  assert(/request\.resource\.data\.shipping >= 0/.test(block),
-    "⭐⭐ شحن سالب ممنوع (كان بيقلّل الإجمالي)");
-  assert(/grandTotal >= request\.resource\.data\.total/.test(block),
-    '⭐⭐ الإجمالي مايقلّش عن قيمة البضاعة');
+  // v681: direct anonymous writes must NEVER bypass atomic server-side catalog,
+  // rate limiting or shipping validation. All clients call onlineOrderPlace.
+  assert(/allow create: if false;/.test(block),
+    '⭐⭐ إنشاء الأوردر مباشرة ممنوع؛ السيرفر وحده يحسب ويحجز المخزون');
+  const server=fs.readFileSync(path.join(ROOT, 'functions', 'onlineOrderPlace.js'),'utf8');
+  assert(/const fulfillment = d.fulfillment === "delivery" \? "delivery" : "pickup"/.test(server),
+    '⭐ السيرفر بيحصر التسليم في استلام أو شحن');
+  assert(/function serverShippingFee/.test(server) && /Math.max\(0, Number\(cfg.shippingFee\) \|\| 0\)/.test(server),
+    '⭐⭐ السيرفر يحسب الشحن من إعدادات موثوقة ومش يقبل السالب من العميل');
+  assert(/grandTotal: Math.round\(\(subtotal \+ shipping\) \* 100\) \/ 100/.test(server),
+    '⭐⭐ الإجمالي محسوب على السيرفر من البضاعة والشحن');
   assert(/request\.resource\.data\.shipping == resource\.data\.shipping/.test(RULES.slice(i, i + 2600)),
     '⭐ والشحن متجمّد بعد الإنشاء');
 })();

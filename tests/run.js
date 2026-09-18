@@ -14,6 +14,8 @@ const path = require('path');
 
 const files = fs.readdirSync(__dirname).filter(f=>/^test-.*\.js$/.test(f)).sort();
 let pass=0, fail=0; const failures=[];
+const realExit = process.exit.bind(process);
+process.exit = function(code){ const e = new Error('exit'); e.__exitStub = true; e.__exitCode = code || 0; throw e; };
 
 global.assert = function(cond, msg){
   if(cond){ pass++; }
@@ -28,12 +30,15 @@ global.assertEq = function(actual, expected, msg){
 console.log(`🧪 تشغيل ${files.length} ملف اختبار...\n`);
 for(const f of files){
   const before = fail;
+  process.exitCode = 0;
   console.log('▶ ' + f);
   try { require(path.join(__dirname, f)); }
-  catch(e){ fail++; failures.push(`${f} crashed: ${e.message}`); console.error('  💥 crash:', e.message); }
+  catch(e){ if(!e.__exitStub || e.__exitCode !== 0){ fail++; failures.push(`${f} crashed: ${e.message}`); console.error('  💥 crash:', e.message); } }
+  if(process.exitCode){ fail++; failures.push(`${f} set exitCode=${process.exitCode}`); console.error('  💥 exitCode:', process.exitCode); process.exitCode = 0; }
   console.log(before===fail ? '  ✅ تمام\n' : '  ⚠️ فيه فشل فوق\n');
 }
 console.log('===============================');
 console.log(`النتيجة: ${pass} ناجح · ${fail} فاشل`);
-if(fail){ console.log('الفشل:'); failures.forEach(m=>console.log(' -', m)); process.exit(1); }
-process.exit(0); // أي مؤقتات باقية متمنعش الخروج
+process.exit = realExit;
+if(fail){ console.log('الفشل:'); failures.forEach(m=>console.log(' -', m)); realExit(1); }
+realExit(0); // أي مؤقتات باقية متمنعش الخروج

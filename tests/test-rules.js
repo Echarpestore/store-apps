@@ -170,8 +170,8 @@ const OPS = [
   // ---- 💳 منظومة الرصيد وكروت الهدايا ----
   // ⚠️ القاعدة الحاكمة: **مفيش تطبيق بيكتب فلوس**. كل الكتابة من
   //    Cloud Functions (بتشتغل بـAdmin SDK فالقواعد مبتتطبّقش عليها).
-  ['تطبيق الولاء', 'credit_ledger', 'list', { auth:'anon', limit:50 }, true,
-    'loyalty — كشف حساب الرصيد (نفس نمط «فواتيري»)'],
+  ['تطبيق الولاء', 'credit_ledger', 'list', { auth:'anon', limit:50 }, false,
+    'خصوصية: العميل لا يقرأ دفتر كل العملاء؛ كشف حسابه عبر PIN والدالة السحابية'],
   ['تطبيق الولاء', 'credit_ledger', 'create', ANON, false,
     '⭐⭐ التطبيق مايكتبش في الدفتر — الدوال بس'],
   ['POS', 'pos_card_refunds_due', 'create', STAFF, true,

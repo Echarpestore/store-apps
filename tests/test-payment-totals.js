@@ -409,7 +409,7 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
 
   // 💰 v372: الدرج بيفتح قبل انتظار حفظ Firestore نفسه، مش بس قبل الطباعة.
   const pbSrc = extractFn(appSrc2, '_printBuiltReceipt');
-  assert(/preOpenCashDrawerForSale\(invoiceCode, payments\)[\s\S]{0,250}db\.collection\(TEST_SALES\)\.add/.test(saleSrc),
+  assert(/preOpenCashDrawerForSale\(invoiceCode, payments\)[\s\S]{0,270}(?:financeSaleWrite|db\.collection\(TEST_SALES\)\.add)/.test(saleSrc),
     'أمر الدرج المبكر بيطلع قبل انتظار حفظ الفاتورة');
   assert(/_drawerViaPrint = drawerTarget && !_hasDrawerApi/.test(pbSrc),
     'أمر الدرج داخل الطباعة fallback فقط للشِل القديم');

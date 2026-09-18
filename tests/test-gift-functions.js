@@ -106,7 +106,7 @@ function extractFn(s, header){
 //    من غيرها: نفس الرصيد يتصرف في فرعين في نفس اللحظة والاتنين ينجحوا.
 // ============================================================
 (function(){
-  ['giftCardIssue', 'giftCardActivate', 'giftCardClaim', 'creditAdjust', 'creditSpend']
+  ['giftCardIssue', 'giftCardActivate', 'giftCardClaim', 'creditAdjust']
   .forEach(function(n){
     const f = extractFn(src, 'exports.' + n);
     assert(!!f, 'لقينا ' + n);
@@ -115,8 +115,9 @@ function extractFn(s, header){
   });
   // ⭐ القراءة جوّه المعاملة مش بره — القراءة بره بتلغي الحماية
   const spend = extractFn(src, 'exports.creditSpend');
-  assert(!!spend && /await tx\.get\(iref\)/.test(spend),
-    '⭐⭐ وفحص التكرار بـtx.get جوّه المعاملة (بره = سباق حقيقي)');
+  const finance = fs.readFileSync(path.join(ROOT,'functions','financeCheckout.js'),'utf8');
+  assert(!!spend && /throw new HttpsError\('failed-precondition'/.test(spend) && /await tx\.get\(inv\)/.test(finance),
+    '⭐⭐ مسار الصرف القديم مقفول والمعاملة الجديدة بتحرس تكرار الفاتورة');
   const post = extractFn(src, 'async function postCredit(');
   assert(!!post && /await tx\.get\(cref\)/.test(post),
     '⭐⭐ وقراءة الرصيد كمان جوّه المعاملة');
@@ -126,7 +127,7 @@ function extractFn(s, header){
 // ٥) 🔁 مفاتيح التكرار — الشبكة قطعت والكاشير دوس تاني
 // ============================================================
 (function(){
-  ['giftCardIssue', 'creditAdjust', 'creditSpend'].forEach(function(n){
+  ['giftCardIssue', 'creditAdjust'].forEach(function(n){
     const f = extractFn(src, 'exports.' + n);
     if(!f) return;
     assert(/مفتاح التكرار ناقص/.test(f), '🔁 ' + n + ' بترفض من غير مفتاح تكرار');
@@ -172,8 +173,9 @@ function extractFn(s, header){
 
   // 💵 "سيب الباقي" استثناء مقصود — الفلوس دخلت الدرج فعلًا
   const adj = extractFn(src, 'exports.creditAdjust');
-  assert(!!adj && /isChange/.test(adj),
-    '💵 "سيب الباقي في الحساب" ليها مسار مباشر (الفلوس دخلت فعلًا)');
+  const change=extractFn(src,'exports.creditKeepChange');
+  assert(!!change && /pos_test_sales/.test(change) && /runTransaction/.test(change),
+    '💵 سيب الباقي في الحساب مرتبط بفاتورة من السيرفر وذري');
   assert(!!adj && /data\.invoiceCode/.test(adj),
     '⭐ ومربوطة بفاتورة — مش أي مبلغ');
   assert(!!adj && /credit_requests/.test(adj),

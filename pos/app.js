@@ -188,6 +188,7 @@ function _gsClassify(raw){
   if(/^EC[A-Z2-9]{10}$/.test(code)) return { type:'staff', code };
   if(/^(ECH|GLW)/.test(code))       return { type:'customer', code };
   if(/^FT/.test(code))              return { type:'invoice', code };
+  if(/^CR-[0-9A-F]{20}$/.test(code)) return { type:'credit_receipt', code };
   return { type:'maybe_item', code: t };
 }
 // نتخطى المعالجة العامة لو: واقفين في خانة كتابة، أو شاشة الدخول/التحويلات (ليهم لواقطهم الخاصة)
@@ -227,6 +228,7 @@ document.addEventListener('keydown', function(e){
     if(r.type === 'staff'){ resumeOrStartSale(); if(typeof activateStaffPurchase==='function') activateStaffPurchase(r.code); }
     else if(r.type === 'customer'){ resumeOrStartSale(); if(typeof resolveLoyaltyScan==='function') resolveLoyaltyScan(r.code).then(f=>{ if(!f) showToast('كود العضوية مش موجود','err'); }); }
     else if(r.type === 'invoice'){ if(typeof openInvoiceForReturn==='function') openInvoiceForReturn(r.code); }
+    else if(r.type === 'credit_receipt'){ if(typeof financeScanCreditReceipt==='function') financeScanCreditReceipt(r.code); }
     else if(r.type === 'maybe_item'){
       const match = (typeof allInventory!=='undefined'?allInventory:[]).find(it=> it.barcode === r.code && it.status !== 'hidden' && it.status !== 'outofstock');
       if(match){ resumeOrStartSale(); if(typeof addToCart==='function') addToCart(match); }
@@ -260,6 +262,11 @@ function goToSale(){
       firstItemAt: (typeof _cartFirstItemAt !== 'undefined') ? _cartFirstItemAt : null
     });
   }
+  if(typeof _saleJustSaved !== 'undefined' && !_saleJustSaved && typeof financeCancelPending==='function'){
+    financeCancelPending().catch(e=>{try{showToast('تعذر إلغاء طلب التابلت: '+e.message,'err');}catch(_){}});
+  }
+  if(typeof financeSaleReset==='function') financeSaleReset();
+  window._financeInvoiceIdentity=null;
   if(typeof _saleJustSaved !== 'undefined') _saleJustSaved = false;
   if(typeof _cartFirstItemAt !== 'undefined') _cartFirstItemAt = null;
   editingHeldId = null;

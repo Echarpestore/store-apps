@@ -2717,12 +2717,9 @@ function shopSubmit(){
     doc.funnelSource=shopFunnelSource();
     doc.funnelEntryBarcode=(lines[0]&&lines[0].barcode)||'';
     doc.source = 'app';        // 📱 التطبيق · Glow بيبعت 'glow' · الموقع 'web'
-    /* ☁️ الأولوية للدالة السحابية: هي اللي بتعمل الفحص والخصم
-       والإنشاء في transaction واحدة — فمستحيل اتنين ياخدوا آخر
-       قطعة. ⚠️ الفولباك للكتابة المباشرة موجود عشان الطلب ميقفش
-       لو الدالة لسه ماتنشرتش؛ القاعدة لسه بتحمي الفلوس في الحالتين.
-       ⚠️ أول ما تتنشر، الفولباك ده لازم يتشال والقاعدة تمنع الإنشاء
-          من العميلة خالص. */
+    /* ☁️ أمان v681: الطلب يتم على السيرفر فقط.
+       ممنوع fallback بكتابة مباشرة وقت عطل الدالة، لأنه يتجاوز
+       حجز المخزون وحساب السعر ومنع الطلبات المكررة. */
     var payload = {
       brand: CATALOG_BRAND, source: 'app', branch: _shopBranch,
       phone: currentCustomer.phone, name: info.name,
@@ -2732,27 +2729,20 @@ function shopSubmit(){
       notes: info.notes, contactPhone: info.phone,
       funnelSource:shopFunnelSource(), funnelEntryBarcode:(lines[0]&&lines[0].barcode)||''
     };
-    try{
-      var fn = firebase.app('loyalty')
-        .functions('us-central1').httpsCallable('onlineOrderPlace');
-      return fn(payload).then(function(res){
-        var r = (res && res.data) || {};
-        return Object.assign({}, doc, { code: r.code || doc.code });
-      }).catch(function(e){
-        var code = (e && e.code) || '';
-        /* ⚠️ الفولباك للأعطال بس: «الصنف خلص» رفض **مقصود** ولازم
-           يوصل للعميلة زي ما هو، مش يتخطى بكتابة مباشرة. */
-        if(code === 'functions/failed-precondition' || code === 'failed-precondition'
-           || code === 'functions/invalid-argument' || code === 'invalid-argument'){
-          showToast((e && e.message) || 'مش متاح دلوقتي', true);
-          throw new Error('validate');
-        }
-        console.warn('order fn', code, e && e.message);
-        return db.collection(ORD_COL).add(doc).then(function(){ return doc; });
-      });
-    }catch(e){
-      return db.collection(ORD_COL).add(doc).then(function(){ return doc; });
-    }
+    var fn;
+    try{ fn=firebase.app('loyalty').functions('us-central1').httpsCallable('onlineOrderPlace'); }
+    catch(e){ console.error('online order unavailable',e);throw new Error('مش قادرين نتصل بخدمة الأوردرات دلوقتي. طلبك لم يُسجّل. حاولي بعد شوية.'); }
+    return fn(payload).then(function(res){
+      var data=(res&&res.data)||{};
+      if(!data.id||!data.code)throw new Error('رد السيرفر غير مكتمل. راجعي أوردراتك قبل إعادة المحاولة.');
+      return Object.assign({}, doc, {id:data.id,code:data.code,total:data.total,shipping:data.shipping,grandTotal:data.grandTotal});
+    }).catch(function(e){
+      if(e && (e.code==='functions/failed-precondition'||e.code==='failed-precondition'||e.code==='functions/invalid-argument'||e.code==='invalid-argument')){
+        showToast((e&&e.message)||'مش متاح دلوقتي',true);throw new Error('validate');
+      }
+      console.error('online order rejected or connection lost', e);
+      throw new Error('الاتصال اتقطع أو نتيجة الطلب مش مؤكدة. راجعي أوردراتك قبل إعادة المحاولة عشان ما نكررهوش.');
+    });
   }).then(function(doc){
     shopFunnelTrack('order',lines[0]||null,{funnelOrderCode:doc.code||'',funnelOrderAt:Date.now(),followUpDueAt:0});
     _shopCart = {};
@@ -2765,7 +2755,7 @@ function shopSubmit(){
   }).catch(function(e){
     if(e && e.message !== 'validate'){
       console.warn('order send', e);
-      showToast('معرفناش نبعت الأوردر — حاولي تاني', true);
+      showToast((e&&e.message)||'معرفناش نبعت الأوردر — حاولي تاني', true);
     }
   }).then(function(){
     _shopSending = false;
@@ -2904,15 +2894,11 @@ window.showSheet = showSheet; window.closeSheet = closeSheet;
 /* 📒 كشف الحساب — كل حركة بسطر.
    ⚠️ مش رفاهية: لما العميلة تلاقي رقم مش فاهماه، هتيجي تخانق
       الكاشير. الكشف بيرد عنها. */
+// Ledger is no longer anonymously readable: phone alone cannot reveal finance history.
+var _creditStatementVerifiedPhone = '';
 function watchCredit(phone){
-  try{
-    return db.collection('credit_ledger')
-      .where('phone','==', String(phone))
-      .orderBy('at','desc').limit(50)
-      .onSnapshot(function(snap){
-        _creditRows = snap.docs.map(function(d){ return d.data(); });
-      }, function(e){ console.warn('credit ledger', e && e.code); });
-  }catch(e){ console.warn('watchCredit', e); return null; }
+  _creditRows=[];_creditStatementVerifiedPhone='';
+  return null; // View ledger only through PIN-gated creditCustomerStatement callable.
 }
 window.watchCredit = watchCredit;
 
@@ -2921,18 +2907,28 @@ function creditRowLabel(r){
   if(t === 'gift_card')   return '🎁 كارت هدية';
   if(t === 'change_kept') return '💵 باقي محفوظ' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
   if(t === 'spend')       return '🛍️ فاتورة' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
+  if(t === 'return_credit')return '↩️ رصيد مرتجع' + (r.originalInvoice ? ' · الأصلية '+r.originalInvoice : '');
   if(t === 'manual')      return '✏️ ' + (r.reason || 'تعديل');
   return 'حركة';
 }
 
 function openCreditStatement(){
+  if(!currentCustomer||!currentCustomer.phone)return;
+  if(_creditStatementVerifiedPhone!==currentCustomer.phone){
+    showSheet('🔐 كشف الرصيد الخاص',
+      '<p style="line-height:1.9;text-align:center">اكتبي PIN الرصيد المكوّن من 6 أرقام عشان تشوفي تفاصيل فلوسك. لو لسه مش مفعل، المالك يفعّله بعد التحقق من هويتك في الفرع.</p>'
+      +'<input id="creditWalletPin" type="password" maxlength="6" inputmode="numeric" autocomplete="off" pattern="[0-9]{6}" placeholder="••••••" style="text-align:center;font-size:24px;letter-spacing:8px;width:100%;padding:14px;border:1px solid #d9d5ce;border-radius:13px">'
+      +'<button id="walletUnlock" class="btn-outline" onclick="unlockCreditStatement()" style="width:100%;margin-top:12px">عرض كشف الرصيد</button>'
+      +'<p id="creditWalletError" role="status" style="color:#b91c1c;font-size:13px;margin-top:10px"></p>');
+    return;
+  }
   var rows = _creditRows.map(function(r){
     var amt = Number(r.amount) || 0;
     var d = r.at ? new Date(r.at).toLocaleDateString(i18nLocale(),
       { day:'numeric', month:'short', year:'numeric' }) : '';
     return '<div class="acct-row">'
       + '<span class="k">' + esc(creditRowLabel(r)) + '<br>'
-      +   '<span style="font-size:11px; opacity:.7;">' + esc(d) + '</span></span>'
+      +   '<span style="font-size:11px; opacity:.7;">' + esc(d) + (r.originalInvoice?' · فاتورة '+esc(r.originalInvoice):'') + (r.originalPayments?' · الدفع: '+esc(Object.keys(r.originalPayments).join('، ')):'') + '</span></span>'
       + '<span class="v" style="font-weight:900; color:' + (amt < 0 ? '#c0392b' : '#1e8449') + ';">'
       +   (amt < 0 ? '−' : '+') + fmt(Math.abs(amt)) + ' ج.م</span></div>';
   }).join('');
@@ -2945,6 +2941,24 @@ function openCreditStatement(){
             : '<div class="muted" style="text-align:center; padding:14px;">لسه مفيش حركات</div>'));
 }
 window.openCreditStatement = openCreditStatement;
+async function unlockCreditStatement(){
+  var field=document.getElementById('creditWalletPin'),error=document.getElementById('creditWalletError'),
+      btn=document.getElementById('walletUnlock');
+  if(!field||!currentCustomer)return;
+  var pin=field.value;field.value='';
+  if(!/^\d{6}$/.test(pin)){error.textContent='الرقم السري يجب أن يكون 6 أرقام';return;}
+  btn.disabled=true;error.textContent='جارٍ التحقق من السيرفر…';
+  try{
+    var fn=firebase.app('loyalty').functions('us-central1').httpsCallable('creditCustomerStatement');
+    var phone=currentCustomer.phone,ans=(await fn({phone:phone,pin:pin})).data;
+    if(!currentCustomer||currentCustomer.phone!==phone)throw Error('الحساب اتغير أثناء التحقق');
+    _creditStatementVerifiedPhone=phone;_creditRows=ans.rows||[];
+    // Display balance returned from server; never write this value to Firestore from client.
+    currentCustomer.credit=ans.balance;
+    openCreditStatement();
+  }catch(e){error.textContent=e.message||'رقم غير صحيح أو الحساب مقفل مؤقتًا';btn.disabled=false;}
+}
+window.unlockCreditStatement=unlockCreditStatement;
 
 /* 🎁 استلام كارت هدية — الكود بيتحوّل رصيد والكود يموت */
 function openClaimGift(){
@@ -3007,7 +3021,7 @@ function logout(silent){
   _shopImgCache = {}; _shopOpenItem = null;
   // 💬 نفس القاعدة: عميلة تانية على نفس الجهاز ممنوع تشوف شات غيرها
   if(window.chatCleanup) chatCleanup();
-  _creditRows = [];
+  _creditRows = [];_creditStatementVerifiedPhone='';
   _myRequests = [];
   currentCustomer = null;
   localStorage.removeItem(LS_PHONE);

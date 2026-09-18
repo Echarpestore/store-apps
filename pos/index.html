@@ -1959,6 +1959,15 @@ body.on-dashboard .badge-test{ display:block; }
           <button onclick="resetLoyaltyPin()">🔑 مسح الرقم السري للعميل</button>
           <span>لو العميل نسي رقمه السري في التطبيق</span>
         </div>
+        <details class="financeOwnerTools" style="margin-top:8px;padding:8px;border:1px solid #d6d2c9;border-radius:12px;background:#fcfaf7">
+          <summary style="cursor:pointer;font-size:12px;font-weight:800;color:#76684d">🔐 إعدادات المالك · نظام الرصيد وInstaPay</summary>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;padding-top:9px">
+            <button type="button" onclick="financePairTablet()" style="border-radius:11px">ربط تابلت الفرع</button>
+            <button type="button" onclick="financePinSetup()" style="border-radius:11px">تفعيل / استرجاع PIN للعميلة</button>
+            <button type="button" onclick="financeInstaConfigure()" style="border-radius:11px">بيانات مستفيد InstaPay</button>
+          </div>
+          <small style="color:#847d73">الأزرار لا تعمل إلا بحساب المالك. إثبات الهوية يدوي وموثّق. لا يُطلب OTP حاليًا.</small>
+        </details>
       </div>
       <div class="qbx-itemops">
         <button data-uid="io_qtyplus" onclick="qbxQty(1)">➕<br>كمية</button>
@@ -1979,6 +1988,7 @@ body.on-dashboard .badge-test{ display:block; }
           <button id="pmVisa" onclick="togglePayMethod('visa')"><span class="pm-icon">💳</span>فيزا 1</button>
           <button id="pmVisa2" onclick="togglePayMethod('visa2')"><span class="pm-icon">💳</span>فيزا 2</button>
           <button id="pmInsta" onclick="togglePayMethod('instapay')"><span class="pm-icon">📱</span>انستا باي</button>
+          <button id="pmCreditReturn" onclick="togglePayMethod('credit_return')"><span class="pm-icon">💳</span>رصيد المرتجع</button>
           <button class="qbx-clear-pay" onclick="resetPaymentUI()">🗑️ مسح المدفوعات</button>
           <div id="chatMini" onclick="if(typeof chatOpen==='function')chatOpen()" style="display:none; align-items:center; background:#222a35; border:1.5px solid #46536b; border-radius:11px; padding:6px 11px; margin:6px 0; cursor:pointer; height:62px; flex:0 1 360px; min-width:200px; max-width:400px; color:#f1f5fb; overflow:hidden;"></div>
         </div>
@@ -2123,7 +2133,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="cctv-staff-state.js?v=644"></script>
 <script src="cctv-timeline.js?v=555"></script>
 <script src="cctv-invoice.js?v=604"></script>
-<script src="pos-sale.js?v=668"></script>
+<script src="pos-sale.js?v=680"></script>
 <script src="pos-live.js?v=411"></script>
 <script src="app.js"></script>
 <script src="products.js?v=537"></script>
@@ -2151,6 +2161,8 @@ body.on-dashboard .badge-test{ display:block; }
 <!-- 💳 منظومة الرصيد وكروت الهدايا -->
 <script src="credit-core.js"></script>
 <script src="credit-ui.js"></script>
+<script src="finance-pos.js?v=679"></script>
+<div id="financeManagement" style="display:none"></div>
 <!-- 🧠 شريط الفرصة -->
 <script src="opportunity-core.js"></script>
 <!-- 🔖 طلبات الزباين -->

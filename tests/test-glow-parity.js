@@ -143,7 +143,7 @@ const rules = R('security', 'firestore-phase2.rules');
   const req = rules.slice(rules.indexOf('match /customer_requests/'), rules.indexOf('match /customer_requests/') + 260);
   assert(/allow read: if signedIn\(\)/.test(req), L + '⭐⭐ العميلة تقدر تقرا طلباتها');
   const led = rules.slice(rules.indexOf('match /credit_ledger/'), rules.indexOf('match /credit_ledger/') + 240);
-  assert(/allow read: if signedIn\(\)/.test(led), L + '⭐⭐ وتقرا كشف الرصيد');
+  assert(/allow read: if isStaff\(\)/.test(led), L + '⭐⭐ كشف الرصيد للموظفين فقط؛ تطبيق العميلة عبر PIN');
   assert(/allow create, update, delete: if false/.test(led),
     L + '⭐⭐ والدفتر **مقفول للكتابة تمامًا** (الدوال بس)');
 }

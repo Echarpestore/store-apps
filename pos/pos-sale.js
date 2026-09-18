@@ -1142,7 +1142,7 @@ function returnItemFromInvoice(itemIdx){
   // نوزّع أي خصم/مكافأة على مستوى الفاتورة بالنسبة → الصنف يرجع بحصته من اللي اتدفع فعلاً
   const gross = items.filter(x=> !x.isRedemption && !x.isRewardDiscount && (x.price||0) > 0)
                      .reduce((s,x)=> s + (x.price||0)*(x.qty||1), 0);
-  const net = (returnInvoiceData.total != null) ? returnInvoiceData.total : gross;
+  const net = (returnInvoiceData.total != null) ? Number(returnInvoiceData.total)+(Number(returnInvoiceData.creditApplied)||0) : gross;
   const ratio = gross > 0 ? Math.min(1, net / gross) : 1;
   const refundEach = Math.round((Math.abs(it.price||0) * ratio) * 100) / 100;
   if(line){
@@ -3014,6 +3014,7 @@ function togglePayMethod(method){
     sid:_cartSid, branch:currentBranch, atMs:Date.now()
   }); }catch(e){}
   const isRefund = total < 0;
+  if(method==='credit_return' && (!isRefund || !/^01\d{9}$/.test(String(document.getElementById('customerPhone')?.value||'').trim()))){showToast('رصيد المرتجع يحتاج فاتورة سالبة وعميلة مسجلة برقم صحيح','err');return;}
   const isCard = (method === 'visa' || method === 'visa1' || method === 'visa2');
   // 💳 زر «فيزا» العام يروح لأول كارت متاح، لكن visa1 (F3) ثابت على كارت 1.
   let seq = 0;
@@ -3031,7 +3032,7 @@ function togglePayMethod(method){
   const alreadyEnteredAbs = Object.keys(paymentAmounts).reduce((s,m)=> (!isCard && m===method) ? s : s + Math.abs(paymentAmounts[m]||0), 0);
   const remaining = Math.max(0, +(requiredAbs - alreadyEnteredAbs).toFixed(2));
   if(isCard && remaining <= 0.005){ showToast('✅ الفاتورة اتغطت بالكامل', 'err'); return; }
-  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي', salary:'📄 خصم من الراتب'};
+  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي', salary:'📄 خصم من الراتب', credit_return:'💳 رصيد حساب العميلة'};
 
   document.getElementById('payAmountTitle').textContent =
     (isCard ? ('💳 كارت ' + seq + (seq > 1 ? ' — باقي ' + remaining.toFixed(2) + ' ج.م' : '')) : labels[method])
@@ -3076,7 +3077,7 @@ function closePayAmountPopup(){
 // 🖲️ زرار كل طريقة دفع — كان فيه باج: 'salary' كان بيلوّن زرار الانستا باي
 function payBtnId(method, seq){
   if(method === 'visa') return (seq > 1) ? 'pmVisa2' : 'pmVisa';
-  return { cash:'pmCash', instapay:'pmInsta', salary:'pmSalary' }[method] || '';
+  return { cash:'pmCash', instapay:'pmInsta', salary:'pmSalary', credit_return:'pmCreditReturn' }[method] || '';
 }
 window.payBtnId = payBtnId;
 
@@ -3092,6 +3093,8 @@ function confirmPayAmount(){
   const requiredAbs = Math.abs(total);
   const alreadyAbs = Object.keys(paymentAmounts).reduce((s,m)=> (!isCard && m===method) ? s : s + Math.abs(paymentAmounts[m]||0), 0);
   const remaining = Math.max(0, +(requiredAbs - alreadyAbs).toFixed(2));
+  if(method==='credit_return' && (total>=0 || Math.abs(val-requiredAbs)>.005 || Object.entries(paymentAmounts).some(([key,v])=>key!=='credit_return'&&Math.abs(Number(v)||0)>.005))){showToast('رصيد المرتجع طريقة واحدة وبقيمة المرتجع بالكامل','err');return;}
+  if(method!=='credit_return' && Math.abs(Number(paymentAmounts.credit_return)||0)>.005){showToast('امسحي رصيد المرتجع الأول؛ ممنوع تقسيم الاسترداد','err');return;}
   let sentToTerminal = false;
   if(isCard){
     // 💳 سقف صارم: الكارت مفيهوش فكة — لو سحبنا أكتر من الفاتورة هيطلع أوفر في التقفيل
@@ -3718,7 +3721,7 @@ function updatePaySummary(){
     ? Math.max(0, +(enteredAbs - requiredAbs).toFixed(2)) : 0;
   const confirmBtn = document.getElementById('confirmPayBtn');
 
-  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي', salary:'📄 خصم من الراتب'};
+  const labels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي', salary:'📄 خصم من الراتب', credit_return:'💳 رصيد حساب العميلة'};
   const payList = document.getElementById('qbxPayList');
   if(payList){
     const rows = [];
@@ -4039,12 +4042,15 @@ async function confirmPayment(){
       });
     }
   }catch(e){ console.warn('overcharge check', e); }
+  // FINANCE v679: no InstaPay receipt/approved reference -> no POS sale or print.
+  if((Number(paymentAmounts.instapay)||0)>0){
+    if(!window.financeEnsureInstaApproved || !(await window.financeEnsureInstaApproved()))return;
+  }
   _confirmSaving = true;
   if(_btn){ _btn.dataset.lbl = _btn.textContent; _btn.disabled = true; _btn.textContent = '⏳ بيحفظ...'; }
   let _saved = false;
   try{
-    await _doConfirmPayment();
-    _saved = true;
+    _saved = (await _doConfirmPayment()) === true;
   }catch(e){
     console.error('confirmPayment', e);
     showToast('فشل حفظ الفاتورة: ' + (e && e.message ? e.message : e), 'err');
@@ -4103,6 +4109,7 @@ async function _doConfirmPayment(){
   selectedPayMethods.forEach(m=> paymentsEntered[m] = paymentAmounts[m] || 0);
   // المحفوظ في الفاتورة = المطبّق فعلًا (بعد خصم الفكة من الكاش)
   const { applied: payments, changeGiven } = normalizePayments(paymentsEntered, total);
+  if((payments.credit_return||0)<0 && (total>=0 || Math.abs(payments.credit_return-total)>.005 || Object.entries(payments).some(([k,v])=>k!=='credit_return'&&Math.abs(Number(v)||0)>.005)))throw Error('رصيد المرتجع يجب أن يكون طريقة واحدة بقيمة الفاتورة السالبة');
   const phone = document.getElementById('customerPhone').value.trim();
   const custName = document.getElementById('customerName').value.trim();
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
@@ -4170,9 +4177,12 @@ window.returnPointsDeduction = returnPointsDeduction;
   try{ if(_cartSid && typeof cctvCaptureInvoiceStage === 'function') cctvCaptureInvoiceStage('saving', {
     sid:_cartSid, branch:currentBranch, atMs:Date.now()
   }); }catch(e){}
-  const invoiceNo = await generateInvoiceNumber();
+  const financeTransaction = !!(window.pendingCreditSpend || payments.instapay > 0 || payments.credit_return < 0);
+  const previousFinanceCode = financeTransaction ? window._financeInvoiceIdentity : null;
+  const invoiceNo = previousFinanceCode ? previousFinanceCode.invoiceNo : await generateInvoiceNumber();
   // بادئة الفرع في كود الفاتورة (FT + رمز الفرع) — عشان الكود يقول الفرع فورًا ويمنع تعارض الأوفلاين
-  const invoiceCode = 'FT' + branchCode(currentBranch) + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
+  const invoiceCode = previousFinanceCode ? previousFinanceCode.invoiceCode : 'FT' + branchCode(currentBranch) + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
+  if(financeTransaction && !previousFinanceCode)window._financeInvoiceIdentity={invoiceNo,invoiceCode};
   // 💵 شاشة الباقي بتظهر بعد ما الدالة دي تخلص، ومحتاجة رقم الفاتورة
   //    عشان "سيبي الباقي في الحساب" تربط الحركة بفاتورة حقيقية.
   window._lastInvoiceCode = invoiceCode;
@@ -4199,10 +4209,8 @@ window.returnPointsDeduction = returnPointsDeduction;
 
     // 💰 v372: بعد اكتمال كل التحقق، افتح الدرج فورًا قبل أي انتظار شبكة/Firestore.
     // لو الشِل قديم ومفيهوش openDrawer مستقل، printReceipt يحتفظ بالفولباك المعتاد.
-    try{ if(typeof preOpenCashDrawerForSale === 'function') preOpenCashDrawerForSale(invoiceCode, payments); }catch(e){}
-
     // 1) سجل البيع (📴 مش بنستنى السيرفر أكتر من ثواني — أوفلاين بتتسجل محليًا وبتترفع بعدين)
-    const _saleW = await _waitWrite(db.collection(TEST_SALES).add({
+    const _salePayload = {
       invoiceNo,
       invoiceCode,
       employeeId: currentEmployee.id,
@@ -4233,8 +4241,19 @@ window.returnPointsDeduction = returnPointsDeduction;
       cartSid: _cartSid || null,             // 🕵️ رابط أحداث السلة دي بالفاتورة
       createdAtMs: Date.now(),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    }));
+    };
+    if((window.pendingCreditSpend || payments.instapay > 0 || payments.credit_return < 0) && !window.financeSaleWrite) throw new Error('التحقق المالي غير محمّل');
+    // Cash drawer is triggered only by actual cash (the helper checks payments.cash).
+    // Keep it before either finance or ordinary Firestore writes; never open it for pure InstaPay/credit.
+    try{ if(typeof preOpenCashDrawerForSale === 'function') preOpenCashDrawerForSale(invoiceCode, payments); }catch(e){}
+    let _saleW;
+    if(window.pendingCreditSpend || (payments.instapay > 0) || (payments.credit_return < 0)) {
+      _saleW = await window.financeSaleWrite(_salePayload);
+    } else {
+      _saleW = await _waitWrite(db.collection(TEST_SALES).add(_salePayload));
+    }
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
+    if((window.pendingCreditSpend || payments.instapay > 0 || payments.credit_return < 0) && !_saleW.value?.id) throw Error('السيرفر لم يؤكد إنشاء الفاتورة');
 
     // 🔴 v411 POS Live: حدّث Dashboard الفرع بعد **نجاح حفظ الفاتورة فقط**.
     // Fire-and-forget عشان الطباعة لا تنتظر Firestore ثانية. pos-live.js نفسه
@@ -4386,6 +4405,13 @@ window.returnPointsDeduction = returnPointsDeduction;
         try{
           if(typeof commitCreditSpend === 'function')
             await commitCreditSpend(invoiceCode, total);
+          // Optional receipt AFTER atomic credit and invoice commit. No new balance write on reprint.
+          const _creditSlip=window.financeCreditSlipPending;
+          if(_creditSlip){
+            window.financeCreditSlipPending=null;
+            const _wantSlip=await askConfirm({title:'إيصال رصيد المرتجع',message:'اتضاف '+Number(_creditSlip.amount).toFixed(2)+' ج.م لحساب العميلة. تطبعي إيصال الرصيد بالباركود؟',okText:'طباعة إيصال الرصيد',cancelText:'بدون إيصال'});
+            if(_wantSlip&&typeof printCreditSlip==='function')await printCreditSlip(_creditSlip);
+          }
           if(typeof activatePendingGiftCards === 'function'){
             const _cards = await activatePendingGiftCards(invoiceCode);
             if(_cards && _cards.length && typeof printGiftCardSlips === 'function')
@@ -4407,6 +4433,10 @@ window.returnPointsDeduction = returnPointsDeduction;
     let _retPointsDeduct = 0;
     const _retInvoiceUpdates = [];
     try{
+      if((payments.credit_return||0)<0){
+        _retPointsDeduct=Number(window.financeReturnPointsDeduct)||0; // original sale + return log already updated atomically by backend
+        window.financeReturnPointsDeduct=null;
+      } else {
       const retLines = cart.filter(c=> c.isReturn && c.fromInvoice);
       if(retLines.length){
         // نجمّع المرجّع لكل فاتورة أصلية
@@ -4470,6 +4500,7 @@ window.returnPointsDeduction = returnPointsDeduction;
           }));
         }catch(e){ console.warn('return log', e); }
         window._lastReturnMethod = null;
+      }
       }
     }catch(e){ console.warn('return tracking', e); }
 
@@ -4625,8 +4656,10 @@ window.returnPointsDeduction = returnPointsDeduction;
     // (قبل goToSale) عشان شاشة الفاتورة الجديدة ما تسألش عن كارت اتسحب خلاص
     try{ clearCardSaleCompleteState(); paymobReset(); }catch(e){}
     goToSale();
+    return true;
   }catch(e){
     showToast('فشل حفظ الفاتورة: ' + e.message, 'err');
+    throw e; // Keep Save button/cash change in FAILED state. No false success.
   }
 }
 

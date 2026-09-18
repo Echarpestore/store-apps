@@ -84,13 +84,14 @@ const bareUI = stripComments(ui);
   if(!f) return;
   assert(!/Math\.random/.test(stripComments(f)),
     '⛔⭐⭐ المفتاح مش عشوائي — وإلا إعادة الضغط بتنفّذ العملية تاني');
-  ['creditSpend', 'creditAdjust', 'giftCardIssue'].forEach(function(n){
+  ['giftCardIssue'].forEach(function(n){
     assert(new RegExp("'" + n + "'[\\s\\S]{0,400}idem").test(ui),
       '🔁 ' + n + ' بتبعت مفتاح تكرار');
   });
-  // ⭐ مفتاح الصرف مبني على الفاتورة — نفس الفاتورة = نفس المفتاح
-  assert(/creditIdem\('spend', \[invoiceCode, p\.phone, p\.amount\]\)/.test(ui),
-    '⭐⭐ ومفتاح الصرف مبني على رقم الفاتورة (إعادة المحاولة آمنة)');
+  const finance = fs.readFileSync(path.join(ROOT,'functions','financeCheckout.js'),'utf8');
+  assert(/doc\('CREDIT_'\+sid\)/.test(finance) && /if\(prev\.exists\)/.test(finance),
+    '🔁 والخصم مبني على جلسة PIN ثابتة بفواتير تمنع تكرار الخصم');
+  assert(/financeCreditAuthorize/.test(ui), 'PIN العميلة مطلوب قبل تكوين سطر الرصيد');
 })();
 
 // ============================================================
@@ -131,7 +132,7 @@ const bareUI = stripComments(ui);
     '⭐⭐ والخصم الفعلي مش هنا — بعد ما الفاتورة تتقفل');
 
   const c = extractFn(ui, 'async function commitCreditSpend(');
-  assert(!!c && /creditSpend/.test(c), '⭐ التثبيت في دالة لوحدها');
+  assert(!!c && /_committed/.test(c) && !/callCredit\('creditSpend'/.test(c), '⭐ التثبيت يحصل داخل معاملة الفاتورة فقط مش بعدها');
   assert(/commitCreditSpend\(invoiceCode, total\)/.test(sale),
     '⭐⭐ ومتنادية فعلًا بعد الفاتورة');
   assert(!!c && /بلّغ المالك فورًا/.test(c),
@@ -145,8 +146,8 @@ const bareUI = stripComments(ui);
   const f = extractFn(ui, 'async function keepChangeAsCredit(');
   assert(!!f, 'لقينا keepChangeAsCredit');
   if(!f) return;
-  assert(/source:'change'/.test(f), '💵 معلّمة كـ"باقي" — مسار مباشر بلا موافقة');
-  assert(/invoiceCode: invoiceCode/.test(f),
+  assert(/creditKeepChange/.test(f), '💵 الباقي لازم يثبت بسيرفر يتحقق من الفاتورة ومبلغ الباقي');
+  assert(/invoiceCode:invoiceCode/.test(f),
     '⭐⭐ ومربوطة بفاتورة حقيقية — مش أي مبلغ من العدم');
   assert(/amt > 0/.test(f), 'ومبلغ موجب بس');
 })();
@@ -286,10 +287,10 @@ const bareUI = stripComments(ui);
   const ap = extractFn(off, 'async function approveCreditReq(');
   assert(!!ap, 'لقينا approveCreditReq');
   if(ap){
-    assert(/httpsCallable\('creditAdjust'\)/.test(ap),
+    assert(/httpsCallable\('creditRequestDecision'\)/.test(ap),
       '⭐⭐ الموافقة بتنادي الفنكشن — Office مبيكتبش رصيد بنفسه');
     assert(!/credit:/.test(ap), '⛔ ومفيش كتابة مباشرة للرصيد');
-    assert(/idem: 'req:' \+ id/.test(ap),
+    assert(/requestId:id,decision:'approved'/.test(ap),
       '🔁 ⭐⭐ ومفتاح التكرار من رقم الطلب (موافقة مرتين ≠ فلوس مرتين)');
     assert(/confirm\(/.test(ap), 'وفيه تأكيد');
     assert(/بتتضاف من العدم/.test(ap), '⭐ والتأكيد بيقول إن دي فلوس من العدم');
