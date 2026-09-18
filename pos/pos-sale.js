@@ -2754,7 +2754,9 @@ async function unholdInvoice(heldId){
 }
 
 // ---------------- Payment ----------------
+let _financeResetBusy=false;
 function resetPaymentUI(_force){
+  if(_financeResetBusy)return false;
   // 💳 كارت اتسحب فعلًا: مسح المدفوعات بيلغي أثره من الشاشة بس — الفلوس عند العميل
   // مسحوبة. لازم تأكيد صريح، وإلا هيتحفظ نقص في الفاتورة وأوفر في التقفيل.
   const _appr = Math.abs(cardApprovedSum(cardLegs));
@@ -2764,10 +2766,22 @@ function resetPaymentUI(_force){
     if(!ok) return;
     if(typeof _logActivity === 'function') _logActivity('card_payments_cleared', { amount: _appr });
   }
-  if(typeof window.financeHasActiveInsta==='function' && window.financeHasActiveInsta()){
-    if(!_force && !(window.financeCancellationPending&&window.financeCancellationPending()) && !confirm('فيه طلب InstaPay مفتوح. مسح المدفوعات هيلغي جلسة العرض، لكنه مش بيرجع أي تحويل بنكي. تكمّل؟'))return;
-    if(typeof window.financeCancelPending==='function')
-      window.financeCancelPending().catch(e=>showToast('تعذر إلغاء جلسة InstaPay: '+e.message,'err'));
+  if(!_force && typeof window.financeHasActiveInsta==='function' && window.financeHasActiveInsta()){
+    _financeResetBusy=true;
+    (async function(){
+      try{
+        const ok=await askConfirm({title:'إلغاء طلب InstaPay',message:'هيتم إلغاء عرض الطلب على التابلت فقط؛ أي تحويل بنكي تم فعلًا مش بيرجع تلقائيًا. تكمّل؟',
+          okText:'إلغاء الطلب ومسح المدفوعات',cancelText:'رجوع',danger:true,waitSec:0});
+        if(!ok)return;
+        if(typeof window.financeCancelPending!=='function')throw Error('دالة إلغاء الطلب غير متاحة');
+        await window.financeCancelPending(); // MUST finish server cancellation before clearing local UI.
+        _financeResetBusy=false;
+        resetPaymentUI(true);
+        showToast('تم إلغاء الطلب ومسح المدفوعات','ok');
+      }catch(e){showToast('لم تُمسح المدفوعات: '+e.message,'err');}
+      finally{_financeResetBusy=false;if(window.financeRestorePOSFocus)window.financeRestorePOSFocus();}
+    })();
+    return false;
   }
   selectedPayMethods = new Set();
   paymentAmounts = {};
@@ -2781,6 +2795,8 @@ function resetPaymentUI(_force){
     } else if(typeof paymobReset === 'function'){ paymobReset(); }
   }catch(e){ console.warn('paymob cancel', e); }
   updatePaySummary();
+  if(window.financeRestorePOSFocus)window.financeRestorePOSFocus();
+  return true;
 }
 
 // ❌ إلغاء طلب الفيزا المعلّق
@@ -3012,7 +3028,16 @@ window.syncCardPayment = syncCardPayment;
 
 let pendingCardSeq = 0;   // 💳 شريحة الكارت المفتوحة في البوب-أب (1 أو 2)
 
-function togglePayMethod(method){
+function togglePayMethod(method,_instaVerified){
+  // A branch has to be enabled and have an owner-approved tablet BEFORE opening payment.
+  if(method==='instapay'&&!_instaVerified){
+    if(typeof window.financeCheckInstaBranch!=='function'){showToast('تعذر التحقق من تفعيل InstaPay؛ جرّب لاحقًا','err');return;}
+    const expectedBranch=currentBranch;
+    window.financeCheckInstaBranch(expectedBranch).then(ok=>{
+      if(ok&&expectedBranch===currentBranch)togglePayMethod('instapay',true);
+    });
+    return;
+  }
   const total = cartTotal();
   // 📸 v426: أول دخول فعلي لمرحلة الدفع — مرة واحدة لكل سلة.
   try{ if(cart && cart.length && _cartSid && typeof cctvCaptureInvoiceStage === 'function') cctvCaptureInvoiceStage('payment', {
@@ -3077,6 +3102,7 @@ function updatePayAmountChangeLive(method, total, alreadyEnteredAbs){
 function closePayAmountPopup(){
   document.getElementById('payAmountModal').classList.remove('active');
   pendingPayMethod = null;
+  if(window.financeRestorePOSFocus)window.financeRestorePOSFocus();
 }
 
 // 🖲️ زرار كل طريقة دفع — كان فيه باج: 'salary' كان بيلوّن زرار الانستا باي
@@ -3128,6 +3154,7 @@ function confirmPayAmount(){
   pendingPayMethod = null;
   pendingCardSeq = 0;
   updatePaySummary();
+  if(window.financeRestorePOSFocus)window.financeRestorePOSFocus();
   // Send when cashier confirms amount, never when the invoice is prematurely saved.
   if(method==='instapay' && typeof window.financeStartInstaOnAmountOK==='function')
     window.financeStartInstaOnAmountOK(val,total);

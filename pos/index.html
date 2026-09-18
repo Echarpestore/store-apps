@@ -1791,7 +1791,10 @@ body.on-dashboard .badge-test{ display:block; }
         <button type="button" onclick="financeShowPairRequests()">عرض طلبات تابلت الفرع</button>
         <button type="button" onclick="financeInstaConfigure()">بيانات مستفيد InstaPay</button>
         <button type="button" onclick="financePinSetup()">تفعيل أو استرجاع PIN</button>
+        <button type="button" onclick="financeOwnerBranchStatus()">تحديث حالة InstaPay للفرع</button>
+        <button type="button" id="finOwnerBranchToggle" onclick="financeOwnerToggleBranch()">تشغيل / إيقاف InstaPay لهذا الفرع</button>
       </div>
+      <div id="finOwnerBranchStatus" role="status" aria-live="polite" style="font-weight:800;color:#174634;margin:9px 0;"></div>
       <div id="finOwnerPairRequests" aria-live="polite"></div>
       <p class="finOwnerHint">اعتماد الأجهزة وحساب المستفيد وPIN يتم التحقق منهم على السيرفر بحساب المالك فقط.</p>
     </section>
@@ -2164,7 +2167,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="cctv-staff-state.js?v=644"></script>
 <script src="cctv-timeline.js?v=555"></script>
 <script src="cctv-invoice.js?v=604"></script>
-<script src="pos-sale.js?v=682"></script>
+<script src="pos-sale.js?v=683"></script>
 <script src="pos-live.js?v=411"></script>
 <script src="app.js"></script>
 <script src="products.js?v=537"></script>
@@ -2192,7 +2195,18 @@ body.on-dashboard .badge-test{ display:block; }
 <!-- 💳 منظومة الرصيد وكروت الهدايا -->
 <script src="credit-core.js"></script>
 <script src="credit-ui.js"></script>
-<script src="finance-pos.js?v=682"></script>
+<script src="finance-pos.js?v=683"></script>
+<!-- F8 InstaPay: asynchronous server cancellation owns the success toast; the legacy
+     shortcut must not claim "cleared" while confirmation is still pending. -->
+<script>
+document.addEventListener('keydown',function(e){
+  if(e.key!=='F8'||!window.financeHasActiveInsta?.())return;
+  const sale=document.getElementById('saleScreen');
+  if(!sale||sale.offsetParent===null)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  if(typeof resetPaymentUI==='function')resetPaymentUI();
+},true);
+</script>
 <div id="financeManagement" style="display:none"></div>
 <!-- 🧠 شريط الفرصة -->
 <script src="opportunity-core.js"></script>

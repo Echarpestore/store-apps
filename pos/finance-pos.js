@@ -16,7 +16,7 @@ async function poll(name,sessionId,ms=180000){
    if(state.status==='approved'||state.status==='finished')return state;
    if(state.status==='captured'&&name==='instaStatus')return state;
    if(state.status==='cancelled'||state.status==='expired'||Date.now()>state.expiresAt)throw Error('انتهت صلاحية طلب الدفع، ابدأ من جديد');
-   await wait(1300);
+   await wait(name==='instaStatus'?850:1300);
  }
  throw Error('مهلة الدفع انتهت. راجع حالة العملية قبل أي محاولة جديدة.');
 }
@@ -55,6 +55,61 @@ function setInstaStatus(message,state){
  if(el){el.textContent=message||'';el.dataset.state=state||'';}
 }
 let instaStartPromise=null,instaCancelPromise=null;
+let _branchToggleBusy=false;
+window.financeRestorePOSFocus=function(){
+ // Avoid a native Windows confirm; restore shell and scanner only around a payment action.
+ try{if(document.hidden)return;if(typeof markWindowFocusRisk==='function')markWindowFocusRisk('instapay',4000);}catch(_){}
+ const restore=()=>{
+  try{if(document.hidden)return;
+   if(document.hasFocus&& !document.hasFocus()){
+    if(window.posShell&&typeof window.posShell.focusWindow==='function')window.posShell.focusWindow();
+    window.focus();
+   }
+   const active=document.activeElement;
+   if(active&&active!==document.body&&active!==document.documentElement&&document.contains(active)&&
+      active.offsetParent!==null&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName))return;
+   const screen=document.getElementById('saleScreen'),search=document.getElementById('searchBar');
+   if(screen&&screen.offsetParent!==null&&search&&search.offsetParent!==null)search.focus();
+  }catch(_){}
+ };
+ setTimeout(restore,50);setTimeout(restore,320);
+};
+window.financeCheckInstaBranch=async function(expectedBranch){
+ try{
+  const branch=String(expectedBranch||currentBranch||'').trim();
+  if(!branch)throw Error('اختار الفرع الأول');
+  const state=await call('instaBranchStatus',{branch});
+  if(currentBranch!==branch)return false;
+  if(!state.enabled)throw Error('InstaPay متوقف في هذا الفرع من إعدادات المالك');
+  if(!state.paired)throw Error('لا يوجد تابلت معتمد لهذا الفرع؛ اربطه من الصلاحيات أولًا');
+  return true;
+ }catch(e){notify(msg(e),true);return false;}
+};
+window.financeOwnerBranchStatus=async function(){
+ const host=document.getElementById('finOwnerBranchStatus');if(!host)return;
+ const branch=currentBranch;host.textContent='جارٍ فحص حالة '+branch+'…';
+ try{
+  const state=await call('instaBranchStatus',{branch});if(branch!==currentBranch)return;
+  host.textContent='الفرع: '+branch+' · InstaPay: '+(state.enabled?'مفعّل':'متوقف')+' · التابلت: '+(state.paired?'معتمد':'غير مربوط');
+  const b=document.getElementById('finOwnerBranchToggle');if(b){b.textContent=state.enabled?'إيقاف InstaPay لهذا الفرع':'تفعيل InstaPay لهذا الفرع';b.disabled=_branchToggleBusy;}
+ }catch(e){host.textContent='تعذّر فحص حالة الفرع: '+msg(e);}
+};
+window.financeOwnerToggleBranch=async function(){
+ if(_branchToggleBusy)return;
+ const branch=currentBranch;
+ try{
+  const state=await call('instaBranchStatus',{branch});
+  const enable=!state.enabled;
+  if(enable&&!state.paired)throw Error('لازم تابلت معتمد قبل التفعيل');
+  const ok=await askConfirm({title:(enable?'تفعيل':'إيقاف')+' InstaPay · '+branch,
+   message:enable?'هيتاح بدء طلبات جديدة على تابلت الفرع بعد التفعيل.':'الإيقاف يمنع طلبات InstaPay الجديدة فقط، ومش بيرجع تحويلات بنكية.',
+   okText:enable?'تفعيل هذا الفرع':'إيقاف هذا الفرع',danger:!enable,waitSec:0});
+  if(!ok||branch!==currentBranch)return;
+  _branchToggleBusy=true;const btn=document.getElementById('finOwnerBranchToggle');if(btn)btn.disabled=true;
+  await call('instaOwnerBranchSet',{branch,enabled:enable});notify('تم '+(enable?'تفعيل':'إيقاف')+' InstaPay للفرع '+branch);
+ }catch(e){notify(msg(e),true);}
+ finally{_branchToggleBusy=false;await window.financeOwnerBranchStatus();}
+};
 window.financeShowPairRequests=async function(){
  const host=document.getElementById('finOwnerPairRequests');if(!host)return;
  host.textContent='جارٍ تحميل طلبات تابلت '+currentBranch+'…';
@@ -82,29 +137,34 @@ window.financeShowPairRequests=async function(){
   });
  }catch(e){host.textContent='تعذر جلب الطلبات: '+msg(e);}
 };
-window.financeStartInstaOnAmountOK=async function(amount,invoiceTotal){
- try{
-  if(instaCancelPromise)await instaCancelPromise;
-  if(!navigator.onLine)throw Error('اتصال الإنترنت مطلوب لإرسال الدفع للتابلت');
-  if(!Number.isFinite(amount)||amount<=0||Math.abs(amount-invoiceTotal)>.005)
+window.financeStartInstaOnAmountOK=function(amount,invoiceTotal){
+ // Reserve the in-flight promise BEFORE any async branch/network check.
+ if(instaStartPromise)return instaStartPromise;
+ const requestedBranch=currentBranch;
+ const promise=(async()=>{
+  try{
+   if(instaCancelPromise)await instaCancelPromise;
+   if(!navigator.onLine)throw Error('اتصال الإنترنت مطلوب لإرسال الدفع للتابلت');
+   if(!Number.isFinite(amount)||amount<=0||Math.abs(amount-invoiceTotal)>.005)
     throw Error('InstaPay يجب أن يغطي الفاتورة بالكامل في الإصدار الحالي');
-  if(instaSession){
-   if(instaAmount!==amount||instaInvoiceTotal!==invoiceTotal)
-    throw Error('لا يمكن تغيير مبلغ جلسة قائمة؛ ألغِ الطلب القديم أولًا');
-   setInstaStatus('الطلب ظاهر على التابلت · في انتظار تصوير الإيصال','pending');return true;
-  }
-  if(instaStartPromise)return instaStartPromise;
-  setInstaStatus('جارٍ إرسال المبلغ إلى تابلت الفرع…','pending');
-  const promise=(async()=>{
-   const s=await call('instaStart',{amount,invoiceTotal,branch:currentBranch});
+   if(instaSession){
+    if(instaAmount!==amount||instaInvoiceTotal!==invoiceTotal)
+     throw Error('لا يمكن تغيير مبلغ جلسة قائمة؛ ألغِ الطلب القديم أولًا');
+    setInstaStatus('الطلب ظاهر على التابلت · في انتظار تصوير الإيصال','pending');return true;
+   }
+   if(!await window.financeCheckInstaBranch(requestedBranch))return false;
+   if(currentBranch!==requestedBranch)throw Error('الفرع اتغير أثناء إنشاء الطلب');
+   setInstaStatus('جارٍ إرسال المبلغ إلى تابلت الفرع…','pending');
+   const s=await call('instaStart',{amount,invoiceTotal,branch:requestedBranch});
+   if(!s?.sessionId)throw Error('السيرفر لم يؤكد إنشاء جلسة InstaPay');
    instaSession=s.sessionId;instaAmount=amount;instaInvoiceTotal=invoiceTotal;
    setInstaStatus('تم إرسال '+amount.toFixed(2)+' ج.م · في انتظار تصوير الإيصال','pending');
    return true;
-  })();
-  instaStartPromise=promise;
-  return await promise;
- }catch(e){setInstaStatus(msg(e),'error');notify(msg(e),true);return false;}
- finally{instaStartPromise=null;}
+  }catch(e){setInstaStatus(msg(e),'error');notify(msg(e),true);return false;}
+ })();
+ instaStartPromise=promise;
+ promise.finally(()=>{if(instaStartPromise===promise)instaStartPromise=null;}).catch(()=>{});
+ return promise;
 };
 
 async function manual(sid,state){
@@ -187,8 +247,10 @@ window.financeCancelPending=async function(){
  const action=(async()=>{
   if(instaStartPromise)await instaStartPromise.catch(()=>{});
   const s=instaSession,credit=window.pendingCreditSpend;
-  if(s)await call('financeCancelSession',{sessionId:s});
-  if(credit?.sessionId&&!credit._committed)await call('financeCancelSession',{sessionId:credit.sessionId});
+  if(s){const result=await call('financeCancelSession',{sessionId:s});
+   if(!result?.ok||result.alreadyFinished)throw Error('الإلغاء لم يُعتمد؛ راجع العملية قبل مسح المدفوعات');}
+  if(credit?.sessionId&&!credit._committed){const result=await call('financeCancelSession',{sessionId:credit.sessionId});
+   if(!result?.ok||result.alreadyFinished)throw Error('جلسة الرصيد لم تُلغَ؛ راجع العملية قبل المسح');}
   if(instaSession===s){instaSession=null;instaAmount=0;instaInvoiceTotal=0;}
   if(window.pendingCreditSpend===credit)window.pendingCreditSpend=null;
   setInstaStatus('','');

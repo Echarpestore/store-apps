@@ -39,6 +39,7 @@ async function run(){
    currentBranch:'Madinaty',paymentAmounts:{instapay:350},cartTotal:()=>350,showToast:(s)=>toast.push(s),console,
    firebase:{app:()=>({functions:()=>({httpsCallable:name=>async data=>{
     calls.push({name,data});
+    if(name==='instaBranchStatus')return {data:{enabled:true,paired:true,ready:true}};
     if(name==='instaStart'){
       if(startMode==='pending')return await new Promise(r=>{resolveStart=r;});
       if(startMode==='error')throw Error('mock server unavailable');
@@ -52,8 +53,9 @@ async function run(){
  vm.runInNewContext(finance,ctx,{filename:'finance-pos.js'});
  const first=ctx.window.financeStartInstaOnAmountOK(350,350);
  const second=ctx.window.financeStartInstaOnAmountOK(350,350);
- await Promise.resolve();
+ await new Promise(r=>setTimeout(r,5));
  check('No duplicate InstaPay session from rapid OK',calls.filter(x=>x.name==='instaStart').length===1);
+ check('Branch validated before session starts',calls.some(x=>x.name==='instaBranchStatus')&&calls.findIndex(x=>x.name==='instaBranchStatus')<calls.findIndex(x=>x.name==='instaStart'));
  resolveStart({data:{sessionId:'sid-1'}});
  check('Start resolves after server accepted',await first===true&&await second===true);
  check('Save awaits approved status and reuses started session',await ctx.window.financeEnsureInstaApproved()===true&&calls.filter(x=>x.name==='instaStart').length===1);
