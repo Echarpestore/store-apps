@@ -12,6 +12,7 @@ const style=document.createElement('style');style.textContent=`
 #finOverlay .finBrand{letter-spacing:.38em;font:700 15px 'Space Grotesk',sans-serif;color:#4a4038;margin-bottom:18px}
 #finOverlay .finAmount{font:700 clamp(42px,8vw,72px) 'Space Grotesk',Arial,sans-serif;direction:ltr;unicode-bidi:isolate;margin:5px 0}
 #finOverlay .finSub{font-size:14px;color:#827970;margin:10px 0 24px}
+#finOverlay .finPaymentQr{display:block;width:min(260px,63vw);height:auto;aspect-ratio:1;margin:8px auto 10px;object-fit:contain;image-rendering:auto;border:8px solid #fff;border-radius:12px}
 #finOverlay .finBadge{display:inline-flex;align-items:center;justify-content:center;border-radius:99px;background:#f0f7f2;color:#187847;padding:7px 14px;font-weight:800;font-size:12px}
 #finOverlay .finDots{font-size:30px;letter-spacing:10px;direction:ltr;min-height:49px;margin:8px auto}
 #finOverlay .finPad{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;max-width:350px;margin:0 auto 16px;direction:ltr}
@@ -50,9 +51,19 @@ function pinScreen(s){
  };
 }
 async function cameraScreen(s){activeId=s.sessionId;activeKind='instapay';scanStarted=false;
- card('<span class="finBadge">InstaPay</span><h2>حوّلي المبلغ للحساب ده</h2><div class="finAmount">'+Number(s.amount).toFixed(2)+' EGP</div><div class="finSub" id="finRecipient"></div><button class="finPrimary" id="finTransferred">تم التحويل — صوّري الإيصال</button><p class="finErr"></p>');
+ card('<span class="finBadge">InstaPay</span><h2>حوّلي المبلغ للحساب ده</h2><div class="finAmount">'+Number(s.amount).toFixed(2)+' EGP</div><div class="finSub" id="finRecipient"></div><div id="finPaymentQrHost"></div><button class="finPrimary" id="finTransferred">تم التحويل — صوّري الإيصال</button><p class="finErr"></p>');
  const details=await call('instaTabletDetails');if(details.sessionId!==activeId)throw Error('الجلسة اتغيرت');
  overlay.querySelector('#finRecipient').textContent=details.recipientName+' · '+details.recipientBank+' · '+details.recipientAlias;
+ // Only show this account's QR when the SERVER recipient matches the uploaded QR.
+ // A configuration change must not silently direct customers to the old account.
+ const isMatchingQr=String(details.recipientAlias||'').trim().toLowerCase()==='zogzog2000@instapay';
+ if(isMatchingQr){
+  const image=document.createElement('img');image.className='finPaymentQr';
+  image.src='instapay-qr.png?v=1';image.alt='QR حساب InstaPay: zogzog2000@instapay';
+  image.width=260;image.height=260;
+  image.onerror=()=>{image.remove();error('QR مش متاح حاليًا؛ استخدمي عنوان الحساب المكتوب فوق.');};
+  overlay.querySelector('#finPaymentQrHost').appendChild(image);
+ }
  overlay.querySelector('#finTransferred').onclick=async()=>{
   if(scanStarted)return;scanStarted=true;
   try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:1920},height:{ideal:1080}}});
