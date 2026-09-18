@@ -38,10 +38,11 @@ console.log('\n⚙️ الإعدادات');
 t('فرع مفعّل لازم له عنوان',()=>has("if (on && !alias)"));
 t('فرع مفعّل لازم له QR',()=>has('if (on && !_qrData)'));
 t('الصورة بتتصغّر قبل الحفظ',()=>{has('const max = 560');has("toDataURL('image/jpeg', 0.88)")});
-t('الحقن مبيعدّلش pos-admin',()=>{
-  const a=fs.readFileSync('/home/claude/repo/store-apps-main/pos/pos-admin.js','utf8');
-  const b=fs.existsSync('pos/pos-admin.js')?fs.readFileSync('pos/pos-admin.js','utf8'):a;
-  if(a!==b)throw Error('pos-admin.js اتغير')});
+t('الحقن في شاشة الصلاحيات',()=>{has("getElementById('rolesScreen')")});
+t('الحقن مبيعدّلش pos-reports',()=>{
+  const a=fs.readFileSync('/home/claude/repo/store-apps-main/pos/pos-reports.js','utf8');
+  const b=fs.existsSync('pos/pos-reports.js')?fs.readFileSync('pos/pos-reports.js','utf8'):a;
+  if(a!==b)throw Error('pos-reports.js اتغير')});
 
 console.log('\n📄 الربط');
 t('الملف متحمّل في index.html',()=>{if(!html.includes('instapay-pos.js?v=690'))throw Error('مش متحمّل')});

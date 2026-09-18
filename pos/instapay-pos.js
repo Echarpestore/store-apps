@@ -377,21 +377,24 @@
     };
   }
 
-  /* 🧩 الحقن: لوحة الأدمن بتترسم من pos-admin.js وبتتمسح وتترسم
-     تاني. بنراقبها وبنعيد حقن الكارت لو اختفى — بدل ما نعدّل
-     pos-admin.js ونتعرض إننا نكسر لوحة شغالة. */
+  /* 🧩 الحقن في شاشة **الصلاحيات** — جنب إعدادات ماكينة الفيزا
+     وبداية يوم الشغل، لأن دي شاشة الإعدادات الفعلية في POS.
+     بنحقن بدل ما نعدّل index.html أو pos-reports.js: الشاشة دي
+     بتترسم وتتمسح، فبنراقبها وبنعيد الحقن لو الكارت اختفى. */
   function inject() {
-    const host = document.getElementById('shopAdminWrap');
-    if (!host || !host.children.length) return;
+    const host = document.getElementById('rolesScreen');
+    if (!host) return;
     if (document.getElementById('ipSetCard')) return;
+    // الشاشة مقفولة؟ منحقنش — عشان مانقراش الإعدادات من غير داعي
+    if (!host.classList.contains('active') && host.offsetParent === null) return;
     host.insertAdjacentHTML('beforeend', settingsHtml());
     wireSettings();
     loadSettings();
   }
   try {
-    const host = document.getElementById('shopAdminWrap');
-    if (host) new MutationObserver(inject).observe(host, { childList: true });
-    setInterval(inject, 2000);
+    const host = document.getElementById('rolesScreen');
+    if (host) new MutationObserver(inject).observe(host, { childList: true, attributes: true, attributeFilter: ['class', 'style'] });
+    setInterval(inject, 1500);
   } catch (e) { console.warn('[instapay] settings inject', e); }
 
   // 🩺 تشخيص: اكتب instaDiag() في الكونسول
