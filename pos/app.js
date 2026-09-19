@@ -305,8 +305,8 @@ function currencyLabel(){
   return (c.lang==='en') ? (c.currencyEn||'EGP') : (c.currencyAr||'ج.م');
 }
 const RECEIPT_LABELS = {
-  ar: { emp:'الموظف', total:'الإجمالي', cash:'كاش', visa:'فيزا', instapay:'انستا باي', currency:'ج.م', invoice:'فاتورة رقم', item:'الصنف', qty:'كمية', price:'السعر', change:'الباقي' },
-  en: { emp:'Cashier', total:'Total', cash:'Cash', visa:'Visa', instapay:'InstaPay', currency:'EGP', invoice:'Invoice #', item:'Item', qty:'Qty', price:'Price', change:'Change' }
+  ar: { emp:'الموظف', total:'الإجمالي', cash:'كاش', visa:'فيزا', instapay:'انستا باي', salary:'خصم راتب', credit:'رصيد العميلة', points:'استبدال نقط', reward:'مكافأة', currency:'ج.م', invoice:'فاتورة رقم', item:'الصنف', qty:'كمية', price:'السعر', change:'الباقي' },
+  en: { emp:'Cashier', total:'Total', cash:'Cash', visa:'Visa', instapay:'InstaPay', salary:'Salary', credit:'Store credit', points:'Points', reward:'Reward', currency:'EGP', invoice:'Invoice #', item:'Item', qty:'Qty', price:'Price', change:'Change' }
 };
 // تعريف عناصر الفاتورة: fixed = نصه تلقائي من النظام، text = بتكتبه انت
 const RECEIPT_ELEMENTS = [

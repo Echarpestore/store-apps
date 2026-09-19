@@ -437,7 +437,7 @@ async function renderReportsScreen(){
   const byMethod = _agg.byMethod, methodCount = _agg.methodCount, itemAgg = _agg.itemAgg;
   const netTotal = _agg.netTotal;
   const invoiceCount = _agg.invoiceCount;
-  const methodLabels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستاباي'};
+  const methodLabels = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستاباي', salary:'📄 خصم راتب', credit:'💳 رصيد العميلة', points:'🎁 استبدال نقط', reward:'🎁 مكافأة خاصة'};
 
   const avgInvoice = invoiceCount ? netTotal/invoiceCount : 0;
   const _kpis = `<div class="rep-kpis"><div class="rep-kpi primary"><span>صافي المبيعات</span><b>${netTotal.toFixed(2)}</b><small>ج.م</small></div><div class="rep-kpi"><span>الفواتير</span><b>${invoiceCount}</b><small>فاتورة</small></div><div class="rep-kpi"><span>القطع</span><b>${itemsSold}</b><small>قطعة</small></div><div class="rep-kpi"><span>متوسط الفاتورة</span><b>${avgInvoice.toFixed(0)}</b><small>ج.م</small></div></div>`;
@@ -659,6 +659,7 @@ function _sameBrandAsCurrent(branch){ return GLOW_BRANCHES.includes(branch||'') 
 // فاتورة "التطبيق ساهم فيها": استبدال نقط، أو عرض فعّله العميل من التطبيق، أو مكافأة
 function _isAppInfluencedSale(s){
   if((s.pointsRedeemed||0) > 0) return true;
+  if(((s.payments||{}).reward||0) > 0) return true;   // §4هـ: المكافأة بقت طريقة دفع
   return (s.items||[]).some(it=> it.offerApplied || it.isRewardDiscount);
 }
 
@@ -1715,9 +1716,11 @@ let dcData = {};   // بيانات النهاردة من السيستم (للح�
 // بتشمل المعكوس وفاتورة عكسه مع بعض (بيصفّروا بعض) — دي فلوس دخلت وخرجت فعلًا من الدرج.
 function dcAggregate(sales){
   const systemTotal = (sales||[]).reduce((s,x)=> s + (x.total||0), 0);
-  let cashSales=0, visaSales=0, instaSales=0, salarySales=0, creditSales=0;
-  (sales||[]).forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); salarySales+=(p.salary||0);  creditSales+=(p.credit||0);});
-  return { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales };
+  let cashSales=0, visaSales=0, instaSales=0, salarySales=0, creditSales=0, pointsSales=0, rewardSales=0;
+  // 🎁 points/reward (§4هـ): استبدال النقط والمكافأة بقوا طرق دفع — لازم يتجمعوا هنا
+  //    وفي التسوية، وإلا كل فاتورة فيها استبدال تطلّع **عجز وهمي** بقيمته.
+  (sales||[]).forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); salarySales+=(p.salary||0);  creditSales+=(p.credit||0); pointsSales+=(p.points||0); rewardSales+=(p.reward||0);});
+  return { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales };
 }
 window.dcAggregate = dcAggregate;
 
@@ -1796,7 +1799,10 @@ async function goToEndOfDay(){
     _pendingCount = sales.filter(s=> s._pending).length;
   }catch(e){ console.warn('sales', e); }
 
-  const { systemTotal, cashSales, visaSales, instaSales, salarySales } = dcAggregate(sales);
+  // 🔴 كان بياخد 5 مفاتيح بس ويرمي `creditSales` — فـ`dcData.creditSales` كان دايمًا
+  //    undefined والتسوية بتجمع صفر: كل مرتجع بالرصيد = أوفر وهمي رغم إن
+  //    `dcAggregate` نفسها سليمة ومتختبرة. لازم **كل** مفاتيح الدفع توصل لـdcData.
+  const { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales } = dcAggregate(sales);
 
   // 🕵️ السبب الأول للأوفر اليومي: فواتير اتعملت **بعد تقفيل امبارح وقبل بداية
   // يوم الشغل الحالي** — دي مش داخلة في مبيعات النهاردة ولا دخلت تقفيل امبارح
@@ -1831,7 +1837,7 @@ async function goToEndOfDay(){
     });
   }catch(e){ console.warn('advances', e); }
 
-  dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length, lateTotal, lateCash, lateCount: lateSales.length, lastCloseTs, pendingCount: _pendingCount, fromCache: _fromCache };
+  dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length, lateTotal, lateCash, lateCount: lateSales.length, lastCloseTs, pendingCount: _pendingCount, fromCache: _fromCache };
   const lastFloat = parseFloat(localStorage.getItem('dc_float_'+currentBranch)) || '';
 
   const denoms = [200,100,50,20,10,5];
@@ -1947,8 +1953,13 @@ function dcFinish(){
      `payments.credit` سالب في المرتجع، فجمعه بيعادل نزول
      `systemTotal` بالظبط. */
   const creditOut = +(dcData.creditSales || 0);
-  // المفروض يتجمّع = (كاش معدود − عهدة) + مصروفات + سلف + فيزا + انستا + راتب + رصيد
-  const accounted = (counted - flt) + exp + adv + visa + insta + salary + creditOut;
+  /* 🎁 استبدال نقط + مكافآت (§4هـ): بقوا طرق دفع والفاتورة بقيمتها الكاملة،
+     فـ`systemTotal` بقى شايل قيمتهم ومفيش مقابلهم فلوس في الدرج.
+     🔴 من غير السطر ده كل استبدال/مكافأة = **عجز وهمي** بنفس القيمة.
+     و`creditOut` بقى **صافي** الرصيد: صرف (+) ناقص مرتجع لرصيد (−). */
+  const promoOut = +((dcData.pointsSales || 0) + (dcData.rewardSales || 0));
+  // المفروض يتجمّع = (كاش معدود − عهدة) + مصروفات + سلف + فيزا + انستا + راتب + رصيد + نقط/مكافآت
+  const accounted = (counted - flt) + exp + adv + visa + insta + salary + creditOut + promoOut;
   const overShort = +(accounted - dcData.systemTotal).toFixed(2);
   // ⚠️ الأوفر المتوقع من فواتير ما بعد آخر تقفيل (كاشها في الدرج ومش في مبيعات النهاردة)
   const _lateCash = +(dcData.lateCash || 0);
@@ -1974,7 +1985,8 @@ function dcFinish(){
           <div><span>+ فيزا</span><b>${visa.toFixed(2)}</b></div>
           <div><span>+ انستاباي</span><b>${insta.toFixed(2)}</b></div>
           ${salary>0?`<div><span>+ 📄 راتب موظفين (للمرتبات)</span><b>${salary.toFixed(2)}</b></div>`:''}
-          ${creditOut!==0?`<div><span>+ 💳 مرتجع لرصيد العميلة</span><b>${creditOut.toFixed(2)}</b></div>`:''}
+          ${creditOut!==0?`<div><span>+ 💳 رصيد عميلات (صرف − مرتجع)</span><b>${creditOut.toFixed(2)}</b></div>`:''}
+          ${promoOut!==0?`<div><span>+ 🎁 استبدال نقط ومكافآت</span><b>${promoOut.toFixed(2)}</b></div>`:''}
           <div class="dc-res-sep"><span>= إجمالي محسوب</span><b>${accounted.toFixed(2)}</b></div>
           <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>${_lateBlock}
         </div>
@@ -2003,6 +2015,7 @@ function dcFinish(){
     type:'dayclose', branch: currentBranch, date: todayISO(),
     countedCash: counted, float: flt, expenses: exp, advances: adv, visa, instapay: insta, salaryDeferred: salary,
     systemTotal: dcData.systemTotal, cashSales: dcData.cashSales, visaSales: dcData.visaSales, instaSales: dcData.instaSales,
+    creditSales: +(dcData.creditSales||0), pointsSales: +(dcData.pointsSales||0), rewardSales: +(dcData.rewardSales||0),
     accounted, overShort, overShortReal, lateCash: _lateCash, lateTotal: +(dcData.lateTotal||0), lateCount: dcData.lateCount||0, invoiceCount: dcData.invoiceCount,
     pendingCount: dcData.pendingCount||0, closedFromCache: !!dcData.fromCache,
     expNote, advSystem, advChanged,

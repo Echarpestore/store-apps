@@ -2119,7 +2119,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="blackbox.js"></script>
 <script src="pos-core.js"></script>
 <script src="pos-admin.js?v=534"></script>
-<script src="pos-reports.js?v=535"></script>
+<script src="pos-reports.js?v=696"></script>
 <script src="../cctv-config.js?v=549"></script>
 <script src="cctv-presence.js?v=617"></script>
 <script src="cctv-staff-state.js?v=644"></script>
@@ -2157,6 +2157,10 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="instapay-pos.js?v=695"></script>
 <!-- 💳 المرتجع لرصيد العميلة -->
 <script src="refund-credit.js?v=692"></script>
+<!-- 💳 §4هـ: الرصيد/النقط/المكافأة بيتحفظوا طرق دفع مش سطور سالبة.
+     ⚠️ لازم **بعد** pos-sale.js (بيغلّف _doConfirmPayment) والـcore قبل الـpos. -->
+<script src="tender-core.js?v=696"></script>
+<script src="tender-pos.js?v=696"></script>
 <!-- 🧠 شريط الفرصة -->
 <script src="opportunity-core.js"></script>
 <!-- 🔖 طلبات الزباين -->

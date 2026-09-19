@@ -38,7 +38,7 @@ t('مرتجع كاش لسه شغال زي ما هو',()=>{
 t('التسوية في الشاشة بتستخدمه',()=>{
   if(!rep.includes('+ salary + creditOut'))throw Error('مش مستخدم في accounted')});
 t('بيظهر سطر في نتيجة التقفيل',()=>{
-  if(!rep.includes('مرتجع لرصيد العميلة'))throw Error('مفيش سطر عرض')});
+  if(!/creditOut!==0\?`<div><span>\+ 💳 رصيد عميلات/.test(rep))throw Error('مفيش سطر عرض')});
 
 console.log('\n🔒 البوابات');
 t('رصيد من غير رقم عميلة ممنوع',()=>{

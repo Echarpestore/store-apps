@@ -34,7 +34,7 @@ function saleDateStr(s){
   const d = s.createdAt && s.createdAt.toDate ? s.createdAt.toDate() : null;
   return d ? d.toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit'}) : '—';
 }
-const PAY_LABELS = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي'};
+const PAY_LABELS = {cash:'💵 كاش', visa:'💳 فيزا', instapay:'📱 انستا باي', salary:'📄 خصم راتب', credit:'💳 رصيد العميلة', points:'🎁 استبدال نقط', reward:'🎁 مكافأة'};
 
 // ---------------- فاتورة كاملة ----------------
 async function openInvoice(saleId){
