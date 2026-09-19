@@ -476,9 +476,44 @@
     return { cols: cols, rows: rows };
   }
 
+  /* 🔲 اكتشاف الشكل الحقيقي بدل الثقة في المطلوب.
+     🔴 الباج: `resolveGridOrientation` بيرجع من غير فحص لو
+        cols === rows — يعني 2×2 بتعدّي دايمًا. لكن الموديل مش
+        ملزوم يطيع: طلبنا 2×2 ورجّع أحيانًا شريط أفقي 1×4، وإحنا
+        قصّينا بافتراض 2×2 فطلع في كل خانة نص وش من خانة ونص وش
+        من اللي جنبها — الشكل الملخبط اللي ظهر في التجربة.
+     ✅ بنجرّب كل تقسيمات العدد (لـ4: 2×2 و1×4 و4×1) ونختار اللي
+        نسبته أقرب لنسبة الصورة الفعلية، بافتراض إن كل خانة بورتريه
+        (~3:4). ده بيشتغل مهما كان الموديل عمل إيه. */
+  var CELL_ASPECT = 0.75;   // عرض/ارتفاع الخانة المتوقعة
+
+  function detectGridLayout(w, h, n, cols, rows) {
+    n = Math.max(1, Number(n) || 1);
+    if (n === 1) return { cols: 1, rows: 1 };
+    var actual = (w || 1) / (h || 1);
+    var best = null;
+    for (var c = 1; c <= n; c++) {
+      if (n % c !== 0) continue;
+      var r = n / c;
+      var expected = (c / r) * CELL_ASPECT;
+      // مقارنة لوغاريتمية: الفرق بين 3.0 و0.75 لازم يتقاس نسبيًا
+      var err = Math.abs(Math.log(actual / expected));
+      if (!best || err < best.err) best = { cols: c, rows: r, err: err };
+    }
+    /* ⚠️ لو الفرق كبير أوي يبقى إحنا مش فاهمين الصورة — نرجع للمطلوب.
+       🔴 بس بشرط إن المطلوب نفسه يطلع عدد الخانات الصح: الاختبار
+          مسك إن الرجوع الأعمى كان ممكن يرجّع 2×2 لخانتين، يعني
+          أربع قصّات لخانتين — نفس نوع اللخبطة اللي بنصلحها. */
+    if (!best || best.err > 0.9) {
+      if (cols * rows === n) return { cols: cols, rows: rows };
+    }
+    return best ? { cols: best.cols, rows: best.rows } : { cols: n, rows: 1 };
+  }
+
   function sliceGridProportional(w, h, cols, rows, n, insetFrac) {
     var inset = insetFrac != null ? insetFrac : 0.035;
-    var resolved = resolveGridOrientation(w, h, cols, rows);
+    var resolved = detectGridLayout(w, h, n, cols, rows);
+    if (resolved.cols * resolved.rows !== n) resolved = resolveGridOrientation(w, h, cols, rows);
     cols = resolved.cols; rows = resolved.rows;
     var cellW = w / cols, cellH = h / rows;
     var cells = [];
@@ -497,6 +532,7 @@
 
   var API = {
     SS_KEYS: SS_KEYS,
+    detectGridLayout: detectGridLayout,
     BRANDS: BRANDS,
     TARGET_MAX_DIM: TARGET_MAX_DIM,
     JPEG_QUALITY: JPEG_QUALITY,
