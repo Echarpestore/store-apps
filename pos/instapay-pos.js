@@ -245,10 +245,40 @@
   /* ============================================================
      ▶️ فتح الطلب — بعد ما الكاشير تأكّد المبلغ
      ============================================================ */
+  /* 🏬 الفرع ده شغّال بمنظومة التابلت ولا لأ؟
+     ------------------------------------------------------------
+     🔴 الباج: الفرع اللي مالوش تابلت كان بيفتح اللوحة، السيرفر يرد
+        «مش مفعّل»، اللوحة تفضل مفتوحة بزرار «أكّدي يدوي» **ميت**
+        (مفيش طلب يتأكد)، وإنستاباي **يتشال من الفاتورة** — يعني
+        الفرع ده مايقدرش يقبض إنستاباي خالص.
+     ✅ الفرع اللي مش مفعّل = إنستاباي **طريقة دفع عادية** زي قبل
+        المنظومة: لا لوحة ولا بوابة ولا طلب للسيرفر.
+     «مش مفعّل» = مفيش إعدادات · أو enabled:false · أو ناقص عنوان/QR
+     (نفس شروط السيرفر بالظبط — هو المرجع).
+     القيمة بتتخزن لكل فرع: true = مش مفعّل · false = مفعّل · غير
+     موجودة = لسه مانعرفش (ساعتها السيرفر هو اللي بيقرر). */
+  const _offByBranch = {};
+  function cfgIsOff(exists, d) {
+    d = d || {};
+    return !exists || d.enabled === false || !(d.alias || (d.extraAliases || []).length) || !d.qr;
+  }
+  async function branchOff(br) {
+    br = String(br || '');
+    if (_offByBranch[br] === true || _offByBranch[br] === false) return _offByBranch[br];
+    try {
+      const snap = await db.collection(TEST_SETTINGS).doc(cfgDocId(br)).get();
+      _offByBranch[br] = cfgIsOff(snap.exists, snap.exists ? snap.data() : null);
+      return _offByBranch[br];
+    } catch (e) { return null; }   // مانعرفش — مبنخمّنش
+  }
+  window.instaCfgIsOff = cfgIsOff;
+
   async function startFlow(amount) {
     const br = window.currentBranch || currentBranch;
     const cents = Math.round(Math.abs(Number(amount) || 0) * 100);
     if (!(cents > 0)) return;
+    // 🏬 فرع من غير تابلت: إنستاباي عادي — ولا لوحة ولا طلب
+    if ((await branchOff(br)) === true) return;
     $('ipPosAmt').textContent = (cents / 100).toFixed(2) + ' ج.م';
     $('ipPosState').textContent = 'بيتبعت للتابلت…';
     openBox();
@@ -259,6 +289,15 @@
       $('ipPosState').textContent = 'في انتظار العميلة…';
     } catch (e) {
       const msg = (e && e.message) || 'مشكلة في الاتصال';
+      // 🏬 السيرفر قال الفرع مش متجهّز (الإعدادات اتغيّرت بعد ما قريناها):
+      //    نقفل اللوحة ونسيب إنستاباي في الفاتورة كطريقة دفع عادية.
+      if (e && /failed-precondition/.test(String(e.code || ''))) {
+        _offByBranch[String(br || '')] = true;
+        closeBox();
+        return;
+      }
+      // عطل حقيقي (نت/جلسة): مفيش طلب اتفتح → زرار اليدوي ملوش لازمة
+      $('ipPosManual').style.display = 'none';
       $('ipPosSpin').style.display = 'none';
       $('ipPosState').textContent = '⛔ ' + msg;
       // 🔴 الفرع مش مفعّل أو مفيهوش QR → نشيل إنستاباي من الفاتورة
@@ -347,6 +386,13 @@
   window.confirmPayment = async function () {
     let usingInsta = false;
     try { usingInsta = (typeof selectedPayMethods !== 'undefined') && selectedPayMethods.has('instapay'); } catch (e) {}
+    // 🏬 فرع من غير تابلت = مفيش بوابة (إنستاباي عادي زي قبل المنظومة).
+    //    ⚠️ `=== true` بس: لو مانعرفش (null) البوابة بتفضل شغالة.
+    let branchIsOff = false;
+    if (usingInsta && !approved) {
+      try { branchIsOff = (await branchOff(window.currentBranch || currentBranch)) === true; } catch (e) {}
+    }
+    if (branchIsOff) return _origConfirmPay.apply(this, arguments);
     // 🔒 البوابة: فاتورة فيها إنستاباي متأكدش = مفيش حفظ.
     //    ده أهم سطر في الملف — من غيره الكاشير تقدر تحفظ وتطبع
     //    والعميلة ماحوّلتش.
@@ -525,6 +571,8 @@
           qr: _qrData || '',
           updatedAt: Date.now()
         }, { merge: true });
+        // 🏬 الحالة المخزّنة لازم تتحدّث فورًا — وإلا تفعيل الفرع مايبانش غير بعد restart
+        _offByBranch[String(br || '')] = cfgIsOff(true, { enabled: on, alias: alias, qr: _qrData || '' });
         $('ipSetMsg').textContent = '✅ اتحفظ';
       } catch (e) {
         $('ipSetMsg').textContent = '⛔ ماتحفظش: ' + ((e && e.message) || '');

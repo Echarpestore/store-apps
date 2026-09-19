@@ -9,7 +9,7 @@ const no=s=>{if(src.includes(s))throw Error('موجود وماينفعش: '+s)};
 console.log('\n🔒 البوابة (أهم حاجة)');
 t('مفيش حفظ قبل التأكيد',()=>has('if (usingInsta && cartTotal() > 0 && !approved)'));
 t('البوابة بترجع من غير ما تنادي الأصلية',()=>{
-  const i=src.indexOf('!approved)'); const seg=src.slice(i,i+400);
+  const i=src.indexOf('cartTotal() > 0 && !approved)'); if(i<0)throw Error('سطر البوابة مش موجود'); const seg=src.slice(i,i+400);
   if(!seg.includes('return;'))throw Error('مفيش return');
   if(seg.indexOf('_origConfirmPay')!==-1 && seg.indexOf('_origConfirmPay')<seg.indexOf('return;'))
     throw Error('بتنادي الأصلية قبل الرفض')});
@@ -28,6 +28,35 @@ t('مبيفتحش طلب في المرتجع',()=>has('cartTotal() > 0'));
 t('إنستاباي مالهوش سطر في pos-sale',()=>{
   const b=fs.existsSync('pos/pos-sale.js')?fs.readFileSync('pos/pos-sale.js','utf8'):'';
   if(/insta(Pay|Scan|Start|Reset|Finalize)/.test(b))throw Error('إنستاباي دخل pos-sale')});
+
+console.log('\n🏬 فرع من غير تابلت = إنستاباي عادي');
+const codeNC=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/(^|[^:'"`\\])\/\/[^\n]*/g,'$1');
+function grab(head){const i=codeNC.indexOf(head);if(i<0)throw Error('البلوك مش موجود: '+head);
+  const o=codeNC.indexOf('{',i);let d=0;for(let k=o;k<codeNC.length;k++){if(codeNC[k]==='{')d++;else if(codeNC[k]==='}'){d--;if(!d)return codeNC.slice(i,k+1)}}throw Error('أقواس')}
+const cfgIsOff=eval('('+grab('function cfgIsOff')+')');
+t('مفيش إعدادات = مش مفعّل',()=>{if(cfgIsOff(false,null)!==true)throw Error()});
+t('enabled:false = مش مفعّل',()=>{if(cfgIsOff(true,{enabled:false,alias:'a',qr:'q'})!==true)throw Error()});
+t('ناقص QR أو عنوان = مش مفعّل (نفس شروط السيرفر)',()=>{
+  if(cfgIsOff(true,{alias:'a'})!==true||cfgIsOff(true,{qr:'q'})!==true)throw Error()});
+t('⭐ فرع كامل الإعدادات = مفعّل',()=>{if(cfgIsOff(true,{alias:'a',qr:'q'})!==false)throw Error();
+  if(cfgIsOff(true,{enabled:true,extraAliases:['x'],qr:'q'})!==false)throw Error()});
+t('⭐⭐ startFlow بيسأل عن الفرع **قبل** ما يفتح اللوحة',()=>{
+  const b=grab('async function startFlow'); const i=b.indexOf('branchOff('), j=b.indexOf('openBox()');
+  if(i<0)throw Error('مفيش فحص فرع'); if(j<0||i>j)throw Error('اللوحة بتتفتح قبل الفحص')});
+t('⭐⭐ رد السيرفر «مش متجهّز» بيقفل اللوحة ومبيشيلش إنستاباي',()=>{
+  const b=grab('async function startFlow'); const i=b.indexOf('failed-precondition');
+  if(i<0)throw Error('مفيش معالجة'); const seg=b.slice(i,b.indexOf("selectedPayMethods.delete('instapay')"));
+  if(!/closeBox\(\)/.test(seg)||!/return;/.test(seg))throw Error('لازم يقفل ويرجع قبل الشيل')});
+t('⭐⭐ البوابة بتتخطّى في الفرع اللي مش مفعّل بس (=== true)',()=>{
+  const i=codeNC.indexOf('window.confirmPayment = async function'); const seg=codeNC.slice(i,codeNC.indexOf('!approved) {',i+1)+400);
+  if(!/branchOff\([^)]*\)\)\s*===\s*true/.test(seg))throw Error('لازم === true — «مانعرفش» مايفتحش البوابة');
+  if(seg.indexOf('if (branchIsOff) return _origConfirmPay')<0)throw Error('مفيش تخطّي')});
+t('🔴 «مانعرفش» (فشل القراءة) بيرجّع null مش true',()=>{
+  if(!/catch\s*\(e\)\s*\{\s*return null;/.test(grab('async function branchOff')))throw Error('الفشل بيتحسب مش مفعّل = ثغرة')});
+t('زرار اليدوي بيختفي لو مفيش طلب اتفتح',()=>{
+  if(!/\$\('ipPosManual'\)\.style\.display = 'none'/.test(grab('async function startFlow')))throw Error()});
+t('حفظ الإعدادات بيحدّث الحالة فورًا',()=>{
+  const i=codeNC.indexOf("$('ipSetSave').onclick"); if(!/_offByBranch\[[^\]]+\]\s*=\s*cfgIsOff\(true/.test(codeNC.slice(i,i+2500)))throw Error()});
 
 console.log('\n🧯 الأعطال');
 t('فشل فتح الطلب بيشيل إنستاباي من الفاتورة',()=>has("selectedPayMethods.delete('instapay')"));
