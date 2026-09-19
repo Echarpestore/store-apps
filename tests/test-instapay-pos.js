@@ -41,10 +41,21 @@ t('فرع مفعّل لازم له عنوان',()=>has("if (on && !alias)"));
 t('فرع مفعّل لازم له QR',()=>has('if (on && !_qrData)'));
 t('الصورة بتتصغّر قبل الحفظ',()=>{has('const max = 560');has("toDataURL('image/jpeg', 0.88)")});
 t('الحقن في شاشة الصلاحيات',()=>{has("getElementById('rolesScreen')")});
-t('الحقن مبيعدّلش pos-reports',()=>{
-  const a=fs.readFileSync('/home/claude/repo/store-apps-main/pos/pos-reports.js','utf8');
-  const b=fs.existsSync('pos/pos-reports.js')?fs.readFileSync('pos/pos-reports.js','utf8'):a;
-  if(a!==b)throw Error('pos-reports.js اتغير')});
+t('الكارت مربوط بحارس الجلسة المقفولة',()=>{
+  has("getElementById('pmbTerminalId')");has('if (!ready)')});
+t('الكارت بيتشال لو الإعدادات اتخفت',()=>has("if (c) c.remove()"));
+t('الأقسام بتتطوي',()=>{has('function collapsify(');has('ipFoldBody')});
+t('🔴 الطي مبيبدأش مطوي (مبيخفيش محتوى)',()=>{
+  if(src.includes('const open = n === 0'))throw Error('لسه بيخفي أقسام من غير طلب');
+  if(!src.includes("h.classList.remove('ipShut')"))throw Error('مفيش فتح افتراضي')});
+t('شبكة أمان بترجّع المخفي',()=>{has('function unhideOrphans(')});
+t('زرار الرصيد ليه لون',()=>has('button#pmCredit{background'));
+t('الطي مبيعدّلش كود الشاشة',()=>has("h.dataset.ipFold"));
+// ⚠️ pos-reports.js اتعدّل عن قصد للمرتجع بالرصيد (اختباره في
+//    test-refund-credit). اللي يهمنا هنا إن **الحقن** مش بيكتب فيه.
+t('إنستاباي مالهوش سطر في pos-reports',()=>{
+  const b=fs.existsSync('pos/pos-reports.js')?fs.readFileSync('pos/pos-reports.js','utf8'):'';
+  if(/ipSetCard|instaPay|collapsify/.test(b))throw Error('الحقن دخل pos-reports')});
 
 console.log('\n🚫 §10 ممنوع prompt/confirm في POS');
 // ⚠️ الفحص لازم يشيل التعليقات الأول — الاختبار وقع مرة على كلمة
@@ -60,7 +71,7 @@ console.log('\n📄 الربط');
 t('الملف متحمّل في index.html',()=>{if(!html.includes('instapay-pos.js?v=690'))throw Error('مش متحمّل')});
 t('بعد credit-ui',()=>{if(html.indexOf('instapay-pos.js')<html.indexOf('credit-ui.js'))throw Error('الترتيب غلط')});
 t('CACHE_NAME اترفع',()=>{const sw=fs.readFileSync('pos/sw.js','utf8');
-  if(!sw.includes('pos-shell-v690'))throw Error('الكاش ماترفعش')});
+  if(!/pos-shell-v69[2-9]/.test(sw))throw Error('الكاش ماترفعش')});
 
 console.log('\n===============================\nالنتيجة: '+p+' ناجح · '+f+' فاشل\n===============================\n');
 process.exit(f?1:0);

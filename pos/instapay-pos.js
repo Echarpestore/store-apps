@@ -70,6 +70,7 @@
 .ipSet .prev{margin-top:10px;background:#fff;border-radius:10px;padding:8px;display:none}
 .ipSet .prev.on{display:block}
 .ipSet .prev img{width:100%;max-width:180px;display:block;margin:0 auto}
+.qbx-pay-btns button#pmCredit{background:linear-gradient(#f59e0b,#d97706)}
 .ipFoldHead{cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
 .ipFoldHead .ipArrow{display:inline-block;transition:transform .2s;font-size:12px;opacity:.7}
 .ipFoldHead.ipShut .ipArrow{transform:rotate(-90deg)}
@@ -523,14 +524,28 @@
       h.insertAdjacentElement('afterend', body);
       h.classList.add('ipFoldHead');
       h.insertAdjacentHTML('afterbegin', '<span class="ipArrow">▾</span> ');
-      const open = n === 0;
-      body.style.display = open ? '' : 'none';
-      h.classList.toggle('ipShut', !open);
+      /* 🔴 الطي **مبيبدأش مطوي**.
+         الخطأ اللي حصل: خليت كل الأقسام مطوية ماعدا الأول، فالشاشة
+         بانت فاضية ومفيهاش غير كارت إنستاباي. العناصر كانت موجودة
+         كلها (اتأكدنا بالكونسول) — أنا اللي مخفيها.
+         القاعدة: ميزة عرض عمرها ما تخفي محتوى من غير ما المستخدم
+         يطلب. الطي بقى بالضغط بس. */
+      body.style.display = '';
+      h.classList.remove('ipShut');
       h.onclick = function () {
         const shut = body.style.display === 'none';
         body.style.display = shut ? '' : 'none';
         h.classList.toggle('ipShut', !shut);
       };
+    });
+  }
+
+  /* 🛡️ شبكة أمان: أي قسم اتخفي ومفيهوش عنوان مطوي بالضغط يرجع
+     يظهر. بتحمي من أي حالة مستقبلية بيقع فيها الطي في النص. */
+  function unhideOrphans(host) {
+    Array.prototype.forEach.call(host.querySelectorAll('.ipFoldBody'), function (b) {
+      const h = b.previousElementSibling;
+      if (b.style.display === 'none' && (!h || !h.classList.contains('ipShut'))) b.style.display = '';
     });
   }
 
@@ -549,11 +564,13 @@
     if (!ready) { const c = document.getElementById('ipSetCard'); if (c) c.remove(); return; }
 
     collapsify(host);
+    unhideOrphans(host);
     if (document.getElementById('ipSetCard')) return;
     host.insertAdjacentHTML('beforeend', settingsHtml());
     const card = document.getElementById('ipSetCard');
     // كارت إنستاباي نفسه بيتطوي زي الباقي، ومطوي افتراضيًا
     collapsify(card);
+    unhideOrphans(card);
     wireSettings();
     loadSettings();
   }
