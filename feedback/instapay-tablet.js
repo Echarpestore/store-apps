@@ -115,6 +115,7 @@ const HTML = `
     <div class="ipQr"><img id="ipQrImg" alt="QR"></div>
     <div class="ipWho" id="ipWho"></div>
     <button class="ipBtn" id="ipDone">تم التحويل ✓</button>
+    <button class="ipBtn ipGhost" id="ipWaitBack" style="margin-top:.6vh">لسه هحوّل — استني</button>
   </div>
 
   <!-- 2️⃣ المسح -->
@@ -156,6 +157,9 @@ const HTML = `
   <div class="ipPane" id="ipMan">
     <div class="ipBig">سلّمي الإيصال للكاشير</div>
     <div class="ipLabel">هتراجعه بنفسها وتكمّل الفاتورة</div>
+    <!-- 🔴 الشاشة دي كانت مسدودة: العميلة توصلها وتقف. أي شاشة
+         مفيهاش طريق للخروج = طريق مسدود، حتى لو الكاشير هتتصرف. -->
+    <button class="ipBtn ipGhost" id="ipManBack" style="margin-top:2vh">◀ جرّبي تاني</button>
   </div>
 </div>`;
 
@@ -350,6 +354,9 @@ $('ipDone').onclick = async () => {
 $('ipHelp').onclick = () => { stopCam(); show('man'); };
 // ◀ رجوع للـQR — لو دوست «تم التحويل» قبل ما تحوّل
 $('ipBack').onclick = () => { stopCam(); show('wait'); $('ipDone').disabled = false; };
+$('ipManBack').onclick = () => { blindTries = 0; show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 550); }); };
+// زرار على شاشة الـQR بيوضّح للعميلة إن مفيش استعجال
+$('ipWaitBack').onclick = () => { $('ipHint') && ($('ipHint').textContent = ''); };
 /* 🔄 زرار القلب اتشال من الشاشة عن قصد.
    العميلة مش المفروض تفهم يعني إيه "اقلبي الكاميرا" — ده قرار تقني
    بنستنتجه لوحدنا من أول محاولة عمياء وبيتحفظ للجهاز، فبيحصل مرة
