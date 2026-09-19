@@ -22,10 +22,12 @@ t('بيحفظ الدالة الأصلية',()=>{has('const _origConfirmAmt = win
 t('بينادي الأصلية في كل الحالات العادية',()=>has('_origConfirmAmt.apply(this, arguments)'));
 t('مبيفتحش طلب غير لما المبلغ يتقبل',()=>has("selectedPayMethods.has('instapay')"));
 t('مبيفتحش طلب في المرتجع',()=>has('cartTotal() > 0'));
-t('مفيش تعديل مباشر على pos-sale',()=>{
-  const a=fs.readFileSync('/home/claude/repo/store-apps-main/pos/pos-sale.js','utf8');
-  const b=fs.existsSync('pos/pos-sale.js')?fs.readFileSync('pos/pos-sale.js','utf8'):a;
-  if(a!==b)throw Error('pos-sale.js اتغير')});
+// ⚠️ pos-sale.js اتعدّل عن قصد في إصلاح نقط المرتجع (اختباره في
+//    test-money-fixes). اللي يهمنا هنا إن **إنستاباي** مالهوش أي
+//    سطر جوّاه — الربط كله بالتغليف من برّه.
+t('إنستاباي مالهوش سطر في pos-sale',()=>{
+  const b=fs.existsSync('pos/pos-sale.js')?fs.readFileSync('pos/pos-sale.js','utf8'):'';
+  if(/insta(Pay|Scan|Start|Reset|Finalize)/.test(b))throw Error('إنستاباي دخل pos-sale')});
 
 console.log('\n🧯 الأعطال');
 t('فشل فتح الطلب بيشيل إنستاباي من الفاتورة',()=>has("selectedPayMethods.delete('instapay')"));

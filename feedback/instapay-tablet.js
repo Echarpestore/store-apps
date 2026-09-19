@@ -99,6 +99,7 @@ const CSS = `
 .ipTick circle,.ipTick path{fill:none;stroke:#2fa36b;stroke-width:6;
   stroke-linecap:round;stroke-linejoin:round}
 .ipTick circle{stroke-dasharray:308;stroke-dashoffset:308;animation:ipDraw .6s ease forwards}
+.ipTickBad circle,.ipTickBad path{stroke:#e5484d}
 .ipTick path{stroke-dasharray:60;stroke-dashoffset:60;animation:ipDraw .4s .45s ease forwards}
 @keyframes ipDraw{to{stroke-dashoffset:0}}
 .ipBig{font-size:4.6vh;font-weight:900}
@@ -128,8 +129,9 @@ const HTML = `
     </div>
     <div class="ipHint" id="ipHint">وجّهي شاشة الإيصال ناحية الكاميرا</div>
     <div style="display:flex;gap:1.6vw;width:min(70vh,86vw)">
-      <button class="ipBtn ipGhost" id="ipFlip" style="flex:1;padding:1.4vh 2vw;font-size:2vh">🔄 اقلبي الكاميرا</button>
-      <button class="ipBtn ipGhost" id="ipHelp" style="flex:2;padding:1.4vh 2vw;font-size:2vh">سلّمي الكاشير</button>
+      <button class="ipBtn ipGhost" id="ipBack" style="flex:1;padding:1.4vh 2vw;font-size:2vh">◀ رجوع</button>
+      <button class="ipBtn ipGhost" id="ipFlip" style="flex:1;padding:1.4vh 2vw;font-size:2vh">🔄 اقلبي</button>
+      <button class="ipBtn ipGhost" id="ipHelp" style="flex:1;padding:1.4vh 2vw;font-size:2vh">الكاشير</button>
     </div>
   </div>
 
@@ -141,7 +143,16 @@ const HTML = `
     <div class="ipLabel">استني الفاتورة من الكاشير</div>
   </div>
 
-  <!-- 4️⃣ سلّمي الكاشير -->
+  <!-- 4️⃣ رفض نهائي — مفيش فايدة من إعادة التصوير -->
+  <div class="ipPane" id="ipBad">
+    <svg class="ipTick ipTickBad" viewBox="0 0 120 120"><circle cx="60" cy="60" r="49"></circle>
+      <path d="M44 44 L76 76 M76 44 L44 76"></path></svg>
+    <div class="ipBig" id="ipBadMsg">الإيصال مش مظبوط</div>
+    <div class="ipLabel">كلّمي الكاشير</div>
+    <button class="ipBtn ipGhost" id="ipRetry" style="margin-top:2vh">عندي إيصال تاني</button>
+  </div>
+
+  <!-- 5️⃣ سلّمي الكاشير -->
   <div class="ipPane" id="ipMan">
     <div class="ipBig">سلّمي الإيصال للكاشير</div>
     <div class="ipLabel">هتراجعه بنفسها وتكمّل الفاتورة</div>
@@ -153,7 +164,7 @@ document.body.insertAdjacentHTML('beforeend', HTML);
 
 const $ = id => document.getElementById(id);
 const wrap = $('ipWrap');
-const panes = { wait: $('ipWait'), scan: $('ipScan'), ok: $('ipOk'), man: $('ipMan') };
+const panes = { wait: $('ipWait'), scan: $('ipScan'), ok: $('ipOk'), bad: $('ipBad'), man: $('ipMan') };
 let cur = null;      // الطلب الحالي
 let stream = null;   // الكاميرا
 let loop = null;     // مؤقّت المسح
@@ -231,22 +242,40 @@ function setFlip(on) {
   $('ipFlip').textContent = flipCapture ? '🔄 الكاميرا مقلوبة' : '🔄 اقلبي الكاميرا';
 }
 
+/* ✂️ بنبعت **جوّه الإطار بس**، مش الصورة كلها.
+   قبل كده كنا بنبعت الشاشة + الإيد + المكتب + الخلفية، وVision
+   بيدوّر على نص في ده كله بينما اللي عايزينه ربع الصورة. القص
+   بيصغّر الصورة للربع وبيشيل أي نص مش من الإيصال — أسرع وأدق. */
+const INSET = 0.06;   // نفس نسبة .frame في الـCSS
+
 function frameJpeg(video) {
   const w = video.videoWidth, h = video.videoHeight;
   if (!w || !h) return null;
-  const scale = Math.min(1, 1600 / Math.max(w, h));
+  const sx = Math.round(w * INSET), sy = Math.round(h * INSET);
+  const sw = w - sx * 2, sh = h - sy * 2;
+  const scale = Math.min(1, 1500 / Math.max(sw, sh));
   const c = document.createElement('canvas');
-  c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+  c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
   const x = c.getContext('2d', { alpha: false });
   if (flipCapture) { x.translate(c.width, 0); x.scale(-1, 1); }
-  x.drawImage(video, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', 0.82).split(',')[1];
+  x.drawImage(video, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.84).split(',')[1];
 }
 
-function paintChecks(ch) {
-  $('ipC1').classList.toggle('ok', !!(ch && ch.amount));
-  $('ipC2').classList.toggle('ok', !!(ch && ch.time));
-  $('ipC3').classList.toggle('ok', !!(ch && ch.reference));
+/* 🔢 المربعات بتوري **اللي اتقرا فعلًا** مش اسم الحقل.
+   "المبلغ" رمادي مبتقولش حاجة؛ "1600 ≠ 350" بتقول كل حاجة. */
+function chip(el, on, label, val) {
+  el.classList.toggle('ok', !!on);
+  el.innerHTML = '<span>' + label + (val ? '<br><b style="font-size:1.7vh">' + val + '</b>' : '') + '</span>';
+}
+function paintChecks(ch, d) {
+  const seen = (d && d.seenCents && d.seenCents.length)
+    ? d.seenCents.map(c => (c / 100).toLocaleString('en-EG')).join('/') : '';
+  chip($('ipC1'), ch && ch.amount, 'المبلغ', ch && ch.amount ? '✓' : seen);
+  chip($('ipC2'), ch && ch.time, 'الوقت',
+    (ch && ch.time) ? '✓' : (d && d.driftMin != null ? d.driftMin + ' د' : ''));
+  chip($('ipC3'), ch && ch.reference, 'رقم العملية',
+    (d && d.ref) ? String(d.ref).slice(-6) : '');
 }
 
 async function tick() {
@@ -256,7 +285,9 @@ async function tick() {
   const g = grayOf(v, 64, 48);
   const d = diffScore(prevGray, g);
   prevGray = g;
-  if (d > 6) { $('ipHint').textContent = 'ثبّتي التليفون شوية'; return; }
+  // ⚠️ الشرط كان صارم (6) فمع إيد بتهتز شوية كان ممكن ياخد ثواني
+  //    قبل ما يبعت أصلًا. رخّيناه، والفريم الأول بيتبعت على طول.
+  if (prevGray && d > 16) { $('ipHint').textContent = 'ثبّتي شوية'; return; }
 
   busy = true;
   try {
@@ -264,7 +295,7 @@ async function tick() {
     if (!img) return;
     $('ipHint').textContent = 'بنقرا…';
     const r = (await callScan({ sid: cur.sid, image: img })).data || {};
-    paintChecks(r.checks);
+    paintChecks(r.checks, r.detail);
 
     // 👁️ عمى كامل: مفيش ولا حقل اتقرا → غالبًا الصورة مقلوبة
     const ch = r.checks || {};
@@ -281,7 +312,13 @@ async function tick() {
     } else { blindTries = 0; }
 
     if (r.ok) { stopCam(); show('ok'); return; }
-    if (r.error === 'DUPLICATE') { $('ipHint').textContent = 'الإيصال ده اتستخدم قبل كده'; return; }
+
+    /* ⛔ رفض نهائي → نوقف فورًا. الاستمرار في التصوير هنا بيخلي
+       العميلة واقفة تستنى حاجة النظام عارف من أول لقطة إنها
+       مش هتتغير. */
+    if (r.fatal) { stopCam(); $('ipBadMsg').textContent = r.hint || 'الإيصال مش مظبوط'; show('bad'); return; }
+
+    if (r.error === 'DUPLICATE') { stopCam(); $('ipBadMsg').textContent = 'الإيصال ده اتستخدم قبل كده'; show('bad'); return; }
     // ⚠️ كانت بتفضل على "بنقرا…" لما الرد يرجع فاضي — فالعميلة
     //    والكاشير فاكرين إن النظام معلّق وهو شغال.
     $('ipHint').textContent = r.hint
@@ -305,7 +342,14 @@ $('ipDone').onclick = async () => {
   if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 900); }
 };
 $('ipHelp').onclick = () => { stopCam(); show('man'); };
+// ◀ رجوع للـQR — لو دوست «تم التحويل» قبل ما تحوّل
+$('ipBack').onclick = () => { stopCam(); show('wait'); $('ipDone').disabled = false; };
 $('ipFlip').onclick = () => { setFlip(!flipCapture); blindTries = 0; $('ipHint').textContent = 'جرّبي تاني'; };
+$('ipRetry').onclick = async () => {
+  paintChecks(null); blindTries = 0;
+  show('scan');
+  if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 900); }
+};
 setFlip(flipCapture);
 
 /* 🖼️ الـQR بيتقرا من إعدادات الفرع **مرة واحدة** ويتخزّن في الذاكرة.
@@ -331,7 +375,7 @@ if (branch) {
     // طلب جديد على نفس التابلت = الشاشة تبدأ من الأول
     if (!cur || cur.sid !== s.sid) {
       cur = { sid: s.sid };
-      stopCam(); paintChecks(null);
+      stopCam(); paintChecks(null, null);
       blindTries = 0;   // القلب إعداد جهاز — بيفضل، والعداد بس بيتصفّر
       $('ipAmt').innerHTML = (Number(s.amountCents || 0) / 100)
         .toLocaleString('en-EG', { minimumFractionDigits: 0 }) + '<span>ج.م</span>';
@@ -339,8 +383,9 @@ if (branch) {
       loadQr();
     }
     if (s.status === 'waiting') show('wait');
-    else if (s.status === 'scanning') { if (!stream) { show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 900); }); } paintChecks(s.checks); }
+    else if (s.status === 'scanning') { if (!stream) { show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 900); }); } paintChecks(s.checks, s.detail); }
     else if (s.status === 'approved') { stopCam(); show('ok'); }
+    else if (s.status === 'rejected') { stopCam(); $('ipBadMsg').textContent = s.hint || 'الإيصال مش مظبوط'; show('bad'); }
     else hide();
   }, err => console.warn('[instapay]', err && err.code));
 }

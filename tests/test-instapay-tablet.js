@@ -10,7 +10,10 @@ t('بينده الدالتين بس',()=>{has("'instaPay'");has("'instaScan'")})
 t('الكاميرا بتطفي عند إخفاء الصفحة',()=>{has("pagehide");has("visibilitychange")});
 
 console.log('\n💸 توفير التكلفة');
-t('مبيبعتش غير لما الصورة تثبت',()=>has('if (d > 6)'));
+t('الفريم الأول بيتبعت فورًا',()=>has('if (prevGray && d > 16)'));
+t('بيقص على الإطار بس',()=>{has('const INSET = 0.06');has('x.drawImage(video, sx, sy, sw, sh')});
+t('المربعات بتوري الأرقام',()=>{has('function chip(');has('d.seenCents')});
+t('فيه زرار رجوع للـQR',()=>{has("id=\"ipBack\"");has("$('ipBack').onclick")});
 t('فيه مؤقّت مش نداء متواصل',()=>has('setInterval(tick, 900)'));
 t('قفل تزامن يمنع نداءين مع بعض',()=>has('if (busy || !cur) return'));
 t('الـQR بيتحمّل مرة واحدة',()=>has('if (_qr)'));
@@ -23,7 +26,7 @@ t('القلب بيتفعّل من أول محاولة عمياء',()=>has('blind
 t('القلب بيتحفظ للجهاز',()=>{has('FLIP_KEY');has('localStorage.setItem(FLIP_KEY')});
 t('فيه زرار قلب يدوي',()=>{has("id=\"ipFlip\"");has("$('ipFlip').onclick")});
 t('الشاشة متفضلش واقفة على بنقرا',()=>has('مش شايف الإيصال'));
-t('الجودة مضغوطة',()=>has("'image/jpeg', 0.82"));
+t('الجودة مضغوطة',()=>has("'image/jpeg', 0.84"));
 t('الكاميرا الأمامية',()=>has("facingMode: 'user'"));
 
 console.log('\n🧯 الأعطال');

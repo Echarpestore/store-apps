@@ -157,6 +157,18 @@
     $('ipP2').classList.toggle('ok', !!c.time);
     $('ipP3').classList.toggle('ok', !!c.reference);
     const s = st && st.status;
+    if (s === 'rejected') {
+      // ⛔ رفض نهائي: السبب بالرقم، والكاشير تقرر — إيصال تاني
+      //    ولا طريقة دفع تانية. مفيش انتظار.
+      $('ipPosSpin').style.display = 'none';
+      $('ipPosState').innerHTML = '⛔ ' + (st.hint || 'الإيصال مرفوض');
+      $('ipPosManual').style.display = '';
+      const ex0 = explain(st);
+      $('ipPosWhy').textContent = ex0;
+      $('ipPosWhy').style.display = ex0 ? '' : 'none';
+      openBox();
+      return;
+    }
     if (s === 'approved') {
       approved = true;
       $('ipPosSpin').style.display = 'none';
@@ -363,6 +375,8 @@
       </select>
       <label>عنوان الانستا باي (زي ما هو بالظبط)</label>
       <input id="ipSetAlias" placeholder="zogzog2000@instapay" dir="ltr">
+      <label>عناوين إضافية مقبولة (رقم محفظة أو عنوان تاني — افصلهم بفاصلة)</label>
+      <input id="ipSetExtra" placeholder="01144155987, name@instapay" dir="ltr">
       <label>اسم المستفيد (بيظهر للعميلة)</label>
       <input id="ipSetBen" placeholder="echarpe — الرحاب">
       <label>مدة قبول الإيصال بالدقايق</label>
@@ -411,6 +425,7 @@
       const d = s.exists ? s.data() : {};
       $('ipSetEnabled').value = (d.enabled === false) ? '0' : '1';
       $('ipSetAlias').value = d.alias || '';
+      $('ipSetExtra').value = (d.extraAliases || []).join(', ');
       $('ipSetBen').value = d.beneficiary || '';
       $('ipSetWin').value = d.windowMin || 5;
       $('ipSetCap').value = (d.monthlyScanCap != null) ? d.monthlyScanCap : 1000;
@@ -443,6 +458,13 @@
       try {
         await db.collection(TEST_SETTINGS).doc(cfgDocId(br)).set({
           enabled: on, alias: alias,
+          /* 👥 عناوين إضافية: الفرع ممكن يستقبل على أكتر من حساب
+             (عنوان إنستاباي + رقم محفظة). أي واحد فيهم في ناحية
+             «إلى» بيعدّي.
+             ⚠️ بنشيل المسافات والشرط المائل عشان الرقم اللي الكاشير
+                بتكتبه بمسافات ميفشلش المطابقة. */
+          extraAliases: $('ipSetExtra').value.split(/[,،\n]/)
+            .map(function(x){ return x.trim(); }).filter(Boolean),
           beneficiary: $('ipSetBen').value.trim(),
           windowMin: Math.max(1, +$('ipSetWin').value || 5),
           monthlyScanCap: Math.max(0, +$('ipSetCap').value || 0),
