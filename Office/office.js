@@ -428,8 +428,12 @@ function ofCollectDays(data, fromKey, toKey){
       if(!it) return;
       const line = Math.abs(Number(it.price) || 0) * (Number(it.qty) || 0);
       if(it.isGiftCard)    r.gcSold  += line;   // اتباع كارت → الدين زاد
-      if(it.isCreditSpend) r.gcSpent += line;   // اتصرف رصيد → الدين قلّ
+      if(it.isCreditSpend) r.gcSpent += line;   // اتصرف رصيد → الدين قلّ (فواتير قبل v696)
     });
+    // 💳 من POS v696 (§4هـ) صرف الرصيد بقى طريقة دفع `payments.credit` مش سطر
+    //    سالب. الفاتورة الواحدة فيها شكل واحد بس، فمفيش عدّ مرتين.
+    //    ⚠️ الموجب بس: السالب = مرتجع لرصيد، وده مش صرف.
+    if((Number(p.credit) || 0) > 0) r.gcSpent += Number(p.credit);
   });
 
   const bucket = function(arr, field, filter, valueOf){
@@ -6235,7 +6239,7 @@ function ofSaleRating(s){
 // ---- 🧾 سجل المبيعات v427 — الفاتورة نفسها هي نقطة المراجعة ----
 function _ofSaleCode(s){ return String((s && (s.invoiceCode || s.invoiceNo)) || ''); }
 function _ofPayWays(s){
-  const PAY={cash:'كاش',visa:'فيزا',instapay:'انستا باي',salary:'راتب'}, p=(s&&s.payments)||{};
+  const PAY={cash:'كاش',visa:'فيزا',instapay:'انستا باي',salary:'راتب',credit:'رصيد',points:'نقط',reward:'مكافأة'}, p=(s&&s.payments)||{};
   return Object.keys(PAY).filter(function(k){return Math.abs(Number(p[k])||0)>.005;}).map(function(k){return PAY[k];}).join(' + ')||'—';
 }
 function _ofSaleThumbSlot(s){
