@@ -126,6 +126,7 @@ const HTML = `
       <div class="ipChip" id="ipC1"><span>المبلغ</span></div>
       <div class="ipChip" id="ipC2"><span>الوقت</span></div>
       <div class="ipChip" id="ipC3"><span>رقم العملية</span></div>
+      <div class="ipChip" id="ipC4"><span>المستفيد</span></div>
     </div>
     <div class="ipHint" id="ipHint">وجّهي شاشة الإيصال ناحية الكاميرا</div>
     <div style="display:flex;gap:1.6vw;width:min(70vh,86vw)">
@@ -276,6 +277,7 @@ function paintChecks(ch, d) {
     (ch && ch.time) ? '✓' : (d && d.driftMin != null ? d.driftMin + ' د' : ''));
   chip($('ipC3'), ch && ch.reference, 'رقم العملية',
     (d && d.ref) ? String(d.ref).slice(-6) : '');
+  chip($('ipC4'), ch && ch.beneficiary, 'المستفيد', (ch && ch.beneficiary) ? '✓' : '');
 }
 
 async function tick() {

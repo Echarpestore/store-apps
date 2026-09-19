@@ -84,6 +84,7 @@
     <div class="ipPill" id="ipP1">المبلغ</div>
     <div class="ipPill" id="ipP2">الوقت</div>
     <div class="ipPill" id="ipP3">رقم العملية</div>
+    <div class="ipPill" id="ipP4">المستفيد</div>
   </div>
   <div class="ipState" id="ipPosState">في انتظار العميلة…</div>
   <div id="ipPosWhy" style="display:none;font-size:11.5px;color:var(--muted,#8b90a0);
@@ -156,6 +157,9 @@
     $('ipP1').classList.toggle('ok', !!c.amount);
     $('ipP2').classList.toggle('ok', !!c.time);
     $('ipP3').classList.toggle('ok', !!c.reference);
+    // 🔴 الرابع كان مخفي، والاعتماد مقفول عليه — الكاشير بتشوف
+    //    تلاتة خضر والشاشة لسه بتلف من غير ما تعرف الناقص إيه.
+    $('ipP4').classList.toggle('ok', !!c.beneficiary);
     const s = st && st.status;
     if (s === 'rejected') {
       // ⛔ رفض نهائي: السبب بالرقم، والكاشير تقرر — إيصال تاني
@@ -296,6 +300,12 @@
       await fnCall('instaPay', { action: 'approveManual', sid: S.sid, reason: why });
       approved = true;
       paint({ status: 'approved', mode: 'manual' });
+      /* ✅ نقفل اللوحة على طول ونقول للكاشير تكمّل.
+         🔴 قبل كده اللوحة كانت بتفضل مفتوحة والمؤشر بيلف، فالكاشير
+            مش عارفة إن التأكيد تم وإنها تقدر تحفظ وتطبع دلوقتي. */
+      setTimeout(closeBox, 700);
+      if (typeof showToast === 'function')
+        showToast('✅ اتأكد يدوي — احفظي الفاتورة', 'ok');
     } catch (e) {
       $('ipPosState').textContent = '⛔ ماتمّش: ' + ((e && e.message) || 'مشكلة اتصال');
     }

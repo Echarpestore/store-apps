@@ -73,8 +73,24 @@ t('إيصال قديم (ساعة فاتت) يترفض', () =>
   eq(C.inspectReceipt(TO_US, { ...base, startedCivilMin: START + 60 }).checks.time, false));
 t('إيصال بعد النافذة بدقيقة يترفض', () =>
   eq(C.inspectReceipt(TO_US, { ...base, startedCivilMin: START - 6 }).checks.time, false));
+t('تحويل قبل الطلب بـ37 دقيقة يعدّي (نافذة 40)', () =>
+  eq(C.inspectReceipt(TO_US, { ...base, windowMin: 40, startedCivilMin: START + 37 }).checks.time, true));
+t('تحويل قبل الطلب بـ41 دقيقة يترفض (نافذة 40)', () =>
+  eq(C.inspectReceipt(TO_US, { ...base, windowMin: 40, startedCivilMin: START + 42 }).checks.time, false));
+t('إيصال إمبارح يترفض مهما كانت النافذة', () =>
+  eq(C.inspectReceipt(TO_US, { ...base, windowMin: 60, startedCivilMin: START + 1440 }).checks.time, false));
 t('إيصال جوّه النافذة بالظبط يعدّي', () =>
   eq(C.inspectReceipt(TO_US, { ...base, startedCivilMin: START - 4 }).checks.time, true));
+
+console.log('\n⏱️ النافذة في الاتجاهين');
+t('إيصال من 4 دقايق قبل الطلب يعدّي', () =>
+  eq(C.inspectReceipt(TO_US, { ...base, startedCivilMin: START + 4 }).checks.time, true));
+t('37 دقيقة قبل الطلب ونافذة 40 يعدّي', () =>
+  eq(C.inspectReceipt(TO_US, { ...base, windowMin: 40, startedCivilMin: START + 37 }).checks.time, true));
+t('سلبي: 41 دقيقة قبل ونافذة 40 يترفض', () =>
+  eq(C.inspectReceipt(TO_US, { ...base, windowMin: 40, startedCivilMin: START + 42 }).checks.time, false));
+t('سلبي: 6 دقايق قبل ونافذة 5 يترفض', () =>
+  eq(C.inspectReceipt(TO_US, { ...base, startedCivilMin: START + 7 }).checks.time, false));
 t('مفيش عنوان متسجّل = رفض مش قبول', () =>
   eq(C.inspectReceipt(TO_US, { ...base, aliases: [] }).checks.beneficiary, false));
 t('رقمين مرجعيين محتملين = مبنخمّنش', () =>
@@ -88,7 +104,7 @@ function classify(text, exp){
   if (v.ok) return 'ok';
   if (v.checks.failed) return 'fatal';
   if (v.beneficiaryReason === 'ALIAS_IS_SENDER') return 'fatal';
-  if (v.checks.success && v.beneficiaryReason === 'ALIAS_NOT_FOUND') return 'fatal';
+  if (v.beneficiaryReason === 'ALIAS_NOT_FOUND' && (v.reference || v.amountsSeen.length)) return 'fatal';
   if (v.amountsSeen.length && !v.checks.amount) return 'fatal';
   if (v.receiptTime && v.driftMin != null && !v.checks.time && Math.abs(v.driftMin) > 120) return 'fatal';
   return 'retry';
@@ -101,6 +117,9 @@ t('صورة مقلوبة/فاضية = مؤقت مش نهائي',()=>eq(classify(
 t('نص مقصوص من غير مبلغ = مؤقت',()=>eq(classify('تم التحويل بنجاح zogzog2000@instapay إلى',base),'retry'));
 t('متأخر دقيقتين بس = مؤقت مش نهائي',()=>eq(classify(TO_US,{...base,startedCivilMin:START-7}),'retry'));
 t('الإيصال السليم لسه بيعدّي',()=>eq(classify(TO_US,base),'ok'));
+t('إيصال من غير عبارة النجاح بيعدّي',()=>eq(classify(TO_US.replace('تم التحويل بنجاح',''),base),'ok'));
+t('سلبي: قيد التنفيذ لسه بيترفض',()=>eq(classify(TO_US.replace('تم التحويل بنجاح','قيد التنفيذ'),base),'fatal'));
+t('سلبي: صورة فاضية لسه مؤقتة مش نهائية',()=>eq(classify('',base),'retry'));
 
 console.log('\n👥 عناوين متعددة للفرع');
 const multi = { ...base, aliases: ['zogzog2000@instapay', '01144155987'] };
