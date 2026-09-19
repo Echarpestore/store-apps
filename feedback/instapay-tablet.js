@@ -175,16 +175,46 @@ let loop = null;     // مؤقّت المسح
 let busy = false;    // نداء شغال
 let prevGray = null; // الفريم السابق لقياس الثبات
 
+/* ⏲️ الشاشة بتقفل نفسها — التابلت ده أصلًا تابلت التقييم.
+   ------------------------------------------------------------
+   🔴 الباج: الشاشة مابتتقفلش غير لما POS يلغي الطلب أو الفاتورة تتحفظ.
+      أي طريق تاني = تابلت معلّق للأبد: الكاشير فضّت السلة · قفلت POS ·
+      كمّلت كاش · الطلب انتهت مدته (٢٠ دقيقة) · اتأكد والبيعة ماكملتش.
+      ومحدش بييجي يمسح `insta_live` في الحالات دي.
+   ✅ التابلت بيحمي نفسه ومابيستناش حد:
+      • شاشات **النهاية** (سلّمي للكاشير · تم · مرفوض) العميلة خلّصت
+        دورها فيها → بتقفل بعد مدة قصيرة من غير أي تحديث.
+      • أي شاشة فضلت أطول من عمر الطلب على السيرفر → بتقفل.
+   ⚠️ الوقت **محلي** (من لحظة ما التابلت عرض الشاشة) مش من ساعة
+      السيرفر — ساعة التابلت لو غلط ماتأثرش.
+   ⚠️ القفل هنا للشاشة بس. الطلب نفسه على السيرفر زي ما هو: لو
+      الكاشير أكّدت بعدها، التحديث بييجي والشاشة ترجع تعرضه. */
+const IP_PANE_IDLE_MS = { man: 90 * 1000, ok: 60 * 1000, bad: 3 * 60 * 1000 };
+const IP_SESSION_MAX_MS = 20 * 60 * 1000;   // نفس `expiresAt` في functions/instapay.js
+function ipShouldAutoHide(pane, paneAgeMs, sessionAgeMs) {
+  if (!pane) return false;
+  const idle = IP_PANE_IDLE_MS[pane];
+  if (idle && paneAgeMs >= idle) return true;
+  return sessionAgeMs >= IP_SESSION_MAX_MS;
+}
+let curPane = null, paneAt = 0;
+
 function show(name) {
   wrap.classList.add('on');
   Object.keys(panes).forEach(k => panes[k].classList.toggle('on', k === name));
+  curPane = name; paneAt = Date.now();   // كل عرض/تحديث بيصفّر العدّاد
 }
 function hide() {
   wrap.classList.remove('on');
   Object.values(panes).forEach(p => p.classList.remove('on'));
   stopCam();
-  cur = null;
+  cur = null; curPane = null;
 }
+setInterval(() => {
+  if (!curPane || !cur) return;
+  const now = Date.now();
+  if (ipShouldAutoHide(curPane, now - paneAt, now - (cur.seenAt || now))) hide();
+}, 5000);
 
 /* 📷 الكاميرا الأمامية — العميلة واقفة قدام التابلت وبتوري تليفونها. */
 async function startCam() {
@@ -390,7 +420,7 @@ if (branch) {
     if (!s) { hide(); return; }
     // طلب جديد على نفس التابلت = الشاشة تبدأ من الأول
     if (!cur || cur.sid !== s.sid) {
-      cur = { sid: s.sid };
+      cur = { sid: s.sid, seenAt: Date.now() };
       stopCam(); paintChecks(null, null);
       blindTries = 0;   // القلب إعداد جهاز — بيفضل، والعداد بس بيتصفّر
       $('ipAmt').innerHTML = (Number(s.amountCents || 0) / 100)
