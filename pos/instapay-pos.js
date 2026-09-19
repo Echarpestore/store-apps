@@ -566,12 +566,22 @@
     collapsify(host);
     unhideOrphans(host);
     if (document.getElementById('ipSetCard')) return;
-    /* 📍 الكارت بيتحط **فوق** مش تحت.
-       🔴 كان `beforeend` يعني آخر حاجة بعد ٦ أقسام. فالمالك ينزل
-          لتحت ويشوف إنستاباي لوحده ويفتكر إن الشاشة اتمسحت —
-          حصل فعلًا واتصرف وقت طويل في تشخيص مشكلة مش موجودة.
-       الميزة الجديدة مكانها فوق: هي اللي بتتظبط دلوقتي. */
-    host.insertAdjacentHTML('afterbegin', settingsHtml());
+    /* 📍 الكارت بيتحقن **جوّه صندوق الإسكرول**، مش في جذر الشاشة.
+       🔴 الباج اللي ضيّع ساعات: `#rolesScreen` عمود flex فيه عنوان +
+          صندوق واحد `flex:1; overflow-y:auto` جوّاه كل الأقسام. الكارت
+          كان بيتحقن في **الجذر** كأخ للصندوق ده. الكارت طويل فبياخد
+          ارتفاعه كامل، و`flex:1` بياخد "الباقي" — اللي هو صفر. فالأقسام
+          الستة اتعصرت في صندوق ارتفاعه صفر: موجودة في الـDOM، و
+          `offsetParent` بتاعها سليم، ومفتوحة — ومش باينة خالص.
+          الكونسول كان بيقول "ظاهر" والمالك شايف شاشة فاضية، والاتنين صح.
+       ✅ بنطلع من عنصر معروف جوّه الإعدادات لحد الابن المباشر للشاشة —
+          وده هو صندوق الإسكرول أيًا كان شكله أو ستايله.
+       📌 الدرس: الحقن في شاشة مش بتاعتك = لازم تقرا هيكلها الأول.
+          `insertAdjacentHTML` على الجذر بيكسر أي layout مبني على flex. */
+    let target = ready;
+    while (target && target.parentElement && target.parentElement !== host) target = target.parentElement;
+    if (!target || target.parentElement !== host) return;   // هيكل غير متوقع → منحقنش خالص
+    target.insertAdjacentHTML('beforeend', settingsHtml());
     const card = document.getElementById('ipSetCard');
     // كارت إنستاباي نفسه بيتطوي زي الباقي، ومطوي افتراضيًا
     collapsify(card);

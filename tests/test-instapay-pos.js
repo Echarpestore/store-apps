@@ -41,9 +41,9 @@ t('فرع مفعّل لازم له عنوان',()=>has("if (on && !alias)"));
 t('فرع مفعّل لازم له QR',()=>has('if (on && !_qrData)'));
 t('الصورة بتتصغّر قبل الحفظ',()=>{has('const max = 560');has("toDataURL('image/jpeg', 0.88)")});
 t('الحقن في شاشة الصلاحيات',()=>{has("getElementById('rolesScreen')")});
-t('📍 الكارت فوق مش تحت',()=>{
-  if(src.includes("insertAdjacentHTML('beforeend', settingsHtml())"))throw Error('لسه في الآخر');
-  has("insertAdjacentHTML('afterbegin', settingsHtml())")});
+t('📍 الكارت مبيتحقنش في جذر الشاشة',()=>{
+  if(/host\.insertAdjacentHTML\('(beforeend|afterbegin)', settingsHtml\(\)\)/.test(src))throw Error('حقن في الجذر — بيعصر صندوق الأقسام لصفر');
+  has("target.insertAdjacentHTML('beforeend', settingsHtml())")});
 t('عنوان الكارت h3 عشان يتطوي زي الباقي',()=>has('<h3 style="margin:0 0 10px;font-size:15px">📱'));
 t('الكارت مربوط بحارس الجلسة المقفولة',()=>{
   has("getElementById('pmbTerminalId')");has('if (!ready)')});
@@ -72,7 +72,7 @@ t('فيه مودال بديل',()=>{has('function ipAsk(');has("id=\"ipAsk\"")})
 t('التأكيد اليدوي خطوة واحدة',()=>has("yes: 'أكّدي وكمّلي'"));
 
 console.log('\n📄 الربط');
-t('الملف متحمّل في index.html',()=>{if(!html.includes('instapay-pos.js?v=690'))throw Error('مش متحمّل')});
+t('الملف متحمّل في index.html',()=>{if(!/instapay-pos\.js\?v=69\d/.test(html))throw Error('مش متحمّل')});
 t('بعد credit-ui',()=>{if(html.indexOf('instapay-pos.js')<html.indexOf('credit-ui.js'))throw Error('الترتيب غلط')});
 t('CACHE_NAME اترفع',()=>{const sw=fs.readFileSync('pos/sw.js','utf8');
   if(!/pos-shell-v69[2-9]/.test(sw))throw Error('الكاش ماترفعش')});
