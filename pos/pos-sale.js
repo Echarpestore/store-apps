@@ -3076,7 +3076,7 @@ function closePayAmountPopup(){
 // 🖲️ زرار كل طريقة دفع — كان فيه باج: 'salary' كان بيلوّن زرار الانستا باي
 function payBtnId(method, seq){
   if(method === 'visa') return (seq > 1) ? 'pmVisa2' : 'pmVisa';
-  return { cash:'pmCash', instapay:'pmInsta', salary:'pmSalary' }[method] || '';
+  return { cash:'pmCash', instapay:'pmInsta', salary:'pmSalary', credit:'pmCredit' }[method] || '';
 }
 window.payBtnId = payBtnId;
 

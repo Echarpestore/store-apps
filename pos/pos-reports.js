@@ -1715,9 +1715,9 @@ let dcData = {};   // بيانات النهاردة من السيستم (للح�
 // بتشمل المعكوس وفاتورة عكسه مع بعض (بيصفّروا بعض) — دي فلوس دخلت وخرجت فعلًا من الدرج.
 function dcAggregate(sales){
   const systemTotal = (sales||[]).reduce((s,x)=> s + (x.total||0), 0);
-  let cashSales=0, visaSales=0, instaSales=0, salarySales=0;
-  (sales||[]).forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); salarySales+=(p.salary||0); });
-  return { systemTotal, cashSales, visaSales, instaSales, salarySales };
+  let cashSales=0, visaSales=0, instaSales=0, salarySales=0, creditSales=0;
+  (sales||[]).forEach(s=>{ const p=s.payments||{}; cashSales+=(p.cash||0); visaSales+=(p.visa||0); instaSales+=(p.instapay||0); salarySales+=(p.salary||0);  creditSales+=(p.credit||0);});
+  return { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales };
 }
 window.dcAggregate = dcAggregate;
 
@@ -1939,8 +1939,16 @@ function dcFinish(){
   const visa = dcNum('dc_visa'), insta = dcNum('dc_insta');
   const salary = dcNum('dc_salary');   // 📄 أوردرات موظفين بخصم الراتب — قيمة مترحّلة للمرتبات (مش فلوس درج)
 
-  // المفروض يتجمّع فعليًا = (كاش معدود − عهدة) + مصروفات + سلف + فيزا + انستا + خصم راتب مترحّل
-  const accounted = (counted - flt) + exp + adv + visa + insta + salary;
+  /* 💳 مرتجع بالرصيد: بضاعة رجعت وفلوس **ماخرجتش من الدرج**.
+     🔴 من غير السطر ده: `systemTotal` بينزل بقيمة المرتجع والكاش
+        المعدود زي ما هو → التقفيل يطلّع **أوفر وهمي** بنفس القيمة
+        كل يوم فيه مرتجع بالرصيد. نفس نوع الباج بتاع جلسة الفلوس،
+        وعشان كده اتكتب تحذير في المستند قبل ما الميزة تتبني.
+     `payments.credit` سالب في المرتجع، فجمعه بيعادل نزول
+     `systemTotal` بالظبط. */
+  const creditOut = +(dcData.creditSales || 0);
+  // المفروض يتجمّع = (كاش معدود − عهدة) + مصروفات + سلف + فيزا + انستا + راتب + رصيد
+  const accounted = (counted - flt) + exp + adv + visa + insta + salary + creditOut;
   const overShort = +(accounted - dcData.systemTotal).toFixed(2);
   // ⚠️ الأوفر المتوقع من فواتير ما بعد آخر تقفيل (كاشها في الدرج ومش في مبيعات النهاردة)
   const _lateCash = +(dcData.lateCash || 0);
@@ -1966,6 +1974,7 @@ function dcFinish(){
           <div><span>+ فيزا</span><b>${visa.toFixed(2)}</b></div>
           <div><span>+ انستاباي</span><b>${insta.toFixed(2)}</b></div>
           ${salary>0?`<div><span>+ 📄 راتب موظفين (للمرتبات)</span><b>${salary.toFixed(2)}</b></div>`:''}
+          ${creditOut!==0?`<div><span>+ 💳 مرتجع لرصيد العميلة</span><b>${creditOut.toFixed(2)}</b></div>`:''}
           <div class="dc-res-sep"><span>= إجمالي محسوب</span><b>${accounted.toFixed(2)}</b></div>
           <div><span>مبيعات السيستم</span><b>${dcData.systemTotal.toFixed(2)}</b></div>${_lateBlock}
         </div>

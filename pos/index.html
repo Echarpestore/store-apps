@@ -1979,6 +1979,8 @@ body.on-dashboard .badge-test{ display:block; }
           <button id="pmVisa" onclick="togglePayMethod('visa')"><span class="pm-icon">💳</span>فيزا 1</button>
           <button id="pmVisa2" onclick="togglePayMethod('visa2')"><span class="pm-icon">💳</span>فيزا 2</button>
           <button id="pmInsta" onclick="togglePayMethod('instapay')"><span class="pm-icon">📱</span>انستا باي</button>
+          <!-- 💳 رصيد العميلة — بيظهر في **المرتجع بس** (refund-credit.js) -->
+          <button id="pmCredit" style="display:none" onclick="togglePayMethod('credit')"><span class="pm-icon">💳</span>رصيد العميلة</button>
           <button class="qbx-clear-pay" onclick="resetPaymentUI()">🗑️ مسح المدفوعات</button>
           <div id="chatMini" onclick="if(typeof chatOpen==='function')chatOpen()" style="display:none; align-items:center; background:#222a35; border:1.5px solid #46536b; border-radius:11px; padding:6px 11px; margin:6px 0; cursor:pointer; height:62px; flex:0 1 360px; min-width:200px; max-width:400px; color:#f1f5fb; overflow:hidden;"></div>
         </div>
@@ -2153,6 +2155,8 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="credit-ui.js"></script>
 <!-- 📱 انستا باي — طبقة فوق pos-sale.js، لو وقعت الفاتورة بتكمّل عادي -->
 <script src="instapay-pos.js?v=690"></script>
+<!-- 💳 المرتجع لرصيد العميلة -->
+<script src="refund-credit.js?v=692"></script>
 <!-- 🧠 شريط الفرصة -->
 <script src="opportunity-core.js"></script>
 <!-- 🔖 طلبات الزباين -->
