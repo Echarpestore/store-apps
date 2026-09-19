@@ -4541,9 +4541,21 @@ window.returnPointsDeduction = returnPointsDeduction;
       //    ⚠️ `loyaltyPointsEarned` على فاتورة فيها مرتجع بس بتبقى سالبة
       //       بالحساب القديم، فبناخد الموجب منها بس عشان مايتخصمش مرتين.
       const _earnedPart = Math.max(0, loyaltyPointsEarned);
+      /* ↩️🎁 مرتجع **باسم العميلة** من غير ربط بفاتورة أصلية.
+         🔴 الباج: `_retPointsDeduct` بيتحسب بس للسطور اللي فيها
+            `fromInvoice`. والمرتجع باسم العميلة مفيهوش، فكان بيخرج
+            بصفر خصم. و`Math.max(0, ...)` فوق بترمي النقط السالبة.
+            النتيجة: البضاعة ترجع والنقط تفضل — نقط بتتولد من العدم.
+         ✅ بنحسب نصيب السطور غير المربوطة بنفس معادلة الكسب
+            (floor على السعر) عشان الكسب والخصم يبقوا متماثلين. */
+      const _unlinkedRefund = cart
+        .filter(function(c){ return c.isReturn && !c.fromInvoice; })
+        .reduce(function(n,c){ return n + Math.abs(c.price||0) * (c.qty||0); }, 0);
+      const _unlinkedDeduct = phone ? Math.floor(_unlinkedRefund / _rate) : 0;
       const netPointsChange = _earnedPart
         - (pendingRedemption ? pendingRedemption.points : 0)
-        - _retPointsDeduct;
+        - _retPointsDeduct
+        - _unlinkedDeduct;
       const pf = pointsFieldFor(currentBranch);
       custUpdate = {
         phone, branch: currentBranch,

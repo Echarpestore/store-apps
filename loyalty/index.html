@@ -1414,6 +1414,8 @@ function enterApp(phone){
   try{ var _cl = $('chatLogo'); if(_cl) _cl.src = logoSrc; }catch(e){}   // 🖼️ لوجو الشات
   $('greet').textContent = greetWord();
   $('waTop').style.display = hasSupport() ? 'flex' : 'none';
+  try{ Object.keys(_liveUnsub).forEach(function(k){ if(_liveUnsub[k]) _liveUnsub[k](); }); }catch(e){}
+  _liveUnsub = {};
   dataOffers = null; dataProducts = null; dataInvoices = null; tabStarted = {};   // تبويبات جديدة لكل جلسة، تتحمّل كسول عند فتحها
   switchTab('card');
   loadBadgeSources();   // مصادر الشارات (عروض/منتجات) مرة واحدة للجلسة
@@ -1475,6 +1477,7 @@ var dataOffers = null, dataProducts = null, dataInvoices = null;
       نقل مستقبلي لبلوك تاني يكسره بصمت (درس TDZ). */
 var shopCatalog = null;   // null = لسه ما اتحمّلش   // null = لسه ما اتحمّلش
 var tabStarted = {};   // التبويب بدأ تحميله قبل كده؟
+var _liveUnsub = {};   // 📡 مستمعو اللايف — بيتقفلوا عند تسجيل الخروج
 
 // بيبني الاستعلام لكل تبويب — بحد أقصى للعدد عشان ما نحمّلش آلاف الصفوف على الموبايل
 function tabRef(tab){
@@ -1553,6 +1556,21 @@ function lazyLoadTab(tab){
   var ref = tabRef(tab); if(!ref) return;
   tabStarted[tab] = true;
   showTopLoad(true);
+  /* 📡 الفواتير **لايف**.
+     🔴 الباج: التبويب كان بيقرا `get()` مرة واحدة بس عند أول فتح،
+        وبعدها `tabStarted` بيمنع أي قراءة تانية. فالفاتورة اللي
+        الكاشير بتحفظها دلوقتي مكانتش تظهر عند العميلة غير لما تقفل
+        التطبيق وتفتحه.
+     ✅ الفواتير بقت `onSnapshot` — بتوصل في نفس اللحظة.
+     ⚠️ العروض والمنتجات سايبينهم `get()` عن قصد: بيتغيّروا مرة كل
+        كام يوم، ومستمع دايم عليهم استهلاك من غير فايدة. */
+  if(tab === 'invoices'){
+    if(_liveUnsub[tab]){ try{ _liveUnsub[tab](); }catch(e){} }
+    _liveUnsub[tab] = ref.onSnapshot(function(s){
+      tabAssign(tab, s); tabRender(tab); showTopLoad(false);
+    }, function(){ tabAssign(tab, null); tabRender(tab); showTopLoad(false); });
+    return;
+  }
   ref.get({ source:'cache' }).then(function(s){ if(s && s.docs && s.docs.length){ tabAssign(tab, s); tabRender(tab); } }).catch(function(){});
   ref.get().then(function(s){ tabAssign(tab, s); tabRender(tab); }).catch(function(){ tabAssign(tab, null); tabRender(tab); })
     .then(function(){ showTopLoad(false); });
