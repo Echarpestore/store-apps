@@ -421,10 +421,19 @@
     return out;
   };
 
+  /* 🧹 سلة اتفضّت والطلب لسه مفتوح = نلغيه على السيرفر، وإلا التابلت يفضل
+     عارض QR لفاتورة مابقتش موجودة. من غير انتظار ومن غير ما نوقّف الكاشير —
+     ولو فشل، التابلت بيقفل نفسه بالمؤقّت.
+     ⚠️ المتأكد (`approved`) مابيتلغيش — السيرفر بيرفض وده المقصود. */
+  function abandonSession() {
+    if (!S || !S.sid || approved || finalizing) return;
+    const sid = S.sid;
+    try { fnCall('instaPay', { action: 'cancel', sid: sid }).catch(function () {}); } catch (e) {}
+  }
   // 🧹 سلة جديدة = طلب قديم يتنسى
   const _origClear = window.clearCart;
   if (typeof _origClear === 'function') {
-    window.clearCart = function () { resetFlow(); return _origClear.apply(this, arguments); };
+    window.clearCart = function () { abandonSession(); resetFlow(); return _origClear.apply(this, arguments); };
   }
 
   /* ============================================================
