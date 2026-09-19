@@ -439,12 +439,34 @@
     fr.readAsDataURL(file);
   }
 
+  /* 🏬 الكارت **واعي بالفرع**.
+     🔴 الباج: تبديل الفرع من الأدمن بيحصل من غير إعادة تحميل الصفحة
+        (`currentBranch = branch` في pos-core — مؤقت للجلسة)، والكارت كان
+        بيتحمّل مرة واحدة ويفضل. فبعد التبديل الفورم لسه عارض إعدادات
+        الفرع **القديم**، والحفظ بيكتبه كله — العنوان والـQR وحالة
+        التشغيل — في مستند الفرع **الجديد**. كل فرع يتزار ياخد نسخة من
+        نفس الفورم، فيبان إن "القفل في فرع بيقفل كل الفروع".
+        والأخطر: QR فرع بيتكتب على فرع تاني — فلوس تروح حساب غلط.
+     ✅ `_cardBranch` = الفرع اللي الفورم متحمّل له. أي اختلاف عن الفرع
+        الحالي = إعادة تحميل، والحفظ بيترفض لو الفرع اتغيّر من تحته. */
+  let _cardBranch = null;
+  function curBranch() { return String(window.currentBranch || currentBranch || ''); }
+
   async function loadSettings() {
-    const br = window.currentBranch || currentBranch;
+    const br = curBranch();
+    _cardBranch = br;
+    // تصفير فوري — مفيش قيمة من الفرع القديم تفضل ظاهرة وقت التحميل
+    _qrData = null;
+    $('ipSetPrev').classList.remove('on'); $('ipSetPrevImg').removeAttribute('src');
+    $('ipSetQr').value = '';
+    $('ipSetMsg').textContent = 'بيحمّل إعدادات ' + (br || '—') + '…';
+    $('ipSetSave').disabled = true;
     $('ipSetBranch').textContent = br || '—';
     try {
-      const s = await db.collection(TEST_SETTINGS).doc(cfgDocId(br)).get();
-      const d = s.exists ? s.data() : {};
+      const snap = await db.collection(TEST_SETTINGS).doc(cfgDocId(br)).get();
+      // الرد وصل بعد ما الفرع اتبدّل تاني؟ نرميه — التحميل الأحدث هو اللي يكسب
+      if (curBranch() !== br || _cardBranch !== br) return;
+      const d = snap.exists ? (snap.data() || {}) : {};
       $('ipSetEnabled').value = (d.enabled === false) ? '0' : '1';
       $('ipSetAlias').value = d.alias || '';
       $('ipSetExtra').value = (d.extraAliases || []).join(', ');
@@ -452,7 +474,11 @@
       $('ipSetWin').value = d.windowMin || 5;
       $('ipSetCap').value = (d.monthlyScanCap != null) ? d.monthlyScanCap : 1000;
       if (d.qr) { _qrData = d.qr; $('ipSetPrevImg').src = d.qr; $('ipSetPrev').classList.add('on'); }
-    } catch (e) { $('ipSetMsg').textContent = 'ماقدرناش نقرا الإعدادات'; }
+      $('ipSetMsg').textContent = snap.exists ? '' : 'الفرع ده لسه مالوش إعدادات';
+      $('ipSetSave').disabled = false;
+    } catch (e) {
+      if (curBranch() === br) $('ipSetMsg').textContent = 'ماقدرناش نقرا الإعدادات';
+    }
   }
 
   function wireSettings() {
@@ -469,7 +495,13 @@
       });
     };
     $('ipSetSave').onclick = async function () {
-      const br = window.currentBranch || currentBranch;
+      const br = curBranch();
+      // 🔒 الفرع اتغيّر من تحت الفورم → مبنكتبش إعدادات فرع في مستند فرع تاني
+      if (br !== _cardBranch) {
+        loadSettings();
+        if (typeof showToast === 'function') showToast('الفرع اتغيّر — اتحمّلت إعدادات ' + br + '، راجعها واحفظ تاني', 'err');
+        return;
+      }
       const alias = $('ipSetAlias').value.trim();
       const on = $('ipSetEnabled').value === '1';
       // 🔴 فرع مفعّل من غير عنوان أو QR = طلب بيفشل قدام العميلة.
@@ -565,7 +597,10 @@
 
     collapsify(host);
     unhideOrphans(host);
-    if (document.getElementById('ipSetCard')) return;
+    if (document.getElementById('ipSetCard')) {
+      if (_cardBranch !== null && _cardBranch !== curBranch()) loadSettings();
+      return;
+    }
     /* 📍 الكارت بيتحقن **جوّه صندوق الإسكرول**، مش في جذر الشاشة.
        🔴 الباج اللي ضيّع ساعات: `#rolesScreen` عمود flex فيه عنوان +
           صندوق واحد `flex:1; overflow-y:auto` جوّاه كل الأقسام. الكارت
