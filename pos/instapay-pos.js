@@ -70,6 +70,11 @@
 .ipSet .prev{margin-top:10px;background:#fff;border-radius:10px;padding:8px;display:none}
 .ipSet .prev.on{display:block}
 .ipSet .prev img{width:100%;max-width:180px;display:block;margin:0 auto}
+.ipFoldHead{cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
+.ipFoldHead .ipArrow{display:inline-block;transition:transform .2s;font-size:12px;opacity:.7}
+.ipFoldHead.ipShut .ipArrow{transform:rotate(-90deg)}
+.ipFoldBody{animation:ipFoldIn .2s ease}
+@keyframes ipFoldIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .ipSet .save{width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;
   background:var(--accent,#4f46e5);color:#fff;font-family:inherit;font-weight:800;cursor:pointer}
 `;
@@ -499,13 +504,56 @@
      وبداية يوم الشغل، لأن دي شاشة الإعدادات الفعلية في POS.
      بنحقن بدل ما نعدّل index.html أو pos-reports.js: الشاشة دي
      بتترسم وتتمسح، فبنراقبها وبنعيد الحقن لو الكارت اختفى. */
+  /* 📐 طي الأقسام.
+     شاشة الصلاحيات فيها ٤ أقسام فوق بعض، والإسكرول بقى طويل.
+     بنحوّل كل عنوان h3 لزرار بيطوي اللي تحته — **من غير ما نعدّل
+     كود الشاشة**: بنلم الإخوة اللي بعد كل عنوان لحد العنوان اللي
+     بعده ونحطهم في صندوق واحد.
+     ⚠️ أول قسم بيفضل مفتوح، والباقي مطوي. */
+  function collapsify(host) {
+    const heads = Array.prototype.filter.call(
+      host.querySelectorAll('h3'), h => !h.dataset.ipFold);
+    heads.forEach((h, n) => {
+      h.dataset.ipFold = '1';
+      const body = document.createElement('div');
+      body.className = 'ipFoldBody';
+      let el = h.nextElementSibling;
+      while (el && el.tagName !== 'H3') { const nx = el.nextElementSibling; body.appendChild(el); el = nx; }
+      if (!body.children.length) return;
+      h.insertAdjacentElement('afterend', body);
+      h.classList.add('ipFoldHead');
+      h.insertAdjacentHTML('afterbegin', '<span class="ipArrow">▾</span> ');
+      const open = n === 0;
+      body.style.display = open ? '' : 'none';
+      h.classList.toggle('ipShut', !open);
+      h.onclick = function () {
+        const shut = body.style.display === 'none';
+        body.style.display = shut ? '' : 'none';
+        h.classList.toggle('ipShut', !shut);
+      };
+    });
+  }
+
   function inject() {
     const host = document.getElementById('rolesScreen');
     if (!host) return;
-    if (document.getElementById('ipSetCard')) return;
     // الشاشة مقفولة؟ منحقنش — عشان مانقراش الإعدادات من غير داعي
     if (!host.classList.contains('active') && host.offsetParent === null) return;
+
+    /* 🔒 الحارس: الكارت ميظهرش غير لما إعدادات الشاشة تكون **ظاهرة
+       فعلًا**.
+       🔴 الباج: الشاشة دي محمية بـ`adminUnlocked` — جلسة مقفولة =
+          كل لوحاتها بتتخفي. وكارت إنستاباي ماكانش عليه نفس الحارس،
+          فكان بيظهر لوحده والشاشة تبان كإن كل حاجة اتمسحت. */
+    const ready = document.getElementById('pmbTerminalId') || document.getElementById('dayStartHour');
+    if (!ready) { const c = document.getElementById('ipSetCard'); if (c) c.remove(); return; }
+
+    collapsify(host);
+    if (document.getElementById('ipSetCard')) return;
     host.insertAdjacentHTML('beforeend', settingsHtml());
+    const card = document.getElementById('ipSetCard');
+    // كارت إنستاباي نفسه بيتطوي زي الباقي، ومطوي افتراضيًا
+    collapsify(card);
     wireSettings();
     loadSettings();
   }
