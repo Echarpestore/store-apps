@@ -53,6 +53,14 @@ t('فشل كتابة الرصيد بيتبلّغ بصوت عالي',()=>{
 t('السيرفر بيقبل مصدر refund',()=>{
   const g=fs.readFileSync('functions/giftCredit.js','utf8');
   if(!g.includes("source === 'refund'"))throw Error('هيروح للطابور')});
+t('🔑 بيبعت مفتاح منع التكرار',()=>{
+  if(!src.includes('idem: idem'))throw Error('idem ناقص — الدالة هترفض')});
+t('المفتاح مبني من الفاتورة والرقم والمبلغ',()=>{
+  if(!src.includes("'refund:' + (code"))throw Error('مفتاح مش فريد للعملية')});
+t('نفس المرتجع = نفس المفتاح',()=>{
+  const mk=(c,p,a)=>'refund:'+(c||'nocode')+':'+p+':'+a.toFixed(2);
+  if(mk('FT1','01000669964',5)!==mk('FT1','01000669964',5))throw Error('مش ثابت');
+  if(mk('FT1','01000669964',5)===mk('FT2','01000669964',5))throw Error('مش فريد لكل فاتورة')});
 t('لازم رقم فاتورة عشان يعدّي',()=>{
   const g=fs.readFileSync('functions/giftCredit.js','utf8');
   if(!g.includes('&& data.invoiceCode'))throw Error('رصيد من غير فاتورة')});

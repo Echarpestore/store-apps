@@ -105,12 +105,20 @@
       const ctx = lastCtx; lastCtx = null;
       const code = window._lastInvoiceCode || '';
       try {
+        /* 🔑 `idem` = مفتاح منع التكرار، **إجباري** في `creditAdjust`.
+           🔴 نسيته في أول نسخة فالدالة رفضت بـ"مفتاح التكرار ناقص" —
+              وده رفض صح: من غيره لو الاتصال اتكرر (نت متقطع، ضغط
+              مرتين) الرصيد كان هيتحط مرتين على نفس المرتجع.
+           بنبنيه من رقم الفاتورة + الرقم + المبلغ، فأي إعادة إرسال
+           لنفس المرتجع بتتعرف وتترفض. */
+        const idem = 'refund:' + (code || 'nocode') + ':' + ctx.phone + ':' + ctx.amount.toFixed(2);
         await fnCall('creditAdjust', {
           phone: ctx.phone,
           amount: ctx.amount,          // موجب — ده رصيد بيتضاف
           source: 'refund',
           branch: ctx.branch,
           invoiceCode: code,
+          idem: idem,
           reason: 'مرتجع بضاعة — فاتورة ' + (code || '—')
         });
         if (typeof showToast === 'function')
