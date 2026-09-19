@@ -41,6 +41,10 @@ t('فرع مفعّل لازم له عنوان',()=>has("if (on && !alias)"));
 t('فرع مفعّل لازم له QR',()=>has('if (on && !_qrData)'));
 t('الصورة بتتصغّر قبل الحفظ',()=>{has('const max = 560');has("toDataURL('image/jpeg', 0.88)")});
 t('الحقن في شاشة الصلاحيات',()=>{has("getElementById('rolesScreen')")});
+t('📍 الكارت فوق مش تحت',()=>{
+  if(src.includes("insertAdjacentHTML('beforeend', settingsHtml())"))throw Error('لسه في الآخر');
+  has("insertAdjacentHTML('afterbegin', settingsHtml())")});
+t('عنوان الكارت h3 عشان يتطوي زي الباقي',()=>has('<h3 style="margin:0 0 10px;font-size:15px">📱'));
 t('الكارت مربوط بحارس الجلسة المقفولة',()=>{
   has("getElementById('pmbTerminalId')");has('if (!ready)')});
 t('الكارت بيتشال لو الإعدادات اتخفت',()=>has("if (c) c.remove()"));

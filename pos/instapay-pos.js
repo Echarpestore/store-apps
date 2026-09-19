@@ -389,7 +389,7 @@
      ============================================================ */
   function settingsHtml() {
     return `<div class="ipSet" id="ipSetCard">
-      <h4>📱 إعدادات انستا باي — <span id="ipSetBranch"></span></h4>
+      <h3 style="margin:0 0 10px;font-size:15px">📱 إعدادات انستا باي — <span id="ipSetBranch"></span></h3>
       <label>تشغيل الميزة في الفرع ده</label>
       <select id="ipSetEnabled">
         <option value="1">مفعّلة</option>
@@ -566,7 +566,12 @@
     collapsify(host);
     unhideOrphans(host);
     if (document.getElementById('ipSetCard')) return;
-    host.insertAdjacentHTML('beforeend', settingsHtml());
+    /* 📍 الكارت بيتحط **فوق** مش تحت.
+       🔴 كان `beforeend` يعني آخر حاجة بعد ٦ أقسام. فالمالك ينزل
+          لتحت ويشوف إنستاباي لوحده ويفتكر إن الشاشة اتمسحت —
+          حصل فعلًا واتصرف وقت طويل في تشخيص مشكلة مش موجودة.
+       الميزة الجديدة مكانها فوق: هي اللي بتتظبط دلوقتي. */
+    host.insertAdjacentHTML('afterbegin', settingsHtml());
     const card = document.getElementById('ipSetCard');
     // كارت إنستاباي نفسه بيتطوي زي الباقي، ومطوي افتراضيًا
     collapsify(card);
