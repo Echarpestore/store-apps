@@ -131,8 +131,7 @@ const HTML = `
     <div class="ipHint" id="ipHint">وجّهي شاشة الإيصال ناحية الكاميرا</div>
     <div style="display:flex;gap:1.6vw;width:min(70vh,86vw)">
       <button class="ipBtn ipGhost" id="ipBack" style="flex:1;padding:1.4vh 2vw;font-size:2vh">◀ رجوع</button>
-      <button class="ipBtn ipGhost" id="ipFlip" style="flex:1;padding:1.4vh 2vw;font-size:2vh">🔄 اقلبي</button>
-      <button class="ipBtn ipGhost" id="ipHelp" style="flex:1;padding:1.4vh 2vw;font-size:2vh">الكاشير</button>
+      <button class="ipBtn ipGhost" id="ipHelp" style="flex:2;padding:1.4vh 2vw;font-size:2vh">سلّمي الكاشير</button>
     </div>
   </div>
 
@@ -240,7 +239,8 @@ function setFlip(on) {
   flipCapture = !!on;
   try { localStorage.setItem(FLIP_KEY, flipCapture ? '1' : '0'); } catch (e) {}
   $('ipVid').classList.toggle('flip', flipCapture);
-  $('ipFlip').textContent = flipCapture ? '🔄 الكاميرا مقلوبة' : '🔄 اقلبي الكاميرا';
+  // الزرار اتشال من الواجهة — بنفحص وجوده قبل ما نلمسه
+  const b = $('ipFlip'); if (b) b.textContent = flipCapture ? '🔄 مقلوبة' : '🔄 اقلبي';
 }
 
 /* ✂️ بنبعت **جوّه الإطار بس**، مش الصورة كلها.
@@ -254,13 +254,17 @@ function frameJpeg(video) {
   if (!w || !h) return null;
   const sx = Math.round(w * INSET), sy = Math.round(h * INSET);
   const sw = w - sx * 2, sh = h - sy * 2;
-  const scale = Math.min(1, 1500 / Math.max(sw, sh));
+    /* ⚡ 1500 → 1150 و0.84 → 0.76.
+     أبطأ حتة في الدورة مش القراءة — دي أقل من ثانية — لكن **رفع**
+     الصورة من نت الفرع. تصغير الفريم بيقلّل الحجم للنص تقريبًا،
+     والنص على شاشة تليفون لسه واضح تمامًا عند الحجم ده. */
+  const scale = Math.min(1, 1150 / Math.max(sw, sh));
   const c = document.createElement('canvas');
   c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
   const x = c.getContext('2d', { alpha: false });
   if (flipCapture) { x.translate(c.width, 0); x.scale(-1, 1); }
   x.drawImage(video, sx, sy, sw, sh, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', 0.84).split(',')[1];
+  return c.toDataURL('image/jpeg', 0.76).split(',')[1];
 }
 
 /* 🔢 المربعات بتوري **اللي اتقرا فعلًا** مش اسم الحقل.
@@ -289,7 +293,7 @@ async function tick() {
   prevGray = g;
   // ⚠️ الشرط كان صارم (6) فمع إيد بتهتز شوية كان ممكن ياخد ثواني
   //    قبل ما يبعت أصلًا. رخّيناه، والفريم الأول بيتبعت على طول.
-  if (prevGray && d > 16) { $('ipHint').textContent = 'ثبّتي شوية'; return; }
+  if (prevGray && d > 24) { $('ipHint').textContent = 'ثبّتي شوية'; return; }
 
   busy = true;
   try {
@@ -341,16 +345,19 @@ $('ipDone').onclick = async () => {
   try { await callPay({ action: 'ready', sid: cur.sid }); } catch (e) {}
   $('ipDone').disabled = false;
   show('scan');
-  if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 900); }
+  if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 550); }
 };
 $('ipHelp').onclick = () => { stopCam(); show('man'); };
 // ◀ رجوع للـQR — لو دوست «تم التحويل» قبل ما تحوّل
 $('ipBack').onclick = () => { stopCam(); show('wait'); $('ipDone').disabled = false; };
-$('ipFlip').onclick = () => { setFlip(!flipCapture); blindTries = 0; $('ipHint').textContent = 'جرّبي تاني'; };
+/* 🔄 زرار القلب اتشال من الشاشة عن قصد.
+   العميلة مش المفروض تفهم يعني إيه "اقلبي الكاميرا" — ده قرار تقني
+   بنستنتجه لوحدنا من أول محاولة عمياء وبيتحفظ للجهاز، فبيحصل مرة
+   واحدة في عمر التابلت وخلاص. */
 $('ipRetry').onclick = async () => {
   paintChecks(null); blindTries = 0;
   show('scan');
-  if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 900); }
+  if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 550); }
 };
 setFlip(flipCapture);
 
@@ -381,11 +388,17 @@ if (branch) {
       blindTries = 0;   // القلب إعداد جهاز — بيفضل، والعداد بس بيتصفّر
       $('ipAmt').innerHTML = (Number(s.amountCents || 0) / 100)
         .toLocaleString('en-EG', { minimumFractionDigits: 0 }) + '<span>ج.م</span>';
-      $('ipWho').innerHTML = (s.alias || '') + '<small>' + (s.beneficiary || '') + '</small>';
+      /* 📇 العنوان + الأرقام الإضافية. العميلة ساعات بتحوّل على رقم
+         المحفظة مش على عنوان الإنستاباي، فلازم تشوف الاتنين قدامها
+         بدل ما تسأل الكاشير. */
+      const extra = (s.aliases || []).filter(a => a && a !== s.alias);
+      $('ipWho').innerHTML = (s.alias || '')
+        + (extra.length ? '<div style="font-size:2.3vh;margin-top:.6vh;direction:ltr">' + extra.join(' · ') + '</div>' : '')
+        + '<small>' + (s.beneficiary || '') + '</small>';
       loadQr();
     }
     if (s.status === 'waiting') show('wait');
-    else if (s.status === 'scanning') { if (!stream) { show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 900); }); } paintChecks(s.checks, s.detail); }
+    else if (s.status === 'scanning') { if (!stream) { show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 550); }); } paintChecks(s.checks, s.detail); }
     else if (s.status === 'approved') { stopCam(); show('ok'); }
     else if (s.status === 'rejected') { stopCam(); $('ipBadMsg').textContent = s.hint || 'الإيصال مش مظبوط'; show('bad'); }
     else hide();

@@ -10,11 +10,11 @@ t('بينده الدالتين بس',()=>{has("'instaPay'");has("'instaScan'")})
 t('الكاميرا بتطفي عند إخفاء الصفحة',()=>{has("pagehide");has("visibilitychange")});
 
 console.log('\n💸 توفير التكلفة');
-t('الفريم الأول بيتبعت فورًا',()=>has('if (prevGray && d > 16)'));
+t('الفريم الأول بيتبعت فورًا',()=>has('if (prevGray && d > 24)'));
 t('بيقص على الإطار بس',()=>{has('const INSET = 0.06');has('x.drawImage(video, sx, sy, sw, sh')});
 t('المربعات بتوري الأرقام',()=>{has('function chip(');has('d.seenCents')});
 t('فيه زرار رجوع للـQR',()=>{has("id=\"ipBack\"");has("$('ipBack').onclick")});
-t('فيه مؤقّت مش نداء متواصل',()=>has('setInterval(tick, 900)'));
+t('فيه مؤقّت مش نداء متواصل',()=>has('setInterval(tick, 550)'));
 t('قفل تزامن يمنع نداءين مع بعض',()=>has('if (busy || !cur) return'));
 t('الـQR بيتحمّل مرة واحدة',()=>has('if (_qr)'));
 
@@ -24,9 +24,12 @@ t('العرض مش مقلوب (العميلة تشوف اللي بيتبعت)',(
 t('فيه شبكة أمان للانعكاس',()=>{has('let flipCapture =');has('x.scale(-1, 1)')});
 t('القلب بيتفعّل من أول محاولة عمياء',()=>has('blindTries === 1'));
 t('القلب بيتحفظ للجهاز',()=>{has('FLIP_KEY');has('localStorage.setItem(FLIP_KEY')});
-t('فيه زرار قلب يدوي',()=>{has("id=\"ipFlip\"");has("$('ipFlip').onclick")});
+t('زرار القلب اتشال من الواجهة',()=>{
+  if(/id="ipFlip"/.test(src))throw Error('لسه ظاهر للعميلة')});
+t('الكشف التلقائي لسه شغال',()=>{has('blindTries === 1');has('setFlip(true)')});
+t('العنوان والأرقام بتظهر للعميلة',()=>has("extra.join(' · ')"));
 t('الشاشة متفضلش واقفة على بنقرا',()=>has('مش شايف الإيصال'));
-t('الجودة مضغوطة',()=>has("'image/jpeg', 0.84"));
+t('الجودة مضغوطة',()=>has("'image/jpeg', 0.76"));
 t('الكاميرا الأمامية',()=>has("facingMode: 'user'"));
 
 console.log('\n🧯 الأعطال');
