@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -57,7 +58,7 @@ ok(/!Number\.isFinite\(_paidCentsReady\) \|\| _paidCentsReady <= 0/.test(watch),
 ok(/بنستنى تفاصيل التأكيد/.test(watch), 'cashier gets explicit waiting message');
 ok(/return false;[\s\S]{0,180}paymobApproved = true/.test(watch), 'incomplete success keeps watcher alive before approved flag');
 ok(/paymobCanAutoFinish\(amountEGP, d, orderRef\)/.test(watch), 'normal complete success still auto-finishes and prints');
-ok(sw.includes("store-apps-shell-v374"), 'POS service worker bumped to v374');
+ok(swAtLeast(sw, 374), 'POS service worker bumped to v374');
 
 console.log(`v374 Paymob PIN auto-print: ${pass} passed, ${fail} failed`);
 if(fail) throw new Error(`test-paymob-pin-autoprint-v374: ${fail} فحص فشل`);

@@ -1,3 +1,4 @@
+require('./helpers/swv');
 // 🧪 فحص جاف لشاشة التابلت: الثبات، تنسيق المبلغ، وعدم كسر الكشك
 const fs=require('fs'); const src=fs.readFileSync('feedback/instapay-tablet.js','utf8');
 let p=0,f=0; const t=(n,fn)=>{try{fn();p++;console.log('  ✅ '+n)}catch(e){f++;console.log('  ❌ '+n+' → '+e.message)}};
@@ -14,6 +15,7 @@ t('الفريم الأول بيتبعت فورًا',()=>has('if (prevGray && d >
 t('بيقص على الإطار بس',()=>{has('const INSET = 0.06');has('x.drawImage(video, sx, sy, sw, sh')});
 t('المربعات بتوري الأرقام',()=>{has('function chip(');has('d.seenCents')});
 t('فيه زرار رجوع للـQR',()=>{has("id=\"ipBack\"");has("$('ipBack').onclick")});
+t('شاشة الكاشير مش مسدودة',()=>{has("id=\"ipManBack\"");has("$('ipManBack').onclick")});
 t('فيه مؤقّت مش نداء متواصل',()=>has('setInterval(tick, 550)'));
 t('قفل تزامن يمنع نداءين مع بعض',()=>has('if (busy || !cur) return'));
 t('الـQR بيتحمّل مرة واحدة',()=>has('if (_qr)'));
@@ -39,9 +41,37 @@ t('زرار يدوي للعميلة',()=>has('ipHelp'));
 
 console.log('\n🏗️ مبيكسرش الكشك');
 const html=fs.readFileSync('feedback/index.html','utf8');
-t('سطر واحد بس اتضاف',()=>{const o=fs.readFileSync('/home/claude/repo/store-apps-main/feedback/index.html','utf8');
-  const d=html.split('\n').length-o.split('\n').length; if(d!==2)throw Error('فرق '+d+' سطر')});
+// سطرين لإنستاباي + سطرين لدعوة التطبيق = 4
+t('الكشك اتضافله 4 سطور بس',()=>{const o=baselineOrSkip('/home/claude/repo/store-apps-main/feedback/index.html'); if(o===null) return;
+  const d=html.split('\n').length-o.split('\n').length; if(d!==4)throw Error('فرق '+d+' سطر')});
 t('الطبقة فوق كل حاجة',()=>has('z-index:9000'));
 t('مخفية لحد ما يجي طلب',()=>has('#ipWrap{position:fixed;inset:0;z-index:9000;display:none'));
+console.log('\n⏲️ الشاشة بتقفل نفسها (التابلت المعلّق)');
+const codeNC=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/(^|[^:'"`\\])\/\/[^\n]*/g,'$1');
+function grab(head){const i=codeNC.indexOf(head);if(i<0)throw Error('البلوك مش موجود: '+head);
+  const o=codeNC.indexOf('{',i);let d=0;for(let k=o;k<codeNC.length;k++){if(codeNC[k]==='{')d++;else if(codeNC[k]==='}'){d--;if(!d)return codeNC.slice(i,k+1)}}throw Error('أقواس')}
+const idleLine=codeNC.match(/const IP_PANE_IDLE_MS\s*=\s*\{[^}]*\};/); const maxLine=codeNC.match(/const IP_SESSION_MAX_MS\s*=[^;]*;/);
+if(!idleLine||!maxLine)throw Error('ثوابت المؤقّت مش موجودة');
+const should=eval('(function(){'+idleLine[0]+maxLine[0]+grab('function ipShouldAutoHide')+';return ipShouldAutoHide})()');
+const MIN=60*1000;
+t('⭐⭐ «سلّمي للكاشير» بتقفل بعد دقيقة ونص',()=>{if(should('man',89*1000,0)!==false)throw Error('بدري');if(should('man',90*1000,0)!==true)throw Error('مقفلتش')});
+t('«تم» بتقفل بعد دقيقة',()=>{if(should('ok',59*1000,0)||!should('ok',60*1000,0))throw Error()});
+t('«مرفوض» بتدّي وقت أطول (٣ دقايق)',()=>{if(should('bad',2*MIN,0)||!should('bad',3*MIN,0))throw Error()});
+t('⭐ شاشة الـQR والمسح **مبتقفلش** بدري — العميلة لسه بتحوّل',()=>{
+  if(should('wait',10*MIN,10*MIN)||should('scan',10*MIN,10*MIN))throw Error('قفلت على عميلة بتحوّل')});
+t('⭐⭐ أي شاشة بتقفل بعد عمر الطلب (٢٠ دقيقة)',()=>{
+  if(!should('wait',0,20*MIN)||!should('scan',0,20*MIN))throw Error('معلّقة للأبد')});
+t('مفيش شاشة = مفيش قفل',()=>{if(should(null,1e9,1e9)!==false)throw Error()});
+t('عمر الطلب = نفس مدة السيرفر',()=>{
+  const fn=fs.readFileSync('functions/instapay.js','utf8'); if(!/expiresAt:\s*now\s*\+\s*20\s*\*\s*60\s*\*\s*1000/.test(fn))throw Error('مدة السيرفر اتغيّرت');
+  if(!/IP_SESSION_MAX_MS\s*=\s*20\s*\*\s*60\s*\*\s*1000/.test(codeNC))throw Error('مش متطابقين')});
+t('show() بتصفّر العدّاد وhide() بتوقفه',()=>{
+  if(!/curPane\s*=\s*name;\s*paneAt\s*=\s*Date\.now\(\)/.test(grab('function show')))throw Error('show');
+  if(!/curPane\s*=\s*null/.test(grab('function hide')))throw Error('hide')});
+t('المؤقّت شغال ووقته محلي (seenAt من التابلت مش السيرفر)',()=>{
+  if(!/setInterval\(\(\)\s*=>\s*\{[\s\S]{0,300}ipShouldAutoHide\(curPane[\s\S]{0,120}hide\(\)/.test(codeNC))throw Error('مفيش مؤقّت');
+  if(!/cur\s*=\s*\{\s*sid:\s*s\.sid,\s*seenAt:\s*Date\.now\(\)\s*\}/.test(codeNC))throw Error('seenAt')});
+t('لسه مبيكتبش في Firestore',()=>{no('setDoc(');no('deleteDoc(')});
+
 console.log('\n=============================== \nالنتيجة: '+p+' ناجح · '+f+' فاشل\n===============================\n');
 process.exit(f?1:0);

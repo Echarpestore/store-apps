@@ -58,6 +58,15 @@ t('زرار اليدوي بيختفي لو مفيش طلب اتفتح',()=>{
 t('حفظ الإعدادات بيحدّث الحالة فورًا',()=>{
   const i=codeNC.indexOf("$('ipSetSave').onclick"); if(!/_offByBranch\[[^\]]+\]\s*=\s*cfgIsOff\(true/.test(codeNC.slice(i,i+2500)))throw Error()});
 
+console.log('\n🧹 سلة اتفضّت والطلب مفتوح');
+t('⭐⭐ clearCart بتلغي الطلب على السيرفر **قبل** التصفير',()=>{
+  const m=codeNC.match(/window\.clearCart\s*=\s*function\s*\(\)\s*\{([^}]*)\}/); if(!m)throw Error('مفيش تغليف');
+  const i=m[1].indexOf('abandonSession()'), j=m[1].indexOf('resetFlow()'); if(i<0)throw Error('مفيش إلغاء'); if(j<0||i>j)throw Error('التصفير قبل الإلغاء = S بقت null')});
+t('⭐ المتأكد والجاري حفظه مابيتلغوش',()=>{
+  if(!/if\s*\(!S\s*\|\|\s*!S\.sid\s*\|\|\s*approved\s*\|\|\s*finalizing\)\s*return;/.test(grab('function abandonSession')))throw Error()});
+t('الإلغاء مابيوقّفش الكاشير (من غير await) وفشله صامت',()=>{
+  const b=grab('function abandonSession'); if(/await/.test(b))throw Error('await'); if(!/\.catch\(/.test(b))throw Error('مفيش catch')});
+
 console.log('\n🧯 الأعطال');
 t('فشل فتح الطلب بيشيل إنستاباي من الفاتورة',()=>has("selectedPayMethods.delete('instapay')"));
 t('فشل التثبيت بيتبلّغ بصوت عالي',()=>has('تثبيت الانستا باي فشل'));
@@ -101,10 +110,10 @@ t('فيه مودال بديل',()=>{has('function ipAsk(');has("id=\"ipAsk\"")})
 t('التأكيد اليدوي خطوة واحدة',()=>has("yes: 'أكّدي وكمّلي'"));
 
 console.log('\n📄 الربط');
-t('الملف متحمّل في index.html',()=>{if(!/instapay-pos\.js\?v=69\d/.test(html))throw Error('مش متحمّل')});
+t('الملف متحمّل في index.html',()=>{const m=html.match(/instapay-pos\.js\?v=(\d+)/); if(!m||+m[1]<692)throw Error('مش متحمّل')});
 t('بعد credit-ui',()=>{if(html.indexOf('instapay-pos.js')<html.indexOf('credit-ui.js'))throw Error('الترتيب غلط')});
 t('CACHE_NAME اترفع',()=>{const sw=fs.readFileSync('pos/sw.js','utf8');
-  if(!/pos-shell-v69[2-9]/.test(sw))throw Error('الكاش ماترفعش')});
+  const m=sw.match(/pos-shell-v(\d+)/); if(!m||+m[1]<692)throw Error('الكاش ماترفعش')});
 
 console.log('\n===============================\nالنتيجة: '+p+' ناجح · '+f+' فاشل\n===============================\n');
 process.exit(f?1:0);

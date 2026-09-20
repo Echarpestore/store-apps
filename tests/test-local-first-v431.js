@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs = require('fs');
 const assert = require('assert');
 const path = require('path');
@@ -21,7 +22,7 @@ ok(office.includes("q.get({source:'cache'})") && office.includes("ofLfLast('cust
 ok(office.includes("baseQ.get({source:'cache'})") && office.includes("get({source:'server'})"), 'Office sales hydrate 30d locally then request only incremental server data');
 ok(office.includes("where('clockOutTs','==', null).onSnapshot"), 'Office keeps tiny open-shifts realtime listener');
 ok(office.includes("where('status','==','pending').onSnapshot"), 'Office keeps pending operational data realtime');
-ok(officeHtml.includes('office.js?v=79') && officeSw.includes('echarpe-office-v75'), 'Office cache bust versions updated');
+ok(assetAtLeast(officeHtml, 'office.js', 79) && swAtLeast(officeSw, 75), 'Office cache bust versions updated');
 
 ok(sales.includes('getDocsFromCache') && sales.includes('getDocsFromServer'), 'Sales uses explicit IndexedDB cache/server APIs');
 ok(sales.includes("const LF431_RECENT_MS=2*24*3600000"), 'Sales realtime window is limited to two days');
@@ -31,5 +32,5 @@ for (const name of ['points190','feedback65','shifts190','submissions190','rewar
 ok(!sales.includes("onSnapshot(_scoped(pointsCol,'ts')"), 'Sales removed 190-day points listener');
 ok(!sales.includes("onSnapshot(_scopedDays(entriesCol,'ts', 65)"), 'Sales removed 65-day feedback listener');
 ok(!sales.includes("onSnapshot(_scoped(shiftsCol,'clockInTs')"), 'Sales removed 190-day shifts listener');
-ok(salesHtml.includes('sales-app.js?v=24') && salesSw.includes('store-apps-shell-v394'), 'Sales cache bust versions updated');
+ok(assetAtLeast(salesHtml, 'sales-app.js', 24) && swAtLeast(salesSw, 394), 'Sales cache bust versions updated');
 console.log(`Local-first v431: ${n}/${n} PASS`);

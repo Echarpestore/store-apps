@@ -14,7 +14,7 @@ c.remember(d,100000);
 assert.strictEqual(c.guard(d,105000),true,'same confirmed movement must be blocked');
 assert.strictEqual(c.guard({...d,amount:24000},105000),false,'different amount must be allowed');
 assert.strictEqual(c.guard(d,113000),false,'guard must expire');
-const fn=fs.readFileSync(__dirname+'/../echarpe-push/index.js','utf8');
+const fn=fs.readFileSync(__dirname+'/../functions/index.js','utf8');
 assert(fn.includes('اخفض confidence تحت 0.90 بدل التخمين'),'AI anti-guess instruction missing');
 assert(fn.includes('فرّق بدقة بين قيمة الفاتورة والمبلغ المدفوع'),'invoice/payment separation missing');
 console.log('PASS test-office-ai-purchases-v72');

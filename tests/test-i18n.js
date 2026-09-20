@@ -258,7 +258,7 @@ const loySrc = fs.readFileSync(LOY, 'utf8');
    ============================================================ */
 (function(){
   const sw = fs.readFileSync(path.join(ROOT, 'loyalty', 'sw.js'), 'utf8');
-  const m = sw.match(/echarpe-loyalty-v(\d+)/);
+  const m = sw.match(/(?:echarpe-loyalty|loyalty-shell)-v(\d+)/);
   assert(!!m, 'CACHE_NAME موجود في loyalty/sw.js');
   assert(m && Number(m[1]) >= 50, '⭐ CACHE_NAME اترفع لـv50+ (وإلا الجهاز يفضل على القديم)');
 })();

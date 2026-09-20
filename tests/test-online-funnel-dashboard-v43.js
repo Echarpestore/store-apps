@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const c=fs.readFileSync('pos/chat-staff-ui.js','utf8');
 const s=fs.readFileSync('sales/sales-ui.js','utf8');
@@ -23,5 +24,5 @@ assert(s.includes("p.dataset.salesSection='performance'"),'dashboard is under pe
 assert(s.includes("p.classList.add('sales-panel-hidden')"),'dashboard does not leak onto overview');
 assert(s.includes('[data-sales-section-btn="performance"]'),'performance navigation triggers load');
 assert(s.includes('Date.now()-_days*86400000'),'range filter');
-assert(h.includes('sales-ui.js?v=21'),'sales UI cache bust');
+assert(assetAtLeast(h, 'sales-ui.js', 21),'sales UI cache bust');
 console.log('online funnel dashboard v43: PASS');

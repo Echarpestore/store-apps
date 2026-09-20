@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const s=fs.readFileSync('Office/office.js','utf8');
 const h=fs.readFileSync('Office/index.html','utf8');
@@ -14,5 +15,5 @@ assert(s.includes("goldSource:'تلقائي · Gold API + USD/EGP'"),'auto sourc
 assert(s.includes("goldManualUntil:Date.now()+OF_GOLD_MANUAL_LOCK_MS"),'manual lock stored');
 assert(s.includes("تعذر تحديث السعر الآن. هيفضل آخر سعر محفوظ شغال"),'failure keeps last saved value');
 assert(s.includes("document.addEventListener('visibilitychange'"),'refresh on app resume');
-assert(h.includes('office.js?v=76'),'cache bust v76');
+assert(assetAtLeast(h, 'office.js', 76),'cache bust v76');
 console.log('Office gold auto v66: PASS');

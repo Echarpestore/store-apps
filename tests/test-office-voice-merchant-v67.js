@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert'),vm=require('vm');
 const src=fs.readFileSync('Office/office.js','utf8');
 const html=fs.readFileSync('Office/index.html','utf8');
@@ -20,7 +21,7 @@ assert(src.includes("المتبقي للتاجر"),'reads remaining balance');
 assert(src.includes("قل تأكيد أو إلغاء"),'voice confirmation');
 assert(src.includes("if(_ofVoiceBusy||!_ofVoiceDraft)return"),'double confirm guard');
 assert(src.includes("const amount=ofArabicDigitsOnly(moneyPart)"),'strict digit-by-digit amount parser');
-assert(html.includes('office.js?v=76'),'v76 cache bust');
+assert(assetAtLeast(html, 'office.js', 76),'v76 cache bust');
 
 // Static parse helpers: extract exact functions.
 function fn(name){

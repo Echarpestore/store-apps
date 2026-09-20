@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),path=require('path'),root=path.resolve(__dirname,'..');
 const read=(...p)=>fs.readFileSync(path.join(root,...p),'utf8');
 const sales=read('sales','sales-app.js'),presence=read('pos','cctv-presence.js'),timeline=read('pos','cctv-timeline.js');
@@ -12,10 +13,10 @@ let n=0;function ok(v,m){if(!v)throw new Error('FAIL: '+m);n++;}
 
 ok(/openBreakCount:breakIds\.length/.test(sales)&&/activeStaffCount:onFloor\.length/.test(sales),'attendance subtracts open breaks');
 ok(/setInterval\(publishMadinatyStaffState,30000\)/.test(sales),'staff state remains fresh');
-ok(/cctv-presence\.js\?v=555/.test(posHtml),'presence engine is actually loaded');
+ok(assetAtLeast(posHtml, 'cctv-presence.js', 555),'presence engine is actually loaded');
 ok(/session-signal/.test(presence)&&/cctvPresenceNoteCartActivity/.test(timeline),'basket changes reach local detector agent');
 ok(/cctvPresenceRecordSale/.test(invoice)&&/transactionKind/.test(invoice),'sale and return evidence reaches presence path');
-ok(/store-apps-shell-v555/.test(posSw),'POS cache is v555');
+ok(swAtLeast(posSw, 555),'POS cache is v555');
 
 ok(/STREAMS=\{4:.*camera4.*8:.*camera8/.test(detector),'detector opens cameras 4 and 8');
 ok(/attendance_fresh and bool\(r4 and r8\) and pair4 and surplus>=1/.test(detector),'candidate requires fresh attendance, both cameras, cashier pair and surplus person');
@@ -33,5 +34,5 @@ ok(/CAMERA4_AUDIO_NOT_AVAILABLE/.test(installer)&&/DUAL_RECORDING_NOT_HEALTHY/.t
 ok(/openSmartActivityReview/.test(office)&&/data-smart-master/.test(office)&&/data-smart-slave/.test(office),'Office has synchronized dual review');
 ok(/of-smart555-marker/.test(officeHtml)&&/data-smart-jump/.test(office),'clickable event markers are rendered');
 ok(/كاميرا 4 \+ كاميرا 8 \+ صوت الكاشير \+ السلة/.test(officeHtml),'review contract is visible to owner');
-ok(/cctv\.js\?v=555/.test(officeHtml)&&/echarpe-office-v555/.test(officeSw),'Office cache is v555');
+ok(assetAtLeast(officeHtml, 'cctv.js', 555)&&swAtLeast(officeSw, 555),'Office cache is v555');
 console.log('Madinaty smart review v555: '+n+'/'+n+' PASS');

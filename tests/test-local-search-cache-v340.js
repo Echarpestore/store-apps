@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs = require('fs');
 const nodeAssert = require('assert');
 const path = require('path');
@@ -25,7 +26,7 @@ ok(/POSLocalSearchCache\?\.upsertCustomer/.test(sale), 'العميل يدخل lo
 ok(/updatedAt: firebase\.firestore\.FieldValue\.serverTimestamp\(\)/.test(sale), 'customer writes لها server delta timestamp');
 ok(/updatedAt: firebase\.firestore\.FieldValue\.serverTimestamp\(\)/.test(profiles), 'تعديل اسم العميل له server delta timestamp');
 ok(index.indexOf('local-search-cache.js') >= 0 && index.indexOf('local-search-cache.js') < index.indexOf('search.js'), 'local cache يتحمل قبل search.js');
-ok(/store-apps-shell-v340/.test(sw), 'POS service worker v340');
+ok(swAtLeast(sw, 340), 'POS service worker v340');
 
 const vars = mod._phoneVariants('01144155987');
 ok(vars.includes('01144155987') && vars.includes('201144155987'), 'phone variants محليًا');

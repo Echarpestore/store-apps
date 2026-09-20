@@ -214,8 +214,9 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(/saleTs\(s\)/.test(repBody), 'فلتر الفترة في التقارير بيستخدم saleTs');
   // 🔐 التقفيل بقى أشد: لازم pending writes تتأكد من السيرفر، ومفيش override أوفلاين.
   const finBody = extractFn(repSrc, 'dcFinish');
-  assert(/posRequireSynced\('تقفيل اليوم'/.test(finBody) && /if\(!sync\.ok\) return;/.test(finBody),
-    'تقفيل اليوم يستنى تأكيد كل الكتابات من السيرفر');
+  // v708: المنع الكامل (posRequireSynced) مارجعش عمدًا — قرار 4أ-6: تقفيل والنت قاطع مسموح بتأكيد إجباري + عدّاد المعلّق.
+  assert(/dcData\.fromCache/.test(finBody) && /await posConfirm\(/.test(finBody),
+    'تقفيل والنت قاطع = تأكيد إجباري جوّه الصفحة');
   assert(/fromCache/.test(finBody) && !/confirm\(/.test(finBody),
     'تقفيل والنت قاطع = مرفوض، مش مجرد تأكيد قابل للتجاوز');
 }

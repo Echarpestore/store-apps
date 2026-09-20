@@ -1,3 +1,4 @@
+require('./helpers/swv');
 'use strict';
 const assert=require('assert');
 const fs=require('fs');
@@ -28,6 +29,6 @@ ok(premature===-1,'camera preview no longer marks welcome as completed');
 ok(app.includes("$('#attPhotoStatus').textContent = firstWelcome ? niqabWelcomeText(emp) : 'تمام، بيصور...'"),'same message remains visible at camera step until first successful clock-in');
 ok(app.includes('setTimeout(()=> captureAttPhoto(video), 650)'),'niqab capture still skips face detector without delaying attendance');
 ok(app.includes('waitForFaceThenCapture(video, Date.now())'),'normal employees retain face-detection path');
-ok(/sales-app\.js\?v=(?:502|505|543|544|545)/.test(html),'sales app cache bust includes the niqab fix');
-ok(/store-apps-shell-v(?:502|505|543|544|545)/.test(sw),'service worker cache bust includes the niqab fix');
+ok(assetAtLeast(html, 'sales-app.js', 502),'sales app cache bust includes the niqab fix');
+ok(swAtLeast(sw, 502),'service worker cache bust includes the niqab fix');
 console.log(`niqab attendance v502: ${n}/${n} PASS`);

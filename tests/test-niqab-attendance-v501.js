@@ -1,3 +1,4 @@
+require('./helpers/swv');
 'use strict';
 const assert=require('assert');
 const fs=require('fs');
@@ -18,6 +19,6 @@ ok(app.includes("niqabWelcomeClockInAt: doneAt"),'successful clock-in state pers
 ok(app.includes("أهلاً يا ") && app.includes("من غير ما تحتاجي تكشفي وشك"),'welcome copy is friendly and clear');
 ok(app.includes("waitForFaceThenCapture(video, Date.now())"),'normal employees retain existing face-detection path');
 ok(app.includes("const dataUri = canvas.toDataURL('image/jpeg', 0.5)"),'photo remains mandatory audit capture');
-ok(/sales-app\.js\?v=(?:501|502|505|543|544|545)/.test(html),'sales app cache bust is current');
-ok(/store-apps-shell-v(?:501|502|505|543|544|545)/.test(sw),'service worker cache bust is current');
+ok(assetAtLeast(html, 'sales-app.js', 501),'sales app cache bust is current');
+ok(swAtLeast(sw, 501),'service worker cache bust is current');
 console.log(`niqab attendance v501: ${n}/${n} PASS`);

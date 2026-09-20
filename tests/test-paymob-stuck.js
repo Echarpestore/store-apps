@@ -174,6 +174,6 @@ const st = (o)=> Object.assign({}, OK, o||{});
     assert(new RegExp('window\\.' + n + ' *= *' + n).test(posSrc), n + ' معروضة على window');
   });
   const sw = fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 280, 'POS: CACHE_NAME v280+');
 })();

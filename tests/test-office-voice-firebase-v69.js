@@ -1,15 +1,16 @@
 "use strict";
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require("fs"),assert=require("assert");
 const o=fs.readFileSync("Office/office.js","utf8");
 const h=fs.readFileSync("Office/index.html","utf8");
-const f=fs.readFileSync("echarpe-push/index.js","utf8");
+const f=fs.readFileSync(__dirname+"/../functions/index.js","utf8");
 assert(!o.includes("voice-ai.php"),"PHP endpoint removed");
 assert(o.includes("cloudfunctions.net/officeVoiceParse"),"Office calls existing Firebase Functions project");
 assert(o.includes("user.getIdToken(false)"),"Firebase ID token sent");
 assert(o.includes("'Authorization':'Bearer '+token"),"Bearer auth header");
 assert(o.includes("conf<0.90"),"client refuses low-confidence AI");
 assert(o.includes("parser:'firebase_ai_v73'"),"v69 parser marker");
-assert(h.includes("office.js?v=75"),"cache bust v75");
+assert(assetAtLeast(h, "office.js", 75),"cache bust v75");
 assert(f.includes('exports.officeVoiceParse = onRequest'),"function added in existing index.js");
 assert(f.includes('defineSecret("OPENAI_API_KEY")'),"OpenAI key is Firebase secret");
 assert(f.includes('verifyIdToken'),"server verifies Firebase login");

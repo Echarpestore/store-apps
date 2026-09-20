@@ -1,5 +1,6 @@
 // Final import policy: update/add only; preserve system quantity; no missing-item removal.
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'), path=require('path'), vm=require('vm');
 const src=fs.readFileSync(path.resolve(__dirname,'..','pos','import.js'),'utf8');
 function extractFn(name){const st=src.indexOf('function '+name+'(');if(st<0)return'';const op=src.indexOf('{',st);let d=0;for(let i=op;i<src.length;i++){if(src[i]==='{')d++;else if(src[i]==='}'){d--;if(d===0)return src.slice(st,i+1)}}return''}
@@ -19,5 +20,5 @@ ok(!src.includes('id="impZeroMissing"'),'اختيار حذف/تصفير غير �
 ok(!src.includes('const wantZero ='),'مسار تنفيذ حذف/تصفير غير الموجود اتشال من runImport');
 ok(src.includes('أي صنف موجود في الفرع ومش موجود في الملف يفضل زي ما هو'),'الواجهة تشرح السياسة الجديدة بوضوح');
 ok(src.includes("untouchedExisting:0"),'الخطة تتبع الأصناف الموجودة التي تُترك كما هي');
-ok(/store-apps-shell-v340/.test(fs.readFileSync(path.resolve(__dirname,'..','pos','sw.js'),'utf8')),'POS cache v340');
+ok(swAtLeast(fs.readFileSync(path.resolve(__dirname,'..','pos','sw.js'),'utf8'), 340),'POS cache v340');
 console.log('  ✅ test-import-final-policy كامل');

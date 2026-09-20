@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),assert=require('assert'),vm=require('vm');
 const js=fs.readFileSync('Office/office.js','utf8');
-const fn=fs.readFileSync('echarpe-push/index.js','utf8');
+const fn=fs.readFileSync(__dirname+'/../functions/index.js','utf8');
 assert(js.includes('needsMerchantCreate=true'),'local new-merchant draft missing');
 assert(js.includes('🆕 تاجر جديد'),'new merchant review warning missing');
 assert(js.includes("db.collection('office_merchants').doc()"),'merchant creation ref missing');

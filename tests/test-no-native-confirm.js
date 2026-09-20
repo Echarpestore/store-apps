@@ -7,6 +7,7 @@
 // يتشغّل لوحده: node tests/test-no-native-confirm.js
 // ============================================================
 'use strict';
+require('./helpers/swv');
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const POS = path.join(ROOT, 'pos');
@@ -207,7 +208,7 @@ const files = fs.readdirSync(POS).filter(f => /\.js$/.test(f) && !/^test-|\.min\
 
   console.log('📦 6) الإصدار');
   ok(+fs.readFileSync(path.join(POS, 'sw.js'), 'utf8').match(/pos-shell-v(\d+)/)[1] >= 707, 'CACHE_NAME اترفع لـv707');
-  ok(/pos-sale\.js\?v=707/.test(idx) && /pos-admin\.js\?v=707/.test(idx), 'index.html بيحمّل pos-sale/pos-admin بـv707');
+  ok(assetAtLeast(idx, 'pos-sale.js', 707) && assetAtLeast(idx, 'pos-admin.js', 707), 'index.html بيحمّل pos-sale/pos-admin بـv707+');
 
   console.log('\n' + (fail ? '❌' : '✅') + ' test-no-native-confirm: ' + pass + ' ناجح · ' + fail + ' فاشل');
   if(fail) process.exitCode = 1;

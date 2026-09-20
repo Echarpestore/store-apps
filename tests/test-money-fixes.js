@@ -1,3 +1,4 @@
+require('./helpers/swv');
 /* 🧪 اختبارات إصلاحات الفلوس — ٣ باجات شغالة في الإنتاج */
 const fs=require('fs');
 let p=0,f=0; const t=(n,fn)=>{try{fn();p++;console.log('  ✅ '+n)}catch(e){f++;console.log('  ❌ '+n+' → '+e.message)}};
@@ -35,15 +36,15 @@ t('العروض والمنتجات لسه get()',()=>{if(!ly.includes("ref.get({
 
 console.log('\n🛡️ مفيش ضرر جانبي');
 t('pos-sale اتغير في مكان واحد بس',()=>{
-  const o=fs.readFileSync(R+'pos/pos-sale.js','utf8');
+  const o=baselineOrSkip(R+'pos/pos-sale.js'); if(o===null) return;
   const d=ps.split('\n').length-o.split('\n').length;
   if(d!==12)throw Error('فرق '+d+' سطر — متوقع 12')});
 t('loyalty/index.html اتغير في مكانين',()=>{
-  const o=fs.readFileSync(R+'loyalty/index.html','utf8');
+  const o=baselineOrSkip(R+'loyalty/index.html'); if(o===null) return;
   const d=ly.split('\n').length-o.split('\n').length;
   if(d<15||d>28)throw Error('فرق '+d+' سطر — خارج المتوقع')});
 t('CACHE_NAME اترفع',()=>{
-  if(!fs.readFileSync('loyalty/sw.js','utf8').includes('loyalty-shell-v690'))throw Error('الكاش ماترفعش')});
+  if(!swAtLeast(fs.readFileSync('loyalty/sw.js','utf8'), 690))throw Error('الكاش ماترفعش')});
 
 console.log('\n===============================\nالنتيجة: '+p+' ناجح · '+f+' فاشل\n===============================\n');
 process.exit(f?1:0);

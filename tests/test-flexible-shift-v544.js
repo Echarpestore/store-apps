@@ -1,3 +1,4 @@
+require('./helpers/swv');
 'use strict';
 process.env.TZ = 'Africa/Cairo';
 const assert = require('assert');
@@ -49,9 +50,9 @@ ok(app.includes('const shiftEmp = shift.scheduledStartTime'),'clock-out uses the
 ok(ui.includes("shift.scheduledEndTime") && ui.indexOf('shift.scheduledEndTime') < ui.indexOf('emp && emp.scheduledEndTime'),'Sales administrative close prefers the chosen shift end');
 ok(office.includes("shift.scheduledEndTime") && office.indexOf('shift.scheduledEndTime',office.indexOf('function ofGraceCloseTs')) < office.indexOf('emp && emp.scheduledEndTime',office.indexOf('function ofGraceCloseTs')),'Office close prefers the chosen shift end');
 
-ok(/sales-app\.js\?v=544/.test(salesHtml)&&/sales-ui\.js\?v=544/.test(salesHtml),'Sales assets are cache-busted to v544');
-ok(Number((salesSw.match(/store-apps-shell-v(\d+)/)||[])[1]||0)>=544,'Sales service worker includes v544 or newer');
-ok(/office\.js\?v=544/.test(officeHtml),'Office asset is cache-busted to v544');
+ok(assetAtLeast(salesHtml, 'sales-app.js', 544)&&assetAtLeast(salesHtml, 'sales-ui.js', 544),'Sales assets are cache-busted to v544');
+ok(Number((salesSw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/)||[])[1]||0)>=544,'Sales service worker includes v544 or newer');
+ok(assetAtLeast(officeHtml, 'office.js', 544),'Office asset is cache-busted to v544');
 ok(Number((officeSw.match(/echarpe-office-v(\d+)/)||[])[1]||0)>=544,'Office service worker includes v544 or newer');
 
 console.log(`flexible shift v544: ${passed}/${passed} PASS`);

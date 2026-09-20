@@ -11,6 +11,6 @@ ok(/excludedByImportBranch\s*===\s*branch/.test(src), 'explicit import detach gu
 ok(/\(Number\(by\[branch\]\)\s*\|\|\s*0\)\s*!==\s*0/.test(src), 'stale branches recovery must require real branch stock');
 ok(/if\(!inventoryItemInBranch\(it, currentBranch\)\) return false;/.test(src), 'inventory list still uses stale branches-only gate');
 ok(/الكود موجود في المخزون، لكنه مش مربوط بفرع/.test(src), 'cross-branch diagnostic message missing');
-const m = sw.match(/store-apps-shell-v(\d+)/);
+const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
 ok(m && Number(m[1]) >= 373, 'POS SW must be v373 or newer');
 console.log('PASS inventory branch search v373');

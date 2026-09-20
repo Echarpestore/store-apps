@@ -254,6 +254,14 @@ const box = {
   todayStr: function(){ return '2026-07-11'; },
   doc: function(){ return {}; }, db: {}, alert: function(){}, console: console,
   updateDoc: function(ref, payload){ Object.assign(written, payload); return Promise.resolve(); },
+  // v711: clockOut اتنقل في v554 لـoutbox دائم (queueAttendanceMutation) بدل updateDoc المباشر.
+  // الـharness بيطبّق نفس عمليات الـoutbox على written — فالفحوصات تحت بتفحص **نفس الحقول** اللي بتتكتب فعلًا.
+  fixedAttendanceTs: function(){ return NOW; },
+  attendanceDocId: function(kind, empId, sid){ return kind + '_' + empId + '_' + sid; },
+  queueAttendanceMutation: function(m){
+    (m.durableOps || []).forEach(function(op){ if(op.collection === 'sales_shifts') Object.assign(written, op.data); else (written._credits = written._credits || []).push(op.data); });
+    return Promise.resolve({ ok:true });
+  },
   Math: Math, JSON: JSON, Number: Number, String: String, Promise: Promise,
   Date: class extends Date {
     constructor(v){ super(v === undefined ? NOW : v); }
@@ -357,7 +365,7 @@ try{ fs.unlinkSync(runnerPath); }catch(e){}
     });
   assert(typeof S.window.forgottenShifts === 'function', 'وفعلًا موجودة بعد التحميل');
   const sw = fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 91, 'sales: CACHE_NAME v91+');
 })();
 

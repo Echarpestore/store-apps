@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const imp=fs.readFileSync('pos/import.js','utf8');
 const prod=fs.readFileSync('pos/products.js','utf8');
@@ -19,8 +20,8 @@ const checks=[
  ['receive log reads Firestore stock log', recv.includes('db.collection(TEST_STOCK_LOG)') && recv.includes("x.type !== 'receipt'")],
  ['receive log shows last 20 not only today', recv.includes('limit(20)') && recv.includes('آخر 20 عملية استلام')],
  ['receive log has local-cache fallback', recv.includes('renderRows(receiveGoodsTodayLog') && recv.includes("console.warn('receive log firestore'")],
- ['POS cache bumped v340', posSw.includes("store-apps-shell-v340")],
+ ['POS cache bumped v340', swAtLeast(posSw, 340)],
  ['Glow tryon URL canonical', glow.includes("frame.src = '../tryon/photo.html?brand=' + brand + '&embed=1';") && !glow.includes("&embed=1&run=" )],
- ['Glow cache bumped v73', glowSw.includes('glow-loyalty-v73')]
+ ['Glow cache bumped v73', swAtLeast(glowSw, 73)]
 ];
 checks.forEach(([n,ok])=>{assert.ok(ok,n);console.log('PASS',n)});
