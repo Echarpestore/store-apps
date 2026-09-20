@@ -15,7 +15,7 @@ const ok = (c, m) => { if(c){ pass++; } else { fail++; console.error('  ❌ ' + 
 const block = sel => { const i = css.indexOf(sel + '{'); if(i < 0) return null; return css.slice(i + sel.length + 1, css.indexOf('}', i)); };
 
 console.log('\n🔌 1) التوصيل — من غير ما نكسر الكشك');
-ok(assetAtLeast(html, 'kiosk-theme.css', 696), 'ملف الهوية متحمّل');
+ok(assetAtLeast(html, 'kiosk-theme.css', 697), 'ملف الهوية متحمّل');
 ok(html.indexOf('kiosk-theme.css') > html.indexOf('</style>'), 'وبعد الـstyle الأصلي (عشان يغلبه)');
 const btns = [...html.matchAll(/<button class="face-btn b(\d)" data-r="(\d)">/g)];
 ok(btns.length === 4 && btns.every((m, i) => m[1] === String(i + 1) && m[2] === String(i + 1)), 'الأربع زراير بنفس `class` و`data-r` وبنفس الترتيب — كود التقييم مربوط بيهم');
@@ -34,6 +34,16 @@ console.log('⚖️ 2) الحياد — الأربع زراير بنفس الو�
 ok(!/\.face-btn\.b\d[^{]*\{[^}]*(opacity|filter|transform|font-size|width|height|aspect-ratio)\s*:/.test(css), 'مفيش زرار أصغر/أبهت/أكبر من التاني');
 const delays = [...css.matchAll(/\.face-btn\.b(\d)::after\{animation-delay:([\d.]+)s\}/g)].map(m => +m[2]);
 ok(delays.length === 4 && delays.every((d, i) => i === 0 || d > delays[i - 1]), 'اللمعة بتعدّي على الأربعة بالدور (مش على «عجبني» بس)');
+
+console.log('📐 2ب) مقاسات جوّه الزرار = نسبة من الزرار (باج v696: حلقة بيضاوية ومقصوصة على الموبايل)');
+const svgRule = block('.face-btn svg') || '';
+ok(/width:\d+%/.test(svgRule) && /height:auto/.test(svgRule) && /aspect-ratio:1\/1/.test(svgRule), 'دايرة الوش: عرض بالـ٪ + height:auto + aspect-ratio 1/1 = دايرة حقيقية على أي مقاس');
+ok(/flex:none/.test(svgRule), 'ومبتتضغطش جوّه الـflex (ده اللي خلّاها بيضاوية)');
+ok(!/(width|height)\s*:[^;]*\d(vh|vw)/.test(svgRule), 'ومفيش vh/vw في مقاس الدايرة — الكارت بالـvw والدايرة كانت بالـvh فاتلخبطوا');
+const btnRule = block('.face-btn') || '';
+ok(/padding:\d+% \d+% \d+%/.test(btnRule) && /gap:\d+%/.test(btnRule), 'والحشو والمسافة جوّه الكارت بالـ٪ برضه');
+const port = css.slice(css.indexOf('@media (orientation:portrait){'));
+ok(/\.face-btn\{[^}]*font-size:clamp\([^)]*vw/.test(port), 'بالطول: حجم الخط تابع لعرض الشاشة (زي الكارت) مش ارتفاعها');
 
 console.log('🔒 3) قفل التقييم المكرر لسه شغال');
 ok(/isolation:isolate/.test(block('#kiosk') || ''), '`#kiosk` عامل stacking context — وإلا z-index الزراير يطلع فوق طبقة الشكر');
@@ -57,7 +67,7 @@ ok(!/--(bg|panel|panel2|ink|sub|line|r[1-4])\s*:/.test(css), 'ومغيّرش م�
 const kf = (css.match(/@keyframes \w+\{[^@]*?\}\}/g) || []).join(' ');
 ok(kf.length > 0 && !/(^|[;{\s])(width|height|top|left|right|bottom|margin[\w-]*|padding[\w-]*|box-shadow|filter)\s*:/.test(kf), 'الحركة transform/opacity بس');
 ok(/@media \(prefers-reduced-motion:reduce\)/.test(css) && /@media \(orientation:portrait\)/.test(css), 'تقليل الحركة + التابلت بالطول متغطّيين');
-ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'feedback', 'sw.js'), 'utf8'), 696), 'CACHE_NAME ≥ v696');
+ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'feedback', 'sw.js'), 'utf8'), 697), 'CACHE_NAME ≥ v697');
 
 console.log('\n' + (fail ? '❌' : '✅') + ' test-kiosk-theme: ' + pass + ' ناجح · ' + fail + ' فاشل');
 if(fail) process.exitCode = 1;

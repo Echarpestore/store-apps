@@ -54,38 +54,48 @@ html[data-brand="glow"]{
   font-size:clamp(26px,5.6vh,54px); line-height:1.3; margin:0 0 5.2vh; max-width:none;
 }
 
-.grid{gap:clamp(12px,1.8vw,26px); max-width:min(1180px,92vw);}
+/* ------------------------------------------------------------
+   v697 — الزراير اتعاد تصميمها (المالك: «شكلها وحش أوي» — وكان عنده حق):
+   1) باج مقاسات: الوش كان بالـvh والزرار بالـvw ← على موبايل بالطول الحلقة بقت بيضاوية ومقصوصة من فوق والاسم لازق تحت.
+      دلوقتي **كل حاجة جوّه الزرار نسبة من الزرار نفسه** (٪) — مفيش وحدة شاشة جوّه الكارت، فمستحيل يتلخبط على أي مقاس.
+   2) الشكل: أربع بلوكات غامقة تقيلة (برقوقي/أسود) كانت كئيبة. دلوقتي كارت أبيض هادي، واللون في **دايرة الوش بس** —
+      مساحة بيضا أكتر = شكل أغلى. الحياد زي ما هو: الأربع كروت متطابقين، والفرق لون الدايرة بس.
+   ------------------------------------------------------------ */
+.grid{gap:clamp(12px,1.8vw,26px); max-width:min(1120px,92vw);}
 .face-btn{
-  aspect-ratio:4/5; border-radius:clamp(20px,3.6vh,34px); overflow:hidden; isolation:isolate;
-  gap:clamp(10px,2.4vh,22px); padding:0 1vw;
-  font-weight:800; font-size:clamp(15px,2.75vh,24px); letter-spacing:0; color:var(--k-on-dark);
-  background:linear-gradient(165deg,var(--fa),var(--fb));
-  box-shadow:0 2.6vh 4.4vh -2vh var(--fs), 0 0 0 1px rgba(255,255,255,.22) inset, 0 .25vh 0 rgba(255,255,255,.28) inset;
+  aspect-ratio:4/5; border-radius:clamp(22px,3.4vw,36px); overflow:hidden; isolation:isolate;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9%; padding:9% 6% 8%;
+  font-weight:800; font-size:clamp(15px,2.7vh,25px); letter-spacing:0; color:var(--k-ink); line-height:1.25;
+  background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(255,255,255,.80));
+  box-shadow:0 2.4vh 4.6vh -2.4vh rgba(90,25,60,.38), 0 0 0 1px rgba(59,30,44,.07), 0 1px 0 #fff inset;
   transform:translateY(0) scale(1);
   transition:transform .14s cubic-bezier(.2,.8,.2,1), box-shadow .14s ease;
 }
-.face-btn.b1{--fa:var(--k-1a); --fb:var(--k-1b); --fs:rgba(46,20,34,.75);}
-.face-btn.b2{--fa:var(--k-2a); --fb:var(--k-2b); --fs:rgba(124,39,82,.7);}
-.face-btn.b3{--fa:var(--k-3a); --fb:var(--k-3b); --fs:rgba(220,63,128,.65);}
-.face-btn.b4{--fa:var(--k-4a); --fb:var(--k-4b); --fs:rgba(200,130,40,.65); color:var(--k-on-4);}
-.b1,.b2,.b3,.b4{background:linear-gradient(165deg,var(--fa),var(--fb));}
-html[data-brand="glow"] .face-btn.b1{--fs:rgba(18,12,15,.7);}
-html[data-brand="glow"] .face-btn.b2{--fs:rgba(76,34,54,.65);}
-html[data-brand="glow"] .face-btn.b3{--fs:rgba(178,78,115,.6);}
-html[data-brand="glow"] .face-btn.b4{--fs:rgba(200,110,140,.55);}
+.face-btn.b1{--fa:var(--k-1a); --fb:var(--k-1b); --fs:rgba(46,20,34,.55);}
+.face-btn.b2{--fa:var(--k-2a); --fb:var(--k-2b); --fs:rgba(124,39,82,.5);}
+.face-btn.b3{--fa:var(--k-3a); --fb:var(--k-3b); --fs:rgba(220,63,128,.5);}
+.face-btn.b4{--fa:var(--k-4a); --fb:var(--k-4b); --fs:rgba(200,130,40,.5);}
+.b1,.b2,.b3,.b4{background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(255,255,255,.80));}
+html[data-brand="glow"] .face-btn.b1{--fs:rgba(18,12,15,.5);}
+html[data-brand="glow"] .face-btn.b2{--fs:rgba(76,34,54,.5);}
+html[data-brand="glow"] .face-btn.b3{--fs:rgba(178,78,115,.5);}
+html[data-brand="glow"] .face-btn.b4{--fs:rgba(200,110,140,.5);}
 
-/* الوش: خط رفيع جوّه حلقة — مرسوم بـcurrentColor فبياخد لون الزرار لوحده */
+/* الوش: دايرة بلون المستوى — ٪ من عرض الكارت، ومربعة دايمًا، ومبتتضغطش */
 .face-btn svg{
-  width:clamp(64px,15vh,132px); height:clamp(64px,15vh,132px);
-  padding:clamp(10px,2.2vh,20px); border-radius:50%;
-  background:rgba(255,255,255,.12); box-shadow:0 0 0 1px rgba(255,255,255,.28) inset;
+  width:54%; height:auto; aspect-ratio:1/1; flex:none; box-sizing:border-box; padding:11%;
+  border-radius:50%; color:var(--k-on-dark);
+  background:linear-gradient(155deg,var(--fa),var(--fb));
+  box-shadow:0 1.6vh 2.6vh -1.2vh var(--fs), 0 0 0 1px rgba(255,255,255,.35) inset;
+  transition:transform .14s cubic-bezier(.2,.8,.2,1);
 }
-.face-btn.b4 svg{background:rgba(255,255,255,.3); box-shadow:0 0 0 1px rgba(59,30,44,.16) inset;}
+.face-btn.b4 svg{color:var(--k-on-4);}
 
-/* لمعة القماش */
+/* لمعة القماش — على الكارت كله، بالدور */
 .face-btn::after{
-  content:""; position:absolute; inset:-20% -60%; z-index:-1; pointer-events:none;
-  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.26) 50%,transparent 58%);
+  content:""; position:absolute; inset:-20% -60%; z-index:1; pointer-events:none;
+  background:linear-gradient(105deg,transparent 43%,rgba(255,255,255,.55) 50%,transparent 57%);
+  mix-blend-mode:soft-light;
   transform:translateX(-70%); animation:kSheen 8s ease-in-out infinite;
 }
 .face-btn.b1::after{animation-delay:1.6s} .face-btn.b2::after{animation-delay:2.0s}
@@ -93,9 +103,10 @@ html[data-brand="glow"] .face-btn.b4{--fs:rgba(200,110,140,.55);}
 @keyframes kSheen{0%,72%{transform:translateX(-70%)}92%,100%{transform:translateX(70%)}}
 
 .face-btn:active{
-  transform:translateY(.5vh) scale(.965);
-  box-shadow:0 1vh 2vh -1.2vh var(--fs), 0 0 0 1px rgba(255,255,255,.22) inset, 0 .25vh 0 rgba(255,255,255,.28) inset;
+  transform:translateY(.4vh) scale(.97);
+  box-shadow:0 1vh 2vh -1.4vh rgba(90,25,60,.4), 0 0 0 1px rgba(59,30,44,.1), 0 1px 0 #fff inset;
 }
+.face-btn:active svg{transform:scale(.94);}
 .face-btn:focus-visible{outline:.4vh solid var(--k-ink); outline-offset:.5vh;}
 
 /* دخول واحد متألّف عند فتح الشاشة */
@@ -124,9 +135,12 @@ html[data-brand="glow"] .face-btn.b4{--fs:rgba(200,110,140,.55);}
 #thanks p{font-size:clamp(22px,4.6vh,40px); font-weight:900; color:var(--k-ink);}
 
 @media (orientation:portrait){
-  .grid{grid-template-columns:repeat(2,1fr); max-width:min(640px,88vw);}
-  .face-btn{aspect-ratio:1/1;}
-  #kiosk h1{font-size:clamp(24px,4vh,44px); margin-bottom:4vh;}
+  .grid{grid-template-columns:repeat(2,1fr); gap:3.4vw; max-width:min(680px,88vw);}
+  .face-btn{aspect-ratio:1/1.12; font-size:clamp(15px,4.3vw,30px); border-radius:clamp(22px,6vw,40px);
+    box-shadow:0 4vw 8vw -4vw rgba(90,25,60,.38), 0 0 0 1px rgba(59,30,44,.07), 0 1px 0 #fff inset;}
+  .face-btn svg{box-shadow:0 3vw 5vw -2.4vw var(--fs), 0 0 0 1px rgba(255,255,255,.35) inset;}
+  #kiosk h1{font-size:clamp(24px,7vw,46px); margin-bottom:5vw;}
+  .k-brand{width:clamp(56px,17vw,96px); height:clamp(56px,17vw,96px); margin-bottom:4vw;}
 }
 @media (max-width:760px){ .grid{grid-template-columns:repeat(2,1fr);} }
 @media (prefers-reduced-motion:reduce){
