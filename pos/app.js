@@ -1658,7 +1658,7 @@ document.addEventListener('keydown', function(e){
   if(e.key === 'F4'){ e.preventDefault(); if(typeof togglePayMethod==='function') togglePayMethod('instapay'); return; }
   if(e.key === 'F8'){
     e.preventDefault();
-    if(typeof resetPaymentUI==='function'){ resetPaymentUI(); showToast('اتمسحت المدفوعات 🧹'); }
+    if(typeof resetPaymentUI==='function'){ if(resetPaymentUI() !== false) showToast('اتمسحت المدفوعات 🧹'); }
     return;
   }
   // 💰 v364: F9 = نفس زر فتح درج الكاش، بنفس الصلاحيات والتسجيل الحالي.

@@ -408,7 +408,7 @@ window.boostAdd = boostAdd;
 async function boostStop(id){
   const it = staffBoosts.items.find(function(x){ return x.id === id; });
   if(!it) return;
-  if(!confirm('توقف حملة «' + (it.name || '') + '»؟')) return;
+  if(!(await posConfirm('توقف حملة «' + (it.name || '') + '»؟', { icon:'⏹️', danger:true, okText:'أيوه، وقّفها' }))) return;
   const before = staffBoosts.items.slice();
   staffBoosts.items = staffBoosts.items.filter(function(x){ return x.id !== id; });
   try{ await saveBoostDoc(); renderBoostScreen(); showToast('اتوقفت'); }

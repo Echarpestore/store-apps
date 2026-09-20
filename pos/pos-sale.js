@@ -410,6 +410,7 @@ searchBar.addEventListener('keydown', (e)=>{
 // الفرق لا يختفي: يظهر فورًا ويتسجل كمستحق رد مرتبط بنفس عملية الكارت.
 let _cardAdjustmentMode = false;
 let _cardAdjustmentApprovedAmount = 0;
+let _cardAdjustAsking = false;   // v707: سؤال فتح التعديل ظاهر دلوقتي — ميتفتحش مرتين
 function cardCartEditBlockReason(){
   if(!_cardMoneyAtRiskAt || _cardAdjustmentMode) return null;
   const approved = Math.abs(cardApprovedSum(cardLegs || []));
@@ -438,17 +439,29 @@ function blockCartEditAfterCard(){
     return true;
   }
   const approved = Math.abs(cardApprovedSum(cardLegs || []));
-  const ok = (typeof confirm === 'function') ? confirm(
-    '✅ تم سحب ' + approved.toFixed(2) + ' ج.م من العميلة بالفعل.\n\n'
-    + 'لو هتعدلي السلة دلوقتي، السيستم هيحسب الفرق تلقائيًا ويسجله كمستحق رد/تحصيل.\n'
-    + 'تكملي تعديل السلة؟'
-  ) : false;
-  if(!ok) return true;
-  _cardAdjustmentMode = true;
-  _cardAdjustmentApprovedAmount = approved;
-  showToast('✏️ وضع تعديل بعد الدفع شغال — أي فرق هيظهر ويتسجل تلقائيًا', 'warn');
-  try{ if(typeof _logActivity === 'function') _logActivity('card_adjustment_started', { charged: approved, totalBeforeEdit: Math.abs(cartTotal()) }); }catch(e){}
-  return false;
+  // 🎯 v707: من غير confirm() (نافذة ويندوز بتسرق الـfocus في الـexe).
+  // الدالة دي حارس **متزامن** بيناديه 16 مكان (منهم مسح الباركود) — فمش هنحوّلهم كلهم async.
+  // بدل كده: العملية الحالية **بتتمنع** دلوقتي، والسؤال يطلع جوّه الصفحة؛ لو وافقت
+  // وضع التعديل يشتغل والكاشير تكرر العملية. الرفض/التجاهل = السلة مقفولة زي ما هي.
+  if(!_cardAdjustAsking){
+    _cardAdjustAsking = true;
+    posConfirm(
+      '✅ تم سحب ' + approved.toFixed(2) + ' ج.م من العميلة بالفعل\n'
+      + 'لو هتعدلي السلة دلوقتي، السيستم هيحسب الفرق تلقائيًا ويسجله كمستحق رد/تحصيل.\n'
+      + 'تكملي تعديل السلة؟',
+      { icon:'💳', danger:true, okText:'أيوه، افتحي التعديل', cancelText:'لأ، سيبي السلة' }
+    ).then(function(ok){
+      _cardAdjustAsking = false;
+      if(!ok) return;
+      // السؤال غير متزامن — نتأكد إن الحالة لسه زي ما هي (الفاتورة ممكن تكون اتحفظت/اتمسحت)
+      if(cardCartEditBlockReason() !== 'approved') return;
+      _cardAdjustmentMode = true;
+      _cardAdjustmentApprovedAmount = Math.abs(cardApprovedSum(cardLegs || []));
+      showToast('✏️ وضع التعديل اتفتح — كرّري التعديل دلوقتي، وأي فرق هيتسجل تلقائيًا', 'warn');
+      try{ if(typeof _logActivity === 'function') _logActivity('card_adjustment_started', { charged: _cardAdjustmentApprovedAmount, totalBeforeEdit: Math.abs(cartTotal()) }); }catch(e){}
+    }).catch(function(){ _cardAdjustAsking = false; });
+  }
+  return true;
 }
 if(typeof window !== 'undefined'){
   window.cardCartEditBlockReason = cardCartEditBlockReason;
@@ -1357,11 +1370,13 @@ function qbxDeleteSel(){
 }
 
 // تحويل الفاتورة كلها لمرتجع بتأكيد واحد بس — بدل ما تدوس مرتجع على كل صنف لوحده
-function qbxReturnWholeInvoice(){
+async function qbxReturnWholeInvoice(){
   if(blockCartEditAfterCard()) return;
   if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس — مش مسموح للكاشير', 'err'); return; }
   if(cart.length === 0){ showToast('الفاتورة فاضية', 'err'); return; }
-  if(!confirm(`متأكد إنك عايز تحوّل كل الفاتورة (${cart.length} صنف) لمرتجع كامل؟`)) return;
+  const _n = cart.length;
+  if(!(await posConfirm(`تحويل الفاتورة كلها لمرتجع؟\n${_n} صنف هيتحوّلوا لمرتجع كامل.`, { icon:'🔄', danger:true, okText:'أيوه، مرتجع كامل' }))) return;
+  if(cart.length !== _n || blockCartEditAfterCard()) return;   // السلة اتغيّرت والسؤال مفتوح
   cart.forEach(line=>{
     line.price = -Math.abs(line.price);
     line.isReturn = true;
@@ -1830,7 +1845,7 @@ document.getElementById('customerPhone').addEventListener('input', function(){
 async function resetLoyaltyPin(){
   const phone = document.getElementById('customerPhone').value.trim();
   if(!phone){ showToast('اكتب رقم العميل الأول', 'err'); return; }
-  if(!confirm('متأكد إنك عايز تمسح الرقم السري للعميل ده؟ هيحدد واحد جديد أول ما يفتح التطبيق.')) return;
+  if(!(await posConfirm('مسح الرقم السري للعميل ' + phone + '؟\nهيحدد واحد جديد أول ما يفتح التطبيق.', { icon:'🔑', danger:true, okText:'أيوه، امسح' }))) return;
   try{
     await db.collection(TEST_CUSTOMERS).doc(phone).set({ loyaltyPin: null }, { merge:true });
     const rp = document.getElementById('resetPinRow'); if(rp) rp.style.display = 'none';
@@ -1899,7 +1914,7 @@ async function registerNewCustomer(){
   if(!name){ showToast('اكتب اسم العميل', 'err'); return; }
   // 🔄 لو التطبيع غيّر الرقم، نوريه للكاشير قبل ما نسجّل — عشان تتأكد
   if(phone !== raw){
-    if(!confirm('الرقم هيتسجل كده:\n\n' + phone + '\n\nصح؟')) return;
+    if(!(await posConfirm('الرقم هيتسجل كده:\n' + phone + '\n\nصح؟', { icon:'📱', okText:'صح', cancelText:'لأ، أعدّله' }))) return;
     document.getElementById('customerPhone').value = phone;
   }
   try{
@@ -2381,7 +2396,8 @@ async function renderReverseList(){
 async function reverseReceipt(saleId){
   if(!hasPerm('canReverse') && !hasPerm('canRefund')){ showToast('عكس الفاتورة للمشرف/المدير بس', 'err'); return; }
   if(_busyOps.has('reverse_'+saleId)) return;
-  if(!confirm('متأكد إنك عايز تعكس الفاتورة دي؟ الكمية هترجع للمخزون، والإجراء ده نهائي.')) return;
+  if(!(await posConfirm('متأكد إنك عايز تعكس الفاتورة دي؟\nالكمية هترجع للمخزون، والإجراء ده نهائي.', { icon:'↩️', danger:true, waitSec:2, okText:'أيوه، اعكس الفاتورة' }))) return;
+  if(_busyOps.has('reverse_'+saleId)) return;   // v707: السؤال غير متزامن — دوستين ميعكسوش مرتين
   _busyOps.add('reverse_'+saleId);
   _offlineQueued = false;
   try{
@@ -2392,7 +2408,7 @@ async function reverseReceipt(saleId){
     // ⏰ عكس فاتورة في نفس يوم بيعها → تأكيد إضافي + تسجيل للصندوق الأسود
     const _rvMs = sale.createdAt && sale.createdAt.toMillis ? sale.createdAt.toMillis() : (sale.createdAt && sale.createdAt.seconds ? sale.createdAt.seconds*1000 : 0);
     if(_isSameLocalDay(_rvMs)){
-      if(!confirm('⏰ الفاتورة دي متسجلة النهارده — عكسها هيتسجل كملاحظة يوم-بيوم. متأكد؟')) return;
+      if(!(await posConfirm('⏰ الفاتورة دي متسجلة النهارده\nعكسها هيتسجل كملاحظة يوم-بيوم. متأكد؟', { danger:true, okText:'أيوه، كمّل العكس' }))) return;
       if(typeof _logActivity === 'function') _logActivity('same_day_reversal', { invoiceNo: sale.invoiceNo||'', total: sale.total||0 });
     }
 
@@ -2759,15 +2775,31 @@ async function unholdInvoice(heldId){
 }
 
 // ---------------- Payment ----------------
+let _resetPayAsking = false;   // v707
 function resetPaymentUI(_force){
   // 💳 كارت اتسحب فعلًا: مسح المدفوعات بيلغي أثره من الشاشة بس — الفلوس عند العميل
   // مسحوبة. لازم تأكيد صريح، وإلا هيتحفظ نقص في الفاتورة وأوفر في التقفيل.
   const _appr = Math.abs(cardApprovedSum(cardLegs));
   if(!_force && _appr > 0){
-    const ok = confirm('⚠️ فيه ' + _appr.toFixed(2) + ' ج.م اتسحبوا فعلًا من الكارت.\n'
-      + 'مسح المدفوعات مش بيرجّع الفلوس — لازم مرتجع من Paymob.\nتكمّل المسح؟');
-    if(!ok) return;
-    if(typeof _logActivity === 'function') _logActivity('card_payments_cleared', { amount: _appr });
+    // 🎯 v707: من غير confirm(). الدالة متزامنة وبيناديها أماكن كتير، فالمسح **مبيحصلش دلوقتي**
+    // (نفس مسار «إلغاء» القديم بالظبط) والسؤال يطلع جوّه الصفحة؛ الموافقة بتنادي نفس الدالة بـforce.
+    // بترجّع false = «ماتمسحش لسه» عشان اللي بينادي ميقولش «اتمسحت».
+    if(!_resetPayAsking){
+      _resetPayAsking = true;
+      posConfirm('⚠️ فيه ' + _appr.toFixed(2) + ' ج.م اتسحبوا فعلًا من الكارت\n'
+        + 'مسح المدفوعات مش بيرجّع الفلوس — لازم مرتجع من Paymob.\nتكمّل المسح؟',
+        { danger:true, waitSec:2, okText:'أيوه، امسح المدفوعات', cancelText:'لأ، سيبها' }
+      ).then(function(ok){
+        _resetPayAsking = false;
+        if(!ok) return;
+        const _now = Math.abs(cardApprovedSum(cardLegs));
+        if(!(_now > 0)) return;   // اتحفظت/اتصفّرت والسؤال مفتوح — مفيش حاجة تتمسح
+        if(typeof _logActivity === 'function') _logActivity('card_payments_cleared', { amount: _now });
+        resetPaymentUI(true);
+        try{ showToast('اتمسحت المدفوعات 🧹'); }catch(e){}
+      }).catch(function(){ _resetPayAsking = false; });
+    }
+    return false;
   }
   selectedPayMethods = new Set();
   paymentAmounts = {};
@@ -3952,7 +3984,7 @@ window.showChangeAfterPrint = showChangeAfterPrint;
 
 let _confirmSaving = false;
 async function confirmPayment(){
-  if(typeof confirmForeignBranchAction === 'function' && !confirmForeignBranchAction('حفظ الفاتورة والبيع')) return;
+  if(typeof confirmForeignBranchAction === 'function' && !(await confirmForeignBranchAction('حفظ الفاتورة والبيع'))) return;
   if(_confirmSaving){ showToast('الفاتورة بتتحفظ... استنى ثانية', 'err'); return; }   // منع التكرار
   // 💵 بنحسب الباقي دلوقتي قبل ما السلة تتفضّى — وبنعرضه بعد الطباعة
   let _pendingChange = 0;

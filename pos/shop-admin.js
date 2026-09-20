@@ -336,7 +336,7 @@ window.shopToggleActive = shopToggleActive;
 async function shopDelItem(id){
   const it = shopData.items.find(function(x){ return x.id === id; });
   if(!it) return;
-  if(!confirm('تشيل «' + (it.name || '') + '» من البيع أونلاين خالص؟')) return;
+  if(!(await posConfirm('تشيل «' + (it.name || '') + '» من البيع أونلاين خالص؟', { icon:'🗑️', danger:true, okText:'أيوه، شيله' }))) return;
   const before = shopData.items.slice();
   shopData.items = shopData.items.filter(function(x){ return x.id !== id; });
   try{

@@ -251,8 +251,8 @@ function priceLabelApplyQtyToAll(){
   const el=document.getElementById('priceLabelAllQty'); const qty=Math.max(1,parseInt(el&&el.value,10)||1);
   priceLabelQueue.forEach(function(x){x.qty=qty;}); savePriceLabelQueue(); renderPriceLabelQueue();
 }
-function clearPriceLabelQueue(){
-  if(priceLabelQueue.length && !confirm('تمسح كل الأكواد المجهزة للطباعة؟'))return;
+async function clearPriceLabelQueue(){
+  if(priceLabelQueue.length && !(await posConfirm('تمسح كل الأكواد المجهزة للطباعة؟', { icon:'🗑️', danger:true, okText:'أيوه، امسح' })))return;
   priceLabelQueue=[];priceLabelSelectedId='';savePriceLabelQueue();renderPriceLabelQueue();
 }
 function printPriceLabelQueue(){

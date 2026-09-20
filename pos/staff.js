@@ -209,7 +209,7 @@ async function openStaffCard(empId){
 
 async function reissueStaffCard(empId){
   const e = staffList.find(x=>x.id===empId); if(!e) return;
-  if(!confirm('إعادة إصدار كارت '+e.name+'؟ الكارت القديم هيتبطّل فورًا (للكروت الضايعة).')) return;
+  if(!(await posConfirm('إعادة إصدار كارت '+e.name+'؟\nالكارت القديم هيتبطّل فورًا (للكروت الضايعة).', { icon:'🪪', danger:true, okText:'أيوه، كارت جديد' }))) return;
   e.cardCode = _newCardCode();
   try{
     await db.collection('sales_employees').doc(empId).update({ cardCode: e.cardCode, cardIssuedAt: Date.now() });

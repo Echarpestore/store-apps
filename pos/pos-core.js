@@ -1310,21 +1310,49 @@ function returnToDeviceBranch(){
   showToast('رجعت لفرع الجهاز: '+currentBranch+' ✔');
   goToDashboard();
 }
-function confirmForeignBranchAction(actionLabel){
+// ============================================================
+// ✋ posConfirm (v707) — بديل confirm() في كل ملفات POS
+// confirm() في Electron نافذة ويندوز حقيقية: بعد ما تتقفل، شاشة POS بتفضل من غير
+// system focus والكاشير مش قادرة تكتب لحد Alt-Tab. الحل: التأكيد جوّه الصفحة (askConfirm).
+// أول سطر في الرسالة = العنوان، والباقي = الشرح. النص بيتهرّب (أسماء عملاء/أصناف).
+// ⚠️ بترجّع Promise — لازم `await`. `if(!posConfirm(..))` من غير await = دايمًا "موافق" (ثغرة).
+function _pcEsc(s){ return String(s == null ? '' : s).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;').split('"').join('&quot;'); }
+function posConfirm(msg, opts){
+  const o = opts || {};
+  const lines = String(msg == null ? '' : msg).split('\n');
+  while(lines.length && !lines[0].trim()) lines.shift();
+  const title = lines.shift() || '';
+  const body = lines.join('\n').replace(/^\n+/, '');
+  if(typeof askConfirm !== 'function'){
+    // شبكة أمان بس: لو pos-sale.js متحمّلش لأي سبب، نرجع للنافذة الأصلية بدل ما نعدّي من غير تأكيد
+    return Promise.resolve((typeof confirm === 'function') ? confirm(String(msg)) : false);
+  }
+  return askConfirm({
+    icon: o.icon, danger: !!o.danger, waitSec: (o.waitSec == null ? 0 : o.waitSec),
+    title: _pcEsc(title), message: _pcEsc(body),
+    okText: o.okText || 'أيوه', cancelText: o.cancelText || 'لأ'
+  });
+}
+window.posConfirm = posConfirm;
+
+// ⚠️ v707: بقت async — كل اللي بيناديها لازم `await` (transfers.js ×2 · confirmPayment).
+async function confirmForeignBranchAction(actionLabel){
   if(!isForeignBranchSession()) return true;
   const home=deviceHomeBranch();
-  return confirm('🔴 تحذير فرع مختلف\n\nهذا الجهاز تابع لفرع: '+home+'\nأنت تعمل الآن على: '+currentBranch+'\n\n'+(actionLabel||'هذه العملية')+' ستُسجّل وتؤثر على فرع '+currentBranch+' وليس '+home+'.\n\nهل أنت متأكد أنك تريد الاستمرار؟');
+  return await posConfirm('🔴 تحذير فرع مختلف\n\nهذا الجهاز تابع لفرع: '+home+'\nأنت تعمل الآن على: '+currentBranch+'\n\n'+(actionLabel||'هذه العملية')+' ستُسجّل وتؤثر على فرع '+currentBranch+' وليس '+home+'.\n\nهل أنت متأكد أنك تريد الاستمرار؟',
+    { danger:true, okText:'أيوه، كمّل على '+currentBranch, cancelText:'لأ، إلغاء' });
 }
 window.deviceHomeBranch=deviceHomeBranch;
 window.isForeignBranchSession=isForeignBranchSession;
 window.refreshForeignBranchWarning=refreshForeignBranchWarning;
 window.returnToDeviceBranch=returnToDeviceBranch;
 window.confirmForeignBranchAction=confirmForeignBranchAction;
-function doBranchSwitch(branch){
+async function doBranchSwitch(branch){
   if(!hasPerm('canSwitchBranch')) return;
   const _home = deviceHomeBranch();
   if(_home && branch !== _home){
-    const ok = confirm('🔴 أنت على وشك ترك فرع الجهاز '+_home+' والعمل مؤقتًا على '+branch+'.\n\nأي بيع أو استلام أو حركة مخزون بعد التبديل ستؤثر على '+branch+'.\n\nمتأكد من التبديل؟');
+    const ok = await posConfirm('🔴 أنت على وشك ترك فرع الجهاز '+_home+' والعمل مؤقتًا على '+branch+'.\n\nأي بيع أو استلام أو حركة مخزون بعد التبديل ستؤثر على '+branch+'.\n\nمتأكد من التبديل؟',
+      { danger:true, okText:'أيوه، بدّل لـ '+branch, cancelText:'لأ، خليني على '+_home });
     if(!ok) return;
   }
   currentBranch = branch;   // مؤقت للجلسة — مش بيتخزّن، فالجهاز يفضل على فرعه الأصلي بعد الخروج

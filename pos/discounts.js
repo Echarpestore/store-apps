@@ -186,7 +186,7 @@ async function toggleDiscount(id, activate){
 }
 
 async function deleteDiscount(id){
-  if(!confirm('متأكد إنك عايز تمسح الخصم ده؟')) return;
+  if(!(await posConfirm('متأكد إنك عايز تمسح الخصم ده؟', { icon:'🗑️', danger:true, okText:'أيوه، امسح' }))) return;
   try{
     await db.collection(TEST_DISCOUNTS).doc(id).delete();
     discountsCacheAt = 0;

@@ -233,10 +233,10 @@ function ordMove(id, to){
 }
 window.ordMove = ordMove;
 
-function ordCancel(id){
+async function ordCancel(id){
   var o = _ordCache.filter(function(x){ return x.id === id; })[0];
   if(!o) return;
-  if(!confirm('إلغاء أوردر #' + (o.code || '') + '؟\nالكمية هترجع للبيع والعميلة هتشوف إنه اتلغى.')) return;
+  if(!(await posConfirm('إلغاء أوردر #' + (o.code || '') + '؟\nالكمية هترجع للبيع والعميلة هتشوف إنه اتلغى.', { icon:'✖️', danger:true, okText:'أيوه، الغي الأوردر', cancelText:'لأ، سيبه' }))) return;
   return db.collection(ORD_COL).doc(id).set({ status:'cancelled', cancelledAt: Date.now() }, { merge:true })
     .then(function(){ showToast('اتلغى', 'ok'); })
     .catch(function(e){ showToast('مانفعش: ' + (e && e.code || ''), 'err'); });
@@ -250,15 +250,15 @@ window.ordCancel = ordCancel;
    ⚠️ الحالة **مبتتحركش لـcollected هنا** — بتتحرك بعد ما الفاتورة
       تتحفظ فعلًا (`ordMarkCollected`). لو اتحركت هنا والكاشير لغت
       البيع، الأوردر يبقى «اتسلّم» والبضاعة في المحل. */
-function ordDeliver(id){
+async function ordDeliver(id){
   var o = _ordCache.filter(function(x){ return x.id === id; })[0];
   if(!o){ showToast('الأوردر مش موجود', 'err'); return; }
   if(orderIsExpired(o, Date.now())){ showToast('الأوردر انتهى حجزه', 'err'); return; }
   if(o.branch !== currentBranch){
-    if(!confirm('الأوردر ده لفرع ' + (o.branch || '؟') + ' مش فرعك.\nتكمّل؟')) return;
+    if(!(await posConfirm('الأوردر ده لفرع ' + (o.branch || '؟') + ' مش فرعك\nتكمّل؟', { danger:true, okText:'أيوه، كمّل' }))) return;
   }
   if(cart && cart.length){
-    if(!confirm('فيه سلة مفتوحة هتتمسح. تكمّل؟')) return;
+    if(!(await posConfirm('فيه سلة مفتوحة هتتمسح\nتكمّل؟', { danger:true, okText:'أيوه، امسح السلة وحمّل الأوردر' }))) return;
   }
 
   var chk = orderValidateCart(
@@ -268,8 +268,8 @@ function ordDeliver(id){
   );
   if(!chk.ok){
     showToast('⚠️ ' + chk.errors[0], 'err');
-    if(!confirm('المخزون اتغيّر:\n\n' + chk.errors.join('\n')
-      + '\n\nتحمّل اللي متاح بس وتكمّلي؟')) return;
+    if(!(await posConfirm('المخزون اتغيّر:\n\n' + chk.errors.join('\n')
+      + '\n\nتحمّل اللي متاح بس وتكمّلي؟', { danger:true, okText:'أيوه، حمّل المتاح' }))) return;
   }
 
   cart = [];

@@ -1330,15 +1330,15 @@ async function runImport(){
         }catch(e){
           // فشل قراءة السجل ميوقفش الاستيراد — بس المستخدم لازم يعرف
           console.warn('[import] تعذّر قراءة حركة الاستلام:', e && e.message);
-          if(!confirm('⚠️ متعرفناش نقرا حركة «استلام بضاعة» بعد التاريخ ده.\n'
-            + 'الاستيراد هيخصم المباع بس.\n\nنكمّل؟')){ resultBox.textContent = 'اتلغى'; return; }
+          if(!(await posConfirm('⚠️ متعرفناش نقرا حركة «استلام بضاعة» بعد التاريخ ده\n'
+            + 'الاستيراد هيخصم المباع بس.\n\nنكمّل؟', { danger:true, okText:'أيوه، كمّل', cancelText:'لأ، الغي' }))){ resultBox.textContent = 'اتلغى'; return; }
         }
         if(movedChanges.length){
           const topM = movedChanges.slice(0, 12).map(function(c){
             return '• ' + (c.name||c.barcode) + ': ' + c.before + ' ' + (c.moved > 0 ? '+ ' + c.moved : '− ' + (-c.moved)) + ' = ' + c.after;
           }).join('\n');
           const moreM = movedChanges.length > 12 ? ('\n… و' + (movedChanges.length-12) + ' صنف كمان') : '';
-          if(!confirm('📥 حركة استلام على ' + movedChanges.length + ' صنف:\n\n' + topM + moreM + '\n\nنكمّل؟')){
+          if(!(await posConfirm('📥 حركة استلام على ' + movedChanges.length + ' صنف:\n\n' + topM + moreM + '\n\nنكمّل؟', { okText:'أيوه، كمّل', cancelText:'لأ، الغي' }))){
             resultBox.textContent = 'اتلغى'; return;
           }
           prepped.forEach(function(pr){ if(mapping.quantity) pr._row[mapping.quantity] = pr.qty; });
@@ -1346,7 +1346,7 @@ async function runImport(){
             _logActivity('import_qty_moved', { count: movedChanges.length, since: sinceVal });
         }
         if(!changes.length){
-          if(!confirm('مفيش أي بيعات على النظام الجديد بعد التاريخ ده.\nنكمّل الاستيراد من غير خصم؟')){
+          if(!(await posConfirm('مفيش أي بيعات على النظام الجديد بعد التاريخ ده\nنكمّل الاستيراد من غير خصم؟', { okText:'أيوه، كمّل', cancelText:'لأ، الغي' }))){
             resultBox.textContent = 'اتلغى'; return;
           }
         } else {
@@ -1354,7 +1354,7 @@ async function runImport(){
             return '• ' + (c.name||c.barcode) + ': ' + c.before + ' − ' + c.sold + ' = ' + c.after;
           }).join('\n');
           const more = changes.length > 12 ? ('\n… و' + (changes.length-12) + ' صنف كمان') : '';
-          if(!confirm('⚖️ هيتعدّل ' + changes.length + ' صنف:\n\n' + top + more + '\n\nنكمّل؟')){
+          if(!(await posConfirm('⚖️ هيتعدّل ' + changes.length + ' صنف:\n\n' + top + more + '\n\nنكمّل؟', { okText:'أيوه، كمّل', cancelText:'لأ، الغي' }))){
             resultBox.textContent = 'اتلغى'; return;
           }
           // نرجّع الكميات المعدّلة للصفوف الأصلية

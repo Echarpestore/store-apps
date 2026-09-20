@@ -1075,7 +1075,7 @@ async function deleteInventoryItem(id){
        + 'المسح بيشيله نهائيًا ومش بيسجل خروج مخزون — الكمية دي هتختفي من الحسابات.\n'
        + 'لو الصنف خلص، الأنسب تعلّمه «نافد» بدل ما تمسحه.\n\nمتأكد إنك عايز تمسح؟')
     : 'متأكد إنك عايز تمسح الصنف ده؟';
-  if(!confirm(_msg)) return;
+  if(!(await posConfirm(_msg, { icon:'🗑️', danger:true, waitSec:(_q > 0 ? 3 : 0), okText:'أيوه، امسح الصنف' }))) return;
   await db.collection(TEST_INVENTORY).doc(id).delete();
   showToast('اتمسح ✅');
   renderInventoryScreen();

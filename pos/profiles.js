@@ -502,8 +502,8 @@ async function sendRateRequest(phone){
   if(!last){ showToast('مفيش فاتورة تصلح للتقييم', 'err'); return; }
   const when = saleDateStr(last);
   const name = (_cp.c && _cp.c.name) || phone;
-  if(!confirm('هيتبعت طلب تقييم لـ' + name + ' (' + phone + ')\n'
-    + 'على فاتورة ' + when + '\n\nالإشعار بيوصل خلال 5 دقايق. تكمّل؟')) return;
+  if(!(await posConfirm('هيتبعت طلب تقييم لـ' + name + ' (' + phone + ')\n'
+    + 'على فاتورة ' + when + '\n\nالإشعار بيوصل خلال 5 دقايق. تكمّل؟', { icon:'⭐', okText:'أيوه، ابعت' }))) return;
   try{
     await db.collection(TEST_SALES).doc(last.id).update({
       rateForce: true,

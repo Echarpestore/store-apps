@@ -301,8 +301,8 @@ function uiedRemoveCustom(uid){
   CFG.hidden = CFG.hidden.filter(x=> x!==uid);
   _rerender();
 }
-function uiedReset(){
-  if(typeof confirm==='function' && !confirm('ترجّع الشكل الافتراضي؟ (مش هيتحفظ غير لما تدوس 💾)')) return;
+async function uiedReset(){
+  if(!(await posConfirm('ترجّع الشكل الافتراضي؟\n(مش هيتحفظ غير لما تدوس 💾)', { icon:'↩️', okText:'أيوه، رجّعه' }))) return;
   CFG = defaultLayout();
   _rerender();
   _toast('رجع الشكل الافتراضي — متنساش الحفظ');

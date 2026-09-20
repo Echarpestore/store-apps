@@ -1965,10 +1965,10 @@ function dcRecalc(){
 }
 
 // لما يدوس OK: يحسب الأوفر/العجز ويحفظ سجل التقفيل
-function dcFinish(){
+async function dcFinish(){
   // 📴 تقفيل والنت قاطع = أرقام ناقصة محتملة (فواتير أجهزة تانية مش واصلة) — تأكيد إجباري
   if(dcData && dcData.fromCache){
-    if(!confirm('📴 النت قاطع والأرقام من الكاش المحلي — فواتير الأجهزة التانية ممكن تكون ناقصة.\nالأفضل تستنى النت يرجع. متأكد إنك عايز تقفل دلوقتي؟')) return;
+    if(!(await posConfirm('📴 النت قاطع والأرقام من الكاش المحلي\nفواتير الأجهزة التانية ممكن تكون ناقصة.\nالأفضل تستنى النت يرجع. متأكد إنك عايز تقفل دلوقتي؟', { danger:true, waitSec:3, okText:'أيوه، اقفل دلوقتي', cancelText:'لأ، هستنى النت' }))) return;
   }
   const denoms = [200,100,50,20,10,5];
   let counted = 0; denoms.forEach(d=> counted += dcNum('dc_den_'+d) * d);
