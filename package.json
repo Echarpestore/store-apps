@@ -1,0 +1,7 @@
+{
+  "name": "store-apps-tests",
+  "private": true,
+  "description": "اعتماديات الاختبارات فقط — التطبيقات نفسها من غير build",
+  "scripts": { "test": "node tests/run.js" },
+  "devDependencies": { "jsdom": "^30.1.0" }
+}
