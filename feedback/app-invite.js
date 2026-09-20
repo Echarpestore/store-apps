@@ -3,7 +3,8 @@
    ------------------------------------------------------------
    بيتحط في: feedback/app-invite.js
    وبيتحمّل من feedback/index.html:
-     <script src="app-invite.js?v=690"></script>
+     <script type="module" src="app-invite.js?v=693"></script>
+   + فولدر feedback/invite/ (3 لقطات من التطبيق + الأيقونة)
 
    بتظهر بعد ما العميلة تكتب رقمها وتشوف شاشة الترحيب.
    ⚠️ ملف مستقل زي إنستاباي: لو وقع، الكشك بيفضل شغال عادي.
@@ -68,117 +69,203 @@ import { getFirestore, collection, query, where, limit, getDocs }
   } catch (e) {}
   var QR = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 37 37" width="100%" height="100%" shape-rendering="crispEdges"><path fill="#fff" d="M0 0h37v37h-37z"/><path stroke="#000" d="M2 2.5h7m8 0h1m1 0h1m3 0h2m3 0h7m-33 1h1m5 0h1m1 0h1m1 0h5m1 0h1m1 0h2m2 0h1m3 0h1m5 0h1m-33 1h1m1 0h3m1 0h1m4 0h2m2 0h1m2 0h1m2 0h2m3 0h1m1 0h3m1 0h1m-33 1h1m1 0h3m1 0h1m1 0h6m2 0h1m1 0h1m1 0h2m2 0h1m1 0h1m1 0h3m1 0h1m-33 1h1m1 0h3m1 0h1m1 0h2m3 0h1m1 0h4m1 0h2m4 0h1m1 0h3m1 0h1m-33 1h1m5 0h1m3 0h1m1 0h1m2 0h1m1 0h1m3 0h4m1 0h1m5 0h1m-33 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-25 1h3m2 0h4m1 0h2m2 0h2m-23 1h1m1 0h4m1 0h2m1 0h2m3 0h2m2 0h1m2 0h4m1 0h2m1 0h1m-31 1h3m3 0h4m1 0h2m3 0h3m2 0h2m4 0h3m-30 1h1m2 0h3m2 0h3m1 0h3m4 0h6m2 0h3m1 0h1m-32 1h1m1 0h1m1 0h1m1 0h1m4 0h2m4 0h3m6 0h1m2 0h2m-31 1h1m2 0h1m1 0h5m1 0h3m1 0h2m2 0h1m3 0h1m1 0h2m4 0h1m-32 1h1m2 0h2m1 0h1m3 0h2m4 0h2m2 0h3m3 0h1m1 0h1m-27 1h1m2 0h2m1 0h1m3 0h2m1 0h7m3 0h1m1 0h2m-29 1h1m2 0h1m4 0h3m2 0h1m3 0h1m3 0h1m1 0h2m2 0h3m1 0h1m-33 1h2m2 0h1m1 0h1m1 0h5m1 0h1m4 0h2m1 0h1m1 0h6m-29 1h1m1 0h1m1 0h1m1 0h1m1 0h1m3 0h3m3 0h1m1 0h2m1 0h3m1 0h1m1 0h1m1 0h1m-33 1h2m2 0h1m1 0h1m5 0h4m1 0h3m1 0h3m2 0h2m1 0h2m1 0h1m-32 1h1m1 0h1m3 0h2m2 0h1m1 0h2m1 0h1m2 0h1m3 0h1m1 0h2m1 0h4m-32 1h3m3 0h1m6 0h1m2 0h1m1 0h2m2 0h1m1 0h1m2 0h1m1 0h1m1 0h1m-32 1h1m2 0h2m2 0h1m2 0h1m1 0h1m1 0h3m1 0h2m2 0h2m1 0h1m1 0h3m-30 1h1m1 0h1m3 0h1m3 0h2m3 0h4m1 0h2m1 0h1m1 0h2m2 0h4m-33 1h1m1 0h1m4 0h2m1 0h6m1 0h2m1 0h1m4 0h2m3 0h1m-31 1h5m1 0h1m1 0h2m2 0h2m1 0h1m3 0h2m3 0h6m-22 1h1m1 0h1m3 0h1m1 0h1m4 0h4m3 0h1m1 0h1m-31 1h7m2 0h2m1 0h5m1 0h2m3 0h2m1 0h1m1 0h1m1 0h1m-31 1h1m5 0h1m1 0h1m2 0h2m4 0h2m1 0h1m1 0h3m3 0h4m-32 1h1m1 0h3m1 0h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m3 0h7m2 0h1m-32 1h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h3m1 0h1m1 0h3m1 0h1m2 0h1m1 0h1m4 0h1m-33 1h1m1 0h3m1 0h1m3 0h1m2 0h1m1 0h2m1 0h3m1 0h1m1 0h1m2 0h2m2 0h2m-33 1h1m5 0h1m1 0h4m1 0h1m1 0h1m1 0h4m4 0h1m1 0h6m-33 1h7m8 0h1m1 0h1m2 0h1m3 0h1m2 0h3"/></svg>';
 
-  /* ✍️ الصياغة: جملة اسمية قصيرة لكل ميزة + سطر واحد يشرح.
-     ⚠️ النسخة الأولى كانت "نقط على كل شرايه" — عامية مكسورة ومش
-        لايقة على براند. والميزة الرابعة كانت بتقول "الذكاء
-        الاصطناعي" صراحة؛ العميلة مش فارق معاها التقنية، فارق
-        معاها إنها تشوف الطرحة عليها قبل ما تشتري. */
-  var FEATURES = [
-    { i: 'M12 3l2.6 5.9 6.4.6-4.8 4.3 1.4 6.2L12 16.8 6.4 20l1.4-6.2L3 9.5l6.4-.6z', t: 'نقاط مع كل قطعة', s: 'تتحوّل خصم على اللي بعدها' },
-    { i: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6', t: 'فواتيرك محفوظة', s: 'من غير ورق ولا بحث' },
-    { i: 'M12 2l7 4v6c0 4.4-3 8.3-7 10-4-1.7-7-5.6-7-10V6z', t: 'وصول مبكر للتشكيلات', s: 'قبل ما تنزل الفروع' },
-    { i: 'M4 20c0-4 3.6-7 8-7s8 3 8 7M12 4a4 4 0 014 4c0 2.8-1.8 5-4 5s-4-2.2-4-5a4 4 0 014-4z', t: 'شوفيها عليكِ', s: 'جرّبي الطرحة قبل الشراء' }
-  ];
+  /* ============================================================
+     🎨 v693 — تصميم جديد للشاشة **بالعرض** (طلب المالك 20-09):
+        لقطات حقيقية من التطبيق في النص الشمال · الـQR في النص اليمين · ترجع لوحدها لصفحة التقييم.
+     القديم كان عمود رأسي على خلفية سودا — على تابلت بالعرض الـQR كان صغير في النص والباقي مقصوص،
+     ولونه مالوش علاقة بالبراند. دلوقتي نفس ألوان التطبيق والستاند المطبوع اللي واقف جنب التابلت.
 
-  /* 🎨 إعادة تصميم كاملة.
-     المشاكل في النسخة الأولى: إيموجي بحجم مختلف على كل جهاز، صفوف
-     رمادية متكررة شكلها قائمة إعدادات مش صفحة براند، ومفيش حركة
-     غير ظهور باهت. دلوقتي: أيقونات SVG مرسومة بنفس السُمك، الـQR
-     هو البطل في النص بهالة حواليه، والصفوف بتترسم واحد ورا التاني
-     بحركة جانبية ناعمة.
-     ⚠️ كل المقاسات بالـvh عشان التابلت الرأسي — مفيش قيمة ثابتة
-        بالبكسل تكسر الشكل على مقاس تاني. */
+     🖼️ اللقطات ملفات عادية في `feedback/invite/` — تبديل لقطة = استبدال الملف بنفس الاسم، من غير كود.
+        لو لقطة متحمّلتش (نت الفرع قاطع وأول مرة) بتتخفى هي بس، والـQR شغال — هو مدفون في الملف.
+     🎬 حركة واحدة متألّفة عند الفتح، وبعدها اللقطات بتتبدّل بـ«سحبة قماش» مايلة (clip-path).
+        كل الحركة transform/opacity/clip-path بس — التابلت الرخيص ميهنّجش.
+     ============================================================ */
+  var SHOTS = [
+    { src: 'invite/home.jpg',  t: 'نقاط مع كل قطعة',        s: 'بتتحوّل خصم على اللي بعدها' },
+    { src: 'invite/shop.jpg',  t: 'التشكيلات الجديدة أول بأول', s: 'واطلبي وإنتِ في البيت' },
+    { src: 'invite/tryon.jpg', t: 'شوفيها عليكِ',            s: 'جرّبي الطرحة قبل ما تشتري' }
+  ];
+  var STEP_MS = 3400;                       // مدة كل لقطة
+  var TOTAL_MS = STEP_MS * SHOTS.length + 1800;   // ≈ 12 ثانية وترجع لصفحة التقييم لوحدها
+
   var CSS = '\
-#aiWrap{position:fixed;inset:0;z-index:8800;display:none;background:#070809;\
-  color:#fff;font-family:\'Cairo\',sans-serif;direction:rtl;overflow:hidden}\
-#aiWrap.on{display:flex;flex-direction:column;align-items:center;justify-content:center;\
-  padding:4vh 7vw;gap:0}\
-#aiWrap::before{content:"";position:absolute;inset:0;pointer-events:none;\
-  background:radial-gradient(60vh 44vh at 50% 30%,rgba(168,130,255,.20),transparent 68%),\
-             radial-gradient(50vh 40vh at 50% 96%,rgba(60,90,220,.13),transparent 70%)}\
-#aiWrap::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;\
-  background:repeating-linear-gradient(0deg,rgba(255,255,255,.028) 0 1px,transparent 1px 3px)}\
-.aiIn{position:relative;z-index:1;width:100%;display:flex;flex-direction:column;\
-  align-items:center;gap:1.1vh}\
-.aiEyebrow{font-family:\'Space Grotesk\',sans-serif;font-size:1.75vh;letter-spacing:.44em;\
-  color:#8f86b8;font-weight:700;opacity:0;animation:aiFade .6s .05s both}\
-.aiTitle{font-size:4.5vh;font-weight:900;line-height:1.2;text-align:center;\
-  letter-spacing:-.02em;opacity:0;animation:aiRise .7s .12s both}\
-.aiTitle em{font-style:normal;background:linear-gradient(105deg,#e6d9ff,#a882ff 55%,#7c5cf0);\
-  -webkit-background-clip:text;background-clip:text;color:transparent}\
-.aiSub{font-size:2.05vh;color:#8a8fa3;font-weight:600;text-align:center;\
-  opacity:0;animation:aiFade .6s .26s both}\
-/* الـQR: إطار متدرّج رفيع + هالة بتتنفّس */\
-.aiQrHold{position:relative;margin:1.6vh 0 .7vh;opacity:0;animation:aiPop .75s .34s both}\
-.aiQrHold::before{content:"";position:absolute;inset:-1.6vh;border-radius:4.4vh;\
-  background:conic-gradient(from 0deg,#a882ff,#5cc6ff,#a882ff);filter:blur(1.6vh);\
-  opacity:.34;animation:aiSpin 9s linear infinite}\
-.aiQr{position:relative;background:#fff;border-radius:3vh;padding:2.1vh;\
-  width:min(31vh,50vw);box-shadow:0 2.4vh 6vh rgba(0,0,0,.72)}\
-.aiQr svg{display:block;width:100%;height:auto}\
-.aiScan{position:absolute;left:2.1vh;right:2.1vh;height:26%;border-radius:1vh;\
-  background:linear-gradient(180deg,transparent,rgba(124,92,240,.20),transparent);\
-  animation:aiScan 2.6s ease-in-out infinite}\
-/* المميزات */\
-.aiList{width:min(66vh,92vw);display:flex;flex-direction:column;gap:.85vh;margin-top:1.3vh}\
-.aiRow{display:flex;align-items:center;gap:3.4vw;padding:1.35vh 3.4vw;border-radius:1.9vh;\
-  background:linear-gradient(135deg,rgba(255,255,255,.055),rgba(255,255,255,.018));\
-  border:1px solid rgba(255,255,255,.07);opacity:0;animation:aiSlide .6s both cubic-bezier(.2,.85,.25,1)}\
-.aiIco{flex:none;width:4.4vh;height:4.4vh;border-radius:1.3vh;display:grid;place-items:center;\
-  background:linear-gradient(140deg,rgba(168,130,255,.24),rgba(92,198,255,.11));\
-  border:1px solid rgba(168,130,255,.24)}\
-.aiIco svg{width:2.5vh;height:2.5vh;fill:none;stroke:#cbb6ff;stroke-width:1.7;\
-  stroke-linecap:round;stroke-linejoin:round}\
-.aiRow b{display:block;font-size:2.15vh;font-weight:800;letter-spacing:-.01em}\
-.aiRow small{display:block;font-size:1.72vh;color:#868ca1;margin-top:.15vh;font-weight:600}\
-.aiClose{margin-top:2vh;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);\
-  color:#b9bece;border-radius:99px;padding:1.45vh 9vw;font-family:inherit;font-size:2vh;\
-  font-weight:800;cursor:pointer;opacity:0;animation:aiFade .6s .95s both;\
-  transition:background .18s,transform .18s}\
-.aiClose:active{transform:scale(.97);background:rgba(255,255,255,.09)}\
-@keyframes aiFade{from{opacity:0}to{opacity:1}}\
-@keyframes aiRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}\
-@keyframes aiPop{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:none}}\
-@keyframes aiSlide{from{opacity:0;transform:translateX(22px)}to{opacity:1;transform:none}}\
-@keyframes aiSpin{to{transform:rotate(1turn)}}\
-@keyframes aiScan{0%{top:2.1vh;opacity:0}12%{opacity:1}88%{opacity:1}100%{top:70%;opacity:0}}\
+#aiWrap{position:fixed;inset:0;z-index:8800;display:none;overflow:hidden;direction:rtl;\
+  font-family:\'Cairo\',sans-serif;color:#3B1E2C;\
+  background:linear-gradient(115deg,#FFF6FA 0%,#FBE6EF 52%,#F6D6E4 100%)}\
+#aiWrap.on{display:grid;grid-template-columns:1fr 1fr;align-items:center}\
+/* القماشة: نفس تدرّج كارت النقط في التطبيق، مكبّر ومايل ورا الموبايل — دي الحاجة الوحيدة الجريئة في الشاشة */\
+.aiCloth{position:absolute;left:-9vw;top:-22vh;width:58vw;height:150vh;border-radius:9vh;\
+  background:linear-gradient(160deg,#E4458E 0%,#EB6A7E 46%,#E2A646 100%);\
+  transform:rotate(9deg) translateX(-70vw);opacity:.96}\
+#aiWrap.on .aiCloth{animation:aiCloth 1.1s cubic-bezier(.16,.84,.24,1) forwards}\
+.aiCloth::after{content:"";position:absolute;inset:0;border-radius:inherit;\
+  background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.22) 48%,transparent 62%);\
+  transform:translateX(-60%)}\
+#aiWrap.on .aiCloth::after{animation:aiSheen 5.5s ease-in-out 1.2s infinite}\
+\
+/* ---- النص الشمال: الموبايل ---- */\
+.aiStage{grid-column:2;grid-row:1;position:relative;z-index:1;height:100vh;display:flex;flex-direction:column;\
+  align-items:center;justify-content:center;gap:2.6vh}\
+.aiPhone{position:relative;height:74vh;aspect-ratio:1080/2190;border-radius:4.6vh;background:#1d1216;\
+  padding:1vh;box-shadow:0 5vh 9vh -2vh rgba(90,20,55,.55),0 0 0 .25vh rgba(255,255,255,.35) inset;\
+  transform:translateY(60vh) rotate(-9deg);opacity:0}\
+#aiWrap.on .aiPhone{animation:aiPhoneIn 1.05s cubic-bezier(.16,.84,.24,1) .18s forwards,aiFloat 6s ease-in-out 1.3s infinite}\
+.aiScreen{position:relative;width:100%;height:100%;border-radius:3.7vh;overflow:hidden;background:#FDEFF5}\
+.aiShot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top;\
+  clip-path:polygon(118% 0,118% 0,100% 100%,100% 100%);z-index:1}\
+.aiShot.was{clip-path:none;z-index:1}\
+.aiShot.is{z-index:2;animation:aiWipe .95s cubic-bezier(.65,0,.2,1) forwards}\
+.aiShot.first{clip-path:none;animation:none}\
+.aiEdge{position:absolute;top:-10%;bottom:-10%;width:16%;right:-30%;z-index:3;pointer-events:none;\
+  background:linear-gradient(90deg,transparent,rgba(255,236,200,.85),transparent);transform:skewX(-9deg);opacity:0}\
+.aiEdge.go{animation:aiEdge .95s cubic-bezier(.65,0,.2,1) forwards}\
+.aiCap{height:9.5vh;text-align:center;color:#fff;text-shadow:0 .3vh 1.6vh rgba(110,20,60,.45)}\
+.aiCap b{display:block;font-size:3.5vh;font-weight:900;line-height:1.35}\
+.aiCap small{display:block;font-size:2.25vh;font-weight:600;opacity:.92}\
+.aiCap.swap{animation:aiCap .7s ease both}\
+\
+/* ---- النص اليمين: الكود ---- */\
+.aiSide{grid-column:1;grid-row:1;position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;\
+  justify-content:center;gap:2.2vh;padding:0 4vw;text-align:center}\
+.aiSide>*{opacity:0;transform:translateY(2.4vh)}\
+#aiWrap.on .aiSide>*{animation:aiUp .7s cubic-bezier(.2,.8,.2,1) forwards}\
+#aiWrap.on .aiSide>*:nth-child(1){animation-delay:.35s}\
+#aiWrap.on .aiSide>*:nth-child(2){animation-delay:.47s}\
+#aiWrap.on .aiSide>*:nth-child(3){animation-delay:.6s}\
+#aiWrap.on .aiSide>*:nth-child(4){animation-delay:.78s}\
+#aiWrap.on .aiSide>*:nth-child(5){animation-delay:.9s}\
+.aiBrand{width:9.5vh;height:9.5vh;border-radius:2.4vh;box-shadow:0 1.4vh 3vh -1vh rgba(190,50,110,.55)}\
+.aiTitle{font-size:6vh;font-weight:900;line-height:1.25;color:#3B1E2C;letter-spacing:-.01em}\
+.aiQrHold{position:relative;padding:1.3vh;border-radius:4.4vh;\
+  background:linear-gradient(140deg,#E4458E,#E2A646)}\
+.aiQr{position:relative;width:40vh;height:40vh;background:#fff;border-radius:3.3vh;padding:2.4vh;overflow:hidden}\
+.aiQr svg{display:block}\
+.aiQr::after{content:"";position:absolute;left:0;right:0;top:0;height:22%;pointer-events:none;\
+  background:linear-gradient(180deg,transparent,rgba(228,69,142,.16));border-bottom:.35vh solid rgba(228,69,142,.55);\
+  transform:translateY(-110%)}\
+#aiWrap.on .aiQr::after{animation:aiScan 2.6s cubic-bezier(.5,0,.5,1) 1.3s infinite}\
+.aiHint{font-size:2.9vh;font-weight:700;color:#7A4860}\
+.aiBar{width:40vh;height:.7vh;border-radius:1vh;background:rgba(59,30,44,.12);overflow:hidden}\
+.aiBar i{display:block;height:100%;width:100%;border-radius:inherit;transform-origin:right center;\
+  background:linear-gradient(90deg,#E2A646,#E4458E)}\
+#aiWrap.on .aiBar i{animation:aiBar var(--ai-total,12s) linear 1s forwards}\
+#aiClose{position:absolute;inset:0;z-index:4;width:100%;height:100%;border:0;padding:0;margin:0;background:transparent;\
+  cursor:pointer;-webkit-tap-highlight-color:transparent}\
+#aiWrap.out{animation:aiOut .45s ease forwards}\
+\
+@keyframes aiCloth{to{transform:rotate(9deg) translateX(0)}}\
+@keyframes aiSheen{0%,55%{transform:translateX(-60%)}100%{transform:translateX(60%)}}\
+@keyframes aiPhoneIn{to{transform:translateY(0) rotate(-3deg);opacity:1}}\
+@keyframes aiFloat{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-1.4vh) rotate(-2.2deg)}}\
+@keyframes aiWipe{from{clip-path:polygon(118% 0,118% 0,100% 100%,100% 100%)}to{clip-path:polygon(-18% 0,118% 0,100% 100%,-36% 100%)}}\
+@keyframes aiEdge{0%{transform:translateX(0) skewX(-9deg);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateX(-925%) skewX(-9deg);opacity:0}}\
+@keyframes aiCap{from{opacity:0;transform:translateY(1.4vh)}to{opacity:1;transform:none}}\
+@keyframes aiUp{to{opacity:1;transform:none}}\
+@keyframes aiScan{0%{transform:translateY(-110%)}100%{transform:translateY(520%)}}\
+@keyframes aiBar{to{transform:scaleX(0)}}\
+@keyframes aiOut{to{opacity:0}}\
+\
+/* التابلت اتلفّ بالطول: الكود فوق (هو المهم) والموبايل تحته أصغر */\
+@media (orientation:portrait){\
+  #aiWrap.on{grid-template-columns:1fr;grid-template-rows:auto 1fr;align-items:start}\
+  .aiSide{grid-column:1;grid-row:1;padding:3vh 6vw 0;gap:1.3vh}\
+  .aiStage{grid-column:1;grid-row:2;height:auto;justify-content:flex-start;padding-top:3.5vh;gap:1.2vh}\
+  .aiPhone{height:31vh;padding:.6vh;border-radius:2.6vh}.aiScreen{border-radius:2.1vh}\
+  .aiBrand{width:6.5vh;height:6.5vh;border-radius:1.7vh}.aiTitle{font-size:3.7vh}\
+  .aiQr{width:25vh;height:25vh;padding:1.6vh;border-radius:2.4vh}.aiQrHold{padding:.9vh;border-radius:3.2vh}\
+  .aiHint{font-size:2.1vh}.aiBar{width:25vh}.aiCap{height:6vh}.aiCap b{font-size:2.5vh}.aiCap small{font-size:1.7vh}\
+  .aiCloth{left:-20vw;top:57vh;width:140vw;height:70vh;transform:rotate(-5deg) translateX(-140vw)}\
+  @keyframes aiCloth{to{transform:rotate(-5deg) translateX(0)}}\
+}\
+@media (prefers-reduced-motion:reduce){\
+  #aiWrap.on .aiCloth,#aiWrap.on .aiPhone,#aiWrap.on .aiSide>*{animation-duration:.01s;animation-delay:0s}\
+  #aiWrap.on .aiCloth::after,#aiWrap.on .aiQr::after{animation:none}\
+  .aiShot.is{animation:none;clip-path:none}.aiEdge.go{animation:none}\
+}\
 ';
 
-  var rows = FEATURES.map(function (f, n) {
-    return '<div class="aiRow" style="animation-delay:' + (0.46 + n * 0.1) + 's">'
-      + '<span class="aiIco"><svg viewBox="0 0 24 24"><path d="' + f.i + '"/></svg></span>'
-      + '<span><b>' + f.t + '</b><small>' + f.s + '</small></span></div>';
+  var shotsHtml = SHOTS.map(function (sh, n) {
+    return '<img class="aiShot" data-n="' + n + '" src="' + sh.src + '" alt="" decoding="async" draggable="false">';
   }).join('');
 
-  var HTML = '<div id="aiWrap"><div class="aiIn">'
-    + '<div class="aiEyebrow">ECHARPE</div>'
-    + '<div class="aiTitle">تجربتك معانا<br><em>في تطبيق واحد</em></div>'
-    + '<div class="aiSub">امسحي الكود بكاميرا موبايلك</div>'
-    + '<div class="aiQrHold"><div class="aiQr">' + QR + '<div class="aiScan"></div></div></div>'
-    + '<div class="aiList">' + rows + '</div>'
-    + '<button class="aiClose" id="aiClose">تمام</button>'
-    + '</div></div>';
-
+  var HTML = '<div id="aiWrap" role="dialog" aria-label="حمّلي تطبيق إيشارب">'
+    + '<div class="aiCloth"></div>'
+    + '<div class="aiSide">'
+    +   '<img class="aiBrand" src="invite/app-icon.png" alt="echarpe">'
+    +   '<div class="aiTitle">حمّلي تطبيق إيشارب</div>'
+    +   '<div class="aiQrHold"><div class="aiQr">' + QR + '</div></div>'
+    +   '<div class="aiHint">وجّهي كاميرا موبايلك على الكود</div>'
+    +   '<div class="aiBar"><i></i></div>'
+    + '</div>'
+    + '<div class="aiStage">'
+    +   '<div class="aiPhone"><div class="aiScreen">' + shotsHtml + '<div class="aiEdge"></div></div></div>'
+    +   '<div class="aiCap"><b></b><small></small></div>'
+    + '</div>'
+    + '<button id="aiClose" aria-label="رجوع لصفحة التقييم"></button>'
+    + '</div>';
 
   document.head.insertAdjacentHTML('beforeend', '<style>' + CSS + '</style>');
   document.body.insertAdjacentHTML('beforeend', HTML);
 
   var wrap = document.getElementById('aiWrap');
-  var timer = null;
+  var shots = [].slice.call(wrap.querySelectorAll('.aiShot'));
+  var edge = wrap.querySelector('.aiEdge');
+  var cap = wrap.querySelector('.aiCap');
+  var timer = null, stepTimer = null, cur = 0;
+  wrap.style.setProperty('--ai-total', (TOTAL_MS - 1000) + 'ms');
 
-  function hide() { wrap.classList.remove('on'); clearTimeout(timer); }
+  // لقطة متحمّلتش = تتشال من الدورة. الشاشة متقعش والـQR شغال.
+  shots.forEach(function (im) {
+    im.addEventListener('error', function () {
+      im.dataset.bad = '1'; im.style.display = 'none';
+    });
+  });
+  function live() { return shots.filter(function (im) { return im.dataset.bad !== '1'; }); }
+
+  function setCap(n) {
+    var sh = SHOTS[n] || SHOTS[0];
+    cap.querySelector('b').textContent = sh.t;
+    cap.querySelector('small').textContent = sh.s;
+    cap.classList.remove('swap'); void cap.offsetWidth; cap.classList.add('swap');
+  }
+  function firstShot() {
+    var ok = live();
+    shots.forEach(function (im) { im.classList.remove('is', 'was', 'first'); });
+    if (!ok.length) { wrap.querySelector('.aiPhone').style.visibility = 'hidden'; cap.style.visibility = 'hidden'; return; }
+    cur = 0; ok[0].classList.add('first', 'was'); setCap(+ok[0].dataset.n);
+  }
+  function nextShot() {
+    var ok = live(); if (ok.length < 2) return;
+    var prev = ok[cur % ok.length]; cur = (cur + 1) % ok.length; var nx = ok[cur];
+    shots.forEach(function (im) { if (im !== prev && im !== nx) im.classList.remove('is', 'was', 'first'); });
+    prev.classList.remove('is', 'first'); prev.classList.add('was');
+    nx.classList.remove('was', 'first'); void nx.offsetWidth; nx.classList.add('is');
+    edge.classList.remove('go'); void edge.offsetWidth; edge.classList.add('go');
+    setCap(+nx.dataset.n);
+  }
+
+  function hide() {
+    clearTimeout(timer); clearInterval(stepTimer);
+    if (!wrap.classList.contains('on')) return;
+    wrap.classList.add('out');
+    setTimeout(function () { wrap.classList.remove('on', 'out'); }, 430);   // ← وتحتها صفحة التقييم الرئيسية زي ما هي
+  }
   async function show(force) {
     /* ⚠️ مبنظهرش فوق إنستاباي. العميلة بتحوّل فلوس — دي مش اللحظة
        اللي نعرض فيها إعلان، والشاشتين فوق بعض كارثة. */
     var ip = document.getElementById('ipWrap');
     if (ip && ip.classList.contains('on')) return;
     if (!force && await hasApp(_phone)) return;   // عندها التطبيق خلاص
+    wrap.classList.remove('out');
+    wrap.classList.remove('on'); void wrap.offsetWidth;    // إعادة تشغيل حركة الدخول من الأول كل مرة
+    firstShot();
     wrap.classList.add('on');
-    clearTimeout(timer);
-    timer = setTimeout(hide, 22000);
+    clearTimeout(timer); clearInterval(stepTimer);
+    stepTimer = setInterval(nextShot, STEP_MS);
+    timer = setTimeout(hide, TOTAL_MS);
   }
+  // لمسة في أي حتة = رجوع فوري لصفحة التقييم (مفيش زرار «تمام» تدوّر عليه)
   document.getElementById('aiClose').onclick = hide;
-  wrap.onclick = function (e) { if (e.target === wrap) hide(); };
 
   /* 👀 بنستنى شاشة الترحيب تخلص.
      الكشك بيعرض capPaneGreet لمدة ٤ ثواني بعد ما العميلة تكتب رقمها.
