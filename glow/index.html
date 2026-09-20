@@ -2042,8 +2042,10 @@ function renderAccount(){
          ⚠️ الرصيد **مشترك بين البراندين** (حقل `credit` واحد على مستند
             العميلة) — كارت اتشُري من echarpe بيتصرف في Glow والعكس. */
       ((Number(currentCustomer.credit)||0) > 0
-        ? '<div class="acct-row"><span class="k">💰 رصيدي</span><span class="v" style="font-weight:900;">'
-          + fmt(currentCustomer.credit) + ' ج.م</span></div>' : '')+
+        /* 👆 الصف نفسه بيفتح الكشف — الزرار المنفصل تحت اتشال (كان تكرار:
+           العميلة بتدوس على الرقم بالفطرة ومبيحصلش حاجة). */
+        ? '<div class="acct-row" onclick="openCreditStatement()" style="cursor:pointer;"><span class="k">💰 رصيدي</span><span class="v" style="font-weight:900;">'
+          + fmt(currentCustomer.credit) + ' ج.م <span style="opacity:.55; font-weight:700;">‹</span></span></div>' : '')+
     '</div>'+
     /* 🌐 اللغة — صف مستقل فوق الأزرار عشان يبان من غير سكرول */
     '<div class="lang-row"><span class="lr-k">لغة التطبيق</span>'
@@ -2053,7 +2055,9 @@ function renderAccount(){
     '<button class="btn-outline" onclick="openMyRequests()">🔖 طلباتي'
       + (_myRequests.length ? ' (' + _myRequests.length + ')' : '') + '</button>'+
     '<button class="btn-outline" onclick="openClaimGift()">🎁 عندي كود كارت هدية</button>'+
-    ((Number(currentCustomer.credit)||0) > 0 || _creditRows.length
+    /* الرصيد صفر = صف «رصيدي» مش ظاهر، فالزرار ده الطريق الوحيد للكشف
+       (عميلة صرفت رصيدها كله وعايزة تراجع). غير كده الصف بيكفي. */
+    (!((Number(currentCustomer.credit)||0) > 0) && _creditRows.length
       ? '<button class="btn-outline" onclick="openCreditStatement()">📒 كشف حساب الرصيد</button>' : '')+
     (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
     '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
@@ -2860,13 +2864,27 @@ window.showSheet = showSheet; window.closeSheet = closeSheet;
    ⚠️ مش رفاهية: لما العميلة تلاقي رقم مش فاهماه، هتيجي تخانق
       الكاشير. الكشف بيرد عنها. */
 function watchCredit(phone){
+  /* 🔴 الاستعلام `where(phone) + orderBy(at)` محتاج index مركّب — وماكانش
+     معمول. المستمع كان بيفشل **بصمت** (console.warn) فالكشف يطلع «لسه
+     مفيش حركات» والرصيد ظاهر والحركات موجودة. دلوقتي لو اترفض بنرجع
+     لاستعلام بالرقم بس (index تلقائي) ونرتّب هنا، والكشف المفتوح بيتحدّث. */
+  function apply(docs){
+    _creditRows = docs.map(function(d){ return d.data(); })
+      .sort(function(a, b){ return (b.at || 0) - (a.at || 0); }).slice(0, 50);
+    try{ if(typeof renderAccount === 'function' && $('tab-account') && $('tab-account').style.display !== 'none') renderAccount(); }catch(e){}
+  }
+  var col = db.collection('credit_ledger'), inner = null;
   try{
-    return db.collection('credit_ledger')
-      .where('phone','==', String(phone))
-      .orderBy('at','desc').limit(50)
-      .onSnapshot(function(snap){
-        _creditRows = snap.docs.map(function(d){ return d.data(); });
-      }, function(e){ console.warn('credit ledger', e && e.code); });
+    var outer = col.where('phone','==', String(phone)).orderBy('at','desc').limit(50)
+      .onSnapshot(function(snap){ apply(snap.docs); }, function(e){
+        console.warn('credit ledger (ordered)', e && e.code);
+        if(inner) return;
+        try{
+          inner = col.where('phone','==', String(phone))
+            .onSnapshot(function(snap){ apply(snap.docs); }, function(e2){ console.warn('credit ledger', e2 && e2.code); });
+        }catch(x){ console.warn('watchCredit fallback', x); }
+      });
+    return function(){ try{ outer(); }catch(e){} try{ if(inner) inner(); }catch(e){} };
   }catch(e){ console.warn('watchCredit', e); return null; }
 }
 window.watchCredit = watchCredit;
