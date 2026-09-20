@@ -30,8 +30,9 @@ const REWARD = { id: '__reward__', name: '🎁', price: -30, qty: 1, isRewardDis
 (async () => {
   console.log('\n🧮 الفصل (tender-core)');
   t('سطر الرصيد = credit (رغم إن عليه isRedemption كمان)', () => eq(T.tenderKeyOf(CREDIT), 'credit'));
-  t('سطر النقط = points', () => eq(T.tenderKeyOf(POINTS), 'points'));
-  t('سطر المكافأة = reward', () => eq(T.tenderKeyOf(REWARD), 'reward'));
+  t('⭐⭐ النقط **خصم** مش طريقة دفع (مفيش مقابلها فلوس دخلت)', () => eq(T.tenderKeyOf(POINTS), ''));
+  t('⭐⭐ المكافأة **خصم** مش طريقة دفع', () => eq(T.tenderKeyOf(REWARD), ''));
+  t('الرصيد بس في TENDER_KEYS', () => eq(T.TENDER_KEYS.join(), 'credit'));
   t('سطر بضاعة عادي مش طريقة دفع', () => eq(T.tenderKeyOf(LINE), ''));
   t('⭐ سطر مرتجع بضاعة (سالب) مش طريقة دفع', () => eq(T.tenderKeyOf({ id: 'A1', price: -350, qty: 1, isReturn: true }), ''));
   t('خصم يدوي (سعر موجب أقل) مش طريقة دفع', () => eq(T.tenderKeyOf({ id: 'A1', price: 300, qty: 1 }), ''));
@@ -42,7 +43,7 @@ const REWARD = { id: '__reward__', name: '🎁', price: -30, qty: 1, isRewardDis
   });
   t('التلاتة مع بعض', () => {
     const s = T.tenderSplit([LINE, { ...CREDIT, price: -100 }, POINTS, REWARD]);
-    eq(s.payments.credit, 100); eq(s.payments.points, 50); eq(s.payments.reward, 30); eq(s.sum, 180); eq(s.items.length, 1);
+    eq(s.payments.credit, 100); ok(!('points' in s.payments) && !('reward' in s.payments), 'النقط/المكافأة اتحوّلوا دفع'); eq(s.sum, 100); eq(s.items.length, 3, 'سطور الخصم لازم تفضل في السلة');
   });
   t('سلة من غير سطور دفع = sum صفر ونفس السطور', () => { const s = T.tenderSplit([LINE]); eq(s.sum, 0); eq(s.items.length, 1); });
   t('قيم فاضية مبتكسرش', () => { eq(T.tenderSplit(null).sum, 0); eq(T.tenderSplit([null, {}]).sum, 0); });
@@ -101,12 +102,19 @@ const REWARD = { id: '__reward__', name: '🎁', price: -30, qty: 1, isRewardDis
     eq(s.total, 350); eq(s.payments.credit, 100); eq(s.payments.cash, 250); eq(s.changeGiven, 50);
     eq(s.payments.cash + s.payments.credit, s.total, 'مجموع المدفوعات = الإجمالي');
   });
-  await t('نقط + مكافأة + فيزا', async () => {
+  await t('⭐⭐ نقط + مكافأة + فيزا → المبيعات 270 مش 350 (الخصم مش مبيعات)', async () => {
     const c = makeCtx(); c.__a = LINE; c.__b = POINTS; c.__c = REWARD;
     run(c, 'cart = [__a, __b, __c]; selectedPayMethods.add("visa"); paymentAmounts.visa = 270;');
     await run(c, '_doConfirmPayment()');
     const s = c.__saved[0];
-    eq(s.total, 350); eq(s.payments.points, 50); eq(s.payments.reward, 30); eq(s.payments.visa, 270);
+    eq(s.total, 270); eq(s.items.length, 3); eq(Object.keys(s.payments).join(), 'visa'); eq(s.payments.visa, 270);
+  });
+  await t('⭐ رصيد + نقط مع بعض: الرصيد دفع والنقط خصم', async () => {
+    const c = makeCtx(); c.__a = LINE; c.__b = { ...CREDIT, price: -100 }; c.__c = POINTS;
+    run(c, 'cart = [__a, __b, __c]; selectedPayMethods.add("cash"); paymentAmounts.cash = 200;');
+    await run(c, '_doConfirmPayment()');
+    const s = c.__saved[0];
+    eq(s.total, 300, '350 − 50 نقط'); eq(s.payments.credit, 100); eq(s.payments.cash, 200); eq(s.items.length, 2);
   });
   await t('فاتورة عادية ماتتلمسش', async () => {
     const c = makeCtx(); c.__a = LINE;
@@ -162,6 +170,15 @@ const REWARD = { id: '__reward__', name: '🎁', price: -30, qty: 1, isRewardDis
   const OLD_SALE = { total: 0, payments: {}, items: [{ name: 'طرحة', price: 350, qty: 1 }, { name: '💳', price: -350, qty: 1, isRedemption: true }] };
   t('⭐⭐ صافي المبيعات = صفر', () => eq(repAggregate([REFUND, NEW_SALE]).netTotal, 0));
   t('🔴 سلبي: بالشكل القديم كان −350', () => eq(repAggregate([REFUND, OLD_SALE]).netTotal, -350));
+  t('⭐⭐ فاتورة انتقالية (v696–v704) فيها payments.points/reward: المبيعات بتنزل بقيمتهم', () => {
+    const r = repAggregate([{ total: 350, payments: { visa: 270, points: 50, reward: 30 }, items: [] }]);
+    eq(r.netTotal, 270); eq(r.loyaltyDiscount, 80); ok(!('points' in r.byMethod) && !('reward' in r.byMethod), 'لسه ظاهرين كطريقة دفع'); eq(r.byMethod.visa, 270);
+  });
+  t('⭐ صورة المالك: 53525 فيهم 120 مكافأة + 60 نقط → المبيعات 53345', () => {
+    const r = repAggregate([{ total: 53525, payments: { visa: 37500, cash: 14550, instapay: 1295, reward: 120, points: 60 }, items: [] }]);
+    eq(r.netTotal, 53345); eq(Object.keys(r.byMethod).sort().join(), 'cash,instapay,visa');
+  });
+  t('الرصيد لسه بيتحسب مبيعات وطريقة دفع', () => { const r = repAggregate([NEW_SALE]); eq(r.netTotal, 350); eq(r.byMethod.credit, 350); });
   t('⭐ التقفيل: فرق صفر (رصيد + كاش)', () => {
     const a = dcAggregate([{ total: 1000, payments: { cash: 1000 } }, REFUND, NEW_SALE]);
     const accounted = 1000 + a.creditSales + a.pointsSales + a.rewardSales;

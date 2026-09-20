@@ -360,12 +360,18 @@ function reportRangeLabel(){
 // وفاتورة العكس السالبة بتتحسب → المبلغ بيتخصم مرتين والتقرير بينقص بقيمة كل عكس.
 function repAggregate(sales){
   const clean = (sales||[]).filter(s=> !s.reversed && !s.isReversal);
-  let salesTotal=0, returnsTotal=0, itemsSold=0;
+  let salesTotal=0, returnsTotal=0, itemsSold=0, loyaltyDiscount=0;
   const byMethod = {}, methodCount = {}, itemAgg = {};
   clean.forEach(s=>{
-    const tot = s.total||0;
+    /* 🎁 فواتير v696→v704 (يوم-يومين) اتحفظت فيها النقط والمكافأة كـ`payments.points/
+       reward` والفاتورة بقيمتها الكاملة. دول **خصومات مش مبيعات** — بنطرحهم هنا
+       ومبنعرضهمش كطريقة دفع، فتقرير الأيام دي يطلع زي باقي الأيام. */
+    const _p = s.payments||{};
+    const _loy = (Number(_p.points)||0) + (Number(_p.reward)||0);
+    loyaltyDiscount += _loy;
+    const tot = (s.total||0) - _loy;
     if(tot >= 0) salesTotal += tot; else returnsTotal += tot;
-    Object.entries(s.payments||{}).forEach(([m,amt])=>{ byMethod[m]=(byMethod[m]||0)+amt; methodCount[m]=(methodCount[m]||0)+1; });
+    Object.entries(_p).forEach(([m,amt])=>{ if(m==='points'||m==='reward') return; byMethod[m]=(byMethod[m]||0)+amt; methodCount[m]=(methodCount[m]||0)+1; });
     (s.items||[]).forEach(it=>{
       const qty = it.qty||0, line = (it.price||0)*qty;
       if(!it.isReturn && (it.price||0) >= 0) itemsSold += qty;
@@ -376,7 +382,7 @@ function repAggregate(sales){
   });
   const netTotal = salesTotal + returnsTotal;
   const invoiceCount = clean.filter(s=> (s.total||0) >= 0).length;
-  return { sales: clean, salesTotal, returnsTotal, netTotal, itemsSold, byMethod, methodCount, itemAgg, invoiceCount };
+  return { sales: clean, salesTotal, returnsTotal, netTotal, itemsSold, byMethod, methodCount, itemAgg, invoiceCount, loyaltyDiscount };
 }
 window.repAggregate = repAggregate;
 
@@ -499,7 +505,7 @@ async function renderReportsScreen(){
       ${entries.length ? entries.map(m=>`<tr><td>${methodLabels[m]||m}</td><td class="num">${methodCount[m]||0}</td><td class="num">${byMethod[m].toFixed(2)}</td><td class="num">${grand? Math.round(byMethod[m]/grand*100):0}%</td></tr>`).join('')
                        : '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:16px;">لا يوجد</td></tr>'}
       </tbody><tfoot><tr class="grand"><td>الإجمالي</td><td class="num">${invoiceCount}</td><td class="num">${grand.toFixed(2)} ج.م</td><td class="num">100%</td></tr></tfoot></table>
-    </div></div>
+    </div>${(typeof loyaltyDiscountCardHTML === 'function') ? loyaltyDiscountCardHTML(sales) : ''}</div>
     <div style="text-align:center; margin-top:6px;"><button class="rep-print-btn" onclick="printReportArea()">🖨️ طباعة</button></div>`;
   }
 
