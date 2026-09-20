@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -47,7 +48,7 @@ assert(ctx.normalizeScan('FTGL02672-XHJ1') === 'FTGL02672-XHJ1', 'English-layout
 // Normal Arabic product-name typing must not be rewritten as a barcode.
 assert(ctx.normalizeScan('طرحة سوداء') === 'طرحة سوداء', 'normal Arabic text stays Arabic');
 
-assert(sw.includes('store-apps-shell-v385'), 'POS service worker bumped to v385 so clients receive the fix');
+assert(swAtLeast(sw, 385), 'POS service worker bumped to v385 so clients receive the fix');
 
 if(process.exitCode) throw new Error('test-scanner-arabic-layout-v385: فيه فحص فشل فوق');
 console.log('v385 Arabic keyboard scanner regression checks passed');

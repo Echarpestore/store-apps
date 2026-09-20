@@ -145,6 +145,6 @@ const it = (price, qty)=> ({ price, qty: qty == null ? 1 : qty });
       '⭐ ومكتوب إن الأرقام تقديرية — مش توقّع دقيق');
   }
   const sw = fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 286, 'pos/sw.js: v286+ (لقينا ' + (m ? m[1] : '—') + ')');
 })();

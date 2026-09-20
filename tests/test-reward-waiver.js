@@ -46,6 +46,7 @@ const WANTED = [
   'function rewardEmploymentStartMs(', 'function rewardFullPeriodEligible(',
   'function rewardGateReport(', 'function qualifiesForReward(', 'function computeWeekComposite(',
   'function countElapsedWorkDaysInRange(', 'function _fbOwner(', 'function _fbIsFor(', 'function computeAvgRatingInRange(',
+  'function rewardCreditHours(',   // v711: اعتماد جديد للمحرك — الـharness كان ناقصه
 ];
 const parts = [];
 let missing = null;
@@ -271,6 +272,6 @@ const fullSubs = ALL_DAYS.map(d=> sub(d, true));
     assert(new RegExp('window\\.' + n + ' *= *' + n).test(bare), '§18 ' + n + ' على window');
   });
   const sw = fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 105, 'sales/sw.js: v105+ (لقينا ' + (m ? m[1] : '—') + ')');
 })();

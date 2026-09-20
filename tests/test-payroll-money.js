@@ -158,8 +158,13 @@ const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
 // ============================================================
 {
   // التأخير → رصيد وقت مش غرامة ثابتة
-  assert(/type: 'late', hours: _lateHours/.test(appSrc),
+  // v711: التوصيل اتطوّر في v554 (outbox دائم + معرّف ثابت للرصيد) — الفحص على الشكل الحالي، ونفس المعنى:
+  assert(/lateHoursFrom\(lateMinutes, window\.timeCfg \|\| timeCfgDefaults\)/.test(appSrc)
+      && /type:'late', hours:lateHours/.test(appSrc)
+      && /clockInOps\.push\(\{mode:'set',collection:'sales_time_credit',id:creditId/.test(appSrc),
     'الحضور المتأخر بيكتب ساعات رصيد وقت');
+  assert(/const creditId = attendanceDocId\('late', empId, shiftId\)/.test(appSrc),
+    'ورصيد التأخير بمعرّف ثابت من الشيفت — إعادة المحاولة متكررش الخصم');
   assert(!/type: 'late', amount: complianceCfg\.penalty/.test(appSrc),
     'الغرامة الثابتة القديمة للتأخير اتشالت');
   // computeSalary موصّل بالمحرك

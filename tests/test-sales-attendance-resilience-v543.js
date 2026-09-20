@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -62,7 +63,7 @@ ok(ui.indexOf('optimisticTimeCredit') < ui.indexOf('fbUpdateDoc', ui.indexOf('wi
 ok(ui.includes('rollbackTimeCredit'), 'failed excuse rolls back instead of silently lying');
 ok(ui.includes('queueAttendanceMutation'), 'excuse uses the same pending/error/retry feedback');
 
-ok(/sales-app\.js\?v=554/.test(html) && /sales-ui\.js\?v=554/.test(html), 'Sales scripts are cache-busted to v554');
-ok(/store-apps-shell-v554/.test(sw), 'Sales service worker cache is v554');
+ok(assetAtLeast(html, 'sales-app.js', 554) && assetAtLeast(html, 'sales-ui.js', 554), 'Sales scripts are cache-busted to v554');
+ok(swAtLeast(sw, 554), 'Sales service worker cache is v554');
 
 console.log(`sales attendance resilience v543: ${passed}/${passed} PASS`);

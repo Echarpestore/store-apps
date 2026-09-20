@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const h=fs.readFileSync('sales/index.html','utf8');
 const u=fs.readFileSync('sales/sales-ui.js','utf8');
@@ -17,7 +18,7 @@ assert(u.includes('salesAdminSearch'),'بحث إداري موجود');
 assert(u.includes('salesAdminJump'),'انتقال مباشر موجود');
 assert(u.includes("showSection('overview')"),'الأدمن بيفتح على الرئيسية');
 assert(u.includes("data-go-sales-section=\"approvals\""),'quick actions للموافقات');
-assert(h.includes('sales-app.js?v=18') && h.includes('sales-ui.js?v=18'),'cache bust للملفات المعدلة');
+assert(assetAtLeast(h, 'sales-app.js', 18) && assetAtLeast(h, 'sales-ui.js', 18),'cache bust للملفات المعدلة');
 assert(sw.includes("const CACHE_NAME = 'store-apps-shell-v118-sales'"),'Sales cache له namespace مستقل');
 assert(sw.includes("n.endsWith(SALES_CACHE_SUFFIX)"),'SW يمسح كاش Sales فقط');
 assert(!sw.includes("names.filter((n) => n !== CACHE_NAME)"),'مفيش حذف عام لكاشات باقي البرامج');

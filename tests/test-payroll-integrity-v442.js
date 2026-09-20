@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs = require('fs');
 const vm = require('vm');
 const path = require('path');
@@ -26,5 +27,5 @@ t('payment stores payroll audit', src.includes('payrollAudit: {') && src.include
 t('payment amount uses canonical salary net', src.includes('periodLabel: pk, amount: liveIntegrity.salaryNet'));
 t('receipt prints salary formula', src.includes("add('الصافي','معادلة الراتب'"));
 t('cache bust updated', fs.readFileSync(path.join(__dirname,'../sales/index.html'),'utf8').includes('sales-app.js?v=442'));
-t('service worker cache bumped', fs.readFileSync(path.join(__dirname,'../sales/sw.js'),'utf8').includes('store-apps-shell-v442'));
+t('service worker cache bumped', swAtLeast(fs.readFileSync(path.join(__dirname,'../sales/sw.js'),'utf8'), 442));
 console.log(`RESULT ${pass}/${pass+fail}`); process.exit(fail?1:0);

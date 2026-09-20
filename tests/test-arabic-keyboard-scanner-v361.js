@@ -8,5 +8,5 @@ assert(app.includes('const ch = _scanChar(e);'));
 assert(app.includes('}, true);'));
 assert(core.includes("const _rescuedChar = (typeof _scanChar === 'function') ? _scanChar(e)"));
 assert(!core.includes("t.value = (t.value || '') + e.key;"));
-const m=sw.match(/store-apps-shell-v(\d+)/); assert(m && Number(m[1]) >= 361);
+const m=sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/); assert(m && Number(m[1]) >= 361);
 console.log('PASS arabic keyboard scanner v361');

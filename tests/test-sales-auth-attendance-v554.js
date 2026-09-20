@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs');
 const path=require('path');
 const root=path.resolve(__dirname,'..');
@@ -29,6 +30,6 @@ for(const marker of ['break-start:'+"'",'durableOps:breakOps','durableOps:clockI
   ok(app.includes(marker),'durable coverage marker '+marker);
 }
 
-ok(/sales-app\.js\?v=554/.test(html)&&/sales-ui\.js\?v=554/.test(html),'browser receives v554 files');
-ok(/store-apps-shell-v554/.test(sw),'Sales cache bumped to v554');
+ok(assetAtLeast(html, 'sales-app.js', 554)&&assetAtLeast(html, 'sales-ui.js', 554),'browser receives v554 files');
+ok(swAtLeast(sw, 554),'Sales cache bumped to v554');
 console.log('sales auth + attendance v554: '+passed+'/'+passed+' PASS');

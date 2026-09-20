@@ -182,7 +182,7 @@ function anonHasOnly(src){
 // لأن الكود القديم هو اللي هيفضل شغال.
 // ============================================================
 {
-  [['loyalty', 'echarpe-loyalty-v', 48], ['glow', 'glow-loyalty-v', 39]].forEach(function(a){
+  [['loyalty', '(?:echarpe-loyalty|loyalty-shell)-v', 48], ['glow', 'glow-loyalty-v', 39]].forEach(function(a){
     const sw = R(a[0], 'sw.js');
     const v = (sw.match(new RegExp(a[1] + '(\\d+)')) || [])[1];
     assert(!!v && Number(v) >= a[2],
@@ -266,7 +266,7 @@ function anonHasOnly(src){
   assert(/renderRequestsBadge\(\);/.test(ui) && /renderRequestsScreen\(\);/.test(ui),
     L + 'والاتنين بيتحدّثوا من لقطة المستمع');
 
-  const v = (R('pos', 'sw.js').match(/store-apps-shell-v(\d+)/) || [])[1];
+  const v = (R('pos', 'sw.js').match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/) || [])[1];
   assert(!!v && Number(v) >= 299, L + 'CACHE_NAME v299+ (لقينا v' + (v || '?') + ')');
 }
 

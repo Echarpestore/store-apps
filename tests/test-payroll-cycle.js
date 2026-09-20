@@ -88,6 +88,7 @@ function makeCtx(opts){
   const ctx = {
     window: win, console: { warn(){}, log(){} },
     allShifts: opts.shifts || [], allAdvances: opts.advances || [],
+    allDeductions: opts.deductions || [],   // v711: المحرك بقى يقرا الخصومات الإدارية من الحالة دي
   };
   win.allShifts = ctx.allShifts;
   ctx.globalThis = ctx;
@@ -295,6 +296,6 @@ const adv = (id, dateStr, amount, src_) => ({
     .forEach(n=> assert(new RegExp('window\\.' + n + ' *= *' + n).test(bare), '§18 ' + n + ' معروضة على window'));
   assert(/window\.openAttendanceDaysDialog = function/.test(bare), '§18 openAttendanceDaysDialog على window');
   const sw = fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 102, 'sales/sw.js: CACHE_NAME v102+ (لقينا ' + (m ? m[1] : '—') + ')');
 })();

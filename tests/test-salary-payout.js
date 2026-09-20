@@ -37,6 +37,7 @@ const WANTED = [
   'function pointWeight(', 'function sumPoints(', 'function fmtPts(', 'function commissionDueFor(',
   'function payoutBreakdown(', 'function buildSalaryReceiptPayload(',
   'function payPeriodLabelAr(', 'function defaultPayPeriodKey(', 'function _mkKey(',
+  'function payrollMoneyBreakdown(',   // v711: اعتماد جديد للمحرك — الـharness كان ناقصه
 ];
 const parts = [];
 let missing = null;
@@ -120,7 +121,7 @@ const pt = (w)=> ({ employeeId: 'e1', ts: JUL, value: w });
 (function(){
   const c = ctxWith({ points: [pt(20)] });
   const due = c.commissionDueFor(EMP, '2026-07');       // 20 نقطة = 100 ج.م
-  const calc = { netSalary: 2800 };
+  const calc = { netSalary: 2800, proratedBase: 2800 };   // v711: محرك السلامة (v442) بيحسب الصافي من المكوّنات مش من netSalary — الـfixture لازم يبقى متسق
 
   const all = c.payoutBreakdown(calc, due, { pts: 20, ref: false, tgt: false }, 5);
   assert(all.total === 2900 && all.ptsAmt === 100, 'الكل: 2800 + 100 = 2900');
@@ -150,7 +151,7 @@ const pt = (w)=> ({ employeeId: 'e1', ts: JUL, value: w });
   const due = c.commissionDueFor(EMP, '2026-07');
   assert(due.refDueCount === 2 && due.refDueAmt === 40, 'تنزيلين = 40 ج.م');
   assert(due.tgtDueAmt === 150, 'وتارجت 150');
-  const calc = { netSalary: 3000 };
+  const calc = { netSalary: 3000, proratedBase: 3000 };
   assert(c.payoutBreakdown(calc, due, { pts:0, ref:true,  tgt:true  }, 5).total === 3190, 'الاتنين داخلين');
   assert(c.payoutBreakdown(calc, due, { pts:0, ref:false, tgt:true  }, 5).total === 3150, 'من غير تنزيلات');
   assert(c.payoutBreakdown(calc, due, { pts:0, ref:false, tgt:false }, 5).total === 3000, 'من غير الاتنين');
@@ -173,7 +174,7 @@ const pt = (w)=> ({ employeeId: 'e1', ts: JUL, value: w });
     dayOffBonusAmount: 100, dayOffBonusDays: 1,
     deductionAmount: 100, extraOffDays: 1,
     timeCreditDeduction: 50, timeCreditHours: 7, timeCreditDays: 1,
-    adminDeductions: 100, advCash: 500, advOrders: 200, advPrevCycle: 300,
+    adminDeductions: 100, advCash: 400, advOrders: 200, advancesTotal: 600, advPrevCycle: 300,   // 3000+200−250−600 = 2350 (متسق مع netSalary)
   };
   const p = c.buildSalaryReceiptPayload(EMP, calc, '2026-07');
   const label = (t)=> p.lines.some(l=> l[0].indexOf(t) >= 0);
@@ -229,6 +230,6 @@ const pt = (w)=> ({ employeeId: 'e1', ts: JUL, value: w });
       '§18 ' + n + ' على window');
   });
   const sw = fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 103, 'sales/sw.js: CACHE_NAME v103+ (لقينا ' + (m ? m[1] : '—') + ')');
 })();

@@ -217,6 +217,6 @@ const R = (r, o)=> Object.assign({ r, ts: Date.now() - 3600000, branch: 'الر�
   assert(!!om && Number(om[1]) >= 37, 'Office/sw.js: v37+ (لقينا ' + (om ? om[1] : '—') + ')');
 
   const psw = fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8');
-  const pm = psw.match(/store-apps-shell-v(\d+)/);
+  const pm = psw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!pm && Number(pm[1]) >= 284, 'pos/sw.js: v284+ (لقينا ' + (pm ? pm[1] : '—') + ')');
 })();

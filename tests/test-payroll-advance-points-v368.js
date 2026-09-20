@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'), assert=require('assert');
 const app=fs.readFileSync('sales/sales-app.js','utf8');
 const html=fs.readFileSync('sales/index.html','utf8');
@@ -23,5 +24,5 @@ assert(/total:\s*Math\.round\(\(calc\.netSalary \+ commission\)/.test(app), 'sal
 assert(app.includes('withSalary: true, partial: s.pts < due.ptsDue, paidAt'), 'points paid with salary must be recorded as such');
 
 assert(/sales-app\.js\?v=(2[0-9]|[3-9]\d+)/.test(html), 'sales app cache bust must be v20 or newer');
-assert(sw.includes('store-apps-shell-v368'), 'Sales SW must be v368');
+assert(swAtLeast(sw, 368), 'Sales SW must be v368');
 console.log('PASS payroll advances detail + points value v368');

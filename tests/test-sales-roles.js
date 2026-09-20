@@ -109,7 +109,7 @@ const src2 = fs.readFileSync(path.resolve(__dirname,'..','sales','sales-app.js')
 assert(/isManager\s*=\s*!!window\.managerCode/.test(src2),
   'كود المدير الفاضي مش بيفتح الدخول (شرط !! موجود)');
 assert(/pass\s*!==\s*ADMIN_CODE/.test(src2), 'كود المدير ماينفعش يساوي كود المالك');
-assert(/roleHidden\s*===\s*'1'/.test(src2), 'اللوحات الممنوعة بتفضل مخفية مع تبديل التبويبات');
+assert(/p\.dataset\.roleHidden = ok \? '' : '1'/.test(src2), 'اللوحات الممنوعة بتتعلّم roleHidden (والتنقل في sales-ui بيحترمه — شوف تحت)');
 
 // ---------- 🔒 اختبار الإخفاء الفعلي على كل لوحات الشاشة ----------
 {
@@ -205,7 +205,7 @@ assert(/roleHidden\s*===\s*'1'/.test(src2), 'اللوحات الممنوعة ب�
   assert(/الأجهزة التانية/.test(del), 'وبينبّه إن الأجهزة التانية عندها نسخة محلية');
 
   const swS = fs.readFileSync(path.resolve(__dirname,'..','sales','sw.js'),'utf8');
-  assert(/store-apps-shell-v\d+/.test(swS), 'CACHE_NAME بتاع sales فيه رقم نسخة');
+  assert(/(?:store-apps|pos|loyalty)-shell-v\d+/.test(swS), 'CACHE_NAME بتاع sales فيه رقم نسخة');
 }
 
 // ============================================================
@@ -306,45 +306,45 @@ assert(/roleHidden\s*===\s*'1'/.test(src2), 'اللوحات الممنوعة ب�
   const ui = fs2.readFileSync(path2.join(SD, 'sales-ui.js'), 'utf8');
   const app = fs2.readFileSync(path2.join(SD, 'sales-app.js'), 'utf8');
 
-  // 🔴 نظام واحد لا غير
+  // v711: نظام التبويبات اتنقل في v366 من `initAdminTabs` (sales-app) لشريط واحد في sales-ui (`sectionMeta`).
+  //       الدرس نفسه لسه ساري — **نظام تنقّل واحد بس**، والصلاحيات طبقة مستقلة فوقه.
   assert(html.indexOf('id="adminTabs"') < 0 && html.indexOf('data-g="') < 0,
     '🔴 مفيش نظام تبويبات تاني في الـHTML — نظام واحد بس');
-  assert(ui.indexOf('adminShowGroup') < 0 && ui.indexOf('g-off') < 0,
-    '🔴 ولا في sales-ui — الإخفاء بيتم من مكان واحد (initAdminTabs)');
-  assert(/function initAdminTabs/.test(app), 'والنظام الأصلي موجود');
+  assert(ui.indexOf('adminShowGroup') < 0 && ui.indexOf('g-off') < 0, '🔴 ولا بقايا النظام التجريبي في sales-ui');
+  assert(/const legacyBar = document\.getElementById\('adminTabBar'\);\s*\n\s*if\(legacyBar\) legacyBar\.remove\(\);/.test(app),
+    '🔴 والشريط القديم بيتشال لو ظهر — sales-app مبترسمش تنقّل');
+  assert(!/p\.style\.display\s*=[^;]*admin_tab/.test(app), '🔴 ومفيش إخفاء بانلات حسب admin_tab في sales-app');
 
-  // المجموعات كلها ليها مفاتيح، ومفيش مجموعة فاضية
-  const block2 = app.slice(app.indexOf('const ADMIN_TAB_GROUPS'), app.indexOf('let _adminTabsInited'));
-  const ids = (block2.match(/id:'([a-z]+)'/g) || []).map(function(m){ return m.slice(4, -1); });
-  assert(ids.length >= 6, '🗂️ التقسيم على ' + ids.length + ' تبويبات');
+  const meta = ui.slice(ui.indexOf('const sectionMeta = {'), ui.indexOf('let activeSection'));
+  const ids = (meta.match(/\n\s*([a-z]+):\s*\{label:/g) || []).map(function(m){ return m.replace(/[\s:{]|label/g, ''); });
+  assert(ids.length === 5, '🗂️ التقسيم على ' + ids.length + ' أقسام (team/approvals/payroll/performance/settings)');
+  const ps = ui.slice(ui.indexOf('function panelSection('), ui.indexOf('function directPanels('));
   ids.forEach(function(id){
-    const seg = block2.slice(block2.indexOf("id:'" + id + "'"));
-    const keys = seg.slice(0, seg.indexOf(']'));
-    assert((keys.match(/'/g) || []).length > 4,
-      '🔴 التبويب `' + id + '` ليه مفاتيح — التبويب الفاضي بيبان زرار بيفتح على لا شيء');
+    assert(new RegExp("return '" + id + "';").test(ps), '🔴 القسم `' + id + '` فيه بانلات بتتوجّه له — القسم الفاضي زرار بيفتح على لا شيء');
   });
+  // كل مُعرّف بيعتمد عليه التوزيع لازم يكون موجود في الشاشة — وإلا البانل بيقع في «المزيد» بصمت
+  const wanted = (ps.match(/has\('#([A-Za-z]+)'\)/g) || []).map(function(m){ return m.slice(6, -2); });
+  const orphan = wanted.filter(function(id){ return html.indexOf('id="' + id + '"') < 0 && app.indexOf(id) < 0 && ui.indexOf("'" + id + "'") < 0; });
+  assert(wanted.length >= 25 && orphan.length <= 2,
+    '🗂️ كل بانل بيلاقي قسمه (معرّفات مش موجودة: ' + orphan.slice(0, 4).join(' · ') + ')');
 
-  // كل بانل في الشاشة لازم يلاقي مفتاح — وإلا بيقع في emps ويلخبطها
-  const adminHtml = html.slice(html.indexOf('<div id="admin">'));
-  const titles = (adminHtml.match(/<h3[^>]*>([^<]{3,60})/g) || [])
-    .map(function(t){ return t.replace(/<h3[^>]*>/, '').trim(); });
-  const allKeys = (block2.match(/'([^']{4,})'/g) || []).map(function(k){ return k.slice(1, -1); });
-  const orphan = titles.filter(function(t){
-    return !allKeys.some(function(k){ return t.indexOf(k) >= 0; });
-  });
-  assert(orphan.length <= 2,
-    '🗂️ كل بانل بيلاقي تبويبه (بدون تبويب: ' + orphan.slice(0, 4).join(' · ') + ')');
-
-  // النقط: الحاجات المستنية في تبويب مقفول ما تعدّيش
-  const dots = app.slice(app.indexOf('function _refreshAdminTabDots'));
+  // العدّاد: الحاجات المستنية بتظهر على قسم الموافقات
+  const pc = ui.slice(ui.indexOf('function _pendingCounts'), ui.indexOf('function _pendingCounts') + 1600);
   ['pendingBadge','staffOrdersBadge','leaveBadge','issuesBadge','regPendBadge'].forEach(function(id){
-    assert(dots.indexOf(id) > 0, '🔴 البادج `' + id + '` داخل في نقط التبويبات');
+    assert(ui.indexOf("'" + id + "'") > 0, '🔴 البادج `' + id + '` متراقَب في شريط التنقل');
     assert(html.indexOf('id="' + id + '"') > 0, 'وموجود في الشاشة');
   });
-  assert(/dotFor\('time'/.test(dots) && /dotFor\('emps'/.test(dots),
-    'وتبويبي الالتزام والموظفين ليهم نقط');
+  assert(/key === 'approvals' \? c\.total/.test(ui), 'وقسم الموافقات عليه عدّاد المستني');
 
-  // الصلاحيات فوق التبويبات
-  assert(/if\(p\.dataset\.roleHidden === '1'\)\{ p\.style\.display = 'none'; return; \}/.test(app),
-    '🔐 والممنوع على الدور بيفضل مخفي مهما اتنقلت بين التبويبات');
+  // 🔐 الصلاحيات فوق التنقل — الطبقتين مستقلتين
+  assert(/p\.dataset\.roleHidden = ok \? '' : '1';\s*\n\s*p\.style\.display = ok \? '' : 'none';/.test(app),
+    '🔐 الممنوع على الدور بيتعلّم roleHidden **وبيتخفي inline** من sales-app');
+  const show = ui.slice(ui.indexOf('function showSection('), ui.indexOf('window.showSalesAdminSection'));
+  assert(/const allowed = p\.dataset\.roleHidden !== '1';\s*\n\s*const show = allowed && p\.dataset\.salesSection===section;/.test(show),
+    '🔐 والتنقل بين الأقسام بيحترمه — الممنوع بيفضل مخفي مهما اتنقلت');
+  const uiNC = ui.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert(!/\bp\.style\.display\s*=\s*(''|""|'block')/.test(uiNC),
+    '🔐 وsales-ui **مبتلمسش** `style.display` بتاع البانلات (بتشتغل بـclass بس) — فمفيش طريق ترجّع بيه بانل ممنوع');
+  assert(/const hasAllowed=panels\.some\(p=>p\.dataset\.salesSection===sec && p\.dataset\.roleHidden!=='1'\);/.test(ui),
+    '🔐 وقسم كله ممنوع على الدور = زراره نفسه بيختفي');
 }

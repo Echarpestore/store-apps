@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const html=fs.readFileSync('pos/index.html','utf8');
 const sale=fs.readFileSync('pos/pos-sale.js','utf8');
@@ -7,5 +8,5 @@ assert(!html.includes('id="basketStrip"'),'sale suggestion strip must be removed
 assert(!/basketRenderStrip\(\)/.test(sale),'sale render must not invoke suggestions');
 assert(html.includes('id="boostStrip"'),'staff boost strip must stay untouched');
 assert(html.includes('id="basketScreen"'),'owner basket insights must stay available');
-assert(sw.includes('store-apps-shell-v362'),'SW must track v362');
+assert(swAtLeast(sw, 362),'SW must track v362');
 console.log('PASS sales copilot disabled v362');

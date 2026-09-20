@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs = require('fs');
 const vm = require('vm');
 const src = fs.readFileSync(require('path').join(__dirname,'../pos/pos-sale.js'),'utf8');
@@ -11,5 +12,5 @@ ok(src.includes("_logActivity('paymob_txn_id_reconciled'"), 'audits changed tran
 ok(src.includes('await paymobReconcileCardTxnsBeforeSale(1200)'), 'reconciles suspicious card state immediately before sale write');
 ok(src.includes('الشبكة لا تحبس الكاشير'), 'network failure does not block sale');
 const sw=fs.readFileSync(require('path').join(__dirname,'../pos/sw.js'),'utf8');
-ok(/store-apps-shell-v43[45]/.test(sw),'POS service worker is v434 or newer');
+ok(swAtLeast(sw, 434),'POS service worker is v434 or newer');
 console.log('9/9 PASS');

@@ -188,6 +188,6 @@ const CFG = S.window.REWARD_CFG;
       assert(new RegExp('window\\.' + n + ' *= *' + n).test(appSrc), n + ' معروضة على window');
     });
   const sw = fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 93, 'sales: CACHE_NAME v93+');
 })();

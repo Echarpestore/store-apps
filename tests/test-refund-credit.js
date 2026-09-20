@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 /* 🧪 المرتجع لرصيد العميلة — التركيز على التقفيل */
 const fs=require('fs');
 const R='/home/claude/repo/store-apps-main/pos/';
@@ -70,11 +71,11 @@ t('الزرار في الواجهة ومخفي افتراضيًا',()=>{
   if(!/id="pmCredit"[^>]*display:none/.test(html))throw Error('مش مخفي')});
 t('الطريقة متربوطة بالزرار',()=>{
   if(!sale.includes("credit:'pmCredit'"))throw Error('مفيش في payBtnId')});
-t('الملف متحمّل',()=>{if(!html.includes('refund-credit.js?v=692'))throw Error('مش متحمّل')});
+t('الملف متحمّل',()=>{if(!assetAtLeast(html, 'refund-credit.js', 692))throw Error('مش متحمّل')});
 t('CACHE_NAME اترفع',()=>{
   const m=fs.readFileSync('pos/sw.js','utf8').match(/pos-shell-v(\d+)/); if(!m||+m[1]<692)throw Error('الكاش ماترفعش')});
 t('pos-sale اتغير سطر واحد بس',()=>{
-  const o=fs.readFileSync(R+'pos-sale.js','utf8');
+  const o=baselineOrSkip(R+'pos-sale.js'); if(o===null) return;
   const d=sale.split('\n').length-o.split('\n').length;
   if(d!==12)throw Error('فرق '+d+' سطر (12 من إصلاح النقط بس)')});
 

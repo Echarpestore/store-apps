@@ -149,6 +149,6 @@ const bare = stripComments(fn);
 // ============================================================
 (function(){
   const sw = fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 285, 'pos/sw.js: v285+ (لقينا ' + (m ? m[1] : '—') + ')');
 })();

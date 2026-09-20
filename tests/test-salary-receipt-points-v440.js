@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'), path=require('path');
 const root=path.join(__dirname,'..');
 const sales=fs.readFileSync(path.join(root,'sales','sales-app.js'),'utf8');
@@ -14,10 +15,10 @@ ok(!/employeePointPeriodTotals[\s\S]{0,1500}(deleteDoc|writeBatch|setDoc|updateD
 ok(salesHtml.includes('id="dh_pointsWeek"'), 'employee dashboard shows weekly points');
 ok(salesHtml.includes('id="dh_pointsMonth"'), 'employee dashboard shows monthly points');
 ok(salesHtml.includes('تبدأ من 0 كل أسبوع') && salesHtml.includes('تبدأ من 0 كل شهر'), 'reset meaning is explicit in UI');
-ok(salesHtml.includes('sales-app.js?v=442'), 'sales cache bust bumped');
-ok(salesSw.includes("store-apps-shell-v442"), 'sales service worker bumped');
+ok(assetAtLeast(salesHtml, 'sales-app.js', 442), 'sales cache bust bumped');
+ok(swAtLeast(salesSw, 442), 'sales service worker bumped');
 ok(pos.includes('const isLong=rawValue.length>22'), 'salary receipt detects long values');
 ok(pos.includes('white-space:normal;overflow-wrap:anywhere'), 'long salary receipt values wrap instead of collapsing label column');
-ok(posHtml.includes('app.js?v=440'), 'POS app cache bust bumped');
-ok(posSw.includes("store-apps-shell-v440"), 'POS service worker bumped');
+ok(swAtLeast(fs.readFileSync(require('path').join(__dirname,'..','pos','sw.js'),'utf8'), 440), 'POS cache bumped (app.js من غير ?v — الكاش بيتحكم فيه CACHE_NAME)');
+ok(swAtLeast(posSw, 440), 'POS service worker bumped');
 console.log(`\n${n}/${n} PASS`);

@@ -117,7 +117,7 @@ function run(swPath, scenario){
 // التطبيقين — نفس الباج كان في الاتنين، فنفس السيناريوهات على الاتنين
 // ============================================================
 const APPS = [
-  { name: 'loyalty (echarpe)', dir: 'loyalty', scopePath: '/loyalty/', prefix: 'echarpe-loyalty-v', minVer: 40 },
+  { name: 'loyalty (echarpe)', dir: 'loyalty', scopePath: '/loyalty/', prefix: '(?:echarpe-loyalty|loyalty-shell)-v', minVer: 40 },
   { name: 'glow',              dir: 'glow',    scopePath: '/glow/',    prefix: 'glow-loyalty-v',    minVer: 33 }
 ];
 

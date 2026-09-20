@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert');
 const root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
@@ -35,8 +36,8 @@ assert(installer.includes('EXISTING_CHANNEL_CONFIG_NO_CHANGES'));
 assert(installer.includes('Copy-Item -LiteralPath $cfg -Destination $backup'));
 assert(!installer.includes('stream=1\''));
 for(const app of ['Office','pos']){
- assert(read(app+'/index.html').includes('cctv-config.js?v=549'));
+ assert(assetAtLeast(read(app+'/index.html'), 'cctv-config.js', 549));
  assert(read(app+'/sw.js').includes('v549'));
 }
-assert(read('Office/index.html').includes('cctv.js?v=549'));
+assert(assetAtLeast(read('Office/index.html'), 'cctv.js', 549));
 console.log('Rehab v549: profile, eight toggles, cashier-only replay, branch isolation, installer safeguards and cache checks PASS');
