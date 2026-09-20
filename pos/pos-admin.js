@@ -446,7 +446,35 @@ function renderBranchSummary(){
 
 // ============ مكافآت خاصة للعملاء (فردية أو جماعية) ============
 let rewardTarget = null;   // رقم عميل، أو {bulk:true, phones:[...]}
+// ============================================================
+// 🔐 v714 — المكافآت: صلاحية + سقف + تسجيل.
+// قبل كده: `sendRewardConfirm` كان **من غير أي فحص**، بأي قيمة، ولأي عدد، و**من غير سطر واحد في سجل النشاط**.
+// وزرار «🎁 مكافأة» في بروفايل العميلة — والبروفايل بتوصله الكاشير من البحث العام. يعني: كاشير تبعت لرقمها
+// مكافأة 5000 ج.م بحد أدنى صفر، وتستخدمها على الكاشير (المكافأة مسقوفة بقيمة الفاتورة = فاتورة ببلاش)، ومفيش أثر.
+//   1) `canSendRewards` (كاشير ✗).   2) السقف = **أقصى خصم للدور** (`maxDiscountPct`) — المكافأة خصم مؤجّل، فمتعدّيش
+//      اللي الدور مسموحله يديه على الكاشير: نسبة ≤ السقف · مبلغ ÷ الحد الأدنى للفاتورة ≤ السقف (يعني المبلغ لازم له حد أدنى).
+//   3) كل إرسال بيتسجّل `reward_sent` (hot في Office) بالقيمة والعدد والأرقام.
+// ============================================================
+function rewardSendBlockReason(type, value, minInvoice, count){
+  if(!(typeof hasPerm === 'function' && hasPerm('canSendRewards'))) return 'إرسال المكافآت مش من صلاحياتك';
+  const cap = Math.max(0, Math.min(100, Number((typeof myPerms === 'function' ? myPerms() : {}).maxDiscountPct) || 0));
+  if(cap >= 100) return null;                                    // مدير/أدمن — زي الخصم على الكاشير بالظبط
+  const v = Number(value) || 0, min = Number(minInvoice) || 0;
+  if(type === 'percent'){
+    if(v > cap) return 'أقصى نسبة مكافأة لدورك ' + cap + '% (نفس سقف الخصم)';
+    return null;
+  }
+  if(!(min > 0)) return 'مكافأة بمبلغ لازم لها «حد أدنى للفاتورة» — دورك سقفه ' + cap + '% من الفاتورة';
+  if(v / min * 100 > cap + 1e-9){
+    return 'المبلغ ده = ' + (v / min * 100).toFixed(0) + '% من الحد الأدنى — سقف دورك ' + cap + '%. '
+         + 'يا تقلل المبلغ لـ' + Math.floor(min * cap / 100) + ' ج.م يا تزوّد الحد الأدنى لـ' + Math.ceil(v * 100 / cap) + ' ج.م';
+  }
+  return null;
+}
+window.rewardSendBlockReason = rewardSendBlockReason;
+
 function openRewardModal(target){
+  if(!(typeof hasPerm === 'function' && hasPerm('canSendRewards'))){ showToast('🔐 إرسال المكافآت مش من صلاحياتك', 'err'); return; }
   rewardTarget = target;
   document.getElementById('rwValue').value = '';
   document.getElementById('rwMin').value = '';
@@ -467,6 +495,9 @@ async function sendRewardConfirm(){
   _busyOps.add('reward');
   const minInvoice = parseFloat(document.getElementById('rwMin').value) || 0;
   const days = parseInt(document.getElementById('rwDays').value) || 7;
+  // 🔐 v714: الفحص على **الكتابة نفسها** مش على فتح الشاشة بس (الشاشة بتتفتح من 4 أماكن)
+  const _blk = rewardSendBlockReason(type, value, minInvoice, 1);
+  if(_blk){ showToast('⛔ ' + _blk, 'err'); _busyOps.delete('reward'); return; }
   const reward = {
     id: 'r' + Date.now().toString(36) + Math.floor(Math.random()*100),
     type, value, minInvoice,
@@ -490,6 +521,13 @@ async function sendRewardConfirm(){
       const _bs = (reward.brand||'echarpe');
       db.collection(TEST_SETTINGS).doc('reward_stats_'+_bs).set({ sent: firebase.firestore.FieldValue.increment(phones.length) }, { merge:true });
     }catch(e){}
+    // 🕵️ v714: أثر لكل مكافأة — قبل كده مفيش حاجة كانت بتتسجل غير عدّاد
+    try{ if(typeof _logActivity === 'function') _logActivity('reward_sent', {
+      rewardId: reward.id, rewardType: type, value: value, minInvoice: minInvoice, days: days,
+      count: phones.length, bulk: !!(rewardTarget && rewardTarget.bulk),
+      phones: phones.slice(0, 5).join(' · ') + (phones.length > 5 ? ' …+' + (phones.length - 5) : ''),
+      maxPossibleEGP: type === 'amount' ? +(value * phones.length).toFixed(2) : undefined
+    }); }catch(e){}
     closeRewardModal();
     if(typeof selectedCustomers !== 'undefined'){ selectedCustomers.clear(); if(document.getElementById('customerListWrap')) renderCustList(); }
     showToast(`اتبعتت المكافأة لـ ${phones.length} عميل 🎁`);

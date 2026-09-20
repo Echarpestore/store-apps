@@ -1336,7 +1336,7 @@ function testInvoicePrinter(){
 }
 
 // الطباعة الفعلية: بيبني الفاتورة من تصميمك ويطبعها (صامت جوّه البرنامج / نافذة في المتصفح)
-function printReceipt(payments, total, invoiceNo, invoiceCode){
+function printReceipt(payments, total, invoiceNo, invoiceCode, scanCode){
   const c = receiptDesignConfig || defaultReceiptConfig();
   const L = RECEIPT_LABELS[c.lang] || RECEIPT_LABELS.ar;
   const payStr = Object.entries(payments||{}).filter(([k,v])=>v>0).map(([k,v])=> (L[k]||k)+': '+Number(v).toFixed(2)).join(' | ');
@@ -1347,7 +1347,7 @@ function printReceipt(payments, total, invoiceNo, invoiceCode){
     brand: _deviceBrand(),
     items: cart.map(it=> ({name:it.name, qty:it.qty, barcode:it.barcode||'',
       unit:Number(it.price||0).toFixed(2), line:(it.price*it.qty).toFixed(2)})),
-    totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: invoiceCode||invoiceNo||'',
+    totalStr: Number(total).toFixed(2), payStr, invoiceNo: invoiceNo||'', scanCode: scanCode||invoiceCode||invoiceNo||'',   // 📷 v711: الكود القصير لو موجود
     // 💳↩️ v295 (فاتورة 1444): اتسحب من الكارت أكتر من الفاتورة —
     //    بيتطبع صراحةً إنه بيترد — الورقة هي إثبات العميلة إنها تاخد حقها
     cardOverStr: (function(){
@@ -1453,7 +1453,7 @@ function printGiftReceiptForLast(){
       branch: s.branch || (typeof currentBranch!=='undefined' ? currentBranch : ''),
       items: s.items,
       invoiceNo: s.invoiceNo,
-      scanCode: s.invoiceCode,
+      scanCode: s.scanCode || s.invoiceCode,   // 📷 v711
       custPoints: { show:false },
       showAppQR: false
     }, {});     // {} = مفيش كاش → الدرج مايفتحش

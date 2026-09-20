@@ -126,7 +126,7 @@ if(typeof window !== 'undefined') window.saveDayStartHour = saveDayStartHour;
 
 const PERM_LABELS = {
   canSell:'يبيع', canHold:'يعمل Hold/Unhold', canPrintLabel:'يطبع Price Label',
-  canViewCostPrice:'يشوف سعر التكلفة', canViewStock:'يشوف المخزون (الكميات)', canViewLogs:'يشوف السجلات', canRefund:'يعمل استرجاع',
+  canViewCostPrice:'يشوف سعر التكلفة', canViewStock:'يشوف المخزون (الكميات)', canViewLogs:'يشوف سجل المبيعات الكامل (من غيرها: فواتير النهارده بس)', canViewCustomers:'يشوف قايمة العملاء كلها', canSendRewards:'يبعت مكافآت للعملاء (في حدود أقصى خصم للدور)', canEditPoints:'يعدّل رصيد نقط العميلة مباشرة', canRefund:'يعمل استرجاع',
   canResetCustomerPin:'يمسح الرقم السري للعميل', canEditInventory:'يعدّل/يضيف مخزون', canReceiveGoods:'يستلم/يخرج بضاعة', canChangePrices:'يغيّر الأسعار',
   canViewReports:'يشوف التقارير المالية', canManageRoles:'يدير الصلاحيات', canSwitchBranch:'يبدّل الفرع (أدمن)',
   canDiscount:'يعمل خصم', canOpenDrawer:'يفتح الدرج', canReverse:'يعكس فاتورة'
@@ -1125,6 +1125,7 @@ function printReportArea(){
 // ---------------- Sales History ----------------
 let salesHistoryTab = 'live';
 function switchSalesHistoryTab(tab){
+  if(tab !== 'live' && !shFullAccess()) tab = 'live';   // 🔐 v712: المستورد من QuickBooks للي معاه الصلاحية بس
   salesHistoryTab = tab;
   document.getElementById('shTabLive').classList.toggle('active', tab==='live');
   document.getElementById('shTabLegacy').classList.toggle('active', tab==='legacy');
@@ -1132,8 +1133,36 @@ function switchSalesHistoryTab(tab){
   else renderLegacySalesHistory();
 }
 
+// ============================================================
+// 🔐 v712 — سجل المبيعات كان مفتوح لأي حد. الصلاحية `canViewLogs` («يشوف السجلات») متعرّفة في جدول الأدوار
+// وظاهرة في شاشة الأدوار (الكاشير = لأ) — و**مفيش ولا مكان في الكود كان بيفحصها**. فالكاشير كانت بتشوف
+// كل فواتير الفرع من أول يوم + إجمالي كل يوم وكل شهر (= إيراد الفرع) + تليفونات كل العملاء.
+// الحل مش منع كامل: الكاشير محتاجة السجل لإعادة طباعة فاتورة / إيصال هدية / لما الطباعة تفشل.
+//   • معاها `canViewLogs` (مشرف/مدير/أدمن) ← السجل الكامل زي ما هو.
+//   • من غيرها ← **فواتير يوم الشغل الحالي بس**، من غير شريط الشهور ولا فلتر التاريخ ولا أي إجمالي،
+//     ومن غير تبويب QuickBooks. والتحميل نفسه استعلام بنطاق اليوم — مش تحميل الكل وإخفاؤه
+//     (اللي بيتحمّل بيتحط في `window._shSalesById` وبيتشاف من أي console).
+// ============================================================
+// 🔐 v713: بيتنادى عند الخروج — قايمة العملاء وسجل المبيعات المتحمّلين لمشرف ميفضلوش في الذاكرة للكاشير اللي بعده
+function clearProtectedScreenData(){
+  try{ custListData = []; custListFiltered = []; }catch(e){}
+  try{ window._shSalesById = {}; window._shRatingById = {}; }catch(e){}
+  try{ ['customerListWrap','salesHistoryWrap'].forEach(function(id){ const el = document.getElementById(id); if(el) el.innerHTML = ''; }); }catch(e){}
+}
+window.clearProtectedScreenData = clearProtectedScreenData;
+
+function shFullAccess(){
+  return (typeof hasPerm === 'function') && hasPerm('canViewLogs');
+}
+window.shFullAccess = shFullAccess;
+
 async function goToSalesHistory(){
   showScreen('salesHistoryScreen');
+  const full = shFullAccess();
+  try{
+    const lg = document.getElementById('shTabLegacy'); if(lg) lg.style.display = full ? '' : 'none';
+    if(!full){ _shMonthKey = null; _shDayFilter = null; }   // فلتر قديم من جلسة مشرف ميتورّثش
+  }catch(e){}
   switchSalesHistoryTab('live');
 }
 
@@ -1235,6 +1264,14 @@ if(typeof window !== 'undefined') window.shLinkRatings = shLinkRatings;
 // هنا نقرأ كل فواتير الفرع (query واحد بسيط، من غير composite index ولا limit)،
 // وبعدها نرتب محليًا بـ saleTs = createdAt أو createdAtMs.
 async function loadLiveSalesHistorySales(){
+  if(!shFullAccess()){
+    // 🔐 v712: يوم الشغل الحالي بس — بنفس استعلام النطاق بتاع التقارير (بيلم فواتير الأوفلاين بـcreatedAtMs كمان)
+    const _now = Date.now();
+    const _from = (typeof bizDayStartMs === 'function') ? bizDayStartMs(_now) : new Date(new Date(_now).setHours(0,0,0,0)).getTime();
+    const rows = await loadReportSales(new Date(_from), new Date(_now + 5*60*1000));
+    return rows.filter(s=>{ const t = _shTsOf(s); return t != null && t >= _from; })
+               .sort((a,b)=> (_shTsOf(b)||0) - (_shTsOf(a)||0));
+  }
   const snap = await db.collection(TEST_SALES).where('branch','==', currentBranch).get();
   return snap.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=> (_shTsOf(b)||0) - (_shTsOf(a)||0));
 }
@@ -1251,8 +1288,12 @@ async function renderLiveSalesHistory(){
     wrap.innerHTML = '<div class="empty-cart">تعذر تحميل سجل المبيعات — جرّب تحديث الصفحة. مفيش بيانات اتشالت.</div>';
     return;
   }
-  if(sales.length === 0){ wrap.innerHTML = '<div class="empty-cart">لسه مفيش مبيعات مسجلة</div>'; return; }
+  const _full = shFullAccess();
   window._shSalesById = {}; sales.forEach(x=>{ window._shSalesById[x.id] = x; });
+  if(sales.length === 0){
+    wrap.innerHTML = '<div class="empty-cart">' + (_full ? 'لسه مفيش مبيعات مسجلة' : 'مفيش فواتير النهارده لسه') + '</div>';
+    return;
+  }
 
   // ⭐ تقييمات العملاء على الفواتير
   // 🔴 كان فيه باجين هنا خلّوا التقييم **مايظهرش خالص**:
@@ -1329,6 +1370,14 @@ async function renderLiveSalesHistory(){
       <div id="shBody_${s.id}" style="display:none; border-top:1px solid #eef0f4; background:#fafbfc; padding:12px 15px;"></div>
     </div>`;
   };
+
+  // 🔐 v712: من غير `canViewLogs` — فواتير النهارده بس، من غير أي إجمالي ولا فلاتر ولا شهور
+  if(!_full){
+    wrap.innerHTML = '<div style="background:#fff6e6; border:1.5px solid #f59e0b; border-radius:12px; padding:10px 14px; margin-bottom:12px; font-size:12.5px; color:#92400e; font-weight:700;">'
+      + '🔐 فواتير النهارده بس (' + sales.length + ') — لإعادة الطباعة وإيصال الهدية. السجل الكامل للمشرف.</div>'
+      + sales.map(renderRow).join('');
+    return;
+  }
 
   // ⚡ فلاتر يوم سريعة: النهارده / امبارح / تاريخ معيّن — فوق شريط الشهور
   const _chip = (on)=> `flex-shrink:0; padding:8px 14px; border-radius:12px; cursor:pointer; font-weight:800; font-size:12.5px; border:1.5px solid ${on?'#818cf8':'var(--border)'}; background:${on?'rgba(129,140,248,.14)':'var(--panel2)'}; color:var(--text);`;
@@ -1498,7 +1547,7 @@ function reprintSale(id){
       totalStr: Number(s.total||0).toFixed(2),
       payStr,
       invoiceNo: s.invoiceNo || '',
-      scanCode: s.invoiceCode || s.invoiceNo || '',
+      scanCode: s.scanCode || s.invoiceCode || s.invoiceNo || '',
       cardTxn: s.cardTxn || null,
       cardTxns: (s.cardTxns && s.cardTxns.length) ? s.cardTxns : null,   // 💳💳 نسخة تانية بالكارتين
       // 🎁 نقط العميلة **مبتظهرش في النسخة التانية** — وده مقصود:
@@ -1537,7 +1586,7 @@ function giftReceiptData(s){
     items: (s.items||[]).filter(function(it){ return !it.isReturn && (it.qty||0) > 0; })
       .map(function(it){ return { name: it.name, qty: it.qty, barcode: it.barcode || '' }; }),
     invoiceNo: s.invoiceNo || '',
-    scanCode: s.invoiceCode || s.invoiceNo || '',   // 🔑 من غيره مفيش استبدال
+    scanCode: s.scanCode || s.invoiceCode || s.invoiceNo || '',   // 🔑 من غيره مفيش استبدال
     custPoints: { show:false },
     showAppQR: false
   };
@@ -1558,6 +1607,7 @@ if(typeof window !== 'undefined') window.printGiftReceipt = printGiftReceipt;
 
 // المبيعات المستوردة من QuickBooks — للرجوع والاطلاع بس، مش بتدخل في التقارير الحية
 async function renderLegacySalesHistory(){
+  if(!shFullAccess()){ switchSalesHistoryTab('live'); return; }   // 🔐 v712
   const wrap = document.getElementById('salesHistoryWrap');
   wrap.innerHTML = 'بيتحمّل...';
   try{
@@ -1617,6 +1667,12 @@ function mergeCustDocs(branchDocs, appDocs, isGlow){
 window.custAppBrandMatch = custAppBrandMatch; window.mergeCustDocs = mergeCustDocs;
 
 async function goToCustomerList(){
+  // 🔐 v713: القايمة كانت من غير أي فحص — أي كاشير تفتحها تشوف كل عملاء الفرع بتليفوناتهم ومشترياتهم.
+  //    الفحص **قبل** أي تحميل: الدالة دي بتقرا كل العملاء + كل فواتير الفرع، فالمنع لازم يبقى قبل القراءة مش قبل العرض.
+  if(!(typeof hasPerm === 'function' && hasPerm('canViewCustomers'))){
+    showToast('🔐 قايمة العملاء للمشرف/المدير — تقدري تدوّري على عميلة برقمها من شاشة البيع', 'err');
+    return;
+  }
   showScreen('customerListScreen');
   const wrap = document.getElementById('customerListWrap');
   wrap.innerHTML = '<div style="padding:30px; text-align:center; color:var(--muted);">بيتحمّل...</div>';
@@ -1662,6 +1718,11 @@ let custListShown = 40;
 function renderCustList(){
   const wrap = document.getElementById('customerListWrap');
   if(!wrap) return;
+  // 🔐 v713: خط دفاع تاني — القايمة بتفضل في الذاكرة بعد ما المشرف يخرج. لو اللي قدام الجهاز دلوقتي من غير الصلاحية، تتمسح ومتتعرضش.
+  if(!(typeof hasPerm === 'function' && hasPerm('canViewCustomers'))){
+    custListData = []; custListFiltered = []; wrap.innerHTML = '';
+    return;
+  }
   const q = (document.getElementById('custSearch')?.value || '').trim().toLowerCase();
   const sort = document.getElementById('custSort')?.value || 'spend';
   // 🏷️ رصيد براند الفرع الحالي بس (`credit` / `credit_glow`)
@@ -1720,7 +1781,7 @@ function renderCustList(){
   const selCount = selectedCustomers.size;
   const bulkBtn = hasPerm('canEditInventory') ? `
     <div style="display:flex; gap:8px; margin-bottom:10px;">
-      <button onclick="sendRewardToAllListed()" style="flex:1; padding:11px; border-radius:10px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer;">🎁 للكل (${list.length})</button>
+      <button onclick="sendRewardToAllListed()" style="${hasPerm('canSendRewards')?'':'display:none;'}flex:1; padding:11px; border-radius:10px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer;">🎁 للكل (${list.length})</button>
       <button onclick="${selCount?'sendRewardToSelected()':'selectAllListed()'}" style="flex:1; padding:11px; border-radius:10px; border:none; background:${selCount?'var(--plus)':'var(--panel2)'}; color:${selCount?'#062':'var(--text)'}; font-weight:800; cursor:pointer;">${selCount? '🎁 للمختارين ('+selCount+')' : '☑️ اختار'}</button>
       ${selCount?`<button onclick="clearCustSelection()" style="padding:11px 14px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--minus); font-weight:800; cursor:pointer;">✕</button>`:''}
     </div>` : '';

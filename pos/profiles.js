@@ -275,7 +275,7 @@ function renderCustProfile(){
               style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; padding:2px 4px;">✏️</button></div>
           <div style="color:var(--muted); font-size:11.5px; direction:ltr; text-align:right;">${d.phone}</div>
         </div>
-        <button onclick="openRewardModal('${d.phone}')" style="padding:9px 14px; border-radius:9px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer; font-size:11.5px; flex-shrink:0;">🎁 مكافأة</button>
+        <button onclick="openRewardModal('${d.phone}')" style="${hasPerm('canSendRewards')?'':'display:none;'}padding:9px 14px; border-radius:9px; border:none; background:var(--warn); color:#3a2600; font-weight:800; cursor:pointer; font-size:11.5px; flex-shrink:0;">🎁 مكافأة</button>
       </div>
 
       <div style="display:flex; gap:6px; margin-top:9px;">
@@ -308,7 +308,7 @@ function renderCustProfile(){
       ${hasPush ? `<button onclick="sendRateRequest('${d.phone}')"
         style="width:100%; margin-top:9px; padding:9px; border-radius:9px; border:1px solid var(--border);
         background:var(--panel2); color:var(--muted); font-family:'Cairo'; font-weight:800; font-size:11.5px; cursor:pointer;">⭐ ابعت طلب تقييم</button>` : ''}
-      ${hasPerm('canRedeemManual') ? `<button onclick="editCustomerPoints('${d.phone}')"
+      ${hasPerm('canEditPoints') ? `<button onclick="editCustomerPoints('${d.phone}')"
         style="width:100%; margin-top:9px; padding:9px; border-radius:9px; border:1px solid var(--border);
         background:var(--panel2); color:var(--muted); font-family:'Cairo'; font-weight:800; font-size:11.5px; cursor:pointer;">⚖️ تعديل النقط يدوي</button>` : ''}
     </div>
@@ -459,7 +459,8 @@ window.editCustomerName = editCustomerName;
    · لازم سبب مكتوب
    · بيتسجل في pos_activity_log بالقديم والجديد */
 async function editCustomerPoints(phone){
-  if(!hasPerm('canRedeemManual')){ showToast('مش من صلاحياتك', 'err'); return; }
+  // 🔐 v714: صلاحية مستقلة. كانت راكبة على `canRedeemManual` (استبدال يدوي على الكاشير) — فأي مشرف كان بيكتب أي رصيد لأي عميلة.
+  if(!hasPerm('canEditPoints')){ showToast('🔐 تعديل رصيد النقط للمدير/الأدمن', 'err'); return; }
   const field = pointsFieldFor(currentBranch);
   const cur = Number((_cp && _cp.c && _cp.c[field]) || 0);
   const v = await askText({

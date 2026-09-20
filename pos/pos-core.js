@@ -307,12 +307,18 @@ let selectedPayMethods = new Set();
 const DEFAULT_ROLE_PERMISSIONS = {
   admin: {
     label: 'أدمن', canSell: true, canHold: true, canPrintLabel: true,
+    canViewCustomers: true, canSendRewards: true, canEditPoints: true,
     canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
     canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: true,
     canDiscount: true, canOpenDrawer: true, canReverse: true, canRedeemManual: true, maxDiscountPct: 100
   },
   cashier: {
     label: 'كاشير', canSell: true, canHold: true, canPrintLabel: true,
+    // 🔐 v713: قايمة العملاء (كل العميلات + تليفوناتهم + مشترياتهم) كانت مفتوحة لأي حد — قاعدة العملاء أغلى أصل في المحل.
+    //    الكاشير لسه بتدوّر على عميلة بالتليفون في شاشة البيع عادي؛ الممنوع هو **تصفّح القايمة كلها**.
+    canViewCustomers: false,
+    // 🔐 v714: إرسال مكافأة لعميلة كان **من غير أي صلاحية ولا سقف ولا تسجيل** — وزراره في بروفايل العميلة اللي الكاشير بتوصله من البحث.
+    canSendRewards: false, canEditPoints: false,
     canViewCostPrice: false, canViewStock: true, canViewLogs: false, canRefund: false, canResetCustomerPin: false,
     canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false,
     // 🎁 الاستبدال اليدوي مقفول على الكاشير — الاستبدال بيتطلب من التطبيق
@@ -320,12 +326,16 @@ const DEFAULT_ROLE_PERMISSIONS = {
   },
   supervisor: {
     label: 'مشرف', canSell: true, canHold: true, canPrintLabel: true,
+    canViewCustomers: true,
+    // المشرف: مكافآت في حدود سقف خصمه (maxDiscountPct) · تعديل رصيد النقط مباشرة = للمدير/الأدمن (كان مع canRedeemManual)
+    canSendRewards: true, canEditPoints: false,
     canViewCostPrice: false, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
     canEditInventory: false, canReceiveGoods: true, canChangePrices: false, canViewReports: false, canManageRoles: false, canSwitchBranch: false,
     canDiscount: true, canOpenDrawer: true, canReverse: true, canRedeemManual: true, maxDiscountPct: 20
   },
   manager: {
     label: 'مدير', canSell: true, canHold: true, canPrintLabel: true,
+    canViewCustomers: true, canSendRewards: true, canEditPoints: true,
     canViewCostPrice: true, canViewStock: true, canViewLogs: true, canRefund: true, canResetCustomerPin: true,
     canEditInventory: true, canReceiveGoods: true, canChangePrices: true, canViewReports: true, canManageRoles: true, canSwitchBranch: false,
     canDiscount: true, canOpenDrawer: true, canReverse: true, canRedeemManual: true, maxDiscountPct: 100
@@ -1231,12 +1241,48 @@ window.addEventListener('beforeunload', function(){
   try{ if(typeof saveReceiveDraft === 'function') saveReceiveDraft(); }catch(e){}
 });
 
+// ============================================================
+// 🔐 v708 — متابعة الكتابات المعلّقة (نسخة **مخففة** من Sync Guard بتاع v339)
+// الأصلية كانت **بتمنع** الخروج وتقفيل اليوم لحد ما السيرفر يأكد، و`beforeunload` بـpreventDefault.
+// مارجّعناش المنع عمدًا: (1) قرار المالك اللاحق في جلسة الفلوس (4أ-6) إن التقفيل والنت قاطع **مسموح**
+// ببانر أحمر + تأكيد إجباري + عدّاد الفواتير المعلّقة؛ (2) فرع النت قاطع فيه طول الليل مايتحبسش على
+// حساب موظفة؛ (3) preventDefault في beforeunload جوّه Electron بيمنع قفل النافذة من غير أي رسالة.
+// اللي رجع: العلامة بتتصفّر لما الكتابات توصل، وتحذير (مش منع) عند الخروج.
+// ============================================================
+window.__posPendingWritesKnown = false;
+async function posFlushPendingWrites(timeoutMs){
+  try{
+    await Promise.race([
+      db.waitForPendingWrites(),
+      new Promise(function(_r, rej){ setTimeout(function(){ rej(new Error('sync-timeout')); }, timeoutMs || 15000); })
+    ]);
+    window.__posPendingWritesKnown = false;
+    return { ok:true };
+  }catch(e){
+    window.__posPendingWritesKnown = true;
+    return { ok:false };
+  }
+}
+window.posFlushPendingWrites = posFlushPendingWrites;
+window.addEventListener('online', function(){
+  setTimeout(function(){ posFlushPendingWrites(30000).catch(function(){}); }, 500);
+});
+
 function logout(){
+  // 📴 v708: تحذير بس — الخروج مبيتمنعش. الفواتير محفوظة على الجهاز وبتترفع لوحدها أول ما النت يرجع.
+  try{
+    if(window.__posPendingWritesKnown){
+      showToast('📴 فيه فواتير على الجهاز لسه مترفعتش — سيبي البرنامج مفتوح لحد ما النت يرجع', 'warn');
+      posFlushPendingWrites(8000).catch(function(){});
+    }
+  }catch(e){}
   // 💾 v365: قبل الخروج احفظ مسودات الشغل، لكن لا تورّث حالة دفع قديمة.
   try{ if(typeof prepareSaleDraftForLogout === 'function') prepareSaleDraftForLogout(); }catch(e){}
   try{ if(typeof saveReceiveDraft === 'function') saveReceiveDraft(); }catch(e){}
   currentEmployee = null;
   cart = [];
+  // 🔐 v713: بيانات الشاشات المحمية متفضلش في الذاكرة للي هيدخل بعده على نفس الجهاز
+  try{ if(typeof clearProtectedScreenData === 'function') clearProtectedScreenData(); }catch(e){}
   currentBranch = localStorage.getItem('pos_branch') || currentBranch;   // الجهاز يرجع لفرعه الأصلي بعد خروج الأدمن
   try{ refreshForeignBranchWarning(); }catch(e){}
   backToEmployeePicker();

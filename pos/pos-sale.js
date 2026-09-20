@@ -486,7 +486,7 @@ function addToCart(item){
   //    بإيدها (عشان تخصم على قطعة واحدة) بيتعلّم `noMerge` وبيتستثنى من الدمج،
   //    وإلا الضربة الجاية لنفس الباركود كانت هترجع تدمجهم وتلغي الفصل.
   const existing = cart.find(c => c.id === item.id && !c.isReturn && !c.noMerge);
-  if(existing){ existing.qty += 1; }
+  if(existing){ existing.qty += 1; _cartStamp(existing); }
   else{
     // تطبيق أفضل خصم ساري تلقائيًا (لو فيه) — بقاعدة "الأفضل للعميل بس، مش تجميع"
     let finalPrice = item.price;
@@ -502,6 +502,7 @@ function addToCart(item){
       }
     }
     cart.push({id:item.id, name:item.name, barcode:item.barcode, price:finalPrice, originalPrice, discountName, qty:1, attribute:item.attribute||'', size:item.size||''});
+    _cartStamp(cart[cart.length - 1]);
   }
   lastAddedId = item.id;   // ده آخر منتج ضربته — هيتميّز في السلة
   // 🎯 وبيتحدد تلقائي — عشان + و− و«تعديل» و«حذف» يشتغلوا عليه على طول
@@ -819,12 +820,53 @@ function renderHoldButtons(){
   });
 }
 
+// ============================================================
+// 🕵️ v710 — سجل تدقيق السلة (رجوع فكرة v476 اللي اتشالت 03-09 في `95eb1ab`، بتصميم أبسط)
+// السيناريو: الكاشير تمسح 5 قطع، العميلة تدفع كاش وتمشي، وبعدين قطعتين يتشالوا قبل الحفظ.
+// اللي بيتسجل: **كل** شيل أو تقليل كمية، ومعاه «القطعة قعدت قد إيه في السلة» وقيمتها والطريقة.
+//   • شيل بعد ثواني = مسحة غلط. شيل بعد دقيقتين والعميلة واقفة = علامة استفهام ← نوع منفصل `item_removed_late` (hot في Office).
+// الفرق عن v476: التوقيت في WeakMap **برّه** سطر السلة — `items: cart` بتتحفظ خام في الفاتورة والمسودة،
+//   فحقول زي `_addedAtMs` كانت بتتسرّب لمستند الفاتورة. بعد استرجاع مسودة، الوقت بيتحسب من أول صنف في السلة.
+// مفيش كتابة Firestore لكل مسحة — الكتابة بس لحظة الشيل (حدث نادر).
+// ⚠️ قبل v710 كان بيتسجل زرار 🗑️ بس. **مفتاح Delete وزرار «حذف» و− في شريط الأدوات وكتابة الكمية وشاشة التعديل كانوا من غير أي أثر.**
+// ============================================================
+const CART_LATE_REMOVAL_SEC = 90;
+const _cartLineTimes = new WeakMap();
+function _cartAuditSkip(line){
+  return !line || line.isRedemption || String(line.id == null ? '' : line.id).indexOf('__') === 0;   // استبدال نقط / خصم مكافأة = مش بضاعة
+}
+function _cartStamp(line){
+  if(_cartAuditSkip(line)) return;
+  const now = Date.now(), t = _cartLineTimes.get(line);
+  if(t) t.last = now; else _cartLineTimes.set(line, { added: now, last: now });
+}
+function _cartLogRemoval(line, qtyRemoved, how, extra){
+  try{
+    if(_cartAuditSkip(line) || typeof _logActivity !== 'function') return;
+    const now = Date.now(), t = _cartLineTimes.get(line);
+    const added = (t && t.added) || Number(typeof _cartFirstItemAt !== 'undefined' ? _cartFirstItemAt : 0) || now;
+    const q = Math.abs(Number(qtyRemoved) || 1);
+    const inCartSec = Math.max(0, Math.round((now - added) / 1000));
+    const partial = !!(extra && extra.qtyAfter != null);
+    const type = inCartSec >= CART_LATE_REMOVAL_SEC ? 'item_removed_late' : (partial ? 'item_qty_reduced' : 'item_removed');
+    _logActivity(type, Object.assign({
+      name: line.name || '', barcode: line.barcode || '', qty: q, price: Number(line.price) || 0,
+      value: +(Math.abs(Number(line.price) || 0) * q).toFixed(2),
+      inCartSec: inCartSec, how: how || '', isReturn: line.isReturn ? true : undefined
+    }, extra || {}));
+  }catch(e){}
+}
+window._cartStamp = _cartStamp; window._cartLogRemoval = _cartLogRemoval;
+
 // كتابة الكمية بأي رقم مباشرة
 function cartSetQty(idx, val){
   if(blockCartEditAfterCard()) return;
   const c = cart[idx]; if(!c) return;
   let nq = parseInt(val);
   if(isNaN(nq) || nq < 1){ if(nq === 0){ cartRemove(idx); return; } nq = 1; }
+  const _oq = Number(c.qty) || 1;
+  if(nq < _oq) _cartLogRemoval(c, _oq - nq, 'كتابة الكمية في السطر', { qtyBefore:_oq, qtyAfter:nq });
+  else if(nq > _oq) _cartStamp(c);
   c.qty = nq;   // مسموح بأي كمية حتى لو أكبر من المخزون
   renderCart();
 }
@@ -835,6 +877,9 @@ function cartQty(idx, delta){
   const c = cart[idx]; if(!c) return;
   let nq = (c.qty||1) + delta;
   if(nq < 1){ cartRemove(idx); return; }
+  const _oq = Number(c.qty) || 1;
+  if(nq < _oq) _cartLogRemoval(c, _oq - nq, 'زرار − في السطر', { qtyBefore:_oq, qtyAfter:nq });
+  else if(nq > _oq) _cartStamp(c);
   c.qty = nq;   // مسموح بأي كمية حتى لو أكبر من المخزون
   renderCart();
 }
@@ -843,7 +888,7 @@ function cartRemove(idx){
   if(blockCartEditAfterCard()) return;
   if(idx < 0 || idx >= cart.length) return;
   const _rm = cart[idx];
-  _logActivity('item_removed', { name:_rm.name||'', qty:_rm.qty||1, price:_rm.price||0, cartCountAfter: cart.length-1 });
+  _cartLogRemoval(_rm, _rm.qty || 1, 'زرار 🗑️ في السطر', { cartCountAfter: cart.length - 1 });
   // 🕵️ v297: اتشال **بعد** ما الكارت اتسحب؟ يبقى ده سبب الفرق —
   //    بيتحفظ عشان حدث السحب الزيادة يقول ليه بدل ما المالك يدوّر
   _trackEditAfterCard('شيل', _rm.name || '', _rm.qty || 1,
@@ -966,7 +1011,14 @@ async function openInvoiceForReturn(code){
   document.getElementById('returnInvoiceModal').classList.add('active');
   document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">بندوّر على الفاتورة...</div>';
   try{
-    const snap = await db.collection(TEST_SALES).where('invoiceCode','==', code).limit(1).get();
+    // 📷 v711: الفواتير الجديدة باركودها كود قصير أرقام (`scanCode`)؛ القديمة باركودها `invoiceCode` — الاتنين شغالين.
+    const _short = (typeof isShortScanCode === 'function') && isShortScanCode(code);
+    const snap = await db.collection(TEST_SALES).where(_short ? 'scanCode' : 'invoiceCode','==', code).limit(_short ? 2 : 1).get();
+    if(_short && snap.size > 1){
+      // احتمال شبه معدوم (نفس الثانية + نفس الرقمين). مبنخمّنش — الغلط هنا = مرتجع على فاتورة حد تاني.
+      document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">⚠️ فيه فاتورتين بنفس كود المسح<br><span style="font-size:12px;">افتحي الفاتورة من البحث برقم الفاتورة المكتوب فوق</span></div>';
+      return;
+    }
     if(snap.empty){
       document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">مفيش فاتورة بالكود ده 🤔<br><span style="font-size:11px;">'+code+'</span></div>';
       return;
@@ -1336,6 +1388,9 @@ function qbxEditSel(){
     if(blockCartEditAfterCard()) return;
     const v = out.v;
     if(line.origPrice == null) line.origPrice = base;   // الأصلي بيتحفظ مرة واحدة
+    { const _oq = Number(line.qty) || 1;   // 🕵️ v710: تقليل الكمية من شاشة التعديل
+      if(v.qty < _oq) _cartLogRemoval(line, _oq - v.qty, 'شاشة تعديل الصنف', { qtyBefore:_oq, qtyAfter:v.qty });
+      else if(v.qty > _oq) _cartStamp(line); }
     line.price   = line.isReturn ? -out.unit : out.unit;
     line.qty     = v.qty;
     line.edited  = true;
@@ -1433,6 +1488,13 @@ if(typeof window !== 'undefined') window.splitCartLine = splitCartLine;
 function changeQty(idx, delta){
   if(blockCartEditAfterCard()) return;
   const line = cart[idx];
+  if(!line) return;
+  const _oq = Number(line.qty) || 1;
+  // 🕵️ v710: المسار ده (− في شريط الأدوات) كان بيقلّل ويشيل **من غير أي تسجيل**
+  if(delta < 0){
+    if(_oq + delta <= 0) _cartLogRemoval(line, _oq, 'زرار − في شريط الأدوات', { cartCountAfter: cart.length - 1 });
+    else _cartLogRemoval(line, -delta, 'زرار − في شريط الأدوات', { qtyBefore:_oq, qtyAfter:_oq + delta });
+  } else if(delta > 0) _cartStamp(line);
   line.qty += delta;   // مسموح بأي كمية حتى لو أكبر من المخزون
   if(line.qty <= 0){ cart.splice(idx,1); selectedCartIdx = null; }
   renderCart();
@@ -1440,6 +1502,8 @@ function changeQty(idx, delta){
 function removeFromCart(idx){
   if(blockCartEditAfterCard()) return;
   if(cart[idx] && cart[idx].isRedemption) pendingRedemption = null;
+  // 🕵️ v710: زرار «حذف» ومفتاح Delete بيعدّوا من هنا — كانوا بيشيلوا الصنف **من غير أي أثر** في سجل النشاط
+  if(cart[idx]) _cartLogRemoval(cart[idx], cart[idx].qty || 1, 'زرار «حذف» / مفتاح Delete', { cartCountAfter: cart.length - 1 });
   // 🔴 باج التركيز (AI_HANDOFF §0، مسار ١) — نفس منطق cartRemove بالظبط:
   // فوكس searchBar قبل ما renderCart تمسح الزرار المفوكس.
   if(searchBar) searchBar.focus();
@@ -2982,6 +3046,111 @@ window.cardPendingLegs = cardPendingLegs;
 window.cardPendingSum = cardPendingSum;
 window.cardLegToManual = cardLegToManual;
 
+// ============================================================
+// 💳 v709 — رجوع حارس سلامة Paymob قبل الحفظ (v434/v435)
+// اتمسح بالغلط 04-09 في رفعة كاميرات (`cabf1f3`) — pos-sale.js نزل 252 سطر. شوف LOST-FIXES-AUDIT.
+// المسار الطبيعي (Success كامل وصل للـwatcher) = صفر قراءات وزمن شبه صفر.
+// بنرجع للسيرفر **بس** لو الشريحة مشكوك فيها: manual أو ناقصها transactionId/amountCents.
+// الهدف: محاولة Failed/Reversal قديمة مستحيل تتسجل كأنها العملية الناجحة، ومبلغ مختلف ميتربطش بالفاتورة.
+// ============================================================
+function paymobCardLegNeedsServerCheck(leg){
+  if(!leg || !leg.ref) return false;
+  const t = leg.txn || {};
+  return leg.status === 'manual' || !t.transactionId || !(Number(t.amountCents) > 0);
+}
+function paymobCardLegIntegrity(leg){
+  if(!leg) return { ok:false, reason:'missing-leg' };
+  if(leg.status === 'failed') return { ok:false, reason:'failed' };
+  if(leg.status === 'approved'){
+    const t = leg.txn || {};
+    const want = Math.round(Math.abs(Number(leg.amount) || 0) * 100);
+    const got = Number(t.amountCents) || 0;
+    if(got && want && got !== want) return { ok:false, reason:'amount-mismatch' };
+    return { ok:true };
+  }
+  if(leg.status === 'manual') return { ok:true, manual:true };
+  return { ok:false, reason:String(leg.status || 'unknown') };
+}
+async function paymobReconcileCardTxnsBeforeSale(timeoutMs){
+  timeoutMs = Math.max(400, Number(timeoutMs) || 1200);
+  const live = (cardLegs || []).filter(function(l){ return l && l.status !== 'failed'; });
+  const badLocal = live.filter(function(l){ return !paymobCardLegIntegrity(l).ok; });
+  if(badLocal.length) return { checked:0, refreshed:0, mismatches:0, invalid:badLocal.length, reason:paymobCardLegIntegrity(badLocal[0]).reason };
+
+  // ⚡ Fast path: العملية وصلت Success كاملة بالفعل — لا Firestore read ولا انتظار.
+  const legs = live.filter(paymobCardLegNeedsServerCheck);
+  if(!legs.length) return { checked:0, refreshed:0, mismatches:0, invalid:0, fastPath:true };
+
+  let refreshed = 0, mismatches = 0, invalid = 0, reason = '';
+  await Promise.all(legs.map(async function(leg){
+    try{
+      const read = db.collection('pos_paymob_txns').doc(String(leg.ref)).get({ source:'server' });
+      const snap = await Promise.race([
+        read,
+        new Promise(function(_, reject){ setTimeout(function(){ reject(new Error('paymob-reconcile-timeout')); }, timeoutMs); })
+      ]);
+      if(!snap || !snap.exists) return; // manual/offline recovery stays available; never freeze sale
+      const d = snap.data() || {};
+      // 🔒 لو نفس orderRef عند Paymob بيقول Failed/Reversal/Refunded، ممنوع نحتفظ
+      // ببيانات نجاح قديمة عليه. نمسح txn ونوقف الحفظ برسالة واضحة بدل فاتورة غلط.
+      if(d.status === 'failed' || d.status === 'voided' || d.status === 'refunded'){
+        leg.status = 'failed'; leg.txn = null; invalid++; reason = reason || String(d.status);
+        if(typeof _logActivity === 'function') _logActivity('paymob_presave_rejected_attempt', {
+          orderRef:String(leg.ref), status:String(d.status), amount:Number(leg.amount)||0
+        });
+        return;
+      }
+      if(d.status !== 'success') return;
+      const want = Math.round(Math.abs(Number(leg.amount) || 0) * 100);
+      const got = Number(d.amountCents) || 0;
+      if(!want || got !== want){
+        mismatches++; invalid++; reason = reason || 'amount-mismatch';
+        if(typeof _logActivity === 'function') _logActivity('paymob_presave_amount_mismatch', {
+          orderRef:String(leg.ref), expectedCents:want, gotCents:got
+        });
+        return;
+      }
+      const oldTxn = leg.txn || {};
+      if(d.transactionId && oldTxn.transactionId && String(d.transactionId) !== String(oldTxn.transactionId)){
+        if(typeof _logActivity === 'function') _logActivity('paymob_txn_id_reconciled', {
+          orderRef:String(leg.ref), from:String(oldTxn.transactionId), to:String(d.transactionId)
+        });
+      }
+      leg.txn = Object.assign({}, oldTxn, {
+        seq:leg.seq, amount:+Math.abs(Number(leg.amount)||0).toFixed(2),
+        last4:d.cardLast4 ? String(d.cardLast4).slice(-4) : (oldTxn.last4||null),
+        scheme:d.cardScheme || oldTxn.scheme || null,
+        transactionId:d.transactionId || oldTxn.transactionId || null,
+        approvalCode:d.approvalCode || oldTxn.approvalCode || null,
+        rrn:d.rrn || oldTxn.rrn || null,
+        terminalId:d.terminalId || oldTxn.terminalId || paymobTerminalId() || null,
+        orderRef:String(leg.ref), amountCents:got, manual:false
+      });
+      leg.status = 'approved'; refreshed++;
+    }catch(e){
+      // الشبكة لا تحبس الكاشير. لو كانت manual يفضل مسار المراجعة اليدوية كما هو.
+      console.warn('paymob pre-save reconcile', e && e.message);
+    }
+  }));
+
+  // أي محاولة ثبت فشلها تتشال فورًا من المدفوعات؛ Retry يبدأ بمرجع جديد.
+  // (مبلغ مش مطابق بيفضل ظاهر للكاشير — الفلوس اتسحبت فعلًا ولازم تتشاف، مش تختفي.)
+  if(invalid){
+    cardLegs = (cardLegs || []).filter(function(l){ return l && l.status !== 'failed'; });
+    window.cardLegs = cardLegs;
+    try{ syncCardPayment(); }catch(e){}
+  }
+  paymobCardTxns = (cardLegs || []).filter(function(l){ return l && l.txn && (l.status === 'approved' || l.status === 'manual'); })
+    .map(function(l){ return l.txn; });
+  window.paymobCardTxns = paymobCardTxns;
+  paymobCardInfo = paymobCardTxns[0] || null;
+  window.paymobCardInfo = paymobCardInfo;
+  return { checked:legs.length, refreshed:refreshed, mismatches:mismatches, invalid:invalid, reason:reason };
+}
+window.paymobCardLegNeedsServerCheck = paymobCardLegNeedsServerCheck;
+window.paymobCardLegIntegrity = paymobCardLegIntegrity;
+window.paymobReconcileCardTxnsBeforeSale = paymobReconcileCardTxnsBeforeSale;
+
 // 🚧 هل مسموح أفتح شريحة الكارت رقم seq دلوقتي؟ (بترجّع سبب المنع أو null)
 function cardLegBlockReason(legs, seq, isRefund, maxLegs){
   const max = maxLegs || 2;
@@ -3870,7 +4039,11 @@ let _offlineQueued = false;   // بتتعلّم لو أي كتابة اتأجل�
 function _waitWrite(p, ms){
   return new Promise(function(res){
     var done = false;
-    var t = setTimeout(function(){ if(!done){ done = true; _offlineQueued = true; res({ queued:true }); } }, ms || _WRITE_WAIT_MS);
+    var t = setTimeout(function(){ if(!done){
+      done = true; _offlineQueued = true;
+      window.__posPendingWritesKnown = true;   // v708 (رجوع v339): فيه كتابة لسه موصلتش السيرفر
+      res({ queued:true });
+    } }, ms || _WRITE_WAIT_MS);
     Promise.resolve(p).then(function(v){
       if(!done){ done = true; clearTimeout(t); res({ ok:true, value:v }); }
     }).catch(function(e){
@@ -3886,13 +4059,43 @@ function _raceTimeout(p, ms){
 }
 // <<< OFFLINE_SAVE_END
 
-// رقم فاتورة متسلسل ومميز (زي INV-000123) — بيتولّد بمعاملة Firestore آمنة
-// عشان لو جهازين بيبيعوا في نفس اللحظة، كل واحد ياخد رقم مختلف من غير تعارض.
-// 📴 المعاملات محتاجة نت: لو أوفلاين أو اتأخرت عن 2.5 ثانية → رقم بديل فورًا
-// (كود الفاتورة نفسه فيه لاحقة وقت + رمز الفرع فمفيش خوف من تعارض الأرقام).
-async function generateInvoiceNumber(){
+// 🔐 v708 — رجوع حماية v339 (اتمسحت بالغلط 24-08 في رفعة الشات `6196887` — شوف LOST-FIXES-AUDIT).
+// رقم الفاتورة: أونلاين = counter متسلسل من Firestore.
+// أوفلاين = مشتق من **معرّف المستند المولَّد محليًا قبل الحفظ** — مش من الساعة.
+// `Date.now().slice(-8)` القديم كان بيلفّ كل ~27.7 ساعة، وجهازين أوفلاين في نفس الفرع ممكن يتطابقوا.
+// ونفس المعرّف بيتحفظ بيه المستند (`set` مش `add`) فإعادة المحاولة متعملش فاتورة تانية.
+function offlineInvoiceNumberFromSaleId(saleId){
+  const clean = String(saleId || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return 'O' + (clean.slice(-10) || 'LOCAL');
+}
+window.offlineInvoiceNumberFromSaleId = offlineInvoiceNumberFromSaleId;
+
+// 📷 v711 — كود المسح القصير (اللي بيتطبع **باركود** على الفاتورة).
+// باركود `invoiceCode` كان بطيء في القراءة: حروف وأرقام = CODE128-B = 178 موديول على ورقة 80مم (≈2.6 نقطة للخط).
+// و v708 طوّله (200 موديول أونلاين · 266 أوفلاين). الحل: الباركود يشيل كود **أرقام بس**: FT + 12 رقم = 134 موديول
+// (CODE128 بيحوّل الأرقام لـset C: رقمين في الرمز الواحد) ← الخطوط أعرض ~30% = نفس كثافة ليبل الأسعار.
+// `invoiceCode` زي ما هو (هوية الفاتورة في التقارير والولاء والكاميرات) — ده حقل **إضافي** للمسح بس.
+// 10 أرقام = ثواني الساعة · رقمين = مشتقين من معرّف المستند (ثابتين لو الكتابة اتعادت، ومختلفين لفاتورتين في نفس الثانية).
+function buildScanCode(saleId, nowMs){
+  const sec = String(Math.floor((Number(nowMs) || Date.now()) / 1000)).slice(-10).padStart(10, '0');
+  const id = String(saleId || '');
+  let h = 0;
+  for(let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 100;
+  return 'FT' + sec + String(h).padStart(2, '0');
+}
+window.buildScanCode = buildScanCode;
+function isShortScanCode(code){ return /^FT\d{12}$/.test(String(code || '')); }
+window.isShortScanCode = isShortScanCode;
+
+function buildInvoiceCode(branch, invoiceNo, saleId){
+  const token = String(saleId || '').replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || 'LOCAL';
+  return 'FT' + branchCode(branch) + String(invoiceNo || '') + '-' + token;
+}
+window.buildInvoiceCode = buildInvoiceCode;
+
+async function generateInvoiceNumber(fallbackSaleId){
   const counterRef = db.collection(TEST_SETTINGS).doc('invoice_counter_' + currentBranch);
-  if(typeof navigator !== 'undefined' && navigator.onLine === false) return Date.now().toString().slice(-8);
+  if(typeof navigator !== 'undefined' && navigator.onLine === false) return offlineInvoiceNumberFromSaleId(fallbackSaleId);
   try{
     const newNumber = await _raceTimeout(db.runTransaction(async (tx)=>{
       const doc = await tx.get(counterRef);
@@ -3903,8 +4106,8 @@ async function generateInvoiceNumber(){
     }), 2500);
     return String(newNumber);
   }catch(e){
-    console.warn('تعذر توليد رقم فاتورة متسلسل، هيتستخدم رقم بديل', e);
-    return Date.now().toString().slice(-8);
+    console.warn('تعذر توليد رقم فاتورة متسلسل، هيتستخدم رقم أوفلاين مميز', e);
+    return offlineInvoiceNumberFromSaleId(fallbackSaleId);
   }
 }
 
@@ -4140,6 +4343,22 @@ async function _doConfirmPayment(){
   selectedPayMethods.forEach(m=> paymentsEntered[m] = paymentAmounts[m] || 0);
   // المحفوظ في الفاتورة = المطبّق فعلًا (بعد خصم الفكة من الكاش)
   const { applied: payments, changeGiven } = normalizePayments(paymentsEntered, total);
+
+  // 💳 v709 (رجوع v434): قبل تثبيت فاتورة Visa، طابق شرايح الكارت المشكوك فيها بمستند Paymob نفسه.
+  // مكانه **قبل** رقم الفاتورة وفتح الدرج (الأصل كان بعدهم): فاتورة مرفوضة متحرقش رقم ومتفتحش درج.
+  // Best-effort بمهلة قصيرة؛ الأوفلاين/التأخير لا يحبّس الكاشير.
+  if(Number(payments.visa || 0) > 0){
+    try{
+      const _pmSafe = await paymobReconcileCardTxnsBeforeSale(1200);
+      if(_pmSafe && _pmSafe.invalid){
+        showToast(_pmSafe.reason === 'amount-mismatch'
+          ? '⛔ المبلغ اللي اتسحب من الكارت مش مطابق لمبلغ الشريحة — راجعي إيصال الماكينة قبل الحفظ.'
+          : '⛔ محاولة الفيزا دي فاشلة/ملغاة عند Paymob — جرّبي الفيزا من جديد. مش هنحفظ مرجع دفع غلط.', 'err');
+        return;
+      }
+    }catch(e){ console.warn('paymob pre-save guard', e); }
+  }
+
   const phone = document.getElementById('customerPhone').value.trim();
   const custName = document.getElementById('customerName').value.trim();
   const itemCount = cart.reduce((s,c)=>s+c.qty, 0);
@@ -4207,9 +4426,12 @@ window.returnPointsDeduction = returnPointsDeduction;
   try{ if(_cartSid && typeof cctvCaptureInvoiceStage === 'function') cctvCaptureInvoiceStage('saving', {
     sid:_cartSid, branch:currentBranch, atMs:Date.now()
   }); }catch(e){}
-  const invoiceNo = await generateInvoiceNumber();
-  // بادئة الفرع في كود الفاتورة (FT + رمز الفرع) — عشان الكود يقول الفرع فورًا ويمنع تعارض الأوفلاين
-  const invoiceCode = 'FT' + branchCode(currentBranch) + invoiceNo + '-' + Date.now().toString(36).slice(-4).toUpperCase();
+  // 🔐 هوية الفاتورة بتتولد محليًا **قبل أي كتابة**. `doc()` مش محتاج نت وبيطلّع معرّف عشوائي قوي؛
+  // نفس المعرّف في رقم/كود الأوفلاين وفي الحفظ نفسه ← إعادة المحاولة متعملش فاتورة تانية.
+  const saleRef = db.collection(TEST_SALES).doc();
+  const invoiceNo = await generateInvoiceNumber(saleRef.id);
+  const invoiceCode = buildInvoiceCode(currentBranch, invoiceNo, saleRef.id);
+  const scanCode = buildScanCode(saleRef.id, Date.now());   // 📷 v711: ده اللي بيتطبع باركود
   // 💵 شاشة الباقي بتظهر بعد ما الدالة دي تخلص، ومحتاجة رقم الفاتورة
   //    عشان "سيبي الباقي في الحساب" تربط الحركة بفاتورة حقيقية.
   window._lastInvoiceCode = invoiceCode;
@@ -4239,9 +4461,12 @@ window.returnPointsDeduction = returnPointsDeduction;
     try{ if(typeof preOpenCashDrawerForSale === 'function') preOpenCashDrawerForSale(invoiceCode, payments); }catch(e){}
 
     // 1) سجل البيع (📴 مش بنستنى السيرفر أكتر من ثواني — أوفلاين بتتسجل محليًا وبتترفع بعدين)
-    const _saleW = await _waitWrite(db.collection(TEST_SALES).add({
+    // set() على المرجع الثابت بدل add(): نفس هوية الفاتورة لو الكتابة اتعادت/اتأخرت.
+    const _saleW = await _waitWrite(saleRef.set({
       invoiceNo,
       invoiceCode,
+      scanCode,                                   // 📷 v711: كود المسح القصير (أرقام) — الباركود المطبوع
+      clientSaleId: saleRef.id,
       employeeId: currentEmployee.id,
       employeeName: currentEmployee.name || '',
       sellerEmployeeId, sellerEmployeeName,
@@ -4265,6 +4490,10 @@ window.returnPointsDeduction = returnPointsDeduction;
       // 💳💳 كل الكروت المستخدمة في الفاتورة بمبالغها وأرقام عملياتها —
       // ضروري للمرتجع: كل عملية بترجع لوحدها من Paymob
       cardTxns: (paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : null,
+      // 💳🔎 v709 (رجوع v432): index صغير للبحث برقم عملية البنك — `local-search-cache.js` بيسأل عليه
+      //    (`array-contains`) من 01-09 والحقل مكانش بيتكتب، فالبحث برقم العملية كان بيرجع فاضي للكارت التاني.
+      bankTransactionIds: Array.from(new Set(((paymobCardTxns && paymobCardTxns.length) ? paymobCardTxns : (paymobCardInfo ? [paymobCardInfo] : []))
+        .map(function(ct){ return String((ct && ct.transactionId) == null ? '' : ct.transactionId).trim(); }).filter(Boolean))),
       // 📴 طابع وقت محلي: serverTimestamp بيفضل null لحد ما فاتورة الأوفلاين تترفع،
       // فكانت بتختفي من التقفيل والتقارير وهي كاشها في الدرج. ده البديل الفوري.
       cartSid: _cartSid || null,             // 🕵️ رابط أحداث السلة دي بالفاتورة
@@ -4272,6 +4501,20 @@ window.returnPointsDeduction = returnPointsDeduction;
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }));
     if(_saleW.error) throw _saleW.error;   // فشل حقيقي (مش أوفلاين) → رسالة خطأ عادية
+
+    // 🔎 فهرس البحث المحلي: الفاتورة تظهر في البحث فورًا حتى لو البيع أوفلاين.
+    // Best-effort بس؛ فشل IndexedDB عمره ما يوقف أو يغيّر مسار البيع.
+    try{
+      if(window.POSLocalSearchCache && typeof window.POSLocalSearchCache.upsertInvoice === 'function'){
+        window.POSLocalSearchCache.upsertInvoice({
+          id:saleRef.id, invoiceNo, invoiceCode, customerPhone:phone||'', customerName:custName||'',
+          total, createdAtMs:Date.now(), branch:currentBranch
+        }, currentBranch).catch(function(){});
+        if(phone && custName && typeof window.POSLocalSearchCache.upsertCustomer === 'function'){
+          window.POSLocalSearchCache.upsertCustomer({ id:phone, name:custName, phone, branch:currentBranch, updatedAtMs:Date.now() }, currentBranch).catch(function(){});
+        }
+      }
+    }catch(e){}
 
     // 🔴 v411 POS Live: حدّث Dashboard الفرع بعد **نجاح حفظ الفاتورة فقط**.
     // Fire-and-forget عشان الطباعة لا تنتظر Firestore ثانية. pos-live.js نفسه
@@ -4301,7 +4544,7 @@ window.returnPointsDeduction = returnPointsDeduction;
     try{
       const _cctvMeta = {
         invoiceCode: invoiceCode, invoiceNo: invoiceNo, branch: currentBranch,
-        saleId: (_saleW && _saleW.value && _saleW.value.id) || '',
+        saleId: saleRef.id,   // v708: set() مبيرجّعش مرجع — المعرّف معروف من قبل الحفظ
         sid: _cartSid || '', cartSid: _cartSid || '', atMs: Date.now(),
         total: total, itemCount: itemCount,
         transactionKind: cart.some(function(line){ return !!line.isReturn; }) ? 'return_or_exchange' : 'sale',
@@ -4406,7 +4649,7 @@ window.returnPointsDeduction = returnPointsDeduction;
       _pmPrintMark = null; window._pmPrintMark = null;   // فاتورة واحدة لكل قياس
       // ⚠️ حارس حرج: الطباعة بقت **قبل** خصم المخزون، فلو رمت استثناء كانت
       //    هتوقف الدالة والمخزون ما يتخصمش. الورقة ممكن تتأجل — المخزون لأ.
-      try{ printReceipt(paymentsEntered, total, invoiceNo, invoiceCode); }
+      try{ printReceipt(paymentsEntered, total, invoiceNo, invoiceCode, scanCode); }
       catch(e){
         console.error('فشل الطباعة — الفاتورة والمخزون كملوا عادي', e);
         try{ showToast('⚠️ الطباعة فشلت — الفاتورة اتسجلت، اطبعها من سجل المبيعات', 'err'); }catch(e2){}
