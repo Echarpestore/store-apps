@@ -67,11 +67,37 @@ const NEW = { invoiceCode: 'INV-1', customerPhone: '01012345678', total: 350, pa
     const e = make({ ...NEW }, { fnFail: true }); eq(await e.ctx.reverseReceipt('S1'), 'orig'); eq(e.toasts[0].k, 'err');
   });
 
+  console.log('\n🧾 عكس الفواتير القديمة (السطور الوهمية)');
+  function invLoop() {
+    const fi = sale.indexOf('async function reverseReceipt'); if (fi < 0) throw Error('reverseReceipt مش موجودة');
+    const st = sale.indexOf('(sale.items||[]).forEach(it=>{', fi); if (st < 0) throw Error('حلقة المخزون مش موجودة');
+    // الأقواس المتوازنة بتبدأ من قوس `forEach(` مش من `(sale.items` — الأول بيقفل بدري
+    const open = sale.indexOf('.forEach(', st) + '.forEach'.length;
+    let d = 0, k = open; for (; k < sale.length; k++) { if (sale[k] === '(') d++; else if (sale[k] === ')') { d--; if (!d) break; } }
+    const body = sale.slice(st, k + 1);
+    if (!/batch\.update/.test(body)) throw Error('الاستخراج ماجابش الحلقة كاملة');   // حارس الفشل الوهمي
+    return body + ';';
+  }
+  function runLoop(items) {
+    const ups = [];
+    const ctx = vm.createContext({ sale: { items }, currentBranch: 'الرحاب', TEST_INVENTORY: 'inv',
+      db: { collection: () => ({ doc: id => ({ id }) }) }, batch: { update: (ref, v) => ups.push({ id: ref.id, v }) },
+      firebase: { firestore: { FieldValue: { increment: n => n } } } });
+    vm.runInContext(invLoop(), ctx); return ups;
+  }
+  await t('⭐⭐ السطور الوهمية مبتلمسش المخزون', () => {
+    const ups = runLoop([{ id: 'A1', qty: 2 }, { id: '__credit_spend__', qty: 1, isCreditSpend: true, isRedemption: true },
+      { id: '__loyalty_redemption__', qty: 1, isRedemption: true }, { id: '__reward__', qty: 1, isRewardDiscount: true }]);
+    eq(ups.length, 1); eq(ups[0].id, 'A1'); eq(ups[0].v['qtyByBranch.الرحاب'], 2);
+  });
+  await t('سطر المرتجع لسه بيتعكس بالسالب', () => { const u = runLoop([{ id: 'B2', qty: 1, isReturn: true }]); eq(u[0].v['qtyByBranch.الرحاب'], -1); });
+  await t('سطر من غير id مبيكسرش', () => eq(runLoop([{ qty: 1 }, null, { id: 'A1', qty: 1 }]).length, 1));
+
   console.log('\n📦 التحميل');
   await t('بعد pos-sale.js وبعد tender-pos.js', () => { const h = html.replace(/<!--[\s\S]*?-->/g, ''); const i = n => { const k = h.indexOf('src="' + n); if (k < 0) throw Error(n); return k; }; if (!(i('pos-sale.js') < i('tender-pos.js') && i('tender-pos.js') < i('reverse-credit.js'))) throw Error('الترتيب'); });
   await t('pos-sale.js ماتلمسش', () => { if (/reverse-credit|reverseCreditAmount/.test(sale)) throw Error('دخل pos-sale'); });
   await t('ممنوع prompt/confirm/alert', () => { if (/\b(prompt|confirm|alert)\s*\(/.test(strip(src))) throw Error(); });
-  await t('CACHE_NAME اترفع', () => { const v = +fs.readFileSync(path.join(ROOT, 'pos/sw.js'), 'utf8').match(/pos-shell-v(\d+)/)[1]; if (v < 698) throw Error('v' + v); });
+  await t('CACHE_NAME اترفع', () => { const v = +fs.readFileSync(path.join(ROOT, 'pos/sw.js'), 'utf8').match(/pos-shell-v(\d+)/)[1]; if (v < 699) throw Error('v' + v); });
 
   console.log('\n===============================\nالنتيجة: ' + p + ' ناجح · ' + f + ' فاشل\n===============================\n');
   if (f) process.exitCode = 1;

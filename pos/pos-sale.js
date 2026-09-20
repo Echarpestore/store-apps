@@ -2398,6 +2398,10 @@ async function reverseReceipt(saleId){
     // 1) رجّع الكمية للمخزون (سطور المرتجع جوه الفاتورة بتتعكس هي كمان: كانت رجّعت بضاعة، فبنخصمها تاني)
     const batch = db.batch();
     (sale.items||[]).forEach(it=>{
+      // 🔴 السطور الوهمية (`__credit_spend__` · `__loyalty_redemption__` · المكافأة) ملهاش
+      //    مستند مخزون. `batch.update` على مستند مش موجود بيرفض **الدفعة كلها** — فأي
+      //    فاتورة قبل v696 فيها استبدال/رصيد/مكافأة ماكانتش بتتعكس خالص.
+      if(!it || !it.id || String(it.id).indexOf('__') === 0 || it.isRedemption || it.isRewardDiscount) return;
       const ref = db.collection(TEST_INVENTORY).doc(it.id);
       batch.update(ref, { ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(it.isReturn ? -it.qty : it.qty) });
     });
