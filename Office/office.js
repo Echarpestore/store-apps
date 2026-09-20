@@ -2108,6 +2108,7 @@ const OF_ACT_KINDS = {
   manual_drawer_open:    { t:'💵 الدرج اتفتح بالإيد', g:'money', hot:true },
   customer_points_edit:  { t:'🎁 تعديل نقط عميلة', g:'money', hot:true },
   reward_sent:           { t:'🎁 مكافأة اتبعتت لعميلة', g:'money', hot:true },
+  customer_self_registered:{ t:'📱 عميلة سجّلت نفسها على التابلت', g:'cart' },
   redeem_value_mismatch: { t:'🎁 فرق في قيمة الاستبدال', g:'money', hot:true },
   card_saved_manual:     { t:'💳 كارت اتسجل يدوي', g:'money', hot:true },
   card_payments_cleared: { t:'💳 مدفوعات كارت اتلغت', g:'money' },
@@ -2372,6 +2373,10 @@ function ofActIntelligence(a){
     'صنف موجود في السيستم لم يظهر في ملف الاستيراد وتم استبعاده حسب سياسة الاستيراد.',
     'ممكن يكون صنف اتوقف فعلًا أو سقط من الملف بالخطأ.',
     'راجع الأصناف المستبعدة لو العدد غير معتاد.');
+  if(type === 'customer_self_registered') return normal(
+    'عميلة جديدة كتبت رقمها واسمها بنفسها على تابلت الفرع، واتسجلت تلقائي.',
+    'ده المسار الطبيعي للتسجيل — مفيش تدخل من الكاشير.',
+    'مش محتاج مراجعة.');
   if(type === 'customer_name_edit') return normal(
     'اسم عميلة اتعدل في ملفها.', 'لا أثر مالي مباشر.', 'لا إجراء إلا لو التعديل غير متوقع.');
   if(type === 'rate_request_manual') return normal(

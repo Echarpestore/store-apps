@@ -1146,11 +1146,18 @@ window.__scriptFullyLoaded = true;
    والبيانات بتظهر عند الكاشير تلقائي. منطق العرض صافي قابل للاختبار. */
 function capValidPhone(p){ var d = String(p||'').replace(/\D/g,''); return /^01\d{9}$/.test(d) ? d : null; }
 function capFresh(data, now){ return !!(data && data.ts && ((now||Date.now()) - data.ts) < 300000); }  // 5 دقايق (العميلة بتاخد وقتها)
-function capKioskView(data, handledAskId, now){
+// 🔁 v695 — باج «أهلًا بيكي» مرتين: مستند الترحيب بيفضل `mode:'greet'` وطازة 5 دقايق، وأي كتابة على نفس المستند
+//    (تأكيد قفل الشاشة `shownAskId:null` · النبضة كل 20 ثانية) بترجّع نفس الـsnapshot ← الترحيب يتعرض تاني، ووراه دعوة التطبيق تاني.
+//    دلوقتي كل ترحيب له مفتاح (askId + ts) وبيتعرض **مرة واحدة**.
+function capGreetKey(data){ return data ? (String(data.askId || '') + ':' + String(data.ts || '')) : ''; }
+function capKioskView(data, handledAskId, now, greetedKey){
   if(!data || !capFresh(data, now)) return { view:'hide' };
   if(data.mode === 'ask' && data.askId && data.askId !== handledAskId) return { view:'phone', askId:data.askId };
   if(data.mode === 'need_name' && data.askId) return { view:'name', askId:data.askId, phone:data.phone };
-  if(data.mode === 'greet') return { view:'greet', name:String(data.greetName||''), isNew:!!data.isNew };
+  if(data.mode === 'greet'){
+    if(greetedKey && capGreetKey(data) === greetedKey) return { view:'hide' };   // اتعرض خلاص
+    return { view:'greet', name:String(data.greetName||''), isNew:!!data.isNew, key:capGreetKey(data) };
+  }
   return { view:'hide' };
 }
 function capGreetText(name, isNew){
@@ -1159,7 +1166,7 @@ function capGreetText(name, isNew){
 }
 /* <<< CAP_KIOSK_END */
 
-let _capDigits = '', _capAskId = null, _capHandled = null, _capGreetTimer = null;
+let _capDigits = '', _capAskId = null, _capHandled = null, _capGreetTimer = null, _capGreetedKey = '';
 const _capPanes = ['capPanePhone','capPaneName','capPaneGreet'];
 function _capShowPane(id){
   document.getElementById('capOverlay').classList.toggle('show', !!id);
@@ -1214,7 +1221,7 @@ window.capCancel = function(){
   _capShowPane(null);
 };
 function _capApply(data){
-  const v = capKioskView(data, _capHandled);
+  const v = capKioskView(data, _capHandled, undefined, _capGreetedKey);
   if(v.view === 'phone'){
     _capAskId = v.askId; _capDigits = ''; _capRefreshDisplay(); _capShowPane('capPanePhone');
   }else if(v.view === 'name'){
@@ -1224,6 +1231,7 @@ function _capApply(data){
     _capShowPane('capPaneName');
     setTimeout(()=> document.getElementById('capNameInput').focus(), 80);
   }else if(v.view === 'greet'){
+    _capGreetedKey = v.key || '';
     document.getElementById('capGreetTxt').textContent = capGreetText(v.name, v.isNew);
     _capShowPane('capPaneGreet');
     clearTimeout(_capGreetTimer);
@@ -1307,7 +1315,7 @@ window.capDiag = function(){
 <!-- 📱 شاشة إنستاباي — ملف مستقل. لو وقع، الكشك بيفضل شغال عادي. -->
 <script type="module" src="instapay-tablet.js?v=692"></script>
 <!-- 📲 دعوة تحميل التطبيق — ملف مستقل كمان -->
-<script type="module" src="app-invite.js?v=693"></script>
+<script type="module" src="app-invite.js?v=695"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

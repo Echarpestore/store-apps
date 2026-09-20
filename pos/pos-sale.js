@@ -2743,14 +2743,44 @@ function _capStartListener(){
     if(data.mode === 'named'){
       const phone = _capValidPhone(data.phone);
       if(!phone) return;
-      _capFill(phone, String(data.name||'').trim());
+      const _nm = String(data.name||'').trim();
+      _capFill(phone, _nm);
+      // 🆕 v715: العميلة كتبت رقمها واسمها بنفسها على التابلت — التسجيل **يتم هنا**. قبل كده كنا بنملا الخانتين بس،
+      //    والتوست بيقول «اتسجل» والشاشة عند الكاشير بتقول «مش مسجّل» ومستنية دوسة «سجّل» — ولو الكاشير نسيت، العميلة متسجلتش
+      //    (والتابلت رحّب بيها «اتسجلتي معانا»). الرقم جاي من كيبورد التابلت ومتحقق منه مرتين، فمفيش حاجة الكاشير تراجعها.
+      const _regOk = await capAutoRegister(phone, _nm);
       _capDocRef().set({ mode:'greet', greetName: String(data.name||'').trim(), isNew:true, ts:Date.now(), askId:_capAskId }).catch(()=>{});
-      showToast('🆕 ' + (String(data.name||'').trim() || phone) + ' — عميل جديد اتسجل في الفاتورة', 'ok');
+      showToast(_regOk ? ('🆕 ' + (_nm || phone) + ' — عميلة جديدة اتسجلت ✅')
+                       : ('⚠️ ' + (_nm || phone) + ' — البيانات اتملت، دوسي «سجّل» (التسجيل التلقائي متمّش)'), _regOk ? 'ok' : 'warn');
       _capAskId = null;   // اكتمل
       return;
     }
   }, (e)=> console.warn('cap listener', e));
 }
+
+// 🆕 v715: تسجيل عميلة التابلت تلقائي. بترجّع true لو اتسجلت (أو كانت مسجّلة أصلًا).
+//    ⚠️ `points:0` بيتكتب **بس لو المستند مش موجود** — `merge` مع points:0 على عميلة موجودة بيصفّر نقطها.
+async function capAutoRegister(phone, name){
+  try{
+    const ph = (typeof normalizePhone === 'function') ? normalizePhone(phone) : phone;
+    if(!name || (typeof phoneRejectReason === 'function' && phoneRejectReason(ph))) return false;
+    const ref = db.collection(TEST_CUSTOMERS).doc(ph);
+    const cur = await ref.get();
+    if(!cur.exists){
+      await ref.set({ name: name, phone: ph, points: 0, branch: currentBranch, source: 'kiosk_self',
+                      createdAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
+      try{ if(typeof _logActivity === 'function') _logActivity('customer_self_registered', { phone: ph, name: name }); }catch(e){}
+    }
+    try{
+      const row = document.getElementById('newCustomerRow'); if(row) row.style.display = 'none';
+      const info = document.getElementById('customerInfo'); if(info) info.textContent = 'اتسجلت عميلة جديدة: ' + name;
+    }catch(e){}
+    try{ window.POSLocalSearchCache && window.POSLocalSearchCache.upsertCustomer && window.POSLocalSearchCache.upsertCustomer({ id:ph, name:name, phone:ph, branch:currentBranch, updatedAtMs:Date.now() }, currentBranch).catch(function(){}); }catch(e){}
+    if(typeof refreshCustomerInfo === 'function') refreshCustomerInfo();
+    return true;
+  }catch(e){ console.warn('cap auto register', e); return false; }
+}
+window.capAutoRegister = capAutoRegister;
 
 function _capFill(phone, name){
   const pEl = document.getElementById('customerPhone');
