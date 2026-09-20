@@ -743,7 +743,7 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
   assert(/if\(_bad\)\{ showToast/.test(reg), '⛔ والمنع بيوقف التسجيل');
   assert(reg.indexOf('phoneRejectReason') < reg.indexOf('.set({ name, phone'),
     'التحقق **قبل** الكتابة');
-  assert(/if\(phone !== raw\)/.test(reg) && /confirm\(/.test(reg),
+  assert(/if\(phone !== raw\)/.test(reg) && /await posConfirm\(/.test(reg),   // v707: التأكيد بقى جوّه الصفحة
     '🔄 ولو التطبيع غيّر الرقم، الكاشير بتشوفه وتأكّد');
 
   // ---- 🔴 اتغيّر بقرار المالك: الرقم الناقص مبقاش يعدّي ----
