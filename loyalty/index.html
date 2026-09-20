@@ -2932,7 +2932,10 @@ function watchCredit(phone){
      مفيش حركات» والرصيد ظاهر والحركات موجودة. دلوقتي لو اترفض بنرجع
      لاستعلام بالرقم بس (index تلقائي) ونرتّب هنا، والكشف المفتوح بيتحدّث. */
   function apply(docs){
+    /* 🏷️ حركات البراند ده بس. الحركات القديمة (قبل الفصل) من غير `brand`
+       كانت كلها على `credit` = echarpe. */
     _creditRows = docs.map(function(d){ return d.data(); })
+      .filter(function(r){ return r.brand !== 'glow'; })
       .sort(function(a, b){ return (b.at || 0) - (a.at || 0); }).slice(0, 50);
     try{ if(typeof renderAccount === 'function' && $('tab-account') && $('tab-account').style.display !== 'none') renderAccount(); }catch(e){}
   }
@@ -2958,6 +2961,11 @@ function creditRowLabel(r){
   if(t === 'change_kept') return '💵 باقي محفوظ' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
   if(t === 'spend')       return '🛍️ فاتورة' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
   if(t === 'manual')      return '✏️ ' + (r.reason || 'تعديل');
+  /* 🔀 ترحيل بعد فصل البراندين. العميلة عمرها ما «نقلت» حاجة — رصيدها اتولد هنا
+     من الأول وكان متسجّل في مكان مشترك. فالداخل يتسمّى «رصيدك السابق» مش «اتنقل من». */
+  if(t === 'brand_move')  return r.amount < 0
+    ? '🔀 اتنقل لرصيدك في ' + (r.movedTo === 'glow' ? 'Glow' : 'echarpe')
+    : '💼 رصيدك السابق';
   return 'حركة';
 }
 
@@ -3019,7 +3027,11 @@ async function claimGift(){
     var d = res.data || {};
     if(msg){
       msg.style.color = '#1e8449';
-      msg.textContent = '🎉 اتضاف ' + fmt(d.amount) + ' ج.م — رصيدك دلوقتي ' + fmt(d.balance) + ' ج.م';
+      /* 🏷️ براند الكارت هو الحاكم: كارت Glow اتفعّل من هنا بيروح رصيد Glow —
+         لازم العميلة تعرف، وإلا تدوّر عليه هنا وماتلاقيهوش. */
+      msg.textContent = (d.brand && d.brand !== 'echarpe')
+        ? '🎉 اتضاف ' + fmt(d.amount) + ' ج.م لرصيدك في Glow — هتلاقيه في تطبيق Glow وتصرفيه من فروعه'
+        : '🎉 اتضاف ' + fmt(d.amount) + ' ج.م — رصيدك دلوقتي ' + fmt(d.balance) + ' ج.م';
     }
     if(el) el.value = '';
     // الرصيد بيتحدّث لوحده من مستمع العميلة
