@@ -60,7 +60,7 @@ t('لقطة متحمّلتش = بتتشال هي بس والـQR شغال',()=>{
 t('والموبايل عمره ما يبقى فاضي: شاشة فتح التطبيق تحت اللقطات',()=>{has('<div class="aiSplash"><img src="');has('.aiSplash{position:absolute;inset:0;')});
 t('حركة خفيفة على التابلت: transform/opacity/clip-path بس',()=>{
   const kf=(src.match(/@keyframes \w+\{[^@]*\}\}?/g)||[]).join(' ');
-  if(/(^|[;{\s])(width|height|top|left|right|bottom|margin|padding|box-shadow|filter)\s*:/.test(kf))throw Error('فيه خاصية بتعمل layout/paint جوّه keyframes') });
+  if(/(^|[;{\s])(width|height|top|left|right|bottom|margin[\w-]*|padding[\w-]*|box-shadow|filter)\s*:/.test(kf))throw Error('فيه خاصية بتعمل layout/paint جوّه keyframes') });
 t('بيحترم «تقليل الحركة»',()=>has('@media (prefers-reduced-motion:reduce){'));
 t('الحركة بتبدأ من الأول كل مرة الشاشة تظهر',()=>{ const sh=src.slice(src.indexOf('async function show(')); const a=sh.indexOf("wrap.classList.remove('on');"), b=sh.indexOf('void wrap.offsetWidth;'), c=sh.indexOf("wrap.classList.add('on');"); if(!(a>0&&b>a&&c>b))throw Error('ترتيب remove → reflow → add اتكسر') });
 t('ألوان البراند مش خلفية سودا',()=>{ if(/background:#070809/.test(src))throw Error('الخلفية القديمة لسه موجودة'); has('#E4458E'); has('#E2A646') });
