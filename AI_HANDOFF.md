@@ -43,7 +43,7 @@
 ## 1. الإصدارات الحالية
 | التطبيق | الإصدار |
 |---|---|
-| POS (`pos/sw.js`) | **v697** |
+| POS (`pos/sw.js`) | **v698** |
 | sales (الحضور/HR) | v618 |
 | feedback (تابلت الفرع) | **v691** |
 | loyalty / glow | **v690** / v75 |
@@ -135,7 +135,7 @@ ChatGPT ضاف منظومة finance/InstaPay في **29 دالة** (13 في `inst
 ---
 
 ## 3. الملفات
-- `pos/` — + `tender-core.js` · `tender-pos.js` (جداد 4هـ) · `instapay-pos.js` · `refund-credit.js` · `credit-core.js` · `credit-ui.js`
+- `pos/` — + `reverse-credit.js` (v698) · `tender-core.js` · `tender-pos.js` (جداد 4هـ) · `instapay-pos.js` · `refund-credit.js` · `credit-core.js` · `credit-ui.js`
   · `index.html` · `pos-core.js` · `pos-sale.js` · `pos-admin.js` · `pos-reports.js`
   · `app.js` · `frames.js` · `import.js` · `products.js` · `transfers.js` · `chat.js`
   · `staff.js` · `profiles.js` · `loyalty.js` · `search.js` · `discounts.js` · `ui-editor.js` + `sw.js`
@@ -374,7 +374,7 @@ localStorage + كود المالك علامة '1' قابلة للزرع — خط
 ## 19. الاختبارات
 **ملفات جلسة 18–19 سبتمبر (11 · 216 اختبار):** `test-instapay-core` (47) ·
 `test-instapay-pos` (36) · `test-instapay-tablet` (27) · `test-refund-credit` (21) ·
-**`test-tender` (48 — جلسة 4هـ، فيه 6 اختبارات سلبية + سلسلة التقفيل كاملة)** ·
+**`test-reverse-credit` (18)** · **`test-tender` (48 — جلسة 4هـ، فيه 6 اختبارات سلبية + سلسلة التقفيل كاملة)** ·
 `test-app-invite` (18) · `test-money-fixes` (16) · `test-settings-placement` (12 —
 **jsdom على هيكل الشاشة الحقيقي**، محتاج `npm i jsdom`) · `test-tryon-drape` (11) ·
 `test-settings-branch` (11 — jsdom) · `test-grid-detect` (9) · `test-admin-import` (8).
@@ -425,9 +425,15 @@ node tests/run.js
 ### 🔥 الأولوية (متفق عليها مع المالك 19 سبتمبر — بالترتيب ده)
 0. ~~العيب المحاسبي (4هـ)~~ ✅ اتحل (v696). **باقي منه:** deploy لـ`creditSpend` +
    مراقبة أول تقفيلين (سطر «رصيد عميلات» و«استبدال نقط ومكافآت» لازم يظهروا والفرق صفر).
-0أ. 🟠 **عكس فاتورة مدفوعة بالرصيد مبيرجّعش الرصيد للعميلة** — `reverseReceipt` بيعكس
-   المدفوعات في التقفيل (سليم) بس مبيناديش `creditAdjust`. لحد ما يتعمل: المالك يرجّعه يدوي.
-   ونفس الدالة لسه فيها `confirm()` (ممنوع في Electron — قسم 0).
+0أ. ~~عكس فاتورة مدفوعة بالرصيد مبيرجّعش الرصيد~~ ✅ اتحل (v698) — `pos/reverse-credit.js`
+   بيغلّف `reverseReceipt`: صرف اتعكس → +المبلغ فورًا (`source:'refund'`) · مرتجع لرصيد اتعكس →
+   −المبلغ (طابور موافقة المالك لو مش هو اللي عكس). بيتأكد إن العكس **تم فعلًا** قبل أي حركة،
+   و`idem` من رقم الفاتورة الأصلية. `test-reverse-credit` (18 + 3 سلبيين).
+   ⚠️ تصحيح: `confirm()` **شغال** في Electron (الممنوع `prompt()` بس) — فمش باج.
+0أ-2. 🟠 **فواتير ما قبل v696 اللي فيها سطر وهمي (`__credit_spend__` / `__loyalty_redemption__`
+   / مكافأة) متتعكسش أصلًا:** `reverseReceipt` بيعمل `batch.update` على مستند مخزون بالـid ده،
+   مش موجود → الدفعة كلها بتترفض. الجديدة سليمة (السطور بقت مدفوعات). الإصلاح سطر واحد
+   جوّه `pos-sale.js` (تخطّي أي `id` بيبدأ بـ`__`) — مستني إذن المالك للمس الملف.
 0ب. 🟠 **Office: المرتجع لرصيد مبيزوّدش الدين** — `gcSold` بيتحسب من بيع الكروت بس،
    فـ«رصيد عليك» في الشيت أقل من الحقيقي بقيمة المرتجعات للرصيد.
 0ج. 🟡 مرتجع قطعة اتدفع جزء منها نقط/مكافأة بيرجّع سعرها كامل كاش (سلوك قديم مش جديد).
