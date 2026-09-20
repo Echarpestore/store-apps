@@ -72,7 +72,7 @@ t('الطريقة متربوطة بالزرار',()=>{
   if(!sale.includes("credit:'pmCredit'"))throw Error('مفيش في payBtnId')});
 t('الملف متحمّل',()=>{if(!html.includes('refund-credit.js?v=692'))throw Error('مش متحمّل')});
 t('CACHE_NAME اترفع',()=>{
-  if(!/pos-shell-v69[2-9]/.test(fs.readFileSync('pos/sw.js','utf8')))throw Error('الكاش ماترفعش')});
+  const m=fs.readFileSync('pos/sw.js','utf8').match(/pos-shell-v(\d+)/); if(!m||+m[1]<692)throw Error('الكاش ماترفعش')});
 t('pos-sale اتغير سطر واحد بس',()=>{
   const o=fs.readFileSync(R+'pos-sale.js','utf8');
   const d=sale.split('\n').length-o.split('\n').length;

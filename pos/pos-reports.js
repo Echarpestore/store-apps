@@ -1588,16 +1588,46 @@ function sendRewardToSelected(){
   if(!phones.length){ showToast('اختار عملاء الأول', 'err'); return; }
   openRewardModal({ bulk:true, phones });
 }
+/* العميلة اللي من غير فرع (سجّلت من التطبيق) تبع أنهي براند؟
+   `loyaltyCode` = echarpe · `loyaltyCode_glow` = Glow · والـ`source` بيأكد.
+   اللي سجّلت في الاتنين بتظهر في الاتنين. */
+function custAppBrandMatch(c, isGlow){
+  c = c || {};
+  const src = String(c.source || '');
+  if(isGlow) return !!c.loyaltyCode_glow || src.indexOf('glow_app') === 0;
+  return !!c.loyaltyCode || src.indexOf('loyalty_app') === 0;
+}
+// دمج من غير تكرار: عملاء الفرع + عملاء التطبيق بتوع نفس البراند
+function mergeCustDocs(branchDocs, appDocs, isGlow){
+  const seen = {}, out = [];
+  (branchDocs || []).forEach(d=>{ if(!seen[d.id]){ seen[d.id] = 1; out.push(d); } });
+  (appDocs || []).forEach(d=>{
+    if(seen[d.id]) return;
+    if(!custAppBrandMatch(d.data(), isGlow)) return;
+    seen[d.id] = 1; out.push(d);
+  });
+  return out;
+}
+window.custAppBrandMatch = custAppBrandMatch; window.mergeCustDocs = mergeCustDocs;
+
 async function goToCustomerList(){
   showScreen('customerListScreen');
   const wrap = document.getElementById('customerListWrap');
   wrap.innerHTML = '<div style="padding:30px; text-align:center; color:var(--muted);">بيتحمّل...</div>';
   const searchEl = document.getElementById('custSearch'); if(searchEl) searchEl.value='';
   try{
-    const [custSnap, sales] = await Promise.all([
+    /* 📱 عملاء التطبيق كانوا **مختفيين** من القايمة:
+       التطبيق بيسجّل العميلة بـ`branch: ''` (هي مش تبع فرع لسه)، والقايمة كانت
+       بتجيب `branch == الفرع الحالي` بس → اللي سجّلت من التطبيق ماتظهرش في أي
+       فرع خالص، ولا حتى بعد ما تشتري. دلوقتي بنجيب الاتنين ونفلتر اللي من غير
+       فرع بالبراند (`custAppBrandMatch`) عشان عميلات Glow مايظهروش في echarpe. */
+    const _isGlow = pointsFieldFor(currentBranch) === 'points_glow';
+    const [custSnap, appSnap, sales] = await Promise.all([
       db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get(),
+      db.collection(TEST_CUSTOMERS).where('branch','==', '').get().catch(()=> ({ docs: [] })),
       getBranchSales()
     ]);
+    const _custDocs = mergeCustDocs(custSnap.docs, appSnap.docs, _isGlow);
     try{
       const _rs = await db.collection(TEST_SETTINGS).doc('reward_stats_' + (pointsFieldFor(currentBranch)==='points_glow'?'glow':'echarpe')).get();
       rewardStats = _rs.exists ? _rs.data() : {};
@@ -1612,7 +1642,7 @@ async function goToCustomerList(){
       if(!s.isReversal) agg[p].count += 1;
       const t = saleTime(s); if(t > agg[p].lastTs) agg[p].lastTs = t;
     });
-    custListData = custSnap.docs.map(d=>{
+    custListData = _custDocs.map(d=>{
       const c = { id:d.id, ...d.data() };
       const a = agg[c.phone] || { spend:0, count:0, lastTs:0 };
       c._spend = a.spend; c._count = a.count; c._lastTs = a.lastTs;
@@ -1646,6 +1676,7 @@ function renderCustList(){
       + chip('📱 معاهم التطبيق', appStats.hasApp + ' (' + pct + '%)', 'var(--accent)')
       + chip('إجمالي إنفاقهم', totalSpend.toFixed(0)+' ج.م','var(--plus)')
       + chip('إجمالي النقاط', totalPoints,'var(--warn)')
+      + chip('💳 أرصدة العملاء (دين عليك)', custListData.reduce((s,c)=> s + (Number(c.credit)||0), 0).toFixed(0)+' ج.م','var(--minus)')
       + chip('🎁 مكافأة الترحيب', appStats.welcomeGranted + ' اتصرفت · ' + appStats.welcomeUsed + ' اتستعملت','var(--warn)')
       + chip('كل المكافآت: اتبعت/اتستعمل', (rewardStats.sent||0)+' / '+(rewardStats.used||0),'var(--accent)');
     // تفصيل مصادر التحميل — تحت الشرائح مباشرة
@@ -1672,9 +1703,10 @@ function renderCustList(){
   if(sort==='spend') list.sort((a,b)=> (b._spend||0)-(a._spend||0));
   else if(sort==='recent') list.sort((a,b)=> (b._lastTs||0)-(a._lastTs||0));
   else if(sort==='points') list.sort((a,b)=> (b[pointsFieldFor(currentBranch)]||0)-(a[pointsFieldFor(currentBranch)]||0));
+  else if(sort==='credit'){ list = list.filter(c=> (Number(c.credit)||0) > 0); list.sort((a,b)=> (Number(b.credit)||0)-(Number(a.credit)||0)); }
   else if(sort==='name') list.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
-  if(list.length === 0){ wrap.innerHTML = '<div class="empty-cart">'+(q?'مفيش عميل بالبحث ده':'لسه مفيش عملاء مسجلين')+'</div>'; return; }
+  if(list.length === 0){ wrap.innerHTML = '<div class="empty-cart">'+(q?'مفيش عميل بالبحث ده':(sort==='credit'?'مفيش عملاء عندهم رصيد':'لسه مفيش عملاء مسجلين'))+'</div>'; return; }
   custListFiltered = list;   // للمكافأة الجماعية
 
   const selCount = selectedCustomers.size;
@@ -1701,6 +1733,8 @@ function renderCustList(){
         <div style="text-align:left; flex-shrink:0;">
           <div style="font-weight:900; font-size:13.5px; color:var(--plus);">${(c._spend||0).toFixed(0)}<span style="font-size:9.5px; font-weight:700;"> ج.م</span></div>
           <div style="color:var(--muted); font-size:9.5px;">⭐${pts} · 🧾${c._count||0} · ${last}</div>
+          ${(Number(c.credit)||0) > 0 ? `<div style="color:var(--minus); font-size:10.5px; font-weight:900;">💳 ${Number(c.credit).toFixed(2)}</div>` : ''}
+          ${!c.branch ? `<div style="color:var(--accent); font-size:9.5px; font-weight:800;">📱 من التطبيق</div>` : ''}
         </div>
       </div>
       <button onclick="event.stopPropagation(); openWaCompose('${c.phone}', ${JSON.stringify(String(c.name||'')).replace(/"/g,'&quot;')})" title="ابعت واتساب"

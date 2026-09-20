@@ -1346,6 +1346,7 @@ body.on-dashboard .badge-test{ display:block; }
         <option value="spend">الأكثر إنفاقًا</option>
         <option value="recent">آخر زيارة</option>
         <option value="points">النقاط</option>
+        <option value="credit">💳 عندهم رصيد</option>
         <option value="name">الاسم</option>
       </select>
     </div>
@@ -2119,7 +2120,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="blackbox.js"></script>
 <script src="pos-core.js"></script>
 <script src="pos-admin.js?v=534"></script>
-<script src="pos-reports.js?v=696"></script>
+<script src="pos-reports.js?v=701"></script>
 <script src="../cctv-config.js?v=549"></script>
 <script src="cctv-presence.js?v=617"></script>
 <script src="cctv-staff-state.js?v=644"></script>
@@ -2154,7 +2155,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="credit-core.js"></script>
 <script src="credit-ui.js"></script>
 <!-- 📱 انستا باي — طبقة فوق pos-sale.js، لو وقعت الفاتورة بتكمّل عادي -->
-<script src="instapay-pos.js?v=697"></script>
+<script src="instapay-pos.js?v=700"></script>
 <!-- 💳 المرتجع لرصيد العميلة -->
 <script src="refund-credit.js?v=692"></script>
 <!-- 💳 §4هـ: الرصيد/النقط/المكافأة بيتحفظوا طرق دفع مش سطور سالبة.
@@ -2163,6 +2164,8 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="tender-pos.js?v=696"></script>
 <!-- ↩️💳 عكس فاتورة فيها رصيد بيرجّع/يسحب الرصيد — بيغلّف reverseReceipt -->
 <script src="reverse-credit.js?v=698"></script>
+<!-- 📒 كشف رصيد العميلة في البروفايل — قراءة بس، بيغلّف renderCustProfile -->
+<script src="credit-ledger-ui.js?v=701"></script>
 <!-- 🧠 شريط الفرصة -->
 <script src="opportunity-core.js"></script>
 <!-- 🔖 طلبات الزباين -->
