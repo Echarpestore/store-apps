@@ -1,0 +1,136 @@
+/* ============================================================
+   🎀 kiosk-theme.css — هوية شاشة التقييم (feedback v696 · 20 سبتمبر 2026)
+   ------------------------------------------------------------
+   طلب المالك: الزراير تمشي مع هوية echarpe وتبقى شكل براند عالمي.
+   القديم: أربع مربعات أحمر/برتقالي/ليموني/أخضر على خلفية سودا — شكل جهاز تقييم جاهز، مالوش علاقة بالمحل.
+
+   ⚖️ قاعدة مهمة: **الأربع زراير بنفس الوزن البصري بالظبط** (حجم · تشبّع · تباين · حركة). ده جهاز قياس —
+      لو الزرار السلبي باهت أو أصغر، الناس هتدوس الحلو أكتر والأرقام عندك تكدب. الترتيب بييجي من
+      **تدرّج البراند نفسه** (برقوقي غامق ← توتي ← فوشيا ← دهبي) مش من إن واحد أجمل من التاني.
+   🧱 الملف ده بيلمس `#kiosk` و`#thanks` بس. لوحة النتائج والإعدادات وكيبورد تسجيل الرقم على ألوانهم.
+   🏷️ `html[data-brand="glow"]` = نفس التصميم بألوان Glow (التابلت بيعرف فرعه — زي شاشة دعوة التطبيق).
+   🎬 الحركة transform/opacity بس. لمعة القماش بتعدّي على الزراير واحد ورا التاني كل 8 ثواني عشان التابلت يلفت النظر.
+   ============================================================ */
+:root{
+  --k-bg1:#FFF7FA; --k-bg2:#FBE6EF; --k-bg3:#F6D6E4;
+  --k-ink:#3B1E2C; --k-sub:#8A5A70; --k-line:rgba(59,30,44,.14);
+  --k-1a:#4A2238; --k-1b:#2E1422;          /* مضايقني جدًا — برقوقي */
+  --k-2a:#A33B6F; --k-2b:#7C2752;          /* مش عاجبني — توتي */
+  --k-3a:#EE6A86; --k-3b:#DC3F80;          /* كويس — فوشيا */
+  --k-4a:#F0BC62; --k-4b:#DE9A35;          /* عجبني جدًا — دهبي */
+  --k-on-dark:#FFF6FA; --k-on-4:#3B1E2C;
+}
+html[data-brand="glow"]{
+  --k-bg1:#FFF5F8; --k-bg2:#FCE7EC; --k-bg3:#F4B9C6;
+  --k-ink:#1A1315; --k-sub:#8A5F70; --k-line:rgba(26,19,21,.14);
+  --k-1a:#2A1D24; --k-1b:#120C0F;
+  --k-2a:#6E3550; --k-2b:#4C2236;
+  --k-3a:#CF6D8C; --k-3b:#B24E73;
+  --k-4a:#F6C3CF; --k-4b:#EDA3B5;
+  --k-on-4:#1A1315;
+}
+
+#kiosk{
+  background:linear-gradient(120deg,var(--k-bg1) 0%,var(--k-bg2) 55%,var(--k-bg3) 100%);
+  color:var(--k-ink); padding:4vh 4vw 5vh; gap:0; overflow:hidden;
+  isolation:isolate;   /* ⚠️ من غيرها z-index بتاع الزراير بيطلع فوق #thanks — وطبقة الشكر هي **قفل التقييم المكرر**، فالزراير كانت هتفضل بتتداس */
+}
+/* قماشة خفيفة مايلة في الخلفية — نفس لغة شاشة دعوة التطبيق */
+#kiosk::before{
+  content:""; position:absolute; right:-14vw; top:-30vh; width:60vw; height:160vh; border-radius:12vh;
+  background:linear-gradient(200deg,rgba(255,255,255,.75),rgba(255,255,255,0) 60%);
+  transform:rotate(-11deg); pointer-events:none;
+}
+#kiosk .k-brand,#kiosk h1,#kiosk .grid{position:relative; z-index:1;}   /* مش `#kiosk > *` — ده كان بيكسر الـabsolute بتاع الفرع والترس */
+#branchTag,#gear,#fsBtn{z-index:2;}
+#kiosk .eyebrow{display:none;}
+
+.k-brand{
+  width:clamp(52px,8.4vh,84px); height:clamp(52px,8.4vh,84px); border-radius:24%;
+  box-shadow:0 1.6vh 3.2vh -1.2vh rgba(120,30,70,.45); margin-bottom:2.4vh; display:block;
+}
+#kiosk h1{
+  color:var(--k-ink); font-weight:900; letter-spacing:-.01em;
+  font-size:clamp(26px,5.6vh,54px); line-height:1.3; margin:0 0 5.2vh; max-width:none;
+}
+
+.grid{gap:clamp(12px,1.8vw,26px); max-width:min(1180px,92vw);}
+.face-btn{
+  aspect-ratio:4/5; border-radius:clamp(20px,3.6vh,34px); overflow:hidden; isolation:isolate;
+  gap:clamp(10px,2.4vh,22px); padding:0 1vw;
+  font-weight:800; font-size:clamp(15px,2.75vh,24px); letter-spacing:0; color:var(--k-on-dark);
+  background:linear-gradient(165deg,var(--fa),var(--fb));
+  box-shadow:0 2.6vh 4.4vh -2vh var(--fs), 0 0 0 1px rgba(255,255,255,.22) inset, 0 .25vh 0 rgba(255,255,255,.28) inset;
+  transform:translateY(0) scale(1);
+  transition:transform .14s cubic-bezier(.2,.8,.2,1), box-shadow .14s ease;
+}
+.face-btn.b1{--fa:var(--k-1a); --fb:var(--k-1b); --fs:rgba(46,20,34,.75);}
+.face-btn.b2{--fa:var(--k-2a); --fb:var(--k-2b); --fs:rgba(124,39,82,.7);}
+.face-btn.b3{--fa:var(--k-3a); --fb:var(--k-3b); --fs:rgba(220,63,128,.65);}
+.face-btn.b4{--fa:var(--k-4a); --fb:var(--k-4b); --fs:rgba(200,130,40,.65); color:var(--k-on-4);}
+.b1,.b2,.b3,.b4{background:linear-gradient(165deg,var(--fa),var(--fb));}
+html[data-brand="glow"] .face-btn.b1{--fs:rgba(18,12,15,.7);}
+html[data-brand="glow"] .face-btn.b2{--fs:rgba(76,34,54,.65);}
+html[data-brand="glow"] .face-btn.b3{--fs:rgba(178,78,115,.6);}
+html[data-brand="glow"] .face-btn.b4{--fs:rgba(200,110,140,.55);}
+
+/* الوش: خط رفيع جوّه حلقة — مرسوم بـcurrentColor فبياخد لون الزرار لوحده */
+.face-btn svg{
+  width:clamp(64px,15vh,132px); height:clamp(64px,15vh,132px);
+  padding:clamp(10px,2.2vh,20px); border-radius:50%;
+  background:rgba(255,255,255,.12); box-shadow:0 0 0 1px rgba(255,255,255,.28) inset;
+}
+.face-btn.b4 svg{background:rgba(255,255,255,.3); box-shadow:0 0 0 1px rgba(59,30,44,.16) inset;}
+
+/* لمعة القماش */
+.face-btn::after{
+  content:""; position:absolute; inset:-20% -60%; z-index:-1; pointer-events:none;
+  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.26) 50%,transparent 58%);
+  transform:translateX(-70%); animation:kSheen 8s ease-in-out infinite;
+}
+.face-btn.b1::after{animation-delay:1.6s} .face-btn.b2::after{animation-delay:2.0s}
+.face-btn.b3::after{animation-delay:2.4s} .face-btn.b4::after{animation-delay:2.8s}
+@keyframes kSheen{0%,72%{transform:translateX(-70%)}92%,100%{transform:translateX(70%)}}
+
+.face-btn:active{
+  transform:translateY(.5vh) scale(.965);
+  box-shadow:0 1vh 2vh -1.2vh var(--fs), 0 0 0 1px rgba(255,255,255,.22) inset, 0 .25vh 0 rgba(255,255,255,.28) inset;
+}
+.face-btn:focus-visible{outline:.4vh solid var(--k-ink); outline-offset:.5vh;}
+
+/* دخول واحد متألّف عند فتح الشاشة */
+#kiosk .k-brand,#kiosk h1,#kiosk .face-btn{animation:kUp .7s cubic-bezier(.2,.8,.2,1) both;}
+#kiosk h1{animation-delay:.08s}
+#kiosk .face-btn.b1{animation-delay:.18s} #kiosk .face-btn.b2{animation-delay:.26s}
+#kiosk .face-btn.b3{animation-delay:.34s} #kiosk .face-btn.b4{animation-delay:.42s}
+@keyframes kUp{from{opacity:0; transform:translateY(3vh)}to{opacity:1; transform:none}}
+
+/* الأيقونات الصغيرة والفرع على الخلفية الفاتحة */
+#branchTag{color:var(--k-sub); font-family:'Cairo',sans-serif; font-weight:700; letter-spacing:0;}
+#gear,#fsBtn{background:rgba(255,255,255,.6); border-color:var(--k-line); opacity:.5;}
+#gear svg,#fsBtn svg{stroke:var(--k-sub);}
+
+/* ---------- شكرًا ---------- */
+#thanks{z-index:5; background:linear-gradient(120deg,var(--k-bg1),var(--k-bg2) 55%,var(--k-bg3)); color:var(--k-ink); gap:3vh;}
+#thanks .check{
+  width:clamp(88px,17vh,150px); height:clamp(88px,17vh,150px);
+  background:linear-gradient(150deg,var(--k-3a),var(--k-4b)) !important;   /* الكود بيحط لون التقييم inline — الشكر بلون البراند لكل التقييمات */
+  box-shadow:0 3vh 5vh -2vh rgba(200,60,120,.55);
+}
+#thanks .check svg{width:52%; height:52%; stroke:#fff;}
+#thanks .check svg path{stroke-dasharray:30; stroke-dashoffset:30;}
+#thanks.show .check svg path{animation:kDraw .5s ease-out .18s forwards;}
+@keyframes kDraw{to{stroke-dashoffset:0}}
+#thanks p{font-size:clamp(22px,4.6vh,40px); font-weight:900; color:var(--k-ink);}
+
+@media (orientation:portrait){
+  .grid{grid-template-columns:repeat(2,1fr); max-width:min(640px,88vw);}
+  .face-btn{aspect-ratio:1/1;}
+  #kiosk h1{font-size:clamp(24px,4vh,44px); margin-bottom:4vh;}
+}
+@media (max-width:760px){ .grid{grid-template-columns:repeat(2,1fr);} }
+@media (prefers-reduced-motion:reduce){
+  .face-btn::after{animation:none}
+  #kiosk .k-brand,#kiosk h1,#kiosk .face-btn{animation:none}
+  #thanks.show .check svg path{animation:none; stroke-dashoffset:0}
+}
