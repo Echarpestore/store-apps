@@ -2039,13 +2039,13 @@ function renderAccount(){
       '<div class="acct-row"><span class="k">عضو من</span><span class="v">'+esc(sinceFull)+'</span></div>'+
       /* 💰 رصيد الفلوس — منفصل عن النقط عن قصد.
          النقط بتتكسب بقاعدة، والرصيد فلوس اتدفعت. خلطهم بيلخبط.
-         ⚠️ الرصيد **مشترك بين البراندين** (حقل `credit` واحد على مستند
-            العميلة) — كارت اتشُري من echarpe بيتصرف في Glow والعكس. */
-      ((Number(currentCustomer.credit)||0) > 0
+         🏷️ الرصيد **لكل براند لوحده** (قرار المالك 20 سبتمبر 2026): Glow بتقرا
+            `credit_glow` وecharpe بتقرا `credit` — زي النقط بالظبط. */
+      ((Number(currentCustomer.credit_glow)||0) > 0
         /* 👆 الصف نفسه بيفتح الكشف — الزرار المنفصل تحت اتشال (كان تكرار:
            العميلة بتدوس على الرقم بالفطرة ومبيحصلش حاجة). */
         ? '<div class="acct-row" onclick="openCreditStatement()" style="cursor:pointer;"><span class="k">💰 رصيدي</span><span class="v" style="font-weight:900;">'
-          + fmt(currentCustomer.credit) + ' ج.م <span style="opacity:.55; font-weight:700;">‹</span></span></div>' : '')+
+          + fmt(currentCustomer.credit_glow) + ' ج.م <span style="opacity:.55; font-weight:700;">‹</span></span></div>' : '')+
     '</div>'+
     /* 🌐 اللغة — صف مستقل فوق الأزرار عشان يبان من غير سكرول */
     '<div class="lang-row"><span class="lr-k">لغة التطبيق</span>'
@@ -2057,7 +2057,7 @@ function renderAccount(){
     '<button class="btn-outline" onclick="openClaimGift()">🎁 عندي كود كارت هدية</button>'+
     /* الرصيد صفر = صف «رصيدي» مش ظاهر، فالزرار ده الطريق الوحيد للكشف
        (عميلة صرفت رصيدها كله وعايزة تراجع). غير كده الصف بيكفي. */
-    (!((Number(currentCustomer.credit)||0) > 0) && _creditRows.length
+    (!((Number(currentCustomer.credit_glow)||0) > 0) && _creditRows.length
       ? '<button class="btn-outline" onclick="openCreditStatement()">📒 كشف حساب الرصيد</button>' : '')+
     (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
     '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
@@ -2869,7 +2869,10 @@ function watchCredit(phone){
      مفيش حركات» والرصيد ظاهر والحركات موجودة. دلوقتي لو اترفض بنرجع
      لاستعلام بالرقم بس (index تلقائي) ونرتّب هنا، والكشف المفتوح بيتحدّث. */
   function apply(docs){
+    /* 🏷️ حركات البراند ده بس. الحركات القديمة (قبل الفصل) من غير `brand`
+       كانت كلها على `credit` = echarpe. */
     _creditRows = docs.map(function(d){ return d.data(); })
+      .filter(function(r){ return r.brand === 'glow'; })
       .sort(function(a, b){ return (b.at || 0) - (a.at || 0); }).slice(0, 50);
     try{ if(typeof renderAccount === 'function' && $('tab-account') && $('tab-account').style.display !== 'none') renderAccount(); }catch(e){}
   }
@@ -2895,6 +2898,11 @@ function creditRowLabel(r){
   if(t === 'change_kept') return '💵 باقي محفوظ' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
   if(t === 'spend')       return '🛍️ فاتورة' + (r.invoiceCode ? ' · ' + r.invoiceCode : '');
   if(t === 'manual')      return '✏️ ' + (r.reason || 'تعديل');
+  /* 🔀 ترحيل بعد فصل البراندين. العميلة عمرها ما «نقلت» حاجة — رصيدها اتولد هنا
+     من الأول وكان متسجّل في مكان مشترك. فالداخل يتسمّى «رصيدك السابق» مش «اتنقل من». */
+  if(t === 'brand_move')  return r.amount < 0
+    ? '🔀 اتنقل لرصيدك في ' + (r.movedTo === 'glow' ? 'Glow' : 'echarpe')
+    : '💼 رصيدك السابق';
   return 'حركة';
 }
 
@@ -2912,7 +2920,7 @@ function openCreditStatement(){
   showSheet('📒 كشف حساب الرصيد',
     '<div class="acct-card">'
     + '<div class="acct-row"><span class="k">رصيدك دلوقتي</span>'
-    +   '<span class="v" style="font-weight:900;">' + fmt(currentCustomer.credit || 0) + ' ج.م</span></div>'
+    +   '<span class="v" style="font-weight:900;">' + fmt(currentCustomer.credit_glow || 0) + ' ج.م</span></div>'
     + '</div>'
     + (rows ? '<div class="acct-card">' + rows + '</div>'
             : '<div class="muted" style="text-align:center; padding:14px;">لسه مفيش حركات</div>'));
@@ -2958,7 +2966,11 @@ async function claimGift(){
     var d = res.data || {};
     if(msg){
       msg.style.color = '#1e8449';
-      msg.textContent = '🎉 اتضاف ' + fmt(d.amount) + ' ج.م — رصيدك دلوقتي ' + fmt(d.balance) + ' ج.م';
+      /* 🏷️ براند الكارت هو الحاكم: كارت echarpe اتفعّل من هنا بيروح رصيد echarpe —
+         لازم العميلة تعرف، وإلا تدوّر عليه هنا وماتلاقيهوش. */
+      msg.textContent = (d.brand && d.brand !== 'glow')
+        ? '🎉 اتضاف ' + fmt(d.amount) + ' ج.م لرصيدك في echarpe — هتلاقيه في تطبيق echarpe وتصرفيه من فروعه'
+        : '🎉 اتضاف ' + fmt(d.amount) + ' ج.م — رصيدك دلوقتي ' + fmt(d.balance) + ' ج.م';
     }
     if(el) el.value = '';
     // الرصيد بيتحدّث لوحده من مستمع العميلة
