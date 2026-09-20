@@ -75,10 +75,21 @@ if(typeof module !== 'undefined' && module.exports){
   const money = n => (Number(n) || 0).toFixed(2);
   const LIMIT = 200;
 
+  /* ⚠️ `where(phone) + orderBy(at)` محتاج index مركّب — وطلع **مش معمول**
+     في المشروع (افترضت إنه موجود عشان تطبيق العميلة بيستخدم نفس الاستعلام،
+     وهو كان بيفشل هناك بصمت). فلو الاستعلام المرتّب اترفض بنرجع لاستعلام
+     بالرقم بس (index تلقائي) ونرتّب هنا — دفتر العميلة الواحدة صغير. */
+  function sortDesc(rows){ return rows.sort((a, b) => (b.at || 0) - (a.at || 0)); }
   async function loadLedger(phone){
-    const snap = await db.collection('credit_ledger')
-      .where('phone', '==', String(phone)).orderBy('at', 'desc').limit(LIMIT).get();
-    return snap.docs.map(d => d.data());
+    const col = db.collection('credit_ledger'), ph = String(phone);
+    try{
+      const snap = await col.where('phone', '==', ph).orderBy('at', 'desc').limit(LIMIT).get();
+      return snap.docs.map(d => d.data());
+    }catch(e){
+      if(!/index/i.test(String((e && e.message) || '')) && String((e && e.code) || '') !== 'failed-precondition') throw e;
+      const snap = await col.where('phone', '==', ph).get();
+      return sortDesc(snap.docs.map(d => d.data())).slice(0, LIMIT);
+    }
   }
 
   // 🧾 فتح الفاتورة من رقمها (الدفتر شايل invoiceCode مش id المستند)

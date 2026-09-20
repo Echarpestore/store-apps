@@ -39,7 +39,13 @@ t('تعديل يدوي بسببه', () => ok(/تسوية/.test(M.creditLedgerLab
 console.log('\n🔒 قراءة بس');
 const code = strip(src);
 t('⭐⭐ مفيش أي كتابة في Firestore', () => ['.set(', '.update(', '.add(', '.delete(', 'batch(', 'httpsCallable'].forEach(x => ok(code.indexOf(x) < 0, 'لقيت ' + x)));
-t('بيقرا credit_ledger بنفس استعلام تطبيق العميلة (نفس الـindex)', () => ok(/collection\('credit_ledger'\)\s*\.where\('phone', '==', String\(phone\)\)\.orderBy\('at', 'desc'\)/.test(code)));
+t('بيجرّب الاستعلام المرتّب الأول (أسرع لو الـindex موجود)', () => ok(/collection\('credit_ledger'\)/.test(code) && /col\.where\('phone', '==', ph\)\.orderBy\('at', 'desc'\)\.limit\(LIMIT\)/.test(code)));
+t('⭐⭐ من غير index: بيرجع لاستعلام بالرقم بس ويرتّب بنفسه', () => {
+  const b = extractFn(code, 'async function loadLedger');
+  ok(/catch\s*\(e\)/.test(b), 'مفيش فولباك'); ok(/col\.where\('phone', '==', ph\)\.get\(\)/.test(b), 'الفولباك لسه فيه orderBy');
+  ok(/sortDesc\(/.test(b) && /\.slice\(0, LIMIT\)/.test(b)); ok(/throw e/.test(b), 'الأخطاء التانية لازم تتعدّى مش تتبلع');
+  const sd = eval('(' + extractFn(code, 'function sortDesc') + ')'); eq(sd([{ at: 1 }, { at: 5 }, { at: 3 }]).map(r => r.at).join(), '5,3,1');
+});
 t('أسماء/فروع الدفتر بتتهرّب قبل العرض', () => ok(/esc\(r\.branch\)/.test(code) && /esc\(r\.byName\)/.test(code) && /esc\(creditLedgerLabel\(r\)\)/.test(code)));
 t('ممنوع prompt/confirm/alert', () => ok(!/\b(prompt|confirm|alert)\s*\(/.test(code)));
 t('الرقم من مفتاح المستند مش من الحقل', () => ok(/_cp\.phone\)\s*\|\|\s*\(c && c\.phone\)/.test(code)));
