@@ -1658,6 +1658,8 @@ function renderCustList(){
   if(!wrap) return;
   const q = (document.getElementById('custSearch')?.value || '').trim().toLowerCase();
   const sort = document.getElementById('custSort')?.value || 'spend';
+  // 🏷️ رصيد براند الفرع الحالي بس (`credit` / `credit_glow`)
+  const _crF = (typeof creditFieldFor === 'function') ? creditFieldFor(currentBranch) : 'credit';
 
   // إحصائيات عامة (على كل العملاء مش المفلترين)
 
@@ -1676,7 +1678,7 @@ function renderCustList(){
       + chip('📱 معاهم التطبيق', appStats.hasApp + ' (' + pct + '%)', 'var(--accent)')
       + chip('إجمالي إنفاقهم', totalSpend.toFixed(0)+' ج.م','var(--plus)')
       + chip('إجمالي النقاط', totalPoints,'var(--warn)')
-      + chip('💳 أرصدة العملاء (دين عليك)', custListData.reduce((s,c)=> s + (Number(c.credit)||0), 0).toFixed(0)+' ج.م','var(--minus)')
+      + chip('💳 أرصدة العملاء (دين عليك)', custListData.reduce((s,c)=> s + (Number(c[_crF])||0), 0).toFixed(0)+' ج.م','var(--minus)')
       + chip('🎁 مكافأة الترحيب', appStats.welcomeGranted + ' اتصرفت · ' + appStats.welcomeUsed + ' اتستعملت','var(--warn)')
       + chip('كل المكافآت: اتبعت/اتستعمل', (rewardStats.sent||0)+' / '+(rewardStats.used||0),'var(--accent)');
     // تفصيل مصادر التحميل — تحت الشرائح مباشرة
@@ -1703,7 +1705,7 @@ function renderCustList(){
   if(sort==='spend') list.sort((a,b)=> (b._spend||0)-(a._spend||0));
   else if(sort==='recent') list.sort((a,b)=> (b._lastTs||0)-(a._lastTs||0));
   else if(sort==='points') list.sort((a,b)=> (b[pointsFieldFor(currentBranch)]||0)-(a[pointsFieldFor(currentBranch)]||0));
-  else if(sort==='credit'){ list = list.filter(c=> (Number(c.credit)||0) > 0); list.sort((a,b)=> (Number(b.credit)||0)-(Number(a.credit)||0)); }
+  else if(sort==='credit'){ list = list.filter(c=> (Number(c[_crF])||0) > 0); list.sort((a,b)=> (Number(b[_crF])||0)-(Number(a[_crF])||0)); }
   else if(sort==='name') list.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''),'ar'));
 
   if(list.length === 0){ wrap.innerHTML = '<div class="empty-cart">'+(q?'مفيش عميل بالبحث ده':(sort==='credit'?'مفيش عملاء عندهم رصيد':'لسه مفيش عملاء مسجلين'))+'</div>'; return; }
@@ -1733,7 +1735,7 @@ function renderCustList(){
         <div style="text-align:left; flex-shrink:0;">
           <div style="font-weight:900; font-size:13.5px; color:var(--plus);">${(c._spend||0).toFixed(0)}<span style="font-size:9.5px; font-weight:700;"> ج.م</span></div>
           <div style="color:var(--muted); font-size:9.5px;">⭐${pts} · 🧾${c._count||0} · ${last}</div>
-          ${(Number(c.credit)||0) > 0 ? `<div style="color:var(--minus); font-size:10.5px; font-weight:900;">💳 ${Number(c.credit).toFixed(2)}</div>` : ''}
+          ${(Number(c[_crF])||0) > 0 ? `<div style="color:var(--minus); font-size:10.5px; font-weight:900;">💳 ${Number(c[_crF]).toFixed(2)}</div>` : ''}
           ${!c.branch ? `<div style="color:var(--accent); font-size:9.5px; font-weight:800;">📱 من التطبيق</div>` : ''}
         </div>
       </div>

@@ -30,7 +30,12 @@ async function callCredit(name, payload){
   _creditBusy = true;
   try{
     const fn = firebase.app().functions('us-central1').httpsCallable(name);
-    const res = await fn(payload);
+    /* 🏷️ الفرع الحالي بيتبعت مع **كل** نداء — السيرفر بيحدد منه البراند
+       (`credit` ولا `credit_glow`). مكان واحد بدل ما كل نداء يفتكر يبعته،
+       ونداء ينسى = رصيد Glow يتصرف من echarpe بصمت. */
+    const _pl = Object.assign({}, payload || {});
+    if(!_pl.branch){ try{ _pl.branch = (window.currentBranch || currentBranch) || ''; }catch(e){} }
+    const res = await fn(_pl);
     return res.data;
   }catch(e){
     // رسائل الفنكشن بالعربي خلاص — بنعرضها زي ما هي

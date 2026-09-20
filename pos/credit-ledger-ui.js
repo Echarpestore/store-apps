@@ -33,6 +33,7 @@ function creditLedgerLabel(r){
     return '💵 باقي محفوظ' + inv;
   }
   if(t === 'manual')      return '✏️ ' + (reason || 'تعديل يدوي');
+  if(t === 'brand_move')  return '🔀 ' + (r.movedTo ? 'اتنقل لرصيد ' + r.movedTo : 'اتنقل من رصيد ' + (r.movedFrom || '—'));
   return 'حركة';
 }
 
@@ -79,16 +80,21 @@ if(typeof module !== 'undefined' && module.exports){
      في المشروع (افترضت إنه موجود عشان تطبيق العميلة بيستخدم نفس الاستعلام،
      وهو كان بيفشل هناك بصمت). فلو الاستعلام المرتّب اترفض بنرجع لاستعلام
      بالرقم بس (index تلقائي) ونرتّب هنا — دفتر العميلة الواحدة صغير. */
+  /* 🏷️ الكشف لبراند الفرع الحالي بس — الرصيدين منفصلين، وخلطهم في كشف واحد
+     يكسر سلسلة `balanceAfter` (كل براند ليه رصيده). الحركات القديمة من غير
+     `brand` = echarpe (`creditRowBrand`). */
+  function curBrand(){ try{ return creditBrandFor(window.currentBranch || currentBranch); }catch(e){ return 'echarpe'; } }
+  function byBrand(rows){ const b = curBrand(); return rows.filter(r => creditRowBrand(r) === b); }
   function sortDesc(rows){ return rows.sort((a, b) => (b.at || 0) - (a.at || 0)); }
   async function loadLedger(phone){
     const col = db.collection('credit_ledger'), ph = String(phone);
     try{
       const snap = await col.where('phone', '==', ph).orderBy('at', 'desc').limit(LIMIT).get();
-      return snap.docs.map(d => d.data());
+      return byBrand(snap.docs.map(d => d.data()));
     }catch(e){
       if(!/index/i.test(String((e && e.message) || '')) && String((e && e.code) || '') !== 'failed-precondition') throw e;
       const snap = await col.where('phone', '==', ph).get();
-      return sortDesc(snap.docs.map(d => d.data())).slice(0, LIMIT);
+      return sortDesc(byBrand(snap.docs.map(d => d.data()))).slice(0, LIMIT);
     }
   }
 
@@ -112,7 +118,7 @@ if(typeof module !== 'undefined' && module.exports){
     ov.style.cssText = 'position:fixed; inset:0; z-index:9500; background:rgba(0,0,0,.72); display:flex; align-items:center; justify-content:center; padding:14px;';
     ov.innerHTML = '<div style="background:var(--panel); border:1px solid var(--border); border-radius:16px; width:100%; max-width:560px; max-height:88vh; display:flex; flex-direction:column;">'
       + '<div style="padding:14px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">'
-      +   '<b style="font-size:15px;">📒 كشف رصيد — ' + esc(name || phone) + '</b>'
+      +   '<b style="font-size:15px;">📒 كشف رصيد ' + (curBrand() === 'glow' ? 'Glow' : 'echarpe') + ' — ' + esc(name || phone) + '</b>'
       +   '<button onclick="creditLedgerClose()" style="border:none; background:var(--panel2); color:var(--text); border-radius:9px; padding:7px 12px; font-weight:800; cursor:pointer;">✕</button></div>'
       + '<div id="creditLedgerBody" style="padding:14px 16px; overflow:auto;"><div style="text-align:center; color:var(--muted); padding:24px;">بيتحمّل...</div></div></div>';
     ov.addEventListener('click', e => { if(e.target === ov) closeLedger(); });
@@ -173,7 +179,7 @@ if(typeof module !== 'undefined' && module.exports){
       const phone = (typeof _cp !== 'undefined' && _cp && _cp.phone) || (c && c.phone) || '';
       if(!wrap || !c || !phone) return out;
       const old = document.getElementById('cpCreditCard'); if(old) old.remove();
-      const bal = Number(c.credit) || 0;
+      const bal = Number(c[creditFieldFor(window.currentBranch || currentBranch)]) || 0;
       const card = document.createElement('div');
       card.id = 'cpCreditCard';
       card.style.cssText = 'background:var(--panel); border:1px solid ' + (bal > 0 ? 'var(--accent)' : 'var(--border)') + '; border-radius:12px; padding:11px 14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;';

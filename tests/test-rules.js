@@ -353,7 +353,8 @@ DENY.forEach(function(d){
   const custBlock = rules.slice(rules.indexOf('match /pos_test_customers/'),
                                 rules.indexOf('match /pos_test_sales/'));
 
-  assert(/hasAny\(\['credit', 'creditAt'\]\)/.test(custBlock),
+  // 🏷️ الرصيد اتفصل لكل براند — `credit_glow` لازم يتقفل مع `credit` (وإلا كاشير يزوّد رصيد Glow لنفسه)
+  assert(/hasAny\(\['credit', 'credit_glow', 'creditAt'\]\)/.test(custBlock),
     '💳⭐⭐ حقل الرصيد مقفول على التعديل — ولا حتى الموظفين');
   assert(/!\('credit' in request\.resource\.data\)/.test(custBlock),
     '💳⭐⭐ ومفيش رصيد ابتدائي عند إنشاء العميلة');

@@ -1749,7 +1749,8 @@ async function refreshCustomerInfo(){
       custPointsBalance = Number(d[pointsFieldFor(currentBranch)]) || 0;   // 🛡️ الرصيد الحقيقي
       // 💳 رصيد الفلوس — منفصل تمامًا عن النقط. للعرض بس؛
       //    الفنكشن بتتأكد من الرصيد الحقيقي وقت الصرف.
-      window.custCreditBalance = Number(d.credit) || 0;
+      // 🏷️ الرصيد لكل براند لوحده: فرع Glow يقرا `credit_glow` والباقي `credit`
+      window.custCreditBalance = Number(d[(typeof creditFieldFor === 'function') ? creditFieldFor(currentBranch) : 'credit']) || 0;
       // 🔖 طلب مسجّل ليها ووصل؟ (حساب محلي — صفر قراءات)
       try{ if(typeof refreshCustRequestHit === 'function') refreshCustRequestHit(phone); }catch(e){}
       if(Object.keys(custActivatedOffers).length){ await _loadOfficialOffers(); if(_stale()) return; }   // 🛡️ الشروط الرسمية قبل أي خصم

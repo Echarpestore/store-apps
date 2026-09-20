@@ -65,7 +65,7 @@ t('⭐⭐ الدمج: عملاء الفرع + عملاء التطبيق بتوع
 const repC = strip(rep);
 t('⭐⭐ goToCustomerList بتجيب branch==\'\' كمان', () => { const b = extractFn(repC, 'async function goToCustomerList'); ok(/where\('branch','==', ''\)/.test(b), 'مفيش استعلام'); ok(/mergeCustDocs\(custSnap\.docs, appSnap\.docs/.test(b)); ok(/custListData = _custDocs\.map/.test(b), 'القايمة لسه من custSnap بس'); });
 t('فشل استعلام التطبيق مايوقعش القايمة كلها', () => ok(/where\('branch','==', ''\)\.get\(\)\.catch\(/.test(repC)));
-t('الرصيد ظاهر في الصف + ترتيب «عندهم رصيد» + إجمالي الدين', () => { ok(/sort==='credit'/.test(repC)); ok(/💳 \$\{Number\(c\.credit\)\.toFixed\(2\)\}/.test(rep)); ok(/أرصدة العملاء/.test(rep)); ok(/value="credit"/.test(html)); });
+t('الرصيد ظاهر في الصف + ترتيب «عندهم رصيد» + إجمالي الدين', () => { ok(/sort==='credit'/.test(repC)); ok(/💳 \$\{Number\(c\[_crF\]\)\.toFixed\(2\)\}/.test(rep)); ok(/const _crF = \(typeof creditFieldFor === 'function'\) \? creditFieldFor\(currentBranch\) : 'credit';/.test(rep), 'الرصيد لازم من حقل براند الفرع'); ok(/أرصدة العملاء/.test(rep)); ok(/value="credit"/.test(html)); });
 
 console.log('\n📦 التحميل');
 t('بعد profiles.js وcredit-ui.js', () => { const h = html.replace(/<!--[\s\S]*?-->/g, ''); const i = n => { const k = h.indexOf('src="' + n); if (k < 0) throw Error(n); return k; }; ok(i('profiles.js') < i('credit-ledger-ui.js') && i('credit-ui.js') < i('credit-ledger-ui.js')); });

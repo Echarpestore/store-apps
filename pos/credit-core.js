@@ -129,10 +129,27 @@ function giftCardAccounting(kind, amount){
   return { cash: 0, revenue: 0, liability: 0 };
 }
 
+/* 🏷️ الرصيد لكل براند لوحده (قرار المالك 20 سبتمبر 2026) — زي `pointsFieldFor`.
+   echarpe → `credit` · Glow → `credit_glow`. ⚠️ لازم = `creditFieldOf` في
+   functions/giftCredit.js (عليها اختبار). `glowBranches` بتتبعت للاختبار؛ في
+   المتصفح بتتاخد من `GLOW_BRANCHES` بتاعة pos-core.js. */
+function creditBrandFor(branch, glowBranches){
+  const list = glowBranches || (typeof GLOW_BRANCHES !== 'undefined' ? GLOW_BRANCHES : ['Glow']);
+  return list.indexOf(String(branch || '')) >= 0 ? 'glow' : 'echarpe';
+}
+function creditFieldFor(branch, glowBranches){
+  return creditBrandFor(branch, glowBranches) === 'glow' ? 'credit_glow' : 'credit';
+}
+/* حركة الدفتر دي تبع أنهي براند؟ الحركات القديمة (قبل الفصل) من غير `brand`
+   كانت كلها على حقل `credit` → echarpe. ده اللي بيخلّي سلسلة `balanceAfter`
+   سليمة في كشف echarpe بعد الترحيل. */
+function creditRowBrand(row){ return (row && row.brand === 'glow') ? 'glow' : 'echarpe'; }
+
 if(typeof module !== 'undefined' && module.exports){
   module.exports = { giftCardNormalize, giftCardDisplay, giftCardGenerate,
     creditBalance, creditSpendable, giftCardCheck, giftCardTryGuard,
-    giftCardAccounting, GC_ALPHABET, GC_MAX_TRIES, GC_LOCK_MS };
+    giftCardAccounting, GC_ALPHABET, GC_MAX_TRIES, GC_LOCK_MS,
+    creditBrandFor, creditFieldFor, creditRowBrand };
 }
 if(typeof window !== 'undefined'){
   window.giftCardNormalize = giftCardNormalize;
@@ -142,4 +159,7 @@ if(typeof window !== 'undefined'){
   window.giftCardCheck = giftCardCheck;
   window.giftCardTryGuard = giftCardTryGuard;
   window.giftCardAccounting = giftCardAccounting;
+  window.creditBrandFor = creditBrandFor;
+  window.creditFieldFor = creditFieldFor;
+  window.creditRowBrand = creditRowBrand;
 }
