@@ -126,7 +126,7 @@ const at = (h, m)=> new Date(2026, 6, 10, h, m, 0, 0);
 // ============================================================
 (function(){
   const sw = fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 94, 'sales: CACHE_NAME v94+');
 })();
 

@@ -264,8 +264,8 @@ function runSalesTicks(cfgOverride, endAtMin){
 (function(){
   const pos = fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8');
   const sal = fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8');
-  const mp = pos.match(/store-apps-shell-v(\d+)/);
-  const ms = sal.match(/store-apps-shell-v(\d+)/);
+  const mp = pos.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
+  const ms = sal.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!mp && Number(mp[1]) >= 279, 'POS: CACHE_NAME v279+');
   assert(!!ms && Number(ms[1]) >= 90,  'sales: CACHE_NAME v90+');
 })();

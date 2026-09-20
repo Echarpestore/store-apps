@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const R=path.join(__dirname,'..');
 const staff=fs.readFileSync(path.join(R,'pos','cctv-staff-state.js'),'utf8');
@@ -21,9 +22,9 @@ assert(office.includes("normalizeTrackingStatus"));
 assert(office.includes("catch(function(){return {items:[]};})"));
 assert(!office.includes("section.style.display=x.id==='madinaty'?'block':'none'"));
 assert(!office.includes("تقرير الزوار يبدأ بعد تثبيت Madinaty v606."));
-assert(pi.includes('cctv-presence.js?v=617'));
-assert(pi.includes('cctv-staff-state.js?v=617'));
-assert(psw.includes("store-apps-shell-v617"));
-assert(oi.includes('cctv.js?v=617'));
-assert(osw.includes("echarpe-office-v617"));
+assert(assetAtLeast(pi, 'cctv-presence.js', 617));
+assert(assetAtLeast(pi, 'cctv-staff-state.js', 617));
+assert(swAtLeast(psw, 617));
+assert(assetAtLeast(oi, 'cctv.js', 617));
+assert(swAtLeast(osw, 617));
 console.log('GLOW_POS_OFFICE_V617=PASS');

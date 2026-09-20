@@ -14,4 +14,4 @@ assert(ui.includes("Notification.permission !== 'granted'") && ui.includes('new 
 assert(ui.includes('ccMaybeAskNotifications();'), 'v369: طلب إذن إشعارات النظام يحصل من ضغطة المستخدم على الشات');
 assert(/weekday:\s*'long'/.test(ui) && /year:\s*'numeric'/.test(ui) && /month:\s*'2-digit'/.test(ui) && /day:\s*'2-digit'/.test(ui), 'v369: كل رسالة تعرض اليوم والتاريخ الكامل');
 assert(/\.\.\/pos\/chat-staff-ui\.js\?v=(?:369|3[7-9]\d|[4-9]\d\d|\d{4,})/.test(sales), 'v369: Sales يحمل v369 أو أحدث من واجهة الشات');
-assert(/store-apps-shell-v(?:369|3[7-9]\d|[4-9]\d\d|\d{4,})/.test(sw), 'v369: Sales service worker v369 أو أحدث');
+assert(/(?:store-apps|pos|loyalty)-shell-v(?:369|3[7-9]\d|[4-9]\d\d|\d{4,})/.test(sw), 'v369: Sales service worker v369 أو أحدث');

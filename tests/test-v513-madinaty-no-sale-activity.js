@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),rd=p=>fs.readFileSync(path.join(root,p),'utf8');
 const office=rd('Office/cctv.js'),html=rd('Office/index.html'),sw=rd('Office/sw.js');
@@ -20,5 +21,5 @@ assert(html.includes('id="ofCctvActivityReview"')&&html.includes('موظف خل�
 assert(office.includes('function loadActivityAlerts()')&&office.includes('data-activity-play'),'Office lists alerts and opens their videos');
 assert(watcher.includes('ECHARPE-MADINATY-PERSON-DETECTOR.py'),'watchdog restarts the isolated detector');
 assert(updater.includes('mediapipe==0.10.21')&&updater.includes('AI_GATE_SELF_TEST_FAILED'),'installer provisions and self-tests the local detector');
-assert(html.includes('cctv.js?v=513')&&sw.includes('echarpe-office-v513'),'Office cache is safely busted');
+assert(assetAtLeast(html, 'cctv.js', 513)&&swAtLeast(sw, 513),'Office cache is safely busted');
 console.log('Madinaty employee+customer without sale video v513: PASS');

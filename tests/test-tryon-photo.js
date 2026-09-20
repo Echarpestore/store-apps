@@ -113,7 +113,7 @@ function verAtLeast(str, re, min) {
   const n = Number((str.match(re) || [])[1]);
   return Number.isFinite(n) && n >= min;
 }
-assert(verAtLeast(sw('loyalty/sw.js'), /echarpe-loyalty-v(\d+)/, 57), 'كاش loyalty ≥ v57');
+assert(verAtLeast(sw('loyalty/sw.js'), /(?:echarpe-loyalty|loyalty-shell)-v(\d+)/, 57), 'كاش loyalty ≥ v57');
 assert(verAtLeast(sw('glow/sw.js'), /glow-loyalty-v(\d+)/, 51), 'كاش glow ≥ v51');
 const TSW = sw('tryon/sw.js');
 assert(verAtLeast(TSW, /echarpe-tryon-v(\d+)/, 38), 'كاش tryon ≥ v38');

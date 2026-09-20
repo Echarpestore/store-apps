@@ -170,7 +170,7 @@ const extractFn = (src, sig) => {
   // ⚠️ كان فحص **مساواة** على v298/v48 بالنص — يعني أي ترقية كاش بعد كده
   //    بتوقّع الاختبار وشكلها باج حقيقي. الفحص الصح هو **الحد الأدنى**:
   //    اللي يهمنا إن الكاش مانزلش عن النسخة اللي فيها الإصلاح.
-  const posV = (posSw.match(/store-apps-shell-v(\d+)/) || [])[1];
+  const posV = (posSw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/) || [])[1];
   const ofV = (ofSw.match(/echarpe-office-v(\d+)/) || [])[1];
   assert(!!posV && Number(posV) >= 298, 'POS → v298+ (لقينا v' + (posV || '?') + ')');
   assert(!!ofV && Number(ofV) >= 48, 'Office → v48+ (لقينا v' + (ofV || '?') + ')');

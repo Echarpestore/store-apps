@@ -15,8 +15,8 @@ assert(/function onPickImage[\s\S]*CST\.imgData = data[\s\S]*ccImgPrev'\)\.style
 const pickBlock=(ui.match(/function onPickImage\(e\)[\s\S]*?\n  function ccImgClear\(\)/)||[''])[0];
 assert(!/ccSend\s*\(/.test(pickBlock), 'v370: الصورة لا تُرسل تلقائيًا بعد التصوير أو الاختيار');
 const salesChatVersion=Number((sales.match(/chat-staff-ui\.js\?v=(\d+)/)||[])[1]||0);
-const salesSwVersion=Number((ssw.match(/store-apps-shell-v(\d+)/)||[])[1]||0);
+const salesSwVersion=Number((ssw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/)||[])[1]||0);
 assert(salesChatVersion>=370, 'v370: Sales يجبر تحميل واجهة الشات الجديدة أو أحدث');
 assert(salesSwVersion>=370, 'v370: Sales service worker مرفوع لـ v370 أو أحدث');
-const pver = Number((psw.match(/store-apps-shell-v(\d+)/) || [])[1] || 0);
+const pver = Number((psw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/) || [])[1] || 0);
 assert(pver >= 370, 'v370: POS service worker v370 أو أحدث لأن ملف الشات مشترك');

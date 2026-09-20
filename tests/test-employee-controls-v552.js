@@ -1,4 +1,5 @@
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert');
 const root=path.join(__dirname,'..');
 const sales=fs.readFileSync(path.join(root,'sales','sales-ui.js'),'utf8');
@@ -27,8 +28,8 @@ ok(office.includes('window.ofHubEmployeeSettings = function'),'Office has focuse
 ok(office.includes("db.collection('sales_employees').doc(empId).update(patch)"),'Office saves into authoritative employee record');
 ok(office.includes('salaryHistory') && office.includes('salaryUpdatedAt'),'Office preserves salary change history');
 
-ok(salesHtml.includes('sales-app.js?v=554')&&salesHtml.includes('sales-ui.js?v=554'),'Sales cache-busting version updated');
-ok(officeHtml.includes('office.js?v=552'),'Office cache-busting version updated');
+ok(assetAtLeast(salesHtml, 'sales-app.js', 554)&&assetAtLeast(salesHtml, 'sales-ui.js', 554),'Sales cache-busting version updated');
+ok(assetAtLeast(officeHtml, 'office.js', 552),'Office cache-busting version updated');
 
 // Execute the pure Office close calculator against a normal 10:00-18:00 shift.
 const start=office.indexOf('function ofCloseNowCalc('),end=office.indexOf('window.ofCloseNowCalc = ofCloseNowCalc;');

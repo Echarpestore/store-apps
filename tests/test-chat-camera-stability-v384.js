@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs = require('fs');
 function must(cond, msg){ if(!cond){ console.error('FAIL:', msg); process.exitCode=1; } else console.log('PASS:', msg); }
 const chat = fs.readFileSync(__dirname + '/../pos/chat-staff-ui.js','utf8');
@@ -15,8 +16,8 @@ var bandCss=(chat.match(/#ccBandRow\{[^}]*\}/)||[''])[0];
 must(bandCss && !/overflow-y\s*:\s*auto|max-height/.test(bandCss), 'bandana row does not trap mobile touch in nested scrolling');
 must(sales.includes('getEmployees: function(col, branch)'), 'Sales bridge exposes employee names');
 must(sales.includes("where('barcode','==',bc)"), 'new barcode lookup remains field-based');
-must(Number((psw.match(/store-apps-shell-v(\d+)/)||[])[1])>=545, 'POS SW ships v545 or newer');
-must(ssw.includes('store-apps-shell-v554'), 'Sales SW ships the v545 mobile composer fix in v554');
+must(Number((psw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/)||[])[1])>=545, 'POS SW ships v545 or newer');
+must(swAtLeast(ssw, 554), 'Sales SW ships the v545 mobile composer fix in v554');
 // ⚠️ إصلاح: process.exit() هنا كان بيقفل عملية run.js كلها عند أول فشل،
 // فيوقف تنفيذ كل ملفات الاختبار اللي بعده أبجديًا. الحل: throw عادي.
 if(process.exitCode){

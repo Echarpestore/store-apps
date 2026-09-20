@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert');
 const root=path.resolve(__dirname,'..');
 const rd=(p)=>fs.readFileSync(path.join(root,p),'utf8');
@@ -31,9 +32,9 @@ assert.strictEqual(writes.length,0,'cart scans stay local; no Firestore write pe
   vm.createContext(cfgCtx);vm.runInContext(configSrc,cfgCtx);
   const custom=cfgCtx.window.echarpeCctvProfile('shop');assert.strictEqual(custom.id,'client-branch','sold installations can inject profiles without editing consumers');assert.strictEqual(custom.cashierCamera,'9');
 
-  assert(pidx.indexOf('../cctv-config.js?v=506')<pidx.indexOf('cctv-invoice.js?v=506'),'POS config loads before CCTV');
-  assert(pidx.indexOf('cctv-timeline.js?v=506')<pidx.indexOf('pos-sale.js'),'timeline hook loads before sale logic');
-  assert(oidx.indexOf('../cctv-config.js?v=506')<oidx.indexOf('cctv.js?v=506'),'Office config loads before CCTV');
+  assert(assetIndex(pidx, '../cctv-config.js')<assetIndex(pidx, 'cctv-invoice.js'),'POS config loads before CCTV');
+  assert(assetIndex(pidx, 'cctv-timeline.js')<pidx.indexOf('pos-sale.js'),'timeline hook loads before sale logic');
+  assert(assetIndex(oidx, '../cctv-config.js')<assetIndex(oidx, 'cctv.js'),'Office config loads before CCTV');
   assert(sale.includes('cartSid:(typeof _cartSid')&&sale.includes('_cartSid = d.cartSid ||'),'refresh/reopen preserves basket sid');
   assert(sale.includes('cctvBasketTimelineObserve')&&pos.includes('cctvFinalizeBasketTimeline(meta)'),'POS observes locally and finalizes through CCTV hook');
   assert(rules.includes('match /pos_cctv_invoice_timelines/{invoiceCode}')&&rules.includes('allow read, create, update: if isStaff();'),'timeline is staff-only');

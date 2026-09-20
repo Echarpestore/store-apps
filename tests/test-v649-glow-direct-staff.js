@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const c=fs.readFileSync(__dirname+'/../Office/cctv.js','utf8');
 const h=fs.readFileSync(__dirname+'/../Office/index.html','utf8');
@@ -13,8 +14,8 @@ function guard(x){
   assert(x.includes("branchId==='glow'?160:900"),'v645 fast Glow live must remain');
 }
 guard(c);
-assert(h.includes('cctv.js?v=649'),'Office ref not v649');
-assert(sw.includes('echarpe-office-v649'),'Office SW cache not v649');
+assert(assetAtLeast(h, 'cctv.js', 649),'Office ref not v649');
+assert(swAtLeast(sw, 649),'Office SW cache not v649');
 
 let broken=c.replace("fetchJsonRetry(base+'/echarpe-playback/staff-state?_='+Date.now(),x.id,2).catch(function(){return null;})","Promise.resolve(null)");
 let failed=false;try{guard(broken)}catch(e){failed=true}

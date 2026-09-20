@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'), assert=require('assert');
 const sale=fs.readFileSync('pos/pos-sale.js','utf8');
 const cap=fs.readFileSync('pos/cctv-invoice.js','utf8');
@@ -5,7 +6,7 @@ const idx=fs.readFileSync('pos/index.html','utf8');
 const office=fs.readFileSync('Office/office.js','utf8');
 const cctv=fs.readFileSync('Office/cctv.js','utf8');
 const rules=fs.readFileSync('security/firestore-phase2.rules','utf8');
-assert(idx.indexOf('cctv-invoice.js?v=421')<idx.indexOf('pos-sale.js'),'capture hook loads before sale');
+assert(assetIndex(idx, 'cctv-invoice.js')<idx.indexOf('pos-sale.js'),'capture hook loads before sale');
 assert(sale.includes("_logActivity('sale_saved'") && sale.includes('cctvCaptureInvoiceSnapshot'),'snapshot hook after sale save area');
 assert(cap.includes("STREAM='camera4'") && cap.includes("pos_cctv_invoice_snapshots"),'D04 snapshot collection');
 assert(cap.includes("toDataURL('image/jpeg',0.62)"),'snapshot compressed');

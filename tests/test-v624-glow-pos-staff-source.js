@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert'),path=require('path');
 const root=path.resolve(__dirname,'..');
 const staff=fs.readFileSync(path.join(root,'pos/cctv-staff-state.js'),'utf8');
@@ -14,8 +15,8 @@ function checks(src){
   assert(src.includes("lastError='break_get_'"),'independent break failure marker missing');
 }
 checks(staff);
-assert(html.includes('cctv-staff-state.js?v=624'),'POS HTML cache-bust not v624');
-assert(sw.includes("store-apps-shell-v624"),'POS SW cache not v624');
+assert(assetAtLeast(html, 'cctv-staff-state.js', 624),'POS HTML cache-bust not v624');
+assert(swAtLeast(sw, 624),'POS SW cache not v624');
 // Negative regression: recreate the old Glow-blind branch mapper; the test must fail.
 let regressed=staff.replace("if(s.indexOf('glow')>=0)return {id:'glow'};",'');
 let failed=false;try{checks(regressed);}catch(e){failed=true;}

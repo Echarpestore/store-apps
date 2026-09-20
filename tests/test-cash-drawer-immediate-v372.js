@@ -5,10 +5,10 @@ const sale=fs.readFileSync(path.join(ROOT,'pos/pos-sale.js'),'utf8');
 const sw=fs.readFileSync(path.join(ROOT,'pos/sw.js'),'utf8');
 function ok(v,m){ if(!v) throw new Error(m); }
 ok(/function preOpenCashDrawerForSale\(invoiceCode, payments\)/.test(app),'early drawer helper missing');
-ok(/preOpenCashDrawerForSale\(invoiceCode, payments\)[\s\S]{0,270}(?:financeSaleWrite|db\.collection\(TEST_SALES\)\.add)/.test(sale),'drawer must be requested before sale Firestore write');
+ok(/preOpenCashDrawerForSale\(invoiceCode, payments\)[\s\S]{0,420}(?:financeSaleWrite|db\.collection\(TEST_SALES\)\.add|saleRef\.set\()/.test(sale)   /* v708: الحفظ بقى saleRef.set */,'drawer must be requested before sale Firestore write');
 ok(/_drawerViaPrint = drawerTarget && !_hasDrawerApi/.test(app),'print fallback must be limited to old shells');
 ok(/openDrawer: _drawerViaPrint/.test(app) && /openCashDrawer: _drawerViaPrint/.test(app),'print fallback flags missing');
 ok(/_cashDrawerPreopenedInvoiceCode/.test(app),'per-invoice duplicate drawer guard missing');
-const swMatch = sw.match(/store-apps-shell-v(\d+)/);
+const swMatch = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
 ok(swMatch && Number(swMatch[1]) >= 372,'service worker must stay v372 or newer');
 console.log('PASS cash drawer immediate v372');

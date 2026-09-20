@@ -46,6 +46,7 @@ const WANTED = [
   'function attendedDaysDetail(', 'function countDayOffOccurrencesInRange(',
   'function payPeriodRange(', 'function getMonthLabel(', 'function payCycleKeyOfDate(',
   'function defaultPayPeriodKey(', 'function _mkKey(', 'function payDayOfMonth(',
+  'function resolveAttendanceShift(',   // v711: اعتماد جديد للمحرك — الـharness كان ناقصه
 ];
 const parts = [];
 let missing = null;
@@ -223,6 +224,6 @@ assert(EG.earlyMin === 0 && EG.earlyHours === 0,
       '⭐ ' + label + ': بيمشي على القاهرة مش على ساعة الجهاز');
   });
   const sw = fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 104, 'sales/sw.js: CACHE_NAME v104+ (لقينا ' + (m ? m[1] : '—') + ')');
 })();

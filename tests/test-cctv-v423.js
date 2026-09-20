@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const c=fs.readFileSync('Office/cctv.js','utf8'),i=fs.readFileSync('Office/index.html','utf8'),sw=fs.readFileSync('Office/sw.js','utf8');
 assert(c.includes("KEY='echarpe.office.cctv.v423'"));
@@ -8,6 +9,6 @@ assert(c.includes("stage.innerHTML='<div class=\"of-cctv-overlay\""),'single sta
 assert(!c.includes('CAMERAS.map'),'old all-camera simultaneous renderer removed');
 assert(i.includes('يتم تشغيل الكاميرا التي تختارها فقط'));
 assert(!i.includes('id="ofCctvGateway"'),'technical gateway field hidden');
-assert(i.includes('cctv.js?v=423'));
-assert(sw.includes('echarpe-office-v70'));
+assert(assetAtLeast(i, 'cctv.js', 423));
+assert(swAtLeast(sw, 70));
 console.log('CCTV v423: 10/10 PASS');

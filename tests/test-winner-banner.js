@@ -206,7 +206,7 @@ const R = (o)=> Object.assign({ id:'r1', employeeName:'سارة', amount:200, ty
     assert(new RegExp('window\\.' + n + ' *= *' + n).test(bare), '§18 ' + n + ' على window');
   });
   const sw = fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 109, 'sales/sw.js: v109+ (لقينا ' + (m ? m[1] : '—') + ')');
 })();
 

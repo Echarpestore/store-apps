@@ -74,6 +74,6 @@ function verAtLeast(str, re, min) {
   const n = Number((str.match(re) || [])[1]);
   return Number.isFinite(n) && n >= min;
 }
-assert(verAtLeast(read('loyalty/sw.js'), /echarpe-loyalty-v(\d+)/, 58), 'كاش loyalty ≥ v58');
+assert(verAtLeast(read('loyalty/sw.js'), /(?:echarpe-loyalty|loyalty-shell)-v(\d+)/, 58), 'كاش loyalty ≥ v58');
 assert(verAtLeast(read('glow/sw.js'), /glow-loyalty-v(\d+)/, 52), 'كاش glow ≥ v52');
-assert(verAtLeast(read('pos/sw.js'), /store-apps-shell-v(\d+)/, 320), 'كاش POS ≥ v320');
+assert(verAtLeast(read('pos/sw.js'), /(?:store-apps|pos|loyalty)-shell-v(\d+)/, 320), 'كاش POS ≥ v320');

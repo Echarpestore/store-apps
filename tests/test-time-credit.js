@@ -153,7 +153,7 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
 
   // كاش الـsw اترفع مع التعديل (وإلا الأجهزة تفضل على القديم)
   const swSrc = fs2.readFileSync(path2.resolve(__dirname, '..', 'sales', 'sw.js'), 'utf8');
-  assert(/store-apps-shell-v\d+/.test(swSrc), 'CACHE_NAME فيه رقم نسخة');
+  assert(/(?:store-apps|pos|loyalty)-shell-v\d+/.test(swSrc), 'CACHE_NAME فيه رقم نسخة');
 }
 
 // ============================================================

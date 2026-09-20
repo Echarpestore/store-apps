@@ -90,8 +90,8 @@ function verAtLeast(str, re, min) {
   const n = Number((str.match(re) || [])[1]);
   return Number.isFinite(n) && n >= min;
 }
-assert(verAtLeast(read('pos/sw.js'), /store-apps-shell-v(\d+)/, 322), 'كاش POS ≥ v322');
-assert(verAtLeast(read('loyalty/sw.js'), /echarpe-loyalty-v(\d+)/, 60), 'كاش loyalty ≥ v60');
+assert(verAtLeast(read('pos/sw.js'), /(?:store-apps|pos|loyalty)-shell-v(\d+)/, 322), 'كاش POS ≥ v322');
+assert(verAtLeast(read('loyalty/sw.js'), /(?:echarpe-loyalty|loyalty-shell)-v(\d+)/, 60), 'كاش loyalty ≥ v60');
 assert(verAtLeast(read('glow/sw.js'), /glow-loyalty-v(\d+)/, 54), 'كاش glow ≥ v54');
 
 syntaxCheckAll(read('loyalty/index.html'), 'loyalty');

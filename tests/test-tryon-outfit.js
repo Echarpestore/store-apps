@@ -149,8 +149,8 @@ function verAtLeast(str, re, min) {
   const n = Number((str.match(re) || [])[1]);
   return Number.isFinite(n) && n >= min;
 }
-assert(verAtLeast(read('pos/sw.js'), /store-apps-shell-v(\d+)/, 321), 'كاش POS ≥ v321');
-assert(verAtLeast(read('loyalty/sw.js'), /echarpe-loyalty-v(\d+)/, 59), 'كاش loyalty ≥ v59');
+assert(verAtLeast(read('pos/sw.js'), /(?:store-apps|pos|loyalty)-shell-v(\d+)/, 321), 'كاش POS ≥ v321');
+assert(verAtLeast(read('loyalty/sw.js'), /(?:echarpe-loyalty|loyalty-shell)-v(\d+)/, 59), 'كاش loyalty ≥ v59');
 assert(verAtLeast(read('glow/sw.js'), /glow-loyalty-v(\d+)/, 53), 'كاش glow ≥ v53');
 assert(verAtLeast(read('tryon/sw.js'), /echarpe-tryon-v(\d+)/, 40), 'كاش tryon ≥ v40');
 assert(verAtLeast(read('tryon/tryon-app.js'), /TRYON_VER = 'v(\d+)'/, 40), 'TRYON_VER ≥ v40 (تناسق)');

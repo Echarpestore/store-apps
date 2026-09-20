@@ -54,8 +54,10 @@ function extractFn(s, header){
   const fn = extractFn(src, 'async function editCustomerPoints(');
   assert(!!fn, 'لقينا editCustomerPoints');
   if(!fn) return;
-  assert(/if\(!hasPerm\('canRedeemManual'\)\)/.test(fn),
-    '⭐⭐ محجوب على الكاشير (نفس صلاحية الاستبدال اليدوي)');
+  // v714: بقت صلاحية مستقلة `canEditPoints` (كانت راكبة على الاستبدال اليدوي فأي مشرف يكتب أي رصيد) — قرار المالك 20-09
+  const fnNC = fn.replace(/^\s*\/\/.*$/gm, '');   // §0: التعليق اللي بيشرح القديم ميتحسبش كود
+  assert(/if\(!hasPerm\('canEditPoints'\)\)/.test(fn) && !/canRedeemManual/.test(fnNC),
+    '⭐⭐ محجوب على الكاشير والمشرف (صلاحية مستقلة: canEditPoints)');
   // نيجاتيف: الحارس أول سطر مش بعد ما يعرض الشاشة
   const head = fn.slice(0, fn.indexOf('askText'));
   assert(/hasPerm/.test(head), '⭐ والفحص قبل أي شاشة تتفتح مش بعدها');
@@ -67,7 +69,7 @@ function extractFn(s, header){
   assert(/pointsFieldFor\(currentBranch\)/.test(fn),
     '⭐ وبيعدّل نقط البراند الصح (echarpe/glow منفصلين)');
   // الزرار نفسه متخفي عن اللي مالوش صلاحية
-  assert(/hasPerm\('canRedeemManual'\) \?/.test(src),
+  assert(/hasPerm\('canEditPoints'\) \?/.test(src),
     'والزرار أصلًا مبيظهرش لغير المصرّح له');
 })();
 
@@ -204,7 +206,7 @@ function extractFn(s, header){
 // ============================================================
 (function(){
   const sw = fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8');
-  const m = sw.match(/store-apps-shell-v(\d+)/);
+  const m = sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/);
   assert(!!m && Number(m[1]) >= 281, 'POS: CACHE_NAME v281+');
 })();
 

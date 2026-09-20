@@ -10,6 +10,7 @@
 //         على GitHub Pages مش مع POS/Electron.
 // ============================================================
 'use strict';
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
@@ -40,7 +41,7 @@ if (!fs.existsSync(P)) {
 // ٤) كاش POS اترفع
 const sw = path.join(ROOT, 'pos', 'sw.js');
 if (fs.existsSync(sw)) {
-  assert(/store-apps-shell-v319/.test(fs.readFileSync(sw, 'utf8')), 'كاش POS اترفع لـv319');
+  assert(swAtLeast(fs.readFileSync(sw, 'utf8'), 319), 'كاش POS اترفع لـv319');
 } else {
   assert(false, 'pos/sw.js لازم يكون موجود');
 }

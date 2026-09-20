@@ -98,7 +98,7 @@ function verAtLeast(str, re, min) {
   const n = Number((str.match(re) || [])[1]);
   return Number.isFinite(n) && n >= min;
 }
-assert(verAtLeast(read('loyalty/sw.js'), /echarpe-loyalty-v(\d+)/, 57), 'كاش loyalty ≥ v57');
+assert(verAtLeast(read('loyalty/sw.js'), /(?:echarpe-loyalty|loyalty-shell)-v(\d+)/, 57), 'كاش loyalty ≥ v57');
 assert(verAtLeast(read('glow/sw.js'), /glow-loyalty-v(\d+)/, 51), 'كاش glow ≥ v51');
 assert(verAtLeast(read('tryon/sw.js'), /echarpe-tryon-v(\d+)/, 38), 'كاش tryon ≥ v38');
 assert(verAtLeast(read('tryon/tryon-app.js'), /TRYON_VER = 'v(\d+)'/, 38), 'TRYON_VER ≥ v38 (تناسق مع sw)');

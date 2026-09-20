@@ -250,7 +250,7 @@ const el = (sb, id)=> sb.document.getElementById(id);
 // ============================================================
 {
   const sw = fs.readFileSync(path.join(POS, 'sw.js'), 'utf8');
-  const v = (sw.match(/store-apps-shell-v(\d+)/) || [])[1];
+  const v = (sw.match(/(?:store-apps|pos|loyalty)-shell-v(\d+)/) || [])[1];
   assert(!!v && Number(v) >= 253, 'CACHE_NAME بتاع POS ≥ v253 (الحالي v' + (v || '?') + ')');
 }
 

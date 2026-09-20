@@ -1,3 +1,4 @@
+require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'), assert=require('assert');
 const cctv=fs.readFileSync('Office/cctv.js','utf8');
 const idx=fs.readFileSync('Office/index.html','utf8');
@@ -8,8 +9,8 @@ const install=fs.readFileSync('cctv-gateway/INSTALL-AUTOSTART.ps1','utf8');
 const runner=fs.readFileSync('cctv-gateway/RUN-GATEWAY-AUTO.ps1','utf8');
 assert(cctv.includes("https://cctv-madinaty.echarpe.store"),'Office uses permanent Madinaty URL');
 assert(!idx.includes('id="ofCctvGateway"'),'Gateway is no longer user-editable in CCTV UI');
-assert(idx.includes('cctv.js?v=423') && posidx.includes('cctv-invoice.js?v=422'),'cache-busting correct');
-assert(sw.includes("echarpe-office-v70"),'Office SW cache bumped');
+assert(assetAtLeast(idx, 'cctv.js', 423) && assetAtLeast(posidx, 'cctv-invoice.js', 422),'cache-busting correct');
+assert(swAtLeast(sw, 70),'Office SW cache bumped');
 assert(cap.includes('version:422') && cap.includes("LOCAL='http://127.0.0.1:1984'"),'POS snapshot stays local and non-tunnel dependent');
 assert(install.includes("New-ScheduledTaskTrigger -AtLogOn") && install.includes("Register-ScheduledTask"),'gateway auto-start task installed');
 assert(install.includes('ConvertFrom-SecureString') && runner.includes('ConvertTo-SecureString'),'NVR password stored with Windows DPAPI');

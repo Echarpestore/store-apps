@@ -161,7 +161,7 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
    ============================================================ */
 (function(){
   const sw = fs.readFileSync(path.join(ROOT, 'loyalty', 'sw.js'), 'utf8');
-  const m = sw.match(/echarpe-loyalty-v(\d+)/);
+  const m = sw.match(/(?:echarpe-loyalty|loyalty-shell)-v(\d+)/);
   assert(m && Number(m[1]) >= 54, '⭐ CACHE_NAME اترفع لـv54+');
 })();
 
