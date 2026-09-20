@@ -127,6 +127,13 @@ function server(custDoc) {
     eq(mig.creditBrandMigratePlan([{ phone: 'A', credit: 0.01 }], { A: rows }, G)[0].move, 0);
   });
   await t('حركات ما بعد الفصل (فيها brand) مابتتحسبش', () => eq(mig.creditBrandMigratePlan([{ phone: 'A', credit: 100 }], { A: [{ amount: 100, branch: 'Glow', brand: 'glow' }] }, G)[0].move, 0));
+  await t('⭐⭐ حركة المالك (فرع فاضي) على فاتورة Glow بتتنقل — فرع الفاتورة هو الحاكم', () => {
+    const r = mig.creditBrandMigratePlan([{ phone: 'A', credit: 325 }], { A: [{ amount: 350, branch: '', invoiceCode: 'FTGLO1', invBranch: 'Glow' }, { amount: -25, branch: '', invoiceCode: 'FTGLO2', invBranch: 'Glow' }] }, G)[0];
+    eq(r.move, 325); eq(r.noBranch, 0);
+  });
+  await t('فرع الفاتورة بيغلب فرع الموظف (كاشير الرحاب غطّت في Glow)', () =>
+    eq(mig.creditBrandMigratePlan([{ phone: 'A', credit: 100 }], { A: [{ amount: 100, branch: 'الرحاب', invBranch: 'Glow' }] }, G)[0].move, 100));
+  await t('الأداة بتجيب فرع الفاتورة من pos_test_sales', () => { const b = strip(rd('pos/credit-brand-migrate.js')); ok(/where\('invoiceCode', '==', code\)\.limit\(1\)/.test(b)); ok(/r\.invBranch = invCache\[code\]/.test(b)); });
   await t('حركات من غير فرع بتبان للمراجعة ومابتتنقلش', () => { const r = mig.creditBrandMigratePlan([{ phone: 'A', credit: 200 }], { A: [{ amount: 200, branch: '' }] }, G)[0]; eq(r.move, 0); eq(r.noBranch, 200); });
   await t('المعاينة هي الافتراضي — التنفيذ محتاج go:true', () => { const b = extractFn(strip(rd('pos/credit-brand-migrate.js')), 'window.creditBrandMigrate = async function'); const i = b.indexOf('if(!opts.go){'), j = b.indexOf('return plan;', i), k = b.indexOf("action: 'brandMove'"); ok(i > 0 && j > i, 'مفيش خروج للمعاينة'); ok(k > j, 'النقل قبل فحص go'); });
 

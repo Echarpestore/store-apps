@@ -32,8 +32,13 @@ function creditBrandMigratePlan(customers, ledgerByPhone, glowBranches){
     rows.forEach(function(r){
       if(r.type === 'brand_move'){ if(r.brand !== 'glow' && r.movedTo === 'glow') moved += Math.abs(Number(r.amount) || 0); return; }
       if(r.brand) return;                                  // حركة بعد الفصل — في مكانها الصح
-      if(isGlow(r.branch)) glowNet += Number(r.amount) || 0;
-      else if(!r.branch) noBranch += Number(r.amount) || 0;
+      /* 🔴 `branch` في الدفتر القديم = فرع **الموظف المسجّل** مش الفرع اللي الحركة
+         حصلت فيه — وحساب المالك مالوش فرع، فكل حركاته فاضية. أول معاينة طلّعت
+         «هيتنقل: 0» لرصيد كله من فواتير Glow. الفاتورة هي الحقيقة: لو الحركة
+         مربوطة بفاتورة بناخد فرع **الفاتورة** (`invBranch` — بيتجاب من pos_test_sales). */
+      const br = r.invBranch || r.branch || '';
+      if(isGlow(br)) glowNet += Number(r.amount) || 0;
+      else if(!br) noBranch += Number(r.amount) || 0;
     });
     const move = Math.max(0, Math.min(credit, r2(glowNet - moved)));
     out.push({ phone: c.phone, name: c.name || '', credit: credit, glowNet: r2(glowNet),
@@ -63,10 +68,22 @@ if(typeof module !== 'undefined' && module.exports){ module.exports = { creditBr
     const glow = (typeof GLOW_BRANCHES !== 'undefined') ? GLOW_BRANCHES : ['Glow'];
     const snap = await db.collection(TEST_CUSTOMERS).where('credit', '>', 0).get();
     const customers = snap.docs.map(d => Object.assign({ phone: d.id }, d.data(), { phone: d.id }));
-    const ledger = {};
+    const ledger = {}, invCache = {};
     for(const c of customers){
       const l = await db.collection('credit_ledger').where('phone', '==', String(c.phone)).get();
       ledger[c.phone] = l.docs.map(d => d.data());
+      // 🧾 فرع الفاتورة لكل حركة قديمة مربوطة بفاتورة (قراءة واحدة لكل فاتورة)
+      for(const r of ledger[c.phone]){
+        if(r.brand || !r.invoiceCode) continue;
+        const code = String(r.invoiceCode);
+        if(!(code in invCache)){
+          try{
+            const q = await db.collection(TEST_SALES).where('invoiceCode', '==', code).limit(1).get();
+            invCache[code] = q.empty ? '' : (q.docs[0].data().branch || '');
+          }catch(e){ invCache[code] = ''; }
+        }
+        r.invBranch = invCache[code];
+      }
     }
     const plan = creditBrandMigratePlan(customers, ledger, glow);
     console.table(plan);
