@@ -44,24 +44,6 @@ async function callCredit(name, payload){
   }finally{ _creditBusy = false; }
 }
 
-/* نفس `callCredit` بس بيرجّع الخطأ بدل ما يبلعه — للمسارات اللي لازم **تقرر** حسب نوع الفشل.
-   مفيش توست هنا، واللي بينادي هو اللي يقول للكاشير. مبيتأثرش بقفل `_creditBusy` (بيستنى دوره). */
-async function callCreditEx(name, payload){
-  if(!navigator.onLine) return { ok:false, code:'offline', message:'مفيش نت' };
-  for(let i = 0; _creditBusy && i < 40; i++) await new Promise(function(r){ setTimeout(r, 250); });   // لحد 10 ثواني
-  _creditBusy = true;
-  try{
-    const fn = firebase.app().functions('us-central1').httpsCallable(name);
-    const _pl = Object.assign({}, payload || {});
-    if(!_pl.branch){ try{ _pl.branch = (window.currentBranch || currentBranch) || ''; }catch(e){} }
-    const res = await fn(_pl);
-    return { ok:true, data: res.data };
-  }catch(e){
-    return { ok:false, code: String((e && e.code) || '').replace(/^functions\//, ''), message: (e && e.message) || 'العملية فشلت' };
-  }finally{ _creditBusy = false; }
-}
-window.callCreditEx = callCreditEx;
-
 /* ============================================================
    🎁 بيع كارت هدية
    ------------------------------------------------------------
@@ -166,22 +148,9 @@ async function useCustomerCredit(){
   });
   if(!ok) return;
 
-  // 🛑 v720 — **فحص السيرفر قبل ما الخصم يتحط على الفاتورة.**
-  //    بلاغ المالك 21-09: «دفعت بالرصيد عادي، الفاتورة اتعملت، والرصيد متخصمش». السبب في التصميم: الخصم الحقيقي بيحصل
-  //    **بعد** حفظ الفاتورة — فلو دالة `creditSpend` مرفوضة (نسخة قديمة منشورة · الجهاز مش داخل بحساب موظف · الكود إجباري
-  //    وPOS فاكره لأ) الفاتورة بتتقفل بالخصم والرصيد يفضل زي ما هو، ومفيش غير توست بيختفي. والعميلة تصرف نفس الرصيد كل يوم.
-  //    دلوقتي: بنسأل السيرفر الأول. **مش قادر يرد = مفيش خصم رصيد على الفاتورة دي.** والسيرفر هو اللي بيقول الكود إجباري ولا لأ.
-  const _pf = await creditPreflight();
-  if(!_pf.ok){
-    try{ if(typeof _logActivity === 'function') _logActivity('credit_spend_blocked', { phone: phone, amount: max, code: _pf.code || '', message: _pf.message || '' }); }catch(e){}
-    await askConfirm({ icon:'🛑', danger:true, waitSec:0, title:'مينفعش نستخدم الرصيد دلوقتي',
-      message:'خدمة الرصيد على السيرفر رفضت أو مش بترد:<br><b>' + esc(_pf.message || _pf.code || 'خطأ غير معروف') + '</b><br><br>'
-        + 'لو كمّلنا، الفاتورة هتتقفل بالخصم و**الرصيد مش هيتخصم** من حساب العميلة.<br>حصّلي المبلغ بطريقة تانية وبلّغي المالك.',
-      okText:'فهمت', cancelText:'قفل' });
-    return;
-  }
+  // 🔐 v718: كود تأكيد من العميلة — **قبل** ما الخصم يتحط على الفاتورة. لو الإعداد مقفول، المسار القديم زي ما هو.
   let _approvalId = null;
-  if(_pf.required){
+  if(await creditOtpRequired()){
     const ap = await creditOtpFlow(phone, max);
     if(!ap) return;                              // اتلغى / معندهاش التطبيق / الكود غلط 3 مرات
     _approvalId = ap.approvalId;
@@ -212,18 +181,6 @@ window.useCustomerCredit = useCustomerCredit;
    الإدخال اليدوي للكود هنا = فولباك لو التابلت واقع (الكود لسه جاي من موبايلها هي).
    الفرض الحقيقي على **السيرفر** (`credit_cfg.otpRequired`) — الملف ده واجهة بس.
    ============================================================ */
-/* هل السيرفر جاهز يخصم؟ وهل الكود إجباري؟ — إجابة واحدة من `creditSpend` نفسها (`otp_status` بيعدّي على `requireStaff`،
-   فنجاحه = الدالة منشورة + الجهاز داخل بحساب موظف مقبول).
-   سيرفر **قديم** (قبل v718) ميعرفش `action` ← بيرفض بـ`invalid-argument` (رقم ناقص) **بعد** ما عدّى فحص الموظف ← ده معناه
-   «شغّال بس قديم»: نكمّل من غير كود زي الأول. أي رفض تاني (صلاحية · مش منشورة · خطأ داخلي · نت) = **نوقف**. */
-async function creditPreflight(){
-  const r = await callCreditEx('creditSpend', { action:'otp_status' });
-  if(r.ok) return { ok:true, required: !!(r.data && r.data.required) };
-  if(r.code === 'invalid-argument') return { ok:true, required:false, oldServer:true };
-  return { ok:false, code: r.code, message: r.message };
-}
-window.creditPreflight = creditPreflight;
-
 let _otpCfgCache = { at: 0, required: false };
 async function creditOtpRequired(){
   if(Date.now() - _otpCfgCache.at < 60000) return _otpCfgCache.required;
@@ -333,37 +290,20 @@ window.creditOtpFlow = creditOtpFlow;
 async function commitCreditSpend(invoiceCode, invoiceTotal){
   if(!pendingCreditSpend) return null;
   const p = pendingCreditSpend;
-  pendingCreditSpend = null;                      // الفاتورة اتقفلت — السطر ده مبقاش «معلّق» على السلة
-  const payload = {
+  const r = await callCredit('creditSpend', {
     phone: p.phone, amount: p.amount,
     invoiceTotal: Math.abs(Number(invoiceTotal) || 0) + p.amount,
     invoiceCode: invoiceCode,
     approvalId: p.approvalId || null,            // 🔐 v718: موافقة العميلة — السيرفر بيستهلكها جوّه معاملة الخصم
     idem: creditIdem('spend', [invoiceCode, p.phone, p.amount])
-  };
-  // 🔁 v720: 3 محاولات (نفس `idem` ← السيرفر مبيخصمش مرتين). نت وقع لحظة = ميبقاش خسارة.
-  let r = null;
-  const waits = [0, 2500, 6000];
-  for(let i = 0; i < waits.length; i++){
-    if(waits[i]) await new Promise(function(res){ setTimeout(res, waits[i]); });
-    r = await callCreditEx('creditSpend', payload);
-    if(r.ok) return r.data;
-    if(['permission-denied','invalid-argument','failed-precondition','deadline-exceeded','not-found','unauthenticated'].indexOf(r.code) >= 0) break;   // رفض نهائي — الإعادة مش هتغيّر حاجة
+  });
+  if(!r){
+    // ⚠️ الفاتورة اتقفلت بخصم والرصيد مااتخصمش = خسارة عليك.
+    //    لازم تبان بصوت عالي مش تعدّي في اللوج.
+    showToast('⚠️⚠️ الرصيد مااتخصمش من حساب العميلة — بلّغ المالك فورًا', 'err');
   }
-  // ⚠️ الفاتورة اتقفلت بخصم والرصيد مااتخصمش = خسارة على المالك. لازم تسيب **أثر دائم** مش توست بيختفي.
-  const fail = { phone: p.phone, amount: p.amount, invoiceCode: invoiceCode, code: (r && r.code) || '', message: (r && r.message) || '', at: Date.now() };
-  try{ if(typeof _logActivity === 'function') _logActivity('credit_spend_failed', fail); }catch(e){}
-  try{
-    const q = await db.collection(TEST_SALES).where('invoiceCode','==', invoiceCode).limit(1).get();
-    if(!q.empty) await q.docs[0].ref.update({ creditSpendFailed: fail });
-  }catch(e){ console.warn('mark creditSpendFailed', e); }
-  try{
-    await askConfirm({ icon:'🚨', danger:true, waitSec:3, title:'الرصيد مااتخصمش من حساب العميلة',
-      message:'الفاتورة <b>' + esc(invoiceCode || '') + '</b> اتقفلت بخصم <b>' + Number(p.amount).toFixed(2) + ' ج.م</b> من الرصيد — بس السيرفر رفض يخصمه:<br><b>'
-        + esc(fail.message || fail.code || 'خطأ') + '</b><br><br>بلّغي المالك دلوقتي. اتسجّلت في نشاط Office.',
-      okText:'بلّغت المالك', cancelText:'قفل' });
-  }catch(e){ showToast('⚠️⚠️ الرصيد مااتخصمش من حساب العميلة — بلّغ المالك فورًا', 'err'); }
-  return null;
+  pendingCreditSpend = null;
+  return r;
 }
 window.commitCreditSpend = commitCreditSpend;
 

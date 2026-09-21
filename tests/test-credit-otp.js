@@ -24,8 +24,7 @@ const cust = (o) => ({ ['pos_test_customers/' + P]: Object.assign({ name:'منى
   ok(db._store['credit_otp/' + P].code === r.code && db._store['credit_otp/' + P].amount === 300, 'متخزّن في `credit_otp` (سيرفر بس)');
   const cdoc = db._store['pos_test_customers/' + P];
   ok(cdoc.creditOtpAt === T0 && JSON.stringify(cdoc).indexOf(r.code) < 0, '⛔⭐ مستند العميلة (اللي POS بيقراه) فيه **التوقيت بس** — الكود مش فيه');
-  // v718: القاعدتين اتكتبوا صراحة `if false` (توثيق) — المهم إن **مفيش** قاعدة بتفتحهم
-  ok(/match \/\{document=\*\*\} \{\s*\n\s*allow read, write: if false;/.test(rules) && !/match \/credit_(otp|keys)\/\{id\}\s*\{(?! allow read, write: if false; \})/.test(rules), 'والرولز: `credit_otp`/`credit_keys` واقعين تحت الرفض الافتراضي (مفيش قاعدة بتفتحهم)');
+  ok(/match \/\{document=\*\*\} \{\s*\n\s*allow read, write: if false;/.test(rules) && !/match \/credit_otp|match \/credit_keys/.test(rules), 'والرولز: `credit_otp`/`credit_keys` واقعين تحت الرفض الافتراضي (مفيش قاعدة بتفتحهم)');
   db = makeDb(cust({ loyaltyPin:undefined }));
   delete db._store['pos_test_customers/' + P].loyaltyPin;
   r = await OTP.request(db, { phone:P, amount:100, brand:'echarpe' }, T0);

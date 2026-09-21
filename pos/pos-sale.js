@@ -935,30 +935,6 @@ let returnInvoiceData = null;
 const RETURN_WINDOW_DAYS = 14;
 
 // ============ مرتجع برقم موبايل العميل ============
-// وقت الفاتورة — نفس قاعدة التقارير (`saleTs`) مع فولباك لو pos-reports مش محمّل. **مفيش `Date.now()` كبديل**:
-// فاتورة من غير وقت تتكتب «من غير تاريخ» وتنزل آخر القايمة — مش تتنكّر في تاريخ النهارده.
-function invTs(s){
-  try{ if(typeof saleTs === 'function'){ const t = saleTs(s); if(t) return t; } }catch(e){}
-  if(s && s.createdAt && typeof s.createdAt.toMillis === 'function') return s.createdAt.toMillis();
-  if(s && typeof s.createdAtMs === 'number') return s.createdAtMs;
-  if(s && typeof s.ts === 'number') return s.ts;
-  return 0;
-}
-window.invTs = invTs;
-// فتح فاتورة **من القايمة** = فيه زرار رجوع للقايمة (المسح بالباركود مفيهوش قايمة يرجعلها)
-window.openInvoiceFromList = async function(code){
-  await openInvoiceForReturn(code);
-  try{
-    const body = document.getElementById('returnInvoiceBody');
-    if(body && window._retListHtml && !document.getElementById('retBackBtn')){
-      body.insertAdjacentHTML('afterbegin', '<button id="retBackBtn" onclick="backToInvoiceList()" style="width:100%; margin-bottom:10px; padding:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:10px; font-family:\'Cairo\'; font-weight:800; cursor:pointer;">➡️ رجوع لقايمة الفواتير</button>');
-    }
-  }catch(e){}
-};
-window.backToInvoiceList = function(){
-  const body = document.getElementById('returnInvoiceBody');
-  if(body && window._retListHtml){ returnInvoiceData = null; body.innerHTML = window._retListHtml; }
-};
 window.returnByPhone = async function(rawPhone){
   if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس', 'err'); return; }
   const clean = String(rawPhone||'').replace(/\D/g,'');
@@ -975,17 +951,10 @@ window.returnByPhone = async function(rawPhone){
       return;
     }
     // نفلتر حسب السلسلة (echarpe/glow) ونرتّب من الأحدث
-    // 🔴 v719 — 3 باجات بلّغ عنها المالك في القايمة دي:
-    //   1) **كل الفواتير بنفس التاريخ والساعة (دلوقتي):** الكود كان بيقرا `s.ts` — والفواتير **مفيهاش** الحقل ده
-    //      (وقتها في `createdAt`/`createdAtMs`)، فـ`new Date(undefined || Date.now())` = اللحظة الحالية لكل سطر.
-    //   2) **آخر فاتورة «مش ظاهرة»:** نفس السبب — الترتيب `b.ts - a.ts` = `0 - 0` لكل الفواتير، فالقايمة طالعة
-    //      بترتيب عشوائي (معرّف المستند) وآخر فاتورة مدفونة تحت. دلوقتي الوقت من `invTs` والترتيب من الأحدث.
-    //   3) **مفيش رجوع للقايمة** بعد اختيار فاتورة — لازم ✕ وتدوّر بالرقم تاني. بقى فيه زرار رجوع (من غير قراءة جديدة).
     const hereIsGlow = GLOW_BRANCHES.includes(currentBranch);
     let invoices = snap.docs.map(d=>({ id:d.id, ...d.data() }))
       .filter(s=> GLOW_BRANCHES.includes(s.branch) === hereIsGlow)
-      .filter(s=> !s.isReversal)                       // سطر العكس نفسه مش فاتورة يترجّع منها
-      .sort((a,b)=> invTs(b) - invTs(a));
+      .sort((a,b)=> (b.ts||0) - (a.ts||0));
 
     if(invoices.length === 0){
       document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">مفيش فواتير من نفس السلسلة للرقم ده</div>';
@@ -993,29 +962,23 @@ window.returnByPhone = async function(rawPhone){
     }
 
     // نعرض قايمة الفواتير — يدوس على الفاتورة اللي عايز يرجّع منها
-    const _listHtml = `
-      <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">📱 ${clean} — ${invoices.length} فاتورة · من الأحدث · اختار الفاتورة:</div>
+    document.getElementById('returnInvoiceBody').innerHTML = `
+      <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">📱 ${clean} — ${invoices.length} فاتورة · اختار الفاتورة:</div>
       <div style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
         ${invoices.map(s=>{
-          const t = invTs(s);
-          const d = t ? new Date(t) : null;
-          const dateTxt = d ? (d.toLocaleDateString('ar-EG',{day:'2-digit',month:'short',year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})) : 'من غير تاريخ';
-          const itemCount = (s.items||[]).filter(it=> it && !it.isRedemption && !it.isRewardDiscount).length;
+          const d = new Date(s.ts||Date.now());
+          const dateTxt = d.toLocaleDateString('ar-EG',{day:'2-digit',month:'short',year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+          const itemCount = (s.items||[]).length;
           const total = Number(s.total||0).toFixed(2);
-          const tags = ((s.items||[]).some(it=> it && it.isCreditSpend) ? ' · 💰 رصيد' : '')
-                     + (Number(s.pointsRedeemed) > 0 ? ' · 🎁 نقط' : '')
-                     + (s.reversed ? ' · ↩️ معكوسة' : '') + (Number(s.total) < 0 ? ' · مرتجع' : '');
-          return `<button onclick="openInvoiceFromList('${(s.invoiceCode||'').replace(/'/g,"")}')" style="text-align:right; background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; font-family:'Cairo'; ${s.reversed?'opacity:.55;':''}">
+          return `<button onclick="openInvoiceForReturn('${(s.invoiceCode||'').replace(/'/g,"")}')" style="text-align:right; background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:12px; cursor:pointer; font-family:'Cairo';">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-weight:800; color:var(--text); font-size:13px;">${s.invoiceNo ? '#' + esc(String(s.invoiceNo)) + ' · ' : ''}${esc(s.invoiceCode||'—')}</span>
+              <span style="font-weight:800; color:var(--text); font-size:13px;">${s.invoiceCode||'—'}</span>
               <span style="font-weight:800; color:var(--accent);">${total} ج</span>
             </div>
-            <div style="font-size:11px; color:var(--muted); margin-top:4px;">${dateTxt} · ${itemCount} صنف · ${esc(s.branch||'')}${tags}</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:4px;">${dateTxt} · ${itemCount} صنف · ${s.branch||''}</div>
           </button>`;
         }).join('')}
       </div>`;
-    window._retListHtml = _listHtml;                  // للرجوع من غير قراءة جديدة
-    document.getElementById('returnInvoiceBody').innerHTML = _listHtml;
   }catch(e){
     document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">تعذر جلب الفواتير: '+e.message+'</div>';
   }
