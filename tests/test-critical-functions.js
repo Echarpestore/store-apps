@@ -30,6 +30,7 @@ const MUST = [
   ['pos-sale.js', 'custHasBrandApp',                'v716 «عندها التطبيق» بالبراند'],
   ['pos-sale.js', 'custLiveStart',                  'v717 العميلة المربوطة لايف (طلب الاستبدال يوصل فورًا)'],
   ['pos-sale.js', 'custPickPendingRedeem',          'v717 فحوصات أمان طلب الاستبدال — مصدر واحد'],
+  ['pos-sale.js', 'invTs',                          'v719 وقت الفاتورة في قايمة المرتجع (مش Date.now)'],
   ['pos-sale.js', 'askConfirm',                     '§10 بديل confirm'],
   ['pos-sale.js', 'askText',                        '§10 بديل prompt'],
   ['pos-sale.js', 'normalizePayments',              '4أ-1 الفكة مش مدفوعات'],
