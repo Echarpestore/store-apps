@@ -92,12 +92,66 @@ function extractFn(src, header){
   ok(/_regOk \?[\s\S]{0,200}دوسي «سجّل»/.test(named), 'والتوست صادق: لو التسجيل متمّش بيقول للكاشير تدوس «سجّل»');
   ok(!/عميل جديد اتسجل في الفاتورة/.test(sale), 'التوست القديم اللي كان بيقول «اتسجل» وهو ماتسجلش — اتشال');
 
+  console.log('📲 2ب) العميلة **المسجّلة** اللي معندهاش التطبيق بتتدعى (v716 / kiosk v698)');
+  function mkInv(branch, o){
+    o = o || {};
+    const st = { writes:[] };
+    const ctx = { st, window:{}, Set, Date, String, Object, Array,
+      GLOW_BRANCHES:['Glow'], currentBranch: branch, bizDayKey: () => (o.day || '2026-09-21'),
+      _capDocRef: () => ({ set: d => { st.writes.push(d); return Promise.resolve(); } }) };
+    vm.createContext(ctx);
+    vm.runInContext('let _capAskId = ' + JSON.stringify(o.askId || null) + ';\n'
+      + ['function capBrandKey(', 'function custHasBrandApp(', 'function _capInviteKey(', 'function capMarkInvited(', 'function capInviteIfNoApp(']
+          .map(h => extractFn(sale, h)).join('\n').replace('function _capInviteKey(', 'const _capInvitedToday = new Set();\nfunction _capInviteKey(')
+      + ';this.setDay = d => { bizDayKey = () => d; };', ctx);
+    return ctx;
+  }
+  let v = mkInv('echarpe El Rehab');
+  ok(v.capInviteIfNoApp('01011111111', { name:'منى', points:40 }) === true && v.st.writes.length === 1, '⭐ مسجّلة + معندهاش التطبيق + الكاشير كتبت رقمها في POS = التابلت بياخد ترحيب ودعوة (كان: ولا حاجة)');
+  const w = v.st.writes[0] || {};
+  ok(w.mode === 'greet' && w.invite === true && w.isNew === false && w.greetName === 'منى' && /^inv_/.test(w.askId), 'الرسالة: ترحيب باسمها + `invite:true` + مش «جديدة»');
+  ok(v.capInviteIfNoApp('01011111111', { name:'منى' }) === false && v.st.writes.length === 1, 'نفس الرقم تاني في نفس اليوم (الكاشير مسحت وكتبت) = مفيش دعوة تانية');
+  v.setDay('2026-09-22'); ok(v.capInviteIfNoApp('01011111111', { name:'منى' }) === true, 'تاني يوم = بتتدعى تاني (لحد ما تنزّله)');
+  v = mkInv('echarpe El Rehab');
+  ok(v.capInviteIfNoApp('0102', { name:'x', fcmTokens_echarpe:['t'] }) === false && v.st.writes.length === 0, 'عندها تطبيق echarpe = مفيش دعوة');
+  ok(v.capInviteIfNoApp('0103', { name:'x', welcomeGranted_echarpe:true }) === false, 'خدت هدية ترحيب التطبيق = عندها');
+  ok(v.capInviteIfNoApp('0104', { name:'x', source:'loyalty_app:qr' }) === false, 'اتسجلت من التطبيق أصلًا = عندها');
+  ok(v.capInviteIfNoApp('0105', { name:'x', loyaltyCode:'ECH 1234 5678' }) === true, '⭐ `loyaltyCode` لوحده **مش دليل** (استيراد QuickBooks بيديه لكل العملاء) = بتتدعى');
+  ok(v.capInviteIfNoApp('0106', { name:'x', fcmTokens_glow:['t'], fcmTokenAt:1 }) === true, '⭐ عندها تطبيق **Glow** بس وهي في فرع echarpe = بتتدعى لتطبيق echarpe');
+  v = mkInv('Glow');
+  ok(v.capInviteIfNoApp('0107', { name:'x', fcmTokens_echarpe:['t'] }) === true, 'والعكس: عندها echarpe وهي في Glow = بتتدعى لـGlow');
+  ok(v.capInviteIfNoApp('0108', { name:'x', fcmTokens_glow:['t'] }) === false, 'عندها Glow في Glow = لأ');
+  ok(v.capInviteIfNoApp('0109', { name:'x', fcmTokens:{ tok1:{ brand:'glow', ts:1 } } }) === false, 'الشكل القديم للتوكنات بيتقري بالبراند');
+  v = mkInv('echarpe El Rehab', { askId:'ask_77' });
+  ok(v.capInviteIfNoApp('0110', { name:'x' }) === false && v.st.writes.length === 0, 'التابلت عليه طلب رقم شغّال = منقاطعهوش');
+  v = mkInv('echarpe El Rehab'); v.capMarkInvited('0111');
+  ok(v.capInviteIfNoApp('0111', { name:'x' }) === false, 'عميلة جاية من مسار التابلت نفسه (اترحّب بيها خلاص) = مفيش ترحيب تاني من POS');
+  ok(v.capInviteIfNoApp('', { name:'x' }) === false && v.capInviteIfNoApp('0112', null) === false, 'مدخلات ناقصة = لأ');
+
+  const rci = extractFn(sale, 'async function refreshCustomerInfo(');
+  const iHook = rci.indexOf('if(doc.exists) capInviteIfNoApp(phone, doc.data() || {});');
+  ok(iHook > 0 && iHook > rci.indexOf('if(_stale()) return;'), 'متوصّلة في `refreshCustomerInfo` بعد فحص «الرقم اتغيّر» — بنفس القراءة (صفر قراءات زيادة)');
+  ok(/capMarkInvited\(phone\);[^\n]*\n\s*_capFill\(phone, cust\.name/.test(sale) && /capMarkInvited\(phone\);\s*\n\s*_capFill\(phone, _nm\)/.test(sale), 'ومسارين التابلت بيعلّموا الرقم قبل `_capFill` (اللي بينادي refreshCustomerInfo)');
+  ok(/invite: !custHasBrandApp\(cust, capBrandKey\(\)\)/.test(sale) && /isNew:true, ts:Date\.now\(\), askId:_capAskId, invite:true/.test(sale), 'وترحيب التابلت نفسه شايل قرار الدعوة (موجودة: حسب التطبيق · جديدة: دايمًا)');
+
+  // الكشك
+  const gv = K.capKioskView({ mode:'greet', greetName:'منى', ts:NOW, askId:'inv_1', invite:true }, null, NOW + 10, '');
+  ok(gv.view === 'greet' && gv.invite === true, 'الكشك بيمرّر `invite:true`');
+  ok(K.capKioskView({ mode:'greet', ts:NOW, askId:'a9', invite:false }, null, NOW + 10, '').invite === false, 'و`invite:false`');
+  ok(K.capKioskView({ mode:'greet', ts:NOW, askId:'a9' }, null, NOW + 10, '').invite === undefined, 'وPOS قديم (من غير الحقل) = undefined ← الكشك يفحص بنفسه');
+  ok(/window\.__capInvite = v\.invite;/.test(kiosk), 'وبيسلّمه لشاشة الدعوة');
+  const sh = invite.slice(invite.indexOf('async function show('), invite.indexOf('async function show(') + 1400);
+  ok(/var hint = window\.__capInvite; window\.__capInvite = undefined;/.test(sh), 'شاشة الدعوة بتستهلك القرار مرة واحدة');
+  ok(/if \(!force && hint === false\) return;/.test(sh) && /if \(!force && hint !== true && await hasApp\(_phone\)\) return;/.test(sh), 'false = متعرضش · true = اعرضي من غير فحص · مفيش قرار = فحص محلي');
+  const ha = invite.slice(invite.indexOf('async function hasApp('), invite.indexOf('async function hasApp(') + 1500);
+  ok(/var bk = brandKey\(\);/.test(ha) && /d\['fcmTokens_' \+ bk\]/.test(ha) && !/if \(d\.fcmTokenAt\) return true;/.test(ha), 'والفحص المحلي بقى بالبراند (مش `fcmTokenAt` العام)');
+
   console.log('🖼️ 3) لقطات Glow');
   const g = invite.slice(invite.indexOf('    glow: {'), invite.indexOf('  function brandKey'));
   const gs = (g.match(/src: '(invite\/[\w-]+\.jpg)'/g) || []).map(m => m.match(/'([^']+)'/)[1]);
   ok(gs.length === 3 && gs.every(f => fs.existsSync(path.join(ROOT, 'feedback', f))), 'Glow بقى ليه 3 لقطات وملفاتهم موجودة');
   ok(gs.every(f => fs.statSync(path.join(ROOT, 'feedback', f)).size < 160 * 1024), 'وخفيفة على نت الفرع');
-  ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8'), 715) && swAtLeast(fs.readFileSync(path.join(ROOT, 'feedback', 'sw.js'), 'utf8'), 695), 'POS ≥ v715 · kiosk ≥ v695');
+  ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8'), 716) && swAtLeast(fs.readFileSync(path.join(ROOT, 'feedback', 'sw.js'), 'utf8'), 698), 'POS ≥ v716 · kiosk ≥ v698');
 
   console.log('\n' + (fail ? '❌' : '✅') + ' test-tablet-capture: ' + pass + ' ناجح · ' + fail + ' فاشل');
   if(fail) process.exitCode = 1;

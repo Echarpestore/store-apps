@@ -2450,7 +2450,7 @@ onSnapshot(terminationsCol, (snap)=>{
   if(adminUnlocked){ renderTerminationPanel(); renderTerminationLog(); }
 }, (err)=> console.error('terminations sync error', err));
 
-lf431History('advances190', _scoped(advancesCol,'ts'), _recent(advancesCol,'ts'), ()=>allAdvances, (rows)=>{allAdvances=rows;window.allAdvancesAll=allAdvances;advances=allAdvances.filter(a=>a.branch===window.currentBranch);renderTodayAdvancesSummary();if(adminUnlocked){renderSalaryPanel();renderAdvancesLog();}});
+lf431History('advances190', _scoped(advancesCol,'ts'), _recent(advancesCol,'ts'), ()=>allAdvances, (rows)=>{allAdvances=rows;window.allAdvancesAll=allAdvances;window.allAdvances=allAdvances;/* v619: advCheck بيقرا window.allAdvances — كان بيفضل على المصفوفة القديمة بعد أي تحديث */advances=allAdvances.filter(a=>a.branch===window.currentBranch);renderTodayAdvancesSummary();if(adminUnlocked){renderSalaryPanel();renderAdvancesLog();}});
 
 function renderLog(){
   const wrap = $('#logList');
@@ -9028,6 +9028,7 @@ $('#openAdvance')?.addEventListener('click', ()=>{
 // ===== 💵 قواعد السلف (المالك بيحددها من الإعدادات) =====
 // advCfg = { maxPerMonth: سقف الشهر بالجنيه (0 = مفيش سقف), openDay: أول يوم مسموح (0 = مفتوح طول الشهر) }
 window.advCfg = { maxPerMonth: 0, openDay: 0, closeDay: 0 };
+window.advCfgLoaded = false;   // v620: لحد ما الإعدادات توصل، السقف = 0 (من غير حد) والنافذة مفتوحة — مفيش سلف تتسجّل في الحالة دي
 try{
   // 🎫 فترات اتسقط فيها شرط المهام
   onSnapshot(doc(db,'pos_test_settings','reward_waivers'), (snap)=>{
@@ -9038,13 +9039,16 @@ try{
   }, (e)=> console.warn('reward waivers', e && e.code));
 
   onSnapshot(doc(db,'pos_test_settings','advances_cfg'), (snap)=>{
+    window.advCfgLoaded = true;
     if(snap.exists()){
       const d = snap.data();
       // 🔴 كان بيرمي closeDay هنا — والمالك حافظه من الإعدادات (يقفل يوم 6).
       //    النتيجة: النافذة اشتغلت "من 12 لآخر الشهر" (أيام 1→6 مقفولة
       //    غلط و7→11 مفتوحة غلط)، والسقف الشهري اتحسب بالشهر التقويمي
       //    بدل دورة القبض، ودورة كل سلفة جديدة (cycleKey) اتسجّلت غلط.
-      window.advCfg = { maxPerMonth: Number(d.maxPerMonth)||0, openDay: Number(d.openDay)||0, closeDay: Number(d.closeDay)||0 };
+      window.advCfg = { maxPerMonth: Number(d.maxPerMonth)||0, openDay: Number(d.openDay)||0, closeDay: Number(d.closeDay)||0,
+                        ordersCountInCap: d.ordersCountInCap !== false };   // v619: الافتراضي = زي ما كان (المشتريات محسوبة)
+      try{ const _oc = document.getElementById('advOrdersInCapInput'); if(_oc) _oc.checked = window.advCfg.ordersCountInCap; }catch(_){}
       try{ if(typeof renderSalaryPanel === 'function') renderSalaryPanel(); }catch(_){}
     }
   }, (e)=> console.warn('adv cfg', e && e.code));
@@ -9083,6 +9087,19 @@ function advCycleKey(now, openDay, closeDay){
   return y + '-' + String(m + 1).padStart(2, '0');
 }
 window.advCycleKey = advCycleKey;
+// دورة السلفة الواحدة — مصدر واحد للقاعدة (المجموع والتفصيلة بيستخدموه)
+function advKeyOf(a, openDay, closeDay){
+  let key = a && a.cycleKey;
+  if(!key){
+    const ds = String((a && a.date) || '');
+    if(ds.length >= 10 && openDay){
+      const [yy,mm,dd] = ds.slice(0,10).split('-').map(Number);
+      key = advCycleKey(caiStamp(yy, mm, dd, 12, 0, 0, 0), openDay, closeDay);
+    } else key = ds.slice(0,7);
+  }
+  return key;
+}
+window.advKeyOf = advKeyOf;
 // مجموع سلف الموظف الشهر ده
 function advMonthTotal(advances, empId, monthKey, openDay, closeDay){
   return (advances||[]).reduce((sum,a)=>{
@@ -9093,18 +9110,62 @@ function advMonthTotal(advances, empId, monthKey, openDay, closeDay){
     //    تقدر تاخد سقفين في 4 أيام.
     // بنستخدم cycleKey المحفوظ لو موجود (السلف الجديدة)، وإلا بنحسبه من
     // التاريخ (السلف القديمة — توافق).
-    let key = a.cycleKey;
-    if(!key){
-      const ds = String(a.date||'');
-      if(ds.length >= 10 && openDay){
-        const [yy,mm,dd] = ds.slice(0,10).split('-').map(Number);
-        key = advCycleKey(caiStamp(yy, mm, dd, 12, 0, 0, 0), openDay, closeDay);
-      } else key = ds.slice(0,7);
-    }
-    if(key !== monthKey) return sum;
+    if(advKeyOf(a, openDay, closeDay) !== monthKey) return sum;
     return sum + (Number(a.amount)||0);
   }, 0);
 }
+// 🧾 v619 — تفصيلة المحسوب على سقف الشهر: **سلف كاش** و**مشتريات** كل واحدة لوحدها.
+//    بلاغ المالك 21-09: موظف «ماخدش ولا سلفة» واتقاله «عدّيت الليميت 3000». السبب: أوردرات شراء الموظف على المرتب
+//    بتتكتب في `sales_advances` (`source:'staff_order'`، والمرفوض `staff_order_reject` بالسعر الكامل) — و`advMonthTotal`
+//    بيجمع **كل** اللي في المجموعة من غير ما يبص على المصدر. فمشترياته كلت السقف، والرسالة كانت بتقول «واخد X» من غير توضيح.
+function advMonthBreakdown(advances, empId, monthKey, openDay, closeDay){
+  let cash = 0, orders = 0; const items = [];
+  (advances||[]).forEach(a=>{
+    if(!a || a.employeeId !== empId) return;
+    if(advKeyOf(a, openDay, closeDay) !== monthKey) return;
+    const amt = Number(a.amount)||0;
+    const isOrder = String(a.source||'').indexOf('staff_order') === 0;
+    if(isOrder) orders += amt; else cash += amt;
+    // 🔎 الدورة المحفوظة vs الدورة اللي تاريخ السلفة نفسه بيقولها — لو مختلفين، السلفة متسجّلة على شهر غلط
+    const byDate = advKeyOf({ date: a.date }, openDay, closeDay);
+    items.push({ date: String(a.date||'').slice(0,10), amount: amt, kind: isOrder ? 'order' : (a.manual ? 'manual' : 'cash'),
+                 wrongCycle: !!(a.cycleKey && byDate && String(a.date||'').length >= 10 && a.cycleKey !== byDate) });
+  });
+  cash = Math.round(cash*100)/100; orders = Math.round(orders*100)/100;
+  items.sort((x,y)=> x.date < y.date ? -1 : 1);
+  return { cash, orders, total: Math.round((cash+orders)*100)/100, items };
+}
+window.advMonthBreakdown = advMonthBreakdown;
+// رسالة الرفض — بتقول للموظف **إيه اللي محسوب عليه**
+function advLimitMessage(chk){
+  const max = chk.max, left = chk.left;
+  if(!(chk.used > 0)) return `المبلغ أكبر من سقف الشهر — أقصى سلفة ${max} ج.م`;
+  const parts = [];
+  if(chk.cash > 0) parts.push(`سلف ${chk.cash} ج.م`);
+  if(chk.countsOrders && chk.orders > 0) parts.push(`مشتريات على المرتب ${chk.orders} ج.م`);
+  let why = parts.length ? ` — محسوب عليك: ${parts.join(' + ')}` : '';
+  // v620: **البنود نفسها بتواريخها** — عشان «أنا ماخدتش حاجة» تتحسم قدام الشاشة مش بالتخمين
+  const its = (chk.items||[]).filter(i => chk.countsOrders || i.kind !== 'order').slice(0, 5);
+  if(its.length){
+    why += '\n' + its.map(i => '• ' + (i.date || 'من غير تاريخ') + ' — '
+      + (i.kind === 'order' ? 'مشتريات' : i.kind === 'manual' ? 'سلفة سجّلها المالك' : 'سلفة') + ' ' + i.amount + ' ج.م'
+      + (i.wrongCycle ? ' ⚠️ متسجّلة على شهر غلط — بلّغ الإدارة' : '')).join('\n');
+  }
+  return left > 0 ? `فاضلك ${left} ج.م بس من سقف ${max}${why}` : `سقف الشهر (${max} ج.م) خلص${why}`;
+}
+window.advLimitMessage = advLimitMessage;
+// 🩺 من الكونسول: advDiag('اسم الموظف') — كل اللي محسوب عليه في الدورة الحالية، بند بند
+window.advDiag = function(nameOrId){
+  const cfg = window.advCfg || {}, all = window.allAdvances || [];
+  const q = String(nameOrId||'').trim();
+  const ids = Array.from(new Set(all.filter(a => a && (a.employeeId === q || String(a.employeeName||'').indexOf(q) >= 0)).map(a => a.employeeId)));
+  const mk = advCycleKey(new Date(), cfg.openDay, cfg.closeDay);
+  console.log('دورة السلف الحالية:', mk, '| السقف:', cfg.maxPerMonth, '| الإعدادات محمّلة:', !!window.advCfgLoaded, '| موظفين مطابقين:', ids.length);
+  ids.forEach(id => { const bd = advMonthBreakdown(all, id, mk, cfg.openDay, cfg.closeDay);
+    console.log('—', id, '| كاش', bd.cash, '| مشتريات', bd.orders); console.table(bd.items); });
+  return ids.length;
+};
+
 // فحص كامل لطلب سلفة — بيرجع {ok, reason, left}
 function advCheck(cfg, advances, empId, amount, now){
   cfg = cfg || { maxPerMonth:0, openDay:0, closeDay:0 };
@@ -9117,9 +9178,11 @@ function advCheck(cfg, advances, empId, amount, now){
     // 🗓️ وبيتحسب بشهر **النافذة** مش التقويمي (قرار المالك)
     const _d = now || new Date();
     const mk = advCycleKey(_d, cfg.openDay, cfg.closeDay);
-    const used = advMonthTotal(advances, empId, mk, cfg.openDay, cfg.closeDay);
-    const left = Math.max(0, cfg.maxPerMonth - used);
-    if(amount > left) return { ok:false, reason:'limit', left, used, max: cfg.maxPerMonth };
+    const bd = advMonthBreakdown(advances, empId, mk, cfg.openDay, cfg.closeDay);
+    const countsOrders = cfg.ordersCountInCap !== false;          // الافتراضي: المشتريات محسوبة (السلوك القديم)
+    const used = countsOrders ? bd.total : bd.cash;
+    const left = Math.max(0, Math.round((cfg.maxPerMonth - used)*100)/100);
+    if(amount > left) return { ok:false, reason:'limit', left, used, max: cfg.maxPerMonth, cash: bd.cash, orders: bd.orders, countsOrders, items: bd.items };
     return { ok:true, left: left - amount, used };
   }
   return { ok:true };
@@ -9190,12 +9253,16 @@ $('#advConfirmBtn')?.addEventListener('click', async ()=>{
   if(advSubmitting) return;
   const amount = parseFloat($('#advAmountInput').value);
   if(isNaN(amount) || amount <= 0){ $('#advAmountErr').textContent = 'اكتب مبلغ صحيح'; return; }
+  // 🔒 v620: إعدادات السلف لسه موصلتش؟ منسجّلش. من غيرها السقف صفر = **من غير حد**، و`cycleKey` بيتحفظ بالشهر
+  //    التقويمي بدل دورة القبض ← سلفة 3 سبتمبر تتحسب على دورة سبتمبر وتاكل سقف الشهر الجاي (ده اللي الفحص طلّعه
+  //    كسبب وحيد ممكن لـ«واخد 3000» عند واحدة ماخدتش حاجة في الدورة).
+  if(!window.advCfgLoaded){ $('#advAmountErr').textContent = 'إعدادات السلف لسه بتتحمّل — استنى ثواني وجرّب تاني'; return; }
   // 💵 قواعد السلف: نافذة الفتح + سقف الشهر
   const chk = advCheck(window.advCfg, window.allAdvances, advSelectedEmp.id, amount, new Date());
   if(!chk.ok){
     $('#advAmountErr').textContent = chk.reason === 'closed'
       ? `السلف بتفتح من يوم ${chk.openDay} في الشهر — مش متاحة دلوقتي`
-      : `تعدّيت سقف الشهر (${chk.max} ج.م) — واخد ${chk.used} وفاضلك ${chk.left} بس`;
+      : advLimitMessage(chk);
     return;
   }
   advSubmitting = true;
@@ -9590,7 +9657,8 @@ function renderAdvancesLog(){
     const orig = advBtn.textContent; advBtn.disabled = true;
     try{
       const cdv = Math.max(0, Math.min(28, Number((document.getElementById('advCloseDayInput')||{}).value) || 0));
-      await setDoc(doc(db,'pos_test_settings','advances_cfg'), { maxPerMonth: mx, openDay: od, closeDay: cdv }, { merge:true });
+      const _oc = document.getElementById('advOrdersInCapInput');
+      await setDoc(doc(db,'pos_test_settings','advances_cfg'), { maxPerMonth: mx, openDay: od, closeDay: cdv, ordersCountInCap: _oc ? !!_oc.checked : true }, { merge:true });
       errB.textContent = ''; advBtn.textContent = 'اتحفظ ✅';
     }catch(e2){ errB.textContent = 'خطأ: ' + (e2 && e2.message ? e2.message : e2); advBtn.textContent = 'خطأ'; }
     setTimeout(()=>{ advBtn.textContent = orig; advBtn.disabled = false; }, 1800);
@@ -9605,6 +9673,7 @@ function renderAdvancesLog(){
         if(c2 && d.closeDay) c2.value = d.closeDay;
         if(a && d.maxPerMonth) a.value = d.maxPerMonth;
         if(b && d.openDay) b.value = d.openDay;
+        const _oc = document.getElementById('advOrdersInCapInput'); if(_oc) _oc.checked = d.ordersCountInCap !== false;
       }
     }catch(e){}
   })();

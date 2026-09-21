@@ -1174,7 +1174,8 @@ function capKioskView(data, handledAskId, now, greetedKey){
   if(data.mode === 'need_name' && data.askId) return { view:'name', askId:data.askId, phone:data.phone };
   if(data.mode === 'greet'){
     if(greetedKey && capGreetKey(data) === greetedKey) return { view:'hide' };   // اتعرض خلاص
-    return { view:'greet', name:String(data.greetName||''), isNew:!!data.isNew, key:capGreetKey(data) };
+    return { view:'greet', name:String(data.greetName||''), isNew:!!data.isNew, key:capGreetKey(data),
+             invite:(typeof data.invite === 'boolean' ? data.invite : undefined) };   // v698: POS هو اللي بيقرر الدعوة
   }
   return { view:'hide' };
 }
@@ -1250,6 +1251,7 @@ function _capApply(data){
     setTimeout(()=> document.getElementById('capNameInput').focus(), 80);
   }else if(v.view === 'greet'){
     _capGreetedKey = v.key || '';
+    window.__capInvite = v.invite;   // true = اعرضي الدعوة · false = عندها التطبيق · undefined = POS قديم (الكشك يفحص بنفسه)
     document.getElementById('capGreetTxt').textContent = capGreetText(v.name, v.isNew);
     _capShowPane('capPaneGreet');
     clearTimeout(_capGreetTimer);
@@ -1333,7 +1335,7 @@ window.capDiag = function(){
 <!-- 📱 شاشة إنستاباي — ملف مستقل. لو وقع، الكشك بيفضل شغال عادي. -->
 <script type="module" src="instapay-tablet.js?v=692"></script>
 <!-- 📲 دعوة تحميل التطبيق — ملف مستقل كمان -->
-<script type="module" src="app-invite.js?v=696"></script>
+<script type="module" src="app-invite.js?v=698"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

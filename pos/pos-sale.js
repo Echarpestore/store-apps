@@ -1792,6 +1792,7 @@ async function refreshCustomerInfo(){
     const doc = await db.collection(TEST_CUSTOMERS).doc(phone).get();
     if(_stale()) return;                      // الكاشير مسحت أو غيّرت الرقم وإحنا بنقرا
     custExists = doc.exists;
+    if(doc.exists) capInviteIfNoApp(phone, doc.data() || {});   // 📲 v716: مسجّلة ومعندهاش التطبيق ← دعوة على التابلت
     { const _d = doc.exists ? (doc.data()||{}) : {};
       // "معاه التطبيق" = عنده PIN أو كود ولاء أو مصدره التطبيق
       custHasApp = !!(_d.loyaltyPin || _d.loyaltyCode || _d.loyaltyCode_glow || String(_d.source||'').indexOf('app')>=0);
@@ -2728,8 +2729,10 @@ function _capStartListener(){
       let cust = null;
       try{ const cd = await db.collection(TEST_CUSTOMERS).doc(phone).get(); cust = cd.exists ? cd.data() : null; }catch(e){}
       if(cust){
+        capMarkInvited(phone);                       // v716: الترحيب ده هو الدعوة — refreshCustomerInfo متبعتش واحدة تانية
         _capFill(phone, cust.name || '');
-        _capDocRef().set({ mode:'greet', greetName: cust.name || '', isNew:false, ts:Date.now(), askId:_capAskId }).catch(()=>{});
+        _capDocRef().set({ mode:'greet', greetName: cust.name || '', isNew:false, ts:Date.now(), askId:_capAskId,
+                           invite: !custHasBrandApp(cust, capBrandKey()) }).catch(()=>{});
         showToast('🙋‍♀️ ' + (cust.name || phone) + ' — اتسجلت في الفاتورة', 'ok');
         _capAskId = null;   // اكتمل
       }else{
@@ -2744,12 +2747,13 @@ function _capStartListener(){
       const phone = _capValidPhone(data.phone);
       if(!phone) return;
       const _nm = String(data.name||'').trim();
+      capMarkInvited(phone);
       _capFill(phone, _nm);
       // 🆕 v715: العميلة كتبت رقمها واسمها بنفسها على التابلت — التسجيل **يتم هنا**. قبل كده كنا بنملا الخانتين بس،
       //    والتوست بيقول «اتسجل» والشاشة عند الكاشير بتقول «مش مسجّل» ومستنية دوسة «سجّل» — ولو الكاشير نسيت، العميلة متسجلتش
       //    (والتابلت رحّب بيها «اتسجلتي معانا»). الرقم جاي من كيبورد التابلت ومتحقق منه مرتين، فمفيش حاجة الكاشير تراجعها.
       const _regOk = await capAutoRegister(phone, _nm);
-      _capDocRef().set({ mode:'greet', greetName: String(data.name||'').trim(), isNew:true, ts:Date.now(), askId:_capAskId }).catch(()=>{});
+      _capDocRef().set({ mode:'greet', greetName: String(data.name||'').trim(), isNew:true, ts:Date.now(), askId:_capAskId, invite:true }).catch(()=>{});
       showToast(_regOk ? ('🆕 ' + (_nm || phone) + ' — عميلة جديدة اتسجلت ✅')
                        : ('⚠️ ' + (_nm || phone) + ' — البيانات اتملت، دوسي «سجّل» (التسجيل التلقائي متمّش)'), _regOk ? 'ok' : 'warn');
       _capAskId = null;   // اكتمل
@@ -2757,6 +2761,51 @@ function _capStartListener(){
     }
   }, (e)=> console.warn('cap listener', e));
 }
+
+// 📲 v716 — دعوة التطبيق للعميلة **المسجّلة** اللي لسه منزّلتوش (بلاغ المالك 21-09: «البرومو بيظهر بس للي بتسجّل أول مرة»).
+//    السبب: الدعوة على التابلت بتطلع ورا شاشة «أهلًا بيكي» — والشاشة دي بتتبعت بس لما العميلة تكتب رقمها **على التابلت**.
+//    العميلة المسجّلة الكاشير بتكتب رقمها في POS أو تمسح كارتها ← التابلت مبيعرفش إنها موجودة أصلًا.
+//    دلوقتي: أول ما POS يتعرّف على عميلة موجودة ومعندهاش تطبيق **براند الفرع ده**، بيبعت للتابلت ترحيب + دعوة.
+//    · مرة واحدة لكل رقم في اليوم على الجهاز ده.  · مش أثناء طلب شغّال على التابلت.  · قرار «عندها التطبيق؟» هنا (المستند
+//      مقري أصلًا = صفر قراءات زيادة) وبيتبعت للتابلت في `invite:true/false`.
+//    ⚠️ `loyaltyCode` **مش دليل**: استيراد QuickBooks بيدّي كود لكل العملاء. الدليل = توكن إشعارات البراند / هدية ترحيبه / مصدر التسجيل.
+function capBrandKey(){
+  return (typeof GLOW_BRANCHES !== 'undefined' && GLOW_BRANCHES.indexOf(currentBranch) >= 0) ? 'glow' : 'echarpe';
+}
+function custHasBrandApp(d, brand){
+  d = d || {};
+  const arr = d['fcmTokens_' + brand];
+  if(Array.isArray(arr) && arr.length) return true;
+  if(d['welcomeGranted_' + brand]) return true;
+  if(String(d.source || '').indexOf(brand === 'glow' ? 'glow_app' : 'loyalty_app') === 0) return true;
+  const t = d.fcmTokens;                                   // الشكل القديم: { token: { brand, ts } }
+  if(t && typeof t === 'object' && !Array.isArray(t)){
+    return Object.keys(t).some(function(k){ return (((t[k] || {}).brand) || 'echarpe') === brand; });
+  }
+  return false;
+}
+window.capBrandKey = capBrandKey; window.custHasBrandApp = custHasBrandApp;
+
+const _capInvitedToday = new Set();
+function _capInviteKey(phone){
+  const day = (typeof bizDayKey === 'function') ? bizDayKey(Date.now()) : new Date().toISOString().slice(0, 10);
+  return day + ':' + phone;
+}
+function capMarkInvited(phone){ if(phone) _capInvitedToday.add(_capInviteKey(phone)); }
+function capInviteIfNoApp(phone, data){
+  try{
+    if(!phone || !data) return false;
+    if(_capAskId) return false;                                   // التابلت مشغول بطلب رقم — منقاطعهوش
+    const key = _capInviteKey(phone);
+    if(_capInvitedToday.has(key)) return false;                   // اتدعت النهارده خلاص
+    if(custHasBrandApp(data, capBrandKey())) return false;        // عندها تطبيق البراند ده
+    _capInvitedToday.add(key);
+    _capDocRef().set({ mode:'greet', greetName: String(data.name || ''), isNew:false, invite:true,
+                       ts: Date.now(), askId: 'inv_' + Date.now() }).catch(function(){});
+    return true;
+  }catch(e){ return false; }
+}
+window.capInviteIfNoApp = capInviteIfNoApp;
 
 // 🆕 v715: تسجيل عميلة التابلت تلقائي. بترجّع true لو اتسجلت (أو كانت مسجّلة أصلًا).
 //    ⚠️ `points:0` بيتكتب **بس لو المستند مش موجود** — `merge` مع points:0 على عميلة موجودة بيصفّر نقطها.

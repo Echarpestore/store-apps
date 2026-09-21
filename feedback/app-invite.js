@@ -42,10 +42,17 @@ import { getFirestore, collection, query, where, limit, getDocs }
         where('phone', '==', String(phone)), limit(1)));
       if (snap.empty) return false;
       const d = snap.docs[0].data() || {};
-      if (d.fcmTokenAt) return true;
-      return Object.keys(d).some(function (k) {
-        return k.indexOf('fcmTokens') === 0 && Array.isArray(d[k]) && d[k].length;
-      });
+      // v698: **بالبراند**. قبل كده أي توكن (أو `fcmTokenAt`) = «عندها التطبيق» ← عميلة عندها تطبيق echarpe
+      //       مكانتش بتتدعى لتطبيق Glow في فرع Glow، والعكس.
+      var bk = brandKey();
+      var arr = d['fcmTokens_' + bk];
+      if (Array.isArray(arr) && arr.length) return true;
+      if (d['welcomeGranted_' + bk]) return true;
+      var t = d.fcmTokens;
+      if (t && typeof t === 'object' && !Array.isArray(t)) {
+        return Object.keys(t).some(function (k) { return (((t[k] || {}).brand) || 'echarpe') === bk; });
+      }
+      return false;
     } catch (e) { return false; }
   }
 
@@ -289,7 +296,10 @@ import { getFirestore, collection, query, where, limit, getDocs }
        اللي نعرض فيها إعلان، والشاشتين فوق بعض كارثة. */
     var ip = document.getElementById('ipWrap');
     if (ip && ip.classList.contains('on')) return;
-    if (!force && await hasApp(_phone)) return;   // عندها التطبيق خلاص
+    // v698: قرار POS أولًا (هو قاري مستند العميلة وعارف براند الفرع). الفحص المحلي فولباك لـPOS قديم بس.
+    var hint = window.__capInvite; window.__capInvite = undefined;
+    if (!force && hint === false) return;                          // POS: عندها تطبيق البراند ده
+    if (!force && hint !== true && await hasApp(_phone)) return;   // مفيش قرار من POS ← نفحص بنفسنا
     // v695: نفس العميلة متشوفش الدعوة مرتين ورا بعض (الترحيب كان بيتعاد فالدعوة بتتعاد وراه — اتصلّح من المصدر، وده حزام أمان)
     if (!force && Date.now() - lastShownAt < 60000) return;
     lastShownAt = Date.now();

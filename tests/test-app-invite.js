@@ -32,7 +32,7 @@ t('طبقة تحت إنستاباي',()=>{has('z-index:8800')});
 
 console.log('\n🔍 إخفاء لمن عنده التطبيق');
 t('بيفحص علامة التطبيق',()=>{has('function hasApp(');has('fcmTokenAt')});
-t('بيفحص توكنات البراندات كمان',()=>has("k.indexOf('fcmTokens') === 0"));
+t('بيفحص توكنات **براند الفرع** (v698 — مش أي توكن)',()=>{has("var arr = d['fcmTokens_' + bk];");has('var bk = brandKey();')});
 t('فشل القراءة = نعرض مش نخفي',()=>has('catch (e) { return false; }'));
 t('بيمسك الرقم من غير تعديل الكشك',()=>{has('origSubmit.apply(this, arguments)')});
 t('اسم عنصر الرقم مطابق للكشك',()=>{

@@ -827,7 +827,7 @@
         <p class="sub">اكتب مبلغ السلفة</p>
         <input type="number" min="1" id="advAmountInput" placeholder="بالجنيه"
           style="width:100%; padding:14px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Space Grotesk'; font-size:20px; text-align:center; margin-bottom:12px;">
-        <div class="field-err" id="advAmountErr"></div>
+        <div class="field-err" id="advAmountErr" style="white-space:pre-line; line-height:1.8;"></div>
         <button style="width:100%; padding:13px; border:none; border-radius:12px; background:var(--gold); color:#0b0c0f; font-family:'Cairo'; font-weight:800; font-size:14px; cursor:pointer; margin-bottom:10px;" id="advConfirmBtn">تأكيد السلفة ✅</button>
         <button style="width:100%; padding:11px; border:1px solid var(--line); border-radius:12px; background:transparent; color:var(--sub); font-family:'Cairo'; font-weight:700; font-size:13px; cursor:pointer;" id="advStep3Cancel">إلغاء</button>
       </div>
@@ -912,6 +912,11 @@
         <input type="number" min="0" max="28" id="advCloseDayInput" placeholder="وتقفل يوم (1-28)" style="min-width:160px;">
         <button id="saveAdvCfgBtn">حفظ إعدادات السلف</button>
       </div>
+      <label style="display:flex; align-items:flex-start; gap:10px; margin:12px 0 4px; font-size:13px; line-height:1.7; cursor:pointer;">
+        <input type="checkbox" id="advOrdersInCapInput" checked style="width:20px; height:20px; margin-top:3px; flex:none;">
+        <span><b>مشتريات الموظف على المرتب بتتحسب من سقف السلف</b><br>
+          <span style="color:var(--sub); font-size:12px;">شغّالة: اللي اشترى بـ2000 يقدر ياخد سلفة 1000 بس من سقف 3000. مقفولة: السقف للسلف الكاش بس، والمشتريات ليها سقفها في الكاشير.</span></span>
+      </label>
       <div class="field-err" id="advCfgErr"></div>
     </div>
 
@@ -1268,7 +1273,7 @@
 
 </div>
 
-<script type="module" src="sales-app.js?v=616"></script>
+<script type="module" src="sales-app.js?v=620"></script>
 <script src="sales-ui.js?v=559"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
