@@ -41,6 +41,8 @@ const MUST = [
   ['pos-reports.js', 'shFullAccess',                'v712 سجل المبيعات بيحترم canViewLogs'],
   ['pos-reports.js', 'clearProtectedScreenData',    'v713 الخروج بيمسح بيانات الشاشات المحمية'],
   ['pos-admin.js', 'rewardSendBlockReason',         'v714 المكافآت: صلاحية + سقف'],
+  ['credit-ui.js', 'creditPreflight',               'v720 فحص السيرفر قبل خصم الرصيد (فاتورة بخصم ورصيد مااتخصمش)'],
+  ['credit-ui.js', 'callCreditEx',                  'v720 نداء بيرجّع نوع الخطأ'],
   ['credit-ui.js', 'creditOtpFlow',                 'v718 كود تأكيد صرف الرصيد (جهة الكاشير)'],
   ['credit-ui.js', 'creditOtpRequired',             'v718 إعداد «الكود إجباري»'],
   ['pos-reports.js', 'dcAggregate',                 '4أ التقفيل'],

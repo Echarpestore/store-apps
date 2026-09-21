@@ -8,6 +8,7 @@ require('./helpers/swv');
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const rd = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+const office = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if(c){ pass++; } else { fail++; console.error('  ❌ ' + m); } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -25,8 +26,21 @@ function mkPos(o){
     cart: o.cart || [{ price:500, qty:1 }], cartTotal: () => w.cart.reduce((s, c) => s + c.price * c.qty, 0), renderCart(){},
     showToast: (m) => st.toasts.push(m), _logActivity: (t, d) => st.logs.push(t),
     askConfirm: (opt) => { st.confirms.push(opt); return Promise.resolve(o.confirm !== false); },
-    firebase: { app: () => ({ functions: () => ({ httpsCallable: (name) => async (payload) => { st.calls.push(Object.assign({ _fn:name }, payload)); return { data: o.server(payload, st) }; } }) }) },
-    db: { collection: (c) => ({ doc: (id) => (c === 'pos_capture' ? capDoc : { get: async () => ({ exists:true, data: () => ({ otpRequired: o.required !== false }) }) }) }) }
+    esc: x => String(x), TEST_SALES:'pos_test_sales',
+    // v720: `otp_status` = فحص السيرفر قبل الخصم. بيتسجّل لوحده في `st.status` عشان باقي الفحوصات تفضل على نداءات الكود/الخصم.
+    firebase: { app: () => ({ functions: () => ({ httpsCallable: (name) => async (payload) => {
+      if(payload && payload.action === 'otp_status'){
+        st.status = (st.status || 0) + 1;
+        if(o.statusError){ const e = new Error(o.statusError.message); e.code = 'functions/' + o.statusError.code; throw e; }
+        return { data: { required: o.required !== false } };
+      }
+      st.calls.push(Object.assign({ _fn:name }, payload));
+      const out = o.server(payload, st);
+      if(out && out.__throw){ const e = new Error(out.__throw.message); e.code = 'functions/' + out.__throw.code; throw e; }
+      return { data: out };
+    } }) }) },
+    db: { collection: (c) => ({ doc: (id) => (c === 'pos_capture' ? capDoc : { get: async () => ({ exists:true, data: () => ({ otpRequired: o.required !== false }) }) }),
+      where: () => ({ limit: () => ({ get: async () => ({ empty:false, docs:[{ ref:{ update: async (d) => { st.saleMarks = (st.saleMarks || []).concat([d]); } } }] }) }) }) }) }
   });
   w.custCreditBalance = o.balance == null ? 325 : o.balance;
   w.eval(rd('pos/credit-ui.js'));
@@ -41,7 +55,7 @@ const tablet = (w, doc) => w.__st.capListeners.forEach(cb => cb({ exists:true, d
     console.log('\n🔓 1) الإعداد مقفول = المسار القديم بالحرف');
     let w = mkPos({ required:false, server: () => ({}) });
     await w.useCustomerCredit();
-    ok(w.__st.calls.length === 0 && w.cart.some(l => l.isCreditSpend) && w.pendingCreditSpend.approvalId === null, 'من غير كود: الخصم بيتحط زي الأول (المرحلة 1 — مفيش حاجة بتتكسر قبل ما المالك يفعّل)');
+    ok(w.__st.status === 1 && w.__st.calls.length === 0 && w.cart.some(l => l.isCreditSpend) && w.pendingCreditSpend.approvalId === null, 'من غير كود: الخصم بيتحط زي الأول (المرحلة 1 — مفيش حاجة بتتكسر قبل ما المالك يفعّل)');
 
     console.log('📵 2) معندهاش التطبيق (قرار المالك ب)');
     w = mkPos({ server: p => p.action === 'otp_request' ? { ok:false, reason:'no_app' } : {} });
@@ -131,6 +145,45 @@ const tablet = (w, doc) => w.__st.capListeners.forEach(cb => cb({ exists:true, d
   ok(swAtLeast(rd('pos/sw.js'), 718) && swAtLeast(rd('feedback/sw.js'), 699) && swAtLeast(rd('loyalty/sw.js'), 694) && swAtLeast(rd('glow/sw.js'), 79), 'POS ≥ 718 · kiosk ≥ 699 · loyalty ≥ 694 · glow ≥ 79');
 
   
+console.log('🛑 7ب) v720 — «دفعت بالرصيد والفاتورة اتعملت والرصيد متخصمش» (بلاغ المالك 21-09)');
+await (async function(){
+  if(!JSDOM) return;
+  // (أ) السيرفر بيرفض ← الخصم **ميتحطش** على الفاتورة أصلًا
+  for(const [code, msg] of [['permission-denied', 'الحساب ده مش موظف'], ['failed-precondition', 'استخدم تابلت العميلة'], ['not-found', 'function not found'], ['internal', 'INTERNAL'], ['unavailable', 'network']]){
+    const w = mkPos({ statusError:{ code, message: msg }, server: () => ({}) });
+    await w.useCustomerCredit();
+    ok(!w.cart.some(l => l.isCreditSpend) && !w.pendingCreditSpend, '⛔ السيرفر رد `' + code + '` ← **مفيش خصم رصيد على الفاتورة**');
+    if(code === 'permission-denied'){
+      ok(w.__st.confirms.some(c => /مينفعش نستخدم الرصيد/.test(c.title) && c.message.indexOf(msg) >= 0), 'والكاشير بتشوف **السبب بالنص** + «حصّلي المبلغ بطريقة تانية»');
+      ok(w.__st.logs.indexOf('credit_spend_blocked') >= 0, 'وبيتسجّل للمالك');
+    }
+  }
+  // (ب) سيرفر قديم (ميعرفش action) بس شغّال ← المسار القديم من غير كود — مفيش حاجة بتقف قبل ما المالك ينشر
+  let w = mkPos({ statusError:{ code:'invalid-argument', message:'رقم غلط' }, server: () => ({}) });
+  await w.useCustomerCredit();
+  ok(w.cart.some(l => l.isCreditSpend) && w.pendingCreditSpend.approvalId === null, 'سيرفر قديم شغّال (`invalid-argument`) ← زي الأول من غير كود');
+  // (ج) الخصم بعد الحفظ: نت وقع لحظة ← إعادة المحاولة بنفس المفتاح
+  let n = 0;
+  w = mkPos({ required:false, server: (p) => { if(p.action) return {}; n++; return n < 2 ? { __throw:{ code:'unavailable', message:'network' } } : { repeat:false, balance:25, spent:300 }; } });
+  w.setTimeout = (fn) => { fn(); return 0; };
+  await w.useCustomerCredit();
+  let r = await w.commitCreditSpend('FTGLO1-AAAAAA', 25);
+  const spends = w.__st.calls.filter(c => !c.action);
+  ok(r && r.balance === 25 && spends.length === 2 && spends[0].idem === spends[1].idem, '🔁 فشل مؤقت ← محاولة تانية **بنفس `idem`** (السيرفر مبيخصمش مرتين) ← نجح');
+  ok(!w.__st.logs.includes('credit_spend_failed'), 'ومفيش إنذار كاذب');
+  // (د) رفض نهائي ← أثر دائم مش توست
+  w = mkPos({ required:false, server: (p) => p.action ? {} : { __throw:{ code:'permission-denied', message:'الحساب ده مش موظف' } } });
+  w.setTimeout = (fn) => { fn(); return 0; };
+  await w.useCustomerCredit(); w.__st.confirms.length = 0;
+  r = await w.commitCreditSpend('FTGLO2-BBBBBB', 25);
+  ok(r === null && w.__st.calls.filter(c => !c.action).length === 1, 'رفض نهائي (صلاحية) ← مفيش إعادة محاولات عبثية');
+  ok(w.__st.logs.includes('credit_spend_failed'), '🚨 بيتسجّل `credit_spend_failed` في نشاط Office');
+  ok((w.__st.saleMarks || []).length === 1 && w.__st.saleMarks[0].creditSpendFailed.amount === 325 && w.__st.saleMarks[0].creditSpendFailed.message === 'الحساب ده مش موظف', 'والفاتورة نفسها بتتعلّم `creditSpendFailed` بالمبلغ والسبب — المالك يلاقيها بعدين');
+  ok(w.__st.confirms.some(c => /الرصيد مااتخصمش/.test(c.title) && c.waitSec === 3), 'وشاشة حمرا بعدّاد للكاشير (مش توست بيختفي في ثانيتين)');
+  ok(w.pendingCreditSpend === null, 'والسطر المعلّق بيتصفّر (ميتسحبش على فاتورة العميلة اللي بعدها)');
+  ok(/credit_spend_failed:\s*\{ t:'[^']+', g:'money', hot:true \}/.test(office) && /credit_spend_blocked:\s*\{ t:'[^']+', g:'money', hot:true \}/.test(office), 'والاتنين 🔥 في Office بشرح');
+})();
+
 console.log('🧱 8) الرولز');
 {
   const rules = fs.readFileSync(path.join(ROOT, 'security', 'firestore-phase2.rules'), 'utf8');
