@@ -1,0 +1,144 @@
+#!/usr/bin/env node
+// ============================================================
+// test-credit-otp-flow.js — كود صرف الرصيد: POS + التابلت + التطبيقين
+// POS بيتشغّل فعليًا جوّه jsdom (محتاج `npm i`). يتشغّل لوحده: node tests/test-credit-otp-flow.js
+// ============================================================
+'use strict';
+require('./helpers/swv');
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const ROOT = path.join(__dirname, '..');
+const rd = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+let pass = 0, fail = 0;
+const ok = (c, m) => { if(c){ pass++; } else { fail++; console.error('  ❌ ' + m); } };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let JSDOM = null; try{ JSDOM = require('jsdom').JSDOM; }catch(e){}
+
+function mkPos(o){
+  o = o || {};
+  const dom = new JSDOM('<!doctype html><body><input id="customerPhone" value="01011111111"></body>', { runScripts:'outside-only' });
+  const w = dom.window;
+  const st = { calls:[], cap:[], capListeners:[], confirms:[], toasts:[], logs:[] };
+  const capDoc = { set: d => { st.cap.push(JSON.parse(JSON.stringify(d))); st.capNow = d; return Promise.resolve(); },
+                   onSnapshot: cb => { st.capListeners.push(cb); return () => { st.unsub = (st.unsub || 0) + 1; }; } };
+  Object.assign(w, {
+    TEST_SETTINGS:'pos_test_settings', currentBranch:'echarpe El Rehab',
+    cart: o.cart || [{ price:500, qty:1 }], cartTotal: () => w.cart.reduce((s, c) => s + c.price * c.qty, 0), renderCart(){},
+    showToast: (m) => st.toasts.push(m), _logActivity: (t, d) => st.logs.push(t),
+    askConfirm: (opt) => { st.confirms.push(opt); return Promise.resolve(o.confirm !== false); },
+    firebase: { app: () => ({ functions: () => ({ httpsCallable: (name) => async (payload) => { st.calls.push(Object.assign({ _fn:name }, payload)); return { data: o.server(payload, st) }; } }) }) },
+    db: { collection: (c) => ({ doc: (id) => (c === 'pos_capture' ? capDoc : { get: async () => ({ exists:true, data: () => ({ otpRequired: o.required !== false }) }) }) }) }
+  });
+  w.custCreditBalance = o.balance == null ? 325 : o.balance;
+  w.eval(rd('pos/credit-ui.js'));
+  w.__st = st;
+  return w;
+}
+const tablet = (w, doc) => w.__st.capListeners.forEach(cb => cb({ exists:true, data: () => doc }));
+
+(async function(){
+  if(!JSDOM){ console.log('  ⏭️  تخطّي تشغيل POS — jsdom مش متسطّب (`npm i`)'); }
+  else{
+    console.log('\n🔓 1) الإعداد مقفول = المسار القديم بالحرف');
+    let w = mkPos({ required:false, server: () => ({}) });
+    await w.useCustomerCredit();
+    ok(w.__st.calls.length === 0 && w.cart.some(l => l.isCreditSpend) && w.pendingCreditSpend.approvalId === null, 'من غير كود: الخصم بيتحط زي الأول (المرحلة 1 — مفيش حاجة بتتكسر قبل ما المالك يفعّل)');
+
+    console.log('📵 2) معندهاش التطبيق (قرار المالك ب)');
+    w = mkPos({ server: p => p.action === 'otp_request' ? { ok:false, reason:'no_app' } : {} });
+    await w.useCustomerCredit();
+    ok(!w.cart.some(l => l.isCreditSpend) && !w.pendingCreditSpend, '⛔ مفيش خصم بيتحط على الفاتورة');
+    ok(w.__st.cap.some(d => d.mode === 'greet' && d.invite === true), 'والتابلت بيعرض دعوة تحميل التطبيق');
+    ok(w.__st.confirms.some(c => /تنزّل التطبيق/.test(c.title)), 'والكاشير بتشوف السبب');
+
+    console.log('🔐 3) المسار الكامل: غلط ← صح');
+    w = mkPos({ server: (p) => p.action === 'otp_request' ? { ok:true, expAt: Date.now() + 180000 }
+      : p.action === 'otp_verify' ? (p.code === '4827' ? { ok:true, approvalId:'a'.repeat(24), amount:325 } : { ok:false, reason:'wrong', left:2 })
+      : { repeat:false, balance:0, spent:325 } });
+    const flow = w.useCustomerCredit();
+    await sleep(30);
+    const first = w.__st.cap.find(d => d.mode === 'otp');
+    ok(!!first && /^otp_/.test(first.askId) && first.amount === 325, 'التابلت بياخد طلب `otp` بالمبلغ');
+    ok(!!w.document.getElementById('otpWaitOverlay') && !w.cart.some(l => l.isCreditSpend), 'الكاشير على شاشة انتظار — و**الخصم لسه متحطش**');
+    ok(w.__st.calls[0].action === 'otp_request' && JSON.stringify(w.__st.calls[0]).indexOf('code') < 0, 'طلب الكود راح للسيرفر');
+    tablet(w, { mode:'otp_code', code:'1111', askId:first.askId, ts:Date.now() }); await sleep(30);
+    const retry = w.__st.cap.filter(d => d.mode === 'otp').pop();
+    ok(retry.err === 'wrong' && retry.left === 2 && !w.cart.some(l => l.isCreditSpend), 'كود غلط من التابلت = التابلت ياخد «غلط، فاضل 2» ومفيش خصم');
+    tablet(w, { mode:'otp_code', code:'9999', askId:'otp_someone_else', ts:Date.now() }); await sleep(20);
+    ok(w.__st.calls.filter(c => c.action === 'otp_verify').length === 1, 'كود بـaskId مش بتاعنا = بيتجاهل');
+    tablet(w, { mode:'otp_code', code:'4827', askId:first.askId, ts:Date.now() }); await flow;
+    ok(w.cart.some(l => l.isCreditSpend && l.price === -325) && w.pendingCreditSpend.approvalId === 'a'.repeat(24), '⭐ الكود الصح = الخصم يتحط ومعاه `approvalId`');
+    ok(w.__st.cap[w.__st.cap.length - 1].mode === 'otp_ok' && !w.document.getElementById('otpWaitOverlay') && w.__st.unsub === 1, 'التابلت ياخد «تمام» · الشاشة تتقفل · المستمع يتقفل');
+    await w.commitCreditSpend('FTR1-ABCDEF', 175);
+    const sp = w.__st.calls[w.__st.calls.length - 1];
+    ok(!sp.action && sp.approvalId === 'a'.repeat(24) && sp.amount === 325, 'وتثبيت الخصم بعد الفاتورة بيبعت `approvalId` للسيرفر');
+
+    console.log('🧯 4) الحالات الجانبية');
+    w = mkPos({ server: p => p.action === 'otp_request' ? { ok:true, expAt: Date.now() + 180000 } : { ok:false, reason:'locked' } });
+    let f2 = w.useCustomerCredit(); await sleep(30);
+    tablet(w, { mode:'otp_code', code:'0000', askId:w.__st.cap.find(d => d.mode === 'otp').askId }); await f2;
+    ok(!w.cart.some(l => l.isCreditSpend) && w.__st.cap[w.__st.cap.length - 1].mode === 'otp_fail', '3 محاولات غلط (locked) = مفيش خصم والتابلت يقول اتقفل');
+    w = mkPos({ server: p => ({ ok:true, expAt: Date.now() + 180000 }) });
+    f2 = w.useCustomerCredit(); await sleep(30); w.document.getElementById('otpCancelBtn').click(); await f2;
+    ok(!w.cart.some(l => l.isCreditSpend) && w.__st.cap[w.__st.cap.length - 1].mode === 'idle' && w._capOtpBusy === false, 'الكاشير لغت = التابلت يتقفل ومفيش خصم');
+    w = mkPos({ server: p => ({ ok:true, expAt: Date.now() + 180000 }) });
+    f2 = w.useCustomerCredit(); await sleep(30);
+    tablet(w, { mode:'idle', by:'kiosk', askId:w.__st.cap.find(d => d.mode === 'otp').askId }); await f2;
+    ok(!w.cart.some(l => l.isCreditSpend), 'العميلة لغت من التابلت = مفيش خصم');
+    w = mkPos({ server: p => p.action === 'otp_verify' ? { ok:true, approvalId:'b'.repeat(24) } : { ok:true, expAt: Date.now() + 180000 } });
+    f2 = w.useCustomerCredit(); await sleep(30); w.cart.push({ price:200, qty:1 });
+    tablet(w, { mode:'otp_code', code:'4827', askId:w.__st.cap.find(d => d.mode === 'otp').askId }); await f2;
+    ok(!w.cart.some(l => l.isCreditSpend) && w.__st.toasts.some(t => /الفاتورة اتغيّرت/.test(t)), 'السلة اتغيّرت والعميلة بتكتب الكود = مفيش خصم، تتعاد');
+    w = mkPos({ server: p => p.action === 'otp_verify' ? { ok:true, approvalId:'c'.repeat(24) } : { ok:true, expAt: Date.now() + 180000 } });
+    f2 = w.useCustomerCredit(); await sleep(30);
+    w.document.getElementById('otpManual').value = '4827'; w.document.getElementById('otpManualBtn').click(); await f2;
+    ok(w.cart.some(l => l.isCreditSpend), 'فولباك: التابلت واقع = الكود يتكتب في POS (لسه جاي من موبايل العميلة)');
+  }
+
+  console.log('🖥️ 5) التابلت');
+  const kiosk = rd('feedback/index.html');
+  const K = { Date, String, Number }; vm.createContext(K);
+  vm.runInContext(kiosk.slice(kiosk.indexOf('/* >>> CAP_KIOSK_START */'), kiosk.indexOf('/* <<< CAP_KIOSK_END */')), K);
+  const NOW = Date.now();
+  let v = K.capKioskView({ mode:'otp', askId:'otp_1', ts:NOW, amount:325, left:3 }, null, NOW + 10, '');
+  ok(v.view === 'otp' && v.askId === 'otp_1' && v.amount === 325 && v.err === '', 'طلب كود = شاشة الكود');
+  v = K.capKioskView({ mode:'otp', askId:'otp_1', ts:NOW + 5, err:'wrong', left:2 }, null, NOW + 10, '');
+  ok(v.err === 'wrong' && v.left === 2 && v.key !== K.capKioskView({ mode:'otp', askId:'otp_1', ts:NOW }, null, NOW + 10, '').key, 'محاولة غلط = رسالة + مفتاح جديد (الخانة تفضى)');
+  ok(K.capKioskView({ mode:'otp_code', askId:'otp_1', code:'1234', ts:NOW }, null, NOW + 10, '').view === 'otp_wait', 'بعد ما تكتب = انتظار (الشاشة متتقفلش)');
+  v = K.capKioskView({ mode:'otp_ok', askId:'otp_1', ts:NOW }, null, NOW + 10, '');
+  ok(v.view === 'otp_done' && v.ok === true && K.capKioskView({ mode:'otp_ok', askId:'otp_1', ts:NOW }, null, NOW + 10, v.key).view === 'hide', '«تمام» مرة واحدة (النبضة متعيدهاش)');
+  ok(K.capKioskView({ mode:'otp_fail', askId:'otp_1', ts:NOW, reason:'locked' }, null, NOW + 10, '').reason === 'locked', 'والفشل بسببه');
+  ok(K.capKioskView({ mode:'otp', askId:'otp_1', ts:NOW - 6 * 60000 }, null, NOW, '').view === 'hide', 'طلب قديم (6 دقايق) = مخفي');
+  ok(K.capKioskView({ mode:'ask', askId:'a1', ts:NOW }, null, NOW + 10, '').view === 'phone', 'ومسار تسجيل الرقم زي ما هو');
+  ok(/_capOtp\.replace\(\/\.\/g, '●'\)/.test(kiosk), 'الكود بيظهر **نقط** على التابلت (اللي واقف وراها ميشوفش)');
+  ok(/_capWrite\(\{ mode:'otp_code', code: code, ts: Date\.now\(\), askId: _capOtpAsk \}\)/.test(kiosk) && /window\.__capInvite = false;/.test(kiosk), 'بيبعت الكود بنفس askId · ومفيش دعوة تحميل بعد «تمام»');
+  ok(/const _capPanes = \['capPanePhone','capPaneName','capPaneGreet','capPaneOtp'\];/.test(kiosk) && /id="capPaneOtp"/.test(kiosk), 'الشاشة متسجّلة في قايمة الشاشات');
+
+  console.log('📱 6) التطبيقين');
+  ['loyalty', 'glow'].forEach(app => {
+    const a = rd(app + '/index.html');
+    const blk = a.slice(a.lastIndexOf('🔐 كود استخدام الرصيد — جهة العميلة'));
+    ok(new RegExp("var APP = '" + app + "'").test(blk) && /httpsCallable\('creditSpend'\)/.test(blk), app + ': بينادي `creditSpend` على تطبيق Firebase بتاعه');
+    ok(/action:'my_code', phone: phoneNow\(\), deviceKey: devKey\(\)/.test(blk) && /action:'device_enroll'/.test(blk), app + ': بيجيب الكود بمفتاح الجهاز، وبيسجّل الجهاز بالرقم السري');
+    ok(/r\.reason === 'enroll'\)\{ askPin\(\); return; \}/.test(blk), app + ': جهاز مش مسجّل = بيسأل عن الرقم السري مرة');
+    ok(/getRandomValues/.test(blk) && !/localStorage\.setItem\([^)]*pin/i.test(blk) && /window\.__crPin = '';/.test(blk), app + ': مفتاح الجهاز عشوائي قوي، و**الرقم السري ميتخزّنش**');
+    ok(/if\(Date\.now\(\) - at < 3 \* 60 \* 1000\) fetchCode\(false\);/.test(blk), app + ': إشارة كود طازة = بيتعرض فورًا (الإشعارات المقفولة مش مشكلة)');
+    ok(/crOtpSignal\(currentCustomer\)/.test(a) && (a.match(/crStashPin\(pin\)/g) || []).length === 2, app + ': متوصّل في تحديث العميلة اللايف وفي خطوتين الرقم السري');
+    ok(/go === 'code'\)\{ if\(window\.crFetchCode\) crFetchCode\(true\); \}/.test(a) && /onclick="crFetchCode\(true\)">🔐 كود استخدام الرصيد/.test(a), app + ': إشعار الكود بيفتحه + زرار في «حسابي»');
+    ok(/متديش الكود لحد/.test(blk), app + ': تحذير «متديش الكود لحد»');
+  });
+
+  console.log('🔢 7) الإصدارات');
+  ok(swAtLeast(rd('pos/sw.js'), 718) && swAtLeast(rd('feedback/sw.js'), 699) && swAtLeast(rd('loyalty/sw.js'), 694) && swAtLeast(rd('glow/sw.js'), 79), 'POS ≥ 718 · kiosk ≥ 699 · loyalty ≥ 694 · glow ≥ 79');
+
+  
+console.log('🧱 8) الرولز');
+{
+  const rules = fs.readFileSync(path.join(ROOT, 'security', 'firestore-phase2.rules'), 'utf8');
+  ok(/match \/credit_otp\/\{id\}\s*\{ allow read, write: if false; \}/.test(rules) && /match \/credit_keys\/\{id\}\s*\{ allow read, write: if false; \}/.test(rules), 'الكود وبصمات الأجهزة: **ولا عميل ولا موظف** يقرا أو يكتب');
+  ok(/return id == 'staff_access' \|\| id == 'credit_cfg';/.test(rules), '⭐ مفتاح «الكود إجباري» مقفول على الموظفين — كاشير متقدرش تطفيه من الكونسول');
+  ok(/allow create, update: if !settingsLocked\(id\) && \(/.test(rules), 'والقفل على **كل** فروع شرط الكتابة');
+}
+console.log('\n' + (fail ? '❌' : '✅') + ' test-credit-otp-flow: ' + pass + ' ناجح · ' + fail + ' فاشل');
+  if(fail) process.exitCode = 1;
+  setTimeout(() => process.exit(process.exitCode || 0), 50);   // jsdom intervals
+})().catch(e => { console.error('💥', e); process.exit(1); });

@@ -433,6 +433,20 @@
       <div id="capPaneGreet" style="display:none;">
         <div class="cap-greet" id="capGreetTxt"></div>
       </div>
+      <!-- 🔐 v699: كود استخدام الرصيد — العميلة بتكتبه بنفسها (الكاشير لا بتشوفه ولا بتسمعه) -->
+      <div id="capPaneOtp" style="display:none;">
+        <div class="cap-title">اكتبي كود استخدام الرصيد 🔐</div>
+        <div class="cap-sub" id="capOtpSub">الكود وصلك على التطبيق — افتحي التطبيق هتلاقيه</div>
+        <div class="cap-display" id="capOtpDisplay" style="letter-spacing:.5em; direction:ltr;">&nbsp;</div>
+        <div id="capOtpErr" style="min-height:24px; color:#ff8a8a; font-weight:800; font-size:15px; margin-bottom:6px;"></div>
+        <div class="cap-pad">
+          <button onclick="capOtpKey('1')">1</button><button onclick="capOtpKey('2')">2</button><button onclick="capOtpKey('3')">3</button>
+          <button onclick="capOtpKey('4')">4</button><button onclick="capOtpKey('5')">5</button><button onclick="capOtpKey('6')">6</button>
+          <button onclick="capOtpKey('7')">7</button><button onclick="capOtpKey('8')">8</button><button onclick="capOtpKey('9')">9</button>
+          <button onclick="capOtpKey('del')">⌫</button><button onclick="capOtpKey('0')">0</button><button class="cap-ok" id="capOtpOkBtn" onclick="capOtpSubmit()" disabled>تأكيد ✓</button>
+        </div>
+        <button class="cap-cancel" onclick="capOtpCancel()">إلغاء</button>
+      </div>
     </div>
   </div>
 
@@ -1172,6 +1186,15 @@ function capKioskView(data, handledAskId, now, greetedKey){
   if(!data || !capFresh(data, now)) return { view:'hide' };
   if(data.mode === 'ask' && data.askId && data.askId !== handledAskId) return { view:'phone', askId:data.askId };
   if(data.mode === 'need_name' && data.askId) return { view:'name', askId:data.askId, phone:data.phone };
+  // 🔐 v699: كود استخدام الرصيد
+  if(data.mode === 'otp' && data.askId){
+    return { view:'otp', askId:String(data.askId), key:capGreetKey(data), err:String(data.err||''), left:Number(data.left), amount:Number(data.amount)||0 };
+  }
+  if(data.mode === 'otp_code' && data.askId) return { view:'otp_wait', askId:String(data.askId) };
+  if((data.mode === 'otp_ok' || data.mode === 'otp_fail') && data.askId){
+    if(greetedKey && capGreetKey(data) === greetedKey) return { view:'hide' };
+    return { view:'otp_done', ok: data.mode === 'otp_ok', reason:String(data.reason||''), key:capGreetKey(data) };
+  }
   if(data.mode === 'greet'){
     if(greetedKey && capGreetKey(data) === greetedKey) return { view:'hide' };   // اتعرض خلاص
     return { view:'greet', name:String(data.greetName||''), isNew:!!data.isNew, key:capGreetKey(data),
@@ -1186,13 +1209,13 @@ function capGreetText(name, isNew){
 /* <<< CAP_KIOSK_END */
 
 let _capDigits = '', _capAskId = null, _capHandled = null, _capGreetTimer = null, _capGreetedKey = '';
-const _capPanes = ['capPanePhone','capPaneName','capPaneGreet'];
+const _capPanes = ['capPanePhone','capPaneName','capPaneGreet','capPaneOtp'];
 function _capShowPane(id){
   document.getElementById('capOverlay').classList.toggle('show', !!id);
   _capPanes.forEach(pid => document.getElementById(pid).style.display = (pid===id) ? 'block' : 'none');
   // ✅ تأكيد للكاشير: الشاشة ظهرت فعلًا قدام العميل دلوقتي (أو اتقفلت).
   // الكاشير مش بيخمّن — الإطار الأخضر عنده بيتبني على التأكيد ده بالظبط.
-  capAckShown(id === 'capPanePhone' || id === 'capPaneName');
+  capAckShown(id === 'capPanePhone' || id === 'capPaneName' || id === 'capPaneOtp');
 }
 let _capLastAck = null;
 function capAckShown(shown){
@@ -1239,8 +1262,54 @@ window.capCancel = function(){
   _capWrite({ mode:'idle', ts: Date.now() });
   _capShowPane(null);
 };
+/* 🔐 v699 — كود استخدام الرصيد على التابلت */
+let _capOtp = '', _capOtpAsk = null, _capOtpKey = '';
+function _capOtpRefresh(){
+  document.getElementById('capOtpDisplay').innerHTML = _capOtp ? _capOtp.replace(/./g, '●') : '&nbsp;';   // نقط مش أرقام — اللي واقف وراها ميشوفش
+  document.getElementById('capOtpOkBtn').disabled = _capOtp.length !== 4;
+}
+window.capOtpKey = function(k){
+  if(k === 'del') _capOtp = _capOtp.slice(0, -1);
+  else if(_capOtp.length < 4) _capOtp += k;
+  document.getElementById('capOtpErr').textContent = '';
+  _capOtpRefresh();
+};
+window.capOtpSubmit = function(){
+  if(_capOtp.length !== 4 || !_capOtpAsk) return;
+  const code = _capOtp; _capOtp = ''; _capOtpRefresh();
+  document.getElementById('capOtpErr').style.color = '#c9ced9';
+  document.getElementById('capOtpErr').textContent = 'بنتأكد…';
+  _capWrite({ mode:'otp_code', code: code, ts: Date.now(), askId: _capOtpAsk });
+};
+window.capOtpCancel = function(){
+  const a = _capOtpAsk; _capOtpAsk = null; _capOtp = '';
+  _capWrite({ mode:'idle', by:'kiosk', ts: Date.now(), askId: a });
+  _capShowPane(null);
+};
 function _capApply(data){
   const v = capKioskView(data, _capHandled, undefined, _capGreetedKey);
+  if(v.view === 'otp'){
+    _capOtpAsk = v.askId;
+    if(v.key !== _capOtpKey){ _capOtpKey = v.key; _capOtp = ''; }        // طلب/محاولة جديدة = خانة فاضية
+    const _br = document.documentElement.getAttribute('data-brand') === 'glow' ? 'Glow' : 'echarpe';
+    document.getElementById('capOtpSub').textContent = 'الكود وصلك على تطبيق ' + _br + ' — افتحي التطبيق هتلاقيه';
+    const er = document.getElementById('capOtpErr'); er.style.color = '#ff8a8a';
+    er.textContent = v.err === 'wrong' ? ('الكود غلط — فاضل ' + (isFinite(v.left) ? v.left : '') + ' محاولة') : '';
+    _capOtpRefresh(); _capShowPane('capPaneOtp');
+    return;
+  }
+  if(v.view === 'otp_wait'){ return; }                                    // كتبت الكود — الشاشة زي ما هي لحد ما الكاشير يرد
+  if(v.view === 'otp_done'){
+    _capGreetedKey = v.key || ''; _capOtpAsk = null; _capOtp = '';
+    window.__capInvite = false;                                           // دي مش لحظة دعوة تحميل — هي لسه مستخدمة التطبيق
+    document.getElementById('capGreetTxt').textContent = v.ok ? 'تمام ✅ اتخصم من رصيدك'
+      : (v.reason === 'locked' ? 'الكود اتقفل بعد 3 محاولات — اطلبي من الكاشير كود جديد'
+      : v.reason === 'expired' ? 'الكود انتهى — اطلبي من الكاشير كود جديد' : 'معرفناش نتأكد من الكود');
+    _capShowPane('capPaneGreet');
+    clearTimeout(_capGreetTimer);
+    _capGreetTimer = setTimeout(()=> _capShowPane(null), v.ok ? 2500 : 4500);
+    return;
+  }
   if(v.view === 'phone'){
     _capAskId = v.askId; _capDigits = ''; _capRefreshDisplay(); _capShowPane('capPanePhone');
   }else if(v.view === 'name'){
@@ -1335,7 +1404,7 @@ window.capDiag = function(){
 <!-- 📱 شاشة إنستاباي — ملف مستقل. لو وقع، الكشك بيفضل شغال عادي. -->
 <script type="module" src="instapay-tablet.js?v=692"></script>
 <!-- 📲 دعوة تحميل التطبيق — ملف مستقل كمان -->
-<script type="module" src="app-invite.js?v=698"></script>
+<script type="module" src="app-invite.js?v=699"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

@@ -719,6 +719,7 @@ let holdSlots = [null, null];
 // بيصفّر سياق العميل المرتبط بالفاتورة (استبدال نقط / مكافأة / عروض مفعّلة)
 // مهم: عشان ما يتسربش لفاتورة تانية بعد Hold أو بدء فاتورة جديدة
 function clearCustomerContext(){
+  if(typeof custLiveStop === 'function') custLiveStop();   // 📡 v717
   custExists = false; custHasApp = false;
   if(typeof lastAddedId !== 'undefined') lastAddedId = null;   // نلغي تمييز آخر منتج مع بداية/تعليق/استرجاع فاتورة
   if(typeof pendingRedemption   !== 'undefined') pendingRedemption   = null;
@@ -1640,6 +1641,57 @@ const RATING_PREVIEW_MAP = {1:'😠 مضايقني جدًا', 2:'🙁 مش عا�
 // 🔴 الباج اللي بيقفله: الحالة كانت `custBox.on` بس (نوّر/مطفي) — الكاشير
 //    مش عارف هل العميل اترّبط بالفاتورة ولا لأ، والاسم مش ظاهر في أي حالة.
 let _custMatchedPhone = '';   // آخر رقم اتربط فعليًا بالفاتورة
+
+// ============================================================
+// 📡 v717 — العميلة المربوطة بالفاتورة **لايف**
+// بلاغ المالك 21-09: «لو مسحت كارت العميلة وهي عملت طلب الاستبدال **بعد** المسح، لازم أمسح الكارت تاني».
+// السبب: مستند العميلة بيتقري مرة واحدة (`get`) لحظة المسح. دلوقتي طول ما هي مربوطة بالفاتورة فيه مستمع واحد
+// على مستندها: طلب الاستبدال يظهر زراره في ثانية، والنقط/الرصيد/المكافآت بتتحدّث لوحدها. مستمع واحد = قراءة واحدة
+// لكل تغيير فعلي، وبيتقفل أول ما العميلة تتشال أو الرقم يتغيّر.
+// القاعدتين دول مصدر واحد للقراءة الأولى وللتحديث اللايف — نفس فحوصات الأمان بالظبط (براند · ≤ الرصيد · طازة).
+// ============================================================
+function custPickPendingRedeem(d, brand, balance, now){
+  const p = d && d.pendingRedeem;
+  return (p && p.brand === brand && p.points > 0 && p.points <= balance && redeemReqFresh(p, now)) ? p : null;
+}
+function custPickReward(d, brand, now){
+  return ((d && d.rewards) || []).find(r => r && !r.used && r.brand === brand && (!r.expiry || r.expiry > now)) || null;
+}
+let _custLiveUnsub = null, _custLivePhone = '';
+function custLiveStop(){
+  try{ if(_custLiveUnsub) _custLiveUnsub(); }catch(e){}
+  _custLiveUnsub = null; _custLivePhone = '';
+}
+function custLiveApply(phone, d){
+  // مستمع قديم لعميلة اتشالت/اتبدّلت؟ تجاهل — مايكتبش على عميلة تانية
+  if(!d || phone !== _custLivePhone || phone !== _custMatchedPhone) return false;
+  const brand = pointsFieldFor(currentBranch) === 'points_glow' ? 'glow' : 'echarpe';
+  const now = Date.now();
+  const hadReq = !!custPendingRedeem;
+  custPointsBalance = Number(d[pointsFieldFor(currentBranch)]) || 0;
+  window.custCreditBalance = Number(d[(typeof creditFieldFor === 'function') ? creditFieldFor(currentBranch) : 'credit']) || 0;
+  custPendingRedeem = custPickPendingRedeem(d, brand, custPointsBalance, now);
+  custReward = custPickReward(d, brand, now);
+  if(custPendingRedeem && !hadReq && !pendingRedemption){
+    showToast('📲 وصل طلب استبدال من العميلة — ' + custPendingRedeem.points + ' نقطة', 'ok');
+  }
+  refreshCustomerActionUI();
+  return true;
+}
+function custLiveStart(phone){
+  if(_custLiveUnsub && _custLivePhone === phone) return;      // شغّال على نفس العميلة
+  custLiveStop();
+  if(!phone) return;
+  _custLivePhone = phone;
+  let first = true;
+  try{
+    _custLiveUnsub = db.collection(TEST_CUSTOMERS).doc(phone).onSnapshot(function(snap){
+      if(first){ first = false; return; }                       // أول snapshot = نفس اللي `get` قراه لسه
+      if(snap.exists) custLiveApply(phone, snap.data() || {});
+    }, function(e){ console.warn('cust live', e && e.code); });
+  }catch(e){ console.warn('cust live start', e); }
+}
+window.custLiveStart = custLiveStart; window.custLiveStop = custLiveStop; window.custLiveApply = custLiveApply;
 function setCustState(state, name, phone){
   const st = (state === 'found' || state === 'new' || state === 'bad') ? state : '';
   const box  = document.getElementById('custBox');
@@ -1703,6 +1755,7 @@ window.setCustAction = setCustAction;
 // ✕ شيل العميل من الفاتورة بضغطة — بيمسح الرقم والاسم وسياق العميل كله
 //   (استبدال/مكافأة/عروض) من غير أي دوسة زيادة.
 function clearCustomer(){
+  if(typeof custLiveStop === 'function') custLiveStop();   // 📡 v717
   _custInvalidate();          // 🛡️ أي قراءة في الطريق تتلغي — مايرجعش لوحده
   const ph = document.getElementById('customerPhone');
   const nm = document.getElementById('customerName');
@@ -1843,14 +1896,12 @@ async function refreshCustomerInfo(){
       //    وماخدش، الطلب بيفضل في مستنده **للأبد** — وكل ما تكتب رقمه
       //    الزرار يظهر، فيبان كإن النظام بيقترح الاستبدال من نفسه.
       //    دلوقتي الطلب بيسقط بعد المدة، والقديم اللي من غير وقت بيتجاهل.
-      custPendingRedeem = (d.pendingRedeem && d.pendingRedeem.brand === _brand
-        && d.pendingRedeem.points > 0
-        && d.pendingRedeem.points <= custPointsBalance
-        && redeemReqFresh(d.pendingRedeem, _now)) ? d.pendingRedeem : null;
+      custPendingRedeem = custPickPendingRedeem(d, _brand, custPointsBalance, _now);
       if(d.pendingRedeem && d.pendingRedeem.points > custPointsBalance){
         showToast('⚠️ طلب استبدال العميل أكبر من رصيده — اتجاهل. اعمل الاستبدال يدوي بالرصيد الصح', 'warn');
       }
-      custReward = (d.rewards||[]).find(r=> r && !r.used && r.brand===_brand && (!r.expiry || r.expiry>_now)) || null;
+      custReward = custPickReward(d, _brand, _now);
+      custLiveStart(phone);   // 📡 v717: أي تغيير في مستند العميلة (طلب استبدال/نقط/رصيد/مكافأة) يوصل لايف
       custBaseText = 'loaded';   // مؤشر إن فيه عميل متحمّل — العرض في الشريط
       _custMatchedPhone = phone;
       setCustState('found', d.name || '', phone);
@@ -2277,14 +2328,17 @@ function refreshCustomerActionUI(){
       + (_cr > 0 ? '  ·  💰 ' + _cr.toFixed(2) + ' ج.م' : '');
   }
 
-  // 💰 زرار استخدام الرصيد — بيظهر بس لما يكون فيه رصيد وفاتورة موجبة
-  //    ومفيش خصم رصيد متطبّق خلاص على الفاتورة دي.
+  // 🧩 v717 — **كل** الأزرار المتاحة مع بعض. قبل كده كانت سلسلة if/return: أول شرط يتحقق بيعرض زراره ويخرج —
+  //    فعميلة عندها رصيد **و** طالبة استبدال نقط كان بيظهرلها «استخدمي الرصيد» بس، وزرار الاستبدال مستخبّي لحد ما
+  //    الرصيد يتطبّق (والكاشير مش عارفة إن فيه طلب أصلًا). منطق الأمان جوّه كل زرار زي ما هو بالحرف.
+  const _btns = [];
+
+  // 💰 الرصيد — لما يكون فيه رصيد وفاتورة موجبة ومفيش خصم رصيد متطبّق خلاص
   if((Number(window.custCreditBalance) || 0) > 0 && cartTot > 0
      && !cart.some(l => l.isCreditSpend) && !window.pendingCreditSpend){
     const _use = Math.min(Number(window.custCreditBalance) || 0, cartTot);
-    setCustAction('<button class="act-redeem" onclick="useCustomerCredit()">💰 استخدمي الرصيد ('
+    _btns.push('<button class="act-redeem" onclick="useCustomerCredit()">💰 استخدمي الرصيد ('
       + _use.toFixed(2) + ' ج.م)</button>');
-    return;
   }
 
   if(custPendingRedeem && !pendingRedemption){
@@ -2292,8 +2346,8 @@ function refreshCustomerActionUI(){
     const _rr = loyaltyRedemptionConfig || {};
     const _sane = _redeemSanitize(custPendingRedeem.points, custPointsBalance, _rr.pointsPerRedemption, _rr.redemptionValueEGP);
     const _tampered = (Number(custPendingRedeem.valueEGP) !== _sane.value) || (Number(custPendingRedeem.points) !== _sane.points);
-    if(_tampered && _sane._flagged !== true){
-      _sane._flagged = true;
+    if(_tampered && custPendingRedeem._flagged !== true){
+      custPendingRedeem._flagged = true;   // v717: العلامة على الطلب نفسه — كانت على `_sane` اللي بيتعمل جديد كل مرة، فالتسجيل بيتكرر مع كل رسم
       if(typeof _logActivity === 'function') _logActivity('redeem_value_mismatch', {
         phone: document.getElementById('customerPhone').value.trim(),
         reqPoints: custPendingRedeem.points, reqValue: custPendingRedeem.valueEGP,
@@ -2302,21 +2356,18 @@ function refreshCustomerActionUI(){
     }
     custPendingRedeem._sane = _sane; custPendingRedeem._tampered = _tampered;
     if(_tampered && _ptsEl) _ptsEl.textContent += ' 🚩';
-    // 🎁 الزرار في مكانه الثابت — كبير ومقروء
-    setCustAction('<button class="act-redeem" onclick="applyPendingRedeem()">🎁 استبدال '
+    _btns.push('<button class="act-redeem" onclick="applyPendingRedeem()">🎁 استبدال '
       + _sane.points + ' نقطة (' + _sane.value + ' ج.م)</button>');
-    return;
   }
   if(custReward && !cart.some(l=> l.isRewardDiscount)){
     const okMin = cartTot >= (custReward.minInvoice||0);
     const rTxt = custReward.type==='percent' ? `${custReward.value}%` : `${custReward.value} ج.م`;
-    if(okMin){
-      setCustAction('<button class="act-reward" onclick="applyCustomerReward()">🎁 مكافأة '
-        + rTxt + '</button>');
-    }else{
-      setCustAction('<button class="act-wait" disabled>🎁 مكافأة من '
-        + custReward.minInvoice + ' ج.م</button>');
-    }
+    _btns.push(okMin
+      ? '<button class="act-reward" onclick="applyCustomerReward()">🎁 مكافأة ' + rTxt + '</button>'
+      : '<button class="act-wait" disabled>🎁 مكافأة من ' + custReward.minInvoice + ' ج.م</button>');
+  }
+  if(_btns.length){
+    setCustAction('<div class="act-row">' + _btns.join('') + '</div>');
     return;
   }
   /* 🧠 شريط الفرصة
@@ -2795,7 +2846,7 @@ function capMarkInvited(phone){ if(phone) _capInvitedToday.add(_capInviteKey(pho
 function capInviteIfNoApp(phone, data){
   try{
     if(!phone || !data) return false;
-    if(_capAskId) return false;                                   // التابلت مشغول بطلب رقم — منقاطعهوش
+    if(_capAskId || window._capOtpBusy) return false;             // التابلت مشغول بطلب رقم/كود رصيد — منقاطعهوش
     const key = _capInviteKey(phone);
     if(_capInvitedToday.has(key)) return false;                   // اتدعت النهارده خلاص
     if(custHasBrandApp(data, capBrandKey())) return false;        // عندها تطبيق البراند ده
@@ -4559,6 +4610,8 @@ window.returnPointsDeduction = returnPointsDeduction;
       onlineOrder:(typeof _ordDelivering!=='undefined'&&_ordDelivering)?{code:_ordDelivering.code||'',source:_ordDelivering.funnelSource||'',entryBarcode:_ordDelivering.funnelEntryBarcode||''}:null,
       loyaltyPointsEarned,
       pointsRedeemed: (pendingRedemption ? pendingRedemption.points : 0),
+      // 🔔 v717: رصيد النقط **قبل** الفاتورة — السيرفر بيحسب منه «رصيدك دلوقتي» في إشعار الاستبدال (بس لو فيه عميلة)
+      pointsBalanceBefore: (phone && typeof custPointsBalance === 'number') ? custPointsBalance : null,
       staffPointEarned: earnsStaffPoint,
       staffPointValue,                       // ⭐ القيمة بالكسور (1 = الحد الأدنى بالظبط)
       staffBaseValue,                        // ⭐ نقط القطع العادية

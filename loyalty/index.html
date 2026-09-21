@@ -1355,6 +1355,7 @@ function stepSetPin(){
   if(pin.length !== 4){ $('loginErr').textContent='الرقم السري لازم يكون ٤ أرقام'; return; }
   if(pin !== c){ $('loginErr').textContent='الرقمين مش متطابقين'; $('pinConfirmInput').value=''; return; }
   $('loginBtn').disabled=true; $('loginBtn').textContent='بنجهّز...';
+  try{ if(window.crStashPin) crStashPin(pin); }catch(e){}   // 🔐
   if(pendingIsNew){
     createCustomer(pendingPhone, pendingName, pin);
   }else{
@@ -1374,6 +1375,7 @@ function stepEnterPin(){
   var pin = digits($('pinInput').value);
   if(pin.length !== 4){ $('loginErr').textContent='اكتبي الرقم السري (٤ أرقام)'; return; }
   if(pin !== pinToMatch){ $('loginErr').textContent='الرقم السري غلط'; $('pinInput').value=''; return; }
+  try{ if(window.crStashPin) crStashPin(pin); }catch(e){}   // 🔐 لتسجيل الجهاز على السيرفر (في الذاكرة بس)
   localStorage.setItem(LS_PHONE, pendingPhone);
   enterApp(pendingPhone);
 }
@@ -1453,6 +1455,7 @@ function enterApp(phone){
     if(!currentCustomer.loyaltyCode){ ensureLoyaltyCode(phone); } // عميل قديم من غير كود؟ نولّدله
     renderCard();
     refreshBadges();   // مكافأة جديدة؟ الشارة تظهر لايف
+    try{ if(window.crOtpSignal) crOtpSignal(currentCustomer); }catch(e){}   // 🔐 كود استخدام الرصيد
     // لو التبويب المفتوح هو الحساب، نحدّثه كمان
     if($('tab-account').style.display !== 'none') renderAccount();
   }, function(err){ console.warn('customer sync', err); });
@@ -2033,6 +2036,11 @@ function renderInvoices(){
 
 function openInvoiceDetail(i){
   var s = invoicesData[i]; if(!s) return;
+  renderInvoiceSheet(s);
+}
+/* 🧾 v-next: الشيت بيتفتح من أي مكان (قايمة الفواتير · كشف حساب الرصيد · إشعار) — مش بس بالترتيب في القايمة */
+function renderInvoiceSheet(s){
+  if(!s) return;
   var d = toJsDate(s.createdAt);
   var dateStr = d ? d.toLocaleDateString(i18nLocale(), {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
   var itemsHtml = (s.items||[]).map(function(it){
@@ -2049,6 +2057,8 @@ function openInvoiceDetail(i){
     '<div class="ish-row big"><span>الإجمالي</span><span>'+fmt(s.total)+' ج.م</span></div>'+
     pmtRows+
     (s.loyaltyPointsEarned ? '<div class="ish-row"><span>نقاط كسبتيها</span><span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span></div>' : '')+
+    (Number(s.pointsRedeemed) > 0 ? '<div class="ish-row"><span>نقاط استبدلتيها</span><span style="color:#c0392b; font-weight:800;">−'+fmt(s.pointsRedeemed)+' نقطة</span></div>' : '')+
+    (invCreditUsed(s) > 0 ? '<div class="ish-row"><span>💰 رصيد استخدمتيه</span><span style="color:#c0392b; font-weight:800;">−'+fmt(invCreditUsed(s))+' ج.م</span></div>' : '')+
     (s.sellerEmployeeName||s.employeeName ? '<div class="ish-row"><span>خدمك</span><span>'+esc(s.sellerEmployeeName||s.employeeName)+'</span></div>' : '')+
     (s.invoiceCode ? '<div style="margin-top:16px; padding-top:14px; border-top:2px dashed var(--line); text-align:center;">'+
       '<div style="font-size:12px; color:var(--muted); font-weight:700; margin-bottom:8px;">📷 لو عايزة ترجّعي حاجة، ورّي الكود ده للكاشير</div>'+
@@ -2056,8 +2066,31 @@ function openInvoiceDetail(i){
       '<div style="font-family:monospace; font-size:12px; color:var(--pink-deep); margin-top:4px; letter-spacing:1px;">'+esc(s.invoiceCode)+'</div>'+
     '</div>' : '');
   $('invOverlay').classList.add('on');
-  if(s.invoiceCode){ try{ drawBarcode('invBarcode', s.invoiceCode); }catch(e){ console.warn('inv barcode', e); } }
+  /* 📷 الفواتير الجديدة ليها كود مسح قصير (أرقام) بيتقري أسرع على الكاشير — القديمة بكودها */
+  if(s.invoiceCode){ try{ drawBarcode('invBarcode', s.scanCode || s.invoiceCode); }catch(e){ console.warn('inv barcode', e); } }
 }
+function invCreditUsed(s){
+  var t = 0;
+  ((s && s.items) || []).forEach(function(it){ if(it && it.isCreditSpend) t += Math.abs((Number(it.price)||0) * (Number(it.qty)||1)); });
+  return Math.round(t * 100) / 100;
+}
+/* 📒→🧾 من سطر في كشف الرصيد للفاتورة نفسها. الأول من الفواتير المتحمّلة (صفر قراءات)، ولو مش فيهم قراءة واحدة بالكود. */
+function openInvoiceByCode(code){
+  code = String(code || ''); if(!code) return;
+  var pool = (typeof dataInvoices !== 'undefined' && dataInvoices) ? dataInvoices : [];
+  var hit = null;
+  for(var i = 0; i < pool.length; i++){ if(pool[i] && (pool[i].invoiceCode === code || pool[i].scanCode === code)){ hit = pool[i]; break; } }
+  try{ closeSheet(); }catch(e){}
+  if(hit){ renderInvoiceSheet(hit); return; }
+  db.collection('pos_test_sales').where('invoiceCode','==', code).limit(1).get().then(function(snap){
+    if(snap.empty){ try{ showToast('الفاتورة دي مش متاحة للعرض', true); }catch(e){} return; }
+    var s = snap.docs[0].data(); s.id = snap.docs[0].id;
+    /* 🔒 فاتورة حد تاني؟ متتفتحش — الكود جاي من كشف حسابها هي، بس نتأكد */
+    if(currentCustomer && s.customerPhone && String(s.customerPhone) !== String(currentCustomer.phone)) return;
+    renderInvoiceSheet(s);
+  }).catch(function(e){ console.warn('invoice by code', e && e.code); });
+}
+window.openInvoiceByCode = openInvoiceByCode; window.renderInvoiceSheet = renderInvoiceSheet;
 function closeInvoiceDetail(){ $('invOverlay').classList.remove('on'); }
 
 /* ============================================================
@@ -2096,6 +2129,7 @@ function renderAccount(){
        (عميلة صرفت رصيدها كله وعايزة تراجع). غير كده الصف بيكفي. */
     (!((Number(currentCustomer.credit)||0) > 0) && _creditRows.length
       ? '<button class="btn-outline" onclick="openCreditStatement()">📒 كشف حساب الرصيد</button>' : '')+
+      ((Number(currentCustomer.credit)||0) > 0 || (Number(currentCustomer.credit_glow)||0) > 0 ? '<button class="btn-outline" onclick="crFetchCode(true)">🔐 كود استخدام الرصيد</button>' : '')+
     (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
     '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
     '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
@@ -2974,8 +3008,10 @@ function openCreditStatement(){
     var amt = Number(r.amount) || 0;
     var d = r.at ? new Date(r.at).toLocaleDateString(i18nLocale(),
       { day:'numeric', month:'short', year:'numeric' }) : '';
-    return '<div class="acct-row">'
-      + '<span class="k">' + esc(creditRowLabel(r)) + '<br>'
+    /* 🧾 حركة مربوطة بفاتورة = السطر بيتداس ويفتح الفاتورة (اتصرف في إيه بالظبط) */
+    var _link = (r.invoiceCode && (r.type === 'spend' || r.type === 'change_kept'));
+    return '<div class="acct-row"' + (_link ? ' onclick="openInvoiceByCode(\'' + esc(String(r.invoiceCode)).replace(/'/g,'') + '\')" style="cursor:pointer;"' : '') + '>'
+      + '<span class="k">' + esc(creditRowLabel(r)) + (_link ? ' <span style="opacity:.55;">‹</span>' : '') + '<br>'
       +   '<span style="font-size:11px; opacity:.7;">' + esc(d) + '</span></span>'
       + '<span class="v" style="font-weight:900; color:' + (amt < 0 ? '#c0392b' : '#1e8449') + ';">'
       +   (amt < 0 ? '−' : '+') + fmt(Math.abs(amt)) + ' ج.م</span></div>';
@@ -3986,6 +4022,133 @@ window.closeChat = closeChat;
 window.chatSend = chatSend;
 window.chatTryOn = chatTryOn;
 window.chatCleanup = chatCleanup;
+</script>
+
+<script>
+/* ============================================================
+   🔗 فتح المكان المطلوب من الإشعار — ?inv=كود الفاتورة · ?go=credit · ?go=points
+   ------------------------------------------------------------
+   نفس أسلوب `?rate=`: الـService Worker بيعمل navigate للينك اللي فيه query. هنا بنستنى لحد ما العميلة
+   تبقى داخلة (currentCustomer) وبعدين نفتح المطلوب **مرة واحدة** ونشيل الـquery من العنوان عشان
+   الـrefresh ميفتحوش تاني.
+   ============================================================ */
+(function(){
+  var q; try{ q = new URLSearchParams(location.search); }catch(e){ return; }
+  var inv = String(q.get('inv') || '').trim().slice(0, 60);
+  var go  = String(q.get('go')  || '').trim();
+  if(!inv && !go) return;
+  var tries = 0, done = false;
+  function run(){
+    if(done) return;
+    if(typeof currentCustomer === 'undefined' || !currentCustomer){ if(++tries < 60) setTimeout(run, 250); return; }
+    done = true;
+    try{
+      if(inv && /^[A-Za-z0-9-]+$/.test(inv)){ if(typeof switchTab === 'function') switchTab('invoices'); openInvoiceByCode(inv); }
+      else if(go === 'credit'){ if(typeof switchTab === 'function') switchTab('account'); openCreditStatement(); }
+      else if(go === 'points'){ if(typeof switchTab === 'function') switchTab('card'); }
+      else if(go === 'offers'){ if(typeof switchTab === 'function') switchTab('offers'); }   /* 🎁 إشعار المكافأة */
+      else if(go === 'code'){ if(window.crFetchCode) crFetchCode(true); }                          /* 🔐 إشعار كود الرصيد */
+    }catch(e){ console.warn('deep link', e); }
+    try{ q.delete('inv'); q.delete('go'); var rest = q.toString(); history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '')); }catch(e){}
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(run, 300); });
+  else setTimeout(run, 300);
+})();
+</script>
+
+<script>
+/* ============================================================
+   🔐 كود استخدام الرصيد — جهة العميلة
+   ------------------------------------------------------------
+   الكاشير بتدوس «استخدمي الرصيد» ← السيرفر بيعمل كود ← العميلة تكتبه **بنفسها** على تابلت الفرع.
+   • الكود بيتجاب من السيرفر بـ**مفتاح جهاز** اتسجّل لحظة ما كتبت رقمها السري — مش متخزّن في أي مكان يتقري.
+     فاللي قافلة الإشعارات بتشوفه هنا أول ما تفتح التطبيق.
+   • `creditOtpAt` على مستندها = **إشارة بس** (توقيت، من غير الكود) إن فيه كود يتجاب.
+   • اللي داخلة من قبل التحديث ده: بتتسأل عن رقمها السري **مرة واحدة** وجهازها يتسجّل.
+   ============================================================ */
+(function(){
+  var APP = 'loyalty', LS_KEY = 'cr_device_key_v1';
+  var lastSeenAt = 0, tick = null, busy = false;
+  function devKey(){
+    var k = ''; try{ k = localStorage.getItem(LS_KEY) || ''; }catch(e){}
+    if(k.length < 40){
+      var a = new Uint8Array(24); (window.crypto || window.msCrypto).getRandomValues(a);
+      k = Array.prototype.map.call(a, function(b){ return ('0' + b.toString(16)).slice(-2); }).join('');
+      try{ localStorage.setItem(LS_KEY, k); }catch(e){}
+    }
+    return k;
+  }
+  function call(payload){
+    return firebase.app(APP).functions('us-central1').httpsCallable('creditSpend')(payload).then(function(r){ return r.data; });
+  }
+  function phoneNow(){ return (typeof currentCustomer !== 'undefined' && currentCustomer && currentCustomer.phone) ? String(currentCustomer.phone) : ''; }
+  function enroll(pin){ return call({ action:'device_enroll', phone: phoneNow(), pin: String(pin || ''), deviceKey: devKey() }); }
+
+  /* الرقم السري بيتمسك في الذاكرة لحظة الدخول بس — ميتخزّنش */
+  window.crStashPin = function(pin){ window.__crPin = String(pin || ''); };
+  function autoEnroll(){
+    if(!window.__crPin || !phoneNow()) return;
+    var p = window.__crPin; window.__crPin = '';
+    enroll(p).catch(function(e){ console.warn('cr enroll', e && e.message); });
+  }
+
+  function askPin(){
+    showSheet('🔐 أكّدي رقمك السري',
+      '<div class="acct-card" style="text-align:center;">'
+      + '<div style="font-size:13.5px; line-height:1.9; margin-bottom:12px;">عشان نعرض كود استخدام رصيدك على الموبايل ده.<br>مرة واحدة بس.</div>'
+      + '<input id="crPinInput" type="password" inputmode="numeric" maxlength="4" placeholder="••••" style="width:60%; padding:14px; border-radius:14px; border:2px solid var(--line); font-size:22px; text-align:center; letter-spacing:.4em; font-family:inherit;">'
+      + '<div id="crPinErr" style="min-height:20px; color:#c0392b; font-weight:800; font-size:12.5px; margin-top:8px;"></div>'
+      + '<button class="btn-primary" style="width:100%; margin-top:6px;" onclick="crPinSubmit()">تأكيد</button></div>');
+    setTimeout(function(){ var i = document.getElementById('crPinInput'); if(i) i.focus(); }, 120);
+  }
+  window.crPinSubmit = function(){
+    var i = document.getElementById('crPinInput'), er = document.getElementById('crPinErr');
+    var pin = String((i && i.value) || '').replace(/\D/g, '');
+    if(pin.length !== 4){ if(er) er.textContent = 'الرقم السري ٤ أرقام'; return; }
+    if(er) er.textContent = 'لحظة…';
+    enroll(pin).then(function(){ fetchCode(true); })
+      .catch(function(e){ if(er) er.textContent = (e && e.message) || 'معرفناش نتأكد — جرّبي تاني'; if(i) i.value = ''; });
+  };
+
+  function showCode(r){
+    clearInterval(tick);
+    var digitsHtml = String(r.code).split('').map(function(d){
+      return '<span style="display:inline-block; min-width:1.5em; padding:.25em 0; margin:0 .12em; border-radius:16px; background:var(--pink-soft,#fce7ec); font-size:42px; font-weight:900; font-family:monospace;">' + d + '</span>'; }).join('');
+    showSheet('🔐 كود استخدام رصيدك',
+      '<div class="acct-card" style="text-align:center;">'
+      + '<div dir="ltr" style="margin:6px 0 14px;">' + digitsHtml + '</div>'
+      + '<div style="font-size:14px; font-weight:800; line-height:1.9;">اكتبيه على الشاشة اللي قدامك في الفرع</div>'
+      + '<div style="font-size:12.5px; opacity:.75; margin-top:4px;">المبلغ: ' + fmt(r.amount || 0) + ' ج.م' + (r.branch ? ' · ' + esc(r.branch) : '') + ' · <span id="crLeft"></span></div>'
+      + '<div style="font-size:12px; color:#c0392b; font-weight:800; margin-top:12px;">لو مش إنتِ اللي في الفرع دلوقتي — متديش الكود لحد.</div></div>');
+    function upd(){
+      var left = Math.max(0, Math.round((Number(r.expAt) - Date.now()) / 1000)), el = document.getElementById('crLeft');
+      if(el) el.textContent = 'صالح ' + Math.floor(left / 60) + ':' + ('0' + (left % 60)).slice(-2);
+      if(left <= 0){ clearInterval(tick); try{ closeSheet(); }catch(e){} }
+    }
+    upd(); tick = setInterval(upd, 1000);
+  }
+
+  function fetchCode(manual){
+    if(busy || !phoneNow()) return;
+    busy = true;
+    call({ action:'my_code', phone: phoneNow(), deviceKey: devKey() }).then(function(r){
+      busy = false;
+      if(r && r.ok === false && r.reason === 'enroll'){ askPin(); return; }
+      if(r && r.code){ showCode(r); return; }
+      if(manual){ try{ showToast('مفيش كود دلوقتي — الكاشير لازم تدوس «استخدمي الرصيد» الأول'); }catch(e){} }
+    }).catch(function(e){ busy = false; if(manual){ try{ showToast('النت ضعيف — جرّبي تاني', true); }catch(x){} } console.warn('cr code', e && e.message); });
+  }
+  window.crFetchCode = fetchCode;
+
+  /* بيتنادى مع كل تحديث لمستند العميلة (لايف) */
+  window.crOtpSignal = function(c){
+    autoEnroll();
+    var at = Number(c && c.creditOtpAt) || 0;
+    if(at <= lastSeenAt) return;
+    lastSeenAt = at;
+    if(Date.now() - at < 3 * 60 * 1000) fetchCode(false);     // كود طازة ← اعرضيه فورًا (حتى لو الإشعارات مقفولة)
+  };
+})();
 </script>
 </body>
 </html>

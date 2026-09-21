@@ -148,16 +148,141 @@ async function useCustomerCredit(){
   });
   if(!ok) return;
 
+  // 🔐 v718: كود تأكيد من العميلة — **قبل** ما الخصم يتحط على الفاتورة. لو الإعداد مقفول، المسار القديم زي ما هو.
+  let _approvalId = null;
+  if(await creditOtpRequired()){
+    const ap = await creditOtpFlow(phone, max);
+    if(!ap) return;                              // اتلغى / معندهاش التطبيق / الكود غلط 3 مرات
+    _approvalId = ap.approvalId;
+    if(Math.abs(cartTotal() - total) > 0.005 || cart.some(l => l.isCreditSpend)){   // السلة اتغيّرت والعميلة بتكتب الكود
+      showToast('الفاتورة اتغيّرت — دوسي «استخدمي الرصيد» تاني', 'err'); return;
+    }
+  }
+
   cart.push({
     id: '__credit_spend__',
     name: '💳 خصم من الرصيد',
     price: -max, qty: 1, isReturn: false, isRedemption: true, isCreditSpend: true
   });
-  pendingCreditSpend = { phone: phone, amount: max };
+  pendingCreditSpend = { phone: phone, amount: max, approvalId: _approvalId };
   renderCart();
   showToast('اتخصم ' + max.toFixed(2) + ' ج.م من الرصيد ✅');
 }
 window.useCustomerCredit = useCustomerCredit;
+
+/* ============================================================
+   🔐 v718 — كود تأكيد صرف الرصيد (جهة الكاشير)
+   ------------------------------------------------------------
+   الثغرة: «استخدمي الرصيد» كانت بتخصم رصيد **أي** عميلة من غير علمها. دلوقتي (لما المالك يفعّل الإعداد):
+     1) السيرفر يعمل كود ويوصّله لتطبيق العميلة (إشعار + جوّه التطبيق). **الكود مبيرجعش لـPOS أبدًا.**
+     2) التابلت يقلب على «اكتبي الكود» — العميلة تكتبه **بنفسها**.
+     3) POS يمرّره للسيرفر يتأكد، وياخد `approvalId` لمرة واحدة ← وبعدين بس الخصم يتحط على الفاتورة.
+   قرار المالك: اللي معندهاش التطبيق **متصرفش** ← رسالة + دعوة تحميل التطبيق على التابلت.
+   الإدخال اليدوي للكود هنا = فولباك لو التابلت واقع (الكود لسه جاي من موبايلها هي).
+   الفرض الحقيقي على **السيرفر** (`credit_cfg.otpRequired`) — الملف ده واجهة بس.
+   ============================================================ */
+let _otpCfgCache = { at: 0, required: false };
+async function creditOtpRequired(){
+  if(Date.now() - _otpCfgCache.at < 60000) return _otpCfgCache.required;
+  try{
+    const d = await db.collection(TEST_SETTINGS).doc('credit_cfg').get();
+    _otpCfgCache = { at: Date.now(), required: !!(d.exists && (d.data() || {}).otpRequired === true) };
+  }catch(e){ /* القراءة فشلت: نمشي على آخر قيمة — والسيرفر هيرفض لو الكود إجباري */ }
+  return _otpCfgCache.required;
+}
+window.creditOtpRequired = creditOtpRequired;
+
+function _otpCapRef(){ return db.collection('pos_capture').doc(currentBranch); }
+
+function creditOtpFlow(phone, amount){
+  return new Promise(async function(resolve){
+    const req = await callCredit('creditSpend', { action:'otp_request', phone: phone, amount: amount });
+    if(!req){ resolve(null); return; }
+    if(req.ok === false && req.reason === 'no_app'){
+      // قرار المالك (ب): من غير التطبيق مفيش صرف — ونعرض عليها التحميل على التابلت
+      try{ _otpCapRef().set({ mode:'greet', greetName:'', isNew:false, invite:true, ts:Date.now(), askId:'inv_' + Date.now() }).catch(function(){}); }catch(e){}
+      try{ if(typeof _logActivity === 'function') _logActivity('credit_otp_no_app', { phone: phone, amount: amount }); }catch(e){}
+      await askConfirm({ icon:'📲', title:'العميلة لازم تنزّل التطبيق',
+        message:'استخدام الرصيد بقى بكود بيوصل على تطبيق العميلة.<br>شاشة التحميل ظهرت على التابلت — تنزّله وتدخل برقمها، وبعدين دوسي «استخدمي الرصيد» تاني.',
+        okText:'تمام', cancelText:'قفل', waitSec:0 });
+      resolve(null); return;
+    }
+    if(!req.ok){ resolve(null); return; }
+
+    const askId = 'otp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    let done = false, unsub = null, tick = null, busy = false;
+    window._capOtpBusy = true;
+    const old = document.getElementById('otpWaitOverlay'); if(old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'otpWaitOverlay';
+    ov.style.cssText = 'position:fixed; inset:0; z-index:13600; background:rgba(8,12,24,.72); display:flex; align-items:center; justify-content:center; padding:20px; direction:rtl; font-family:Tajawal,Arial,sans-serif;';
+    ov.innerHTML = '<div style="background:#fff; color:#111827; border-radius:20px; max-width:440px; width:100%; padding:22px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.35);">'
+      + '<div style="font-size:40px; margin-bottom:6px;">🔐</div>'
+      + '<div style="font-size:19px; font-weight:900; margin-bottom:6px;">مستنيين العميلة تكتب الكود على التابلت</div>'
+      + '<div style="font-size:13px; line-height:1.8; color:#4b5563; margin-bottom:12px;">الكود وصلها على التطبيق (إشعار + جوّه التطبيق).<br>المبلغ: <b>' + Number(amount).toFixed(2) + ' ج.م</b> · <span id="otpLeft">3:00</span></div>'
+      + '<div id="otpMsg" style="min-height:22px; font-size:13px; font-weight:800; color:#b91c1c; margin-bottom:8px;"></div>'
+      + '<div style="display:flex; gap:8px; margin-bottom:10px;"><input id="otpManual" inputmode="numeric" maxlength="4" placeholder="أو اكتبي الكود هنا لو التابلت واقع" style="flex:1; padding:12px; border-radius:12px; border:1.5px solid #d1d5db; font-size:15px; text-align:center; font-family:inherit;">'
+      + '<button type="button" id="otpManualBtn" style="padding:12px 16px; border:none; border-radius:12px; background:#111827; color:#fff; font-weight:900; cursor:pointer;">تأكيد</button></div>'
+      + '<button type="button" id="otpCancelBtn" style="width:100%; padding:12px; border:1.5px solid #d1d5db; border-radius:12px; background:#f9fafb; font-weight:800; cursor:pointer;">إلغاء</button></div>';
+    document.body.appendChild(ov);
+    const msg = ov.querySelector('#otpMsg');
+
+    function finish(result, capMode, extra){
+      if(done) return; done = true;
+      try{ if(unsub) unsub(); }catch(e){}
+      clearInterval(tick); window._capOtpBusy = false;
+      try{ _otpCapRef().set(Object.assign({ mode: capMode || 'idle', ts: Date.now(), askId: askId }, extra || {})).catch(function(){}); }catch(e){}
+      try{ ov.remove(); }catch(e){}
+      try{ if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(300); }catch(e){}
+      resolve(result);
+    }
+    async function tryCode(code){
+      if(done || busy) return;
+      code = String(code || '').replace(/\D/g, '');
+      if(code.length !== 4){ msg.textContent = 'الكود 4 أرقام'; return; }
+      busy = true; msg.style.color = '#374151'; msg.textContent = 'بنتأكد…';
+      const r = await callCredit('creditSpend', { action:'otp_verify', phone: phone, code: code });
+      busy = false;
+      if(done) return;
+      if(r && r.ok){
+        try{ if(typeof _logActivity === 'function') _logActivity('credit_otp_ok', { phone: phone, amount: amount }); }catch(e){}
+        finish({ approvalId: r.approvalId }, 'otp_ok'); return;
+      }
+      const reason = (r && r.reason) || 'error';
+      if(reason === 'wrong'){
+        msg.style.color = '#b91c1c'; msg.textContent = 'الكود غلط — فاضل ' + r.left + ' محاولة';
+        _otpCapRef().set({ mode:'otp', ts: Date.now(), askId: askId, amount: amount, err:'wrong', left: r.left }).catch(function(){});
+        return;
+      }
+      try{ if(typeof _logActivity === 'function') _logActivity('credit_otp_failed', { phone: phone, amount: amount, reason: reason }); }catch(e){}
+      showToast(reason === 'locked' ? '⛔ الكود اتقفل بعد 3 محاولات غلط — اطلبي كود جديد'
+              : reason === 'expired' ? '⏱️ الكود انتهى — اطلبي كود جديد' : 'تعذّر التأكد من الكود', 'err');
+      finish(null, 'otp_fail', { reason: reason });
+    }
+
+    ov.querySelector('#otpCancelBtn').onclick = function(){ finish(null, 'idle'); };
+    ov.querySelector('#otpManualBtn').onclick = function(){ tryCode(ov.querySelector('#otpManual').value); };
+    ov.querySelector('#otpManual').addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); tryCode(this.value); } });
+
+    const expAt = Number(req.expAt) || (Date.now() + 180000);
+    tick = setInterval(function(){
+      const left = Math.max(0, Math.round((expAt - Date.now()) / 1000));
+      const el = ov.querySelector('#otpLeft'); if(el) el.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+      if(left <= 0){ showToast('⏱️ الكود انتهى — اطلبي كود جديد', 'err'); finish(null, 'otp_fail', { reason:'expired' }); }
+    }, 1000);
+
+    try{
+      await _otpCapRef().set({ mode:'otp', ts: Date.now(), askId: askId, amount: amount, left: 3 });
+      unsub = _otpCapRef().onSnapshot(function(d){
+        const x = d.exists ? d.data() : null;
+        if(!x || x.askId !== askId) return;
+        if(x.mode === 'otp_code' && x.code) tryCode(x.code);
+        else if(x.mode === 'idle' && x.by === 'kiosk') finish(null, 'idle');       // العميلة داست «إلغاء» على التابلت
+      }, function(e){ console.warn('otp listen', e && e.code); });
+    }catch(e){ msg.textContent = 'التابلت مش متصل — اكتبي الكود هنا'; }
+  });
+}
+window.creditOtpFlow = creditOtpFlow;
 
 /* ✅ تثبيت الخصم — بعد ما الفاتورة تتقفل
    ⚠️ الترتيب مقصود: الخصم بيتثبّت **بعد** الفاتورة. لو ثبّتناه
@@ -169,6 +294,7 @@ async function commitCreditSpend(invoiceCode, invoiceTotal){
     phone: p.phone, amount: p.amount,
     invoiceTotal: Math.abs(Number(invoiceTotal) || 0) + p.amount,
     invoiceCode: invoiceCode,
+    approvalId: p.approvalId || null,            // 🔐 v718: موافقة العميلة — السيرفر بيستهلكها جوّه معاملة الخصم
     idem: creditIdem('spend', [invoiceCode, p.phone, p.amount])
   });
   if(!r){

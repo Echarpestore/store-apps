@@ -278,7 +278,8 @@ const el = (sb, id)=> sb.document.getElementById(id);
   assert(/getElementById\('custPts'\)/.test(ui),
     '💳 النقط ليها عنصرها الخاص — فمفيش تكرار مع كل تحديث');
   assert(!/infoBox\.textContent = _base/.test(ui), '🔴 ومفيش لزق في سطر الاسم');
-  assert(/setCustAction\('<button class="act-redeem"/.test(ui),
+  // v717: الأزرار بتتجمّع في صف واحد (رصيد + استبدال + مكافأة مع بعض) — نفس المكان الثابت
+  assert(/_btns\.push\('<button class="act-redeem" onclick="applyPendingRedeem\(\)"/.test(ui) && /setCustAction\('<div class="act-row">'/.test(ui),
     '🎁 وزرار الاستبدال بيروح لمكانه في نفس السطر');
   assert(!/margin-top:8px; background:#fff6e6/.test(ui), 'والبلوك الكبير القديم اتشال');
 }
@@ -332,7 +333,9 @@ const el = (sb, id)=> sb.document.getElementById(id);
 
   // الوصلة في الإنتاج
   const rci = extractFn(saleSrc, 'refreshCustomerInfo');
-  assert(/redeemReqFresh\(d\.pendingRedeem, _now\)/.test(rci),
+  // v717: الفحص اتنقل لـ`custPickPendingRedeem` — مصدر واحد للقراءة الأولى وللتحديث اللايف
+  assert(/custPickPendingRedeem\(d, _brand, custPointsBalance, _now\)/.test(rci)
+      && /redeemReqFresh\(p, now\)/.test(extractFn(saleSrc, 'custPickPendingRedeem')),
     '🔗 والفحص متوصّل فعلًا في قراءة العميل');
 }
 
