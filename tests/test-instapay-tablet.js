@@ -78,5 +78,9 @@ t('طلب waiting/scanning أقدم من 20 دقيقة = الشاشة تتقفل
   if(!/_age > 20 \* 60 \* 1000 && \(s\.status === 'waiting' \|\| s\.status === 'scanning'\)\) \{ stopCam\(\); hide\(\); return; \}/.test(src))throw Error('مفيش فحص عمر الطلب'); });
 t('وPOS بيلغي الطلب اليتيم عند الفتح',()=>{ const p=fs.readFileSync('pos/instapay-pos.js','utf8'); if(!/function cleanupOrphan\(\)/.test(p)||!/setTimeout\(cleanupOrphan, 15000\)/.test(p)||!/action: 'cancel', sid: d\.sid/.test(p))throw Error('ناقص'); });
 
+t('v702: «تم التأكيد» مبيعلّقش — نتيجة أقدم من 3 دقايق بتتقفل + مؤقت 90ث',()=>{ const src=fs.readFileSync('feedback/instapay-tablet.js','utf8');
+  if(!/_age > 3 \* 60 \* 1000 && \(s\.status === 'approved' \|\| s\.status === 'rejected'\)\) \{ stopCam\(\); hide\(\); return; \}/.test(src)) throw Error('مفيش فحص عمر النتيجة');
+  if(!/window\._ipOkT = setTimeout\(\(\) => \{ if \(cur && cur\.sid === _sid\) hide\(\); \}, 90 \* 1000\)/.test(src)) throw Error('مفيش مؤقت'); });
+
 console.log('\n=============================== \nالنتيجة: '+p+' ناجح · '+f+' فاشل\n===============================\n');
 process.exit(f?1:0);

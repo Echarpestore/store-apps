@@ -422,6 +422,9 @@ if (branch) {
        وأول ما التابلت يفتح (أو الرولز ترجع) بيلاقيه ويعرضه من غير ما حد يبعت حاجة. طلب أقدم من 20 دقيقة = مش حي. */
     const _age = Date.now() - Number(s.updatedAt || s.startedAt || 0);
     if (Number(s.updatedAt || s.startedAt) && _age > 20 * 60 * 1000 && (s.status === 'waiting' || s.status === 'scanning')) { stopCam(); hide(); return; }
+    /* v702 (22-09): «تم التأكيد — استني الفاتورة» كان بيفضل على الشاشة للأبد لو POS ماقفلش الطلب (المستند بيفضل approved)،
+       وبيغطّي شاشة كتابة الرقم/كود الرصيد. نتيجة (approved/rejected) أقدم من 3 دقايق = خلصت. */
+    if (Number(s.updatedAt || s.startedAt) && _age > 3 * 60 * 1000 && (s.status === 'approved' || s.status === 'rejected')) { stopCam(); hide(); return; }
     // طلب جديد على نفس التابلت = الشاشة تبدأ من الأول
     if (!cur || cur.sid !== s.sid) {
       cur = { sid: s.sid, seenAt: Date.now() };
@@ -440,7 +443,11 @@ if (branch) {
     }
     if (s.status === 'waiting') show('wait');
     else if (s.status === 'scanning') { if (!stream) { show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 550); }); } paintChecks(s.checks, s.detail); }
-    else if (s.status === 'approved') { stopCam(); show('ok'); }
+    else if (s.status === 'approved') {
+      stopCam(); show('ok');
+      const _sid = s.sid; clearTimeout(window._ipOkT);
+      window._ipOkT = setTimeout(() => { if (cur && cur.sid === _sid) hide(); }, 90 * 1000);   // v702: مبتفضلش أكتر من دقيقة ونص
+    }
     else if (s.status === 'rejected') { stopCam(); $('ipBadMsg').textContent = s.hint || 'الإيصال مش مظبوط'; show('bad'); }
     else hide();
   }, err => console.warn('[instapay]', err && err.code));
