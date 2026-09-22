@@ -1,4 +1,9 @@
-const CACHE_NAME = 'store-apps-shell-v703';
+const CACHE_NAME = 'feedback-shell-v705';
+// 🧹 v704: التابلت بيمسح كاشاته هو بس. قبل كده كان بيمسح **كل** الكاشات على الدومين
+//    (POS والحضور والمكتب لو اتفتحوا على نفس الجهاز). الاسم القديم `store-apps-shell-v703`
+//    بيتمسح بالاسم بالظبط — لأن تطبيق الحضور بيستخدم نفس البادئة.
+const OWN_PREFIX = 'feedback-shell-';
+const LEGACY_OWN = ['store-apps-shell-v703'];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -7,7 +12,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((names) =>
-      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+      Promise.all(names
+        .filter((n) => n !== CACHE_NAME && (n.startsWith(OWN_PREFIX) || LEGACY_OWN.includes(n)))
+        .map((n) => caches.delete(n)))
     ).then(() => self.clients.claim())
   );
 });

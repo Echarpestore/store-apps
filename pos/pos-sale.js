@@ -1331,7 +1331,12 @@ function returnItemFromInvoice(itemIdx){
       price: -refundEach,
       qty: 1,
       isReturn: true,
-      fromInvoice: invoiceNo
+      fromInvoice: invoiceNo,
+      /* ↩️🔴 v729 — مرجع الفاتورة الأصلية الحقيقي. `fromInvoice` = رقم الفاتورة (للعرض والسقف جوّه السلة)،
+         لكن الحفظ كان بيدوّر بيه على `invoiceCode` ← عمره ما لقاها ← returnedQty/refundedValue/نقط المرتجع
+         متحدّثوش أبدًا، والقطعة تترجع تاني في جلسة جديدة. الحفظ بيدوّر بالمعرّف ده الأول. */
+      fromInvoiceId: returnInvoiceData.id || '',
+      fromInvoiceCode: returnInvoiceData.invoiceCode || ''
     });
     // ⏰ أول إضافة مرتجع من فاتورة متباعة النهارده → تنبيه + تسجيل للصندوق الأسود
     if(_isSameLocalDay(returnInvoiceData._saleMs)){
@@ -1610,9 +1615,22 @@ function changeQty(idx, delta){
   if(line.qty <= 0){ cart.splice(idx,1); selectedCartIdx = null; }
   renderCart();
 }
+/* 🔁 v728 — بلاغ المالك 22-09: «لو حطيت الرصيد أو استبدال النقط في السلة ومسحته، مقدرش أعمله تاني — حتى لو مسحت كل حاجة وكتبت العميلة تاني».
+   السبب: الحالة المعلّقة (`pendingCreditSpend` / `pendingRedemption`) كانت بتتصفّر في مسار واحد بس من مسارات الشيل، وسطر الرصيد
+   كان بيصفّر حالة **النقط** بالغلط. والزرارين بيختفوا طول ما الحالة موجودة. دلوقتي مصدر واحد: الحالة المعلّقة لازم يكون ليها سطر
+   في السلة — مفيش سطر = مفيش حالة. بيتنادى قبل رسم أزرار العميلة، فأي طريقة شيل (حذف · − · كمية · مسح السلة · تغيير العميلة) بتتغطّى. */
+function reconcilePendingPayLines(){
+  if(window._paySplitSaving) return;   // أثناء الحفظ: الأسطر اتنقلت للمدفوعات — الحالة لازم تفضل لحد commitCreditSpend
+  try{
+    if(window.pendingCreditSpend && !cart.some(function(l){ return l && l.isCreditSpend; })) window.pendingCreditSpend = null;
+    if(pendingRedemption && !cart.some(function(l){ return l && l.isRedemption && !l.isCreditSpend; })) pendingRedemption = null;
+  }catch(e){}
+}
+window.reconcilePendingPayLines = reconcilePendingPayLines;
+
 function removeFromCart(idx){
   if(blockCartEditAfterCard()) return;
-  if(cart[idx] && cart[idx].isRedemption) pendingRedemption = null;
+  if(cart[idx] && cart[idx].isRedemption && !cart[idx].isCreditSpend) pendingRedemption = null;   // v728: سطر الرصيد مش استبدال نقط
   // 🕵️ v710: زرار «حذف» ومفتاح Delete بيعدّوا من هنا — كانوا بيشيلوا الصنف **من غير أي أثر** في سجل النشاط
   if(cart[idx]) _cartLogRemoval(cart[idx], cart[idx].qty || 1, 'زرار «حذف» / مفتاح Delete', { cartCountAfter: cart.length - 1 });
   // 🔴 باج التركيز (AI_HANDOFF §0، مسار ١) — نفس منطق cartRemove بالظبط:
@@ -2423,6 +2441,7 @@ async function _loadOfficialOffers(){
 
 // بيحدّث صندوق العميل (المكافأة/الاستبدال) حسب إجمالي الفاتورة الحالي — بيتنادى مع كل تغيّر في السلة
 function refreshCustomerActionUI(){
+  reconcilePendingPayLines();   // v728
   const infoBox = document.getElementById('customerInfo');
   if(!infoBox) return;
   if(!custBaseText){ return; }   // مفيش عميل متحمّل
@@ -4327,6 +4346,30 @@ window.buildScanCode = buildScanCode;
 function isShortScanCode(code){ return /^FT\d{12}$/.test(String(code || '')); }
 window.isShortScanCode = isShortScanCode;
 
+/* ↩️ v729 — نلاقي الفاتورة الأصلية لسطر مرتجع: المعرّف الأول (السطور الجديدة)، وبعده الكود،
+   وبعده الرقم — بس لو طلع **تطابق واحد** في نفس البراند (الرقم لوحده ممكن يتكرر بين الفروع). */
+async function _findReturnOrigin(line){
+  if(!line) return null;
+  const col = db.collection(TEST_SALES);
+  if(line.fromInvoiceId){
+    const d = await col.doc(line.fromInvoiceId).get();
+    if(d.exists) return d;
+  }
+  const code = line.fromInvoiceCode || line.fromInvoice;
+  if(code){
+    const q = await col.where('invoiceCode','==', String(code)).limit(1).get();
+    if(!q.empty) return q.docs[0];
+  }
+  if(line.fromInvoice){
+    const hereGlow = GLOW_BRANCHES.includes(currentBranch);
+    const q = await col.where('invoiceNo','==', line.fromInvoice).limit(5).get();
+    const hits = q.docs.filter(d => GLOW_BRANCHES.includes((d.data()||{}).branch) === hereGlow);
+    if(hits.length === 1) return hits[0];
+  }
+  return null;
+}
+window._findReturnOrigin = _findReturnOrigin;
+
 function buildInvoiceCode(branch, invoiceNo, saleId){
   const token = String(saleId || '').replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || 'LOCAL';
   return 'FT' + branchCode(branch) + String(invoiceNo || '') + '-' + token;
@@ -4394,7 +4437,10 @@ function showChangeAfterPrint(change, ctx){
       _keep.disabled = true; _keep.textContent = 'بيتحفظ...';
       try{
         const r = await keepChangeAsCredit(change, (ctx && ctx.invoiceCode) || '', (ctx && ctx.phone) || '');
-        if(r){ showToast('اتحفظ ' + Number(change).toFixed(2) + ' ج.م في حسابها ✅'); close(); }
+        /* 🕓 السيرفر بيتأكد من الفاتورة بنفسه؛ لو مقدرش (فاتورة لسه بتزامن مثلًا)
+           بيودّيها لطابور موافقة المالك — لازم الكاشير تعرف إن الرصيد **لسه** ماتحطش. */
+        if(r && r.queued){ showToast('🕓 الباقي مستني موافقة المالك — قولي للعميلة إنه مش في حسابها دلوقتي', 'err'); close(); }
+        else if(r){ showToast('اتحفظ ' + Number(change).toFixed(2) + ' ج.م في حسابها ✅'); close(); }
         else { _keep.disabled = false; _keep.textContent = '💳 سيبي الباقي في حسابها'; }
       }catch(e){
         _keep.disabled = false; _keep.textContent = '💳 سيبي الباقي في حسابها';
@@ -4942,14 +4988,15 @@ window.returnPointsDeduction = returnPointsDeduction;
         // نجمّع المرجّع لكل فاتورة أصلية
         const byInvoice = {};
         retLines.forEach(c=>{
-          (byInvoice[c.fromInvoice] = byInvoice[c.fromInvoice] || []).push(c);
+          const _k = c.fromInvoiceId ? ('id:' + c.fromInvoiceId) : ('no:' + c.fromInvoice);
+          (byInvoice[_k] = byInvoice[_k] || []).push(c);
         });
         for(const invCode of Object.keys(byInvoice)){
           try{
-            const oq = await db.collection(TEST_SALES).where('invoiceCode','==', invCode).limit(1).get();
-            if(!oq.empty){
-              const origRef = oq.docs[0].ref;
-              const orig = oq.docs[0].data();
+            const origDoc = await _findReturnOrigin(byInvoice[invCode][0]);
+            if(origDoc){
+              const origRef = origDoc.ref;
+              const orig = origDoc.data();
               // نحدّث returnedQty على مستوى كل صنف (باركود+اسم)
               const returnedMap = orig.returnedQty || {};
               byInvoice[invCode].forEach(c=>{
@@ -4982,6 +5029,7 @@ window.returnPointsDeduction = returnPointsDeduction;
               const _rqW = await _waitWrite(origRef.update(_upd));
               if(_rqW.error) console.warn('update returnedQty', invCode, _rqW.error);
             }
+            else console.warn('↩️ الفاتورة الأصلية للمرتجع مالقيناهاش', invCode);
           }catch(e){ console.warn('update returnedQty', invCode, e); }
         }
         // 📋 سجل المرتجعات المراقَب

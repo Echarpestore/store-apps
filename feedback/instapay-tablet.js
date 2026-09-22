@@ -103,37 +103,74 @@ const CSS = `
 .ipTick path{stroke-dasharray:60;stroke-dashoffset:60;animation:ipDraw .4s .45s ease forwards}
 @keyframes ipDraw{to{stroke-dashoffset:0}}
 .ipBig{font-size:4.6vh;font-weight:900}
+/* ============================================================
+   📐 وضع بالعرض (landscape) — التابلت في الفرع شغّال بالعرض دايمًا.
+   · شاشة الانتظار: المبلغ والزراير **يمين** · الـQR **شمال** (طلب المالك 22-09).
+   · شاشة المسح: الكاميرا لازقة في **أقصى الشمال** جنب عدسة التابلت نفسها،
+     عشان العميلة تحط الإيصال قدام العدسة على طول من غير ما تلف إيدها.
+   ⚠️ العمود الأول في الشبكة = **اليمين** لأن الشاشة RTL.
+   ⚠️ في الوضع الطولي الغلافين `display:contents` — يعني الشكل القديم زي ما هو بالظبط.
+   ============================================================ */
+.ipCol{display:contents}
+@media (orientation:landscape){
+  /* --- 1️⃣ الانتظار: مبلغ يمين · QR شمال --- */
+  #ipWait{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:'info qr' 'act qr';
+    align-content:center;align-items:center;justify-items:center;gap:1.5vh 4vw;padding:4vh 4vw;row-gap:2vh}
+  #ipWait .ipCol{display:flex;flex-direction:column;align-items:center;gap:1.4vh}
+  #ipWait .ipColInfo{grid-area:info;align-self:end}
+  #ipWait .ipColAct{grid-area:act;align-self:start;width:100%}
+  #ipWait .ipColQr{grid-area:qr;align-self:center}
+  #ipWait .ipQr{width:min(72vh,42vw)}
+  #ipWait .ipAmount{font-size:13vh}
+  #ipWait .ipBtn{width:min(38vw,52vh)}
+  /* --- 2️⃣ المسح: الكاميرا أقصى الشمال --- */
+  #ipScan{display:grid;grid-template-columns:1fr auto;align-items:center;justify-items:center;
+    padding:0;gap:0 3vw}
+  #ipScan .ipCol{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2vh;padding:3vh 3vw;width:100%}
+  #ipScan .ipCam{height:100vh;width:auto;aspect-ratio:3/4;border-radius:3vh 0 0 3vh;
+    margin:0;justify-self:start}
+  #ipScan .ipChips,#ipScan .ipActions{width:100%}
+}
 `;
 
 const HTML = `
 <div id="ipWrap">
   <!-- 1️⃣ استنى: الـQR والمبلغ -->
   <div class="ipPane" id="ipWait">
-    <div class="ipEyebrow">INSTAPAY</div>
-    <div class="ipAmount" id="ipAmt">0<span>ج.م</span></div>
-    <div class="ipLabel">المبلغ المطلوب تحويله</div>
-    <div class="ipQr"><img id="ipQrImg" alt="QR"></div>
-    <div class="ipWho" id="ipWho"></div>
-    <button class="ipBtn" id="ipDone">تم التحويل ✓</button>
-    <button class="ipBtn ipGhost" id="ipWaitBack" style="margin-top:.6vh">لسه هحوّل — استني</button>
+    <div class="ipCol ipColInfo">
+      <div class="ipEyebrow">INSTAPAY</div>
+      <div class="ipAmount" id="ipAmt">0<span>ج.م</span></div>
+      <div class="ipLabel">المبلغ المطلوب تحويله</div>
+    </div>
+    <div class="ipCol ipColQr">
+      <div class="ipQr"><img id="ipQrImg" alt="QR"></div>
+    </div>
+    <div class="ipCol ipColAct">
+      <div class="ipWho" id="ipWho"></div>
+      <button class="ipBtn" id="ipDone">تم التحويل ✓</button>
+      <button class="ipBtn ipGhost" id="ipWaitBack" style="margin-top:.6vh">لسه هحوّل — استني</button>
+    </div>
   </div>
 
   <!-- 2️⃣ المسح -->
   <div class="ipPane" id="ipScan">
-    <div class="ipEyebrow">مسح الإيصال</div>
+    <div class="ipCol ipColScan">
+      <div class="ipEyebrow">مسح الإيصال</div>
+      <div class="ipChips">
+        <div class="ipChip" id="ipC1"><span>المبلغ</span></div>
+        <div class="ipChip" id="ipC2"><span>الوقت</span></div>
+        <div class="ipChip" id="ipC3"><span>رقم العملية</span></div>
+        <div class="ipChip" id="ipC4"><span>المستفيد</span></div>
+      </div>
+      <div class="ipHint" id="ipHint">وجّهي شاشة الإيصال ناحية الكاميرا</div>
+      <div class="ipActions" style="display:flex;gap:1.6vw;width:min(70vh,86vw)">
+        <button class="ipBtn ipGhost" id="ipBack" style="flex:1;padding:1.4vh 2vw;font-size:2vh">◀ رجوع</button>
+        <button class="ipBtn ipGhost" id="ipHelp" style="flex:2;padding:1.4vh 2vw;font-size:2vh">سلّمي الكاشير</button>
+      </div>
+    </div>
     <div class="ipCam"><video id="ipVid" playsinline muted autoplay></video>
       <div class="frame"></div><div class="beam"></div></div>
-    <div class="ipChips">
-      <div class="ipChip" id="ipC1"><span>المبلغ</span></div>
-      <div class="ipChip" id="ipC2"><span>الوقت</span></div>
-      <div class="ipChip" id="ipC3"><span>رقم العملية</span></div>
-      <div class="ipChip" id="ipC4"><span>المستفيد</span></div>
-    </div>
-    <div class="ipHint" id="ipHint">وجّهي شاشة الإيصال ناحية الكاميرا</div>
-    <div style="display:flex;gap:1.6vw;width:min(70vh,86vw)">
-      <button class="ipBtn ipGhost" id="ipBack" style="flex:1;padding:1.4vh 2vw;font-size:2vh">◀ رجوع</button>
-      <button class="ipBtn ipGhost" id="ipHelp" style="flex:2;padding:1.4vh 2vw;font-size:2vh">سلّمي الكاشير</button>
-    </div>
   </div>
 
   <!-- 3️⃣ تم -->

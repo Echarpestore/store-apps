@@ -81,9 +81,11 @@
       paymentAmounts[k] = +(((hadKey[k] ? Number(hadAmt[k]) : 0) || 0) + split.payments[k]).toFixed(2);
     });
 
+    window._paySplitSaving = true;   // v728: أثناء الحفظ سطر الرصيد بيبقى في المدفوعات مش السلة — reconcilePendingTenders متلمسش الحالة
     try {
       return await _orig.apply(this, arguments);
     } finally {
+      window._paySplitSaving = false;
       // ✅ النجاح = `goToSale()` فضّت السلة (cart = []).
       //    لو السلة لسه هي هي ومليانة يبقى الحفظ فشل/اترفض → رجّع.
       let failed = false;

@@ -106,7 +106,7 @@ const cust = (o) => ({ ['pos_test_customers/' + P]: Object.assign({ name:'منى
   const iChk = txn.indexOf('OTP.checkApproval(os.exists ? os.data() : null, { approvalId: data.approvalId, amount })');
   ok(iChk > txn.indexOf('tx.get(_oref)') && iChk < txn.indexOf('postCredit(tx'), '⛔⭐ `checkApproval` بيتنادى جوّه المعاملة **قبل الخصم** — من غير موافقة مفيش `postCredit`');
   ok(txn.indexOf('tx.update(_oref, { used: true') > txn.indexOf('postCredit(tx'), 'وبتتعلّم «اتستخدمت» **جوّه نفس معاملة الخصم**');
-  ok(/const _mustOtp = await OTP\.otpRequired\(db\);/.test(cs) && /if\(_mustOtp\)\{\s*\n\s*const os = await tx\.get\(_oref\);/.test(cs), 'والفرض من **إعداد على السيرفر** — POS مقدرش يتخطّاه');
+  ok(/_mustOtp = await OTP\.otpRequired\(db\);/.test(cs) && /if\(_mustOtp\)\{\s*\n\s*const os = await tx\.get\(_oref\);/.test(cs), 'والفرض من **إعداد على السيرفر** — POS مقدرش يتخطّاه');
   ok((await OTP.otpRequired(makeDb({}))) === false && (await OTP.otpRequired(makeDb({ 'pos_test_settings/credit_cfg':{ otpRequired:true } }))) === true, 'الافتراضي مقفول (المرحلة 1: القديم شغال لحد ما المالك يفعّل)');
 
   console.log('\n' + (fail ? '❌' : '✅') + ' test-credit-otp: ' + pass + ' ناجح · ' + fail + ' فاشل');

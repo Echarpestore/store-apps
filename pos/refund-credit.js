@@ -140,12 +140,18 @@
           reason: 'مرتجع بضاعة — فاتورة ' + (code || '—')
         };
         /* v724: نفس معاملة خصم الرصيد — نداء بيرجّع السبب + طابور إعادة لو الفشل مؤقت (المالك شاف «الرصيد ماتحطش» في الرحاب 21-09 من غير سبب) */
+        let _r = null;
         if (typeof callCreditEx === 'function') {
           const r = await callCreditEx('creditAdjust', _pl);
           if (!r.ok) { const e = new Error(r.message || r.code || 'creditAdjust'); e.code = r.code; e._payload = _pl; throw e; }
-        } else await fnCall('creditAdjust', _pl);
-        if (typeof showToast === 'function')
-          showToast('✅ اتحط ' + ctx.amount.toFixed(2) + ' ج.م في رصيد العميلة', 'ok');
+          _r = r.data || r;
+        } else _r = await fnCall('creditAdjust', _pl);
+        if (typeof showToast === 'function'){
+          /* 🕓 السيرفر بقى بيفتح الفاتورة ويتأكد من المبلغ. لو مقدرش يتأكد بيودّيها
+             طابور موافقة المالك — يبقى الرصيد **لسه** ماتحطش، والكاشير لازم تعرف. */
+          if (_r && _r.queued) showToast('🕓 رصيد المرتجع مستني موافقة المالك — لسه مش في حسابها', 'err');
+          else showToast('✅ اتحط ' + ctx.amount.toFixed(2) + ' ج.م في رصيد العميلة', 'ok');
+        }
         /* نعلّم على الفاتورة الأصلية إن الجزء ده من رصيدها رجع — عشان مرتجع تاني منها ميطلبش نفس الرصيد مرتين */
         try {
           Object.keys(ctx.alloc || {}).forEach(function (inv) {

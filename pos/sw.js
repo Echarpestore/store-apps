@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pos-shell-v727';
+const CACHE_NAME = 'pos-shell-v730';
 
 // ⚠️ مفيش skipWaiting تلقائي.
 // النسخة الجديدة بتنزل في الخلفية وتستنى، والصفحة هي اللي بتقرر
@@ -35,7 +35,9 @@ self.addEventListener('activate', (event) => {
       setTimeout(() => {
         caches.keys().then((names) =>
           Promise.all(names
-            .filter((n) => n !== CACHE_NAME && n.startsWith('store-apps-shell-'))
+            // 🧹 v730: POS يمسح كاشاته القديمة هو بس (pos-shell-*). كان بيمسح `store-apps-shell-*`
+            //    = كاش تطبيق الحضور وتابلت الفرع، وكاشات POS القديمة نفسها كانت بتتراكم.
+            .filter((n) => n !== CACHE_NAME && n.startsWith('pos-shell-'))
             .map((n) => caches.delete(n)))
         ).catch(() => {});
       }, 60000);
