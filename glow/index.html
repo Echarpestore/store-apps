@@ -732,7 +732,7 @@
         <div class="hi" id="greet">أهلاً</div>
         <div class="who" id="topName">—</div>
       </div>
-      <button class="cart-fab" id="ntfBtn" onclick="openNotifications()" aria-label="الإشعارات" style="margin-inline-end:6px;">
+      <button class="cart-fab" id="ntfBtn" onclick="ntfSecretTap(); openNotifications()" aria-label="الإشعارات" style="margin-inline-end:6px;">
         <svg viewBox="0 0 24 24"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
         <span class="cart-fab-dot" id="ntfDot" style="display:none">0</span>
       </button>
@@ -1145,7 +1145,10 @@ function initPushForCustomer(){
             // v377: لو التوكن محفوظ محليًا لكن هدية الترحيب ما اتعلمتش على العميلة،
             // نلمس fcmTokenAt عشان Cloud Function تعمل reconciliation بدل ما الحالة تفضل عالقة.
             var welcomeField = 'welcomeGranted_' + CATALOG_BRAND;
-            if(currentCustomer && currentCustomer[welcomeField]){
+            /* 🩹 التوكن محفوظ على الموبايل **وموجود في حساب العميلة على السيرفر** = خلاص. لو السيرفر شاله (اتعلّم ميت)
+               كان التطبيق بيفضل فاكره متسجّل ومش بيبعته تاني أبدًا ← الإشعارات بتقف للأبد. دلوقتي بيرجّعه لوحده. */
+            var _onServer = (currentCustomer['fcmTokens_' + CATALOG_BRAND] || []).indexOf(token) >= 0;
+            if(currentCustomer && currentCustomer[welcomeField] && _onServer){
               _pushSay('ok-cached', 'التوكن متسجّل خلاص'); return;
             }
           }
@@ -1992,7 +1995,7 @@ function renderInvoices(){
       '</div>'+
       '<div class="inv-meta">'+
         '<span>🛍️ '+pieces+' قطعة · '+payMethodsText(s.payments)+'</span>'+
-        (s.loyaltyPointsEarned ? '<span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span>' : '<span></span>')+
+        (s.loyaltyPointsEarned ? '<span class="inv-pts"'+(s.loyaltyPointsEarned<0?' style="color:#c0392b"':'')+'>'+(s.loyaltyPointsEarned>0?'+':'−')+Math.abs(s.loyaltyPointsEarned)+' نقطة</span>' : '<span></span>')+
       '</div>'+
     '</div>';
   }).join('');
@@ -2021,7 +2024,7 @@ function renderInvoiceSheet(s){
     itemsHtml+
     '<div class="ish-row big"><span>الإجمالي</span><span>'+fmt(s.total)+' ج.م</span></div>'+
     pmtRows+
-    (s.loyaltyPointsEarned ? '<div class="ish-row"><span>نقاط كسبتيها</span><span class="inv-pts">+'+s.loyaltyPointsEarned+' نقطة</span></div>' : '')+
+    (s.loyaltyPointsEarned ? '<div class="ish-row"><span>'+(s.loyaltyPointsEarned<0?'نقاط اتخصمت (مرتجع)':'نقاط كسبتيها')+'</span><span class="inv-pts"'+(s.loyaltyPointsEarned<0?' style="color:#c0392b"':'')+'>'+(s.loyaltyPointsEarned>0?'+':'−')+Math.abs(s.loyaltyPointsEarned)+' نقطة</span></div>' : '')+
     (Number(s.pointsRedeemed) > 0 ? '<div class="ish-row"><span>نقاط استبدلتيها</span><span style="color:#c0392b; font-weight:800;">−'+fmt(s.pointsRedeemed)+' نقطة</span></div>' : '')+
     (invCreditUsed(s) > 0 ? '<div class="ish-row"><span>💰 رصيد استخدمتيه</span><span style="color:#c0392b; font-weight:800;">−'+fmt(invCreditUsed(s))+' ج.م</span></div>' : '')+
     (s.sellerEmployeeName||s.employeeName ? '<div class="ish-row"><span>خدمك</span><span>'+esc(s.sellerEmployeeName||s.employeeName)+'</span></div>' : '')+
@@ -4033,6 +4036,12 @@ window.chatCleanup = chatCleanup;
         + '<span style="opacity:.55;">‹</span></div>';
     }).join('') : '<div class="acct-card" style="text-align:center; padding:26px;">مفيش إشعارات لسه 🌸</div>';
     showSheet('🔔 الإشعارات', '<div class="acct-card" style="padding:4px 12px;">' + html + '</div>');
+  };
+  /* 🩺 للمالك بس: 5 دوسات على الجرس ورا بعض = حالة الإشعارات على الموبايل ده (من غير console). العميلة مبتشوفش حاجة. */
+  var _ntfTaps = [];
+  window.ntfSecretTap = function(){
+    var now = Date.now(); _ntfTaps = _ntfTaps.filter(function(t){ return now - t < 2500; }); _ntfTaps.push(now);
+    if(_ntfTaps.length >= 5){ _ntfTaps = []; try{ if(typeof pushDiag === 'function') pushDiag(); }catch(e){} }
   };
   window.refreshNotifDot = function(){
     var d = document.getElementById('ntfDot'); if(!d) return;

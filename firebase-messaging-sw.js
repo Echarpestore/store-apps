@@ -17,7 +17,9 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(function(payload){
   const n = (payload && payload.notification) || {};
   const data = (payload && payload.data) || {};
-  const url = data.url || (payload && payload.fcmOptions && payload.fcmOptions.link) || './';
+  // لينكات السيرفر نسبية (./?inv=…) ومكتوبة لتطبيق البراند — من هنا (جذر الموقع) لازم نكمّلها بمسار التطبيق وإلا بتفتح الصفحة الرئيسية
+  let url = data.url || (payload && payload.fcmOptions && payload.fcmOptions.link) || './';
+  if (url.indexOf('./') === 0 || url === '') url = (/glow/i.test(n.title || '') ? '/glow/' : '/loyalty/') + url.replace(/^\.\//, '');
   return self.registration.showNotification(n.title || 'echarpe', {
     body: n.body || '', dir: 'rtl', lang: 'ar', tag: data.tag || 'echarpe', data: { url: url },
     icon: '/loyalty/icon-192.png', badge: '/loyalty/icon-192.png'
