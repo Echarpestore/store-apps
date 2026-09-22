@@ -4698,11 +4698,12 @@ window.returnPointsDeduction = returnPointsDeduction;
 
     // 💰 v372: بعد اكتمال كل التحقق، افتح الدرج فورًا قبل أي انتظار شبكة/Firestore.
     // لو الشِل قديم ومفيهوش openDrawer مستقل، printReceipt يحتفظ بالفولباك المعتاد.
+    const _savedItemsForCredit = cart.slice();   // v726: نسخة من أصناف الفاتورة المحفوظة — لفحص خصم الرصيد بعد الحفظ
+    const _savedPaymentsForCredit = Object.assign({}, payments || {});   // v727: الرصيد في مسار الدفع بيبقى هنا (payments.credit) مش سطر في الأصناف
     try{ if(typeof preOpenCashDrawerForSale === 'function') preOpenCashDrawerForSale(invoiceCode, payments); }catch(e){}
 
     // 1) سجل البيع (📴 مش بنستنى السيرفر أكتر من ثواني — أوفلاين بتتسجل محليًا وبتترفع بعدين)
     // set() على المرجع الثابت بدل add(): نفس هوية الفاتورة لو الكتابة اتعادت/اتأخرت.
-    const _savedItemsForCredit = cart.slice();   // v726: نسخة من أصناف الفاتورة المحفوظة — لفحص خصم الرصيد بعد الحفظ
     const _saleW = await _waitWrite(saleRef.set({
       invoiceNo,
       invoiceCode,
@@ -4910,7 +4911,7 @@ window.returnPointsDeduction = returnPointsDeduction;
           if(typeof commitCreditSpend === 'function')
             // 🔴 v726: كانت `sale.items` — ومفيش متغيّر اسمه `sale` هنا ← ReferenceError (اتبلع في الـcatch تحت) ← **ولا رصيد
             //    اتخصم ولا كارت هدية اتفعّل** من ساعة v724. الفاتورة نفسها كانت بتتحفظ عادي (عشان كده ظهرت في تطبيق العميلة).
-            await commitCreditSpend(invoiceCode, total, _savedItemsForCredit);
+            await commitCreditSpend(invoiceCode, total, _savedItemsForCredit, _savedPaymentsForCredit);
           if(typeof activatePendingGiftCards === 'function'){
             const _cards = await activatePendingGiftCards(invoiceCode);
             if(_cards && _cards.length && typeof printGiftCardSlips === 'function')

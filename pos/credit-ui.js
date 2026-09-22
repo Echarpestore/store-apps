@@ -330,14 +330,17 @@ window.creditOtpFlow = creditOtpFlow;
 /* ✅ تثبيت الخصم — بعد ما الفاتورة تتقفل
    ⚠️ الترتيب مقصود: الخصم بيتثبّت **بعد** الفاتورة. لو ثبّتناه
       قبلها والفاتورة فشلت، الرصيد اتخصم والعميلة ماخدتش حاجة. */
-async function commitCreditSpend(invoiceCode, invoiceTotal, savedItems){
+async function commitCreditSpend(invoiceCode, invoiceTotal, savedItems, savedPayments){
   if(!pendingCreditSpend) return null;
   const p = pendingCreditSpend;
   pendingCreditSpend = null;
   // 🛡️ v724 — الفاتورة المحفوظة **لازم يكون فيها سطر الخصم بنفس المبلغ**. غير كده الخصم ده بتاع سلة اتمسحت — مبيتخصمش.
   //    (المالك 21-09: كتب الكود، مسح الفاتورة، وباع فاتورة تانية عادي — الرصيد اتخصم عليها وجاله إشعار «اتسحب».)
   if(Array.isArray(savedItems)){
-    const inSale = savedItems.some(function(l){ return l && l.isCreditSpend && Math.abs(Math.abs(Number(l.price) || 0) * (Number(l.qty) || 1) - p.amount) < 0.01; });
+    // 🔴 v727: فاتورة الرصيد في مسار الدفع (tender-pos) **مفيهاش سطر** — السطر بيتحوّل لـ`payments.credit` لحظة الحفظ.
+    //    الفحص القديم كان بيدوّر على السطر بس ← كل فاتورة برصيد اتعلّمت «يتيمة» واتلغى خصمها (3 فواتير المالك 22-09).
+    const inSale = savedItems.some(function(l){ return l && l.isCreditSpend && Math.abs(Math.abs(Number(l.price) || 0) * (Number(l.qty) || 1) - p.amount) < 0.01; })
+                || (savedPayments && Math.abs((Number(savedPayments.credit) || 0) - p.amount) < 0.01);
     if(!inSale){
       try{ if(typeof _logActivity === 'function') _logActivity('credit_spend_orphan_dropped', { phone: p.phone, amount: p.amount, invoiceCode: invoiceCode }); }catch(e){}
       return null;
@@ -453,8 +456,9 @@ async function creditRecoverMissing(days){
       const s = d.data() || {};
       if(s.creditSpendCommittedAt || s.isReversal || s.reversed || !s.customerPhone || !s.invoiceCode) continue;
       const line = (s.items || []).find(function(l){ return l && l.isCreditSpend; });
-      if(!line) continue;
-      const amount = Math.round(Math.abs((Number(line.price) || 0) * (Number(line.qty) || 1)) * 100) / 100;
+      const payCredit = Math.abs(Number(s.payments && s.payments.credit) || 0);
+      if(!line && !(payCredit > 0)) continue;                       // v727: مسار الدفع = payments.credit من غير سطر
+      const amount = Math.round((line ? Math.abs((Number(line.price) || 0) * (Number(line.qty) || 1)) : payCredit) * 100) / 100;
       if(!(amount > 0)) continue;
       out.checked++;
       const payload = { phone: String(s.customerPhone), amount: amount, invoiceTotal: Math.abs(Number(s.total) || 0) + amount,

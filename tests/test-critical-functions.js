@@ -67,7 +67,7 @@ const MARKERS = [
   ['profiles.js', "hasPerm('canEditPoints')", 'v714 تعديل النقط بصلاحية مستقلة'],
   ['pos-sale.js', "setCustAction('<div class=\"act-row\">'", 'v717 كل أزرار العميلة مع بعض'],
   ['credit-ui.js', 'approvalId: p.approvalId || null', 'v718 الخصم بيتبعت بموافقة العميلة'],
-  ['pos-sale.js', 'commitCreditSpend(invoiceCode, total, _savedItemsForCredit)', 'v726 نداء الخصم بمتغيّر موجود (sale.items كان ReferenceError)'],
+  ['pos-sale.js', 'commitCreditSpend(invoiceCode, total, _savedItemsForCredit, _savedPaymentsForCredit)', 'v726 نداء الخصم بمتغيّر موجود (sale.items كان ReferenceError)'],
   ['refund-credit.js', 'chosen + 0.01 < _reqCredit.need', 'v723 منع رجوع الرصيد كاش'],
   ['credit-ui.js', "_logActivity('credit_spend_orphan_dropped'", 'v724 خصم لسلة اتمسحت مبيتخصمش'],
   ['pos-sale.js', 'clientSaleId: saleRef.id',       'v708 هوية الفاتورة'],
