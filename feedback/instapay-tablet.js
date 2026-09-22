@@ -109,12 +109,14 @@ const CSS = `
    · شاشة المسح: الكاميرا لازقة في **أقصى الشمال** جنب عدسة التابلت نفسها،
      عشان العميلة تحط الإيصال قدام العدسة على طول من غير ما تلف إيدها.
    ⚠️ العمود الأول في الشبكة = **اليمين** لأن الشاشة RTL.
-   ⚠️ في الوضع الطولي الغلافين `display:contents` — يعني الشكل القديم زي ما هو بالظبط.
+   ⚠️ في الوضع الطولي الغلافين شفافين (display:contents) — يعني الشكل القديم زي ما هو بالظبط.
+   ⚠️ ممنوع علامة backtick جوّه البلوك ده — البلوك نفسه متحدّد بيها، وأي واحدة بتقفله في نصّه
+      وتكسر الملف كله (حصل 22-09 والتابلت وقف).
    ============================================================ */
 .ipCol{display:contents}
 @media (orientation:landscape){
   /* --- 1️⃣ الانتظار: مبلغ يمين · QR شمال --- */
-  #ipWait{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:'info qr' 'act qr';
+  #ipWait.on{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:'info qr' 'act qr';
     align-content:center;align-items:center;justify-items:center;gap:1.5vh 4vw;padding:4vh 4vw;row-gap:2vh}
   #ipWait .ipCol{display:flex;flex-direction:column;align-items:center;gap:1.4vh}
   #ipWait .ipColInfo{grid-area:info;align-self:end}
@@ -124,7 +126,7 @@ const CSS = `
   #ipWait .ipAmount{font-size:13vh}
   #ipWait .ipBtn{width:min(38vw,52vh)}
   /* --- 2️⃣ المسح: الكاميرا أقصى الشمال --- */
-  #ipScan{display:grid;grid-template-columns:1fr auto;align-items:center;justify-items:center;
+  #ipScan.on{display:grid;grid-template-columns:1fr auto;align-items:center;justify-items:center;
     padding:0;gap:0 3vw}
   #ipScan .ipCol{display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:2vh;padding:3vh 3vw;width:100%}

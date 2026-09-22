@@ -127,12 +127,12 @@ const retLine = (extra) => Object.assign({ id:'p1', name:'طرحة', barcode:'11
     ok(!s.has('store-apps-shell-v703'), 'كاش التابلت القديم ماتمسحش');
   });
   await t('🔴 POS بيمسح كاشاته القديمة بس', async () => {
-    const s = await activate('pos/sw.js', ['pos-shell-v729', 'pos-shell-v730', ...others, 'feedback-shell-v705']);
+    const s = await activate('pos/sw.js', ['pos-shell-v729', 'pos-shell-v730', ...others, 'feedback-shell-v706']);
     ok(!s.has('pos-shell-v729'), 'كاش POS القديم فضل');
-    ok(s.has('pos-shell-v730') && s.has('feedback-shell-v705') && others.every(n => s.has(n)), 'مسح كاش تطبيق تاني');
+    ok(s.has('pos-shell-v730') && s.has('feedback-shell-v706') && others.every(n => s.has(n)), 'مسح كاش تطبيق تاني');
   });
-  await t('الإصدارات اترفعت: POS ≥ v730 · التابلت ≥ v705', () => {
-    ok(swAtLeast(rd('pos/sw.js'), 730) && swAtLeast(rd('feedback/sw.js'), 705));
+  await t('الإصدارات اترفعت: POS ≥ v730 · التابلت ≥ v706', () => {
+    ok(swAtLeast(rd('pos/sw.js'), 730) && swAtLeast(rd('feedback/sw.js'), 706));
   });
 
   console.log('\n🔐 F10 — فشل قراية إعداد الـOTP ميلغيش الكود');
