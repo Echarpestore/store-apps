@@ -242,6 +242,25 @@
   }
   window.instaResetFlow = resetFlow;
 
+  /* 🧹 v724 (22-09): طلب يتيم على التابلت — POS اتقفل/اتحدّث والطلب فضل `waiting` على insta_live، والتابلت يعرض 350 ج.م لعميلة مش موجودة
+     ومفيش زرار يقفله. عند فتح POS: لو فيه طلب حي على الفرع ومفيش جلسة عندنا ← إلغاء من السيرفر (اللي بيمسح المستند). */
+  function cleanupOrphan() {
+    try {
+      const br = window.currentBranch || currentBranch; if (!br) return;
+      db.collection('insta_live').doc(br).get().then(function (snap) {
+        const d = snap.exists ? snap.data() : null;
+        if (!d || !d.sid) return;
+        if (S && S.sid === d.sid) return;                                   // بتاعنا وشغّال
+        if (d.status !== 'waiting' && d.status !== 'scanning') return;
+        fnCall('instaPay', { action: 'cancel', sid: d.sid }).then(function () {
+          try { if (typeof _logActivity === 'function') _logActivity('instapay_orphan_cancelled', { sid: d.sid, amountCents: d.amountCents || 0 }); } catch (e) {}
+        }).catch(function () {});
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  window.instaCleanupOrphan = cleanupOrphan;
+  setTimeout(cleanupOrphan, 15000);
+
   /* ============================================================
      ▶️ فتح الطلب — بعد ما الكاشير تأكّد المبلغ
      ============================================================ */

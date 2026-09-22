@@ -418,6 +418,10 @@ if (branch) {
   onSnapshot(doc(db, 'insta_live', branch), snap => {
     const s = snap.exists() ? snap.data() : null;
     if (!s) { hide(); return; }
+    /* ⏳ v701 (22-09): طلب قديم معلّق — الكاشير قفلت POS/الفاتورة والسيرفر ماوصلوش «إلغاء»، فالمستند فضل `waiting`
+       وأول ما التابلت يفتح (أو الرولز ترجع) بيلاقيه ويعرضه من غير ما حد يبعت حاجة. طلب أقدم من 20 دقيقة = مش حي. */
+    const _age = Date.now() - Number(s.updatedAt || s.startedAt || 0);
+    if (Number(s.updatedAt || s.startedAt) && _age > 20 * 60 * 1000 && (s.status === 'waiting' || s.status === 'scanning')) { stopCam(); hide(); return; }
     // طلب جديد على نفس التابلت = الشاشة تبدأ من الأول
     if (!cur || cur.sid !== s.sid) {
       cur = { sid: s.sid, seenAt: Date.now() };

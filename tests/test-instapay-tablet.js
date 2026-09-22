@@ -73,5 +73,10 @@ t('المؤقّت شغال ووقته محلي (seenAt من التابلت مش 
   if(!/cur\s*=\s*\{\s*sid:\s*s\.sid,\s*seenAt:\s*Date\.now\(\)\s*\}/.test(codeNC))throw Error('seenAt')});
 t('لسه مبيكتبش في Firestore',()=>{no('setDoc(');no('deleteDoc(')});
 
+console.log('\n⏳ v701 — طلب قديم معلّق مبيتعرضش');
+t('طلب waiting/scanning أقدم من 20 دقيقة = الشاشة تتقفل',()=>{ const src=fs.readFileSync('feedback/instapay-tablet.js','utf8');
+  if(!/_age > 20 \* 60 \* 1000 && \(s\.status === 'waiting' \|\| s\.status === 'scanning'\)\) \{ stopCam\(\); hide\(\); return; \}/.test(src))throw Error('مفيش فحص عمر الطلب'); });
+t('وPOS بيلغي الطلب اليتيم عند الفتح',()=>{ const p=fs.readFileSync('pos/instapay-pos.js','utf8'); if(!/function cleanupOrphan\(\)/.test(p)||!/setTimeout\(cleanupOrphan, 15000\)/.test(p)||!/action: 'cancel', sid: d\.sid/.test(p))throw Error('ناقص'); });
+
 console.log('\n=============================== \nالنتيجة: '+p+' ناجح · '+f+' فاشل\n===============================\n');
 process.exit(f?1:0);
