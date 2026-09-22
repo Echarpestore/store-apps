@@ -238,7 +238,7 @@ await (async function(){
   const r3 = await w3.commitCreditSpend('FTGLO4522-XXXXXX', 25, [{ name:'قطن', price:350, qty:1 }, { name:'خصم رصيد', price:-100, qty:1, isCreditSpend:true }]);
   ok(r3 === null, 'سطر رصيد بمبلغ مختلف (100 مش 325) = مش هو ← مبيتخصمش');
   ok(/pendingCreditSpend = null; \}/.test(rd('pos/pos-sale.js').slice(rd('pos/pos-sale.js').indexOf('function clearSaleState('), rd('pos/pos-sale.js').indexOf('function clearSaleState(') + 900)), 'ومسح السلة نفسه بيصفّر المعلّق');
-  ok(/commitCreditSpend\(invoiceCode, total, sale\.items\)/.test(rd('pos/pos-sale.js')), 'والحفظ بيبعت أصناف الفاتورة المحفوظة للفحص');
+  ok(/commitCreditSpend\(invoiceCode, total, _savedItemsForCredit\)/.test(rd('pos/pos-sale.js')), 'والحفظ بيبعت أصناف الفاتورة المحفوظة للفحص (v726: كان `sale.items` = متغيّر مش موجود — والاختبار ده كان بيثبّت الباج)');
 })();
 
 console.log('↩️ 7هـ) v724 — مرتجع الرصيد: السبب + إعادة');

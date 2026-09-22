@@ -4702,6 +4702,7 @@ window.returnPointsDeduction = returnPointsDeduction;
 
     // 1) سجل البيع (📴 مش بنستنى السيرفر أكتر من ثواني — أوفلاين بتتسجل محليًا وبتترفع بعدين)
     // set() على المرجع الثابت بدل add(): نفس هوية الفاتورة لو الكتابة اتعادت/اتأخرت.
+    const _savedItemsForCredit = cart.slice();   // v726: نسخة من أصناف الفاتورة المحفوظة — لفحص خصم الرصيد بعد الحفظ
     const _saleW = await _waitWrite(saleRef.set({
       invoiceNo,
       invoiceCode,
@@ -4907,7 +4908,9 @@ window.returnPointsDeduction = returnPointsDeduction;
       (async function(){
         try{
           if(typeof commitCreditSpend === 'function')
-            await commitCreditSpend(invoiceCode, total, sale.items);
+            // 🔴 v726: كانت `sale.items` — ومفيش متغيّر اسمه `sale` هنا ← ReferenceError (اتبلع في الـcatch تحت) ← **ولا رصيد
+            //    اتخصم ولا كارت هدية اتفعّل** من ساعة v724. الفاتورة نفسها كانت بتتحفظ عادي (عشان كده ظهرت في تطبيق العميلة).
+            await commitCreditSpend(invoiceCode, total, _savedItemsForCredit);
           if(typeof activatePendingGiftCards === 'function'){
             const _cards = await activatePendingGiftCards(invoiceCode);
             if(_cards && _cards.length && typeof printGiftCardSlips === 'function')
@@ -4918,7 +4921,11 @@ window.returnPointsDeduction = returnPointsDeduction;
             if(_cards && _cards.length && typeof offerGiftShare === 'function')
               offerGiftShare(_cards);
           }
-        }catch(e){ console.error('credit post-sale', e); }
+        }catch(e){
+          console.error('credit post-sale', e);
+          try{ if(typeof _logActivity === 'function') _logActivity('credit_post_sale_error', { invoiceCode: invoiceCode, message: String((e && e.message) || e).slice(0, 200) }); }catch(_){}
+          try{ showToast('⚠️⚠️ خطأ بعد حفظ الفاتورة — الرصيد/كارت الهدية ممكن ميكونش اتسجّل. بلّغ المالك (' + invoiceCode + ')', 'err'); }catch(_){}
+        }
       })();
     };
 

@@ -356,7 +356,11 @@ async function commitCreditSpend(invoiceCode, invoiceTotal, savedItems){
   for(let i = 0; i < waits.length; i++){
     if(waits[i]) await new Promise(function(res){ setTimeout(res, waits[i]); });
     r = await callCreditEx('creditSpend', payload);
-    if(r.ok){ try{ setTimeout(function(){ creditRetryRun(); }, 1500); }catch(e){} return r.data; }
+    if(r.ok){
+      try{ setTimeout(function(){ creditRetryRun(); }, 1500); }catch(e){}
+      try{ db.collection(TEST_SALES).where('invoiceCode','==', invoiceCode).limit(1).get().then(function(q){ if(!q.empty) q.docs[0].ref.update({ creditSpendCommittedAt: Date.now() }).catch(function(){}); }).catch(function(){}); }catch(e){}
+      return r.data;
+    }
     if(['permission-denied','invalid-argument','failed-precondition','deadline-exceeded','not-found','unauthenticated'].indexOf(r.code) >= 0) break;   // رفض نهائي — الإعادة مش هتغيّر حاجة
   }
   // ⚠️ الفاتورة اتقفلت بخصم والرصيد مااتخصمش = خسارة على المالك. لازم تسيب **أثر دائم** مش توست بيختفي.
@@ -430,7 +434,46 @@ async function creditRetryRun(){
   finally{ _creditRetryRunning = false; }
   return recovered;
 }
-window.creditRetryRun = creditRetryRun; window.creditRetryPush = creditRetryPush; window.creditRetryLoad = creditRetryLoad;
+window.creditRetryRun = creditRetryRun;
+
+/* ============================================================
+   🩹 v726 — استرجاع الخصومات اللي ضاعت بسبب باج v724/v725 (`sale.items` مش متعرّف)
+   فواتير الفرع آخر 4 أيام فيها سطر `isCreditSpend` ومتعلّمش `creditSpendCommittedAt` ← نبعت الخصم بنفس `idem` بالظبط
+   اللي كان المفروض يتبعت ← السيرفر: اتخصم قبل كده = `repeat` (مفيش خصم تاني أبدًا) · لو لأ = يتخصم دلوقتي. آمن يتعاد.
+   ============================================================ */
+async function creditRecoverMissing(days){
+  const out = { checked:0, recovered:0, already:0, failed:[] };
+  try{
+    const br = window.currentBranch || currentBranch; if(!br) return out;
+    const since = new Date(Date.now() - (days || 4) * 86400000);
+    let snap;
+    try{ snap = await db.collection(TEST_SALES).where('branch','==', br).where('createdAt','>=', since).get(); }
+    catch(e){ console.warn('credit recover query', e && e.code); return out; }
+    for(const d of snap.docs){
+      const s = d.data() || {};
+      if(s.creditSpendCommittedAt || s.isReversal || s.reversed || !s.customerPhone || !s.invoiceCode) continue;
+      const line = (s.items || []).find(function(l){ return l && l.isCreditSpend; });
+      if(!line) continue;
+      const amount = Math.round(Math.abs((Number(line.price) || 0) * (Number(line.qty) || 1)) * 100) / 100;
+      if(!(amount > 0)) continue;
+      out.checked++;
+      const payload = { phone: String(s.customerPhone), amount: amount, invoiceTotal: Math.abs(Number(s.total) || 0) + amount,
+                        invoiceCode: s.invoiceCode, approvalId: null, idem: creditIdem('spend', [s.invoiceCode, String(s.customerPhone), amount]) };
+      const r = await callCreditEx('creditSpend', payload);
+      if(r.ok){
+        if(r.data && r.data.repeat) out.already++; else out.recovered++;
+        try{ await d.ref.update({ creditSpendCommittedAt: Date.now(), creditSpendFailed: null }); }catch(e){}
+      } else out.failed.push(s.invoiceCode + ': ' + (r.message || r.code));
+    }
+    if(out.recovered){ try{ if(typeof _logActivity === 'function') _logActivity('credit_spend_recovered', { bulk:true, recovered: out.recovered, invoices: out.checked }); }catch(e){} }
+    if(out.failed.length){ try{ if(typeof _logActivity === 'function') _logActivity('credit_spend_failed', { bulk:true, list: out.failed.slice(0, 10).join(' | ') }); }catch(e){} }
+    if(out.recovered || out.failed.length) showToast('💰 استرجاع الرصيد: اتخصم ' + out.recovered + ' فاتورة كانت ناقصة' + (out.failed.length ? ' · ' + out.failed.length + ' فشلوا (Office)' : ''), out.failed.length ? 'warn' : 'ok');
+  }catch(e){ console.warn('credit recover', e); }
+  console.log('creditRecoverMissing', out);
+  return out;
+}
+window.creditRecoverMissing = creditRecoverMissing;
+try{ setTimeout(function(){ creditRecoverMissing(4); }, 30000); }catch(e){} window.creditRetryPush = creditRetryPush; window.creditRetryLoad = creditRetryLoad;
 try{
   setTimeout(function(){ creditRetryRun(); }, 20000);                        // بعد ما الجهاز يدخل بحسابه
   window.addEventListener('online', function(){ setTimeout(function(){ creditRetryRun(); }, 3000); });

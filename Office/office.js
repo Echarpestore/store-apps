@@ -2112,6 +2112,7 @@ const OF_ACT_KINDS = {
   credit_spend_failed:   { t:'🚨 فاتورة بخصم رصيد — والرصيد مااتخصمش', g:'money', hot:true },
   credit_spend_blocked:  { t:'🛑 استخدام الرصيد اتمنع — السيرفر مش جاهز', g:'money', hot:true },
   credit_spend_recovered:{ t:'✅ رصيد معلّق اتخصم لوحده بعد رجوع الاتصال', g:'money' },
+  credit_post_sale_error:{ t:'🚨 خطأ بعد حفظ فاتورة — الرصيد/كارت الهدية ممكن متسجّلش', g:'money', hot:true },
   credit_refund_failed:  { t:'🚨 مرتجع رصيد — الرصيد ماتحطش في حساب العميلة', g:'money', hot:true },
   credit_refund_recovered:{ t:'✅ رصيد مرتجع معلّق اتحط لوحده', g:'money' },
   credit_spend_orphan_dropped:{ t:'🛡️ خصم رصيد لسلة اتمسحت — اتلغى قبل ما يتخصم', g:'money' },
