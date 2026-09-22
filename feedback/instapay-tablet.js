@@ -264,11 +264,20 @@ function diffScore(a, b) {
    بدل ما نكتشفها في الفرع، بنكتشفها لوحدنا: ٣ محاولات من غير ما
    يتقرا **أي** حقل = نقلب ونكمّل. القلب بيتطبّق على اللقطة
    والعرض مع بعض عشان العميلة تشوف اللي بيتبعت. */
-const FLIP_KEY = 'insta_flip_' + branch;
-let flipCapture = localStorage.getItem(FLIP_KEY) === '1', blindTries = 0;
+/* 🔴 v703 (22-09 — «الصورة متشقلبة وبيفضل بنقرا»): القلب كان **بيتحفظ للأبد من أول لقطة فاضية**. أول فريم بيتبعت قبل ما العميلة
+   ترفع موبايلها ← «مفيش حقل» ← قلب + `localStorage='1'` ← وشرط الرجوع كان `!== '1'` فعمره ما اتحقق. التابلت فضل مقلوب،
+   وكل لقطة بتوصل Vision معكوسة فمبيقراش حاجة. دلوقتي القلب **تجربة**: بيتحفظ بس لو اللقطة المقلوبة اتقرا منها حاجة فعلًا،
+   ولو فشلت يرجع. والمفتاح اتغيّر (`flip2`) عشان التابلتات اللي اتحفظ عليها القلب الغلط ترجع طبيعي. */
+const FLIP_KEY = 'insta_flip2_' + branch;
+let flipCapture = localStorage.getItem(FLIP_KEY) === '1', blindTries = 0, flipTrial = false, flipTested = false;
 
 /* 💾 القلب بيتحفظ **للجهاز**. التابلت اللي بيعكس هيفضل يعكس، فمفيش
    معنى إننا نكتشفه من أول في كل عملية ونضيّع محاولة على العميلة. */
+/* القلب للعرض واللقطة بس — من غير حفظ (تجربة) */
+function setFlipView(on) {
+  flipCapture = !!on;
+  $('ipVid').classList.toggle('flip', flipCapture);
+}
 function setFlip(on) {
   flipCapture = !!on;
   try { localStorage.setItem(FLIP_KEY, flipCapture ? '1' : '0'); } catch (e) {}
@@ -328,6 +337,9 @@ async function tick() {
   // ⚠️ الشرط كان صارم (6) فمع إيد بتهتز شوية كان ممكن ياخد ثواني
   //    قبل ما يبعت أصلًا. رخّيناه، والفريم الأول بيتبعت على طول.
   if (prevGray && d > 24) { $('ipHint').textContent = 'ثبّتي شوية'; return; }
+  // v703: فريم من غير تفاصيل (حيطة/إيد/لسه مفيش موبايل) = مبنبعتوش — بيضيّع من حصة القراءة اليومية وبيتحسب «مش شايف» غلط
+  { let m = 0; for (let i = 0; i < g.length; i++) m += g[i]; m /= g.length; let v2 = 0; for (let i = 0; i < g.length; i++) v2 += (g[i] - m) * (g[i] - m);
+    if (Math.sqrt(v2 / g.length) < 14) { $('ipHint').textContent = 'قرّبي شاشة الإيصال من الكاميرا'; return; } }
 
   busy = true;
   try {
@@ -342,14 +354,18 @@ async function tick() {
     const sawSomething = ch.amount || ch.reference || ch.time || ch.success || ch.beneficiary;
     if (!sawSomething && !r.ok) {
       blindTries++;
-      // محاولة واحدة عمياء تكفي: صفر حقول = صورة مقلوبة، مش صورة وحشة.
-      if (blindTries === 1 && !flipCapture) {
-        setFlip(true);
+      // v703: لقطتين عمى ورا بعض (مش واحدة) ← نجرّب الاتجاه التاني **من غير ما نحفظه**
+      if (blindTries >= 2 && !flipTrial && !flipTested) {
+        flipTrial = true; blindTries = 0; setFlipView(!flipCapture);
         $('ipHint').textContent = 'بنظبط الكاميرا…';
         return;
       }
-      if (blindTries >= 3 && flipCapture && localStorage.getItem(FLIP_KEY) !== '1') setFlip(false);
-    } else { blindTries = 0; }
+      // التجربة فشلت كمان ← نرجع للاتجاه الأصلي ومنجرّبش تاني في العملية دي
+      if (flipTrial && blindTries >= 2) { flipTrial = false; flipTested = true; blindTries = 0; setFlipView(!flipCapture); }
+    } else {
+      blindTries = 0;
+      if (flipTrial) { flipTrial = false; flipTested = true; setFlip(flipCapture); }   // الاتجاه ده اتقرا منه ← يتحفظ للجهاز
+    }
 
     if (r.ok) { stopCam(); show('ok'); return; }
 
@@ -429,7 +445,8 @@ if (branch) {
     if (!cur || cur.sid !== s.sid) {
       cur = { sid: s.sid, seenAt: Date.now() };
       stopCam(); paintChecks(null, null);
-      blindTries = 0;   // القلب إعداد جهاز — بيفضل، والعداد بس بيتصفّر
+      blindTries = 0; flipTrial = false; flipTested = false;   // القلب إعداد جهاز — بيفضل، والتجربة بتبدأ من أول مع كل طلب
+      flipCapture = localStorage.getItem(FLIP_KEY) === '1'; try { $('ipVid').classList.toggle('flip', flipCapture); } catch (e) {}
       $('ipAmt').innerHTML = (Number(s.amountCents || 0) / 100)
         .toLocaleString('en-EG', { minimumFractionDigits: 0 }) + '<span>ج.م</span>';
       /* 📇 العنوان + الأرقام الإضافية. العميلة ساعات بتحوّل على رقم
