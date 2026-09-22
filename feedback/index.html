@@ -1311,7 +1311,9 @@ function _capApply(data){
     return;
   }
   if(v.view === 'phone'){
-    _capAskId = v.askId; _capDigits = ''; _capRefreshDisplay(); _capShowPane('capPanePhone');
+    // 🐛 v700: كل snapshot (نبضة/تأكيد الظهور) كان بيصفّر الأرقام وهي بتكتب — بيتصفّر بس لو ده **طلب جديد**
+    if(_capAskId !== v.askId){ _capDigits = ''; }
+    _capAskId = v.askId; _capRefreshDisplay(); _capShowPane('capPanePhone');
   }else if(v.view === 'name'){
     _capAskId = v.askId;
     if(v.phone) _capDigits = v.phone;

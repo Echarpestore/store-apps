@@ -67,6 +67,13 @@ function mk(){
   await c.openInvoiceFromList('FTGLO4339-LHEE'); await c.openInvoiceFromList('FTGLO4339-LHEE');
   ok((c.st.body.match(/id="retBackBtn"/g) || []).length === 1, 'زرار الرجوع ميتكررش');
   ok(/onclick="openInvoiceFromList\(/.test(html) && !/onclick="openInvoiceForReturn\(/.test(html), 'القايمة بتفتح بالمسار اللي فيه رجوع');
+  console.log('📡 3) «مفيش فاتورة» والفاتورة موجودة (اتصال Firestore معلّق)');
+  {
+    const src = sale.slice(sale.indexOf('async function openInvoiceForReturn('), sale.indexOf('async function openInvoiceForReturn(') + 3200).replace(/^\s*\/\/.*$/gm, '');
+    const iCache = src.indexOf("snap.empty && snap.metadata && snap.metadata.fromCache"), iSrv = src.indexOf("_q.get({ source:'server' })"), iNone = src.indexOf('مفيش فاتورة بالكود ده');
+    ok(iCache > 0 && iSrv > iCache && iNone > iSrv, '⭐ نتيجة فاضية **من الكاش** ← نسأل السيرفر الأول، وبعدين بس نقول «مفيش»');
+    ok(/catch\(e\)\{[\s\S]{0,260}مش واصل للسيرفر/.test(src), 'ولو السيرفر مش بيرد: الرسالة بتقول المشكلة في **الاتصال** مش في الفاتورة');
+  }
   ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8'), 719), 'CACHE_NAME ≥ v719');
 
   console.log('\n' + (fail ? '❌' : '✅') + ' test-return-picker: ' + pass + ' ناجح · ' + fail + ' فاشل');

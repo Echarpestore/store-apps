@@ -82,6 +82,24 @@
   const _origConfirm = window.confirmPayment;
   window.confirmPayment = async function () {
     lastCtx = null;
+    /* 💰↩️ v723 — فاتورة اتدفعت **رصيد** لازم مرتجعها يرجع **رصيد** (بلاغ المالك 21-09).
+       قبل كده الكاشير كانت تختار كاش لمرتجع فاتورة مدفوعة رصيد = الرصيد بيتحوّل فلوس في الإيد. دلوقتي:
+       الجزء اللي اتدفع رصيد (ولسه مارجعش) **لازم** يتحط على طريقة «رصيد العميلة»، والباقي بأي طريقة. */
+    let _reqCredit = { need: 0, alloc: {} };
+    try {
+      if (typeof window.retRequiredCredit === 'function') {
+        _reqCredit = window.retRequiredCredit(cart, window._retCredit || {}, (typeof cartTotal === 'function') ? cartTotal() : 0);
+        let chosen = 0;
+        try { if (selectedPayMethods.has('credit')) chosen = Math.abs(Number(paymentAmounts.credit) || 0); } catch (e) {}
+        if (_reqCredit.need > 0.009 && chosen + 0.01 < _reqCredit.need) {
+          const msg = 'الفاتورة الأصلية اتدفع منها رصيد — لازم <b>' + _reqCredit.need.toFixed(2) + ' ج.م</b> يرجعوا <b>رصيد</b> مش كاش.<br><br>'
+            + 'اختاري «💳 رصيد العميلة» واكتبي ' + _reqCredit.need.toFixed(2) + (chosen > 0 ? ' (مكتوب دلوقتي ' + chosen.toFixed(2) + ')' : '') + '.';
+          if (typeof askConfirm === 'function') await askConfirm({ icon:'💰', danger:true, waitSec:0, title:'المرتجع ده لازم يرجع رصيد', message: msg, okText:'تمام', cancelText:'قفل' });
+          else if (typeof showToast === 'function') showToast('⛔ لازم ' + _reqCredit.need.toFixed(2) + ' ج.م يرجعوا رصيد', 'err');
+          return;
+        }
+      }
+    } catch (e) { console.warn('[refund-credit] required', e); }
     try {
       const use = (typeof selectedPayMethods !== 'undefined') && selectedPayMethods.has('credit');
       if (use) {
@@ -95,7 +113,7 @@
           if (typeof showToast === 'function') showToast('⛔ مبلغ الرصيد مش مكتوب', 'err');
           return;
         }
-        lastCtx = { phone: ph, amount: amt, branch: (window.currentBranch || currentBranch) };
+        lastCtx = { phone: ph, amount: amt, branch: (window.currentBranch || currentBranch), alloc: _reqCredit.alloc || {} };
       }
     } catch (e) { console.warn('[refund-credit] ctx', e); }
 
@@ -112,7 +130,7 @@
            بنبنيه من رقم الفاتورة + الرقم + المبلغ، فأي إعادة إرسال
            لنفس المرتجع بتتعرف وتترفض. */
         const idem = 'refund:' + (code || 'nocode') + ':' + ctx.phone + ':' + ctx.amount.toFixed(2);
-        await fnCall('creditAdjust', {
+        const _pl = {
           phone: ctx.phone,
           amount: ctx.amount,          // موجب — ده رصيد بيتضاف
           source: 'refund',
@@ -120,16 +138,33 @@
           invoiceCode: code,
           idem: idem,
           reason: 'مرتجع بضاعة — فاتورة ' + (code || '—')
-        });
+        };
+        /* v724: نفس معاملة خصم الرصيد — نداء بيرجّع السبب + طابور إعادة لو الفشل مؤقت (المالك شاف «الرصيد ماتحطش» في الرحاب 21-09 من غير سبب) */
+        if (typeof callCreditEx === 'function') {
+          const r = await callCreditEx('creditAdjust', _pl);
+          if (!r.ok) { const e = new Error(r.message || r.code || 'creditAdjust'); e.code = r.code; e._payload = _pl; throw e; }
+        } else await fnCall('creditAdjust', _pl);
         if (typeof showToast === 'function')
           showToast('✅ اتحط ' + ctx.amount.toFixed(2) + ' ج.م في رصيد العميلة', 'ok');
+        /* نعلّم على الفاتورة الأصلية إن الجزء ده من رصيدها رجع — عشان مرتجع تاني منها ميطلبش نفس الرصيد مرتين */
+        try {
+          Object.keys(ctx.alloc || {}).forEach(function (inv) {
+            const info = (window._retCredit || {})[inv];
+            if (!info || !info.docId) return;
+            info.left = Math.max(0, Math.round((info.left - ctx.alloc[inv]) * 100) / 100);
+            db.collection(TEST_SALES).doc(info.docId).update({ creditRefunded: firebase.firestore.FieldValue.increment(ctx.alloc[inv]) }).catch(function () {});
+          });
+        } catch (e) {}
       } catch (e) {
         /* ⚠️ الفاتورة اتحفظت خلاص ومبنرجّعش فيها. بنبلّغ بصوت عالي
            عشان المالك يضيف الرصيد يدوي — أهون بكتير من إننا نسكت
            والعميلة ترجع تسأل على رصيد مش موجود. */
         console.error('[refund-credit] adjust', e);
+        const why = (e && e.message) || (e && e.code) || '';
+        try { if (typeof _logActivity === 'function') _logActivity('credit_refund_failed', { phone: ctx.phone, amount: ctx.amount, invoiceCode: code, code: (e && e.code) || '', message: why }); } catch (_) {}
+        try { if (e && e._payload && typeof creditRetryPush === 'function') creditRetryPush(e._payload, { code: e.code }, 'creditAdjust'); } catch (_) {}
         if (typeof showToast === 'function')
-          showToast('⚠️⚠️ الفاتورة اتحفظت بس الرصيد ماتحطش — بلّغ المالك فورًا (' + (code || '؟') + ')', 'err');
+          showToast('⚠️⚠️ الفاتورة اتحفظت بس الرصيد ماتحطش (' + (code || '؟') + ')' + (why ? ' — السبب: ' + why : '') + ' — هيتعاد لوحده لو مؤقت، وبلّغ المالك', 'err');
       }
     }
     return out;

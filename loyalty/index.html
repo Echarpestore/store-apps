@@ -712,6 +712,10 @@
         <div class="hi" id="greet">أهلاً</div>
         <div class="who" id="topName">—</div>
       </div>
+      <button class="cart-fab" id="ntfBtn" onclick="openNotifications()" aria-label="الإشعارات" style="margin-inline-end:6px;">
+        <svg viewBox="0 0 24 24"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+        <span class="cart-fab-dot" id="ntfDot" style="display:none">0</span>
+      </button>
       <button class="cart-fab" id="cartFab" onclick="openQuickCheckout()" aria-label="سلتك">
         <svg viewBox="0 0 24 24"><path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 16H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v12z"/></svg>
         <span class="cart-fab-dot" id="cartFabDot">0</span>
@@ -1996,7 +2000,7 @@ function catalogHTML(){
    تبويب فواتيري (نسخ من فواتير العميلة — بديل الفاتورة الورق)
    ============================================================ */
 var invoicesData = [];
-var PAY_LABEL = { cash:'كاش', visa:'فيزا', instapay:'انستاباي' };
+var PAY_LABEL = { cash:'كاش', visa:'فيزا', visa1:'فيزا', visa2:'فيزا', instapay:'انستاباي', credit:'💰 رصيدك' };   /* كان بيطلع «credit» بالإنجليزي في الفاتورة */
 
 function payMethodsText(pmts){
   var out = [];
@@ -2129,7 +2133,7 @@ function renderAccount(){
        (عميلة صرفت رصيدها كله وعايزة تراجع). غير كده الصف بيكفي. */
     (!((Number(currentCustomer.credit)||0) > 0) && _creditRows.length
       ? '<button class="btn-outline" onclick="openCreditStatement()">📒 كشف حساب الرصيد</button>' : '')+
-      ((Number(currentCustomer.credit)||0) > 0 || (Number(currentCustomer.credit_glow)||0) > 0 ? '<button class="btn-outline" onclick="crFetchCode(true)">🔐 كود استخدام الرصيد</button>' : '')+
+      ((Number(currentCustomer.credit)||0) > 0 ? '<button class="btn-outline" onclick="crFetchCode(true)">🔐 كود استخدام الرصيد</button>' : '')+
     (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
     '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
     '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
@@ -4078,8 +4082,17 @@ window.chatCleanup = chatCleanup;
     }
     return k;
   }
+  /* v696: الدوسة على الإشعار بتفتح التطبيق ← اللينك بينادي قبل ما الدخول المجهول يخلص ← السيرفر يرد «unauthenticated» ← كان بيطلع «النت ضعيف». نستنى الدخول الأول. */
+  function authReady(){
+    return new Promise(function(res){
+      var a = firebase.app(APP).auth();
+      if(a.currentUser) return res();
+      var off = a.onAuthStateChanged(function(u){ if(u){ off(); res(); } });
+      setTimeout(function(){ off(); res(); }, 8000);
+    });
+  }
   function call(payload){
-    return firebase.app(APP).functions('us-central1').httpsCallable('creditSpend')(payload).then(function(r){ return r.data; });
+    return authReady().then(function(){ return firebase.app(APP).functions('us-central1').httpsCallable('creditSpend')(payload); }).then(function(r){ return r.data; });
   }
   function phoneNow(){ return (typeof currentCustomer !== 'undefined' && currentCustomer && currentCustomer.phone) ? String(currentCustomer.phone) : ''; }
   function enroll(pin){ return call({ action:'device_enroll', phone: phoneNow(), pin: String(pin || ''), deviceKey: devKey() }); }
@@ -4136,7 +4149,14 @@ window.chatCleanup = chatCleanup;
       if(r && r.ok === false && r.reason === 'enroll'){ askPin(); return; }
       if(r && r.code){ showCode(r); return; }
       if(manual){ try{ showToast('مفيش كود دلوقتي — الكاشير لازم تدوس «استخدمي الرصيد» الأول'); }catch(e){} }
-    }).catch(function(e){ busy = false; if(manual){ try{ showToast('النت ضعيف — جرّبي تاني', true); }catch(x){} } console.warn('cr code', e && e.message); });
+    }).catch(function(e){
+      busy = false; console.warn('cr code', e && e.code, e && e.message);
+      var c = String((e && e.code) || '').replace(/^functions\//, '');
+      var m = (c === 'unavailable' || c === 'deadline-exceeded' || c === 'internal' || !c) ? 'النت ضعيف — جرّبي تاني'
+            : (c === 'unauthenticated') ? 'التطبيق لسه بيفتح — جرّبي تاني بعد ثانية'
+            : ((e && e.message) || 'معرفناش نجيب الكود');
+      if(manual){ try{ showToast(m, true); }catch(x){} }
+    });
   }
   window.crFetchCode = fetchCode;
 
@@ -4148,6 +4168,57 @@ window.chatCleanup = chatCleanup;
     lastSeenAt = at;
     if(Date.now() - at < 3 * 60 * 1000) fetchCode(false);     // كود طازة ← اعرضيه فورًا (حتى لو الإشعارات مقفولة)
   };
+})();
+</script>
+
+<script>
+/* ============================================================
+   🔔 مجمّع الإشعارات — كل اللي حصل على الحساب في مكان واحد (طلب المالك 22-09).
+   مش بيخزّن الإشعارات (اللي قافلة الإشعارات مبيوصلهاش أصلًا) — بيبنيها من البيانات اللي التطبيق محمّلها فعلًا:
+   كشف الرصيد · الفواتير (نقط كسبتيها/استبدلتيها) · المكافآت · كود رصيد طازة. كل بند بيفتح مكانه.
+   ============================================================ */
+(function(){
+  var LS = 'ntf_seen_v1';
+  function seenAt(){ try{ return Number(localStorage.getItem(LS)) || 0; }catch(e){ return 0; } }
+  function markSeen(){ try{ localStorage.setItem(LS, String(Date.now())); }catch(e){} var d = document.getElementById('ntfDot'); if(d) d.style.display = 'none'; }
+  function tsOf(x){ if(!x) return 0; if(typeof x === 'number') return x; if(x.toMillis) return x.toMillis(); if(x.seconds) return x.seconds * 1000; return 0; }
+  function items(){
+    var out = [], c = (typeof currentCustomer !== 'undefined' && currentCustomer) || {};
+    (typeof _creditRows !== 'undefined' ? _creditRows : []).forEach(function(r){
+      if(!r) return; var amt = Number(r.amount) || 0;
+      out.push({ at: r.at || 0, icon: amt < 0 ? '💰' : '💵', title: (typeof creditRowLabel === 'function' ? creditRowLabel(r) : 'حركة رصيد'),
+        sub: (amt < 0 ? '−' : '+') + fmt(Math.abs(amt)) + ' ج.م' + (typeof r.after === 'number' ? ' · الباقي ' + fmt(r.after) + ' ج.م' : ''),
+        go: r.invoiceCode ? "openInvoiceByCode('" + String(r.invoiceCode).replace(/[^A-Za-z0-9-]/g, '') + "')" : 'openCreditStatement()' });
+    });
+    (typeof dataInvoices !== 'undefined' && dataInvoices ? dataInvoices : []).forEach(function(s){
+      if(!s) return; var at = tsOf(s.createdAt) || Number(s.createdAtMs) || 0, code = String(s.invoiceCode || '').replace(/[^A-Za-z0-9-]/g, '');
+      if(Number(s.loyaltyPointsEarned) > 0) out.push({ at: at, icon: '⭐', title: 'كسبتي ' + fmt(s.loyaltyPointsEarned) + ' نقطة', sub: 'فاتورة #' + (s.invoiceNo || ''), go: "openInvoiceByCode('" + code + "')" });
+      if(Number(s.pointsRedeemed) > 0) out.push({ at: at + 1, icon: '🎁', title: 'استبدلتي ' + fmt(s.pointsRedeemed) + ' نقطة', sub: 'فاتورة #' + (s.invoiceNo || ''), go: "openInvoiceByCode('" + code + "')" });
+    });
+    (c.rewards || []).forEach(function(r){
+      if(!r) return;
+      out.push({ at: r.createdAt || r.at || 0, icon: '🎁', title: r.used ? 'مكافأة اتستخدمت' : 'وصلتك مكافأة', sub: (r.type === 'percent' ? r.value + '%' : fmt(r.value) + ' ج.م') + (r.minInvoice ? ' · من ' + fmt(r.minInvoice) + ' ج.م' : ''), go: "switchTab('offers')" });
+    });
+    var otpAt = Number(c.creditOtpAt) || 0;
+    if(otpAt && Date.now() - otpAt < 3 * 60 * 1000) out.unshift({ at: otpAt, icon: '🔐', title: 'كود استخدام رصيدك جاهز', sub: 'اضغطي لعرضه', go: 'crFetchCode(true)' });
+    return out.filter(function(x){ return x.at > 0; }).sort(function(a, b){ return b.at - a.at; }).slice(0, 40);
+  }
+  function fmtDate(ms){ try{ return new Date(ms).toLocaleString('ar-EG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' }); }catch(e){ return ''; } }
+  window.openNotifications = function(){
+    var list = items(); markSeen();
+    var html = list.length ? list.map(function(x){
+      return '<div class="acct-row" onclick="try{ closeSheet(); }catch(e){} ' + x.go + '" style="cursor:pointer; align-items:center;">'
+        + '<span class="k"><span style="font-size:20px; margin-left:8px;">' + x.icon + '</span><b>' + esc(x.title) + '</b><br><span style="opacity:.75; font-size:12px;">' + esc(x.sub) + ' · ' + fmtDate(x.at) + '</span></span>'
+        + '<span style="opacity:.55;">‹</span></div>';
+    }).join('') : '<div class="acct-card" style="text-align:center; padding:26px;">مفيش إشعارات لسه 🌸</div>';
+    showSheet('🔔 الإشعارات', '<div class="acct-card" style="padding:4px 12px;">' + html + '</div>');
+  };
+  window.refreshNotifDot = function(){
+    var d = document.getElementById('ntfDot'); if(!d) return;
+    var n = items().filter(function(x){ return x.at > seenAt(); }).length;
+    d.style.display = n ? '' : 'none'; d.textContent = n > 9 ? '9+' : String(n);
+  };
+  setInterval(function(){ try{ window.refreshNotifDot(); }catch(e){} }, 4000);
 })();
 </script>
 </body>

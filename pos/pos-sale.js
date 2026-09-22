@@ -756,6 +756,8 @@ function clearSaleState(){
   try{ paymobReset(); }catch(e){}
   cart = [];
   selectedCartIdx = null;
+  // 💰 v724 — الثغرة اللي المالك شافها: كتب كود الرصيد ثم **مسح الفاتورة** — `pendingCreditSpend` فضل حي، فاتخصم على الفاتورة **اللي بعدها**.
+  try{ if(typeof window.pendingCreditSpend !== 'undefined' && window.pendingCreditSpend){ window.pendingCreditSpend = null; } }catch(e){}
   clearCustomerContext();
   const ph = document.getElementById('customerPhone'); if(ph) ph.value = '';
   const cn = document.getElementById('customerName'); if(cn) cn.value = '';
@@ -935,6 +937,30 @@ let returnInvoiceData = null;
 const RETURN_WINDOW_DAYS = 14;
 
 // ============ مرتجع برقم موبايل العميل ============
+// وقت الفاتورة — نفس قاعدة التقارير (`saleTs`) مع فولباك لو pos-reports مش محمّل. **مفيش `Date.now()` كبديل**:
+// فاتورة من غير وقت تتكتب «من غير تاريخ» وتنزل آخر القايمة — مش تتنكّر في تاريخ النهارده.
+function invTs(s){
+  try{ if(typeof saleTs === 'function'){ const t = saleTs(s); if(t) return t; } }catch(e){}
+  if(s && s.createdAt && typeof s.createdAt.toMillis === 'function') return s.createdAt.toMillis();
+  if(s && typeof s.createdAtMs === 'number') return s.createdAtMs;
+  if(s && typeof s.ts === 'number') return s.ts;
+  return 0;
+}
+window.invTs = invTs;
+// فتح فاتورة **من القايمة** = فيه زرار رجوع للقايمة (المسح بالباركود مفيهوش قايمة يرجعلها)
+window.openInvoiceFromList = async function(code){
+  await openInvoiceForReturn(code);
+  try{
+    const body = document.getElementById('returnInvoiceBody');
+    if(body && window._retListHtml && !document.getElementById('retBackBtn')){
+      body.insertAdjacentHTML('afterbegin', '<button id="retBackBtn" onclick="backToInvoiceList()" style="width:100%; margin-bottom:10px; padding:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); border-radius:10px; font-family:\'Cairo\'; font-weight:800; cursor:pointer;">➡️ رجوع لقايمة الفواتير</button>');
+    }
+  }catch(e){}
+};
+window.backToInvoiceList = function(){
+  const body = document.getElementById('returnInvoiceBody');
+  if(body && window._retListHtml){ returnInvoiceData = null; body.innerHTML = window._retListHtml; }
+};
 window.returnByPhone = async function(rawPhone){
   if(!hasPerm('canRefund')){ showToast('المرتجع للمشرف/المدير بس', 'err'); return; }
   const clean = String(rawPhone||'').replace(/\D/g,'');
@@ -951,10 +977,17 @@ window.returnByPhone = async function(rawPhone){
       return;
     }
     // نفلتر حسب السلسلة (echarpe/glow) ونرتّب من الأحدث
+    // 🔴 v719 — 3 باجات بلّغ عنها المالك في القايمة دي:
+    //   1) **كل الفواتير بنفس التاريخ والساعة (دلوقتي):** الكود كان بيقرا `s.ts` — والفواتير **مفيهاش** الحقل ده
+    //      (وقتها في `createdAt`/`createdAtMs`)، فـ`new Date(undefined || Date.now())` = اللحظة الحالية لكل سطر.
+    //   2) **آخر فاتورة «مش ظاهرة»:** نفس السبب — الترتيب `b.ts - a.ts` = `0 - 0` لكل الفواتير، فالقايمة طالعة
+    //      بترتيب عشوائي (معرّف المستند) وآخر فاتورة مدفونة تحت. دلوقتي الوقت من `invTs` والترتيب من الأحدث.
+    //   3) **مفيش رجوع للقايمة** بعد اختيار فاتورة — لازم ✕ وتدوّر بالرقم تاني. بقى فيه زرار رجوع (من غير قراءة جديدة).
     const hereIsGlow = GLOW_BRANCHES.includes(currentBranch);
     let invoices = snap.docs.map(d=>({ id:d.id, ...d.data() }))
       .filter(s=> GLOW_BRANCHES.includes(s.branch) === hereIsGlow)
-      .sort((a,b)=> (b.ts||0) - (a.ts||0));
+      .filter(s=> !s.isReversal)                       // سطر العكس نفسه مش فاتورة يترجّع منها
+      .sort((a,b)=> invTs(b) - invTs(a));
 
     if(invoices.length === 0){
       document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">مفيش فواتير من نفس السلسلة للرقم ده</div>';
@@ -962,23 +995,29 @@ window.returnByPhone = async function(rawPhone){
     }
 
     // نعرض قايمة الفواتير — يدوس على الفاتورة اللي عايز يرجّع منها
-    document.getElementById('returnInvoiceBody').innerHTML = `
-      <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">📱 ${clean} — ${invoices.length} فاتورة · اختار الفاتورة:</div>
+    const _listHtml = `
+      <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">📱 ${clean} — ${invoices.length} فاتورة · من الأحدث · اختار الفاتورة:</div>
       <div style="max-height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
         ${invoices.map(s=>{
-          const d = new Date(s.ts||Date.now());
-          const dateTxt = d.toLocaleDateString('ar-EG',{day:'2-digit',month:'short',year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
-          const itemCount = (s.items||[]).length;
+          const t = invTs(s);
+          const d = t ? new Date(t) : null;
+          const dateTxt = d ? (d.toLocaleDateString('ar-EG',{day:'2-digit',month:'short',year:'numeric'}) + ' · ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})) : 'من غير تاريخ';
+          const itemCount = (s.items||[]).filter(it=> it && !it.isRedemption && !it.isRewardDiscount).length;
           const total = Number(s.total||0).toFixed(2);
-          return `<button onclick="openInvoiceForReturn('${(s.invoiceCode||'').replace(/'/g,"")}')" style="text-align:right; background:var(--panel2); border:1px solid var(--border); border-radius:12px; padding:12px; cursor:pointer; font-family:'Cairo';">
+          const tags = ((s.items||[]).some(it=> it && it.isCreditSpend) ? ' · 💰 رصيد' : '')
+                     + (Number(s.pointsRedeemed) > 0 ? ' · 🎁 نقط' : '')
+                     + (s.reversed ? ' · ↩️ معكوسة' : '') + (Number(s.total) < 0 ? ' · مرتجع' : '');
+          return `<button onclick="openInvoiceFromList('${(s.invoiceCode||'').replace(/'/g,"")}')" style="text-align:right; background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; cursor:pointer; font-family:'Cairo'; ${s.reversed?'opacity:.55;':''}">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-weight:800; color:var(--text); font-size:13px;">${s.invoiceCode||'—'}</span>
+              <span style="font-weight:800; color:var(--text); font-size:13px;">${s.invoiceNo ? '#' + esc(String(s.invoiceNo)) + ' · ' : ''}${esc(s.invoiceCode||'—')}</span>
               <span style="font-weight:800; color:var(--accent);">${total} ج</span>
             </div>
-            <div style="font-size:11px; color:var(--muted); margin-top:4px;">${dateTxt} · ${itemCount} صنف · ${s.branch||''}</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:4px;">${dateTxt} · ${itemCount} صنف · ${esc(s.branch||'')}${tags}</div>
           </button>`;
         }).join('')}
       </div>`;
+    window._retListHtml = _listHtml;                  // للرجوع من غير قراءة جديدة
+    document.getElementById('returnInvoiceBody').innerHTML = _listHtml;
   }catch(e){
     document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">تعذر جلب الفواتير: '+e.message+'</div>';
   }
@@ -1014,7 +1053,19 @@ async function openInvoiceForReturn(code){
   try{
     // 📷 v711: الفواتير الجديدة باركودها كود قصير أرقام (`scanCode`)؛ القديمة باركودها `invoiceCode` — الاتنين شغالين.
     const _short = (typeof isShortScanCode === 'function') && isShortScanCode(code);
-    const snap = await db.collection(TEST_SALES).where(_short ? 'scanCode' : 'invoiceCode','==', code).limit(_short ? 2 : 1).get();
+    const _q = db.collection(TEST_SALES).where(_short ? 'scanCode' : 'invoiceCode','==', code).limit(_short ? 2 : 1);
+    let snap = await _q.get();
+    // 📡 v720 — بلاغ المالك 21-09: «مفيش فاتورة بالكود ده» لفاتورة موجودة فعلًا، ولما قفل وفتح ظهرت.
+    //    لما اتصال Firestore بيعلّق (تاب مفتوح من بدري/النت قطع ورجع) الـ`get()` بيرد من **الكاش المحلي**، والفاتورة
+    //    اللي اتعملت على جهاز تاني مش فيه ← «مفيش». دلوقتي: نتيجة فاضية **من الكاش** = نسأل السيرفر صراحة قبل ما نقول مفيش،
+    //    ولو السيرفر مش بيرد نقولها إن المشكلة في الاتصال مش في الفاتورة.
+    if(snap.empty && snap.metadata && snap.metadata.fromCache){
+      try{ snap = await _q.get({ source:'server' }); }
+      catch(e){
+        document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">📡 الجهاز مش واصل للسيرفر دلوقتي<br><span style="font-size:12px;">الفاتورة ممكن تكون موجودة — اتأكدي من النت وجرّبي تاني (أو اقفلي البرنامج وافتحيه)</span><br><span style="font-size:11px;">'+esc(code)+'</span></div>';
+        return;
+      }
+    }
     if(_short && snap.size > 1){
       // احتمال شبه معدوم (نفس الثانية + نفس الرقمين). مبنخمّنش — الغلط هنا = مرتجع على فاتورة حد تاني.
       document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">⚠️ فيه فاتورتين بنفس كود المسح<br><span style="font-size:12px;">افتحي الفاتورة من البحث برقم الفاتورة المكتوب فوق</span></div>';
@@ -1054,8 +1105,10 @@ async function openInvoiceForReturn(code){
       </div>`;
     }
 
-    const saleMs = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : (s.createdAt && s.createdAt.seconds ? s.createdAt.seconds*1000 : 0);
-    const dateStr = saleMs ? new Date(saleMs).toLocaleString('ar-EG', {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '—';
+    // v723: `invTs` (فاتورة أوفلاين من غير `createdAt` كانت بتطلع «—» ومدة المرتجع بتتحسب صفر) · والساعة **بتوقيت القاهرة**
+    //       مهما كان توقيت الجهاز (لابتوب المالك على توقيت البرازيل كان بيعرض 05:09 لفاتورة 11:09).
+    const saleMs = (typeof invTs === 'function' ? invTs(s) : 0) || (s.createdAt && s.createdAt.seconds ? s.createdAt.seconds*1000 : 0);
+    const dateStr = saleMs ? new Date(saleMs).toLocaleString('ar-EG', {day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'Africa/Cairo'}) : '—';
     const daysAgo = saleMs ? Math.floor((Date.now() - saleMs) / 86400000) : 0;
     const withinWindow = daysAgo <= RETURN_WINDOW_DAYS;
     const windowBadge = withinWindow
@@ -1095,6 +1148,22 @@ async function openInvoiceForReturn(code){
         </div>`; }).join('')}
       </div>` : '';
 
+    // 💵 v723 — **اتدفعت إزاي** (بلاغ المالك: «مبقاش يظهر طريقة الدفع واضحة»). كانت بتظهر بيانات الكارت بس.
+    const _pi = retPayInfo(s);
+    returnInvoiceData._creditPaid = _pi.creditPaid;
+    returnInvoiceData._creditLeft = _pi.creditLeft;
+    if(!window._retCredit) window._retCredit = {};
+    window._retCredit[String(s.invoiceNo || '')] = { docId: doc.id, code: s.invoiceCode || '', left: _pi.creditLeft };
+    const payBanner = _pi.parts.length ? `
+      <div style="background:var(--panel2); border:1.5px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px;">
+        <div style="font-weight:800; font-size:12.5px; margin-bottom:6px;">💵 اتدفعت بـ:</div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">${_pi.parts.map(p => `<span style="background:${p.key==='credit'?'#fff6e6':'#eef2ff'}; color:${p.key==='credit'?'#92400e':'#1e3a8a'}; font-weight:800; font-size:13px; padding:5px 11px; border-radius:99px;">${p.icon} ${p.label} · ${p.amount.toFixed(2)} ج.م</span>`).join('')}</div>
+      </div>` : '';
+    const creditBanner = _pi.creditLeft > 0.009 ? `
+      <div style="background:#fff6e6; border:1.5px solid #f59e0b; color:#92400e; padding:9px 11px; border-radius:8px; font-size:12.5px; font-weight:800; margin-bottom:8px;">
+        💰 اتدفع منها ${_pi.creditPaid.toFixed(2)} ج.م <u>رصيد</u> — المرتجع بيرجع <u>رصيد</u> الأول (لحد ${_pi.creditLeft.toFixed(2)} ج.م)، مش كاش.
+      </div>` : '';
+
     const alreadyReversed = s.reversed ? '<div style="background:#fdecec; color:#b91c1c; padding:8px 10px; border-radius:8px; font-size:12px; margin-bottom:8px;">⚠️ الفاتورة دي اترجعت بالكامل قبل كده.</div>' : '';
     returnInvoiceData._saleMs = saleMs;
     const sameDayBanner = _isSameLocalDay(saleMs) ? '<div style="background:#fff6e6; border:1.5px solid var(--warn); color:#b45309; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:800; margin-bottom:8px;">⏰ الفاتورة دي متباعة النهارده — المرتجع هيتسجل كملاحظة يوم-بيوم.</div>' : '';
@@ -1130,6 +1199,8 @@ async function openInvoiceForReturn(code){
         ${windowBadge}
       </div>
       ${branchBanner}
+      ${payBanner}
+      ${creditBanner}
       ${cardBanner}
       ${customerBanner}
       ${alreadyReversed}
@@ -1142,6 +1213,45 @@ async function openInvoiceForReturn(code){
   }
 }
 
+
+// 💵 v723 — ملخص دفع الفاتورة الأصلية + كام منها «رصيد» لسه مارجعش. (pure — متختبر)
+//    الشكلين: الجديد `payments.credit` (الرصيد كطريقة دفع) · والقديم سطر `isCreditSpend` بالسالب جوّه الأصناف.
+const RET_PAY_LABELS = { cash:['💵','كاش'], visa:['💳','فيزا'], visa1:['💳','فيزا 1'], visa2:['💳','فيزا 2'], instapay:['📲','إنستاباي'], credit:['💰','رصيد العميلة'] };
+function retPayInfo(s){
+  const pay = (s && s.payments) || {};
+  const parts = [];
+  Object.keys(pay).forEach(function(k){
+    const v = Math.abs(Number(pay[k]) || 0); if(!(v > 0)) return;
+    const L = RET_PAY_LABELS[k] || ['💠', k];
+    parts.push({ key:k, icon:L[0], label:L[1], amount:v });
+  });
+  let legacy = 0;
+  ((s && s.items) || []).forEach(function(it){ if(it && it.isCreditSpend) legacy += Math.abs((Number(it.price) || 0) * (Number(it.qty) || 1)); });
+  if(legacy > 0 && !(Number(pay.credit) > 0)) parts.push({ key:'credit', icon:'💰', label:'رصيد العميلة', amount: Math.round(legacy * 100) / 100 });
+  const creditPaid = Math.round(((Number(pay.credit) > 0 ? Number(pay.credit) : 0) || legacy) * 100) / 100;
+  const creditLeft = Math.max(0, Math.round((creditPaid - (Number(s && s.creditRefunded) || 0)) * 100) / 100);
+  return { parts: parts, creditPaid: creditPaid, creditLeft: creditLeft };
+}
+window.retPayInfo = retPayInfo;
+// المطلوب يرجع «رصيد» في الفاتورة الحالية = لكل فاتورة أصلية: min(قيمة مرتجعها في السلة، الرصيد اللي لسه مارجعش منها)،
+// ومسقوف بصافي الفلوس الراجعة فعلًا (في الاستبدال العميلة ممكن متاخدش حاجة أو تدفع فرق).
+function retRequiredCredit(cartArr, creditMap, netTotal){
+  const byInv = {};
+  (cartArr || []).forEach(function(c){
+    if(!c || !c.isReturn || !c.fromInvoice) return;
+    byInv[c.fromInvoice] = (byInv[c.fromInvoice] || 0) + Math.abs((Number(c.price) || 0) * (Number(c.qty) || 1));
+  });
+  let need = 0; const alloc = {};
+  Object.keys(byInv).forEach(function(inv){
+    const left = Number(((creditMap || {})[inv] || {}).left) || 0;
+    const a = Math.min(byInv[inv], left);
+    if(a > 0.009){ alloc[inv] = Math.round(a * 100) / 100; need += a; }
+  });
+  const netBack = Math.max(0, -(Number(netTotal) || 0));
+  need = Math.round(Math.min(need, netBack) * 100) / 100;
+  return { need: need, alloc: alloc };
+}
+window.retRequiredCredit = retRequiredCredit;
 
 // >>> RETCAP_START
 // ↩️ سقف المرتجع: مينفعش ترجّع من الصنف أكتر من اللي اتباع فعلًا في الفاتورة دي.
@@ -4797,7 +4907,7 @@ window.returnPointsDeduction = returnPointsDeduction;
       (async function(){
         try{
           if(typeof commitCreditSpend === 'function')
-            await commitCreditSpend(invoiceCode, total);
+            await commitCreditSpend(invoiceCode, total, sale.items);
           if(typeof activatePendingGiftCards === 'function'){
             const _cards = await activatePendingGiftCards(invoiceCode);
             if(_cards && _cards.length && typeof printGiftCardSlips === 'function')

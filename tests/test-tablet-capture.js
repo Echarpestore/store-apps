@@ -146,12 +146,23 @@ function extractFn(src, header){
   const ha = invite.slice(invite.indexOf('async function hasApp('), invite.indexOf('async function hasApp(') + 1500);
   ok(/var bk = brandKey\(\);/.test(ha) && /d\['fcmTokens_' \+ bk\]/.test(ha) && !/if \(d\.fcmTokenAt\) return true;/.test(ha), 'والفحص المحلي بقى بالبراند (مش `fcmTokenAt` العام)');
 
+  console.log('🐛 2ج) v700 — الأرقام كانت بتتمسح وهي بتكتب (كل snapshot) · الرولز');
+  {
+    const ap = kiosk.slice(kiosk.indexOf('function _capApply('), kiosk.indexOf('function _capApply(') + 2600);
+    ok(/if\(_capAskId !== v\.askId\)\{ _capDigits = ''; \}/.test(ap) && !/_capAskId = v\.askId; _capDigits = '';/.test(ap), 'view phone: الأرقام بتتصفّر بس لو askId اتغيّر (مش مع كل نبضة)');
+    const rules = fs.readFileSync(path.join(ROOT, 'security', 'firestore-phase2.rules'), 'utf8');
+    ok(/match \/insta_live\/\{branch\} \{\s*\n\s*allow read: if signedIn\(\);\s*\n\s*allow create, update, delete: if false;/.test(rules), '⭐ insta_live **جوّه** ملف الرولز (كان في ملف جانبي ← نشر الملف قفل الإنستاباي على التابلت)');
+    ok(/match \/sales_shifts_voided\/\{id\}\s*\{ allow read, write: if isStaff\(\); \}/.test(rules), 'وأرشيف الحضور الملغي');
+    ['loyalty/index.html', 'glow/index.html'].forEach(f => { const a = fs.readFileSync(path.join(ROOT, f), 'utf8');
+      ok(/function authReady\(\)/.test(a) && /return authReady\(\)\.then\(function\(\)\{ return firebase\.app\(APP\)\.functions/.test(a), f.split('/')[0] + ': كود الرصيد بيستنى الدخول قبل النداء (الإشعار كان بيفتح قبل الدخول ← «النت ضعيف»)');
+      ok(/c === 'unauthenticated'\) \? 'التطبيق لسه بيفتح/.test(a), f.split('/')[0] + ': والرسالة بتقول السبب الحقيقي'); });
+  }
   console.log('🖼️ 3) لقطات Glow');
   const g = invite.slice(invite.indexOf('    glow: {'), invite.indexOf('  function brandKey'));
   const gs = (g.match(/src: '(invite\/[\w-]+\.jpg)'/g) || []).map(m => m.match(/'([^']+)'/)[1]);
   ok(gs.length === 3 && gs.every(f => fs.existsSync(path.join(ROOT, 'feedback', f))), 'Glow بقى ليه 3 لقطات وملفاتهم موجودة');
   ok(gs.every(f => fs.statSync(path.join(ROOT, 'feedback', f)).size < 160 * 1024), 'وخفيفة على نت الفرع');
-  ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8'), 716) && swAtLeast(fs.readFileSync(path.join(ROOT, 'feedback', 'sw.js'), 'utf8'), 698), 'POS ≥ v716 · kiosk ≥ v698');
+  ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'pos', 'sw.js'), 'utf8'), 716) && swAtLeast(fs.readFileSync(path.join(ROOT, 'feedback', 'sw.js'), 'utf8'), 700), 'POS ≥ v716 · kiosk ≥ v700');
 
   console.log('\n' + (fail ? '❌' : '✅') + ' test-tablet-capture: ' + pass + ' ناجح · ' + fail + ' فاشل');
   if(fail) process.exitCode = 1;

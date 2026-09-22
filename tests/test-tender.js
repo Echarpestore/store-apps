@@ -231,8 +231,18 @@ const REWARD = { id: '__reward__', name: '🎁', price: -30, qty: 1, isRewardDis
   console.log('\n☁️ creditSpend على السيرفر');
   t('⭐⭐ مفيش throw غير مشروط قبل التحقق من الموظف', () => {
     const body = strip(extractFn(gift.slice(gift.indexOf('exports.creditSpend')), 'async (request)'));
-    const i = body.indexOf('requireStaff'), j = body.indexOf('throw new HttpsError');
-    ok(i > 0, 'requireStaff مش موجود'); ok(j < 0 || j > i, 'لسه فيه throw بيوقف الدالة قبل ما تبدأ');
+    const i = body.indexOf('requireStaff');
+    ok(i > 0, 'requireStaff مش موجود');
+    // v718: قبل `requireStaff` بقى فيه بلوك أفعال تطبيق العميلة (`device_enroll`/`my_code`) وجوّاه throw **مشروط** (من غير auth).
+    //       الفحص الأصلي كان بيدوّر على أول `throw` وخلاص فبقى بيقع غلط. المعنى الحقيقي: مفيش throw **في جسم الدالة مباشرة**
+    //       (عمق أقواس 1 = غير مشروط) قبل التحقق من الموظف — ده اللي كان عامل كارثة v679.
+    let depth = 0, bad = -1;
+    for(let k = 0; k < i; k++){
+      const c = body[k];
+      if(c === '{') depth++; else if(c === '}') depth--;
+      else if(depth === 1 && body.startsWith('throw ', k) && !/if\s*\([^;{]*\)\s*$/.test(body.slice(Math.max(0, k - 160), k))){ bad = k; break; }
+    }
+    ok(bad < 0, 'لسه فيه throw غير مشروط بيوقف الدالة قبل ما تبدأ');
   });
   t('ولسه بيرفض صرف أكبر من الفاتورة', () => ok(/amount\s*>\s*invoiceTotal/.test(strip(extractFn(gift.slice(gift.indexOf('exports.creditSpend')), 'async (request)')))));
 

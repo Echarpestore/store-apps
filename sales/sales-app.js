@@ -3417,9 +3417,16 @@ function closedShiftToday(empId,dateKey){
   return (allShifts||[]).find(x=>x && x.employeeId===empId && !!x.clockOutTs && caiDayKey(x.clockInTs)===dateKey) || null;
 }
 function secondShiftAllowed(emp,dateKey){ return !!(emp && String(emp.reopenShiftDateKey||'')===String(dateKey||'')); }
+/* 🗓️ v621 — مفتاح عام: «الموظف اللي عنده إجازة معتمدة النهاردة ميقدرش يبصم». الافتراضي شغّال (زي ما كان).
+   المالك يقفله من إعدادات الحضور ← الموظف يبصم في إجازته عادي واليوم يتحسب «اشتغل يوم إجازة». sales_settings/_global.dayOffClockInBlock */
+function dayOffClockInBlockOn(){
+  const g=(window.allSettingsByBranch||{})[FACE_GLOBAL_DOC]||{};
+  return g.dayOffClockInBlock!==false;
+}
+window.dayOffClockInBlockOn=dayOffClockInBlockOn;
 function clockInBlockReason(emp,dateKey){
   if(!emp) return 'employee';
-  if(approvedLeaveBlocksClockIn(emp.id,dateKey) && !leaveWorkAllowed(emp,dateKey)) return 'leave';
+  if(dayOffClockInBlockOn() && approvedLeaveBlocksClockIn(emp.id,dateKey) && !leaveWorkAllowed(emp,dateKey)) return 'leave';
   if(closedShiftToday(emp.id,dateKey) && !secondShiftAllowed(emp,dateKey)) return 'second-shift';
   return '';
 }
@@ -5750,6 +5757,89 @@ function _employeeSummary(emp){
   return { shifts:sh.length, points:pts.length };
 }
 
+function _recentShiftsHtml(emp){
+  const rows=(window.allShifts||[]).filter(s=>s && s.employeeId===emp.id).sort((a,b)=>(b.clockInTs||0)-(a.clockInTs||0)).slice(0,6);
+  if(!rows.length) return '<div class="er-info">مفيش حضور مسجّل لسه</div>';
+  const f=ts=>ts?new Date(ts).toLocaleString('ar-EG',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'}):'—';
+  return rows.map(s=>'<div class="er-info" style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:5px">'
+    +'<span>'+(s.manual?'✍️ ':'')+f(s.clockInTs)+' ← '+(s.clockOutTs?f(s.clockOutTs):'<i>مفتوح</i>')+'</span>'
+    +'<button type="button" class="backBtn erVoidShift" data-id="'+_empEsc(s.id)+'" style="padding:5px 10px;font-size:12px">✖ إلغاء</button></div>').join('');
+}
+function openManualShiftDialog(emp){
+  document.getElementById('manualShiftOv')?.remove();
+  const ov=document.createElement('div'); ov.id='manualShiftOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:10030;overflow:auto;padding:18px 10px;';
+  const today=todayStr();
+  ov.innerHTML=`<div style="max-width:460px;margin:auto;background:var(--panel,#181820);border:1px solid var(--line);border-radius:18px;padding:18px;">
+    <div style="font-size:18px;font-weight:900;margin-bottom:6px">✍️ تسجيل يوم شغل يدوي — ${_empEsc(emp.name)}</div>
+    <p style="color:var(--sub);font-size:12px;margin:0 0 12px">للموظف اللي اشتغل والجهاز رفض يسجّل (إجازة معتمدة · جهاز واقع). بيتحسب في المرتب زي أي شيفت، ولو اليوم إجازته بيتحسب «اشتغل يوم إجازة». بيتسجّل باسمك في سجل الموظف.</p>
+    <div class="employee-form-grid">
+      <label>اليوم<input id="msDate" type="date" value="${today}" max="${today}"></label>
+      <label>حضور<input id="msIn" type="time" value="10:00"></label>
+      <label>انصراف<input id="msOut" type="time" value="18:00"></label>
+      <label>السبب<input id="msReason" placeholder="مثال: جت في إجازتها والجهاز رفض"></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px"><button id="msSave" class="confirmBtn" style="flex:2">تسجيل اليوم</button><button id="msClose" class="backBtn" style="flex:1">إلغاء</button></div>
+    <div id="msMsg" class="field-err" style="margin-top:8px"></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#msClose').onclick=()=>ov.remove();
+  ov.querySelector('#msSave').onclick=async()=>{
+    const msg=ov.querySelector('#msMsg'); msg.textContent='';
+    const d=ov.querySelector('#msDate').value, tin=ov.querySelector('#msIn').value, tout=ov.querySelector('#msOut').value, reason=ov.querySelector('#msReason').value.trim();
+    const plan=manualShiftPlan(emp,d,tin,tout,reason,window.allShifts||[]);
+    if(plan.error){ msg.textContent=plan.error; return; }
+    try{
+      await setDoc(doc(db,'sales_shifts',plan.id),plan.data,{merge:true});
+      try{ await _employeeAudit(emp,'manual_shift',{dateKey:d,clockIn:tin,clockOut:tout,reason}); }catch(_){}
+      try{ (window.allShifts||[]).push(Object.assign({id:plan.id},plan.data)); }catch(_){}
+      ov.remove(); document.getElementById('employeeRecordOv')?.remove();
+      try{ renderAttendanceLists(); }catch(_){}
+      alert('اتسجّل يوم '+d+' لـ'+emp.name+' ✅');
+    }catch(err){ console.error('manual shift',err); msg.textContent='تعذر التسجيل — '+(err&&err.message||''); }
+  };
+}
+/* pure — متختبرة: بتبني مستند الشيفت اليدوي أو بترجّع خطأ */
+function manualShiftPlan(emp,dateKey,tIn,tOut,reason,shifts){
+  if(!emp||!emp.id) return {error:'موظف'};
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey||''))) return {error:'اختار اليوم'};
+  if(!/^\d{2}:\d{2}$/.test(tIn||'')||!/^\d{2}:\d{2}$/.test(tOut||'')) return {error:'اكتب وقت الحضور والانصراف'};
+  if(!String(reason||'').trim()) return {error:'اكتب السبب — بيتسجّل في سجل الموظف'};
+  const [y,m,dd]=dateKey.split('-').map(Number);
+  const [h1,mi1]=tIn.split(':').map(Number), [h2,mi2]=tOut.split(':').map(Number);
+  const clockInTs=caiStamp(y,m,dd,h1,mi1,0,0);
+  let clockOutTs=caiStamp(y,m,dd,h2,mi2,0,0);
+  if(clockOutTs<=clockInTs) clockOutTs+=24*3600e3;           // شيفت بيعدّي نص الليل
+  if(clockInTs>Date.now()) return {error:'اليوم لسه مجاش'};
+  if((clockOutTs-clockInTs)>16*3600e3) return {error:'شيفت أطول من 16 ساعة — راجع الأوقات'};
+  const dup=(shifts||[]).find(s=>s&&s.employeeId===emp.id&&caiDayKey(s.clockInTs)===dateKey);
+  if(dup) return {error:'فيه حضور مسجّل لليوم ده أصلًا — ألغيه الأول لو غلط'};
+  const id=attendanceDocId('shift',emp.id,dateKey+'_manual');
+  return {id,data:{employeeId:emp.id,employeeName:emp.name,branch:emp.branch||window.currentBranch,clockInTs,clockOutTs,
+    manual:true,manualBy:'owner',manualReason:String(reason).trim(),manualAt:Date.now(),
+    lateMinutes:0,latePenalized:false,attendanceShiftMode:'manual'}};
+}
+window.manualShiftPlan=manualShiftPlan; window.openManualShiftDialog=openManualShiftDialog;
+/* ✖ إلغاء حضور اتسجّل بالغلط (موظفة سجّلت لزميلتها اللي في إجازة). المستند بينتقل لـ sales_shifts_voided (أثر) وبيتشال —
+   فكل الحسابات (مرتب/غياب/تأخير) بتستبعده لوحدها من غير ما نلمس أي دالة. رصيد تأخير مربوط بيه بيتشال معاه. */
+async function voidShift(emp,shiftId,msg){
+  const s=(window.allShifts||[]).find(x=>x&&x.id===shiftId); if(!s) return;
+  const f=ts=>new Date(ts).toLocaleString('ar-EG',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
+  if(!confirm('إلغاء حضور '+emp.name+' يوم '+f(s.clockInTs)+'؟\nهيتشال من الحضور والمرتب كأنه ماحصلش (بيتحفظ نسخة في السجل).')) return;
+  try{
+    const copy=Object.assign({},s,{voidedAt:Date.now(),voidedBy:'owner'}); delete copy.id;
+    await setDoc(doc(db,'sales_shifts_voided',shiftId),copy);
+    await deleteDoc(doc(db,'sales_shifts',shiftId));
+    const lateId=attendanceDocId('late',emp.id,shiftId);
+    try{ await deleteDoc(doc(db,'sales_time_credit',lateId)); }catch(_){}
+    try{ await _employeeAudit(emp,'void_shift',{shiftId,clockInTs:s.clockInTs,clockOutTs:s.clockOutTs||null}); }catch(_){}
+    window.allShifts=(window.allShifts||[]).filter(x=>x.id!==shiftId);
+    if(msg){ msg.style.color='var(--good)'; msg.textContent='اتلغى الحضور ✅'; }
+    try{ renderAttendanceLists(); }catch(_){}
+    const box=document.getElementById('erRecentShifts'); if(box){ box.innerHTML=_recentShiftsHtml(emp); box.querySelectorAll('.erVoidShift').forEach(b=>{ b.onclick=()=>voidShift(emp,b.dataset.id,msg); }); }
+  }catch(err){ console.error('void shift',err); if(msg){ msg.style.color='var(--bad)'; msg.textContent='تعذر الإلغاء — '+(err&&err.message||''); } }
+}
+window.voidShift=voidShift;
+
 async function _saveOwnerAttendanceOverride(emp,kind,btn,msg){
   if(!emp || !btn || !msg) return false;
   const k=todayStr();
@@ -5816,6 +5906,7 @@ window.openEmployeeRecord = function(empId){
       <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erFaceAttendanceExempt" type="checkbox" ${emp.faceAttendanceExempt===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>استثناء من Face Attendance <small style="display:block;color:var(--sub);font-weight:600">PIN + صورة الحضور الحالية فقط. المنتقبة مستثناة تلقائيًا.</small></span></label>
       ${employeeHasDuplicatePin(emp)?'<div class="field-err" style="margin:6px 0">⚠️ الـPIN الحالي مكرر مع موظف آخر. غيّره عند أول فرصة.</div>':''}
       ${adminRole==='owner'?'<div style="display:flex;gap:7px;flex-wrap:wrap;margin:8px 0"><button type="button" id="erAllowLeaveWork" class="backBtn">السماح بالعمل في الإجازة اليوم</button><button type="button" id="erReopenShift" class="backBtn">فتح حضور جديد اليوم</button><button type="button" id="erResetFace" class="backBtn">إعادة تسجيل الوجه</button></div>':''}
+      ${adminRole==='owner'?`<div style="margin:10px 0 4px;font-weight:900;font-size:13px">🗓️ الحضور</div><div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 8px"><button type="button" id="erManualShift" class="backBtn">✍️ تسجيل يوم شغل يدوي</button></div><div id="erRecentShifts">${_recentShiftsHtml(emp)}</div>`:''}
       <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erFlexibleMorningEvening" type="checkbox" ${emp.flexibleMorningEvening===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>🔀 مرن صباحي/مسائي <small style="display:block;color:var(--sub);font-weight:600">السيستم يختار تلقائيًا الأقرب من ${_empEsc(_morningStart)} أو ${_empEsc(_eveningStart)}</small></span></label>
     </div>
     <div style="margin:14px 0 6px;font-weight:900">سجل تعديل الراتب</div>
@@ -5836,6 +5927,9 @@ window.openEmployeeRecord = function(empId){
     const btn=ov.querySelector('#erReopenShift'), msg=ov.querySelector('#erMsg');
     _saveOwnerAttendanceOverride(emp,'reopen',btn,msg);
   };
+  /* 🗓️ v621 — المالك يسجّل يوم شغل بإيده (روان جت في إجازتها، الجهاز رفض، ومشيت) ويلغي حضور اتسجّل بالغلط. */
+  if(ov.querySelector('#erManualShift')) ov.querySelector('#erManualShift').onclick=()=>openManualShiftDialog(emp);
+  if(ov.querySelector('#erRecentShifts')) ov.querySelectorAll('.erVoidShift').forEach(b=>{ b.onclick=()=>voidShift(emp,b.dataset.id,ov.querySelector('#erMsg')); });
   if(ov.querySelector('#erResetFace')) ov.querySelector('#erResetFace').onclick=async()=>{ if(!confirm('إعادة تسجيل الوجه في أول حضور/انصراف قادم؟'))return; await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:null,faceProfileUpdatedAt:Date.now()}); emp.faceProfile=null; ov.querySelector('#erMsg').style.color='var(--good)'; ov.querySelector('#erMsg').textContent='هيتعمل تسجيل وجه جديد تلقائيًا المرة الجاية ✅'; };
   ov.querySelector('#erSave').onclick=async()=>{
     const btn=ov.querySelector('#erSave'), msg=ov.querySelector('#erMsg'); msg.textContent='';
@@ -7099,6 +7193,7 @@ function renderFaceAttendanceSettings(){
   const offAll=faceAttendanceOffAll();
   const cb=$('#faceAttendanceEnabledInput'); if(cb) cb.checked=(window.faceAttendanceEnabled===true);
   const off=$('#faceOffAllInput'); if(off) off.checked=offAll;
+  const dob=$('#dayOffBlockInput'); if(dob) dob.checked=dayOffClockInBlockOn();
   const md=$('#faceEnrollModeInput'); if(md) md.value=faceEnrollMode();
   // v610: أداة التسجيل المباشر مفيدة في كل الأوضاع — بتتخفي بس لو النظام متوقف عام
   const box=$('#faceEnrollManualBox'); if(box) box.style.display=offAll ? 'none' : 'block';
@@ -7135,11 +7230,12 @@ $('#saveFaceAttendanceBtn')?.addEventListener('click', async ()=>{
   const mode=String($('#faceEnrollModeInput')?.value||'auto');
   try{
     await setDoc(doc(db,'sales_settings',window.currentBranch),{faceAttendanceEnabled:enabled,faceEnrollMode:mode},{merge:true});
-    await setDoc(doc(db,'sales_settings',FACE_GLOBAL_DOC),{faceAttendanceOffAll:offAll,updatedAt:Date.now()},{merge:true});
+    const dayOffBlock=($('#dayOffBlockInput')?.checked)!==false;
+    await setDoc(doc(db,'sales_settings',FACE_GLOBAL_DOC),{faceAttendanceOffAll:offAll,dayOffClockInBlock:dayOffBlock,updatedAt:Date.now()},{merge:true});
     window.faceAttendanceEnabled=enabled;
     // نحدّث النسخة المحلية فورًا لحد ما الـsnapshot يوصل
     window.allSettingsByBranch=window.allSettingsByBranch||{};
-    window.allSettingsByBranch[FACE_GLOBAL_DOC]=Object.assign({},window.allSettingsByBranch[FACE_GLOBAL_DOC]||{},{faceAttendanceOffAll:offAll});
+    window.allSettingsByBranch[FACE_GLOBAL_DOC]=Object.assign({},window.allSettingsByBranch[FACE_GLOBAL_DOC]||{},{faceAttendanceOffAll:offAll,dayOffClockInBlock:dayOffBlock});
     window.allSettingsByBranch[window.currentBranch]=Object.assign({},window.allSettingsByBranch[window.currentBranch]||{},{faceEnrollMode:mode});
     renderFaceAttendanceSettings();
   }

@@ -1008,6 +1008,7 @@
       <label style="display:flex;gap:9px;align-items:center;cursor:pointer"><input id="faceAttendanceEnabledInput" type="checkbox" style="width:19px;height:19px"><b>تفعيل Face Attendance لهذا الفرع</b></label>
       <label style="display:flex;gap:9px;align-items:center;cursor:pointer;margin-top:10px"><input id="faceOffAllInput" type="checkbox" style="width:19px;height:19px"><b>🛑 إيقاف Face Attendance في كل الفروع</b></label>
       <p style="color:var(--sub); font-size:11.5px; margin:5px 0 12px;">مفتاح واحد بيغلب تفعيل أي فرع — بيوقف مطابقة الوجه فورًا في كل الأجهزة من غير ما تلف على الفروع.</p>
+      <label style="display:flex;gap:9px;align-items:flex-start;cursor:pointer;margin-top:6px"><input id="dayOffBlockInput" type="checkbox" checked style="width:19px;height:19px;flex:none;margin-top:2px"><span><b>🗓️ منع البصمة في الإجازة المعتمدة</b><br><span style="color:var(--sub);font-size:11.5px">شغّال: الموظف اللي عنده إجازة معتمدة النهاردة ميقدرش يبصم (ينفع تسمح له من ملفه). مقفول: يبصم عادي واليوم يتحسب «اشتغل يوم إجازة». للأيام اللي فاتت: «تسجيل يوم شغل يدوي» من ملف الموظف.</span></span></label>
       <div style="margin:10px 0">
         <b style="font-size:13px">تسجيل الوجه لأول مرة</b>
         <select id="faceEnrollModeInput" style="width:100%;margin-top:6px;padding:9px;border-radius:9px">
@@ -1273,7 +1274,7 @@
 
 </div>
 
-<script type="module" src="sales-app.js?v=620"></script>
+<script type="module" src="sales-app.js?v=621"></script>
 <script src="sales-ui.js?v=559"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.

@@ -100,7 +100,7 @@ function server(custDoc) {
 
   console.log('\n📱 التطبيقات');
   const lo = strip(rd('loyalty/index.html')), gl = strip(rd('glow/index.html'));
-  await t('⭐⭐ Glow بيقرا credit_glow بس', () => { ok(!/currentCustomer\.credit\b(?!_glow)/.test(gl), 'لسه بيقرا credit'); eq((gl.match(/currentCustomer\.credit_glow/g) || []).length, 4); });
+  await t('⭐⭐ Glow بيقرا credit_glow بس', () => { ok(!/currentCustomer\.credit\b(?!_glow)/.test(gl), 'لسه بيقرا credit'); eq((gl.match(/currentCustomer\.credit_glow/g) || []).length, 5);   /* v718: +1 زرار «كود استخدام الرصيد» — برضه credit_glow بس */ });
   await t('⭐⭐ echarpe بيقرا credit بس', () => ok(!/credit_glow/.test(lo)));
   await t('كل تطبيق بيعرض حركات براندو بس', () => { ok(/return r\.brand === 'glow';/.test(gl)); ok(/return r\.brand !== 'glow';/.test(lo)); });
 
