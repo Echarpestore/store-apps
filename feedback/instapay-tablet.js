@@ -3,7 +3,7 @@
    ------------------------------------------------------------
    بيتحط في: feedback/instapay-tablet.js
    وبيتحمّل من feedback/index.html بسطر واحد في الآخر:
-     <script type="module" src="instapay-tablet.js?v=690"></script>
+     <script type="module" src="instapay-tablet.js?v=707"></script>
 
    ⚠️ الملف **مستقل تمامًا** عن كشك التقييم: بيعمل طبقة فوق الشاشة
       وبتظهر بس لما يكون فيه طلب على الفرع ده. لو الملف ده وقع
@@ -17,13 +17,16 @@
 import { getFirestore, doc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-functions.js";
 
+import './instapay-scan-core.js?v=707';
+const scanCore = window.InstaScanCore;
+
 const app = window.fbApp;
 if (!app) console.warn('[instapay] التطبيق مش متهيّأ');
 
 const db = getFirestore(app);
 const fns = getFunctions(app, 'us-central1');
 const callPay  = httpsCallable(fns, 'instaPay');
-const callScan = httpsCallable(fns, 'instaScan');
+const callScan = httpsCallable(fns, 'instaScan', { timeout: 12000 });
 
 const branch = localStorage.getItem('feedback_branch') || '';
 
@@ -211,7 +214,9 @@ const panes = { wait: $('ipWait'), scan: $('ipScan'), ok: $('ipOk'), bad: $('ipB
 let cur = null;      // الطلب الحالي
 let stream = null;   // الكاميرا
 let loop = null;     // مؤقّت المسح
-let busy = false;    // نداء شغال
+let busy = false;    // current request token
+let scanGeneration = 0, cameraPending = null, nextScanAt = 0, readErrors = 0;
+const SCAN_POLL_MS = 150;
 let prevGray = null; // الفريم السابق لقياس الثبات
 
 /* ⏲️ الشاشة بتقفل نفسها — التابلت ده أصلًا تابلت التقييم.
@@ -258,24 +263,51 @@ setInterval(() => {
 /* 📷 الكاميرا الأمامية — العميلة واقفة قدام التابلت وبتوري تليفونها. */
 async function startCam() {
   if (stream) return true;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false
-    });
-    const v = $('ipVid'); v.srcObject = stream; await v.play().catch(() => {});
-    return true;
-  } catch (e) {
-    // 🔴 الإذن مرفوض أو الكاميرا مشغولة → مبنعلّقش العميلة، بنحوّل
-    //    على الكاشير على طول.
-    $('ipHint').textContent = 'الكاميرا مش متاحة';
-    show('man'); return false;
-  }
+  if (cameraPending) return cameraPending;
+  const generation = scanGeneration;
+  const pending = (async () => {
+    let opened;
+    try {
+      opened = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false
+      });
+      if (generation !== scanGeneration || !cur || curPane !== 'scan') {
+        opened.getTracks().forEach(t => t.stop()); return false;
+      }
+      stream = opened;
+      const track = stream.getVideoTracks()[0];
+      // Autofocus where supported; failure must not block fixed-focus tablets.
+      try {
+        const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.focusMode && caps.focusMode.includes('continuous'))
+          track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+      } catch (e) {}
+      const v = $('ipVid'); v.srcObject = opened; await v.play().catch(() => {});
+      return generation === scanGeneration && stream === opened;
+    } catch (e) {
+      if (opened) opened.getTracks().forEach(t => t.stop());
+      if (generation === scanGeneration) { stream = null; $('ipHint').textContent = 'الكاميرا مش متاحة'; show('man'); }
+      return false;
+    }
+  })();
+  cameraPending = pending;
+  try { return await pending; } finally { if (cameraPending === pending) cameraPending = null; }
 }
 function stopCam() {
+  scanGeneration++; busy = false; cameraPending = null; nextScanAt = 0; readErrors = 0;
   if (loop) { clearInterval(loop); loop = null; }
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  $('ipVid').srcObject = null;
   prevGray = null;
+}
+async function beginScan() {
+  if (!cur) return;
+  show('scan'); const generation = scanGeneration;
+  if (await startCam()) {
+    if (generation !== scanGeneration || curPane !== 'scan') return;
+    if (!loop) loop = setInterval(tick, SCAN_POLL_MS);
+    tick();
+  }
 }
 
 /* 🧊 قياس ثبات الصورة.
@@ -285,7 +317,8 @@ function stopCam() {
 function grayOf(video, w, h) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const x = c.getContext('2d', { willReadFrequently: true });
-  x.drawImage(video, 0, 0, w, h);
+  const r = captureRect(video); if (!r) return null;
+  x.drawImage(video, r.sx, r.sy, r.sw, r.sh, 0, 0, w, h);
   const d = x.getImageData(0, 0, w, h).data, g = new Uint8Array(w * h);
   for (let i = 0, j = 0; i < d.length; i += 4, j++) g[j] = (d[i] * 3 + d[i + 1] * 6 + d[i + 2]) / 10;
   return g;
@@ -300,7 +333,7 @@ function diffScore(a, b) {
    الأصل إن الفريم الخام من الكاميرا **مش** معكوس، وده اللي بنبعته.
    لكن فيه أجهزة (ويب-فيو على بعض التابلتات) بترجّع الفريم معكوس
    فعلًا — وساعتها النص بيوصل Vision مقلوب ومحصلتش قراءة خالص.
-   بدل ما نكتشفها في الفرع، بنكتشفها لوحدنا: ٣ محاولات من غير ما
+   بدل ما نكتشفها في الفرع، بنكتشفها لوحدنا: محاولتين من غير ما
    يتقرا **أي** حقل = نقلب ونكمّل. القلب بيتطبّق على اللقطة
    والعرض مع بعض عشان العميلة تشوف اللي بيتبعت. */
 /* 🔴 v703 (22-09 — «الصورة متشقلبة وبيفضل بنقرا»): القلب كان **بيتحفظ للأبد من أول لقطة فاضية**. أول فريم بيتبعت قبل ما العميلة
@@ -331,29 +364,30 @@ function setFlip(on) {
    بيصغّر الصورة للربع وبيشيل أي نص مش من الإيصال — أسرع وأدق. */
 const INSET = 0.06;   // نفس نسبة .frame في الـCSS
 
+function captureRect(video) {
+  const box = video.getBoundingClientRect();
+  return scanCore.cropRect(video.videoWidth, video.videoHeight, box.width, box.height, INSET);
+}
 function frameJpeg(video) {
-  const w = video.videoWidth, h = video.videoHeight;
-  if (!w || !h) return null;
-  const sx = Math.round(w * INSET), sy = Math.round(h * INSET);
-  const sw = w - sx * 2, sh = h - sy * 2;
-    /* ⚡ 1500 → 1150 و0.84 → 0.76.
-     أبطأ حتة في الدورة مش القراءة — دي أقل من ثانية — لكن **رفع**
-     الصورة من نت الفرع. تصغير الفريم بيقلّل الحجم للنص تقريبًا،
-     والنص على شاشة تليفون لسه واضح تمامًا عند الحجم ده. */
-  const scale = Math.min(1, 1150 / Math.max(sw, sh));
+  const r = captureRect(video); if (!r) return null;
+  const { sx, sy, sw, sh } = r;
+  // Keep small recipient/reference digits at native resolution; crop removes background upload cost.
+  const scale = Math.min(1, 1600 / Math.max(sw, sh));
   const c = document.createElement('canvas');
-  c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+  c.width = Math.max(1, Math.round(sw * scale)); c.height = Math.max(1, Math.round(sh * scale));
   const x = c.getContext('2d', { alpha: false });
   if (flipCapture) { x.translate(c.width, 0); x.scale(-1, 1); }
   x.drawImage(video, sx, sy, sw, sh, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', 0.76).split(',')[1];
+  return c.toDataURL('image/jpeg', 0.88).split(',')[1];
 }
 
 /* 🔢 المربعات بتوري **اللي اتقرا فعلًا** مش اسم الحقل.
    "المبلغ" رمادي مبتقولش حاجة؛ "1600 ≠ 350" بتقول كل حاجة. */
 function chip(el, on, label, val) {
   el.classList.toggle('ok', !!on);
-  el.innerHTML = '<span>' + label + (val ? '<br><b style="font-size:1.7vh">' + val + '</b>' : '') + '</span>';
+  const span = document.createElement('span'); span.textContent = label;
+  if (val) { span.appendChild(document.createElement('br')); const b = document.createElement('b'); b.style.fontSize = '1.7vh'; b.textContent = String(val); span.appendChild(b); }
+  el.replaceChildren(span);
 }
 function paintChecks(ch, d) {
   const seen = (d && d.seenCents && d.seenCents.length)
@@ -367,30 +401,35 @@ function paintChecks(ch, d) {
 }
 
 async function tick() {
-  if (busy || !cur) return;
-  const v = $('ipVid');
-  if (!v.videoWidth) return;
-  const g = grayOf(v, 64, 48);
-  const d = diffScore(prevGray, g);
-  prevGray = g;
-  // ⚠️ الشرط كان صارم (6) فمع إيد بتهتز شوية كان ممكن ياخد ثواني
-  //    قبل ما يبعت أصلًا. رخّيناه، والفريم الأول بيتبعت على طول.
-  if (prevGray && d > 24) { $('ipHint').textContent = 'ثبّتي شوية'; return; }
-  // v703: فريم من غير تفاصيل (حيطة/إيد/لسه مفيش موبايل) = مبنبعتوش — بيضيّع من حصة القراءة اليومية وبيتحسب «مش شايف» غلط
-  { let m = 0; for (let i = 0; i < g.length; i++) m += g[i]; m /= g.length; let v2 = 0; for (let i = 0; i < g.length; i++) v2 += (g[i] - m) * (g[i] - m);
-    if (Math.sqrt(v2 / g.length) < 14) { $('ipHint').textContent = 'قرّبي شاشة الإيصال من الكاميرا'; return; } }
-
-  busy = true;
+  if (!cur || curPane !== 'scan' || !stream || document.hidden) return;
+  const v = $('ipVid'); if (!v.videoWidth || v.readyState < 2) return;
+  const g = grayOf(v, 96, 128); if (!g) return;
+  const previous = prevGray, d = diffScore(previous, g); prevGray = g;
+  // Sample while OCR is in flight so motion compares neighbouring frames, not seconds apart.
+  if (busy || Date.now() < nextScanAt) return;
+  if (previous && d > 24) { $('ipHint').textContent = 'ثبّتي الموبايل لحظة'; return; }
+  const quality = scanCore.quality(g, 96, 128);
+  if (quality.contrast < 14 || quality.edges < 1.5) {
+    $('ipHint').textContent = 'خلّي الإيصال كامل وواضح جوّه الإطار'; return;
+  }
+  const request = { sid: cur.sid, generation: scanGeneration };
+  const active = () => cur && cur.sid === request.sid && scanGeneration === request.generation && curPane === 'scan';
+  busy = request;
   try {
-    const img = frameJpeg(v);
-    if (!img) return;
-    $('ipHint').textContent = 'بنقرا…';
-    const r = (await callScan({ sid: cur.sid, image: img })).data || {};
+    const img = frameJpeg(v); if (!img) return;
+    $('ipHint').textContent = 'بنراجع بيانات الإيصال…';
+    const r = (await callScan({ sid: request.sid, image: img })).data || {};
+    if (!active() || r.stale) return;
+    if (r.error === 'READ_FAILED') {
+      readErrors++; nextScanAt = Date.now() + Math.min(2000, 500 * readErrors);
+      $('ipHint').textContent = r.hint || 'القراءة اتأخرت — بنحاول تاني'; return;
+    }
+    readErrors = 0;
     paintChecks(r.checks, r.detail);
 
     // 👁️ عمى كامل: مفيش ولا حقل اتقرا → غالبًا الصورة مقلوبة
     const ch = r.checks || {};
-    const sawSomething = ch.amount || ch.reference || ch.time || ch.success || ch.beneficiary;
+    const sawSomething = scanCore.hasReading(ch, r.detail);
     if (!sawSomething && !r.ok) {
       blindTries++;
       // v703: لقطتين عمى ورا بعض (مش واحدة) ← نجرّب الاتجاه التاني **من غير ما نحفظه**
@@ -419,37 +458,36 @@ async function tick() {
     $('ipHint').textContent = r.hint
       || (sawSomething ? 'ثبّتي شوية كمان' : 'مش شايف الإيصال — قرّبيه أو اقلبي الكاميرا');
   } catch (e) {
+    if (!active()) return;
     const c = String((e && e.code) || '');
     // خلصت المحاولات أو الطلب اتقفل → الكاشير تكمّل
-    if (c.includes('resource-exhausted') || c.includes('deadline') || c.includes('failed-precondition')) {
+    if (c.includes('resource-exhausted') || c.includes('failed-precondition') || c.includes('not-found')) {
       stopCam(); show('man'); return;
     }
-    $('ipHint').textContent = 'النت بطيء — استني';
-  } finally { busy = false; }
+    readErrors++; nextScanAt = Date.now() + Math.min(2000, 500 * readErrors);
+    $('ipHint').textContent = 'النت بطيء — بنحاول تاني، أو سلّمي الكاشير';
+  } finally { if (busy === request) busy = false; }
 }
 
-$('ipDone').onclick = async () => {
+$('ipDone').onclick = () => {
   if (!cur) return;
-  $('ipDone').disabled = true;
-  try { await callPay({ action: 'ready', sid: cur.sid }); } catch (e) {}
-  $('ipDone').disabled = false;
-  show('scan');
-  if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 550); }
+  const sid = cur.sid;
+  // Start the camera now; the optional ready round-trip must not delay capture.
+  callPay({ action: 'ready', sid }).catch(() => {});
+  beginScan();
 };
 $('ipHelp').onclick = () => { stopCam(); show('man'); };
 // ◀ رجوع للـQR — لو دوست «تم التحويل» قبل ما تحوّل
 $('ipBack').onclick = () => { stopCam(); show('wait'); $('ipDone').disabled = false; };
-$('ipManBack').onclick = () => { blindTries = 0; show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 550); }); };
+$('ipManBack').onclick = () => { blindTries = 0; beginScan(); };
 // زرار على شاشة الـQR بيوضّح للعميلة إن مفيش استعجال
 $('ipWaitBack').onclick = () => { $('ipHint') && ($('ipHint').textContent = ''); };
 /* 🔄 زرار القلب اتشال من الشاشة عن قصد.
    العميلة مش المفروض تفهم يعني إيه "اقلبي الكاميرا" — ده قرار تقني
-   بنستنتجه لوحدنا من أول محاولة عمياء وبيتحفظ للجهاز، فبيحصل مرة
-   واحدة في عمر التابلت وخلاص. */
-$('ipRetry').onclick = async () => {
-  paintChecks(null); blindTries = 0;
-  show('scan');
-  if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 550); }
+   بنجرب الاتجاه التاني بعد محاولتين بدون قراءة، ونحفظه فقط لو قرأ بيانات. */
+$('ipRetry').onclick = () => {
+  stopCam(); paintChecks(null); blindTries = 0; flipTrial = false; flipTested = false;
+  beginScan();
 };
 setFlip(flipCapture);
 
@@ -483,7 +521,7 @@ if (branch) {
     // طلب جديد على نفس التابلت = الشاشة تبدأ من الأول
     if (!cur || cur.sid !== s.sid) {
       cur = { sid: s.sid, seenAt: Date.now() };
-      stopCam(); paintChecks(null, null);
+      stopCam(); curPane = null; paintChecks(null, null);
       blindTries = 0; flipTrial = false; flipTested = false;   // القلب إعداد جهاز — بيفضل، والتجربة بتبدأ من أول مع كل طلب
       flipCapture = localStorage.getItem(FLIP_KEY) === '1'; try { $('ipVid').classList.toggle('flip', flipCapture); } catch (e) {}
       $('ipAmt').innerHTML = (Number(s.amountCents || 0) / 100)
@@ -498,7 +536,11 @@ if (branch) {
       loadQr();
     }
     if (s.status === 'waiting') show('wait');
-    else if (s.status === 'scanning') { if (!stream) { show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 550); }); } paintChecks(s.checks, s.detail); }
+    else if (s.status === 'scanning') {
+      if (!stream && curPane !== 'man' && curPane !== 'wait' && curPane !== 'bad') beginScan();
+      if (curPane === null) beginScan();
+      if (curPane === 'scan') paintChecks(s.checks, s.detail);
+    }
     else if (s.status === 'approved') {
       stopCam(); show('ok');
       const _sid = s.sid; clearTimeout(window._ipOkT);
@@ -512,4 +554,7 @@ if (branch) {
 // 🔌 الصفحة اتقفلت → الكاميرا تطفي فورًا. تابلت في الصالة والكاميرا
 //    شغالة من غير سبب = مشكلة خصوصية مش تفصيلة تقنية.
 window.addEventListener('pagehide', stopCam);
-document.addEventListener('visibilitychange', () => { if (document.hidden) stopCam(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopCam();
+  else if (cur && curPane === 'scan') beginScan();
+});

@@ -117,7 +117,7 @@ t('صورة مقلوبة/فاضية = مؤقت مش نهائي',()=>eq(classify(
 t('نص مقصوص من غير مبلغ = مؤقت',()=>eq(classify('تم التحويل بنجاح zogzog2000@instapay إلى',base),'retry'));
 t('متأخر دقيقتين بس = مؤقت مش نهائي',()=>eq(classify(TO_US,{...base,startedCivilMin:START-7}),'retry'));
 t('الإيصال السليم لسه بيعدّي',()=>eq(classify(TO_US,base),'ok'));
-t('إيصال من غير عبارة النجاح بيعدّي',()=>eq(classify(TO_US.replace('تم التحويل بنجاح',''),base),'ok'));
+t('v707: غياب عبارة النجاح يحتاج لقطة أوضح ولا يعتمد آليًا',()=>eq(classify(TO_US.replace('تم التحويل بنجاح',''),base),'retry'));
 t('سلبي: قيد التنفيذ لسه بيترفض',()=>eq(classify(TO_US.replace('تم التحويل بنجاح','قيد التنفيذ'),base),'fatal'));
 t('سلبي: صورة فاضية لسه مؤقتة مش نهائية',()=>eq(classify('',base),'retry'));
 
@@ -135,12 +135,25 @@ t('رقم محفظة تاني يترفض', () =>
 t('العنوان الأساسي لسه شغال', () => eq(C.inspectReceipt(TO_US, multi).ok, true));
 
 console.log('\n🧩 تجميع الحقول عبر الفريمات (منطق السيرفر)');
-const srv=require('fs').readFileSync('functions/instapay.js','utf8');
-t('الحقل المقروء بيتقفل',()=>{if(!srv.includes('const prevLock = s.locked'))throw Error('مفيش تجميع')});
-t('التجميع مربوط بنفس الرقم المرجعي',()=>{if(!srv.includes('prevLock.reference === v0.reference'))throw Error('مش مربوط')});
-t('رقم مختلف بيمسح المجمّع',()=>{if(!srv.includes('const base = sameReceipt ? prevLock : {}'))throw Error('مبيمسحش')});
-t('إيصال فاشل بيلغي كل حاجة',()=>{if(!srv.includes('if (v0.checks.failed) { locked.success = false'))throw Error('بيجمّع على فاشل')});
-t('الاعتماد محتاج الخمسة',()=>{if(!srv.includes('locked.success && locked.amount && locked.time && locked.beneficiary && !!locked.reference'))throw Error('شرط ناقص')});
+t('الحقول تتجمع لنفس المرجع',()=>{
+  const first=C.mergeReading({},C.inspectReceipt(TO_US.replace('1,600 EGP',''),base));
+  const last=C.mergeReading(first,C.inspectReceipt(TO_US.replace('تم التحويل بنجاح',''),base));
+  eq(last.success&&last.amount&&last.time&&last.beneficiary,true);
+});
+t('مرجع مختلف لا يرث المبلغ',()=>{
+  const first=C.mergeReading({},C.inspectReceipt(TO_US,base));
+  const last=C.mergeReading(first,C.inspectReceipt(TO_US.replace('462046147040','462046147041').replace('1,600 EGP',''),base));
+  eq(last.amount,false);
+});
+t('صورة بلا مرجع لا تضيف دليلًا',()=>eq(Object.keys(C.mergeReading({},C.inspectReceipt('1600 EGP',base))).length,0));
+t('الفشل يمسح الحقول المؤكدة',()=>{
+  const first=C.mergeReading({},C.inspectReceipt(TO_US,base));
+  eq(C.mergeReading(first,C.inspectReceipt(TO_US.replace('تم التحويل بنجاح','فشل التحويل'),base)).success,false);
+});
+t('مبلغ مخالف لا يرث الموافقة السابقة',()=>{
+  const first=C.mergeReading({},C.inspectReceipt(TO_US,base));
+  eq(C.mergeReading(first,C.inspectReceipt(TO_US.replace('1,600','1,800'),base)).amount,false);
+});
 
 console.log('\n===============================');
 console.log('النتيجة: ' + pass + ' ناجح · ' + fail + ' فاشل');
