@@ -7324,6 +7324,9 @@ function getMonthDateRange(d){
    ============================================================ */
 const PAYDAY_FALLBACK = 6;
 function payDayOfMonth(){
+  // v622: لو المالك حدد يوم بداية شهر السلف، آخر يوم في الدورة = اليوم اللي قبله (بداية 7 ⇒ لحد 6)
+  const _sd = advCycleStartDay();
+  if(_sd >= 1) return _sd - 1;          // بداية 1 = الشهر التقويمي (مفيش ترحيل)
   const cd = Number(((typeof window !== 'undefined' && window.advCfg) || {}).closeDay) || 0;
   return cd > 0 ? cd : PAYDAY_FALLBACK;
 }
@@ -9143,6 +9146,7 @@ try{
       //    غلط و7→11 مفتوحة غلط)، والسقف الشهري اتحسب بالشهر التقويمي
       //    بدل دورة القبض، ودورة كل سلفة جديدة (cycleKey) اتسجّلت غلط.
       window.advCfg = { maxPerMonth: Number(d.maxPerMonth)||0, openDay: Number(d.openDay)||0, closeDay: Number(d.closeDay)||0,
+                        cycleStartDay: Number(d.cycleStartDay)||0,   // v622: يوم بداية شهر السلف
                         ordersCountInCap: d.ordersCountInCap !== false };   // v619: الافتراضي = زي ما كان (المشتريات محسوبة)
       try{ const _oc = document.getElementById('advOrdersInCapInput'); if(_oc) _oc.checked = window.advCfg.ordersCountInCap; }catch(_){}
       try{ if(typeof renderSalaryPanel === 'function') renderSalaryPanel(); }catch(_){}
@@ -9171,10 +9175,26 @@ function advWindowOpen(openDay, now, closeDay){
 // قرار المالك: سلفة يوم 3 أغسطس تتحسب على سقف **يوليو** لأنها من نافذته.
 // من غير ده، الموظفة تاخد سقف يوليو كامل يوم 30، وسقف أغسطس كامل يوم 3 —
 // ضعف السقف في 4 أيام.
-function advCycleKey(now, openDay, closeDay){
+/* 📅 v622 — **يوم بداية شهر السلف** (إعداد صريح من المالك: `advances_cfg.cycleStartDay`).
+   مثال: القبض يوم 6 ← شهر السلف يبدأ يوم 7: سلفة 2 سبتمبر = شهر أغسطس، سلفة 7 سبتمبر = شهر سبتمبر.
+   نفس الرقم بيحكم **سقف السلف** و**خصمها من المرتب** — رقم واحد مش رقمين بيختلفوا.
+   0 = مش متظبط ← السلوك القديم زي ما هو بالظبط. */
+function advCycleStartDay(cfg){
+  const c = cfg || (typeof window !== 'undefined' && window.advCfg) || {};
+  const sd = Number(c.cycleStartDay) || 0;
+  return (sd >= 1 && sd <= 28) ? sd : 0;
+}
+window.advCycleStartDay = advCycleStartDay;
+function advCycleKey(now, openDay, closeDay, startDay){
   const d = cai(now != null ? now : Date.now());       // 🕒 بتوقيت القاهرة
   const od = Number(openDay) || 0, cd = Number(closeDay) || 0;
+  const sd = (startDay != null) ? (Number(startDay) || 0) : advCycleStartDay();
   let y = d.getFullYear(), m = d.getMonth();   // 0-based
+  if(sd >= 1){
+    // v622: قبل يوم البداية = لسه في شهر السلف اللي فات
+    if(d.getDate() < sd){ m -= 1; if(m < 0){ m = 11; y -= 1; } }
+    return y + '-' + String(m + 1).padStart(2, '0');
+  }
   // في الأيام اللي قبل يوم الفتح (امتداد النافذة السابقة) بنرجع شهر
   if(od && cd && od > cd && d.getDate() <= cd){
     m -= 1;
@@ -9184,20 +9204,21 @@ function advCycleKey(now, openDay, closeDay){
 }
 window.advCycleKey = advCycleKey;
 // دورة السلفة الواحدة — مصدر واحد للقاعدة (المجموع والتفصيلة بيستخدموه)
-function advKeyOf(a, openDay, closeDay){
-  let key = a && a.cycleKey;
-  if(!key){
-    const ds = String((a && a.date) || '');
-    if(ds.length >= 10 && openDay){
-      const [yy,mm,dd] = ds.slice(0,10).split('-').map(Number);
-      key = advCycleKey(caiStamp(yy, mm, dd, 12, 0, 0, 0), openDay, closeDay);
-    } else key = ds.slice(0,7);
+/* v622: **تاريخ السلفة هو المرجع** — زي المرتب بالظبط (`advPayCycleOf`).
+   🔴 كان `cycleKey` المحفوظ بيكسب: سلف اتسجلت قبل ما الإعدادات تتظبط (أو من مسار المالك)
+      اتحفظت على شهر غلط، فكانت بتتخصم من مرتب شهر وبتاكل سقف الشهر اللي بعده
+      («⚠️ متسجّلة على شهر غلط» — سقف 3000 يخلص وهي واخدة أقل). */
+function advKeyOf(a, openDay, closeDay, startDay){
+  const ds = String((a && a.date) || '');
+  if(ds.length >= 10){
+    const [yy,mm,dd] = ds.slice(0,10).split('-').map(Number);
+    if([yy,mm,dd].every(n => !isNaN(n))) return advCycleKey(caiStamp(yy, mm, dd, 12, 0, 0, 0), openDay, closeDay, startDay);
   }
-  return key;
+  return (a && a.cycleKey) || ds.slice(0,7);
 }
 window.advKeyOf = advKeyOf;
 // مجموع سلف الموظف الشهر ده
-function advMonthTotal(advances, empId, monthKey, openDay, closeDay){
+function advMonthTotal(advances, empId, monthKey, openDay, closeDay, startDay){
   return (advances||[]).reduce((sum,a)=>{
     if(!a || a.employeeId !== empId) return sum;
     // 🗓️ المقارنة بشهر **النافذة** مش التاريخ التقويمي.
@@ -9206,7 +9227,7 @@ function advMonthTotal(advances, empId, monthKey, openDay, closeDay){
     //    تقدر تاخد سقفين في 4 أيام.
     // بنستخدم cycleKey المحفوظ لو موجود (السلف الجديدة)، وإلا بنحسبه من
     // التاريخ (السلف القديمة — توافق).
-    if(advKeyOf(a, openDay, closeDay) !== monthKey) return sum;
+    if(advKeyOf(a, openDay, closeDay, startDay) !== monthKey) return sum;
     return sum + (Number(a.amount)||0);
   }, 0);
 }
@@ -9214,18 +9235,17 @@ function advMonthTotal(advances, empId, monthKey, openDay, closeDay){
 //    بلاغ المالك 21-09: موظف «ماخدش ولا سلفة» واتقاله «عدّيت الليميت 3000». السبب: أوردرات شراء الموظف على المرتب
 //    بتتكتب في `sales_advances` (`source:'staff_order'`، والمرفوض `staff_order_reject` بالسعر الكامل) — و`advMonthTotal`
 //    بيجمع **كل** اللي في المجموعة من غير ما يبص على المصدر. فمشترياته كلت السقف، والرسالة كانت بتقول «واخد X» من غير توضيح.
-function advMonthBreakdown(advances, empId, monthKey, openDay, closeDay){
+function advMonthBreakdown(advances, empId, monthKey, openDay, closeDay, startDay){
   let cash = 0, orders = 0; const items = [];
   (advances||[]).forEach(a=>{
     if(!a || a.employeeId !== empId) return;
-    if(advKeyOf(a, openDay, closeDay) !== monthKey) return;
+    if(advKeyOf(a, openDay, closeDay, startDay) !== monthKey) return;
     const amt = Number(a.amount)||0;
     const isOrder = String(a.source||'').indexOf('staff_order') === 0;
     if(isOrder) orders += amt; else cash += amt;
-    // 🔎 الدورة المحفوظة vs الدورة اللي تاريخ السلفة نفسه بيقولها — لو مختلفين، السلفة متسجّلة على شهر غلط
-    const byDate = advKeyOf({ date: a.date }, openDay, closeDay);
+    // v622: الشهر بقى بيتحسب من التاريخ دايمًا — مفيش «شهر غلط» يتعلّم عليه تاني
     items.push({ date: String(a.date||'').slice(0,10), amount: amt, kind: isOrder ? 'order' : (a.manual ? 'manual' : 'cash'),
-                 wrongCycle: !!(a.cycleKey && byDate && String(a.date||'').length >= 10 && a.cycleKey !== byDate) });
+                 wrongCycle: false });
   });
   cash = Math.round(cash*100)/100; orders = Math.round(orders*100)/100;
   items.sort((x,y)=> x.date < y.date ? -1 : 1);
@@ -9255,9 +9275,9 @@ window.advDiag = function(nameOrId){
   const cfg = window.advCfg || {}, all = window.allAdvances || [];
   const q = String(nameOrId||'').trim();
   const ids = Array.from(new Set(all.filter(a => a && (a.employeeId === q || String(a.employeeName||'').indexOf(q) >= 0)).map(a => a.employeeId)));
-  const mk = advCycleKey(new Date(), cfg.openDay, cfg.closeDay);
-  console.log('دورة السلف الحالية:', mk, '| السقف:', cfg.maxPerMonth, '| الإعدادات محمّلة:', !!window.advCfgLoaded, '| موظفين مطابقين:', ids.length);
-  ids.forEach(id => { const bd = advMonthBreakdown(all, id, mk, cfg.openDay, cfg.closeDay);
+  const mk = advCycleKey(new Date(), cfg.openDay, cfg.closeDay, advCycleStartDay(cfg));
+  console.log('دورة السلف الحالية:', mk, '| تبدأ يوم:', advCycleStartDay(cfg) || '(قديم)', '| السقف:', cfg.maxPerMonth, '| الإعدادات محمّلة:', !!window.advCfgLoaded, '| موظفين مطابقين:', ids.length);
+  ids.forEach(id => { const bd = advMonthBreakdown(all, id, mk, cfg.openDay, cfg.closeDay, advCycleStartDay(cfg));
     console.log('—', id, '| كاش', bd.cash, '| مشتريات', bd.orders); console.table(bd.items); });
   return ids.length;
 };
@@ -9273,8 +9293,9 @@ function advCheck(cfg, advances, empId, amount, now){
     // لأي سلفة بين 12 و2/3 الفجر أول الشهر (مصر UTC+2/+3) فالسقف بيتحسب غلط
     // 🗓️ وبيتحسب بشهر **النافذة** مش التقويمي (قرار المالك)
     const _d = now || new Date();
-    const mk = advCycleKey(_d, cfg.openDay, cfg.closeDay);
-    const bd = advMonthBreakdown(advances, empId, mk, cfg.openDay, cfg.closeDay);
+    const _sd = advCycleStartDay(cfg);
+    const mk = advCycleKey(_d, cfg.openDay, cfg.closeDay, _sd);
+    const bd = advMonthBreakdown(advances, empId, mk, cfg.openDay, cfg.closeDay, _sd);
     const countsOrders = cfg.ordersCountInCap !== false;          // الافتراضي: المشتريات محسوبة (السلوك القديم)
     const used = countsOrders ? bd.total : bd.cash;
     const left = Math.max(0, Math.round((cfg.maxPerMonth - used)*100)/100);
@@ -9370,7 +9391,7 @@ $('#advConfirmBtn')?.addEventListener('click', async ()=>{
       amount, date: todayStr(), ts: Date.now(),
       // 🗓️ شهر النافذة وقت التسجيل — بيتحفظ عشان الحسبة متتغيرش لو
       //    الإعدادات اتعدّلت بعدين
-      cycleKey: advCycleKey(new Date(), (window.advCfg||{}).openDay, (window.advCfg||{}).closeDay)
+      cycleKey: advCycleKey(new Date(), (window.advCfg||{}).openDay, (window.advCfg||{}).closeDay, advCycleStartDay(window.advCfg))
     });
     $('#advanceOverlay').classList.remove('show');
     alert(`تم تسجيل سلفة ${amount} ج.م لـ ${advSelectedEmp.name} ✅`);
@@ -9754,7 +9775,8 @@ function renderAdvancesLog(){
     try{
       const cdv = Math.max(0, Math.min(28, Number((document.getElementById('advCloseDayInput')||{}).value) || 0));
       const _oc = document.getElementById('advOrdersInCapInput');
-      await setDoc(doc(db,'pos_test_settings','advances_cfg'), { maxPerMonth: mx, openDay: od, closeDay: cdv, ordersCountInCap: _oc ? !!_oc.checked : true }, { merge:true });
+      const sdv = Math.max(0, Math.min(28, Number((document.getElementById('advCycleStartInput')||{}).value) || 0));
+      await setDoc(doc(db,'pos_test_settings','advances_cfg'), { maxPerMonth: mx, openDay: od, closeDay: cdv, cycleStartDay: sdv, ordersCountInCap: _oc ? !!_oc.checked : true }, { merge:true });
       errB.textContent = ''; advBtn.textContent = 'اتحفظ ✅';
     }catch(e2){ errB.textContent = 'خطأ: ' + (e2 && e2.message ? e2.message : e2); advBtn.textContent = 'خطأ'; }
     setTimeout(()=>{ advBtn.textContent = orig; advBtn.disabled = false; }, 1800);
@@ -9767,6 +9789,7 @@ function renderAdvancesLog(){
         const a = document.getElementById('advMaxInput'), b = document.getElementById('advOpenDayInput');
         const c2 = document.getElementById('advCloseDayInput');
         if(c2 && d.closeDay) c2.value = d.closeDay;
+        const c3 = document.getElementById('advCycleStartInput'); if(c3 && d.cycleStartDay) c3.value = d.cycleStartDay;
         if(a && d.maxPerMonth) a.value = d.maxPerMonth;
         if(b && d.openDay) b.value = d.openDay;
         const _oc = document.getElementById('advOrdersInCapInput'); if(_oc) _oc.checked = d.ordersCountInCap !== false;

@@ -904,12 +904,14 @@
       <h3>💵 إعدادات السلف</h3>
       <p style="color:var(--sub); font-size:12px; margin:-6px 0 12px;">
         سقف السلف لكل موظف في الشهر، وأول يوم تفتح فيه (مثلاً بعد القبض يوم 6، تفتح من يوم 15).
-        سيب السقف 0 يعني من غير حد، ويوم الفتح 0 يعني مفتوحة طول الشهر.
+        سيب السقف 0 يعني من غير حد، ويوم الفتح 0 يعني مفتوحة طول الشهر.<br>
+        <b>شهر السلف يبدأ يوم:</b> لو القبض يوم 6 اكتب 7 — سلفة يوم 2 سبتمبر تتحسب على شهر أغسطس (سقفه وخصمه من مرتبه)، وسلفة يوم 7 تبدأ شهر سبتمبر. نفس الرقم بيتطبق على السقف وعلى الخصم من المرتب.
       </p>
       <div class="add-form" style="flex-wrap:wrap;">
         <input type="number" min="0" id="advMaxInput" placeholder="سقف الشهر للموظف (ج.م)" style="min-width:190px;">
         <input type="number" min="0" max="28" id="advOpenDayInput" placeholder="تفتح من يوم (1-28)" style="min-width:160px;">
         <input type="number" min="0" max="28" id="advCloseDayInput" placeholder="وتقفل يوم (1-28)" style="min-width:160px;">
+        <input type="number" min="0" max="28" id="advCycleStartInput" placeholder="شهر السلف يبدأ يوم (1-28)" style="min-width:190px;">
         <button id="saveAdvCfgBtn">حفظ إعدادات السلف</button>
       </div>
       <label style="display:flex; align-items:flex-start; gap:10px; margin:12px 0 4px; font-size:13px; line-height:1.7; cursor:pointer;">
@@ -1274,7 +1276,7 @@
 
 </div>
 
-<script type="module" src="sales-app.js?v=621"></script>
+<script type="module" src="sales-app.js?v=622"></script>
 <script src="sales-ui.js?v=559"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
