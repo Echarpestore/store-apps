@@ -410,7 +410,10 @@ function renderShopAdmin(){
     + '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">'
     + (shopData.items.map(function(it){
         const p = (allInventory || []).find(function(x){ return String(x.barcode) === String(it.barcode); });
-        const total = p ? Object.keys(p.qtyByBranch || {}).reduce(function(a, b){ return a + (Number(p.qtyByBranch[b]) || 0); }, 0) : null;
+        // ⚠️ البضاعة اللي في الطريق أو في المخزن مش متاحة للبيع أونلاين — مبتتحسبش هنا
+        const total = p ? ((typeof sellableTotal === 'function')
+          ? sellableTotal(p.qtyByBranch)
+          : Object.keys(p.qtyByBranch || {}).reduce(function(a, b){ return a + (Number(p.qtyByBranch[b]) || 0); }, 0)) : null;
         /* ⚠️ التحذير ده هو اللي بيمنع أكتر غلطة متوقعة: عدد أونلاين
            أكبر من المخزون الحقيقي = وعد مش هنقدر نوفيه. */
         const over = (total !== null && Number(it.onlineQty) > total);

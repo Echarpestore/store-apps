@@ -344,7 +344,8 @@ async function goToBranchSummary(){
     _bsSalesRaw = snap.docs.map(d=> d.data()).filter(s=> !s.reversed);
     // الفروع المتاحة (من المخزون + المبيعات) — ثابتة مش متأثرة بالتاريخ
     const brset = new Set();
-    allInventory.forEach(p=>{ if(p.qtyByBranch) Object.keys(p.qtyByBranch).forEach(b=> brset.add(b)); });
+    // ⚠️ «في الطريق» و«المخزن» أماكن مش فروع — مايبانوش في فلتر الفروع
+    allInventory.forEach(p=>{ if(p.qtyByBranch) (typeof realBranchesOf==='function' ? realBranchesOf(p.qtyByBranch) : Object.keys(p.qtyByBranch)).forEach(b=> brset.add(b)); });
     _bsSalesRaw.forEach(s=>{ if(s.branch) brset.add(s.branch); });
     _bsBranches = [...brset].sort((a,b)=> a.localeCompare(b,'ar'));
     document.querySelectorAll('.bs-range-btn').forEach(b=> b.classList.toggle('active', b.dataset.bsrange === currentBSRange));

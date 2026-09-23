@@ -31,7 +31,9 @@ function fakeDb(){
       set: async (d, o) => { store[name][id] = (o && o.merge) ? Object.assign({}, store[name][id], d) : d; applyUpdate(store[name][id], d); },
       update: async (d) => {
         if(failUpdates[name] > 0){ failUpdates[name]--; throw new Error('حصل خطأ في الشبكة'); }
-        store[name][id] = store[name][id] || {}; applyUpdate(store[name][id], d);
+        // زي Firestore بالظبط: update على مستند مش موجود بترمي
+        if(!store[name][id]) throw new Error('No document to update: ' + name + '/' + id);
+        applyUpdate(store[name][id], d);
       }
     }),
     where: () => ({ where: function(){ return this; }, limit: () => ({ get: async () => ({ empty: true, docs: [] }) }),
@@ -55,7 +57,10 @@ function fakeDb(){
         update: (ref, d) => writes.push(() => ref.update(d))
       };
       const out = await fn(tx);
-      for(const w of writes) await w();
+      // ذرية زي Firestore: لو أي كتابة وقعت، كل حاجة بترجع زي ما كانت
+      const backup = JSON.parse(JSON.stringify(store));
+      try{ for(const w of writes) await w(); }
+      catch(e){ Object.keys(store).forEach(k => { store[k] = backup[k]; }); throw e; }
       return out;
     }
   };
@@ -67,7 +72,8 @@ function fakeDb(){
     c.doc = (id) => { const r = origDoc(id); r._colName = name; return r; };
     return c;
   };
-  return { db, store, INC, setOffline: (v) => { offline = v; }, failNextUpdate: (c, n) => { failUpdates[c] = n; }, txCount: () => txRuns };
+  const seed = (id, map) => { store.pos_test_inventory[id] = { name: 'طرحة', barcode: '111', qtyByBranch: map || {} }; };
+  return { db, store, INC, seed, setOffline: (v) => { offline = v; }, failNextUpdate: (c, n) => { failUpdates[c] = n; }, txCount: () => txRuns };
 }
 
 /* ---------- تحميل الكود الحقيقي في بيئة POS وهمية ---------- */
@@ -104,6 +110,7 @@ const LINE = (q) => [{ itemId: 'it1', name: 'طرحة سودا', barcode: '111',
   console.log('\n📦 طبقة الحركة');
   await t('الحركة بتخصم من مكان وتزوّد التاني وبتسيب سطر', async () => {
     const { env, api } = loadPos(['pos/stock-move.js']);
+    env.seed('it1', { 'El Rehab': 0 });
     await api.stockApply({ docType: 'transfer', docId: 'TR1', phase: 'out', reason: 'تحويل', lines: LINE(10) });
     const inv = env.store.pos_test_inventory.it1.qtyByBranch;
     ok(inv['El Rehab'] === -10 && inv['Madinaty'] === 10, JSON.stringify(inv));
@@ -112,18 +119,21 @@ const LINE = (q) => [{ itemId: 'it1', name: 'طرحة سودا', barcode: '111',
   });
   await t('🔴 نفس النداء 5 مرات = خصم واحد', async () => {
     const { env, api } = loadPos(['pos/stock-move.js']);
+    env.seed('it1', { 'El Rehab': 0 });
     for(let i = 0; i < 5; i++) await api.stockApply({ docType: 'transfer', docId: 'TR2', phase: 'out', lines: LINE(10) });
     ok(env.store.pos_test_inventory.it1.qtyByBranch['El Rehab'] === -10,
        'اتخصم ' + env.store.pos_test_inventory.it1.qtyByBranch['El Rehab']);
   });
   await t('🔴 النداء المكرر بيرجّع repeat مش خطأ', async () => {
-    const { api } = loadPos(['pos/stock-move.js']);
+    const { env, api } = loadPos(['pos/stock-move.js']);
+    env.seed('it1', { 'El Rehab': 0 });
     await api.stockApply({ docType: 'x', docId: 'D1', lines: LINE(3) });
     const r = await api.stockApply({ docType: 'x', docId: 'D1', lines: LINE(3) });
     ok(r.ok && r.repeat === true, JSON.stringify(r));
   });
   await t('مرحلتين مختلفتين على نفس الإذن = حركتين', async () => {
     const { env, api } = loadPos(['pos/stock-move.js']);
+    env.seed('it1', { 'El Rehab': 0 });
     await api.stockApply({ docType: 'transfer', docId: 'TR3', phase: 'out', lines: LINE(4) });
     await api.stockApply({ docType: 'transfer', docId: 'TR3', phase: 'in',
       lines: [{ itemId: 'it1', qty: 4, from: 'في الطريق', to: 'Madinaty' }] });
@@ -168,6 +178,7 @@ const LINE = (q) => [{ itemId: 'it1', name: 'طرحة سودا', barcode: '111',
   }
   await t('🔴 الإرسال وقع بعد الخصم ← إعادة المحاولة متخصمش تاني', async () => {
     const L = transferEnv();
+    L.env.seed('it1', { 'El Rehab': 0 });
     L.el('trDestSel').value = 'Madinaty';
     L.api._setCart([{ id: 'it1', name: 'طرحة', barcode: '111', qty: 100 }], { id: 'c1', name: 'منى' });
     L.env.failNextUpdate('pos_test_transfers', 1);       // الشبكة بتقطع بعد الخصم
@@ -185,6 +196,7 @@ const LINE = (q) => [{ itemId: 'it1', name: 'طرحة سودا', barcode: '111',
   });
   await t('🔴 الاستلام: 98 من 100 ← 98 بس تدخل الفرع والفرق يفضل مفتوح', async () => {
     const L = transferEnv();
+    L.env.seed('it1', { 'El Rehab': 0 });
     L.el('trDestSel').value = 'Madinaty';
     L.api._setCart([{ id: 'it1', name: 'طرحة', barcode: '111', qty: 100 }], { id: 'c1', name: 'منى' });
     await L.api.sendTransfer();
@@ -212,7 +224,7 @@ const LINE = (q) => [{ itemId: 'it1', name: 'طرحة سودا', barcode: '111',
     const src = rd('pos/transfers.js');
     const i = src.indexOf('async function confirmTransfer');
     const body = src.slice(i, i + 9000);
-    ok(/from: IN_TRANSIT, to: t\.toBranch/.test(body), 'الاستلام مش جاي من «في الطريق»');
+    ok(/from: cameFromTransit \? IN_TRANSIT : null, to: t\.toBranch/.test(body), 'الاستلام مش جاي من «في الطريق»');
     ok(!/tx\.update\(db\.collection\(TEST_INVENTORY\)/.test(body), 'لسه بيكتب على المخزون جوّه المعاملة = خصم مزدوج محتمل');
     ok(/openDiffStatus/.test(body), 'الفرق مش بيتسجل كبند مفتوح');
   });
@@ -226,6 +238,54 @@ const LINE = (q) => [{ itemId: 'it1', name: 'طرحة سودا', barcode: '111',
     ok(idx.indexOf('stock-move.js') < idx.indexOf('transfers.js'), 'الترتيب غلط — transfers محتاجه قبله');
     const c = rd('pos/sw.js').match(/CACHE_NAME = 'pos-shell-v(\d+)'/);
     ok(c && Number(c[1]) >= 731, 'الكاش ماترفعش');
+  });
+
+  console.log('\n🛡️ مايوقّفش حاجة شغالة');
+  await t('🔴 صنف مش موجود: الحركة كلها بتقع وماتكتبش نص حركة', async () => {
+    const { env, api } = loadPos(['pos/stock-move.js']);
+    env.store.pos_test_inventory.itA = { qtyByBranch: { 'El Rehab': 20 } };
+    let msg = '';
+    try{
+      await api.stockApply({ docType: 'x', docId: 'D7', lines: [
+        { itemId: 'itA', qty: 5, from: 'El Rehab', to: 'Madinaty' },
+        { itemId: 'itGHOST', qty: 5, from: 'El Rehab', to: 'Madinaty' }] });
+    }catch(e){ msg = e.message; }
+    ok(/مش موجود/.test(msg), 'الرسالة: ' + msg);
+    ok(env.store.pos_test_inventory.itA.qtyByBranch['El Rehab'] === 20, 'الصنف السليم اتغيّر رغم فشل الحركة');
+    ok(!env.store.pos_test_inventory.itGHOST, 'اتعمل مستند شبح');
+    ok(!Object.keys(env.store.pos_stock_moves).length, 'اتسجلت حركة نص');
+  });
+  await t('🔴 «في الطريق» و«المخزن» مش فروع — مايبانوش في قوايم الفروع', async () => {
+    const { api } = loadPos(['pos/stock-move.js']);
+    ok(api.isVirtualPlace ? true : true);
+    const { realBranchesOf, sellableTotal } = loadPos(['pos/stock-move.js']).win;
+    const map = { 'El Rehab': 5, 'Madinaty': 3, 'في الطريق': 100, 'المخزن': 50 };
+    ok(JSON.stringify(realBranchesOf(map)) === JSON.stringify(['El Rehab', 'Madinaty']), JSON.stringify(realBranchesOf(map)));
+    ok(sellableTotal(map) === 8, 'المتاح للبيع = ' + sellableTotal(map));
+  });
+  await t('🔴 المتاح أونلاين مبيحسبش اللي في الطريق', () => {
+    ok(/sellableTotal\(p\.qtyByBranch\)/.test(rd('pos/shop-admin.js')), 'shop-admin لسه بيجمع كل الأماكن');
+  });
+  await t('🔴 فلتر فروع التقارير والاستيراد نضيف', () => {
+    ok(/realBranchesOf\(p\.qtyByBranch\)/.test(rd('pos/pos-admin.js')), 'pos-admin');
+    ok(/isVirtualPlace\(b\)/.test(rd('pos/import.js')), 'import');
+  });
+  await t('🔴 تحويلة قديمة (قبل التحديث) متخليش «في الطريق» بالسالب', async () => {
+    const L = transferEnv();
+    // مستند قديم: مفيش `code` ومفيش حركة خروج مسجلة
+    L.env.store.pos_test_transfers.OLD1 = { id: 'OLD1', fromBranch: 'El Rehab', toBranch: 'Madinaty',
+      status: 'in_transit', items: [{ id: 'it1', name: 'طرحة', qty: 10 }] };
+    const src = rd('pos/transfers.js');
+    ok(/cameFromTransit = !!t\.code/.test(src), 'مفيش حماية للتحويلات القديمة');
+    ok(/from: cameFromTransit \? IN_TRANSIT : null/.test(src), 'الاستلام القديم لسه بيخصم من الطريق');
+  });
+  await t('🔴 الرولز بتسمح بسجل الحركة ومبتسمحش بتعديله', () => {
+    const r = rd('security/firestore-phase2.rules');
+    const i = r.indexOf('match /pos_stock_moves/');
+    ok(i > 0, 'المجموعة مش في الرولز — كل التحويلات هتترفض');
+    const block = r.slice(i, i + 200);
+    ok(/allow read, create: if isStaff\(\)/.test(block), 'الكتابة مقفولة');
+    ok(/allow update, delete: if false/.test(block), 'السجل قابل للتعديل');
   });
 
   console.log(`\nالنتيجة: ${P} ناجح · ${F} فاشل`);

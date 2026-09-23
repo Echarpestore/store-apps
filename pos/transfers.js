@@ -582,9 +582,13 @@ async function confirmTransfer(id, confirmer){
        قبل تغيير الحالة. لو التغيير وقع، إعادة التأكيد بتعيد النداء والحركة
        **مبتتعملش تاني** — المعرّف من المستند. والفرق بيفضل في «في الطريق»
        لحد ما يتحسم، مش بيختفي. */
+    /* ⚠️ انتقالي: التحويلات اللي اتبعتت **قبل** التحديث اتخصمت من الفرع على طول
+       (مكانش فيه «في الطريق»). لو استلمناها بخصم من «في الطريق» هيبقى بالسالب
+       على الفاضي. الإذن الجديد بس هو اللي فيه `code`. */
+    const cameFromTransit = !!t.code;
     const gotLines = confirmed.filter(it=> it.confirmedQty > 0).map(it=> ({
       itemId: it.id, name: it.name, barcode: it.barcode,
-      qty: it.confirmedQty, from: IN_TRANSIT, to: t.toBranch }));
+      qty: it.confirmedQty, from: cameFromTransit ? IN_TRANSIT : null, to: t.toBranch }));
     if(gotLines.length) await stockApply({
       docType: 'transfer', docId: id, phase: 'in',
       reason: 'استلام تحويلة في ' + t.toBranch, lines: gotLines });

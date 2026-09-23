@@ -65,7 +65,9 @@ async function stockApply(o){
         const upd = {};
         if(l.from) upd['qtyByBranch.' + l.from] = inc(-Math.abs(Number(l.qty)));
         if(l.to)   upd['qtyByBranch.' + l.to]   = inc(Math.abs(Number(l.qty)));
-        tx.set(iref, upd, { merge: true });
+        /* ⚠️ update مش set: لو معرّف الصنف مش موجود (صنف اتمسح أو اتدمج) المعاملة كلها
+           بتقع وماتكتبش حاجة. الـset كان هيخلق مستند شبح فيه كمية من غير اسم ولا باركود. */
+        tx.update(iref, upd);
       });
 
       tx.set(ref, {
@@ -87,10 +89,21 @@ async function stockApply(o){
   }catch(e){
     // معاملة من غير نت بترمي — الرسالة لازم تقول السبب الحقيقي للكاشير
     const msg = String((e && e.message) || e);
+    if(/no document to update|not-found|NOT_FOUND/i.test(msg))
+      throw new Error('صنف مش موجود في المخزون — الحركة **ماتمتش**');
     if(/offline|unavailable|network|failed to get document/i.test(msg))
       throw new Error('محتاج نت عشان تتحرك البضاعة — الحركة **ماتمتش**');
     throw e;
   }
+}
+
+/* 🚫 أماكن مش فروع: مبتظهرش في قوايم الفروع ومبتتحسبش كبضاعة متاحة للبيع.
+   من غير ده كان «في الطريق» هيبان كأنه فرع جديد في الإعدادات والتقارير،
+   وكميته هتتحسب ضمن المتاح أونلاين. */
+function isVirtualPlace(p){ return p === WAREHOUSE || p === IN_TRANSIT; }
+function realBranchesOf(map){ return Object.keys(map || {}).filter(b => b && !isVirtualPlace(b)); }
+function sellableTotal(map){
+  return realBranchesOf(map).reduce((a, b) => a + (Number((map || {})[b]) || 0), 0);
 }
 
 /* 📜 سجل حركة صنف واحد — الأحدث الأول */
@@ -107,5 +120,8 @@ window.WAREHOUSE = WAREHOUSE;
 window.IN_TRANSIT = IN_TRANSIT;
 window.stockMoveId = stockMoveId;
 window.isStockPlace = isStockPlace;
+window.isVirtualPlace = isVirtualPlace;
+window.realBranchesOf = realBranchesOf;
+window.sellableTotal = sellableTotal;
 window.stockApply = stockApply;
 window.stockHistory = stockHistory;

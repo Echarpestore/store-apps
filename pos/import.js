@@ -758,7 +758,10 @@ function _branchReplaceKnownBranches(items, supplied, branch){
     (Array.isArray(it && it.branches) ? it.branches : []).forEach(function(b){
       if(b && b !== IMPORT_EXCLUDED_TAG && b !== '(مدموج)') seen[String(b)] = 1;
     });
-    Object.keys((it && it.qtyByBranch) || {}).forEach(function(b){ if(b) seen[String(b)] = 1; });
+    // ⚠️ «في الطريق»/«المخزن» مايدخلوش قوايم الفروع في الاستيراد
+    Object.keys((it && it.qtyByBranch) || {}).forEach(function(b){
+      if(b && !(typeof isVirtualPlace === 'function' && isVirtualPlace(b))) seen[String(b)] = 1;
+    });
   });
   if(branch) seen[String(branch)] = 1;
   return Object.keys(seen);
