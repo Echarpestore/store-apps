@@ -122,17 +122,17 @@ const retLine = (extra) => Object.assign({ id:'p1', name:'طرحة', barcode:'11
   }
   const others = ['store-apps-shell-v621', 'echarpe-office-v688', 'loyalty-shell-v699'];
   await t('🔴 تابلت الفرع مبيمسحش كاش POS/الحضور/المكتب', async () => {
-    const s = await activate('feedback/sw.js', ['pos-shell-v731', ...others, 'store-apps-shell-v703']);
-    ok(s.has('pos-shell-v731') && others.every(n => s.has(n)), 'اتمسح: ' + ['pos-shell-v731', ...others].filter(n => !s.has(n)));
+    const s = await activate('feedback/sw.js', ['pos-shell-v732', ...others, 'store-apps-shell-v703']);
+    ok(s.has('pos-shell-v732') && others.every(n => s.has(n)), 'اتمسح: ' + ['pos-shell-v732', ...others].filter(n => !s.has(n)));
     ok(!s.has('store-apps-shell-v703'), 'كاش التابلت القديم ماتمسحش');
   });
   await t('🔴 POS بيمسح كاشاته القديمة بس', async () => {
-    const s = await activate('pos/sw.js', ['pos-shell-v730', 'pos-shell-v731', ...others, 'feedback-shell-v706']);
-    ok(!s.has('pos-shell-v730'), 'كاش POS القديم فضل');
-    ok(s.has('pos-shell-v731') && s.has('feedback-shell-v706') && others.every(n => s.has(n)), 'مسح كاش تطبيق تاني');
+    const s = await activate('pos/sw.js', ['pos-shell-v731', 'pos-shell-v732', ...others, 'feedback-shell-v706']);
+    ok(!s.has('pos-shell-v731'), 'كاش POS القديم فضل');
+    ok(s.has('pos-shell-v732') && s.has('feedback-shell-v706') && others.every(n => s.has(n)), 'مسح كاش تطبيق تاني');
   });
-  await t('الإصدارات اترفعت: POS ≥ v731 · التابلت ≥ v706', () => {
-    ok(swAtLeast(rd('pos/sw.js'), 731) && swAtLeast(rd('feedback/sw.js'), 706));
+  await t('الإصدارات اترفعت: POS ≥ v732 · التابلت ≥ v706', () => {
+    ok(swAtLeast(rd('pos/sw.js'), 732) && swAtLeast(rd('feedback/sw.js'), 706));
   });
 
   console.log('\n🔐 F10 — فشل قراية إعداد الـOTP ميلغيش الكود');

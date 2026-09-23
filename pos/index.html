@@ -1197,6 +1197,7 @@ body.on-dashboard .badge-test{ display:block; }
       <button onclick="openHeldModal()">⏸️ فواتير معلّقة <span id="heldCountLabel" style="display:block; font-size:10px; font-weight:400; opacity:.8;">0 فاتورة</span></button>
       <button class="secondary" onclick="goToInventory()">📦 قائمة الأصناف</button>
       <button class="secondary" onclick="goToTransfers()">🚚 التحويلات</button>
+      <button class="secondary" onclick="goToStockCount()">🧮 الجرد</button>
       <button class="secondary" onclick="goToCustomerList()">👤 قائمة العملاء</button>
       <button class="secondary" onclick="goToCustomerRequests()">🔖 طلبات العملاء <span id="sideReqBadge" style="display:none; background:#E5484D; color:#fff; border-radius:99px; padding:0 6px; font-size:11px; font-weight:800;"></span></button>
       <button class="secondary" id="reportsSidebarBtn" onclick="goToReports()">📊 التقارير</button>
@@ -1687,6 +1688,17 @@ body.on-dashboard .badge-test{ display:block; }
   <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="transfersWrap"></div>
 </div>
 
+<div class="screen mgmt-light" id="stockCountScreen">
+  <div class="mgmt-topbar">
+    <div><h1>🧮 الجرد</h1></div>
+    <div class="topbar-actions">
+      <button class="logout-btn" onclick="showScreen('dashboardScreen')">⬅️ رجوع</button>
+      <button class="btn-newsale" onclick="resumeOrStartSale()"><span class="ns-ico">🧾</span> بيع جديد</button>
+    </div>
+  </div>
+  <div style="flex:1; overflow-y:auto; padding:0 16px 20px;" id="stockCountWrap"></div>
+</div>
+
 <div class="screen mgmt-light" id="staffCardsScreen">
   <div class="mgmt-topbar">
     <div><h1>🎫 بطاقات الموظفين</h1></div>
@@ -2120,7 +2132,7 @@ body.on-dashboard .badge-test{ display:block; }
      شايف الأخطاء من لحظة الفتح — لو اتأخر، اللي حصل قبله بيضيع. -->
 <script src="blackbox.js"></script>
 <script src="pos-core.js"></script>
-<script src="stock-move.js?v=731"></script>
+<script src="stock-move.js?v=732"></script>
 <script src="pos-admin.js?v=714"></script>
 <script src="pos-reports.js?v=714"></script>
 <script src="../cctv-config.js?v=549"></script>
@@ -2142,6 +2154,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="loyalty.js"></script>
 <script src="staff.js"></script>
 <script src="transfers.js?v=731"></script>
+<script src="stock-count.js?v=732"></script>
 <script src="ui-editor.js"></script>
 <script src="chat.js"></script>
 <!-- 🖼️ نظام الإطارات والتارجت.
