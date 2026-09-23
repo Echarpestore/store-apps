@@ -127,9 +127,12 @@ const retLine = (extra) => Object.assign({ id:'p1', name:'طرحة', barcode:'11
     ok(!s.has('store-apps-shell-v703'), 'كاش التابلت القديم ماتمسحش');
   });
   await t('🔴 POS بيمسح كاشاته القديمة بس', async () => {
-    const s = await activate('pos/sw.js', ['pos-shell-v731', 'pos-shell-v732', ...others, 'feedback-shell-v706']);
+    // الاسم الحالي بيتقرا من الملف — عشان رفع الإصدار ميكسرش الاختبار (كان مكتوب v732 ثابت)
+    const cur = (rd('pos/sw.js').match(/CACHE_NAME\s*=\s*'([^']+)'/) || [])[1];
+    ok(cur && cur !== 'pos-shell-v731', 'مش لاقي CACHE_NAME');
+    const s = await activate('pos/sw.js', ['pos-shell-v731', cur, ...others, 'feedback-shell-v706']);
     ok(!s.has('pos-shell-v731'), 'كاش POS القديم فضل');
-    ok(s.has('pos-shell-v732') && s.has('feedback-shell-v706') && others.every(n => s.has(n)), 'مسح كاش تطبيق تاني');
+    ok(s.has(cur) && s.has('feedback-shell-v706') && others.every(n => s.has(n)), 'مسح كاش تطبيق تاني');
   });
   await t('الإصدارات اترفعت: POS ≥ v732 · التابلت ≥ v706', () => {
     ok(swAtLeast(rd('pos/sw.js'), 732) && swAtLeast(rd('feedback/sw.js'), 706));

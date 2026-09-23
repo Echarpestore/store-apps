@@ -75,7 +75,12 @@ async function renderTransfersScreen(){
       <div style="color:var(--muted); font-size:11.5px; margin-top:5px;">${itemsStr} <b>(${(t.items||[]).reduce((s,i)=>s+i.qty,0)} قطعة)</b></div>
       <div style="color:var(--muted); font-size:10px; margin-top:3px;">أرسلها: ${t.senderName||'—'} · ${new Date(t.ts).toLocaleString('ar-EG',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
         ${t.status==='confirmed'?` · استلمها: <b>${t.confirmedBy||'—'}</b>${t.note?' · 📝 '+t.note:''}`:''}</div>
-      ${showConfirm && t.status==='in_transit' ? `<button onclick="openTransferConfirm('${t.id}')" style="margin-top:8px; width:100%; padding:10px; border-radius:9px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">📥 عدّ واستلم</button>` : ''}
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        ${showConfirm && t.status==='in_transit' ? `<button onclick="openTransferConfirm('${t.id}')" style="flex:3; padding:10px; border-radius:9px; border:none; background:var(--plus); color:#062; font-weight:800; cursor:pointer;">📥 عدّ واستلم</button>` : ''}
+        <!-- 🖨️ مرحلة ٢: كشف الإذن المطبوع (warehouse.js) -->
+        <button onclick="trPrintManifest('${t.id}')" title="طباعة كشف الإذن" style="flex:1; padding:10px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:700; cursor:pointer; font-size:12px;">🖨️ الكشف${t.code?` <span style="direction:ltr; color:var(--muted); font-size:10px;">${t.code}</span>`:''}</button>
+      </div>
+      ${t.openDiffStatus==='open' ? `<div style="margin-top:6px; font-size:11px; color:var(--bad); font-weight:800;">⚠️ فرق مفتوح — بيتحسم من 🏬 المخزن ← الفروق المفتوحة</div>` : ''}
     </div>`;
   };
 
@@ -83,7 +88,11 @@ async function renderTransfersScreen(){
   if(_trTab==='in'){
     const pend = incoming.filter(t=> t.status==='in_transit');
     const done = incoming.filter(t=> t.status!=='in_transit').slice(0,10);
-    body = (pend.length? pend.map(t=> row(t,true)).join('') : '<div class="empty-cart">مفيش تحويلات جاية في الطريق</div>')
+    /* 📇 مرحلة ٢: الشحنة بتتفتح بمسح باركود الإذن (trOpenByCode في warehouse.js) */
+    const permit = `<input id="trPermitInput" placeholder="📇 امسح باركود الإذن عشان تفتح الشحنة..." autocomplete="off"
+        onkeydown="if(event.key==='Enter'){ event.preventDefault(); const v=this.value; this.value=''; if(typeof trOpenByCode==='function') trOpenByCode(v); }"
+        style="width:100%; padding:13px; border-radius:11px; border:1.5px dashed var(--accent); background:var(--panel2); color:var(--text); font-size:14px; margin-bottom:10px;">`;
+    body = permit + (pend.length? pend.map(t=> row(t,true)).join('') : '<div class="empty-cart">مفيش تحويلات جاية في الطريق</div>')
       + (done.length? `<div style="color:var(--muted); font-size:11px; margin:12px 2px 6px;">آخر المستلَمة:</div>` + done.map(t=> row(t,false)).join('') : '');
   }
   else if(_trTab==='out'){
@@ -437,16 +446,21 @@ document.addEventListener('keydown', function(e){
     return;
   }
   const scr = document.getElementById('transfersScreen');
-  if(!scr || scr.offsetParent === null || _trTab !== 'new') return;
+  if(!scr || scr.offsetParent === null || (_trTab !== 'new' && _trTab !== 'in')) return;
   const a = document.activeElement;
-  const inOurInputs = a && (a.id === 'trScanInput' || a.id === 'trCarrierInput');
+  const inOurInputs = a && (a.id === 'trScanInput' || a.id === 'trCarrierInput' || a.id === 'trPermitInput');
   if(inOurInputs) return;   // الخانات ليها معالجها — ده للمسح وانت مش واقف في خانة
   const now = Date.now();
   if(now - _trLastKey > 90) _trBuf = '';
   _trLastKey = now;
   if(e.key === 'Enter'){
     const code = _trBuf; _trBuf = '';
-    if(code.length >= 4){ e.preventDefault(); _trRouteCode(code); }
+    if(code.length >= 4){
+      e.preventDefault();
+      // 📇 في «الوارد» المسحة = باركود إذن · في «جديد» = قطعة أو كارت
+      if(_trTab === 'in'){ if(typeof trOpenByCode === 'function') trOpenByCode(code); }
+      else _trRouteCode(code);
+    }
     return;
   }
   { const _c = (typeof _scanChar==='function') ? _scanChar(e) : ((e.key&&e.key.length===1)?e.key:''); if(_c) _trBuf += _c; }
@@ -508,11 +522,17 @@ async function openTransferConfirm(id){
   ov.innerHTML = `<div style="background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:16px; max-width:440px; width:100%; max-height:85vh; overflow-y:auto;">
     <div style="font-weight:800; margin-bottom:2px;">📥 استلام تحويلة من ${t.fromBranch}</div>
     <div style="color:var(--muted); font-size:11.5px; margin-bottom:10px;">جايبتها: ${t.carrierName} · عدّ القطع اللي في إيدك فعلًا وعدّل لو فيه فرق</div>
+    <!-- 🔎 مرحلة ٢: العد بالمسح (_trCfScan في warehouse.js) -->
+    <input id="trCfScan" placeholder="🔎 امسح القطع واحدة واحدة عشان تتعدّ..." autocomplete="off"
+      onkeydown="if(event.key==='Enter'){ event.preventDefault(); if(typeof _trCfScan==='function') _trCfScan(this.value); }"
+      style="width:100%; padding:11px; border-radius:10px; border:1.5px solid var(--accent); background:var(--panel2); color:var(--text); font-size:13.5px; margin-bottom:8px;">
+    <div id="trCfScanMode" style="display:none; background:rgba(34,197,94,.1); border:1px solid var(--good, #22c55e); border-radius:9px; padding:7px 10px; font-size:11.5px; margin-bottom:8px;">🔎 <b>العد بالمسح شغال</b> — الأعداد بدأت من صفر وبتزيد مع كل مسحة. اللي ماتمسحش = ماوصلش.</div>
     ${(t.items||[]).map((it,i)=>`
       <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:10px; margin-bottom:6px;">
         <div style="flex:1; font-size:12.5px; font-weight:700;">${it.name} <span style="color:var(--muted); font-weight:400;">(اتبعت ${it.qty})</span></div>
         <input type="number" min="0" max="${it.qty}" value="${it.qty}" id="trCf_${i}" style="width:64px; padding:8px; text-align:center; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:800;">
       </div>`).join('')}
+    <div id="trCfExtras" style="display:none; margin-top:6px; background:rgba(229,72,77,.08); border:1px solid var(--bad); border-radius:9px; padding:7px 10px; font-size:11.5px;"></div>
     <input id="trCfNote" placeholder="ملاحظة (لو فيه نقص اكتب السبب)..." style="width:100%; margin-top:4px; padding:10px; border-radius:9px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:12px;">
     <div style="margin-top:12px; padding:11px; border:1.5px dashed var(--accent); border-radius:11px; text-align:center; background:var(--panel2);">
       <div style="font-weight:800; font-size:13.5px;">🎫 المستلمة تمسح كارتها = تأكيد فوري</div>
@@ -525,6 +545,7 @@ async function openTransferConfirm(id){
     </div>
   </div>`;
   document.body.appendChild(ov);
+  setTimeout(function(){ const s = document.getElementById('trCfScan'); if(s) try{ s.focus(); }catch(e){} }, 60);
 }
 // 🔢 تأكيد الاستلام بالاسم + الرقم السري — بديل الكارت
 // الحاملة مستبعدة من القايمة أصلًا عشان ما تأكدش استلامها بنفسها.
@@ -571,6 +592,9 @@ async function confirmTransfer(id, confirmer){
     return { ...it, confirmedQty: (isNaN(v)||v<0) ? 0 : Math.min(v, it.qty) };
   });
   const note = (document.getElementById('trCfNote')||{}).value.trim();
+  // 🚩 قطع اتمسحت ومش في الإذن — بتتسجل على الإذن للمتابعة، مش بتدخل الرصيد
+  const _cfOv = document.getElementById('trConfirmOv');
+  const extras = (_cfOv && Array.isArray(_cfOv._extras)) ? _cfOv._extras.slice() : [];
   const discrepancy = confirmed.some(it=> it.confirmedQty !== it.qty);
   if(discrepancy && !note){ showToast('فيه فرق في العدد — اكتب ملاحظة بالسبب', 'err'); return; }
   confirmTransfer._busy = id;
@@ -603,7 +627,7 @@ async function confirmTransfer(id, confirmer){
         confirmedBy: (who&&who.name)||'',
         confirmedById: (who&&who.id)||'',
         confirmedByCard: !!confirmer,
-        items: confirmed, discrepancy, note,
+        items: confirmed, discrepancy, note, extras,
         /* 📌 الفرق بند **مفتوح**: القطع الناقصة لسه متسجلة في «في الطريق»
            باسم الحاملة لحد ما يتحسم — الإذن مبيتقفلش باعتبار إن كله وصل. */
         openDiff: confirmed.filter(it=> (it.confirmedQty||0) !== it.qty)

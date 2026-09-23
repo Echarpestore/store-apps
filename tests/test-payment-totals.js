@@ -360,7 +360,16 @@ const dcAggregate  = (sales)=> vm.runInContext(`dcAggregate(${JSON.stringify(sal
     'الكتابة القديمة المنفصلة (سلفة ثم حالة) اتشالت');
 
   // تأكيد التحويلة: معاملة ذرية بشرط in_transit — المخزون ميدخلش مرتين
-  const ctBlock = trSrc.slice(trSrc.indexOf('async function confirmTransfer(id, confirmer)'), trSrc.indexOf('async function confirmTransfer(id, confirmer)') + 2600);
+  /* ⚠️ كان slice بطول ثابت (2600 حرف) — أي سطر يتضاف جوّه الدالة كان بيزق الشرط بره
+     الشريحة ويطلّع فشل وهمي (حصل في v733). دلوقتي الدالة كلها بالأقواس المتوازنة. */
+  const ctBlock = (function(){
+    const i0 = trSrc.indexOf('async function confirmTransfer(id, confirmer)');
+    if(i0 < 0) return '';
+    let d = 0, j = trSrc.indexOf('{', i0);
+    for(; j < trSrc.length; j++){ const ch = trSrc[j]; if(ch === '{') d++; else if(ch === '}'){ d--; if(d === 0) break; } }
+    return trSrc.slice(i0, j + 1);
+  })();
+  assert(ctBlock.length > 500, 'دالة confirmTransfer ماتلقتش');
   assert(/db\.runTransaction\(async \(tx\)=>\{/.test(ctBlock), 'تأكيد التحويلة جوه معاملة ذرية');
   assert(/cur !== 'in_transit'/.test(ctBlock) && /اتأكدت خلاص من جهاز تاني/.test(ctBlock),
     'التحويلة المتأكدة بتترفض (شرط in_transit على السيرفر)');
