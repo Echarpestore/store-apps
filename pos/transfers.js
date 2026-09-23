@@ -12,6 +12,13 @@ let _trTab = 'new';          // new | in | out | log — التحويل الجد
 let _trList = [];            // آخر تحميل
 let _trNewItems = [];        // أصناف التحويلة الجديدة
 let _trCarrier = null;       // {id, name} بعد مسح الكارت
+/* 🔒 رقم الإذن بيتولّد **مرة واحدة** للتحويلة اللي في الشاشة، وبيفضل هو هو لو الإرسال
+   وقع واتعاد. من غيره كانت كل ضغطة بتعمل مستند جديد — وده كان بيخصم البضاعة مرتين. */
+let _trDocId = null;
+function _trNewId(){
+  const b = (typeof branchCode === 'function') ? branchCode(currentBranch) : 'X';
+  return 'TR' + b + Date.now().toString(36).toUpperCase() + Math.floor(Math.random()*36).toString(36).toUpperCase();
+}
 
 function goToTransfers(){
   showScreen('transfersScreen');
@@ -22,7 +29,9 @@ async function loadTransfers(){
   try{
     const snap = await db.collection(TRANSFERS_COL)
       .where('branches', 'array-contains', currentBranch).get();
-    _trList = snap.docs.map(d=> ({id:d.id, ...d.data()})).sort((a,b)=> b.ts - a.ts);
+    _trList = snap.docs.map(d=> ({id:d.id, ...d.data()}))
+      .filter(t=> t.status !== 'draft')   // إذن اتعمل ولسه ماخرجش — مش تحويلة بعد
+      .sort((a,b)=> b.ts - a.ts);
   }catch(e){ _trList = []; console.warn('transfers', e); }
 }
 
@@ -451,26 +460,34 @@ async function sendTransfer(){
   if(!_trCarrier){ showToast('الحاملة لازم تمسح كارتها 🎫', 'err'); return; }
   const btn = document.getElementById('trSendBtn'); if(btn) btn.disabled = true;
   try{
-    // خصم فوري من رصيد الفرع المرسل (القطع بقت "في الطريق" — مش رصيد حد)
-    const batch = db.batch();
-    _trNewItems.forEach(it=>{
-      batch.update(db.collection(TEST_INVENTORY).doc(it.id), {
-        ['qtyByBranch.'+currentBranch]: firebase.firestore.FieldValue.increment(-it.qty)
-      });
-    });
-    await batch.commit();
-    await db.collection(TRANSFERS_COL).add({
+    /* 🔴 الترتيب هنا مقصود (إصلاح 23-09):
+       كان: خصم في دفعة ← بعدها إنشاء المستند. لو الدوسة اتكررت أو النت قطع بين
+       الخطوتين، البضاعة تتخصم مرتين أو تتخصم من غير تحويلة.
+       بقى: الإذن الأول برقم ثابت ← الخصم من خلال `stockApply` (بيتنفّذ مرة واحدة
+       مهما اتكرر النداء) ← تحويل الحالة لـ«في الطريق».
+       الخصم بيروح لمكان «في الطريق» مش للعدم — فالبضاعة تفضل ظاهرة لحد الاستلام. */
+    const id = _trDocId || (_trDocId = _trNewId());
+    const items = _trNewItems.map(it=> ({ id: it.id, name: it.name, barcode: it.barcode, qty: it.qty }));
+    const trRef = db.collection(TRANSFERS_COL).doc(id);
+    await trRef.set({
+      code: id,                          // 📇 رقم الإذن — هو نفسه الباركود اللي بيتمسح
       fromBranch: currentBranch, toBranch: dest,
       branches: [currentBranch, dest],   // لسهولة الاستعلام للفرعين
-      items: _trNewItems.map(it=> ({ id: it.id, name: it.name, barcode: it.barcode, qty: it.qty })),
+      items,
       carrierId: _trCarrier.id, carrierName: _trCarrier.name,
       senderName: (currentEmployee&&currentEmployee.name)||'',
-      status: 'in_transit', ts: Date.now(),
+      status: 'draft', ts: Date.now(),
       deadlineTs: Date.now() + TRANSFER_DEADLINE_MIN*60000
+    }, { merge: true });
+    await stockApply({
+      docType: 'transfer', docId: id, phase: 'out', reason: 'تحويل خارج لفرع ' + dest,
+      lines: items.map(it=> ({ itemId: it.id, name: it.name, barcode: it.barcode,
+                               qty: it.qty, from: currentBranch, to: IN_TRANSIT }))
     });
+    await trRef.update({ status: 'in_transit', sentAt: Date.now() });
     try{ localStorage.setItem('tr_last_dest_'+currentBranch, dest); }catch(e){}
-    showToast('🚚 اتبعتت — على عهدة ' + _trCarrier.name + ' لحد ما فرع ' + dest + ' يأكد');
-    _trNewItems = []; _trCarrier = null; _trTab = 'out';
+    showToast('🚚 إذن ' + id + ' اتبعت — على عهدة ' + _trCarrier.name + ' لحد ما فرع ' + dest + ' يأكد');
+    _trNewItems = []; _trCarrier = null; _trDocId = null; _trTab = 'out';
     if(typeof loadInventory === 'function') loadInventory();
     renderTransfersScreen();
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); if(btn) btn.disabled = false; }
@@ -561,23 +578,35 @@ async function confirmTransfer(id, confirmer){
     // 🛡️ ثغرة الازدواج: تأكيد التحويلة من جهازين في نفس اللحظة (أو دبل كليك)
     // كان بيضيف الكمية للمخزون **مرتين**. المعاملة الذرية بتقرا حالة التحويلة
     // من السيرفر — لو اتأكدت خلاص بترفض، والمخزون والحالة بيتكتبوا مع بعض.
+    /* 🔴 23-09: الرصيد بقى بيدخل من `stockApply` (من «في الطريق» لمخزون الفرع)
+       قبل تغيير الحالة. لو التغيير وقع، إعادة التأكيد بتعيد النداء والحركة
+       **مبتتعملش تاني** — المعرّف من المستند. والفرق بيفضل في «في الطريق»
+       لحد ما يتحسم، مش بيختفي. */
+    const gotLines = confirmed.filter(it=> it.confirmedQty > 0).map(it=> ({
+      itemId: it.id, name: it.name, barcode: it.barcode,
+      qty: it.confirmedQty, from: IN_TRANSIT, to: t.toBranch }));
+    if(gotLines.length) await stockApply({
+      docType: 'transfer', docId: id, phase: 'in',
+      reason: 'استلام تحويلة في ' + t.toBranch, lines: gotLines });
     await db.runTransaction(async (tx)=>{
       const trRef = db.collection(TRANSFERS_COL).doc(id);
       const snap = await tx.get(trRef);
       if(!snap.exists) throw new Error('التحويلة مش موجودة');
       const cur = (snap.data() || {}).status;
       if(cur !== 'in_transit') throw new Error('التحويلة اتأكدت خلاص من جهاز تاني');
-      confirmed.forEach(it=>{
-        if(it.confirmedQty > 0) tx.update(db.collection(TEST_INVENTORY).doc(it.id), {
-          ['qtyByBranch.'+t.toBranch]: firebase.firestore.FieldValue.increment(it.confirmedQty)
-        });
-      });
       tx.update(trRef, {
         status: 'confirmed', confirmedAt: Date.now(),
         confirmedBy: (who&&who.name)||'',
         confirmedById: (who&&who.id)||'',
         confirmedByCard: !!confirmer,
-        items: confirmed, discrepancy, note
+        items: confirmed, discrepancy, note,
+        /* 📌 الفرق بند **مفتوح**: القطع الناقصة لسه متسجلة في «في الطريق»
+           باسم الحاملة لحد ما يتحسم — الإذن مبيتقفلش باعتبار إن كله وصل. */
+        openDiff: confirmed.filter(it=> (it.confirmedQty||0) !== it.qty)
+          .map(it=> ({ itemId: it.id, name: it.name, sent: it.qty,
+                       got: it.confirmedQty||0, missing: it.qty - (it.confirmedQty||0) })),
+        openDiffStatus: discrepancy ? 'open' : 'none',
+        openDiffOwner: t.carrierName || '', openDiffReason: note || ''
       });
     });
     const ov = document.getElementById('trConfirmOv'); if(ov) ov.remove();
