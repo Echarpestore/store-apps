@@ -13,14 +13,11 @@ function extractFn(s, h){ const at = s.indexOf(h); if(at < 0) throw new Error(h)
 
 function mk(stored, reader){
   const ls = { v: stored == null ? null : stored }, st = { sent:[], flipClass:false, hint:'' };
-  const el = id => ({ get videoWidth(){ return 640; }, readyState: 4, classList:{ toggle: (c, on) => { if(c === 'flip') st.flipClass = on; } }, set textContent(t){ if(id === 'ipHint') st.hint = t; }, set innerHTML(x){} });
+  const el = id => ({ get videoWidth(){ return 640; }, classList:{ toggle: (c, on) => { if(c === 'flip') st.flipClass = on; } }, set textContent(t){ if(id === 'ipHint') st.hint = t; }, set innerHTML(x){} });
   const ctx = { st, Math, String, Number, Date, Uint8Array, console:{ warn(){} },
     localStorage:{ getItem: k => (k.indexOf('insta_flip2_') === 0 ? ls.v : null), setItem: (k, v) => { if(k.indexOf('insta_flip2_') === 0) ls.v = v; } },
     $: el, branch:'Glow', cur:{ sid:'s1' }, busy:false, prevGray:null,
-    // v707: tick بقى بيتأكد إن شاشة المسح هي المفتوحة وإن الرد لسه للطلب ده
-    curPane:'scan', stream:{}, document:{ hidden:false }, nextScanAt:0, scanGeneration:0, readErrors:0,
-    scanCore: require(path.join(__dirname, '..', 'feedback', 'instapay-scan-core.js')),
-    grayOf: () => { const g = new Uint8Array(96 * 128); for(let i = 0; i < g.length; i++) g[i] = (i % 7) * 30; return g; },
+    grayOf: () => { const g = new Uint8Array(64 * 48); for(let i = 0; i < g.length; i++) g[i] = (i % 7) * 30; return g; },
     diffScore: () => 0, paintChecks(){}, stopCam(){}, show(){},
     frameJpeg: () => 'IMG', callScan: async p => { const flipped = vm.runInContext('flipCapture', ctx); st.sent.push(flipped); return { data: reader(flipped, st.sent.length) }; } };
   vm.createContext(ctx);
@@ -57,9 +54,9 @@ const BLIND = () => ({ checks:{} }), SEES = () => ({ checks:{ amount:true } });
   ok(c.st.sent[0] === false && c.st.flipClass === false, 'طبيعي من أول لقطة');
 
   console.log('📉 4) فريم فاضي مبيتبعتش');
-  const c2 = mk(null, SEES); c2.grayOf = () => new Uint8Array(96 * 128).fill(90);
+  const c2 = mk(null, SEES); c2.grayOf = () => new Uint8Array(64 * 48).fill(90);
   await c2.tick();
-  ok(c2.st.sent.length === 0 && /قرّبي|جوّه الإطار/.test(c2.st.hint), 'فريم من غير تفاصيل = مبيتبعتش (بيوفّر حصة القراءة) + «قرّبي شاشة الإيصال»');
+  ok(c2.st.sent.length === 0 && /قرّبي/.test(c2.st.hint), 'فريم من غير تفاصيل = مبيتبعتش (بيوفّر حصة القراءة) + «قرّبي شاشة الإيصال»');
   ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'feedback', 'sw.js'), 'utf8'), 703), 'kiosk ≥ v703');
   console.log('\n' + (fail ? '❌' : '✅') + ' test-instapay-flip: ' + pass + ' ناجح · ' + fail + ' فاشل');
   if(fail) process.exitCode = 1;

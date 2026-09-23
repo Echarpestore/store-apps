@@ -11,27 +11,27 @@ t('بينده الدالتين بس',()=>{has("'instaPay'");has("'instaScan'")})
 t('الكاميرا بتطفي عند إخفاء الصفحة',()=>{has("pagehide");has("visibilitychange")});
 
 console.log('\n💸 توفير التكلفة');
-t('الفريم الأول بيتبعت فورًا',()=>has('if (previous && d > 24)'));
+t('الفريم الأول بيتبعت فورًا',()=>has('if (prevGray && d > 24)'));
 t('بيقص على الإطار بس',()=>{has('const INSET = 0.06');has('x.drawImage(video, sx, sy, sw, sh')});
 t('المربعات بتوري الأرقام',()=>{has('function chip(');has('d.seenCents')});
 t('فيه زرار رجوع للـQR',()=>{has("id=\"ipBack\"");has("$('ipBack').onclick")});
 t('شاشة الكاشير مش مسدودة',()=>{has("id=\"ipManBack\"");has("$('ipManBack').onclick")});
-t('فيه مؤقّت مش نداء متواصل',()=>has('setInterval(tick, SCAN_POLL_MS)'));
-t('قفل تزامن يمنع نداءين مع بعض',()=>has('if (busy || Date.now() < nextScanAt) return'));
+t('فيه مؤقّت مش نداء متواصل',()=>has('setInterval(tick, 550)'));
+t('قفل تزامن يمنع نداءين مع بعض',()=>has('if (busy || !cur) return'));
 t('الـQR بيتحمّل مرة واحدة',()=>has('if (_qr)'));
 
 console.log('\n🖼️ الصورة');
 t('العرض مش مقلوب (العميلة تشوف اللي بيتبعت)',()=>{
   if(src.includes('object-fit:cover;transform:scaleX(-1)'))throw Error('العرض لسه مقلوب')});
 t('فيه شبكة أمان للانعكاس',()=>{has('let flipCapture =');has('x.scale(-1, 1)')});
-t('القلب تجربة بعد محاولتين عمياء',()=>has('blindTries >= 2 && !flipTrial && !flipTested'));
+t('القلب تجربة بعد لقطتين عمى (v703 — من أول لقطة كان بيقلب ويحفظ غلط؛ السلوك متختبر في test-instapay-flip)',()=>has('blindTries >= 2 && !flipTrial && !flipTested'));
 t('القلب بيتحفظ للجهاز',()=>{has('FLIP_KEY');has('localStorage.setItem(FLIP_KEY')});
 t('زرار القلب اتشال من الواجهة',()=>{
   if(/id="ipFlip"/.test(src))throw Error('لسه ظاهر للعميلة')});
-t('الكشف التلقائي لسه شغال',()=>{has('blindTries >= 2');has('setFlip(flipCapture)')});
+t('الكشف التلقائي لسه شغال',()=>{has('setFlipView(!flipCapture)');has('setFlip(flipCapture)')});
 t('العنوان والأرقام بتظهر للعميلة',()=>has("extra.join(' · ')"));
 t('الشاشة متفضلش واقفة على بنقرا',()=>has('مش شايف الإيصال'));
-t('الجودة مضغوطة',()=>has("'image/jpeg', 0.88"));
+t('الجودة مضغوطة',()=>has("'image/jpeg', 0.76"));
 t('الكاميرا الأمامية',()=>has("facingMode: 'user'"));
 
 console.log('\n🧯 الأعطال');
