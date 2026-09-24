@@ -147,6 +147,20 @@ function lf431Report(name, patch){
   const cur = window.salesHistoryDiagnostics[name] || {};
   window.salesHistoryDiagnostics[name] = Object.assign(cur, patch, {updatedAt: Date.now()});
 }
+/* 💸 v623 — بلاغ المالك 24-09: 13 مليون قراية في 24 ساعة (Query Insights: sales_shifts ·
+   sales_points · sales_rewards · commissions · breaks …). السبب: فحص الاكتمال كان بيعدّ
+   **كل** نافذة الـ190 يوم على السيرفر ويقارنها بالكاش — وأي سجل جديد اتكتب والتطبيق مقفول
+   (يعني دايمًا) بيخلّي السيرفر أكبر ← تحميل كامل لـ12 مجموعة مع **كل فتحة** على كل موبايل.
+   السجلات الجديدة بتيجي أصلًا من لستنر الـ«recent» (آخر يومين). فالفحص بقى على **الجزء
+   القديم بس** (قبل آخر يومين): لو ناقص منه حاجة ← تحميل كامل زي الأول. التحديث الكامل
+   كل 24 ساعة زي ما هو (بيجيب التعديلات على السجلات القديمة). */
+const _lf431Meta = new WeakMap();
+function _lf431ToMs(v){
+  if(v == null) return NaN;
+  if(typeof v === 'number') return v;
+  if(typeof v.toMillis === 'function') return v.toMillis();
+  const t = +new Date(v); return t;
+}
 function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*1000){
   // production uses explicit cache/server APIs; the getDocs fallback only keeps the legacy node harness compatible.
   const _cacheGet=(typeof getDocsFromCache==='function')?getDocsFromCache:getDocs;
@@ -164,20 +178,31 @@ function lf431History(name, fullQ, recentQ, getCurrent, apply, ttlMs=24*60*60*10
     if(!s.empty){
       apply(lf431Merge(getCurrent()||[],lf431Docs(s)),'cache');
       lf431Report(name,{cacheCount:s.size});
-      verifyCoverage(s.size);
+      verifyCoverage(s.size, s);
     }else{
       lf431Report(name,{cacheCount:0,cacheEmpty:true});
       if((Date.now()-lf431Last(name))<ttlMs) runServerFetch(false);
     }
   }).catch(e=>lf431Report(name,{cacheError:(e&&e.code)||String(e)}));
-  function verifyCoverage(cacheCount){
+  function verifyCoverage(cacheCount, cacheSnap){
     if(typeof getCountFromServer!=='function') return;   // node harness
     if(_fetchInFlight||_fetchDone) return;               // هيتحمّل كامل أصلًا
     if(!_lf431Authed()){
-      _lf431Pending.set(name+'::count',()=>verifyCoverage(cacheCount));
+      _lf431Pending.set(name+'::count',()=>verifyCoverage(cacheCount, cacheSnap));
       return;
     }
-    getCountFromServer(fullQ).then(cs=>{
+    // v623: الجزء القديم بس — الجديد بيوصل من لستنر الـrecent
+    const meta = _lf431Meta.get(fullQ);
+    let countQ = fullQ;
+    if(meta && cacheSnap && Array.isArray(cacheSnap.docs)){
+      const cutoff = Date.now() - LF431_RECENT_MS;
+      countQ = query(meta.col, where(meta.field, '>=', meta.start), where(meta.field, '<', cutoff));
+      cacheCount = cacheSnap.docs.filter(d=>{
+        const v = _lf431ToMs((d.data() || {})[meta.field]);
+        return v >= meta.start && v < cutoff;
+      }).length;
+    }
+    getCountFromServer(countQ).then(cs=>{
       const serverCount=Number(cs&&cs.data&&cs.data().count)||0;
       lf431Report(name,{serverTotal:serverCount,coverageCheckedAt:Date.now()});
       if(serverCount>cacheCount){
@@ -2323,11 +2348,11 @@ window.appReferrals = [];
 // السجلات الأقدم موجودة في قاعدة البيانات عادي — بس مش بتتقرا مع كل فتحة.
 const READ_WINDOW_MS = 190 * 24 * 3600000;
 const _winStart = Date.now() - READ_WINDOW_MS;
-const _scoped = (col, field)=> query(col, where(field, '>=', _winStart));
+const _scoped = (col, field)=>{ const q = query(col, where(field, '>=', _winStart)); _lf431Meta.set(q, { col, field, start: _winStart }); return q; };
 // 🔬 نافذة أضيق للمجموعات الضخمة: تقييمات العملاء بتتستخدم في مطابقة النقط
 // على فترات المرتبات (الشهر الحالي والسابق بس) — 65 يوم بتغطيهم بهامش،
 // و190 يوم منها كانت لوحدها عشرات الآلاف قراءة مع كل فتحة للتطبيق.
-const _scopedDays = (col, field, days)=> query(col, where(field, '>=', Date.now() - days * 24 * 3600000));
+const _scopedDays = (col, field, days)=>{ const st = Date.now() - days * 24 * 3600000; const q = query(col, where(field, '>=', st)); _lf431Meta.set(q, { col, field, start: st }); return q; };
 
 onSnapshot(referralsCol, (snap)=>{
   window.appReferrals = snap.docs.map(d=> ({id:d.id, ...d.data()}));

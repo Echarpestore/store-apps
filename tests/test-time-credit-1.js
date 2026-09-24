@@ -113,7 +113,8 @@ assert(ms.days === 2 && ms.capped === true, 'سقف الشهر (2 أيام) بي
 
   // النافذة نفسها
   assert(/const READ_WINDOW_MS = 190 \* 24 \* 3600000/.test(appSrc), 'نافذة القراءة 190 يوم متعرّفة');
-  assert(/const _scoped = \(col, field\)=> query\(col, where\(field, '>=', _winStart\)\)/.test(appSrc),
+  // v623: الدالة بقت بتسجّل الحقل لفحص الاكتمال — نفس الاستعلام
+  assert(/const _scoped = \(col, field\)=>\s*(?:\{\s*const q = )?query\(col, where\(field, '>=', _winStart\)\)/.test(appSrc),
     'دالة النطاق شغالة بمقارنة رقمية');
 
   // 🔑 كل مجموعة والحقل بتاعها — الحقول دي مؤكدة من مكان الكتابة (Date.now())
