@@ -281,13 +281,24 @@ const Q = (L) => L.env.store.pos_test_inventory.it1.qtyByBranch;
     win.resumeOrStartSale();
     ok(calls.length === 1, 'الحارس وقّف البيع في فرع عادي');
   });
+  await t('🔴 v735 — «بدّل الفرع» فيه المخزن (مرة واحدة، ومش وقت الخطأ)', async () => {
+    const win = { openBranchSwitch: async () => { L.el('branchSwitchList').innerHTML = '<button onclick="doBranchSwitch(\'Glow\')">Glow</button>'; } };
+    const L = loadAll({ window: win });
+    await win.openBranchSwitch();
+    const h = L.el('branchSwitchList').innerHTML;
+    ok((h.match(/doBranchSwitch\('المخزن'\)/g) || []).length === 1 && h.indexOf("doBranchSwitch('Glow')") >= 0, h);
+    win.openBranchSwitch._whGuard = true;   // مايتلفّش مرتين
+    const L2 = loadAll({ window: { openBranchSwitch: async () => { L2.el('branchSwitchList').innerHTML = '<div class="empty-cart">تعذر التحميل</div>'; } } });
+    await L2.ctx.window.openBranchSwitch();
+    ok(L2.el('branchSwitchList').innerHTML.indexOf('المخزن') < 0, 'اتضاف على رسالة خطأ');
+  });
   await t('الملف متحمّل بعد transfers وstock-count وبرقم إصدار · الكاش اترفع', () => {
     const idx = rd('pos/index.html');
     const a = idx.indexOf('transfers.js'), b = idx.indexOf('stock-count.js'), c = idx.indexOf('warehouse.js?v=');
     ok(c > a && c > b, 'warehouse.js مش متحمّل أو قبل اللي بيعتمد عليهم');
     ok(idx.includes('id="warehouseScreen"') && idx.includes('id="warehouseWrap"') && /goToWarehouse\(\)/.test(idx), 'الشاشة/الزرار ناقصين');
     const m = rd('pos/sw.js').match(/pos-shell-v(\d+)/);
-    ok(m && Number(m[1]) >= 733, 'الكاش ماترفعش');
+    ok(m && Number(m[1]) >= 735, 'الكاش ماترفعش');
   });
   await t('القاعدة الذهبية: كل الدوال المستخدمة من onclick على window', () => {
     const s = rd('pos/warehouse.js');

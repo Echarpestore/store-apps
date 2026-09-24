@@ -455,6 +455,31 @@ async function _whHistLoad(itemId){
   }
 })();
 
+/* 🏬 v735 — «بدّل الفرع» (أدمن): المخزن بقى اختيار في القايمة.
+   القايمة بتتبني من فروع الموظفين، فالمخزن مكانش بيظهر لحد ما يبقى فيه موظف فرعه «المخزن»
+   (بلاغ المالك 24-09). التبديل مؤقت للجلسة زي أي فرع — والبيع بيتقفل تلقائي وانت على المخزن. */
+(function(){
+  if(typeof window === 'undefined') return;
+  const orig = window.openBranchSwitch;
+  if(typeof orig !== 'function' || orig._whGuard) return;
+  const g = async function(){
+    const r = await orig.apply(this, arguments);
+    try{
+      const list = document.getElementById('branchSwitchList');
+      if(list && typeof list.innerHTML === 'string' && list.innerHTML.indexOf("doBranchSwitch('" + WAREHOUSE + "')") < 0
+         && list.innerHTML.indexOf('empty-cart') < 0){
+        const sel = (typeof currentBranch !== 'undefined' && currentBranch === WAREHOUSE);
+        list.innerHTML += '<button class="secondary" style="width:100%; margin-bottom:8px; border-style:dashed; '
+          + (sel ? 'border-color:var(--accent); color:var(--accent); font-weight:800;' : '') + '" onclick="doBranchSwitch(\'' + WAREHOUSE + '\')">'
+          + (sel ? '✅ ' : '') + '🏬 ' + WAREHOUSE + '</button>';
+      }
+    }catch(e){}
+    return r;
+  };
+  g._whGuard = true;
+  window.openBranchSwitch = g;
+})();
+
 /* القاعدة الذهبية */
 window.WH_DIFF_DECISIONS = WH_DIFF_DECISIONS;
 window.isWarehouseDevice = isWarehouseDevice;
