@@ -35,6 +35,10 @@ function fakeDb(){
       where: (f, op, v) => q(preds.concat([[f, op, v]])),
       limit: () => q(preds),
       get: async () => {
+        /* 🔴 v736: زي Firestore الحقيقي — مساواة على حقل + مدى على حقل تاني = محتاج index مركّب */
+        const eq = preds.filter(p => p[1] === '==').map(p => p[0]);
+        const rg = preds.filter(p => /[<>]/.test(p[1])).map(p => p[0]);
+        if(rg.length && eq.some(f => rg.indexOf(f) < 0)) throw new Error('The query requires an index');
         const docs = all().filter(d => preds.every(([f, op, v]) => {
           const x = (d.data() || {})[f];
           if(op === '==') return x === v;
@@ -131,6 +135,14 @@ function seedSale(env, o){ env.store['pos_test_sales'] = env.store['pos_test_sal
     ok(rows[0].systemAtCount === 50, 'رصيد لحظة العد = ' + rows[0].systemAtCount);
   });
 
+  await t('🔴 v736 — بيع فرع تاني بعد العد مبيأثرش (والاستعلام من غير index مركّب)', async () => {
+    const L = load('manager'); seedItem(L.env, 'i1', 50);
+    await L.api.countStart({ scope: 'full' });
+    await L.api.countAdd(item('i1'), 50, { replace: true });
+    seedSale(L.env, { branch: 'Madinaty', createdAtMs: Date.now() + 10, items: [{ id: 'i1', qty: 3 }] });
+    const rows = await L.api.countReview();
+    ok(rows[0].diff === 0, 'بيع مدينتي اتحسب على الرحاب: ' + rows[0].diff);
+  });
   await t('🔴 مرتجع أثناء العد كمان بيتحسب', async () => {
     const L = load('manager'); seedItem(L.env, 'i1', 50);
     await L.api.countStart({ scope: 'full' });

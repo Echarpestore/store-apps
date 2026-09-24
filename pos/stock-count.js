@@ -83,10 +83,14 @@ async function countMovementsSince(itemId, branch, sinceMs){
   let net = 0;
   // 🧾 الفواتير: السطر المرتجع كميته موجبة ومعاه isReturn، والبيع بيخصم
   try{
+    /* 🔴 v736 — بلاغ المالك 24-09: «إنهاء العد» وقع بـ«The query requires an index».
+       الاستعلام كان فرع + وقت = index مركّب مش موجود. دلوقتي الوقت بس (index تلقائي)
+       والفرع بيتفلتر هنا — الفترة من لحظة العد لدلوقتي، فالفواتير قليلة. */
     const snap = await db.collection(TEST_SALES)
-      .where('branch', '==', branch).where('createdAtMs', '>=', sinceMs).get();
+      .where('createdAtMs', '>=', sinceMs).get();
     snap.docs.forEach(d => {
       const s = d.data() || {};
+      if(s.branch !== branch) return;
       (s.items || []).forEach(it => {
         if(it.id !== itemId) return;
         const q = Math.abs(Number(it.qty) || 0);
