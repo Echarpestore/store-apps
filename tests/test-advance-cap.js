@@ -35,7 +35,7 @@ const pre = 'function cai(t){ return new Date(new Date(t).getTime() + 3*3600e3 +
           + 'function caiStamp(y,m,d,h,mi,s,ms){ return Date.UTC(y, m-1, d, (h||0)-3, mi||0, s||0, ms||0); }\n';
 const ctx = { window:{}, Date, Math, Number, String, Object, Array };
 vm.createContext(ctx);
-vm.runInContext(pre + ['function advWindowOpen(', 'function advCycleKey(', 'function advKeyOf(', 'function advMonthTotal(', 'function advMonthBreakdown(', 'function advLimitMessage(', 'function advCheck(']
+vm.runInContext(pre + ['function advWindowOpen(', 'function advCycleStartDay(', 'function advCycleKey(', 'function advKeyOf(', 'function advMonthTotal(', 'function advMonthBreakdown(', 'function advLimitMessage(', 'function advCheck(']
   .map(h => extractFn(app, h)).join('\n'), ctx);
 
 const CFG = { maxPerMonth:3000, openDay:12, closeDay:6 };          // إعدادات المالك: تفتح 12 وتقفل 6
@@ -73,8 +73,9 @@ ok(/ordersCountInCap: d\.ordersCountInCap !== false/.test(app), 'الإعداد 
 ok(/id="advOrdersInCapInput"[^>]*checked/.test(html) && /ordersCountInCap: _oc \? !!_oc\.checked : true/.test(app), 'وفيه اختيار في شاشة إعدادات السلف بيتحفظ');
 
 console.log('🗓️ 4) قاعدة الدورة ماتكسرتش');
-ok(ctx.advMonthTotal([cash(500), order(700), cash(900, { cycleKey:'2026-08' })], 'e1', '2026-09', 12, 6) === 1200, '`advMonthTotal` زي ما هي (الاختبارات القديمة معتمدة عليها)');
-let bd = ctx.advMonthBreakdown([cash(500), order(700), cash(900, { cycleKey:'2026-08' }), cash(400, { employeeId:'e2' })], 'e1', '2026-09', 12, 6);
+// v622: الشهر بقى من **التاريخ** (زي المرتب) — «دورة تانية» = تاريخ في أغسطس
+ok(ctx.advMonthTotal([cash(500), order(700), cash(900, { date:'2026-08-20', cycleKey:'2026-08' })], 'e1', '2026-09', 12, 6) === 1200, '`advMonthTotal` زي ما هي (الاختبارات القديمة معتمدة عليها)');
+let bd = ctx.advMonthBreakdown([cash(500), order(700), cash(900, { date:'2026-08-20', cycleKey:'2026-08' }), cash(400, { employeeId:'e2' })], 'e1', '2026-09', 12, 6);
 ok(bd.cash === 500 && bd.orders === 700 && bd.total === 1200, 'التفصيلة = نفس المجموع، ومن غير دورة تانية ولا موظف تاني');
 bd = ctx.advMonthBreakdown([order(600, { date:'2026-09-03' })], 'e1', '2026-09', 12, 6);
 ok(bd.total === 0, 'مشتريات 3 سبتمبر (من غير cycleKey) = دورة أغسطس مش سبتمبر');
@@ -86,10 +87,10 @@ console.log('🔎 4ب) v620 — «أنا ماخدتش حاجة»: الرسالة
 r = ctx.advCheck(CFG, [cash(3000, { date:'2026-09-15' })], 'e1', 500, NOW);
 msg = ctx.advLimitMessage(r);
 ok(/• 2026-09-15 — سلفة 3000 ج\.م/.test(msg), 'كل بند محسوب بيظهر بتاريخه ومبلغه — ' + JSON.stringify(msg.split('\n')[1] || ''));
+/* v622: بلاغ المالك 23-09 (حبيبة) — سلف 2 و5 سبتمبر محفوظة `cycleKey:'2026-09'` واتخصمت من مرتب أغسطس
+   (المرتب بيقرا التاريخ)، وبرضه كانت بتاكل سقف سبتمبر ← «سقف 3000 خلص» وهي واخدة 1000 بس في سبتمبر. */
 r = ctx.advCheck(CFG, [cash(3000, { date:'2026-09-03', cycleKey:'2026-09' })], 'e1', 500, NOW);
-msg = ctx.advLimitMessage(r);
-ok(r.ok === false && r.items[0].wrongCycle === true, '⭐ سلفة 3 سبتمبر (دورة أغسطس) محفوظة غلط على سبتمبر = بتتعلّم `wrongCycle`');
-ok(/2026-09-03/.test(msg) && /متسجّلة على شهر غلط/.test(msg), 'والرسالة بتقولها صراحة بدل «واخد 3000» مبهمة');
+ok(r.ok === true, '⭐ سلفة 3 سبتمبر محفوظة غلط على سبتمبر = بتتحسب على أغسطس بتاريخها (زي المرتب) ومبتاكلش سقف سبتمبر');
 r = ctx.advCheck(CFG, [cash(3000, { date:'2026-09-03', cycleKey:'2026-08' })], 'e1', 500, NOW);
 ok(r.ok === true, 'ونفس السلفة محفوظة صح (دورة أغسطس) = مبتأثرش على سبتمبر');
 r = ctx.advCheck(CFG, [cash(2800, { date:'2026-09-16', manual:true, source:'owner_manual' })], 'e1', 500, NOW);
@@ -101,10 +102,29 @@ ok(/window\.advCfgLoaded = false;/.test(app) && /\(snap\)=>\{\s*\n\s*window\.adv
 ok(/id="advAmountErr" style="white-space:pre-line/.test(html), 'وخانة الخطأ بتعرض السطور تحت بعض');
 ok(/window\.advDiag = function/.test(app), 'و`advDiag(\'الاسم\')` من الكونسول للمالك');
 
+console.log('📅 4ج) v622 — يوم بداية شهر السلف (إعداد المالك)');
+const CFG7 = { maxPerMonth:3000, openDay:0, closeDay:0, cycleStartDay:7 };
+const at = (d) => new Date(Date.UTC(2026, 8, d, 9, 0, 0));
+ok(ctx.advCycleKey(at(6), 0, 0, 7) === '2026-08' && ctx.advCycleKey(at(7), 0, 0, 7) === '2026-09', 'بداية 7: يوم 6 = أغسطس · يوم 7 = سبتمبر');
+ok(ctx.advCycleKey(new Date(Date.UTC(2026, 0, 3, 9)), 0, 0, 7) === '2025-12', 'أول يناير بيرجع لديسمبر السنة اللي فاتت');
+ok(ctx.advCycleKey(at(2), 0, 0, 1) === '2026-09', 'بداية 1 = الشهر التقويمي');
+ok(ctx.advCycleKey(at(8), 12, 6, 10) === '2026-08', 'يوم البداية بيكسب على حسبة الفتح/القفل القديمة');
+ok(ctx.advCycleKey(at(8), 12, 6, 0) === '2026-09' && ctx.advCycleKey(at(5), 12, 6, 0) === '2026-08', 'من غير إعداد = السلوك القديم بالظبط');
+const habiba = [cash(200, { date:'2026-09-02' }), cash(220, { date:'2026-09-05', manual:true }), cash(1300, { date:'2026-09-05', manual:true }),
+                cash(100, { date:'2026-09-05', manual:true }), cash(1000, { date:'2026-09-13' })];
+r = ctx.advCheck(CFG7, habiba, 'e1', 200, at(23));
+ok(r.ok === true && r.used === 1000, '⭐ حالة حبيبة: سبتمبر فيه 1000 بس ← سلفة 200 تعدّي (كانت: «خلص — محسوب 3320»)' + JSON.stringify(r));
+r = ctx.advCheck(CFG7, habiba, 'e1', 2100, at(23));
+ok(r.ok === false && r.left === 2000, 'والسقف لسه شغال: 2100 فوق الـ2000 الباقيين = مرفوض');
+ok(ctx.advMonthBreakdown(habiba, 'e1', '2026-08', 0, 0, 7).total === 1820, 'وسلف 2 و5 سبتمبر في شهر أغسطس (1820)');
+ok(!/شهر غلط/.test(ctx.advLimitMessage(ctx.advCheck(CFG7, habiba.concat([cash(1900, { date:'2026-09-20' })]), 'e1', 500, at(23)))), 'ومفيش تحذير «شهر غلط» تاني');
+ok(/id="advCycleStartInput"/.test(html) && /cycleStartDay: sdv/.test(app) && /cycleStartDay: Number\(d\.cycleStartDay\)\|\|0/.test(app), 'فيه خانة في الإعدادات بتتحفظ وبتتقري');
+ok(/const _sd = advCycleStartDay\(\);\s*\n\s*if\(_sd >= 1\) return _sd - 1;/.test(app), 'ونفس الرقم بيحدد دورة الخصم من المرتب (payDayOfMonth)');
+
 console.log('🔌 5) التوصيل');
 ok(/window\.allAdvancesAll=allAdvances;window\.allAdvances=allAdvances;/.test(app), '⭐ `window.allAdvances` بيتحدّث مع كل تحميل — كان بيفضل على القايمة القديمة، فالسقف بيتحسب على بيانات ناقصة');
 ok(/: advLimitMessage\(chk\);/.test(app) && !/تعدّيت سقف الشهر/.test(app), 'شاشة طلب السلفة بتستخدم الرسالة الجديدة');
-['advKeyOf', 'advMonthBreakdown', 'advLimitMessage'].forEach(n => ok(new RegExp('window\\.' + n + ' = ' + n + ';').test(app), '`' + n + '` متعرّضة على window (القاعدة الذهبية §18)'));
+['advKeyOf', 'advMonthBreakdown', 'advLimitMessage', 'advCycleStartDay'].forEach(n => ok(new RegExp('window\\.' + n + ' = ' + n + ';').test(app), '`' + n + '` متعرّضة على window (القاعدة الذهبية §18)'));
 ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8'), 620) && assetAtLeast(html, 'sales-app.js', 620), 'sales ≥ v620');
 
 console.log('\n' + (fail ? '❌' : '✅') + ' test-advance-cap: ' + pass + ' ناجح · ' + fail + ' فاشل');

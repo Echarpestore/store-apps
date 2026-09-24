@@ -86,7 +86,7 @@ function load(role){
   };
   const names = Object.keys(ctx);
   const code = rd('pos/stock-move.js') + '\n' + rd('pos/stock-count.js')
-    + '\nreturn { countStart, countAdd, countReview, countApprove, countRecount, countCancel, canApproveCount, stockApply, countMovementsSince };';
+    + '\nreturn { countStart, countAdd, countReview, countApprove, countRecount, countCancel, canApproveCount, stockApply, countMovementsSince, scFindItem, scReportHTML };';
   const api = new Function(...names, code)(...names.map(n => ctx[n]));
   return { env, api, ctx, els };
 }
@@ -232,6 +232,72 @@ function seedSale(env, o){ env.store['pos_test_sales'] = env.store['pos_test_sal
   });
 
   console.log('\n🛡️ الربط والرولز');
+  console.log('\n🔎 v734 — السكانر في الجرد');
+  const INV = [{ id: 'a', name: 'طرحة', barcode: 'ECH-TR7' }, { id: 'b', name: 'بندانة', barcode: '00123' },
+               { id: 'c', name: 'إسدال', barcode: '4567', code: 'ISD1' }];
+  await t('باركود عادي · كود الصنف · من غير فرق حروف كبيرة وصغيرة', () => {
+    const L = load('manager'); L.ctx.allInventory.push(...INV);
+    ok(L.api.scFindItem('ECH-TR7').id === 'a' && L.api.scFindItem('ech-tr7').id === 'a' && L.api.scFindItem('ISD1').id === 'c', 'مالقاش');
+  });
+  await t('🔴 سكانر على كيبورد عربي بيعدّي من normalizeScan', () => {
+    const L = load('manager'); L.ctx.allInventory.push(...INV);
+    L.ctx.window.normalizeScan = (x) => x === 'ثؤا-فق7' ? 'ECH-TR7' : x;   // نفس دور دالة شاشة البيع
+    ok((L.api.scFindItem('ثؤا-فق7') || {}).id === 'a', 'الكيبورد العربي لسه بيرفض');
+  });
+  await t('🔴 الأصفار البادئة — بس لو صنف واحد بالظبط', () => {
+    const L = load('manager'); L.ctx.allInventory.push(...INV);
+    ok((L.api.scFindItem('123') || {}).id === 'b' && (L.api.scFindItem('000123') || {}).id === 'b', 'الأصفار');
+    L.ctx.allInventory.push({ id: 'd', name: 'تانية', barcode: '0123' });
+    ok(L.api.scFindItem('123') === null, 'خمّن بين صنفين');
+    ok(L.api.scFindItem('XYZ') === null, 'لقى حاجة مش موجودة');
+  });
+  await t('🔴 المسحة في الجرد متروحش للبيع (لاقط capture بيوقف الانتشار)', () => {
+    const src = rd('pos/stock-count.js');
+    ok(/document\.addEventListener\('keydown', _scKeydown, true\)/.test(src), 'اللاقط مش capture');
+    ok(/e\.stopImmediatePropagation\(\)/.test(src) && /scScan\(typed\.trim\(\) \? typed : buf, buf\)/.test(src), 'مبيوقفش اللاقط العام / مبيبعتش البديل');
+    ok(!/onkeydown="if\(event\.key==='Enter'\) scScan/.test(src), 'الـEnter بيتنادى مرتين');
+  });
+
+  console.log('\n📦 v734 — طبّق على السيستم كله');
+  const seed3 = (L) => { seedItem(L.env, 'i1', 10); seedItem(L.env, 'i2', 7); seedItem(L.env, 'i3', 0);
+    L.ctx.allInventory.push({ id: 'i1', name: 'أ', qtyByBranch: { 'El Rehab': 10 } }, { id: 'i2', name: 'ب', qtyByBranch: { 'El Rehab': 7 } },
+                            { id: 'i3', name: 'ج', qtyByBranch: { 'El Rehab': 0 } }); };
+  await t('جرد كامل: اللي ماتعدّش بيظهر لوحده ومبيتلمسش من غير الاختيار', async () => {
+    const L = load('manager'); seed3(L);
+    await L.api.countStart({ scope: 'full' });
+    await L.api.countAdd(item('i1'), 9, { replace: true });
+    const rows = await L.api.countReview();
+    ok(rows.uncounted.length === 1 && rows.uncounted[0].itemId === 'i2' && rows.uncounted[0].qtyNow === 7, JSON.stringify(rows.uncounted));
+    const r = await L.api.countApprove('جرد');
+    ok(r.zeroed === 0 && L.env.store.pos_test_inventory.i2.qtyByBranch['El Rehab'] === 7 && L.env.store.pos_test_inventory.i1.qtyByBranch['El Rehab'] === 9, 'اتلمس من غير اختيار');
+  });
+  await t('🔴 مع «طبّق على السيستم كله»: اللي ماتعدّش يتصفّر بحركة موثقة', async () => {
+    const L = load('manager'); seed3(L);
+    await L.api.countStart({ scope: 'full' });
+    await L.api.countAdd(item('i1'), 9, { replace: true });
+    await L.api.countReview();
+    const r = await L.api.countApprove('جرد آخر الشهر', { zeroUncounted: true });
+    const q = (id) => L.env.store.pos_test_inventory[id].qtyByBranch['El Rehab'];
+    ok(r.zeroed === 1 && q('i2') === 0 && q('i1') === 9 && q('i3') === 0, JSON.stringify({ r, i1: q('i1'), i2: q('i2') }));
+    const mv = Object.values(L.env.store.pos_stock_moves || {})[0];
+    ok(mv && mv.lines.some(l => l.itemId === 'i2' && l.qty === 7 && l.from === 'El Rehab' && l.to === null), 'التصفير من غير حركة');
+  });
+  await t('🔴 جرد قسم عمره ما يصفّر حاجة برّه القسم', async () => {
+    const L = load('manager'); seed3(L);
+    await L.api.countStart({ scope: 'section', sectionName: 'طرح' });
+    await L.api.countAdd(item('i1'), 9, { replace: true });
+    const rows = await L.api.countReview();
+    const r = await L.api.countApprove('', { zeroUncounted: true });
+    ok(rows.uncounted.length === 0 && r.zeroed === 0 && L.env.store.pos_test_inventory.i2.qtyByBranch['El Rehab'] === 7, 'صفّر برّه القسم');
+  });
+  await t('🖨️ تقرير مطبوع فيه الفرق والأصناف اللي ماتعدّتش ومهرّب', () => {
+    const L = load('manager');
+    const rows = [{ name: '<b>x</b>', barcode: '1', systemAtCount: 10, counted: 7, diff: -3 }, { name: 'ب', barcode: '2', systemAtCount: 2, counted: 4, diff: 2 }];
+    rows.uncounted = [{ name: 'ج', barcode: '3', qtyNow: 5 }];
+    const h = L.api.scReportHTML('CNT1', rows, { branch: 'El Rehab' });
+    ok(h.includes('CNT1') && h.includes('عجز 3') && h.includes('زيادة 2') && h.includes('ماتعدّتش') && h.includes('&lt;b&gt;') && !h.includes('<b>x</b>'), 'التقرير ناقص/مش مهرّب');
+  });
+
   await t('الشاشة والزرار متوصلين والإصدار اترفع', () => {
     const idx = rd('pos/index.html');
     ok(/stock-count\.js\?v=\d+/.test(idx), 'الملف مش متحمّل');

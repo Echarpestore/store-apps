@@ -70,7 +70,8 @@ if (!fs.existsSync(CORE)) {
   const H = fs.readFileSync(p, 'utf8');
   // 🖼️⭐ chatTryOn بيفتح الـoverlay (iframe) بدل تنقّل مباشر
   assert(H.indexOf("tryonOverlayOpen('" + brand + "')") >= 0, brand + ': chatTryOn بيفتح الـoverlay للبراند الصح');
-  assert(H.indexOf("photo.html?brand=' + brand + '&embed=1'") >= 0,
+  // 🔄 23-09: glow بقى بيزوّد `&run=` (تشغيل جديد كل فتحة) — الرابط الأساسي هو المهم
+  assert(/photo\.html\?brand=' \+ brand \+ '&embed=1/.test(H),
     brand + ': tryonOverlayOpen بيبني رابط الـiframe الصح');
   // 🔴 مبقاش بيفتح الوضع الحي مباشرة من الشات
   assert(H.indexOf("'../tryon/?imgkey=1'") === -1, brand + ': الشات مبقاش بيفتح الوضع الحي مباشرة');
@@ -118,10 +119,16 @@ assert(verAtLeast(sw('glow/sw.js'), /glow-loyalty-v(\d+)/, 51), 'كاش glow ≥
 const TSW = sw('tryon/sw.js');
 assert(verAtLeast(TSW, /echarpe-tryon-v(\d+)/, 38), 'كاش tryon ≥ v38');
 assert(TSW.indexOf('./photo.html') >= 0 && TSW.indexOf('./photo-core.js') >= 0, 'photo في precache بتاع tryon');
-assert(/photo-core\.js\?v=61/.test(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8')),
-  '🔴 photo-core عليه cache-bust v61 عشان إصلاح قص البندانة يوصل فورًا');
-assert(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8').indexOf('dataUrl === lastGridImage') >= 0,
-  '🔴 ممنوع عرض صورة الـgrid الأصلية لو crop البندانة فشل');
+/* 🔄 23-09: الـ?v=61 اتشال — الـsw بقى «شبكة الأول» بـno-cache لكل js/html، فأي تعديل بيوصل من غير رقم. */
+assert(/cache: 'no-cache'/.test(TSW) && /fetch\(fresh\)/.test(TSW),
+  '🔴 tryon sw بيجيب photo-core من الشبكة الأول (إصلاح القص يوصل فورًا من غير cache-bust)');
+{
+  const PH = fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8');
+  const sb = PH.slice(PH.indexOf('function showBandResult('), PH.indexOf('function onSwatchTap('));
+  assert(/^function showBandResult\(label, dataUrl\)\{\s*if\(!dataUrl\) return;/.test(sb)
+      && /return cells\[whichIndex\] \? cropCell\(imgEl, cells\[whichIndex\]\) : "";/.test(PH),
+    '🔴 ممنوع عرض صورة الـgrid الأصلية لو crop البندانة فشل (القص الفاشل = مفيش عرض خالص)');
+}
 
 
 /* ============================================================
@@ -260,11 +267,12 @@ assert(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8').indexOf('
   const fn = H.slice(H.indexOf('function generate('), H.indexOf('function fail('));
 
   const iHit  = fn.indexOf('PC.readResult');
-  const iCall = fn.indexOf('httpsCallable');
+  const iCall = fn.indexOf('callHijabTryOn(');   // 🔄 النداء اتنقل لدالة callHijabTryOn
   assert(iHit > -1, '💾 photo.html بيفحص الكاش');
   assert(iHit < iCall,
     '⭐ والفحص **قبل** النداء — بعده مالوش أي لازمة، التكلفة بتكون اتدفعت');
-  assert(/if\(hit\)\{\s*succeed\(hit,\s*true\);\s*return;\s*\}/.test(fn),
+  assert(/if\(hit\)\{\s*succeedPlain\(hit,\s*true\);\s*return;\s*\}/.test(fn)
+      && fn.indexOf('if(gridHit){') > -1 && fn.indexOf('if(gridHit){') < fn.indexOf('callHijabTryOn({ withBandana: true'),
     'وعند الإصابة بيعرض ويرجع من غير ما ينادي');
   assert(fn.indexOf('PC.saveResult') > -1, 'والنتيجة الجديدة بتتحفظ');
   // 🔴 مايتحفظش اللي جاي من الكاش — ده كان هيقلّب الترتيب كل عرض
@@ -295,9 +303,9 @@ assert(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8').indexOf('
   assertEq(PC.parseBandanaColors('not json'), [], 'JSON بايظ → فاضي مش استثناء');
   assertEq(PC.parseBandanaColors(null), [], 'قيمة فاضية → فاضي');
 
-  // isGridMode — ٢ فأكتر بس
+  // isGridMode — 🔄 التصميم الحالي: أي لون = شبكة («بدون بندانة» + من ١ لـ٣ ألوان)
   assert(PC.isGridMode(['a', 'b']) === true, '٢ لون = وضع شبكة');
-  assert(PC.isGridMode(['a']) === false, 'لون واحد = مش شبكة');
+  assert(PC.isGridMode(['a']) === true, 'لون واحد = شبكة (بدون بندانة + اللون)');
   assert(PC.isGridMode([]) === false, 'صفر لون = مش شبكة');
 
   // readBandanaColors — من sessionStorage (JSON string)
@@ -358,7 +366,13 @@ assert(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8').indexOf('
   // computeGridLayout — لازم يطابق حسبة hijabTryOn.js بالظبط
   assertEq(PC.computeGridLayout(2), { cols: 2, rows: 1 }, '٢ لون → ٢×١');
   assertEq(PC.computeGridLayout(4), { cols: 2, rows: 2 }, '٤ ألوان → ٢×٢');
-  assertEq(PC.computeGridLayout(6), { cols: 3, rows: 2 }, '٦ ألوان → ٣×٢');
+  // 🔄 أقصى ٤ خانات («بدون» + ٣ ألوان) — زي السيرفر بالظبط
+  assertEq(PC.computeGridLayout(3), { cols: 3, rows: 1 }, '٣ خانات → ٣×١');
+  {
+    const srv = fs.readFileSync(path.join(ROOT, 'functions', 'hijabTryOn.js'), 'utf8');
+    assert(/if \(n === 3\) return \{ cols: 3, rows: 1 \};\s*return \{ cols: 2, rows: 2 \};/.test(srv),
+      '⭐ الشبكة في الصفحة = الشبكة في برومبت السيرفر (غير كده القص بيقطع غلط)');
+  }
 
   // 🔴🔴⭐ resolveGridOrientation — نفس حالة السكرين شوت بالظبط
   assertEq(PC.resolveGridOrientation(600, 1400, 2, 1), { cols: 1, rows: 2 },
@@ -432,14 +446,16 @@ assert(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8').indexOf('
   assert(H.indexOf('PC.readBandanaColors') >= 0, 'بيقرا ألوان البندانة من sessionStorage');
   assert(H.indexOf('withBandana') >= 0 && H.indexOf('bandanaColors') >= 0,
     'بيبعت withBandana + bandanaColors للدالة');
-  assert(H.indexOf('bandanaColors: gridMode ? bandanaColorsRequested : undefined') >= 0,
+  assert(H.indexOf('callHijabTryOn({ withBandana: true, bandanaColors: bandanaColorsRequested })') >= 0,
     '🔴🔴🔴🔴⭐ نداء واحد بيبعت كل الألوان المختارة مع بعض (لحد ٣) — مش لون واحد منفصل');
-  assert(H.indexOf('generateForColor') === -1 && H.indexOf('onSwatchTap') === -1,
+  const tapFn = H.slice(H.indexOf('function onSwatchTap('), H.indexOf('function renderBandRow('));
+  assert(H.indexOf('generateForColor') === -1 && tapFn.length > 0 && tapFn.indexOf('callHijabTryOn') === -1 && tapFn.indexOf('cropFromGrid') > -1,
     '🔴 مفيش أثر للتصميم القديم (طلب مستقل لكل لون) — اتلغى بقرار المالك');
 
   // ✂️ القص: التقسيم الرياضي + تصحيح الاتجاه، على الصورة كلها مرة واحدة
-  const trySplitFn = (H.match(/function trySplitGrid\(imageDataUrl, colors\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(trySplitFn.length > 0, 'trySplitGrid موجودة');
+  // 🔄 trySplitGrid اتسمّت cropFromGrid
+  const trySplitFn = (H.match(/function cropFromGrid\(imgEl, whichIndex\)\{[\s\S]*?\n  \}/) || [''])[0];
+  assert(trySplitFn.length > 0, 'cropFromGrid موجودة');
   assert(trySplitFn.indexOf('PC.computeGridLayout') >= 0 && trySplitFn.indexOf('PC.sliceGridProportional') >= 0,
     'بتستخدم نفس أبعاد الشبكة اللي في البرومبت + التقسيم المضمون');
   assert(H.indexOf('id="bandRow"') >= 0, 'عنصر صف الألوان موجود في الصفحة');
@@ -448,8 +464,8 @@ assert(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8').indexOf('
   assert(!/\.innerHTML\s*=/.test(H), '🔒 الكود الجديد برضه ملتزم: مفيش innerHTML في الصفحة كلها');
 
   // 🔴 الافتراضي المعروض أول ما النتيجة تظهر: أول لون حقيقي، مش "بدون بندانة"
-  const renderFn = (H.match(/function renderBandRow\(labeled, imgEl\)\{[\s\S]*?\n  \}/) || [''])[0];
-  assert(renderFn.indexOf("e.label !== \"none\"") >= 0,
+  // 🔄 الخانة 0 = «بدون بندانة»؛ الافتراضي الخانة 1 = أول لون حقيقي (في مسار الكاش والجديد)
+  assert((H.match(/showBandResult\(bandanaColorsRequested\[0\], cropFromGrid\(_lastLoadedGridImg, 1\)\)/g) || []).length === 2,
     '🔴 الافتراضي أول لون حقيقي (المنتج المعروض) مش غيابه');
 })();
 
@@ -510,13 +526,14 @@ assert(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8').indexOf('
    ============================================================ */
 (function () {
   const H = fs.readFileSync(PAGE, 'utf8');
-  assert(/\.resultCard\{[^}]*aspect-ratio\s*:\s*4\s*\/\s*5/.test(H),
-    '🔴⭐ كارت النتيجة بنسبة ثابتة (aspect-ratio) مش متغيّرة مع كل توليد');
+  // 🔄 نسبة 4/5 الثابتة اتشالت (كانت بتسيب فراغ حوالين خانات البندانة) — الحماية دلوقتي: contain + سقف ارتفاع
+  assert(/\.resultCard\{[^}]*overflow:hidden/.test(H),
+    '🔴⭐ كارت النتيجة مقفول على حدوده (مفيش سكرول جوّه)');
   assert(/\.result img\{[^}]*object-fit\s*:\s*contain/.test(H),
     '🔴⭐ object-fit:contain — الصورة كاملة دايمًا، مفيش أي جزء بيتقص/"يطير"');
   assert(!/\.result img\{[^}]*object-fit\s*:\s*cover/.test(H),
     '🔴 مفيش رجوع لـcover (كانت هي سبب قص الصورة)');
-  assert(/\.resultCard\{[^}]*max-height\s*:\s*62vh/.test(H),
+  assert(/\.result img\{[^}]*max-height\s*:\s*62vh/.test(H),
     '⭐ سقف ارتفاع أكبر من المحاولة الأولى (44vh كانت صغيرة أوي)');
 })();
 
@@ -637,3 +654,11 @@ assert(fs.readFileSync(path.join(ROOT, 'tryon', 'photo.html'), 'utf8').indexOf('
   assert(/\.outfit-card \.oc-buy\{background:none; border-color:var\(--pink\);/.test(H),
     brand + ': 🔴 زرار "اطلبيها" في كارت الطقم بقى بإطار (تانوي) زي باقي التصميم');
 });
+
+/* 🔄 23-09 (قرار المالك): `tryon/index.html` كان نسخة غلط من تطبيق نادي العملاء (بشات وإشعارات).
+   بقى تحويل بسيط لنادي العملاء — ومينفعش يرجع تطبيق كامل هنا بالغلط تاني. */
+(function(){
+  const T = fs.readFileSync(path.join(ROOT, 'tryon', 'index.html'), 'utf8');
+  assert(/location\.replace\('\.\.\/loyalty\/'\)/.test(T), '🔴 /tryon/ بيحوّل لنادي العملاء');
+  assert(!/firebase-messaging|chat-core\.js|نادي العملاء<\/title>/.test(T), '🔴 ومش نسخة من تطبيق العملاء (مفيش شات ولا إشعارات)');
+})();

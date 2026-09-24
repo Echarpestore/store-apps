@@ -42,7 +42,7 @@ function extractFn(s, header){
 const WANTED = [
   'function caiParts(', 'function caiOffsetMs(', 'function cai(', 'function caiNow(',
   'function caiStamp(', 'function caiDayStart(', 'function caiDayEnd(',
-  'function _fmtKey(', 'function caiDayKey(', 'function payDayOfMonth(', 'function _mkKey(', 'function payCycleKeyOfDate(',
+  'function _fmtKey(', 'function caiDayKey(', 'function advCycleStartDay(', 'function payDayOfMonth(', 'function _mkKey(', 'function payCycleKeyOfDate(',
   'function advPayCycleOf(', 'function payPeriodRange(', 'function defaultPayPeriodKey(',
   'function payPeriodOptions(', 'function _nextMonthKey(', 'function attendedDaysDetail(',
   'function getMonthDateRange(', 'function getMonthLabel(', 'function countDayOffOccurrencesInRange(',
@@ -84,7 +84,7 @@ function _dayKeyOf(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).pad
 `;
 
 function makeCtx(opts){
-  const win = { advCfg: { maxPerMonth: 0, openDay: 12, closeDay: (opts.closeDay === undefined ? 6 : opts.closeDay) }, deductions: [], allTimeCredit: [], allLeaveReqs: [] };
+  const win = { advCfg: { maxPerMonth: 0, openDay: 12, closeDay: (opts.closeDay === undefined ? 6 : opts.closeDay), cycleStartDay: opts.cycleStartDay || 0 }, deductions: [], allTimeCredit: [], allLeaveReqs: [] };
   const ctx = {
     window: win, console: { warn(){}, log(){} },
     allShifts: opts.shifts || [], allAdvances: opts.advances || [],
@@ -236,6 +236,13 @@ const adv = (id, dateStr, amount, src_) => ({
   assert(c9.payDayOfMonth() === 9, '⭐ ولو المالك غيّره لـ 9 بيتغيّر فعلًا');
   assert(c9.payCycleKeyOfDate(new Date('2026-08-08T12:00:00'), c9.payDayOfMonth()) === '2026-07',
     'والدورة بتتحرك معاه (8 أغسطس بقت على يوليو)');
+  // v622: «شهر السلف يبدأ يوم» بيكسب على closeDay — نفس الرقم للسقف وللخصم
+  const s7 = makeCtx({ closeDay: 9, cycleStartDay: 7 });
+  assert(s7.payDayOfMonth() === 6, '⭐ بداية 7 ⇒ الدورة لحد 6 (حتى لو closeDay = 9)');
+  assert(s7.advPayCycleOf({ date: '2026-09-05' }, s7.payDayOfMonth()) === '2026-08'
+      && s7.advPayCycleOf({ date: '2026-09-07' }, s7.payDayOfMonth()) === '2026-09', 'سلفة 5 سبتمبر تتخصم من أغسطس · 7 من سبتمبر');
+  const s1 = makeCtx({ closeDay: 6, cycleStartDay: 1 });
+  assert(s1.payDayOfMonth() === 0 && s1.advPayCycleOf({ date: '2026-09-02' }, 0) === '2026-09', 'بداية 1 = الشهر التقويمي');
 })();
 
 // ============================================================

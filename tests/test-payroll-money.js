@@ -275,7 +275,7 @@ const EMP = { id:'e1', name:'سارة', branch:'الرحاب', baseSalary:3000,
   // ---- موصّل ----
   assert(/advWindowOpen\(cfg\.openDay, now, cfg\.closeDay\)/.test(srcA),
     'الفحص بيمرّر يوم القفل');
-  assert(/advCycleKey\(_d, cfg\.openDay, cfg\.closeDay\)/.test(srcA),
+  assert(/advCycleKey\(_d, cfg\.openDay, cfg\.closeDay(?:, _sd)?\)/.test(srcA),
     'والسقف بيتحسب بشهر النافذة');
   assert(/cycleKey: advCycleKey\(new Date\(\)/.test(srcA),
     '🗓️ وكل سلفة بتتسجل بشهر نافذتها — الحسبة متتغيرش لو الإعدادات اتعدّلت');

@@ -65,10 +65,11 @@ if (M) {
   // ====================== ١) إعدادات السيرفر ======================
   const d0 = M.resolveConfig(null);
   assertEq(d0.model, M.DEFAULTS.model, 'الافتراضي: الموديل');
-  assertEq(d0.quality, 'low', 'الافتراضي: الجودة low');
+  // 🔄 الافتراضي بقى high (2K عشان خانات الشبكة تبقى واضحة بعد القص) — وبيتغيّر من tryon_ai من غير نشر
+  assertEq(d0.quality, 'high', 'الافتراضي: الجودة high (2K للشبكة)');
   assert(d0.enabled === true, 'الافتراضي: مفعّل');
   // الجودة الغلط بترجع للافتراضي (مش بتعدّي كأي string)
-  assertEq(M.resolveConfig({ quality: 'ultra' }).quality, 'low', 'جودة غير مسموحة → افتراضي');
+  assertEq(M.resolveConfig({ quality: 'ultra' }).quality, M.DEFAULTS.quality, 'جودة غير مسموحة → الافتراضي');
   assertEq(M.resolveConfig({ quality: 'high' }).quality, 'high', 'high مسموحة');
   // التفعيل ينطفي بس بـfalse صريح
   assert(M.resolveConfig({ enabled: false }).enabled === false, 'enabled:false بيتحترم');
@@ -110,13 +111,14 @@ if (M) {
 
   // ====================== ٤) البرومبت ======================
   const p = M.buildTryOnPrompt();
-  assert(/same face/i.test(p) && /skin tone/i.test(p), 'البرومبت بيحافظ على هوية العميلة');
+  // 🔄 23-09: البرومبت اتعاد كتابته — نفس الضمانات بصياغة جديدة
+  assert(/Preserve the customer's identity exactly/i.test(p) && /skin texture and tone/i.test(p), 'البرومبت بيحافظ على هوية العميلة');
   assert(/do not beautify/i.test(p), 'البرومبت بيمنع التجميل/التعديل');
   assert(/border|stripes|embroidery/i.test(p), 'البرومبت بيحافظ على تفاصيل المنتج (حواف/تطريز)');
-  assert(/pasted/i.test(p), 'البرومبت بيمنع الشكل الملزوق');
+  assert(/physically worn with realistic folds, shadows, depth and occlusion/i.test(p), 'البرومبت بيمنع الشكل الملزوق (لازم ملبوس فعلًا بظلال وطيّات)');
   // 🔴 صورة **واحدة** بس — مفيش كولاج/مقارنة
   assert(/one finished/i.test(p), 'البرومبت بيطلب صورة واحدة');
-  assert(/no collage/i.test(p) && /side-by-side/i.test(p), 'البرومبت بيمنع الكولاج والمقارنة');
+  assert(/No grid, collage, side-by-side/i.test(p), 'البرومبت بيمنع الكولاج والمقارنة');
 
   // ====================== ٥) استخراج الصورة من الرد ======================
   const resp = { candidates: [{ content: { parts: [

@@ -56,7 +56,8 @@ if (!fs.existsSync(OC_PATH)) {
   assert(/if\(bc\) sessionStorage\.setItem\('echarpe_tryon_pid', bc\);/.test(ctFn),
     brand + ': chatTryOn بيحفظ الباركود لو موجود');
   // بيفتح البراند الصح
-  assert(ctFn.indexOf("photo.html?brand=" + brand) >= 0, brand + ': chatTryOn بيفتح البراند الصح');
+  // 🔄 بقى بيفتح overlay: tryonOverlayOpen('<براند>') هي اللي بتبني الرابط (متفحوصة في test-tryon-photo)
+  assert(ctFn.indexOf("photo.html?brand=" + brand) >= 0 || ctFn.indexOf("tryonOverlayOpen('" + brand + "')") >= 0, brand + ': chatTryOn بيفتح البراند الصح');
 
   // tryonAddToCart: بيضيف فعليًا للسلة الحقيقية + يفتح تبويب المتجر
   // ⚠️ v62: بارامتر note اختياري بقى (لون البندانة) — الاسم نفسه

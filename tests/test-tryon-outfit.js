@@ -92,8 +92,9 @@ function checkCustomerApp(brand, filePath, tryonOpenPattern) {
   assert(tryonOpenPattern.test(H), brand + ': جربيها عليكي بتفتح photo.html بالبراند الصح');
 }
 
-checkCustomerApp('loyalty', path.join(ROOT, 'loyalty', 'index.html'), /photo\.html\?brand=loyalty/);
-checkCustomerApp('glow', path.join(ROOT, 'glow', 'index.html'), /photo\.html\?brand=glow/);
+checkCustomerApp('loyalty', path.join(ROOT, 'loyalty', 'index.html'), /photo\.html\?brand=loyalty|tryonOverlayOpen\('loyalty'\)/);
+// 🔄 التطبيقين بقوا بيفتحوا التجربة جوّه overlay: tryonOverlayOpen('<براند>') هي اللي بتبني photo.html?brand=…
+checkCustomerApp('glow', path.join(ROOT, 'glow', 'index.html'), /photo\.html\?brand=glow|tryonOverlayOpen\('glow'\)/);
 checkCustomerApp('site', path.join(ROOT, 'index.html'), /photo\.html\?brand=site/);
 
 // ================= ٥) تعقيم كروت الطقم =================

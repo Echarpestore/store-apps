@@ -45,7 +45,7 @@ const WANTED = [
   'function earlyLeaveFromWorked(', 'function countAttendedDaysInRange(',
   'function attendedDaysDetail(', 'function countDayOffOccurrencesInRange(',
   'function payPeriodRange(', 'function getMonthLabel(', 'function payCycleKeyOfDate(',
-  'function defaultPayPeriodKey(', 'function _mkKey(', 'function payDayOfMonth(',
+  'function defaultPayPeriodKey(', 'function _mkKey(', 'function advCycleStartDay(', 'function payDayOfMonth(',
   'function resolveAttendanceShift(',   // v711: اعتماد جديد للمحرك — الـharness كان ناقصه
 ];
 const parts = [];

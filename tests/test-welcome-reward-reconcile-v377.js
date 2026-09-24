@@ -9,7 +9,8 @@ ok(fn.includes('await db.runTransaction(async (tx) =>'), 'welcome grant is trans
 ok(fn.includes('if (current["welcomeGranted_" + brand]) return false;'), 'marker prevents duplicate grant');
 ok(fn.includes('if (!readTokens(current, brand).length) return false;'), 'grant requires real token');
 ok(fn.includes('.catch((e) => console.warn("welcome push"'), 'push failure cannot undo grant');
-for(const rel of ['loyalty/index.html','glow/index.html','tryon/index.html']){
+// 🔄 23-09: tryon/index.html كان نسخة غلط من تطبيق العملاء — بقى تحويل لنادي العملاء (test-tryon-photo)
+for(const rel of ['loyalty/index.html','glow/index.html']){
   const s=fs.readFileSync(path.join(root,rel),'utf8');
   ok(s.includes("var welcomeField = 'welcomeGranted_' + CATALOG_BRAND;"), rel+' cached token recovery');
   ok(s.includes("u['fcmTokenAt'] = Date.now();"), rel+' re-touch triggers reconciliation');
