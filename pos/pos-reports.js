@@ -1817,6 +1817,9 @@ let dcData = {};   // بيانات النهاردة من السيستم (للح�
 
 // 💰 تجميع أرقام التقفيل — دالة نقية عشان تتختبر بالـ harness.
 // بتشمل المعكوس وفاتورة عكسه مع بعض (بيصفّروا بعض) — دي فلوس دخلت وخرجت فعلًا من الدرج.
+/* 💵 v737 — فئات عدّ الدرج (اتضاف الجنيه). مكان واحد للقايمة — الرسم والحساب والإيصال بيقروا منها. */
+const DC_DENOMS = [200, 100, 50, 20, 10, 5, 1];
+window.DC_DENOMS = DC_DENOMS;
 function dcAggregate(sales){
   const systemTotal = (sales||[]).reduce((s,x)=> s + (x.total||0), 0);
   let cashSales=0, visaSales=0, instaSales=0, salarySales=0, creditSales=0, pointsSales=0, rewardSales=0;
@@ -1943,7 +1946,7 @@ async function goToEndOfDay(){
   dcData = { systemTotal, cashSales, visaSales, instaSales, salarySales, creditSales, pointsSales, rewardSales, staffOrdersCount: staffOrdersToday.length, staffOrdersTotal, advancesTotal, invoiceCount: sales.length, lateTotal, lateCash, lateCount: lateSales.length, lastCloseTs, pendingCount: _pendingCount, fromCache: _fromCache };
   const lastFloat = parseFloat(localStorage.getItem('dc_float_'+currentBranch)) || '';
 
-  const denoms = [200,100,50,20,10,5];
+  const denoms = DC_DENOMS;
   const denomRows = denoms.map(d=>`
     <div class="dc-den-row">
       <div class="dc-den-face">${d} ج.م</div>
@@ -2012,7 +2015,7 @@ function dcClearResult(){ const r=document.getElementById('dc_result'); if(r) r.
 
 // حساب حي لإجمالي الكاش المعدود
 function dcRecalc(){
-  const denoms = [200,100,50,20,10,5];
+  const denoms = DC_DENOMS;
   let counted = 0;
   denoms.forEach(d=>{
     const c = dcNum('dc_den_'+d);
@@ -2031,7 +2034,7 @@ async function dcFinish(){
   if(dcData && dcData.fromCache){
     if(!(await posConfirm('📴 النت قاطع والأرقام من الكاش المحلي\nفواتير الأجهزة التانية ممكن تكون ناقصة.\nالأفضل تستنى النت يرجع. متأكد إنك عايز تقفل دلوقتي؟', { danger:true, waitSec:3, okText:'أيوه، اقفل دلوقتي', cancelText:'لأ، هستنى النت' }))) return;
   }
-  const denoms = [200,100,50,20,10,5];
+  const denoms = DC_DENOMS;
   let counted = 0; denoms.forEach(d=> counted += dcNum('dc_den_'+d) * d);
   const flt = dcNum('dc_float'), exp = dcNum('dc_expenses'), adv = dcNum('dc_advances');
   // 🛡️ ثغرة "المصروفات المطاطة": خانة المصروفات إدخال حر — أي رقم فيها بيغطي
