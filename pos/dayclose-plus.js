@@ -16,7 +16,7 @@
 function _dcpEsc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
-function _dcpN(v){ return (+(v || 0)).toFixed(2); }
+function _dcpN(v){ const n = +(v || 0); return Number.isInteger(n) ? n.toLocaleString('en-US') : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function _dcpDenomList(){ return (typeof DC_DENOMS !== 'undefined' && Array.isArray(DC_DENOMS)) ? DC_DENOMS : [200, 100, 50, 20, 10, 5, 1]; }
 function _dcpVal(id){ const el = document.getElementById(id); return el ? (parseFloat(el.value) || 0) : 0; }
 function _dcpDayId(){ return 'dayclose_' + currentBranch + '_' + todayISO(); }
@@ -49,31 +49,33 @@ function dcpReceiptHTML(r){
   r = r || {};
   const den = r.denoms || {};
   const list = _dcpDenomList();
+  /* v739: نفس قالب «تقرير إغلاق اليوم» اللي بيتطبع سليم على طابعات الفروع بالظبط —
+     سطر = اسم على اليمين وقيمة على الشمال. (الجدول بـ3 عواميد كان بيعدّي عرض ورق 80mm فاتقص.) */
   const rows = list.map(d => {
     const n = Number(den[String(d)]) || 0;
-    return '<tr><td style="padding:3px 4px;">' + d + ' ج</td><td style="text-align:center;">× ' + n + '</td><td style="text-align:left; font-weight:700;">' + (n * d).toFixed(0) + '</td></tr>';
+    return '<div style="display:flex; justify-content:space-between; font-size:13px; padding:1.5px 0;"><span>' + d + ' ج × ' + n + '</span><b style="direction:ltr;">' + _dcpN(n * d) + '</b></div>';
   }).join('');
   const pieces = list.reduce((s, d) => s + (Number(den[String(d)]) || 0), 0);
-  const line = (l, v, bold) => '<div style="display:flex; justify-content:space-between; padding:2.5px 0; font-size:13px;' + (bold ? 'font-weight:900; font-size:14.5px;' : '') + '"><span>' + l + '</span><b style="direction:ltr;">' + v + '</b></div>';
+  const line = (l, v, bold) => '<div style="display:flex; justify-content:space-between; font-size:13px; padding:2.5px 0;' + (bold ? 'font-weight:900;' : '') + '"><span>' + l + '</span><b style="direction:ltr;">' + v + '</b></div>';
   const hr = '<div style="border-top:2px dashed #000; margin:6px 0;"></div>';
   const at = r.at ? new Date(r.at) : new Date();
   return '<div style="font-family:Cairo,Tahoma,Arial,sans-serif; direction:rtl; color:#000; width:100%; padding:4px 6px;">'
-    + '<div style="text-align:center; font-weight:900; font-size:17px;">🧾 إيصال تسليم الدرج</div>'
+    + '<div style="text-align:center; font-weight:900; font-size:17px;">إيصال تسليم الدرج</div>'
     + '<div style="text-align:center; font-size:12.5px;">' + _dcpEsc(r.branch) + ' · ' + _dcpEsc(r.date || '') + ' · ' + at.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) + '</div>'
-    + '<div style="font-size:12px; margin-top:4px;">👤 الكاشير: <b>' + _dcpEsc(r.closedBy || '—') + '</b></div>'
-    + (r.staff && r.staff.length ? '<div style="font-size:12px;">👥 كانوا واقفين: ' + r.staff.map(_dcpEsc).join('، ') + '</div>' : '')
+    + line('الكاشير', _dcpEsc(r.closedBy || '—'))
+    + (r.staff && r.staff.length ? '<div style="font-size:12px; text-align:center;">كانوا واقفين: ' + r.staff.map(_dcpEsc).join('، ') + '</div>' : '')
     + hr
-    + '<div style="font-weight:900; font-size:13.5px; margin-bottom:3px;">💵 عدّ الكاش</div>'
-    + '<table style="width:100%; border-collapse:collapse; font-size:13px;">' + rows + '</table>'
+    + '<div style="font-weight:900; font-size:13.5px; margin-bottom:3px;">عدّ الكاش</div>'
+    + rows
     + line('عدد الورق', pieces)
     + line('إجمالي الكاش المعدود', _dcpN(r.counted), true)
-    + line('− العهدة (بتفضل في الدرج)', _dcpN(r.float))
+    + line('− العهدة', _dcpN(r.float))
     + line('= المسلّم كاش', _dcpN(r.handed), true)
     + hr
-    + line('مصروفات طلعت من الدرج', _dcpN(r.expenses))
-    + (r.expNote ? '<div style="font-size:11.5px;">📝 ' + _dcpEsc(r.expNote) + '</div>' : '')
-    + line('سلف طلعت من الدرج', _dcpN(r.advances))
-    + line('فيزا (من الماكينة)', _dcpN(r.visa))
+    + line('مصروفات', _dcpN(r.expenses))
+    + (r.expNote ? '<div style="font-size:11.5px;">' + _dcpEsc(r.expNote) + '</div>' : '')
+    + line('سلف', _dcpN(r.advances))
+    + line('فيزا', _dcpN(r.visa))
     + line('انستاباي', _dcpN(r.instapay))
     + ((+(r.salary || 0)) > 0 ? line('📄 خصم راتب موظفين', _dcpN(r.salary)) : '')
     + hr
@@ -103,24 +105,35 @@ let _dcpLast = null;
 function dcpPrintLast(){ if(_dcpLast) dcpPrint(_dcpLast); }
 
 /* بعد التقفيل: نجمع بيانات الإيصال من الشاشة ونحفظها على مستند اليوم */
-async function dcpAfterFinish(){
-  const counted = _dcpDenomList().reduce((s, d) => s + _dcpVal('dc_den_' + d) * d, 0);
-  const flt = _dcpVal('dc_float');
-  const dayMs = (typeof bizDayStartMs === 'function') ? bizDayStartMs() : new Date(new Date().setHours(0, 0, 0, 0)).getTime();
-  const staff = await dcpStaffToday(currentBranch, dayMs);
-  const who = (typeof currentEmployee !== 'undefined' && currentEmployee) || {};
-  const r = {
-    branch: currentBranch, date: todayISO(), at: Date.now(),
-    closedBy: who.name || '', closedById: who.id || '',
-    staff, denoms: dcpReadDenoms(),
-    counted, float: flt, handed: +(counted - flt).toFixed(2),
+/* كل اللي على الشاشة، مقروء في لحظة واحدة — بيتاخد **قبل** ما التقفيل الأصلي يشتغل. */
+function dcpSnapshot(){
+  const denoms = dcpReadDenoms();
+  return {
+    denoms, counted: _dcpDenomList().reduce((s, d) => s + (denoms[String(d)] || 0) * d, 0), float: _dcpVal('dc_float'),
     expenses: _dcpVal('dc_expenses'), advances: _dcpVal('dc_advances'),
     expNote: ((document.getElementById('dc_expNote') || {}).value || '').trim(),
     visa: _dcpVal('dc_visa'), instapay: _dcpVal('dc_insta'), salary: _dcpVal('dc_salary')
   };
+}
+async function dcpAfterFinish(pre){
+  /* 🔴 v739 — بلاغ المالك 25-09: الإيصال طلع كل الفئات «× 0» والمعدود صح.
+     الخانات كانت بتتقري بعد انتظار الحضور (await) — والشاشة بتترسم من جديد في الوقت ده
+     فالخانات بتفضى. دلوقتي كل حاجة من الشاشة بتتقري **مرة واحدة قبل أي انتظار**. */
+  const snap0 = pre || dcpSnapshot();
+  const { denoms, counted, float: flt } = snap0;
+  const snap = { expenses: snap0.expenses, advances: snap0.advances, expNote: snap0.expNote, visa: snap0.visa, instapay: snap0.instapay, salary: snap0.salary };
+  const who = (typeof currentEmployee !== 'undefined' && currentEmployee) || {};
+  const branch = currentBranch, date = todayISO(), docId = _dcpDayId();
+  const dayMs = (typeof bizDayStartMs === 'function') ? bizDayStartMs() : new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+  const staff = await dcpStaffToday(branch, dayMs);
+  const r = Object.assign({
+    branch, date, at: Date.now(),
+    closedBy: who.name || '', closedById: who.id || '',
+    staff, denoms, counted, float: flt, handed: +(counted - flt).toFixed(2)
+  }, snap);
   _dcpLast = r;
   try{
-    await db.collection(TEST_SETTINGS).doc(_dcpDayId()).set({
+    await db.collection(TEST_SETTINGS).doc(docId).set({
       denoms: r.denoms, handedCash: r.handed, staffOnShift: staff,
       closedById: r.closedById, closedByName: r.closedBy, receiptAt: r.at
     }, { merge: true });
@@ -216,10 +229,11 @@ function dcpPrintRec(docId){
     const g = async function(){
       const res = document.getElementById('dc_result');
       if(res) res.innerHTML = '';
+      const pre = dcpSnapshot();          // v739: الخانات قبل ما أي حاجة تعيد رسم الشاشة
       const out = await origFinish.apply(this, arguments);
       // التقفيل بيرسم النتيجة **بس** لو كمّل للحفظ — لو وقف (بيان ناقص/إلغاء) مبنكتبش حاجة
       if(!res || !res.innerHTML.trim()) return out;
-      const r = await dcpAfterFinish();
+      const r = await dcpAfterFinish(pre);
       res.insertAdjacentHTML('beforeend', '<button onclick="dcpPrintLast()" style="margin-top:10px; width:100%; padding:13px; border-radius:11px; border:none; background:var(--accent); color:#fff; font-weight:800; font-size:14px; cursor:pointer;">🖨️ طباعة إيصال تسليم الدرج</button>');
       // الكاشير: الإيصال بيتطبع لوحده. المدير بيدوس «احسب» كذا مرة فمبنطبعش كل مرة — الزرار موجود
       if(r && !_dcpCanReceive()) dcpPrint(r);
@@ -254,3 +268,4 @@ window.openDaysReceive = openDaysReceive;
 window.dcpReceiveUI = dcpReceiveUI;
 window.dcpPrintRec = dcpPrintRec;
 window.dcpStaffToday = dcpStaffToday;
+window.dcpSnapshot = dcpSnapshot;
