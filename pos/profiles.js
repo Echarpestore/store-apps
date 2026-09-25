@@ -130,6 +130,8 @@ async function openCustomerProfile(phone){
     sales.forEach(s=>{
       const t = saleTime(s), ref = s.invoiceNo || (s.id ? s.id.slice(-6).toUpperCase() : '');
       if((s.loyaltyPointsEarned||0) > 0) pts.push({ earn:true, n:s.loyaltyPointsEarned, t, ref });
+      // ↩️ v741: فاتورة مرتجع بتخصم نقط — كانت بتتخصم من الرصيد بس مكانتش بتظهر هنا (بلاغ 26-09)
+      else if((s.loyaltyPointsEarned||0) < 0) pts.push({ earn:false, ret:true, n:Math.abs(s.loyaltyPointsEarned), t, ref });
       let red = s.pointsRedeemed || 0;
       if(!red){ const rl = (s.items||[]).find(it=> it.isRedemption); if(rl){ const m = String(rl.name||'').match(/(\d+)/); if(m) red = parseInt(m[1]); } }
       if(red > 0) pts.push({ earn:false, n:red, t, ref });
@@ -210,9 +212,9 @@ function renderCustProfile(){
     (d.pts.length ? d.pts.slice(0,50).map(e=>{
       const dstr = e.t ? new Date(e.t).toLocaleDateString('ar-EG', {day:'2-digit', month:'short', year:'numeric'}) : '—';
       return `<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:12.5px;">
-        <div><span style="font-weight:800; color:${e.earn?'var(--plus)':'var(--warn)'};">${e.earn?'➕ كسب':'🎁 استبدال'}</span>
+        <div><span style="font-weight:800; color:${e.earn?'var(--plus)':(e.ret?'var(--minus)':'var(--warn)')};">${e.earn?'➕ كسب':(e.ret?'↩️ خصم مرتجع':'🎁 استبدال')}</span>
         <div style="color:var(--muted); font-size:10.5px; margin-top:1px;">${e.ref?('#'+e.ref+' · '):''}${dstr}</div></div>
-        <span style="font-weight:900; font-size:15px; color:${e.earn?'var(--plus)':'var(--warn)'};">${e.earn?'+':'−'}${e.n}</span>
+        <span style="font-weight:900; font-size:15px; color:${e.earn?'var(--plus)':(e.ret?'var(--minus)':'var(--warn)')};">${e.earn?'+':'−'}${e.n}</span>
       </div>`;
     }).join('') : '<div style="color:var(--muted); font-size:12px; text-align:center; padding:14px 0;">لسه مفيش حركات نقاط (بتتسجّل تلقائي من الفواتير)</div>');
   }

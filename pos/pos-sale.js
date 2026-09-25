@@ -4472,7 +4472,54 @@ window.showChangeAfterPrint = showChangeAfterPrint;
 
 
 let _confirmSaving = false;
+let _confirmBusy = false;                 // v741: قفل من أول ضغطة لحد آخر الحفظ (شامل سؤال الماكينة)
+const _savedCardRefs = new Map();         // v741: رقم طلب Paymob → رقم الفاتورة اللي اتحفظ فيها
+function _currentCardRefs(){
+  const out = [];
+  try{ (cardLegs || []).forEach(function(l){ if(l && l.ref && l.status !== 'pending') out.push(String(l.ref)); }); }catch(e){}
+  try{ (paymobCardTxns || []).forEach(function(t){ if(t && t.orderRef) out.push(String(t.orderRef)); if(t && t.transactionId) out.push('txn:' + t.transactionId); }); }catch(e){}
+  return out;
+}
+function _cardRefAlreadySaved(){
+  const refs = _currentCardRefs();
+  for(let i = 0; i < refs.length; i++){
+    if(_savedCardRefs.has(refs[i])) return { ref: refs[i], invoice: _savedCardRefs.get(refs[i]) };
+  }
+  return null;
+}
+function _rememberSavedCardRefs(invoice){
+  _currentCardRefs().forEach(function(r){ _savedCardRefs.set(r, invoice || '—'); });
+  if(_savedCardRefs.size > 200){ const k = _savedCardRefs.keys().next().value; _savedCardRefs.delete(k); }
+}
+window._cardRefAlreadySaved = _cardRefAlreadySaved;
 async function confirmPayment(){
+  /* 🔴 v741 — بلاغ المالك 26-09: فاتورة فيزا اتسجلت مرتين (8190 و8191، نفس رقم العملية
+     TXN 541930806) والنقط اتحسبت مرتين.
+     السبب: الكاشير داس «حفظ وطباعة» والماكينة لسه ماأكدتش → ظهر سؤال «إيصال الموافقة طلع؟».
+     الحارس القديم (_confirmSaving) كان بيتقفل **بعد** السؤال، فلما تأكيد Paymob وصل
+     والسؤال لسه مفتوح، الحفظ التلقائي دخل وحفظ، وبعدين الكاشير دوس «أيوه» فاتحفظ تاني.
+     ✅ القفل دلوقتي بيتقفل في **أول سطر** وبيفضل مقفول لحد آخر الحفظ (حتى وقت السؤال).
+     ✅ وأي عملية Paymob اتحفظت خلاص مبتتحفظش في فاتورة تانية (_savedCardRefs). */
+  if(_confirmBusy){
+    showToast('الفاتورة بتتحفظ... استنى ثانية', 'err');
+    try{ if(typeof _logActivity === 'function') _logActivity('confirm_blocked_busy', {}); }catch(_e){}
+    return;
+  }
+  const _dupRef = _cardRefAlreadySaved();
+  if(_dupRef){
+    showToast('⛔ عملية الفيزا دي اتحفظت قبل كده في فاتورة ' + _dupRef.invoice + ' — مش هتتحفظ تاني', 'err');
+    try{ if(typeof _logActivity === 'function') _logActivity('confirm_blocked_dup_card', _dupRef); }catch(_e){}
+    return;
+  }
+  _confirmBusy = true;
+  try{
+    return await _confirmPaymentCore();
+  }finally{
+    _confirmBusy = false;
+  }
+}
+
+async function _confirmPaymentCore(){
   if(typeof confirmForeignBranchAction === 'function' && !(await confirmForeignBranchAction('حفظ الفاتورة والبيع'))) return;
   if(_confirmSaving){ showToast('الفاتورة بتتحفظ... استنى ثانية', 'err'); return; }   // منع التكرار
   // 💵 بنحسب الباقي دلوقتي قبل ما السلة تتفضّى — وبنعرضه بعد الطباعة
@@ -4584,6 +4631,7 @@ async function confirmPayment(){
     }
     // 📟 تنضيف حالة Paymob بعد أي حفظ ناجح — بيانات كارت فاتورة اتحفظت يدوي
     // كانت بتفضل معلّقة وتلوث الفاتورة اللي بعدها (cardTxn قديم على فاتورة كاش)
+    if(_saved){ try{ _rememberSavedCardRefs(window._lastInvoiceCode || ''); }catch(e){} }
     if(_saved && typeof paymobReset === 'function'){
       try{
         if(typeof clearCardSaleCompleteState === 'function') clearCardSaleCompleteState();
