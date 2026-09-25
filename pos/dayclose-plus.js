@@ -46,42 +46,50 @@ async function dcpStaffToday(branch, dayMs){
 
 /* 🧾 الإيصال — **مفيش** مبيعات سيستم ولا أوفر/عجز هنا بالتصميم */
 function dcpReceiptHTML(r){
+  /* v740 — بلاغ المالك 25-09: «مسافة كبيرة فاضية بين الكلام والمبالغ» + الأرقام بتتقص من الشمال.
+     السبب: الإيصال كان width:100% من صفحة أعرض من الورقة، فالمبالغ راحت لآخر الصفحة (برّه الورقة).
+     دلوقتي نفس مقاس وأسلوب «إيصال الراتب» المتجرّب: عرض الرول بالظبط (72mm / 54mm) + سطر
+     بعمودين (الكلام يلفّ لو طويل · المبلغ جنبه) + خط منقّط يربط الاتنين. */
   r = r || {};
   const den = r.denoms || {};
   const list = _dcpDenomList();
-  /* v739: نفس قالب «تقرير إغلاق اليوم» اللي بيتطبع سليم على طابعات الفروع بالظبط —
-     سطر = اسم على اليمين وقيمة على الشمال. (الجدول بـ3 عواميد كان بيعدّي عرض ورق 80mm فاتقص.) */
+  const cfg = (typeof receiptDesignConfig !== 'undefined' && receiptDesignConfig) || {};
+  const w = cfg.paperWidth === '58' ? '54mm' : '72mm';
+  // جدول بعرض ثابت (بيشتغل في أي محرك طباعة) — الكلام يلفّ، والمبلغ في عمود ثابت جنبه
+  const row = (l, v, strong) => '<table style="width:100%; table-layout:fixed; border-collapse:collapse; font-size:' + (strong ? '13.5px; font-weight:900' : '12px') + ';"><tr>'
+    + '<td style="padding:1.6px 0; border-bottom:0.4px dotted #999; word-wrap:break-word;">' + l + '</td>'
+    + '<td style="width:30%; padding:1.6px 0; border-bottom:0.4px dotted #999; text-align:left; direction:ltr; white-space:nowrap; font-weight:700;">' + v + '</td></tr></table>';
   const rows = list.map(d => {
     const n = Number(den[String(d)]) || 0;
-    return '<div style="display:flex; justify-content:space-between; font-size:13px; padding:1.5px 0;"><span>' + d + ' ج × ' + n + '</span><b style="direction:ltr;">' + _dcpN(n * d) + '</b></div>';
+    return row(d + ' ج × ' + n, _dcpN(n * d));
   }).join('');
   const pieces = list.reduce((s, d) => s + (Number(den[String(d)]) || 0), 0);
-  const line = (l, v, bold) => '<div style="display:flex; justify-content:space-between; font-size:13px; padding:2.5px 0;' + (bold ? 'font-weight:900;' : '') + '"><span>' + l + '</span><b style="direction:ltr;">' + v + '</b></div>';
-  const hr = '<div style="border-top:2px dashed #000; margin:6px 0;"></div>';
+  const hr = '<div style="border-top:1.5px dashed #000; margin:5px 0;"></div>';
   const at = r.at ? new Date(r.at) : new Date();
-  return '<div style="font-family:Cairo,Tahoma,Arial,sans-serif; direction:rtl; color:#000; width:100%; padding:4px 6px;">'
-    + '<div style="text-align:center; font-weight:900; font-size:17px;">إيصال تسليم الدرج</div>'
-    + '<div style="text-align:center; font-size:12.5px;">' + _dcpEsc(r.branch) + ' · ' + _dcpEsc(r.date || '') + ' · ' + at.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) + '</div>'
-    + line('الكاشير', _dcpEsc(r.closedBy || '—'))
-    + (r.staff && r.staff.length ? '<div style="font-size:12px; text-align:center;">كانوا واقفين: ' + r.staff.map(_dcpEsc).join('، ') + '</div>' : '')
+  return '<div style="width:' + w + '; box-sizing:border-box; font-family:Tahoma,Arial,sans-serif; color:#000; direction:rtl; padding:2mm; background:#fff;">'
+    + '<div style="text-align:center; font-weight:900; font-size:15px;">إيصال تسليم الدرج</div>'
+    + '<div style="text-align:center; font-size:10.5px; margin-top:2px;">' + _dcpEsc(r.branch) + ' · ' + _dcpEsc(r.date || '') + ' · ' + at.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) + '</div>'
     + hr
-    + '<div style="font-weight:900; font-size:13.5px; margin-bottom:3px;">عدّ الكاش</div>'
+    + row('الكاشير', _dcpEsc(r.closedBy || '—'))
+    + (r.staff && r.staff.length ? '<div style="font-size:10.5px; padding:2px 0;">كانوا واقفين: ' + r.staff.map(_dcpEsc).join('، ') + '</div>' : '')
+    + hr
+    + '<div style="font-weight:900; font-size:12.5px; margin-bottom:2px;">عدّ الكاش</div>'
     + rows
-    + line('عدد الورق', pieces)
-    + line('إجمالي الكاش المعدود', _dcpN(r.counted), true)
-    + line('− العهدة', _dcpN(r.float))
-    + line('= المسلّم كاش', _dcpN(r.handed), true)
+    + row('عدد الورق', pieces)
+    + row('إجمالي الكاش المعدود', _dcpN(r.counted), true)
+    + row('− العهدة (بتفضل في الدرج)', _dcpN(r.float))
+    + row('= المسلّم كاش', _dcpN(r.handed), true)
     + hr
-    + line('مصروفات', _dcpN(r.expenses))
-    + (r.expNote ? '<div style="font-size:11.5px;">' + _dcpEsc(r.expNote) + '</div>' : '')
-    + line('سلف', _dcpN(r.advances))
-    + line('فيزا', _dcpN(r.visa))
-    + line('انستاباي', _dcpN(r.instapay))
-    + ((+(r.salary || 0)) > 0 ? line('📄 خصم راتب موظفين', _dcpN(r.salary)) : '')
+    + row('مصروفات طلعت من الدرج', _dcpN(r.expenses))
+    + (r.expNote ? '<div style="font-size:10.5px;">بيان: ' + _dcpEsc(r.expNote) + '</div>' : '')
+    + row('سلف طلعت من الدرج', _dcpN(r.advances))
+    + row('فيزا (من الماكينة)', _dcpN(r.visa))
+    + row('انستاباي', _dcpN(r.instapay))
+    + ((+(r.salary || 0)) > 0 ? row('خصم راتب موظفين', _dcpN(r.salary)) : '')
     + hr
-    + '<div style="display:flex; gap:12px; margin-top:26px; font-size:12px;">'
-    + '<div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:4px;">توقيع الكاشير</div>'
-    + '<div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:4px;">توقيع المستلم</div></div>'
+    + '<table style="width:100%; table-layout:fixed; margin-top:22px; font-size:10.5px; text-align:center;"><tr>'
+    + '<td style="border-top:1px solid #000; padding-top:3px;">توقيع الكاشير</td><td style="width:8%;"></td>'
+    + '<td style="border-top:1px solid #000; padding-top:3px;">توقيع المستلم</td></tr></table>'
     + '</div>';
 }
 
