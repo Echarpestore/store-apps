@@ -33,15 +33,17 @@ assert(/offlineInvoiceNumberFromSaleId\(fallbackSaleId\)/.test(genFn), 'fallback
 assert(!/Date\.now\(\)\.toString\(\)\.slice\(-8\)/.test(genFn), 'مفيش fallback مبني على Date.now فقط');
 
 // 2) Sale document id generated before invoice identity and reused with set() (idempotent).
-const savePos = sale.indexOf('const saleRef = db.collection(TEST_SALES).doc();');
-const noPos = sale.indexOf('const invoiceNo = await generateInvoiceNumber(saleRef.id);');
+// v742: الهوية بقت في _resolveSaleIdentity (ثابتة للسلة) — نفس الشرط: المعرّف قبل الرقم، والاتنين قبل الحفظ
+const savePos = sale.indexOf('const ref = db.collection(TEST_SALES).doc();');
+const noPos = sale.indexOf('const invoiceNo = await generateInvoiceNumber(ref.id);');
+const identPos = sale.indexOf('const saleRef = _ident.saleRef;');
 const setPos = sale.indexOf('const _saleW = await _waitWrite(saleRef.set({');
-assert(savePos>0 && noPos>savePos && setPos>noPos, 'هوية الفاتورة تتولد قبل الحفظ ويعاد استخدام نفس المستند');
+assert(savePos>0 && noPos>savePos && identPos>0 && setPos>identPos, 'هوية الفاتورة تتولد قبل الحفظ ويعاد استخدام نفس المستند');
 assert(sale.includes('clientSaleId: saleRef.id'), 'clientSaleId محفوظ داخل الفاتورة للمراجعة');
 assert(!sale.includes('db.collection(TEST_SALES).add({\n      invoiceNo,'), 'الحفظ الأساسي مش add عشوائي جديد كل retry');
 
 // 3) Invoice code includes same sale id entropy.
-assert(sale.includes('const invoiceCode = buildInvoiceCode(currentBranch, invoiceNo, saleRef.id);'), 'كود الفاتورة مربوط بنفس saleRef.id');
+assert(sale.includes('const invoiceCode = buildInvoiceCode(currentBranch, invoiceNo, ref.id);'), 'كود الفاتورة مربوط بنفس معرّف المستند (v742: جوّه _resolveSaleIdentity)');
 
 // 4) v708 — متابعة الكتابات المعلّقة: **تحذير مش منع** (قرار موثّق في pos-core + الـHANDOFF 4أ-6).
 //    النسخة الأصلية كانت بتمنع الخروج والتقفيل؛ المنع مارجعش عمدًا، والتقفيل الأوفلاين له بانره وتأكيده.

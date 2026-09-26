@@ -4663,6 +4663,38 @@ function normalizePayments(payments, total){
 }
 window.normalizePayments = normalizePayments;
 
+/* ============================================================
+   🔐 v742 — هوية الفاتورة ثابتة لكل سلة
+   أول محاولة حفظ بتحجز رقم مستند + رقم فاتورة. أي محاولة تانية لنفس السلة (بعد «فشل حفظ
+   الفاتورة» مثلًا) بتاخد **نفس** الرقم: لو المستند موجود (اتحفظ فعلًا — حتى أوفلاين في
+   الكاش) = مفيش حفظ تاني؛ لو مش موجود = بتكمّل بنفس الرقم (من غير ما تحرق رقم جديد).
+   ============================================================ */
+let _saleAttempt = null;   // { sid, saleId, invoiceNo, invoiceCode, scanCode }
+async function _saleDocExists(ref){
+  try{
+    const d = await _raceTimeout(ref.get(), 3000);
+    return !!(d && d.exists);
+  }catch(e){
+    try{ const d = await ref.get({ source: 'cache' }); return !!(d && d.exists); }catch(_e){ return false; }
+  }
+}
+async function _resolveSaleIdentity(){
+  const sid = (typeof _cartSid !== 'undefined' && _cartSid) ? _cartSid : null;
+  const prev = (sid && _saleAttempt && _saleAttempt.sid === sid) ? _saleAttempt : null;
+  if(prev){
+    const ref = db.collection(TEST_SALES).doc(prev.saleId);
+    if(await _saleDocExists(ref)) return Object.assign({ alreadySaved: true, saleRef: ref }, prev);
+    return Object.assign({ alreadySaved: false, saleRef: ref }, prev);
+  }
+  const ref = db.collection(TEST_SALES).doc();
+  const invoiceNo = await generateInvoiceNumber(ref.id);
+  const invoiceCode = buildInvoiceCode(currentBranch, invoiceNo, ref.id);
+  const scanCode = buildScanCode(ref.id, Date.now());
+  _saleAttempt = { sid, saleId: ref.id, invoiceNo, invoiceCode, scanCode };
+  return Object.assign({ alreadySaved: false, saleRef: ref }, _saleAttempt);
+}
+window._resolveSaleIdentity = _resolveSaleIdentity;
+
 async function _doConfirmPayment(){
   _offlineQueued = false;   // 📴 نبدأ صفحة جديدة لكل فاتورة
   const total = cartTotal();
@@ -4762,10 +4794,23 @@ window.returnPointsDeduction = returnPointsDeduction;
   }); }catch(e){}
   // 🔐 هوية الفاتورة بتتولد محليًا **قبل أي كتابة**. `doc()` مش محتاج نت وبيطلّع معرّف عشوائي قوي؛
   // نفس المعرّف في رقم/كود الأوفلاين وفي الحفظ نفسه ← إعادة المحاولة متعملش فاتورة تانية.
-  const saleRef = db.collection(TEST_SALES).doc();
-  const invoiceNo = await generateInvoiceNumber(saleRef.id);
-  const invoiceCode = buildInvoiceCode(currentBranch, invoiceNo, saleRef.id);
-  const scanCode = buildScanCode(saleRef.id, Date.now());   // 📷 v711: ده اللي بيتطبع باركود
+  // 🔴 v742: رقم الفاتورة ثابت للسلة — لو «فشل حفظ الفاتورة» ظهرت والكاشير داس حفظ تاني،
+  //    نفس الفاتورة بنفس الرقم، ولو كانت اتحفظت فعلًا مبتتحفظش تاني (بلاغ المالك 26-09).
+  const _ident = await _resolveSaleIdentity();
+  if(_ident.alreadySaved){
+    showToast('✅ الفاتورة دي اتحفظت خلاص برقم ' + _ident.invoiceCode + ' — مش هتتحفظ تاني. لو محتاج ورقة اطبعها من سجل المبيعات', 'ok');
+    try{ if(typeof _logActivity === 'function') _logActivity('sale_retry_found_saved', { saleId: _ident.saleId, invoiceCode: _ident.invoiceCode }); }catch(e){}
+    _saleAttempt = null;
+    _saleJustSaved = true;
+    try{ _saleDraftClear(); }catch(e){}
+    try{ clearCardSaleCompleteState(); paymobReset(); }catch(e){}
+    goToSale();
+    return;
+  }
+  const saleRef = _ident.saleRef;
+  const invoiceNo = _ident.invoiceNo;
+  const invoiceCode = _ident.invoiceCode;
+  const scanCode = _ident.scanCode;   // 📷 v711: ده اللي بيتطبع باركود
   // 💵 شاشة الباقي بتظهر بعد ما الدالة دي تخلص، ومحتاجة رقم الفاتورة
   //    عشان "سيبي الباقي في الحساب" تربط الحركة بفاتورة حقيقية.
   window._lastInvoiceCode = invoiceCode;
@@ -5258,6 +5303,7 @@ window.returnPointsDeduction = returnPointsDeduction;
       showToast('تم حفظ الفاتورة ✔ — متبقى تقييم العميل من صفحة التقييم', 'ok');
     }
     _saleJustSaved = true;   // 🕵️ المسح الجاي طبيعي (بعد حفظ)
+    _saleAttempt = null;     // v742: الفاتورة خلصت — السلة الجاية تاخد رقم جديد
     try{ _saleDraftClear(); }catch(e){}   // ✅ الفاتورة اتحفظت؛ ممنوع ترجع كمسودة بعد restart
     // 💳 الفاتورة اتحفظت واتطبعت وبيانات الكروت اتسجلت جواها — الشرائح بتتصفّر هنا
     // (قبل goToSale) عشان شاشة الفاتورة الجديدة ما تسألش عن كارت اتسحب خلاص

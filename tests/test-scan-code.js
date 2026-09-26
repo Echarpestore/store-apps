@@ -68,10 +68,12 @@ else{
 
 console.log('🔌 3) التوصيل');
 const save = extractFn(sale, 'async function _doConfirmPayment(');
-ok(/const scanCode = buildScanCode\(saleRef\.id, Date\.now\(\)\);/.test(save), 'بيتولّد من معرّف المستند قبل الحفظ');
+// v742: الهوية (المعرّف + الرقم + الكود + كود المسح) بقت في _resolveSaleIdentity — ثابتة للسلة
+const ident = extractFn(sale, 'async function _resolveSaleIdentity(');
+ok(/const scanCode = buildScanCode\(ref\.id, Date\.now\(\)\);/.test(ident) && /const scanCode = _ident\.scanCode;/.test(save), 'بيتولّد من معرّف المستند قبل الحفظ');
 ok(/invoiceCode,\s*\n\s*scanCode,/.test(save), 'وبيتحفظ على الفاتورة');
 ok(/printReceipt\(paymentsEntered, total, invoiceNo, invoiceCode, scanCode\)/.test(save), 'وبيتبعت للطباعة');
-ok(/const invoiceCode = buildInvoiceCode\(currentBranch, invoiceNo, saleRef\.id\);/.test(save), '`invoiceCode` زي ما هو (الولاء/التقارير/الكاميرات معتمدين عليه)');
+ok(/const invoiceCode = buildInvoiceCode\(currentBranch, invoiceNo, ref\.id\);/.test(ident) && /const invoiceCode = _ident\.invoiceCode;/.test(save), '`invoiceCode` زي ما هو (الولاء/التقارير/الكاميرات معتمدين عليه)');
 ok(/function printReceipt\(payments, total, invoiceNo, invoiceCode, scanCode\)/.test(app) && /scanCode: scanCode\|\|invoiceCode\|\|invoiceNo/.test(app), 'الفاتورة بتطبع القصير لو موجود، وإلا القديم');
 ok((rep.match(/scanCode: s\.scanCode \|\| s\.invoiceCode/g) || []).length === 2 && /scanCode: s\.scanCode \|\| s\.invoiceCode,/.test(app), 'إعادة الطباعة (3 أماكن): فاتورة قديمة من غير scanCode بتطبع باركودها القديم');
 const open = extractFn(sale, 'async function openInvoiceForReturn(');
