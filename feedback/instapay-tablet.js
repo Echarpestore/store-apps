@@ -143,7 +143,7 @@ const HTML = `
     <div class="ipCol ipColInfo">
       <div class="ipEyebrow">INSTAPAY</div>
       <div class="ipAmount" id="ipAmt">0<span>ج.م</span></div>
-      <div class="ipLabel">المبلغ المطلوب تحويله</div>
+      <div class="ipLabel" id="ipAmtLbl">المبلغ المطلوب تحويله</div>
     </div>
     <div class="ipCol ipColQr">
       <div class="ipQr"><img id="ipQrImg" alt="QR"></div>
@@ -179,8 +179,8 @@ const HTML = `
   <div class="ipPane" id="ipOk">
     <svg class="ipTick" viewBox="0 0 120 120"><circle cx="60" cy="60" r="49"></circle>
       <path d="M38 62 L54 78 L84 46"></path></svg>
-    <div class="ipBig">تم التأكيد</div>
-    <div class="ipLabel">استني الفاتورة من الكاشير</div>
+    <div class="ipBig" id="ipOkBig">تم التأكيد</div>
+    <div class="ipLabel" id="ipOkSub">استني الفاتورة من الكاشير</div>
   </div>
 
   <!-- 4️⃣ رفض نهائي — مفيش فايدة من إعادة التصوير -->
@@ -488,6 +488,10 @@ if (branch) {
       flipCapture = localStorage.getItem(FLIP_KEY) === '1'; try { $('ipVid').classList.toggle('flip', flipCapture); } catch (e) {}
       $('ipAmt').innerHTML = (Number(s.amountCents || 0) / 100)
         .toLocaleString('en-EG', { minimumFractionDigits: 0 }) + '<span>ج.م</span>';
+      // 🔢 الطلب ده خد قروش مخصوص (فيه طلب تاني بنفس المبلغ) — العميلة لازم تحوّله بالظبط
+      if ($('ipAmtLbl')) $('ipAmtLbl').textContent = (s.requestedCents && s.requestedCents !== s.amountCents)
+        ? 'حوّلي المبلغ ده بالظبط بالقروش'
+        : 'المبلغ المطلوب تحويله';
       /* 📇 العنوان + الأرقام الإضافية. العميلة ساعات بتحوّل على رقم
          المحفظة مش على عنوان الإنستاباي، فلازم تشوف الاتنين قدامها
          بدل ما تسأل الكاشير. */
@@ -500,6 +504,9 @@ if (branch) {
     if (s.status === 'waiting') show('wait');
     else if (s.status === 'scanning') { if (!stream) { show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 550); }); } paintChecks(s.checks, s.detail); }
     else if (s.status === 'approved') {
+      // 🏦 v709: التأكيد جه من رسالة البنك (العميلة مش محتاجة تصوّر)
+      if ($('ipOkBig')) $('ipOkBig').textContent = (s.mode === 'bank') ? 'التحويل وصل ✓' : 'تم التأكيد';
+      if ($('ipOkSub')) $('ipOkSub').textContent = (s.mode === 'bank') ? 'شكرًا — الفاتورة بتتطبع دلوقتي' : 'استني الفاتورة من الكاشير';
       stopCam(); show('ok');
       const _sid = s.sid; clearTimeout(window._ipOkT);
       window._ipOkT = setTimeout(() => { if (cur && cur.sid === _sid) hide(); }, 90 * 1000);   // v702: مبتفضلش أكتر من دقيقة ونص

@@ -180,12 +180,18 @@
       return;
     }
     if (s === 'approved') {
+      const firstTime = !approved;
       approved = true;
       $('ipPosSpin').style.display = 'none';
       $('ipPosState').innerHTML = (st.mode === 'manual')
         ? '✍️ اتأكد يدوي — كمّلي الفاتورة'
-        : '✅ التحويل اتأكد — كمّلي الفاتورة';
+        : (st.mode === 'bank')
+          ? '🏦 البنك أكّد وصول التحويل' + (st.fromName ? ' من ' + String(st.fromName).replace(/[<>&]/g, '') : '') + ' — بيحفظ ويطبع…'
+          : '✅ التحويل اتأكد — بيحفظ ويطبع…';
       $('ipPosManual').style.display = 'none';
+      // 🖨️ v743 (طلب المالك 27-09): التأكيد (من البنك أو من قراية الإيصال) = حفظ وطباعة لوحدهم.
+      //    اليدوي لأ — الكاشير لسه مأكدة بإيدها وهي اللي هتدوس. قفل v741 بيمنع أي حفظ مكرر.
+      if (firstTime && st.mode !== 'manual') autoFinish(st);
     } else {
       /* 🔴 الزرار كان بيتخفي عند الاعتماد ومبيرجعش غير مع سلة جديدة.
          فلو الطلب رجع لحالة مسح (إيصال اتقرا غلط، أو طلب تاني على
@@ -200,6 +206,25 @@
       $('ipPosWhy').textContent = ex;
       $('ipPosWhy').style.display = ex ? '' : 'none';
     }
+  }
+
+  /* 🖨️ v743: حفظ وطباعة تلقائي بعد التأكيد — مرة واحدة لكل طلب */
+  let autoFiredFor = null;
+  function autoFinish(st) {
+    if (!S || autoFiredFor === S.sid) return;
+    autoFiredFor = S.sid;
+    try {
+      if (typeof showToast === 'function')
+        showToast(st.mode === 'bank' ? '🏦 البنك أكّد التحويل — بيحفظ ويطبع' : '✅ التحويل اتأكد — بيحفظ ويطبع', 'ok');
+    } catch (e) {}
+    setTimeout(function () {
+      try {
+        const usingInsta = (typeof selectedPayMethods !== 'undefined') && selectedPayMethods.has('instapay');
+        const hasCart = (typeof cart !== 'undefined') && cart && cart.length;
+        if (!usingInsta || !hasCart || !approved || finalizing) return;
+        if (typeof window.confirmPayment === 'function') window.confirmPayment();
+      } catch (e) { console.warn('[instapay] auto finish', e); }
+    }, 700);
   }
 
   /* 🩺 سبب الرفض بالأرقام — للكاشير بس.
@@ -235,7 +260,7 @@
   /* 🔄 تصفير كامل — بيتنادى مع كل سلة جديدة */
   function resetFlow() {
     if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
-    S = null; approved = false; finalizing = false;
+    S = null; approved = false; finalizing = false; autoFiredFor = null;
     ['ipP1', 'ipP2', 'ipP3'].forEach(i => $(i).classList.remove('ok'));
     $('ipPosManual').style.display = '';
     closeBox();
@@ -303,7 +328,12 @@
     openBox();
     try {
       const r = await fnCall('instaPay', { action: 'start', branch: br, amountCents: cents });
-      S = { sid: r.sid, cents: cents };
+      S = { sid: r.sid, cents: cents, payCents: r.amountCents || cents };
+      // 🔢 فيه طلب تاني مفتوح بنفس المبلغ → الطلب ده خد قروش مختلفة (خصم صغير) عشان التحويل يتعرف
+      if (r.amountCents && r.amountCents !== cents) {
+        $('ipPosAmt').innerHTML = (r.amountCents / 100).toFixed(2) + ' ج.م'
+          + '<div style="font-size:.55em;opacity:.75;font-weight:600">الفاتورة ' + (cents / 100).toFixed(2) + ' · خصم ' + ((cents - r.amountCents) / 100).toFixed(2) + ' (طلب تاني مفتوح بنفس المبلغ)</div>';
+      }
       listen(r.sid);
       $('ipPosState').textContent = 'في انتظار العميلة…';
     } catch (e) {

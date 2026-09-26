@@ -34,13 +34,61 @@ ok(Array.isArray(C.matchSms(a, amb)?.ambiguous), '🔴 طلبين بنفس ال�
 const sa = (sid, ocr) => ({ sid, amountCents: 185000, approvedAt: ar.at - 60000, ocrText: ocr });
 ok(C.matchSms(ar, [sa('x', 'from: عَمرو عيد سلامة محمد'), sa('y', 'أحمد علي')])?.sid === 'x', 'اسم عربي بتشكيل وة/ه بيتطابق');
 
+console.log('\n🏦 من غير تصوير (طلب لسه مفتوح)');
+const op = (sid, cents, dtMin, extra) => Object.assign({ sid, amountCents: cents, startedAt: T + dtMin * 60000, expiresAt: T + (dtMin + 20) * 60000 }, extra || {});
+ok(C.matchOpen(a, [op('o1', 75500, -3)], [])?.sid === 'o1', 'طلب مفتوح واحد بنفس المبلغ = يتأكد من البنك');
+ok(Array.isArray(C.matchOpen(a, [op('o1', 75500, -3), op('o2', 75500, -1)], [])?.ambiguous), '🔴 طلبين مفتوحين بنفس المبلغ = مفيش تخمين (يرجع للتصوير)');
+ok(Array.isArray(C.matchOpen(a, [op('o1', 75500, -3)], [{ amountCents: 75500, approvedAt: T - 60000 }])?.ambiguous), '🔴 فيه طلب تاني بنفس المبلغ اتقبل ومستني البنك = مفيش تخمين');
+ok(C.matchOpen(a, [op('o1', 75500, -3, { bankLast4: '1234' })], []) === null, '🔴 حساب الفرع غير الحساب اللي وصله التحويل = لأ');
+ok(C.matchOpen(a, [op('o1', 75500, -3, { bankLast4: '6818' })], [])?.sid === 'o1', 'حساب الفرع = نفس الحساب = أيوه');
+ok(C.matchOpen(a, [op('o1', 75500, 5)], []) === null, '🔴 طلب اتفتح بعد التحويل = مش بتاعه');
+ok(C.matchOpen(a, [op('o1', 75500, -40)], []) === null, '🔴 طلب قديم = مش بتاعه');
+ok(C.matchOpen(a, [op('o1', 75500, -3)], [], { maxAgeMin: 4 })?.sid === 'o1', '⏱️ التحويل وصل بعد 3 دقايق من الطلب = يتأكد');
+ok(C.matchOpen(a, [op('o1', 75500, -5)], [], { maxAgeMin: 4 }) === null, '🔴 ⏱️ بعد 5 دقايق = مش من البنك (العميلة تصوّر الإيصال)');
+ok(/const BANK_FIRST_MAX_MIN = 4;/.test(fs.readFileSync(path.join(__dirname, '..', 'functions', 'instapaySms.js'), 'utf8')) && /matchOpen\(sms, open, busy, \{ maxAgeMin: BANK_FIRST_MAX_MIN \}\)/.test(fs.readFileSync(path.join(__dirname, '..', 'functions', 'instapaySms.js'), 'utf8')), 'الدالة مربوطة بحد الـ4 دقايق');
+ok(C.matchOpen(a, [op('o1', 75500, -30, { expiresAt: T - 60000 })], []) === null, '🔴 طلب منتهي = لأ');
+ok(C.matchOpen(a, [op('o1', 75400, -3)], []) === null && C.matchOpen(o, [op('o1', 100000, -1)], []) === null, '🔴 مبلغ مختلف بجنيه · رسالة صادر = لأ');
+
+console.log('\n🔢 بصمة عند التصادم بس');
+const fp = (sid, pay, req, dtMin) => ({ sid, amountCents: pay, requestedCents: req, startedAt: T + dtMin * 60000, expiresAt: T + (dtMin + 20) * 60000 });
+const inAmt = (cents) => Object.assign({}, a, { amountCents: cents });
+ok(C.matchOpen(inAmt(75500), [fp('f1', 75500, 75500, -2), fp('f2', 75437, 75500, -1)], [])?.ambiguous, '🔴 طلب بـ755 بالظبط + طلب تاني خد 754.37 · وصل 755 = مفيش تخمين (يمكن التانية حوّلت الكامل)');
+ok(C.matchOpen(inAmt(75437), [fp('f1', 75500, 75500, -2), fp('f2', 75437, 75500, -1)], [])?.sid === 'f2', 'وصل 754.37 = الطلب اللي خد البصمة بالظبط');
+ok(C.matchOpen(inAmt(75500), [fp('f2', 75437, 75500, -1)], [])?.sid === 'f2', 'طلب واحد خد بصمة والعميلة حوّلت الكامل = يتأكد');
+ok(C.matchSms(inAmt(75500), [{ sid: 'x', amountCents: 75437, requestedCents: 75500, approvedAt: T - 60000, ocrText: '' }])?.sid === 'x', 'تأكيد البنك لطلب اتقبل بالإيصال: المبلغ الكامل مقبول');
+{
+  const src = fs.readFileSync(path.join(__dirname, '..', 'functions', 'instapay.js'), 'utf8');
+  const i = src.indexOf('async function pickPayAmount('); let j = src.indexOf('{', i), dd = 0;
+  for (; j < src.length; j++) { if (src[j] === '{') dd++; else if (src[j] === '}') { dd--; if (dd === 0) break; } }
+  const fnSrc = src.slice(i, j + 1);
+  const mk = (docs) => new Function('db', 'crypto', 'console', fnSrc + '\nreturn pickPayAmount;')(
+    () => ({ collection: () => ({ where: () => ({ get: async () => ({ forEach: (cb) => docs.forEach((u) => cb({ data: () => u })) }) }) }) }),
+    require('crypto'), { warn(){} });
+  (async () => {
+    ok(await mk([])(75500, Date.now()) === 75500, 'مفيش طلب تاني = مبلغ الفاتورة بالظبط (الحالة العادية)');
+    ok(await mk([{ status: 'finalized', bankState: 'BANK_CONFIRMED', amountCents: 75500 }])(75500, Date.now()) === 75500, 'طلب قديم خلص واتأكد من البنك = مش تصادم');
+    const v = await mk([{ status: 'waiting', amountCents: 75500 }])(75500, Date.now());
+    ok(v >= 75401 && v <= 75499, '🔴 طلب تاني مفتوح بنفس المبلغ = الطلب الجديد ياخد قروش مختلفة');
+    const many = [{ status: 'waiting', amountCents: 75500 }].concat(Array.from({ length: 98 }, (_, k) => ({ status: 'scanning', amountCents: 75500 - (k + 1) })));
+    ok(await mk(many)(75500, Date.now()) === 75401, '🔴 القروش عمرها ما تتكرر مع طلب مفتوح');
+    ok(await mk([{ status: 'approved', bankState: 'PENDING_BANK_RECONCILIATION', amountCents: 75500 }])(75500, Date.now()) !== 75500, 'طلب اتقبل ولسه البنك ماأكدهوش = لسه بيتحسب تصادم');
+  })();
+  ok(/const payCents = await pickPayAmount\(requestedCents, now\);/.test(src) && /amountCents: payCents, requestedCents, fingerprintCents: requestedCents - payCents/.test(src), 'الطلب بيتسجل بمبلغ الدفع + مبلغ الفاتورة + الفرق');
+  ok(/const vFull = core\.inspectReceipt\(text, _insOpts\(s\.requestedCents\)\);/.test(src), 'إيصال بمبلغ الفاتورة الكامل مقبول');
+}
+
 console.log('\n🔐 الدالة');
 const fn = fs.readFileSync(path.join(__dirname, '..', 'functions', 'instapaySms.js'), 'utf8');
 ok(/defineSecret\('INSTAPAY_SMS_KEY'\)/.test(fn) && /timingSafeEqual/.test(fn), 'مفتاح سري من Secret Manager ومقارنة آمنة');
 ok(/if \(\(await tx\.get\(ref\)\)\.exists\) return false;/.test(fn) && /tx\.create\(ref,/.test(fn), 'نفس الرسالة مرتين = مرة واحدة');
 ok(/if \(!s \|\| s\.bankState === CONFIRMED\) return false;/.test(fn), 'طلب اتأكد مبيتأكدش تاني برسالة تانية');
 ok(!/where\([^)]*\)\.where\(/.test(fn), 'كل الاستعلامات بحقل واحد (من غير index مركّب)');
+ok(/if \(!s \|\| !\['waiting', 'scanning'\]\.includes\(s\.status\)\) return false;/.test(fn) && /\(live\.data\(\) \|\| \{\}\)\.sid === sid/.test(fn), 'التأكيد من البنك جوّه معاملة: الطلب لسه مفتوح + التابلت بيتحدّث بس لو لسه على نفس الطلب');
+ok(/if \(!\(m && m\.ambiguous\)\) \{/.test(fn), 'لو طلبات «اتقبلت» متلخبطة بنفس المبلغ، مبنروحش نأكد طلب مفتوح');
+ok(/const DONE = \['approved', 'finalized'\]/.test(fn) && (fn.match(/DONE\.includes\(s\.status\)/g) || []).length === 2, '🔴 الطلب اللي فاتورته اتحفظت (finalized) لسه بيتطابق ويتراقب — مش approved بس');
 
-console.log(`\nالنتيجة: ${P} ناجح · ${F} فاشل`);
-if (typeof assert === 'function') assert(F === 0, 'test-instapay-sms: ' + F);
-else if (F) process.exitCode = 1;
+setTimeout(() => {   // فحوص البصمة async — النتيجة بعدها
+  console.log(`\nالنتيجة: ${P} ناجح · ${F} فاشل`);
+  if (typeof assert === 'function') assert(F === 0, 'test-instapay-sms: ' + F);
+  else if (F) process.exitCode = 1;
+}, 100);
