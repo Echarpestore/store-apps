@@ -2125,6 +2125,7 @@ const OF_ACT_KINDS = {
   confirm_blocked_dup_card: { t:'🛑 منع حفظ نفس عملية الفيزا مرتين', g:'money', hot:true },
   sale_retry_found_saved: { t:'🛑 محاولة حفظ تانية لفاتورة كانت اتحفظت — اتمنعت', g:'money', hot:true },
   instapay_bank_missing: { t:'⚠️ إنستاباي اتقبل ومفيش رسالة بنك (30 دقيقة)', g:'money', hot:true },
+  instapay_invoice_bank_missing: { t:'⚠️ فاتورة إنستاباي ومفيش تحويل بنفس المبلغ وصل البنك (30 دقيقة)', g:'money', hot:true },
   card_payments_cleared: { t:'💳 مدفوعات كارت اتلغت', g:'money' },
   card_leg_recovered:    { t:'💳 شريحة كارت استرجعت', g:'money' },
   paymob_presave_rejected_attempt:{ t:'📟 فيزا مرفوضة اتمنعت قبل الحفظ', g:'money', hot:true },

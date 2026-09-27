@@ -18,6 +18,12 @@ ok(o && o.direction === 'out' && o.amountCents === 100000 && o.fromName === '', 
 const ar = C.parseCibSms(AR);
 ok(ar && ar.fromName === 'عمرو عيد سلامه محمد عبد' && ar.amountCents === 185000, 'اسم عربي');
 ok(C.parseCibSms('كود التحقق 123456') === null && C.parseCibSms('') === null, 'رسايل تانية بتتجاهل');
+{
+  const bidi = IN1.replace('بمبلغ ', 'بمبلغ \u200F').replace('755.00', '\u202A755.00\u202C').replace('بـ ', 'بـ\u00A0').replace('6818', '\u200E6818');
+  const pb = C.parseCibSms(bidi);
+  ok(pb && pb.amountCents === 75500 && pb.last4 === '6818' && pb.direction === 'in', '🔴 علامات الاتجاه المخفية بتاعة الآيفون مبتبوّظش القراية');
+  ok(C.parseCibSms(IN1.replace('755.00', '٧٥٥٫٠٠'))?.amountCents === 75500, 'فاصلة عشرية عربي (٫)');
+}
 ok(C.parseCibSms(IN1.replace('755.00', '٧٥٥٫٠٠'.replace('٫', '.'))).amountCents === 75500, 'أرقام عربي');
 
 console.log('\n🔗 المطابقة');
@@ -75,6 +81,26 @@ ok(C.matchSms(inAmt(75500), [{ sid: 'x', amountCents: 75437, requestedCents: 755
   })();
   ok(/const payCents = await pickPayAmount\(requestedCents, now\);/.test(src) && /amountCents: payCents, requestedCents, fingerprintCents: requestedCents - payCents/.test(src), 'الطلب بيتسجل بمبلغ الدفع + مبلغ الفاتورة + الفرق');
   ok(/const vFull = core\.inspectReceipt\(text, _insOpts\(s\.requestedCents\)\);/.test(src), 'إيصال بمبلغ الفاتورة الكامل مقبول');
+}
+
+console.log('\n🧾 المطابقة بعد الحفظ (كل الفروع)');
+{
+  const inv = (cents, dtMin, extra) => Object.assign({ id: 'i' + cents + dtMin, amountCents: cents, createdAt: T + dtMin * 60000, status: 'pending' }, extra || {});
+  const sm = (id, cents, dtMin, extra) => Object.assign({ id, direction: 'in', amountCents: cents, at: T + dtMin * 60000 }, extra || {});
+  ok(C.matchInvoiceSms(inv(75500, 3), [sm('m1', 75500, 0)])?.id === 'm1', 'العميلة حوّلت وبعد 3 دقايق الكاشير حفظ = اتربطت');
+  ok(C.matchSmsInvoice(sm('m1', 75500, 2), [inv(75500, 0)])?.id === 'i755000', 'الكاشير حفظ الأول والرسالة وصلت بعدها = اتربطت');
+  ok(C.matchInvoiceSms(inv(75500, 3), [sm('m1', 75000, 0)]) === null, '🔴 مبلغ مختلف = مفيش ربط (هيطلع تنبيه)');
+  ok(C.matchInvoiceSms(inv(75500, 3), [sm('m1', 75500, 0, { invoiceId: 'other' })]) === null, '🔴 رسالة اتربطت بفاتورة تانية مبتتستخدمش مرتين');
+  ok(C.matchInvoiceSms(inv(75500, 30), [sm('m1', 75500, 0)]) === null, '🔴 رسالة من نص ساعة = مش بتاعتها');
+  ok(C.matchInvoiceSms(inv(75500, 5), [sm('m1', 75500, 0), sm('m2', 75500, 4)])?.id === 'm2', 'رسالتين بنفس المبلغ = الأقرب في الوقت');
+  ok(C.matchInvoiceSms(inv(100000, 1), [Object.assign(sm('o', 100000, 0), { direction: 'out' })]) === null, '🔴 رسالة صادر عمرها ما تأكد فاتورة');
+  ok(C.matchSmsInvoice(sm('m1', 75500, 2), [inv(75500, 0, { status: 'bank_missing' })]) !== null, 'رسالة اتأخرت في الوصول (بعد التنبيه) بتتربط برضه وبتتعلّم «متأخرة»');
+  ok(C.matchSmsInvoice(sm('m1', 75500, 1), [inv(75500, 0, { status: 'bank_ok' })]) === null, 'فاتورة اتربطت خلاص مبتتربطش تاني');
+  const fn2 = fs.readFileSync(path.join(__dirname, '..', 'functions', 'instapaySms.js'), 'utf8');
+  ok(/onDocumentCreated\(\{ document: 'pos_test_sales\/\{saleId\}', region: 'europe-west1' \}/.test(fn2) && /if \(!sale \|\| !\(insta > 0\) \|\| Number\(sale\.total \|\| 0\) < 0\) return;/.test(fn2), 'كل فاتورة فيها إنستاباي (أي فرع) بتدخل المطابقة · المرتجع لأ');
+  ok(/type: 'instapay_invoice_bank_missing'/.test(fn2) && /if \(s\.status === 'finalized'\) continue;/.test(fn2), 'فاتورة من غير رسالة = تنبيه في Office · ومن غير تنبيه مكرر للطلب');
+  ok(/await tryInvoicesForSms\(smsId, sms\)/.test(fn2), 'الرسالة لما توصل بتدوّر على الفاتورة كمان');
+  ok(/status: 'unreadable'/.test(fn2), 'رسالة مقدرناش نقراها بتتسجل «unreadable» عشان نعرف السبب');
 }
 
 console.log('\n🔐 الدالة');
