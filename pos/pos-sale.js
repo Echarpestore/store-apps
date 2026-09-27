@@ -2711,6 +2711,7 @@ async function reverseReceipt(saleId){
 const CAP_COL = 'pos_capture';
 const CAP_FRESH_MS = 300 * 1000;   // 5 دقايق (العميلة بتاخد وقتها في كتابة رقمها)
 let _capUnsub = null, _capAskId = null;
+let _capHandledKey = null;   // v745: نفس رد التابلت ميتعالجش مرتين (بلاغ 27-09: «عميلة سجّلت نفسها» اتسجلت مرتين في Office)
 
 // رقم موبايل مصري سليم؟ (11 رقم بيبدأ 01)
 function _capValidPhone(p){
@@ -2901,6 +2902,12 @@ function _capStartListener(){
     // نتجاهل طلباتنا اللي احنا كتبناها (need_name/greet) — نرد بس على رد الكشك
     if(data.askId !== _capAskId) return;
     if(!_capFresh(data)) return;
+    // 🔴 v745: Firestore بيبعت نفس الرد مرتين أحيانًا (كتابة محلية + تأكيد السيرفر) — والاتنين كانوا بيعدّوا
+    //    الشرط اللي فوق لأن _capAskId بيتصفّر **بعد** await → تسجيل العميلة وسجل Office مرتين.
+    //    القفل ده **قبل أي await** فالتاني بيرجع على طول.
+    const _hk = String(data.askId) + '|' + String(data.mode) + '|' + String(data.phone || '') + '|' + String(data.name || '');
+    if(_capHandledKey === _hk) return;
+    _capHandledKey = _hk;
 
     // 1) العميلة كتبت رقمها → نلاقيها ولا نطلب اسمها
     if(data.mode === 'phone'){
@@ -2989,7 +2996,15 @@ window.capInviteIfNoApp = capInviteIfNoApp;
 
 // 🆕 v715: تسجيل عميلة التابلت تلقائي. بترجّع true لو اتسجلت (أو كانت مسجّلة أصلًا).
 //    ⚠️ `points:0` بيتكتب **بس لو المستند مش موجود** — `merge` مع points:0 على عميلة موجودة بيصفّر نقطها.
+const _capRegInFlight = new Set();   // v745: حماية تانية — نفس الرقم مبيتسجلش مرتين في نفس اللحظة
 async function capAutoRegister(phone, name){
+  const _ph0 = (typeof normalizePhone === 'function') ? normalizePhone(phone) : phone;
+  if(_capRegInFlight.has(_ph0)) return true;
+  _capRegInFlight.add(_ph0);
+  try{ return await _capAutoRegisterCore(phone, name); }
+  finally{ setTimeout(function(){ _capRegInFlight.delete(_ph0); }, 5000); }
+}
+async function _capAutoRegisterCore(phone, name){
   try{
     const ph = (typeof normalizePhone === 'function') ? normalizePhone(phone) : phone;
     if(!name || (typeof phoneRejectReason === 'function' && phoneRejectReason(ph))) return false;

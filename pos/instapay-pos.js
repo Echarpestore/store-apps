@@ -191,6 +191,14 @@
       $('ipPosManual').style.display = 'none';
       // 🖨️ v743 (طلب المالك 27-09): التأكيد (من البنك أو من قراية الإيصال) = حفظ وطباعة لوحدهم.
       //    اليدوي لأ — الكاشير لسه مأكدة بإيدها وهي اللي هتدوس. قفل v741 بيمنع أي حفظ مكرر.
+      // 🧾 بيانات التحويل للفاتورة (البنك أكّد بس) — بتتصفّر مع كل سلة جديدة
+      if (st.mode === 'bank') {
+        window.instapayConfirmInfo = {
+          fromFirst: String(st.fromName || '').trim().split(/\s+/)[0] || '',
+          bankRef: String(st.bankRef || ''), bankAt: Number(st.bankAt) || Date.now(),
+          amount: (Number(st.amountCents) || 0) / 100
+        };
+      }
       if (firstTime && st.mode !== 'manual') autoFinish(st);
     } else {
       /* 🔴 الزرار كان بيتخفي عند الاعتماد ومبيرجعش غير مع سلة جديدة.
@@ -261,6 +269,7 @@
   function resetFlow() {
     if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
     S = null; approved = false; finalizing = false; autoFiredFor = null;
+    window.instapayConfirmInfo = null;
     ['ipP1', 'ipP2', 'ipP3'].forEach(i => $(i).classList.remove('ok'));
     $('ipPosManual').style.display = '';
     closeBox();

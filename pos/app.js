@@ -769,6 +769,17 @@ function buildReceiptHTML(data){
         // 💳💳 الفاتورة ممكن تكون اتقسمت على كارتين → كل كارت بمبلغه ورقم عمليته،
         // ضروري للمرتجع (كل عملية بترجع لوحدها من Paymob)
         const _list = (d.cardTxns && d.cardTxns.length) ? d.cardTxns : (d.cardTxn ? [d.cardTxn] : []);
+        // 🏦 إنستاباي مؤكد من البنك — بيتطبع في نفس البلوك (موجود في كل تصميمات الفواتير)
+        if(d.instaTxn){
+          const it = d.instaTxn, tm = new Date(it.bankAt || Date.now());
+          const hh = String(tm.getHours()).padStart(2,'0') + ':' + String(tm.getMinutes()).padStart(2,'0');
+          const iRows = ['INSTAPAY - BANK CONFIRMED'];
+          if(it.fromFirst) iRows.push('FROM: ' + String(it.fromFirst).replace(/[<>&"]/g,'').slice(0, 20));
+          if(it.bankRef) iRows.push('BANK REF: ' + String(it.bankRef).replace(/[^A-Za-z0-9]/g,'').slice(0, 20));
+          iRows.push('TIME: ' + hh);
+          parts.push(`<div dir="ltr" style="border-top:1px dashed #000; margin:5px 0 2px; padding-top:4px; text-align:center; font-size:${fs}; font-family:monospace; letter-spacing:.5px;">`
+            + iRows.map(r=> `<div style="font-weight:700; unicode-bidi:isolate;">${r}</div>`).join('') + `</div>`);
+        }
         if(!_list.length) break;
         // إنجليزي + اتجاه LTR: الأرقام الطويلة بتتقلب في السياق العربي، وده بيمنع اللخبطة
         const rows = [];
@@ -1367,6 +1378,8 @@ function printReceipt(payments, total, invoiceNo, invoiceCode, scanCode){
     // ممكن تتطبع على فاتورة كاش)
     cardTxns: (Number((payments||{}).visa) > 0 && window.paymobCardTxns && window.paymobCardTxns.length)
       ? window.paymobCardTxns : null,
+    // 🏦 إنستاباي أكده البنك — نفس الشرطين: الفاتورة فيها إنستاباي فعلًا + فيه تأكيد
+    instaTxn: (Number((payments||{}).instapay) > 0 && window.instapayConfirmInfo) ? window.instapayConfirmInfo : null,
     // 🎁 نقط العميلة — بتتحسب هنا لأن الطباعة بتحصل **قبل** ما النقط تتكتب
     //    في Firestore (الورقة اتقدّمت عمدًا عشان العميلة ماتستناش الشبكة).
     //    يعني ممنوع نقرا الرصيد من المستند — لازم نحسبه محليًا.

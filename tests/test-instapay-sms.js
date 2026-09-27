@@ -111,6 +111,27 @@ console.log('\n🧾 المطابقة بعد الحفظ (كل الفروع)');
   ok(/if \(!sms\.at\) \{ sms\.at = Date\.now\(\); sms\.atFromReceived = true; \}/.test(fn2) && /sms0\.receivedAt\) \? \{ \.\.\.sms0, at: sms0\.receivedAt \}/.test(fn2), '🔴 مفيش وقت في الرسالة = وقت وصولها (بدل ما المطابقة تقف)');
 }
 
+console.log('\n📛 المرسل لازم يكون CIB');
+{
+  const fn3 = fs.readFileSync(path.join(__dirname, '..', 'functions', 'instapaySms.js'), 'utf8');
+  const lines = fn3.split('\n').filter((l) => /^const TRUSTED_SENDERS|^const senderOk/.test(l)).join('\n');
+  const senderOk = new Function(lines + '\nreturn senderOk;')();
+  ok(senderOk('CIB') && senderOk('cib') && senderOk(' CIB '), 'CIB (بأي حروف كبيرة/صغيرة) = مقبول');
+  ok(!senderOk('+201001234567') && !senderOk('') && !senderOk('CIB Bank Fake') && !senderOk('CIBB'), '🔴 رقم عادي أو من غير مرسل أو اسم شبه CIB = مرفوض');
+  const i = fn3.indexOf('if (!senderOk(sender)) {'), j = fn3.indexOf('const created = await db().runTransaction', i);
+  ok(i > 0 && j > i && /status: 'untrusted_sender'/.test(fn3.slice(i, j)) && /return res\.json\(\{ ok: true, untrusted: true \}\);/.test(fn3.slice(i, j)), '🔴 رسالة من مرسل تاني بتتسجل «untrusted» وبترجع قبل أي مطابقة');
+  ok(/type: 'instapay_sms_untrusted'/.test(fn3), 'ومعاها تنبيه في Office');
+}
+console.log('\n🧾 بيانات التحويل على الفاتورة');
+{
+  const pos = fs.readFileSync(path.join(__dirname, '..', 'pos', 'instapay-pos.js'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'pos', 'app.js'), 'utf8');
+  ok(/if \(st\.mode === 'bank'\) \{\s*window\.instapayConfirmInfo = \{/.test(pos) && /window\.instapayConfirmInfo = null;/.test(pos), 'البيانات بتتجهز لما البنك يأكد بس · وبتتصفّر مع كل سلة');
+  ok(/split\(\/\\s\+\/\)\[0\]/.test(pos), 'الاسم الأول بس (خصوصية — الفاتورة بتترمى)');
+  ok(/instaTxn: \(Number\(\(payments\|\|\{\}\)\.instapay\) > 0 && window\.instapayConfirmInfo\)/.test(app), '🔴 بتتطبع بس لو الفاتورة فيها إنستاباي فعلًا (مش على فاتورة كاش بعدها)');
+  ok(/INSTAPAY - BANK CONFIRMED/.test(app) && /GIFT_HIDDEN = \['totals','cardTxn'/.test(app), 'بتتطبع في بلوك الدفع · ومبتظهرش في إيصال الهدية');
+}
+
 console.log('\n🔐 الدالة');
 const fn = fs.readFileSync(path.join(__dirname, '..', 'functions', 'instapaySms.js'), 'utf8');
 ok(/defineSecret\('INSTAPAY_SMS_KEY'\)/.test(fn) && /timingSafeEqual/.test(fn), 'مفتاح سري من Secret Manager ومقارنة آمنة');
