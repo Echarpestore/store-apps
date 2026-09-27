@@ -19,6 +19,12 @@ const ar = C.parseCibSms(AR);
 ok(ar && ar.fromName === 'عمرو عيد سلامه محمد عبد' && ar.amountCents === 185000, 'اسم عربي');
 ok(C.parseCibSms('كود التحقق 123456') === null && C.parseCibSms('') === null, 'رسايل تانية بتتجاهل');
 {
+  const base = IN1.replace('بتاريخ 2026-09-25 23:38', '');
+  for (const [tail, lbl] of [['بتاريخ 2026/09/25 23:38', 'شرطة مايلة'], ['بتاريخ 25-09-2026 23:38', 'يوم-شهر-سنة'], ['بتاريخ \u200F2026-09-25\u200F \u200E23:38', 'علامات اتجاه حوالين التاريخ']])
+    ok(C.parseCibSms(base + tail)?.at === a.at, '🔴 تاريخ بشكل «' + lbl + '» بيتقري صح');
+  ok(C.parseCibSms(base)?.at === null, 'من غير تاريخ = null (والسيرفر بيستخدم وقت الوصول)');
+}
+{
   const bidi = IN1.replace('بمبلغ ', 'بمبلغ \u200F').replace('755.00', '\u202A755.00\u202C').replace('بـ ', 'بـ\u00A0').replace('6818', '\u200E6818');
   const pb = C.parseCibSms(bidi);
   ok(pb && pb.amountCents === 75500 && pb.last4 === '6818' && pb.direction === 'in', '🔴 علامات الاتجاه المخفية بتاعة الآيفون مبتبوّظش القراية');
@@ -101,6 +107,7 @@ console.log('\n🧾 المطابقة بعد الحفظ (كل الفروع)');
   ok(/type: 'instapay_invoice_bank_missing'/.test(fn2) && /if \(s\.status === 'finalized'\) continue;/.test(fn2), 'فاتورة من غير رسالة = تنبيه في Office · ومن غير تنبيه مكرر للطلب');
   ok(/await tryInvoicesForSms\(smsId, sms\)/.test(fn2), 'الرسالة لما توصل بتدوّر على الفاتورة كمان');
   ok(/status: 'unreadable'/.test(fn2), 'رسالة مقدرناش نقراها بتتسجل «unreadable» عشان نعرف السبب');
+  ok(/if \(!sms\.at\) \{ sms\.at = Date\.now\(\); sms\.atFromReceived = true; \}/.test(fn2) && /sms0\.receivedAt\) \? \{ \.\.\.sms0, at: sms0\.receivedAt \}/.test(fn2), '🔴 مفيش وقت في الرسالة = وقت وصولها (بدل ما المطابقة تقف)');
 }
 
 console.log('\n🔐 الدالة');
