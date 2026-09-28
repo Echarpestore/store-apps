@@ -18,7 +18,7 @@ window.ofCctvSaveBasketOffset=function(branch,value){
   try{localStorage.setItem('echarpe.cctv.'+String(branch)+'.basketOffsetMs.v746',String(value));}catch(e){}
   return value;
 };
-/* ECHARPE Office CCTV v747
+/* ECHARPE Office CCTV v749
    Fixed camera wall: every branch camera keeps a permanent card; Live starts only when its own switch is turned on. */
 (function(){
   'use strict';
@@ -497,18 +497,26 @@ window.ofCctvSaveBasketOffset=function(branch,value){
     var x=b(),gateway=agentGateway(x),aliases=(x.liveAliases||[]).map(function(v){return String(v).toLowerCase();});
     setCctvBusy(true,'جاري فحص التسجيل المتاح…',18);var range=null,timelineDocs=[],range8=null,cashierInfo=await resolveCashierCamera(x,gateway);
     var primaryCam=String(cashierInfo.camera||x.playbackCamera||'1');
+    var canTryHistoricalNvr=x.id==='madinaty'&&primaryCam==='4'&&dayReviewBounds.start<Date.now(),rangeError=null;
     // v599: افصل اختبار تسجيل الكاميرا عن Firestore. في v598 كان Promise.all
     // بيحوّل أي فشل في timeline query إلى رسالة مضللة "بوابة Glow فشل".
     try{
       range=await fetchJsonRetry(gateway+'/echarpe-playback/range?camera='+encodeURIComponent(primaryCam)+'&_='+Date.now(),x.id,3);
-    }catch(e){
-      setCctvBusy(false);var rangeMsg=(e&&e.message)||String(e||'');
-      alert('تعذر تجهيز تسجيل كاميرا الكاشير '+primaryCam+(rangeMsg==='Failed to fetch'?' — الاتصال ببوابة Glow فشل.':' : '+rangeMsg));
-      return;
+    }catch(e){rangeError=e;}
+    // Keep authorization errors and explicit camera mismatches blocking.
+    var rangeMsg=rangeError?String(rangeError.message||rangeError):'',rangeAuthError=/(?:401|403|unauthori[sz]ed|forbidden)/i.test(rangeMsg);
+    var rangeCameraMismatch=range&&range.camera!=null&&String(range.camera)!==primaryCam;
+    if(rangeAuthError||rangeCameraMismatch){
+      setCctvBusy(false);
+      alert(rangeAuthError?'تعذر الوصول للتسجيل؛ تحقق من تسجيل الدخول والصلاحيات.':'رقم كاميرا التسجيل غير مطابق. المطلوب '+primaryCam+'.');return;
     }
-    if(!range||!range.ok||String(range.camera)!==String(primaryCam)){
-      alert('تسجيل كاميرا الكاشير غير متاح أو رقم الكاميرا غير مطابق. المطلوب '+primaryCam+'.');
-      return;
+    var validLocalRange=!!(range&&range.ok&&String(range.camera)===primaryCam);
+    if(!validLocalRange){
+      if(!canTryHistoricalNvr){
+        setCctvBusy(false);alert('تعذر تجهيز تسجيل كاميرا الكاشير '+primaryCam+' · '+x.name+(rangeMsg?' : '+rangeMsg:'.'));return;
+      }
+      // No local coverage is not proof that historical NVR recordings are absent.
+      range={ok:true,camera:primaryCam,startMs:0,endMs:0};
     }
     try{
       var timelineSnap=await db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',dayReviewBounds.start).where('endedAtMs','<',dayReviewBounds.end).get();
@@ -523,10 +531,19 @@ window.ofCctvSaveBasketOffset=function(branch,value){
     var timelineCodes={};timelineDocs.forEach(function(t){if(t&&t.invoiceCode)timelineCodes[String(t.invoiceCode)]=true;});
     (dayReviewRows||[]).forEach(function(sale){var code=String(sale&&sale.invoiceCode||'');if(!code||timelineCodes[code]||!branchMatches(sale.branch,x.id,aliases))return;var fallback=timelineFromSale(sale);if(fallback){timelineDocs.push(fallback);timelineCodes[code]=true;}});
     var rangeStart=Number(range.startMs)||0,rangeEnd=Number(range.endMs)||0,coverageStart=Math.max(dayReviewBounds.start,rangeStart),coverageEnd=Math.min(dayReviewBounds.end,rangeEnd);
-    if(!coverageStart||coverageEnd-coverageStart<30000){setCctvBusy(false);alert('مفيش تسجيل محفوظ في التاريخ المختار. التسجيل المتاح يبدأ '+(rangeStart?new Date(rangeStart).toLocaleString('ar-EG'):'—')+'.');return;}setCctvBusy(true,'جاري تجهيز خط اليوم والسلة…',55);
+    // v749: Madinaty v690 can fetch historical Camera 4 clips from the NVR even when
+    // /range only reports the local recorder window. Do not reject the selected old day.
+    var nvrHistorical=(canTryHistoricalNvr&&(!coverageStart||coverageEnd-coverageStart<30000));
+    if(nvrHistorical){
+      coverageStart=dayReviewBounds.start;coverageEnd=dayReviewBounds.end;
+      range8=null; // Camera 8 historical NVR mapping is not verified yet.
+    }else if(!coverageStart||coverageEnd-coverageStart<30000){
+      setCctvBusy(false);alert('مفيش تسجيل محفوظ في التاريخ المختار. التسجيل المتاح يبدأ '+(rangeStart?new Date(rangeStart).toLocaleString('ar-EG'):'—')+'.');return;
+    }
+    setCctvBusy(true,nvrHistorical?'جاري تجهيز اليوم من NVR مدينتي…':'جاري تجهيز خط اليوم والسلة…',55);
     var events=[];timelineDocs.forEach(function(t){var catalog=t.catalog||{},code=t.invoiceCode||'';(t.events||[]).forEach(function(e){events.push(Object.assign({},e,{catalog:catalog,invoiceCode:code}));});events.push({atMs:Number(t.endedAtMs||0)+1,kind:'cart_cleared',cart:[],total:0,catalog:{},invoiceCode:''});});events.sort(function(a,c){return Number(a.atMs)-Number(c.atMs);});
     var tq=String(timeInput&&timeInput.value||'').split(':').map(Number),chosenStart=tq.length>1?new Date(new Date(dayReviewBounds.start).getFullYear(),new Date(dayReviewBounds.start).getMonth(),new Date(dayReviewBounds.start).getDate(),tq[0]||0,tq[1]||0,0,0).getTime():0;
-    var firstEvent=events.find(function(e){return Number(e.atMs)>=coverageStart;}),chunkMs=60*1000,chunkStart=chosenStart?Math.max(coverageStart,Math.min(chosenStart,coverageEnd-30000)):(firstEvent?Math.max(coverageStart,Number(firstEvent.atMs)-10000):Math.max(coverageStart,coverageEnd-90000));
+    var firstEvent=events.find(function(e){return Number(e.atMs)>=coverageStart;}),chunkMs=nvrHistorical?30*1000:60*1000,chunkStart=chosenStart?Math.max(coverageStart,Math.min(chosenStart,coverageEnd-30000)):(firstEvent?Math.max(coverageStart,Number(firstEvent.atMs)-(nvrHistorical?5000:10000)):Math.max(coverageStart,coverageEnd-90000));
     // v563: كاميرا 8 بتشتغل جنب الأساسية بس لو الـagent مأكد إن عندها تسجيل فعلي
     var dualCam=x.id==='madinaty'&&!!(range8&&range8.ok&&Number(range8.segmentCount)>0),glowDay=x.id==='glow';
     var coverageSpan=Math.max(1,coverageEnd-coverageStart);
@@ -556,7 +573,7 @@ window.ofCctvSaveBasketOffset=function(branch,value){
     }
     function dayReady(){updateBufferedProgress();if(statusText&&(!master||!master.buffered||!master.buffered.length))statusText.textContent='التسجيل جاهز';}
     var basketOffsetMs=window.ofCctvReadBasketOffset(x.id);
-    ov.querySelector('[data-day-coverage]').textContent='المتاح '+new Date(coverageStart).toLocaleTimeString('ar-EG')+' — '+new Date(coverageEnd).toLocaleTimeString('ar-EG')+' · '+(dualCam?'كاميرتين متزامنتين':glowDay?'Glow · كاميرا الكاشير '+primaryCam+' ✓':'كاميرا واحدة')+' · '+jumpEvents.length+' علامة';
+    ov.querySelector('[data-day-coverage]').textContent=(nvrHistorical?'NVR مدينتي · تحميل عند الطلب · ':'المتاح '+new Date(coverageStart).toLocaleTimeString('ar-EG')+' — '+new Date(coverageEnd).toLocaleTimeString('ar-EG')+' · ')+(dualCam?'كاميرتين متزامنتين':glowDay?'Glow · كاميرا الكاشير '+primaryCam+' ✓':'كاميرا '+primaryCam)+' · '+jumpEvents.length+' علامة';
     slider.min=String(Math.max(0,Math.floor((coverageStart-dayReviewBounds.start)/1000)));slider.max=String(Math.max(Number(slider.min)+1,Math.floor((coverageEnd-dayReviewBounds.start-1000)/1000)));slider.value=String(Math.max(Number(slider.min),Math.floor((chunkStart-dayReviewBounds.start)/1000)));
     function kindName(k){return ({item_added:'إضافة صنف',item_removed:'حذف صنف',qty_increased:'زيادة كمية',qty_decreased:'تقليل كمية',cart_edited:'تعديل السلة',payment:'بدء الدفع',saving:'بدء الحفظ',sale_saved:'حفظ الفاتورة',cart_cleared:'بين الفواتير'})[k]||'حركة سلة';}
     // 🔖 شريط العلامات على مدى اليوم كله — الدوسة بتنقلك للحظة نفسها في الكاميرتين
@@ -573,7 +590,7 @@ window.ofCctvSaveBasketOffset=function(branch,value){
       if(!isRetry)chunkRetry=0;
       var latestStart=Math.max(coverageStart,coverageEnd-30000);
       chunkStart=Math.max(coverageStart,Math.min(Number(next)||coverageStart,latestStart));currentVideoNow=chunkStart;
-      var duration=Math.max(30,Math.min(60,Math.floor((coverageEnd-chunkStart)/1000)));
+      var duration=nvrHistorical?30:Math.max(30,Math.min(60,Math.floor((coverageEnd-chunkStart)/1000)));
       slider.value=String(Math.max(Number(slider.min),Math.min(Number(slider.max),Math.floor((chunkStart-dayReviewBounds.start)/1000))));
       dayLoading(chunkRetry?'إعادة الاتصال بالتسجيل تلقائيًا…':'جاري تجهيز '+new Date(chunkStart).toLocaleTimeString('ar-EG')+'…',chunkRetry?58:32);
       master.src=clipUrl(primaryCam,chunkStart,duration);master.load();master.play().catch(function(){});
@@ -582,7 +599,7 @@ window.ofCctvSaveBasketOffset=function(branch,value){
     }
     // النطّ لحظة معيّنة: لو جوه المقطع الحالي نتحرك فيه، وإلا نحمّل المقطع اللي فيها
     function seekToMs(targetMs){
-      var duration=Math.max(30,Math.min(60,Math.floor((coverageEnd-chunkStart)/1000)));
+      var duration=nvrHistorical?30:Math.max(30,Math.min(60,Math.floor((coverageEnd-chunkStart)/1000)));
       if(targetMs>=chunkStart&&targetMs<chunkStart+duration*1000&&master&&master.readyState>=1){
         var sec=Math.max(0,(targetMs-chunkStart)/1000);
         master.currentTime=sec;if(slave)slave.currentTime=sec;
