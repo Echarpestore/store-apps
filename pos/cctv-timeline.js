@@ -1,4 +1,4 @@
-/* ECHARPE synchronized basket timeline v507.
+/* ECHARPE synchronized basket timeline v747.
    Cart changes stay local while the sale is open, then one idempotent document
    is written per invoice. This avoids a Firestore write/read for every scan and
    lets Office rebuild the basket at any video time. */
@@ -29,7 +29,7 @@
     var pq=prev.reduce(function(n,x){return n+Number(x[1]||0);},0),nq=next.reduce(function(n,x){return n+Number(x[1]||0);},0);
     if(nq>pq)return 'qty_increased';if(nq<pq)return 'qty_decreased';return 'cart_edited';
   }
-  function newState(meta,sid,at){return {version:507,sid:sid,branch:safe(meta.branch||'',100),startedAtMs:Number(meta.firstItemAt)||at,catalog:{},events:[],lastHash:'',lastCart:[]};}
+  function newState(meta,sid,at){return {version:747,sid:sid,branch:safe(meta.branch||'',100),clockSource:'pos_pc',startedAtMs:Number(meta.firstItemAt)||at,catalog:{},events:[],lastHash:'',lastCart:[]};}
   function observe(meta){
     try{
       meta=meta||{};var sid=safe(meta.sid||meta.cartSid||(typeof _cartSid!=='undefined'&&_cartSid)||'',140);if(!sid)return false;
@@ -70,7 +70,7 @@
       if(liveCart)observe({sid:sid,branch:meta.branch,cart:liveCart,atMs:Number(meta.atMs)||Date.now()});
       var s=load(sid);if(!s)return Promise.resolve(false);var end=Number(meta.atMs)||Date.now();
       s.events.push({seq:s.events.length+1,atMs:end,kind:'sale_saved',cart:s.lastCart||[],total:Number(meta.total)||Number((s.events[s.events.length-1]||{}).total)||0});
-      var doc={version:507,invoiceCode:code,invoiceNo:safe(meta.invoiceNo||'',80),saleId:safe(meta.saleId||'',140),sid:sid,branch:safe(meta.branch||s.branch||'',100),startedAtMs:Number(s.startedAtMs)||end,endedAtMs:end,clipStartAtMs:Math.max(1,(Number(s.startedAtMs)||end)-5000),clipEndAtMs:end+10000,catalog:s.catalog||{},events:s.events||[],eventCount:(s.events||[]).length,storage:'one_doc_per_invoice'};
+      var doc={version:747,clockSource:'pos_pc',invoiceCode:code,invoiceNo:safe(meta.invoiceNo||'',80),saleId:safe(meta.saleId||'',140),sid:sid,branch:safe(meta.branch||s.branch||'',100),startedAtMs:Number(s.startedAtMs)||end,endedAtMs:end,clipStartAtMs:Math.max(1,(Number(s.startedAtMs)||end)-5000),clipEndAtMs:end+10000,catalog:s.catalog||{},events:s.events||[],eventCount:(s.events||[]).length,storage:'one_doc_per_invoice'};
       enqueue(doc);drop(sid);return writeDoc(doc).then(function(){var q=queueLoad();delete q[code];queueSave(q);return true;}).catch(function(){
         return writeSnapshotFallback(doc).then(function(){var q=queueLoad();delete q[code];queueSave(q);return true;}).catch(function(){return false;});
       });
