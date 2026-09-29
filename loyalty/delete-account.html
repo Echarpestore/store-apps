@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>إيشارب · حذف الحساب</title>
+<meta name="theme-color" content="#EC4899">
+<link rel="icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+<style>
+  :root{ --pink:#EC4899; --bg:#FFF6FA; --line:#f1d4de; --ink:#2b2b2b; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Tajawal',system-ui,sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .card{ background:#fff; border-radius:22px; padding:26px 22px; max-width:420px; width:100%; box-shadow:0 10px 40px rgba(236,72,153,.12); }
+  h1{ font-size:22px; margin:0 0 6px; } p{ line-height:1.9; font-size:14px; margin:0 0 12px; }
+  label{ display:block; font-weight:800; font-size:13px; margin:10px 0 4px; }
+  input{ width:100%; padding:13px; border-radius:14px; border:2px solid var(--line); font-size:18px; font-family:inherit; text-align:center; }
+  button{ width:100%; margin-top:14px; padding:14px; border:0; border-radius:14px; font-family:inherit; font-weight:800; font-size:16px; cursor:pointer; }
+  .danger{ background:#c0392b; color:#fff; } .ghost{ background:#fff; border:2px solid var(--line); }
+  .err{ color:#c0392b; font-weight:800; min-height:22px; margin-top:8px; font-size:13px; }
+  .ok{ color:#1e8449; font-weight:800; }
+  ul{ padding-right:18px; line-height:1.9; font-size:13.5px; }
+  .hide{ display:none; }
+</style>
+</head>
+<body>
+<div class="card" id="step1">
+  <h1>🗑️ حذف حساب إيشارب</h1>
+  <p>لو مش عايزة تكمّلي معانا، تقدري تمسحي حسابك من هنا أو من داخل التطبيق (حسابي ← حذف حسابي وبياناتي).</p>
+  <p><b>اللي بيتمسح:</b></p>
+  <ul>
+    <li>اسمك ولغتك وملاحظاتك ورقمك السري وكود العضوية.</li>
+    <li>تسجيلات الإشعارات على أجهزتك (مش هيوصلك إشعارات تاني).</li>
+    <li>رصيد النقاط بيتصفّر ولا يمكن استرجاعه.</li>
+  </ul>
+  <p><b>اللي بيفضل:</b> الفواتير القديمة كسجلات محاسبية (بدون اسمك)، وأي رصيد فلوس مدفوع — لو عندك رصيد كلمينا قبل الحذف عشان نرجّعه.</p>
+  <p>الحذف بيتم فورًا بعد تأكيد رقمك السري، وبيقفل الدخول من تطبيقات إيشارب وGlow لنفس الرقم.</p>
+  <label for="ph">رقم الموبايل</label>
+  <input id="ph" inputmode="tel" placeholder="01xxxxxxxxx" dir="ltr">
+  <label for="pin">الرقم السري (٤ أرقام)</label>
+  <input id="pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••">
+  <div class="err" id="err"></div>
+  <button class="danger" id="go">احذفي حسابي نهائيًا</button>
+  <button class="ghost" onclick="location.href='./'">رجوع للتطبيق</button>
+</div>
+<div class="card hide" id="done">
+  <h1>اتحذف حسابك</h1>
+  <p class="ok">تم حذف بياناتك الشخصية ✅</p>
+  <p>نتمنى نشوفك تاني 🌷 — تقدري تسجّلي من جديد في أي وقت بنفس الرقم.</p>
+</div>
+<script>
+var firebaseConfig = { apiKey: "AIzaSyCa6Qho3IKoKE_jCNHYuFX6rtaV88jekQs", authDomain: "customer-feedback-8ac1d.firebaseapp.com", projectId: "customer-feedback-8ac1d" };
+var app = firebase.initializeApp(firebaseConfig, 'loyalty-delete');   // جلسة منفصلة — مش بتلمس جلسة التطبيق ولا office
+var BRAND = 'echarpe';
+function digits(s){ return String(s||'').replace(/[^0-9]/g,''); }
+function call(p){ p.brand = BRAND; return app.functions('us-central1').httpsCallable('loyaltyAuth')(p).then(function(r){ return r.data||{}; }); }
+function msg(e){ var c = e && e.details && e.details.code; if(c==='locked') return 'محاولات كتير غلط — استني ربع ساعة وجرّبي تاني'; if(e && e.message && e.code && e.code!=='internal' && e.code!=='unavailable') return e.message; return 'النت ضعيف — حاولي تاني'; }
+document.getElementById('go').addEventListener('click', function(){
+  var ph = digits(document.getElementById('ph').value), pin = digits(document.getElementById('pin').value), er = document.getElementById('err'), b = this;
+  if(ph.length < 8){ er.textContent = 'اكتبي رقم موبايل صح'; return; }
+  if(pin.length !== 4){ er.textContent = 'الرقم السري ٤ أرقام'; return; }
+  if(!confirm('متأكدة؟ الحذف نهائي ومفيش رجوع.')) return;
+  b.disabled = true; er.textContent = 'لحظة…';
+  call({ action:'login', phone: ph, pin: pin })
+    .then(function(r){ return app.auth().signInWithCustomToken(r.token); })
+    .then(function(){ return call({ action:'delete_account', pin: pin }); })
+    .then(function(){ try{ app.auth().signOut(); }catch(e){} document.getElementById('step1').classList.add('hide'); document.getElementById('done').classList.remove('hide'); })
+    .catch(function(e){ b.disabled = false; er.textContent = msg(e); console.warn(e); });
+});
+</script>
+</body>
+</html>

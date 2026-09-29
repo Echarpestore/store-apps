@@ -854,15 +854,17 @@ var _anonPending = false;
 function ensureAnonAuth(){
   try{
     if(!firebase.auth) return;
-    if(fbAuth.currentUser || _anonPending) return;   // داخل بالفعل أو الطلب في السكة
+    if(!_authRestored || fbAuth.currentUser || _anonPending) return;   // داخل بالفعل أو الطلب في السكة أو الجلسة لسه بتترجّع
     _anonPending = true;
     fbAuth.signInAnonymously()
       .then(function(){ _anonPending = false; })
       .catch(function(e){ _anonPending = false; console.warn('anon auth', e && e.code); });
   }catch(e){ _anonPending = false; console.warn('anon auth unavailable', e); }
 }
-ensureAnonAuth();
-try{ fbAuth.onAuthStateChanged(function(u){ if(!u) ensureAnonAuth(); }); }catch(e){}
+/* LOYALTY-AUTH-v1 — الدخول المجهول يستنى استعادة الجلسة الأول: signInAnonymously
+   وهي شغّالة فورًا كانت هتستبدل جلسة العميلة (Custom Token) المحفوظة على الجهاز. */
+var _authRestored = false;
+try{ fbAuth.onAuthStateChanged(function(u){ _authRestored = true; if(!u) ensureAnonAuth(); }); }catch(e){ _authRestored = true; ensureAnonAuth(); }
 window.addEventListener('online', ensureAnonAuth);
 // §18 القاعدة الذهبية — الملف فيه أكتر من <script>
 window.fbApp = fbApp; window.fbAuth = fbAuth; window.ensureAnonAuth = ensureAnonAuth;
@@ -873,6 +875,34 @@ var db = firebase.firestore(fbApp);
    Firestore customer create/update rules require an authenticated (anonymous) customer session.
    The anonymous sign-in starts immediately, but registration can be completed before that async
    sign-in has settled on a fresh QR/browser session. Wait for the named app's auth before writes. */
+/* LOYALTY-AUTH-v1 — الرقم السري بيتقارن على السيرفر (functions/loyaltyAuth.js)
+   والدخول بـCustom Token بمطالبة phone — قواعد الأمان بتقفل المستند على صاحبته. */
+var LOYALTY_BRAND = 'echarpe';
+function loyaltyAuthCall(payload){
+  payload = Object.assign({ brand: LOYALTY_BRAND }, payload || {});
+  return fbApp.functions('us-central1').httpsCallable('loyaltyAuth')(payload).then(function(r){ return r.data || {}; });
+}
+function loyaltyAuthMsg(e, fallback){
+  var code = e && e.details && e.details.code;
+  if(code === 'locked') return 'محاولات كتير غلط — استني ربع ساعة وجرّبي تاني';
+  if(e && e.message && e.code && e.code !== 'internal' && e.code !== 'unavailable' && e.code !== 'deadline-exceeded') return e.message;
+  return fallback || 'النت ضعيف — حاولي تاني';
+}
+function loyaltySignIn(token){ return fbAuth.signInWithCustomToken(token); }
+/* الجلسة المحفوظة على الجهاز تبقى بتاعة نفس الرقم ونفس البراند؟ */
+function loyaltySessionFor(phone){
+  return new Promise(function(res){
+    var done = false, off = null;
+    function settle(u){
+      if(done) return; done = true; try{ if(off) off(); }catch(_){}
+      if(!u || u.isAnonymous) return res(false);
+      u.getIdTokenResult().then(function(t){ var c = t && t.claims || {}; res(!!(c.loyalty && c.brand === LOYALTY_BRAND && String(c.phone) === String(phone))); }).catch(function(){ res(false); });
+    }
+    try{ off = fbAuth.onAuthStateChanged(settle); }catch(e){ settle(fbAuth.currentUser); }
+    setTimeout(function(){ settle(fbAuth.currentUser); }, 6000);
+  });
+}
+window.loyaltyAuthCall = loyaltyAuthCall; window.loyaltyAuthMsg = loyaltyAuthMsg;
 function waitForCustomerAuth(){
   return new Promise(function(resolve, reject){
     if(fbAuth.currentUser){ resolve(fbAuth.currentUser); return; }
@@ -1336,18 +1366,17 @@ function stepPhone(){
   var phone = digits($('phoneInput').value);
   if(phone.length < 8){ $('loginErr').textContent='اكتبي رقم موبايل صح'; return; }
   $('loginBtn').disabled=true; $('loginBtn').textContent='لحظة...';
-  db.collection(COL_CUSTOMERS).doc(phone).get().then(function(doc){
+  loyaltyAuthCall({ action:'lookup', phone: phone }).then(function(r){
     $('loginBtn').disabled=false; pendingPhone = phone;
-    if(!doc.exists){ pendingIsNew=true; setLoginStep('name'); }
+    if(!r.exists){ pendingIsNew=true; setLoginStep('name'); }
     else{
-      pendingIsNew=false;
-      var d = doc.data();
-      if(d.loyaltyPin){ pinToMatch = String(d.loyaltyPin); setLoginStep('enterpin'); }
+      pendingIsNew=false; pinToMatch='';
+      if(r.hasPin){ setLoginStep('enterpin'); }
       else{ setLoginStep('setpin'); }   // حساب موجود من غير رقم سري (اتعمل من الكاشير أو اتعمله reset)
     }
   }).catch(function(e){
     $('loginBtn').disabled=false; $('loginBtn').textContent='دخول';
-    $('loginErr').textContent='النت ضعيف — حاولي تاني'; console.warn(e);
+    $('loginErr').textContent=loyaltyAuthMsg(e); console.warn(e);
   });
 }
 
@@ -1366,14 +1395,14 @@ function stepSetPin(){
   if(pendingIsNew){
     createCustomer(pendingPhone, pendingName, pin);
   }else{
-    waitForCustomerAuth().then(function(){
-      return db.collection(COL_CUSTOMERS).doc(pendingPhone).set({ loyaltyPin: pin }, { merge:true });
+    loyaltyAuthCall({ action:'set_pin', phone: pendingPhone, pin: pin }).then(function(r){
+      return loyaltySignIn(r.token);
     }).then(function(){
       localStorage.setItem(LS_PHONE, pendingPhone);
       $('loginBtn').disabled=false; enterApp(pendingPhone);
     }).catch(function(e){
       $('loginBtn').disabled=false; $('loginBtn').textContent='حفظ ودخول';
-      $('loginErr').textContent='معرفناش نحفظ — حاولي تاني'; console.warn(e);
+      $('loginErr').textContent=loyaltyAuthMsg(e, 'معرفناش نحفظ — حاولي تاني'); console.warn(e);
     });
   }
 }
@@ -1381,33 +1410,31 @@ function stepSetPin(){
 function stepEnterPin(){
   var pin = digits($('pinInput').value);
   if(pin.length !== 4){ $('loginErr').textContent='اكتبي الرقم السري (٤ أرقام)'; return; }
-  if(pin !== pinToMatch){ $('loginErr').textContent='الرقم السري غلط'; $('pinInput').value=''; return; }
-  try{ if(window.crStashPin) crStashPin(pin); }catch(e){}   // 🔐 لتسجيل الجهاز على السيرفر (في الذاكرة بس)
-  localStorage.setItem(LS_PHONE, pendingPhone);
-  enterApp(pendingPhone);
+  $('loginBtn').disabled=true; $('loginBtn').textContent='لحظة...';
+  loyaltyAuthCall({ action:'login', phone: pendingPhone, pin: pin }).then(function(r){
+    return loyaltySignIn(r.token);
+  }).then(function(){
+    try{ if(window.crStashPin) crStashPin(pin); }catch(e){}   // 🔐 لتسجيل الجهاز على السيرفر (في الذاكرة بس)
+    localStorage.setItem(LS_PHONE, pendingPhone);
+    $('loginBtn').disabled=false; enterApp(pendingPhone);
+  }).catch(function(e){
+    $('loginBtn').disabled=false; $('loginBtn').textContent='دخول'; $('pinInput').value='';
+    $('loginErr').textContent=loyaltyAuthMsg(e); console.warn(e);
+  });
 }
 
 function createCustomer(phone, name, pin){
-  waitForCustomerAuth().then(function(){
-    return makeUniqueCode(0);
-  }).then(function(code){
-    var data = {
-      name: name, phone: phone, points: 0, totalSpent: 0,
-      lastVisit: null, notes: '', branch: '',
-      loyaltyCode: code, loyaltyPin: pin, createdAt: Date.now(), source: visitSrc ? ('loyalty_app:'+visitSrc) : 'loyalty_app',
-      /* 🌐 اللغة اللي اختارتها وهي بتسجّل — بتتحفظ من أول لحظة عشان
-         الإشعارات والفاتورة يقدروا يستعملوها بعدين. */
-      lang: (window.i18nLang ? i18nLang() : 'ar')
-    };
-    return db.collection(COL_CUSTOMERS).doc(phone).set(data, { merge:true });
+  /* التسجيل والكود الفريد على السيرفر — التطبيق مبيكتبش مستند العميلة قبل الدخول */
+  loyaltyAuthCall({ action:'register', phone: phone, name: name, pin: pin,
+    source: visitSrc ? ('loyalty_app:'+visitSrc) : 'loyalty_app',
+    lang: (window.i18nLang ? i18nLang() : 'ar') }).then(function(r){
+    return loyaltySignIn(r.token);
   }).then(function(){
     localStorage.setItem(LS_PHONE, phone);
     $('loginBtn').disabled=false; enterApp(phone);
   }).catch(function(e){
     $('loginBtn').disabled=false; $('loginBtn').textContent='حفظ ودخول';
-    $('loginErr').textContent = (e && e.message === 'auth-timeout')
-      ? 'الاتصال بالحساب اتأخر — تأكدي من النت وحاولي تاني'
-      : 'معرفناش نحفظ الحساب — حاولي تاني';
+    $('loginErr').textContent = loyaltyAuthMsg(e, 'معرفناش نحفظ الحساب — حاولي تاني');
     console.warn('customer registration failed', e && (e.code || e.message), e);
   });
 }
@@ -1717,9 +1744,7 @@ function makeUniqueCode(tries){
 // يتأكد إن العميل عنده كود؛ لو لأ يولّد واحد ويحفظه (الحفظ بيرجّع snapshot تاني فيعاد الرسم بالباركود)
 function ensureLoyaltyCode(phone){
   if(currentCustomer && currentCustomer.loyaltyCode) return;
-  makeUniqueCode(0).then(function(code){
-    return db.collection(COL_CUSTOMERS).doc(phone).set({ loyaltyCode: code }, { merge:true });
-  }).catch(function(e){ console.warn('تعذر توليد كود العضوية', e); });
+  loyaltyAuthCall({ action:'ensure_code' }).catch(function(e){ console.warn('تعذر توليد كود العضوية', e); });
 }
 
 /* ---------- مولّد باركود CODE128-B جوه الملف (من غير أي مكتبة خارجية عشان يشتغل أوفلاين) ---------- */
@@ -2140,7 +2165,9 @@ function renderAccount(){
     (hasSupport() ? '<button class="btn-outline wa" onclick="openSupport()">💬 تواصلي معانا على واتساب</button>' : '')+
     '<button class="btn-outline install" id="installBtn" style="display:none;">📲 نزّلي التطبيق على الموبايل</button>'+
     '<div class="ios-tip" id="iosTip">📲 لتثبيت التطبيق على الآيفون: دوسي على زر المشاركة <b>⬆️</b> تحت، بعدين اختاري <b>«إضافة إلى الشاشة الرئيسية»</b>.</div>'+
-    '<button class="btn-outline logout" onclick="logout()">تسجيل الخروج</button>';
+    '<button class="btn-outline" onclick="openChangePin()">🔑 تغيير الرقم السري</button>'+
+    '<button class="btn-outline logout" onclick="logout()">تسجيل الخروج</button>'+
+    '<button class="btn-outline logout" onclick="openDeleteAccount()" style="opacity:.75;">🗑️ حذف حسابي وبياناتي</button>';
 
   // زر التثبيت
   var ib = $('installBtn');
@@ -2950,6 +2977,40 @@ window.orderRate = orderRate;
       موجودة أصلًا** في التطبيق. الاختبار النصي كان هيعدّي أخضر
       (الاسم مكتوب في الكود) والزرار كان هيقع صامت على موبايل
       العميلة. الدرس: أي دالة بننديها لازم نتأكد إنها موجودة. */
+/* LOYALTY-AUTH-v1 — تغيير الرقم السري وحذف الحساب (من التطبيق نفسه) */
+function _pinSheet(title, intro, btnLabel, fields, onSubmit){
+  showSheet(title,
+    '<div class="acct-card" style="text-align:center;">'
+    + '<div style="font-size:13.5px; line-height:1.9; margin-bottom:12px;">' + intro + '</div>'
+    + fields.map(function(f){ return '<input id="' + f.id + '" type="password" inputmode="numeric" maxlength="4" placeholder="' + f.ph + '" style="width:60%; padding:12px; border-radius:14px; border:2px solid var(--line); font-size:20px; text-align:center; letter-spacing:.4em; font-family:inherit; margin:4px 0;">'; }).join('')
+    + '<div id="lyPinErr" style="min-height:20px; color:#c0392b; font-weight:800; font-size:12.5px; margin-top:8px;"></div>'
+    + '<button class="btn-primary" id="lyPinBtn" style="width:100%; margin-top:6px;">' + btnLabel + '</button></div>');
+  setTimeout(function(){ var i = document.getElementById(fields[0].id); if(i) i.focus(); }, 120);
+  var b = document.getElementById('lyPinBtn'); if(b) b.onclick = onSubmit;
+}
+function openChangePin(){
+  _pinSheet('🔑 تغيير الرقم السري', 'اكتبي الرقم القديم وبعدين الجديد (٤ أرقام).', 'حفظ',
+    [{id:'lyOldPin', ph:'القديم'}, {id:'lyNewPin', ph:'الجديد'}, {id:'lyNewPin2', ph:'تأكيد'}], function(){
+    var o = digits(document.getElementById('lyOldPin').value), n1 = digits(document.getElementById('lyNewPin').value), n2 = digits(document.getElementById('lyNewPin2').value), er = document.getElementById('lyPinErr');
+    if(o.length !== 4 || n1.length !== 4){ er.textContent = 'الرقم السري ٤ أرقام'; return; }
+    if(n1 !== n2){ er.textContent = 'الرقمين الجداد مش متطابقين'; return; }
+    er.textContent = 'لحظة…';
+    loyaltyAuthCall({ action:'change_pin', oldPin: o, newPin: n1 }).then(function(){ closeSheet(); alert('تم تغيير الرقم السري ✅'); })
+      .catch(function(e){ er.textContent = loyaltyAuthMsg(e); });
+  });
+}
+function openDeleteAccount(){
+  _pinSheet('🗑️ حذف الحساب', '<b>ده بيمسح اسمك وبياناتك ونقاطك نهائيًا</b> ومش هتقدري ترجعيهم.<br>الفواتير القديمة بتفضل كسجلات بس من غير اسمك.<br>لو عندك رصيد فلوس، كلمينا الأول عشان نرجّعه.<br><br>اكتبي رقمك السري للتأكيد:', 'احذفي حسابي نهائيًا',
+    [{id:'lyDelPin', ph:'••••'}], function(){
+    var p = digits(document.getElementById('lyDelPin').value), er = document.getElementById('lyPinErr');
+    if(p.length !== 4){ er.textContent = 'الرقم السري ٤ أرقام'; return; }
+    if(!confirm('متأكدة؟ الحذف نهائي.')) return;
+    er.textContent = 'لحظة…';
+    loyaltyAuthCall({ action:'delete_account', pin: p }).then(function(){ closeSheet(); alert('اتحذف حسابك. نتمنى نشوفك تاني 🌷'); logout(true); })
+      .catch(function(e){ er.textContent = loyaltyAuthMsg(e); });
+  });
+}
+window.openChangePin = openChangePin; window.openDeleteAccount = openDeleteAccount;
 function showSheet(title, bodyHtml){
   var sh = document.getElementById('crSheet');
   var ov = document.getElementById('crOverlay');
@@ -3102,6 +3163,7 @@ function logout(silent){
   _myRequests = [];
   currentCustomer = null;
   localStorage.removeItem(LS_PHONE);
+  try{ if(fbAuth.currentUser && !fbAuth.currentUser.isAnonymous) fbAuth.signOut(); }catch(e){}
   $('phoneInput').value=''; $('nameInput').value='';
   pendingIsNew=false; pendingName=''; pinToMatch='';
   showScreen('screen-login');
@@ -3168,8 +3230,13 @@ if(isIOS() && !isStandalone()){
 $('heroLogo').src = logoSrc;
 loadSettings().finally(function(){
   var saved = localStorage.getItem(LS_PHONE);
-  if(saved){ showScreen('screen-app'); enterApp(saved); }
-  else { showScreen('screen-login'); setLoginStep('phone'); }
+  if(!saved){ showScreen('screen-login'); setLoginStep('phone'); return; }
+  loyaltySessionFor(saved).then(function(ok){
+    if(ok){ showScreen('screen-app'); enterApp(saved); return; }
+    /* جلسة قديمة (قبل التحديث) أو انتهت: رقم سري مرة واحدة وخلاص */
+    localStorage.removeItem(LS_PHONE);
+    showScreen('screen-login'); setLoginStep('phone'); $('phoneInput').value = saved;
+  });
 });
 
 // لو الاسكربت كله اشتغل، نلغي بانر الفشل الاحتياطي
