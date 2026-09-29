@@ -1666,6 +1666,19 @@ function mergeCustDocs(branchDocs, appDocs, isGlow){
 }
 window.custAppBrandMatch = custAppBrandMatch; window.mergeCustDocs = mergeCustDocs;
 
+/* 🧮 v750: قراءة إحصائيات العميلة للفرع من مستندها.
+   نفس منطق functions/customerStatsCore.js بالظبط — أي تغيير هنا لازم يتغير هناك.
+   اسم الفرع بيتحوّل لمفتاح آمن (Firestore بيقرا النقطة كمسار حقول). */
+function custBranchKey(branch){
+  return String(branch == null ? '' : branch).trim().replace(/[.$[\]#/\s]+/g,'_') || '_none';
+}
+function custStatsFor(customer, branch){
+  const all = (customer && customer.stats) || {};
+  const s = all[custBranchKey(branch)] || {};
+  return { spend: Number(s.spend)||0, count: Number(s.count)||0, lastTs: Number(s.lastTs)||0 };
+}
+if(typeof window !== 'undefined'){ window.custBranchKey = custBranchKey; window.custStatsFor = custStatsFor; }
+
 async function goToCustomerList(){
   // 🔐 v713: القايمة كانت من غير أي فحص — أي كاشير تفتحها تشوف كل عملاء الفرع بتليفوناتهم ومشترياتهم.
   //    الفحص **قبل** أي تحميل: الدالة دي بتقرا كل العملاء + كل فواتير الفرع، فالمنع لازم يبقى قبل القراءة مش قبل العرض.
@@ -1684,17 +1697,32 @@ async function goToCustomerList(){
        فرع خالص، ولا حتى بعد ما تشتري. دلوقتي بنجيب الاتنين ونفلتر اللي من غير
        فرع بالبراند (`custAppBrandMatch`) عشان عميلات Glow مايظهروش في echarpe. */
     const _isGlow = pointsFieldFor(currentBranch) === 'points_glow';
+
+    /* ⚡ v750: الشاشة دي كانت بتقرا **كل فواتير الفرع** (عشرات الآلاف) عشان
+       تحسب إنفاق/زيارات/آخر زيارة لكل عميلة — 65 ثانية تحميل على الموبايل.
+       دلوقتي السيرفر بيحسبها وقت البيع ويخزنها على مستند العميلة
+       (`stats.<الفرع>`)، فالشاشة بتقراها جاهزة مع العملاء في نفس الاستعلام.
+
+       🔐 مفيش أي تغيير في الأرقام: بنستخدم المخزّن **بس** لو الجرد خلص
+       (`pos_test_settings/customer_stats.ready`). قبل كده — أو لو رجّعنا العلم
+       false لأي سبب — الشاشة بترجع تحسب من الفواتير زي الأول بالظبط. */
+    let _statsReady = false;
+    try{
+      const _f = await db.collection(TEST_SETTINGS).doc('customer_stats').get();
+      _statsReady = !!(_f.exists && _f.data() && _f.data().ready);
+    }catch(e){ _statsReady = false; }
+
     const [custSnap, appSnap, sales] = await Promise.all([
       db.collection(TEST_CUSTOMERS).where('branch','==', currentBranch).get(),
       db.collection(TEST_CUSTOMERS).where('branch','==', '').get().catch(()=> ({ docs: [] })),
-      getBranchSales()
+      _statsReady ? Promise.resolve([]) : getBranchSales()
     ]);
     const _custDocs = mergeCustDocs(custSnap.docs, appSnap.docs, _isGlow);
     try{
       const _rs = await db.collection(TEST_SETTINGS).doc('reward_stats_' + (pointsFieldFor(currentBranch)==='points_glow'?'glow':'echarpe')).get();
       rewardStats = _rs.exists ? _rs.data() : {};
     }catch(e){ rewardStats = {}; }
-    // تجميع إنفاق/زيارات/آخر زيارة لكل عميل من الفواتير
+    // الطريقة القديمة: تجميع من الفواتير (بتشتغل لو الجرد لسه ماخلصش)
     const agg = {};
     sales.forEach(s=>{
       if(!s.customerPhone || s.reversed) return;
@@ -1706,7 +1734,7 @@ async function goToCustomerList(){
     });
     custListData = _custDocs.map(d=>{
       const c = { id:d.id, ...d.data() };
-      const a = agg[c.phone] || { spend:0, count:0, lastTs:0 };
+      const a = _statsReady ? custStatsFor(c, currentBranch) : (agg[c.phone] || { spend:0, count:0, lastTs:0 });
       c._spend = a.spend; c._count = a.count; c._lastTs = a.lastTs;
       return c;
     });
