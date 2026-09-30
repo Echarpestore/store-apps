@@ -3792,15 +3792,17 @@ function chatRenderMsgs(arr){
       body += '<img src="' + m.img.replace(/"/g, '') + '" alt="" onclick="chatImgZoom(this.src)" style="cursor:zoom-in;">';
     }
     if(m.text) body += esc(m.text);
-    if(m.tryon && chatImgs[m.id]){
+    // 🛒 v680: الزراير بتظهر لو فيه جرّبيها **أو** باركود — قبل كده منتج من غير
+    //    جرّبيها (لاصق مثلًا) كان بيوصل صورة بس، من غير «أضيفيها للسلة».
+    if(chatImgs[m.id] && (m.tryon || m.barcode)){
       // 💰 الاسم/السعر بيظهروا لو الموظفة حطّت باركود صح وقت الإرسال —
       //    مفيش حاجة اتحسبت هنا، كله جاي جاهز من الرسالة نفسها.
       if(m.productName){
         body += '<div class="m-prod"><b>' + esc(m.productName) + '</b>'
           + (m.productPrice ? ' — ' + Number(m.productPrice) + ' ج.م' : '') + '</div>';
       }
-      body += '<div class="m-actions">'
-        + '<button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">'
+      body += '<div class="m-actions">';
+      if(m.tryon) body += '<button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">'
         + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.9L19 9l-4.1 3.2L16 17l-4-2.6L8 17l1.1-4.8L5 9l5.1-1.1L12 3z"/></svg>'
         + ' جرّبيها</button>';
       if(m.barcode){

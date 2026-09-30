@@ -26,10 +26,10 @@ if (!fs.existsSync(P)) {
   // ١) حقل الباركود موجود في منطقة الصورة
   assert(/id="ccTryBc"/.test(CODE), 'حقل الباركود (ccTryBc) موجود في الشات');
 
-  // ٢) 🔴 الباركود بيترفق **جوه** حارس msg.tryon (اللي جوه بلوك الصورة)
+  // ٢) 🔴 v680: الباركود بيترفق جوه بلوك الصورة **مهما كان** جرّبيها (منتج مش طرحة)
   assert(/msg\.barcode\s*=/.test(CODE), 'msg.barcode بيتحط');
-  assert(/if\s*\(\s*msg\.tryon\s*\)\s*\{[\s\S]*?ccTryBc[\s\S]*?msg\.barcode\s*=/.test(CODE),
-    'الباركود بيترفق بس لو جرّبيها مفعّل (جوه حارس msg.tryon)');
+  assert(/if\(CST\.imgData\)\{[\s\S]*?ccTryBc[\s\S]*?msg\.barcode\s*=/.test(CODE),
+    'الباركود بيترفق مع الصورة حتى لو جرّبيها مش مفعّل (v680)');
   // 🔴 والقيمة جاية من الحقل مش ثابتة
   assert(/ccTryBc[\s\S]{0,120}\.value/.test(CODE), 'قيمة الباركود جاية من حقل ccTryBc');
 

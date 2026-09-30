@@ -23,7 +23,8 @@ assert(imgGuard > renderStart && imgGuard < renderEnd,
 
 // ٢) زرار جربيها مشروط بالعلم وبوجود الصورة (مش أي رسالة)
 const trySlice = html.slice(renderStart, renderEnd);
-assert(trySlice.indexOf('m.tryon && chatImgs[m.id]') > -1,
+assert(trySlice.indexOf("if(m.tryon) body += '<button class=\"m-try\"") > -1
+  && trySlice.indexOf('chatImgs[m.id] && (m.tryon || m.barcode)') > -1,
   'جربيها = علم tryon + صورة فعلًا — مش زرار يتيم يفتح فاضي');
 
 // ٣) مستمع الرسايل بنافذة limit مش مفتوح (قاعدة تحسين القراءات)

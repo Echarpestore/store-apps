@@ -38,9 +38,12 @@ else {
   const P = fs.readFileSync(POS_PATH, 'utf8');
   const sendFn = (P.match(/function ccSend\(\)\{[\s\S]*?\n  \}/) || [''])[0];
   assert(sendFn.length > 0, 'ccSend موجودة');
-  // 🔴 الاسم/السعر جوه حارس msg.tryon بس — مش بيتحطوا لأي صورة
-  assert(/if\(msg\.tryon\)\{[\s\S]*?msg\.productName[\s\S]*?msg\.productPrice[\s\S]*?\}/.test(sendFn),
-    'الاسم/السعر بيتحطوا جوه حارس msg.tryon (مش لأي صورة عادية)');
+  // 🔴 v680: الاسم/السعر جوه حارس **الصورة** (CST.imgData) ومربوطين بالباركود — مش بحارس جرّبيها
+  //    (منتج مش طرحة بيتباع من غير جرّبيها). وبيفضلوا مش بيتحطوا لصورة من غير كود.
+  assert(/if\(CST\.imgData\)\{[\s\S]*?if\(_bc\)\{[\s\S]*?msg\.productName[\s\S]*?msg\.productPrice[\s\S]*?\}/.test(sendFn),
+    'الاسم/السعر بيتحطوا جوه حارس الصورة ومع الباركود (مش لأي صورة عادية)');
+  assert(!/if\(msg\.tryon\)\{[\s\S]{0,400}msg\.barcode = _bc/.test(sendFn),
+    'v680 سلبي: الباركود مش جوه حارس جرّبيها');
   assert(/findByBarcode\(_bc, \{ includeOut: true \}\)/.test(sendFn), 'بيدوّر بنفس منطق المعاينة اللحظية');
   assert(/msg\.productName = _p\.name \|\| 'صنف'/.test(sendFn), 'اسم المنتج بيتحط');
   assert(/msg\.productPrice = Number\(_p\.price\) \|\| 0/.test(sendFn), 'سعر المنتج بيتحط');
@@ -51,9 +54,9 @@ function checkApp(brand, filePath) {
   if (!fs.existsSync(filePath)) { assert(false, filePath + ' لازم يكون موجود'); return; }
   const H = fs.readFileSync(filePath, 'utf8');
 
-  // 🔴 الاسم/السعر وزرار الشراء جوه حارس m.tryon && chatImgs[m.id] بس
-  const guardMatch = H.match(/if\(m\.tryon && chatImgs\[m\.id\]\)\{[\s\S]*?\n    \}/);
-  assert(guardMatch, brand + ': اسم/سعر/زرار الشراء جوه حارس m.tryon');
+  // 🔴 v680: الاسم/السعر وزرار الشراء جوه حارس الصورة + (جرّبيها أو باركود)
+  const guardMatch = H.match(/if\(chatImgs\[m\.id\] && \(m\.tryon \|\| m\.barcode\)\)\{[\s\S]*?\n    \}/);
+  assert(guardMatch, brand + ': اسم/سعر/زرار الشراء جوه حارس الصورة + (جرّبيها أو باركود)');
   if (guardMatch) {
     const block = guardMatch[0];
     assert(/m\.productName/.test(block), brand + ': اسم المنتج بيتعرض');

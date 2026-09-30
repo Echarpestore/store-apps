@@ -385,6 +385,8 @@
       + '.ccMsg.cu{align-self:flex-end; background:#232733; border-bottom-left-radius:4px;}'
       + '.ccMsg img{max-width:100%; border-radius:9px; display:block; margin-bottom:5px;}'
       + '.ccMsg .mt{display:block; font-size:10px; opacity:.65; margin-top:3px; text-align:left;}'
+      + '.ccDay{align-self:center; font-size:10.5px; color:#a9b0bd; background:#1c202a; border:1px solid #2a2f3b;'
+      + ' border-radius:99px; padding:3px 11px; margin:6px 0 2px;}'
       + '.ccAuto{align-self:center; background:#20242e; color:#9aa1af; font-size:11.5px;'
       + 'border-radius:99px; padding:4px 13px;}'
       + '#ccSigner{display:flex; align-items:center; gap:7px; overflow-x:auto;'
@@ -583,8 +585,10 @@
       if(wl.level === 'late') waitTxt = '<span class="ccWaitL">🔥 ' + wl.mins + ' دق</span>';
       var brand = (c.brand === 'glow')
         ? '<span class="ccChip g">Glow</span>' : '<span class="ccChip e">echarpe</span>';
-      var t = c.lastAt ? new Date(Number(c.lastAt)).toLocaleTimeString('ar-EG',
-                { hour: '2-digit', minute: '2-digit' }) : '';
+      // 🕒 v679: النهاردة = الساعة · إمبارح · اسم اليوم · التاريخ (زي واتساب)
+      var t = c.lastAt ? ((typeof window.chatListStamp === 'function')
+                ? window.chatListStamp(Number(c.lastAt), now)
+                : new Date(Number(c.lastAt)).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })) : '';
       html += '<div class="ccConv" onclick="ccOpenConv(\'' + esc2(c.id) + '\')">'
         + '<div class="ci"><div class="cn">' + esc2(c.name || c.phone || c.id) + ' ' + brand
         + (c.blocked === true ? ' <span class="ccChip" style="background:#3a2222;color:#E5484D;">محظورة</span>' : '')
@@ -647,7 +651,18 @@
   function renderThread(arr){
     var box = document.getElementById('ccThread');
     var html = '';
+    // 🕒 v679: فاصل يوم بين الرسايل (النهاردة / إمبارح / الثلاثاء ٢٩ سبتمبر) — زي واتساب.
+    //    من غيره رسالة من أسبوع شكلها زي رسالة النهاردة (الساعة بس).
+    var _now = Date.now(), _lastDay = null;
+    var _hasDay = (typeof window.chatDayKey === 'function' && typeof window.chatDayLabel === 'function');
     arr.forEach(function(m){
+      if(_hasDay && m.atMs){
+        var _dk = window.chatDayKey(Number(m.atMs));
+        if(_dk !== _lastDay){
+          _lastDay = _dk;
+          html += '<div class="ccDay">' + esc2(window.chatDayLabel(Number(m.atMs), _now)) + '</div>';
+        }
+      }
       if(m.from === 'auto'){
         html += '<div class="ccAuto">🤖 ' + esc2(m.text || '') + '</div>';
         return;
@@ -1144,19 +1159,22 @@
       //    الاسم/السعر بيتاخدوا من **نتيجة المعاينة** (CST.bcInfo) مش من
       //    الكاش المحلي — الكاش موجود في POS بس، فمن sales/office كانت
       //    الرسالة بتتبعت من غير اسم ولا سعر (ولا صورة في السلة).
-      if(msg.tryon){
-        var _bc = String((document.getElementById('ccTryBc') || {}).value || '').trim();
-        if(_bc){
-          msg.barcode = _bc;
-          var _p = (CST.bcInfo && CST.bcInfo.barcode === _bc) ? CST.bcInfo
-                 : ((typeof window.findByBarcode === 'function')
-                    ? window.findByBarcode(_bc, { includeOut: true }) : null);
-          if(_p){
-            msg.productName = _p.name || 'صنف';
-            msg.productPrice = Number(_p.price) || 0;
-            if(_p.img) msg.productImg = _p.img;   // 🖼️ صورة المنتج للسلة
-          }
+      // 🛒 v680: الباركود/الاسم/السعر بيتبعتوا **مهما كان** زر جرّبيها —
+      //    كان جوّه `if(msg.tryon)`، فلو الموظفة شالت جرّبيها (منتج مش طرحة:
+      //    لاصق، بروش…) الرسالة كانت بتوصل من غير كود ولا زرار «أضيفيها للسلة».
+      var _bc = String((document.getElementById('ccTryBc') || {}).value || '').trim();
+      if(_bc){
+        msg.barcode = _bc;
+        var _p = (CST.bcInfo && CST.bcInfo.barcode === _bc) ? CST.bcInfo
+               : ((typeof window.findByBarcode === 'function')
+                  ? window.findByBarcode(_bc, { includeOut: true }) : null);
+        if(_p){
+          msg.productName = _p.name || 'صنف';
+          msg.productPrice = Number(_p.price) || 0;
+          if(_p.img) msg.productImg = _p.img;   // 🖼️ صورة المنتج للسلة
         }
+      }
+      if(msg.tryon){
         // 🧢 بندانة — بتحوّل صفحة التجربة لوضع الشبكة (توليد واحد،
         //    تبديل ألوان مجاني بعد كده). باركودها منتج منفصل عن الطرحة.
         if(_bandColors && _bandColors.length >= 1){
