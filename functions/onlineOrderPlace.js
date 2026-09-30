@@ -137,7 +137,26 @@ function serverValidateCart(cart, shopItems, invByBarcode, branch, cfg) {
     const bc = String((line && line.barcode) || "");
     const q = Math.max(0, Math.floor(Number(line && line.qty) || 0));
     const s = byBc[bc];
-    if (!s) { errors.push("صنف مش معروض للبيع أونلاين"); return; }
+    if (!s) {
+      /* 🛍️ `cfg.sellAllInventory === true` (قرار المالك 30-09): الشات بيبيع **أي صنف في
+         المحل** مش كتالوج الأونلاين بس. السعر والاسم من مستند المخزون **على السيرفر**
+         (مش من العميلة). صنف مخفي أو من غير سعر بيترفض. الكمية: لو `ignoreBranchStock`
+         شغال مبتتفحصش، غير كده لازم تكون موجودة في الفرع. مفيش `onlineQty` هنا يتخصم —
+         الأصناف دي مش في الكتالوج أصلًا (applyQtyDelta بيعدّيها). */
+      const inv = invByBarcode[bc];
+      if (!(cfg && cfg.sellAllInventory === true) || !inv) { errors.push("صنف مش معروض للبيع أونلاين"); return; }
+      if (q <= 0) return;
+      if (inv.status === "hidden") { errors.push((inv.name || "صنف") + " — مش متاح للبيع"); return; }
+      const invPrice = Number(inv.price) || 0;
+      if (invPrice <= 0) { errors.push((inv.name || "صنف") + " — سعره مش متسجل"); return; }
+      if (!(cfg && cfg.ignoreBranchStock === true)) {
+        const inBranch = Math.max(0, Number((inv.qtyByBranch || {})[branch]) || 0);
+        if (inBranch <= 0) { errors.push((inv.name || "صنف") + " — خلص من " + branch); return; }
+        if (q > inBranch) { errors.push((inv.name || "صنف") + " — متاح " + inBranch + " بس"); return; }
+      }
+      items.push({ barcode: bc, name: String(inv.name || ""), qty: q, price: invPrice });
+      return;
+    }
     if (q <= 0) return;
     const avail = serverAvailable(s, invByBarcode[bc], branch, cfg);
     if (avail <= 0) {
