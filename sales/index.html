@@ -544,6 +544,7 @@
       </div>
       <button class="lbBtn" id="openAdvance" style="margin-left:8px; padding:8px 12px; font-size:11px;">💰 سلفة</button>
       <button class="lbBtn" id="openAttendance" style="margin-left:8px;">⏰ الحضور</button>
+      <button class="lbBtn" id="openReceive" onclick="window.salesRecvOpen && window.salesRecvOpen()" style="padding:8px 12px; font-size:11px;">📥 استلام</button>
       <button class="lbBtn" id="openLeaderboard" style="padding:8px 12px; font-size:11px;">🏆 الترتيب</button>
       <button class="lbBtn" id="openRegBtn" style="padding:8px 12px; font-size:11px; display:none;" onclick="openRegWizard()">🙋 تسجيل موظف جديد</button>
     </div>
@@ -1278,6 +1279,8 @@
 
 <script type="module" src="sales-app.js?v=623"></script>
 <script src="sales-ui.js?v=559"></script>
+<script src="../pos/receive-core.js?v=753"></script>
+<script src="sales-receive.js?v=625"></script>
 <!-- 💬 شات العملاء — **نفس ملفات POS بالظبط** (مصدر واحد، مفيش نسخة تتنسى).
      ⚠️ `chat-core.js` منطق خالص من غير Firestore، فبيشتغل زي ما هو.
      ⚠️ `chat-staff-ui.js?v=678` مكتوب compat، وبيكتشف إنه في بيئة modular

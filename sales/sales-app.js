@@ -1905,6 +1905,63 @@ window.fsChatApi = {
     });
   }
 };
+
+/* ============================================================
+   📥 v625 — استلام/إخراج المنتجات من Sales (البيانات بس)
+   ------------------------------------------------------------
+   الواجهة في sales-receive.js (سكريبت عادي)، فبنعرّض العمليات هنا زي
+   fsChatApi. ⚠️ نفس كتابة POS بالظبط: زيادة ذرّية على
+   qtyByBranch.<الفرع> + سطر في pos_test_stock_log — والاتنين في
+   **batch واحد** لكل مجموعة، فمفيش كمية اتغيرت من غير سجل ولا العكس.
+   ============================================================ */
+window.salesRecvApi = {
+  // استعلام بحقل واحد (الباركود) — مش قراءة المخزون كله على الموبايل
+  findByBarcode: function(code){
+    const bc = String(code || '').trim();
+    if(!bc) return Promise.resolve([]);
+    return getDocs(query(collection(db, 'pos_test_inventory'), where('barcode', '==', bc), limit(10)))
+      .then(function(s){ return s.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); }); });
+  },
+  getInventoryCfg: function(){
+    return getDoc(doc(db, 'pos_test_settings', 'inventory_cfg'))
+      .then(function(d){ return d.exists() ? (d.data() || {}) : {}; });
+  },
+  // rows: [{ id, qty, status|null, log:{...} }] — 200 سطر للـbatch (سطرين عمليات لكل حركة)
+  commit: async function(branch, rows){
+    const br = String(branch || '').trim();
+    if(!br) throw new Error('الفرع مش متحدد');
+    for(let i = 0; i < rows.length; i += 200){
+      const b = writeBatch(db);
+      rows.slice(i, i + 200).forEach(function(r){
+        const upd = {}; upd['qtyByBranch.' + br] = increment(Number(r.qty));
+        if(r.status) upd.status = r.status;
+        b.update(doc(db, 'pos_test_inventory', String(r.id)), upd);
+        b.set(doc(collection(db, 'pos_test_stock_log')), Object.assign({}, r.log, { createdAt: serverTimestamp() }));
+      });
+      await b.commit();
+    }
+    return true;
+  },
+  // نفس استعلام سجل POS (نفس الـindex) + الإخراج من شاشة الاستلام
+  recentLog: async function(branch){
+    const br = String(branch || '').trim();
+    const col = collection(db, 'pos_test_stock_log');
+    const toRows = function(s){ return s.docs.map(function(d){
+      const x = d.data() || {};
+      return Object.assign({ _id: d.id }, x, { createdAtMs: x.createdAt && x.createdAt.toMillis ? x.createdAt.toMillis() : 0 });
+    }); };
+    try{
+      const [a, b] = await Promise.all([
+        getDocs(query(col, where('branch', '==', br), where('type', '==', 'receipt'), orderBy('createdAt', 'desc'), limit(20))),
+        getDocs(query(col, where('branch', '==', br), where('type', '==', 'adjustment'), orderBy('createdAt', 'desc'), limit(20)))
+      ]);
+      return toRows(a).concat(toRows(b));
+    }catch(e){
+      const s = await getDocs(query(col, where('branch', '==', br), orderBy('createdAt', 'desc'), limit(120)));
+      return toRows(s);
+    }
+  }
+};
 window.checkLeaveRequest = checkLeaveRequest;
 window.coverageOnDate = coverageOnDate;
 window.todayStr = todayStr;

@@ -698,7 +698,7 @@ async function renderReceiveGoodsLog(){
         +'<td class="work-code">'+_workEsc(l.barcode||l.productBarcode||'—')+'</td>'
         +'<td class="work-name">'+_workEsc(l.name||l.productName||'صنف')+'</td>'
         +'<td style="font-weight:900;color:'+(qty>=0?'#047857':'#b91c1c')+'">'+(qty>0?'+':'')+qty+'</td>'
-        +'<td class="work-time">'+_workEsc(when)+'</td><td>'+_workEsc(l.employeeName||'—')+'</td></tr>';
+        +'<td class="work-time">'+_workEsc(when)+'</td><td>'+_workEsc(l.employeeName||'—')+(l.source==='sales'?' 📱':'')+'</td></tr>';
     }).join('') + '</tbody></table></div>' + (note ? '<div style="color:#64748b;font-size:11px;padding-top:7px;text-align:center;">' + _workEsc(note) + '</div>' : '');
   };
   renderRows(receiveGoodsTodayLog, 'آخر بيانات محفوظة على الجهاز');
@@ -706,13 +706,21 @@ async function renderReceiveGoodsLog(){
   // المصدر الحقيقي: سجل حركة المخزون في Firestore. آخر 20 عملية للفرع،
   // مش بس "النهاردة" ومش مربوط بنفس الجهاز اللي استلم البضاعة.
   try{
-    let snap;
+    let snap, outSnap = null;
     try{
       snap = await db.collection(TEST_STOCK_LOG)
         .where('branch','==',currentBranch)
         .where('type','==','receipt')
         .orderBy('createdAt','desc')
         .limit(20).get();
+      // 📤 v753: الإخراج من شاشة الاستلام (POS أو موبايل Sales) — نفس شكل الاستعلام ونفس الـindex
+      try{
+        outSnap = await db.collection(TEST_STOCK_LOG)
+          .where('branch','==',currentBranch)
+          .where('type','==','adjustment')
+          .orderBy('createdAt','desc')
+          .limit(20).get();
+      }catch(_outErr){ outSnap = null; }
     }catch(indexErr){
       // من غير اعتماد على index مركب: نجيب آخر سجل الفرع ونفلتر receipt محليًا.
       snap = await db.collection(TEST_STOCK_LOG)
@@ -720,15 +728,22 @@ async function renderReceiveGoodsLog(){
         .orderBy('createdAt','desc')
         .limit(120).get();
     }
-    const rows = [];
-    (snap && snap.docs || []).forEach(function(d){
-      const x=d.data()||{};
-      if(x.branch !== currentBranch || x.type !== 'receipt') return;
-      const ts = Number(x.receivedAtMs)||(x.createdAt && x.createdAt.toMillis ? x.createdAt.toMillis() : (x.createdAtMs || 0));
+    // 📥 v753: المنطق المشترك مع Sales (receive-core.js) — الاستلام + الإخراج من شاشة الاستلام،
+    //    وعلامة 📱 على اللي اتسجل من موبايل Sales
+    const _docs = [];
+    [snap, outSnap].forEach(function(sn){ (sn && sn.docs || []).forEach(function(d){
+      const x = Object.assign({ _id:d.id }, d.data()||{});
+      x.createdAtMs = x.createdAt && x.createdAt.toMillis ? x.createdAt.toMillis() : (x.createdAtMs || 0);
       const inv=(allInventory||[]).find(function(it){return it&&it.id===x.productId;})||{};
-      rows.push({ id:x.receiveEntryId||d.id, barcode:x.productBarcode||inv.barcode||'', name:x.productName||inv.name||'صنف', qtyChange:Number(x.delta||0), ts:ts, employeeName:x.employeeName||'' });
-    });
-    rows.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+      if(!x.productBarcode && inv.barcode) x.productBarcode = inv.barcode;
+      if(!x.productName && inv.name) x.productName = inv.name;
+      _docs.push(x);
+    }); });
+    const rows = (window.RecvCore && typeof window.RecvCore.recvLogRowsFromDocs === 'function')
+      ? window.RecvCore.recvLogRowsFromDocs(_docs, currentBranch, 20)
+      : _docs.filter(function(x){ return x.branch === currentBranch && x.type === 'receipt'; })
+          .map(function(x){ return { id:x.receiveEntryId||x._id, barcode:x.productBarcode||'', name:x.productName||'صنف', qtyChange:Number(x.delta||0), ts:Number(x.receivedAtMs)||x.createdAtMs||0, employeeName:x.employeeName||'' }; })
+          .sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
     if(rows.length){
       receiveGoodsTodayLog = rows.slice(0,20);
       _recvLogSave();
