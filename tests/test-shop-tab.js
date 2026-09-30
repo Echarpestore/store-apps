@@ -27,7 +27,7 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
    ١) الربط الأساسي
    ============================================================ */
 (function(){
-  assert(/<script src="\.\.\/pos\/orders-core\.js"><\/script>/.test(LOY),
+  assert(/<script src="\.\.\/pos\/orders-core\.js(?:\?v=\d+)?"><\/script>/.test(LOY),
     '⭐ التطبيق بيحمّل **نفس** محرك الأوردرات بتاع POS والموقع');
   assert(LOY.indexOf('orders-core.js') < LOY.indexOf('function renderShop'),
     'المحرك بيتحمّل قبل ما الواجهة تستعمله');
@@ -169,7 +169,7 @@ const I = require(path.join(ROOT, 'pos', 'i18n-core.js'));
    ٩) 🖤 Glow — نفس الفحوصات الحرجة
    ============================================================ */
 (function(){
-  assert(/<script src="\.\.\/pos\/orders-core\.js"><\/script>/.test(GLOW),
+  assert(/<script src="\.\.\/pos\/orders-core\.js(?:\?v=\d+)?"><\/script>/.test(GLOW),
     'Glow بيحمّل نفس محرك الأوردرات');
   assert(/data-tab="shop"/.test(GLOW) && /id="tab-shop"/.test(GLOW), 'Glow: تبويب «اطلبي»');
   assert(/\['card','offers','shop','invoices','account','contact'\]/.test(GLOW),

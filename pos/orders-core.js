@@ -127,8 +127,12 @@ function orderBranchQty(product, branch){
    ⚠️ الفحص ده **لازم يتعاد في POS وقت التسليم**: بين لحظة الطلب
       ولحظة الاستلام ممكن القطعة تكون اتباعت في المحل. الفحص هنا
       بيمنع الطلب الغلط من الأول، مش بيضمن التسليم. */
-function orderValidateCart(cart, products, branch, nowMs){
+/* 🔧 opts.ignoreBranchStock === true (قرار المالك 30-09): كمية الفرع مبتتفحصش
+   على العميل — نفس علم السيرفر `online_shop_<brand>_cfg.ignoreBranchStock`.
+   السيرفر لسه بيحكم بالمخصّص أونلاين (onlineQty)، فمفيش بيع من العدم. */
+function orderValidateCart(cart, products, branch, nowMs, opts){
   var errors = [], items = [];
+  var skipBranch = !!(opts && opts.ignoreBranchStock === true);
   var byBarcode = {};
   (products || []).forEach(function(p){ if(p && p.barcode) byBarcode[String(p.barcode)] = p; });
 
@@ -140,14 +144,16 @@ function orderValidateCart(cart, products, branch, nowMs){
     var q = Math.max(0, Math.floor(Number(line && line.qty) || 0));
     if(!p){ errors.push('صنف مش موجود في الكتالوج'); return; }
     if(q <= 0) return;
-    var have = orderBranchQty(p, branch);
-    if(have <= 0){
-      errors.push((p.name || 'صنف') + ' — مش موجود في ' + branch);
-      return;
-    }
-    if(q > have){
-      errors.push((p.name || 'صنف') + ' — متاح ' + have + ' بس');
-      return;
+    if(!skipBranch){
+      var have = orderBranchQty(p, branch);
+      if(have <= 0){
+        errors.push((p.name || 'صنف') + ' — مش موجود في ' + branch);
+        return;
+      }
+      if(q > have){
+        errors.push((p.name || 'صنف') + ' — متاح ' + have + ' بس');
+        return;
+      }
     }
     items.push({
       barcode: String(p.barcode),

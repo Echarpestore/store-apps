@@ -104,10 +104,15 @@ function serverShippingFee(cfg, subtotal, governorate) {
   return Math.max(0, Number(cfg.shippingFee) || 0);
 }
 
-/* 📦 المتاح — أقل رقم بين المخصّص للبيع أونلاين واللي في الفرع فعلًا. */
-function serverAvailable(shopItem, invDoc, branch) {
+/* 📦 المتاح — أقل رقم بين المخصّص للبيع أونلاين واللي في الفرع فعلًا.
+   🔧 `cfg.ignoreBranchStock === true` (قرار المالك 30-09): جرد إيشارب لسه مش
+      مظبوط، فكمية الفرع مبتتحسبش والمتاح = المخصّص أونلاين بس (`onlineQty`).
+      Glow (جردها مظبوط) تفضل على الفحص الكامل لأن العلم على مستند كل براند
+      لوحده (`online_shop_<brand>_cfg`). الرجوع = امسح العلم — من غير نشر. */
+function serverAvailable(shopItem, invDoc, branch, cfg) {
   if (!shopItem || shopItem.active !== true) return 0;
   const alloc = Math.max(0, Math.floor(Number(shopItem.onlineQty) || 0));
+  if (cfg && cfg.ignoreBranchStock === true) return alloc;
   if (!invDoc) return 0;
   const by = invDoc.qtyByBranch || {};
   const inBranch = Math.max(0, Number(by[branch]) || 0);
@@ -117,7 +122,7 @@ function serverAvailable(shopItem, invDoc, branch) {
 /* ✅ فحص السلة على السيرفر — **الأسعار من مستند البيع أونلاين**.
    ⚠️ أي سعر جاي من العميلة بيتجاهل تمامًا. ده خط الدفاع اللي
       بيمنع طلب بـ٠ جنيه. */
-function serverValidateCart(cart, shopItems, invByBarcode, branch) {
+function serverValidateCart(cart, shopItems, invByBarcode, branch, cfg) {
   const errors = [];
   const items = [];
   const byBc = {};
@@ -134,8 +139,12 @@ function serverValidateCart(cart, shopItems, invByBarcode, branch) {
     const s = byBc[bc];
     if (!s) { errors.push("صنف مش معروض للبيع أونلاين"); return; }
     if (q <= 0) return;
-    const avail = serverAvailable(s, invByBarcode[bc], branch);
-    if (avail <= 0) { errors.push((s.name || "صنف") + " — خلص من " + branch); return; }
+    const avail = serverAvailable(s, invByBarcode[bc], branch, cfg);
+    if (avail <= 0) {
+      // مع تجاهل كمية الفرع، الرفض معناه إن المخصّص أونلاين نفسه صفر — الرسالة لازم تقول كده
+      errors.push((s.name || "صنف") + (cfg && cfg.ignoreBranchStock === true ? " — خلص من الكتالوج أونلاين" : " — خلص من " + branch));
+      return;
+    }
     if (q > avail) { errors.push((s.name || "صنف") + " — متاح " + avail + " بس"); return; }
     items.push({
       barcode: bc,
@@ -253,7 +262,7 @@ exports.onlineOrderPlace = onCall({ region: "us-central1" }, async (req) => {
     const invByBarcode = {};
     invDocs.forEach((s, i) => { invByBarcode[barcodes[i]] = s.exists ? s.data() : null; });
 
-    const chk = serverValidateCart(cart, shopItems, invByBarcode, branch);
+    const chk = serverValidateCart(cart, shopItems, invByBarcode, branch, cfg);
     if (!chk.ok) throw new HttpsError("failed-precondition", chk.errors[0] || "السلة مش صالحة");
 
     const subtotal = serverTotal(chk.items);

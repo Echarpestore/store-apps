@@ -28,7 +28,7 @@ const H = fs.readFileSync(P, 'utf8');
 
 // ---------- ١) البنية ----------
 assert(H.indexOf('firebase-functions-compat.js') >= 0, 'Functions SDK متحمّل (مطلوب لنداء onlineOrderPlace)');
-assert(H.indexOf('src="pos/orders-core.js"') >= 0, 'orders-core.js متحمّل (مسار من الجذر بلا ../)');
+assert(/src="pos\/orders-core\.js(?:\?v=\d+)?"/.test(H), 'orders-core.js متحمّل (مسار من الجذر بلا ../)');
 assert(H.indexOf('id="wsShop"') >= 0, 'قسم المتجر موجود');
 assert(H.indexOf('id="wsGrid"') >= 0 && H.indexOf('id="wsCartWrap"') >= 0, 'حاويات الشبكة والسلة موجودة');
 assert(H.indexOf('id="wsToastBox"') >= 0, 'حاوية التوست موجودة');

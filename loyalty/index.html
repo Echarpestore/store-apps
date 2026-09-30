@@ -31,7 +31,7 @@
      الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
 <!-- 🛍️ محرك الأوردرات — **نفس الملف** اللي POS والموقع بيقروه -->
-<script src="../pos/orders-core.js"></script>
+<script src="../pos/orders-core.js?v=2"></script>
 <script>try{ if(window.i18nInit) i18nInit(); }catch(e){}</script>
 
 <style>
@@ -2779,7 +2779,8 @@ function shopSubmit(){
   })).then(function(prods){
     var chk = orderValidateCart(
       lines.map(function(l){ return { barcode:l.barcode, qty:l.qty }; }),
-      prods.filter(Boolean), _shopBranch, Date.now()
+      prods.filter(Boolean), _shopBranch, Date.now(),
+      { ignoreBranchStock: shopCfg.ignoreBranchStock === true }   // 🔧 نفس علم السيرفر
     );
     if(!chk.ok){
       showToast(chk.errors[0], true);

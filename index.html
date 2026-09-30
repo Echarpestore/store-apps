@@ -351,7 +351,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 <!-- 🛍️ محرك الأوردرات — نفس الملف اللي POS وتطبيقي العميلة بيقروه -->
-<script src="pos/orders-core.js"></script>
+<script src="pos/orders-core.js?v=2"></script>
 <!-- 💬 محرك الشات المشترك (ساعات العمل/الرد الآلي/التحقق/انتهاء الصلاحية) -->
 <script src="pos/chat-core.js"></script>
 <script>
@@ -749,7 +749,8 @@
     })).then(function(prods){
       var chk = window.orderValidateCart(
         lines.map(function(l){ return { barcode: l.barcode, qty: l.qty }; }),
-        prods.filter(Boolean), wsBranch || BRANCHES[0], Date.now()
+        prods.filter(Boolean), wsBranch || BRANCHES[0], Date.now(),
+        { ignoreBranchStock: wsCfg.ignoreBranchStock === true }   // 🔧 نفس علم السيرفر
       );
       if(!chk.ok){ var err = new Error(chk.errors[0]); err._friendly = true; throw err; }
 
