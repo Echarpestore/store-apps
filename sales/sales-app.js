@@ -5839,13 +5839,71 @@ function _employeeSummary(emp){
   return { shifts:sh.length, points:pts.length };
 }
 
-function _recentShiftsHtml(emp){
-  const rows=(window.allShifts||[]).filter(s=>s && s.employeeId===emp.id).sort((a,b)=>(b.clockInTs||0)-(a.clockInTs||0)).slice(0,6);
-  if(!rows.length) return '<div class="er-info">مفيش حضور مسجّل لسه</div>';
-  const f=ts=>ts?new Date(ts).toLocaleString('ar-EG',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'}):'—';
-  return rows.map(s=>'<div class="er-info" style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:5px">'
-    +'<span>'+(s.manual?'✍️ ':'')+f(s.clockInTs)+' ← '+(s.clockOutTs?f(s.clockOutTs):'<i>مفتوح</i>')+'</span>'
-    +'<button type="button" class="backBtn erVoidShift" data-id="'+_empEsc(s.id)+'" style="padding:5px 10px;font-size:12px">✖ إلغاء</button></div>').join('');
+/* 🗓️ v627 — حضور الموظف بالشهر (كان آخر ٦ شيفتات بس، فيوم ٩ مكانش بيبان خالص).
+   - الشهر بيتغيّر بـ ‹ ›، والصفوف مرتبة بالتاريخ زي جدول الحضور.
+   - مفيش زرار إلغاء جنب كل صف (كان سهل يتداس غلط): تدوس على اليوم ← يفتح
+     تحته ← تكتب السبب ← «إلغاء اليوم ده». السبب بيتسجل في سجل الموظف.
+   - ⚠️ علامة على الأيام المريبة: دخول وخروج في نفس الدقيقة تقريبًا (أقل من ٣٠ دقيقة)،
+     أو شيفت لسه مفتوح من يوم قديم. */
+function shiftMonthRows(shifts,empId,monthKey,nowMs){
+  const now=Number(nowMs)||Date.now(), today=caiDayKey(now);
+  return (shifts||[]).filter(s=>s&&s.employeeId===empId&&s.clockInTs&&caiDayKey(s.clockInTs).slice(0,7)===monthKey)
+    .sort((a,b)=>(a.clockInTs||0)-(b.clockInTs||0))
+    .map(s=>{
+      const day=caiDayKey(s.clockInTs), mins=s.clockOutTs?Math.round((s.clockOutTs-s.clockInTs)/60000):null;
+      const flag=(mins!==null&&mins<30)?'short':((mins===null&&day<today)?'stale_open':'');
+      return {id:s.id,day,clockInTs:s.clockInTs,clockOutTs:s.clockOutTs||null,mins,manual:!!s.manual,flag};
+    });
+}
+function shiftMonthKeys(shifts,empId,nowMs){
+  const set=new Set([caiDayKey(Number(nowMs)||Date.now()).slice(0,7)]);
+  (shifts||[]).forEach(s=>{ if(s&&s.employeeId===empId&&s.clockInTs) set.add(caiDayKey(s.clockInTs).slice(0,7)); });
+  return [...set].sort();
+}
+window.shiftMonthRows=shiftMonthRows; window.shiftMonthKeys=shiftMonthKeys;
+function _recentShiftsHtml(emp,monthKey,openId){
+  const keys=shiftMonthKeys(window.allShifts||[],emp.id);
+  const mk=(monthKey&&keys.indexOf(monthKey)>=0)?monthKey:keys[keys.length-1];
+  const i=keys.indexOf(mk);
+  const [yy,mm]=mk.split('-').map(Number);
+  const title=new Date(Date.UTC(yy,mm-1,15)).toLocaleDateString('ar-EG',{month:'long',year:'numeric',timeZone:'UTC'});
+  const rows=shiftMonthRows(window.allShifts||[],emp.id,mk);
+  const t=ts=>new Date(ts).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
+  const wd=ts=>new Date(ts).toLocaleDateString('ar-EG',{weekday:'short',timeZone:'Africa/Cairo'});
+  const nav='<div data-mk="'+mk+'" class="erShiftNav" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">'
+    +'<button type="button" class="backBtn erShiftPrev" style="padding:6px 14px"'+(i<=0?' disabled':'')+'>‹</button>'
+    +'<b style="font-size:14px">'+_empEsc(title)+' · '+rows.length+' يوم</b>'
+    +'<button type="button" class="backBtn erShiftNext" style="padding:6px 14px"'+(i>=keys.length-1?' disabled':'')+'>›</button></div>';
+  if(!rows.length) return nav+'<div class="er-info">مفيش حضور مسجّل في الشهر ده</div>';
+  return nav+rows.map(r=>{
+    const warn=r.flag==='short'?' <span style="color:var(--bad)">⚠️ '+r.mins+' د</span>':(r.flag==='stale_open'?' <span style="color:var(--bad)">⚠️ مفتوح</span>':'');
+    const dur=r.mins!==null?(Math.floor(r.mins/60)+':'+String(r.mins%60).padStart(2,'0')):'';
+    const isOpen=r.id===openId;
+    return '<div class="erShiftRow" data-id="'+_empEsc(r.id)+'" style="border:1px solid '+(isOpen?'var(--bad)':(r.flag?'rgba(229,72,77,.45)':'var(--line)'))+';border-radius:11px;padding:8px 10px;margin-bottom:5px;cursor:pointer;background:'+(r.flag?'rgba(229,72,77,.06)':'transparent')+'">'
+      +'<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px">'
+      +'<span><b>'+Number(r.day.slice(8,10))+'</b> '+_empEsc(wd(r.clockInTs))+(r.manual?' ✍️':'')+warn+'</span>'
+      +'<span style="font-family:Space Grotesk,Cairo;direction:ltr">'+t(r.clockInTs)+' → '+(r.clockOutTs?t(r.clockOutTs):'—')+(dur?' <span style="color:var(--sub)">('+dur+')</span>':'')+'</span></div>'
+      +(isOpen?'<div style="margin-top:8px" onclick="event.stopPropagation()">'
+        +'<input class="erVoidReason" placeholder="السبب (إجباري) — مثال: حد سجّلها بالغلط" style="width:100%;padding:9px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-family:Cairo;margin-bottom:6px">'
+        +'<button type="button" class="erVoidShift" data-id="'+_empEsc(r.id)+'" style="width:100%;padding:10px;border:none;border-radius:10px;background:var(--bad);color:#fff;font:800 13px Cairo;cursor:pointer">✖ إلغاء حضور يوم '+Number(r.day.slice(8,10))+'</button></div>':'')
+      +'</div>';
+  }).join('');
+}
+/* ربط الأحداث — مكان واحد (كان متكرر في مكانين) */
+function _bindRecentShifts(emp,box,msg,monthKey,openId){
+  if(!box) return;
+  box.innerHTML=_recentShiftsHtml(emp,monthKey,openId);
+  const nav=box.querySelector('.erShiftNav'), mk=nav?nav.dataset.mk:monthKey;
+  const keys=shiftMonthKeys(window.allShifts||[],emp.id), i=keys.indexOf(mk);
+  const pv=box.querySelector('.erShiftPrev'), nx=box.querySelector('.erShiftNext');
+  if(pv) pv.onclick=()=>_bindRecentShifts(emp,box,msg,keys[i-1],null);
+  if(nx) nx.onclick=()=>_bindRecentShifts(emp,box,msg,keys[i+1],null);
+  box.querySelectorAll('.erShiftRow').forEach(r=>{ r.onclick=()=>_bindRecentShifts(emp,box,msg,mk,r.dataset.id===openId?null:r.dataset.id); });
+  box.querySelectorAll('.erVoidShift').forEach(b=>{ b.onclick=()=>{
+    const reason=String((box.querySelector('.erVoidReason')||{}).value||'').trim();
+    if(!reason){ const inp=box.querySelector('.erVoidReason'); if(inp){ inp.style.borderColor='var(--bad)'; inp.focus(); } return; }
+    voidShift(emp,b.dataset.id,msg,reason,()=>_bindRecentShifts(emp,box,msg,mk,null));
+  }; });
 }
 function openManualShiftDialog(emp){
   document.getElementById('manualShiftOv')?.remove();
@@ -5902,22 +5960,26 @@ function manualShiftPlan(emp,dateKey,tIn,tOut,reason,shifts){
 }
 window.manualShiftPlan=manualShiftPlan; window.openManualShiftDialog=openManualShiftDialog;
 /* ✖ إلغاء حضور اتسجّل بالغلط (موظفة سجّلت لزميلتها اللي في إجازة). المستند بينتقل لـ sales_shifts_voided (أثر) وبيتشال —
-   فكل الحسابات (مرتب/غياب/تأخير) بتستبعده لوحدها من غير ما نلمس أي دالة. رصيد تأخير مربوط بيه بيتشال معاه. */
-async function voidShift(emp,shiftId,msg){
+   فكل الحسابات (مرتب/غياب/تأخير) بتستبعده لوحدها من غير ما نلمس أي دالة. رصيد تأخير مربوط بيه بيتشال معاه.
+   v627: الثلاثة (نسخة الأرشيف + حذف الشيفت + حذف رصيد التأخير) في **batch واحد** — كانوا منفصلين،
+   فلو النت وقع في النص كان ممكن يبقى الأرشيف اتكتب والشيفت لسه موجود. + السبب إجباري ومتسجل. */
+async function voidShift(emp,shiftId,msg,reason,after){
   const s=(window.allShifts||[]).find(x=>x&&x.id===shiftId); if(!s) return;
-  const f=ts=>new Date(ts).toLocaleString('ar-EG',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
-  if(!confirm('إلغاء حضور '+emp.name+' يوم '+f(s.clockInTs)+'؟\nهيتشال من الحضور والمرتب كأنه ماحصلش (بيتحفظ نسخة في السجل).')) return;
+  const why=String(reason||'').trim();
+  if(!why){ if(msg){ msg.style.color='var(--bad)'; msg.textContent='اكتب السبب الأول'; } return; }
   try{
-    const copy=Object.assign({},s,{voidedAt:Date.now(),voidedBy:'owner'}); delete copy.id;
-    await setDoc(doc(db,'sales_shifts_voided',shiftId),copy);
-    await deleteDoc(doc(db,'sales_shifts',shiftId));
+    const copy=Object.assign({},s,{voidedAt:Date.now(),voidedBy:'owner',voidReason:why}); delete copy.id;
     const lateId=attendanceDocId('late',emp.id,shiftId);
-    try{ await deleteDoc(doc(db,'sales_time_credit',lateId)); }catch(_){}
-    try{ await _employeeAudit(emp,'void_shift',{shiftId,clockInTs:s.clockInTs,clockOutTs:s.clockOutTs||null}); }catch(_){}
+    const b=writeBatch(db);
+    b.set(doc(db,'sales_shifts_voided',shiftId),copy);
+    b.delete(doc(db,'sales_shifts',shiftId));
+    b.delete(doc(db,'sales_time_credit',lateId));
+    await b.commit();
+    try{ await _employeeAudit(emp,'void_shift',{shiftId,clockInTs:s.clockInTs,clockOutTs:s.clockOutTs||null,reason:why}); }catch(_){}
     window.allShifts=(window.allShifts||[]).filter(x=>x.id!==shiftId);
-    if(msg){ msg.style.color='var(--good)'; msg.textContent='اتلغى الحضور ✅'; }
+    if(msg){ msg.style.color='var(--good)'; msg.textContent='اتلغى حضور يوم '+caiDayKey(s.clockInTs)+' ✅'; }
     try{ renderAttendanceLists(); }catch(_){}
-    const box=document.getElementById('erRecentShifts'); if(box){ box.innerHTML=_recentShiftsHtml(emp); box.querySelectorAll('.erVoidShift').forEach(b=>{ b.onclick=()=>voidShift(emp,b.dataset.id,msg); }); }
+    if(typeof after==='function') after();
   }catch(err){ console.error('void shift',err); if(msg){ msg.style.color='var(--bad)'; msg.textContent='تعذر الإلغاء — '+(err&&err.message||''); } }
 }
 window.voidShift=voidShift;
@@ -5988,7 +6050,7 @@ window.openEmployeeRecord = function(empId){
       <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erFaceAttendanceExempt" type="checkbox" ${emp.faceAttendanceExempt===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>استثناء من Face Attendance <small style="display:block;color:var(--sub);font-weight:600">PIN + صورة الحضور الحالية فقط. المنتقبة مستثناة تلقائيًا.</small></span></label>
       ${employeeHasDuplicatePin(emp)?'<div class="field-err" style="margin:6px 0">⚠️ الـPIN الحالي مكرر مع موظف آخر. غيّره عند أول فرصة.</div>':''}
       ${adminRole==='owner'?'<div style="display:flex;gap:7px;flex-wrap:wrap;margin:8px 0"><button type="button" id="erAllowLeaveWork" class="backBtn">السماح بالعمل في الإجازة اليوم</button><button type="button" id="erReopenShift" class="backBtn">فتح حضور جديد اليوم</button><button type="button" id="erResetFace" class="backBtn">إعادة تسجيل الوجه</button></div>':''}
-      ${adminRole==='owner'?`<div style="margin:10px 0 4px;font-weight:900;font-size:13px">🗓️ الحضور</div><div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 8px"><button type="button" id="erManualShift" class="backBtn">✍️ تسجيل يوم شغل يدوي</button></div><div id="erRecentShifts">${_recentShiftsHtml(emp)}</div>`:''}
+      ${adminRole==='owner'?`<div style="margin:10px 0 4px;font-weight:900;font-size:13px">🗓️ الحضور</div><div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 8px"><button type="button" id="erManualShift" class="backBtn">✍️ تسجيل يوم شغل يدوي</button></div><div style="color:var(--sub);font-size:11.5px;margin:0 0 6px">دوس على اليوم عشان تلغيه</div><div id="erRecentShifts"></div>`:''}
       <label style="display:flex;align-items:center;gap:9px;min-height:48px;cursor:pointer"><input id="erFlexibleMorningEvening" type="checkbox" ${emp.flexibleMorningEvening===true?'checked':''} style="width:18px;height:18px;flex:0 0 auto"><span>🔀 مرن صباحي/مسائي <small style="display:block;color:var(--sub);font-weight:600">السيستم يختار تلقائيًا الأقرب من ${_empEsc(_morningStart)} أو ${_empEsc(_eveningStart)}</small></span></label>
     </div>
     <div style="margin:14px 0 6px;font-weight:900">سجل تعديل الراتب</div>
@@ -6011,7 +6073,7 @@ window.openEmployeeRecord = function(empId){
   };
   /* 🗓️ v621 — المالك يسجّل يوم شغل بإيده (روان جت في إجازتها، الجهاز رفض، ومشيت) ويلغي حضور اتسجّل بالغلط. */
   if(ov.querySelector('#erManualShift')) ov.querySelector('#erManualShift').onclick=()=>openManualShiftDialog(emp);
-  if(ov.querySelector('#erRecentShifts')) ov.querySelectorAll('.erVoidShift').forEach(b=>{ b.onclick=()=>voidShift(emp,b.dataset.id,ov.querySelector('#erMsg')); });
+  if(ov.querySelector('#erRecentShifts')) _bindRecentShifts(emp,ov.querySelector('#erRecentShifts'),ov.querySelector('#erMsg'),null,null);
   if(ov.querySelector('#erResetFace')) ov.querySelector('#erResetFace').onclick=async()=>{ if(!confirm('إعادة تسجيل الوجه في أول حضور/انصراف قادم؟'))return; await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:null,faceProfileUpdatedAt:Date.now()}); emp.faceProfile=null; ov.querySelector('#erMsg').style.color='var(--good)'; ov.querySelector('#erMsg').textContent='هيتعمل تسجيل وجه جديد تلقائيًا المرة الجاية ✅'; };
   ov.querySelector('#erSave').onclick=async()=>{
     const btn=ov.querySelector('#erSave'), msg=ov.querySelector('#erMsg'); msg.textContent='';

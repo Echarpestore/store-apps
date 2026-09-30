@@ -46,10 +46,40 @@ ok(p.id === ctx.manualShiftPlan(emp, '2026-09-20', '11:00', '19:00', 'y', []).id
 
 console.log('✖ 3) إلغاء حضور بالغلط');
 const vs = extractFn(app, 'async function voidShift(');
-ok(/sales_shifts_voided/.test(vs) && vs.indexOf("setDoc(doc(db,'sales_shifts_voided'") < vs.indexOf("deleteDoc(doc(db,'sales_shifts'"), 'نسخة في sales_shifts_voided **قبل** الحذف');
-ok(/attendanceDocId\('late',emp\.id,shiftId\)/.test(vs) && /deleteDoc\(doc\(db,'sales_time_credit',lateId\)\)/.test(vs), 'ورصيد التأخير المربوط بيه بيتشال معاه');
-ok(/confirm\(/.test(vs) && /_employeeAudit\(emp,'void_shift'/.test(vs), 'بتأكيد + أثر في سجل الموظف');
+ok(/writeBatch\(db\)/.test(vs) && vs.indexOf("b.set(doc(db,'sales_shifts_voided'") > 0 && vs.indexOf("b.set(doc(db,'sales_shifts_voided'") < vs.indexOf("b.delete(doc(db,'sales_shifts'") && vs.indexOf('await b.commit()') > vs.indexOf("b.delete(doc(db,'sales_shifts'"), 'v627: نسخة الأرشيف والحذف في batch واحد (الأرشيف قبل الحذف)');
+ok(/attendanceDocId\('late',emp\.id,shiftId\)/.test(vs) && /b\.delete\(doc\(db,'sales_time_credit',lateId\)\)/.test(vs), 'ورصيد التأخير المربوط بيه بيتشال معاه (في نفس الـbatch)');
+ok(/if\(!why\)/.test(vs) && /voidReason:why/.test(vs) && /_employeeAudit\(emp,'void_shift',\{[^}]*reason:why/.test(vs), 'v627: السبب إجباري ومتسجل في الأرشيف وسجل الموظف');
+ok(!/deleteDoc\(/.test(vs), 'سلبي: مفيش حذف منفصل برّه الـbatch');
+
+console.log('🗓️ 3ب) حضور الموظف بالشهر (v627)');
+{
+  const ctx2 = { Date, String, Number, Intl, Math, Set, Array, Object };
+  vm.createContext(ctx2);
+  // caiDayKey جاية من `pre` (نفس تعريف التطبيق بتوقيت القاهرة)
+  vm.runInContext(pre + extractFn(app, 'function shiftMonthRows(') + '\n' + extractFn(app, 'function shiftMonthKeys(') + ';this.R=shiftMonthRows;this.K=shiftMonthKeys;', ctx2);
+  const T = (d, h, m) => Date.UTC(2026, 8, d, h - 3, m);   // القاهرة UTC+3
+  const sh = [
+    { id:'s30', employeeId:'e1', clockInTs:T(30,10,9), clockOutTs:T(30,19,21) },
+    { id:'s09', employeeId:'e1', clockInTs:T(9,18,17), clockOutTs:T(9,18,17) },
+    { id:'s01', employeeId:'e1', clockInTs:T(1,10,55), clockOutTs:T(1,18,9) },
+    { id:'o', employeeId:'e2', clockInTs:T(9,10,0), clockOutTs:T(9,18,0) },
+    { id:'a31', employeeId:'e1', clockInTs:Date.UTC(2026,7,31,7,0), clockOutTs:Date.UTC(2026,7,31,15,0) },
+    { id:'open', employeeId:'e1', clockInTs:T(20,10,0) }
+  ];
+  const now = T(30, 20, 0);
+  const rows = ctx2.R(sh, 'e1', '2026-09', now);
+  ok(JSON.stringify(rows.map(r => r.id)) === JSON.stringify(['s01','s09','open','s30']), 'كل أيام الشهر (مش آخر ٦) ومرتبة بالتاريخ — ويوم ٩ ظاهر');
+  ok(rows.find(r => r.id === 's09').flag === 'short' && rows.find(r => r.id === 's09').mins === 0, 'يوم ٩ (دخول = خروج) متعلّم ⚠️');
+  ok(rows.find(r => r.id === 'open').flag === 'stale_open', 'شيفت مفتوح من يوم قديم متعلّم ⚠️');
+  ok(rows.find(r => r.id === 's30').flag === '', 'سلبي: يوم عادي مش متعلّم');
+  ok(!rows.some(r => r.id === 'o'), 'سلبي: موظفة تانية مش ظاهرة');
+  ok(!rows.some(r => r.id === 'a31'), 'سلبي: شهر تاني مش ظاهر');
+  ok(JSON.stringify(ctx2.K(sh, 'e1', now)) === JSON.stringify(['2026-08','2026-09']), 'الشهور المتاحة للتنقّل ‹ ›');
+  ok(ctx2.R(sh, 'e1', '2026-09', now).find(r => r.id === 's30').day === '2026-09-30', 'اليوم بتوقيت القاهرة');
+  ok(/دوس على اليوم عشان تلغيه/.test(app) && !/_recentShiftsHtml\(emp\)\}<\/div>/.test(app), 'مفيش زرار إلغاء جنب كل صف — تدوس على اليوم الأول');
+  ok(/if\(!reason\)\{/.test(extractFn(app, 'function _bindRecentShifts(')), 'سلبي: زرار الإلغاء من غير سبب مش بيعمل حاجة');
+}
 ok(/adminRole==='owner'\?`<div style="margin:10px 0 4px;font-weight:900;font-size:13px">🗓️ الحضور/.test(app), 'الزرارين للمالك بس');
-ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8'), 621) && assetAtLeast(html, 'sales-app.js', 621), 'sales ≥ v621');
+ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8'), 627) && assetAtLeast(html, 'sales-app.js', 627), 'sales ≥ v627');
 console.log('\n' + (fail ? '❌' : '✅') + ' test-dayoff-attendance: ' + pass + ' ناجح · ' + fail + ' فاشل');
 if(fail) process.exitCode = 1;
