@@ -2,7 +2,8 @@
    📥 sales-receive.js — استلام/إخراج المنتجات من تطبيق Sales (v625)
    ------------------------------------------------------------
    ليه: لما الكاشير زحمة، أي موظفة تستلم البضاعة من موبايل/تابلت Sales.
-   - الموظفة بتختار اسمها + كودها (PIN) — عشان السجل يقول مين استلم.
+   - الموظفة بتدوس على اسمها بس (v626 — قرار المالك: من غير كود عشان السرعة؛
+     الجهاز نفسه داخل بحساب الفرع) — والاسم بيتسجل على كل حركة.
    - سكان بالكاميرا (سريع ومتواصل) أو كتابة الكود بإيدها.
    - نفس سلوك شاشة POS: كل مسحة سطر مستقل، − و+ لكل سطر، سالب = إخراج.
    - التأكيد = زيادة ذرّية على qtyByBranch.<الفرع> + سطر في pos_test_stock_log
@@ -12,7 +13,7 @@
    ============================================================ */
 (function(){
   'use strict';
-  var S = { emp:null, pin:'', cart:[], out:false, sending:false, allowNeg:false,
+  var S = { emp:null, cart:[], out:false, sending:false, allowNeg:false,
             cache:{}, lastCode:'', lastAt:0, stream:null, zx:null, det:null, scanning:false, busy:false, log:[] };
   var DRAFT = 'sales_recv_draft_v1_';
 
@@ -42,12 +43,6 @@
       + '.rcvGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;}'
       + '.rcvEmp{background:var(--panel,#1b1e27);border:1px solid var(--line,#2b2f3b);border-radius:16px;padding:14px 8px;text-align:center;cursor:pointer;font-weight:800;font-size:13px;}'
       + '.rcvEmp b{display:flex;width:44px;height:44px;margin:0 auto 6px;border-radius:50%;align-items:center;justify-content:center;background:var(--panel2,#232733);color:var(--gold,#f2c14e);font-size:18px;}'
-      + '.rcvDots{display:flex;gap:12px;justify-content:center;margin:18px 0;}'
-      + '.rcvDots i{width:15px;height:15px;border-radius:50%;border:2px solid var(--gold-dim,#8a6f2c);}'
-      + '.rcvDots i.f{background:var(--gold,#f2c14e);border-color:var(--gold,#f2c14e);}'
-      + '.rcvDots.err i{border-color:var(--bad,#e5484d);background:var(--bad,#e5484d);}'
-      + '.rcvPad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;margin:0 auto;}'
-      + '.rcvPad button{height:58px;border-radius:14px;border:1px solid var(--line,#2b2f3b);background:var(--panel2,#232733);color:inherit;font:800 22px Cairo;cursor:pointer;}'
       + '.rcvMode{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}'
       + '.rcvMode button{padding:11px;border-radius:12px;border:1px solid var(--line,#2b2f3b);background:var(--panel,#1b1e27);color:var(--sub,#8b90a0);font:800 14px Cairo;cursor:pointer;}'
       + '.rcvMode button.on.in{background:#123524;border-color:var(--good,#2fa36b);color:#7ee2ad;}'
@@ -122,7 +117,7 @@
     inject();
     if(!branch()){ alert('الفرع مش متحدد على الجهاز ده'); return; }
     if(!api() || !core()){ alert('التطبيق لسه بيحمّل — جرّبي كمان ثانية'); return; }
-    S.emp = null; S.pin = '';
+    S.emp = null;
     draftLoad();
     $('rcvOverlay').classList.add('show');
     try{ history.pushState({ rcv:1 }, ''); }catch(e){}
@@ -142,31 +137,8 @@
   function pickEmp(id){
     var e = (window.employees || []).filter(function(x){ return x && x.id === id; })[0];
     if(!e) return;
-    if(!e.pin){ toast('اعملي كودك الأول من «⏰ الحضور»', true); return; }
-    S.emp = e; S.pin = '';
-    renderPin(false);
-  }
-
-  /* ---------- الخطوة ٢: الكود السري ---------- */
-  function renderPin(err){
-    $('rcvSub').textContent = '👤 ' + S.emp.name + ' · اكتبي كودك';
-    var dots = ''; for(var i = 0; i < 4; i++) dots += '<i class="' + (i < S.pin.length ? 'f' : '') + '"></i>';
-    var keys = ['1','2','3','4','5','6','7','8','9','←','0','✕'];
-    $('rcvBody').innerHTML = '<div class="rcvDots' + (err ? ' err' : '') + '">' + dots + '</div>'
-      + (err ? '<div style="text-align:center;color:var(--bad,#e5484d);font-weight:800;margin-bottom:10px">الكود غلط</div>' : '')
-      + '<div class="rcvPad">' + keys.map(function(k){
-          return '<button onclick="salesRecvPinKey(\'' + k + '\')">' + k + '</button>';
-        }).join('') + '</div>';
-  }
-  function pinKey(k){
-    if(k === '✕'){ S.emp = null; renderPick(); return; }
-    if(k === '←'){ S.pin = S.pin.slice(0, -1); renderPin(false); return; }
-    if(S.pin.length >= 4) return;
-    S.pin += k; renderPin(false);
-    if(S.pin.length === 4){
-      if(S.pin === String(S.emp.pin)){ S.pin = ''; enterMain(); }
-      else { renderPin(true); setTimeout(function(){ S.pin = ''; renderPin(false); }, 600); }
-    }
+    S.emp = e;
+    enterMain();   // ⚡ v626: من غير كود — دوسة على الاسم وتبدأ على طول
   }
 
   /* ---------- الخطوة ٣: الشاشة الأساسية ---------- */
@@ -368,7 +340,7 @@
     draftSave();
     var ov = $('rcvOverlay'); var was = ov && ov.classList.contains('show');
     if(ov) ov.classList.remove('show');
-    S.emp = null; S.pin = '';
+    S.emp = null;
     if(!fromPop && was){ try{ if(history.state && history.state.rcv) history.back(); }catch(e){} }
   }
   // زرار الرجوع في الموبايل: يقفل الكاميرا الأول، بعدين الشاشة — مش التطبيق
@@ -381,7 +353,6 @@
   window.salesRecvOpen = open;
   window.salesRecvClose = function(){ close(false); };
   window.salesRecvPickEmp = pickEmp;
-  window.salesRecvPinKey = pinKey;
   window.salesRecvAddCode = addFromInput;
   window.salesRecvQty = qty;
   window.salesRecvSetQty = setQty;

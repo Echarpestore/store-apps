@@ -58,14 +58,13 @@ const tick = () => new Promise(r => setImmediate(r));
   T.win.salesRecvOpen();
   assert(T.d.getElementById('rcvOverlay').classList.contains('show'), 'الشاشة بتفتح');
   assert(/Amira/.test(T.d.getElementById('rcvBody').innerHTML), 'قايمة الموظفات ظاهرة');
+  T.win.salesRecvPickEmp('zz');
+  assert(!/rcvScanBtn/.test(T.d.getElementById('rcvBody').innerHTML), 'سلبي: اسم مش موجود ميدخلش');
   T.win.salesRecvPickEmp('e2');
-  assert(!/rcvDots/.test(T.d.getElementById('rcvBody').innerHTML), 'سلبي: موظفة من غير كود متوصلش لشاشة الكود');
-  T.win.salesRecvPickEmp('e1');
-  '9999'.split('').forEach(k => T.win.salesRecvPinKey(k));
-  assert(!/rcvScanBtn/.test(T.d.getElementById('rcvBody').innerHTML), 'سلبي: كود غلط ميدخلش');
-  '1234'.split('').forEach(k => T.win.salesRecvPinKey(k));
   await tick();
-  assert(/rcvScanBtn/.test(T.d.getElementById('rcvBody').innerHTML), 'الكود الصح بيفتح شاشة الاستلام');
+  assert(/rcvScanBtn/.test(T.d.getElementById('rcvBody').innerHTML) && !/rcvDots/.test(T.d.getElementById('rcvBody').innerHTML), 'v626: دوسة على الاسم = شاشة الاستلام على طول (من غير كود)');
+  assert(/Nour/.test(T.d.getElementById('rcvSub').textContent), 'اسم الموظفة ظاهر فوق');
+  T.win.salesRecvClose(); T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); await tick();
 
   T.d.getElementById('rcvCode').value = '555'; T.win.salesRecvAddCode(); await tick();
   T.d.getElementById('rcvCode').value = '777'; T.win.salesRecvAddCode(); await tick();
@@ -89,7 +88,7 @@ const tick = () => new Promise(r => setImmediate(r));
 
   // 📤 الإخراج والرصيد السالب
   T = boot();
-  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); '1234'.split('').forEach(k => T.win.salesRecvPinKey(k)); await tick();
+  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); await tick();
   T.win.salesRecvMode(true);
   T.d.getElementById('rcvCode').value = '555'; T.win.salesRecvAddCode(); await tick();
   T.d.getElementById('rcvCode').value = '555'; T.win.salesRecvAddCode(); await tick();
@@ -103,7 +102,7 @@ const tick = () => new Promise(r => setImmediate(r));
   assert(r0.qty === -1 && r0.status === 'outofstock' && r0.log.type === 'adjustment', 'الإخراج = adjustment والصنف بقى نافد');
 
   T = boot({ allowNeg:true });
-  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); '1234'.split('').forEach(k => T.win.salesRecvPinKey(k)); await tick();
+  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); await tick();
   T.win.salesRecvMode(true);
   T.d.getElementById('rcvCode').value = '777'; T.win.salesRecvAddCode(); await tick();
   await T.win.salesRecvConfirm(); await tick();
@@ -112,7 +111,7 @@ const tick = () => new Promise(r => setImmediate(r));
 
   // ❌ فشل الكتابة: القايمة متتمسحش
   T = boot({ fail:true });
-  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); '1234'.split('').forEach(k => T.win.salesRecvPinKey(k)); await tick();
+  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); await tick();
   T.d.getElementById('rcvCode').value = '555'; T.win.salesRecvAddCode(); await tick();
   await T.win.salesRecvConfirm(); await tick();
   assert(/الجهاز مش مسجّل دخول/.test(T.d.getElementById('rcvToast').textContent), 'سلبي: رفض الصلاحية بيقول السبب');
@@ -120,11 +119,11 @@ const tick = () => new Promise(r => setImmediate(r));
 
   // 🚪 القفل والفتح تاني = المسودة راجعة
   T = boot();
-  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); '1234'.split('').forEach(k => T.win.salesRecvPinKey(k)); await tick();
+  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); await tick();
   T.d.getElementById('rcvCode').value = '555'; T.win.salesRecvAddCode(); await tick();
   T.win.salesRecvClose();
   assert(!T.d.getElementById('rcvOverlay').classList.contains('show'), 'القفل بيقفل');
   T.win.salesRecvOpen();
   assert(/فيه 1 حركة محفوظة/.test(T.d.getElementById('rcvBody').innerHTML), 'المسودة راجعة بعد إعادة الفتح');
-  assert(!/rcvScanBtn/.test(T.d.getElementById('rcvBody').innerHTML), 'سلبي: إعادة الفتح بتطلب الموظفة والكود تاني');
+  assert(!/rcvScanBtn/.test(T.d.getElementById('rcvBody').innerHTML), 'سلبي: إعادة الفتح بتسأل مين بيستلم تاني');
 })().catch(e => assert(false, 'flow crashed: ' + e.message)).then(() => { process.stdout.write(JSON.stringify(_res)); });

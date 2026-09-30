@@ -68,15 +68,15 @@ assert(!rows.some(r => r.qtyChange === 5), 'سلبي: فرع تاني مش بي�
 
 // ===== ٦) الواجهة: التوصيل =====
 const H = fs.readFileSync(path.join(root, 'sales', 'index.html'), 'utf8');
-const iCore = H.indexOf('../pos/receive-core.js?v=753'), iUi = H.indexOf('sales-receive.js?v=625');
+const iCore = H.indexOf('../pos/receive-core.js?v=753'), iUi = H.indexOf('sales-receive.js?v=626');
 assert(iCore > 0 && iUi > iCore, 'Sales: receive-core قبل sales-receive');
 assert(/id="openReceive"[^>]*salesRecvOpen/.test(H), 'Sales: زرار 📥 استلام في الشاشة الرئيسية');
 const UI = fs.readFileSync(path.join(root, 'sales', 'sales-receive.js'), 'utf8');
 require('child_process').execFileSync(process.execPath, ['--check', path.join(root, 'sales', 'sales-receive.js')]);
 assert(/BarcodeDetector/.test(UI) && /zxing-browser/.test(UI), 'سكان بالكاميرا: BarcodeDetector ومعاه ZXing للآيفون');
-assert(/S\.pin === String\(S\.emp\.pin\)/.test(UI), 'الدخول بكود الموظفة (PIN)');
-assert(/if\(!e\.pin\)/.test(UI), 'سلبي: موظفة من غير كود متقدرش تدخل');
+assert(/S\.emp = e;\s*\n\s*enterMain\(\);/.test(UI), 'v626: دوسة على الاسم = دخول على طول (من غير كود)');
 assert(/c === S\.lastCode && now - S\.lastAt < 1800/.test(UI), 'نفس الكود قدام الكاميرا مش بيتضاف مرتين ورا بعض');
+assert(!/salesRecvPinKey|renderPin/.test(UI), 'v626: شاشة الكود اتشالت خالص');
 assert(/if\(S\.sending \|\| !S\.emp\) return;/.test(UI), 'حماية الضغطة المزدوجة على التأكيد');
 assert(/recvValidate\(S\.cart, S\.allowNeg\)/.test(UI) && /allowNegativeStock/.test(UI), 'نفس إعداد الرصيد السالب بتاع POS');
 assert(/localStorage\.setItem\(draftKey\(\)/.test(UI), 'مسودة محفوظة لكل فرع');
@@ -96,4 +96,4 @@ assert(/l\.source==='sales'\?' 📱'/.test(PX), 'POS بيعلّم حركات ا�
 const PI = fs.readFileSync(path.join(root, 'pos', 'index.html'), 'utf8');
 assert(PI.indexOf('receive-core.js?v=753') > 0 && PI.indexOf('receive-core.js?v=753') < PI.indexOf('products.js?v=753'), 'POS: receive-core قبل products');
 assert(/pos-shell-v75[3-9]/.test(fs.readFileSync(path.join(root, 'pos', 'sw.js'), 'utf8')), 'POS CACHE_NAME اترفع');
-assert(/store-apps-shell-v62[5-9]/.test(fs.readFileSync(path.join(root, 'sales', 'sw.js'), 'utf8')), 'Sales CACHE_NAME اترفع');
+assert(/store-apps-shell-v62[6-9]/.test(fs.readFileSync(path.join(root, 'sales', 'sw.js'), 'utf8')), 'Sales CACHE_NAME اترفع');
