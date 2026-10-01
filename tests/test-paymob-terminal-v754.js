@@ -37,3 +37,15 @@ async function runCase(responses){
   console.log((fail ? '❌' : '✅') + ' test-paymob-terminal-v754: ' + pass + ' ناجح · ' + fail + ' فاشل');
   if(fail) process.exitCode = 1;
 })();
+// v756 — الدالة في الدوحة، وPOS بيكلّمها هناك
+{
+  const fsx = require('fs'), px = require('path');
+  const fnSrc = fsx.readFileSync(px.join(__dirname, '..', 'functions', 'index.js'), 'utf8');
+  const blk = fnSrc.slice(fnSrc.indexOf('exports.paymobTerminalOrder = onRequest('), fnSrc.indexOf('exports.paymobTerminalOrder = onRequest(') + 200);
+  ok(/region: "me-central1"/.test(blk), 'paymobTerminalOrder في me-central1');
+  ok(/exports\.paymobWebhook[\s\S]{0,400}region: "us-central1"/.test(fnSrc) || !/exports\.paymobWebhook/.test(fnSrc), 'سلبي: الـwebhook (Paymob بيكلّمنا) متنقلش');
+  const sale = fsx.readFileSync(px.join(__dirname, '..', 'pos', 'pos-sale.js'), 'utf8');
+  ok(/PAYMOB_FN_URL = 'https:\/\/me-central1-customer-feedback-8ac1d\.cloudfunctions\.net\/paymobTerminalOrder'/.test(sale), 'POS بيبعت للدوحة');
+  ok(!/us-central1-customer-feedback-8ac1d\.cloudfunctions\.net\/paymobTerminalOrder/.test(sale), 'سلبي: مفيش أي استدعاء للعنوان القديم');
+  ok(/pos-sale\.js\?v=7(5[6-9]|[6-9]\d)/.test(fsx.readFileSync(px.join(__dirname, '..', 'pos', 'index.html'), 'utf8')), 'pos-sale بإصدار جديد');
+}

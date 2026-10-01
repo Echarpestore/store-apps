@@ -4178,7 +4178,8 @@ function paymobWatch(orderRef, amountEGP, _retry, seq){
   }, 600000);
 }
 // رابط الدالة — بيتفعّل مع خطوة النشر الأخيرة
-const PAYMOB_FN_URL = 'https://us-central1-customer-feedback-8ac1d.cloudfunctions.net/paymobTerminalOrder';
+// 🌍 v756: الدالة اتنقلت للدوحة (me-central1) — Paymob بيحجب سيرفرات أمريكا من 01-10-2026
+const PAYMOB_FN_URL = 'https://me-central1-customer-feedback-8ac1d.cloudfunctions.net/paymobTerminalOrder';
 // دعم Enter بدل ما تدوس OK يدويًا
 document.getElementById('payAmountInput').addEventListener('keydown', (e)=>{
   if(e.key === 'Enter'){ e.preventDefault(); confirmPayAmount(); }
