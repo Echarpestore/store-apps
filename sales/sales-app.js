@@ -112,8 +112,29 @@ try{
 function lf431Last(k){try{return Number(localStorage.getItem(LF431_PREFIX+k)||0)||0;}catch(e){return 0;}}
 function lf431Mark(k){try{localStorage.setItem(LF431_PREFIX+k,String(Date.now()));}catch(e){}}
 function lf431Docs(snap){return (snap&&snap.docs?snap.docs:[]).map(d=>({id:d.id,...d.data()}));}
+/* 🪦 v628 — شواهد الحذف: الدمج هنا عمره ما بيمسح سطر (حماية التاريخ من v603)، فمستند
+   اتمسح عمدًا (حضور اتلغى + رصيد التأخير بتاعه) كان بيفضل في الذاكرة ويتحسب في المرتب
+   لحد ما الجهاز يتحدّث مرتين. أي id اتسجل هنا بيتشال من الدمج ٣٠ يوم. */
+const LF_TOMB_KEY='sales_tombstones_v1';
+function lf431Tombs(){
+  try{
+    if(typeof localStorage==='undefined') return {};
+    const o=JSON.parse(localStorage.getItem(LF_TOMB_KEY)||'{}')||{}, cut=Date.now()-30*864e5; let ch=false;
+    Object.keys(o).forEach(k=>{ if(!(Number(o[k])>cut)){ delete o[k]; ch=true; } });
+    if(ch) localStorage.setItem(LF_TOMB_KEY,JSON.stringify(o));
+    return o;
+  }catch(_){ return {}; }
+}
+function lf431Tombstone(ids){
+  try{
+    if(typeof localStorage==='undefined') return;
+    const o=lf431Tombs(); (ids||[]).forEach(id=>{ if(id) o[String(id)]=Date.now(); });
+    localStorage.setItem(LF_TOMB_KEY,JSON.stringify(o));
+  }catch(_){}
+}
 function lf431Merge(base,fresh){
-  const m=new Map(); (base||[]).forEach(x=>m.set(String(x.id),x)); (fresh||[]).forEach(x=>m.set(String(x.id),x)); return Array.from(m.values());
+  const t=lf431Tombs();
+  const m=new Map(); (base||[]).forEach(x=>{ if(!t[String(x.id)]) m.set(String(x.id),x); }); (fresh||[]).forEach(x=>{ if(!t[String(x.id)]) m.set(String(x.id),x); }); return Array.from(m.values());
 }
 // v560: the full-history server fetch used to fail silently (bare console.warn)
 // with no retry and no visible trace — if it kept failing on a device, that
@@ -1726,6 +1747,23 @@ function earlyLeaveFromWorked(workedMin, requiredMin, lateMin, cfg){
 window.scheduledShiftMinutes = scheduledShiftMinutes;
 window.earlyLeaveFromWorked = earlyLeaveFromWorked;
 
+/* ⏰➕ v629 — «الشغل الزيادة يسد التأخير الأول» (قرار المالك 01-10)
+   المثال: معادها 10–6 (8 ساعات)، جت 12، مشيت 10 بالليل = 10 ساعات شغل.
+   - الشغل لحد مدة شيفتها (8 ساعات) بيعوّض التأخير: لو وصلت لـ8 ساعات، التأخير اتسد كله.
+   - اللي بعد كده بس هو الأوفرتايم (زي ما هو: المدة − 8:15) — فوقت التعويض مبيتدفعش مرتين.
+   - تعويض جزئي (مشيت قبل ما تكمّل) = العقوبة بتتحسب على الدقايق اللي لسه ناقصة بس.
+   بيرجّع { coveredMin, remainingMin, hours } — hours بنفس معدل التأخير (lateHoursFrom). */
+function lateCompensation(workedMin, requiredMin, lateMin, cfg){
+  const L = Math.max(0, Math.round(Number(lateMin) || 0));
+  const req = Number(requiredMin) > 0 ? Number(requiredMin) : (8*60 + 15);
+  const W = Math.max(0, Number(workedMin) || 0);
+  // لو كانت جت في معادها ومشيت في معادها كانت هتشتغل (req − L) من وقت ما وصلت
+  const covered = Math.min(L, Math.max(0, Math.round(W - (req - L))));
+  const remaining = L - covered;
+  return { coveredMin: covered, remainingMin: remaining, hours: lateHoursFrom(remaining, cfg) };
+}
+window.lateCompensation = lateCompensation;
+
 // 🚫 ساعات الغياب بدون عذر
 function absenceHoursFrom(cfg){
   cfg = cfg || timeCfgDefaults;
@@ -3287,6 +3325,14 @@ function optimisticTimeCredit(id, patch, mutationKey){
   return optimisticAttendanceRow('credits', { ...item, ...patch, id:String(id) }, mutationKey);
 }
 window.optimisticTimeCredit = optimisticTimeCredit;
+/* 🪦 v628 — شيل سطور اتمسحت من السيرفر من الذاكرة فورًا (الموديول + window + المعلّق) */
+function salesForgetRows(kind, ids){
+  const set=new Set((ids||[]).filter(Boolean).map(String)); if(!set.size) return;
+  lf431Tombstone([...set]);
+  set.forEach(id=>{ try{ attPendingRows[kind]&&attPendingRows[kind].delete(id); }catch(_){} });
+  setAttendanceRows(kind, (attendanceRows(kind)||[]).filter(x=>!set.has(String(x&&x.id))));
+}
+window.salesForgetRows = salesForgetRows;
 
 function queueAttendanceMutation(options){
   const key = String(options.key);
@@ -3907,6 +3953,25 @@ async function clockOut(empId, photoDataUri){
   const _reqMin = scheduledShiftMinutes(shiftEmp, complianceCfg, caiDayKey(shift.clockInTs));
   if(!forgotten) earlyInfo = earlyLeaveFromWorked(totalMin, _reqMin, Number(shift.lateMinutes)||0, cfg);
 
+  /* ⏰➕ v629 — الشغل الزيادة يسد التأخير الأول: بنعدّل بند التأخير بتاع الشيفت ده بس،
+     ولو لقيناه في الذاكرة ومش معذور (عشان منعملش مستند ناقص لو مش موجود). الانصراف المنسي
+     مبيعوّضش حاجة — ده مش شغل. */
+  let lateFix = null;
+  const _lateId = attendanceDocId('late', empId, shift.id);
+  const _lateRow = (window.allTimeCredit||[]).find(x=>x && String(x.id)===_lateId);   // window = نفس نسخة الموديول (setAttendanceRows)
+  if(!forgotten && _lateRow && !_lateRow.excused && (Number(shift.lateMinutes)||0) > 0){
+    const comp = lateCompensation(totalMin, _reqMin, Number(shift.lateMinutes)||0, cfg);
+    const curH = Number(_lateRow.hours)||0;
+    if(comp.coveredMin > 0 && comp.hours < curH){
+      const orig = _lateRow.originalHours != null ? _lateRow.originalHours : curH;
+      lateFix = comp.hours > 0
+        ? { hours:comp.hours, originalHours:orig, compensatedMin:comp.coveredMin,
+            note:`تأخير ${shift.lateMinutes} دقيقة · عوّضت ${comp.coveredMin} دقيقة بالقعدة بعد معادها` }
+        : { hours:0, originalHours:orig, compensatedMin:comp.coveredMin, excused:true,
+            excuseReason:'عوّضت التأخير (قعدت بعد معادها)', excusedAt:now };
+    }
+  }
+
   const _otProbe = { clockInTs:shift.clockInTs, clockOutTs:now, shiftMinutes:totalMin,
       overtimeMinutes, forgotClockOut:forgotten || false, otRequiresApproval:true,
       overtimeDecision:overtimeMinutes > 0 ? 'pending' : 'none' };
@@ -3932,25 +3997,31 @@ async function clockOut(empId, photoDataUri){
   const h=Math.floor(totalMin/60), m=totalMin%60;
   let successText=`تم تسجيل الانصراف — مدة الشيفت ${h} س ${m} د ✅`;
   if(earlyInfo.hours>0) successText += ` · نقص ${earlyInfo.earlyMin} دقيقة`;
+  if(lateFix) successText += lateFix.excused ? ' · التأخير اتعوّض بالكامل' : ` · التأخير اتعوّض ${lateFix.compensatedMin} دقيقة`;
   if(overtimeMinutes>0) successText += _otAuto ? ' · الإضافي اتعتمد تلقائيًا' : ' · الإضافي محتاج مراجعة الإدارة';
   const mutationKey='clock-out:'+shift.id;
   const clockOutOps=[{mode:'update',collection:'sales_shifts',id:shift.id,data:patch}];
   if(credit){const clean={...credit};delete clean.id;clockOutOps.push({mode:'set',collection:'sales_time_credit',id:creditId,data:clean,merge:true});}
+  // v629: تعديل بند التأخير في نفس العملية (الانصراف + التعويض يا يتسجلوا مع بعض يا لأ)
+  if(lateFix) clockOutOps.push({mode:'update',collection:'sales_time_credit',id:_lateId,data:lateFix});
+  const lateRowAfter = lateFix ? { ..._lateRow, ...lateFix, id:_lateId } : null;
   return queueAttendanceMutation({
     key:mutationKey,
     durableOps:clockOutOps,
-    durableRows:[{kind:'shifts',row:{...shift,...patch,id:shift.id}}].concat(credit?[{kind:'credits',row:credit}]:[]),
+    durableRows:[{kind:'shifts',row:{...shift,...patch,id:shift.id}}].concat(credit?[{kind:'credits',row:credit}]:[]).concat(lateRowAfter?[{kind:'credits',row:lateRowAfter}]:[]),
     optimistic:()=>{
       const undoShift=optimisticAttendanceRow('shifts',{...shift,...patch,id:shift.id},mutationKey);
       const undoCredit=credit?optimisticAttendanceRow('credits',credit,mutationKey):function(){};
-      const undo=()=>{undoCredit();undoShift();};
-      undo.confirm=()=>{if(undoCredit.confirm)undoCredit.confirm();if(undoShift.confirm)undoShift.confirm();};
+      const undoLate=lateRowAfter?optimisticAttendanceRow('credits',lateRowAfter,mutationKey):function(){};
+      const undo=()=>{undoLate();undoCredit();undoShift();};
+      undo.confirm=()=>{if(undoLate.confirm)undoLate.confirm();if(undoCredit.confirm)undoCredit.confirm();if(undoShift.confirm)undoShift.confirm();};
       return undo;
     },
     commit:()=>{
       const batch = writeBatch(db);
       batch.update(doc(db,'sales_shifts',shift.id),patch);
       if(credit){const clean={...credit};delete clean.id;batch.set(doc(db,'sales_time_credit',creditId),clean,{merge:true});}
+      if(lateFix) batch.update(doc(db,'sales_time_credit',_lateId),lateFix);
       return batch.commit();
     },
     savingText:'تم تسجيل الانصراف على الجهاز — جاري المزامنة…',
@@ -5976,7 +6047,10 @@ async function voidShift(emp,shiftId,msg,reason,after){
     b.delete(doc(db,'sales_time_credit',lateId));
     await b.commit();
     try{ await _employeeAudit(emp,'void_shift',{shiftId,clockInTs:s.clockInTs,clockOutTs:s.clockOutTs||null,reason:why}); }catch(_){}
-    window.allShifts=(window.allShifts||[]).filter(x=>x.id!==shiftId);
+    // v628: كان بيشيل من window.allShifts بس — نسخة الموديول (اللي المرتب بيحسب منها) كانت بتفضل،
+    // ورصيد التأخير فضل في الذاكرة. دلوقتي الاتنين بيتشالوا فورًا ومش هيرجعوا من الكاش.
+    salesForgetRows('shifts',[shiftId]);
+    salesForgetRows('credits',[lateId]);
     if(msg){ msg.style.color='var(--good)'; msg.textContent='اتلغى حضور يوم '+caiDayKey(s.clockInTs)+' ✅'; }
     try{ renderAttendanceLists(); }catch(_){}
     if(typeof after==='function') after();
@@ -8447,6 +8521,28 @@ window.openPayrollEmployee = function(empId, periodKey){
 };
 
 // ⏳ v492 — تفاصيل رصيد الوقت من داخل المرتب نفسه، مع إمكانية إلغاء/عذر أي بند.
+/* 🕘 v630 — جنب كل بند رصيد: جت إمتى ومشيت إمتى ومعادها كام (طلب المالك).
+   بنربط بالشيفت اللي عمل البند (sourceShiftId)، والبنود القديمة اللي ملهاش
+   الحقل ده بنربطها بأول حضور لنفس الموظفة في نفس اليوم (بتوقيت القاهرة). */
+function tcShiftFor(x, shifts){
+  if(!x) return null;
+  const all = shifts || [];
+  if(x.sourceShiftId){ const s = all.find(s=>s && s.id===x.sourceShiftId); if(s) return s; }
+  if(!x.date || !x.employeeId) return null;
+  return all.filter(s=>s && s.employeeId===x.employeeId && s.clockInTs && caiDayKey(s.clockInTs)===x.date)
+    .sort((a,b)=>(a.clockInTs||0)-(b.clockInTs||0))[0] || null;
+}
+function tcShiftLine(s, emp){
+  if(!s) return '';
+  const t = ts => new Date(ts).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
+  const mins = s.clockOutTs ? Math.max(0, Math.round((s.clockOutTs - s.clockInTs)/60000)) : null;
+  const sched = s.scheduledStartTime || (emp && emp.scheduledStartTime) || '';
+  const schedEnd = s.scheduledEndTime || (emp && emp.scheduledEndTime) || '';
+  return '🟢 جت ' + t(s.clockInTs) + ' · 🔴 ' + (s.clockOutTs ? 'مشيت ' + t(s.clockOutTs) : 'لسه مفتوح')
+    + (mins !== null ? ' · اشتغلت ' + Math.floor(mins/60) + ':' + String(mins%60).padStart(2,'0') : '')
+    + (sched ? ' · معادها ' + sched + (schedEnd ? '–' + schedEnd : '') : '');
+}
+window.tcShiftFor = tcShiftFor; window.tcShiftLine = tcShiftLine;
 window.openPayrollTimeCreditDetails = function(empId, periodKey){
   const emp = allEmployees.find(e=>e.id===empId); if(!emp) return;
   const pk = periodKey || window.salaryPeriodKey || defaultPayPeriodKey(new Date());
@@ -8464,8 +8560,9 @@ window.openPayrollTimeCreditDetails = function(empId, periodKey){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10050;overflow:auto;padding:12px 8px 28px;';
   const items = rows.length ? rows.map(x=>{
     const active=tcCounts(x,cfg), h=active?(Number(x.hours)||0):(Number(x.originalHours)||Number(x.hours)||0);
+    const _sl = x.type==='absence' ? '' : tcShiftLine(tcShiftFor(x, window.allShifts||[]), emp);
     return `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08);${active?'':'opacity:.55'}">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><b>${labels[x.type]||_payEsc(x.type||'بند')}</b><div style="font-size:10.5px;color:var(--sub);margin-top:3px">${_payEsc(x.date||'')} ${x.note?'· '+_payEsc(x.note):''}</div></div><b style="color:${active?'#ff5b63':'#888'};direction:ltr">${_payQty(h,'ساعة')}</b></div>
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><b>${labels[x.type]||_payEsc(x.type||'بند')}</b><div style="font-size:10.5px;color:var(--sub);margin-top:3px">${_payEsc(x.date||'')} ${x.note?'· '+_payEsc(x.note):''}</div>${_sl?`<div style="font-size:11px;color:#c9cbd6;margin-top:4px;line-height:1.6">${_payEsc(_sl)}</div>`:''}</div><b style="color:${active?'#ff5b63':'#888'};direction:ltr">${_payQty(h,'ساعة')}</b></div>
       ${active?`<button type="button" onclick="excusePayrollTimeCredit('${_payEsc(x.id)}','${empId}','${pk}')" style="margin-top:7px;border:1px solid rgba(255,255,255,.14);background:#292a34;color:#fff;border-radius:9px;padding:6px 10px;font-family:inherit;font-size:11px;cursor:pointer">🩺 إلغاء/عذر البند</button>`:`<div style="font-size:10.5px;color:#49db7e;margin-top:5px">✅ ملغي/معذور${x.excuseReason?' — '+_payEsc(x.excuseReason):''}</div>`}
     </div>`;
   }).join('') : '<div style="color:var(--sub);padding:14px 0;text-align:center">مفيش رصيد وقت في الفترة دي ✅</div>';

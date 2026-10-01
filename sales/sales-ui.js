@@ -365,7 +365,12 @@ window.excuseTimeCredit = async function(id){
   const options = {
     key:mutationKey,
     optimistic:rollbackTimeCredit,
-    commit:()=>window.fbUpdateDoc(window.fbDoc(window.db,'sales_time_credit',id),patch),
+    // v628: «not-found» = البند اتمسح من السيرفر (غالبًا مع إلغاء اليوم بتاعه) — يعني مفيش خصم
+    //    أصلًا. نشيله من الشاشة بدل ما نرجّعه ونطلّع خطأ.
+    commit:()=>window.fbUpdateDoc(window.fbDoc(window.db,'sales_time_credit',id),patch).catch(e=>{
+      if(e && e.code==='not-found' && typeof window.salesForgetRows==='function'){ window.salesForgetRows('credits',[id]); return; }
+      throw e;
+    }),
     savingText:'تم تسجيل العذر على الجهاز — جاري المزامنة…',
     successText:'تم تسجيل العذر والمزامنة ✅',
     errorText:'تعذر تسجيل العذر'

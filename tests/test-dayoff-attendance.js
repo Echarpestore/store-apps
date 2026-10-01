@@ -80,6 +80,34 @@ console.log('🗓️ 3ب) حضور الموظف بالشهر (v627)');
   ok(/if\(!reason\)\{/.test(extractFn(app, 'function _bindRecentShifts(')), 'سلبي: زرار الإلغاء من غير سبب مش بيعمل حاجة');
 }
 ok(/adminRole==='owner'\?`<div style="margin:10px 0 4px;font-weight:900;font-size:13px">🗓️ الحضور/.test(app), 'الزرارين للمالك بس');
-ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8'), 627) && assetAtLeast(html, 'sales-app.js', 627), 'sales ≥ v627');
+console.log('🪦 3ج) المحذوف ميرجعش من الكاش (v628)');
+{
+  const store = {};
+  const ls = { getItem:k => (k in store ? store[k] : null), setItem:(k,v) => { store[k] = String(v); } };
+  const ctx3 = { localStorage:ls, Date, JSON, Number, String, Map, Array, Object };
+  vm.createContext(ctx3);
+  vm.runInContext("const LF_TOMB_KEY='sales_tombstones_v1';\n" + ['function lf431Tombs(', 'function lf431Tombstone(', 'function lf431Merge('].map(h => extractFn(app, h)).join('\n') + ';this.M=lf431Merge;this.T=lf431Tombstone;', ctx3);
+  const base = [{ id:'late_9', hours:49 }, { id:'late_11', hours:2 }];
+  ok(ctx3.M(base, []).length === 2, 'من غير شواهد: الدمج مش بيمسح حاجة (حماية التاريخ زي ما هي)');
+  ctx3.T(['late_9']);
+  const m = ctx3.M(base, [{ id:'late_9', hours:49 }]);
+  ok(m.length === 1 && m[0].id === 'late_11', 'بند يوم ٩ اتشال من الكاش ومن نتيجة السيرفر');
+  store['sales_tombstones_v1'] = JSON.stringify({ old:Date.now() - 31 * 864e5 });
+  ok(ctx3.M([{ id:'old' }], []).length === 1, 'سلبي: الشاهد بيخلص بعد ٣٠ يوم');
+  const ctx4 = { Date, JSON, Number, String, Map, Array, Object }; vm.createContext(ctx4);
+  vm.runInContext("const LF_TOMB_KEY='x';\n" + ['function lf431Tombs(', 'function lf431Tombstone(', 'function lf431Merge('].map(h => extractFn(app, h)).join('\n') + ';this.M=lf431Merge;', ctx4);
+  ok(ctx4.M([{ id:'a' }], [{ id:'b' }]).length === 2, 'سلبي: من غير localStorage (اختبارات) الدمج شغال عادي');
+  const vs2 = extractFn(app, 'async function voidShift(');
+  ok(/salesForgetRows\('shifts',\[shiftId\]\)/.test(vs2) && /salesForgetRows\('credits',\[lateId\]\)/.test(vs2), 'إلغاء اليوم بيشيل الشيفت ورصيد التأخير من الذاكرة فورًا');
+  ok(vs2.indexOf("salesForgetRows('shifts'") > vs2.indexOf('await b.commit()'), 'سلبي: مفيش شيل من الذاكرة قبل ما السيرفر يأكّد');
+  ok(!/window\.allShifts=\(window\.allShifts\|\|\[\]\)\.filter/.test(vs2), 'مش بيعدّل window بس (نسخة الموديول كانت بتفضل)');
+  const fr = extractFn(app, 'function salesForgetRows(');
+  ok(/lf431Tombstone\(/.test(fr) && /attPendingRows\[kind\]\.delete\(id\)/.test(fr) && /setAttendanceRows\(kind,/.test(fr), 'النسيان = شاهد + المعلّق + الموديول');
+  const ui = fs.readFileSync(path.join(ROOT, 'sales', 'sales-ui.js'), 'utf8');
+  ok(/e\.code==='not-found' && typeof window\.salesForgetRows==='function'\)\{ window\.salesForgetRows\('credits',\[id\]\); return; \}/.test(ui), 'عذر على بند اتمسح (not-found) = يتشال بدل الخطأ');
+  ok(/throw e;/.test(ui.slice(ui.indexOf("e.code==='not-found'"), ui.indexOf("e.code==='not-found'") + 200)), 'سلبي: أي خطأ تاني لسه بيطلع');
+  ok(assetAtLeast(html, 'sales-ui.js', 628), 'sales-ui ≥ v628');
+}
+ok(swAtLeast(fs.readFileSync(path.join(ROOT, 'sales', 'sw.js'), 'utf8'), 628) && assetAtLeast(html, 'sales-app.js', 628), 'sales ≥ v628');
 console.log('\n' + (fail ? '❌' : '✅') + ' test-dayoff-attendance: ' + pass + ' ناجح · ' + fail + ' فاشل');
 if(fail) process.exitCode = 1;

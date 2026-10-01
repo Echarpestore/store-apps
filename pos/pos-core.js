@@ -149,12 +149,37 @@ updateOnlineStatus();
 
 // بيحمّل أسماء الفروع المعتمدة (من الموظفين المسجّلين) لقايمة اختيار الفرع —
 // عشان نمنع أخطاء الكتابة اليدوية اللي بتعمل "فرع جديد" بالغلط
+/* 🚑 v755 — الشاشة كانت بتقف على «جارٍ تحميل الفروع…» للأبد (بلاغ المالك 01-10، الفرع واقف بيع):
+   القراءة من السيرفر ممكن تعلّق من غير رد ولا خطأ (جلسة الدخول اتمسحت / IndexedDB مقفول
+   من تاب تاني) — والقايمة كانت مستنياها. دلوقتي:
+   ١) القايمة بتتملي **فورًا** من آخر قايمة محفوظة على الجهاز + فروع Glow + فرع الجهاز.
+   ٢) السيرفر بيتجرّب في الخلفية بحد أقصى 5 ثواني، ولو رد بيحدّث القايمة. */
+function _branchSetupRender(sel, branches){
+  const saved = localStorage.getItem('pos_branch') || '';
+  const set = new Set((branches || []).filter(Boolean));
+  if(saved) set.add(saved);                          // فرع الجهاز لازم يبقى موجود دايمًا
+  const list = [...set].sort((a,b)=> a.localeCompare(b,'ar'));
+  const keep = sel.value && sel.value !== '' ? sel.value : saved;
+  sel.innerHTML = '<option value="">— اختار الفرع —</option>'
+    + list.map(b=> `<option value="${b.replace(/"/g,'&quot;')}" ${b===keep?'selected':''}>${b}</option>`).join('')
+    + '<option value="__new__">➕ فرع جديد (اكتب الاسم)...</option>';
+  if(keep === '__new__') sel.value = '__new__';
+}
+function _branchSetupCached(){
+  let cached = [];
+  try{ cached = JSON.parse(localStorage.getItem('pos_branch_list') || '[]') || []; }catch(e){ cached = []; }
+  return [...new Set([...(Array.isArray(cached) ? cached : []), ...GLOW_BRANCHES])];
+}
 async function loadBranchSetupOptions(){
   const sel = document.getElementById('branchSetupSelect');
   if(!sel) return;
-  let branches = [];
+  _branchSetupRender(sel, _branchSetupCached());    // ⚡ فورًا — من غير ما نستنى النت
+  onBranchSetupSelect();
   try{
-    const snap = await db.collection(EMPLOYEES_COLLECTION).get();
+    const snap = await Promise.race([
+      db.collection(EMPLOYEES_COLLECTION).get(),
+      new Promise((_, rej)=> setTimeout(()=> rej(new Error('branch-list-timeout')), 5000))
+    ]);
     const set = new Set();
     snap.docs.forEach(d=>{
       const e = d.data();
@@ -163,18 +188,14 @@ async function loadBranchSetupOptions(){
       if(b && b !== 'الإدارة') set.add(b);
     });
     GLOW_BRANCHES.forEach(b=> set.add(b));
-    branches = [...set].sort((a,b)=> a.localeCompare(b,'ar'));
+    const branches = [...set];
     try{ localStorage.setItem('pos_branch_list', JSON.stringify(branches)); }catch(e){}
+    _branchSetupRender(sel, branches);
+    onBranchSetupSelect();
   }catch(e){
-    // القراءة اترفضت (قواعد الأمان قبل الدخول) أو مفيش نت → نستخدم القايمة المحفوظة من آخر مرة
-    try{ branches = JSON.parse(localStorage.getItem('pos_branch_list') || '[]'); }catch(e2){ branches = []; }
-    if(!branches.length) branches = [...GLOW_BRANCHES];
+    // اترفضت (قبل الدخول) أو علّقت أو مفيش نت → القايمة المحفوظة اللي ظاهرة أصلًا كفاية
+    console.warn('branch list', e && (e.code || e.message));
   }
-  const saved = localStorage.getItem('pos_branch') || '';
-  sel.innerHTML = '<option value="">— اختار الفرع —</option>'
-    + branches.map(b=> `<option value="${b.replace(/"/g,'&quot;')}" ${b===saved?'selected':''}>${b}</option>`).join('')
-    + '<option value="__new__">➕ فرع جديد (اكتب الاسم)...</option>';
-  onBranchSetupSelect();
 }
 function onBranchSetupSelect(){
   const sel = document.getElementById('branchSetupSelect');

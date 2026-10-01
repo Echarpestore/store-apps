@@ -96,4 +96,4 @@ assert(/l\.source==='sales'\?' 📱'/.test(PX), 'POS بيعلّم حركات ا�
 const PI = fs.readFileSync(path.join(root, 'pos', 'index.html'), 'utf8');
 assert(PI.indexOf('receive-core.js?v=753') > 0 && PI.indexOf('receive-core.js?v=753') < PI.indexOf('products.js?v=753'), 'POS: receive-core قبل products');
 assert(/pos-shell-v75[3-9]/.test(fs.readFileSync(path.join(root, 'pos', 'sw.js'), 'utf8')), 'POS CACHE_NAME اترفع');
-assert(/store-apps-shell-v62[6-9]/.test(fs.readFileSync(path.join(root, 'sales', 'sw.js'), 'utf8')), 'Sales CACHE_NAME اترفع');
+assert(/store-apps-shell-v6(2[6-9]|[3-9]\d)/.test(fs.readFileSync(path.join(root, 'sales', 'sw.js'), 'utf8')), 'Sales CACHE_NAME اترفع');
