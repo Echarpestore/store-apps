@@ -664,11 +664,14 @@
   border-top:1px solid rgba(243,222,233,.9); border-radius:22px 22px 0 0;
   box-shadow:0 -12px 32px -14px rgba(201,50,126,.28);
 }
-.tab,html[dir="ltr"] .tab{flex:1 1 0; min-width:0; padding:7px 0 3px; scroll-snap-align:none; touch-action:manipulation; z-index:1;}
-.tab .tl{font-size:10.5px; letter-spacing:.1px; transition:color .25s ease;}
+.tab,html[dir="ltr"] .tab{flex:1 1 0; min-width:0; padding:8px 0 19px; position:relative; scroll-snap-align:none; touch-action:manipulation; z-index:1;}
+/* الاسم بيظهر تحت التبويب النشط بس — شكل أنضف ومفيش زحمة في الإنجليزي (الاسم موجود للقارئ الصوتي) */
+.tabbar .tab .tl,html[dir="ltr"] .tabbar .tab .tl{position:absolute; left:50%; bottom:3px; font-size:10.5px; line-height:1.2; white-space:nowrap; letter-spacing:.1px; text-align:center;
+  opacity:0; transform:translate(-50%,6px) scale(.9); transition:opacity .25s ease, transform .4s var(--pux-ease), color .25s ease; pointer-events:none;}
+.tabbar .tab.active .tl,html[dir="ltr"] .tabbar .tab.active .tl{opacity:1; transform:translate(-50%,0) scale(1);}
 .tab .ti{transition:transform .38s var(--pux-ease);}
 .tab .ti-svg{width:25px; height:25px; transition:stroke .25s ease, fill .25s ease;}
-.tab.active .ti{transform:translateY(-3px) scale(1.1);}
+.tab.active .ti{transform:translateY(-2px) scale(1.08);}
 .tab.active .ti-svg{stroke:url(#puxGrad); fill:rgba(236,72,153,.13);}
 .tab.active .tl{color:var(--pink-deep);}
 .tab:active .ti{transform:scale(.86);}
@@ -732,6 +735,12 @@
 .empty .big .pux-ic{width:1em; height:1em;}
 .card .pux-ic svg,.btn-primary .pux-ic svg,.wa-btn .pux-ic svg,.toast .pux-ic svg{stroke:#fff;}
 .card .pux-ic,.btn-primary .pux-ic,.toast .pux-ic{--pux-tint:rgba(255,255,255,.24);}
+
+/* ── التحية: الوردة جنب اسم العميلة (مش جنب «صباح الخير») ── */
+#greet .pux-ic{display:none;}
+#topName::after{content:""; display:inline-block; width:.8em; height:.8em; margin-inline-start:.32em; vertical-align:-.05em;
+  background:linear-gradient(135deg,var(--pink),var(--gold));
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' fill-opacity='.22' stroke='black' stroke-width='1.6'%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(0 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(72 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(144 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(216 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(288 12 12)'/%3E%3Ccircle cx='12' cy='12' r='1.7' fill='none'/%3E%3C/svg%3E") center/contain no-repeat; mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' fill-opacity='.22' stroke='black' stroke-width='1.6'%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(0 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(72 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(144 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(216 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(288 12 12)'/%3E%3Ccircle cx='12' cy='12' r='1.7' fill='none'/%3E%3C/svg%3E") center/contain no-repeat;}
 </style>
 </head>
 <body>
@@ -4436,7 +4445,8 @@ var PUX_ICONS = {
   down:'<path d="M12 4.5v15M6 13.5l6 6 6-6"/>',
   up:'<path d="M12 19.5v-15M6 10.5l6-6 6 6"/>',
   image:'<rect class="t" x="3" y="4.2" width="18" height="15.6" rx="2.6"/><circle cx="8.6" cy="9.6" r="1.6"/><path d="M3.4 17l5-4.8 3.6 3.4 3.2-2.8 5.6 5"/>',
-  search:'<circle class="t" cx="10.6" cy="10.6" r="6.4"/><path d="M15.4 15.4l5.1 5.1"/>'
+  search:'<circle class="t" cx="10.6" cy="10.6" r="6.4"/><path d="M15.4 15.4l5.1 5.1"/>',
+  moon:'<path class="t" d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z"/>'
 };
 /* emoji → اسم الأيقونة. اللي مش هنا بيفضل إيموجي عادي (ماتتلمسش). */
 var PUX_MAP = {
@@ -4444,7 +4454,7 @@ var PUX_MAP = {
   '🧾':'receipt','📄':'receipt','📋':'receipt','📝':'receipt','🔐':'shield','🔒':'shield','⭐':'star','🏆':'star','💬':'chat','💳':'card','🏷':'tag','🔖':'bookmark',
   '💵':'coins','💰':'coins','💸':'coins','🖤':'heart','🤍':'heart','💚':'heart','📷':'camera','🌐':'globe','🌍':'globe','📱':'mobile','📲':'mobile','📞':'handset',
   '🚚':'truck','📒':'book','🧕':'user','👤':'user','🔑':'key','🗝':'key','🗑':'trash','🏬':'store','🏪':'store','🏢':'store','📍':'pin','📌':'pin','🔔':'bell',
-  '⏳':'clock','⏱':'clock','🕐':'clock','⏰':'clock','🎯':'target','🎟':'ticket','🛒':'cart','📦':'box','⚠':'alert','✅':'check','➕':'plus','⬇':'down','⬆':'up','🖼':'image','🔍':'search'
+  '⏳':'clock','⏱':'clock','🕐':'clock','⏰':'clock','🎯':'target','🎟':'ticket','🛒':'cart','📦':'box','⚠':'alert','✅':'check','➕':'plus','⬇':'down','⬆':'up','🖼':'image','🔍':'search','🌙':'moon'
 };
 
 /* PREMIUM-UX-v1 — حركات ذكية (بتتعطّل لوحدها لو الجهاز طالب «تقليل الحركة») */
