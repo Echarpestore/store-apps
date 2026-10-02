@@ -587,7 +587,9 @@
   html[dir="ltr"] .prod .oos{left:auto; right:12px;}
   html[dir="ltr"] .tab-badge{left:auto; right:calc(50% + 4px);}
   /* 📱 أسماء التبويبات الإنجليزي أطول («My receipts» + «My account» كانوا لازقين في بعض) */
-  html[dir="ltr"] .tab{padding:6px 9px;}
+  html[dir="ltr"] .tabbar{scroll-snap-type:none; padding-left:4px; padding-right:4px;}
+  html[dir="ltr"] .tab{flex:1 1 0; min-width:0; padding:6px 1px; scroll-snap-align:none; justify-content:flex-start;}
+  html[dir="ltr"] .tab .tl{font-size:10px; white-space:normal; text-align:center; line-height:1.15; overflow-wrap:anywhere;}
 
   /* 🖼️ صفحة المنتج */
   .pv-gal{display:flex; gap:8px; overflow-x:auto; scroll-snap-type:x mandatory;
