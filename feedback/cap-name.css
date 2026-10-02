@@ -1,0 +1,156 @@
+/* ============================================================
+   🌷 cap-name.css — شاشة «أول مرة معانا» على تابلت التقييم (v710 · 02-10-2026)
+   ------------------------------------------------------------
+   شكوى المالك: التابلت بالعرض، والعميلة بتكتب اسمها والكيبورد مغطّي الخانة — مش شايفة بتكتب إيه.
+   الحل:
+   ١) الشاشة بتتقاس على **الجزء الظاهر فوق الكيبورد** (visualViewport) — مش على الشاشة كلها.
+   ٢) لما الكيبورد يفتح: الشاشة بتنضغط لشريط واحد (العنوان + الاسم كبير + الخانة والزرار جنب بعض).
+   ٣) الاسم بيظهر **كبير** وهي بتكتبه («أهلًا يا …») — حتى لو الخانة نفسها صغرت.
+   🎨 ألوان البراند من kiosk-theme.css (echarpe / Glow تلقائي). 🎬 الحركة transform/opacity بس.
+   ============================================================ */
+
+/* الخلفية بتاعة البراند لشاشة الاسم والترحيب بس — كيبورد الرقم والكود زي ما هم */
+#capOverlay[data-pane="capPaneName"],
+#capOverlay[data-pane="capPaneGreet"]{
+  background:
+    radial-gradient(120% 90% at 85% 0%, rgba(255,255,255,.85) 0%, rgba(255,255,255,0) 55%),
+    linear-gradient(125deg, var(--k-bg1) 0%, var(--k-bg2) 55%, var(--k-bg3) 100%);
+  color:var(--k-ink);
+  overflow:hidden;
+}
+/* لما الكيبورد مفتوح: الشاشة = الجزء الظاهر بس (cap-name.js بيحط top/height) والمحتوى فوق */
+#capOverlay.cn-kb{ align-items:center; bottom:auto; }   /* متوسّطة في الجزء الظاهر بس — فوق الكيبورد */
+
+#capOverlay[data-pane="capPaneName"] .cap-box{ width:min(92vw,640px); }
+#capOverlay[data-pane="capPaneGreet"] .cap-box{ width:min(92vw,820px); }
+#capPaneName{ width:100%; }
+.cn-wrap{
+  position:relative; width:100%; margin:0 auto; text-align:center;
+  display:flex; flex-direction:column; align-items:stretch;
+}
+/* زهور خفيفة في الخلفية */
+#capOverlay[data-pane="capPaneName"]::before,
+#capOverlay[data-pane="capPaneGreet"]::before{
+  content:""; position:absolute; inset:-20%; pointer-events:none; opacity:.55;
+  background:
+    radial-gradient(closest-side, rgba(238,106,134,.18), transparent) 8% 18%/34vmin 34vmin no-repeat,
+    radial-gradient(closest-side, rgba(240,188,98,.20), transparent) 92% 82%/40vmin 40vmin no-repeat;
+  animation:cnDrift 14s ease-in-out infinite alternate;
+}
+@keyframes cnDrift{ to{ transform:translate3d(2%, -2%, 0) scale(1.04); } }
+
+.cn-head{ position:relative; }
+.cn-flower{
+  width:64px; height:64px; margin:0 auto 10px; border-radius:22px; display:grid; place-items:center;
+  font-size:32px; background:linear-gradient(145deg,#fff, var(--k-bg2));
+  box-shadow:0 14px 30px -14px rgba(120,30,70,.45), inset 0 1px 0 #fff;
+  animation:cnFloat 3.6s ease-in-out infinite;
+}
+@keyframes cnFloat{ 0%,100%{ transform:translateY(0) rotate(-3deg); } 50%{ transform:translateY(-6px) rotate(3deg); } }
+#capPaneName .cap-title{ color:var(--k-ink); font-size:30px; font-weight:900; margin:0 0 4px; letter-spacing:-.01em; }
+#capPaneName .cap-sub{ color:var(--k-sub); font-size:15px; margin:0 0 18px; }
+
+/* ✨ الاسم الكبير — بيتكتب وهي بتكتب */
+.cn-preview{
+  position:relative; min-height:64px; margin:0 0 16px; padding:6px 10px;
+  display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap;
+  font-size:40px; font-weight:900; line-height:1.25; direction:rtl;
+}
+.cn-hello{ color:var(--k-sub); font-weight:800; font-size:.62em; }
+.cn-text{
+  background:linear-gradient(100deg, var(--k-2a), var(--k-3b) 55%, var(--k-4b));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.cn-preview.empty .cn-text{ background:none; color:var(--k-sub); opacity:.55; font-weight:700; font-size:.6em; }
+.cn-caret{ width:3px; height:.95em; border-radius:3px; background:var(--k-3b); animation:cnBlink 1s steps(1) infinite; }
+.cn-preview.empty .cn-caret{ display:none; }
+@keyframes cnBlink{ 50%{ opacity:0; } }
+.cn-preview.pop .cn-text{ animation:cnPop .18s ease-out; }
+@keyframes cnPop{ 0%{ transform:scale(.96); } 60%{ transform:scale(1.03); } 100%{ transform:scale(1); } }
+
+/* الخانة + الزرار */
+.cn-row{ display:flex; flex-direction:column; gap:12px; }
+#capPaneName .cap-name-input{
+  margin:0; width:100%; padding:16px 18px; border-radius:18px;
+  background:rgba(255,255,255,.88); color:var(--k-ink);
+  border:2px solid var(--k-line); font-size:22px; font-weight:800; text-align:center;
+  box-shadow:0 10px 26px -18px rgba(120,30,70,.5);
+  transition:border-color .2s, box-shadow .2s, transform .2s;
+  -webkit-appearance:none; appearance:none; outline:none;
+}
+#capPaneName .cap-name-input::placeholder{ color:var(--k-sub); opacity:.6; font-weight:700; }
+#capPaneName .cap-name-input:focus{
+  border-color:var(--k-3b);
+  box-shadow:0 0 0 5px color-mix(in srgb, var(--k-3a) 22%, transparent), 0 12px 28px -18px rgba(120,30,70,.55);
+}
+.cn-shake{ animation:cnShake .38s ease; }
+@keyframes cnShake{ 20%{ transform:translateX(-8px); } 40%{ transform:translateX(7px); } 60%{ transform:translateX(-5px); } 80%{ transform:translateX(3px); } }
+
+#capPaneName .cap-big-btn{
+  position:relative; overflow:hidden; width:100%; padding:16px 22px; border-radius:18px; border:none;
+  background:linear-gradient(110deg, var(--k-3a), var(--k-2a));
+  color:#fff; font-size:19px; font-weight:900; letter-spacing:.01em;
+  box-shadow:0 16px 30px -16px color-mix(in srgb, var(--k-2a) 80%, transparent);
+  transition:transform .15s ease, opacity .25s ease, filter .25s ease;
+}
+#capPaneName .cap-big-btn:active{ transform:scale(.97); }
+#capPaneName .cap-big-btn:disabled{ opacity:.38; filter:saturate(.4); box-shadow:none; }
+#capPaneName .cap-big-btn:not(:disabled)::after{   /* لمعة بتعدّي على الزرار لما يبقى جاهز */
+  content:""; position:absolute; top:0; bottom:0; width:40%; left:-50%;
+  background:linear-gradient(100deg, transparent, rgba(255,255,255,.45), transparent);
+  transform:skewX(-18deg); animation:cnShine 2.4s ease-in-out infinite;
+}
+@keyframes cnShine{ 0%{ left:-50%; } 55%,100%{ left:130%; } }
+#capPaneName .cap-big-btn.done{ background:linear-gradient(110deg,#3fbf86,#2fa36b); }
+#capPaneName .cap-cancel{ color:var(--k-sub); margin-top:12px; }
+
+/* 🎬 دخول الشاشة: العناصر بتطلع واحدة ورا التانية */
+#capPaneName.cn-in .cn-head, #capPaneName.cn-in .cn-preview, #capPaneName.cn-in .cn-row, #capPaneName.cn-in .cap-cancel{
+  animation:cnUp .55s cubic-bezier(.2,.8,.2,1) both;
+}
+#capPaneName.cn-in .cn-preview{ animation-delay:.07s; }
+#capPaneName.cn-in .cn-row{ animation-delay:.14s; }
+#capPaneName.cn-in .cap-cancel{ animation-delay:.2s; }
+@keyframes cnUp{ from{ opacity:0; transform:translateY(18px); } to{ opacity:1; transform:none; } }
+
+/* ⌨️ الكيبورد مفتوح → شريط واحد مضغوط فوق الكيبورد */
+#capOverlay.cn-kb .cap-box{ padding:10px 14px 8px; width:min(96vw,980px); }
+#capOverlay.cn-kb .cn-wrap{ width:100%; }
+#capOverlay.cn-kb .cn-flower, #capOverlay.cn-kb #capPaneName .cap-sub{ display:none; }
+#capOverlay.cn-kb .cn-head{ display:flex; align-items:center; justify-content:space-between; }
+#capOverlay.cn-kb #capPaneName .cap-title{ font-size:17px; margin:0; opacity:.85; }
+#capOverlay.cn-kb .cn-preview{ font-size:34px; min-height:48px; margin:4px 0 8px; padding:0; }
+#capOverlay.cn-kb .cn-row{ flex-direction:row; gap:10px; }
+#capOverlay.cn-kb #capPaneName .cap-name-input{ flex:1; padding:12px 14px; font-size:20px; border-radius:14px; }
+#capOverlay.cn-kb #capPaneName .cap-big-btn{ width:auto; flex:0 0 auto; padding:12px 26px; font-size:17px; border-radius:14px; }
+#capOverlay.cn-kb #capPaneName > .cn-wrap > .cap-cancel{ display:none; }
+.cn-cancel-mini{ display:none; background:none; border:none; color:var(--k-sub); font-family:'Cairo'; font-size:14px; font-weight:700; text-decoration:underline; cursor:pointer; padding:4px 6px; }
+#capOverlay.cn-kb .cn-cancel-mini{ display:inline-block; }
+/* مساحة قصيرة جدًا (موبايل بالعرض + كيبورد) */
+@media (max-height:300px){
+  #capOverlay.cn-kb .cn-preview{ font-size:26px; min-height:38px; margin:2px 0 6px; }
+  #capOverlay.cn-kb #capPaneName .cap-title{ font-size:15px; }
+}
+
+/* 🌸 الترحيب بعد التسجيل */
+#capOverlay[data-pane="capPaneGreet"] .cap-greet{
+  color:var(--k-ink); white-space:pre-line; font-size:clamp(28px,6vh,46px);
+  animation:cnGreet .7s cubic-bezier(.2,.9,.25,1.2) both;
+}
+@keyframes cnGreet{ from{ opacity:0; transform:scale(.86) translateY(14px); } to{ opacity:1; transform:none; } }
+.cn-petal{
+  position:fixed; top:-8vh; z-index:81; pointer-events:none; font-size:26px; opacity:0;
+  animation:cnFall linear forwards;
+}
+@keyframes cnFall{
+  0%{ opacity:0; transform:translate3d(0,0,0) rotate(0); }
+  10%{ opacity:.95; }
+  100%{ opacity:0; transform:translate3d(var(--dx,30px),118vh,0) rotate(var(--rot,240deg)); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .cn-flower, .cn-caret, #capPaneName .cap-big-btn::after, #capOverlay::before{ animation:none !important; }
+  #capPaneName.cn-in *{ animation:none !important; }
+  .cn-petal{ display:none; }
+}

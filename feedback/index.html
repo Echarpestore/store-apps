@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
 <title>إحنا عايزين رأيك</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2fa36b">
@@ -244,6 +244,7 @@
   }
 </style>
 <link rel="stylesheet" href="kiosk-theme.css?v=697">
+<link rel="stylesheet" href="cap-name.css?v=710">
 <script>
 /* 🏷️ v696: هوية الفرع على شاشة التقييم — نفس قايمة POS وشاشة الدعوة: GLOW_BRANCHES = ['Glow'] */
 (function(){
@@ -423,12 +424,24 @@
         </div>
         <button class="cap-cancel" onclick="capCancel()">إلغاء</button>
       </div>
+      <!-- 🌷 v710: شاشة الاسم — بتتقاس على الجزء الظاهر فوق الكيبورد والاسم بيظهر كبير وهي بتكتب (cap-name.js/css) -->
       <div id="capPaneName" style="display:none;">
-        <div class="cap-title">أول مرة معانا 🌷</div>
-        <div class="cap-sub">اكتبي اسمك عشان نرحّب بيكِ</div>
-        <input class="cap-name-input" id="capNameInput" placeholder="الاسم" autocomplete="off">
-        <button class="cap-big-btn" onclick="capSubmitName()">تم ✓</button>
-        <button class="cap-cancel" onclick="capCancel()">إلغاء</button>
+        <div class="cn-wrap">
+          <div class="cn-head">
+            <div class="cn-flower" aria-hidden="true">🌷</div>
+            <div class="cap-title">أول مرة معانا</div>
+            <div class="cap-sub">اكتبي اسمك عشان نرحّب بيكِ</div>
+            <button class="cn-cancel-mini" type="button" onclick="capCancel()">إلغاء</button>
+          </div>
+          <div class="cn-preview empty" id="capNamePreview" aria-hidden="true">
+            <span class="cn-hello">أهلًا</span><span class="cn-text" id="capNamePreviewTxt">اسمك هيظهر هنا ✨</span><span class="cn-caret"></span>
+          </div>
+          <div class="cn-row">
+            <input class="cap-name-input" id="capNameInput" placeholder="اكتبي اسمك هنا" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done" maxlength="40" dir="auto">
+            <button class="cap-big-btn" id="capNameOk" type="button" onclick="window.capNameTrySubmit ? capNameTrySubmit() : capSubmitName()" disabled>تم ✓</button>
+          </div>
+          <button class="cap-cancel" type="button" onclick="capCancel()">إلغاء</button>
+        </div>
       </div>
       <div id="capPaneGreet" style="display:none;">
         <div class="cap-greet" id="capGreetTxt"></div>
@@ -1212,6 +1225,7 @@ let _capDigits = '', _capAskId = null, _capHandled = null, _capGreetTimer = null
 const _capPanes = ['capPanePhone','capPaneName','capPaneGreet','capPaneOtp'];
 function _capShowPane(id){
   document.getElementById('capOverlay').classList.toggle('show', !!id);
+  document.getElementById('capOverlay').setAttribute('data-pane', id || '');   // v710: ستايل البراند لشاشة الاسم والترحيب
   _capPanes.forEach(pid => document.getElementById(pid).style.display = (pid===id) ? 'block' : 'none');
   // ✅ تأكيد للكاشير: الشاشة ظهرت فعلًا قدام العميل دلوقتي (أو اتقفلت).
   // الكاشير مش بيخمّن — الإطار الأخضر عنده بيتبني على التأكيد ده بالظبط.
@@ -1318,6 +1332,7 @@ function _capApply(data){
     _capAskId = v.askId;
     if(v.phone) _capDigits = v.phone;
     document.getElementById('capNameInput').value = '';
+    if(typeof window.capNameRender === 'function') window.capNameRender(false);
     _capShowPane('capPaneName');
     setTimeout(()=> document.getElementById('capNameInput').focus(), 80);
   }else if(v.view === 'greet'){
@@ -1414,5 +1429,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+<script src="cap-name.js?v=710"></script>
 </body>
 </html>
