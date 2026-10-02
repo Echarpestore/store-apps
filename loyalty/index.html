@@ -238,10 +238,12 @@
   .card .pts-num{font-size:52px; font-weight:800; line-height:1; letter-spacing:-1px;}
   .card .pts-unit{font-size:17px; font-weight:700; opacity:.92; margin-right:6px;}
   .card .pts-worth{font-size:13.5px; font-weight:600; opacity:.95; margin-top:8px;}
-  .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px; padding-bottom:26px;}  /* 📱 يرفع الاسم و«عضو من» فوق تلميح «اضغطي لعرض الباركود» — كانوا بيتركّبوا على بعض في الإنجليزي */
+  .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px;}
   .card .holder .name{font-size:16px; font-weight:800;}
   .card .holder .since{font-size:11px; opacity:.85; font-weight:600;}
   .card .flip-hint{position:absolute; z-index:1; bottom:12px; left:20px; font-size:11px; font-weight:700; opacity:.9;}
+  /* 📱 تلميح الباركود في الوش الأمامي جوّه الترتيب العادي (تحت «عضو من») مش absolute — كان بيتركّب على النص لما الخط يكبر على الموبايل */
+  .card-front .flip-hint{position:static; align-self:flex-end; margin-top:6px;}
 
   /* ===== بطاقة تنقلب (flip) ===== */
   .card-flip{perspective:1600px;}
@@ -249,6 +251,7 @@
     transition:transform .65s cubic-bezier(.4,.15,.2,1); transform-style:preserve-3d;}
   .card-flip.flipped .card-inner{transform:rotateY(180deg);}
   .card-face{position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden; border-radius:26px; overflow:hidden;}
+  .card-front{position:relative; inset:auto; min-height:236px;}  /* 📱 الوش الأمامي هو اللي بيحدد الطول: لو الخط كبر على الموبايل الكارت بيطوّل بدل ما الكلام يتقص */
   /* الوش بياخد شكل .card نفسه؛ الـ position:absolute هنا بيغلب لأنه متعرّف بعده */
   .card-back{
     transform:rotateY(180deg); background:#fff; border:1.5px solid var(--line);
@@ -4565,6 +4568,7 @@ var PUX_MAP = {
     var E = '\\p{Extended_Pictographic}\\uFE0F?(?:\\u200D\\p{Extended_Pictographic}\\uFE0F?)*';
     RX_LEAD = new RegExp('^\\s*(' + E + ')\\s*', 'u'); RX_TRAIL = new RegExp('\\s*(' + E + ')\\s*$', 'u'); RX_ANY = new RegExp('\\p{Extended_Pictographic}', 'u');
   }catch(e){ return; }   // WebView قديم من غير \p{…}: الإيموجي يفضل زي ما هو
+  try{ if(localStorage.getItem('puxNoIcons') === 'v3') return; }catch(e){}   // قاطع الأمان اتفعّل قبل كده على الجهاز ده
   var MAP = {}; Object.keys(PUX_MAP).forEach(function(k){ MAP[k.replace(/\uFE0F/g, '')] = PUX_MAP[k]; });
   var SKIP = { SCRIPT:1, STYLE:1, TEXTAREA:1, OPTION:1, TITLE:1, INPUT:1, SELECT:1, NOSCRIPT:1 };
   function norm(s){ return s.replace(/\uFE0F/g, ''); }
@@ -4582,18 +4586,45 @@ var PUX_MAP = {
     return s;
   }
   function isIc(el, name){ return el && el.nodeType === 1 && el.className && String(el.className).indexOf('pux-ic') === 0 && el.getAttribute('data-e') === name; }
-  function proc(n){
-    if(n.nodeType !== 3 || !n.nodeValue || !RX_ANY.test(n.nodeValue) || skip(n)) return;
-    try{ if(window.i18nApply) i18nApply(n); }catch(e){}          // الترجمة الأول (عشان تحفظ النص الأصلي بالإيموجي)
-    var v = n.nodeValue, lead = null, trail = null, m = RX_LEAD.exec(v);
+  /* بيرجّع النص بعد شيل الإيموجي المستبدل، وبيتأكد إن أيقونة الـSVG موجودة جنب العقدة */
+  function stripFor(node, str){
+    var v = str, lead = null, trail = null, m = RX_LEAD.exec(v);
     if(m && MAP[norm(m[1])]){ lead = MAP[norm(m[1])]; v = v.slice(m[0].length); }
     var solo = !!lead && v === '';
     if(!solo && v){ var t = RX_TRAIL.exec(v); if(t && MAP[norm(t[1])]){ trail = MAP[norm(t[1])]; v = v.slice(0, t.index); } }
-    if(!lead && !trail) return;
-    n.nodeValue = v;
-    var par = n.parentNode; if(!par) return;
-    if(lead && !isIc(n.previousSibling, lead)) par.insertBefore(make(lead, solo), n);
-    if(trail && !isIc(n.nextSibling, trail)) par.insertBefore(make(trail, false), n.nextSibling);
+    if(!lead && !trail) return str;
+    var par = node.parentNode; if(!par) return str;
+    if(lead && !isIc(node.previousSibling, lead)) par.insertBefore(make(lead, solo), node);
+    if(trail && !isIc(node.nextSibling, trail)) par.insertBefore(make(trail, false), node.nextSibling);
+    return v;
+  }
+  function proc(n){
+    if(n.nodeType !== 3 || !n.nodeValue || !RX_ANY.test(n.nodeValue) || skip(n)) return;
+    var cur = n.nodeValue, out = stripFor(n, cur);
+    if(out === cur) return;
+    /* ⚠️ بنحفظ النص الأصلي (بالإيموجي) عند i18n قبل الشيل — من غيره الترجمة بعد تغيير اللغة مبتلاقيش المفتاح */
+    try{ if(typeof _i18nOrig !== 'undefined' && _i18nOrig && !_i18nOrig.has(n)) _i18nOrig.set(n, cur); }catch(e){}
+    n.nodeValue = out;
+  }
+  /* ⚠️ i18n كان بيرجّع الإيموجي كل ما نشيله (والعكس) = حلقة لا نهائية. الحل: نفس منطق i18n بالظبط لكن النص اللي بيقارن بيه
+     متشال منه الإيموجي — فالحالة المستقرة واحدة والحلقة بتقف. */
+  var origTN = (typeof _i18nTextNode === 'function') ? _i18nTextNode : null, obsRef = null, winT = Date.now(), winN = 0, dead = false;
+  /* 🛑 قاطع أمان: لو حصلت عواصف تعديلات (أكتر من 4000 في ثانية) نوقف تبديل الأيقونات ونرجّع الإيموجي — التطبيق ميتعلّقش أبدًا بسبب الزينة */
+  function kill(){
+    if(dead) return; dead = true;
+    try{ if(obsRef) obsRef.disconnect(); }catch(e){}
+    try{ if(origTN) window._i18nTextNode = origTN; }catch(e){}
+    try{ localStorage.setItem('puxNoIcons', 'v3'); }catch(e){}
+  }
+  PUX._unpatch = function(){ if(origTN) window._i18nTextNode = origTN; };
+  if(typeof _i18nTextNode === 'function' && typeof _i18nOriginal === 'function' && typeof i18nT === 'function' && typeof _i18nSkip === 'function'){
+    window._i18nTextNode = function(node){
+      if(!node || node.nodeType !== 3 || _i18nSkip(node.parentNode)) return;
+      var orig = _i18nOriginal(node); if(!orig || !orig.trim()) return;
+      var next = i18nT(orig);
+      if(RX_ANY.test(next) && !skip(node)) next = stripFor(node, next);
+      if(next !== node.nodeValue) node.nodeValue = next;
+    };
   }
   function walk(root){
     if(root.nodeType === 3){ proc(root); return; }
@@ -4604,13 +4635,16 @@ var PUX_MAP = {
   }
   PUX.swapIcons = walk;
   walk(document.body);
-  new MutationObserver(function(muts){
+  obsRef = new MutationObserver(function(muts){
+    var now = Date.now(); if(now - winT > 1000){ winT = now; winN = 0; }
+    winN += muts.length; if(winN > 4000){ kill(); return; }
     for(var i = 0; i < muts.length; i++){
       var r = muts[i];
       if(r.type === 'characterData'){ proc(r.target); continue; }
       for(var j = 0; j < r.addedNodes.length; j++) walk(r.addedNodes[j]);
     }
-  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  obsRef.observe(document.body, { childList: true, subtree: true, characterData: true });
 })();
 </script>
 </body>
