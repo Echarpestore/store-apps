@@ -238,7 +238,7 @@
   .card .pts-num{font-size:52px; font-weight:800; line-height:1; letter-spacing:-1px;}
   .card .pts-unit{font-size:17px; font-weight:700; opacity:.92; margin-right:6px;}
   .card .pts-worth{font-size:13.5px; font-weight:600; opacity:.95; margin-top:8px;}
-  .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px; padding-bottom:16px;}  /* 📱 يرفع الاسم و«عضو من» فوق تلميح «اضغطي لعرض الباركود» — كانوا بيتركّبوا على بعض في الإنجليزي */
+  .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px; padding-bottom:26px;}  /* 📱 يرفع الاسم و«عضو من» فوق تلميح «اضغطي لعرض الباركود» — كانوا بيتركّبوا على بعض في الإنجليزي */
   .card .holder .name{font-size:16px; font-weight:800;}
   .card .holder .since{font-size:11px; opacity:.85; font-weight:600;}
   .card .flip-hint{position:absolute; z-index:1; bottom:12px; left:20px; font-size:11px; font-weight:700; opacity:.9;}
@@ -718,6 +718,17 @@
   .screen.on,.pux-in > *,.loader::before,.loader::after{animation:none;}
   .tab-ind,.tab .ti{transition:none;}
 }
+
+/* ── أيقونات SVG بدل الإيموجي ── */
+:root{--pux-tint:rgba(236,72,153,.13);}
+@supports (color:color-mix(in srgb, red 10%, blue)){:root{--pux-tint:color-mix(in srgb, var(--pink) 15%, transparent);}}
+.pux-ic{display:inline-block; width:1.2em; height:1.2em; vertical-align:-.24em; margin-inline-end:.4em; line-height:1; flex-shrink:0;}
+.pux-ic.solo{margin:0;}
+.pux-ic svg{display:block; width:100%; height:100%; overflow:visible;}
+.pux-ic .t{fill:var(--pux-tint);}
+.empty .big .pux-ic{width:1em; height:1em;}
+.card .pux-ic svg,.btn-primary .pux-ic svg,.wa-btn .pux-ic svg,.toast .pux-ic svg{stroke:#fff;}
+.card .pux-ic,.btn-primary .pux-ic,.toast .pux-ic{--pux-tint:rgba(255,255,255,.24);}
 </style>
 </head>
 <body>
@@ -3309,6 +3320,11 @@ if(isIOS() && !isStandalone()){
    إقلاع التطبيق
    ============================================================ */
 $('heroLogo').src = logoSrc;
+/* ⚡ بنعرض الشاشة فورًا من الذاكرة المحلية — من غير ما نستنى الشبكة (كانت شاشة بيضا كام ثانية لحد ما الإعدادات تيجي) */
+(function(){ try{
+  if(localStorage.getItem(LS_PHONE)){ showScreen('screen-app'); var tc = $('tab-card'); if(tc && !tc.innerHTML) tc.innerHTML = loaderHTML('بنجيب بياناتك…'); }
+  else { showScreen('screen-login'); }
+}catch(e){} })();
 loadSettings().finally(function(){
   var saved = localStorage.getItem(LS_PHONE);
   if(!saved){ showScreen('screen-login'); setLoginStep('phone'); return; }
@@ -4379,6 +4395,55 @@ window.chatCleanup = chatCleanup;
 })();
 </script>
 <script>
+/* PUX-ICONS — أيقونات SVG مرسومة بإيد بدل الإيموجي (خط 1.6 مدوّر + تدرّج البراند + تعبئة خفيفة) */
+var PUX_ICONS = {
+  gift:'<rect class="t" x="3" y="8.2" width="18" height="4.2" rx="1.3"/><path class="t" d="M4.6 12.4V19a1.7 1.7 0 0 0 1.7 1.7h11.4a1.7 1.7 0 0 0 1.7-1.7v-6.6"/><path d="M12 8.2v12.5"/><path d="M12 8.2C10.6 8 7.8 7.6 7.4 5.6 7 3.6 9 2.8 10.4 3.8c1 .8 1.4 2.4 1.6 4.4zM12 8.2c1.4-.2 4.2-.6 4.6-2.6.4-2-1.6-2.8-3-1.8-1 .8-1.4 2.4-1.6 4.4z"/>',
+  bag:'<path class="t" d="M5.2 8h13.6l-1 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5.2 8z"/><path d="M8.6 10V7.4a3.4 3.4 0 0 1 6.8 0V10"/>',
+  flower:'<g class="t"><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4"/><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4" transform="rotate(72 12 12)"/><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4" transform="rotate(144 12 12)"/><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4" transform="rotate(216 12 12)"/><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4" transform="rotate(288 12 12)"/></g><circle cx="12" cy="12" r="1.7" fill="#fff"/>',
+  sparkle:'<path class="t" d="M11 4c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7z"/><path d="M19 3.4v3.2M17.4 5h3.2"/><path d="M19 17.4v3.2M17.4 19h3.2"/>',
+  receipt:'<path class="t" d="M6 3.2h12a1 1 0 0 1 1 1V20l-2.3-1.6L14.4 20 12 18.4 9.6 20l-2.3-1.6L5 20V4.2a1 1 0 0 1 1-1z"/><path d="M8.8 8h6.4M8.8 11.6h6.4M8.8 15h3.6"/>',
+  shield:'<path class="t" d="M12 3l7.5 2.8v5.4c0 4.7-3.1 8.2-7.5 9.8-4.4-1.6-7.5-5.1-7.5-9.8V5.8L12 3z"/><path d="M9.2 12.2l2 2 3.8-4"/>',
+  star:'<path class="t" d="M12 3.4l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.4 6.9 19.1l1-5.7-4.1-4 5.7-.8L12 3.4z"/>',
+  chat:'<path class="t" d="M20.5 11.6c0 4-3.8 7.2-8.5 7.2-1.1 0-2.1-.17-3.1-.5L4.5 20l1.3-3.6C4.4 15.2 3.5 13.5 3.5 11.6c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2z"/><path d="M8.6 11.8h.01M12 11.8h.01M15.4 11.8h.01"/>',
+  card:'<rect class="t" x="2.5" y="5" width="19" height="14" rx="3.2"/><path d="M2.5 9.8h19M6.4 15h3.2"/>',
+  tag:'<path class="t" d="M12.4 3.2H18a2.3 2.3 0 0 1 2.3 2.3v5.6c0 .6-.24 1.2-.67 1.63l-7.3 7.3a2.3 2.3 0 0 1-3.26 0l-4.9-4.9a2.3 2.3 0 0 1 0-3.26l7.3-7.3c.43-.43 1.02-.67 1.63-.67z"/><circle cx="16" cy="8" r="1.3"/>',
+  bookmark:'<path class="t" d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4.2L6 21V4.5a1 1 0 0 1 1-1z"/>',
+  coins:'<ellipse class="t" cx="12" cy="6.5" rx="7" ry="2.8"/><path d="M5 6.5v5c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-5"/><path d="M5 11.5v5c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-5"/>',
+  heart:'<path class="t" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+  camera:'<path class="t" d="M21.4 18.6a1.9 1.9 0 0 1-1.9 1.9h-15a1.9 1.9 0 0 1-1.9-1.9V9a1.9 1.9 0 0 1 1.9-1.9h3.1l1.6-2.6h4.6l1.6 2.6h3.1A1.9 1.9 0 0 1 21.4 9v9.6z"/><circle cx="12" cy="13.4" r="3.6"/>',
+  globe:'<circle class="t" cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.4 4 5.5 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.5-4-9s1.4-6.6 4-9z"/>',
+  mobile:'<rect class="t" x="6.5" y="2.8" width="11" height="18.4" rx="2.8"/><path d="M10.4 18h3.2"/>',
+  handset:'<path class="t" d="M21 16.9v2.6a1.9 1.9 0 0 1-2.1 1.9 18.8 18.8 0 0 1-8.2-2.9 18.5 18.5 0 0 1-5.7-5.7A18.8 18.8 0 0 1 2.1 4.1 1.9 1.9 0 0 1 4 2h2.6a1.9 1.9 0 0 1 1.9 1.6c.1.9.3 1.8.7 2.7a1.9 1.9 0 0 1-.4 2L7.7 9.4a15.2 15.2 0 0 0 5.7 5.7l1.1-1.1a1.9 1.9 0 0 1 2-.4c.9.4 1.8.6 2.7.7a1.9 1.9 0 0 1 1.6 1.9z"/>',
+  truck:'<path class="t" d="M2.8 6.2h10.6v10.4H2.8z"/><path class="t" d="M13.4 9.6h4.2l3.4 3.4v3.6h-7.6z"/><circle cx="7" cy="17.8" r="2" fill="#fff"/><circle cx="17" cy="17.8" r="2" fill="#fff"/>',
+  book:'<path class="t" d="M5 4.2A1.7 1.7 0 0 1 6.7 2.5H19v17H6.7A1.7 1.7 0 0 0 5 21.2V4.2z"/><path d="M5 19.5a1.7 1.7 0 0 1 1.7-1.7H19"/><path d="M9 7h6"/>',
+  user:'<circle class="t" cx="12" cy="8.6" r="3.7"/><path d="M4.6 20c.5-3.7 3.5-5.7 7.4-5.7s6.9 2 7.4 5.7"/>',
+  key:'<circle class="t" cx="8" cy="15.2" r="4.2"/><path d="M11 12.2L20 3.2M16 7.2l2.6 2.6M13.6 9.6l2 2"/>',
+  trash:'<path d="M4 6.8h16"/><path d="M9.4 6.8V4.6a1 1 0 0 1 1-1h3.2a1 1 0 0 1 1 1v2.2"/><path class="t" d="M6.2 6.8l.9 12.4a1.8 1.8 0 0 0 1.8 1.7h6.2a1.8 1.8 0 0 0 1.8-1.7l.9-12.4"/><path d="M10 10.8v6M14 10.8v6"/>',
+  store:'<path class="t" d="M4 9.4h16l-1.3-5H5.3L4 9.4z"/><path d="M4 9.4a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.2 12.2V20h13.6v-7.8"/><path d="M10 20v-4.6h4V20"/>',
+  pin:'<path class="t" d="M12 21s-6.6-5.8-6.6-11.2a6.6 6.6 0 0 1 13.2 0C18.6 15.2 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.3" fill="#fff"/>',
+  bell:'<path class="t" d="M6.2 16.4V11a5.8 5.8 0 0 1 11.6 0v5.4l1.4 1.8H4.8l1.4-1.8z"/><path d="M10 20.6a2.2 2.2 0 0 0 4 0"/>',
+  clock:'<circle class="t" cx="12" cy="12" r="9"/><path d="M12 7v5.2l3.4 2"/>',
+  target:'<circle class="t" cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>',
+  ticket:'<path class="t" d="M3 8.2a1.8 1.8 0 0 1 1.8-1.8h14.4A1.8 1.8 0 0 1 21 8.2v2a2 2 0 0 0 0 3.6v2a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 15.8v-2a2 2 0 0 0 0-3.6v-2z"/><path d="M14.5 7v10" stroke-dasharray="1.6 2.2"/>',
+  cart:'<path class="t" d="M6.2 7.6h14.2l-1.6 6.6a1.6 1.6 0 0 1-1.6 1.2H9.1a1.6 1.6 0 0 1-1.6-1.3L6.2 7.6z"/><path d="M2.8 3.8h2.6l.8 3.8"/><circle cx="9.5" cy="19.2" r="1.3"/><circle cx="17" cy="19.2" r="1.3"/>',
+  box:'<path class="t" d="M12 2.8l8.2 4.4v9.6L12 21.2l-8.2-4.4V7.2L12 2.8z"/><path d="M3.8 7.2L12 11.6l8.2-4.4M12 11.6v9.6"/>',
+  alert:'<path class="t" d="M12 3.6l9.4 16H2.6L12 3.6z"/><path d="M12 9.8v4.2M12 17h.01"/>',
+  check:'<circle class="t" cx="12" cy="12" r="9"/><path d="M8 12.4l2.7 2.7 5.5-5.7"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  down:'<path d="M12 4.5v15M6 13.5l6 6 6-6"/>',
+  up:'<path d="M12 19.5v-15M6 10.5l6-6 6 6"/>',
+  image:'<rect class="t" x="3" y="4.2" width="18" height="15.6" rx="2.6"/><circle cx="8.6" cy="9.6" r="1.6"/><path d="M3.4 17l5-4.8 3.6 3.4 3.2-2.8 5.6 5"/>',
+  search:'<circle class="t" cx="10.6" cy="10.6" r="6.4"/><path d="M15.4 15.4l5.1 5.1"/>'
+};
+/* emoji → اسم الأيقونة. اللي مش هنا بيفضل إيموجي عادي (ماتتلمسش). */
+var PUX_MAP = {
+  '🎁':'gift','🛍':'bag','👜':'bag','🧺':'bag','🌸':'flower','🌷':'flower','✨':'sparkle','🎉':'sparkle','🎀':'sparkle','💡':'sparkle','👋':'sparkle','🚀':'sparkle',
+  '🧾':'receipt','📄':'receipt','📋':'receipt','📝':'receipt','🔐':'shield','🔒':'shield','⭐':'star','🏆':'star','💬':'chat','💳':'card','🏷':'tag','🔖':'bookmark',
+  '💵':'coins','💰':'coins','💸':'coins','🖤':'heart','🤍':'heart','💚':'heart','📷':'camera','🌐':'globe','🌍':'globe','📱':'mobile','📲':'mobile','📞':'handset',
+  '🚚':'truck','📒':'book','🧕':'user','👤':'user','🔑':'key','🗝':'key','🗑':'trash','🏬':'store','🏪':'store','🏢':'store','📍':'pin','📌':'pin','🔔':'bell',
+  '⏳':'clock','⏱':'clock','🕐':'clock','⏰':'clock','🎯':'target','🎟':'ticket','🛒':'cart','📦':'box','⚠':'alert','✅':'check','➕':'plus','⬇':'down','⬆':'up','🖼':'image','🔍':'search'
+};
+
 /* PREMIUM-UX-v1 — حركات ذكية (بتتعطّل لوحدها لو الجهاز طالب «تقليل الحركة») */
 (function(){
   var reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
@@ -4475,7 +4540,12 @@ window.chatCleanup = chatCleanup;
     if(!el || !document.documentElement.classList.contains('pux-intro-on')) return;
     try{ sessionStorage.setItem('puxIntro', '1'); }catch(e){}
     try{ el.querySelector('img').src = logoSrc; }catch(e){}
-    setTimeout(function(){ el.classList.add('out'); setTimeout(function(){ el.remove(); }, 850); }, 1500);
+    var t0 = Date.now();
+    (function wait(){
+      var up = Date.now() - t0;
+      if(up < 1400 || (!document.querySelector('.screen.on') && up < 3500)){ setTimeout(wait, 100); return; }
+      el.classList.add('out'); setTimeout(function(){ el.remove(); }, 850);
+    })();
   }
 
   upgradeIcons(); mountIndicator(); watchCard(); intro();
@@ -4487,6 +4557,60 @@ window.chatCleanup = chatCleanup;
     var b = ev.target.closest && ev.target.closest('.btn-primary,.cart-fab');
     if(b) PUX.haptic('light');
   }, true);
+})();
+/* PUX-ICON-SWAP — بيبدّل الإيموجي (أول النص أو آخره) بأيقونة SVG. آمن مع الترجمة: بنخلّي i18n يترجم الأول وهو شايف الإيموجي. */
+(function(){
+  var RX_LEAD, RX_TRAIL, RX_ANY;
+  try{
+    var E = '\\p{Extended_Pictographic}\\uFE0F?(?:\\u200D\\p{Extended_Pictographic}\\uFE0F?)*';
+    RX_LEAD = new RegExp('^\\s*(' + E + ')\\s*', 'u'); RX_TRAIL = new RegExp('\\s*(' + E + ')\\s*$', 'u'); RX_ANY = new RegExp('\\p{Extended_Pictographic}', 'u');
+  }catch(e){ return; }   // WebView قديم من غير \p{…}: الإيموجي يفضل زي ما هو
+  var MAP = {}; Object.keys(PUX_MAP).forEach(function(k){ MAP[k.replace(/\uFE0F/g, '')] = PUX_MAP[k]; });
+  var SKIP = { SCRIPT:1, STYLE:1, TEXTAREA:1, OPTION:1, TITLE:1, INPUT:1, SELECT:1, NOSCRIPT:1 };
+  function norm(s){ return s.replace(/\uFE0F/g, ''); }
+  function skip(n){
+    for(var p = n.parentNode; p && p.nodeType === 1; p = p.parentNode){
+      if(SKIP[p.tagName] || p.namespaceURI === 'http://www.w3.org/2000/svg') return true;
+      if(p.hasAttribute && p.hasAttribute('data-noicon')) return true;
+      if(p.classList && p.classList.contains('pux-ic')) return true;
+    }
+    return false;
+  }
+  function make(name, solo){
+    var s = document.createElement('span'); s.className = 'pux-ic' + (solo ? ' solo' : ''); s.setAttribute('aria-hidden', 'true'); s.setAttribute('data-e', name);
+    s.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="url(#puxGrad)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + PUX_ICONS[name] + '</svg>';
+    return s;
+  }
+  function isIc(el, name){ return el && el.nodeType === 1 && el.className && String(el.className).indexOf('pux-ic') === 0 && el.getAttribute('data-e') === name; }
+  function proc(n){
+    if(n.nodeType !== 3 || !n.nodeValue || !RX_ANY.test(n.nodeValue) || skip(n)) return;
+    try{ if(window.i18nApply) i18nApply(n); }catch(e){}          // الترجمة الأول (عشان تحفظ النص الأصلي بالإيموجي)
+    var v = n.nodeValue, lead = null, trail = null, m = RX_LEAD.exec(v);
+    if(m && MAP[norm(m[1])]){ lead = MAP[norm(m[1])]; v = v.slice(m[0].length); }
+    var solo = !!lead && v === '';
+    if(!solo && v){ var t = RX_TRAIL.exec(v); if(t && MAP[norm(t[1])]){ trail = MAP[norm(t[1])]; v = v.slice(0, t.index); } }
+    if(!lead && !trail) return;
+    n.nodeValue = v;
+    var par = n.parentNode; if(!par) return;
+    if(lead && !isIc(n.previousSibling, lead)) par.insertBefore(make(lead, solo), n);
+    if(trail && !isIc(n.nextSibling, trail)) par.insertBefore(make(trail, false), n.nextSibling);
+  }
+  function walk(root){
+    if(root.nodeType === 3){ proc(root); return; }
+    if(root.nodeType !== 1 || (root.classList && root.classList.contains('pux-ic'))) return;
+    var w = document.createTreeWalker(root, 4, null, false), list = [], x;
+    while((x = w.nextNode())) list.push(x);
+    for(var i = 0; i < list.length; i++) proc(list[i]);
+  }
+  PUX.swapIcons = walk;
+  walk(document.body);
+  new MutationObserver(function(muts){
+    for(var i = 0; i < muts.length; i++){
+      var r = muts[i];
+      if(r.type === 'characterData'){ proc(r.target); continue; }
+      for(var j = 0; j < r.addedNodes.length; j++) walk(r.addedNodes[j]);
+    }
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
 })();
 </script>
 </body>
