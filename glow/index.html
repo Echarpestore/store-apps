@@ -667,8 +667,85 @@
   .ord-hint{font-size:12.5px; line-height:1.8; background:rgba(255,255,255,.06); border-radius:12px; padding:8px 11px;}
   .ord-time{font-size:12px; font-weight:800; color:var(--gold); margin-top:7px;}
 </style>
+<style id="pux-css">
+/* PREMIUM-UX-v1 — حركة وشكل فخم (CSS فقط: transform/opacity عشان الأداء) */
+:root{--pux-ease:cubic-bezier(.22,1,.36,1);}
+@keyframes puxFade{from{opacity:0;}to{opacity:1;}}
+.screen.on{animation:puxFade .45s ease both;}
+
+/* ── شريط التبويبات: ثابت (من غير سحب) + زجاجي + مؤشر بيتزحلق ── */
+.tabbar,html[dir="ltr"] .tabbar{
+  overflow:visible; scroll-snap-type:none; gap:0; touch-action:manipulation; overscroll-behavior:none;
+  padding:9px 6px calc(8px + env(safe-area-inset-bottom));
+  background:rgba(255,255,255,.86); -webkit-backdrop-filter:saturate(1.8) blur(18px); backdrop-filter:saturate(1.8) blur(18px);
+  border-top:1px solid rgba(243,222,233,.9); border-radius:22px 22px 0 0;
+  box-shadow:0 -12px 32px -14px rgba(201,50,126,.28);
+}
+.tab,html[dir="ltr"] .tab{flex:1 1 0; min-width:0; padding:7px 0 3px; scroll-snap-align:none; touch-action:manipulation; z-index:1;}
+.tab .tl{font-size:10.5px; letter-spacing:.1px; transition:color .25s ease;}
+.tab .ti{transition:transform .38s var(--pux-ease);}
+.tab .ti-svg{width:25px; height:25px; transition:stroke .25s ease, fill .25s ease;}
+.tab.active .ti{transform:translateY(-3px) scale(1.1);}
+.tab.active .ti-svg{stroke:url(#puxGrad); fill:rgba(236,72,153,.13);}
+.tab.active .tl{color:var(--pink-deep);}
+.tab:active .ti{transform:scale(.86);}
+.tab-ind{position:absolute; top:0; left:0; width:24px; height:3px; border-radius:0 0 4px 4px; pointer-events:none; will-change:transform;
+  background:linear-gradient(90deg,var(--pink),var(--gold)); box-shadow:0 3px 10px -1px rgba(236,72,153,.6);
+  transition:transform .5s var(--pux-ease);}
+
+/* ── أزرار الهيدر (الجرس والسلة): زجاج أبيض بأيقونة متدرّجة بدل الكور الدهبي ── */
+.cart-fab{background:#fff; border:1px solid var(--line); animation:none; box-shadow:0 10px 24px -12px rgba(201,50,126,.4);
+  transition:transform .22s var(--pux-ease), box-shadow .22s ease;}
+.cart-fab svg{fill:url(#puxGrad);}
+.cart-fab:active{transform:scale(.9);}
+.btn-primary,.btn-outline{transition:transform .18s var(--pux-ease), box-shadow .2s ease;}
+.btn-primary:active,.btn-outline:active{transform:scale(.97);}
+
+/* ── دخول المحتوى: كروت بتطلع واحدة ورا التانية، بإتجاه التبويب ── */
+@keyframes puxRise{from{opacity:0; transform:translate3d(var(--pux-dx,0),16px,0) scale(.985);} to{opacity:1; transform:none;}}
+.pux-in > *{animation:puxRise .6s var(--pux-ease) both; animation-delay:calc(var(--pux-i,0) * 55ms);}
+
+/* ── شاشات التحميل: هيكل لامع (shimmer) بدل الدايرة ── */
+@keyframes puxShimmer{0%{background-position:-200% 0;} 100%{background-position:200% 0;}}
+.loader{align-items:stretch; padding:6px 0 20px; gap:12px;}
+.loader .ring{display:none;}
+.loader::before,.loader::after{
+  content:""; display:block; border-radius:22px;
+  background:linear-gradient(100deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.8) 50%,rgba(255,255,255,0) 70%) 0 0/200% 100%, linear-gradient(135deg,var(--pink-soft),var(--gold-soft));
+  animation:puxShimmer 1.35s linear infinite;}
+.loader::before{height:168px;}
+.loader::after{height:84px; order:1;}
+.loader .lt{order:2; text-align:center; font-size:12.5px; opacity:.85;}
+
+/* ── شاشة الافتتاح (أول فتح بس): لوجو بيظهر + خط بيترسم + تلاشي ── */
+#pux-intro{display:none; position:fixed; inset:0; z-index:9999; flex-direction:column; align-items:center; justify-content:center; overflow:hidden;
+  background:var(--card-grad); transition:opacity .55s ease, transform .8s var(--pux-ease);}
+.pux-intro-on #pux-intro{display:flex;}
+#pux-intro::before{content:""; position:absolute; inset:-20%;
+  background:radial-gradient(circle at 28% 18%,rgba(255,255,255,.4),transparent 46%), radial-gradient(circle at 82% 86%,rgba(255,255,255,.24),transparent 42%);
+  animation:puxDrift 5s ease-in-out infinite alternate;}
+#pux-intro img{position:relative; width:min(58vw,240px); opacity:0; transform:scale(.86);
+  filter:brightness(0) invert(1) drop-shadow(0 10px 30px rgba(0,0,0,.18)); animation:puxLogo 1s var(--pux-ease) .1s forwards;}
+#pux-intro .pux-line{position:relative; margin-top:22px; height:2px; width:0; border-radius:2px;
+  background:linear-gradient(90deg,transparent,#fff,transparent); animation:puxLine 1s var(--pux-ease) .55s forwards;}
+#pux-intro.out{opacity:0; transform:scale(1.05); pointer-events:none;}
+@keyframes puxLogo{to{opacity:1; transform:none;}}
+@keyframes puxLine{to{width:min(46vw,180px);}}
+@keyframes puxDrift{to{transform:translate3d(4%,3%,0) scale(1.08);}}
+
+@media (prefers-reduced-motion:reduce){
+  #pux-intro{display:none !important;}
+  .screen.on,.pux-in > *,.loader::before,.loader::after{animation:none;}
+  .tab-ind,.tab .ti{transition:none;}
+}
+</style>
 </head>
 <body>
+<!-- PREMIUM-UX-v1 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="puxGrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="24"><stop offset="0" style="stop-color:var(--pink)"/><stop offset="1" style="stop-color:var(--gold)"/></linearGradient></defs></svg>
+<div id="pux-intro" aria-hidden="true"><img alt=""><div class="pux-line"></div></div>
+<script>(function(){try{var r=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;if(!r&&!sessionStorage.getItem('puxIntro')){document.documentElement.classList.add('pux-intro-on');}}catch(e){}setTimeout(function(){var e=document.getElementById('pux-intro');if(e)e.remove();},4200);})();</script>
+
 <div id="errBanner"></div>
 <div id="loadFail">
   <div>
@@ -4121,6 +4198,117 @@ window.chatCleanup = chatCleanup;
     d.style.display = n ? '' : 'none'; d.textContent = n > 9 ? '9+' : String(n);
   };
   setInterval(function(){ try{ window.refreshNotifDot(); }catch(e){} }, 4000);
+})();
+</script>
+<script>
+/* PREMIUM-UX-v1 — حركات ذكية (بتتعطّل لوحدها لو الجهاز طالب «تقليل الحركة») */
+(function(){
+  var reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+  var PUX = window.PUX = {};
+  var TABS = ['card','offers','shop','invoices','account','contact'];
+  var SV = function(inner){ return '<svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+inner+'</svg>'; };
+  var ICONS = {
+    card: SV('<rect x="2.5" y="5" width="19" height="14" rx="3.2"/><path d="M2.5 9.8h19"/><path d="M6.4 15h3.2"/><circle cx="17" cy="15" r="1.1"/>'),
+    offers: SV('<path d="M12.4 3.2H18a2.3 2.3 0 0 1 2.3 2.3v5.6c0 .6-.24 1.2-.67 1.63l-7.3 7.3a2.3 2.3 0 0 1-3.26 0l-4.9-4.9a2.3 2.3 0 0 1 0-3.26l7.3-7.3c.43-.43 1.02-.67 1.63-.67z"/><circle cx="16" cy="8" r="1.3"/><path d="M9.4 13.6l2.4 2.4"/>'),
+    shop: SV('<path d="M5.2 8h13.6l-1 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5.2 8z"/><path d="M8.6 10V7.4a3.4 3.4 0 0 1 6.8 0V10"/>'),
+    invoices: SV('<path d="M6 3.2h12a1 1 0 0 1 1 1V20l-2.3-1.6L14.4 20 12 18.4 9.6 20l-2.3-1.6L5 20V4.2a1 1 0 0 1 1-1z"/><path d="M8.8 8h6.4"/><path d="M8.8 11.6h6.4"/><path d="M8.8 15h3.6"/>'),
+    account: SV('<circle cx="12" cy="8.6" r="3.7"/><path d="M4.6 20c.5-3.7 3.5-5.7 7.4-5.7s6.9 2 7.4 5.7"/>'),
+    contact: SV('<path d="M20.5 11.6c0 4-3.8 7.2-8.5 7.2-1.1 0-2.1-.17-3.1-.5L4.5 20l1.3-3.6C4.4 15.2 3.5 13.5 3.5 11.6c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2z"/><path d="M8.6 11.8h.01M12 11.8h.01M15.4 11.8h.01"/>')
+  };
+  function upgradeIcons(){
+    TABS.forEach(function(t){
+      var ti = document.querySelector('.tab[data-tab="'+t+'"] .ti');
+      if(ti) ti.innerHTML = ICONS[t];
+    });
+  }
+
+  /* مؤشر التبويب النشط بيتزحلق تحت الأيقونة */
+  function placeInd(animate){
+    var nav = document.getElementById('tabbar'), ind = document.getElementById('tabInd');
+    if(!nav || !ind) return;
+    var a = nav.querySelector('.tab.active'); if(!a) return;
+    var nr = nav.getBoundingClientRect(), ar = a.getBoundingClientRect();
+    if(!nr.width || !ar.width) return;
+    var x = (ar.left - nr.left) + ar.width/2 - ind.offsetWidth/2;
+    if(animate === false){ ind.style.transition = 'none'; }
+    ind.style.transform = 'translateX(' + x + 'px)';
+    if(animate === false){ void ind.offsetWidth; ind.style.transition = ''; }
+  }
+  function mountIndicator(){
+    var nav = document.getElementById('tabbar'); if(!nav || document.getElementById('tabInd')) return;
+    var ind = document.createElement('span'); ind.className = 'tab-ind'; ind.id = 'tabInd'; nav.appendChild(ind);
+    try{ new ResizeObserver(function(){ placeInd(false); }).observe(nav); }catch(e){ window.addEventListener('resize', function(){ placeInd(false); }); }
+    placeInd(false);
+    try{ new MutationObserver(function(){ placeInd(false); }).observe(document.documentElement, { attributes: true, attributeFilter: ['dir','lang'] }); }catch(e){}
+  }
+
+  /* اهتزاز خفيف: Haptics في التطبيق الأصلي، vibrate على أندرويد في الـPWA */
+  PUX.haptic = function(kind){
+    try{
+      if(window.EcharpeNative && window.EcharpeNative.haptic) window.EcharpeNative.haptic(kind);
+      else if(navigator.vibrate && /Android/i.test(navigator.userAgent)) navigator.vibrate(kind === 'medium' ? 14 : 8);
+    }catch(e){}
+  };
+
+  /* دخول المحتوى بإتجاه التبويب (RTL-aware) */
+  var lastIdx = 0;
+  PUX.onTab = function(tab){
+    var idx = TABS.indexOf(tab); if(idx < 0) return;
+    var delta = idx - lastIdx; lastIdx = idx;
+    placeInd(true);
+    PUX.haptic('light');
+    if(reduce) return;
+    var pane = document.getElementById('tab-' + tab); if(!pane) return;
+    var rtl = document.documentElement.dir === 'rtl';
+    var dx = delta === 0 ? 0 : (delta > 0 ? 1 : -1) * (rtl ? -1 : 1) * 22;
+    pane.style.setProperty('--pux-dx', dx + 'px');
+    for(var i = 0; i < pane.children.length; i++) pane.children[i].style.setProperty('--pux-i', Math.min(i, 8));
+    pane.classList.remove('pux-in'); void pane.offsetWidth; pane.classList.add('pux-in');
+    /* ⚠️ بنشيل الكلاس بعد الحركة: من غيره كل تحديث لايف للمحتوى (onSnapshot) كان هيعيد الحركة ويرعش الشاشة */
+    clearTimeout(pane._puxT); pane._puxT = setTimeout(function(){ pane.classList.remove('pux-in'); }, 1100);
+  };
+
+  /* عدّاد النقاط: من صفر لأول مرة، ومن القيمة القديمة لو اتغيّرت — ومن غير حركة لو نفس الرقم */
+  var lastPts = null;
+  function countUp(el){
+    if(!el || reduce) return;
+    var finalTxt = el.textContent || '';
+    var to = parseFloat(finalTxt.replace(/[^\d.]/g, '')); if(!isFinite(to)) return;
+    if(lastPts === to) return;
+    var from = (lastPts === null) ? 0 : lastPts; lastPts = to;
+    var t0 = performance.now(), dur = Math.min(1200, 550 + Math.abs(to - from) * 4);
+    (function step(t){
+      var p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 4);
+      el.textContent = p < 1 ? Math.round(from + (to - from) * e).toLocaleString('en-US') : finalTxt;
+      if(p < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+  function watchCard(){
+    var host = document.getElementById('tab-card'); if(!host || host._puxW) return; host._puxW = true;
+    new MutationObserver(function(){
+      var el = host.querySelector('.pts-num');
+      if(el && !el.dataset.puxSeen){ el.dataset.puxSeen = '1'; countUp(el); }
+    }).observe(host, { childList: true, subtree: true });
+  }
+
+  /* شاشة الافتتاح */
+  function intro(){
+    var el = document.getElementById('pux-intro');
+    if(!el || !document.documentElement.classList.contains('pux-intro-on')) return;
+    try{ sessionStorage.setItem('puxIntro', '1'); }catch(e){}
+    try{ el.querySelector('img').src = logoSrc; }catch(e){}
+    setTimeout(function(){ el.classList.add('out'); setTimeout(function(){ el.remove(); }, 850); }, 1500);
+  }
+
+  upgradeIcons(); mountIndicator(); watchCard(); intro();
+  if(typeof window.switchTab === 'function'){
+    var _sw = window.switchTab;
+    window.switchTab = function(){ var r = _sw.apply(this, arguments); try{ PUX.onTab(arguments[0]); }catch(e){} return r; };
+  }
+  document.addEventListener('click', function(ev){
+    var b = ev.target.closest && ev.target.closest('.btn-primary,.cart-fab');
+    if(b) PUX.haptic('light');
+  }, true);
 })();
 </script>
 </body>
