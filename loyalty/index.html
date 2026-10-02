@@ -31,7 +31,7 @@
      الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
 <!-- 🛍️ محرك الأوردرات — **نفس الملف** اللي POS والموقع بيقروه -->
-<script src="../pos/orders-core.js?v=2"></script>
+<script src="../pos/orders-core.js"></script>
 <script>try{ if(window.i18nInit) i18nInit(); }catch(e){}</script>
 
 <style>
@@ -238,7 +238,7 @@
   .card .pts-num{font-size:52px; font-weight:800; line-height:1; letter-spacing:-1px;}
   .card .pts-unit{font-size:17px; font-weight:700; opacity:.92; margin-right:6px;}
   .card .pts-worth{font-size:13.5px; font-weight:600; opacity:.95; margin-top:8px;}
-  .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px;}
+  .card .holder{position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-end; margin-top:4px; padding-bottom:16px;}  /* 📱 يرفع الاسم و«عضو من» فوق تلميح «اضغطي لعرض الباركود» — كانوا بيتركّبوا على بعض في الإنجليزي */
   .card .holder .name{font-size:16px; font-weight:800;}
   .card .holder .since{font-size:11px; opacity:.85; font-weight:600;}
   .card .flip-hint{position:absolute; z-index:1; bottom:12px; left:20px; font-size:11px; font-weight:700; opacity:.9;}
@@ -566,6 +566,8 @@
   html[dir="ltr"] .offer::before{right:auto; left:0;}
   html[dir="ltr"] .prod .oos{left:auto; right:12px;}
   html[dir="ltr"] .tab-badge{left:auto; right:calc(50% + 4px);}
+  /* 📱 أسماء التبويبات الإنجليزي أطول («My receipts» + «My account» كانوا لازقين في بعض) */
+  html[dir="ltr"] .tab{padding:6px 9px;}
 
   /* 🖼️ صفحة المنتج */
   .pv-gal{display:flex; gap:8px; overflow-x:auto; scroll-snap-type:x mandatory;
@@ -2779,8 +2781,7 @@ function shopSubmit(){
   })).then(function(prods){
     var chk = orderValidateCart(
       lines.map(function(l){ return { barcode:l.barcode, qty:l.qty }; }),
-      prods.filter(Boolean), _shopBranch, Date.now(),
-      { ignoreBranchStock: shopCfg.ignoreBranchStock === true }   // 🔧 نفس علم السيرفر
+      prods.filter(Boolean), _shopBranch, Date.now()
     );
     if(!chk.ok){
       showToast(chk.errors[0], true);
@@ -3793,17 +3794,15 @@ function chatRenderMsgs(arr){
       body += '<img src="' + m.img.replace(/"/g, '') + '" alt="" onclick="chatImgZoom(this.src)" style="cursor:zoom-in;">';
     }
     if(m.text) body += esc(m.text);
-    // 🛒 v680: الزراير بتظهر لو فيه جرّبيها **أو** باركود — قبل كده منتج من غير
-    //    جرّبيها (لاصق مثلًا) كان بيوصل صورة بس، من غير «أضيفيها للسلة».
-    if(chatImgs[m.id] && (m.tryon || m.barcode)){
+    if(m.tryon && chatImgs[m.id]){
       // 💰 الاسم/السعر بيظهروا لو الموظفة حطّت باركود صح وقت الإرسال —
       //    مفيش حاجة اتحسبت هنا، كله جاي جاهز من الرسالة نفسها.
       if(m.productName){
         body += '<div class="m-prod"><b>' + esc(m.productName) + '</b>'
           + (m.productPrice ? ' — ' + Number(m.productPrice) + ' ج.م' : '') + '</div>';
       }
-      body += '<div class="m-actions">';
-      if(m.tryon) body += '<button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">'
+      body += '<div class="m-actions">'
+        + '<button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">'
         + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.9L19 9l-4.1 3.2L16 17l-4-2.6L8 17l1.1-4.8L5 9l5.1-1.1L12 3z"/></svg>'
         + ' جرّبيها</button>';
       if(m.barcode){
