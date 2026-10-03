@@ -120,8 +120,15 @@
      فوق أي شاشة تانية بدل تبديل تبويب. صفر تكرار HTML/منطق. */
   #tab-shop.shop-overlay{
     position:fixed; inset:0; z-index:800; background:var(--bg);
-    overflow-y:auto; padding-top:calc(66px + env(safe-area-inset-top));
+    overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+    padding-top:calc(66px + env(safe-area-inset-top));
+    /* v705: مسافة تحت عشان زرار «اطلبي دلوقتي» يبان كامل ويتعمله سكرول (شريط الموبايل) */
+    padding-bottom:calc(32px + env(safe-area-inset-bottom));
   }
+  /* v705: حركة الشاشات (PREMIUM-UX) بتخلّي كل شاشة طبقة لوحدها، فالسلة (جوّه الشاشة) مكانتش
+     بتقدر تطلع فوق الشريط الزجاجي (برّه الشاشة) مهما كان z-index — كان مغطّي زرار الطلب.
+     السلة السريعة مفتوحة = الشريط مستخبّي. */
+  body.qc-open .tabbar{ visibility:hidden; pointer-events:none; }
   .qc-close{
     display:none; position:fixed; top:14px; inset-inline-start:14px; z-index:801; width:42px; height:42px;
     border:none; border-radius:50%; background:var(--panel,#fff); border:1.5px solid var(--line);
@@ -269,6 +276,8 @@
   .card .holder .name{font-size:16px; font-weight:800;}
   .card .holder .since{font-size:11px; opacity:.85; font-weight:600;}
   .card .flip-hint{position:absolute; z-index:1; bottom:12px; left:20px; font-size:11px; font-weight:700; opacity:.9;}
+  /* 📱 تلميح الباركود في الوش الأمامي جوّه الترتيب العادي (تحت «عضو من») مش absolute — كان بيتركّب على النص لما الخط يكبر على الموبايل */
+  .card-front .flip-hint{position:static; align-self:flex-end; margin-top:6px;}
 
   /* ===== بطاقة تنقلب (flip) ===== */
   .card-flip{perspective:1600px;}
@@ -276,6 +285,7 @@
     transition:transform .65s cubic-bezier(.4,.15,.2,1); transform-style:preserve-3d;}
   .card-flip.flipped .card-inner{transform:rotateY(180deg);}
   .card-face{position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden; border-radius:26px; overflow:hidden;}
+  .card-front{position:relative; inset:auto; min-height:236px;}  /* 📱 الوش الأمامي هو اللي بيحدد الطول: لو الخط كبر على الموبايل الكارت بيطوّل بدل ما الكلام يتقص */
   /* الوش بياخد شكل .card نفسه؛ الـ position:absolute هنا بيغلب لأنه متعرّف بعده */
   .card-back{
     transform:rotateY(180deg); background:var(--white); border:1.5px solid var(--line);
@@ -586,6 +596,10 @@
   html[dir="ltr"] .offer::before{right:auto; left:0;}
   html[dir="ltr"] .prod .oos{left:auto; right:12px;}
   html[dir="ltr"] .tab-badge{left:auto; right:calc(50% + 4px);}
+  /* 📱 أسماء التبويبات الإنجليزي أطول («My receipts» + «My account» كانوا لازقين في بعض) */
+  html[dir="ltr"] .tabbar{scroll-snap-type:none; padding-left:4px; padding-right:4px;}
+  html[dir="ltr"] .tab{flex:1 1 0; min-width:0; padding:6px 1px; scroll-snap-align:none; justify-content:flex-start;}
+  html[dir="ltr"] .tab .tl{font-size:10px; white-space:normal; text-align:center; line-height:1.15; overflow-wrap:anywhere;}
 
   /* 🖼️ صفحة المنتج */
   .pv-gal{display:flex; gap:8px; overflow-x:auto; scroll-snap-type:x mandatory;
@@ -663,8 +677,105 @@
   .ord-hint{font-size:12.5px; line-height:1.8; background:rgba(255,255,255,.06); border-radius:12px; padding:8px 11px;}
   .ord-time{font-size:12px; font-weight:800; color:var(--gold); margin-top:7px;}
 </style>
+<style id="pux-css">
+/* PREMIUM-UX-v1 — حركة وشكل فخم (CSS فقط: transform/opacity عشان الأداء) */
+:root{--pux-ease:cubic-bezier(.22,1,.36,1);}
+@keyframes puxFade{from{opacity:0;}to{opacity:1;}}
+.screen.on{animation:puxFade .45s ease both;}
+
+/* ── شريط التبويبات: ثابت (من غير سحب) + زجاجي + مؤشر بيتزحلق ── */
+.tabbar,html[dir="ltr"] .tabbar{
+  overflow:visible; scroll-snap-type:none; gap:0; touch-action:manipulation; overscroll-behavior:none;
+  padding:9px 6px calc(8px + env(safe-area-inset-bottom));
+  background:rgba(255,255,255,.86); -webkit-backdrop-filter:saturate(1.8) blur(18px); backdrop-filter:saturate(1.8) blur(18px);
+  border-top:1px solid rgba(243,222,233,.9); border-radius:22px 22px 0 0;
+  box-shadow:0 -12px 32px -14px rgba(201,50,126,.28);
+}
+.tab,html[dir="ltr"] .tab{flex:1 1 0; min-width:0; padding:8px 0 19px; position:relative; scroll-snap-align:none; touch-action:manipulation; z-index:1;}
+/* الاسم بيظهر تحت التبويب النشط بس — شكل أنضف ومفيش زحمة في الإنجليزي (الاسم موجود للقارئ الصوتي) */
+.tabbar .tab .tl,html[dir="ltr"] .tabbar .tab .tl{position:absolute; left:50%; bottom:3px; font-size:10.5px; line-height:1.2; white-space:nowrap; letter-spacing:.1px; text-align:center;
+  opacity:0; transform:translate(-50%,6px) scale(.9); transition:opacity .25s ease, transform .4s var(--pux-ease), color .25s ease; pointer-events:none;}
+.tabbar .tab.active .tl,html[dir="ltr"] .tabbar .tab.active .tl{opacity:1; transform:translate(-50%,0) scale(1);}
+.tab .ti{transition:transform .38s var(--pux-ease);}
+.tab .ti-svg{width:25px; height:25px; transition:stroke .25s ease, fill .25s ease;}
+.tab.active .ti{transform:translateY(-2px) scale(1.08);}
+.tab.active .ti-svg{stroke:url(#puxGrad); fill:rgba(236,72,153,.13);}
+.tab.active .tl{color:var(--pink-deep);}
+.tab:active .ti{transform:scale(.86);}
+.tab-ind{position:absolute; top:0; left:0; width:24px; height:3px; border-radius:0 0 4px 4px; pointer-events:none; will-change:transform;
+  background:linear-gradient(90deg,var(--pink),var(--gold)); box-shadow:0 3px 10px -1px rgba(236,72,153,.6);
+  transition:transform .5s var(--pux-ease);}
+
+/* ── أزرار الهيدر (الجرس والسلة): زجاج أبيض بأيقونة متدرّجة بدل الكور الدهبي ── */
+.cart-fab{background:#fff; border:1px solid var(--line); animation:none; box-shadow:0 10px 24px -12px rgba(201,50,126,.4);
+  transition:transform .22s var(--pux-ease), box-shadow .22s ease;}
+.cart-fab svg{fill:url(#puxGrad);}
+.cart-fab:active{transform:scale(.9);}
+.btn-primary,.btn-outline{transition:transform .18s var(--pux-ease), box-shadow .2s ease;}
+.btn-primary:active,.btn-outline:active{transform:scale(.97);}
+
+/* ── دخول المحتوى: كروت بتطلع واحدة ورا التانية، بإتجاه التبويب ── */
+@keyframes puxRise{from{opacity:0; transform:translate3d(var(--pux-dx,0),16px,0) scale(.985);} to{opacity:1; transform:none;}}
+.pux-in > *{animation:puxRise .6s var(--pux-ease) both; animation-delay:calc(var(--pux-i,0) * 55ms);}
+
+/* ── شاشات التحميل: هيكل لامع (shimmer) بدل الدايرة ── */
+@keyframes puxShimmer{0%{background-position:-200% 0;} 100%{background-position:200% 0;}}
+.loader{align-items:stretch; padding:6px 0 20px; gap:12px;}
+.loader .ring{display:none;}
+.loader::before,.loader::after{
+  content:""; display:block; border-radius:22px;
+  background:linear-gradient(100deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.8) 50%,rgba(255,255,255,0) 70%) 0 0/200% 100%, linear-gradient(135deg,var(--pink-soft),var(--gold-soft));
+  animation:puxShimmer 1.35s linear infinite;}
+.loader::before{height:168px;}
+.loader::after{height:84px; order:1;}
+.loader .lt{order:2; text-align:center; font-size:12.5px; opacity:.85;}
+
+/* ── شاشة الافتتاح (أول فتح بس): لوجو بيظهر + خط بيترسم + تلاشي ── */
+#pux-intro{display:none; position:fixed; inset:0; z-index:9999; flex-direction:column; align-items:center; justify-content:center; overflow:hidden;
+  background:var(--card-grad); transition:opacity .55s ease, transform .8s var(--pux-ease);}
+.pux-intro-on #pux-intro{display:flex;}
+#pux-intro::before{content:""; position:absolute; inset:-20%;
+  background:radial-gradient(circle at 28% 18%,rgba(255,255,255,.4),transparent 46%), radial-gradient(circle at 82% 86%,rgba(255,255,255,.24),transparent 42%);
+  animation:puxDrift 5s ease-in-out infinite alternate;}
+#pux-intro img{position:relative; width:min(58vw,240px); opacity:0; transform:scale(.86);
+  filter:brightness(0) invert(1) drop-shadow(0 10px 30px rgba(0,0,0,.18)); animation:puxLogo 1s var(--pux-ease) .1s forwards;}
+#pux-intro .pux-line{position:relative; margin-top:22px; height:2px; width:0; border-radius:2px;
+  background:linear-gradient(90deg,transparent,#fff,transparent); animation:puxLine 1s var(--pux-ease) .55s forwards;}
+#pux-intro.out{opacity:0; transform:scale(1.05); pointer-events:none;}
+@keyframes puxLogo{to{opacity:1; transform:none;}}
+@keyframes puxLine{to{width:min(46vw,180px);}}
+@keyframes puxDrift{to{transform:translate3d(4%,3%,0) scale(1.08);}}
+
+@media (prefers-reduced-motion:reduce){
+  #pux-intro{display:none !important;}
+  .screen.on,.pux-in > *,.loader::before,.loader::after{animation:none;}
+  .tab-ind,.tab .ti{transition:none;}
+}
+
+/* ── أيقونات SVG بدل الإيموجي ── */
+:root{--pux-tint:rgba(236,72,153,.13);}
+@supports (color:color-mix(in srgb, red 10%, blue)){:root{--pux-tint:color-mix(in srgb, var(--pink) 15%, transparent);}}
+.pux-ic{display:inline-block; width:1.2em; height:1.2em; vertical-align:-.24em; margin-inline-end:.4em; line-height:1; flex-shrink:0;}
+.pux-ic.solo{margin:0;}
+.pux-ic svg{display:block; width:100%; height:100%; overflow:visible;}
+.pux-ic .t{fill:var(--pux-tint);}
+.empty .big .pux-ic{width:1em; height:1em;}
+.card .pux-ic svg,.btn-primary .pux-ic svg,.wa-btn .pux-ic svg,.toast .pux-ic svg{stroke:#fff;}
+.card .pux-ic,.btn-primary .pux-ic,.toast .pux-ic{--pux-tint:rgba(255,255,255,.24);}
+
+/* ── التحية: الوردة جنب اسم العميلة (مش جنب «صباح الخير») ── */
+#greet .pux-ic{display:none;}
+#topName::after{content:""; display:inline-block; width:.8em; height:.8em; margin-inline-start:.32em; vertical-align:-.05em;
+  background:linear-gradient(135deg,var(--pink),var(--gold));
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' fill-opacity='.22' stroke='black' stroke-width='1.6'%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(0 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(72 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(144 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(216 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(288 12 12)'/%3E%3Ccircle cx='12' cy='12' r='1.7' fill='none'/%3E%3C/svg%3E") center/contain no-repeat; mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black' fill-opacity='.22' stroke='black' stroke-width='1.6'%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(0 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(72 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(144 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(216 12 12)'/%3E%3Cellipse cx='12' cy='6.7' rx='2.5' ry='3.4' transform='rotate(288 12 12)'/%3E%3Ccircle cx='12' cy='12' r='1.7' fill='none'/%3E%3C/svg%3E") center/contain no-repeat;}
+</style>
 </head>
 <body>
+<!-- PREMIUM-UX-v1 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><linearGradient id="puxGrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="24"><stop offset="0" style="stop-color:var(--pink)"/><stop offset="1" style="stop-color:var(--gold)"/></linearGradient></defs></svg>
+<div id="pux-intro" aria-hidden="true"><img alt=""><div class="pux-line"></div></div>
+<script>(function(){try{var r=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;if(!r&&!sessionStorage.getItem('puxIntro')){document.documentElement.classList.add('pux-intro-on');}}catch(e){}setTimeout(function(){var e=document.getElementById('pux-intro');if(e)e.remove();},4200);})();</script>
+
 <div id="errBanner"></div>
 <div id="loadFail">
   <div>
@@ -1610,6 +1721,7 @@ function switchTab(tab){
   if(_ts && _ts.classList.contains('shop-overlay')){
     _ts.classList.remove('shop-overlay');
     document.body.style.overflow = '';
+    document.body.classList.remove('qc-open');   // v705: الشريط يرجع
     var _x = $('qcCloseBtn'); if(_x) _x.classList.remove('show');
   }
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
@@ -3170,6 +3282,11 @@ if(isIOS() && !isStandalone()){
    إقلاع التطبيق
    ============================================================ */
 $('heroLogo').src = logoSrc;
+/* ⚡ بنعرض الشاشة فورًا من الذاكرة المحلية — من غير ما نستنى الشبكة (كانت شاشة بيضا كام ثانية لحد ما الإعدادات تيجي) */
+(function(){ try{
+  if(localStorage.getItem(LS_PHONE)){ showScreen('screen-app'); var tc = $('tab-card'); if(tc && !tc.innerHTML) tc.innerHTML = loaderHTML('بنجيب بياناتك…'); }
+  else { showScreen('screen-login'); }
+}catch(e){} })();
 loadSettings().finally(function(){
   var saved = localStorage.getItem(LS_PHONE);
   if(!saved){ showScreen('screen-login'); setLoginStep('phone'); return; }
@@ -3821,6 +3938,7 @@ function openQuickCheckout(barcode){
   box.style.display = 'block';
   box.classList.add('shop-overlay');
   document.body.style.overflow = 'hidden';
+  document.body.classList.add('qc-open');
   lazyLoadTab('shop');   // لو أول مرة العميلة تفتح "اطلبي" أصلًا — نفس التحميل الكسول العادي
   renderShop();
   var x = $('qcCloseBtn'); if(x) x.classList.add('show');
@@ -3831,6 +3949,7 @@ function closeQuickCheckout(){
   var box = $('tab-shop'); if(!box) return;
   box.classList.remove('shop-overlay');
   document.body.style.overflow = '';
+  document.body.classList.remove('qc-open');
   box.style.display = (currentTab === 'shop') ? 'block' : 'none';
   var x = $('qcCloseBtn'); if(x) x.classList.remove('show');
 }
@@ -4135,6 +4254,257 @@ window.chatCleanup = chatCleanup;
     d.style.display = n ? '' : 'none'; d.textContent = n > 9 ? '9+' : String(n);
   };
   setInterval(function(){ try{ window.refreshNotifDot(); }catch(e){} }, 4000);
+})();
+</script>
+<script>
+/* PUX-ICONS — أيقونات SVG مرسومة بإيد بدل الإيموجي (خط 1.6 مدوّر + تدرّج البراند + تعبئة خفيفة) */
+var PUX_ICONS = {
+  gift:'<rect class="t" x="3" y="8.2" width="18" height="4.2" rx="1.3"/><path class="t" d="M4.6 12.4V19a1.7 1.7 0 0 0 1.7 1.7h11.4a1.7 1.7 0 0 0 1.7-1.7v-6.6"/><path d="M12 8.2v12.5"/><path d="M12 8.2C10.6 8 7.8 7.6 7.4 5.6 7 3.6 9 2.8 10.4 3.8c1 .8 1.4 2.4 1.6 4.4zM12 8.2c1.4-.2 4.2-.6 4.6-2.6.4-2-1.6-2.8-3-1.8-1 .8-1.4 2.4-1.6 4.4z"/>',
+  bag:'<path class="t" d="M5.2 8h13.6l-1 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5.2 8z"/><path d="M8.6 10V7.4a3.4 3.4 0 0 1 6.8 0V10"/>',
+  flower:'<g class="t"><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4"/><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4" transform="rotate(72 12 12)"/><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4" transform="rotate(144 12 12)"/><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4" transform="rotate(216 12 12)"/><ellipse cx="12" cy="6.7" rx="2.5" ry="3.4" transform="rotate(288 12 12)"/></g><circle cx="12" cy="12" r="1.7" fill="#fff"/>',
+  sparkle:'<path class="t" d="M11 4c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7z"/><path d="M19 3.4v3.2M17.4 5h3.2"/><path d="M19 17.4v3.2M17.4 19h3.2"/>',
+  receipt:'<path class="t" d="M6 3.2h12a1 1 0 0 1 1 1V20l-2.3-1.6L14.4 20 12 18.4 9.6 20l-2.3-1.6L5 20V4.2a1 1 0 0 1 1-1z"/><path d="M8.8 8h6.4M8.8 11.6h6.4M8.8 15h3.6"/>',
+  shield:'<path class="t" d="M12 3l7.5 2.8v5.4c0 4.7-3.1 8.2-7.5 9.8-4.4-1.6-7.5-5.1-7.5-9.8V5.8L12 3z"/><path d="M9.2 12.2l2 2 3.8-4"/>',
+  star:'<path class="t" d="M12 3.4l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.4 6.9 19.1l1-5.7-4.1-4 5.7-.8L12 3.4z"/>',
+  chat:'<path class="t" d="M20.5 11.6c0 4-3.8 7.2-8.5 7.2-1.1 0-2.1-.17-3.1-.5L4.5 20l1.3-3.6C4.4 15.2 3.5 13.5 3.5 11.6c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2z"/><path d="M8.6 11.8h.01M12 11.8h.01M15.4 11.8h.01"/>',
+  card:'<rect class="t" x="2.5" y="5" width="19" height="14" rx="3.2"/><path d="M2.5 9.8h19M6.4 15h3.2"/>',
+  tag:'<path class="t" d="M12.4 3.2H18a2.3 2.3 0 0 1 2.3 2.3v5.6c0 .6-.24 1.2-.67 1.63l-7.3 7.3a2.3 2.3 0 0 1-3.26 0l-4.9-4.9a2.3 2.3 0 0 1 0-3.26l7.3-7.3c.43-.43 1.02-.67 1.63-.67z"/><circle cx="16" cy="8" r="1.3"/>',
+  bookmark:'<path class="t" d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4.2L6 21V4.5a1 1 0 0 1 1-1z"/>',
+  coins:'<ellipse class="t" cx="12" cy="6.5" rx="7" ry="2.8"/><path d="M5 6.5v5c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-5"/><path d="M5 11.5v5c0 1.55 3.13 2.8 7 2.8s7-1.25 7-2.8v-5"/>',
+  heart:'<path class="t" d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+  camera:'<path class="t" d="M21.4 18.6a1.9 1.9 0 0 1-1.9 1.9h-15a1.9 1.9 0 0 1-1.9-1.9V9a1.9 1.9 0 0 1 1.9-1.9h3.1l1.6-2.6h4.6l1.6 2.6h3.1A1.9 1.9 0 0 1 21.4 9v9.6z"/><circle cx="12" cy="13.4" r="3.6"/>',
+  globe:'<circle class="t" cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.4 4 5.5 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.5-4-9s1.4-6.6 4-9z"/>',
+  mobile:'<rect class="t" x="6.5" y="2.8" width="11" height="18.4" rx="2.8"/><path d="M10.4 18h3.2"/>',
+  handset:'<path class="t" d="M21 16.9v2.6a1.9 1.9 0 0 1-2.1 1.9 18.8 18.8 0 0 1-8.2-2.9 18.5 18.5 0 0 1-5.7-5.7A18.8 18.8 0 0 1 2.1 4.1 1.9 1.9 0 0 1 4 2h2.6a1.9 1.9 0 0 1 1.9 1.6c.1.9.3 1.8.7 2.7a1.9 1.9 0 0 1-.4 2L7.7 9.4a15.2 15.2 0 0 0 5.7 5.7l1.1-1.1a1.9 1.9 0 0 1 2-.4c.9.4 1.8.6 2.7.7a1.9 1.9 0 0 1 1.6 1.9z"/>',
+  truck:'<path class="t" d="M2.8 6.2h10.6v10.4H2.8z"/><path class="t" d="M13.4 9.6h4.2l3.4 3.4v3.6h-7.6z"/><circle cx="7" cy="17.8" r="2" fill="#fff"/><circle cx="17" cy="17.8" r="2" fill="#fff"/>',
+  book:'<path class="t" d="M5 4.2A1.7 1.7 0 0 1 6.7 2.5H19v17H6.7A1.7 1.7 0 0 0 5 21.2V4.2z"/><path d="M5 19.5a1.7 1.7 0 0 1 1.7-1.7H19"/><path d="M9 7h6"/>',
+  user:'<circle class="t" cx="12" cy="8.6" r="3.7"/><path d="M4.6 20c.5-3.7 3.5-5.7 7.4-5.7s6.9 2 7.4 5.7"/>',
+  key:'<circle class="t" cx="8" cy="15.2" r="4.2"/><path d="M11 12.2L20 3.2M16 7.2l2.6 2.6M13.6 9.6l2 2"/>',
+  trash:'<path d="M4 6.8h16"/><path d="M9.4 6.8V4.6a1 1 0 0 1 1-1h3.2a1 1 0 0 1 1 1v2.2"/><path class="t" d="M6.2 6.8l.9 12.4a1.8 1.8 0 0 0 1.8 1.7h6.2a1.8 1.8 0 0 0 1.8-1.7l.9-12.4"/><path d="M10 10.8v6M14 10.8v6"/>',
+  store:'<path class="t" d="M4 9.4h16l-1.3-5H5.3L4 9.4z"/><path d="M4 9.4a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.2 12.2V20h13.6v-7.8"/><path d="M10 20v-4.6h4V20"/>',
+  pin:'<path class="t" d="M12 21s-6.6-5.8-6.6-11.2a6.6 6.6 0 0 1 13.2 0C18.6 15.2 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.3" fill="#fff"/>',
+  bell:'<path class="t" d="M6.2 16.4V11a5.8 5.8 0 0 1 11.6 0v5.4l1.4 1.8H4.8l1.4-1.8z"/><path d="M10 20.6a2.2 2.2 0 0 0 4 0"/>',
+  clock:'<circle class="t" cx="12" cy="12" r="9"/><path d="M12 7v5.2l3.4 2"/>',
+  target:'<circle class="t" cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/>',
+  ticket:'<path class="t" d="M3 8.2a1.8 1.8 0 0 1 1.8-1.8h14.4A1.8 1.8 0 0 1 21 8.2v2a2 2 0 0 0 0 3.6v2a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 15.8v-2a2 2 0 0 0 0-3.6v-2z"/><path d="M14.5 7v10" stroke-dasharray="1.6 2.2"/>',
+  cart:'<path class="t" d="M6.2 7.6h14.2l-1.6 6.6a1.6 1.6 0 0 1-1.6 1.2H9.1a1.6 1.6 0 0 1-1.6-1.3L6.2 7.6z"/><path d="M2.8 3.8h2.6l.8 3.8"/><circle cx="9.5" cy="19.2" r="1.3"/><circle cx="17" cy="19.2" r="1.3"/>',
+  box:'<path class="t" d="M12 2.8l8.2 4.4v9.6L12 21.2l-8.2-4.4V7.2L12 2.8z"/><path d="M3.8 7.2L12 11.6l8.2-4.4M12 11.6v9.6"/>',
+  alert:'<path class="t" d="M12 3.6l9.4 16H2.6L12 3.6z"/><path d="M12 9.8v4.2M12 17h.01"/>',
+  check:'<circle class="t" cx="12" cy="12" r="9"/><path d="M8 12.4l2.7 2.7 5.5-5.7"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  down:'<path d="M12 4.5v15M6 13.5l6 6 6-6"/>',
+  up:'<path d="M12 19.5v-15M6 10.5l6-6 6 6"/>',
+  image:'<rect class="t" x="3" y="4.2" width="18" height="15.6" rx="2.6"/><circle cx="8.6" cy="9.6" r="1.6"/><path d="M3.4 17l5-4.8 3.6 3.4 3.2-2.8 5.6 5"/>',
+  search:'<circle class="t" cx="10.6" cy="10.6" r="6.4"/><path d="M15.4 15.4l5.1 5.1"/>',
+  moon:'<path class="t" d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z"/>'
+};
+/* emoji → اسم الأيقونة. اللي مش هنا بيفضل إيموجي عادي (ماتتلمسش). */
+var PUX_MAP = {
+  '🎁':'gift','🛍':'bag','👜':'bag','🧺':'bag','🌸':'flower','🌷':'flower','✨':'sparkle','🎉':'sparkle','🎀':'sparkle','💡':'sparkle','👋':'sparkle','🚀':'sparkle',
+  '🧾':'receipt','📄':'receipt','📋':'receipt','📝':'receipt','🔐':'shield','🔒':'shield','⭐':'star','🏆':'star','💬':'chat','💳':'card','🏷':'tag','🔖':'bookmark',
+  '💵':'coins','💰':'coins','💸':'coins','🖤':'heart','🤍':'heart','💚':'heart','📷':'camera','🌐':'globe','🌍':'globe','📱':'mobile','📲':'mobile','📞':'handset',
+  '🚚':'truck','📒':'book','🧕':'user','👤':'user','🔑':'key','🗝':'key','🗑':'trash','🏬':'store','🏪':'store','🏢':'store','📍':'pin','📌':'pin','🔔':'bell',
+  '⏳':'clock','⏱':'clock','🕐':'clock','⏰':'clock','🎯':'target','🎟':'ticket','🛒':'cart','📦':'box','⚠':'alert','✅':'check','➕':'plus','⬇':'down','⬆':'up','🖼':'image','🔍':'search','🌙':'moon'
+};
+
+/* PREMIUM-UX-v1 — حركات ذكية (بتتعطّل لوحدها لو الجهاز طالب «تقليل الحركة») */
+(function(){
+  var reduce = false; try{ reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+  var PUX = window.PUX = {};
+  var TABS = ['card','offers','shop','invoices','account','contact'];
+  var SV = function(inner){ return '<svg class="ti-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+inner+'</svg>'; };
+  var ICONS = {
+    card: SV('<rect x="2.5" y="5" width="19" height="14" rx="3.2"/><path d="M2.5 9.8h19"/><path d="M6.4 15h3.2"/><circle cx="17" cy="15" r="1.1"/>'),
+    offers: SV('<path d="M12.4 3.2H18a2.3 2.3 0 0 1 2.3 2.3v5.6c0 .6-.24 1.2-.67 1.63l-7.3 7.3a2.3 2.3 0 0 1-3.26 0l-4.9-4.9a2.3 2.3 0 0 1 0-3.26l7.3-7.3c.43-.43 1.02-.67 1.63-.67z"/><circle cx="16" cy="8" r="1.3"/><path d="M9.4 13.6l2.4 2.4"/>'),
+    shop: SV('<path d="M5.2 8h13.6l-1 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5.2 8z"/><path d="M8.6 10V7.4a3.4 3.4 0 0 1 6.8 0V10"/>'),
+    invoices: SV('<path d="M6 3.2h12a1 1 0 0 1 1 1V20l-2.3-1.6L14.4 20 12 18.4 9.6 20l-2.3-1.6L5 20V4.2a1 1 0 0 1 1-1z"/><path d="M8.8 8h6.4"/><path d="M8.8 11.6h6.4"/><path d="M8.8 15h3.6"/>'),
+    account: SV('<circle cx="12" cy="8.6" r="3.7"/><path d="M4.6 20c.5-3.7 3.5-5.7 7.4-5.7s6.9 2 7.4 5.7"/>'),
+    contact: SV('<path d="M20.5 11.6c0 4-3.8 7.2-8.5 7.2-1.1 0-2.1-.17-3.1-.5L4.5 20l1.3-3.6C4.4 15.2 3.5 13.5 3.5 11.6c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2z"/><path d="M8.6 11.8h.01M12 11.8h.01M15.4 11.8h.01"/>')
+  };
+  function upgradeIcons(){
+    TABS.forEach(function(t){
+      var ti = document.querySelector('.tab[data-tab="'+t+'"] .ti');
+      if(ti) ti.innerHTML = ICONS[t];
+    });
+  }
+
+  /* مؤشر التبويب النشط بيتزحلق تحت الأيقونة */
+  function placeInd(animate){
+    var nav = document.getElementById('tabbar'), ind = document.getElementById('tabInd');
+    if(!nav || !ind) return;
+    var a = nav.querySelector('.tab.active'); if(!a) return;
+    var nr = nav.getBoundingClientRect(), ar = a.getBoundingClientRect();
+    if(!nr.width || !ar.width) return;
+    var x = (ar.left - nr.left) + ar.width/2 - ind.offsetWidth/2;
+    if(animate === false){ ind.style.transition = 'none'; }
+    ind.style.transform = 'translateX(' + x + 'px)';
+    if(animate === false){ void ind.offsetWidth; ind.style.transition = ''; }
+  }
+  function mountIndicator(){
+    var nav = document.getElementById('tabbar'); if(!nav || document.getElementById('tabInd')) return;
+    var ind = document.createElement('span'); ind.className = 'tab-ind'; ind.id = 'tabInd'; nav.appendChild(ind);
+    try{ new ResizeObserver(function(){ placeInd(false); }).observe(nav); }catch(e){ window.addEventListener('resize', function(){ placeInd(false); }); }
+    placeInd(false);
+    try{ new MutationObserver(function(){ placeInd(false); }).observe(document.documentElement, { attributes: true, attributeFilter: ['dir','lang'] }); }catch(e){}
+  }
+
+  /* اهتزاز خفيف: Haptics في التطبيق الأصلي، vibrate على أندرويد في الـPWA */
+  PUX.haptic = function(kind){
+    try{
+      if(window.EcharpeNative && window.EcharpeNative.haptic) window.EcharpeNative.haptic(kind);
+      else if(navigator.vibrate && /Android/i.test(navigator.userAgent)) navigator.vibrate(kind === 'medium' ? 14 : 8);
+    }catch(e){}
+  };
+
+  /* دخول المحتوى بإتجاه التبويب (RTL-aware) */
+  var lastIdx = 0;
+  PUX.onTab = function(tab){
+    var idx = TABS.indexOf(tab); if(idx < 0) return;
+    var delta = idx - lastIdx; lastIdx = idx;
+    placeInd(true);
+    PUX.haptic('light');
+    if(reduce) return;
+    var pane = document.getElementById('tab-' + tab); if(!pane) return;
+    var rtl = document.documentElement.dir === 'rtl';
+    var dx = delta === 0 ? 0 : (delta > 0 ? 1 : -1) * (rtl ? -1 : 1) * 22;
+    pane.style.setProperty('--pux-dx', dx + 'px');
+    for(var i = 0; i < pane.children.length; i++) pane.children[i].style.setProperty('--pux-i', Math.min(i, 8));
+    pane.classList.remove('pux-in'); void pane.offsetWidth; pane.classList.add('pux-in');
+    /* ⚠️ بنشيل الكلاس بعد الحركة: من غيره كل تحديث لايف للمحتوى (onSnapshot) كان هيعيد الحركة ويرعش الشاشة */
+    clearTimeout(pane._puxT); pane._puxT = setTimeout(function(){ pane.classList.remove('pux-in'); }, 1100);
+  };
+
+  /* عدّاد النقاط: من صفر لأول مرة، ومن القيمة القديمة لو اتغيّرت — ومن غير حركة لو نفس الرقم */
+  var lastPts = null;
+  function countUp(el){
+    if(!el || reduce) return;
+    var finalTxt = el.textContent || '';
+    var to = parseFloat(finalTxt.replace(/[^\d.]/g, '')); if(!isFinite(to)) return;
+    if(lastPts === to) return;
+    var from = (lastPts === null) ? 0 : lastPts; lastPts = to;
+    var t0 = performance.now(), dur = Math.min(1200, 550 + Math.abs(to - from) * 4);
+    (function step(t){
+      var p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 4);
+      el.textContent = p < 1 ? Math.round(from + (to - from) * e).toLocaleString('en-US') : finalTxt;
+      if(p < 1) requestAnimationFrame(step);
+    })(t0);
+  }
+  function watchCard(){
+    var host = document.getElementById('tab-card'); if(!host || host._puxW) return; host._puxW = true;
+    new MutationObserver(function(){
+      var el = host.querySelector('.pts-num');
+      if(el && !el.dataset.puxSeen){ el.dataset.puxSeen = '1'; countUp(el); }
+    }).observe(host, { childList: true, subtree: true });
+  }
+
+  /* شاشة الافتتاح */
+  function intro(){
+    var el = document.getElementById('pux-intro');
+    if(!el || !document.documentElement.classList.contains('pux-intro-on')) return;
+    try{ sessionStorage.setItem('puxIntro', '1'); }catch(e){}
+    try{ el.querySelector('img').src = logoSrc; }catch(e){}
+    var t0 = Date.now();
+    (function wait(){
+      var up = Date.now() - t0;
+      if(up < 1400 || (!document.querySelector('.screen.on') && up < 3500)){ setTimeout(wait, 100); return; }
+      el.classList.add('out'); setTimeout(function(){ el.remove(); }, 850);
+    })();
+  }
+
+  upgradeIcons(); mountIndicator(); watchCard(); intro();
+  if(typeof window.switchTab === 'function'){
+    var _sw = window.switchTab;
+    window.switchTab = function(){ var r = _sw.apply(this, arguments); try{ PUX.onTab(arguments[0]); }catch(e){} return r; };
+  }
+  document.addEventListener('click', function(ev){
+    var b = ev.target.closest && ev.target.closest('.btn-primary,.cart-fab');
+    if(b) PUX.haptic('light');
+  }, true);
+})();
+/* PUX-ICON-SWAP — بيبدّل الإيموجي (أول النص أو آخره) بأيقونة SVG. آمن مع الترجمة: بنخلّي i18n يترجم الأول وهو شايف الإيموجي. */
+(function(){
+  var RX_LEAD, RX_TRAIL, RX_ANY;
+  try{
+    var E = '\\p{Extended_Pictographic}\\uFE0F?(?:\\u200D\\p{Extended_Pictographic}\\uFE0F?)*';
+    RX_LEAD = new RegExp('^\\s*(' + E + ')\\s*', 'u'); RX_TRAIL = new RegExp('\\s*(' + E + ')\\s*$', 'u'); RX_ANY = new RegExp('\\p{Extended_Pictographic}', 'u');
+  }catch(e){ return; }   // WebView قديم من غير \p{…}: الإيموجي يفضل زي ما هو
+  try{ if(localStorage.getItem('puxNoIcons') === 'v3') return; }catch(e){}   // قاطع الأمان اتفعّل قبل كده على الجهاز ده
+  var MAP = {}; Object.keys(PUX_MAP).forEach(function(k){ MAP[k.replace(/\uFE0F/g, '')] = PUX_MAP[k]; });
+  var SKIP = { SCRIPT:1, STYLE:1, TEXTAREA:1, OPTION:1, TITLE:1, INPUT:1, SELECT:1, NOSCRIPT:1 };
+  function norm(s){ return s.replace(/\uFE0F/g, ''); }
+  function skip(n){
+    for(var p = n.parentNode; p && p.nodeType === 1; p = p.parentNode){
+      if(SKIP[p.tagName] || p.namespaceURI === 'http://www.w3.org/2000/svg') return true;
+      if(p.hasAttribute && p.hasAttribute('data-noicon')) return true;
+      if(p.classList && p.classList.contains('pux-ic')) return true;
+    }
+    return false;
+  }
+  function make(name, solo){
+    var s = document.createElement('span'); s.className = 'pux-ic' + (solo ? ' solo' : ''); s.setAttribute('aria-hidden', 'true'); s.setAttribute('data-e', name);
+    s.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="url(#puxGrad)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + PUX_ICONS[name] + '</svg>';
+    return s;
+  }
+  function isIc(el, name){ return el && el.nodeType === 1 && el.className && String(el.className).indexOf('pux-ic') === 0 && el.getAttribute('data-e') === name; }
+  /* بيرجّع النص بعد شيل الإيموجي المستبدل، وبيتأكد إن أيقونة الـSVG موجودة جنب العقدة */
+  function stripFor(node, str){
+    var v = str, lead = null, trail = null, m = RX_LEAD.exec(v);
+    if(m && MAP[norm(m[1])]){ lead = MAP[norm(m[1])]; v = v.slice(m[0].length); }
+    var solo = !!lead && v === '';
+    if(!solo && v){ var t = RX_TRAIL.exec(v); if(t && MAP[norm(t[1])]){ trail = MAP[norm(t[1])]; v = v.slice(0, t.index); } }
+    if(!lead && !trail) return str;
+    var par = node.parentNode; if(!par) return str;
+    if(lead && !isIc(node.previousSibling, lead)) par.insertBefore(make(lead, solo), node);
+    if(trail && !isIc(node.nextSibling, trail)) par.insertBefore(make(trail, false), node.nextSibling);
+    return v;
+  }
+  function proc(n){
+    if(n.nodeType !== 3 || !n.nodeValue || !RX_ANY.test(n.nodeValue) || skip(n)) return;
+    var cur = n.nodeValue, out = stripFor(n, cur);
+    if(out === cur) return;
+    /* ⚠️ بنحفظ النص الأصلي (بالإيموجي) عند i18n قبل الشيل — من غيره الترجمة بعد تغيير اللغة مبتلاقيش المفتاح */
+    try{ if(typeof _i18nOrig !== 'undefined' && _i18nOrig && !_i18nOrig.has(n)) _i18nOrig.set(n, cur); }catch(e){}
+    n.nodeValue = out;
+  }
+  /* ⚠️ i18n كان بيرجّع الإيموجي كل ما نشيله (والعكس) = حلقة لا نهائية. الحل: نفس منطق i18n بالظبط لكن النص اللي بيقارن بيه
+     متشال منه الإيموجي — فالحالة المستقرة واحدة والحلقة بتقف. */
+  var origTN = (typeof _i18nTextNode === 'function') ? _i18nTextNode : null, obsRef = null, winT = Date.now(), winN = 0, dead = false;
+  /* 🛑 قاطع أمان: لو حصلت عواصف تعديلات (أكتر من 4000 في ثانية) نوقف تبديل الأيقونات ونرجّع الإيموجي — التطبيق ميتعلّقش أبدًا بسبب الزينة */
+  function kill(){
+    if(dead) return; dead = true;
+    try{ if(obsRef) obsRef.disconnect(); }catch(e){}
+    try{ if(origTN) window._i18nTextNode = origTN; }catch(e){}
+    try{ localStorage.setItem('puxNoIcons', 'v3'); }catch(e){}
+  }
+  PUX._unpatch = function(){ if(origTN) window._i18nTextNode = origTN; };
+  if(typeof _i18nTextNode === 'function' && typeof _i18nOriginal === 'function' && typeof i18nT === 'function' && typeof _i18nSkip === 'function'){
+    window._i18nTextNode = function(node){
+      if(!node || node.nodeType !== 3 || _i18nSkip(node.parentNode)) return;
+      var orig = _i18nOriginal(node); if(!orig || !orig.trim()) return;
+      var next = i18nT(orig);
+      if(RX_ANY.test(next) && !skip(node)) next = stripFor(node, next);
+      if(next !== node.nodeValue) node.nodeValue = next;
+    };
+  }
+  function walk(root){
+    if(root.nodeType === 3){ proc(root); return; }
+    if(root.nodeType !== 1 || (root.classList && root.classList.contains('pux-ic'))) return;
+    var w = document.createTreeWalker(root, 4, null, false), list = [], x;
+    while((x = w.nextNode())) list.push(x);
+    for(var i = 0; i < list.length; i++) proc(list[i]);
+  }
+  PUX.swapIcons = walk;
+  walk(document.body);
+  obsRef = new MutationObserver(function(muts){
+    var now = Date.now(); if(now - winT > 1000){ winT = now; winN = 0; }
+    winN += muts.length; if(winN > 4000){ kill(); return; }
+    for(var i = 0; i < muts.length; i++){
+      var r = muts[i];
+      if(r.type === 'characterData'){ proc(r.target); continue; }
+      for(var j = 0; j < r.addedNodes.length; j++) walk(r.addedNodes[j]);
+    }
+  });
+  obsRef.observe(document.body, { childList: true, subtree: true, characterData: true });
 })();
 </script>
 </body>

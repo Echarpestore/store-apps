@@ -21,8 +21,8 @@ for(const app of ['loyalty', 'glow']){
   assert(h.includes("if(m.tryon) body += '<button class=\"m-try\""), app + ': زر جرّبيها بشرطه لوحده');
   assert(h.includes("if(m.barcode){"), app + ': زر أضيفيها للسلة بشرط الباركود');
 }
-assert(/loyalty-shell-v70[1-9]/.test(fs.readFileSync(path.join(root, 'loyalty', 'sw.js'), 'utf8')), 'loyalty CACHE_NAME اترفع');
-assert(/glow-loyalty-v8[6-9]/.test(fs.readFileSync(path.join(root, 'glow', 'sw.js'), 'utf8')), 'glow CACHE_NAME اترفع');
+assert(/loyalty-shell-v7(0[1-9]|[1-9]\d)/.test(fs.readFileSync(path.join(root, 'loyalty', 'sw.js'), 'utf8')), 'loyalty CACHE_NAME اترفع');
+assert(/glow-loyalty-v(8[6-9]|9\d)/.test(fs.readFileSync(path.join(root, 'glow', 'sw.js'), 'utf8')), 'glow CACHE_NAME اترفع');
 for(const f of ['pos/index.html', 'Office/index.html', 'sales/index.html'])
   assert(fs.readFileSync(path.join(root, f), 'utf8').includes('chat-staff-ui.js?v=680'), f + ': chat-staff-ui v680');
 

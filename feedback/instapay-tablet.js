@@ -49,6 +49,8 @@ const CSS = `
   align-items:center;justify-content:center;padding:6vh 6vw;gap:2.4vh;text-align:center}
 .ipPane.on{display:flex;animation:ipUp .4s cubic-bezier(.2,.8,.2,1)}
 @keyframes ipUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+#ipVerify{gap:2.6vh}
+#ipVRing{margin:1vh 0}
 .ipEyebrow{font-family:'Space Grotesk',sans-serif;font-size:2.4vh;letter-spacing:.26em;
   color:#6f7688;font-weight:700}
 .ipAmount{font-family:'Space Grotesk',sans-serif;font-weight:700;line-height:.9;
@@ -155,7 +157,16 @@ const HTML = `
     </div>
   </div>
 
-  <!-- 2️⃣ المسح -->
+  <!-- ⏳ v757: في انتظار تأكيد البنك (بدل مسح الإيصال) -->
+  <div class="ipPane" id="ipVerify">
+    <div class="ipEyebrow">INSTAPAY</div>
+    <div id="ipVRing"></div>
+    <div class="ipBig" id="ipVText" style="font-size:3.6vh">بنستلم تحويلك من البنك…</div>
+    <div class="ipLabel" id="ipVSub">ثواني ويوصل التأكيد — مش محتاجة تعملي حاجة</div>
+    <button class="ipBtn ipGhost" id="ipVBack" style="margin-top:1.6vh;font-size:2vh;padding:1.2vh 3vw">لسه محوّلتش — ارجعي للـQR</button>
+  </div>
+
+  <!-- 2️⃣ المسح (v757: اتشال من الطريق — التأكيد من رسالة البنك. الكود فاضل للطوارئ بس) -->
   <div class="ipPane" id="ipScan">
     <div class="ipCol ipColScan">
       <div class="ipEyebrow">مسح الإيصال</div>
@@ -189,7 +200,7 @@ const HTML = `
       <path d="M44 44 L76 76 M76 44 L44 76"></path></svg>
     <div class="ipBig" id="ipBadMsg">الإيصال مش مظبوط</div>
     <div class="ipLabel">كلّمي الكاشير</div>
-    <button class="ipBtn ipGhost" id="ipRetry" style="margin-top:2vh">عندي إيصال تاني</button>
+    <button class="ipBtn ipGhost" id="ipRetry" style="margin-top:2vh">◀ رجوع للـQR</button>
   </div>
 
   <!-- 5️⃣ سلّمي الكاشير -->
@@ -207,7 +218,31 @@ document.body.insertAdjacentHTML('beforeend', HTML);
 
 const $ = id => document.getElementById(id);
 const wrap = $('ipWrap');
-const panes = { wait: $('ipWait'), scan: $('ipScan'), ok: $('ipOk'), bad: $('ipBad'), man: $('ipMan') };
+const panes = { wait: $('ipWait'), verify: $('ipVerify'), scan: $('ipScan'), ok: $('ipOk'), bad: $('ipBad'), man: $('ipMan') };
+
+/* ⏳ v757 — التقدّم على التابلت: المدة المعتادة من payeta_<الفرع> (POS بيتعلّمها من كل تأكيد بنك) */
+let vRing = null, vT0 = 0, vTimer = 0, vEta = 0;
+async function loadEta() {
+  vEta = (window.PayLiveCore && window.PayLiveCore.DEF.instapay) || 40000;
+  try {
+    const c = await getDoc(doc(db, 'pos_test_settings', 'payeta_' + branch));
+    if (c.exists() && window.PayLiveCore) vEta = window.PayLiveCore.etaFrom(c.data().instapay, 'instapay');
+  } catch (e) {}
+}
+function vTick() {
+  if (!vRing || !vT0 || !window.PayLiveCore) return;
+  const el = Date.now() - vT0;
+  vRing.set(window.PayLiveCore.progressAt(el, vEta));
+  $('ipVText').textContent = window.PayLiveCore.phase(el, vEta, 'instapay', 'customer');
+}
+function vStart() {
+  if (!vRing && window.PayRing) vRing = window.PayRing.create($('ipVRing'), { size: 'min(30vh,40vw)' });
+  if (!vT0) { vT0 = Date.now(); if (vRing) vRing.set(1); }
+  if (!vTimer) vTimer = setInterval(vTick, 400);
+  vTick();
+}
+function vStop() { if (vTimer) { clearInterval(vTimer); vTimer = 0; } }
+function vReset() { vStop(); vT0 = 0; if (vRing) vRing.idle(); const s = $('ipVSub'), k = $('ipVBack'); if (s) s.textContent = 'ثواني ويوصل التأكيد — مش محتاجة تعملي حاجة'; if (k) k.style.visibility = ''; }
 let cur = null;      // الطلب الحالي
 let stream = null;   // الكاميرا
 let loop = null;     // مؤقّت المسح
@@ -244,6 +279,7 @@ function show(name) {
   curPane = name; paneAt = Date.now();   // كل عرض/تحديث بيصفّر العدّاد
 }
 function hide() {
+  vReset();
   wrap.classList.remove('on');
   Object.values(panes).forEach(p => p.classList.remove('on'));
   stopCam();
@@ -431,11 +467,11 @@ async function tick() {
 $('ipDone').onclick = async () => {
   if (!cur) return;
   $('ipDone').disabled = true;
+  show('verify'); vStart();          // v757: على طول — من غير كاميرا ولا مسح
   try { await callPay({ action: 'ready', sid: cur.sid }); } catch (e) {}
   $('ipDone').disabled = false;
-  show('scan');
-  if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 550); }
 };
+$('ipVBack').onclick = () => { vReset(); show('wait'); };
 $('ipHelp').onclick = () => { stopCam(); show('man'); };
 // ◀ رجوع للـQR — لو دوست «تم التحويل» قبل ما تحوّل
 $('ipBack').onclick = () => { stopCam(); show('wait'); $('ipDone').disabled = false; };
@@ -446,11 +482,7 @@ $('ipWaitBack').onclick = () => { $('ipHint') && ($('ipHint').textContent = '');
    العميلة مش المفروض تفهم يعني إيه "اقلبي الكاميرا" — ده قرار تقني
    بنستنتجه لوحدنا من أول محاولة عمياء وبيتحفظ للجهاز، فبيحصل مرة
    واحدة في عمر التابلت وخلاص. */
-$('ipRetry').onclick = async () => {
-  paintChecks(null); blindTries = 0;
-  show('scan');
-  if (await startCam()) { if (loop) clearInterval(loop); loop = setInterval(tick, 550); }
-};
+$('ipRetry').onclick = () => { paintChecks(null); vReset(); show('wait'); };   // v757: يرجع للـQR مش للكاميرا
 setFlip(flipCapture);
 
 /* 🖼️ الـQR بيتقرا من إعدادات الفرع **مرة واحدة** ويتخزّن في الذاكرة.
@@ -483,6 +515,7 @@ if (branch) {
     // طلب جديد على نفس التابلت = الشاشة تبدأ من الأول
     if (!cur || cur.sid !== s.sid) {
       cur = { sid: s.sid, seenAt: Date.now() };
+      vReset(); loadEta();
       stopCam(); paintChecks(null, null);
       blindTries = 0; flipTrial = false; flipTested = false;   // القلب إعداد جهاز — بيفضل، والتجربة بتبدأ من أول مع كل طلب
       flipCapture = localStorage.getItem(FLIP_KEY) === '1'; try { $('ipVid').classList.toggle('flip', flipCapture); } catch (e) {}
@@ -501,17 +534,21 @@ if (branch) {
         + '<small>' + (s.beneficiary || '') + '</small>';
       loadQr();
     }
-    if (s.status === 'waiting') show('wait');
-    else if (s.status === 'scanning') { if (!stream) { show('scan'); startCam().then(ok => { if (ok && !loop) loop = setInterval(tick, 550); }); } paintChecks(s.checks, s.detail); }
+    if (s.status === 'waiting') { if (curPane !== 'verify') show('wait'); }
+    else if (s.status === 'scanning') { stopCam(); if (curPane !== 'verify') show('verify'); vStart(); }   // v757
     else if (s.status === 'approved') {
       // 🏦 v709: التأكيد جه من رسالة البنك (العميلة مش محتاجة تصوّر)
       if ($('ipOkBig')) $('ipOkBig').textContent = (s.mode === 'bank') ? 'التحويل وصل ✓' : 'تم التأكيد';
       if ($('ipOkSub')) $('ipOkSub').textContent = (s.mode === 'bank') ? 'شكرًا — الفاتورة بتتطبع دلوقتي' : 'استني الفاتورة من الكاشير';
-      stopCam(); show('ok');
+      stopCam();
+      // v757: لو العداد شغال — يكمل 100% ويرسم ✓ وبعدين شاشة الشكر
+      if (curPane === 'verify' && vRing) { vStop(); vRing.done(true); $('ipVText').textContent = 'التحويل وصل ✓'; $('ipVSub').textContent = 'شكرًا 🌷 الفاتورة بتتطبع دلوقتي'; $('ipVBack').style.visibility = 'hidden'; setTimeout(() => { if (cur && cur.sid === s.sid) show('ok'); }, 1300); }
+      else show('ok');
+      vT0 = 0;
       const _sid = s.sid; clearTimeout(window._ipOkT);
       window._ipOkT = setTimeout(() => { if (cur && cur.sid === _sid) hide(); }, 90 * 1000);   // v702: مبتفضلش أكتر من دقيقة ونص
     }
-    else if (s.status === 'rejected') { stopCam(); $('ipBadMsg').textContent = s.hint || 'الإيصال مش مظبوط'; show('bad'); }
+    else if (s.status === 'rejected') { stopCam(); vReset(); $('ipBadMsg').textContent = s.hint || 'التحويل ماتأكدش'; show('bad'); }
     else hide();
   }, err => console.warn('[instapay]', err && err.code));
 }

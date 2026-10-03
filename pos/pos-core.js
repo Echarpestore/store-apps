@@ -99,9 +99,20 @@ function isStaffSignedIn(){
   var u = firebase.auth().currentUser;
   return !!(u && !u.isAnonymous);
 }
+/* 🔐 v757 — «كل شوية يعلق على شاشة إعداد الجهاز ولازم أقفل وأفتح» (بلاغ المالك 02-10):
+   ١) الدخول التلقائي كان بيتجرّب **مرة واحدة** وقت فتح الصفحة — لو النت هنّج اللحظة دي،
+      الجهاز يفضل على الشاشة دي للأبد. دلوقتي بيعيد المحاولة لوحده (كل 5→30 ثانية + لما النت يرجع).
+   ٢) كان بيتجرّب **قبل** ما Firebase يخلّص استرجاع الجلسة المحفوظة (currentUser لسه null) —
+      دلوقتي بيستنى أول رد من Firebase.
+   ٣) صفحة تانية من الموقع على نفس الجهاز (زي صفحة صورة التجربة) بتعمل دخول «مجهول» بيمسح
+      دخول الفرع — والدخول التلقائي كان بيعتبر المجهول «داخل» ومبيرجّعش. اتصلح. */
+let _posAuthReadyResolve;
+const _posAuthReady = new Promise(function(r){ _posAuthReadyResolve = r; });
+firebase.auth().onAuthStateChanged(function(){ if(_posAuthReadyResolve){ _posAuthReadyResolve(); _posAuthReadyResolve = null; } });
 // لو مفيش جلسة موظف محفوظة، نرجّع لشاشة إعداد الجهاز عشان يسجّل
 firebase.auth().onAuthStateChanged(function(u){
   if(!u || u.isAnonymous){
+    if(typeof posAutoLoginLoop === 'function') setTimeout(function(){ posAutoLoginLoop(u && u.isAnonymous ? 'anon' : 'null'); }, 0);
     var bs = document.getElementById('branchSetupScreen');
     var ls = document.getElementById('loginScreen');
     if(bs && ls && !document.querySelector('.screen.active#branchSetupScreen')){
@@ -273,8 +284,10 @@ window.saveBranchLogin = saveBranchLogin;
 window.getBranchLogin = getBranchLogin;
 
 // بيحاول يرجّع الجلسة لوحده — بيرجع true لو نجح
+// (v757: الدخول «المجهول» من صفحة تانية مش دخول فرع — لازم نرجّع حساب الفرع)
 async function tryAutoBranchLogin(){
-  if(firebase.auth().currentUser) return true;
+  const _cu = firebase.auth().currentUser;
+  if(_cu && !_cu.isAnonymous) return true;
   const saved = getBranchLogin();
   if(!saved) return false;
   try{
@@ -287,10 +300,54 @@ async function tryAutoBranchLogin(){
     if(e && (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password')){
       localStorage.removeItem(_BL_KEY);
     }
+    window._posAutoLoginLastErr = (e && e.code) || 'error';
     return false;
   }
 }
 window.tryAutoBranchLogin = tryAutoBranchLogin;
+
+/* 🔁 v757 — إعادة الدخول التلقائي لحد ما ينجح (بدل محاولة واحدة). بيكتب الحالة على شاشة الإعداد. */
+let _posAutoLoginRunning = false;
+function _posAutoStatus(txt, bad){
+  try{
+    const box = document.querySelector('#branchSetupScreen .pin-box');
+    if(!box) return;
+    let el = document.getElementById('branchSetupAuto');
+    if(!el){
+      el = document.createElement('div'); el.id = 'branchSetupAuto';
+      el.style.cssText = 'font-size:12.5px;font-weight:700;margin:0 0 12px;padding:8px 10px;border-radius:10px;line-height:1.6;';
+      const h = box.querySelector('h2'); if(h && h.nextSibling) box.insertBefore(el, h.nextSibling); else box.appendChild(el);
+    }
+    el.textContent = txt || '';
+    el.style.display = txt ? 'block' : 'none';
+    el.style.background = bad ? 'rgba(229,72,77,.12)' : 'rgba(47,163,107,.12)';
+    el.style.color = bad ? '#ff9a9d' : '#7ee2ad';
+  }catch(e){}
+}
+async function posAutoLoginLoop(reason){
+  if(_posAutoLoginRunning) return;
+  if(!getBranchLogin()){ _posAutoStatus(reason === 'anon' ? '⚠️ صفحة تانية من الموقع اتفتحت على الجهاز ده وغيّرت الدخول — اكتب حساب الفرع تحت' : '', reason === 'anon'); return; }
+  _posAutoLoginRunning = true;
+  try{
+    try{ await _posAuthReady; }catch(e){}
+    for(let i = 1; i <= 40; i++){
+      const cu = firebase.auth().currentUser;
+      if(cu && !cu.isAnonymous){ _posAutoStatus(''); return; }
+      if(!getBranchLogin()){ _posAutoStatus('🔑 باسورد حساب الفرع اتغيّر — اكتبه تاني تحت', true); return; }
+      _posAutoStatus('⏳ بيرجّع دخول الفرع لوحده… (محاولة ' + i + ')' + (window._posAutoLoginLastErr ? ' · ' + window._posAutoLoginLastErr : ''));
+      if(await tryAutoBranchLogin()){ _posAutoStatus(''); return; }
+      if(!getBranchLogin()){ _posAutoStatus('🔑 باسورد حساب الفرع اتغيّر — اكتبه تاني تحت', true); return; }
+      const wait = Math.min(30000, 5000 * i);
+      await new Promise(function(res){
+        const t = setTimeout(done, wait);
+        function done(){ clearTimeout(t); window.removeEventListener('online', done); res(); }
+        window.addEventListener('online', done);   // النت رجع → جرّب على طول
+      });
+    }
+    _posAutoStatus('❌ مقدرش يرجّع الدخول — اتأكد من النت واقفل الصفحة وافتحها', true);
+  } finally { _posAutoLoginRunning = false; }
+}
+window.posAutoLoginLoop = posAutoLoginLoop;
 
 // أول ما الصفحة تفتح: لو مفيش فرع متسجل على الجهاز ده، اطلب تسجيله الأول قبل أي حاجة تانية.
 // أول ما الصفحة تفتح: الجهاز يعدّي بس لو عنده فرع محفوظ + جلسة حساب فرع سارية.
@@ -299,8 +356,11 @@ if(currentBranch){
   // 🔐 لو الجلسة ضاعت (تحديث/تنضيف كاش)، بنحاول نرجّعها لوحدنا الأول —
   // الموظفة مش المفروض تشوف شاشة الإيميل والباسورد خالص.
   (async function(){
-    if(!firebase.auth().currentUser){
-      try{ await tryAutoBranchLogin(); }catch(e){ console.warn('auto login', e); }
+    // v757: نستنى Firebase يرجّع الجلسة المحفوظة الأول — وبعدين نعيد المحاولة لحد ما تنجح
+    try{ await _posAuthReady; }catch(e){}
+    const cu = firebase.auth().currentUser;
+    if(!cu || cu.isAnonymous){
+      try{ await posAutoLoginLoop(cu ? 'anon' : 'null'); }catch(e){ console.warn('auto login', e); }
     }
   })();
   firebase.auth().onAuthStateChanged(function once(u){

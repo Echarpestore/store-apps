@@ -2186,7 +2186,11 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="credit-core.js"></script>
 <script src="credit-ui.js"></script>
 <!-- 📱 انستا باي — طبقة فوق pos-sale.js، لو وقعت الفاتورة بتكمّل عادي -->
-<script src="instapay-pos.js?v=744"></script>
+<!-- ⏳ v757: شاشة «في انتظار التأكيد» (إنستاباي + فيزا) — بعد pos-sale.js لأنها بتلف دوال الكارت -->
+<script src="pay-live-core.js?v=757"></script>
+<script src="pay-live-ring.js?v=757"></script>
+<script src="pay-live.js?v=757"></script>
+<script src="instapay-pos.js?v=757"></script>
 <!-- 💳 المرتجع لرصيد العميلة -->
 <script src="refund-credit.js?v=730"></script>
 <!-- 💳 §4هـ: الرصيد/النقط/المكافأة بيتحفظوا طرق دفع مش سطور سالبة.

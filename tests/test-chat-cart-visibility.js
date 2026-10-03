@@ -74,10 +74,11 @@ function checkApp(brand, filePath) {
   assert(buyFn.indexOf('photo.html') === -1, brand + ': مبتفتحش صفحة التجربة');
 
   // ٤) شارة السلة متوصّلة
-  const renderShopFn = (H.match(/function renderShop\(\)\{[\s\S]*?\n  var box[\s\S]{0,400}/) || [''])[0];
-  assert(/setTabBadge\('shop',/.test(renderShopFn), brand + ': شارة تبويب اطلبي متوصّلة بعدد السلة');
-  assert(/_shopCart/.test(renderShopFn) && /shopQty\(bc\)/.test(renderShopFn),
-    brand + ': العدّاد فعلي من _shopCart مش رقم ثابت');
+  const renderShopFn = (H.match(/function renderShop\(\)\{[\s\S]*?\n  var box[\s\S]{0,900}/) || [''])[0];
+  // v703 (قرار المالك): العدد على زرار الشنطة فوق بس — تبويب «اطلبي» من غير نقطة حمرا
+  assert(/setTabBadge\('shop', 0\)/.test(renderShopFn), brand + ': v703 تبويب اطلبي من غير عدّاد (كان بيتفهم إشعار)');
+  assert(/_cfd\.textContent = _cn > 9 \? '9\+' : String\(_cn\)/.test(renderShopFn) && /shopQty\(bc\)/.test(renderShopFn),
+    brand + ': العدّاد على زرار الشنطة فعلي من _shopCart مش رقم ثابت');
 
   // ⚠️ زرار الشات العائم اتشال بالكامل في دفعة لاحقة (تفضيل المالك:
   //    أيقونة عائمة واحدة بس — السلة). التفاصيل في

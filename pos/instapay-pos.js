@@ -59,6 +59,10 @@
 .ipSpin{width:34px;height:34px;margin:6px auto 10px;border-radius:50%;
   border:3px solid var(--border,#2b2f3b);border-top-color:#16a34a;animation:ipSpin 1s linear infinite}
 @keyframes ipSpin{to{transform:rotate(360deg)}}
+/* v757: مسح الإيصال اتشال — التأكيد من رسالة البنك بس، فالمؤشرات الأربعة والسبينر القديم مالهمش لازمة */
+#ipPosSpin{display:none!important}
+#ipPosBox .ipRow{display:none}
+#ipPosState{transition:color .3s}
 /* لوحة الإعدادات */
 .ipSet{background:var(--panel,#1b1e27);border:1px solid var(--border,#2b2f3b);
   border-radius:14px;padding:16px;margin-top:14px}
@@ -86,6 +90,8 @@
   <div class="sub" id="ipPosSub">الطلب راح للتابلت</div>
   <div class="ipAmtBig" id="ipPosAmt">0 ج.م</div>
   <div class="ipSpin" id="ipPosSpin"></div>
+  <!-- ⏳ v757: دايرة التقدّم (pay-live-ring.js) — بتمشي على المدة المعتادة لتأكيد البنك في الفرع ده -->
+  <div id="ipPosRing" style="margin:4px auto 8px;display:flex;justify-content:center"></div>
   <div class="ipRow">
     <div class="ipPill" id="ipP1">المبلغ</div>
     <div class="ipPill" id="ipP2">الوقت</div>
@@ -158,7 +164,36 @@
     });
   }
 
+  /* ⏳ v757 — التقدّم: بيبدأ لما العميلة تدوس «تم التحويل» على التابلت (status=scanning)
+     ويخلص 100% بس لما البنك يأكد. وقت كل تأكيد بنك بيتسجّل عشان المرة الجاية تبقى أدق. */
+  let ipRing = null, ipT0 = 0, ipTimer = 0;
+  function ringEnsure() {
+    if (!ipRing && window.PayRing && $('ipPosRing')) ipRing = window.PayRing.create($('ipPosRing'), { size: '118px' });
+    return ipRing;
+  }
+  function ipStopTimer() { if (ipTimer) { clearInterval(ipTimer); ipTimer = 0; } }
+  function ipTick() {
+    if (!ipRing || !ipT0 || !window.PayLiveCore) return;
+    const e = window.PayLive ? window.PayLive.etaFor('instapay') : window.PayLiveCore.DEF.instapay;
+    const el = Date.now() - ipT0;
+    ipRing.set(window.PayLiveCore.progressAt(el, e));
+    if (!approved) $('ipPosState').textContent = window.PayLiveCore.phase(el, e, 'instapay', 'staff');
+  }
+  function ipProgress(st) {
+    if (!ringEnsure()) return;
+    const s = st && st.status;
+    if (s === 'scanning' && !ipT0) { ipT0 = Date.now(); ipStopTimer(); ipTimer = setInterval(ipTick, 400); ipTick(); }
+    else if (s === 'waiting' && !ipT0) ipRing.idle();
+    else if (s === 'approved') {
+      ipStopTimer(); ipRing.done(true);
+      if (st.mode === 'bank' && ipT0 && window.PayLive) window.PayLive.record('instapay', Date.now() - ipT0);
+      ipT0 = 0;
+    } else if (s === 'rejected') { ipStopTimer(); ipRing.done(false); ipT0 = 0; }
+  }
+  function ipProgressReset() { ipStopTimer(); ipT0 = 0; if (ipRing) ipRing.idle(); }
+
   function paint(st) {
+    try { ipProgress(st); } catch (e) { console.warn('[instapay] progress', e); }
     const c = (st && st.checks) || {};
     $('ipP1').classList.toggle('ok', !!c.amount);
     $('ipP2').classList.toggle('ok', !!c.time);
@@ -208,8 +243,8 @@
       $('ipPosManual').style.display = '';
       $('ipPosManual').disabled = false;
       $('ipPosSpin').style.display = '';
-      $('ipPosState').textContent = (st && st.hint) ||
-        (s === 'scanning' ? 'العميلة بتمسح الإيصال…' : 'في انتظار العميلة…');
+      // v757: مفيش مسح إيصال — «scanning» = العميلة قالت «حوّلت» والعداد شغال (ipTick بيكتب المرحلة)
+      if (s !== 'scanning') $('ipPosState').textContent = (st && st.hint) || 'في انتظار العميلة تحوّل…';
       const ex = explain(st);
       $('ipPosWhy').textContent = ex;
       $('ipPosWhy').style.display = ex ? '' : 'none';
@@ -268,6 +303,7 @@
   /* 🔄 تصفير كامل — بيتنادى مع كل سلة جديدة */
   function resetFlow() {
     if (unsub) { try { unsub(); } catch (e) {} unsub = null; }
+    ipProgressReset();
     S = null; approved = false; finalizing = false; autoFiredFor = null;
     window.instapayConfirmInfo = null;
     ['ipP1', 'ipP2', 'ipP3'].forEach(i => $(i).classList.remove('ok'));
@@ -338,6 +374,7 @@
     try {
       const r = await fnCall('instaPay', { action: 'start', branch: br, amountCents: cents });
       S = { sid: r.sid, cents: cents, payCents: r.amountCents || cents };
+      ipProgressReset();
       // 🔢 فيه طلب تاني مفتوح بنفس المبلغ → الطلب ده خد قروش مختلفة (خصم صغير) عشان التحويل يتعرف
       if (r.amountCents && r.amountCents !== cents) {
         $('ipPosAmt').innerHTML = (r.amountCents / 100).toFixed(2) + ' ج.م'

@@ -83,6 +83,8 @@ async function sendToTokens(tokens, title, body, tag, customerRef, link) {
   const res = await getMessaging().sendEachForMulticast({
     tokens,
     notification: { title, body },
+    // 📱 الدوسة على الإشعار في التطبيق الأصلي (Android/iOS) بتقرا data.url — حقول webpush زي ما هي
+    data: { url: String(link || "./"), tag: String(tag || "") },
     webpush: {
       notification: { title, body, dir: "rtl", lang: "ar", tag },
       fcmOptions: { link: link || "./" },
@@ -140,7 +142,8 @@ exports.onRewardAdded = onDocumentUpdated(
         title,
         `🎁 وصلتك مكافأة خاصة: ${desc} — مستنيينك!`,
         "reward",
-        event.data.after.ref
+        event.data.after.ref,
+        "./?go=offers"   // 🔗 الدوسة على الإشعار تفتح تبويب العروض (مكان «مكافآتك الخاصة») — كانت بتفتح الرئيسية بس
       );
     }
   }
@@ -244,7 +247,8 @@ exports.onWelcomeToken = onDocumentUpdated(
           BRAND_NAMES[brand] || brand,
           `👋 أهلًا بيكي! كسبتي ${Number(cfg.value)} نقطة هدية الترحيب 🎁`,
           "welcome",
-          ref
+          ref,
+          "./?go=points"   // 🔗 تفتح كارت النقط
         ).catch((e) => console.warn("welcome push", brand, e && e.message || e));
       }
       // fixed reward: onRewardAdded يرسل إشعار المكافأة تلقائيًا.
@@ -312,6 +316,15 @@ exports.onSaleForReferral = onDocumentCreated("pos_test_sales/{saleId}", async (
   try {
     const sale = event.data ? event.data.data() : null;
     if (!sale || !sale.customerPhone) return;
+
+    // 🔔 إشعار «اتخصم X نقطة · رصيدك Y» — قبل أي return تحت (الفاتورة ممكن تبقى صفر بعد الاستبدال).
+    //    best-effort ومعزول: أي خطأ هنا مايأثرش على تفعيل العمولة.
+    try {
+      const { buildPointsNotice, sendNotice } = require("./spendNotice");
+      const _n = buildPointsNotice(sale);
+      if (_n) await sendNotice({ db, messaging: getMessaging() }, sale.customerPhone, _n);
+    } catch (e) { console.error("points notice", e && e.message); }
+
     const total = Number(sale.total) || 0;
     if (total <= 0) return;   // مرتجعات/أصفار لا تفعّل
 
@@ -355,9 +368,25 @@ exports.onSaleForReferral = onDocumentCreated("pos_test_sales/{saleId}", async (
 const { onRequest } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const PAYMOB_API_KEY = defineSecret("PAYMOB_API_KEY");
+// 🌐 v754: دومين واحد بس (accept.paymob.com). الدومين القديم accept.paymobsolutions.com
+//    بقى يرجّع صفحة HTML بدل JSON → «Unexpected token '<'» والماكينة متفتحش.
+const PAYMOB_BASE = "https://accept.paymob.com/api";
+/* قراءة رد Paymob بأمان: لو رجع HTML أو أي حاجة مش JSON نقول **أنهي خطوة** و**الكود**
+   بدل رسالة JSON المبهمة — عشان المرة الجاية نعرف السبب من الشاشة على طول. */
+async function paymobReadJson(res, step){
+  const text = await res.text();
+  try { return { ok: true, data: JSON.parse(text) }; }
+  catch (_) {
+    const snippet = String(text || "").replace(/\s+/g, " ").slice(0, 120);
+    console.error("paymob non-json", step, res.status, snippet);
+    return { ok: false, error: "Paymob رد بصفحة مش JSON (" + step + " · " + res.status + ")" };
+  }
+}
 
+// 🌍 v756: Paymob بقى يحجب سيرفرات Google في أمريكا (nginx 403 من 01-10-2026) وبيقبل من الدوحة —
+//    اتأكد بدالة paymobProbe. لو اتحجبت تاني: جرّب المنطقة بنفس الدالة قبل ما تنقل.
 exports.paymobTerminalOrder = onRequest(
-  { secrets: [PAYMOB_API_KEY], cors: true, region: "us-central1" },
+  { secrets: [PAYMOB_API_KEY], cors: true, region: "me-central1" },
   async (req, res) => {
     try {
       if (req.method !== "POST") { res.status(405).json({ ok:false, error:"POST only" }); return; }
@@ -368,16 +397,18 @@ exports.paymobTerminalOrder = onRequest(
       if (!tid) { res.status(400).json({ ok:false, error:"terminal_id ناقص" }); return; }
 
       // 1) Auth token
-      const authRes = await fetch("https://accept.paymobsolutions.com/api/auth/tokens", {
+      const authRes = await fetch(PAYMOB_BASE + "/auth/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ api_key: PAYMOB_API_KEY.value() })
       });
-      const auth = await authRes.json();
-      if (!auth.token) { res.status(502).json({ ok:false, error:"فشل توثيق Paymob" }); return; }
+      const authJ = await paymobReadJson(authRes, "auth");
+      if (!authJ.ok) { res.status(502).json({ ok:false, error: authJ.error }); return; }
+      const auth = authJ.data || {};
+      if (!auth.token) { res.status(502).json({ ok:false, error:"فشل توثيق Paymob (" + authRes.status + ")" }); return; }
 
       // 2) Order registration → إشعار الماكينة
-      const url = "https://accept.paymob.com/api/ecommerce/orders"
+      const url = PAYMOB_BASE + "/ecommerce/orders"
         + "?send_pay_notification_to_terminal_id=" + tid
         + "&preferred_payment_method=card";
       const orderRes = await fetch(url, {
@@ -391,7 +422,9 @@ exports.paymobTerminalOrder = onRequest(
           merchant_order_id: String(merchant_order_id || Date.now())
         })
       });
-      const order = await orderRes.json();
+      const orderJ = await paymobReadJson(orderRes, "order");
+      if (!orderJ.ok) { res.status(502).json({ ok:false, error: orderJ.error }); return; }
+      const order = orderJ.data || {};
       if (!orderRes.ok || !order.id) {
         console.error("paymob order fail", order);
         res.status(502).json({ ok:false, error: (order && order.message) || "فشل تسجيل الأوردر" });
@@ -1009,8 +1042,17 @@ exports.autoCloseSalesShiftsAt1 = onSchedule(
 // ============================================================================
 Object.assign(exports, require("./giftCredit"));
 // Finance v679: customer-confirmed credit + InstaPay evidence. No legacy handler overwritten.
+/* ⛔ معطّل مؤقتًا (18 سبتمبر) — السطرين دول بينشروا 29 دالة في us-central1
+   وده اللي عدّى حد الـCPU للمشروع وخلّى النشر يفشل بـ:
+   "Quota exceeded for total allowable CPU per project per region"
+   والنتيجة إن الأساسي وقع: onlineOrderPlace · paymobWebhook · rateVisitPush
+   · hijabTryOn · creditSpend. الملفين موجودين مكانهم ومحدش بيحمّلهم من
+   الفرونت (finance-pos.js و finance-tablet.js و finance-office.js كلهم
+   مش متحمّلين في أي index.html)، فتعطيلهم ملوش أي أثر على الشغل.
+   ⚠️ ممنوع يترجّعوا غير بعد إعادة بنائهم بعدد دوال أقل.
 Object.assign(exports, require("./financeCheckout"));
 Object.assign(exports, require("./instaEvidence"));
+*/
 
 // 🥇 سعر الدهب التلقائي — كان ملف موجود في الريبو **ومش مربوط**،
 //    يعني الدالة مكانتش بتتنشر أصلًا (نفس درس frames.js: ملف موجود
@@ -1026,3 +1068,24 @@ Object.assign(exports, require("./onlineOrderPlace"));
 //    صورة واحدة واقعية). من غير السطر ده الدالة **مش منشورة**. النشر:
 //    firebase deploy --only functions:hijabTryOn
 Object.assign(exports, require("./hijabTryOn"));
+
+// 📱 إنستاباي على تابلت الفرع — دالتين بس (instaPay + instaScan).
+//    بديل الـ29 دالة اللي عدّوا حد الـCPU. النشر:
+//    firebase deploy --only functions:instaPay,functions:instaScan
+Object.assign(exports, require("./instapay"));
+
+// 📩 مطابقة إنستاباي برسايل CIB (26-09) — النشر:
+//    firebase functions:secrets:set INSTAPAY_SMS_KEY
+//    firebase deploy --only functions:instapaySmsIngest,functions:instapayBankWatch
+Object.assign(exports, require("./instapaySms"));
+
+// 🔐 دخول نادي العملاء على السيرفر + حذف الحساب (LOYALTY-AUTH-v1، 29-09) — النشر:
+//    firebase deploy --only functions:loyaltyAuth
+Object.assign(exports, require("./loyaltyAuth"));
+
+// 🧮 إحصائيات العميلة لكل فرع (v750) — بتتحدّث وقت البيع بدل ما شاشة العملاء
+//    تقرا كل فواتير الفرع (كانت 65 ثانية تحميل). النشر:
+//    firebase deploy --only functions:onSaleForCustomerStats,functions:customerStatsBackfill,functions:customerStatsVerify
+Object.assign(exports, require("./customerStats"));
+
+Object.assign(exports, require("./paymobProbe"));

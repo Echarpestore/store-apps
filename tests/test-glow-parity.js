@@ -233,8 +233,9 @@ const rules = R('security', 'firestore-phase2.rules');
     '⭐⭐ مفيش نص أسود فوق خلفية `--gold` (وهي أسود في Glow)');
 
   // كل متغيّر مستعمل لازم يكون معرّف في :root
-  const root = G.slice(G.indexOf(':root{'), G.indexOf('}', G.indexOf(':root{')));
-  const defined = new Set((root.match(/--[a-z-]+/g) || []));
+  // (PREMIUM-UX بيعرّف متغيّراته في :root{…} تاني تحت — بنقرا كل بلوكات :root مش الأول بس)
+  const root = (G.match(/:root\{[^}]*\}/g) || []).join(' ');
+  const defined = new Set((root.match(/--[a-z-]+(?=\s*:)/g) || []));
   const used = new Set((G.match(/var\((--[a-z-]+)\)/g) || [])
     .map(function(x){ return x.replace(/var\(|\)/g, ''); }));
   const missing = [...used].filter(function(v){ return !defined.has(v); });
