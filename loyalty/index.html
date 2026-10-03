@@ -486,6 +486,15 @@
   #chatWrap{position:fixed; inset:0; z-index:60; background:var(--bg); display:none; flex-direction:column;
     max-width:480px; margin:0 auto;}
   #chatWrap.on{display:flex;}
+  .ch-cart{margin-inline-start:auto; position:relative; flex:0 0 auto; width:44px; height:44px; border-radius:50%;
+    border:1.5px solid var(--line); background:#fff; color:var(--pink,#d4518f); display:grid; place-items:center; cursor:pointer;
+    box-shadow:0 6px 16px -10px rgba(201,50,126,.45); transition:transform .15s ease;}
+  .ch-cart:active{transform:scale(.92);}
+  .ch-cart-dot{position:absolute; top:-4px; inset-inline-end:-4px; min-width:20px; height:20px; padding:0 5px; border-radius:10px;
+    background:#e5484d; color:#fff; font-size:11px; font-weight:800; display:none; align-items:center; justify-content:center;
+    border:2px solid #fff; line-height:1;}
+  .ch-cart-dot.show{display:flex; animation:chDotPop .3s cubic-bezier(.2,1.4,.4,1);}
+  @keyframes chDotPop{from{transform:scale(.4);}to{transform:scale(1);}}
   .ch-head{display:flex; align-items:center; gap:12px; padding:14px 16px; background:#fff;
     border-bottom:1px solid var(--line); box-shadow:0 2px 12px -6px rgba(58,34,51,.15);}
   .ch-head .ch-back{border:none; background:none; font-size:22px; cursor:pointer; color:var(--ink); padding:4px;}
@@ -661,7 +670,9 @@
 /* PREMIUM-UX-v1 — حركة وشكل فخم (CSS فقط: transform/opacity عشان الأداء) */
 :root{--pux-ease:cubic-bezier(.22,1,.36,1);}
 @keyframes puxFade{from{opacity:0;}to{opacity:1;}}
-.screen.on{animation:puxFade .45s ease both;}
+/* v706: «backwards» مش «both» — «both» كانت بتسيب كل شاشة طبقة لوحدها للأبد بعد الحركة، فالسلة السريعة
+   (جوّه الشاشة) كانت بتفتح ورا الشات وورا الشريط الزجاجي. دلوقتي الطبقة بتختفي أول ما الحركة تخلص. */
+.screen.on{animation:puxFade .45s ease backwards;}
 
 /* ── شريط التبويبات: ثابت (من غير سحب) + زجاجي + مؤشر بيتزحلق ── */
 .tabbar,html[dir="ltr"] .tabbar{
@@ -858,6 +869,11 @@
         <b>echarpe ✿</b>
         <span id="chStatus">بنرد من ١٠ الصبح لـ١٠ بالليل</span>
       </div>
+      <!-- 🛍️ v706: السلة في الشات كمان — بتفتح السلة السريعة فوق الشات ومعاها العدد -->
+      <button class="ch-cart" type="button" onclick="openQuickCheckout()" aria-label="السلة">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l1 12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
+        <span class="ch-cart-dot" id="chCartDot"></span>
+      </button>
     </div>
     <button class="outfit-cta" onclick="chatOutfitCta()">🧥 اختاري طرحة لطقمك ✨</button>
     <div id="chMsgs"></div>
@@ -2679,6 +2695,8 @@ function renderShop(){
     var _cn = Object.keys(_shopCart).reduce(function(s, bc){ return s + shopQty(bc); }, 0);
     _cfd.textContent = _cn > 9 ? '9+' : String(_cn);
     _cfd.classList.toggle('show', _cn > 0);
+    var _chd = $('chCartDot');   // v706: نفس العدد على زرار السلة في الشات
+    if(_chd){ _chd.textContent = _cfd.textContent; _chd.classList.toggle('show', _cn > 0); }
   }
   /* 🛍️ وضع "السلة فقط" — لمّا الشاشة دي بتفتح كـoverlay (زرار السلة
      العائم، أو "أضيفيها للسلة" من الشات/التجربة) بدل تبويب عادي.
