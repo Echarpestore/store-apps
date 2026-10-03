@@ -32,10 +32,10 @@ const mode = process.argv[2];
   win.paymobWatch('echarpe Madinaty-1', 350);
   win.paymobWatch('echarpe Madinaty-1', 350);
   _off = 21000;   // العميلة حطّت الكارت والبنك رد بعد 21 ثانية    // نفس المرجع (إعادة محاولة) — مفيش مستمع تاني
-  if(mode === 'ok') docCb({ exists:true, data: () => ({ status:'success', cardScheme:'Visa', cardLast4:'4417' }) });
-  if(mode === 'bad') docCb({ exists:true, data: () => ({ status:'failed', declineReason:'51' }) });
+  if(mode === 'ok' && docCb) docCb({ exists:true, data: () => ({ status:'success', cardScheme:'Visa', cardLast4:'4417' }) });
+  if(mode === 'bad' && docCb) docCb({ exists:true, data: () => ({ status:'failed', declineReason:'51' }) });
   if(mode === 'cancel') win.paymobCancelPending();
-  if(mode === 'ok') docCb({ exists:true, data: () => ({ status:'failed', declineReason:'51' }) });   // رد متأخر بعد النجاح — يتجاهل
+  if(mode === 'ok' && docCb) docCb({ exists:true, data: () => ({ status:'failed', declineReason:'51' }) });   // رد متأخر بعد النجاح — يتجاهل
   await new Promise(r => setTimeout(r, 50));
   out.st = (el.cache['.st'] || {}).textContent; out.sub = (el.cache['.sub'] || {}).textContent;
   process.stdout.write(JSON.stringify(out));

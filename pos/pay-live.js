@@ -139,7 +139,12 @@
     var w = function(){ try{ before.apply(this, arguments); }catch(e){ console.warn('[paylive]', name, e); } return orig.apply(this, arguments); };
     w.__pl = true; window[name] = w;
   }
+  /* 🔕 v759 (قرار المالك 04-10): شاشة الكارت اتلغت على POS والتابلت — الماكينة نفسها بتعرض للعميلة
+     كل حاجة، والكاشير عنده رسالة Paymob العادية. الملف فاضل عشان إنستاباي بيستخدم PayLive.etaFor/record.
+     الرجوع = CARD_LIVE = true + سطر pay-live-tablet.js في feedback/index.html. */
+  var CARD_LIVE = false;
   function hook(){
+    if(!CARD_LIVE) return;
     wrap('sendToPaymobTerminal', function(amountEGP){ if(typeof paymobTerminalId === 'function' && paymobTerminalId()) cardStart(amountEGP); });
     wrap('paymobWatch', function(orderRef, amountEGP){ cardWatch(orderRef, amountEGP); });
     wrap('paymobCancelPending', function(){ cardCancel(); });

@@ -48,9 +48,11 @@ assertEq(C.reasonAr(null), 'البنك رفض العملية', 'من غير سب
 // ===== التوصيل =====
 const PI = fs.readFileSync(path.join(root, 'pos', 'index.html'), 'utf8');
 const order = ['pos-sale.js?v=', 'pay-live-core.js?v=757', 'pay-live-ring.js?v=757', 'pay-live.js?v=757', 'instapay-pos.js?v=757'].map(x => PI.indexOf(x));
+order[3] = PI.indexOf('pay-live.js?v=759'); order[4] = PI.indexOf('instapay-pos.js?v=757');
 assert(order.every((v, i) => v > 0 && (i === 0 || v > order[i - 1])), 'POS: الترتيب pos-sale ← core ← ring ← pay-live ← instapay');
 const FI = fs.readFileSync(path.join(root, 'feedback', 'index.html'), 'utf8');
-assert(FI.indexOf('../pos/pay-live-core.js?v=757') > 0 && FI.indexOf('../pos/pay-live-ring.js?v=757') < FI.indexOf('instapay-tablet.js?v=757') && /pay-live-tablet\.js\?v=757/.test(FI), 'التابلت: المحرك والدايرة قبل الشاشات');
+assert(FI.indexOf('../pos/pay-live-core.js?v=757') > 0 && FI.indexOf('../pos/pay-live-ring.js?v=757') < FI.indexOf('instapay-tablet.js?v=757'), 'التابلت: المحرك والدايرة قبل إنستاباي');
+assert(!/pay-live-tablet\.js/.test(FI), 'v759: شاشة الكارت على التابلت اتشالت (قرار المالك)');
 const IT = fs.readFileSync(path.join(root, 'feedback', 'instapay-tablet.js'), 'utf8');
 const _d0 = IT.indexOf("$('ipDone').onclick"); const done = IT.slice(_d0, IT.indexOf("$('ipVBack').onclick", _d0));
 assert(/show\('verify'\); vStart\(\)/.test(done) && !/startCam/.test(done), 'التابلت: «تم التحويل» = عداد التأكيد، مش كاميرا');
@@ -65,26 +67,17 @@ assert(!/setDoc|updateDoc|addDoc/.test(PT), 'سلبي: التابلت مبيكت
 const PL = fs.readFileSync(path.join(root, 'pos', 'pay-live.js'), 'utf8');
 const pubBlock = PL.slice(PL.indexOf("publish({ state: 'approved'"), PL.indexOf("publish({ state: 'approved'") + 80);
 assert(!/cardLast4|last4/.test(pubBlock) && !/publish\([^)]*last4/.test(PL), 'سلبي: آخر 4 أرقام مش بتتبعت للتابلت');
-for(const [f, re] of [['pos/sw.js', /pos-shell-v7(5[8-9]|[6-9]\d)/], ['feedback/sw.js', /feedback-shell-v7(1[1-9]|[2-9]\d)/]])
+for(const [f, re] of [['pos/sw.js', /pos-shell-v7(59|[6-9]\d)/], ['feedback/sw.js', /feedback-shell-v7(1[2-9]|[2-9]\d)/]])
   assert(re.test(fs.readFileSync(path.join(root, f), 'utf8')), f + ' اترفع');
 
-// ===== تشغيل حقيقي للوحة الكارت على POS =====
+// ===== v759: لوحة الكارت متقفلة (قرار المالك) — دوال الدفع بتتنده زي ما هي ومفيش كتابة للتابلت =====
 const run = m => JSON.parse(require('child_process').execFileSync(process.execPath, [path.join(__dirname, '_helpers', 'pay-live-run.js'), m], { encoding:'utf8', timeout:15000 }));
 let r = run('ok');
-assert(r.calls[0] === 'send:350' && r.calls.filter(c => c.startsWith('watch')).length === 2, 'الدوال الأصلية لسه بتتنده زي ما هي (اللف شفاف)');
-const live = r.writes.filter(w => w.id === 'paylive_echarpe Madinaty').map(w => w.d.state);
-assertEq(live, ['waiting', 'approved'], 'التابلت: منتظر ← اتقبلت (والرد المتأخر بعد النجاح اتجاهل)');
-assert(r.writes.find(w => w.d.state === 'waiting').d.etaMs === 24200, 'المدة المعتادة من بيانات الفرع (وسيط 22000 × 1.1)');
-assert(r.ring.includes('OK') && !r.ring.includes('BAD'), 'الدايرة: ✓');
-assert(/اتقبلت/.test(r.st) && /Visa ••4417/.test(r.sub), 'POS: نوع الكارت وآخر 4 أرقام للكاشير');
-assert(!r.writes.some(w => JSON.stringify(w.d).includes('4417')), 'سلبي: آخر 4 أرقام مااتبعتتش للتابلت');
-assert(r.writes.some(w => w.id === 'payeta_echarpe Madinaty' && Array.isArray(w.d.card) && w.d.card.length === 4), 'وقت العملية اتسجّل في بيانات الفرع');
-r = run('bad');
-assertEq(r.writes.filter(w => w.id.startsWith('paylive_')).map(w => w.d.state), ['waiting', 'declined'], 'رفض: منتظر ← اترفضت');
-assert(r.writes.find(w => w.d.state === 'declined').d.reason === 'الرصيد مش كفاية' && /الرصيد مش كفاية/.test(r.sub), 'السبب بالعربي على الشاشتين');
-assert(!r.writes.some(w => w.id.startsWith('payeta_')), 'سلبي: الرفض مش بيتحسب في المدة المعتادة');
-r = run('cancel');
-assertEq(r.writes.filter(w => w.id.startsWith('paylive_')).map(w => w.d.state), ['waiting', 'cancelled'], 'إلغاء: التابلت بيقفل');
+assert(r.calls[0] === 'send:350' && r.calls.filter(c => c.startsWith('watch')).length === 2, 'دوال الكارت الأصلية شغالة عادي');
+assert(!r.writes.some(w => w.id.startsWith('paylive_')), 'مفيش أي حالة كارت بتتبعت للتابلت');
+assert(!r.ring.length, 'مفيش لوحة كارت على POS');
+assert(/var CARD_LIVE = false;/.test(PL) && /if\(!CARD_LIVE\) return;/.test(PL), 'المفتاح مقفول (والرجوع سطر واحد)');
+assert(/etaFor: etaFor, record: record/.test(PL), 'إنستاباي لسه بيستخدم تعلّم المدة من نفس الملف');
 
 // ===== الدايرة (بعد الفحص بالصور) =====
 const RG = fs.readFileSync(path.join(root, 'pos', 'pay-live-ring.js'), 'utf8');
