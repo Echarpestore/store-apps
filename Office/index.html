@@ -28,8 +28,41 @@
      دلوقتي بتبدأ **مخفية**، والكود هو اللي بيقرر يعرضها ولا لأ. */
   #gate{ position:fixed; inset:0; z-index:100; background:var(--bg); display:none; align-items:center; justify-content:center; padding:22px; }
   #gate.on{ display:flex; }
-  #bootWait{ position:fixed; inset:0; z-index:99; background:var(--bg); display:flex;
-    align-items:center; justify-content:center; color:var(--sub); font-size:13px; }
+  /* ✨ v697: شاشة الفتح — لوجو بينبض + شريط بيلمع + جملة بتتغيّر (بدل «⏳ لحظة…») */
+  #bootWait{ position:fixed; inset:0; z-index:99; display:flex; flex-direction:column; gap:14px;
+    align-items:center; justify-content:center; color:var(--sub); font-size:13px;
+    background:radial-gradient(120% 80% at 50% 0%, #ffffff 0%, var(--bg) 60%); transition:opacity .35s ease, transform .35s ease; }
+  #bootWait.out{ opacity:0; transform:scale(1.02); pointer-events:none; }
+  #bootWait .bw-logo{ width:76px; height:76px; border-radius:24px; display:grid; place-items:center; font-size:38px;
+    background:linear-gradient(145deg,#fff,#eef2ff); box-shadow:0 18px 40px -18px rgba(37,99,235,.45), inset 0 1px 0 #fff;
+    animation:bwPulse 1.8s ease-in-out infinite; }
+  #bootWait .bw-name{ font-size:20px; font-weight:900; color:var(--ink); letter-spacing:-.01em; }
+  #bootWait .bw-bar{ width:180px; height:4px; border-radius:4px; background:#e3e7ef; overflow:hidden; position:relative; }
+  #bootWait .bw-bar i{ position:absolute; top:0; bottom:0; width:40%; border-radius:4px;
+    background:linear-gradient(90deg,var(--accent),var(--gold)); animation:bwSlide 1.15s cubic-bezier(.45,0,.2,1) infinite; }
+  #bootWait .bw-tip{ min-height:18px; transition:opacity .3s; }
+  @keyframes bwPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.06); } }
+  @keyframes bwSlide{ 0%{ right:-40%; } 100%{ right:100%; } }
+  /* شريط تحميل البيانات فوق + كبسولة «بيجهّز…» تحت */
+  #ofLoadBar{ position:fixed; top:0; right:0; left:0; height:3px; z-index:9998; pointer-events:none; opacity:0; transition:opacity .4s; }
+  #ofLoadBar.on{ opacity:1; }
+  #ofLoadBar i{ display:block; height:100%; width:0; background:linear-gradient(270deg,var(--accent),#7c9cff,var(--gold));
+    box-shadow:0 0 10px rgba(37,99,235,.55); transition:width .5s cubic-bezier(.22,1,.36,1); }
+  #ofLoadPill{ position:fixed; bottom:calc(84px + env(safe-area-inset-bottom)); left:50%; z-index:9998; pointer-events:none;
+    transform:translate(-50%,16px); opacity:0; transition:opacity .3s, transform .35s cubic-bezier(.2,.9,.25,1.2);
+    background:rgba(26,31,43,.92); color:#fff; font-size:12.5px; font-weight:800; padding:8px 14px 8px 12px; border-radius:99px;
+    display:flex; align-items:center; gap:8px; box-shadow:0 12px 30px -12px rgba(0,0,0,.45); white-space:nowrap; }
+  #ofLoadPill.on{ opacity:1; transform:translate(-50%,0); }
+  #ofLoadPill .sp{ width:13px; height:13px; border-radius:50%; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; animation:ofSpin .8s linear infinite; }
+  #ofLoadPill small{ color:#9aa3b2; font-weight:700; }
+  @keyframes ofSpin{ to{ transform:rotate(360deg); } }
+  /* هيكل لامع مكان «…» لحد ما البيانات توصل */
+  .of-skel{ display:grid; gap:9px; padding:6px 0; }
+  .of-skel i{ display:block; height:14px; border-radius:7px; background:linear-gradient(90deg,#eceff4 25%,#f7f8fb 50%,#eceff4 75%);
+    background-size:200% 100%; animation:ofShimmer 1.3s linear infinite; }
+  .of-skel i:nth-child(2){ width:82%; } .of-skel i:nth-child(3){ width:64%; }
+  @keyframes ofShimmer{ to{ background-position:-200% 0; } }
+  @media (prefers-reduced-motion:reduce){ #bootWait .bw-logo, #bootWait .bw-bar i, .of-skel i, #ofLoadPill .sp{ animation:none; } }
   #gate .card{ width:100%; max-width:360px; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:26px 22px; text-align:center; }
   #gate .logo{ font-size:44px; }
   #gate h1{ font-size:20px; margin:8px 0 2px; }
@@ -621,7 +654,9 @@ document.addEventListener('DOMContentLoaded',function(){
 <body>
 
 <!-- ===== بوابة الدخول: حساب فرع (Firebase) + كود المالك ===== -->
-<div id="bootWait">⏳ لحظة…</div>
+<div id="bootWait"><div class="bw-logo">🏢</div><div class="bw-name">echarpe office</div><div class="bw-bar"><i></i></div><div class="bw-tip" id="bwTip">بنجهّز مكتبك…</div></div>
+<div id="ofLoadBar"><i></i></div>
+<div id="ofLoadPill"><span class="sp"></span><span id="ofLoadTxt">بيجهّز…</span><small id="ofLoadN"></small></div>
 <div id="gate">
   <div class="card">
     <div class="logo">🏢</div>
@@ -1105,7 +1140,7 @@ document.addEventListener('DOMContentLoaded',function(){
 <script src="../pos/chat-staff-ui.js?v=680"></script>
 <script src="../cctv-config.js?v=549"></script>
 <script src="cctv.js?v=749"></script>
-<script src="office.js?v=696"></script>
+<script src="office.js?v=697"></script>
 <script src="office-days.js?v=690"></script>
 </body>
 </html>

@@ -89,6 +89,34 @@ function ofPerfShow(){
   document.body.insertAdjacentHTML('beforeend', h);
 }
 window.ofPerfShow = ofPerfShow;
+/* ✨ v697 — مؤشر التحميل: شريط رفيع فوق بيتملي + كبسولة «بيجهّز: …» تحت.
+   كل تحميل بيعمل begin/end؛ لما كله يخلص الاتنين بيختفوا بنعومة. */
+var OF_LOAD_NAMES = { sales30:'المبيعات', inventory:'المخزون', employees:'الموظفين', merchants:'التجار', merchant_txns:'حركات التجار',
+  recurring:'المصاريف الثابتة', rewards:'المكافآت', settlements:'تسويات Paymob', gift_cards:'كروت الهدايا', credit_ledger_50:'الرصيد',
+  cash_days:'الخزنة', activity_log:'سجل النشاط', customers:'العملاء', ratings30:'التقييمات' };
+window.ofLoad = (function(){
+  var pend = {}, total = 0, done = 0, hideT = 0;
+  function el(id){ return document.getElementById(id); }
+  function paint(){
+    var keys = Object.keys(pend), bar = el('ofLoadBar'), pill = el('ofLoadPill');
+    if(!bar || !pill) return;
+    clearTimeout(hideT);
+    if(!keys.length){
+      bar.querySelector('i').style.width = '100%';
+      hideT = setTimeout(function(){ bar.classList.remove('on'); pill.classList.remove('on'); setTimeout(function(){ if(!Object.keys(pend).length){ total = 0; done = 0; bar.querySelector('i').style.width = '0'; } }, 450); }, 500);
+      return;
+    }
+    bar.classList.add('on');
+    bar.querySelector('i').style.width = Math.max(8, Math.round(done / Math.max(1, total) * 100)) + '%';
+    el('ofLoadTxt').textContent = 'بيجهّز: ' + (OF_LOAD_NAMES[keys[keys.length - 1]] || 'البيانات');
+    el('ofLoadN').textContent = total > 1 ? (done + '/' + total) : '';
+    pill.classList.add('on');
+  }
+  return {
+    begin: function(k){ if(pend[k]) return; pend[k] = 1; total++; paint(); },
+    end: function(k){ if(!pend[k]) return; delete pend[k]; done++; paint(); }
+  };
+})();
 /* ⚡ v696: الحاجات اللي مش لازمة لأول شاشة بتستنى لحد ما الشاشة تخلص رسم */
 function ofLater(fn, ms){
   setTimeout(function(){ (window.requestIdleCallback || function(f){ return setTimeout(f, 1); })(function(){ try{ fn(); }catch(e){ console.warn('later', e); } }, { timeout: 4000 }); }, ms || 2500);
@@ -96,6 +124,7 @@ function ofLater(fn, ms){
 function ofLfOnce(q,key,apply,ttlMs){
   ttlMs = Number(ttlMs)||12*60*60*1000;
   var cacheHad=false, t=ofNow();
+  window.ofLoad.begin(key);
   // 1) zero-cost local render
   q.get({source:'cache'}).then(function(s){
     cacheHad = !!(s && !s.empty);
@@ -106,7 +135,8 @@ function ofLfOnce(q,key,apply,ttlMs){
     if(cacheHad && (Date.now()-ofLfLast(key)) < ttlMs) return null;
     var t2 = ofNow();
     return q.get({source:'server'}).then(function(s){ ofPerfAdd(key, 'server', s.size, ofNow() - t2); apply(s,'server'); ofLfMark(key); return s; });
-  }).catch(function(e){ console.warn('local-first '+key, e&&e.code||e); });
+  }).catch(function(e){ console.warn('local-first '+key, e&&e.code||e); })
+    .then(function(){ window.ofLoad.end(key); });
 }
 
 // الحركات المالية قليلة لكن لازم توصل Office فورًا من أجهزة Sales/POS.
@@ -1267,8 +1297,18 @@ window.officeLogout = async function(){
 // بيشيل شاشة الانتظار أول ما نعرف الحالة الحقيقية
 function _bootDone(){
   const b = document.getElementById('bootWait');
-  if(b) b.remove();
+  if(!b || b.classList.contains('out')) return;
+  clearInterval(window._bwTipT);
+  b.classList.add('out');                      // ✨ v697: بتختفي بنعومة بدل ما تتشال فجأة
+  setTimeout(function(){ if(b.parentNode) b.remove(); }, 380);
 }
+(function(){
+  var tips = ['بنجهّز مكتبك…', 'بنجيب آخر المبيعات…', 'بنراجع الوارد…', 'ثواني ونبدأ ✨'], i = 0;
+  window._bwTipT = setInterval(function(){
+    var t = document.getElementById('bwTip'); if(!t){ clearInterval(window._bwTipT); return; }
+    t.style.opacity = 0; setTimeout(function(){ i = (i + 1) % tips.length; t.textContent = tips[i]; t.style.opacity = 1; }, 300);
+  }, 1600);
+})();
 function refreshGate(user){
   const saved = localStorage.getItem('office_email') || '';
   if(saved && !$('#gEmail').value) $('#gEmail').value = saved;
@@ -2109,6 +2149,8 @@ async function ofActPublishClosedArchives(){
 
 async function ofActFetchRange(sinceTs, untilTs, onProgress){
   const out = [], _t = ofNow();
+  window.ofLoad.begin('activity_log');
+  try{
   let lastDoc = null;
   while(true){
     let q = db.collection('pos_activity_log').where('ts', '>=', sinceTs).orderBy('ts', 'desc');
@@ -2124,6 +2166,7 @@ async function ofActFetchRange(sinceTs, untilTs, onProgress){
     if(onProgress) onProgress(out.length);
     if(snap.size < OF_ACT_PAGE_SIZE) break;
   }
+  } finally { window.ofLoad.end('activity_log'); }
   ofPerfAdd('activity_log', 'server', out.length, ofNow() - _t);
   return out;
 }
@@ -3022,13 +3065,14 @@ function loadSales(){
   }
   // أول فتحة: اعرض الـ30 يوم من IndexedDB بدون أي server read.
   const _t0 = ofNow();
+  window.ofLoad.begin('sales30');
   const hydrate = loadSales._hydrated ? Promise.resolve() : baseQ.get({source:'cache'}).then(function(s){ofPerfAdd('sales30', 'cache', s.size, ofNow() - _t0); if(!s.empty)mergeSnap(s);}).catch(function(){}).then(function(){loadSales._hydrated=true;});
   hydrate.then(function(){
     // بعدها اطلب فقط الجديد مع overlap دقيقة، بدل إعادة 30 يوم.
     const fromMs=_salesTo?Math.max(cutMs,_salesTo-60000):cutMs;
     const _t1 = ofNow();
     return db.collection('pos_test_sales').where('createdAt','>=',firebase.firestore.Timestamp.fromMillis(fromMs)).get({source:'server'}).then(function(s){ ofPerfAdd('sales30', 'server', s.size, ofNow() - _t1); mergeSnap(s); });
-  }).catch(function(e){console.warn('sales load',e);}).then(function(){loadSales._busy=false;});
+  }).catch(function(e){console.warn('sales load',e);}).then(function(){loadSales._busy=false; window.ofLoad.end('sales30');});
 }
 
 // 👥 العملاء — للتقارير (تحميلات التطبيق والمكافآت والنقط)
@@ -3040,7 +3084,7 @@ function loadCustomers(force){
   var q=db.collection('pos_test_customers');
   q.get({source:'cache'}).then(function(s){if(!s.empty){D.customers=s.docs.map(function(d){return Object.assign({_id:d.id},d.data());});try{renderActivityReports();}catch(e){}}}).catch(function(){});
   if(!force && (Date.now()-ofLfLast('customers'))<24*60*60*1000) return;
-  q.get({source:'server'}).then(function(s){D.customers=s.docs.map(function(d){return Object.assign({_id:d.id},d.data());});ofLfMark('customers');try{renderActivityReports();}catch(e){}}).catch(function(e){console.warn('customers load',e);});
+  window.ofLoad.begin('customers'); q.get({source:'server'}).then(function(s){D.customers=s.docs.map(function(d){return Object.assign({_id:d.id},d.data());});ofLfMark('customers');try{renderActivityReports();}catch(e){}}).catch(function(e){console.warn('customers load',e);}).then(function(){ window.ofLoad.end('customers'); });
 }
 
 // ⭐ تقييمات العملاء (آخر 30 يوم)
@@ -3049,7 +3093,7 @@ function loadRatings(force){
   var from=Date.now()-30*86400000,q=db.collection('entries').where('ts','>=',from);
   q.get({source:'cache'}).then(function(s){if(!s.empty){D.ratings=s.docs.map(function(d){return d.data();});try{renderActivityReports();}catch(e){}}}).catch(function(){});
   if(!force&&(Date.now()-ofLfLast('ratings30'))<2*60*60*1000)return;
-  q.get({source:'server'}).then(function(s){D.ratings=s.docs.map(function(d){return d.data();});ofLfMark('ratings30');try{renderActivityReports();}catch(e){}}).catch(function(e){console.warn('ratings load',e);});
+  window.ofLoad.begin('ratings30'); q.get({source:'server'}).then(function(s){D.ratings=s.docs.map(function(d){return d.data();});ofLfMark('ratings30');try{renderActivityReports();}catch(e){}}).catch(function(e){console.warn('ratings load',e);}).then(function(){ window.ofLoad.end('ratings30'); });
 }
 
 /* ============================================================
@@ -4532,7 +4576,7 @@ function fillBranchSel(){
 function renderTop(){
   const wrap = $('#topSellers'); if(!wrap) return;
   const br = $('#topBranchSel').value;
-  if(!br){ wrap.innerHTML = '<div class="empty">…</div>'; return; }
+  if(!br){ wrap.innerHTML = '<div class="of-skel"><i></i><i></i><i></i></div>'; return; }
   const top = topSellers(D.sales, br, 10);
   if(!top.length){ wrap.innerHTML = '<div class="empty">مفيش مبيعات متسجلة للفرع ده آخر 30 يوم</div>'; return; }
   wrap.innerHTML = top.map(function(t, i){
