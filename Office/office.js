@@ -45,7 +45,10 @@ var ofAuth = firebase.auth(ofApp);
 ofAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(function(){});
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){});
 const db = firebase.firestore(ofApp);
-db.settings({ cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED, merge:true });
+/* ⚡ v696: الكاش كان «بلا حدود» ومبيتنضفش أبدًا — كل «اقرا من الكاش الأول» كانت بتعدّي على
+   كل حاجة اتنزلت من شهور (فواتير، سجل نشاط، مخزون بصوره) فـOffice بيبطأ أسبوع ورا أسبوع.
+   150MB مع تنضيف تلقائي (LRU): الشغل اليومي فاضل في الكاش والقديم بيتشال لوحده. */
+db.settings({ cacheSizeBytes: 150 * 1024 * 1024, merge:true });
 db.enablePersistence({ synchronizeTabs:true }).catch(function(){});
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
@@ -64,17 +67,45 @@ const OF_LF_PREFIX = 'office_lf_v431_';
 function ofLfLast(key){ try{return Number(localStorage.getItem(OF_LF_PREFIX+key)||0)||0;}catch(e){return 0;} }
 function ofLfMark(key){ try{localStorage.setItem(OF_LF_PREFIX+key,String(Date.now()));}catch(e){} }
 function ofLfDocs(s){ return (s&&s.docs?s.docs:[]).map(function(d){return Object.assign({id:d.id},d.data()||{});}); }
+/* ⏱️ v696 — تقرير سرعة Office: كل مجموعة بيانات بتتسجّل (مصدرها، عدد المستندات، الوقت)
+   + الوقت اللي الشاشة اتجمدت فيه. بيتفتح بالضغط على «متوصّل ✅» فوق. */
+function ofNow(){ try{ return performance.now(); }catch(e){ return Date.now(); } }
+window.ofPerf = window.ofPerf || { t0: ofNow(), rows: [], longMs: 0, longN: 0 };
+function ofPerfAdd(key, src, docs, ms){
+  try{ window.ofPerf.rows.push({ key:key, src:src, docs:docs, ms:Math.round(ms), at:Math.round(ofNow() - window.ofPerf.t0) }); }catch(e){}
+}
+try{
+  new PerformanceObserver(function(l){ l.getEntries().forEach(function(e){ window.ofPerf.longMs += e.duration; window.ofPerf.longN++; }); })
+    .observe({ type:'longtask', buffered:true });
+}catch(e){}
+function ofPerfShow(){
+  var P = window.ofPerf, rows = P.rows.slice().sort(function(a, b){ return b.ms - a.ms; });
+  var h = '<div style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center" onclick="this.remove()">'
+    + '<div onclick="event.stopPropagation()" style="background:#fff;color:#111;width:min(560px,100%);max-height:80vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px;font:13px/1.6 Cairo,sans-serif;direction:rtl">'
+    + '<b style="font-size:16px">⏱️ سرعة Office</b><div style="color:#666;margin:4px 0 10px">الشاشة اتجمدت ' + (P.longMs / 1000).toFixed(1) + ' ثانية (' + P.longN + ' مرة) · من الفتح: ' + ((ofNow() - P.t0) / 1000).toFixed(0) + ' ثانية</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="background:#f3f3f3"><th style="text-align:right;padding:5px">البيانات</th><th>من</th><th>عدد</th><th>وقت</th><th>بعد</th></tr>'
+    + rows.map(function(r){ return '<tr style="border-top:1px solid #eee' + (r.ms > 1500 ? ';background:#fff1f1' : '') + '"><td style="padding:5px">' + r.key + '</td><td>' + (r.src === 'cache' ? 'الجهاز' : 'السيرفر') + '</td><td>' + r.docs + '</td><td><b>' + (r.ms / 1000).toFixed(1) + 'ث</b></td><td>' + (r.at / 1000).toFixed(0) + 'ث</td></tr>'; }).join('')
+    + '</table><div style="color:#666;margin-top:10px">صوّر الشاشة دي وابعتها — الأحمر هو اللي بيبطّأ.</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', h);
+}
+window.ofPerfShow = ofPerfShow;
+/* ⚡ v696: الحاجات اللي مش لازمة لأول شاشة بتستنى لحد ما الشاشة تخلص رسم */
+function ofLater(fn, ms){
+  setTimeout(function(){ (window.requestIdleCallback || function(f){ return setTimeout(f, 1); })(function(){ try{ fn(); }catch(e){ console.warn('later', e); } }, { timeout: 4000 }); }, ms || 2500);
+}
 function ofLfOnce(q,key,apply,ttlMs){
   ttlMs = Number(ttlMs)||12*60*60*1000;
-  var cacheHad=false;
+  var cacheHad=false, t=ofNow();
   // 1) zero-cost local render
   q.get({source:'cache'}).then(function(s){
     cacheHad = !!(s && !s.empty);
+    ofPerfAdd(key, 'cache', s ? s.size : 0, ofNow() - t);
     if(cacheHad) apply(s,'cache');
   }).catch(function(){}).then(function(){
     // 2) only hit server if this dataset is stale or cache is empty
     if(cacheHad && (Date.now()-ofLfLast(key)) < ttlMs) return null;
-    return q.get({source:'server'}).then(function(s){ apply(s,'server'); ofLfMark(key); return s; });
+    var t2 = ofNow();
+    return q.get({source:'server'}).then(function(s){ ofPerfAdd(key, 'server', s.size, ofNow() - t2); apply(s,'server'); ofLfMark(key); return s; });
   }).catch(function(e){ console.warn('local-first '+key, e&&e.code||e); });
 }
 
@@ -1269,6 +1300,8 @@ function refreshGate(user){
   }
   $('#gate').classList.remove('on'); _bootDone();
   $('#hdrSub').textContent = 'متوصّل ✅ · ' + new Date().toLocaleDateString('ar-EG', { weekday:'long', day:'numeric', month:'long' });
+  $('#hdrSub').style.cursor = 'pointer'; $('#hdrSub').onclick = function(){ ofPerfShow(); };   // ⏱️ v696: تقرير السرعة
+  ofPerfAdd('فتح الشاشة', 'cache', 0, ofNow() - window.ofPerf.t0);
   startData();
 }
 // 🔐 أول ما الدخول يتأكد: نجيب بصمة الكود ونشوف الجلسة لسه سارية
@@ -2075,7 +2108,7 @@ async function ofActPublishClosedArchives(){
 }
 
 async function ofActFetchRange(sinceTs, untilTs, onProgress){
-  const out = [];
+  const out = [], _t = ofNow();
   let lastDoc = null;
   while(true){
     let q = db.collection('pos_activity_log').where('ts', '>=', sinceTs).orderBy('ts', 'desc');
@@ -2091,6 +2124,7 @@ async function ofActFetchRange(sinceTs, untilTs, onProgress){
     if(onProgress) onProgress(out.length);
     if(snap.size < OF_ACT_PAGE_SIZE) break;
   }
+  ofPerfAdd('activity_log', 'server', out.length, ofNow() - _t);
   return out;
 }
 
@@ -2858,6 +2892,8 @@ function startData(){
     try{ ofRenderHireRegs(); }catch(e){ console.warn('hire regs', e); }
   }, function(){ /* الكولكشن ممكن ميكونش موجود */ });
 
+  // ⚡ v696: التوظيف (والصور بتاعته) مش لازم لأول شاشة — بيستنى 3 ثواني
+  ofLater(function(){
   // 💼 المتقدّمين — نافذة ٩٠ يوم (الطلبات بتتراكم ومحدش بيرجع لطلب من سنة)
   db.collection('job_applications').where('ts','>=', Date.now() - 90*86400000)
     .onSnapshot(function(s4){
@@ -2887,6 +2923,7 @@ function startData(){
       console.warn('docs sync', e);
       try{ ofRenderHireRegs(); }catch(_e){}
     });
+  }, 3000);
   db.collection('sales_staff_orders').where('status','==','pending').onSnapshot(function(s){
     D.orders = s.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
     maybeNotifyNew('so', D.orders.filter(function(x){ return x.status==='pending'; }),
@@ -2901,16 +2938,18 @@ function startData(){
   });
   // 💾 v431: البيانات التاريخية/الإدارية الكبيرة Local‑First.
   // لا نفتح listeners دائمة عليها. الكاش يظهر فورًا، والسيرفر يتراجع فقط حسب TTL.
+  ofWatchRecentMoney(db.collection('office_expenses').where('ts','>=',ofMoneyWindowStartMs()),'expenses',function(s){
+    D.expenses = ofLfDocs(s); renderExpenses(); renderPL(); try{renderCashHand();}catch(e){} try{ofRenderRecurring();}catch(e){}
+  });
+  ofLater(function(){   // ⚡ v696: التجار وحركاتهم والمتكرر بعد أول شاشة
   ofLfOnce(db.collection('office_merchants'),'merchants',function(s){
     D.merchants = ofLfDocs(s); renderMerchants(); try{ ofRenderQuickGoodsMerchants(); ofWireQuickGoods(); ofWireVoiceGoods(); }catch(e){}
   }, 6*60*60*1000);
   ofLfOnce(db.collection('office_merchant_txns'),'merchant_txns',function(s){
     D.mtxns = ofLfDocs(s); renderMerchants(); renderPL();
   }, 12*60*60*1000);
-  ofWatchRecentMoney(db.collection('office_expenses').where('ts','>=',ofMoneyWindowStartMs()),'expenses',function(s){
-    D.expenses = ofLfDocs(s); renderExpenses(); renderPL(); try{renderCashHand();}catch(e){} try{ofRenderRecurring();}catch(e){}
-  });
   ofLfOnce(db.collection(OF_RECUR_COL),'recurring',function(s){ D.recurring=ofLfDocs(s); try{ofRenderRecurring();}catch(e){} }, 6*60*60*1000);
+  }, 1500);
   ofLfOnce(db.collection('sales_employees'),'employees',function(s){
     D.employees=ofLfDocs(s); renderSalaries(); fillBranchSel(); fillExpenseBranchSel(); renderPL();
     ofLoadDayCut().then(function(){try{ofWireDay();}catch(e){}});
@@ -2923,7 +2962,7 @@ function startData(){
   }, function(e){console.warn('present sync',e&&e.code);});
 
   ofWatchRecentMoney(db.collection('sales_salary_payments').where('paidAt','>=',ofMoneyWindowStartMs()),'salary_pays',function(s){D.salaryPays=ofLfDocs(s);try{renderCashHand();renderSalaries();renderPL();}catch(e){}});
-  ofLfOnce(db.collection('sales_rewards'),'rewards',function(s){D.rewards=ofLfDocs(s);try{renderCashHand();}catch(e){}},12*60*60*1000);
+  ofLater(function(){ ofLfOnce(db.collection('sales_rewards'),'rewards',function(s){D.rewards=ofLfDocs(s);try{renderCashHand();}catch(e){}},12*60*60*1000); }, 2000);
   ofLfOnce(db.collection('office_paymob_settlements'),'settlements',function(s){D.settlements=ofLfDocs(s);try{renderCashHand();renderInbox();ofMaybeWeeklyPaymobReminder();}catch(e){}},6*60*60*1000);
 
   // 💳 pending requests صغيرة وتحتاج Live.
@@ -2931,8 +2970,8 @@ function startData(){
     D.creditRequests=ofLfDocs(s); try{ofSyncCreditBadge();}catch(e){} try{renderCreditAdmin();}catch(e){}
   }, function(e){console.warn('credit reqs',e&&e.code);});
 
-  ofLfOnce(db.collection('gift_cards_public'),'gift_cards',function(s){D.giftCards=ofLfDocs(s);try{renderCreditAdmin();}catch(e){}},6*60*60*1000);
-  ofLfOnce(db.collection('credit_ledger').orderBy('at','desc').limit(50),'credit_ledger_50',function(s){D.creditLedger=(s.docs||[]).map(function(d){return d.data();});try{renderCreditAdmin();}catch(e){}},30*60*1000);
+  ofLater(function(){ ofLfOnce(db.collection('gift_cards_public'),'gift_cards',function(s){D.giftCards=ofLfDocs(s);try{renderCreditAdmin();}catch(e){}},6*60*60*1000);
+  ofLfOnce(db.collection('credit_ledger').orderBy('at','desc').limit(50),'credit_ledger_50',function(s){D.creditLedger=(s.docs||[]).map(function(d){return d.data();});try{renderCreditAdmin();}catch(e){}},30*60*1000); }, 3000);
   ofLfOnce(db.collection('office_cash_days'),'cash_days',function(s){
     var m={}; (s.docs||[]).forEach(function(d){m[d.id]=Object.assign({id:d.id},d.data()||{});}); D.cashDays=m; try{renderCashHand();}catch(e){}
   },12*60*60*1000);
@@ -2950,9 +2989,10 @@ function startData(){
   //   • الفترات اتوسّعت (كانت 5 دقايق = آلاف القراءات في الساعة)
   loadSales();
   setInterval(function(){ if(!document.hidden) loadSales(); }, 20*60*1000);
-  ofLfOnce(db.collection('pos_test_inventory'),'inventory',function(s){
+  // ⚡ v696: المخزون كله (بصوره) أتقل حاجة — بيستنى 4 ثواني بعد أول شاشة
+  ofLater(function(){ ofLfOnce(db.collection('pos_test_inventory'),'inventory',function(s){
     D.inventory=ofLfDocs(s); renderTop();
-  },12*60*60*1000);
+  },12*60*60*1000); }, 4000);
 
   setTimeout(function(){ firstLoadDone = true; try{renderInbox();ofMaybeWeeklyPaymobReminder();}catch(e){} }, 8000);
 }
@@ -2981,11 +3021,13 @@ function loadSales(){
     renderTop(); try{fillExpenseBranchSel();renderCashHand();renderInbox();ofMaybeWeeklyPaymobReminder();renderGrowth();}catch(e){}
   }
   // أول فتحة: اعرض الـ30 يوم من IndexedDB بدون أي server read.
-  const hydrate = loadSales._hydrated ? Promise.resolve() : baseQ.get({source:'cache'}).then(function(s){if(!s.empty)mergeSnap(s);}).catch(function(){}).then(function(){loadSales._hydrated=true;});
+  const _t0 = ofNow();
+  const hydrate = loadSales._hydrated ? Promise.resolve() : baseQ.get({source:'cache'}).then(function(s){ofPerfAdd('sales30', 'cache', s.size, ofNow() - _t0); if(!s.empty)mergeSnap(s);}).catch(function(){}).then(function(){loadSales._hydrated=true;});
   hydrate.then(function(){
     // بعدها اطلب فقط الجديد مع overlap دقيقة، بدل إعادة 30 يوم.
     const fromMs=_salesTo?Math.max(cutMs,_salesTo-60000):cutMs;
-    return db.collection('pos_test_sales').where('createdAt','>=',firebase.firestore.Timestamp.fromMillis(fromMs)).get({source:'server'}).then(mergeSnap);
+    const _t1 = ofNow();
+    return db.collection('pos_test_sales').where('createdAt','>=',firebase.firestore.Timestamp.fromMillis(fromMs)).get({source:'server'}).then(function(s){ ofPerfAdd('sales30', 'server', s.size, ofNow() - _t1); mergeSnap(s); });
   }).catch(function(e){console.warn('sales load',e);}).then(function(){loadSales._busy=false;});
 }
 
