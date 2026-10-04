@@ -68,7 +68,7 @@ assert(!rows.some(r => r.qtyChange === 5), 'سلبي: فرع تاني مش بي�
 
 // ===== ٦) الواجهة: التوصيل =====
 const H = fs.readFileSync(path.join(root, 'sales', 'index.html'), 'utf8');
-const iCore = H.indexOf('../pos/receive-core.js?v=753'), iUi = H.indexOf('sales-receive.js?v=626');
+const iCore = H.search(/\.\.\/pos\/receive-core\.js\?v=7\d\d/), iUi = H.search(/sales-receive\.js\?v=6\d\d/);
 assert(iCore > 0 && iUi > iCore, 'Sales: receive-core قبل sales-receive');
 assert(/id="openReceive"[^>]*salesRecvOpen/.test(H), 'Sales: زرار 📥 استلام في الشاشة الرئيسية');
 const UI = fs.readFileSync(path.join(root, 'sales', 'sales-receive.js'), 'utf8');
@@ -94,6 +94,6 @@ assert(/RecvCore\.recvLogRowsFromDocs\(_docs, currentBranch, 20\)/.test(PX), 'PO
 assert(/where\('type','==','adjustment'\)/.test(PX), 'POS بيجيب الإخراج كمان');
 assert(/l\.source==='sales'\?' 📱'/.test(PX), 'POS بيعلّم حركات الموبايل 📱');
 const PI = fs.readFileSync(path.join(root, 'pos', 'index.html'), 'utf8');
-assert(PI.indexOf('receive-core.js?v=753') > 0 && PI.indexOf('receive-core.js?v=753') < PI.indexOf('products.js?v=753'), 'POS: receive-core قبل products');
-assert(/pos-shell-v75[3-9]/.test(fs.readFileSync(path.join(root, 'pos', 'sw.js'), 'utf8')), 'POS CACHE_NAME اترفع');
+assert(PI.search(/receive-core\.js\?v=7\d\d/) > 0 && PI.search(/receive-core\.js\?v=7\d\d/) < PI.indexOf('products.js?v=753'), 'POS: receive-core قبل products');
+assert(/pos-shell-v7(5[3-9]|[6-9]\d)/.test(fs.readFileSync(path.join(root, 'pos', 'sw.js'), 'utf8')), 'POS CACHE_NAME اترفع');
 assert(/store-apps-shell-v6(2[6-9]|[3-9]\d)/.test(fs.readFileSync(path.join(root, 'sales', 'sw.js'), 'utf8')), 'Sales CACHE_NAME اترفع');

@@ -112,12 +112,31 @@
     return { entryId:'recv_' + now + '_' + Math.random().toString(36).slice(2, 8),
       id:product.id, name:product.name || 'صنف', barcode:product.barcode || '',
       currentQty:recvBranchQty(product, branch), status:product.status || '',
+      price:Number(product.price) || 0,
       qty:(Number(qty) || 1), receivedAtMs:now };
+  }
+
+  /* 🏷️ v760: ليبلات الاستلام → مهمة طباعة على Zebra الفرع (POS بيطبعها).
+     الاستلام بس (الإخراج مالوش ليبل) · نفس الصنف في أكتر من سطر بيتجمع ·
+     سقف 300 ليبل للمهمة (أمان من رقم غلط زي 1000 بدل 10). */
+  var LABEL_MAX = 300;
+  function recvLabelItems(rows){
+    var by = {}, order = [];
+    (rows || []).forEach(function(r){
+      var q = Math.round(Number(r && r.qty) || 0);
+      if(!r || !r.barcode || q <= 0) return;
+      var k = String(r.barcode);
+      if(!by[k]){ by[k] = { name:String(r.name || 'صنف'), price:Number(r.price) || 0, barcode:k, qty:0 }; order.push(k); }
+      by[k].qty += q;
+    });
+    var items = order.map(function(k){ return by[k]; }), total = 0;
+    items.forEach(function(it){ total += it.qty; });
+    return { items:items, total:total, tooMany: total > LABEL_MAX, max: LABEL_MAX };
   }
 
   var api = { recvVisible:recvVisible, recvBranchQty:recvBranchQty, recvPickProduct:recvPickProduct,
     recvStatusAfter:recvStatusAfter, recvValidate:recvValidate, recvLogRow:recvLogRow,
-    recvLogRowsFromDocs:recvLogRowsFromDocs, recvNewEntry:recvNewEntry };
+    recvLogRowsFromDocs:recvLogRowsFromDocs, recvNewEntry:recvNewEntry, recvLabelItems:recvLabelItems };
   if(typeof module !== 'undefined' && module.exports) module.exports = api;
   if(typeof window !== 'undefined') window.RecvCore = api;
 })();

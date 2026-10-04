@@ -1159,7 +1159,8 @@ function openLabelQtyModal(items){
     doPrintLabels(jobs);
   };
 }
-function doPrintLabels(jobs){
+function doPrintLabels(jobs, opts){
+  opts = opts || {};
   // بنبني كل الليبلات (كل صنف × كميته) في مستند واحد — الطابعة بتقطع ليبل ليبل
   let html = '', n = 0;
   const codes = [];
@@ -1215,9 +1216,15 @@ function doPrintLabels(jobs){
   tmp.remove();
 
   if(shellCfg && shellCfg.labelPrinter){
-    window.posShell.printLabel({ printer: shellCfg.labelPrinter, widthMm: w, heightMm: h, html: `<style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;} *{-webkit-print-color-adjust:exact; print-color-adjust:exact; text-rendering:geometricPrecision;}</style>`+finalHTML })
-      .then(()=> showToast('اتبعت '+total+' ليبل للطابعة 🏷️'))
-      .catch(e=> showToast('فشل طباعة الليبل: '+e.message, 'err'));
+    // v760: بترجّع الـPromise — مهمة الليبلات الجاية من موبايل Sales محتاجة تعرف اتطبعت ولا لأ
+    return window.posShell.printLabel({ printer: shellCfg.labelPrinter, widthMm: w, heightMm: h, html: `<style>@page{size:${w}mm ${h}mm; margin:0;} body{margin:0;} *{-webkit-print-color-adjust:exact; print-color-adjust:exact; text-rendering:geometricPrecision;}</style>`+finalHTML })
+      .then(()=>{ showToast((opts.remote ? '🏷️ اتطبع '+total+' ليبل جاي من موبايل Sales' : 'اتبعت '+total+' ليبل للطابعة 🏷️')); return total; })
+      .catch(e=>{ showToast('فشل طباعة الليبل: '+e.message, 'err'); if(opts.remote) throw e; });
+  }else if(opts.remote){
+    // مهمة من الموبايل: مفيش حد قدام الجهاز يدوس «طباعة» في نافذة — نرجّع السبب بدل ما نفتح نافذة
+    return Promise.reject(new Error(typeof window.posShell !== 'undefined'
+      ? 'مفيش طابعة ليبل متختارة على جهاز الكاشير'
+      : 'POS الفرع مفتوح من المتصفح مش من برنامج الويندوز'));
   }else if(typeof window.posShell !== 'undefined'){
     // جوه برنامج الويندوز من غير طابعة متختارة → رسالة واضحة بدل الفشل الصامت
     showToast('🏷️ مفيش طابعة ليبل متختارة على الجهاز ده — افتح محرر تصميم الفاتورة، وتحت خالص اختار طابعة الليبل ودوس «حفظ طابعات الجهاز ده»', 'err');
@@ -1803,8 +1810,39 @@ function startPrintJobListener(){
         for(const d of snap.docs){
           if(_printJobsDone.has(d.id)) continue;
           _printJobsDone.add(d.id);
+          const _job = { id:d.id, ...d.data() };
+          // 🏷️ v760: ليبلات من شاشة الاستلام في موبايل Sales → Zebra الفرع بنفس تصميم الليبل
+          if(_job.type === 'labels'){
+            // بس الجهاز اللي عليه Zebra متختارة ياخد المهمة — ولو فيه جهازين، واحد بس «بيحجزها»
+            const _lc = (typeof window.posShell !== 'undefined') ? getPrinterCfg() : null;
+            if(!_lc || !_lc.labelPrinter){ _printJobsDone.delete(d.id); continue; }
+            const _ref = db.collection('pos_print_jobs').doc(d.id);
+            let _mine = false;
+            try{
+              _mine = await db.runTransaction(async t=>{
+                const cur = await t.get(_ref);
+                if(!cur.exists || (cur.data()||{}).status !== 'pending') return false;
+                t.update(_ref, { status:'printing', claimedBy: _deviceKey(), claimedAt: Date.now() });
+                return true;
+              });
+            }catch(_e){ _printJobsDone.delete(d.id); continue; }
+            if(!_mine) continue;
+            try{
+              const items = (_job.items||[]).filter(it=> it && it.barcode && Number(it.qty) > 0)
+                .map(it=>{ const inv = (allInventory||[]).find(x=> x && String(x.barcode)===String(it.barcode)) || {};
+                  return { name: it.name || inv.name || 'صنف', price: (inv.price!=null ? inv.price : it.price), barcode: String(it.barcode), qty: Math.min(300, Math.round(Number(it.qty))) }; });
+              if(!items.length) throw new Error('مفيش أصناف في المهمة');
+              const n = await doPrintLabels(items, { remote:true });
+              await db.collection('pos_print_jobs').doc(d.id).update({ status:'printed', printedAt: Date.now(), printedByBranchDevice: currentBranch, printedCount: Number(n)||null });
+            }catch(e){
+              console.warn('label job', e);
+              try{ await db.collection('pos_print_jobs').doc(d.id).update({ status:'failed', error: String((e && e.message) || e).slice(0,140), failedAt: Date.now() }); }
+              catch(_e){ _printJobsDone.delete(d.id); }   // الكتابة نفسها فشلت (نت) — نجرّب تاني
+            }
+            continue;
+          }
           try{
-            await _printGenericJob({ id:d.id, ...d.data() });
+            await _printGenericJob(_job);
             await db.collection('pos_print_jobs').doc(d.id).update({ status:'printed', printedAt: Date.now(), printedByBranchDevice: currentBranch });
             showToast('🖨️ اتطبع إيصال جاي من برنامج الحضور');
           }catch(e){ console.warn('print job', e); _printJobsDone.delete(d.id); }

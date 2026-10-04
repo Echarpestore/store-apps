@@ -1980,6 +1980,18 @@ window.salesRecvApi = {
     }
     return true;
   },
+  /* 🏷️ v760: مهمة ليبلات لـZebra الفرع — نفس طابور pos_print_jobs اللي إيصالات المرتب
+     بتتطبع بيه. POS الفرع (برنامج الويندوز) بيلتقطها ويطبعها بتصميم الليبل بتاعه. */
+  queueLabels: function(branch, employeeName, items){
+    return addDoc(printJobsCol, {
+      type: 'labels', branch: String(branch || ''), status: 'pending', ts: Date.now(),
+      requestedBy: String(employeeName || ''), source: 'sales_receive',
+      items: (items || []).map(function(it){ return { name: String(it.name || ''), price: Number(it.price) || 0, barcode: String(it.barcode || ''), qty: Math.round(Number(it.qty) || 0) }; })
+    }).then(function(ref){ return ref.id; });
+  },
+  watchJob: function(id, cb){
+    return firebaseOnSnapshot(doc(db, 'pos_print_jobs', String(id)), function(s){ cb(s.exists() ? (s.data() || {}) : null); }, function(){ cb(null); });
+  },
   // نفس استعلام سجل POS (نفس الـindex) + الإخراج من شاشة الاستلام
   recentLog: async function(branch){
     const br = String(branch || '').trim();

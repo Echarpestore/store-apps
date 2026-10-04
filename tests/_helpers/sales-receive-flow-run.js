@@ -37,12 +37,15 @@ function boot(opts){
       findByBarcode(c){ store.lookups++; return Promise.resolve(inv[c] || []); },
       getInventoryCfg(){ return Promise.resolve({ allowNegativeStock: !!(opts && opts.allowNeg) }); },
       commit(br, rows){ if(opts && opts.fail) return Promise.reject(Object.assign(new Error('x'), { code:'permission-denied' })); store.commits.push({ br, rows }); return Promise.resolve(true); },
-      recentLog(){ return Promise.resolve([]); }
+      recentLog(){ return Promise.resolve([]); },
+      queueLabels(br, emp, items){ store.labels = (store.labels || []).concat([{ br, emp, items }]); return Promise.resolve('job' + store.labels.length); },
+      watchJob(id, cb){ store.watch = cb; return function(){}; }
     },
     addEventListener(){},
     alert(m){ store.alert = m; }
   };
   const ls = {}; 
+  win.confirm = () => true;
   const g = { window:win, document:d, navigator:{}, history:{ pushState(){}, state:null, back(){} },
     localStorage:{ getItem:k => (k in ls ? ls[k] : null), setItem:(k,v)=>{ ls[k] = String(v); }, removeItem:k => { delete ls[k]; } },
     alert:win.alert, setTimeout:(f)=>{ f(); return 0; }, clearTimeout(){}, Promise, console:{ warn(){} , log(){} } };
@@ -126,4 +129,49 @@ const tick = () => new Promise(r => setImmediate(r));
   T.win.salesRecvOpen();
   assert(/فيه 1 حركة محفوظة/.test(T.d.getElementById('rcvBody').innerHTML), 'المسودة راجعة بعد إعادة الفتح');
   assert(!/rcvScanBtn/.test(T.d.getElementById('rcvBody').innerHTML), 'سلبي: إعادة الفتح بتسأل مين بيستلم تاني');
+
+  // 🏷️ v761 — ليبل لكل سطر: اللي يتعلّم بس، وبالكمية اللي تحددها
+  T = boot();
+  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); await tick();
+  assert(!/اطبعي ليبلات للاستلام/.test(T.d.getElementById('rcvBody').innerHTML), 'مفيش مفتاح بكلام — أيقونة على كل سطر بس');
+  ['555', '555', '777'].forEach(c => { T.d.getElementById('rcvCode').value = c; T.win.salesRecvAddCode(); });
+  await tick(); await tick();
+  assert((T.d.getElementById('rcvBody').innerHTML.match(/class="rcvTag"/g) || []).length === 3, 'أيقونة ليبل على كل سطر (مش متعلّمة)');
+  T.win.salesRecvLbl(2);                       // 777 (آخر سطر = index 2)
+  assert(/class="rcvTag on"/.test(T.d.getElementById('rcvBody').innerHTML) && /class="rcvLq"/.test(T.d.getElementById('rcvBody').innerHTML), 'التعليم بيظهر خانة كمية الليبلات');
+  T.win.salesRecvLblQty(2, 1); T.win.salesRecvLblQty(2, 1);   // 1 → 3
+  T.win.salesRecvLbl(0); T.win.salesRecvSetLblQty(0, '5');    // 555 أول سطر → 5 ليبل
+  assert(/🏷️ 8/.test(T.d.getElementById('rcvConfirm').textContent), 'زرار التأكيد بيقول عدد الليبلات (8)');
+  await T.win.salesRecvConfirm(); await tick();
+  assert(T.store.labels && T.store.labels.length === 1, 'مهمة ليبلات واحدة');
+  assertEq(T.store.labels[0].items.map(i => [i.barcode, i.qty]), [['555', 5], ['777', 3]], 'المتعلّم بس، وبالكمية المختارة (السطر التاني من 555 مش متعلّم)');
+  T.store.watch({ status:'printed' }); await tick();
+  assert(/اتطبع 8 ليبل/.test(T.d.getElementById('rcvJobBox').innerHTML), 'الحالة: «✓ اتطبع 8 ليبل»');
+  T.store.watch({ status:'failed', error:'مفيش طابعة ليبل متختارة على جهاز الكاشير' }); await tick();
+  assert(/مااتطبعتش: مفيش طابعة ليبل/.test(T.d.getElementById('rcvJobBox').innerHTML), 'فشل → السبب + «جرّبي تاني»');
+  T.win.salesRecvReprint(); await tick();
+  assert(T.store.labels.length === 2 && JSON.stringify(T.store.labels[1].items) === JSON.stringify(T.store.labels[0].items), 'جرّبي تاني = نفس الليبلات');
+  // سلبي: محدش متعلّم
+  T = boot();
+  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); await tick();
+  T.d.getElementById('rcvCode').value = '555'; T.win.salesRecvAddCode(); await tick();
+  await T.win.salesRecvConfirm(); await tick();
+  assert(!T.store.labels && T.store.commits.length === 1, 'سلبي: مفيش سطر متعلّم = استلام من غير ليبلات');
+  // سلبي: الكمية صفر = يتشال التعليم
+  T = boot();
+  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); await tick();
+  T.d.getElementById('rcvCode').value = '555'; T.win.salesRecvAddCode(); await tick();
+  T.win.salesRecvLbl(0); T.win.salesRecvLblQty(0, -1);
+  assert(!/class="rcvTag on"/.test(T.d.getElementById('rcvBody').innerHTML), 'سلبي: كمية الليبل صفر = التعليم اتشال');
+  await T.win.salesRecvConfirm(); await tick();
+  assert(!T.store.labels, 'ومفيش طباعة');
+  // سلبي: سطر إخراج مالوش أيقونة
+  T = boot({ allowNeg:true });
+  T.win.salesRecvOpen(); T.win.salesRecvPickEmp('e1'); await tick();
+  T.win.salesRecvMode(true);
+  T.d.getElementById('rcvCode').value = '555'; T.win.salesRecvAddCode(); await tick();
+  assert(!/class="rcvTag/.test(T.d.getElementById('rcvBody').innerHTML), 'سلبي: الإخراج مالوش أيقونة ليبل');
+  T.win.salesRecvLbl(0);
+  await T.win.salesRecvConfirm(); await tick();
+  assert(!T.store.labels, 'سلبي: ومبيطبعش حتى لو اتنده');
 })().catch(e => assert(false, 'flow crashed: ' + e.message)).then(() => { process.stdout.write(JSON.stringify(_res)); });
