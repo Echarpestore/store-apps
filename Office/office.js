@@ -49,7 +49,9 @@ const db = firebase.firestore(ofApp);
    كل حاجة اتنزلت من شهور (فواتير، سجل نشاط، مخزون بصوره) فـOffice بيبطأ أسبوع ورا أسبوع.
    150MB مع تنضيف تلقائي (LRU): الشغل اليومي فاضل في الكاش والقديم بيتشال لوحده. */
 db.settings({ cacheSizeBytes: 150 * 1024 * 1024, merge:true });
-db.enablePersistence({ synchronizeTabs:true }).catch(function(){});
+/* 🩺 v698: لو الكاش على الجهاز مش شغال، كل حاجة بتتحمّل من الأول كل مرة — بنسجّل ده في تقرير السرعة */
+window._ofPersist = 'pending';
+db.enablePersistence({ synchronizeTabs:true }).then(function(){ window._ofPersist = 'ok'; }).catch(function(e){ window._ofPersist = (e && e.code) || 'error'; console.warn('office cache off', e && e.code); });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
 
@@ -82,6 +84,9 @@ function ofPerfShow(){
   var P = window.ofPerf, rows = P.rows.slice().sort(function(a, b){ return b.ms - a.ms; });
   var h = '<div style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center" onclick="this.remove()">'
     + '<div onclick="event.stopPropagation()" style="background:#fff;color:#111;width:min(560px,100%);max-height:80vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px;font:13px/1.6 Cairo,sans-serif;direction:rtl">'
+    + (window._ofPersist && window._ofPersist !== 'ok' && window._ofPersist !== 'pending'
+        ? '<div style="background:#fff1f1;color:#b91c1c;border-radius:10px;padding:8px 10px;margin-bottom:8px;font-weight:800">⚠️ الكاش على الجهاز ده مش شغال (' + window._ofPersist + ') — كل حاجة بتتحمّل من الأول كل مرة. لو Office مفتوح في أكتر من تاب اقفلهم وسيب واحد، ولو تصفح خفي افتحه عادي.</div>'
+        : '<div style="color:#059669;font-weight:800;margin-bottom:4px">✓ الكاش على الجهاز شغال — بيتحمّل الجديد بس</div>')
     + '<b style="font-size:16px">⏱️ سرعة Office</b><div style="color:#666;margin:4px 0 10px">الشاشة اتجمدت ' + (P.longMs / 1000).toFixed(1) + ' ثانية (' + P.longN + ' مرة) · من الفتح: ' + ((ofNow() - P.t0) / 1000).toFixed(0) + ' ثانية</div>'
     + '<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="background:#f3f3f3"><th style="text-align:right;padding:5px">البيانات</th><th>من</th><th>عدد</th><th>وقت</th><th>بعد</th></tr>'
     + rows.map(function(r){ return '<tr style="border-top:1px solid #eee' + (r.ms > 1500 ? ';background:#fff1f1' : '') + '"><td style="padding:5px">' + r.key + '</td><td>' + (r.src === 'cache' ? 'الجهاز' : 'السيرفر') + '</td><td>' + r.docs + '</td><td><b>' + (r.ms / 1000).toFixed(1) + 'ث</b></td><td>' + (r.at / 1000).toFixed(0) + 'ث</td></tr>'; }).join('')
@@ -124,7 +129,6 @@ function ofLater(fn, ms){
 function ofLfOnce(q,key,apply,ttlMs){
   ttlMs = Number(ttlMs)||12*60*60*1000;
   var cacheHad=false, t=ofNow();
-  window.ofLoad.begin(key);
   // 1) zero-cost local render
   q.get({source:'cache'}).then(function(s){
     cacheHad = !!(s && !s.empty);
@@ -134,6 +138,7 @@ function ofLfOnce(q,key,apply,ttlMs){
     // 2) only hit server if this dataset is stale or cache is empty
     if(cacheHad && (Date.now()-ofLfLast(key)) < ttlMs) return null;
     var t2 = ofNow();
+    window.ofLoad.begin(key);   // v698: الكبسولة للتحميل من السيرفر بس — مش لقراية الجهاز
     return q.get({source:'server'}).then(function(s){ ofPerfAdd(key, 'server', s.size, ofNow() - t2); apply(s,'server'); ofLfMark(key); return s; });
   }).catch(function(e){ console.warn('local-first '+key, e&&e.code||e); })
     .then(function(){ window.ofLoad.end(key); });
@@ -3032,10 +3037,8 @@ function startData(){
   //   • الفترات اتوسّعت (كانت 5 دقايق = آلاف القراءات في الساعة)
   loadSales();
   setInterval(function(){ if(!document.hidden) loadSales(); }, 20*60*1000);
-  // ⚡ v696: المخزون كله (بصوره) أتقل حاجة — بيستنى 4 ثواني بعد أول شاشة
-  ofLater(function(){ ofLfOnce(db.collection('pos_test_inventory'),'inventory',function(s){
-    D.inventory=ofLfDocs(s); renderTop();
-  },12*60*60*1000); }, 4000);
+  // ⚡ v698: المخزون كله (آلاف الأصناف بصورها) كان بيتحمّل عشان رقم المخزون جنب **أكتر 10 بيعًا** بس.
+  //    دلوقتي renderTop بتجيب الـ10 دول بس (ofTopStock) — المخزون الكامل مبيتحمّلش خالص.
 
   setTimeout(function(){ firstLoadDone = true; try{renderInbox();ofMaybeWeeklyPaymobReminder();}catch(e){} }, 8000);
 }
@@ -3065,12 +3068,12 @@ function loadSales(){
   }
   // أول فتحة: اعرض الـ30 يوم من IndexedDB بدون أي server read.
   const _t0 = ofNow();
-  window.ofLoad.begin('sales30');
   const hydrate = loadSales._hydrated ? Promise.resolve() : baseQ.get({source:'cache'}).then(function(s){ofPerfAdd('sales30', 'cache', s.size, ofNow() - _t0); if(!s.empty)mergeSnap(s);}).catch(function(){}).then(function(){loadSales._hydrated=true;});
   hydrate.then(function(){
     // بعدها اطلب فقط الجديد مع overlap دقيقة، بدل إعادة 30 يوم.
     const fromMs=_salesTo?Math.max(cutMs,_salesTo-60000):cutMs;
     const _t1 = ofNow();
+    window.ofLoad.begin('sales30');
     return db.collection('pos_test_sales').where('createdAt','>=',firebase.firestore.Timestamp.fromMillis(fromMs)).get({source:'server'}).then(function(s){ ofPerfAdd('sales30', 'server', s.size, ofNow() - _t1); mergeSnap(s); });
   }).catch(function(e){console.warn('sales load',e);}).then(function(){loadSales._busy=false; window.ofLoad.end('sales30');});
 }
@@ -4573,14 +4576,29 @@ function fillBranchSel(){
   renderTop();
   try{ renderGrowth(); }catch(e){}    // 📈 فرص الزيادة — نفس مصدر الفروع
 }
+/* 📦 v698 — مخزون أكتر الأصناف بيعًا: قراءة 10 مستندات بس (مش المخزون كله)، وبتتحدّث كل 10 دقايق */
+var _ofStock = {}, _ofStockAt = {}, _ofStockBusy = false;
+function ofTopStock(barcodes){
+  var need = (barcodes || []).map(String).filter(function(b){ return b && !(Date.now() - (_ofStockAt[b] || 0) < 10 * 60 * 1000); });
+  if(!need.length || _ofStockBusy) return;
+  _ofStockBusy = true;
+  need.forEach(function(b){ _ofStockAt[b] = Date.now(); });
+  var chunks = []; for(var i = 0; i < need.length; i += 10) chunks.push(need.slice(i, i + 10));
+  Promise.all(chunks.map(function(c){ return db.collection('pos_test_inventory').where('barcode', 'in', c).get(); }))
+    .then(function(snaps){
+      snaps.forEach(function(s){ s.docs.forEach(function(d){ var o = d.data() || {}; if(o.status === 'merged') return; _ofStock[String(o.barcode || '')] = o; }); });
+      _ofStockBusy = false; renderTop();
+    }).catch(function(e){ _ofStockBusy = false; console.warn('top stock', e && e.code); });
+}
 function renderTop(){
   const wrap = $('#topSellers'); if(!wrap) return;
   const br = $('#topBranchSel').value;
   if(!br){ wrap.innerHTML = '<div class="of-skel"><i></i><i></i><i></i></div>'; return; }
   const top = topSellers(D.sales, br, 10);
   if(!top.length){ wrap.innerHTML = '<div class="empty">مفيش مبيعات متسجلة للفرع ده آخر 30 يوم</div>'; return; }
+  ofTopStock(top.map(function(t){ return t.barcode; }));
   wrap.innerHTML = top.map(function(t, i){
-    const inv = D.inventory.find(function(p){ return String(p.barcode||'') === t.barcode; });
+    const inv = _ofStock[String(t.barcode||'')] || D.inventory.find(function(p){ return String(p.barcode||'') === t.barcode; });
     const stock = inv ? branchQtyOf(inv, br) : null;
     const low = stock != null && stock <= 3;
     return '<div class="card row">' +
