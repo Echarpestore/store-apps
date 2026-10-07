@@ -653,6 +653,7 @@ window.renderTimeSettings = function(){
     <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">⏰ التأخير والانصراف بدري</div>
     ${row('كل كام دقيقة = ساعة رصيد', 'tsLatePer', c.lateMinPerHour, 'أقل من الرقم ده = سماح مجاني')}
     ${row('سقف ساعات التأخير في اليوم', 'tsLateCap', c.maxLateHoursPerDay, '0 = مفيش سقف')}
+    ${row('جت على معاد شيفت تاني؟ (دقيقة)', 'tsAutoShift', c.autoShiftWindowMin == null ? 120 : c.autoShiftWindowMin, 'لو جت بعد بداية شيفت تاني بأقل من الدقايق دي (أو قبله بساعة) تتحسب عليه · 0 = مقفول')}
     <div style="height:1px; background:var(--line); margin:12px 0;"></div>
     <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">☕ البريك</div>
     ${row('مدة البريك (دقيقة)', 'tsBreakMin', c.breakMin)}
@@ -681,6 +682,7 @@ window.saveTimeSettings = async function(){
   const payload = {
     lateMinPerHour: n('tsLatePer', c.lateMinPerHour),
     maxLateHoursPerDay: n('tsLateCap', c.maxLateHoursPerDay),
+    autoShiftWindowMin: n('tsAutoShift', c.autoShiftWindowMin == null ? 120 : c.autoShiftWindowMin),
     breakMin: n('tsBreakMin', c.breakMin),
     breakGraceMin: n('tsBreakGrace', c.breakGraceMin),
     breakMinPerHour: n('tsBreakPer', c.breakMinPerHour),

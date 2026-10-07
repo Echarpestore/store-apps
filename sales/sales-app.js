@@ -1064,8 +1064,24 @@ function resolveAttendanceShift(clockInDate, emp, cfg){
   }
   const key=(emp&&emp.shift)||'';
   const def=(cfg.shifts||{})[key]||{};
-  return {key,label:def.label||key,start:effectiveStartHM(emp,cfg,dateKey),
+  const fixed={key,label:def.label||key,start:effectiveStartHM(emp,cfg,dateKey),
     end:effectiveEndHM(emp,cfg,dateKey),mode:'fixed'};
+  /* 🔀 v634 (06-10): الشيفت الأقرب تلقائي — موظفة شيفتها صباحي بس بتيجي 3:20 كل يوم كانت بتتحسب
+     متأخرة 320 دقيقة = 32 ساعة خصم في اليوم. لو جت متأخرة ساعة ونص أو أكتر عن شيفتها، ومعادها
+     في نطاق شيفت تاني (من ساعة قبل بدايته لحد autoShiftWindowMin دقيقة بعدها) → تتحسب على الشيفت ده (mode:'auto_other')
+     وبيبان للمالك في السجل. المالك بعدها يقرّر: يحوّلها للشيفت ده أو يحاسبها. */
+  const win=Number((window.timeCfg||timeCfgDefaults||{}).autoShiftWindowMin);
+  const W=isNaN(win)?120:win;   // بعد بداية الشيفت التاني بكام دقيقة لسه يتحسب عليه (التأخير بيتحسب عليه عادي)
+  if(W>0 && clockInDate && /^\d{1,2}:\d{2}$/.test(String(fixed.start))){
+    const c=cai(clockInDate), inMin=c.getHours()*60+c.getMinutes();
+    if(inMin-_hm2min(fixed.start) >= 90){
+      const other=Object.keys(cfg.shifts||{}).map(k=>({key:k,...(cfg.shifts[k]||{})}))
+        .filter(x=>{ if(x.key===key || !/^\d{1,2}:\d{2}$/.test(String(x.start||''))) return false; const d=inMin-_hm2min(x.start); return d>=-60 && d<=W; })
+        .sort((a,b)=>Math.abs(inMin-_hm2min(a.start))-Math.abs(inMin-_hm2min(b.start)))[0];
+      if(other) return {key:other.key,label:other.label||other.key,start:other.start,end:other.end||'',mode:'auto_other'};
+    }
+  }
+  return fixed;
 }
 window.resolveAttendanceShift=resolveAttendanceShift;
 
@@ -1240,6 +1256,7 @@ function pairSwaps(issues){
 // وكل 7 ساعات متراكمة في الشهر = يوم يتخصم من المرتب
 const timeCfgDefaults = {
   lateMinPerHour: 10,      // كل كام دقيقة تأخير تساوي ساعة
+  autoShiftWindowMin: 120, // v634: جت خلال كام دقيقة من بداية شيفت تاني = تتحسب عليه (0 = مقفول)
   breakMin: 30,            // مدة البريك المسموحة (دقيقة)
   breakGraceMin: 5,        // سماح إضافي بعد مدة البريك
   breakMinPerHour: 10,     // كل كام دقيقة زيادة في البريك تساوي ساعة (زي التأخير)
@@ -1729,6 +1746,10 @@ function scheduledShiftMinutes(emp, cfg, dayKey){
   if(!/^\d{1,2}:\d{2}$/.test(String(sHM)) || !/^\d{1,2}:\d{2}$/.test(String(eHM))) return 0;
   let mins = _hm2min(eHM) - _hm2min(sHM);
   if(mins <= 0) mins += 1440;            // شيفت بيعدّي نص الليل
+  /* 🛡️ v633 (06-10): معاد شيفت «11:00 → 07:00» (نهاية اتكتبت 7 صباحًا بدل 7 مساءً) كان بيطلع 20 ساعة،
+     فموظفة اشتغلت 8 ساعات اتحسب عليها «ناقص 714 دقيقة» و12 ساعة خصم في اليوم (161 ساعة في الشهر).
+     مفيش شيفت في المحل أطول من 16 ساعة — أطول من كده = معاد غلط = مفيش حكم انصراف بدري. */
+  if(mins > 16 * 60){ try{ console.warn('scheduledShiftMinutes: معاد شيفت مش منطقي', emp && emp.name, sHM, eHM); }catch(_){} return 0; }
   return mins;
 }
 function earlyLeaveFromWorked(workedMin, requiredMin, lateMin, cfg){
@@ -3930,9 +3951,12 @@ async function clockOut(empId, photoDataUri){
   const now = fixedAttendanceTs('clock-out-'+shift.id, empId, shiftDay);
   // الشيفت الذي اختير لحظة الحضور هو مصدر الحقيقة للانصراف؛ إعداد
   // الموظف العام قد يظل صباحيًا رغم أن يومه الحالي اختير مسائيًا.
+  // v633: نهاية الشيفت من نفس مصدر بدايته — لو الصورة اللحظية فيها بداية بس، النهاية من تعريف
+  //    نفس الشيفت (attendanceShiftKey) مش من معاد الموظفة الحالي (ممكن يكون اتغيّر أو مكتوب غلط)
+  const _snapDef = (complianceCfg.shifts || {})[shift.attendanceShiftKey] || {};
   const shiftEmp = shift.scheduledStartTime ? { ...(emp||{}),
     scheduledStartTime:shift.scheduledStartTime,
-    scheduledEndTime:shift.scheduledEndTime || (emp&&emp.scheduledEndTime) } : emp;
+    scheduledEndTime:shift.scheduledEndTime || _snapDef.end || (emp&&emp.scheduledEndTime) } : emp;
 
   // Overtime is based on actual shift duration exceeding the standard 8h15m
   // (495 minutes) — not on a fixed clock-out time. This naturally accounts
@@ -7292,10 +7316,16 @@ function renderCommissionPanel(){
         tgtHtml = `<div class="meta" style="color:var(--sub); font-size:10.5px;">🎯 تارجت ${tgt.scopeLabel}: ${tgt.basis.toFixed(0)} من ${tgt.targetAmount} — فاضل ${(tgt.targetAmount - tgt.basis).toFixed(0)} ج.م</div>`;
       }
     }
+    // 💡 v635: العمولة بتتاخد من إعدادات **فرع الموظفة** — لو فرعها مفيش له عمولة محددة يبقى 0 ونقول ليه
+    const _rate = commissionRateForEmployee(e);
+    const _rateHtml = _rate > 0
+      ? `<div class="meta" style="color:var(--sub); font-size:10.5px;">${_rate} ج.م لكل نقطة (فرع ${e.branch||'—'})</div>`
+      : `<div class="meta" style="color:#ff9a9d; font-size:10.5px;">⚠️ فرع «${e.branch||'—'}» مفيش له عمولة محددة — احفظ العمولة «لكل الفروع» فوق</div>`;
     return `
     <div class="emp-row" style="flex-wrap:wrap;">
       <div class="n">${e.name}</div>
       <div class="meta">${pointsThisMonth} نقطة إجمالي الشهر</div>
+      ${_rateHtml}
       ${refHtml}
       ${tgtHtml}
       ${paidNote}
@@ -7488,6 +7518,19 @@ $('#saveCommissionBtn')?.addEventListener('click', async ()=>{
   if(isNaN(val) || val < 0){ alert('اكتب رقم صحيح'); return; }
   try{
     await setDoc(doc(db,'sales_settings', window.currentBranch), { commissionPerPoint: val }, { merge:true });
+  }catch(err){ console.error('تعذر حفظ العمولة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
+});
+/* 🏬 v635: العمولة لكل الفروع مرة واحدة — كانت بتتحفظ لفرع الجهاز بس، فالموظفات في الفروع التانية
+   كانت عمولتهم 0 رغم إن الشاشة بتقول 10 */
+$('#saveCommissionAllBtn')?.addEventListener('click', async ()=>{
+  const val = parseFloat($('#commissionPerPointInput').value);
+  if(isNaN(val) || val < 0){ alert('اكتب رقم صحيح'); return; }
+  const branches = (allSettingsDocs||[]).filter(id=> id && id !== FACE_GLOBAL_DOC && !String(id).startsWith('_'));
+  if(!branches.length){ alert('مفيش فروع'); return; }
+  if(!confirm('هتحفظ '+val+' ج.م لكل نقطة في '+branches.length+' فرع: '+branches.join('، ')+'؟')) return;
+  try{
+    for(const b of branches) await setDoc(doc(db,'sales_settings', b), { commissionPerPoint: val }, { merge:true });
+    alert('اتحفظت لكل الفروع ✅');
   }catch(err){ console.error('تعذر حفظ العمولة', err); alert('حصل خطأ: ' + (err && err.code ? err.code : 'غير معروف')); }
 });
 
@@ -8552,9 +8595,53 @@ function tcShiftLine(s, emp){
   const schedEnd = s.scheduledEndTime || (emp && emp.scheduledEndTime) || '';
   return '🟢 جت ' + t(s.clockInTs) + ' · 🔴 ' + (s.clockOutTs ? 'مشيت ' + t(s.clockOutTs) : 'لسه مفتوح')
     + (mins !== null ? ' · اشتغلت ' + Math.floor(mins/60) + ':' + String(mins%60).padStart(2,'0') : '')
-    + (sched ? ' · معادها ' + sched + (schedEnd ? '–' + schedEnd : '') : '');
+    + (sched ? ' · معادها ' + sched + (schedEnd ? '–' + schedEnd : '') : '')
+    + (s.attendanceShiftMode === 'auto_other' ? ' · 🔀 جت على شيفت تاني' : '');
 }
 window.tcShiftFor = tcShiftFor; window.tcShiftLine = tcShiftLine;
+/* 🧹 v633 — بنود انصراف بدري غلط (معاد شيفت كان مكتوب غلط): نعيد حسابها بالمنطق المصحّح،
+   واللي المفروض ميكونش موجود يتعذر تلقائي. بيرجّع البنود المرشّحة. */
+function wrongEarlyEntries(empId, rows){
+  const cfg = window.timeCfg || timeCfgDefaults, emp = allEmployees.find(e=>e.id===empId);
+  return (rows||[]).filter(x=>{
+    if(!x || !tcCounts(x,cfg)) return false;
+    const sh = tcShiftFor(x, window.allShifts||[]); if(!sh) return false;
+    // v634: تأخير اتحسب على شيفتها الصباحي وهي جاية على معاد شيفت تاني → بالمنطق الجديد مفيش تأخير
+    if(x.type==='late'){
+      const r = resolveAttendanceShift(new Date(sh.clockInTs), emp, complianceCfg);
+      if(r.mode!=='auto_other') return false;
+      const c = cai(new Date(sh.clockInTs)), inMin = c.getHours()*60+c.getMinutes();
+      return (inMin - _hm2min(r.start)) <= (Number(cfg.lateMinPerHour)||10);
+    }
+    if(x.type!=='early' || !sh.clockOutTs) return false;
+    const def = (complianceCfg.shifts||{})[sh.attendanceShiftKey] || {};
+    const se = sh.scheduledStartTime ? { ...(emp||{}), scheduledStartTime:sh.scheduledStartTime, scheduledEndTime:sh.scheduledEndTime || def.end || (emp&&emp.scheduledEndTime) } : emp;
+    const req = scheduledShiftMinutes(se, complianceCfg, caiDayKey(sh.clockInTs));
+    const worked = Math.round((sh.clockOutTs - sh.clockInTs)/60000);
+    return earlyLeaveFromWorked(worked, req, Number(sh.lateMinutes)||0, cfg).hours === 0;
+  });
+}
+window.wrongEarlyEntries = wrongEarlyEntries;
+window.fixWrongEarly = async function(empId, pk){
+  const emp = allEmployees.find(e=>e.id===empId); if(!emp) return;
+  const range = payPeriodRange(pk);
+  const rows = (window.allTimeCredit||[]).filter(x=>{ if(!x||x.employeeId!==empId) return false; const d=payrollDateFromKey(x.date); return d&&d>=range.start&&d<=range.end; });
+  const bad = wrongEarlyEntries(empId, rows);
+  if(!bad.length) return;
+  if(!confirm('هيتعذر '+bad.length+' بند اتحسبوا غلط (جت على معاد شيفت تاني / اشتغلت مدة شيفتها كاملة). متأكد؟')) return;
+  const patched = [];
+  for(const x of bad){
+    const patch = { hours:0, originalHours:(x.originalHours!=null?x.originalHours:x.hours), excused:true, excuseReason:(x.type==='late' ? 'تصحيح — جت على معاد شيفت تاني' : 'تصحيح — معاد الشيفت كان مكتوب غلط'), excusedAt:Date.now() };
+    try{ await updateDoc(doc(db,'sales_time_credit', x.id), patch); patched.push({ ...x, ...patch }); }
+    catch(e){ console.warn('fix early', x.id, e&&e.code); }
+  }
+  if(patched.length){
+    const map = {}; patched.forEach(p=>{ map[p.id]=p; });
+    setAttendanceRows('credits', (attendanceRows('credits')||[]).map(r=> map[r.id] || r));
+    try{ await _employeeAudit(emp,'fix_wrong_early',{ count:patched.length, ids:patched.map(p=>p.id) }); }catch(_){}
+  }
+  try{ window.openPayrollTimeCreditDetails(empId, pk); }catch(_){}
+};
 window.openPayrollTimeCreditDetails = function(empId, periodKey){
   const emp = allEmployees.find(e=>e.id===empId); if(!emp) return;
   const pk = periodKey || window.salaryPeriodKey || defaultPayPeriodKey(new Date());
@@ -8567,6 +8654,8 @@ window.openPayrollTimeCreditDetails = function(empId, periodKey){
   }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')) || (Number(b.ts)||0)-(Number(a.ts)||0));
   const counted = rows.filter(x=>tcCounts(x,cfg));
   const total = counted.reduce((n,x)=>n+(Number(x.hours)||0),0);
+  const _bad = wrongEarlyEntries(empId, rows);   // v633
+  const fixBtn = _bad.length ? `<button type="button" onclick="fixWrongEarly('${empId}','${pk}')" style="width:100%;margin:0 0 12px;padding:10px;border:1px solid #ff5b63;background:rgba(255,91,99,.12);color:#ff9a9d;border-radius:12px;font:800 12.5px Cairo;cursor:pointer">🧹 فيه ${_bad.length} بند اتحسبوا غلط (جت على شيفت تاني / اشتغلت شيفتها كامل) — صحّحهم</button>` : '';
   const old=document.getElementById('payrollTcOv'); if(old) old.remove();
   const ov=document.createElement('div'); ov.id='payrollTcOv';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10050;overflow:auto;padding:12px 8px 28px;';
@@ -8578,7 +8667,7 @@ window.openPayrollTimeCreditDetails = function(empId, periodKey){
       ${active?`<button type="button" onclick="excusePayrollTimeCredit('${_payEsc(x.id)}','${empId}','${pk}')" style="margin-top:7px;border:1px solid rgba(255,255,255,.14);background:#292a34;color:#fff;border-radius:9px;padding:6px 10px;font-family:inherit;font-size:11px;cursor:pointer">🩺 إلغاء/عذر البند</button>`:`<div style="font-size:10.5px;color:#49db7e;margin-top:5px">✅ ملغي/معذور${x.excuseReason?' — '+_payEsc(x.excuseReason):''}</div>`}
     </div>`;
   }).join('') : '<div style="color:var(--sub);padding:14px 0;text-align:center">مفيش رصيد وقت في الفترة دي ✅</div>';
-  ov.innerHTML=`<div style="max-width:500px;margin:auto;background:#171820;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:15px;color:#f5f5f7"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div style="font-size:18px;font-weight:950">⏳ رصيد الوقت</div><div style="font-size:11px;color:var(--sub)">${_payEsc(emp.name)} · ${_payEsc(payPeriodLabelAr(pk))}</div></div><button class="backBtn" onclick="document.getElementById('payrollTcOv').remove()">✕</button></div><div style="margin:12px 0;padding:10px;border-radius:12px;background:#20212a;display:flex;justify-content:space-between"><span>المحتسب حاليًا</span><b style="color:${total?'#ff5b63':'#49db7e'}">${_payQty(total,'ساعة')}</b></div>${items}</div>`;
+  ov.innerHTML=`<div style="max-width:500px;margin:auto;background:#171820;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:15px;color:#f5f5f7"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><div style="font-size:18px;font-weight:950">⏳ رصيد الوقت</div><div style="font-size:11px;color:var(--sub)">${_payEsc(emp.name)} · ${_payEsc(payPeriodLabelAr(pk))}</div></div><button class="backBtn" onclick="document.getElementById('payrollTcOv').remove()">✕</button></div><div style="margin:12px 0;padding:10px;border-radius:12px;background:#20212a;display:flex;justify-content:space-between"><span>المحتسب حاليًا</span><b style="color:${total?'#ff5b63':'#49db7e'}">${_payQty(total,'ساعة')}</b></div>${fixBtn}${items}</div>`;
   document.body.appendChild(ov);
 };
 window.excusePayrollTimeCredit = async function(id,empId,pk){
