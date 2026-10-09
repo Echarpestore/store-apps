@@ -31,7 +31,7 @@
      الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
 <!-- 🛍️ محرك الأوردرات — **نفس الملف** اللي POS والموقع بيقروه -->
-<script src="../pos/orders-core.js?v=2"></script>
+<script src="../pos/orders-core.js"></script>
 <script>try{ if(window.i18nInit) i18nInit(); }catch(e){}</script>
 
 <style>
@@ -118,15 +118,8 @@
      فوق أي شاشة تانية بدل تبديل تبويب. صفر تكرار HTML/منطق. */
   #tab-shop.shop-overlay{
     position:fixed; inset:0; z-index:800; background:var(--bg);
-    overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
-    padding-top:calc(66px + env(safe-area-inset-top));
-    /* v705: مسافة تحت عشان زرار «اطلبي دلوقتي» يبان كامل ويتعمله سكرول (شريط الموبايل) */
-    padding-bottom:calc(32px + env(safe-area-inset-bottom));
+    overflow-y:auto; padding-top:calc(66px + env(safe-area-inset-top));
   }
-  /* v705: حركة الشاشات (PREMIUM-UX) بتخلّي كل شاشة طبقة لوحدها، فالسلة (جوّه الشاشة) مكانتش
-     بتقدر تطلع فوق الشريط الزجاجي (برّه الشاشة) مهما كان z-index — كان مغطّي زرار الطلب.
-     السلة السريعة مفتوحة = الشريط مستخبّي. */
-  body.qc-open .tabbar{ visibility:hidden; pointer-events:none; }
   .qc-close{
     display:none; position:fixed; top:14px; inset-inline-start:14px; z-index:801; width:42px; height:42px;
     border:none; border-radius:50%; background:var(--panel,#fff); border:1.5px solid var(--line);
@@ -486,15 +479,6 @@
   #chatWrap{position:fixed; inset:0; z-index:60; background:var(--bg); display:none; flex-direction:column;
     max-width:480px; margin:0 auto;}
   #chatWrap.on{display:flex;}
-  .ch-cart{margin-inline-start:auto; position:relative; flex:0 0 auto; width:44px; height:44px; border-radius:50%;
-    border:1.5px solid var(--line); background:#fff; color:var(--pink,#d4518f); display:grid; place-items:center; cursor:pointer;
-    box-shadow:0 6px 16px -10px rgba(201,50,126,.45); transition:transform .15s ease;}
-  .ch-cart:active{transform:scale(.92);}
-  .ch-cart-dot{position:absolute; top:-4px; inset-inline-end:-4px; min-width:20px; height:20px; padding:0 5px; border-radius:10px;
-    background:#e5484d; color:#fff; font-size:11px; font-weight:800; display:none; align-items:center; justify-content:center;
-    border:2px solid #fff; line-height:1;}
-  .ch-cart-dot.show{display:flex; animation:chDotPop .3s cubic-bezier(.2,1.4,.4,1);}
-  @keyframes chDotPop{from{transform:scale(.4);}to{transform:scale(1);}}
   .ch-head{display:flex; align-items:center; gap:12px; padding:14px 16px; background:#fff;
     border-bottom:1px solid var(--line); box-shadow:0 2px 12px -6px rgba(58,34,51,.15);}
   .ch-head .ch-back{border:none; background:none; font-size:22px; cursor:pointer; color:var(--ink); padding:4px;}
@@ -670,9 +654,7 @@
 /* PREMIUM-UX-v1 — حركة وشكل فخم (CSS فقط: transform/opacity عشان الأداء) */
 :root{--pux-ease:cubic-bezier(.22,1,.36,1);}
 @keyframes puxFade{from{opacity:0;}to{opacity:1;}}
-/* v706: «backwards» مش «both» — «both» كانت بتسيب كل شاشة طبقة لوحدها للأبد بعد الحركة، فالسلة السريعة
-   (جوّه الشاشة) كانت بتفتح ورا الشات وورا الشريط الزجاجي. دلوقتي الطبقة بتختفي أول ما الحركة تخلص. */
-.screen.on{animation:puxFade .45s ease backwards;}
+.screen.on{animation:puxFade .45s ease both;}
 
 /* ── شريط التبويبات: ثابت (من غير سحب) + زجاجي + مؤشر بيتزحلق ── */
 .tabbar,html[dir="ltr"] .tabbar{
@@ -869,11 +851,6 @@
         <b>echarpe ✿</b>
         <span id="chStatus">بنرد من ١٠ الصبح لـ١٠ بالليل</span>
       </div>
-      <!-- 🛍️ v706: السلة في الشات كمان — بتفتح السلة السريعة فوق الشات ومعاها العدد -->
-      <button class="ch-cart" type="button" onclick="openQuickCheckout()" aria-label="السلة">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l1 12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
-        <span class="ch-cart-dot" id="chCartDot"></span>
-      </button>
     </div>
     <button class="outfit-cta" onclick="chatOutfitCta()">🧥 اختاري طرحة لطقمك ✨</button>
     <div id="chMsgs"></div>
@@ -1696,7 +1673,9 @@ function lazyLoadTab(tab){
         var data = d.exists ? d.data() : {};
         shopCatalog = Array.isArray(data.items) ? data.items : [];
       }).catch(function(){ shopCatalog = []; })
-        .then(function(){ return ensureShopCfg(); })
+        .then(function(){ return db.collection(COL_SETTINGS).doc('online_shop_echarpe_cfg').get(); })
+        .then(function(c){ if(c && c.exists) shopCfg = Object.assign(shopCfg, c.data()); })
+        .catch(function(){})
         .then(function(){ showTopLoad(false); if(currentTab==='shop') renderShop(); });
     }
     tabStarted[tab] = true; return;
@@ -1747,7 +1726,6 @@ function switchTab(tab){
   if(_ts && _ts.classList.contains('shop-overlay')){
     _ts.classList.remove('shop-overlay');
     document.body.style.overflow = '';
-    document.body.classList.remove('qc-open');   // v705: الشريط يرجع
     var _x = $('qcCloseBtn'); if(_x) _x.classList.remove('show');
   }
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
@@ -2688,15 +2666,12 @@ function renderShop(){
   // 🛍️ شارة السلة على تبويب "اطلبي" — كانت موجودة في الـHTML بس
   //    متوصّلة بحاجة (badge-shop ميت). دلوقتي بتعكس عدد القطع فعليًا،
   //    وده بالظبط اللي بيوضّح للعميلة "السلة فين" بعد الإضافة من الشات.
-  // v703: العدد على زرار الشنطة فوق بس (قرار المالك 02-10) — النقطة الحمرا على «اطلبي» كانت بتتفهم إشعار
-  setTabBadge('shop', 0);
+  setTabBadge('shop', Object.keys(_shopCart).reduce(function(s, bc){ return s + shopQty(bc); }, 0));
   var _cfd = $('cartFabDot');
   if(_cfd){
     var _cn = Object.keys(_shopCart).reduce(function(s, bc){ return s + shopQty(bc); }, 0);
     _cfd.textContent = _cn > 9 ? '9+' : String(_cn);
     _cfd.classList.toggle('show', _cn > 0);
-    var _chd = $('chCartDot');   // v706: نفس العدد على زرار السلة في الشات
-    if(_chd){ _chd.textContent = _cfd.textContent; _chd.classList.toggle('show', _cn > 0); }
   }
   /* 🛍️ وضع "السلة فقط" — لمّا الشاشة دي بتفتح كـoverlay (زرار السلة
      العائم، أو "أضيفيها للسلة" من الشات/التجربة) بدل تبويب عادي.
@@ -2900,19 +2875,15 @@ function shopSubmit(){
   if(btn){ btn.disabled = true; btn.textContent = 'بيتبعت…'; }
 
   /* 📦 الكميات الحقيقية — مستند لكل باركود (الباركود = مفتاح المستند).
-     ⚠️ مش استعلام على المخزون كله: ده آلاف المستندات على موبايل.
-     🔧 v704: إعدادات المتجر (ignoreBranchStock …) **لازم** تكون اتقرت قبل الفحص —
-        كانت بتتقري بس لما تبويب «اطلبي» يتفتح، فالطلب من الشات على طول كان
-        بيتفحص بالإعدادات الافتراضية ويقول «مش موجود في الفرع» رغم إن العلم شغال. */
-  ensureShopCfg().then(function(){ return Promise.all(lines.map(function(l){
+     ⚠️ مش استعلام على المخزون كله: ده آلاف المستندات على موبايل. */
+  Promise.all(lines.map(function(l){
     return db.collection(COL_INVENTORY).doc(String(l.barcode)).get()
       .then(function(d){ return d.exists ? Object.assign({ barcode:String(l.barcode) }, d.data()) : null; })
       .catch(function(){ return null; });
-  })); }).then(function(prods){
+  })).then(function(prods){
     var chk = orderValidateCart(
       lines.map(function(l){ return { barcode:l.barcode, qty:l.qty }; }),
-      prods.filter(Boolean), _shopBranch, Date.now(),
-      { ignoreBranchStock: shopCfg.ignoreBranchStock === true }   // 🔧 نفس علم السيرفر
+      prods.filter(Boolean), _shopBranch, Date.now()
     );
     if(!chk.ok){
       showToast(chk.errors[0], true);
@@ -3930,17 +3901,15 @@ function chatRenderMsgs(arr){
       body += '<img src="' + m.img.replace(/"/g, '') + '" alt="" onclick="chatImgZoom(this.src)" style="cursor:zoom-in;">';
     }
     if(m.text) body += esc(m.text);
-    // 🛒 v680: الزراير بتظهر لو فيه جرّبيها **أو** باركود — قبل كده منتج من غير
-    //    جرّبيها (لاصق مثلًا) كان بيوصل صورة بس، من غير «أضيفيها للسلة».
-    if(chatImgs[m.id] && (m.tryon || m.barcode)){
+    if(m.tryon && chatImgs[m.id]){
       // 💰 الاسم/السعر بيظهروا لو الموظفة حطّت باركود صح وقت الإرسال —
       //    مفيش حاجة اتحسبت هنا، كله جاي جاهز من الرسالة نفسها.
       if(m.productName){
         body += '<div class="m-prod"><b>' + esc(m.productName) + '</b>'
           + (m.productPrice ? ' — ' + Number(m.productPrice) + ' ج.م' : '') + '</div>';
       }
-      body += '<div class="m-actions">';
-      if(m.tryon) body += '<button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">'
+      body += '<div class="m-actions">'
+        + '<button class="m-try" onclick="chatTryOn(\'' + esc(m.id) + '\')">'
         + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.9L19 9l-4.1 3.2L16 17l-4-2.6L8 17l1.1-4.8L5 9l5.1-1.1L12 3z"/></svg>'
         + ' جرّبيها</button>';
       if(m.barcode){
@@ -4064,7 +4033,7 @@ function tryonAddToCart(barcode, imgFallback, note){
   /* 🖼️ صورة المنتج: مستندات المخزون (pos_test_inventory) **مفيهاش**
      حقل صورة أصلًا — فالسلة كانت بتعرض أيقونة افتراضية دايمًا. الحل:
      نستخدم صورة الطرحة اللي الموظفة بعتتها في الشات نفسها. */
-  if(imgFallback && String(imgFallback).indexOf('data:image/') === 0){
+  if(imgFallback && /^(data:image\/|https:\/\/)/.test(String(imgFallback))){
     if(!_extraCartProducts[bc]) _extraCartProducts[bc] = {};
     _extraCartProducts[bc].img = imgFallback;
   }
@@ -4110,26 +4079,12 @@ window.chatImgZoomClose = chatImgZoomClose;
    العميلة فاتحاها (شات مثلًا) بدل ما تضطر تسيب الشات وتفتح تبويب
    تاني. القفل بيرجّعها لنفس الشاشة اللي كانت فيها، والصنف يفضل
    في سلتها لحد ما تكمّل — مفيش حاجة بتضيع. */
-/* 🔧 v704 — إعدادات المتجر بتتقري مرة واحدة ومن أي مكان (التبويب، السلة السريعة، الإرسال).
-   لو القراءة فشلت بنسمح بمحاولة تانية المرة الجاية بدل ما نفضل على الافتراضي. */
-var _shopCfgP = null;
-function ensureShopCfg(){
-  if(!_shopCfgP){
-    _shopCfgP = db.collection(COL_SETTINGS).doc('online_shop_echarpe_cfg').get()
-      .then(function(c){ if(c && c.exists) shopCfg = Object.assign(shopCfg, c.data()); })
-      .catch(function(e){ _shopCfgP = null; console.warn('shop cfg', e && e.code); });
-  }
-  return _shopCfgP || Promise.resolve();
-}
-window.ensureShopCfg = ensureShopCfg;
 function openQuickCheckout(barcode){
   if(barcode) shopAdd(barcode, 1);
   var box = $('tab-shop'); if(!box) return;
-  ensureShopCfg().then(function(){ if(box.classList.contains('shop-overlay')) renderShop(); });   // الشحن/الاستلام بالإعدادات الحقيقية
   box.style.display = 'block';
   box.classList.add('shop-overlay');
   document.body.style.overflow = 'hidden';
-  document.body.classList.add('qc-open');
   lazyLoadTab('shop');   // لو أول مرة العميلة تفتح "اطلبي" أصلًا — نفس التحميل الكسول العادي
   renderShop();
   var x = $('qcCloseBtn'); if(x) x.classList.add('show');
@@ -4140,7 +4095,6 @@ function closeQuickCheckout(){
   var box = $('tab-shop'); if(!box) return;
   box.classList.remove('shop-overlay');
   document.body.style.overflow = '';
-  document.body.classList.remove('qc-open');
   box.style.display = (currentTab === 'shop') ? 'block' : 'none';
   var x = $('qcCloseBtn'); if(x) x.classList.remove('show');
 }
