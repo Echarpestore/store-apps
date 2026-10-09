@@ -34,6 +34,8 @@
     padding:14px 16px; background:var(--bg); border-bottom:1px solid var(--line);
   }
   header .logo{ display:flex; align-items:center; flex:0 0 auto; }
+  /* لوجو echarpe أبيض — على الخلفية الفاتحة مكانش باين، فبنحطه على جرادينت البراند */
+  header .logo.pill{ background:linear-gradient(135deg,#EC4899,#E8B050); border-radius:12px; padding:4px 12px; }
   header .back{
     flex:0 0 auto; width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
     background:#fff; color:var(--ink); font-size:16px; display:flex; align-items:center;
@@ -259,6 +261,7 @@
 
   // 🏷️ لوجو البراند فوق (زي المرجع: اسم البراند + "studio" تحته)
   // 🖼️⭐ نفس لوجو PNG الحقيقي بتاع loyalty/glow — مش خط مخترع
+  if(params.brand !== "glow") $("hLogo").classList.add("pill");
   $("hLogoImg").src = "data:image/png;base64," +
     (params.brand === "glow" ? PC.LOGO_B64_GLOW : PC.LOGO_B64_LOYALTY);
   // 🏷️ عنوان الشاشة بيتغيّر في تاب المتصفح بس — الهيدر نفسه في
