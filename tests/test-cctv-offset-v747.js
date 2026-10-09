@@ -25,9 +25,9 @@ assertEq(save('glow',100),100,'Blocked storage still permits session adjustment'
 // Exercise the shipped invoice initialization with POS timeline + NVR clock.
 ctx.localStorage=storage;save('madinaty',1200);
 Object.assign(ctx,{profile:{id:'madinaty'},d:{clockSource:'nvr_isapi'},timeline:{clockSource:'pos_pc'},sync:true});
-vm.runInContext(src.match(/var basketBranch=String\(profile[\s\S]*?basketOffsetMs=window.ofCctvReadBasketOffset\(basketBranch\);/)[0],ctx);
+vm.runInContext(src.match(/var basketBranch=String\(profile[\s\S]*?basketOffsetMs=window.ofCctvReadBasketOffset\(basketBranch,basketCam\);/)[0],ctx);
 assertEq(ctx.basketOffsetMs,1200,'POS clock label cannot discard saved camera calibration');
-ctx.profile={id:'rehab'};vm.runInContext(src.match(/var basketBranch=String\(profile[\s\S]*?basketOffsetMs=window.ofCctvReadBasketOffset\(basketBranch\);/)[0],ctx);
+ctx.profile={id:'rehab'};vm.runInContext(src.match(/var basketBranch=String\(profile[\s\S]*?basketOffsetMs=window.ofCctvReadBasketOffset\(basketBranch,basketCam\);/)[0],ctx);
 assertEq(ctx.basketOffsetMs,-15000,'Invoice initialization resolves actual branch');
 assert(!src.includes('autoClockSync')&&!src.includes('basketAutoClock'),'No unverified AUTO calibration');
 assert(!src.includes('(basketOffsetMs/1000).toFixed(0)'),'Subsecond display is not rounded away');
@@ -49,11 +49,11 @@ const click=id=>w.document.getElementById(id).click();
 w.ofCctvSaveBasketOffset('madinaty',100);browser.openPlayer(true);
 assertEq(w.document.getElementById('ofSync506Total').textContent,'20.00 ج.م','Player applies saved 100ms offset to basket');
 assertEq(w.document.getElementById('ofSync506Quality').value,'480','Player keeps established 480p default');
-click('ofSync506Plus');assertEq(w.ofCctvReadBasketOffset('madinaty'),200,'Actual + button saves adjustment');
+click('ofSync506Plus');assertEq(w.ofCctvReadBasketOffset('madinaty','1'),200,'Actual + button saves adjustment');
 click('ofSync506Close');browser.openPlayer(true);
-assertEq(w.ofCctvReadBasketOffset('madinaty'),200,'Close and reopen retain correction');
-click('ofSync506Minus');assertEq(w.ofCctvReadBasketOffset('madinaty'),100,'Actual minus button subtracts 100ms');
-click('ofSync506Zero');assertEq(w.ofCctvReadBasketOffset('madinaty'),0,'Actual reset persists zero');
+assertEq(w.ofCctvReadBasketOffset('madinaty','1'),200,'Close and reopen retain correction');
+click('ofSync506Minus');assertEq(w.ofCctvReadBasketOffset('madinaty','1'),100,'Actual minus button subtracts 100ms');
+click('ofSync506Zero');assertEq(w.ofCctvReadBasketOffset('madinaty','1'),0,'Actual reset persists zero');
 assertEq(w.document.getElementById('ofSync506Total').textContent,'0.00 ج.م','Reset recalculates basket');
 click('ofSync506Close');browser.openPlayer(true);
 assertEq(w.document.getElementById('ofSync506Total').textContent,'0.00 ج.م','Zero remains effective after reopen');
