@@ -5097,7 +5097,7 @@ function computeRaceStatus(emp, periodType){
 function bankCardHtml(emp){
   const now = Date.now(); const cfg = _timeCfgNow(); const tc = TimeBank.cfgOf(cfg);
   const m = getMonthRange(now); const sum = bankMonthFor(emp, m.start.getTime(), m.end.getTime());
-  const w = TimeBank.currentWeek(now); const st = bankWeekStats(emp, w.start, w.end); const b = TimeBank.weekBonus(st, cfg);
+  const w = TimeBank.currentWeek(now); const st = bankWeekStats(emp, w.start, w.end); const b = bankWeekBonus(st);
   const col = sum.balanceMin < 0 ? 'var(--bad)' : 'var(--good)';
   const bal = `<div class="raceBlock"><div class="raceBlockTitle"><span>🏦 رصيد وقتك الشهر ده</span></div>
     <div style="font-size:26px;font-weight:900;color:${col};direction:ltr;text-align:right">${TimeBank.fmtMin(sum.balanceMin)}</div>
@@ -5106,10 +5106,10 @@ function bankCardHtml(emp){
       ? `اقعد <b>${Math.abs(sum.balanceMin)} د</b> زيادة قبل آخر الشهر وبيتصفّر لوحده ✅ — اللي يفضل سالب بيتخصم من المرتب`
       : (sum.balanceMin > 0 ? `<b>+${sum.balanceMin} د</b> وقت زيادة بتتحسب لك أوفرتايم 👏` : 'رصيدك صفر — ملتزم بالمواعيد ✅')}</div></div>`;
   const part = (k, lbl) => `<div class="raceItem"><span>${lbl}</span><span style="font-weight:800;color:${b.parts[k]>=b.max[k]?'var(--good)':(b.parts[k]>0?'#e0a020':'var(--bad)')}">${b.parts[k]} / ${b.max[k]}</span></div>`;
-  const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+tc.bonusPointsWeek+' · ':''}= ${tc.bonusMax} ج</div>` : '';
+  const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+st.target+' · ':''}= ${tc.bonusMax} ج</div>` : '';
   const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span></div>
     <div style="font-size:24px;font-weight:900;color:${b.amount?'var(--good)':'var(--bad)'};direction:ltr;text-align:right">${b.amount} ج <small style="font-size:12px;color:var(--sub)">(${b.score}/100)</small></div>
-    ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+' ن)')}${next}</div>`;
+    ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+(st.target>0?' من '+st.target:'')+' ن)')}${next}</div>`;
   return bal + bonus;
 }
 function renderRaceStatus(empId){
@@ -8107,20 +8107,48 @@ function bankLastSaleTs(empId, fromTs, toTs){
   (window.points || []).forEach(p=>{ if(p && p.employeeId===empId && p.ts >= fromTs && p.ts <= toTs && p.ts > best) best = p.ts; });
   return best;
 }
+// 🎯 الهدف الأسبوعي للموظف (تلقائي من متوسطه ومتوسط فرعه، أو رقم ثابت) — بيتحسب من الأسابيع اللي **قبل** الأسبوع المطلوب
+const _bankTargetCache = {};
+function bankTargetStats(branch, weekStartMs){
+  const k = String(branch||'') + ':' + weekStartMs;
+  if(_bankTargetCache[k] && (Date.now() - _bankTargetCache[k].at) < 60000) return _bankTargetCache[k].v;
+  const ids = (window.allEmployees || window.employees || []).filter(e=> e && (e.branch||'') === (branch||'') && !isSetupShift(e)).map(e=> e.id);
+  const v = TimeBank.weeklyPointStats(window.points || [], allShifts || [], ids, weekStartMs, _timeCfgNow());
+  _bankTargetCache[k] = { at: Date.now(), v }; return v;
+}
+function bankTargetFor(emp, weekStartMs){
+  const cfg = _timeCfgNow();
+  if(TimeBank.cfgOf(cfg).bonusPointsMode !== 'auto') return TimeBank.cfgOf(cfg).bonusPointsWeek;
+  try{ return TimeBank.targetFor(cfg, bankTargetStats(emp.branch, weekStartMs), emp.id); }catch(e){ return 0; }
+}
+window.bankTargetStats = bankTargetStats; window.bankTargetFor = bankTargetFor;
 function bankWeekStats(emp, ws, we){
   const sum = bankMonthFor(emp, ws, we);
   let avg = null; try{ avg = computeAvgRatingInRange(emp.id, ws, we); }catch(e){}
   const pts = sumPoints((window.points||[]).filter(p=> p.employeeId===emp.id && p.ts >= ws && p.ts <= we));
-  return { lateMinTotal: sum.lateMinTotal, lateCount: sum.lateCount, forgotCount: sum.forgotCount, absences: 0, avgRating: avg, ratingCount: avg == null ? 0 : 1, points: pts, shifts: sum.countedShifts };
+  return { lateMinTotal: sum.lateMinTotal, lateCount: sum.lateCount, forgotCount: sum.forgotCount, absences: 0, avgRating: avg, ratingCount: avg == null ? 0 : 1, points: pts, shifts: sum.countedShifts, target: bankTargetFor(emp, ws) };
 }
+function bankWeekBonus(st){ return TimeBank.weekBonus(st, { ..._timeCfgNow(), bonusPointsWeek: Number(st && st.target) || 0 }); }
 function bankBonusFor(emp, periodStart, periodEnd, nowMs){
   const cfg = _timeCfgNow();
   const weeks = TimeBank.weeksInPeriod(periodStart.getTime(), periodEnd.getTime(), nowMs || Date.now());
-  const out = weeks.map(w=>{ const st = bankWeekStats(emp, w.start, w.end); const b = TimeBank.weekBonus(st, cfg); return { ...w, st, ...b }; })
+  const out = weeks.map(w=>{ const st = bankWeekStats(emp, w.start, w.end); const b = bankWeekBonus(st); return { ...w, st, ...b }; })
     .filter(w=> w.st.shifts > 0);   // أسبوع من غير أي شيفت (إجازة/قبل التعيين) = مفيش حافز ومفيش عقاب
   return { weeks: out, total: out.reduce((n,w)=> n + w.amount, 0) };
 }
 window.bankMonthFor = bankMonthFor; window.bankBonusFor = bankBonusFor; window.bankWeekStats = bankWeekStats;
+/* 🎯 جدول الاقتراح للمالك (شاشة الإعدادات): متوسط الفرع + متوسط كل موظف + هدفه المقترح للأسبوع الحالي */
+window.bankTargetsReportHtml = function(){
+  try{
+    const branch = window.currentBranch || ''; const w = TimeBank.currentWeek(Date.now());
+    const stt = TimeBank.weeklyPointStats(window.points||[], allShifts||[], (window.allEmployees||window.employees||[]).filter(e=> e && (e.branch||'')===branch && !isSetupShift(e)).map(e=>e.id), w.start, _timeCfgNow());
+    const emps = (window.allEmployees||window.employees||[]).filter(e=> e && (e.branch||'')===branch && !isSetupShift(e));
+    if(!emps.length) return '<div style="color:var(--sub);font-size:12px">مفيش موظفين في الفرع ده</div>';
+    const rows = emps.map(e=>{ const p = stt.per[e.id] || { avg:0, weeks:[], target: Math.round(stt.branchAvg) }; return `<tr><td style="padding:4px 6px">${e.name}</td><td style="text-align:center">${p.weeks.length}</td><td style="text-align:center">${p.avg}</td><td style="text-align:center;font-weight:900;color:var(--gold)">${p.target}</td></tr>`; }).join('');
+    return `<div style="font-size:12px;margin-bottom:6px">متوسط الفرع: <b>${stt.branchAvg}</b> نقطة/أسبوع (آخر ${stt.weeks} أسبوع) · الهدف = (متوسط الموظف + متوسط الفرع) ÷ 2</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="color:var(--sub)"><th style="text-align:right;padding:4px 6px">الموظف</th><th>أسابيع</th><th>متوسطه</th><th>هدفه</th></tr>${rows}</table>`;
+  }catch(e){ return '<div style="color:var(--bad);font-size:12px">'+(e&&e.message)+'</div>'; }
+};
 
 /* 🧹 الشيفت المنسي: يتقفل على ميعاد نهاية شيفته (أو آخر فاتورة الموظف نفسه + 15 د لو سهر) —
    بيشتغل على أي جهاز بعد ما الشيفتات تتحمّل، مرة لكل شيفت. مفيش مراجعة يدوية. */
@@ -8605,7 +8633,7 @@ window.openPayrollBankDetails = function(empId, periodKey){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10000;overflow:auto;padding:12px 8px 28px;color:#f5f5f7;font-family:inherit';
   const reasonAr = { forgot:'نسي الانصراف', manual:'يدوي', needs_review:'مستني مراجعة', open:'مفتوح', voided:'ملغي' };
   const rows = c.bank.rows.map(r=> `<tr style="border-top:1px solid rgba(255,255,255,.07)${r.counted?'':';opacity:.5'}"><td style="padding:6px 4px">${r.day.slice(5)}</td><td>${hm(r.clockInTs)}</td><td>${hm(r.clockOutTs)}</td><td style="direction:ltr;text-align:center">${r.lateMin?'<span style="color:#ff5b63">'+r.lateMin+'</span>':'0'}</td><td style="direction:ltr;text-align:center">${r.requiredMin?Math.round(r.requiredMin/60*10)/10:'—'}</td><td style="direction:ltr;text-align:center;font-weight:800;color:${r.delta<0?'#ff5b63':(r.delta>0?'#35d26f':'#aaa')}">${r.counted?TimeBank.fmtMin(r.delta):(reasonAr[r.reason]||r.reason)}</td></tr>`).join('');
-  const weeks = (c.bonus?c.bonus.weeks:[]).map(w=> `<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.07);font-size:12px"><span>أسبوع ${w.key.slice(5)}<br><small style="color:#aaa">التزام ${w.parts.commit}/${w.max.commit} (تأخير ${w.st.lateMinTotal} د) · تقييم ${w.parts.rating}/${w.max.rating}${w.st.avgRating!=null?' ('+w.st.avgRating.toFixed(1)+'/4)':''} · مبيعات ${w.parts.sales}/${w.max.sales} (${fmtPts(w.st.points)} ن)</small></span><b style="color:${w.amount?'#35d26f':'#ff5b63'};direction:ltr">${w.score}/100 → ${w.amount} ج</b></div>`).join('') || '<div style="color:#aaa;font-size:12px">مفيش أسبوع مكتمل لسه</div>';
+  const weeks = (c.bonus?c.bonus.weeks:[]).map(w=> `<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.07);font-size:12px"><span>أسبوع ${w.key.slice(5)}<br><small style="color:#aaa">التزام ${w.parts.commit}/${w.max.commit} (تأخير ${w.st.lateMinTotal} د) · تقييم ${w.parts.rating}/${w.max.rating}${w.st.avgRating!=null?' ('+w.st.avgRating.toFixed(1)+'/4)':''} · مبيعات ${w.parts.sales}/${w.max.sales} (${fmtPts(w.st.points)}${w.st.target>0?' من '+w.st.target:''} ن)</small></span><b style="color:${w.amount?'#35d26f':'#ff5b63'};direction:ltr">${w.score}/100 → ${w.amount} ج</b></div>`).join('') || '<div style="color:#aaa;font-size:12px">مفيش أسبوع مكتمل لسه</div>';
   ov.innerHTML = `<div style="max-width:560px;margin:auto;background:#171820;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:14px">
     <div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:17px">🏦 رصيد الوقت — ${_payEsc(emp.name)}</b><div style="font-size:11px;color:#aaa">${_payEsc(payPeriodLabelAr(periodKey))} · الرصيد ${TimeBank.fmtMin(c.bank.balanceMin)} · ${c.bank.lateCount} تأخير (${c.bank.lateMinTotal} د) · ${c.bank.forgotCount} شيفت منسي</div></div><button class="backBtn" onclick="document.getElementById('bankDetOv').remove()">✕</button></div>
     <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px"><tr style="color:#aaa;font-size:11px"><th style="text-align:right;padding:4px">يوم</th><th>جه</th><th>مشي</th><th>تأخير</th><th>المطلوب (س)</th><th>الرصيد</th></tr>${rows}</table>

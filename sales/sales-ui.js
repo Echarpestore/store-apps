@@ -662,7 +662,15 @@ window.renderTimeSettings = function(){
     ${row('أعلى حافز أسبوعي (ج)', 'tsBonusMax', tb.bonusMax, 'عند 100 نقطة')}
     ${row('تأخير الأسبوع المسموح للالتزام (دقيقة)', 'tsBonusLate', tb.bonusLateMinWeek, 'إجمالي الأسبوع · ضعفه = نص درجة الالتزام')}
     ${row('أقل تقييم عملاء للحافز (من 4)', 'tsBonusRating', tb.bonusRatingMin)}
-    ${row('هدف نقاط الأسبوع للحافز', 'tsBonusPts', tb.bonusPointsWeek, '0 = جزء المبيعات بيتحسب كامل')}
+    <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-size:13px;">
+      <span style="flex:1;">هدف نقاط الأسبوع للحافز<br><small style="color:var(--sub); font-size:10.5px;">تلقائي = لكل موظف هدفه من متوسطه ومتوسط الفرع (آخر ${tb.autoTargetWeeks} أسبوع)</small></span>
+      <select id="tsBonusPtsMode" onfocus="this.closest('#timeSettingsForm').dataset.editing='1'" onblur="this.closest('#timeSettingsForm').dataset.editing='0'" style="padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-weight:800;">
+        <option value="auto" ${tb.bonusPointsMode==='auto'?'selected':''}>🤖 تلقائي</option><option value="fixed" ${tb.bonusPointsMode==='fixed'?'selected':''}>رقم ثابت</option></select>
+    </label>
+    ${row('الرقم الثابت (لو اخترت ثابت)', 'tsBonusPts', tb.bonusPointsWeek, '0 = جزء المبيعات بيتحسب كامل')}
+    ${row('معامل الهدف التلقائي (%)', 'tsAutoFactor', Math.round(tb.autoTargetFactor*100), '100 = المتوسط زي ما هو · 110 = أصعب شوية · 90 = أسهل')}
+    <button type="button" onclick="document.getElementById('tsTargetsBox').innerHTML = (window.bankTargetsReportHtml ? window.bankTargetsReportHtml() : '—')" style="width:100%; margin:2px 0 8px; padding:9px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-weight:800; font-size:12.5px; cursor:pointer;">👀 اعرض اقتراح الأهداف للأسبوع ده</button>
+    <div id="tsTargetsBox" style="margin-bottom:8px"></div>
     ${row('إنذار تأخير متكرر: كام مرة في 14 يوم', 'tsAlertLate', tb.alertLateCount, 'بيظهرلك فوق المرتبات')}
     <div style="height:1px; background:var(--line); margin:12px 0;"></div>
     <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">⏰ التأخير والانصراف بدري ${bankOn ? '<span style="color:#e0a020">(النظام القديم — مش شغال طول ما رصيد الوقت شغال)</span>' : ''}</div>
@@ -707,6 +715,8 @@ window.saveTimeSettings = async function(){
     bonusMin: n('tsBonusMin', tb.bonusMin), bonusMax: n('tsBonusMax', tb.bonusMax),
     bonusLateMinWeek: n('tsBonusLate', tb.bonusLateMinWeek), bonusRatingMin: f('tsBonusRating', tb.bonusRatingMin),
     bonusPointsWeek: n('tsBonusPts', tb.bonusPointsWeek), alertLateCount: n('tsAlertLate', tb.alertLateCount),
+    bonusPointsMode: (document.querySelector('#tsBonusPtsMode') || {}).value === 'fixed' ? 'fixed' : 'auto',
+    autoTargetFactor: Math.max(0.1, n('tsAutoFactor', Math.round(tb.autoTargetFactor*100)) / 100),
     lateMinPerHour: n('tsLatePer', c.lateMinPerHour),
     maxLateHoursPerDay: n('tsLateCap', c.maxLateHoursPerDay),
     autoShiftWindowMin: n('tsAutoShift', c.autoShiftWindowMin == null ? 120 : c.autoShiftWindowMin),

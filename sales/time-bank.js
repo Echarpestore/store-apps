@@ -26,7 +26,10 @@
     bonusMin: 50, bonusMax: 150,
     bonusLateMinWeek: 10,       // إجمالي تأخير الأسبوع المسموح للالتزام الكامل
     bonusRatingMin: 3.5,        // من 4 (مقياس تابلت التقييم)
-    bonusPointsWeek: 0,         // هدف نقاط الأسبوع · 0 = جزء المبيعات مفتوح
+    bonusPointsWeek: 0,         // هدف نقاط الأسبوع (الوضع الثابت) · 0 = جزء المبيعات مفتوح
+    bonusPointsMode: 'auto',    // 'auto' = هدف لكل موظف من متوسطه ومتوسط الفرع · 'fixed' = الرقم فوق
+    autoTargetWeeks: 8,         // كام أسبوع ورا بنحسب منهم المتوسط
+    autoTargetFactor: 1.0,      // الهدف = ((متوسط الموظف + متوسط الفرع) ÷ 2) × المعامل
     bonusWeights: { commit: 40, rating: 30, sales: 30 },
     bonusMinScore: 40,          // أقل من كده = مفيش حافز
     alertLateCount: 4, alertWindowDays: 14
@@ -34,9 +37,11 @@
   function cfgOf(raw){
     var c = Object.assign({}, DEFAULTS, raw || {});
     c.bonusWeights = Object.assign({}, DEFAULTS.bonusWeights, (raw && raw.bonusWeights) || {});
-    ['bankGraceMin','bankStdShiftMin','bankMaxShiftMin','bankLastSalePadMin','bonusMin','bonusMax','bonusLateMinWeek','bonusPointsWeek','bonusMinScore','alertLateCount','alertWindowDays']
+    ['bankGraceMin','bankStdShiftMin','bankMaxShiftMin','bankLastSalePadMin','bonusMin','bonusMax','bonusLateMinWeek','bonusPointsWeek','bonusMinScore','alertLateCount','alertWindowDays','autoTargetWeeks','autoTargetFactor']
       .forEach(function(k){ var v = Number(c[k]); c[k] = isNaN(v) ? DEFAULTS[k] : v; });
     c.bonusRatingMin = isNaN(Number(c.bonusRatingMin)) ? DEFAULTS.bonusRatingMin : Number(c.bonusRatingMin);
+    if(c.autoTargetWeeks < 1) c.autoTargetWeeks = DEFAULTS.autoTargetWeeks; if(c.autoTargetFactor <= 0) c.autoTargetFactor = 1;
+    c.bonusPointsMode = c.bonusPointsMode === 'fixed' ? 'fixed' : 'auto';
     if(c.bonusMax < c.bonusMin) c.bonusMax = c.bonusMin;
     c.bankEnabled = c.bankEnabled !== false;
     return c;
@@ -168,6 +173,48 @@
     return { start: d.getTime(), end: we.getTime(), key: keyOf(d.getTime()) };
   }
 
+  /* ---------- الهدف التلقائي لنقاط الأسبوع ----------
+     طلب المالك 10-10: السيستم يقترح لكل موظف هدف أسبوعي من متوسط الفرع ومتوسط الموظف نفسه.
+     · لكل موظف: متوسط نقاطه في آخر N أسبوع كان فيها شيفت (الإجازة والتعيين الجديد مش بيوقّعوا المتوسط)
+     · الفرع: متوسط كل (موظف×أسبوع) في نفس الفترة
+     · الهدف = ((متوسط الموظف + متوسط الفرع) ÷ 2) × المعامل — الضعيف بيتشد ناحية الفرع، والقوي بيحافظ على مستواه */
+  function weeksBefore(weekStartMs, n){
+    var out = []; var d = new Date(Number(weekStartMs));
+    for(var i = 0; i < n; i++){ d.setDate(d.getDate() - 7); var ws = new Date(d); var we = new Date(d); we.setDate(we.getDate() + 7); we.setMilliseconds(-1); out.push({ start: ws.getTime(), end: we.getTime(), key: keyOf(ws.getTime()) }); }
+    return out;
+  }
+  // points: [{employeeId, ts, value}] · shifts: [{employeeId, clockInTs}] · empIds: موظفين الفرع
+  function weeklyPointStats(points, shifts, empIds, weekStartMs, cfg){
+    var c = cfgOf(cfg); var wks = weeksBefore(weekStartMs, c.autoTargetWeeks);
+    var per = {}; var all = [];
+    (empIds || []).forEach(function(id){
+      var rows = [];
+      wks.forEach(function(w){
+        var worked = (shifts || []).some(function(s){ return s && s.employeeId === id && s.clockInTs >= w.start && s.clockInTs <= w.end && !s.voided; });
+        if(!worked) return;
+        var pts = 0; (points || []).forEach(function(p){ if(p && p.employeeId === id && p.ts >= w.start && p.ts <= w.end){ var v = Number(p.value); pts += (isNaN(v) || v <= 0) ? 1 : v; } });
+        rows.push({ key: w.key, pts: Math.round(pts * 10) / 10 }); all.push(pts);
+      });
+      var avg = rows.length ? rows.reduce(function(n, r){ return n + r.pts; }, 0) / rows.length : 0;
+      per[id] = { weeks: rows, avg: Math.round(avg * 10) / 10 };
+    });
+    var branchAvg = all.length ? all.reduce(function(n, x){ return n + x; }, 0) / all.length : 0;
+    branchAvg = Math.round(branchAvg * 10) / 10;
+    Object.keys(per).forEach(function(id){ per[id].target = autoTarget(per[id].avg, branchAvg, per[id].weeks.length, c); });
+    return { branchAvg: branchAvg, per: per, weeks: wks.length };
+  }
+  function autoTarget(empAvg, branchAvg, weeksCount, cfg){
+    var c = cfgOf(cfg); var e = Number(empAvg) || 0, b = Number(branchAvg) || 0;
+    if(!(weeksCount > 0)) return Math.max(0, Math.round(b * c.autoTargetFactor));   // موظف جديد: هدف الفرع
+    return Math.max(0, Math.round(((e + b) / 2) * c.autoTargetFactor));
+  }
+  function targetFor(cfg, stats, empId){
+    var c = cfgOf(cfg);
+    if(c.bonusPointsMode !== 'auto') return c.bonusPointsWeek;
+    var p = stats && stats.per && stats.per[empId];
+    return p ? p.target : Math.round((stats && stats.branchAvg || 0) * c.autoTargetFactor);
+  }
+
   /* ---------- إنذار التأخير المتكرر ---------- */
   function lateAlerts(shifts, cfg, nowMs){
     var c = cfgOf(cfg); var now = Number(nowMs) || Date.now(); var since = now - c.alertWindowDays * 86400000;
@@ -186,7 +233,7 @@
   function fmtMin(m){ m = Math.round(Number(m) || 0); var s = m < 0 ? '−' : (m > 0 ? '+' : ''); m = Math.abs(m); var h = Math.floor(m / 60), r = m % 60; return s + (h ? h + ' س ' : '') + r + ' د'; }
 
   var TB = { DEFAULTS: DEFAULTS, cfgOf: cfgOf, enabledFor: enabledFor, keyOf: keyOf, shiftDelta: shiftDelta, monthSummary: monthSummary, money: money,
-    forgottenFix: forgottenFix, isForgottenOpen: isForgottenOpen, weekBonus: weekBonus, weeksInPeriod: weeksInPeriod, currentWeek: currentWeek, lateAlerts: lateAlerts, fmtMin: fmtMin };
+    forgottenFix: forgottenFix, isForgottenOpen: isForgottenOpen, weekBonus: weekBonus, weeksBefore: weeksBefore, weeklyPointStats: weeklyPointStats, autoTarget: autoTarget, targetFor: targetFor, weeksInPeriod: weeksInPeriod, currentWeek: currentWeek, lateAlerts: lateAlerts, fmtMin: fmtMin };
   if(typeof window !== 'undefined') window.TimeBank = TB;
   if(typeof module !== 'undefined' && module.exports) module.exports = TB;
 })();

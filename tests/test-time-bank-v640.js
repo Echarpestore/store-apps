@@ -206,8 +206,8 @@ assert(!/قبل نهاية شيفته بـ15|متنساش تسجّل الخرو�
 const ui = fs.readFileSync(path.join(ROOT,'sales','sales-ui.js'),'utf8');
 assert(/id="tsBankOn"/.test(ui) && /tsBankGrace/.test(ui) && /tsBonusMin/.test(ui) && /tsAlertLate/.test(ui) && /bankEnabled, bankFrom,/.test(ui), 'إعدادات رصيد الوقت والحافز');
 const html = fs.readFileSync(path.join(ROOT,'sales','index.html'),'utf8');
-assert(html.indexOf('time-bank.js?v=641') > 0 && html.indexOf('time-bank.js?v=641') < html.indexOf('sales-app.js?v=641') && /sales-ui\.js\?v=640/.test(html), 'time-bank.js قبل sales-app.js v641');
-assert(/store-apps-shell-v641/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
+assert(html.indexOf('time-bank.js?v=642') > 0 && html.indexOf('time-bank.js?v=642') < html.indexOf('sales-app.js?v=642') && /sales-ui\.js\?v=642/.test(html), 'time-bank.js قبل sales-app.js v641');
+assert(/store-apps-shell-v642/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
 // v641 — طلب المالك: مفيش مبلغ بالجنيه للموظف، والمكافآت القديمة بتختفي في وضع الرصيد
 const _card = extractFn(src, 'function bankCardHtml(');
 assert(!/TimeBank\.money|هيتخصم <b>|أوفرتايم لحد دلوقتي <b>/.test(_card) && /\$\{b\.amount\} ج/.test(_card), 'سلبي: كارت الموظف مفيهوش مبلغ الخصم/الأوفرتايم بالجنيه — الحافز بس بالجنيه');
@@ -215,4 +215,30 @@ assert(/id="dh_legacyRewards"/.test(html) && /_lg\.style\.display = _bankNow \? 
 // ---------- ٥) Office بنفس المحرك ----------
 const of = fs.readFileSync(path.join(ROOT,'Office','office.js'),'utf8');
 assert(/TimeBank\.enabledFor\(cfg, start\.getTime\(\)\)/.test(of) && /bank=TimeBank\.monthSummary\(rangeShifts,cfg,_req\)/.test(of) && /x\.type!=='late'&&x\.type!=='early'/.test(of), 'Office: المرتب بنفس محرك الرصيد وبيتجاهل بنود التأخير القديمة');
-assert(/\.\.\/sales\/time-bank\.js\?v=640/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=700/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
+assert(/\.\.\/sales\/time-bank\.js\?v=642/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
+
+// ---------- ٦) v642 — الهدف الأسبوعي التلقائي لكل موظف (متوسطه + متوسط الفرع) ----------
+(function(){
+  const W0 = D(2026,10,10);   // سبت 10 أكتوبر = بداية الأسبوع الحالي
+  const wk = TB.weeksBefore(W0, 8);
+  assert(wk.length === 8 && wk[0].start === D(2026,10,3) && wk[7].start === D(2026,8,15), '8 أسابيع ورا بداية الأسبوع (3 أكتوبر … 15 أغسطس)');
+  // سارة: 20 نقطة في كل أسبوع من 4 · نهى: 10 نقاط في 4 أسابيع · مريم جديدة (مفيش شيفتات)
+  const pts = [], sh = [];
+  wk.slice(0,4).forEach(w => { for(let i=0;i<20;i++) pts.push({ employeeId:'s', ts: w.start + 3600000 }); for(let i=0;i<10;i++) pts.push({ employeeId:'n', ts: w.start + 3600000 }); sh.push({ employeeId:'s', clockInTs: w.start + 3600000 }, { employeeId:'n', clockInTs: w.start + 3600000 }); });
+  // أسبوع إجازة لنهى: مفيش شيفت ومفيش نقاط — مش بيوقّع متوسطها
+  const st = TB.weeklyPointStats(pts, sh, ['s','n','m'], W0, {});
+  assertEq(st.branchAvg, 15, 'متوسط الفرع = (20+10)/2 = 15 نقطة/أسبوع');
+  assertEq(st.per.s.avg, 20, 'متوسط سارة 20 (4 أسابيع)');
+  assertEq(st.per.n.avg, 10, 'متوسط نهى 10 — أسبوع الإجازة مش محسوب');
+  assertEq(st.per.s.target, 18, 'هدف سارة = (20+15)/2 ≈ 18');
+  assertEq(st.per.n.target, 13, 'هدف نهى = (10+15)/2 ≈ 13 (بتتشد ناحية الفرع)');
+  assertEq(st.per.m.target, 15, 'موظفة جديدة: هدفها متوسط الفرع');
+  assertEq(TB.weeklyPointStats(pts, sh, ['s'], W0, { autoTargetFactor: 1.1 }).per.s.target, 22, 'المعامل 110%: (20+20)/2 × 1.1 = 22');
+  assertEq(TB.targetFor({ bonusPointsMode:'fixed', bonusPointsWeek: 7 }, st, 's'), 7, 'الوضع الثابت بيتجاهل التلقائي');
+  assertEq(TB.targetFor({}, st, 's'), 18, 'الافتراضي تلقائي');
+  assertEq(TB.targetFor({}, { branchAvg: 15, per: {} }, 'zz'), 15, 'موظف مش في الإحصاء: متوسط الفرع');
+  const b = TB.weekBonus({ lateMinTotal:0, forgotCount:0, avgRating:4, ratingCount:3, points: 9 }, { bonusPointsWeek: 18 });
+  assertEq(b.parts.sales, 15, '9 من هدف 18 = 15/30');
+  assert(/function bankTargetFor\(emp, weekStartMs\)/.test(src) && /target: bankTargetFor\(emp, ws\)/.test(src) && /bonusPointsWeek: Number\(st && st\.target\) \|\| 0/.test(src), 'الحافز بيتحسب بهدف الموظف نفسه');
+  assert(/bankTargetsReportHtml/.test(src) && /id="tsBonusPtsMode"/.test(ui) && /tsAutoFactor/.test(ui), 'شاشة الإعدادات: تلقائي/ثابت + جدول الاقتراح');
+})();
