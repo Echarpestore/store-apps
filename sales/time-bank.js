@@ -77,11 +77,12 @@
     if(worked < 0) worked = 0;
     if(worked > c.bankMaxShiftMin) worked = c.bankMaxShiftMin;
     var late = Math.max(0, Number(shift.lateMinutes) || 0);
-    if(late <= c.bankGraceMin) late = 0;
+    if(late <= c.bankGraceMin || shift.lateExcused) late = 0;   // المالك عذر التأخير (Office 2)
     out.requiredMin = req; out.workedMin = worked; out.lateMin = late; out.counted = true;
     if(shift.manual){ out.reason = 'manual'; out.delta = 0; return out; }   // المالك كتبه بإيده = يوم كامل
     var delta = worked - req;
     if(Math.abs(delta) <= c.bankGraceMin) delta = 0;
+    delta += Number(shift.bankAdjustMin) || 0;   // تعديل المالك (عذر تأخير = +الدقايق · خصم يدوي = −)
     if(shift.forgotClockOut || shift.bankAutoEnd){ if(delta > 0) delta = 0; out.reason = 'forgot'; }
     out.delta = delta;
     return out;
@@ -232,7 +233,7 @@
       .sort(function(a, b){ return b.count - a.count; });
   }
 
-  function fmtMin(m){ m = Math.round(Number(m) || 0); var s = m < 0 ? '−' : (m > 0 ? '+' : ''); m = Math.abs(m); var h = Math.floor(m / 60), r = m % 60; return s + (h ? h + ' س ' : '') + r + ' د'; }
+  function fmtMin(m){ m = Math.round(Number(m) || 0); var s = m < 0 ? '−' : (m > 0 ? '+' : ''); m = Math.abs(m); var h = Math.floor(m / 60), r = m % 60; return s + (h ? h + ' س' + (r ? ' ' : '') : '') + (r || !h ? r + ' د' : ''); }
 
   var TB = { DEFAULTS: DEFAULTS, cfgOf: cfgOf, enabledFor: enabledFor, keyOf: keyOf, shiftDelta: shiftDelta, monthSummary: monthSummary, money: money,
     forgottenFix: forgottenFix, isForgottenOpen: isForgottenOpen, weekBonus: weekBonus, weeksBefore: weeksBefore, weeklyPointStats: weeklyPointStats, autoTarget: autoTarget, targetFor: targetFor, weeksInPeriod: weeksInPeriod, currentWeek: currentWeek, lateAlerts: lateAlerts, fmtMin: fmtMin };

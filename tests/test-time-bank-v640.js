@@ -89,7 +89,7 @@ const al = TB.lateAlerts([1,2,3,4].map(i => ({ employeeId:'e1', employeeName:'س
 assert(al.length === 1 && al[0].name === 'سارة' && al[0].count === 4 && al[0].avgMin === 20, 'إنذار: سارة 4 مرات في 14 يوم · نهى (جوه السماح) لا');
 assertEq(TB.lateAlerts([1,2,3].map(i => ({ employeeId:'e1', employeeName:'سارة', clockInTs: D(2026,10,i,14,20), lateMinutes: 20 })), {}, D(2026,10,9)).length, 0, 'سلبي: 3 مرات مش إنذار');
 assert(TB.enabledFor({ bankEnabled: true, bankFrom: '2026-10-01' }, D(2026,10,1)) && !TB.enabledFor({ bankEnabled: true, bankFrom: '2026-10-01' }, D(2026,9,1)) && !TB.enabledFor({ bankEnabled: false }, D(2026,10,1)), 'سبتمبر على القديم · أكتوبر على الجديد · مقفول = قديم');
-assertEq(TB.fmtMin(-95), '−1 س 35 د', 'تنسيق الدقايق');
+assertEq(TB.fmtMin(-95), '−1 س 35 د', 'تنسيق الدقايق'); assertEq(TB.fmtMin(60), '+1 س', 'ساعة كاملة من غير «0 د»');
 
 // ---------- ٢) clockOut الحقيقي في وضع الرصيد ----------
 const RUNNER = `
@@ -206,8 +206,8 @@ assert(!/قبل نهاية شيفته بـ15|متنساش تسجّل الخرو�
 const ui = fs.readFileSync(path.join(ROOT,'sales','sales-ui.js'),'utf8');
 assert(/id="tsBankOn"/.test(ui) && /tsBankGrace/.test(ui) && /tsBonusMin/.test(ui) && /tsAlertLate/.test(ui) && /bankEnabled, bankFrom,/.test(ui), 'إعدادات رصيد الوقت والحافز');
 const html = fs.readFileSync(path.join(ROOT,'sales','index.html'),'utf8');
-assert(html.indexOf('time-bank.js?v=645') > 0 && html.indexOf('time-bank.js?v=645') < html.indexOf('sales-app.js?v=646') && /sales-ui\.js\?v=645/.test(html), 'time-bank.js قبل sales-app.js v641');
-assert(/store-apps-shell-v646/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
+assert(html.indexOf('time-bank.js?v=647') > 0 && html.indexOf('time-bank.js?v=647') < html.indexOf('sales-app.js?v=647') && /sales-ui\.js\?v=647/.test(html), 'time-bank.js قبل sales-app.js v641');
+assert(/store-apps-shell-v647/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
 // v641 — طلب المالك: مفيش مبلغ بالجنيه للموظف، والمكافآت القديمة بتختفي في وضع الرصيد
 const _card = extractFn(src, 'function bankCardHtml(');
 assert(!/TimeBank\.money|هيتخصم <b>|أوفرتايم لحد دلوقتي <b>/.test(_card), 'سلبي: كارت الموظف مفيهوش مبلغ الخصم/الأوفرتايم بالجنيه');
@@ -215,7 +215,7 @@ assert(/id="dh_legacyRewards"/.test(html) && /_lg\.style\.display = _bankNow \? 
 // ---------- ٥) Office بنفس المحرك ----------
 const of = fs.readFileSync(path.join(ROOT,'Office','office.js'),'utf8');
 assert(/TimeBank\.enabledFor\(cfg, start\.getTime\(\)\)/.test(of) && /bank=TimeBank\.monthSummary\(rangeShifts,cfg,_req\)/.test(of) && /x\.type!=='late'&&x\.type!=='early'/.test(of), 'Office: المرتب بنفس محرك الرصيد وبيتجاهل بنود التأخير القديمة');
-assert(/\.\.\/sales\/time-bank\.js\?v=645/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
+assert(/\.\.\/sales\/time-bank\.js\?v=647/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
 
 // ---------- ٦) v642 — الهدف الأسبوعي التلقائي لكل موظف (متوسطه + متوسط الفرع) ----------
 (function(){

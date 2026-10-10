@@ -1,0 +1,56 @@
+/* Office 2 — v1 — نظيف، فاتح، خط كبير، لون واحد */
+:root{--bg:#f4f5f7;--card:#fff;--ink:#141821;--sub:#6b7280;--line:#e6e8ee;--acc:#1f5eff;--good:#15a35f;--bad:#e2443a;--warn:#e39b12;--soft:#eef3ff;--r:16px}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Cairo,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+button,input,select{font-family:inherit}
+.num{font-family:"Space Grotesk",Cairo,sans-serif;direction:ltr;unicode-bidi:embed}
+/* بوابة */
+.gate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0f1115;padding:20px;z-index:50}
+.gate-card{width:min(360px,100%);background:#fff;border-radius:22px;padding:22px 18px}
+.gate-logo{font-weight:900;font-size:24px;text-align:center;margin-bottom:14px}.gate-logo span{color:var(--acc)}
+.gate-sub{color:var(--sub);font-size:13px;margin-bottom:8px;text-align:center}
+.gate input{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;font-size:15px;margin-bottom:10px;text-align:center}
+.gate-err{color:var(--bad);font-size:12.5px;text-align:center;min-height:18px;margin-top:6px}
+/* هيكل */
+.app{min-height:100dvh;padding-bottom:84px}
+.top{position:sticky;top:0;z-index:5;background:rgba(244,245,247,.92);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px}
+.top b{font-size:20px;font-weight:900;display:block}.top small{display:block;color:var(--sub);font-size:11.5px;font-weight:600}
+.top-r{display:flex;align-items:center;gap:10px}
+.icon{border:1px solid var(--line);background:#fff;border-radius:12px;width:36px;height:36px;font-size:18px;cursor:pointer}
+.dot{width:10px;height:10px;border-radius:50%;background:#c3c7d1;display:inline-block}.dot.ok{background:var(--good);box-shadow:0 0 0 3px #e6f7ee}.dot.off{background:var(--bad)}
+.screen{padding:4px 12px 12px;max-width:760px;margin:auto}
+@media(min-width:900px){.screen{max-width:1100px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}.screen>.full{grid-column:1/-1}}
+.tabbar{position:fixed;left:12px;right:12px;bottom:12px;background:#fff;border:1px solid var(--line);border-radius:20px;display:flex;justify-content:space-around;padding:8px 4px;z-index:6;box-shadow:0 10px 30px -18px rgba(0,0,0,.4);max-width:736px;margin:auto}
+.tabbar button{border:0;background:transparent;font-size:10.5px;font-weight:800;color:var(--sub);position:relative;padding:2px 8px;cursor:pointer}
+.tabbar button span{display:block;font-size:18px}.tabbar button.on{color:var(--acc)}
+.badge{position:absolute;top:-2px;right:2px;background:var(--bad);color:#fff;border-radius:999px;font-size:10px;font-style:normal;padding:1px 6px;font-weight:900}
+/* كروت */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin:0 0 10px}
+.card h3{margin:0 0 8px;font-size:13.5px;font-weight:900;display:flex;justify-content:space-between;align-items:center;gap:8px}.card h3 small{color:var(--sub);font-weight:600;font-size:11px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.kpi{background:var(--soft);border-radius:12px;padding:9px 8px;cursor:pointer}.kpi small{display:block;color:var(--sub);font-size:10.5px;font-weight:700}.kpi b{font-family:"Space Grotesk",Cairo;font-size:18px;display:block;margin-top:2px}.kpi .d{font-size:10.5px;font-weight:800}
+.up{color:var(--good)}.dn{color:var(--bad)}
+.row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);cursor:pointer}.row:first-child,.row.first{border-top:0}
+.row .n{flex:1;min-width:0}.row .n b{display:block;font-size:13.5px}.row .n small{color:var(--sub);font-size:11px;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:800;white-space:nowrap}.p-good{background:#e6f7ee;color:var(--good)}.p-bad{background:#fdecea;color:var(--bad)}.p-warn{background:#fff5dc;color:#9a6500}.p-gray{background:#eef0f4;color:var(--sub)}.p-acc{background:var(--soft);color:var(--acc)}
+.sdot{width:9px;height:9px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px #e6f7ee;flex:0 0 auto}.sdot.off{background:#c3c7d1;box-shadow:none}.sdot.brk{background:var(--warn);box-shadow:0 0 0 3px #fff5dc}
+.alert{display:flex;gap:9px;align-items:center;background:#fff;border:1px solid var(--line);border-right:4px solid var(--bad);border-radius:12px;padding:9px 10px;margin-bottom:8px;font-size:12.5px;font-weight:700;cursor:pointer}.alert.w{border-right-color:var(--warn)}.alert.i{border-right-color:var(--acc)}.alert .go{margin-inline-start:auto;color:var(--acc);font-size:11px;white-space:nowrap}
+.big{font-family:"Space Grotesk",Cairo;font-size:30px;font-weight:700;direction:ltr;unicode-bidi:embed}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;font-size:11px;text-align:center}.cal div{border-radius:8px;padding:7px 0;background:#f1f3f7;font-weight:800;cursor:pointer}.cal .ok{background:#e6f7ee;color:var(--good)}.cal .late{background:#fff5dc;color:#9a6500}.cal .miss{background:#fdecea;color:var(--bad)}.cal .off{background:#fff;color:#c3c7d1;border:1px dashed var(--line)}.cal .open{background:var(--soft);color:var(--acc)}.cal .hd{background:transparent;color:var(--sub);font-size:10px;padding:2px 0;cursor:default}.cal .fut{background:transparent;color:#c3c7d1;cursor:default}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:11px;padding:8px 12px;font-size:12px;font-weight:800;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;white-space:nowrap}.btn.p{background:var(--acc);color:#fff;border-color:var(--acc)}.btn.g{background:var(--good);color:#fff;border-color:var(--good)}.btn.r{background:#fff;color:var(--bad);border-color:#f5c6c2}.btn.w{width:100%}.btn:disabled{opacity:.5}
+.btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.seg{display:flex;background:#eceff4;border-radius:12px;padding:3px;margin-bottom:10px}.seg button{flex:1;border:0;background:transparent;padding:7px;border-radius:10px;font-size:12px;font-weight:800;color:var(--sub);cursor:pointer}.seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.empty{color:var(--sub);text-align:center;padding:18px;font-size:13px}
+.sec{font-size:12px;color:var(--sub);font-weight:800;margin:14px 4px 6px}
+.back{border:0;background:transparent;font-size:18px;cursor:pointer;padding:0 6px}
+/* شيت */
+.sheet{position:fixed;inset:0;z-index:40}.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.sheet-card{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;padding:16px 16px 28px;max-height:88vh;overflow:auto;max-width:760px;margin:auto}
+.sheet-card h2{margin:0 0 6px;font-size:17px}
+.sheet-card input,.sheet-card select,.sheet-card textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:12px;font-size:14px;margin:6px 0}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);background:#141821;color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:800;opacity:0;transition:.25s;z-index:60;pointer-events:none;max-width:90vw}.toast.on{opacity:1;transform:translateX(-50%)}
+.skel{height:14px;border-radius:7px;background:linear-gradient(90deg,#eceff4,#f6f7f9,#eceff4);background-size:200% 100%;animation:sk 1.2s infinite}@keyframes sk{to{background-position:-200% 0}}
+.tag{font-size:10.5px;color:var(--sub);font-weight:700}
+.money{font-family:"Space Grotesk",Cairo;font-weight:700;direction:ltr;unicode-bidi:embed}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hint{font-size:11px;color:var(--sub);margin-top:6px}
+.link{color:var(--acc);font-weight:800;cursor:pointer;font-size:12px}

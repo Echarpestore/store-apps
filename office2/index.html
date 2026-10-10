@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f5f7">
+<title>echarpe Office</title>
+<link rel="manifest" href="manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="office2.css?v=1">
+</head>
+<body>
+<!-- 🔐 البوابة: حساب Firebase + كود المالك (نفس office_gate بتاع Office القديم) -->
+<div id="gate" class="gate">
+  <div class="gate-card">
+    <div class="gate-logo">echarpe <span>Office</span></div>
+    <div id="gateLogin">
+      <input id="gEmail" type="email" placeholder="الإيميل" autocomplete="username">
+      <input id="gPass" type="password" placeholder="الباسورد" autocomplete="current-password">
+      <button id="gLogin" class="btn p w">دخول</button>
+    </div>
+    <div id="gateCode" style="display:none">
+      <div class="gate-sub">اكتب كود المالك</div>
+      <input id="gCode" type="password" inputmode="numeric" placeholder="••••" autocomplete="off">
+      <button id="gCodeBtn" class="btn p w">افتح</button>
+    </div>
+    <div id="gateErr" class="gate-err"></div>
+  </div>
+</div>
+
+<div id="app" class="app" style="display:none">
+  <header class="top">
+    <div><b id="hTitle">اليوم</b><small id="hSub">—</small></div>
+    <div class="top-r"><span id="syncDot" class="dot" title="الاتصال"></span><button id="btnOld" class="icon" title="Office القديم">⋯</button></div>
+  </header>
+  <main id="screen" class="screen"></main>
+  <nav class="tabbar" id="tabbar">
+    <button data-s="today" class="on"><span>⌂</span>اليوم</button>
+    <button data-s="staff"><span>👥</span>الموظفين</button>
+    <button data-s="inbox"><span>✅</span>الموافقات<i id="inboxN" class="badge" style="display:none"></i></button>
+    <button data-s="money"><span>💰</span>الفلوس</button>
+    <button data-s="more"><span>📷</span>المزيد</button>
+  </nav>
+</div>
+
+<div id="sheet" class="sheet" style="display:none"><div class="sheet-bg" onclick="O2.closeSheet()"></div><div class="sheet-card" id="sheetBody"></div></div>
+<div id="toast" class="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script src="../sales/time-bank.js?v=647"></script>
+<script src="office2.js?v=1"></script>
+</body>
+</html>
