@@ -23,7 +23,7 @@
     bankStdShiftMin: 495,       // لو الموظف ملوش معاد مكتوب
     bankMaxShiftMin: 16 * 60,   // أطول من كده = نسيان
     bankLastSalePadMin: 15,     // الشيفت المنسي: آخر فاتورة + كده
-    bonusMin: 50, bonusMax: 150,
+    bonusMin: 100, bonusMax: 200,   // قرار المالك 10-10: من 100 لـ200 حسب الالتزام
     bonusLateMinWeek: 10,       // إجمالي تأخير الأسبوع المسموح للالتزام الكامل
     bonusRatingMin: 3.5,        // من 4 (مقياس تابلت التقييم)
     bonusPointsWeek: 0,         // هدف نقاط الأسبوع (الوضع الثابت) · 0 = جزء المبيعات مفتوح

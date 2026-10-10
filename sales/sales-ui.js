@@ -659,7 +659,7 @@ window.renderTimeSettings = function(){
     </label>
     ${row('فترة السماح (دقيقة)', 'tsBankGrace', tb.bankGraceMin, 'تأخير أو فرق أقل من كده مش بيتحسب')}
     ${row('أقل نقاط للحافز (من 100)', 'tsBonusMinScore', tb.bonusMinScore, 'الالتزام 40 + تقييم 30 + مبيعات 30 · أقل من كده = صفر')}
-    ${row('أقل حافز أسبوعي (ج)', 'tsBonusMin', tb.bonusMin, 'عند أقل النقاط')}
+    ${row('أقل حافز أسبوعي (ج)', 'tsBonusMin', tb.bonusMin, 'عند أقل النقاط · الحافز مبيظهرش للموظف ولا بيتصرف غير لما تعتمده من شاشة المرتبات')}
     ${row('أعلى حافز أسبوعي (ج)', 'tsBonusMax', tb.bonusMax, 'عند 100 نقطة')}
     ${row('تأخير الأسبوع المسموح للالتزام (دقيقة)', 'tsBonusLate', tb.bonusLateMinWeek, 'إجمالي الأسبوع · ضعفه = نص درجة الالتزام')}
     ${row('أقل تقييم عملاء للحافز (من 4)', 'tsBonusRating', tb.bonusRatingMin)}

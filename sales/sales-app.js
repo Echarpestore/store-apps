@@ -624,6 +624,7 @@ const printJobsCol = collection(db, 'pos_print_jobs');
 const entriesCol = collection(db, 'entries'); // shared with the feedback (happy-or-not) app
 const shiftsCol = collection(db, 'sales_shifts');
 const tasksCol = collection(db, 'sales_tasks');
+const bonusWeekCol = collection(db, 'sales_bonus_week');   // 🎁 v644: قرارات المالك على حوافز الأسبوع
 const submissionsCol = collection(db, 'sales_task_submissions');
 const rewardsCol = collection(db, 'sales_rewards');
 const settingsCol = collection(db, 'sales_settings');
@@ -2507,6 +2508,22 @@ lf431History('shifts190', _scoped(shiftsCol,'clockInTs'), _recent(shiftsCol,'clo
   try{ setTimeout(bankFinalizeForgotten, 1500); }catch(e){}   // 🏦 v640
 });
 
+// 🎁 v644 — الحافز الأسبوعي مبيظهرش للموظف ولا بيدخل المرتب غير لما المالك يعتمده
+window.allBonusDecisions = [];
+try{
+  onSnapshot(query(bonusWeekCol, where('ts','>=', Date.now() - 120*86400000)), (snap)=>{
+    window.allBonusDecisions = snap.docs.map(d=> ({ id:d.id, ...d.data() }));
+    try{ if(adminUnlocked){ renderSalaryPanel(); refreshOpenPayrollEmployee(); } }catch(e){}
+  }, (e)=> console.warn('bonus decisions', e && e.code));
+}catch(e){ console.warn('bonus listen', e); }
+function bankBonusDecision(empId, weekKey){ return (window.allBonusDecisions||[]).find(d=> d.employeeId===empId && d.weekKey===weekKey) || null; }
+window.bankDecideBonus = async function(empId, weekKey, approve, amount, score){
+  const emp = (window.allEmployees||window.employees||[]).find(e=> e.id===empId); if(!emp) return;
+  const id = 'bw_' + empId + '_' + weekKey;
+  const docData = { employeeId: empId, employeeName: emp.name||'', branch: emp.branch||'', weekKey, amount: approve ? (Number(amount)||0) : 0, score: Number(score)||0,
+    status: approve ? 'approved' : 'rejected', decidedAt: Date.now(), decidedBy: 'owner', ts: Date.now() };
+  try{ await setDoc(doc(db,'sales_bonus_week', id), docData, { merge:true }); }catch(e){ alert('تعذر الحفظ: ' + (e && e.message)); }
+};
 onSnapshot(tasksCol, (snap)=>{
   allTasks = snap.docs.map(d=>({id:d.id, ...d.data()}));
   applyBranchFilter();
@@ -5105,12 +5122,19 @@ function bankCardHtml(emp){
     <div style="font-size:12px;margin-top:6px">${sum.balanceMin < 0
       ? `اقعد <b>${Math.abs(sum.balanceMin)} د</b> زيادة قبل آخر الشهر وبيتصفّر لوحده ✅ — اللي يفضل سالب بيتخصم من المرتب`
       : (sum.balanceMin > 0 ? `<b>+${sum.balanceMin} د</b> وقت زيادة بتتحسب لك أوفرتايم 👏` : 'رصيدك صفر — ملتزم بالمواعيد ✅')}</div></div>`;
-  const part = (k, lbl) => `<div class="raceItem"><span>${lbl}</span><span style="font-weight:800;color:${b.parts[k]>=b.max[k]?'var(--good)':(b.parts[k]>0?'#e0a020':'var(--bad)')}">${b.parts[k]} / ${b.max[k]}</span></div>`;
-  const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.amount?'':'أقل حافز من '+tc.bonusMinScore+' نقطة · '}${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+st.target+' · ':''}= ${tc.bonusMax} ج</div>` : '';
   const _dayN = Math.min(7, Math.max(1, Math.floor((now - w.start) / 86400000) + 1));
-  const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span><small style="color:var(--sub);font-weight:600">يوم ${_dayN} من 7 · بيتحسب نهائي يوم الجمعة</small></div>
-    <div style="font-size:24px;font-weight:900;color:${b.amount?'var(--good)':'var(--bad)'};direction:ltr;text-align:right">${b.amount} ج <small style="font-size:12px;color:var(--sub)">(${b.score}/100 لحد دلوقتي)</small></div>
-    ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+(st.target>0?' من '+st.target:'')+' ن)')}${next}</div>`;
+  // 🎁 قرار المالك 10-10: مفيش مبلغ للموظف أثناء الأسبوع — بيشوف تقدمه بس، والمبلغ بيظهر لما يستحق **ويعتمده المالك**
+  const part = (k, lbl) => `<div class="raceItem"><span>${lbl}</span><span style="font-weight:800;color:${b.parts[k]>=b.max[k]?'var(--good)':(b.parts[k]>0?'#e0a020':'var(--bad)')}">${b.parts[k]} / ${b.max[k]}</span></div>`;
+  const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+st.target+' · ':''}= الحافز الكامل</div>` : '';
+  let approvedHtml = '';
+  try{
+    const bb = bankBonusFor(emp, m.start, m.end, now).weeks.filter(x=> x.decision==='approved' && x.paid > 0);
+    if(bb.length) approvedHtml = `<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px">${bb.map(x=>`<div class="raceItem"><span>✅ حافز أسبوع ${x.key.slice(5)}</span><span style="font-weight:900;color:var(--good)">${x.paid} ج</span></div>`).join('')}</div>`;
+  }catch(e){}
+  const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span><small style="color:var(--sub);font-weight:600">يوم ${_dayN} من 7</small></div>
+    <div style="font-size:22px;font-weight:900;color:${b.score>=tc.bonusMinScore?'var(--good)':'#e0a020'};direction:ltr;text-align:right">${b.score} / 100</div>
+    ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+(st.target>0?' من '+st.target:'')+' ن)')}${next}
+    <div style="font-size:11px;color:var(--sub);margin-top:6px">الحافز بيتحدد يوم الجمعة (من ${tc.bonusMinScore} نقطة) وبيعتمده المالك — وبعدها بيظهر هنا</div>${approvedHtml}</div>`;
   return bal + bonus;
 }
 function renderRaceStatus(empId){
@@ -8133,9 +8157,11 @@ function bankWeekBonus(st){ return TimeBank.weekBonus(st, { ..._timeCfgNow(), bo
 function bankBonusFor(emp, periodStart, periodEnd, nowMs){
   const cfg = _timeCfgNow();
   const weeks = TimeBank.weeksInPeriod(periodStart.getTime(), periodEnd.getTime(), nowMs || Date.now());
-  const out = weeks.map(w=>{ const st = bankWeekStats(emp, w.start, w.end); const b = bankWeekBonus(st); return { ...w, st, ...b }; })
+  const out = weeks.map(w=>{ const st = bankWeekStats(emp, w.start, w.end); const b = bankWeekBonus(st); const d = (typeof bankBonusDecision==='function') ? bankBonusDecision(emp.id, w.key) : null;
+      return { ...w, st, ...b, earned: b.amount > 0, decision: d ? d.status : (b.amount > 0 ? 'pending' : 'none'), paid: d && d.status==='approved' ? (Number(d.amount)||0) : 0 }; })
     .filter(w=> w.st.shifts > 0);   // أسبوع من غير أي شيفت (إجازة/قبل التعيين) = مفيش حافز ومفيش عقاب
-  return { weeks: out, total: out.reduce((n,w)=> n + w.amount, 0) };
+  // 💰 اللي بيدخل المرتب = المعتمد من المالك بس
+  return { weeks: out, total: out.reduce((n,w)=> n + w.paid, 0), pending: out.filter(w=> w.decision==='pending') };
 }
 window.bankMonthFor = bankMonthFor; window.bankBonusFor = bankBonusFor; window.bankWeekStats = bankWeekStats;
 /* 🎯 جدول الاقتراح للمالك (شاشة الإعدادات): متوسط الفرع + متوسط كل موظف + هدفه المقترح للأسبوع الحالي */
@@ -8532,7 +8558,7 @@ function renderSalaryPanel(){
   renderPayrollBranchSummary(periodLabel, emps);
   if(!emps.length){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const range = payPeriodRange(periodLabel);
-  let _alerts = ''; try{ _alerts = bankAlertsHtml(); }catch(e){}
+  let _alerts = ''; try{ _alerts = bankPendingBonusesHtml() + bankAlertsHtml(); }catch(e){}
   wrap.innerHTML = _alerts + emps.map(e=>{
     if(!e.baseSalary){
       return `<div class="emp-row" style="padding:13px;"><div class="n">${e.name}</div><div class="meta">لسه مفيش مرتب أساسي</div></div>`;
@@ -8634,7 +8660,7 @@ window.openPayrollBankDetails = function(empId, periodKey){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10000;overflow:auto;padding:12px 8px 28px;color:#f5f5f7;font-family:inherit';
   const reasonAr = { forgot:'نسي الانصراف', manual:'يدوي', needs_review:'مستني مراجعة', open:'مفتوح', voided:'ملغي' };
   const rows = c.bank.rows.map(r=> `<tr style="border-top:1px solid rgba(255,255,255,.07)${r.counted?'':';opacity:.5'}"><td style="padding:6px 4px">${r.day.slice(5)}</td><td>${hm(r.clockInTs)}</td><td>${hm(r.clockOutTs)}</td><td style="direction:ltr;text-align:center">${r.lateMin?'<span style="color:#ff5b63">'+r.lateMin+'</span>':'0'}</td><td style="direction:ltr;text-align:center">${r.requiredMin?Math.round(r.requiredMin/60*10)/10:'—'}</td><td style="direction:ltr;text-align:center;font-weight:800;color:${r.delta<0?'#ff5b63':(r.delta>0?'#35d26f':'#aaa')}">${r.counted?TimeBank.fmtMin(r.delta):(reasonAr[r.reason]||r.reason)}</td></tr>`).join('');
-  const weeks = (c.bonus?c.bonus.weeks:[]).map(w=> `<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.07);font-size:12px"><span>أسبوع ${w.key.slice(5)}<br><small style="color:#aaa">التزام ${w.parts.commit}/${w.max.commit} (تأخير ${w.st.lateMinTotal} د) · تقييم ${w.parts.rating}/${w.max.rating}${w.st.avgRating!=null?' ('+w.st.avgRating.toFixed(1)+'/4)':''} · مبيعات ${w.parts.sales}/${w.max.sales} (${fmtPts(w.st.points)}${w.st.target>0?' من '+w.st.target:''} ن)</small></span><b style="color:${w.amount?'#35d26f':'#ff5b63'};direction:ltr">${w.score}/100 → ${w.amount} ج</b></div>`).join('') || '<div style="color:#aaa;font-size:12px">مفيش أسبوع مكتمل لسه</div>';
+  const weeks = (c.bonus?c.bonus.weeks:[]).map(w=> `<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.07);font-size:12px"><span>أسبوع ${w.key.slice(5)}<br><small style="color:#aaa">التزام ${w.parts.commit}/${w.max.commit} (تأخير ${w.st.lateMinTotal} د) · تقييم ${w.parts.rating}/${w.max.rating}${w.st.avgRating!=null?' ('+w.st.avgRating.toFixed(1)+'/4)':''} · مبيعات ${w.parts.sales}/${w.max.sales} (${fmtPts(w.st.points)}${w.st.target>0?' من '+w.st.target:''} ن)</small></span><b style="color:${w.decision==='approved'?'#35d26f':(w.decision==='pending'?'#fbbf24':'#ff5b63')};direction:ltr">${w.score}/100 → ${w.amount} ج ${w.decision==='approved'?'✅':(w.decision==='rejected'?'✖':(w.decision==='pending'?'⏳':''))}</b></div>`).join('') || '<div style="color:#aaa;font-size:12px">مفيش أسبوع مكتمل لسه</div>';
   ov.innerHTML = `<div style="max-width:560px;margin:auto;background:#171820;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:14px">
     <div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:17px">🏦 رصيد الوقت — ${_payEsc(emp.name)}</b><div style="font-size:11px;color:#aaa">${_payEsc(payPeriodLabelAr(periodKey))} · الرصيد ${TimeBank.fmtMin(c.bank.balanceMin)} · ${c.bank.lateCount} تأخير (${c.bank.lateMinTotal} د) · ${c.bank.forgotCount} شيفت منسي</div></div><button class="backBtn" onclick="document.getElementById('bankDetOv').remove()">✕</button></div>
     <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px"><tr style="color:#aaa;font-size:11px"><th style="text-align:right;padding:4px">يوم</th><th>جه</th><th>مشي</th><th>تأخير</th><th>المطلوب (س)</th><th>الرصيد</th></tr>${rows}</table>
@@ -8644,6 +8670,15 @@ window.openPayrollBankDetails = function(empId, periodKey){
   document.body.appendChild(ov);
 };
 /* 🏦 v640 — إنذار التأخير المتكرر للمالك (فوق قايمة المرتبات) */
+/* 🎁 v644 — حوافز الأسبوع المستنية اعتماد المالك (فوق المرتبات) */
+function bankPendingBonusesHtml(){
+  if(!(typeof _bankOn==='function'?_bankOn:()=>false)()) return '';
+  const emps = reviewEmployeesFor(viewBranch); const items = [];
+  const now = new Date(); const m = getMonthRange(now); const prev = getMonthRange(new Date(m.start.getTime() - 86400000));
+  emps.forEach(e=>{ if(!e.baseSalary || isSetupShift(e)) return; try{ bankBonusFor(e, prev.start, m.end, Date.now()).pending.forEach(w=> items.push({ e, w })); }catch(_){} });
+  if(!items.length) return '';
+  return `<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:12.5px"><b>🎁 حوافز أسبوعية مستنية اعتمادك (${items.length})</b>${items.map(({e,w})=>`<div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap"><span style="flex:1"><b>${_payEsc(e.name)}</b> · أسبوع ${w.key.slice(5)} · ${w.score}/100 (التزام ${w.parts.commit} · تقييم ${w.parts.rating} · مبيعات ${w.parts.sales}) → <b>${w.amount} ج</b></span><button onclick="bankDecideBonus('${e.id}','${w.key}',true,${w.amount},${w.score})" style="border:0;border-radius:9px;background:#16a866;color:#fff;padding:6px 10px;font-family:inherit;font-weight:800;cursor:pointer">✅ اعتمد</button><button onclick="bankDecideBonus('${e.id}','${w.key}',false,0,${w.score})" style="border:0;border-radius:9px;background:#3b3b46;color:#fff;padding:6px 10px;font-family:inherit;font-weight:800;cursor:pointer">✖ ارفض</button></div>`).join('')}</div>`;
+}
 function bankAlertsHtml(){
   if(!(typeof _bankOn==='function'?_bankOn:()=>false)()) return '';
   const emps = reviewEmployeesFor(viewBranch); const ids = new Set(emps.map(e=>e.id));
@@ -8681,7 +8716,7 @@ window.openPayrollEmployee = function(empId, periodKey){
   const _bk = c.bank;
   const bankRow = _bk ? `<button type="button" onclick="openPayrollBankDetails('${emp.id}','${pk}')" style="width:100%;display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;border-bottom:1px solid rgba(255,255,255,.055);background:transparent;color:inherit;padding:8px 0;font-family:inherit;cursor:pointer;text-align:right"><span style="color:#aaaab4;flex:1">🏦 رصيد الوقت <small style="color:#fbbf24">${TimeBank.fmtMin(_bk.balanceMin)} · ${_bk.lateCount} تأخير · اضغط للتفاصيل</small></span><b class="${_bk.balanceMin<0?'bad':'good'}" style="text-align:left;direction:ltr">${_bk.balanceMin<0 ? '-'+_payMoney(_bk.money.deduction) : '+'+_payMoney(_bk.money.overtimePay)}</b></button>`
     + (_bk.otherDays ? detailRow('بريك/تبديل/غياب · '+_payQty(_bk.otherHours,'ساعة'),'-'+_payMoney(Math.round(_bk.otherDays*(Number(emp.baseSalary||0)/30)*100)/100),'bad') : '') : '';
-  const bonusRow = c.bonus ? detailRow('🎁 حافز أسبوعي · '+c.bonus.weeks.length+' أسبوع'+(c.bonus.weeks.length?' ('+c.bonus.weeks.map(w=>w.amount).join(' + ')+')':''),'+'+_payMoney(c.weeklyBonusAmount),'good') : '';
+  const bonusRow = c.bonus ? detailRow('🎁 حافز أسبوعي معتمد · '+c.bonus.weeks.filter(w=>w.decision==='approved').length+' أسبوع'+(c.bonus.pending.length?' · <span style="color:#fbbf24">'+c.bonus.pending.length+' مستني اعتمادك</span>':''),'+'+_payMoney(c.weeklyBonusAmount),'good') : '';
   const timeCreditRow = _bk ? bankRow : `<button type="button" onclick="openPayrollTimeCreditDetails('${emp.id}','${pk}')" style="width:100%;display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;border-bottom:1px solid rgba(255,255,255,.055);background:transparent;color:inherit;padding:8px 0;font-family:inherit;cursor:pointer;text-align:right"><span style="color:#aaaab4;flex:1">⏳ رصيد الوقت <small style="color:#fbbf24">اضغط للتفاصيل والتعديل</small></span><b class="bad" style="text-align:left;direction:ltr">${_payQty(c.timeCreditHours,'ساعة')} = -${_payMoney(c.timeCreditDeduction)}</b></button>`;
   const adminDeductionRows = (c.adminDeductionItems||[]).map(d=>{
     const unit = Number(d.days)>0 ? (' · '+_payQty(d.days,'يوم')) : '';

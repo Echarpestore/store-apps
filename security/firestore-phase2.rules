@@ -446,6 +446,7 @@ service cloud.firestore {
 
     // التاسك الأسبوعي — تطبيق الحضور بيسلّم، وOffice بيقبل/يرفض
     match /sales_tasks/{id}               { allow read, write: if isStaff(); }
+    match /sales_bonus_week/{id}          { allow read, write: if isStaff(); }   // 🎁 v644: قرارات المالك على حوافز الأسبوع
     match /sales_task_submissions/{id}    { allow read, write: if isStaff(); }
     match /sales_task_weeks/{id}          { allow read, write: if isStaff(); }
 
