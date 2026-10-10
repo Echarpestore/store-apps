@@ -11,9 +11,17 @@ else {
   assert(!out.fatal, 'الصفحة اشتغلت — ' + (out.fatal||''));
   assertEq((out.errs||[]).length, 0, 'مفيش أخطاء JS في أي شاشة — ' + JSON.stringify(out.errs||[]).slice(0,200));
   // اليوم
-  assert(/سارة[\s\S]*اتأخرت 5 مرات/.test(out.today||''), 'إنذار التأخير المتكرر فوق');
+  assert(/سارة[\s\S]*اتأخرت 5 مرات/.test(out.today||''), 'إنذار التأخير المتكرر فوق (موظفة واحدة = سطر واحد)');
+  assert(/function lateSheet\(/.test(require('fs').readFileSync(require('path').join(__dirname,'..','office2','office2.js'),'utf8')) && /موظفين<\/b> بيتأخروا كتير/.test(require('fs').readFileSync(require('path').join(__dirname,'..','office2','office2.js'),'utf8')), 'أكتر من واحدة = إنذار واحد مجمّع بيفتح قايمة');
   assert(/1 حاجة مستنية قرارك/.test(out.today||''), 'عدّاد الموافقات');
-  assert(/El Rehab\n2,000\n▲ 33% عن امبارح/.test(out.today||''), 'مبيعات الفرع النهاردة ومقارنة امبارح (2000 vs 1500)');
+  assert(/El Rehab\n2,000\n▼ 17% عن امبارح نفس الوقت/.test(out.today||''), 'مبيعات الفرع النهاردة مقارنة بامبارح **لنفس الوقت** (2000 vs 2400 لحد 16:00)');
+  assert(!/الإدارة/.test(out.today||''), 'سلبي: «الإدارة» مش فرع');
+  // v3: صفحة الفرع
+  assert(/المبيعات\n2,000/.test(out.branchToday||'') && /القطع\n5/.test(out.branchToday||'') && /كاش 1,200 · فيزا 800/.test(out.branchToday||''), 'صفحة الفرع النهاردة: المبيعات والقطع وطرق الدفع');
+  assert(/1\. طرحة شيفون\n111\n4 قطعة\n1,600/.test(out.branchToday||''), 'الأكثر مبيعًا بالقطع (طرحة شيفون 4 قطع)');
+  assert(/#5802 · 13:00[\s\S]*سارة · 2 قطعة · فيزا/.test(out.branchToday||''), 'سجل الفواتير: الوقت والبياعة والقطع وطريقة الدفع');
+  assert(/المبيعات\n2,400/.test(out.branchYday||'') && /#5790 · 15:00/.test(out.branchYday||''), '⭐ يوم تاني (امبارح) بيتحمّل عند الطلب ويظهر سجله');
+  assert(/فاتورة #5790[\s\S]*إيشارب حرير[\s\S]*×3[\s\S]*الإجمالي[\s\S]*1,500/.test(out.invoice||''), 'شيت الفاتورة: الأصناف والكميات والإجمالي');
   assert(/سارة · El Rehab\nمن 14:22 · متأخرة 22 د/.test(out.today||''), 'مين موجود: متأخرة 22 د (بتوقيت القاهرة)');
   assert(/هاجر · El Rehab\nبريك من 15:40/.test(out.today||''), 'حالة البريك');
   assert(/دينا · Glow\nمش موجودة/.test(out.today||''), 'سلبي: اللي مش في شيفت');
