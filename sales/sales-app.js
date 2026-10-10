@@ -5097,16 +5097,14 @@ function computeRaceStatus(emp, periodType){
 function bankCardHtml(emp){
   const now = Date.now(); const cfg = _timeCfgNow(); const tc = TimeBank.cfgOf(cfg);
   const m = getMonthRange(now); const sum = bankMonthFor(emp, m.start.getTime(), m.end.getTime());
-  const rate = (Number(emp.baseSalary)||0) / 30 / 8;
-  const mon = TimeBank.money(sum.balanceMin, rate);
   const w = TimeBank.currentWeek(now); const st = bankWeekStats(emp, w.start, w.end); const b = TimeBank.weekBonus(st, cfg);
   const col = sum.balanceMin < 0 ? 'var(--bad)' : 'var(--good)';
   const bal = `<div class="raceBlock"><div class="raceBlockTitle"><span>🏦 رصيد وقتك الشهر ده</span></div>
     <div style="font-size:26px;font-weight:900;color:${col};direction:ltr;text-align:right">${TimeBank.fmtMin(sum.balanceMin)}</div>
     <div style="font-size:11.5px;color:var(--sub);margin-top:2px">${sum.lateCount} تأخير (${sum.lateMinTotal} د) · ${sum.plusMin} د زيادة · ${sum.forgotCount?sum.forgotCount+' شيفت منسي · ':''}${sum.countedShifts} شيفت</div>
     <div style="font-size:12px;margin-top:6px">${sum.balanceMin < 0
-      ? `لو فضل كده لآخر الشهر هيتخصم <b>${Math.round(mon.deduction)} ج</b> — اقعد <b>${Math.abs(sum.balanceMin)} د</b> زيادة وبيتصفّر لوحده ✅`
-      : (sum.balanceMin > 0 ? `أوفرتايم لحد دلوقتي <b>+${Math.round(mon.overtimePay)} ج</b> 👏` : 'رصيدك صفر — ملتزم بالمواعيد ✅')}</div></div>`;
+      ? `اقعد <b>${Math.abs(sum.balanceMin)} د</b> زيادة قبل آخر الشهر وبيتصفّر لوحده ✅ — اللي يفضل سالب بيتخصم من المرتب`
+      : (sum.balanceMin > 0 ? `<b>+${sum.balanceMin} د</b> وقت زيادة بتتحسب لك أوفرتايم 👏` : 'رصيدك صفر — ملتزم بالمواعيد ✅')}</div></div>`;
   const part = (k, lbl) => `<div class="raceItem"><span>${lbl}</span><span style="font-weight:800;color:${b.parts[k]>=b.max[k]?'var(--good)':(b.parts[k]>0?'#e0a020':'var(--bad)')}">${b.parts[k]} / ${b.max[k]}</span></div>`;
   const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+tc.bonusPointsWeek+' · ':''}= ${tc.bonusMax} ج</div>` : '';
   const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span></div>
@@ -5119,7 +5117,12 @@ function renderRaceStatus(empId){
   if(!wrap) return;
   const emp = window.employees.find(e=> e.id === empId);
   if(!emp){ wrap.innerHTML = ''; return; }
-  if((typeof _bankOn==='function'?_bankOn:()=>false)()){ try{ wrap.innerHTML = bankCardHtml(emp); }catch(e){ console.warn('bank card', e); wrap.innerHTML=''; } return; }
+  // 🏦 v641: في وضع الرصيد نخفي المكافآت القديمة (أسبوع/شهر/سباق) — النظام الجديد هو اللي بيحكم
+  const _bankNow = (typeof _bankOn==='function'?_bankOn:()=>false)();
+  const _lg = document.getElementById('dh_legacyRewards'), _bl = document.getElementById('dh_bankLabel');
+  if(_lg) _lg.style.display = _bankNow ? 'none' : '';
+  if(_bl) _bl.style.display = _bankNow ? '' : 'none';
+  if(_bankNow){ try{ wrap.innerHTML = bankCardHtml(emp); }catch(e){ console.warn('bank card', e); wrap.innerHTML=''; } return; }
 
   const typeLabel = { late:'⏰ تأخير', break:'☕ بريك', early:'🚪 انصراف بدري', swap:'🔄 تبديل', absence:'🚫 غياب' };
 

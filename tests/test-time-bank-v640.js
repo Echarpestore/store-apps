@@ -206,8 +206,12 @@ assert(!/قبل نهاية شيفته بـ15|متنساش تسجّل الخرو�
 const ui = fs.readFileSync(path.join(ROOT,'sales','sales-ui.js'),'utf8');
 assert(/id="tsBankOn"/.test(ui) && /tsBankGrace/.test(ui) && /tsBonusMin/.test(ui) && /tsAlertLate/.test(ui) && /bankEnabled, bankFrom,/.test(ui), 'إعدادات رصيد الوقت والحافز');
 const html = fs.readFileSync(path.join(ROOT,'sales','index.html'),'utf8');
-assert(html.indexOf('time-bank.js?v=640') > 0 && html.indexOf('time-bank.js?v=640') < html.indexOf('sales-app.js?v=640') && /sales-ui\.js\?v=640/.test(html), 'time-bank.js قبل sales-app.js v640');
-assert(/store-apps-shell-v640/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v640');
+assert(html.indexOf('time-bank.js?v=641') > 0 && html.indexOf('time-bank.js?v=641') < html.indexOf('sales-app.js?v=641') && /sales-ui\.js\?v=640/.test(html), 'time-bank.js قبل sales-app.js v641');
+assert(/store-apps-shell-v641/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
+// v641 — طلب المالك: مفيش مبلغ بالجنيه للموظف، والمكافآت القديمة بتختفي في وضع الرصيد
+const _card = extractFn(src, 'function bankCardHtml(');
+assert(!/TimeBank\.money|هيتخصم <b>|أوفرتايم لحد دلوقتي <b>/.test(_card) && /\$\{b\.amount\} ج/.test(_card), 'سلبي: كارت الموظف مفيهوش مبلغ الخصم/الأوفرتايم بالجنيه — الحافز بس بالجنيه');
+assert(/id="dh_legacyRewards"/.test(html) && /_lg\.style\.display = _bankNow \? 'none' : ''/.test(src), 'مكافأة الأسبوع/الشهر/السباق القديمة مخفية في وضع الرصيد');
 // ---------- ٥) Office بنفس المحرك ----------
 const of = fs.readFileSync(path.join(ROOT,'Office','office.js'),'utf8');
 assert(/TimeBank\.enabledFor\(cfg, start\.getTime\(\)\)/.test(of) && /bank=TimeBank\.monthSummary\(rangeShifts,cfg,_req\)/.test(of) && /x\.type!=='late'&&x\.type!=='early'/.test(of), 'Office: المرتب بنفس محرك الرصيد وبيتجاهل بنود التأخير القديمة');
