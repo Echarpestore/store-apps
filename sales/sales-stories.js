@@ -93,7 +93,7 @@
     var d = S.draft;
     var prod = S.product === null ? '' : (S.product ? '<div class="stProd">✅ ' + esc(S.product.name || '') + (S.product.price ? ' · ' + esc(S.product.price) + ' ج.م' : '') + '</div>' : '<div class="stProd bad">الكود ده مش في المخزون — اتأكدي منه (من غير باركود صح مش هتاخدي نقط)</div>');
     var W = d.where, isP = !W.story, piece = W.online || W.home;
-    var CH = [['story','📸 ستوري النهارده'],['home','🏠 الصفحة الرئيسية'],['offers','🏷️ العروض'],['online','🛒 شراء أونلاين']];
+    var CH = [['story','📸 ستوري النهارده'],['home','🏠 الصفحة الرئيسية'],['offers','🏷️ العروض'],['online','🛒 بيع مباشر بعدد']];
     $('stBody').innerHTML = (S.editId ? '<div class="stTurn">✏️ بتعدّلي صورة رجعت لك — صوّري تاني وابعتي</div>' : turnLine())
       // 🗂️ الصورة تظهر فين (أكتر من اختيار) — الإدارة بتأكد أو تغيّر وهي بتوافق
       + '<div class="stLbl">تظهر فين؟ (اختاري واحد أو أكتر)</div>'

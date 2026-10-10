@@ -107,8 +107,9 @@ function go(i){
   document.getElementById('stvT').textContent = s.title || ''; document.getElementById('stvS').textContent = s.subtitle || (s.price ? s.price + ' ج.م' : '');
   var piece = s.online === true, left = Number(s.qtyLeft) || 0;
   document.getElementById('stvA').innerHTML = (s.tryable !== false ? '<button class="try" onclick="StoriesApp.tryOn()">✨ جرّبيها عليكي</button>' : '')
+    // 🛒 بعدد محدد (المالك حدد العدد) = طلب مباشر بحجز · غير كده = 💬 من الشات (الموظفة تتأكد إنها موجودة الأول)
     + (piece ? (left > 0 ? '<button class="cart buy" onclick="StoriesApp.order()">🛒 اطلبيها</button>' : '<button class="cart" disabled>اتباعت 💔</button>')
-      : (s.barcode && typeof window.tryonAddToCart === 'function' ? '<button class="cart" onclick="StoriesApp.addCart()">🛒</button>' : ''));
+      : (typeof window.openChat === 'function' ? '<button class="cart buy" onclick="StoriesApp.ask()">💬 اطلبيها من الشات</button>' : ''));
   markSeen(s.id);
   var bar = bars[i]; if(bar){ requestAnimationFrame(function(){ bar.style.transition = 'transform ' + DUR + 'ms linear'; bar.style.transform = 'scaleX(1)'; }); }
   S.start = Date.now(); S.left = DUR; S.timer = setTimeout(function(){ go(S.idx + 1); }, DUR);
@@ -138,7 +139,23 @@ function order(){
   try{ if(s.pieceBranch && typeof window.shopSetBranch === 'function') window.shopSetBranch(s.pieceBranch); else if(s.pieceBranch) window._shopBranch = s.pieceBranch; }catch(e){}
   close(); window.tryonAddToCart(s.barcode, S.imgs[s.id] || s.thumb, 'القطعة اللي في الصورة');
 }
+/* 💬 الطلب من الشات: صورة الطرحة + رسالة جاهزة — العميلة تبعتها والموظفة تتأكد من الرف وتبيعها من الشات */
+function ask(){
+  var s = S.list[S.idx]; if(!s) return;
+  var img = S.imgs[s.id] || s.thumb; close();
+  try{
+    window.openChat();
+    setTimeout(function(){
+      try{
+        window.chatImgData = img;
+        var t = document.getElementById('chImgTag'), pv = document.getElementById('chImgPrev'), inp = document.getElementById('chInput');
+        if(t) t.src = img; if(pv) pv.style.display = 'flex';
+        if(inp && !inp.value.trim()) inp.value = 'عايزة دي 😍 — ' + (s.title || s.productName || '') + (s.barcode ? ' (كود ' + s.barcode + ')' : '') + ' — متاحة؟';
+      }catch(e){}
+    }, 350);
+  }catch(e){}
+}
 function addCart(){ var s = S.list[S.idx]; if(!s || !s.barcode) return; close(); window.tryonAddToCart(s.barcode, S.imgs[s.id] || s.thumb, ''); }
 
-window.StoriesApp = { order: order, init: init, storiesHtml: storiesHtml, homeHtml: homeHtml, open: open, openHome: openHome, close: close, isOpen: isOpen, tryOn: tryOn, addCart: addCart };
+window.StoriesApp = { ask: ask, order: order, init: init, storiesHtml: storiesHtml, homeHtml: homeHtml, open: open, openHome: openHome, close: close, isOpen: isOpen, tryOn: tryOn, addCart: addCart };
 })();

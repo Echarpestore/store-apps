@@ -69,12 +69,13 @@ const rd = (f)=> fs.readFileSync(path.join(ROOT, f), 'utf8');
 /* ٣) Sales · Office · التطبيق */
 {
   const sal = rd('sales/sales-stories.js'), off = rd('office2/stories.js'), app = rd('pos/stories-app.js'), loy = rd('loyalty/index.html');
-  assert(/\['online','🛒 شراء أونلاين'\]/.test(sal) && /\['offers','🏷️ العروض'\]/.test(sal), 'الموظفة بتختار تظهر فين (ستوري/رئيسية/عروض/أونلاين)');
+  assert(/\['online','🛒 بيع مباشر بعدد'\]/.test(sal) && /\['offers','🏷️ العروض'\]/.test(sal), 'الموظفة بتختار تظهر فين (ستوري/رئيسية/عروض/أونلاين)');
   assert(/story\.qty = /.test(sal) && /story\.pieceBranch = /.test(sal), 'عدد القطع من اللون ده + فرعها');
   assert(/if\(online && s\.qtyLeft === undefined\)/.test(off), 'العدد بيتحط أول موافقة بس (مايمسحش حجز قائم)');
   assert(/if\(online\) home = true/.test(off), 'الأونلاين بيظهر في «مختارة ليكي»');
   assert(/catalog_' \+ b/.test(off) && /950000/.test(off), 'العروض = كتالوج POS نفسه · مع حماية حجم المستند');
   assert(/online:false/.test(off.slice(off.indexOf('async function unhome'))), 'الشيل من الرئيسية بيقفل الطلب');
   assert(/StoriesApp\.order\(\)/.test(app) && /اتباعت 💔/.test(app), 'التطبيق: «اطلبيها» أو «اتباعت»');
+  assert(/StoriesApp\.ask\(\)/.test(app) && /window\.chatImgData = img/.test(app) && /متاحة؟/.test(app), 'من غير عدد = «اطلبيها من الشات» بصورة القطعة ورسالة جاهزة');
   assert(/_cartPieces\[s\.barcode\] = s\.id/.test(app) && /pieceId: pid/.test(loy), 'رقم القطعة بيوصل للسيرفر مع الطلب');
 }
