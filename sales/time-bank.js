@@ -31,6 +31,7 @@
     autoTargetWeeks: 8,         // كام أسبوع ورا بنحسب منهم المتوسط
     autoTargetFactor: 1.0,      // الهدف = ((متوسط الموظف + متوسط الفرع) ÷ 2) × المعامل
     bonusWeights: { commit: 40, rating: 30, sales: 30 },
+    bonusApproval: 'auto',      // 'auto' = اللي يستحق بياخد من غير ما المالك يعمل حاجة (يقدر يلغي) · 'manual' = لازم اعتماد
     bonusMinScore: 60,          // أقل من كده = مفيش حافز (الالتزام لوحده 40 مش كفاية — لازم تقييم أو مبيعات)
     alertLateCount: 4, alertWindowDays: 14
   };
@@ -42,6 +43,7 @@
     c.bonusRatingMin = isNaN(Number(c.bonusRatingMin)) ? DEFAULTS.bonusRatingMin : Number(c.bonusRatingMin);
     if(c.autoTargetWeeks < 1) c.autoTargetWeeks = DEFAULTS.autoTargetWeeks; if(c.autoTargetFactor <= 0) c.autoTargetFactor = 1;
     c.bonusPointsMode = c.bonusPointsMode === 'fixed' ? 'fixed' : 'auto';
+    c.bonusApproval = c.bonusApproval === 'manual' ? 'manual' : 'auto';
     if(c.bonusMax < c.bonusMin) c.bonusMax = c.bonusMin;
     c.bankEnabled = c.bankEnabled !== false;
     return c;

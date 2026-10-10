@@ -206,8 +206,8 @@ assert(!/قبل نهاية شيفته بـ15|متنساش تسجّل الخرو�
 const ui = fs.readFileSync(path.join(ROOT,'sales','sales-ui.js'),'utf8');
 assert(/id="tsBankOn"/.test(ui) && /tsBankGrace/.test(ui) && /tsBonusMin/.test(ui) && /tsAlertLate/.test(ui) && /bankEnabled, bankFrom,/.test(ui), 'إعدادات رصيد الوقت والحافز');
 const html = fs.readFileSync(path.join(ROOT,'sales','index.html'),'utf8');
-assert(html.indexOf('time-bank.js?v=644') > 0 && html.indexOf('time-bank.js?v=644') < html.indexOf('sales-app.js?v=644') && /sales-ui\.js\?v=644/.test(html), 'time-bank.js قبل sales-app.js v641');
-assert(/store-apps-shell-v644/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
+assert(html.indexOf('time-bank.js?v=645') > 0 && html.indexOf('time-bank.js?v=645') < html.indexOf('sales-app.js?v=645') && /sales-ui\.js\?v=645/.test(html), 'time-bank.js قبل sales-app.js v641');
+assert(/store-apps-shell-v645/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
 // v641 — طلب المالك: مفيش مبلغ بالجنيه للموظف، والمكافآت القديمة بتختفي في وضع الرصيد
 const _card = extractFn(src, 'function bankCardHtml(');
 assert(!/TimeBank\.money|هيتخصم <b>|أوفرتايم لحد دلوقتي <b>/.test(_card), 'سلبي: كارت الموظف مفيهوش مبلغ الخصم/الأوفرتايم بالجنيه');
@@ -215,7 +215,7 @@ assert(/id="dh_legacyRewards"/.test(html) && /_lg\.style\.display = _bankNow \? 
 // ---------- ٥) Office بنفس المحرك ----------
 const of = fs.readFileSync(path.join(ROOT,'Office','office.js'),'utf8');
 assert(/TimeBank\.enabledFor\(cfg, start\.getTime\(\)\)/.test(of) && /bank=TimeBank\.monthSummary\(rangeShifts,cfg,_req\)/.test(of) && /x\.type!=='late'&&x\.type!=='early'/.test(of), 'Office: المرتب بنفس محرك الرصيد وبيتجاهل بنود التأخير القديمة');
-assert(/\.\.\/sales\/time-bank\.js\?v=644/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
+assert(/\.\.\/sales\/time-bank\.js\?v=645/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
 
 // ---------- ٦) v642 — الهدف الأسبوعي التلقائي لكل موظف (متوسطه + متوسط الفرع) ----------
 (function(){
@@ -249,6 +249,11 @@ assert(/\.\.\/sales\/time-bank\.js\?v=644/.test(fs.readFileSync(path.join(ROOT,'
   assert(!/\$\{b\.amount\}/.test(card) && /\$\{b\.score\} \/ 100/.test(card), 'سلبي: كارت الموظف مفيهوش مبلغ الحافز — النقاط بس');
   assert(/x\.decision==='approved' && x\.paid > 0/.test(card) && /\$\{x\.paid\} ج/.test(card), 'المبلغ بيظهر للموظف بس بعد اعتماد المالك');
   assert(/total: out\.reduce\(\(n,w\)=> n \+ w\.paid, 0\)/.test(src), 'المرتب بياخد المعتمد بس');
+  // v645: الاعتماد تلقائي — المالك مش بيعمل حاجة، بس يقدر يلغي
+  assertEq(TB.cfgOf({}).bonusApproval, 'auto', 'الافتراضي: اعتماد تلقائي');
+  assert(/const autoOk = TimeBank\.cfgOf\(cfg\)\.bonusApproval !== 'manual'/.test(src) && /\(autoOk \? 'approved' : 'pending'\)/.test(src), 'اللي يستحق بيتعتمد لوحده (إلا لو المالك اختار يدوي)');
+  assert(/d \? d\.status :/.test(src) && /bankDecideBonus\('\$\{e\.id\}','\$\{w\.key\}',false,0,\$\{w\.score\}\)[^<]*>✖ إلغاء/.test(src), 'قرار الرفض/الإلغاء المحفوظ بيغلب التلقائي');
+  assert(/id="tsBonusApproval"/.test(ui), 'إعداد تلقائي/يدوي');
   assert(/function bankPendingBonusesHtml\(/.test(src) && /bankDecideBonus\('\$\{e\.id\}','\$\{w\.key\}',true/.test(src) && /window\.bankDecideBonus = async function/.test(src) && /sales_bonus_week/.test(src), 'لوحة الاعتماد للمالك + قرار بيتحفظ في sales_bonus_week');
   assert(/match \/sales_bonus_week\/\{id\}/.test(fs.readFileSync(path.join(ROOT,'security','firestore-phase2.rules'),'utf8')), 'قاعدة Firestore للمجموعة الجديدة');
   assertEq(TB.cfgOf({}).bonusMin, 100, 'الافتراضي: من 100');

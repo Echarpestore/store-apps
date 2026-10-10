@@ -659,7 +659,12 @@ window.renderTimeSettings = function(){
     </label>
     ${row('فترة السماح (دقيقة)', 'tsBankGrace', tb.bankGraceMin, 'تأخير أو فرق أقل من كده مش بيتحسب')}
     ${row('أقل نقاط للحافز (من 100)', 'tsBonusMinScore', tb.bonusMinScore, 'الالتزام 40 + تقييم 30 + مبيعات 30 · أقل من كده = صفر')}
-    ${row('أقل حافز أسبوعي (ج)', 'tsBonusMin', tb.bonusMin, 'عند أقل النقاط · الحافز مبيظهرش للموظف ولا بيتصرف غير لما تعتمده من شاشة المرتبات')}
+    <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-size:13px;">
+      <span style="flex:1;">اعتماد الحافز<br><small style="color:var(--sub); font-size:10.5px;">تلقائي = اللي يستحق بياخد وبيظهرله من غير ما تعمل حاجة (تقدر تلغي من شاشة المرتبات) · يدوي = لازم تدوس اعتمد</small></span>
+      <select id="tsBonusApproval" onfocus="this.closest('#timeSettingsForm').dataset.editing='1'" onblur="this.closest('#timeSettingsForm').dataset.editing='0'" style="padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-weight:800;">
+        <option value="auto" ${tb.bonusApproval!=='manual'?'selected':''}>🤖 تلقائي</option><option value="manual" ${tb.bonusApproval==='manual'?'selected':''}>يدوي</option></select>
+    </label>
+    ${row('أقل حافز أسبوعي (ج)', 'tsBonusMin', tb.bonusMin, 'عند أقل النقاط')}
     ${row('أعلى حافز أسبوعي (ج)', 'tsBonusMax', tb.bonusMax, 'عند 100 نقطة')}
     ${row('تأخير الأسبوع المسموح للالتزام (دقيقة)', 'tsBonusLate', tb.bonusLateMinWeek, 'إجمالي الأسبوع · ضعفه = نص درجة الالتزام')}
     ${row('أقل تقييم عملاء للحافز (من 4)', 'tsBonusRating', tb.bonusRatingMin)}
@@ -717,6 +722,7 @@ window.saveTimeSettings = async function(){
     bonusLateMinWeek: n('tsBonusLate', tb.bonusLateMinWeek), bonusRatingMin: f('tsBonusRating', tb.bonusRatingMin),
     bonusPointsWeek: n('tsBonusPts', tb.bonusPointsWeek), alertLateCount: n('tsAlertLate', tb.alertLateCount),
     bonusPointsMode: (document.querySelector('#tsBonusPtsMode') || {}).value === 'fixed' ? 'fixed' : 'auto',
+    bonusApproval: (document.querySelector('#tsBonusApproval') || {}).value === 'manual' ? 'manual' : 'auto',
     autoTargetFactor: Math.max(0.1, n('tsAutoFactor', Math.round(tb.autoTargetFactor*100)) / 100),
     lateMinPerHour: n('tsLatePer', c.lateMinPerHour),
     maxLateHoursPerDay: n('tsLateCap', c.maxLateHoursPerDay),

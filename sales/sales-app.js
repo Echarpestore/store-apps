@@ -5134,7 +5134,7 @@ function bankCardHtml(emp){
   const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span><small style="color:var(--sub);font-weight:600">يوم ${_dayN} من 7</small></div>
     <div style="font-size:22px;font-weight:900;color:${b.score>=tc.bonusMinScore?'var(--good)':'#e0a020'};direction:ltr;text-align:right">${b.score} / 100</div>
     ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+(st.target>0?' من '+st.target:'')+' ن)')}${next}
-    <div style="font-size:11px;color:var(--sub);margin-top:6px">الحافز بيتحدد يوم الجمعة (من ${tc.bonusMinScore} نقطة) وبيعتمده المالك — وبعدها بيظهر هنا</div>${approvedHtml}</div>`;
+    <div style="font-size:11px;color:var(--sub);margin-top:6px">الحافز بيتحدد يوم الجمعة (من ${tc.bonusMinScore} نقطة)${tc.bonusApproval==='manual'?' وبيعتمده المالك':''} — وبعدها بيظهر هنا</div>${approvedHtml}</div>`;
   return bal + bonus;
 }
 function renderRaceStatus(empId){
@@ -8158,7 +8158,11 @@ function bankBonusFor(emp, periodStart, periodEnd, nowMs){
   const cfg = _timeCfgNow();
   const weeks = TimeBank.weeksInPeriod(periodStart.getTime(), periodEnd.getTime(), nowMs || Date.now());
   const out = weeks.map(w=>{ const st = bankWeekStats(emp, w.start, w.end); const b = bankWeekBonus(st); const d = (typeof bankBonusDecision==='function') ? bankBonusDecision(emp.id, w.key) : null;
-      return { ...w, st, ...b, earned: b.amount > 0, decision: d ? d.status : (b.amount > 0 ? 'pending' : 'none'), paid: d && d.status==='approved' ? (Number(d.amount)||0) : 0 }; })
+      // 🤖 v645: الاعتماد تلقائي (قرار المالك: «مش عايز أعمل حاجة») — اللي يستحق بياخد، والمالك يقدر يلغي بس
+      const autoOk = TimeBank.cfgOf(cfg).bonusApproval !== 'manual';
+      let decision = d ? d.status : (b.amount > 0 ? (autoOk ? 'approved' : 'pending') : 'none');
+      const paid = decision === 'approved' ? (d && d.status==='approved' ? (Number(d.amount)||b.amount) : b.amount) : 0;
+      return { ...w, st, ...b, earned: b.amount > 0, decision, paid, auto: !d && decision==='approved' }; })
     .filter(w=> w.st.shifts > 0);   // أسبوع من غير أي شيفت (إجازة/قبل التعيين) = مفيش حافز ومفيش عقاب
   // 💰 اللي بيدخل المرتب = المعتمد من المالك بس
   return { weeks: out, total: out.reduce((n,w)=> n + w.paid, 0), pending: out.filter(w=> w.decision==='pending') };
@@ -8675,8 +8679,11 @@ function bankPendingBonusesHtml(){
   if(!(typeof _bankOn==='function'?_bankOn:()=>false)()) return '';
   const emps = reviewEmployeesFor(viewBranch); const items = [];
   const now = new Date(); const m = getMonthRange(now); const prev = getMonthRange(new Date(m.start.getTime() - 86400000));
-  emps.forEach(e=>{ if(!e.baseSalary || isSetupShift(e)) return; try{ bankBonusFor(e, prev.start, m.end, Date.now()).pending.forEach(w=> items.push({ e, w })); }catch(_){} });
+  const autoMode = TimeBank.cfgOf(_timeCfgNow()).bonusApproval !== 'manual';
+  const since = Date.now() - 21*86400000;   // آخر 3 أسابيع بس في اللوحة
+  emps.forEach(e=>{ if(!e.baseSalary || isSetupShift(e)) return; try{ bankBonusFor(e, prev.start, m.end, Date.now()).weeks.forEach(w=>{ if(w.end < since) return; if(w.decision==='pending' || (autoMode && w.auto)) items.push({ e, w }); }); }catch(_){} });
   if(!items.length) return '';
+  if(autoMode) return `<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:12.5px"><b>🎁 حوافز الأسبوع — اتعتمدت تلقائي (${items.length})</b> <small style="color:var(--sub)">بتدخل المرتب وبتظهر للموظفة من غير ما تعمل حاجة · تقدر تلغي أي واحدة</small>${items.map(({e,w})=>`<div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap"><span style="flex:1"><b>${_payEsc(e.name)}</b> · أسبوع ${w.key.slice(5)} · ${w.score}/100 (التزام ${w.parts.commit} · تقييم ${w.parts.rating} · مبيعات ${w.parts.sales}) → <b>${w.amount} ج</b></span><button onclick="bankDecideBonus('${e.id}','${w.key}',false,0,${w.score})" style="border:0;border-radius:9px;background:#3b3b46;color:#fff;padding:6px 10px;font-family:inherit;font-weight:800;cursor:pointer">✖ إلغاء</button></div>`).join('')}</div>`;
   return `<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:12.5px"><b>🎁 حوافز أسبوعية مستنية اعتمادك (${items.length})</b>${items.map(({e,w})=>`<div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap"><span style="flex:1"><b>${_payEsc(e.name)}</b> · أسبوع ${w.key.slice(5)} · ${w.score}/100 (التزام ${w.parts.commit} · تقييم ${w.parts.rating} · مبيعات ${w.parts.sales}) → <b>${w.amount} ج</b></span><button onclick="bankDecideBonus('${e.id}','${w.key}',true,${w.amount},${w.score})" style="border:0;border-radius:9px;background:#16a866;color:#fff;padding:6px 10px;font-family:inherit;font-weight:800;cursor:pointer">✅ اعتمد</button><button onclick="bankDecideBonus('${e.id}','${w.key}',false,0,${w.score})" style="border:0;border-radius:9px;background:#3b3b46;color:#fff;padding:6px 10px;font-family:inherit;font-weight:800;cursor:pointer">✖ ارفض</button></div>`).join('')}</div>`;
 }
 function bankAlertsHtml(){
