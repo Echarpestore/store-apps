@@ -8176,8 +8176,8 @@ function bankWeekBonus(st){ return TimeBank.weekBonus(st, { ..._timeCfgNow(), bo
 function bankBonusFor(emp, periodStart, periodEnd, nowMs){
   const cfg = _timeCfgNow();
   // 🗓️ v646: مفيش حافز على أسبوع بدأ قبل تشغيل النظام (bankFrom) — أسبوع 26 سبتمبر مكانش على القواعد دي
-  const _bf = String(TimeBank.cfgOf(cfg).bankFrom || '').slice(0,10);
-  const weeks = TimeBank.weeksInPeriod(periodStart.getTime(), periodEnd.getTime(), nowMs || Date.now()).filter(w=> !_bf || TimeBank.keyOf(w.start) >= _bf);
+  // 🗓️ v648: + bonusFrom — أول أسبوع للحافز (قرار المالك 10-10: اللي قبل إعلان القواعد مش بيتحسب)
+  const weeks = TimeBank.weeksInPeriod(periodStart.getTime(), periodEnd.getTime(), nowMs || Date.now()).filter(w=> TimeBank.bonusWeekOk(w.start, cfg));
   const out = weeks.map(w=>{ const st = bankWeekStats(emp, w.start, w.end); const b = bankWeekBonus(st); const d = (typeof bankBonusDecision==='function') ? bankBonusDecision(emp.id, w.key) : null;
       // 🤖 v645: الاعتماد تلقائي (قرار المالك: «مش عايز أعمل حاجة») — اللي يستحق بياخد، والمالك يقدر يلغي بس
       const autoOk = TimeBank.cfgOf(cfg).bonusApproval !== 'manual';

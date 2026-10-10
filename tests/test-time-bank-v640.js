@@ -206,7 +206,7 @@ assert(!/قبل نهاية شيفته بـ15|متنساش تسجّل الخرو�
 const ui = fs.readFileSync(path.join(ROOT,'sales','sales-ui.js'),'utf8');
 assert(/id="tsBankOn"/.test(ui) && /tsBankGrace/.test(ui) && /tsBonusMin/.test(ui) && /tsAlertLate/.test(ui) && /bankEnabled, bankFrom,/.test(ui), 'إعدادات رصيد الوقت والحافز');
 const html = fs.readFileSync(path.join(ROOT,'sales','index.html'),'utf8');
-assert(html.indexOf('time-bank.js?v=647') > 0 && html.indexOf('time-bank.js?v=647') < html.search(/sales-app\.js\?v=6\d\d/) && /sales-ui\.js\?v=647/.test(html), 'time-bank.js قبل sales-app.js v641');
+assert(html.indexOf('time-bank.js?v=649') > 0 && html.indexOf('time-bank.js?v=649') < html.search(/sales-app\.js\?v=6\d\d/) && /sales-ui\.js\?v=649/.test(html), 'time-bank.js قبل sales-app.js v641');
 assert(/store-apps-shell-v64[7-9]/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
 // v641 — طلب المالك: مفيش مبلغ بالجنيه للموظف، والمكافآت القديمة بتختفي في وضع الرصيد
 const _card = extractFn(src, 'function bankCardHtml(');
@@ -215,7 +215,7 @@ assert(/id="dh_legacyRewards"/.test(html) && /_lg\.style\.display = _bankNow \? 
 // ---------- ٥) Office بنفس المحرك ----------
 const of = fs.readFileSync(path.join(ROOT,'Office','office.js'),'utf8');
 assert(/TimeBank\.enabledFor\(cfg, start\.getTime\(\)\)/.test(of) && /bank=TimeBank\.monthSummary\(rangeShifts,cfg,_req\)/.test(of) && /x\.type!=='late'&&x\.type!=='early'/.test(of), 'Office: المرتب بنفس محرك الرصيد وبيتجاهل بنود التأخير القديمة');
-assert(/\.\.\/sales\/time-bank\.js\?v=647/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
+assert(/\.\.\/sales\/time-bank\.js\?v=649/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
 
 // ---------- ٦) v642 — الهدف الأسبوعي التلقائي لكل موظف (متوسطه + متوسط الفرع) ----------
 (function(){
@@ -249,8 +249,17 @@ assert(/\.\.\/sales\/time-bank\.js\?v=647/.test(fs.readFileSync(path.join(ROOT,'
   assert(!/\$\{b\.amount\}/.test(card) && /\$\{b\.score\} \/ 100/.test(card), 'سلبي: كارت الموظف مفيهوش مبلغ الحافز — النقاط بس');
   assert(/x\.decision==='approved' && x\.paid > 0/.test(card) && /\$\{x\.paid\} ج/.test(card), 'المبلغ بيظهر للموظف بس بعد اعتماد المالك');
   assert(/total: out\.reduce\(\(n,w\)=> n \+ w\.paid, 0\)/.test(src), 'المرتب بياخد المعتمد بس');
-  // v645: الاعتماد تلقائي — المالك مش بيعمل حاجة، بس يقدر يلغي
-  assertEq(TB.cfgOf({}).bonusApproval, 'auto', 'الافتراضي: اعتماد تلقائي');
+  // v648: قرار المالك 10-10 — الحافز مبيظهرش ولا بيتصرف إلا لما يعتمده هو، ومفيش حافز على أسابيع قبل إعلان القواعد
+  assertEq(TB.cfgOf({}).bonusApproval, 'manual', 'الافتراضي: اعتماد يدوي من المالك');
+  assertEq(TB.cfgOf({ bonusApproval:'auto' }).bonusApproval, 'manual', 'سلبي: المفتاح القديم المتحفوظ auto مبيفتحش التلقائي');
+  assertEq(TB.cfgOf({ bonusApprove:'auto' }).bonusApproval, 'auto', 'المفتاح الجديد هو اللي بيفتح التلقائي');
+  assertEq(TB.cfgOf({}).bonusFrom, '2026-10-10', 'أول أسبوع للحافز = سبت 10-10');
+  assert(!TB.bonusWeekOk(Date.UTC(2026,9,3,9), {}), 'سلبي: أسبوع 10-03 (قبل إعلان القواعد) مفيش حافز');
+  assert(TB.bonusWeekOk(Date.UTC(2026,9,10,9), {}), 'أسبوع 10-10 بيتحسب');
+  assert(!TB.bonusWeekOk(Date.UTC(2026,9,10,9), { bonusFrom:'2026-10-17' }), 'المالك يقدر يأخّر أول أسبوع');
+  assert(!TB.bonusWeekOk(Date.UTC(2026,9,10,9), { bankFrom:'2026-10-17' }), 'سلبي: ولا قبل تشغيل الرصيد');
+  assert(/TimeBank\.bonusWeekOk\(w\.start, cfg\)/.test(src) && /TimeBank\.bonusWeekOk\(w\.start, cfg\)/.test(fs.readFileSync(path.join(ROOT,'office2','office2.js'),'utf8')), 'Sales وOffice 2 بيفلتروا الأسابيع بنفس القاعدة');
+  assert(/id="tsBonusFrom"/.test(ui) && /bonusFrom:/.test(ui), 'إعداد أول أسبوع للحافز في الإعدادات');
   assert(/const autoOk = TimeBank\.cfgOf\(cfg\)\.bonusApproval !== 'manual'/.test(src) && /\(autoOk \? 'approved' : 'pending'\)/.test(src), 'اللي يستحق بيتعتمد لوحده (إلا لو المالك اختار يدوي)');
   assert(/d \? d\.status :/.test(src) && /bankDecideBonus\('\$\{e\.id\}','\$\{w\.key\}',false,0,\$\{w\.score\}\)[^<]*>✖ إلغاء/.test(src), 'قرار الرفض/الإلغاء المحفوظ بيغلب التلقائي');
   assert(/id="tsBonusApproval"/.test(ui), 'إعداد تلقائي/يدوي');
@@ -261,5 +270,5 @@ assert(/\.\.\/sales\/time-bank\.js\?v=647/.test(fs.readFileSync(path.join(ROOT,'
 })();
 
 // ---------- ٨) v646 — مفيش حافز على أسبوع بدأ قبل bankFrom ----------
-assert(/\.filter\(w=> !_bf \|\| TimeBank\.keyOf\(w\.start\) >= _bf\)/.test(src), 'أسبوع 26 سبتمبر→2 أكتوبر مش بيتحسب (بدأ قبل تشغيل النظام)');
+assert(/\.filter\(w=> TimeBank\.bonusWeekOk\(w\.start, cfg\)\)/.test(src), 'أسبوع 26 سبتمبر→2 أكتوبر مش بيتحسب (بدأ قبل تشغيل النظام)');
 assert(TB.keyOf(D(2026,9,26)) < '2026-10-01' && TB.keyOf(D(2026,10,3)) >= '2026-10-01', 'مفتاح الأسبوع بيتقارن بتاريخ التشغيل صح');

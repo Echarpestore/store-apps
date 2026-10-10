@@ -63,5 +63,5 @@ assert(/\} finally \{ window\.ofLoad\.end\('activity_log'\); \}/.test(O), 'سج�
   let threw = false; try{ ctx.ofTimed('z', () => { now += 900; throw new Error('boom'); }); }catch(e){ threw = true; }
   assert(threw && ctx.ofPerf.rows.length === 2, 'v699: الخطأ بيعدّي والوقت بيتسجّل برضه');
   assert(/ofTimed\('أعلى الشاشة', renderTop\)/.test(src) && /function renderActivityReports\(\)\{ return ofTimed\('التقارير', _renderActivityReports\); \}/.test(src), 'v699: الرسومات الكبيرة متغلّفة');
-  assert(/office\.js\?v=699/.test(fs.readFileSync(path.join(__dirname,'..','Office','index.html'),'utf8')) && /echarpe-office-v755/.test(fs.readFileSync(path.join(__dirname,'..','Office','sw.js'),'utf8')), 'v699: النسخ اترفعت');
+  assert(/office\.js\?v=(699|7\d\d)/.test(fs.readFileSync(path.join(__dirname,'..','Office','index.html'),'utf8')) && /echarpe-office-v7(5[5-9]|[6-9]\d)/.test(fs.readFileSync(path.join(__dirname,'..','Office','sw.js'),'utf8')), 'v699: النسخ اترفعت');
 })();

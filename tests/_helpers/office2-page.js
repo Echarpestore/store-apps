@@ -6,7 +6,7 @@ const D = (y,m,d,h,mi)=> Date.UTC(y, m-1, d, (h||0)-3, mi||0);   // القاهر
 const NOW = D(2026,10,10,16,0);
 function baseData(){ return {
   sales_employees: [ { id:'e1', name:'سارة', branch:'echarpe El Rehab', shift:'evening', baseSalary:4000, dayOff:5 }, { id:'e2', name:'هاجر', branch:'echarpe El Rehab', shift:'morning', baseSalary:4200, dayOff:4 }, { id:'e3', name:'دينا', branch:'Glow', shift:'evening', baseSalary:3800, dayOff:5 } ],
-  sales_settings: [ { id:'echarpe El Rehab', commissionPerPoint:10, timeCfg:{ bankEnabled:true, bankFrom:'2026-10-01' }, compliance:{ shifts:{ morning:{ start:'10:00', end:'18:00' }, evening:{ start:'14:00', end:'22:00' } } } }, { id:'Glow', timeCfg:{ bankEnabled:true, bankFrom:'2026-10-01' }, compliance:{ shifts:{ evening:{ start:'14:00', end:'22:00' } } } } ],
+  sales_settings: [ { id:'echarpe El Rehab', commissionPerPoint:10, timeCfg:{ bankEnabled:true, bankFrom:'2026-10-01', bonusFrom:'2026-10-01', bonusApprove:'auto' }, compliance:{ shifts:{ morning:{ start:'10:00', end:'18:00' }, evening:{ start:'14:00', end:'22:00' } } } }, { id:'Glow', timeCfg:{ bankEnabled:true, bankFrom:'2026-10-01', bonusFrom:'2026-10-01', bonusApprove:'auto' }, compliance:{ shifts:{ evening:{ start:'14:00', end:'22:00' } } } } ],
   sales_shifts: [
     { id:'s1', employeeId:'e1', employeeName:'سارة', branch:'echarpe El Rehab', clockInTs:D(2026,10,10,14,22), clockOutTs:null, lateMinutes:22, attendanceShiftKey:'evening', scheduledStartTime:'14:00', scheduledEndTime:'22:00' },
     { id:'s2', employeeId:'e1', employeeName:'سارة', branch:'echarpe El Rehab', clockInTs:D(2026,10,6,14,20), clockOutTs:D(2026,10,6,22,40), shiftMinutes:500, lateMinutes:20, attendanceShiftKey:'evening', scheduledStartTime:'14:00', scheduledEndTime:'22:00' },

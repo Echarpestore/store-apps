@@ -31,7 +31,8 @@
     autoTargetWeeks: 8,         // كام أسبوع ورا بنحسب منهم المتوسط
     autoTargetFactor: 1.0,      // الهدف = ((متوسط الموظف + متوسط الفرع) ÷ 2) × المعامل
     bonusWeights: { commit: 40, rating: 30, sales: 30 },
-    bonusApproval: 'auto',      // 'auto' = اللي يستحق بياخد من غير ما المالك يعمل حاجة (يقدر يلغي) · 'manual' = لازم اعتماد
+    bonusFrom: '2026-10-10',    // 🗓️ v648: أول أسبوع يتحسب له حافز (سبت) — قرار المالك 10-10: مفيش حافز على أسابيع قبل ما القواعد تتعلن
+    bonusApprove: 'manual',     // 🧑‍💼 v648: 'manual' = الحافز مبيظهرش للموظف ولا بيدخل المرتب إلا لما المالك يعتمده من Office 2 · 'auto' = اللي يستحق بياخد
     bonusMinScore: 60,          // أقل من كده = مفيش حافز (الالتزام لوحده 40 مش كفاية — لازم تقييم أو مبيعات)
     alertLateCount: 4, alertWindowDays: 14
   };
@@ -43,7 +44,9 @@
     c.bonusRatingMin = isNaN(Number(c.bonusRatingMin)) ? DEFAULTS.bonusRatingMin : Number(c.bonusRatingMin);
     if(c.autoTargetWeeks < 1) c.autoTargetWeeks = DEFAULTS.autoTargetWeeks; if(c.autoTargetFactor <= 0) c.autoTargetFactor = 1;
     c.bonusPointsMode = c.bonusPointsMode === 'fixed' ? 'fixed' : 'auto';
-    c.bonusApproval = c.bonusApproval === 'manual' ? 'manual' : 'auto';
+    c.bonusApprove = c.bonusApprove === 'auto' ? 'auto' : 'manual';   // المفتاح القديم bonusApproval اتشال عمدًا — كان 'auto' متحفوظ وبيظهر مبالغ من غير اعتماد
+    c.bonusApproval = c.bonusApprove;
+    c.bonusFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(c.bonusFrom||'')) ? String(c.bonusFrom) : DEFAULTS.bonusFrom;
     if(c.bonusMax < c.bonusMin) c.bonusMax = c.bonusMin;
     c.bankEnabled = c.bankEnabled !== false;
     return c;
@@ -54,6 +57,8 @@
     var f = String(c.bankFrom).slice(0, 10);
     return keyOf(periodStartMs) >= f;
   }
+  // 🗓️ v648: الأسبوع يتحسب له حافز لو بدأ من بعد تشغيل الرصيد (bankFrom) **و** من بعد أول أسبوع للحافز (bonusFrom)
+  function bonusWeekOk(weekStartMs, cfg){ var c = cfgOf(cfg); var k = keyOf(weekStartMs); var bf = String(c.bankFrom||'').slice(0,10); return (!bf || k >= bf) && k >= c.bonusFrom; }
   function keyOf(ms){
     var d = new Date(Number(ms) || Date.now());
     try{
@@ -235,7 +240,7 @@
 
   function fmtMin(m){ m = Math.round(Number(m) || 0); var s = m < 0 ? '−' : (m > 0 ? '+' : ''); m = Math.abs(m); var h = Math.floor(m / 60), r = m % 60; return s + (h ? h + ' س' + (r ? ' ' : '') : '') + (r || !h ? r + ' د' : ''); }
 
-  var TB = { DEFAULTS: DEFAULTS, cfgOf: cfgOf, enabledFor: enabledFor, keyOf: keyOf, shiftDelta: shiftDelta, monthSummary: monthSummary, money: money,
+  var TB = { DEFAULTS: DEFAULTS, cfgOf: cfgOf, enabledFor: enabledFor, keyOf: keyOf, bonusWeekOk: bonusWeekOk, shiftDelta: shiftDelta, monthSummary: monthSummary, money: money,
     forgottenFix: forgottenFix, isForgottenOpen: isForgottenOpen, weekBonus: weekBonus, weeksBefore: weeksBefore, weeklyPointStats: weeklyPointStats, autoTarget: autoTarget, targetFor: targetFor, weeksInPeriod: weeksInPeriod, currentWeek: currentWeek, lateAlerts: lateAlerts, fmtMin: fmtMin };
   if(typeof window !== 'undefined') window.TimeBank = TB;
   if(typeof module !== 'undefined' && module.exports) module.exports = TB;

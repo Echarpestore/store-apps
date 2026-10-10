@@ -144,8 +144,8 @@ function weekStats(emp, w){
 }
 function weekBonus(emp, w){ const st = weekStats(emp, w); const cfg = timeCfg(emp.branch); const b = TimeBank.weekBonus(st, Object.assign({}, cfg, { bonusPointsWeek: st.target })); const d = D.bonus.find(x=> x.employeeId===emp.id && x.weekKey===w.key); const autoOk = TimeBank.cfgOf(cfg).bonusApproval !== 'manual'; const decision = d ? d.status : (b.amount>0 ? (autoOk?'approved':'pending') : 'none'); return Object.assign({ st, decision, paid: decision==='approved' ? (d && d.status==='approved' ? (Number(d.amount)||b.amount) : b.amount) : 0, auto: !d && decision==='approved' }, b); }
 function monthBonuses(emp, range){
-  const bf = String(TimeBank.cfgOf(timeCfg(emp.branch)).bankFrom||'').slice(0,10);
-  return TimeBank.weeksInPeriod(range.start, range.end, Date.now()).filter(w=> !bf || TimeBank.keyOf(w.start) >= bf).map(w=> Object.assign({ w }, weekBonus(emp, w))).filter(x=> x.st.shifts > 0);
+  const cfg = timeCfg(emp.branch);
+  return TimeBank.weeksInPeriod(range.start, range.end, Date.now()).filter(w=> TimeBank.bonusWeekOk(w.start, cfg)).map(w=> Object.assign({ w }, weekBonus(emp, w))).filter(x=> x.st.shifts > 0);
 }
 function openShift(empId){ return D.shifts.find(s=> s.employeeId===empId && !s.clockOutTs && !s.voided); }
 function onBreak(empId){ return D.breaks.find(b=> b.employeeId===empId && !b.endTs); }
