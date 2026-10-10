@@ -180,13 +180,13 @@ async function fixForgotten(){
 }
 
 /* ---------- 🧭 التنقل ---------- */
-function go(name, arg){ screenName = name; screenArg = arg || null; window.scrollTo(0,0); document.querySelectorAll('#tabbar button').forEach(b=> b.classList.toggle('on', b.dataset.s === (name==='emp' ? 'staff' : (name==='branch' ? 'today' : name)))); render(); }
+function go(name, arg){ screenName = name; screenArg = arg || null; window.scrollTo(0,0); document.querySelectorAll('#tabbar button').forEach(b=> b.classList.toggle('on', b.dataset.s === (name==='emp' ? 'staff' : (name==='branch' ? 'today' : (name==='activity' ? 'more' : name))))); render(); }
 function head(t, sub){ document.getElementById('hTitle').innerHTML = t; document.getElementById('hSub').textContent = sub || ''; }
 function render(){
   if(!booted) return;
   const el = document.getElementById('screen'); if(!el) return;
   try{
-    const fn = { today: rToday, staff: rStaff, emp: rEmp, inbox: rInbox, money: rMoney, more: rMore, branch: rBranch }[screenName] || rToday;
+    const fn = { today: rToday, staff: rStaff, emp: rEmp, inbox: rInbox, money: rMoney, more: rMore, branch: rBranch, activity: rActivity }[screenName] || rToday;
     el.innerHTML = fn();
   }catch(e){ console.error(e); el.innerHTML = '<div class="card"><b>حصل خطأ في العرض</b><div class="hint">' + esc(e.message) + '</div></div>'; }
   const n = inboxItems().length; const b = document.getElementById('inboxN'); b.style.display = n ? '' : 'none'; b.textContent = n;
@@ -370,6 +370,7 @@ const O2 = {
       tx.update(ref, ok ? { status:'approved', decidedAt: Date.now() } : { status:'rejected', decidedAt: Date.now(), note }); }); toast(ok ? 'اتعتمد ✅' : 'اترفض'); }catch(e){ toast('تعذر: ' + (e && (e.message||e.code))); }
   },
   staffQ(v){ staffQ = v; const el = document.activeElement; render(); try{ const i = document.querySelector('#screen input[placeholder^="🔍"]'); if(i && el && el.tagName==='INPUT'){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, staffBranch(v){ staffBranch = v; render(); },
+  actFilter(g){ actFilter = g; render(); }, actMore(){ actDays += 7; loadActivity(actDays); },
   inboxTab(t){ inboxTab = t; render(); }, moneyTab(t){ moneyTab = t; render(); }, payMonth(d){ payOffset += d; render(); },
   paySheet, paySalary, payComm, addAdvance, addDeduction, addExpense, invoice: invoiceSheet,
   day(d){ const a = branchDay.split('-').map(Number); branchDay = caiKey(caiStamp(a[0],a[1],a[2],12,0) + d*DAY); if(branchDay > caiKey(Date.now())) branchDay = caiKey(Date.now()); render(); }, dayPick(v){ if(v) { branchDay = v; render(); } },
@@ -487,10 +488,84 @@ function addDeduction(empId){ const e = empById(empId); if(!e) return; const v =
 function addExpense(){ const amount = Math.round((Number(prompt('المبلغ:'))||0)*100)/100; if(!(amount>0)) return; const note = prompt('إيه المصروف؟') || ''; if(!note) return; const bs = branches(); const bi = bs.length>1 ? prompt('الفرع: ' + bs.map((b,i)=> (i+1)+' = '+b).join(' · ') + ' (فاضي = عام)') : '1'; const branch = bi && bs[Number(bi)-1] ? bs[Number(bi)-1] : null;
   const now = Date.now(); const p = caiParts(now); db.collection('office_expenses').add({ amount, note, branch, ts: now, month: p.y + '-' + String(p.m).padStart(2,'0'), source:'office2' }).then(()=> toast('اتسجل ✅')).catch(err=> toast('تعذر: ' + (err && err.code))); }
 
+/* ---------- ٦) 🕵️ النشاط — اللي يستاهل تعرفه، مش لوج تقني ----------
+   قرار المالك 10-10: السجل القديم (54 نوع حدث تقني) محدش بيفتحه. هنا: أحداث الفلوس والتلاعب بس،
+   بالعربي وبالمبلغ والموظفة، مع ملخص الأسبوع ومين فيه خروج عن المعتاد. */
+let actDays = 7, actFilter = 'all'; const act = { rows:[], loadedSince:0, loading:false, err:null };
+const ACT_TYPES = ['same_day_return','same_day_reversal','manual_discount','cart_item_edited','manual_drawer_open','cart_abandoned','customer_points_edit','customer_name_edit','card_overcharge_saved','card_saved_manual','paymob_stuck','paymob_cancelled','credit_spend_failed','credit_spend_blocked','gift_card_return_blocked','inventory_wiped','inventory_merge','inventory_merge_bulk','inventory_full_reconcile','inventory_branch_catalog_replace','import_qty_adjusted','import_qty_moved','redeem_value_mismatch'];
+const ACT_GROUP = { returns:['same_day_return','same_day_reversal'], discounts:['manual_discount','cart_item_edited'], drawer:['manual_drawer_open'], cart:['cart_abandoned'], customers:['customer_points_edit','customer_name_edit','redeem_value_mismatch'], card:['card_overcharge_saved','card_saved_manual','paymob_stuck','paymob_cancelled','credit_spend_failed','credit_spend_blocked','gift_card_return_blocked'], stock:['inventory_wiped','inventory_merge','inventory_merge_bulk','inventory_full_reconcile','inventory_branch_catalog_replace','import_qty_adjusted','import_qty_moved'] };
+const ACT_LABEL = { all:'الكل', returns:'↩️ مرتجعات', discounts:'🏷️ خصومات', drawer:'🗄️ الدرج', cart:'🛒 سلة اتمسحت', customers:'👤 عملاء', card:'💳 دفع', stock:'📦 مخزون', attendance:'⏰ حضور' };
+async function loadActivity(days){
+  const since = Date.now() - days*DAY; if(act.loading || (act.loadedSince && act.loadedSince <= since)) return;
+  act.loading = true; render();
+  try{
+    let last = null; const rows = []; const until = act.loadedSince || null;
+    for(let i = 0; i < 30; i++){
+      let q = db.collection('pos_activity_log').where('ts','>=',since).orderBy('ts','desc'); if(until) q = q.where('ts','<',until); if(last) q = q.startAfter(last); q = q.limit(500);
+      const snap = await q.get(); if(snap.empty) break; snap.docs.forEach(d=> rows.push(Object.assign({ id:d.id }, d.data()))); last = snap.docs[snap.docs.length-1]; if(snap.size < 500) break;
+    }
+    const seen = new Set(act.rows.map(r=>r.id)); rows.forEach(r=>{ if(!seen.has(r.id) && ACT_TYPES.includes(r.type)) act.rows.push(r); });
+    act.rows.sort((a,b)=> (b.ts||0)-(a.ts||0)); act.loadedSince = since; act.err = null;
+  }catch(e){ act.err = e && (e.code||e.message); }
+  act.loading = false; render();
+}
+function actGroupOf(type){ return Object.keys(ACT_GROUP).find(g=> ACT_GROUP[g].includes(type)) || 'other'; }
+function actText(r){
+  const who = esc(r.employeeName||'—'); const m = (v)=> n0(v) + ' ج';
+  switch(r.type){
+    case 'same_day_return': return `↩️ <b>${who}</b> عملت مرتجع نفس اليوم: ${esc(r.item||'')} (فاتورة #${esc(r.invoiceNo||'')})`;
+    case 'same_day_reversal': return `↩️ <b>${who}</b> عكست فاتورة #${esc(r.invoiceNo||'')} بالكامل — ${m(r.total)}`;
+    case 'manual_discount': return `🏷️ <b>${who}</b> خصم يدوي ${r.pct}% على سلة ${r.cartCount||''} صنف`;
+    case 'cart_item_edited': return `🏷️ <b>${who}</b> غيّرت سعر «${esc(r.name||'')}» من ${m(r.from)} لـ ${m(r.to)}${r.pct?' ('+r.pct+'%)':''}`;
+    case 'manual_drawer_open': return `🗄️ <b>${who}</b> فتحت الدرج من غير بيع`;
+    case 'cart_abandoned': return `🛒 <b>${who}</b> مسحت سلة ${r.itemCount||0} صنف بقيمة ${m(r.value)}`;
+    case 'customer_points_edit': return `👤 <b>${who}</b> عدّلت نقط عميلة ${esc(r.phone||'')}: ${r.from} ← ${r.to} (${r.diff>0?'+':''}${r.diff})${r.reason?' · '+esc(r.reason):''}`;
+    case 'customer_name_edit': return `👤 <b>${who}</b> غيّرت اسم عميلة ${esc(r.phone||'')}: «${esc(r.from||'')}» ← «${esc(r.to||'')}»`;
+    case 'redeem_value_mismatch': return `👤 ⚠️ قيمة استبدال نقط مش مطابقة (${esc(r.employeeName||'')})`;
+    case 'card_overcharge_saved': return `💳 ⚠️ <b>${who}</b> الماكينة خدت ${m(r.charged)} على فاتورة ${m(r.total)} (فرق ${m(r.diff)})`;
+    case 'card_saved_manual': return `💳 <b>${who}</b> سجّلت فيزا يدوي${r.amount?' '+m(r.amount):''}`;
+    case 'paymob_stuck': return `💳 ⚠️ الماكينة علّقت (${esc(r.reason||'')}) عند <b>${who}</b>`;
+    case 'paymob_cancelled': return `💳 <b>${who}</b> لغت عملية فيزا`;
+    case 'credit_spend_failed': case 'credit_spend_blocked': return `💰 ⚠️ صرف رصيد عميلة فشل/اتمنع عند <b>${who}</b>`;
+    case 'gift_card_return_blocked': return `🎁 <b>${who}</b> حاولت ترجّع كارت هدايا ${m(r.value)} (اتمنع)`;
+    case 'inventory_wiped': return `📦 🚨 <b>${who}</b> مسحت مخزون الفرع (${r.count||0} صنف)`;
+    case 'inventory_merge': case 'inventory_merge_bulk': return `📦 <b>${who}</b> دمجت أصناف في المخزون`;
+    case 'inventory_full_reconcile': return `📦 <b>${who}</b> عملت جرد كامل`;
+    case 'inventory_branch_catalog_replace': return `📦 🚨 <b>${who}</b> استبدلت كتالوج الفرع`;
+    case 'import_qty_adjusted': case 'import_qty_moved': return `📦 <b>${who}</b> عدّلت كميات بالاستيراد`;
+    default: return `${esc(r.type)} · ${who}`;
+  }
+}
+function actWeight(r){ return ['inventory_wiped','inventory_branch_catalog_replace','card_overcharge_saved','same_day_reversal','redeem_value_mismatch'].includes(r.type) ? 'bad' : (['manual_discount','cart_item_edited','manual_drawer_open','customer_points_edit','same_day_return'].includes(r.type) ? 'w' : 'i'); }
+function attendanceEvents(since){
+  const out = [];
+  D.shifts.filter(s=> s.clockInTs >= since).forEach(s=>{ const e = empById(s.employeeId)||{}; const g = TimeBank.cfgOf(timeCfg(e.branch)).bankGraceMin;
+    if((Number(s.lateMinutes)||0) > Math.max(g, 15)) out.push({ id:'late_'+s.id, ts:s.clockInTs, branch:s.branch, employeeName:s.employeeName||e.name, group:'attendance', w:'w', html:`⏰ <b>${esc(s.employeeName||e.name||'')}</b> اتأخرت ${s.lateMinutes} د` });
+    if(s.bankAutoEnd) out.push({ id:'forgot_'+s.id, ts:s.bankAutoAt||s.clockOutTs, branch:s.branch, employeeName:s.employeeName||e.name, group:'attendance', w:'w', html:`🕐 <b>${esc(s.employeeName||e.name||'')}</b> نسيت الانصراف — اتقفل على ${hm(s.clockOutTs)}` });
+  });
+  return out;
+}
+function rActivity(){
+  head(`<button class="back" onclick="O2.go('more')">‹</button> النشاط`, 'اللي يستاهل تعرفه · آخر ' + actDays + ' يوم');
+  const since = Date.now() - actDays*DAY;
+  if(!act.loading && (!act.loadedSince || act.loadedSince > since)) setTimeout(()=> loadActivity(actDays), 0);
+  const rows = act.rows.filter(r=> r.ts >= since).map(r=> ({ id:r.id, ts:r.ts, branch:r.branch, employeeName:r.employeeName, group: actGroupOf(r.type), w: actWeight(r), html: actText(r), type:r.type }));
+  const all = rows.concat(attendanceEvents(since)).sort((a,b)=> (b.ts||0)-(a.ts||0));
+  // ملخص: عدد كل مجموعة + أكتر موظفة في كل مجموعة
+  const groups = Object.keys(ACT_LABEL).filter(g=> g!=='all');
+  const chips = ['all'].concat(groups).map(g=>{ const n = g==='all' ? all.length : all.filter(x=>x.group===g).length; return n || g==='all' ? `<button class="${actFilter===g?'on':''}" onclick="O2.actFilter('${g}')">${ACT_LABEL[g]}${n?' '+n:''}</button>` : ''; }).join('');
+  const outl = groups.map(g=>{ const by = {}; all.filter(x=> x.group===g && x.employeeName).forEach(x=>{ by[x.employeeName] = (by[x.employeeName]||0) + 1; }); const top = Object.entries(by).sort((a,b)=> b[1]-a[1])[0]; const total = Object.values(by).reduce((n,v)=>n+v,0); return (top && top[1] >= 3 && top[1] >= total*0.4) ? `<div class="row" style="cursor:default"><div class="n"><b>${ACT_LABEL[g]}</b><small>${esc(top[0])} عندها ${top[1]} من ${total}</small></div><span class="pill p-warn">خروج عن المعتاد</span></div>` : ''; }).join('');
+  const sum = `<div class="card"><h3>📊 ملخص ${actDays} يوم <small>${all.length} حدث</small></h3><div class="kpis">${groups.filter(g=> all.some(x=>x.group===g)).slice(0,6).map(g=>`<div class="kpi" onclick="O2.actFilter('${g}')"><small>${ACT_LABEL[g]}</small><b>${all.filter(x=>x.group===g).length}</b></div>`).join('') || '<div class="empty">مفيش أحداث</div>'}</div>${outl?`<div class="sec">🚩 مين أكتر من الطبيعي</div>${outl}`:''}</div>`;
+  const list = all.filter(x=> actFilter==='all' || x.group===actFilter);
+  let lastDay = ''; const feed = list.map(x=>{ const k = caiKey(x.ts); const hd = k !== lastDay ? `<div class="sec">${dayName(x.ts)} ${k.slice(5)}</div>` : ''; lastDay = k; return hd + `<div class="alert ${x.w==='bad'?'':x.w}" style="cursor:default"><span style="flex:1">${x.html}<br><small class="tag">${esc(String(x.branch||'').replace('echarpe ',''))} · ${hm(x.ts)}</small></span></div>`; }).join('');
+  return `<div class="seg full" style="flex-wrap:wrap">${chips}</div>` + sum + `<div class="full">${act.loading?'<div class="card"><div class="skel"></div></div>':''}${act.err?`<div class="card"><b style="color:var(--bad)">تعذر التحميل: ${esc(act.err)}</b></div>`:''}${feed || (act.loading?'':'<div class="empty">مفيش أحداث في الفترة دي 🎉</div>')}<div class="btns"><button class="btn w" onclick="O2.actMore()">⏮ حمّل أسبوع أقدم</button></div></div>`;
+}
+
 /* ---------- ٥) المزيد ---------- */
 function rMore(){
   head('المزيد', '');
-  return `<div class="card"><div class="row first" onclick="O2.oldOffice()"><div class="n"><b>📷 الكاميرات</b><small>بتفتح من الشاشة القديمة لحد ما تتنقل هنا</small></div><span class="pill p-acc">افتح ›</span></div>
+  return `<div class="card"><div class="row first" onclick="O2.go('activity')"><div class="n"><b>🕵️ النشاط</b><small>مرتجعات · خصومات يدوية · الدرج · سلة اتمسحت · تعديل نقط عملاء · دفع · مخزون · حضور — بالعربي وبالمبلغ</small></div><span class="pill p-acc">افتح ›</span></div>
+    <div class="row" onclick="O2.oldOffice()"><div class="n"><b>📷 الكاميرات</b><small>بتفتح من الشاشة القديمة لحد ما تتنقل هنا</small></div><span class="pill p-acc">افتح ›</span></div>
     <div class="row" onclick="O2.oldOffice()"><div class="n"><b>📦 المخزون والتقارير التفصيلية</b><small>الشاشة القديمة</small></div><span class="pill p-acc">افتح ›</span></div>
     <div class="row" onclick="O2.logout()"><div class="n"><b>🚪 خروج</b></div></div></div>
     <div class="hint">Office 2 · v1 · البيانات من نفس القاعدة — أي تعديل هنا بيظهر في sales وOffice فورًا</div>`;

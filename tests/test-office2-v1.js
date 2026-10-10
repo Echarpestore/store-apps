@@ -63,3 +63,18 @@ if(!(out.fatal && /playwright|Cannot find module/i.test(out.fatal))){
   assert(ex && ex.p.amount === 250 && ex.p.month === '2026-10' && ex.p.source === 'office2', 'مصروف — نفس مجموعة Office القديم');
   assert(/مصاريف الشهر\n430 ج/.test(out.exp2||''), 'قايمة المصاريف اتحدثت لايف (180 + 250)');
 }
+
+// ---------- v5: النشاط — أحداث الفلوس بس، بالعربي، مع ملخص ومين خارج المعتاد ----------
+if(!(out.fatal && /playwright|Cannot find module/i.test(out.fatal))){
+  const a = out.activity || '';
+  assert(/🏷️ خصومات\n4/.test(a) && /↩️ مرتجعات\n1/.test(a) && /🛒 سلة اتمسحت\n1/.test(a), 'ملخص 7 أيام بالمجموعات');
+  assert(!/sale_saved|print_latency/.test(a), 'سلبي: الأحداث التقنية (sale_saved/print_latency) مش بتظهر');
+  assert(/سارة غيّرت|سارة خصم يدوي 15%/.test(a.replace(/\n/g,' ')), 'الحدث بالعربي وبالموظفة والنسبة');
+  assert(/هاجر عكست فاتورة #5790 بالكامل — 1,500 ج/.test(a.replace(/\n/g,' ')), 'عكس فاتورة بالمبلغ');
+  assert(/دينا مسحت سلة 2 صنف بقيمة 900 ج/.test(a.replace(/\n/g,' ')), 'سلة اتمسحت بالقيمة');
+  assert(/سارة عدّلت نقط عميلة 0100: 10 ← 40 \(\+30\) · تصحيح/.test(a), 'تعديل نقط عميلة بالسبب');
+  assert(/مين أكتر من الطبيعي[\s\S]*🏷️ خصومات\nسارة عندها 3 من 4/.test(a), '🚩 سارة خارج المعتاد في الخصومات (3 من 4)');
+  assert(/سارة اتأخرت 35 د/.test(a) && /نسيت الانصراف — اتقفل على 22:00/.test(a), 'الحضور داخل في النشاط (تأخير كبير + شيفت منسي)');
+  const d = out.activityDisc || '';
+  assert(!/عكست فاتورة/.test(d.slice(d.indexOf('السبت'))) && /خصم يدوي 15%/.test(d), 'الفلتر بيشتغل (خصومات بس)');
+}

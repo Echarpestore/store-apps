@@ -25,6 +25,17 @@ const data = {
   sales_deductions: [ { id:'d1', employeeId:'e2', employeeName:'هاجر', branch:'echarpe El Rehab', amount:100, type:'manual_money', date:'2026-10-05', ts:D(2026,10,5,12,0), reason:'كسر' } ],
   sales_salary_payments: [], sales_commission_payments: [],
   office_expenses: [ { id:'x1', amount:180, note:'مياه', branch:'echarpe El Rehab', ts:D(2026,10,10,11,0), month:'2026-10', source:'office_manual' } ],
+  pos_activity_log: [
+    { id:'l1', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,10,13,10), pct:15, cartCount:3 },
+    { id:'l2', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,9,13,10), pct:10, cartCount:2 },
+    { id:'l3', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,8,13,10), pct:20, cartCount:1 },
+    { id:'l4', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,7,13,10), pct:5, cartCount:1 },
+    { id:'l5', type:'cart_abandoned', branch:'Glow', employeeName:'دينا', ts:D(2026,10,10,15,0), itemCount:2, value:900 },
+    { id:'l6', type:'same_day_reversal', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,9,18,0), invoiceNo:5790, total:1500 },
+    { id:'l7', type:'customer_points_edit', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,6,12,0), phone:'0100', from:10, to:40, diff:30, reason:'تصحيح' },
+    { id:'l8', type:'sale_saved', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,10,12,30) },
+    { id:'l9', type:'print_latency', branch:'echarpe El Rehab', ts:D(2026,10,10,12,31), ms:900 }
+  ],
   pos_test_settings: [ { id:'office_gate', hash:null }, { id:'advances_cfg', closeDay:6, openDay:12 } ]
 };
 const STUB = `
@@ -32,8 +43,8 @@ window.__writes = []; window.__now = ${NOW}; Date.now = ()=> window.__now;
 const DATA = ${JSON.stringify(data)};
 function snapOf(rows){ const docs = rows.map(r=>{ const d = Object.assign({}, r); delete d.id; return { id:r.id, data:()=>d, exists:true }; }); return { docs, forEach:f=>docs.forEach(f), size:docs.length, empty:!docs.length }; }
 function col(name){ let filters = []; const q = {
-  where(f, op, v){ filters.push([f,op,v]); return q; },
-  rows(){ return (DATA[name]||[]).filter(r=> filters.every(([f,op,v])=>{ const x = r[f]; const vv = (v && typeof v.toMillis==='function') ? v.toMillis() : v; if(op==='>=') return (Number(x)||0) >= vv; if(op==='<=') return (Number(x)||0) <= vv; if(op==='==') return x===vv; return true; })); },
+  where(f, op, v){ filters.push([f,op,v]); return q; }, orderBy(){ return q; }, startAfter(){ return q; }, limit(){ return q; },
+  rows(){ return (DATA[name]||[]).filter(r=> filters.every(([f,op,v])=>{ const x = r[f]; const vv = (v && typeof v.toMillis==='function') ? v.toMillis() : v; if(op==='>=') return (Number(x)||0) >= vv; if(op==='<=') return (Number(x)||0) <= vv; if(op==='<') return (Number(x)||0) < vv; if(op==='==') return x===vv; return true; })); },
   onSnapshot(ok){ ok(snapOf(q.rows())); window.__listeners = (window.__listeners||[]); window.__listeners.push(()=> ok(snapOf(q.rows()))); return ()=>{}; },
   get(){ return Promise.resolve(snapOf(q.rows())); },
   add(p){ const id = name + '_' + Math.random().toString(36).slice(2,8); window.__writes.push({ col:name, id, op:'add', p }); (DATA[name] = DATA[name]||[]).push(Object.assign({ id }, p)); (window.__listeners||[]).forEach(f=>f()); return Promise.resolve({ id }); },
@@ -50,7 +61,7 @@ window.firebase = { apps:[{}], app:()=>({}), initializeApp:()=>({}), auth: Objec
   const errs = []; p.on('pageerror', e=> errs.push(String(e.message))); p.on('console', m=>{ if(m.type()==='error') errs.push('console: ' + m.text()); });
   let html = fs.readFileSync(path.join(ROOT,'office2','index.html'),'utf8');
   html = html.replace(/<script src="https:\/\/www\.gstatic\.com[^>]*><\/script>\n?/g, '').replace('<script src="../sales/time-bank.js?v=647"></script>', '<script>' + STUB + '</script><script>' + fs.readFileSync(path.join(ROOT,'sales','time-bank.js'),'utf8') + '</script>')
-    .replace('<script src="payroll.js?v=2"></script>', '<script>' + fs.readFileSync(path.join(ROOT,'office2','payroll.js'),'utf8') + '</script>').replace('<script src="office2.js?v=4"></script>', '<script>' + fs.readFileSync(path.join(ROOT,'office2','office2.js'),'utf8') + '</script>')
+    .replace('<script src="payroll.js?v=2"></script>', '<script>' + fs.readFileSync(path.join(ROOT,'office2','payroll.js'),'utf8') + '</script>').replace('<script src="office2.js?v=5"></script>', '<script>' + fs.readFileSync(path.join(ROOT,'office2','office2.js'),'utf8') + '</script>')
     .replace('<link rel="stylesheet" href="office2.css?v=2">', '<style>' + fs.readFileSync(path.join(ROOT,'office2','office2.css'),'utf8') + '</style>')
     .replace(/<link href="https:\/\/fonts[^>]*>/, '');
   await p.setContent(html); await p.waitForTimeout(700);
@@ -63,6 +74,9 @@ window.firebase = { apps:[{}], app:()=>({}), initializeApp:()=>({}), auth: Objec
   if(shots) await p.screenshot({ path: shots + '-branch.png', fullPage:true });
   await p.evaluate(()=> O2.day(-1)); await p.waitForTimeout(300); out.branchYday = await p.evaluate(()=> document.getElementById('screen').innerText);
   await p.evaluate(()=> O2.invoice('2026-10-09','v3')); await p.waitForTimeout(80); out.invoice = await p.evaluate(()=> document.getElementById('sheetBody').innerText); await p.evaluate(()=> O2.closeSheet());
+  step('activity'); await p.evaluate(()=> O2.go('activity')); await p.waitForTimeout(300); out.activity = await p.evaluate(()=> document.getElementById('screen').innerText);
+  if(shots) await p.screenshot({ path: shots + '-activity.png', fullPage:true });
+  await p.evaluate(()=> O2.actFilter('discounts')); await p.waitForTimeout(80); out.activityDisc = await p.evaluate(()=> document.getElementById('screen').innerText);
   step('staff'); await p.evaluate(()=> O2.go('staff')); await p.waitForTimeout(100); out.staff = await p.evaluate(()=> document.getElementById('screen').innerText);
   if(shots) await p.screenshot({ path: shots + '-staff.png' });
   await p.evaluate(()=> O2.go('emp','e1')); await p.waitForTimeout(100); out.emp = await p.evaluate(()=> document.getElementById('screen').innerText);
