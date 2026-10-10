@@ -28,7 +28,7 @@ else {
   // إجراء: اعذر تأخير
   const ex = (out.writes||[]).find(w=> w.col==='sales_shifts' && w.id==='s2');
   assert(ex && ex.p.lateExcused === true && ex.p.bankAdjustMin === 20, '⭐ «اعذر التأخير» بيكتب lateExcused + 20 د لصالحها');
-  assert(/رصيد −50 د/.test(out.pay||''), 'المرتبات: الرصيد بعد العذر −50 (كان −70)');
+  assert(/رصيد الوقت −50 د/.test(out.paySheet||''), 'المرتبات: الرصيد بعد العذر −50 (كان −70)');
   // الموافقات
   assert(/إجازة · دينا \(Glow\)[\s\S]*الفرع فيه 1 موظفين/.test(out.inbox||''), 'طلب الإجازة بالسياق');
   const lv = (out.writes||[]).find(w=> w.col==='sales_leave_requests' && w.id==='l1');
@@ -36,5 +36,21 @@ else {
   assert(/مفيش حاجة مستنية قرارك/.test(out.inboxAfter||''), 'بعد الموافقة الصندوق فاضي');
   assert(/شيفت منسي · سارة/.test(out.auto||''), 'تبويب «تلقائي» بيوري الشيفت المنسي اللي اتقفل');
   // المرتبات التقديرية
-  assert(/هاجر\nأساسي 4,200 · أوفرتايم \+18/.test(out.pay||''), 'أوفرتايم هاجر +60 د = 18 ج (4200/30/8/60×60)');
+  assert(/هاجر\nأساسي 4,200[^\n]*أوفرتايم \+18/.test(out.pay||''), 'أوفرتايم هاجر +60 د = 18 ج (4200/30/8/60×60)');
+}
+// ---------- v2: المرتبات الكاملة والصرف والسلف والخصومات والمصاريف ----------
+if(!(out.fatal && /playwright|Cannot find module/i.test(out.fatal))){
+  assert(/سارة\nأساسي 4,000 · وقت −14 · غياب −533 · سلف −500/.test(out.pay||''), 'المرتبات: نفس محرك Office (غياب بالأيام · رصيد الوقت بالدقيقة · السلف)');
+  assert(/هاجر\nأساسي 4,200[^\n]*أوفرتايم \+18[^\n]*حوافز \+125[^\n]*خصومات −100/.test(out.pay||''), 'هاجر: أوفرتايم + حوافز معتمدة تلقائي + خصم إداري');
+  assert(/صافي المرتب\n3,078/.test(out.paySheet||'') && /عمولة الشهر · 1 نقطة × 10/.test(out.paySheet||''), 'شيت المرتب: الصافي والعمولة بسعر نقطة الفرع');
+  const pays = (out.writes||[]).filter(w=> w.col==='sales_salary_payments');
+  assert(pays.length === 1 && pays[0].id === 'e1_2026-10' && pays[0].p.amount === 3000 && pays[0].p.paidFrom === 'office2', '⭐ الصرف مرة واحدة بس (المحاولة التانية اترفضت) — نفس مستند sales/Office');
+  const cm = (out.writes||[]).find(w=> w.col==='sales_commission_payments');
+  assert(cm && cm.p.commissionAmount === 20 && cm.p.pointsCount === 2 && cm.p.monthLabel === '2026-10', 'دفع العمولة بنفس حقول sales');
+  const adv = (out.writes||[]).find(w=> w.col==='sales_advances'); const ded = (out.writes||[]).find(w=> w.col==='sales_deductions');
+  assert(adv && adv.p.amount === 250 && adv.p.reason && adv.p.source === 'owner_manual' && adv.p.employeeId === 'e2', 'سلفة بسبب — نفس حقول sales');
+  assert(ded && ded.p.amount === 250 && ded.p.type === 'manual_money' && ded.p.employeeId === 'e3', 'خصم بسبب — نفس حقول sales');
+  const ex = (out.writes||[]).find(w=> w.col==='office_expenses');
+  assert(ex && ex.p.amount === 250 && ex.p.month === '2026-10' && ex.p.source === 'office2', 'مصروف — نفس مجموعة Office القديم');
+  assert(/مصاريف الشهر\n430 ج/.test(out.exp2||''), 'قايمة المصاريف اتحدثت لايف (180 + 250)');
 }

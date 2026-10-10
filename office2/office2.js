@@ -61,7 +61,7 @@ try{ document.getElementById('gEmail').value = localStorage.getItem('office_emai
 auth.onAuthStateChanged(u=>{ try{ if(u && u.email) localStorage.setItem('office_email', u.email); }catch(e){} gateFlow(u); });
 
 /* ---------- 📦 البيانات ---------- */
-const D = { employees:[], shifts:[], breaks:[], points:[], ratings:[], leaves:[], bonus:[], sales:[], settings:{}, credits:[], staffOrders:[] };
+const D = { employees:[], shifts:[], breaks:[], points:[], ratings:[], leaves:[], bonus:[], sales:[], settings:{}, credits:[], staffOrders:[], advances:[], deductions:[], salaryPays:[], commPays:[], expenses:[], advCfg:{} };
 let booted = false, screenName = 'today', screenArg = null; const unsub = [];
 function salesCfg(branch){ const s = D.settings[branch] || D.settings[Object.keys(D.settings)[0]] || {}; return s; }
 function timeCfg(branch){ return Object.assign({}, (salesCfg(branch).timeCfg)||{}); }
@@ -88,6 +88,13 @@ function boot(){
   watch('sales_bonus_week', 'ts', Date.now() - 120*DAY, 'bonus');
   watch('sales_time_credit', 'ts', since, 'credits');
   watch('sales_staff_orders', 'ts', since, 'staffOrders');
+  // 💼 المرتبات والفلوس — نافذة 75 يوم (شهر حالي + سابق + دورة القبض)
+  watch('sales_advances', 'ts', Date.now() - 75*DAY, 'advances');
+  watch('sales_deductions', 'ts', Date.now() - 75*DAY, 'deductions');
+  watch('sales_salary_payments', 'paidAt', Date.now() - 75*DAY, 'salaryPays');
+  watch('sales_commission_payments', 'paidAt', Date.now() - 75*DAY, 'commPays');
+  watch('office_expenses', 'ts', Date.now() - 75*DAY, 'expenses');
+  db.collection('pos_test_settings').doc('advances_cfg').get().then(d=>{ D.advCfg = d.exists ? (d.data()||{}) : {}; render(); }).catch(()=>{});
   // 💰 فواتير النهاردة وامبارح — استعلامين (createdAt للسيرفر + createdAtMs للأوفلاين) ودمج بالمعرّف
   const from = caiDayStart(Date.now()) - DAY; const salesMap = {};
   const mergeSales = (s)=>{ s.docs.forEach(d=>{ salesMap[d.id] = Object.assign({ id:d.id }, d.data()); }); D.sales = Object.values(salesMap); render(); };
@@ -247,7 +254,7 @@ function rEmp(){
     <div class="card"><h3><span><button class="back" onclick="O2.month(-1)">‹</button> ${mLabel} <button class="back" onclick="O2.month(1)">›</button></span><small>✅ في الميعاد · 🟡 تأخير/منسي · 🔴 مفيش شيفت · ⬜ إجازة</small></h3><div class="cal">${cal}</div></div>
     <div class="card"><h3>الشيفتات <small>اضغط أي شيفت للتفاصيل والتعديل</small></h3>${rows || '<div class="empty">مفيش شيفتات الشهر ده</div>'}</div>
     ${isSetup(e)?'':`<div class="card"><h3>🎁 الحوافز الأسبوعية</h3>${bonusRows || '<div class="empty">لسه مفيش أسبوع مكتمل</div>'}</div>`}
-    <div class="card full"><div class="btns">${openShift(e.id)?`<button class="btn" onclick="O2.closeOpen('${e.id}')">🕐 اقفل الشيفت المفتوح</button>`:''}<button class="btn" onclick="O2.oldOffice('emp')">💵 سلفة / خصم / المرتب (Office القديم)</button></div></div>`;
+    <div class="card full"><div class="btns">${openShift(e.id)?`<button class="btn" onclick="O2.closeOpen('${e.id}')">🕐 اقفل الشيفت المفتوح</button>`:''}<button class="btn" onclick="O2.addAdvance('${e.id}')">➕ سلفة</button><button class="btn" onclick="O2.addDeduction('${e.id}')">➖ خصم</button><button class="btn p" onclick="O2.moneyTab('pay');O2.go('money');setTimeout(function(){O2.paySheet('${e.id}')},50)">💰 المرتب</button></div></div>`;
 }
 /* تفاصيل شيفت + إجراءات */
 function shiftSheet(id){
@@ -277,7 +284,8 @@ const O2 = {
   async leave(id, ok){ try{ await db.collection('sales_leave_requests').doc(id).update({ status: ok?'approved':'rejected', decidedAt: Date.now(), decidedBy:'office2' }); toast(ok?'اتوافق ✅':'اترفض'); }catch(e){ toast('تعذر: '+(e&&e.code)); } },
   async overtime(id, ok){ const s = D.shifts.find(x=>x.id===id); if(!s) return; try{ await db.collection('sales_shifts').doc(id).update({ overtimeApprovedMin: ok ? (Number(s.overtimeMinutes)||0) : 0, overtimeDecision: ok?'approved':'rejected', overtimeAutoApproved:false, overtimeDecidedAt: Date.now(), overtimeDecidedBy:'office2' }); toast(ok?'اتعتمد ✅':'اترفض'); }catch(e){ toast('تعذر: '+(e&&e.code)); } },
   async bonus(empId, weekKey, ok, amount, score){ const e = empById(empId); if(!e) return; try{ await db.collection('sales_bonus_week').doc('bw_'+empId+'_'+weekKey).set({ employeeId:empId, employeeName:e.name||'', branch:e.branch||'', weekKey, amount: ok?amount:0, score, status: ok?'approved':'rejected', decidedAt: Date.now(), decidedBy:'office2', ts: Date.now() }, { merge:true }); toast(ok?'اتعتمد ✅':'اتلغى'); }catch(e){ toast('تعذر: '+(e&&e.code)); } },
-  inboxTab(t){ inboxTab = t; render(); }, moneyTab(t){ moneyTab = t; render(); },
+  inboxTab(t){ inboxTab = t; render(); }, moneyTab(t){ moneyTab = t; render(); }, payMonth(d){ payOffset += d; render(); },
+  paySheet, paySalary, payComm, addAdvance, addDeduction, addExpense,
   logout(){ try{ sessionStorage.removeItem(SESS_KEY); }catch(e){} auth.signOut(); location.reload(); }
 };
 window.O2 = O2;
@@ -321,27 +329,80 @@ function leaveLabel(l){ return { dayoff:'إجازة', changeDayoff:'تغيير �
 function dateKeyMs(k){ const a = String(k||'').split('-').map(Number); return a.length===3 ? caiStamp(a[0],a[1],a[2],12,0) : Date.now(); }
 
 /* ---------- ٤) الفلوس ---------- */
-let moneyTab = 'today';
+let moneyTab = 'today', payOffset = 0;
+function payDay(){ return Number(D.advCfg.closeDay) > 0 ? Number(D.advCfg.closeDay) : 6; }
+function payPeriod(){ const d = new Date(); d.setMonth(d.getMonth() + payOffset); return O2Pay.monthDateRange(d); }
+function salaryOf(e, r){
+  return O2Pay.compute(e, r.start, r.end, { shifts: D.shifts, timeCredit: D.credits, deductions: D.deductions.filter(d=>!d.deleted), advances: D.advances, leaves: D.leaves, timeCfg: timeCfg(e.branch), shiftDefs: shiftDefs(e.branch), payDay: payDay() });
+}
+function bonusesOf(e, r){ return isSetup(e) ? 0 : monthBonuses(e, { start: r.start.getTime(), end: r.end.getTime() }).reduce((n,x)=> n + x.paid, 0); }
+function commOf(e, r){ const label = O2Pay.monthLabel(r.start); const rate = Number(salesCfg(e.branch).commissionPerPoint) || 0; return Object.assign({ label, rate }, O2Pay.commission(D.points, D.commPays, e.id, r.start.getTime(), r.end.getTime(), label, rate)); }
+function paidOf(e, label){ return D.salaryPays.find(p=> p.employeeId===e.id && p.periodLabel===label); }
 function rMoney(){
-  head('الفلوس', 'المبيعات والمرتبات');
+  head('الفلوس', 'المبيعات · المصاريف · المرتبات');
   const now = Date.now(); const t0 = caiDayStart(now), y0 = t0 - DAY;
-  const seg = `<div class="seg full"><button class="${moneyTab==='today'?'on':''}" onclick="O2.moneyTab('today')">اليوم</button><button class="${moneyTab==='pay'?'on':''}" onclick="O2.moneyTab('pay')">المرتبات</button></div>`;
+  const seg = `<div class="seg full"><button class="${moneyTab==='today'?'on':''}" onclick="O2.moneyTab('today')">اليوم</button><button class="${moneyTab==='pay'?'on':''}" onclick="O2.moneyTab('pay')">المرتبات</button><button class="${moneyTab==='exp'?'on':''}" onclick="O2.moneyTab('exp')">المصاريف</button></div>`;
   if(moneyTab==='pay'){
-    const range = caiMonthRange(now); const mLabel = new Intl.DateTimeFormat('ar-EG', { timeZone:'Africa/Cairo', month:'long', year:'numeric' }).format(new Date(range.start + 5*DAY));
-    const rows = activeEmps().filter(e=> Number(e.baseSalary)>0).map(e=>{ const bm = bankMonth(e, range); const rate = (Number(e.baseSalary)||0)/30/8; const m = TimeBank.money(bm.balanceMin, rate); const bon = isSetup(e)?0:monthBonuses(e, range).reduce((n,x)=>n+x.paid,0); const est = Math.round((Number(e.baseSalary)||0) - m.deduction + m.overtimePay + bon);
-      return `<div class="row" onclick="O2.go('emp','${e.id}')"><div class="n"><b>${esc(e.name)}</b><small>أساسي ${n0(e.baseSalary)}${m.deduction?' · رصيد '+TimeBank.fmtMin(bm.balanceMin)+' (−'+n0(m.deduction)+')':''}${m.overtimePay?' · أوفرتايم +'+n0(m.overtimePay):''}${bon?' · حوافز +'+n0(bon):''}</small></div><b class="money">${n0(est)}</b></div>`; }).join('');
-    return seg + `<div class="card"><h3>💼 مرتبات ${mLabel} <small>تقديري: الأساسي ± رصيد الوقت + الحوافز</small></h3>${rows}<div class="hint">الغياب والسلف والخصومات الإدارية والصرف الفعلي — من Office القديم أو تطبيق sales لحد ما تتنقل هنا (المرحلة الجاية).</div><div class="btns"><button class="btn p" onclick="O2.oldOffice()">فتح المرتبات الكاملة</button></div></div>`;
+    const r = payPeriod(); const label = O2Pay.monthLabel(r.start); const mLabel = new Intl.DateTimeFormat('ar-EG', { month:'long', year:'numeric' }).format(r.start);
+    let total = 0, paidN = 0;
+    const rows = activeEmps().filter(e=> Number(e.baseSalary)>0).map(e=>{ const c = salaryOf(e, r); const bon = bonusesOf(e, r); const net = Math.round((c.netSalary + bon)*100)/100; const cm = commOf(e, r); const paid = paidOf(e, label); total += net; if(paid) paidN++;
+      return `<div class="row" onclick="O2.paySheet('${e.id}')"><div class="n"><b>${esc(e.name)} ${paid?'<span class="pill p-good">اتصرف</span>':''}</b><small>أساسي ${n0(c.proratedBase)}${c.timeCreditDeduction?' · وقت −'+n0(c.timeCreditDeduction):''}${c.deductionAmount?' · غياب −'+n0(c.deductionAmount):''}${c.overtimePay?' · أوفرتايم +'+n0(c.overtimePay):''}${bon?' · حوافز +'+n0(bon):''}${c.advancesTotal?' · سلف −'+n0(c.advancesTotal):''}${c.adminDeductions?' · خصومات −'+n0(c.adminDeductions):''}${cm.newAmount?' · عمولة '+n0(cm.newAmount):''}</small></div><b class="money">${n0(net)}</b></div>`; }).join('');
+    return seg + `<div class="card"><h3><span><button class="back" onclick="O2.payMonth(-1)">‹</button> ${mLabel} <button class="back" onclick="O2.payMonth(1)">›</button></span><small>${paidN} اتصرف · إجمالي ${n0(total)} ج</small></h3>${rows || '<div class="empty">مفيش موظفين بمرتب</div>'}<div class="hint">نفس محرك sales وOffice بالظبط (الغياب · رصيد الوقت · الأوفرتايم · الحوافز · السلف · الخصومات) — اضغط الموظف للتفاصيل والصرف</div></div>`;
   }
-  const cards = branches().map(b=>{ const t = todaySales(b, t0); const y = todaySales(b, y0); const pb = payBreak(t); const parts = Object.entries(pb).filter(([k,v])=> v).map(([k,v])=> (PAY_AR[k]||k)+' '+n0(v)).join(' · ');
-    return `<div class="card"><h3>📍 ${esc(b)} <small>${t.length} فاتورة</small></h3><div class="grid2"><div class="kpi"><small>النهاردة</small><b>${n0(sumTotal(t))}</b></div><div class="kpi"><small>امبارح كله</small><b>${n0(sumTotal(y))}</b></div></div><div class="hint">${parts || '—'}</div></div>`; }).join('');
+  if(moneyTab==='exp'){
+    const r = caiMonthRange(now); const list = D.expenses.filter(x=> x.ts >= r.start && x.ts <= r.end).sort((a,b)=> b.ts-a.ts);
+    const rows = list.map(x=>`<div class="row"><div class="n"><b>${esc(x.note||'مصروف')}</b><small>${esc(String(x.branch||'عام').replace('echarpe ',''))} · ${dayName(x.ts)} ${caiParts(x.ts).d} · ${hm(x.ts)}</small></div><b class="money">${n0(x.amount)}</b></div>`).join('');
+    return seg + `<div class="card"><h3>🧾 مصاريف الشهر <small>${n0(list.reduce((n,x)=>n+(Number(x.amount)||0),0))} ج</small></h3><div class="btns" style="margin:0 0 8px"><button class="btn p" onclick="O2.addExpense()">➕ مصروف جديد</button></div>${rows || '<div class="empty">مفيش مصاريف الشهر ده</div>'}</div>`;
+  }
+  const cards = branches().map(b=>{ const t = todaySales(b, t0); const y = todaySales(b, y0); const pb = payBreak(t);
+    const exp = D.expenses.filter(x=> x.branch===b && x.ts >= t0).reduce((n,x)=> n + (Number(x.amount)||0), 0);
+    const adv = D.advances.filter(x=> x.branch===b && x.ts >= t0 && String(x.source||'').indexOf('staff_order')!==0).reduce((n,x)=> n + (Number(x.amount)||0), 0);
+    const cash = Number(pb.cash)||0; const drawer = cash - exp - adv;
+    const parts = Object.entries(pb).filter(([k,v])=> v).map(([k,v])=> (PAY_AR[k]||k)+' '+n0(v)).join(' · ');
+    return `<div class="card"><h3>📍 ${esc(b)} <small>${t.length} فاتورة</small></h3><div class="grid2"><div class="kpi"><small>النهاردة</small><b>${n0(sumTotal(t))}</b></div><div class="kpi"><small>امبارح كله</small><b>${n0(sumTotal(y))}</b></div></div><div class="hint">${parts || '—'}</div>
+      <div class="hint">💵 الكاش المتوقع في الدرج: <b class="money">${n0(drawer)}</b> = كاش ${n0(cash)}${exp?' − مصاريف '+n0(exp):''}${adv?' − سلف '+n0(adv):''}</div></div>`; }).join('');
   return seg + cards;
 }
+function paySheet(empId){
+  const e = empById(empId); if(!e) return; const r = payPeriod(); const label = O2Pay.monthLabel(r.start); const c = salaryOf(e, r); const bon = bonusesOf(e, r); const cm = commOf(e, r); const paid = paidOf(e, label); const net = Math.round((c.netSalary + bon)*100)/100;
+  const row = (l, v, cls)=>`<div class="row" style="cursor:default"><div class="n"><small style="font-size:12.5px;color:var(--ink)">${l}</small></div><b class="money ${cls||''}">${v}</b></div>`;
+  const bankLine = c.bank ? `رصيد الوقت ${TimeBank.fmtMin(c.bank.balanceMin)} · ${c.bank.lateCount} تأخير${c.bank.otherDays?' · '+c.timeCreditDays+' يوم بريك/تبديل':''}` : `رصيد وقت ${c.timeCreditHours} س = ${c.timeCreditDays} يوم`;
+  sheet(`<h2>💼 ${esc(e.name)} · ${esc(label)}</h2><div class="hint">${esc(e.branch||'')} · أساسي ${n0(e.baseSalary)} · أيام العمل ${c.elapsedWorkDays} · حضور ${c.attendedDays}${c.incompleteShifts&&c.incompleteShifts.length?' · ⚠️ '+c.incompleteShifts.length+' شيفت مفتوح':''}</div>
+    ${row('الأساسي للفترة', n0(c.proratedBase))}
+    ${c.overtimePay?row('أوفرتايم '+TimeBank.fmtMin(c.overtimeMinutes), '+'+n0(c.overtimePay), 'up'):''}
+    ${c.dayOffBonusAmount?row('شغل يوم الإجازة', '+'+n0(c.dayOffBonusAmount), 'up'):''}
+    ${bon?row('حوافز أسبوعية معتمدة', '+'+n0(bon), 'up'):''}
+    ${c.deductionAmount?row('غياب '+c.extraOffDays+' يوم'+(c.absenceDates&&c.absenceDates.length?' ('+c.absenceDates.map(x=>x.date||x).join('، ')+')':''), '−'+n0(c.deductionAmount), 'dn'):''}
+    ${c.timeCreditDeduction?row(bankLine, '−'+n0(c.timeCreditDeduction), 'dn'):row(bankLine, '0')}
+    ${c.adminDeductions?row('خصومات إدارية', '−'+n0(c.adminDeductions), 'dn'):''}
+    ${c.advancesTotal?row('سلف'+(c.advOrders?' (كاش '+n0(c.advCash)+' · مشتريات '+n0(c.advOrders)+')':''), '−'+n0(c.advancesTotal), 'dn'):''}
+    <div class="row" style="cursor:default;border-top:2px solid var(--ink)"><div class="n"><b>صافي المرتب</b></div><b class="money" style="font-size:20px">${n0(net)}</b></div>
+    ${cm.rate?row('⭐ عمولة الشهر · '+cm.pointsMonth+' نقطة × '+cm.rate+(cm.pointsAlreadyPaid?' (اتدفع '+cm.pointsAlreadyPaid+')':''), (cm.newAmount?'+':'')+n0(cm.newAmount), 'up'):'<div class="hint">⚠️ سعر النقطة مش متظبط للفرع (من sales → الإعدادات)</div>'}
+    <div class="btns">${paid?`<span class="pill p-good">✅ اتصرف ${n0(paid.amount)} ج · ${caiKey(paid.paidAt)}</span>`:`<button class="btn g" onclick="O2.paySalary('${e.id}',${net})">💵 صرف المرتب ${n0(net)}</button>`}
+      ${cm.newAmount>0?`<button class="btn p" onclick="O2.payComm('${e.id}',${cm.newPoints},${cm.newAmount},'${label}')">⭐ ادفع العمولة ${n0(cm.newAmount)}</button>`:''}
+      <button class="btn" onclick="O2.addAdvance('${e.id}')">➕ سلفة</button><button class="btn" onclick="O2.addDeduction('${e.id}')">➖ خصم</button><button class="btn" onclick="O2.go('emp','${e.id}');O2.closeSheet()">👤 الملف</button></div>`);
+}
+async function paySalary(empId, amount){
+  const e = empById(empId); if(!e) return; const r = payPeriod(); const label = O2Pay.monthLabel(r.start);
+  if(new Date() < r.end && !confirm('الشهر لسه مخلصش — تصرف دلوقتي؟')) return;
+  if(!confirm('تأكيد صرف ' + n0(amount) + ' ج لـ ' + e.name + ' عن ' + label + '؟')) return;
+  const ref = db.collection('sales_salary_payments').doc(String(e.id).replace(/[^A-Za-z0-9_-]/g,'_') + '_' + label.replace(/[^A-Za-z0-9_-]/g,'_'));
+  try{ await db.runTransaction(async tx=>{ const s = await tx.get(ref); if(s.exists) throw new Error('__PAID__'); tx.set(ref, { employeeId:e.id, employeeName:e.name, branch:e.branch, periodLabel:label, amount, paidAt: Date.now(), paidFrom:'office2' }); }); toast('اتصرف ✅'); closeSheet(); }
+  catch(err){ toast(err && err.message==='__PAID__' ? 'اتصرف قبل كده — مش هيتسجل مرتين' : 'تعذر: ' + (err && err.code)); }
+}
+async function payComm(empId, pts, amount, label){ const e = empById(empId); if(!e) return; if(!confirm('دفع ' + n0(amount) + ' ج عمولة لـ ' + e.name + ' عن ' + pts + ' نقطة (' + label + ')؟')) return; try{ await db.collection('sales_commission_payments').add({ employeeId:e.id, employeeName:e.name, branch:e.branch, monthLabel:label, pointsCount:pts, commissionAmount:amount, paidAt: Date.now(), paidFrom:'office2' }); toast('اتدفعت ✅'); closeSheet(); }catch(err){ toast('تعذر: ' + (err && err.code)); } }
+function addAdvance(empId){ const e = empById(empId); if(!e) return; const v = prompt('مبلغ السلفة لـ ' + e.name + ':'); if(v===null) return; const amount = Math.round((Number(v)||0)*100)/100; if(!(amount>0)){ toast('مبلغ مش صح'); return; } const reason = prompt('السبب:') || ''; if(!reason){ toast('لازم سبب'); return; }
+  db.collection('sales_advances').add({ employeeId:e.id, employeeName:e.name, branch:e.branch, amount, date: caiKey(Date.now()), ts: Date.now(), reason, manual:true, source:'owner_manual' }).then(()=>{ toast('اتسجلت السلفة ✅'); closeSheet(); }).catch(err=> toast('تعذر: ' + (err && err.code))); }
+function addDeduction(empId){ const e = empById(empId); if(!e) return; const v = prompt('مبلغ الخصم بالجنيه لـ ' + e.name + ':'); if(v===null) return; const amount = Math.round((Number(v)||0)*100)/100; if(!(amount>0)){ toast('مبلغ مش صح'); return; } const reason = prompt('السبب (بيظهر في كشف المرتب):') || ''; if(!reason){ toast('لازم سبب'); return; }
+  db.collection('sales_deductions').add({ employeeId:e.id, employeeName:e.name, branch:e.branch, type:'manual_money', mode:'money', amount, date: caiKey(Date.now()), ts: Date.now(), reason, manual:true, source:'owner_manual' }).then(()=>{ toast('اتسجل الخصم ✅'); closeSheet(); }).catch(err=> toast('تعذر: ' + (err && err.code))); }
+function addExpense(){ const amount = Math.round((Number(prompt('المبلغ:'))||0)*100)/100; if(!(amount>0)) return; const note = prompt('إيه المصروف؟') || ''; if(!note) return; const bs = branches(); const bi = bs.length>1 ? prompt('الفرع: ' + bs.map((b,i)=> (i+1)+' = '+b).join(' · ') + ' (فاضي = عام)') : '1'; const branch = bi && bs[Number(bi)-1] ? bs[Number(bi)-1] : null;
+  const now = Date.now(); const p = caiParts(now); db.collection('office_expenses').add({ amount, note, branch, ts: now, month: p.y + '-' + String(p.m).padStart(2,'0'), source:'office2' }).then(()=> toast('اتسجل ✅')).catch(err=> toast('تعذر: ' + (err && err.code))); }
 
 /* ---------- ٥) المزيد ---------- */
 function rMore(){
   head('المزيد', '');
   return `<div class="card"><div class="row first" onclick="O2.oldOffice()"><div class="n"><b>📷 الكاميرات</b><small>Office القديم (نفس الصفحة)</small></div><span class="pill p-acc">افتح ›</span></div>
-    <div class="row" onclick="O2.oldOffice()"><div class="n"><b>🏢 Office القديم</b><small>المخزون · التقارير · المصاريف · النظافة · كل اللي لسه ما اتنقلش</small></div><span class="pill p-acc">افتح ›</span></div>
+    <div class="row" onclick="O2.oldOffice()"><div class="n"><b>🏢 Office القديم</b><small>المخزون · التقارير · الخزنة بالتفصيل · كل اللي لسه ما اتنقلش</small></div><span class="pill p-acc">افتح ›</span></div>
     <div class="row" onclick="location.href='../sales/'"><div class="n"><b>📱 تطبيق sales</b><small>إعدادات الوقت والحافز · المرتبات والصرف</small></div><span class="pill p-acc">افتح ›</span></div>
     <div class="row" onclick="O2.logout()"><div class="n"><b>🚪 خروج</b></div></div></div>
     <div class="hint">Office 2 · v1 · البيانات من نفس القاعدة — أي تعديل هنا بيظهر في sales وOffice فورًا</div>`;
