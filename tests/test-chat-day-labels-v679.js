@@ -48,5 +48,5 @@ for(const f of ['pos/index.html', 'Office/index.html', 'sales/index.html']){
   assert(i1 > 0 && i2 > i1, f + ': chat-time.js?v=679 قبل chat-staff-ui.js?v=680');
 }
 assert(/pos-shell-v75[2-9]|pos-shell-v7[6-9]\d/.test(fs.readFileSync(path.join(root, 'pos', 'sw.js'), 'utf8')), 'POS CACHE_NAME اترفع');
-assert(/echarpe-office-v75\d/.test(fs.readFileSync(path.join(root, 'Office', 'sw.js'), 'utf8')), 'Office CACHE_NAME اترفع');
+assert(/echarpe-office-v7[5-9]\d/.test(fs.readFileSync(path.join(root, 'Office', 'sw.js'), 'utf8')), 'Office CACHE_NAME اترفع');
 assert(/store-apps-shell-v6(2[4-9]|[3-9]\d)/.test(fs.readFileSync(path.join(root, 'sales', 'sw.js'), 'utf8')), 'Sales CACHE_NAME اترفع');

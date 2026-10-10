@@ -83,7 +83,7 @@ ok(/window\.ChatAlert\.update\(rows,\s*\{ open: !!CST\.open, activeId: CST\.acti
   ok(i1 > 0 && i2 > i1, f + ': chat-alert.js قبل chat-staff-ui.js v762');
 });
 ok(/pos-shell-v76[2-9]/.test(fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8')), 'pos sw v762');
-ok(/store-apps-shell-v636/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sales sw v636');
-ok(/echarpe-office-v754/.test(fs.readFileSync(path.join(ROOT,'Office','sw.js'),'utf8')), 'Office sw v754');
+ok(/store-apps-shell-v6(3[6-9]|[4-9]\d)/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sales sw ≥ v636');
+ok(/echarpe-office-v7(5[4-9]|[6-9]\d)/.test(fs.readFileSync(path.join(ROOT,'Office','sw.js'),'utf8')), 'Office sw ≥ v754');
 console.log(`  ${pass} ناجح · ${fail} فاشل`);
 if(fail) process.exitCode = 1;

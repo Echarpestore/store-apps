@@ -20,22 +20,33 @@ const data = {
   entries: [ { id:'r1', branch:'echarpe El Rehab', ts:D(2026,10,10,12,0)+30000, r:4 } ],
   sales_leave_requests: [ { id:'l1', empId:'e3', empName:'دينا', branch:'Glow', type:'dayoff', dateKey:'2026-10-16', reason:'ظرف عائلي', status:'pending', ts:D(2026,10,9,20,0) } ],
   sales_bonus_week: [], sales_time_credit: [], sales_staff_orders: [],
-  pos_test_sales: [ { id:'v1', branch:'echarpe El Rehab', total:1200, invoiceNo:5801, employee:'هاجر', createdAtMs:D(2026,10,10,12,30), payments:{ cash:1200 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:2, price:400 }, { barcode:'222', name:'بيجامة قطن', qty:1, price:400 }] }, { id:'v2', branch:'echarpe El Rehab', total:800, invoiceNo:5802, employee:'سارة', createdAtMs:D(2026,10,10,13,0), payments:{ visa:800 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:2, price:400 }] }, { id:'v3', branch:'echarpe El Rehab', total:1500, invoiceNo:5790, employee:'هاجر', createdAtMs:D(2026,10,9,15,0), payments:{ cash:1500 }, items:[{ barcode:'333', name:'إيشارب حرير', qty:3, price:500 }] }, { id:'v5', branch:'echarpe El Rehab', total:900, invoiceNo:5789, employee:'هاجر', createdAtMs:D(2026,10,9,11,0), payments:{ cash:900 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:1, price:900 }] }, { id:'v4', branch:'Glow', total:600, invoiceNo:7001, employee:'دينا', createdAtMs:D(2026,10,10,14,0), payments:{ instapay:600 }, items:[{ barcode:'444', name:'سكارف', qty:1, price:600 }] } ],
+  pos_test_sales: [ { id:'v1', branch:'echarpe El Rehab', total:1200, invoiceNo:5801, employee:'هاجر', createdAtMs:D(2026,10,10,12,30), payments:{ cash:1200 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:2, price:400 }, { barcode:'222', name:'بيجامة قطن', qty:1, price:400 }] }, { id:'v2', branch:'echarpe El Rehab', total:800, invoiceNo:5802, employee:'سارة', cartSid:'c1', createdAtMs:D(2026,10,10,13,0), payments:{ visa:800 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:2, price:400 }] }, { id:'v3', branch:'echarpe El Rehab', total:1500, invoiceNo:5790, employee:'هاجر', cartSid:'c2', customerPhone:'01011111111', createdAtMs:D(2026,10,9,15,0), payments:{ cash:1500 }, items:[{ barcode:'333', name:'إيشارب حرير', qty:3, price:500 }] }, { id:'v5', branch:'echarpe El Rehab', total:900, invoiceNo:5789, employee:'هاجر', createdAtMs:D(2026,10,9,11,0), payments:{ cash:900 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:1, price:900 }] }, { id:'v4', branch:'Glow', total:600, invoiceNo:7001, employee:'دينا', createdAtMs:D(2026,10,10,14,0), payments:{ instapay:600 }, items:[{ barcode:'444', name:'سكارف', qty:1, price:600 }] } ,
+    { id:'v6', branch:'Glow', total:450, invoiceNo:6990, employee:'دينا', customerPhone:'01022222222', pointsRedeemed:50, createdAtMs:D(2026,10,8,16,0), payments:{ cash:450 }, items:[{ barcode:'444', name:'سكارف', qty:1, price:450 }] },
+    { id:'v7', branch:'echarpe El Rehab', total:-300, invoiceNo:5770, employee:'سارة', createdAtMs:D(2026,10,7,17,0), payments:{ cash:-300 }, items:[{ barcode:'555', name:'شال صوف', qty:1, price:-300, isReturn:true }] },
+    { id:'v8', branch:'echarpe El Rehab', total:200, invoiceNo:5771, employee:'سارة', customerPhone:'01099999999', createdAtMs:D(2026,10,6,12,0), payments:{ cash:200 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:1, price:200 }] },
+    { id:'v9', branch:'echarpe El Rehab', total:200, invoiceNo:5772, employee:'سارة', customerPhone:'01099999999', createdAtMs:D(2026,10,6,13,0), payments:{ cash:200 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:1, price:200 }] },
+    { id:'v10', branch:'echarpe El Rehab', total:200, invoiceNo:5773, employee:'سارة', customerPhone:'01099999999', createdAtMs:D(2026,10,5,12,0), payments:{ cash:200 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:1, price:200 }] },
+    { id:'v11', branch:'echarpe El Rehab', total:200, invoiceNo:5774, employee:'سارة', customerPhone:'01099999999', createdAtMs:D(2026,10,5,13,0), payments:{ cash:200 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:1, price:200 }] } ],
   sales_advances: [ { id:'a1', employeeId:'e1', employeeName:'سارة', branch:'echarpe El Rehab', amount:500, date:'2026-10-08', ts:D(2026,10,8,12,0), source:'cash' } ],
   sales_deductions: [ { id:'d1', employeeId:'e2', employeeName:'هاجر', branch:'echarpe El Rehab', amount:100, type:'manual_money', date:'2026-10-05', ts:D(2026,10,5,12,0), reason:'كسر' } ],
   sales_salary_payments: [], sales_commission_payments: [],
   office_expenses: [ { id:'x1', amount:180, note:'مياه', branch:'echarpe El Rehab', ts:D(2026,10,10,11,0), month:'2026-10', source:'office_manual' } ],
   pos_activity_log: [
-    { id:'l1', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,10,13,10), pct:15, cartCount:3 },
-    { id:'l2', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,9,13,10), pct:10, cartCount:2 },
+    { id:'l1', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,10,12,58), pct:15, cartCount:3, sid:'c1', cctvEventId:'ev1' },
+    { id:'l2', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,9,14,58), pct:10, cartCount:2, sid:'c2' },
     { id:'l3', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,8,13,10), pct:20, cartCount:1 },
     { id:'l4', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,7,13,10), pct:5, cartCount:1 },
     { id:'l5', type:'cart_abandoned', branch:'Glow', employeeName:'دينا', ts:D(2026,10,10,15,0), itemCount:2, value:900 },
     { id:'l6', type:'same_day_reversal', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,9,18,0), invoiceNo:5790, total:1500 },
     { id:'l7', type:'customer_points_edit', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,6,12,0), phone:'0100', from:10, to:40, diff:30, reason:'تصحيح' },
     { id:'l8', type:'sale_saved', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,10,12,30) },
-    { id:'l9', type:'print_latency', branch:'echarpe El Rehab', ts:D(2026,10,10,12,31), ms:900 }
+    { id:'l9', type:'print_latency', branch:'echarpe El Rehab', ts:D(2026,10,10,12,31), ms:900 },
+    { id:'l10', type:'manual_drawer_open', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,10,16,0), cctvEventId:'ev10' },
+    { id:'l11', type:'manual_drawer_open', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,10,12,31) },
+    { id:'l12', type:'cart_abandoned', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,10,12,25), itemCount:3, value:1200 },
+    { id:'l13', type:'cart_abandoned', branch:'Glow', employeeName:'دينا', ts:D(2026,10,9,15,0), itemCount:1, value:30 }
   ],
+  office_cases: [], pos_cctv_invoice_snapshots: [],
   pos_test_settings: [ { id:'office_gate', hash:null }, { id:'advances_cfg', closeDay:6, openDay:12 } ]
 };
 const STUB = `
@@ -58,10 +69,10 @@ window.firebase = { apps:[{}], app:()=>({}), initializeApp:()=>({}), auth: Objec
 `;
 (async()=>{
   const b = await chromium.launch(); const p = await b.newPage({ viewport:{ width:390, height:844 } });
-  const errs = []; p.on('pageerror', e=> errs.push(String(e.message))); p.on('console', m=>{ if(m.type()==='error') errs.push('console: ' + m.text()); });
+  const errs = []; p.on('pageerror', e=> errs.push(String(e.message))); p.on('console', m=>{ if(m.type()==='error' && !/Failed to load resource/.test(m.text())) errs.push('console: ' + m.text()); });
   let html = fs.readFileSync(path.join(ROOT,'office2','index.html'),'utf8');
   html = html.replace(/<script src="https:\/\/www\.gstatic\.com[^>]*><\/script>\n?/g, '').replace('<script src="../sales/time-bank.js?v=647"></script>', '<script>' + STUB + '</script><script>' + fs.readFileSync(path.join(ROOT,'sales','time-bank.js'),'utf8') + '</script>')
-    .replace('<script src="payroll.js?v=2"></script>', '<script>' + fs.readFileSync(path.join(ROOT,'office2','payroll.js'),'utf8') + '</script>').replace('<script src="office2.js?v=5"></script>', '<script>' + fs.readFileSync(path.join(ROOT,'office2','office2.js'),'utf8') + '</script>')
+    .replace('<script src="payroll.js?v=2"></script>', '<script>' + fs.readFileSync(path.join(ROOT,'office2','payroll.js'),'utf8') + '</script>').replace('<script src="office2.js?v=6"></script>', '<script>' + fs.readFileSync(path.join(ROOT,'office2','office2.js'),'utf8') + '</script>')
     .replace('<link rel="stylesheet" href="office2.css?v=2">', '<style>' + fs.readFileSync(path.join(ROOT,'office2','office2.css'),'utf8') + '</style>')
     .replace(/<link href="https:\/\/fonts[^>]*>/, '');
   await p.setContent(html); await p.waitForTimeout(700);
@@ -76,7 +87,9 @@ window.firebase = { apps:[{}], app:()=>({}), initializeApp:()=>({}), auth: Objec
   await p.evaluate(()=> O2.invoice('2026-10-09','v3')); await p.waitForTimeout(80); out.invoice = await p.evaluate(()=> document.getElementById('sheetBody').innerText); await p.evaluate(()=> O2.closeSheet());
   step('activity'); await p.evaluate(()=> O2.go('activity')); await p.waitForTimeout(300); out.activity = await p.evaluate(()=> document.getElementById('screen').innerText);
   if(shots) await p.screenshot({ path: shots + '-activity.png', fullPage:true });
-  await p.evaluate(()=> O2.actFilter('discounts')); await p.waitForTimeout(80); out.activityDisc = await p.evaluate(()=> document.getElementById('screen').innerText);
+  await p.evaluate(()=> O2.shFilter('discount')); await p.waitForTimeout(80); out.activityDisc = await p.evaluate(()=> document.getElementById('screen').innerText);
+  await p.evaluate(()=> O2.shFilter('all')); await p.evaluate(()=> O2.shDecide('drawer_l10','ok', window.__now)); await p.waitForTimeout(150); out.activityOk = await p.evaluate(()=> document.getElementById('screen').innerText);
+  await p.evaluate(()=> O2.shVideo('echarpe El Rehab', window.__now - 3600000)); await p.waitForTimeout(80); out.video = await p.evaluate(()=> document.getElementById('sheetBody').innerHTML); await p.evaluate(()=> O2.closeSheet());
   step('staff'); await p.evaluate(()=> O2.go('staff')); await p.waitForTimeout(100); out.staff = await p.evaluate(()=> document.getElementById('screen').innerText);
   if(shots) await p.screenshot({ path: shots + '-staff.png' });
   await p.evaluate(()=> O2.go('emp','e1')); await p.waitForTimeout(100); out.emp = await p.evaluate(()=> document.getElementById('screen').innerText);

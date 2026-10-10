@@ -370,7 +370,7 @@ const O2 = {
       tx.update(ref, ok ? { status:'approved', decidedAt: Date.now() } : { status:'rejected', decidedAt: Date.now(), note }); }); toast(ok ? 'اتعتمد ✅' : 'اترفض'); }catch(e){ toast('تعذر: ' + (e && (e.message||e.code))); }
   },
   staffQ(v){ staffQ = v; const el = document.activeElement; render(); try{ const i = document.querySelector('#screen input[placeholder^="🔍"]'); if(i && el && el.tagName==='INPUT'){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, staffBranch(v){ staffBranch = v; render(); },
-  actFilter(g){ actFilter = g; render(); }, actMore(){ actDays += 7; loadActivity(actDays); },
+  shFilter(g){ shFilter = g; render(); }, shMore(){ shDays += 7; loadShield(shDays); }, shVideo, shShots, shDecide, invoiceAny,
   inboxTab(t){ inboxTab = t; render(); }, moneyTab(t){ moneyTab = t; render(); }, payMonth(d){ payOffset += d; render(); },
   paySheet, paySalary, payComm, addAdvance, addDeduction, addExpense, invoice: invoiceSheet,
   day(d){ const a = branchDay.split('-').map(Number); branchDay = caiKey(caiStamp(a[0],a[1],a[2],12,0) + d*DAY); if(branchDay > caiKey(Date.now())) branchDay = caiKey(Date.now()); render(); }, dayPick(v){ if(v) { branchDay = v; render(); } },
@@ -488,83 +488,113 @@ function addDeduction(empId){ const e = empById(empId); if(!e) return; const v =
 function addExpense(){ const amount = Math.round((Number(prompt('المبلغ:'))||0)*100)/100; if(!(amount>0)) return; const note = prompt('إيه المصروف؟') || ''; if(!note) return; const bs = branches(); const bi = bs.length>1 ? prompt('الفرع: ' + bs.map((b,i)=> (i+1)+' = '+b).join(' · ') + ' (فاضي = عام)') : '1'; const branch = bi && bs[Number(bi)-1] ? bs[Number(bi)-1] : null;
   const now = Date.now(); const p = caiParts(now); db.collection('office_expenses').add({ amount, note, branch, ts: now, month: p.y + '-' + String(p.m).padStart(2,'0'), source:'office2' }).then(()=> toast('اتسجل ✅')).catch(err=> toast('تعذر: ' + (err && err.code))); }
 
-/* ---------- ٦) 🕵️ النشاط — اللي يستاهل تعرفه، مش لوج تقني ----------
-   قرار المالك 10-10: السجل القديم (54 نوع حدث تقني) محدش بيفتحه. هنا: أحداث الفلوس والتلاعب بس،
-   بالعربي وبالمبلغ والموظفة، مع ملخص الأسبوع ومين فيه خروج عن المعتاد. */
-let actDays = 7, actFilter = 'all'; const act = { rows:[], loadedSince:0, loading:false, err:null };
-const ACT_TYPES = ['same_day_return','same_day_reversal','manual_discount','cart_item_edited','manual_drawer_open','cart_abandoned','customer_points_edit','customer_name_edit','card_overcharge_saved','card_saved_manual','paymob_stuck','paymob_cancelled','credit_spend_failed','credit_spend_blocked','gift_card_return_blocked','inventory_wiped','inventory_merge','inventory_merge_bulk','inventory_full_reconcile','inventory_branch_catalog_replace','import_qty_adjusted','import_qty_moved','redeem_value_mismatch'];
-const ACT_GROUP = { returns:['same_day_return','same_day_reversal'], discounts:['manual_discount','cart_item_edited'], drawer:['manual_drawer_open'], cart:['cart_abandoned'], customers:['customer_points_edit','customer_name_edit','redeem_value_mismatch'], card:['card_overcharge_saved','card_saved_manual','paymob_stuck','paymob_cancelled','credit_spend_failed','credit_spend_blocked','gift_card_return_blocked'], stock:['inventory_wiped','inventory_merge','inventory_merge_bulk','inventory_full_reconcile','inventory_branch_catalog_replace','import_qty_adjusted','import_qty_moved'] };
-const ACT_LABEL = { all:'الكل', returns:'↩️ مرتجعات', discounts:'🏷️ خصومات', drawer:'🗄️ الدرج', cart:'🛒 سلة اتمسحت', customers:'👤 عملاء', card:'💳 دفع', stock:'📦 مخزون', attendance:'⏰ حضور' };
-async function loadActivity(days){
-  const since = Date.now() - days*DAY; if(act.loading || (act.loadedSince && act.loadedSince <= since)) return;
-  act.loading = true; render();
+/* ---------- ٦) 🛡️ الحماية — كشف السرقة والنشاط المريب على الكاشير (قرار المالك 10-10) ----------
+   مش لوج: قواعد بتقرا الفواتير + أحداث الكاشير + السلة، وكل حالة معاها 📸 لقطات الفاتورة و🎥 فيديو الكاميرا في نفس الدقيقة.
+   القواعد: الدرج اتفتح من غير بيع · أصناف اتضربت واتمسحت والعميل خرج من غير فاتورة · خصم يدوي/تعديل سعر لفاتورة من غير عميلة ·
+   استبدال نقط (تأكد إن العميلة موجودة + رقم مرتبط بموظفة) · مرتجع من غير فاتورة أصلية · عكس فاتورة · بيع بعد ميعاد القفل. */
+let shDays = 7, shFilter = 'all'; const sh = { events:[], loadedSince:0, loading:false, err:null, cases:{} };
+const SH_TYPES = ['manual_drawer_open','cart_abandoned','manual_discount','cart_item_edited','same_day_reversal','card_overcharge_saved','customer_points_edit','redeem_value_mismatch','inventory_wiped','inventory_branch_catalog_replace'];
+const SH_RULE = {
+  drawer:   { icon:'🗄️', t:'الدرج اتفتح من غير بيع', w:2 },
+  wiped:    { icon:'🛒', t:'أصناف اتضربت واتمسحت — العميل خرج من غير فاتورة؟', w:3 },
+  discount: { icon:'🏷️', t:'خصم/تعديل سعر لفاتورة من غير عميلة', w:2 },
+  redeem:   { icon:'🎁', t:'استبدال نقط — اتأكد إن العميلة موجودة', w:1 },
+  phone:    { icon:'📱', t:'رقم عميلة مرتبط بموظفة واحدة', w:3 },
+  return:   { icon:'↩️', t:'مرتجع من غير فاتورة أصلية', w:3 },
+  reversal: { icon:'🔁', t:'فاتورة اتعكست بالكامل بعد الدفع', w:2 },
+  overcharge:{ icon:'💳', t:'الماكينة خدت أكتر من الفاتورة', w:3 },
+  points:   { icon:'👤', t:'تعديل نقط عميلة يدوي', w:2 },
+  stock:    { icon:'📦', t:'مسح/استبدال مخزون الفرع', w:4 },
+  hours:    { icon:'🌙', t:'بيع بعد ميعاد القفل', w:1 }
+};
+const SH_SITES = [ { k:/madinaty|مدينتي/i, id:'madinaty', gateway:'https://cctv-madinaty.echarpe.store', cam:'4', q:360 }, { k:/glow/i, id:'glow', gateway:'https://cctv-glow.echarpe.store', cam:'1', q:480 }, { k:/rehab|الرحاب/i, id:'rehab', gateway:'https://cctv-rehab.echarpe.store', cam:'1', q:480 } ];
+function siteOf(branch){ return SH_SITES.find(x=> x.k.test(String(branch||''))) || null; }
+async function loadShield(days){
+  const since = Date.now() - days*DAY; if(sh.loading || (sh.loadedSince && sh.loadedSince <= since)) return;
+  sh.loading = true; render();
   try{
-    let last = null; const rows = []; const until = act.loadedSince || null;
-    for(let i = 0; i < 30; i++){
-      let q = db.collection('pos_activity_log').where('ts','>=',since).orderBy('ts','desc'); if(until) q = q.where('ts','<',until); if(last) q = q.startAfter(last); q = q.limit(500);
-      const snap = await q.get(); if(snap.empty) break; snap.docs.forEach(d=> rows.push(Object.assign({ id:d.id }, d.data()))); last = snap.docs[snap.docs.length-1]; if(snap.size < 500) break;
-    }
-    const seen = new Set(act.rows.map(r=>r.id)); rows.forEach(r=>{ if(!seen.has(r.id) && ACT_TYPES.includes(r.type)) act.rows.push(r); });
-    act.rows.sort((a,b)=> (b.ts||0)-(a.ts||0)); act.loadedSince = since; act.err = null;
-  }catch(e){ act.err = e && (e.code||e.message); }
-  act.loading = false; render();
+    // ١) أحداث الكاشير
+    let last = null; const until = sh.loadedSince || null;
+    for(let i = 0; i < 40; i++){ let q = db.collection('pos_activity_log').where('ts','>=',since).orderBy('ts','desc'); if(until) q = q.where('ts','<',until); if(last) q = q.startAfter(last); q = q.limit(500); const snap = await q.get(); if(snap.empty) break; snap.docs.forEach(d=>{ const r = Object.assign({ id:d.id }, d.data()); if(SH_TYPES.includes(r.type) && !sh.events.some(x=>x.id===r.id)) sh.events.push(r); }); last = snap.docs[snap.docs.length-1]; if(snap.size < 500) break; }
+    // ٢) فواتير كل يوم في النافذة (كاش)
+    for(let d = 0; d < days; d++) await loadDay(caiKey(since + d*DAY + 3600000));
+    // ٣) قرارات المالك على الحالات
+    try{ const cs = await db.collection('office_cases').where('ts','>=',since).get(); cs.forEach(d=>{ sh.cases[d.id] = d.data(); }); }catch(e){}
+    sh.loadedSince = since; sh.err = null;
+  }catch(e){ sh.err = e && (e.code||e.message); }
+  sh.loading = false; render();
 }
-function actGroupOf(type){ return Object.keys(ACT_GROUP).find(g=> ACT_GROUP[g].includes(type)) || 'other'; }
-function actText(r){
-  const who = esc(r.employeeName||'—'); const m = (v)=> n0(v) + ' ج';
-  switch(r.type){
-    case 'same_day_return': return `↩️ <b>${who}</b> عملت مرتجع نفس اليوم: ${esc(r.item||'')} (فاتورة #${esc(r.invoiceNo||'')})`;
-    case 'same_day_reversal': return `↩️ <b>${who}</b> عكست فاتورة #${esc(r.invoiceNo||'')} بالكامل — ${m(r.total)}`;
-    case 'manual_discount': return `🏷️ <b>${who}</b> خصم يدوي ${r.pct}% على سلة ${r.cartCount||''} صنف`;
-    case 'cart_item_edited': return `🏷️ <b>${who}</b> غيّرت سعر «${esc(r.name||'')}» من ${m(r.from)} لـ ${m(r.to)}${r.pct?' ('+r.pct+'%)':''}`;
-    case 'manual_drawer_open': return `🗄️ <b>${who}</b> فتحت الدرج من غير بيع`;
-    case 'cart_abandoned': return `🛒 <b>${who}</b> مسحت سلة ${r.itemCount||0} صنف بقيمة ${m(r.value)}`;
-    case 'customer_points_edit': return `👤 <b>${who}</b> عدّلت نقط عميلة ${esc(r.phone||'')}: ${r.from} ← ${r.to} (${r.diff>0?'+':''}${r.diff})${r.reason?' · '+esc(r.reason):''}`;
-    case 'customer_name_edit': return `👤 <b>${who}</b> غيّرت اسم عميلة ${esc(r.phone||'')}: «${esc(r.from||'')}» ← «${esc(r.to||'')}»`;
-    case 'redeem_value_mismatch': return `👤 ⚠️ قيمة استبدال نقط مش مطابقة (${esc(r.employeeName||'')})`;
-    case 'card_overcharge_saved': return `💳 ⚠️ <b>${who}</b> الماكينة خدت ${m(r.charged)} على فاتورة ${m(r.total)} (فرق ${m(r.diff)})`;
-    case 'card_saved_manual': return `💳 <b>${who}</b> سجّلت فيزا يدوي${r.amount?' '+m(r.amount):''}`;
-    case 'paymob_stuck': return `💳 ⚠️ الماكينة علّقت (${esc(r.reason||'')}) عند <b>${who}</b>`;
-    case 'paymob_cancelled': return `💳 <b>${who}</b> لغت عملية فيزا`;
-    case 'credit_spend_failed': case 'credit_spend_blocked': return `💰 ⚠️ صرف رصيد عميلة فشل/اتمنع عند <b>${who}</b>`;
-    case 'gift_card_return_blocked': return `🎁 <b>${who}</b> حاولت ترجّع كارت هدايا ${m(r.value)} (اتمنع)`;
-    case 'inventory_wiped': return `📦 🚨 <b>${who}</b> مسحت مخزون الفرع (${r.count||0} صنف)`;
-    case 'inventory_merge': case 'inventory_merge_bulk': return `📦 <b>${who}</b> دمجت أصناف في المخزون`;
-    case 'inventory_full_reconcile': return `📦 <b>${who}</b> عملت جرد كامل`;
-    case 'inventory_branch_catalog_replace': return `📦 🚨 <b>${who}</b> استبدلت كتالوج الفرع`;
-    case 'import_qty_adjusted': case 'import_qty_moved': return `📦 <b>${who}</b> عدّلت كميات بالاستيراد`;
-    default: return `${esc(r.type)} · ${who}`;
-  }
-}
-function actWeight(r){ return ['inventory_wiped','inventory_branch_catalog_replace','card_overcharge_saved','same_day_reversal','redeem_value_mismatch'].includes(r.type) ? 'bad' : (['manual_discount','cart_item_edited','manual_drawer_open','customer_points_edit','same_day_return'].includes(r.type) ? 'w' : 'i'); }
-function attendanceEvents(since){
-  const out = [];
-  D.shifts.filter(s=> s.clockInTs >= since).forEach(s=>{ const e = empById(s.employeeId)||{}; const g = TimeBank.cfgOf(timeCfg(e.branch)).bankGraceMin;
-    if((Number(s.lateMinutes)||0) > Math.max(g, 15)) out.push({ id:'late_'+s.id, ts:s.clockInTs, branch:s.branch, employeeName:s.employeeName||e.name, group:'attendance', w:'w', html:`⏰ <b>${esc(s.employeeName||e.name||'')}</b> اتأخرت ${s.lateMinutes} د` });
-    if(s.bankAutoEnd) out.push({ id:'forgot_'+s.id, ts:s.bankAutoAt||s.clockOutTs, branch:s.branch, employeeName:s.employeeName||e.name, group:'attendance', w:'w', html:`🕐 <b>${esc(s.employeeName||e.name||'')}</b> نسيت الانصراف — اتقفل على ${hm(s.clockOutTs)}` });
+function windowSales(since){ const m = {}; Object.keys(dayCache).forEach(k=>{ (dayCache[k].rows||[]).forEach(s=>{ if(saleMs(s) >= since) m[s.id] = s; }); }); D.sales.forEach(s=>{ if(saleMs(s) >= since) m[s.id] = s; }); return Object.values(m); }
+function shiftHours(branch){ const defs = shiftDefs(branch); let a = 24*60, b = 0; Object.values(defs).forEach(d=>{ if(!d || !/^\d{1,2}:\d{2}$/.test(d.start||'') || !/^\d{1,2}:\d{2}$/.test(d.end||'')) return; a = Math.min(a, hm2min(d.start)); let e = hm2min(d.end); if(e <= hm2min(d.start)) e += 1440; b = Math.max(b, e); }); return b > 0 ? { open:a, close:b } : null; }
+function buildCases(since){
+  const out = []; const sales = windowSales(since); const ev = sh.events.filter(e=> e.ts >= since);
+  const saleBySid = {}; sales.forEach(s=>{ if(s.cartSid) saleBySid[s.cartSid] = s; });
+  const push = (rule, id, o)=> out.push(Object.assign({ rule, id: rule + '_' + id, w: SH_RULE[rule].w }, o));
+  ev.forEach(e=>{
+    const near = (ms)=> sales.some(s=> s.branch===e.branch && Math.abs(saleMs(s) - e.ts) <= ms);
+    if(e.type==='manual_drawer_open' && !near(3*60000)) push('drawer', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, text:'الدرج اتفتح يدوي ومفيش أي بيع قبلها أو بعدها بـ3 دقايق', eventId:e.cctvEventId });
+    if(e.type==='cart_abandoned' && (Number(e.value)||0) >= 50){ const v = Number(e.value)||0; const sold = sales.some(s=> s.branch===e.branch && saleMs(s) > e.ts && saleMs(s) <= e.ts + 15*60000 && Math.abs((Number(s.total)||0) - v) <= v*0.25); if(!sold) push('wiped', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, amount:v, text:`سلة ${e.itemCount||0} صنف بقيمة ${n0(v)} ج اتمسحت ومفيش فاتورة قريبة من المبلغ ده في الربع ساعة اللي بعدها`, eventId:e.cctvEventId }); }
+    if(e.type==='manual_discount' || e.type==='cart_item_edited'){ const s = e.sid && saleBySid[e.sid]; if(s && !s.customerPhone){ const lowered = e.type==='manual_discount' || (Number(e.to)||0) < (Number(e.from)||0); if(lowered) push('discount', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, invoice:s, amount:Number(s.total)||0, text: e.type==='manual_discount' ? `خصم يدوي ${e.pct}% على فاتورة #${s.invoiceNo||''} (${n0(s.total)} ج) من غير رقم عميلة` : `سعر «${esc(e.name||'')}» اتعدّل من ${n0(e.from)} لـ ${n0(e.to)} في فاتورة #${s.invoiceNo||''} من غير رقم عميلة`, eventId:e.cctvEventId }); } }
+    if(e.type==='same_day_reversal') push('reversal', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, amount:Number(e.total)||0, text:`فاتورة #${e.invoiceNo||''} اتعكست بالكامل — ${n0(e.total)} ج`, eventId:e.cctvEventId });
+    if(e.type==='card_overcharge_saved') push('overcharge', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, amount:Number(e.diff)||0, text:`الماكينة خدت ${n0(e.charged)} على فاتورة ${n0(e.total)} (فرق ${n0(e.diff)} ج)`, invoiceCode:e.invoiceCode, eventId:e.cctvEventId });
+    if(e.type==='customer_points_edit' || e.type==='redeem_value_mismatch') push('points', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, text: e.type==='customer_points_edit' ? `نقط عميلة ${esc(e.phone||'')}: ${e.from} ← ${e.to} (${e.diff>0?'+':''}${e.diff})${e.reason?' · '+esc(e.reason):''}` : 'قيمة استبدال نقط مش مطابقة', eventId:e.cctvEventId });
+    if(e.type==='inventory_wiped' || e.type==='inventory_branch_catalog_replace') push('stock', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, text: e.type==='inventory_wiped' ? `مخزون الفرع اتمسح (${e.count||0} صنف)` : 'كتالوج الفرع اتستبدل', eventId:e.cctvEventId });
   });
-  return out;
+  // من الفواتير نفسها
+  const byPhone = {};
+  sales.forEach(s=>{
+    const emp = s.employeeName || s.employee || s.seller || '';
+    if(s.pointsRedeemed > 0 && !s.isReversal) push('redeem', s.id, { ts:saleMs(s), branch:s.branch, emp, invoice:s, amount:Number(s.total)||0, text:`استبدال ${s.pointsRedeemed} نقطة في فاتورة #${s.invoiceNo||''} (${n0(s.total)} ج) · عميلة ${esc(s.customerPhone||'')}` });
+    const retNoInv = (s.items||[]).filter(it=> it && it.isReturn && !it.fromInvoice && !it.fromInvoiceId && !it.fromInvoiceCode);
+    if(retNoInv.length) push('return', s.id, { ts:saleMs(s), branch:s.branch, emp, invoice:s, amount:Math.abs(retNoInv.reduce((n,it)=> n + (Number(it.price)||0)*(Number(it.qty)||1), 0)), text:`مرتجع ${retNoInv.length} صنف من غير فاتورة أصلية في #${s.invoiceNo||''}: ${retNoInv.map(it=> esc(it.name||'')).join('، ')}` });
+    if(s.isReversal && !ev.some(e=> e.type==='same_day_reversal' && String(e.invoiceNo)===String(s.invoiceNo))) push('reversal', s.id, { ts:saleMs(s), branch:s.branch, emp, invoice:s, amount:Math.abs(Number(s.total)||0), text:`فاتورة اتعكست — ${n0(Math.abs(s.total))} ج` });
+    if(s.customerPhone && emp){ const k = s.branch + '|' + s.customerPhone; byPhone[k] = byPhone[k] || { emps:new Set(), n:0, phone:s.customerPhone, branch:s.branch, last:s, ts:saleMs(s) }; byPhone[k].emps.add(emp); byPhone[k].n++; byPhone[k].ts = Math.max(byPhone[k].ts, saleMs(s)); }
+    const sh_ = shiftHours(s.branch); if(sh_){ const p = caiParts(saleMs(s)); let m = p.h*60 + p.mi; if(m < sh_.open - 60) m += 1440; if(m > sh_.close + 60 || m < sh_.open - 30) push('hours', s.id, { ts:saleMs(s), branch:s.branch, emp, invoice:s, amount:Number(s.total)||0, text:`فاتورة #${s.invoiceNo||''} الساعة ${hm(saleMs(s))} برّه مواعيد الفرع` }); }
+  });
+  Object.values(byPhone).forEach(x=>{ if(x.n >= 4 && x.emps.size === 1) push('phone', x.branch + '_' + x.phone, { ts:x.ts, branch:x.branch, emp:[...x.emps][0], invoice:x.last, text:`رقم ${esc(x.phone)} اتحط على ${x.n} فواتير كلها مع نفس الموظفة` }); });
+  // تكرار نفس القاعدة لنفس الموظفة في الأسبوع = خطورة أعلى
+  const rep = {}; out.forEach(c=>{ const k = c.rule + '|' + c.emp; rep[k] = (rep[k]||0) + 1; });
+  out.forEach(c=>{ c.score = c.w + (rep[c.rule + '|' + c.emp] >= 3 ? 2 : 0) + ((c.amount||0) >= 1000 ? 1 : 0); c.decision = (sh.cases[c.id]||{}).status || ''; });
+  return out.sort((a,b)=> (b.ts||0) - (a.ts||0));
 }
 function rActivity(){
-  head(`<button class="back" onclick="O2.go('more')">‹</button> النشاط`, 'اللي يستاهل تعرفه · آخر ' + actDays + ' يوم');
-  const since = Date.now() - actDays*DAY;
-  if(!act.loading && (!act.loadedSince || act.loadedSince > since)) setTimeout(()=> loadActivity(actDays), 0);
-  const rows = act.rows.filter(r=> r.ts >= since).map(r=> ({ id:r.id, ts:r.ts, branch:r.branch, employeeName:r.employeeName, group: actGroupOf(r.type), w: actWeight(r), html: actText(r), type:r.type }));
-  const all = rows.concat(attendanceEvents(since)).sort((a,b)=> (b.ts||0)-(a.ts||0));
-  // ملخص: عدد كل مجموعة + أكتر موظفة في كل مجموعة
-  const groups = Object.keys(ACT_LABEL).filter(g=> g!=='all');
-  const chips = ['all'].concat(groups).map(g=>{ const n = g==='all' ? all.length : all.filter(x=>x.group===g).length; return n || g==='all' ? `<button class="${actFilter===g?'on':''}" onclick="O2.actFilter('${g}')">${ACT_LABEL[g]}${n?' '+n:''}</button>` : ''; }).join('');
-  const outl = groups.map(g=>{ const by = {}; all.filter(x=> x.group===g && x.employeeName).forEach(x=>{ by[x.employeeName] = (by[x.employeeName]||0) + 1; }); const top = Object.entries(by).sort((a,b)=> b[1]-a[1])[0]; const total = Object.values(by).reduce((n,v)=>n+v,0); return (top && top[1] >= 3 && top[1] >= total*0.4) ? `<div class="row" style="cursor:default"><div class="n"><b>${ACT_LABEL[g]}</b><small>${esc(top[0])} عندها ${top[1]} من ${total}</small></div><span class="pill p-warn">خروج عن المعتاد</span></div>` : ''; }).join('');
-  const sum = `<div class="card"><h3>📊 ملخص ${actDays} يوم <small>${all.length} حدث</small></h3><div class="kpis">${groups.filter(g=> all.some(x=>x.group===g)).slice(0,6).map(g=>`<div class="kpi" onclick="O2.actFilter('${g}')"><small>${ACT_LABEL[g]}</small><b>${all.filter(x=>x.group===g).length}</b></div>`).join('') || '<div class="empty">مفيش أحداث</div>'}</div>${outl?`<div class="sec">🚩 مين أكتر من الطبيعي</div>${outl}`:''}</div>`;
-  const list = all.filter(x=> actFilter==='all' || x.group===actFilter);
-  let lastDay = ''; const feed = list.map(x=>{ const k = caiKey(x.ts); const hd = k !== lastDay ? `<div class="sec">${dayName(x.ts)} ${k.slice(5)}</div>` : ''; lastDay = k; return hd + `<div class="alert ${x.w==='bad'?'':x.w}" style="cursor:default"><span style="flex:1">${x.html}<br><small class="tag">${esc(String(x.branch||'').replace('echarpe ',''))} · ${hm(x.ts)}</small></span></div>`; }).join('');
-  return `<div class="seg full" style="flex-wrap:wrap">${chips}</div>` + sum + `<div class="full">${act.loading?'<div class="card"><div class="skel"></div></div>':''}${act.err?`<div class="card"><b style="color:var(--bad)">تعذر التحميل: ${esc(act.err)}</b></div>`:''}${feed || (act.loading?'':'<div class="empty">مفيش أحداث في الفترة دي 🎉</div>')}<div class="btns"><button class="btn w" onclick="O2.actMore()">⏮ حمّل أسبوع أقدم</button></div></div>`;
+  head(`<button class="back" onclick="O2.go('more')">‹</button> 🛡️ الحماية`, 'نشاط مريب على الكاشير · آخر ' + shDays + ' يوم');
+  const since = Date.now() - shDays*DAY;
+  if(!sh.loading && (!sh.loadedSince || sh.loadedSince > since)) setTimeout(()=> loadShield(shDays), 0);
+  const all = buildCases(since); const open = all.filter(c=> c.decision !== 'ok');
+  const rules = Object.keys(SH_RULE).filter(r=> open.some(c=> c.rule===r));
+  const chips = `<div class="seg full" style="flex-wrap:wrap"><button class="${shFilter==='all'?'on':''}" onclick="O2.shFilter('all')">الكل ${open.length}</button>${rules.map(r=>`<button class="${shFilter===r?'on':''}" onclick="O2.shFilter('${r}')">${SH_RULE[r].icon} ${open.filter(c=>c.rule===r).length}</button>`).join('')}<button class="${shFilter==='ok'?'on':''}" onclick="O2.shFilter('ok')">✓ اتراجعت ${all.length-open.length}</button></div>`;
+  // خطورة الموظفين
+  const risk = {}; open.forEach(c=>{ if(!c.emp) return; risk[c.emp] = risk[c.emp] || { s:0, n:0, b:c.branch }; risk[c.emp].s += c.score; risk[c.emp].n++; });
+  const top = Object.entries(risk).sort((a,b)=> b[1].s - a[1].s).slice(0,5);
+  const sum = `<div class="card"><h3>📊 آخر ${shDays} يوم <small>${open.length} حالة مفتوحة</small></h3><div class="kpis">${rules.slice(0,6).map(r=>`<div class="kpi" onclick="O2.shFilter('${r}')"><small>${SH_RULE[r].icon} ${SH_RULE[r].t.split(' — ')[0].slice(0,18)}</small><b>${open.filter(c=>c.rule===r).length}</b></div>`).join('') || '<div class="empty" style="grid-column:1/-1">مفيش حالات 🎉</div>'}</div>${top.length?`<div class="sec">🚩 أعلى خطورة</div>${top.map(([n,x])=>`<div class="row" style="cursor:default"><div class="n"><b>${esc(n)}</b><small>${esc(String(x.b||'').replace('echarpe ',''))} · ${x.n} حالة</small></div><span class="pill ${x.s>=8?'p-bad':(x.s>=4?'p-warn':'p-gray')}">خطورة ${x.s}</span></div>`).join('')}`:''}</div>`;
+  const list = (shFilter==='ok' ? all.filter(c=> c.decision==='ok') : open.filter(c=> shFilter==='all' || c.rule===shFilter));
+  let lastDay = ''; const feed = list.map(c=>{ const k = caiKey(c.ts); const hd = k !== lastDay ? `<div class="sec">${dayName(c.ts)} ${k.slice(5)}</div>` : ''; lastDay = k; const cls = c.score >= 5 ? '' : (c.score >= 3 ? 'w' : 'i');
+    return hd + `<div class="alert ${cls}" style="cursor:default;flex-wrap:wrap"><span style="flex:1;min-width:0"><b>${SH_RULE[c.rule].icon} ${SH_RULE[c.rule].t}</b>${c.decision==='flag'?' <span class="pill p-bad">🚩 مشكلة</span>':''}<br><span style="font-weight:600">${c.text}</span><br><small class="tag">${esc(String(c.branch||'').replace('echarpe ',''))} · ${esc(c.emp||'—')} · ${hm(c.ts)} · خطورة ${c.score}</small></span><span class="btns" style="margin:0;width:100%"><button class="btn" onclick="O2.shVideo('${esc(c.branch)}',${c.ts})">🎥 فيديو</button>${(c.invoice&&c.invoice.invoiceCode)||c.invoiceCode?`<button class="btn" onclick="O2.shShots('${esc((c.invoice&&c.invoice.invoiceCode)||c.invoiceCode)}')">📸 لقطات</button>`:''}${c.invoice?`<button class="btn" onclick="O2.invoiceAny('${c.invoice.id}')">🧾 الفاتورة</button>`:''}${c.decision==='ok'?`<button class="btn" onclick="O2.shDecide('${c.id}','',${c.ts})">↩ افتح تاني</button>`:`<button class="btn g" onclick="O2.shDecide('${c.id}','ok',${c.ts})">✓ عادي</button><button class="btn r" onclick="O2.shDecide('${c.id}','flag',${c.ts})">🚩 مشكلة</button>`}</span></div>`; }).join('');
+  return chips + sum + `<div class="full">${sh.loading?'<div class="card"><div class="skel"></div><div class="hint">بيقرا فواتير وأحداث ' + shDays + ' يوم…</div></div>':''}${sh.err?`<div class="card"><b style="color:var(--bad)">تعذر التحميل: ${esc(sh.err)}</b></div>`:''}${feed || (sh.loading?'':'<div class="empty">مفيش حالات في الفترة دي 🎉</div>')}<div class="btns"><button class="btn w" onclick="O2.shMore()">⏮ حمّل أسبوع أقدم</button></div></div>`;
 }
+function shVideo(branch, ts){
+  const site = siteOf(branch); if(!site){ toast('الفرع ده مفيهوش كاميرات متوصّلة'); return; }
+  const at = ts - 20000; const url = site.gateway + '/echarpe-playback/video?camera=' + site.cam + '&atMs=' + at + '&durationSec=60&quality=' + site.q + '&mode=fast&_=' + Date.now();
+  sheet(`<h2>🎥 ${esc(branch)} · ${hm(ts)}</h2><div class="hint">كاميرا الكاشير · من 20 ثانية قبل الحدث لـ40 بعده</div><video controls autoplay playsinline style="width:100%;border-radius:12px;background:#000;max-height:60vh" src="${url}"></video><div class="hint">لو الفيديو مش بيفتح: الـgateway بتاع الفرع واقع أو التسجيل أقدم من المتاح</div>`);
+}
+async function shShots(invoiceCode){
+  sheet('<h2>📸 لقطات الفاتورة</h2><div class="skel"></div>');
+  try{ const d = await db.collection('pos_cctv_invoice_snapshots').doc(String(invoiceCode)).get(); const x = d.exists ? d.data() : null; const shots = (x && x.shots) || {}; const keys = Object.keys(shots).filter(k=> shots[k] && shots[k].jpegData);
+    if(!keys.length){ sheet(`<h2>📸 لقطات الفاتورة ${esc(invoiceCode)}</h2><div class="empty">مفيش لقطات محفوظة للفاتورة دي</div>`); return; }
+    sheet(`<h2>📸 ${esc(invoiceCode)}</h2><div class="hint">${keys.length} لقطة · ${esc(x.camera||'')}</div>${keys.map(k=>`<div style="margin:8px 0"><img src="${shots[k].jpegData}" style="width:100%;border-radius:12px;background:#000"><div class="hint">${esc(k)}${shots[k].atMs?' · '+hm(shots[k].atMs):''}</div></div>`).join('')}`);
+  }catch(e){ sheet('<h2>📸</h2><div class="empty">تعذر: ' + esc(e && e.code) + '</div>'); }
+}
+async function shDecide(id, status, ts){
+  try{ if(!status){ await db.collection('office_cases').doc(id).delete(); delete sh.cases[id]; } else { await db.collection('office_cases').doc(id).set({ status, ts, at: Date.now(), by:'owner' }); sh.cases[id] = { status, ts }; } render(); }
+  catch(e){ toast('تعذر الحفظ: ' + (e && e.code)); }
+}
+function invoiceAny(id){ const all = windowSales(0); const s = all.find(x=> x.id===id); if(!s) return; const k = caiKey(saleMs(s)); if(!dayCache[k]) dayCache[k] = { rows:[], done:false }; if(!dayCache[k].rows.some(x=>x.id===id)) dayCache[k].rows.push(s); invoiceSheet(k, id); }
 
 /* ---------- ٥) المزيد ---------- */
 function rMore(){
   head('المزيد', '');
-  return `<div class="card"><div class="row first" onclick="O2.go('activity')"><div class="n"><b>🕵️ النشاط</b><small>مرتجعات · خصومات يدوية · الدرج · سلة اتمسحت · تعديل نقط عملاء · دفع · مخزون · حضور — بالعربي وبالمبلغ</small></div><span class="pill p-acc">افتح ›</span></div>
+  return `<div class="card"><div class="row first" onclick="O2.go('activity')"><div class="n"><b>🛡️ الحماية</b><small>نشاط مريب على الكاشير بالفيديو واللقطات: درج من غير بيع · أصناف اتمسحت · خصم بدون عميلة · استبدال نقط · مرتجع بدون فاتورة</small></div><span class="pill p-acc">افتح ›</span></div>
     <div class="row" onclick="O2.oldOffice()"><div class="n"><b>📷 الكاميرات</b><small>بتفتح من الشاشة القديمة لحد ما تتنقل هنا</small></div><span class="pill p-acc">افتح ›</span></div>
     <div class="row" onclick="O2.oldOffice()"><div class="n"><b>📦 المخزون والتقارير التفصيلية</b><small>الشاشة القديمة</small></div><span class="pill p-acc">افتح ›</span></div>
     <div class="row" onclick="O2.logout()"><div class="n"><b>🚪 خروج</b></div></div></div>
