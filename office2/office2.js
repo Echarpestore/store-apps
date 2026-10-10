@@ -180,13 +180,14 @@ async function fixForgotten(){
 }
 
 /* ---------- 🧭 التنقل ---------- */
-function go(name, arg){ screenName = name; screenArg = arg || null; window.scrollTo(0,0); document.querySelectorAll('#tabbar button').forEach(b=> b.classList.toggle('on', b.dataset.s === (name==='emp' ? 'staff' : (name==='branch' ? 'today' : (name==='activity' ? 'more' : name))))); render(); }
+const MODS = {};   // 🧩 شاشات إضافية في ملفات m-*.js — O2.register(name, { icon, title, desc, tab, render(arg), enter(arg) })
+function go(name, arg){ const prev = screenName; screenName = name; screenArg = arg || null; window.scrollTo(0,0); const tab = MODS[name] ? (MODS[name].tab||'more') : (name==='emp' ? 'staff' : (name==='branch' ? 'today' : (name==='activity' ? 'more' : name))); document.querySelectorAll('#tabbar button').forEach(b=> b.classList.toggle('on', b.dataset.s === tab)); if(MODS[name] && MODS[name].enter) { try{ MODS[name].enter(screenArg, prev); }catch(e){ console.error(e); } } render(); }
 function head(t, sub){ document.getElementById('hTitle').innerHTML = t; document.getElementById('hSub').textContent = sub || ''; }
 function render(){
   if(!booted) return;
   const el = document.getElementById('screen'); if(!el) return;
   try{
-    const fn = { today: rToday, staff: rStaff, emp: rEmp, inbox: rInbox, money: rMoney, more: rMore, branch: rBranch, activity: rActivity }[screenName] || rToday;
+    const fn = { today: rToday, staff: rStaff, emp: rEmp, inbox: rInbox, money: rMoney, more: rMore, branch: rBranch, activity: rActivity }[screenName] || (MODS[screenName] ? ()=> MODS[screenName].render(screenArg) : rToday);
     el.innerHTML = fn();
   }catch(e){ console.error(e); el.innerHTML = '<div class="card"><b>حصل خطأ في العرض</b><div class="hint">' + esc(e.message) + '</div></div>'; }
   const n = inboxItems().length; const b = document.getElementById('inboxN'); b.style.display = n ? '' : 'none'; b.textContent = n;
@@ -376,6 +377,8 @@ const O2 = {
   day(d){ const a = branchDay.split('-').map(Number); branchDay = caiKey(caiStamp(a[0],a[1],a[2],12,0) + d*DAY); if(branchDay > caiKey(Date.now())) branchDay = caiKey(Date.now()); render(); }, dayPick(v){ if(v) { branchDay = v; render(); } },
   logout(){ try{ sessionStorage.removeItem(SESS_KEY); }catch(e){} auth.signOut(); location.reload(); }
 };
+O2.register = (name, mod)=>{ MODS[name] = mod; if(booted && screenName==='more') render(); };
+O2.mods = MODS;
 window.O2 = O2;
 function sheet(html){ document.getElementById('sheetBody').innerHTML = html; document.getElementById('sheet').style.display = ''; }
 function closeSheet(){ document.getElementById('sheet').style.display = 'none'; }
@@ -595,9 +598,10 @@ function invoiceAny(id){ const all = windowSales(0); const s = all.find(x=> x.id
 function rMore(){
   head('المزيد', '');
   return `<div class="card"><div class="row first" onclick="O2.go('activity')"><div class="n"><b>🛡️ الحماية</b><small>نشاط مريب على الكاشير بالفيديو واللقطات: درج من غير بيع · أصناف اتمسحت · خصم بدون عميلة · استبدال نقط · مرتجع بدون فاتورة</small></div><span class="pill p-acc">افتح ›</span></div>
-    <div class="row" onclick="O2.oldOffice()"><div class="n"><b>📷 الكاميرات</b><small>بتفتح من الشاشة القديمة لحد ما تتنقل هنا</small></div><span class="pill p-acc">افتح ›</span></div>
-    <div class="row" onclick="O2.oldOffice()"><div class="n"><b>📦 المخزون والتقارير التفصيلية</b><small>الشاشة القديمة</small></div><span class="pill p-acc">افتح ›</span></div>
+    ${Object.keys(MODS).sort((a,b)=> (MODS[a].order||99) - (MODS[b].order||99)).map(k=>{ const m = MODS[k]; const n = m.badge ? m.badge() : 0; return `<div class="row" onclick="O2.go('${k}')"><div class="n"><b>${m.icon||''} ${esc(m.title||k)}</b><small>${esc(m.desc||'')}</small></div>${n?`<span class="pill p-bad">${n}</span>`:'<span class="pill p-acc">افتح ›</span>'}</div>`; }).join('')}
     <div class="row" onclick="O2.logout()"><div class="n"><b>🚪 خروج</b></div></div></div>
-    <div class="hint">Office 2 · v1 · البيانات من نفس القاعدة — أي تعديل هنا بيظهر في sales وOffice فورًا</div>`;
+    <div class="hint">Office 2 · v7 · البيانات من نفس القاعدة — أي تعديل هنا بيظهر في sales وOffice فورًا</div>`;
 }
+// 🧰 أدوات مشتركة للموديولات (m-*.js) — نفس الدوال اللي الشاشات الأساسية بتستخدمها
+O2.u = { db, auth, D, DAY, GLOW, esc, n0, hm, hm2min, caiParts, caiKey, caiStamp, caiDayStart, caiMonthRange, caiDow, dayName, AR_DAYS, SHIFT_AR, PAY_AR, sheet, closeSheet, toast, render, head, branches, activeEmps, empById, salesCfg, timeCfg, shiftDefs, brandOf, isSetup, loadDay, dayCache, daySales, saleMs, sumTotal, payBreak, paymentSummaryHtml, topItems, windowSales, invoiceAny, invoiceSheet, siteOf, SH_SITES, openShift, onBreak, go, screen: ()=> screenName, arg: ()=> screenArg };
 })();
