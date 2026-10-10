@@ -80,6 +80,14 @@ try{
   new PerformanceObserver(function(l){ l.getEntries().forEach(function(e){ window.ofPerf.longMs += e.duration; window.ofPerf.longN++; }); })
     .observe({ type:'longtask', buffered:true });
 }catch(e){}
+/* ⏱️ v699 — بعد تقرير المالك 09-10 (تجمّد 27.9ث × 20): نعرف **أنهي رسم** بيجمّد الشاشة.
+   أي دالة رسم بتاخد أكتر من 300ms بتتسجّل كصف «رسم: …» في التقرير. */
+function ofTimed(name, fn){
+  var t = ofNow();
+  try{ return fn(); }
+  finally{ var ms = ofNow() - t; if(ms > 300) ofPerfAdd('رسم: ' + name, 'render', 0, ms); }
+}
+window.ofTimed = ofTimed;
 function ofPerfShow(){
   var P = window.ofPerf, rows = P.rows.slice().sort(function(a, b){ return b.ms - a.ms; });
   var h = '<div style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center" onclick="this.remove()">'
@@ -89,8 +97,8 @@ function ofPerfShow(){
         : '<div style="color:#059669;font-weight:800;margin-bottom:4px">✓ الكاش على الجهاز شغال — بيتحمّل الجديد بس</div>')
     + '<b style="font-size:16px">⏱️ سرعة Office</b><div style="color:#666;margin:4px 0 10px">الشاشة اتجمدت ' + (P.longMs / 1000).toFixed(1) + ' ثانية (' + P.longN + ' مرة) · من الفتح: ' + ((ofNow() - P.t0) / 1000).toFixed(0) + ' ثانية</div>'
     + '<table style="width:100%;border-collapse:collapse;font-size:12px"><tr style="background:#f3f3f3"><th style="text-align:right;padding:5px">البيانات</th><th>من</th><th>عدد</th><th>وقت</th><th>بعد</th></tr>'
-    + rows.map(function(r){ return '<tr style="border-top:1px solid #eee' + (r.ms > 1500 ? ';background:#fff1f1' : '') + '"><td style="padding:5px">' + r.key + '</td><td>' + (r.src === 'cache' ? 'الجهاز' : 'السيرفر') + '</td><td>' + r.docs + '</td><td><b>' + (r.ms / 1000).toFixed(1) + 'ث</b></td><td>' + (r.at / 1000).toFixed(0) + 'ث</td></tr>'; }).join('')
-    + '</table><div style="color:#666;margin-top:10px">صوّر الشاشة دي وابعتها — الأحمر هو اللي بيبطّأ.</div></div></div>';
+    + rows.map(function(r){ return '<tr style="border-top:1px solid #eee' + (r.ms > 1500 ? ';background:#fecaca;color:#7f1d1d' : r.ms > 500 ? ';background:#fff7ed' : '') + '"><td style="padding:5px">' + r.key + '</td><td>' + (r.src === 'cache' ? 'الجهاز' : r.src === 'render' ? 'الرسم' : 'السيرفر') + '</td><td>' + r.docs + '</td><td><b>' + (r.ms / 1000).toFixed(1) + 'ث</b></td><td>' + (r.at > 600000 ? (r.at / 3600000).toFixed(1) + 'س ⏸' : (r.at / 1000).toFixed(0) + 'ث') + '</td></tr>'; }).join('')
+    + '</table><div style="color:#666;margin-top:10px">صوّر الشاشة دي وابعتها — الأحمر هو اللي بيبطّأ · ⏸ = الرد وصل بعد ما التطبيق رجع من الخلفية.</div></div></div>';
   document.body.insertAdjacentHTML('beforeend', h);
 }
 window.ofPerfShow = ofPerfShow;
@@ -3064,7 +3072,8 @@ function loadSales(){
     const seen={}; fresh.forEach(function(x){seen[x._id]=1;});
     D.sales=(D.sales||[]).filter(function(x){return !seen[x._id]&&_saleMs(x)>=cutMs;}).concat(fresh);
     _salesTo=0; D.sales.forEach(function(x){const t=_saleMs(x);if(t>_salesTo)_salesTo=t;});
-    renderTop(); try{fillExpenseBranchSel();renderCashHand();renderInbox();ofMaybeWeeklyPaymobReminder();renderGrowth();}catch(e){}
+    ofTimed('أعلى الشاشة', renderTop);
+    try{ ofTimed('فروع المصاريف', fillExpenseBranchSel); ofTimed('الكاش في اليد', renderCashHand); ofTimed('الوارد', renderInbox); ofMaybeWeeklyPaymobReminder(); ofTimed('النمو', renderGrowth); }catch(e){}
   }
   // أول فتحة: اعرض الـ30 يوم من IndexedDB بدون أي server read.
   const _t0 = ofNow();
@@ -3336,7 +3345,8 @@ function renderWhoRated(){
 }
 window.renderWhoRated = renderWhoRated;
 
-function renderActivityReports(){
+function renderActivityReports(){ return ofTimed('التقارير', _renderActivityReports); }
+function _renderActivityReports(){
   var box = document.getElementById('activityReports'); if(!box) return;
   var dl = dailyDownloads(D.customers, 14);
   var wl = dailyWelcome(D.customers, 14);
@@ -7596,7 +7606,8 @@ function ofSyncCreditBadge(){
 }
 window.ofSyncCreditBadge = ofSyncCreditBadge;
 
-function renderCreditAdmin(){
+function renderCreditAdmin(){ return ofTimed('الرصيد', _renderCreditAdmin); }
+function _renderCreditAdmin(){
   ofSyncCreditBadge();
   const host = document.getElementById('creditAdminBody');
   if(!host) return;

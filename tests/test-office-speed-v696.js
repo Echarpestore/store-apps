@@ -4,7 +4,9 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const O = fs.readFileSync(path.join(__dirname, '..', 'Office', 'office.js'), 'utf8');
 assert(!/CACHE_SIZE_UNLIMITED/.test(O) && /cacheSizeBytes: 150 \* 1024 \* 1024/.test(O), 'الكاش محدود (150MB) وبيتنضف لوحده — مش بلا حدود');
 const sd = O.slice(O.indexOf('function startData(){'), O.indexOf('function loadSales(){'));
-const deferred = ["collection('job_applications')", "collection('staff_docs')", "collection('staff_invites')", "collection('office_merchants')", "collection('office_merchant_txns')", "collection('sales_rewards')", "collection('gift_cards_public')", "collection('credit_ledger')", "collection('pos_test_inventory')"];
+const deferred = ["collection('job_applications')", "collection('staff_docs')", "collection('staff_invites')", "collection('office_merchants')", "collection('office_merchant_txns')", "collection('sales_rewards')", "collection('gift_cards_public')", "collection('credit_ledger')"];
+// v698: المخزون مبيتحمّلش كامل خالص — بيتقري بالباركود عند الحاجة (ofTopStock)
+assert(!/collection\('pos_test_inventory'\)\.get\(/.test(O) && /where\('barcode', 'in', c\)/.test(O), 'v698: مفيش تحميل كامل للمخزون — بالباركود بس');
 // كل واحدة جوّه ofLater: آخر «ofLater(function(){» قبلها أقرب من آخر «}, \d+);» قبلها
 for(const k of deferred){
   const i = sd.indexOf(k), before = sd.slice(0, i);
@@ -46,3 +48,20 @@ timers.forEach(f => f());
 assert(!els.ofLoadBar.classList.contains('on') && !els.ofLoadPill.classList.contains('on'), 'وبيختفوا بعدها');
 assert(/window\.ofLoad\.begin\(key\);/.test(O) && /\.then\(function\(\)\{ window\.ofLoad\.end\(key\); \}\);/.test(O), 'كل تحميل «من الجهاز الأول» متتبَّع (ومبيعلقش لو فشل)');
 assert(/\} finally \{ window\.ofLoad\.end\('activity_log'\); \}/.test(O), 'سجل النشاط: المؤشر بيخلص حتى لو التحميل وقع');
+
+// ---- v699: توقيت الرسم في تقرير السرعة
+(function(){
+  const src = fs.readFileSync(path.join(__dirname, '..', 'Office', 'office.js'), 'utf8');
+  const a = src.indexOf('function ofTimed('), b = src.indexOf('window.ofTimed = ofTimed;');
+  const ctx = { window:{}, ofPerf:{ rows:[] } };
+  let now = 0; ctx.ofNow = () => now; ctx.ofPerfAdd = (k, s, d, ms) => ctx.ofPerf.rows.push({ k, s, ms });
+  require('vm').runInNewContext(src.slice(a, b), ctx);
+  const r = ctx.ofTimed('x', () => { now += 800; return 7; });
+  assert(r === 7 && ctx.ofPerf.rows.length === 1 && ctx.ofPerf.rows[0].k === 'رسم: x' && ctx.ofPerf.rows[0].s === 'render', 'v699: رسم 800ms بيتسجّل كصف «رسم: x»');
+  ctx.ofTimed('y', () => { now += 100; });
+  assert(ctx.ofPerf.rows.length === 1, 'v699 سلبي: رسم 100ms مبيتسجّلش');
+  let threw = false; try{ ctx.ofTimed('z', () => { now += 900; throw new Error('boom'); }); }catch(e){ threw = true; }
+  assert(threw && ctx.ofPerf.rows.length === 2, 'v699: الخطأ بيعدّي والوقت بيتسجّل برضه');
+  assert(/ofTimed\('أعلى الشاشة', renderTop\)/.test(src) && /function renderActivityReports\(\)\{ return ofTimed\('التقارير', _renderActivityReports\); \}/.test(src), 'v699: الرسومات الكبيرة متغلّفة');
+  assert(/office\.js\?v=699/.test(fs.readFileSync(path.join(__dirname,'..','Office','index.html'),'utf8')) && /echarpe-office-v755/.test(fs.readFileSync(path.join(__dirname,'..','Office','sw.js'),'utf8')), 'v699: النسخ اترفعت');
+})();
