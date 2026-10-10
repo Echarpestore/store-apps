@@ -31,7 +31,7 @@
     autoTargetWeeks: 8,         // كام أسبوع ورا بنحسب منهم المتوسط
     autoTargetFactor: 1.0,      // الهدف = ((متوسط الموظف + متوسط الفرع) ÷ 2) × المعامل
     bonusWeights: { commit: 40, rating: 30, sales: 30 },
-    bonusMinScore: 40,          // أقل من كده = مفيش حافز
+    bonusMinScore: 60,          // أقل من كده = مفيش حافز (الالتزام لوحده 40 مش كفاية — لازم تقييم أو مبيعات)
     alertLateCount: 4, alertWindowDays: 14
   };
   function cfgOf(raw){

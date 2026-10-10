@@ -658,7 +658,8 @@ window.renderTimeSettings = function(){
       <input id="tsBankOn" type="checkbox" ${bankOn?'checked':''} onfocus="this.closest('#timeSettingsForm').dataset.editing='1'" onblur="this.closest('#timeSettingsForm').dataset.editing='0'" style="width:22px;height:22px;flex-shrink:0;">
     </label>
     ${row('فترة السماح (دقيقة)', 'tsBankGrace', tb.bankGraceMin, 'تأخير أو فرق أقل من كده مش بيتحسب')}
-    ${row('أقل حافز أسبوعي (ج)', 'tsBonusMin', tb.bonusMin, 'عند 40 نقطة من 100')}
+    ${row('أقل نقاط للحافز (من 100)', 'tsBonusMinScore', tb.bonusMinScore, 'الالتزام 40 + تقييم 30 + مبيعات 30 · أقل من كده = صفر')}
+    ${row('أقل حافز أسبوعي (ج)', 'tsBonusMin', tb.bonusMin, 'عند أقل النقاط')}
     ${row('أعلى حافز أسبوعي (ج)', 'tsBonusMax', tb.bonusMax, 'عند 100 نقطة')}
     ${row('تأخير الأسبوع المسموح للالتزام (دقيقة)', 'tsBonusLate', tb.bonusLateMinWeek, 'إجمالي الأسبوع · ضعفه = نص درجة الالتزام')}
     ${row('أقل تقييم عملاء للحافز (من 4)', 'tsBonusRating', tb.bonusRatingMin)}
@@ -712,7 +713,7 @@ window.saveTimeSettings = async function(){
   const payload = {
     bankEnabled, bankFrom,
     bankGraceMin: n('tsBankGrace', tb.bankGraceMin),
-    bonusMin: n('tsBonusMin', tb.bonusMin), bonusMax: n('tsBonusMax', tb.bonusMax),
+    bonusMin: n('tsBonusMin', tb.bonusMin), bonusMax: n('tsBonusMax', tb.bonusMax), bonusMinScore: Math.max(1, Math.min(100, n('tsBonusMinScore', tb.bonusMinScore))),
     bonusLateMinWeek: n('tsBonusLate', tb.bonusLateMinWeek), bonusRatingMin: f('tsBonusRating', tb.bonusRatingMin),
     bonusPointsWeek: n('tsBonusPts', tb.bonusPointsWeek), alertLateCount: n('tsAlertLate', tb.alertLateCount),
     bonusPointsMode: (document.querySelector('#tsBonusPtsMode') || {}).value === 'fixed' ? 'fixed' : 'auto',

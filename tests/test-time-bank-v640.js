@@ -68,17 +68,17 @@ assertEq(b.score, 100, 'أسبوع مثالي = 100');
 assertEq(b.amount, 150, '…= أعلى حافز');
 b = TB.weekBonus({ lateMinTotal: 15, forgotCount: 0, avgRating: 3.8, ratingCount: 6, points: 30 }, {});
 assertEq(b.parts.commit, 20, 'تأخير 15 د (≤ ضعف المسموح) = نص الالتزام');
-assertEq(b.amount, 115, '80 نقطة → 115 ج');
+assertEq(b.amount, 100, '80 نقطة → 100 ج');
 b = TB.weekBonus({ lateMinTotal: 40, forgotCount: 0, avgRating: 3.8, ratingCount: 6, points: 30 }, {});
 assertEq(b.parts.commit, 0, 'سلبي: تأخير 40 د = صفر التزام');
-assertEq(b.amount, 85, '60 نقطة → 85 ج (خطّي من 50 عند 40 لـ150 عند 100)');
+assertEq(b.amount, 50, '60 نقطة = الحد الأدنى → 50 ج (خطّي من 50 عند 60 لـ150 عند 100)');
 b = TB.weekBonus({ lateMinTotal: 0, forgotCount: 1, avgRating: 3.8, ratingCount: 6, points: 30 }, {});
 assertEq(b.parts.commit, 0, 'سلبي: شيفت منسي = صفر التزام');
 b = TB.weekBonus({ lateMinTotal: 0, forgotCount: 0, avgRating: null, ratingCount: 0, points: 0 }, { bonusPointsWeek: 50 });
 assertEq(b.score, 40, 'من غير تقييم ولا نقاط: الالتزام بس 40');
-assertEq(b.amount, 50, '…= أقل حافز 50');
-b = TB.weekBonus({ lateMinTotal: 0, forgotCount: 0, avgRating: null, ratingCount: 0, points: 0 }, { bonusPointsWeek: 50, bonusMinScore: 50 });
-assertEq(b.amount, 0, 'سلبي: أقل من الحد = مفيش حافز');
+assertEq(b.amount, 0, '⭐ سلبي: الالتزام لوحده (40) مش كفاية — مفيش حافز من غير تقييم أو مبيعات (قرار المالك 10-10)');
+b = TB.weekBonus({ lateMinTotal: 0, forgotCount: 0, avgRating: null, ratingCount: 0, points: 0 }, { bonusPointsWeek: 50, bonusMinScore: 40 });
+assertEq(b.amount, 50, 'لو المالك نزّل الحد لـ40: الالتزام لوحده = أقل حافز');
 b = TB.weekBonus({ lateMinTotal: 0, forgotCount: 0, avgRating: 2.0, ratingCount: 3, points: 25 }, { bonusPointsWeek: 50 });
 assertEq(b.parts.rating, 17, 'تقييم 2/3.5 = 17 من 30 (نسبي)');
 assertEq(b.parts.sales, 15, 'نقاط 25/50 = 15 من 30');
@@ -206,8 +206,8 @@ assert(!/قبل نهاية شيفته بـ15|متنساش تسجّل الخرو�
 const ui = fs.readFileSync(path.join(ROOT,'sales','sales-ui.js'),'utf8');
 assert(/id="tsBankOn"/.test(ui) && /tsBankGrace/.test(ui) && /tsBonusMin/.test(ui) && /tsAlertLate/.test(ui) && /bankEnabled, bankFrom,/.test(ui), 'إعدادات رصيد الوقت والحافز');
 const html = fs.readFileSync(path.join(ROOT,'sales','index.html'),'utf8');
-assert(html.indexOf('time-bank.js?v=642') > 0 && html.indexOf('time-bank.js?v=642') < html.indexOf('sales-app.js?v=642') && /sales-ui\.js\?v=642/.test(html), 'time-bank.js قبل sales-app.js v641');
-assert(/store-apps-shell-v642/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
+assert(html.indexOf('time-bank.js?v=643') > 0 && html.indexOf('time-bank.js?v=643') < html.indexOf('sales-app.js?v=643') && /sales-ui\.js\?v=643/.test(html), 'time-bank.js قبل sales-app.js v641');
+assert(/store-apps-shell-v643/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
 // v641 — طلب المالك: مفيش مبلغ بالجنيه للموظف، والمكافآت القديمة بتختفي في وضع الرصيد
 const _card = extractFn(src, 'function bankCardHtml(');
 assert(!/TimeBank\.money|هيتخصم <b>|أوفرتايم لحد دلوقتي <b>/.test(_card) && /\$\{b\.amount\} ج/.test(_card), 'سلبي: كارت الموظف مفيهوش مبلغ الخصم/الأوفرتايم بالجنيه — الحافز بس بالجنيه');
@@ -215,7 +215,7 @@ assert(/id="dh_legacyRewards"/.test(html) && /_lg\.style\.display = _bankNow \? 
 // ---------- ٥) Office بنفس المحرك ----------
 const of = fs.readFileSync(path.join(ROOT,'Office','office.js'),'utf8');
 assert(/TimeBank\.enabledFor\(cfg, start\.getTime\(\)\)/.test(of) && /bank=TimeBank\.monthSummary\(rangeShifts,cfg,_req\)/.test(of) && /x\.type!=='late'&&x\.type!=='early'/.test(of), 'Office: المرتب بنفس محرك الرصيد وبيتجاهل بنود التأخير القديمة');
-assert(/\.\.\/sales\/time-bank\.js\?v=642/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
+assert(/\.\.\/sales\/time-bank\.js\?v=643/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
 
 // ---------- ٦) v642 — الهدف الأسبوعي التلقائي لكل موظف (متوسطه + متوسط الفرع) ----------
 (function(){

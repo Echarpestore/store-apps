@@ -5106,9 +5106,10 @@ function bankCardHtml(emp){
       ? `اقعد <b>${Math.abs(sum.balanceMin)} د</b> زيادة قبل آخر الشهر وبيتصفّر لوحده ✅ — اللي يفضل سالب بيتخصم من المرتب`
       : (sum.balanceMin > 0 ? `<b>+${sum.balanceMin} د</b> وقت زيادة بتتحسب لك أوفرتايم 👏` : 'رصيدك صفر — ملتزم بالمواعيد ✅')}</div></div>`;
   const part = (k, lbl) => `<div class="raceItem"><span>${lbl}</span><span style="font-weight:800;color:${b.parts[k]>=b.max[k]?'var(--good)':(b.parts[k]>0?'#e0a020':'var(--bad)')}">${b.parts[k]} / ${b.max[k]}</span></div>`;
-  const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+st.target+' · ':''}= ${tc.bonusMax} ج</div>` : '';
-  const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span></div>
-    <div style="font-size:24px;font-weight:900;color:${b.amount?'var(--good)':'var(--bad)'};direction:ltr;text-align:right">${b.amount} ج <small style="font-size:12px;color:var(--sub)">(${b.score}/100)</small></div>
+  const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.amount?'':'أقل حافز من '+tc.bonusMinScore+' نقطة · '}${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+st.target+' · ':''}= ${tc.bonusMax} ج</div>` : '';
+  const _dayN = Math.min(7, Math.max(1, Math.floor((now - w.start) / 86400000) + 1));
+  const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span><small style="color:var(--sub);font-weight:600">يوم ${_dayN} من 7 · بيتحسب نهائي يوم الجمعة</small></div>
+    <div style="font-size:24px;font-weight:900;color:${b.amount?'var(--good)':'var(--bad)'};direction:ltr;text-align:right">${b.amount} ج <small style="font-size:12px;color:var(--sub)">(${b.score}/100 لحد دلوقتي)</small></div>
     ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+(st.target>0?' من '+st.target:'')+' ن)')}${next}</div>`;
   return bal + bonus;
 }
