@@ -519,6 +519,8 @@
         function(rows){
           CST.convs = rows;
           renderBadge();
+          // 🔔 v762: تنبيه رسايل جديدة (صوت/اهتزاز/شريط/إشعار) — chat-alert.js
+          try{ if(window.ChatAlert) window.ChatAlert.update(rows, { open: !!CST.open, activeId: CST.activeId, branch: myBranch(), filterMine: !!CST.filterMine }); }catch(_e){}
           if(CST.open && !CST.activeId) renderList();
           if(CST.open && CST.activeId) renderThreadHead();
         }, function(e){ console.warn('cc convs', e && e.code); });

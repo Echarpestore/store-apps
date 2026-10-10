@@ -189,6 +189,10 @@ body{margin:0;font-family:'Cairo',-apple-system,'Segoe UI',Tahoma,Arial,sans-ser
   outline:none !important; border-color:#2563EB !important;
   box-shadow:0 0 0 4px rgba(37,99,235,.12) !important;
 }
+/* v761: شريط البحث لازم يفضل عربي من اليمين دايمًا.
+   على ويندوز Ctrl+Shift (يمين) بيقلب الحقل المفوكس LTR وبيحط style مباشر عليه —
+   !important هنا بتغلب الـstyle المباشر، فالضغطة بالغلط مبتأثرش. */
+#searchBar{ direction:rtl !important; text-align:right !important; }
 .qbx-quickbtn{
   border-radius:13px !important; border:none !important; width:50px !important;
   height:50px !important; font-size:21px !important;
@@ -1928,7 +1932,7 @@ body.on-dashboard .badge-test{ display:block; }
       <div class="qbx-center">
         <div class="sale-top">
           <div class="search-wrap">
-            <input type="text" id="searchBar" placeholder="&lt; اكتب اسم المنتج أو امسح الباركود هنا &gt;" autocomplete="off">
+            <input type="text" id="searchBar" dir="rtl" placeholder="&lt; اكتب اسم المنتج أو امسح الباركود هنا &gt;" autocomplete="off">
             <div id="suggestBox"></div>
           </div>
         </div>
@@ -2153,7 +2157,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="cctv-staff-state.js?v=644"></script>
 <script src="cctv-timeline.js?v=747"></script>
 <script src="cctv-invoice.js?v=604"></script>
-<script src="pos-sale.js?v=756"></script>
+<script src="pos-sale.js?v=761"></script>
 <script src="pos-live.js?v=411"></script>
 <script src="app.js?v=760"></script>
 <script src="receive-core.js?v=760"></script>
@@ -2223,6 +2227,7 @@ body.on-dashboard .badge-test{ display:block; }
 <script src="chat-core.js"></script>
 <!-- 💬 شاشة شات العملاء (مشتركة مع Office) — بتحقن نفسها -->
 <script src="chat-time.js?v=679"></script>
-<script src="chat-staff-ui.js?v=680"></script>
+<script src="chat-alert.js?v=762"></script>
+<script src="chat-staff-ui.js?v=762"></script>
 </body>
 </html>

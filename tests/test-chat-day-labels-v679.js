@@ -44,7 +44,7 @@ assert(ui.includes('window.chatListStamp('), 'renderList بيستخدم طابع
 assert(ui.includes('.ccDay{'), 'ستايل الفاصل موجود');
 for(const f of ['pos/index.html', 'Office/index.html', 'sales/index.html']){
   const h = fs.readFileSync(path.join(root, f), 'utf8');
-  const i1 = h.indexOf('chat-time.js?v=679'), i2 = h.indexOf('chat-staff-ui.js?v=680');
+  const i1 = h.indexOf('chat-time.js?v=679'), i2 = h.search(/chat-staff-ui\.js\?v=(680|762)/);
   assert(i1 > 0 && i2 > i1, f + ': chat-time.js?v=679 قبل chat-staff-ui.js?v=680');
 }
 assert(/pos-shell-v75[2-9]|pos-shell-v7[6-9]\d/.test(fs.readFileSync(path.join(root, 'pos', 'sw.js'), 'utf8')), 'POS CACHE_NAME اترفع');

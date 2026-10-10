@@ -24,7 +24,7 @@ for(const app of ['loyalty', 'glow']){
 assert(/loyalty-shell-v7(0[1-9]|[1-9]\d)/.test(fs.readFileSync(path.join(root, 'loyalty', 'sw.js'), 'utf8')), 'loyalty CACHE_NAME اترفع');
 assert(/glow-loyalty-v(8[6-9]|9\d)/.test(fs.readFileSync(path.join(root, 'glow', 'sw.js'), 'utf8')), 'glow CACHE_NAME اترفع');
 for(const f of ['pos/index.html', 'Office/index.html', 'sales/index.html'])
-  assert(fs.readFileSync(path.join(root, f), 'utf8').includes('chat-staff-ui.js?v=680'), f + ': chat-staff-ui v680');
+  assert(fs.readFileSync(path.join(root, f), 'utf8').match(/chat-staff-ui\.js\?v=(680|762)/), f + ': chat-staff-ui v680+');
 
 // محاكاة منطق العرض كدالة نقية — نفس الشرط حرفيًا
 function show(m){ return !!(m.img && (m.tryon || m.barcode)); }

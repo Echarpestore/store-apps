@@ -1071,11 +1071,15 @@ async function openInvoiceForReturn(code){
       document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">⚠️ فيه فاتورتين بنفس كود المسح<br><span style="font-size:12px;">افتحي الفاتورة من البحث برقم الفاتورة المكتوب فوق</span></div>';
       return;
     }
-    if(snap.empty){
-      document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">مفيش فاتورة بالكود ده 🤔<br><span style="font-size:11px;">'+code+'</span></div>';
+    let doc = snap.empty ? null : snap.docs[0];
+    // ✍️ v761 — بلاغ المالك 09-10: «مفيش فاتورة بالكود ده» لـFTGLO5800-CNNSTX. الكاشير كتب الكود بإيده من شاشة
+    //    التطبيق: حرف O في «GLO» اتكتب صفر (الاتنين شبه بعض في خط التطبيق). لو الكود بالشكل FT<فرع><رقم>-<توكن>
+    //    ومتلقاش حرفيًا ← ندوّر برقم الفاتورة + كود الفرع في نفس السلسلة، ونقبل بس لو **تطابق واحد**.
+    if(!doc){ try{ doc = await findInvoiceByTypedCode(code); }catch(_e){ doc = null; } }
+    if(!doc){
+      document.getElementById('returnInvoiceBody').innerHTML = '<div class="empty-cart">مفيش فاتورة بالكود ده 🤔<br><span style="font-size:11px;">'+esc(code)+'</span><br><span style="font-size:12px;color:var(--muted);">امسحي الباركود اللي في التطبيق بالماسح بدل الكتابة — أو ابحثي برقم الفاتورة</span></div>';
       return;
     }
-    const doc = snap.docs[0];
     const s = doc.data();
     // Glow يرجّع Glow بس، وecharpe يرجّع echarpe بس (أي فرع echarpe)
     const saleIsGlow = GLOW_BRANCHES.includes(s.branch);
@@ -4385,6 +4389,29 @@ async function _findReturnOrigin(line){
   return null;
 }
 window._findReturnOrigin = _findReturnOrigin;
+
+// ✍️ v761 — يحلّل كود مكتوب بإيد الكاشير (FT<كود فرع><رقم>-<توكن>) ويطبّع لبس O/0 وI/1 في جزء الفرع (الفرع حروف بس).
+function parseTypedInvoiceCode(code){
+  // كود الفرع 3 حروف (branchCode) — ممكن يتكتبوا بالغلط أرقام شبههم (O→0 · I→1)
+  const m = /^FT([A-Z0-9]{3})(\d+)(?:-([A-Z0-9]{1,8}))?$/i.exec(String(code || '').trim().toUpperCase());
+  if(!m) return null;
+  const br = m[1].replace(/0/g, 'O').replace(/1/g, 'I');
+  if(!/^[A-Z]{3}$/.test(br)) return null;
+  const no = parseInt(m[2], 10);
+  if(!(no > 0)) return null;
+  return { branchCode: br, invoiceNo: no, token: m[3] || '' };
+}
+window.parseTypedInvoiceCode = parseTypedInvoiceCode;
+// بيرجّع مستند الفاتورة لو فيه تطابق **واحد** على (رقم الفاتورة + كود الفرع + نفس السلسلة) — وإلا null. مبنخمّنش.
+async function findInvoiceByTypedCode(code){
+  const p = parseTypedInvoiceCode(code);
+  if(!p) return null;
+  const hereGlow = GLOW_BRANCHES.includes(currentBranch);
+  const q = await db.collection(TEST_SALES).where('invoiceNo','==', p.invoiceNo).limit(10).get();
+  const hits = q.docs.filter(d => { const b = (d.data() || {}).branch; return GLOW_BRANCHES.includes(b) === hereGlow && branchCode(b) === p.branchCode; });
+  return hits.length === 1 ? hits[0] : null;
+}
+window.findInvoiceByTypedCode = findInvoiceByTypedCode;
 
 function buildInvoiceCode(branch, invoiceNo, saleId){
   const token = String(saleId || '').replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase() || 'LOCAL';
