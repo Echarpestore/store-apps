@@ -45,7 +45,9 @@ function baseData(){ return {
     { id:'l10', type:'manual_drawer_open', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,10,16,0), cctvEventId:'ev10' },
     { id:'l11', type:'manual_drawer_open', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,10,12,31) },
     { id:'l12', type:'cart_abandoned', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,10,12,25), itemCount:3, value:1200 },
-    { id:'l13', type:'cart_abandoned', branch:'Glow', employeeName:'دينا', ts:D(2026,10,9,15,0), itemCount:1, value:30 }
+    { id:'l13', type:'cart_abandoned', branch:'Glow', employeeName:'دينا', ts:D(2026,10,9,15,0), itemCount:1, value:30 },
+    { id:'l14', type:'item_removed', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,10,12,55), sid:'c1', name:'طرحة كريب', barcode:'777', qty:1, price:400, value:400, inCartSec:20 },
+    { id:'l15', type:'item_removed_late', branch:'Glow', employeeName:'دينا', ts:D(2026,10,9,13,0), sid:'c9', name:'سكارف حرير', barcode:'888', qty:2, price:300, value:600, inCartSec:200 }
   ],
   office_cases: [], pos_cctv_invoice_snapshots: [],
   pos_test_settings: [ { id:'office_gate', hash:null }, { id:'advances_cfg', closeDay:6, openDay:12 } ]
