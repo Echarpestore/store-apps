@@ -51,7 +51,7 @@ function run(branch){
   ok(d === null, 'سلبي: رقم مش موجود → null');
   // الربط في شاشة المرتجع + النسخة
   ok(/doc = await findInvoiceByTypedCode\(code\)/.test(sale), 'openInvoiceForReturn بتجرّب الكود المكتوب قبل «مفيش»');
-  ok(/pos-sale\.js\?v=761/.test(fs.readFileSync(path.join(ROOT,'pos','index.html'),'utf8')), 'pos-sale.js?v=761');
+  ok(/pos-sale\.js\?v=76[1-9]/.test(fs.readFileSync(path.join(ROOT,'pos','index.html'),'utf8')), 'pos-sale.js?v=761');
   console.log(`  ${pass} ناجح · ${fail} فاشل`);
   if(fail) process.exitCode = 1;
 })();

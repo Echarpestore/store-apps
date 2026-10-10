@@ -1843,6 +1843,14 @@ function setCustState(state, name, phone){
       : st === 'new'  ? '🆕 مش مسجّل'
       : st === 'bad'  ? '⚠️ الرقم ناقص'
       : '';
+    // 🏅 TIERS-v1: شارة المستوى جنب الاسم — بس لو الميزة مفعّلة (loyalty.tiers.enabled)
+    try{
+      if(st === 'found' && window.Tiers && Tiers.enabled(loyaltyRedemptionConfig) && window._custDocForTier){
+        const _b = pointsFieldFor(currentBranch) === 'points_glow' ? 'glow' : 'echarpe';
+        const _p = Tiers.pointsFor(window._custDocForTier, _b, Date.now(), loyaltyRedemptionConfig.tiers);
+        info.insertAdjacentHTML('beforeend', ' ' + Tiers.chipHtml(Tiers.tierFor(_p, loyaltyRedemptionConfig.tiers)));
+      }
+    }catch(_e){}
   }
   if(pts && st !== 'found') pts.textContent = '';
   // 🛡️ خانة الاسم بتتقفل بالـCSS لما الحالة تتغيّر. لو التركيز كان عليها،
@@ -2012,6 +2020,7 @@ async function refreshCustomerInfo(){
       if(_nm2) _nm2.value = d.name || '';   // الاسم بيبان في الشريط
       custActivatedOffers = d.activatedOffers || {};   // عروض العميل المفعّلة
       custPointsBalance = Number(d[pointsFieldFor(currentBranch)]) || 0;   // 🛡️ الرصيد الحقيقي
+      window._custDocForTier = d;   // 🏅 TIERS-v1: للشارة في setCustState
       // 💳 رصيد الفلوس — منفصل تمامًا عن النقط. للعرض بس؛
       //    الفنكشن بتتأكد من الرصيد الحقيقي وقت الصرف.
       // 🏷️ الرصيد لكل براند لوحده: فرع Glow يقرا `credit_glow` والباقي `credit`
@@ -5277,6 +5286,14 @@ window.returnPointsDeduction = returnPointsDeduction;
         lastVisit: firebase.firestore.FieldValue.serverTimestamp()
       };
       custUpdate[pf] = firebase.firestore.FieldValue.increment(netPointsChange);   // نقاط الفرع الصح
+      // 🏅 TIERS-v1: النقط المكتسبة بالشهر (صافي المرتجع، من غير الاستبدال) — المستوى بيتحسب منها على آخر 12 شهر.
+      //    بتتكتب من دلوقتي حتى والميزة مقفولة عشان يوم الإطلاق المستويات تبقى جاهزة.
+      try{
+        const _tierDelta = _earnedPart - _retPointsDeduct - _unlinkedDeduct;
+        if(_tierDelta && window.Tiers){
+          custUpdate[Tiers.fieldFor(pf === 'points_glow' ? 'glow' : 'echarpe') + '.' + Tiers.monthKey(Date.now())] = firebase.firestore.FieldValue.increment(_tierDelta);
+        }
+      }catch(_e){}
       if(pendingRedemption) custUpdate.pendingRedeem = firebase.firestore.FieldValue.delete();   // نمسح الطلب بعد ما اتنفّذ
       if(appliedReward) custUpdate.rewards = firebase.firestore.FieldValue.arrayRemove(appliedReward);   // نمسح المكافأة اللي اتستخدمت
       cart.forEach(l=>{

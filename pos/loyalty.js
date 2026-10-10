@@ -125,7 +125,33 @@ async function renderLoyaltyScreen(){
         <input id="soc_${brand}_sup" value="${String(sc.support||'').replace(/"/g,'&quot;')}" placeholder="واتساب خدمة العملاء — الزر الأخضر فوق في التطبيق (اختياري)" style="padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); direction:ltr; text-align:center;">
       </div>
     </div>`; };
+  // 🏅 TIERS-v1 — مستويات العميلة (مخفية لحد ما المالك يفعّلها)
+  const _tc = (typeof Tiers !== 'undefined') ? Tiers.cfgOf(loyaltyRedemptionConfig.tiers) : null;
+  const tiersCard = !_tc ? '' : `
+    <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
+      <div style="font-weight:800; margin-bottom:4px;">🏅 مستويات العميلة (برونز · سيلفر · جولد · بلاتينيوم)</div>
+      <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">المستوى بيتحسب على النقط <b>المكتسبة في آخر ${_tc.windowMonths} شهر</b> (الاستبدال مبيوقّعش المستوى). برونز لكل عميلة من أول يوم. طول ما الميزة مقفولة مفيش حاجة بتظهر في أي تطبيق — بس النقط الشهرية بتتسجّل من دلوقتي.</p>
+      <label style="display:flex; align-items:center; gap:8px; font-weight:800; margin-bottom:10px; cursor:pointer;">
+        <input id="tiers_on" type="checkbox" ${_tc.enabled?'checked':''} style="width:20px;height:20px;"> ${_tc.enabled ? '🟢 الميزة شغالة — ظاهرة للعميلات' : '🔴 مقفولة — جاهزة للإطلاق'}
+      </label>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:13.5px; margin-bottom:8px;">
+        <span>🥈 سيلفر من</span><input id="tiers_silver" type="number" value="${_tc.silver}" style="width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:700;">
+        <span>🥇 جولد من</span><input id="tiers_gold" type="number" value="${_tc.gold}" style="width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:700;">
+        <span>💎 بلاتينيوم من</span><input id="tiers_platinum" type="number" value="${_tc.platinum}" style="width:70px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center; font-weight:700;">
+        <span>نقطة</span>
+        <span style="color:var(--muted); font-size:11.5px; width:100%;">≈ ${_tc.silver*c.pointsPerEGP} / ${_tc.gold*c.pointsPerEGP} / ${_tc.platinum*c.pointsPerEGP} ج.م مشتريات في ${_tc.windowMonths} شهر (بسعر النقطة الحالي ${c.pointsPerEGP} ج.م)</span>
+      </div>
+      <div style="margin:6px 0 10px; font-weight:800; font-size:13px;">✨ مميزات كل مستوى — انت اللي بتحددها (اللي هنا هو اللي العميلة هتشوفه بالظبط)</div>
+      <div id="tiersPerksEditor">${tiersPerksEditorHtml(_tc)}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <button class="secondary" onclick="tiersBackfill()" style="padding:9px 14px;">🧮 احسب نقط كل العميلات من فواتير آخر ${_tc.windowMonths} شهر</button>
+        <button class="secondary" onclick="tiersPreview()" style="padding:9px 14px;">👀 معاينة شاشة العميلة</button>
+        <span id="tiersBfStatus" style="font-size:12px; color:var(--muted);"></span>
+      </div>
+      <div id="tiersBfResult" style="margin-top:8px; font-size:12.5px;"></div>
+    </div>`;
   document.getElementById('loyaltyScreenWrap').innerHTML = `
+    ${tiersCard}
     <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:14px;">
       <div style="font-weight:800; margin-bottom:4px;">💰 معدل كسب النقط</div>
       <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">كل ما العميل يشتري بمبلغ معين، ياخد نقطة ولاء واحدة تلقائي.</p>
@@ -209,6 +235,23 @@ async function saveLoyaltyConfig(){
     whatsapp: _socCleanWa(_socState[brand].whatsapp)
   });
   config.social = { echarpe: readSocial('echarpe'), glow: readSocial('glow') };
+  // 🏅 TIERS-v1
+  if(typeof Tiers !== 'undefined' && document.getElementById('tiers_on')){
+    const readPerks = (t) => Array.from(document.querySelectorAll('#tiersPerksEditor .tp-row[data-tier="'+t+'"]')).map(r => ({
+      icon: (r.querySelector('.tp-icon').value || '✨').trim(), t: (r.querySelector('.tp-t').value || '').trim(),
+      s: (r.querySelector('.tp-s').value || '').trim(), ctr: (r.querySelector('.tp-ctr').value || '').trim()
+    })).filter(p => p.t).map(p => { if(!p.ctr) delete p.ctr; if(!p.s) delete p.s; return p; });
+    const tiers = {
+      enabled: document.getElementById('tiers_on').checked,
+      silver: parseInt(document.getElementById('tiers_silver').value) || 60,
+      gold: parseInt(document.getElementById('tiers_gold').value) || 120,
+      platinum: parseInt(document.getElementById('tiers_platinum').value) || 200,
+      windowMonths: Tiers.cfgOf(loyaltyRedemptionConfig.tiers).windowMonths,
+      perks: { bronze: readPerks('bronze'), silver: readPerks('silver'), gold: readPerks('gold'), platinum: readPerks('platinum') }
+    };
+    if(!(tiers.silver < tiers.gold && tiers.gold < tiers.platinum)){ showToast('المستويات لازم تصاعدية: سيلفر < جولد < بلاتينيوم', 'err'); return; }
+    config.tiers = tiers;
+  }
   for(const b of ['echarpe','glow']){
     if(config.welcome[b].enabled && config.welcome[b].value <= 0){
       showToast('اكتب قيمة مكافأة الترحيب لـ ' + (b==='glow'?'Glow':'إيشارب'), 'err'); return;
@@ -248,3 +291,97 @@ function printAppQR(){
   w.document.close();
   if(typeof reclaimWindowFocus === 'function') reclaimWindowFocus(400);
 }
+
+
+/* ============================================================
+   🏅 TIERS-v1 — حساب النقط الشهرية لكل العميلات من الفواتير (مرة واحدة قبل الإطلاق،
+   وممكن تتكرر — بتكتب الخريطة كاملة فبتصحّح أي فرق).
+   · شهر بشهر، استعلامين لكل شهر (createdAt للسيرفر + createdAtMs لفواتير الأوفلاين — درس v751)
+   · النقط = loyaltyPointsEarned (بالسالب للمرتجع) · البراند من الفرع (Glow ولا باقي الفروع)
+   ============================================================ */
+function tiersAggregate(docs, nowMs, months){
+  const keys = new Set(Tiers.monthKeys(nowMs, months)); const out = {}; const seen = new Set();
+  docs.forEach(d => {
+    if(!d || seen.has(d.id)) return; seen.add(d.id);
+    const x = d.data ? d.data() : d; if(!x) return;
+    const phone = String(x.customerPhone || '').trim(); const pts = Number(x.loyaltyPointsEarned) || 0;
+    if(!phone || !pts) return;
+    const ms = (x.createdAt && typeof x.createdAt.toMillis === 'function') ? x.createdAt.toMillis() : (Number(x.createdAtMs) || 0);
+    if(!ms) return;
+    const k = Tiers.monthKey(ms); if(!keys.has(k)) return;
+    const f = Tiers.fieldFor((typeof GLOW_BRANCHES !== 'undefined' && GLOW_BRANCHES.includes(x.branch)) ? 'glow' : 'echarpe');
+    out[phone] = out[phone] || {}; out[phone][f] = out[phone][f] || {}; out[phone][f][k] = (out[phone][f][k] || 0) + pts;
+  });
+  return out;
+}
+window.tiersAggregate = tiersAggregate;
+
+async function tiersBackfill(){
+  if(!hasPerm('canChangePrices')){ showToast('مفيش صلاحية', 'err'); return; }
+  const st = document.getElementById('tiersBfStatus'), res = document.getElementById('tiersBfResult');
+  const months = Tiers.cfgOf(loyaltyRedemptionConfig.tiers).windowMonths;
+  if(!confirm('هيقرا فواتير آخر ' + months + ' شهر من كل الفروع (ممكن ياخد دقايق على جهاز الكاشير). نكمّل؟')) return;
+  const now = Date.now(); const keys = Tiers.monthKeys(now, months);
+  const docs = []; let reads = 0;
+  try{
+    for(let i = keys.length - 1; i >= 0; i--){
+      const k = keys[i]; const y = +k.slice(0,4), m = +k.slice(5,7);
+      const from = new Date(y, m-1, 1).getTime(), to = new Date(y, m, 1).getTime();
+      st.textContent = '⏳ ' + k + ' …';
+      const q1 = db.collection(TEST_SALES).where('createdAt', '>=', firebase.firestore.Timestamp.fromMillis(from)).where('createdAt', '<', firebase.firestore.Timestamp.fromMillis(to)).get({ source:'server' });
+      const q2 = db.collection(TEST_SALES).where('createdAtMs', '>=', from).where('createdAtMs', '<', to).get({ source:'server' });
+      const [s1, s2] = await Promise.all([q1, q2]);
+      s1.forEach(d => docs.push(d)); s2.forEach(d => docs.push(d)); reads += s1.size + s2.size;
+    }
+    const agg = tiersAggregate(docs, now, months);
+    const phones = Object.keys(agg); let written = 0;
+    const counts = { bronze:0, silver:0, gold:0, platinum:0 };
+    for(let i = 0; i < phones.length; i += 400){
+      const batch = db.batch();
+      phones.slice(i, i + 400).forEach(ph => {
+        const patch = {}; Object.keys(agg[ph]).forEach(f => { patch[f] = agg[ph][f]; });
+        batch.set(db.collection(TEST_CUSTOMERS).doc(ph), patch, { merge:true });
+        const p = Tiers.pointsInWindow(agg[ph].tierPts_echarpe, now, months) + Tiers.pointsInWindow(agg[ph].tierPts_glow, now, months);
+        counts[Tiers.tierFor(p, loyaltyRedemptionConfig.tiers)]++;
+      });
+      await batch.commit(); written += Math.min(400, phones.length - i);
+      st.textContent = '💾 ' + written + ' / ' + phones.length;
+    }
+    st.textContent = '✅ خلص';
+    res.innerHTML = 'اتقرت ' + reads + ' فاتورة · اتحدّثت ' + written + ' عميلة · ' +
+      '🥈 ' + counts.silver + ' · 🥇 ' + counts.gold + ' · 💎 ' + counts.platinum + ' (والباقي 🥉 برونز)';
+  }catch(e){ st.textContent = '❌ ' + (e && e.message || e); }
+}
+window.tiersBackfill = tiersBackfill;
+
+function tiersPreview(){
+  const cfg = Tiers.cfgOf(loyaltyRedemptionConfig.tiers);
+  Tiers.injectCss();
+  const pts = [20, 88, 150, 262];
+  const h = '<div onclick="this.remove()" style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);overflow:auto;padding:20px;">' +
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;" onclick="event.stopPropagation()">' +
+    pts.map(p => '<div style="width:340px;background:#fff8fb;border-radius:24px;padding:14px;">' + Tiers.sectionHtml({ pts:p, cfg:cfg, brand:'echarpe', pointsPerEGP: loyaltyRedemptionConfig.pointsPerEGP, visits: 7 }) + '</div>').join('') +
+    '</div><div style="text-align:center;color:#fff;margin-top:12px;font-weight:800;">اضغط برّه للإغلاق</div></div>';
+  document.body.insertAdjacentHTML('beforeend', h);
+}
+window.tiersPreview = tiersPreview;
+
+/* 🏅 TIERS-v1 — محرّر المميزات: صف لكل ميزة (أيقونة · العنوان · الوصف · العدّاد) + إضافة/حذف. المالك هو اللي بيحدد كل حاجة. */
+function _tpRow(t, p){
+  const v = x => String(x || '').replace(/"/g, '&quot;');
+  const inp = (cls, val, ph, w) => `<input class="${cls}" value="${v(val)}" placeholder="${ph}" style="${w ? 'width:'+w+';' : 'flex:1; min-width:120px;'} padding:7px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-family:Cairo; font-size:12.5px;">`;
+  return `<div class="tp-row" data-tier="${t}" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
+    ${inp('tp-icon', p && p.icon, '🎁', '46px')}${inp('tp-t', p && p.t, 'اسم الميزة (مثلًا: تقيسي في البيت)')}${inp('tp-s', p && p.s, 'وصف قصير (اختياري)')}${inp('tp-ctr', p && p.ctr, 'عدّاد (مثلًا 2 / شهر)', '130px')}
+    <button type="button" onclick="this.closest('.tp-row').remove()" title="حذف" style="border:none; background:#fee2e2; color:#b91c1c; border-radius:8px; padding:6px 9px; cursor:pointer; font-weight:800;">✕</button>
+  </div>`;
+}
+function tiersPerksEditorHtml(tc){
+  return ['bronze','silver','gold','platinum'].map(t => `
+    <div style="background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:8px;">
+      <div style="font-weight:800; font-size:12.5px; margin-bottom:6px;">${Tiers.META[t].icon} ${Tiers.META[t].en} · ${Tiers.META[t].ar}</div>
+      <div id="tp_list_${t}">${(tc.perks[t] || []).map(p => _tpRow(t, p)).join('')}</div>
+      <button type="button" class="secondary" onclick="tiersPerkAdd('${t}')" style="padding:6px 12px; font-size:12px;">➕ إضافة ميزة</button>
+    </div>`).join('');
+}
+function tiersPerkAdd(t){ const l = document.getElementById('tp_list_' + t); if(l) l.insertAdjacentHTML('beforeend', _tpRow(t, null)); }
+window.tiersPerkAdd = tiersPerkAdd; window.tiersPerksEditorHtml = tiersPerksEditorHtml;

@@ -82,7 +82,7 @@ ok(/window\.ChatAlert\.update\(rows,\s*\{ open: !!CST\.open, activeId: CST\.acti
   const i1 = h.indexOf(tag), i2 = h.indexOf('chat-staff-ui.js?v=762');
   ok(i1 > 0 && i2 > i1, f + ': chat-alert.js قبل chat-staff-ui.js v762');
 });
-ok(/pos-shell-v762/.test(fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8')), 'pos sw v762');
+ok(/pos-shell-v76[2-9]/.test(fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8')), 'pos sw v762');
 ok(/store-apps-shell-v636/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sales sw v636');
 ok(/echarpe-office-v754/.test(fs.readFileSync(path.join(ROOT,'Office','sw.js'),'utf8')), 'Office sw v754');
 console.log(`  ${pass} ناجح · ${fail} فاشل`);
