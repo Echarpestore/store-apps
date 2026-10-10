@@ -2,7 +2,7 @@
 require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require("fs"),assert=require("assert");
 const o=fs.readFileSync("Office/office.js","utf8");
-const h=fs.readFileSync("Office/index.html","utf8");
+const h=fs.readFileSync("Office/old.html","utf8");
 const f=fs.readFileSync(__dirname+"/../functions/index.js","utf8");
 assert(!o.includes("voice-ai.php"),"PHP endpoint removed");
 assert(o.includes("cloudfunctions.net/officeVoiceParse"),"Office calls existing Firebase Functions project");

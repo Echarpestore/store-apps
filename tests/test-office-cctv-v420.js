@@ -1,6 +1,6 @@
 const fs=require('fs');
 const assert=require('assert');
-const html=fs.readFileSync('Office/index.html','utf8');
+const html=fs.readFileSync('Office/old.html','utf8');
 const office=fs.readFileSync('Office/office.js','utf8');
 const cctv=fs.readFileSync('Office/cctv.js','utf8');
 const sw=fs.readFileSync('Office/sw.js','utf8');

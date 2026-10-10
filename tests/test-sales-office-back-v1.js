@@ -2,7 +2,7 @@
 require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const o=fs.readFileSync('Office/office.js','utf8');
-const oh=fs.readFileSync('Office/index.html','utf8');
+const oh=fs.readFileSync('Office/old.html','utf8');
 const s=fs.readFileSync('sales/sales-ui.js','utf8');
 const sh=fs.readFileSync('sales/index.html','utf8');
 

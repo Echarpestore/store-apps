@@ -1,7 +1,7 @@
 require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'), assert=require('assert');
 const cctv=fs.readFileSync('Office/cctv.js','utf8');
-const idx=fs.readFileSync('Office/index.html','utf8');
+const idx=fs.readFileSync('Office/old.html','utf8');
 const sw=fs.readFileSync('Office/sw.js','utf8');
 const posidx=fs.readFileSync('pos/index.html','utf8');
 const cap=fs.readFileSync('pos/cctv-invoice.js','utf8');

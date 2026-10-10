@@ -142,7 +142,7 @@ window.ofCctvOffsetForEvent=function(event,videoWallMs){
   function liveGateway(x){return localBranchActive(x)?(location.origin+'/local-live'):String((x&&x.remoteGateway)||(x&&x.gateway)||'').replace(/\/$/,'');}
   function renderConnectionMode(){var el=document.getElementById('ofCctvConnectionMode');if(!el)return;var x=b(),local=localBranchActive(x);el.textContent=local?'⚡ LOCAL · '+x.name:'☁ REMOTE · '+x.name;el.classList.toggle('local',local);el.classList.toggle('remote',!local);el.title=local?'المراجعة تمر مباشرة داخل شبكة Glow بدون Cloudflare':'المراجعة تمر عبر الاتصال الخارجي';}
   window.ofCctvLocalReviewInfo=function(){var x=b();return {localReview:LOCAL_REVIEW,branch:x.id,mode:localBranchActive(x)?'local':'remote',agentGateway:agentGateway(x),liveGateway:liveGateway(x)};};
-  function openLocalReview(){if(LOCAL_REVIEW){location.href='/Office/';return;}var url='http://192.168.0.107:1990/Office/';window.location.href=url;}
+  function openLocalReview(){if(LOCAL_REVIEW){location.href='/Office/old.html';return;}var url='http://192.168.0.107:1990/Office/old.html';window.location.href=url;}
   function streamUrl(c){return liveGateway(b())+'/stream.html?src='+encodeURIComponent(liveStreamName(c))+'&mode='+liveMode(b())+'&background=false';}
   function streamUrlFor(x,c){return liveGateway(x)+'/stream.html?src='+encodeURIComponent(c.liveStream||c.stream)+'&mode='+liveMode(x)+'&background=false';}
   function nativeMp4Url(c){return liveGateway(b())+'/api/stream.mp4?src='+encodeURIComponent(liveStreamName(c))+'&mp4=all&_='+Date.now();}

@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0c0f">
+<title>echarpe office</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230b0c0f'/><text x='50' y='68' font-size='52' text-anchor='middle'>🏢</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800;900&display=swap" rel="stylesheet">
+<style>
+  /* 🎨 نفس أسلوب سجل المبيعات — فاتح ونضيف */
+  :root{
+    --bg:#eef1f6; --panel:#ffffff; --panel2:#f7f8fa; --line:#e6e9ef;
+    --ink:#1a1f2b; --sub:#6b7280; --gold:#D97706; --gold-dim:#fffbeb;
+    --good:#059669; --bad:#DC2626; --accent:#2563EB; --dark:#2f3545;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body{ background:var(--bg); color:var(--ink); font-family:'Cairo',sans-serif; min-height:100vh;
+        padding-bottom:calc(74px + env(safe-area-inset-bottom)); }
+  h1,h2,h3{ font-weight:900; }
+  button{ font-family:'Cairo'; }
+
+  /* ===== الدخول ===== */
+  /* 🔴 كانت display:flex — يعني شاشة الإيميل ظاهرة من أول لحظة تحميل الصفحة،
+     قبل ما أي كود يشتغل. Firebase بياخد جزء من الثانية عشان يرجّع الجلسة
+     المحفوظة، فالشاشة كانت تومض وبعدين تختفي.
+     دلوقتي بتبدأ **مخفية**، والكود هو اللي بيقرر يعرضها ولا لأ. */
+  #gate{ position:fixed; inset:0; z-index:100; background:var(--bg); display:none; align-items:center; justify-content:center; padding:22px; }
+  #gate.on{ display:flex; }
+  /* ✨ v697: شاشة الفتح — لوجو بينبض + شريط بيلمع + جملة بتتغيّر (بدل «⏳ لحظة…») */
+  #bootWait{ position:fixed; inset:0; z-index:99; display:flex; flex-direction:column; gap:14px;
+    align-items:center; justify-content:center; color:var(--sub); font-size:13px;
+    background:radial-gradient(120% 80% at 50% 0%, #ffffff 0%, var(--bg) 60%); transition:opacity .35s ease, transform .35s ease; }
+  #bootWait.out{ opacity:0; transform:scale(1.02); pointer-events:none; }
+  #bootWait .bw-logo{ width:76px; height:76px; border-radius:24px; display:grid; place-items:center; font-size:38px;
+    background:linear-gradient(145deg,#fff,#eef2ff); box-shadow:0 18px 40px -18px rgba(37,99,235,.45), inset 0 1px 0 #fff;
+    animation:bwPulse 1.8s ease-in-out infinite; }
+  #bootWait .bw-name{ font-size:20px; font-weight:900; color:var(--ink); letter-spacing:-.01em; }
+  #bootWait .bw-bar{ width:180px; height:4px; border-radius:4px; background:#e3e7ef; overflow:hidden; position:relative; }
+  #bootWait .bw-bar i{ position:absolute; top:0; bottom:0; width:40%; border-radius:4px;
+    background:linear-gradient(90deg,var(--accent),var(--gold)); animation:bwSlide 1.15s cubic-bezier(.45,0,.2,1) infinite; }
+  #bootWait .bw-tip{ min-height:18px; transition:opacity .3s; }
+  @keyframes bwPulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.06); } }
+  @keyframes bwSlide{ 0%{ right:-40%; } 100%{ right:100%; } }
+  /* شريط تحميل البيانات فوق + كبسولة «بيجهّز…» تحت */
+  #ofLoadBar{ position:fixed; top:0; right:0; left:0; height:3px; z-index:9998; pointer-events:none; opacity:0; transition:opacity .4s; }
+  #ofLoadBar.on{ opacity:1; }
+  #ofLoadBar i{ display:block; height:100%; width:0; background:linear-gradient(270deg,var(--accent),#7c9cff,var(--gold));
+    box-shadow:0 0 10px rgba(37,99,235,.55); transition:width .5s cubic-bezier(.22,1,.36,1); }
+  #ofLoadPill{ position:fixed; bottom:calc(84px + env(safe-area-inset-bottom)); left:50%; z-index:9998; pointer-events:none;
+    transform:translate(-50%,16px); opacity:0; transition:opacity .3s, transform .35s cubic-bezier(.2,.9,.25,1.2);
+    background:rgba(26,31,43,.92); color:#fff; font-size:12.5px; font-weight:800; padding:8px 14px 8px 12px; border-radius:99px;
+    display:flex; align-items:center; gap:8px; box-shadow:0 12px 30px -12px rgba(0,0,0,.45); white-space:nowrap; }
+  #ofLoadPill.on{ opacity:1; transform:translate(-50%,0); }
+  #ofLoadPill .sp{ width:13px; height:13px; border-radius:50%; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; animation:ofSpin .8s linear infinite; }
+  #ofLoadPill small{ color:#9aa3b2; font-weight:700; }
+  @keyframes ofSpin{ to{ transform:rotate(360deg); } }
+  /* هيكل لامع مكان «…» لحد ما البيانات توصل */
+  .of-skel{ display:grid; gap:9px; padding:6px 0; }
+  .of-skel i{ display:block; height:14px; border-radius:7px; background:linear-gradient(90deg,#eceff4 25%,#f7f8fb 50%,#eceff4 75%);
+    background-size:200% 100%; animation:ofShimmer 1.3s linear infinite; }
+  .of-skel i:nth-child(2){ width:82%; } .of-skel i:nth-child(3){ width:64%; }
+  @keyframes ofShimmer{ to{ background-position:-200% 0; } }
+  @media (prefers-reduced-motion:reduce){ #bootWait .bw-logo, #bootWait .bw-bar i, .of-skel i, #ofLoadPill .sp{ animation:none; } }
+  #gate .card{ width:100%; max-width:360px; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:26px 22px; text-align:center; }
+  #gate .logo{ font-size:44px; }
+  #gate h1{ font-size:20px; margin:8px 0 2px; }
+  #gate p{ color:var(--sub); font-size:12.5px; margin-bottom:18px; }
+  #gate input{ width:100%; padding:13px; border-radius:12px; border:1px solid var(--line); background:var(--panel2);
+    color:var(--ink); font-family:'Cairo'; font-size:14px; margin-bottom:10px; text-align:center; }
+  #gate button{ width:100%; padding:14px; border:none; border-radius:12px; font-weight:800; font-size:14px; cursor:pointer;
+    background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400; }
+  #gateErr{ color:var(--bad); font-size:12px; margin-top:8px; min-height:16px; }
+  #gateStep2{ display:none; }
+
+  /* ===== الهيكل ===== */
+  /* الكروت والجداول والأزرار — موحّدة */
+  .card, .panel{
+    background:#fff !important; border:1px solid var(--line) !important;
+    border-radius:16px !important; box-shadow:0 2px 10px rgba(20,25,40,.05) !important;
+    padding:16px 18px;
+  }
+  .row{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .muted{ color:var(--sub); }
+  input, select, textarea{
+    border-radius:11px !important; border:1.5px solid var(--line) !important;
+    background:#fff !important; color:var(--ink) !important; padding:11px 13px !important;
+    font-family:'Cairo',sans-serif !important; width:100%;
+  }
+  input:focus, select:focus{
+    outline:none !important; border-color:var(--accent) !important;
+    box-shadow:0 0 0 3px rgba(37,99,235,.12) !important;
+  }
+  button{
+    border-radius:11px !important; font-weight:800 !important; cursor:pointer;
+    border:none; padding:11px 18px; font-size:14px;
+    background:linear-gradient(135deg,#3B82F6,#1D4ED8); color:#fff;
+    transition:transform .12s, filter .12s;
+  }
+  button:hover{ filter:brightness(1.05); }
+  button:active{ transform:scale(.98); }
+  button.ghost{
+    background:#fff !important; color:#374151 !important;
+    border:1px solid var(--line) !important;
+  }
+  button.danger{ background:linear-gradient(135deg,#EF4444,#B91C1C) !important; }
+  table{ width:100%; border-collapse:separate; border-spacing:0;
+         border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(20,25,40,.05); }
+  th{ background:var(--dark); color:#fff; padding:12px 14px; text-align:right;
+      font-weight:700; font-size:14px; }
+  td{ padding:11px 14px; border-bottom:1px solid var(--line); font-size:14px; background:#fff; }
+  tr:nth-child(even) td{ background:#fbfcfd; }
+  tr:last-child td{ border-bottom:none; }
+  .amount{ font-weight:900; font-size:15px; }
+  .amount.neg{ color:var(--bad); }
+  .amount.pos{ color:var(--good); }
+  .empty{ color:var(--sub); text-align:center; padding:30px 14px; font-size:13.5px;
+          background:var(--panel2); border:1.5px dashed var(--line); border-radius:14px; }
+  nav{ overflow-x:auto; }
+  nav#tabsNav{
+    background:#fff !important; border-top:1px solid var(--line) !important;
+    box-shadow:0 -3px 16px rgba(20,25,40,.07) !important;
+  }
+  nav#tabsNav button{
+    background:transparent !important; color:var(--sub) !important;
+    border-radius:0 !important; font-weight:700 !important;
+  }
+  nav#tabsNav button.on{ color:var(--accent) !important; }
+
+  header{ position:sticky; top:0; z-index:20; background:linear-gradient(180deg, var(--bg) 70%, transparent);
+    padding:14px 16px 10px; display:flex; align-items:center; justify-content:space-between; }
+  header h1{ font-size:17px; }
+  /* 🔧 أزرار الترويسة: مقاس ثابت ومفيش لفّ — كانت بتركب على العنوان */
+  .hdrBtns{ display:flex; gap:6px; align-items:center; flex-shrink:0; }
+  .hdrBtns .ico{
+    width:38px; height:38px; padding:0; font-size:16px; line-height:1;
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+  }
+  header > div:first-child{ min-width:0; }
+  header h1{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  header .sub{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  @media (max-width:380px){ .hdrBtns .ico{ width:34px; height:34px; font-size:15px; } }
+  header .sub{ color:var(--sub); font-size:11px; }
+  #notifBtn{ background:var(--panel2); border:1px solid var(--line); color:var(--ink); border-radius:99px;
+    padding:7px 13px; font-size:12px; font-weight:700; cursor:pointer; }
+  main{ padding:0 14px; }
+  .tabPage{ display:none; }
+  .tabPage.on{ display:block; animation:fadeIn .18s ease; }
+  @keyframes fadeIn{ from{ opacity:0; transform:translateY(4px);} to{ opacity:1; transform:none;} }
+
+  /* 💼 تبويبات التوظيف الفرعية — المختار **لازم** يبان.
+     من غير الحالة دي الأربع أزرار بيبقوا شكل واحد بالظبط
+     (كلهم بياخدوا تدرّج الزرار العام) والمالك مش هيعرف هو فين. */
+  .hireSub{
+    background:#fff !important; color:var(--sub) !important;
+    border:1px solid var(--line) !important; font-size:12.5px !important;
+    padding:9px 6px !important;
+  }
+  .hireSub.on{
+    background:linear-gradient(135deg,#3B82F6,#1D4ED8) !important;
+    color:#fff !important; border-color:transparent !important;
+  }
+
+  /* 📅 تبويبات اليوم الفرعية — نفس مشكلة التوظيف بالظبط:
+     التلاتة كانوا بياخدوا تدرّج الزرار العام فشكلهم واحد،
+     ومفيش أي علامة على المفتوح. */
+  .daySub{
+    background:#fff !important; color:var(--sub) !important;
+    border:1px solid var(--line) !important; font-size:12.5px !important;
+    padding:9px 6px !important;
+  }
+  .daySub.on{
+    background:linear-gradient(135deg,#3B82F6,#1D4ED8) !important;
+    color:#fff !important; border-color:transparent !important;
+  }
+
+  /* 🔢 عدّاد جوه الزرار الفرعي — بيقول «فيه كام مستني» من غير ما تفتح.
+     أحمر وهو مقفول عشان يشدّ العين، وأبيض شفاف وهو مفتوح عشان
+     ما يتصارعش مع خلفية الزرار الزرقا. */
+  .hsN{
+    display:none; min-width:17px; padding:0 5px; margin-inline-start:4px;
+    border-radius:99px; background:#e5484d; color:#fff;
+    font-size:10.5px; font-weight:900; line-height:17px; vertical-align:middle;
+  }
+  .hireSub.on .hsN{ background:rgba(255,255,255,.28); }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:15px; padding:15px; margin-bottom:12px; }
+  .panel h3{ font-size:14.5px; margin-bottom:4px; }
+  .panel .hint{ color:var(--sub); font-size:11.5px; margin-bottom:12px; }
+  .card{ background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:11px 13px; margin-bottom:8px; }
+  .row{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .muted{ color:var(--sub); font-size:11.5px; }
+  .amount{ font-weight:900; font-size:15px; }
+  .amount.pos{ color:var(--good); } .amount.neg{ color:var(--bad); }
+  .btn{ border:none; border-radius:10px; padding:10px 14px; font-weight:800; font-size:12.5px; cursor:pointer; }
+  .btn.ok{ background:linear-gradient(180deg,#3fbf60,#1f9440); color:#fff; }
+  .btn.no{ background:var(--panel); border:1px solid var(--line); color:var(--sub); }
+  .btn.gold{ background:linear-gradient(180deg,var(--gold),#d9a838); color:#1b1400; }
+  .empty{ color:var(--sub); font-size:12.5px; text-align:center; padding:14px 0; }
+  input.f, select.f{ width:100%; padding:12px; border-radius:11px; border:1px solid var(--line); background:var(--panel2);
+    color:var(--ink); font-family:'Cairo'; font-size:13.5px; margin-bottom:8px; }
+  .pill{ display:inline-block; padding:2px 10px; border-radius:99px; font-size:10.5px; font-weight:800; }
+  .pill.g{ background:var(--gold-dim); color:var(--gold); }
+  .badge{ min-width:19px; height:19px; padding:0 6px; border-radius:99px; background:#e5484d; color:#fff;
+    font-size:11px; font-weight:900; display:inline-flex; align-items:center; justify-content:center; }
+
+  /* ===== شريط التبويبات السفلي ===== */
+  nav{ position:fixed; bottom:0; left:0; right:0; z-index:30; background:rgba(20,22,28,.97);
+    border-top:1px solid var(--line); display:flex; padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    backdrop-filter:blur(10px); }
+  nav button{ flex:1; background:none; border:none; color:var(--sub); font-size:10px; font-weight:700;
+    display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 2px; cursor:pointer; position:relative; }
+  nav button .ic{ font-size:20px; }
+  nav button.on{ color:var(--gold); }
+  nav button .nb{ position:absolute; top:0; right:calc(50% - 20px); }
+  /* 8 تبويبات على شاشة ضيقة — الأيقونة والخط بيصغّروا شوية بدل ما الكلام يتقص */
+  @media (max-width:400px){
+    nav button{ font-size:9px; padding:6px 0; }
+    nav button .ic{ font-size:18px; }
+  }
+
+  /* ===== Office v63 — Owner Control Center ===== */
+  .of-home-hero{
+    background:linear-gradient(135deg,#111827,#1f2937 58%,#0f172a);
+    color:#fff;border:0!important;border-radius:20px!important;padding:16px!important;
+    box-shadow:0 14px 35px rgba(15,23,42,.18)!important;margin-bottom:10px;
+  }
+  .of-home-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .of-home-kicker{font-size:11px;color:#cbd5e1;font-weight:800}
+  .of-home-title{font-size:18px;font-weight:900;margin-top:2px}
+  .of-home-date{font-size:10.5px;color:#94a3b8;white-space:nowrap}
+  .of-home-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}
+  .of-home-stat{background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.09);
+    border-radius:13px;padding:9px;min-width:0;cursor:pointer}
+  .of-home-stat b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .of-home-stat span{display:block;color:#cbd5e1;font-size:9.8px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .of-home-stat.hot{background:rgba(217,119,6,.16);border-color:rgba(245,158,11,.30)}
+  .of-home-actions{display:flex;gap:7px;margin-top:10px;overflow:auto;padding-bottom:1px}
+  .of-home-actions button{white-space:nowrap;background:rgba(255,255,255,.10)!important;color:#fff!important;
+    border:1px solid rgba(255,255,255,.12)!important;padding:8px 11px!important;font-size:11px!important}
+  .of-cash-hero{background:linear-gradient(135deg,#0f172a,#111827);color:#fff;border-radius:20px;
+    padding:18px 16px;box-shadow:0 16px 38px rgba(15,23,42,.16)}
+  .of-cash-caption{font-size:11px;color:#cbd5e1;font-weight:800;text-align:center}
+  .of-cash-big{font-size:36px;font-weight:900;text-align:center;margin:3px 0 3px;letter-spacing:-.5px}
+  .of-cash-sub{text-align:center;color:#94a3b8;font-size:10.8px;line-height:1.7}
+  .of-confidence{display:flex;justify-content:center;margin-top:8px}
+  .of-confidence span{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:5px 9px;
+    font-size:10.5px;font-weight:900;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.10)}
+  .of-cash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+  .of-money-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:11px}
+  .of-money-card .k{font-size:10.5px;color:var(--sub);font-weight:700}
+  .of-money-card .v{font-size:17px;font-weight:900;margin-top:2px}
+  .of-money-card .s{font-size:9.8px;color:var(--sub);margin-top:2px;line-height:1.5}
+  .of-verdict{background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px;margin-top:9px}
+  .of-verdict-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .of-verdict .num{font-size:21px;font-weight:900}
+  .of-quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:9px}
+  .of-quick .btn{margin:0!important}
+  .of-details-toggle{width:100%;margin-top:9px;background:#fff!important;color:var(--ink)!important;border:1px solid var(--line)!important}
+  #officeMoreSheet{position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.46);display:none;align-items:flex-end;justify-content:center}
+  #officeMoreSheet.on{display:flex}
+  #officeMoreSheet .sheet{width:100%;max-width:560px;background:#fff;border-radius:22px 22px 0 0;padding:13px 13px calc(16px + env(safe-area-inset-bottom));
+    box-shadow:0 -20px 55px rgba(15,23,42,.18)}
+  .of-more-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .of-more-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .of-more-item{background:#f8fafc!important;color:#111827!important;border:1px solid var(--line)!important;
+    min-height:62px;text-align:right!important;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .of-more-item .mi{font-size:20px}
+  .of-more-item .mt{flex:1;min-width:0}
+  .of-more-item .mt b{display:block;font-size:12.5px}
+  .of-more-item .mt small{display:block;color:var(--sub);font-size:9.8px;margin-top:1px}
+  #tabsNav{justify-content:space-around}
+  #tabsNav button{max-width:110px}
+  @media(max-width:620px){
+    .of-home-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .of-cash-big{font-size:32px}
+    .of-home-stat b{font-size:14px}
+  }
+
+
+  /* 📹 CCTV v429 — Premium Control Room */
+  .of-cctv-shell{position:relative;background:linear-gradient(180deg,#070b14 0%,#0a1020 100%);border:1px solid #202b3d;border-radius:22px;padding:12px;box-shadow:0 22px 60px rgba(2,6,23,.30);color:#fff;overflow:hidden}
+  .of-cctv-controlroom{min-height:62vh}.of-cctv-lock{overflow:hidden!important}
+  .of-cctv-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}.of-cctv-title{display:flex;align-items:center;gap:9px}.of-cctv-title b{font-size:16px}.of-cctv-title small{display:block;color:#7f8da4;margin-top:2px;font-size:10px}.of-cctv-top-actions{display:flex;align-items:center;gap:7px}
+  .of-cctv-status{font-size:9px;font-weight:900;color:#86efac;background:#082d22;border:1px solid #14532d;border-radius:999px;padding:5px 9px}.of-cctv-room-full{border:1px solid #34445d;background:#111a2a;color:#fff;border-radius:10px;padding:7px 10px;cursor:pointer;font:inherit;font-weight:900}.of-cctv-room-full:hover{background:#18243a}
+  .of-cctv-toolbar{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:6px;background:#070c16;border:1px solid #1c2738;border-radius:13px}.of-cctv-branches{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;flex:1}.of-cctv-branches::-webkit-scrollbar{display:none}
+  .of-cctv-chip{white-space:nowrap;border:1px solid #2b384d;background:#101827;color:#cbd5e1;border-radius:9px;padding:7px 10px;cursor:pointer;font:inherit;font-size:10px}.of-cctv-chip.active{background:#e8edf5;color:#0f172a;border-color:#e8edf5;font-weight:900}
+  .of-cctv-layouts{display:flex;gap:3px;background:#050914;border:1px solid #223047;border-radius:9px;padding:3px}.of-cctv-layout-btn{border:0;background:transparent;color:#8190a8;border-radius:7px;padding:6px 8px;cursor:pointer;font:inherit;font-size:10px;font-weight:900}.of-cctv-layout-btn.active{background:#2563eb;color:#fff;box-shadow:0 4px 14px rgba(37,99,235,.25)}
+  .of-cctv-warning{display:none;margin:8px 0;padding:10px 12px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:11px}
+  .of-cctv-grid{display:grid;gap:7px;margin-top:8px;align-items:stretch}.of-cctv-grid-1{grid-template-columns:minmax(0,1fr)}.of-cctv-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}.of-cctv-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .of-cctv-panel{position:relative;min-width:0;background:#02050b;border:1px solid #243248;border-radius:13px;overflow:hidden;display:flex;flex-direction:column;min-height:190px;box-shadow:0 10px 26px rgba(0,0,0,.24)}.of-cctv-panel:hover{border-color:#3f587a}
+  .of-cctv-panel-head{position:relative;z-index:4;display:flex;align-items:center;gap:5px;padding:5px;background:#0a111e;border-bottom:1px solid #1e2a3c}.of-cctv-source{min-width:0;flex:1;background:#111a29;color:#e5e7eb;border:1px solid #293950;border-radius:8px;padding:6px 7px;font:inherit;font-size:9px;outline:none}.of-cctv-source:focus{border-color:#3b82f6;box-shadow:0 0 0 2px rgba(59,130,246,.16)}
+  .of-cctv-panel-full{width:31px;height:31px;flex:0 0 31px;border:1px solid #304159;background:#121c2c;color:#fff;border-radius:8px;cursor:pointer;font:inherit;font-size:14px}.of-cctv-panel-full:hover{background:#1c2a41}
+  .of-cctv-panel-body{position:relative;flex:1;min-height:0;background:#000}.of-cctv-panel-body iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000}.of-cctv-video{aspect-ratio:16/9;min-height:0}.of-cctv-cam-badge{position:absolute;right:8px;bottom:7px;z-index:2;background:rgba(3,7,18,.72);border:1px solid rgba(255,255,255,.10);backdrop-filter:blur(8px);padding:4px 7px;border-radius:7px;font-size:8px;color:#e5e7eb;pointer-events:none}.of-cctv-cam-badge .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#22c55e;margin-left:4px;box-shadow:0 0 0 3px rgba(34,197,94,.10)}
+  .of-cctv-pos-body{background:#050914}.of-cctv-pos{height:100%;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(180deg,#0b1220,#080d17);color:#e5e7eb;padding:8px}.of-cctv-pos .muted{color:#6f7f95}.of-cctv-pos-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.of-cctv-pos-top b{font-size:11px}.of-cctv-pos-top small{display:block;color:#738198;font-size:7.5px;margin-top:2px}.of-cctv-pos-live{font-size:7px;font-weight:900;padding:3px 5px;border-radius:999px}.of-cctv-pos-live.online{color:#86efac;background:#073b2c}.of-cctv-pos-live.offline{color:#fca5a5;background:#451a1a}
+  .of-cctv-pos-scroll{flex:1;min-height:38px;max-height:105px;overflow:auto;margin-top:5px;border-top:1px solid #1e293b}.of-cctv-pos-row{display:flex;justify-content:space-between;gap:6px;padding:5px 1px;border-bottom:1px solid #172235;font-size:8.5px}.of-cctv-pos-row span{min-width:0}.of-cctv-pos-row span b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.of-cctv-pos-row small{display:block;color:#718096;font-size:7px;margin-top:1px}.of-cctv-pos-row em{color:#fca5a5;font-style:normal;font-size:7px}.of-cctv-pos-row strong{white-space:nowrap;font-size:8.5px}.of-cctv-cart-empty{padding:18px 0;text-align:center;color:#64748b;font-size:9px}
+  .of-cctv-pay{margin-top:5px;padding:5px 6px;border-radius:8px;background:#0d1626;border:1px solid #233149}.of-cctv-pay-head{display:flex;justify-content:space-between;align-items:center;font-size:8px}.of-cctv-pay-head span{font-weight:900}.of-cctv-pay-head small{color:#718096}.of-cctv-pay-chips{margin-top:3px;display:flex;flex-wrap:wrap;gap:3px}.of-cctv-pos-chip{display:inline-flex;align-items:center;gap:3px;padding:3px 5px;border-radius:999px;background:#1b2434;border:1px solid #334155;font-size:7px}.of-cctv-pos-total{display:flex;justify-content:space-between;gap:6px;margin-top:5px;padding:6px 7px;border-radius:8px;background:#08251e;border:1px solid #14532d}.of-cctv-pos-total b{font-size:9px}.of-cctv-pos-total strong{font-size:11px}.of-cctv-last{display:grid;grid-template-columns:1fr auto;gap:1px 6px;margin-top:4px;padding:5px 6px;border-radius:7px;background:#0b1730;border:1px solid #1e3a5f;font-size:7px}.of-cctv-last b{font-size:8px}.of-cctv-last small{grid-column:1/-1;color:#718096}.of-cctv-age{font-size:7px;color:#68778e;margin-top:3px}.of-cctv-empty{height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:#64748b}.of-cctv-empty b{display:block;color:#cbd5e1;font-size:11px}.of-cctv-empty small{display:block;margin-top:5px;font-size:8px}
+  .of-cctv-footnote{font-size:8px;color:#68778e;margin-top:6px;text-align:center}
+  /* v430: real cinema mode. The CSS fallback is always applied even when the browser Fullscreen API succeeds. */
+  .of-cctv-controlroom.of-cctv-room-focus{position:fixed!important;inset:0!important;z-index:10050!important;width:100vw!important;height:100dvh!important;max-width:none!important;margin:0!important;border:0!important;border-radius:0!important;padding:8px!important;background:#03060b!important;display:flex!important;flex-direction:column!important;overflow:hidden!important}
+  .of-cctv-room-focus .of-cctv-top{margin:0 0 5px!important;min-height:34px}.of-cctv-room-focus .of-cctv-title small{display:none}.of-cctv-room-focus .of-cctv-title b{font-size:13px}.of-cctv-room-focus .of-cctv-toolbar{padding:4px;border-radius:10px}.of-cctv-room-focus .of-cctv-chip{padding:5px 8px;font-size:8px}.of-cctv-room-focus .of-cctv-layout-btn{padding:5px 7px;font-size:9px}.of-cctv-room-focus .of-cctv-footnote{display:none}.of-cctv-room-focus .of-cctv-grid{flex:1;min-height:0;margin-top:5px;grid-auto-rows:minmax(0,1fr)}.of-cctv-room-focus .of-cctv-panel{min-height:0;height:100%}.of-cctv-room-focus .of-cctv-video{aspect-ratio:auto}.of-cctv-room-focus .of-cctv-panel-head{padding:4px}.of-cctv-room-focus .of-cctv-source{padding:5px 6px;font-size:8px}.of-cctv-room-focus .of-cctv-panel-full{width:27px;height:27px;flex-basis:27px}
+  .of-cctv-panel.of-cctv-panel-focus{position:fixed!important;inset:0!important;z-index:10060!important;width:100vw!important;height:100dvh!important;max-width:none!important;margin:0!important;border:0!important;border-radius:0!important;background:#000!important;min-height:0!important}.of-cctv-panel-focus .of-cctv-panel-head{position:absolute;top:8px;left:8px;right:8px;z-index:8;background:rgba(7,12,22,.72);border:1px solid rgba(255,255,255,.10);border-radius:11px;backdrop-filter:blur(10px);opacity:.92}.of-cctv-panel-focus .of-cctv-panel-body{position:absolute;inset:0;height:100%!important}.of-cctv-panel-focus .of-cctv-video{aspect-ratio:auto}.of-cctv-panel-focus .of-cctv-cam-badge{right:12px;bottom:12px;font-size:10px}.of-cctv-panel-focus .of-cctv-pos{padding:58px 18px 18px}.of-cctv-panel-focus .of-cctv-pos-scroll{max-height:none}.of-cctv-panel-focus .of-cctv-pos-row{font-size:13px}.of-cctv-panel-focus .of-cctv-pos-row small,.of-cctv-panel-focus .of-cctv-pos-row em{font-size:10px}.of-cctv-panel-focus .of-cctv-pos-row strong{font-size:13px}.of-cctv-panel-focus .of-cctv-pos-top b{font-size:17px}.of-cctv-panel-focus .of-cctv-pos-top small{font-size:11px}.of-cctv-panel-focus .of-cctv-pay-head{font-size:12px}.of-cctv-panel-focus .of-cctv-pos-chip{font-size:10px}.of-cctv-panel-focus .of-cctv-pos-total b{font-size:13px}.of-cctv-panel-focus .of-cctv-pos-total strong{font-size:18px}
+  @media(max-width:1050px){.of-cctv-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}.of-cctv-panel{min-height:180px}}
+  @media(max-width:720px){.of-cctv-shell{margin:0 -3px;padding:7px;border-radius:16px}.of-cctv-title b{font-size:13px}.of-cctv-title small{font-size:8px}.of-cctv-top{margin-bottom:6px}.of-cctv-room-full{padding:6px 8px;font-size:9px}.of-cctv-toolbar{padding:4px}.of-cctv-chip{padding:6px 8px;font-size:9px}.of-cctv-layout-btn{padding:5px 7px;font-size:9px}.of-cctv-grid{gap:5px}.of-cctv-grid-2,.of-cctv-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}.of-cctv-panel{min-height:150px;border-radius:10px}.of-cctv-panel-head{padding:3px;gap:3px}.of-cctv-source{font-size:7.8px;padding:5px 4px}.of-cctv-panel-full{width:27px;height:27px;flex-basis:27px;padding:0}.of-cctv-grid-1 .of-cctv-panel{min-height:360px}.of-cctv-video{aspect-ratio:16/10}.of-cctv-pos{padding:5px}.of-cctv-pos-scroll{max-height:70px}.of-cctv-pay{padding:4px 5px}.of-cctv-last{display:none}.of-cctv-footnote{display:none}}
+  @media(orientation:landscape){.of-cctv-room-focus .of-cctv-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-template-rows:minmax(0,1fr)!important}.of-cctv-room-focus .of-cctv-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-rows:minmax(0,1fr)!important}.of-cctv-room-focus .of-cctv-top{position:absolute;top:7px;left:7px;z-index:30;margin:0!important}.of-cctv-room-focus .of-cctv-title,.of-cctv-room-focus .of-cctv-status{display:none}.of-cctv-room-focus .of-cctv-toolbar{position:absolute;top:7px;left:50%;transform:translateX(-50%);z-index:20;width:auto;max-width:74vw;background:rgba(5,9,20,.76);backdrop-filter:blur(10px)}.of-cctv-room-focus .of-cctv-grid{margin-top:0!important}.of-cctv-room-focus .of-cctv-panel-head{position:absolute;left:5px;right:5px;top:5px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(5,9,20,.70);backdrop-filter:blur(8px)}.of-cctv-room-focus .of-cctv-panel-body{position:absolute;inset:0}.of-cctv-room-focus .of-cctv-pos{padding-top:40px}}
+
+
+/* v441 — quiet POS live: one cart + one last-invoice line */
+.of-cctv-lastline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px;padding:7px 9px;border-top:1px solid #1f2b3d;color:#dbeafe;font-size:9px}.of-cctv-lastline b{font-size:9px}.of-cctv-lastline span:last-child{text-align:left;white-space:nowrap;color:#a7f3d0;font-weight:800}.of-cctv-lastline.muted span:last-child{color:#64748b}.of-cctv-pos .of-cctv-pay{display:none!important}.of-cctv-pos-complete,.of-cctv-complete-head,.of-cctv-last-meta,.of-cctv-complete-note{display:none!important}
+@media(max-width:720px){.of-cctv-lastline{font-size:8px;padding:6px 4px}.of-cctv-lastline b{font-size:8.5px}.of-cctv-pinned-live{min-height:245px}.of-cctv-pinned-live .of-cctv-pos{min-height:245px}}
+
+/* v446 — غرفة المراقبة: كاميرات ثابتة + مراجعة اليوم خارج ملء الشاشة فقط */
+.of-cctv-camera-panel{min-height:220px!important;overflow:hidden!important}
+.of-cctv-camera-panel .of-cctv-panel-body{min-height:0!important;height:100%!important}
+.of-cctv-camera-panel iframe{display:block!important;width:100%!important;height:100%!important;min-height:190px!important;border:0!important}
+.of-cctv-room-focus .of-cctv-day-review{display:none!important}
+.of-cctv-room-focus .of-cctv-footnote{display:none!important}
+.of-cctv-room-focus .of-cctv-camera-grid{overflow:hidden!important}
+.of-cctv-room-focus .of-cctv-camera-panel{min-height:0!important;height:100%!important}
+.of-cctv-room-focus .of-cctv-camera-panel iframe{min-height:0!important;height:100%!important}
+@media(max-width:720px){
+ .of-cctv-camera-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:stretch!important}
+ .of-cctv-camera-panel{min-height:210px!important;height:210px!important;aspect-ratio:auto!important}
+ .of-cctv-camera-panel .of-cctv-panel-body{height:100%!important}
+}
+@media(max-width:720px) and (orientation:landscape){
+ .of-cctv-room-focus .of-cctv-pinned-live{flex:0 0 40%!important}
+ .of-cctv-room-focus .of-cctv-camera-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;grid-template-rows:minmax(0,1fr)!important}
+ .of-cctv-room-focus .of-cctv-camera-panel{height:100%!important;min-height:0!important}
+}
+</style>
+
+<style id="ofCctvV436Style">
+/* v436 — cleaner monitoring room + persistent completed invoice */
+.of-cctv-controlroom{background:#070b13;border:1px solid #1c2738;border-radius:22px;padding:10px;box-shadow:0 18px 45px rgba(15,23,42,.18)}
+.of-cctv-top{margin-bottom:8px}.of-cctv-title b{font-size:15px}.of-cctv-title small{opacity:.72}
+.of-cctv-toolbar{background:#0c1320;border:1px solid #1f2c3e;border-radius:14px;padding:6px}
+.of-cctv-panel{position:relative;overflow:hidden;background:#03060b;border:1px solid #253247;border-radius:16px;box-shadow:none}
+.of-cctv-panel-head{position:absolute;z-index:6;left:7px;right:7px;top:7px;padding:0;background:transparent;border:0;pointer-events:none}
+.of-cctv-source,.of-cctv-panel-full{pointer-events:auto;background:rgba(7,12,22,.82)!important;color:#eef2ff!important;border:1px solid rgba(255,255,255,.13)!important;backdrop-filter:blur(10px);box-shadow:0 5px 15px rgba(0,0,0,.18)}
+.of-cctv-source{border-radius:999px!important;padding:7px 10px!important}.of-cctv-panel-full{border-radius:10px!important}
+.of-cctv-panel-body{height:100%}.of-cctv-video iframe,.of-cctv-video video{min-height:100%;height:100%}.of-cctv-video video{width:100%;display:block;object-fit:contain;background:#000}.of-cctv-cam-badge{background:rgba(7,12,22,.78);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(9px)}
+.of-cctv-pos-body{background:#080e18}.of-cctv-pos{padding:48px 11px 10px;background:linear-gradient(180deg,#0a1220 0%,#070c14 100%)}
+.of-cctv-pos-top{align-items:center;margin-bottom:7px}.of-cctv-pos-top b{font-size:13px}.of-cctv-pos-top small{font-size:9px}.of-cctv-pos-live{font-size:8px;padding:5px 8px}.of-cctv-pos-live.done{background:#123524;color:#86efac}
+.of-cctv-pos-scroll{max-height:none;min-height:70px;margin-top:0;border-top:1px solid #1e293b}.of-cctv-pos-row{padding:7px 2px;font-size:10px}.of-cctv-pos-row small{font-size:8px}.of-cctv-pos-row strong{font-size:10px}
+.of-cctv-pay{margin-top:7px;padding:7px 8px}.of-cctv-pos-total{margin-top:7px;padding:8px 9px}.of-cctv-pos-total strong{font-size:15px}
+.of-cctv-complete-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;padding:10px 11px;margin:2px 0 7px;border-radius:12px;background:linear-gradient(135deg,#103425,#0b241b);border:1px solid #1b5a40}.of-cctv-complete-head small{display:block;color:#8fbca8;font-size:8px}.of-cctv-complete-head b{display:block;margin-top:2px;font-size:14px}.of-cctv-complete-head strong{font-size:18px;color:#d1fae5}.of-cctv-complete-note{text-align:center;color:#789186;font-size:8px;margin-top:6px}.of-cctv-frozen{border-bottom:1px solid #172235}
+@media(max-width:720px){
+ .of-cctv-controlroom{padding:8px;border-radius:18px}.of-cctv-grid{gap:7px}
+ .of-cctv-grid-4 .of-cctv-panel-pos{grid-column:1/-1;min-height:260px;order:-1}
+ .of-cctv-grid-4 .of-cctv-panel:not(.of-cctv-panel-pos){min-height:190px}
+ .of-cctv-pos{padding:48px 10px 10px}.of-cctv-pos-scroll{max-height:120px}.of-cctv-pos-row{font-size:10px}.of-cctv-last{display:grid}
+}
+
+<style id="ofCctvV437Style">
+/* v437 — pinned POS Live + fixed four-camera wall */
+.of-cctv-controlroom{display:flex;flex-direction:column;gap:8px}
+.of-cctv-toolbar{display:flex;align-items:center;justify-content:space-between}
+.of-cctv-pinned-live{position:relative;background:#080e18;border:1px solid #253247;border-radius:16px;overflow:hidden;min-height:250px}
+.of-cctv-fixed-label{position:absolute;z-index:7;top:8px;left:8px;display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:999px;background:rgba(7,12,22,.86);border:1px solid rgba(255,255,255,.12);color:#eef2ff;backdrop-filter:blur(10px);font-size:9px}
+.of-cctv-fixed-label small{color:#89a1bd;font-size:8px}.of-cctv-pinned-live-body{height:100%}.of-cctv-pinned-live .of-cctv-pos{min-height:250px;padding-top:48px}
+.of-cctv-camera-section-title{display:flex;align-items:center;justify-content:space-between;color:#dbe7f7;padding:2px 4px}.of-cctv-camera-section-title b{font-size:11px}.of-cctv-camera-section-title small{font-size:8px;color:#7f91a8}
+.of-cctv-camera-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-height:0}
+.of-cctv-camera-panel{min-height:220px;aspect-ratio:16/10}.of-cctv-camera-title{pointer-events:none;margin-inline-end:auto;max-width:calc(100% - 40px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:7px 10px;border-radius:999px;background:rgba(7,12,22,.82);color:#eef2ff;border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(10px);font-size:9px}
+.of-cctv-room-focus .of-cctv-pinned-live{flex:0 0 39%;min-height:0}.of-cctv-room-focus .of-cctv-pinned-live .of-cctv-pos{height:100%;min-height:0;overflow:auto}.of-cctv-room-focus .of-cctv-camera-section-title{flex:0 0 auto}.of-cctv-room-focus .of-cctv-camera-grid{flex:1;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));min-height:0}.of-cctv-room-focus .of-cctv-camera-panel{height:100%;min-height:0;aspect-ratio:auto}.of-cctv-room-focus .of-cctv-toolbar{flex:0 0 auto}.of-cctv-room-focus .of-cctv-fixed-label{top:5px;left:5px}
+@media(max-width:720px){.of-cctv-pinned-live{min-height:300px}.of-cctv-pinned-live .of-cctv-pos{min-height:300px}.of-cctv-camera-grid{gap:7px}.of-cctv-camera-panel{min-height:185px;aspect-ratio:10/11}.of-cctv-camera-title{font-size:8px;padding:6px 8px}.of-cctv-camera-section-title{padding-top:4px}}
+@media(orientation:landscape){.of-cctv-room-focus .of-cctv-pinned-live{flex-basis:42%}.of-cctv-room-focus .of-cctv-camera-grid{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:minmax(0,1fr)}.of-cctv-room-focus .of-cctv-camera-section-title{display:none}.of-cctv-room-focus .of-cctv-camera-panel{min-height:0}.of-cctv-room-focus .of-cctv-pinned-live .of-cctv-pos-scroll{max-height:calc(42vh - 150px)}}
+</style>
+</style>
+
+<style>
+.of-cctv-camera-select{min-width:0;max-width:calc(100% - 48px);border:1px solid rgba(255,255,255,.15);background:rgba(7,12,22,.88);color:#eef2ff;border-radius:999px;padding:7px 30px 7px 10px;font:inherit;font-size:9px;font-weight:800;outline:none}
+.of-cctv-camera-select option{color:#111;background:#fff}.of-cctv-panel-full:disabled{opacity:.35;cursor:not-allowed}.of-cctv-off-body{display:flex;align-items:center;justify-content:center;text-align:center;color:#94a3b8;background:linear-gradient(145deg,#0b1220,#111827)}.of-cctv-off-body b,.of-cctv-off-body small{display:block}.of-cctv-off-body small{margin-top:5px;font-size:9px}
+@media(max-width:720px){.of-cctv-camera-select{font-size:8px;padding-top:6px;padding-bottom:6px}}
+/* v500 — live video is opt-in; only selected slots create stream iframes. */
+.of-cctv-layouts{display:flex;align-items:center;gap:4px;flex:0 0 auto}.of-cctv-layout-btn:disabled{opacity:.3;cursor:not-allowed}.of-cctv-stop-all{border:1px solid #334155!important;background:#111827!important;color:#cbd5e1!important;border-radius:8px!important;padding:6px 8px!important;font:inherit!important;font-size:9px!important;font-weight:900!important}.of-cctv-status.idle{color:#cbd5e1;background:#172033;border-color:#334155}.of-cctv-camera-grid-1{grid-template-columns:minmax(0,1fr)!important}.of-cctv-camera-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))!important}.of-cctv-camera-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+@media(min-width:1051px){.of-cctv-camera-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
+@media(max-width:720px){.of-cctv-toolbar{align-items:flex-start;flex-wrap:wrap}.of-cctv-branches{min-width:100%}.of-cctv-layouts{width:100%;justify-content:flex-end}.of-cctv-camera-grid-1{grid-template-columns:minmax(0,1fr)!important}.of-cctv-camera-grid-2,.of-cctv-camera-grid-4{grid-template-columns:repeat(2,minmax(0,1fr))!important}.of-cctv-camera-grid-1 .of-cctv-camera-panel{height:280px!important;min-height:280px!important}}
+</style>
+<style id="ofCctvV439Style">
+.of-cctv-last-meta{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.of-cctv-last-meta span{background:#0b1220;border:1px solid #263449;border-radius:999px;padding:5px 9px;font-size:11px;color:#dbeafe}
+.of-cctv-day-review{margin-top:14px;border:1px solid #243247;background:#0b1220;border-radius:16px;padding:12px}.of-cctv-day-head{display:flex;justify-content:space-between;gap:12px;align-items:center}.of-cctv-day-head small{display:block;color:#94a3b8;margin-top:3px}.of-cctv-day-controls{display:flex;gap:7px}.of-cctv-day-controls input,.of-cctv-day-controls button{border:1px solid #334155;background:#111827;color:#fff;border-radius:9px;padding:8px}.of-cctv-day-controls button{cursor:pointer;font-weight:800}.of-cctv-day-row{display:grid;grid-template-columns:75px 1fr auto;gap:10px;align-items:center;border-top:1px solid #1f2937;padding:10px 2px}.of-cctv-day-time{font-weight:900}.of-cctv-day-main small{display:block;color:#94a3b8;margin-top:3px}.of-cctv-day-actions{display:flex;gap:6px}.of-cctv-day-actions button{border:1px solid #334155;background:#111827;color:#fff;border-radius:8px;padding:7px;cursor:pointer}.of-cctv-day-empty{text-align:center;color:#94a3b8;padding:18px}
+.of-cctv-activity-status{display:block;width:max-content;margin-top:7px;padding:4px 8px;border:1px solid #14532d;border-radius:999px;background:#082d22;color:#86efac;font-size:10px;font-weight:800}.of-cctv-activity-status.offline{border-color:#7f1d1d;background:#450a0a;color:#fecaca}.of-cctv-alert-row{border-color:#713f12;background:rgba(120,53,15,.12)}
+.of-day564-head-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.of-day564-head-actions button{border:1px solid #475569;border-radius:9px;background:#172033;color:#fff;padding:8px 10px;font-family:inherit;font-weight:800;cursor:pointer}.of-day564-event-rail{display:flex;gap:6px;overflow-x:auto;padding:8px;background:#090f1c;border-top:1px solid #263449;scrollbar-width:thin}.of-day564-event{flex:0 0 auto;display:flex;gap:6px;align-items:center;max-width:230px;border:1px solid #854d0e;border-radius:9px;background:#422006;color:#fde68a;padding:6px 8px;font-family:inherit;font-size:10px;cursor:pointer}.of-day564-event.strong{border-color:#ef4444;background:#450a0a;color:#fecaca}.of-day564-event b{direction:ltr}.of-day564-event span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.of-smart555-body{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(260px,.65fr);direction:ltr;flex:1;min-height:0}.of-smart555-stage{display:flex;flex-direction:column;min-height:0;background:#020617}.of-smart555-videos{display:grid;grid-template-columns:1fr 1fr;gap:2px;flex:1;min-height:0}.of-smart555-video{position:relative;min-width:0;min-height:0;background:#000}.of-smart555-video video{width:100%;height:100%;object-fit:contain}.of-smart555-label{position:absolute;top:7px;right:7px;z-index:2;padding:4px 7px;border-radius:7px;background:rgba(2,6,23,.82);color:#fff;font-size:10px;font-weight:900}.of-smart555-timeline{position:relative;padding:11px 12px 16px;background:#111827;direction:ltr}.of-smart555-timeline input{width:100%;margin:0}.of-smart555-markers{position:absolute;left:18px;right:18px;top:5px;height:15px;pointer-events:none}.of-smart555-marker{position:absolute;transform:translateX(-50%);width:13px;height:13px;border:2px solid #fff;border-radius:50%;background:#ef4444;padding:0;pointer-events:auto;cursor:pointer}.of-smart555-marker.context{background:#f59e0b;width:10px;height:10px}.of-smart555-cart{direction:rtl;background:#0f172a;color:#fff;display:flex;flex-direction:column;min-height:0;border-right:1px solid #334155}.of-smart555-carthead{padding:10px;border-bottom:1px solid #334155}.of-smart555-event{color:#fbbf24;font-size:12px;font-weight:900;margin-top:6px}.of-smart555-rows{overflow:auto;flex:1;padding:8px}.of-smart555-row{display:flex;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid #263449;font-size:12px}.of-smart555-total{display:flex;justify-content:space-between;padding:12px;border-top:1px solid #334155;font-weight:900}
+@media(max-width:700px){.of-cctv-day-head{align-items:stretch;flex-direction:column}.of-cctv-day-controls>*{flex:1}.of-cctv-day-row{grid-template-columns:60px 1fr}.of-cctv-day-actions{grid-column:1/-1}.of-cctv-day-actions button{flex:1}#ofCctvDayReview .of-cctv-day-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;max-width:100%}#ofCctvDayReview .of-cctv-day-controls>*{min-width:0;width:100%;box-sizing:border-box;padding:10px 7px;font-size:14px}#ofCctvDayDate,#ofCctvDayTime{direction:ltr}#ofCctvDayLoad,#ofCctvDayPlay{white-space:normal;line-height:1.35;min-height:44px}.of-day564-head-actions{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.of-day564-head-actions button{min-width:0;padding:8px 5px;font-size:11px}}
+@media(max-width:700px){.of-smart555-body{grid-template-columns:1fr;grid-template-rows:minmax(42%,1fr) minmax(33%,.8fr)}.of-smart555-videos{grid-template-columns:1fr 1fr}.of-smart555-cart{border-right:0;border-top:1px solid #334155}.of-smart555-label{font-size:8px}}
+</style>
+
+<style id="ofCctvV491PlaybackStyle">
+/* v491 — mobile-safe NVR review + in-Office playback modal */
+.of-cctv-nvr-controls{display:grid;grid-template-columns:minmax(150px,1.25fr) minmax(145px,1fr) minmax(115px,.8fr) minmax(100px,.7fr) minmax(135px,.85fr);gap:7px;min-width:0;max-width:100%}
+.of-cctv-nvr-controls>*{min-width:0;width:100%;box-sizing:border-box}
+.of-cctv-playback-ov{position:fixed;inset:0;z-index:10050;background:rgba(2,6,23,.92);display:flex;align-items:center;justify-content:center;padding:12px}
+.of-cctv-playback-modal{width:min(1180px,100%);height:min(92vh,850px);background:#070b12;border:1px solid #334155;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.55)}
+.of-cctv-playback-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#111827;color:#fff;border-bottom:1px solid #263449}
+.of-cctv-playback-head>div{display:flex;align-items:center;gap:7px}.of-cctv-playback-external,.of-cctv-playback-close{border:1px solid #334155;background:#172033;color:#fff;border-radius:9px;padding:8px 10px;font:inherit;font-weight:800;text-decoration:none;cursor:pointer}
+.of-cctv-playback-modal iframe,.of-cctv-playback-modal>video{display:block;flex:1;width:100%;min-height:0;border:0;background:#000;object-fit:contain}
+.of-day511-body{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(270px,.75fr);direction:ltr;flex:1;min-height:0}.of-day511-stage{display:flex;flex-direction:column;min-width:0;background:#000}.of-day511-stage video{width:100%;flex:1;min-height:0;object-fit:contain}.of-day511-nav{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:8px;background:#111827;color:#fff;direction:rtl}.of-day511-nav input{width:100%}.of-day511-nav button{border:1px solid #334155;background:#172033;color:#fff;border-radius:8px;padding:8px;font-weight:800}.of-day511-cart{direction:rtl;background:#0f172a;color:#fff;display:flex;flex-direction:column;min-height:0;border-right:1px solid #334155}.of-day511-carthead{padding:10px;border-bottom:1px solid #334155}.of-day511-rows{overflow:auto;flex:1;padding:8px}.of-day511-row{display:flex;justify-content:space-between;gap:8px;padding:8px 2px;border-bottom:1px solid #263449;font-size:12px}.of-day511-row small{display:block;color:#94a3b8}.of-day511-total{display:flex;justify-content:space-between;padding:12px;border-top:1px solid #334155;font-weight:900}.of-day511-muted{color:#94a3b8;font-size:11px}.of-day511-event{color:#f5cf68;font-size:11px;margin-top:4px}
+@media(max-width:700px){
+  #ofCctvNvrReview{overflow:hidden}
+  #ofCctvNvrReview .of-cctv-day-head{display:block}
+  #ofCctvNvrReview .of-cctv-day-head>div:first-child{margin-bottom:10px}
+  .of-cctv-nvr-controls{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;width:100%;gap:8px}
+  .of-cctv-nvr-controls>*{font-size:16px!important;padding:10px 8px!important;min-width:0!important;max-width:none!important}
+  #ofCctvNvrCamera{grid-column:1/-1}
+  #ofCctvNvrDate{grid-column:1}
+  #ofCctvNvrTime{grid-column:2}
+  #ofCctvNvrDuration{grid-column:1}
+  #ofCctvNvrOpen{grid-column:2}
+  .of-cctv-playback-ov{padding:0}
+  .of-cctv-playback-modal{width:100%;height:100dvh;max-height:none;border:0;border-radius:0}
+  .of-cctv-playback-head{padding:8px 10px}.of-cctv-playback-head b{font-size:13px}.of-cctv-playback-external{font-size:11px;padding:7px 8px}.of-cctv-playback-close{padding:7px 10px}
+  .of-day511-body{grid-template-columns:1fr;grid-template-rows:minmax(43%,1fr) minmax(35%,.85fr)}.of-day511-cart{border-right:0;border-top:1px solid #334155}.of-day511-nav{grid-template-columns:1fr 1fr}.of-day511-nav input{grid-column:1/-1}
+}
+.of-cctv-playback-noaudio{display:inline-flex;align-items:center;padding:7px 9px;border:1px solid #334155;border-radius:9px;color:#cbd5e1;font-size:11px;font-weight:800}
+</style>
+
+<style id="ofCctvV503Style">
+/* v503 — fixed four-camera wall with independent premium on/off switches. */
+.of-cctv-start-all,.of-cctv-stop-all{border-radius:10px!important;padding:7px 10px!important;font:inherit!important;font-size:9px!important;font-weight:900!important;cursor:pointer!important}
+.of-cctv-start-all{border:1px solid #166534!important;background:#0d2d20!important;color:#bbf7d0!important}
+.of-cctv-stop-all{border:1px solid #334155!important;background:#111827!important;color:#cbd5e1!important}
+.of-cctv-camera-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.of-cctv-camera-grid-1{grid-template-columns:minmax(0,1fr)!important}
+.of-cctv-camera-panel{position:relative}
+.of-cctv-panel-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:7px!important;pointer-events:none!important}
+.of-cctv-camera-name{pointer-events:none;min-width:0;padding:7px 10px;border-radius:12px;background:rgba(7,12,22,.86);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px);color:#f8fafc}
+.of-cctv-camera-name b{display:block;font-size:10px;line-height:1.1}.of-cctv-camera-name small{display:block;color:#94a3b8;font-size:8px;margin-top:3px}
+.of-cctv-camera-actions{display:flex;align-items:center;gap:5px;pointer-events:auto}
+.of-cctv-cam-toggle{display:flex;align-items:center;gap:6px;border:1px solid #334155;background:rgba(15,23,42,.9);color:#cbd5e1;border-radius:999px;padding:5px 7px;cursor:pointer;font:inherit;font-size:8px;font-weight:900;backdrop-filter:blur(10px)}
+.of-cctv-cam-toggle.on{border-color:#15803d;background:rgba(20,83,45,.92);color:#dcfce7}
+.of-cctv-switch-track{position:relative;width:29px;height:16px;border-radius:999px;background:#334155;display:inline-block;flex:0 0 auto;transition:.18s ease}.of-cctv-cam-toggle.on .of-cctv-switch-track{background:#22c55e}
+.of-cctv-switch-knob{position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 4px rgba(0,0,0,.35);transition:transform .18s ease}.of-cctv-cam-toggle.on .of-cctv-switch-knob{transform:translateX(13px)}
+.of-cctv-panel-full{pointer-events:auto!important}
+.of-cctv-camera-panel.is-live{border-color:#14532d;box-shadow:0 0 0 1px rgba(34,197,94,.08),0 10px 28px rgba(0,0,0,.22)}
+.of-cctv-off-body{background:radial-gradient(circle at 50% 15%,rgba(30,41,59,.7),rgba(5,9,16,.96) 66%)}
+.of-cctv-off-camera span{font-size:25px;opacity:.7}.of-cctv-off-camera b{margin-top:8px;font-size:13px;color:#e2e8f0}.of-cctv-off-camera small{font-size:9px;color:#94a3b8}.of-cctv-off-camera em{display:inline-block;margin-top:9px;padding:6px 10px;border:1px solid #253247;border-radius:999px;color:#64748b;font-size:8px;font-style:normal}
+@media(min-width:1051px){.of-cctv-camera-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
+@media(max-width:720px){.of-cctv-camera-panel{height:190px!important;min-height:190px!important;aspect-ratio:auto!important}.of-cctv-camera-name{padding:6px 7px}.of-cctv-camera-name b{font-size:9px}.of-cctv-camera-name small{font-size:7px}.of-cctv-cam-toggle{padding:4px 5px}.of-cctv-switch-track{width:27px;height:15px}.of-cctv-switch-knob{width:11px;height:11px}.of-cctv-cam-toggle.on .of-cctv-switch-knob{transform:translateX(12px)}.of-cctv-switch-text{display:none}}
+</style>
+
+<style id="ofCctvV521Style">
+/* Madinaty reliable live fallback: current JPEG frames avoid failed remote MSE sessions. */
+.of-cctv-video img[data-live-frame]{position:absolute;inset:0;display:block;width:100%;height:100%;min-height:100%;object-fit:contain;background:#000;opacity:0;transition:opacity .15s ease}
+.of-cctv-video img[data-live-frame].is-ready{opacity:1}
+</style>
+\n<style id="ofCctvV583Style">
+/* v596 compact CCTV navigation: one workspace at a time, sticky controls, all-branch live shortcuts. */
+#page-cctv{overflow-x:hidden}.of-cctv-controlroom{padding-bottom:18px}.of-cctv-toolbar{position:sticky;top:0;z-index:28;background:rgba(5,9,16,.96);backdrop-filter:blur(12px);padding:8px 0;margin-bottom:8px}
+.of-cctv-branches{display:grid!important;grid-template-columns:repeat(4,minmax(120px,1fr));gap:7px!important;flex:1}.of-cctv-branch-card{display:flex;align-items:stretch;min-width:0;border:1px solid #263449;background:#0f172a;border-radius:13px;overflow:hidden;color:#e5e7eb}.of-cctv-branch-card.active{border-color:#2563eb;box-shadow:0 0 0 1px rgba(37,99,235,.25)}.of-cctv-branch-card.all{appearance:none;padding:0;cursor:pointer;align-items:center;justify-content:center;gap:6px;flex-direction:column}.of-cctv-branch-card.all span{font-size:18px}.of-cctv-branch-card.all b,.of-cctv-branch-main b{font-size:10px}.of-cctv-branch-card small,.of-cctv-branch-main small{font-size:8px;color:#94a3b8}.of-cctv-branch-main{flex:1;min-width:0;border:0;background:transparent;color:inherit;padding:8px 7px;cursor:pointer;display:grid;grid-template-columns:auto 1fr;column-gap:6px;text-align:right}.of-cctv-branch-main span{grid-row:1/3;font-size:17px;align-self:center}.of-cctv-branch-main b,.of-cctv-branch-main small{display:block}.of-cctv-branch-play{border:0;border-right:1px solid #263449;background:#111827;color:#f8d568;padding:7px 6px;cursor:pointer;font-size:8px;font-weight:900;white-space:nowrap}
+.of-cctv-worknav{display:flex;gap:6px;overflow:auto;padding:4px 0 8px;scrollbar-width:none}.of-cctv-worknav::-webkit-scrollbar{display:none}.of-cctv-worknav button{border:1px solid #334155;background:#111827;color:#cbd5e1;border-radius:999px;padding:8px 11px;white-space:nowrap;font:inherit;font-size:9px;font-weight:900;cursor:pointer}.of-cctv-worknav button.active{background:#1d4ed8;border-color:#3b82f6;color:#fff}.of-cctv-workpane{margin-top:7px}.of-cctv-all-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.of-cctv-all-card{border:1px solid #263449;border-radius:14px;background:#0b1220;overflow:hidden}.of-cctv-all-head{display:flex;justify-content:space-between;gap:7px;align-items:center;padding:8px 9px}.of-cctv-all-head b{display:block;font-size:11px}.of-cctv-all-head small{display:block;color:#94a3b8;font-size:8px}.of-cctv-all-head button{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:8px;padding:5px 7px;font-size:8px;font-weight:800;cursor:pointer;margin-inline-start:4px}.of-cctv-all-media{height:250px;background:#000}.of-cctv-all-media iframe,.of-cctv-all-media img{width:100%;height:100%;border:0;object-fit:contain;background:#000}.of-cctv-day-review{margin-top:8px!important}.of-cctv-nvr-controls{gap:6px!important}.of-cctv-nvr-controls>*{min-height:36px}.of-cctv-playback-modal{max-height:92vh}.of-cctv-playback-modal video{min-height:min(58vh,520px)}
+.of-traffic606-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:9px 0}.of-traffic606-cards>div{background:#0f172a;border:1px solid #263449;border-radius:12px;padding:10px;text-align:center}.of-traffic606-cards small{display:block;color:#94a3b8;font-size:8px}.of-traffic606-cards b{display:block;color:#f8fafc;font-size:20px;margin-top:3px}.of-traffic606-note{font-size:9px;color:#94a3b8;margin:6px 2px}.of-traffic606-hours{display:flex;gap:6px;overflow:auto;margin:7px 0;padding-bottom:3px}.of-traffic606-hours span{min-width:88px;background:#0b1220;border:1px solid #263449;border-radius:9px;padding:7px}.of-traffic606-hours b,.of-traffic606-hours small{display:block;font-size:8px}.of-traffic606-hours small{color:#94a3b8;margin-top:2px}.of-traffic606-tablewrap{overflow:auto;border:1px solid #263449;border-radius:10px;margin:7px 0 12px}.of-traffic606-table{width:100%;border-collapse:collapse;font-size:9px}.of-traffic606-table th,.of-traffic606-table td{padding:7px;border-bottom:1px solid #1e293b;text-align:center}.of-traffic606-table th{color:#94a3b8;background:#0b1220}.of-traffic606-table td{color:#e2e8f0}
+@media(max-width:620px){.of-traffic606-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.of-traffic606-cards b{font-size:17px}}
+@media(max-width:900px){.of-cctv-branches{grid-template-columns:repeat(2,minmax(0,1fr))}.of-cctv-all-grid{grid-template-columns:1fr 1fr}.of-cctv-all-media{height:220px}}
+@media(max-width:620px){.of-cctv-toolbar{top:0}.of-cctv-branches{display:flex!important;overflow:auto;scroll-snap-type:x proximity}.of-cctv-branch-card{min-width:145px;scroll-snap-align:start}.of-cctv-all-grid{grid-template-columns:1fr}.of-cctv-all-media{height:210px}.of-cctv-top{position:relative}.of-cctv-room-full{display:none}.of-cctv-footnote{display:none}.of-cctv-camera-section-title small{display:none}}
+</style>\n
+<style id="ofCctvV592MobileReviewStyle">
+.of-day592-noaudio{display:inline-flex;align-items:center;justify-content:center;border:1px solid #334155;background:#0f172a;color:#cbd5e1;border-radius:9px;padding:7px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+@media(max-width:700px){
+  #ofCctvPlaybackOv .of-cctv-playback-modal{height:100dvh;max-height:100dvh;overflow:hidden}
+  #ofCctvPlaybackOv .of-cctv-playback-head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px;padding:6px 8px;min-height:0}
+  #ofCctvPlaybackOv .of-cctv-playback-head>div:first-child{min-width:0}
+  #ofCctvPlaybackOv .of-cctv-playback-head b{font-size:12px;line-height:1.2}
+  #ofCctvPlaybackOv .of-cctv-playback-head small{display:block;max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;line-height:1.2}
+  #ofCctvPlaybackOv .of-day564-head-actions{width:auto!important;display:flex!important;flex-wrap:nowrap!important;gap:4px!important;justify-content:flex-end!important}
+  #ofCctvPlaybackOv .of-day564-head-actions button,#ofCctvPlaybackOv .of-day592-noaudio{padding:6px 7px!important;min-width:0!important;font-size:10px!important;border-radius:8px!important}
+  #ofCctvPlaybackOv .of-day592-noaudio{display:none}
+
+  #ofCctvPlaybackOv .of-day511-body{display:flex!important;flex-direction:column!important;min-height:0!important;overflow:hidden!important}
+  #ofCctvPlaybackOv .of-day511-stage{flex:0 0 auto!important;min-height:0!important;background:#020617!important}
+  #ofCctvPlaybackOv .of-day511-stage>.of-smart555-videos{height:clamp(108px,31vw,158px)!important;min-height:108px!important;max-height:158px!important;flex:none!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:2px!important}
+  #ofCctvPlaybackOv .of-smart555-video{height:100%!important;min-height:0!important;overflow:hidden!important}
+  #ofCctvPlaybackOv .of-smart555-video video{display:block!important;width:100%!important;height:100%!important;min-height:0!important;object-fit:contain!important;background:#000!important}
+  #ofCctvPlaybackOv .of-smart555-label{top:4px!important;right:4px!important;padding:3px 5px!important;font-size:8px!important}
+
+  #ofCctvPlaybackOv .of-smart555-timeline{height:28px!important;box-sizing:border-box!important;padding:5px 10px 7px!important}
+  #ofCctvPlaybackOv .of-smart555-markers{top:2px!important;height:10px!important;left:12px!important;right:12px!important}
+  #ofCctvPlaybackOv .of-smart555-marker{width:9px!important;height:9px!important;border-width:1px!important}
+  #ofCctvPlaybackOv .of-smart555-timeline input{height:14px!important;margin:0!important}
+
+  #ofCctvPlaybackOv .of-day564-event-rail{min-height:0!important;max-height:31px!important;padding:3px 6px!important;gap:4px!important;overflow-x:auto!important;overflow-y:hidden!important}
+  #ofCctvPlaybackOv .of-day564-event{padding:3px 5px!important;font-size:8px!important;max-width:155px!important;border-radius:7px!important}
+  #ofCctvPlaybackOv .of-day511-nav{grid-template-columns:1fr 1fr!important;gap:5px!important;padding:4px 6px!important}
+  #ofCctvPlaybackOv .of-day511-nav button{padding:5px 7px!important;font-size:10px!important;min-height:30px!important}
+
+  #ofCctvPlaybackOv .of-day511-cart{flex:1 1 auto!important;min-height:0!important;overflow:hidden!important;border-top:1px solid #334155!important;border-right:0!important}
+  #ofCctvPlaybackOv .of-day511-carthead{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;column-gap:8px!important;row-gap:2px!important;padding:7px 9px!important}
+  #ofCctvPlaybackOv .of-day511-carthead>b{font-size:13px!important;line-height:1.2!important}
+  #ofCctvPlaybackOv .of-day511-carthead>[data-day-clock]{grid-column:2;grid-row:1;text-align:left;white-space:nowrap;font-size:9px!important}
+  #ofCctvPlaybackOv .of-day511-carthead>[data-day-event]{grid-column:1/-1;margin-top:1px!important;font-size:10px!important}
+  #ofCctvPlaybackOv .of-day511-carthead>[data-day-sync]{grid-column:1;font-size:9px!important}
+  #ofCctvPlaybackOv .of-day511-carthead>[data-day-status]{grid-column:2;text-align:left;font-size:9px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #ofCctvPlaybackOv .of-day511-rows{flex:1!important;min-height:0!important;overflow:auto!important;padding:4px 8px!important}
+  #ofCctvPlaybackOv .of-day511-row{padding:6px 1px!important;font-size:11px!important}
+  #ofCctvPlaybackOv .of-day511-rows>.of-day511-muted{padding:8px!important}
+  #ofCctvPlaybackOv .of-day511-total{flex:0 0 auto!important;padding:8px 10px!important;font-size:14px!important}
+}
+@media(max-width:420px){
+  #ofCctvPlaybackOv .of-cctv-playback-head small{display:none}
+  #ofCctvPlaybackOv .of-day564-head-actions button{padding:5px 6px!important;font-size:9px!important}
+  #ofCctvPlaybackOv .of-day511-stage>.of-smart555-videos{height:112px!important;min-height:112px!important}
+}
+</style>
+
+
+<style id="ofCctvV594MobileStackStyle">
+@media(max-width:700px){
+#ofCctvPlaybackOv .of-cctv-playback-modal{height:100dvh!important;max-height:100dvh!important;overflow:hidden!important}
+#ofCctvPlaybackOv .of-day511-body{display:flex!important;flex-direction:column!important;height:calc(100dvh - 52px)!important;min-height:0!important;overflow:hidden!important}
+#ofCctvPlaybackOv .of-day511-stage{display:flex!important;flex-direction:column!important;flex:0 0 auto!important;min-height:0!important;background:#000!important}
+#ofCctvPlaybackOv .of-day511-stage>.of-smart555-videos{display:flex!important;flex-direction:column!important;height:auto!important;min-height:0!important;max-height:none!important;gap:2px!important;background:#000!important}
+#ofCctvPlaybackOv .of-smart555-video{width:100%!important;height:clamp(112px,26dvh,178px)!important;min-height:112px!important;max-height:178px!important;flex:none!important;position:relative!important;background:#000!important;overflow:hidden!important}
+#ofCctvPlaybackOv .of-smart555-video video{display:block!important;width:100%!important;height:100%!important;min-height:0!important;max-height:none!important;object-fit:contain!important;background:#000!important}
+#ofCctvPlaybackOv .of-smart555-label{top:4px!important;right:6px!important;font-size:9px!important;padding:3px 6px!important}
+#ofCctvPlaybackOv .of-smart555-timeline{flex:none!important;height:24px!important;padding:4px 9px 5px!important}
+#ofCctvPlaybackOv .of-day564-event-rail{flex:none!important;max-height:25px!important;min-height:0!important;padding:2px 6px!important}
+#ofCctvPlaybackOv .of-day511-nav{flex:none!important;padding:3px 6px!important;gap:5px!important}
+#ofCctvPlaybackOv .of-day511-nav button{min-height:27px!important;padding:3px 6px!important;font-size:9px!important}
+#ofCctvPlaybackOv .of-day511-cart{display:flex!important;flex-direction:column!important;flex:1 1 0!important;min-height:110px!important;overflow:hidden!important;background:#0f172a!important}
+#ofCctvPlaybackOv .of-day511-carthead{flex:none!important;padding:5px 8px!important}
+#ofCctvPlaybackOv .of-day511-carthead>b{font-size:12px!important}
+#ofCctvPlaybackOv .of-day511-rows{flex:1 1 0!important;min-height:0!important;overflow-y:auto!important;padding:3px 8px!important}
+#ofCctvPlaybackOv .of-day511-total{flex:none!important;padding:6px 9px!important;font-size:13px!important}
+}
+@media(max-width:420px){
+#ofCctvPlaybackOv .of-smart555-video{height:clamp(105px,23dvh,145px)!important;min-height:105px!important;max-height:145px!important}
+#ofCctvPlaybackOv .of-day511-body{height:calc(100dvh - 48px)!important}
+}
+</style>
+
+
+<style id="ofCctvV595ReviewFixStyle">
+#ofCctvPlaybackOv iframe[data-pb-glow]{display:block;width:100%;flex:1;min-height:0;border:0;background:#000}
+@media(max-width:700px){
+  #ofCctvPlaybackOv iframe[data-pb-glow]{height:calc(100dvh - 150px);min-height:360px;flex:1}
+  #ofCctvPlaybackOv .of-day511-stage>.of-smart555-videos{
+    display:flex!important;flex-direction:column!important;height:auto!important;max-height:none!important;gap:2px!important
+  }
+  #ofCctvPlaybackOv .of-smart555-video{
+    width:100%!important;height:clamp(150px,27dvh,215px)!important;
+    min-height:150px!important;max-height:215px!important;flex:none!important
+  }
+  #ofCctvPlaybackOv .of-smart555-video video{width:100%!important;height:100%!important;object-fit:contain!important}
+  #ofCctvPlaybackOv .of-day564-event-rail{
+    display:flex!important;min-height:48px!important;max-height:60px!important;
+    padding:5px 7px!important;gap:6px!important;overflow-x:auto!important;overflow-y:hidden!important
+  }
+  #ofCctvPlaybackOv .of-day564-event{
+    flex:0 0 auto!important;min-width:145px!important;max-width:190px!important;
+    min-height:40px!important;padding:5px 7px!important;font-size:9px!important;
+    display:flex!important;flex-direction:column!important;justify-content:center!important
+  }
+  #ofCctvPlaybackOv .of-smart555-timeline{height:30px!important;padding:6px 10px 7px!important}
+  #ofCctvPlaybackOv .of-day511-nav{padding:4px 6px!important}
+  #ofCctvPlaybackOv .of-day511-cart{min-height:125px!important}
+}
+@media(max-width:420px){
+  #ofCctvPlaybackOv .of-smart555-video{
+    height:clamp(140px,25dvh,190px)!important;min-height:140px!important;max-height:190px!important
+  }
+}
+</style>
+
+<style id="ofCctvV596FinalReviewStyle">
+#ofCctvPlaybackOv .of-day596-glow-wrap{position:relative;width:100%;height:min(52dvh,430px);min-height:300px;background:#000}
+#ofCctvPlaybackOv iframe[data-day-glow]{display:block;width:100%;height:100%;border:0;background:#000}
+@media(max-width:700px){
+#ofCctvPlaybackOv .of-day511-body{height:calc(100dvh - 50px)!important}
+#ofCctvPlaybackOv .of-day511-stage>.of-smart555-videos{display:flex!important;flex-direction:column!important;width:100%!important;height:auto!important;max-height:none!important;gap:2px!important}
+#ofCctvPlaybackOv .of-smart555-video{width:100%!important;height:clamp(165px,24dvh,205px)!important;min-height:165px!important;max-height:205px!important;flex:0 0 auto!important}
+#ofCctvPlaybackOv .of-smart555-video video{width:100%!important;height:100%!important;object-fit:contain!important;background:#000!important}
+#ofCctvPlaybackOv .of-day596-glow-wrap{height:clamp(300px,48dvh,390px)!important;min-height:300px!important}
+#ofCctvPlaybackOv .of-smart555-timeline{height:34px!important;padding:7px 10px 8px!important}
+#ofCctvPlaybackOv .of-day564-event-rail{display:flex!important;min-height:64px!important;max-height:72px!important;padding:7px 8px!important;gap:7px!important;overflow-x:auto!important;overflow-y:hidden!important}
+#ofCctvPlaybackOv .of-day564-event{min-width:170px!important;max-width:220px!important;min-height:50px!important;padding:7px 9px!important;font-size:10px!important;line-height:1.25!important;display:flex!important;flex-direction:column!important;align-items:flex-start!important}
+#ofCctvPlaybackOv .of-day564-event span{width:100%!important;white-space:normal!important;overflow:visible!important}
+#ofCctvPlaybackOv .of-day511-cart{flex:1 1 0!important;min-height:135px!important}
+}</style>
+
+<style id="ofV665OfficeUx">
+/* Office v665 — simpler CCTV navigation, visible loading, premium playback timeline */
+#page-cctv .of-cctv-shell{max-width:1180px;margin:0 auto}
+#page-cctv .of-cctv-toolbar{display:grid;gap:10px}
+#page-cctv .of-cctv-worknav{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px!important;overflow:visible!important}
+#page-cctv .of-cctv-worknav button{min-width:0!important;min-height:66px;border:1px solid #e2e8f0!important;border-radius:15px!important;background:#fff!important;color:#334155!important;display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 5px!important;box-shadow:0 4px 14px rgba(15,23,42,.04)}
+#page-cctv .of-cctv-worknav button span{font-size:18px} #page-cctv .of-cctv-worknav button b{font-size:12px} #page-cctv .of-cctv-worknav button small{font-size:9px;color:#94a3b8;line-height:1.15}
+#page-cctv .of-cctv-worknav button.active{border-color:#111827!important;background:#111827!important;color:#fff!important;box-shadow:0 8px 20px rgba(15,23,42,.18)}
+#page-cctv .of-cctv-worknav button.active small{color:#cbd5e1}
+.of-cctv665-busy{display:none;margin:10px 0 12px;padding:11px 13px;border:1px solid #dbeafe;border-radius:14px;background:#f8fbff;box-shadow:0 8px 24px rgba(37,99,235,.06)}
+.of-cctv665-busy.show{display:block}.of-cctv665-busy-top{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:11px;color:#475569;margin-bottom:7px}.of-cctv665-busy-top b{font-size:12px;color:#0f172a}
+.of-cctv665-busy-track,.of-pb665-loader-track,.of-day665-load>div,.of-sales665-progress>div,.of-inline665-loader{height:5px;border-radius:999px;background:#e2e8f0;overflow:hidden;position:relative}
+.of-cctv665-busy-track i,.of-pb665-loader-track i,.of-day665-load i,.of-sales665-progress i,.of-inline665-loader i{display:block;height:100%;width:38%;border-radius:inherit;background:linear-gradient(90deg,#0f172a,#64748b);transition:width .25s ease}
+.of-cctv665-busy-track i.indeterminate,.of-pb665-loader-track i.indeterminate,.of-day665-load i.indeterminate{animation:of665load 1.05s ease-in-out infinite}
+@keyframes of665load{0%{transform:translateX(-130%)}55%{transform:translateX(130%)}100%{transform:translateX(290%)}}
+.of-pb665-loader{display:none;padding:10px 12px;background:#0f172a;color:#e2e8f0}.of-pb665-loader.show{display:block}.of-pb665-loader-top{display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:7px}.of-pb665-loader-top b{font-size:9px;letter-spacing:.12em;color:#94a3b8}
+#ofCctvPlaybackOv .of-day665-timeline{background:#0b1220;padding:10px 12px 12px;border-top:1px solid #263244;position:relative;z-index:3}
+#ofCctvPlaybackOv .of-day665-timeline-head{display:flex;justify-content:space-between;align-items:center;gap:12px;color:#cbd5e1;margin-bottom:7px;font-size:10px}
+#ofCctvPlaybackOv .of-day665-timeline-head b{color:#fff;font-size:12px}
+#ofCctvPlaybackOv input[data-day-slider]{display:block!important;width:100%!important;height:26px!important;margin:0!important;accent-color:#fff;touch-action:pan-x;cursor:pointer}
+#ofCctvPlaybackOv .of-day665-marker-track{position:relative!important;height:9px!important;margin-top:3px!important;background:#1e293b;border-radius:99px;overflow:visible!important}
+#ofCctvPlaybackOv .of-day665-marker-track .of-smart555-marker{top:0!important;transform:translate(-50%,-1px)!important;height:11px!important;width:4px!important;border-radius:3px!important}
+#ofCctvPlaybackOv .of-day665-events-head{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#111827;color:#e2e8f0;padding:7px 10px 3px;font-size:9px}
+#ofCctvPlaybackOv .of-day665-events-head b{font-size:11px;color:#fff}
+#ofCctvPlaybackOv .of-day564-event-rail{position:relative!important;z-index:2!important;border-top:0!important}
+#ofCctvPlaybackOv .of-day665-load{display:none;margin-top:5px}.of-day665-load.show{display:block}#ofCctvPlaybackOv .of-day665-load span{display:block;font-size:9px;margin-bottom:5px;color:#cbd5e1}
+.of-inline665-loader{width:150px;max-width:80%;margin:0 auto 10px}.of-inline665-loader i{animation:of665load 1.05s ease-in-out infinite}
+.of-cctv-day-empty small{display:block;margin-top:5px;color:#94a3b8}
+.of-sales665-panel{border:1px solid #dbe3ee!important;box-shadow:0 10px 30px rgba(15,23,42,.05)}
+.of-sales665-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.of-sales665-head h3{margin-bottom:2px!important}.of-sales665-live{font-size:9px;font-weight:900;letter-spacing:.12em;background:#111827;color:#fff;border-radius:999px;padding:6px 8px}
+.of-sales665-quick{display:flex;gap:6px;margin:12px 0 9px}.of-sales665-quick button{flex:1;border:1px solid #e2e8f0;background:#fff;color:#111827!important;border-radius:11px;padding:9px;font-weight:800}.of-sales665-quick button.on{background:#111827!important;color:#fff!important;border-color:#111827}
+.of-sales665-controls{display:grid;grid-template-columns:1fr 1fr 1.1fr auto;gap:8px;align-items:end}.of-sales665-controls label{display:grid;gap:4px;font-size:10px;color:#64748b}.of-sales665-controls input,.of-sales665-controls select{width:100%;min-width:0}.of-sales665-controls button{height:42px;border:0;border-radius:12px;background:#111827;color:#fff;font-weight:900;padding:0 15px}
+.of-sales665-progress{display:none;margin-top:12px}.of-sales665-progress.show{display:grid;gap:6px}.of-sales665-progress span{font-size:10px;color:#64748b}.of-sales665-progress i{animation:of665load 1.05s ease-in-out infinite}
+.of-sales665-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:13px}.of-sales665-kpi,.of-sales665-branch{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#fff}.of-sales665-kpi b{display:block;font-size:18px;color:#0f172a}.of-sales665-kpi span,.of-sales665-branch small{font-size:10px;color:#64748b}
+.of-sales665-branches{display:grid;gap:7px;margin-top:10px}.of-sales665-branch{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}.of-sales665-branch strong{font-size:14px}.of-sales665-share{grid-column:1/-1;height:5px;background:#e2e8f0;border-radius:999px;overflow:hidden}.of-sales665-share i{display:block;height:100%;background:#111827;border-radius:999px}
+@media(max-width:700px){
+ #page-cctv .of-cctv-worknav{grid-template-columns:repeat(5,1fr)!important;gap:5px!important}
+ #page-cctv .of-cctv-worknav button{min-height:58px!important;padding:6px 2px!important;border-radius:12px!important} #page-cctv .of-cctv-worknav button span{font-size:16px} #page-cctv .of-cctv-worknav button b{font-size:10px} #page-cctv .of-cctv-worknav button small{display:none}
+ #ofCctvPlaybackOv .of-day665-timeline{padding:8px 10px 10px!important}
+ #ofCctvPlaybackOv .of-day665-events-head{padding:6px 8px 3px!important}
+ #ofCctvPlaybackOv .of-day564-event-rail{min-height:54px!important;max-height:62px!important}
+ .of-sales665-controls{grid-template-columns:1fr 1fr}.of-sales665-controls label:nth-child(3),.of-sales665-controls button{grid-column:1/-1}
+ .of-sales665-kpis{grid-template-columns:1fr 1fr}.of-sales665-kpi:first-child{grid-column:1/-1}
+}
+</style>
+
+
+<style id="ofV666PlaybackPolish">
+#ofCctvPlaybackOv .of-day666-buffer{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:7px 10px;background:#0b1220;color:#cbd5e1;font-size:10px}
+#ofCctvPlaybackOv .of-day666-buffer>div{height:5px;background:#263244;border-radius:999px;overflow:hidden}
+#ofCctvPlaybackOv .of-day666-buffer i{display:block;width:0;height:100%;background:#e2e8f0;border-radius:999px;transition:width .18s linear}
+#ofCctvPlaybackOv .of-day666-nav{grid-template-columns:1fr 1fr!important}
+#ofCctvPlaybackOv .of-day666-nav button{font-size:13px!important;min-height:42px}
+.of-sales665-quick button{color:#111827!important}
+.of-sales665-quick button.on{background:#111827!important;color:#fff!important}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  Array.from(document.body.childNodes).forEach(function(n){
+    if(n.nodeType===3 && /^\s*(?:n|\\n)+\s*$/i.test(n.nodeValue||'')) n.remove();
+  });
+});
+</script>
+
+<style id="ofCctvV671LocalReviewStyle">
+.of-cctv-connection-mode{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border-radius:999px;font-size:11px;font-weight:900;white-space:nowrap;border:1px solid #334155;background:#0f172a;color:#cbd5e1}
+.of-cctv-connection-mode.local{background:#052e16;border-color:#166534;color:#bbf7d0}
+.of-cctv-connection-mode.remote{background:#172554;border-color:#1d4ed8;color:#bfdbfe}
+.of-cctv-local-open{border:1px solid #166534;background:#052e16;color:#bbf7d0;border-radius:10px;padding:6px 9px;font-size:11px;font-weight:900;cursor:pointer}
+@media(max-width:700px){.of-cctv-connection-mode{font-size:9px;padding:5px 7px}}
+</style>
+</head>
+<body>
+<!-- 🏢 ده Office القديم — الأساسي بقى Office 2 على ./ -->
+<a href="./" style="position:fixed;top:8px;left:8px;z-index:99;background:#1f5eff;color:#fff;font:800 12px Cairo,sans-serif;padding:7px 11px;border-radius:10px;text-decoration:none;box-shadow:0 6px 16px -6px rgba(0,0,0,.5)">↩ Office الجديد</a>
+
+
+<!-- ===== بوابة الدخول: حساب فرع (Firebase) + كود المالك ===== -->
+<div id="bootWait"><div class="bw-logo">🏢</div><div class="bw-name">echarpe office</div><div class="bw-bar"><i></i></div><div class="bw-tip" id="bwTip">بنجهّز مكتبك…</div></div>
+<div id="ofLoadBar"><i></i></div>
+<div id="ofLoadPill"><span class="sp"></span><span id="ofLoadTxt">بيجهّز…</span><small id="ofLoadN"></small></div>
+<div id="gate">
+  <div class="card">
+    <div class="logo">🏢</div>
+    <h1>echarpe office</h1>
+    <p>إدارة البيزنس — للمالك بس</p>
+    <div id="gateStep1">
+      <input id="gEmail" type="email" placeholder="إيميل حساب الفرع" autocomplete="username" style="direction:ltr;">
+      <input id="gPass" type="password" placeholder="الباسورد" autocomplete="current-password" style="direction:ltr;">
+      <button id="gLogin">دخول</button>
+    </div>
+    <div id="gateStep2">
+      <input id="gCode" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="كود المالك" style="letter-spacing:4px;">
+      <button id="gCodeBtn">تأكيد</button>
+      <button id="gBioBtn" style="display:none; margin-top:8px; width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--ink);">👆 افتح بالبصمة</button>
+      <label style="display:none; align-items:center; gap:7px; margin-top:10px; font-size:12px; color:var(--sub);" id="gBioEnrollRow"><input type="checkbox" id="gBioEnroll" style="width:16px; height:16px;"> اربط البصمة على الجهاز ده</label>
+    </div>
+    <div id="gateErr"></div>
+  </div>
+</div>
+
+<header>
+  <div>
+    <h1>🏢 echarpe office</h1>
+    <div class="sub" id="hdrSub">…</div>
+  </div>
+  <!-- 🔧 أيقونات بس بمقاس واحد — النصوص الطويلة كانت بتلفّ السطر
+       وتركب على العنوان. الشرح في `title` وفي شاشة الإشعارات نفسها. -->
+  <div class="hdrBtns">
+    <button id="eyeBtn" class="ghost ico" onclick="ofToggleMoney()" title="إخفاء الأرقام">👁️</button>
+    <button id="notifBtn" class="ghost ico" title="تفعيل الإشعارات">🔔</button>
+    <button id="notifTestBtn" class="ghost ico" onclick="ofPushTest(this)" title="ابعت إشعار تجربة">🧪</button>
+    <button onclick="officeLogout()" class="ghost ico" title="خروج ونسيان الدخول">🚪</button>
+  </div>
+</header>
+
+<main>
+  <!-- 🔔 الوارد -->
+  <section class="tabPage on" id="page-day">
+    <div id="officeHomeSummary"></div>
+    <div class="card" style="position:sticky; top:0; z-index:5;">
+      <div style="display:flex; gap:6px;">
+        <select id="dayBranch" style="flex:1;"></select>
+        <input id="dayDate" type="date" style="flex:1; direction:ltr;">
+      </div>
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <button class="dayNav" data-d="-1" style="flex:1;">◀ امبارح</button>
+        <button class="dayNav" data-d="0"  style="flex:1;">النهاردة</button>
+        <button class="dayNav" data-d="1"  style="flex:1;">بكرة ▶</button>
+      </div>
+      <div id="dayWindow" style="font-size:11px; color:var(--sub); margin-top:7px; text-align:center;"></div>
+    </div>
+
+    <!-- 👥 الحاضرين دلوقتي (لايف — مستقل عن تاريخ اليوم المختار) -->
+    <div id="dayPresent"></div>
+
+    <div class="card">
+      <div id="daySubNav" style="display:flex; gap:4px;">
+        <button class="daySub" data-s="pay"   style="flex:1;">💵 الدفع</button>
+        <button class="daySub on" data-s="sales"    style="flex:1;">🧾 سجل المبيعات</button>
+        <button class="daySub" data-s="items"    style="flex:1;">📦 الأصناف</button>
+      </div>
+    </div>
+
+    <div id="dayPay"   class="daySec" style="display:none;"></div>
+    <div id="daySales" class="daySec"></div>
+    <div id="dayItems" class="daySec" style="display:none;"></div>
+  </section>
+
+  <section class="tabPage" id="page-tasks">
+    <div class="card" style="position:sticky; top:0; z-index:5;">
+      <select id="tkBranch" style="width:100%;"></select>
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <button class="tkNav" data-d="-1" style="flex:1;">◀ اللي فات</button>
+        <button class="tkNav" data-d="0"  style="flex:1;">الأسبوع ده</button>
+        <button class="tkNav" data-d="1"  style="flex:1;">اللي جاي ▶</button>
+      </div>
+      <div id="tkRange" style="font-size:11px; color:var(--sub); margin-top:7px; text-align:center;"></div>
+    </div>
+    <div id="tkList"></div>
+  </section>
+
+  <section class="tabPage" id="page-inbox">
+    <div class="panel">
+      <h3>🔔 الوارد — محتاج قرارك</h3>
+      <div class="hint">أذونات وتسجيلات وأوردرات ونواقص من كل الفروع، لحظة بلحظة.</div>
+      <div id="inboxList"></div>
+    </div>
+
+  </section>
+
+  <!-- 💼 التوظيف: الحلقة كاملة — شواغر ← متقدّمين ← دعوة ← طلبات ← ملف -->
+  <!-- 💼 التوظيف — أربع شاشات منفصلة، واحدة تبان في المرة.
+       🔴 قبل كده: خمس لوحات مرصوصة في سكرول واحد بنفس الشكل، فالمتقدّمين
+          على الإعلان (job_applications) كانوا تايهين وسط اللي قدّم الورق
+          بعد الدعوة (staff_docs) — مجموعتين مختلفتين تمامًا. -->
+  <section class="tabPage" id="page-hire">
+    <div class="card" style="position:sticky; top:0; z-index:5;">
+      <div id="hireSubNav" style="display:flex; gap:4px;">
+        <button class="hireSub on" data-h="apps"  style="flex:1;">📋 مقدّمين<span class="hsN" id="hsnApps">0</span></button>
+        <button class="hireSub" data-h="docs"     style="flex:1;">📄 ورق<span class="hsN" id="hsnDocs">0</span></button>
+        <button class="hireSub" data-h="vac"      style="flex:1;">📌 شواغر</button>
+        <button class="hireSub" data-h="files"    style="flex:1;">🗂️ ملفات</button>
+      </div>
+    </div>
+
+    <!-- 📋 مقدّمين — اللي جه من رابط الإعلان، قبل أي مقابلة -->
+    <div id="hireApps" class="hireSec">
+    <div class="panel">
+      <h3>💼 المتقدّمين للوظائف</h3>
+      <div class="hint">الطلبات الجاية من رابط الإعلان. افرز، وابعت دعوة تسجيل
+        لأي حد بعد المقابلة.</div>
+      <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;">
+        <select id="apStatus" style="flex:1 1 130px;">
+          <option value="new">🆕 جديد</option>
+          <option value="interview">📞 للمقابلة</option>
+          <option value="hired">✅ اتوظف</option>
+          <option value="rejected">❌ مرفوض</option>
+          <option value="">الكل</option>
+        </select>
+        <select id="apBranch" style="flex:1 1 120px;"><option value="">كل الفروع</option></select>
+        <select id="apShift" style="flex:1 1 120px;">
+          <option value="">كل الشيفتات</option>
+          <option value="morning">صباحي</option>
+          <option value="evening">مسائي</option>
+          <option value="setup">تجهيز ٧–١٠</option>
+          <option value="any">أي شيفت</option>
+        </select>
+      </div>
+      <div id="apList"></div>
+    </div>
+
+    <!-- 🗂️ ملف الموظفة: بحث بالاسم أو الرقم في **كل** التاريخ، والمستندات
+         بتتجاب على الطلب مش على نافذة زمنية -->
+    </div>
+
+    <!-- 📄 ورق — الدعوة بتتبعت هنا، وطلباتها بمستنداتها بتنزل تحتيها -->
+    <div id="hireDocs" class="hireSec" style="display:none;">
+    <div class="panel">
+      <h3>🧑‍💼 دعوة موظف جديد</h3>
+      <div class="hint">بيتولّد رابط بكود لمرة واحدة — الفرع والوظيفة محدّدين فيه،
+        فالموظفة مش بتختارهم ومفيش فرصة غلط.</div>
+      <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;">
+        <select id="hvBrand" style="flex:1 1 120px;">
+          <option value="echarpe">echarpe</option>
+          <option value="glow">Glow</option>
+        </select>
+        <select id="hvBranch" style="flex:1 1 130px;"></select>
+        <select id="hvRole" style="flex:1 1 190px;">
+          <option value="sales_social">مبيعات ومساعدة تسويق رقمي</option>
+          <option value="cashier">كاشير ومبيعات</option>
+        </select>
+        <select id="hvDays" style="flex:1 1 110px;">
+          <option value="3">تنتهي بعد 3 أيام</option>
+          <option value="1">تنتهي بعد يوم</option>
+          <option value="7">تنتهي بعد 7 أيام</option>
+        </select>
+      </div>
+      <button id="hvMake" style="width:100%; margin-top:10px;">🔗 اعمل رابط دعوة</button>
+      <div id="hvOut"></div>
+      <div id="hvList"></div>
+    </div>
+    <div class="panel">
+      <h3>📥 طلبات التوظيف</h3>
+      <div class="hint">الطلبات الجاية من رابط الدعوة — بمستنداتها.</div>
+      <div id="hrList"></div>
+    </div>
+
+    <!-- 📌 الشواغر: إنت اللي بتحدد أي فرع محتاج أي وظيفة -->
+    </div>
+
+    <!-- 📌 شواغر — إنت اللي بتحدد أي فرع محتاج أي وظيفة -->
+    <div id="hireVac" class="hireSec" style="display:none;">
+    <div class="panel">
+      <h3>📌 الوظائف المتاحة</h3>
+      <div class="hint">علّم الفرع والوظيفة اللي محتاج فيها حد — استمارة التقديم
+        بتعرض المتاح بس. لو مفيش أي علامة، الاستمارة بتقول «لا توجد شواغر».</div>
+      <div id="opGrid"></div>
+      <button id="opSave" style="width:100%; margin-top:11px;">💾 احفظ الشواغر</button>
+    </div>
+
+    <!-- 💼 المتقدّمين للوظائف — الفرز قبل المقابلة -->
+    </div>
+
+    <!-- 🗂️ ملفات — بحث في كل التاريخ بلا حد زمني -->
+    <div id="hireFiles" class="hireSec" style="display:none;">
+    <div class="panel">
+      <h3>🗂️ ملف الموظفة</h3>
+      <div class="hint">اكتب اسم أو رقم موبايل — بيدوّر في كل التسجيلات
+        والموظفين، من غير حد زمني.</div>
+      <input id="efQ" placeholder="اسم أو رقم موبايل" style="width:100%; margin-top:9px;">
+      <div id="efList"></div>
+      <div id="efCard"></div>
+    </div>
+    </div>
+  </section>
+
+  <!-- 📦 النواقص -->
+  <section class="tabPage" id="page-short">
+    <div class="panel">
+      <h3>📦 النواقص المطلوبة</h3>
+      <div class="hint">اللي الموظفين طالبينه — بالاسم والفرع والمخزون وقت الطلب.</div>
+      <div id="shortList"></div>
+    </div>
+  </section>
+
+  <!-- 💰 الفلوس: أرباح وخسائر + تجار + مصاريف -->
+  <section class="tabPage" id="page-money">
+    <!-- 💳↩️ فروق فيزا مستحقة الرد — من POS لما يتسحب أكتر من الفاتورة -->
+    <div class="panel" id="refundsDuePanel" style="display:none; border:2px solid #dc2626;">
+      <h3>💳↩️ فيزا مسحوبة زيادة — مستحقة الرد</h3>
+      <div class="hint">اتسحب من كارت العميلة أكتر من الفاتورة (السلة اتعدّلت بعد الماكينة). الرد بيتم على نفس العملية من داشبورد Paymob — مش من الدرج. بعد ما ترد فعلًا، دوس «اترد».</div>
+      <div id="refundsDueBody"></div>
+    </div>
+
+    <!-- 💳 الرصيد وكروت الهدايا -->
+    <div class="panel">
+      <h3>💳 الرصيد وكروت الهدايا</h3>
+      <div id="creditAdminBody"></div>
+    </div>
+
+    <div class="panel">
+      <h3>💹 بنكسب ولا بنخسر؟</h3>
+      <div class="hint">مبيعات الفروع − ما تم صرفه فعليًا من المرتبات والعمولات − السلف ومشتريات الموظفين − البضاعة − مصاريف الفروع. كل حركة تُحسب في شهر تسجيلها.</div>
+      <select class="f" id="plMonthSel"></select>
+      <div id="plBranches"></div>
+      <div id="plBody"></div>
+      <div id="plResult" style="text-align:center; border-radius:13px; padding:14px; margin-top:10px; font-size:15px; font-weight:900;"></div>
+    </div>
+    <div class="panel" id="quickGoodsPanel">
+      <h3>📦 تسجيل بضاعة بسرعة</h3>
+      <div class="hint">بدل ما تسجل نفس الحاجة مرتين: الأوردر هنا يتحسب «تكلفة بضاعة». ولما تسجل دفعة للتاجر من حسابه، الدفعة الجديدة تتخصم تلقائيًا من «فلوسي» — ما تسجلهاش تاني كمصروف.</div>
+      <div style="display:grid;grid-template-columns:1.3fr .8fr 1.4fr auto;gap:7px;align-items:center;">
+        <select class="f" id="qgMerchant"><option value="">اختار التاجر</option></select>
+        <input class="f" id="qgAmount" type="number" inputmode="decimal" placeholder="المبلغ">
+        <input class="f" id="qgNote" placeholder="ملاحظة / رقم فاتورة (اختياري)">
+        <button class="btn gold" id="qgAdd" style="margin:0;">+ بضاعة</button>
+      </div>
+      <div id="qgStatus" class="muted" style="font-size:11px;margin-top:7px;"></div>
+      <div style="display:flex;gap:7px;margin-top:9px;align-items:center;flex-wrap:wrap;">
+        <button class="btn gold" id="qgVoiceBtn" type="button" style="margin:0;min-width:155px;">🎙️ ابدأ تسجيل</button>
+        <span class="muted" style="font-size:10.5px;flex:1;min-width:190px;">قولها بطبيعتك: «اشتريت من أحمد بـ٢٣ ألف ودفعت ١٠ آلاف». لو أحمد مش متسجل، النظام يقدر يقترح إضافته كتاجر جديد بعد مراجعتك.</span>
+      </div>
+      <div id="qgVoiceLive" style="margin-top:9px;border:1px solid #e2e8f0;background:#f8fafc;border-radius:14px;padding:10px 11px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <span id="qgMicDot" style="width:10px;height:10px;border-radius:50%;background:#94a3b8;display:inline-block;"></span>
+            <b id="qgVoiceStateTitle" style="font-size:12px;">المايك جاهز</b>
+          </div>
+          <span id="qgMicPermission" class="muted" style="font-size:10.5px;">صلاحية المايك: بنفحص…</span>
+        </div>
+        <div id="qgVoiceStatus" style="font-size:11.5px;margin-top:6px;line-height:1.7;">اضغط «ابدأ تسجيل» واتكلم. مش هيتحفظ أي مبلغ قبل المراجعة والتأكيد.</div>
+        <div id="qgVoiceLiveText" style="display:none;margin-top:7px;background:#fff;border-radius:10px;padding:8px;font-size:12px;font-weight:700;word-break:break-word;"></div>
+        <div style="display:flex;gap:7px;margin-top:8px;">
+          <button class="ghost danger" id="qgVoiceCancelBtn" type="button" style="display:none;margin:0;padding:7px 12px;">✕ إلغاء التسجيل</button>
+          <button class="ghost" id="qgVoiceAgainBtn" type="button" style="display:none;margin:0;padding:7px 12px;">↻ أقولها تاني</button>
+        </div>
+      </div>
+      <div id="qgAiHint" style="margin-top:8px;background:#fffbeb;border:1px solid #fde68a;border-radius:11px;padding:8px 10px;font-size:11px;line-height:1.7;">
+        <b>🧠 سريع وآمن:</b> الكلام الواضح بيتفهم محليًا فورًا، والـAI بيتدخل بس لو محتاجين نفهم الاسم أو الجملة. هتشوف <b>التاجر + الفاتورة + المدفوع + الحساب قبل وبعد</b> قبل الحفظ.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🧾 حسابات التجار</h3>
+      <div class="hint">أوردر جديد بيزوّد اللي عليك، والدفعة بتخصم. الرصيد بيتحسب لوحده.</div>
+      <div style="display:flex; gap:8px;">
+        <input class="f" id="mName" placeholder="اسم تاجر جديد" style="flex:1;">
+        <button class="btn gold" id="mAdd" style="margin-bottom:8px;">إضافة</button>
+      </div>
+      <div id="merchantsList"></div>
+    </div>
+    <div class="panel">
+      <h3>💸 المصاريف</h3>
+      <div class="hint">مصاريف التشغيل — إيجار، مرتبات خارجية، تسويق، أي حاجة.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input class="f" id="exAmount" type="number" inputmode="decimal" placeholder="المبلغ" style="flex:1; min-width:100px;">
+        <select class="f" id="exBranch" style="flex:1;min-width:140px;"><option value="">عام / الشركة</option></select>
+        <input class="f" id="exNote" placeholder="على إيه؟" style="flex:2; min-width:140px;">
+        <button class="btn gold" id="exAdd" style="margin-bottom:8px;">تسجيل</button>
+      </div>
+      <div class="row" style="margin:4px 0 10px;">
+        <span class="muted">إجمالي الشهر ده:</span><span class="amount neg" id="exMonthTotal">0 ج.م</span>
+      </div>
+      <div id="recurringBox" style="margin-bottom:12px;"></div>
+      <div id="expensesList"></div>
+    </div>
+  </section>
+
+  <!-- 📊 التقارير -->
+  <section class="tabPage" id="page-reports">
+    <div class="panel of-sales665-panel">
+      <div class="of-sales665-head"><div><h3>💰 مبيعات الفروع</h3><div class="hint">اليوم أو أي فترة — كل الفروع مع بعض أو فرع واحد. الاستعلام محدد بالتاريخ ولا يسحب تاريخ المبيعات كله.</div></div><span class="of-sales665-live">OWNER</span></div>
+      <div class="of-sales665-quick"><button type="button" data-sales665-quick="today" class="on">اليوم</button><button type="button" data-sales665-quick="7">7 أيام</button><button type="button" data-sales665-quick="30">30 يوم</button></div>
+      <div class="of-sales665-controls"><label><span>من</span><input type="date" id="ofSales665From"></label><label><span>إلى</span><input type="date" id="ofSales665To"></label><label><span>الفرع</span><select id="ofSales665Branch"><option value="">كل الفروع</option></select></label><button type="button" id="ofSales665Load">عرض التقرير</button></div>
+      <div id="ofSales665Progress" class="of-sales665-progress"><div><i></i></div><span>جاري تحميل المبيعات…</span></div>
+      <div id="ofSales665Body"><div class="empty">اختار الفترة واضغط «عرض التقرير».</div></div>
+    </div>
+    <div class="panel">
+      <h3>🔥 الأكثر مبيعًا (آخر 30 يوم)</h3>
+      <div class="hint">لكل فرع — بعدد القطع، ومعاه مخزون الفرع الحالي من الصنف.</div>
+      <select class="f" id="topBranchSel"></select>
+      <div id="topSellers"></div>
+    </div>
+
+    <!-- 📈 فرص الزيادة -->
+    <div class="panel">
+      <h3>📈 فرص الزيادة</h3>
+      <div class="hint">تحليل مبيعات آخر ٣٠ يوم — فين الفلوس الضايعة وإزاي تتكسب.</div>
+      <select class="f" id="gxBranchSel"></select>
+    </div>
+    <div id="growthBox"></div>
+
+    <!-- 📈 نشاط يومي: تحميلات · مكافآت · نقط · تقييمات -->
+    <div id="activityReports"></div>
+
+    <!-- 🔎 مين قيّم — بالاسم والرقم (تقييمات التطبيق بس؛ الكشك مجهول) -->
+    <div id="whoRated"></div>
+
+    <div class="panel">
+      <h3>💵 المرتبات والسلف (الشهر الحالي)</h3>
+      <div class="hint">المرتب الأساسي لكل موظف، والسلف المسحوبة الشهر ده، والصافي التقريبي.</div>
+      <div id="salariesList"></div>
+    </div>
+  </section>
+
+  <!-- 🔴 POS Live — مشاهدة فقط، بدون تحكم عن بُعد -->
+  <section class="tabPage" id="page-live">
+    <div style="margin:2px 2px 10px;">
+      <h2 style="font-size:19px;">🔴 POS Live</h2>
+      <div class="muted">لوحة تشغيل الفروع لحظيًا: مبيعات اليوم، آخر بيع، طرق الدفع والسلة الحالية — مشاهدة فقط.</div>
+    </div>
+    <div id="posLiveBody"><div class="empty">افتح التبويب لبدء المتابعة</div></div>
+  </section>
+
+  <!-- 📹 CCTV v599 — compact control room -->
+  <section class="tabPage" id="page-cctv">
+    <div class="of-cctv-shell of-cctv-controlroom">
+      <div class="of-cctv-top">
+        <div class="of-cctv-title"><span style="font-size:22px">📹</span><div><b>غرفة المراقبة</b><small>Live · تسجيل · سلة — بدون لف وسكرول طويل</small></div></div>
+        <div class="of-cctv-top-actions"><span class="of-cctv-connection-mode remote" id="ofCctvConnectionMode" title="مسار الاتصال">☁ REMOTE</span><button type="button" class="of-cctv-local-open" id="ofCctvLocalOpen" title="افتح Office مباشرة من شبكة Glow">⚡ Local</button><span class="of-cctv-status" id="ofCctvStatus">● متوقف</span><button type="button" class="of-cctv-room-full" id="ofCctvRoomFullscreen">⛶ ملء الشاشة</button></div>
+      </div>
+      <div class="of-cctv-toolbar">
+        <div class="of-cctv-branches" id="ofCctvBranches"></div>
+        <div class="of-cctv-worknav" id="ofCctvWorkNav" aria-label="التنقل داخل الكاميرات">
+          <button type="button" data-cctv-view="live" class="active"><span>📹</span><b>مباشر</b><small>كاميرات الفرع</small></button>
+          <button type="button" data-cctv-view="all"><span>🌐</span><b>كل الفروع</b><small>الكاشير Live</small></button>
+          <button type="button" data-cctv-view="playback"><span>🎞</span><b>تسجيل</b><small>وقت محدد</small></button>
+          <button type="button" data-cctv-view="day"><span>🕘</span><b>اليوم</b><small>فيديو + سلة</small></button>
+          <button type="button" data-cctv-view="activity"><span>🚨</span><b>النشاط</b><small>زوار وتنبيهات</small></button>
+        </div>
+      </div>
+      <div id="ofCctvWarn" class="of-cctv-warning"></div>
+      <div id="ofCctvBusy" class="of-cctv665-busy" aria-live="polite"><div class="of-cctv665-busy-top"><b data-cctv-busy-text>جاري التحميل…</b><span>يرجى الانتظار</span></div><div class="of-cctv665-busy-track"><i data-cctv-busy-bar></i></div></div>
+      <div id="ofCctvLivePane" class="of-cctv-workpane">
+        <section class="of-cctv-pinned-live" id="ofCctvPinnedLive"><div class="of-cctv-fixed-label"><span>🛒 السلة LIVE</span><small>الفرع المختار</small></div><div class="of-cctv-pinned-live-body" id="ofCctvPinnedLiveBody"></div></section>
+        <div class="of-cctv-camera-section-title"><b>📹 كاميرات الفرع</b><div class="of-cctv-layouts" id="ofCctvLayouts"><button type="button" class="of-cctv-start-all" id="ofCctvStartAll">▶ تشغيل الكل</button><button type="button" class="of-cctv-stop-all" id="ofCctvStopAll">■ إيقاف الكل</button></div></div>
+        <div class="of-cctv-camera-grid" id="ofCctvCameraGrid"></div>
+      </div>
+      <div id="ofCctvAllPane" class="of-cctv-workpane" style="display:none"><div class="of-cctv-camera-section-title"><b>🌐 كل الفروع Live</b><small>كاميرا الكاشير من كل فرع — اضغط اسم الفرع لباقي الكاميرات</small></div><div class="of-cctv-all-grid" id="ofCctvAllGrid"></div></div>
+      <section class="of-cctv-day-review" id="ofCctvNvrReview" style="display:none">
+        <div class="of-cctv-day-head"><div><b>🎞️ التسجيل السريع</b><small id="ofCctvNvrHint">اختار الكاميرا والوقت</small></div><div class="of-cctv-day-controls of-cctv-nvr-controls"><select id="ofCctvNvrCamera"></select><input type="date" id="ofCctvNvrDate"><input type="time" id="ofCctvNvrTime" step="60"><select id="ofCctvNvrDuration"><option value="1" selected>1 دقيقة — أسرع</option><option value="5">5 دقائق</option><option value="10">10 دقائق</option><option value="15">15 دقيقة</option><option value="30">30 دقيقة</option></select><button type="button" id="ofCctvNvrNow">⏱ آخر دقيقة</button><button type="button" id="ofCctvNvrOpen">▶ تشغيل</button></div></div>
+      </section>
+      <section class="of-cctv-day-review" id="ofCctvDayReview" style="display:none"><div class="of-cctv-day-head"><div><b>🕘 مراجعة اليوم + السلة</b><small>التسجيل والسلة على نفس الخط الزمني</small></div><div class="of-cctv-day-controls"><input type="date" id="ofCctvDayDate"><input type="time" id="ofCctvDayTime" step="300"><button type="button" id="ofCctvDayLoad">تحميل الفواتير</button><button type="button" id="ofCctvDayPlay">▶ مراجعة اليوم كله</button></div></div><div id="ofCctvDayRows"><div class="of-cctv-day-empty">اختار التاريخ واضغط تحميل اليوم</div></div></section>
+      <section class="of-cctv-day-review" id="ofCctvActivityReview" style="display:none"><div class="of-cctv-day-head"><div><b>📊 الزوار و Conversion + النشاط</b><small>Camera 8 للباب · كل الكاميرات للتأكيد · آخر 7 أيام</small><span class="of-cctv-activity-status" id="ofCctvActivityStatus">● جاري الفحص</span></div><div class="of-cctv-day-controls"><button type="button" id="ofCctvActivityReload">↻ تحديث</button></div></div><div id="ofCctvTrafficReport"><div class="of-cctv-day-empty">جاري تحميل تقرير الزوار…</div></div><div id="ofCctvActivityRows"><div class="of-cctv-day-empty">جاري فحص التنبيهات…</div></div></section>
+    </div>
+  </section>
+  <!-- 🕵️ سجل النشاط -->
+  <section class="tabPage" id="page-odd">
+    <!-- 🐞 بلاغات الفروع -->
+    <div class="panel">
+      <h3>🐞 بلاغات المشاكل</h3>
+      <div class="hint">لما موظفة تدوس زرار المشكلة في الكاشير، البلاغ بيوصل هنا بكل التفاصيل التقنية. بيتحمّل بدوسة.</div>
+      <button class="btn gold" id="incLoad" style="width:100%;">تحميل البلاغات</button>
+      <div id="incBox" style="margin-top:10px;"></div>
+    </div>
+    <div class="panel">
+      <h3>🕵️ سجل النشاط</h3>
+      <div class="hint">كل حاجة غير عادية بتحصل على الأجهزة بتتسجل هنا. السجل بيتحفظ محليًا على الجهاز ويتزامن مع Firestore؛ مفيش حد أقصى لعدد الأحداث المعروضة، وبعد أول تحميل بنقرأ الجديد فقط قدر الإمكان.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+        <select class="f" id="actDays" style="flex:1; min-width:110px;">
+          <option value="1">النهاردة</option>
+          <option value="7" selected>آخر ٧ أيام</option>
+          <option value="30">آخر ٣٠ يوم</option>
+          <option value="0">كل السجل</option>
+        </select>
+        <select class="f" id="actKind" style="flex:1; min-width:130px;">
+          <option value="">كل الأنواع</option>
+          <option value="money">💰 فلوس بس</option>
+          <option value="cart">🛒 السلة بس</option>
+          <option value="stock">📦 المخزون بس</option>
+        </select>
+        <select class="f" id="actAttention" style="flex:1; min-width:145px;">
+          <option value="">كل المستويات</option>
+          <option value="action">🚨 محتاج إجراء</option>
+          <option value="watch">⚠️ محتاج متابعة</option>
+          <option value="normal">✅ معلومات عادية</option>
+        </select>
+        <button class="btn gold" id="actLoad" style="margin-bottom:0;">تحديث</button>
+      </div>
+      <!-- 🤫 الأحداث العادية (بيع/قياس طباعة) مخفية افتراضيًا — تبويب
+           بيصيح على كل حاجة محدش بيسمعه. الشيك بوكس بيرجّعها للي عايز
+           يتتبع فاتورة بعينها. -->
+      <label style="display:flex; align-items:center; gap:7px; font-size:12.5px;
+                    margin-bottom:8px; cursor:pointer; user-select:none;">
+        <input type="checkbox" id="actQuiet" style="width:16px; height:16px; cursor:pointer;">
+        <span>ورّيني كمان المبيعات العادية وقياسات الطباعة</span>
+      </label>
+      <input class="f" id="actSearch" placeholder="بحث: اسم موظف / فرع / صنف / رقم فاتورة" style="margin-bottom:8px;">
+      <div id="actSummary"></div>
+      <div id="actBody"><div class="empty">دوس «تحميل» عشان تجيب السجل</div></div>
+    </div>
+  </section>
+  <!-- 📥 v690 — استلام الأيام (office-days.js) -->
+  <section class="tabPage" id="page-days">
+    <div style="margin:2px 2px 10px;">
+      <h2 style="font-size:19px;">📥 استلام الأيام</h2>
+      <div class="muted">تقفيلات الفروع — مين قفل ومضى، مين كان واقف، والمسلّم كاش. من غير مبيعات.</div>
+    </div>
+    <div id="daysBody"></div>
+  </section>
+  <section class="tabPage" id="page-cash">
+    <div style="margin:2px 2px 10px;">
+      <h2 style="font-size:19px;">💰 فلوسي</h2>
+      <div class="muted">رقم واحد واضح للسيولة المؤكدة، وبعده اللي لسه جاي والتزاماتك.</div>
+    </div>
+    <div id="cashHandBody"></div>
+  </section>
+</main>
+
+<div id="ofVoiceOverlay" aria-hidden="true" style="display:none;position:fixed;inset:0;z-index:95;background:rgba(15,23,42,.58);align-items:flex-end;justify-content:center;">
+  <div style="width:100%;max-width:560px;background:#fff;color:#111827;border-radius:22px 22px 0 0;padding:16px 14px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -20px 55px rgba(15,23,42,.22);">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <div><b style="font-size:16px;">🎙️ راجع اللي فهمته</b><div id="ofVoiceHeard" style="font-size:10.5px;color:#64748b;margin-top:2px;"></div></div>
+      <button class="ghost ico" type="button" onclick="ofVoiceCancel()">✕</button>
+    </div>
+    <div id="ofVoiceSummary" style="margin-top:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:12px;line-height:1.9;font-size:13px;"></div>
+    <div id="ofVoiceWarn" style="display:none;margin-top:8px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:9px;font-size:11px;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px;">
+      <button class="btn gold" id="ofVoiceConfirmBtn" type="button">✅ تأكيد</button>
+      <button class="btn" type="button" onclick="ofVoiceRetry()">🎙️ أقولها تاني</button>
+    </div>
+  </div>
+</div>
+
+<div id="officeMoreSheet" aria-hidden="true">
+  <div class="sheet">
+    <div class="of-more-head">
+      <div><b style="font-size:15px;">المزيد</b><div class="muted">الحاجات اللي مش محتاجها كل دقيقة</div></div>
+      <button class="ghost ico" type="button" onclick="ofCloseMore()">✕</button>
+    </div>
+    <div class="of-more-grid">
+      <button class="of-more-item" type="button" data-office-go="tasks"><span class="mi">✅</span><span class="mt"><b>التاسكات</b><small>تشغيل الأسبوع</small></span></button>
+      <button class="of-more-item" type="button" data-office-go="short"><span class="mi">📦</span><span class="mt"><b>النواقص</b><small>طلبات الفروع</small></span><span class="badge" id="nbShort" style="display:none;">0</span></button>
+      <button class="of-more-item" type="button" data-office-go="money"><span class="mi">🧾</span><span class="mt"><b>الحسابات</b><small>ربح وخسارة · تجار · مصاريف</small></span><span class="badge" id="nbMoney" style="display:none;">0</span></button>
+      <button class="of-more-item" type="button" data-office-go="hire"><span class="mi">💼</span><span class="mt"><b>التوظيف</b><small>متقدمين وملفات</small></span><span class="badge" id="nbHire" style="display:none;">0</span></button>
+      <button class="of-more-item" type="button" data-office-go="live"><span class="mi">🔴</span><span class="mt"><b>POS Live</b><small>السلة والحركة الآن</small></span></button>
+      <button class="of-more-item" type="button" data-office-go="cctv"><span class="mi">📹</span><span class="mt"><b>الكاميرات</b><small>Live من الفروع</small></span></button>
+      <button class="of-more-item" type="button" data-office-go="days"><span class="mi">📥</span><span class="mt"><b>استلام الأيام</b><small>التقفيلات اللي اتحصّلت واللي لسه</small></span></button>
+      <button class="of-more-item" type="button" data-office-go="odd"><span class="mi">🕵️</span><span class="mt"><b>النشاط والمشاكل</b><small>بلاغات وسجل غير عادي</small></span></button>
+    </div>
+  </div>
+</div>
+
+<nav id="tabsNav">
+  <button data-page="day" class="on"><span class="ic">⌂</span>الرئيسية</button>
+  <button data-page="inbox"><span class="ic">🔔</span>الوارد<span class="nb badge" id="nbInbox" style="display:none;">0</span></button>
+  <button data-page="cash"><span class="ic">💰</span>فلوسي</button>
+  <button data-page="reports"><span class="ic">📊</span>تقارير</button>
+  <button id="officeMoreBtn" type="button"><span class="ic">•••</span>المزيد</button>
+</nav>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<!-- 💳 لازم للموافقة على طلبات الرصيد -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-functions-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
+<!-- 💬 شات العملاء — نفس محرك وشاشة POS (مصدر واحد) -->
+<script src="../pos/chat-core.js"></script>
+<script src="../pos/chat-time.js?v=679"></script>
+<script src="../pos/chat-alert.js?v=762"></script>
+<script src="../pos/chat-staff-ui.js?v=762"></script>
+<script src="../cctv-config.js?v=549"></script>
+<script src="cctv.js?v=749"></script>
+<script src="../sales/time-bank.js?v=649"></script>
+<script src="office.js?v=701"></script>
+<script src="office-days.js?v=690"></script>
+</body>
+</html>

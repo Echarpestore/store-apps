@@ -169,7 +169,7 @@ syntaxCheckAll(read('glow/index.html'), 'glow');
    الاتنين بيحمّلوا ../pos/chat-staff-ui.js نفسه، مفيش نسخة تانية. */
 (function () {
   const sales = fs.readFileSync(path.join(ROOT, 'sales', 'index.html'), 'utf8');
-  const office = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+  const office = fs.readFileSync(path.join(ROOT, 'Office', 'old.html'), 'utf8');
   assert(sales.indexOf('../pos/chat-staff-ui.js') >= 0, 'sales بيحمّل نفس ملف الشات (مفيش نسخة تانية)');
   assert(office.indexOf('../pos/chat-staff-ui.js') >= 0, 'Office بيحمّل نفس ملف الشات (مفيش نسخة تانية)');
 })();

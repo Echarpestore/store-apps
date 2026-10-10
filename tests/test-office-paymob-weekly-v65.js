@@ -18,7 +18,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(box.ofPaymobCycleForPayout('2026-08-2
 assert(src.includes("cashTracked: type !== 'order'"),'new merchant payment auto-tracks cash');
 assert(src.includes("t.cashTracked === true"),'only new flagged merchant payments affect cash; no historical double charge');
 assert(src.includes("supplierPayments"),'supplier payments have explicit ledger field');
-assert(src.includes("id=\"quickGoodsPanel\"")||fs.readFileSync('Office/index.html','utf8').includes('id="quickGoodsPanel"'),'quick goods UI exists');
+assert(src.includes("id=\"quickGoodsPanel\"")||fs.readFileSync('Office/old.html','utf8').includes('id="quickGoodsPanel"'),'quick goods UI exists');
 assert(src.includes("doc('weekly_'+c.end).set"),'weekly settlement deterministic id');
 assert(src.includes("value:c.expectedNet"),'expected net prefilled for owner confirmation');
 assert(src.includes("kind:'paymobWeekly'"),'Tuesday confirmation appears in inbox');

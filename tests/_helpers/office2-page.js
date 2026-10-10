@@ -71,11 +71,11 @@ window.firebase = { apps:[{}], app:()=>({}), initializeApp:()=>({}), auth: Objec
 `;
 }
 function htmlFor(data, now){
-  let html = fs.readFileSync(path.join(ROOT,'office2','index.html'),'utf8');
+  let html = fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8');
   html = html.replace(/<script src="https:\/\/www\.gstatic\.com[^>]*><\/script>\n?/g, '').replace(/<link href="https:\/\/fonts[^>]*>/, '')
-    .replace(/<link rel="stylesheet" href="office2\.css\?v=\d+">/, '<style>' + fs.readFileSync(path.join(ROOT,'office2','office2.css'),'utf8') + '</style>')
+    .replace(/<link rel="stylesheet" href="\.\.\/office2\/office2\.css\?v=\d+">/, '<style>' + fs.readFileSync(path.join(ROOT,'office2','office2.css'),'utf8') + '</style>')
     .replace(/<script src="\.\.\/sales\/time-bank\.js\?v=\d+"><\/script>/, '<script>' + stubFor(data, now) + '</script><script>' + fs.readFileSync(path.join(ROOT,'sales','time-bank.js'),'utf8') + '</script>')
-    .replace(/<script src="([a-z0-9\-]+\.js)\?v=\d+"><\/script>/g, (m, f)=> '<script>' + fs.readFileSync(path.join(ROOT,'office2',f),'utf8') + '</script>');
+    .replace(/<script src="\.\.\/office2\/([a-z0-9\-]+\.js)\?v=\d+"><\/script>/g, (m, f)=> '<script>' + fs.readFileSync(path.join(ROOT,'office2',f),'utf8') + '</script>');
   return html;
 }
 async function open(opt){

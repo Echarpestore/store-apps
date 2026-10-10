@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 
 const OFFICE = path.resolve(__dirname, '..', 'Office');
-const html = fs.readFileSync(path.join(OFFICE, 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(OFFICE, 'old.html'), 'utf8');
 const js   = fs.readFileSync(path.join(OFFICE, 'office.js'), 'utf8');
 
 /* استخراج محتوى عنصر بالـid بالأقواس المتوازنة — بيمتد لآخر الـdiv

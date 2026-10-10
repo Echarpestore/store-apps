@@ -22,7 +22,7 @@ const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const officeSrc = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
-const officeHtml = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+const officeHtml = fs.readFileSync(path.join(ROOT, 'Office', 'old.html'), 'utf8');
 const posSrc = fs.readFileSync(path.join(ROOT, 'pos', 'pos-reports.js'), 'utf8');
 
 function stripComments(s){

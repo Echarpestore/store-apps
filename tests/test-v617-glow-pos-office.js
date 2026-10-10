@@ -6,7 +6,7 @@ const presence=fs.readFileSync(path.join(R,'pos','cctv-presence.js'),'utf8');
 const pi=fs.readFileSync(path.join(R,'pos','index.html'),'utf8');
 const psw=fs.readFileSync(path.join(R,'pos','sw.js'),'utf8');
 const office=fs.readFileSync(path.join(R,'Office','cctv.js'),'utf8');
-const oi=fs.readFileSync(path.join(R,'Office','index.html'),'utf8');
+const oi=fs.readFileSync(path.join(R,'Office','old.html'),'utf8');
 const osw=fs.readFileSync(path.join(R,'Office','sw.js'),'utf8');
 
 assert(staff.includes("if(s.indexOf('glow')>=0)return {id:'glow'}"));

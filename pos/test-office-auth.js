@@ -68,7 +68,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
 // 📅 شاشة اليوم — لازم تطابق تقفيل الفرع بالظبط
 // ============================================================
 {
-  const html = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(OF, 'old.html'), 'utf8');
   const vm = require('vm');
 
   // ---- الواجهة موجودة ----
@@ -131,7 +131,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
 // بيمسح القديم. مفيش أسبوع ولا حالة ولا تاريخ.
 // ============================================================
 {
-  const html2 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const html2 = fs.readFileSync(path.join(OF, 'old.html'), 'utf8');
   const vm2 = require('vm');
 
   ['page-tasks','tkBranch','tkRange','tkList'].forEach(id=>
@@ -190,7 +190,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
 // الإيجار ثابت والكهربا متغيّرة، وكل فرع لوحده.
 // ============================================================
 {
-  const html3 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const html3 = fs.readFileSync(path.join(OF, 'old.html'), 'utf8');
   assert(html3.indexOf('id="recurringBox"') >= 0, 'الواجهة موجودة');
   assert(html3.indexOf('id="recurringBox"') < html3.indexOf('id="expensesList"'),
     'المتكررة فوق قايمة المصاريف');
@@ -261,7 +261,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
 // الإشعارات القديمة كانت محلية (بتتولد من الصفحة) فبتشتغل والتطبيق مفتوح بس.
 // ============================================================
 {
-  const html4 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const html4 = fs.readFileSync(path.join(OF, 'old.html'), 'utf8');
   const sw5 = fs.readFileSync(path.join(OF, 'sw.js'), 'utf8');
 
   // ---- SDK والـSW ----
@@ -299,7 +299,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
 // 👆 البصمة · 🙈 إخفاء الأرقام · 🔒 كود المالك مخفي
 // ============================================================
 {
-  const html5 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const html5 = fs.readFileSync(path.join(OF, 'old.html'), 'utf8');
 
   // ---- 🔒 كود المالك مابقاش ظاهر على الشاشة ----
   assert(/id="gCode"[^>]*type="password"/.test(html5),
@@ -358,7 +358,7 @@ assert(/echarpe-office-v\d+/.test(sw), 'CACHE_NAME فيه رقم نسخة');
 // تحميل الصفحة، **قبل** ما أي كود يشتغل. الحارس في JS مكانش بيكفي.
 // ============================================================
 {
-  const h6 = fs.readFileSync(path.join(OF, 'index.html'), 'utf8');
+  const h6 = fs.readFileSync(path.join(OF, 'old.html'), 'utf8');
   assert(/#gate\{[^}]*display:none/.test(h6),
     '🔴 البوابة بتبدأ **مخفية** — الكود هو اللي بيقرر يعرضها');
   assert(/#gate\.on\{ display:flex; \}/.test(h6), 'وبتظهر بكلاس');

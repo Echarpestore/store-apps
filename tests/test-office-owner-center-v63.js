@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),assert=require('assert'),path=require('path');
 const ROOT=path.resolve(__dirname,'..');
-const h=fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8');
+const h=fs.readFileSync(path.join(ROOT,'Office','old.html'),'utf8');
 const j=fs.readFileSync(path.join(ROOT,'Office','office.js'),'utf8');
 
 assert(h.includes('id="officeHomeSummary"'),'home control center موجود');

@@ -14,7 +14,7 @@ const vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 const join  = fs.readFileSync(path.join(ROOT, 'join', 'index.html'), 'utf8');
 const off   = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
-const offH  = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+const offH  = fs.readFileSync(path.join(ROOT, 'Office', 'old.html'), 'utf8');
 const rules = fs.readFileSync(path.join(ROOT, 'security', 'firestore-phase2.rules'), 'utf8');
 
 function extractFn(src, name){
@@ -179,7 +179,7 @@ function extractFn(src, name){
 // ============================================================
 {
   ['hvBrand','hvBranch','hvRole','hvDays','hvMake','hvOut','hvList','hrList'].forEach(id=>{
-    assert(offH.indexOf('id="' + id + '"') > 0, 'العنصر ' + id + ' موجود في Office/index.html');
+    assert(offH.indexOf('id="' + id + '"') > 0, 'العنصر ' + id + ' موجود في Office/old.html');
   });
   const sw = fs.readFileSync(path.join(ROOT, 'Office', 'sw.js'), 'utf8');
   const v = (sw.match(/echarpe-office-v(\d+)/) || [])[1];

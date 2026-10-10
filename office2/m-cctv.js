@@ -365,7 +365,7 @@ O2.cctv = {
   branch(id, view){ if(!siteById(id)) return; if(st.branch !== id){ st.branch = id; st.on = {}; } if(view) st.view = view; else if(st.view==='all') st.view = 'live'; u.render(); },
   cam(id){ st.on[id] = !st.on[id]; u.render(); },
   all(on){ st.on = {}; if(on) site().cameras.forEach(c=>{ st.on[c.id] = true; }); u.render(); },
-  local(){ if(LOCAL_REVIEW){ location.href = '/office2/'; return; } location.href = 'http://192.168.0.107:1990/office2/'; },
+  local(){ if(LOCAL_REVIEW){ location.href = '/Office/'; return; } location.href = 'http://192.168.0.107:1990/Office/'; },
   probe(){ probeGateways(true); u.toast('بيفحص الـgateways…'); },
   f(k, v){ form[k] = String(v||''); },
   play, playNow, pbStep, pbQ(v){ if(!pb) return; pb.q = Number(v); pb.url = ''; u.sheet(pbHtml()); }, pbSt(t){ const el = document.getElementById('cctvPbSt'); if(el) el.textContent = t; },

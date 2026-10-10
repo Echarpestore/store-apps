@@ -5,7 +5,7 @@ const root=path.join(__dirname,'..');
 const live=fs.readFileSync(path.join(root,'pos','pos-live.js'),'utf8');
 const sale=fs.readFileSync(path.join(root,'pos','pos-sale.js'),'utf8');
 const office=fs.readFileSync(path.join(root,'Office','office.js'),'utf8');
-const oi=fs.readFileSync(path.join(root,'Office','index.html'),'utf8');
+const oi=fs.readFileSync(path.join(root,'Office','old.html'),'utf8');
 const pi=fs.readFileSync(path.join(root,'pos','index.html'),'utf8');
 const psw=fs.readFileSync(path.join(root,'pos','sw.js'),'utf8');
 

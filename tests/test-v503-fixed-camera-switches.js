@@ -1,7 +1,7 @@
 const fs=require('fs'),path=require('path');
 const root=path.resolve(__dirname,'..');
 const js=fs.readFileSync(path.join(root,'Office/cctv.js'),'utf8');
-const html=fs.readFileSync(path.join(root,'Office/index.html'),'utf8');
+const html=fs.readFileSync(path.join(root,'Office/old.html'),'utf8');
 let ok=0,fail=0;function t(n,v){if(v){ok++;console.log('PASS',n)}else{fail++;console.error('FAIL',n)}}
 t('v503+ code marker',/ECHARPE Office CCTV v(?:50[3-9]|5[1-9]\d|[6-9]\d{2,})/.test(js));
 t('room still starts with every camera off',/function start\(\)\{state\.active=true;resetLiveSlots\(\);render\(\);\}/.test(js));

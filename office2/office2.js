@@ -350,7 +350,7 @@ async function patchShift(id, patch, msg){ try{ await db.collection('sales_shift
 const O2 = {
   go, closeSheet, month(d){ empMonthOffset += d; render(); }, shift: shiftSheet,
   alert(i){ const a = (window._alerts||[])[i]; if(a) a.go(); },
-  oldOffice(){ location.href = '../Office/'; },
+  oldOffice(){ location.href = '../Office/old.html'; },
   excuse(id){ const s = D.shifts.find(x=>x.id===id); if(!s) return; if(!confirm('تعذر تأخير ' + s.lateMinutes + ' دقيقة؟ (مش هيتحسب على رصيدها)')) return; patchShift(id, { lateExcused:true, bankAdjustMin: (Number(s.bankAdjustMin)||0) + (Number(s.lateMinutes)||0), bankNote:'المالك عذر التأخير', bankEditedAt: Date.now() }, 'اتعذر ✅'); },
   unexcuse(id){ const s = D.shifts.find(x=>x.id===id); if(!s) return; patchShift(id, { lateExcused:false, bankAdjustMin: (Number(s.bankAdjustMin)||0) - (Number(s.lateMinutes)||0), bankNote:'', bankEditedAt: Date.now() }, 'رجع ✅'); },
   adjust(id){ const s = D.shifts.find(x=>x.id===id); if(!s) return; const v = prompt('تعديل رصيد الشيفت بالدقيقة (موجب = لصالحها · سالب = عليها)\nالحالي: ' + (Number(s.bankAdjustMin)||0), String(Number(s.bankAdjustMin)||0)); if(v===null) return; const n = Math.round(Number(v)||0); const note = prompt('السبب (بيظهر في التفاصيل):', s.bankNote||'') || ''; patchShift(id, { bankAdjustMin:n, bankNote:note, bankEditedAt: Date.now() }); },
@@ -599,8 +599,9 @@ function rMore(){
   head('المزيد', '');
   return `<div class="card"><div class="row first" onclick="O2.go('activity')"><div class="n"><b>🛡️ الحماية</b><small>نشاط مريب على الكاشير بالفيديو واللقطات: درج من غير بيع · أصناف اتمسحت · خصم بدون عميلة · استبدال نقط · مرتجع بدون فاتورة</small></div><span class="pill p-acc">افتح ›</span></div>
     ${Object.keys(MODS).sort((a,b)=> (MODS[a].order||99) - (MODS[b].order||99)).map(k=>{ const m = MODS[k]; const n = m.badge ? m.badge() : 0; return `<div class="row" onclick="O2.go('${k}')"><div class="n"><b>${m.icon||''} ${esc(m.title||k)}</b><small>${esc(m.desc||'')}</small></div>${n?`<span class="pill p-bad">${n}</span>`:'<span class="pill p-acc">افتح ›</span>'}</div>`; }).join('')}
+    <div class="row" onclick="O2.oldOffice()"><div class="n"><b>🗂️ Office القديم</b><small>الشاشة القديمة زي ما هي — لو احتجت حاجة لسه مش هنا</small></div><span class="pill p-gray">افتح ›</span></div>
     <div class="row" onclick="O2.logout()"><div class="n"><b>🚪 خروج</b></div></div></div>
-    <div class="hint">Office 2 · v7 · البيانات من نفس القاعدة — أي تعديل هنا بيظهر في sales وOffice فورًا</div>`;
+    <div class="hint">Office · v9 · البيانات من نفس القاعدة — أي تعديل هنا بيظهر في sales وOffice فورًا</div>`;
 }
 // 🧰 أدوات مشتركة للموديولات (m-*.js) — نفس الدوال اللي الشاشات الأساسية بتستخدمها
 O2.u = { db, auth, D, DAY, GLOW, esc, n0, hm, hm2min, caiParts, caiKey, caiStamp, caiDayStart, caiMonthRange, caiDow, dayName, AR_DAYS, SHIFT_AR, PAY_AR, sheet, closeSheet, toast, render, head, branches, activeEmps, empById, salesCfg, timeCfg, shiftDefs, brandOf, isSetup, loadDay, dayCache, daySales, saleMs, sumTotal, payBreak, paymentSummaryHtml, topItems, windowSales, invoiceAny, invoiceSheet, siteOf, SH_SITES, openShift, onBreak, go, screen: ()=> screenName, arg: ()=> screenArg };

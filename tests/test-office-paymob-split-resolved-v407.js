@@ -21,7 +21,7 @@ const info=ctx.ofActIntelligence(rows[0]);
 assertEq(info.level,'normal','Split payment المكتمل لا يفضل إنذار محتاج إجراء');
 const open=ctx.ofActIntelligence({type:'paymob_stuck',sid:'S2',reason:'الدفع اتقبل والحفظ ماكملش'});
 assertEq(open.level,'action','التعليق الحقيقي من غير sale_saved يفضل محتاج إجراء');
-const html=fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8');
+const html=fs.readFileSync(path.join(ROOT,'Office','old.html'),'utf8');
 const sw=fs.readFileSync(path.join(ROOT,'Office','sw.js'),'utf8');
 const ov=html.match(/office\.js\?v=(\d+)/); assert(ov && Number(ov[1])>=74,'Office يحمل office.js v74+');
 assert(/echarpe-office-v(6[5-9]|[7-9]\d|\d{3,})/.test(sw),'Office cache مرفوع v65+');

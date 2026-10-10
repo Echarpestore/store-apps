@@ -21,7 +21,7 @@ if (fs.existsSync(dir)){
 {
   const fs2 = require('fs');
   const path2 = require('path');
-  ['pos/index.html', 'sales/index.html', 'Office/index.html', 'join/index.html'].forEach(function(rel){
+  ['pos/index.html', 'sales/index.html', 'Office/old.html', 'join/index.html'].forEach(function(rel){
     const f = path2.resolve(__dirname, '..', rel);
     if(!fs2.existsSync(f)) return;
     const src = fs2.readFileSync(f, 'utf8');

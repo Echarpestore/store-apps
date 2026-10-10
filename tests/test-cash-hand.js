@@ -18,7 +18,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const src = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
-const html = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(ROOT, 'Office', 'old.html'), 'utf8');
 
 // ⚠️ شيل التعليقات قبل أي فحص نصّي — §0: نص موجود في تعليق كان
 //    بيخلّي أسيرشن يعدّي وهو غلط. حصل أكتر من مرة.

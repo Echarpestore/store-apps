@@ -128,7 +128,7 @@ assert(logoutSlice.indexOf('chatCleanup()') > -1,
   const pos = fs.readFileSync(path.resolve(__dirname, '..', 'pos', 'index.html'), 'utf8');
   assert(pos.indexOf('<script src="chat-staff-ui.js"></script>') > -1,
     'POS بيحمّل الشاشة (درس frames.js — ملف موجود ومش محمّل = ميزة ميتة)');
-  const off = fs.readFileSync(path.resolve(__dirname, '..', 'Office', 'index.html'), 'utf8');
+  const off = fs.readFileSync(path.resolve(__dirname, '..', 'Office', 'old.html'), 'utf8');
   assert(off.indexOf('<script src="../pos/chat-core.js"></script>') > -1
       && off.indexOf('<script src="../pos/chat-staff-ui.js"></script>') > -1,
     'Office بيحمّل المحرك والشاشة من مصدرهم الواحد');

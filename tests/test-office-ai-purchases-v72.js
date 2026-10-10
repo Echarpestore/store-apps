@@ -4,7 +4,7 @@ assert(src.includes("source:'office_ai_purchase_v73'"),'AI purchase audit source
 assert(src.includes("balanceBefore:m.before,balanceAfter:m.after"),'balance audit snapshot missing');
 assert(src.includes("transcript:String(d.transcript||'').slice(0,400)"),'transcript audit missing');
 assert(src.includes("ofVoiceDuplicateGuard(d)"),'duplicate commit guard missing');
-const html=fs.readFileSync(__dirname+'/../Office/index.html','utf8');assert(html.includes('مش هيتحفظ أي مبلغ قبل المراجعة والتأكيد'),'review-before-write UX missing');
+const html=fs.readFileSync(__dirname+'/../Office/old.html','utf8');assert(html.includes('مش هيتحفظ أي مبلغ قبل المراجعة والتأكيد'),'review-before-write UX missing');
 const a=src.indexOf("function ofVoiceDraftKey"),b=src.indexOf("window.ofVoiceDuplicateGuard=ofVoiceDuplicateGuard;",a);
 const code="let _ofVoiceLastCommitKey='', _ofVoiceLastCommitAt=0;\n"+src.slice(a,b)+"\nthis.guard=ofVoiceDuplicateGuard;this.remember=ofVoiceRememberCommit;";
 const c={};vm.createContext(c);vm.runInContext(code,c);

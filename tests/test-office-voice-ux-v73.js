@@ -2,7 +2,7 @@
 require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const js=fs.readFileSync('Office/office.js','utf8');
-const html=fs.readFileSync('Office/index.html','utf8');
+const html=fs.readFileSync('Office/old.html','utf8');
 assert(html.includes('id="qgVoiceCancelBtn"'),'visible cancel control missing');
 assert(html.includes('id="qgMicPermission"'),'mic permission status missing');
 assert(html.includes('id="qgMicDot"'),'mic live indicator missing');

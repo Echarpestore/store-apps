@@ -6,7 +6,7 @@ const config=rd('cctv-config.js'),pos=rd('pos/cctv-invoice.js'),office=rd('Offic
 const agent=rd('branch-tools/madinaty/cctv-recorder/ECHARPE-MADINATY-RECORDER.ps1');
 const watch=rd('branch-tools/madinaty/cctv-recorder/WATCH-MADINATY-RECORDER.ps1');
 const install=rd('branch-tools/madinaty/cctv-recorder/INSTALL-MADINATY-v510.ps1');
-const pidx=rd('pos/index.html'),oidx=rd('Office/index.html'),psw=rd('pos/sw.js'),osw=rd('Office/sw.js');
+const pidx=rd('pos/index.html'),oidx=rd('Office/old.html'),psw=rd('pos/sw.js'),osw=rd('Office/sw.js');
 
 const local={};
 const ctx={window:{},localStorage:{getItem:k=>local[k]||null,setItem:(k,v)=>local[k]=String(v)},console};

@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),rd=p=>fs.readFileSync(path.join(root,p),'utf8');
-const office=rd('Office/cctv.js'),html=rd('Office/index.html'),sw=rd('Office/sw.js');
+const office=rd('Office/cctv.js'),html=rd('Office/old.html'),sw=rd('Office/sw.js');
 
 assert(office.includes('function playbackUrl(atMs,durationMin,cameraId,offsetMs,quality)'), 'normal playback URL accepts quality');
 assert(office.includes("q===480?'&mode=fast':''"), '480p is the default fast-copy path while 720p uses quality conversion');

@@ -6,7 +6,7 @@ const sales=fs.readFileSync(path.join(root,'sales','sales-ui.js'),'utf8');
 const app=fs.readFileSync(path.join(root,'sales','sales-app.js'),'utf8');
 const office=fs.readFileSync(path.join(root,'Office','office.js'),'utf8');
 const salesHtml=fs.readFileSync(path.join(root,'sales','index.html'),'utf8');
-const officeHtml=fs.readFileSync(path.join(root,'Office','index.html'),'utf8');
+const officeHtml=fs.readFileSync(path.join(root,'Office','old.html'),'utf8');
 
 function ok(v,m){assert.ok(v,m);console.log('PASS',m);}
 ok(!sales.includes('csPenalty'),'legacy cash-penalty setting is removed');

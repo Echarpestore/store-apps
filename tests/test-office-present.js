@@ -21,7 +21,7 @@ const vm = require('vm');
 
 const OFF = path.resolve(__dirname, '..', 'Office');
 const src = fs.readFileSync(path.join(OFF, 'office.js'), 'utf8');
-const html = fs.readFileSync(path.join(OFF, 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(OFF, 'old.html'), 'utf8');
 
 function extractFn(s, name){
   const st = s.indexOf('function ' + name + '(');

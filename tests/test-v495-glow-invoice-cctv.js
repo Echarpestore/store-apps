@@ -3,7 +3,7 @@ const root=path.resolve(__dirname,'..');
 const pos=fs.readFileSync(path.join(root,'pos','cctv-invoice.js'),'utf8');
 const pidx=fs.readFileSync(path.join(root,'pos','index.html'),'utf8');
 const off=fs.readFileSync(path.join(root,'Office','cctv.js'),'utf8');
-const oidx=fs.readFileSync(path.join(root,'Office','index.html'),'utf8');
+const oidx=fs.readFileSync(path.join(root,'Office','old.html'),'utf8');
 let ok=0,fail=0;function t(name,cond){if(cond){console.log('PASS',name);ok++}else{console.error('FAIL',name);fail++}}
 t('POS uses local agent for Glow stages',pos.includes("/echarpe-events/snapshot-stage"));
 t('POS finalizes local snapshot folder',pos.includes("/echarpe-events/snapshot-finalize"));

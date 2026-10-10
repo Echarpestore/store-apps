@@ -2,7 +2,7 @@ require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثب�
 const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert');
 const root=path.resolve(__dirname,'..');
 const rd=(p)=>fs.readFileSync(path.join(root,p),'utf8');
-const timelineSrc=rd('pos/cctv-timeline.js'),configSrc=rd('cctv-config.js'),pos=rd('pos/cctv-invoice.js'),sale=rd('pos/pos-sale.js'),office=rd('Office/cctv.js'),pidx=rd('pos/index.html'),oidx=rd('Office/index.html'),rules=rd('security/firestore-phase2.rules'),agent=rd('branch-tools/glow/cctv-gateway/GLOW-CCTV-AGENT.ps1'),installer=rd('cctv-gateway/INSTALL-CCTV-v506.ps1');
+const timelineSrc=rd('pos/cctv-timeline.js'),configSrc=rd('cctv-config.js'),pos=rd('pos/cctv-invoice.js'),sale=rd('pos/pos-sale.js'),office=rd('Office/cctv.js'),pidx=rd('pos/index.html'),oidx=rd('Office/old.html'),rules=rd('security/firestore-phase2.rules'),agent=rd('branch-tools/glow/cctv-gateway/GLOW-CCTV-AGENT.ps1'),installer=rd('cctv-gateway/INSTALL-CCTV-v506.ps1');
 
 const mem={};let writes=[];
 const localStorage={getItem:k=>Object.prototype.hasOwnProperty.call(mem,k)?mem[k]:null,setItem:(k,v)=>{mem[k]=String(v)},removeItem:k=>{delete mem[k]}};

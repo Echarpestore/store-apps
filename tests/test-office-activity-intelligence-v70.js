@@ -3,7 +3,7 @@ const path = require('path');
 const vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 const src = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
-const html = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(ROOT, 'Office', 'old.html'), 'utf8');
 function ok(x,m){ if(!x) throw new Error('FAIL: '+m); console.log('✅ '+m); }
 function block(from,to){ const a=src.indexOf(from), b=src.indexOf(to,a); if(a<0||b<0) throw new Error('missing '+from); return src.slice(a,b); }
 

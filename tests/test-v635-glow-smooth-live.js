@@ -1,7 +1,7 @@
 require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const c=fs.readFileSync(__dirname+'/../Office/cctv.js','utf8');
-const i=fs.readFileSync(__dirname+'/../Office/index.html','utf8');
+const i=fs.readFileSync(__dirname+'/../Office/old.html','utf8');
 const sw=fs.readFileSync(__dirname+'/../Office/sw.js','utf8');
 assert(c.includes("function liveMode(x){return x&&x.id==='glow'?'webrtc':'mse';}"),'Glow uses WebRTC, other branches keep MSE');
 assert(c.includes("'&mode='+liveMode(b())+'&background=false'"),'per-camera live URL is branch-aware');

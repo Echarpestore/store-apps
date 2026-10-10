@@ -42,7 +42,7 @@ const ui = fs.readFileSync(path.join(root, 'pos', 'chat-staff-ui.js'), 'utf8');
 assert(ui.includes('class="ccDay"') && ui.includes('window.chatDayLabel('), 'renderThread بيحط فاصل اليوم');
 assert(ui.includes('window.chatListStamp('), 'renderList بيستخدم طابع القايمة');
 assert(ui.includes('.ccDay{'), 'ستايل الفاصل موجود');
-for(const f of ['pos/index.html', 'Office/index.html', 'sales/index.html']){
+for(const f of ['pos/index.html', 'Office/old.html', 'sales/index.html']){
   const h = fs.readFileSync(path.join(root, f), 'utf8');
   const i1 = h.indexOf('chat-time.js?v=679'), i2 = h.search(/chat-staff-ui\.js\?v=(680|762)/);
   assert(i1 > 0 && i2 > i1, f + ': chat-time.js?v=679 قبل chat-staff-ui.js?v=680');

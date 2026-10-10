@@ -3,7 +3,7 @@ const root=path.join(__dirname,'..');
 const live=fs.readFileSync(path.join(root,'pos','pos-live.js'),'utf8');
 const sale=fs.readFileSync(path.join(root,'pos','pos-sale.js'),'utf8');
 const pi=fs.readFileSync(path.join(root,'pos','index.html'),'utf8');
-const oi=fs.readFileSync(path.join(root,'Office','index.html'),'utf8');
+const oi=fs.readFileSync(path.join(root,'Office','old.html'),'utf8');
 const oj=fs.readFileSync(path.join(root,'Office','office.js'),'utf8');
 const rules=fs.readFileSync(path.join(root,'security','firestore-phase2.rules'),'utf8');
 assert(live.includes("collection('office_pos_live')"),'POS publishes live collection');

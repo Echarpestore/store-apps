@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),rd=p=>fs.readFileSync(path.join(root,p),'utf8');
-const office=rd('Office/cctv.js'),html=rd('Office/index.html'),sw=rd('Office/sw.js');
+const office=rd('Office/cctv.js'),html=rd('Office/old.html'),sw=rd('Office/sw.js');
 const agent=rd('branch-tools/madinaty/cctv-recorder/ECHARPE-MADINATY-RECORDER.ps1');
 const updater=rd('branch-tools/madinaty/cctv-recorder/UPDATE-MADINATY-v511.ps1');
 

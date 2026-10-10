@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('assert');
 const root=path.resolve(__dirname,'..'),rd=p=>fs.readFileSync(path.join(root,p),'utf8');
-const office=rd('Office/cctv.js'),html=rd('Office/index.html'),sw=rd('Office/sw.js');
+const office=rd('Office/cctv.js'),html=rd('Office/old.html'),sw=rd('Office/sw.js');
 
 assert(office.startsWith('/* ECHARPE Office CCTV v533'),'Office CCTV is v533');
 const officeSwVersion=Number((sw.match(/echarpe-office-v(\d+)/)||[])[1]||0);

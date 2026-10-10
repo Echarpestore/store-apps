@@ -2,7 +2,7 @@
 require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const s=fs.readFileSync('Office/office.js','utf8');
-const h=fs.readFileSync('Office/index.html','utf8');
+const h=fs.readFileSync('Office/old.html','utf8');
 
 assert(s.includes("https://api.gold-api.com/price/XAU"),'gold source no-key endpoint');
 assert(s.includes("@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json"),'USD/EGP source');

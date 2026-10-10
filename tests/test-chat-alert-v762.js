@@ -77,7 +77,7 @@ calls.notif[1] && (function(){ const n = new ctx.Notification('x', {}); })();
 // الربط والملفات
 const ui = fs.readFileSync(path.join(ROOT,'pos','chat-staff-ui.js'),'utf8');
 ok(/window\.ChatAlert\.update\(rows,\s*\{ open: !!CST\.open, activeId: CST\.activeId, branch: myBranch\(\), filterMine: !!CST\.filterMine \}\)/.test(ui), 'chat-staff-ui بينادي ChatAlert مع كل لقطة');
-[['pos/index.html','chat-alert.js?v=762'],['sales/index.html','../pos/chat-alert.js?v=762'],['Office/index.html','../pos/chat-alert.js?v=762']].forEach(([f, tag]) => {
+[['pos/index.html','chat-alert.js?v=762'],['sales/index.html','../pos/chat-alert.js?v=762'],['Office/old.html','../pos/chat-alert.js?v=762']].forEach(([f, tag]) => {
   const h = fs.readFileSync(path.join(ROOT, f), 'utf8');
   const i1 = h.indexOf(tag), i2 = h.indexOf('chat-staff-ui.js?v=762');
   ok(i1 > 0 && i2 > i1, f + ': chat-alert.js قبل chat-staff-ui.js v762');

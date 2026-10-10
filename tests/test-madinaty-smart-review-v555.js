@@ -4,7 +4,7 @@ const fs=require('fs'),path=require('path'),root=path.resolve(__dirname,'..');
 const read=(...p)=>fs.readFileSync(path.join(root,...p),'utf8');
 const sales=read('sales','sales-app.js'),presence=read('pos','cctv-presence.js'),timeline=read('pos','cctv-timeline.js');
 const invoice=read('pos','cctv-invoice.js'),posHtml=read('pos','index.html'),posSw=read('pos','sw.js');
-const office=read('Office','cctv.js'),officeHtml=read('Office','index.html'),officeSw=read('Office','sw.js');
+const office=read('Office','cctv.js'),officeHtml=read('Office','old.html'),officeSw=read('Office','sw.js');
 const agent=read('branch-tools','madinaty','cctv-recorder','ECHARPE-MADINATY-RECORDER.ps1');
 const detector=read('branch-tools','madinaty','cctv-recorder','ECHARPE-MADINATY-PERSON-DETECTOR.py');
 const watchdog=read('branch-tools','madinaty','cctv-recorder','WATCH-MADINATY-RECORDER.ps1');

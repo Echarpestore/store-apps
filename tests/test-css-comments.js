@@ -21,7 +21,7 @@ const FILES = [
   'index.html',
   'tryon/photo.html',
   'tryon/index.html',
-  'Office/index.html',
+  'Office/old.html',
   'pos/index.html',
   'sales/index.html'
 ];

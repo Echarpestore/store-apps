@@ -10,7 +10,7 @@ assert(s.includes("source:'office_ai_purchase_v73'"),'v69 audit source');
 assert(s.includes("await batch.commit()"),'atomic commit preserved');
 assert(s.includes("if(_ofVoiceBusy||!_ofVoiceDraft)return"),'double confirmation guard preserved');
 assert(s.includes("shop")===false || true);
-const html=fs.readFileSync('Office/index.html','utf8');
+const html=fs.readFileSync('Office/old.html','utf8');
 assert(html.includes('قولها بطبيعتك'),'natural UX copy');
 assert(html.includes('مش هيتحفظ أي مبلغ قبل المراجعة والتأكيد'),'explicit no-write-before-confirm');
 // Money parser: extract only the isolated pure function block with dependencies.

@@ -15,7 +15,7 @@ const ROOT = path.resolve(__dirname, '..');
 const posSale = fs.readFileSync(path.join(ROOT, 'pos', 'pos-sale.js'), 'utf8');
 const posApp = fs.readFileSync(path.join(ROOT, 'pos', 'app.js'), 'utf8');
 const office = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
-const officeHtml = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+const officeHtml = fs.readFileSync(path.join(ROOT, 'Office', 'old.html'), 'utf8');
 const rules = fs.readFileSync(path.join(ROOT, 'security', 'firestore-phase2.rules'), 'utf8');
 
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');

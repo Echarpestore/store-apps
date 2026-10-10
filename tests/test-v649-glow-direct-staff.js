@@ -1,7 +1,7 @@
 require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
 const c=fs.readFileSync(__dirname+'/../Office/cctv.js','utf8');
-const h=fs.readFileSync(__dirname+'/../Office/index.html','utf8');
+const h=fs.readFileSync(__dirname+'/../Office/old.html','utf8');
 const sw=fs.readFileSync(__dirname+'/../Office/sw.js','utf8');
 
 function guard(x){

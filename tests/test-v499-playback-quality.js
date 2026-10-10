@@ -2,7 +2,7 @@ const fs=require('fs'),path=require('path');
 const root=path.resolve(__dirname,'..');
 const agent=fs.readFileSync(path.join(root,'branch-tools/glow/cctv-gateway/GLOW-CCTV-AGENT.ps1'),'utf8');
 const office=fs.readFileSync(path.join(root,'Office/cctv.js'),'utf8');
-const html=fs.readFileSync(path.join(root,'Office/index.html'),'utf8');
+const html=fs.readFileSync(path.join(root,'Office/old.html'),'utf8');
 let ok=0,fail=0;function t(n,v){if(v){ok++;console.log('PASS',n)}else{fail++;console.error('FAIL',n)}}
 t('Agent version 499+',/version=(?:499|[5-9]\d{2,})/.test(agent));
 t('Default profile is 480p',/return @\{quality='480';scale='854:-2';bitrate='600k';maxrate='750k';bufsize='1500k'\}/.test(agent));

@@ -1,6 +1,6 @@
 require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs'),assert=require('assert');
-const c=fs.readFileSync('Office/cctv.js','utf8'),i=fs.readFileSync('Office/index.html','utf8'),sw=fs.readFileSync('Office/sw.js','utf8');
+const c=fs.readFileSync('Office/cctv.js','utf8'),i=fs.readFileSync('Office/old.html','utf8'),sw=fs.readFileSync('Office/sw.js','utf8');
 assert(c.includes("KEY='echarpe.office.cctv.v423'"));
 assert(c.includes("gateway:'https://cctv-madinaty.echarpe.store'"));
 assert(c.includes("selectedCamera='4'"));

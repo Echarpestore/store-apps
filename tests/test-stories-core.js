@@ -93,7 +93,7 @@ const sale = (ms, items, branch)=> ({ ms, branch: branch || 'echarpe Rehab', ite
   assert(/status:\s*'pending'/.test(SAL), 'اللي الموظفة بترفعه بيبدأ «مستني موافقة» — مفيش نشر من Sales');
   assert(!/status:\s*'published'/.test(SAL), 'Sales عمره ما بينشر');
   const HTML = fs.readFileSync(path.join(ROOT, 'sales', 'index.html'), 'utf8');
-  const OHTML = fs.readFileSync(path.join(ROOT, 'office2', 'index.html'), 'utf8');
+  const OHTML = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
   assert(/pos\/stories-core\.js/.test(HTML) && /sales-stories\.js/.test(HTML), 'Sales بيحمّل ملفات الستوري');
   assert(/pos\/stories-core\.js/.test(OHTML) && /stories\.js/.test(OHTML), 'Office 2 بيحمّل ملفات الستوري');
   const RULES = fs.readFileSync(path.join(ROOT, 'security', 'firestore-phase2.rules'), 'utf8');

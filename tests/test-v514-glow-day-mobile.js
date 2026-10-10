@@ -1,7 +1,7 @@
 require('./helpers/swv');   // إصدار الكاش ≥ N بدل رقم مثبّت
 const fs=require('fs');
 const assert=require('assert');
-const html=fs.readFileSync('Office/index.html','utf8');
+const html=fs.readFileSync('Office/old.html','utf8');
 const sw=fs.readFileSync('Office/sw.js','utf8');
 const agent=fs.readFileSync('branch-tools/glow/cctv-gateway/GLOW-CCTV-AGENT.ps1','utf8');
 const updater=fs.readFileSync('branch-tools/glow/cctv-gateway/UPDATE-GLOW-v514.ps1','utf8');

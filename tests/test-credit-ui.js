@@ -275,7 +275,7 @@ const bareUI = stripComments(ui);
 // ============================================================
 (function(){
   const off = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
-  const offHtml = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+  const offHtml = fs.readFileSync(path.join(ROOT, 'Office', 'old.html'), 'utf8');
 
   assert(/id="creditAdminBody"/.test(offHtml), '🏢 اللوحة موجودة في الصفحة');
   assert(/functions-compat/.test(offHtml),
@@ -335,7 +335,7 @@ const bareUI = stripComments(ui);
 // ============================================================
 (function(){
   const off = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
-  const offHtml = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+  const offHtml = fs.readFileSync(path.join(ROOT, 'Office', 'old.html'), 'utf8');
 
   assert(/id="nbMoney"/.test(offHtml), '🔔 العدّاد موجود على تبويب الفلوس');
   assert(/function ofSyncCreditBadge\(/.test(off), 'ودالة التحديث موجودة');
@@ -355,7 +355,7 @@ const bareUI = stripComments(ui);
 // ============================================================
 (function(){
   const off = fs.readFileSync(path.join(ROOT, 'Office', 'office.js'), 'utf8');
-  const offHtml = fs.readFileSync(path.join(ROOT, 'Office', 'index.html'), 'utf8');
+  const offHtml = fs.readFileSync(path.join(ROOT, 'Office', 'old.html'), 'utf8');
   assert(!/function renderGiftCards\(/.test(off),
     '🚫 مفيش شاشة كروت تانية (renderGiftCards اتشالت)');
   assert(!/id="giftBody"/.test(offHtml), 'ومفيش تبويب مكرر');

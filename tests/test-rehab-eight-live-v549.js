@@ -39,5 +39,5 @@ for(const app of ['Office','pos']){
  assert(assetAtLeast(read(app+'/index.html'), 'cctv-config.js', 549));
  assert(read(app+'/sw.js').includes('v549'));
 }
-assert(assetAtLeast(read('Office/index.html'), 'cctv.js', 549));
+assert(assetAtLeast(read('Office/old.html'), 'cctv.js', 549));
 console.log('Rehab v549: profile, eight toggles, cashier-only replay, branch isolation, installer safeguards and cache checks PASS');
