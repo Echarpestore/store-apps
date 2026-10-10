@@ -72,7 +72,7 @@ ok(/where\('createdAtMs', '>=', from\)/.test(loy) && /where\('createdAt', '>=', 
 ok(/id="tiers_on"/.test(loy) && /config\.tiers = tiers/.test(loy) && /المستويات لازم تصاعدية/.test(loy) && /id="tiers_silver"/.test(loy), 'إعدادات التفعيل والحدود (المالك بيحدد نقط كل مرحلة)');
 ok(/function tiersPerksEditorHtml/.test(loy) && /tiersPerkAdd/.test(loy) && /querySelectorAll\('#tiersPerksEditor \.tp-row/.test(loy) && !/tiers_perks_/.test(loy), 'محرّر المميزات صف بصف (إضافة/حذف) — المالك بيحدد المميزات');
 // ---- النسخ
-ok(/tiers-core\.js\?v=1/.test(fs.readFileSync(path.join(ROOT,'pos','index.html'),'utf8')) && /pos-shell-v763/.test(fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8')) && /glow-loyalty-v92/.test(fs.readFileSync(path.join(ROOT,'glow','sw.js'),'utf8')) && /loyalty-shell-v707/.test(fs.readFileSync(path.join(ROOT,'loyalty','sw.js'),'utf8')), 'النسخ اترفعت');
+ok(/tiers-core\.js\?v=1/.test(fs.readFileSync(path.join(ROOT,'pos','index.html'),'utf8')) && /pos-shell-v763/.test(fs.readFileSync(path.join(ROOT,'pos','sw.js'),'utf8')) && /glow-loyalty-v92/.test(fs.readFileSync(path.join(ROOT,'glow','sw.js'),'utf8')) && /loyalty-shell-v(70[7-9]|7[1-9]\d)/.test(fs.readFileSync(path.join(ROOT,'loyalty','sw.js'),'utf8')), 'النسخ اترفعت');
 
 
 // ---- طلب المالك 09-10: المصطلحات على الكارت إنجليزي

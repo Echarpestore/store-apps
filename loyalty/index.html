@@ -28,6 +28,7 @@
 <!-- 💬 محرك الشات المشترك — مصدر واحد مع POS (مفيش نسخة تانية تتنسى) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/tiers-core.js?v=1"></script>
+<script src="../pos/stories-app.js?v=1"></script>
 <!-- 🌐 محرك اللغتين — مشترك مع Glow. لازم **قبل** أي رسم عشان
      الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
@@ -1981,6 +1982,10 @@ function renderCard(){
 
   var code = currentCustomer.loyaltyCode || '';
 
+  /* 📸 الستوري و«مختارة ليكي» — مقفولين لحد ما المالك يفتحهم من Office 2 (stories_cfg.live_echarpe).
+     بتتحمّل مرة واحدة بعد الدخول (القواعد محتاجة العميلة تكون داخلة). */
+  if(window.StoriesApp && !renderCard._st){ renderCard._st = 1; StoriesApp.init(db, CATALOG_BRAND, function(){ if(currentTab === 'card' && !StoriesApp.isOpen()) renderCard(); }); }
+
   $('tab-card').innerHTML =
     '<div class="card-flip" id="cardFlip">'+
       '<div class="card-inner" onclick="flipCard()">'+
@@ -2027,6 +2032,7 @@ function renderCard(){
     '</div>'+
 
     '<button class="show-cashier" onclick="flipCard()">🎟️ اعرضي كودك للكاشير</button>'+
+    (window.StoriesApp ? StoriesApp.storiesHtml() : '')+
 
     tiersSectionHtml()+
     '<div class="progress-wrap">'+
@@ -2040,7 +2046,8 @@ function renderCard(){
     '</div>'+
 
     redeemBlockHtml()+
-    '<div class="redeem-hint">💡 الاستبدال بيحصل في المحل — قوليلهم عايزة تستبدلي نقاطك عند الدفع.</div>';
+    '<div class="redeem-hint">💡 الاستبدال بيحصل في المحل — قوليلهم عايزة تستبدلي نقاطك عند الدفع.</div>'+
+    (window.StoriesApp ? StoriesApp.homeHtml() : '');
 
   // نرسم الباركود على ضهر البطاقة (مولّد داخلي — بيشتغل حتى أوفلاين)
   if(code){
@@ -3413,6 +3420,7 @@ setTimeout(function(){
   }
   function topLayer(){
     if(isOn('tryonOverlay')) return 'tryon';
+    if(isOn('stvWrap','on')) return 'story';
     if(isOn('invOverlay','on')) return 'invoice';
     if(isOn('crOverlay','on')) return 'sheet';
     var shop=document.getElementById('tab-shop');
@@ -3422,6 +3430,7 @@ setTimeout(function(){
   }
   function closeTop(kind){
     if(kind==='tryon' && typeof tryonOverlayClose==='function') return tryonOverlayClose();
+    if(kind==='story' && window.StoriesApp) return StoriesApp.close();
     if(kind==='invoice' && typeof closeInvoiceDetail==='function') return closeInvoiceDetail();
     if(kind==='sheet' && typeof closeSheet==='function') return closeSheet();
     if(kind==='checkout' && typeof closeQuickCheckout==='function') return closeQuickCheckout();
@@ -3467,6 +3476,8 @@ setTimeout(function(){
   wrapOpen('showSheet','sheet');
   wrapOpen('openQuickCheckout','checkout');
   wrapOpen('tryonOverlayOpen','tryon');
+  // 📸 الستوري: زرار الرجوع بيقفلها (مش بيخرج من التطبيق)
+  if(window.StoriesApp){ ['open','openHome'].forEach(function(k){ var o = StoriesApp[k]; StoriesApp[k] = function(){ var r = o.apply(this, arguments); push('story'); return r; }; }); }
 
   // openChat already had its own history hack. Replace only its push behavior
   // by temporarily suppressing history.pushState inside that legacy function.

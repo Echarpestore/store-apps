@@ -93,7 +93,10 @@ function render(){
   var home = S.list.filter(function(s){ return s.homeFeed; });
   document.getElementById('o2StSub').textContent = P.length ? P.length + ' مستنية موافقتك' : 'مفيش حاجة مستنية';
   var tabs = [['pending', 'مستنية' + (P.length ? ' (' + P.length + ')' : '')], ['live', 'في التطبيق'], ['home', 'الرئيسية'], ['turn', 'الدور والنقط']];
-  var h = '<div class="seg">' + tabs.map(function(t){ return '<button class="' + (S.tab === t[0] ? 'on' : '') + '" onclick="O2Stories.tab(\'' + t[0] + '\')">' + t[1] + '</button>'; }).join('') + '</div>';
+  var live = S.cfg.live_echarpe === true;
+  var h = '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:' + (live ? '#bfe8cf' : '#f3d9a6') + '"><div style="flex:1"><b style="font-size:13.5px">📱 في تطبيق العميلات: ' + (live ? '<span style="color:var(--good)">شغال</span>' : '<span style="color:#9a6500">مقفول</span>') + '</b><div class="hint" style="margin:2px 0 0">' + (live ? 'العميلات شايفين الستوري و«مختارة ليكي»' : 'تقدر توافق وتجهّز براحتك — مفيش حاجة بتظهر للعميلات لحد ما تفتحه') + '</div></div>'
+    + '<button class="btn ' + (live ? '' : 'g') + '" onclick="O2Stories.live(' + (!live) + ')">' + (live ? 'اقفل' : 'افتح للعميلات') + '</button></div>';
+  h += '<div class="seg">' + tabs.map(function(t){ return '<button class="' + (S.tab === t[0] ? 'on' : '') + '" onclick="O2Stories.tab(\'' + t[0] + '\')">' + t[1] + '</button>'; }).join('') + '</div>';
   if(S.tab === 'pending') h += P.length ? P.map(pendingCard).join('') : '<div class="empty">مفيش ستوري مستنية 👌<br><small>الموظفات بيرفعوا من Sales ← صفحة الموظفة ← 📸 ستوري</small></div>';
   else if(S.tab === 'live') h += '<div class="card"><h3>ستوري النهارده في التطبيق <small>' + pub.length + '</small></h3>' + (pub.length ? pub.map(function(s){ return mini(s, '<button class="btn r" onclick="O2Stories.archive(\'' + s.id + '\')">شيلها</button>'); }).join('') : '<div class="empty">مفيش ستوري منشورة دلوقتي</div>') + '</div>'
     + '<div class="hint">أول ما توافق على ستوري يوم جديد، ستوري الأيام اللي فاتت بتتشال لوحدها.</div>';
@@ -113,7 +116,7 @@ function mini(s, actions){
   return '<div class="stMini">' + (s.thumb ? '<img src="' + s.thumb + '" alt="" onclick="O2Stories.full(\'' + s.id + '\')">' : '') + '<div class="n"><b>' + esc(s.title) + '</b>' + esc(s.employeeName || '') + ' · ' + esc(short(s.branch)) + (s.productName ? ' · ' + esc(s.productName) : '') + '</div>' + actions + '</div>';
 }
 function pendingCard(s){
-  var b = s.brand || 'echarpe', pushed = S.pushDay[b] === C.dayKey(Date.now());
+  var b = s.brand || 'echarpe', pushed = S.pushDay[b] === C.dayKey(Date.now()), canPush = S.cfg['live_' + b] === true;
   var noteOpen = S.noteFor === s.id;
   return '<div class="stCard" id="stc_' + s.id + '">'
     + '<div class="ph" onclick="O2Stories.full(\'' + s.id + '\')">' + (s.thumb ? '<img src="' + s.thumb + '" alt="صورة الستوري" data-full="' + s.id + '">' : '') + '</div>'
@@ -123,7 +126,7 @@ function pendingCard(s){
     + '<input type="text" id="stS_' + s.id + '" value="' + esc(s.subtitle) + '" maxlength="60" placeholder="السطر الصغير (اختياري)">'
     + '<label class="stCk"><input type="checkbox" id="stTry_' + s.id + '" ' + (s.tryable !== false ? 'checked' : '') + '> العميلة تقدر تجرّبها على صورتها</label>'
     + '<label class="stCk"><input type="checkbox" id="stHome_' + s.id + '" ' + (s.showOnHome ? 'checked' : '') + '> تظهر كمان في «مختارة ليكي» في الرئيسية</label>'
-    + '<label class="stCk" style="' + (pushed ? 'opacity:.5' : '') + '"><input type="checkbox" id="stPush_' + s.id + '" ' + (pushed ? 'disabled' : '') + '> ابعت إشعار للعميلات' + (pushed ? ' (اتبعت إشعار النهارده)' : ' — مرة في اليوم بالكتير') + '</label>'
+    + (canPush ? '<label class="stCk" style="' + (pushed ? 'opacity:.5' : '') + '"><input type="checkbox" id="stPush_' + s.id + '" ' + (pushed ? 'disabled' : '') + '> ابعت إشعار للعميلات' + (pushed ? ' (اتبعت إشعار النهارده)' : ' — مرة في اليوم بالكتير') + '</label>' : '')
     + (noteOpen ? '<textarea id="stN_' + s.id + '" placeholder="اكتب للموظفة: مثلاً النور ضعيف — صوّري جنب الباب"></textarea><div class="btns"><button class="btn p" onclick="O2Stories.changes(\'' + s.id + '\')">ابعت لها</button><button class="btn" onclick="O2Stories.note(null)">إلغاء</button></div>'
       : '<div class="btns"><button class="btn g" style="flex:2" onclick="O2Stories.approve(\'' + s.id + '\')">✅ انشر</button><button class="btn" style="flex:1" onclick="O2Stories.note(\'' + s.id + '\')">📝 اطلب تعديل</button><button class="btn r" onclick="O2Stories.reject(\'' + s.id + '\')">✕</button></div>')
     + '</div></div>';
@@ -165,6 +168,10 @@ async function approve(id){
     if(push && S.pushDay[b] !== today) batch.set(db.collection('pos_test_settings').doc('stories_push_' + b), { day: today, title: title, storyId: id, seq: firebase.firestore.FieldValue.increment(1), ts: now }, { merge: true });
     await batch.commit(); toast('اتنشرت ✅');
   }catch(e){ toast('تعذر: ' + (e && e.code)); }
+}
+async function setLive(on){
+  if(on && !confirm('تفتح الستوري و«مختارة ليكي» للعميلات في تطبيق إيشارب دلوقتي؟')) return;
+  try{ await db.collection('pos_test_settings').doc('stories_cfg').set({ live_echarpe: !!on, liveChangedAt: Date.now() }, { merge: true }); S.cfg.live_echarpe = !!on; toast(on ? 'اتفتح للعميلات ✅' : 'اتقفل'); render(); }catch(e){ toast('تعذر: ' + (e && e.code)); }
 }
 function note(id){ S.noteFor = id; render(); if(id) setTimeout(function(){ var t = document.getElementById('stN_' + id); if(t) t.focus(); }, 50); }
 async function changes(id){
@@ -234,6 +241,6 @@ async function processPoints(){
 }
 
 window.O2Stories = { open: open, close: close, tab: function(t){ S.tab = t; S.noteFor = null; render(); if(t === 'turn') processPoints(); },
-  approve: approve, note: note, changes: changes, reject: reject, archive: archive, unhome: unhome, full: full, pendingCount: function(){ return pending().length; }, _process: processPoints };
+  approve: approve, note: note, live: setLive, changes: changes, reject: reject, archive: archive, unhome: unhome, full: full, pendingCount: function(){ return pending().length; }, _process: processPoints };
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchScreen); else watchScreen();
 })();

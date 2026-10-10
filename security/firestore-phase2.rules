@@ -573,7 +573,8 @@ service cloud.firestore {
     // الموظفات بيرفعوا من Sales (مستنية) · المالك بيوافق من Office 2.
     // العميلة بتشوف المنشور النهارده + اللي على الرئيسية بس — مش المستني/المرفوض.
     match /app_stories/{id} {
-      allow read: if isStaff() || (signedIn() && (resource.data.status == 'published' || resource.data.get('homeFeed', '') != ''));
+      // ⚠️ الشرط بالمساواة عشان استعلامات التطبيق (status == published · homeFeed == البراند) تعدّي
+      allow read: if isStaff() || (signedIn() && (resource.data.status == 'published' || resource.data.homeFeed == 'echarpe' || resource.data.homeFeed == 'glow'));
       allow write: if isStaff();
     }
     match /app_story_images/{id} {

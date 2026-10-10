@@ -256,56 +256,66 @@ exports.onWelcomeToken = onDocumentUpdated(
   }
 );
 
-// ============ 2) الكتالوج اتحدّث (منتجات/عروض جديدة) ============
+// ============ 2) الكتالوج اتحدّث (منتجات/عروض جديدة) + 📸 ستوري جديدة ============
+// 📣 إشعار لكل عميلات البراند — نفس الطريقة للكتالوج والستوري.
+/* ⚠️ استعلامين لازم: العملاء القدام عندهم `fcmTokens` (خريطة) والجداد
+   عندهم `fcmTokens_<brand>` (مصفوفة). استعلام واحد على الحقل القديم
+   بس كان معناه إن كل عميلة فتحت التطبيق بعد التحديث **تختفي** من
+   إشعارات الكتالوج تمامًا. */
+async function broadcastBrand(brand, title, body, tag) {
+  const field = TOKEN_FIELDS[brand] || TOKEN_FIELDS.echarpe;
+  const [snapNew, snapOld] = await Promise.all([
+    db.collection("pos_test_customers").where(field, "!=", null).get(),
+    db.collection("pos_test_customers").where("fcmTokens", "!=", null).get(),
+  ]);
+  const seen = new Set();
+  const docs = [];
+  [...snapNew.docs, ...snapOld.docs].forEach((d) => {
+    if (seen.has(d.id)) return;          // العميلة ممكن تطلع في الاتنين
+    seen.add(d.id);
+    docs.push(d);
+  });
+  let batchTokens = [];
+  for (const doc of docs) {
+    const tokens = readTokens(doc.data(), brand);
+    batchTokens.push(...tokens);
+    // FCM بيسمح بـ 500 توكن للدفعة — نبعت على دفعات
+    while (batchTokens.length >= 500) {
+      await sendToTokens(batchTokens.slice(0, 500), title, body, tag, null);
+      batchTokens = batchTokens.slice(500);
+    }
+  }
+  if (batchTokens.length) {
+    await sendToTokens(batchTokens, title, body, tag, null);
+  }
+}
+
 exports.onCatalogUpdated = onDocumentWritten(
   { document: "pos_test_settings/{docId}", region: "europe-west1" },
   async (event) => {
     const docId = event.params.docId;
+    const before = event.data.before.exists ? event.data.before.data() : {};
+    const after = event.data.after.exists ? event.data.after.data() : {};
+
+    /* 📸 ستوري جديدة — Office 2 بيزوّد seq لما المالك يعلّم «ابعت إشعار» وهو بيوافق
+       (مرة في اليوم بالكتير). مفيش إشعار لو الستوري لسه مقفولة على العميلات. */
+    const sm = docId.match(/^stories_push_(echarpe|glow)$/);
+    if (sm) {
+      const brand = sm[1];
+      if (!(Number(after.seq || 0) > Number(before.seq || 0))) return;
+      const cfg = await db.collection("pos_test_settings").doc("stories_cfg").get();
+      if (!cfg.exists || cfg.data()["live_" + brand] !== true) return;
+      await broadcastBrand(brand, BRAND_NAMES[brand] || brand, "📸 " + String(after.title || "ستوري جديدة — افتحي وشوفي"), "stories");
+      return;
+    }
+
     const m = docId.match(/^catalog_(echarpe|glow)$/);
     if (!m) return;
     const brand = m[1];
-
-    const before = event.data.before.exists ? event.data.before.data() : {};
-    const after = event.data.after.exists ? event.data.after.data() : {};
     const oldCount = Array.isArray(before.items) ? before.items.length : 0;
     const newCount = Array.isArray(after.items) ? after.items.length : 0;
     if (newCount <= oldCount) return; // إشعار بس لما يزيد منتج جديد (مش تعديل/مسح)
-
-    // كل العملاء اللي عندهم توكنات للبراند ده
-    // (استعلام واحد على المستندات اللي فيها fcmTokens — بنفلتر البراند في الكود)
-    /* ⚠️ استعلامين لازم: العملاء القدام عندهم `fcmTokens` (خريطة) والجداد
-       عندهم `fcmTokens_<brand>` (مصفوفة). استعلام واحد على الحقل القديم
-       بس كان معناه إن كل عميلة فتحت التطبيق بعد التحديث **تختفي** من
-       إشعارات الكتالوج تمامًا. */
-    const field = TOKEN_FIELDS[brand] || TOKEN_FIELDS.echarpe;
-    const [snapNew, snapOld] = await Promise.all([
-      db.collection("pos_test_customers").where(field, "!=", null).get(),
-      db.collection("pos_test_customers").where("fcmTokens", "!=", null).get(),
-    ]);
-    const seen = new Set();
-    const docs = [];
-    [...snapNew.docs, ...snapOld.docs].forEach((d) => {
-      if (seen.has(d.id)) return;          // العميلة ممكن تطلع في الاتنين
-      seen.add(d.id);
-      docs.push(d);
-    });
-    const snap = { docs };
-    const title = BRAND_NAMES[brand] || brand;
-    const body = "✨ وصل جديد! افتحي «آخر العروض» وشوفي بنفسك";
-
-    let batchTokens = [];
-    for (const doc of snap.docs) {
-      const tokens = readTokens(doc.data(), brand);
-      batchTokens.push(...tokens);
-      // FCM بيسمح بـ 500 توكن للدفعة — نبعت على دفعات
-      while (batchTokens.length >= 500) {
-        await sendToTokens(batchTokens.slice(0, 500), title, body, "catalog", null);
-        batchTokens = batchTokens.slice(500);
-      }
-    }
-    if (batchTokens.length) {
-      await sendToTokens(batchTokens, title, body, "catalog", null);
-    }
+    await broadcastBrand(brand, BRAND_NAMES[brand] || brand, "✨ وصل جديد! افتحي «آخر العروض» وشوفي بنفسك", "catalog");
   }
 );
 

@@ -101,3 +101,4 @@ const sale = (ms, items, branch)=> ({ ms, branch: branch || 'echarpe Rehab', ite
   const m = RULES.match(/match \/app_stories\/\{id\}\s*\{([\s\S]*?)\n    \}/);
   assert(m && /resource\.data\.status == 'published'/.test(m[1]) && /allow write: if isStaff\(\)/.test(m[1]), 'العميلة بتشوف المنشور بس · الكتابة للموظفين');
 }
+
