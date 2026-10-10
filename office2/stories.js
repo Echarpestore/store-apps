@@ -120,12 +120,13 @@ function pendingCard(s){
   var noteOpen = S.noteFor === s.id;
   return '<div class="stCard" id="stc_' + s.id + '">'
     + '<div class="ph" onclick="O2Stories.full(\'' + s.id + '\')">' + (s.thumb ? '<img src="' + s.thumb + '" alt="صورة الستوري" data-full="' + s.id + '">' : '') + '</div>'
-    + '<div class="bd"><div class="meta">📷 ' + esc(s.employeeName || '') + ' · ' + esc(short(s.branch)) + ' · ' + ago(s.updatedAt || s.createdAt) + (b === 'glow' ? ' · Glow' : '') + '</div>'
+    + '<div class="bd"><div><span class="pill ' + (s.kind === 'product' ? 'p-acc">🛍️ منتج للرئيسية' : 'p-gray">📸 ستوري') + '</span></div><div class="meta">📷 ' + esc(s.employeeName || '') + ' · ' + esc(short(s.branch)) + ' · ' + ago(s.updatedAt || s.createdAt) + (b === 'glow' ? ' · Glow' : '') + '</div>'
     + '<div class="meta">🏷️ ' + (s.barcode ? esc(s.barcode) + (s.productName ? ' · ' + esc(s.productName) : ' · <span style="color:var(--bad)">مش في المخزون</span>') + (s.price ? ' · ' + esc(s.price) + ' ج' : '') : '<span style="color:var(--bad)">من غير باركود (مش هتتحسب نقط)</span>') + '</div>'
     + '<input type="text" id="stT_' + s.id + '" value="' + esc(s.title) + '" maxlength="40" placeholder="العنوان">'
     + '<input type="text" id="stS_' + s.id + '" value="' + esc(s.subtitle) + '" maxlength="60" placeholder="السطر الصغير (اختياري)">'
     + '<label class="stCk"><input type="checkbox" id="stTry_' + s.id + '" ' + (s.tryable !== false ? 'checked' : '') + '> العميلة تقدر تجرّبها على صورتها</label>'
-    + '<label class="stCk"><input type="checkbox" id="stHome_' + s.id + '" ' + (s.showOnHome ? 'checked' : '') + '> تظهر كمان في «مختارة ليكي» في الرئيسية</label>'
+    + '<label class="stCk"><input type="checkbox" id="stStory_' + s.id + '" ' + (s.kind === 'product' ? '' : 'checked') + '> تظهر في الستوري النهارده</label>'
+    + '<label class="stCk"><input type="checkbox" id="stHome_' + s.id + '" ' + (s.showOnHome ? 'checked' : '') + '> تظهر في «مختارة ليكي» في الرئيسية</label>'
     + (canPush ? '<label class="stCk" style="' + (pushed ? 'opacity:.5' : '') + '"><input type="checkbox" id="stPush_' + s.id + '" ' + (pushed ? 'disabled' : '') + '> ابعت إشعار للعميلات' + (pushed ? ' (اتبعت إشعار النهارده)' : ' — مرة في اليوم بالكتير') + '</label>' : '')
     + (noteOpen ? '<textarea id="stN_' + s.id + '" placeholder="اكتب للموظفة: مثلاً النور ضعيف — صوّري جنب الباب"></textarea><div class="btns"><button class="btn p" onclick="O2Stories.changes(\'' + s.id + '\')">ابعت لها</button><button class="btn" onclick="O2Stories.note(null)">إلغاء</button></div>'
       : '<div class="btns"><button class="btn g" style="flex:2" onclick="O2Stories.approve(\'' + s.id + '\')">✅ انشر</button><button class="btn" style="flex:1" onclick="O2Stories.note(\'' + s.id + '\')">📝 اطلب تعديل</button><button class="btn r" onclick="O2Stories.reject(\'' + s.id + '\')">✕</button></div>')
@@ -153,12 +154,16 @@ function turnView(){
 function val(id){ var el = document.getElementById(id); return el ? (el.type === 'checkbox' ? el.checked : el.value.trim()) : null; }
 async function approve(id){
   var s = S.list.find(function(x){ return x.id === id; }); if(!s) return;
-  var title = val('stT_' + id), sub = val('stS_' + id), tryable = val('stTry_' + id), home = val('stHome_' + id), push = val('stPush_' + id);
+  var title = val('stT_' + id), sub = val('stS_' + id), tryable = val('stTry_' + id), home = val('stHome_' + id), push = val('stPush_' + id), story = val('stStory_' + id);
   if(!title){ toast('اكتب عنوان'); return; }
+  if(!story && !home){ toast('اختار تظهر فين: الستوري أو الرئيسية'); return; }
+  if(!story) push = false;   // الإشعار للستوري بس
   var b = s.brand || 'echarpe', now = Date.now(), today = C.dayKey(now);
   try{
     var batch = db.batch();
-    batch.update(db.collection('app_stories').doc(id), { status:'published', feed: C.feedKey(b, 'published'), title: title, subtitle: sub, tryable: !!tryable, showOnHome: !!home, homeFeed: home ? b : firebase.firestore.FieldValue.delete(), approvedAt: now, dayKey: today, ownerNote:'', decidedAt: now, updatedAt: now });
+    // 'published' = في الستوري النهارده · 'live' = منتج على الرئيسية بس (مش في الستوري)
+    var st = story ? 'published' : 'live';
+    batch.update(db.collection('app_stories').doc(id), { status: st, feed: C.feedKey(b, st), title: title, subtitle: sub, tryable: !!tryable, showOnHome: !!home, homeFeed: home ? b : firebase.firestore.FieldValue.delete(), approvedAt: now, dayKey: today, ownerNote:'', decidedAt: now, updatedAt: now });
     batch.set(db.collection('app_story_images').doc(id), { published: true }, { merge: true });
     // 🔁 ستوري الأيام اللي فاتت بتتشال من التطبيق (المنتج اللي على الرئيسية بيفضل)
     S.list.filter(function(x){ return x.status === 'published' && (x.brand || 'echarpe') === b && x.dayKey && x.dayKey !== today && x.id !== id; }).forEach(function(x){
@@ -190,7 +195,9 @@ async function archive(id){
 }
 async function unhome(id){
   var s = S.list.find(function(x){ return x.id === id; }) || {};
-  try{ var b = db.batch(); b.update(db.collection('app_stories').doc(id), { showOnHome:false, homeFeed: firebase.firestore.FieldValue.delete(), updatedAt: Date.now() });
+  try{ var b = db.batch(); var up = { showOnHome:false, homeFeed: firebase.firestore.FieldValue.delete(), updatedAt: Date.now() };
+    if(s.status === 'live'){ up.status = 'archived'; up.feed = C.feedKey(s.brand || 'echarpe', 'archived'); }
+    b.update(db.collection('app_stories').doc(id), up);
     if(s.status !== 'published') b.set(db.collection('app_story_images').doc(id), { published:false }, { merge:true }); await b.commit(); toast('اتشالت من الرئيسية'); }catch(e){ toast('تعذر: ' + (e && e.code)); }
 }
 function full(id){

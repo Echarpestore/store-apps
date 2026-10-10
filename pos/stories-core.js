@@ -63,7 +63,7 @@ function turnFor(emps, brand, ms){
    · القطعة اللي اتباعت وهي جوه نافذة صورة (approvedAt → +windowDays) بتتحسب.
    · لو أكتر من موظفة ليهم صورة شغالة لنفس الباركود: القطعة بتتقسم بالتساوي.
    · المرتجع بينقص الرصيد (بس النقط اللي اتصرفت خلاص مش بتتسحب). */
-function active(s){ return s && s.barcode && s.approvedAt && (s.status === 'published' || s.status === 'archived'); }
+function active(s){ return s && s.barcode && s.approvedAt && (s.status === 'published' || s.status === 'live' || s.status === 'archived'); }   // live = منتج على الرئيسية
 function computeCredits(stories, sales, credits, opts){
   opts = opts || {};
   var per = Number(opts.piecesPerPoint) > 0 ? Number(opts.piecesPerPoint) : DEFAULTS.piecesPerPoint;

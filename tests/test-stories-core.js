@@ -57,6 +57,11 @@ const sale = (ms, items, branch)=> ({ ms, branch: branch || 'echarpe Rehab', ite
   assertEq(S.computeCredits([st({ id:'a', barcode:'B5', employeeId:'e1', status:'pending' })], [sale(T0 + 1, [{ barcode:'B5', qty:9 }])], {}).awards.length, 0, 'اللي لسه مستنية موافقة ما بتحسبش');
   assertEq(S.computeCredits([st({ id:'a', barcode:'B6', employeeId:'e1', status:'archived' })], [sale(T0 + 1, [{ barcode:'B6', qty:5 }])], {}).awards.length, 1, 'الستوري اللي اتشالت من التطبيق لسه بتحسب لحد آخر النافذة');
   assertEq(S.computeCredits(stories, [sale(T0 + 1, [{ barcode:'B4', qty:5, isRedemption:true }])], {}).awards.length, 0, 'سطور الاستبدال مش بيع');
+  assertEq(S.computeCredits([st({ id:'p', barcode:'B7', employeeId:'e1', status:'live', kind:'product' })], [sale(T0 + 1, [{ barcode:'B7', qty:5 }])], {}).awards.length, 1, 'المنتج اللي على الرئيسية بس (live) بيحسب نقط زي الستوري');
+  const SAL2 = fs.readFileSync(path.join(ROOT, 'sales', 'sales-stories.js'), 'utf8');
+  assert(/data-k="product"/.test(SAL2) && /story\.kind = d\.kind === 'product'/.test(SAL2), 'الموظفة بتختار: ستوري ولا منتج للرئيسية');
+  const O2b = fs.readFileSync(path.join(ROOT, 'office2', 'stories.js'), 'utf8');
+  assert(/var st = story \? 'published' : 'live'/.test(O2b), 'المنتج من غير ستوري بيتنشر live (مش في صف الستوري)');
   // الترتيب: مبيعات جاية مش مترتبة
   const rr = S.computeCredits(stories, [sale(T0 + 50, [{ barcode:'B4', qty:3 }]), sale(T0 + 20, [{ barcode:'B4', qty:2 }])], {});
   assertEq(rr.awards[0].ts, T0 + 50, 'بيترتب بالوقت قبل الحساب');

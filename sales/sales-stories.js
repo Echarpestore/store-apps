@@ -56,8 +56,8 @@
       + '@keyframes stPulse{50%{box-shadow:0 0 0 6px rgba(212,168,75,.18);}}';
     document.head.appendChild(css);
     var ov = document.createElement('div'); ov.id = 'stOverlay';
-    ov.innerHTML = '<div class="stHead"><div style="flex:1"><h3>📸 الستوري</h3><small id="stSub">—</small></div><button class="stX" id="stClose" aria-label="إغلاق">✕</button></div>'
-      + '<div class="stTabs"><button data-t="new" class="on">ستوري جديدة</button><button data-t="mine">ستوريهاتي</button></div>'
+    ov.innerHTML = '<div class="stHead"><div style="flex:1"><h3>📸 الستوري والمنتجات</h3><small id="stSub">—</small></div><button class="stX" id="stClose" aria-label="إغلاق">✕</button></div>'
+      + '<div class="stTabs"><button data-t="new" class="on">صورة جديدة</button><button data-t="mine">صوري</button></div>'
       + '<div class="stBody" id="stBody"></div>'
       + '<input type="file" accept="image/*" capture="environment" id="stFile" style="display:none">';
     document.body.appendChild(ov);
@@ -67,7 +67,7 @@
     $('stFile').onchange = onFile;
   }
 
-  function reset(){ S.img = ''; S.thumb = ''; S.product = null; S.editId = null; S.draft = { title:'', subtitle:'', barcode:'', tryable:true }; }
+  function reset(){ S.img = ''; S.thumb = ''; S.product = null; S.editId = null; S.draft = { kind:'story', title:'', subtitle:'', barcode:'', tryable:true }; }
   function open(empId){
     inject();
     var emp = (api().employees() || []).find(function(e){ return e.id === empId; }); if(!emp){ toast('اختاري اسمك الأول', true); return; }
@@ -90,18 +90,23 @@
     if(S.tab === 'mine') return renderMine();
     var d = S.draft;
     var prod = S.product === null ? '' : (S.product ? '<div class="stProd">✅ ' + esc(S.product.name || '') + (S.product.price ? ' · ' + esc(S.product.price) + ' ج.م' : '') + '</div>' : '<div class="stProd bad">الكود ده مش في المخزون — اتأكدي منه (من غير باركود صح مش هتاخدي نقط)</div>');
-    $('stBody').innerHTML = (S.editId ? '<div class="stTurn">✏️ بتعدّلي ستوري رجعت لك — صوّري تاني وابعتي</div>' : turnLine())
+    var isP = d.kind === 'product';
+    $('stBody').innerHTML = (S.editId ? '<div class="stTurn">✏️ بتعدّلي صورة رجعت لك — صوّري تاني وابعتي</div>' : turnLine())
+      // 🛍️ نوعين: ستوري (بتتجدد كل يوم) · منتج لـ«مختارة ليكي» في الرئيسية (بيفضل لحد ما الإدارة تشيله)
+      + '<div class="stTabs" style="padding:0"><button type="button" data-k="story" class="' + (isP ? '' : 'on') + '">📸 ستوري النهارده</button><button type="button" data-k="product" class="' + (isP ? 'on' : '') + '">🛍️ منتج للرئيسية</button></div>'
+      + '<div class="stTips" style="margin-top:-4px">' + (isP ? 'المنتج بيظهر في «مختارة ليكي» في الصفحة الرئيسية للتطبيق — صورة واضحة للطرحة لوحدها أو على موديل' : 'الستوري بتظهر للعميلات النهارده وبتتجدد كل يوم') + '</div>'
       + '<div class="stFrame" id="stPick">' + (S.img ? '<img src="' + S.img + '" alt="">' : '<span class="g"></span><div class="c"><b>📷</b>دوسي وصوّري الطرحة<br>خلّيها تملى الإطار</div>') + '</div>'
       + '<div class="stTips">💡 نور طبيعي (جنب الشباك أو الباب) · خلفية سادة · الطرحة نضيفة ومكوية وواضحة · صورة بالطول</div>'
       + '<div class="stLbl">باركود الطرحة</div>'
       + '<div class="stRow"><input class="stIn" id="stBc" inputmode="numeric" placeholder="امسحي أو اكتبي الكود" value="' + esc(d.barcode) + '"><button class="stBtn" id="stFind">دوّري</button></div>' + prod
       + '<div class="stLbl">الكلام اللي هيظهر للعميلة</div>'
-      + '<input class="stIn" id="stTitle" maxlength="40" placeholder="مثلاً: كوليكشن الخريف نزل" value="' + esc(d.title) + '">'
+      + '<input class="stIn" id="stTitle" maxlength="40" placeholder="' + (isP ? 'اسم المنتج زي ما هيظهر — مثلاً: لينن مكرمش بيج' : 'مثلاً: كوليكشن الخريف نزل') + '" value="' + esc(d.title) + '">'
       + '<input class="stIn" id="stSubT" maxlength="60" placeholder="سطر صغير تحته (اختياري) — مثلاً: ٤ ألوان جديدة" value="' + esc(d.subtitle) + '">'
       + '<label class="stChk"><input type="checkbox" id="stTry" ' + (d.tryable ? 'checked' : '') + '> العميلة تقدر تجرّبها على صورتها</label>'
       + '<button class="stBtn p" id="stSend" ' + (S.busy ? 'disabled' : '') + '>' + (S.busy ? 'بيترفع…' : 'ابعتي للمراجعة') + '</button>'
       + '<div class="stTips" style="text-align:center">مش هتظهر للعميلات غير لما الإدارة توافق · كل ٥ قطع تتباع من الكود ده = نقطة ليكي</div>';
     $('stPick').onclick = function(){ keep(); $('stFile').click(); };
+    $('stBody').querySelectorAll('[data-k]').forEach(function(b){ b.onclick = function(){ keep(); S.draft.kind = b.dataset.k; render(); }; });
     $('stFind').onclick = function(){ keep(); find(); };
     $('stBc').onkeydown = function(e){ if(e.key === 'Enter'){ keep(); find(); } };
     $('stSend').onclick = function(){ keep(); send(); };
@@ -115,7 +120,10 @@
   }
   function find(){
     var bc = S.draft.barcode; if(!bc){ S.product = null; render(); return; }
-    api().findByBarcode(bc).then(function(rows){ S.product = rows && rows.length ? rows[0] : false; render(); })
+    api().findByBarcode(bc).then(function(rows){ S.product = rows && rows.length ? rows[0] : false;
+      // المنتج: اسمه بيتملى لوحده من المخزون لو لسه ما كتبتش
+      if(S.product && S.draft.kind === 'product' && !S.draft.title) S.draft.title = String(S.product.name || '').slice(0, 40);
+      render(); })
       .catch(function(){ S.product = false; render(); });
   }
   function send(){
@@ -131,7 +139,9 @@
       employeeId: S.emp.id, employeeName: S.emp.name || '', branch: S.emp.branch || window.currentBranch || '',
       thumb: S.thumb, updatedAt: now, ownerNote: ''
     };
-    if(!S.editId){ story.createdAt = now; story.showOnHome = false; }
+    story.kind = d.kind === 'product' ? 'product' : 'story';
+    story.showOnHome = story.kind === 'product';   // اقتراح للإدارة — القرار النهائي في Office 2
+    if(!S.editId){ story.createdAt = now; }
     api().submit(story, S.img, S.editId).then(function(){
       S.busy = false; toast('اتبعتت للمراجعة ✅'); reset(); S.tab = 'mine'; render();
     }).catch(function(err){ S.busy = false; render(); toast('ما اترفعتش: ' + ((err && err.code) || 'جرّبي تاني'), true); });
@@ -143,14 +153,14 @@
     api().mine(S.emp.id).then(function(list){
       if(!list.length){ $('stBody').innerHTML = '<div class="stTips" style="text-align:center;padding:30px 0">لسه ما رفعتيش ستوري</div>'; return; }
       $('stBody').innerHTML = list.map(function(s){
-        return '<div class="stItem">' + (s.thumb ? '<img src="' + s.thumb + '" alt="">' : '') + '<div class="n"><b>' + esc(s.title || '') + '</b>'
+        return '<div class="stItem">' + (s.thumb ? '<img src="' + s.thumb + '" alt="">' : '') + '<div class="n"><b>' + (s.kind === 'product' ? '🛍️ ' : '') + esc(s.title || '') + '</b>'
           + '<span style="color:var(--sub,#8b90a0)">' + esc(s.productName || s.barcode || '') + '</span><br><span class="stPill stP-' + esc(s.status) + '">' + (LBL[s.status] || esc(s.status)) + '</span>'
           + (s.status === 'changes' ? '<div class="stNote">📝 ' + esc(s.ownerNote || 'الإدارة طالبة تعديل') + '</div><button class="stBtn" style="margin-top:8px" data-redo="' + esc(s.id) + '">صوّري تاني وابعتي</button>' : '')
           + '</div></div>';
       }).join('');
       $('stBody').querySelectorAll('[data-redo]').forEach(function(btn){ btn.onclick = function(){
         var s = list.find(function(x){ return x.id === btn.dataset.redo; }); if(!s) return;
-        reset(); S.editId = s.id; S.draft = { title: s.title || '', subtitle: s.subtitle || '', barcode: s.barcode || '', tryable: s.tryable !== false };
+        reset(); S.editId = s.id; S.draft = { kind: s.kind === 'product' ? 'product' : 'story', title: s.title || '', subtitle: s.subtitle || '', barcode: s.barcode || '', tryable: s.tryable !== false };
         S.product = s.barcode ? { name: s.productName, price: s.price } : null; S.tab = 'new'; render();
       }; });
     }).catch(function(){ $('stBody').innerHTML = '<div class="stTips">مش قادرة أحمّل — جرّبي تاني</div>'; });
@@ -170,7 +180,7 @@
     var empId = api() && api().hubEmp(); var emp = (api() ? api().employees() : []).find(function(e){ return e.id === empId; });
     var mine = false;
     try{ var t = emp && core().turnFor(api().employees(), core().brandOfBranch(emp.branch), Date.now()); mine = !!(t && emp && t.id === emp.id); }catch(e){}
-    b.className = mine ? 'turn' : ''; b.textContent = mine ? '📸 دورك في الستوري' : '📸 ستوري';
+    b.className = mine ? 'turn' : ''; b.textContent = mine ? '📸 دورك في التصوير' : '📸 صوّري';
     b.onclick = function(){ var id = api().hubEmp(); if(id) open(id); };
   }
   function watchHub(){
