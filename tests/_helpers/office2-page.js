@@ -39,7 +39,8 @@ function baseData(){ return {
     { id:'l4', type:'manual_discount', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,7,13,10), pct:5, cartCount:1 },
     { id:'l5', type:'cart_abandoned', branch:'Glow', employeeName:'دينا', ts:D(2026,10,10,15,0), itemCount:2, value:900 },
     { id:'l6', type:'same_day_reversal', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,9,18,0), invoiceNo:5790, total:1500 },
-    { id:'l7', type:'customer_points_edit', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,6,12,0), phone:'0100', from:10, to:40, diff:30, reason:'تصحيح' },
+    { id:'l7', type:'customer_points_edit', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,6,12,0), phone:'0100', field:'points', from:10, to:40, diff:30, reason:'تصحيح' },
+    { id:'l16', type:'redeem_value_mismatch', branch:'Glow', employeeName:'دينا', ts:D(2026,10,10,14,50), phone:'01022222222', reqPoints:200, reqValue:100, sanePoints:100, saneValue:50, balance:120 },
     { id:'l8', type:'sale_saved', branch:'echarpe El Rehab', employeeName:'هاجر', ts:D(2026,10,10,12,30) },
     { id:'l9', type:'print_latency', branch:'echarpe El Rehab', ts:D(2026,10,10,12,31), ms:900 },
     { id:'l10', type:'manual_drawer_open', branch:'echarpe El Rehab', employeeName:'سارة', ts:D(2026,10,10,16,0), cctvEventId:'ev10' },
@@ -50,6 +51,7 @@ function baseData(){ return {
     { id:'l15', type:'item_removed_late', branch:'Glow', employeeName:'دينا', ts:D(2026,10,9,13,0), sid:'c9', name:'سكارف حرير', barcode:'888', qty:2, price:300, value:600, inCartSec:200 }
   ],
   office_cases: [], pos_cctv_invoice_snapshots: [],
+  pos_test_customers: [ { id:'0100', name:'منى أحمد', points:40, points_glow:5 }, { id:'01022222222', name:'ياسمين', points_glow:120 } ],
   pos_test_settings: [ { id:'office_gate', hash:null }, { id:'advances_cfg', closeDay:6, openDay:12 } ]
 }; }
 function stubFor(data, now){

@@ -371,7 +371,7 @@ const O2 = {
       tx.update(ref, ok ? { status:'approved', decidedAt: Date.now() } : { status:'rejected', decidedAt: Date.now(), note }); }); toast(ok ? 'اتعتمد ✅' : 'اترفض'); }catch(e){ toast('تعذر: ' + (e && (e.message||e.code))); }
   },
   staffQ(v){ staffQ = v; const el = document.activeElement; render(); try{ const i = document.querySelector('#screen input[placeholder^="🔍"]'); if(i && el && el.tagName==='INPUT'){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, staffBranch(v){ staffBranch = v; render(); },
-  shFilter(g){ shFilter = g; render(); }, shBranch(b){ shBranch = b; render(); }, shSearch(v){ shQ = v; render(); try{ const i = document.getElementById('shSearch'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, shMore(){ shDays += 7; loadShield(shDays); }, shVideo, shShots, shDecide, invoiceAny,
+  shFilter(g){ shFilter = g; render(); }, shBranch(b){ shBranch = b; render(); }, shSearch(v){ shQ = v; render(); try{ const i = document.getElementById('shSearch'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, shMore(){ shDays += 7; loadShield(shDays); }, shVideo, shShots, shDecide, shDetail, invoiceAny,
   inboxTab(t){ inboxTab = t; render(); }, moneyTab(t){ moneyTab = t; render(); }, payMonth(d){ payOffset += d; render(); },
   paySheet, paySalary, payComm, addAdvance, addDeduction, addExpense, invoice: invoiceSheet,
   day(d){ const a = branchDay.split('-').map(Number); branchDay = caiKey(caiStamp(a[0],a[1],a[2],12,0) + d*DAY); if(branchDay > caiKey(Date.now())) branchDay = caiKey(Date.now()); render(); }, dayPick(v){ if(v) { branchDay = v; render(); } },
@@ -495,7 +495,7 @@ function addExpense(){ const amount = Math.round((Number(prompt('المبلغ:')
    مش لوج: قواعد بتقرا الفواتير + أحداث الكاشير + السلة، وكل حالة معاها 📸 لقطات الفاتورة و🎥 فيديو الكاميرا في نفس الدقيقة.
    القواعد: الدرج اتفتح من غير بيع · أصناف اتضربت واتمسحت والعميل خرج من غير فاتورة · خصم يدوي/تعديل سعر لفاتورة من غير عميلة ·
    استبدال نقط (تأكد إن العميلة موجودة + رقم مرتبط بموظفة) · مرتجع من غير فاتورة أصلية · عكس فاتورة · بيع بعد ميعاد القفل. */
-let shDays = 7, shFilter = 'all', shQ = '', shBranch = ''; const sh = { events:[], loadedSince:0, loading:false, err:null, cases:{} };
+let shDays = 7, shFilter = 'all', shQ = '', shBranch = ''; const sh = { events:[], raw:[], loadedSince:0, loading:false, err:null, cases:{}, cust:{}, custLoading:{} };
 const SH_TYPES = ['item_removed','item_removed_late','item_qty_reduced','manual_drawer_open','cart_abandoned','manual_discount','cart_item_edited','same_day_reversal','card_overcharge_saved','customer_points_edit','redeem_value_mismatch','inventory_wiped','inventory_branch_catalog_replace'];
 const SH_RULE = {
   drawer:   { icon:'🗄️', t:'الدرج اتفتح من غير بيع', w:2 },
@@ -507,7 +507,8 @@ const SH_RULE = {
   return:   { icon:'↩️', t:'فلوس اترجعت من غير فاتورة أصلية', w:3 },
   reversal: { icon:'🔁', t:'فاتورة اتعكست بالكامل بعد الدفع', w:2 },
   overcharge:{ icon:'💳', t:'الماكينة خدت أكتر من الفاتورة', w:3 },
-  points:   { icon:'👤', t:'تعديل نقط عميلة يدوي', w:2 },
+  points:   { icon:'👤', t:'رصيد نقط عميلة اتغيّر يدوي', w:2 },
+  redeemReq:{ icon:'📲', t:'طلب استبدال من التطبيق أرقامه مش مطابقة', w:1 },
   stock:    { icon:'📦', t:'مسح/استبدال مخزون الفرع', w:4 },
   hours:    { icon:'🌙', t:'بيع بعد ميعاد القفل', w:1 }
 };
@@ -519,7 +520,7 @@ async function loadShield(days){
   try{
     // ١) أحداث الكاشير
     let last = null; const until = sh.loadedSince || null;
-    for(let i = 0; i < 40; i++){ let q = db.collection('pos_activity_log').where('ts','>=',since).orderBy('ts','desc'); if(until) q = q.where('ts','<',until); if(last) q = q.startAfter(last); q = q.limit(500); const snap = await q.get(); if(snap.empty) break; snap.docs.forEach(d=>{ const r = Object.assign({ id:d.id }, d.data()); if(SH_TYPES.includes(r.type) && !sh.events.some(x=>x.id===r.id)) sh.events.push(r); }); last = snap.docs[snap.docs.length-1]; if(snap.size < 500) break; }
+    for(let i = 0; i < 40; i++){ let q = db.collection('pos_activity_log').where('ts','>=',since).orderBy('ts','desc'); if(until) q = q.where('ts','<',until); if(last) q = q.startAfter(last); q = q.limit(500); const snap = await q.get(); if(snap.empty) break; snap.docs.forEach(d=>{ const r = Object.assign({ id:d.id }, d.data()); if(r.type !== 'print_latency' && !sh.raw.some(x=>x.id===r.id)) sh.raw.push(r); if(SH_TYPES.includes(r.type) && !sh.events.some(x=>x.id===r.id)) sh.events.push(r); }); last = snap.docs[snap.docs.length-1]; if(snap.size < 500) break; }
     // ٢) فواتير كل يوم في النافذة (كاش)
     for(let d = 0; d < days; d++) await loadDay(caiKey(since + d*DAY + 3600000));
     // ٣) قرارات المالك على الحالات
@@ -533,15 +534,18 @@ function shiftHours(branch){ const defs = shiftDefs(branch); let a = 24*60, b = 
 function buildCases(since){
   const out = []; const sales = windowSales(since); const ev = sh.events.filter(e=> e.ts >= since);
   const saleBySid = {}; sales.forEach(s=>{ if(s.cartSid) saleBySid[s.cartSid] = s; });
-  const push = (rule, id, o)=> out.push(Object.assign({ rule, id: rule + '_' + id, w: SH_RULE[rule].w }, o));
+  const pushRaw = (rule, id, o)=> out.push(Object.assign({ rule, id: rule + '_' + id, w: SH_RULE[rule].w }, o));
+  const push = (rule, id, o)=> pushRaw(rule, id, Object.assign({ phone: (o && o.invoice && o.invoice.customerPhone) || '' }, o));
   ev.forEach(e=>{
+    const push = (rule, id, o)=> pushRaw(rule, id, Object.assign({ ev:e, phone: e.phone || e.customerPhone || '' }, o));
     const near = (ms)=> sales.some(s=> s.branch===e.branch && Math.abs(saleMs(s) - e.ts) <= ms);
     if(e.type==='manual_drawer_open' && !near(3*60000)) push('drawer', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, text:'الدرج اتفتح يدوي ومفيش أي بيع قبلها أو بعدها بـ3 دقايق', eventId:e.cctvEventId });
     if(e.type==='cart_abandoned' && (Number(e.value)||0) >= 50){ const v = Number(e.value)||0; const sold = sales.some(s=> s.branch===e.branch && saleMs(s) > e.ts && saleMs(s) <= e.ts + 15*60000 && Math.abs((Number(s.total)||0) - v) <= v*0.25); if(!sold) push('wiped', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, amount:v, text:`سلة ${e.itemCount||0} صنف بقيمة ${n0(v)} ج اتمسحت ومفيش فاتورة قريبة من المبلغ ده في الربع ساعة اللي بعدها`, eventId:e.cctvEventId }); }
     if(e.type==='manual_discount' || e.type==='cart_item_edited'){ const s = e.sid && saleBySid[e.sid]; if(s && !s.customerPhone){ const lowered = e.type==='manual_discount' || (Number(e.to)||0) < (Number(e.from)||0); if(lowered) push('discount', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, invoice:s, amount:Number(s.total)||0, text: e.type==='manual_discount' ? `خصم يدوي ${e.pct}% على فاتورة #${s.invoiceNo||''} (${n0(s.total)} ج) من غير رقم عميلة` : `سعر «${esc(e.name||'')}» اتعدّل من ${n0(e.from)} لـ ${n0(e.to)} في فاتورة #${s.invoiceNo||''} من غير رقم عميلة`, eventId:e.cctvEventId }); } }
     if(e.type==='same_day_reversal') push('reversal', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, amount:Number(e.total)||0, text:`فاتورة #${e.invoiceNo||''} اتعكست بالكامل — ${n0(e.total)} ج`, eventId:e.cctvEventId });
     if(e.type==='card_overcharge_saved') push('overcharge', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, amount:Number(e.diff)||0, text:`الماكينة خدت ${n0(e.charged)} على فاتورة ${n0(e.total)} (فرق ${n0(e.diff)} ج)`, invoiceCode:e.invoiceCode, eventId:e.cctvEventId });
-    if(e.type==='customer_points_edit' || e.type==='redeem_value_mismatch') push('points', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, text: e.type==='customer_points_edit' ? `نقط عميلة ${esc(e.phone||'')}: ${e.from} ← ${e.to} (${e.diff>0?'+':''}${e.diff})${e.reason?' · '+esc(e.reason):''}` : 'قيمة استبدال نقط مش مطابقة', eventId:e.cctvEventId });
+    if(e.type==='customer_points_edit') push('points', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, amount:0, text:`${esc(e.employeeName||'موظفة')} غيّرت رصيد نقط العميلة ${esc(e.phone||'')} يدوي من ملفها على الكاشير: كان ${e.from} وبقى ${e.to} (${e.diff>0?'+':''}${e.diff} نقطة)${e.reason?' · السبب اللي اتكتب: «'+esc(e.reason)+'»':' · من غير سبب'}`, eventId:e.cctvEventId });
+    if(e.type==='redeem_value_mismatch') push('redeemReq', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, text:`العميلة ${esc(e.phone||'')} طلبت من التطبيق تستبدل ${e.reqPoints} نقطة بـ${n0(e.reqValue)} ج — والصح حسب رصيدها (${e.balance}) والإعدادات ${e.sanePoints} نقطة بـ${n0(e.saneValue)} ج. الكاشير اتعرض عليه الرقم الصح بس.`, eventId:e.cctvEventId });
     if(e.type==='inventory_wiped' || e.type==='inventory_branch_catalog_replace') push('stock', e.id, { ts:e.ts, branch:e.branch, emp:e.employeeName, text: e.type==='inventory_wiped' ? `مخزون الفرع اتمسح (${e.count||0} صنف)` : 'كتالوج الفرع اتستبدل', eventId:e.cctvEventId });
   });
   // 🗑️ مسح قطع من السلة — حالة واحدة لكل سلة (sid): إيه اللي اتشال، قعد قد إيه، واتعملت فاتورة ولا لأ
@@ -553,7 +557,7 @@ function buildCases(since){
     const items = c.lines.map(e=> esc(e.name||e.barcode||'صنف') + (Number(e.qty)>1?' ×'+e.qty:'') + (e.type==='item_removed_late'?' ⏱'+Math.round((Number(e.inCartSec)||0)/60)+'د':'')).join('، ');
     const w = noInv ? 4 : (c.late ? 2 : 1);
     const head = noInv ? 'اتمسحوا والسلة خرجت من غير فاتورة' : (sale ? 'اتمسحوا قبل فاتورة #' + (sale.invoiceNo||'') + ' (' + n0(sale.total) + ' ج)' : 'اتمسحوا من السلة');
-    out.push({ rule:'removed', id:'removed_' + c.k, w, ts:c.ts, branch:c.branch, emp:c.emp, amount:c.value, invoice: sale || null, eventId:c.eventId, text:`${c.lines.length} ${c.lines.length>1?'قطع':'قطعة'} بـ${n0(c.value)} ج ${head}: ${items}${c.late?' — ⏱ = فضلت في السلة أكتر من دقيقة ونص قبل ما تتشال':''}` });
+    out.push({ rule:'removed', id:'removed_' + c.k, evs:c.lines, ev:c.lines[0], phone: (sale && sale.customerPhone) || '', w, ts:c.ts, branch:c.branch, emp:c.emp, amount:c.value, invoice: sale || null, eventId:c.eventId, text:`${c.lines.length} ${c.lines.length>1?'قطع':'قطعة'} بـ${n0(c.value)} ج ${head}: ${items}${c.late?' — ⏱ = فضلت في السلة أكتر من دقيقة ونص قبل ما تتشال':''}` });
   });
   // من الفواتير نفسها
   const byPhone = {};
@@ -570,7 +574,7 @@ function buildCases(since){
   // تكرار نفس القاعدة لنفس الموظفة في الأسبوع = خطورة أعلى
   const rep = {}; out.forEach(c=>{ const k = c.rule + '|' + c.emp; rep[k] = (rep[k]||0) + 1; });
   out.forEach(c=>{ c.score = c.w + (rep[c.rule + '|' + c.emp] >= 3 ? 2 : 0) + ((c.amount||0) >= 1000 ? 1 : 0); c.decision = (sh.cases[c.id]||{}).status || ''; });
-  return out.sort((a,b)=> (b.ts||0) - (a.ts||0));
+  out.sort((a,b)=> (b.ts||0) - (a.ts||0)); sh.byId = {}; out.forEach(c=>{ sh.byId[c.id] = c; }); return out;
 }
 function rActivity(){
   head(`<button class="back" onclick="O2.go('more')">‹</button> 🛡️ الحماية`, 'نشاط مريب على الكاشير · آخر ' + shDays + ' يوم');
@@ -578,6 +582,7 @@ function rActivity(){
   if(!sh.loading && (!sh.loadedSince || sh.loadedSince > since)) setTimeout(()=> loadShield(shDays), 0);
   const qn = String(shQ||'').trim().toLowerCase();
   const all = buildCases(since).filter(c=> (!shBranch || c.branch===shBranch) && (!qn || [c.emp, c.branch, c.text, (c.invoice&&c.invoice.invoiceNo)].some(x=> String(x||'').toLowerCase().includes(qn)))); const open = all.filter(c=> c.decision !== 'ok');
+  fetchCusts(all.map(c=> c.phone));
   const brs = [...new Set(sh.events.map(e=>e.branch).concat(branches()).filter(Boolean))].sort();
   const searchBar = `<div class="card full" style="padding:8px"><input id="shSearch" value="${esc(shQ)}" placeholder="🔍 اسم الموظفة أو الفرع أو رقم فاتورة" oninput="O2.shSearch(this.value)" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:12px;font-size:14px"><div class="btns" style="margin-top:6px"><button class="btn ${!shBranch?'p':''}" onclick="O2.shBranch('')">كل الفروع</button>${brs.map(b=>`<button class="btn ${shBranch===b?'p':''}" onclick="O2.shBranch('${esc(b)}')">${esc(String(b).replace('echarpe ',''))}</button>`).join('')}</div></div>`;
   const rules = Object.keys(SH_RULE).filter(r=> open.some(c=> c.rule===r));
@@ -588,8 +593,68 @@ function rActivity(){
   const sum = `<div class="card"><h3>📊 آخر ${shDays} يوم <small>${open.length} حالة مفتوحة</small></h3><div class="kpis">${rules.slice(0,6).map(r=>`<div class="kpi" onclick="O2.shFilter('${r}')"><small>${SH_RULE[r].icon} ${SH_RULE[r].t.split(' — ')[0].slice(0,18)}</small><b>${open.filter(c=>c.rule===r).length}</b></div>`).join('') || '<div class="empty" style="grid-column:1/-1">مفيش حالات 🎉</div>'}</div>${top.length?`<div class="sec">🚩 أعلى خطورة</div>${top.map(([n,x])=>`<div class="row" style="cursor:default"><div class="n"><b>${esc(n)}</b><small>${esc(String(x.b||'').replace('echarpe ',''))} · ${x.n} حالة</small></div><span class="pill ${x.s>=8?'p-bad':(x.s>=4?'p-warn':'p-gray')}">خطورة ${x.s}</span></div>`).join('')}`:''}</div>`;
   const list = (shFilter==='ok' ? all.filter(c=> c.decision==='ok') : open.filter(c=> shFilter==='all' || c.rule===shFilter));
   let lastDay = ''; const feed = list.map(c=>{ const k = caiKey(c.ts); const hd = k !== lastDay ? `<div class="sec">${dayName(c.ts)} ${k.slice(5)}</div>` : ''; lastDay = k; const cls = c.score >= 5 ? '' : (c.score >= 3 ? 'w' : 'i');
-    return hd + `<div class="alert ${cls}" style="cursor:default;flex-wrap:wrap"><span style="flex:1;min-width:0"><b>${SH_RULE[c.rule].icon} ${SH_RULE[c.rule].t}</b>${c.decision==='flag'?' <span class="pill p-bad">🚩 مشكلة</span>':''}<br><span style="font-weight:600">${c.text}</span><br><small class="tag">${esc(String(c.branch||'').replace('echarpe ',''))} · ${esc(c.emp||'—')} · ${hm(c.ts)} · خطورة ${c.score}</small></span><span class="btns" style="margin:0;width:100%"><button class="btn" onclick="O2.shVideo('${esc(c.branch)}',${c.ts})">🎥 فيديو</button>${(c.invoice&&c.invoice.invoiceCode)||c.invoiceCode?`<button class="btn" onclick="O2.shShots('${esc((c.invoice&&c.invoice.invoiceCode)||c.invoiceCode)}')">📸 لقطات</button>`:''}${c.invoice?`<button class="btn" onclick="O2.invoiceAny('${c.invoice.id}')">🧾 الفاتورة</button>`:''}${c.decision==='ok'?`<button class="btn" onclick="O2.shDecide('${c.id}','',${c.ts})">↩ افتح تاني</button>`:`<button class="btn g" onclick="O2.shDecide('${c.id}','ok',${c.ts})">✓ عادي</button><button class="btn r" onclick="O2.shDecide('${c.id}','flag',${c.ts})">🚩 مشكلة</button>`}</span></div>`; }).join('');
+    return hd + `<div class="alert ${cls}" style="cursor:default;flex-wrap:wrap"><span style="flex:1;min-width:0"><b>${SH_RULE[c.rule].icon} ${SH_RULE[c.rule].t}</b>${c.decision==='flag'?' <span class="pill p-bad">🚩 مشكلة</span>':''}<br><span style="font-weight:600">${c.text}</span>${c.phone?`<br><small class="tag">👤 ${esc(custName(c.phone)||'عميلة')} · ${esc(c.phone)}</small>`:''}<br><small class="tag">${esc(String(c.branch||'').replace('echarpe ',''))} · ${esc(c.emp||'—')} · ${hm(c.ts)} · خطورة ${c.score}</small></span><span class="btns" style="margin:0;width:100%"><button class="btn p" onclick="O2.shDetail('${esc(c.id)}')">📋 التفاصيل</button><button class="btn" onclick="O2.shVideo('${esc(c.branch)}',${c.ts})">🎥 فيديو</button>${(c.invoice&&c.invoice.invoiceCode)||c.invoiceCode?`<button class="btn" onclick="O2.shShots('${esc((c.invoice&&c.invoice.invoiceCode)||c.invoiceCode)}')">📸 لقطات</button>`:''}${c.invoice?`<button class="btn" onclick="O2.invoiceAny('${c.invoice.id}')">🧾 الفاتورة</button>`:''}${c.decision==='ok'?`<button class="btn" onclick="O2.shDecide('${c.id}','',${c.ts})">↩ افتح تاني</button>`:`<button class="btn g" onclick="O2.shDecide('${c.id}','ok',${c.ts})">✓ عادي</button><button class="btn r" onclick="O2.shDecide('${c.id}','flag',${c.ts})">🚩 مشكلة</button>`}</span></div>`; }).join('');
   return searchBar + chips + sum + `<div class="full">${sh.loading?'<div class="card"><div class="skel"></div><div class="hint">بيقرا فواتير وأحداث ' + shDays + ' يوم…</div></div>':''}${sh.err?`<div class="card"><b style="color:var(--bad)">تعذر التحميل: ${esc(sh.err)}</b></div>`:''}${feed || (sh.loading?'':'<div class="empty">مفيش حالات في الفترة دي 🎉</div>')}<div class="btns"><button class="btn w" onclick="O2.shMore()">⏮ حمّل أسبوع أقدم</button></div></div>`;
+}
+/* ---------- 📋 تفاصيل الحالة: إيه اللي حصل بالظبط، إزاي، مين العميلة، الفاتورة، واللي حصل في نفس السلة ---------- */
+function custName(phone){ const c = sh.cust[phone]; return c ? (c.name || '') : ''; }
+function fetchCusts(phones){
+  const need = [...new Set(phones.filter(p=> p && !(p in sh.cust) && !sh.custLoading[p]))].slice(0, 40); if(!need.length) return;
+  need.forEach(p=>{ sh.custLoading[p] = 1; db.collection('pos_test_customers').doc(String(p)).get().then(d=>{ sh.cust[p] = d.exists ? (d.data()||{}) : null; }).catch(()=>{ sh.cust[p] = null; }).then(()=>{ delete sh.custLoading[p]; clearTimeout(fetchCusts._t); fetchCusts._t = setTimeout(()=>{ if(screenName==='activity') render(); }, 150); }); });
+}
+const SH_HOW = {
+  manual_drawer_open: 'الكاشير داس زرار «🗄️ فتح الدرج» من شاشة البيع. الدرج بيتفتح لوحده مع أي فاتورة كاش — فالفتح اليدوي ده كان من غير فاتورة، ومفيش فاتورة اتحفظت قبله أو بعده بـ3 دقايق في نفس الفرع.',
+  cart_abandoned: 'اتضربت أصناف في السلة، وبعدين السلة اتفضّت (فاتورة جديدة / رجوع) من غير ما فاتورة تتحفظ. ومفيش فاتورة بنفس المبلغ تقريبًا اتعملت في الربع ساعة اللي بعدها.',
+  item_removed: 'قطعة اتشالت من السلة قبل حفظ الفاتورة.', item_qty_reduced: 'كمية قطعة اتقللت في السلة قبل حفظ الفاتورة.',
+  item_removed_late: 'قطعة اتشالت من السلة بعد ما فضلت فيها أكتر من دقيقة ونص — مش مسحة غلط سريعة.',
+  manual_discount: 'الكاشير حط خصم بنسبة % يدوي على كل السلة من زرار الخصم — والفاتورة اتحفظت من غير رقم عميلة.',
+  cart_item_edited: 'سعر صنف اتغيّر يدوي من شاشة «تعديل الصنف» في السلة — والفاتورة اتحفظت من غير رقم عميلة.',
+  same_day_reversal: 'فاتورة اتعكست بالكامل في نفس يوم بيعها: البضاعة رجعت المخزون والنقط اترجعت — والفلوس المفروض رجعت للعميلة.',
+  card_overcharge_saved: 'ماكينة الفيزا سحبت من كارت العميلة أكتر من إجمالي الفاتورة — عادةً لإن السلة اتعدّلت بعد السحب. الفرق لازم يترد للعميلة من Paymob.',
+  customer_points_edit: 'موظفة بصلاحية «تعديل النقط» فتحت ملف العميلة على الكاشير، ودوست «⚖️ تعديل رصيد النقط» وكتبت رصيد جديد بإيدها (مش من فاتورة).',
+  redeem_value_mismatch: 'العميلة طلبت استبدال نقط من تطبيقها، والطلب وصل الكاشير بأرقام مختلفة عن الصح (رصيدها اتغيّر أو إعدادات الاستبدال اتغيّرت بعد الطلب، أو الطلب اتلعب فيه). الكاشير بيعرض الرقم الصح بس — مفيش فلوس اتصرفت غلط لوحدها.',
+  inventory_wiped: 'مخزون الفرع كله اتمسح من شاشة الاستيراد على الكاشير.', inventory_branch_catalog_replace: 'كتالوج الفرع اتستبدل بملف من شاشة الاستيراد.'
+};
+const SH_SALE_HOW = {
+  redeem: 'الفاتورة دي فيها استبدال نقط بخصم. اتأكد إن العميلة كانت موجودة فعلًا (اتفرج على الفيديو) — النقط ممكن تتصرف على رقم عميلة مش موجودة.',
+  return: 'فاتورة فيها صنف اتعلّم مرتجع من غير ما يتجاب من فاتورة أصلية، والفاتورة نزلت بالسالب — يعني فلوس طلعت من الدرج للعميلة من غير إثبات إنها اشترت.',
+  phone: 'رقم العميلة ده اتحط على 4 فواتير أو أكتر في الأسبوع كلها مع نفس الموظفة — ممكن تكون بتجمّع نقط على رقم واحد.',
+  reversal: 'فاتورة اتعكست بالكامل.', hours: 'فاتورة اتعملت برّه مواعيد شيفتات الفرع (أبدر من أول شيفت بنص ساعة أو بعد آخر شيفت بساعة).'
+};
+const SH_FIELDS = { name:'الصنف', barcode:'الكود', qty:'الكمية', price:'السعر', value:'القيمة', inCartSec:'فضلت في السلة', how:'اتشالت إزاي', qtyBefore:'الكمية قبل', qtyAfter:'الكمية بعد', pct:'النسبة', from:'من', to:'لـ', diff:'الفرق', reason:'السبب اللي اتكتب', phone:'رقم العميلة', customerPhone:'رقم العميلة', field:'رصيد', invoiceNo:'رقم الفاتورة', invoiceCode:'كود الفاتورة', total:'إجمالي الفاتورة', charged:'اتسحب من الكارت', cause:'السبب', txnId:'رقم عملية Paymob', itemCount:'عدد الأصناف', firstItemAt:'أول صنف اتضرب', cartCount:'عدد سطور السلة', reqPoints:'النقط في طلب التطبيق', reqValue:'القيمة في طلب التطبيق', sanePoints:'النقط الصح', saneValue:'القيمة الصح', balance:'رصيدها وقتها', count:'عدد الأصناف', fileItems:'أصناف الملف', newItems:'جديد', updatedItems:'اتحدّث', removedMissing:'اتشال', by:'اتعمل بحساب' };
+function shFieldVal(k, v){
+  if(v == null || v === '') return '';
+  if(k==='inCartSec') return Math.floor(v/60) ? Math.floor(v/60) + ' د ' + (v%60) + ' ث' : v + ' ث';
+  if(k==='firstItemAt') return hm(v);
+  if(k==='field') return v==='points_glow' ? 'نقط Glow' : 'نقط echarpe';
+  if(['price','value','total','charged','reqValue','saneValue'].includes(k)) return n0(v) + ' ج';
+  if(k==='pct') return v + '%';
+  return String(v);
+}
+function shEventRows(e){
+  const skip = { type:1, branch:1, employeeId:1, employeeName:1, sid:1, ts:1, cctvEventId:1, id:1, isReturn:1, causeSum:1, causeExact:1 };
+  return Object.keys(e).filter(k=> !skip[k] && e[k] != null && e[k] !== '' && typeof e[k] !== 'object').map(k=>`<div class="row" style="cursor:default;padding:6px 0"><div class="n"><small>${esc(SH_FIELDS[k]||k)}</small></div><b style="font-size:13px">${esc(shFieldVal(k, e[k]))}</b></div>`).join('');
+}
+const SH_TL = { sale_saved:'💾 الفاتورة اتحفظت', manual_drawer_open:'🗄️ فتح الدرج يدوي', cart_abandoned:'🛒 السلة اتفضّت من غير فاتورة', item_removed:'🗑️ قطعة اتشالت', item_removed_late:'🗑️⏱ قطعة اتشالت متأخر', item_qty_reduced:'➖ كمية اتقللت', manual_discount:'🏷️ خصم يدوي', cart_item_edited:'✏️ سعر اتعدّل', card_overcharge_saved:'💳 سحب زيادة', redeem_value_mismatch:'📲 طلب استبدال مش مطابق', customer_points_edit:'👤 تعديل نقط', same_day_reversal:'🔁 عكس فاتورة', basket_suggest_added:'➕ صنف من الاقتراحات' };
+function shDetail(id){
+  const c = (sh.byId||{})[id]; if(!c) return;
+  const e = c.ev || null; const inv = c.invoice || null; const phone = c.phone || '';
+  if(phone) fetchCusts([phone]);
+  const R = SH_RULE[c.rule]; const how = e ? (SH_HOW[e.type] || '') : (SH_SALE_HOW[c.rule] || '');
+  const sid = (e && e.sid) || (inv && inv.cartSid) || '';
+  const tl = sid ? sh.raw.filter(x=> x.sid===sid).sort((a,b)=> a.ts-b.ts) : [];
+  const cust = phone ? sh.cust[phone] : undefined;
+  const custHtml = phone ? `<div class="card" style="margin-top:8px"><h3>👤 العميلة</h3>${cust===undefined?'<div class="skel"></div>':(cust===null?`<div class="hint">الرقم ${esc(phone)} مش متسجل كعميلة</div>`:`<div class="row first" style="cursor:default"><div class="n"><b>${esc(cust.name||'من غير اسم')}</b><small>${esc(phone)}${cust.createdAt?' · مسجّلة من '+esc(caiKey(Number(cust.createdAt.toMillis?cust.createdAt.toMillis():cust.createdAt)||0)):''}</small></div><a class="btn" href="tel:${esc(phone)}">📞</a></div><div class="row" style="cursor:default"><div class="n"><small>رصيد النقط دلوقتي</small></div><b>echarpe ${n0(cust.points||0)} · Glow ${n0(cust.points_glow||0)}</b></div>`)}</div>` : '';
+  const invHtml = inv ? `<div class="card" style="margin-top:8px"><h3>🧾 الفاتورة #${esc(inv.invoiceNo||'')} <small>${hm(saleMs(inv))} · ${esc(inv.employee||inv.employeeName||'')}</small></h3>${(inv.items||[]).map(it=>`<div class="row" style="cursor:default;padding:6px 0"><div class="n"><b style="font-size:13px">${esc(it.name||'')}${it.isReturn?' <span class="pill p-bad">مرتجع</span>':''}${it.isRedemption?' <span class="pill p-acc">استبدال</span>':''}</b><small>${esc(it.barcode||'')} · × ${Number(it.qty)||1}</small></div><b class="money">${n0((Number(it.price)||0)*(Number(it.qty)||1))}</b></div>`).join('')}<div class="row" style="cursor:default;border-top:2px solid var(--ink)"><div class="n"><b>الإجمالي</b><small>${Object.entries(inv.payments||{}).filter(([k,v])=>Number(v)).map(([k,v])=> (PAY_AR[k]||k)+' '+n0(v)).join(' · ')}${inv.pointsRedeemed?' · استبدال '+inv.pointsRedeemed+' نقطة':''}</small></div><b class="money">${n0(inv.total)} ج</b></div><div class="btns"><button class="btn" onclick="O2.invoiceAny('${inv.id}')">افتح الفاتورة</button>${inv.invoiceCode?`<button class="btn" onclick="O2.shShots('${esc(inv.invoiceCode)}')">📸 لقطات</button>`:''}</div></div>` : '';
+  const lines = (c.evs && c.evs.length > 1 ? c.evs : (e ? [e] : []));
+  const factsHtml = lines.length ? `<div class="card" style="margin-top:8px"><h3>🔎 اللي اتسجل من الكاشير</h3>${lines.map((x,i)=> (lines.length>1?`<div class="sec" style="margin-top:${i?10:0}px">${SH_TL[x.type]||x.type} · ${hm(x.ts)}</div>`:'') + shEventRows(x)).join('')}</div>` : '';
+  const tlHtml = tl.length > 1 ? `<div class="card" style="margin-top:8px"><h3>🕒 اللي حصل في نفس السلة</h3>${tl.map(x=>`<div class="row" style="cursor:default;padding:6px 0"><div class="n"><b style="font-size:12.5px">${SH_TL[x.type]||esc(x.type)}${x.name?' · '+esc(x.name):''}${x.value?' · '+n0(x.value)+' ج':''}${x.pct?' · '+x.pct+'%':''}</b><small>${esc(x.employeeName||'')}</small></div><span class="tag">${hm(x.ts)}</span></div>`).join('')}${!inv && sid ? '<div class="hint">مفيش فاتورة اتحفظت للسلة دي</div>' : ''}</div>` : '';
+  sheet(`<h2>${R.icon} ${R.t}</h2>
+    <div class="hint" style="font-size:12px">${dayName(c.ts)} ${caiKey(c.ts)} · ${hm(c.ts)} · ${esc(c.branch||'')} · ${esc(c.emp||'—')} · خطورة ${c.score}</div>
+    <div class="card" style="margin-top:8px"><h3>📌 إيه اللي حصل</h3><div style="font-weight:700;font-size:13.5px;line-height:1.8">${c.text}</div>${how?`<div class="hint" style="font-size:12px;line-height:1.8;margin-top:6px">💡 ${how}</div>`:''}</div>
+    ${custHtml}${factsHtml}${invHtml}${tlHtml}
+    <div class="btns"><button class="btn" onclick="O2.shVideo('${esc(c.branch)}',${c.ts})">🎥 الفيديو وقتها</button>${c.decision==='ok'?'':`<button class="btn g" onclick="O2.shDecide('${esc(c.id)}','ok',${c.ts});O2.closeSheet()">✓ عادي</button><button class="btn r" onclick="O2.shDecide('${esc(c.id)}','flag',${c.ts});O2.closeSheet()">🚩 مشكلة</button>`}</div>`);
+  if(phone && cust === undefined) setTimeout(()=>{ if(document.getElementById('sheet').style.display !== 'none') shDetail(id); }, 900);
 }
 function shVideo(branch, ts){
   const site = siteOf(branch); if(!site){ toast('الفرع ده مفيهوش كاميرات متوصّلة'); return; }

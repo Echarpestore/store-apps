@@ -67,7 +67,7 @@ if(!(out.fatal && /playwright|Cannot find module/i.test(out.fatal))){
 // ---------- v6: 🛡️ الحماية — نشاط مريب على الكاشير بس (من غير موظفين/حضور) مع فيديو ولقطات وقرار ----------
 if(!(out.fatal && /playwright|Cannot find module/i.test(out.fatal))){
   const a = out.activity || '';
-  assert(/الكل 10/.test(a) && /10 حالة مفتوحة/.test(a), 'ملخص 7 أيام: 10 حالات مفتوحة');
+  assert(/الكل 11/.test(a) && /11 حالة مفتوحة/.test(a), 'ملخص 7 أيام: 11 حالة مفتوحة');
   assert(/الدرج اتفتح يدوي ومفيش أي بيع قبلها أو بعدها بـ3 دقايق[\s\S]*El Rehab · سارة · 16:00/.test(a), 'درج اتفتح من غير بيع (سارة 16:00)');
   assert(/🗄️ 1\n/.test(a), 'سلبي: الدرج اللي اتفتح بعد بيع بدقيقة (هاجر 12:31) مش حالة');
   assert(/سلة 2 صنف بقيمة 900 ج اتمسحت ومفيش فاتورة قريبة/.test(a) && /🛒 1\n/.test(a), 'سلة اتمسحت ومفيش فاتورة بعدها — والسلة اللي اتباعت بعدها (1200) والسلة الصغيرة (30 ج) مش حالات');
@@ -85,13 +85,25 @@ if(!(out.fatal && /playwright|Cannot find module/i.test(out.fatal))){
   assert(/1 قطعة بـ600 ج اتمسحوا والسلة خرجت من غير فاتورة: سكارف حرير ×2 ⏱3د/.test(r), '🗑️ قطعة اتمسحت والسلة خرجت من غير فاتورة (خطورة أعلى)');
   assert(!/الدرج اتفتح يدوي/.test(rf), 'فلتر المسح بيعرض المسح بس');
   const q = out.activityQ || '';
-  assert(/الكل 3/.test(q) && /دينا/.test(q) && !/El Rehab · سارة/.test(q), 'البحث باسم الموظفة (دينا) بيعرض حالاتها بس');
+  assert(/الكل 4/.test(q) && /دينا/.test(q) && !/El Rehab · سارة/.test(q), 'البحث باسم الموظفة (دينا) بيعرض حالاتها بس');
   const br = out.activityBr || '';
-  assert(/الكل 3/.test(br) && !/El Rehab ·/.test(br.slice(br.indexOf('📊'))), 'فلتر الفرع (Glow) بيعرض الفرع بس');
+  assert(/الكل 4/.test(br) && !/El Rehab ·/.test(br.slice(br.indexOf('📊'))), 'فلتر الفرع (Glow) بيعرض الفرع بس');
+  // v11: كل حالة بتفاصيلها — إيه وإزاي ومين العميلة ومنين
+  const ac = out.activityCust || '';
+  assert(/👤 منى أحمد · 0100/.test(ac) && /👤 ياسمين · 01022222222/.test(ac) && /📋 التفاصيل/.test(ac), 'اسم العميلة ورقمها على الكارت + زرار التفاصيل');
+  const dp = out.detPts || '';
+  assert(/سارة غيّرت رصيد نقط العميلة 0100 يدوي من ملفها على الكاشير: كان 10 وبقى 40 \(\+30 نقطة\) · السبب اللي اتكتب: «تصحيح»/.test(dp), 'تعديل النقط: مين وإزاي ومن كام لكام والسبب');
+  assert(/⚖️ تعديل رصيد النقط/.test(dp) && /منى أحمد/.test(dp) && /echarpe 40 · Glow 5/.test(dp) && /رصيد\nنقط echarpe/.test(dp), 'التفاصيل: الطريقة على الكاشير + العميلة ورصيدها دلوقتي + أنهي رصيد');
+  const dq = out.detReq || '';
+  assert(/📲 طلب استبدال من التطبيق أرقامه مش مطابقة/.test(dq) && /طلبت من التطبيق تستبدل 200 نقطة بـ100 ج — والصح حسب رصيدها \(120\) والإعدادات 100 نقطة بـ50 ج/.test(dq) && /ياسمين/.test(dq), 'طلب الاستبدال من التطبيق مش «تعديل نقط» — بالأرقام والعميلة');
+  assert(!/تعديل نقط عميلة يدوي/.test(dq), 'سلبي: طلب التطبيق مبقاش متسمي تعديل يدوي');
+  const dr = out.detRem || '';
+  assert(/🧾 الفاتورة #5802/.test(dr) && /طرحة كريب/.test(dr) && /فضلت في السلة\n20 ث/.test(dr), 'تفاصيل المسح: القطعة والمدة والفاتورة بأصنافها');
+  assert(/زرار «🗄️ فتح الدرج»/.test(out.detDrawer||''), 'تفاصيل الدرج: اتفتح إزاي');
   const d = out.activityDisc || '';
   assert(/خصم يدوي 15%/.test(d.slice(d.indexOf('السبت'))) && !/الدرج اتفتح يدوي/.test(d.slice(d.indexOf('السبت'))), 'فلتر الخصومات بيعرض الخصم بس');
   const ok = out.activityOk || '';
-  assert(/الكل 9/.test(ok) && /✓ اتراجعت 1/.test(ok) && !/🗄️/.test(ok.split('📊')[0]), 'بعد ✓ عادي: الحالة اختفت من المفتوح وبقت 1 اتراجعت');
+  assert(/الكل 10/.test(ok) && /✓ اتراجعت 1/.test(ok) && !/🗄️/.test(ok.split('📊')[0]), 'بعد ✓ عادي: الحالة اختفت من المفتوح وبقت 1 اتراجعت');
   const cs = (out.writes||[]).find(w=> w.col==='office_cases');
   assert(cs && cs.id==='drawer_l10' && cs.p.status==='ok', 'القرار اتسجل في office_cases');
   assert(/cctv-rehab\.echarpe\.store\/echarpe-playback\/video\?camera=1&amp;atMs=/.test(out.video||'') && /durationSec=60/.test(out.video||''), '🎥 فيديو من gateway الفرع من 20 ثانية قبل الحدث');
