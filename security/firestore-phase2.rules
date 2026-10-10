@@ -569,6 +569,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---------- 📸 الستوري والمنتجات (10-10-2026) ----------
+    // الموظفات بيرفعوا من Sales (مستنية) · المالك بيوافق من Office 2.
+    // العميلة بتشوف المنشور النهارده + اللي على الرئيسية بس — مش المستني/المرفوض.
+    match /app_stories/{id} {
+      allow read: if isStaff() || (signedIn() && (resource.data.status == 'published' || resource.data.get('homeFeed', '') != ''));
+      allow write: if isStaff();
+    }
+    match /app_story_images/{id} {
+      allow read: if isStaff() || (signedIn() && resource.data.published == true);
+      allow write: if isStaff();
+    }
+    // رصيد قطع كل موظفة + مؤشر الحساب — Office 2 بس
+    match /app_story_credit/{id}          { allow read, write: if isStaff(); }
+
     // ---------- أي حاجة تانية: ممنوعة ----------
     /* 📱 إنستاباي — نسخة العرض اللي تابلت الفرع بيسمعها لايف. القراءة للداخلين (التابلت مجهول). الكتابة من الدوال بس.
        ⚠️ 22-09: البلوك ده كان في ملف جانبي (insta_live-RULES-ADD.txt) مش في الملف — المالك نشر الملف فوقع insta_live تحت الرفض

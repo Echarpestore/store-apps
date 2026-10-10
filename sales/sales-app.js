@@ -2037,6 +2037,25 @@ window.salesRecvApi = {
     }
   }
 };
+/* 📸 v648: الستوري — الموظفة بتصوّر وترفع (مستنية موافقة المالك) · المنطق في sales-stories.js
+   الصورة الكبيرة في app_story_images (مستند لوحده) والمصغّرة مع البيانات في app_stories. */
+window.salesStoryApi = {
+  hubEmp: function(){ return taskSubmitEmpId; },
+  employees: function(){ return window.employees || []; },
+  findByBarcode: function(code){ return window.salesRecvApi.findByBarcode(code); },
+  submit: async function(story, img, id){
+    const ref = id ? doc(db, 'app_stories', String(id)) : doc(collection(db, 'app_stories'));
+    const b = writeBatch(db);
+    b.set(ref, story, { merge: !!id });
+    if(img) b.set(doc(db, 'app_story_images', ref.id), { img: img, brand: story.brand || 'echarpe', published: false, ts: Date.now() });
+    await b.commit();
+    return ref.id;
+  },
+  mine: async function(empId){
+    const s = await getDocs(query(collection(db, 'app_stories'), where('employeeId', '==', String(empId)), limit(40)));
+    return s.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); }).sort(function(a, b){ return (b.createdAt || 0) - (a.createdAt || 0); });
+  }
+};
 window.checkLeaveRequest = checkLeaveRequest;
 window.coverageOnDate = coverageOnDate;
 window.todayStr = todayStr;
