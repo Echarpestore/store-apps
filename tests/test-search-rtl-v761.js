@@ -7,7 +7,7 @@ const fs=require('fs'); const path=require('path'); const { execFileSync } = req
 const html=fs.readFileSync(path.join(__dirname,'..','pos','index.html'),'utf8');
 assert(/<input[^>]*id="searchBar"[^>]*dir="rtl"/.test(html), 'v761: #searchBar عليه dir="rtl"');
 assert(/#searchBar\{\s*direction:rtl !important;\s*text-align:right !important;\s*\}/.test(html), 'v761: قاعدة CSS !important بتثبّت الاتجاه');
-assert(/pos-shell-v761/.test(fs.readFileSync(path.join(__dirname,'..','pos','sw.js'),'utf8')), 'v761: CACHE_NAME اترفع');
+assert(/pos-shell-v76[1-9]/.test(fs.readFileSync(path.join(__dirname,'..','pos','sw.js'),'utf8')), 'v761: CACHE_NAME اترفع');
 // سلبي: نسخة من الصفحة من غير القاعدة متعدّيش
 const stripped=html.replace(/#searchBar\{ direction:rtl !important; text-align:right !important; \}/,'');
 assert(!/#searchBar\{\s*direction:rtl !important/.test(stripped), 'v761 سلبي: من غير القاعدة الفحص بيفشل');

@@ -22,7 +22,8 @@ function baseData(){ return {
   sales_leave_requests: [ { id:'l1', empId:'e3', empName:'دينا', branch:'Glow', type:'dayoff', dateKey:'2026-10-16', reason:'ظرف عائلي', status:'pending', ts:D(2026,10,9,20,0) } ],
   sales_bonus_week: [], sales_time_credit: [], sales_staff_orders: [],
   pos_test_sales: [ { id:'v1', branch:'echarpe El Rehab', total:1200, invoiceNo:5801, employee:'هاجر', createdAtMs:D(2026,10,10,12,30), payments:{ cash:1200 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:2, price:400 }, { barcode:'222', name:'بيجامة قطن', qty:1, price:400 }] }, { id:'v2', branch:'echarpe El Rehab', total:800, invoiceNo:5802, employee:'سارة', cartSid:'c1', createdAtMs:D(2026,10,10,13,0), payments:{ visa:800 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:2, price:400 }] }, { id:'v3', branch:'echarpe El Rehab', total:1500, invoiceNo:5790, employee:'هاجر', cartSid:'c2', customerPhone:'01011111111', createdAtMs:D(2026,10,9,15,0), payments:{ cash:1500 }, items:[{ barcode:'333', name:'إيشارب حرير', qty:3, price:500 }] }, { id:'v5', branch:'echarpe El Rehab', total:900, invoiceNo:5789, employee:'هاجر', createdAtMs:D(2026,10,9,11,0), payments:{ cash:900 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:1, price:900 }] }, { id:'v4', branch:'Glow', total:600, invoiceNo:7001, employee:'دينا', createdAtMs:D(2026,10,10,14,0), payments:{ instapay:600 }, items:[{ barcode:'444', name:'سكارف', qty:1, price:600 }] } ,
-    { id:'v6', branch:'Glow', total:450, invoiceNo:6990, employee:'دينا', customerPhone:'01022222222', pointsRedeemed:50, createdAtMs:D(2026,10,8,16,0), payments:{ cash:450 }, items:[{ barcode:'444', name:'سكارف', qty:1, price:450 }] },
+    { id:'v6', branch:'Glow', total:450, invoiceNo:6990, employee:'دينا', customerPhone:'01022222222', pointsRedeemed:50, redeemSource:'manual', createdAtMs:D(2026,10,8,16,0), payments:{ cash:450 }, items:[{ barcode:'444', name:'سكارف', qty:1, price:450 }] },
+    { id:'v6b', branch:'Glow', total:545, invoiceNo:5881, employee:'دينا', customerPhone:'01033333333', pointsRedeemed:20, redeemSource:'app', createdAtMs:D(2026,10,10,14,51), payments:{ visa:545 }, items:[{ barcode:'986', name:'كويتي', qty:1, price:565 }, { id:'__loyalty_redemption__', name:'🎁 استبدال 20 نقطة ولاء', qty:1, price:-20, isRedemption:true, redeemSource:'app' }] },
     { id:'v7', branch:'echarpe El Rehab', total:-300, invoiceNo:5770, employee:'سارة', createdAtMs:D(2026,10,7,17,0), payments:{ cash:-300 }, items:[{ barcode:'555', name:'شال صوف', qty:1, price:-300, isReturn:true }] },
     { id:'v8', branch:'echarpe El Rehab', total:200, invoiceNo:5771, employee:'سارة', customerPhone:'01099999999', createdAtMs:D(2026,10,6,12,0), payments:{ cash:200 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:1, price:200 }] },
     { id:'v9', branch:'echarpe El Rehab', total:200, invoiceNo:5772, employee:'سارة', customerPhone:'01099999999', createdAtMs:D(2026,10,6,13,0), payments:{ cash:200 }, items:[{ barcode:'111', name:'طرحة شيفون', qty:1, price:200 }] },
@@ -74,11 +75,11 @@ let authCb = null; const authStub = { currentUser:{ email:'owner@test' }, onAuth
 window.firebase = { apps:[{}], app:()=>({}), initializeApp:()=>({}), auth: Object.assign(()=>authStub, { Auth:{ Persistence:{ LOCAL:'local' } } }), firestore: Object.assign(()=>dbStub, { Timestamp:{ fromMillis:(ms)=>({ toMillis:()=>ms }) } }) };
 `;
 }
-function htmlFor(data, now){
+function htmlFor(data, now, pre){
   let html = fs.readFileSync(path.join(ROOT,'Office','index.html'),'utf8');
   html = html.replace(/<script src="https:\/\/www\.gstatic\.com[^>]*><\/script>\n?/g, '').replace(/<link href="https:\/\/fonts[^>]*>/, '')
     .replace(/<link rel="stylesheet" href="\.\.\/office2\/office2\.css\?v=\d+">/, '<style>' + fs.readFileSync(path.join(ROOT,'office2','office2.css'),'utf8') + '</style>')
-    .replace(/<script src="\.\.\/sales\/time-bank\.js\?v=\d+"><\/script>/, '<script>' + stubFor(data, now) + '</script><script>' + fs.readFileSync(path.join(ROOT,'sales','time-bank.js'),'utf8') + '</script>')
+    .replace(/<script src="\.\.\/sales\/time-bank\.js\?v=\d+"><\/script>/, '<script>' + stubFor(data, now) + '</script>' + (pre ? '<script>' + pre + '</script>' : '') + '<script>' + fs.readFileSync(path.join(ROOT,'sales','time-bank.js'),'utf8') + '</script>')
     .replace(/<script src="\.\.\/office2\/([a-z0-9\-]+\.js)\?v=\d+"><\/script>/g, (m, f)=> '<script>' + fs.readFileSync(path.join(ROOT,'office2',f),'utf8') + '</script>');
   return html;
 }
@@ -87,7 +88,7 @@ async function open(opt){
   const b = await chromium.launch(); const p = await b.newPage({ viewport:{ width:390, height:844 } });
   const errs = []; p.on('pageerror', e=> errs.push(String(e.message))); p.on('console', m=>{ if(m.type()==='error' && !/Failed to load resource/.test(m.text())) errs.push('console: ' + m.text()); });
   p.on('dialog', d=>{ const m = d.message(); d.accept(opt.dialog ? opt.dialog(m) : (/مبلغ|المبلغ|الفرع/.test(m) ? '250' : 'سبب اختبار')); });
-  await p.setContent(htmlFor(data, now)); await p.waitForTimeout(700);
+  await p.setContent(htmlFor(data, now, opt.pre)); await p.waitForTimeout(700);
   const text = ()=> p.evaluate(()=> document.getElementById('screen').innerText);
   const sheet = ()=> p.evaluate(()=> document.getElementById('sheetBody').innerText);
   const sheetHtml = ()=> p.evaluate(()=> document.getElementById('sheetBody').innerHTML);

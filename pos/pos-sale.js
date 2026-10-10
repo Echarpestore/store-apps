@@ -2276,9 +2276,11 @@ async function openRedeemPoints(){
     // بيتضاف كسطر خصم منفصل في الفاتورة (مش مربوط بمنتج معين)، بالسالب، عشان يقلل الإجمالي فورًا
     cart.push({
       id: '__loyalty_redemption__', name: `🎁 استبدال ${pointsUsed} نقطة ولاء`,
-      price: -discountValue, qty: 1, isReturn: false, isRedemption: true
+      price: -discountValue, qty: 1, isReturn: false, isRedemption: true, redeemSource: 'manual'
     });
-    pendingRedemption = { phone, points: pointsUsed, value: discountValue };
+    // 🛡️ v764: المصدر بيتسجل — اليدوي (من غير طلب من تطبيق العميلة) هو اللي Office بيراجعه
+    pendingRedemption = { phone, points: pointsUsed, value: discountValue, source: 'manual' };
+    try{ if(typeof _logActivity === 'function') _logActivity('manual_redeem', { phone, points: pointsUsed, value: discountValue, balance }); }catch(e){}
     renderCart();
     showToast(`اتخصم ${discountValue.toFixed(2)} ج.م مقابل ${pointsUsed} نقطة ✅`);
   }catch(e){ showToast('حصل خطأ: ' + e.message, 'err'); }
@@ -2576,9 +2578,9 @@ function applyPendingRedeem(){
   const phone = document.getElementById('customerPhone').value.trim();
   cart.push({
     id: '__loyalty_redemption__', name: `🎁 استبدال ${points} نقطة ولاء`,
-    price: -Math.abs(value), qty: 1, isReturn: false, isRedemption: true
+    price: -Math.abs(value), qty: 1, isReturn: false, isRedemption: true, redeemSource: 'app'
   });
-  pendingRedemption = { phone, points, value: Math.abs(value) };
+  pendingRedemption = { phone, points, value: Math.abs(value), source: 'app' };   // 📲 v764: طلب من تطبيق العميلة نفسها
   renderCart();
   refreshCustomerInfo();   // نحدّث العرض (يخفي الطلب بعد ما اتطبّق)
   showToast(`اتطبّق خصم ${value} ج.م مقابل ${points} نقطة 🎁`);
@@ -4913,6 +4915,7 @@ window.returnPointsDeduction = returnPointsDeduction;
       onlineOrder:(typeof _ordDelivering!=='undefined'&&_ordDelivering)?{code:_ordDelivering.code||'',source:_ordDelivering.funnelSource||'',entryBarcode:_ordDelivering.funnelEntryBarcode||''}:null,
       loyaltyPointsEarned,
       pointsRedeemed: (pendingRedemption ? pendingRedemption.points : 0),
+      redeemSource: (pendingRedemption ? (pendingRedemption.source || 'manual') : null),   // 📲 'app' = العميلة طلبت من تطبيقها · 'manual' = الكاشير استبدل يدوي
       // 🔔 v717: رصيد النقط **قبل** الفاتورة — السيرفر بيحسب منه «رصيدك دلوقتي» في إشعار الاستبدال (بس لو فيه عميلة)
       pointsBalanceBefore: (phone && typeof custPointsBalance === 'number') ? custPointsBalance : null,
       staffPointEarned: earnsStaffPoint,

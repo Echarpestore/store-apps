@@ -2210,6 +2210,7 @@ const OF_ACT_KINDS = {
   credit_otp_no_app:     { t:'📵 رصيد متصرفش — العميلة معندهاش التطبيق', g:'money' },
   customer_self_registered:{ t:'📱 عميلة سجّلت نفسها على التابلت', g:'cart' },
   redeem_value_mismatch: { t:'🎁 فرق في قيمة الاستبدال', g:'money', hot:true },
+  manual_redeem:         { t:'✋ استبدال نقط يدوي من الكاشير', g:'money', hot:true },
   card_saved_manual:     { t:'💳 كارت اتسجل يدوي', g:'money', hot:true },
   confirm_blocked_busy:  { t:'🛑 حفظ مكرر اتمنع (الفاتورة كانت بتتحفظ)', g:'money' },
   confirm_blocked_dup_card: { t:'🛑 منع حفظ نفس عملية الفيزا مرتين', g:'money', hot:true },

@@ -42,8 +42,39 @@ async function gateFlow(user){
   try{ const d = await db.collection('pos_test_settings').doc(GATE_DOC).get(); gateHash = (d.exists && d.data().hash) || null; }catch(e){ gateHash = null; }
   if(!gateHash || sessOk()){ g.style.display = 'none'; a.style.display = ''; boot(); return; }
   document.getElementById('gateLogin').style.display = 'none'; document.getElementById('gateCode').style.display = '';
-  setTimeout(()=>{ try{ document.getElementById('gCode').focus(); }catch(e){} }, 100);
+  const rec = bioRec(); const bb = document.getElementById('gBio');
+  if(bb) bb.style.display = (rec && bioSupported()) ? '' : 'none';
+  if(!(rec && bioSupported())) setTimeout(()=>{ try{ document.getElementById('gCode').focus(); }catch(e){} }, 100);
 }
+/* ---------- 👆 الفتح بالبصمة / Face ID (WebAuthn — بصمة الجهاز نفسه) ----------
+   نفس مفتاح Office القديم (office_bio_cred) على نفس الدومين — اللي ربط بصمته في القديم بتشتغل هنا على طول.
+   البصمة بديل لكود المالك بس — حساب Firebase لسه مطلوب. ولو الكود اتغيّر، البصمة بتبطل لوحدها. ومربوطة بالجهاز ده بس. */
+const BIO_KEY = 'office_bio_cred';
+function bioSupported(){ return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create && navigator.credentials.get); }
+function bioRec(){ let r = null; try{ r = JSON.parse(localStorage.getItem(BIO_KEY) || 'null'); }catch(e){} if(r && r.h && gateHash && r.h !== gateHash){ try{ localStorage.removeItem(BIO_KEY); }catch(e){} return null; } return (r && r.id) ? r : null; }
+function b64u(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function unb64u(str){ const s = String(str).replace(/-/g,'+').replace(/_/g,'/'); const bin = atob(s + '==='.slice((s.length + 3) % 4)); const out = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out.buffer; }
+async function bioUnlock(){
+  const err = document.getElementById('gateErr'); err.textContent = ''; const rec = bioRec(); if(!rec || !bioSupported()) return;
+  try{
+    const asr = await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), allowCredentials: [{ type:'public-key', id: unb64u(rec.id), transports:['internal'] }], userVerification: 'required', timeout: 60000 } });
+    if(!asr) throw new Error('cancel');
+    try{ sessionStorage.setItem(SESS_KEY, JSON.stringify({ h: gateHash, exp: Date.now() + SESS_HOURS*3600000 })); }catch(e){}
+    gateFlow(auth.currentUser);
+  }catch(e){ err.textContent = (e && e.name === 'NotAllowedError') ? 'اتلغت — جرّب تاني أو اكتب الكود' : 'البصمة مافتحتش — اكتب الكود'; }
+}
+async function bioEnroll(){
+  if(!bioSupported()){ toast('الجهاز/المتصفح ده مش بيدعم البصمة'); return; }
+  if(!gateHash){ toast('مفيش كود مالك متسجل — مش محتاج بصمة'); return; }
+  try{
+    const cred = await navigator.credentials.create({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), rp: { name: 'echarpe office' }, user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'office', displayName: 'echarpe office' }, pubKeyCredParams: [{ type:'public-key', alg:-7 }, { type:'public-key', alg:-257 }], authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' }, timeout: 60000, attestation: 'none' } });
+    if(!cred || !cred.rawId) return;
+    localStorage.setItem(BIO_KEY, JSON.stringify({ id: b64u(cred.rawId), h: gateHash, at: Date.now() }));
+    toast('اتفعّل 👆 — المرة الجاية افتح بالبصمة / Face ID'); render();
+  }catch(e){ toast('ماتفعّلش: ' + ((e && (e.name || e.message)) || '')); }
+}
+function bioForget(){ if(!confirm('تشيل الدخول بالبصمة من الجهاز ده؟')) return; try{ localStorage.removeItem(BIO_KEY); }catch(e){} toast('اتشالت'); render(); }
+document.getElementById('gBio') && (document.getElementById('gBio').onclick = bioUnlock);
 document.getElementById('gLogin').onclick = async ()=>{
   const em = document.getElementById('gEmail').value.trim(), pw = document.getElementById('gPass').value; const err = document.getElementById('gateErr'); err.textContent = '';
   if(!em || !pw){ err.textContent = 'اكتب الإيميل والباسورد'; return; }
@@ -371,7 +402,7 @@ const O2 = {
       tx.update(ref, ok ? { status:'approved', decidedAt: Date.now() } : { status:'rejected', decidedAt: Date.now(), note }); }); toast(ok ? 'اتعتمد ✅' : 'اترفض'); }catch(e){ toast('تعذر: ' + (e && (e.message||e.code))); }
   },
   staffQ(v){ staffQ = v; const el = document.activeElement; render(); try{ const i = document.querySelector('#screen input[placeholder^="🔍"]'); if(i && el && el.tagName==='INPUT'){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, staffBranch(v){ staffBranch = v; render(); },
-  shFilter(g){ shFilter = g; render(); }, shBranch(b){ shBranch = b; render(); }, shSearch(v){ shQ = v; render(); try{ const i = document.getElementById('shSearch'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, shMore(){ shDays += 7; loadShield(shDays); }, shVideo, shShots, shDecide, shDetail, invoiceAny,
+  shFilter(g){ shFilter = g; render(); }, shBranch(b){ shBranch = b; render(); }, shSearch(v){ shQ = v; render(); try{ const i = document.getElementById('shSearch'); if(i){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, shMore(){ shDays += 7; loadShield(shDays); }, shVideo, shShots, shDecide, shDetail, invoiceAny, bioEnroll, bioForget,
   inboxTab(t){ inboxTab = t; render(); }, moneyTab(t){ moneyTab = t; render(); }, payMonth(d){ payOffset += d; render(); },
   paySheet, paySalary, payComm, addAdvance, addDeduction, addExpense, invoice: invoiceSheet,
   day(d){ const a = branchDay.split('-').map(Number); branchDay = caiKey(caiStamp(a[0],a[1],a[2],12,0) + d*DAY); if(branchDay > caiKey(Date.now())) branchDay = caiKey(Date.now()); render(); }, dayPick(v){ if(v) { branchDay = v; render(); } },
@@ -502,7 +533,7 @@ const SH_RULE = {
   removed:  { icon:'🗑️', t:'قطع اتمسحت من السلة', w:1 },
   wiped:    { icon:'🛒', t:'أصناف اتضربت واتمسحت — العميل خرج من غير فاتورة؟', w:3 },
   discount: { icon:'🏷️', t:'خصم/تعديل سعر لفاتورة من غير عميلة', w:2 },
-  redeem:   { icon:'🎁', t:'استبدال نقط — اتأكد إن العميلة موجودة', w:1 },
+  redeem:   { icon:'🎁', t:'استبدال نقط يدوي من الكاشير — من غير طلب من التطبيق', w:2 },
   phone:    { icon:'📱', t:'رقم عميلة مرتبط بموظفة واحدة', w:3 },
   return:   { icon:'↩️', t:'فلوس اترجعت من غير فاتورة أصلية', w:3 },
   reversal: { icon:'🔁', t:'فاتورة اتعكست بالكامل بعد الدفع', w:2 },
@@ -563,7 +594,8 @@ function buildCases(since){
   const byPhone = {};
   sales.forEach(s=>{
     const emp = s.employeeName || s.employee || s.seller || '';
-    if(s.pointsRedeemed > 0 && !s.isReversal) push('redeem', s.id, { ts:saleMs(s), branch:s.branch, emp, invoice:s, amount:Number(s.total)||0, text:`استبدال ${s.pointsRedeemed} نقطة في فاتورة #${s.invoiceNo||''} (${n0(s.total)} ج) · عميلة ${esc(s.customerPhone||'')}` });
+    // 📲 v764: الاستبدال الطبيعي = العميلة بتطلبه من تطبيقها (يعني هي اللي وافقت) — الحالة بس لو الكاشير استبدل يدوي
+    if(s.pointsRedeemed > 0 && !s.isReversal && s.redeemSource === 'manual') push('redeem', s.id, { ts:saleMs(s), branch:s.branch, emp, invoice:s, amount:Number(s.total)||0, text:`${esc(emp||'الكاشير')} استبدلت ${s.pointsRedeemed} نقطة من رصيد العميلة ${esc(s.customerPhone||'')} يدوي من زرار «🎁 استبدال نقط» في فاتورة #${s.invoiceNo||''} (${n0(s.total)} ج) — من غير ما العميلة تطلب من تطبيقها` });
     const retNoInv = (s.items||[]).filter(it=> it && it.isReturn && !it.fromInvoice && !it.fromInvoiceId && !it.fromInvoiceCode);
     if(retNoInv.length && (Number(s.total)||0) < 0) push('return', s.id, { ts:saleMs(s), branch:s.branch, emp, invoice:s, amount:Math.abs(retNoInv.reduce((n,it)=> n + (Number(it.price)||0)*(Number(it.qty)||1), 0)), text:`مرتجع ${retNoInv.length} صنف من غير فاتورة أصلية في #${s.invoiceNo||''}: ${retNoInv.map(it=> esc(it.name||'')).join('، ')}` });
     if(s.isReversal && !ev.some(e=> e.type==='same_day_reversal' && String(e.invoiceNo)===String(s.invoiceNo))) push('reversal', s.id, { ts:saleMs(s), branch:s.branch, emp, invoice:s, amount:Math.abs(Number(s.total)||0), text:`فاتورة اتعكست — ${n0(Math.abs(s.total))} ج` });
@@ -616,7 +648,7 @@ const SH_HOW = {
   inventory_wiped: 'مخزون الفرع كله اتمسح من شاشة الاستيراد على الكاشير.', inventory_branch_catalog_replace: 'كتالوج الفرع اتستبدل بملف من شاشة الاستيراد.'
 };
 const SH_SALE_HOW = {
-  redeem: 'الفاتورة دي فيها استبدال نقط بخصم. اتأكد إن العميلة كانت موجودة فعلًا (اتفرج على الفيديو) — النقط ممكن تتصرف على رقم عميلة مش موجودة.',
+  redeem: 'الطريق الطبيعي إن العميلة تطلب الاستبدال من تطبيقها والكاشير يأكّد بس. هنا مشرف/مدير استخدم صلاحية «الاستبدال اليدوي» وخصم النقط من رصيدها من غير طلب منها — اتفرج على الفيديو واتأكد إنها كانت واقفة وموافقة.',
   return: 'فاتورة فيها صنف اتعلّم مرتجع من غير ما يتجاب من فاتورة أصلية، والفاتورة نزلت بالسالب — يعني فلوس طلعت من الدرج للعميلة من غير إثبات إنها اشترت.',
   phone: 'رقم العميلة ده اتحط على 4 فواتير أو أكتر في الأسبوع كلها مع نفس الموظفة — ممكن تكون بتجمّع نقط على رقم واحد.',
   reversal: 'فاتورة اتعكست بالكامل.', hours: 'فاتورة اتعملت برّه مواعيد شيفتات الفرع (أبدر من أول شيفت بنص ساعة أو بعد آخر شيفت بساعة).'
@@ -635,7 +667,7 @@ function shEventRows(e){
   const skip = { type:1, branch:1, employeeId:1, employeeName:1, sid:1, ts:1, cctvEventId:1, id:1, isReturn:1, causeSum:1, causeExact:1 };
   return Object.keys(e).filter(k=> !skip[k] && e[k] != null && e[k] !== '' && typeof e[k] !== 'object').map(k=>`<div class="row" style="cursor:default;padding:6px 0"><div class="n"><small>${esc(SH_FIELDS[k]||k)}</small></div><b style="font-size:13px">${esc(shFieldVal(k, e[k]))}</b></div>`).join('');
 }
-const SH_TL = { sale_saved:'💾 الفاتورة اتحفظت', manual_drawer_open:'🗄️ فتح الدرج يدوي', cart_abandoned:'🛒 السلة اتفضّت من غير فاتورة', item_removed:'🗑️ قطعة اتشالت', item_removed_late:'🗑️⏱ قطعة اتشالت متأخر', item_qty_reduced:'➖ كمية اتقللت', manual_discount:'🏷️ خصم يدوي', cart_item_edited:'✏️ سعر اتعدّل', card_overcharge_saved:'💳 سحب زيادة', redeem_value_mismatch:'📲 طلب استبدال مش مطابق', customer_points_edit:'👤 تعديل نقط', same_day_reversal:'🔁 عكس فاتورة', basket_suggest_added:'➕ صنف من الاقتراحات' };
+const SH_TL = { sale_saved:'💾 الفاتورة اتحفظت', manual_drawer_open:'🗄️ فتح الدرج يدوي', cart_abandoned:'🛒 السلة اتفضّت من غير فاتورة', item_removed:'🗑️ قطعة اتشالت', item_removed_late:'🗑️⏱ قطعة اتشالت متأخر', item_qty_reduced:'➖ كمية اتقللت', manual_discount:'🏷️ خصم يدوي', cart_item_edited:'✏️ سعر اتعدّل', manual_redeem:'✋ استبدال نقط يدوي', card_overcharge_saved:'💳 سحب زيادة', redeem_value_mismatch:'📲 طلب استبدال مش مطابق', customer_points_edit:'👤 تعديل نقط', same_day_reversal:'🔁 عكس فاتورة', basket_suggest_added:'➕ صنف من الاقتراحات' };
 function shDetail(id){
   const c = (sh.byId||{})[id]; if(!c) return;
   const e = c.ev || null; const inv = c.invoice || null; const phone = c.phone || '';
@@ -645,7 +677,7 @@ function shDetail(id){
   const tl = sid ? sh.raw.filter(x=> x.sid===sid).sort((a,b)=> a.ts-b.ts) : [];
   const cust = phone ? sh.cust[phone] : undefined;
   const custHtml = phone ? `<div class="card" style="margin-top:8px"><h3>👤 العميلة</h3>${cust===undefined?'<div class="skel"></div>':(cust===null?`<div class="hint">الرقم ${esc(phone)} مش متسجل كعميلة</div>`:`<div class="row first" style="cursor:default"><div class="n"><b>${esc(cust.name||'من غير اسم')}</b><small>${esc(phone)}${cust.createdAt?' · مسجّلة من '+esc(caiKey(Number(cust.createdAt.toMillis?cust.createdAt.toMillis():cust.createdAt)||0)):''}</small></div><a class="btn" href="tel:${esc(phone)}">📞</a></div><div class="row" style="cursor:default"><div class="n"><small>رصيد النقط دلوقتي</small></div><b>echarpe ${n0(cust.points||0)} · Glow ${n0(cust.points_glow||0)}</b></div>`)}</div>` : '';
-  const invHtml = inv ? `<div class="card" style="margin-top:8px"><h3>🧾 الفاتورة #${esc(inv.invoiceNo||'')} <small>${hm(saleMs(inv))} · ${esc(inv.employee||inv.employeeName||'')}</small></h3>${(inv.items||[]).map(it=>`<div class="row" style="cursor:default;padding:6px 0"><div class="n"><b style="font-size:13px">${esc(it.name||'')}${it.isReturn?' <span class="pill p-bad">مرتجع</span>':''}${it.isRedemption?' <span class="pill p-acc">استبدال</span>':''}</b><small>${esc(it.barcode||'')} · × ${Number(it.qty)||1}</small></div><b class="money">${n0((Number(it.price)||0)*(Number(it.qty)||1))}</b></div>`).join('')}<div class="row" style="cursor:default;border-top:2px solid var(--ink)"><div class="n"><b>الإجمالي</b><small>${Object.entries(inv.payments||{}).filter(([k,v])=>Number(v)).map(([k,v])=> (PAY_AR[k]||k)+' '+n0(v)).join(' · ')}${inv.pointsRedeemed?' · استبدال '+inv.pointsRedeemed+' نقطة':''}</small></div><b class="money">${n0(inv.total)} ج</b></div><div class="btns"><button class="btn" onclick="O2.invoiceAny('${inv.id}')">افتح الفاتورة</button>${inv.invoiceCode?`<button class="btn" onclick="O2.shShots('${esc(inv.invoiceCode)}')">📸 لقطات</button>`:''}</div></div>` : '';
+  const invHtml = inv ? `<div class="card" style="margin-top:8px"><h3>🧾 الفاتورة #${esc(inv.invoiceNo||'')} <small>${hm(saleMs(inv))} · ${esc(inv.employee||inv.employeeName||'')}</small></h3>${(inv.items||[]).map(it=>`<div class="row" style="cursor:default;padding:6px 0"><div class="n"><b style="font-size:13px">${esc(it.name||'')}${it.isReturn?' <span class="pill p-bad">مرتجع</span>':''}${it.isRedemption?' <span class="pill p-acc">استبدال</span>':''}</b><small>${esc(it.barcode||'')} · × ${Number(it.qty)||1}</small></div><b class="money">${n0((Number(it.price)||0)*(Number(it.qty)||1))}</b></div>`).join('')}<div class="row" style="cursor:default;border-top:2px solid var(--ink)"><div class="n"><b>الإجمالي</b><small>${Object.entries(inv.payments||{}).filter(([k,v])=>Number(v)).map(([k,v])=> (PAY_AR[k]||k)+' '+n0(v)).join(' · ')}${inv.pointsRedeemed?' · استبدال '+inv.pointsRedeemed+' نقطة'+(inv.redeemSource==='app'?' (📲 طلب من التطبيق)':(inv.redeemSource==='manual'?' (✋ يدوي من الكاشير)':'')):''}</small></div><b class="money">${n0(inv.total)} ج</b></div><div class="btns"><button class="btn" onclick="O2.invoiceAny('${inv.id}')">افتح الفاتورة</button>${inv.invoiceCode?`<button class="btn" onclick="O2.shShots('${esc(inv.invoiceCode)}')">📸 لقطات</button>`:''}</div></div>` : '';
   const lines = (c.evs && c.evs.length > 1 ? c.evs : (e ? [e] : []));
   const factsHtml = lines.length ? `<div class="card" style="margin-top:8px"><h3>🔎 اللي اتسجل من الكاشير</h3>${lines.map((x,i)=> (lines.length>1?`<div class="sec" style="margin-top:${i?10:0}px">${SH_TL[x.type]||x.type} · ${hm(x.ts)}</div>`:'') + shEventRows(x)).join('')}</div>` : '';
   const tlHtml = tl.length > 1 ? `<div class="card" style="margin-top:8px"><h3>🕒 اللي حصل في نفس السلة</h3>${tl.map(x=>`<div class="row" style="cursor:default;padding:6px 0"><div class="n"><b style="font-size:12.5px">${SH_TL[x.type]||esc(x.type)}${x.name?' · '+esc(x.name):''}${x.value?' · '+n0(x.value)+' ج':''}${x.pct?' · '+x.pct+'%':''}</b><small>${esc(x.employeeName||'')}</small></div><span class="tag">${hm(x.ts)}</span></div>`).join('')}${!inv && sid ? '<div class="hint">مفيش فاتورة اتحفظت للسلة دي</div>' : ''}</div>` : '';
@@ -679,6 +711,7 @@ function rMore(){
   head('المزيد', '');
   return `<div class="card"><div class="row first" onclick="O2.go('activity')"><div class="n"><b>🛡️ الحماية</b><small>نشاط مريب على الكاشير بالفيديو واللقطات: درج من غير بيع · أصناف اتمسحت · خصم بدون عميلة · استبدال نقط · مرتجع بدون فاتورة</small></div><span class="pill p-acc">افتح ›</span></div>
     ${Object.keys(MODS).sort((a,b)=> (MODS[a].order||99) - (MODS[b].order||99)).map(k=>{ const m = MODS[k]; const n = m.badge ? m.badge() : 0; return `<div class="row" onclick="O2.go('${k}')"><div class="n"><b>${m.icon||''} ${esc(m.title||k)}</b><small>${esc(m.desc||'')}</small></div>${n?`<span class="pill p-bad">${n}</span>`:'<span class="pill p-acc">افتح ›</span>'}</div>`; }).join('')}
+    ${bioSupported() && gateHash ? (bioRec() ? `<div class="row" onclick="O2.bioForget()"><div class="n"><b>👆 الدخول بالبصمة / Face ID</b><small>مفعّل على الجهاز ده — دوس عشان تشيله</small></div><span class="pill p-good">مفعّل</span></div>` : `<div class="row" onclick="O2.bioEnroll()"><div class="n"><b>👆 الدخول بالبصمة / Face ID</b><small>بدل ما تكتب الكود كل مرة — على الجهاز ده بس</small></div><span class="pill p-acc">فعّل ›</span></div>`) : ''}
     <div class="row" onclick="O2.oldOffice()"><div class="n"><b>🗂️ Office القديم</b><small>الشاشة القديمة زي ما هي — لو احتجت حاجة لسه مش هنا</small></div><span class="pill p-gray">افتح ›</span></div>
     <div class="row" onclick="O2.logout()"><div class="n"><b>🚪 خروج</b></div></div></div>
     <div class="hint">Office · v9 · البيانات من نفس القاعدة — أي تعديل هنا بيظهر في sales وOffice فورًا</div>`;

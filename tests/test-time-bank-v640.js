@@ -215,7 +215,7 @@ assert(/id="dh_legacyRewards"/.test(html) && /_lg\.style\.display = _bankNow \? 
 // ---------- ٥) Office بنفس المحرك ----------
 const of = fs.readFileSync(path.join(ROOT,'Office','office.js'),'utf8');
 assert(/TimeBank\.enabledFor\(cfg, start\.getTime\(\)\)/.test(of) && /bank=TimeBank\.monthSummary\(rangeShifts,cfg,_req\)/.test(of) && /x\.type!=='late'&&x\.type!=='early'/.test(of), 'Office: المرتب بنفس محرك الرصيد وبيتجاهل بنود التأخير القديمة');
-assert(/\.\.\/sales\/time-bank\.js\?v=649/.test(fs.readFileSync(path.join(ROOT,'Office','old.html'),'utf8')) && /office\.js\?v=701/.test(fs.readFileSync(path.join(ROOT,'Office','old.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
+assert(/\.\.\/sales\/time-bank\.js\?v=649/.test(fs.readFileSync(path.join(ROOT,'Office','old.html'),'utf8')) && /office\.js\?v=70[1-9]/.test(fs.readFileSync(path.join(ROOT,'Office','old.html'),'utf8')), 'Office بيحمّل time-bank.js · office v700');
 
 // ---------- ٦) v642 — الهدف الأسبوعي التلقائي لكل موظف (متوسطه + متوسط الفرع) ----------
 (function(){
