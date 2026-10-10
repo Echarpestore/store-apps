@@ -31,7 +31,7 @@ const assertEq = (a, e, m)=> assert(JSON.stringify(a) === JSON.stringify(e), m +
     assertEq([off.storiesHtml(), off.homeHtml()], ['', ''], 'مقفول من Office 2 = مفيش ستوري ولا «مختارة ليكي» للعميلات');
     const sh = on.storiesHtml(), hh = on.homeHtml();
     assert(/جديد/.test(sh) && !/مستنية/.test(sh) && !/Glow/.test(sh.replace('جديد إيشارب','')), 'مفتوح = ستوري إيشارب المنشورة بس (مش المستنية ولا Glow)');
-    assert(/لينن بيج/.test(hh) && /350/.test(hh), '«مختارة ليكي» من المنتجات اللي على الرئيسية');
+    assert(/لينن/.test(hh) && /350/.test(hh) && !/جديد/.test(hh), '«مختارة ليكي» من المنتجات اللي على الرئيسية (بالعنوان اللي المالك عدّله)');
   }
   const L = fs.readFileSync(path.join(ROOT, 'loyalty', 'index.html'), 'utf8');
   assert(/pos\/stories-app\.js/.test(L) && /StoriesApp\.init\(db, CATALOG_BRAND/.test(L), 'تطبيق إيشارب بيحمّل الستوري');

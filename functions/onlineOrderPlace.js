@@ -32,6 +32,7 @@ const COL_ORDERS = "online_orders";
 const COL_SETTINGS = "pos_test_settings";
 const COL_INVENTORY = "pos_test_inventory";
 const COL_GUARD = "online_order_guard";
+const COL_PIECES = "app_stories";
 const HOLD_MS = 24 * 60 * 60 * 1000;
 
 /* ============================================================
@@ -154,7 +155,7 @@ function serverValidateCart(cart, shopItems, invByBarcode, branch, cfg) {
         if (inBranch <= 0) { errors.push((inv.name || "صنف") + " — خلص من " + branch); return; }
         if (q > inBranch) { errors.push((inv.name || "صنف") + " — متاح " + inBranch + " بس"); return; }
       }
-      items.push({ barcode: bc, name: String(inv.name || ""), qty: q, price: invPrice });
+      items.push(withPiece({ barcode: bc, name: String(inv.name || ""), qty: q, price: invPrice }, line));
       return;
     }
     if (q <= 0) return;
@@ -165,15 +166,59 @@ function serverValidateCart(cart, shopItems, invByBarcode, branch, cfg) {
       return;
     }
     if (q > avail) { errors.push((s.name || "صنف") + " — متاح " + avail + " بس"); return; }
-    items.push({
+    items.push(withPiece({
       barcode: bc,
       name: String(s.name || ""),
       qty: q,
       price: Number(s.price) || 0
-    });
+    }, line));
   });
 
   return { ok: errors.length === 0 && items.length > 0, errors, items };
+}
+
+/* ============================================================
+   📸 القطعة الواحدة (10-10-2026) — صورة صوّرتها موظفة = «قطعة» بعدد معروف
+   ------------------------------------------------------------
+   الباركود الواحد عليه ألوان كتير، فالمخزون مايعرفش اللون اللي في الصورة.
+   الصورة نفسها (app_stories/{id}) شايلة عدد القطع من اللون ده (qtyLeft)
+   والفرع اللي فيه (pieceBranch). سطر السلة اللي معاه pieceId:
+   · بيتفحص ويتخصم من qtyLeft **في نفس الـtransaction** — اتنين على آخر قطعة
+     = التانية بترفض «اتحجزت».
+   · qtyReserved بيزيد (محجوزة لأوردر) — الـPOS بيحذّر الكاشير لو اتمسحت.
+   · الإلغاء/الانتهاء بيرجّعها · الاستلام (collected) بيقفلها كمباعة.
+   ============================================================ */
+function withPiece(item, line) {
+  const pid = String((line && line.pieceId) || "").trim();
+  if (pid && /^[A-Za-z0-9_-]{1,64}$/.test(pid)) item.pieceId = pid;
+  return item;
+}
+function pieceQty(items) {
+  const out = {};
+  (items || []).forEach((it) => {
+    const pid = it && it.pieceId; if (!pid) return;
+    out[pid] = (out[pid] || 0) + Math.max(0, Math.floor(Number(it.qty) || 0));
+  });
+  return out;
+}
+const PIECE_LIVE = ["published", "live", "archived"];
+function pieceCheck(items, pieces, brand, branch) {
+  const errors = [];
+  const need = pieceQty(items);
+  Object.keys(need).forEach((pid) => {
+    const p = pieces[pid];
+    const nm = (p && (p.productName || p.title)) || "القطعة";
+    if (!p || p.online !== true || PIECE_LIVE.indexOf(p.status) < 0 || (p.brand || "echarpe") !== brand) {
+      errors.push(nm + " — مش متاحة للطلب"); return;
+    }
+    if (p.pieceBranch && String(p.pieceBranch) !== String(branch)) {
+      errors.push(nm + " — موجودة في فرع " + p.pieceBranch + " بس"); return;
+    }
+    const left = Math.max(0, Math.floor(Number(p.qtyLeft) || 0));
+    if (left <= 0) { errors.push(nm + " — اتحجزت أو اتباعت 💔"); return; }
+    if (need[pid] > left) errors.push(nm + " — متاح " + left + " بس");
+  });
+  return { ok: errors.length === 0, errors, need };
 }
 
 function serverTotal(items) {
@@ -284,6 +329,18 @@ exports.onlineOrderPlace = onCall({ region: "us-central1" }, async (req) => {
     const chk = serverValidateCart(cart, shopItems, invByBarcode, branch, cfg);
     if (!chk.ok) throw new HttpsError("failed-precondition", chk.errors[0] || "السلة مش صالحة");
 
+    // 📸 القطع (صور الموظفات) — قراءة كمان قبل أي كتابة
+    const pieceIds = Object.keys(pieceQty(chk.items));
+    const pieceSnaps = await Promise.all(pieceIds.map((id) => tx.get(db.collection(COL_PIECES).doc(id))));
+    const pieces = {};
+    pieceSnaps.forEach((ps, i) => { pieces[pieceIds[i]] = ps.exists ? ps.data() : null; });
+    const pc = pieceCheck(chk.items, pieces, brand, branch);
+    if (!pc.ok) throw new HttpsError("failed-precondition", pc.errors[0]);
+    chk.items.forEach((it) => {
+      const p = it.pieceId && pieces[it.pieceId];
+      if (p && typeof p.thumb === "string" && p.thumb.length < 40000) it.img = p.thumb;   // صورة القطعة تظهر للفرع في الأوردر
+    });
+
     const subtotal = serverTotal(chk.items);
     const shipping = fulfillment === "delivery"
       ? serverShippingFee(cfg, subtotal, governorate) : 0;
@@ -308,7 +365,8 @@ exports.onlineOrderPlace = onCall({ region: "us-central1" }, async (req) => {
       reservedUntil: now + HOLD_MS,
       code: serverOrderCode(now, phone),
       uid,                   // 🔑 مين ندهها — للمتابعة لو حصل استغلال
-      qtyHeld: true          // 🔑 الكمية اتخصمت — الإرجاع بيعتمد عليه
+      qtyHeld: true,         // 🔑 الكمية اتخصمت — الإرجاع بيعتمد عليه
+      piecesHeld: pieceIds.length > 0   // 📸 القطع اتحجزت — الإرجاع/الإقفال بيعتمد عليه
     };
 
     // 🔒 الخصم والإنشاء في نفس الـtransaction
@@ -316,6 +374,14 @@ exports.onlineOrderPlace = onCall({ region: "us-central1" }, async (req) => {
     tx.set(guardRef, { count: g.count, windowStart: g.windowStart, lastAt: Date.now() },
            { merge: true });
     tx.set(orderRef, doc);
+    pieceIds.forEach((pid) => {
+      const p = pieces[pid]; const q = pc.need[pid];
+      tx.set(db.collection(COL_PIECES).doc(pid), {
+        qtyLeft: Math.max(0, (Math.floor(Number(p.qtyLeft) || 0)) - q),
+        qtyReserved: Math.max(0, Math.floor(Number(p.qtyReserved) || 0)) + q,
+        lastOrderAt: now
+      }, { merge: true });
+    });
     return { id: orderRef.id, code: doc.code, total: doc.total, shipping: doc.shipping,
              grandTotal: doc.grandTotal };
   });
@@ -338,19 +404,38 @@ exports.onlineOrderRelease = onDocumentUpdated(
     const after = event.data.after.data() || {};
     const dead = ["cancelled", "expired"];
 
-    if (dead.indexOf(before.status) >= 0) return;      // كانت ميتة خلاص
-    if (dead.indexOf(after.status) < 0) return;        // لسه حية
-    if (after.qtyHeld !== true) return;                // الكمية اترجّعت قبل كده
+    const becameDead = dead.indexOf(before.status) < 0 && dead.indexOf(after.status) >= 0;
+    // 📸 الاستلام بيقفل القطع كمباعة (المحجوز بيقل · المتاح فاضل زي ما هو)
+    const becameCollected = before.status !== "collected" && after.status === "collected";
+    const releaseQty = becameDead && after.qtyHeld === true;     // الكمية اترجّعت قبل كده = false
+    const touchPieces = (becameDead || becameCollected) && after.piecesHeld === true;
+    if (!releaseQty && !touchPieces) return;
 
     const db = getFirestore();
     const brand = after.brand === "glow" ? "glow" : "echarpe";
     const shopRef = db.collection(COL_SETTINGS).doc("online_shop_" + brand);
+    const need = touchPieces ? pieceQty(after.items) : {};
+    const pids = Object.keys(need);
 
     await db.runTransaction(async (tx) => {
-      const snap = await tx.get(shopRef);
-      const items = (snap.exists && Array.isArray(snap.data().items)) ? snap.data().items : [];
-      tx.set(shopRef, { items: applyQtyDelta(items, after.items || [], +1) }, { merge: true });
-      tx.set(event.data.after.ref, { qtyHeld: false, releasedAt: Date.now() }, { merge: true });
+      const snap = releaseQty ? await tx.get(shopRef) : null;
+      const pSnaps = await Promise.all(pids.map((id) => tx.get(db.collection(COL_PIECES).doc(id))));
+      const patch = {};
+      if (releaseQty) {
+        const items = (snap.exists && Array.isArray(snap.data().items)) ? snap.data().items : [];
+        tx.set(shopRef, { items: applyQtyDelta(items, after.items || [], +1) }, { merge: true });
+        patch.qtyHeld = false; patch.releasedAt = Date.now();
+      }
+      pSnaps.forEach((ps, i) => {
+        if (!ps.exists) return;
+        const p = ps.data() || {}; const q = need[pids[i]];
+        const upd = { qtyReserved: Math.max(0, Math.floor(Number(p.qtyReserved) || 0) - q) };
+        if (becameDead) upd.qtyLeft = Math.floor(Number(p.qtyLeft) || 0) + q;
+        else upd.soldOnline = Math.floor(Number(p.soldOnline) || 0) + q;
+        tx.set(ps.ref, upd, { merge: true });
+      });
+      if (touchPieces) patch.piecesHeld = false;
+      tx.set(event.data.after.ref, patch, { merge: true });
     });
   }
 );
@@ -394,6 +479,9 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports.applyQtyDelta = applyQtyDelta;
   module.exports.guardDecide = guardDecide;
   module.exports.capCartQty = capCartQty;
+  module.exports.pieceCheck = pieceCheck;
+  module.exports.pieceQty = pieceQty;
+  module.exports.withPiece = withPiece;
   module.exports.GUARD_MAX_PER_PHONE = GUARD_MAX_PER_PHONE;
   module.exports.MAX_QTY_PER_LINE = MAX_QTY_PER_LINE;
 }

@@ -153,7 +153,7 @@ function renderOrdersScreen(){
     var soon = orderNearExpiry(o, now);
     var items = (o.items || []).map(function(it){
       return '<div style="display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:3px 0;">'
-        + '<span>' + ordEsc(it.name || 'صنف') + ' × ' + (Number(it.qty)||0) + '</span>'
+        + '<span style="display:flex;align-items:center;gap:8px;">' + (it.img && /^data:image\//.test(String(it.img)) ? '<img src="' + it.img + '" alt="" style="width:44px;height:54px;object-fit:cover;border-radius:8px;">' : '') + ordEsc(it.name || 'صنف') + ' × ' + (Number(it.qty)||0) + (it.pieceId ? ' <b style="color:#c62828;">📸 قطعة الصورة</b>' : '') + '</span>'
         + '<span style="font-weight:700;">' + ((Number(it.price)||0) * (Number(it.qty)||0)).toFixed(2) + '</span>'
         + '</div>';
     }).join('');

@@ -28,7 +28,7 @@
 <!-- 💬 محرك الشات المشترك — مصدر واحد مع POS (مفيش نسخة تانية تتنسى) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/tiers-core.js?v=1"></script>
-<script src="../pos/stories-app.js?v=1"></script>
+<script src="../pos/stories-app.js?v=2"></script>
 <!-- 🌐 محرك اللغتين — مشترك مع Glow. لازم **قبل** أي رسم عشان
      الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
@@ -2968,7 +2968,8 @@ function shopSubmit(){
     var payload = {
       brand: CATALOG_BRAND, source: 'app', branch: _shopBranch,
       phone: currentCustomer.phone, name: info.name,
-      items: chk.items.map(function(it){ return { barcode: it.barcode, qty: it.qty }; }),
+      // 📸 قطعة الصورة (StoriesApp.order): السيرفر بيحجزها هي بالذات — اللون اللي في الصورة
+      items: chk.items.map(function(it){ var pid = (window._cartPieces || {})[it.barcode]; return pid ? { barcode: it.barcode, qty: it.qty, pieceId: pid } : { barcode: it.barcode, qty: it.qty }; }),
       payMethod: _shopPay, fulfillment: _shopFulfill,
       governorate: info.governorate, address: info.address,
       notes: info.notes, contactPhone: info.phone,

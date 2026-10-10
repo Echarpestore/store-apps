@@ -100,7 +100,7 @@ function render(){
   if(S.tab === 'pending') h += P.length ? P.map(pendingCard).join('') : '<div class="empty">مفيش ستوري مستنية 👌<br><small>الموظفات بيرفعوا من Sales ← صفحة الموظفة ← 📸 ستوري</small></div>';
   else if(S.tab === 'live') h += '<div class="card"><h3>ستوري النهارده في التطبيق <small>' + pub.length + '</small></h3>' + (pub.length ? pub.map(function(s){ return mini(s, '<button class="btn r" onclick="O2Stories.archive(\'' + s.id + '\')">شيلها</button>'); }).join('') : '<div class="empty">مفيش ستوري منشورة دلوقتي</div>') + '</div>'
     + '<div class="hint">أول ما توافق على ستوري يوم جديد، ستوري الأيام اللي فاتت بتتشال لوحدها.</div>';
-  else if(S.tab === 'home') h += '<div class="card"><h3>«مختارة ليكي» في الصفحة الرئيسية <small>' + home.length + '</small></h3>' + (home.length ? home.map(function(s){ return mini(s, '<button class="btn r" onclick="O2Stories.unhome(\'' + s.id + '\')">شيلها</button>'); }).join('') : '<div class="empty">مفيش منتجات على الرئيسية — علّم «تظهر في الرئيسية» وانت بتوافق</div>') + '</div>';
+  else if(S.tab === 'home') h += '<div class="card"><h3>«مختارة ليكي» في الصفحة الرئيسية <small>' + home.length + '</small></h3>' + (home.length ? home.map(function(s){ return mini(s, (s.online ? '<span class="pill ' + ((s.qtyLeft || 0) > 0 ? 'p-good">' + s.qtyLeft + ' متاحة' : 'p-bad">خلصت') + (s.qtyReserved ? ' · ' + s.qtyReserved + ' محجوزة' : '') + '</span>' : '') + '<button class="btn r" onclick="O2Stories.unhome(\'' + s.id + '\')">شيلها</button>'); }).join('') : '<div class="empty">مفيش منتجات على الرئيسية — علّم «تظهر في الرئيسية» وانت بتوافق</div>') + '</div>';
   else h += turnView();
   document.getElementById('o2StBody').innerHTML = h;
   if(S.tab === 'pending') P.forEach(function(x){ loadFull(x.id); });
@@ -116,6 +116,7 @@ function mini(s, actions){
   return '<div class="stMini">' + (s.thumb ? '<img src="' + s.thumb + '" alt="" onclick="O2Stories.full(\'' + s.id + '\')">' : '') + '<div class="n"><b>' + esc(s.title) + '</b>' + esc(s.employeeName || '') + ' · ' + esc(short(s.branch)) + (s.productName ? ' · ' + esc(s.productName) : '') + '</div>' + actions + '</div>';
 }
 function pendingCard(s){
+  var W = Object.assign({ story: s.kind !== 'product', home: !!s.showOnHome, offers: false, online: false }, s.where || {});
   var b = s.brand || 'echarpe', pushed = S.pushDay[b] === C.dayKey(Date.now()), canPush = S.cfg['live_' + b] === true;
   var noteOpen = S.noteFor === s.id;
   return '<div class="stCard" id="stc_' + s.id + '">'
@@ -125,8 +126,10 @@ function pendingCard(s){
     + '<input type="text" id="stT_' + s.id + '" value="' + esc(s.title) + '" maxlength="40" placeholder="العنوان">'
     + '<input type="text" id="stS_' + s.id + '" value="' + esc(s.subtitle) + '" maxlength="60" placeholder="السطر الصغير (اختياري)">'
     + '<label class="stCk"><input type="checkbox" id="stTry_' + s.id + '" ' + (s.tryable !== false ? 'checked' : '') + '> العميلة تقدر تجرّبها على صورتها</label>'
-    + '<label class="stCk"><input type="checkbox" id="stStory_' + s.id + '" ' + (s.kind === 'product' ? '' : 'checked') + '> تظهر في الستوري النهارده</label>'
-    + '<label class="stCk"><input type="checkbox" id="stHome_' + s.id + '" ' + (s.showOnHome ? 'checked' : '') + '> تظهر في «مختارة ليكي» في الرئيسية</label>'
+    + '<label class="stCk"><input type="checkbox" id="stStory_' + s.id + '" ' + (W.story ? 'checked' : '') + '> 📸 الستوري النهارده</label>'
+    + '<label class="stCk"><input type="checkbox" id="stHome_' + s.id + '" ' + (W.home ? 'checked' : '') + '> 🏠 «مختارة ليكي» في الرئيسية</label>'
+    + '<label class="stCk"><input type="checkbox" id="stOff_' + s.id + '" ' + (W.offers ? 'checked' : '') + (s.barcode && s.productName ? '' : ' disabled') + '> 🏷️ العروض (بالسعر العادي)' + (s.barcode && s.productName ? '' : ' — محتاجة باركود صح') + '</label>'
+    + '<label class="stCk"><input type="checkbox" id="stOn_' + s.id + '" ' + (W.online ? 'checked' : '') + (s.barcode && s.productName ? '' : ' disabled') + '> 🛒 شراء أونلاين — العدد: <input type="number" id="stQ_' + s.id + '" value="' + (Number(s.qty) || 1) + '" min="1" max="20" style="width:64px;padding:6px;margin:0"> قطعة في ' + esc(short(s.pieceBranch || s.branch)) + '</label>'
     + (canPush ? '<label class="stCk" style="' + (pushed ? 'opacity:.5' : '') + '"><input type="checkbox" id="stPush_' + s.id + '" ' + (pushed ? 'disabled' : '') + '> ابعت إشعار للعميلات' + (pushed ? ' (اتبعت إشعار النهارده)' : ' — مرة في اليوم بالكتير') + '</label>' : '')
     + (noteOpen ? '<textarea id="stN_' + s.id + '" placeholder="اكتب للموظفة: مثلاً النور ضعيف — صوّري جنب الباب"></textarea><div class="btns"><button class="btn p" onclick="O2Stories.changes(\'' + s.id + '\')">ابعت لها</button><button class="btn" onclick="O2Stories.note(null)">إلغاء</button></div>'
       : '<div class="btns"><button class="btn g" style="flex:2" onclick="O2Stories.approve(\'' + s.id + '\')">✅ انشر</button><button class="btn" style="flex:1" onclick="O2Stories.note(\'' + s.id + '\')">📝 اطلب تعديل</button><button class="btn r" onclick="O2Stories.reject(\'' + s.id + '\')">✕</button></div>')
@@ -155,15 +158,22 @@ function val(id){ var el = document.getElementById(id); return el ? (el.type ===
 async function approve(id){
   var s = S.list.find(function(x){ return x.id === id; }); if(!s) return;
   var title = val('stT_' + id), sub = val('stS_' + id), tryable = val('stTry_' + id), home = val('stHome_' + id), push = val('stPush_' + id), story = val('stStory_' + id);
+  var offers = !!val('stOff_' + id), online = !!val('stOn_' + id), qty = Math.max(1, Math.min(20, parseInt(val('stQ_' + id), 10) || 1));
   if(!title){ toast('اكتب عنوان'); return; }
-  if(!story && !home){ toast('اختار تظهر فين: الستوري أو الرئيسية'); return; }
+  if(!story && !home && !offers && !online){ toast('اختار تظهر فين'); return; }
+  // 🛒 الأونلاين بيظهر في «مختارة ليكي» بزرار «اطلبيها» — فالرئيسية لازمة معاه
+  if(online) home = true;
   if(!story) push = false;   // الإشعار للستوري بس
   var b = s.brand || 'echarpe', now = Date.now(), today = C.dayKey(now);
   try{
     var batch = db.batch();
     // 'published' = في الستوري النهارده · 'live' = منتج على الرئيسية بس (مش في الستوري)
     var st = story ? 'published' : 'live';
-    batch.update(db.collection('app_stories').doc(id), { status: st, feed: C.feedKey(b, st), title: title, subtitle: sub, tryable: !!tryable, showOnHome: !!home, homeFeed: home ? b : firebase.firestore.FieldValue.delete(), approvedAt: now, dayKey: today, ownerNote:'', decidedAt: now, updatedAt: now });
+    var upd = { status: st, feed: C.feedKey(b, st), title: title, subtitle: sub, tryable: !!tryable, showOnHome: !!home, homeFeed: home ? b : firebase.firestore.FieldValue.delete(), approvedAt: now, dayKey: today, ownerNote:'', decidedAt: now, updatedAt: now,
+      where: { story: !!story, home: !!home, offers: offers, online: online }, online: online, pieceBranch: s.pieceBranch || s.branch || '' };
+    // 📸 القطعة: العدد بيتحط مرة واحدة أول موافقة (بعد كده الحجز والبيع هما اللي بيحرّكوه)
+    if(online && s.qtyLeft === undefined){ upd.qty = qty; upd.qtyLeft = qty; upd.qtyReserved = 0; }
+    batch.update(db.collection('app_stories').doc(id), upd);
     batch.set(db.collection('app_story_images').doc(id), { published: true }, { merge: true });
     // 🔁 ستوري الأيام اللي فاتت بتتشال من التطبيق (المنتج اللي على الرئيسية بيفضل)
     S.list.filter(function(x){ return x.status === 'published' && (x.brand || 'echarpe') === b && x.dayKey && x.dayKey !== today && x.id !== id; }).forEach(function(x){
@@ -172,7 +182,25 @@ async function approve(id){
     });
     if(push && S.pushDay[b] !== today) batch.set(db.collection('pos_test_settings').doc('stories_push_' + b), { day: today, title: title, storyId: id, seq: firebase.firestore.FieldValue.increment(1), ts: now }, { merge: true });
     await batch.commit(); toast('اتنشرت ✅');
+    if(offers) addToOffers(s, title, sub).catch(function(e){ toast('العروض: ' + ((e && e.message) || 'تعذر')); });
   }catch(e){ toast('تعذر: ' + (e && e.code)); }
+}
+/* 🏷️ العروض = نفس كتالوج «آخر العروض» اللي في POS (pos_test_settings/catalog_<براند>) —
+   صورة متوسطة (٦٠٠ بكسل) عشان المستند كله حدّه ١ ميجا. */
+function shrink(dataUrl, side){
+  return new Promise(function(res, rej){ var im = new Image(); im.onload = function(){ var k = Math.min(1, side / Math.max(im.naturalWidth, im.naturalHeight)); var c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', 0.72)); }; im.onerror = rej; im.src = dataUrl; });
+}
+async function addToOffers(s, title, sub){
+  var b = s.brand || 'echarpe', ref = db.collection('pos_test_settings').doc('catalog_' + b);
+  var full = S.full[s.id]; if(!full){ var d = await db.collection('app_story_images').doc(s.id).get(); full = d.exists ? d.data().img : s.thumb; }
+  var img = await shrink(full, 600);
+  var snap = await ref.get(); var data = snap.exists ? (snap.data() || {}) : {};
+  var items = Array.isArray(data.items) ? data.items.slice() : [];
+  if(items.some(function(x){ return x && x.storyId === s.id; })) return;
+  items.push({ id: 's' + s.id.slice(0, 10), storyId: s.id, barcode: s.barcode || '', name: title, price: String(s.price || ''), img: img, desc: sub || '', discountType: 'none', discountValue: 0, usesPerCustomer: 1, validDays: 0 });
+  if(JSON.stringify(Object.assign({}, data, { items: items })).length > 950000) throw new Error('العروض مليانة صور — امسح منتج قديم من العروض الأول');
+  await ref.set({ items: items }, { merge: true });
+  toast('اتضافت للعروض كمان 🏷️');
 }
 async function setLive(on){
   if(on && !confirm('تفتح الستوري و«مختارة ليكي» للعميلات في تطبيق إيشارب دلوقتي؟')) return;
@@ -195,7 +223,7 @@ async function archive(id){
 }
 async function unhome(id){
   var s = S.list.find(function(x){ return x.id === id; }) || {};
-  try{ var b = db.batch(); var up = { showOnHome:false, homeFeed: firebase.firestore.FieldValue.delete(), updatedAt: Date.now() };
+  try{ var b = db.batch(); var up = { showOnHome:false, homeFeed: firebase.firestore.FieldValue.delete(), online:false, updatedAt: Date.now() };   // من غير الرئيسية مفيش طلب أونلاين
     if(s.status === 'live'){ up.status = 'archived'; up.feed = C.feedKey(s.brand || 'echarpe', 'archived'); }
     b.update(db.collection('app_stories').doc(id), up);
     if(s.status !== 'published') b.set(db.collection('app_story_images').doc(id), { published:false }, { merge:true }); await b.commit(); toast('اتشالت من الرئيسية'); }catch(e){ toast('تعذر: ' + (e && e.code)); }

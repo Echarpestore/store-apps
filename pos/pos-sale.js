@@ -516,6 +516,8 @@ function addToCart(item){
     if(_i >= 0) selectedCartIdx = _i;
   }
   renderCart();
+  // 📸 القطعة الواحدة: لو الكود ده عليه صورة معروضة أونلاين في الفرع — اسأل هي نفس اللون؟ (pos-pieces.js)
+  try{ if(window.PosPieces) PosPieces.onAdd(item, existing || cart[cart.length - 1]); }catch(e){}
 }
 
 let selectedCartIdx = null;
@@ -5327,6 +5329,8 @@ window.returnPointsDeduction = returnPointsDeduction;
     if(_stockW.error) console.error('خصم المخزون + نقطة الموظف + نقط العميلة', _stockW.error);
     // سجل الحركة: من غير انتظار (جواه catch بتاعه) — أوفلاين بيتقيد محليًا ويترفع بعدين
     stockLines.forEach(c=>{ logStockMovement(c.id, c.name, c.isReturn ? c.qty : -c.qty, c.isReturn ? 'return' : 'sale', c.isReturn ? 'مرتجع داخل فاتورة بيع' : 'بيع'); });
+    // 📸 القطع اللي الكاشير أكّدت إنها اللي في الصورة — المتاح في التطبيق بيقل (برّه الـbatch عمدًا)
+    try{ if(window.PosPieces) PosPieces.afterSale(stockLines); }catch(e){}
 
     // 3) نقطة الموظف — اتنقلت فوق (خطوة 2) جوه نفس الـbatch بتاع خصم
     //    المخزون، عشان تتقيّد أوفلاين معاه في نفس اللحظة بالظبط ومتفقدش

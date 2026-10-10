@@ -43,6 +43,8 @@
       + '.stBtn{border:1px solid var(--line,#2b2f3b);background:transparent;color:inherit;border-radius:12px;padding:11px 14px;font:800 13px Cairo,sans-serif;cursor:pointer;white-space:nowrap;}'
       + '.stBtn.p{background:var(--gold,#d4a84b);border-color:var(--gold,#d4a84b);color:#1a1408;width:100%;padding:14px;font-size:15px;}.stBtn:disabled{opacity:.5;}'
       + '.stProd{font-size:13px;border-radius:12px;padding:9px 12px;background:var(--panel,#1b1e27);border:1px solid var(--line,#2b2f3b);}.stProd.bad{color:#ffb4a8;border-color:#5a2a26;}'
+      + '.stWhere{display:grid;grid-template-columns:1fr 1fr;gap:8px;}.stWhere button{border:1px solid var(--line,#2b2f3b);background:transparent;color:var(--sub,#8b90a0);border-radius:12px;padding:11px 6px;font:800 13px Cairo,sans-serif;cursor:pointer;}'
+      + '.stWhere button.on{background:var(--gold-dim,#3a2f17);border-color:var(--gold,#d4a84b);color:var(--gold,#d4a84b);}'
       + '.stChk{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:700;cursor:pointer;}.stChk input{width:20px;height:20px;accent-color:var(--gold,#d4a84b);}'
       + '.stItem{display:flex;gap:12px;align-items:flex-start;padding:10px;border:1px solid var(--line,#2b2f3b);border-radius:14px;background:var(--panel,#1b1e27);}'
       + '.stItem img{width:58px;height:72px;border-radius:10px;object-fit:cover;flex:0 0 auto;}.stItem .n{flex:1;min-width:0;font-size:13px;}.stItem .n b{display:block;font-size:14px;}'
@@ -67,7 +69,7 @@
     $('stFile').onchange = onFile;
   }
 
-  function reset(){ S.img = ''; S.thumb = ''; S.product = null; S.editId = null; S.draft = { kind:'story', title:'', subtitle:'', barcode:'', tryable:true }; }
+  function reset(){ S.img = ''; S.thumb = ''; S.product = null; S.editId = null; S.draft = { where:{ story:true, home:false, offers:false, online:false }, qty:1, title:'', subtitle:'', barcode:'', tryable:true }; }
   function open(empId){
     inject();
     var emp = (api().employees() || []).find(function(e){ return e.id === empId; }); if(!emp){ toast('اختاري اسمك الأول', true); return; }
@@ -90,11 +92,14 @@
     if(S.tab === 'mine') return renderMine();
     var d = S.draft;
     var prod = S.product === null ? '' : (S.product ? '<div class="stProd">✅ ' + esc(S.product.name || '') + (S.product.price ? ' · ' + esc(S.product.price) + ' ج.م' : '') + '</div>' : '<div class="stProd bad">الكود ده مش في المخزون — اتأكدي منه (من غير باركود صح مش هتاخدي نقط)</div>');
-    var isP = d.kind === 'product';
+    var W = d.where, isP = !W.story, piece = W.online || W.home;
+    var CH = [['story','📸 ستوري النهارده'],['home','🏠 الصفحة الرئيسية'],['offers','🏷️ العروض'],['online','🛒 شراء أونلاين']];
     $('stBody').innerHTML = (S.editId ? '<div class="stTurn">✏️ بتعدّلي صورة رجعت لك — صوّري تاني وابعتي</div>' : turnLine())
-      // 🛍️ نوعين: ستوري (بتتجدد كل يوم) · منتج لـ«مختارة ليكي» في الرئيسية (بيفضل لحد ما الإدارة تشيله)
-      + '<div class="stTabs" style="padding:0"><button type="button" data-k="story" class="' + (isP ? '' : 'on') + '">📸 ستوري النهارده</button><button type="button" data-k="product" class="' + (isP ? 'on' : '') + '">🛍️ منتج للرئيسية</button></div>'
-      + '<div class="stTips" style="margin-top:-4px">' + (isP ? 'المنتج بيظهر في «مختارة ليكي» في الصفحة الرئيسية للتطبيق — صورة واضحة للطرحة لوحدها أو على موديل' : 'الستوري بتظهر للعميلات النهارده وبتتجدد كل يوم') + '</div>'
+      // 🗂️ الصورة تظهر فين (أكتر من اختيار) — الإدارة بتأكد أو تغيّر وهي بتوافق
+      + '<div class="stLbl">تظهر فين؟ (اختاري واحد أو أكتر)</div>'
+      + '<div class="stWhere">' + CH.map(function(c){ return '<button type="button" data-w="' + c[0] + '" class="' + (W[c[0]] ? 'on' : '') + '">' + c[1] + '</button>'; }).join('') + '</div>'
+      + (piece ? '<div class="stRow" style="align-items:center"><span style="font-size:13px;font-weight:800;flex:1">كام قطعة من <u>اللون ده بالظبط</u> في الفرع؟</span><button class="stBtn" type="button" data-q="-1">−</button><b style="min-width:30px;text-align:center;font-size:18px">' + d.qty + '</b><button class="stBtn" type="button" data-q="1">+</button></div>'
+        + '<div class="stTips" style="margin-top:-6px">أول ما عميلة تطلبها أونلاين بتتحجز ليها — وهيجيلك تنبيه تشيليها من الرف</div>' : '')
       + '<div class="stFrame" id="stPick">' + (S.img ? '<img src="' + S.img + '" alt="">' : '<span class="g"></span><div class="c"><b>📷</b>دوسي وصوّري الطرحة<br>خلّيها تملى الإطار</div>') + '</div>'
       + '<div class="stTips">💡 نور طبيعي (جنب الشباك أو الباب) · خلفية سادة · الطرحة نضيفة ومكوية وواضحة · صورة بالطول</div>'
       + '<div class="stLbl">باركود الطرحة</div>'
@@ -106,7 +111,8 @@
       + '<button class="stBtn p" id="stSend" ' + (S.busy ? 'disabled' : '') + '>' + (S.busy ? 'بيترفع…' : 'ابعتي للمراجعة') + '</button>'
       + '<div class="stTips" style="text-align:center">مش هتظهر للعميلات غير لما الإدارة توافق · كل ٥ قطع تتباع من الكود ده = نقطة ليكي</div>';
     $('stPick').onclick = function(){ keep(); $('stFile').click(); };
-    $('stBody').querySelectorAll('[data-k]').forEach(function(b){ b.onclick = function(){ keep(); S.draft.kind = b.dataset.k; render(); }; });
+    $('stBody').querySelectorAll('[data-w]').forEach(function(b){ b.onclick = function(){ keep(); var w = S.draft.where; w[b.dataset.w] = !w[b.dataset.w]; render(); }; });
+    $('stBody').querySelectorAll('[data-q]').forEach(function(b){ b.onclick = function(){ keep(); S.draft.qty = Math.max(1, Math.min(20, S.draft.qty + Number(b.dataset.q))); render(); }; });
     $('stFind').onclick = function(){ keep(); find(); };
     $('stBc').onkeydown = function(e){ if(e.key === 'Enter'){ keep(); find(); } };
     $('stSend').onclick = function(){ keep(); send(); };
@@ -122,7 +128,7 @@
     var bc = S.draft.barcode; if(!bc){ S.product = null; render(); return; }
     api().findByBarcode(bc).then(function(rows){ S.product = rows && rows.length ? rows[0] : false;
       // المنتج: اسمه بيتملى لوحده من المخزون لو لسه ما كتبتش
-      if(S.product && S.draft.kind === 'product' && !S.draft.title) S.draft.title = String(S.product.name || '').slice(0, 40);
+      if(S.product && !S.draft.where.story && !S.draft.title) S.draft.title = String(S.product.name || '').slice(0, 40);
       render(); })
       .catch(function(){ S.product = false; render(); });
   }
@@ -130,6 +136,8 @@
     var d = S.draft;
     if(!S.img){ toast('صوّري الطرحة الأول', true); return; }
     if(!d.title){ toast('اكتبي سطر للعميلة', true); return; }
+    var W = d.where; if(!W.story && !W.home && !W.offers && !W.online){ toast('اختاري تظهر فين', true); return; }
+    if((W.online || W.offers) && !(S.product && S.product.name)){ toast('للعروض والأونلاين لازم باركود صح — دوّري عليه الأول', true); return; }
     if(S.busy) return; S.busy = true; render();
     var b = brand(), now = Date.now(), p = S.product || null;
     var story = {
@@ -139,8 +147,11 @@
       employeeId: S.emp.id, employeeName: S.emp.name || '', branch: S.emp.branch || window.currentBranch || '',
       thumb: S.thumb, updatedAt: now, ownerNote: ''
     };
-    story.kind = d.kind === 'product' ? 'product' : 'story';
-    story.showOnHome = story.kind === 'product';   // اقتراح للإدارة — القرار النهائي في Office 2
+    story.where = { story: !!W.story, home: !!W.home, offers: !!W.offers, online: !!W.online };   // اقتراح — القرار في Office
+    story.kind = W.story ? 'story' : 'product';
+    story.showOnHome = !!W.home;
+    story.qty = Math.max(1, Number(d.qty) || 1);
+    story.pieceBranch = S.emp.branch || window.currentBranch || '';
     if(!S.editId){ story.createdAt = now; }
     api().submit(story, S.img, S.editId).then(function(){
       S.busy = false; toast('اتبعتت للمراجعة ✅'); reset(); S.tab = 'mine'; render();
@@ -160,7 +171,7 @@
       }).join('');
       $('stBody').querySelectorAll('[data-redo]').forEach(function(btn){ btn.onclick = function(){
         var s = list.find(function(x){ return x.id === btn.dataset.redo; }); if(!s) return;
-        reset(); S.editId = s.id; S.draft = { kind: s.kind === 'product' ? 'product' : 'story', title: s.title || '', subtitle: s.subtitle || '', barcode: s.barcode || '', tryable: s.tryable !== false };
+        reset(); S.editId = s.id; S.draft = { where: Object.assign({ story: s.kind !== 'product', home: !!s.showOnHome, offers:false, online:false }, s.where || {}), qty: s.qty || 1, title: s.title || '', subtitle: s.subtitle || '', barcode: s.barcode || '', tryable: s.tryable !== false };
         S.product = s.barcode ? { name: s.productName, price: s.price } : null; S.tab = 'new'; render();
       }; });
     }).catch(function(){ $('stBody').innerHTML = '<div class="stTips">مش قادرة أحمّل — جرّبي تاني</div>'; });

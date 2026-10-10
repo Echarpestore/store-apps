@@ -44,7 +44,7 @@ function storiesHtml(){
 function homeHtml(){
   if(!S.live || !S.home.length) return '';
   return '<div class="stv-sec"><div class="stv-h"><b>مختارة ليكي</b><span>اسحبي ←</span></div><div class="stv-rail">'
-    + S.home.map(function(s, i){ return '<button class="stv-look" onclick="StoriesApp.openHome(' + i + ')"><span class="stv-fr"><img src="' + s.thumb + '" alt="" data-stv-home="' + esc(s.id) + '"></span><b>' + esc(s.productName || s.title) + '</b>' + (s.price ? '<small>' + esc(s.price) + ' ج.م</small>' : '') + '</button>'; }).join('')
+    + S.home.map(function(s, i){ var sold = s.online === true && !(Number(s.qtyLeft) > 0); return '<button class="stv-look' + (sold ? ' sold' : '') + '" onclick="StoriesApp.openHome(' + i + ')"><span class="stv-fr"><img src="' + s.thumb + '" alt="" data-stv-home="' + esc(s.id) + '">' + (sold ? '<i>اتباعت</i>' : (s.online === true ? '<i class="on">قطعة واحدة</i>' : '')) + '</span><b>' + esc(s.title || s.productName) + '</b>' + (s.price ? '<small>' + esc(s.price) + ' ج.م</small>' : '') + '</button>'; }).join('')
     + '</div></div>';
 }
 
@@ -60,6 +60,8 @@ function css(){
     + '.stv-b small{font-size:11px;max-width:74px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     + '.stv-rail{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px;scroll-snap-type:x mandatory;scrollbar-width:none}.stv-rail::-webkit-scrollbar{display:none}'
     + '.stv-look{flex:0 0 150px;scroll-snap-align:start;border:0;background:none;padding:0;text-align:right;cursor:pointer;display:flex;flex-direction:column;gap:5px;font:inherit;color:inherit}'
+    + '.stv-fr{position:relative;}.stv-fr i{position:absolute;top:8px;right:8px;font-style:normal;font-size:11px;font-weight:800;background:rgba(20,16,18,.78);color:#fff;border-radius:10px;padding:3px 8px}.stv-fr i.on{background:rgba(255,255,255,.92);color:#1F161A}.stv-look.sold img{filter:grayscale(.7);opacity:.7}'
+    + '#stvWrap .buy{background:#fff!important;color:#1F161A!important;flex:1!important;border:0!important}#stvWrap .cart[disabled]{opacity:.7}'
     + '.stv-fr{display:block;height:190px;border-radius:16px;overflow:hidden;background:var(--pink-soft,#fbe9ef)}.stv-fr img{width:100%;height:100%;object-fit:cover}.stv-look b{font-size:13px;font-weight:700}.stv-look small{font-size:12px;color:var(--muted,#8a7f85)}'
     + '#stvWrap{position:fixed;inset:0;z-index:99990;background:#0e0a0c;color:#fff;display:none;user-select:none;-webkit-user-select:none}#stvWrap.on{display:block}'
     + '#stvWrap .m{position:absolute;inset:0;overflow:hidden}#stvWrap .m img{width:100%;height:100%;object-fit:cover;transform-origin:50% 40%}'
@@ -103,8 +105,10 @@ function go(i){
   if(!S.imgs[s.id]) S.db.collection('app_story_images').doc(s.id).get().then(function(d){ if(d.exists && d.data().img){ S.imgs[s.id] = d.data().img; if(S.list[S.idx] === s){ var im = document.querySelector('#stvM img'); if(im) im.src = S.imgs[s.id]; } } }).catch(function(){});
   var nx = S.list[i + 1]; if(nx && !S.imgs[nx.id]) S.db.collection('app_story_images').doc(nx.id).get().then(function(d){ if(d.exists && d.data().img) S.imgs[nx.id] = d.data().img; }).catch(function(){});
   document.getElementById('stvT').textContent = s.title || ''; document.getElementById('stvS').textContent = s.subtitle || (s.price ? s.price + ' ج.م' : '');
+  var piece = s.online === true, left = Number(s.qtyLeft) || 0;
   document.getElementById('stvA').innerHTML = (s.tryable !== false ? '<button class="try" onclick="StoriesApp.tryOn()">✨ جرّبيها عليكي</button>' : '')
-    + (s.barcode && typeof window.tryonAddToCart === 'function' ? '<button class="cart" onclick="StoriesApp.addCart()">🛒</button>' : '');
+    + (piece ? (left > 0 ? '<button class="cart buy" onclick="StoriesApp.order()">🛒 اطلبيها</button>' : '<button class="cart" disabled>اتباعت 💔</button>')
+      : (s.barcode && typeof window.tryonAddToCart === 'function' ? '<button class="cart" onclick="StoriesApp.addCart()">🛒</button>' : ''));
   markSeen(s.id);
   var bar = bars[i]; if(bar){ requestAnimationFrame(function(){ bar.style.transition = 'transform ' + DUR + 'ms linear'; bar.style.transform = 'scaleX(1)'; }); }
   S.start = Date.now(); S.left = DUR; S.timer = setTimeout(function(){ go(S.idx + 1); }, DUR);
@@ -127,7 +131,14 @@ function tryOn(){
   close();
   if(typeof window.tryonOverlayOpen === 'function') window.tryonOverlayOpen(S.brand === 'glow' ? 'glow' : 'loyalty');
 }
+/* 📸 قطعة الصورة: السلة بتشيل رقم القطعة، والفرع بيتظبط على فرعها — والسيرفر بيحجزها */
+function order(){
+  var s = S.list[S.idx]; if(!s || !s.barcode || !(Number(s.qtyLeft) > 0)) return;
+  window._cartPieces = window._cartPieces || {}; window._cartPieces[s.barcode] = s.id;
+  try{ if(s.pieceBranch && typeof window.shopSetBranch === 'function') window.shopSetBranch(s.pieceBranch); else if(s.pieceBranch) window._shopBranch = s.pieceBranch; }catch(e){}
+  close(); window.tryonAddToCart(s.barcode, S.imgs[s.id] || s.thumb, 'القطعة اللي في الصورة');
+}
 function addCart(){ var s = S.list[S.idx]; if(!s || !s.barcode) return; close(); window.tryonAddToCart(s.barcode, S.imgs[s.id] || s.thumb, ''); }
 
-window.StoriesApp = { init: init, storiesHtml: storiesHtml, homeHtml: homeHtml, open: open, openHome: openHome, close: close, isOpen: isOpen, tryOn: tryOn, addCart: addCart };
+window.StoriesApp = { order: order, init: init, storiesHtml: storiesHtml, homeHtml: homeHtml, open: open, openHome: openHome, close: close, isOpen: isOpen, tryOn: tryOn, addCart: addCart };
 })();
