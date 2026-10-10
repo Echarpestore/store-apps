@@ -423,7 +423,7 @@ window.rwRender=function(){
     b.innerHTML = `<div class="rw-step">
       <div class="rw-eyebrow">خطوة 3</div>
       <div class="rw-title">اختار شيفتك</div>
-      <div class="rw-sub">ده معاد حضورك اليومي — والتأخير بيتسجل رصيد وقت (كل ${(window.timeCfg||timeCfgDefaults).lateMinPerHour||10} دقيقة = ساعة)</div>
+      <div class="rw-sub">ده معاد حضورك اليومي — ${(typeof _bankOn==='function'?_bankOn:()=>false)() ? 'التأخير بيتكتب بالدقيقة على رصيد وقتك وبيتعوّض بالقعدة بعد معادك' : 'والتأخير بيتسجل رصيد وقت (كل '+((window.timeCfg||timeCfgDefaults).lateMinPerHour||10)+' دقيقة = ساعة)'}</div>
       <div class="rw-choice">
         ${Object.keys(S).map(k=>`<div class="rw-opt ${_rwData.shift===k?'sel':''}" onclick="window.rwPick('shift','${k}')">${S[k].label}<small>${S[k].start} → ${S[k].end}${S[k].noBonus?' · قبل الفتح':''}</small></div>`).join('')}
       </div>
@@ -446,11 +446,14 @@ window.rwRender=function(){
       <div class="rw-sub">اقرا كويس — ده اللي بيحدد مكافأتك ومرتبك</div>
       <div class="rw-rules">
         <div class="rw-rule good"><div class="ic">🎁</div><div><b>المكافأة على 3 حاجات</b><small>التزامك بالمواعيد (${cfg.weights.commitment}%) + مبيعاتك (${cfg.weights.sales}%) + تقييم العملاء ليك (${cfg.weights.rating}%)</small></div></div>
-        <div class="rw-rule good"><div class="ic">✅</div><div><b>تأخير أقل من ${tcfg.lateMinPerHour} دقايق = مسموح</b><small>عندك سماح يومي، مش هيتحسب عليك حاجة</small></div></div>
-        <div class="rw-rule warn"><div class="ic">⏰</div><div><b>كل ${tcfg.lateMinPerHour} دقايق تأخير = ساعة على رصيدك</b><small>مثال: اتأخرت ${tcfg.lateMinPerHour*2} دقيقة → ساعتين رصيد</small></div></div>
+        ${(typeof _bankOn==='function'?_bankOn:()=>false)() ? `<div class="rw-rule good"><div class="ic">🏦</div><div><b>رصيد وقت بالدقيقة</b><small>اتأخرت 20 دقيقة = −20 د · قعدت 30 دقيقة بعد معادك = +30 د · بيتصفّر لوحده</small></div></div>
+        <div class="rw-rule warn"><div class="ic">⏰</div><div><b>آخر الشهر: السالب يتخصم بسعر الدقيقة الحقيقي · الموجب أوفرتايم</b><small>سماح ${TimeBank.cfgOf(tcfg).bankGraceMin} دقايق · ومتنساش تسجّل انصرافك — الشيفت المنسي بيتقفل على ميعادك من غير أوفرتايم</small></div></div>
+        <div class="rw-rule good"><div class="ic">🎁</div><div><b>حافز أسبوعي ${TimeBank.cfgOf(tcfg).bonusMin}–${TimeBank.cfgOf(tcfg).bonusMax} ج</b><small>التزام (تأخير ≤ ${TimeBank.cfgOf(tcfg).bonusLateMinWeek} د في الأسبوع) + تقييم العملاء + مبيعاتك</small></div></div>`
+        : `<div class="rw-rule good"><div class="ic">✅</div><div><b>تأخير أقل من ${tcfg.lateMinPerHour} دقايق = مسموح</b><small>عندك سماح يومي، مش هيتحسب عليك حاجة</small></div></div>
+        <div class="rw-rule warn"><div class="ic">⏰</div><div><b>كل ${tcfg.lateMinPerHour} دقايق تأخير = ساعة على رصيدك</b><small>مثال: اتأخرت ${tcfg.lateMinPerHour*2} دقيقة → ساعتين رصيد</small></div></div>`}
         <div class="rw-rule warn"><div class="ic">☕</div><div><b>البريك ${tcfg.breakMin} دقيقة (+${tcfg.breakGraceMin} سماح)</b><small>الزيادة بعد كده: كل ${tcfg.breakMinPerHour} دقايق = ساعة رصيد · بريك ${tcfg.breakPerDay} في اليوم</small></div></div>
         <div class="rw-rule warn"><div class="ic">🔄</div><div><b>تبديل الشيفت أو الإجازة</b><small>أول تبديل في الشهر مجاني · اللي بعده = ${tcfg.swapHours} ساعات رصيد</small></div></div>
-        <div class="rw-rule warn"><div class="ic">💰</div><div><b>كل ${tcfg.hoursPerDay} ساعات رصيد = يوم يتخصم من مرتبك</b><small>يعني لو تأخيرك في الشهر عدّى ${tcfg.hoursPerDay*tcfg.lateMinPerHour} دقيقة</small></div></div>
+        ${(typeof _bankOn==='function'?_bankOn:()=>false)() ? '' : `<div class="rw-rule warn"><div class="ic">💰</div><div><b>كل ${tcfg.hoursPerDay} ساعات رصيد = يوم يتخصم من مرتبك</b><small>يعني لو تأخيرك في الشهر عدّى ${tcfg.hoursPerDay*tcfg.lateMinPerHour} دقيقة</small></div></div>`}
         <div class="rw-rule warn"><div class="ic">🚪</div><div><b>رصيدك لازم مايعدّيش ${tcfg.allowedHoursMonth} ساعات في الشهر</b><small>لو عدّاها → بتخرج من المكافأة، مهما كانت مبيعاتك وتقييمك</small></div></div>
         <div class="rw-rule good"><div class="ic">⭐</div><div><b>الالتزام هو الأساس</b><small>الملتزم بمواعيده هو اللي بياخد المكافأة</small></div></div>
       </div>
@@ -2501,6 +2504,7 @@ lf431History('feedback65', _scopedDays(entriesCol,'ts',65), _recent(entriesCol,'
 
 lf431History('shifts190', _scoped(shiftsCol,'clockInTs'), _recent(shiftsCol,'clockInTs'), ()=>allShifts, (rows)=>{
   allShifts=overlayAttendancePending('shifts', rows); window.allShifts=allShifts; applyBranchFilter();
+  try{ setTimeout(bankFinalizeForgotten, 1500); }catch(e){}   // 🏦 v640
 });
 
 onSnapshot(tasksCol, (snap)=>{
@@ -2833,6 +2837,12 @@ window.openDaySummary = function(empId){
     attCard = `<div style="background:linear-gradient(180deg,#16241c,var(--panel)); border:1px solid #2e5a42; border-radius:13px; padding:13px; text-align:center;">
       <div style="font-size:15px; font-weight:800; color:#5ec88a;">جيت في ميعادك ✅</div>
       <div style="font-size:12px; color:var(--sub); margin-top:3px;">سجّلت حضور ${inTxt}</div></div>`;
+  } else if((typeof _bankOn==='function'?_bankOn:()=>false)(inTs)){
+    // 🏦 v640: رصيد وقت بالدقيقة — بيتعوّض بالقعدة
+    const _g = TimeBank.cfgOf(_timeCfgNow()).bankGraceMin;
+    attCard = lateMin <= _g
+      ? `<div style="background:var(--panel2); border:1px solid var(--line); border-radius:13px; padding:13px; text-align:center;"><div style="font-size:15px; font-weight:800;">اتأخرت ${lateMin} دقيقة</div><div style="font-size:12px; color:var(--sub); margin-top:3px;">جوه السماح (${_g} د) — مفيش حاجة اتحسبت</div></div>`
+      : `<div style="background:linear-gradient(180deg,#2a1a18,var(--panel)); border:1px solid #5a3a3a; border-radius:13px; padding:13px; text-align:center;"><div style="font-size:15px; font-weight:800; color:#e0796b;">اتأخرت ${lateMin} دقيقة</div><div style="font-size:12px; color:var(--sub); margin-top:3px;">اتكتبت <b>−${lateMin} د</b> على رصيد وقتك — اقعد ${lateMin} دقيقة بعد معادك وتتصفّر لوحدها</div></div>`;
   } else {
     // 🔴 الشاشة دي كانت بتكذب على الموظفة: فضلت على **النظام القديم**
     //    (غرامة ثابتة + سماح 20 دقيقة) بعد ما النظام اتحوّل لرصيد ساعات
@@ -3903,7 +3913,8 @@ async function clockIn(empId, photoDataUri){
     lateMinutes, latePenalized, clockInPhoto:photoDataUri || null
   };
   // ⏳ التأخير وشيفته عملية مالية واحدة؛ retry لن يكرر رصيد الوقت.
-  const lateHours = latePenalized && !isSetupShift(emp)
+  // 🏦 v640: في نظام رصيد الوقت مفيش بند تأخير — الدقايق بتتحسب على الشيفت نفسه وبتتعوّض بالقعدة
+  const lateHours = (latePenalized && !isSetupShift(emp) && !(typeof _bankOn==='function'?_bankOn:()=>false)(clockInTs))
     ? lateHoursFrom(lateMinutes, window.timeCfg || timeCfgDefaults) : 0;
   const creditId = attendanceDocId('late', empId, shiftId);
   const credit = lateHours > 0 ? {
@@ -3948,7 +3959,7 @@ async function clockOut(empId, photoDataUri){
   if(!shift) return;
   const emp = window.employees.find(e=> e.id === empId);
   const shiftDay = caiDayKey(shift.clockInTs);
-  const now = fixedAttendanceTs('clock-out-'+shift.id, empId, shiftDay);
+  let now = fixedAttendanceTs('clock-out-'+shift.id, empId, shiftDay);
   // الشيفت الذي اختير لحظة الحضور هو مصدر الحقيقة للانصراف؛ إعداد
   // الموظف العام قد يظل صباحيًا رغم أن يومه الحالي اختير مسائيًا.
   // v633: نهاية الشيفت من نفس مصدر بدايته — لو الصورة اللحظية فيها بداية بس، النهاية من تعريف
@@ -3971,13 +3982,20 @@ async function clockOut(empId, photoDataUri){
      دلوقتي: الرقم بيتسجّل زي ما هو للمراجعة، والمرتب مبياخدش منه
      غير الدقايق اللي المالك يعتمدها من لوحة "أوفرتايم مستني موافقتك". */
   const STANDARD_SHIFT_MINUTES = 8*60 + 15; // 495
-  const totalMin = Math.round((now - shift.clockInTs)/60000);
-  const overtimeMinutes = Math.max(0, totalMin - STANDARD_SHIFT_MINUTES);
-
   const cfg = window.timeCfg || timeCfgDefaults;
   const maxShiftMin = (Number(cfg.maxShiftHours) || 14) * 60;
   // 🚨 شيفت أطول من المعقول = نسيان انصراف، مش شغل
-  const forgotten = totalMin > maxShiftMin;
+  const forgotten = Math.round((now - shift.clockInTs)/60000) > maxShiftMin;
+  // 🏦 v640: الشيفت المنسي بيتقفل على ميعاد نهاية شيفته (أو آخر فاتورة الموظف + 15 د) — مش على وقت ما افتكر
+  const _bank = (typeof _bankOn==='function'?_bankOn:()=>false)(shift.clockInTs);
+  let _bankFix = null;
+  if(_bank && forgotten){
+    const _endTs = expectedShiftEndTs(shift, shiftEmp, complianceCfg);
+    _bankFix = TimeBank.forgottenFix(shift, _endTs, bankLastSaleTs(empId, shift.clockInTs, now), cfg);
+    if(_bankFix) now = _bankFix.clockOutTs;
+  }
+  const totalMin = Math.round((now - shift.clockInTs)/60000);
+  const overtimeMinutes = (_bank && forgotten) ? 0 : Math.max(0, totalMin - STANDARD_SHIFT_MINUTES);
 
   // 🚪 انصراف بدري: بالطابع الزمني لنهاية الشيفت (مش بساعة اليوم)
   let earlyInfo = { earlyMin: 0, hours: 0 };
@@ -3987,7 +4005,7 @@ async function clockOut(empId, photoDataUri){
   // ⛔ الشيفت المنسي مبياخدش خصم انصراف بدري خالص — هي اتأخرت مش مشيت بدري
   // 🚪 الخصم بقى على النقص في الساعات مش على ساعة الخروج (شوف earlyLeaveFromWorked)
   const _reqMin = scheduledShiftMinutes(shiftEmp, complianceCfg, caiDayKey(shift.clockInTs));
-  if(!forgotten) earlyInfo = earlyLeaveFromWorked(totalMin, _reqMin, Number(shift.lateMinutes)||0, cfg);
+  if(!forgotten && !_bank) earlyInfo = earlyLeaveFromWorked(totalMin, _reqMin, Number(shift.lateMinutes)||0, cfg);
 
   /* ⏰➕ v629 — الشغل الزيادة يسد التأخير الأول: بنعدّل بند التأخير بتاع الشيفت ده بس،
      ولو لقيناه في الذاكرة ومش معذور (عشان منعملش مستند ناقص لو مش موجود). الانصراف المنسي
@@ -3995,7 +4013,7 @@ async function clockOut(empId, photoDataUri){
   let lateFix = null;
   const _lateId = attendanceDocId('late', empId, shift.id);
   const _lateRow = (window.allTimeCredit||[]).find(x=>x && String(x.id)===_lateId);   // window = نفس نسخة الموديول (setAttendanceRows)
-  if(!forgotten && _lateRow && !_lateRow.excused && (Number(shift.lateMinutes)||0) > 0){
+  if(!forgotten && !_bank && _lateRow && !_lateRow.excused && (Number(shift.lateMinutes)||0) > 0){
     const comp = lateCompensation(totalMin, _reqMin, Number(shift.lateMinutes)||0, cfg);
     const curH = Number(_lateRow.hours)||0;
     if(comp.coveredMin > 0 && comp.hours < curH){
@@ -4022,8 +4040,10 @@ async function clockOut(empId, photoDataUri){
       overtimeAutoApproved: _otAuto,
       shiftMinutes: totalMin,
       forgotClockOut: forgotten || false,
-      needsClockOutReview: forgotten || false
+      needsClockOutReview: (forgotten && !_bankFix) || false
   };
+  if(_bank && !_bankFix){ patch.overtimeApprovedMin = overtimeMinutes; patch.overtimeDecision = overtimeMinutes > 0 ? 'approved' : 'none'; patch.overtimeAutoApproved = overtimeMinutes > 0; }   // 🏦 الأوفرتايم بيتحسب من الرصيد — مفيش موافقات
+  if(_bankFix){ patch.bankAutoEnd = true; patch.bankAutoReason = _bankFix.reason; patch.bankAutoAt = Date.now(); patch.overtimeApprovedMin = 0; patch.overtimeDecision = 'none'; patch.overtimeAutoApproved = false; }
   const creditId = attendanceDocId('early', empId, shift.id);
   const credit = earlyInfo.hours > 0 ? {
     id:creditId, employeeId:empId, employeeName:(emp&&emp.name)||'', branch:window.currentBranch,
@@ -4032,6 +4052,8 @@ async function clockOut(empId, photoDataUri){
   } : null;
   const h=Math.floor(totalMin/60), m=totalMin%60;
   let successText=`تم تسجيل الانصراف — مدة الشيفت ${h} س ${m} د ✅`;
+  if(_bankFix) successText = `الشيفت كان مفتوح من غير انصراف — اتقفل على ${_bankFix.reason==='last_sale' ? 'آخر فاتورة ليك' : 'ميعاد نهاية شيفتك'} (${h} س ${m} د) ✅`;
+  else if(_bank){ const _d = TimeBank.shiftDelta({...shift,...patch}, _reqMin, cfg); if(_d.counted && _d.delta) successText += ` · رصيد وقتك ${TimeBank.fmtMin(_d.delta)}`; }
   if(earlyInfo.hours>0) successText += ` · نقص ${earlyInfo.earlyMin} دقيقة`;
   if(lateFix) successText += lateFix.excused ? ' · التأخير اتعوّض بالكامل' : ` · التأخير اتعوّض ${lateFix.compensatedMin} دقيقة`;
   if(overtimeMinutes>0) successText += _otAuto ? ' · الإضافي اتعتمد تلقائيًا' : ' · الإضافي محتاج مراجعة الإدارة';
@@ -5071,11 +5093,33 @@ function computeRaceStatus(emp, periodType){
   };
 }
 
+/* 🏦 v640 — كارت رصيد الوقت والحافز للموظف (بدل سباق الساعات القديم) */
+function bankCardHtml(emp){
+  const now = Date.now(); const cfg = _timeCfgNow(); const tc = TimeBank.cfgOf(cfg);
+  const m = getMonthRange(now); const sum = bankMonthFor(emp, m.start.getTime(), m.end.getTime());
+  const rate = (Number(emp.baseSalary)||0) / 30 / 8;
+  const mon = TimeBank.money(sum.balanceMin, rate);
+  const w = TimeBank.currentWeek(now); const st = bankWeekStats(emp, w.start, w.end); const b = TimeBank.weekBonus(st, cfg);
+  const col = sum.balanceMin < 0 ? 'var(--bad)' : 'var(--good)';
+  const bal = `<div class="raceBlock"><div class="raceBlockTitle"><span>🏦 رصيد وقتك الشهر ده</span></div>
+    <div style="font-size:26px;font-weight:900;color:${col};direction:ltr;text-align:right">${TimeBank.fmtMin(sum.balanceMin)}</div>
+    <div style="font-size:11.5px;color:var(--sub);margin-top:2px">${sum.lateCount} تأخير (${sum.lateMinTotal} د) · ${sum.plusMin} د زيادة · ${sum.forgotCount?sum.forgotCount+' شيفت منسي · ':''}${sum.countedShifts} شيفت</div>
+    <div style="font-size:12px;margin-top:6px">${sum.balanceMin < 0
+      ? `لو فضل كده لآخر الشهر هيتخصم <b>${Math.round(mon.deduction)} ج</b> — اقعد <b>${Math.abs(sum.balanceMin)} د</b> زيادة وبيتصفّر لوحده ✅`
+      : (sum.balanceMin > 0 ? `أوفرتايم لحد دلوقتي <b>+${Math.round(mon.overtimePay)} ج</b> 👏` : 'رصيدك صفر — ملتزم بالمواعيد ✅')}</div></div>`;
+  const part = (k, lbl) => `<div class="raceItem"><span>${lbl}</span><span style="font-weight:800;color:${b.parts[k]>=b.max[k]?'var(--good)':(b.parts[k]>0?'#e0a020':'var(--bad)')}">${b.parts[k]} / ${b.max[k]}</span></div>`;
+  const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+tc.bonusPointsWeek+' · ':''}= ${tc.bonusMax} ج</div>` : '';
+  const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span></div>
+    <div style="font-size:24px;font-weight:900;color:${b.amount?'var(--good)':'var(--bad)'};direction:ltr;text-align:right">${b.amount} ج <small style="font-size:12px;color:var(--sub)">(${b.score}/100)</small></div>
+    ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+' ن)')}${next}</div>`;
+  return bal + bonus;
+}
 function renderRaceStatus(empId){
   const wrap = document.querySelector('#dh_raceStatus');
   if(!wrap) return;
   const emp = window.employees.find(e=> e.id === empId);
   if(!emp){ wrap.innerHTML = ''; return; }
+  if((typeof _bankOn==='function'?_bankOn:()=>false)()){ try{ wrap.innerHTML = bankCardHtml(emp); }catch(e){ console.warn('bank card', e); wrap.innerHTML=''; } return; }
 
   const typeLabel = { late:'⏰ تأخير', break:'☕ بريك', early:'🚪 انصراف بدري', swap:'🔄 تبديل', absence:'🚫 غياب' };
 
@@ -8038,6 +8082,67 @@ if(typeof window!=='undefined'){
 
 // Computes pay for any date range within a salary cycle — used both for the
 // regular full-month calculation and for a prorated final settlement.
+/* ============================================================
+   🏦 v640 — رصيد الوقت (TimeBank) — المنطق في sales/time-bank.js
+   ============================================================ */
+function _bankOn(ms){ return (typeof TimeBank !== 'undefined') && TimeBank.enabledFor(_timeCfgNow(), ms == null ? Date.now() : ms); }
+function _bankShiftEmp(shift, emp){
+  const _def = ((typeof complianceCfg !== 'undefined' && complianceCfg.shifts) || {})[shift && shift.attendanceShiftKey] || {};
+  return (shift && shift.scheduledStartTime)
+    ? { ...(emp||{}), scheduledStartTime: shift.scheduledStartTime, scheduledEndTime: shift.scheduledEndTime || _def.end || (emp && emp.scheduledEndTime) }
+    : (emp || {});
+}
+function _bankReqMin(shift, emp){
+  try{ return scheduledShiftMinutes(_bankShiftEmp(shift, emp), complianceCfg, caiDayKey(shift.clockInTs)); }catch(e){ return 0; }
+}
+function bankMonthFor(emp, startMs, endMs, shiftsSrc){
+  const rows = (shiftsSrc || allShifts).filter(s=> s && s.employeeId===emp.id && s.clockInTs >= startMs && s.clockInTs <= endMs);
+  return TimeBank.monthSummary(rows, _timeCfgNow(), s=> _bankReqMin(s, emp));
+}
+function bankLastSaleTs(empId, fromTs, toTs){
+  let best = 0;
+  (window.points || []).forEach(p=>{ if(p && p.employeeId===empId && p.ts >= fromTs && p.ts <= toTs && p.ts > best) best = p.ts; });
+  return best;
+}
+function bankWeekStats(emp, ws, we){
+  const sum = bankMonthFor(emp, ws, we);
+  let avg = null; try{ avg = computeAvgRatingInRange(emp.id, ws, we); }catch(e){}
+  const pts = sumPoints((window.points||[]).filter(p=> p.employeeId===emp.id && p.ts >= ws && p.ts <= we));
+  return { lateMinTotal: sum.lateMinTotal, lateCount: sum.lateCount, forgotCount: sum.forgotCount, absences: 0, avgRating: avg, ratingCount: avg == null ? 0 : 1, points: pts, shifts: sum.countedShifts };
+}
+function bankBonusFor(emp, periodStart, periodEnd, nowMs){
+  const cfg = _timeCfgNow();
+  const weeks = TimeBank.weeksInPeriod(periodStart.getTime(), periodEnd.getTime(), nowMs || Date.now());
+  const out = weeks.map(w=>{ const st = bankWeekStats(emp, w.start, w.end); const b = TimeBank.weekBonus(st, cfg); return { ...w, st, ...b }; })
+    .filter(w=> w.st.shifts > 0);   // أسبوع من غير أي شيفت (إجازة/قبل التعيين) = مفيش حافز ومفيش عقاب
+  return { weeks: out, total: out.reduce((n,w)=> n + w.amount, 0) };
+}
+window.bankMonthFor = bankMonthFor; window.bankBonusFor = bankBonusFor; window.bankWeekStats = bankWeekStats;
+
+/* 🧹 الشيفت المنسي: يتقفل على ميعاد نهاية شيفته (أو آخر فاتورة الموظف نفسه + 15 د لو سهر) —
+   بيشتغل على أي جهاز بعد ما الشيفتات تتحمّل، مرة لكل شيفت. مفيش مراجعة يدوية. */
+const _bankFixed = new Set();
+async function bankFinalizeForgotten(){
+  if(!(typeof _bankOn==='function'?_bankOn:()=>false)()) return;
+  const cfg = _timeCfgNow(); const now = Date.now();
+  const list = (allShifts||[]).filter(s=> s && s.employeeId && !s.voided && !_bankFixed.has(s.id) && !s.bankAutoEnd
+    && (TimeBank.isForgottenOpen(s, now, cfg) || (s.clockOutTs && s.needsClockOutReview && s.autoClosedAt1)));
+  for(const s of list){
+    _bankFixed.add(s.id);
+    try{
+      const emp = (window.allEmployees||window.employees||[]).find(e=> e.id===s.employeeId) || {};
+      const endTs = expectedShiftEndTs(s, _bankShiftEmp(s, emp), complianceCfg);
+      const lastSale = bankLastSaleTs(s.employeeId, s.clockInTs, s.clockInTs + TimeBank.cfgOf(cfg).bankMaxShiftMin*60000);
+      const fix = TimeBank.forgottenFix(s, endTs, lastSale, cfg); if(!fix) continue;
+      const patch = { clockOutTs: fix.clockOutTs, shiftMinutes: fix.shiftMinutes, overtimeMinutes: 0, overtimeApprovedMin: 0, overtimeDecision: 'none',
+        earlyMin: 0, earlyHours: 0, forgotClockOut: true, needsClockOutReview: false, bankAutoEnd: true, bankAutoReason: fix.reason, bankAutoAt: now };
+      await updateDoc(doc(db, 'sales_shifts', s.id), patch);
+      Object.assign(s, patch);
+    }catch(e){ console.warn('bank fix', s.id, e && e.code); }
+  }
+}
+window.bankFinalizeForgotten = bankFinalizeForgotten;
+
 function computeSalary(emp, periodStart, end){
   const baseSalary = emp.baseSalary || 0;
   // Daily/hourly rate always uses a FIXED 30-day divisor, regardless of
@@ -8210,9 +8315,24 @@ function computeSalary(emp, periodStart, end){
   const advCash = periodAdvances.filter(a=> String(a.source||'').indexOf('staff_order') !== 0).reduce((s,a)=> s + a.amount, 0);
   const advOrders = Math.round((advancesTotal - advCash) * 100)/100;
 
-  const netSalary = Math.round((proratedBase - deductionAmount - timeCreditDeduction - adminDeductions + overtimePay + dayOffBonusAmount - advancesTotal) * 100)/100;
-  return { proratedBase, overtimeMinutes, overtimePay, overtimePendingMin, dayOffOccurrences, extraOffDays, deductionAmount,
-           timeCreditHours, timeCreditDays, timeCreditDeduction, adminDeductions, adminDeductionItems,
+  // 🏦 v640 — رصيد الوقت بدل «كل 8 ساعات = يوم»: السالب يتخصم بسعر الدقيقة، الموجب أوفرتايم بنفس السعر،
+  //    + الحافز الأسبوعي. بنود التأخير/الانصراف بدري القديمة مبتتحسبش (الرصيد بيغطيها) — البريك/التبديل/الغياب زي ما هم.
+  let bank = null, bonus = null, weeklyBonusAmount = 0;
+  let _otMin = overtimeMinutes, _otPay = overtimePay, _otPend = overtimePendingMin, _tcH = timeCreditHours, _tcD = timeCreditDays, _tcDed = timeCreditDeduction;
+  if((typeof _bankOn==='function'?_bankOn:()=>false)(start.getTime()) && !isSetupShift(emp)){
+    bank = bankMonthFor(emp, start.getTime(), end.getTime());
+    const bm = TimeBank.money(bank.balanceMin, hourlyRate);
+    const otherSum = monthlyTimeSummary(tcEntries.filter(x=> x.type !== 'late' && x.type !== 'early'), _tcfg);
+    _otMin = bm.overtimeMin; _otPay = bm.overtimePay; _otPend = 0;
+    _tcH = Math.round(bank.minusMin / 60 * 100) / 100; _tcD = otherSum.days;
+    _tcDed = Math.round((bm.deduction + otherSum.days * dailyRate) * 100) / 100;
+    bank.money = bm; bank.otherDays = otherSum.days; bank.otherHours = otherSum.totalHours;
+    bonus = bankBonusFor(emp, start, end); weeklyBonusAmount = bonus.total;
+  }
+  const netSalary = Math.round((proratedBase - deductionAmount - _tcDed - adminDeductions + _otPay + dayOffBonusAmount + weeklyBonusAmount - advancesTotal) * 100)/100;
+  return { proratedBase, overtimeMinutes:_otMin, overtimePay:_otPay, overtimePendingMin:_otPend, dayOffOccurrences, extraOffDays, deductionAmount,
+           timeCreditHours:_tcH, timeCreditDays:_tcD, timeCreditDeduction:_tcDed, adminDeductions, adminDeductionItems,
+           bank, bonus, weeklyBonusAmount,
            dayOffBonusDays, dayOffBonusHours, dayOffBonusAmount, advancesTotal, advCash, advOrders, advPrevCycle, netSalary, daysInCalc,
            attendedDays, elapsedWorkDays, absenceDays,
            absenceDates: attendance.absenceDates, dayOffDates: attendance.dayOffDates,
@@ -8234,7 +8354,7 @@ function payrollMoneyBreakdown(calc, due){
   const c = calc || {};
   const d = due || {};
   const base = Math.round((Number(c.proratedBase)||0)*100)/100;
-  const salaryAdditions = Math.round(((Number(c.overtimePay)||0) + (Number(c.dayOffBonusAmount)||0))*100)/100;
+  const salaryAdditions = Math.round(((Number(c.overtimePay)||0) + (Number(c.dayOffBonusAmount)||0) + (Number(c.weeklyBonusAmount)||0))*100)/100;
   const salaryDeductions = Math.round(((Number(c.deductionAmount)||0) + (Number(c.timeCreditDeduction)||0) + (Number(c.adminDeductions)||0) + (Number(c.advancesTotal)||0))*100)/100;
   const salaryNet = Math.round((base + salaryAdditions - salaryDeductions)*100)/100;
   const commissionsDue = Math.round((Number(d.totalDue)||0)*100)/100;
@@ -8380,7 +8500,8 @@ function renderSalaryPanel(){
   renderPayrollBranchSummary(periodLabel, emps);
   if(!emps.length){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
   const range = payPeriodRange(periodLabel);
-  wrap.innerHTML = emps.map(e=>{
+  let _alerts = ''; try{ _alerts = bankAlertsHtml(); }catch(e){}
+  wrap.innerHTML = _alerts + emps.map(e=>{
     if(!e.baseSalary){
       return `<div class="emp-row" style="padding:13px;"><div class="n">${e.name}</div><div class="meta">لسه مفيش مرتب أساسي</div></div>`;
     }
@@ -8470,6 +8591,35 @@ window.payPayrollPointsNow = async function(empId, periodKey, btn){
   }
 };
 
+/* 🏦 v640 — تفاصيل رصيد الوقت والحافز للمالك: كل شيفت (جه امتى · مشي امتى · المطلوب · الفرق) وكل أسبوع (الالتزام · التقييم · المبيعات) */
+window.openPayrollBankDetails = function(empId, periodKey){
+  const emp = allEmployees.find(e=> e.id===empId); if(!emp) return;
+  const range = payPeriodRange(periodKey);
+  const c = computeSalary(emp, range.start, range.end); if(!c.bank) return;
+  const hm = ts => ts ? new Date(ts).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const old = document.getElementById('bankDetOv'); if(old) old.remove();
+  const ov = document.createElement('div'); ov.id='bankDetOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10000;overflow:auto;padding:12px 8px 28px;color:#f5f5f7;font-family:inherit';
+  const reasonAr = { forgot:'نسي الانصراف', manual:'يدوي', needs_review:'مستني مراجعة', open:'مفتوح', voided:'ملغي' };
+  const rows = c.bank.rows.map(r=> `<tr style="border-top:1px solid rgba(255,255,255,.07)${r.counted?'':';opacity:.5'}"><td style="padding:6px 4px">${r.day.slice(5)}</td><td>${hm(r.clockInTs)}</td><td>${hm(r.clockOutTs)}</td><td style="direction:ltr;text-align:center">${r.lateMin?'<span style="color:#ff5b63">'+r.lateMin+'</span>':'0'}</td><td style="direction:ltr;text-align:center">${r.requiredMin?Math.round(r.requiredMin/60*10)/10:'—'}</td><td style="direction:ltr;text-align:center;font-weight:800;color:${r.delta<0?'#ff5b63':(r.delta>0?'#35d26f':'#aaa')}">${r.counted?TimeBank.fmtMin(r.delta):(reasonAr[r.reason]||r.reason)}</td></tr>`).join('');
+  const weeks = (c.bonus?c.bonus.weeks:[]).map(w=> `<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.07);font-size:12px"><span>أسبوع ${w.key.slice(5)}<br><small style="color:#aaa">التزام ${w.parts.commit}/${w.max.commit} (تأخير ${w.st.lateMinTotal} د) · تقييم ${w.parts.rating}/${w.max.rating}${w.st.avgRating!=null?' ('+w.st.avgRating.toFixed(1)+'/4)':''} · مبيعات ${w.parts.sales}/${w.max.sales} (${fmtPts(w.st.points)} ن)</small></span><b style="color:${w.amount?'#35d26f':'#ff5b63'};direction:ltr">${w.score}/100 → ${w.amount} ج</b></div>`).join('') || '<div style="color:#aaa;font-size:12px">مفيش أسبوع مكتمل لسه</div>';
+  ov.innerHTML = `<div style="max-width:560px;margin:auto;background:#171820;border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:17px">🏦 رصيد الوقت — ${_payEsc(emp.name)}</b><div style="font-size:11px;color:#aaa">${_payEsc(payPeriodLabelAr(periodKey))} · الرصيد ${TimeBank.fmtMin(c.bank.balanceMin)} · ${c.bank.lateCount} تأخير (${c.bank.lateMinTotal} د) · ${c.bank.forgotCount} شيفت منسي</div></div><button class="backBtn" onclick="document.getElementById('bankDetOv').remove()">✕</button></div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px"><tr style="color:#aaa;font-size:11px"><th style="text-align:right;padding:4px">يوم</th><th>جه</th><th>مشي</th><th>تأخير</th><th>المطلوب (س)</th><th>الرصيد</th></tr>${rows}</table>
+    <div style="margin-top:14px;font-weight:900">🎁 الحافز الأسبوعي — ${_payMoney(c.weeklyBonusAmount)}</div>${weeks}
+    <div style="margin-top:10px;font-size:11px;color:#aaa">الخصم = الدقايق السالبة × سعر الدقيقة (الأساسي ÷ 30 ÷ 8 ÷ 60) · الموجب أوفرتايم بنفس السعر · فترة السماح ${TimeBank.cfgOf(_timeCfgNow()).bankGraceMin} د</div>
+  </div>`;
+  document.body.appendChild(ov);
+};
+/* 🏦 v640 — إنذار التأخير المتكرر للمالك (فوق قايمة المرتبات) */
+function bankAlertsHtml(){
+  if(!(typeof _bankOn==='function'?_bankOn:()=>false)()) return '';
+  const emps = reviewEmployeesFor(viewBranch); const ids = new Set(emps.map(e=>e.id));
+  const al = TimeBank.lateAlerts((allShifts||[]).filter(s=> ids.has(s.employeeId)), _timeCfgNow());
+  if(!al.length) return '';
+  const cfg = TimeBank.cfgOf(_timeCfgNow());
+  return `<div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);border-radius:14px;padding:10px 12px;margin-bottom:10px;font-size:12.5px"><b>⚠️ تأخير متكرر في آخر ${cfg.alertWindowDays} يوم</b>${al.map(a=>`<div style="margin-top:4px">• <b>${_payEsc(a.name)}</b> — ${a.count} مرات · متوسط ${a.avgMin} دقيقة</div>`).join('')}</div>`;
+}
 window.openPayrollEmployee = function(empId, periodKey){
   const emp = allEmployees.find(e=> e.id===empId); if(!emp) return;
   const pk = periodKey || window.salaryPeriodKey || defaultPayPeriodKey(new Date());
@@ -8496,7 +8646,11 @@ window.openPayrollEmployee = function(empId, periodKey){
   const section=(title,cls,body)=>`<section class="pay-v393-sec ${cls||''}"><div class="pay-v393-sec-title">${title}</div>${body}</section>`;
   const absenceText = c.absenceDates.length ? c.absenceDates.map(x=>x.date+(x.approved?' (مصرح)':'')).join('، ') : '—';
   const offText = c.dayOffDates.length ? c.dayOffDates.join('، ') : '—';
-  const timeCreditRow = `<button type="button" onclick="openPayrollTimeCreditDetails('${emp.id}','${pk}')" style="width:100%;display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;border-bottom:1px solid rgba(255,255,255,.055);background:transparent;color:inherit;padding:8px 0;font-family:inherit;cursor:pointer;text-align:right"><span style="color:#aaaab4;flex:1">⏳ رصيد الوقت <small style="color:#fbbf24">اضغط للتفاصيل والتعديل</small></span><b class="bad" style="text-align:left;direction:ltr">${_payQty(c.timeCreditHours,'ساعة')} = -${_payMoney(c.timeCreditDeduction)}</b></button>`;
+  const _bk = c.bank;
+  const bankRow = _bk ? `<button type="button" onclick="openPayrollBankDetails('${emp.id}','${pk}')" style="width:100%;display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;border-bottom:1px solid rgba(255,255,255,.055);background:transparent;color:inherit;padding:8px 0;font-family:inherit;cursor:pointer;text-align:right"><span style="color:#aaaab4;flex:1">🏦 رصيد الوقت <small style="color:#fbbf24">${TimeBank.fmtMin(_bk.balanceMin)} · ${_bk.lateCount} تأخير · اضغط للتفاصيل</small></span><b class="${_bk.balanceMin<0?'bad':'good'}" style="text-align:left;direction:ltr">${_bk.balanceMin<0 ? '-'+_payMoney(_bk.money.deduction) : '+'+_payMoney(_bk.money.overtimePay)}</b></button>`
+    + (_bk.otherDays ? detailRow('بريك/تبديل/غياب · '+_payQty(_bk.otherHours,'ساعة'),'-'+_payMoney(Math.round(_bk.otherDays*(Number(emp.baseSalary||0)/30)*100)/100),'bad') : '') : '';
+  const bonusRow = c.bonus ? detailRow('🎁 حافز أسبوعي · '+c.bonus.weeks.length+' أسبوع'+(c.bonus.weeks.length?' ('+c.bonus.weeks.map(w=>w.amount).join(' + ')+')':''),'+'+_payMoney(c.weeklyBonusAmount),'good') : '';
+  const timeCreditRow = _bk ? bankRow : `<button type="button" onclick="openPayrollTimeCreditDetails('${emp.id}','${pk}')" style="width:100%;display:flex;justify-content:space-between;gap:14px;align-items:center;border:0;border-bottom:1px solid rgba(255,255,255,.055);background:transparent;color:inherit;padding:8px 0;font-family:inherit;cursor:pointer;text-align:right"><span style="color:#aaaab4;flex:1">⏳ رصيد الوقت <small style="color:#fbbf24">اضغط للتفاصيل والتعديل</small></span><b class="bad" style="text-align:left;direction:ltr">${_payQty(c.timeCreditHours,'ساعة')} = -${_payMoney(c.timeCreditDeduction)}</b></button>`;
   const adminDeductionRows = (c.adminDeductionItems||[]).map(d=>{
     const unit = Number(d.days)>0 ? (' · '+_payQty(d.days,'يوم')) : '';
     const why = d.reason ? (' · '+_payEsc(d.reason)) : '';
@@ -8547,6 +8701,7 @@ window.openPayrollEmployee = function(empId, periodKey){
       (c.proratedBase!==Number(emp.baseSalary)?detailRow('استحقاق الأساسي للفترة','+'+_payMoney(c.proratedBase),'good'):'')+
       detailRow('أوفرتايم · '+_payQty(c.overtimeMinutes/60,'ساعة'),'+'+_payMoney(c.overtimePay),'good')+
       detailRow('شغل يوم الإجازة · '+_payQty(c.dayOffBonusHours,'ساعة'),'+'+_payMoney(c.dayOffBonusAmount),'good')+
+      bonusRow+
       detailRow('إجمالي إضافات الراتب','+'+_payMoney(salaryAdditions),'good'))}
     ${section('− الخصومات','ded',
       timeCreditRow+

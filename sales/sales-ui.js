@@ -649,8 +649,23 @@ window.renderTimeSettings = function(){
         onblur="this.closest('#timeSettingsForm').dataset.editing='0'"
         style="width:60px; padding:8px; border-radius:9px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); font-family:'Cairo'; font-weight:800; text-align:center; flex-shrink:0;">
     </label>`;
+  const tb = (window.TimeBank ? window.TimeBank.cfgOf(c) : {});
+  const bankOn = !!(window.TimeBank && window.TimeBank.cfgOf(c).bankEnabled);
   wrap.innerHTML = `
-    <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">⏰ التأخير والانصراف بدري</div>
+    <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">🏦 رصيد الوقت (النظام الجديد v640)</div>
+    <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-size:13px;">
+      <span style="flex:1;">تشغيل رصيد الوقت بالدقيقة<br><small style="color:var(--sub); font-size:10.5px;">${bankOn ? 'شغال من '+(tb.bankFrom||'—')+' — التأخير يتعوّض بالقعدة، السالب يتخصم آخر الشهر بسعر الدقيقة، الموجب أوفرتايم' : 'مقفول — النظام القديم (كل '+c.lateMinPerHour+' دقيقة = ساعة) شغال'}</small></span>
+      <input id="tsBankOn" type="checkbox" ${bankOn?'checked':''} onfocus="this.closest('#timeSettingsForm').dataset.editing='1'" onblur="this.closest('#timeSettingsForm').dataset.editing='0'" style="width:22px;height:22px;flex-shrink:0;">
+    </label>
+    ${row('فترة السماح (دقيقة)', 'tsBankGrace', tb.bankGraceMin, 'تأخير أو فرق أقل من كده مش بيتحسب')}
+    ${row('أقل حافز أسبوعي (ج)', 'tsBonusMin', tb.bonusMin, 'عند 40 نقطة من 100')}
+    ${row('أعلى حافز أسبوعي (ج)', 'tsBonusMax', tb.bonusMax, 'عند 100 نقطة')}
+    ${row('تأخير الأسبوع المسموح للالتزام (دقيقة)', 'tsBonusLate', tb.bonusLateMinWeek, 'إجمالي الأسبوع · ضعفه = نص درجة الالتزام')}
+    ${row('أقل تقييم عملاء للحافز (من 4)', 'tsBonusRating', tb.bonusRatingMin)}
+    ${row('هدف نقاط الأسبوع للحافز', 'tsBonusPts', tb.bonusPointsWeek, '0 = جزء المبيعات بيتحسب كامل')}
+    ${row('إنذار تأخير متكرر: كام مرة في 14 يوم', 'tsAlertLate', tb.alertLateCount, 'بيظهرلك فوق المرتبات')}
+    <div style="height:1px; background:var(--line); margin:12px 0;"></div>
+    <div style="font-size:12px; color:var(--sub); margin-bottom:8px;">⏰ التأخير والانصراف بدري ${bankOn ? '<span style="color:#e0a020">(النظام القديم — مش شغال طول ما رصيد الوقت شغال)</span>' : ''}</div>
     ${row('كل كام دقيقة = ساعة رصيد', 'tsLatePer', c.lateMinPerHour, 'أقل من الرقم ده = سماح مجاني')}
     ${row('سقف ساعات التأخير في اليوم', 'tsLateCap', c.maxLateHoursPerDay, '0 = مفيش سقف')}
     ${row('جت على معاد شيفت تاني؟ (دقيقة)', 'tsAutoShift', c.autoShiftWindowMin == null ? 120 : c.autoShiftWindowMin, 'لو جت بعد بداية شيفت تاني بأقل من الدقايق دي (أو قبله بساعة) تتحسب عليه · 0 = مقفول')}
@@ -678,8 +693,20 @@ window.renderTimeSettings = function(){
 
 window.saveTimeSettings = async function(){
   const n = (id, def)=>{ const v = parseInt(document.querySelector('#'+id).value,10); return isNaN(v)?def:v; };
+  const f = (id, def)=>{ const v = parseFloat(document.querySelector('#'+id).value); return isNaN(v)?def:v; };
   const c = window.timeCfg || window.timeCfgDefaults;
+  const tb = window.TimeBank ? window.TimeBank.cfgOf(c) : {};
+  const _bankOnEl = document.querySelector('#tsBankOn');
+  const bankEnabled = _bankOnEl ? _bankOnEl.checked : tb.bankEnabled !== false;
+  // أول تشغيل: الرصيد بيبدأ من أول الشهر الحالي (الشهور اللي قبله بتفضل على النظام القديم)
+  let bankFrom = c.bankFrom || tb.bankFrom || '';
+  if(bankEnabled && !c.bankFrom){ const d = new Date(); bankFrom = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; }
   const payload = {
+    bankEnabled, bankFrom,
+    bankGraceMin: n('tsBankGrace', tb.bankGraceMin),
+    bonusMin: n('tsBonusMin', tb.bonusMin), bonusMax: n('tsBonusMax', tb.bonusMax),
+    bonusLateMinWeek: n('tsBonusLate', tb.bonusLateMinWeek), bonusRatingMin: f('tsBonusRating', tb.bonusRatingMin),
+    bonusPointsWeek: n('tsBonusPts', tb.bonusPointsWeek), alertLateCount: n('tsAlertLate', tb.alertLateCount),
     lateMinPerHour: n('tsLatePer', c.lateMinPerHour),
     maxLateHoursPerDay: n('tsLateCap', c.maxLateHoursPerDay),
     autoShiftWindowMin: n('tsAutoShift', c.autoShiftWindowMin == null ? 120 : c.autoShiftWindowMin),
@@ -705,8 +732,8 @@ window.saveTimeSettings = async function(){
     // بيتمسح. الحل: ندمج مع القيم الحالية (window.timeCfg) *قبل* الكتابة.
     const _fullTimeCfg = { ...(window.timeCfg || window.timeCfgDefaults), ...payload };
     await window.fbSetDoc(window.fbDoc(window.db,'sales_settings', b), { timeCfg: _fullTimeCfg }, { merge:true });
-    window.timeCfg = { ...window.timeCfgDefaults, ...payload };
-    const f = document.querySelector('#timeSettingsForm'); if(f) f.dataset.editing='0';
+    window.timeCfg = _fullTimeCfg;
+    const _form = document.querySelector('#timeSettingsForm'); if(_form) _form.dataset.editing='0';
     alert('اتحفظت إعدادات رصيد الوقت ✅');
   }catch(e){ alert('تعذر الحفظ: ' + e.message); }
 };

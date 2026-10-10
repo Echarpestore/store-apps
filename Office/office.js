@@ -5992,9 +5992,21 @@ function ofComputeSalary(emp, periodStart, end, data){
     if(x.employeeId!==emp.id||!ofTcCounts(x,cfg)) return false;
     const t=new Date((x.date||'')+'T00:00:00').getTime(); return t>=start.getTime()&&t<=end.getTime();
   });
-  const tcSummary=ofMonthlyTimeSummary(tcEntries,cfg);
-  const timeCreditHours=tcSummary.totalHours,timeCreditDays=tcSummary.days;
-  const timeCreditDeduction=Math.round(timeCreditDays*dailyRate*100)/100;
+  // 🏦 v640 — رصيد الوقت (نفس محرك sales/time-bank.js): السالب يتخصم بسعر الدقيقة، الموجب أوفرتايم.
+  //    الحافز الأسبوعي بيتحسب في تطبيق sales (محتاج تقييمات العملاء) — Office بيعرض الرصيد بس.
+  let bank=null, _otMin=overtimeMinutes, _otPay=overtimePay;
+  const _bankOnHere = (typeof TimeBank!=='undefined') && TimeBank.enabledFor(cfg, start.getTime()) && !ofIsSetupShift(emp,data.shiftDefs);
+  let tcSummary;
+  if(_bankOnHere){
+    const _req=function(sh){ const d=((data.shiftDefs||{})[sh.attendanceShiftKey])||{}; const st=sh.scheduledStartTime||d.start, en=sh.scheduledEndTime||d.end;
+      if(!/^\d{1,2}:\d{2}$/.test(String(st))||!/^\d{1,2}:\d{2}$/.test(String(en))) return 0;
+      const m=function(x){ const a=String(x).split(':').map(Number); return a[0]*60+(a[1]||0); }; let v=m(en)-m(st); if(v<=0) v+=1440; return v>16*60?0:v; };
+    bank=TimeBank.monthSummary(rangeShifts,cfg,_req); const bm=TimeBank.money(bank.balanceMin,hourlyRate); bank.money=bm;
+    _otMin=bm.overtimeMin; _otPay=bm.overtimePay;
+    tcSummary=ofMonthlyTimeSummary(tcEntries.filter(function(x){ return x.type!=='late'&&x.type!=='early'; }),cfg);
+  } else tcSummary=ofMonthlyTimeSummary(tcEntries,cfg);
+  const timeCreditHours=bank?Math.round(bank.minusMin/60*100)/100:tcSummary.totalHours,timeCreditDays=tcSummary.days;
+  const timeCreditDeduction=Math.round(((bank?bank.money.deduction:0)+timeCreditDays*dailyRate)*100)/100;
   const adminDeductions=(data.deductions||[]).filter(function(d){ const t=d.ts||new Date((d.date||'')+'T00:00:00').getTime(); return d.employeeId===emp.id&&t>=start.getTime()&&t<=end.getTime(); }).reduce(function(x,d){return x+(Number(d.amount)||0);},0);
   const full=end>=naturalMonthEnd;
   const payDay=Number(data.payDay)||6;
@@ -6007,8 +6019,8 @@ function ofComputeSalary(emp, periodStart, end, data){
   const advancesTotal=periodAdvances.reduce(function(sum,a){return sum+(Number(a.amount)||0);},0);
   const advCash=periodAdvances.filter(function(a){return String(a.source||'').indexOf('staff_order')!==0;}).reduce(function(x,a){return x+(Number(a.amount)||0);},0);
   const advOrders=Math.round((advancesTotal-advCash)*100)/100;
-  const netSalary=Math.round((proratedBase-deductionAmount-timeCreditDeduction-adminDeductions+overtimePay+dayOffBonusAmount-advancesTotal)*100)/100;
-  return { proratedBase:proratedBase,overtimeMinutes:overtimeMinutes,overtimePay:overtimePay,dayOffOccurrences:dayOffOccurrences,extraOffDays:extraOffDays,deductionAmount:deductionAmount,
+  const netSalary=Math.round((proratedBase-deductionAmount-timeCreditDeduction-adminDeductions+_otPay+dayOffBonusAmount-advancesTotal)*100)/100;
+  return { bank:bank, proratedBase:proratedBase,overtimeMinutes:_otMin,overtimePay:_otPay,dayOffOccurrences:dayOffOccurrences,extraOffDays:extraOffDays,deductionAmount:deductionAmount,
     timeCreditHours:timeCreditHours,timeCreditDays:timeCreditDays,timeCreditDeduction:timeCreditDeduction,adminDeductions:adminDeductions,
     dayOffBonusDays:dayOffBonusDays,dayOffBonusHours:dayOffBonusHours,dayOffBonusAmount:dayOffBonusAmount,advancesTotal:advancesTotal,advCash:advCash,advOrders:advOrders,
     netSalary:netSalary,daysInCalc:daysInCalc,attendedDays:attendedDays,elapsedWorkDays:elapsedWorkDays,absenceDays:absenceDays,
@@ -6237,7 +6249,9 @@ window.ofHubMoney = async function(empId){
       + (calc.overtimePay > 0 ? row('إضافي (' + calc.overtimeMinutes + 'د)', '+' + egp(calc.overtimePay), '#4ade80') : '')
       + (calc.dayOffBonusAmount > 0 ? row('شغل يوم الإجازة (' + (calc.dayOffBonusHours || 0) + ' ساعة)', '+' + egp(calc.dayOffBonusAmount), '#4ade80') : '')
       + (calc.deductionAmount > 0 ? row('خصم غياب (' + calc.extraOffDays + ' يوم)', '−' + egp(calc.deductionAmount), '#f87171') : '')
-      + (calc.timeCreditDeduction > 0 ? row('⏳ رصيد الوقت (' + calc.timeCreditHours + ' ساعة = ' + calc.timeCreditDays + ' يوم)', '−' + egp(calc.timeCreditDeduction), '#f87171') : '')
+      + (calc.bank ? row('🏦 رصيد الوقت ' + TimeBank.fmtMin(calc.bank.balanceMin) + ' · ' + calc.bank.lateCount + ' تأخير' + (calc.bank.otherDays ? ' + ' + calc.timeCreditDays + ' يوم بريك/تبديل' : ''), calc.bank.balanceMin < 0 ? '−' + egp(calc.timeCreditDeduction) : (calc.timeCreditDeduction > 0 ? '−' + egp(calc.timeCreditDeduction) : '✓'), calc.bank.balanceMin < 0 ? '#f87171' : '#4ade80')
+          + '<div style="font-size:11px; color:var(--sub);">🎁 الحافز الأسبوعي بيتحسب ويتصرف من تطبيق sales (محتاج تقييمات العملاء)</div>'
+        : (calc.timeCreditDeduction > 0 ? row('⏳ رصيد الوقت (' + calc.timeCreditHours + ' ساعة = ' + calc.timeCreditDays + ' يوم)', '−' + egp(calc.timeCreditDeduction), '#f87171') : ''))
       + (calc.adminDeductions > 0 ? row('خصومات إدارية', '−' + egp(calc.adminDeductions), '#f87171') : '')
       + (calc.advancesTotal > 0 ? row('سلف' + (calc.advOrders > 0 ? ' (كاش ' + calc.advCash + ' · أوردرات ' + calc.advOrders + ')' : ''), '−' + egp(calc.advancesTotal), '#f87171') : '')
       + '<div style="display:flex; justify-content:space-between; font-size:13.5px; font-weight:900; padding:6px 0; margin-top:4px; border-top:1px solid var(--line);"><span>الصافي</span><span style="color:#4ade80;">' + egp(calc.netSalary) + '</span></div></div>';
