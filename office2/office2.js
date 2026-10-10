@@ -154,6 +154,15 @@ function sumTotal(list){ return list.reduce((n,s)=> n + (Number(s.total)||0), 0)
 function payBreak(list){ const o = {}; list.forEach(s=>{ Object.entries(s.payments||{}).forEach(([k,v])=>{ o[k] = (o[k]||0) + (Number(v)||0); }); }); return o; }
 const SHIFT_AR = { morning:'صباحي', evening:'مسائي', setup:'تجهيز' };
 const PAY_AR = { cash:'كاش', visa:'فيزا', instapay:'إنستاباي', wallet:'محفظة', credit:'رصيد', points:'نقط' };
+// 💳 ملخص طرق الدفع ليوم: المبلغ · عدد الفواتير · النسبة · المرتجع
+function paymentSummaryHtml(list){
+  const ok = list.filter(s=> !s.reversed && !s.isReversal); const pos = ok.filter(s=> Number(s.total) >= 0); const ret = ok.filter(s=> Number(s.total) < 0);
+  const agg = {}; pos.forEach(s=>{ Object.entries(s.payments||{}).forEach(([k,v])=>{ if(!(Number(v)>0)) return; agg[k] = agg[k] || { amt:0, n:0 }; agg[k].amt += Number(v); agg[k].n++; }); });
+  const gross = Object.values(agg).reduce((n,x)=> n + x.amt, 0); const retSum = ret.reduce((n,s)=> n + (Number(s.total)||0), 0);
+  const order = ['cash','visa','instapay','wallet','credit','points'];
+  const rows = Object.entries(agg).sort((a,b)=> (order.indexOf(a[0])+1||99) - (order.indexOf(b[0])+1||99)).map(([k,x])=>{ const pct = gross ? Math.round(x.amt/gross*100) : 0; return `<div class="row" style="cursor:default"><div class="n"><b>${esc(PAY_AR[k]||k)}</b><small>${x.n} فاتورة · ${pct}%</small></div><div class="bar" style="width:34%;height:7px;margin-inline-end:8px"><i style="width:${pct}%"></i></div><b class="money">${n0(x.amt)}</b></div>`; }).join('');
+  return `<div class="card"><h3>💳 طرق الدفع <small>${pos.length} فاتورة${ret.length?' · '+ret.length+' مرتجع':''}</small></h3>${rows || '<div class="empty">مفيش مبيعات</div>'}${ret.length?`<div class="row" style="cursor:default"><div class="n"><b>↩️ مرتجعات</b><small>${ret.length} فاتورة</small></div><b class="money dn">${n0(retSum)}</b></div>`:''}<div class="row" style="cursor:default;border-top:2px solid var(--ink)"><div class="n"><b>الصافي</b></div><b class="money" style="font-size:17px">${n0(gross + retSum)}</b></div></div>`;
+}
 function lastSaleTs(empId, from, to){ let b = 0; D.points.forEach(p=>{ if(p.employeeId===empId && p.ts>=from && p.ts<=to && p.ts>b) b = p.ts; }); return b; }
 /* 🧹 الشيفت المنسي يتقفل لوحده (نفس منطق sales) */
 const fixed = new Set();
@@ -218,7 +227,7 @@ function rToday(){
     return `<div class="row" onclick="O2.go('emp','${e.id}')"><span class="sdot ${s?(brk?'brk':''):'off'}"></span><div class="n"><b>${esc(e.name)} · ${esc(String(e.branch||'').replace('echarpe ',''))}</b><small>${st} · ${pointsIn(e.id, t0, now)} نقطة النهاردة</small></div>${pill}</div>`;
   }).join('');
   return `<div class="full">${al}</div>
-    <div class="card"><h3>💰 مبيعات النهاردة <small>لحد ${hm(now)} · اضغط الفرع للتفاصيل</small></h3><div class="kpis">${kp || '<div class="empty">—</div>'}</div></div>
+    <div class="card"><h3>💰 مبيعات النهاردة · <span class="money">${n0(branches().reduce((n,b)=> n + sumTotal(todaySales(b, t0)), 0))}</span> <small>لحد ${hm(now)} · اضغط الفرع للتفاصيل</small></h3><div class="kpis">${kp || '<div class="empty">—</div>'}</div></div>
     <div class="card"><h3>👥 مين موجود دلوقتي <small>${present.length} من ${emps.length}</small></h3>${rows || '<div class="empty">لسه مفيش موظفين</div>'}</div>`;
 }
 function todayShift(e){ const t0 = caiDayStart(Date.now()); return D.shifts.find(s=> s.employeeId===e.id && s.clockInTs >= t0 && s.clockOutTs); }
@@ -258,7 +267,7 @@ function rBranch(){
   if(list === null) return nav + '<div class="card"><div class="skel"></div><div class="skel" style="width:60%;margin-top:8px"></div></div>';
   const ok = list.filter(s=> !s.reversed && !s.isReversal); const ret = list.filter(s=> Number(s.total) < 0); const pb = payBreak(ok);
   const pieces = ok.reduce((n,s)=> n + (s.items||[]).reduce((m,it)=> m + (it && !it.isRedemption ? (it.isReturn?-1:1)*(Number(it.qty)||0) : 0), 0), 0);
-  const kpis = `<div class="card"><h3>💰 ${dayKey===caiKey(Date.now())?'النهاردة':'اليوم ده'} <small>${ok.length} فاتورة${ret.length?' · '+ret.length+' مرتجع':''}</small></h3><div class="kpis"><div class="kpi"><small>المبيعات</small><b>${n0(sumTotal(ok))}</b></div><div class="kpi"><small>القطع</small><b>${n0(pieces)}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${ok.length?n0(sumTotal(ok)/ok.length):'—'}</b></div></div><div class="hint">${Object.entries(pb).filter(([k,v])=>v).map(([k,v])=> (PAY_AR[k]||k)+' '+n0(v)).join(' · ') || '—'}</div></div>`;
+  const kpis = `<div class="card"><h3>💰 ${dayKey===caiKey(Date.now())?'النهاردة':'اليوم ده'} <small>${ok.length} فاتورة${ret.length?' · '+ret.length+' مرتجع':''}</small></h3><div class="kpis"><div class="kpi"><small>المبيعات</small><b>${n0(sumTotal(ok))}</b></div><div class="kpi"><small>القطع</small><b>${n0(pieces)}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${ok.length?n0(sumTotal(ok)/ok.length):'—'}</b></div></div></div>` + paymentSummaryHtml(list);
   const top = topItems(ok).slice(0, 12).map((x,i)=>`<div class="row" style="cursor:default"><div class="n"><b>${i+1}. ${esc(x.name)}</b><small>${esc(x.barcode)}</small></div><span class="pill p-acc">${x.pieces} قطعة</span><b class="money">${n0(x.revenue)}</b></div>`).join('');
   const bySeller = {}; ok.forEach(s=>{ const k = s.employee || s.seller || '—'; bySeller[k] = bySeller[k] || { n:0, t:0 }; bySeller[k].n++; bySeller[k].t += Number(s.total)||0; });
   const sellers = Object.entries(bySeller).sort((x,y)=> y[1].t - x[1].t).map(([k,v])=>`<div class="row" style="cursor:default"><div class="n"><b>${esc(k)}</b><small>${v.n} فاتورة</small></div><b class="money">${n0(v.t)}</b></div>`).join('');
@@ -272,16 +281,21 @@ function invoiceSheet(dayKey, id){
 }
 
 /* ---------- ٢) الموظفين ---------- */
+let staffQ = '', staffBranch = '';
 function rStaff(){
   head('الموظفين', activeEmps().length + ' موظف · ' + branches().length + ' فروع');
   const range = caiMonthRange(Date.now()); const w = TimeBank.currentWeek(Date.now());
-  return branches().map(b=>{
-    const list = activeEmps().filter(e=> e.branch===b).map(e=>{
+  const q = staffQ.trim().toLowerCase();
+  const tools = `<div class="card full" style="display:flex;gap:6px;align-items:center"><input value="${esc(staffQ)}" placeholder="🔍 ابحث بالاسم" oninput="O2.staffQ(this.value)" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:10px;font-family:inherit"><select onchange="O2.staffBranch(this.value)" style="padding:9px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-weight:800"><option value="">كل الفروع</option>${branches().map(b=>`<option value="${esc(b)}" ${staffBranch===b?'selected':''}>${esc(b.replace('echarpe ',''))}</option>`).join('')}</select></div>`;
+  if(!D.employees.length) return tools + '<div class="card"><div class="skel"></div><div class="skel" style="width:70%;margin-top:8px"></div></div>';
+  return tools + branches().filter(b=> !staffBranch || b===staffBranch).map(b=>{
+    const list = activeEmps().filter(e=> e.branch===b && (!q || String(e.name||'').toLowerCase().includes(q))).map(e=>{
       const s = openShift(e.id); const bm = bankMonth(e, range); const wb = isSetup(e) ? null : weekBonus(e, w); const r = ratingIn(e, range.start, range.end);
       return `<div class="row" onclick="O2.go('emp','${e.id}')"><span class="sdot ${s?'':'off'}"></span><div class="n"><b>${esc(e.name)}</b><small>${esc(SHIFT_AR[e.shift]||e.shift||'')} ${startEndHM(e).s?startEndHM(e).s+'–'+startEndHM(e).e:''} · ${bm.lateCount} تأخير · ${r.avg!=null?'⭐ '+r.avg.toFixed(1):'بدون تقييم'} · ${pointsIn(e.id, range.start, range.end)} نقطة</small></div>${wb?`<span class="pill ${wb.score>=TimeBank.cfgOf(timeCfg(e.branch)).bonusMinScore?'p-good':'p-warn'}">${wb.score}/100</span>`:''}<span class="pill ${bm.balanceMin<0?'p-bad':(bm.balanceMin>0?'p-good':'p-gray')}">${TimeBank.fmtMin(bm.balanceMin)}</span></div>`;
     }).join('');
+    if(!list) return '';
     return `<div class="card"><h3>📍 ${esc(b)} <small>${activeEmps().filter(e=>e.branch===b).length}</small></h3>${list}</div>`;
-  }).join('') || '<div class="empty">لسه بيحمّل…</div>';
+  }).join('') || '<div class="empty">مفيش نتائج</div>';
 }
 
 /* ---------- ٢ب) ملف الموظف ---------- */
@@ -355,6 +369,7 @@ const O2 = {
       if(adv > 0) tx.set(db.collection('sales_advances').doc(), { employeeId:o.employeeId, employeeName:o.employeeName, branch:o.branch, amount:adv, date: caiKey(Date.now()), ts: Date.now(), source: ok ? 'staff_order' : 'staff_order_reject', invoiceNo:o.invoiceNo||'', note });
       tx.update(ref, ok ? { status:'approved', decidedAt: Date.now() } : { status:'rejected', decidedAt: Date.now(), note }); }); toast(ok ? 'اتعتمد ✅' : 'اترفض'); }catch(e){ toast('تعذر: ' + (e && (e.message||e.code))); }
   },
+  staffQ(v){ staffQ = v; const el = document.activeElement; render(); try{ const i = document.querySelector('#screen input[placeholder^="🔍"]'); if(i && el && el.tagName==='INPUT'){ i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }catch(e){} }, staffBranch(v){ staffBranch = v; render(); },
   inboxTab(t){ inboxTab = t; render(); }, moneyTab(t){ moneyTab = t; render(); }, payMonth(d){ payOffset += d; render(); },
   paySheet, paySalary, payComm, addAdvance, addDeduction, addExpense, invoice: invoiceSheet,
   day(d){ const a = branchDay.split('-').map(Number); branchDay = caiKey(caiStamp(a[0],a[1],a[2],12,0) + d*DAY); if(branchDay > caiKey(Date.now())) branchDay = caiKey(Date.now()); render(); }, dayPick(v){ if(v) { branchDay = v; render(); } },
@@ -426,14 +441,16 @@ function rMoney(){
     const rows = list.map(x=>`<div class="row"><div class="n"><b>${esc(x.note||'مصروف')}</b><small>${esc(String(x.branch||'عام').replace('echarpe ',''))} · ${dayName(x.ts)} ${caiParts(x.ts).d} · ${hm(x.ts)}</small></div><b class="money">${n0(x.amount)}</b></div>`).join('');
     return seg + `<div class="card"><h3>🧾 مصاريف الشهر <small>${n0(list.reduce((n,x)=>n+(Number(x.amount)||0),0))} ج</small></h3><div class="btns" style="margin:0 0 8px"><button class="btn p" onclick="O2.addExpense()">➕ مصروف جديد</button></div>${rows || '<div class="empty">مفيش مصاريف الشهر ده</div>'}</div>`;
   }
+  const allToday = branches().reduce((arr,b)=> arr.concat(todaySales(b, t0)), []);
+  const summary = `<div class="card"><h3>📊 كل الفروع النهاردة <small>${n0(sumTotal(allToday.filter(s=>!s.reversed&&!s.isReversal)))} ج</small></h3><div class="hint">اضغط أي فرع تحت لتفاصيل يومه وأي يوم تاني</div></div>` + paymentSummaryHtml(allToday);
   const cards = branches().map(b=>{ const t = todaySales(b, t0); const y = todaySales(b, y0); const pb = payBreak(t);
     const exp = D.expenses.filter(x=> x.branch===b && x.ts >= t0).reduce((n,x)=> n + (Number(x.amount)||0), 0);
     const adv = D.advances.filter(x=> x.branch===b && x.ts >= t0 && String(x.source||'').indexOf('staff_order')!==0).reduce((n,x)=> n + (Number(x.amount)||0), 0);
     const cash = Number(pb.cash)||0; const drawer = cash - exp - adv;
     const parts = Object.entries(pb).filter(([k,v])=> v).map(([k,v])=> (PAY_AR[k]||k)+' '+n0(v)).join(' · ');
-    return `<div class="card"><h3>📍 ${esc(b)} <small>${t.length} فاتورة</small></h3><div class="grid2"><div class="kpi"><small>النهاردة</small><b>${n0(sumTotal(t))}</b></div><div class="kpi"><small>امبارح كله</small><b>${n0(sumTotal(y))}</b></div></div><div class="hint">${parts || '—'}</div>
+    return `<div class="card" onclick="O2.go('branch','${esc(b)}')" style="cursor:pointer"><h3>📍 ${esc(b)} <small>${t.length} فاتورة · افتح ›</small></h3><div class="grid2"><div class="kpi"><small>النهاردة</small><b>${n0(sumTotal(t))}</b></div><div class="kpi"><small>امبارح كله</small><b>${n0(sumTotal(y))}</b></div></div><div class="hint">${parts || '—'}</div>
       <div class="hint">💵 الكاش المتوقع في الدرج: <b class="money">${n0(drawer)}</b> = كاش ${n0(cash)}${exp?' − مصاريف '+n0(exp):''}${adv?' − سلف '+n0(adv):''}</div></div>`; }).join('');
-  return seg + cards;
+  return seg + summary + cards;
 }
 function paySheet(empId){
   const e = empById(empId); if(!e) return; const r = payPeriod(); const label = O2Pay.monthLabel(r.start); const c = salaryOf(e, r); const bon = bonusesOf(e, r); const cm = commOf(e, r); const paid = paidOf(e, label); const net = Math.round((c.netSalary + bon)*100)/100;
