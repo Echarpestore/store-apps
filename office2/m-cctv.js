@@ -380,6 +380,7 @@ function vReview(){
       <select onchange="O2.cctv.rvCam(this.value)" style="${I}">${recordedCameras(x).map(c=> `<option value="${u.esc(c.id)}" ${rv.cam===String(c.id)?'selected':''}>${u.esc(c.label||c.name)}</option>`).join('')}</select>
       <label style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px"><input type="checkbox" ${rv.skip?'checked':''} onchange="O2.cctv.rvSkip(this.checked)" style="width:auto;margin:0"> تخطّي الفاضي</label></div>
     <div id="rvBasket" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px"></div></div>
+    <div class="card full"><h3>🔴 شاشة الكاشير دلوقتي <small>السلة LIVE</small></h3><div id="cctvPinned">${pinnedHtml()}</div><div class="btns"><button class="btn p" onclick="O2.cctv.rvLive()">🔴 ودّيني للكاميرا دلوقتي</button></div><div class="hint">دي السلة اللي على شاشة الـPOS في اللحظة دي، بتتحدّث لوحدها. اللي فوق هي السلة وقت الفيديو.</div></div>
     <div class="card full"><div class="seg" style="flex-wrap:wrap">${RV_FILTERS.map(f=> `<button id="rvF_${f[0]}" class="${rv.filter===f[0]?'on':''}" onclick="O2.cctv.rvFilter('${f[0]}')">${f[1]}</button>`).join('')}</div>
     <div id="rvList" style="max-height:48vh;overflow-y:auto;margin-top:8px">${rvListHtml()}</div>
     <div class="hint">دوس على أي حدث والفيديو يروح له (${RV_LEAD/1000} ثواني قبله) · الوقت بساعة كمبيوتر الفرع · السلل اللي اتسابت من غير بيع بتظهر كتنبيه بس، من غير تفاصيل الأصناف</div></div>`;
@@ -530,6 +531,7 @@ O2.cctv = {
   rvRate(v){ rv.rate = Number(v) || 1; const el = rvVideo(); if(el) el.playbackRate = rv.rate; },
   rvCam(v){ rv.cam = String(v); rvLoad(rv.cur, true); },
   rvSkip(on){ rv.skip = !!on; },
+  rvLive(){ if(st.dayKey !== u.caiKey(Date.now())){ st.dayKey = u.caiKey(Date.now()); rv.pendingAt = Date.now() - 30000; rv.loaded = false; u.render(); return; } rvSeek(Date.now() - 30000, true); },
   rvReload(){ rv.err = ''; rv.loaded = false; loadReview(true); },
   openAt(branch, ms, mins){ const p = profileFor(branch); if(!p){ u.toast('الفرع ده مفيش له كاميرات معرّفة'); return; } st.branch = p.id; openPlayback(p, ms, mins||1, p.playbackCamera); }
 };
