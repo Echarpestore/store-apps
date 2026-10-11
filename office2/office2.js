@@ -38,7 +38,10 @@ let gateHash = null;
 function sessOk(){ try{ const o = JSON.parse(sessionStorage.getItem(SESS_KEY)||'null'); return !!(o && o.exp > Date.now() && (!gateHash || o.h === gateHash)); }catch(e){ return false; } }
 async function gateFlow(user){
   const g = document.getElementById('gate'), a = document.getElementById('app');
-  if(!user){ g.style.display = ''; a.style.display = 'none'; document.getElementById('gateLogin').style.display = ''; document.getElementById('gateCode').style.display = 'none'; return; }
+  /* 🔐 حساب موظف بس (إيميل وباسورد). تطبيق العميلات على نفس الدومين وبيدخل بحساب عميلة/مجهول —
+     ونفس المتصفح بيشارك الدخول، فـOffice كان بيفتح بحساب العميلة وكل كتابة ترجع permission-denied. */
+  const staff = !!(user && user.email && (user.providerData || []).some(p => p && p.providerId === 'password'));
+  if(!staff){ g.style.display = ''; a.style.display = 'none'; document.getElementById('gateLogin').style.display = ''; document.getElementById('gateCode').style.display = 'none'; return; }
   try{ const d = await db.collection('pos_test_settings').doc(GATE_DOC).get(); gateHash = (d.exists && d.data().hash) || null; }catch(e){ gateHash = null; }
   if(!gateHash || sessOk()){ g.style.display = 'none'; a.style.display = ''; boot(); return; }
   document.getElementById('gateLogin').style.display = 'none'; document.getElementById('gateCode').style.display = '';

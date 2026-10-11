@@ -31,3 +31,5 @@ assert(/S\.live = c\['live_' \+ S\.brand\] === true \|\| S\.preview;/.test(SA) &
 const O2S = fs.readFileSync(path.join(__dirname, '..', 'office2', 'stories.js'), 'utf8');
 assert(/update\(\{ mxPreview: true \}\)/.test(O2S) && /preview: savePreview/.test(O2S) && !/stories_cfg'\)\.set\(\{ preview_phones/.test(O2S), 'v2: Office 2 بيعلّم مستند العميلة (مش مستند الإعدادات اللي بيرفض)');
 
+const O2M = fs.readFileSync(path.join(__dirname, '..', 'office2', 'office2.js'), 'utf8');
+assert(/const staff = !!\(user && user\.email && \(user\.providerData \|\| \[\]\)\.some\(p => p && p\.providerId === 'password'\)\);\n\s*if\(!staff\)\{/.test(O2M), 'Office 2: حساب العميلة (من تطبيق العملاء على نفس المتصفح) مبيفتحش Office — لازم دخول موظف');
