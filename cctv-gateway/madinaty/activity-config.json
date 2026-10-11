@@ -1,0 +1,68 @@
+﻿{
+    "employeeZone4":  [
+                          0.48,
+                          0.0,
+                          1.0,
+                          0.78
+                      ],
+    "doorCamera":  8,
+    "sampleSeconds":  1,
+    "version":  555,
+    "doorCrossMaxSeconds":  5,
+    "clearSeconds":  8,
+    "doorOutsideLine":  [
+                            [
+                                0.4612,
+                                0.3549
+                            ],
+                            [
+                                0.5952,
+                                0.3946
+                            ]
+                        ],
+    "staffStateMaxAgeSeconds":  90,
+    "scoreThreshold":  0.45,
+    "doorGateXMargin":  0.025,
+    "doorTrackTtlSeconds":  3.5,
+    "doorSampleSeconds":  0.3,
+    "customerZone4":  [
+                          0.0,
+                          0.30,
+                          0.62,
+                          1.0
+                      ],
+    "doorMinTrackFrames":  3,
+    "doorLineHysteresis":  0.012,
+    "doorInsideLine":  [
+                           [
+                               0.4372,
+                               0.4838
+                           ],
+                           [
+                               0.5712,
+                               0.5378
+                           ]
+                       ],
+    "doorMinTravel":  0.075,
+    "businessDayStartHour":  6,
+    "doorCooldownSeconds":  2,
+    "doorStableFrames":  2,
+    "holdSeconds":  20,
+    "doorScoreThreshold":  0.15,
+    "doorMode":  "roi_directional_flow",
+    "doorRoi":  [
+                    0.34,
+                    0.24,
+                    0.8,
+                    0.99
+                ],
+    "flowMinMagnitude":  1.15,
+    "flowMinActiveFraction":  0.006,
+    "flowMinVerticalRatio":  0.58,
+    "flowMinStepPixels":  0.65,
+    "flowWindow":  7,
+    "flowVotesRequired":  4,
+    "flowMinCentroidTravel":  0.035,
+    "flowCooldownSeconds":  2.5,
+    "doorMaxJump":  0.13
+}

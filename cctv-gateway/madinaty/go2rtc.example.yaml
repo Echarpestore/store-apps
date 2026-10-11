@@ -1,0 +1,15 @@
+# go2rtc config shape used at Madinaty (go2rtc 1.9.14). EXAMPLE ONLY - no real credentials.
+# The real file lives on the branch PC only and must never be committed.
+# XM / XMEye RTSP:  channel = NVR channel (0 for a direct camera), stream 0 = main, 1 = sub.
+api:
+  listen: "127.0.0.1:1984"
+  origin: "*"
+webrtc:
+  listen: "127.0.0.1:8555"
+streams:
+  # cameraN       = raw stream (snapshots: /api/frame.jpeg?src=cameraN)
+  # cameraN_live  = H264 from the sub stream (browser live view + the recorder input)
+  camera4: "rtsp://USER:PASS@NVR_IP:554/user=USER&password=PASS&channel=4&stream=0.sdp?real_stream"
+  camera4_live: "ffmpeg:rtsp://USER:PASS@NVR_IP:554/user=USER&password=PASS&channel=4&stream=1.sdp?real_stream#video=h264#hardware=qsv"
+  camera8: "rtsp://USER:PASS@NVR_IP:554/user=USER&password=PASS&channel=8&stream=1.sdp?real_stream"
+  camera8_live: "ffmpeg:rtsp://USER:PASS@NVR_IP:554/user=USER&password=PASS&channel=8&stream=1.sdp?real_stream#video=h264#hardware=qsv"

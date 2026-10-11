@@ -100,9 +100,22 @@ function fetchJson(url, ms, branchId){
   return fetch(url, { cache:'no-store', credentials:'omit', signal: ctl ? ctl.signal : undefined }).then(r=>{ if(!r.ok) throw new Error('cctv_http_'+r.status); return r.json(); })
     .catch(e=> branchId==='madinaty' ? fetchFrameBridge(url) : Promise.reject(e)).finally(()=> clearTimeout(t));
 }
+/* بعض الـtunnels (مدينتي) بتعدّي /echarpe-playback/* بس للـagent، فـ/health بيرجّع 404 من go2rtc.
+   نجرّب /health، وبعدين نفس الفحص تحت /echarpe-playback/، وآخر حاجة أي endpoint خفيف من الـagent. */
+const HEALTH_PATHS = ['/health', '/echarpe-playback/health', '/echarpe-playback/alerts'];
+async function probeHealth(gateway){
+  let last = new Error('cctv_probe_failed');
+  for(const path of HEALTH_PATHS){
+    let j;
+    try{ j = await fetchJson(gateway+path+'?_='+Date.now(), 6000); }catch(e){ last = e; continue; }   // المسار مش موصول — جرّب اللي بعده
+    if(j && j.ok===false) throw new Error('cctv_unhealthy');   // الـagent ردّ وقال إنه مش سليم — ده تحذير حقيقي
+    return j;
+  }
+  throw last;
+}
 async function probeGateways(force){
   if(!force && warnAt && Date.now() - warnAt < 2*60000) return; warnAt = Date.now();
-  await Promise.all(BRANCHES.map(x=> fetchJson(agentGateway(x)+'/health?_='+Date.now(), 6000).then(()=>{ warn[x.id] = false; }, ()=>{ warn[x.id] = true; })));
+  await Promise.all(BRANCHES.map(x=> probeHealth(agentGateway(x)).then(()=>{ warn[x.id] = false; }, ()=>{ warn[x.id] = true; })));
   if(u.screen()==='cctv') u.render();
 }
 
