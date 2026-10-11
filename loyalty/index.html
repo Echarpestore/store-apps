@@ -29,7 +29,7 @@
 <!-- 💬 محرك الشات المشترك — مصدر واحد مع POS (مفيش نسخة تانية تتنسى) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/tiers-core.js?v=1"></script>
-<script src="../pos/stories-app.js?v=4"></script>
+<script src="../pos/stories-app.js?v=5"></script>
 <!-- 🌐 محرك اللغتين — مشترك مع Glow. لازم **قبل** أي رسم عشان
      الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
@@ -2120,9 +2120,9 @@ function redeemBlockHtml(){
 }
 
 /* 🏅 TIERS-v1 — قسم المستوى في «بطاقتي». بيظهر بس لو loyalty.tiers.enabled = true (قرار المالك وقت الإطلاق)
-   — أو لرقم التجربة اللي المالك حاطه في Office 2 (👀 preview_phones). */
+   — أو لرقم التجربة اللي المالك حاطه في Office 2 (👀 علامة mxPreview على مستندها). */
 function mxTiersOn(){
-  try{ return !!(window.Tiers && (Tiers.enabled(loyaltyCfg) || (window.StoriesApp && StoriesApp.preview && StoriesApp.preview()))); }catch(e){ return false; }
+  try{ return !!(window.Tiers && (Tiers.enabled(loyaltyCfg) || (currentCustomer && currentCustomer.mxPreview === true))); }catch(e){ return false; }
 }
 function tiersSectionHtml(){
   try{
@@ -2167,8 +2167,8 @@ function renderCard(){
   var code = currentCustomer.loyaltyCode || '';
 
   /* 📸 الستوري و«مختارة ليكي» — مقفولين لحد ما المالك يفتحهم من Office 2 (stories_cfg.live_echarpe)
-     أو لرقم التجربة (preview_phones). بتتحمّل مرة واحدة بعد الدخول (القواعد محتاجة العميلة تكون داخلة). */
-  if(window.StoriesApp && !renderCard._st){ renderCard._st = 1; StoriesApp.init(db, CATALOG_BRAND, function(){ if(currentTab === 'card' && !StoriesApp.isOpen()) renderCard(); }, currentCustomer.phone); }
+     أو لرقم التجربة (mxPreview). بتتحمّل مرة واحدة بعد الدخول (القواعد محتاجة العميلة تكون داخلة). */
+  if(window.StoriesApp && !renderCard._st){ renderCard._st = 1; StoriesApp.init(db, CATALOG_BRAND, function(){ if(currentTab === 'card' && !StoriesApp.isOpen()) renderCard(); }, currentCustomer.mxPreview === true); }
 
   /* 🌸 MAISON: الكارت بينك في كل المستويات — المستوى «حافة معدن» بس، ولو المستويات مفتوحة بس */
   var mxTier = '';

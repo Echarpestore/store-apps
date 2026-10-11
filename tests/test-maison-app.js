@@ -23,11 +23,11 @@ assert(!/progress-wrap|info-grid|goal-wrap|pts-worth/.test(rc), 'v2: الكار�
 assert(/class="mx-pts"/.test(rc) && /class="mx-meta"/.test(rc) && /عضوة من/.test(rc), 'v2: الرقم الكبير + الاسم وتاريخ العضوية');
 assert(/\.topbar \.badge\{display:none\}/.test(L) && /'صباح الخير'/.test(L), 'v2: الهيدر «صباح الخير / الاسم» من غير مربع اللوجو');
 assert(/class="mx-send"/.test(L) && /<b>طلبك وصل<\/b>/.test(L), 'v2: الاستبدال بشكل التجربة (ابعتي الطلب / طلبك وصل)');
-assert(/Tiers\.enabled\(loyaltyCfg\) \|\| \(window\.StoriesApp && StoriesApp\.preview/.test(L), 'v2: المستويات بتظهر لو مفتوحة أو لرقم التجربة بس');
+assert(/Tiers\.enabled\(loyaltyCfg\) \|\| \(currentCustomer && currentCustomer\.mxPreview === true\)/.test(L), 'v2: المستويات بتظهر لو مفتوحة أو لرقم التجربة بس');
 assert(/class="mx-ladder"/.test(L) && /onclick="mxPerk\(/.test(L), 'v2: سلّم المستويات والمميزات بالضغط');
-assert(/StoriesApp\.init\(db, CATALOG_BRAND, function\(\)\{[^}]*\}, currentCustomer\.phone\)/.test(rc), 'v2: رقم العميلة بيتبعت عشان التجربة');
+assert(/StoriesApp\.init\(db, CATALOG_BRAND, function\(\)\{[^}]*\}, currentCustomer\.mxPreview === true\)/.test(rc), 'v2: علامة التجربة بتتبعت للستوري');
 const SA = fs.readFileSync(path.join(__dirname, '..', 'pos', 'stories-app.js'), 'utf8');
-assert(/S\.live = c\['live_' \+ S\.brand\] === true \|\| S\.preview;/.test(SA) && /preview_phones/.test(SA), 'v2: الستوري مفتوحة لرقم التجربة بس');
+assert(/S\.live = c\['live_' \+ S\.brand\] === true \|\| S\.preview;/.test(SA) && /S\.preview = preview === true;/.test(SA), 'v2: الستوري مفتوحة لرقم التجربة بس');
 const O2S = fs.readFileSync(path.join(__dirname, '..', 'office2', 'stories.js'), 'utf8');
-assert(/preview_phones: list/.test(O2S) && /preview: savePreview/.test(O2S), 'v2: Office 2 بيحفظ أرقام التجربة');
+assert(/update\(\{ mxPreview: true \}\)/.test(O2S) && /preview: savePreview/.test(O2S) && !/stories_cfg'\)\.set\(\{ preview_phones/.test(O2S), 'v2: Office 2 بيعلّم مستند العميلة (مش مستند الإعدادات اللي بيرفض)');
 

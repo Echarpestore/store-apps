@@ -83,7 +83,7 @@ function ensureView(){
   var f = document.createElement('div'); f.id = 'o2StFull'; f.innerHTML = '<img alt="">'; f.onclick = function(){ f.classList.remove('on'); }; document.body.appendChild(f);
   document.getElementById('o2StBack').onclick = close;
 }
-function open(){ boot(); ensureView(); S.open = true; document.getElementById('o2St').classList.add('on'); render(); }
+function open(){ boot(); ensureView(); S.open = true; document.getElementById('o2St').classList.add('on'); render(); loadPreview(); }
 function close(){ S.open = false; var v = document.getElementById('o2St'); if(v) v.classList.remove('on'); hook(); }
 
 function render(){
@@ -97,7 +97,7 @@ function render(){
   var h = '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:' + (live ? '#bfe8cf' : '#f3d9a6') + '"><div style="flex:1"><b style="font-size:13.5px">📱 في تطبيق العميلات: ' + (live ? '<span style="color:var(--good)">شغال</span>' : '<span style="color:#9a6500">مقفول</span>') + '</b><div class="hint" style="margin:2px 0 0">' + (live ? 'العميلات شايفين الستوري و«مختارة ليكي»' : 'تقدر توافق وتجهّز براحتك — مفيش حاجة بتظهر للعميلات لحد ما تفتحه') + '</div></div>'
     + '<button class="btn ' + (live ? '' : 'g') + '" onclick="O2Stories.live(' + (!live) + ')">' + (live ? 'اقفل' : 'افتح للعميلات') + '</button></div>';
   /* 👀 تجربة قبل الإطلاق: الأرقام دي بس بتشوف الستوري والمستويات في التطبيق حتى لو مقفول */
-  var pv = (S.cfg.preview_phones || []).join('، ');
+  var pv = (S.pvList || []).join('، ');
   h += '<div class="card"><b style="font-size:13.5px">👀 تجربة على رقمك قبل العميلات</b><div class="hint" style="margin:2px 0 8px">الأرقام دي بس هتشوف الستوري والمستويات (حافة المعدن) في التطبيق — حتى لو مقفول. افصل بين الأرقام بفاصلة.</div>'
     + '<div style="display:flex;gap:8px"><input id="stPv" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx" value="' + esc(pv) + '" style="flex:1;min-width:0"><button class="btn" onclick="O2Stories.preview()">حفظ</button></div></div>';
   h += '<div class="seg">' + tabs.map(function(t){ return '<button class="' + (S.tab === t[0] ? 'on' : '') + '" onclick="O2Stories.tab(\'' + t[0] + '\')">' + t[1] + '</button>'; }).join('') + '</div>';
@@ -207,10 +207,24 @@ async function addToOffers(s, title, sub){
   await ref.set({ items: items }, { merge: true });
   toast('اتضافت للعروض كمان 🏷️');
 }
+/* 👀 أرقام التجربة: علامة mxPreview على مستند العميلة نفسها (الموظف مسموحله يعدّل مستند العميلة —
+   مستند الإعدادات كان بيرفض: permission-denied). العميلة بتقرا مستندها هي بس، فالعلامة دي آمنة. */
+S.pvList = null;
+function normPhone(x){ var d = String(x || '').replace(/[٠-٩]/g, function(c){ return '٠١٢٣٤٥٦٧٨٩'.indexOf(c); }).replace(/\D/g, ''); if(d.length === 12 && d.indexOf('20') === 0) d = '0' + d.slice(2); if(d.length === 10 && d[0] === '1') d = '0' + d; return d; }
+function loadPreview(){
+  if(S.pvList) return;
+  db.collection('pos_test_customers').where('mxPreview', '==', true).limit(20).get().then(function(q){ S.pvList = q.docs.map(function(d){ return d.id; }); render(); }).catch(function(e){ console.warn('preview', e && e.code); S.pvList = []; });
+}
 async function savePreview(){
-  var raw = (val('stPv') || '').replace(/[٠-٩]/g, function(d){ return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); });
-  var list = raw.split(/[,،\s]+/).map(function(x){ return x.replace(/\D/g, ''); }).filter(function(x){ return x.length >= 10; });
-  try{ await db.collection('pos_test_settings').doc('stories_cfg').set({ preview_phones: list }, { merge: true }); S.cfg.preview_phones = list; toast(list.length ? 'تمام ✅ افتح التطبيق على الرقم ده' : 'اتمسحت أرقام التجربة'); render(); }catch(e){ toast('تعذر: ' + (e && e.code)); }
+  var list = (val('stPv') || '').split(/[,،\s]+/).map(normPhone).filter(function(x){ return x.length >= 10; });
+  var col = db.collection('pos_test_customers'), FV = firebase.firestore.FieldValue, ok = [], bad = [];
+  for(var i = 0; i < list.length; i++){
+    try{ await col.doc(list[i]).update({ mxPreview: true }); ok.push(list[i]); }catch(e){ bad.push(list[i] + (e && e.code === 'not-found' ? ' (مش مسجّلة في التطبيق)' : ' (' + (e && e.code) + ')')); }
+  }
+  var old = S.pvList || [];
+  for(var j = 0; j < old.length; j++){ if(ok.indexOf(old[j]) < 0){ try{ await col.doc(old[j]).update({ mxPreview: FV.delete() }); }catch(e){} } }
+  S.pvList = ok; render();
+  toast(bad.length ? 'تعذر: ' + bad.join('، ') : (ok.length ? 'تمام ✅ اقفل التطبيق وافتحه على الرقم ده' : 'اتمسحت أرقام التجربة'));
 }
 async function setLive(on){
   if(on && !confirm('تفتح الستوري و«مختارة ليكي» للعميلات في تطبيق إيشارب دلوقتي؟')) return;
