@@ -308,7 +308,7 @@ const RV = window.O2CctvReview;
 const RV_CHUNK = 120, RV_PX_MIN = 14, RV_LEAD = 4000;
 const RV_TONE = { add:'#16a34a', del:'#dc2626', edit:'#d97706', pay:'#2563eb', sale:'#0f172a', alert:'#9333ea' };
 const RV_FILTERS = [['all','الكل'],['del','🗑 حذف وتقليل'],['alert','⚠️ تنبيهات'],['sale','🧾 فواتير']];
-const rv = { key:'', branch:'', loaded:false, loading:false, err:'', actErr:false, events:[], timelines:[], span:null, cur:0, chunkStart:0, cam:'', filter:'all', rate:1, skip:false, idx:-2, basketKey:'', pendingAt:0 };
+const rv = { loadToken:0, seekTo:0, aligned:false, key:'', branch:'', loaded:false, loading:false, err:'', actErr:false, events:[], timelines:[], span:null, cur:0, chunkStart:0, cam:'', filter:'all', rate:1, skip:false, idx:-2, basketKey:'', pendingAt:0 };
 function hms(ms){ const p = u.caiParts(ms); return String(p.h).padStart(2,'0') + ':' + String(p.mi).padStart(2,'0') + ':' + String(Math.floor(ms/1000)%60).padStart(2,'0'); }
 function rvMatch(e){ return rv.filter==='all' || (rv.filter==='del' && e.removedValue > 0) || (rv.filter==='alert' && e.tone==='alert') || (rv.filter==='sale' && e.kind==='sale_saved'); }
 async function loadReview(force){
@@ -372,14 +372,16 @@ function vReview(){
   setTimeout(rvMount, 0);
   return nav + `<div class="card full"><h3>📼 مراجعة اليوم <small>${u.esc(x.name)} · ${s.sales} فاتورة · ${s.total} حدث</small></h3>
     <div class="hint" style="margin-top:0">${s.removed ? `🗑 ${s.removed} مرة حذف/تقليل بقيمة <b>${u.n0(s.removedValue)} ج</b>` : '🗑 مفيش حذف من السلة'} · ⚠️ ${s.alerts} تنبيه${rv.actErr ? ' · سجل النشاط ماتحمّلش' : ''}${rv.src && rv.src.sales ? ' · ' + rv.src.sales + ' فاتورة من غير خطوات الإضافة والحذف (سلتها النهائية بس)' : ''}</div>
-    <video id="rvVideo" controls playsinline muted style="width:100%;border-radius:12px;background:#000;max-height:52vh" ontimeupdate="O2.cctv.rvTick()" onended="O2.cctv.rvNext()" onloadeddata="O2.cctv.rvSt('')" onplaying="O2.cctv.rvSt('')" onwaiting="O2.cctv.rvSt('⏳ جاري تحميل الفيديو…')" onerror="O2.cctv.rvSt('⚠️ مفيش تسجيل للوقت ده — أقدم من المتاح أو الـgateway واقع')"></video>
+    <video id="rvVideo" controls playsinline muted style="width:100%;border-radius:12px;background:#000;max-height:52vh" ontimeupdate="O2.cctv.rvTick()" onseeking="O2.cctv.rvTick()" onseeked="O2.cctv.rvSt('');O2.cctv.rvTick()" oncanplay="O2.cctv.rvSt('')" onended="O2.cctv.rvNext()" onloadeddata="O2.cctv.rvReady()" onplaying="O2.cctv.rvSt('')" onwaiting="O2.cctv.rvSt('⏳ جاري تحميل الفيديو…')" onerror="O2.cctv.rvSt('⚠️ مفيش تسجيل للوقت ده — أقدم من المتاح أو الـgateway واقع')"></video>
+    <div id="rvBasket" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:6px;min-height:44px"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0"><b id="rvClock" style="font-size:18px;font-variant-numeric:tabular-nums">${hms(rv.cur)}</b><span id="rvSt" class="hint" style="margin:0"></span></div>
     ${rvStripHtml()}
     <div class="btns" style="align-items:center;flex-wrap:wrap"><button class="btn" onclick="O2.cctv.rvStep(-1)">⏮ الحدث السابق</button><button class="btn p" onclick="O2.cctv.rvStep(1)">الحدث التالي ⏭</button><button class="btn" onclick="O2.cctv.rvJump(-10)">−10ث</button><button class="btn" onclick="O2.cctv.rvJump(10)">+10ث</button>
       <select onchange="O2.cctv.rvRate(this.value)" style="${I}">${[1,2,4,8].map(v=> `<option value="${v}" ${rv.rate===v?'selected':''}>${v}×</option>`).join('')}</select>
       <select onchange="O2.cctv.rvCam(this.value)" style="${I}">${recordedCameras(x).map(c=> `<option value="${u.esc(c.id)}" ${rv.cam===String(c.id)?'selected':''}>${u.esc(c.label||c.name)}</option>`).join('')}</select>
       <label style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px"><input type="checkbox" ${rv.skip?'checked':''} onchange="O2.cctv.rvSkip(this.checked)" style="width:auto;margin:0"> تخطّي الفاضي</label></div>
-    <div id="rvBasket" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px"></div></div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:12px"><span id="rvAlign" class="hint" style="margin:0;flex:1"></span><span class="hint" style="margin:0">ضبط السلة:</span><button class="btn" style="padding:4px 9px" onclick="O2.cctv.rvNudge(-500)">السلة بدري ◀</button><b id="rvOff" style="min-width:44px;text-align:center">0.0ث</b><button class="btn" style="padding:4px 9px" onclick="O2.cctv.rvNudge(500)">▶ السلة متأخرة</button></div>
+    </div>
     <div class="card full"><h3>🔴 شاشة الكاشير دلوقتي <small>السلة LIVE</small></h3><div id="cctvPinned">${pinnedHtml()}</div><div class="btns"><button class="btn p" onclick="O2.cctv.rvLive()">🔴 ودّيني للكاميرا دلوقتي</button></div><div class="hint">دي السلة اللي على شاشة الـPOS في اللحظة دي، بتتحدّث لوحدها. اللي فوق هي السلة وقت الفيديو.</div></div>
     <div class="card full"><div class="seg" style="flex-wrap:wrap">${RV_FILTERS.map(f=> `<button id="rvF_${f[0]}" class="${rv.filter===f[0]?'on':''}" onclick="O2.cctv.rvFilter('${f[0]}')">${f[1]}</button>`).join('')}</div>
     <div id="rvList" style="max-height:48vh;overflow-y:auto;margin-top:8px">${rvListHtml()}</div>
@@ -387,18 +389,28 @@ function vReview(){
 }
 function rvVideo(){ return document.getElementById('rvVideo'); }
 function rvUrl(atMs){ const x = site(); return agentGateway(x) + '/echarpe-playback/video?camera=' + encodeURIComponent(rv.cam) + '&atMs=' + Math.floor(atMs) + '&durationSec=' + RV_CHUNK + '&quality=360&mode=fast'; }
-function rvLoad(ms, autoplay){
-  const v = rvVideo(); if(!v) return;
-  rv.chunkStart = Math.floor(ms); rv.cur = rv.chunkStart; v.src = rvUrl(rv.chunkStart); v.playbackRate = rv.rate;
-  rvSt('⏳ جاري تحميل الفيديو…'); if(autoplay){ const p = v.play(); if(p && p.catch) p.catch(()=>{}); }
-  rvPaint(true);
+/* 🎯 التزامن: الفيديو بيتقطع عند keyframe، فلو طلبنا وقت عشوائي القطعة بتبدأ بعده بثواني (اتقاس: 0 لـ3ث).
+   الحل: نسأل الـagent الأول «أقرب بداية segment قبل الوقت ده فين؟» ونطلب القطعة من البداية دي بالظبط.
+   لو الـagent قديم (مفيش clip-start) بنكمل بالطريقة القديمة ونعلّم إن التزامن تقريبي. */
+function rvOffKey(){ return 'o2.cctv.sync.' + rv.branch + '.' + rv.cam; }
+function rvOff(){ try{ return Number(localStorage.getItem(rvOffKey())) || 0; }catch(e){ return 0; } }
+function rvOffLabel(){ const el = document.getElementById('rvOff'); if(el){ const o = rvOff(); el.textContent = (o > 0 ? '+' : '') + (o / 1000).toFixed(1) + 'ث'; } const a = document.getElementById('rvAlign'); if(a) a.textContent = rv.aligned ? '🎯 تزامن دقيق' : '≈ تزامن تقريبي (لحد 5ث) — الـagent محتاج تحديث'; }
+async function rvLoad(ms, autoplay){
+  const v = rvVideo(); if(!v) return; const x = site(); const want = Math.floor(ms), token = ++rv.loadToken;
+  rvSt('⏳ جاري تحميل الفيديو…'); let start = want, aligned = false;
+  try{ const j = await fetchJson(agentGateway(x) + '/echarpe-playback/clip-start?camera=' + encodeURIComponent(rv.cam) + '&atMs=' + want + '&_=' + Date.now(), 4000); if(j && j.ok && Number(j.startMs) > 0 && want - Number(j.startMs) < 30000){ start = Number(j.startMs); aligned = true; } }catch(e){}
+  if(token !== rv.loadToken || rvVideo() !== v) return;      // طلب أحدث سبق
+  rv.aligned = aligned; rv.chunkStart = start; rv.seekTo = aligned ? Math.max(0, (want - start) / 1000) : 0; rv.cur = want;
+  v.src = rvUrl(start); v.playbackRate = rv.rate;
+  if(autoplay){ const p = v.play(); if(p && p.catch) p.catch(()=>{}); }
+  rvOffLabel(); rvPaint(true);
 }
 function rvSeek(ms, autoplay){
   const v = rvVideo(); if(!v || !rv.span) return;
   ms = Math.max(rv.span.start, Math.min(ms, Math.max(rv.span.start, Date.now() - 20000)));
-  const off = (ms - rv.chunkStart) / 1000;
+  const off = (ms - rvOff() - rv.chunkStart) / 1000;
   if(rv.chunkStart && off >= 0 && off < RV_CHUNK - 3 && v.readyState >= 1 && isFinite(v.duration) && off < v.duration - 1){ v.currentTime = off; rv.cur = ms; if(autoplay){ const p = v.play(); if(p && p.catch) p.catch(()=>{}); } rvPaint(true); }
-  else rvLoad(ms, autoplay);
+  else rvLoad(ms - rvOff(), autoplay);
 }
 function rvMount(){ const v = rvVideo(); if(!v || v.getAttribute('data-on')) return; v.setAttribute('data-on','1'); rv.idx = -2; rv.basketKey = ''; rvLoad(rv.cur || rv.span.start, !!rv.resume); rv.resume = false; }
 function rvSt(t){ const el = document.getElementById('rvSt'); if(el) el.textContent = t; }
@@ -417,10 +429,12 @@ function rvPaint(scroll){
 }
 function rvTick(){
   const v = rvVideo(); if(!v || !rv.chunkStart) return;
-  rv.cur = rv.chunkStart + v.currentTime * 1000; rvPaint(false);
+  if(rv.seekTo > 0) return;                                 // لسه هننط لبداية اللحظة المطلوبة جوّه القطعة
+  rv.cur = rv.chunkStart + v.currentTime * 1000 + rvOff(); rvPaint(false);
   // تخطّي الفاضي: لو مفيش حدث قريب، نط لقبل الحدث الجاي على طول
   if(rv.skip && !v.paused){ const i = RV.nearestIndex(rv.events, rv.cur), next = rv.events[i+1], last = rv.events[i]; if(next && next.atMs - rv.cur > 45000 && (!last || rv.cur - last.atMs > 12000)) rvSeek(next.atMs - RV_LEAD, true); }
 }
+function rvReady(){ rvSt(''); const v = rvVideo(); if(v && rv.seekTo > 0){ const t = rv.seekTo; rv.seekTo = 0; try{ v.currentTime = t; }catch(e){} } }
 function rvNext(){ const at = rv.chunkStart + RV_CHUNK * 1000; if(rv.span && at < Math.min(rv.span.end, Date.now() - 30000)) rvLoad(at, true); else rvSt('⏹ آخر اليوم'); }
 function rvStep(dir){
   let i = RV.nearestIndex(rv.events, rv.cur + (dir > 0 ? RV_LEAD + 1500 : -1500));
@@ -530,7 +544,8 @@ O2.cctv = {
   rvJump(sec){ rvSeek(rv.cur + sec * 1000, true); },
   rvRate(v){ rv.rate = Number(v) || 1; const el = rvVideo(); if(el) el.playbackRate = rv.rate; },
   rvCam(v){ rv.cam = String(v); rvLoad(rv.cur, true); },
-  rvSkip(on){ rv.skip = !!on; },
+  rvSkip(on){ rv.skip = !!on; }, rvReady,
+  rvNudge(d){ try{ localStorage.setItem(rvOffKey(), String(Math.max(-15000, Math.min(15000, rvOff() + d)))); }catch(e){} rv.basketKey = ''; rv.idx = -2; rvOffLabel(); rvTick(); },
   rvLive(){ if(st.dayKey !== u.caiKey(Date.now())){ st.dayKey = u.caiKey(Date.now()); rv.pendingAt = Date.now() - 30000; rv.loaded = false; u.render(); return; } rvSeek(Date.now() - 30000, true); },
   rvReload(){ rv.err = ''; rv.loaded = false; loadReview(true); },
   openAt(branch, ms, mins){ const p = profileFor(branch); if(!p){ u.toast('الفرع ده مفيش له كاميرات معرّفة'); return; } st.branch = p.id; openPlayback(p, ms, mins||1, p.playbackCamera); }
