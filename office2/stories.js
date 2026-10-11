@@ -96,6 +96,10 @@ function render(){
   var live = S.cfg.live_echarpe === true;
   var h = '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:' + (live ? '#bfe8cf' : '#f3d9a6') + '"><div style="flex:1"><b style="font-size:13.5px">📱 في تطبيق العميلات: ' + (live ? '<span style="color:var(--good)">شغال</span>' : '<span style="color:#9a6500">مقفول</span>') + '</b><div class="hint" style="margin:2px 0 0">' + (live ? 'العميلات شايفين الستوري و«مختارة ليكي»' : 'تقدر توافق وتجهّز براحتك — مفيش حاجة بتظهر للعميلات لحد ما تفتحه') + '</div></div>'
     + '<button class="btn ' + (live ? '' : 'g') + '" onclick="O2Stories.live(' + (!live) + ')">' + (live ? 'اقفل' : 'افتح للعميلات') + '</button></div>';
+  /* 👀 تجربة قبل الإطلاق: الأرقام دي بس بتشوف الستوري والمستويات في التطبيق حتى لو مقفول */
+  var pv = (S.cfg.preview_phones || []).join('، ');
+  h += '<div class="card"><b style="font-size:13.5px">👀 تجربة على رقمك قبل العميلات</b><div class="hint" style="margin:2px 0 8px">الأرقام دي بس هتشوف الستوري والمستويات (حافة المعدن) في التطبيق — حتى لو مقفول. افصل بين الأرقام بفاصلة.</div>'
+    + '<div style="display:flex;gap:8px"><input id="stPv" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx" value="' + esc(pv) + '" style="flex:1;min-width:0"><button class="btn" onclick="O2Stories.preview()">حفظ</button></div></div>';
   h += '<div class="seg">' + tabs.map(function(t){ return '<button class="' + (S.tab === t[0] ? 'on' : '') + '" onclick="O2Stories.tab(\'' + t[0] + '\')">' + t[1] + '</button>'; }).join('') + '</div>';
   if(S.tab === 'pending') h += P.length ? P.map(pendingCard).join('') : '<div class="empty">مفيش ستوري مستنية 👌<br><small>الموظفات بيرفعوا من Sales ← صفحة الموظفة ← 📸 ستوري</small></div>';
   else if(S.tab === 'live') h += '<div class="card"><h3>ستوري النهارده في التطبيق <small>' + pub.length + '</small></h3>' + (pub.length ? pub.map(function(s){ return mini(s, '<button class="btn r" onclick="O2Stories.archive(\'' + s.id + '\')">شيلها</button>'); }).join('') : '<div class="empty">مفيش ستوري منشورة دلوقتي</div>') + '</div>'
@@ -203,6 +207,11 @@ async function addToOffers(s, title, sub){
   await ref.set({ items: items }, { merge: true });
   toast('اتضافت للعروض كمان 🏷️');
 }
+async function savePreview(){
+  var raw = (val('stPv') || '').replace(/[٠-٩]/g, function(d){ return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); });
+  var list = raw.split(/[,،\s]+/).map(function(x){ return x.replace(/\D/g, ''); }).filter(function(x){ return x.length >= 10; });
+  try{ await db.collection('pos_test_settings').doc('stories_cfg').set({ preview_phones: list }, { merge: true }); S.cfg.preview_phones = list; toast(list.length ? 'تمام ✅ افتح التطبيق على الرقم ده' : 'اتمسحت أرقام التجربة'); render(); }catch(e){ toast('تعذر: ' + (e && e.code)); }
+}
 async function setLive(on){
   if(on && !confirm('تفتح الستوري و«مختارة ليكي» للعميلات في تطبيق إيشارب دلوقتي؟')) return;
   try{ await db.collection('pos_test_settings').doc('stories_cfg').set({ live_echarpe: !!on, liveChangedAt: Date.now() }, { merge: true }); S.cfg.live_echarpe = !!on; toast(on ? 'اتفتح للعميلات ✅' : 'اتقفل'); render(); }catch(e){ toast('تعذر: ' + (e && e.code)); }
@@ -277,6 +286,6 @@ async function processPoints(){
 }
 
 window.O2Stories = { open: open, close: close, tab: function(t){ S.tab = t; S.noteFor = null; render(); if(t === 'turn') processPoints(); },
-  approve: approve, note: note, live: setLive, changes: changes, reject: reject, archive: archive, unhome: unhome, full: full, pendingCount: function(){ return pending().length; }, _process: processPoints };
+  approve: approve, note: note, live: setLive, preview: savePreview, changes: changes, reject: reject, archive: archive, unhome: unhome, full: full, pendingCount: function(){ return pending().length; }, _process: processPoints };
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchScreen); else watchScreen();
 })();

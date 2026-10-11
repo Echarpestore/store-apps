@@ -17,6 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=El+Messiri:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Italiana&display=swap" rel="stylesheet">
 
 <!-- Firebase (compat — نفس إصدار الكاشير عشان يقرا نفس البيانات) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -28,7 +29,7 @@
 <!-- 💬 محرك الشات المشترك — مصدر واحد مع POS (مفيش نسخة تانية تتنسى) -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/tiers-core.js?v=1"></script>
-<script src="../pos/stories-app.js?v=3"></script>
+<script src="../pos/stories-app.js?v=4"></script>
 <!-- 🌐 محرك اللغتين — مشترك مع Glow. لازم **قبل** أي رسم عشان
      الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
@@ -775,9 +776,9 @@
   --mx-foil:linear-gradient(105deg,#0B0B0C 0%,#3A3638 34%,#060606 52%,#2C292A 72%,#0B0B0C 100%);
   --mx-metal:linear-gradient(115deg,#6e3a1f 0%,#c98a5c 32%,#f3cfae 50%,#b4733f 70%,#6e3a1f 100%); --mx-metal-ink:#3a1d0c;
 }
-.card-flip[data-tier="silver"]{--mx-metal:linear-gradient(115deg,#6f757d 0%,#c9ced5 32%,#ffffff 50%,#a7adb5 70%,#6f757d 100%);--mx-metal-ink:#1c2026}
-.card-flip[data-tier="gold"]{--mx-metal:linear-gradient(115deg,#8a5a12 0%,#d9a53f 32%,#fff1c2 50%,#c99733 70%,#8a5a12 100%);--mx-metal-ink:#2b1d05}
-.card-flip[data-tier="platinum"]{--mx-metal:linear-gradient(115deg,#16161c 0%,#55576a 32%,#eceef4 50%,#787b8a 70%,#16161c 100%);--mx-metal-ink:#fff}
+.card-flip[data-tier="silver"],.mx-pk[data-tier="silver"]{--mx-metal:linear-gradient(115deg,#6f757d 0%,#c9ced5 32%,#ffffff 50%,#a7adb5 70%,#6f757d 100%);--mx-metal-ink:#1c2026}
+.card-flip[data-tier="gold"],.mx-pk[data-tier="gold"]{--mx-metal:linear-gradient(115deg,#8a5a12 0%,#d9a53f 32%,#fff1c2 50%,#c99733 70%,#8a5a12 100%);--mx-metal-ink:#2b1d05}
+.card-flip[data-tier="platinum"],.mx-pk[data-tier="platinum"]{--mx-metal:linear-gradient(115deg,#16161c 0%,#55576a 32%,#eceef4 50%,#787b8a 70%,#16161c 100%);--mx-metal-ink:#fff}
 @keyframes mxFoil{0%,100%{background-position:0% 0}50%{background-position:100% 0}}
 .card{color:#1E1417; box-shadow:0 22px 44px -22px rgba(201,87,126,.55);}
 .card-front::before{content:"";position:absolute;inset:9px;border-radius:19px;border:1px solid rgba(30,20,23,.16);pointer-events:none;z-index:0}
@@ -819,6 +820,96 @@
 .mx-tr-perks{background:#fff;border:1px solid var(--line);border-radius:18px;padding:4px 14px 8px;animation:mxIn .45s cubic-bezier(.16,1,.3,1)}
 .mx-tr-ph{display:flex;justify-content:space-between;align-items:center;padding:10px 0}.mx-tr-ph b{letter-spacing:.2em;font-size:15px}.mx-tr-ph span{font-size:12px;color:var(--muted)}
 @keyframes mxIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+/* ============================================================
+   🌸 MAISON v2 (10-10-2026) — نفس شكل صفحة التجربة بالظبط:
+   هيدر «مساء الخير / الاسم» + الشنطة · كارت نظيف (الرقم الكبير والاسم بس)
+   · الاستبدال تحت الكارت · سلّم المستويات · من غير بوكسات الشرح القديمة
+   ============================================================ */
+:root{--mx-f-display:'El Messiri','Amiri',serif;--mx-f-mark:'Italiana','Didot','Bodoni 72',serif;--mx-ease:cubic-bezier(.16,1,.3,1)}
+body{font-family:'IBM Plex Sans Arabic','Tajawal',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+/* الهيدر */
+.topbar{padding:14px 18px 8px;gap:4px}
+.topbar .badge{display:none}
+#topName::after{display:none}
+.topbar .hi{font-size:12px;font-weight:400;color:var(--muted)}
+.topbar .who{font-family:var(--mx-f-display);font-size:22px;font-weight:600;line-height:1.25}
+.topbar .cart-fab{width:44px;height:44px;background:none!important;border:0!important;box-shadow:none!important;margin:0!important}
+.topbar .cart-fab svg{width:23px;height:23px;fill:none!important;stroke:var(--ink);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.topbar .cart-fab-dot{background:var(--pink)}
+.tabview{padding:6px 20px 28px}
+/* الكارت */
+.card-inner{min-height:0;aspect-ratio:1.62}
+.card-front{position:absolute;inset:0;min-height:0}
+.card{padding:20px 22px 18px;min-height:0}
+.card .card-top{align-items:flex-start}
+.mx-lbl{display:flex;flex-direction:column;align-items:flex-start;gap:2px;font-size:12px}
+.mx-lbl b{font-family:var(--mx-f-display);font-weight:500;font-size:20px}
+.card .mx-logo{width:120px;height:52px}
+.mx-pts{position:relative;z-index:1;display:flex;align-items:baseline;gap:8px}
+.mx-pts span{font-size:58px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.mx-pts em{font-style:normal;font-size:18px}
+.mx-meta{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px}
+.mx-meta>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mx-tier{font-family:var(--mx-f-mark);font-weight:400;font-size:13px;letter-spacing:.24em;padding:4px 11px 3px}
+.card-back{gap:12px;padding:18px}
+.card-back .cb-barcode{margin-top:0}
+.card-back .cb-code{font-size:18px;letter-spacing:.3em;margin-top:0;font-weight:600}
+.card-back .cb-pts{margin-top:0;font-weight:400;font-size:12px}
+.show-cashier{height:52px;padding:0 16px;margin-top:16px;border-radius:26px!important;font-size:15px;font-weight:500;box-shadow:none}
+/* الاستبدال */
+.mx-box{margin-top:14px;padding:18px;border-radius:22px;background:#fff;border:1px solid var(--line)}
+.mx-rh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:14px}
+.mx-rh b{font-family:var(--mx-f-display);font-weight:500;font-size:19px}
+.mx-rh small,.mx-rule{font-size:12px;color:var(--muted)}
+.mx-rule{text-align:center;margin-top:12px;line-height:1.7}
+.mx-few{font-size:14px;line-height:1.9;text-align:center}.mx-few b{color:var(--pink-deep);font-weight:600}
+.mx-stepper{display:flex;align-items:center;justify-content:center;gap:22px}
+.mx-st{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--pink-soft);font-size:22px;display:grid;place-items:center;color:var(--ink);transition:transform .3s var(--mx-ease),opacity .3s}
+.mx-st:active{transform:scale(.9)}.mx-st:disabled{opacity:.35}
+.mx-rv{min-width:96px;text-align:center;display:flex;flex-direction:column}
+.mx-rv span{font-size:34px;font-weight:600;line-height:1.1;color:var(--pink);font-variant-numeric:tabular-nums}
+.mx-rv small{font-size:11px;color:var(--muted)}
+.mx-eq{text-align:center;font-size:14px;margin:10px 0 14px}
+.mx-send{width:100%;height:52px;border:0;border-radius:26px;background:#1E1417;color:#FCF6F8;font-size:15px;font-weight:500}
+.mx-send:disabled{opacity:.35}
+.mx-done{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px}
+.mx-stamp{width:62px;height:62px;fill:none;stroke:var(--pink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mx-stamp circle{stroke-dasharray:176;stroke-dashoffset:176;animation:mxDraw .8s cubic-bezier(.7,0,.2,1) forwards}
+.mx-stamp path{stroke-dasharray:40;stroke-dashoffset:40;animation:mxDraw .5s var(--mx-ease) .6s forwards}
+@keyframes mxDraw{to{stroke-dashoffset:0}}
+.mx-done b{font-family:var(--mx-f-display);font-weight:500;font-size:20px}
+.mx-done p{margin:0;font-size:13px;line-height:1.8;color:var(--muted);max-width:30ch}
+.mx-done p strong{color:var(--ink);font-weight:600}
+.mx-cancel{margin-top:4px;border:1px solid var(--line);background:none;border-radius:20px;padding:8px 18px;font-size:13px;color:var(--ink)}
+/* سلّم المستويات */
+.mx-tr{margin:22px 0 0;gap:14px}
+.mx-tr-top{gap:10px;font-size:13px}
+.mx-tr-top b{font-weight:600;color:var(--pink-deep)}
+.mx-chip{font-family:var(--mx-f-mark);font-size:13px;letter-spacing:.18em;padding:5px 12px;border-radius:14px;direction:ltr;white-space:nowrap;flex:0 0 auto}
+.mx-chip[data-tier="bronze"]{background:linear-gradient(135deg,#7a3f22,#b8683d 50%,#dfa078);color:#fff}
+.mx-chip[data-tier="silver"]{background:linear-gradient(135deg,#5b616b,#c9ced5 55%,#eef0f3);color:#1c2026}
+.mx-chip[data-tier="gold"]{background:linear-gradient(135deg,#8a5a12,#d9a53f 50%,#f6dd8a);color:#2b1d05}
+.mx-chip[data-tier="platinum"]{background:linear-gradient(135deg,#0b0b0f,#26262e 55%,#4b4b57);color:#EDEDF2}
+.mx-ladder{position:relative;height:44px;margin-inline:34px}
+.mx-track{position:absolute;inset-inline:0;top:5px;height:3px;border-radius:3px;background:var(--pink-soft)}
+.mx-track i{position:absolute;inset-block:0;inset-inline-start:0;width:var(--lp,0%);border-radius:3px;background:linear-gradient(270deg,#C9577E,#F0B9CB);animation:mxGrow 1.2s var(--mx-ease) both;transform-origin:right}
+@keyframes mxGrow{from{transform:scaleX(0)}}
+.mx-stop{all:unset;position:absolute;top:0;width:0;height:40px;inset-inline-start:var(--p);cursor:pointer}
+.mx-stop em{position:absolute;left:0;top:1px;width:11px;height:11px;border-radius:50%;transform:translateX(-50%);background:var(--bg);border:2px solid var(--pink-soft)}
+.mx-stop.on em{border-color:var(--pink);background:var(--pink)}
+.mx-stop small{position:absolute;left:0;top:14px;transform:translateX(-50%);padding:4px 6px;font-size:11px;color:var(--muted);white-space:nowrap;border-radius:10px}
+.mx-stop.next small{color:var(--ink);font-weight:600}
+.mx-stop.sel small{background:var(--pink-soft);color:var(--ink)}
+.mx-you{position:absolute;top:-1px;width:0;inset-inline-start:var(--lp,0%);pointer-events:none}
+.mx-you em{position:absolute;left:0;width:15px;height:15px;border-radius:50%;transform:translateX(-50%);background:#fff;border:3px solid var(--pink);animation:mxRing 2.2s ease-out 1s infinite}
+@keyframes mxRing{0%{box-shadow:0 0 0 0 rgba(201,87,126,.45)}100%{box-shadow:0 0 0 12px rgba(201,87,126,0)}}
+.mx-tr-hint{font-size:11.5px;color:var(--muted);text-align:center;margin-top:-4px}
+.mx-pk{border-radius:22px;background:#fff;border:1px solid var(--line);overflow:hidden;padding:0 14px 8px;animation:mxIn .45s var(--mx-ease)}
+.mx-pk-h{position:relative;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:16px 4px 12px}
+.mx-pk-h::before{content:"";position:absolute;inset:0 -14px auto;height:4px;background:var(--mx-metal)}
+.mx-pk-h b{font-family:var(--mx-f-mark);font-weight:400;font-size:20px;letter-spacing:.2em;direction:ltr}
+.mx-pk-h span{color:var(--muted);font-size:12px}
+@media (prefers-reduced-motion:reduce){.mx-track i,.mx-you em,.mx-stamp circle,.mx-stamp path{animation:none;stroke-dashoffset:0}}
 </style>
 </head>
 <body>
@@ -896,11 +987,11 @@
         <div class="who" id="topName">—</div>
       </div>
       <button class="cart-fab" id="ntfBtn" onclick="ntfSecretTap(); openNotifications()" aria-label="الإشعارات" style="margin-inline-end:6px;">
-        <svg viewBox="0 0 24 24"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
         <span class="cart-fab-dot" id="ntfDot" style="display:none">0</span>
       </button>
       <button class="cart-fab" id="cartFab" onclick="openQuickCheckout()" aria-label="سلتك">
-        <svg viewBox="0 0 24 24"><path d="M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 16H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v12z"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
         <span class="cart-fab-dot" id="cartFabDot">0</span>
       </button>
       <button class="wa-btn" id="waTop" onclick="openSupport()" aria-label="تواصل واتساب" style="display:none;">
@@ -1691,9 +1782,9 @@ function enterApp(phone){
 
 function greetWord(){
   var h = new Date().getHours();
-  if(h < 12) return 'صباح الخير 🌷';
-  if(h < 18) return 'نهارك سعيد ✨';
-  return 'مساء الخير 🌙';
+  if(h < 12) return 'صباح الخير';
+  if(h < 18) return 'نهارك سعيد';
+  return 'مساء الخير';
 }
 function firstName(n){ n=(n||'').trim(); return n ? n.split(/\s+/)[0] : 'يا فندم'; }
 
@@ -1972,6 +2063,7 @@ function drawBarcode(containerId, text){
 
 /* ---------- قلب البطاقة ---------- */
 function flipCard(){ var f=$('cardFlip'); if(!f) return; f.classList.toggle('flipped');
+  var sc=document.querySelector('#tab-card .show-cashier'); if(sc) sc.textContent = f.classList.contains('flipped') ? 'رجوع للكارت' : 'اعرضي كودك للكاشير';
   // 🌸 الاستبدال بيفتح مع الباركود (والطلب المعلّق يفضل ظاهر)
   var r=$('mxRedeem'); if(r) r.classList.toggle('open', f.classList.contains('flipped') || !!(currentCustomer && currentCustomer.pendingRedeem && currentCustomer.pendingRedeem.points>0)); }
 
@@ -1995,54 +2087,70 @@ function cancelRedeem(){
   });
 }
 function redeemBlockHtml(){
-  var per=Number(loyaltyCfg.pointsPerRedemption)||10, val=Number(loyaltyCfg.redemptionValueEGP)||5;
+  var per=Number(loyaltyCfg.pointsPerRedemption)||10, val=Number(loyaltyCfg.redemptionValueEGP)||5, earn=Number(loyaltyCfg.pointsPerEGP)||35;
   var bal=Number(currentCustomer[POINTS_FIELD])||0;
   var pr=currentCustomer.pendingRedeem;
+  var rule='<div class="mx-rule">كل '+fmt(earn)+' ج.م تشتريها = نقطة</div>';
+  /* 🌸 MAISON v2: الطلب المعلّق = ختم «طلبك وصل» */
   if(pr && pr.brand===CATALOG_BRAND && pr.points>0){
-    return '<div style="background:var(--pink-soft); border:1px solid var(--pink); border-radius:16px; padding:16px; margin-top:14px; text-align:center;">'+
-      '<div style="font-weight:800; color:var(--pink-deep); margin-bottom:4px;">🎁 طلبتي استبدال '+pr.points+' نقطة</div>'+
-      '<div style="font-size:13px; color:var(--ink);">خصم '+pr.valueEGP+' ج.م — هيتطبق عند الدفع</div>'+
-      '<button onclick="cancelRedeem()" style="margin-top:10px; padding:8px 16px; border-radius:8px; border:1px solid var(--pink); background:transparent; color:var(--pink-deep); font-weight:700; cursor:pointer;">إلغاء الطلب</button>'+
-    '</div>';
+    return '<div class="mx-box"><div class="mx-done">'+
+      '<svg class="mx-stamp" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28"/><path d="M20 33l8 8 16-17"/></svg>'+
+      '<b>طلبك وصل</b>'+
+      '<p>استبدال <strong>'+fmt(pr.points)+'</strong> نقطة = خصم <strong>'+fmt(pr.valueEGP)+'</strong> ج.م. الكاشير هيلاقي الطلب جاهز وانتي بتدفعي في أي فرع.</p>'+
+      '<button class="mx-cancel" onclick="cancelRedeem()">إلغاء الطلب</button>'+
+    '</div></div>';
   }
-  if(bal<per) return '';
-  var pts=redeemSel*per, egp=redeemSel*val;
-  return '<div style="background:var(--white); border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:14px;">'+
-    '<div style="font-weight:800; text-align:center; margin-bottom:12px;">🎁 استبدلي نقاطك</div>'+
-    '<div style="display:flex; align-items:center; justify-content:center; gap:18px; margin-bottom:8px;">'+
-      '<button onclick="changeRedeem(-1)" style="width:42px; height:42px; border-radius:50%; border:1px solid var(--line); background:var(--pink-soft); font-size:22px; font-weight:800; cursor:pointer;">−</button>'+
-      '<div style="text-align:center; min-width:90px;"><div style="font-size:26px; font-weight:900; color:var(--pink-deep);">'+pts+'</div><div style="font-size:11px; color:var(--muted);">نقطة</div></div>'+
-      '<button onclick="changeRedeem(1)" style="width:42px; height:42px; border-radius:50%; border:1px solid var(--line); background:var(--pink-soft); font-size:22px; font-weight:800; cursor:pointer;">+</button>'+
+  var head='<div class="mx-rh"><b>استبدلي نقاطك</b><small>كل '+per+' نقاط = خصم '+fmt(val)+' ج.م</small></div>';
+  if(bal<per){
+    var need=per-bal;
+    return '<div class="mx-box">'+head+
+      '<div class="mx-few">فاضلك <b>'+fmt(need)+' نقطة</b> — يعني مشتريات بـ <b>'+fmt(need*earn)+' ج.م</b> — وتفتحي أول خصم '+fmt(val)+' ج.م</div>'+rule+'</div>';
+  }
+  var pts=redeemSel*per, egp=redeemSel*val, max=redeemMax();
+  return '<div class="mx-box">'+head+
+    '<div class="mx-stepper">'+
+      '<button class="mx-st" onclick="changeRedeem(-1)" aria-label="قلّلي" '+(redeemSel<=0?'disabled':'')+'>−</button>'+
+      '<div class="mx-rv"><span>'+fmt(pts)+'</span><small>نقطة</small></div>'+
+      '<button class="mx-st" onclick="changeRedeem(1)" aria-label="زوّدي" '+(redeemSel>=max?'disabled':'')+'>+</button>'+
     '</div>'+
-    '<div style="text-align:center; font-size:14px; color:var(--ink); margin-bottom:12px;">= خصم <b>'+egp+' ج.م</b></div>'+
-    '<button onclick="requestRedeem()" '+(redeemSel<=0?'disabled':'')+' style="width:100%; padding:12px; border-radius:10px; border:none; background:'+(redeemSel<=0?'#bbb':'var(--pink)')+'; color:#fff; font-weight:800; cursor:'+(redeemSel<=0?'default':'pointer')+';">اطلبي الاستبدال</button>'+
+    '<div class="mx-eq">= خصم <b>'+fmt(egp)+'</b> ج.م</div>'+
+    '<button class="mx-send" onclick="requestRedeem()" '+(redeemSel<=0?'disabled':'')+'>ابعتي الطلب</button>'+
+    rule+
   '</div>';
 }
 
-/* 🏅 TIERS-v1 — قسم المستوى في «بطاقتي». بيظهر بس لو loyalty.tiers.enabled = true (قرار المالك وقت الإطلاق). */
+/* 🏅 TIERS-v1 — قسم المستوى في «بطاقتي». بيظهر بس لو loyalty.tiers.enabled = true (قرار المالك وقت الإطلاق)
+   — أو لرقم التجربة اللي المالك حاطه في Office 2 (👀 preview_phones). */
+function mxTiersOn(){
+  try{ return !!(window.Tiers && (Tiers.enabled(loyaltyCfg) || (window.StoriesApp && StoriesApp.preview && StoriesApp.preview()))); }catch(e){ return false; }
+}
 function tiersSectionHtml(){
   try{
-    if(!window.Tiers || !currentCustomer || !Tiers.enabled(loyaltyCfg)) return '';
+    if(!window.Tiers || !currentCustomer || !mxTiersOn()) return '';
     Tiers.injectCss();
     var pts = Tiers.pointsFor(currentCustomer, 'echarpe', Date.now(), loyaltyCfg.tiers);
-    var since = ''; try{ var _rd = toJsDate(currentCustomer.createdAt); if(_rd) since = 'Member since ' + _rd.toLocaleDateString('en-GB', {month:'short', year:'numeric'}); }catch(e){}
-    // 🌸 MAISON: مفيش كارت مستوى تاني — الكارت البينك فوق عليه الحافة المعدن. هنا: فاضل كام + المميزات بتظهر لما تدوسي على مستوى
+    // 🌸 MAISON: مفيش كارت مستوى تاني — الكارت البينك فوق عليه الحافة المعدن. هنا: سلّم المستويات + المميزات بتظهر لما تدوسي على مستوى
     return '<div id="tiersSection">' + mxTiersHtml(pts) + '</div>';
   }catch(e){ console.warn('tiers', e); return ''; }
 }
 var mxPerkSel = null;
 function mxTiersHtml(pts){
   var c = Tiers.cfgOf(loyaltyCfg.tiers), p = Tiers.progress(pts, c), T = Tiers.TIERS, M = Tiers.META;
-  var mine = T.indexOf(p.tier);
-  var h = '<div class="mx-tr"><div class="mx-tr-top"><span>' + (p.next ? 'فاضلك <b>' + fmt(p.need) + ' نقطة</b> وتبقي <b>' + M[p.next].en + '</b>' : 'انتي في <b>أعلى مستوى</b>') + '</span><span dir="ltr" class="mx-tr-n">' + fmt(pts) + (p.next ? ' / ' + fmt(p.to) : '') + '</span></div>'
-    + '<div class="mx-tr-bar"><i style="width:' + p.pct + '%"></i></div>'
-    + '<div class="mx-tr-tabs">' + T.map(function(t, i){
-        var st = i === mine ? 'مستواكي' : (i < mine ? '✓' : 'فاضلك ' + fmt(Math.max(0, Tiers.thresholdOf(t, c) - pts)));
-        return '<button class="' + (mxPerkSel === t ? 'on' : '') + '" onclick="mxPerk(\'' + t + '\')"><b>' + M[t].en + '</b><small>' + st + '</small></button>';
-      }).join('') + '</div>';
+  var mine = T.indexOf(p.tier), seg = 100 / (T.length - 1);
+  var lp = Math.min(100, mine * seg + (p.next ? (p.pct / 100) * seg : 0));
+  var h = '<div class="mx-tr">'
+    + '<div class="mx-tr-top"><span class="mx-chip" data-tier="' + p.tier + '">' + M[p.tier].en.toUpperCase() + '</span>'
+    + '<span>' + (p.next ? 'فاضلك <b>' + fmt(p.need) + ' نقطة</b> وتبقي <b>' + M[p.next].en + '</b>' : 'انتي في <b>أعلى مستوى</b> ✨') + '</span></div>'
+    + '<div class="mx-ladder" style="--lp:' + lp.toFixed(1) + '%"><span class="mx-track"><i></i></span>'
+    + T.map(function(t, i){
+        var cls = (i <= mine ? ' on' : '') + (t === p.next ? ' next' : '') + (mxPerkSel === t ? ' sel' : '');
+        return '<button class="mx-stop' + cls + '" style="--p:' + (i * seg).toFixed(1) + '%" onclick="mxPerk(\'' + t + '\')"><em></em><small>' + M[t].en + (i ? ' · ' + fmt(Tiers.thresholdOf(t, c)) : '') + '</small></button>';
+      }).join('')
+    + '<span class="mx-you"><em></em></span></div>'
+    + '<div class="mx-tr-hint">اضغطي على أي مستوى وشوفي مميزاته</div>';
   if(mxPerkSel){
     var k = T.indexOf(mxPerkSel), locked = k > mine;
-    h += '<div class="mx-tr-perks"><div class="mx-tr-ph"><b>' + M[mxPerkSel].en.toUpperCase() + '</b><span>' + (k === mine ? 'ده مستواكي دلوقتي' : (locked ? '🔒 بتفتح عند ' + fmt(Tiers.thresholdOf(mxPerkSel, c)) + ' نقطة' : 'عدّيتيه ✓')) + '</span></div>'
+    h += '<div class="mx-pk" data-tier="' + mxPerkSel + '"><div class="mx-pk-h"><b>' + M[mxPerkSel].en.toUpperCase() + '</b><span>' + (k === mine ? 'ده مستواكي دلوقتي' : (locked ? '🔒 بتفتح عند ' + fmt(Tiers.thresholdOf(mxPerkSel, c)) + ' نقطة' : 'عدّيتيه ✓')) + '</span></div>'
       + Tiers.perksHtml(c.perks[mxPerkSel], locked) + '</div>';
   }
   return h + '</div>';
@@ -2052,97 +2160,54 @@ window.mxPerk = mxPerk;
 function renderCard(){
   if(!currentCustomer) return;
   var pts = Number(currentCustomer.points)||0;
-  var per = Number(loyaltyCfg.pointsPerRedemption)||10;
-  var val = Number(loyaltyCfg.redemptionValueEGP)||5;
-  var earn = Number(loyaltyCfg.pointsPerEGP)||100;
 
-  var units = Math.floor(pts / per);
-  var worth = units * val;                          // القيمة القابلة للاستبدال دلوقتي
-  var toNext = per - (pts % per);                    // كام نقطة للوحدة الجاية
-  var pct = Math.round(((pts % per) / per) * 100);
-  // 🎯 الناقص **بالجنيه** — ده اللي بيخلي الرقم قابل للتصرف
-  //    (ولو خلصت وحدة كاملة، مفيش "ناقص" — فيه "جاهزة")
-  var toNextEGP = (pts % per === 0 && pts > 0) ? 0 : Math.ceil(toNext * earn);
-
-  var sinceTxt = regDateText({day:'numeric', month:'long', year:'numeric'});
-  if(sinceTxt) sinceTxt = 'عضو من ' + sinceTxt;
+  var sinceTxt = regDateText({month:'long', year:'numeric'});
+  sinceTxt = esc(firstName(currentCustomer.name)) + (sinceTxt ? ' · عضوة من ' + esc(sinceTxt) : '');
 
   var code = currentCustomer.loyaltyCode || '';
 
-  /* 📸 الستوري و«مختارة ليكي» — مقفولين لحد ما المالك يفتحهم من Office 2 (stories_cfg.live_echarpe).
-     بتتحمّل مرة واحدة بعد الدخول (القواعد محتاجة العميلة تكون داخلة). */
-  if(window.StoriesApp && !renderCard._st){ renderCard._st = 1; StoriesApp.init(db, CATALOG_BRAND, function(){ if(currentTab === 'card' && !StoriesApp.isOpen()) renderCard(); }); }
+  /* 📸 الستوري و«مختارة ليكي» — مقفولين لحد ما المالك يفتحهم من Office 2 (stories_cfg.live_echarpe)
+     أو لرقم التجربة (preview_phones). بتتحمّل مرة واحدة بعد الدخول (القواعد محتاجة العميلة تكون داخلة). */
+  if(window.StoriesApp && !renderCard._st){ renderCard._st = 1; StoriesApp.init(db, CATALOG_BRAND, function(){ if(currentTab === 'card' && !StoriesApp.isOpen()) renderCard(); }, currentCustomer.phone); }
 
   /* 🌸 MAISON: الكارت بينك في كل المستويات — المستوى «حافة معدن» بس، ولو المستويات مفتوحة بس */
   var mxTier = '';
-  try{ if(window.Tiers && Tiers.enabled(loyaltyCfg)) mxTier = Tiers.tierFor(Tiers.pointsFor(currentCustomer, 'echarpe', Date.now(), loyaltyCfg.tiers), loyaltyCfg.tiers) || ''; }catch(e){ mxTier = ''; }
+  try{ if(mxTiersOn()) mxTier = Tiers.tierFor(Tiers.pointsFor(currentCustomer, 'echarpe', Date.now(), loyaltyCfg.tiers), loyaltyCfg.tiers) || ''; }catch(e){ mxTier = ''; }
   var mxWasOpen = !!($('cardFlip') && $('cardFlip').classList.contains('flipped'));
 
   $('tab-card').innerHTML =
     '<div class="card-flip'+(mxWasOpen ? ' flipped' : '')+'" id="cardFlip"'+(mxTier ? ' data-tier="'+mxTier+'"' : '')+'>'+
-      '<div class="card-inner" onclick="flipCard()">'+
+      '<div class="card-inner" onclick="flipCard()" role="button" aria-label="بطاقة نادي إيشارب — اضغطي لعرض الكود واستبدال النقاط">'+
 
         // ===== وش البطاقة =====
         '<div class="card card-face card-front">'+
           '<div class="card-top">'+
-            '<div><div class="lbl">نقاطك</div><div class="clubname">نادي إيشارب</div></div>'+
+            '<div class="mx-lbl">نقاطك<b>نادي إيشارب</b></div>'+
             '<span class="mx-logo" role="img" aria-label="echarpe" style="-webkit-mask-image:url('+logoSrc+');mask-image:url('+logoSrc+')"></span>'+
           '</div>'+
-          '<div class="pts-block">'+
-            '<span class="pts-num">'+fmt(pts)+'</span><span class="pts-unit">نقطة</span>'+
-            '<div class="pts-worth">'+(worth>0 ? ('تقدري تستبدليها بخصم ~'+fmt(worth)+' ج.م') : 'اجمعي نقاط أكتر عشان تبدأي تستبدلي')+'</div>'+
-            /* 🎯 هدف الشراية الجاية — نفس اللي الكاشير بتشوفه في POS
-               ⚠️ بالجنيه مش بالنقط: "ناقصك ٣ نقط" رقم مالوش معنى
-                  عند العميلة. "ناقصك ٣٠٠ ج.م" حاجة تقدر تتصرف بيها. */
-            '<div class="goal-wrap">'+
-              '<div class="goal-bar"><i style="width:'+pct+'%"></i></div>'+
-              '<div class="goal-txt">'+
-                (toNextEGP > 0
-                  ? ('🎯 ناقصك <b>'+fmt(toNextEGP)+' ج.م</b> وتفتحي مكافأة '+fmt(val)+' ج.م')
-                  : ('🎉 مكافأتك جاهزة — استبدليها في أي فرع'))+
-              '</div>'+
-            '</div>'+
-          '</div>'+
-          '<div class="holder">'+
-            '<div class="name">'+esc(currentCustomer.name||'—')+'</div>'+
-            (mxTier ? '<span class="mx-tier">'+mxTier.toUpperCase()+'</span>' : '<div class="since">'+esc(sinceTxt)+'</div>')+
-          '</div>'+
-          '<div class="flip-hint">اضغطي لعرض الباركود ↻</div>'+
+          '<div class="mx-pts"><span>'+fmt(pts)+'</span><em>نقطة</em></div>'+
+          '<div class="mx-meta"><span>'+sinceTxt+'</span>'+(mxTier ? '<span class="mx-tier">'+mxTier.toUpperCase()+'</span>' : '')+'</div>'+
           (mxTier ? '<span class="mx-edge"></span>' : '')+
         '</div>'+
 
         // ===== ضهر البطاقة (الباركود) =====
         '<div class="card-face card-back">'+
-          '<div class="cb-title">🎟️ كود عضويتك</div>'+
           (code
             ? '<div class="cb-barcode" id="cardBarcode"></div><div class="cb-code">'+esc(prettyCode(code))+'</div>'
             : '<div class="cb-wait">بنجهّز كودك...</div>')+
-          '<div class="cb-pts">رصيدك: '+fmt(pts)+' نقطة</div>'+
-          '<div class="flip-hint">اضغطي للرجوع ↩</div>'+
+          '<div class="cb-pts">اعرضي الكود للكاشير · رصيدك '+fmt(pts)+' نقطة</div>'+
         '</div>'+
 
       '</div>'+
     '</div>'+
 
-    '<button class="show-cashier" onclick="flipCard()">🎟️ اعرضي كودك للكاشير</button>'+
+    '<button class="show-cashier" onclick="flipCard()">'+(mxWasOpen ? 'رجوع للكارت' : 'اعرضي كودك للكاشير')+'</button>'+
     /* 🌸 الاستبدال بيفتح تحت الكارت لما يلف للباركود — والطلب المعلّق ظاهر دايمًا */
     '<div class="mx-redeem'+((mxWasOpen || (currentCustomer.pendingRedeem && currentCustomer.pendingRedeem.points>0)) ? ' open' : '')+'" id="mxRedeem"><div>'+
       redeemBlockHtml()+
-      '<div class="redeem-hint">💡 الاستبدال بيحصل في المحل — قوليلهم عايزة تستبدلي نقاطك عند الدفع.</div>'+
     '</div></div>'+
-    (window.StoriesApp ? StoriesApp.storiesHtml() : '')+
-
     tiersSectionHtml()+
-    '<div class="progress-wrap">'+
-      '<div class="pw-top"><span>الوحدة الجاية</span><span class="g">'+(pts>0 && (pts%per===0) ? 'جاهزة للاستبدال! 🎉' : ('فاضل '+toNext+' نقطة'))+'</span></div>'+
-      '<div class="bar"><span style="width:'+pct+'%"></span></div>'+
-    '</div>'+
-
-    '<div class="info-grid">'+
-      '<div class="info-box"><div class="ico">🛒</div><div class="t">إزاي تكسبي نقاط</div><div class="d">كل '+fmt(earn)+' ج.م تشتريها = نقطة</div></div>'+
-      '<div class="info-box"><div class="ico">🎁</div><div class="t">إزاي تستبدلي</div><div class="d">كل '+per+' نقطة = '+fmt(val)+' ج.م خصم</div></div>'+
-    '</div>'+
-
+    (window.StoriesApp ? StoriesApp.storiesHtml() : '')+
     (window.StoriesApp ? StoriesApp.homeHtml() : '');
 
   // نرسم الباركود على ضهر البطاقة (مولّد داخلي — بيشتغل حتى أوفلاين)

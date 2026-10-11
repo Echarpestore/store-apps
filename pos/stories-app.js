@@ -15,11 +15,16 @@ function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(
 try{ S.seen = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') || {}; }catch(e){ S.seen = {}; }
 function markSeen(id){ S.seen[id] = Date.now(); try{ var keep = {}; Object.keys(S.seen).sort(function(a, b){ return S.seen[b] - S.seen[a]; }).slice(0, 80).forEach(function(k){ keep[k] = S.seen[k]; }); localStorage.setItem(SEEN_KEY, JSON.stringify(keep)); }catch(e){} }
 
-function init(db, brand, rerender){
+function last10(p){ var d = String(p || '').replace(/\D/g, ''); return d.slice(-10); }
+function init(db, brand, rerender, phone){
   S.db = db; S.brand = brand || 'echarpe'; S.rerender = rerender || null; css();
   db.collection('pos_test_settings').doc('stories_cfg').get().then(function(d){
     var c = d.exists ? (d.data() || {}) : {};
-    S.live = c['live_' + S.brand] === true;
+    /* 👀 أرقام التجربة (من Office 2): بتشوف الستوري والمستويات قبل ما المالك يفتحهم للكل */
+    var me = last10(phone);
+    S.preview = !!me && (c.preview_phones || []).some(function(x){ return last10(x) === me; });
+    S.live = c['live_' + S.brand] === true || S.preview;
+    if(S.preview && S.rerender) S.rerender();
     if(!S.live){ S.loaded = true; return; }
     return Promise.all([
       db.collection('app_stories').where('status', '==', 'published').where('brand', '==', S.brand).limit(20).get(),
@@ -157,5 +162,5 @@ function ask(){
 }
 function addCart(){ var s = S.list[S.idx]; if(!s || !s.barcode) return; close(); window.tryonAddToCart(s.barcode, S.imgs[s.id] || s.thumb, ''); }
 
-window.StoriesApp = { ask: ask, order: order, init: init, storiesHtml: storiesHtml, homeHtml: homeHtml, open: open, openHome: openHome, close: close, isOpen: isOpen, tryOn: tryOn, addCart: addCart };
+window.StoriesApp = { ask: ask, order: order, init: init, storiesHtml: storiesHtml, homeHtml: homeHtml, open: open, openHome: openHome, close: close, isOpen: isOpen, tryOn: tryOn, addCart: addCart, preview: function(){ return S.preview === true; } };
 })();

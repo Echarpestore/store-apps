@@ -50,7 +50,7 @@ ok(/Tiers\.enabled\(loyaltyRedemptionConfig\) && window\._custDocForTier/.test(s
 // ---- التطبيقات: القسم مشروط بالتفعيل
 ['glow/index.html', 'loyalty/index.html'].forEach(f => {
   const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
-  ok(/tiers-core\.js\?v=1/.test(s) && /tiersSectionHtml\(\)\+\n\s*'<div class="progress-wrap">'\+/.test(s) && /!Tiers\.enabled\(loyaltyCfg\)\) return ''/.test(s), f + ': القسم موجود ومشروط بالتفعيل');
+  ok(/tiers-core\.js\?v=1/.test(s) && /tiersSectionHtml\(\)\+/.test(s) && (/!Tiers\.enabled\(loyaltyCfg\)\) return ''/.test(s) || (/!mxTiersOn\(\)\) return ''/.test(s) && /function mxTiersOn\(\)\{\n\s*try\{ return !!\(window\.Tiers && \(Tiers\.enabled\(loyaltyCfg\) \|\|/.test(s))), f + ': القسم موجود ومشروط بالتفعيل');
 });
 ok(/'glow', Date\.now\(\), loyaltyCfg\.tiers/.test(fs.readFileSync(path.join(ROOT, 'glow/index.html'), 'utf8')) && /'echarpe', Date\.now\(\), loyaltyCfg\.tiers/.test(fs.readFileSync(path.join(ROOT, 'loyalty/index.html'), 'utf8')), 'كل تطبيق بيقرا نقط برانده');
 // ---- loyalty.js: التجميع من الفواتير
