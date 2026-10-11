@@ -161,6 +161,21 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---------- CCTV basket timelines + events ----------
+    // 11-10-2026: الاتنين دول ماكانش ليهم قاعدة، فكانوا واقعين تحت الرفض الافتراضي:
+    //   · pos_cctv_invoice_timelines = خطوات السلة لكل فاتورة (إضافة/حذف صنف بالوقت). الـPOS كان بيفشل يكتبها
+    //     وبيحفظ نسخة احتياطية جوّه pos_cctv_invoice_snapshots، و«مراجعة اليوم» في Office كانت بترجع permission-denied.
+    //   · pos_cctv_events = أحداث الكاشير اللي ليها فيديو (خصم، فتح درج…). POS بيكتبها بـset+merge و Office بيقراها.
+    // موظفين فقط · لا حذف من العميل — نفس مبدأ pos_cctv_invoice_snapshots.
+    match /pos_cctv_invoice_timelines/{invoiceCode} {
+      allow read, create, update: if isStaff();
+      allow delete: if false;
+    }
+    match /pos_cctv_events/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if false;
+    }
+
     // ---------- المبيعات ----------
     match /pos_test_sales/{id} {
       // ⚠️ اتفحص: تبويب «فواتيري» في الولاء وGlow بيعمل
