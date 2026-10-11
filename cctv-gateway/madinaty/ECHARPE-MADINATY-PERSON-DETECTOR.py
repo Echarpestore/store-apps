@@ -5,6 +5,9 @@ No biometric identification. Conservative fail-open behavior: uncertainty suppre
 from __future__ import annotations
 import json, os, sys, time, urllib.request, math
 from datetime import datetime, timezone, timedelta
+# v720: liveness module lives next to this script (see echarpe_liveness.py).
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+from echarpe_liveness import LivenessMonitor, EmptyStoreCorrector
 
 ROOT=r"C:\ProgramData\ECHARPE\MadinatyCCTV"
 CONFIG_PATH=os.path.join(ROOT,"activity-config.json")
@@ -462,6 +465,9 @@ class DoorOccupancy:
                           f,separators=(",",":"))
             os.replace(tmp,OCCUPANCY_PATH)
         except Exception as e:log("occupancy_save_failed "+str(e))
+    def force_zero(self,now,reason):
+        """v720: visual evidence says the shop is empty - drop the drifted door count."""
+        self.count=0;self.updatedAtMs=int(now*1000);self.lastEvent=reason;self._save()
     def roll_day(self,now):
         k=business_day_key(now,self.cfg)
         if k!=self.day:
@@ -546,6 +552,7 @@ class PersistentPersonGraph:
 
 def run():
     import cv2,mediapipe as mp
+    import numpy as np
     from mediapipe.tasks import python
     from mediapipe.tasks.python import vision
     os.makedirs(ROOT,exist_ok=True)
@@ -559,6 +566,7 @@ def run():
       score_threshold=float(c.get("doorScoreThreshold",.15)),max_results=20))
     log("detector_v662_started aux_threshold=%.2f door_cam=%s door_threshold=%.2f"%(float(c["scoreThreshold"]),int(c["doorCamera"]),float(c.get("doorScoreThreshold",.15))))
     tracker=DirectionalDoorFlowCounter(c);occupancy=DoorOccupancy(c);caps={};last_state=0;last_nonzero=0;traffic=load_traffic();identities=IdentityBook(traffic,c);graph=PersistentPersonGraph(c);last_aux_detect=0;last_counts={cam:0 for cam in CAMERAS};last_online={cam:False for cam in CAMERAS}
+    liveness=LivenessMonitor(c);corrector=EmptyStoreCorrector(c);empty_resets=0;last_empty_reset_ms=0
     while True:
         started=time.time();now_ms=int(started*1000);counts=dict(last_counts);online=dict(last_online);door_people=[];door_frame=None
         occupancy.roll_day(started)
@@ -579,6 +587,7 @@ def run():
                 caps.pop(cam,None);online[cam]=False;counts[cam]=0;continue
             try:
                 people=detect(door_detector if cam==int(c["doorCamera"]) else detector,mp,cv2,frame);online[cam]=True;counts[cam]=len(people)
+                liveness.update(cv2,np,cam,frame,people,started)
                 for person in people:
                     pid,is_new,app_sc,dt,allowed=graph.assign(cam,person.get("appearance") or [],started)
                     person["pid"]=pid
@@ -632,6 +641,13 @@ def run():
                 add_crossing(traffic,False,started,0)
                 log("roi_flow_exit pid=%s identity=%s score=%.3f travel=%.3f elapsed=%.2f"%(pid or "none",iid or "unknown",reid_score,float(ev.get("travel") or 0),float(ev.get("elapsed") or 0)))
 
+        # v720: self-correct the door count. If nobody alive is visible beyond the staff and the
+        # cashier desk has been motionless, for the whole confirmation period, occupancy is 0.
+        alive_total=liveness.alive_total(started)
+        cashier_quiet=liveness.scene_quiet_seconds(int(c.get("cashierCamera",4)),started)
+        if corrector.step(alive_total,(staff_count if staff is not None else None),liveness.cameras_reporting(started),cashier_quiet,started) and occupancy.count>0:
+            log("visual_empty_reset from=%d alive=%d staff=%s cashierQuiet=%.0fs"%(occupancy.count,alive_total,(staff_count if staff is not None else "unknown"),min(cashier_quiet,99999)))
+            occupancy.force_zero(started,"visual_empty_reset");empty_resets+=1;last_empty_reset_ms=now_ms
         all_online=sum(1 for v in online.values() if v)
         # IMPORTANT: do NOT derive customer occupancy from raw visual person counts.
         # Madinaty contains mannequin/display forms that person detectors can classify
@@ -661,7 +677,9 @@ def run():
           "trafficTimezone":"Africa/Cairo","trafficRetentionDays":TRAFFIC_RETENTION_DAYS,
           "trafficHistory":traffic_history(traffic,31),"trackingMode":"camera8_roi_directional_flow_persistent_handoff",
           "countingAuthority":"camera8_roi_directional_optical_flow","rawVisualCountsExcludedFromOccupancy":True,
-          "handoffGraph":c.get("cameraGraph") or {}}
+          "handoffGraph":c.get("cameraGraph") or {},
+          "livenessVersion":720,"alivePeople":alive_total,"emptyHeldSeconds":int(corrector.held_seconds(started)),
+          "emptyResets":empty_resets,"lastEmptyResetAtMs":last_empty_reset_ms}
         if now_ms-last_state>=2000:
             try:req("/echarpe-playback/activity-state",state)
             except Exception:pass
