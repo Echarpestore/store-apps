@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>إعلان تطبيق إيشارب</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FDF3F7; --ink:#3A2530; --muted:#A98A98; --accent:#D65D8B; --deep:#B34571;
+  --soft:#FADCE7; --mist:#F6CBDC; --line:#F3E0E9; --wa:#25D366;
+  --page:#efe5ea; --page-ink:#3A2530;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --page:#140d11; --page-ink:#f3e3ea; } }
+:root[data-theme="dark"]{ --page:#140d11; --page-ink:#f3e3ea; }
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--page); color:var(--page-ink); font-family:'Tajawal',system-ui,sans-serif;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:16px; overflow:hidden}
+#frame{position:relative; border-radius:18px; overflow:hidden; box-shadow:0 20px 60px rgba(58,37,48,.35)}
+#stage{position:absolute; inset:0 auto auto 0; width:1080px; height:1920px; transform-origin:0 0; overflow:hidden;
+  background:var(--bg); color:var(--ink); font-family:'Tajawal',sans-serif; direction:rtl}
+#controls{display:flex; align-items:center; gap:10px; width:100%; max-width:420px}
+#controls button{border:0; border-radius:99px; background:var(--accent); color:#fff; font:800 14px Tajawal,sans-serif;
+  padding:8px 16px; cursor:pointer; min-width:44px}
+#bar{flex:1; height:6px; border-radius:6px; background:rgba(214,93,139,.25); cursor:pointer; position:relative}
+#bar i{position:absolute; inset:0 auto 0 0; background:var(--accent); border-radius:6px}
+body.export{padding:0; background:#000}
+body.export #frame{border-radius:0; box-shadow:none}
+body.export #controls{display:none}
+
+/* ---------- stage ---------- */
+.abs{position:absolute}
+.scene{position:absolute; inset:0; display:none}
+.blob{position:absolute; border-radius:50%; filter:blur(70px)}
+#ribbons{position:absolute; inset:0; width:1080px; height:1920px}
+.spark{position:absolute; color:#fff; font-size:34px; text-shadow:0 0 18px rgba(214,93,139,.8)}
+.words .w{display:inline-block; white-space:pre}
+.center{left:0; right:0; text-align:center}
+h1,h2{font-weight:900; letter-spacing:-.5px}
+.hl{position:absolute; left:40px; right:40px; text-align:center; font-size:72px; line-height:1.25; font-weight:900; color:var(--ink)}
+.hl b{color:var(--deep)}
+.pill{position:absolute; left:50%; display:inline-block; background:var(--accent); color:#fff; font-weight:900;
+  font-size:34px; padding:12px 34px; border-radius:99px; white-space:nowrap; box-shadow:0 10px 30px rgba(214,93,139,.35)}
+
+/* S1 */
+#s1logo{position:absolute; left:140px; width:800px; top:640px}
+#s1line{position:absolute; left:240px; width:600px; top:990px; height:10px; border-radius:10px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent); transform-origin:50% 50%}
+#s1h{top:1030px; font-size:84px}
+#s1sub{position:absolute; top:1300px; font-size:46px; font-weight:700; color:var(--muted)}
+
+/* phone */
+#phone{position:absolute; left:220px; top:560px; width:640px; height:1300px; border-radius:86px; background:#22171c;
+  padding:20px; box-shadow:0 60px 120px rgba(120,40,80,.35), inset 0 0 0 3px #3b2a32}
+#phone .screen{position:relative; width:100%; height:100%; border-radius:68px; overflow:hidden; background:#FCF6F8}
+#notch{position:absolute; top:18px; left:50%; margin-left:-90px; width:180px; height:46px; border-radius:30px; background:#22171c; z-index:5}
+.app{position:absolute; inset:0}
+.apphead{position:absolute; top:0; left:0; right:0; height:190px; padding:92px 34px 0; display:flex; align-items:center; gap:18px;
+  background:linear-gradient(135deg,var(--mist),var(--soft)); border-bottom:1px solid var(--line)}
+.ava{width:76px; height:76px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; flex:none;
+  box-shadow:0 4px 12px rgba(214,93,139,.25)}
+.ava img{width:62px}
+.apphead .t{font-size:34px; font-weight:900}
+.apphead .s{font-size:22px; font-weight:700; color:#2f9e5b}
+.apphead .s:before{content:''; display:inline-block; width:12px; height:12px; border-radius:50%; background:var(--wa); margin-left:8px}
+.bub{position:absolute; max-width:440px; padding:22px 28px; border-radius:34px; font-size:32px; font-weight:700; line-height:1.4;
+  box-shadow:0 6px 18px rgba(58,37,48,.08)}
+.bub.me{left:28px; background:var(--accent); color:#fff; border-bottom-left-radius:10px}
+.bub.them{right:28px; background:#fff; color:var(--ink); border-bottom-right-radius:10px}
+.bub .tick{font-size:22px; opacity:.85; margin-right:10px}
+#typing{display:flex; gap:10px; padding:26px 30px}
+#typing i{width:16px; height:16px; border-radius:50%; background:var(--muted); display:block}
+#imgbub{padding:12px; width:420px}
+#imgbub img{display:block; width:100%; height:330px; object-fit:cover; object-position:50% 30%; border-radius:24px}
+#imgbub div{font-size:26px; padding:12px 8px 2px}
+.inputbar{position:absolute; left:24px; right:24px; bottom:30px; height:96px; border-radius:50px; background:#fff;
+  border:2px solid var(--line); display:flex; align-items:center; padding:0 34px; font-size:28px; color:var(--muted); font-weight:500}
+.inputbar b{position:absolute; left:12px; top:12px; width:72px; height:72px; border-radius:50%; background:var(--accent);
+  color:#fff; display:flex; align-items:center; justify-content:center; font-size:30px}
+#heart{position:absolute; font-size:40px}
+
+/* try-on screen */
+#tryframe{position:absolute; left:40px; right:40px; top:220px; height:650px; border-radius:40px; overflow:hidden; background:#eee}
+#tryimg{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:72% 40%}
+#tint{position:absolute; inset:0; mix-blend-mode:color}
+#scan{position:absolute; left:0; right:0; height:160px; background:linear-gradient(180deg,transparent,rgba(255,255,255,.75) 85%,#fff 88%,transparent 90%)}
+.corner{position:absolute; width:70px; height:70px; border:7px solid #fff; border-radius:8px}
+#okbadge{position:absolute; left:50%; top:560px; margin-left:-215px; width:430px; text-align:center; background:#fff; color:var(--deep);
+  font-size:34px; font-weight:900; padding:16px 0; border-radius:99px; box-shadow:0 12px 30px rgba(58,37,48,.25)}
+#swatches{position:absolute; left:40px; right:40px; top:905px; display:flex; justify-content:space-between}
+.sw{width:76px; height:76px; border-radius:50%; border:5px solid #fff; box-shadow:0 4px 10px rgba(0,0,0,.15)}
+#ring{position:absolute; top:893px; width:100px; height:100px; border-radius:50%; border:5px solid var(--accent)}
+#addcart{position:absolute; left:40px; right:40px; top:1040px; height:110px; border-radius:60px; background:var(--accent); color:#fff;
+  font-size:38px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 14px 30px rgba(214,93,139,.4)}
+
+/* S4 loyalty */
+#card{position:absolute; left:90px; top:560px; width:900px; height:560px; border-radius:48px; overflow:hidden; color:#fff;
+  background:linear-gradient(135deg,#F3AFC8 0%,var(--accent) 55%,var(--deep) 100%);
+  box-shadow:0 50px 100px rgba(179,69,113,.45)}
+#card .clogo{position:absolute; top:52px; right:56px; width:300px; filter:brightness(0) invert(1)}
+#card .club{position:absolute; top:70px; left:56px; font-size:30px; font-weight:800; opacity:.92}
+#card .lbl{position:absolute; top:220px; right:56px; font-size:34px; font-weight:700; opacity:.9}
+#pts{position:absolute; top:262px; right:56px; font-size:150px; font-weight:900; line-height:1}
+#pts small{font-size:46px; font-weight:800; margin-right:14px}
+#card .bars{position:absolute; bottom:56px; left:56px; display:flex; gap:7px; align-items:flex-end; height:80px}
+#card .bars i{display:block; background:#fff; height:80px; border-radius:2px; opacity:.95}
+#card .member{position:absolute; bottom:60px; right:56px; font-size:30px; font-weight:800}
+#shine{position:absolute; top:-200px; width:180px; height:1000px; background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent); transform-origin:center}
+.plus{position:absolute; font-size:64px; font-weight:900; color:var(--deep)}
+.chip{position:absolute; left:120px; right:120px; height:150px; border-radius:40px; background:#fff; display:flex; align-items:center;
+  gap:30px; padding:0 40px; font-size:46px; font-weight:900; color:var(--ink); box-shadow:0 18px 40px rgba(179,69,113,.16)}
+.chip span{width:96px; height:96px; flex:none; border-radius:28px; background:var(--soft); display:flex; align-items:center; justify-content:center; font-size:54px}
+.conf{position:absolute; width:22px; height:34px; border-radius:6px}
+
+/* S5 map */
+#map{position:absolute; left:70px; top:520px; width:940px; height:820px; border-radius:56px; overflow:hidden; background:#fff;
+  box-shadow:0 40px 90px rgba(179,69,113,.22)}
+#map svg{position:absolute; inset:0}
+.pin{position:absolute; width:0; height:0}
+.pin .p{position:absolute; left:-42px; top:-104px; width:84px; height:104px}
+.pin .lab{position:absolute; top:12px; left:-140px; width:280px; text-align:center; font-size:36px; font-weight:900; color:var(--ink);
+  background:rgba(255,255,255,.92); border-radius:20px; padding:6px 0}
+#rider{position:absolute; font-size:76px; left:0; top:0; margin:-48px 0 0 -40px}
+#shop{position:absolute; font-size:80px}
+.badge{position:absolute; height:130px; border-radius:40px; background:#fff; display:flex; align-items:center; justify-content:center; gap:20px;
+  font-size:42px; font-weight:900; color:var(--ink); box-shadow:0 18px 40px rgba(179,69,113,.16)}
+#branches{position:absolute; top:1700px; font-size:36px; font-weight:800; color:var(--muted)}
+
+/* S6 outro */
+#outbg{position:absolute; inset:0; background:radial-gradient(120% 80% at 50% 30%,#E784AA 0%,var(--accent) 45%,var(--deep) 100%)}
+#olog{position:absolute; left:140px; width:800px; top:470px; filter:brightness(0) invert(1)}
+#oh{top:850px; color:#fff; font-size:96px}
+#osub{position:absolute; top:1030px; left:110px; right:110px; text-align:center; color:#fff; opacity:.92; font-size:42px; font-weight:700; line-height:1.5}
+#cta{position:absolute; left:190px; width:700px; top:1270px; height:150px; border-radius:99px; background:#fff; color:var(--deep);
+  display:flex; align-items:center; justify-content:center; font-size:62px; font-weight:900; direction:ltr; letter-spacing:.5px;
+  box-shadow:0 24px 60px rgba(80,10,40,.35)}
+.ringp{position:absolute; left:190px; width:700px; top:1270px; height:150px; border-radius:99px; border:5px solid #fff}
+#hand{position:absolute; font-size:110px; left:700px; top:1350px}
+#ofeat{position:absolute; top:1530px; left:80px; right:80px; display:flex; justify-content:center; gap:24px}
+#ofeat div{background:rgba(255,255,255,.18); color:#fff; border:2px solid rgba(255,255,255,.4); border-radius:99px; padding:14px 28px; font-size:32px; font-weight:800; white-space:nowrap}
+
+/* wipe */
+#wipe{position:absolute; left:-760px; top:-640px; width:2600px; height:3200px; pointer-events:none}
+#wipe i{position:absolute; top:0; height:100%; display:block}
+</style>
+</head>
+<body>
+<div id="frame"><div id="stage">
+  <div class="blob" id="b1" style="width:760px;height:760px;background:#F6CBDC"></div>
+  <div class="blob" id="b2" style="width:640px;height:640px;background:#F3AFC8"></div>
+  <div class="blob" id="b3" style="width:560px;height:560px;background:#FFE3EE"></div>
+  <svg id="ribbons" viewBox="0 0 1080 1920">
+    <defs>
+      <linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="#D65D8B" stop-opacity=".0"/><stop offset=".5" stop-color="#D65D8B" stop-opacity=".38"/><stop offset="1" stop-color="#F3AFC8" stop-opacity=".1"/></linearGradient>
+      <linearGradient id="g2" x1="0" x2="1"><stop offset="0" stop-color="#F6CBDC" stop-opacity=".2"/><stop offset=".6" stop-color="#ffffff" stop-opacity=".75"/><stop offset="1" stop-color="#F6CBDC" stop-opacity=".2"/></linearGradient>
+      <linearGradient id="g3" x1="0" x2="1"><stop offset="0" stop-color="#B34571" stop-opacity=".22"/><stop offset=".5" stop-color="#E784AA" stop-opacity=".3"/><stop offset="1" stop-color="#B34571" stop-opacity="0"/></linearGradient>
+    </defs>
+    <path id="r1" fill="url(#g1)"/><path id="r2" fill="url(#g2)"/><path id="r3" fill="url(#g3)"/>
+  </svg>
+  <div id="sparks"></div>
+
+  <!-- 1 · Intro -->
+  <section class="scene" id="s1">
+    <img id="s1logo" src="assets/logo-hd.png" alt="echarpe">
+    <div id="s1line"></div>
+    <h1 class="hl words" id="s1h">طرحتك… بقت على موبايلك</h1>
+    <p class="center" id="s1sub">تطبيق إيشارب الجديد ✨</p>
+  </section>
+
+  <!-- 2+3 · Chat ordering & try-on -->
+  <section class="scene" id="s23">
+    <div class="pill" id="p2">١ · اطلبي من الشات</div>
+    <div class="pill" id="p3">٢ · جرّبي قبل الشراء</div>
+    <h2 class="hl words" id="h2" style="top:300px">اطلبي طرحتك من الشات 💬</h2>
+    <h2 class="hl words" id="h3" style="top:300px">جرّبيها قبل ما تشتريها ✨</h2>
+    <div id="phone"><div class="screen">
+      <div id="notch"></div>
+      <div class="app" id="chat">
+        <div class="apphead"><div class="ava"><img src="assets/logo-hd.png" alt=""></div><div><div class="t">إيشارب</div><div class="s">متصلين دلوقتي</div></div></div>
+        <div class="bub me" id="c1" style="top:230px">عايزة طرحة رمادي خفيفة 🤍</div>
+        <div class="bub them" id="typing" style="top:350px"><i></i><i></i><i></i></div>
+        <div class="bub them" id="t1" style="top:350px">عندنا ٧ درجات رمادي تجنن 😍</div>
+        <div class="bub them" id="imgbub" style="top:470px"><img src="assets/col-grays.jpg" alt=""><div>كوليكشن الرمادي 🤍</div></div>
+        <div class="bub me" id="c2" style="top:925px">هاخد الـ Light Gray 😍 <span class="tick">✓✓</span></div>
+        <div id="heart" style="left:60px;top:1000px">❤️</div>
+        <div class="inputbar">اكتبي رسالتك…<b>➤</b></div>
+      </div>
+      <div class="app" id="tryon">
+        <div class="apphead"><div class="ava"><img src="assets/logo-hd.png" alt=""></div><div><div class="t">جرّبي الطرحة</div><div class="s">تجربة مباشرة</div></div></div>
+        <div id="tryframe">
+          <img id="tryimg" src="assets/col-hero.jpg" alt="">
+          <div id="tint"></div>
+          <div id="scan"></div>
+          <div class="corner" style="top:24px;right:24px;border-left:0;border-bottom:0"></div>
+          <div class="corner" style="top:24px;left:24px;border-right:0;border-bottom:0"></div>
+          <div class="corner" style="bottom:24px;right:24px;border-left:0;border-top:0"></div>
+          <div class="corner" style="bottom:24px;left:24px;border-right:0;border-top:0"></div>
+          <div id="okbadge">✨ شكلها تحفة عليكي</div>
+        </div>
+        <div id="ring"></div>
+        <div id="swatches"></div>
+        <div id="addcart">ضيفيها للسلة 🛍️</div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- 4 · Loyalty -->
+  <section class="scene" id="s4">
+    <div class="pill" id="p4">٣ · نادي العملاء</div>
+    <h2 class="hl words" id="h4" style="top:300px">نقاط على كل مشترياتك ⭐</h2>
+    <div id="card">
+      <img class="clogo" src="assets/logo-hd.png" alt="">
+      <div class="club">نادي عملاء إيشارب</div>
+      <div class="lbl">رصيد نقاطك</div>
+      <div id="pts">٠<small>نقطة</small></div>
+      <div class="member">عضوة مميزة 💗</div>
+      <div class="bars" id="bars"></div>
+      <div id="shine"></div>
+    </div>
+    <div class="plus" id="pl1">+٥٠</div>
+    <div class="plus" id="pl2">+١٠٠</div>
+    <div class="chip" id="ch1" style="top:1230px"><span>🎁</span>هدية ترحيب أول تسجيل</div>
+    <div class="chip" id="ch2" style="top:1410px"><span>🏷️</span>عروض حصرية لأعضائنا</div>
+    <div class="chip" id="ch3" style="top:1590px"><span>💳</span>استبدلي نقاطك بخصومات</div>
+    <div id="confetti"></div>
+  </section>
+
+  <!-- 5 · Pickup -->
+  <section class="scene" id="s5">
+    <div class="pill" id="p5">٤ · استلام زي ما تحبي</div>
+    <h2 class="hl words" id="h5" style="top:300px">استلمي في نفس اليوم 🛍️</h2>
+    <div id="map">
+      <svg viewBox="0 0 940 820" width="940" height="820">
+        <rect width="940" height="820" fill="#FDF3F7"/>
+        <g stroke="#F3E0E9" stroke-width="26" fill="none" stroke-linecap="round">
+          <path d="M-20 180 L960 120"/><path d="M-20 470 L960 520"/><path d="M-20 720 L960 690"/>
+          <path d="M210 -20 L170 840"/><path d="M520 -20 L560 840"/><path d="M800 -20 L760 840"/>
+        </g>
+        <g fill="#FADCE7"><rect x="260" y="220" width="200" height="190" rx="26"/><rect x="620" y="230" width="110" height="230" rx="26"/>
+          <rect x="40" y="540" width="100" height="120" rx="22"/><rect x="600" y="570" width="130" height="90" rx="22"/></g>
+        <path id="route" d="M150 690 C 260 560, 330 520, 470 470 S 700 360, 800 200" fill="none" stroke="#D65D8B" stroke-width="12"
+          stroke-linecap="round" stroke-dasharray="1 0"/>
+      </svg>
+      <div id="shop" style="left:96px;top:640px">🏬</div>
+      <div class="pin" id="pinA" style="left:800px;top:200px"><svg class="p" viewBox="0 0 84 104"><path d="M42 102C42 102 4 62 4 40a38 38 0 0176 0c0 22-38 62-38 62z" fill="#D65D8B"/><circle cx="42" cy="40" r="15" fill="#fff"/></svg><div class="lab">مدينتي</div></div>
+      <div class="pin" id="pinB" style="left:330px;top:150px"><svg class="p" viewBox="0 0 84 104"><path d="M42 102C42 102 4 62 4 40a38 38 0 0176 0c0 22-38 62-38 62z" fill="#B34571"/><circle cx="42" cy="40" r="15" fill="#fff"/></svg><div class="lab">الرحاب</div></div>
+      <div class="pin" id="pinC" style="left:640px;top:610px"><svg class="p" viewBox="0 0 84 104"><path d="M42 102C42 102 4 62 4 40a38 38 0 0176 0c0 22-38 62-38 62z" fill="#E784AA"/><circle cx="42" cy="40" r="15" fill="#fff"/></svg><div class="lab">مدينة نصر</div></div>
+      <div id="rider">🛵</div>
+    </div>
+    <div class="badge" id="bd1" style="left:70px;width:460px;top:1400px">🚚 في نفس اليوم</div>
+    <div class="badge" id="bd2" style="left:550px;width:460px;top:1400px">💵 ادفعي وقت الاستلام</div>
+    <p class="center" id="branches">أو استلمي من فروعنا: الرحاب · مدينتي · سيتي سنتر</p>
+  </section>
+
+  <!-- 6 · Outro -->
+  <section class="scene" id="s6">
+    <div id="outbg"></div>
+    <img id="olog" src="assets/logo-hd.png" alt="echarpe">
+    <h2 class="hl words" id="oh">حمّلي التطبيق دلوقتي</h2>
+    <p id="osub">بيتفتح من المتصفح على طول<br>من غير متاجر ولا تحميل تقيل</p>
+    <div class="ringp" id="rg1"></div><div class="ringp" id="rg2"></div>
+    <div id="cta">echarpe.store</div>
+    <div id="hand">👆</div>
+    <div id="ofeat"><div>⭐ نقاط</div><div>🎁 هدية ترحيب</div><div>🏷️ عروض حصرية</div></div>
+  </section>
+
+  <div id="wipe"><i id="w1"></i><i id="w2"></i><i id="w3"></i></div>
+</div></div>
+<div id="controls"><button id="play" aria-label="تشغيل أو إيقاف">❚❚</button><div id="bar"><i id="fill"></i></div><button id="re">↺</button></div>
+
+<script>
+const DUR = 25;
+const $ = id => document.getElementById(id);
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, x) => a + (b - a) * x;
+const eo = x => 1 - Math.pow(1 - x, 3);
+const eio = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const back = x => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const ar = n => Math.round(n).toLocaleString('ar-EG');
+function set(el, { o = 1, x = 0, y = 0, s = 1, r = 0, b = 0, extra = '' } = {}) {
+  el.style.opacity = o;
+  el.style.transform = `${extra} translate(${x}px,${y}px) scale(${s}) rotate(${r}deg)`;
+  el.style.filter = b > .05 ? `blur(${b}px)` : '';
+}
+// pop-in helper: appear at t0 with overshoot
+function pop(el, t, t0, d = .45, from = { y: 30, s: .6 }) {
+  const p = seg(t, t0, t0 + d), e = back(p);
+  set(el, { o: clamp(p * 2.2), y: lerp(from.y, 0, e), s: lerp(from.s, 1, e) });
+  return p;
+}
+// word-by-word reveal; optional exit
+function words(el, t, t0, out = null, stagger = .09) {
+  const ws = el.querySelectorAll('.w');
+  let ox = 1, oy = 0;
+  if (out) { const q = eio(seg(t, out, out + .35)); ox = 1 - q; oy = -50 * q; }
+  ws.forEach((w, i) => {
+    const p = eo(seg(t, t0 + i * stagger, t0 + i * stagger + .55));
+    set(w, { o: p * ox, y: lerp(60, 0, p) + oy, b: (1 - p) * 14 });
+  });
+}
+function centerPill(el, t, t0, out = null) {
+  const p = back(seg(t, t0, t0 + .5)), q = out ? eio(seg(t, out, out + .3)) : 0;
+  el.style.marginLeft = (-el.offsetWidth / 2) + 'px';
+  set(el, { o: clamp(seg(t, t0, t0 + .25)) * (1 - q), s: lerp(.4, 1, p), y: -30 * q });
+}
+
+// ---------- build dynamic bits ----------
+document.querySelectorAll('.words').forEach(el => {
+  const parts = el.textContent.trim().split(/\s+/);
+  el.innerHTML = parts.map(p => `<span class="w">${p}</span>`).join(' ');
+});
+const SPARKS = Array.from({ length: 26 }, (_, i) => {
+  const s = document.createElement('span'); s.className = 'spark'; s.textContent = i % 3 ? '✦' : '✧';
+  $('sparks').appendChild(s);
+  const r = k => (Math.sin(i * 127.1 + k * 311.7) * 43758.5453) % 1;
+  return { el: s, x: Math.abs(r(1)) * 1040, y: Math.abs(r(2)) * 1920, sp: 18 + Math.abs(r(3)) * 40, ph: Math.abs(r(4)) * 6.28, sz: .5 + Math.abs(r(5)) * .9 };
+});
+const SW = ['#d8c8b0', '#a3a3a6', '#d79aa6', '#6e5040', '#4a5f86', '#2c2c30'];
+SW.forEach(c => { const d = document.createElement('div'); d.className = 'sw'; d.style.background = c; $('swatches').appendChild(d); });
+const barsEl = $('bars'); [3, 6, 2, 8, 3, 5, 2, 7, 4, 3, 6, 2, 5, 8, 3, 4].forEach(w => { const i = document.createElement('i'); i.style.width = w + 'px'; barsEl.appendChild(i); });
+const CONF = Array.from({ length: 34 }, (_, i) => {
+  const c = document.createElement('div'); c.className = 'conf';
+  c.style.background = ['#D65D8B', '#F6CBDC', '#B34571', '#FFD36E', '#fff'][i % 5];
+  $('confetti').appendChild(c);
+  return { el: c, x: 60 + (i * 211) % 960, d: (i * 0.137) % 1.1, sp: 700 + (i * 97) % 500, rot: (i * 53) % 360, sw: 30 + (i * 17) % 50 };
+});
+const route = document.querySelector('#route'); const RL = route.getTotalLength();
+route.style.strokeDasharray = RL; route.style.strokeDashoffset = RL;
+
+function ribbon(path, t, y0, amp, len, speed, thick, tilt) {
+  const top = [], bot = [];
+  for (let i = 0; i <= 40; i++) {
+    const x = -120 + i * 33, ph = x / len + t * speed;
+    const yc = y0 + Math.sin(ph) * amp + Math.sin(ph * .43 + 2) * amp * .5 + x * tilt;
+    const th = thick * (.45 + .55 * Math.abs(Math.sin(ph * .6 + 1.3)));
+    top.push(`${x.toFixed(1)} ${(yc - th / 2).toFixed(1)}`); bot.unshift(`${x.toFixed(1)} ${(yc + th / 2).toFixed(1)}`);
+  }
+  path.setAttribute('d', 'M' + top.join(' L') + ' L' + bot.join(' L') + 'Z');
+}
+
+const SCENES = [['s1', 0, 3.4], ['s23', 3.4, 12.6], ['s4', 12.6, 17.2], ['s5', 17.2, 20.8], ['s6', 20.8, DUR + 1]];
+const CUTS = [3.4, 12.6, 17.2, 20.8];
+
+function render(t) {
+  // background life
+  set($('b1'), { x: -180 + Math.sin(t * .5) * 120, y: -120 + Math.cos(t * .4) * 140 });
+  set($('b2'), { x: 600 + Math.cos(t * .45) * 140, y: 1150 + Math.sin(t * .35) * 160 });
+  set($('b3'), { x: 420 + Math.sin(t * .3 + 1) * 200, y: 500 + Math.cos(t * .5) * 120 });
+  ribbon($('r1'), t, 1500, 90, 260, .9, 230, -.25);
+  ribbon($('r2'), t + 3, 380, 70, 210, -.7, 120, .18);
+  ribbon($('r3'), t + 7, 1780, 70, 300, .6, 180, -.1);
+  SPARKS.forEach(s => {
+    const y = ((s.y - t * s.sp) % 1920 + 1920) % 1920;
+    set(s.el, { o: .25 + .6 * Math.abs(Math.sin(t * 1.6 + s.ph)), x: s.x, y, s: s.sz, r: t * 40 + s.ph * 50 });
+  });
+
+  SCENES.forEach(([id, a, b]) => { $(id).style.display = t >= a && t < b ? 'block' : 'none'; });
+
+  // ---- wipe (silky diagonal sweep hiding each cut)
+  let wp = null;
+  for (const c of CUTS) if (t > c - .5 && t < c + .5) wp = (t - (c - .5));
+  const W = $('wipe');
+  if (wp === null) W.style.display = 'none';
+  else {
+    W.style.display = 'block';
+    const e = eio(wp);
+    W.style.transform = `rotate(-18deg)`;
+    const base = lerp(2700, -2900, e);
+    [['w1', 0, 2300, 'linear-gradient(90deg,#F6CBDC,#E784AA 25%,#D65D8B 50%,#E784AA 75%,#F6CBDC)'],
+     ['w2', 2350, 120, '#F3AFC8'], ['w3', 2520, 50, '#fff']].forEach(([id, off, w, bg]) => {
+      const el = $(id); el.style.left = (base + off) + 'px'; el.style.width = w + 'px'; el.style.background = bg;
+    });
+  }
+
+  // ---- S1
+  if (t < 3.4) {
+    const lp = eio(seg(t, .3, 1.6));
+    const L = $('s1logo');
+    L.style.clipPath = `inset(-20% ${(1 - lp) * 100}% -20% 0)`;
+    set(L, { o: clamp(seg(t, .3, .6)), s: lerp(.9, 1, eo(seg(t, .3, 2))) * lerp(1, 1.05, seg(t, 2.6, 3.4)), y: -10 * seg(t, 2.6, 3.4) });
+    set($('s1line'), { o: seg(t, 1.3, 1.5), s: eo(seg(t, 1.3, 1.9)) });
+    words($('s1h'), t, 1.6);
+    set($('s1sub'), { o: eo(seg(t, 2.3, 2.8)), y: lerp(30, 0, eo(seg(t, 2.3, 2.8))) });
+  }
+
+  // ---- S2/S3 (chat → try-on)
+  if (t >= 3.4 && t < 12.6) {
+    centerPill($('p2'), t, 3.5, 7.9); $('p2').style.top = '180px';
+    centerPill($('p3'), t, 8.25); $('p3').style.top = '180px';
+    words($('h2'), t, 3.65, 7.9);
+    words($('h3'), t, 8.35);
+    const pe = back(seg(t, 3.5, 4.4));
+    set($('phone'), { o: clamp(seg(t, 3.5, 3.8)), y: lerp(1100, 0, pe) + Math.sin(t * 1.4) * 8, r: lerp(-8, 0, pe) + Math.sin(t * .9) * .6 });
+    // chat
+    pop($('c1'), t, 4.5, .45, { y: 40, s: .5 });
+    const typ = $('typing'); const tv = t >= 5.05 && t < 5.8;
+    typ.style.display = tv ? 'flex' : 'none';
+    if (tv) { pop(typ, t, 5.05, .3); typ.querySelectorAll('i').forEach((d, i) => d.style.transform = `translateY(${-10 * Math.max(0, Math.sin(t * 9 - i * .9))}px)`); }
+    if (t >= 5.8) pop($('t1'), t, 5.8, .45, { y: 30, s: .6 }); else $('t1').style.opacity = 0;
+    pop($('imgbub'), t, 6.35, .5, { y: 60, s: .6 });
+    pop($('c2'), t, 7.1, .45, { y: 40, s: .5 });
+    const hp = seg(t, 7.5, 8.0); set($('heart'), { o: hp > 0 ? 1 : 0, s: back(hp) });
+    // screen swap
+    const sp = eio(seg(t, 8.0, 8.55));
+    set($('chat'), { x: sp * 640 });
+    set($('tryon'), { x: lerp(-640, 0, sp) });
+    // try-on
+    const sc = seg(t, 8.7, 9.9);
+    $('scan').style.top = (lerp(-160, 650, eio(sc))) + 'px';
+    $('scan').style.opacity = sc > 0 && sc < 1 ? 1 : 0;
+    pop($('okbadge'), t, 9.95, .5, { y: 40, s: .5 });
+    const k = clamp(Math.floor((t - 10.1) / .45), -1, SW.length - 1);
+    const ringX = k < 0 ? 0 : k;
+    const swEl = $('swatches').children[ringX];
+    $('ring').style.left = (40 + swEl.offsetLeft - 12) + 'px';
+    set($('ring'), { o: t > 10.1 ? 1 : 0, s: 1 + .15 * Math.max(0, 1 - ((t - 10.1) % .45) / .2) });
+    const tint = $('tint'); tint.style.background = k < 0 ? 'transparent' : SW[k]; tint.style.opacity = k < 0 ? 0 : .55;
+    set($('addcart'), { s: t > 11.6 ? 1 + .05 * Math.sin((t - 11.6) * 10) * Math.max(0, 1 - (t - 11.6)) : 1 });
+    set($('tryimg'), { s: 1.04 + .04 * seg(t, 8, 12.6) });
+  }
+
+  // ---- S4 loyalty
+  if (t >= 12.6 && t < 17.2) {
+    centerPill($('p4'), t, 12.75); $('p4').style.top = '180px';
+    words($('h4'), t, 12.85);
+    const cp = eo(seg(t, 12.9, 13.8));
+    set($('card'), { o: clamp(seg(t, 12.9, 13.2)), y: lerp(200, 0, cp) + Math.sin(t * 1.3) * 6, extra: `perspective(1800px) rotateY(${lerp(75, 0, cp)}deg) rotateX(${Math.sin(t * 1.1) * 3}deg)` });
+    const v = eo(seg(t, 13.7, 15.2)) * 350;
+    $('pts').firstChild.nodeValue = ar(v);
+    $('shine').style.left = lerp(-300, 1100, eio(seg(t, 14.0, 14.9))) + 'px';
+    $('shine').style.transform = 'rotate(20deg)';
+    [['pl1', 14.0, 700], ['pl2', 14.6, 230]].forEach(([id, t0, x]) => {
+      const p = seg(t, t0, t0 + 1.0);
+      set($(id), { o: p > 0 ? Math.sin(p * Math.PI) : 0, x: x, y: lerp(560, 420, eo(p)), s: lerp(.6, 1.2, eo(p)) });
+    });
+    [['ch1', 14.9], ['ch2', 15.25], ['ch3', 15.6]].forEach(([id, t0]) => {
+      const p = back(seg(t, t0, t0 + .55)); set($(id), { o: clamp(seg(t, t0, t0 + .2)), x: lerp(-700, 0, p) });
+    });
+    CONF.forEach(c => {
+      const p = t - 14.9 - c.d; if (p < 0) { c.el.style.opacity = 0; return; }
+      set(c.el, { o: clamp(1.6 - p * .6), x: c.x + Math.sin(p * 4 + c.rot) * c.sw, y: -60 + p * c.sp, r: c.rot + p * 400 });
+    });
+  }
+
+  // ---- S5 pickup
+  if (t >= 17.2 && t < 20.8) {
+    centerPill($('p5'), t, 17.35); $('p5').style.top = '180px';
+    words($('h5'), t, 17.45);
+    const mp = eo(seg(t, 17.4, 18.1));
+    set($('map'), { o: clamp(seg(t, 17.4, 17.7)), y: lerp(160, 0, mp), s: lerp(.9, 1, mp) });
+    const rp = eio(seg(t, 18.0, 19.6));
+    route.style.strokeDashoffset = RL * (1 - rp);
+    const pt = route.getPointAtLength(RL * rp);
+    const rider = $('rider'); set(rider, { o: t > 18.0 ? 1 : 0, x: pt.x, y: pt.y + Math.sin(t * 20) * 3 });
+    set($('shop'), { o: 1, s: back(seg(t, 17.7, 18.1)) });
+    [['pinB', 18.1], ['pinC', 18.4], ['pinA', 19.5]].forEach(([id, t0]) => {
+      const p = seg(t, t0, t0 + .5); const el = $(id);
+      set(el.querySelector('.p'), { o: clamp(p * 3), y: lerp(-160, 0, back(p)) });
+      set(el.querySelector('.lab'), { o: seg(t, t0 + .3, t0 + .6) });
+    });
+    pop($('bd1'), t, 19.3, .5, { y: 50, s: .6 });
+    pop($('bd2'), t, 19.55, .5, { y: 50, s: .6 });
+    set($('branches'), { o: eo(seg(t, 19.9, 20.3)), y: lerp(30, 0, eo(seg(t, 19.9, 20.3))) });
+  }
+
+  // ---- S6 outro
+  if (t >= 20.8) {
+    const lp = eio(seg(t, 20.95, 22.0)), L = $('olog');
+    L.style.clipPath = `inset(-20% ${(1 - lp) * 100}% -20% 0)`;
+    set(L, { o: clamp(seg(t, 20.95, 21.2)), s: lerp(.92, 1, eo(seg(t, 20.95, 22.5))) });
+    words($('oh'), t, 21.6);
+    set($('osub'), { o: eo(seg(t, 22.2, 22.7)), y: lerp(30, 0, eo(seg(t, 22.2, 22.7))) });
+    const press = t > 23.75 && t < 24.05 ? .94 : 1;
+    const cp = pop($('cta'), t, 22.6, .55, { y: 60, s: .5 });
+    if (cp >= 1) set($('cta'), { s: press });
+    [['rg1', 23.2], ['rg2', 23.9]].forEach(([id, t0]) => {
+      const p = ((t - t0) % 1.4) / 1.4; set($(id), { o: t > t0 ? (1 - p) * .8 : 0, s: 1 + p * .25 });
+    });
+    const hp = eo(seg(t, 23.1, 23.7));
+    set($('hand'), { o: clamp(seg(t, 23.1, 23.3)), x: lerp(200, 0, hp), y: lerp(260, 0, hp) + (press < 1 ? 14 : 0) });
+    [...$('ofeat').children].forEach((d, i) => pop(d, t, 23.4 + i * .15, .45, { y: 30, s: .6 }));
+  }
+}
+
+// ---------- playback ----------
+const isExport = /[?&]export/.test(location.search);
+const stage = $('stage'), frame = $('frame');
+function fit() {
+  const k = isExport ? 1 : Math.min((innerWidth - 32) / 1080, (innerHeight - 90) / 1920);
+  frame.style.width = 1080 * k + 'px'; frame.style.height = 1920 * k + 'px';
+  stage.style.transform = `scale(${k})`;
+}
+if (isExport) document.body.classList.add('export');
+addEventListener('resize', fit); fit();
+window.__render = render; window.__DUR = DUR;
+if (!isExport) {
+  let playing = true, t = 0, last = null;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) { playing = false; t = 21.0 + 3.5; }
+  const btn = $('play');
+  const sync = () => { btn.textContent = playing ? '❚❚' : '▶'; };
+  btn.onclick = () => { playing = !playing; sync(); };
+  $('re').onclick = () => { t = 0; playing = true; sync(); };
+  $('bar').onclick = e => { const r = e.currentTarget.getBoundingClientRect(); t = clamp((r.right - e.clientX) / r.width) * DUR; render(t); };
+  // bar fills right-to-left to match RTL
+  $('fill').style.left = 'auto'; $('fill').style.right = '0';
+  sync();
+  const loop = now => {
+    if (last !== null && playing) { t += (now - last) / 1000; if (t >= DUR) t = 0; }
+    last = now; render(t); $('fill').style.width = (t / DUR * 100) + '%';
+    requestAnimationFrame(loop);
+  };
+  document.fonts.ready.then(() => requestAnimationFrame(loop));
+}
+</script>
+</body>
+</html>
