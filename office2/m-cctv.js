@@ -116,13 +116,13 @@ async function probeHealth(gateway){
 async function probeGateways(force){
   if(!force && warnAt && Date.now() - warnAt < 2*60000) return; warnAt = Date.now();
   await Promise.all(BRANCHES.map(x=> probeHealth(agentGateway(x)).then(()=>{ warn[x.id] = false; }, ()=>{ warn[x.id] = true; })));
-  if(u.screen()==='cctv') u.render();
+  if(u.screen()==='cctv' && st.view!=='review') u.render();   // المراجعة فيها مشغّل شغال — مانمسحوش
 }
 
 /* ---------- 🛒 السلة LIVE (office_pos_live) ---------- */
 function startLive(){
   if(liveStarted) return; liveStarted = true;
-  u.db.collection('office_pos_live').onSnapshot(s=>{ liveDocs = s.docs.map(d=> Object.assign({ id:d.id }, d.data())); const el = document.getElementById('cctvPinned'); if(el) el.innerHTML = pinnedHtml(); else if(u.screen()==='cctv') u.render(); }, e=>{ console.warn('office_pos_live', e && e.code); });
+  u.db.collection('office_pos_live').onSnapshot(s=>{ liveDocs = s.docs.map(d=> Object.assign({ id:d.id }, d.data())); const el = document.getElementById('cctvPinned'); if(el) el.innerHTML = pinnedHtml(); else if(u.screen()==='cctv' && st.view==='live') u.render(); }, e=>{ console.warn('office_pos_live', e && e.code); });
 }
 function liveDoc(x){
   const norm = v=> String(v||'').trim().toLowerCase(); const aliases = x.liveAliases||[];
@@ -258,7 +258,7 @@ function dayRow(x, s){
   const ms = u.saleMs(s); const pm = Object.entries(s.payments||{}).filter(([k,v])=> Math.abs(Number(v)||0)>.001).map(([k,v])=> (PAY[k]||k) + ' ' + money(v)).join(' · ');
   const cust = (s.customerName||s.customerPhone) ? '👤 ' + u.esc(s.customerName||'عميل') + (s.customerPhone ? ' · ' + u.esc(s.customerPhone) : '') : '👤 بدون عميل';
   const cnt = Number(s.itemCount || (s.items||[]).length);
-  return `<div class="row" style="cursor:default;flex-wrap:wrap"><div class="n"><b>${u.hm(ms)} · فاتورة #${u.esc(s.invoiceNo||s.invoiceCode||s.id||'')} · ${money(s.total)}${s.reversed?' <span class="pill p-gray">معكوسة</span>':''}${Number(s.total)<0?' <span class="pill p-bad">مرتجع</span>':''}</b><small>${cust} · ${u.esc(s.employeeName||s.employee||s.seller||'')}</small><small>💳 ${u.esc(pm||'—')} · ${cnt} صنف</small></div><span class="btns" style="margin:0;width:100%">${s.invoiceCode?`<button class="btn" onclick="O2.cctv.shots('${u.esc(String(s.invoiceCode))}')">📸 لقطات</button>`:''}${x.playback?`<button class="btn p" onclick="O2.cctv.saleVideo('${u.esc(s.id)}',${ms})">🎥 فيديو</button>`:''}<button class="btn" onclick="O2.cctv.invoice('${u.esc(s.id)}')">🧾 الفاتورة</button></span></div>`;
+  return `<div class="row" style="cursor:default;flex-wrap:wrap"><div class="n"><b>${u.hm(ms)} · فاتورة #${u.esc(s.invoiceNo||s.invoiceCode||s.id||'')} · ${money(s.total)}${s.reversed?' <span class="pill p-gray">معكوسة</span>':''}${Number(s.total)<0?' <span class="pill p-bad">مرتجع</span>':''}</b><small>${cust} · ${u.esc(s.employeeName||s.employee||s.seller||'')}</small><small>💳 ${u.esc(pm||'—')} · ${cnt} صنف</small></div><span class="btns" style="margin:0;width:100%">${s.invoiceCode?`<button class="btn" onclick="O2.cctv.shots('${u.esc(String(s.invoiceCode))}')">📸 لقطات</button>`:''}${x.playback?`<button class="btn p" onclick="O2.cctv.saleVideo('${u.esc(s.id)}',${ms})">🎥 فيديو</button>`:''}${x.playback?`<button class="btn" onclick="O2.cctv.reviewAt(${ms})">📼 مراجعة</button>`:''}<button class="btn" onclick="O2.cctv.invoice('${u.esc(s.id)}')">🧾 الفاتورة</button></span></div>`;
 }
 function vDay(){
   const x = site(); const key = st.dayKey; const today = u.caiKey(Date.now()); const a = key.split('-').map(Number); const dayMs = u.caiStamp(a[0],a[1],a[2],12,0);
@@ -299,6 +299,132 @@ function shotVideo(q){
   if(!shotDoc) return; const { d, profile, gateway } = shotDoc; const at = Number(d.videoAtMs) - 30000; q = q || '480';
   openPlayback(profile, at, 1, d.cameraId || profile.playbackCamera, Number(q), { step:false, url: invoiceVideoUrl(d, profile, gateway, at, 60, q), title:'فيديو الفاتورة ' + shotDoc.code, sub:'30 ثانية قبل الحفظ + 30 ثانية بعده · التسجيل محفوظ على ' + (d.clockSource==='pos_pc' ? 'كمبيوتر الفرع' : 'الـNVR') });
 }
+
+/* ---------- 📼 مراجعة اليوم — فيديو متصل + شريط أحداث الـPOS + السلة متزامنة ----------
+   · الأحداث من pos_cctv_invoice_timelines (سلة كل فاتورة بالوقت) + pos_activity_log (خصم، درج، مرتجع…)
+   · الفيديو بيتحمّل قطع صغيرة ورا بعض؛ وقت أي لحظة = بداية القطعة + وقت المشغّل (ساعة كمبيوتر الفرع، نفس ساعة الـPOS)
+   · المشغّل شغال = مفيش u.render() (بيمسح الفيديو) — التحديث كله على عناصر بالـid */
+const RV = window.O2CctvReview;
+const RV_CHUNK = 120, RV_PX_MIN = 14, RV_LEAD = 4000;
+const RV_TONE = { add:'#16a34a', del:'#dc2626', edit:'#d97706', pay:'#2563eb', sale:'#0f172a', alert:'#9333ea' };
+const RV_FILTERS = [['all','الكل'],['del','🗑 حذف وتقليل'],['alert','⚠️ تنبيهات'],['sale','🧾 فواتير']];
+const rv = { key:'', branch:'', loaded:false, loading:false, err:'', actErr:false, events:[], timelines:[], span:null, cur:0, chunkStart:0, cam:'', filter:'all', rate:1, skip:false, idx:-2, basketKey:'', pendingAt:0 };
+function hms(ms){ const p = u.caiParts(ms); return String(p.h).padStart(2,'0') + ':' + String(p.mi).padStart(2,'0') + ':' + String(Math.floor(ms/1000)%60).padStart(2,'0'); }
+function rvMatch(e){ return rv.filter==='all' || (rv.filter==='del' && e.removedValue > 0) || (rv.filter==='alert' && e.tone==='alert') || (rv.filter==='sale' && e.kind==='sale_saved'); }
+async function loadReview(force){
+  const x = site(), key = st.dayKey;
+  if(rv.loading || (!force && rv.loaded && rv.key===key && rv.branch===x.id)) return;
+  rv.loading = true; rv.loaded = false; rv.err = ''; rv.key = key; rv.branch = x.id; u.render();
+  try{
+    const a = key.split('-').map(Number), start = u.caiStamp(a[0],a[1],a[2],0,0), end = start + u.DAY;
+    const pair = await Promise.all([
+      u.db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',start).where('endedAtMs','<',end).get(),
+      u.db.collection('pos_activity_log').where('ts','>=',start).where('ts','<',end).get().catch(()=> null) ]);
+    rv.timelines = pair[0].docs.map(d=> d.data()).filter(t=> branchMatches(t.branch, x));
+    rv.actErr = !pair[1];
+    rv.events = RV.buildEvents(rv.timelines, pair[1] ? pair[1].docs.map(d=> d.data()).filter(r=> branchMatches(r.branch, x)) : []);
+    rv.span = RV.span(rv.events, start, Math.min(end, Date.now()));
+    rv.cur = rv.pendingAt || (rv.events.length ? Math.max(rv.span.start, rv.events[0].atMs - RV_LEAD) : rv.span.start);
+    rv.pendingAt = 0; rv.chunkStart = 0; rv.idx = -2; rv.basketKey = '';
+    if(!recordedCameras(x).some(c=> String(c.id)===rv.cam)) rv.cam = String(x.playbackCamera || x.cameras[0].id || '1');
+    rv.loaded = true;
+  }catch(e){ rv.err = String(e && (e.code||e.message)); }
+  rv.loading = false; if(u.screen()==='cctv') u.render();
+}
+function rvX(ms){ return (ms - rv.span.start) / 60000 * RV_PX_MIN; }
+function rvStripHtml(){
+  const w = Math.max(320, Math.ceil(rvX(rv.span.end))); let ticks = '';
+  for(let t = Math.ceil(rv.span.start / 600000) * 600000; t <= rv.span.end; t += 600000){ const hour = (t % 3600000) === 0; ticks += `<div style="position:absolute;left:${rvX(t).toFixed(1)}px;top:0;bottom:0;border-left:1px solid ${hour?'#94a3b8':'#e2e8f0'}"></div><div style="position:absolute;left:${(rvX(t)+3).toFixed(1)}px;top:1px;font-size:10px;color:#64748b;font-weight:${hour?800:500}">${u.hm(t)}</div>`; }
+  const marks = rv.events.map((e, i)=> `<div title="${u.esc(hms(e.atMs) + ' ' + e.label)}" style="position:absolute;left:${(rvX(e.atMs)-2).toFixed(1)}px;top:${e.removedValue>0||e.tone==='alert'?16:26}px;width:4px;height:${e.removedValue>0||e.tone==='alert'?34:20}px;border-radius:2px;background:${RV_TONE[e.tone]||'#64748b'};opacity:${rvMatch(e)?1:.18}"></div>`).join('');
+  return `<div id="rvStrip" onclick="O2.cctv.rvStripTap(event)" style="direction:ltr;overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:#f8fafc;-webkit-overflow-scrolling:touch"><div id="rvStripIn" style="position:relative;height:56px;width:${w}px">${ticks}${marks}<div id="rvHead" style="position:absolute;top:0;bottom:0;width:2px;background:#ef4444;left:0;box-shadow:0 0 0 1px rgba(239,68,68,.25)"></div></div></div>`;
+}
+function rvBasketHtml(b){
+  if(!b) return '<div class="hint" style="margin:0">🛒 مفيش سلة مفتوحة في اللحظة دي</div>';
+  return `<div style="display:flex;justify-content:space-between;align-items:center;font-weight:800"><span>🛒 فاتورة ${b.invoiceNo ? '#' + u.esc(b.invoiceNo) : u.esc(b.invoiceCode)}${b.saved ? ' <span class="pill p-gray">اتحفظت</span>' : ''}</span><span class="money">${money(b.total)}</span></div>` +
+    (b.rows.map(r=> `<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-top:1px dashed var(--line);font-size:13px"><span>${r.ret?'↩️ ':''}${u.esc(r.name)}</span><span style="white-space:nowrap">${r.qty} × ${u.n0(r.price)}</span></div>`).join('') || '<div class="hint" style="margin:0">السلة فاضية</div>');
+}
+function rvListHtml(){
+  const rows = rv.events.map((e, i)=> rvMatch(e) ? `<div id="rvE${i}" class="row" onclick="O2.cctv.rvGo(${i})" style="align-items:flex-start;gap:8px"><span style="flex:none;width:10px;height:10px;border-radius:50%;margin-top:6px;background:${RV_TONE[e.tone]||'#64748b'}"></span><div class="n"><b>${hms(e.atMs)} · ${u.esc(e.label)}${e.removedValue>0 ? ' <span class="pill p-bad">−' + u.n0(e.removedValue) + ' ج</span>' : ''}</b><small>${u.esc(e.detail||'')}${e.invoiceNo ? ' · فاتورة #' + u.esc(e.invoiceNo) : ''}${e.total!=null && e.source==='cart' ? ' · الإجمالي ' + u.n0(e.total) : ''}</small></div></div>` : '').join('');
+  return rows || '<div class="empty">مفيش أحداث من النوع ده في اليوم</div>';
+}
+function vReview(){
+  const x = site(); const key = st.dayKey; const today = u.caiKey(Date.now()); const a = key.split('-').map(Number); const dayMs = u.caiStamp(a[0],a[1],a[2],12,0);
+  const nav = `<div class="card full" style="display:flex;align-items:center;gap:8px"><button class="back" onclick="O2.cctv.day(-1)">‹</button><input type="date" value="${key}" max="${today}" onchange="O2.cctv.dayPick(this.value)" style="flex:1;padding:9px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-weight:800;text-align:center"><button class="back" onclick="O2.cctv.day(1)" ${key>=today?'disabled':''}>›</button><span class="tag">${u.dayName(dayMs)}</span></div>`;
+  if(!x.playback) return nav + `<div class="card full"><div class="empty">التسجيل مش متاح لفرع ${u.esc(x.name)}</div></div>`;
+  if(!RV) return nav + '<div class="card full"><div class="empty">حدّث الصفحة — ملف المراجعة لسه ماتحمّلش</div></div>';
+  if((rv.key!==key || rv.branch!==x.id) && !rv.loading){ rv.err = ''; rv.loaded = false; }
+  if(rv.err) return nav + `<div class="card full"><b style="color:var(--bad)">تعذر تحميل أحداث اليوم: ${u.esc(rv.err)}</b><div class="btns"><button class="btn" onclick="O2.cctv.rvReload()">↻ حاول تاني</button></div></div>`;
+  if(rv.loading || !rv.loaded){ if(!rv.loading) setTimeout(()=> loadReview(), 0); return nav + '<div class="card full"><div class="skel"></div><div class="hint">بيجيب أحداث اليوم من الـPOS…</div></div>'; }
+  { const old = rvVideo(); rv.resume = !!(old && !old.paused && !old.ended); }   // لو الشاشة اترسمت تاني والفيديو شغال، كمّل من نفس اللحظة
+  const s = RV.summary(rv.events);
+  const I = 'width:auto;margin:0;padding:8px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-weight:800';
+  setTimeout(rvMount, 0);
+  return nav + `<div class="card full"><h3>📼 مراجعة اليوم <small>${u.esc(x.name)} · ${s.sales} فاتورة · ${s.total} حدث</small></h3>
+    <div class="hint" style="margin-top:0">${s.removed ? `🗑 ${s.removed} مرة حذف/تقليل بقيمة <b>${u.n0(s.removedValue)} ج</b>` : '🗑 مفيش حذف من السلة'} · ⚠️ ${s.alerts} تنبيه${rv.actErr ? ' · سجل النشاط ماتحمّلش' : ''}</div>
+    <video id="rvVideo" controls playsinline muted style="width:100%;border-radius:12px;background:#000;max-height:52vh" ontimeupdate="O2.cctv.rvTick()" onended="O2.cctv.rvNext()" onloadeddata="O2.cctv.rvSt('')" onplaying="O2.cctv.rvSt('')" onwaiting="O2.cctv.rvSt('⏳ جاري تحميل الفيديو…')" onerror="O2.cctv.rvSt('⚠️ مفيش تسجيل للوقت ده — أقدم من المتاح أو الـgateway واقع')"></video>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0"><b id="rvClock" style="font-size:18px;font-variant-numeric:tabular-nums">${hms(rv.cur)}</b><span id="rvSt" class="hint" style="margin:0"></span></div>
+    ${rvStripHtml()}
+    <div class="btns" style="align-items:center;flex-wrap:wrap"><button class="btn" onclick="O2.cctv.rvStep(-1)">⏮ الحدث السابق</button><button class="btn p" onclick="O2.cctv.rvStep(1)">الحدث التالي ⏭</button><button class="btn" onclick="O2.cctv.rvJump(-10)">−10ث</button><button class="btn" onclick="O2.cctv.rvJump(10)">+10ث</button>
+      <select onchange="O2.cctv.rvRate(this.value)" style="${I}">${[1,2,4,8].map(v=> `<option value="${v}" ${rv.rate===v?'selected':''}>${v}×</option>`).join('')}</select>
+      <select onchange="O2.cctv.rvCam(this.value)" style="${I}">${recordedCameras(x).map(c=> `<option value="${u.esc(c.id)}" ${rv.cam===String(c.id)?'selected':''}>${u.esc(c.label||c.name)}</option>`).join('')}</select>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px"><input type="checkbox" ${rv.skip?'checked':''} onchange="O2.cctv.rvSkip(this.checked)" style="width:auto;margin:0"> تخطّي الفاضي</label></div>
+    <div id="rvBasket" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px"></div></div>
+    <div class="card full"><div class="seg" style="flex-wrap:wrap">${RV_FILTERS.map(f=> `<button id="rvF_${f[0]}" class="${rv.filter===f[0]?'on':''}" onclick="O2.cctv.rvFilter('${f[0]}')">${f[1]}</button>`).join('')}</div>
+    <div id="rvList" style="max-height:48vh;overflow-y:auto;margin-top:8px">${rvListHtml()}</div>
+    <div class="hint">دوس على أي حدث والفيديو يروح له (${RV_LEAD/1000} ثواني قبله) · الوقت بساعة كمبيوتر الفرع · السلل اللي اتسابت من غير بيع بتظهر كتنبيه بس، من غير تفاصيل الأصناف</div></div>`;
+}
+function rvVideo(){ return document.getElementById('rvVideo'); }
+function rvUrl(atMs){ const x = site(); return agentGateway(x) + '/echarpe-playback/video?camera=' + encodeURIComponent(rv.cam) + '&atMs=' + Math.floor(atMs) + '&durationSec=' + RV_CHUNK + '&quality=360&mode=fast'; }
+function rvLoad(ms, autoplay){
+  const v = rvVideo(); if(!v) return;
+  rv.chunkStart = Math.floor(ms); rv.cur = rv.chunkStart; v.src = rvUrl(rv.chunkStart); v.playbackRate = rv.rate;
+  rvSt('⏳ جاري تحميل الفيديو…'); if(autoplay){ const p = v.play(); if(p && p.catch) p.catch(()=>{}); }
+  rvPaint(true);
+}
+function rvSeek(ms, autoplay){
+  const v = rvVideo(); if(!v || !rv.span) return;
+  ms = Math.max(rv.span.start, Math.min(ms, Math.max(rv.span.start, Date.now() - 20000)));
+  const off = (ms - rv.chunkStart) / 1000;
+  if(rv.chunkStart && off >= 0 && off < RV_CHUNK - 3 && v.readyState >= 1 && isFinite(v.duration) && off < v.duration - 1){ v.currentTime = off; rv.cur = ms; if(autoplay){ const p = v.play(); if(p && p.catch) p.catch(()=>{}); } rvPaint(true); }
+  else rvLoad(ms, autoplay);
+}
+function rvMount(){ const v = rvVideo(); if(!v || v.getAttribute('data-on')) return; v.setAttribute('data-on','1'); rv.idx = -2; rv.basketKey = ''; rvLoad(rv.cur || rv.span.start, !!rv.resume); rv.resume = false; }
+function rvSt(t){ const el = document.getElementById('rvSt'); if(el) el.textContent = t; }
+function rvPaint(scroll){
+  const clock = document.getElementById('rvClock'); if(clock) clock.textContent = hms(rv.cur);
+  const head = document.getElementById('rvHead'), strip = document.getElementById('rvStrip');
+  if(head && strip){ const px = rvX(rv.cur); head.style.left = px.toFixed(1) + 'px'; if(scroll || px < strip.scrollLeft + 30 || px > strip.scrollLeft + strip.clientWidth - 30) strip.scrollLeft = Math.max(0, px - strip.clientWidth / 2); }
+  const b = RV.basketAt(rv.timelines, rv.cur); const bk = b ? b.invoiceCode + '|' + b.atMs : '';
+  if(bk !== rv.basketKey){ rv.basketKey = bk; const el = document.getElementById('rvBasket'); if(el) el.innerHTML = rvBasketHtml(b); }
+  const i = RV.nearestIndex(rv.events, rv.cur);
+  if(i !== rv.idx){
+    const old = document.getElementById('rvE' + rv.idx); if(old) old.style.background = '';
+    rv.idx = i; const el = document.getElementById('rvE' + i);
+    if(el){ el.style.background = '#fef9c3'; const list = document.getElementById('rvList'); if(list) list.scrollTop = Math.max(0, el.offsetTop - list.offsetTop - list.clientHeight / 3); }
+  }
+}
+function rvTick(){
+  const v = rvVideo(); if(!v || !rv.chunkStart) return;
+  rv.cur = rv.chunkStart + v.currentTime * 1000; rvPaint(false);
+  // تخطّي الفاضي: لو مفيش حدث قريب، نط لقبل الحدث الجاي على طول
+  if(rv.skip && !v.paused){ const i = RV.nearestIndex(rv.events, rv.cur), next = rv.events[i+1], last = rv.events[i]; if(next && next.atMs - rv.cur > 45000 && (!last || rv.cur - last.atMs > 12000)) rvSeek(next.atMs - RV_LEAD, true); }
+}
+function rvNext(){ const at = rv.chunkStart + RV_CHUNK * 1000; if(rv.span && at < Math.min(rv.span.end, Date.now() - 30000)) rvLoad(at, true); else rvSt('⏹ آخر اليوم'); }
+function rvStep(dir){
+  let i = RV.nearestIndex(rv.events, rv.cur + (dir > 0 ? RV_LEAD + 1500 : -1500));
+  if(dir > 0){ for(i = i + 1; i < rv.events.length && !rvMatch(rv.events[i]); i++); } else { for(; i >= 0 && !rvMatch(rv.events[i]); i--); }
+  if(i < 0 || i >= rv.events.length){ u.toast(dir > 0 ? 'مفيش أحداث بعد كده' : 'ده أول حدث'); return; }
+  rvSeek(rv.events[i].atMs - RV_LEAD, true);
+}
+function rvStripTap(ev){ const inner = document.getElementById('rvStripIn'); if(!inner || !rv.span) return; const r = inner.getBoundingClientRect(); rvSeek(rv.span.start + (ev.clientX - r.left) / RV_PX_MIN * 60000, true); }
+function rvFilter(f){
+  rv.filter = f; rv.idx = -2;
+  RV_FILTERS.forEach(x=>{ const b = document.getElementById('rvF_' + x[0]); if(b) b.className = x[0]===f ? 'on' : ''; });
+  const list = document.getElementById('rvList'); if(list) list.innerHTML = rvListHtml();
+  const strip = document.getElementById('rvStrip'); if(strip){ const left = strip.scrollLeft; strip.outerHTML = rvStripHtml(); const s2 = document.getElementById('rvStrip'); if(s2) s2.scrollLeft = left; }
+  rvPaint(false);
+}
+function reviewAt(ms){ rv.pendingAt = Math.max(1, Number(ms) - RV_LEAD); rv.loaded = false; st.view = 'review'; u.render(); }
 
 /* ---------- 🚨 النشاط — زوار وتنبيهات من الـgateway ---------- */
 function trackingProfile(x){
@@ -359,7 +485,7 @@ function actPlay(i){
 }
 
 /* ---------- 🖼 الشاشة ---------- */
-const VIEWS = [['live','📹 مباشر'],['all','🌐 كل الفروع'],['playback','🎞 تسجيل'],['day','🕘 اليوم'],['activity','🚨 النشاط']];
+const VIEWS = [['live','📹 مباشر'],['all','🌐 كل الفروع'],['playback','🎞 تسجيل'],['day','🕘 اليوم'],['review','📼 مراجعة اليوم'],['activity','🚨 النشاط']];
 function render(){
   startLive();
   const x = site(); const local = localBranchActive(x);
@@ -368,7 +494,7 @@ function render(){
   const seg = `<div class="seg full">${VIEWS.map(v=> `<button class="${st.view===v[0]?'on':''}" onclick="O2.cctv.view('${v[0]}')">${v[1]}</button>`).join('')}</div>`;
   const down = BRANCHES.filter(b=> warn[b.id]);
   const warnBar = down.length ? `<div class="alert w full" style="cursor:default">⚠️ gateway ${down.map(b=> u.esc(b.name)).join(' و')} مش متاح — الكاميرات والتسجيل مش هيفتحوا لحد ما يرجع <span class="link" onclick="O2.cctv.probe()">↻ افحص تاني</span></div>` : '';
-  const body = st.view==='all' ? vAll() : st.view==='playback' ? vPlayback() : st.view==='day' ? vDay() : st.view==='activity' ? vActivity() : vLive();
+  const body = st.view==='all' ? vAll() : st.view==='playback' ? vPlayback() : st.view==='day' ? vDay() : st.view==='review' ? vReview() : st.view==='activity' ? vActivity() : vLive();
   setTimeout(armFrames, 0);
   return chips + seg + warnBar + body;
 }
@@ -387,8 +513,15 @@ O2.cctv = {
   dayReload(){ delete dayRows[st.dayKey]; if(u.dayCache[st.dayKey]) u.dayCache[st.dayKey].done = false; u.render(); },
   saleVideo, shots, shotVideo, invoice(id){ u.invoiceAny(id); },
   actReload(){ loadActivity(true); }, actPlay,
+  reviewAt, rvTick, rvNext, rvSt, rvStep, rvStripTap, rvFilter,
+  rvGo(i){ const e = rv.events[i]; if(e) rvSeek(e.atMs - RV_LEAD, true); },
+  rvJump(sec){ rvSeek(rv.cur + sec * 1000, true); },
+  rvRate(v){ rv.rate = Number(v) || 1; const el = rvVideo(); if(el) el.playbackRate = rv.rate; },
+  rvCam(v){ rv.cam = String(v); rvLoad(rv.cur, true); },
+  rvSkip(on){ rv.skip = !!on; },
+  rvReload(){ rv.err = ''; rv.loaded = false; loadReview(true); },
   openAt(branch, ms, mins){ const p = profileFor(branch); if(!p){ u.toast('الفرع ده مفيش له كاميرات معرّفة'); return; } st.branch = p.id; openPlayback(p, ms, mins||1, p.playbackCamera); }
 };
-O2.register('cctv', { icon:'📹', title:'الكاميرات', desc:'مباشر · كل الفروع · تسجيل · فواتير اليوم باللقطات والفيديو · زوار وتنبيهات', order:10, tab:'more',
+O2.register('cctv', { icon:'📹', title:'الكاميرات', desc:'مباشر · كل الفروع · تسجيل · فواتير اليوم باللقطات والفيديو · مراجعة اليوم بأحداث الـPOS والسلة · زوار وتنبيهات', order:10, tab:'more',
   enter(){ st.on = {}; startLive(); probeGateways(false); }, render });
 })();
