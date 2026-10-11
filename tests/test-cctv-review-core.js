@@ -81,4 +81,12 @@ assert.deepStrictEqual(R.buildEvents(null, null), []);
 assert.deepStrictEqual(R.buildEvents([{ events:[] }, null, { invoiceCode:'X' }], [null, {}]), []);
 assert.strictEqual(R.basketAt(null, T0), null);
 
+// فاتورة من غير تايملاين: سلة نهائية من أصناف الفاتورة (من غير أحداث حذف وهمية)
+const syn = R.fromSale({ id:'S9', invoiceCode:'INV9', invoiceNo:'499', branch:'مدينتي', total:210, items:[{ name:'طرحة', qty:1, price:165 },{ name:'بندانة', qty:1, price:45 },{ name:'نقط', isRedemption:true, qty:1, price:-10 }] }, T0+900000);
+assert.strictEqual(syn.synthetic, true); assert.strictEqual(syn.startedAtMs, T0+900000-30000);
+const synEv = R.buildEvents([syn], []);
+assert.deepStrictEqual(synEv.map(e=> e.kind), ['invoice_cart','sale_saved']);
+assert.strictEqual(R.summary(synEv).removed, 0, 'الفاتورة المبنية من الأصناف ماينفعش تطلع حذف');
+b = R.basketAt([syn], T0+900000-10000); assert.deepStrictEqual(b.rows.map(r=> r.name), ['طرحة','بندانة']); assert.strictEqual(b.total, 210);
+assert.strictEqual(R.fromSale({ items:[] }, T0), null); assert.strictEqual(R.fromSale({ items:[{ name:'x', qty:1, price:1 }] }, 0), null);
 console.log('  ✓ cctv review core: ' + ev.length + ' أحداث · محذوف ' + sum.removedValue + ' ج · السلة متزامنة');

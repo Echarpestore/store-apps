@@ -137,7 +137,25 @@ function summary(events){
   s.removedValue = +s.removedValue.toFixed(2); return s;
 }
 
-var api = { KIND:KIND, ACTIVITY:ACTIVITY, buildEvents:buildEvents, basketAt:basketAt, nearestIndex:nearestIndex, span:span, summary:summary, cartRows:cartRows, diffCarts:diffCarts };
+/* فاتورة مالهاش تايملاين محفوظ: نبني واحد بسيط من أصناف الفاتورة نفسها.
+   بيعرض السلة النهائية في وقت الفاتورة، من غير خطوات الإضافة والحذف (synthetic). */
+function fromSale(sale, endMs){
+  sale = sale || {}; endMs = num(endMs); if(!endMs) return null;
+  var start = num(sale.firstItemAt) || Math.max(1, endMs - 30000), catalog = {}, seen = {}, packed = [];
+  (Array.isArray(sale.items) ? sale.items : []).forEach(function(item){
+    if(!item || item.isRedemption) return;
+    var base = String(item.id || item.barcode || item.name || 'item'), n = (seen[base]||0) + 1, key = base + '#' + n; seen[base] = n;
+    catalog[key] = { name:String(item.name || item.code || 'صنف'), barcode:String(item.barcode||'') };
+    packed.push([key, num(item.qty), num(item.price), item.isReturn ? 1 : 0]);
+  });
+  if(!packed.length) return null;
+  var total = sale.total != null ? num(sale.total) : null;
+  return { synthetic:true, invoiceCode:String(sale.invoiceCode||sale.id||''), invoiceNo:String(sale.invoiceNo||''), saleId:String(sale.id||''), branch:String(sale.branch||''),
+           startedAtMs:start, endedAtMs:endMs, catalog:catalog,
+           events:[ { seq:1, atMs:start, kind:'invoice_cart', cart:packed, total:total }, { seq:2, atMs:endMs, kind:'sale_saved', cart:packed, total:total } ] };
+}
+
+var api = { fromSale:fromSale, KIND:KIND, ACTIVITY:ACTIVITY, buildEvents:buildEvents, basketAt:basketAt, nearestIndex:nearestIndex, span:span, summary:summary, cartRows:cartRows, diffCarts:diffCarts };
 if(typeof module !== 'undefined' && module.exports) module.exports = api;
 if(root) root.O2CctvReview = api;
 })(typeof window !== 'undefined' ? window : null);

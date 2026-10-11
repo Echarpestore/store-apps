@@ -317,12 +317,23 @@ async function loadReview(force){
   rv.loading = true; rv.loaded = false; rv.err = ''; rv.key = key; rv.branch = x.id; u.render();
   try{
     const a = key.split('-').map(Number), start = u.caiStamp(a[0],a[1],a[2],0,0), end = start + u.DAY;
-    const pair = await Promise.all([
-      u.db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',start).where('endedAtMs','<',end).get(),
-      u.db.collection('pos_activity_log').where('ts','>=',start).where('ts','<',end).get().catch(()=> null) ]);
-    rv.timelines = pair[0].docs.map(d=> d.data()).filter(t=> branchMatches(t.branch, x));
-    rv.actErr = !pair[1];
-    rv.events = RV.buildEvents(rv.timelines, pair[1] ? pair[1].docs.map(d=> d.data()).filter(r=> branchMatches(r.branch, x)) : []);
+    // 3 مصادر للسلة بالترتيب: (1) pos_cctv_invoice_timelines · (2) نفس المستند محفوظ احتياطي جوّه
+    // pos_cctv_invoice_snapshots.basketTimeline (الـPOS بيكتبه هناك لما المجموعة الأولى مرفوضة بالـrules)
+    // · (3) أصناف الفاتورة نفسها (سلة نهائية بس). أي مصدر يفشل مايوقّفش الباقي.
+    const none = ()=> null;
+    const got = await Promise.all([
+      u.db.collection('pos_cctv_invoice_timelines').where('endedAtMs','>=',start).where('endedAtMs','<',end).get().catch(none),
+      u.db.collection('pos_cctv_invoice_snapshots').where('basketTimeline.endedAtMs','>=',start).where('basketTimeline.endedAtMs','<',end).get().catch(none),
+      u.db.collection('pos_activity_log').where('ts','>=',start).where('ts','<',end).get().catch(none),
+      u.loadDay(key).catch(none) ]);
+    const byCode = {}; rv.src = { timelines:0, snapshots:0, sales:0 };
+    if(got[0]) got[0].docs.forEach(d=>{ const t = d.data() || {}; if(t.invoiceCode && branchMatches(t.branch, x)){ byCode[String(t.invoiceCode)] = t; rv.src.timelines++; } });
+    if(got[1]) got[1].docs.forEach(d=>{ const t = (d.data() || {}).basketTimeline; if(t && t.invoiceCode && !byCode[String(t.invoiceCode)] && branchMatches(t.branch, x)){ byCode[String(t.invoiceCode)] = t; rv.src.snapshots++; } });
+    (got[3] || []).forEach(sale=>{ const code = String(sale && (sale.invoiceCode || sale.id) || ''); if(!code || byCode[code] || !branchMatches(sale.branch, x)) return; const t = RV.fromSale(sale, u.saleMs(sale)); if(t && t.endedAtMs >= start && t.endedAtMs < end){ byCode[code] = t; rv.src.sales++; } });
+    if(!got[0] && !got[1] && !got[3]) throw new Error('permission-denied');
+    rv.timelines = Object.keys(byCode).map(k=> byCode[k]);
+    rv.actErr = !got[2];
+    rv.events = RV.buildEvents(rv.timelines, got[2] ? got[2].docs.map(d=> d.data()).filter(r=> branchMatches(r.branch, x)) : []);
     rv.span = RV.span(rv.events, start, Math.min(end, Date.now()));
     rv.cur = rv.pendingAt || (rv.events.length ? Math.max(rv.span.start, rv.events[0].atMs - RV_LEAD) : rv.span.start);
     rv.pendingAt = 0; rv.chunkStart = 0; rv.idx = -2; rv.basketKey = '';
@@ -360,7 +371,7 @@ function vReview(){
   const I = 'width:auto;margin:0;padding:8px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-weight:800';
   setTimeout(rvMount, 0);
   return nav + `<div class="card full"><h3>📼 مراجعة اليوم <small>${u.esc(x.name)} · ${s.sales} فاتورة · ${s.total} حدث</small></h3>
-    <div class="hint" style="margin-top:0">${s.removed ? `🗑 ${s.removed} مرة حذف/تقليل بقيمة <b>${u.n0(s.removedValue)} ج</b>` : '🗑 مفيش حذف من السلة'} · ⚠️ ${s.alerts} تنبيه${rv.actErr ? ' · سجل النشاط ماتحمّلش' : ''}</div>
+    <div class="hint" style="margin-top:0">${s.removed ? `🗑 ${s.removed} مرة حذف/تقليل بقيمة <b>${u.n0(s.removedValue)} ج</b>` : '🗑 مفيش حذف من السلة'} · ⚠️ ${s.alerts} تنبيه${rv.actErr ? ' · سجل النشاط ماتحمّلش' : ''}${rv.src && rv.src.sales ? ' · ' + rv.src.sales + ' فاتورة من غير خطوات الإضافة والحذف (سلتها النهائية بس)' : ''}</div>
     <video id="rvVideo" controls playsinline muted style="width:100%;border-radius:12px;background:#000;max-height:52vh" ontimeupdate="O2.cctv.rvTick()" onended="O2.cctv.rvNext()" onloadeddata="O2.cctv.rvSt('')" onplaying="O2.cctv.rvSt('')" onwaiting="O2.cctv.rvSt('⏳ جاري تحميل الفيديو…')" onerror="O2.cctv.rvSt('⚠️ مفيش تسجيل للوقت ده — أقدم من المتاح أو الـgateway واقع')"></video>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0"><b id="rvClock" style="font-size:18px;font-variant-numeric:tabular-nums">${hms(rv.cur)}</b><span id="rvSt" class="hint" style="margin:0"></span></div>
     ${rvStripHtml()}
