@@ -3771,38 +3771,136 @@ function headRatio(lm){
   const lx=le.reduce((a,p)=>a+p.x,0)/le.length, rx=re.reduce((a,p)=>a+p.x,0)/re.length;
   return (no[3].x-lx)/Math.max(1,rx-lx);
 }
+/* 🟢 v652 — تحقق الحركة بالاتجاه: «بص يمين» ثم «بص شمال» (بترتيب عشوائي) بشريطين على جانبي الكاميرا.
+   القديم كان «افتح بُقك + حرّك وشك» بنص مكتوب بس: الموظفة مش عارفة هي عملت المطلوب ولا لأ.
+   دلوقتي كل اتجاه له شريط بيتملي كل ما الوش يلف ناحيته، ويقلب أخضر بعلامة ✓ لما يوصل.
+   · الصورة المطبوعة ماتعدّيش: لفّ ورقة مسطّحة مابيحرّكش الأنف بالنسبة للعينين (محتاج وش مجسّم).
+   · الترتيب عشوائي عشان فيديو متسجّل مايعدّيش بالصدفة.
+   · القياس بالفرق عن وضع «قدام» بتاع نفس الشخص (base)، مش رقم ثابت — عشان اختلاف الوشوش والكاميرات.
+   المنطق (faceTurnProgress / faceLivenessStep) دوال خالصة ومتجرّبة في tests/test-face-liveness-v652.js. */
+const FACE_TURN_DELTA=0.09, FACE_TURN_HOLD=2, FACE_BASE_FRAMES=3, FACE_LIVE_TIMEOUT_MS=12000;
+/* نسبة الأنف بين العينين في الصورة الخام (مش المعكوسة): 0.5 = قدام.
+   لما الشخص يبص **يمينه** الأنف بيروح ناحية شمال الصورة ← النسبة بتقل. يساره ← بتزيد. */
+function faceTurnProgress(base,ratio,dir){
+  if(!Number.isFinite(base)||!Number.isFinite(ratio)) return 0;
+  const dev=dir==='right' ? base-ratio : ratio-base;
+  const p=dev/FACE_TURN_DELTA; return p>=1-1e-6 ? 1 : Math.max(0,p);   // السماحية: 0.5-0.41 بيطلع 0.0899999 بالكسور العشرية
+}
+function faceLivenessNew(order){
+  return {phase:'base',order:(order&&order.length===2)?order.slice():['right','left'],i:0,base:NaN,baseRows:[],hold:0,
+          done:{right:false,left:false},progress:{right:0,left:0}};
+}
+function faceLivenessStep(s,ratio){
+  if(!s||s.phase==='done'||!Number.isFinite(ratio)) return s;
+  if(s.phase==='base'){
+    // لازم كام لقطة ورا بعض والوش قدام عشان ناخد وضع البداية؛ أي لقطة ملفوفة بتصفّر العدّ.
+    if(ratio>=FACE_FRONT_MIN&&ratio<=FACE_FRONT_MAX){
+      s.baseRows.push(ratio);
+      if(s.baseRows.length>=FACE_BASE_FRAMES){ const r=s.baseRows.slice().sort((x,y)=>x-y); s.base=r[Math.floor(r.length/2)]; s.phase='turn'; }
+    }else s.baseRows.length=0;
+    return s;
+  }
+  const dir=s.order[s.i], p=faceTurnProgress(s.base,ratio,dir);
+  s.progress[dir]=p;
+  if(p>=1){
+    s.hold++;
+    if(s.hold>=FACE_TURN_HOLD){ s.done[dir]=true; s.progress[dir]=1; s.hold=0; s.i++; if(s.i>=s.order.length) s.phase='done'; }
+  }else s.hold=0;
+  return s;
+}
+window.faceTurnProgress=faceTurnProgress; window.faceLivenessNew=faceLivenessNew; window.faceLivenessStep=faceLivenessStep;
+
+/* واجهة الشريطين: بتتركّب فوق أي <video> (شاشة الحضور وشاشة تسجيل الوش من لوحة المالك).
+   المعاينة بتتعكس زي المراية، فـ«يمين» الشخص = يمين الشاشة. */
+function faceLiveUi(video){
+  if(!document.getElementById('faceLiveCss')){
+    const css=document.createElement('style'); css.id='faceLiveCss';
+    css.textContent=[
+      '.flv{position:absolute;pointer-events:none;direction:ltr;border-radius:14px;transition:box-shadow .25s}',
+      '.flv.all{box-shadow:inset 0 0 0 4px #22c55e,inset 0 0 38px rgba(34,197,94,.45);animation:flvFlash .6s ease-out}',
+      '.flv-bar{position:absolute;top:13%;bottom:13%;width:13px;border-radius:9px;background:rgba(255,255,255,.2);overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.35);transition:background .2s,box-shadow .2s,width .2s}',
+      '.flv-l{left:9px}.flv-r{right:9px}',
+      '.flv-bar i{position:absolute;inset:0;transform:scaleY(var(--p,0));transform-origin:50% 50%;background:linear-gradient(#fde68a,#f59e0b);border-radius:9px;transition:transform .12s linear}',
+      '.flv-bar.target{animation:flvBreath 1.05s ease-in-out infinite}',
+      '.flv-bar.ok{background:#22c55e;width:16px;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 0 20px 3px rgba(34,197,94,.85);animation:flvPop .45s cubic-bezier(.2,1.5,.4,1)}',
+      '.flv-bar.ok i{opacity:0}',
+      '.flv-tick{position:absolute;top:50%;width:34px;height:34px;margin-top:-17px;border-radius:50%;background:#22c55e;color:#fff;font:900 20px/34px system-ui;text-align:center;transform:scale(0);box-shadow:0 4px 14px rgba(0,0,0,.4)}',
+      '.flv-tick.l{left:30px}.flv-tick.r{right:30px}',
+      '.flv-tick.on{animation:flvTick .5s cubic-bezier(.2,1.6,.4,1) forwards}',
+      '.flv-hint{position:absolute;top:50%;margin-top:-22px;height:44px;display:flex;align-items:center;gap:2px;color:#fff;font:900 34px/1 system-ui;text-shadow:0 2px 8px rgba(0,0,0,.75);opacity:0;transition:opacity .2s}',
+      '.flv-hint.on{opacity:1}.flv-hint.r{right:34px}.flv-hint.l{left:34px;flex-direction:row-reverse}',
+      '.flv-hint span{opacity:.15;animation:flvChev 1s linear infinite}',
+      '.flv-hint span:nth-child(2){animation-delay:.16s}.flv-hint span:nth-child(3){animation-delay:.32s}',
+      '.flv-hint.l span{transform:scaleX(-1)}',
+      '@keyframes flvBreath{0%,100%{box-shadow:0 0 0 1px rgba(0,0,0,.35),0 0 0 0 rgba(245,158,11,0)}50%{box-shadow:0 0 0 1px rgba(0,0,0,.35),0 0 16px 4px rgba(245,158,11,.75)}}',
+      '@keyframes flvPop{0%{transform:scaleX(1)}45%{transform:scaleX(1.9)}100%{transform:scaleX(1)}}',
+      '@keyframes flvTick{0%{transform:scale(0) rotate(-30deg)}100%{transform:scale(1) rotate(0)}}',
+      '@keyframes flvChev{0%{opacity:.15}35%{opacity:1}70%,100%{opacity:.15}}',
+      '@keyframes flvFlash{0%{box-shadow:inset 0 0 0 10px #22c55e,inset 0 0 70px rgba(34,197,94,.9)}100%{box-shadow:inset 0 0 0 4px #22c55e,inset 0 0 38px rgba(34,197,94,.45)}}'
+    ].join('\n');
+    document.head.appendChild(css);
+  }
+  const host=video.parentElement; if(!host) return {set(){},end(){}};
+  if(getComputedStyle(host).position==='static') host.style.position='relative';
+  const prevTransform=video.style.transform; video.style.transform='scaleX(-1)';
+  const box=document.createElement('div'); box.className='flv';
+  box.innerHTML='<div class="flv-bar flv-l"><i></i></div><div class="flv-bar flv-r"><i></i></div>'
+    +'<div class="flv-tick l">✓</div><div class="flv-tick r">✓</div>'
+    +'<div class="flv-hint l"><span>›</span><span>›</span><span>›</span></div><div class="flv-hint r"><span>›</span><span>›</span><span>›</span></div>';
+  host.appendChild(box);
+  const el={l:box.querySelector('.flv-l'),r:box.querySelector('.flv-r'),tl:box.querySelector('.flv-tick.l'),tr:box.querySelector('.flv-tick.r'),hl:box.querySelector('.flv-hint.l'),hr:box.querySelector('.flv-hint.r')};
+  const place=()=>{ box.style.left=video.offsetLeft+'px'; box.style.top=video.offsetTop+'px'; box.style.width=video.offsetWidth+'px'; box.style.height=video.offsetHeight+'px'; };
+  place();
+  return {
+    set(st){
+      place();
+      const target=st.phase==='turn' ? st.order[st.i] : '';
+      [['right',el.r,el.tr,el.hr],['left',el.l,el.tl,el.hl]].forEach(([dir,bar,tick,hint])=>{
+        bar.style.setProperty('--p',String(st.done[dir]?1:(st.progress[dir]||0)));
+        bar.classList.toggle('ok',!!st.done[dir]);
+        bar.classList.toggle('target',target===dir&&!st.done[dir]);
+        tick.classList.toggle('on',!!st.done[dir]);
+        hint.classList.toggle('on',target===dir&&!st.done[dir]);
+      });
+      box.classList.toggle('all',st.phase==='done');
+    },
+    end(){ try{ box.remove(); }catch(_e){} video.style.transform=prevTransform; }
+  };
+}
+
 async function runActiveLiveness(video,setStatus,isActive){
   const _st=setStatus||((t)=>{const el=$('#attPhotoStatus'); if(el) el.textContent=t;});
   const _alive=isActive||(()=>!!pendingPhotoAction);
-  // v602 — mobile-friendly active liveness.
-  // Blink detection was unreliable on real phones, so use a CHANGE in mouth opening
-  // plus a small head movement. A static photo cannot satisfy the mouth-change step.
-  const until=Date.now()+7000;
-  let minMouth=Infinity,maxMouth=-Infinity,minHead=Infinity,maxHead=-Infinity,frames=0;
-  while(Date.now()<until && _alive()){
-    const r=await faceFrame(video).catch(()=>null);
-    if(!r){
-      _st('خليك قدام الكاميرا…');
-      await new Promise(x=>setTimeout(x,120));
-      continue;
+  const _wait=(ms)=>new Promise(x=>setTimeout(x,ms));
+  const s=faceLivenessNew(Math.random()<0.5?['right','left']:['left','right']);
+  const ui=faceLiveUi(video);
+  const until=Date.now()+FACE_LIVE_TIMEOUT_MS;
+  try{
+    while(Date.now()<until && _alive()){
+      const r=await faceFrame(video).catch(()=>null);
+      if(!r){ _st('خليك قدام الكاميرا…'); await _wait(120); continue; }
+      const was=s.i;
+      faceLivenessStep(s,headRatio(r.landmarks));
+      if(s.i!==was){ try{ if(navigator.vibrate) navigator.vibrate(35); }catch(_e){} }
+      ui.set(s);
+      if(s.phase==='base') _st('بص قدام الكاميرا…');
+      else if(s.phase==='turn') _st(s.order[s.i]==='right' ? 'بص يمين 👉 لحد ما الشريط ينوّر أخضر' : 'بص شمال 👈 لحد ما الشريط ينوّر أخضر');
+      else{
+        _st('تمام ✅ ارجع بص قدام…');
+        // استنى الوش يرجع قدام قبل ما اللقطات الجاية تتاخد (وإلا المطابقة بتاخد وش ملفوف)
+        const back=Date.now()+2200;
+        while(Date.now()<back && _alive()){
+          const f=await faceFrame(video).catch(()=>null);
+          const hr=f?headRatio(f.landmarks):NaN;
+          if(Number.isFinite(hr)&&hr>=FACE_FRONT_MIN&&hr<=FACE_FRONT_MAX) break;
+          await _wait(90);
+        }
+        return true;
+      }
+      await _wait(90);
     }
-    frames++;
-    const lm=r.landmarks;
-    const mr=mouthOpenRatio(lm);
-    if(Number.isFinite(mr)){ minMouth=Math.min(minMouth,mr); maxMouth=Math.max(maxMouth,mr); }
-    const hr=headRatio(lm); minHead=Math.min(minHead,hr); maxHead=Math.max(maxHead,hr);
-
-    const mouthChanged=frames>=5 && (maxMouth-minMouth)>=0.055;
-    const moved=(maxHead-minHead)>=0.09;
-
-    _st(!mouthChanged
-      ? 'افتح بُقك واقفله مرة طبيعي…'
-      : (!moved ? 'تمام ✅ حرّك وشك سنة يمين أو شمال…' : 'تم التحقق ✅'));
-
-    if(mouthChanged && moved) return true;
-    await new Promise(x=>setTimeout(x,110));
-  }
-  return false;
+    return false;
+  }finally{ ui.end(); }
 }
 
 async function verifyFaceWithSilentRetry(emp,video){
@@ -3815,7 +3913,7 @@ async function verifyFaceWithSilentRetry(emp,video){
         // Do not close/reopen the modal and do not force the user to press Retry.
         $('#attPhotoErr').textContent='';
         $('#attPhotoRetryBtn').style.display='none';
-        $('#attPhotoStatus').textContent='كمّل قدام الكاميرا — افتح بُقك واقفله وحرّك وشك سنة، هحاول تلقائي…';
+        $('#attPhotoStatus').textContent='كمّل قدام الكاميرا — بص يمين وبعدين شمال، هحاول تلقائي…';
         await new Promise(x=>setTimeout(x,650));
         continue;
       }
