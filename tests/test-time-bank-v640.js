@@ -125,7 +125,7 @@ assertEq(w.earlyMin, 0, 'سلبي: مفيش «انصراف بدري» في وض�
 assert(!(w._credits||[]).length, 'سلبي: مفيش بنود رصيد وقت (late/early) بتتكتب');
 assertEq(w.overtimeDecision, 'none', 'مدة 8:10 < 8:15 = مفيش أوفرتايم بالطريقة القديمة (الرصيد هو اللي بيحسب)');
 assertEq(w.needsClockOutReview, false, 'مش محتاج مراجعة');
-assert(/رصيد وقتك \+10 د/.test(w._text), 'الرسالة: رصيد وقتك +10 د (اتأخر 20 وقعد 30)');
+assert(!/رصيد وقتك/.test(w._text), 'v650 سلبي: رسالة الانصراف مفيهاش رصيد الوقت (مبيظهرش للموظف)');
 // ب) نسي الانصراف وسجّله تاني يوم 14:00 — يتقفل 22:00 نفس اليوم
 w = clockOutWritten(D(2026,10,5,14,20), D(2026,10,6,14,0));
 assertEq(w.clockOutTs, D(2026,10,5,22,0), '⭐ الشيفت المنسي اتقفل على 22:00 (نهاية شيفته) مش على وقت ما افتكر');
@@ -207,7 +207,7 @@ const ui = fs.readFileSync(path.join(ROOT,'sales','sales-ui.js'),'utf8');
 assert(/id="tsBankOn"/.test(ui) && /tsBankGrace/.test(ui) && /tsBonusMin/.test(ui) && /tsAlertLate/.test(ui) && /bankEnabled, bankFrom,/.test(ui), 'إعدادات رصيد الوقت والحافز');
 const html = fs.readFileSync(path.join(ROOT,'sales','index.html'),'utf8');
 assert(html.indexOf('time-bank.js?v=649') > 0 && html.indexOf('time-bank.js?v=649') < html.search(/sales-app\.js\?v=6\d\d/) && /sales-ui\.js\?v=649/.test(html), 'time-bank.js قبل sales-app.js v641');
-assert(/store-apps-shell-v64[7-9]/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
+assert(/store-apps-shell-v6([4-9][7-9]|[5-9][0-9])/.test(fs.readFileSync(path.join(ROOT,'sales','sw.js'),'utf8')), 'sw v641');
 // v641 — طلب المالك: مفيش مبلغ بالجنيه للموظف، والمكافآت القديمة بتختفي في وضع الرصيد
 const _card = extractFn(src, 'function bankCardHtml(');
 assert(!/TimeBank\.money|هيتخصم <b>|أوفرتايم لحد دلوقتي <b>/.test(_card), 'سلبي: كارت الموظف مفيهوش مبلغ الخصم/الأوفرتايم بالجنيه');
@@ -272,3 +272,9 @@ assert(/\.\.\/sales\/time-bank\.js\?v=649/.test(fs.readFileSync(path.join(ROOT,'
 // ---------- ٨) v646 — مفيش حافز على أسبوع بدأ قبل bankFrom ----------
 assert(/\.filter\(w=> TimeBank\.bonusWeekOk\(w\.start, cfg\)\)/.test(src), 'أسبوع 26 سبتمبر→2 أكتوبر مش بيتحسب (بدأ قبل تشغيل النظام)');
 assert(TB.keyOf(D(2026,9,26)) < '2026-10-01' && TB.keyOf(D(2026,10,3)) >= '2026-10-01', 'مفتاح الأسبوع بيتقارن بتاريخ التشغيل صح');
+// v650: كارت الموظف = الحافز بس — رصيد الوقت مبيظهرش له (بيتحسب في المرتب للمالك)
+(function(){
+  const src = require('fs').readFileSync(require('path').join(__dirname,'..','sales','sales-app.js'),'utf8');
+  const i = src.indexOf('function bankCardHtml('); const body = src.slice(i, src.indexOf('\n}\n', i));
+  assert(/\n  return bonus;/.test(body) && !/return bal \+ bonus/.test(body), 'v650: كارت الموظف بيرجّع الحافز بس من غير رصيد الوقت');
+})();

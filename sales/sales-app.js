@@ -4089,7 +4089,7 @@ async function clockOut(empId, photoDataUri){
   const h=Math.floor(totalMin/60), m=totalMin%60;
   let successText=`تم تسجيل الانصراف — مدة الشيفت ${h} س ${m} د ✅`;
   if(_bankFix) successText = `الشيفت كان مفتوح من غير انصراف — اتقفل على ${_bankFix.reason==='last_sale' ? 'آخر فاتورة ليك' : 'ميعاد نهاية شيفتك'} (${h} س ${m} د) ✅`;
-  else if(_bank){ const _d = TimeBank.shiftDelta({...shift,...patch}, _reqMin, cfg); if(_d.counted && _d.delta) successText += ` · رصيد وقتك ${TimeBank.fmtMin(_d.delta)}`; }
+  // 🙈 v650: رصيد الوقت مبيظهرش للموظف في رسالة الانصراف كمان (قرار المالك 11-10)
   if(earlyInfo.hours>0) successText += ` · نقص ${earlyInfo.earlyMin} دقيقة`;
   if(lateFix) successText += lateFix.excused ? ' · التأخير اتعوّض بالكامل' : ` · التأخير اتعوّض ${lateFix.compensatedMin} دقيقة`;
   if(overtimeMinutes>0) successText += _otAuto ? ' · الإضافي اتعتمد تلقائيًا' : ' · الإضافي محتاج مراجعة الإدارة';
@@ -5154,7 +5154,9 @@ function bankCardHtml(emp){
     <div style="font-size:22px;font-weight:900;color:${b.score>=tc.bonusMinScore?'var(--good)':'#e0a020'};direction:ltr;text-align:right">${b.score} / 100</div>
     ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+(st.target>0?' من '+st.target:'')+' ن)')}${next}
     <div style="font-size:11px;color:var(--sub);margin-top:6px">الحافز بيتحدد يوم الجمعة (من ${tc.bonusMinScore} نقطة)${tc.bonusApproval==='manual'?' وبيعتمده المالك':''} — وبعدها بيظهر هنا</div>${approvedHtml}</div>`;
-  return bal + bonus;
+  // 🙈 v650 قرار المالك 11-10: رصيد الوقت مبيظهرش للموظف — الحافز الأسبوعي بس (الرصيد لسه بيتحسب في المرتب وبيظهر للمالك)
+  void bal;
+  return bonus;
 }
 function renderRaceStatus(empId){
   const wrap = document.querySelector('#dh_raceStatus');
