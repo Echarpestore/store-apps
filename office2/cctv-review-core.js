@@ -24,6 +24,14 @@ var KIND = {
   sale_saved:    { ar:'حفظ الفاتورة', tone:'sale' }
 };
 /* أحداث الـPOS المهمة للمراجعة. أي نوع مش هنا بيتساب (ضوضاء تشغيلية). */
+// Item removals: the POS writes every removal / quantity cut to pos_activity_log with these types
+// (name, value, seconds the item sat in the cart). This is the primary source for removals - it
+// exists even when the basket steps were not saved or the cart was abandoned without a sale.
+var REMOVAL = {
+  item_removed:      { ar:'حذف قطعة من السلة' },
+  item_removed_late: { ar:'حذف قطعة بعد ما فضلت في السلة' },
+  item_qty_reduced:  { ar:'تقليل كمية قطعة' }
+};
 var ACTIVITY = {
   cart_abandoned:        { ar:'سلة اتسابت من غير بيع', tone:'alert' },
   cart_item_edited:      { ar:'تعديل صنف في السلة',    tone:'edit' },
@@ -95,6 +103,19 @@ function buildEvents(timelines, activity){
     });
   });
   (Array.isArray(activity) ? activity : []).forEach(function(a){
+    var removal = REMOVAL[String(a && a.type)];
+    if(removal){
+      var at = num(a.ts), val = a.value != null ? Math.abs(num(a.value)) : Math.abs(num(a.price) * (num(a.qty) || 1)), late = String(a.type) === 'item_removed_late';
+      var wait = num(a.inCartSec), waitTxt = wait >= 60 ? ' · بعد ' + Math.round(wait / 60) + ' د في السلة' : (wait > 0 ? ' · بعد ' + wait + ' ث في السلة' : '');
+      // The same removal may also be in the basket steps - count it once, but keep its extra data.
+      var twin = null;
+      for(var i = 0; i < out.length; i++){ var c = out[i]; if(c.source === 'cart' && c.removedValue > 0 && Math.abs(c.atMs - at) <= 3000 && (!a.sid || !c.sid || String(a.sid) === c.sid)){ twin = c; break; } }
+      if(twin){ if(late){ twin.label = removal.ar; twin.late = true; } if(waitTxt && twin.detail.indexOf('في السلة') < 0) twin.detail += waitTxt; return; }
+      out.push({ atMs:at, kind:String(a.type), label:removal.ar, tone:'del', late:late,
+                 detail:'− ' + String(a.name || a.barcode || 'صنف').slice(0, 80) + ((num(a.qty) || 1) !== 1 ? ' ×' + num(a.qty) : '') + waitTxt + (a.employeeName ? ' · ' + String(a.employeeName).slice(0, 40) : ''),
+                 removedValue:+val.toFixed(2), total:null, invoiceNo:String(a.invoiceNo||''), invoiceCode:String(a.invoiceCode||''), sid:String(a.sid||''), source:'activity' });
+      return;
+    }
     var t = ACTIVITY[String(a && a.type)]; if(!t) return;
     var bits = [];
     if(a.amount != null) bits.push(num(a.amount) + ' ج'); if(a.discount != null) bits.push('خصم ' + num(a.discount));
@@ -103,6 +124,11 @@ function buildEvents(timelines, activity){
     out.push({ atMs:num(a.ts), kind:String(a.type), label:t.ar, tone:t.tone, detail:bits.join(' · '), removedValue:0, total:null,
                invoiceNo:String(a.invoiceNo||''), invoiceCode:String(a.invoiceCode||''), sid:String(a.sid||''), source:'activity' });
   });
+  // Activity rows are written while the cart is open, before the invoice has a number.
+  // Their sid is the cart session, so the saved invoice of that session is theirs.
+  var bySid = {};
+  sessionsOf(timelines).forEach(function(x){ if(x.sid) bySid[x.sid] = x; });
+  out.forEach(function(e){ if(e.source !== 'activity' || e.invoiceCode || !e.sid) return; var x = bySid[e.sid]; if(x){ e.invoiceCode = x.code; if(!e.invoiceNo) e.invoiceNo = x.no; } });
   return out.filter(function(e){ return e.atMs > 0; }).sort(function(a, b){ return a.atMs - b.atMs; });
 }
 
@@ -150,12 +176,12 @@ function fromSale(sale, endMs){
   });
   if(!packed.length) return null;
   var total = sale.total != null ? num(sale.total) : null;
-  return { synthetic:true, invoiceCode:String(sale.invoiceCode||sale.id||''), invoiceNo:String(sale.invoiceNo||''), saleId:String(sale.id||''), branch:String(sale.branch||''),
+  return { synthetic:true, invoiceCode:String(sale.invoiceCode||sale.id||''), invoiceNo:String(sale.invoiceNo||''), saleId:String(sale.id||''), sid:String(sale.cartSid||sale.sid||''), branch:String(sale.branch||''),
            startedAtMs:start, endedAtMs:endMs, catalog:catalog,
            events:[ { seq:1, atMs:start, kind:'invoice_cart', cart:packed, total:total }, { seq:2, atMs:endMs, kind:'sale_saved', cart:packed, total:total } ] };
 }
 
-var api = { fromSale:fromSale, KIND:KIND, ACTIVITY:ACTIVITY, buildEvents:buildEvents, basketAt:basketAt, nearestIndex:nearestIndex, span:span, summary:summary, cartRows:cartRows, diffCarts:diffCarts };
+var api = { fromSale:fromSale, REMOVAL:REMOVAL, KIND:KIND, ACTIVITY:ACTIVITY, buildEvents:buildEvents, basketAt:basketAt, nearestIndex:nearestIndex, span:span, summary:summary, cartRows:cartRows, diffCarts:diffCarts };
 if(typeof module !== 'undefined' && module.exports) module.exports = api;
 if(root) root.O2CctvReview = api;
 })(typeof window !== 'undefined' ? window : null);

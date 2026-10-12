@@ -89,4 +89,28 @@ assert.deepStrictEqual(synEv.map(e=> e.kind), ['invoice_cart','sale_saved']);
 assert.strictEqual(R.summary(synEv).removed, 0, 'الفاتورة المبنية من الأصناف ماينفعش تطلع حذف');
 b = R.basketAt([syn], T0+900000-10000); assert.deepStrictEqual(b.rows.map(r=> r.name), ['طرحة','بندانة']); assert.strictEqual(b.total, 210);
 assert.strictEqual(R.fromSale({ items:[] }, T0), null); assert.strictEqual(R.fromSale({ items:[{ name:'x', qty:1, price:1 }] }, 0), null);
+// 🗑 مسح القطع من pos_activity_log (المصدر الأساسي للحذف)
+//   · فاتورة سلتها نهائية بس / سلة اتسابت: الحذف لازم يظهر من سجل النشاط
+//   · حذف متسجل في المصدرين: يتعدّ مرة واحدة بس، وياخد علامة «متأخر» من سجل النشاط
+const rmAct = [
+  { type:'item_removed', ts:T0+900000-12000, branch:'مدينتي', name:'شال', qty:1, price:300, value:300, inCartSec:20, sid:'s9', employeeName:'Aya' },
+  { type:'item_qty_reduced', ts:T0+1500000, branch:'مدينتي', name:'شراب', qty:2, price:20, value:40, inCartSec:8, sid:'sX' },
+  { type:'item_removed_late', ts:T0+30500, branch:'مدينتي', name:'طرحة سادة', qty:1, price:165, value:165, inCartSec:150, sid:'s1' } ];   // توأم حذف inv1 (T0+30000)
+const evRm = R.buildEvents([inv1, syn], rmAct);
+const sRm = R.summary(evRm);
+assert.strictEqual(sRm.removed, 4, 'حذفين من خطوات inv1 + حذفين من سجل النشاط (التوأم مايتعدّش مرتين)');
+assert.strictEqual(sRm.removedValue, 45 + 165 + 300 + 40);
+const fromAct = evRm.filter(e=> e.source==='activity' && e.removedValue > 0);
+assert.strictEqual(fromAct.length, 2);
+assert.ok(fromAct[0].detail.includes('شال') && fromAct[0].tone === 'del');
+const twin = evRm.find(e=> e.kind==='item_removed' && e.source==='cart');
+assert.strictEqual(twin.late, true, 'التوأم لازم ياخد علامة الحذف المتأخر'); assert.ok(twin.detail.includes('في السلة'));
+assert.strictEqual(R.summary(R.buildEvents([], rmAct)).removed, 3, 'من غير أي تايملاين الحذف كله لازم يظهر من سجل النشاط');
+
+// ربط أحداث سجل النشاط بفاتورتها عن طريق sid (عشان تظهر في مراجعة الفاتورة الواحدة)
+const linked = R.buildEvents([inv1], [{ type:'manual_discount', ts:T0+25000, branch:'مدينتي', amount:20, sid:'s1' }, { type:'item_removed', ts:T0+5000000, name:'x', qty:1, price:10, value:10, sid:'orphan' }]);
+assert.strictEqual(linked.find(e=> e.kind==='manual_discount').invoiceCode, 'INV1'); assert.strictEqual(linked.find(e=> e.kind==='manual_discount').invoiceNo, '491');
+assert.strictEqual(linked.find(e=> e.sid==='orphan').invoiceCode, '', 'سلة اتسابت من غير فاتورة تفضل من غير رقم');
+assert.strictEqual(R.fromSale({ id:'S1', invoiceCode:'C1', cartSid:'sidA', items:[{ name:'a', qty:1, price:5 }] }, T0).sid, 'sidA');
+
 console.log('  ✓ cctv review core: ' + ev.length + ' أحداث · محذوف ' + sum.removedValue + ' ج · السلة متزامنة');
