@@ -258,7 +258,7 @@ function dayRow(x, s){
   const ms = u.saleMs(s); const pm = Object.entries(s.payments||{}).filter(([k,v])=> Math.abs(Number(v)||0)>.001).map(([k,v])=> (PAY[k]||k) + ' ' + money(v)).join(' · ');
   const cust = (s.customerName||s.customerPhone) ? '👤 ' + u.esc(s.customerName||'عميل') + (s.customerPhone ? ' · ' + u.esc(s.customerPhone) : '') : '👤 بدون عميل';
   const cnt = Number(s.itemCount || (s.items||[]).length);
-  return `<div class="row" style="cursor:default;flex-wrap:wrap"><div class="n"><b>${u.hm(ms)} · فاتورة #${u.esc(s.invoiceNo||s.invoiceCode||s.id||'')} · ${money(s.total)}${s.reversed?' <span class="pill p-gray">معكوسة</span>':''}${Number(s.total)<0?' <span class="pill p-bad">مرتجع</span>':''}</b><small>${cust} · ${u.esc(s.employeeName||s.employee||s.seller||'')}</small><small>💳 ${u.esc(pm||'—')} · ${cnt} صنف</small></div><span class="btns" style="margin:0;width:100%">${s.invoiceCode?`<button class="btn" onclick="O2.cctv.shots('${u.esc(String(s.invoiceCode))}')">📸 لقطات</button>`:''}${x.playback?`<button class="btn p" onclick="O2.cctv.saleVideo('${u.esc(s.id)}',${ms})">🎥 فيديو</button>`:''}${x.playback?`<button class="btn" onclick="O2.cctv.reviewAt(${ms})">📼 مراجعة</button>`:''}<button class="btn" onclick="O2.cctv.invoice('${u.esc(s.id)}')">🧾 الفاتورة</button></span></div>`;
+  return `<div class="row" style="cursor:default;flex-wrap:wrap"><div class="n"><b>${u.hm(ms)} · فاتورة #${u.esc(s.invoiceNo||s.invoiceCode||s.id||'')} · ${money(s.total)}${s.reversed?' <span class="pill p-gray">معكوسة</span>':''}${Number(s.total)<0?' <span class="pill p-bad">مرتجع</span>':''}</b><small>${cust} · ${u.esc(s.employeeName||s.employee||s.seller||'')}</small><small>💳 ${u.esc(pm||'—')} · ${cnt} صنف</small></div><span class="btns" style="margin:0;width:100%">${s.invoiceCode?`<button class="btn" onclick="O2.cctv.shots('${u.esc(String(s.invoiceCode))}')">📸 لقطات</button>`:''}${x.playback?`<button class="btn p" onclick="O2.cctv.saleVideo('${u.esc(s.id)}',${ms})">🎥 فيديو</button>`:''}${x.playback?`<button class="btn" onclick="O2.cctv.reviewAt(${ms},'${u.esc(String(s.invoiceCode||''))}')">📼 مراجعة بالسلة</button>`:''}<button class="btn" onclick="O2.cctv.invoice('${u.esc(s.id)}')">🧾 الفاتورة</button></span></div>`;
 }
 function vDay(){
   const x = site(); const key = st.dayKey; const today = u.caiKey(Date.now()); const a = key.split('-').map(Number); const dayMs = u.caiStamp(a[0],a[1],a[2],12,0);
@@ -308,9 +308,9 @@ const RV = window.O2CctvReview;
 const RV_CHUNK = 120, RV_PX_MIN = 14, RV_LEAD = 4000;
 const RV_TONE = { add:'#16a34a', del:'#dc2626', edit:'#d97706', pay:'#2563eb', sale:'#0f172a', alert:'#9333ea' };
 const RV_FILTERS = [['all','الكل'],['del','🗑 حذف وتقليل'],['alert','⚠️ تنبيهات'],['sale','🧾 فواتير']];
-const rv = { loadToken:0, seekTo:0, aligned:false, key:'', branch:'', loaded:false, loading:false, err:'', actErr:false, events:[], timelines:[], span:null, cur:0, chunkStart:0, cam:'', filter:'all', rate:1, skip:false, idx:-2, basketKey:'', pendingAt:0 };
+const rv = { focus:'', loadToken:0, seekTo:0, aligned:false, key:'', branch:'', loaded:false, loading:false, err:'', actErr:false, events:[], timelines:[], span:null, cur:0, chunkStart:0, cam:'', filter:'all', rate:1, skip:false, idx:-2, basketKey:'', pendingAt:0 };
 function hms(ms){ const p = u.caiParts(ms); return String(p.h).padStart(2,'0') + ':' + String(p.mi).padStart(2,'0') + ':' + String(Math.floor(ms/1000)%60).padStart(2,'0'); }
-function rvMatch(e){ return rv.filter==='all' || (rv.filter==='del' && e.removedValue > 0) || (rv.filter==='alert' && e.tone==='alert') || (rv.filter==='sale' && e.kind==='sale_saved'); }
+function rvMatch(e){ if(rv.focus && e.invoiceCode !== rv.focus) return false; return rv.filter==='all' || (rv.filter==='del' && e.removedValue > 0) || (rv.filter==='alert' && e.tone==='alert') || (rv.filter==='sale' && e.kind==='sale_saved'); }
 async function loadReview(force){
   const x = site(), key = st.dayKey;
   if(rv.loading || (!force && rv.loaded && rv.key===key && rv.branch===x.id)) return;
@@ -336,6 +336,7 @@ async function loadReview(force){
     rv.events = RV.buildEvents(rv.timelines, got[2] ? got[2].docs.map(d=> d.data()).filter(r=> branchMatches(r.branch, x)) : []);
     rv.span = RV.span(rv.events, start, Math.min(end, Date.now()));
     rv.cur = rv.pendingAt || (rv.events.length ? Math.max(rv.span.start, rv.events[0].atMs - RV_LEAD) : rv.span.start);
+    if(rv.focus){ const fe = rv.events.find(e=> e.invoiceCode===rv.focus); if(fe) rv.cur = Math.max(rv.span.start, fe.atMs - RV_LEAD); }
     rv.pendingAt = 0; rv.chunkStart = 0; rv.idx = -2; rv.basketKey = '';
     if(!recordedCameras(x).some(c=> String(c.id)===rv.cam)) rv.cam = String(x.playbackCamera || x.cameras[0].id || '1');
     rv.loaded = true;
@@ -367,25 +368,32 @@ function vReview(){
   if(rv.err) return nav + `<div class="card full"><b style="color:var(--bad)">تعذر تحميل أحداث اليوم: ${u.esc(rv.err)}</b><div class="btns"><button class="btn" onclick="O2.cctv.rvReload()">↻ حاول تاني</button></div></div>`;
   if(rv.loading || !rv.loaded){ if(!rv.loading) setTimeout(()=> loadReview(), 0); return nav + '<div class="card full"><div class="skel"></div><div class="hint">بيجيب أحداث اليوم من الـPOS…</div></div>'; }
   { const old = rvVideo(); rv.resume = !!(old && !old.paused && !old.ended); }   // لو الشاشة اترسمت تاني والفيديو شغال، كمّل من نفس اللحظة
-  const s = RV.summary(rv.events);
   const I = 'width:auto;margin:0;padding:8px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-weight:800';
   setTimeout(rvMount, 0);
-  return nav + `<div class="card full"><h3>📼 مراجعة اليوم <small>${u.esc(x.name)} · ${s.sales} فاتورة · ${s.total} حدث</small></h3>
-    <div class="hint" style="margin-top:0">${s.removed ? `🗑 ${s.removed} مرة حذف/تقليل بقيمة <b>${u.n0(s.removedValue)} ج</b>` : '🗑 مفيش حذف من السلة'} · ⚠️ ${s.alerts} تنبيه${rv.actErr ? ' · سجل النشاط ماتحمّلش' : ''}${rv.src && rv.src.sales ? ' · ' + rv.src.sales + ' فاتورة من غير خطوات الإضافة والحذف (سلتها النهائية بس)' : ''}</div>
-    <video id="rvVideo" controls playsinline muted style="width:100%;border-radius:12px;background:#000;max-height:52vh" ontimeupdate="O2.cctv.rvTick()" onseeking="O2.cctv.rvTick()" onseeked="O2.cctv.rvSt('');O2.cctv.rvTick()" oncanplay="O2.cctv.rvSt('')" onended="O2.cctv.rvNext()" onloadeddata="O2.cctv.rvReady()" onplaying="O2.cctv.rvSt('')" onwaiting="O2.cctv.rvSt('⏳ جاري تحميل الفيديو…')" onerror="O2.cctv.rvSt('⚠️ مفيش تسجيل للوقت ده — أقدم من المتاح أو الـgateway واقع')"></video>
-    <div id="rvBasket" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:6px;min-height:44px"></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:6px 0"><b id="rvClock" style="font-size:18px;font-variant-numeric:tabular-nums">${hms(rv.cur)}</b><span id="rvSt" class="hint" style="margin:0"></span></div>
+  const evs = rv.focus ? rv.events.filter(e=> e.invoiceCode===rv.focus) : rv.events; const fs2 = RV.summary(evs);
+  const focusInv = rv.focus ? rv.timelines.find(t=> String(t.invoiceCode)===rv.focus) : null;
+  const focusBar = rv.focus ? `<div class="card full" style="display:flex;align-items:center;gap:8px;background:#eff6ff"><b style="flex:1">🧾 بتراجع فاتورة ${focusInv && focusInv.invoiceNo ? '#' + u.esc(focusInv.invoiceNo) : u.esc(rv.focus)} بس</b><button class="btn" onclick="O2.cctv.rvFocus('')">اليوم كله</button></div>` : '';
+  const V = 'style="width:100%;border-radius:12px;background:#000;max-height:46vh;display:block"';
+  return nav + focusBar + `<div class="card full">
+    <video id="rvVideo" controls playsinline muted ${V} ontimeupdate="O2.cctv.rvTick()" onseeking="O2.cctv.rvTick()" onseeked="O2.cctv.rvSt('');O2.cctv.rvTick()" oncanplay="O2.cctv.rvSt('')" onended="O2.cctv.rvNext()" onloadeddata="O2.cctv.rvReady()" onplaying="O2.cctv.rvSt('')" onwaiting="O2.cctv.rvSt('⏳ جاري تحميل الفيديو…')" onerror="O2.cctv.rvSt('⚠️ مفيش تسجيل للوقت ده — أقدم من المتاح أو الـgateway واقع')"></video>
+    <div id="rvBasket" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px;min-height:44px;background:#f8fafc"></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:10px 2px 6px"><b id="rvClock" style="font-size:20px;font-variant-numeric:tabular-nums">${hms(rv.cur)}</b><span id="rvSt" class="hint" style="margin:0"></span></div>
     ${rvStripHtml()}
-    <div class="btns" style="align-items:center;flex-wrap:wrap"><button class="btn" onclick="O2.cctv.rvStep(-1)">⏮ الحدث السابق</button><button class="btn p" onclick="O2.cctv.rvStep(1)">الحدث التالي ⏭</button><button class="btn" onclick="O2.cctv.rvJump(-10)">−10ث</button><button class="btn" onclick="O2.cctv.rvJump(10)">+10ث</button>
-      <select onchange="O2.cctv.rvRate(this.value)" style="${I}">${[1,2,4,8].map(v=> `<option value="${v}" ${rv.rate===v?'selected':''}>${v}×</option>`).join('')}</select>
-      <select onchange="O2.cctv.rvCam(this.value)" style="${I}">${recordedCameras(x).map(c=> `<option value="${u.esc(c.id)}" ${rv.cam===String(c.id)?'selected':''}>${u.esc(c.label||c.name)}</option>`).join('')}</select>
-      <label style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px"><input type="checkbox" ${rv.skip?'checked':''} onchange="O2.cctv.rvSkip(this.checked)" style="width:auto;margin:0"> تخطّي الفاضي</label></div>
-    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:12px"><span id="rvAlign" class="hint" style="margin:0;flex:1"></span><span class="hint" style="margin:0">ضبط السلة:</span><button class="btn" style="padding:4px 9px" onclick="O2.cctv.rvNudge(-500)">السلة بدري ◀</button><b id="rvOff" style="min-width:44px;text-align:center">0.0ث</b><button class="btn" style="padding:4px 9px" onclick="O2.cctv.rvNudge(500)">▶ السلة متأخرة</button></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button class="btn" style="padding:12px 6px" onclick="O2.cctv.rvStep(-1)">⏮ الحدث السابق</button><button class="btn p" style="padding:12px 6px" onclick="O2.cctv.rvStep(1)">الحدث التالي ⏭</button></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:6px;margin-top:6px"><button class="btn" onclick="O2.cctv.rvJump(-10)">−10ث</button><button class="btn" onclick="O2.cctv.rvJump(10)">+10ث</button>
+      <select onchange="O2.cctv.rvRate(this.value)" style="${I};width:100%">${[1,2,4,8].map(v=> `<option value="${v}" ${rv.rate===v?'selected':''}>${v}×</option>`).join('')}</select>
+      <select onchange="O2.cctv.rvCam(this.value)" style="${I};width:100%">${recordedCameras(x).map(c=> `<option value="${u.esc(c.id)}" ${rv.cam===String(c.id)?'selected':''}>${u.esc(c.label||c.name)}</option>`).join('')}</select></div>
+    <details style="margin-top:10px"><summary style="font-weight:800;font-size:13px;cursor:pointer;color:#475569">⚙️ إعدادات (تخطّي الفاضي · ضبط التزامن)</summary>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px;margin-top:8px"><input type="checkbox" ${rv.skip?'checked':''} onchange="O2.cctv.rvSkip(this.checked)" style="width:auto;margin:0"> تخطّي الوقت الفاضي — نط للحدث الجاي لوحدك</label>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12px"><span class="hint" style="margin:0">ضبط السلة على الصورة:</span><button class="btn" style="padding:4px 9px" onclick="O2.cctv.rvNudge(-500)">السلة بدري ◀</button><b id="rvOff" style="min-width:44px;text-align:center">0.0ث</b><button class="btn" style="padding:4px 9px" onclick="O2.cctv.rvNudge(500)">▶ السلة متأخرة</button></div>
+      <div id="rvAlign" class="hint"></div></details>
     </div>
-    <div class="card full"><h3>🔴 شاشة الكاشير دلوقتي <small>السلة LIVE</small></h3><div id="cctvPinned">${pinnedHtml()}</div><div class="btns"><button class="btn p" onclick="O2.cctv.rvLive()">🔴 ودّيني للكاميرا دلوقتي</button></div><div class="hint">دي السلة اللي على شاشة الـPOS في اللحظة دي، بتتحدّث لوحدها. اللي فوق هي السلة وقت الفيديو.</div></div>
-    <div class="card full"><div class="seg" style="flex-wrap:wrap">${RV_FILTERS.map(f=> `<button id="rvF_${f[0]}" class="${rv.filter===f[0]?'on':''}" onclick="O2.cctv.rvFilter('${f[0]}')">${f[1]}</button>`).join('')}</div>
-    <div id="rvList" style="max-height:48vh;overflow-y:auto;margin-top:8px">${rvListHtml()}</div>
-    <div class="hint">دوس على أي حدث والفيديو يروح له (${RV_LEAD/1000} ثواني قبله) · الوقت بساعة كمبيوتر الفرع · السلل اللي اتسابت من غير بيع بتظهر كتنبيه بس، من غير تفاصيل الأصناف</div></div>`;
+    <div class="card full"><h3>📋 ${rv.focus ? 'أحداث الفاتورة' : 'أحداث اليوم'} <small>${rv.focus ? '' : fs2.sales + ' فاتورة · '}${fs2.total} حدث</small></h3>
+    <div class="hint" style="margin-top:0">${fs2.removed ? `🗑 ${fs2.removed} مرة حذف/تقليل بقيمة <b>${u.n0(fs2.removedValue)} ج</b>` : '🗑 مفيش حذف من السلة'} · ⚠️ ${fs2.alerts} تنبيه${rv.actErr ? ' · سجل النشاط ماتحمّلش' : ''}${!rv.focus && rv.src && rv.src.sales ? ' · ' + rv.src.sales + ' فاتورة بسلتها النهائية بس' : ''}</div>
+    <div class="seg" style="flex-wrap:wrap">${RV_FILTERS.map(f=> `<button id="rvF_${f[0]}" class="${rv.filter===f[0]?'on':''}" onclick="O2.cctv.rvFilter('${f[0]}')">${f[1]}</button>`).join('')}</div>
+    <div id="rvList" style="max-height:52vh;overflow-y:auto;margin-top:8px">${rvListHtml()}</div>
+    <div class="hint">دوس على أي حدث والفيديو يروح له (${RV_LEAD/1000} ثواني قبله)</div></div>
+    <details class="card full"><summary style="font-weight:800;cursor:pointer">🔴 شاشة الكاشير دلوقتي (السلة LIVE)</summary><div id="cctvPinned" style="margin-top:8px">${pinnedHtml()}</div><div class="btns"><button class="btn p" onclick="O2.cctv.rvLive()">🔴 ودّيني للكاميرا دلوقتي</button></div></details>`;
 }
 function rvVideo(){ return document.getElementById('rvVideo'); }
 function rvUrl(atMs){ const x = site(); return agentGateway(x) + '/echarpe-playback/video?camera=' + encodeURIComponent(rv.cam) + '&atMs=' + Math.floor(atMs) + '&durationSec=' + RV_CHUNK + '&quality=360&mode=fast'; }
@@ -450,7 +458,13 @@ function rvFilter(f){
   const strip = document.getElementById('rvStrip'); if(strip){ const left = strip.scrollLeft; strip.outerHTML = rvStripHtml(); const s2 = document.getElementById('rvStrip'); if(s2) s2.scrollLeft = left; }
   rvPaint(false);
 }
-function reviewAt(ms){ rv.pendingAt = Math.max(1, Number(ms) - RV_LEAD); rv.loaded = false; st.view = 'review'; u.render(); }
+function reviewAt(ms, code){ rv.focus = String(code||''); rv.pendingAt = Math.max(1, Number(ms) - 30000); rv.loaded = false; st.view = 'review'; u.render(); }
+/* من أي فاتورة في Office: افتح مراجعة يومها عند وقتها، مركّزة على الفاتورة دي. */
+function reviewSale(sale){
+  if(!sale) return false; const p = profileFor(sale.branch); if(!p || !p.playback) return false; const ms = u.saleMs(sale); if(!ms) return false;
+  st.branch = p.id; st.dayKey = u.caiKey(ms); st.view = 'review'; rv.focus = String(sale.invoiceCode||''); rv.pendingAt = Math.max(1, ms - 30000); rv.loaded = false;
+  u.closeSheet(); if(u.screen() !== 'cctv') u.go('cctv'); else u.render(); return true;
+}
 
 /* ---------- 🚨 النشاط — زوار وتنبيهات من الـgateway ---------- */
 function trackingProfile(x){
@@ -511,7 +525,7 @@ function actPlay(i){
 }
 
 /* ---------- 🖼 الشاشة ---------- */
-const VIEWS = [['live','📹 مباشر'],['all','🌐 كل الفروع'],['playback','🎞 تسجيل'],['day','🕘 اليوم'],['review','📼 مراجعة اليوم'],['activity','🚨 النشاط']];
+const VIEWS = [['live','📹 مباشر'],['all','🌐 كل الفروع'],['playback','🎞 تسجيل'],['day','🕘 اليوم'],['review','📼 مراجعة'],['activity','🚨 النشاط']];
 function render(){
   startLive();
   const x = site(); const local = localBranchActive(x);
@@ -539,7 +553,10 @@ O2.cctv = {
   dayReload(){ delete dayRows[st.dayKey]; if(u.dayCache[st.dayKey]) u.dayCache[st.dayKey].done = false; u.render(); },
   saleVideo, shots, shotVideo, invoice(id){ u.invoiceAny(id); },
   actReload(){ loadActivity(true); }, actPlay,
-  reviewAt, rvTick, rvNext, rvSt, rvStep, rvStripTap, rvFilter,
+  reviewAt, reviewSale, canReview(branch){ const p = profileFor(branch); return !!(p && p.playback && RV); },
+  reviewSaleId(id){ const s = u.windowSales(0).find(x=> x.id===id) || Object.keys(u.dayCache).map(k=> ((u.dayCache[k]||{}).rows||[]).find(x=> x.id===id)).find(Boolean); if(!reviewSale(s)) u.toast('مفيش تسجيل كاميرا للفاتورة دي'); },
+  rvFocus(code){ rv.focus = String(code||''); rv.idx = -2; u.render(); },
+  rvTick, rvNext, rvSt, rvStep, rvStripTap, rvFilter,
   rvGo(i){ const e = rv.events[i]; if(e) rvSeek(e.atMs - RV_LEAD, true); },
   rvJump(sec){ rvSeek(rv.cur + sec * 1000, true); },
   rvRate(v){ rv.rate = Number(v) || 1; const el = rvVideo(); if(el) el.playbackRate = rv.rate; },
@@ -551,5 +568,5 @@ O2.cctv = {
   openAt(branch, ms, mins){ const p = profileFor(branch); if(!p){ u.toast('الفرع ده مفيش له كاميرات معرّفة'); return; } st.branch = p.id; openPlayback(p, ms, mins||1, p.playbackCamera); }
 };
 O2.register('cctv', { icon:'📹', title:'الكاميرات', desc:'مباشر · كل الفروع · تسجيل · فواتير اليوم باللقطات والفيديو · مراجعة اليوم بأحداث الـPOS والسلة · زوار وتنبيهات', order:10, tab:'more',
-  enter(){ st.on = {}; startLive(); probeGateways(false); }, render });
+  enter(){ st.on = {}; startLive(); probeGateways(false); }   /* st.view بيفضل زي ما reviewSale ظبطه */, render });
 })();
