@@ -7374,7 +7374,7 @@ function renderCommissionPanel(){
   const _mp = String(monthLabel).split('-').map(Number);
   const monthRange = { start: new Date(_mp[0], _mp[1]-1, 1, 0,0,0,0), end: new Date(_mp[0], _mp[1], 0, 23,59,59,999) };
 
-  wrap.innerHTML = reviewEmployeesFor(viewBranch).map(e=>{
+  wrap.innerHTML = payrollEmployeesFor(viewBranch, payPeriodRange(monthLabel), 'commission').map(e=>{   // 🚪 المغادر بيختفي بعد شهر خروجه
     const due = commissionDueFor(e, monthLabel);
     const paidThisMonth = allCommissionPayments.filter(p=> p.employeeId===e.id && p.monthLabel===monthLabel);
     const pointsThisMonth = due.ptsTotal;
@@ -8576,15 +8576,41 @@ if(typeof window!=='undefined'){
   window.payrollIntegrityCheck = payrollIntegrityCheck;
 }
 
+/* 🚪 v651 — المغادر في شاشة الرواتب والعمولات.
+   القايمتين كانوا بيعرضوا **كل** موظفي الفرع، فاللي ساب الشغل يفضل ظاهر كل شهر ومعاه راتب محسوب،
+   مع إن مستحقاته اتحسبت في التصفية (من أول الشهر لحد يوم خروجه).
+   القاعدة:
+     · الراتب   : يظهر بس في الشهور اللي خلصت **قبل** ما يمشي (شهر الخروج نفسه بتاع التصفية).
+     · العمولات : تظهر لحد شهر الخروج (العمولة مش داخلة في التصفية)، وتختفي بعده.
+     · مغادر من غير تاريخ معروف: يختفي من الشهر الجاري وطالع، ويفضل في الشهور القديمة.
+   دالة خالصة عشان تتجرّب (tests/test-payroll-leavers-v651.js). */
+function payrollLeaverVisible(emp, leftAtMs, startMs, endMs, kind, nowMs){
+  if(!emp) return false;
+  if(emp.active !== false && !emp.deletedAt) return true;
+  var left = Number(leftAtMs) || Number(emp.deletedAt) || 0;
+  if(!left) return Number(endMs) < Number(nowMs) && !(Number(startMs) <= Number(nowMs) && Number(nowMs) <= Number(endMs));
+  if(kind === 'commission') return left >= Number(startMs);
+  return left > Number(endMs);
+}
+function _leftAtMs(emp){
+  if(!emp) return 0;
+  var best = 0; (allTerminations || []).forEach(function(t){ if(t && t.employeeId === emp.id && Number(t.terminatedAt) > best) best = Number(t.terminatedAt); });
+  return best || Number(emp.deletedAt) || 0;
+}
+function payrollEmployeesFor(branch, range, kind){
+  var a = range.start.getTime(), b = range.end.getTime(), now = Date.now();
+  return reviewEmployeesFor(branch).filter(function(e){ return payrollLeaverVisible(e, _leftAtMs(e), a, b, kind, now); });
+}
+window.payrollLeaverVisible = payrollLeaverVisible;
 function renderSalaryPanel(){
   const wrap = $('#salaryList');
   if(!wrap) return;
   const periodLabel = window.salaryPeriodKey || defaultPayPeriodKey(new Date());
   _renderPeriodPicker('salaryPeriodSelect', periodLabel);
-  const emps = reviewEmployeesFor(viewBranch);
+  const range = payPeriodRange(periodLabel);
+  const emps = payrollEmployeesFor(viewBranch, range, 'salary');   // 🚪 من غير اللي سابوا الشغل قبل/خلال الفترة
   renderPayrollBranchSummary(periodLabel, emps);
   if(!emps.length){ wrap.innerHTML = '<div class="empty">لسه مفيش موظفين</div>'; return; }
-  const range = payPeriodRange(periodLabel);
   let _alerts = ''; try{ _alerts = bankPendingBonusesHtml() + bankAlertsHtml(); }catch(e){}
   wrap.innerHTML = _alerts + emps.map(e=>{
     if(!e.baseSalary){
