@@ -506,7 +506,15 @@ service cloud.firestore {
     }
     match /sales_terminations/{id} {
       allow read, create: if isStaff();
-      allow update, delete: if false;
+      // 💸 صرف مستحقات اللي ساب الشغل (12-10-2026): القاعدة كانت update: false، فزرار «تم الدفع»
+      //    في تطبيق الحضور كان بيترفض دايمًا والاسم يفضل معلّق كأنه لسه ماتصرفش.
+      //    المسموح **تعديل واحد بس**: تسجيل paidAt مرة واحدة على تصفية لسه ماتدفعتش.
+      //    المبلغ والاسم والفرع والتاريخ متجمدين، والدفع مايتلغيش ولا يتغيّر تاريخه بعد كده.
+      allow update: if isStaff()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paidAt'])
+        && resource.data.get('paidAt', null) == null
+        && request.resource.data.paidAt is int;
+      allow delete: if false;
     }
     match /sales_app_referrals/{id} {
       allow read: if isStaff();
