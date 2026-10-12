@@ -3953,6 +3953,81 @@ async function enrollFaceProfile(emp,video,opts){
   return profile;
 }
 window.enrollFaceProfile=enrollFaceProfile;
+/* 🎯 v653 — مطابقة أدق من غير ما الحد يتوسّع.
+   المشكلة: «الوجه مش مطابق» لموظفة حقيقية. السبب إن لكل موظفة **بصمة واحدة** (متوسط لقطات يوم التسجيل)،
+   فأي تغيير في الإضاءة أو لفّة الطرحة أو النضارة بيبعّدها عنها. الحد (0.50) مشدود عن قصد ومش هيتغيّر.
+   الحل:
+     1) كذا بصمة لكل موظفة: بصمة التسجيل الأصلية + لحد 4 بصمات بتتضاف لوحدها. المقارنة بأقربهم.
+     2) البصمة بتتحدّث لوحدها بس لما المطابقة **قوية جدًا** (≤0.40) واللقطة لسه قريبة من بصمة التسجيل.
+     3) مرساة: حتى لو لقطة طابقت بصمة مضافة، لازم تفضل قريبة من بصمة التسجيل الأصلية (≤0.60)،
+        عشان البصمات المضافة ماتسحبش البروفايل بعيد عن صاحبته وحد تاني يعدّي من بصمة جانبية.
+     4) لو فيه مشكلة في الصورة (ضلمة / بعيد) الرسالة بتقولها بدل «مش مطابق» وبس.
+     5) كل محاولة بيتسجل رقمها على مستند الموظفة (faceStats) عشان الحد يتظبط بعدين على بيانات حقيقية.
+   مفيش منطقة وسط: اللي مايطابقش مابيتسجلش. الدوال دي خالصة ومتجرّبة في tests/test-face-accuracy-v653.js. */
+const FACE_ANCHOR_MAX=0.60, FACE_ADAPT_MAX=0.40, FACE_ADAPT_ANCHOR=0.50, FACE_ADAPT_NOVELTY=0.18, FACE_AUTO_TEMPLATES=4, FACE_ADAPT_COOLDOWN_MS=20*3600000;
+function faceProfileTemplates(profile){
+  const out=[]; if(!profile) return out;
+  if(Array.isArray(profile.descriptor)&&profile.descriptor.length===128) out.push(profile.descriptor);
+  (Array.isArray(profile.templates)?profile.templates:[]).forEach(t=>{ const d=t&&t.d; if(Array.isArray(d)&&d.length===128) out.push(d); });
+  return out;
+}
+function faceMatchProfile(profile,samples){
+  const tpl=faceProfileTemplates(profile), list=(samples||[]).filter(x=>Array.isArray(x)&&x.length===128);
+  if(!tpl.length||!list.length) return {ok:false,dist:Infinity,primaryDist:Infinity,reason:'no-data'};
+  let best=Infinity,bestSample=null;
+  list.forEach(x=>tpl.forEach(t=>{ const d=faceDistance(t,x); if(d<best){ best=d; bestSample=x; } }));
+  const primaryDist=faceDistance(tpl[0],bestSample);      // نفس اللقطة اللي كسبت، مقاسة على بصمة التسجيل الأصلية
+  const ok=best<=FACE_MATCH_THRESHOLD && primaryDist<=FACE_ANCHOR_MAX;
+  return {ok,dist:best,primaryDist,reason:ok?'match':(best<=FACE_MATCH_THRESHOLD?'anchor':'far')};
+}
+/* بيرجّع بروفايل جديد فيه بصمة مضافة، أو null لو مفيش داعي/مش آمن نضيف. */
+function faceAdaptProfile(profile,samples,match,nowMs){
+  if(!profile||!match||!match.ok||!(match.dist<=FACE_ADAPT_MAX)) return null;
+  const list=(samples||[]).filter(x=>Array.isArray(x)&&x.length===128);
+  if(list.length<3) return null;
+  const cand=avgFaceDescriptors(pickStableDescriptors(list,FACE_OUTLIER_MAX));
+  const tpl=faceProfileTemplates(profile);
+  if(!cand||!tpl.length) return null;
+  if(faceDistance(tpl[0],cand)>FACE_ADAPT_ANCHOR) return null;                 // بعيدة عن بصمة التسجيل = ماتتضافش
+  if(tpl.some(t=>faceDistance(t,cand)<FACE_ADAPT_NOVELTY)) return null;        // شبه بصمة موجودة = مفيش جديد
+  const autos=(Array.isArray(profile.templates)?profile.templates:[]).filter(t=>t&&Array.isArray(t.d)&&t.d.length===128);
+  const lastAt=autos.reduce((m,t)=>Math.max(m,Number(t.at)||0),0);
+  if(Number(nowMs)-lastAt<FACE_ADAPT_COOLDOWN_MS) return null;                  // بصمة واحدة في اليوم بالكتير
+  const next=autos.concat([{d:cand,at:Number(nowMs),kind:'auto'}]).sort((a,b)=>(Number(a.at)||0)-(Number(b.at)||0)).slice(-FACE_AUTO_TEMPLATES);
+  return Object.assign({},profile,{v:3,templates:next,templatesUpdatedAt:Number(nowMs)});
+}
+function faceQualityIssue(q){
+  if(!q) return '';
+  if(Number.isFinite(q.luma)&&q.luma<48) return 'dark';
+  if(Number.isFinite(q.luma)&&q.luma>235) return 'bright';
+  if(q.frameW>0&&Number.isFinite(q.boxW)){ const r=q.boxW/q.frameW; if(r<0.20) return 'far'; if(r>0.85) return 'close'; }
+  return '';
+}
+const FACE_QUALITY_AR={dark:'الإضاءة ضعيفة — قرّب من نور أو لفّ ناحية الضوء.',bright:'النور قوي أوي على وشك — غيّر مكانك شوية.',far:'قرّب من الكاميرا.',close:'ابعد شوية عن الكاميرا.'};
+function faceFrameQuality(video,r){
+  try{
+    const b=r.detection.box, c=faceFrameQuality._c||(faceFrameQuality._c=document.createElement('canvas'));
+    c.width=32; c.height=32; const g=c.getContext('2d',{willReadFrequently:true});
+    g.drawImage(video,b.x,b.y,b.width,b.height,0,0,32,32);
+    const d=g.getImageData(0,0,32,32).data; let sum=0;
+    for(let i=0;i<d.length;i+=4) sum+=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    return {luma:sum/(d.length/4),boxW:b.width,frameW:video.videoWidth||0};
+  }catch(_e){ return null; }
+}
+function faceStatsNext(prev,entry){
+  prev=prev||{}; const recent=(Array.isArray(prev.recent)?prev.recent:[]).concat([entry]).slice(-20);
+  return {n:(Number(prev.n)||0)+1,ok:(Number(prev.ok)||0)+(entry.ok?1:0),fail:(Number(prev.fail)||0)+(entry.ok?0:1),lastAt:entry.at,recent};
+}
+function faceLogAttempt(emp,info){
+  try{
+    const r3=(v)=>Number.isFinite(v)?Math.round(v*1000)/1000:null;
+    const entry={at:Date.now(),ok:!!info.ok,d:r3(info.dist),p:r3(info.primaryDist),r:String(info.reason||''),q:String(info.issue||''),t:Number(info.templates)||0};
+    const next=faceStatsNext(emp.faceStats,entry); emp.faceStats=next;
+    updateDoc(doc(db,'sales_employees',emp.id),{faceStats:next}).catch(()=>{});
+  }catch(_e){}
+}
+window.faceProfileTemplates=faceProfileTemplates; window.faceMatchProfile=faceMatchProfile; window.faceAdaptProfile=faceAdaptProfile;
+window.faceQualityIssue=faceQualityIssue; window.faceStatsNext=faceStatsNext;
 async function enrollOrVerifyFace(emp,video){
   await ensureFaceAuthModels();
   const live=await runActiveLiveness(video); if(!live) throw new Error('liveness');
@@ -3963,16 +4038,28 @@ async function enrollOrVerifyFace(emp,video){
   $('#attPhotoStatus').textContent='بنتأكد من الوجه…';
   /* v610: التحقق بأحسن لقطة من عدة لقطات بدل لقطة واحدة. اللقطة الواحدة كانت
      بتتاخد بعد حركة الـliveness على طول، فأي رمشة/لفة بتطلّع "غير مطابق". */
-  const samples=[]; let tries=0;
-  while(samples.length<FACE_VERIFY_FRAMES && tries<14 && pendingPhotoAction){
+  const samples=[]; let tries=0; const issues={};
+  while(samples.length<FACE_VERIFY_FRAMES && tries<18 && pendingPhotoAction){
     tries++;
     const r=await faceFrame(video).catch(()=>null);
-    if(r && r.descriptor && faceSampleUsable(r)) samples.push(Array.from(r.descriptor));
+    if(r){
+      // v653: مشكلة الصورة بتتقال للموظفة وبتتسجل، بس مابتمنعش اللقطة السليمة تدخل المقارنة.
+      const q=faceQualityIssue(faceFrameQuality(video,r));
+      if(q){ issues[q]=(issues[q]||0)+1; $('#attPhotoStatus').textContent=FACE_QUALITY_AR[q]; }
+      if(r.descriptor && faceSampleUsable(r)) samples.push(Array.from(r.descriptor));
+    }
     await new Promise(x=>setTimeout(x,90));
   }
-  if(!samples.length) throw new Error('face-not-found');
-  const dist=bestFaceDistance(emp.faceProfile.descriptor,samples);
-  if(!(dist<=FACE_MATCH_THRESHOLD)){ const e=new Error('face-mismatch'); e.distance=dist; throw e; }
+  const topIssue=Object.keys(issues).sort((a,b)=>issues[b]-issues[a])[0]||'';
+  if(!samples.length){ faceLogAttempt(emp,{ok:false,reason:'face-not-found',issue:topIssue}); const e0=new Error('face-not-found'); e0.issue=topIssue; throw e0; }
+  const m=faceMatchProfile(emp.faceProfile,samples);
+  faceLogAttempt(emp,{ok:m.ok,dist:m.dist,primaryDist:m.primaryDist,reason:m.reason,issue:topIssue,templates:faceProfileTemplates(emp.faceProfile).length});
+  if(!m.ok){ const e=new Error('face-mismatch'); e.distance=m.dist; e.issue=topIssue; throw e; }
+  // مطابقة قوية + لقطة فيها جديد = بصمة مضافة (best-effort؛ فشل الحفظ مايوقّفش الحضور)
+  try{
+    const next=faceAdaptProfile(emp.faceProfile,samples,m,Date.now());
+    if(next){ await updateDoc(doc(db,'sales_employees',emp.id),{faceProfile:next}); emp.faceProfile=next; }
+  }catch(_e){}
   $('#attPhotoStatus').textContent='الوجه مطابق ✅'; return true;
 }
 
@@ -9620,7 +9707,8 @@ async function openAttPhoto(action){
       }catch(err){
         if(err&&err.message==='cancelled') return;
         $('#attPhotoStatus').textContent='';
-        $('#attPhotoErr').textContent = err&&err.message==='face-mismatch' ? 'الوجه مش مطابق للموظف المختار.' : 'تعذر التحقق من الوجه. حاول تاني.';
+        { const _hint=(err&&err.issue&&typeof FACE_QUALITY_AR!=='undefined'&&FACE_QUALITY_AR[err.issue])?(' '+FACE_QUALITY_AR[err.issue]):'';
+          $('#attPhotoErr').textContent = (err&&err.message==='face-mismatch' ? 'الوجه مش مطابق للموظف المختار.' : 'تعذر التحقق من الوجه. حاول تاني.') + _hint; }
         $('#attPhotoRetryBtn').style.display='block';
         return;
       }
