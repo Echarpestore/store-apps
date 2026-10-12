@@ -375,7 +375,7 @@ function Build-Clip([long]$StartMs,[int]$DurationSec,[int]$Quality,[bool]$Fast,[
   Wait-ForWindow $endMs $Camera
   # v538 cache namespace also prevents clips assembled from incomplete segments.
   # mobile browsers after the browser-compatible H264 playback upgrade.
-  $key = 'v566-cam' + [string]$Camera + '-' + [string]$StartMs + '-' + [string]$DurationSec + '-' + [string]$Quality + '-' + $(if($Fast){'fast'}else{'exact'})
+  $key = 'v712-cam' + [string]$Camera + '-' + [string]$StartMs + '-' + [string]$DurationSec + '-' + [string]$Quality + '-' + $(if($Fast){'fast'}else{'exact'})
   $out = Join-Path $Cache ($key + '.mp4')
   if ((Test-Path -LiteralPath $out) -and (Get-Item -LiteralPath $out).Length -gt 4096) { return $out }
 
@@ -389,6 +389,10 @@ function Build-Clip([long]$StartMs,[int]$DurationSec,[int]$Quality,[bool]$Fast,[
       $picked.Add($f)
     }
   }
+  # v712: a start that is exactly a segment boundary plays from that segment with no seek.
+  $exactIdx = -1
+  for ($pi = 0; $pi -lt $picked.Count; $pi++) { if ((Segment-TimeMs $picked[$pi]) -eq $StartMs) { $exactIdx = $pi; break } }
+  if ($exactIdx -gt 0) { $picked.RemoveRange(0, $exactIdx); $firstMs = $StartMs }
   if ($picked.Count -lt 2) {
     $nvr=Build-NvrDownloadedClip $StartMs $DurationSec $Quality $Camera
     if($nvr){return $nvr}
@@ -530,15 +534,21 @@ while ($listener.IsListening) {
       $staff=Get-StaffState;Send-Json $ctx 200 @{ok=[bool]$staff.sourceHealthy;source=[string]$staff.source;generatedAtMs=[long]$staff.generatedAtMs;activeStaffCount=[int]$staff.activeStaffCount;clockedInCount=[int]$staff.clockedInCount;openBreakCount=[int]$staff.openBreakCount;employeeIds=@($staff.employeeIds);employees=@($staff.employees)}
     } elseif($path -eq '/echarpe-presence/status'){
       $state=$null;try{if(Test-Path -LiteralPath $DetectorStateFile){$state=Get-Content -LiteralPath $DetectorStateFile -Raw|ConvertFrom-Json}}catch{};$current=$null;if($state){$current=$state.current};Send-Json $ctx 200 @{ok=[bool]$state;generatedAtMs=$(if($state){[long]$state.generatedAtMs}else{0});configuredCameras=@(4,8);current=$current;recent=@()}
-    } elseif ($path -eq '/health') {
+    } elseif ($path -eq '/health' -or $path -eq '/echarpe-playback/health') {
       $recorderState=Get-RecorderState;$recorder8State=Get-Recorder8State;$lastStamp=$null;if($recorderState.LastSegment){$lastStamp=$recorderState.LastSegment.LastWriteTime.ToString('s')}
       $recorderPidValue=$null;if($recorderState.Process){$recorderPidValue=$recorderState.Process.Id}
-      $staff=Get-StaffState;Send-Json $ctx 200 @{ok=[bool]($recorderState.Healthy -and $recorder8State.Healthy -and (Get-DetectorProcess));version=711;branch='madinaty';cameras=@(4,8);audioCamera=0;clockSource='pos_pc';recorder=[bool]($recorderState.Healthy -and $recorder8State.Healthy);camera4Recorder=[bool]$recorderState.Healthy;camera8Recorder=[bool]$recorder8State.Healthy;camera4SegmentAgeSec=$recorderState.LastSegmentAgeSec;camera8SegmentAgeSec=$recorder8State.LastSegmentAgeSec;recorderPid=$recorderPidValue;recorderProcessAgeSec=$recorderState.ProcessAgeSec;detector=[bool](Get-DetectorProcess);lastSegment=$lastStamp;lastSegmentAgeSec=$recorderState.LastSegmentAgeSec;lastSegmentBytes=$recorderState.LastSegmentBytes;staffSource=[string]$staff.source;activeStaffCount=[int]$staff.activeStaffCount;retentionHours=$RetentionHours;playback=$true;playbackCodec='h264';audio=$false;recordingAudioCodec='none'}
+      $staff=Get-StaffState;Send-Json $ctx 200 @{ok=[bool]($recorderState.Healthy -and $recorder8State.Healthy -and (Get-DetectorProcess));version=712;branch='madinaty';cameras=@(4,8);audioCamera=0;clockSource='pos_pc';recorder=[bool]($recorderState.Healthy -and $recorder8State.Healthy);camera4Recorder=[bool]$recorderState.Healthy;camera8Recorder=[bool]$recorder8State.Healthy;camera4SegmentAgeSec=$recorderState.LastSegmentAgeSec;camera8SegmentAgeSec=$recorder8State.LastSegmentAgeSec;recorderPid=$recorderPidValue;recorderProcessAgeSec=$recorderState.ProcessAgeSec;detector=[bool](Get-DetectorProcess);lastSegment=$lastStamp;lastSegmentAgeSec=$recorderState.LastSegmentAgeSec;lastSegmentBytes=$recorderState.LastSegmentBytes;staffSource=[string]$staff.source;activeStaffCount=[int]$staff.activeStaffCount;retentionHours=$RetentionHours;playback=$true;playbackCodec='h264';audio=$false;recordingAudioCodec='none'}
     } elseif ($path -eq '/echarpe-playback/view') {
       $camera=[int]($ctx.Request.QueryString['camera']);if($camera -notin @(4,8)){$camera=4};$atMs=[long]($ctx.Request.QueryString['atMs']);if($atMs -le 0){$atMs=[DateTimeOffset]::Now.ToUnixTimeMilliseconds()-1800000};$mins=[int]($ctx.Request.QueryString['durationMin']);if($mins -lt 1){$mins=1};if($mins -gt 60){$mins=60};$seconds=$mins*60
       $src='/echarpe-playback/video?camera='+[string]$camera+'&amp;atMs='+$atMs+'&amp;durationSec='+$seconds+'&amp;quality=480&amp;mode=fast'
       $html='<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Madinaty recording</title><style>html,body{margin:0;height:100%;background:#05070b;color:#fff;font-family:Arial}body{display:flex;flex-direction:column}header{padding:10px;background:#111827;font-weight:bold}video{width:100%;flex:1;min-height:0;background:#000}</style><header>Madinaty recording - branch PC clock</header><video controls autoplay playsinline src="'+$src+'"></video></html>'
       Send-Html $ctx $html
+    } elseif ($path -eq '/echarpe-playback/clip-start') {
+      # v712: the latest segment that starts at or before atMs. A clip requested from exactly
+      # that moment starts on the segment keyframe, so the player clock is exact.
+      $camera=[int]($ctx.Request.QueryString['camera']);if($camera -notin @(4,8)){$camera=4};$folder=$(if($camera -eq 8){$Segments8}else{$Segments});$atMs=[long]($ctx.Request.QueryString['atMs'])
+      $startMs=0L;foreach($seg in @(Get-SegmentsForWindow $folder $camera ($atMs - 40000) $atMs)){$sm=Segment-TimeMs $seg;if($sm -gt 0 -and $sm -le $atMs){$startMs=$sm}}
+      Send-Json $ctx 200 @{ok=[bool]($startMs -gt 0);camera=$camera;requestedAtMs=$atMs;startMs=$startMs;clockSource='pos_pc'}
     } elseif ($path -eq '/echarpe-playback/range') {
       $camera=[int]($ctx.Request.QueryString['camera']);if($camera -notin @(4,8)){$camera=4};$folder=$(if($camera -eq 8){$Segments8}else{$Segments});$filter='cam'+[string]$camera+'-*.ts';$files=@(Get-ChildItem -LiteralPath $folder -Filter $filter -File -ErrorAction SilentlyContinue | Where-Object { $PSItem.Length -gt $MinimumSegmentBytes } | Sort-Object Name)
       $first=0L;$last=0L;if($files.Count){$first=Segment-TimeMs $files[0];$last=(Segment-TimeMs $files[$files.Count-1])+10000L}

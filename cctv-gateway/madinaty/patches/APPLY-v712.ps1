@@ -68,9 +68,14 @@ function Test-Syntax([string]$path) {
   return @($errs).Count
 }
 
+# The marker that means this patch is already applied. Checked in test mode too:
+# v712 first shipped with the v711 marker here and refused to install ("Already v712").
+$AlreadyPattern = "version=712;branch='madinaty'"
+
 # ---------------- local test mode ----------------
 if ($TestFile) {
   $src = [IO.File]::ReadAllText($TestFile)
+  if ($src -match $AlreadyPattern) { Say 'TEST input already carries the applied marker'; exit 3 }
   $out = Apply-Edits $src
   [IO.File]::WriteAllText($TestOut, $out, (New-Object Text.UTF8Encoding($false)))
   $bad = Test-Syntax $TestOut
@@ -118,7 +123,7 @@ function Wait-Recording([datetime]$since, [int]$seconds) {
 
 Say 'ECHARPE Madinaty CCTV v712' 'Cyan'
 $src = [IO.File]::ReadAllText($Target)
-if ($src -match "version=711;branch='madinaty'") { Say 'Already v712 - nothing to do.' 'Green'; exit 0 }
+if ($src -match $AlreadyPattern) { Say 'Already v712 - nothing to do.' 'Green'; exit 0 }
 
 try { $patched = Apply-Edits $src } catch { Say ('Recorder is not the expected version - nothing changed. ' + $_.Exception.Message) 'Red'; exit 1 }
 
