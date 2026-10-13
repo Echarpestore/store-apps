@@ -1,15 +1,21 @@
 # فيديو شرح شات إيشارب
 
-`echarpe-chat-explainer.mp4` — موشن جرافيك طولي 1080×1920، 30fps، مدته 56 ثانية (مناسب للريلز والستوري والتيك توك).
+`echarpe-chat-explainer.mp4` — موشن جرافيك طولي 1080×1920، 30fps، 64 ثانية، بمزيكا ومؤثرات صوت.
 
-المشاهد: افتحي الشات ← جرّبي الطرحة ← جرّبي البندانة ← اطلبي ← المندوب في الطريق ← المندوب مستني تجربي ← كاش / كارت / مرتجع / استلام من الفرع ← الخاتمة.
+المشاهد:
+1. ابعتيلنا صورة طقمك (أو اكتبي الخامة واللون)
+2. ستايليست متخصصة بتختارلك من بين آلاف المنتجات
+3. جرّبيها عليكي — لقطات حقيقية من شاشة التجربة + تغيير لون البندانة
+4. خصوصيتك: صورتك بتفضل على موبايلك، مش بتتبعت ولا بتتخزن
+5. اطلبيها من الشات ← المندوب في الطريق ← المندوب مستني تجربي
+6. كاش / كارت / مرتجع سهل / استلام من الفرع ← الخاتمة
 
-## التعديل وإعادة الرندر
-الفيديو معمول كصفحة HTML (`source/index.html`) فيها دالة `seek(t)` بترسم كل لحظة. عشان تعدّلي نص أو توقيت:
-
+## إعادة الرندر
 ```bash
 cd promo/chat-video/source
-node render.js frames frames 30          # بيطلع 1680 صورة
-ffmpeg -framerate 30 -i frames/f_%05d.jpg -c:v libx264 -crf 20 -pix_fmt yuv420p -movflags +faststart ../echarpe-chat-explainer.mp4
+node render.js frames frames 30              # 1920 صورة (محتاج playwright)
+python3 audio.py track.wav                   # المزيكا والمؤثرات (numpy)
+ffmpeg -framerate 30 -i frames/f_%05d.jpg -i track.wav -c:v libx264 -crf 19 -pix_fmt yuv420p \
+  -af loudnorm=I=-15:TP=-1.5 -c:a aac -b:a 192k -shortest -movflags +faststart ../echarpe-chat-explainer.mp4
 ```
-(محتاج `playwright` و `ffmpeg`.) الفيديو من غير صوت — ضيفي مزيكا أو تعليق صوتي في أي برنامج مونتاج.
+النصوص والتوقيتات كلها في `source/index.html` (دالة `seek(t)`).
