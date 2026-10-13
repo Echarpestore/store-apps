@@ -160,6 +160,7 @@ export type Client = {
   name: string;
   logo?: string; // e.g. 'logos/brand.svg'
   aspect?: number;
+  scale?: number; // optical size correction (1 = default), never changes proportions
   evidence: string; // where the project is documented
   project?: Photo;
 };
@@ -169,16 +170,19 @@ const CONFIRMED = 'Confirmed by HEYDAY, 2026-10-13';
 export const clients: Client[] = [
   {name: 'Samsung', logo: 'logos/samsung.svg', aspect: 5.9, evidence: CONFIRMED},
   {name: 'Google', logo: 'logos/google.svg', aspect: 2.93, evidence: CONFIRMED},
-  {name: 'Apple', logo: 'logos/apple.svg', aspect: 0.82, evidence: CONFIRMED},
+  {name: 'Apple TV+', logo: 'logos/appletvplus.png', aspect: 2.65, scale: 0.9, evidence: CONFIRMED},
   {name: 'Disney', logo: 'logos/disney.svg', aspect: 2.35, evidence: CONFIRMED},
-  {name: 'Universal Pictures', evidence: CONFIRMED},
+  {name: 'Universal', logo: 'logos/universal.png', aspect: 1.82, scale: 1.4, evidence: CONFIRMED},
   {name: 'Nike', logo: 'logos/nike.svg', aspect: 2.76, evidence: CONFIRMED},
   {name: 'Coca-Cola', logo: 'logos/cocacola.svg', aspect: 3.06, evidence: CONFIRMED},
+  {name: 'Riachuelo', logo: 'logos/riachuelo.png', aspect: 2.62, scale: 1.2, evidence: CONFIRMED},
+  {name: 'Sicredi', logo: 'logos/sicredi.png', aspect: 3.68, evidence: CONFIRMED},
+  {name: 'Kiwify', logo: 'logos/kiwify.png', aspect: 1.0, evidence: CONFIRMED},
   {name: 'Fairmont', evidence: CONFIRMED},
-  {name: 'Sicredi', evidence: CONFIRMED},
-  {name: 'Kiwify', evidence: CONFIRMED},
 ];
 
 // Official logo file. When present (SVG or PNG with transparency) it replaces
 // the typeset wordmark everywhere. Leave undefined to use the wordmark.
-export const officialLogo: string | undefined = undefined; // e.g. 'brand/heyday-logo.svg'
+// Supplied by HEYDAY (2026-10-13): white serif wordmark with cyan glow.
+export const officialLogo: string | undefined = 'brand/heyday-logo.png';
+export const officialLogoAspect = 3.85; // width / height of the file

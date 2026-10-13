@@ -44,20 +44,23 @@ No HEYDAY page or post naming a client could be opened from the build environmen
 |---|---|---|
 | Samsung | official wordmark, original blue | `@thesvg/icons` 3.3.13 (`samsung`, CC0, upstream Simple Icons) |
 | Google | official wordmark, original colours | `@thesvg/icons` (`google` / wordmark, CC0) |
-| Apple | official Apple mark, black | `@thesvg/icons` (`apple`, CC0), white fill switched to black |
-| Disney | official Disney script wordmark, black | `@thesvg/icons` (`disney`, listed as "Fair Use") |
-| Nike | official Swoosh, black | `@thesvg/icons` (`nike`, CC0) |
+| Apple TV+ | official Apple TV+ logo | file supplied by HEYDAY (2026-10-13) |
+| Disney | official Disney script wordmark | `@thesvg/icons` (`disney`, listed as "Fair Use") |
+| Universal | official Universal globe logo | file supplied by HEYDAY |
+| Nike | official Swoosh | `@thesvg/icons` (`nike`, CC0) |
 | Coca-Cola | official script wordmark, Coca-Cola red | `@thesvg/icons` (`coca-cola`, CC0) |
-| Universal Pictures | **name in neutral type** (logo not available) | — send official file |
-| Fairmont | **name in neutral type** (logo not available) | — send official file |
-| Sicredi | **name in neutral type** (logo not available) | — send official file |
-| Kiwify | **name in neutral type** (logo not available) | — send official file |
+| Riachuelo | official RCHLO / RIACHUELO logo | file supplied by HEYDAY |
+| Sicredi | official logo, original greens | file supplied by HEYDAY |
+| Kiwify | official symbol | file supplied by HEYDAY |
+| Fairmont | **name in neutral type** (logo not supplied yet) | send official file |
+
+Supplied raster logos were trimmed to their artwork and their white background made transparent (`public/logos/*.png`). Nothing else was changed.
 
 Logos are used as published: viewBox cropped tight to the artwork, never stretched (`object-fit: contain` with each logo's own aspect ratio). The licence fields describe the SVG file, not trademark rights. All marks remain the property of their owners, so check each brand's usage rules before paid media.
 
 ## Logo and photography — missing
 
-* **Official logo**: not downloadable. The video uses a typeset monoline "HEYDAY" wordmark drawn in SVG as a stand-in. Put the official file in `public/brand/` and set `officialLogo`.
+* **Official logo**: supplied by HEYDAY on 2026-10-13 (white serif wordmark with cyan glow). Trimmed to the artwork and stored at `public/brand/heyday-logo.png`. Used in Scenes 1 and 6.
 * **Product photos**: not downloadable. The video uses original, editable SVG globe illustrations (clearly illustrative — generic "SUA MARCA" content, no third-party brands). They are not presented as HEYDAY portfolio pieces. Every photo slot is wired: see `docs/ASSET_MANIFEST.md`.
 * **Palette**: HEYDAY's official colours could not be sampled. A restrained white / ink / warm-gold palette is used; change the hex values in `colors`.
 

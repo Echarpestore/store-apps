@@ -7,7 +7,7 @@ import {InnerLogo} from '../components/Inner';
 import {SnowField} from '../components/Particles';
 import {PhotoSlot} from '../components/PhotoSlot';
 import {Eyebrow, KineticText} from '../components/Typography';
-import {Wordmark, WORDMARK_W} from '../components/Wordmark';
+import {Wordmark, wordmarkWidth} from '../components/Wordmark';
 import {useLayout} from '../lib/layout';
 import {clamp, easeInOut, easeOut, springAt} from '../lib/motion';
 
@@ -135,7 +135,7 @@ export const S1Reveal: React.FC = () => {
         />
       </div>
       <Wordmark
-        x={L.vertical ? L.W / 2 : L.text.x - 40 * u + (WORDMARK_W * 0.8 * u) / 2}
+        x={L.vertical ? L.W / 2 : L.text.x - 40 * u + wordmarkWidth(80 * u) / 2}
         y={L.vertical ? L.H * 0.745 : L.H * 0.47}
         height={(L.vertical ? 88 : 80) * u}
         start={3.05}

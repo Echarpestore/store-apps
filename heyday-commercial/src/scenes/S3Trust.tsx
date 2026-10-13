@@ -60,12 +60,12 @@ export const S3Trust: React.FC = () => {
 
   // ---- verified client grid (used only when clients are configured) ----
   const clientGrid = () => {
-    const list = clients.slice(0, 10);
-    const cols = L.vertical ? 2 : 5;
-    const gap = (L.vertical ? 30 : 28) * u;
+    const list = clients.slice(0, 12);
+    const cols = L.vertical ? 2 : Math.ceil(list.length / 2);
+    const gap = (L.vertical ? 24 : 24) * u;
     const gridW = L.vertical ? L.W - 160 * u : L.W * 0.86;
     const cellW = (gridW - gap * (cols - 1)) / cols;
-    const cellH = (L.vertical ? 182 : 190) * u;
+    const cellH = (L.vertical ? 150 : 180) * u;
     const x0 = (L.W - gridW) / 2;
     const y0 = L.vertical ? L.H * 0.27 : L.H * 0.36;
     const area = cellW * cellH * 0.13; // optical size: every logo gets the same visual area
@@ -73,19 +73,22 @@ export const S3Trust: React.FC = () => {
     return list.map((c, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
+      const rows = Math.ceil(list.length / cols);
+      const inRow = row === rows - 1 ? list.length - row * cols : cols;
+      const rowShift = ((cols - inRow) * (cellW + gap)) / 2; // centre an incomplete last row
       const st = 1.0 + (row * cols + col) * 0.09;
       const s = springAt(frame, fps, st, {damping: 17});
       const reveal = interpolate(t, [st + 0.15, st + 0.8], [0, 1], {...clamp, easing: easeOut});
       const draw = interpolate(t, [st, st + 0.9], [0, 1], {...clamp, easing: easeOut});
       const a = c.aspect ?? 3;
-      let lw = Math.sqrt(area * a);
+      let lw = Math.sqrt(area * a) * (c.scale ?? 1);
       let lh = lw / a;
-      const maxW = cellW * 0.66;
-      const maxH = cellH * 0.5;
+      const maxW = cellW * 0.72;
+      const maxH = cellH * 0.56;
       const k = Math.min(1, maxW / lw, maxH / lh);
       lw *= k;
       lh *= k;
-      const cx = x0 + col * (cellW + gap);
+      const cx = x0 + rowShift + col * (cellW + gap);
       const cy = y0 + row * (cellH + gap);
       // gold light passing over the grid once everything is in
       const d = (col / cols + row * 0.12) - sweep;
@@ -204,7 +207,7 @@ export const S3Trust: React.FC = () => {
               position: 'absolute',
               left: 0,
               width: L.W,
-              top: L.vertical ? L.H * 0.27 + 5 * (212 * u) + 50 * u : L.H * 0.36 + 2 * (218 * u) + 50 * u,
+              top: L.vertical ? L.H * 0.27 + Math.ceil(clients.length / 2) * (174 * u) + 44 * u : L.H * 0.36 + 2 * (204 * u) + 50 * u,
               textAlign: 'center',
               fontFamily: fonts.sans,
               fontSize: 26 * u,

@@ -1,6 +1,6 @@
 import React from 'react';
 import {Img, interpolate, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
-import {colors, officialLogo} from '../config/brand';
+import {colors, officialLogo, officialLogoAspect} from '../config/brand';
 import {clamp, easeOut} from '../lib/motion';
 
 /**
@@ -39,12 +39,31 @@ export const Wordmark: React.FC<{
   const width = WORDMARK_W * s;
 
   if (officialLogo) {
-    const p = interpolate(t, [start, start + 0.9], [0, 1], {...clamp, easing: easeOut});
+    // official file: wipes in left → right out of a blur; the shimmer is a light
+    // band masked by the logo's own alpha, so it only lights the artwork.
+    const lh = height * 1.7;
+    const lw = lh * officialLogoAspect;
+    const p = interpolate(t, [start, start + 1.1], [0, 1], {...clamp, easing: easeOut});
+    const src = staticFile(officialLogo);
+    const box: React.CSSProperties = {position: 'absolute', left: x - lw / 2, top: y - lh / 2, width: lw, height: lh};
     return (
-      <Img
-        src={staticFile(officialLogo)}
-        style={{position: 'absolute', left: x - width / 2, top: y - height, height: height * 2, width, objectFit: 'contain', opacity: p * opacity, filter: `blur(${(1 - p) * 8}px)`}}
-      />
+      <div style={{...box, opacity: opacity * Math.min(1, p * 1.5), clipPath: `inset(0 ${(1 - p) * 100}% 0 0)`, transform: `scale(${0.94 + 0.06 * p})`, filter: `blur(${(1 - p) * 6}px)`}}>
+        <Img src={src} style={{width: '100%', height: '100%', objectFit: 'contain'}} />
+        {shimmer >= 0 && shimmer <= 1.2 && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: `linear-gradient(100deg, transparent ${shimmer * 100 - 18}%, rgba(255,255,255,0.95) ${shimmer * 100}%, transparent ${shimmer * 100 + 18}%)`,
+              WebkitMaskImage: `url(${src})`,
+              WebkitMaskSize: 'contain',
+              WebkitMaskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              mixBlendMode: 'screen',
+            }}
+          />
+        )}
+      </div>
     );
   }
 
@@ -92,3 +111,6 @@ export const Wordmark: React.FC<{
     </svg>
   );
 };
+
+/** Rendered width of the wordmark for a given `height` prop (official file or stand-in). */
+export const wordmarkWidth = (height: number) => (officialLogo ? height * 1.7 * officialLogoAspect : (WORDMARK_W * height) / 100);
