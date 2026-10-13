@@ -16,6 +16,7 @@ ok(/const BIO_KEY = 'office_bio_cred'/.test(O2), 'نفس مفتاح Office ال�
 ok(/authenticatorAttachment: 'platform'/.test(O2) && /userVerification: 'required'/.test(O2), 'بصمة/وش الجهاز نفسه مع تحقق فعلي');
 ok(/r\.h !== gateHash/.test(O2), 'لو كود المالك اتغيّر البصمة بتبطل');
 ok(/id="gBio"/.test(HTML) && /Face ID/.test(HTML), 'زرار Face ID / البصمة في البوابة');
+ok(/id="gateWait"/.test(HTML) && /<div id="gateLogin" style="display:none">/.test(HTML), 'v13 سلبي: شاشة الإيميل والباسورد مش بتظهر وهو لسه بيتأكد من الدخول');
 ok(/redeemSource: 'manual'/.test(POS) && /redeemSource: 'app'/.test(POS) && /redeemSource: \(pendingRedemption \? \(pendingRedemption\.source \|\| 'manual'\) : null\)/.test(POS), 'POS بيسجل مصدر الاستبدال (تطبيق / يدوي) في الفاتورة');
 ok(/_logActivity\('manual_redeem'/.test(POS), 'الاستبدال اليدوي بيتسجل في سجل النشاط');
 ok(/s\.redeemSource === 'manual'\) push\('redeem'/.test(O2), 'Office: الحالة بس للاستبدال اليدوي');
@@ -28,11 +29,9 @@ const { open } = require(${JSON.stringify(path.join(ROOT,'tests','_helpers','off
   // سيناريو ١: فيه كود مالك + بصمة مربوطة → زرار البصمة يظهر، والدوس يفتح من غير كود
   const pre = "window.__ls = { office_bio_cred: JSON.stringify({ id:'AQID', h:'HASH1', at:1 }) }; Object.defineProperty(window, 'localStorage', { value: { getItem:k=> (k in window.__ls ? window.__ls[k] : null), setItem:(k,v)=>{ window.__ls[k]=String(v); }, removeItem:k=>{ delete window.__ls[k]; } } }); Object.defineProperty(window, 'sessionStorage', { value: { _s:{}, getItem(k){ return this._s[k]||null; }, setItem(k,v){ this._s[k]=String(v); }, removeItem(k){ delete this._s[k]; } } }); window.PublicKeyCredential = function(){}; window.__bioCalls = []; Object.defineProperty(navigator, 'credentials', { value: { create: async (o)=>{ window.__bioCalls.push('create'); return { rawId: new Uint8Array([9,9,9]).buffer }; }, get: async (o)=>{ window.__bioCalls.push('get:' + o.publicKey.userVerification); return { id:'x' }; } } });";
   let pg = await open({ pre, data: { pos_test_settings: [ { id:'office_gate', hash:'HASH1' }, { id:'advances_cfg', closeDay:6, openDay:12 } ] } });
-  out.bioVisible = await pg.p.evaluate(()=> document.getElementById('gBio').style.display !== 'none' && document.getElementById('gateCode').style.display !== 'none');
-  out.appHidden = await pg.p.evaluate(()=> document.getElementById('app').style.display === 'none');
-  await pg.p.click('#gBio'); await pg.p.waitForTimeout(400);
+  await pg.p.waitForTimeout(400);   // v13: البصمة بتتطلب لوحدها من غير دوس
   out.appShown = await pg.p.evaluate(()=> document.getElementById('app').style.display !== 'none' && document.getElementById('gate').style.display === 'none');
-  out.calls = await pg.p.evaluate(()=> window.__bioCalls);
+  out.calls = await pg.p.evaluate(()=> window.__bioCalls); out.cachedHash = await pg.p.evaluate(()=> window.__ls.office_gate_hash_v1);
   out.more = await pg.go('more');
   out.errs1 = pg.errs; await pg.close();
   // سيناريو ٢: الكود اتغيّر بعد الربط → البصمة تبطل وتتشال
@@ -55,8 +54,8 @@ try{ out = JSON.parse(execFileSync(process.execPath, ['-e', RUN], { encoding:'ut
 if(out.fatal && /playwright|Cannot find module/i.test(out.fatal)) console.log('  ⏭ كروميوم مش متاح');
 else {
   ok(!out.fatal, 'الصفحة اشتغلت ' + (out.fatal||''));
-  ok(out.bioVisible && out.appHidden, 'البوابة: زرار Face ID / البصمة ظاهر والبرنامج مقفول');
-  ok(out.appShown, 'الدوس على البصمة فتح البرنامج من غير كود');
+  ok(out.appShown, 'v13: Face ID / البصمة اتطلبت لوحدها وفتحت البرنامج من غير دوس ولا كود');
+  ok(out.cachedHash === 'HASH1', 'v13: بصمة الكود اتخزنت على الجهاز — المرة الجاية البوابة مش هتستنى Firestore');
   ok(JSON.stringify(out.calls) === '["get:required"]', 'اتطلب تحقق فعلي (userVerification required) — مرة واحدة');
   ok(/👆 الدخول بالبصمة \/ Face ID\n?مفعّل على الجهاز ده/.test(out.more||''), '«المزيد»: البصمة مفعّلة على الجهاز ده (وتتشال منه)');
   ok(out.bioHidden2 && out.removed2, 'سلبي: الكود اتغيّر → البصمة اتشالت وزرارها مش ظاهر');

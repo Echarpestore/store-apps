@@ -41,13 +41,21 @@ async function gateFlow(user){
   /* 🔐 حساب موظف بس (إيميل وباسورد). تطبيق العميلات على نفس الدومين وبيدخل بحساب عميلة/مجهول —
      ونفس المتصفح بيشارك الدخول، فـOffice كان بيفتح بحساب العميلة وكل كتابة ترجع permission-denied. */
   const staff = !!(user && user.email && (user.providerData || []).some(p => p && p.providerId === 'password'));
+  const wait = document.getElementById('gateWait'); if(wait) wait.style.display = 'none';
   if(!staff){ g.style.display = ''; a.style.display = 'none'; document.getElementById('gateLogin').style.display = ''; document.getElementById('gateCode').style.display = 'none'; return; }
-  try{ const d = await db.collection('pos_test_settings').doc(GATE_DOC).get(); gateHash = (d.exists && d.data().hash) || null; }catch(e){ gateHash = null; }
+  /* ⚡ v13: بصمة كود المالك متخزنة على الجهاز — البوابة بتقرر فورًا من غير ما تستنى Firestore، وبتتحدّث في الخلفية */
+  let cached = null; try{ cached = localStorage.getItem('office_gate_hash_v1'); }catch(e){}
+  const fresh = db.collection('pos_test_settings').doc(GATE_DOC).get().then(d=> (d.exists && d.data().hash) || null, ()=> undefined);
+  if(cached != null && cached !== ''){ gateHash = cached === '-' ? null : cached;
+    fresh.then(h=>{ if(h === undefined) return; try{ localStorage.setItem('office_gate_hash_v1', h || '-'); }catch(e){} if((h||null) !== gateHash){ gateHash = h || null; if(booted && gateHash && !sessOk()) location.reload(); } }); }
+  else { const h = await fresh; gateHash = h === undefined ? null : h; if(h !== undefined){ try{ localStorage.setItem('office_gate_hash_v1', h || '-'); }catch(e){} } }
   if(!gateHash || sessOk()){ g.style.display = 'none'; a.style.display = ''; boot(); return; }
   document.getElementById('gateLogin').style.display = 'none'; document.getElementById('gateCode').style.display = '';
   const rec = bioRec(); const bb = document.getElementById('gBio');
   if(bb) bb.style.display = (rec && bioSupported()) ? '' : 'none';
   if(!(rec && bioSupported())) setTimeout(()=>{ try{ document.getElementById('gCode').focus(); }catch(e){} }, 100);
+  // 👆 v13: البصمة / Face ID بتتطلب لوحدها أول ما الشاشة تفتح — لو المتصفح رفض من غير لمسة، الزرار موجود
+  else if(!gateFlow._autoBio){ gateFlow._autoBio = true; setTimeout(()=> bioUnlock(true), 150); }
 }
 /* ---------- 👆 الفتح بالبصمة / Face ID (WebAuthn — بصمة الجهاز نفسه) ----------
    نفس مفتاح Office القديم (office_bio_cred) على نفس الدومين — اللي ربط بصمته في القديم بتشتغل هنا على طول.
@@ -57,14 +65,15 @@ function bioSupported(){ return !!(window.PublicKeyCredential && navigator.crede
 function bioRec(){ let r = null; try{ r = JSON.parse(localStorage.getItem(BIO_KEY) || 'null'); }catch(e){} if(r && r.h && gateHash && r.h !== gateHash){ try{ localStorage.removeItem(BIO_KEY); }catch(e){} return null; } return (r && r.id) ? r : null; }
 function b64u(buf){ return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
 function unb64u(str){ const s = String(str).replace(/-/g,'+').replace(/_/g,'/'); const bin = atob(s + '==='.slice((s.length + 3) % 4)); const out = new Uint8Array(bin.length); for(let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out.buffer; }
-async function bioUnlock(){
+async function bioUnlock(auto){
+  if(auto === true && document.visibilityState === 'hidden') return;
   const err = document.getElementById('gateErr'); err.textContent = ''; const rec = bioRec(); if(!rec || !bioSupported()) return;
   try{
     const asr = await navigator.credentials.get({ publicKey: { challenge: crypto.getRandomValues(new Uint8Array(32)), allowCredentials: [{ type:'public-key', id: unb64u(rec.id), transports:['internal'] }], userVerification: 'required', timeout: 60000 } });
     if(!asr) throw new Error('cancel');
     try{ sessionStorage.setItem(SESS_KEY, JSON.stringify({ h: gateHash, exp: Date.now() + SESS_HOURS*3600000 })); }catch(e){}
     gateFlow(auth.currentUser);
-  }catch(e){ err.textContent = (e && e.name === 'NotAllowedError') ? 'اتلغت — جرّب تاني أو اكتب الكود' : 'البصمة مافتحتش — اكتب الكود'; }
+  }catch(e){ if(auto === true) return; err.textContent = (e && e.name === 'NotAllowedError') ? 'اتلغت — جرّب تاني أو اكتب الكود' : 'البصمة مافتحتش — اكتب الكود'; }
 }
 async function bioEnroll(){
   if(!bioSupported()){ toast('الجهاز/المتصفح ده مش بيدعم البصمة'); return; }
