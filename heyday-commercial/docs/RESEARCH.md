@@ -49,7 +49,6 @@ No HEYDAY page or post naming a client could be opened from the build environmen
 | Universal | official Universal globe logo | file supplied by HEYDAY |
 | Nike | official Swoosh | `@thesvg/icons` (`nike`, CC0) |
 | Coca-Cola | official script wordmark, Coca-Cola red | `@thesvg/icons` (`coca-cola`, CC0) |
-| Riachuelo | official RCHLO / RIACHUELO logo | file supplied by HEYDAY |
 | Sicredi | official logo, original greens | file supplied by HEYDAY |
 | Kiwify | official symbol | file supplied by HEYDAY |
 | Fairmont | **name in neutral type** (logo not supplied yet) | send official file |
@@ -61,7 +60,7 @@ Logos are used as published: viewBox cropped tight to the artwork, never stretch
 ## Logo and photography — missing
 
 * **Official logo**: supplied by HEYDAY on 2026-10-13 (white serif wordmark with cyan glow). Trimmed to the artwork and stored at `public/brand/heyday-logo.png`. Used in Scenes 1 and 6.
-* **Product photos**: supplied by HEYDAY on 2026-10-13 (Coca-Cola, Coca-Cola FEMSA, Sicredi, Bauducco, Porsche, Samsung TV Plus, Nike, Riachuelo, plus Schutz, Marvel and Disney+ stories). See `docs/ASSET_MANIFEST.md`. SVG illustrations stay throughout as "the idea" (Scenes 1, 2, 4, 5 and 6), and each one hands over to a real photo ("the creation").
+* **Product photos**: supplied by HEYDAY on 2026-10-13 (Coca-Cola, Coca-Cola FEMSA, Sicredi, Bauducco, Porsche, Samsung TV Plus, Nike, plus Schutz, Marvel and Disney+ stories). See `docs/ASSET_MANIFEST.md`. The story is told with SVG illustrations; the real photos are shown unaltered in the Scene 5 showcase. Riachuelo was removed at HEYDAY's request.
 * **Palette**: HEYDAY's official colours could not be sampled. A restrained white / ink / warm-gold palette is used; change the hex values in `colors`.
 
 Products seen in search listings (Dr Who, Taylor Swift "Lover", Up, Friends, O Pequeno Príncipe, Olaf) are licensed entertainment properties and were deliberately **not** illustrated.

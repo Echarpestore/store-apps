@@ -200,7 +200,7 @@ export const S6CTA: React.FC = () => {
           height={(V ? 58 : 50) * u}
           start={0.6}
           color={colors.paper}
-          shimmer={interpolate(t, [8.6, 9.8], [0, 1.15], clamp)}
+          shimmer={interpolate(t, [7.4, 8.6], [0, 1.15], clamp)}
         />
 
         <div style={{position: 'absolute', left: colX, top: V ? L.H * 0.455 : L.H * 0.1, width: colW}}>

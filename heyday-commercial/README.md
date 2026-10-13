@@ -1,6 +1,6 @@
 # HEYDAY — motion graphics commercial
 
-A 54.5-second commercial in Brazilian Portuguese for HEYDAY (custom snow globes, Joinville/SC). It is built entirely in code: React + SVG compositions rendered by [Remotion](https://www.remotion.dev/), with an original synthesised score.
+A 55-second commercial in Brazilian Portuguese for HEYDAY (custom snow globes, Joinville/SC). It is built entirely in code: React + SVG compositions rendered by [Remotion](https://www.remotion.dev/), with an original synthesised score.
 
 | Deliverable | Path |
 |---|---|
@@ -11,7 +11,7 @@ A 54.5-second commercial in Brazilian Portuguese for HEYDAY (custom snow globes,
 | Research, what was verified, what is missing | `docs/RESEARCH.md` |
 | Asset manifest + photo/logo slots | `docs/ASSET_MANIFEST.md` |
 
-> **Read `docs/RESEARCH.md` before publishing.** The build environment could not open heyday.com.br or Instagram, so HEYDAY supplied the official logo, the product photos and the confirmed list of 11 clients directly. Fairmont is still shown as a name until its logo file is added. Each of these is one config change away from the real asset. WhatsApp and e-mail were confirmed by the client and appear in the final scene.
+> **Read `docs/RESEARCH.md` before publishing.** The build environment could not open heyday.com.br or Instagram, so HEYDAY supplied the official logo, the product photos and the confirmed list of 10 clients directly. Fairmont is still shown as a name until its logo file is added. Each of these is one config change away from the real asset. WhatsApp and e-mail were confirmed by the client and appear in the final scene.
 
 ## Quick start
 

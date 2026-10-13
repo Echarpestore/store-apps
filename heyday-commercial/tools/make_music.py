@@ -5,8 +5,9 @@ third-party audio, so there are no licensing issues).
     python3 tools/make_music.py public/audio/heyday-score.wav
 
 Hit points are aligned with src/config/timeline.ts:
-  2.4s globe reveal · 5/12/19/35/43s scene transitions ·
-  18.8/22.0/25.2/28.4/31.6s ordering steps · 43s CTA · 48s tagline · 54.5s end
+  2.4s globe reveal · 5/12/19/35/45.5s scene transitions ·
+  18.8/22.0/25.2/28.4/31.6s ordering steps · 38.8–44.2s photo showcase ·
+  45.5s CTA · 51s tagline · 55s end
 Edit CUTS / STEPS below if the timeline changes.
 """
 import sys
@@ -15,11 +16,13 @@ import wave
 import numpy as np
 
 SR = 48000
-DUR = 54.5
+DUR = 55.0
 N = int(SR * DUR)
 BPM = 120
 BEAT = 60 / BPM
-CUTS = [5.0, 12.0, 19.0, 35.0, 43.0]
+CUTS = [5.0, 12.0, 19.0, 35.0, 45.5]
+CTA = 45.5
+GALLERY = [34.4 + 4.4 + k * 1.35 for k in range(5)]  # Scene 5 photo showcase
 STEPS = [18.8, 22.0, 25.2, 28.4, 31.6]
 REVEAL = 2.4
 rng = np.random.default_rng(7)
@@ -167,7 +170,7 @@ for i, m in enumerate([93, 90, 97]):
 # Main body (5 → 43): pad + bass + arpeggio + rhythm with dynamics
 ARP = [0, 2, 3, 4, 3, 2, 1, 2]
 t = 4.0
-while t < 43.0:
+while t < CTA:
     c = chord_at(t)
     start_pad = t
     add(pad(CHORDS[c], start_pad, 4.6, gain=0.055), start_pad, pan=0)
@@ -184,12 +187,14 @@ def section_level(tt):
         return 1.0
     if tt < 37:
         return 0.45
-    return 0.85
+    if tt < 38.8:
+        return 0.7
+    return 0.9
 
 step = BEAT / 2
 tt = 5.0
 k = 0
-while tt < 43.0 - 1e-6:
+while tt < CTA - 1e-6:
     lvl = section_level(tt)
     c = chord_at(tt)
     notes = CHORDS[c]
@@ -216,27 +221,28 @@ for i, s in enumerate(STEPS):
         add(bell(m + (i % 2) * 2, 1.5), s + j * 0.09, pan=0.4 * (j * 2 - 1), gain=0.045)
 # approval "ding" (step 3 → approved)
 add(bell(93, 2.0), 25.2 + 2.6, gain=0.05)
-# outline → product moment in scene 5
-for i, m in enumerate([78, 81, 85, 90]):
-    add(bell(m, 2.2), 34.4 + 6.0 + i * 0.1, pan=-0.3 + i * 0.2, gain=0.04)
+# photo showcase in scene 5: a soft chime on each new piece
+for i, g in enumerate(GALLERY):
+    for j, m in enumerate([86, 90] if i % 2 == 0 else [88, 93]):
+        add(bell(m, 1.8), g + j * 0.08, pan=0.35 * (j * 2 - 1), gain=0.04)
 
 # CTA (43 → end): impact, warm resolve, no drums
-add(boom(0.8), 43.0)
-add(pad([38, 50, 57, 61, 64, 66], 43.0, 5.0, gain=0.07), 43.0)
-add(pad([43, 50, 54, 57, 62, 66], 47.6, 4.2, gain=0.065), 47.6)
-add(pad([38, 50, 57, 62, 64, 69, 74], 51.4, 3.1, gain=0.07), 51.4)
-tt = 43.0
+add(boom(0.8), CTA)
+add(pad([38, 50, 57, 61, 64, 66], CTA, 4.4, gain=0.07), CTA)
+add(pad([43, 50, 54, 57, 62, 66], CTA + 4.0, 3.6, gain=0.065), CTA + 4.0)
+add(pad([38, 50, 57, 62, 64, 69, 74], CTA + 7.2, 2.3, gain=0.07), CTA + 7.2)
+tt = CTA
 k = 0
-while tt < 51.0:
-    c = 0 if tt < 47.6 else 2
+while tt < CTA + 7.0:
+    c = 0 if tt < CTA + 4.0 else 2
     m = CHORDS[c][ARP[k % 8]] + 24
     add(pluck(m, 1.4, 0.6), tt, pan=0.4 * np.sin(k), gain=0.035)
     tt += BEAT
     k += 1
 for i, m in enumerate([86, 90, 93, 98]):
-    add(bell(m, 3.0), 48.0 + i * 0.14, pan=-0.45 + i * 0.3, gain=0.045)
-add(bell(74, 4.0), 51.4, gain=0.06)
-add(bell(86, 4.0), 51.45, gain=0.04)
+    add(bell(m, 3.0), CTA + 5.6 + i * 0.14, pan=-0.45 + i * 0.3, gain=0.045)
+add(bell(74, 4.0), CTA + 7.2, gain=0.06)
+add(bell(86, 4.0), CTA + 7.25, gain=0.04)
 
 # ------------------------------------------------------------------ reverb
 def reverb(x, seconds=2.6, mix=0.28):

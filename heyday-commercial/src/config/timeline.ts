@@ -6,8 +6,8 @@ export const TIMELINE = {
   s2: {from: 5, dur: 7},
   s3: {from: 12, dur: 7},
   s4: {from: 19, dur: 16},
-  s5: {from: 35, dur: 8},
-  s6: {from: 43, dur: 11.5},
+  s5: {from: 35, dur: 10.5},
+  s6: {from: 45.5, dur: 9.5},
 } as const;
 
 /** Overlap used by cross-scene transitions (seconds). */

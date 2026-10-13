@@ -3,10 +3,9 @@ import {AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig} from 'remoti
 import {colors, copy, fonts, photos} from '../config/brand';
 import {PaperBackground} from '../components/Background';
 import {Globe} from '../components/Globe';
-import {CheckIcon} from '../components/Icons';
 import {InnerGift, InnerLogo, InnerProduct, InnerVenue} from '../components/Inner';
 import {SnowField} from '../components/Particles';
-import {PhotoGlobe} from '../components/PhotoSlot';
+import {PhotoSlot} from '../components/PhotoSlot';
 import {SceneIn} from '../components/Transition';
 import {Eyebrow, KineticText} from '../components/Typography';
 import {mixList, rgba} from '../lib/color';
@@ -52,21 +51,22 @@ export const S5Special: React.FC = () => {
   const glitter = t < 2.5 ? null : t < 2.8 ? colors.gold : t < 3.1 ? '#E3A6B4' : null;
   const plaque = t < 3.1 ? PLAQUES[0] : t < 3.45 ? PLAQUES[2] : PLAQUES[3];
 
-  // ---- part B: outline → finished product ----
-  const B = 4.6;
-  const toLine = between(B, B + 0.45, easeIn);
-  const redraw = between(B + 0.45, B + 1.35);
-  const reveal = between(B + 1.3, B + 2.0, easeOut);
-  const outline = t < B + 0.45 ? 1 : redraw;
-  const solid = t < B + 0.45 ? 1 - toLine : reveal;
-  const move = between(B - 0.1, B + 0.8);
-  const gScale = lerp((V ? 0.95 : 0.8) * u, (V ? 0.78 : 0.8) * u, move);
-  const gx = lerp(L.stage.x, V ? L.stage.x : L.W * 0.28, move);
-  const gy = lerp(V ? L.H * 0.42 : L.H * 0.5, V ? L.H * 0.36 : L.H * 0.47, move);
-  const beauty = photos.beauty[0];
-  const photoIn = beauty ? reveal : 0;
+  // ---- part B: real HEYDAY work, one piece per strength ----
+  const B = 4.4; // showcase starts
+  const SLOT = 1.35; // seconds per photo
+  const XF = 0.4; // crossfade
+  const gallery = photos.beauty.slice(0, copy.s5.features.length);
+  const aOut = gallery.length ? between(B - 0.25, B + 0.2, easeIn) : 0;
+  const gScale = (V ? 0.95 : 0.8) * u;
+  const gx = L.stage.x;
+  const gy = V ? L.H * 0.42 : L.H * 0.5;
+  const chipsOut = aOut;
+  const card = V ? {x: L.W / 2, y: L.H * 0.465, w: 720 * u, h: 900 * u} : {x: L.W * 0.3, y: L.H * 0.53, w: 620 * u, h: 860 * u};
+  const capX = V ? 0 : L.W * 0.55;
+  const capW = V ? L.W : L.W * 0.38;
+  const capY = V ? L.H * 0.745 : L.H * 0.46;
+  const startOf = (k: number) => B + k * SLOT;
 
-  const chipsOut = between(B - 0.2, B + 0.3, easeIn);
   return (
     <SceneIn type="iris" originX={L.stage.x} originY={L.stage.y}>
       <AbsoluteFill>
@@ -79,8 +79,8 @@ export const S5Special: React.FC = () => {
               <stop offset="100%" stopColor="#fff" stopOpacity="0" />
             </radialGradient>
           </defs>
-          <circle cx={gx} cy={gy} r={520 * u} fill="url(#s5-glow)" />
-          <g transform={`translate(${gx} ${gy}) scale(${0.96 + 0.04 * popS}) translate(${-gx} ${-gy})`}>
+          <circle cx={gx} cy={gy} r={520 * u} fill="url(#s5-glow)" opacity={1 - aOut * 0.6} />
+          <g transform={`translate(${gx} ${gy}) scale(${(0.96 + 0.04 * popS) * (1 - aOut * 0.08)}) translate(${-gx} ${-gy})`} opacity={1 - aOut}>
             <Globe
               id="s5-globe"
               x={gx}
@@ -92,14 +92,8 @@ export const S5Special: React.FC = () => {
               glitter={glitter}
               swirl={interpolate(t, [2.5, 2.7, 3.4], [0, 0.6, 0], clamp)}
               inner={<Inner fill={1} draw={1} label="SUA MARCA" />}
-              outline={outline}
-              solid={beauty ? (t < B + 0.45 ? 1 - toLine : 0) : solid}
-              opacity={1 - photoIn}
-              sheen={interpolate(t, [B + 1.8, B + 3.0], [0, 1], clamp)}
+              sheen={-1}
             />
-            {beauty && photoIn > 0 && (
-              <PhotoGlobe id="s5-photo" photo={beauty} cx={gx} cy={gy} r={300 * gScale} mode="card" reveal={photoIn} sheen={interpolate(t, [B + 2.0, B + 3.2], [0, 1], clamp)} drift={1 + Math.max(0, t - B - 1.3) * 0.012} />
-            )}
           </g>
         </svg>
 
@@ -151,30 +145,64 @@ export const S5Special: React.FC = () => {
           })}
         </div>
 
-        {/* part B: feature list */}
-        <div
-          style={{
-            position: 'absolute',
-            left: V ? 150 * u : L.W * 0.55,
-            top: V ? L.H * 0.66 : L.H * 0.42,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: (V ? 26 : 22) * u,
-          }}
-        >
-          {copy.s5.features.map((f, i) => {
-            const s0 = B + 0.3 + i * 0.32;
-            const p = interpolate(t, [s0, s0 + 0.6], [0, 1], {...clamp, easing: easeOut});
-            return (
-              <div key={f} style={{display: 'flex', alignItems: 'center', gap: 22 * u, opacity: p, transform: `translateX(${(1 - p) * 50 * u}px)`}}>
-                <svg width={48 * u} height={48 * u}>
-                  <CheckIcon x={24 * u} y={24 * u} size={46 * u} draw={p} fill={p} />
-                </svg>
-                <span style={{fontFamily: fonts.sans, fontSize: (V ? 40 : 36) * u, color: colors.ink, fontWeight: 400, letterSpacing: '-0.01em'}}>{f}</span>
+        {/* part B: showcase of real HEYDAY pieces */}
+        {gallery.length > 0 && t > B - 0.05 && (
+          <svg width={L.W} height={L.H} style={{position: 'absolute', inset: 0}}>
+            <defs>
+              <linearGradient id="s5-shadow" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#000" stopOpacity="0" />
+                <stop offset="100%" stopColor="#000" stopOpacity="0.22" />
+              </linearGradient>
+            </defs>
+            {gallery.map((ph, k) => {
+              const s0 = startOf(k);
+              const next = k < gallery.length - 1 ? startOf(k + 1) : Infinity;
+              if (t < s0 - 0.02 || t > next + XF + 0.05) return null;
+              const pin = interpolate(t, [s0, s0 + XF], [0, 1], {...clamp, easing: easeOut});
+              const sc = 1.035 - 0.035 * pin;
+              const dy = (1 - pin) * 24 * u;
+              return (
+                <g key={ph.file} opacity={pin} transform={`translate(${card.x} ${card.y + dy}) scale(${sc}) translate(${-card.x} ${-card.y})`}>
+                  <rect x={card.x - card.w / 2 + 14 * u} y={card.y - card.h / 2 + 40 * u} width={card.w - 28 * u} height={card.h} rx={40 * u} fill="url(#s5-shadow)" />
+                  <PhotoSlot id={`s5-g${k}`} photo={ph} x={card.x} y={card.y} w={card.w} h={card.h} shape="rounded" zoom={1.02 + Math.max(0, t - s0) * 0.03} />
+                  <rect x={card.x - card.w / 2} y={card.y - card.h / 2} width={card.w} height={card.h} rx={Math.min(card.w, card.h) * 0.06} fill="none" stroke="#fff" strokeOpacity={0.7} strokeWidth={2 * u} />
+                </g>
+              );
+            })}
+          </svg>
+        )}
+        {gallery.map((ph, k) => {
+          const s0 = startOf(k);
+          const exit = k < gallery.length - 1 ? startOf(k + 1) - 0.3 : undefined;
+          const lp = interpolate(t, [s0 + 0.25, s0 + 0.6], [0, 1], clamp) * (exit === undefined ? 1 : interpolate(t, [exit, exit + 0.25], [1, 0], clamp));
+          return (
+            <div key={ph.file} style={{position: 'absolute', left: capX, width: capW, top: capY, display: 'flex', flexDirection: 'column', alignItems: V ? 'center' : 'flex-start', gap: 14 * u}}>
+              <KineticText text={copy.s5.features[k]} start={s0 + 0.1} exit={exit} size={(V ? 56 : 52) * u} weight={300} align={V ? 'center' : 'left'} width={capW - (V ? 120 * u : 0)} stagger={0.05} />
+              <div style={{fontFamily: fonts.sans, fontWeight: 600, fontSize: 22 * u, letterSpacing: '0.3em', textTransform: 'uppercase', color: colors.gold, opacity: lp}}>
+                {ph.label}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
+        {gallery.length > 0 && (
+          <svg width={L.W} height={L.H} style={{position: 'absolute', inset: 0}}>
+            {gallery.map((_, k) => {
+              const on = t >= startOf(k) ? 1 : 0;
+              const fillP = interpolate(t, [startOf(k), startOf(k) + SLOT], [0, 1], clamp);
+              const bw = 54 * u;
+              const gap = 12 * u;
+              const total = gallery.length * bw + (gallery.length - 1) * gap;
+              const x0 = (V ? L.W / 2 - total / 2 : capX) + k * (bw + gap);
+              const y0 = V ? L.H * 0.87 : L.H * 0.72;
+              return (
+                <g key={k} opacity={between(B, B + 0.4)}>
+                  <rect x={x0} y={y0} width={bw} height={4 * u} rx={2 * u} fill={rgba(colors.ink, 0.12)} />
+                  <rect x={x0} y={y0} width={bw * fillP * on} height={4 * u} rx={2 * u} fill={colors.gold} />
+                </g>
+              );
+            })}
+          </svg>
+        )}
       </AbsoluteFill>
     </SceneIn>
   );

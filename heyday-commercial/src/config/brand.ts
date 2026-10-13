@@ -123,8 +123,7 @@ export const copy = {
 // list is empty the commercial uses the in-house SVG globe illustrations,
 // which are presented as illustrations, never as HEYDAY portfolio pieces.
 //
-// Slots: hero (S1, optional), montage (S2: the real result after each drawn idea),
-// process (S4 step 05),
+// Slots: hero (S1), montage (S2), process (S4 step 05),
 // beauty (S5 close-ups), cta (S6).
 // ---------------------------------------------------------------------------
 export type Photo = {
@@ -148,34 +147,21 @@ export const photos: {
   beauty: Photo[];
   cta?: Photo;
 } = {
-  // S1 stays an illustration (the idea). Set a photo here to reveal it instead.
+  // The story is told with illustrations (S1, S2, S4, S6) and the real work is
+  // shown on its own, near the end, in the Scene 5 showcase (`beauty`).
+  // The other slots stay available but are intentionally empty.
   hero: undefined,
-  montage: [
-    {file: 'photos/sicredi-staircase.jpg', size: {w: 720, h: 1280}, label: 'Sicredi', alt: 'Globos Sicredi com escada da cooperativa', source: SUPPLIED, focus: {x: 0.47, y: 0.55}},
-    {file: 'photos/bauducco-mickey.jpg', size: {w: 1100, h: 1571}, label: 'Bauducco', alt: 'Globos Bauducco Lado a Lado Missão Orlando', source: SUPPLIED, focus: {x: 0.66, y: 0.38}},
-    {file: 'photos/porsche-ice-experience.jpg', size: {w: 800, h: 450}, label: 'Porsche', alt: 'Globos Porsche Ice Experience Finlândia 2025', source: SUPPLIED, focus: {x: 0.52, y: 0.6}},
-    {file: 'photos/riachuelo-olympics.jpg', size: {w: 394, h: 800}, label: 'Riachuelo', alt: 'Globo Riachuelo com mascote do Time Brasil', source: SUPPLIED, focus: {x: 0.5, y: 0.45}},
-  ],
-  process: {
-    file: 'photos/coca-cola-femsa-hand.jpg',
-    size: {w: 489, h: 869},
-    label: 'Coca-Cola FEMSA',
-    alt: 'Globo Coca-Cola FEMSA na mão com luva',
-    source: SUPPLIED,
-    sphere: {x: 242, y: 303, r: 218},
-  },
+  montage: [],
+  process: undefined,
+  // S5 showcase: one real piece per HEYDAY strength (copy.s5.features, same order)
   beauty: [
-    {file: 'photos/nike-sneaker.jpg', size: {w: 800, h: 1422}, label: 'Nike', alt: 'Globo Nike com tênis e pinheiro', source: SUPPLIED, sphere: {x: 432, y: 575, r: 280}},
+    {file: 'photos/coca-cola-hero.jpg', size: {w: 800, h: 982}, label: 'Coca-Cola', alt: 'Globo de neve Coca-Cola com caminhão e montanha nevada', source: SUPPLIED, focus: {x: 0.47, y: 0.45}},
+    {file: 'photos/coca-cola-femsa-hand.jpg', size: {w: 489, h: 869}, label: 'Coca-Cola FEMSA', alt: 'Globo Coca-Cola FEMSA na mão com luva', source: SUPPLIED, focus: {x: 0.5, y: 0.42}},
+    {file: 'photos/nike-sneaker.jpg', size: {w: 800, h: 1422}, label: 'Nike', alt: 'Globo Nike com tênis e pinheiro', source: SUPPLIED, focus: {x: 0.54, y: 0.45}},
+    {file: 'photos/sicredi-staircase.jpg', size: {w: 720, h: 1280}, label: 'Sicredi', alt: 'Globos Sicredi com escada da cooperativa', source: SUPPLIED, focus: {x: 0.47, y: 0.52}},
+    {file: 'photos/bauducco-mickey.jpg', size: {w: 1100, h: 1571}, label: 'Bauducco', alt: 'Globos Bauducco Lado a Lado Missão Orlando', source: SUPPLIED, focus: {x: 0.6, y: 0.42}},
   ],
-  // S6: the illustrated globe ("Sua ideia") hands over to this real piece ("Nossa criação")
-  cta: {
-    file: 'photos/coca-cola-hero.jpg',
-    size: {w: 800, h: 982},
-    label: 'Coca-Cola',
-    alt: 'Globo de neve Coca-Cola com caminhão e montanha nevada',
-    source: SUPPLIED,
-    sphere: {x: 372, y: 360, r: 298},
-  },
+  cta: undefined,
 };
 
 // ---------------------------------------------------------------------------
@@ -206,7 +192,6 @@ export const clients: Client[] = [
   {name: 'Universal', logo: 'logos/universal.png', aspect: 1.82, scale: 1.4, evidence: CONFIRMED},
   {name: 'Nike', logo: 'logos/nike.svg', aspect: 2.76, evidence: CONFIRMED},
   {name: 'Coca-Cola', logo: 'logos/cocacola.svg', aspect: 3.06, evidence: CONFIRMED},
-  {name: 'Riachuelo', logo: 'logos/riachuelo.png', aspect: 2.62, scale: 1.2, evidence: CONFIRMED},
   {name: 'Sicredi', logo: 'logos/sicredi.png', aspect: 3.68, evidence: CONFIRMED},
   {name: 'Kiwify', logo: 'logos/kiwify.png', aspect: 1.0, evidence: CONFIRMED},
   {name: 'Fairmont', evidence: CONFIRMED},
