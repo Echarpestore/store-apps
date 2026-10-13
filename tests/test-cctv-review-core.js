@@ -122,4 +122,10 @@ assert.strictEqual(R.fromSale({ id:'S1', invoiceCode:'C1', cartSid:'sidA', items
   assert.ok(/near\.invoiceCode !== rv\.focus\)\{ rv\.focus = ''/.test(src), 'الدوس على علامة فاتورة تانية وانت بتراجع فاتورة → يفتح اليوم كله');
   assert.ok(/فيه \$\{other\.removed\} حذف\/تقليل تاني في اليوم ده برّه الفاتورة دي/.test(src), 'تنبيه بالحذف اللي برّه الفاتورة المعروضة');
 }
+// v14: سحب الشريط باليد — الشريط مايشدّكش لمكان الفيديو كل ثانية
+{ const src = require('fs').readFileSync(path.join(__dirname, '..', 'office2', 'm-cctv.js'), 'utf8');
+  assert.ok(/id="rvStrip"[^>]*ontouchstart="O2\.cctv\.rvHold\(\)"/.test(src), 'لمس/سحب الشريط بيوقف المتابعة التلقائية');
+  assert.ok(/!\(rv\.holdUntil > Date\.now\(\)\) && \(px < strip\.scrollLeft/.test(src), 'سلبي: المتابعة التلقائية مش بتشتغل وانت ماسك الشريط');
+  assert.ok(/rvHold\(\)\{ rv\.holdUntil = Date\.now\(\) \+ 15000; \}/.test(src), 'بترجع لوحدها بعد 15 ثانية');
+}
 console.log('  ✓ cctv review core: ' + ev.length + ' أحداث · محذوف ' + sum.removedValue + ' ج · السلة متزامنة');

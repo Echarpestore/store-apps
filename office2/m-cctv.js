@@ -348,7 +348,7 @@ function rvStripHtml(){
   const w = Math.max(320, Math.ceil(rvX(rv.span.end))); let ticks = '';
   for(let t = Math.ceil(rv.span.start / 600000) * 600000; t <= rv.span.end; t += 600000){ const hour = (t % 3600000) === 0; ticks += `<div style="position:absolute;left:${rvX(t).toFixed(1)}px;top:0;bottom:0;border-left:1px solid ${hour?'#94a3b8':'#e2e8f0'}"></div><div style="position:absolute;left:${(rvX(t)+3).toFixed(1)}px;top:1px;font-size:10px;color:#64748b;font-weight:${hour?800:500}">${u.hm(t)}</div>`; }
   const marks = rv.events.map((e, i)=> `<div title="${u.esc(hms(e.atMs) + ' ' + e.label)}" style="position:absolute;left:${(rvX(e.atMs)-2).toFixed(1)}px;top:${e.removedValue>0||e.tone==='alert'?16:26}px;width:4px;height:${e.removedValue>0||e.tone==='alert'?34:20}px;border-radius:2px;background:${RV_TONE[e.tone]||'#64748b'};opacity:${rvMatch(e)?1:.18}"></div>`).join('');
-  return `<div id="rvStrip" onclick="O2.cctv.rvStripTap(event)" style="direction:ltr;overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:#f8fafc;-webkit-overflow-scrolling:touch"><div id="rvStripIn" style="position:relative;height:56px;width:${w}px">${ticks}${marks}<div id="rvHead" style="position:absolute;top:0;bottom:0;width:2px;background:#ef4444;left:0;box-shadow:0 0 0 1px rgba(239,68,68,.25)"></div></div></div>`;
+  return `<div id="rvStrip" onclick="O2.cctv.rvStripTap(event)" ontouchstart="O2.cctv.rvHold()" onpointerdown="O2.cctv.rvHold()" onwheel="O2.cctv.rvHold()" style="direction:ltr;overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:#f8fafc;-webkit-overflow-scrolling:touch"><div id="rvStripIn" style="position:relative;height:56px;width:${w}px">${ticks}${marks}<div id="rvHead" style="position:absolute;top:0;bottom:0;width:2px;background:#ef4444;left:0;box-shadow:0 0 0 1px rgba(239,68,68,.25)"></div></div></div>`;
 }
 function rvBasketHtml(b){
   if(!b) return '<div class="hint" style="margin:0">🛒 مفيش سلة مفتوحة في اللحظة دي</div>';
@@ -426,7 +426,7 @@ function rvSt(t){ const el = document.getElementById('rvSt'); if(el) el.textCont
 function rvPaint(scroll){
   const clock = document.getElementById('rvClock'); if(clock) clock.textContent = hms(rv.cur);
   const head = document.getElementById('rvHead'), strip = document.getElementById('rvStrip');
-  if(head && strip){ const px = rvX(rv.cur); head.style.left = px.toFixed(1) + 'px'; if(scroll || px < strip.scrollLeft + 30 || px > strip.scrollLeft + strip.clientWidth - 30) strip.scrollLeft = Math.max(0, px - strip.clientWidth / 2); }
+  if(head && strip){ const px = rvX(rv.cur); head.style.left = px.toFixed(1) + 'px'; if(scroll || (!(rv.holdUntil > Date.now()) && (px < strip.scrollLeft + 30 || px > strip.scrollLeft + strip.clientWidth - 30))) strip.scrollLeft = Math.max(0, px - strip.clientWidth / 2); }
   const b = RV.basketAt(rv.timelines, rv.cur); const bk = b ? b.invoiceCode + '|' + b.atMs : '';
   if(bk !== rv.basketKey){ rv.basketKey = bk; const el = document.getElementById('rvBasket'); if(el) el.innerHTML = rvBasketHtml(b); }
   const i = RV.nearestIndex(rv.events, rv.cur);
@@ -561,6 +561,8 @@ O2.cctv = {
   actReload(){ loadActivity(true); }, actPlay,
   reviewAt, reviewSale, canReview(branch){ const p = profileFor(branch); return !!(p && p.playback && RV); },
   reviewSaleId(id){ const s = u.windowSales(0).find(x=> x.id===id) || Object.keys(u.dayCache).map(k=> ((u.dayCache[k]||{}).rows||[]).find(x=> x.id===id)).find(Boolean); if(!reviewSale(s)) u.toast('مفيش تسجيل كاميرا للفاتورة دي'); },
+  // ✋ v14: وانت بتسحب الشريط بإيدك، الشريط مايرجعش لمكان الفيديو لوحده لمدة 15 ثانية (كان بيشدّك كل ثانية)
+  rvHold(){ rv.holdUntil = Date.now() + 15000; },
   rvFocus(code){ rv.focus = String(code||''); rv.idx = -2; u.render(); },
   rvTick, rvNext, rvSt, rvStep, rvStripTap, rvFilter,
   rvGo(i){ const e = rv.events[i]; if(e) rvSeek(e.atMs - RV_LEAD, true); },
