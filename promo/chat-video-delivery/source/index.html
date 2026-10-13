@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>echarpe chat film</title>
+<style>
+@font-face{font-family:T;font-weight:400;src:url(fonts/tajawal-400.ttf)}
+@font-face{font-family:T;font-weight:500;src:url(fonts/tajawal-500.ttf)}
+@font-face{font-family:T;font-weight:700;src:url(fonts/tajawal-700.ttf)}
+@font-face{font-family:T;font-weight:800;src:url(fonts/tajawal-800.ttf)}
+:root{--bg:#FFF6FA;--plum:#2A1724;--plum2:#3A2233;--ink:#3A2233;--muted:#9E8792;--accent:#EC4899;--deep:#C9327E;--gold:#E6B450;--soft:#FCE7F1;--line:#F3DEE9;--cream:#FBF3DF;--ok:#2BB673;
+  --grad:linear-gradient(135deg,#EC4899 0%,#F06AA6 45%,#E6B450 100%)}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;background:var(--bg)}
+body{font-family:T,sans-serif;color:var(--ink);position:relative}
+.L{position:absolute}
+#dark{position:absolute;inset:0;background:radial-gradient(120% 80% at 50% 40%,#4A2B40 0%,#22121C 70%);opacity:0}
+#glow{position:absolute;width:1400px;height:1400px;left:-160px;top:200px;border-radius:50%;background:radial-gradient(circle,rgba(236,72,153,.28),rgba(230,180,80,.10) 45%,transparent 70%)}
+#grain{position:absolute;inset:0;opacity:.06;mix-blend-mode:multiply;pointer-events:none;z-index:90}
+
+/* kinetic type */
+.w{display:inline-block;overflow:hidden;vertical-align:bottom;padding:0 .04em .12em}
+.w>span{display:inline-block}
+.cap{position:absolute;left:60px;right:60px;top:110px;text-align:center}
+.ov{display:inline-flex;align-items:center;gap:14px;font-size:30px;font-weight:700;letter-spacing:1px;color:var(--deep);opacity:0}
+.ov i{display:block;width:46px;height:3px;background:var(--grad);border-radius:3px}
+.cap h1{font-size:84px;font-weight:800;line-height:1.18;margin-top:18px}
+.cap h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.cap p{font-size:38px;font-weight:500;color:var(--muted);margin-top:16px}
+.cap.dk h1{color:#fff}.cap.dk p{color:rgba(255,255,255,.62)}.cap.dk .ov{color:var(--gold)}
+
+/* phone */
+#stage3d{position:absolute;inset:0;perspective:2400px}
+#phone{position:absolute;left:220px;top:560px;width:640px;height:1290px;border-radius:92px;background:linear-gradient(145deg,#3b2a33,#120a0e);padding:20px;box-shadow:0 60px 120px rgba(58,34,51,.35),0 0 0 3px #5a4650 inset;transform-style:preserve-3d}
+#screen{position:relative;width:100%;height:100%;border-radius:74px;overflow:hidden;background:#FFF8FA}
+.island{position:absolute;top:18px;left:50%;width:180px;height:48px;margin-left:-90px;border-radius:30px;background:#0d0709;z-index:40}
+#sheen{position:absolute;inset:0;border-radius:74px;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.22) 50%,transparent 65%);z-index:45;pointer-events:none;background-size:300% 100%}
+.app{position:absolute;inset:0;opacity:0}
+/* chat */
+.hdr{position:absolute;top:0;left:0;right:0;height:200px;background:#fff;border-bottom:2px solid var(--line);display:flex;align-items:flex-end;padding:0 30px 26px;gap:20px;z-index:5}
+.hdr .av{width:86px;height:86px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center}
+.hdr .av img{width:74px;filter:brightness(0) invert(1)}
+.hdr .t1{font-size:36px;font-weight:800}
+.hdr .t2{font-size:25px;font-weight:500;color:var(--muted);display:flex;align-items:center;gap:8px}
+.hdr .t2 i{width:13px;height:13px;border-radius:50%;background:#33C47A;display:inline-block}
+.msgs{position:absolute;top:200px;left:0;right:0;bottom:120px;overflow:hidden}
+.mi{position:absolute;left:0;right:0;top:0;padding:28px 26px;display:flex;flex-direction:column;gap:18px}
+.b{max-width:82%;padding:20px 26px;border-radius:32px;font-size:31px;line-height:1.45;font-weight:500;opacity:0}
+.b.me{align-self:flex-start;background:var(--ink);color:#fff;border-top-right-radius:10px}
+.b.st{align-self:flex-end;background:#fff;border:2px solid var(--line);border-top-left-radius:10px}
+.who{align-self:flex-end;display:flex;align-items:center;gap:12px;font-size:24px;font-weight:700;color:var(--muted);opacity:0}
+.who b{width:48px;height:48px;border-radius:50%;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px}
+.photo{align-self:flex-start;padding:10px;background:var(--ink);border-radius:30px;border-top-right-radius:10px;opacity:0}
+.photo img{display:block;width:330px;height:176px;object-fit:cover;border-radius:22px}
+.typing{align-self:flex-end;background:#fff;border:2px solid var(--line);border-radius:30px;padding:22px 28px;display:flex;gap:10px;opacity:0}
+.typing i{width:13px;height:13px;border-radius:50%;background:var(--muted);display:block}
+.picks{align-self:flex-end;display:flex;gap:16px;opacity:0}
+.pk{width:250px;background:#fff;border:2px solid var(--line);border-radius:30px;overflow:hidden;position:relative}
+.pk img{display:block;width:100%;height:230px;object-fit:cover}
+.pk .n{font-size:27px;font-weight:800;padding:14px 18px 2px}
+.pk .c{font-size:23px;color:var(--muted);padding:0 18px 10px;font-weight:500}
+.pk .tb{margin:0 14px 16px;height:62px;border-radius:32px;background:var(--grad);color:#fff;font-size:25px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.inp{position:absolute;left:0;right:0;bottom:0;height:120px;background:#fff;border-top:2px solid var(--line);display:flex;align-items:center;padding:0 24px;gap:16px}
+.inp .f{flex:1;height:72px;border-radius:40px;background:var(--bg);color:var(--muted);font-size:28px;display:flex;align-items:center;padding:0 28px}
+.inp .s{width:72px;height:72px;border-radius:50%;background:var(--ink);display:flex;align-items:center;justify-content:center}
+/* tryon screenshots */
+.shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top;opacity:0}
+/* sheet */
+#sheet{position:absolute;left:0;right:0;bottom:0;height:820px;background:#fff;border-radius:50px 50px 0 0;box-shadow:0 -20px 60px rgba(0,0,0,.18);padding:22px 34px;transform:translateY(900px);z-index:20}
+#sheet .grab{width:90px;height:10px;border-radius:6px;background:var(--line);margin:0 auto 26px}
+#sheet h3{font-size:38px;font-weight:800;margin-bottom:12px}
+.it{display:flex;align-items:center;gap:22px;padding:16px 0;border-bottom:2px solid var(--line)}
+.it img,.it .sq{width:104px;height:104px;border-radius:24px;object-fit:cover}
+.it .n{font-size:31px;font-weight:800}.it .c{font-size:25px;color:var(--muted);font-weight:500;margin-top:4px}
+.it .p{margin-right:auto;font-size:30px;font-weight:800}
+.tot{display:flex;justify-content:space-between;font-size:32px;font-weight:800;padding:22px 4px}
+.cbtn{height:110px;border-radius:56px;background:var(--ink);color:#fff;font-size:38px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:16px}
+#done{position:absolute;inset:0;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;z-index:30}
+#done .ck{width:210px;height:210px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;box-shadow:0 24px 60px rgba(236,72,153,.35)}
+#done h2{font-size:54px;font-weight:800;margin-top:46px}
+#done p{font-size:30px;color:var(--muted);margin-top:12px;font-weight:500}
+/* map */
+#eta{position:absolute;left:24px;right:24px;bottom:30px;background:#fff;border-radius:40px;padding:30px;box-shadow:0 -6px 40px rgba(58,34,51,.14)}
+#eta .top{display:flex;align-items:center;gap:22px}
+#eta .ic{width:96px;height:96px;border-radius:28px;background:var(--grad);display:flex;align-items:center;justify-content:center}
+#eta .k{font-size:26px;color:var(--muted);font-weight:500}
+#eta .v{font-size:38px;font-weight:800;white-space:nowrap}
+#eta .min{margin-right:auto;text-align:center}
+#eta .min b{display:block;font-size:60px;font-weight:800;color:var(--deep);line-height:1}
+#eta .min span{font-size:24px;color:var(--muted);font-weight:500}
+#eta .bar{height:14px;border-radius:10px;background:var(--line);margin-top:28px;overflow:hidden;direction:rtl}
+#eta .bar i{display:block;height:100%;background:var(--grad);border-radius:10px;width:0}
+/* tap */
+.tap{position:absolute;width:96px;height:96px;margin:-48px 0 0 -48px;border-radius:50%;background:rgba(255,255,255,.35);border:4px solid rgba(255,255,255,.95);box-shadow:0 0 0 3px rgba(58,34,51,.25),0 8px 24px rgba(0,0,0,.25);opacity:0;z-index:60;pointer-events:none}
+/* privacy */
+#priv{position:absolute;inset:0;opacity:0}
+#priv .pill{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:18px;padding:22px 40px;border-radius:60px;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.16);color:#fff;font-size:36px;font-weight:700;white-space:nowrap;opacity:0}
+#priv .pill svg{flex:none}
+/* wait / options / outro */
+#wait,#opts,#outro,#intro{position:absolute;inset:0;opacity:0}
+.oc{position:absolute;width:450px;height:470px;background:#fff;border-radius:56px;padding:46px 40px;box-shadow:0 30px 70px rgba(201,50,126,.14);border:2px solid var(--line);opacity:0}
+.oc .oi{width:130px;height:130px;border-radius:38px;display:flex;align-items:center;justify-content:center}
+.oc h3{font-size:46px;font-weight:800;margin-top:40px;line-height:1.2}
+.oc p{font-size:29px;color:var(--muted);font-weight:500;margin-top:14px;line-height:1.4}
+#intro,#outro{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+#intro img,#outro img{filter:brightness(0) invert(1)}
+.tagl{font-size:76px;font-weight:800;color:#fff;line-height:1.25;margin-top:70px}
+.tagl .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.line{height:4px;background:var(--grad);border-radius:4px;margin-top:60px;width:0}
+#outro .cta{margin-top:80px;padding:0 70px;height:140px;border-radius:70px;background:var(--grad);color:#fff;font-size:48px;font-weight:800;display:flex;align-items:center;gap:22px;box-shadow:0 24px 60px rgba(236,72,153,.4);opacity:0}
+#outro .url{margin-top:44px;font-size:42px;font-weight:700;color:rgba(255,255,255,.75);direction:ltr;letter-spacing:2px;opacity:0}
+#wipe{position:absolute;inset:-200px;background:var(--grad);z-index:80;transform:translateX(-140%) skewX(-12deg);pointer-events:none}
+
+.tbar{position:absolute;top:70px;left:24px;right:24px;height:80px;display:flex;justify-content:space-between;align-items:center;direction:rtl}
+.tbar .ep{height:76px;padding:0 26px;border-radius:24px;background:var(--grad);display:flex;align-items:center}
+.tbar .ep img{height:44px;filter:brightness(0) invert(1)}
+.tbar .bk{width:72px;height:72px;border-radius:50%;border:2px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center}
+.tcard{position:absolute;top:170px;left:24px;right:24px;height:700px;border-radius:44px;overflow:hidden;box-shadow:0 18px 40px rgba(58,34,51,.12)}
+.chipme{position:absolute;top:22px;right:22px;padding:8px 22px;border-radius:24px;background:rgba(255,255,255,.92);font-size:24px;font-weight:800;color:var(--deep)}
+.dl{position:absolute;left:22px;bottom:22px;padding:12px 26px;border-radius:40px;background:#fff;font-size:26px;font-weight:700;display:flex;gap:10px;align-items:center}
+#shimmer{position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.75) 48%,rgba(255,236,200,.5) 52%,transparent 70%);transform:translateX(-120%)}
+.sws{position:absolute;top:902px;left:0;right:0;display:flex;justify-content:center;gap:12px;direction:rtl}
+.swi{width:82px;display:flex;flex-direction:column;align-items:center;gap:12px;font-size:20px;font-weight:500;color:var(--muted);white-space:nowrap}
+.sw{width:72px;height:72px;border-radius:50%;border:4px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center}
+.sw.none{background:#fff}
+.sw.on{box-shadow:0 0 0 4px #fff,0 0 0 8px #3A2233}
+.acts{position:absolute;top:1030px;left:24px;right:24px;height:110px;border:2px solid var(--line);border-radius:36px;background:#fff;display:flex;direction:rtl}
+.acts div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:20px;color:#6d5a64;font-weight:500}
+.adds{position:absolute;top:1162px;left:24px;right:24px;display:flex;gap:16px;direction:rtl}
+.adds div{flex:1;height:96px;border-radius:48px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800}
+.adds .a1{background:#3A2233;color:#fff}.adds .a2{background:#FBF3DF;color:#3A2233;border:2px solid #F0E2BF}
+.it svg{border-radius:24px}
+#done .ck,#done h2,#done p{position:relative;z-index:2}
+#conf rect{transform-box:fill-box;transform-origin:center}
+
+/* apps scene */
+#apps,#ios{position:absolute;inset:0;opacity:0}
+.ac{position:absolute;left:70px;right:70px;background:#fff;border-radius:56px;padding:50px 54px;box-shadow:0 30px 70px rgba(201,50,126,.14);border:2px solid var(--line);opacity:0}
+.ac .hd{display:flex;align-items:center;gap:26px}
+.ac .ic{width:120px;height:120px;border-radius:36px;display:flex;align-items:center;justify-content:center;flex:none}
+.ac h3{font-size:54px;font-weight:800}
+.ac .sub{font-size:34px;color:var(--muted);font-weight:500;margin-top:6px}
+.gp{margin-top:40px;display:inline-flex;align-items:center;gap:22px;background:#111;color:#fff;border-radius:26px;padding:20px 40px 20px 34px;direction:ltr}
+.gp small{display:block;font-size:22px;opacity:.85;direction:rtl;text-align:left}
+.gp b{display:block;font-size:44px;font-weight:700;letter-spacing:.5px;line-height:1}
+.webp{margin-top:36px;display:inline-flex;align-items:center;gap:16px;background:var(--bg);border:2px solid var(--line);border-radius:40px;padding:18px 34px;font-size:38px;font-weight:800;direction:ltr;color:var(--deep)}
+.note{margin-top:26px;font-size:30px;font-weight:700;color:var(--ink);line-height:1.5}
+.note span{color:var(--deep)}
+/* ios demo */
+#iph{position:absolute;left:220px;top:520px;width:640px;height:1290px;border-radius:92px;background:linear-gradient(145deg,#3b2a33,#120a0e);padding:20px;box-shadow:0 60px 120px rgba(58,34,51,.35),0 0 0 3px #5a4650 inset}
+#isc{position:relative;width:100%;height:100%;border-radius:74px;overflow:hidden;background:#fff}
+#cI h1{font-size:68px}
+.stp{position:absolute;left:60px;right:60px;top:330px;height:96px;display:flex;align-items:center;justify-content:center}
+.stp div{position:absolute;padding:0 40px;height:92px;border-radius:50px;background:var(--ink);color:#fff;font-size:36px;font-weight:700;display:flex;align-items:center;gap:16px;white-space:nowrap;opacity:0}
+.stp div b{display:inline-flex;width:56px;height:56px;border-radius:50%;background:var(--grad);align-items:center;justify-content:center;font-size:30px}
+.stp .en{direction:ltr;unicode-bidi:isolate;font-weight:800;color:#F9CFE3}
+.lay{position:absolute;inset:0}
+.site{position:absolute;inset:0;background:#FFF8FA}
+.site .sh{height:200px;background:var(--grad);display:flex;align-items:flex-end;justify-content:center;padding-bottom:30px}
+.site .sh img{height:60px;filter:brightness(0) invert(1)}
+.site h4{font-size:50px;font-weight:800;text-align:center;margin-top:50px;line-height:1.3}
+.site .sb{margin:30px auto 0;width:330px;height:84px;border-radius:44px;background:var(--ink);color:#fff;font-size:30px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.site .gr{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:40px 34px}
+.site .gr div{height:210px;border-radius:30px}
+.sbar{position:absolute;left:0;right:0;bottom:0;height:260px;background:rgba(246,246,248,.97);border-top:1px solid #ddd}
+.addr{position:absolute;left:24px;right:24px;top:24px;height:84px;border-radius:22px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.08);display:flex;align-items:center;justify-content:center;gap:12px;font-size:32px;font-weight:500;color:#111;direction:ltr;overflow:hidden}
+.addr .pg{position:absolute;left:0;bottom:0;height:5px;background:#0A84FF;width:0}
+.cur{display:inline-block;width:3px;height:36px;background:#0A84FF}
+.tbr{position:absolute;left:30px;right:30px;top:140px;height:80px;display:flex;justify-content:space-between;align-items:center;direction:ltr}
+.shs{position:absolute;left:0;right:0;bottom:0;height:900px;background:#F2F2F7;border-radius:36px 36px 0 0;box-shadow:0 -10px 40px rgba(0,0,0,.18);transform:translateY(960px);overflow:hidden}
+.shs .top{display:flex;align-items:center;gap:20px;padding:30px 32px;border-bottom:1px solid #ddd;direction:rtl}
+.shs .si{width:84px;height:84px;border-radius:20px;background:var(--grad);display:flex;align-items:center;justify-content:center}
+.shs .si img{width:64px;filter:brightness(0) invert(1)}
+.apps{display:flex;gap:26px;padding:26px 32px;direction:rtl}
+.apps i{width:100px;height:100px;border-radius:24px;display:block}
+.rows{margin:14px 26px;background:#fff;border-radius:24px;overflow:hidden;direction:rtl}
+.rw{height:96px;display:flex;align-items:center;justify-content:space-between;padding:0 30px;font-size:30px;font-weight:500;border-bottom:1px solid #eee;color:#111}
+.ath{position:absolute;inset:0;background:#F2F2F7;transform:translateY(1300px);direction:rtl}
+.ath .nav{height:160px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 26px;font-size:30px;border-bottom:1px solid #ddd;background:#F8F8FA}
+.ath .nav span{color:#0A84FF}.ath .nav b{font-size:30px;font-weight:700;color:#111}
+.ath .cd{margin:40px 26px;background:#fff;border-radius:24px;padding:30px;display:flex;gap:26px;align-items:center}
+.ath .cd .si{width:130px;height:130px;border-radius:30px;background:var(--grad);display:flex;align-items:center;justify-content:center;flex:none}
+.ath .cd .si img{width:100px;filter:brightness(0) invert(1)}
+.ath .nm{font-size:36px;font-weight:700;border-bottom:1px solid #eee;padding-bottom:16px}
+.ath .ur{font-size:28px;color:#8e8e93;margin-top:14px;direction:ltr;text-align:right}
+.ath .ex{margin:0 40px;font-size:26px;color:#8e8e93;line-height:1.5}
+.home{position:absolute;inset:0;background:linear-gradient(160deg,#5B2A45 0%,#C2577F 50%,#F2B48A 100%);opacity:0}
+.hg{position:absolute;left:44px;right:44px;top:140px;display:grid;grid-template-columns:repeat(4,1fr);row-gap:44px;direction:rtl}
+.hi{display:flex;flex-direction:column;align-items:center;gap:10px;font-size:20px;color:#fff;font-weight:500}
+.hi i{width:108px;height:108px;border-radius:26px;display:block;box-shadow:0 6px 14px rgba(0,0,0,.18)}
+.hi .eic{background:#fff;display:flex;align-items:center;justify-content:center}
+.hi .eic img{width:92px}
+.dock{position:absolute;left:30px;right:30px;bottom:30px;height:170px;border-radius:50px;background:rgba(255,255,255,.28);display:flex;justify-content:space-around;align-items:center}
+.dock i{width:108px;height:108px;border-radius:26px;display:block}
+#splash{position:absolute;inset:0;background:var(--grad);display:flex;align-items:center;justify-content:center;opacity:0}
+#splash img{width:360px;filter:brightness(0) invert(1)}
+
+.dlh{font-size:28px;font-weight:800;margin:20px 0 12px}
+.dlo{display:flex;align-items:center;gap:16px;border:3px solid var(--line);border-radius:28px;padding:14px 20px;margin-bottom:12px;background:#fff}
+.dlo i{width:34px;height:34px;border-radius:50%;border:3px solid #D9C6D0;flex:none;position:relative}
+.dlo.on{border-color:var(--accent);background:#FFF2F8}
+.dlo.on i{border-color:var(--accent)}
+.dlo.on i:after{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--accent)}
+.dlo b{font-size:28px;font-weight:800;display:block}.dlo small{font-size:22px;color:var(--muted);font-weight:500}
+#sheet{height:900px!important}
+/* receive scene */
+#recv{position:absolute;inset:0;opacity:0}
+.rc{position:absolute;left:60px;right:60px;height:600px;background:#fff;border-radius:60px;border:2px solid var(--line);box-shadow:0 34px 80px rgba(201,50,126,.14);overflow:hidden;opacity:0}
+.rc svg.ill{position:absolute;left:0;top:0}
+.rc .tx{position:absolute;left:56px;right:56px;bottom:46px;text-align:right}
+.rc h3{font-size:54px;font-weight:800;line-height:1.2}
+.rc p{font-size:32px;color:var(--muted);font-weight:500;margin-top:10px}
+.rc .k{display:inline-flex;align-items:center;justify-content:center;width:64px;height:64px;border-radius:50%;background:var(--grad);color:#fff;margin-left:16px;vertical-align:middle}
+#orB{position:absolute;left:50%;top:1135px;width:120px;height:120px;margin-left:-60px;border-radius:50%;background:var(--ink);color:#fff;font-size:44px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 16px 40px rgba(58,34,51,.35);z-index:3;opacity:0;border:8px solid var(--bg)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<pattern id="gmono" width="34" height="34" patternUnits="userSpaceOnUse" patternTransform="rotate(10) scale(.68)"><rect width="34" height="34" fill="#8E877F"/><path d="M17 6 L28 17 L17 28 L6 17Z" fill="none" stroke="#3B332F" stroke-width="2.4"/><circle cx="17" cy="17" r="3" fill="#3B332F"/><circle cx="0" cy="0" r="2.4" fill="#3B332F"/><circle cx="34" cy="0" r="2.4" fill="#3B332F"/><circle cx="0" cy="34" r="2.4" fill="#3B332F"/><circle cx="34" cy="34" r="2.4" fill="#3B332F"/></pattern>
+</defs></svg>
+<div id="dark"></div>
+<div id="glow"></div>
+<svg id="tiles" class="L" width="1080" height="1920" style="left:0;top:0;opacity:0;-webkit-mask-image:linear-gradient(to bottom,transparent 0,transparent 470px,#000 700px);mask-image:linear-gradient(to bottom,transparent 0,transparent 470px,#000 700px)"></svg>
+
+<!-- INTRO -->
+<div id="intro">
+  <img id="inLogo" src="logo.png" width="640" alt="">
+  <div class="line" id="inLine"></div>
+  <div class="tagl" id="inTag">ستايلك يبدأ <span class="g">من الشات</span></div>
+</div>
+
+<!-- CAPTIONS -->
+<div class="cap" id="c1"><div class="ov"><i></i>الخطوة ١<i></i></div><h1 data-k>ابعتيلنا <span class="g">صورة فستانك</span></h1><p data-k>أو اكتبيلنا الخامة واللون اللي في بالك</p></div>
+<div class="cap" id="c2"><div class="ov"><i></i>الخطوة ٢<i></i></div><h1 data-k>ستايليست <span class="g">بتختارلك</span></h1><p data-k>متخصصة في التنسيق، من بين آلاف المنتجات</p></div>
+<div class="cap" id="c3"><div class="ov"><i></i>الخطوة ٣<i></i></div><h1 data-k>جرّبيها <span class="g">عليكي</span></h1><p data-k>وغيّري لون البندانة بلمسة</p></div>
+<div class="cap dk" id="cP"><div class="ov"><i></i>خصوصيتك أولاً<i></i></div><h1 data-k>صورتك بتفضل <span class="g">على موبايلك</span></h1></div>
+<div class="cap" id="c4"><div class="ov"><i></i>الخطوة ٤<i></i></div><h1 data-k>عجبتك؟ <span class="g">اطلبيها</span></h1><p data-k>من نفس الشات في ثواني</p></div>
+<div class="cap" id="cR"><div class="ov"><i></i>الاستلام<i></i></div><h1 data-k>استلمي <span class="g">زي ما تحبي</span></h1></div>
+<div class="cap" id="c5"><div class="ov"><i></i>الخطوة ٥<i></i></div><h1 data-k>المندوب <span class="g">في الطريق</span></h1><p data-k>تابعيه لحظة بلحظة</p></div>
+<div class="cap" id="c6"><div class="ov"><i></i>الخطوة ٦<i></i></div><h1 data-k>المندوب <span class="g">مستنيكي</span></h1><p data-k>جرّبي القطعة على الحقيقة قبل ما تدفعي</p></div>
+<div class="cap" id="c7"><div class="ov"><i></i>براحتك<i></i></div><h1 data-k>وانتي <span class="g">اللي تختاري</span></h1></div>
+
+<!-- PRIVACY -->
+<div id="priv">
+  <svg class="L" style="left:0;top:470px" width="1080" height="900" viewBox="0 0 1080 900">
+    <defs><linearGradient id="gg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#EC4899"/><stop offset="1" stop-color="#E6B450"/></linearGradient>
+      <clipPath id="pclip"><rect x="-150" y="-300" width="300" height="600" rx="46"/></clipPath></defs>
+    <g id="rings" transform="translate(540 430)">
+      <circle id="r1" r="300" fill="none" stroke="url(#gg)" stroke-width="3"/>
+      <circle id="r2" r="300" fill="none" stroke="url(#gg)" stroke-width="3"/>
+      <circle id="r3" r="300" fill="none" stroke="url(#gg)" stroke-width="3"/>
+    </g>
+    <g id="pphone" transform="translate(540 430)">
+      <rect x="-162" y="-312" width="324" height="624" rx="56" fill="#0d0709" stroke="#5a4650" stroke-width="3"/>
+      <g clip-path="url(#pclip)"><rect x="-150" y="-300" width="300" height="600" fill="#FFF8FA"/><g id="pvg"></g></g>
+    </g>
+    <g id="lock" transform="translate(540 760)">
+      <circle r="92" fill="url(#gg)"/>
+      <path id="shackle" d="M-30 -8 v-26 a30 30 0 0 1 60 0 v26" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/>
+      <rect x="-44" y="-10" width="88" height="66" rx="14" fill="#fff"/>
+      <circle cx="0" cy="18" r="9" fill="#EC4899"/><rect x="-4" y="20" width="8" height="18" rx="4" fill="#EC4899"/>
+    </g>
+    <!-- blocked cloud -->
+    <g id="cloud" transform="translate(880 120)" opacity="0">
+      <path d="M-70 30 a40 40 0 0 1 6 -79 a55 55 0 0 1 104 -8 a44 44 0 0 1 30 87z" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="7" stroke-linejoin="round"/>
+      <line id="slash" x1="-80" y1="-70" x2="90" y2="60" stroke="#E6B450" stroke-width="9" stroke-linecap="round" stroke-dasharray="215" stroke-dashoffset="215"/>
+    </g>
+    <path id="dash" d="M690 200 C760 150 800 140 840 130" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="6" stroke-dasharray="4 16" stroke-linecap="round" opacity="0"/>
+  </svg>
+  <div class="pill" id="pl1" style="top:1440px"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#E6B450" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>مش بتتبعتلنا</div>
+  <div class="pill" id="pl2" style="top:1570px"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#E6B450" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>ومش بتتخزن في أي مكان</div>
+  <div class="pill" id="pl3" style="top:1700px"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#E6B450" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>التجربة كلها بتحصل على تليفونك</div>
+</div>
+
+<!-- PHONE -->
+<div id="stage3d"><div id="phone"><div id="screen">
+  <div class="island"></div>
+
+  <!-- chat -->
+  <div class="app" id="chat">
+    <div class="hdr"><div class="av"><img src="logo.png" alt=""></div><div><div class="t1">شات إيشارب</div><div class="t2"><i></i>فريق الستايلنج متاح دلوقتي</div></div></div>
+    <div class="msgs"><div class="mi" id="mi">
+      <div class="photo" id="m1"><svg width="270" height="310" viewBox="0 0 260 300" style="display:block;border-radius:22px">
+<rect width="260" height="300" fill="#FCE7F1"/><circle cx="34" cy="40" r="6" fill="#F9CFE3"/><circle cx="226" cy="250" r="8" fill="#F9CFE3"/><circle cx="222" cy="44" r="5" fill="#F3DCA0"/>
+<path d="M130 36 v-8 q10 -4 10 -12 q0 -10 -10 -10 q-10 0 -10 10" stroke="#C79A38" stroke-width="4" fill="none" stroke-linecap="round"/>
+<path d="M72 60 L130 36 L188 60" stroke="#C79A38" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<g id="dressG">
+<path d="M46 286 L94 136 L166 136 L214 286 Q130 302 46 286Z" fill="#A27A5C"/>
+<path d="M112 146 L84 286 M130 146 L130 294 M148 146 L176 286" stroke="#B99173" stroke-width="5" fill="none" stroke-linecap="round" opacity=".8"/>
+<path d="M100 58 Q130 76 160 58 L172 72 L166 132 L94 132 L88 72Z" fill="#8E6849"/>
+<ellipse cx="84" cy="74" rx="20" ry="16" fill="#97705A"/><ellipse cx="176" cy="74" rx="20" ry="16" fill="#97705A"/>
+<path d="M110 60 Q130 82 150 60" stroke="#6E4E36" stroke-width="5" fill="none" stroke-linecap="round"/>
+<rect x="92" y="126" width="76" height="13" rx="6" fill="#E9D8C2"/><circle cx="130" cy="132" r="9" fill="#D9C2A5"/>
+<path d="M190 200 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z" fill="#fff" opacity=".9"/><path d="M70 160 l2 6 6 2 -6 2 -2 6 -2 -6 -6 -2 6 -2z" fill="#fff" opacity=".8"/>
+</g></svg></div>
+      <div class="b me" id="m2">ده الفستان اللي هلبسه،<br>عايزة طرحة تليق عليه</div>
+      <div class="who" id="who">منّة · ستايليست إيشارب<b>م</b></div>
+      <div class="typing" id="typ"><i></i><i></i><i></i></div>
+      <div class="b st" id="m3">اخترتلك دول من الكوليكشن الجديد، هيليقوا جداً على البني</div>
+      <div class="picks" id="picks">
+        <div class="pk" id="pk1"><svg class="" viewBox="0 0 250 230" width="250" height="230" preserveAspectRatio="xMidYMid slice" style="display:block"><rect width="250" height="230" fill="#EFEAEC"/>
+<path d="M50 40 Q125 20 200 40 L210 196 Q125 214 48 196Z" fill="url(#gmono)" stroke="#2E2622" stroke-width="5" stroke-linejoin="round"/>
+<path d="M50 40 Q125 20 200 40 L170 110 Q120 96 70 112Z" fill="#fff" opacity=".18"/><path d="M90 60 Q100 130 84 196M150 56 Q166 130 156 198" stroke="#000" stroke-opacity=".12" stroke-width="5" fill="none"/></svg><div class="n">طرحة جاكار</div><div class="c">رمادي × أسود</div><div class="tb">جرّبيها عليكي</div></div>
+        <div class="pk"><svg class="" viewBox="0 0 250 230" width="250" height="230" preserveAspectRatio="xMidYMid slice" style="display:block"><rect width="250" height="230" fill="#F6EFE8"/>
+<path d="M50 40 Q125 20 200 40 L210 196 Q125 214 48 196Z" fill="#CDB8A4" stroke="#B9A28D" stroke-width="5" stroke-linejoin="round"/>
+<path d="M50 40 Q125 20 200 40 L170 110 Q120 96 70 112Z" fill="#fff" opacity=".18"/><path d="M90 60 Q100 130 84 196M150 56 Q166 130 156 198" stroke="#000" stroke-opacity=".12" stroke-width="5" fill="none"/><g stroke="#B9A28D" stroke-width="3" stroke-linecap="round"><path d="M60 196v14"/><path d="M70 196v14"/><path d="M80 196v14"/><path d="M90 196v14"/><path d="M100 196v14"/><path d="M110 196v14"/><path d="M120 196v14"/><path d="M130 196v14"/><path d="M140 196v14"/><path d="M150 196v14"/><path d="M160 196v14"/><path d="M170 196v14"/><path d="M180 196v14"/><path d="M190 196v14"/></g></svg><div class="n">طرحة كريب</div><div class="c">بيج</div><div class="tb">جرّبيها عليكي</div></div>
+      </div>
+    </div></div>
+    <div class="inp"><div class="f">اكتبي رسالتك...</div><div class="s"><svg width="34" height="34" viewBox="0 0 24 24"><path d="M4 12 20 4l-3 8 3 8z" fill="#fff"/></svg></div></div>
+  </div>
+
+  <!-- try-on (real screens) -->
+  <div class="app" id="try">
+    <div class="tbar"><div class="bk"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#3A2233" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div><div class="ep"><img src="logo.png" alt=""></div></div>
+    <div class="tcard"><div id="girlTry" style="position:absolute;inset:0"></div><div class="chipme" id="chipme">صورتك</div><div class="dl"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3A2233" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>تنزيل</div>
+      <div id="shimmer"></div></div>
+    <div class="sws"><div class="swi"><div class="sw none" id="sw0"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#9C8590" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg></div><span>بدون بندانة</span></div>
+      <div class="swi"><div class="sw" id="sw1" style="background:#EFE6D8"></div><span>أوف وايت</span></div>
+      <div class="swi"><div class="sw" id="sw2" style="background:#8A8A8A"></div><span>رمادي</span></div>
+      <div class="swi"><div class="sw" id="sw3" style="background:#6B4A33"></div><span>بني</span></div></div>
+    <div class="acts"><div><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3A2233" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>غيّري صورتك</div><div><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3A2233" stroke-width="1.8" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/></svg>إعادة التجربة</div><div><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3A2233" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4M5 14v6h14v-6"/></svg>مشاركة</div><div><svg width="40" height="40" viewBox="0 0 24 24" fill="#3A2233"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>المزيد</div></div>
+    <div class="adds"><div class="a1">أضيفي الطرحة</div><div class="a2">أضيفي البندانة</div></div>
+    <svg id="hearts" class="L" width="600" height="900" style="left:0;top:0;pointer-events:none"></svg>
+    <div id="sheet"><div class="grab"></div><h3>طلبك</h3>
+      <div class="it"><div class="sq" style="overflow:hidden"><svg class="" viewBox="0 0 250 230" width="104" height="104" preserveAspectRatio="xMidYMid slice" style="display:block"><rect width="250" height="230" fill="#EFEAEC"/>
+<path d="M50 40 Q125 20 200 40 L210 196 Q125 214 48 196Z" fill="url(#gmono)" stroke="#2E2622" stroke-width="5" stroke-linejoin="round"/>
+<path d="M50 40 Q125 20 200 40 L170 110 Q120 96 70 112Z" fill="#fff" opacity=".18"/><path d="M90 60 Q100 130 84 196M150 56 Q166 130 156 198" stroke="#000" stroke-opacity=".12" stroke-width="5" fill="none"/></svg></div><div><div class="n">طرحة جاكار</div><div class="c">رمادي × أسود</div></div></div>
+      <div class="it"><div class="sq" style="background:linear-gradient(135deg,#9a9a9a,#7d7d7d)"></div><div><div class="n">بندانة</div><div class="c">رمادي</div></div></div>
+      <div class="dlh">طريقة الاستلام</div>
+      <div class="dlo" id="dv1"><i></i><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#C9327E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v7h14v-7"/></svg><div><b>استلام من الفرع</b><small>من أي فرع من فروعنا</small></div></div>
+      <div class="dlo" id="dv2"><i></i><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#C9327E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9H3z"/><path d="M10 20v-5h4v5"/></svg><div><b>توصيل لحد البيت</b><small>المندوب يوصل لحد عندك</small></div></div>
+      <div class="cbtn" id="cbtn">أكّدي الطلب</div>
+    </div>
+    <div id="done"><svg id="conf" class="L" width="600" height="1250" style="left:0;top:0"></svg><div class="ck"><svg width="110" height="110" viewBox="0 0 24 24"><path id="ckp" d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="24" stroke-dashoffset="24"/></svg></div><h2>طلبك اتأكد!</h2><p>هنتواصل معاكي لتأكيد كل التفاصيل</p></div>
+  </div>
+
+  <!-- map -->
+  <div class="app" id="map">
+    <svg viewBox="0 0 600 1250" width="100%" height="100%">
+      <rect width="600" height="1250" fill="#F5ECF0"/>
+      <g fill="#EADCE3">
+        <rect x="20" y="90" width="160" height="210" rx="20"/><rect x="225" y="90" width="160" height="140" rx="20"/><rect x="430" y="90" width="150" height="270" rx="20"/>
+        <rect x="20" y="350" width="160" height="230" rx="20"/><rect x="225" y="280" width="160" height="240" rx="20"/><rect x="430" y="410" width="150" height="180" rx="20"/>
+        <rect x="20" y="630" width="160" height="200" rx="20"/><rect x="225" y="570" width="160" height="160" rx="20"/><rect x="430" y="640" width="150" height="200" rx="20"/>
+        <rect x="225" y="780" width="160" height="150" rx="20"/>
+      </g>
+      <rect x="40" y="660" width="120" height="140" rx="16" fill="#DCEFE0"/>
+      <path id="route" d="M505 880 L505 615 L405 615 L405 550 L202 550 L202 325 L95 325" fill="none" stroke="#fff" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+      <path id="rl" d="M505 880 L505 615 L405 615 L405 550 L202 550 L202 325 L95 325" fill="none" stroke="#EC4899" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="18 14"/>
+      <g transform="translate(505 880)"><circle r="34" fill="#3A2233"/><path d="M-14 -2h28v16h-28z M-18 -4l18 -12 18 12z" fill="#fff"/></g>
+      <g transform="translate(95 325)"><circle id="pulse" r="60" fill="#EC4899" opacity=".2"/><path d="M0 0 C-30 -34 -34 -48 -34 -60 a34 34 0 0 1 68 0 C34 -48 30 -34 0 0Z" fill="#EC4899"/><path d="M-14 -56 l14 -12 14 12 v16 h-28z" fill="#fff"/></g>
+      <g id="puffs"><circle r="10" fill="#E8D6DF"/><circle r="8" fill="#E8D6DF"/><circle r="6" fill="#E8D6DF"/></g><g id="bike"><circle r="40" fill="#fff" stroke="#EC4899" stroke-width="5"/><g transform="translate(-24 -22) scale(2)" fill="none" stroke="#3A2233" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="17" r="3"/><circle cx="19" cy="17" r="3"/><path d="M5 17h6l3-6h4l1 6"/><path d="M14 11l-2-4H9"/><rect x="2" y="6" width="7" height="6" rx="1" fill="#EC4899" stroke="#EC4899"/></g></g>
+    </svg>
+    <div id="eta"><div class="top">
+      <div class="ic"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="17" r="3"/><circle cx="19" cy="17" r="3"/><path d="M5 17h6l3-6h4l1 6"/><path d="M14 11l-2-4H9"/></svg></div>
+      <div><div class="k">مندوب إيشارب</div><div class="v" id="etaT">خرج من الفرع</div></div>
+      <div class="min"><b id="etaM">٢٥</b><span id="etaU">دقيقة</span></div></div>
+      <div class="bar"><i id="etaB"></i></div>
+    </div>
+  </div>
+
+  <div class="tap" id="tap"></div>
+  <div id="sheen"></div>
+</div></div></div>
+
+
+<!-- RECEIVE -->
+<div id="recv">
+  <div class="rc" id="rc1" style="top:470px">
+    <svg class="ill" width="960" height="360" viewBox="0 0 960 360">
+      <defs><linearGradient id="rg" x1="0" x2="1"><stop offset="0" stop-color="#EC4899"/><stop offset=".5" stop-color="#F06AA6"/><stop offset="1" stop-color="#E6B450"/></linearGradient>
+        <clipPath id="awc"><rect x="250" y="96" width="460" height="70"/></clipPath></defs>
+      <rect width="960" height="360" fill="#FFF2F8"/>
+      <circle cx="140" cy="120" r="70" fill="#FCE7F1"/><circle cx="840" cy="90" r="46" fill="#FBF3DF"/>
+      <rect x="0" y="320" width="960" height="40" fill="#F3DEE9"/>
+      <rect x="270" y="150" width="420" height="172" rx="6" fill="#fff" stroke="#F3DEE9" stroke-width="4"/>
+      <rect x="250" y="40" width="460" height="64" rx="18" fill="#3A2233"/>
+      <image href="logo.png" x="390" y="52" width="180" height="40" style="filter:brightness(0) invert(1)"/>
+      <g clip-path="url(#awc)"><g id="awn">
+        <rect x="250" y="96" width="460" height="56" fill="url(#rg)"/>
+        <g fill="#fff" opacity=".9"><rect x="296" y="96" width="46" height="56"/><rect x="388" y="96" width="46" height="56"/><rect x="480" y="96" width="46" height="56"/><rect x="572" y="96" width="46" height="56"/><rect x="664" y="96" width="46" height="56"/></g>
+      </g></g>
+      <path id="scal" d="M250 152 q23 26 46 0 q23 26 46 0 q23 26 46 0 q23 26 46 0 q23 26 46 0 q23 26 46 0 q23 26 46 0 q23 26 46 0 q23 26 46 0 q23 26 46 0Z" fill="url(#rg)"/>
+      <rect x="300" y="196" width="230" height="126" rx="10" fill="#FCE7F1"/>
+      <g id="win"><rect x="316" y="214" width="56" height="14" rx="5" fill="#CDB8A4"/><rect x="316" y="230" width="56" height="14" rx="5" fill="#EC4899"/><rect x="316" y="246" width="56" height="14" rx="5" fill="#8E877F"/>
+        <rect x="388" y="214" width="56" height="14" rx="5" fill="#7E9C7A"/><rect x="388" y="230" width="56" height="14" rx="5" fill="#F1E3D3"/><rect x="388" y="246" width="56" height="14" rx="5" fill="#E6B450"/>
+        <rect x="460" y="214" width="56" height="14" rx="5" fill="#5C6B8A"/><rect x="460" y="230" width="56" height="14" rx="5" fill="#E9A6B8"/><rect x="460" y="246" width="56" height="14" rx="5" fill="#B98A6E"/>
+        <rect x="306" y="270" width="218" height="8" rx="4" fill="#E9D2C0"/></g>
+      <rect x="560" y="196" width="104" height="126" rx="10" fill="#3A2233"/><circle cx="578" cy="262" r="6" fill="#E6B450"/>
+      <g id="pins"></g>
+    </svg>
+    <div class="tx"><h3><span class="k"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>استلمي من أي فرع</h3><p>اطلبي من الشات واستلمي من الفرع الأقرب ليكي</p></div>
+  </div>
+  <div id="orB">أو</div>
+  <div class="rc" id="rc2" style="top:1230px">
+    <svg class="ill" width="960" height="360" viewBox="0 0 960 360">
+      <rect width="960" height="360" fill="#FFF8EE"/>
+      <circle cx="820" cy="110" r="60" fill="#FBF3DF"/><circle cx="300" cy="80" r="30" fill="#FCE7F1"/>
+      <rect x="0" y="262" width="960" height="70" fill="#EADCE3"/>
+      <path id="lane" d="M0 297 H960" stroke="#fff" stroke-width="8" stroke-dasharray="40 30"/>
+      <rect x="0" y="332" width="960" height="28" fill="#F3DEE9"/>
+      <!-- house (left) -->
+      <g id="house" transform="translate(110 262)">
+        <rect x="-80" y="-130" width="160" height="130" rx="8" fill="#fff" stroke="#F3DEE9" stroke-width="4"/>
+        <path d="M-100 -124 L0 -200 L100 -124Z" fill="url(#rg)"/>
+        <rect x="-22" y="-74" width="44" height="74" rx="8" fill="#3A2233"/><circle cx="12" cy="-38" r="4" fill="#E6B450"/>
+        <rect x="-64" y="-104" width="34" height="30" rx="5" fill="#FCE7F1"/><rect x="30" y="-104" width="34" height="30" rx="5" fill="#FCE7F1"/>
+        <g id="heart" transform="translate(150 -170)"><path d="M0 14 C-30 -10 -18 -34 0 -20 C18 -34 30 -10 0 14Z" fill="#EC4899"/></g>
+      </g>
+      <!-- scooter (faces left) -->
+      <g id="scoot">
+        <g id="speed" stroke="#E2C6D3" stroke-width="6" stroke-linecap="round"><path d="M80 -70 h50 M96 -46 h60 M84 -22 h44"/></g>
+        <circle cx="-44" cy="0" r="20" fill="#3A2233"/><circle cx="-44" cy="0" r="8" fill="#9E8792"/>
+        <circle cx="46" cy="0" r="20" fill="#3A2233"/><circle cx="46" cy="0" r="8" fill="#9E8792"/>
+        <path d="M-64 -12 Q-58 -44 -34 -50 L6 -32 L60 -32 L66 -10 L-64 -10Z" fill="url(#rg)"/>
+        <path d="M-40 -50 L-50 -82" stroke="#3A2233" stroke-width="8" stroke-linecap="round"/><path d="M-58 -84 h18" stroke="#3A2233" stroke-width="8" stroke-linecap="round"/>
+        <path d="M-6 -36 L4 -96 Q20 -104 30 -92 L28 -36Z" fill="#3A2233"/>
+        <path d="M6 -90 L-36 -66" stroke="#3A2233" stroke-width="12" stroke-linecap="round"/>
+        <circle cx="14" cy="-118" r="22" fill="#E9B494"/><path d="M-8 -120 a22 22 0 0 1 44 0 v4 h-44z" fill="#EC4899"/>
+        <rect x="34" y="-96" width="52" height="50" rx="8" fill="#fff" stroke="#F3DEE9" stroke-width="4"/><path d="M60 -96 v50" stroke="#EC4899" stroke-width="6"/>
+      </g>
+      <g id="puff2"><circle r="10" fill="#E8D6DF"/><circle r="8" fill="#E8D6DF"/><circle r="6" fill="#E8D6DF"/></g>
+    </svg>
+    <div class="tx"><h3><span class="k"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>أو المندوب يوصلك</h3><p>توصيل لحد باب البيت</p></div>
+  </div>
+</div>
+
+<!-- WAIT -->
+<div id="wait">
+  <svg viewBox="0 0 1080 1300" width="1080" height="1300" style="position:absolute;top:540px;left:0">
+    <defs><linearGradient id="g2" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#EC4899"/><stop offset="1" stop-color="#E6B450"/></linearGradient></defs>
+    <rect x="600" y="140" width="360" height="900" rx="26" fill="#fff" stroke="#F3DEE9" stroke-width="8"/>
+    <rect x="630" y="170" width="300" height="840" rx="18" fill="#F3D4E0"/>
+    <circle cx="662" cy="620" r="14" fill="#3A2233"/>
+    <rect x="540" y="1040" width="480" height="24" rx="12" fill="#EADCE3"/>
+    <g id="courier" transform="translate(330 380)">
+      <ellipse cx="0" cy="665" rx="170" ry="22" fill="#3A2233" opacity=".08"/>
+      <rect x="-70" y="420" width="56" height="240" rx="26" fill="#3A2233"/><rect x="14" y="420" width="56" height="240" rx="26" fill="#3A2233"/>
+      <rect x="-90" y="640" width="80" height="34" rx="16" fill="#120a0e"/><rect x="10" y="640" width="80" height="34" rx="16" fill="#120a0e"/>
+      <path d="M-100 220 Q0 170 100 220 L110 450 L-110 450Z" fill="url(#g2)"/>
+      <rect x="-30" y="150" width="60" height="70" rx="20" fill="#C98E6F"/>
+      <circle cx="0" cy="110" r="78" fill="#D9A27F"/>
+      <path d="M-80 100 C-80 30 80 30 80 100 L-80 100Z" fill="#3A2233"/><path d="M-20 92 L120 92 Q120 110 100 110 L-20 110Z" fill="#3A2233"/>
+      <g id="ceyes"><circle cx="-26" cy="130" r="7" fill="#3A2233"/><circle cx="26" cy="130" r="7" fill="#3A2233"/></g><ellipse cx="-44" cy="152" rx="12" ry="7" fill="#F29BAA" opacity=".6"/><ellipse cx="44" cy="152" rx="12" ry="7" fill="#F29BAA" opacity=".6"/>
+      <path d="M-22 160 Q0 178 22 160" stroke="#3A2233" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <path d="M-100 240 C-150 320 -120 380 -40 400" stroke="#F06AA6" stroke-width="54" fill="none" stroke-linecap="round"/>
+      <path d="M100 240 C150 320 120 380 40 400" stroke="#EE9A7E" stroke-width="54" fill="none" stroke-linecap="round"/>
+      <rect x="-110" y="330" width="220" height="170" rx="16" fill="#fff"/><rect x="-110" y="330" width="220" height="40" rx="10" fill="#F3DEE9"/>
+      <text x="0" y="455" text-anchor="middle" font-family="T" font-weight="800" font-size="34" fill="#3A2233" direction="ltr">echarpe</text>
+    </g>
+    <g id="bub" transform="translate(470 330)"><rect x="-120" y="-56" width="240" height="96" rx="40" fill="#fff" stroke="#F3DEE9" stroke-width="4"/><path d="M-30 38 L-60 74 L0 40Z" fill="#fff"/><text x="0" y="6" text-anchor="middle" font-family="T" font-weight="800" font-size="34" fill="#3A2233">خدي راحتك</text></g>
+    <g id="clock" transform="translate(240 130)">
+      <circle r="120" fill="#fff" stroke="#F3DEE9" stroke-width="6"/>
+      <circle r="96" fill="none" stroke="#FCE7F1" stroke-width="14"/>
+      <circle id="arc" r="96" fill="none" stroke="url(#g2)" stroke-width="14" stroke-dasharray="603" stroke-dashoffset="603" transform="rotate(-90)" stroke-linecap="round"/>
+      <line id="hand" x1="0" y1="0" x2="0" y2="-58" stroke="#3A2233" stroke-width="10" stroke-linecap="round"/>
+      <circle r="12" fill="#3A2233"/>
+    </g>
+  </svg>
+</div>
+
+<!-- OPTIONS 2x2 -->
+<div id="opts">
+  <div class="oc" id="o1" style="right:60px;top:520px"><div class="oi" style="background:#E5F6EC"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#2BB673" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 12h.01M18 12h.01"/></svg></div><h3>كاش</h3><p>ادفعي عند الاستلام بعد ما تجربي</p></div>
+  <div class="oc" id="o2" style="left:60px;top:520px"><div class="oi" style="background:#E6EEF9"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#4A7CC0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg></div><h3>بالكارت</h3><p>ادفعي بالفيزا بسهولة وأمان</p></div>
+  <div class="oc" id="o3" style="right:60px;top:1030px"><div class="oi" style="background:var(--soft)"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#EC4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></div><h3>مرتجع سهل</h3><p>مش مناسبة؟ رجّعيها مع المندوب</p></div>
+  <div class="oc" id="o4" style="left:60px;top:1030px"><div class="oi" style="background:#F8ECDC"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#C0823A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v7h14v-7"/><path d="M10 20v-4h4v4"/></svg></div><h3>من الفرع</h3><p>حدّدي الفرع واستلمي في معادك</p></div>
+</div>
+
+
+<!-- APPS -->
+<div class="cap" id="cA"><div class="ov"><i></i>حمّلي إيشارب<i></i></div><h1 data-k>إيشارب على <span class="g">موبايلك</span></h1><p data-k>أندرويد أو آيفون، الاتنين سهلين</p></div>
+<div id="apps">
+  <div class="ac" id="ac1" style="top:520px"><div class="hd"><div class="ic" style="background:#E5F6EC"><svg width="70" height="70" viewBox="0 0 24 24" fill="none" stroke="#2BB673" stroke-width="2" stroke-linecap="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div><div><h3>أندرويد</h3><div class="sub">حمّلي التطبيق من Google Play</div></div></div>
+    <div class="gp"><svg width="70" height="78" viewBox="0 0 86 96"><path d="M4 2 L48 48 L4 94Z" fill="#00A0FF"/><path d="M4 2 L62 34 L48 48Z" fill="#00F076"/><path d="M4 94 L48 48 L62 62Z" fill="#F93A4B"/><path d="M62 34 L82 46 Q86 48 82 50 L62 62 L48 48Z" fill="#FFC900"/></svg><div><small>احصل عليه من</small><b>Google Play</b></div></div></div>
+  <div class="ac" id="ac2" style="top:1090px"><div class="hd"><div class="ic" style="background:#E6EEF9"><svg width="70" height="70" viewBox="0 0 24 24" fill="none" stroke="#4A7CC0" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg></div><div><h3>آيفون</h3><div class="sub">استخدمي نسخة الويب، من غير تحميل</div></div></div>
+    <div class="webp"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#C9327E" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>echarpe.store</div>
+    <div class="note">التطبيق مش على الـ App Store، <span>ومش محتاجاه</span><br>نسخة الويب هي هي بالظبط ومن موقعنا الرسمي</div></div>
+</div>
+
+<!-- iOS DEMO -->
+<div class="cap" id="cI"><div class="ov"><i></i>للآيفون<i></i></div><h1 data-k>ضيفيها على <span class="g">الشاشة الرئيسية</span></h1></div>
+<div id="ios">
+  <div class="stp">
+    <div id="st1"><b>١</b>افتحي <span class="en">echarpe.store</span> من Safari</div>
+    <div id="st2"><b>٢</b>دوسي على زرار المشاركة</div>
+    <div id="st3"><b>٣</b>اختاري «إضافة إلى الشاشة الرئيسية»</div>
+    <div id="st4"><b>٤</b>دوسي «إضافة»</div>
+    <div id="st5"><b><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></b>وخلاص! بقت أيقونة زي أي تطبيق</div>
+  </div>
+  <div id="iph"><div id="isc">
+    <div class="island"></div>
+    <div class="lay" id="safari">
+      <div class="site" id="site"><div class="sh"><img src="logo.png" alt=""></div><h4>جرّبي قبل<br>ما تشتري</h4><div class="sb">ابدئي الشات</div>
+        <div class="gr"><div style="background:linear-gradient(135deg,#CDB8A4,#B9A28D)"></div><div style="background:linear-gradient(135deg,#8E877F,#5f5853)"></div><div style="background:linear-gradient(135deg,#F29BAA,#EC4899)"></div><div style="background:linear-gradient(135deg,#EFE6D8,#D9CBB6)"></div></div></div>
+      <div class="sbar"><div class="addr"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span id="url"></span><span class="cur" id="cur"></span><div class="pg" id="pg"></div></div>
+        <div class="tbr">
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#c7c7cc" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+          <svg id="shareIc" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M8 10H6v11h12V10h-2"/></svg>
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5c3-1 5-1 8 1 3-2 5-2 8-1v14c-3-1-5-1-8 1-3-2-5-2-8-1z"/><path d="M12 6v14"/></svg>
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linejoin="round"><rect x="3" y="7" width="13" height="13" rx="2"/><path d="M8 4h11a2 2 0 0 1 2 2v11"/></svg>
+        </div></div>
+      <div class="shs" id="shs"><div class="top"><div class="si"><img src="logo.png" alt=""></div><div><div style="font-size:30px;font-weight:700">إيشارب</div><div style="font-size:24px;color:#8e8e93;direction:ltr;text-align:right">echarpe.store</div></div></div>
+        <div class="apps"><i style="background:#34C759"></i><i style="background:#0A84FF"></i><i style="background:#FFD60A"></i><i style="background:#FF9F0A"></i></div>
+        <div id="rowsWrap"><div class="rows">
+          <div class="rw">نسخ<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></div>
+          <div class="rw">إضافة إلى قائمة القراءة<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8"><circle cx="6.5" cy="14" r="3.5"/><circle cx="17.5" cy="14" r="3.5"/><path d="M10 14h4"/></svg></div>
+          <div class="rw">إضافة إشارة مرجعية<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8"><path d="M4 5c3-1 5-1 8 1 3-2 5-2 8-1v14c-3-1-5-1-8 1-3-2-5-2-8-1z"/></svg></div>
+          <div class="rw">إضافة إلى المفضلة<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg></div>
+          <div class="rw" id="athRow">إضافة إلى الشاشة الرئيسية<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg></div>
+          <div class="rw">طباعة<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.8"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z"/></svg></div>
+        </div></div></div>
+      <div class="ath" id="ath"><div class="nav"><span>إلغاء</span><b>إضافة إلى الشاشة الرئيسية</b><span style="font-weight:700" id="addBtn">إضافة</span></div>
+        <div class="cd"><div class="si"><img src="logo.png" alt=""></div><div style="flex:1"><div class="nm">إيشارب<span class="cur" id="cur2" style="height:34px;margin-right:4px;vertical-align:middle"></span></div><div class="ur">echarpe.store</div></div></div>
+        <div class="ex">ستتم إضافة أيقونة إلى الشاشة الرئيسية لتتمكن من الوصول بسرعة إلى موقع الويب هذا.</div></div>
+    </div>
+    <div class="home" id="home"><div class="hg"><div class="hi"><i style="background:linear-gradient(145deg,#34C759,#34C759cc)"></i>الصور</div><div class="hi"><i style="background:linear-gradient(145deg,#0A84FF,#0A84FFcc)"></i>الكاميرا</div><div class="hi"><i style="background:linear-gradient(145deg,#FF9F0A,#FF9F0Acc)"></i>الساعة</div><div class="hi"><i style="background:linear-gradient(145deg,#FF375F,#FF375Fcc)"></i>الطقس</div><div class="hi"><i style="background:linear-gradient(145deg,#5E5CE6,#5E5CE6cc)"></i>الملاحظات</div><div class="hi"><i style="background:linear-gradient(145deg,#64D2FF,#64D2FFcc)"></i>الخرائط</div><div class="hi"><i style="background:linear-gradient(145deg,#FFD60A,#FFD60Acc)"></i>التقويم</div><div class="hi"><i style="background:linear-gradient(145deg,#8E8E93,#8E8E93cc)"></i>الإعدادات</div><div class="hi"><i style="background:linear-gradient(145deg,#30B0C7,#30B0C7cc)"></i>الرسائل</div><div class="hi"><i style="background:linear-gradient(145deg,#AC8E68,#AC8E68cc)"></i>المحفظة</div><div class="hi"><i style="background:linear-gradient(145deg,#FF453A,#FF453Acc)"></i>الموسيقى</div><div class="hi"><i style="background:linear-gradient(145deg,#32D74B,#32D74Bcc)"></i>الصحة</div><div class="hi"><i style="background:linear-gradient(145deg,#BF5AF2,#BF5AF2cc)"></i>البودكاست</div><div class="hi"><i style="background:linear-gradient(145deg,#FF9F0A,#FF9F0Acc)"></i>الكتب</div><div class="hi"><i style="background:linear-gradient(145deg,#0A84FF,#0A84FFcc)"></i>الملفات</div><div class="hi" id="newIcon"><i class="eic"><img src="logo.png" alt=""></i>إيشارب</div></div><div class="dock"><i style="background:#34C759"></i><i style="background:#0A84FF"></i><i style="background:#FF9F0A"></i><i style="background:#8E8E93"></i></div>
+      <svg id="isp" class="L" width="600" height="1250" style="left:0;top:0"></svg></div>
+    <div id="splash"><img src="logo.png" alt=""></div>
+    <div class="tap" id="tap2"></div>
+  </div></div>
+</div>
+
+<!-- OUTRO -->
+<div id="outro">
+  <img id="outLogo" src="logo.png" width="640" alt="">
+  <div class="tagl" id="outTag" style="font-size:70px">جرّبي. اطلبي.<br><span class="g">واستلمي وانتي مرتاحة.</span></div>
+  <div class="cta" id="cta"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>ابدئي الشات دلوقتي</div>
+  <div class="url" id="ourl">echarpe.store</div>
+</div>
+
+<div id="wipe"></div>
+<svg id="grain" width="1080" height="1920"><filter id="nz"><feTurbulence id="turb" type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="1"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#nz)"/></svg>
+
+<script>
+const $=id=>document.getElementById(id);
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const eo=x=>1-Math.pow(1-x,3), eo5=x=>1-Math.pow(1-x,5);
+const eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const back=x=>{const c=1.4,c3=c+1;return 1+c3*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
+const p=(t,a,d)=>clamp((t-a)/d);
+const AR=n=>String(n).replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[d]);
+const DURATION=73;
+
+// split into words for kinetic reveal
+document.querySelectorAll('[data-k], #inTag, #outTag').forEach(el=>{
+  const walk=n=>{[...n.childNodes].forEach(c=>{
+    if(c.nodeType===3){const f=document.createDocumentFragment();c.textContent.split(/(\s+)/).forEach(s=>{if(!s)return;if(/^\s+$/.test(s)){f.appendChild(document.createTextNode(s));return}const w=document.createElement('span');w.className='w';const i=document.createElement('span');i.textContent=s;w.appendChild(i);f.appendChild(w)});c.replaceWith(f)}
+    else if(c.nodeType===1&&c.tagName!=='BR'){ if(c.classList.contains('g')){const w=document.createElement('span');w.className='w';c.replaceWith(w);w.appendChild(c);} else walk(c);} })};
+  walk(el);
+});
+function words(el,t,a,stag=.07,d=.6){ el.querySelectorAll('.w').forEach((w,i)=>{const v=eo5(p(t,a+i*stag,d));w.firstElementChild.style.transform=`translateY(${(1-v)*110}%)`;}); }
+function wordsOut(el,t,a){ const v=eio(p(t,a,.45)); el.style.opacity=1-v; el.style.transform=`translateY(${-v*40}px)`; }
+
+// caption windows [in, out]
+const CAP={cR:[42.5,51.2],c1:[4.2,11],c2:[11.2,18],c3:[18.2,30],cP:[30.6,36.6],c4:[37,42],c5:[42.2,48],c6:[48.4,53.6],c7:[54,59.6],cA:[59.9,64.4],cI:[64.9,75.7]};
+function caption(id,t){ const [a,b]=CAP[id]; const el=$(id);
+  if(t<a-.01||t>b+.5){el.style.display='none';return} el.style.display='block';
+  el.style.opacity=1; el.style.transform='none';
+  const ov=el.querySelector('.ov'); ov.style.opacity=eo(p(t,a,.5)); ov.style.transform=`translateY(${(1-eo(p(t,a,.5)))*20}px)`;
+  words(el.querySelector('h1'),t,a+.12); const pp=el.querySelector('p'); if(pp) words(pp,t,a+.45,.04);
+  if(t>b) wordsOut(el,t,b);
+}
+
+// try-on screenshot timeline
+
+const TAPS=[ // [time, x, y] inside screen
+  [8.9,300,1185],                       // send
+  [16.2,435,0],                         // "جرّبيها" on pick — y set dynamically
+  [21.15,332,947],[22.75,250,947],[24.35,172,947],
+  [26.35,140,1230],                     // back to chat? (swap to second pick) — styled as tap on add area
+  [27.75,250,922],
+  [38.0,442,1211],[39.6,300,1150]
+];
+function tapAt(t,a,x,y){ const v=p(t,a-.3,.75); if(v<=0||v>=1) return; const el=$('tap'); el.style.left=x+'px'; el.style.top=y+'px';
+  const k=v<.4?v/.4:1; el.style.opacity=v<.4?k:1-(v-.4)/.6; el.style.transform=`scale(${v<.4?1.25-.4*k:.85+.9*(v-.4)})`; }
+
+
+function girlSVG(P){ let ribs=''; for(let x=56;x<=344;x+=14) ribs+=`M${x} 400V500`;
+ let fr=''; for(let x=118;x<=150;x+=8) fr+=`M${x} 492v12`; for(let x=258;x<=294;x+=8) fr+=`M${x} 492v12`;
+ return `<svg viewBox="0 0 400 500" width="100%" height="100%" preserveAspectRatio="xMidYMax slice" style="display:block">
+ <defs><radialGradient id="${P}bg" cx=".5" cy=".3" r=".85"><stop offset="0" stop-color="#F7F0F3"/><stop offset="1" stop-color="#E6DCE2"/></radialGradient></defs>
+ <rect width="400" height="500" fill="url(#${P}bg)"/>
+ <circle cx="60" cy="80" r="26" fill="#fff" opacity=".5"/><circle cx="350" cy="130" r="16" fill="#fff" opacity=".5"/>
+ <g id="${P}sway">
+  <path d="M26 500 C36 420 100 370 200 364 C300 370 364 420 374 500Z" fill="#8E6849"/><path d="M60 470 Q90 420 140 400 M340 470 Q310 420 260 400" stroke="#A9825F" stroke-width="7" fill="none" stroke-linecap="round" opacity=".7"/>
+  <path d="M176 372 Q200 392 224 372" stroke="#6E4E36" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M168 262 L168 340 C184 354 216 354 232 340 L232 262Z" fill="#E9B494"/>
+  <ellipse cx="200" cy="208" rx="64" ry="80" fill="#F3C7A9"/>
+  <path d="M158 188 q16 -9 32 -3 M210 185 q16 -6 32 3" stroke="#6A4338" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <g id="${P}eyes"><ellipse cx="176" cy="212" rx="7.5" ry="9.5" fill="#3A2233"/><ellipse cx="224" cy="212" rx="7.5" ry="9.5" fill="#3A2233"/><circle cx="178.5" cy="208" r="2.6" fill="#fff"/><circle cx="226.5" cy="208" r="2.6" fill="#fff"/></g>
+  <path d="M200 222 q-6 14 3 16" stroke="#D39C80" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <ellipse cx="164" cy="242" rx="15" ry="8.5" fill="#F29BAA" opacity=".55"/><ellipse cx="236" cy="242" rx="15" ry="8.5" fill="#F29BAA" opacity=".55"/>
+  <path d="M184 254 q16 14 32 0 q-16 6 -32 0Z" fill="#C9566F" stroke="#C9566F" stroke-width="4" stroke-linejoin="round"/>
+  <path id="${P}band" d="M146 194 C150 150 175 129 200 129 C225 129 250 150 254 194 C240 171 222 161 200 161 C178 161 160 171 146 194Z" fill="#8A8A8A" opacity="0"/>
+  <g id="${P}hij">
+   <path id="${P}hm" fill-rule="evenodd" fill="url(#gmono)" stroke="#2E2622" stroke-width="4.5" stroke-linejoin="round" d="M200 84 C124 84 96 148 98 220 C100 282 112 318 104 356 C98 392 100 440 112 500 L156 500 C158 446 168 404 200 392 C232 404 242 446 244 500 L288 500 C300 440 302 392 296 356 C288 318 300 282 302 220 C304 148 276 84 200 84Z M200 126 C158 126 138 160 138 208 C138 258 166 296 200 296 C234 296 262 258 262 208 C262 160 242 126 200 126Z"/>
+   <path d="M118 300 C160 345 240 350 286 296 C290 330 262 372 200 380 C150 372 122 340 118 300Z" fill="#000" opacity=".15"/>
+   <path id="${P}tail" d="M240 360 C254 400 252 450 254 500 L300 500 C300 450 296 400 292 346 C280 360 258 364 240 360Z" fill="url(#gmono)" stroke="#2E2622" stroke-width="6" stroke-linejoin="round"/>
+   <path d="M120 232 C122 282 118 320 110 356 M280 232 C278 282 282 320 290 356 M150 108 C175 94 225 94 250 108 M266 380 C270 420 272 460 276 500" stroke="#000" stroke-opacity=".14" stroke-width="5" fill="none" stroke-linecap="round"/>
+   <path id="${P}fr" d="${fr}" stroke="#B9A28D" stroke-width="3" stroke-linecap="round" opacity="0"/>
+  </g>
+ </g>
+ <g id="${P}sp"></g>
+ </svg>`; }
+const STAR='M0 -16 C2 -4 4 -2 16 0 C4 2 2 4 0 16 C-2 4 -4 2 -16 0 C-4 -2 -2 -4 0 -16Z';
+function initSparks(P,n){ let h=''; for(let i=0;i<n;i++) h+=`<path d="${STAR}" fill="${i%3==0?'#E6B450':i%3==1?'#fff':'#EC4899'}"/>`; $(P+'sp').innerHTML=h; }
+const SPK=[[120,130],[290,120],[100,260],[310,250],[200,70],[150,330],[262,330]];
+function sparks(P,t,a){ [...$(P+'sp').children].forEach((el,i)=>{ const v=p(t,a+i*.04,.7); const [x,y]=SPK[i%SPK.length];
+  const s=v<=0||v>=1?0:Math.sin(v*Math.PI)*(.8+.4*(i%2)); el.setAttribute('transform',`translate(${x+(x-200)*.25*v} ${y+(y-200)*.25*v}) rotate(${v*120}) scale(${s})`); }); }
+function girlState(P,t,{hij,band,bandA,drop}){
+  const hm=$(P+'hm'), tl=$(P+'tail');
+  const fill= hij==='mono'?'url(#gmono)': hij==='beige'?'#CDB8A4':'#B48CA0';
+  const st = hij==='mono'?'#2E2622':hij==='beige'?'#B49C86':'#9C7489';
+  hm.setAttribute('fill',fill); tl.setAttribute('fill',fill); hm.setAttribute('stroke',st); tl.setAttribute('stroke',st);
+  $(P+'fr').setAttribute('opacity',hij==='beige'?1:0);
+  const d=drop==null?1:back(clamp(drop)); $(P+'hij').setAttribute('transform',`translate(0 ${(1-d)*-26}) scale(1 ${1+(1-d)*.04})`); $(P+'hij').setAttribute('opacity',1);
+  const b=$(P+'band'); if(band){ b.setAttribute('fill',band); const v=bandA==null?1:clamp(bandA); b.setAttribute('opacity',clamp(v*2)); b.setAttribute('transform',`translate(200 160) scale(${.6+.4*back(v)}) translate(-200 -160)`);} else b.setAttribute('opacity',0);
+  // blink + sway
+  const bl=(t%3.1)<.12?.1:1; $(P+'eyes').setAttribute('transform',`translate(0 212) scale(1 ${bl}) translate(0 -212)`);
+  $(P+'sway').setAttribute('transform',`rotate(${Math.sin(t*1.3)*1.6} 200 420)`);
+}
+$('girlTry').innerHTML=girlSVG('g'); initSparks('g',7);
+$('pvg').innerHTML=girlSVG('v').replace('<svg ','<svg x="-150" y="-300" width="300" height="600" ').replace('width="100%" height="100%" ','');
+// confetti
+(function(){ let h=''; const C=['#EC4899','#E6B450','#F9CFE3','#3A2233','#7FC8A9','#F06AA6']; for(let i=0;i<46;i++){ const a=(i*137.5)%360, sp=260+((i*53)%200); h+=`<rect data-a="${a}" data-s="${sp}" width="${10+(i%3)*4}" height="${16+(i%4)*3}" rx="3" fill="${C[i%C.length]}"/>`;} $('conf').innerHTML=h; })();
+
+// product tiles wall
+(function(){ const s=$('tiles'); const cols=['#C9B8A6','#EC4899','#5C6B8A','#7E9C7A','#E8D9C4','#2E2A2B','#B98A6E','#E9A6B8','#8E9AAF','#C2577F','#A3B18A','#F1E3D3','#6D5A72','#D7B49E'];
+  let h=''; let k=0; for(let r=0;r<16;r++)for(let c=0;c<7;c++){const col=cols[(r*3+c*5+k++)%cols.length];
+    h+=`<g class="tl"><rect x="${c*170-60+(r%2)*85}" y="${r*190-300}" width="150" height="170" rx="26" fill="${col}"/><path d="M${c*170-60+(r%2)*85+20} ${r*190-300+150} q55 -90 110 -120" stroke="#fff" stroke-opacity=".18" stroke-width="10" fill="none"/></g>`;}
+  s.innerHTML=`<g id="tw">${h}</g>`; })();
+
+function ctrS(el){ const r=el.getBoundingClientRect(), sr=$('screen').getBoundingClientRect(); return [(r.left+r.width/2-sr.left)*(600/sr.width),(r.top+r.height/2-sr.top)*(1250/sr.height)]; }
+const PINP=[[120,150],[840,170],[200,250],[760,250]];
+function seek(T){
+  const t = T>=51.5 ? T+8.1 : T;
+  $('tap').style.opacity=0;
+  $('turb').setAttribute('seed',Math.floor(t*24)%97);
+  $('glow').style.transform=`translate(${Math.sin(t*.3)*80}px,${Math.cos(t*.25)*90}px)`;
+
+  // dark segments: intro 0-4, privacy 30.4-36.8, outro 59.6-64
+  const dk=Math.max(1-p(t,3.7,.6), p(t,30.2,.5)*(1-p(t,36.6,.5)), p(t,76.4,.6));
+  $('dark').style.opacity=dk;
+
+  // wipes (brand gradient sweep) at scene changes
+  const W=[3.6,30.0,36.4,76.2]; let wx=-140;
+  W.forEach(w=>{const v=p(t,w,.75); if(v>0&&v<1) wx=-140+280*eio(v);}); $('wipe').style.transform=`translateX(${wx}%) skewX(-12deg)`;
+
+  // INTRO
+  $('intro').style.opacity=t<4.0?1:0;
+  const lg=eo5(p(t,.3,1.2)); $('inLogo').style.opacity=lg; $('inLogo').style.transform=`scale(${.86+.14*lg})`; $('inLogo').style.filter=`brightness(0) invert(1) blur(${(1-lg)*12}px)`;
+  $('inLine').style.width=(eo5(p(t,1.1,1))*420)+'px';
+  words($('inTag'),t,1.5,.12,.7);
+
+  ['c1','c2','c3','cP','c4','cA','cI'].forEach(id=>caption(id,t)); caption('cR',T); ['c5','c6','c7'].forEach(id=>$(id).style.display='none');
+
+  // PHONE in 4.2 → out 30.2 ; in again 36.8 → out 48.2
+  let ph=0, ty=0, ry=0, sc=1;
+  if(t>=4.2&&t<30.6){ const i=eo5(p(t,4.2,1.1)), o=eio(p(t,30.0,.6)); ph=i*(1-o); ty=(1-i)*700+o*300; ry=(1-i)*-28+Math.sin(t*.5)*3; sc=.94+.06*i; }
+  if(t>=36.6&&t<42.6){ const i=eo5(p(t,36.6,1)), o=eio(p(t,41.9,.6)); ph=i*(1-o); ty=(1-i)*700+o*400; ry=(1-i)*24+Math.sin(t*.5)*3; sc=.94+.06*i; }
+  $('phone').style.opacity=ph; $('phone').style.transform=`translateY(${ty}px) rotateY(${ry}deg) rotateX(${Math.cos(t*.4)*2}deg) scale(${sc})`;
+  $('sheen').style.backgroundPosition=`${100-((t*12)%100)*1.5}% 0`;
+
+  // CHAT 4.6–18.4
+  $('chat').style.opacity=(t>=4.2&&t<18.6)?1:0;
+  const pop=(el,a,d=.5)=>{const v=p(t,a,d);el.style.opacity=clamp(v*2.2);el.style.transform=`translateY(${(1-eo5(v))*40}px) scale(${.9+.1*back(v)})`;};
+  pop($('m1'),6.0); pop($('m2'),9.2); pop($('who'),12.2); pop($('typ'),12.5,.3);
+  $('typ').style.display=t<13.9?'flex':'none';
+  [...$('typ').children].forEach((d,i)=>d.style.transform=`translateY(${-8*Math.max(0,Math.sin(t*8-i*.8))}px)`);
+  pop($('m3'),13.9); pop($('picks'),14.8,.6);
+  const scr=eio(p(t,14.2,.8))*470; $('mi').style.transform=`translateY(${-scr}px)`;
+  // tap on send & pick
+  if(t<10) tapAt(t,8.9,62,1185);
+  const pk=$('pk1'); if(t>15.5&&t<17){ const r=pk.getBoundingClientRect(), sr=$('screen').getBoundingClientRect(); }
+  tapAt(t,16.4,414,818);
+  $('pk1').style.transform=`scale(${1-.04*Math.sin(Math.PI*p(t,16.3,.3))})`;
+
+  // TRY 18.2–36
+  const tryOn=t>=18.2&&t<36;
+  $('try').style.opacity=tryOn?eo(p(t,18.2,.4)):0;
+  // states
+  let hij='plain', drop=null, band=null, bandA=null, sel=-1;
+  const BANDS=[[21.4,'#EFE6D8',1],[23.0,'#8A8A8A',2],[24.6,'#6B4A33',3]];
+  if(t>=19.2){ hij='mono'; drop=p(t,19.2,.7); sel=0; }
+  BANDS.forEach(([a,c,i])=>{ if(t>=a){ band=c; bandA=p(t,a,.5); sel=i; } });
+  if(t>=26.6){ hij='beige'; drop=p(t,26.6,.7); band='#EFE6D8'; bandA=1; sel=1; }
+  if(t>=28.0){ band='#8A8A8A'; bandA=p(t,28.0,.5); sel=2; }
+  if(t>=30.0){ hij='mono'; drop=null; band='#8A8A8A'; bandA=1; sel=2; }
+  girlState('g',t,{hij,band,bandA,drop});
+  [0,1,2,3].forEach(i=>{ const el=$('sw'+i); el.classList.toggle('on',i===sel); });
+  $('chipme').style.opacity=1-p(t,19.0,.3);
+  // shimmer sweep at hijab swaps
+  let sh=-120; [[18.9,.9],[26.3,.8]].forEach(([a,d])=>{const v=p(t,a,d); if(v>0&&v<1) sh=-120+240*eio(v);}); $('shimmer').style.transform=`translateX(${sh}%)`;
+  // sparkles on every change
+  [...[19.5,21.4,23.0,24.6,26.9,28.0]].forEach(a=>{ if(t>=a&&t<a+1) sparks('g',t,a); });
+  if(![19.5,21.4,23.0,24.6,26.9,28.0].some(a=>t>=a&&t<a+1)) sparks('g',-9,0);
+  [[21.4,332,947],[23.0,250,947],[24.6,172,947],[28.0,250,947]].forEach(([a,x,y])=>tapAt(t,a,x,y));
+  // swipe gesture to next pick
+  const sg=p(t,25.9,.6); if(sg>0&&sg<1){const el=$('tap');el.style.left=(150+300*eio(sg))+'px';el.style.top='520px';el.style.opacity=Math.sin(sg*Math.PI);el.style.transform='scale(.9)';}
+  $('girlTry').style.transform=`translateX(${(()=>{const v=p(t,26.2,.4),w=p(t,26.6,.45); if(v>0&&v<1) return eio(v)*-12; if(w>0&&w<1) return (1-eo(w))*-12; return 0;})()}%)`;
+  // floating hearts
+  (function(){ let h=''; const hv=t>=25.0&&t<26.3; if(hv){ for(let i=0;i<6;i++){ const v=p(t,25.0+i*.12,1.0); if(v<=0||v>=1) continue; const x=420+((i*47)%120)+Math.sin(v*6+i)*14, y=820-v*420; h+=`<path d="M0 6 C-14 -6 -8 -16 0 -9 C8 -16 14 -6 0 6Z" transform="translate(${x} ${y}) scale(${2+i%2})" fill="${i%2?'#EC4899':'#F29BAA'}" opacity="${Math.sin(v*Math.PI)}"/>`; } } $('hearts').innerHTML=h; })();
+
+  // ORDER (phone back 36.6)
+  if(t>=36.6&&t<42.2){ $('try').style.opacity=1; }
+  // privacy phone girl
+  girlState('v',t,{hij:'mono',band:'#8A8A8A'});
+  tapAt(t,38.2,442,1211);
+  $('sheet').style.transform=`translateY(${(1-eo5(p(t,38.5,.6)))*900}px)`;
+  if(t>38.9&&t<39.8) tapAt(t,39.3,...ctrS($('dv2'))); $('dv2').classList.toggle('on',t>=39.35); $('dv1').classList.toggle('on',false);
+  if(t>39.6&&t<40.5) tapAt(t,40.0,...ctrS($('cbtn')));
+  $('cbtn').style.transform=`scale(${1-.05*Math.sin(Math.PI*p(t,39.9,.3))})`;
+  const dv=eo(p(t,40.4,.4)); $('done').style.opacity=dv;
+  document.querySelector('#done .ck').style.transform=`scale(${back(p(t,40.4,.55))})`;
+  $('ckp').setAttribute('stroke-dashoffset',24*(1-eo(p(t,40.7,.5))));
+  [...$('conf').children].forEach((r,i)=>{ const v=p(t,40.5+(i%5)*.03,1.4); const a=+r.dataset.a*Math.PI/180, sp=+r.dataset.s;
+    const x=300+Math.cos(a)*sp*eo(v), y=520+Math.sin(a)*sp*eo(v)*.8+v*v*380; r.setAttribute('x',x); r.setAttribute('y',y);
+    r.style.transform=`rotate(${v*540+i*30}deg)`; r.setAttribute('opacity',v<=0?0:1-p(v,.75,.25)); });
+
+  // MAP 42.2–48.4
+  const mv=0; $('map').style.opacity=mv;
+  if(t>=42.2) $('try').style.opacity=1-mv;
+  const L=$('route').getTotalLength(), pr=eio(p(t,43,4.6)), pt=$('route').getPointAtLength(L*pr);
+  const pt2=$('route').getPointAtLength(Math.min(L,L*pr+4)); const flip=pt2.x>pt.x+.5?-1:1;
+  $('bike').setAttribute('transform',`translate(${pt.x} ${pt.y+Math.sin(t*14)*2}) scale(${flip*(1+.05*Math.sin(t*10))} ${1+.05*Math.sin(t*10)})`);
+  [...$('puffs').children].forEach((c,i)=>{ const ph=((t*2.2)+i/3)%1; const back=$('route').getPointAtLength(Math.max(0,L*pr-30-ph*40)); const moving=pr>0.01&&pr<.99;
+    c.setAttribute('cx',back.x); c.setAttribute('cy',back.y-ph*20); c.setAttribute('opacity',moving?(1-ph)*.9:0); c.setAttribute('r',6+ph*10); });
+  $('rl').setAttribute('stroke-dashoffset',-t*40);
+  const pu=(t*1.2)%1; $('pulse').setAttribute('r',36+54*pu); $('pulse').setAttribute('opacity',.3*(1-pu));
+  const done=pr>=.999; $('etaM').textContent=done?'✓':AR(Math.max(1,Math.round(25*(1-pr))));
+  $('etaU').textContent=done?'':'دقيقة'; $('etaT').textContent=pr<.04?'خرج من الفرع':done?'وصل عند الباب':'في الطريق ليكي';
+  $('etaB').style.width=(8+92*pr)+'%';
+
+  // PRIVACY 30.4–36.8
+  const pv=Math.min(eo(p(t,30.5,.5)),1-p(t,36.4,.4)); $('priv').style.opacity=t>30.3&&t<36.9?pv:0;
+  const pp=eo5(p(t,30.7,1)); $('pphone').setAttribute('transform',`translate(540 430) scale(${.8+.2*pp})`);
+  [1,2,3].forEach(i=>{const v=((t-30.6)*.55+i/3)%1; $('r'+i).setAttribute('r',170+260*v); $('r'+i).setAttribute('opacity',(1-v)*.7);});
+  const lk=p(t,31.6,.6); $('lock').setAttribute('transform',`translate(540 760) scale(${back(lk)})`);
+  $('shackle').setAttribute('transform',`translate(0 ${(1-eo(p(t,32.1,.35)))*-18})`);
+  $('cloud').setAttribute('opacity',eo(p(t,32.4,.4))); $('dash').setAttribute('opacity',eo(p(t,32.4,.4))*.9); $('dash').setAttribute('stroke-dashoffset',-t*30);
+  $('slash').setAttribute('stroke-dashoffset',215*(1-eo(p(t,33.0,.4))));
+  ['pl1','pl2','pl3'].forEach((id,i)=>{const v=p(t,33.3+i*.55,.6);$(id).style.opacity=eo(v);$(id).style.transform=`translateX(-50%) translateY(${(1-eo5(v))*50}px)`;});
+
+  // WAIT 48.4–54
+  const wv=false?Math.min(eo(p(t,48.4,.6)),1-p(t,53.6,.5)):0; $('wait').style.opacity=wv;
+  const ci=eo5(p(t,48.6,1.1)); $('courier').setAttribute('transform',`translate(${330-(1-ci)*520} ${380+Math.sin(t*3)*4*ci})`);
+  $('ceyes').setAttribute('transform',`translate(0 130) scale(1 ${(t%2.7)<.13?.15:1}) translate(0 -130)`);
+  const bb=p(t,50.0,.6); $('bub').setAttribute('transform',`translate(470 330) scale(${back(bb)})`); $('bub').setAttribute('opacity',clamp(bb*3));
+  const ck=p(t,49.4,4); $('clock').setAttribute('transform',`translate(240 130) scale(${back(p(t,49.2,.6))})`);
+  $('arc').setAttribute('stroke-dashoffset',603*(1-ck)); $('hand').setAttribute('transform',`rotate(${ck*1080})`);
+
+  // OPTIONS 54–60
+  const ov=false?(1-p(t,59.2,.5)):0; $('opts').style.opacity=ov;
+  ['o1','o2','o3','o4'].forEach((id,i)=>{const v=p(t,54.5+i*.5,.7);const el=$(id);el.style.opacity=eo(v);el.style.transform=`translateY(${(1-eo5(v))*120}px) scale(${.92+.08*eo5(v)})`;
+    const h=p(t,56.8+i*.55,.6); el.style.boxShadow=`0 30px 70px rgba(201,50,126,${.14+.25*Math.sin(Math.PI*h)})`; el.querySelector('.oi').style.transform=`translateY(${-18*Math.sin(Math.PI*h)}px) rotate(${-8*Math.sin(Math.PI*h)}deg)`; el.style.borderColor=h>0&&h<1?`rgba(236,72,153,${Math.sin(Math.PI*h)})`:'#F3DEE9';});
+
+
+  // ===== APPS 59.9–64.6 =====
+  const av=t>59.8&&t<64.9?(1-p(t,64.3,.5)):0; $('apps').style.opacity=av;
+  ['ac1','ac2'].forEach((id,i)=>{const v=p(t,60.3+i*.5,.7),el=$(id);el.style.opacity=eo(v);el.style.transform=`translateY(${(1-eo5(v))*140}px) scale(${.94+.06*eo5(v)})`;});
+  document.querySelector('#ac1 .gp').style.transform=`scale(${1+.04*Math.sin(Math.PI*p(t,61.6,.6))})`;
+  document.querySelector('#ac2 .webp').style.transform=`scale(${1+.04*Math.sin(Math.PI*p(t,62.4,.6))})`;
+
+  // ===== iOS 64.9–76 =====
+  const iv=t>64.7&&t<76.4?(1-p(t,75.8,.5)):0; $('ios').style.opacity=iv;
+  const ii=eo5(p(t,64.9,1.0)); $('iph').style.transform=`translateY(${(1-ii)*700 + p(t,75.8,.5)*200}px) rotateY(${(1-ii)*-20}deg) scale(${.94+.06*ii})`;
+  const STP=[['st1',65.0,67.2],['st2',67.2,68.7],['st3',68.7,70.6],['st4',70.6,72.2],['st5',72.2,76]];
+  STP.forEach(([id,a,b])=>{const el=$(id); const v=t>=a&&t<b?Math.min(eo(p(t,a,.4)),1-p(t,b-.25,.25)):0; el.style.opacity=v; el.style.transform=`translateY(${(1-eo5(p(t,a,.5)))*30}px) scale(${.92+.08*eo5(p(t,a,.5))})`;});
+  // typing url
+  const U='echarpe.store'; const nch=Math.floor(clamp((t-65.5)/1.1)*U.length); $('url').textContent=U.slice(0,nch);
+  $('cur').style.opacity=(t<66.7&&Math.floor(t*3)%2===0)?1:(t<66.6?1:0);
+  $('pg').style.width=(t>66.7?Math.min(100,eo(p(t,66.7,.6))*100):0)+'%'; $('pg').style.opacity=t>67.4?0:1;
+  $('site').style.opacity=t<66.9?.0:eo(p(t,66.9,.5));
+  // share
+  const tap2=(a,x,y)=>{const v=p(t,a-.3,.75); if(v<=0||v>=1) return; const el=$('tap2'); el.style.left=x+'px'; el.style.top=y+'px'; const k=v<.4?v/.4:1; el.style.opacity=v<.4?k:1-(v-.4)/.6; el.style.transform=`scale(${v<.4?1.25-.4*k:.85+.9*(v-.4)})`;};
+  $('tap2').style.opacity=0;
+  const ctr=el=>{const r=el.getBoundingClientRect(), sr=$('isc').getBoundingClientRect(); return [(r.left+r.width/2-sr.left)*(600/sr.width),(r.top+r.height/2-sr.top)*(1250/sr.height)];};
+  if(t>67.3&&t<68.2) tap2(67.7,...ctr($('shareIc')));
+  $('shareIc').style.transform=`scale(${1+.25*Math.sin(Math.PI*p(t,67.6,.3))})`;
+  $('shs').style.transform=`translateY(${(1-eo5(p(t,67.95,.55)))*960}px)`;
+  $('rowsWrap').style.transform=`translateY(${-eio(p(t,68.8,.6))*90}px)`;
+  const hl=p(t,69.4,.4); $('athRow').style.background=hl>0?`rgba(236,72,153,${.18*Math.min(1,hl*2)})`:'#fff';
+  if(t>69.4&&t<70.3) tap2(69.8,...ctr($('athRow')));
+  // add dialog
+  $('ath').style.transform=`translateY(${(1-eo5(p(t,70.1,.55)))*1300}px)`;
+  $('cur2').style.opacity=(t>70.6&&t<71.4&&Math.floor(t*3)%2===0)?1:0;
+  if(t>71&&t<71.9) tap2(71.4,...ctr($('addBtn')));
+  $('addBtn').style.opacity=1-.5*Math.sin(Math.PI*p(t,71.3,.3));
+  // home
+  const hv=eo(p(t,71.7,.5)); $('home').style.opacity=hv; $('safari').style.transform=`scale(${1-.15*hv})`; $('safari').style.opacity=1-hv;
+  const ni=$('newIcon'); const nv=p(t,72.2,.7); ni.style.opacity=clamp(nv*3); ni.style.transform=`scale(${back(nv)}) rotate(${(1-eo(nv))*-20}deg)`;
+  // sparkles around new icon
+  (function(){ const r=ni.getBoundingClientRect(), sr=$('isc').getBoundingClientRect(); const sx=(r.left+r.width/2-sr.left)*(600/sr.width), sy=(r.top+54-sr.top)*(1250/sr.height);
+    let h=''; for(let i=0;i<8;i++){ const v=p(t,72.5+i*.05,.9); if(v<=0||v>=1) continue; const a=i*45*Math.PI/180, d=60+70*eo(v);
+      h+=`<path d="${STAR}" transform="translate(${sx+Math.cos(a)*d} ${sy+Math.sin(a)*d}) rotate(${v*140}) scale(${Math.sin(v*Math.PI)*1.1})" fill="${i%2?'#FFE3A8':'#fff'}"/>`; } $('isp').innerHTML=h;
+    if(t>73.8&&t<74.6){ tap2(74.2,sx,sy); } })();
+  // open app
+  const op=p(t,74.4,.6); $('splash').style.opacity=op>0?Math.min(1,op*2):0; $('splash').style.transform=`scale(${.2+.8*eo5(op)})`; $('splash').style.borderRadius=(60*(1-op))+'px';
+  document.querySelector('#splash img').style.transform=`scale(${.9+.1*back(p(t,74.8,.6))})`;
+
+
+  // ===== RECEIVE 42.2–51.5 (real time T) =====
+  const rv=T>42.1&&T<51.6?Math.min(eo(p(T,42.3,.4)),1-p(T,51.0,.5)):0; $('recv').style.opacity=rv;
+  [['rc1',42.6],['rc2',44.4]].forEach(([id,a])=>{const v=p(T,a,.8),el=$(id); el.style.opacity=eo(v); el.style.transform=`translateY(${(1-eo5(v))*160}px) scale(${.94+.06*eo5(v)})`;});
+  const ob=p(T,44.1,.6); $('orB').style.opacity=clamp(ob*2); $('orB').style.transform=`scale(${back(ob)}) rotate(${(1-eo(ob))*-90}deg)`;
+  $('awn').setAttribute('transform',`translate(0 ${-60*(1-eo5(p(T,43.0,.7)))})`); $('scal').setAttribute('transform',`translate(0 ${-60*(1-eo5(p(T,43.0,.7)))})`);
+  $('win').setAttribute('opacity',eo(p(T,43.4,.5)));
+  (function(){ let h=''; PINP.forEach(([x,y],i)=>{ const v=p(T,43.6+i*.18,.6); if(v<=0) return; const yy=y-(1-back(v))*120; const s=.9+.1*Math.sin(T*3+i);
+    h+=`<g transform="translate(${x} ${yy}) scale(${s})" opacity="${clamp(v*3)}"><ellipse cx="0" cy="${y-yy+62}" rx="${14*eo(v)}" ry="5" fill="#3A2233" opacity=".12"/><path d="M0 60 C-26 30 -30 18 -30 6 a30 30 0 0 1 60 0 C30 18 26 30 0 60Z" fill="${i%2?'#E6B450':'#EC4899'}"/><circle cy="6" r="11" fill="#fff"/></g>`; }); $('pins').innerHTML=h; })();
+  // scooter ride (right → left) to the house
+  const sr=eio(p(T,45.0,3.0)); const sx=860-(860-310)*sr; const moving=sr>0&&sr<1;
+  $('scoot').setAttribute('transform',`translate(${sx} ${242+(moving?Math.sin(T*22)*2:0)})`);
+  $('speed').setAttribute('opacity',moving?.9:0); $('lane').setAttribute('stroke-dashoffset',moving?-T*300:0);
+  [...$('puff2').children].forEach((c,i)=>{const ph=((T*2.4)+i/3)%1; c.setAttribute('cx',sx+70+ph*60); c.setAttribute('cy',236-ph*18); c.setAttribute('r',6+ph*10); c.setAttribute('opacity',moving?(1-ph)*.9:0);});
+  const hrt=p(T,48.1,.7); $("heart").setAttribute("transform",`translate(150 ${-170-hrt*20}) scale(${back(hrt)})`); $("heart").setAttribute("opacity",hrt>0?Math.min(1,hrt*3)*(1-p(T,50.2,.5)):0);
+  [['rc1',49.4],['rc2',49.9]].forEach(([id,a])=>{const h=p(T,a,.7); $(id).style.borderColor=h>0&&h<1?`rgba(236,72,153,${Math.sin(Math.PI*h)})`:'#F3DEE9'; $(id).querySelector('.k').style.transform=`scale(${1+.25*Math.sin(Math.PI*h)})`;});
+
+  // OUTRO 59.8–64
+  $('outro').style.opacity=t>76.7?1:0;
+  const ol=eo5(p(t,77.0,1.1)); $('outLogo').style.opacity=ol; $('outLogo').style.transform=`scale(${.86+.14*ol})`; $('outLogo').style.filter=`brightness(0) invert(1) blur(${(1-ol)*12}px)`;
+  words($('outTag'),t,77.6,.1,.7);
+  const cv=p(t,78.6,.6); $('cta').style.opacity=eo(cv); $('cta').style.transform=`translateY(${(1-eo5(cv))*40}px) scale(${1+.025*Math.sin(Math.max(0,t-79.2)*4)})`;
+  $('ourl').style.opacity=eo(p(t,79.2,.6));
+
+  // product wall behind step 2
+  const tw=t>10.8&&t<18.6?Math.min(eo(p(t,11,.8)),1-p(t,18,.5))*.5:0; $('tiles').style.opacity=tw;
+  $('tw').setAttribute('transform',`translate(0 ${-(t-11)*70})`);
+}
+window.seek=seek; window.DURATION=DURATION; seek(0);
+</script>
+</body>
+</html>
