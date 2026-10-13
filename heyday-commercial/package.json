@@ -14,7 +14,9 @@
     "stills": "node tools/stills.mjs",
     "typecheck": "tsc -p .",
     "music:luxury": "python3 tools/make_music_luxury.py /tmp/heyday-lux-raw.wav && ffmpeg -y -loglevel error -i /tmp/heyday-lux-raw.wav -af loudnorm=I=-16:TP=-1.2:LRA=11 -ar 48000 public/audio/heyday-luxury.wav",
-    "render:luxury": "remotion render src/index.ts HeydayLuxuryVertical out/heyday-luxury-vertical-1080x1920.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=256k --timeout=90000 && remotion render src/index.ts HeydayLuxuryHorizontal out/heyday-luxury-horizontal-1920x1080.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=256k --timeout=90000"
+    "render:luxury": "remotion render src/index.ts HeydayLuxuryVertical out/heyday-luxury-vertical-1080x1920.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=256k --timeout=90000 && remotion render src/index.ts HeydayLuxuryHorizontal out/heyday-luxury-horizontal-1920x1080.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=256k --timeout=90000",
+    "music:brands": "python3 tools/make_music_brands.py /tmp/heyday-br-raw.wav && ffmpeg -y -loglevel error -i /tmp/heyday-br-raw.wav -af loudnorm=I=-15:TP=-1.2:LRA=11 -ar 48000 public/audio/heyday-brands.wav",
+    "render:brands": "remotion render src/index.ts HeydayBrandsVertical out/heyday-brands-vertical-1080x1920.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=256k --timeout=90000 && remotion render src/index.ts HeydayBrandsHorizontal out/heyday-brands-horizontal-1920x1080.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=256k --timeout=90000"
   },
   "dependencies": {
     "@fontsource/fraunces": "5.1.0",

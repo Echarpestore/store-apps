@@ -24,6 +24,17 @@ A 34-second brand film about why a HEYDAY globe is a gift people never forget: b
 
 `npm run render:luxury` renders both · copy and beat times in `src/luxury/timeline.ts` · score: `npm run music:luxury`.
 
+## Third film: "A próxima pode ser a sua marca" (big brands)
+
+A 32-second, keynote-style film on a bright background. Each top client gets its own beat: the logo stands alone, then a HEYDAY globe forms around it, with a base in that brand's colour (Apple TV+, Google, Samsung, Disney, Universal, Nike, Coca-Cola). Then all seven gather on a shelf and shake together, two real photos follow as proof, and the film ends with an empty «SUA MARCA» globe and the contact details. A small legal line notes that the trademarks belong to their owners. Storyboard: `docs/STORYBOARD-BRANDS.md`.
+
+| Deliverable | Path |
+|---|---|
+| 9:16, 1080×1920, 60 fps | `out/heyday-brands-vertical-1080x1920.mp4` |
+| 16:9, 1920×1080, 60 fps | `out/heyday-brands-horizontal-1920x1080.mp4` |
+
+`npm run render:brands` · brands, base colours and copy in `src/brands/timeline.ts` · score: `npm run music:brands`.
+
 ## Quick start
 
 ```bash
