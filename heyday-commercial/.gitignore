@@ -1,0 +1,9 @@
+node_modules/
+preview/dist/
+out/stills/
+*.log
+preview/audio/
+preview/photos/
+preview/logos/
+preview/brand/
+*.time
