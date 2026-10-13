@@ -159,7 +159,7 @@ function span(events, dayStartMs, dayEndMs, padMs){
 }
 function summary(events){
   var s = { total:events.length, removed:0, removedValue:0, alerts:0, sales:0 };
-  events.forEach(function(e){ if(e.removedValue > 0){ s.removed++; s.removedValue += e.removedValue; } if(e.tone === 'alert') s.alerts++; if(e.kind === 'sale_saved') s.sales++; });
+  events.forEach(function(e){ if(e.removedValue > 0 || e.tone === 'del'){ s.removed++; s.removedValue += (e.removedValue || 0); } if(e.tone === 'alert') s.alerts++; if(e.kind === 'sale_saved') s.sales++; });
   s.removedValue = +s.removedValue.toFixed(2); return s;
 }
 

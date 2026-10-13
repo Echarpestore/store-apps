@@ -113,4 +113,13 @@ assert.strictEqual(linked.find(e=> e.kind==='manual_discount').invoiceCode, 'INV
 assert.strictEqual(linked.find(e=> e.sid==='orphan').invoiceCode, '', 'سلة اتسابت من غير فاتورة تفضل من غير رقم');
 assert.strictEqual(R.fromSale({ id:'S1', invoiceCode:'C1', cartSid:'sidA', items:[{ name:'a', qty:1, price:5 }] }, T0).sid, 'sidA');
 
+// v13: حذف من سجل النشاط من غير قيمة معروفة (سعر 0/ناقص) لازم يتعد حذف ويطلع في فلتر «حذف وتقليل»
+{ const zero = R.buildEvents([], [{ type:'item_removed', ts:T0+999000, name:'هدية', price:0, qty:1, sid:'z1', branch:'b' }]);
+  assert.strictEqual(zero.length, 1); assert.strictEqual(zero[0].tone, 'del');
+  assert.strictEqual(R.summary(zero).removed, 1, 'حذف بقيمة صفر بيتعد في الملخص (كان «مفيش حذف» والشريط فيه علامة حمرا)');
+  const src = require('fs').readFileSync(path.join(__dirname, '..', 'office2', 'm-cctv.js'), 'utf8');
+  assert.ok(/rv\.filter==='del' && \(e\.removedValue > 0 \|\| e\.tone==='del'\)/.test(src), 'فلتر الحذف بيمسك كل علامة حمرا');
+  assert.ok(/near\.invoiceCode !== rv\.focus\)\{ rv\.focus = ''/.test(src), 'الدوس على علامة فاتورة تانية وانت بتراجع فاتورة → يفتح اليوم كله');
+  assert.ok(/فيه \$\{other\.removed\} حذف\/تقليل تاني في اليوم ده برّه الفاتورة دي/.test(src), 'تنبيه بالحذف اللي برّه الفاتورة المعروضة');
+}
 console.log('  ✓ cctv review core: ' + ev.length + ' أحداث · محذوف ' + sum.removedValue + ' ج · السلة متزامنة');

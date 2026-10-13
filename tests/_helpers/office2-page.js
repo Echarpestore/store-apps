@@ -57,7 +57,7 @@ function baseData(){ return {
 }; }
 function stubFor(data, now){
   return `
-window.__writes = []; window.__now = ${now}; Date.now = ()=> window.__now;
+window.__writes = []; window.__now = ${now}; Date.now = ()=> window.__now; (function(){ const _D = Date; function FD(...a){ if(!(this instanceof FD)) return _D(); return a.length ? new _D(...a) : new _D(window.__now); } FD.prototype = _D.prototype; FD.now = ()=> window.__now; FD.UTC = _D.UTC; FD.parse = _D.parse; window.Date = FD; })();
 const DATA = ${JSON.stringify(data)};
 function snapOf(rows){ const docs = rows.map(r=>{ const d = Object.assign({}, r); delete d.id; return { id:r.id, data:()=>d, exists:true }; }); return { docs, forEach:f=>docs.forEach(f), size:docs.length, empty:!docs.length }; }
 function col(name){ let filters = []; const q = {

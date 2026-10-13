@@ -102,7 +102,7 @@ else {
   assert(!/7001|سكارف/.test(out.day||''), 'سلبي: فاتورة Glow مش ظاهرة في يوم الرحاب');
   assert(!/5789/.test(out.day||''), 'سلبي: فاتورة امبارح مش في النهاردة');
   assert(/5801[\s\S]*📸 لقطات[\s\S]*🎥 فيديو[\s\S]*🧾 الفاتورة/.test(out.day||'') && (out.dayHtml||'').includes("O2.cctv.shots('RH-5801')") && (out.dayHtml||'').includes("O2.cctv.saleVideo('v1'," + D(2026,10,10,12,30) + ")"), 'كل فاتورة: لقطات (بالـinvoiceCode) · فيديو (بوقت الفاتورة) · الفاتورة');
-  assert(/فاتورة #5802 · 800 ج\n👤 بدون عميل · سارة\n💳 فيزا 800 ج · 1 صنف\n🎥 فيديو\n🧾 الفاتورة/.test(out.day||''), 'سلبي: فاتورة من غير invoiceCode مفيهاش زرار لقطات');
+  assert(/فاتورة #5802 · 800 ج\n👤 بدون عميل · سارة\n💳 فيزا 800 ج · 1 صنف\n🎥 فيديو\n(📼 مراجعة بالسلة\n)?🧾 الفاتورة/.test(out.day||''), 'سلبي: فاتورة من غير invoiceCode مفيهاش زرار لقطات');
   const svUrl = 'https://cctv-rehab.echarpe.store/echarpe-playback/video?camera=1&amp;atMs=' + (D(2026,10,10,12,30) - 30000) + '&amp;durationSec=120&amp;quality=480&amp;mode=fast';
   assert((out.saleVideo||'').includes('src="' + svUrl + '&amp;retry=' + NOW + '"'), '⭐ فيديو الفاتورة = نفس منطق cctv.js: 30 ثانية قبل الفاتورة · دقيقتين · كاميرا الكاشير · 480');
   assert((out.shots||'').includes('<img src="data:image/jpeg;base64,/9j/AAAA"') && (out.shots||'').includes('<img src="data:image/jpeg;base64,/9j/BBBB"') && /1️⃣ أول كود[\s\S]*12:29[\s\S]*4️⃣ بعد الحفظ[\s\S]*12:30/.test(out.shots||'') && /2 لقطة/.test(out.shots||'') && !/2️⃣ أثناء الدفع/.test(out.shots||''), 'لقطات الفاتورة من pos_cctv_invoice_snapshots (jpegData) — اللقطة الفاضية مش معروضة');

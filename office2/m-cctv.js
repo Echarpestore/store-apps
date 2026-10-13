@@ -310,7 +310,7 @@ const RV_TONE = { add:'#16a34a', del:'#dc2626', edit:'#d97706', pay:'#2563eb', s
 const RV_FILTERS = [['all','الكل'],['del','🗑 حذف وتقليل'],['alert','⚠️ تنبيهات'],['sale','🧾 فواتير']];
 const rv = { focus:'', loadToken:0, seekTo:0, aligned:false, key:'', branch:'', loaded:false, loading:false, err:'', actErr:false, events:[], timelines:[], span:null, cur:0, chunkStart:0, cam:'', filter:'all', rate:1, skip:false, idx:-2, basketKey:'', pendingAt:0 };
 function hms(ms){ const p = u.caiParts(ms); return String(p.h).padStart(2,'0') + ':' + String(p.mi).padStart(2,'0') + ':' + String(Math.floor(ms/1000)%60).padStart(2,'0'); }
-function rvMatch(e){ if(rv.focus && e.invoiceCode !== rv.focus) return false; return rv.filter==='all' || (rv.filter==='del' && e.removedValue > 0) || (rv.filter==='alert' && e.tone==='alert') || (rv.filter==='sale' && e.kind==='sale_saved'); }
+function rvMatch(e){ if(rv.focus && e.invoiceCode !== rv.focus) return false; return rv.filter==='all' || (rv.filter==='del' && (e.removedValue > 0 || e.tone==='del')) || (rv.filter==='alert' && e.tone==='alert') || (rv.filter==='sale' && e.kind==='sale_saved'); }
 async function loadReview(force){
   const x = site(), key = st.dayKey;
   if(rv.loading || (!force && rv.loaded && rv.key===key && rv.branch===x.id)) return;
@@ -389,6 +389,7 @@ function vReview(){
       <div id="rvAlign" class="hint"></div></details>
     </div>
     <div class="card full"><h3>📋 ${rv.focus ? 'أحداث الفاتورة' : 'أحداث اليوم'} <small>${rv.focus ? '' : fs2.sales + ' فاتورة · '}${fs2.total} حدث</small></h3>
+    ${rv.focus ? (()=>{ const other = RV.summary(rv.events.filter(e=> e.invoiceCode!==rv.focus)); return other.removed ? `<div class="alert w" style="margin:0 0 8px" onclick="O2.cctv.rvFocus('')">🗑 فيه ${other.removed} حذف/تقليل تاني في اليوم ده برّه الفاتورة دي (بقيمة ${u.n0(other.removedValue)} ج — العلامات الحمرا الباهتة على الشريط)<span class="go">اعرض اليوم كله ›</span></div>` : ''; })() : ''}
     <div class="hint" style="margin-top:0">${fs2.removed ? `🗑 ${fs2.removed} مرة حذف/تقليل بقيمة <b>${u.n0(fs2.removedValue)} ج</b>` : '🗑 مفيش حذف من السلة'} · ⚠️ ${fs2.alerts} تنبيه${rv.actErr ? ' · سجل النشاط ماتحمّلش' : ''}${!rv.focus && rv.src && rv.src.sales ? ' · ' + rv.src.sales + ' فاتورة بسلتها النهائية بس' : ''}</div>
     <div class="seg" style="flex-wrap:wrap">${RV_FILTERS.map(f=> `<button id="rvF_${f[0]}" class="${rv.filter===f[0]?'on':''}" onclick="O2.cctv.rvFilter('${f[0]}')">${f[1]}</button>`).join('')}</div>
     <div id="rvList" style="max-height:52vh;overflow-y:auto;margin-top:8px">${rvListHtml()}</div>
@@ -450,7 +451,12 @@ function rvStep(dir){
   if(i < 0 || i >= rv.events.length){ u.toast(dir > 0 ? 'مفيش أحداث بعد كده' : 'ده أول حدث'); return; }
   rvSeek(rv.events[i].atMs - RV_LEAD, true);
 }
-function rvStripTap(ev){ const inner = document.getElementById('rvStripIn'); if(!inner || !rv.span) return; const r = inner.getBoundingClientRect(); rvSeek(rv.span.start + (ev.clientX - r.left) / RV_PX_MIN * 60000, true); }
+function rvStripTap(ev){
+  const inner = document.getElementById('rvStripIn'); if(!inner || !rv.span) return; const r = inner.getBoundingClientRect(); const at = rv.span.start + (ev.clientX - r.left) / RV_PX_MIN * 60000;
+  // 🎯 v13: لو انت بتراجع فاتورة واحدة ودوست على علامة حدث من فاتورة تانية (زي حذف قطعة) — نفتح اليوم كله عشان الحدث يبان في القايمة
+  if(rv.focus){ const near = rv.events.filter(e=> Math.abs(e.atMs - at) <= 20000).sort((a,b)=> Math.abs(a.atMs-at) - Math.abs(b.atMs-at))[0]; if(near && near.invoiceCode !== rv.focus){ rv.focus = ''; rv.idx = -2; rv.cur = Math.max(rv.span.start, at - RV_LEAD); rv.resume = false; u.render(); u.toast('🗑 الحدث ده من فاتورة تانية — اتفتح اليوم كله'); return; } }
+  rvSeek(at, true);
+}
 function rvFilter(f){
   rv.filter = f; rv.idx = -2;
   RV_FILTERS.forEach(x=>{ const b = document.getElementById('rvF_' + x[0]); if(b) b.className = x[0]===f ? 'on' : ''; });
