@@ -23,3 +23,26 @@ export const useFontsReady = () => {
       .then(() => continueRender(handle));
   }, [handle]);
 };
+
+/**
+ * Remotion does not wait for SVG <image> elements, so every product photo is
+ * fetched and decoded up front; frames are only captured once all are ready.
+ */
+export const usePhotosReady = (files: string[]) => {
+  const [handle] = useState(() => delayRender('Decoding photos', {timeoutInMilliseconds: 60000}));
+  useEffect(() => {
+    Promise.all(
+      files.map(
+        (src) =>
+          new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              img.decode().then(() => resolve(), () => resolve());
+            };
+            img.onerror = () => resolve();
+            img.src = src;
+          }),
+      ),
+    ).then(() => continueRender(handle));
+  }, [handle, files]);
+};

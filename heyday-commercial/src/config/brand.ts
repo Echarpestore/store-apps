@@ -128,10 +128,17 @@ export const copy = {
 // ---------------------------------------------------------------------------
 export type Photo = {
   file: string; // path inside /public, e.g. 'photos/globo-banco.jpg'
+  size: {w: number; h: number}; // pixel size of the file
+  label?: string; // client / project name shown with the photo
   alt: string;
-  source: string; // original URL
+  source: string; // original URL or who supplied it
   focus?: {x: number; y: number}; // 0..1 crop focus
+  // Glass sphere in file pixels. Lets the animation line the drawn globe up
+  // with the real one (outline → photo transitions).
+  sphere?: {x: number; y: number; r: number};
 };
+
+const SUPPLIED = 'Supplied by HEYDAY, 2026-10-13';
 
 export const photos: {
   hero?: Photo;
@@ -140,11 +147,39 @@ export const photos: {
   beauty: Photo[];
   cta?: Photo;
 } = {
-  hero: undefined,
-  montage: [],
-  process: undefined,
-  beauty: [],
-  cta: undefined,
+  hero: {
+    file: 'photos/coca-cola-hero.jpg',
+    size: {w: 800, h: 982},
+    label: 'Coca-Cola',
+    alt: 'Globo de neve Coca-Cola com caminhão e montanha nevada',
+    source: SUPPLIED,
+    sphere: {x: 372, y: 360, r: 298},
+  },
+  montage: [
+    {file: 'photos/sicredi-staircase.jpg', size: {w: 720, h: 1280}, label: 'Sicredi', alt: 'Globos Sicredi com escada da cooperativa', source: SUPPLIED, focus: {x: 0.47, y: 0.55}},
+    {file: 'photos/bauducco-mickey.jpg', size: {w: 1100, h: 1571}, label: 'Bauducco', alt: 'Globos Bauducco Lado a Lado Missão Orlando', source: SUPPLIED, focus: {x: 0.66, y: 0.38}},
+    {file: 'photos/porsche-ice-experience.jpg', size: {w: 800, h: 450}, label: 'Porsche', alt: 'Globos Porsche Ice Experience Finlândia 2025', source: SUPPLIED, focus: {x: 0.52, y: 0.6}},
+    {file: 'photos/samsung-tv-plus.jpg', size: {w: 394, h: 800}, label: 'Samsung TV Plus', alt: 'Globo Samsung TV Plus com pipoca', source: SUPPLIED, focus: {x: 0.5, y: 0.6}},
+  ],
+  process: {
+    file: 'photos/coca-cola-femsa-hand.jpg',
+    size: {w: 489, h: 869},
+    label: 'Coca-Cola FEMSA',
+    alt: 'Globo Coca-Cola FEMSA na mão com luva',
+    source: SUPPLIED,
+    sphere: {x: 242, y: 303, r: 218},
+  },
+  beauty: [
+    {file: 'photos/nike-sneaker.jpg', size: {w: 800, h: 1422}, label: 'Nike', alt: 'Globo Nike com tênis e pinheiro', source: SUPPLIED, sphere: {x: 432, y: 575, r: 280}},
+  ],
+  cta: {
+    file: 'photos/riachuelo-olympics.jpg',
+    size: {w: 394, h: 800},
+    label: 'Riachuelo',
+    alt: 'Globo Riachuelo, marca de moda oficial do Comitê Olímpico do Brasil',
+    source: SUPPLIED,
+    sphere: {x: 210, y: 300, r: 175},
+  },
 };
 
 // ---------------------------------------------------------------------------

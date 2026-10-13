@@ -61,7 +61,7 @@ Logos are used as published: viewBox cropped tight to the artwork, never stretch
 ## Logo and photography — missing
 
 * **Official logo**: supplied by HEYDAY on 2026-10-13 (white serif wordmark with cyan glow). Trimmed to the artwork and stored at `public/brand/heyday-logo.png`. Used in Scenes 1 and 6.
-* **Product photos**: not downloadable. The video uses original, editable SVG globe illustrations (clearly illustrative — generic "SUA MARCA" content, no third-party brands). They are not presented as HEYDAY portfolio pieces. Every photo slot is wired: see `docs/ASSET_MANIFEST.md`.
+* **Product photos**: supplied by HEYDAY on 2026-10-13 (Coca-Cola, Coca-Cola FEMSA, Sicredi, Bauducco, Porsche, Samsung TV Plus, Nike, Riachuelo, plus Schutz, Marvel and Disney+ stories). See `docs/ASSET_MANIFEST.md`. SVG illustrations remain only where they explain something (Scene 4 process, Scene 5 customisation demo).
 * **Palette**: HEYDAY's official colours could not be sampled. A restrained white / ink / warm-gold palette is used; change the hex values in `colors`.
 
 Products seen in search listings (Dr Who, Taylor Swift "Lover", Up, Friends, O Pequeno Príncipe, Olaf) are licensed entertainment properties and were deliberately **not** illustrated.

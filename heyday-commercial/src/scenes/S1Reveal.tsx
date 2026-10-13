@@ -5,7 +5,7 @@ import {NightBackground} from '../components/Background';
 import {Globe} from '../components/Globe';
 import {InnerLogo} from '../components/Inner';
 import {SnowField} from '../components/Particles';
-import {PhotoSlot} from '../components/PhotoSlot';
+import {PhotoGlobe} from '../components/PhotoSlot';
 import {Eyebrow, KineticText} from '../components/Typography';
 import {Wordmark, wordmarkWidth} from '../components/Wordmark';
 import {useLayout} from '../lib/layout';
@@ -73,7 +73,7 @@ export const S1Reveal: React.FC = () => {
   });
 
   const hero = photos.hero;
-  const irisR = iris * 470 * scale;
+  const irisR = iris * (hero ? 720 : 470) * scale;
 
   return (
     <AbsoluteFill>
@@ -94,7 +94,7 @@ export const S1Reveal: React.FC = () => {
         {/* revealed product */}
         <g clipPath="url(#s1-iris)">
           {hero ? (
-            <PhotoSlot id="s1-photo" photo={hero} x={gx} y={gy + 60 * scale} w={720 * scale} h={760 * scale} shape="circle" zoom={1.08 * push} />
+            <PhotoGlobe id="s1-photo" photo={hero} cx={gx} cy={gy} r={300 * scale} mode="card" reveal={iris} border="rgba(233,211,166,0.45)" drift={push} sheen={interpolate(t, [2.8, 4.2], [0, 1], clamp)} />
           ) : (
             <Globe
               id="s1-globe"
@@ -136,7 +136,7 @@ export const S1Reveal: React.FC = () => {
       </div>
       <Wordmark
         x={L.vertical ? L.W / 2 : L.text.x - 40 * u + wordmarkWidth(80 * u) / 2}
-        y={L.vertical ? L.H * 0.745 : L.H * 0.47}
+        y={L.vertical ? L.H * 0.77 : L.H * 0.47}
         height={(L.vertical ? 88 : 80) * u}
         start={3.05}
         color={colors.paper}
@@ -147,7 +147,7 @@ export const S1Reveal: React.FC = () => {
           position: 'absolute',
           left: L.vertical ? 0 : L.text.x - 40 * u,
           width: L.vertical ? L.W : 560 * u,
-          top: L.vertical ? L.H * 0.805 : L.H * 0.56,
+          top: L.vertical ? L.H * 0.83 : L.H * 0.56,
         }}
       >
         <Eyebrow text={copy.s1.tagline} start={3.7} size={(L.vertical ? 30 : 26) * u} color={colors.goldLight} align={L.vertical ? 'center' : 'left'} />

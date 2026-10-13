@@ -18,7 +18,7 @@ import {
 import {InnerLogo} from '../components/Inner';
 import {SnowField} from '../components/Particles';
 import {Bubble, ChatHeader, Phone, PHONE_W} from '../components/Phone';
-import {PhotoSlot} from '../components/PhotoSlot';
+import {PhotoGlobe} from '../components/PhotoSlot';
 import {SceneIn} from '../components/Transition';
 import {KineticText} from '../components/Typography';
 import {mix, mixList, rgba} from '../lib/color';
@@ -187,7 +187,8 @@ export const S4Process: React.FC = () => {
   const g4Y = lerp(stageY - 30 * u, stageY - 60 * u, hero) + Math.sin(t * 1.4) * 6 * u * hero;
   const ringR = (V ? 410 : 360) * u;
   const productPhoto = photos.process;
-  const photoIn = productPhoto ? between(STEP[4] + 0.4, STEP[4] + 1.2) : 0;
+  // after the shake, the produced globe hands over to a real finished piece
+  const photoIn = productPhoto ? between(STEP[4] + 1.3, STEP[4] + 2.1) : 0;
 
   // ------------------------------------------------------ progress header
   const prog = interpolate(t, [STEP[0], STEP[5] - 0.6], [0, 1], clamp);
@@ -346,7 +347,7 @@ export const S4Process: React.FC = () => {
                 opacity={1 - photoIn}
               />
               {productPhoto && (
-                <PhotoSlot id="s4-photo" photo={productPhoto} x={stageX} y={g4Y + 60 * u} w={760 * u} h={820 * u} shape="circle" reveal={photoIn} />
+                <PhotoGlobe id="s4-photo" photo={productPhoto} cx={stageX} cy={g4Y} r={300 * g4Scale} mode="feather" featherR={1.45} featherY={0.3} reveal={photoIn} opacity={photoIn} sheen={interpolate(t, [STEP[4] + 2.2, STEP[4] + 3.3], [0, 1], clamp)} />
               )}
               {/* glints */}
               {[

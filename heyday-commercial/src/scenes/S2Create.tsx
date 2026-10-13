@@ -100,7 +100,7 @@ export const S2Create: React.FC = () => {
           {`0${i + 1} / 04`}
         </text>
         <text x={w / 2 - 34 * u} y={h / 2 - 36 * u} textAnchor="end" fontFamily={fonts.display} fontStyle="italic" fontSize={30 * u} fill={colors.ink}>
-          {c.what}
+          {photo?.label ?? c.what}
         </text>
       </g>
     );

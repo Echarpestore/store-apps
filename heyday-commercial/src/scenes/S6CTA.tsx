@@ -6,7 +6,7 @@ import {Globe} from '../components/Globe';
 import {InstagramIcon, MailIcon, WebIcon, WhatsAppIcon} from '../components/Icons';
 import {InnerLogo} from '../components/Inner';
 import {SnowField} from '../components/Particles';
-import {PhotoSlot} from '../components/PhotoSlot';
+import {PhotoGlobe} from '../components/PhotoSlot';
 import {SceneIn} from '../components/Transition';
 import {KineticText} from '../components/Typography';
 import {Wordmark} from '../components/Wordmark';
@@ -79,11 +79,11 @@ export const S6CTA: React.FC = () => {
   const V = L.vertical;
   const between = (a: number, b: number, e = easeInOut) => interpolate(t, [a, b], [0, 1], {...clamp, easing: e});
 
+  const cta = photos.cta;
   const gIn = springAt(frame, fps, 0.5, {damping: 22, stiffness: 60});
   const gx = V ? L.W / 2 : L.W * 0.27;
-  const gy = (V ? L.H * 0.265 : L.H * 0.5) + Math.sin(t * 1.2) * 8 * u + (1 - gIn) * 200 * u;
+  const gy = (V ? (cta ? L.H * 0.225 : L.H * 0.265) : L.H * 0.46) + Math.sin(t * 1.2) * 8 * u + (1 - gIn) * 200 * u;
   const gScale = (V ? 0.58 : 0.72) * u * (0.85 + 0.15 * gIn);
-  const cta = photos.cta;
 
   const colX = V ? 80 * u : L.W * 0.5;
   const colW = V ? L.W - 160 * u : L.W * 0.44;
@@ -103,7 +103,7 @@ export const S6CTA: React.FC = () => {
           </defs>
           <circle cx={gx} cy={gy} r={420 * u} fill="url(#s6-halo)" opacity={gIn} />
           {cta ? (
-            <PhotoSlot id="s6-photo" photo={cta} x={gx} y={gy + 60 * gScale} w={720 * gScale} h={760 * gScale} shape="circle" reveal={gIn} />
+            <PhotoGlobe id="s6-photo" photo={cta} cx={gx} cy={gy} r={(V ? 172 : 190) * u} mode="card" border="rgba(233,211,166,0.45)" reveal={gIn} opacity={Math.min(1, gIn * 1.5)} sheen={interpolate(t, [1.4, 2.6], [0, 1], clamp)} />
           ) : (
             <Globe
               id="s6-globe"

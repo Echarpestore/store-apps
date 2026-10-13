@@ -1,7 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile} from 'remotion';
-import {colors} from './config/brand';
-import {useFontsReady} from './lib/fonts';
+import {clients, colors, officialLogo, photos} from './config/brand';
+import {useFontsReady, usePhotosReady} from './lib/fonts';
 import {OVERLAP, sec, TIMELINE} from './config/timeline';
 import {S1Reveal} from './scenes/S1Reveal';
 import {S2Create} from './scenes/S2Create';
@@ -9,6 +9,20 @@ import {S3Trust} from './scenes/S3Trust';
 import {S4Process} from './scenes/S4Process';
 import {S5Special} from './scenes/S5Special';
 import {S6CTA} from './scenes/S6CTA';
+
+// every raster used inside SVG <image> / <img>: photos, logos, official wordmark
+const ALL_IMAGES = [
+  photos.hero,
+  ...photos.montage,
+  photos.process,
+  ...photos.beauty,
+  photos.cta,
+  ...clients.map((c) => c.project),
+]
+  .filter((p): p is NonNullable<typeof p> => Boolean(p))
+  .map((p) => staticFile(p.file))
+  .concat(clients.filter((c) => c.logo).map((c) => staticFile(c.logo!)))
+  .concat(officialLogo ? [staticFile(officialLogo)] : []);
 
 type SceneKey = keyof typeof TIMELINE;
 
@@ -23,6 +37,7 @@ const SCENES: {key: SceneKey; Comp: React.FC}[] = [
 
 export const Commercial: React.FC<{music?: boolean}> = ({music = true}) => {
   useFontsReady();
+  usePhotosReady(ALL_IMAGES);
   return (
     <AbsoluteFill style={{background: colors.night}}>
       {SCENES.map(({key, Comp}, i) => {

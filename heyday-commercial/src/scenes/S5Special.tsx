@@ -6,7 +6,7 @@ import {Globe} from '../components/Globe';
 import {CheckIcon} from '../components/Icons';
 import {InnerGift, InnerLogo, InnerProduct, InnerVenue} from '../components/Inner';
 import {SnowField} from '../components/Particles';
-import {PhotoSlot} from '../components/PhotoSlot';
+import {PhotoGlobe} from '../components/PhotoSlot';
 import {SceneIn} from '../components/Transition';
 import {Eyebrow, KineticText} from '../components/Typography';
 import {mixList, rgba} from '../lib/color';
@@ -93,10 +93,13 @@ export const S5Special: React.FC = () => {
               swirl={interpolate(t, [2.5, 2.7, 3.4], [0, 0.6, 0], clamp)}
               inner={<Inner fill={1} draw={1} label="SUA MARCA" />}
               outline={outline}
-              solid={solid * (1 - photoIn)}
+              solid={beauty ? (t < B + 0.45 ? 1 - toLine : 0) : solid}
+              opacity={1 - photoIn}
               sheen={interpolate(t, [B + 1.8, B + 3.0], [0, 1], clamp)}
             />
-            {beauty && <PhotoSlot id="s5-photo" photo={beauty} x={gx} y={gy + 60 * gScale} w={720 * gScale} h={760 * gScale} shape="circle" reveal={photoIn} />}
+            {beauty && photoIn > 0 && (
+              <PhotoGlobe id="s5-photo" photo={beauty} cx={gx} cy={gy} r={300 * gScale} mode="card" reveal={photoIn} sheen={interpolate(t, [B + 2.0, B + 3.2], [0, 1], clamp)} drift={1 + Math.max(0, t - B - 1.3) * 0.012} />
+            )}
           </g>
         </svg>
 
