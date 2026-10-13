@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>echarpe app film</title>
+<style>
+@font-face{font-family:T;font-weight:400;src:url(fonts/tajawal-400.ttf)}
+@font-face{font-family:T;font-weight:500;src:url(fonts/tajawal-500.ttf)}
+@font-face{font-family:T;font-weight:700;src:url(fonts/tajawal-700.ttf)}
+@font-face{font-family:T;font-weight:800;src:url(fonts/tajawal-800.ttf)}
+:root{--bg:#FFF6FA;--ink:#3A2233;--muted:#9E8792;--accent:#EC4899;--deep:#C9327E;--gold:#E6B450;--gold2:#C79A38;--soft:#FCE7F1;--line:#F3DEE9;--cream:#FBF3DF;
+  --grad:linear-gradient(135deg,#EC4899 0%,#F06AA6 45%,#E6B450 100%)}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;background:var(--bg)}
+body{font-family:T,sans-serif;color:var(--ink);position:relative}
+.L{position:absolute}
+#dark{position:absolute;inset:0;background:radial-gradient(120% 80% at 50% 40%,#4A2B40 0%,#22121C 70%);opacity:0}
+#glow{position:absolute;width:1400px;height:1400px;left:-160px;top:200px;border-radius:50%;background:radial-gradient(circle,rgba(236,72,153,.26),rgba(230,180,80,.10) 45%,transparent 70%)}
+#grain{position:absolute;inset:0;opacity:.06;mix-blend-mode:multiply;pointer-events:none;z-index:90}
+.w{display:inline-block;overflow:hidden;vertical-align:bottom;padding:0 .04em .12em}
+.w>span{display:inline-block}
+.cap{position:absolute;left:50px;right:50px;top:110px;text-align:center;z-index:10}
+.ov{display:inline-flex;align-items:center;gap:14px;font-size:30px;font-weight:700;letter-spacing:1px;color:var(--deep);opacity:0}
+.ov i{display:block;width:46px;height:3px;background:var(--grad);border-radius:3px}
+.cap h1{font-size:82px;font-weight:800;line-height:1.18;margin-top:18px}
+.g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.cap p{font-size:38px;font-weight:500;color:var(--muted);margin-top:16px}
+#wipe{position:absolute;inset:-200px;background:var(--grad);z-index:80;transform:translateX(-140%) skewX(-12deg);pointer-events:none}
+.tap{position:absolute;width:96px;height:96px;margin:-48px 0 0 -48px;border-radius:50%;background:rgba(255,255,255,.35);border:4px solid rgba(255,255,255,.95);box-shadow:0 0 0 3px rgba(58,34,51,.25),0 8px 24px rgba(0,0,0,.25);opacity:0;z-index:60;pointer-events:none}
+.scene{position:absolute;inset:0;opacity:0}
+/* intro/outro */
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.center img{filter:brightness(0) invert(1)}
+.tagl{font-size:74px;font-weight:800;color:#fff;line-height:1.28;margin-top:70px}
+.line{height:4px;background:var(--grad);border-radius:4px;margin-top:60px;width:0}
+.cta{margin-top:80px;padding:0 70px;height:140px;border-radius:70px;background:var(--grad);color:#fff;font-size:48px;font-weight:800;display:flex;align-items:center;gap:22px;box-shadow:0 24px 60px rgba(236,72,153,.4);opacity:0}
+.url{margin-top:44px;font-size:42px;font-weight:700;color:rgba(255,255,255,.75);direction:ltr;letter-spacing:2px;opacity:0}
+/* catalog wall */
+.col{position:absolute;top:0;width:300px;display:flex;flex-direction:column;gap:26px}
+.pc{background:#fff;border-radius:34px;overflow:hidden;box-shadow:0 14px 34px rgba(201,50,126,.10);border:2px solid var(--line)}
+.pc svg{display:block}
+.pc .n{font-size:26px;font-weight:800;padding:14px 20px 0}
+.pc .pr{font-size:24px;font-weight:700;color:var(--deep);padding:2px 20px 16px}
+#bigpill{position:absolute;left:50%;top:1240px;transform:translate(-50%,-50%);padding:34px 70px;border-radius:80px;background:var(--ink);color:#fff;font-size:64px;font-weight:800;box-shadow:0 30px 70px rgba(58,34,51,.35);white-space:nowrap;opacity:0;z-index:5}
+#bigpill .g{font-size:70px}
+/* original */
+#seal{position:absolute;left:50%;top:1170px;width:560px;height:560px;margin:-280px 0 0 -280px}
+.opill{position:absolute;left:50%;padding:22px 44px;border-radius:60px;background:#fff;border:2px solid var(--line);box-shadow:0 14px 34px rgba(201,50,126,.12);font-size:36px;font-weight:800;display:flex;align-items:center;gap:16px;white-space:nowrap;opacity:0;transform:translateX(-50%)}
+/* phone */
+#stage3d{position:absolute;inset:0;perspective:2400px}
+#phone{position:absolute;left:220px;top:560px;width:640px;height:1290px;border-radius:92px;background:linear-gradient(145deg,#3b2a33,#120a0e);padding:20px;box-shadow:0 60px 120px rgba(58,34,51,.35),0 0 0 3px #5a4650 inset;opacity:0}
+#screen{position:relative;width:100%;height:100%;border-radius:74px;overflow:hidden;background:var(--bg)}
+.island{position:absolute;top:18px;left:50%;width:180px;height:48px;margin-left:-90px;border-radius:30px;background:#0d0709;z-index:40}
+.ahd{position:absolute;top:80px;left:28px;right:28px;height:90px;display:flex;align-items:center;justify-content:space-between;direction:rtl;z-index:6}
+.ahd .hi{font-size:34px;font-weight:800}.ahd .hi small{display:block;font-size:22px;color:var(--muted);font-weight:500}
+.bag{position:relative;width:76px;height:76px;border-radius:50%;background:#fff;border:2px solid var(--line);display:flex;align-items:center;justify-content:center}
+.bag b{position:absolute;top:-6px;left:-6px;min-width:34px;height:34px;border-radius:17px;background:var(--accent);color:#fff;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;opacity:0}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:128px;background:#fff;border-top:2px solid var(--line);display:flex;direction:rtl;padding:0 6px 14px;z-index:8}
+.tabs div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:18px;font-weight:700;color:var(--muted)}
+.tabs div.on{color:var(--deep)}
+.tabs svg{width:38px;height:38px}
+.pane{position:absolute;top:180px;left:0;right:0;bottom:128px;overflow:hidden;opacity:0}
+.srch{margin:0 28px;height:76px;border-radius:40px;background:#fff;border:2px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 26px;font-size:24px;color:var(--muted);direction:rtl}
+.chips{display:flex;gap:12px;margin:20px 28px;direction:rtl}
+.chips span{padding:10px 26px;border-radius:30px;background:#fff;border:2px solid var(--line);font-size:23px;font-weight:700}
+.chips span.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:0 28px;direction:rtl}
+.gi{background:#fff;border-radius:28px;overflow:hidden;border:2px solid var(--line);position:relative}
+.gi .n{font-size:23px;font-weight:800;padding:10px 16px 0}
+.gi .pr{font-size:22px;font-weight:700;color:var(--deep);padding:0 16px 14px}
+.gi .plus{position:absolute;left:12px;bottom:12px;width:52px;height:52px;border-radius:50%;background:var(--ink);color:#fff;font-size:34px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1}
+/* loyalty card */
+.lcard{position:relative;margin:10px 28px 0;height:330px;perspective:1600px}
+.lin{position:absolute;inset:0;transform-style:preserve-3d}
+.lf,.lb{position:absolute;inset:0;border-radius:40px;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden}
+.lf{background:var(--grad);color:#fff;padding:34px 36px;box-shadow:0 20px 44px rgba(236,72,153,.35)}
+.lf .top{display:flex;justify-content:space-between;align-items:flex-start;direction:rtl}
+.lf .lbl{font-size:24px;font-weight:500;opacity:.9}.lf .lbl b{display:block;font-size:34px;font-weight:800;opacity:1}
+.lf img{height:46px;filter:brightness(0) invert(1)}
+.lf .pts{position:absolute;right:36px;bottom:30px;display:flex;align-items:baseline;gap:12px;direction:rtl}
+.lf .pts span{font-size:110px;font-weight:800;line-height:1}
+.lf .pts em{font-style:normal;font-size:34px;font-weight:700}
+.lf .shine{position:absolute;inset:0;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.45) 50%,transparent 65%);transform:translateX(-120%)}
+.lf .circ{position:absolute;width:300px;height:300px;border-radius:50%;background:rgba(255,255,255,.12);left:-90px;bottom:-140px}
+.lb{background:#fff;border:2px solid var(--line);transform:rotateY(180deg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.lb .t{font-size:28px;font-weight:800;color:var(--deep)}
+.lb .code{font-size:32px;font-weight:800;letter-spacing:6px;direction:ltr}
+.lb .s{font-size:22px;color:var(--muted);font-weight:700}
+.redeem{margin:26px 28px 0;background:#fff;border-radius:34px;border:2px solid var(--line);padding:26px 28px;direction:rtl}
+.redeem h4{font-size:30px;font-weight:800}
+.redeem small{display:block;font-size:22px;color:var(--muted);font-weight:500;margin-top:4px}
+.pbar{height:16px;border-radius:10px;background:var(--line);margin-top:20px;overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--grad);border-radius:10px;width:0}
+.rbtn{margin-top:22px;height:84px;border-radius:44px;background:var(--ink);color:#fff;font-size:28px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:12px}
+.hist{margin:22px 28px 0;direction:rtl}
+.hrow{display:flex;align-items:center;gap:16px;background:#fff;border-radius:26px;border:2px solid var(--line);padding:16px 20px;margin-bottom:12px;font-size:24px;font-weight:700}
+.hrow i{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-style:normal}
+.hrow span{margin-right:auto;color:#2BB673;font-weight:800}
+#toast{position:absolute;top:76px;left:28px;right:28px;height:110px;border-radius:30px;background:var(--ink);color:#fff;display:flex;align-items:center;gap:18px;padding:0 28px;font-size:28px;font-weight:700;z-index:30;direction:rtl;transform:translateY(-260px)}
+#toast b{color:#F9CFE3}
+#sheet{position:absolute;left:0;right:0;bottom:0;height:640px;background:#fff;border-radius:50px 50px 0 0;box-shadow:0 -20px 60px rgba(0,0,0,.18);padding:22px 34px;transform:translateY(700px);z-index:20;direction:rtl}
+#sheet .grab{width:90px;height:10px;border-radius:6px;background:var(--line);margin:0 auto 26px}
+#sheet h3{font-size:38px;font-weight:800}
+.ex{margin-top:26px;display:flex;align-items:center;justify-content:space-between;background:var(--soft);border-radius:30px;padding:26px 30px}
+.ex .a{font-size:46px;font-weight:800}.ex .a small{font-size:24px;color:var(--muted);display:block;font-weight:500}
+.ex .ar{font-size:44px;color:var(--deep)}
+.ex .b{font-size:46px;font-weight:800;color:var(--deep);text-align:left}.ex .b small{font-size:24px;color:var(--muted);display:block;font-weight:500}
+#sheet p{font-size:26px;color:var(--muted);font-weight:500;line-height:1.55;margin-top:24px}
+.cbtn{margin-top:26px;height:104px;border-radius:56px;background:var(--grad);color:#fff;font-size:36px;font-weight:800;display:flex;align-items:center;justify-content:center}
+#flyers path{transform-box:fill-box;transform-origin:center}
+/* features */
+.fc{position:absolute;width:450px;height:470px;background:#fff;border-radius:56px;padding:46px 40px;box-shadow:0 30px 70px rgba(201,50,126,.14);border:2px solid var(--line);opacity:0}
+.fc .oi{width:130px;height:130px;border-radius:38px;display:flex;align-items:center;justify-content:center}
+.fc h3{font-size:46px;font-weight:800;margin-top:40px;line-height:1.2}
+.fc p{font-size:29px;color:var(--muted);font-weight:500;margin-top:14px;line-height:1.4}
+/* download */
+.ac{position:absolute;left:70px;right:70px;background:#fff;border-radius:56px;padding:50px 54px;box-shadow:0 30px 70px rgba(201,50,126,.14);border:2px solid var(--line);opacity:0}
+.ac .hd{display:flex;align-items:center;gap:26px}
+.ac .ic{width:120px;height:120px;border-radius:36px;display:flex;align-items:center;justify-content:center;flex:none}
+.ac h3{font-size:54px;font-weight:800}
+.ac .sub{font-size:34px;color:var(--muted);font-weight:500;margin-top:6px}
+.gp{margin-top:40px;display:inline-flex;align-items:center;gap:22px;background:#111;color:#fff;border-radius:26px;padding:20px 40px 20px 34px;direction:ltr}
+.gp small{display:block;font-size:22px;opacity:.85;direction:rtl;text-align:left}
+.gp b{display:block;font-size:44px;font-weight:700;letter-spacing:.5px;line-height:1}
+.webp{margin-top:36px;display:inline-flex;align-items:center;gap:16px;background:var(--bg);border:2px solid var(--line);border-radius:40px;padding:18px 34px;font-size:38px;font-weight:800;direction:ltr;color:var(--deep)}
+.note{margin-top:26px;font-size:30px;font-weight:700;line-height:1.5}
+.note span{color:var(--deep)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<pattern id="pmono" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="rotate(10)"><rect width="24" height="24" fill="#8E877F"/><path d="M12 4 L20 12 L12 20 L4 12Z" fill="none" stroke="#3B332F" stroke-width="2"/><circle cx="12" cy="12" r="2.2" fill="#3B332F"/></pattern>
+<pattern id="pdots" width="22" height="22" patternUnits="userSpaceOnUse"><rect width="22" height="22" fill="#E9A6B8"/><circle cx="11" cy="11" r="3.4" fill="#fff" opacity=".85"/></pattern>
+<pattern id="pstripe" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="26" height="26" fill="#E8D9C4"/><rect width="10" height="26" fill="#C9A989"/></pattern>
+<pattern id="pflor" width="40" height="40" patternUnits="userSpaceOnUse"><rect width="40" height="40" fill="#5C6B8A"/><circle cx="12" cy="12" r="5" fill="#F3C7D6"/><circle cx="30" cy="30" r="4" fill="#E6B450"/><circle cx="32" cy="8" r="2.5" fill="#fff" opacity=".7"/></pattern>
+<linearGradient id="gg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#EC4899"/><stop offset=".45" stop-color="#F06AA6"/><stop offset="1" stop-color="#E6B450"/></linearGradient>
+</defs></svg>
+<div id="dark"></div>
+<div id="glow"></div>
+
+<!-- INTRO -->
+<div class="scene center" id="intro">
+  <img id="inLogo" src="logo.png" width="640" alt="">
+  <div class="line" id="inLine"></div>
+  <div class="tagl" id="inTag">تطبيق إيشارب<br><span class="g">كل حاجة في جيبك</span></div>
+</div>
+
+<!-- CAPTIONS -->
+<div class="cap" id="cA"><div class="ov"><i></i>تشكيلة بلا حدود<i></i></div><h1 data-k>آلاف القطع <span class="g">في فروعنا</span></h1><p data-k>زوري أقرب فرع واختاري براحتك</p></div>
+<div class="cap" id="cB"><div class="ov"><i></i>جودة إيشارب<i></i></div><h1 data-k>منتجات <span class="g">أصلية</span></h1><p data-k>كل قطعة مضمونة قبل ما توصلك</p></div>
+<div class="cap" id="cC"><div class="ov"><i></i>اطلبي<i></i></div><h1 data-k>اطلبي من <span class="g">التطبيق</span></h1><p data-k>تصفّحي وضيفي للشنطة في ثواني</p></div>
+<div class="cap" id="cD"><div class="ov"><i></i>نادي إيشارب<i></i></div><h1 data-k>مع كل شراء <span class="g">بتجمعي نقاط</span></h1><p data-k>أونلاين أو من أي فرع</p></div>
+<div class="cap" id="cE"><div class="ov"><i></i>استبدال النقاط<i></i></div><h1 data-k>استبدلي نقاطك <span class="g">بخصم</span></h1><p data-k>واعرضي الكود للكاشير في أي فرع</p></div>
+<div class="cap" id="cF"><div class="ov"><i></i>وكمان<i></i></div><h1 data-k>كل حاجة <span class="g">في جيبك</span></h1></div>
+<div class="cap" id="cG"><div class="ov"><i></i>حمّلي إيشارب<i></i></div><h1 data-k>إيشارب على <span class="g">موبايلك</span></h1><p data-k>أندرويد أو آيفون، الاتنين سهلين</p></div>
+
+<!-- A: catalog wall -->
+<div class="scene" id="sA">
+  <svg class="L" id="store" width="1080" height="1420" viewBox="0 0 1080 1420" style="left:0;top:500px;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 90px);mask-image:linear-gradient(to bottom,transparent 0,#000 90px)">
+    <rect width="1080" height="1420" fill="#FBEFF4"/>
+    <g id="shelves"></g>
+    <rect y="1330" width="1080" height="90" fill="#F3E1E9"/>
+  </svg>
+  <div id="bigpill"><span class="g">آلاف</span> القطع في فروعنا</div>
+</div>
+
+<!-- B: original -->
+<div class="scene" id="sB">
+  <svg id="seal" viewBox="-280 -280 560 560">
+    <g id="sealRot"><path id="sealEdge" fill="url(#gg)"/></g>
+    <circle r="200" fill="#fff"/>
+    <circle r="182" fill="none" stroke="url(#gg)" stroke-width="5" stroke-dasharray="4 10" stroke-linecap="round"/>
+    <path id="sealCk" d="M-70 0 L-20 50 L80 -60" fill="none" stroke="url(#gg)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="260" stroke-dashoffset="260" transform="translate(0 -40)"/>
+    <text x="0" y="120" text-anchor="middle" font-family="T" font-weight="800" font-size="70" fill="#3A2233">أصلي</text>
+  </svg>
+  <div class="opill" id="op1" style="top:1500px"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2BB673" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>منتجات أصلية</div>
+  <div class="opill" id="op2" style="top:1620px"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2BB673" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>خامات بجودة عالية</div>
+  <div class="opill" id="op3" style="top:1740px"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2BB673" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>بتتشاف وتتجرّب قبل ما تدفعي</div>
+  <svg id="sparkB" class="L" width="1080" height="1920" style="left:0;top:0"></svg>
+</div>
+
+<!-- PHONE -->
+<div id="stage3d"><div id="phone"><div id="screen">
+  <div class="island"></div>
+  <div class="ahd"><div class="hi"><small>أهلاً بيكي</small>نادي إيشارب</div><div class="bag" id="bag"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#3A2233" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg><b id="bagN">١</b></div></div>
+
+  <!-- shop -->
+  <div class="pane" id="shop">
+    <div class="srch"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#9E8792" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>دوري على طرحة، بندانة...</div>
+    <div class="chips"><span class="on">الكل</span><span>طرح</span><span>بندانات</span><span>جديد</span></div>
+    <div id="gridWrap"><div class="grid" id="grid"></div></div>
+  </div>
+
+  <!-- card -->
+  <div class="pane" id="cardp">
+    <div class="lcard"><div class="lin" id="lin">
+      <div class="lf"><div class="circ"></div><div class="top"><div class="lbl">نقاطك<b>نادي إيشارب</b></div><img src="logo.png" alt=""></div>
+        <div class="pts"><span id="pts">١٢٠</span><em>نقطة</em></div><div class="shine" id="shine"></div></div>
+      <div class="lb"><div class="t">اعرضي الكود للكاشير</div><svg width="420" height="110" viewBox="0 0 420 110" id="barcode"></svg><div class="code">EC 4821 7703</div><div class="s" id="bpts">رصيدك ٨٠ نقطة</div></div>
+    </div></div>
+    <div class="redeem"><h4>استبدلي نقاطك</h4><small>كل ما تجمعي أكتر، الخصم يكبر</small><div class="pbar"><i id="pbar"></i></div><div class="rbtn" id="rbtn"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v8H4v-8M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>استبدلي دلوقتي</div></div>
+    <div class="hist">
+      <div class="hrow" id="h1"><i style="background:#FBF3DF"><svg width="30" height="30" viewBox="-17 -17 34 34"><path d="M0 -16 C2 -4 4 -2 16 0 C4 2 2 4 0 16 C-2 4 -4 2 -16 0 C-4 -2 -2 -4 0 -16Z" fill="#E6B450"/></svg></i>كسبتي نقاط من فاتورتك<span>+٦٠</span></div>
+    </div>
+
+    <div id="sheet"><div class="grab"></div><h3>استبدال النقاط</h3>
+      <div class="ex"><div class="a">١٠٠<small>نقطة</small></div><div class="ar">←</div><div class="b">٥٠ ج.م<small>خصم</small></div></div>
+      <p>الكاشير هيلاقي الطلب جاهز وانتي بتدفعي في أي فرع.</p>
+      <div class="cbtn" id="cbtn">أكّدي الاستبدال</div></div>
+  </div>
+  <div id="toast"><svg width="56" height="56" viewBox="-20 -20 40 40"><path d="M0 -16 C2 -4 4 -2 16 0 C4 2 2 4 0 16 C-2 4 -4 2 -16 0 C-4 -2 -2 -4 0 -16Z" fill="#E6B450"/></svg><div>كسبتي <b>٦٠ نقطة</b> من طلبك</div></div>
+  <svg id="flyers" class="L" width="600" height="1250" style="left:0;top:0;z-index:35;pointer-events:none"></svg>
+
+  <div class="tabs">
+    <div id="tb-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10h18"/></svg>بطاقتي</div>
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M20 12l-8 8-9-9V4h7z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>عروضي</div>
+    <div id="tb-shop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>اطلبي</div>
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>فواتيري</div>
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>حسابي</div>
+    <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>تواصل</div>
+  </div>
+  <div class="tap" id="tap"></div>
+</div></div></div>
+
+<!-- F: features -->
+<div class="scene" id="sF">
+  <div class="fc" id="f1" style="right:60px;top:470px"><div class="oi" style="background:var(--soft)"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#EC4899" stroke-width="2" stroke-linejoin="round"><path d="M20 12l-8 8-9-9V4h7z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg></div><h3>عروضي</h3><p>عروض وخصومات خاصة ليكي</p></div>
+  <div class="fc" id="f2" style="left:60px;top:470px"><div class="oi" style="background:#FBF3DF"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#C79A38" stroke-width="2" stroke-linecap="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg></div><h3>فواتيري</h3><p>كل فواتيرك ونقاطك في مكان واحد</p></div>
+  <div class="fc" id="f3" style="right:60px;top:980px"><div class="oi" style="background:#E6EEF9"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#4A7CC0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></div><h3>اطلبي</h3><p>اطلبي أونلاين ويوصلك لحد البيت</p></div>
+  <div class="fc" id="f4" style="left:60px;top:980px"><div class="oi" style="background:#E5F6EC"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#2BB673" stroke-width="2" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></div><h3>تواصل</h3><p>كلّمي الفرع على واتساب بضغطة</p></div>
+</div>
+
+<!-- G: download -->
+<div class="scene" id="sG">
+  <div class="ac" id="ac1" style="top:520px"><div class="hd"><div class="ic" style="background:#E5F6EC"><svg width="70" height="70" viewBox="0 0 24 24" fill="none" stroke="#2BB673" stroke-width="2" stroke-linecap="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></div><div><h3>أندرويد</h3><div class="sub">حمّلي التطبيق من Google Play</div></div></div>
+    <div class="gp"><svg width="70" height="78" viewBox="0 0 86 96"><path d="M4 2 L48 48 L4 94Z" fill="#00A0FF"/><path d="M4 2 L62 34 L48 48Z" fill="#00F076"/><path d="M4 94 L48 48 L62 62Z" fill="#F93A4B"/><path d="M62 34 L82 46 Q86 48 82 50 L62 62 L48 48Z" fill="#FFC900"/></svg><div><small>احصل عليه من</small><b>Google Play</b></div></div></div>
+  <div class="ac" id="ac2" style="top:1090px"><div class="hd"><div class="ic" style="background:#E6EEF9"><svg width="70" height="70" viewBox="0 0 24 24" fill="none" stroke="#4A7CC0" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg></div><div><h3>آيفون</h3><div class="sub">استخدمي نسخة الويب وضيفيها للشاشة الرئيسية</div></div></div>
+    <div class="webp"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#C9327E" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>echarpe.store</div>
+    <div class="note">نفس التطبيق بالظبط، <span>من موقعنا الرسمي</span></div></div>
+</div>
+
+<!-- OUTRO -->
+<div class="scene center" id="outro">
+  <img id="outLogo" src="logo.png" width="640" alt="">
+  <div class="tagl" id="outTag" style="font-size:68px">حمّلي تطبيق إيشارب<br><span class="g">وابدئي تجمعي نقاطك</span></div>
+  <div class="cta" id="cta"><svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>حمّلي التطبيق دلوقتي</div>
+  <div class="url" id="ourl">echarpe.store</div>
+</div>
+
+<div id="wipe"></div>
+<svg id="grain" width="1080" height="1920"><filter id="nz"><feTurbulence id="turb" type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="1"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#nz)"/></svg>
+
+<script>
+const $=id=>document.getElementById(id);
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const eo=x=>1-Math.pow(1-x,3), eo5=x=>1-Math.pow(1-x,5);
+const eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const back=x=>{const c=1.4,c3=c+1;return 1+c3*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
+const p=(t,a,d)=>clamp((t-a)/d);
+const AR=n=>String(n).replace(/\d/g,d=>'٠١٢٣٤٥٦٧٨٩'[d]);
+const DURATION=56;
+const STAR='M0 -16 C2 -4 4 -2 16 0 C4 2 2 4 0 16 C-2 4 -4 2 -16 0 C-4 -2 -2 -4 0 -16Z';
+
+// product art
+const FILLS=['url(#pmono)','#CDB8A4','url(#pdots)','#7E9C7A','url(#pstripe)','#2E2A2B','#E9A6B8','url(#pflor)','#C9B8E0','#B98A6E','#5C6B8A','#F1E3D3','#EC4899','#8E9AAF'];
+const NAMES=['طرحة جاكار','طرحة كريب','طرحة منقّطة','طرحة شيفون','طرحة مقلّمة','بندانة قطن','طرحة موسلين','طرحة مشجّرة','بندانة جيرسيه','طرحة ليكرا','طرحة ساتان','بندانة تريكو','طرحة حرير','طرحة كتان'];
+const PRICES=[320,280,250,260,240,120,270,330,110,230,300,130,350,260];
+function art(i,w,h){ const f=FILLS[i%FILLS.length], band=NAMES[i%NAMES.length].startsWith('بندانة');
+  const bg=['#F7EFF3','#F6EFE8','#EEF2F6','#F3F6EE'][i%4];
+  const shape= band ? `<path d="M36 64 Q125 52 214 64 L132 196 Q125 204 118 196Z" fill="${f}" stroke="rgba(0,0,0,.14)" stroke-width="3" stroke-linejoin="round"/><path d="M36 64 Q20 52 10 70 M214 64 Q230 52 240 70" stroke="rgba(0,0,0,.25)" stroke-width="9" fill="none" stroke-linecap="round"/><path d="M70 80 L122 170 M180 80 L128 170" stroke="#000" stroke-opacity=".08" stroke-width="5"/>`
+   : `<path d="M50 40 Q125 20 200 40 L210 196 Q125 214 48 196Z" fill="${f}" stroke="rgba(0,0,0,.12)" stroke-width="3" stroke-linejoin="round"/><path d="M50 40 Q125 20 200 40 L170 110 Q120 96 70 112Z" fill="#fff" opacity=".18"/><path d="M90 60 Q100 130 84 196M150 56 Q166 130 156 198" stroke="#000" stroke-opacity=".1" stroke-width="5" fill="none"/>`;
+  return `<svg viewBox="0 0 250 230" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"><rect width="250" height="230" fill="${bg}"/>${shape}</svg>`; }
+
+// store shelves
+(function(){ const F=['url(#pmono)','#CDB8A4','url(#pdots)','#7E9C7A','url(#pstripe)','#2E2A2B','#E9A6B8','url(#pflor)','#C9B8E0','#B98A6E','#5C6B8A','#F1E3D3','#EC4899','#8E9AAF','#E6B450','#F3C7D6'];
+  let h='', k=3; const W=3400;
+  // hanging rail
+  h+=`<g id="rail"><rect x="0" y="78" width="${W}" height="10" rx="5" fill="#C79A38"/>`;
+  for(let x=40,i=0;x<W;x+=104,i++){ const c=F[(i*7+3)%F.length], hh=200+((i*5)%4)*22;
+    h+=`<path d="M${x+35} 78 q-14 -26 0 -34 q14 -6 14 8" stroke="#9E8792" stroke-width="4" fill="none"/><rect x="${x}" y="92" width="72" height="${hh}" rx="16" fill="${c}"/><path d="M${x+22} 104 V${92+hh-14} M${x+50} 104 V${92+hh-20}" stroke="#000" stroke-opacity=".1" stroke-width="5"/>`; }
+  h+='</g><g id="racks">';
+  [650,910,1170].forEach((y,r)=>{
+    for(let x=24;x<W;x+=150){ for(let n=0;n<4;n++){ k++; const c=F[(k*7+r*3+(k>>2)*5)%F.length]; const off=(((k*7+n)%3)-1)*5;
+      h+=`<rect x="${x+off}" y="${y-36-n*36}" width="126" height="34" rx="10" fill="${c}" stroke="rgba(0,0,0,.08)" stroke-width="2"/><path d="M${x+off+10} ${y-36-n*36+24} h106" stroke="#fff" stroke-opacity=".25" stroke-width="4"/>`; } }
+    h+=`<rect x="0" y="${y}" width="${W}" height="24" rx="6" fill="#E9D2C0"/><rect x="0" y="${y+24}" width="${W}" height="16" fill="#3A2233" opacity=".06"/>`; });
+  h+='</g>'; $('shelves').innerHTML=h; })();
+// shop grid
+(function(){ let h=''; [0,1,2,6,7,5].forEach((i,k)=>{ h+=`<div class="gi" id="gi${k}">${art(i,260,190)}<div class="n">${NAMES[i]}</div><div class="pr">${AR(PRICES[i])} ج.م</div><div class="plus">+</div></div>`; }); $('grid').innerHTML=h; })();
+// barcode
+(function(){ let h='',x=6,k=7; while(x<414){ k=(k*73+29)%97; const w=1+(k%4); if(k%3) h+=`<rect x="${x}" y="0" width="${w*1.6}" height="110" fill="#3A2233"/>`; x+=w*1.6+2+(k%3); } $('barcode').innerHTML=h; })();
+// seal edge (scalloped)
+(function(){ let d=''; const n=28; for(let i=0;i<=n*2;i++){ const a=i/(n*2)*Math.PI*2, r=i%2?236:262; d+=(i?'L':'M')+(Math.cos(a)*r).toFixed(1)+' '+(Math.sin(a)*r).toFixed(1); } $('sealEdge').setAttribute('d',d+'Z'); })();
+
+// kinetic words
+document.querySelectorAll('[data-k], #inTag, #outTag').forEach(el=>{
+  const walk=n=>{[...n.childNodes].forEach(c=>{
+    if(c.nodeType===3){const f=document.createDocumentFragment();c.textContent.split(/(\s+)/).forEach(s=>{if(!s)return;if(/^\s+$/.test(s)){f.appendChild(document.createTextNode(s));return}const w=document.createElement('span');w.className='w';const i=document.createElement('span');i.textContent=s;w.appendChild(i);f.appendChild(w)});c.replaceWith(f)}
+    else if(c.nodeType===1&&c.tagName!=='BR'){ if(c.classList.contains('g')){const w=document.createElement('span');w.className='w';c.replaceWith(w);w.appendChild(c);} else walk(c);} })};
+  walk(el);
+});
+function words(el,t,a,stag=.07,d=.6){ el.querySelectorAll('.w').forEach((w,i)=>{const v=eo5(p(t,a+i*stag,d));w.firstElementChild.style.transform=`translateY(${(1-v)*110}%)`;}); }
+const CAP={cA:[4.2,10.8],cB:[11.2,16.8],cC:[17.2,24],cD:[24.2,31],cE:[31.2,40],cF:[40.4,45.4],cG:[45.8,51.2]};
+function caption(id,t){ const [a,b]=CAP[id]; const el=$(id);
+  if(t<a-.01||t>b+.5){el.style.display='none';return} el.style.display='block';
+  const ov=el.querySelector('.ov'); ov.style.opacity=eo(p(t,a,.5)); ov.style.transform=`translateY(${(1-eo(p(t,a,.5)))*20}px)`;
+  words(el.querySelector('h1'),t,a+.12); const pp=el.querySelector('p'); if(pp) words(pp,t,a+.45,.04);
+  const v=eio(p(t,b,.45)); el.style.opacity=1-v; el.style.transform=`translateY(${-v*40}px)`; }
+function tapAt(t,a,x,y){ const v=p(t,a-.3,.75); if(v<=0||v>=1) return; const el=$('tap'); el.style.left=x+'px'; el.style.top=y+'px';
+  const k=v<.4?v/.4:1; el.style.opacity=v<.4?k:1-(v-.4)/.6; el.style.transform=`scale(${v<.4?1.25-.4*k:.85+.9*(v-.4)})`; }
+function ctr(el){ const r=el.getBoundingClientRect(), sr=$('screen').getBoundingClientRect(); return [(r.left+r.width/2-sr.left)*(600/sr.width),(r.top+r.height/2-sr.top)*(1250/sr.height)]; }
+function scene(id,t,a,b,fi=.5,fo=.5){ const v=t<a||t>b?0:Math.min(eo(p(t,a,fi)),1-p(t,b-fo,fo)); $(id).style.opacity=v; return v; }
+
+function seek(t){
+  $('tap').style.opacity=0;
+  $('turb').setAttribute('seed',Math.floor(t*24)%97);
+  $('glow').style.transform=`translate(${Math.sin(t*.3)*80}px,${Math.cos(t*.25)*90}px)`;
+  $('dark').style.opacity=Math.max(1-p(t,3.7,.6), p(t,51.3,.6));
+  const W=[3.6,51.1]; let wx=-140; W.forEach(w=>{const v=p(t,w,.75); if(v>0&&v<1) wx=-140+280*eio(v);}); $('wipe').style.transform=`translateX(${wx}%) skewX(-12deg)`;
+
+  // INTRO
+  $('intro').style.opacity=t<4?1:0;
+  const lg=eo5(p(t,.3,1.2)); $('inLogo').style.opacity=lg; $('inLogo').style.transform=`scale(${.86+.14*lg})`; $('inLogo').style.filter=`brightness(0) invert(1) blur(${(1-lg)*12}px)`;
+  $('inLine').style.width=(eo5(p(t,1.1,1))*420)+'px'; words($('inTag'),t,1.5,.12,.7);
+
+  Object.keys(CAP).forEach(id=>caption(id,t));
+
+  // A wall
+  scene('sA',t,4.2,11.2,.6,.5);
+  $('rail').setAttribute('transform',`translate(${-(t-4.2)*120} 0)`); $('racks').setAttribute('transform',`translate(${-200-(t-4.2)*70} 0)`);
+  $('store').style.transform=`scale(${1.12-.12*eo(p(t,4.2,1.6))})`;
+  const bp=p(t,6.4,.7); $('bigpill').style.opacity=clamp(bp*2); $('bigpill').style.transform=`translate(-50%,-50%) scale(${.6+.4*back(bp)}) rotate(${(1-eo(bp))*-6}deg)`;
+
+  // B original
+  scene('sB',t,11.2,17.2,.5,.5);
+  const sv=p(t,11.5,.8); $('seal').style.transform=`scale(${back(sv)}) rotate(${(1-eo(sv))*-90}deg)`; $('seal').style.opacity=clamp(sv*2);
+  $('sealRot').setAttribute('transform',`rotate(${t*14})`);
+  $('sealCk').setAttribute('stroke-dashoffset',260*(1-eo(p(t,12.3,.6))));
+  ['op1','op2','op3'].forEach((id,i)=>{const v=p(t,13.2+i*.5,.6);$(id).style.opacity=eo(v);$(id).style.transform=`translateX(-50%) translateY(${(1-eo5(v))*50}px)`;});
+  (function(){ let h=''; for(let i=0;i<10;i++){ const v=p(t,12.4+i*.06,1.1); if(v<=0||v>=1) continue; const a=i*36*Math.PI/180, d=300+180*eo(v);
+    h+=`<path d="${STAR}" transform="translate(${540+Math.cos(a)*d} ${1170+Math.sin(a)*d}) rotate(${v*160}) scale(${Math.sin(v*Math.PI)*1.6})" fill="${['#E6B450','#EC4899','#F9CFE3'][i%3]}"/>`;} $('sparkB').innerHTML=h; })();
+
+  // PHONE 17.2 → 40.4
+  let ph=0,ty=0,ry=0,sc=1;
+  if(t>=17.2&&t<40.8){ const i=eo5(p(t,17.2,1.1)), o=eio(p(t,40.0,.6)); ph=i*(1-o); ty=(1-i)*700+o*400; ry=(1-i)*-26+Math.sin(t*.5)*2.5; sc=.94+.06*i; }
+  $('phone').style.opacity=ph; $('phone').style.transform=`translateY(${ty}px) rotateY(${ry}deg) rotateX(${Math.cos(t*.4)*2}deg) scale(${sc})`;
+  // panes
+  const onCard=t>=24.6;
+  $('shop').style.opacity=onCard?1-eo(p(t,24.6,.35)):1; $('shop').style.transform=`translateX(${onCard?eo(p(t,24.6,.35))*-40:0}px)`;
+  $('cardp').style.opacity=onCard?eo(p(t,24.6,.4)):0; $('cardp').style.transform=`translateX(${onCard?(1-eo(p(t,24.6,.4)))*40:0}px)`;
+  $('tb-shop').classList.toggle('on',!onCard); $('tb-card').classList.toggle('on',onCard);
+  // shop: grid scroll + add to bag
+  $('gridWrap').style.transform=`translateY(${-eio(p(t,18.6,1.0))*120}px)`;
+  [0,1,2,3,4,5].forEach(k=>{const v=p(t,17.8+k*.12,.6); const el=$('gi'+k); el.style.opacity=eo(v); el.style.transform=`translateY(${(1-eo5(v))*60}px)`;});
+  let bagN=0; [[20.6,'gi0'],[22.2,'gi3']].forEach(([a,id])=>{ if(t>=a+.15) bagN++; if(t>a-.4&&t<a+.5) tapAt(t,a,...ctr($(id).querySelector('.plus'))); const pl=$(id).querySelector('.plus'); pl.style.transform=`scale(${1+.3*Math.sin(Math.PI*p(t,a,.3))})`; if(t>=a+.15) {pl.style.background='#EC4899'; pl.textContent='✓';} else {pl.style.background=''; pl.textContent='+';} });
+  $('bagN').textContent=AR(bagN); $('bagN').style.opacity=bagN?1:0; $('bagN').style.transform=`scale(${1+.5*Math.sin(Math.PI*Math.max(p(t,20.75,.35),p(t,22.35,.35)>0&&p(t,22.35,.35)<1?p(t,22.35,.35):0))})`;
+  $('bag').style.transform=`rotate(${8*Math.sin(Math.PI*p(t,20.75,.4))*Math.sin(t*30)}deg)`;
+  if(t>24-.4&&t<24.9) tapAt(t,24.4,...ctr($('tb-card')));
+  // card: earn points
+  const tv=p(t,26.0,.5), tout=p(t,28.4,.4); $('toast').style.transform=`translateY(${-260+260*eo5(tv)-260*eio(tout)}px)`;
+  // flying stars toast → card
+  (function(){ let h=''; for(let i=0;i<7;i++){ const v=p(t,26.6+i*.08,.8); if(v<=0||v>=1) continue; const x0=300+(i-3)*40, y0=130, x1=440, y1=470; const x=x0+(x1-x0)*eio(v), y=y0+(y1-y0)*eio(v)-Math.sin(v*Math.PI)*120;
+    h+=`<path d="${STAR}" transform="translate(${x} ${y}) rotate(${v*200}) scale(${1.2-.6*v})" fill="${i%2?'#E6B450':'#fff'}" stroke="#E6B450" stroke-width="1"/>`; } $('flyers').innerHTML=h; })();
+  let pts=120; if(t>=27.3) pts=120+Math.round(60*eo(p(t,27.3,.9)));
+  if(t>=35.4) pts=180-Math.round(100*eo(p(t,35.4,.8)));
+  $('pts').textContent=AR(pts); $('pts').style.display='inline-block'; $('pts').style.transform=`scale(${1+.12*Math.sin(Math.PI*p(t,27.3,.9))})`;
+  $('pbar').style.width=(30+Math.min(60,(pts-120)))*(t<35.4?1:1)+'%'; if(t>=35.4) $('pbar').style.width=(20+20*(pts-80)/100)+'%';
+  $('shine').style.transform=`translateX(${-120+240*eio(p(t,27.6,.8))}%)`;
+  const h1=p(t,28.2,.5); $('h1').style.opacity=eo(h1); $('h1').style.transform=`translateY(${(1-eo5(h1))*30}px)`;
+  // redeem
+  if(t>31.6&&t<32.6) tapAt(t,32.1,...ctr($('rbtn')));
+  $('rbtn').style.transform=`scale(${1-.05*Math.sin(Math.PI*p(t,32.0,.3))})`;
+  $('sheet').style.transform=`translateY(${700*(1-eo5(p(t,32.35,.55)))+700*eio(p(t,34.3,.45))}px)`;
+  if(t>33.4&&t<34.4) tapAt(t,33.9,...ctr($('cbtn')));
+  $('cbtn').style.transform=`scale(${1-.05*Math.sin(Math.PI*p(t,33.8,.3))})`;
+  const fl=eio(p(t,34.7,.8)); $('lin').style.transform=`rotateY(${fl*180}deg) translateZ(0)`;
+  $('bpts').textContent='رصيدك '+AR(pts)+' نقطة';
+
+  // F features
+  scene('sF',t,40.4,45.8,.4,.5);
+  ['f1','f2','f3','f4'].forEach((id,i)=>{const v=p(t,40.8+i*.35,.7),el=$(id);el.style.opacity=eo(v);el.style.transform=`translateY(${(1-eo5(v))*120}px) scale(${.92+.08*eo5(v)})`;
+    const h=p(t,42.6+i*.5,.6); el.querySelector('.oi').style.transform=`translateY(${-18*Math.sin(Math.PI*h)}px) rotate(${-8*Math.sin(Math.PI*h)}deg)`; el.style.borderColor=h>0&&h<1?`rgba(236,72,153,${Math.sin(Math.PI*h)})`:'#F3DEE9';});
+
+  // G download
+  scene('sG',t,45.8,51.4,.4,.5);
+  ['ac1','ac2'].forEach((id,i)=>{const v=p(t,46.2+i*.5,.7),el=$(id);el.style.opacity=eo(v);el.style.transform=`translateY(${(1-eo5(v))*140}px) scale(${.94+.06*eo5(v)})`;});
+  document.querySelector('#ac1 .gp').style.transform=`scale(${1+.05*Math.sin(Math.PI*p(t,47.6,.6))})`;
+  document.querySelector('#ac2 .webp').style.transform=`scale(${1+.05*Math.sin(Math.PI*p(t,48.4,.6))})`;
+
+  // OUTRO
+  $('outro').style.opacity=t>51.6?1:0;
+  const ol=eo5(p(t,51.8,1.1)); $('outLogo').style.opacity=ol; $('outLogo').style.transform=`scale(${.86+.14*ol})`; $('outLogo').style.filter=`brightness(0) invert(1) blur(${(1-ol)*12}px)`;
+  words($('outTag'),t,52.4,.1,.7);
+  const cv=p(t,53.4,.6); $('cta').style.opacity=eo(cv); $('cta').style.transform=`translateY(${(1-eo5(cv))*40}px) scale(${1+.025*Math.sin(Math.max(0,t-54)*4)})`;
+  $('ourl').style.opacity=eo(p(t,54,.6));
+}
+window.seek=seek; window.DURATION=DURATION; seek(0);
+</script>
+</body>
+</html>
