@@ -1,6 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, Audio, Sequence, staticFile} from 'remotion';
 import {colors} from './config/brand';
+import {useFontsReady} from './lib/fonts';
 import {OVERLAP, sec, TIMELINE} from './config/timeline';
 import {S1Reveal} from './scenes/S1Reveal';
 import {S2Create} from './scenes/S2Create';
@@ -20,18 +21,21 @@ const SCENES: {key: SceneKey; Comp: React.FC}[] = [
   {key: 's6', Comp: S6CTA},
 ];
 
-export const Commercial: React.FC<{music?: boolean}> = ({music = true}) => (
-  <AbsoluteFill style={{background: colors.night}}>
-    {SCENES.map(({key, Comp}, i) => {
-      const T = TIMELINE[key];
-      const from = i === 0 ? 0 : T.from - OVERLAP;
-      const dur = (i === 0 ? T.dur : T.dur + OVERLAP) + (i === SCENES.length - 1 ? 0 : OVERLAP);
-      return (
-        <Sequence key={key} name={key.toUpperCase()} from={sec(from)} durationInFrames={sec(dur)}>
-          <Comp />
-        </Sequence>
-      );
-    })}
-    {music && <Audio src={staticFile('audio/heyday-score.wav')} />}
-  </AbsoluteFill>
-);
+export const Commercial: React.FC<{music?: boolean}> = ({music = true}) => {
+  useFontsReady();
+  return (
+    <AbsoluteFill style={{background: colors.night}}>
+      {SCENES.map(({key, Comp}, i) => {
+        const T = TIMELINE[key];
+        const from = i === 0 ? 0 : T.from - OVERLAP;
+        const dur = (i === 0 ? T.dur : T.dur + OVERLAP) + (i === SCENES.length - 1 ? 0 : OVERLAP);
+        return (
+          <Sequence key={key} name={key.toUpperCase()} from={sec(from)} durationInFrames={sec(dur)}>
+            <Comp />
+          </Sequence>
+        );
+      })}
+      {music && <Audio src={staticFile('audio/heyday-score.wav')} />}
+    </AbsoluteFill>
+  );
+};

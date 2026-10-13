@@ -11,7 +11,7 @@ A 54.5-second commercial in Brazilian Portuguese for HEYDAY (custom snow globes,
 | Research, what was verified, what is missing | `docs/RESEARCH.md` |
 | Asset manifest + photo/logo slots | `docs/ASSET_MANIFEST.md` |
 
-> **Read `docs/RESEARCH.md` before publishing.** The build environment could not open heyday.com.br or Instagram, so the official logo, the product photos, the client list and the contact details could not be verified. The video uses SVG illustrations, a stand-in wordmark, no client logos, and **labelled placeholders for WhatsApp and e-mail**. Each of these is one config change away from the real asset.
+> **Read `docs/RESEARCH.md` before publishing.** The build environment could not open heyday.com.br or Instagram, so the official logo, the product photos and the client list could not be verified. The video uses SVG illustrations, a stand-in wordmark and no client logos. Each of these is one config change away from the real asset. WhatsApp and e-mail were confirmed by the client and appear in the final scene.
 
 ## Quick start
 
@@ -31,7 +31,7 @@ Everything editable is in **`src/config/brand.ts`**:
 
 | To change | Edit |
 |---|---|
-| WhatsApp / e-mail | `contact.whatsapp` / `contact.email`, then set `verified: true` (until then a labelled placeholder is shown) |
+| WhatsApp / e-mail | `contact.whatsapp` / `contact.email` (`verified: false` shows a labelled placeholder instead) |
 | Any on-screen text | `copy` |
 | Colours | `colors` |
 | Official logo | put the file in `public/brand/`, set `officialLogo` |

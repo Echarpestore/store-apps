@@ -9,19 +9,17 @@ import '@fontsource/fraunces/400.css';
 import '@fontsource/fraunces/500.css';
 import '@fontsource/fraunces/300-italic.css';
 import '@fontsource/fraunces/400-italic.css';
+import {useEffect, useState} from 'react';
 import {continueRender, delayRender} from 'remotion';
 
-if (typeof document !== 'undefined') {
-  const handle = delayRender('Loading fonts', {timeoutInMilliseconds: 60000});
-  const families = ['300 20px Inter', '400 20px Inter', '600 20px Inter', '300 20px Fraunces', '400 20px Fraunces', 'italic 400 20px Fraunces'];
-  let done = false;
-  const finish = () => {
-    if (!done) {
-      done = true;
-      continueRender(handle);
-    }
-  };
-  // document.fonts.ready can stall in a busy headless tab; the explicit loads are what matter.
-  Promise.all(families.map((f) => document.fonts.load(f))).then(finish, finish);
-  setTimeout(finish, 20000);
-}
+const FAMILIES = ['300 20px Inter', '400 20px Inter', '500 20px Inter', '600 20px Inter', '300 20px Fraunces', '400 20px Fraunces', 'italic 300 20px Fraunces', 'italic 400 20px Fraunces'];
+
+/** Holds the frame until the bundled fonts are ready (Remotion's recommended per-mount pattern). */
+export const useFontsReady = () => {
+  const [handle] = useState(() => delayRender('Loading fonts', {timeoutInMilliseconds: 60000}));
+  useEffect(() => {
+    Promise.all(FAMILIES.map((f) => document.fonts.load(f)))
+      .catch(() => undefined)
+      .then(() => continueRender(handle));
+  }, [handle]);
+};

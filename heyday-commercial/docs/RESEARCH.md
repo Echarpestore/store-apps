@@ -27,14 +27,14 @@ The only research channel available was a **web search engine** (titles + text s
 | Instagram bio mentions "📩 Orçamentos WhatsApp", Joinville SC | search snippet of instagram.com/heydaybr | supports WhatsApp as quote channel |
 | Legal entity: HEYDAY GLOBO DE NEVE PERSONALIZADO LTDA, CNPJ 46.031.081/0001-98, Joinville/SC | serasaexperian / cnpj.biz snippets | not shown in the video |
 
-## Contact details — NOT verified (shown as labelled placeholders)
+## Contact details — confirmed
 
-Search snippets of the **HEYDAY Brasil storefront** (`heydaybrasil.com.br`, a Mercado Livre storefront) list in "Fale conosco":
+Search snippets of the **HEYDAY Brasil storefront** (`heydaybrasil.com.br`, "Fale conosco") listed:
 
-* phone **(47) 9275-2823**
+* WhatsApp **(47) 9275-2823**
 * e-mail **heydaybrazil@gmail.com**
 
-These could not be opened and confirmed on heyday.com.br or on Instagram, and it is unknown whether the phone is the WhatsApp business line (the snippet shows 8 digits after the area code; Brazilian mobiles normally have 9). Per the brief, the video therefore shows **`[WhatsApp a confirmar]`** and **`[e-mail a confirmar]`**. To publish real details, edit `src/config/brand.ts → contact` and set `verified: true`.
+These could not be opened from the build environment, but both were **confirmed by the client on 2026-10-13** as the WhatsApp line and business e-mail, and are shown in Scene 6 (`contact.*.verified = true` in `src/config/brand.ts`).
 
 ## Client brands — none verified
 

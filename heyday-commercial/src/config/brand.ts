@@ -38,20 +38,17 @@ export const fonts = {
 // Contact. NOTHING here may be invented.
 //
 // `verified: false` renders a clearly labelled placeholder in the video.
-// The candidate values below were found in public search results for the
-// HEYDAY Brasil storefront ("Fale conosco"), but could NOT be confirmed on
-// heyday.com.br or the @heydaybr Instagram from this environment, so they
-// are not shown until someone at HEYDAY confirms them and flips the flag.
+// WhatsApp and e-mail were confirmed by HEYDAY's side on 2026-10-13.
 // ---------------------------------------------------------------------------
 export const contact = {
   whatsapp: {
-    verified: false,
-    display: '(47) 9275-2823', // candidate — confirm (and whether it is the WhatsApp line)
+    verified: true,
+    display: '(47) 9275-2823',
     placeholder: 'WhatsApp a confirmar',
   },
   email: {
-    verified: false,
-    display: 'heydaybrazil@gmail.com', // candidate — confirm it is the business address
+    verified: true,
+    display: 'heydaybrazil@gmail.com',
     placeholder: 'e-mail a confirmar',
   },
   website: 'heyday.com.br',

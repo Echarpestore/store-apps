@@ -22,6 +22,7 @@ for (const s of secs) {
   files.push(output);
   console.log('still', s, output);
 }
+if (files.length < 2) process.exit(0);
 const cols = id === 'HeydayVertical' ? 6 : 4;
 execFileSync('ffmpeg', ['-loglevel', 'error', '-y', ...files.flatMap((f) => ['-i', f]), '-filter_complex',
   `${files.map((_, i) => `[${i}:v]drawtext=text='${secs[i]}s':x=10:y=10:fontsize=28:fontcolor=red[v${i}]`).join(';')};${files.map((_, i) => `[v${i}]`).join('')}xstack=inputs=${files.length}:layout=${files.map((_, i) => `${(i % cols) ? Array.from({length: i % cols}, () => 'w0').join('+') : '0'}_${Math.floor(i / cols) ? Array.from({length: Math.floor(i / cols)}, () => 'h0').join('+') : '0'}`).join('|')}:fill=black`,
