@@ -12,7 +12,9 @@
     "render:horizontal": "remotion render src/index.ts HeydayHorizontal out/heyday-horizontal-1920x1080.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=256k --timeout=90000",
     "render:all": "npm run render:vertical && npm run render:horizontal",
     "stills": "node tools/stills.mjs",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "music:luxury": "python3 tools/make_music_luxury.py /tmp/heyday-lux-raw.wav && ffmpeg -y -loglevel error -i /tmp/heyday-lux-raw.wav -af loudnorm=I=-16:TP=-1.2:LRA=11 -ar 48000 public/audio/heyday-luxury.wav",
+    "render:luxury": "remotion render src/index.ts HeydayLuxuryVertical out/heyday-luxury-vertical-1080x1920.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=256k --timeout=90000 && remotion render src/index.ts HeydayLuxuryHorizontal out/heyday-luxury-horizontal-1920x1080.mp4 --codec=h264 --crf=18 --audio-codec=aac --audio-bitrate=256k --timeout=90000"
   },
   "dependencies": {
     "@fontsource/fraunces": "5.1.0",

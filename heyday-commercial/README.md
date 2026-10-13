@@ -13,6 +13,17 @@ A 55-second commercial in Brazilian Portuguese for HEYDAY (custom snow globes, J
 
 > **Read `docs/RESEARCH.md` before publishing.** The build environment could not open heyday.com.br or Instagram, so HEYDAY supplied the official logo, the product photos and the confirmed list of 10 clients directly. Fairmont is still shown as a name until its logo file is added. Each of these is one config change away from the real asset. WhatsApp and e-mail were confirmed by the client and appear in the final scene.
 
+## Second film: "Presentes que ficam" (luxury)
+
+A 34-second brand film about why a HEYDAY globe is a gift people never forget: black and gold, one slow continuous camera move, ordinary giveaways turning to dust, the globe shaken back to life, then the real work. Storyboard: `docs/STORYBOARD-LUXURY.md`.
+
+| Deliverable | Path |
+|---|---|
+| 9:16, 1080×1920, 60 fps | `out/heyday-luxury-vertical-1080x1920.mp4` |
+| 16:9, 1920×1080, 60 fps | `out/heyday-luxury-horizontal-1920x1080.mp4` |
+
+`npm run render:luxury` renders both · copy and beat times in `src/luxury/timeline.ts` · score: `npm run music:luxury`.
+
 ## Quick start
 
 ```bash

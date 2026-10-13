@@ -7,7 +7,7 @@ import {shade} from '../lib/color';
  * Each one illustrates a kind of customisation: logo, product, event venue,
  * gift, character. `draw` animates the line art, `fill` the colour.
  */
-type P = {draw?: number; fill?: number; accent?: string; label?: string};
+type P = {draw?: number; fill?: number; accent?: string; label?: string; pines?: boolean};
 
 const line = (draw: number) => ({
   pathLength: 1,
@@ -102,9 +102,9 @@ export const InnerVenue: React.FC<P> = ({draw = 1, fill = 1, accent = colors.gol
 );
 
 /** Gift box — exclusive presents. */
-export const InnerGift: React.FC<P> = ({draw = 1, fill = 1, accent = '#1F3A5F'}) => (
+export const InnerGift: React.FC<P> = ({draw = 1, fill = 1, accent = '#1F3A5F', pines = true}) => (
   <g>
-    <Pines fill={fill} />
+    {pines && <Pines fill={fill} />}
     <g opacity={fill}>
       <rect x={-105} y={10} width={210} height={172} rx={6} fill={accent} />
       <rect x={-120} y={-32} width={240} height={50} rx={6} fill={shade(accent, 0.12)} />
