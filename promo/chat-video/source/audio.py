@@ -95,6 +95,8 @@ for t0 in [3.55,29.95,36.35,59.15]: sadd(whoosh(.9),t0,.22)
 for t0 in [4.2,36.6,26.35]: sadd(whoosh(.6),t0,.12)
 sadd(chime([84,88,91,96]),40.25,.16)
 sadd(chime([79,84]),32.1,.12)
+sadd(chime([91,96,98]),19.45,.08); sadd(chime([93,98]),26.85,.08)
+for t0 in [21.4,23.0,24.6,28.0]: sadd(chime([96]),t0+.05,.04)
 sadd(boom(),0.3,.45); sadd(boom(),60.0,.45)
 for i in range(4): sadd(pop(),54.5+i*.5,.12)
 Sr=conv(S)*0.25+S
