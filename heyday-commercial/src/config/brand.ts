@@ -74,6 +74,7 @@ export const copy = {
   s3: {
     // Used only when at least one verified client is listed in `clients`.
     clientsHeadline: 'Marcas que já fizeram parte da nossa história.',
+    clientsCaption: 'Projetos desenvolvidos pela HEYDAY',
     // Used while the verified client list is empty (current state).
     factsHeadline: 'Desde 2014 criando para empresas, agências e eventos.',
     facts: [
@@ -147,23 +148,36 @@ export const photos: {
 };
 
 // ---------------------------------------------------------------------------
-// Verified clients. Add a brand ONLY after confirming, in genuine HEYDAY
-// material, that HEYDAY completed a project for it. Logo files go in
-// /public/logos (SVG preferred, original proportions). `project` is an
-// optional photo of that brand's HEYDAY globe.
+// Verified clients. Add a brand ONLY after confirming that HEYDAY completed
+// a project for it. Logo files go in /public/logos (SVG, original artwork
+// and colours, never stretched). `aspect` (width / height of the logo
+// artwork) is used for optical sizing. Without a `logo`, the brand name is
+// typeset in neutral type instead — send the official file to replace it.
 //
-// None of the candidate brands in the brief could be verified from this
-// environment, so the list is intentionally empty and Scene 3 shows
-// verified company facts instead.
+// The list below was confirmed by HEYDAY on 2026-10-13.
 // ---------------------------------------------------------------------------
 export type Client = {
   name: string;
-  logo: string; // e.g. 'logos/brand.svg'
-  evidence: string; // URL of the HEYDAY post/page that proves the project
+  logo?: string; // e.g. 'logos/brand.svg'
+  aspect?: number;
+  evidence: string; // where the project is documented
   project?: Photo;
 };
 
-export const clients: Client[] = [];
+const CONFIRMED = 'Confirmed by HEYDAY, 2026-10-13';
+
+export const clients: Client[] = [
+  {name: 'Samsung', logo: 'logos/samsung.svg', aspect: 5.9, evidence: CONFIRMED},
+  {name: 'Google', logo: 'logos/google.svg', aspect: 2.93, evidence: CONFIRMED},
+  {name: 'Apple', logo: 'logos/apple.svg', aspect: 0.82, evidence: CONFIRMED},
+  {name: 'Disney', logo: 'logos/disney.svg', aspect: 2.35, evidence: CONFIRMED},
+  {name: 'Universal Pictures', evidence: CONFIRMED},
+  {name: 'Nike', logo: 'logos/nike.svg', aspect: 2.76, evidence: CONFIRMED},
+  {name: 'Coca-Cola', logo: 'logos/cocacola.svg', aspect: 3.06, evidence: CONFIRMED},
+  {name: 'Fairmont', evidence: CONFIRMED},
+  {name: 'Sicredi', evidence: CONFIRMED},
+  {name: 'Kiwify', evidence: CONFIRMED},
+];
 
 // Official logo file. When present (SVG or PNG with transparency) it replaces
 // the typeset wordmark everywhere. Leave undefined to use the wordmark.

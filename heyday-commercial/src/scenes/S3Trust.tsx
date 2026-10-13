@@ -60,41 +60,67 @@ export const S3Trust: React.FC = () => {
 
   // ---- verified client grid (used only when clients are configured) ----
   const clientGrid = () => {
-    const cols = L.vertical ? 2 : 4;
-    const cellW = L.vertical ? (L.W - 200 * u) / 2 : (L.W * 0.86) / 4;
-    const cellH = cellW * 0.62;
-    const x0 = L.vertical ? 80 * u : L.W * 0.07;
-    const y0 = L.vertical ? L.H * 0.3 : L.H * 0.38;
-    return clients.slice(0, L.vertical ? 8 : 8).map((c, i) => {
-      const s = springAt(frame, fps, 1.0 + i * 0.12);
+    const list = clients.slice(0, 10);
+    const cols = L.vertical ? 2 : 5;
+    const gap = (L.vertical ? 30 : 28) * u;
+    const gridW = L.vertical ? L.W - 160 * u : L.W * 0.86;
+    const cellW = (gridW - gap * (cols - 1)) / cols;
+    const cellH = (L.vertical ? 182 : 190) * u;
+    const x0 = (L.W - gridW) / 2;
+    const y0 = L.vertical ? L.H * 0.27 : L.H * 0.36;
+    const area = cellW * cellH * 0.13; // optical size: every logo gets the same visual area
+    const sweep = interpolate(t, [2.6, 4.2], [-0.2, 1.2], clamp);
+    return list.map((c, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
+      const st = 1.0 + (row * cols + col) * 0.09;
+      const s = springAt(frame, fps, st, {damping: 17});
+      const reveal = interpolate(t, [st + 0.15, st + 0.8], [0, 1], {...clamp, easing: easeOut});
+      const draw = interpolate(t, [st, st + 0.9], [0, 1], {...clamp, easing: easeOut});
+      const a = c.aspect ?? 3;
+      let lw = Math.sqrt(area * a);
+      let lh = lw / a;
+      const maxW = cellW * 0.66;
+      const maxH = cellH * 0.5;
+      const k = Math.min(1, maxW / lw, maxH / lh);
+      lw *= k;
+      lh *= k;
+      const cx = x0 + col * (cellW + gap);
+      const cy = y0 + row * (cellH + gap);
+      // gold light passing over the grid once everything is in
+      const d = (col / cols + row * 0.12) - sweep;
+      const glow = Math.max(0, 1 - Math.abs(d) * 6);
       return (
         <div
           key={c.name}
           style={{
             position: 'absolute',
-            left: x0 + col * (cellW + 40 * u),
-            top: y0 + row * (cellH + 40 * u),
+            left: cx,
+            top: cy,
             width: cellW,
             height: cellH,
-            background: '#fff',
-            borderRadius: 24 * u,
-            boxShadow: `0 ${20 * u}px ${50 * u}px ${rgba(colors.ink, 0.08)}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: s,
-            transform: `translateY(${(1 - s) * 60 * u}px) scale(${0.9 + 0.1 * s})`,
-            overflow: 'hidden',
+            opacity: Math.min(1, s * 1.4),
+            transform: `translateY(${(1 - s) * 50 * u}px) scale(${0.92 + 0.08 * s})`,
           }}
         >
-          {/* logo kept in original proportions: contain, never stretched */}
-          <Img src={staticFile(c.logo)} style={{maxWidth: '62%', maxHeight: '48%', objectFit: 'contain'}} />
+          <svg width={cellW} height={cellH} style={{position: 'absolute', inset: 0, overflow: 'visible'}}>
+            <rect x={0} y={0} width={cellW} height={cellH} rx={24 * u} fill="#fff" />
+            <rect x={0} y={0} width={cellW} height={cellH} rx={24 * u} fill="none" stroke={rgba(colors.gold, 0.35 + glow * 0.65)} strokeWidth={(1.5 + glow * 1.5) * u} pathLength={1} strokeDasharray={1} strokeDashoffset={1 - draw} />
+          </svg>
+          <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: reveal, filter: `blur(${(1 - reveal) * 6}px)`}}>
+            {c.logo ? (
+              // original artwork and colours, aspect ratio preserved (contain)
+              <Img src={staticFile(c.logo)} style={{width: lw, height: lh, objectFit: 'contain'}} />
+            ) : (
+              <span style={{fontFamily: fonts.sans, fontWeight: 600, fontSize: (L.vertical ? 34 : 30) * u, letterSpacing: '0.04em', color: colors.ink, textAlign: 'center', lineHeight: 1.1, padding: `0 ${14 * u}px`}}>
+                {c.name}
+              </span>
+            )}
+          </div>
           {c.project && (
             <Img
               src={staticFile(c.project.file)}
-              style={{position: 'absolute', right: 12 * u, bottom: 12 * u, width: cellH * 0.38, height: cellH * 0.38, borderRadius: '50%', objectFit: 'cover'}}
+              style={{position: 'absolute', right: 10 * u, bottom: 10 * u, width: cellH * 0.36, height: cellH * 0.36, borderRadius: '50%', objectFit: 'cover', opacity: reveal}}
             />
           )}
         </div>
@@ -159,19 +185,39 @@ export const S3Trust: React.FC = () => {
         <PaperBackground tint={colors.goldLight} warmth={0.8} />
         <SnowField seed="s3bg" count={30} color={colors.ice} glitterColor={colors.gold} opacity={0.5} speed={0.35} drift={-10} />
         <div style={{position: 'absolute', left: 80 * u, top: L.vertical ? L.H * 0.075 : L.H * 0.1, width: L.W - 160 * u}}>
-          <Eyebrow text={hasClients ? 'Projetos realizados' : 'Nossa trajetória'} start={0.45} size={24 * u} align={L.vertical ? 'center' : 'left'} />
+          <Eyebrow text={hasClients ? 'Projetos realizados' : 'Nossa trajetória'} start={0.45} size={24 * u} align={L.vertical || hasClients ? 'center' : 'left'} />
           <div style={{height: 26 * u}} />
           <KineticText
             text={headline}
             start={0.6}
             size={(L.vertical ? 68 : 64) * u}
             weight={300}
-            align={L.vertical ? 'center' : 'left'}
-            width={L.vertical ? L.W - 160 * u : L.W * 0.6}
+            align={L.vertical || hasClients ? 'center' : 'left'}
+            width={L.vertical || hasClients ? L.W - 160 * u : L.W * 0.6}
             highlight={['2014', 'história']}
           />
         </div>
         {hasClients ? clientGrid() : factCards()}
+        {hasClients && (
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              width: L.W,
+              top: L.vertical ? L.H * 0.27 + 5 * (212 * u) + 50 * u : L.H * 0.36 + 2 * (218 * u) + 50 * u,
+              textAlign: 'center',
+              fontFamily: fonts.sans,
+              fontSize: 26 * u,
+              fontWeight: 600,
+              letterSpacing: '0.24em',
+              textTransform: 'uppercase',
+              color: colors.muted,
+              opacity: interpolate(t, [2.4, 3.0], [0, 1], clamp),
+            }}
+          >
+            {copy.s3.clientsCaption} · desde 2014
+          </div>
+        )}
         {!hasClients && (
           <div style={{position: 'absolute', left: L.vertical ? 0 : L.W * 0.08, width: L.vertical ? L.W : undefined, top: audTop, display: 'flex', justifyContent: L.vertical ? 'center' : 'flex-start', gap: 24 * u}}>
             {copy.s3.audiences.map((a, i) => {

@@ -11,7 +11,7 @@ A 54.5-second commercial in Brazilian Portuguese for HEYDAY (custom snow globes,
 | Research, what was verified, what is missing | `docs/RESEARCH.md` |
 | Asset manifest + photo/logo slots | `docs/ASSET_MANIFEST.md` |
 
-> **Read `docs/RESEARCH.md` before publishing.** The build environment could not open heyday.com.br or Instagram, so the official logo, the product photos and the client list could not be verified. The video uses SVG illustrations, a stand-in wordmark and no client logos. Each of these is one config change away from the real asset. WhatsApp and e-mail were confirmed by the client and appear in the final scene.
+> **Read `docs/RESEARCH.md` before publishing.** The build environment could not open heyday.com.br or Instagram, so the official logo and product photos could not be downloaded. The video uses SVG illustrations and a stand-in wordmark. The client list was confirmed by HEYDAY; four of the ten client logos (Universal Pictures, Fairmont, Sicredi, Kiwify) are still shown as names until their official files are added. Each of these is one config change away from the real asset. WhatsApp and e-mail were confirmed by the client and appear in the final scene.
 
 ## Quick start
 
