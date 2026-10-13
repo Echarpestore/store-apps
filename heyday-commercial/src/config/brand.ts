@@ -123,7 +123,8 @@ export const copy = {
 // list is empty the commercial uses the in-house SVG globe illustrations,
 // which are presented as illustrations, never as HEYDAY portfolio pieces.
 //
-// Slots: hero (S1 reveal), montage (S2, 4 photos), process (S4 step 04/05),
+// Slots: hero (S1, optional), montage (S2: the real result after each drawn idea),
+// process (S4 step 05),
 // beauty (S5 close-ups), cta (S6).
 // ---------------------------------------------------------------------------
 export type Photo = {
@@ -147,19 +148,13 @@ export const photos: {
   beauty: Photo[];
   cta?: Photo;
 } = {
-  hero: {
-    file: 'photos/coca-cola-hero.jpg',
-    size: {w: 800, h: 982},
-    label: 'Coca-Cola',
-    alt: 'Globo de neve Coca-Cola com caminhão e montanha nevada',
-    source: SUPPLIED,
-    sphere: {x: 372, y: 360, r: 298},
-  },
+  // S1 stays an illustration (the idea). Set a photo here to reveal it instead.
+  hero: undefined,
   montage: [
     {file: 'photos/sicredi-staircase.jpg', size: {w: 720, h: 1280}, label: 'Sicredi', alt: 'Globos Sicredi com escada da cooperativa', source: SUPPLIED, focus: {x: 0.47, y: 0.55}},
     {file: 'photos/bauducco-mickey.jpg', size: {w: 1100, h: 1571}, label: 'Bauducco', alt: 'Globos Bauducco Lado a Lado Missão Orlando', source: SUPPLIED, focus: {x: 0.66, y: 0.38}},
     {file: 'photos/porsche-ice-experience.jpg', size: {w: 800, h: 450}, label: 'Porsche', alt: 'Globos Porsche Ice Experience Finlândia 2025', source: SUPPLIED, focus: {x: 0.52, y: 0.6}},
-    {file: 'photos/samsung-tv-plus.jpg', size: {w: 394, h: 800}, label: 'Samsung TV Plus', alt: 'Globo Samsung TV Plus com pipoca', source: SUPPLIED, focus: {x: 0.5, y: 0.6}},
+    {file: 'photos/riachuelo-olympics.jpg', size: {w: 394, h: 800}, label: 'Riachuelo', alt: 'Globo Riachuelo com mascote do Time Brasil', source: SUPPLIED, focus: {x: 0.5, y: 0.45}},
   ],
   process: {
     file: 'photos/coca-cola-femsa-hand.jpg',
@@ -172,13 +167,14 @@ export const photos: {
   beauty: [
     {file: 'photos/nike-sneaker.jpg', size: {w: 800, h: 1422}, label: 'Nike', alt: 'Globo Nike com tênis e pinheiro', source: SUPPLIED, sphere: {x: 432, y: 575, r: 280}},
   ],
+  // S6: the illustrated globe ("Sua ideia") hands over to this real piece ("Nossa criação")
   cta: {
-    file: 'photos/riachuelo-olympics.jpg',
-    size: {w: 394, h: 800},
-    label: 'Riachuelo',
-    alt: 'Globo Riachuelo, marca de moda oficial do Comitê Olímpico do Brasil',
+    file: 'photos/coca-cola-hero.jpg',
+    size: {w: 800, h: 982},
+    label: 'Coca-Cola',
+    alt: 'Globo de neve Coca-Cola com caminhão e montanha nevada',
     source: SUPPLIED,
-    sphere: {x: 210, y: 300, r: 175},
+    sphere: {x: 372, y: 360, r: 298},
   },
 };
 

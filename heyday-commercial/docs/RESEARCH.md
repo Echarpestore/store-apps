@@ -61,7 +61,7 @@ Logos are used as published: viewBox cropped tight to the artwork, never stretch
 ## Logo and photography — missing
 
 * **Official logo**: supplied by HEYDAY on 2026-10-13 (white serif wordmark with cyan glow). Trimmed to the artwork and stored at `public/brand/heyday-logo.png`. Used in Scenes 1 and 6.
-* **Product photos**: supplied by HEYDAY on 2026-10-13 (Coca-Cola, Coca-Cola FEMSA, Sicredi, Bauducco, Porsche, Samsung TV Plus, Nike, Riachuelo, plus Schutz, Marvel and Disney+ stories). See `docs/ASSET_MANIFEST.md`. SVG illustrations remain only where they explain something (Scene 4 process, Scene 5 customisation demo).
+* **Product photos**: supplied by HEYDAY on 2026-10-13 (Coca-Cola, Coca-Cola FEMSA, Sicredi, Bauducco, Porsche, Samsung TV Plus, Nike, Riachuelo, plus Schutz, Marvel and Disney+ stories). See `docs/ASSET_MANIFEST.md`. SVG illustrations stay throughout as "the idea" (Scenes 1, 2, 4, 5 and 6), and each one hands over to a real photo ("the creation").
 * **Palette**: HEYDAY's official colours could not be sampled. A restrained white / ink / warm-gold palette is used; change the hex values in `colors`.
 
 Products seen in search listings (Dr Who, Taylor Swift "Lover", Up, Friends, O Pequeno Príncipe, Olaf) are licensed entertainment properties and were deliberately **not** illustrated.

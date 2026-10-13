@@ -23,6 +23,7 @@ const CARDS = [
 const FIRST = 1.15; // first card fully in
 const HOLD = 1.5; // seconds per card
 const MOVE = 0.55; // card change duration
+const WIPE_AT = 0.95; // seconds after a card becomes active: drawn idea → real photo
 
 export const S2Create: React.FC = () => {
   const frame = useCurrentFrame();
@@ -57,6 +58,7 @@ export const S2Create: React.FC = () => {
     const draw = interpolate(local, [0, 0.7], [0, 1], {...clamp, easing: easeOut});
     const fill = interpolate(local, [0.45, 0.95], [0, 1], clamp);
     const photo = photos.montage[i];
+    const wipe = interpolate(local, [WIPE_AT, WIPE_AT + 0.4], [0, 1], {...clamp, easing: easeInOut});
     const w = cardW;
     const h = cardH;
     const arch = `M ${-w / 2} ${h / 2} V ${-h / 2 + w / 2} A ${w / 2} ${w / 2} 0 0 1 ${w / 2} ${-h / 2 + w / 2} V ${h / 2} Z`;
@@ -77,21 +79,32 @@ export const S2Create: React.FC = () => {
           {[1, 2, 3].map((r) => (
             <circle key={r} cx={0} cy={-40 * u} r={(120 + r * 90) * u} fill="none" stroke="#fff" strokeOpacity={0.35 / r} strokeWidth={2 * u} />
           ))}
-          {photo ? (
-            <PhotoSlot id={`s2-photo${i}`} photo={photo} x={0} y={0} w={w} h={h} shape="arch" zoom={1.04 + Math.max(0, local) * 0.03} reveal={draw} />
-          ) : (
-            <Globe
-              id={`s2-g${i}`}
-              x={0}
-              y={-70 * u}
-              scale={(L.vertical ? 0.78 : 0.7) * u}
-              t={t + i * 3}
-              baseColor={c.base}
-              plaque={c.plaque}
-              inner={<c.Inner draw={draw} fill={fill} />}
-              snow={fill}
-              sheen={interpolate(local, [0.6, 1.6], [0, 1], clamp)}
-            />
+          {/* the idea, drawn: line art fills in with colour */}
+          <Globe
+            id={`s2-g${i}`}
+            x={0}
+            y={-70 * u}
+            scale={(L.vertical ? 0.78 : 0.7) * u}
+            t={t + i * 3}
+            baseColor={c.base}
+            plaque={c.plaque}
+            inner={<c.Inner draw={draw} fill={fill} />}
+            snow={fill}
+            sheen={photo ? -1 : interpolate(local, [0.6, 1.6], [0, 1], clamp)}
+          />
+          {/* …and the real HEYDAY piece it becomes: gold wipe left → right */}
+          {photo && wipe > 0 && (
+            <g>
+              <defs>
+                <clipPath id={`s2-wipe${i}`}>
+                  <rect x={-w / 2} y={-h / 2} width={w * wipe} height={h} />
+                </clipPath>
+              </defs>
+              <g clipPath={`url(#s2-wipe${i})`}>
+                <PhotoSlot id={`s2-photo${i}`} photo={photo} x={0} y={0} w={w} h={h} shape="arch" zoom={1.04 + Math.max(0, local - WIPE_AT) * 0.03} />
+              </g>
+              {wipe < 1 && <rect x={-w / 2 + w * wipe - 2 * u} y={-h / 2} width={4 * u} height={h} fill={colors.gold} />}
+            </g>
           )}
         </g>
         <path d={arch} fill="none" stroke="#fff" strokeOpacity={0.8} strokeWidth={2 * u} />
@@ -100,7 +113,7 @@ export const S2Create: React.FC = () => {
           {`0${i + 1} / 04`}
         </text>
         <text x={w / 2 - 34 * u} y={h / 2 - 36 * u} textAnchor="end" fontFamily={fonts.display} fontStyle="italic" fontSize={30 * u} fill={colors.ink}>
-          {photo?.label ?? c.what}
+          {photo && wipe > 0.5 ? photo.label : c.what}
         </text>
       </g>
     );

@@ -19,18 +19,18 @@ Every asset in the project, where it comes from, and the slots waiting for authe
 
 ## HEYDAY product photography (supplied 2026-10-13)
 
-All photos were supplied by HEYDAY. They were only cropped, resized and EXIF-rotated, with no retouching. Registered in `src/config/brand.ts → photos`.
+Illustrations and photos work together: each illustration shows the idea, and the photo shows the real piece it became. All photos were supplied by HEYDAY. They were only cropped, resized and EXIF-rotated, with no retouching. Registered in `src/config/brand.ts → photos`.
 
 | File | Project | Original upload | Edit | Used in |
 |---|---|---|---|---|
-| `photos/coca-cola-hero.jpg` | Coca-Cola truck globe | single photo, 800×982 | none | S1 reveal: line art → photo card |
+| `photos/coca-cola-hero.jpg` | Coca-Cola truck globe | single photo, 800×982 | none | S6 "Nossa criação" (next to the illustrated "Sua ideia") |
 | `photos/sicredi-staircase.jpg` | Sicredi cooperative staircase | single photo, 720×1280 | none | S2 card 1 "Brindes corporativos" |
 | `photos/bauducco-mickey.jpg` | Bauducco "Lado a Lado Missão Orlando" | 4000×1848 JPEG (EXIF-rotated portrait) | rotated, cropped to the front row, resized to 1100 px | S2 card 2 "Campanhas promocionais" |
 | `photos/porsche-ice-experience.jpg` | Porsche Ice Experience Finlândia 2025 | single photo, 800×450 | none | S2 card 3 "Eventos especiais" |
-| `photos/samsung-tv-plus.jpg` | Samsung TV Plus popcorn | left tile of a 3-photo collage | cropped to the tile | S2 card 4 "Presentes exclusivos" |
+| `photos/samsung-tv-plus.jpg` | Samsung TV Plus popcorn | left tile of a 3-photo collage | cropped to the tile | alternate (not currently used) |
 | `photos/coca-cola-femsa-hand.jpg` | Coca-Cola FEMSA Brasil, in a gloved hand | single photo, 489×869 | none | S4 step 05: produced globe → real piece |
 | `photos/nike-sneaker.jpg` | Nike sneaker + pine | single photo, 800×1422 | none | S5 outline → photo card |
-| `photos/riachuelo-olympics.jpg` | Riachuelo, Comitê Olímpico do Brasil | left tile of a 3-photo collage | cropped to the tile | S6 closing |
+| `photos/riachuelo-olympics.jpg` | Riachuelo, Comitê Olímpico do Brasil | left tile of a 3-photo collage | cropped to the tile | S2 card 4 "Presentes exclusivos" (after the drawn character) |
 
 Not used, and why: Schutz, Marvel and Disney+ "Paradise" (Instagram stories, where the interface and caption overlays cover the globe); the green "Celebrate special moments" collage (play-button overlay); the duplicate Nike, Coca-Cola FEMSA and Bauducco group shots (kept as alternates).
 

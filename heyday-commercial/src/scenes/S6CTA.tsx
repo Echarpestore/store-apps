@@ -80,9 +80,14 @@ export const S6CTA: React.FC = () => {
   const between = (a: number, b: number, e = easeInOut) => interpolate(t, [a, b], [0, 1], {...clamp, easing: e});
 
   const cta = photos.cta;
+  const D = cta ? 0.5 : 0; // contact block waits for the idea → creation moment
   const gIn = springAt(frame, fps, 0.5, {damping: 22, stiffness: 60});
   const gx = V ? L.W / 2 : L.W * 0.27;
-  const gy = (V ? (cta ? L.H * 0.225 : L.H * 0.265) : L.H * 0.46) + Math.sin(t * 1.2) * 8 * u + (1 - gIn) * 200 * u;
+  const gy = (V ? (cta ? L.H * 0.245 : L.H * 0.265) : L.H * 0.44) + Math.sin(t * 1.2) * 8 * u + (cta ? 0 : (1 - gIn) * 200 * u);
+  // idea (illustration, left) and creation (photo, right)
+  const pair = V
+    ? {ix: L.W * 0.26, ir: 138 * u, px: L.W * 0.73, pr: 128 * u}
+    : {ix: L.W * 0.115, ir: 140 * u, px: L.W * 0.37, pr: 132 * u};
   const gScale = (V ? 0.58 : 0.72) * u * (0.85 + 0.15 * gIn);
 
   const colX = V ? 80 * u : L.W * 0.5;
@@ -103,7 +108,74 @@ export const S6CTA: React.FC = () => {
           </defs>
           <circle cx={gx} cy={gy} r={420 * u} fill="url(#s6-halo)" opacity={gIn} />
           {cta ? (
-            <PhotoGlobe id="s6-photo" photo={cta} cx={gx} cy={gy} r={(V ? 172 : 190) * u} mode="card" border="rgba(233,211,166,0.45)" reveal={gIn} opacity={Math.min(1, gIn * 1.5)} sheen={interpolate(t, [1.4, 2.6], [0, 1], clamp)} />
+            <g>
+              {/* "Sua ideia." — the drawn globe */}
+              <Globe
+                id="s6-idea"
+                x={pair.ix}
+                y={gy}
+                scale={pair.ir / 300}
+                t={t + 5}
+                baseColor={colors.ink}
+                plaque="SUA MARCA"
+                inner={<InnerLogo label="SUA MARCA" />}
+                outline={between(0.5, 1.4)}
+                solid={between(1.2, 1.8)}
+                sheen={interpolate(t, [1.8, 2.8], [0, 1], clamp)}
+              />
+              {/* gold arrow: idea → creation */}
+              <path
+                d={`M ${pair.ix + pair.ir * 1.15} ${gy - pair.ir * 0.1} Q ${(pair.ix + pair.px) / 2} ${gy - pair.ir * 0.75} ${pair.px - pair.pr * 1.5} ${gy - pair.ir * 0.1}`}
+                fill="none"
+                stroke={colors.gold}
+                strokeWidth={3 * u}
+                strokeDasharray={`${8 * u} ${10 * u}`}
+                strokeDashoffset={(1 - between(1.7, 2.3)) * 400 * u}
+                opacity={between(1.7, 1.9)}
+                strokeLinecap="round"
+              />
+              <path
+                d={`M ${pair.px - pair.pr * 1.5 - 14 * u} ${gy - pair.ir * 0.1 - 12 * u} L ${pair.px - pair.pr * 1.5} ${gy - pair.ir * 0.1} L ${pair.px - pair.pr * 1.5 - 16 * u} ${gy - pair.ir * 0.1 + 8 * u}`}
+                fill="none"
+                stroke={colors.gold}
+                strokeWidth={3 * u}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={between(2.2, 2.4)}
+              />
+              {/* "Nossa criação." — the real HEYDAY piece */}
+              <PhotoGlobe
+                id="s6-photo"
+                photo={cta}
+                cx={pair.px}
+                cy={gy}
+                r={pair.pr}
+                mode="card"
+                border="rgba(233,211,166,0.45)"
+                reveal={between(2.0, 2.8, easeOut)}
+                opacity={between(2.0, 2.3)}
+                sheen={interpolate(t, [2.8, 3.8], [0, 1], clamp)}
+              />
+              {[
+                {x: pair.ix, label: 'Sua ideia', p: between(1.3, 1.8)},
+                {x: pair.px, label: 'Nossa criação', p: between(2.5, 3.0)},
+              ].map((l) => (
+                <text
+                  key={l.label}
+                  x={l.x}
+                  y={gy + pair.pr * 1.75 + 44 * u}
+                  textAnchor="middle"
+                  fontFamily={fonts.sans}
+                  fontWeight={600}
+                  fontSize={22 * u}
+                  letterSpacing={5 * u}
+                  fill={colors.goldLight}
+                  opacity={l.p}
+                >
+                  {l.label.toUpperCase()}
+                </text>
+              ))}
+            </g>
           ) : (
             <Globe
               id="s6-globe"
@@ -132,34 +204,36 @@ export const S6CTA: React.FC = () => {
         />
 
         <div style={{position: 'absolute', left: colX, top: V ? L.H * 0.455 : L.H * 0.1, width: colW}}>
-          <KineticText text={copy.s6.headline.replace('. ', '.\n')} start={1.0} size={(V ? 88 : 80) * u} weight={300} color={colors.paper} align={V ? 'center' : 'left'} width={colW} highlight={['criação']} />
+          {copy.s6.headline.split('. ').map((line, k, all) => (
+            <KineticText key={k} text={k < all.length - 1 ? line + '.' : line} start={cta ? [1.0, 2.2][k] ?? 2.2 : 1.0 + k * 0.15} size={(V ? 88 : 80) * u} weight={300} color={colors.paper} align={V ? 'center' : 'left'} width={colW} highlight={['criação']} />
+          ))}
           <div style={{height: 18 * u}} />
-          <KineticText text={copy.s6.sub} start={1.8} size={(V ? 38 : 34) * u} font="sans" weight={300} color="rgba(255,255,255,0.75)" align={V ? 'center' : 'left'} width={colW} stagger={0.04} />
+          <KineticText text={copy.s6.sub} start={cta ? 2.8 : 1.8} size={(V ? 38 : 34) * u} font="sans" weight={300} color="rgba(255,255,255,0.75)" align={V ? 'center' : 'left'} width={colW} stagger={0.04} />
         </div>
 
         <div style={{position: 'absolute', left: colX, top: V ? L.H * 0.632 : L.H * 0.4, width: contactW, display: 'flex', flexDirection: 'column', gap: 22 * u}}>
           <ContactCard
             u={u}
             width={contactW}
-            start={2.8}
+            start={2.8 + D}
             label={`WhatsApp — ${copy.s6.whatsappLabel}`}
             value={contactText(contact.whatsapp)}
             verified={contact.whatsapp.verified}
-            icon={<WhatsAppIcon x={42 * u} y={42 * u} size={80 * u} draw={between(2.9, 3.6)} fill={between(3.3, 3.8)} />}
+            icon={<WhatsAppIcon x={42 * u} y={42 * u} size={80 * u} draw={between(2.9 + D, 3.6 + D)} fill={between(3.3 + D, 3.8 + D)} />}
           />
           <ContactCard
             u={u}
             width={contactW}
-            start={3.2}
+            start={3.2 + D}
             label={`E-mail — ${copy.s6.emailLabel}`}
             value={contactText(contact.email)}
             verified={contact.email.verified}
-            icon={<MailIcon x={42 * u} y={42 * u} size={76 * u} draw={between(3.3, 4.0)} fill={between(3.7, 4.2)} color={colors.gold} />}
+            icon={<MailIcon x={42 * u} y={42 * u} size={76 * u} draw={between(3.3 + D, 4.0 + D)} fill={between(3.7 + D, 4.2 + D)} color={colors.gold} />}
           />
           <div style={{display: 'flex', justifyContent: V ? 'center' : 'flex-start', gap: 50 * u, marginTop: 12 * u}}>
             {[
-              {Icon: WebIcon, text: contact.website, s: 3.8},
-              {Icon: InstagramIcon, text: contact.instagram, s: 4.0},
+              {Icon: WebIcon, text: contact.website, s: 3.8 + D},
+              {Icon: InstagramIcon, text: contact.instagram, s: 4.0 + D},
             ].map(({Icon, text, s}) => {
               const p = springAt(frame, fps, s);
               return (
