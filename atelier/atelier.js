@@ -193,42 +193,71 @@
   /* بصمة المنتج في الكاش — data-URL أو مسار الملف */
   function prodSig(p) { return p.img; }
 
-  /* ---------------- الواجهة (السلايدر) ---------------- */
-  var heroIdx = -1, heroT = 0, heroList = [];
+  /* ---------------- الواجهة: المرآة + عيّنات القماش ----------------
+     مفيش سلايدر بيتحرك لوحده: العميلة بتختار العيّنة، والمرآة
+     بتبدّل القطعة عليها بستارة حرير. قبل الصورة = صورة المنتج،
+     وبعدها = إطلالتها هي. */
+  var mirrorP = null, mirrorShown = "", userPicked = false, paintT = 0;
+  function tryables() { return state.products.filter(function (p) { return p.tryable; }); }
   function renderHero() {
-    var box = $("slides");
-    heroList = state.products.filter(function (p) { return p.tryable; }).slice(0, 5);
-    box.innerHTML = "";
-    heroList.forEach(function (p) {
-      var s = el("div", "slide");
-      s.dataset.id = p.id;
-      s.innerHTML = '<img class="prod" alt=""><img class="look" alt="">';
-      s.querySelector(".prod").src = p.img;
-      box.appendChild(s);
+    var box = $("swatches"); box.innerHTML = "";
+    tryables().forEach(function (p) {
+      var b = el("button", "sw"); b.type = "button"; b.dataset.id = p.id;
+      b.setAttribute("aria-label", p.name); b.setAttribute("role", "option");
+      b.innerHTML = '<span class="clip"><img alt="" loading="lazy"></span><i class="dot"></i>';
+      b.querySelector("img").src = p.img;
+      b.addEventListener("click", function () { userPicked = true; setMirror(p); });
+      box.appendChild(b);
     });
-    $("slideTotal").textContent = pad2(heroList.length);
-    goHero(0);
+    var first = tryables()[0] || state.products[0];
+    if (first) setMirror(first, true);
   }
-  function goHero(i) {
-    var slides = $("slides").children;
-    if (!slides.length) return;
-    var prev = heroIdx;
-    heroIdx = (i + slides.length) % slides.length;
-    for (var k = 0; k < slides.length; k++) {
-      slides[k].classList.toggle("on", k === heroIdx);
-      slides[k].classList.toggle("prev", k === prev && prev !== heroIdx);
+  function setMirror(p, instant) {
+    mirrorP = p;
+    document.querySelectorAll(".sw").forEach(function (sw) {
+      var on = sw.dataset.id === p.id; sw.classList.toggle("on", on); sw.setAttribute("aria-selected", on);
+      if (on && !instant) centerSwatch(sw);
+    });
+    $("mName").textContent = p.name;
+    $("mLine").textContent = AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "";
+    $("mirror").classList.toggle("busy", !!(state.queued[p.id] && !state.looks[p.id]));
+    paintMirror(state.looks[p.id] || p.img, instant);
+    // اختارت قطعة لسه ما اتجهزتش وهي جوّه — نقدّمها أول الطابور
+    if (state.alive && userPicked && p.tryable && !state.looks[p.id] && !state.queued[p.id]) requestOne(p, true);
+  }
+  /* توسيط العيّنة جوّه الشريط بس — scrollIntoView كان بيحرّك الصفحة كلها بالعرض */
+  function centerSwatch(sw) {
+    var box = $("swatches"), br = box.getBoundingClientRect(), r = sw.getBoundingClientRect();
+    var delta = (r.left + r.width / 2) - (br.left + br.width / 2);
+    if (box.scrollBy) box.scrollBy({ left: delta, behavior: REDUCED ? "auto" : "smooth" }); else box.scrollLeft += delta;
+  }
+  function paintMirror(src, instant) {
+    if (!src || src === mirrorShown) return;
+    mirrorShown = src;
+    var m = $("mirror"), layers = m.querySelectorAll(".m-layer"), base = layers[0], top = layers[1];
+    clearTimeout(paintT);
+    if (instant || !base.getAttribute("src")) {
+      base.src = src; base.className = "m-layer base"; top.className = "m-layer"; return;
     }
-    var p = heroList[heroIdx];
-    $("slideNo").textContent = pad2(heroIdx + 1);
-    $("slideName").textContent = p ? p.name : "";
-    var c = document.querySelector(".counter");
-    c.classList.remove("run"); void c.offsetWidth; c.classList.add("run");
-    clearTimeout(heroT); heroT = setTimeout(function () { goHero(heroIdx + 1); }, 6500);
+    top.className = "m-layer top"; top.onload = null;
+    var go = function () {
+      m.style.setProperty("--mh", m.offsetHeight + "px");
+      requestAnimationFrame(function () {
+        top.classList.add("show");
+        m.classList.remove("wipe"); void m.offsetWidth; m.classList.add("wipe");
+      });
+      paintT = setTimeout(function () { base.src = src; base.className = "m-layer base"; top.className = "m-layer"; }, 1600);
+    };
+    top.src = src;
+    if (top.complete) go(); else top.onload = go;
   }
-  document.querySelector(".hero").addEventListener("click", function (e) {
-    if (e.target.closest("button,a")) return;
-    var p = heroList[heroIdx]; if (p) openLook(p);
-  });
+  $("mirror").addEventListener("click", function () { if (mirrorP) openLook(mirrorP); });
+  $("mirror").addEventListener("keydown", function (e) { if (e.key === "Enter" && mirrorP) openLook(mirrorP); });
+  function resetMirror() {
+    document.querySelectorAll(".sw").forEach(function (sw) { sw.classList.remove("worn"); });
+    userPicked = false; mirrorShown = "";
+    if (mirrorP) setMirror(mirrorP, true);
+  }
 
   /* ---------------- المجموعة ---------------- */
   var io = null;
@@ -357,7 +386,7 @@
     state.looks = {}; state.queued = {}; state.queue = [];
     state.requested = 0; state.done = 0; state.target = 0; state.stopped = false;
     document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "manual", "revealing"); });
-    document.querySelectorAll(".slide").forEach(function (s) { s.classList.remove("worn"); });
+    resetMirror();
     if (LS) PC.saveFace(LS, face);
     var ready = state.alive ? Promise.resolve(setFace(face)) : awaken(face);
     var gen = state.gen;
@@ -402,6 +431,7 @@
     var c = card(p.id); if (c) { c.classList.remove("manual"); c.classList.add("weaving"); }
     if (front) state.queue.unshift(p); else state.queue.push(p);
     if (state.lbOpen === p) setLb(p);
+    if (mirrorP === p) $("mirror").classList.add("busy");
     updateDock(); pump();
   }
 
@@ -525,8 +555,11 @@
         setTimeout(function () { c.classList.remove("revealing"); }, 2100);
       });
     }
-    var s = document.querySelector('.slide[data-id="' + CSS.escape(p.id) + '"]');
-    if (s) { s.querySelector(".look").src = url; s.classList.add("worn"); }
+    var sw = document.querySelector('.sw[data-id="' + CSS.escape(p.id) + '"]');
+    if (sw) sw.classList.add("worn");
+    // أول إطلالة جاهزة تظهر في المرآة على طول — لحد ما العميلة تختار بنفسها
+    if (mirrorP === p) setMirror(p);
+    else if (!userPicked && (!mirrorP || !state.looks[mirrorP.id])) setMirror(p);
     if (state.lbOpen === p) setLb(p);
     updateDock();
   }
@@ -596,7 +629,7 @@
     state.done = 0; state.target = 0; state.requested = 0;
     document.body.classList.remove("alive"); state.alive = false;
     document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "manual", "revealing"); c.querySelector(".look").removeAttribute("src"); });
-    document.querySelectorAll(".slide").forEach(function (s) { s.classList.remove("worn"); });
+    resetMirror();
     ["salonImg", "dockFace"].forEach(function (id) { $(id).removeAttribute("src"); });
     $("salonArch").classList.remove("has");
     $("heroEyebrow").textContent = "مجموعة الموسم";
