@@ -38,24 +38,30 @@
   </nav>
 </header>
 
-<!-- ✦ الواجهة -->
+<!-- ✦ الواجهة: المرآة -->
 <section class="hero" id="top" aria-label="المجموعة">
-  <div class="slides" id="slides"></div>
-  <div class="hero-shade"></div>
   <div class="hero-copy">
-    <div class="eyebrow light" id="heroEyebrow">مجموعة الموسم</div>
+    <div class="eyebrow" id="heroEyebrow">مجموعة الموسم</div>
     <h1 class="split" id="heroTitle"><span class="ln"><span>المجموعة كاملة،</span></span><span class="ln"><span><em>عليكِ أنتِ</em></span></span></h1>
     <p class="hero-sub" id="heroSub">صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري.</p>
+  </div>
+  <div class="hero-cta">
     <div class="hero-acts">
-      <button class="btn btn-light" id="ctaUpload" type="button"><span>جرّبي المجموعة</span></button>
-      <a class="btn-link light" href="#collection">تصفّحي المجموعة</a>
+      <button class="btn btn-dark" id="ctaUpload" type="button"><span>جرّبي المجموعة</span></button>
+      <a class="btn-link" href="#collection">تصفّحي المجموعة</a>
     </div>
     <a class="hero-privacy" href="#privacy">🔒 صورتكِ تبقى على هاتفكِ — لا نحتفظ بها</a>
   </div>
-  <div class="hero-foot">
-    <div class="counter"><b id="slideNo">01</b><i></i><span id="slideTotal">05</span></div>
-    <div class="slide-name" id="slideName"></div>
-    <div class="scroll-cue"><i></i></div>
+  <div class="mirror-wrap">
+    <div class="mirror" id="mirror" role="button" tabindex="0" aria-label="عرض القطعة">
+      <img class="m-layer" alt=""><img class="m-layer" alt="">
+      <i class="m-sheen"></i>
+      <div class="m-weave"><span>نُجهّزها لكِ…</span></div>
+    </div>
+    <div class="m-cap"><b id="mName"></b><span id="mLine"></span></div>
+  </div>
+  <div class="swatches-wrap">
+    <div class="swatches" id="swatches" role="listbox" aria-label="اختاري قطعة"></div>
   </div>
 </section>
 
