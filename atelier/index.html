@@ -3,25 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>echarpe — Maison du Voile</title>
-<meta name="description" content="echarpe — دار الطُرَح. ارفعي صورتكِ، وتجلّى المجموعة كاملةً عليكِ.">
+<title>echarpe — جرّبي المجموعة عليكِ</title>
+<meta name="description" content="echarpe — صورةٌ واحدة، وتظهر كل قطعة من المجموعة عليكِ قبل أن تختاري.">
 <meta name="theme-color" content="#f6f2ec">
-<meta property="og:title" content="echarpe — Maison du Voile">
-<meta property="og:description" content="غرفة قياسكِ الخاصة: المجموعة كاملةً عليكِ، قبل أن تختاري.">
+<meta property="og:title" content="echarpe — جرّبي المجموعة عليكِ">
+<meta property="og:description" content="صورةٌ واحدة، وتظهر كل قطعة من المجموعة عليكِ قبل أن تختاري.">
 <meta property="og:image" content="https://www.echarpe.store/atelier/collection/hero-comfort.jpg">
 <link rel="icon" href="../loyalty/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=IBM+Plex+Sans+Arabic:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans+Arabic:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="atelier.css">
 </head>
 <body class="intro-on">
 
 <!-- ✦ الافتتاحية -->
 <div class="intro" id="intro" aria-hidden="true">
-  <div class="intro-mark" id="introMark">echarpe</div>
+  <img class="intro-logo" src="../logo.png" alt="">
   <div class="intro-rule"></div>
-  <div class="intro-tag">MAISON DU VOILE · LE CAIRE</div>
+  <div class="intro-tag">طُرَح · إسدالات</div>
 </div>
 
 <div class="grain" aria-hidden="true"></div>
@@ -29,12 +29,12 @@
 <header id="hdr">
   <nav class="nav-side">
     <a href="#collection">المجموعة</a>
-    <a href="#salon" class="hide-sm">غرفة القياس</a>
+    <a href="#privacy" class="hide-sm">الخصوصية</a>
   </nav>
-  <a class="wordmark" href="#top" aria-label="echarpe">echarpe</a>
+  <a class="logo" href="#top" aria-label="echarpe"><img src="../logo.png" alt="echarpe"></a>
   <nav class="nav-side end">
     <span class="me-dot" id="meDot"><img alt=""></span>
-    <a href="../loyalty/">البوتيك</a>
+    <a href="../loyalty/">المتجر</a>
   </nav>
 </header>
 
@@ -43,13 +43,14 @@
   <div class="slides" id="slides"></div>
   <div class="hero-shade"></div>
   <div class="hero-copy">
-    <div class="eyebrow light" id="heroEyebrow">Maison du Voile — Collection 2026</div>
-    <h1 class="split" id="heroTitle"><span class="ln"><span>أناقةٌ تُرتدى</span></span><span class="ln"><span>قبل أن <em>تُختار</em></span></span></h1>
-    <p class="hero-sub" id="heroSub">صورةٌ واحدة، وتتجلّى المجموعة كاملةً عليكِ.</p>
+    <div class="eyebrow light" id="heroEyebrow">مجموعة الموسم</div>
+    <h1 class="split" id="heroTitle"><span class="ln"><span>المجموعة كاملة،</span></span><span class="ln"><span><em>عليكِ أنتِ</em></span></span></h1>
+    <p class="hero-sub" id="heroSub">صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري.</p>
     <div class="hero-acts">
-      <button class="btn btn-light" id="ctaUpload" type="button"><span>ادخلي غرفة القياس</span></button>
+      <button class="btn btn-light" id="ctaUpload" type="button"><span>جرّبي المجموعة</span></button>
       <a class="btn-link light" href="#collection">تصفّحي المجموعة</a>
     </div>
+    <a class="hero-privacy" href="#privacy">🔒 صورتكِ تبقى على هاتفكِ — لا نحتفظ بها</a>
   </div>
   <div class="hero-foot">
     <div class="counter"><b id="slideNo">01</b><i></i><span id="slideTotal">05</span></div>
@@ -61,9 +62,8 @@
 <div class="marquee" aria-hidden="true"><div class="track" id="marquee"></div></div>
 
 <main>
-  <section class="statement reveal-words" aria-label="عن الدار">
-    <div class="eyebrow">L'Esprit de la Maison</div>
-    <p>كل طيّةٍ حكاية، وكل لونٍ مزاج.<br>اختاري ما يشبهكِ… <em>وارتديه قبل أن تقرّري.</em></p>
+  <section class="statement reveal-words" aria-label="عن echarpe">
+    <p>كل طيّةٍ حكاية، وكل لونٍ مزاج.<br>اختاري ما يشبهكِ… <em>وشاهديه عليكِ أولاً.</em></p>
   </section>
 
   <section class="banner" aria-hidden="true">
@@ -72,9 +72,8 @@
 
   <section class="collection" id="collection">
     <div class="sec-head">
-      <div class="eyebrow">La Collection</div>
       <h2>المجموعة</h2>
-      <p class="sec-sub">خاماتٌ خفيفة، طيّاتٌ ناعمة، وتفاصيلُ صُنعت لتدوم.</p>
+      <p class="sec-sub">خاماتٌ ناعمة، وتفاصيلُ صُنعت لتدوم.</p>
     </div>
     <div class="filters" id="filters" role="tablist"></div>
     <div class="grid" id="grid"></div>
@@ -88,44 +87,53 @@
       </div>
     </div>
     <div class="salon-copy">
-      <div class="eyebrow">Le Salon Privé</div>
-      <h2>غرفة قياسكِ الخاصة</h2>
-      <p>ارفعي صورةً واضحة لوجهكِ وكتفيكِ، ودعينا نُلبسكِ المجموعة قطعةً قطعة — بالضوء نفسه، وبملامحكِ كما هي.</p>
+      <h2>جرّبي قبل أن تختاري</h2>
+      <p>صورةٌ واحدة منكِ، وفي لحظات تظهر كل قطعة من المجموعة عليكِ.</p>
       <ol class="steps">
-        <li><b>I</b><span>صورةٌ واحدة</span></li>
-        <li><b>II</b><span>لحظاتٌ من الانتظار</span></li>
-        <li><b>III</b><span>المجموعة عليكِ</span></li>
+        <li><b>١</b><span>صورةٌ واحدة</span></li>
+        <li><b>٢</b><span>لحظات</span></li>
+        <li><b>٣</b><span>المجموعة عليكِ</span></li>
       </ol>
-      <button class="btn btn-dark" id="ctaSalon" type="button"><span>ادخلي غرفة القياس</span></button>
-      <small class="fine">صورتكِ تبقى على جهازكِ، ولا نحتفظ بها.</small>
+      <button class="btn btn-dark" id="ctaSalon" type="button"><span>جرّبي المجموعة</span></button>
     </div>
+  </section>
+
+  <section class="privacy" id="privacy">
+    <div class="lock" aria-hidden="true"><svg viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M16 21v-5a8 8 0 0 1 16 0v5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="24" cy="31" r="2" fill="currentColor"/></svg></div>
+    <h2>خصوصيتكِ أولاً</h2>
+    <ul>
+      <li><b>على هاتفكِ أنتِ فقط</b><span>صورتكِ وإطلالاتكِ تُحفظ على هاتفكِ، ولا يراها أحدٌ غيركِ.</span></li>
+      <li><b>لا نحتفظ بها</b><span>تُرسَل الصورة لحظة تجهيز الإطلالات فقط، ولا نخزّنها في أي مكانٍ لدينا.</span></li>
+      <li><b>القرار لكِ</b><span>احذفي صورتكِ وإطلالاتكِ من هاتفكِ في أي وقت، بلمسة واحدة.</span></li>
+    </ul>
+    <button class="btn btn-ghost" id="forgetMe" type="button"><span>احذفي صورتي من هاتفي</span></button>
   </section>
 </main>
 
 <footer>
-  <div class="foot-mark">echarpe</div>
-  <div class="foot-tag">MAISON DU VOILE · LE CAIRE</div>
-  <nav><a href="#collection">المجموعة</a><a href="#salon">غرفة القياس</a><a href="../loyalty/">البوتيك</a></nav>
-  <p class="fine">الإطلالات مُنشأة بالذكاء الاصطناعي لتقريب الصورة، وقد تختلف تفاصيل الخامة قليلاً.</p>
+  <img class="foot-logo" src="../logo.png" alt="echarpe">
+  <div class="foot-tag">طُرَح · إسدالات</div>
+  <nav><a href="#collection">المجموعة</a><a href="#privacy">الخصوصية</a><a href="../loyalty/">المتجر</a></nav>
+  <p class="fine">الإطلالات مُنشأة بالذكاء الاصطناعي للتقريب، وقد تختلف تفاصيل الخامة قليلاً.</p>
 </footer>
 
 <input type="file" id="file" accept="image/*" hidden>
 
-<!-- ✦ لحظة الدخول إلى غرفة القياس -->
+<!-- ✦ لحظة التجهيز -->
 <div class="awaken" id="awaken" aria-live="polite">
   <div class="dust" id="dust"></div>
   <div class="aw-arch"><img id="awakenFace" alt=""><i class="scan"></i></div>
   <div class="aw-words">
     <p id="w1" class="letters">أهلاً بكِ</p>
-    <p id="w2" class="letters">نُعِدّ لكِ غرفة القياس</p>
-    <small id="w3">لحظات، وتظهر كل قطعةٍ عليكِ</small>
+    <p id="w2" class="letters">نُجهّز المجموعة لكِ</p>
+    <small id="w3">لحظات، وتظهر كل قطعة عليكِ</small>
   </div>
 </div>
 
 <div class="dock" id="dock">
   <div class="me"><img id="dockFace" alt=""></div>
-  <div class="txt"><b>غرفة القياس</b><small id="dockSub">تُنسَج المجموعة لكِ…</small></div>
-  <button type="button" id="dockChange">تغيير الصورة</button>
+  <div class="txt"><b>إطلالاتكِ</b><small id="dockSub">نُجهّزها لكِ…</small></div>
+  <button type="button" id="dockChange">صورة أخرى</button>
   <div class="prog"><i id="dockProg"></i></div>
 </div>
 
@@ -135,17 +143,14 @@
   <div class="lb-pic" id="lbPic">
     <img class="look" id="lbLook" alt="">
     <img class="prod" id="lbProd" alt="">
-    <div class="weave"></div>
     <div class="chip"><img id="lbChip" alt=""></div>
-    <span class="hd">Haute Définition</span>
-    <div class="hq-note">تُنسَج بدقةٍ عالية…</div>
   </div>
   <div class="lb-info">
-    <div class="eyebrow" id="lbNo"></div>
+    <div class="eyebrow" id="lbLine"></div>
     <h3 id="lbName"></h3>
-    <div class="latin" id="lbLatin"></div>
+    <div class="lb-price" id="lbPrice"></div>
     <div class="lb-acts">
-      <button class="btn btn-dark" id="lbHq" type="button"><span>عرض بدقة عالية</span></button>
+      <button class="btn btn-dark" id="lbTry" type="button"><span>جرّبيها عليكِ</span></button>
       <a class="btn btn-ghost" id="lbOrder" href="../loyalty/"><span>اطلبيها</span></a>
     </div>
     <small class="fine" id="lbHint">اضغطي مطوّلاً على الصورة لرؤية القطعة وحدها.</small>

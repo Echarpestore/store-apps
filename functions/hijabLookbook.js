@@ -194,7 +194,7 @@ exports.hijabLookbook = onCall(
           us.exists ? (us.data().count || 0) : 0,
           gs.exists ? (gs.data().count || 0) : 0, cfg);
         if (!dec.allow) throw new HttpsError("resource-exhausted",
-          "اكتملت جلسة القياس لليوم. يسعدنا لقاؤكِ غداً، ويمكنكِ عرض أي قطعة بدقة عالية.");
+          "اكتفينا بهذا القدر اليوم 🤍 يسعدنا أن تكملي غداً.");
         // 🔒 عدّادات بس — لا صورة ولا وش
         tx.set(uref, { count: dec.nextUser, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         tx.set(gref, { count: dec.nextGlobal, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
