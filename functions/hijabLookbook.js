@@ -88,9 +88,15 @@ function sanitizeProducts(list) {
 
 /* البرومبت — نفس قواعد الحفاظ على العميلة ولفّة الطرحة بتاعت
    hijabTryOn، بس كل خانة بطرحة **مختلفة** وممنوع الخلط بينهم. */
-function buildLookbookPrompt(n) {
+/* 🧥 الإسدال: قطعة صلاة طويلة بغطاء راس متصل — لفّة الطرحة (الطرفين
+   الطوال) ملهاش معنى هنا، فبنبدّل جزء الشكل بس وباقي القواعد زي ما هي. */
+const GARMENTS = ["hijab", "isdal"];
+function cleanGarment(g) { return GARMENTS.includes(g) ? g : "hijab"; }
+
+function buildLookbookPrompt(n, garment) {
   const count = Math.max(1, Math.min(MAX_PRODUCTS, Number(n) || 1));
   const layout = core.computeGridLayout(count);
+  if (cleanGarment(garment) === "isdal") return buildIsdalPrompt(count, layout);
   const lines = [
     "Create a photorealistic virtual hijab try-on lookbook.",
     "IMAGE 1 is the customer and the immutable base photograph.",
@@ -112,6 +118,32 @@ function buildLookbookPrompt(n) {
   }
   lines.push(
     "Each cell uses ONLY its own product. Never mix, swap, blend or repeat colors or prints between cells.",
+    "Never output a product-only image, flat lay, mannequin or fabric close-up in any cell.",
+    "Use only very thin uniform separators between cells. No labels, text, numbers, borders or watermarks."
+  );
+  return lines.join("\n");
+}
+
+function buildIsdalPrompt(count, layout) {
+  const lines = [
+    "Create a photorealistic virtual try-on lookbook of an isdal (a one-piece Muslim prayer garment with an attached head cover that flows down over the body).",
+    "IMAGE 1 is the customer and the immutable base photograph.",
+    "IMAGES 2 to " + (count + 1) + " are " + count + " DIFFERENT isdal products, used ONLY as product references.",
+    "Preserve the customer's identity exactly in every cell: face, facial proportions, skin texture and tone, expression, background, pose, camera perspective and lighting.",
+    "Do not beautify, reshape, retouch, zoom, or change the customer.",
+    "Dress the customer in the isdal: the attached hood frames the face closely, and the garment falls loosely and modestly over the shoulders, arms and body to the full visible length of the photo, with natural folds and realistic weight.",
+    "Keep the exact cut of each isdal (hood shape, sleeves or cape, length, trims, lace, embroidery and closures) as shown in its product image.",
+    "OUTPUT FORMAT IS STRICT:",
+    "Return ONE image containing exactly " + count + " equal portrait cells arranged as " +
+      layout.rows + " row(s) by " + layout.cols + " column(s), filled left-to-right then top-to-bottom.",
+    "Every cell shows the SAME customer with the SAME framing, camera distance and lighting. The ONLY difference between cells is which isdal is worn."
+  ];
+  for (let i = 0; i < count; i++) {
+    lines.push("cell " + (i + 1) + ": the customer wearing EXACTLY the isdal from IMAGE " + (i + 2) +
+      " (same color, print, fabric, trims and cut).");
+  }
+  lines.push(
+    "Each cell uses ONLY its own product. Never mix, swap, blend or repeat colors, prints or cuts between cells.",
     "Never output a product-only image, flat lay, mannequin or fabric close-up in any cell.",
     "Use only very thin uniform separators between cells. No labels, text, numbers, borders or watermarks."
   );
@@ -162,7 +194,7 @@ exports.hijabLookbook = onCall(
           us.exists ? (us.data().count || 0) : 0,
           gs.exists ? (gs.data().count || 0) : 0, cfg);
         if (!dec.allow) throw new HttpsError("resource-exhausted",
-          "شُفتي كولكشن كبير النهاردة 🤍 كمّلي بكرة، أو دوسي على أي طرحة لتجربتها بجودة عالية.");
+          "اكتملت جلسة القياس لليوم. يسعدنا لقاؤكِ غداً، ويمكنكِ عرض أي قطعة بدقة عالية.");
         // 🔒 عدّادات بس — لا صورة ولا وش
         tx.set(uref, { count: dec.nextUser, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         tx.set(gref, { count: dec.nextGlobal, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
@@ -179,7 +211,7 @@ exports.hijabLookbook = onCall(
         model: cfg.model,
         quality: cfg.quality,
         cellCount: products.length,
-        prompt: buildLookbookPrompt(products.length),
+        prompt: buildLookbookPrompt(products.length, cleanGarment(data.garment)),
         images: [{ mime: customer.mime, b64: customer.b64 }]
           .concat(products.map((p) => ({ mime: p.mime, b64: p.b64 })))
       });
@@ -201,6 +233,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports.resolveLookbookConfig = resolveLookbookConfig;
   module.exports.sanitizeProducts = sanitizeProducts;
   module.exports.buildLookbookPrompt = buildLookbookPrompt;
+  module.exports.cleanGarment = cleanGarment;
   module.exports.lookbookGuardDecide = lookbookGuardDecide;
   module.exports.userDayKey = userDayKey;
   module.exports.globalDayKey = globalDayKey;
