@@ -1,0 +1,210 @@
+/* ============================================================
+   ✨👑 hijabLookbook.js — «الأتيليه»: لحد ٤ طرح في نداء واحد
+   ------------------------------------------------------------
+   الفكرة: العميلة ترفع صورتها مرة واحدة في صفحة الأتيليه، والموقع
+   كله "يصحى" — كل كارت منتج يتحوّل لصورتها وهي لابسة الطرحة.
+   بدل نداء لكل منتج (hijabTryOn)، بنبعت الوش + ٤ منتجات في نداء
+   واحد ونرجّع **صورة واحدة فيها شبكة ٢×٢**، والصفحة بتقصّها على
+   الجهاز (نفس sliceGridProportional بتاع شبكة البندانة).
+
+   💰 ليه: التكلفة بالصورة الخارجة مش بعدد المنتجات — ٤ منتجات في
+      صورة 2K ≈ ربع تمن ٤ نداءات منفصلة. الجودة العالية لمنتج واحد
+      لسه بـhijabTryOn لما العميلة تدوس «جودة عالية».
+
+   🔴 نفس قواعد النشر بتاعت hijabTryOn (v2 بس، من غير initializeApp):
+         Object.assign(exports, require("./hijabLookbook"));
+         firebase deploy --only functions:hijabLookbook
+
+   🔐 الحماية — أشد من hijabTryOn عن قصد (الصفحة عامة للموقع كله):
+     · لازم `req.auth` (تسجيل مجهول من الصفحة) — العدّاد على الـuid
+       مش على تليفون جاي من العميل.
+     · سقف لكل uid في اليوم + **سقف يومي للمتجر كله** — من غيره لوب
+       بسيط بعدة حسابات مجهولة يحرق الفلوس.
+     · نفس الخصوصية: الصورة متتخزّنش عندنا، الحارس عدّاد بس.
+   ============================================================ */
+"use strict";
+
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const core = require("./hijabTryOn");
+
+const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
+
+const COL_SETTINGS = "pos_test_settings";
+const DOC_SETTINGS = "tryon_ai";
+const COL_GUARD = "tryon_ai_guard";
+
+/* الإعدادات من نفس مستند tryon_ai — حقول إضافية:
+     lookbookEnabled      (افتراضي true)
+     lookbookCapPerUser   شبكات/يوم لكل عميلة (الشبكة = ٤ منتجات)
+     lookbookCapGlobal    شبكات/يوم للمتجر كله — سقف الميزانية */
+const LOOKBOOK_DEFAULTS = {
+  lookbookEnabled: true,
+  lookbookCapPerUser: 6,     // ٦ شبكات = ٢٤ طرحة للعميلة في اليوم
+  lookbookCapGlobal: 400     // سقف المتجر كله في اليوم
+};
+const MAX_PRODUCTS = 4;
+
+function resolveLookbookConfig(doc) {
+  const d = (doc && typeof doc === "object") ? doc : {};
+  const base = core.resolveConfig(d);
+  const posInt = (v, def) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : def);
+  return {
+    enabled: base.enabled && d.lookbookEnabled !== false,
+    model: base.model,
+    quality: base.quality,
+    capPerUser: posInt(d.lookbookCapPerUser, LOOKBOOK_DEFAULTS.lookbookCapPerUser),
+    capGlobal: posInt(d.lookbookCapGlobal, LOOKBOOK_DEFAULTS.lookbookCapGlobal)
+  };
+}
+
+/* يوم القاهرة YYYY-MM-DD — نفس حسبة phoneDayKeyCairo من غير التليفون */
+function cairoDay(nowMs) {
+  return core.phoneDayKeyCairo("0", nowMs).split("_")[1];
+}
+
+/* الـuid ممكن يكون فيه حروف — بننظّفه لمفتاح مستند آمن */
+function userDayKey(uid, nowMs) {
+  const u = String(uid || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 40) || "anon";
+  return "lb_" + u + "_" + cairoDay(nowMs);
+}
+function globalDayKey(nowMs) {
+  return "lb_all_" + cairoDay(nowMs);
+}
+
+/* تنظيف قائمة المنتجات: ١ لـ٤، كل واحد { id, image } والصورة
+   data-URL سليمة. أي منتج بايظ = الطلب كله يترفض (ترتيب الخانات
+   لازم يفضل مطابق للي العميل هيقصّه). */
+function sanitizeProducts(list) {
+  if (!Array.isArray(list) || !list.length) throw new Error("NO_PRODUCTS");
+  if (list.length > MAX_PRODUCTS) throw new Error("TOO_MANY_PRODUCTS");
+  return list.map((p, i) => {
+    const img = core.validateImageInput(p && p.image, "product" + (i + 1));
+    const id = (p && typeof p.id === "string") ? p.id.slice(0, 80) : String(i);
+    return { id, mime: img.mime, b64: img.b64 };
+  });
+}
+
+/* البرومبت — نفس قواعد الحفاظ على العميلة ولفّة الطرحة بتاعت
+   hijabTryOn، بس كل خانة بطرحة **مختلفة** وممنوع الخلط بينهم. */
+function buildLookbookPrompt(n) {
+  const count = Math.max(1, Math.min(MAX_PRODUCTS, Number(n) || 1));
+  const layout = core.computeGridLayout(count);
+  const lines = [
+    "Create a photorealistic virtual hijab try-on lookbook.",
+    "IMAGE 1 is the customer and the immutable base photograph.",
+    "IMAGES 2 to " + (count + 1) + " are " + count + " DIFFERENT hijab products, used ONLY as product references.",
+    "Preserve the customer's identity exactly in every cell: face, facial proportions, skin texture and tone, expression, body, clothes, background, pose, camera perspective and lighting.",
+    "Do not beautify, reshape, retouch, zoom, or change the customer.",
+    "Replace only the hair/head-covering area and add the hijab naturally around the head, neck and shoulders.",
+    "WRAP GEOMETRY: style each rectangular scarf like a contemporary two-long-ends hijab. Frame the face with a smooth, close-fitting single layer, bring the fabric under the chin, wrap it loosely ONCE around the neck, and let both long ends hang down the left and right front of the torso.",
+    "No cape, poncho, khimar, sculpted turban, stacked neck coils or broad bib across the chest.",
+    "The hijab must look physically worn with realistic folds, shadows, depth and occlusion.",
+    "OUTPUT FORMAT IS STRICT:",
+    "Return ONE image containing exactly " + count + " equal portrait cells arranged as " +
+      layout.rows + " row(s) by " + layout.cols + " column(s), filled left-to-right then top-to-bottom.",
+    "Every cell shows the SAME customer portrait with the SAME framing, camera distance and lighting. The ONLY difference between cells is which hijab product is worn."
+  ];
+  for (let i = 0; i < count; i++) {
+    lines.push("cell " + (i + 1) + ": the customer wearing EXACTLY the hijab from IMAGE " + (i + 2) +
+      " (same color, print, texture, border and fringe).");
+  }
+  lines.push(
+    "Each cell uses ONLY its own product. Never mix, swap, blend or repeat colors or prints between cells.",
+    "Never output a product-only image, flat lay, mannequin or fabric close-up in any cell.",
+    "Use only very thin uniform separators between cells. No labels, text, numbers, borders or watermarks."
+  );
+  return lines.join("\n");
+}
+
+/* قرار الحارسين مع بعض — المساواة بتترفض زي guardDecide */
+function lookbookGuardDecide(userCount, globalCount, cfg) {
+  const u = core.guardDecide(userCount, cfg.capPerUser);
+  const g = core.guardDecide(globalCount, cfg.capGlobal);
+  return { allow: u.allow && g.allow, userOk: u.allow, globalOk: g.allow,
+           nextUser: u.next, nextGlobal: g.next };
+}
+
+exports.hijabLookbook = onCall(
+  { region: "us-central1", secrets: [GEMINI_API_KEY], memory: "1GiB", timeoutSeconds: 180 },
+  async (req) => {
+    const FRIENDLY = core.FRIENDLY_ERR;
+    const uid = req && req.auth && req.auth.uid;
+    if (!uid) throw new HttpsError("unauthenticated", FRIENDLY);
+
+    const db = getFirestore();
+    const data = (req && req.data) || {};
+
+    let cfg;
+    try {
+      const snap = await db.collection(COL_SETTINGS).doc(DOC_SETTINGS).get();
+      cfg = resolveLookbookConfig(snap.exists ? snap.data() : null);
+    } catch (e) { cfg = resolveLookbookConfig(null); }
+    if (!cfg.enabled) throw new HttpsError("unavailable", FRIENDLY);
+
+    let customer, products;
+    try {
+      customer = core.validateImageInput(data.customerImage, "customer");
+      products = sanitizeProducts(data.products);
+    } catch (e) {
+      console.error("lookbook validate", e.message);
+      throw new HttpsError("invalid-argument", FRIENDLY);
+    }
+
+    const now = Date.now();
+    const uref = db.collection(COL_GUARD).doc(userDayKey(uid, now));
+    const gref = db.collection(COL_GUARD).doc(globalDayKey(now));
+    try {
+      await db.runTransaction(async (tx) => {
+        const [us, gs] = await Promise.all([tx.get(uref), tx.get(gref)]);
+        const dec = lookbookGuardDecide(
+          us.exists ? (us.data().count || 0) : 0,
+          gs.exists ? (gs.data().count || 0) : 0, cfg);
+        if (!dec.allow) throw new HttpsError("resource-exhausted",
+          "شُفتي كولكشن كبير النهاردة 🤍 كمّلي بكرة، أو دوسي على أي طرحة لتجربتها بجودة عالية.");
+        // 🔒 عدّادات بس — لا صورة ولا وش
+        tx.set(uref, { count: dec.nextUser, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        tx.set(gref, { count: dec.nextGlobal, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      });
+    } catch (e) {
+      if (e instanceof HttpsError) throw e;
+      console.error("lookbook guard", e.message);
+      throw new HttpsError("unavailable", FRIENDLY);
+    }
+
+    try {
+      const out = await core.callGeminiImage({
+        apiKey: GEMINI_API_KEY.value(),
+        model: cfg.model,
+        quality: cfg.quality,
+        cellCount: products.length,
+        prompt: buildLookbookPrompt(products.length),
+        images: [{ mime: customer.mime, b64: customer.b64 }]
+          .concat(products.map((p) => ({ mime: p.mime, b64: p.b64 })))
+      });
+      return {
+        image: "data:" + out.mime + ";base64," + out.b64,
+        mime: out.mime,
+        // ترتيب الخانات = ترتيب المنتجات اللي اتبعتت بالظبط
+        cells: products.map((p) => p.id),
+        layout: core.computeGridLayout(products.length)
+      };
+    } catch (e) {
+      console.error("lookbook generate", e && e.message);
+      throw new HttpsError("unavailable", FRIENDLY);
+    }
+  }
+);
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports.resolveLookbookConfig = resolveLookbookConfig;
+  module.exports.sanitizeProducts = sanitizeProducts;
+  module.exports.buildLookbookPrompt = buildLookbookPrompt;
+  module.exports.lookbookGuardDecide = lookbookGuardDecide;
+  module.exports.userDayKey = userDayKey;
+  module.exports.globalDayKey = globalDayKey;
+  module.exports.cairoDay = cairoDay;
+  module.exports.LOOKBOOK_DEFAULTS = LOOKBOOK_DEFAULTS;
+  module.exports.MAX_PRODUCTS = MAX_PRODUCTS;
+}
