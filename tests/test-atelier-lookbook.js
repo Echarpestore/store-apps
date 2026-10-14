@@ -131,5 +131,6 @@ assert(AC.kindOf({ name: 'إسدال صلاة كحلي' }) === 'isdal' && AC.kin
 const tb = AC.takeBatch([{ id: 1, kind: 'hijab' }, { id: 2, kind: 'isdal' }, { id: 3, kind: 'hijab' }], 4);
 assert(tb.batch.map((p) => p.id).join() === '1,3' && tb.rest.map((p) => p.id).join() === '2', 'الطرح والإسدال مبيتخلطوش في شبكة واحدة');
 const house = AC.houseCollection('collection/');
-assert(house.length >= 12 && house.every((p) => p.tryable && p.latin && p.line), 'مجموعة الدار كاملة وقابلة للقياس');
+assert(house.length >= 12 && house.every((p) => p.tryable && p.line && AC.lineName(p.line)), 'مجموعة الدار كاملة وقابلة للقياس');
 assert(house.every((p) => fs.existsSync(path.join(ROOT, 'atelier', p.img))), 'كل صورة في مجموعة الدار موجودة فعلاً');
+assert(house.some((p) => p.kind === 'isdal') && house.filter((p) => p.kind === 'isdal').every((p) => p.line === 'isdal'), 'الإسدال في المجموعة بنوعه الصح');

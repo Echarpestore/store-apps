@@ -7,7 +7,6 @@
      يتحوّلوا لصورتها وهي لابساها.
    · التوليد: hijabLookbook (٤ قطع في نداء واحد) — ولو لسه مش منشورة،
      بننزل تلقائي لـhijabTryOn (قطعة لكل نداء، للطرح بس).
-   · «عرض بدقة عالية» = نداء لقطعة واحدة بس.
    · ?mock=1 = معاينة تصميم من غير أي نداء AI (للمراجعة بس).
    ============================================================ */
 (function () {
@@ -21,16 +20,16 @@
   var phone = ""; try { phone = (LS && LS.getItem("echarpe_loyalty_phone")) || ""; } catch (e) { }
 
   var MSG = {
-    limit: "اكتملت جلسة القياس لليوم. يسعدنا لقاؤكِ غداً.",
-    retry: "تعذّر تجهيز بعض القطع — المسي «قيسيها» لإعادة المحاولة.",
+    limit: "اكتفينا بهذا القدر اليوم 🤍 يسعدنا أن تكملي غداً.",
+    retry: "تعذّر تجهيز بعض القطع — المسي «جرّبيها» لإعادة المحاولة.",
     badImg: "تعذّرت قراءة الصورة — جرّبي صورةً أخرى.",
-    isdalSoon: "قياس الإسدال يُتاح قريباً.",
-    generic: "تعذّر التجهيز الآن. حاولي مرةً أخرى بعد لحظات."
+    isdalSoon: "تجربة الإسدال تتوفّر قريباً.",
+    forgot: "تم حذف صورتكِ وإطلالاتكِ من هاتفكِ."
   };
 
   var state = {
     products: [], byId: {}, face: "", alive: false,
-    looks: {}, hq: {}, queued: {}, requested: 0, done: 0, target: 0,
+    looks: {}, queued: {}, requested: 0, done: 0, target: 0,
     mode: "lookbook", lookbookWorked: false, stopped: false,
     queue: [], busy: 0, gen: 0, lbOpen: null, line: "all"
   };
@@ -109,7 +108,7 @@
 
   /* ---------------- الافتتاحية ---------------- */
   (function intro() {
-    var mark = $("introMark"), seen = false;
+    var seen = false;
     try { seen = sessionStorage.getItem("atelier_intro") === "1"; } catch (e) { }
     var finish = function () {
       $("intro").classList.add("lift");
@@ -120,9 +119,6 @@
     };
     if (seen || REDUCED) { $("intro").style.display = "none"; document.body.classList.remove("intro-on");
       requestAnimationFrame(function () { $("heroTitle").classList.add("in"); document.querySelector(".hero").classList.add("in"); }); return; }
-    mark.innerHTML = mark.textContent.split("").map(function (c, i) {
-      return '<span style="animation-delay:' + (0.08 * i + 0.15) + 's">' + c + "</span>";
-    }).join("");
     setTimeout(finish, 2700);
     $("intro").addEventListener("click", finish, { once: true });
   })();
@@ -139,7 +135,7 @@
   }
   window.addEventListener("scroll", onScroll, { passive: true });
   (function marquee() {
-    var words = ["Crêpe", "Plissé", "Monogramme", "Zèbre", "Maison du Voile", "Le Caire"];
+    var words = ["كريب", "بليسيه", "مونوجرام", "زيبرا", "إسدال", "echarpe"];
     var one = words.map(function (w) { return "<span>" + w + "</span><span><b>✦</b></span>"; }).join("");
     $("marquee").innerHTML = one + one;
   })();
@@ -224,7 +220,7 @@
     }
     var p = heroList[heroIdx];
     $("slideNo").textContent = pad2(heroIdx + 1);
-    $("slideName").textContent = p ? (p.latin || p.name) : "";
+    $("slideName").textContent = p ? p.name : "";
     var c = document.querySelector(".counter");
     c.classList.remove("run"); void c.offsetWidth; c.classList.add("run");
     clearTimeout(heroT); heroT = setTimeout(function () { goHero(heroIdx + 1); }, 6500);
@@ -272,13 +268,13 @@
       c.innerHTML =
         '<div class="frame" role="button" tabindex="0">' +
           '<img class="prod" alt="" loading="lazy"><img class="look" alt="">' +
-          '<i class="sheen"></i><div class="weave"></div><div class="weave-txt">تُنسَج لكِ…</div>' +
+          '<i class="sheen"></i><div class="weave"></div><div class="weave-txt">نُجهّزها لكِ…</div>' +
           '<div class="chip"><img alt=""></div>' +
-          '<button class="try-btn" type="button">قيسيها</button>' +
+          '<button class="try-btn" type="button">جرّبيها</button>' +
         '</div>' +
-        '<div class="meta"><span class="no">N°' + pad2(i + 1) + '</span>' +
-          '<span class="nm">' + esc(p.name) + '</span>' +
-          (p.latin ? '<span class="lt">' + esc(p.latin) + '</span>' : (p.price ? '<span class="pr">' + esc(AC.fmtPrice(p.price)) + '</span>' : '')) +
+        '<div class="meta"><span class="nm">' + esc(p.name) + '</span>' +
+          (p.price ? '<span class="pr">' + esc(AC.fmtPrice(p.price)) + '</span>' :
+            (AC.lineName(p.line) ? '<span class="lt">' + esc(AC.lineName(p.line)) + '</span>' : '')) +
         '</div>';
       c.querySelector(".prod").src = p.img;
       c.querySelector(".prod").alt = p.name;
@@ -342,13 +338,13 @@
   }
   function becomeAlive(face) {
     document.body.classList.add("alive"); state.alive = true;
-    $("heroEyebrow").textContent = "Votre Salon Privé";
+    $("heroEyebrow").textContent = "إطلالاتكِ";
     var t = $("heroTitle"); t.classList.remove("in");
     t.innerHTML = '<span class="ln"><span>المجموعة،</span></span><span class="ln"><span><em>عليكِ</em></span></span>';
     requestAnimationFrame(function () { requestAnimationFrame(function () { t.classList.add("in"); }); });
-    $("heroSub").textContent = "المسي أي قطعة لتريها عن قرب، أو اطلبي عرضها بدقةٍ عالية.";
-    $("ctaUpload").querySelector("span").textContent = "اكتشفي إطلالاتكِ";
-    $("ctaSalon").querySelector("span").textContent = "تغيير الصورة";
+    $("heroSub").textContent = "المسي أي قطعة لتريها عن قرب.";
+    $("ctaUpload").querySelector("span").textContent = "شاهدي إطلالاتكِ";
+    $("ctaSalon").querySelector("span").textContent = "صورة أخرى";
     setFace(face);
   }
   function setFace(face) {
@@ -358,7 +354,7 @@
 
   function startWithFace(face) {
     state.face = face; state.gen++;
-    state.looks = {}; state.hq = {}; state.queued = {}; state.queue = [];
+    state.looks = {}; state.queued = {}; state.queue = [];
     state.requested = 0; state.done = 0; state.target = 0; state.stopped = false;
     document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "manual", "revealing"); });
     document.querySelectorAll(".slide").forEach(function (s) { s.classList.remove("worn"); });
@@ -405,6 +401,7 @@
     state.queued[p.id] = true; state.requested++; state.target++;
     var c = card(p.id); if (c) { c.classList.remove("manual"); c.classList.add("weaving"); }
     if (front) state.queue.unshift(p); else state.queue.push(p);
+    if (state.lbOpen === p) setLb(p);
     updateDock(); pump();
   }
 
@@ -530,14 +527,14 @@
     }
     var s = document.querySelector('.slide[data-id="' + CSS.escape(p.id) + '"]');
     if (s) { s.querySelector(".look").src = url; s.classList.add("worn"); }
-    if (state.lbOpen === p && !state.hq[p.id]) setLb(p);
+    if (state.lbOpen === p) setLb(p);
     updateDock();
   }
 
   function updateDock() {
     var t = Math.max(state.target, state.done), d = state.done;
-    $("dockSub").textContent = t && d < t ? ("تُنسَج " + d + " من " + t + "…") :
-      (d ? d + " إطلالة جاهزة — المسي أيّاً منها" : "تُنسَج المجموعة لكِ…");
+    $("dockSub").textContent = t && d < t ? ("نُجهّز " + d + " من " + t + "…") :
+      (d ? d + " إطلالة جاهزة لكِ" : "نُجهّزها لكِ…");
     $("dockProg").style.width = t ? Math.round(d / t * 100) + "%" : "0";
   }
 
@@ -547,19 +544,19 @@
     $("lb").classList.add("on"); document.body.style.overflow = "hidden";
   }
   function setLb(p) {
-    var pic = $("lbPic"), hq = state.hq[p.id], look = hq || state.looks[p.id];
+    var pic = $("lbPic"), look = state.looks[p.id];
     var img = $("lbLook"); img.src = look || p.img;
     img.style.animation = "none"; void img.offsetWidth; img.style.animation = "";
     $("lbProd").src = p.img; $("lbChip").src = p.img;
-    pic.classList.toggle("is-hq", !!hq);
     pic.querySelector(".chip").style.display = look ? "" : "none";
-    var idx = state.products.indexOf(p);
-    $("lbNo").textContent = "N°" + pad2(idx + 1) + (p.latin ? " — " + p.latin : "");
+    $("lbLine").textContent = AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "";
     $("lbName").textContent = p.name;
-    $("lbLatin").textContent = p.price ? AC.fmtPrice(p.price) : "";
-    var b = $("lbHq");
-    b.style.display = hq || !p.tryable ? "none" : "";
-    b.querySelector("span").textContent = state.face ? "عرض بدقة عالية" : "قيسيها عليكِ";
+    $("lbPrice").textContent = p.price ? AC.fmtPrice(p.price) : "";
+    var busy = state.queued[p.id] && !look;
+    var b = $("lbTry");
+    b.style.display = look || !p.tryable ? "none" : "";
+    b.disabled = !!busy;
+    b.querySelector("span").textContent = busy ? "نُجهّزها لكِ…" : "جرّبيها عليكِ";
     $("lbHint").style.display = look ? "" : "none";
   }
   function closeLb() {
@@ -567,25 +564,10 @@
   }
   $("lbClose").addEventListener("click", closeLb);
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeLb(); });
-  $("lbHq").addEventListener("click", function () {
+  $("lbTry").addEventListener("click", function () {
     var p = state.lbOpen; if (!p) return;
     if (!state.face) { closeLb(); pickPhoto(); return; }
-    if (state.mode === "single" && p.kind === "isdal") { toast(MSG.isdalSoon); return; }
-    var pic = $("lbPic"), face = state.face, b = $("lbHq");
-    pic.classList.add("hq-loading"); b.disabled = true;
-    PC.readResultAsync(LS, AC.cacheProductId(p, true), face, null, prodSig(p)).then(function (cached) {
-      return cached || single(p, face).then(function (img) {
-        PC.saveResultAsync(LS, AC.cacheProductId(p, true), face, img, null, prodSig(p));
-        return img;
-      });
-    }).then(function (img) {
-      state.hq[p.id] = img;
-      if (!state.looks[p.id]) { state.target++; showLook(p, img, true); }
-      if (state.lbOpen === p) setLb(p);
-    }).catch(function (err) {
-      var code = String(err && err.code || "").replace(/^functions\//, "");
-      toast(code === "resource-exhausted" ? MSG.limit : MSG.generic);
-    }).then(function () { pic.classList.remove("hq-loading"); b.disabled = false; });
+    requestOne(p, true); setLb(p);
   });
   (function () {
     var pic = $("lbPic");
@@ -606,6 +588,25 @@
   $("ctaUpload").addEventListener("click", enter);
   $("ctaSalon").addEventListener("click", function () { if (state.alive) pickPhoto(); else enter(); });
   $("dockChange").addEventListener("click", pickPhoto);
+  /* 🔒 حذف الصورة والإطلالات من الجهاز — الوش + الكاش (localStorage + IndexedDB) */
+  $("forgetMe").addEventListener("click", function () {
+    if (LS) { PC.clearFace(LS); PC.clearResults(LS); }
+    try { indexedDB.deleteDatabase("echarpe_tryon_cache_v1"); } catch (e) { }
+    state.gen++; state.face = ""; state.looks = {}; state.queued = {}; state.queue = [];
+    state.done = 0; state.target = 0; state.requested = 0;
+    document.body.classList.remove("alive"); state.alive = false;
+    document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "manual", "revealing"); c.querySelector(".look").removeAttribute("src"); });
+    document.querySelectorAll(".slide").forEach(function (s) { s.classList.remove("worn"); });
+    ["salonImg", "dockFace"].forEach(function (id) { $(id).removeAttribute("src"); });
+    $("salonArch").classList.remove("has");
+    $("heroEyebrow").textContent = "مجموعة الموسم";
+    $("heroTitle").innerHTML = '<span class="ln"><span>المجموعة كاملة،</span></span><span class="ln"><span><em>عليكِ أنتِ</em></span></span>';
+    $("heroTitle").classList.add("in");
+    $("heroSub").textContent = "صورةٌ واحدة، وتظهر كل قطعة عليكِ قبل أن تختاري.";
+    $("ctaUpload").querySelector("span").textContent = "جرّبي المجموعة";
+    $("ctaSalon").querySelector("span").textContent = "جرّبي المجموعة";
+    toast(MSG.forgot);
+  });
   $("file").addEventListener("change", function () {
     var f = this.files && this.files[0]; if (!f) return;
     fileToFace(f).then(startWithFace).catch(function () { toast(MSG.badImg); });
@@ -638,7 +639,7 @@
       });
     });
   }
-  if (MOCK) document.body.appendChild(el("div", "demo-flag", "معاينة تصميم — بدون ذكاء اصطناعي"));
+  if (MOCK) document.body.appendChild(el("div", "demo-flag", "معاينة للتصميم فقط"));
 
   /* ---------------- البداية ---------------- */
   loadProducts().then(function (items) {

@@ -15,21 +15,23 @@
      بتظهر لما «منتجات البيع أونلاين» تكون فاضية، وبعد منتجات البيع
      لما تبقى موجودة. line = الخط اللي بيتفلتر بيه في الصفحة. */
   var HOUSE = [
-    ["crepe-minuit",      "كريب ميدنايت",         "Crêpe Minuit",          "crepe"],
-    ["mono-anthracite",   "مونوجرام أنثراسايت",   "Monogramme Anthracite", "mono"],
-    ["zebre-sable",       "زيبرا رملي",            "Zèbre Sable",           "zebre"],
-    ["plisse-noir",       "بليسيه نوار",           "Plissé Noir",           "plisse"],
-    ["crepe-pierre",      "كريب حجري",             "Crêpe Pierre",          "crepe"],
-    ["mono-sable",        "مونوجرام رملي",         "Monogramme Sable",      "mono"],
-    ["zebre-camel",       "زيبرا كاميل",           "Zèbre Camel",           "zebre"],
-    ["mono-gris",         "مونوجرام رمادي",        "Monogramme Gris",       "mono"],
-    ["crepe-noir-volant", "كريب نوار بحافة متموّجة", "Crêpe Noir Volant",   "crepe"],
-    ["mono-moka",         "مونوجرام موكا",         "Monogramme Moka",       "mono"],
-    ["zebre-argent",      "زيبرا فضّي",            "Zèbre Argent",          "zebre"],
-    ["mono-perle",        "مونوجرام لؤلؤي",        "Monogramme Perle",      "mono"],
-    ["plisse-nuit",       "بليسيه ليلي",           "Plissé Nuit",           "plisse"],
-    ["mono-taupe",        "مونوجرام توب",          "Monogramme Taupe",      "mono"],
-    ["zebre-fume",        "زيبرا دخاني",           "Zèbre Fumé",            "zebre"]
+    ["crepe-minuit",      "كريب كحلي",               "crepe"],
+    ["mono-anthracite",   "مونوجرام فحمي",           "mono"],
+    ["isdal-violet",      "إسدال بنفسجي مورّد",      "isdal"],
+    ["zebre-sable",       "زيبرا رملي",              "zebre"],
+    ["plisse-noir",       "بليسيه أسود",             "plisse"],
+    ["crepe-pierre",      "كريب رمادي",              "crepe"],
+    ["mono-sable",        "مونوجرام رملي",           "mono"],
+    ["isdal-gris",        "إسدال رمادي مورّد",       "isdal"],
+    ["zebre-camel",       "زيبرا كاميل",             "zebre"],
+    ["mono-gris",         "مونوجرام رمادي",          "mono"],
+    ["crepe-noir-volant", "كريب أسود بحافة مموّجة",  "crepe"],
+    ["mono-moka",         "مونوجرام موكا",           "mono"],
+    ["zebre-argent",      "زيبرا فضّي",              "zebre"],
+    ["mono-perle",        "مونوجرام لؤلؤي",          "mono"],
+    ["plisse-nuit",       "بليسيه ليلي",             "plisse"],
+    ["mono-taupe",        "مونوجرام توب",            "mono"],
+    ["zebre-fume",        "زيبرا دخاني",             "zebre"]
   ];
   var LINES = [
     { id: "all",    ar: "الكل" },
@@ -39,12 +41,16 @@
     { id: "zebre",  ar: "الزيبرا" },
     { id: "isdal",  ar: "الإسدال" }
   ];
+  function lineName(id) {
+    for (var i = 0; i < LINES.length; i++) if (LINES[i].id === id) return LINES[i].ar;
+    return "";
+  }
   function houseCollection(base) {
     var dir = base || "collection/";
     return HOUSE.map(function (h) {
-      return { id: "house-" + h[0], galleryId: "", barcode: "", name: h[1], latin: h[2],
-               line: h[3], kind: "hijab", price: 0, img: dir + h[0] + ".jpg",
-               tryable: true, house: true };
+      return { id: "house-" + h[0], galleryId: "", barcode: "", name: h[1],
+               line: h[2], kind: h[2] === "isdal" ? "isdal" : "hijab", price: 0,
+               img: dir + h[0] + ".jpg", tryable: true, house: true };
     });
   }
 
@@ -81,7 +87,7 @@
     var id = String(p.id || p.barcode || p.name || ("p" + i));
     var kind = kindOf(p);
     return {
-      id: id, kind: kind, line: kind === "isdal" ? "isdal" : "shop", latin: "",
+      id: id, kind: kind, line: kind === "isdal" ? "isdal" : "shop",
       galleryId: p.id ? String(p.id) : "",
       barcode: p.barcode ? String(p.barcode) : "",
       name: String(p.name || "طرحة").slice(0, 80),
@@ -142,6 +148,7 @@
     HOUSE: HOUSE,
     LINES: LINES,
     houseCollection: houseCollection,
+    lineName: lineName,
     kindOf: kindOf,
     takeBatch: takeBatch,
     AUTO_LIMIT: AUTO_LIMIT,
