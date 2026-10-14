@@ -1,0 +1,66 @@
+# ============================================================
+# 🚀 نشر Cloud Functions من GitHub — يدوي بس (زرار Run workflow)
+# ------------------------------------------------------------
+# بيشتغل لما حد يدوس Run workflow (أو Claude يشغّله)، مش مع كل push.
+# محتاج مرة واحدة: secret اسمه FIREBASE_SERVICE_ACCOUNT في إعدادات
+# الريبو (Settings → Secrets and variables → Actions) = محتوى ملف JSON
+# لحساب خدمة Firebase. من غيره الشغل بيقف برسالة واضحة.
+# ============================================================
+name: Deploy Cloud Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "الدوال اللي تتنشر (مثال: functions:hijabLookbook)"
+        required: true
+        default: "functions:hijabLookbook"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check input and secret
+        env:
+          ONLY: ${{ inputs.only }}
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          # أسماء دوال بس — مفيش مسافات ولا أوامر
+          if ! [[ "$ONLY" =~ ^functions:[A-Za-z0-9_]+(,functions:[A-Za-z0-9_]+)*$ ]]; then
+            echo "::error::only لازم يكون زي functions:hijabLookbook"; exit 1
+          fi
+          if [ -z "$SA" ]; then
+            echo "::error::secret FIREBASE_SERVICE_ACCOUNT مش موجود في إعدادات الريبو"; exit 1
+          fi
+
+      - name: Install functions dependencies
+        working-directory: functions
+        run: npm install --no-audit --no-fund
+
+      - name: Deploy
+        env:
+          ONLY: ${{ inputs.only }}
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          # firebase.json بيتعمل هنا بس — مش في الريبو، عشان ميتعارضش مع
+          # الملف اللي على جهاز المالك (echarpe-push).
+          echo '{"functions":{"source":"functions"}}' > firebase.json
+          npx --yes firebase-tools@14 deploy --only "$ONLY" \
+            --project customer-feedback-8ac1d --non-interactive --force
+          rm -f "$RUNNER_TEMP/sa.json"
