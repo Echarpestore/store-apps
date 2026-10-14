@@ -222,6 +222,7 @@
     $("mLine").textContent = AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "";
     $("mirror").classList.toggle("busy", !!(state.queued[p.id] && !state.looks[p.id]));
     paintMirror(state.looks[p.id] || p.img, instant);
+    syncMirrorActs();
     // اختارت قطعة لسه ما اتجهزتش وهي جوّه — نقدّمها أول الطابور
     if (state.alive && userPicked && p.tryable && !state.looks[p.id] && !state.queued[p.id]) requestOne(p, true);
   }
@@ -251,7 +252,23 @@
     top.src = src;
     if (top.complete) go(); else top.onload = go;
   }
-  $("mirror").addEventListener("click", function () { if (mirrorP) openLook(mirrorP); });
+  /* سحب المرآة يمين/شمال = القطعة اللي بعدها/قبلها */
+  var swipeX = null, swiped = false;
+  $("mirror").addEventListener("pointerdown", function (e) { swipeX = e.clientX; swiped = false; });
+  $("mirror").addEventListener("pointerup", function (e) {
+    if (swipeX == null) return;
+    var dx = e.clientX - swipeX; swipeX = null;
+    if (Math.abs(dx) > 45) { swiped = true; stepMirror(dx < 0 ? 1 : -1); }
+  });
+  function stepMirror(d) {
+    var list = tryables(); if (!list.length) return;
+    var i = Math.max(0, list.indexOf(mirrorP));
+    userPicked = true; setMirror(list[(i + d + list.length) % list.length]); buzz();
+  }
+  $("mirror").addEventListener("click", function () {
+    if (swiped) { swiped = false; return; }
+    if (mirrorP) openLook(mirrorP);
+  });
   $("mirror").addEventListener("keydown", function (e) { if (e.key === "Enter" && mirrorP) openLook(mirrorP); });
   function resetMirror() {
     document.querySelectorAll(".sw").forEach(function (sw) { sw.classList.remove("worn"); });
@@ -300,6 +317,7 @@
           '<i class="sheen"></i><div class="weave"></div><div class="weave-txt">نُجهّزها لكِ…</div>' +
           '<div class="chip"><img alt=""></div>' +
           '<button class="try-btn" type="button">جرّبيها</button>' +
+          '<button class="card-heart heart" type="button" aria-label="أضيفي للمفضّلة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>' +
         '</div>' +
         '<div class="meta"><span class="nm">' + esc(p.name) + '</span>' +
           (p.price ? '<span class="pr">' + esc(AC.fmtPrice(p.price)) + '</span>' :
@@ -311,10 +329,12 @@
       var frame = c.querySelector(".frame");
       frame.addEventListener("click", function (e) {
         if (e.target.closest(".try-btn")) { e.stopPropagation(); requestOne(p, true); return; }
+        if (e.target.closest(".card-heart")) { e.stopPropagation(); toggleFav(p); return; }
         openLook(p);
       });
       frame.addEventListener("keydown", function (e) { if (e.key === "Enter") openLook(p); });
       g.appendChild(c);
+      syncHearts(p);
       if (io) io.observe(c); else c.classList.add("in");
     });
   }
@@ -384,7 +404,7 @@
   function startWithFace(face) {
     state.face = face; state.gen++;
     state.looks = {}; state.queued = {}; state.queue = [];
-    state.requested = 0; state.done = 0; state.target = 0; state.stopped = false;
+    state.requested = 0; state.done = 0; state.target = 0; state.stopped = false; celebrated = false;
     document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "manual", "revealing"); });
     resetMirror();
     if (LS) PC.saveFace(LS, face);
@@ -569,6 +589,14 @@
     $("dockSub").textContent = t && d < t ? ("نُجهّز " + d + " من " + t + "…") :
       (d ? d + " إطلالة جاهزة لكِ" : "نُجهّزها لكِ…");
     $("dockProg").style.width = t ? Math.round(d / t * 100) + "%" : "0";
+    $("dockPoll").style.display = lookCount() >= 2 ? "" : "none";
+    if (!celebrated && d >= 4 && d >= t) {
+      celebrated = true;
+      setTimeout(function () {
+        toast("المجموعة كلها عليكِ الآن ✨ اختاري مفضّلاتكِ واسألي صديقاتكِ", 6000);
+        $("dockPoll").classList.add("glow");
+      }, 900);
+    }
   }
 
   /* ---------------- عرض القطعة + الدقة العالية ---------------- */
@@ -591,6 +619,9 @@
     b.disabled = !!busy;
     b.querySelector("span").textContent = busy ? "نُجهّزها لكِ…" : "جرّبيها عليكِ";
     $("lbHint").style.display = look ? "" : "none";
+    $("lbBag").querySelector("span").textContent = inBag(p) ? "في حقيبتكِ ✓" : "أضيفيها للحقيبة";
+    $("lbShare").style.display = look ? "" : "none";
+    syncHearts(p);
   }
   function closeLb() {
     state.lbOpen = null; $("lb").classList.remove("on"); document.body.style.overflow = "";
@@ -620,7 +651,7 @@
   }
   $("ctaUpload").addEventListener("click", enter);
   $("ctaSalon").addEventListener("click", function () { if (state.alive) pickPhoto(); else enter(); });
-  $("dockChange").addEventListener("click", pickPhoto);
+  $("meDot").addEventListener("click", pickPhoto);
   /* 🔒 حذف الصورة والإطلالات من الجهاز — الوش + الكاش (localStorage + IndexedDB) */
   $("forgetMe").addEventListener("click", function () {
     if (LS) { PC.clearFace(LS); PC.clearResults(LS); }
@@ -674,11 +705,237 @@
   }
   if (MOCK) document.body.appendChild(el("div", "demo-flag", "معاينة للتصميم فقط"));
 
+  /* ============================================================
+     ♡ المفضّلة · 👜 الحقيبة · ↗ المشاركة
+     ------------------------------------------------------------
+     كله على جهاز العميلة (localStorage). الطلب بيروح واتساب
+     للفرع بأسماء القطع، والصور اللي بتتشارك بتتعمل على الموبايل
+     ومبتتنشرش غير لو هي شاركتها.
+     ============================================================ */
+  var WA_NUMBER = "201148664485";
+  var SITE_URL = "https://www.echarpe.store/atelier/";
+  var celebrated = false;
+  function readIds(k) { try { var v = JSON.parse((LS && LS.getItem(k)) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+  function writeIds(k, v) { try { LS && LS.setItem(k, JSON.stringify(v)); } catch (e) { } }
+  var fav = readIds("atelier_fav"), bag = readIds("atelier_bag");
+  function buzz() { try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) { } }
+  function lookCount() { return Object.keys(state.looks).length; }
+  function isFav(p) { return fav.indexOf(p.id) >= 0; }
+  function inBag(p) { return bag.indexOf(p.id) >= 0; }
+
+  function toggleFav(p) {
+    var i = fav.indexOf(p.id);
+    if (i >= 0) fav.splice(i, 1); else { fav.push(p.id); buzz(); }
+    writeIds("atelier_fav", fav);
+    syncHearts(p, true);
+  }
+  function syncHearts(p, pop) {
+    var on = isFav(p);
+    var list = [];
+    var c = card(p.id); if (c) list.push(c.querySelector(".card-heart"));
+    if (mirrorP === p) list.push($("mHeart"));
+    if (state.lbOpen === p) list.push($("lbHeart"));
+    list.forEach(function (h) {
+      if (!h) return;
+      h.classList.toggle("on", on); h.setAttribute("aria-pressed", on);
+      if (pop && on) { h.classList.remove("pop"); void h.offsetWidth; h.classList.add("pop"); }
+    });
+  }
+  function syncMirrorActs() {
+    if (!mirrorP) return;
+    syncHearts(mirrorP);
+    $("mBag").querySelector("span").textContent = inBag(mirrorP) ? "في حقيبتكِ ✓" : "أضيفيها للحقيبة";
+  }
+  $("mHeart").addEventListener("click", function () { if (mirrorP) toggleFav(mirrorP); });
+  $("lbHeart").addEventListener("click", function () { if (state.lbOpen) toggleFav(state.lbOpen); });
+
+  /* ---------- الحقيبة ---------- */
+  function syncBagCount() {
+    var n = bag.filter(function (id) { return state.byId[id]; }).length;
+    document.querySelectorAll(".bag-btn").forEach(function (b) {
+      b.classList.toggle("has", n > 0); b.querySelector(".bagCount").textContent = n;
+    });
+  }
+  function bagTarget() {
+    var d = $("dockBag");
+    return state.alive && d.getBoundingClientRect().width ? d : $("bagBtn");
+  }
+  function flyToBag(srcImg) {
+    var tgt = bagTarget();
+    if (!srcImg || REDUCED) { tgt.classList.remove("bump"); void tgt.offsetWidth; tgt.classList.add("bump"); return; }
+    var r = srcImg.getBoundingClientRect(), t = tgt.getBoundingClientRect();
+    var size = Math.min(r.width, r.height, 160);
+    var f = el("img", "fly"); f.src = srcImg.currentSrc || srcImg.src;
+    f.style.left = (r.left + r.width / 2 - size / 2) + "px"; f.style.top = (r.top + r.height / 2 - size / 2) + "px";
+    f.style.width = f.style.height = size + "px";
+    document.body.appendChild(f); void f.offsetWidth;
+    var dx = (t.left + t.width / 2) - (r.left + r.width / 2), dy = (t.top + t.height / 2) - (r.top + r.height / 2);
+    f.style.transform = "translate(" + dx + "px," + dy + "px) scale(.12)"; f.style.opacity = ".4";
+    setTimeout(function () {
+      f.remove(); tgt.classList.remove("bump"); void tgt.offsetWidth; tgt.classList.add("bump");
+    }, 860);
+  }
+  function addToBag(p, srcImg) {
+    if (inBag(p)) { openSheet("bag"); return; }
+    bag.push(p.id); writeIds("atelier_bag", bag); buzz();
+    flyToBag(srcImg);
+    setTimeout(syncBagCount, 700);
+    syncMirrorActs(); if (state.lbOpen === p) setLb(p);
+    toast("أُضيفت «" + p.name + "» إلى حقيبتكِ 🤍");
+  }
+  function removeFromBag(id) {
+    bag = bag.filter(function (x) { return x !== id; }); writeIds("atelier_bag", bag);
+    syncBagCount(); renderBag(); syncMirrorActs();
+    if (state.lbOpen) setLb(state.lbOpen);
+  }
+  function renderBag() {
+    var items = bag.map(function (id) { return state.byId[id]; }).filter(Boolean);
+    var list = $("bagList"); list.innerHTML = "";
+    if (!items.length) {
+      list.innerHTML = '<div class="bag-empty">حقيبتكِ في انتظار قطعتها الأولى 🤍</div>';
+      $("bagFoot").style.display = "none"; return;
+    }
+    $("bagFoot").style.display = "";
+    var total = 0;
+    items.forEach(function (p) {
+      total += p.price || 0;
+      var row = el("div", "bag-item");
+      row.innerHTML = '<img alt=""><div><b>' + esc(p.name) + '</b><small>' +
+        esc(p.price ? AC.fmtPrice(p.price) : (state.looks[p.id] ? "جرّبتِها عليكِ ✓" : (AC.lineName(p.line) || ""))) +
+        '</small></div><button class="rm" type="button">إزالة</button>';
+      row.querySelector("img").src = state.looks[p.id] || p.img;
+      row.querySelector(".rm").addEventListener("click", function () { removeFromBag(p.id); });
+      list.appendChild(row);
+    });
+    $("bagTotal").textContent = items.length + (items.length === 1 ? " قطعة" : " قطع") + (total ? " · " + AC.fmtPrice(total) : "");
+    var lines = ["أهلاً echarpe 🤍", "جرّبت القطع دي في غرفة القياس وعاوزة أطلبها:"];
+    items.forEach(function (p) {
+      lines.push("• " + p.name + (p.price ? " — " + AC.fmtPrice(p.price) : "") + (p.barcode ? " (" + p.barcode + ")" : ""));
+    });
+    lines.push("", "شكراً!");
+    $("bagWa").href = "https://wa.me/" + WA_NUMBER + "?text=" + encodeURIComponent(lines.join("\n"));
+  }
+  function openSheet(id) {
+    if (id === "bag") renderBag();
+    $(id).classList.add("on"); document.body.style.overflow = "hidden";
+  }
+  function closeSheet(id) {
+    $(id).classList.remove("on");
+    if (!$("lb").classList.contains("on")) document.body.style.overflow = "";
+  }
+  ["bag", "shareSheet"].forEach(function (id) {
+    $(id).addEventListener("click", function (e) { if (e.target.closest("[data-close]")) closeSheet(id); });
+  });
+  $("bagBtn").addEventListener("click", function () { openSheet("bag"); });
+  $("dockBag").addEventListener("click", function () { openSheet("bag"); });
+  $("mBag").addEventListener("click", function () {
+    if (mirrorP) addToBag(mirrorP, $("mirror").querySelector(".m-layer.base"));
+  });
+  $("lbBag").addEventListener("click", function () { if (state.lbOpen) addToBag(state.lbOpen, $("lbLook")); });
+
+  /* ---------- المشاركة: صورة ستوري بلوجو echarpe ---------- */
+  var AR_NUM = ["١", "٢", "٣", "٤"];
+  function fontsReady() {
+    if (!document.fonts || !document.fonts.load) return Promise.resolve();
+    return Promise.all([document.fonts.load('400 72px "Amiri"'), document.fonts.load('400 36px "IBM Plex Sans Arabic"')])
+      .catch(function () { });
+  }
+  function archPath(x, y, w, h, ctx) {
+    var r = w / 2;
+    ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x, y + r);
+    ctx.arc(x + r, y + r, r, Math.PI, 0); ctx.lineTo(x + w, y + h); ctx.closePath();
+  }
+  function drawArch(ctx, img, x, y, w, h) {
+    ctx.save();
+    ctx.shadowColor = "rgba(28,25,22,.28)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 26;
+    archPath(x, y, w, h, ctx); ctx.fillStyle = "#e4dbcf"; ctx.fill();
+    ctx.restore();
+    ctx.save(); archPath(x, y, w, h, ctx); ctx.clip();
+    var s = Math.max(w / img.naturalWidth, h / img.naturalHeight), iw = img.naturalWidth * s, ih = img.naturalHeight * s;
+    ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) * 0.3, iw, ih);
+    ctx.restore();
+    ctx.save(); archPath(x + 12, y + 12, w - 24, h - 24, ctx);
+    ctx.strokeStyle = "rgba(255,252,246,.7)"; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+  }
+  function txt(ctx, t, x, y, font, color) {
+    ctx.font = font; ctx.fillStyle = color; ctx.textAlign = "center"; ctx.direction = "rtl"; ctx.fillText(t, x, y);
+  }
+  function makeStory(items, poll) {
+    var W = 1080, H = 1920;
+    return Promise.all([fontsReady(), loadImg("../logo.png").catch(function () { return null; })]
+      .concat(items.map(function (p) { return loadImg(state.looks[p.id] || p.img); }))).then(function (res) {
+      var logo = res[1], imgs = res.slice(2);
+      var c = document.createElement("canvas"); c.width = W; c.height = H;
+      var x = c.getContext("2d");
+      var g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#fbf8f3"); g.addColorStop(1, "#ede6dc");
+      x.fillStyle = g; x.fillRect(0, 0, W, H);
+      if (logo) { var lw = 280, lh = lw * logo.naturalHeight / logo.naturalWidth; x.drawImage(logo, (W - lw) / 2, 96, lw, lh); }
+      if (!poll) {
+        drawArch(x, imgs[0], 150, 300, 780, 1060);
+        txt(x, items[0].name, W / 2, 1490, '400 76px "Amiri", serif', "#1c1916");
+        var ln = AC.lineName(items[0].line);
+        if (ln) txt(x, "من مجموعة " + ln, W / 2, 1556, '400 34px "IBM Plex Sans Arabic", sans-serif', "#8a6f4e");
+      } else {
+        txt(x, "أي واحدة أختار؟", W / 2, 330, '400 92px "Amiri", serif', "#1c1916");
+        txt(x, "ساعدوني 🤍", W / 2, 400, '400 38px "IBM Plex Sans Arabic", sans-serif', "#8a6f4e");
+        // الترتيب من اليمين (١ يمين فوق) — زي القراية بالعربي
+        var cw = 390, ch = 520, n = imgs.length;
+        var pos = n === 2 ? [[630, 640], [120, 640]] :
+          n === 3 ? [[630, 470], [120, 470], [345, 1060]] : [[630, 470], [120, 470], [630, 1060], [120, 1060]];
+        imgs.forEach(function (im, i) {
+          var px = pos[i][0], py = pos[i][1];
+          drawArch(x, im, px, py, cw, ch);
+          x.beginPath(); x.arc(px + cw / 2, py + ch, 40, 0, Math.PI * 2); x.fillStyle = "#1c1916"; x.fill();
+          txt(x, AR_NUM[i], px + cw / 2, py + ch + 16, '400 46px "Amiri", serif', "#f6f2ec");
+        });
+      }
+      x.fillStyle = "rgba(138,111,78,.5)"; x.fillRect(W / 2 - 60, 1672, 120, 2);
+      txt(x, "جرّبي المجموعة عليكِ", W / 2, 1760, '400 54px "Amiri", serif', "#1c1916");
+      x.direction = "ltr";
+      x.font = '400 32px "IBM Plex Sans Arabic", sans-serif'; x.fillStyle = "#8a6f4e"; x.textAlign = "center";
+      x.fillText("echarpe.store/atelier", W / 2, 1828);
+      return c;
+    });
+  }
+  var shareFile = null, shareText = "";
+  function openShare(items, poll) {
+    shareFile = null;
+    $("shareTitle").textContent = poll ? "اسألي صديقاتكِ" : "شاركي إطلالتكِ";
+    $("shareImg").removeAttribute("src");
+    openSheet("shareSheet");
+    shareText = poll
+      ? "ساعدوني أختار 🤍 أي واحدة أحلى؟ جرّبتهم كلهم عليّا في echarpe — جرّبي إنتِ كمان: " + SITE_URL
+      : "جرّبت «" + items[0].name + "» عليّا في غرفة القياس من echarpe 🤍 جرّبي إنتِ كمان: " + SITE_URL;
+    makeStory(items, poll).then(function (c) {
+      var url = c.toDataURL("image/jpeg", 0.9);
+      $("shareImg").src = url; $("shareSave").href = url;
+      $("shareSave").download = poll ? "echarpe-ساعديني-أختار.jpg" : "echarpe-إطلالتي.jpg";
+      c.toBlob(function (b) { if (b) shareFile = new File([b], "echarpe.jpg", { type: "image/jpeg" }); }, "image/jpeg", 0.9);
+    }).catch(function () { closeSheet("shareSheet"); toast(MSG.generic || "تعذّر تجهيز الصورة."); });
+  }
+  $("shareGo").addEventListener("click", function () {
+    var data = { title: "echarpe", text: shareText };
+    if (shareFile && navigator.canShare && navigator.canShare({ files: [shareFile] })) data.files = [shareFile];
+    else data.url = SITE_URL;
+    if (navigator.share) navigator.share(data).catch(function () { });
+    else $("shareSave").click();
+  });
+  function shareOne(p) { openShare([p], false); }
+  $("mShare").addEventListener("click", function () { if (mirrorP) shareOne(mirrorP); });
+  $("lbShare").addEventListener("click", function () { if (state.lbOpen) shareOne(state.lbOpen); });
+  $("dockPoll").addEventListener("click", function () {
+    $("dockPoll").classList.remove("glow");
+    var withLook = state.products.filter(function (p) { return state.looks[p.id]; });
+    var pick = withLook.filter(isFav).concat(withLook.filter(function (p) { return !isFav(p); })).slice(0, 4);
+    if (pick.length < 2) { toast("جرّبي قطعتين على الأقل لتسألي صديقاتكِ 🤍"); return; }
+    openShare(pick, true);
+  });
+
   /* ---------------- البداية ---------------- */
   loadProducts().then(function (items) {
     state.products = items;
     items.forEach(function (p) { state.byId[p.id] = p; });
-    renderHero(); renderFilters(); renderGrid();
+    renderHero(); renderFilters(); renderGrid(); syncBagCount(); updateDock();
     var saved = LS ? PC.readFace(LS) : "";
     if (saved) { $("salonImg").src = saved; $("salonArch").classList.add("has"); }
   });
