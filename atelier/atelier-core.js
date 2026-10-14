@@ -11,6 +11,51 @@
   var AUTO_LIMIT = 12;       // أول ١٢ منتج بيتولّدوا لوحدهم بعد الرفع
   var SESSION_LIMIT = 24;    // بعد كده: زرار «جرّبيها» يدوي على الكارت
 
+  /* 🏛️ مجموعة الدار — صور المنتجات الحقيقية (atelier/collection).
+     بتظهر لما «منتجات البيع أونلاين» تكون فاضية، وبعد منتجات البيع
+     لما تبقى موجودة. line = الخط اللي بيتفلتر بيه في الصفحة. */
+  var HOUSE = [
+    ["crepe-minuit",      "كريب ميدنايت",         "Crêpe Minuit",          "crepe"],
+    ["mono-anthracite",   "مونوجرام أنثراسايت",   "Monogramme Anthracite", "mono"],
+    ["zebre-sable",       "زيبرا رملي",            "Zèbre Sable",           "zebre"],
+    ["plisse-noir",       "بليسيه نوار",           "Plissé Noir",           "plisse"],
+    ["crepe-pierre",      "كريب حجري",             "Crêpe Pierre",          "crepe"],
+    ["mono-sable",        "مونوجرام رملي",         "Monogramme Sable",      "mono"],
+    ["zebre-camel",       "زيبرا كاميل",           "Zèbre Camel",           "zebre"],
+    ["mono-gris",         "مونوجرام رمادي",        "Monogramme Gris",       "mono"],
+    ["crepe-noir-volant", "كريب نوار بحافة متموّجة", "Crêpe Noir Volant",   "crepe"],
+    ["mono-moka",         "مونوجرام موكا",         "Monogramme Moka",       "mono"],
+    ["zebre-argent",      "زيبرا فضّي",            "Zèbre Argent",          "zebre"],
+    ["mono-perle",        "مونوجرام لؤلؤي",        "Monogramme Perle",      "mono"],
+    ["plisse-nuit",       "بليسيه ليلي",           "Plissé Nuit",           "plisse"],
+    ["mono-taupe",        "مونوجرام توب",          "Monogramme Taupe",      "mono"],
+    ["zebre-fume",        "زيبرا دخاني",           "Zèbre Fumé",            "zebre"]
+  ];
+  var LINES = [
+    { id: "all",    ar: "الكل" },
+    { id: "crepe",  ar: "الكريب" },
+    { id: "plisse", ar: "البليسيه" },
+    { id: "mono",   ar: "المونوجرام" },
+    { id: "zebre",  ar: "الزيبرا" },
+    { id: "isdal",  ar: "الإسدال" }
+  ];
+  function houseCollection(base) {
+    var dir = base || "collection/";
+    return HOUSE.map(function (h) {
+      return { id: "house-" + h[0], galleryId: "", barcode: "", name: h[1], latin: h[2],
+               line: h[3], kind: "hijab", price: 0, img: dir + h[0] + ".jpg",
+               tryable: true, house: true };
+    });
+  }
+
+  /* 🧥 الإسدال — بيتعرف من الاسم (أو kind في المنتج). البرومبت بتاعه
+     مختلف (قطعة طويلة بغطاء راس متصل)، وبيتولّد بس في نداءات منفصلة
+     عن الطرح عشان الشبكة متتلخبطش. */
+  function kindOf(p) {
+    if (p && (p.kind === "isdal" || p.category === "isdal")) return "isdal";
+    return /إسدال|اسدال|أسدال|isdal|prayer/i.test(String(p && p.name || "")) ? "isdal" : "hijab";
+  }
+
   function isImageDataUrl(s) {
     return typeof s === "string" && /^data:image\/(jpeg|png|webp);base64,/i.test(s);
   }
@@ -34,8 +79,9 @@
 
   function normalize(p, i) {
     var id = String(p.id || p.barcode || p.name || ("p" + i));
+    var kind = kindOf(p);
     return {
-      id: id,
+      id: id, kind: kind, line: kind === "isdal" ? "isdal" : "shop", latin: "",
       galleryId: p.id ? String(p.id) : "",
       barcode: p.barcode ? String(p.barcode) : "",
       name: String(p.name || "طرحة").slice(0, 80),
@@ -50,6 +96,18 @@
     var n = Math.max(1, Number(size) || BATCH_SIZE), out = [];
     for (var i = 0; i < (list || []).length; i += n) out.push(list.slice(i, i + n));
     return out;
+  }
+
+  /* الدفعة الجاية من الطابور — كلها من نفس النوع (طرح مع طرح، إسدال
+     مع إسدال) وبحد BATCH_SIZE. بترجع { batch, rest } من غير ما تغيّر
+     الطابور الأصلي. */
+  function takeBatch(queue, size) {
+    var n = Math.max(1, Number(size) || BATCH_SIZE), batch = [], rest = [];
+    var kind = queue.length ? (queue[0].kind || "hijab") : "";
+    queue.forEach(function (p) {
+      if (batch.length < n && (p.kind || "hijab") === kind) batch.push(p); else rest.push(p);
+    });
+    return { batch: batch, rest: rest, kind: kind };
   }
 
   /* هل نولّد المنتج ده لوحده؟ — أول AUTO_LIMIT بس. الباقي لما يبان
@@ -81,6 +139,11 @@
 
   var API = {
     BATCH_SIZE: BATCH_SIZE,
+    HOUSE: HOUSE,
+    LINES: LINES,
+    houseCollection: houseCollection,
+    kindOf: kindOf,
+    takeBatch: takeBatch,
     AUTO_LIMIT: AUTO_LIMIT,
     SESSION_LIMIT: SESSION_LIMIT,
     isImageDataUrl: isImageDataUrl,

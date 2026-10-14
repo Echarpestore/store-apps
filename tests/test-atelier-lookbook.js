@@ -119,3 +119,17 @@ assert(AC.autoPolicy(0, 0, false) === 'auto' && AC.autoPolicy(AC.AUTO_LIMIT, 0, 
 assert(AC.shouldFallbackToSingle({ code: 'functions/internal' }) === true, 'دالة مش منشورة → ننزل لمنتج واحد');
 assert(AC.shouldFallbackToSingle({ code: 'functions/resource-exhausted' }) === false, 'خلص السقف ≠ ننزل (مش هنحرق نداءات أكتر)');
 assert(AC.cacheProductId({ id: 'x' }, true) !== AC.cacheProductId({ id: 'x' }, false), 'كاش الجودة العالية منفصل عن الشبكة');
+
+// ٨) الإسدال + مجموعة الدار
+if (M) {
+  const pi = M.buildLookbookPrompt(2, 'isdal');
+  assert(/isdal/.test(pi) && !/two-long-ends/.test(pi), 'برومبت الإسدال منفصل عن لفّة الطرحة');
+  assert(/1 row\(s\) by 2 column\(s\)/.test(pi), 'الإسدال بنفس هندسة الشبكة');
+  assert(M.cleanGarment('<script>') === 'hijab' && M.cleanGarment('isdal') === 'isdal', 'نوع القطعة من قائمة مسموحة بس');
+}
+assert(AC.kindOf({ name: 'إسدال صلاة كحلي' }) === 'isdal' && AC.kindOf({ name: 'طرحة كريب' }) === 'hijab', 'الإسدال بيتعرف من الاسم');
+const tb = AC.takeBatch([{ id: 1, kind: 'hijab' }, { id: 2, kind: 'isdal' }, { id: 3, kind: 'hijab' }], 4);
+assert(tb.batch.map((p) => p.id).join() === '1,3' && tb.rest.map((p) => p.id).join() === '2', 'الطرح والإسدال مبيتخلطوش في شبكة واحدة');
+const house = AC.houseCollection('collection/');
+assert(house.length >= 12 && house.every((p) => p.tryable && p.latin && p.line), 'مجموعة الدار كاملة وقابلة للقياس');
+assert(house.every((p) => fs.existsSync(path.join(ROOT, 'atelier', p.img))), 'كل صورة في مجموعة الدار موجودة فعلاً');

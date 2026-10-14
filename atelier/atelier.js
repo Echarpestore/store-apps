@@ -1,30 +1,38 @@
 /* ============================================================
-   ✨👑 atelier.js — صفحة «الأتيليه»: الموقع بيصحى بصورة العميلة
+   echarpe — Maison du Voile · atelier.js
    ------------------------------------------------------------
-   · المنتجات: نفس «منتجات البيع أونلاين» بتاعت loyalty
-     (pos_test_settings/online_shop_echarpe)، وفولباك للكتالوج.
-   · بعد ما العميلة ترفع صورتها: كل كارت + سلايدر الصفحة الرئيسية
-     يتحوّلوا لصورتها وهي لابسة الطرحة.
-   · التوليد: hijabLookbook (٤ منتجات في نداء واحد) — ولو لسه مش
-     منشورة، بننزل تلقائي لـhijabTryOn (منتج لكل نداء) عشان التجربة
-     تشتغل النهاردة من غير نشر.
-   · «جودة عالية» = نداء hijabTryOn لمنتج واحد بس.
+   · المنتجات: «منتجات البيع أونلاين» (pos_test_settings/online_shop_echarpe)
+     الأول، وبعدها مجموعة الدار (صور atelier/collection الحقيقية).
+   · بعد ما العميلة ترفع صورتها: كل قطعة في المجموعة + الواجهة
+     يتحوّلوا لصورتها وهي لابساها.
+   · التوليد: hijabLookbook (٤ قطع في نداء واحد) — ولو لسه مش منشورة،
+     بننزل تلقائي لـhijabTryOn (قطعة لكل نداء، للطرح بس).
+   · «عرض بدقة عالية» = نداء لقطعة واحدة بس.
    · ?mock=1 = معاينة تصميم من غير أي نداء AI (للمراجعة بس).
    ============================================================ */
 (function () {
   "use strict";
   var PC = window.PhotoCore, AC = window.AtelierCore;
   function $(id) { return document.getElementById(id); }
+  var REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var MOCK = /(?:^|[?&])mock=1(?:&|$)/.test(location.search);
   var LS = null; try { LS = window.localStorage; } catch (e) { LS = null; }
   var phone = ""; try { phone = (LS && LS.getItem("echarpe_loyalty_phone")) || ""; } catch (e) { }
 
+  var MSG = {
+    limit: "اكتملت جلسة القياس لليوم. يسعدنا لقاؤكِ غداً.",
+    retry: "تعذّر تجهيز بعض القطع — المسي «قيسيها» لإعادة المحاولة.",
+    badImg: "تعذّرت قراءة الصورة — جرّبي صورةً أخرى.",
+    isdalSoon: "قياس الإسدال يُتاح قريباً.",
+    generic: "تعذّر التجهيز الآن. حاولي مرةً أخرى بعد لحظات."
+  };
+
   var state = {
     products: [], byId: {}, face: "", alive: false,
     looks: {}, hq: {}, queued: {}, requested: 0, done: 0, target: 0,
     mode: "lookbook", lookbookWorked: false, stopped: false,
-    queue: [], busy: 0, gen: 0, lbOpen: null
+    queue: [], busy: 0, gen: 0, lbOpen: null, line: "all"
   };
 
   /* ---------------- Firebase ---------------- */
@@ -56,7 +64,7 @@
   var toastT = 0;
   function toast(msg, ms) {
     var t = $("toast"); t.textContent = msg; t.classList.add("on");
-    clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("on"); }, ms || 4200);
+    clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("on"); }, ms || 4600);
   }
   function el(tag, cls, html) {
     var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e;
@@ -66,136 +74,221 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
   function loadImg(src) {
     return new Promise(function (res, rej) {
       var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = src;
     });
   }
-  function urlToDataUrl(url) {
-    return fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
-      return new Promise(function (res) { var fr = new FileReader(); fr.onload = function () { res(fr.result); }; fr.readAsDataURL(b); });
-    });
+  function imgToJpeg(img, maxDim, q) {
+    var d = PC.computeResize(img.naturalWidth, img.naturalHeight, maxDim);
+    var c = document.createElement("canvas"); c.width = d.w; c.height = d.h;
+    var x = c.getContext("2d");
+    x.fillStyle = "#ffffff"; x.fillRect(0, 0, d.w, d.h);   // PNG شفاف ميطلعش أسود
+    x.drawImage(img, 0, 0, d.w, d.h);
+    return c.toDataURL("image/jpeg", q || 0.9);
   }
   function fileToFace(file) {
     return new Promise(function (resolve, reject) {
       if (!file || String(file.type || "").indexOf("image/") !== 0) { reject(new Error("not-image")); return; }
-      var url = URL.createObjectURL(file), img = new Image();
-      img.onload = function () {
-        try {
-          var d = PC.computeResize(img.naturalWidth, img.naturalHeight, PC.TARGET_MAX_DIM);
-          var c = document.createElement("canvas"); c.width = d.w; c.height = d.h;
-          c.getContext("2d").drawImage(img, 0, 0, d.w, d.h);
-          URL.revokeObjectURL(url); resolve(c.toDataURL("image/jpeg", PC.JPEG_QUALITY));
-        } catch (err) { URL.revokeObjectURL(url); reject(err); }
-      };
-      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error("decode")); };
-      img.src = url;
+      var url = URL.createObjectURL(file);
+      loadImg(url).then(function (img) {
+        URL.revokeObjectURL(url); resolve(imgToJpeg(img, PC.TARGET_MAX_DIM, PC.JPEG_QUALITY));
+      }).catch(function (e) { URL.revokeObjectURL(url); reject(e); });
     });
   }
-
-  /* ---------------- المنتجات ---------------- */
-  function fallbackProducts() {
-    var src = [["../col-hero.jpg", "طرحة الكولكشن"], ["../col-grays.jpg", "طرحة الرمادي"]];
-    return Promise.all(src.map(function (s, i) {
-      return urlToDataUrl(s[0]).then(function (d) {
-        return { id: "demo" + i, galleryId: "", barcode: "", name: s[1], price: 0, img: d, tryable: AC.isImageDataUrl(d) };
-      }).catch(function () { return null; });
-    })).then(function (a) { return a.filter(Boolean); });
+  /* بيقسّم النص لحروف في span — للكتابة الحرف بحرف.
+     ⚠️ العربي حروفه متصلة: بنقسّم بالكلمة مش بالحرف عشان التشكيل
+        والوصل ميتكسروش. */
+  function splitLetters(node) {
+    var words = node.textContent.trim().split(/\s+/);
+    node.innerHTML = words.map(function (w, i) {
+      return '<span class="ch" style="transition-delay:' + (i * 0.12) + 's">' + esc(w) + "</span>";
+    }).join(" ");
   }
 
+  /* ---------------- الافتتاحية ---------------- */
+  (function intro() {
+    var mark = $("introMark"), seen = false;
+    try { seen = sessionStorage.getItem("atelier_intro") === "1"; } catch (e) { }
+    var finish = function () {
+      $("intro").classList.add("lift");
+      document.body.classList.remove("intro-on");
+      setTimeout(function () { $("heroTitle").classList.add("in"); document.querySelector(".hero").classList.add("in"); }, 350);
+      setTimeout(function () { $("intro").style.display = "none"; }, 1500);
+      try { sessionStorage.setItem("atelier_intro", "1"); } catch (e) { }
+    };
+    if (seen || REDUCED) { $("intro").style.display = "none"; document.body.classList.remove("intro-on");
+      requestAnimationFrame(function () { $("heroTitle").classList.add("in"); document.querySelector(".hero").classList.add("in"); }); return; }
+    mark.innerHTML = mark.textContent.split("").map(function (c, i) {
+      return '<span style="animation-delay:' + (0.08 * i + 0.15) + 's">' + c + "</span>";
+    }).join("");
+    setTimeout(finish, 2700);
+    $("intro").addEventListener("click", finish, { once: true });
+  })();
+
+  /* ---------------- الهيدر + الشريط ---------------- */
+  function onScroll() {
+    $("hdr").classList.toggle("solid", window.scrollY > window.innerHeight * 0.75);
+    var b = document.querySelector(".banner-img img");
+    if (b && !REDUCED) {
+      var r = b.parentNode.getBoundingClientRect();
+      var p = (r.top + r.height / 2 - window.innerHeight / 2) / window.innerHeight;
+      b.style.transform = "translate3d(0," + (-8 + p * 10).toFixed(2) + "%,0)";
+    }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  (function marquee() {
+    var words = ["Crêpe", "Plissé", "Monogramme", "Zèbre", "Maison du Voile", "Le Caire"];
+    var one = words.map(function (w) { return "<span>" + w + "</span><span><b>✦</b></span>"; }).join("");
+    $("marquee").innerHTML = one + one;
+  })();
+
+  /* كشف عند الظهور — البيان + البانر */
+  var revealIO = "IntersectionObserver" in window ? new IntersectionObserver(function (es) {
+    es.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add("in"); revealIO.unobserve(en.target); } });
+  }, { threshold: 0.25 }) : null;
+  (function statement() {
+    var p = document.querySelector(".statement p");
+    var html = p.innerHTML.split(/(<br>|<em>|<\/em>)/).map(function (part) {
+      if (/^<\/?(br|em)>$/.test(part)) return part;
+      return part.split(/(\s+)/).map(function (w, i) {
+        return /^\s+$/.test(w) || !w ? w : '<span class="w" style="transition-delay:' + (i * 0.04) + 's">' + w + "</span>";
+      }).join("");
+    }).join("");
+    p.innerHTML = html;
+    var host = document.querySelector(".statement");
+    if (revealIO) { revealIO.observe(host); revealIO.observe(document.querySelector(".banner-img")); }
+    else { host.classList.add("in"); document.querySelector(".banner-img").classList.add("in"); }
+  })();
+
+  /* ---------------- المنتجات ---------------- */
   function loadProducts() {
-    if (MOCK || !fb) return fallbackProducts();
+    var house = AC.houseCollection("collection/");
+    if (MOCK || !fb) return Promise.resolve(house);
     var db = fb.firestore();
     return authReady.then(function () {
       return db.collection("pos_test_settings").doc("online_shop_echarpe").get();
     }).then(function (d) {
-      var items = AC.shopItemsFrom(d.exists ? d.data() : null);
-      if (items.length) return items;
-      return db.collection("pos_test_settings").doc("catalog_echarpe").get().then(function (c) {
-        return AC.catalogItemsFrom(c.exists ? c.data() : null);
-      });
-    }).then(function (items) {
-      return items.length ? items : fallbackProducts();
-    }).catch(function () { return fallbackProducts(); });
+      return AC.shopItemsFrom(d.exists ? d.data() : null).concat(house);
+    }).catch(function () { return house; });
   }
 
-  /* صورة مرجعية أكبر للمنتج (الجاليري ٧٢٠px) — أدق للموديل من غلاف
-     الكارت (٤٢٠px). مرة واحدة لكل منتج في الجلسة. */
+  /* صورة مرجعية للموديل (data-URL):
+     · مجموعة الدار: صورة الملف نفسه مضغوطة لـ1280px.
+     · منتجات البيع: صورة الجاليري الأكبر (٧٢٠px) لو موجودة، وإلا الغلاف. */
   var refCache = {};
   function refImage(p) {
     if (refCache[p.id]) return refCache[p.id];
-    var fallback = Promise.resolve(p.img);
-    if (MOCK || !fb || !p.galleryId) return (refCache[p.id] = fallback);
-    refCache[p.id] = fb.firestore().collection("pos_test_settings")
-      .doc("online_shop_echarpe_img_" + p.galleryId).get()
-      .then(function (d) {
-        var arr = (d.exists && Array.isArray(d.data().images)) ? d.data().images : [];
-        var big = arr.filter(AC.isImageDataUrl)[0];
-        return big || p.img;
-      }).catch(function () { return p.img; });
+    if (p.house) {
+      refCache[p.id] = loadImg(p.img).then(function (img) { return imgToJpeg(img, 1280, 0.9); });
+    } else if (MOCK || !fb || !p.galleryId) {
+      refCache[p.id] = Promise.resolve(p.img);
+    } else {
+      refCache[p.id] = fb.firestore().collection("pos_test_settings")
+        .doc("online_shop_echarpe_img_" + p.galleryId).get()
+        .then(function (d) {
+          var arr = (d.exists && Array.isArray(d.data().images)) ? d.data().images : [];
+          return arr.filter(AC.isImageDataUrl)[0] || p.img;
+        }).catch(function () { return p.img; });
+    }
     return refCache[p.id];
   }
+  /* بصمة المنتج في الكاش — data-URL أو مسار الملف */
+  function prodSig(p) { return p.img; }
 
-  /* ---------------- الهيرو ---------------- */
-  var heroIdx = 0, heroT = 0, heroList = [];
+  /* ---------------- الواجهة (السلايدر) ---------------- */
+  var heroIdx = -1, heroT = 0, heroList = [];
   function renderHero() {
-    var box = $("slides"), bars = $("bars");
+    var box = $("slides");
     heroList = state.products.filter(function (p) { return p.tryable; }).slice(0, 5);
-    if (!heroList.length) heroList = state.products.slice(0, 5);
-    box.innerHTML = ""; bars.innerHTML = "";
-    heroList.forEach(function (p, i) {
-      var s = el("div", "slide" + (i === 0 ? " on" : ""));
+    box.innerHTML = "";
+    heroList.forEach(function (p) {
+      var s = el("div", "slide");
       s.dataset.id = p.id;
-      s.innerHTML = '<div class="ph"><img class="prod" alt=""><img class="look" alt=""></div>';
+      s.innerHTML = '<img class="prod" alt=""><img class="look" alt="">';
       s.querySelector(".prod").src = p.img;
       box.appendChild(s);
-      bars.appendChild(el("i"));
     });
+    $("slideTotal").textContent = pad2(heroList.length);
     goHero(0);
   }
   function goHero(i) {
-    var slides = $("slides").children, bars = $("bars").children;
+    var slides = $("slides").children;
     if (!slides.length) return;
+    var prev = heroIdx;
     heroIdx = (i + slides.length) % slides.length;
     for (var k = 0; k < slides.length; k++) {
       slides[k].classList.toggle("on", k === heroIdx);
-      bars[k].classList.remove("on");
-      bars[k].classList.toggle("done", k < heroIdx);
+      slides[k].classList.toggle("prev", k === prev && prev !== heroIdx);
     }
-    void bars[heroIdx].offsetWidth; bars[heroIdx].classList.add("on");
     var p = heroList[heroIdx];
-    $("slideMeta").innerHTML = p ? "<b>" + esc(p.name) + "</b>" + (p.price ? " · " + esc(AC.fmtPrice(p.price)) : "") : "";
-    clearTimeout(heroT); heroT = setTimeout(function () { goHero(heroIdx + 1); }, 6000);
+    $("slideNo").textContent = pad2(heroIdx + 1);
+    $("slideName").textContent = p ? (p.latin || p.name) : "";
+    var c = document.querySelector(".counter");
+    c.classList.remove("run"); void c.offsetWidth; c.classList.add("run");
+    clearTimeout(heroT); heroT = setTimeout(function () { goHero(heroIdx + 1); }, 6500);
   }
-  $("hero").addEventListener("click", function (e) {
+  document.querySelector(".hero").addEventListener("click", function (e) {
     if (e.target.closest("button,a")) return;
     var p = heroList[heroIdx]; if (p) openLook(p);
   });
 
-  /* ---------------- الكولكشن ---------------- */
+  /* ---------------- المجموعة ---------------- */
   var io = null;
+  function renderFilters() {
+    var box = $("filters"), counts = { all: state.products.length };
+    state.products.forEach(function (p) { counts[p.line] = (counts[p.line] || 0) + 1; });
+    var lines = AC.LINES.slice();
+    if (counts.shop) lines.splice(1, 0, { id: "shop", ar: "الجديد" });
+    box.innerHTML = "";
+    lines.forEach(function (l) {
+      if (!counts[l.id]) return;
+      var b = el("button", l.id === state.line ? "on" : "", esc(l.ar) + "<sup>" + counts[l.id] + "</sup>");
+      b.type = "button"; b.setAttribute("role", "tab");
+      b.addEventListener("click", function () { setLine(l.id); });
+      box.appendChild(b);
+    });
+  }
+  function setLine(id) {
+    state.line = id;
+    Array.prototype.forEach.call($("filters").children, function (b, i) { b.classList.remove("on"); });
+    renderFilters();
+    document.querySelectorAll(".card").forEach(function (c) {
+      var p = state.byId[c.dataset.id];
+      var show = id === "all" || p.line === id;
+      c.classList.toggle("hide", !show);
+      if (show) { c.classList.remove("in"); requestAnimationFrame(function () { requestAnimationFrame(function () { c.classList.add("in"); }); }); }
+    });
+  }
+
   function renderGrid() {
     var g = $("grid"); g.innerHTML = "";
-    if (!state.products.length) { g.innerHTML = '<div class="empty">الكولكشن هينزل قريب 🤍</div>'; return; }
-    $("colTitle").textContent = "الكولكشن · " + state.products.length;
-    io = "IntersectionObserver" in window ? new IntersectionObserver(onSeen, { rootMargin: "120px" }) : null;
+    if (!state.products.length) { g.innerHTML = '<div class="empty">تُعَدّ المجموعة الجديدة… قريباً.</div>'; return; }
+    io = "IntersectionObserver" in window ? new IntersectionObserver(onSeen, { rootMargin: "0px 0px -8% 0px" }) : null;
     state.products.forEach(function (p, i) {
       var c = el("article", "card");
       c.dataset.id = p.id; c.dataset.i = i;
       c.innerHTML =
-        '<div class="frame" role="button" tabindex="0" aria-label="' + esc(p.name) + '">' +
+        '<div class="frame" role="button" tabindex="0">' +
           '<img class="prod" alt="" loading="lazy"><img class="look" alt="">' +
-          '<div class="veil"></div><div class="veil-txt">بنلبّسهالك…</div>' +
-          '<div class="chip"><img alt=""></div><div class="spark"></div>' +
-          '<button class="try-btn" type="button">✨ جرّبيها عليكي</button>' +
+          '<i class="sheen"></i><div class="weave"></div><div class="weave-txt">تُنسَج لكِ…</div>' +
+          '<div class="chip"><img alt=""></div>' +
+          '<button class="try-btn" type="button">قيسيها</button>' +
         '</div>' +
-        '<div class="meta"><span class="nm">' + esc(p.name) + '</span><span class="pr">' + esc(AC.fmtPrice(p.price)) + '</span></div>';
+        '<div class="meta"><span class="no">N°' + pad2(i + 1) + '</span>' +
+          '<span class="nm">' + esc(p.name) + '</span>' +
+          (p.latin ? '<span class="lt">' + esc(p.latin) + '</span>' : (p.price ? '<span class="pr">' + esc(AC.fmtPrice(p.price)) + '</span>' : '')) +
+        '</div>';
       c.querySelector(".prod").src = p.img;
+      c.querySelector(".prod").alt = p.name;
       c.querySelector(".chip img").src = p.img;
-      c.querySelector(".frame").addEventListener("click", function (e) {
+      var frame = c.querySelector(".frame");
+      frame.addEventListener("click", function (e) {
         if (e.target.closest(".try-btn")) { e.stopPropagation(); requestOne(p, true); return; }
         openLook(p);
       });
+      frame.addEventListener("keydown", function (e) { if (e.key === "Enter") openLook(p); });
       g.appendChild(c);
       if (io) io.observe(c); else c.classList.add("in");
     });
@@ -213,46 +306,78 @@
     });
   }
 
-  /* ---------------- لحظة الصحيان ---------------- */
+  /* ---------------- الدخول إلى غرفة القياس ---------------- */
+  function dust() {
+    var box = $("dust"); if (box.childElementCount) return;
+    for (var i = 0; i < 34; i++) {
+      var d = el("i");
+      d.style.left = (Math.random() * 100) + "%";
+      d.style.setProperty("--d", (7 + Math.random() * 7) + "s");
+      d.style.setProperty("--delay", (-Math.random() * 10) + "s");
+      d.style.setProperty("--x", ((Math.random() - 0.5) * 120) + "px");
+      box.appendChild(d);
+    }
+  }
   function awaken(face) {
     var a = $("awaken");
-    $("awakenFace").src = face; $("dockFace").src = face;
-    a.classList.add("on");
-    setTimeout(function () { $("w1").classList.add("on"); }, 350);
-    setTimeout(function () { $("w1").classList.remove("on"); }, 1500);
-    setTimeout(function () { $("w2").classList.add("on"); }, 2000);
+    $("awakenFace").src = face;
+    dust(); splitLetters($("w1")); splitLetters($("w2"));
+    a.classList.remove("out"); a.classList.add("on");
+    var T = REDUCED ? 0.2 : 1;
+    setTimeout(function () { $("w1").classList.add("on"); }, 700 * T);
+    setTimeout(function () { $("w1").classList.remove("on"); $("w1").classList.add("off"); }, 2300 * T);
+    setTimeout(function () { $("w2").classList.add("on"); $("w3").classList.add("on"); }, 2800 * T);
     return new Promise(function (res) {
       setTimeout(function () {
-        a.classList.remove("on"); $("w2").classList.remove("on");
-        document.body.classList.add("alive"); state.alive = true;
-        $("heroEyebrow").textContent = "Your Atelier";
-        $("heroTitle").innerHTML = "الكولكشن <em>بقى عليكي</em>";
-        $("heroSub").textContent = "دوسي على أي طرحة تشوفيها أقرب — أو بجودة عالية.";
-        $("ctaUpload").style.display = "none";
+        a.classList.add("out");
+        becomeAlive(face);
+        window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+        setTimeout(function () {
+          a.classList.remove("on", "out");
+          ["w1", "w2", "w3"].forEach(function (id) { $(id).classList.remove("on", "off"); });
+        }, 1700);
         res();
-      }, 3400);
+      }, 5200 * T);
     });
+  }
+  function becomeAlive(face) {
+    document.body.classList.add("alive"); state.alive = true;
+    $("heroEyebrow").textContent = "Votre Salon Privé";
+    var t = $("heroTitle"); t.classList.remove("in");
+    t.innerHTML = '<span class="ln"><span>المجموعة،</span></span><span class="ln"><span><em>عليكِ</em></span></span>';
+    requestAnimationFrame(function () { requestAnimationFrame(function () { t.classList.add("in"); }); });
+    $("heroSub").textContent = "المسي أي قطعة لتريها عن قرب، أو اطلبي عرضها بدقةٍ عالية.";
+    $("ctaUpload").querySelector("span").textContent = "اكتشفي إطلالاتكِ";
+    $("ctaSalon").querySelector("span").textContent = "تغيير الصورة";
+    setFace(face);
+  }
+  function setFace(face) {
+    $("dockFace").src = face; document.querySelector("#meDot img").src = face;
+    $("salonImg").src = face; $("salonArch").classList.add("has");
   }
 
   function startWithFace(face) {
     state.face = face; state.gen++;
     state.looks = {}; state.hq = {}; state.queued = {}; state.queue = [];
     state.requested = 0; state.done = 0; state.target = 0; state.stopped = false;
-    document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "manual"); });
+    document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "manual", "revealing"); });
     document.querySelectorAll(".slide").forEach(function (s) { s.classList.remove("worn"); });
     if (LS) PC.saveFace(LS, face);
-    var ready = state.alive ? Promise.resolve() : awaken(face);
-    $("dockFace").src = face;
-    // الكاش الأول (مجاني وفوري)، وبعدين التوليد
+    var ready = state.alive ? Promise.resolve(setFace(face)) : awaken(face);
     var gen = state.gen;
     Promise.all(state.products.map(function (p) {
-      return PC.readResultAsync(LS, AC.cacheProductId(p, false), face, null, p.img).then(function (v) {
+      return PC.readResultAsync(LS, AC.cacheProductId(p, false), face, null, prodSig(p)).then(function (v) {
         if (gen === state.gen && v) state.looks[p.id] = v;
       });
     })).then(function () { return ready; }).then(function () {
       if (gen !== state.gen) return;
-      state.products.forEach(function (p, i) {
-        if (state.looks[p.id]) { showLook(p, state.looks[p.id], false); state.queued[p.id] = true; }
+      var delay = 0;
+      state.products.forEach(function (p) {
+        if (state.looks[p.id]) {
+          state.queued[p.id] = true;
+          (function (pp, url) { setTimeout(function () { showLook(pp, url, false); }, delay); })(p, state.looks[p.id]);
+          delay += 160;
+        }
       });
       state.products.forEach(function (p, i) {
         var c = card(p.id);
@@ -264,6 +389,7 @@
 
   function considerAuto(p, i, visible) {
     if (!p || !p.tryable || state.queued[p.id] || state.stopped || !state.face) return;
+    if (state.line !== "all" && p.line !== state.line && !visible) return;
     var pol = AC.autoPolicy(i, state.requested, visible);
     if (pol === "auto") enqueue(p, false);
     else if (pol === "manual") { var c = card(p.id); if (c) c.classList.add("manual"); }
@@ -275,6 +401,7 @@
     enqueue(p, front);
   }
   function enqueue(p, front) {
+    if (state.mode === "single" && p.kind === "isdal") { markManual([p]); toast(MSG.isdalSoon); return; }
     state.queued[p.id] = true; state.requested++; state.target++;
     var c = card(p.id); if (c) { c.classList.remove("manual"); c.classList.add("weaving"); }
     if (front) state.queue.unshift(p); else state.queue.push(p);
@@ -285,34 +412,38 @@
   function pump() {
     var maxBusy = state.mode === "lookbook" ? 1 : 2;
     while (state.busy < maxBusy && state.queue.length && !state.stopped) {
-      var batch = state.queue.splice(0, state.mode === "lookbook" ? AC.BATCH_SIZE : 1);
-      runBatch(batch, state.gen);
+      var t = AC.takeBatch(state.queue, state.mode === "lookbook" ? AC.BATCH_SIZE : 1);
+      state.queue = t.rest;
+      runBatch(t.batch, t.kind, state.gen);
     }
   }
 
-  function runBatch(batch, gen) {
+  function runBatch(batch, kind, gen) {
     state.busy++;
     var face = state.face;
-    var work = state.mode === "lookbook" && batch.length > 1 ? runLookbook(batch, face) : runSingles(batch, face);
+    var useGrid = state.mode === "lookbook";
+    var work = useGrid ? runLookbook(batch, kind, face) : runSingles(batch, face);
     work.then(function (results) {
       if (gen !== state.gen) return;
       results.forEach(function (r) {
         showLook(r.p, r.img, true);
-        PC.saveResultAsync(LS, AC.cacheProductId(r.p, false), face, r.img, null, r.p.img);
+        PC.saveResultAsync(LS, AC.cacheProductId(r.p, false), face, r.img, null, prodSig(r.p));
       });
     }).catch(function (err) {
       if (gen !== state.gen) return;
       var code = String(err && err.code || "").replace(/^functions\//, "");
       if (code === "resource-exhausted") {
         state.stopped = true;
-        toast((err && err.message) || "وصلتي للحد بتاع النهاردة 🤍");
+        toast(MSG.limit);
         markManual(batch.concat(state.queue)); state.queue = [];
-      } else if (state.mode === "lookbook" && !state.lookbookWorked && AC.shouldFallbackToSingle(err)) {
+      } else if (useGrid && !state.lookbookWorked && AC.shouldFallbackToSingle(err)) {
         state.mode = "single";                 // hijabLookbook لسه مش منشورة
-        state.queue = batch.concat(state.queue);
+        var isdal = batch.concat(state.queue).filter(function (p) { return p.kind === "isdal"; });
+        state.queue = batch.concat(state.queue).filter(function (p) { return p.kind !== "isdal"; });
+        if (isdal.length) markManual(isdal);
       } else {
         markManual(batch);
-        toast("في طرح مقدرناش نجهّزها — دوسي «جرّبيها عليكي» عليها تاني");
+        toast(MSG.retry);
       }
     }).then(function () {
       state.busy--; updateDock(); pump();
@@ -321,25 +452,30 @@
 
   function markManual(list) {
     list.forEach(function (p) {
-      state.queued[p.id] = false; state.target = Math.max(state.done, state.target - 1);
+      if (state.queued[p.id]) state.target = Math.max(state.done, state.target - 1);
+      state.queued[p.id] = false;
       var c = card(p.id); if (c) { c.classList.remove("weaving"); c.classList.add("manual"); }
     });
   }
 
-  function runLookbook(batch, face) {
-    return Promise.all(batch.map(refImage)).then(function (refs) {
+  function lookbookCall(products, kind, face) {
+    return Promise.all(products.map(refImage)).then(function (refs) {
       if (MOCK) return mockGrid(face, refs);
       return callable("hijabLookbook")({
-        customerImage: face,
-        products: batch.map(function (p, i) { return { id: p.id, image: refs[i] }; })
+        customerImage: face, garment: kind,
+        products: products.map(function (p, i) { return { id: p.id, image: refs[i] }; })
       }).then(function (res) {
         var d = res && res.data;
         if (!d || !d.image) throw { code: "internal" };
         return d.image;
       });
-    }).then(function (gridUrl) {
+    });
+  }
+
+  function runLookbook(batch, kind, face) {
+    return lookbookCall(batch, kind, face).then(function (gridUrl) {
       state.lookbookWorked = true;
-      return sliceGrid(gridUrl, batch.length);
+      return batch.length === 1 ? [gridUrl] : sliceGrid(gridUrl, batch.length);
     }).then(function (cells) {
       return batch.map(function (p, i) { return { p: p, img: cells[i] }; });
     });
@@ -351,7 +487,9 @@
     }));
   }
 
+  /* قطعة واحدة بجودة كاملة: الطرحة بـhijabTryOn، والإسدال بـhijabLookbook (خانة واحدة) */
   function single(p, face) {
+    if (p.kind === "isdal") return lookbookCall([p], "isdal", face);
     return refImage(p).then(function (ref) {
       if (MOCK) return mockLook(face, ref, true);
       return callable("hijabTryOn")({ customerImage: face, productImage: ref, productId: p.id, phone: phone })
@@ -375,16 +513,20 @@
     });
   }
 
-  /* ---------------- عرض النتيجة ---------------- */
+  /* ---------------- ظهور الإطلالة ---------------- */
   function showLook(p, url, fresh) {
     state.looks[p.id] = url;
-    if (fresh) state.done++; else { state.done++; state.target++; }
+    state.done++; if (!fresh) state.target++;
     var c = card(p.id);
     if (c) {
-      c.querySelector(".look").src = url;
+      var lk = c.querySelector(".look");
+      lk.src = url;
       c.classList.remove("weaving", "manual");
-      requestAnimationFrame(function () { c.classList.add("worn"); });
-      if (fresh) sparkle(c.querySelector(".spark"));
+      c.querySelector(".frame").style.setProperty("--h", c.querySelector(".frame").offsetHeight + "px");
+      requestAnimationFrame(function () {
+        c.classList.add("worn", "revealing");
+        setTimeout(function () { c.classList.remove("revealing"); }, 2100);
+      });
     }
     var s = document.querySelector('.slide[data-id="' + CSS.escape(p.id) + '"]');
     if (s) { s.querySelector(".look").src = url; s.classList.add("worn"); }
@@ -392,39 +534,33 @@
     updateDock();
   }
 
-  function sparkle(box) {
-    if (!box) return;
-    for (var i = 0; i < 14; i++) {
-      var s = el("i"); var a = Math.random() * Math.PI * 2, r = 40 + Math.random() * 70;
-      s.style.left = "50%"; s.style.top = "40%";
-      s.style.setProperty("--dx", Math.cos(a) * r + "px"); s.style.setProperty("--dy", Math.sin(a) * r + "px");
-      s.style.animationDelay = (Math.random() * .25) + "s";
-      box.appendChild(s);
-    }
-    setTimeout(function () { box.innerHTML = ""; }, 1600);
-  }
-
   function updateDock() {
     var t = Math.max(state.target, state.done), d = state.done;
-    $("dockSub").textContent = t && d < t ? ("بنلبّسك… " + d + " من " + t) :
-      (d ? d + " طرحة عليكي — دوسي على أي واحدة" : "بنلبّسك…");
+    $("dockSub").textContent = t && d < t ? ("تُنسَج " + d + " من " + t + "…") :
+      (d ? d + " إطلالة جاهزة — المسي أيّاً منها" : "تُنسَج المجموعة لكِ…");
     $("dockProg").style.width = t ? Math.round(d / t * 100) + "%" : "0";
   }
 
-  /* ---------------- عرض الإطلالة + الجودة العالية ---------------- */
+  /* ---------------- عرض القطعة + الدقة العالية ---------------- */
   function openLook(p) {
     state.lbOpen = p; setLb(p);
     $("lb").classList.add("on"); document.body.style.overflow = "hidden";
   }
   function setLb(p) {
     var pic = $("lbPic"), hq = state.hq[p.id], look = hq || state.looks[p.id];
-    $("lbLook").src = look || p.img; $("lbProd").src = p.img; $("lbChip").src = p.img;
+    var img = $("lbLook"); img.src = look || p.img;
+    img.style.animation = "none"; void img.offsetWidth; img.style.animation = "";
+    $("lbProd").src = p.img; $("lbChip").src = p.img;
     pic.classList.toggle("is-hq", !!hq);
     pic.querySelector(".chip").style.display = look ? "" : "none";
-    $("lbName").textContent = p.name; $("lbPrice").textContent = AC.fmtPrice(p.price);
+    var idx = state.products.indexOf(p);
+    $("lbNo").textContent = "N°" + pad2(idx + 1) + (p.latin ? " — " + p.latin : "");
+    $("lbName").textContent = p.name;
+    $("lbLatin").textContent = p.price ? AC.fmtPrice(p.price) : "";
     var b = $("lbHq");
     b.style.display = hq || !p.tryable ? "none" : "";
-    b.textContent = state.face ? "✨ شوفيها بجودة عالية" : "✨ جرّبيها عليكي";
+    b.querySelector("span").textContent = state.face ? "عرض بدقة عالية" : "قيسيها عليكِ";
+    $("lbHint").style.display = look ? "" : "none";
   }
   function closeLb() {
     state.lbOpen = null; $("lb").classList.remove("on"); document.body.style.overflow = "";
@@ -434,44 +570,49 @@
   $("lbHq").addEventListener("click", function () {
     var p = state.lbOpen; if (!p) return;
     if (!state.face) { closeLb(); pickPhoto(); return; }
+    if (state.mode === "single" && p.kind === "isdal") { toast(MSG.isdalSoon); return; }
     var pic = $("lbPic"), face = state.face, b = $("lbHq");
     pic.classList.add("hq-loading"); b.disabled = true;
-    PC.readResultAsync(LS, AC.cacheProductId(p, true), face, null, p.img).then(function (cached) {
+    PC.readResultAsync(LS, AC.cacheProductId(p, true), face, null, prodSig(p)).then(function (cached) {
       return cached || single(p, face).then(function (img) {
-        PC.saveResultAsync(LS, AC.cacheProductId(p, true), face, img, null, p.img);
+        PC.saveResultAsync(LS, AC.cacheProductId(p, true), face, img, null, prodSig(p));
         return img;
       });
     }).then(function (img) {
       state.hq[p.id] = img;
-      if (!state.looks[p.id]) showLook(p, img, true);
+      if (!state.looks[p.id]) { state.target++; showLook(p, img, true); }
       if (state.lbOpen === p) setLb(p);
     }).catch(function (err) {
-      toast((err && err.message) || PC.FRIENDLY_ERR);
+      var code = String(err && err.code || "").replace(/^functions\//, "");
+      toast(code === "resource-exhausted" ? MSG.limit : MSG.generic);
     }).then(function () { pic.classList.remove("hq-loading"); b.disabled = false; });
   });
-  // اضغطي واسكتي = الطرحة لوحدها
   (function () {
     var pic = $("lbPic");
     function on() { pic.classList.add("compare"); }
     function off() { pic.classList.remove("compare"); }
     pic.addEventListener("pointerdown", on);
     ["pointerup", "pointerleave", "pointercancel"].forEach(function (ev) { pic.addEventListener(ev, off); });
+    pic.addEventListener("contextmenu", function (e) { e.preventDefault(); });
   })();
 
   /* ---------------- رفع الصورة ---------------- */
   function pickPhoto() { $("file").value = ""; $("file").click(); }
-  $("ctaUpload").addEventListener("click", function () {
+  function enter() {
+    if (state.alive) { document.getElementById("collection").scrollIntoView({ behavior: "smooth" }); return; }
     var saved = LS ? PC.readFace(LS) : "";
     if (saved) startWithFace(saved); else pickPhoto();
-  });
+  }
+  $("ctaUpload").addEventListener("click", enter);
+  $("ctaSalon").addEventListener("click", function () { if (state.alive) pickPhoto(); else enter(); });
   $("dockChange").addEventListener("click", pickPhoto);
   $("file").addEventListener("change", function () {
     var f = this.files && this.files[0]; if (!f) return;
-    fileToFace(f).then(startWithFace).catch(function () { toast("الصورة دي مش هتنفع — جرّبي صورة تانية"); });
+    fileToFace(f).then(startWithFace).catch(function () { toast(MSG.badImg); });
   });
 
   /* ---------------- معاينة التصميم (?mock=1) ----------------
-     ⚠️ مش AI: بنرسم صورة العميلة وعليها لمسة من لون الطرحة عشان
+     ⚠️ مش AI: بنرسم صورة العميلة وعليها لمسة من لون القطعة عشان
         نراجع الحركة والتصميم من غير ما نصرف ولا نداء. */
   function mockLook(face, prod, slow) {
     return Promise.all([loadImg(face), loadImg(prod)]).then(function (im) {
@@ -480,13 +621,14 @@
       var x = c.getContext("2d");
       var s = Math.max(W / f.naturalWidth, H / f.naturalHeight);
       x.drawImage(f, (W - f.naturalWidth * s) / 2, (H - f.naturalHeight * s) / 2, f.naturalWidth * s, f.naturalHeight * s);
-      x.globalAlpha = .45; x.globalCompositeOperation = "soft-light";
+      x.globalAlpha = .55; x.globalCompositeOperation = "color";
       x.drawImage(p, 0, 0, W, H);
-      return new Promise(function (r) { setTimeout(function () { r(c.toDataURL("image/jpeg", .85)); }, (slow ? 2500 : 1200) + Math.random() * 1500); });
+      return new Promise(function (r) { setTimeout(function () { r(c.toDataURL("image/jpeg", .85)); }, (slow ? 2600 : 1400) + Math.random() * 1600); });
     });
   }
   function mockGrid(face, refs) {
     return Promise.all(refs.map(function (r) { return mockLook(face, r, false); })).then(function (looks) {
+      if (looks.length === 1) return looks[0];
       var lay = PC.computeGridLayout(looks.length);
       return Promise.all(looks.map(loadImg)).then(function (ims) {
         var c = document.createElement("canvas"); c.width = 600 * lay.cols; c.height = 800 * lay.rows;
@@ -496,13 +638,14 @@
       });
     });
   }
-  if (MOCK) document.body.appendChild(el("div", "demo-flag", "معاينة تصميم — مش تجربة AI حقيقية"));
+  if (MOCK) document.body.appendChild(el("div", "demo-flag", "معاينة تصميم — بدون ذكاء اصطناعي"));
 
   /* ---------------- البداية ---------------- */
   loadProducts().then(function (items) {
     state.products = items;
     items.forEach(function (p) { state.byId[p.id] = p; });
-    renderHero(); renderGrid();
-    if (LS && PC.readFace(LS)) $("ctaUpload").textContent = "✨ شوفي الكولكشن عليكي";
+    renderHero(); renderFilters(); renderGrid();
+    var saved = LS ? PC.readFace(LS) : "";
+    if (saved) { $("salonImg").src = saved; $("salonArch").classList.add("has"); }
   });
 })();
