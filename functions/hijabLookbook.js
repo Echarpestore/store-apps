@@ -44,7 +44,28 @@ const LOOKBOOK_DEFAULTS = {
   lookbookCapPerUser: 2,     // جولتين = نداءين توليد = ٨ إطلالات للعميلة في اليوم
   lookbookCapGlobal: 400     // سقف المتجر كله في اليوم
 };
-const MAX_PRODUCTS = 4;
+const MAX_PRODUCTS = 9;
+
+/* 📐 شبكة الأتيليه — لحد ٩ قطع في صورة واحدة. الخانة بورتريه ٣:٤،
+   فنسبة الصورة كلها = (أعمدة×٣):(صفوف×٤) وبنقرّبها لأقرب نسبة
+   بيدعمها Gemini. ⚠️ لازم تطابق gridLayout في atelier-core.js
+   بالظبط — الصفحة بتقصّ على نفس الأعمدة والصفوف. */
+function lookbookLayout(n) {
+  const k = Math.max(1, Math.min(MAX_PRODUCTS, Number(n) || 1));
+  if (k <= 3) return { cols: k, rows: 1 };
+  if (k === 4) return { cols: 2, rows: 2 };
+  if (k <= 6) return { cols: 3, rows: 2 };
+  return { cols: 3, rows: 3 };
+}
+const ASPECTS = [["1:1", 1], ["3:4", .75], ["4:3", 4 / 3], ["2:3", 2 / 3], ["3:2", 1.5],
+  ["4:5", .8], ["5:4", 1.25], ["9:16", 9 / 16], ["16:9", 16 / 9], ["21:9", 21 / 9]];
+function lookbookImageConfig(n) {
+  const l = lookbookLayout(n), want = (l.cols * 3) / (l.rows * 4);
+  let best = ASPECTS[0];
+  for (const a of ASPECTS) if (Math.abs(Math.log(a[1] / want)) < Math.abs(Math.log(best[1] / want))) best = a;
+  // 2K عشان كل خانة تفضل واضحة بعد القص (٦ خانات ≈ ٦٨٠ بكسل عرض)
+  return { aspectRatio: best[0], imageSize: "2K" };
+}
 
 function resolveLookbookConfig(doc) {
   const d = (doc && typeof doc === "object") ? doc : {};
@@ -95,7 +116,7 @@ function cleanGarment(g) { return GARMENTS.includes(g) ? g : "hijab"; }
 
 function buildLookbookPrompt(n, garment) {
   const count = Math.max(1, Math.min(MAX_PRODUCTS, Number(n) || 1));
-  const layout = core.computeGridLayout(count);
+  const layout = lookbookLayout(count);
   if (cleanGarment(garment) === "isdal") return buildIsdalPrompt(count, layout);
   const lines = [
     "Create a photorealistic virtual hijab try-on lookbook.",
@@ -108,8 +129,11 @@ function buildLookbookPrompt(n, garment) {
     "No cape, poncho, khimar, sculpted turban, stacked neck coils or broad bib across the chest.",
     "The hijab must look physically worn with realistic folds, shadows, depth and occlusion.",
     "OUTPUT FORMAT IS STRICT:",
-    "Return ONE image containing exactly " + count + " equal portrait cells arranged as " +
-      layout.rows + " row(s) by " + layout.cols + " column(s), filled left-to-right then top-to-bottom.",
+    "Return ONE image arranged as a grid of " + layout.rows + " row(s) by " + layout.cols +
+      " column(s) of equal portrait cells, filled left-to-right then top-to-bottom. Exactly " + count +
+      " cells contain the customer" + (layout.rows * layout.cols > count
+        ? "; the remaining " + (layout.rows * layout.cols - count) + " cell(s) at the end are plain warm ivory background with nothing in them."
+        : "."),
     "Every cell shows the SAME customer portrait with the SAME framing, camera distance and lighting. The ONLY difference between cells is which hijab product is worn."
   ];
   for (let i = 0; i < count; i++) {
@@ -134,8 +158,11 @@ function buildIsdalPrompt(count, layout) {
     "Dress the customer in the isdal: the attached hood frames the face closely, and the garment falls loosely and modestly over the shoulders, arms and body to the full visible length of the photo, with natural folds and realistic weight.",
     "Keep the exact cut of each isdal (hood shape, sleeves or cape, length, trims, lace, embroidery and closures) as shown in its product image.",
     "OUTPUT FORMAT IS STRICT:",
-    "Return ONE image containing exactly " + count + " equal portrait cells arranged as " +
-      layout.rows + " row(s) by " + layout.cols + " column(s), filled left-to-right then top-to-bottom.",
+    "Return ONE image arranged as a grid of " + layout.rows + " row(s) by " + layout.cols +
+      " column(s) of equal portrait cells, filled left-to-right then top-to-bottom. Exactly " + count +
+      " cells contain the customer" + (layout.rows * layout.cols > count
+        ? "; the remaining " + (layout.rows * layout.cols - count) + " cell(s) at the end are plain warm ivory background with nothing in them."
+        : "."),
     "Every cell shows the SAME customer with the SAME framing, camera distance and lighting. The ONLY difference between cells is which isdal is worn."
   ];
   for (let i = 0; i < count; i++) {
@@ -206,21 +233,30 @@ exports.hijabLookbook = onCall(
     }
 
     try {
-      const out = await core.callGeminiImage({
+      const req = {
         apiKey: GEMINI_API_KEY.value(),
         model: cfg.model,
         quality: cfg.quality,
         cellCount: products.length,
+        imageConfig: lookbookImageConfig(products.length),
         prompt: buildLookbookPrompt(products.length, cleanGarment(data.garment)),
         images: [{ mime: customer.mime, b64: customer.b64 }]
           .concat(products.map((p) => ({ mime: p.mime, b64: p.b64 })))
-      });
+      };
+      let out;
+      try { out = await core.callGeminiImage(req); }
+      catch (e) {
+        // الموديل رفض إعداد الحجم/النسبة (400) → نعيد مرة من غيره بدل ما نفشل
+        if (!/GEMINI_HTTP_400/.test(String(e && e.message))) throw e;
+        console.warn("lookbook: imageConfig rejected, retrying without it");
+        out = await core.callGeminiImage(Object.assign({}, req, { imageConfig: null }));
+      }
       return {
         image: "data:" + out.mime + ";base64," + out.b64,
         mime: out.mime,
         // ترتيب الخانات = ترتيب المنتجات اللي اتبعتت بالظبط
         cells: products.map((p) => p.id),
-        layout: core.computeGridLayout(products.length)
+        layout: lookbookLayout(products.length)
       };
     } catch (e) {
       console.error("lookbook generate", e && e.message);
@@ -240,4 +276,6 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports.cairoDay = cairoDay;
   module.exports.LOOKBOOK_DEFAULTS = LOOKBOOK_DEFAULTS;
   module.exports.MAX_PRODUCTS = MAX_PRODUCTS;
+  module.exports.lookbookLayout = lookbookLayout;
+  module.exports.lookbookImageConfig = lookbookImageConfig;
 }

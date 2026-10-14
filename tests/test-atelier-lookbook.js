@@ -74,8 +74,8 @@ if (M) {
   const ok = M.sanitizeProducts([{ id: 'a', image: img }, { id: 'b', image: img }]);
   assert(ok.length === 2 && ok[0].id === 'a' && ok[1].id === 'b', 'الترتيب محفوظ');
   let threw = false;
-  try { M.sanitizeProducts([1, 2, 3, 4, 5].map((i) => ({ id: 'p' + i, image: img }))); } catch (e) { threw = true; }
-  assert(threw, 'أكتر من ٤ منتجات = رفض');
+  try { M.sanitizeProducts([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => ({ id: 'p' + i, image: img }))); } catch (e) { threw = true; }
+  assert(threw, 'أكتر من ٩ منتجات = رفض');
   threw = false;
   try { M.sanitizeProducts([{ id: 'a', image: img }, { id: 'b', image: 'http://x/y.jpg' }]); } catch (e) { threw = true; }
   assert(threw, 'صورة مش data-URL = رفض الطلب كله');
@@ -141,3 +141,18 @@ const house = AC.houseCollection('collection/');
 assert(house.length >= 12 && house.every((p) => p.tryable && p.line && AC.lineName(p.line)), 'مجموعة الدار كاملة وقابلة للقياس');
 assert(house.every((p) => fs.existsSync(path.join(ROOT, 'atelier', p.img))), 'كل صورة في مجموعة الدار موجودة فعلاً');
 assert(house.some((p) => p.kind === 'isdal') && house.filter((p) => p.kind === 'isdal').every((p) => p.line === 'isdal'), 'الإسدال في المجموعة بنوعه الصح');
+
+// ٩) ٦ قطع في النداء: نفس الشبكة على السيرفر والصفحة + 2K
+if (M) {
+  for (let n = 1; n <= 9; n++) {
+    const a = M.lookbookLayout(n), b = AC.gridLayout(n);
+    assert(a.cols === b.cols && a.rows === b.rows && a.cols * a.rows >= n, 'شبكة ' + n + ' قطع متطابقة بين السيرفر والصفحة');
+  }
+  assert(M.lookbookImageConfig(6).imageSize === '2K' && M.lookbookImageConfig(6).aspectRatio === '5:4', '٦ قطع = 3×2 بحجم 2K');
+  const p6 = M.buildLookbookPrompt(6);
+  assert(/2 row\(s\) by 3 column\(s\)/.test(p6) && p6.includes('cell 6:') && p6.includes('IMAGE 7'), 'برومبت ٦ قطع');
+  assert(/remaining 1 cell/.test(M.buildLookbookPrompt(5)), 'الخانة الفاضية متوصوفة لما القطع أقل من الشبكة');
+}
+assert(AC.ROUND_SIZE === 6, 'الجولة ٦ قطع');
+const gc = AC.gridCells(1500, 1200, 5, 0);
+assert(gc.length === 5 && gc[3].x === 0 && gc[3].y === 600 && gc[2].x === 1000, 'القص بالترتيب: شمال لليمين ومن فوق لتحت');
