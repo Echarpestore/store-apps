@@ -41,7 +41,7 @@ const COL_GUARD = "tryon_ai_guard";
      lookbookCapGlobal    شبكات/يوم للمتجر كله — سقف الميزانية */
 const LOOKBOOK_DEFAULTS = {
   lookbookEnabled: true,
-  lookbookCapPerUser: 6,     // ٦ شبكات = ٢٤ طرحة للعميلة في اليوم
+  lookbookCapPerUser: 2,     // جولتين = نداءين توليد = ٨ إطلالات للعميلة في اليوم
   lookbookCapGlobal: 400     // سقف المتجر كله في اليوم
 };
 const MAX_PRODUCTS = 4;

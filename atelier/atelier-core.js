@@ -8,8 +8,11 @@
   "use strict";
 
   var BATCH_SIZE = 4;        // منتجات في النداء الواحد (شبكة ٢×٢)
-  var AUTO_LIMIT = 12;       // أول ١٢ منتج بيتولّدوا لوحدهم بعد الرفع
-  var SESSION_LIMIT = 24;    // بعد كده: زرار «جرّبيها» يدوي على الكارت
+  /* 💰 جولتين في اليوم بس = نداءين توليد لكل عميلة:
+     الجولة الأولى لوحدها (أول ٤ طرح)، والتانية هي اللي بتختار
+     قطعها الـ٤. نفس السقف على السيرفر (lookbookCapPerUser = 2). */
+  var ROUND_SIZE = 4;
+  var ROUNDS_PER_DAY = 2;
 
   /* 🏛️ مجموعة الدار — صور المنتجات الحقيقية (atelier/collection).
      بتظهر لما «منتجات البيع أونلاين» تكون فاضية، وبعد منتجات البيع
@@ -116,12 +119,26 @@
     return { batch: batch, rest: rest, kind: kind };
   }
 
-  /* هل نولّد المنتج ده لوحده؟ — أول AUTO_LIMIT بس. الباقي لما يبان
-     على الشاشة لحد SESSION_LIMIT، وبعدها يدوي. */
-  function autoPolicy(index, requestedSoFar, visible) {
-    if (requestedSoFar >= SESSION_LIMIT) return "manual";
-    if (index < AUTO_LIMIT) return "auto";
-    return visible ? "auto" : "wait";
+  /* الجولة الأولى: أول ROUND_SIZE طرح ممكن تتجرّب ومالهاش إطلالة جاهزة
+     (الإسدال بيتجرّب في جولة لوحده لما العميلة تختاره). */
+  function firstRound(products, looks) {
+    return (products || []).filter(function (p) {
+      return p && p.tryable && p.kind !== "isdal" && !(looks && looks[p.id]);
+    }).slice(0, ROUND_SIZE);
+  }
+
+  /* عدّاد الجولات على الجهاز — بيتصفّر كل يوم. السيرفر هو الحَكَم
+     الحقيقي؛ ده عشان الصفحة تعرض المتبقّي من غير ما تسأل. */
+  function roundsUsedToday(rec, today) {
+    return rec && rec.day === today ? Math.max(0, Number(rec.n) || 0) : 0;
+  }
+
+  /* تقدر تضيف القطعة دي للاختيار؟ ok | full | kind | done */
+  function canSelect(sel, p, looks) {
+    if (!p || !p.tryable || (looks && looks[p.id])) return "done";
+    if ((sel || []).length >= ROUND_SIZE) return "full";
+    if (sel && sel.length && (sel[0].kind || "hijab") !== (p.kind || "hijab")) return "kind";
+    return "ok";
   }
 
   /* مفتاح الكاش — منفصل عن hijabTryOn عشان صورة الشبكة المقصوصة
@@ -151,13 +168,15 @@
     lineName: lineName,
     kindOf: kindOf,
     takeBatch: takeBatch,
-    AUTO_LIMIT: AUTO_LIMIT,
-    SESSION_LIMIT: SESSION_LIMIT,
+    ROUND_SIZE: ROUND_SIZE,
+    ROUNDS_PER_DAY: ROUNDS_PER_DAY,
+    firstRound: firstRound,
+    roundsUsedToday: roundsUsedToday,
+    canSelect: canSelect,
     isImageDataUrl: isImageDataUrl,
     shopItemsFrom: shopItemsFrom,
     catalogItemsFrom: catalogItemsFrom,
     buildBatches: buildBatches,
-    autoPolicy: autoPolicy,
     cacheProductId: cacheProductId,
     shouldFallbackToSingle: shouldFallbackToSingle,
     fmtPrice: fmtPrice

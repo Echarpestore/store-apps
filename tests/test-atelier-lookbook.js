@@ -113,9 +113,16 @@ const items = AC.shopItemsFrom({ items: [
 assert(items.map((p) => p.id).join(',') === '1,5', 'نفس شرط shopItems بتاع loyalty');
 assert(items[0].tryable === true && items[1].tryable === false, 'المنتج من غير صورة data-URL بيتعرض بس مش بيتجرّب');
 assert(AC.buildBatches([1, 2, 3, 4, 5, 6], 4).map((b) => b.length).join() === '4,2', 'دفعات ٤ بالترتيب');
-assert(AC.autoPolicy(0, 0, false) === 'auto' && AC.autoPolicy(AC.AUTO_LIMIT, 0, false) === 'wait' &&
-       AC.autoPolicy(AC.AUTO_LIMIT, 0, true) === 'auto' && AC.autoPolicy(0, AC.SESSION_LIMIT, true) === 'manual',
-       'التوليد التلقائي محدود (أول ١٢ + اللي بيبان، وبعد السقف يدوي)');
+const prods = AC.houseCollection('collection/');
+const r1 = AC.firstRound(prods, {});
+assert(r1.length === AC.ROUND_SIZE && r1.every((p) => p.kind === 'hijab'), 'الجولة الأولى = ٤ طرح (من غير إسدال)');
+assert(AC.firstRound(prods, { [r1[0].id]: 'x' })[0].id !== r1[0].id, 'الجولة الأولى بتتخطّى اللي إطلالته جاهزة');
+assert(AC.ROUNDS_PER_DAY === 2, 'جولتين بس في اليوم = نداءين توليد');
+assert(AC.roundsUsedToday({ day: '2026-10-14', n: 2 }, '2026-10-14') === 2 && AC.roundsUsedToday({ day: '2026-10-13', n: 2 }, '2026-10-14') === 0, 'عدّاد الجولات بيتصفّر كل يوم');
+const isd = prods.find((p) => p.kind === 'isdal');
+assert(AC.canSelect([r1[0]], isd, {}) === 'kind', 'الإسدال مبيتخلطش مع الطرح في نفس الجولة');
+assert(AC.canSelect(r1, prods[10], {}) === 'full', 'الجولة ٤ قطع بالكتير');
+assert(AC.canSelect([], r1[0], { [r1[0].id]: 'x' }) === 'done', 'القطعة الجاهزة مبتتختارش تاني');
 assert(AC.shouldFallbackToSingle({ code: 'functions/internal' }) === true, 'دالة مش منشورة → ننزل لمنتج واحد');
 assert(AC.shouldFallbackToSingle({ code: 'functions/resource-exhausted' }) === false, 'خلص السقف ≠ ننزل (مش هنحرق نداءات أكتر)');
 assert(AC.cacheProductId({ id: 'x' }, true) !== AC.cacheProductId({ id: 'x' }, false), 'كاش الجودة العالية منفصل عن الشبكة');
