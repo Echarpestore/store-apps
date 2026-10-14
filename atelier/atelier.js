@@ -5,7 +5,7 @@
      الأول، وبعدها مجموعة الدار (صور atelier/collection الحقيقية).
    · بعد ما العميلة ترفع صورتها: كل قطعة في المجموعة + الواجهة
      يتحوّلوا لصورتها وهي لابساها.
-   · التوليد: hijabLookbook (٤ قطع في نداء واحد) — ولو لسه مش منشورة،
+   · التوليد: hijabLookbook (٦ قطع في نداء واحد) — ولو لسه مش منشورة،
      بننزل تلقائي لـhijabTryOn (قطعة لكل نداء، للطرح بس).
    · ?mock=1 = معاينة تصميم من غير أي نداء AI (للمراجعة بس).
    ============================================================ */
@@ -422,7 +422,7 @@
           delay += 160;
         }
       });
-      // الجولة الأولى لوحدها — أول ٤ طرح مالهاش إطلالة جاهزة
+      // الجولة الأولى لوحدها — أول ٦ طرح مالهاش إطلالة جاهزة
       var first = AC.firstRound(state.products, state.looks);
       if (first.length && roundsLeft() > 0) runRound(first);
       syncPickable(); updateDock();
@@ -430,7 +430,7 @@
   }
 
   /* ---------------- الجولات: نداءين توليد بس لكل عميلة في اليوم ----------------
-     الجولة = لحد ٤ قطع من نفس النوع في نداء واحد. الأولى لوحدها،
+     الجولة = لحد ٦ قطع من نفس النوع في نداء واحد. الأولى لوحدها،
      والتانية العميلة بتختار قطعها. */
   var ROUNDS_KEY = "atelier_rounds";
   function today() { return new Date().toLocaleDateString("en-CA"); }
@@ -464,7 +464,7 @@
     else if (!roundsLeft()) { toast(MSG.limit); return; }
     else {
       var ok = AC.canSelect(state.sel, p, state.looks);
-      if (ok === "full") { toast("٤ قطع في كل جولة — جهّزيها أولاً 🤍"); return; }
+      if (ok === "full") { toast("٦ قطع في كل جولة — جهّزيها أولاً 🤍"); return; }
       if (ok === "kind") { toast("الإسدال يُجرَّب في جولة وحده — جهّزي الطُرَح أولاً"); return; }
       if (ok !== "ok" || state.queued[p.id]) return;
       state.sel.push(p); buzz();
@@ -503,7 +503,7 @@
   function pump() {
     var maxBusy = state.mode === "lookbook" ? 1 : 2;
     while (state.busy < maxBusy && state.queue.length && !state.stopped) {
-      var t = AC.takeBatch(state.queue, state.mode === "lookbook" ? AC.BATCH_SIZE : 1);
+      var t = AC.takeBatch(state.queue, state.mode === "lookbook" ? AC.ROUND_SIZE : 1);
       state.queue = t.rest;
       runBatch(t.batch, t.kind, state.gen);
     }
@@ -555,7 +555,7 @@
   function roundFinished() {
     if (!lookCount()) return;
     setTimeout(function () {
-      if (roundsLeft() > 0) toast("إطلالاتكِ الأولى جاهزة ✨ اختاري ٤ قطع أخرى لتجرّبيها", 6000);
+      if (roundsLeft() > 0) toast("إطلالاتكِ الأولى جاهزة ✨ اختاري ٦ قطع أخرى لتجرّبيها", 6000);
       else { toast("اختاري مفضّلتكِ واسألي صديقاتكِ 🤍", 6000); $("dockPoll").classList.add("glow"); }
     }, 900);
   }
@@ -605,8 +605,7 @@
 
   function sliceGrid(url, n) {
     return loadImg(url).then(function (img) {
-      var lay = PC.computeGridLayout(n);
-      var cells = PC.sliceGridProportional(img.naturalWidth, img.naturalHeight, lay.cols, lay.rows, n, 0.02);
+      var cells = AC.gridCells(img.naturalWidth, img.naturalHeight, n, 0.02);
       return cells.map(function (c) {
         var cv = document.createElement("canvas"); cv.width = c.w; cv.height = c.h;
         cv.getContext("2d").drawImage(img, c.x, c.y, c.w, c.h, 0, 0, c.w, c.h);
@@ -645,8 +644,8 @@
     var t = Math.max(state.target, state.done), d = state.done, left = roundsLeft(), n = state.sel.length;
     var sub;
     if (generating()) sub = "نُجهّز إطلالاتكِ…";
-    else if (n) sub = "اخترتِ " + arN(n) + " من ٤ — في جولة واحدة";
-    else if (left > 0 && lookCount()) sub = "اختاري ٤ قطع أخرى ✨";
+    else if (n) sub = "اخترتِ " + arN(n) + " من ٦ — في جولة واحدة";
+    else if (left > 0 && lookCount()) sub = "اختاري ٦ قطع أخرى ✨";
     else if (!left && lookCount()) sub = looksWord(lookCount()) + " اليوم — نكمّل غداً 🤍";
     else sub = "نُجهّز إطلالاتكِ…";
     $("dockSub").textContent = sub;
@@ -752,7 +751,7 @@
   function mockGrid(face, refs) {
     return Promise.all(refs.map(function (r) { return mockLook(face, r, false); })).then(function (looks) {
       if (looks.length === 1) return looks[0];
-      var lay = PC.computeGridLayout(looks.length);
+      var lay = AC.gridLayout(looks.length);
       return Promise.all(looks.map(loadImg)).then(function (ims) {
         var c = document.createElement("canvas"); c.width = 600 * lay.cols; c.height = 800 * lay.rows;
         var x = c.getContext("2d");

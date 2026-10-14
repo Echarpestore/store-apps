@@ -11,7 +11,7 @@
   /* 💰 جولتين في اليوم بس = نداءين توليد لكل عميلة:
      الجولة الأولى لوحدها (أول ٤ طرح)، والتانية هي اللي بتختار
      قطعها الـ٤. نفس السقف على السيرفر (lookbookCapPerUser = 2). */
-  var ROUND_SIZE = 4;
+  var ROUND_SIZE = 6;        // ٦ قطع في النداء = ١٢ إطلالة في اليوم بنفس التكلفة
   var ROUNDS_PER_DAY = 2;
 
   /* 🏛️ مجموعة الدار — صور المنتجات الحقيقية (atelier/collection).
@@ -119,6 +119,24 @@
     return { batch: batch, rest: rest, kind: kind };
   }
 
+  /* 📐 نفس lookbookLayout في functions/hijabLookbook.js بالظبط */
+  function gridLayout(n) {
+    var k = Math.max(1, Math.min(9, Number(n) || 1));
+    if (k <= 3) return { cols: k, rows: 1 };
+    if (k === 4) return { cols: 2, rows: 2 };
+    if (k <= 6) return { cols: 3, rows: 2 };
+    return { cols: 3, rows: 3 };
+  }
+  /* قص الخانات بالحساب (من غير كشف) — أول n خانة من شمال لليمين ومن فوق لتحت */
+  function gridCells(w, h, n, inset) {
+    var l = gridLayout(n), cw = w / l.cols, ch = h / l.rows, k = inset == null ? 0.02 : inset, out = [];
+    for (var i = 0; i < n; i++) {
+      var c = i % l.cols, r = Math.floor(i / l.cols);
+      out.push({ x: Math.round(c * cw + cw * k), y: Math.round(r * ch + ch * k), w: Math.round(cw * (1 - 2 * k)), h: Math.round(ch * (1 - 2 * k)) });
+    }
+    return out;
+  }
+
   /* الجولة الأولى: أول ROUND_SIZE طرح ممكن تتجرّب ومالهاش إطلالة جاهزة
      (الإسدال بيتجرّب في جولة لوحده لما العميلة تختاره). */
   function firstRound(products, looks) {
@@ -171,6 +189,8 @@
     ROUND_SIZE: ROUND_SIZE,
     ROUNDS_PER_DAY: ROUNDS_PER_DAY,
     firstRound: firstRound,
+    gridLayout: gridLayout,
+    gridCells: gridCells,
     roundsUsedToday: roundsUsedToday,
     canSelect: canSelect,
     isImageDataUrl: isImageDataUrl,

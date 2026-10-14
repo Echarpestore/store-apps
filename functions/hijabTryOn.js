@@ -265,7 +265,9 @@ async function callGeminiImage(opts) {
     parts.push({ inline_data: { mime_type: img.mime, data: img.b64 } });
   }
   const generationConfig = { responseModalities: ["IMAGE"] };
-  const imageConfig = outputImageConfig(model, quality, cellCount);
+  // imageConfig صريح (من الأتيليه) بيكسب؛ null = من غير إعداد خالص
+  const imageConfig = opts.imageConfig !== undefined ? opts.imageConfig
+    : outputImageConfig(model, quality, cellCount);
   if (imageConfig) generationConfig.imageConfig = imageConfig;
   const body = {
     contents: [{ role: "user", parts }],
