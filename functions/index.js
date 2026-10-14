@@ -1079,6 +1079,10 @@ Object.assign(exports, require("./onlineOrderPlace"));
 //    firebase deploy --only functions:hijabTryOn
 Object.assign(exports, require("./hijabTryOn"));
 
+// ✨👑 الأتيليه — لحد ٤ طرح على العميلة في نداء واحد (شبكة ٢×٢). النشر:
+//    firebase deploy --only functions:hijabLookbook
+Object.assign(exports, require("./hijabLookbook"));
+
 // 📱 إنستاباي على تابلت الفرع — دالتين بس (instaPay + instaScan).
 //    بديل الـ29 دالة اللي عدّوا حد الـCPU. النشر:
 //    firebase deploy --only functions:instaPay,functions:instaScan

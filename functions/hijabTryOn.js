@@ -406,6 +406,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports.guardDecide = guardDecide;
   module.exports.extractImageFromResponse = extractImageFromResponse;
   module.exports.mapError = mapError;
+  module.exports.callGeminiImage = callGeminiImage;
   module.exports.DEFAULTS = DEFAULTS;
   module.exports.MIME_ALLOWED = MIME_ALLOWED;
   module.exports.MAX_IMAGE_BYTES = MAX_IMAGE_BYTES;
