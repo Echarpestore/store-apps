@@ -33,8 +33,8 @@
   </nav>
   <a class="logo" href="#top" aria-label="echarpe"><img src="../logo.png" alt="echarpe"></a>
   <nav class="nav-side end">
-    <span class="me-dot" id="meDot"><img alt=""></span>
-    <a href="../loyalty/">المتجر</a>
+    <button class="me-dot" id="meDot" type="button" aria-label="تغيير الصورة"><img alt=""></button>
+    <button class="bag-btn" id="bagBtn" type="button" aria-label="حقيبتكِ"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><b class="bagCount">0</b></button>
   </nav>
 </header>
 
@@ -59,6 +59,11 @@
       <div class="m-weave"><span>نُجهّزها لكِ…</span></div>
     </div>
     <div class="m-cap"><b id="mName"></b><span id="mLine"></span></div>
+    <div class="m-acts">
+      <button class="ic heart" id="mHeart" type="button" aria-label="أضيفي للمفضّلة" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button class="btn btn-dark sm" id="mBag" type="button"><span>أضيفيها للحقيبة</span></button>
+      <button class="ic" id="mShare" type="button" aria-label="شاركي"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 12v8h12v-8" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
+    </div>
   </div>
   <div class="swatches-wrap">
     <div class="swatches" id="swatches" role="listbox" aria-label="اختاري قطعة"></div>
@@ -139,7 +144,8 @@
 <div class="dock" id="dock">
   <div class="me"><img id="dockFace" alt=""></div>
   <div class="txt"><b>إطلالاتكِ</b><small id="dockSub">نُجهّزها لكِ…</small></div>
-  <button type="button" id="dockChange">صورة أخرى</button>
+  <button type="button" class="dock-poll" id="dockPoll">ساعديني أختار</button>
+  <button type="button" class="bag-btn light" id="dockBag" aria-label="حقيبتكِ"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l-1 12H7L6 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M9 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg><b class="bagCount">0</b></button>
   <div class="prog"><i id="dockProg"></i></div>
 </div>
 
@@ -157,9 +163,39 @@
     <div class="lb-price" id="lbPrice"></div>
     <div class="lb-acts">
       <button class="btn btn-dark" id="lbTry" type="button"><span>جرّبيها عليكِ</span></button>
-      <a class="btn btn-ghost" id="lbOrder" href="../loyalty/"><span>اطلبيها</span></a>
+      <button class="btn btn-dark" id="lbBag" type="button"><span>أضيفيها للحقيبة</span></button>
+      <button class="btn btn-ghost" id="lbShare" type="button"><span>شاركي إطلالتكِ</span></button>
+      <button class="ic heart" id="lbHeart" type="button" aria-label="أضيفي للمفضّلة" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>
     </div>
     <small class="fine" id="lbHint">اضغطي مطوّلاً على الصورة لرؤية القطعة وحدها.</small>
+  </div>
+</div>
+
+<!-- ✦ الحقيبة -->
+<div class="sheet" id="bag" role="dialog" aria-modal="true" aria-label="حقيبتكِ">
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-panel">
+    <div class="sheet-head"><h3>حقيبتكِ</h3><button class="lb-x small" data-close aria-label="إغلاق"><i></i><i></i></button></div>
+    <div class="bag-list" id="bagList"></div>
+    <div class="bag-foot" id="bagFoot">
+      <div class="bag-total" id="bagTotal"></div>
+      <a class="btn btn-dark wide" id="bagWa" href="#" target="_blank" rel="noopener"><span>اطلبي عبر واتساب</span></a>
+      <small class="fine">نؤكّد معكِ التفاصيل والتوصيل على واتساب في دقائق.</small>
+    </div>
+  </div>
+</div>
+
+<!-- ✦ المشاركة -->
+<div class="sheet" id="shareSheet" role="dialog" aria-modal="true" aria-label="المشاركة">
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-panel share-panel">
+    <div class="sheet-head"><h3 id="shareTitle">شاركي إطلالتكِ</h3><button class="lb-x small" data-close aria-label="إغلاق"><i></i><i></i></button></div>
+    <div class="share-preview"><img id="shareImg" alt=""></div>
+    <div class="share-acts">
+      <button class="btn btn-dark" id="shareGo" type="button"><span>شاركي الآن</span></button>
+      <a class="btn btn-ghost" id="shareSave" download="echarpe.jpg" href="#"><span>احفظي الصورة</span></a>
+    </div>
+    <small class="fine">الصورة تُصنع على هاتفكِ، ولا تُنشر إلا إذا شاركتِها أنتِ.</small>
   </div>
 </div>
 
