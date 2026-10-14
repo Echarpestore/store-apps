@@ -6301,32 +6301,55 @@ function openManualShiftDialog(emp){
     <div class="employee-form-grid">
       <label>اليوم<input id="msDate" type="date" value="${today}" max="${today}"></label>
       <label>حضور<input id="msIn" type="time" value="10:00"></label>
-      <label>انصراف<input id="msOut" type="time" value="18:00"></label>
+      <label>انصراف<input id="msOut" type="time" value="18:00" disabled></label>
       <label>السبب<input id="msReason" placeholder="مثال: جت في إجازتها والجهاز رفض"></label>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:800"><input id="msOpen" type="checkbox" checked style="width:auto;margin:0"> لسه شغال — هو يسجّل انصرافه بنفسه من الجهاز</label>
+    <div style="color:var(--sub);font-size:11px;margin-top:4px">للنهاردة بس: بتحضّره من الساعة اللي وصل فيها، والانصراف بيتسجّل عادي لما يمشي.</div>
     <div style="display:flex;gap:8px;margin-top:12px"><button id="msSave" class="confirmBtn" style="flex:2">تسجيل اليوم</button><button id="msClose" class="backBtn" style="flex:1">إلغاء</button></div>
     <div id="msMsg" class="field-err" style="margin-top:8px"></div></div>`;
   document.body.appendChild(ov);
   ov.querySelector('#msClose').onclick=()=>ov.remove();
+  // 🟢 v654: «لسه شغال» = حضور بس (الانصراف من الجهاز) — متاح للنهاردة بس
+  const _msSync=()=>{ const d=ov.querySelector('#msDate').value, op=ov.querySelector('#msOpen'); if(d!==today){ op.checked=false; op.disabled=true; } else op.disabled=false; ov.querySelector('#msOut').disabled=op.checked; ov.querySelector('#msSave').textContent=op.checked?'تسجيل الحضور':'تسجيل اليوم'; };
+  ov.querySelector('#msDate').onchange=_msSync; ov.querySelector('#msOpen').onchange=_msSync; _msSync();
   ov.querySelector('#msSave').onclick=async()=>{
     const msg=ov.querySelector('#msMsg'); msg.textContent='';
-    const d=ov.querySelector('#msDate').value, tin=ov.querySelector('#msIn').value, tout=ov.querySelector('#msOut').value, reason=ov.querySelector('#msReason').value.trim();
-    const plan=manualShiftPlan(emp,d,tin,tout,reason,window.allShifts||[]);
+    const d=ov.querySelector('#msDate').value, tin=ov.querySelector('#msIn').value, open=ov.querySelector('#msOpen').checked, tout=open?'':ov.querySelector('#msOut').value, reason=ov.querySelector('#msReason').value.trim();
+    const plan=manualShiftPlan(emp,d,tin,tout,reason,window.allShifts||[],open?{open:true,today}:null);
     if(plan.error){ msg.textContent=plan.error; return; }
     try{
       await setDoc(doc(db,'sales_shifts',plan.id),plan.data,{merge:true});
-      try{ await _employeeAudit(emp,'manual_shift',{dateKey:d,clockIn:tin,clockOut:tout,reason}); }catch(_){}
+      try{ await _employeeAudit(emp,'manual_shift',{dateKey:d,clockIn:tin,clockOut:tout||'لسه شغال — هيسجل انصرافه',reason}); }catch(_){}
       try{ (window.allShifts||[]).push(Object.assign({id:plan.id},plan.data)); }catch(_){}
       ov.remove(); document.getElementById('employeeRecordOv')?.remove();
       try{ renderAttendanceLists(); }catch(_){}
-      alert('اتسجّل يوم '+d+' لـ'+emp.name+' ✅');
+      alert(open ? ('اتسجّل حضور '+emp.name+' من '+tin+' ✅ — يسجّل انصرافه من الجهاز لما يمشي') : ('اتسجّل يوم '+d+' لـ'+emp.name+' ✅'));
     }catch(err){ console.error('manual shift',err); msg.textContent='تعذر التسجيل — '+(err&&err.message||''); }
   };
 }
 /* pure — متختبرة: بتبني مستند الشيفت اليدوي أو بترجّع خطأ */
-function manualShiftPlan(emp,dateKey,tIn,tOut,reason,shifts){
+function manualShiftPlan(emp,dateKey,tIn,tOut,reason,shifts,opt){
   if(!emp||!emp.id) return {error:'موظف'};
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey||''))) return {error:'اختار اليوم'};
+  /* 🟢 v654: حضور بس — الموظف بيسجّل انصرافه بنفسه (اشتغل يوم إجازته والجهاز رفض يحضّره) */
+  if(opt&&opt.open){
+    if(dateKey!==(opt.today||todayStr())) return {error:'«لسه شغال» للنهاردة بس — لأي يوم فات اكتب الانصراف'};
+    if(!/^\d{2}:\d{2}$/.test(tIn||'')) return {error:'اكتب وقت الحضور'};
+    if(!String(reason||'').trim()) return {error:'اكتب السبب — بيتسجّل في سجل الموظف'};
+    if((shifts||[]).some(s=>s&&s.employeeId===emp.id&&!s.clockOutTs&&!s.voided)) return {error:'الموظف عنده حضور مفتوح أصلًا'};
+    if((shifts||[]).some(s=>s&&s.employeeId===emp.id&&caiDayKey(s.clockInTs)===dateKey)) return {error:'فيه حضور مسجّل لليوم ده أصلًا — ألغيه الأول لو غلط'};
+    const [y,m,dd]=dateKey.split('-').map(Number), [h1,mi1]=tIn.split(':').map(Number);
+    const clockInTs=caiStamp(y,m,dd,h1,mi1,0,0);
+    if(clockInTs>Date.now()) return {error:'وقت الحضور لسه مجاش'};
+    if(Date.now()-clockInTs>16*3600e3) return {error:'الحضور من أكتر من 16 ساعة — سجّل اليوم كامل بالانصراف'};
+    const endHM=String((h1+8)%24).padStart(2,'0')+':'+String(mi1).padStart(2,'0');   // نهاية افتراضية (8 ساعات) — الانصراف الفعلي من الجهاز
+    const id=attendanceDocId('shift',emp.id,dateKey+'_manual');
+    return {id,open:true,data:{employeeId:emp.id,employeeName:emp.name,branch:emp.branch||window.currentBranch,clockInTs,clockOutTs:null,
+      manual:true,manualOpen:true,manualBy:'owner',manualReason:String(reason).trim(),manualAt:Date.now(),
+      scheduledStartTime:tIn,scheduledEndTime:endHM||null,
+      lateMinutes:0,latePenalized:false,attendanceShiftMode:'manual'}};
+  }
   if(!/^\d{2}:\d{2}$/.test(tIn||'')||!/^\d{2}:\d{2}$/.test(tOut||'')) return {error:'اكتب وقت الحضور والانصراف'};
   if(!String(reason||'').trim()) return {error:'اكتب السبب — بيتسجّل في سجل الموظف'};
   const [y,m,dd]=dateKey.split('-').map(Number);

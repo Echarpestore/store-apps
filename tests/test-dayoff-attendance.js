@@ -43,6 +43,19 @@ ok(/لسه مجاش/.test(ctx.manualShiftPlan(emp, '2099-01-01', '10:00', '18:00
 ok(/16 ساعة/.test(ctx.manualShiftPlan(emp, '2026-09-20', '01:00', '00:00', 'x', []).error || ''), 'أطول من 16 ساعة = لأ');
 ok(/مسجّل لليوم ده/.test(ctx.manualShiftPlan(emp, '2026-09-20', '10:00', '18:00', 'x', [{ employeeId:'e1', clockInTs: p.data.clockInTs }]).error || ''), 'يوم فيه حضور أصلًا = لأ (ألغيه الأول)');
 ok(p.id === ctx.manualShiftPlan(emp, '2026-09-20', '11:00', '19:00', 'y', []).id, 'نفس المعرّف لنفس اليوم (ضغطتين = مستند واحد)');
+// v654: «لسه شغال» — حضور بس من ساعة وصوله، والانصراف من الجهاز عادي (اشتغل يوم إجازته)
+{
+  const fmt = new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Cairo',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+  const today = ctx.caiDayKey(Date.now()); const back = Date.now() - 30*60000;
+  const tIn = ctx.caiDayKey(back) === today ? fmt.format(new Date(back)) : '00:00';
+  const o = ctx.manualShiftPlan(emp, today, tIn, '', 'اشتغل يوم إجازته', [], { open:true, today });
+  ok(!o.error && o.open && o.data.clockOutTs === null && o.data.clockInTs > 0, '⭐ حضور مفتوح من غير انصراف — الموظف يسجّل انصرافه بنفسه');
+  ok(o.data.manual === true && o.data.manualOpen === true && o.data.lateMinutes === 0 && o.data.scheduledStartTime === tIn, 'متعلّم يدوي ومن غير تأخير وبداية الشيفت = ساعة وصوله');
+  ok(/للنهاردة بس/.test(ctx.manualShiftPlan(emp, '2026-09-20', '10:00', '', 'x', [], { open:true, today }).error || ''), 'سلبي: «لسه شغال» ليوم فات = لأ');
+  ok(/حضور مفتوح أصلًا/.test(ctx.manualShiftPlan(emp, today, tIn, '', 'x', [{ employeeId:'e1', clockInTs:Date.now()-3600e3*20, clockOutTs:null }], { open:true, today }).error || ''), 'سلبي: لو عنده حضور مفتوح = لأ');
+  ok(/السبب/.test(ctx.manualShiftPlan(emp, today, tIn, '', '', [], { open:true, today }).error || ''), 'سلبي: من غير سبب = لأ');
+  ok(/id="msOpen" type="checkbox" checked/.test(app) && /manualShiftPlan\(emp,d,tin,tout,reason,window\.allShifts\|\|\[\],open\?\{open:true,today\}:null\)/.test(app), 'الاختيار في شاشة التسجيل اليدوي ومتوصّل بالخطة');
+}
 
 console.log('✖ 3) إلغاء حضور بالغلط');
 const vs = extractFn(app, 'async function voidShift(');
