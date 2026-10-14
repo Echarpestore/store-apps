@@ -20,7 +20,7 @@
   var phone = ""; try { phone = (LS && LS.getItem("echarpe_loyalty_phone")) || ""; } catch (e) { }
 
   var MSG = {
-    limit: "اكتفينا بهذا القدر اليوم 🤍 يسعدنا أن تكملي غداً.",
+    limit: "جرّبتِ جولتين اليوم 🤍 نكمّل غداً بإطلالات جديدة.",
     retry: "تعذّر تجهيز بعض القطع — المسي «جرّبيها» لإعادة المحاولة.",
     badImg: "تعذّرت قراءة الصورة — جرّبي صورةً أخرى.",
     isdalSoon: "تجربة الإسدال تتوفّر قريباً.",
@@ -31,7 +31,7 @@
     products: [], byId: {}, face: "", alive: false,
     looks: {}, queued: {}, requested: 0, done: 0, target: 0,
     mode: "lookbook", lookbookWorked: false, stopped: false,
-    queue: [], busy: 0, gen: 0, lbOpen: null, line: "all"
+    queue: [], sel: [], busy: 0, gen: 0, lbOpen: null, line: "all"
   };
 
   /* ---------------- Firebase ---------------- */
@@ -223,8 +223,7 @@
     $("mirror").classList.toggle("busy", !!(state.queued[p.id] && !state.looks[p.id]));
     paintMirror(state.looks[p.id] || p.img, instant);
     syncMirrorActs();
-    // اختارت قطعة لسه ما اتجهزتش وهي جوّه — نقدّمها أول الطابور
-    if (state.alive && userPicked && p.tryable && !state.looks[p.id] && !state.queued[p.id]) requestOne(p, true);
+    syncMirrorPick();
   }
   /* توسيط العيّنة جوّه الشريط بس — scrollIntoView كان بيحرّك الصفحة كلها بالعرض */
   function centerSwatch(sw) {
@@ -316,7 +315,7 @@
           '<img class="prod" alt="" loading="lazy"><img class="look" alt="">' +
           '<i class="sheen"></i><div class="weave"></div><div class="weave-txt">نُجهّزها لكِ…</div>' +
           '<div class="chip"><img alt=""></div>' +
-          '<button class="try-btn" type="button">جرّبيها</button>' +
+          '<button class="try-btn" type="button">اختاريها</button>' +
           '<button class="card-heart heart" type="button" aria-label="أضيفي للمفضّلة"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" stroke="currentColor" stroke-width="1.3"/></svg></button>' +
         '</div>' +
         '<div class="meta"><span class="nm">' + esc(p.name) + '</span>' +
@@ -328,7 +327,7 @@
       c.querySelector(".chip img").src = p.img;
       var frame = c.querySelector(".frame");
       frame.addEventListener("click", function (e) {
-        if (e.target.closest(".try-btn")) { e.stopPropagation(); requestOne(p, true); return; }
+        if (e.target.closest(".try-btn")) { e.stopPropagation(); toggleSel(p); return; }
         if (e.target.closest(".card-heart")) { e.stopPropagation(); toggleFav(p); return; }
         openLook(p);
       });
@@ -346,7 +345,6 @@
       if (en.isIntersecting) {
         c.classList.add("in");
         c.dataset.visible = "1";
-        if (state.alive) considerAuto(state.byId[c.dataset.id], +c.dataset.i, true);
       } else c.dataset.visible = "";
     });
   }
@@ -403,9 +401,9 @@
 
   function startWithFace(face) {
     state.face = face; state.gen++;
-    state.looks = {}; state.queued = {}; state.queue = [];
+    state.looks = {}; state.queued = {}; state.queue = []; state.sel = [];
     state.requested = 0; state.done = 0; state.target = 0; state.stopped = false; celebrated = false;
-    document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "manual", "revealing"); });
+    document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "pickable", "selected", "revealing"); });
     resetMirror();
     if (LS) PC.saveFace(LS, face);
     var ready = state.alive ? Promise.resolve(setFace(face)) : awaken(face);
@@ -424,36 +422,82 @@
           delay += 160;
         }
       });
-      state.products.forEach(function (p, i) {
-        var c = card(p.id);
-        considerAuto(p, i, !!(c && c.dataset.visible));
-      });
-      updateDock();
+      // الجولة الأولى لوحدها — أول ٤ طرح مالهاش إطلالة جاهزة
+      var first = AC.firstRound(state.products, state.looks);
+      if (first.length && roundsLeft() > 0) runRound(first);
+      syncPickable(); updateDock();
     });
   }
 
-  function considerAuto(p, i, visible) {
-    if (!p || !p.tryable || state.queued[p.id] || state.stopped || !state.face) return;
-    if (state.line !== "all" && p.line !== state.line && !visible) return;
-    var pol = AC.autoPolicy(i, state.requested, visible);
-    if (pol === "auto") enqueue(p, false);
-    else if (pol === "manual") { var c = card(p.id); if (c) c.classList.add("manual"); }
+  /* ---------------- الجولات: نداءين توليد بس لكل عميلة في اليوم ----------------
+     الجولة = لحد ٤ قطع من نفس النوع في نداء واحد. الأولى لوحدها،
+     والتانية العميلة بتختار قطعها. */
+  var ROUNDS_KEY = "atelier_rounds";
+  function today() { return new Date().toLocaleDateString("en-CA"); }
+  function roundsUsed() {
+    var rec = null; try { rec = JSON.parse((LS && LS.getItem(ROUNDS_KEY)) || "null"); } catch (e) { }
+    return AC.roundsUsedToday(rec, today());
   }
-  function requestOne(p, front) {
-    if (!state.face) { pickPhoto(); return; }
-    if (state.looks[p.id] || state.queued[p.id]) return;
-    state.stopped = false;
-    enqueue(p, front);
-  }
-  function enqueue(p, front) {
-    if (state.mode === "single" && p.kind === "isdal") { markManual([p]); toast(MSG.isdalSoon); return; }
-    state.queued[p.id] = true; state.requested++; state.target++;
-    var c = card(p.id); if (c) { c.classList.remove("manual"); c.classList.add("weaving"); }
-    if (front) state.queue.unshift(p); else state.queue.push(p);
-    if (state.lbOpen === p) setLb(p);
-    if (mirrorP === p) $("mirror").classList.add("busy");
+  function setRoundsUsed(n) { try { LS && LS.setItem(ROUNDS_KEY, JSON.stringify({ day: today(), n: n })); } catch (e) { } }
+  function roundsLeft() { return Math.max(0, AC.ROUNDS_PER_DAY - roundsUsed()); }
+  function generating() { return state.busy > 0 || state.queue.length > 0; }
+
+  function runRound(list) {
+    if (!list.length) return;
+    if (state.mode === "single" && list[0].kind === "isdal") { toast(MSG.isdalSoon); return; }
+    setRoundsUsed(roundsUsed() + 1);
+    list.forEach(function (p) {
+      state.queued[p.id] = true; state.target++;
+      var c = card(p.id); if (c) { c.classList.remove("pickable", "selected"); c.classList.add("weaving"); }
+      state.queue.push(p);
+      if (mirrorP === p) $("mirror").classList.add("busy");
+    });
+    state.sel = []; syncPickable();
     updateDock(); pump();
   }
+
+  /* اختيار قطع الجولة الجاية */
+  function toggleSel(p) {
+    if (!state.face) { pickPhoto(); return; }
+    var i = state.sel.indexOf(p);
+    if (i >= 0) { state.sel.splice(i, 1); }
+    else if (!roundsLeft()) { toast(MSG.limit); return; }
+    else {
+      var ok = AC.canSelect(state.sel, p, state.looks);
+      if (ok === "full") { toast("٤ قطع في كل جولة — جهّزيها أولاً 🤍"); return; }
+      if (ok === "kind") { toast("الإسدال يُجرَّب في جولة وحده — جهّزي الطُرَح أولاً"); return; }
+      if (ok !== "ok" || state.queued[p.id]) return;
+      state.sel.push(p); buzz();
+    }
+    syncPickable(); updateDock();
+    if (state.lbOpen === p) setLb(p);
+  }
+  function syncPickable() {
+    var left = roundsLeft() > 0;
+    state.products.forEach(function (p) {
+      var c = card(p.id), sel = state.sel.indexOf(p) >= 0;
+      var pickable = state.alive && left && p.tryable && !state.looks[p.id] && !state.queued[p.id];
+      if (c) {
+        c.classList.toggle("pickable", pickable); c.classList.toggle("selected", sel);
+        c.querySelector(".try-btn").textContent = sel ? "✓ مختارة" : "اختاريها";
+      }
+      var sw = document.querySelector('.sw[data-id="' + CSS.escape(p.id) + '"]');
+      if (sw) sw.classList.toggle("selected", sel);
+    });
+    syncMirrorPick();
+  }
+  function syncMirrorPick() {
+    var b = $("mPick"); if (!mirrorP) return;
+    var pickable = state.alive && roundsLeft() > 0 && mirrorP.tryable && !state.looks[mirrorP.id] && !state.queued[mirrorP.id];
+    var sel = state.sel.indexOf(mirrorP) >= 0;
+    b.classList.toggle("show", pickable); b.classList.toggle("on", sel);
+    b.textContent = sel ? "✓ مختارة للتجربة" : "اختاريها للتجربة";
+  }
+  $("mPick").addEventListener("click", function () { if (mirrorP) toggleSel(mirrorP); });
+  $("dockGo").addEventListener("click", function () {
+    if (!state.sel.length || generating()) return;
+    runRound(state.sel.slice());
+  });
 
   /* ---------------- محرك التوليد ---------------- */
   function pump() {
@@ -480,7 +524,7 @@
       if (gen !== state.gen) return;
       var code = String(err && err.code || "").replace(/^functions\//, "");
       if (code === "resource-exhausted") {
-        state.stopped = true;
+        setRoundsUsed(AC.ROUNDS_PER_DAY);
         toast(MSG.limit);
         markManual(batch.concat(state.queue)); state.queue = [];
       } else if (useGrid && !state.lookbookWorked && AC.shouldFallbackToSingle(err)) {
@@ -493,7 +537,8 @@
         toast(MSG.retry);
       }
     }).then(function () {
-      state.busy--; updateDock(); pump();
+      state.busy--; pump(); syncPickable(); updateDock();
+      if (!generating() && gen === state.gen) roundFinished();
     });
   }
 
@@ -501,8 +546,18 @@
     list.forEach(function (p) {
       if (state.queued[p.id]) state.target = Math.max(state.done, state.target - 1);
       state.queued[p.id] = false;
-      var c = card(p.id); if (c) { c.classList.remove("weaving"); c.classList.add("manual"); }
+      var c = card(p.id); if (c) c.classList.remove("weaving");
+      if (mirrorP === p) $("mirror").classList.remove("busy");
     });
+    syncPickable();
+  }
+  /* بعد كل جولة: نوجّهها للخطوة الجاية */
+  function roundFinished() {
+    if (!lookCount()) return;
+    setTimeout(function () {
+      if (roundsLeft() > 0) toast("إطلالاتكِ الأولى جاهزة ✨ اختاري ٤ قطع أخرى لتجرّبيها", 6000);
+      else { toast("اختاري مفضّلتكِ واسألي صديقاتكِ 🤍", 6000); $("dockPoll").classList.add("glow"); }
+    }, 900);
   }
 
   function lookbookCall(products, kind, face) {
@@ -568,7 +623,7 @@
     if (c) {
       var lk = c.querySelector(".look");
       lk.src = url;
-      c.classList.remove("weaving", "manual");
+      c.classList.remove("weaving", "pickable", "selected");
       c.querySelector(".frame").style.setProperty("--h", c.querySelector(".frame").offsetHeight + "px");
       requestAnimationFrame(function () {
         c.classList.add("worn", "revealing");
@@ -584,19 +639,22 @@
     updateDock();
   }
 
+  function arN(n) { return Number(n).toLocaleString("ar-EG"); }
+  function looksWord(n) { return n === 1 ? "إطلالة واحدة" : n === 2 ? "إطلالتان" : arN(n) + (n <= 10 ? " إطلالات" : " إطلالة"); }
   function updateDock() {
-    var t = Math.max(state.target, state.done), d = state.done;
-    $("dockSub").textContent = t && d < t ? ("نُجهّز " + d + " من " + t + "…") :
-      (d ? d + " إطلالة جاهزة لكِ" : "نُجهّزها لكِ…");
+    var t = Math.max(state.target, state.done), d = state.done, left = roundsLeft(), n = state.sel.length;
+    var sub;
+    if (generating()) sub = "نُجهّز إطلالاتكِ…";
+    else if (n) sub = "اخترتِ " + arN(n) + " من ٤ — في جولة واحدة";
+    else if (left > 0 && lookCount()) sub = "اختاري ٤ قطع أخرى ✨";
+    else if (!left && lookCount()) sub = looksWord(lookCount()) + " اليوم — نكمّل غداً 🤍";
+    else sub = "نُجهّز إطلالاتكِ…";
+    $("dockSub").textContent = sub;
     $("dockProg").style.width = t ? Math.round(d / t * 100) + "%" : "0";
-    $("dockPoll").style.display = lookCount() >= 2 ? "" : "none";
-    if (!celebrated && d >= 4 && d >= t) {
-      celebrated = true;
-      setTimeout(function () {
-        toast("المجموعة كلها عليكِ الآن ✨ اختاري مفضّلاتكِ واسألي صديقاتكِ", 6000);
-        $("dockPoll").classList.add("glow");
-      }, 900);
-    }
+    var go = $("dockGo");
+    go.classList.toggle("show", n > 0 && !generating());
+    go.textContent = "جهّزيها عليّ (" + arN(n) + ")";
+    $("dockPoll").style.display = lookCount() >= 2 && !n ? "" : "none";
   }
 
   /* ---------------- عرض القطعة + الدقة العالية ---------------- */
@@ -613,11 +671,11 @@
     $("lbLine").textContent = AC.lineName(p.line) ? "من مجموعة " + AC.lineName(p.line) : "";
     $("lbName").textContent = p.name;
     $("lbPrice").textContent = p.price ? AC.fmtPrice(p.price) : "";
-    var busy = state.queued[p.id] && !look;
+    var busy = state.queued[p.id] && !look, sel = state.sel.indexOf(p) >= 0;
     var b = $("lbTry");
-    b.style.display = look || !p.tryable ? "none" : "";
+    b.style.display = look || !p.tryable || (state.face && !roundsLeft() && !busy) ? "none" : "";
     b.disabled = !!busy;
-    b.querySelector("span").textContent = busy ? "نُجهّزها لكِ…" : "جرّبيها عليكِ";
+    b.querySelector("span").textContent = busy ? "نُجهّزها لكِ…" : (!state.face ? "جرّبيها عليكِ" : (sel ? "✓ مختارة للتجربة" : "اختاريها للتجربة"));
     $("lbHint").style.display = look ? "" : "none";
     $("lbBag").querySelector("span").textContent = inBag(p) ? "في حقيبتكِ ✓" : "أضيفيها للحقيبة";
     $("lbShare").style.display = look ? "" : "none";
@@ -631,7 +689,7 @@
   $("lbTry").addEventListener("click", function () {
     var p = state.lbOpen; if (!p) return;
     if (!state.face) { closeLb(); pickPhoto(); return; }
-    requestOne(p, true); setLb(p);
+    toggleSel(p); setLb(p);
   });
   (function () {
     var pic = $("lbPic");
@@ -656,10 +714,10 @@
   $("forgetMe").addEventListener("click", function () {
     if (LS) { PC.clearFace(LS); PC.clearResults(LS); }
     try { indexedDB.deleteDatabase("echarpe_tryon_cache_v1"); } catch (e) { }
-    state.gen++; state.face = ""; state.looks = {}; state.queued = {}; state.queue = [];
+    state.gen++; state.face = ""; state.looks = {}; state.queued = {}; state.queue = []; state.sel = [];
     state.done = 0; state.target = 0; state.requested = 0;
     document.body.classList.remove("alive"); state.alive = false;
-    document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "manual", "revealing"); c.querySelector(".look").removeAttribute("src"); });
+    document.querySelectorAll(".card").forEach(function (c) { c.classList.remove("worn", "weaving", "pickable", "selected", "revealing"); c.querySelector(".look").removeAttribute("src"); });
     resetMirror();
     ["salonImg", "dockFace"].forEach(function (id) { $(id).removeAttribute("src"); });
     $("salonArch").classList.remove("has");
