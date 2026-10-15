@@ -149,6 +149,15 @@ service cloud.firestore {
 
     // ---------- POS Live (Office read-only viewer) ----------
     // نفس staff auth فقط. مفيش أي قناة أو حقل تحكم راجع للـPOS.
+    // 📲 v767 — دخول جهاز الكاشير بحساب الفرع من Office: الجهاز (مجهول) بيكتب طلب بمفتاحه العام بس،
+    //    والمالك بيرد بالإيميل والباسورد **متشفّرين** بالمفتاح ده — الجهاز بس اللي يفكّهم.
+    match /pos_pair/{code} {
+      allow get: if signedIn();
+      allow list: if isStaff();
+      allow create: if signedIn() && request.resource.data.status == 'waiting'
+        && !('enc' in request.resource.data) && request.resource.data.pub is string;
+      allow update, delete: if isStaff();
+    }
     match /office_pos_live/{branch} {
       allow read, create, update: if isStaff();
       allow delete: if false;

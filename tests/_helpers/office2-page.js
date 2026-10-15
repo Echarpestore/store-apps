@@ -72,7 +72,7 @@ function col(name){ let filters = []; const q = {
     delete(){ window.__writes.push({ col:name, id, op:'delete' }); DATA[name] = (DATA[name]||[]).filter(x=>x.id!==id); return Promise.resolve(); } }; } }; return q; }
 const dbStub = { collection: col, settings(){}, enablePersistence(){ return Promise.resolve(); }, runTransaction(fn){ const tx = { get(ref){ return ref.get(); }, set(ref,p){ return ref.set(p); }, update(ref,p){ return ref.update(p); } }; return fn(tx); }, batch(){ const ops=[]; return { set(ref,p){ ops.push(()=>ref.set(p)); }, delete(ref){ ops.push(()=>ref.delete()); }, update(ref,p){ ops.push(()=>ref.update(p)); }, commit(){ ops.forEach(f=>f()); return Promise.resolve(); } }; } };
 let authCb = null; const authStub = { currentUser:{ email:'owner@test', providerData:[{ providerId:'password' }] }, onAuthStateChanged(cb){ authCb = cb; setTimeout(()=>cb({ email:'owner@test', providerData:[{ providerId:'password' }] }), 10); }, setPersistence(){ return Promise.resolve(); }, signInWithEmailAndPassword(){ return Promise.resolve(); }, signOut(){ return Promise.resolve(); } };
-window.firebase = { apps:[{}], app:()=>({}), initializeApp:()=>({}), auth: Object.assign(()=>authStub, { Auth:{ Persistence:{ LOCAL:'local' } } }), firestore: Object.assign(()=>dbStub, { Timestamp:{ fromMillis:(ms)=>({ toMillis:()=>ms }) } }) };
+window.firebase = { apps:[{}], app:()=>({}), initializeApp:()=>({}), auth: Object.assign(()=>authStub, { Auth:{ Persistence:{ LOCAL:'local' } } }), firestore: Object.assign(()=>dbStub, { Timestamp:{ fromMillis:(ms)=>({ toMillis:()=>ms }) }, FieldValue:{ increment:(n)=>({ __inc:n }), delete:()=>undefined, serverTimestamp:()=>window.__now, arrayUnion:(...a)=>a } }) };
 `;
 }
 function htmlFor(data, now, pre){
@@ -86,9 +86,10 @@ function htmlFor(data, now, pre){
 async function open(opt){
   opt = opt || {}; const data = Object.assign(baseData(), opt.data||{}); const now = opt.now || NOW;
   const b = await chromium.launch(); const p = await b.newPage({ viewport:{ width:390, height:844 } });
-  const errs = []; p.on('pageerror', e=> errs.push(String(e.message))); p.on('console', m=>{ if(m.type()==='error' && !/Failed to load resource/.test(m.text())) errs.push('console: ' + m.text()); });
+  const errs = []; p.on('pageerror', e=> errs.push(String(e.message))); p.on('console', m=>{ if(m.type()==='error' && !/Failed to load resource|unknown error occurred when fetching the script/.test(m.text())) errs.push('console: ' + m.text()); });
   p.on('dialog', d=>{ const m = d.message(); d.accept(opt.dialog ? opt.dialog(m) : (/مبلغ|المبلغ|الفرع/.test(m) ? '250' : 'سبب اختبار')); });
-  await p.setContent(htmlFor(data, now, opt.pre)); await p.waitForTimeout(700);
+  if(opt.secure){ const html = htmlFor(data, now, opt.pre); await p.route('https://o2.test/**', r=> r.request().url().replace(/[?#].*$/,'') === 'https://o2.test/Office/' ? r.fulfill({ contentType:'text/html; charset=utf-8', body: html }) : r.fulfill({ status:404, contentType:'text/plain', body:'' })); await p.goto('https://o2.test/Office/'); await p.waitForTimeout(700); }   // صفحة على https عشان crypto.subtle
+  else { await p.setContent(htmlFor(data, now, opt.pre)); await p.waitForTimeout(700); }
   const text = ()=> p.evaluate(()=> document.getElementById('screen').innerText);
   const sheet = ()=> p.evaluate(()=> document.getElementById('sheetBody').innerText);
   const sheetHtml = ()=> p.evaluate(()=> document.getElementById('sheetBody').innerHTML);

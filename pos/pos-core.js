@@ -346,7 +346,7 @@ function _posAutoStatus(txt, bad){
 }
 async function posAutoLoginLoop(reason){
   if(_posAutoLoginRunning) return;
-  if(!getBranchLogin()){ posQuietSetup(false); _posAutoStatus(reason === 'anon' ? '⚠️ صفحة تانية من الموقع اتفتحت على الجهاز ده وغيّرت الدخول — اكتب حساب الفرع تحت' : '', reason === 'anon'); return; }
+  if(!getBranchLogin()){ posQuietSetup(false); _posAutoStatus(reason === 'anon' && !window.__posPairing ? '⚠️ صفحة تانية من الموقع اتفتحت على الجهاز ده وغيّرت الدخول — اكتب حساب الفرع تحت' : '', reason === 'anon'); return; }
   _posAutoLoginRunning = true;
   try{
     try{ await _posAuthReady; }catch(e){}
