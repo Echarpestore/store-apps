@@ -292,9 +292,11 @@ function _blDec(s){
 }
 function saveBranchLogin(email, pass){
   if(!email || !pass) return;
+  window._posSavedLoginRejected = false;
   localStorage.setItem(_BL_KEY, _blEnc(JSON.stringify({ e: email, p: pass })));
 }
 function getBranchLogin(){
+  if(window._posSavedLoginRejected) return null;   // v768: اترفض في الجلسة دي — الفورم + زرار الإدارة
   const raw = localStorage.getItem(_BL_KEY);
   if(!raw) return null;
   try{ const o = JSON.parse(_blDec(raw)); return (o && o.e && o.p) ? o : null; }
@@ -316,9 +318,10 @@ async function tryAutoBranchLogin(){
     return true;
   }catch(e){
     console.warn('auto branch login', e && e.code);
-    // الباسورد اتغيّر → نمسح المحفوظ عشان ما نفضلش نحاول
-    if(e && (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password')){
-      localStorage.removeItem(_BL_KEY);
+    // v768: الدخول المحفوظ **مبيتمسحش** — كان بيتمسح من أول رفض فالجهاز يطلب الإيميل والباسورد للأبد
+    //       (حتى لو الرفض مؤقت). بنعلّمه بس ونوقف المحاولات في الجلسة دي؛ فتح الكاشير تاني بيجرّب تاني.
+    if(e && (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-disabled')){
+      window._posSavedLoginRejected = true;
     }
     window._posAutoLoginLastErr = (e && e.code) || 'error';
     return false;

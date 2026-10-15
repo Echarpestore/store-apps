@@ -35,7 +35,14 @@ function card(x){
   const last = x.lastSale || null;
   const lastHtml = last ? `<div class="alert ${Number(last.total)>=0 ? 'i' : 'w'}" style="cursor:default;flex-wrap:wrap"><span style="flex:1;min-width:0"><b>${Number(last.total)>=0 ? '✅ آخر بيع' : '↩️ آخر مرتجع'} · ${money(last.total)}</b><br><small class="tag">${whenTs(last.atMs)}${last.invoiceNo ? ' · #' + u.esc(last.invoiceNo) : ''}${(last.seller||last.employee) ? ' · ' + u.esc(last.seller||last.employee) : ''}</small><br>${payChips(last.payments)}</span></div>` : '';
   const br = x.branch||x.id||''; const rc = remote[br] || {}; const bq = u.esc(String(br).replace(/'/g,"\\'"));
-  const ctl = `<div class="btns" style="margin:0 0 8px">${rc.locked ? `<button class="btn g" onclick="O2.live.lock('${bq}',false)">🔓 افتح الكاشير</button>` : `<button class="btn r" onclick="O2.live.lock('${bq}',true)">🔒 اقفل الكاشير</button>`}${x.employee ? `<button class="btn" onclick="O2.live.kick('${bq}')">🚪 خرّج ${u.esc(x.employee)}</button>` : ''}</div>${rc.locked ? `<div class="alert" style="cursor:default">🔒 مقفول من ${u.hm(rc.at)}${rc.lockMsg ? ' · ' + u.esc(rc.lockMsg) : ''}</div>` : ''}`;
+  /* ✅ v768: حالة حقيقية من الجهاز — مش «تم» وخلاص. الجهاز بيرد (ackLocked/ackKickSeq) لما يستلم. */
+  const lockPending = rc.at && (rc.ackLocked !== !!rc.locked || Number(rc.ackAt||0) < Number(rc.at||0));
+  const kickPending = Number(rc.kickSeq||0) > Number(rc.ackKickSeq||0);
+  const devState = !on
+    ? `<div class="alert w" style="cursor:default;flex-wrap:wrap"><span style="flex:1;min-width:0"><b>📴 الكاشير مش متصل بحساب الفرع${x.updatedAtMs ? ' من ' + whenTs(x.updatedAtMs) : ''}</b><br><small>الجهاز مقفول أو النت فاصل أو بيطلب الإيميل والباسورد — أي أمر هنا مش هيوصله دلوقتي. لو بيطلب الإيميل: الموظفة تدوس «📲 الإدارة تدخّل الجهاز» وتقولك الكود، وهتلاقيه فوق في «أجهزة مستنية دخول».</small></span></div>`
+    : '';
+  const ackLine = rc.at ? `<div class="hint" style="margin:0 0 6px">${lockPending ? '⏳ مستني الجهاز يستلم ' + (rc.locked ? 'القفل' : 'الفتح') + '…' : (rc.locked ? '✅ الجهاز اتقفل فعلًا ' + u.hm(rc.ackAt) : (rc.ackAt ? '✅ الجهاز مفتوح · آخر رد ' + u.hm(rc.ackAt) : ''))}${kickPending ? ' · ⏳ مستني الجهاز ينفّذ الخروج' : ''}</div>` : '';
+  const ctl = devState + `<div class="btns" style="margin:0 0 8px">${rc.locked ? `<button class="btn g" onclick="O2.live.lock('${bq}',false)">🔓 افتح الكاشير</button>` : `<button class="btn r" onclick="O2.live.lock('${bq}',true)">🔒 اقفل الكاشير</button>`}${x.employee && on ? `<button class="btn" onclick="O2.live.kick('${bq}')">🚪 خرّج ${u.esc(x.employee)}</button>` : ''}</div>${ackLine}${rc.locked ? `<div class="alert" style="cursor:default">🔒 مقفول من ${u.hm(rc.at)}${rc.lockMsg ? ' · ' + u.esc(rc.lockMsg) : ''}</div>` : ''}`;
   return `<div class="card"><h3>📍 ${u.esc(x.branch||x.id||'فرع')} <small>${u.esc(x.employee||'بدون موظف')}</small> ${status}</h3>${ctl}
     <div class="kpis"><div class="kpi"><small>صافي النهاردة</small><b>${u.n0(net)}</b></div><div class="kpi"><small>فواتير</small><b>${n}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${n ? u.n0(gross/n) : '—'}</b></div></div>
     ${Object.keys(st.paymentTotals||{}).length ? `<div class="hint">طرق الدفع النهاردة</div><div>${payChips(st.paymentTotals)}</div>` : ''}
@@ -60,12 +67,14 @@ function render(){
 async function lock(branch, on){
   let msg = '';
   if(on){ msg = prompt('رسالة تظهر على الكاشير (اختياري):', 'الكاشير مقفول من الإدارة'); if(msg === null) return; }
-  try{ await u.db.collection('pos_test_settings').doc(rid(branch)).set({ remoteCtl:true, branch, locked:!!on, lockMsg: msg || '', at: Date.now(), by:'office' }, { merge:true }); remote[branch] = Object.assign({}, remote[branch], { locked:!!on, lockMsg:msg, at:Date.now() }); u.toast(on ? '🔒 اتقفل' : '🔓 اتفتح'); u.render(); }
+  const dev = docs.find(d=> (d.branch||d.id)===branch); const isOn = !!(dev && online(dev));
+  if(!isOn && !confirm('⚠️ كاشير ' + branch + ' مش متصل دلوقتي — الأمر هيتسجل وهيتنفذ أول ما الجهاز يدخل. كمّل؟')) return;
+  try{ await u.db.collection('pos_test_settings').doc(rid(branch)).set({ remoteCtl:true, branch, locked:!!on, lockMsg: msg || '', at: Date.now(), by:'office' }, { merge:true }); remote[branch] = Object.assign({}, remote[branch], { locked:!!on, lockMsg:msg, at:Date.now() }); u.toast(isOn ? '📨 اتبعت — مستني الجهاز يأكّد' : '📨 اتسجل — هيتنفذ أول ما الجهاز يتصل'); u.render(); }
   catch(e){ u.toast('تعذر: ' + (e && (e.code||e.message))); }
 }
 async function kick(branch){
   if(!confirm('تخرّج الموظفة الداخلة على كاشير ' + branch + '؟ (الفاتورة المفتوحة بتفضل محفوظة على الجهاز)')) return;
-  try{ await u.db.collection('pos_test_settings').doc(rid(branch)).set({ remoteCtl:true, branch, kickSeq: firebase.firestore.FieldValue.increment(1), kickAt: Date.now(), by:'office' }, { merge:true }); u.toast('🚪 اتبعت'); }
+  try{ await u.db.collection('pos_test_settings').doc(rid(branch)).set({ remoteCtl:true, branch, kickSeq: firebase.firestore.FieldValue.increment(1), kickAt: Date.now(), by:'office' }, { merge:true }); u.toast('📨 اتبعت — مستني الجهاز يأكّد'); }
   catch(e){ u.toast('تعذر: ' + (e && (e.code||e.message))); }
 }
 function accKey(b){ return 'o2_branch_acc_' + b; }

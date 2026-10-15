@@ -33,10 +33,21 @@ function lockOverlay(on, msg){
   el.innerHTML = '<div style="font-size:64px">🔒</div><div style="font-size:26px;font-weight:900">الكاشير مقفول من الإدارة</div><div style="font-size:15px;color:#cbd5e1;max-width:520px;line-height:1.8"></div>';
   el.lastChild.textContent = msg || 'استني لحد ما الإدارة تفتحه';
 }
+/* ✅ v768: الجهاز بيرد إنه استلم — Office بيعرض «الجهاز استلم» بدل ما يقول «تم» والجهاز أصلًا مش سامع */
+function ack(d){
+  try{
+    var b = branchNow(); if(!b || !isStaff()) return;
+    var want = { ackLocked: !!d.locked, ackKickSeq: Number(d.kickSeq) || 0 };
+    if(d.ackLocked === want.ackLocked && Number(d.ackKickSeq || 0) === want.ackKickSeq && Number(d.ackAt || 0) >= Number(d.at || 0)) return;
+    want.ackAt = Date.now(); want.ackDevice = String(navigator.userAgent || '').slice(0, 60);
+    firebase.firestore().collection('pos_test_settings').doc(safeId(b)).set(want, { merge:true }).catch(function(){});
+  }catch(e){}
+}
 function onRemote(d){
   d = d || {};
   lockOverlay(!!d.locked, d.lockMsg);
   var k = Number(d.kickSeq) || 0;
+  ack(d);
   if(lastKick === null){ lastKick = k; return; }               // أول قراية = الحالة الحالية، مش أمر جديد
   if(k > lastKick){
     lastKick = k;
