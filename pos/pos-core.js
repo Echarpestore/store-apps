@@ -73,6 +73,25 @@ const MIN_ITEMS_FOR_STAFF_POINT = 5; // كل فاتورة فيها 5 قطع أو
 
 // كل جهاز POS بيتبع فرع محدد (نفس فكرة باقي البرامج) — بيتحفظ على الجهاز نفسه
 let currentBranch = localStorage.getItem('pos_branch') || '';
+/* 🤫 v766 — «الكاشير ساعات يطلب اختيار الفرع والإيميل والباسورد» (بلاغ المالك 15-10):
+   الجهاز اللي عنده فرع + دخول فرع محفوظ **مش بيعرض الفورم أبدًا** — بيعرض «بيدخّل الفرع…» بس لحد ما
+   الدخول التلقائي يرجع، وبعدين على شاشة اختيار الموظف على طول. الفورم بيظهر بس لو مفيش دخول محفوظ
+   أو الباسورد اتغيّر فعلًا. (البيع من غير دخول الفرع ممنوع — الكتابات كانت هترفض من القواعد وتضيع.) */
+function posQuietSetup(on){
+  try{
+    const bs = document.getElementById('branchSetupScreen'); if(!bs) return;
+    bs.classList.toggle('pos-auto', !!on);
+    let st = document.getElementById('posAutoStyle');
+    if(!st){ st = document.createElement('style'); st.id = 'posAutoStyle';
+      st.textContent = '#branchSetupScreen.pos-auto .pin-box > *:not(#branchSetupAuto):not(.pos-auto-title){display:none!important}#branchSetupScreen .pos-auto-title{display:none}#branchSetupScreen.pos-auto .pos-auto-title{display:block;font-size:20px;font-weight:900;margin-bottom:10px}';
+      document.head.appendChild(st); }
+    const box = bs.querySelector('.pin-box');
+    if(box && !box.querySelector('.pos-auto-title')){ const t = document.createElement('div'); t.className = 'pos-auto-title'; t.textContent = '⏳ بيدخّل ' + (currentBranch || 'الفرع') + '…'; box.insertBefore(t, box.firstChild); }
+    if(on) _posAutoStatus('⏳ بيرجّع دخول الفرع لوحده…');
+  }catch(e){}
+}
+window.posQuietSetup = posQuietSetup;
+try{ if(currentBranch && localStorage.getItem('pos_branch_login')) posQuietSetup(true); }catch(e){}
 // فروع Glow ليها رصيد نقاط منفصل (points_glow) عن echarpe (points) — عشان ما تتلخبطش
 const GLOW_BRANCHES = ['Glow'];
 function pointsFieldFor(branch){ return GLOW_BRANCHES.includes(branch) ? 'points_glow' : 'points'; }
@@ -119,6 +138,7 @@ firebase.auth().onAuthStateChanged(function(u){
       // الجلسة انتهت/اتمسحت → نطلب دخول حساب الفرع تاني (اسم الفرع محفوظ أصلاً)
       document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
       bs.classList.add('active');
+      if(currentBranch && getBranchLogin()) posQuietSetup(true);
       if(typeof loadBranchSetupOptions === 'function') setTimeout(loadBranchSetupOptions, 50);
     }
   }
@@ -326,17 +346,17 @@ function _posAutoStatus(txt, bad){
 }
 async function posAutoLoginLoop(reason){
   if(_posAutoLoginRunning) return;
-  if(!getBranchLogin()){ _posAutoStatus(reason === 'anon' ? '⚠️ صفحة تانية من الموقع اتفتحت على الجهاز ده وغيّرت الدخول — اكتب حساب الفرع تحت' : '', reason === 'anon'); return; }
+  if(!getBranchLogin()){ posQuietSetup(false); _posAutoStatus(reason === 'anon' ? '⚠️ صفحة تانية من الموقع اتفتحت على الجهاز ده وغيّرت الدخول — اكتب حساب الفرع تحت' : '', reason === 'anon'); return; }
   _posAutoLoginRunning = true;
   try{
     try{ await _posAuthReady; }catch(e){}
     for(let i = 1; i <= 40; i++){
       const cu = firebase.auth().currentUser;
       if(cu && !cu.isAnonymous){ _posAutoStatus(''); return; }
-      if(!getBranchLogin()){ _posAutoStatus('🔑 باسورد حساب الفرع اتغيّر — اكتبه تاني تحت', true); return; }
+      if(!getBranchLogin()){ posQuietSetup(false); _posAutoStatus('🔑 باسورد حساب الفرع اتغيّر — اكتبه تاني تحت', true); return; }
       _posAutoStatus('⏳ بيرجّع دخول الفرع لوحده… (محاولة ' + i + ')' + (window._posAutoLoginLastErr ? ' · ' + window._posAutoLoginLastErr : ''));
       if(await tryAutoBranchLogin()){ _posAutoStatus(''); return; }
-      if(!getBranchLogin()){ _posAutoStatus('🔑 باسورد حساب الفرع اتغيّر — اكتبه تاني تحت', true); return; }
+      if(!getBranchLogin()){ posQuietSetup(false); _posAutoStatus('🔑 باسورد حساب الفرع اتغيّر — اكتبه تاني تحت', true); return; }
       const wait = Math.min(30000, 5000 * i);
       await new Promise(function(res){
         const t = setTimeout(done, wait);
@@ -344,7 +364,7 @@ async function posAutoLoginLoop(reason){
         window.addEventListener('online', done);   // النت رجع → جرّب على طول
       });
     }
-    _posAutoStatus('❌ مقدرش يرجّع الدخول — اتأكد من النت واقفل الصفحة وافتحها', true);
+    posQuietSetup(false); _posAutoStatus('❌ مقدرش يرجّع الدخول — اتأكد من النت واقفل الصفحة وافتحها', true);
   } finally { _posAutoLoginRunning = false; }
 }
 window.posAutoLoginLoop = posAutoLoginLoop;
@@ -365,6 +385,7 @@ if(currentBranch){
   })();
   firebase.auth().onAuthStateChanged(function once(u){
     if(u && !u.isAnonymous){
+      posQuietSetup(false);
       document.getElementById('branchSetupScreen').classList.remove('active');
       document.getElementById('loginScreen').classList.add('active');
       loadEmployeePicker();

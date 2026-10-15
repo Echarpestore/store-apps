@@ -49,8 +49,8 @@
       fb = firebase;
       authReady = new Promise(function (res) {
         var done = false, fin = function () { if (!done) { done = true; res(); } };
-        fb.auth().onAuthStateChanged(function (u) { if (u) fin(); });
-        fb.auth().signInAnonymously().catch(fin);
+        // v766: الدخول المجهول بس لو مفيش أي دخول محفوظ — مايمسحش دخول الكاشير/الموظف على نفس الجهاز
+        var _first = true; fb.auth().onAuthStateChanged(function (u) { if (u) { fin(); return; } if (_first) { _first = false; fb.auth().signInAnonymously().catch(fin); } });
         setTimeout(fin, 6000);
       });
     } catch (e) { fb = null; }

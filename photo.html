@@ -313,7 +313,7 @@
     appId: "1:408860081491:web:c5fa8b8e757c13196375a6"
   };
   try{ if(!firebase.apps.length) firebase.initializeApp(firebaseConfig); }catch(e){}
-  try{ firebase.auth().signInAnonymously().catch(function(){}); }catch(e){}
+  try{ var _u0 = firebase.auth().onAuthStateChanged(function(u){ try{ _u0(); }catch(e){} if(!u) firebase.auth().signInAnonymously().catch(function(){}); }); }catch(e){}   /* v766: مايمسحش دخول فرع/موظف محفوظ على نفس الجهاز (الكاشير كان بيطلب الإيميل والباسورد) */
 
   // ---- ضغط صورة العميلة قبل الإرسال (canvas) ----
   function fileToCompressedDataUrl(file){
