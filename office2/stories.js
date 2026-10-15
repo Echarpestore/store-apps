@@ -1,5 +1,5 @@
 /* ============================================================
-   📸 office2/stories.js — v1 — الستوري والمنتجات (موافقة المالك + نقط الموظفات)
+   📸 office2/stories.js — v2 — الستوري والمنتجات (موافقة المالك + نقط الموظفات) + 🎬 الفيديوهات
    ------------------------------------------------------------
    قرار المالك (10-10-2026):
    · الموظفات بيصوّروا من Sales (بالدور: كل يوم موظفة) → هنا «مستنية موافقتك».
@@ -90,9 +90,10 @@ function render(){
   if(!S.open) return;
   var P = pending(), today = C.dayKey(Date.now());
   var pub = S.list.filter(function(s){ return s.status === 'published'; });
-  var home = S.list.filter(function(s){ return s.homeFeed; });
+  var home = S.list.filter(function(s){ return s.homeFeed && s.kind !== 'video'; });
+  var vids = S.list.filter(function(s){ return s.kind === 'video' && s.homeFeed; });
   document.getElementById('o2StSub').textContent = P.length ? P.length + ' مستنية موافقتك' : 'مفيش حاجة مستنية';
-  var tabs = [['pending', 'مستنية' + (P.length ? ' (' + P.length + ')' : '')], ['live', 'في التطبيق'], ['home', 'الرئيسية'], ['turn', 'الدور والنقط']];
+  var tabs = [['pending', 'مستنية' + (P.length ? ' (' + P.length + ')' : '')], ['live', 'في التطبيق'], ['home', 'الرئيسية'], ['videos', '🎬 فيديوهات' + (vids.length ? ' (' + vids.length + ')' : '')], ['turn', 'الدور والنقط']];
   var live = S.cfg.live_echarpe === true;
   var h = '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:' + (live ? '#bfe8cf' : '#f3d9a6') + '"><div style="flex:1"><b style="font-size:13.5px">📱 في تطبيق العميلات: ' + (live ? '<span style="color:var(--good)">شغال</span>' : '<span style="color:#9a6500">مقفول</span>') + '</b><div class="hint" style="margin:2px 0 0">' + (live ? 'العميلات شايفين الستوري و«مختارة ليكي»' : 'تقدر توافق وتجهّز براحتك — مفيش حاجة بتظهر للعميلات لحد ما تفتحه') + '</div></div>'
     + '<button class="btn ' + (live ? '' : 'g') + '" onclick="O2Stories.live(' + (!live) + ')">' + (live ? 'اقفل' : 'افتح للعميلات') + '</button></div>';
@@ -105,6 +106,15 @@ function render(){
   else if(S.tab === 'live') h += '<div class="card"><h3>ستوري النهارده في التطبيق <small>' + pub.length + '</small></h3>' + (pub.length ? pub.map(function(s){ return mini(s, '<button class="btn r" onclick="O2Stories.archive(\'' + s.id + '\')">شيلها</button>'); }).join('') : '<div class="empty">مفيش ستوري منشورة دلوقتي</div>') + '</div>'
     + '<div class="hint">أول ما توافق على ستوري يوم جديد، ستوري الأيام اللي فاتت بتتشال لوحدها.</div>';
   else if(S.tab === 'home') h += '<div class="card"><h3>«مختارة ليكي» في الصفحة الرئيسية <small>' + home.length + '</small></h3>' + (home.length ? home.map(function(s){ return mini(s, (s.online ? '<span class="pill ' + ((s.qtyLeft || 0) > 0 ? 'p-good">' + s.qtyLeft + ' متاحة' : 'p-bad">خلصت') + (s.qtyReserved ? ' · ' + s.qtyReserved + ' محجوزة' : '') + '</span>' : '') + '<button class="btn r" onclick="O2Stories.unhome(\'' + s.id + '\')">شيلها</button>'); }).join('') : '<div class="empty">مفيش منتجات على الرئيسية — علّم «تظهر في الرئيسية» وانت بتوافق</div>') + '</div>';
+  else if(S.tab === 'videos') h += '<div class="card"><h3>🎬 الفيديوهات في التطبيق <small>' + vids.length + '</small></h3>'
+    + '<div class="hint" style="margin:0 0 8px">الموظفات بينشروا على طول من Sales (من غير موافقة) — شوف وشيل اللي مش عاجبك</div>'
+    + (vids.length ? vids.map(function(v){
+        var left = Number(v.qtyLeft) || 0, sold = (Number(v.qty) || 0) - left - (Number(v.qtyReserved) || 0);
+        return '<div class="stMini" style="align-items:flex-start"><video src="' + esc(v.videoUrl) + '" poster="' + esc(v.thumb || '') + '" preload="none" controls playsinline style="width:96px;height:170px;border-radius:12px;object-fit:cover;background:#000"></video>'
+          + '<div class="n"><b>' + esc(v.title || v.productName) + '</b>' + esc(v.employeeName || '') + ' · ' + esc(short(v.branch)) + ' · ' + ago(v.createdAt) + '<br>'
+          + (v.online ? '<span class="pill ' + (left > 0 ? 'p-good">' + left + ' متاحة' : 'p-bad">خلصت') + '</span>' + (v.qtyReserved ? ' <span class="pill p-acc">' + v.qtyReserved + ' محجوزة</span>' : '') + (sold > 0 ? ' <span class="pill p-good">اتباع ' + sold + '</span>' : '') : '<span class="pill">من غير بيع</span>')
+          + '<div style="margin-top:8px"><button class="btn r" onclick="O2Stories.unhome(\'' + v.id + '\')">شيله من التطبيق</button></div></div></div>';
+      }).join('') : '<div class="empty">لسه مفيش فيديوهات<br><small>الموظفات بيصوّروا من Sales ← صفحة الموظفة ← 📸 صوّري ← 🎬 فيديو</small></div>') + '</div>';
   else h += turnView();
   document.getElementById('o2StBody').innerHTML = h;
   if(S.tab === 'pending') P.forEach(function(x){ loadFull(x.id); });

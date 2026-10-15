@@ -2051,6 +2051,29 @@ window.salesStoryApi = {
     await b.commit();
     return ref.id;
   },
+  /* 🎬 الفيديوهات القصيرة (قرار المالك 15-10): الموظفة بتصوّر وتنشر على طول من غير موافقة.
+     الفيديو نفسه في Firebase Storage (تقيل على Firestore) — والمستند في app_stories زي أي منتج على الرئيسية. */
+  newId: function(){ return doc(collection(db, 'app_stories')).id; },
+  uploadVideo: async function(blob, path, onProgress){
+    const st = await import("https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js");
+    const r = st.ref(st.getStorage(app), path);
+    const task = st.uploadBytesResumable(r, blob, { contentType: blob.type || 'video/mp4', cacheControl: 'public,max-age=31536000' });
+    await new Promise(function(res, rej){ task.on('state_changed', function(s){ if(onProgress && s.totalBytes) onProgress(s.bytesTransferred / s.totalBytes); }, rej, res); });
+    return await st.getDownloadURL(r);
+  },
+  publishVideo: async function(id, data){
+    await setDoc(doc(db, 'app_stories', String(id)), data);
+    // 🔔 إشعار واحد في اليوم بالكتير (أول فيديو أو ستوري النهارده) — الفانكشن مبتبعتش لو التطبيق لسه مقفول على العميلات
+    try{
+      const pref = doc(db, 'pos_test_settings', 'stories_push_' + data.brand);
+      const cur = await getDoc(pref);
+      if(!cur.exists() || cur.data().day !== data.dayKey){
+        await setDoc(pref, { day: data.dayKey, kind: 'video', title: 'فيديو جديد — ' + (data.title || ''), storyId: String(id), seq: increment(1), ts: Date.now() }, { merge: true });
+        return true;
+      }
+    }catch(e){ console.warn('video push', e && e.code); }
+    return false;
+  },
   mine: async function(empId){
     const s = await getDocs(query(collection(db, 'app_stories'), where('employeeId', '==', String(empId)), limit(40)));
     return s.docs.map(function(d){ return Object.assign({ id: d.id }, d.data()); }).sort(function(a, b){ return (b.createdAt || 0) - (a.createdAt || 0); });

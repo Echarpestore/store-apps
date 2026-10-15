@@ -1,0 +1,27 @@
+rules_version = '2';
+// ============================================================
+// 🎬 Firebase Storage — قواعد الفيديوهات القصيرة (15-10-2026)
+// الانشر: Firebase Console ← Storage ← Rules ← الصق الملف ده كله ← Publish
+// · الموظفين (دخول بإيميل وباسورد — نفس isStaff في قواعد Firestore) بس يرفعوا
+// · فيديو أو صورة بس، وأقصى حجم 30 ميجا، وفي مجلد app_videos بس
+// · العميلات بيتفرجوا من لينك التحميل (فيه توكن) — مش محتاجين صلاحية قراءة هنا
+// · finance-evidence (صور إنستاباي) بتتكتب من Cloud Functions (Admin) — القواعد مبتأثرش عليها
+// ============================================================
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isStaff() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider == 'password';
+    }
+    match /app_videos/{brand}/{file} {
+      allow read: if isStaff();
+      allow create, update: if isStaff()
+        && (brand == 'echarpe' || brand == 'glow')
+        && request.resource.size < 30 * 1024 * 1024
+        && request.resource.contentType.matches('video/.*|image/.*');
+      allow delete: if isStaff();
+    }
+    match /{all=**} {
+      allow read, write: if false;
+    }
+  }
+}

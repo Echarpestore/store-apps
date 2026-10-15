@@ -305,7 +305,9 @@ exports.onCatalogUpdated = onDocumentWritten(
       if (!(Number(after.seq || 0) > Number(before.seq || 0))) return;
       const cfg = await db.collection("pos_test_settings").doc("stories_cfg").get();
       if (!cfg.exists || cfg.data()["live_" + brand] !== true) return;
-      await broadcastBrand(brand, BRAND_NAMES[brand] || brand, "📸 " + String(after.title || "ستوري جديدة — افتحي وشوفي"), "stories");
+      // 🎬 الفيديو (من Sales على طول) بيكتب kind:'video' — نفس حد «إشعار واحد في اليوم» مع الستوري
+      const icon = after.kind === "video" ? "🎬 " : "📸 ";
+      await broadcastBrand(brand, BRAND_NAMES[brand] || brand, icon + String(after.title || "ستوري جديدة — افتحي وشوفي"), "stories");
       return;
     }
 
