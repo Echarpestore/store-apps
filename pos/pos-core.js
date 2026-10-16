@@ -73,6 +73,22 @@ const MIN_ITEMS_FOR_STAFF_POINT = 5; // كل فاتورة فيها 5 قطع أو
 
 // كل جهاز POS بيتبع فرع محدد (نفس فكرة باقي البرامج) — بيتحفظ على الجهاز نفسه
 let currentBranch = localStorage.getItem('pos_branch') || '';
+/* 🧪 v769 — «فرع الرحاب كل ما يتقفل ويتفتح بيمسح الحساب والطابعات» (بلاغ المالك 16-10):
+   مفيش كود في السيستم بيمسح بيانات الجهاز — الجهاز نفسه هو اللي بيمسحها (مساحة الهارد خلصت · فتح من متصفح تاني/يوزر ويندوز تاني ·
+   برنامج تنضيف · وضع التصفح الخفي). ١) بنطلب من المتصفح يحفظ بيانات الموقع دايمًا (persist) ٢) لو الجهاز فتح «فاضي»
+   بنسجّل حدث فيه بيانات الجهاز (البرنامج ولا متصفح · المساحة) عشان Office يورّي السبب. */
+const _posFreshStorage = (function(){ try{ const had = !!localStorage.getItem('pos_install_marker'); if(!had) localStorage.setItem('pos_install_marker', String(Date.now())); return !had; }catch(e){ return false; } })();
+try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().then(function(p){ window.__posPersisted = p; }).catch(function(){}); }catch(e){}
+async function posReportStorageReset(branch){
+  if(!_posFreshStorage || window.__posResetReported) return; window.__posResetReported = true;
+  let est = {}; try{ if(navigator.storage && navigator.storage.estimate) est = await navigator.storage.estimate(); }catch(e){}
+  let persisted = null; try{ if(navigator.storage && navigator.storage.persisted) persisted = await navigator.storage.persisted(); }catch(e){}
+  try{ await firebase.firestore().collection('pos_activity_log').add({ type:'device_storage_reset', branch: branch || '', ts: Date.now(),
+    shell: typeof window.posShell !== 'undefined', ua: String(navigator.userAgent || '').slice(0, 160), persisted,
+    quotaMB: est.quota ? Math.round(est.quota / 1048576) : null, usageMB: est.usage ? Math.round(est.usage / 1048576) : null,
+    incognitoHint: !!(est.quota && est.quota < 200 * 1048576) }); }catch(e){}
+}
+window.posReportStorageReset = posReportStorageReset;
 /* 🤫 v766 — «الكاشير ساعات يطلب اختيار الفرع والإيميل والباسورد» (بلاغ المالك 15-10):
    الجهاز اللي عنده فرع + دخول فرع محفوظ **مش بيعرض الفورم أبدًا** — بيعرض «بيدخّل الفرع…» بس لحد ما
    الدخول التلقائي يرجع، وبعدين على شاشة اختيار الموظف على طول. الفورم بيظهر بس لو مفيش دخول محفوظ
@@ -262,6 +278,7 @@ async function saveBranchSetup(){
     // الجهاز يرجع لوحده — الموظفة مش معاها الإيميل ولا المفروض تشوفه.
     try{ saveBranchLogin(email, pass); }catch(e){ console.warn('save login', e); }
     if(errBox) errBox.textContent = '';
+    try{ posReportStorageReset(val); }catch(e){}
     showScreen('loginScreen');
     loadEmployeePicker();
   }catch(e){

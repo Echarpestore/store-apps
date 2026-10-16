@@ -26,7 +26,7 @@ const { open, NOW } = require(${JSON.stringify(path.join(ROOT,'tests','_helpers'
   out.acks = await p.evaluate(()=> window.__acks||[]);
   await b.close();
   // ── Office: الأزرار + دخول الجهاز متشفّر ──
-  const pg = await open({ secure:true, data:{ office_pos_live:[ { id:'echarpe El Rehab', branch:'echarpe El Rehab', employee:'سارة', updatedAtMs: NOW - 60000 }, { id:'Glow', branch:'Glow', employee:'دينا', updatedAtMs: NOW - 20*3600e3 } ], pos_pair:[] } });
+  const pg = await open({ secure:true, data:{ office_pos_live:[ { id:'echarpe El Rehab', branch:'echarpe El Rehab', employee:'سارة', updatedAtMs: NOW - 60000 }, { id:'Glow', branch:'Glow', employee:'دينا', updatedAtMs: NOW - 20*3600e3 } ], pos_pair:[], pos_activity_log:[ { id:'r1', type:'device_storage_reset', branch:'echarpe El Rehab', ts: NOW - 3600e3, shell:false, quotaMB: 120, incognitoHint:true }, { id:'r2', type:'device_storage_reset', branch:'echarpe El Rehab', ts: NOW - 2*86400e3, shell:true, quotaMB: 9000 } ] } });
   const keys = await pg.p.evaluate(async()=>{ const k = await crypto.subtle.generateKey({ name:'RSA-OAEP', modulusLength:2048, publicExponent:new Uint8Array([1,0,1]), hash:'SHA-256' }, true, ['encrypt','decrypt']); window.__k = k; return JSON.stringify(await crypto.subtle.exportKey('jwk', k.publicKey)); });
   await pg.p.evaluate((pub)=> O2.u.db.collection('pos_pair').doc('482913').set({ code:'482913', status:'waiting', pub, branchHint:'echarpe El Rehab', createdAt: window.__now }), keys);
   out.live = await pg.go('live', null, 500);
@@ -64,8 +64,11 @@ else {
   ok(w.some(x=> x.col==='pos_test_settings' && x.id==='pos_remote_echarpe El Rehab' && x.p.kickAt > 0), 'الخروج بيتكتب (kickSeq + kickAt)');
   ok(!out.plainLeak, 'سلبي: الباسورد مش مكتوب مكشوف في Firestore');
   ok(/"e":"rehab@echarpe\.pos"/.test(out.decrypted||'') && /"p":"S3cret!"/.test(out.decrypted||'') && /"b":"echarpe El Rehab"/.test(out.decrypted||''), 'الجهاز بمفتاحه بس بيفك الإيميل والباسورد والفرع');
+  ok(/🧹 الجهاز ده اتمسحت بياناته 2 مرة آخر 30 يوم/.test(out.live||'') && /من متصفح عادي مش برنامج الكاشير/.test(out.live||'') && /بيتفتح مرة من البرنامج ومرة من المتصفح/.test(out.live||'') && /شكله تصفح خفي/.test(out.live||''), 'v769: Office بيورّي إن الجهاز بيتمسح وسببه المحتمل');
+  ok(!/🧹/.test((out.live||'').split('📍 Glow')[1]||''), 'v769 سلبي: فرع ماتمسحش مفيهوش التنبيه');
   ok(!(out.errs||[]).length, 'مفيش أخطاء JS ' + JSON.stringify(out.errs||[]).slice(0,200));
 }
 const core = fs.readFileSync(path.join(ROOT,'pos','pos-core.js'),'utf8');
+ok(/navigator\.storage\.persist\(\)/.test(core) && /type:'device_storage_reset'/.test(core) && /try\{ posReportStorageReset\(val\); \}catch\(e\)\{\}/.test(core), 'v769: الكاشير بيطلب حفظ دايم وبيبلّغ لو فتح فاضي');
 ok(!/localStorage\.removeItem\(_BL_KEY\)/.test(core) && /window\._posSavedLoginRejected = true;/.test(core), 'v768 سلبي: الدخول المحفوظ مبيتمسحش من أول رفض (كان بيخلّي الجهاز يطلب الإيميل للأبد)');
 console.log('\n  ' + pass + ' ناجح · ' + fail + ' فاشل'); if(fail) process.exitCode = 1;

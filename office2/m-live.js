@@ -12,11 +12,12 @@ const STALE_MS = 7*60*1000;
 const PAY = Object.assign({}, u.PAY_AR, { salary:'راتب', gift:'كارت هدية' });
 let docs = [], started = false, loaded = false, err = '';
 /* 🎛️ v767 — تحكم عن بُعد: قفل/فتح الكاشير · خروج الموظفة · دخول جهاز بحساب الفرع (متشفّر) */
-const remote = {}; let pairs = [];
+const remote = {}; let pairs = []; let resets = [];
 function rid(b){ return 'pos_remote_' + String(b||'').replace(/\//g,'_'); }
 function start(){
   if(started) return; started = true;
   u.db.collection('pos_test_settings').where('remoteCtl','==',true).onSnapshot(s=>{ s.docs.forEach(d=>{ const x = d.data()||{}; if(x.branch) remote[x.branch] = x; }); u.render(); }, ()=>{});
+  u.db.collection('pos_activity_log').where('type','==','device_storage_reset').onSnapshot(s=>{ resets = s.docs.map(d=> d.data()).filter(r=> r.ts > Date.now() - 30*u.DAY); u.render(); }, ()=>{});
   u.db.collection('pos_pair').where('createdAt','>=', Date.now() - 30*60000).onSnapshot(s=>{ pairs = s.docs.map(d=> Object.assign({ id:d.id }, d.data())).filter(p=> p.status==='waiting'); u.render(); }, ()=>{});
   u.db.collection('office_pos_live').onSnapshot(s=>{ docs = s.docs.map(d=> Object.assign({ id:d.id }, d.data())); loaded = true; err = ''; u.render(); }, e=>{ err = String(e && (e.code||e.message)); loaded = true; u.render(); });
 }
@@ -42,7 +43,9 @@ function card(x){
     ? `<div class="alert w" style="cursor:default;flex-wrap:wrap"><span style="flex:1;min-width:0"><b>📴 الكاشير مش متصل بحساب الفرع${x.updatedAtMs ? ' من ' + whenTs(x.updatedAtMs) : ''}</b><br><small>الجهاز مقفول أو النت فاصل أو بيطلب الإيميل والباسورد — أي أمر هنا مش هيوصله دلوقتي. لو بيطلب الإيميل: الموظفة تدوس «📲 الإدارة تدخّل الجهاز» وتقولك الكود، وهتلاقيه فوق في «أجهزة مستنية دخول».</small></span></div>`
     : '';
   const ackLine = rc.at ? `<div class="hint" style="margin:0 0 6px">${lockPending ? '⏳ مستني الجهاز يستلم ' + (rc.locked ? 'القفل' : 'الفتح') + '…' : (rc.locked ? '✅ الجهاز اتقفل فعلًا ' + u.hm(rc.ackAt) : (rc.ackAt ? '✅ الجهاز مفتوح · آخر رد ' + u.hm(rc.ackAt) : ''))}${kickPending ? ' · ⏳ مستني الجهاز ينفّذ الخروج' : ''}</div>` : '';
-  const ctl = devState + `<div class="btns" style="margin:0 0 8px">${rc.locked ? `<button class="btn g" onclick="O2.live.lock('${bq}',false)">🔓 افتح الكاشير</button>` : `<button class="btn r" onclick="O2.live.lock('${bq}',true)">🔒 اقفل الكاشير</button>`}${x.employee && on ? `<button class="btn" onclick="O2.live.kick('${bq}')">🚪 خرّج ${u.esc(x.employee)}</button>` : ''}</div>${ackLine}${rc.locked ? `<div class="alert" style="cursor:default">🔒 مقفول من ${u.hm(rc.at)}${rc.lockMsg ? ' · ' + u.esc(rc.lockMsg) : ''}</div>` : ''}`;
+  const rs = resets.filter(r=> r.branch===br).sort((a,b)=> b.ts - a.ts);
+  const resetHtml = rs.length ? `<div class="alert w" style="cursor:default;flex-wrap:wrap"><span style="flex:1;min-width:0"><b>🧹 الجهاز ده اتمسحت بياناته ${rs.length} مرة آخر 30 يوم</b> (الحساب والطابعات بيروحوا)<br><small>آخر مرة ${whenTs(rs[0].ts)} · ${rs[0].shell ? 'من برنامج الكاشير' : '⚠️ من متصفح عادي مش برنامج الكاشير'}${rs[0].quotaMB != null ? ' · المساحة المتاحة للموقع ' + u.n0(rs[0].quotaMB) + ' MB' : ''}${rs[0].incognitoHint ? ' · ⚠️ شكله تصفح خفي' : ''}${rs.some(r=> r.shell) && rs.some(r=> !r.shell) ? ' · ⚠️ بيتفتح مرة من البرنامج ومرة من المتصفح' : ''}</small><br><small>السبب من الجهاز مش السيستم: هارد مليان · بيتفتح من مكان تاني (متصفح/يوزر ويندوز تاني) · برنامج تنضيف · تصفح خفي</small></span></div>` : '';
+  const ctl = resetHtml + devState + `<div class="btns" style="margin:0 0 8px">${rc.locked ? `<button class="btn g" onclick="O2.live.lock('${bq}',false)">🔓 افتح الكاشير</button>` : `<button class="btn r" onclick="O2.live.lock('${bq}',true)">🔒 اقفل الكاشير</button>`}${x.employee && on ? `<button class="btn" onclick="O2.live.kick('${bq}')">🚪 خرّج ${u.esc(x.employee)}</button>` : ''}</div>${ackLine}${rc.locked ? `<div class="alert" style="cursor:default">🔒 مقفول من ${u.hm(rc.at)}${rc.lockMsg ? ' · ' + u.esc(rc.lockMsg) : ''}</div>` : ''}`;
   return `<div class="card"><h3>📍 ${u.esc(x.branch||x.id||'فرع')} <small>${u.esc(x.employee||'بدون موظف')}</small> ${status}</h3>${ctl}
     <div class="kpis"><div class="kpi"><small>صافي النهاردة</small><b>${u.n0(net)}</b></div><div class="kpi"><small>فواتير</small><b>${n}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${n ? u.n0(gross/n) : '—'}</b></div></div>
     ${Object.keys(st.paymentTotals||{}).length ? `<div class="hint">طرق الدفع النهاردة</div><div>${payChips(st.paymentTotals)}</div>` : ''}
