@@ -45,7 +45,13 @@ function card(x){
   const ackLine = rc.at ? `<div class="hint" style="margin:0 0 6px">${lockPending ? '⏳ مستني الجهاز يستلم ' + (rc.locked ? 'القفل' : 'الفتح') + '…' : (rc.locked ? '✅ الجهاز اتقفل فعلًا ' + u.hm(rc.ackAt) : (rc.ackAt ? '✅ الجهاز مفتوح · آخر رد ' + u.hm(rc.ackAt) : ''))}${kickPending ? ' · ⏳ مستني الجهاز ينفّذ الخروج' : ''}</div>` : '';
   const rs = resets.filter(r=> r.branch===br).sort((a,b)=> b.ts - a.ts);
   const resetHtml = rs.length ? `<div class="alert w" style="cursor:default;flex-wrap:wrap"><span style="flex:1;min-width:0"><b>🧹 الجهاز ده اتمسحت بياناته ${rs.length} مرة آخر 30 يوم</b> (الحساب والطابعات بيروحوا)<br><small>آخر مرة ${whenTs(rs[0].ts)} · ${rs[0].shell ? 'من برنامج الكاشير' : '⚠️ من متصفح عادي مش برنامج الكاشير'}${rs[0].quotaMB != null ? ' · المساحة المتاحة للموقع ' + u.n0(rs[0].quotaMB) + ' MB' : ''}${rs[0].incognitoHint ? ' · ⚠️ شكله تصفح خفي' : ''}${rs.some(r=> r.shell) && rs.some(r=> !r.shell) ? ' · ⚠️ بيتفتح مرة من البرنامج ومرة من المتصفح' : ''}</small><br><small>السبب من الجهاز مش السيستم: هارد مليان · بيتفتح من مكان تاني (متصفح/يوزر ويندوز تاني) · برنامج تنضيف · تصفح خفي</small></span></div>` : '';
-  const ctl = resetHtml + devState + `<div class="btns" style="margin:0 0 8px">${rc.locked ? `<button class="btn g" onclick="O2.live.lock('${bq}',false)">🔓 افتح الكاشير</button>` : `<button class="btn r" onclick="O2.live.lock('${bq}',true)">🔒 اقفل الكاشير</button>`}${x.employee && on ? `<button class="btn" onclick="O2.live.kick('${bq}')">🚪 خرّج ${u.esc(x.employee)}</button>` : ''}</div>${ackLine}${rc.locked ? `<div class="alert" style="cursor:default">🔒 مقفول من ${u.hm(rc.at)}${rc.lockMsg ? ' · ' + u.esc(rc.lockMsg) : ''}</div>` : ''}`;
+  /* 🖥️ v770: شاشة الجهاز — RustDesk (زي TeamViewer، مجاني) · الـID متسجّل في pos_remote_<branch>.rdId · الباسورد مش بيتخزن هنا — بيتحفظ في برنامج RustDesk على موبايلك */
+  const rd = rdClean(rc.rdId);
+  const rdBtn = rd
+    ? `<button class="btn p" onclick="O2.live.rdOpen('${bq}')">🖥️ شاشة الجهاز</button>`
+    : `<button class="btn" onclick="O2.live.rdSet('${bq}')">🖥️ ربط الريموت</button>`;
+  const rdLine = rd ? `<div class="hint" style="margin:0 0 6px">RustDesk ID: <b style="direction:ltr;letter-spacing:2px;cursor:pointer" title="اضغط للنسخ" onclick="O2.live.rdCopy('${rd}')">${rd}</b> · <a href="https://rustdesk.com/web/" target="_blank" rel="noopener">من المتصفح</a> · <a href="#" onclick="O2.live.rdSet('${bq}');return false">تغيير</a></div>` : '';
+  const ctl = resetHtml + devState + `<div class="btns" style="margin:0 0 8px">${rdBtn}${rc.locked ? `<button class="btn g" onclick="O2.live.lock('${bq}',false)">🔓 افتح الكاشير</button>` : `<button class="btn r" onclick="O2.live.lock('${bq}',true)">🔒 اقفل الكاشير</button>`}${x.employee && on ? `<button class="btn" onclick="O2.live.kick('${bq}')">🚪 خرّج ${u.esc(x.employee)}</button>` : ''}</div>${rdLine}${ackLine}${rc.locked ? `<div class="alert" style="cursor:default">🔒 مقفول من ${u.hm(rc.at)}${rc.lockMsg ? ' · ' + u.esc(rc.lockMsg) : ''}</div>` : ''}`;
   return `<div class="card"><h3>📍 ${u.esc(x.branch||x.id||'فرع')} <small>${u.esc(x.employee||'بدون موظف')}</small> ${status}</h3>${ctl}
     <div class="kpis"><div class="kpi"><small>صافي النهاردة</small><b>${u.n0(net)}</b></div><div class="kpi"><small>فواتير</small><b>${n}</b></div><div class="kpi"><small>متوسط الفاتورة</small><b>${n ? u.n0(gross/n) : '—'}</b></div></div>
     ${Object.keys(st.paymentTotals||{}).length ? `<div class="hint">طرق الدفع النهاردة</div><div>${payChips(st.paymentTotals)}</div>` : ''}
@@ -106,6 +112,23 @@ async function pairSend(id){
     u.closeSheet(); u.toast('📲 اتبعت — الجهاز بيدخل دلوقتي');
   }catch(err){ u.toast('تعذر: ' + (err && (err.code||err.message))); }
 }
-O2.live = { lock, kick, pairSheet, pairFill, pairSend };
-O2.register('live', { icon:'🔴', title:'POS Live', desc:'كل فرع دلوقتي: السلة والدفع وآخر بيع · 🔒 قفل/فتح الكاشير · 🚪 خروج الموظفة · 📲 دخول جهاز بحساب الفرع', badge(){ start(); return pairs.length; }, order:41, tab:'more', enter(){ start(); }, render });
+/* 🖥️ v770 — RustDesk ID (6–16 رقم). rdOpen بيفتح برنامج RustDesk على الموبايل/الكمبيوتر بالـID جاهز — الباسورد الدائم بتكتبه مرة والبرنامج بيحفظه. */
+function rdClean(v){ const d = String(v||'').replace(/\D/g,''); return (d.length >= 6 && d.length <= 16) ? d : ''; }
+async function rdSet(branch){
+  const cur = rdClean((remote[branch]||{}).rdId);
+  const v = prompt('RustDesk ID بتاع جهاز ' + branch + ' (الأرقام اللي في ملف REMOTE-ID.txt على سطح مكتب الجهاز):', cur);
+  if(v === null) return;
+  const id = rdClean(v);
+  if(!id){ u.toast('الـID لازم يكون أرقام بس (6 لـ 16 رقم)'); return; }
+  try{ await u.db.collection('pos_test_settings').doc(rid(branch)).set({ remoteCtl:true, branch, rdId:id, rdAt: Date.now(), by:'office' }, { merge:true }); remote[branch] = Object.assign({}, remote[branch], { rdId:id }); u.toast('✅ اتسجل — دوس «🖥️ شاشة الجهاز» عشان تدخل'); u.render(); }
+  catch(err){ u.toast('تعذر: ' + (err && (err.code||err.message))); }
+}
+function rdOpen(branch){
+  const id = rdClean((remote[branch]||{}).rdId); if(!id){ rdSet(branch); return; }
+  u.toast('بيفتح RustDesk… لو مفتحش: نزّل تطبيق RustDesk على الموبايل أو افتح rustdesk.com/web واكتب الـID ' + id);
+  try{ (O2.live.rdNav || function(href){ window.location.href = href; })('rustdesk://connection/new/' + id); }catch(e){}
+}
+function rdCopy(id){ try{ navigator.clipboard.writeText(String(id)); u.toast('اتنسخ ' + id); }catch(e){} }
+O2.live = { lock, kick, pairSheet, pairFill, pairSend, rdSet, rdOpen, rdCopy, rdClean };
+O2.register('live', { icon:'🔴', title:'POS Live', desc:'كل فرع دلوقتي: السلة والدفع وآخر بيع · 🖥️ شاشة الجهاز (RustDesk) · 🔒 قفل/فتح الكاشير · 🚪 خروج الموظفة · 📲 دخول جهاز بحساب الفرع', badge(){ start(); return pairs.length; }, order:41, tab:'more', enter(){ start(); }, render });
 })();
