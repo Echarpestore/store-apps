@@ -50,3 +50,12 @@ assert(/\['videos', '🎬 فيديوهات'/.test(O2) && /O2Stories\.unhome\(/.t
   const r = S.computeCredits([v], [{ ms:T0 + 1000, branch:'echarpe Rehab', items:[{ barcode:'V1', qty:5 }] }], {});
   assertEq(r.awards.length, 1, 'النقط: ٥ قطع من كود الفيديو = نقطة للموظفة');
 }
+
+// Glow: نفس الستوري و«مختارة ليكي» والفيديوهات (18-10)
+{
+  const G = R('glow/index.html');
+  assert(/pos\/stories-app\.js\?v=\d+/.test(G) && /StoriesApp\.init\(db, CATALOG_BRAND, function\(\)\{[^}]*\}, currentCustomer\.mxPreview === true\)/.test(G), 'Glow: الستوري متوصلة (بمفتاح live_glow أو رقم التجربة)');
+  assert(/StoriesApp\.storiesHtml\(\) : ''\)\+\s*\n\s*\(window\.StoriesApp \? StoriesApp\.homeHtml\(\)/.test(G), 'Glow: الستوري ثم المنتجات والفيديوهات تحت الكارت');
+  assert(/pieceId: pid/.test(G), 'Glow: الطلب بيبعت رقم القطعة (حجز اللون اللي في الصورة/الفيديو)');
+  assert(/\['echarpe', 'إيشارب'\], \['glow', 'Glow'\]/.test(O2) && /up\['live_' \+ b\] = !!on;/.test(O2), 'Office 2: مفتاح فتح لكل تطبيق (إيشارب وGlow)');
+}

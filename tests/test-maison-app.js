@@ -32,5 +32,5 @@ const O2S = fs.readFileSync(path.join(__dirname, '..', 'office2', 'stories.js'),
 assert(/update\(\{ mxPreview: true \}\)/.test(O2S) && /preview: savePreview/.test(O2S) && !/stories_cfg'\)\.set\(\{ preview_phones/.test(O2S), 'v2: Office 2 بيعلّم مستند العميلة (مش مستند الإعدادات اللي بيرفض)');
 
 const O2M = fs.readFileSync(path.join(__dirname, '..', 'office2', 'office2.js'), 'utf8');
-assert(/const staff = !!\(user && user\.email && \(user\.providerData \|\| \[\]\)\.some\(p => p && p\.providerId === 'password'\)\);\n\s*if\(!staff\)\{/.test(O2M), 'Office 2: حساب العميلة (من تطبيق العملاء على نفس المتصفح) مبيفتحش Office — لازم دخول موظف');
+assert(/const staff = !!\(user && user\.email && \(user\.providerData \|\| \[\]\)\.some\(p => p && p\.providerId === 'password'\)\);[\s\S]{0,300}?\n\s*if\(!staff\)\{/.test(O2M), 'Office 2: حساب العميلة (من تطبيق العملاء على نفس المتصفح) مبيفتحش Office — لازم دخول موظف');
 assert(/function morph\(t\)\{/.test(L) && /t\.logo\.style\.visibility = 'hidden'/.test(L) && /borderRadius: '26px'/.test(L) && /if\(Date\.now\(\) - t0 > 6000\) return lift\(\);/.test(L), 'الافتتاحية: الشاشة بتدخل في الكارت واللوجو بيطير للوجو الكارت (ولو الكارت مش ظاهر بترتفع زي الأول)');

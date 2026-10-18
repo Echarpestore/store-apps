@@ -94,9 +94,12 @@ function render(){
   var vids = S.list.filter(function(s){ return s.kind === 'video' && s.homeFeed; });
   document.getElementById('o2StSub').textContent = P.length ? P.length + ' مستنية موافقتك' : 'مفيش حاجة مستنية';
   var tabs = [['pending', 'مستنية' + (P.length ? ' (' + P.length + ')' : '')], ['live', 'في التطبيق'], ['home', 'الرئيسية'], ['videos', '🎬 فيديوهات' + (vids.length ? ' (' + vids.length + ')' : '')], ['turn', 'الدور والنقط']];
-  var live = S.cfg.live_echarpe === true;
-  var h = '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:' + (live ? '#bfe8cf' : '#f3d9a6') + '"><div style="flex:1"><b style="font-size:13.5px">📱 في تطبيق العميلات: ' + (live ? '<span style="color:var(--good)">شغال</span>' : '<span style="color:#9a6500">مقفول</span>') + '</b><div class="hint" style="margin:2px 0 0">' + (live ? 'العميلات شايفين الستوري و«مختارة ليكي»' : 'تقدر توافق وتجهّز براحتك — مفيش حاجة بتظهر للعميلات لحد ما تفتحه') + '</div></div>'
-    + '<button class="btn ' + (live ? '' : 'g') + '" onclick="O2Stories.live(' + (!live) + ')">' + (live ? 'اقفل' : 'افتح للعميلات') + '</button></div>';
+  // 📱 مفتاح لكل تطبيق (إيشارب · Glow) — الستوري و«مختارة ليكي» و🎬 الفيديوهات
+  var h = [['echarpe', 'إيشارب'], ['glow', 'Glow']].map(function(bb){
+    var live = S.cfg['live_' + bb[0]] === true;
+    return '<div class="card" style="display:flex;align-items:center;gap:10px;border-color:' + (live ? '#bfe8cf' : '#f3d9a6') + '"><div style="flex:1"><b style="font-size:13.5px">📱 تطبيق ' + bb[1] + ': ' + (live ? '<span style="color:var(--good)">شغال</span>' : '<span style="color:#9a6500">مقفول</span>') + '</b><div class="hint" style="margin:2px 0 0">' + (live ? 'العميلات شايفين الستوري و«مختارة ليكي» والفيديوهات' : 'تقدر توافق وتجهّز براحتك — مفيش حاجة بتظهر للعميلات لحد ما تفتحه') + '</div></div>'
+      + '<button class="btn ' + (live ? '' : 'g') + '" onclick="O2Stories.live(' + (!live) + ',\'' + bb[0] + '\')">' + (live ? 'اقفل' : 'افتح للعميلات') + '</button></div>';
+  }).join('');
   /* 👀 تجربة قبل الإطلاق: الأرقام دي بس بتشوف الستوري والمستويات في التطبيق حتى لو مقفول */
   var pv = (S.pvList || []).join('، ');
   h += '<div class="card"><b style="font-size:13.5px">👀 تجربة على رقمك قبل العميلات</b><div class="hint" style="margin:2px 0 8px">الأرقام دي بس هتشوف الستوري والمستويات (حافة المعدن) في التطبيق — حتى لو مقفول. افصل بين الأرقام بفاصلة.</div>'
@@ -236,9 +239,11 @@ async function savePreview(){
   S.pvList = ok; render();
   toast(bad.length ? 'تعذر: ' + bad.join('، ') : (ok.length ? 'تمام ✅ اقفل التطبيق وافتحه على الرقم ده' : 'اتمسحت أرقام التجربة'));
 }
-async function setLive(on){
-  if(on && !confirm('تفتح الستوري و«مختارة ليكي» للعميلات في تطبيق إيشارب دلوقتي؟')) return;
-  try{ await db.collection('pos_test_settings').doc('stories_cfg').set({ live_echarpe: !!on, liveChangedAt: Date.now() }, { merge: true }); S.cfg.live_echarpe = !!on; toast(on ? 'اتفتح للعميلات ✅' : 'اتقفل'); render(); }catch(e){ toast('تعذر: ' + (e && e.code)); }
+async function setLive(on, brand){
+  var b = brand === 'glow' ? 'glow' : 'echarpe', nm = b === 'glow' ? 'Glow' : 'إيشارب';
+  if(on && !confirm('تفتح الستوري و«مختارة ليكي» والفيديوهات للعميلات في تطبيق ' + nm + ' دلوقتي؟')) return;
+  var up = { liveChangedAt: Date.now() }; up['live_' + b] = !!on;
+  try{ await db.collection('pos_test_settings').doc('stories_cfg').set(up, { merge: true }); S.cfg['live_' + b] = !!on; toast(on ? 'اتفتح للعميلات ✅' : 'اتقفل'); render(); }catch(e){ toast('تعذر: ' + (e && e.code)); }
 }
 function note(id){ S.noteFor = id; render(); if(id) setTimeout(function(){ var t = document.getElementById('stN_' + id); if(t) t.focus(); }, 50); }
 async function changes(id){

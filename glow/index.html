@@ -32,6 +32,7 @@
 <!-- 💬 محرك الشات المشترك — مصدر واحد مع POS وecharpe -->
 <script src="../pos/chat-core.js"></script>
 <script src="../pos/tiers-core.js?v=1"></script>
+<script src="../pos/stories-app.js?v=6"></script>
 <!-- 🌐 محرك اللغتين — نفس ملف تطبيق إيشارب بالظبط. لازم **قبل** أي
      رسم عشان الشاشة متبدأش عربي وتقلب قدام العميلة (ومضة اللغة). -->
 <script src="../pos/i18n-core.js"></script>
@@ -1970,6 +1971,10 @@ function renderCard(){
 
   var code = currentCustomer.loyaltyCode_glow || '';
 
+  /* 📸 الستوري و«مختارة ليكي» و🎬 الفيديوهات — نفس إيشارب: مقفولين لحد ما المالك يفتحهم من Office 2
+     (stories_cfg.live_glow) أو لرقم التجربة (mxPreview). بتتحمّل مرة واحدة بعد الدخول. */
+  if(window.StoriesApp && !renderCard._st){ renderCard._st = 1; StoriesApp.init(db, CATALOG_BRAND, function(){ if(currentTab === 'card' && !StoriesApp.isOpen()) renderCard(); }, currentCustomer.mxPreview === true); }
+
   $('tab-card').innerHTML =
     '<div class="gcard">'+
       '<div class="gcard-head">'+
@@ -1989,6 +1994,8 @@ function renderCard(){
         '<div class="gcard-scanhint">📷 اعرضي الكود ده للكاشير عند الدفع</div>'+
       '</div>'+
     '</div>'+
+    (window.StoriesApp ? StoriesApp.storiesHtml() : '')+
+    (window.StoriesApp ? StoriesApp.homeHtml() : '')+
 
     tiersSectionHtml()+
     '<div class="progress-wrap">'+
@@ -2899,7 +2906,8 @@ function shopSubmit(){
     var payload = {
       brand: CATALOG_BRAND, source: 'glow', branch: _shopBranch,
       phone: currentCustomer.phone, name: info.name,
-      items: chk.items.map(function(it){ return { barcode: it.barcode, qty: it.qty }; }),
+      // 📸🎬 قطعة الصورة/الفيديو (StoriesApp): السيرفر بيحجزها هي بالذات
+      items: chk.items.map(function(it){ var pid = (window._cartPieces || {})[it.barcode]; return pid ? { barcode: it.barcode, qty: it.qty, pieceId: pid } : { barcode: it.barcode, qty: it.qty }; }),
       payMethod: _shopPay, fulfillment: _shopFulfill,
       governorate: info.governorate, address: info.address,
       notes: info.notes, contactPhone: info.phone,
