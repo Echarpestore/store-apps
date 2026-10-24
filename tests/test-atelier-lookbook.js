@@ -152,11 +152,11 @@ assert(AC.kindOf({ name: 'إسدال صلاة كحلي' }) === 'isdal' && AC.kin
 const tb = AC.takeBatch([{ id: 1, kind: 'hijab' }, { id: 2, kind: 'isdal' }, { id: 3, kind: 'hijab' }], 4);
 assert(tb.batch.map((p) => p.id).join() === '1,3' && tb.rest.map((p) => p.id).join() === '2', 'الطرح والإسدال مبيتخلطوش في شبكة واحدة');
 const house = AC.houseCollection('collection/');
-assert(house.length === 5 && house.every((p) => p.tryable && p.line === 'chiffon' && AC.lineName(p.line)), 'المجموعة = ميسي شيفون كويتي بس (القديم اتمسح)');
+assert(house.length === 9 && house.every((p) => p.tryable && p.line === 'chiffon' && AC.lineName(p.line)), 'المجموعة = ميسي شيفون كويتي بس (٩ ألوان)');
 assert(house.every((p) => fs.existsSync(path.join(ROOT, 'atelier', p.img))), 'كل صورة في مجموعة الدار موجودة فعلاً');
 assert(!house.some((p) => p.kind === 'isdal'), 'الإسدالات اتشالت من المجموعة');
 const linen = house.filter((p) => p.line === 'chiffon');
-assert(linen.length === 5 && linen.every((p) => p.colorName && p.price === 490) && linen.find((p) => p.colorName === 'رمادي دخاني').gallery.length === 2, 'ميسي شيفون كويتي: موديل واحد بـ٥ ألوان بـ٤٩٠ وصورهم الزيادة');
+assert(linen.length === 9 && linen.every((p) => p.colorName && p.price === 490) && linen.find((p) => p.colorName === 'رمادي دخاني').gallery.length === 2, 'ميسي شيفون كويتي: موديل واحد بـ٥ ألوان بـ٤٩٠ وصورهم الزيادة');
 assert(house.every((p) => (p.gallery || []).every((g) => fs.existsSync(path.join(ROOT, 'atelier', g)))), 'كل الصور الزيادة موجودة');
 
 // ٩) ٦ قطع في النداء: نفس الشبكة على السيرفر والصفحة + 2K
@@ -223,7 +223,7 @@ assert(!/match \/atelier_orders/.test(fs.readFileSync(path.join(ROOT, 'security'
 
 // ١٢) الموديلات + رف الألوان
 const models = AC.groupModels(AC.houseCollection('collection/'));
-assert(models.length === 1 && models[0].title === 'ميسي شيفون كويتي' && models[0].items.length === 5, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
+assert(models.length === 1 && models[0].title === 'ميسي شيفون كويتي' && models[0].items.length === 9, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
 assert(AC.groupModels(prods).length === 3, 'كل موديل كارت واحد');
 assert(AC.toneOf([40, 48, 82]) === 'navy' && AC.toneOf([28, 28, 28]) === 'black' && AC.toneOf([200, 176, 140]) === 'beige', 'عائلة اللون من لون القماش');
 assert(/d\.type === 'atelier-chat'/.test(LOY) && /chat=1/.test(LOY), '«كلّمينا في الشات» بيفتح شات التطبيق');
@@ -237,3 +237,4 @@ if (O) {
   assert(O.priceItems([{ img: 'collection/linen-rose.jpg', name: 'x' }], [], [])[0].price === 490, 'طلب ميسي شيفون بيتحسب بـ٤٩٠ على السيرفر');
 }
 assert(['أسود', 'بنفسجي', 'رمادي توب', 'رمادي دخاني', 'روز'].map(AC.toneFromName).join() === 'black,purple,grey,grey,pink', 'عائلة اللون من الاسم لما يكون معروف');
+assert(['كاكي', 'بيج حجري', 'أوف وايت', 'رمادي فحمي'].map(AC.toneFromName).join() === 'beige,beige,white,grey', 'ألوان الدفعة التانية في رف الألوان الصح');
