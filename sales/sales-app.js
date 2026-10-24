@@ -2555,6 +2555,7 @@ window.allBonusDecisions = [];
 try{
   onSnapshot(query(bonusWeekCol, where('ts','>=', Date.now() - 120*86400000)), (snap)=>{
     window.allBonusDecisions = snap.docs.map(d=> ({ id:d.id, ...d.data() }));
+    try{ if(!rewardToastLock){ rewardToastLock = true; setTimeout(()=>{ try{ showUnseenRewardsIfAny(); }catch(e){} rewardToastLock = false; }, 800); } }catch(e){}
     try{ if(adminUnlocked){ renderSalaryPanel(); refreshOpenPayrollEmployee(); } }catch(e){}
   }, (e)=> console.warn('bonus decisions', e && e.code));
 }catch(e){ console.warn('bonus listen', e); }
@@ -5353,15 +5354,12 @@ function bankCardHtml(emp){
   // 🎁 قرار المالك 10-10: مفيش مبلغ للموظف أثناء الأسبوع — بيشوف تقدمه بس، والمبلغ بيظهر لما يستحق **ويعتمده المالك**
   const part = (k, lbl) => `<div class="raceItem"><span>${lbl}</span><span style="font-weight:800;color:${b.parts[k]>=b.max[k]?'var(--good)':(b.parts[k]>0?'#e0a020':'var(--bad)')}">${b.parts[k]} / ${b.max[k]}</span></div>`;
   const next = b.score < 100 ? `<div style="font-size:11px;color:var(--sub);margin-top:4px">${b.parts.commit<b.max.commit?'التزام كامل (تأخير ≤ '+tc.bonusLateMinWeek+' د في الأسبوع) · ':''}${b.parts.rating<b.max.rating?'تقييم ≥ '+tc.bonusRatingMin+'/4 · ':''}${b.parts.sales<b.max.sales?'نقاط ≥ '+st.target+' · ':''}= الحافز الكامل</div>` : '';
-  let approvedHtml = '';
-  try{
-    const bb = bankBonusFor(emp, m.start, m.end, now).weeks.filter(x=> x.decision==='approved' && x.paid > 0);
-    if(bb.length) approvedHtml = `<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px">${bb.map(x=>`<div class="raceItem"><span>✅ حافز أسبوع ${x.key.slice(5)}</span><span style="font-weight:900;color:var(--good)">${x.paid} ج</span></div>`).join('')}</div>`;
-  }catch(e){}
+  // 🎁 v656 قرار المالك 24-10: الحافز المعتمد مبيتكتبش هنا كسطر — بيظهر **بوكس هدية** على الشاشة الرئيسية لما المالك يعتمده (showUnseenRewardsIfAny)
+  const approvedHtml = '';
   const bonus = `<div class="raceBlock"><div class="raceBlockTitle"><span>🎁 حافز الأسبوع ده</span><small style="color:var(--sub);font-weight:600">يوم ${_dayN} من 7</small></div>
     <div style="font-size:22px;font-weight:900;color:${b.score>=tc.bonusMinScore?'var(--good)':'#e0a020'};direction:ltr;text-align:right">${b.score} / 100</div>
     ${part('commit','🎯 الالتزام (تأخير '+st.lateMinTotal+' د)')}${part('rating','⭐ تقييم العملاء'+(st.avgRating!=null?' ('+st.avgRating.toFixed(1)+'/4)':''))}${part('sales','🛍️ المبيعات ('+fmtPts(st.points)+(st.target>0?' من '+st.target:'')+' ن)')}${next}
-    <div style="font-size:11px;color:var(--sub);margin-top:6px">الحافز بيتحدد يوم الجمعة (من ${tc.bonusMinScore} نقطة)${tc.bonusApproval==='manual'?' وبيعتمده المالك':''} — وبعدها بيظهر هنا</div>${approvedHtml}</div>`;
+    <div style="font-size:11px;color:var(--sub);margin-top:6px">الحافز بيتحدد يوم الجمعة (من ${tc.bonusMinScore} نقطة)${tc.bonusApproval==='manual'?' وبيعتمده المالك':''} — وبعدها هيوصلك 🎁 هدية على الشاشة</div>${approvedHtml}</div>`;
   // 🙈 v650 قرار المالك 11-10: رصيد الوقت مبيظهرش للموظف — الحافز الأسبوعي بس (الرصيد لسه بيتحسب في المرتب وبيظهر للمالك)
   void bal;
   return bonus;
@@ -5758,17 +5756,32 @@ function renderWinnerBanner(){
 }
 window.renderWinnerBanner = renderWinnerBanner;
 
+/* 🎁 v656 — أول حافز أسبوع معتمد (مبلغ > 0) لموظف من الفرع ده لسه ماظهرش كهدية.
+   آخر 21 يوم بس — عشان القديم ما يطلعش فجأة. مرفوض/صفر/موظف فرع تاني = لا. */
+function unseenApprovedBonus(decisions, empIds, now){
+  const ids = new Set(empIds||[]);
+  return (decisions||[]).filter(d=> d && d.status==='approved' && Number(d.amount) > 0 && !d.bonusSeen && ids.has(d.employeeId)
+      && (Number(now)||0) - (Number(d.decidedAt||d.ts)||0) <= 21*86400000)
+    .sort((a,b)=> (Number(a.decidedAt)||0) - (Number(b.decidedAt)||0))[0] || null;
+}
+window.unseenApprovedBonus = unseenApprovedBonus;
+function markBonusSeenLocal(id){ const d = (window.allBonusDecisions||[]).find(x=> x.id===id); if(d) d.bonusSeen = true; }
+
 // Show a celebratory gift-box toast for any unseen reward, once per app load per reward.
 function showUnseenRewardsIfAny(){
   // 🚧 المكافآت المستنية موافقة الميزانية مبتظهرش للموظفة —
   //    وعد بمكافأة ممكن ترفضها أسوأ من إنها متظهرش أصلًا.
   const unseen = visibleRewards(rewards).filter(r=> !r.seen);
-  if(unseen.length === 0) return;
-  const r = unseen[0];
+  /* 🎁 v656 — حافز الأسبوع اللي المالك اعتمده بيظهر بنفس بوكس الهدية (مرة واحدة · bonusSeen) */
+  const bw = unseen.length ? null : unseenApprovedBonus(window.allBonusDecisions, (window.employees||[]).map(e=> e.id), Date.now());
+  if(unseen.length === 0 && !bw) return;
+  const r = unseen.length ? unseen[0]
+    : { employeeName: bw.employeeName || '', amount: Number(bw.amount)||0, type:'weekly', periodLabel: 'أسبوع ' + String(bw.weekKey||'').slice(5), _bonusId: bw.id };
   const box = $('#giftBoxToast');
+  if(!box) return;
   $('#giftBoxName').textContent = 'مبروك يا ' + r.employeeName + '!';
   $('#giftBoxAmount').textContent = r.amount + ' ج.م';
-  $('#giftBoxSub').textContent = (r.type==='weekly' ? 'مكافأة الالتزام الأسبوعية' : 'مكافأة الالتزام الشهرية') + ' — ' + r.periodLabel;
+  $('#giftBoxSub').textContent = (r._bonusId ? 'حافز الأسبوع' : (r.type==='weekly' ? 'مكافأة الالتزام الأسبوعية' : 'مكافأة الالتزام الشهرية')) + ' — ' + r.periodLabel;
 
   // 🎊 قصاصات ورق — بتتولد مرة واحدة مع كل احتفال
   const fx = $('#giftBoxFx');
@@ -5792,7 +5805,9 @@ function showUnseenRewardsIfAny(){
   const close = ()=>{
     box.classList.remove('show', 'opened');
     if(fx) fx.innerHTML = '';
-    updateDoc(doc(db,'sales_rewards', r.id), { seen: true })
+    (r._bonusId
+      ? (markBonusSeenLocal(r._bonusId), setDoc(doc(db,'sales_bonus_week', r._bonusId), { bonusSeen: true, bonusSeenAt: Date.now() }, { merge:true }))
+      : updateDoc(doc(db,'sales_rewards', r.id), { seen: true }))
       .catch(()=>{})
       .then(()=>{ try{ renderWinnerBanner(); }catch(e){} });
     setTimeout(()=>{ try{ showUnseenRewardsIfAny(); }catch(e){} }, 400);   // فايزة تانية؟
