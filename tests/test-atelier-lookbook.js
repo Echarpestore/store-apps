@@ -152,7 +152,15 @@ assert(AC.kindOf({ name: 'إسدال صلاة كحلي' }) === 'isdal' && AC.kin
 const tb = AC.takeBatch([{ id: 1, kind: 'hijab' }, { id: 2, kind: 'isdal' }, { id: 3, kind: 'hijab' }], 4);
 assert(tb.batch.map((p) => p.id).join() === '1,3' && tb.rest.map((p) => p.id).join() === '2', 'الطرح والإسدال مبيتخلطوش في شبكة واحدة');
 const house = AC.houseCollection('collection/');
-assert(house.length === 9 && house.every((p) => p.tryable && p.line === 'chiffon' && AC.lineName(p.line)), 'المجموعة = ميسي شيفون كويتي بس (٩ ألوان)');
+assert(house.length === 17 && house.every((p) => p.tryable && AC.lineName(p.line)), 'المجموعة = كينار لينن (٨) + ميسي شيفون (٩)');
+const kinar = house.filter((p) => p.line === 'kinar');
+assert(kinar.length === 8 && kinar.every((p) => p.price === 680 && p.colorName && p.family === 'kinar') && house[0].line === 'kinar', 'كينار لينن كويتي ليدي: ٨ ألوان بـ٦٨٠ وأول المجموعة');
+assert(AC.groupModels(house).length === 2 && AC.groupModels(house)[0].title === 'كينار لينن كويتي ليدي', 'الكينار كارت واحد باسم الموديل');
+assert(AC.toneFromName('أسود بكنار أبيض') === 'black' && AC.toneFromName('أوف وايت بكنار رمادي') === 'white' && AC.toneFromName('توب بكنار أبيض') === 'beige', 'رف الألوان بياخد اللون الأساسي مش لون الكنار');
+// قطع الدار الجديدة بتظهر حتى لو اللوحة اتحفظت قبل كده
+assert(AC.houseUnseen(null, 'collection/').length === 17, 'لوحة فاضية = كل قطع الدار');
+assert(AC.houseUnseen({ items: [{ id: 'a' }] }, 'collection/').map((p) => p.line).join() === 'kinar,kinar,kinar,kinar,kinar,kinar,kinar,kinar', 'حفظ قديم = الكينار الجديد بس يظهر');
+assert(AC.houseUnseen({ items: [{ id: 'a' }], houseSeen: AC.HOUSE.map((h) => h[0]) }, 'collection/').length === 0, 'بعد الحفظ الجديد: اللي اتمسح من اللوحة مبيرجعش');
 assert(house.every((p) => fs.existsSync(path.join(ROOT, 'atelier', p.img))), 'كل صورة في مجموعة الدار موجودة فعلاً');
 assert(!house.some((p) => p.kind === 'isdal'), 'الإسدالات اتشالت من المجموعة');
 const linen = house.filter((p) => p.line === 'chiffon');
@@ -223,7 +231,7 @@ assert(!/match \/atelier_orders/.test(fs.readFileSync(path.join(ROOT, 'security'
 
 // ١٢) الموديلات + رف الألوان
 const models = AC.groupModels(AC.houseCollection('collection/'));
-assert(models.length === 1 && models[0].title === 'ميسي شيفون كويتي' && models[0].items.length === 9, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
+assert(models.length === 2 && models[1].title === 'ميسي شيفون كويتي' && models[1].items.length === 9 && models[0].items.length === 8, 'القطع بتتجمّع في موديلات (كارت واحد + ألوان)');
 assert(AC.groupModels(prods).length === 3, 'كل موديل كارت واحد');
 assert(AC.toneOf([40, 48, 82]) === 'navy' && AC.toneOf([28, 28, 28]) === 'black' && AC.toneOf([200, 176, 140]) === 'beige', 'عائلة اللون من لون القماش');
 assert(/d\.type === 'atelier-chat'/.test(LOY) && /chat=1/.test(LOY), '«كلّمينا في الشات» بيفتح شات التطبيق');

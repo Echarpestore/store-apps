@@ -23,6 +23,14 @@
     // 🧣 ميسي شيفون كويتي — موديل واحد بـ٥ ألوان بـ٤٩٠. العمود الرابع اسم
     //    اللون، والخامس صور زيادة لنفس اللون، والسادس السعر.
     //    ⚠️ السعر لازم يطابق HOUSE_PRICES في functions/atelierOrders.js.
+    ["kinar-noir-blanc", "كينار لينن كويتي ليدي أسود بكنار أبيض",  "kinar", "أسود بكنار أبيض",  ["kinar-noir-blanc-2", "kinar-noir-blanc-3", "kinar-noir-blanc-4"], 680],
+    ["kinar-noir-gris",  "كينار لينن كويتي ليدي أسود بكنار رمادي", "kinar", "أسود بكنار رمادي", ["kinar-noir-gris-2", "kinar-noir-gris-3", "kinar-noir-gris-4"], 680],
+    ["kinar-noir-beige", "كينار لينن كويتي ليدي أسود بكنار بيج",   "kinar", "أسود بكنار بيج",   ["kinar-noir-beige-2"], 680],
+    ["kinar-noir-lilas", "كينار لينن كويتي ليدي أسود بكنار ليلكي", "kinar", "أسود بكنار ليلكي", ["kinar-noir-lilas-2", "kinar-noir-lilas-3"], 680],
+    ["kinar-ivoire",     "كينار لينن كويتي ليدي أوف وايت بكنار رمادي", "kinar", "أوف وايت بكنار رمادي", ["kinar-ivoire-2"], 680],
+    ["kinar-taupe",      "كينار لينن كويتي ليدي توب بكنار أبيض",   "kinar", "توب بكنار أبيض",   ["kinar-taupe-2"], 680],
+    ["kinar-beige-noir", "كينار لينن كويتي ليدي بيج بكنار أسود",   "kinar", "بيج بكنار أسود",   [], 680],
+    ["kinar-beige-fume", "كينار لينن كويتي ليدي بيج بكنار فحمي",   "kinar", "بيج بكنار فحمي",   [], 680],
     ["linen-noir",       "ميسي شيفون كويتي أسود",        "chiffon", "أسود",        ["linen-noir-2"], 490],
     ["chiffon-charcoal", "ميسي شيفون كويتي رمادي فحمي",  "chiffon", "رمادي فحمي",  [], 490],
     ["linen-fume",       "ميسي شيفون كويتي رمادي دخاني", "chiffon", "رمادي دخاني", ["linen-fume-2", "linen-fume-3"], 490],
@@ -39,6 +47,7 @@
     { id: "plisse", ar: "البليسيه" },
     { id: "mono",   ar: "المونوجرام" },
     { id: "zebre",  ar: "الزيبرا" },
+    { id: "kinar",  ar: "الكينار لينن" },
     { id: "chiffon", ar: "الشيفون" },
     { id: "isdal",  ar: "الإسدال" },
     { id: "other",  ar: "قطع أخرى" }
@@ -50,11 +59,26 @@
   function houseCollection(base) {
     var dir = base || "collection/";
     return HOUSE.map(function (h) {
-      return { id: "house-" + h[0], galleryId: "", barcode: "", name: h[1],
+      return { id: "house-" + h[0], houseKey: h[0], galleryId: "", barcode: "", name: h[1],
                line: h[2], family: h[2], kind: h[2] === "isdal" ? "isdal" : "hijab", price: Number(h[5]) || 0,
                img: dir + h[0] + ".jpg", tryable: true, house: true,
                colorName: h[3] || "", gallery: (h[4] || []).map(function (f) { return dir + f + ".jpg"; }) };
     });
+  }
+
+  /* 🆕 قطع الدار اللي لوحة الإدارة لسه ما شافتهاش. اللوحة بتكتب
+     houseSeen (كل مفاتيح الدار وقت الحفظ) — فاللي اتمسح من اللوحة مبيرجعش،
+     واللي اتضاف للدار بعد كده بيظهر على الموقع وفي اللوحة لوحده.
+     حفظ قديم من غير houseSeen = شاف الشيفون التسعة بس. */
+  var LEGACY_HOUSE = ["linen-noir", "chiffon-charcoal", "linen-fume", "linen-taupe", "chiffon-khaki",
+                      "chiffon-stone", "chiffon-ivory", "linen-rose", "linen-violet"];
+  function houseSeenFrom(doc) {
+    if (doc && Array.isArray(doc.houseSeen)) return doc.houseSeen.map(String);
+    return doc && Array.isArray(doc.items) && doc.items.length ? LEGACY_HOUSE.slice() : [];
+  }
+  function houseUnseen(doc, base) {
+    var seen = houseSeenFrom(doc);
+    return houseCollection(base).filter(function (h) { return seen.indexOf(h.houseKey) < 0; });
   }
 
   /* 🗂️ مجموعة صفحة الإدارة (pos_test_settings/atelier_echarpe) — لو
@@ -161,7 +185,7 @@
 
   /* 🗂️ الموديلات: القطع اللي بنفس الموديل بتتعرض كارت واحد ورف ألوان،
      بدل عشرات الكروت المتشابهة. الترتيب = أول ظهور. */
-  var LINE_TITLE = { crepe: "كريب", plisse: "بليسيه", mono: "مونوجرام", zebre: "زيبرا", chiffon: "ميسي شيفون كويتي",
+  var LINE_TITLE = { crepe: "كريب", plisse: "بليسيه", mono: "مونوجرام", zebre: "زيبرا", chiffon: "ميسي شيفون كويتي", kinar: "كينار لينن كويتي ليدي",
                      isdal: "إسدال", other: "قطع مختارة", shop: "جديد" };
   function modelTitle(items) {
     var a = items[0] || {};
@@ -267,6 +291,8 @@
     HOUSE: HOUSE,
     LINES: LINES,
     houseCollection: houseCollection,
+    houseSeenFrom: houseSeenFrom,
+    houseUnseen: houseUnseen,
     ADMIN_DOC: ADMIN_DOC,
     atelierItemsFrom: atelierItemsFrom,
     lineName: lineName,
