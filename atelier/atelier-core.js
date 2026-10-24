@@ -22,12 +22,10 @@
   var HOUSE = [
     ["crepe-minuit",      "كريب كحلي",               "crepe"],
     ["mono-anthracite",   "مونوجرام فحمي",           "mono"],
-    ["isdal-violet",      "إسدال بنفسجي مورّد",      "isdal"],
     ["zebre-sable",       "زيبرا رملي",              "zebre"],
     ["plisse-noir",       "بليسيه أسود",             "plisse"],
     ["crepe-pierre",      "كريب رمادي",              "crepe"],
     ["mono-sable",        "مونوجرام رملي",           "mono"],
-    ["isdal-gris",        "إسدال رمادي مورّد",       "isdal"],
     ["zebre-camel",       "زيبرا كاميل",             "zebre"],
     ["mono-gris",         "مونوجرام رمادي",          "mono"],
     ["crepe-noir-volant", "كريب أسود بحافة مموّجة",  "crepe"],
@@ -36,7 +34,14 @@
     ["mono-perle",        "مونوجرام لؤلؤي",          "mono"],
     ["plisse-nuit",       "بليسيه ليلي",             "plisse"],
     ["mono-taupe",        "مونوجرام توب",            "mono"],
-    ["zebre-fume",        "زيبرا دخاني",             "zebre"]
+    ["zebre-fume",        "زيبرا دخاني",             "zebre"],
+    // 🧣 كتان بأهداب — موديل واحد بـ٥ ألوان. العمود الرابع اسم اللون،
+    //    والخامس صور زيادة لنفس اللون (بتظهر جوّه صفحة القطعة).
+    ["linen-noir",   "كتان بأهداب أسود",       "linen", "أسود",        ["linen-noir-2"]],
+    ["linen-violet", "كتان بأهداب بنفسجي",     "linen", "بنفسجي",      ["linen-violet-2"]],
+    ["linen-taupe",  "كتان بأهداب رمادي توب",  "linen", "رمادي توب",   ["linen-taupe-2"]],
+    ["linen-fume",   "كتان بأهداب رمادي دخاني", "linen", "رمادي دخاني", ["linen-fume-2", "linen-fume-3"]],
+    ["linen-rose",   "كتان بأهداب روز",        "linen", "روز",         []]
   ];
   var LINES = [
     { id: "all",    ar: "الكل" },
@@ -44,6 +49,7 @@
     { id: "plisse", ar: "البليسيه" },
     { id: "mono",   ar: "المونوجرام" },
     { id: "zebre",  ar: "الزيبرا" },
+    { id: "linen",  ar: "الكتان" },
     { id: "isdal",  ar: "الإسدال" },
     { id: "other",  ar: "قطع أخرى" }
   ];
@@ -56,7 +62,8 @@
     return HOUSE.map(function (h) {
       return { id: "house-" + h[0], galleryId: "", barcode: "", name: h[1],
                line: h[2], family: h[2], kind: h[2] === "isdal" ? "isdal" : "hijab", price: 0,
-               img: dir + h[0] + ".jpg", tryable: true, house: true };
+               img: dir + h[0] + ".jpg", tryable: true, house: true,
+               colorName: h[3] || "", gallery: (h[4] || []).map(function (f) { return dir + f + ".jpg"; }) };
     });
   }
 
@@ -163,7 +170,7 @@
 
   /* 🗂️ الموديلات: القطع اللي بنفس الموديل بتتعرض كارت واحد ورف ألوان،
      بدل عشرات الكروت المتشابهة. الترتيب = أول ظهور. */
-  var LINE_TITLE = { crepe: "كريب", plisse: "بليسيه", mono: "مونوجرام", zebre: "زيبرا",
+  var LINE_TITLE = { crepe: "كريب", plisse: "بليسيه", mono: "مونوجرام", zebre: "زيبرا", linen: "كتان بأهداب",
                      isdal: "إسدال", other: "قطع مختارة", shop: "جديد" };
   function modelTitle(items) {
     var a = items[0] || {};

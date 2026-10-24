@@ -460,3 +460,11 @@ body.embed footer nav a[href="../loyalty/"]{display:none;}
 .order-done .ok{width:64px; height:64px; margin:0 auto 12px; border-radius:50%; background:var(--ink); color:var(--paper); display:grid; place-items:center; font-size:28px;}
 .order-done h3{font-family:var(--ar); font-weight:400; font-size:28px;}
 .order-done p{font-size:14px; line-height:1.9; color:var(--ink-2); margin:8px 0 18px;}
+
+/* صور زيادة لنفس اللون جوّه صفحة القطعة */
+.lb-thumbs{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:-8px;}
+.lb-thumbs.hidden{display:none;}
+.lb-thumbs button{width:48px; height:64px; overflow:hidden; opacity:.6; box-shadow:0 0 0 1px var(--line); transition:.3s;}
+.lb-thumbs button.on{opacity:1; box-shadow:0 0 0 2px var(--ink);}
+.lb-thumbs img{width:100%; height:100%; object-fit:cover;}
+@media (min-width:860px){ .lb-pic{grid-column:1; grid-row:1;} .lb-thumbs{grid-column:1; grid-row:2; margin-top:0;} .lb-info{grid-column:2; grid-row:1 / span 2; align-self:center;} }
