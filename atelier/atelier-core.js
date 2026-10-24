@@ -20,21 +20,6 @@
      بتظهر لما «منتجات البيع أونلاين» تكون فاضية، وبعد منتجات البيع
      لما تبقى موجودة. line = الخط اللي بيتفلتر بيه في الصفحة. */
   var HOUSE = [
-    ["crepe-minuit",      "كريب كحلي",               "crepe"],
-    ["mono-anthracite",   "مونوجرام فحمي",           "mono"],
-    ["zebre-sable",       "زيبرا رملي",              "zebre"],
-    ["plisse-noir",       "بليسيه أسود",             "plisse"],
-    ["crepe-pierre",      "كريب رمادي",              "crepe"],
-    ["mono-sable",        "مونوجرام رملي",           "mono"],
-    ["zebre-camel",       "زيبرا كاميل",             "zebre"],
-    ["mono-gris",         "مونوجرام رمادي",          "mono"],
-    ["crepe-noir-volant", "كريب أسود بحافة مموّجة",  "crepe"],
-    ["mono-moka",         "مونوجرام موكا",           "mono"],
-    ["zebre-argent",      "زيبرا فضّي",              "zebre"],
-    ["mono-perle",        "مونوجرام لؤلؤي",          "mono"],
-    ["plisse-nuit",       "بليسيه ليلي",             "plisse"],
-    ["mono-taupe",        "مونوجرام توب",            "mono"],
-    ["zebre-fume",        "زيبرا دخاني",             "zebre"],
     // 🧣 ميسي شيفون كويتي — موديل واحد بـ٥ ألوان بـ٤٩٠. العمود الرابع اسم
     //    اللون، والخامس صور زيادة لنفس اللون، والسادس السعر.
     //    ⚠️ السعر لازم يطابق HOUSE_PRICES في functions/atelierOrders.js.
@@ -204,6 +189,19 @@
     { id: "pink",   ar: "وردي وأحمر",   hex: "#c77f8e", rgb: [196, 120, 134] },
     { id: "purple", ar: "بنفسجي",       hex: "#7b528f", rgb: [122, 80, 142] }
   ];
+  /* لو اسم اللون معروف (مكتوب في المجموعة) بناخد العائلة منه — أدق من
+     الصورة (الإضاءة بتخلّي البنفسجي يبان كحلي والروز يبان بيج). */
+  var TONE_WORDS = [["black", /أسود|اسود|نوار|ليلي/], ["purple", /بنفسج|ليلك|موف/], ["pink", /روز|وردي|بينك|أحمر|بورجندي|نبيتي/],
+    ["navy", /كحلي|أزرق|ازرق|لبني|نيفي/], ["green", /أخضر|اخضر|زيتي|منت|زيتون/], ["brown", /بني|موكا|كاميل|شوكولا|قهوة/],
+    ["beige", /بيج|رملي|كريمي|توب|نود/], ["white", /أبيض|ابيض|أوف|اوف|لؤلؤي|سكري/], ["grey", /رمادي|رصاصي|فضي|فحمي|دخاني/]];
+  function toneFromName(name) {
+    var n = String(name || "");
+    // "رمادي توب" = رمادي (أول كلمة هي اللون الأساسي)
+    var first = n.split(/\s+/)[0];
+    for (var i = 0; i < TONE_WORDS.length; i++) if (TONE_WORDS[i][1].test(first)) return TONE_WORDS[i][0];
+    for (var j = 0; j < TONE_WORDS.length; j++) if (TONE_WORDS[j][1].test(n)) return TONE_WORDS[j][0];
+    return "";
+  }
   function toneOf(rgb) {
     if (!rgb) return "";
     var best = TONES[0], bd = Infinity;
@@ -279,6 +277,7 @@
     groupModels: groupModels,
     TONES: TONES,
     toneOf: toneOf,
+    toneFromName: toneFromName,
     buildRound: buildRound,
     roundsState: roundsState,
     gridLayout: gridLayout,
