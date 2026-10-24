@@ -45,7 +45,8 @@ const GUARD_WINDOW = 60 * 60 * 1000;
    ⚠️ لازم تطابق العمود السادس في HOUSE بـatelier/atelier-core.js (فيه
    اختبار بيقارنهم). القطع اللي من صفحة الإدارة سعرها من Firestore. */
 const HOUSE_PRICES = {
-  "linen-noir": 490, "linen-violet": 490, "linen-taupe": 490, "linen-fume": 490, "linen-rose": 490
+  "linen-noir": 490, "linen-violet": 490, "linen-taupe": 490, "linen-fume": 490, "linen-rose": 490,
+  "chiffon-khaki": 490, "chiffon-charcoal": 490, "chiffon-ivory": 490, "chiffon-stone": 490
 };
 const FRIENDLY = "مقدرناش نسجّل الطلب دلوقتي — جرّبي تاني أو كلّمينا على واتساب 🤍";
 
