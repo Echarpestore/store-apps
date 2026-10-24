@@ -61,18 +61,20 @@
   function loadAll() {
     $("list").innerHTML = '<div class="empty">بتحمّل…</div>';
     col.doc(DOC).get().then(function (d) {
-      var raw = d.exists && Array.isArray(d.data().items) ? d.data().items : [];
+      var data = d.exists ? d.data() : null;
+      var raw = data && Array.isArray(data.items) ? data.items : [];
       items = raw.map(function (it) { return Object.assign({ thumb: "" }, it); });
       $("importHouse").classList.add("hidden");
-      /* 🏠 لسه مفيش حاجة محفوظة هنا؟ يبقى الموقع شغال على الصور الثابتة —
-         نعرضها هنا عشان تتعدّل/تتمسح/يتضاف عليها. أول حفظ بينقلها هنا. */
-      if (!items.length) {
-        items = AC.houseCollection("collection/").map(function (h) {
+      /* 🏠 منتجات الموقع الثابتة اللي لسه ما اتحفظتش هنا (كلها لو اللوحة
+         فاضية، أو الجديدة بس) — بتظهر هنا عشان تتعدّل/تتمسح، وأول حفظ بينقلها. */
+      var fresh = items.length ? AC.houseUnseen(data, "collection/") : AC.houseCollection("collection/");
+      if (fresh.length) {
+        items = fresh.map(function (h) {
           return { id: AD.newId(), name: h.name, price: h.price, line: h.line, family: AC.LINE_TITLE[h.line] || "",
             colorName: h.colorName || "", barcode: "", active: true, thumb: h.img,
             fromSite: { img: h.img, gallery: h.gallery || [] }, extras: (h.gallery || []).length };
-        });
-        $("siteNote").classList.toggle("hidden", !items.length);
+        }).concat(items);
+        $("siteNote").classList.remove("hidden");
       }
       renderList();
       items.forEach(function (it) {
@@ -309,7 +311,9 @@
     })().then(function () {
       var clean = items.concat(batchImgs.map(function (p) { return Object.assign({}, p, { extras: p.extrasCount || 0 }); }))
         .map(function (it) { return AD.cleanItem(it); });
-      return col.doc(DOC).set({ items: clean, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      // houseSeen: منتجات الموقع الثابتة دي كلها اتنقلت (أو اتمسحت) — متظهرش تاني
+      return col.doc(DOC).set({ items: clean, houseSeen: AC.HOUSE.map(function (h) { return h[0]; }),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     }).then(function () {
       // صور القطع المحذوفة بتتفضّى (المسح نفسه ممنوع في القواعد)
       return Promise.all(deleted.map(function (id) {

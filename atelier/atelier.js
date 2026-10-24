@@ -185,8 +185,11 @@
       ]);
     }).then(function (r) {
       var shop = AC.shopItemsFrom(r[0] && r[0].exists ? r[0].data() : null);
-      var admin = AC.atelierItemsFrom(r[1] && r[1].exists ? r[1].data() : null);
+      var adminDoc = r[1] && r[1].exists ? r[1].data() : null;
+      var admin = AC.atelierItemsFrom(adminDoc);
       if (!admin.length) return shop.concat(house);
+      // قطع دار جديدة اللوحة لسه ما شافتهاش بتظهر برضه (أول الموقع)
+      var fresh = AC.houseUnseen(adminDoc, "collection/");
       // قطع صفحة الإدارة: المصغّرة بتتحمّل دلوقتي، والكاملة وقت الحاجة
       return Promise.all(admin.map(function (p) {
         return col.doc(AC.ADMIN_DOC + "_t_" + p.docId).get().then(function (d) {
@@ -194,7 +197,7 @@
           if (AC.isImageDataUrl(img)) { p.img = img; return p; }
           return null;
         }).catch(function () { return null; });
-      })).then(function (list) { return shop.concat(list.filter(Boolean)); });
+      })).then(function (list) { return fresh.concat(shop, list.filter(Boolean)); });
     }).catch(function () { return house; });
   }
 
